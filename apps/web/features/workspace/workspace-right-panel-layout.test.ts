@@ -570,8 +570,11 @@ test("GitHub connection opens the in-app repository chooser before install hando
 
   assert.ok(startGitHubConnectionIndex > -1);
   assert.match(startGitHubConnectionSource, /setShowGitHubRepositoryChooser\(true\)/);
+  assert.match(startGitHubConnectionSource, /listGitHubInstalledRepositories\(projectId\)/);
   assert.doesNotMatch(startGitHubConnectionSource, /createGitHubSourceRepositoryInstallUrl/);
   assert.match(deploymentPanelSource, /showGitHubRepositoryChooser/);
+  assert.match(deploymentPanelSource, /connectInstalledGitHubRepository/);
+  assert.match(deploymentPanelSource, /installedGitHubRepositorySelection/);
   assert.match(deploymentPanelSource, /knownGitHubSourceRepositories/);
   assert.match(deploymentPanelSource, /GitHub App 설치\/권한 추가/);
 });

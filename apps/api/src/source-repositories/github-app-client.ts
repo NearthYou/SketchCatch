@@ -66,7 +66,16 @@ export type GitHubActionsPipelineStatus = {
   statusMessage: string;
 };
 
+export type GitHubAppInstallation = {
+  installationId: string;
+  accountLogin: string;
+  accountType: string | null;
+  repositorySelection: "all" | "selected" | null;
+  htmlUrl: string | null;
+};
+
 export type GitHubAppClient = {
+  listInstallations(): Promise<GitHubAppInstallation[]>;
   listInstallationRepositories(installationId: string): Promise<GitHubRepositoryCandidate[]>;
   createPullRequest(input: GitHubAppCreatePullRequestInput): Promise<GitHubAppCreatePullRequestResult>;
   applyRepositorySettings(
@@ -106,6 +115,16 @@ type GitHubRepositoryApiResponse = {
 
 type GitHubRepositoryListResponse = {
   readonly repositories?: GitHubRepositoryApiResponse[];
+};
+
+type GitHubInstallationApiResponse = {
+  readonly id?: unknown;
+  readonly repository_selection?: unknown;
+  readonly html_url?: unknown;
+  readonly account?: {
+    readonly login?: unknown;
+    readonly type?: unknown;
+  };
 };
 
 type GitHubRefResponse = {
@@ -199,6 +218,31 @@ export function createGitHubAppClient(options: GitHubAppClientOptions): GitHubAp
   }
 
   return {
+    async listInstallations() {
+      const installations: GitHubAppInstallation[] = [];
+
+      for (let page = 1; page <= 10; page += 1) {
+        const pageInstallations = await requestGitHub<GitHubInstallationApiResponse[]>(
+          fetchImpl,
+          `/app/installations?per_page=100&page=${page}`,
+          {
+            token: await createAppJwt(),
+            authScheme: "Bearer"
+          }
+        );
+
+        installations.push(...pageInstallations.map(toGitHubAppInstallation));
+
+        if (pageInstallations.length < 100) {
+          break;
+        }
+      }
+
+      return installations.sort((left, right) =>
+        left.accountLogin.localeCompare(right.accountLogin)
+      );
+    },
+
     async listInstallationRepositories(installationId) {
       const repositories: GitHubRepositoryCandidate[] = [];
 
@@ -446,6 +490,29 @@ async function requestGitHub<T>(
   }
 
   return response.json() as Promise<T>;
+}
+
+function toGitHubAppInstallation(
+  installation: GitHubInstallationApiResponse
+): GitHubAppInstallation {
+  const repositorySelection = installation.repository_selection;
+
+  return {
+    installationId: String(readRequiredNumber(installation.id, "installation id")),
+    accountLogin: readRequiredString(installation.account?.login, "installation account login"),
+    accountType:
+      typeof installation.account?.type === "string" && installation.account.type
+        ? installation.account.type
+        : null,
+    repositorySelection:
+      repositorySelection === "all" || repositorySelection === "selected"
+        ? repositorySelection
+        : null,
+    htmlUrl:
+      typeof installation.html_url === "string" && installation.html_url
+        ? installation.html_url
+        : null
+  };
 }
 
 function toGitHubRepositoryCandidate(

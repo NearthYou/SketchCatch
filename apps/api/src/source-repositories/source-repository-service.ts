@@ -1,6 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
-import type { GitHubRepositoryCandidate } from "@sketchcatch/types";
+import type {
+  GitHubInstalledRepositoryCandidate,
+  GitHubRepositoryCandidate
+} from "@sketchcatch/types";
 import type { Database } from "../db/client.js";
 import { projects, sourceRepositories, touchUpdatedAt } from "../db/schema.js";
 import type { ProjectAccessContext } from "../git-cicd/git-cicd-handoff-service.js";
@@ -68,6 +71,20 @@ export type ListGitHubInstallationRepositoriesInput = {
 export type ListGitHubInstallationRepositoriesResult = {
   projectId: string;
   repositories: GitHubRepositoryCandidate[];
+};
+
+export type ListGitHubInstalledRepositoriesInput = {
+  projectId: string;
+  accessContext: ProjectAccessContext;
+  stateSecret: string;
+  now?: () => Date;
+};
+
+export type ListGitHubInstalledRepositoriesResult = {
+  projectId: string;
+  state: string;
+  expiresAt: Date;
+  repositories: GitHubInstalledRepositoryCandidate[];
 };
 
 export type ConnectGitHubSourceRepositoryInput = {
@@ -263,6 +280,68 @@ export async function listGitHubInstallationRepositories(
   return {
     projectId: state.projectId,
     repositories
+  };
+}
+
+export async function listGitHubInstalledRepositories(
+  input: ListGitHubInstalledRepositoriesInput,
+  repository: SourceRepositoryRepository,
+  githubAppClient: GitHubAppClient
+): Promise<ListGitHubInstalledRepositoriesResult> {
+  await requireAccessibleProject(
+    input.projectId,
+    input.accessContext,
+    repository,
+    "Project not found"
+  );
+
+  const stateInput = {
+    userId: input.accessContext.userId,
+    projectId: input.projectId,
+    secret: input.stateSecret,
+    ...(input.now ? { now: input.now } : {})
+  };
+  const { state, expiresAt } = await createGitHubAppState(stateInput);
+  const knownRepositories = await repository.listProjectSourceRepositories(input.projectId);
+  const installations = await githubAppClient.listInstallations();
+  const repositories: GitHubInstalledRepositoryCandidate[] = [];
+
+  for (const installation of installations) {
+    const installationRepositories = await githubAppClient.listInstallationRepositories(
+      installation.installationId
+    );
+
+    repositories.push(
+      ...installationRepositories.map((candidate) => {
+        const knownRepository = knownRepositories.find(
+          (known) =>
+            known.githubInstallationId === installation.installationId &&
+            known.githubRepositoryId === candidate.githubRepositoryId
+        );
+
+        return {
+          ...candidate,
+          installationId: installation.installationId,
+          installationAccountLogin: installation.accountLogin,
+          installationAccountType: installation.accountType,
+          installationRepositorySelection: installation.repositorySelection,
+          connectedSourceRepositoryId: knownRepository?.id ?? null,
+          connectedStatus:
+            knownRepository?.status === "active" || knownRepository?.status === "inactive"
+              ? knownRepository.status
+              : null
+        };
+      })
+    );
+  }
+
+  return {
+    projectId: input.projectId,
+    state,
+    expiresAt,
+    repositories: repositories.sort((left, right) =>
+      left.fullName.localeCompare(right.fullName)
+    )
   };
 }
 

@@ -5,6 +5,7 @@ import {
   connectGitHubSourceRepository,
   createGitHubExistingInstallationCallbackUrl,
   createGitHubInstallUrl,
+  listGitHubInstalledRepositories,
   listGitHubInstallationRepositories,
   SourceRepositoryNotFoundError,
   SourceRepositoryConflictError,
@@ -74,6 +75,42 @@ test("GitHub App install URL starts at target selection so already-installed acc
   assert.equal(installUrl.origin, "https://github.com");
   assert.equal(installUrl.pathname, "/apps/sketchcatch-test/installations/select_target");
   assert.ok(installUrl.searchParams.get("state"));
+});
+
+test("GitHub App installed repositories include repos not yet stored in SketchCatch", async () => {
+  const repository = createInMemorySourceRepositoryRepository([
+    createSourceRepositoryRecord({
+      githubInstallationId: "42",
+      githubRepositoryId: "repo-1",
+      name: "connected"
+    })
+  ]);
+  const github = createFakeGitHubAppClient([
+    createRepositoryCandidate({ githubRepositoryId: "repo-1", name: "connected" }),
+    createRepositoryCandidate({ githubRepositoryId: "repo-2", name: "handoff-test" })
+  ]);
+  const result = await listGitHubInstalledRepositories(
+    {
+      projectId,
+      accessContext: createAccessContext(userId),
+      stateSecret
+    },
+    repository,
+    github
+  );
+
+  assert.ok(result.state);
+  assert.deepEqual(
+    result.repositories.map((candidate) => ({
+      fullName: candidate.fullName,
+      installationId: candidate.installationId,
+      connectedStatus: candidate.connectedStatus
+    })),
+    [
+      { fullName: "owner/connected", installationId: "42", connectedStatus: "active" },
+      { fullName: "owner/handoff-test", installationId: "42", connectedStatus: null }
+    ]
+  );
 });
 
 test("existing active GitHub installation issues a callback URL for the repo selection screen", async () => {
@@ -304,6 +341,17 @@ function createAccessContext(accessUserId: string): ProjectAccessContext {
 
 function createFakeGitHubAppClient(repositories: GitHubRepositoryCandidate[]): GitHubAppClient {
   return {
+    async listInstallations() {
+      return [
+        {
+          installationId: "42",
+          accountLogin: "owner",
+          accountType: "Organization",
+          repositorySelection: "selected",
+          htmlUrl: "https://github.com/settings/installations/42"
+        }
+      ];
+    },
     async listInstallationRepositories() {
       return repositories;
     },
