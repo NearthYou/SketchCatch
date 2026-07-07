@@ -6,6 +6,7 @@ import type {
   ReverseEngineeringResourceSelection,
   ReverseEngineeringScan,
   ReverseEngineeringScanLogLine,
+  ReverseEngineeringScanResult,
   ReverseEngineeringScanResponse
 } from "../../../../packages/types/src";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
@@ -22,6 +23,10 @@ import {
   createReverseEngineeringBoardComparison,
   type ReverseEngineeringBoardApplicationMode
 } from "./reverse-engineering-board-application";
+import {
+  createReverseEngineeringBoardCandidates,
+  createReverseEngineeringCandidateResult
+} from "./reverse-engineering-board-candidates";
 import {
   updateReverseEngineeringDraftNode,
   type ReverseEngineeringDraftNodeUpdate
@@ -58,6 +63,7 @@ export function ReverseEngineeringPanel({ context, projectId }: ReverseEngineeri
   const [logs, setLogs] = useState<ReverseEngineeringScanLogLine[]>([]);
   const [applyState, setApplyState] = useState<ReverseEngineeringApplyState>("idle");
   const [applyMessage, setApplyMessage] = useState<string | null>(null);
+  const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null);
   const handleRequestError = useCallback((error: unknown) => {
     setErrorMessage(toErrorMessage(error));
   }, []);
@@ -98,16 +104,39 @@ export function ReverseEngineeringPanel({ context, projectId }: ReverseEngineeri
     selectedResourceTypes.length > 0 &&
     loadState !== "loading" &&
     scanState !== "loading";
-  const comparison = useMemo(() => {
+  const boardCandidates = useMemo(() => {
     if (!scanResponse?.result) {
+      return [];
+    }
+
+    return createReverseEngineeringBoardCandidates(scanResponse.result);
+  }, [scanResponse]);
+  const selectedCandidate =
+    boardCandidates.find((candidate) => candidate.id === selectedCandidateId) ?? boardCandidates[0] ?? null;
+  const selectedCandidateResult = useMemo(() => {
+    if (!scanResponse?.result || !selectedCandidate) {
+      return null;
+    }
+
+    return createReverseEngineeringCandidateResult(scanResponse.result, selectedCandidate);
+  }, [scanResponse, selectedCandidate]);
+  const selectedCandidateResponse =
+    scanResponse && selectedCandidateResult
+      ? {
+          ...scanResponse,
+          result: selectedCandidateResult
+        }
+      : null;
+  const comparison = useMemo(() => {
+    if (!selectedCandidateResult) {
       return null;
     }
 
     return createReverseEngineeringBoardComparison({
       currentDiagram: context.diagram,
-      result: scanResponse.result
+      result: selectedCandidateResult
     });
-  }, [context.diagram, scanResponse]);
+  }, [context.diagram, selectedCandidateResult]);
   const hasDeletedSourceScan = useMemo(
     () =>
       hasDeletedReverseEngineeringSourceScan(
@@ -134,6 +163,7 @@ export function ReverseEngineeringPanel({ context, projectId }: ReverseEngineeri
     setErrorMessage(null);
     setApplyMessage(null);
     setApplyState("idle");
+    setSelectedCandidateId(null);
     setScanResponse(null);
     setLogs([]);
     context.setPreviewDiagram(null);
@@ -160,13 +190,7 @@ export function ReverseEngineeringPanel({ context, projectId }: ReverseEngineeri
       rememberCompletedScan(response.scan);
       setLogs(nextLogs);
       if (response.result) {
-        const application = createReverseEngineeringBoardApplication({
-          currentDiagram: context.diagram,
-          mode: "replace",
-          result: response.result
-        });
-
-        context.setPreviewDiagram(application.previewDiagram);
+        showFirstCandidatePreview(response.result);
       }
       setScanState("idle");
     } catch (error) {
@@ -206,6 +230,7 @@ export function ReverseEngineeringPanel({ context, projectId }: ReverseEngineeri
       if (scanResponse?.scan.id === scanId) {
         setScanResponse(null);
         setLogs([]);
+        setSelectedCandidateId(null);
         context.setPreviewDiagram(null);
       }
     } catch (error) {
@@ -234,14 +259,9 @@ export function ReverseEngineeringPanel({ context, projectId }: ReverseEngineeri
       setActiveScanId(response.scan.id);
       setLogs(nextLogs);
       if (response.result) {
-        const application = createReverseEngineeringBoardApplication({
-          currentDiagram: context.diagram,
-          mode: "replace",
-          result: response.result
-        });
-
-        context.setPreviewDiagram(application.previewDiagram);
+        showFirstCandidatePreview(response.result);
       } else {
+        setSelectedCandidateId(null);
         context.setPreviewDiagram(null);
       }
       setScanState("idle");
@@ -253,7 +273,7 @@ export function ReverseEngineeringPanel({ context, projectId }: ReverseEngineeri
 
   // 사용자가 명시적으로 고른 방식으로만 스캔 후보를 실제 보드에 반영합니다.
   async function applyScanResult(mode: ReverseEngineeringBoardApplicationMode): Promise<void> {
-    const result = scanResponse?.result;
+    const result = selectedCandidateResult;
 
     if (!result || applyState === "saving") {
       return;
@@ -305,13 +325,67 @@ export function ReverseEngineeringPanel({ context, projectId }: ReverseEngineeri
       ...scanResponse,
       result: nextResult
     };
+    const nextCandidates = createReverseEngineeringBoardCandidates(nextResult);
+    const nextSelectedCandidate =
+      nextCandidates.find((candidate) => candidate.id === selectedCandidateId) ?? nextCandidates[0] ?? null;
+
+    if (!nextSelectedCandidate) {
+      setScanResponse(nextResponse);
+      context.setPreviewDiagram(null);
+      return;
+    }
+
+    const nextCandidateResult = createReverseEngineeringCandidateResult(nextResult, nextSelectedCandidate);
     const application = createReverseEngineeringBoardApplication({
       currentDiagram: context.diagram,
       mode: "replace",
-      result: nextResult
+      result: nextCandidateResult
     });
 
+    setSelectedCandidateId(nextSelectedCandidate.id);
     setScanResponse(nextResponse);
+    context.setPreviewDiagram(application.previewDiagram);
+  }
+
+  // 스캔 직후에는 가장 앞의 후보를 기본 미리보기로 보여줍니다.
+  function showFirstCandidatePreview(result: ReverseEngineeringScanResult): void {
+    const nextCandidates = createReverseEngineeringBoardCandidates(result);
+    const nextCandidate = nextCandidates[0];
+
+    if (!nextCandidate) {
+      setSelectedCandidateId(null);
+      context.setPreviewDiagram(null);
+      return;
+    }
+
+    const candidateResult = createReverseEngineeringCandidateResult(result, nextCandidate);
+    const application = createReverseEngineeringBoardApplication({
+      currentDiagram: context.diagram,
+      mode: "replace",
+      result: candidateResult
+    });
+
+    setSelectedCandidateId(nextCandidate.id);
+    context.setPreviewDiagram(application.previewDiagram);
+  }
+
+  // 사용자가 후보 카드를 고르면 보드 미리보기도 그 후보로 바꿉니다.
+  function selectBoardCandidate(candidateId: string): void {
+    const result = scanResponse?.result;
+    const candidate = boardCandidates.find((item) => item.id === candidateId);
+
+    if (!result || !candidate) {
+      return;
+    }
+
+    const candidateResult = createReverseEngineeringCandidateResult(result, candidate);
+    const application = createReverseEngineeringBoardApplication({
+      currentDiagram: context.diagram,
+      mode: "replace",
+      result: candidateResult
+    });
+
+    setSelectedCandidateId(candidateId);
     context.setPreviewDiagram(application.previewDiagram);
   }
 
@@ -354,18 +428,21 @@ export function ReverseEngineeringPanel({ context, projectId }: ReverseEngineeri
           scans={scanHistory}
         />
 
-        {scanResponse?.result && comparison ? (
+        {selectedCandidateResponse?.result && comparison && selectedCandidate ? (
           <ReverseEngineeringResultPanel
             applyMessage={applyMessage}
             applyState={applyState}
+            boardCandidates={boardCandidates}
             comparison={comparison}
             hasCurrentBoardResources={context.nodes.length > 0}
             logs={logs}
             onAppendToCurrentBoard={() => void applyScanResult("append")}
+            onCandidateSelect={selectBoardCandidate}
             onDraftNodeEdit={updateDraftNode}
             onOpenAsNewBoard={() => void applyScanResult("replace")}
             onRetryScan={() => void runScan()}
-            response={scanResponse}
+            response={selectedCandidateResponse}
+            selectedCandidateId={selectedCandidate.id}
           />
         ) : (
           <section className={styles.deploymentSection}>

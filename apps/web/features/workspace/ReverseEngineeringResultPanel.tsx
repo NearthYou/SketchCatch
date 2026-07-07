@@ -7,6 +7,7 @@ import type {
 } from "@sketchcatch/types";
 import type { ReverseEngineeringDraftNodeUpdate } from "./reverse-engineering-draft-edits";
 import type { ReverseEngineeringBoardComparison } from "./reverse-engineering-board-application";
+import type { ReverseEngineeringBoardCandidate } from "./reverse-engineering-board-candidates";
 import { ReverseEngineeringFindingsPanel } from "./ReverseEngineeringFindingsPanel";
 import { ReverseEngineeringImportSuggestionsPanel } from "./ReverseEngineeringImportSuggestionsPanel";
 import { ReverseEngineeringResourceParametersPanel } from "./ReverseEngineeringResourceParametersPanel";
@@ -17,28 +18,34 @@ export type ReverseEngineeringApplyState = "idle" | "saving" | "saved" | "error"
 export type ReverseEngineeringResultPanelProps = {
   readonly applyMessage: string | null;
   readonly applyState: ReverseEngineeringApplyState;
+  readonly boardCandidates: readonly ReverseEngineeringBoardCandidate[];
   readonly comparison: ReverseEngineeringBoardComparison;
   readonly hasCurrentBoardResources: boolean;
   readonly logs: ReverseEngineeringScanLogLine[];
   readonly onAppendToCurrentBoard: () => void;
+  readonly onCandidateSelect: (candidateId: string) => void;
   readonly onDraftNodeEdit: (nodeId: string, update: ReverseEngineeringDraftNodeUpdate) => void;
   readonly onOpenAsNewBoard: () => void;
   readonly onRetryScan: () => void;
   readonly response: ReverseEngineeringScanResponse;
+  readonly selectedCandidateId: string;
 };
 
 // 스캔 결과와 사용자가 누를 적용 버튼을 한 화면에 모아 보여줍니다.
 export function ReverseEngineeringResultPanel({
   applyMessage,
   applyState,
+  boardCandidates,
   comparison,
   hasCurrentBoardResources,
   logs,
   onAppendToCurrentBoard,
+  onCandidateSelect,
   onDraftNodeEdit,
   onOpenAsNewBoard,
   onRetryScan,
-  response
+  response,
+  selectedCandidateId
 }: ReverseEngineeringResultPanelProps) {
   const result = response.result;
 
@@ -77,6 +84,12 @@ export function ReverseEngineeringResultPanel({
       <ReverseEngineeringScanCoveragePanel
         scanErrors={result.scanErrors}
         unsupportedResourceCount={unsupportedResources.length}
+      />
+
+      <ReverseEngineeringCandidateSelector
+        candidates={boardCandidates}
+        onCandidateSelect={onCandidateSelect}
+        selectedCandidateId={selectedCandidateId}
       />
 
       <ReverseEngineeringDraftEditor
@@ -189,6 +202,52 @@ export function ReverseEngineeringResultPanel({
         )}
       </section>
     </>
+  );
+}
+
+// 여러 인프라가 섞여 있을 때 사용자가 맞는 보드 후보를 고르게 합니다.
+function ReverseEngineeringCandidateSelector({
+  candidates,
+  onCandidateSelect,
+  selectedCandidateId
+}: {
+  readonly candidates: readonly ReverseEngineeringBoardCandidate[];
+  readonly onCandidateSelect: (candidateId: string) => void;
+  readonly selectedCandidateId: string;
+}) {
+  if (candidates.length <= 1) {
+    return null;
+  }
+
+  return (
+    <section className={styles.deploymentSection}>
+      <h3>보드 후보 선택</h3>
+      <p className={styles.deploymentHint}>
+        AWS에 여러 구조가 섞여 있을 수 있습니다. 맞는 후보를 고르면 보드 미리보기도 같이 바뀝니다.
+      </p>
+      <div className={styles.reverseCandidateGrid} role="radiogroup" aria-label="보드 후보 선택">
+        {candidates.map((candidate) => (
+          <button
+            aria-checked={candidate.id === selectedCandidateId}
+            className={
+              candidate.id === selectedCandidateId
+                ? `${styles.reverseCandidateCard} ${styles.reverseCandidateCardSelected}`
+                : styles.reverseCandidateCard
+            }
+            key={candidate.id}
+            onClick={() => onCandidateSelect(candidate.id)}
+            role="radio"
+            type="button"
+          >
+            <strong>{candidate.title}</strong>
+            <span>{candidate.description}</span>
+            <small>
+              노드 {candidate.nodeCount}개 · 연결선 {candidate.edgeCount}개
+            </small>
+          </button>
+        ))}
+      </div>
+    </section>
   );
 }
 

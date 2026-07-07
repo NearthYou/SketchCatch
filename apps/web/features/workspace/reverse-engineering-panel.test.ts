@@ -9,6 +9,7 @@ const findingsPanelSource = readWorkspaceFile("ReverseEngineeringFindingsPanel.t
 const importPanelSource = readWorkspaceFile("ReverseEngineeringImportSuggestionsPanel.tsx");
 const parameterPanelSource = readWorkspaceFile("ReverseEngineeringResourceParametersPanel.tsx");
 const resultPanelSource = readWorkspaceFile("ReverseEngineeringResultPanel.tsx");
+const candidatesSource = readWorkspaceFile("reverse-engineering-board-candidates.ts");
 const resourceTypesSource = readWorkspaceFile("reverse-engineering-resource-types.ts");
 const scanCriteriaFormSource = readWorkspaceFile("ReverseEngineeringScanCriteriaForm.tsx");
 const scanHistoryPanelSource = readWorkspaceFile("ReverseEngineeringScanHistoryPanel.tsx");
@@ -90,6 +91,17 @@ test("Reverse Engineering result explains scan coverage before users apply the p
   assert.match(resultPanelSource, /Resource Explorer/);
   assert.match(resultPanelSource, /전체 AWS 상태가 아닐 수 있습니다/);
   assert.match(resultPanelSource, /getScanCoverageNotice/);
+});
+
+test("Reverse Engineering result shows multiple board candidates before applying one", () => {
+  assert.match(candidatesSource, /createReverseEngineeringBoardCandidates/);
+  assert.match(candidatesSource, /candidate-full-scan/);
+  assert.match(panelSource, /selectedCandidateId/);
+  assert.match(panelSource, /selectedCandidateResult/);
+  assert.match(panelSource, /createReverseEngineeringCandidateResult/);
+  assert.match(resultPanelSource, /보드 후보 선택/);
+  assert.match(resultPanelSource, /onCandidateSelect/);
+  assert.match(resultPanelSource, /candidate\.nodeCount/);
 });
 
 test("Reverse Engineering result lets users inspect provider parameters for every discovered resource", () => {
