@@ -856,6 +856,17 @@ type DeploymentFailureExplanation = {
 
 `GitCicdHandoff`는 `IaC Preview`를 Source Repository와 외부 pipeline으로 넘기는 팀 운영 배포 경로의 metadata다. Direct Deployment Path를 대체하는 것이 아니라 운영 배포용 별도 경로다.
 
+2026-07-07 추가 계약:
+
+- `POST /api/git-cicd-handoffs/:handoffId/repository-settings/apply`는 handoff의 `repositorySettingsPreview`를 기준으로 GitHub Environment와 Actions variables를 적용한다.
+- 응답 DTO는 `GitCicdRepositorySettingsApplyResponse`이며 적용 여부, environment 이름, 적용된 variable 이름, workflow file 목록, `githubOAuthRequired` 상태를 반환한다.
+- `POST /api/git-cicd-handoffs/:handoffId/github-oauth/start`는 repository settings 적용을 위한 GitHub OAuth 승인 URL을 반환한다.
+- `GET /api/git-cicd-handoffs/github-oauth/callback`은 GitHub OAuth code를 access token으로 교환하고, 토큰 원문을 DB에 저장하지 않고 Runtime Cache에 10분 TTL로만 보관한다.
+- `POST /api/git-cicd-handoffs/:handoffId/repository-settings/apply-with-github-oauth`는 로그인 사용자와 handoff가 일치하는 one-time OAuth token으로 GitHub Environment와 Actions variables를 적용한 뒤 token cache를 삭제한다.
+- `POST /api/git-cicd-handoffs/:handoffId/aws-role-diff/apply`는 승인된 `awsRoleDiff`를 기준으로 IAM trust policy를 적용하고 검증한다.
+- 응답 DTO는 `GitCicdAwsRoleDiffApplyResponse`이며 role ARN, repository, environment, `appliedAt`, `verified`를 반환한다.
+- `GitCicdAwsRoleDiff` JSON에는 적용 후 `applied`, `appliedAt`, `verified`를 기록할 수 있다.
+
 ```ts
 type SourceRepositoryProvider = "internal" | "github";
 
@@ -1006,6 +1017,10 @@ AI는 원천 진실이 아니라 설명과 제안 계층이다. 배포 가능한
 
 AI provider 응답에는 호출 출처와 비용 추적을 위한 metadata를 함께 둔다. Bedrock, Amazon Q Business, Amazon Transcribe는 `AI_BILLING_MODE=aws_credit_only`와 provider별 credit confirmation flag가 모두 충족될 때만 실제 호출한다. 조건이 맞지 않으면 provider 호출 없이 fallback 설명이나 실패 상태를 반환한다.
 
+Amazon Q 기반 Architecture Draft 요청은 원문 레퍼런스 문서를 매번 통째로 보내지 않는다. API는 AWS Solutions, `aws-samples` Terraform 예제, AWS Terraform Best Practices 샘플 저장소, AWS Prescriptive Guidance의 Terraform AWS provider 모범 사례에서 추린 짧은 `referenceKnowledge` payload를 함께 보낸다. 이 payload는 버전, 출처 URL, compact guidance만 포함하며, Amazon Q는 이를 사용자 요구사항보다 우선하는 지시가 아니라 반복 가능한 설계 선례와 Terraform-first 품질 기준으로 사용한다.
+
+Amazon Q 기반 Architecture Draft에서 API는 사용자 답변을 `answerProfile`로 정규화하고 `ArchitectureDecisionSpace`를 생성해 payload와 prompt에 함께 보낸다. 이 decision space는 `hardConstraints`, `preferredPatterns`, `discouragedPatterns`, `evaluationCriteria`, `unsupportedSubstitutions`, `coverageRequirements`를 포함한다. `hardConstraints`는 DB 없음, 파일 업로드 없음, 실시간 없음, Korea-only와 같은 명시적 부정/모순에만 사용하고, `preferredPatterns`는 Amazon Q가 선택·변형·조합할 후보 설계 공간으로 취급한다. self-validation은 특정 정답 리소스 조합을 강제하지 않고 forbidden resource/type/label, 선택지 모순, 지원 불가 type, requirement coverage/capability signal 누락만 재생성 사유로 삼는다.
+
 ```ts
 type AiProvider =
   | "bedrock"
@@ -1053,6 +1068,17 @@ type CreateArchitectureDraftRequest = {
   prompt: string;
 };
 
+type ArchitectureDraftClarification = {
+  status: "needs_clarification";
+  question: string;
+  suggestions: string[];
+  providerMetadata: AiProviderMetadata;
+};
+
+type CreateArchitectureDraftResponse =
+  | AiArchitectureDraftResult
+  | ArchitectureDraftClarification;
+
 type ArchitectureRequirementFact =
   | "web_frontend"
   | "static_delivery"
@@ -1073,7 +1099,44 @@ type ArchitectureDraftPattern =
   | "backend_with_db"
   | "server_storage"
   | "serverless_function";
+
+type ArchitectureServicePurpose =
+  | "landing_page"
+  | "file_upload_service"
+  | "auth_web_service"
+  | "reservation_service"
+  | "content_board"
+  | "api_backend"
+  | "data_storage"
+  | "unknown";
+
+type ArchitectureCapability =
+  | "static_delivery"
+  | "file_upload"
+  | "authentication"
+  | "relational_data"
+  | "admin_workflow"
+  | "public_api"
+  | "private_user_data"
+  | "media_storage";
+
+type ArchitectureIntent = {
+  servicePurpose: ArchitectureServicePurpose;
+  capabilities: ArchitectureCapability[];
+  constraints: {
+    budget?: "low" | "normal";
+    traffic?: "small" | "growth";
+    security?: "basic" | "sensitive";
+    computePreference?: "ec2" | "serverless" | "unspecified";
+  };
+  confidence: number;
+  missingQuestions: string[];
+};
 ```
+
+`ArchitectureIntent`는 자유 형식 Requirement Prompt를 표준 설계 의도로 해석한 중간 결과다. 자동 생성 흐름은 `prompt -> interpretRequirement(prompt) -> ArchitectureIntent -> planPracticeArchitecture(intent/resolution) -> ArchitectureJson` 순서로 다룬다. LLM이나 rule fallback은 intent 추출과 설명 보조에 사용할 수 있지만, 실제 보드 리소스 조립은 지원 가능한 `ResourceType`만 사용하는 deterministic planner가 담당한다.
+
+`servicePurpose`와 `capabilities`는 같은 `backend_with_db` 조합 안에서도 로그인 서비스, 예약 신청 관리, 게시판처럼 서로 다른 업무 목적을 구분하는 AI 결과 metadata다. 이 값은 사용자 프롬프트 형식을 강제하기 위한 필드가 아니라 Workspace AI가 자유 문장에서 목적 단서를 해석한 결과이며, 자동 생성 node의 label/config가 목적별로 달라지는 기준이 된다.
 
 `selectedDraftPattern`은 UI와 LLM 설명을 위한 대표 패턴 라벨이다. 생성 기준은 패턴 점수가 아니라 `requirementFacts` 조합이며, 같은 fact 조합은 같은 리소스 조립 순서와 같은 node/edge id를 사용한다.
 
@@ -1207,9 +1270,25 @@ type ArchitecturePatchIntent = {
   requestedAction: "add_resource" | "remove_resource" | "modify_resource" | "manual_review";
   targetResourceId?: string;
   resourceType?: ResourceType;
+  connectionTargetResourceId?: string;
+  skipConnection?: boolean;
+};
+
+type ArchitecturePatchClarification = {
+  status: "needs_clarification";
+  intent: ArchitecturePatchIntent;
+  question: string;
+  candidates: {
+    resourceId: string;
+    resourceType: ResourceType;
+    label: string;
+  }[];
+  suggestions?: string[];
+  providerMetadata: AiProviderMetadata;
 };
 
 type ArchitecturePatchPreview = {
+  status: "preview";
   intent: ArchitecturePatchIntent;
   baseArchitectureJson: ArchitectureJson;
   proposedArchitectureJson: ArchitectureJson;
@@ -1219,6 +1298,10 @@ type ArchitecturePatchPreview = {
   llmExplanation?: LlmExplanation;
   providerMetadata: AiProviderMetadata;
 };
+
+type ArchitecturePatchPreviewResponse =
+  | ArchitecturePatchPreview
+  | ArchitecturePatchClarification;
 ```
 
 Cost Estimate는 실제 청구 데이터를 읽지 않고, `ArchitectureJson`과 사용자가 입력한 추정 조건을 기준으로 계산한다. AWS Pricing API 연동은 `apps/api`의 서버 서비스 안에만 두며, UI 컴포넌트나 `apps/web`은 AWS SDK를 직접 호출하지 않는다. 조회 단가를 쓰지 못한 리소스는 `pricingSource: "fallback"`으로 표시하고, 계산 자체는 계속 성공해야 한다.
@@ -1526,3 +1609,26 @@ type CheckFinding = {
 GitHub App installation repository 목록은 DB에 저장하지 않습니다. callback 응답은 임시 선택 화면에만 사용하고, 사용자가 선택한 repository 1개만 active source repository로 저장합니다. 새 GitHub repo를 연결하면 기존 active row는 `inactive`으로 바꾸고 `disconnected_at`을 기록한 뒤 새 active row를 생성합니다.
 
 Git/CI/CD handoff 생성 요청은 `sourceRepositoryId`만 받습니다. repository owner/name/provider/default branch는 DB의 active source repository에서 읽습니다. 이 원칙은 클라이언트가 임의 GitHub repository identity를 body로 보내는 위험을 막기 위한 서비스 계약입니다.
+
+### Git/CI/CD 자동 배포 handoff 확장
+
+`GitCicdHandoff`는 하나의 record로 유지하되, merge 후 자동 배포를 위해 infra/app/destroy workflow 상태를 분리해 저장합니다. 기존 단일 `pipelineRunUrl`은 summary 링크로 유지하고, 새 UI와 polling은 아래 상세 필드를 함께 사용합니다.
+
+주요 필드:
+
+| 필드 | 설명 |
+| --- | --- |
+| `sourceDeploymentId` | Direct Deployment record에서 Git/CI/CD handoff를 만든 경우의 원본 deployment id |
+| `deploymentMode` | `terraform_iac`, `static_site`, `infra_and_app` 중 하나 |
+| `requiresEnvironmentApproval` | GitHub Environment approval gate 필요 여부 |
+| `pullRequestNumber` | merge 상태 polling 기준 PR 번호 |
+| `mergeCommitSha` | merge 후 target branch workflow run 조회 기준 commit SHA |
+| `environmentName` | 기본 `sketchcatch-production` |
+| `infraPipelineRunUrl`, `infraPipelineStatus` | Terraform plan/apply workflow 상태 |
+| `appPipelineRunUrl`, `appPipelineStatus` | S3 release와 ASG Instance Refresh workflow 상태 |
+| `destroyPipelineRunUrl`, `destroyPipelineStatus` | cleanup destroy workflow 상태 |
+| `repositorySettingsPreview` | 생성/갱신해야 하는 GitHub environment, variables, workflow files preview |
+| `awsRoleDiff` | GitHub Actions OIDC trust 조건 diff preview와 승인 metadata |
+| `githubOAuthRequired` | workflow file write와 repository Actions 설정에 GitHub user OAuth 추가 승인이 필요한지 |
+
+`GitCicdPipelineDetailStatus`는 `not_started`, `waiting_for_merge`, `waiting_for_approval`, `running`, `success`, `failed`, `cancelled` 중 하나입니다. Summary `status`는 infra 또는 app 실패 시 `pipeline_failed`, 둘 다 성공 시 `pipeline_success`, approval 대기/실행 중이면 `pipeline_running`으로 집계합니다.

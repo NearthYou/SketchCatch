@@ -9,22 +9,34 @@ import type {
 import type { NodeResizeUpdate } from "./node-resize";
 
 export type DiagramNodeMetadataUpdate = Partial<Omit<DiagramNode, "id" | "parameters">>;
+export type DiagramPreviewState = "added" | "modified" | "deleted";
+export type DiagramPreviewAnnotations = {
+  readonly nodeStates: Readonly<Record<string, DiagramPreviewState>>;
+  readonly edgeStates: Readonly<Record<string, DiagramPreviewState>>;
+};
 
 export type DiagramEditorPanelContext = {
   diagram: DiagramJson;
   inspectedNodeId: string | null;
   isPreviewActive: boolean;
   isRightPanelOpen: boolean;
+  previewAnnotations: DiagramPreviewAnnotations | null;
   previewDiagram: DiagramJson | null;
   selectedNodeId: string | null;
+  terraformRefreshRequestId: number;
   nodes: readonly DiagramNode[];
   edges: readonly DiagramEdge[];
   applyDiagramJson: (diagram: DiagramJson) => void;
   closeInspectedNode: () => void;
   focusResourceNode: (nodeId: string) => void;
+  requestTerraformRefresh: () => void;
   selectResourceNode: (nodeId: string) => void;
-  setPreviewDiagram: (diagram: DiagramJson | null) => void;
+  setPreviewDiagram: (
+    diagram: DiagramJson | null,
+    annotations?: DiagramPreviewAnnotations | null
+  ) => void;
   setRightPanelOpen: (isOpen: boolean) => void;
+  saveDiagramNow?: (() => Promise<unknown>) | undefined;
   updateNodeParameters: (
     nodeId: string,
     update:
@@ -44,6 +56,7 @@ export type DiagramEditorProps = {
   initialDiagram?: DiagramJson | undefined;
   leftPanel?: ReactNode;
   onDiagramChange?: ((diagram: DiagramJson) => void) | undefined;
+  onDiagramSaveRequest?: (() => Promise<unknown>) | undefined;
   rightPanel?: ((context: DiagramEditorPanelContext) => ReactNode) | undefined;
   projectName?: string | undefined;
   myPageHref?: string | undefined;
@@ -67,11 +80,15 @@ export type DiagramFlowNodeData = Record<string, unknown> & {
   node: DiagramNode;
   selectedNodeCount: number;
   isDimmed: boolean;
+  isConnectionActive: boolean;
+  isPreview: boolean;
+  previewState?: DiagramPreviewState | undefined;
   isReferenceDropTarget: boolean;
 } & DiagramFlowNodeHandlers;
 
 export type DiagramFlowEdgeData = Record<string, unknown> & {
   edge: DiagramEdge;
+  previewState?: DiagramPreviewState | undefined;
 };
 
 export type DiagramFlowNode = Node<DiagramFlowNodeData, "diagramNode">;

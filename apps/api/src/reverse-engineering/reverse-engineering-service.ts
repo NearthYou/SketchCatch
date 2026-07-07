@@ -31,6 +31,11 @@ export type CreateReverseEngineeringScanInput = {
   resourceTypes: ReverseEngineeringResourceSelection[];
 };
 
+export type CreateReverseEngineeringPreviewScanInput = Omit<
+  CreateReverseEngineeringScanInput,
+  "projectId"
+>;
+
 export type CreateReverseEngineeringScanRecordInput = {
   id: string;
   projectId: string;
@@ -134,6 +139,78 @@ class ReverseEngineeringScanCancelledError extends Error {
     super("Reverse Engineering 스캔이 취소됐습니다.");
     this.name = "ReverseEngineeringScanCancelledError";
   }
+}
+
+const PREVIEW_SCAN_PROJECT_ID = "00000000-0000-4000-8000-000000000000";
+
+// 새 프로젝트를 만들기 전 AWS를 먼저 읽기 위한 저장하지 않는 preview scan입니다.
+export async function createReverseEngineeringPreviewScan(
+  input: CreateReverseEngineeringPreviewScanInput,
+  repository: ReverseEngineeringRepository,
+  options: ReverseEngineeringServiceOptions = {}
+): Promise<{ scan: ReverseEngineeringScan; result: ReverseEngineeringScanResult }> {
+  const awsConnection = await repository.findVerifiedAwsConnection(
+    input.awsConnectionId,
+    input.accessContext
+  );
+
+  if (!awsConnection) {
+    throw new ReverseEngineeringNotFoundError("AWS connection not found");
+  }
+
+  const now = options.now ?? (() => new Date());
+  const generateId = options.generateId ?? randomUUID;
+  const startedAt = now();
+  const completedAt = now();
+  const scan: ReverseEngineeringScan = {
+    id: generateId(),
+    projectId: PREVIEW_SCAN_PROJECT_ID,
+    awsConnectionId: input.awsConnectionId,
+    provider: "aws",
+    region: input.region,
+    resourceTypes: input.resourceTypes,
+    status: "completed",
+    createdAt: startedAt.toISOString(),
+    updatedAt: completedAt.toISOString(),
+    startedAt: startedAt.toISOString(),
+    completedAt: completedAt.toISOString(),
+    cancelRequestedAt: null,
+    deletedAt: null,
+    errorSummary: null
+  };
+
+  try {
+    const adapter =
+      options.adapter ??
+      createAwsProviderAdapter(createAwsReverseEngineeringGateway(awsConnection));
+    const adapterResult = await adapter.scan({
+      provider: "aws",
+      region: input.region,
+      resourceTypes: input.resourceTypes
+    });
+    const result: ReverseEngineeringScanResult = {
+      ...adapterResult,
+      scan,
+      reverseEngineeringDraft: {
+        ...adapterResult.reverseEngineeringDraft,
+        id: `draft-${scan.id}`,
+        scanId: scan.id,
+        createdAt: scan.completedAt ?? scan.updatedAt
+      }
+    };
+
+    return {
+      scan,
+      result
+    };
+  } catch (error) {
+    throw new ReverseEngineeringScanFailedError(toErrorSummary(error));
+  }
+}
+
+// 알 수 없는 adapter 오류도 사용자에게 보여줄 수 있는 짧은 실패 문장으로 바꿉니다.
+function toErrorSummary(error: unknown): string {
+  return error instanceof Error ? error.message : "Reverse Engineering scan failed";
 }
 
 // 스캔 생성부터 결과 저장까지 한 번에 처리하는 서비스 진입점입니다.
@@ -276,7 +353,7 @@ async function runReverseEngineeringScanJob({
     }
 
     const failedAt = now();
-    const errorSummary = error instanceof Error ? error.message : "Reverse Engineering scan failed";
+    const errorSummary = toErrorSummary(error);
     const failedScan = await repository.failScan(scan.id, errorSummary, failedAt);
 
     await appendUserFacingLog(repository, scan.id, `Reverse Engineering 스캔이 실패했습니다. ${errorSummary}`, {

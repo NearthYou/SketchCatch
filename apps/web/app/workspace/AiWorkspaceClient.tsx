@@ -9,6 +9,8 @@ import type {
   AiTerraformStage,
   AiTerraformPreviewExplanationResult,
   ArchitectureJson,
+  ArchitectureDraftClarification,
+  CreateArchitectureDraftResponse,
   DesignSimulationResult,
   TerraformDiagnostic,
   TerraformValidateResponse
@@ -72,10 +74,17 @@ export function AiWorkspaceClient() {
   // 자연어 입력을 AI Architecture Draft API로 보내고 결과 설계도를 화면에 저장합니다.
   async function runPromptDraft(): Promise<void> {
     await runRequest(async () => {
-      const result = await postJson<AiArchitectureDraftResult>("/ai/architecture-draft", {
+      const result = await postJson<CreateArchitectureDraftResponse>("/ai/architecture-draft", {
         prompt
       });
-      setDraft(result);
+
+      if (isArchitectureDraftClarification(result)) {
+        throw new Error(result.question);
+      }
+
+      const draftResult: AiArchitectureDraftResult = result;
+
+      setDraft(draftResult);
       setAnalysis(null);
       setDesignSimulation(null);
     });
@@ -334,4 +343,10 @@ export function AiWorkspaceClient() {
       {status === "loading" ? <p className="loadingBanner">AI fallback 응답을 생성하는 중입니다.</p> : null}
     </div>
   );
+}
+
+function isArchitectureDraftClarification(
+  response: CreateArchitectureDraftResponse
+): response is ArchitectureDraftClarification {
+  return "status" in response && response.status === "needs_clarification";
 }

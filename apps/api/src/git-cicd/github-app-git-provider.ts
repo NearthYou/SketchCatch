@@ -47,7 +47,8 @@ export function createGitHubAppGitProvider(
         pullRequestUrl: result.pullRequestUrl,
         sourceBranch: input.sourceBranch,
         commitSha: result.commitSha,
-        pullRequestHeadSha: result.pullRequestHeadSha
+        pullRequestHeadSha: result.pullRequestHeadSha,
+        pullRequestNumber: result.pullRequestNumber
       };
     }
   };
@@ -68,6 +69,14 @@ async function downloadTerraformArtifactText(
     | ((objectKey: string) => Promise<Buffer | Uint8Array | string>)
     | undefined
 ): Promise<string> {
+  if (file.content !== undefined) {
+    return file.content;
+  }
+
+  if (!file.artifactObjectKey) {
+    throw new Error(`Git/CI/CD handoff file ${file.path} has no content source`);
+  }
+
   const content =
     downloadTerraformArtifact !== undefined
       ? await downloadTerraformArtifact(file.artifactObjectKey)

@@ -11,6 +11,9 @@ const architectureDraftResponseSchema = z.object({
       z.object({
         id: z.string(),
         type: z.string(),
+        label: z.string().optional(),
+        positionX: z.number(),
+        positionY: z.number(),
         config: z.record(z.string(), z.unknown())
       })
     ),
@@ -29,6 +32,22 @@ const architectureDraftResponseSchema = z.object({
     assumptions: z.array(z.string()),
     explanations: z.array(z.string()),
     selectedDraftPattern: z.string().optional(),
+    architectureIntent: z
+      .object({
+        servicePurpose: z.string(),
+        capabilities: z.array(z.string()),
+        constraints: z.object({
+          budget: z.string().optional(),
+          computePreference: z.string().optional(),
+          security: z.string().optional(),
+          traffic: z.string().optional()
+        }),
+        confidence: z.number(),
+        missingQuestions: z.array(z.string())
+      })
+      .optional(),
+    servicePurpose: z.string().optional(),
+    capabilities: z.array(z.string()).optional(),
     requirementFacts: z.array(z.string()).optional(),
     operatingProfile: z
       .object({
@@ -148,6 +167,50 @@ function assertDraftHasEdge(
   );
 }
 
+function assertDraftNodesDoNotOverlap(
+  body: ArchitectureDraftResponse,
+  nodeIds: readonly string[],
+  size: { readonly width: number; readonly height: number } = { width: 160, height: 96 }
+): void {
+  const nodes = nodeIds.map((nodeId) => {
+    const node = findDraftNode(body, nodeId);
+
+    if (node === undefined) {
+      assert.fail(`Expected draft to include ${nodeId}`);
+    }
+
+    return node;
+  });
+
+  for (let outerIndex = 0; outerIndex < nodes.length; outerIndex += 1) {
+    const first = nodes[outerIndex];
+
+    if (first === undefined) {
+      assert.fail(`Expected overlap node at index ${outerIndex}`);
+    }
+
+    for (let innerIndex = outerIndex + 1; innerIndex < nodes.length; innerIndex += 1) {
+      const second = nodes[innerIndex];
+
+      if (second === undefined) {
+        assert.fail(`Expected overlap node at index ${innerIndex}`);
+      }
+
+      const overlaps: boolean =
+        first.positionX < second.positionX + size.width &&
+        first.positionX + size.width > second.positionX &&
+        first.positionY < second.positionY + size.height &&
+        first.positionY + size.height > second.positionY;
+
+      assert.equal(
+        overlaps,
+        false,
+        `Expected ${first.id} at (${first.positionX},${first.positionY}) not to overlap ${second.id} at (${second.positionX},${second.positionY})`
+      );
+    }
+  }
+}
+
 test("POST /api/ai/architecture-draft returns a board-ready ArchitectureJson for a static website request", async () => {
   const app = buildApp();
 
@@ -197,16 +260,19 @@ test("POST /api/ai/architecture-draft selects API server and database backend te
     "ROUTE_TABLE_ASSOCIATION",
     "AMI",
     "SECURITY_GROUP",
-    "IAM_ROLE",
-    "IAM_POLICY",
-    "IAM_INSTANCE_PROFILE",
-    "CLOUDWATCH_LOG_GROUP",
-    "CLOUDWATCH_METRIC_ALARM",
     "EC2"
   ]);
+  assert.equal(apiServerNodeTypes.includes("IAM_ROLE"), false);
+  assert.equal(apiServerNodeTypes.includes("CLOUDWATCH_LOG_GROUP"), false);
+  assert.equal(apiServerNodeTypes.includes("S3"), false);
   assertDraftHasEdge(apiServerBody, {
     id: "app-ami-to-app-server",
     sourceId: "app-ami",
+    targetId: "app-server"
+  });
+  assertDraftHasEdge(apiServerBody, {
+    id: "public-subnet-a-to-app-server",
+    sourceId: "public-subnet-a",
     targetId: "app-server"
   });
   assertDraftHasEdge(apiServerBody, {
@@ -298,6 +364,27 @@ test("POST /api/ai/architecture-draft selects a Lambda draft from serverless pro
     sourceId: "lambda-function",
     targetId: "lambda-log-group"
   });
+  assert.equal(body.architectureJson.nodes.some((node) => node.type === "EC2"), false);
+  assert.equal(body.metadata.requirementFacts?.includes("server_runtime"), false);
+
+  const serverlessWebServiceResponse = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    payload: {
+      prompt: "로그인 있는 웹서비스를 서버리스로 만들어줘. EC2는 쓰지 마."
+    }
+  });
+
+  assert.equal(serverlessWebServiceResponse.statusCode, 200);
+
+  const serverlessWebServiceBody = architectureDraftResponseSchema.parse(serverlessWebServiceResponse.json());
+  const serverlessWebServiceNodeTypes = serverlessWebServiceBody.architectureJson.nodes.map((node) => node.type);
+
+  assert.equal(serverlessWebServiceBody.metadata.selectedDraftPattern, "serverless_function");
+  assert.ok(serverlessWebServiceNodeTypes.includes("LAMBDA"));
+  assert.equal(serverlessWebServiceNodeTypes.includes("EC2"), false);
+  assert.equal(serverlessWebServiceBody.metadata.requirementFacts?.includes("serverless_runtime"), true);
+  assert.equal(serverlessWebServiceBody.metadata.requirementFacts?.includes("server_runtime"), false);
 
   await app.close();
 });
@@ -341,6 +428,11 @@ test("POST /api/ai/architecture-draft composes resources from natural language f
     targetId: "upload-bucket"
   });
   assertDraftHasEdge(body, {
+    id: "app-runtime-policy-to-upload-bucket",
+    sourceId: "app-runtime-policy",
+    targetId: "upload-bucket"
+  });
+  assertDraftHasEdge(body, {
     id: "app-server-to-app-database",
     sourceId: "app-server",
     targetId: "app-database"
@@ -367,11 +459,70 @@ test("POST /api/ai/architecture-draft warns when unsupported resources are omitt
   assert.equal(response.statusCode, 200);
 
   const body = architectureDraftResponseSchema.parse(response.json());
+  const omittedWarning = body.metadata.guardrailWarnings?.find(
+    (warning) => warning.code === "unsupported_resource_omitted"
+  );
 
   assert.equal(body.metadata.selectedDraftPattern, "api_server");
   assert.ok(body.metadata.guardrailWarnings?.some((warning) => warning.code === "unsupported_resource_omitted"));
   assert.ok(body.metadata.guardrailWarnings?.some((warning) => warning.code === "partial_generation"));
+  assert.match(omittedWarning?.message ?? "", /ElastiCache\/Redis/);
+  assert.match(omittedWarning?.message ?? "", /현재 보드에서 제외/);
   assert.equal(body.architectureJson.nodes.some((node) => node.type === "UNKNOWN"), false);
+
+  await app.close();
+});
+
+test("POST /api/ai/architecture-draft keeps a minimal API server small but container-based", async () => {
+  const app = buildApp();
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    payload: {
+      prompt: "최소한의 API 서버 만들어줘"
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+
+  const body = architectureDraftResponseSchema.parse(response.json());
+  const nodeIds = body.architectureJson.nodes.map((node) => node.id);
+  const nodeTypes = body.architectureJson.nodes.map((node) => node.type);
+  const appServer = findDraftNode(body, "app-server");
+
+  assert.equal(body.metadata.selectedDraftPattern, "api_server");
+  assert.deepEqual(nodeIds, [
+    "vpc-main",
+    "public-subnet-a",
+    "internet-gateway",
+    "public-route-table",
+    "public-route-table-association",
+    "app-security-group",
+    "app-ami",
+    "app-server"
+  ]);
+  assert.equal(nodeTypes.includes("CLOUDFRONT"), false);
+  assert.equal(nodeTypes.includes("S3"), false);
+  assert.equal(nodeTypes.includes("IAM_ROLE"), false);
+  assert.equal(nodeTypes.includes("CLOUDWATCH_LOG_GROUP"), false);
+  assert.equal(appServer?.config.associatePublicIpAddress, true);
+  assert.equal(appServer?.config.subnetId, "aws_subnet.public_subnet_a.id");
+  assertDraftHasEdge(body, {
+    id: "vpc-main-to-public-subnet-a",
+    sourceId: "vpc-main",
+    targetId: "public-subnet-a"
+  });
+  assertDraftHasEdge(body, {
+    id: "public-subnet-a-to-app-server",
+    sourceId: "public-subnet-a",
+    targetId: "app-server"
+  });
+  assertDraftHasEdge(body, {
+    id: "app-security-group-to-app-server",
+    sourceId: "app-security-group",
+    targetId: "app-server"
+  });
 
   await app.close();
 });
@@ -392,9 +543,9 @@ test("POST /api/ai/architecture-draft derives operating profile from natural lan
 	const body = architectureDraftResponseSchema.parse(response.json());
 	const nodeTypes = body.architectureJson.nodes.map((node) => node.type);
 
-	assert.equal(body.title, "DB 포함 백엔드 Practice Architecture");
+	assert.equal(body.title, "Auth Web Service Practice Architecture");
 	assert.ok(nodeTypes.includes("RDS"));
-	assert.equal(nodeTypes.includes("CLOUDFRONT"), false);
+	assert.equal(nodeTypes.includes("CLOUDFRONT"), true);
   assert.equal(body.metadata.selectedDraftPattern, "backend_with_db");
   assert.ok(body.metadata.guardrailWarnings?.some((warning) => warning.code === "guardrail_adjusted_config"));
   assert.ok(body.metadata.guardrailWarnings?.some((warning) => warning.code === "low_budget_rds_cost"));
@@ -435,6 +586,9 @@ test("POST /api/ai/architecture-draft returns requirement facts and unsupported 
   assert.equal(unsupportedResponse.statusCode, 200);
 
   const unsupportedBody = architectureDraftResponseSchema.parse(unsupportedResponse.json());
+  const substitutionWarning = unsupportedBody.metadata.guardrailWarnings?.find(
+    (warning) => warning.code === "unsupported_requirement_substituted"
+  );
 
   assert.equal(unsupportedBody.metadata.selectedDraftPattern, "api_server");
   assert.equal(unsupportedBody.architectureJson.nodes.some((node) => node.type === "UNKNOWN"), false);
@@ -443,6 +597,9 @@ test("POST /api/ai/architecture-draft returns requirement facts and unsupported 
       (warning) => warning.code === "unsupported_requirement_substituted"
     )
   );
+  assert.match(substitutionWarning?.message ?? "", /EKS\/Kubernetes/);
+  assert.match(substitutionWarning?.message ?? "", /EC2/);
+  assert.match(substitutionWarning?.message ?? "", /대체/);
   assert.ok(unsupportedBody.metadata.requirementFacts?.includes("server_runtime"));
 
   const partialResponse = await app.inject({
@@ -515,32 +672,289 @@ test("POST /api/ai/architecture-draft understands beginner-friendly prompt wordi
   await app.close();
 });
 
-test("POST /api/ai/architecture-draft rejects generic website prompts until clarified", async () => {
+test("POST /api/ai/architecture-draft exposes interpreted ArchitectureIntent metadata", async () => {
   const app = buildApp();
 
   const response = await app.inject({
     method: "POST",
     url: "/api/ai/architecture-draft",
     payload: {
-      prompt: "웹사이트 하나 배포하고 싶어"
+      prompt: "예약 신청을 받고 관리자가 확인하는 웹서비스를 작게 만들어줘"
     }
   });
 
-  assert.equal(response.statusCode, 400);
+  assert.equal(response.statusCode, 200);
 
-  const body = apiErrorResponseSchema.parse(response.json());
+  const body = architectureDraftResponseSchema.parse(response.json());
 
-  assert.equal(body.error, "bad_request");
-  assert.match(body.message, /웹사이트/);
-  assert.match(body.message, /파일|로그인|방문자/);
-  assert.match(body.message, /먼저|확인/);
+  assert.equal(body.metadata.architectureIntent?.servicePurpose, "reservation_service");
+  assert.ok(body.metadata.architectureIntent?.capabilities.includes("admin_workflow"));
+  assert.equal(body.metadata.architectureIntent?.constraints.traffic, "small");
+  assert.equal(body.metadata.architectureIntent?.constraints.computePreference, "ec2");
+  assert.ok((body.metadata.architectureIntent?.confidence ?? 0) >= 0.7);
+  assert.deepEqual(body.metadata.architectureIntent?.missingQuestions, []);
+
+  await app.close();
+});
+
+test("POST /api/ai/architecture-draft keeps purpose-specific diagrams distinct", async () => {
+  const app = buildApp();
+  const prompts = [
+    {
+      prompt: "정적 소개 웹사이트를 만들고 싶어",
+      expectedPattern: "static_site",
+      expectedNodes: ["cloudfront-distribution", "web-assets-bucket"],
+      forbiddenNodes: ["app-server", "upload-bucket", "app-database"]
+    },
+    {
+      prompt: "파일 업로드 페이지가 필요해",
+      expectedPattern: "server_storage",
+      expectedNodes: ["app-server", "upload-bucket"],
+      forbiddenNodes: ["app-database"]
+    },
+    {
+      prompt: "로그인 있는 작은 웹서비스가 필요해",
+      expectedPattern: "backend_with_db",
+      expectedNodes: ["app-server", "app-database"],
+      forbiddenNodes: ["upload-bucket"]
+    },
+    {
+      prompt: "API 서버를 만들고 싶어",
+      expectedPattern: "api_server",
+      expectedNodes: ["app-server"],
+      forbiddenNodes: ["cloudfront-distribution", "upload-bucket", "app-database"]
+    }
+  ] as const;
+  const nodeIdSignatures: string[] = [];
+
+  for (const promptCase of prompts) {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/ai/architecture-draft",
+      payload: {
+        prompt: promptCase.prompt
+      }
+    });
+
+    assert.equal(response.statusCode, 200);
+
+    const body = architectureDraftResponseSchema.parse(response.json());
+    const nodeIds = body.architectureJson.nodes.map((node) => node.id);
+
+    assert.equal(body.metadata.selectedDraftPattern, promptCase.expectedPattern);
+    for (const expectedNode of promptCase.expectedNodes) {
+      assert.ok(nodeIds.includes(expectedNode), `${promptCase.prompt} should include ${expectedNode}`);
+    }
+    for (const forbiddenNode of promptCase.forbiddenNodes) {
+      assert.equal(
+        nodeIds.includes(forbiddenNode),
+        false,
+        `${promptCase.prompt} should not include ${forbiddenNode}`
+      );
+    }
+
+    nodeIdSignatures.push(nodeIds.join("|"));
+  }
+
+  assert.equal(new Set(nodeIdSignatures).size, prompts.length);
+
+  await app.close();
+});
+
+test("POST /api/ai/architecture-draft respects no-server and no-database constraints for landing pages", async () => {
+  const app = buildApp();
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    payload: {
+      prompt: "회사 소개용 정적 랜딩 페이지를 만들고 싶어. 비용은 낮게 하고 서버나 DB는 필요 없어."
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+
+  const body = architectureDraftResponseSchema.parse(response.json());
+  const nodeIds = body.architectureJson.nodes.map((node) => node.id);
+  const nodeTypes = body.architectureJson.nodes.map((node) => node.type);
+
+  assert.equal(body.metadata.architectureIntent?.servicePurpose, "landing_page");
+  assert.equal(body.metadata.selectedDraftPattern, "static_site");
+  assert.deepEqual(nodeIds, ["cloudfront-distribution", "web-assets-bucket"]);
+  assert.equal(nodeTypes.includes("EC2"), false);
+  assert.equal(nodeTypes.includes("RDS"), false);
+  assert.equal(body.metadata.requirementFacts?.includes("server_runtime"), false);
+  assert.equal(body.metadata.requirementFacts?.includes("database"), false);
+
+  await app.close();
+});
+
+test("POST /api/ai/architecture-draft extracts service purpose from free-form Korean prompts", async () => {
+  const app = buildApp();
+  const purposeCases = [
+    {
+      prompt: "로그인 있는 작은 웹서비스가 필요해",
+      expectedPurpose: "auth_web_service",
+      expectedCapabilities: ["authentication", "relational_data", "private_user_data"],
+      expectedLabelPattern: /auth|login|user|account/i,
+      expectedTitlePattern: /Auth Web Service/
+    },
+    {
+      prompt: "예약 신청을 관리하는 웹사이트가 필요해",
+      expectedPurpose: "reservation_service",
+      expectedCapabilities: ["admin_workflow", "relational_data", "private_user_data"],
+      expectedLabelPattern: /reservation|booking|request/i,
+      expectedTitlePattern: /Reservation Service/
+    },
+    {
+      prompt: "게시판 서비스를 만들고 싶어",
+      expectedPurpose: "content_board",
+      expectedCapabilities: ["public_api", "relational_data"],
+      expectedLabelPattern: /content|board|post/i,
+      expectedTitlePattern: /Content Board/
+    }
+  ] as const;
+  const nodeIdSignatures: string[] = [];
+  const purposeSignatures: string[] = [];
+
+  for (const purposeCase of purposeCases) {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/ai/architecture-draft",
+      payload: { prompt: purposeCase.prompt }
+    });
+
+    assert.equal(response.statusCode, 200, purposeCase.prompt);
+
+    const body = architectureDraftResponseSchema.parse(response.json());
+    const appServer = findDraftNode(body, "app-server");
+    const appDatabase = findDraftNode(body, "app-database");
+    const purposeText = [
+      body.title,
+      appServer?.label,
+      appDatabase?.label,
+      appServer?.config.servicePurpose,
+      appDatabase?.config.servicePurpose,
+      appDatabase?.config.dataPurpose
+    ].join(" ");
+
+    assert.equal(body.metadata.selectedDraftPattern, "backend_with_db", purposeCase.prompt);
+    assert.equal(body.metadata.servicePurpose, purposeCase.expectedPurpose, purposeCase.prompt);
+    assert.match(body.title, purposeCase.expectedTitlePattern, purposeCase.prompt);
+    for (const expectedCapability of purposeCase.expectedCapabilities) {
+      assert.ok(
+        body.metadata.capabilities?.includes(expectedCapability),
+        `${purposeCase.prompt} should include ${expectedCapability}`
+      );
+    }
+    assert.match(purposeText, purposeCase.expectedLabelPattern, purposeCase.prompt);
+
+    nodeIdSignatures.push(body.architectureJson.nodes.map((node) => node.id).join("|"));
+    purposeSignatures.push(
+      body.architectureJson.nodes
+        .map((node) => `${node.id}:${node.label ?? ""}:${node.config.servicePurpose ?? ""}:${node.config.dataPurpose ?? ""}`)
+        .join("|")
+    );
+  }
+
+  assert.equal(new Set(nodeIdSignatures).size, purposeCases.length);
+  assert.equal(new Set(purposeSignatures).size, purposeCases.length);
+
+  await app.close();
+});
+
+test("POST /api/ai/architecture-draft keeps equivalent requests stable and different intents divergent", async () => {
+  const app = buildApp();
+  const intentCases = [
+    {
+      intent: "static_delivery",
+      prompts: ["정적 웹사이트를 배포하고 싶어", "정적 웹사이트를 만들고 싶어"],
+      expectedPattern: "static_site",
+      requiredNodes: ["web-assets-bucket", "cloudfront-distribution"],
+      forbiddenNodes: ["app-server", "app-database"]
+    },
+    {
+      intent: "minimal_api",
+      prompts: ["최소한의 api만 넣은 거 하나 만들어줘", "간단한 API 서버만 만들어줘"],
+      expectedPattern: "api_server",
+      requiredNodes: ["app-server"],
+      forbiddenNodes: ["web-assets-bucket", "cloudfront-distribution", "app-database", "upload-bucket"]
+    },
+    {
+      intent: "login_service",
+      prompts: ["로그인이 있는 서비스를 만들고 싶어", "회원 계정이 있는 작은 서비스 만들어줘"],
+      expectedPattern: "backend_with_db",
+      requiredNodes: ["app-server", "app-database"],
+      forbiddenNodes: ["upload-bucket"]
+    }
+  ] as const;
+  const signatureByIntent = new Map<string, string>();
+
+  for (const intentCase of intentCases) {
+    const signatures: string[] = [];
+
+    for (const prompt of intentCase.prompts) {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/ai/architecture-draft",
+        payload: { prompt }
+      });
+
+      assert.equal(response.statusCode, 200, prompt);
+
+      const body = architectureDraftResponseSchema.parse(response.json());
+      const nodeIds = body.architectureJson.nodes.map((node) => node.id);
+      const signature = nodeIds.join("|");
+
+      assert.equal(body.metadata.selectedDraftPattern, intentCase.expectedPattern, prompt);
+      for (const requiredNode of intentCase.requiredNodes) {
+        assert.ok(nodeIds.includes(requiredNode), `${prompt} should include ${requiredNode}`);
+      }
+      for (const forbiddenNode of intentCase.forbiddenNodes) {
+        assert.equal(nodeIds.includes(forbiddenNode), false, `${prompt} should not include ${forbiddenNode}`);
+      }
+
+      signatures.push(signature);
+    }
+
+    assert.equal(
+      new Set(signatures).size,
+      1,
+      `${intentCase.intent} prompt variants should produce a stable architecture signature`
+    );
+    signatureByIntent.set(intentCase.intent, signatures[0] ?? "");
+  }
+
+  assert.equal(new Set(signatureByIntent.values()).size, intentCases.length);
+
+  await app.close();
+});
+
+test("POST /api/ai/architecture-draft rejects generic website prompts until clarified", async () => {
+  const app = buildApp();
+
+  for (const prompt of ["웹사이트 하나 만들고 싶어"]) {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/ai/architecture-draft",
+      payload: { prompt }
+    });
+
+    assert.equal(response.statusCode, 400, prompt);
+
+    const body = apiErrorResponseSchema.parse(response.json());
+
+    assert.equal(body.error, "bad_request", prompt);
+    assert.match(body.message, /웹사이트/, prompt);
+    assert.match(body.message, /파일|로그인|방문자/, prompt);
+    assert.match(body.message, /먼저|확인/, prompt);
+  }
 
   await app.close();
 });
 
 test("POST /api/ai/architecture-draft ignores legacy helper fields for generic website prompts", async () => {
   const app = buildApp();
-  const prompt = "웹사이트 하나 배포하고 싶어";
+  const prompt = "웹사이트 하나 만들고 싶어";
 
   const response = await app.inject({
     method: "POST",
@@ -596,6 +1010,28 @@ test("POST /api/ai/architecture-draft rejects ambiguous prompts instead of creat
 
   assert.equal(fallbackBody.error, "bad_request");
   assert.match(fallbackBody.message, /명확한 아키텍처 단서/);
+
+  await app.close();
+});
+
+test("POST /api/ai/architecture-draft cuts off clearly unrelated prompts", async () => {
+  const app = buildApp();
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    payload: {
+      prompt: "\uB41C\uC7A5\uCC0C\uAC1C \uB808\uC2DC\uD53C \uC54C\uB824\uC918"
+    }
+  });
+
+  assert.equal(response.statusCode, 400);
+
+  const body = apiErrorResponseSchema.parse(response.json());
+
+  assert.equal(body.error, "bad_request");
+  assert.match(body.message, /IaC|아키텍처|인프라/);
+  assert.match(body.message, /레시피|관련 없는 요청/);
 
   await app.close();
 });
@@ -736,9 +1172,10 @@ test("POST /api/ai/architecture-draft uses readable resource ids in nodes, edges
   const staticSiteNodeIds = staticSiteBody.architectureJson.nodes.map((node) => node.id);
   const cloudfrontNode = staticSiteBody.architectureJson.nodes.find((node) => node.id === "cloudfront-distribution");
 
-  assert.deepEqual(staticSiteNodeIds, ["web-assets-bucket", "cloudfront-distribution"]);
+  assert.ok(staticSiteNodeIds.includes("web-assets-bucket"));
+  assert.ok(staticSiteNodeIds.includes("cloudfront-distribution"));
   assert.equal(cloudfrontNode?.config.originResourceId, "web-assets-bucket");
-  assert.deepEqual(staticSiteBody.architectureJson.edges[0], {
+  assertDraftHasEdge(staticSiteBody, {
     id: "cloudfront-to-web-assets-bucket",
     sourceId: "cloudfront-distribution",
     targetId: "web-assets-bucket"
@@ -759,39 +1196,32 @@ test("POST /api/ai/architecture-draft uses readable resource ids in nodes, edges
   const apiServerEdgeIds = apiServerBody.architectureJson.edges.map((edge) => edge.id);
   const apiServerNode = apiServerBody.architectureJson.nodes.find((node) => node.id === "app-server");
 
-  assert.deepEqual(apiServerNodeIds, [
+  for (const expectedNodeId of [
     "vpc-main",
-    "public-subnet",
+    "public-subnet-a",
     "internet-gateway",
     "public-route-table",
     "public-route-table-association",
     "app-security-group",
     "app-ami",
-    "app-runtime-role",
-    "app-runtime-policy",
-    "app-instance-profile",
-    "app-log-group",
-    "app-cpu-alarm",
     "app-server"
-  ]);
-  assert.deepEqual(apiServerEdgeIds, [
-    "vpc-main-to-public-subnet",
-    "public-route-table-to-internet-gateway",
-    "public-subnet-to-public-route-table-association",
+  ]) {
+    assert.ok(apiServerNodeIds.includes(expectedNodeId), `Expected ${expectedNodeId}`);
+  }
+  for (const expectedEdgeId of [
+    "vpc-main-to-public-subnet-a",
+    "public-subnet-a-to-public-route-table-association",
     "public-route-table-association-to-public-route-table",
-    "app-runtime-policy-to-app-runtime-role",
-    "app-runtime-role-to-app-instance-profile",
-    "app-ami-to-app-server",
-    "app-instance-profile-to-app-server",
-    "app-server-to-app-log-group",
-    "app-cpu-alarm-to-app-server",
-    "public-subnet-to-app-server",
+    "public-subnet-a-to-app-server",
     "app-security-group-to-app-server"
-  ]);
+  ]) {
+    assert.ok(apiServerEdgeIds.includes(expectedEdgeId), `Expected ${expectedEdgeId}`);
+  }
   assert.equal(apiServerNode?.config.ami, "data.aws_ami.app_ami.id");
-  assert.equal(apiServerNode?.config.subnetId, "aws_subnet.public_subnet.id");
+  assert.equal(apiServerNode?.config.associatePublicIpAddress, true);
+  assert.equal(apiServerNode?.config.subnetId, "aws_subnet.public_subnet_a.id");
   assert.deepEqual(apiServerNode?.config.vpcSecurityGroupIds, ["aws_security_group.app_security_group.id"]);
-  assert.equal(apiServerNode?.config.iamInstanceProfile, "aws_iam_instance_profile.app_instance_profile.name");
+  assert.equal(apiServerNode?.config.iamInstanceProfile, undefined);
 
   const databaseBackendResponse = await app.inject({
     method: "POST",
@@ -810,58 +1240,91 @@ test("POST /api/ai/architecture-draft uses readable resource ids in nodes, edges
   const databaseNode = databaseBackendBody.architectureJson.nodes.find((node) => node.id === "app-database");
   const databaseEdge = databaseBackendBody.architectureJson.edges.find((edge) => edge.id === "app-server-to-app-database");
 
-  assert.deepEqual(databaseBackendNodeIds, [
-    "vpc-main",
-    "public-subnet",
-    "internet-gateway",
-    "public-route-table",
-    "public-route-table-association",
-    "app-security-group",
-    "app-ami",
-    "app-runtime-role",
-    "app-runtime-policy",
-    "app-instance-profile",
-    "app-log-group",
-    "app-cpu-alarm",
-    "app-server",
-    "private-db-subnet",
-    "db-security-group",
-    "data-encryption-key",
-    "db-cpu-alarm",
+  for (const expectedNodeId of [
+    "private-db-subnet-a",
+    "private-db-subnet-b",
     "app-database"
-  ]);
-  assert.deepEqual(databaseBackendEdgeIds, [
-    "vpc-main-to-public-subnet",
-    "public-route-table-to-internet-gateway",
-    "public-subnet-to-public-route-table-association",
-    "public-route-table-association-to-public-route-table",
-    "app-runtime-policy-to-app-runtime-role",
-    "app-runtime-role-to-app-instance-profile",
-    "app-ami-to-app-server",
-    "app-instance-profile-to-app-server",
-    "app-server-to-app-log-group",
-    "app-cpu-alarm-to-app-server",
-    "public-subnet-to-app-server",
-    "app-security-group-to-app-server",
-    "vpc-main-to-private-db-subnet",
-    "private-db-subnet-to-app-database",
-    "db-security-group-to-app-database",
-    "app-security-group-to-db-security-group",
-    "data-encryption-key-to-app-database",
+  ]) {
+    assert.ok(databaseBackendNodeIds.includes(expectedNodeId), `Expected ${expectedNodeId}`);
+  }
+  for (const expectedEdgeId of [
+    "private-db-subnet-a-to-app-database",
+    "private-db-subnet-b-to-app-database",
     "db-cpu-alarm-to-app-database",
     "app-server-to-app-database"
-  ]);
+  ]) {
+    assert.ok(databaseBackendEdgeIds.includes(expectedEdgeId), `Expected ${expectedEdgeId}`);
+  }
   assert.equal(backendNode?.config.ami, "data.aws_ami.app_ami.id");
-  assert.equal(backendNode?.config.subnetId, "aws_subnet.public_subnet.id");
+  assert.equal(backendNode?.config.subnetId, "aws_subnet.private_app_subnet_a.id");
   assert.deepEqual(backendNode?.config.vpcSecurityGroupIds, ["aws_security_group.app_security_group.id"]);
   assert.equal(backendNode?.config.iamInstanceProfile, "aws_iam_instance_profile.app_instance_profile.name");
-  assert.equal(databaseNode?.config.subnetId, "aws_subnet.private_db_subnet.id");
+  assert.deepEqual(databaseNode?.config.subnetIds, [
+    "aws_subnet.private_db_subnet_a.id",
+    "aws_subnet.private_db_subnet_b.id"
+  ]);
   assert.deepEqual(databaseNode?.config.vpcSecurityGroupIds, ["aws_security_group.db_security_group.id"]);
   assert.deepEqual(databaseEdge, {
     id: "app-server-to-app-database",
     sourceId: "app-server",
     targetId: "app-database"
   });
+
+  await app.close();
+});
+
+test("POST /api/ai/architecture-draft honors distinct Korean generation commands", async () => {
+  const app = buildApp();
+
+  const staticSiteResponse = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    payload: {
+      prompt: "\uC6F9\uC0AC\uC774\uD2B8 \uD558\uB098 \uBC30\uD3EC\uD558\uACE0 \uC2F6\uC5B4"
+    }
+  });
+  const noEc2ApiResponse = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    payload: {
+      prompt: "ec2 \uC5C6\uB294 \uAC04\uB2E8\uD55C api \uC11C\uBC84 \uD558\uB098 \uB9CC\uB4E4\uC5B4\uC918"
+    }
+  });
+  const dataStorageResponse = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    payload: {
+      prompt: "\uB370\uC774\uD130\uBCA0\uC774\uC2A4\uB791 s3\uB9CC \uC788\uB294 \uB2E4\uC774\uC5B4\uADF8\uB7A8 \uADF8\uB824\uC918"
+    }
+  });
+
+  assert.equal(staticSiteResponse.statusCode, 200);
+  assert.equal(noEc2ApiResponse.statusCode, 200);
+  assert.equal(dataStorageResponse.statusCode, 200);
+
+  const staticSiteBody = architectureDraftResponseSchema.parse(staticSiteResponse.json());
+  const noEc2ApiBody = architectureDraftResponseSchema.parse(noEc2ApiResponse.json());
+  const dataStorageBody = architectureDraftResponseSchema.parse(dataStorageResponse.json());
+  const noEc2ApiNodeTypes = noEc2ApiBody.architectureJson.nodes.map((node) => node.type);
+  const dataStorageNodeTypes = dataStorageBody.architectureJson.nodes.map((node) => node.type);
+
+  assert.equal(staticSiteBody.metadata.selectedDraftPattern, "static_site");
+  assertDraftHasNodeTypes(staticSiteBody, ["CLOUDFRONT", "S3"]);
+  assert.equal(staticSiteBody.architectureJson.nodes.some((node) => node.type === "EC2"), false);
+
+  assert.equal(noEc2ApiBody.metadata.selectedDraftPattern, "serverless_function");
+  assert.ok(noEc2ApiNodeTypes.includes("LAMBDA"));
+  assert.ok(noEc2ApiNodeTypes.includes("API_GATEWAY_REST_API"));
+  assert.equal(noEc2ApiNodeTypes.includes("EC2"), false);
+
+  assert.equal(dataStorageBody.metadata.selectedDraftPattern, "backend_with_db");
+  assert.ok(dataStorageNodeTypes.includes("RDS"));
+  assert.ok(dataStorageNodeTypes.includes("S3"));
+  assert.equal(dataStorageNodeTypes.includes("EC2"), false);
+  assert.equal(dataStorageNodeTypes.includes("CLOUDFRONT"), false);
+
+  assert.notDeepEqual(staticSiteBody.architectureJson, noEc2ApiBody.architectureJson);
+  assert.notDeepEqual(noEc2ApiBody.architectureJson, dataStorageBody.architectureJson);
 
   await app.close();
 });
@@ -884,13 +1347,15 @@ test("POST /api/ai/architecture-draft creates a server and storage draft", async
   const nodeTypes = body.architectureJson.nodes.map((node) => node.type);
   const edgeIds = body.architectureJson.edges.map((edge) => edge.id);
   const instanceNode = body.architectureJson.nodes.find((node) => node.id === "app-server");
-  const routeTableNode = body.architectureJson.nodes.find((node) => node.id === "public-route-table");
-  const internetRouteEdge = body.architectureJson.edges.find((edge) => edge.id === "public-route-table-to-internet-gateway");
 
   assert.equal(body.title, "서버+스토리지 Practice Architecture");
   assert.equal(body.metadata.selectedDraftPattern, "server_storage");
   assert.ok(nodeIds.includes("vpc-main"));
-  assert.ok(nodeIds.includes("public-subnet"));
+  assert.ok(nodeIds.includes("private-app-subnet-a"));
+  assert.equal(nodeIds.includes("public-subnet-a"), false);
+  assert.equal(nodeIds.includes("public-subnet-b"), false);
+  assert.equal(nodeIds.includes("internet-gateway"), false);
+  assert.equal(nodeIds.includes("public-route-table"), false);
   assert.ok(nodeIds.includes("app-server"));
   assert.ok(nodeIds.includes("upload-bucket"));
   assert.ok(nodeTypes.includes("EC2"));
@@ -898,21 +1363,43 @@ test("POST /api/ai/architecture-draft creates a server and storage draft", async
   assert.equal(nodeTypes.includes("RDS"), false);
   assert.ok(edgeIds.includes("app-ami-to-app-server"));
   assert.ok(edgeIds.includes("app-server-to-upload-bucket"));
-  assert.ok(edgeIds.includes("public-route-table-to-internet-gateway"));
-  assert.deepEqual(internetRouteEdge, {
-    id: "public-route-table-to-internet-gateway",
-    sourceId: "public-route-table",
-    targetId: "internet-gateway"
-  });
+  assert.ok(edgeIds.includes("app-runtime-policy-to-upload-bucket"));
   assert.equal(instanceNode?.config.ami, "data.aws_ami.app_ami.id");
-  assert.equal(instanceNode?.config.subnetId, "aws_subnet.public_subnet.id");
+  assert.equal(instanceNode?.config.associatePublicIpAddress, false);
+  assert.equal(instanceNode?.config.subnetId, "aws_subnet.private_app_subnet_a.id");
   assert.deepEqual(instanceNode?.config.vpcSecurityGroupIds, ["aws_security_group.app_security_group.id"]);
-  assert.deepEqual(routeTableNode?.config.route, [
-    {
-      cidrBlock: "0.0.0.0/0",
-      gatewayId: "aws_internet_gateway.internet_gateway.id"
+
+  await app.close();
+});
+
+test("POST /api/ai/architecture-draft keeps explicit EC2 and S3 only requests minimal", async () => {
+  const app = buildApp();
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    payload: {
+      prompt: "S3 버킷이랑 EC2 만 있는 다이어그램 그려줘"
     }
-  ]);
+  });
+
+  assert.equal(response.statusCode, 200);
+
+  const body = architectureDraftResponseSchema.parse(response.json());
+  const nodeTypes = body.architectureJson.nodes.map((node) => node.type);
+  const edgeIds = body.architectureJson.edges.map((edge) => edge.id);
+  const appServer = findDraftNode(body, "app-server");
+
+  assert.equal(body.metadata.selectedDraftPattern, "server_storage");
+  assertDraftHasNodeTypes(body, ["VPC", "SUBNET", "SECURITY_GROUP", "AMI", "EC2", "S3"]);
+  assert.equal(nodeTypes.includes("CLOUDFRONT"), false);
+  assert.equal(nodeTypes.includes("IAM_ROLE"), false);
+  assert.equal(nodeTypes.includes("IAM_POLICY"), false);
+  assert.equal(nodeTypes.includes("CLOUDWATCH_LOG_GROUP"), false);
+  assert.equal(nodeTypes.includes("RDS"), false);
+  assert.equal(appServer?.config.associatePublicIpAddress, true);
+  assert.equal(appServer?.config.subnetId, "aws_subnet.public_subnet_a.id");
+  assert.ok(edgeIds.includes("app-server-to-upload-bucket"));
 
   await app.close();
 });
@@ -946,7 +1433,9 @@ test("POST /api/ai/architecture-draft honors requested EC2 and S3 counts", async
     ["upload-bucket", "upload-bucket-2", "upload-bucket-3", "upload-bucket-4", "upload-bucket-5"]
   );
   assert.ok(edgeIds.includes("app-server-to-upload-bucket"));
+  assert.ok(edgeIds.includes("app-runtime-policy-to-upload-bucket"));
   assert.ok(edgeIds.includes("app-server-3-to-upload-bucket-5"));
+  assert.ok(edgeIds.includes("app-runtime-policy-to-upload-bucket-5"));
 
   await app.close();
 });
@@ -1033,6 +1522,92 @@ test("POST /api/ai/architecture-draft changes backend parameters from natural la
   assert.equal(normalDatabaseNode?.config.deletionProtection, true);
   assert.equal(lowLogNode?.config.retentionInDays, 30);
   assert.equal(normalLogNode?.config.retentionInDays, 30);
+
+  await app.close();
+});
+
+test("POST /api/ai/architecture-draft uses production-shaped entry, private app, S3, and DB paths", async () => {
+  const app = buildApp();
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    payload: {
+      prompt: "로그인과 파일 업로드가 있는 백엔드 웹서비스를 개인정보 보호 우선으로 만들어줘"
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+
+  const body = architectureDraftResponseSchema.parse(response.json());
+  const appServer = findDraftNode(body, "app-server");
+  const appDatabase = findDraftNode(body, "app-database");
+  const edgeIds = new Set(body.architectureJson.edges.map((edge) => edge.id));
+
+  assertDraftHasNodeTypes(body, [
+    "CLOUDFRONT",
+    "SUBNET",
+    "EC2",
+    "S3",
+    "IAM_POLICY",
+    "KMS_KEY",
+    "CLOUDWATCH_LOG_GROUP",
+    "CLOUDWATCH_METRIC_ALARM",
+    "RDS"
+  ]);
+  assert.equal(appServer?.config.associatePublicIpAddress, false);
+  assert.match(String(appServer?.config.subnetId), /private_app_subnet/);
+  assert.equal(appDatabase?.config.multiAz, true);
+  assert.deepEqual(appDatabase?.config.subnetIds, [
+    "aws_subnet.private_db_subnet_a.id",
+    "aws_subnet.private_db_subnet_b.id"
+  ]);
+  assert.equal(appDatabase?.config.storageEncrypted, true);
+  assert.ok(edgeIds.has("cloudfront-to-app-server"));
+  assert.ok(edgeIds.has("private-app-subnet-a-to-app-server"));
+  assert.ok(edgeIds.has("app-server-to-upload-bucket"));
+  assert.ok(edgeIds.has("app-runtime-policy-to-upload-bucket"));
+  assert.ok(edgeIds.has("private-db-subnet-a-to-app-database"));
+  assert.ok(edgeIds.has("private-db-subnet-b-to-app-database"));
+  assert.ok(edgeIds.has("data-encryption-key-to-app-database"));
+
+  await app.close();
+});
+
+test("POST /api/ai/architecture-draft omits unused network nodes and avoids layout overlap for single-instance backends", async () => {
+  const app = buildApp();
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    payload: {
+      prompt: "예약 신청을 받고 관리자가 확인하는 예약 서비스를 만들고 싶어. 신청 데이터와 관리자 확인 흐름이 필요해."
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+
+  const body = architectureDraftResponseSchema.parse(response.json());
+  const nodeIds = body.architectureJson.nodes.map((node) => node.id);
+
+  assert.equal(body.metadata.architectureIntent?.servicePurpose, "reservation_service");
+  assert.equal(nodeIds.includes("public-subnet-a"), false);
+  assert.equal(nodeIds.includes("public-subnet-b"), false);
+  assert.equal(nodeIds.includes("private-app-subnet-b"), false);
+  assert.equal(nodeIds.includes("internet-gateway"), false);
+  assert.equal(nodeIds.includes("public-route-table"), false);
+  assert.equal(nodeIds.includes("public-route-table-association"), false);
+  assert.equal(nodeIds.includes("public-route-table-association-b"), false);
+  assert.equal(nodeIds.includes("private-app-route-association-b"), false);
+  assertDraftNodesDoNotOverlap(body, [
+    "private-app-subnet-a",
+    "app-security-group",
+    "app-server",
+    "private-db-subnet-a",
+    "private-db-subnet-b",
+    "db-security-group",
+    "app-database"
+  ]);
 
   await app.close();
 });

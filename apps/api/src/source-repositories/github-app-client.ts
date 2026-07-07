@@ -1,6 +1,10 @@
 import { createPrivateKey } from "node:crypto";
 import { importPKCS8, SignJWT } from "jose";
-import type { GitHubRepositoryCandidate, GitCicdHandoffStatus } from "@sketchcatch/types";
+import type {
+  GitCicdHandoffStatus,
+  GitCicdPipelineDetailStatus,
+  GitHubRepositoryCandidate
+} from "@sketchcatch/types";
 
 const githubApiBaseUrl = "https://api.github.com";
 const githubJwtTtlSeconds = 9 * 60;
@@ -31,24 +35,54 @@ export type GitHubAppCreatePullRequestInput = {
 
 export type GitHubAppCreatePullRequestResult = {
   pullRequestUrl: string;
+  pullRequestNumber: number;
   pullRequestHeadSha: string;
   commitSha: string;
+};
+
+export type GitHubRepositorySettingsInput = {
+  installationId: string;
+  owner: string;
+  name: string;
+  environmentName: string;
+  variables: Record<string, string>;
+};
+
+export type GitHubRepositorySettingsResult = {
+  environmentName: string;
+  variables: string[];
 };
 
 export type GitHubActionsPipelineStatus = {
   status: GitCicdHandoffStatus;
   pipelineRunUrl: string | null;
+  mergeCommitSha?: string | null | undefined;
+  infraPipelineRunUrl?: string | null | undefined;
+  infraPipelineStatus?: GitCicdPipelineDetailStatus | undefined;
+  appPipelineRunUrl?: string | null | undefined;
+  appPipelineStatus?: GitCicdPipelineDetailStatus | undefined;
+  destroyPipelineRunUrl?: string | null | undefined;
+  destroyPipelineStatus?: GitCicdPipelineDetailStatus | undefined;
   statusMessage: string;
 };
 
 export type GitHubAppClient = {
   listInstallationRepositories(installationId: string): Promise<GitHubRepositoryCandidate[]>;
   createPullRequest(input: GitHubAppCreatePullRequestInput): Promise<GitHubAppCreatePullRequestResult>;
+  applyRepositorySettings(
+    input: GitHubRepositorySettingsInput
+  ): Promise<GitHubRepositorySettingsResult>;
   getLatestWorkflowRunForHeadSha(input: {
     installationId: string;
     owner: string;
     name: string;
     headSha: string;
+  }): Promise<GitHubActionsPipelineStatus>;
+  getPipelineStatusForPullRequest(input: {
+    installationId: string;
+    owner: string;
+    name: string;
+    pullRequestNumber: number;
   }): Promise<GitHubActionsPipelineStatus>;
 };
 
@@ -95,9 +129,13 @@ type GitHubPutContentsResponse = {
 
 type GitHubPullRequestResponse = {
   readonly html_url?: unknown;
+  readonly number?: unknown;
   readonly head?: {
     readonly sha?: unknown;
   };
+  readonly merged?: unknown;
+  readonly state?: unknown;
+  readonly merge_commit_sha?: unknown;
 };
 
 type GitHubWorkflowRunsResponse = {
@@ -106,6 +144,7 @@ type GitHubWorkflowRunsResponse = {
 
 type GitHubWorkflowRunApiResponse = {
   readonly html_url?: unknown;
+  readonly name?: unknown;
   readonly status?: unknown;
   readonly conclusion?: unknown;
   readonly created_at?: unknown;
@@ -233,8 +272,31 @@ export function createGitHubAppClient(options: GitHubAppClientOptions): GitHubAp
 
       return {
         pullRequestUrl: readRequiredString(pullRequest.html_url, "pull request url"),
+        pullRequestNumber: readRequiredNumber(pullRequest.number, "pull request number"),
         pullRequestHeadSha: readRequiredString(pullRequest.head?.sha, "pull request head sha"),
         commitSha: lastCommitSha
+      };
+    },
+
+    async applyRepositorySettings(input) {
+      await requestWithInstallationToken<Record<string, never>>(
+        input.installationId,
+        createRepositoryPath(input, `/environments/${encodeURIComponent(input.environmentName)}`),
+        {
+          method: "PUT",
+          body: {}
+        }
+      );
+
+      const variableNames = Object.keys(input.variables).sort();
+
+      for (const variableName of variableNames) {
+        await upsertRepositoryVariable(input, variableName, requestWithInstallationToken);
+      }
+
+      return {
+        environmentName: input.environmentName,
+        variables: variableNames
       };
     },
 
@@ -254,6 +316,75 @@ export function createGitHubAppClient(options: GitHubAppClientOptions): GitHubAp
       }
 
       return mapWorkflowRunStatus(latestRun);
+    },
+
+    async getPipelineStatusForPullRequest(input) {
+      const pullRequest = await requestWithInstallationToken<GitHubPullRequestResponse>(
+        input.installationId,
+        createRepositoryPath(input, `/pulls/${input.pullRequestNumber}`)
+      );
+      const state = typeof pullRequest.state === "string" ? pullRequest.state : "";
+
+      if (pullRequest.merged !== true) {
+        if (state === "closed") {
+          return {
+            status: "cancelled",
+            pipelineRunUrl: null,
+            mergeCommitSha: null,
+            infraPipelineStatus: "cancelled",
+            appPipelineStatus: "cancelled",
+            destroyPipelineStatus: "not_started",
+            statusMessage: "GitHub PR was closed without merge."
+          };
+        }
+
+        return {
+          status: "pr_created",
+          pipelineRunUrl: null,
+          mergeCommitSha: null,
+          infraPipelineStatus: "waiting_for_merge",
+          appPipelineStatus: "not_started",
+          destroyPipelineStatus: "not_started",
+          statusMessage: "GitHub PR is open and waiting for merge."
+        };
+      }
+
+      const mergeCommitSha = readRequiredString(
+        pullRequest.merge_commit_sha,
+        "pull request merge commit sha"
+      );
+      const response = await requestWithInstallationToken<GitHubWorkflowRunsResponse>(
+        input.installationId,
+        createRepositoryPath(
+          input,
+          `/actions/runs?per_page=30&head_sha=${encodeURIComponent(mergeCommitSha)}`
+        )
+      );
+      const runs = response.workflow_runs ?? [];
+      const infraRun = findLatestWorkflowRunByName(runs, "SketchCatch Infra");
+      const appRun = findLatestWorkflowRunByName(runs, "SketchCatch App");
+      const destroyRun = findLatestWorkflowRunByName(runs, "SketchCatch Destroy");
+      const infra = mapWorkflowRunDetailStatus(infraRun, "waiting_for_approval");
+      const app = mapWorkflowRunDetailStatus(
+        appRun,
+        infra.status === "success" ? "running" : "not_started"
+      );
+      const destroy = mapWorkflowRunDetailStatus(destroyRun, "not_started");
+      const pipelineRunUrl = app.url ?? infra.url ?? destroy.url ?? null;
+      const status = aggregatePipelineStatus(infra.status, app.status);
+
+      return {
+        status,
+        pipelineRunUrl,
+        mergeCommitSha,
+        infraPipelineRunUrl: infra.url,
+        infraPipelineStatus: infra.status,
+        appPipelineRunUrl: app.url,
+        appPipelineStatus: app.status,
+        destroyPipelineRunUrl: destroy.url,
+        destroyPipelineStatus: destroy.status,
+        statusMessage: createPipelineStatusMessage(status, infra.status, app.status)
+      };
     }
   };
 }
@@ -432,6 +563,46 @@ async function getRepositoryContent(
   }
 }
 
+async function upsertRepositoryVariable(
+  input: GitHubRepositorySettingsInput,
+  variableName: string,
+  requestWithInstallationToken: <T>(
+    installationId: string,
+    path: string,
+    init?: Omit<GitHubRequestInit, "token" | "authScheme">
+  ) => Promise<T>
+): Promise<void> {
+  const variablePath = createRepositoryPath(
+    input,
+    `/actions/variables/${encodeURIComponent(variableName)}`
+  );
+  const body = {
+    name: variableName,
+    value: input.variables[variableName] ?? ""
+  };
+
+  try {
+    await requestWithInstallationToken<Record<string, never>>(input.installationId, variablePath);
+    await requestWithInstallationToken<Record<string, never>>(input.installationId, variablePath, {
+      method: "PATCH",
+      body
+    });
+  } catch (error) {
+    if (!isHttpStatus(error, 404)) {
+      throw error;
+    }
+
+    await requestWithInstallationToken<Record<string, never>>(
+      input.installationId,
+      createRepositoryPath(input, "/actions/variables"),
+      {
+        method: "POST",
+        body
+      }
+    );
+  }
+}
+
 function createRepositoryPath(
   input: Pick<GitHubAppCreatePullRequestInput, "owner" | "name">,
   suffix: string
@@ -494,6 +665,92 @@ function mapWorkflowRunStatus(run: GitHubWorkflowRunApiResponse): GitHubActionsP
     pipelineRunUrl,
     statusMessage: `GitHub Actions workflow run is ${status || "unknown"}.`
   };
+}
+
+function findLatestWorkflowRunByName(
+  runs: readonly GitHubWorkflowRunApiResponse[],
+  name: string
+): GitHubWorkflowRunApiResponse | undefined {
+  return [...runs]
+    .filter((run) => run.name === name)
+    .sort(compareWorkflowRunsDesc)[0];
+}
+
+function mapWorkflowRunDetailStatus(
+  run: GitHubWorkflowRunApiResponse | undefined,
+  fallback: GitCicdPipelineDetailStatus
+): { status: GitCicdPipelineDetailStatus; url: string | null } {
+  if (!run) {
+    return {
+      status: fallback,
+      url: null
+    };
+  }
+
+  const url = typeof run.html_url === "string" && run.html_url ? run.html_url : null;
+  const status = typeof run.status === "string" ? run.status : "";
+  const conclusion = typeof run.conclusion === "string" ? run.conclusion : "";
+
+  if (status === "queued" || status === "in_progress") {
+    return { status: "running", url };
+  }
+
+  if (status === "waiting" || conclusion === "action_required") {
+    return { status: "waiting_for_approval", url };
+  }
+
+  if (status === "completed" && conclusion === "success") {
+    return { status: "success", url };
+  }
+
+  if (status === "completed" && conclusion === "cancelled") {
+    return { status: "cancelled", url };
+  }
+
+  if (status === "completed") {
+    return { status: "failed", url };
+  }
+
+  return { status: "running", url };
+}
+
+function aggregatePipelineStatus(
+  infraStatus: GitCicdPipelineDetailStatus,
+  appStatus: GitCicdPipelineDetailStatus
+): GitCicdHandoffStatus {
+  if (infraStatus === "failed" || appStatus === "failed") {
+    return "pipeline_failed";
+  }
+
+  if (infraStatus === "cancelled" || appStatus === "cancelled") {
+    return "cancelled";
+  }
+
+  if (infraStatus === "success" && appStatus === "success") {
+    return "pipeline_success";
+  }
+
+  return "pipeline_running";
+}
+
+function createPipelineStatusMessage(
+  status: GitCicdHandoffStatus,
+  infraStatus: GitCicdPipelineDetailStatus,
+  appStatus: GitCicdPipelineDetailStatus
+): string {
+  if (status === "pipeline_success") {
+    return "Infra and app GitHub Actions workflows completed successfully.";
+  }
+
+  if (status === "pipeline_failed") {
+    return `GitHub Actions failed. Infra: ${infraStatus}, app: ${appStatus}.`;
+  }
+
+  if (status === "cancelled") {
+    return "GitHub Actions workflow was cancelled.";
+  }
+
+  return `GitHub Actions is running or waiting. Infra: ${infraStatus}, app: ${appStatus}.`;
 }
 
 function readRequiredString(value: unknown, label: string): string {

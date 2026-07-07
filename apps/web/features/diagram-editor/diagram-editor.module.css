@@ -632,6 +632,26 @@
   opacity: 0.38;
 }
 
+.nodeShellPatchAdded {
+  border-color: #2f8c55;
+  box-shadow: 0 0 0 3px rgba(47, 140, 85, 0.14);
+  opacity: 0.58;
+}
+
+.nodeShellPatchModified {
+  border-color: #b7791f;
+  box-shadow: 0 0 0 3px rgba(183, 121, 31, 0.14);
+  opacity: 0.58;
+}
+
+.nodeShellPatchDeleted {
+  background: rgba(242, 244, 247, 0.72);
+  border-color: #8b949e;
+  box-shadow: none;
+  filter: grayscale(1);
+  opacity: 0.36;
+}
+
 .nodeShellReferenceDropTarget {
   border-color: #2f8c55;
   box-shadow:

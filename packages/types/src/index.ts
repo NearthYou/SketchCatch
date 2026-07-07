@@ -30,12 +30,19 @@ export type ResourceType =
   | "S3"
   | "SECURITY_GROUP"
   | "CLOUDFRONT"
+  | "ROUTE53_RECORD"
+  | "WAF_WEB_ACL"
+  | "LOAD_BALANCER"
+  | "LOAD_BALANCER_LISTENER"
   | "LAMBDA"
   | "AMI"
   | "IAM_ROLE"
   | "IAM_POLICY"
   | "IAM_INSTANCE_PROFILE"
   | "KMS_KEY"
+  | "DB_SUBNET_GROUP"
+  | "SECRETS_MANAGER_SECRET"
+  | "VPC_ENDPOINT"
   | "CLOUDWATCH_LOG_GROUP"
   | "CLOUDWATCH_METRIC_ALARM"
   | "API_GATEWAY_REST_API"
@@ -433,12 +440,47 @@ export type GitCicdHandoffStatus =
 
 export type GitCicdHandoffKind = "terraform_iac" | "static_site";
 
+export type GitCicdDeploymentMode = "terraform_iac" | "static_site" | "infra_and_app";
+
+export type GitCicdPipelineDetailStatus =
+  | "not_started"
+  | "waiting_for_merge"
+  | "waiting_for_approval"
+  | "running"
+  | "success"
+  | "failed"
+  | "cancelled";
+
+export type GitCicdRepositorySettingsPreview = {
+  environmentName: string;
+  variables: Record<string, string>;
+  secrets: string[];
+  workflowFiles: string[];
+};
+
+export type GitCicdAwsRoleDiff = {
+  roleArn: string | null;
+  repository: string;
+  targetBranch: string;
+  environmentName: string;
+  requiredTrustConditions: Record<string, string>;
+  approved: boolean;
+  approvedByUserId: string | null;
+  approvedAt: IsoDateTimeString | null;
+  applied?: boolean | undefined;
+  appliedAt?: IsoDateTimeString | null | undefined;
+  verified?: boolean | undefined;
+};
+
 export type GitCicdHandoff = {
   id: string;
   projectId: string;
   architectureId: string;
   terraformArtifactId: string;
   handoffKind: GitCicdHandoffKind;
+  sourceDeploymentId: string | null;
+  deploymentMode: GitCicdDeploymentMode;
+  requiresEnvironmentApproval: boolean;
   sourceRepositoryId: string;
   repositoryProvider: SourceRepositoryProvider;
   repositoryOwner: string;
@@ -448,8 +490,22 @@ export type GitCicdHandoff = {
   commitMessage: string | null;
   pullRequestTitle: string | null;
   pullRequestUrl: string | null;
+  pullRequestNumber: number | null;
   pullRequestHeadSha: string | null;
+  mergeCommitSha: string | null;
+  environmentName: string;
   pipelineRunUrl: string | null;
+  infraPipelineRunUrl: string | null;
+  infraPipelineStatus: GitCicdPipelineDetailStatus;
+  appPipelineRunUrl: string | null;
+  appPipelineStatus: GitCicdPipelineDetailStatus;
+  destroyPipelineRunUrl: string | null;
+  destroyPipelineStatus: GitCicdPipelineDetailStatus;
+  staticSiteUrl: string | null;
+  apiBaseUrl: string | null;
+  repositorySettingsPreview: GitCicdRepositorySettingsPreview | null;
+  awsRoleDiff: GitCicdAwsRoleDiff | null;
+  githubOAuthRequired: boolean;
   status: GitCicdHandoffStatus;
   statusMessage: string | null;
   userAcceptedChangeId: string;
@@ -462,11 +518,22 @@ export type CreateGitCicdHandoffRequest = {
   architectureId: string;
   terraformArtifactId: string;
   handoffKind?: GitCicdHandoffKind | undefined;
+  sourceDeploymentId?: string | null | undefined;
+  deploymentMode?: GitCicdDeploymentMode | undefined;
   sourceRepositoryId: string;
   targetBranch?: string | undefined;
   sourceBranch?: string | undefined;
   commitMessage?: string | undefined;
   pullRequestTitle?: string | undefined;
+  environmentName?: string | undefined;
+  rdsEnabled?: boolean | undefined;
+  awsRegion?: string | undefined;
+  awsRoleArn?: string | null | undefined;
+  tfStateBucket?: string | undefined;
+  releaseBucket?: string | undefined;
+  staticSiteUrl?: string | null | undefined;
+  apiBaseUrl?: string | null | undefined;
+  approveAwsRoleDiff?: boolean | undefined;
   planSummary?: DeploymentPlanSummary | undefined;
   userAcceptedChangeId: string;
 };
@@ -484,7 +551,18 @@ export type GitCicdHandoffPipelineStatus = {
   projectId: string;
   status: GitCicdHandoffStatus;
   pullRequestUrl: string | null;
+  pullRequestNumber: number | null;
+  mergeCommitSha: string | null;
   pipelineRunUrl: string | null;
+  infraPipelineRunUrl: string | null;
+  infraPipelineStatus: GitCicdPipelineDetailStatus;
+  appPipelineRunUrl: string | null;
+  appPipelineStatus: GitCicdPipelineDetailStatus;
+  destroyPipelineRunUrl: string | null;
+  destroyPipelineStatus: GitCicdPipelineDetailStatus;
+  environmentName: string;
+  staticSiteUrl: string | null;
+  apiBaseUrl: string | null;
   statusMessage: string | null;
   updatedAt: IsoDateTimeString;
   source: "runtime_cache" | "rds";
@@ -500,6 +578,29 @@ export type GitCicdHandoffListResponse = {
 
 export type GitCicdHandoffPipelineStatusResponse = {
   pipelineStatus: GitCicdHandoffPipelineStatus;
+};
+
+export type GitCicdGitHubOAuthStartResponse = {
+  authorizationUrl: string;
+  expiresAt: IsoDateTimeString;
+};
+
+export type GitCicdRepositorySettingsApplyResponse = {
+  applied: boolean;
+  environmentName: string;
+  variables: string[];
+  secrets: string[];
+  workflowFiles: string[];
+  githubOAuthRequired: boolean;
+};
+
+export type GitCicdAwsRoleDiffApplyResponse = {
+  applied: boolean;
+  roleArn: string;
+  repository: string;
+  environmentName: string;
+  appliedAt: IsoDateTimeString;
+  verified: boolean;
 };
 
 export type DeploymentStatus =
@@ -1102,7 +1203,7 @@ export type BudgetLimit = {
 
 export type RiskLevel = "low" | "medium" | "high";
 
-export type AiResultSource = "prompt" | "github" | "template_fallback" | "llm_fallback";
+export type AiResultSource = "prompt" | "github" | "amazon_q" | "template_fallback" | "llm_fallback";
 
 export type AiConfidence = "low" | "medium" | "high";
 
@@ -1142,6 +1243,9 @@ export type AiResultMetadata = {
   assumptions: string[];
   explanations: string[];
   selectedDraftPattern?: ArchitectureDraftPattern;
+  architectureIntent?: ArchitectureIntent;
+  servicePurpose?: ArchitectureServicePurpose;
+  capabilities?: ArchitectureCapability[];
   requirementFacts?: ArchitectureRequirementFact[];
   operatingProfile?: ArchitectureDraftOperatingProfile;
   guardrailWarnings?: ArchitectureGuardrailWarning[];
@@ -1153,6 +1257,41 @@ export type ArchitectureDraftPattern =
   | "backend_with_db"
   | "server_storage"
   | "serverless_function";
+
+export type ArchitectureServicePurpose =
+  | "landing_page"
+  | "file_upload_service"
+  | "auth_web_service"
+  | "reservation_service"
+  | "content_board"
+  | "api_backend"
+  | "data_storage"
+  | "unknown";
+
+export type ArchitectureCapability =
+  | "static_delivery"
+  | "file_upload"
+  | "authentication"
+  | "relational_data"
+  | "admin_workflow"
+  | "public_api"
+  | "private_user_data"
+  | "media_storage";
+
+export type ArchitectureIntentConstraints = {
+  budget?: ArchitectureDraftBudgetLevel;
+  traffic?: "small" | "growth";
+  security?: "basic" | "sensitive";
+  computePreference?: "ec2" | "serverless" | "unspecified";
+};
+
+export type ArchitectureIntent = {
+  servicePurpose: ArchitectureServicePurpose;
+  capabilities: ArchitectureCapability[];
+  constraints: ArchitectureIntentConstraints;
+  confidence: number;
+  missingQuestions: string[];
+};
 
 export type ArchitectureGuardrailWarningCode =
   | "low_budget_rds_cost"
@@ -1283,6 +1422,8 @@ export type ArchitecturePatchIntent = {
   requestedAction: ArchitecturePatchAction;
   targetResourceId?: string | undefined;
   resourceType?: ResourceType | undefined;
+  connectionTargetResourceId?: string | undefined;
+  skipConnection?: boolean | undefined;
 };
 
 export type ArchitecturePatchPreviewChange = {
@@ -1292,7 +1433,23 @@ export type ArchitecturePatchPreviewChange = {
   summary: string;
 };
 
+export type ArchitecturePatchClarificationCandidate = {
+  resourceId: string;
+  resourceType: ResourceType;
+  label: string;
+};
+
+export type ArchitecturePatchClarification = {
+  status: "needs_clarification";
+  intent: ArchitecturePatchIntent;
+  question: string;
+  candidates: ArchitecturePatchClarificationCandidate[];
+  suggestions?: string[] | undefined;
+  providerMetadata: AiProviderMetadata;
+};
+
 export type ArchitecturePatchPreview = {
+  status: "preview";
   intent: ArchitecturePatchIntent;
   baseArchitectureJson: ArchitectureJson;
   proposedArchitectureJson: ArchitectureJson;
@@ -1301,6 +1458,18 @@ export type ArchitecturePatchPreview = {
   userAcceptedChange: UserAcceptedChange | null;
   llmExplanation?: LlmExplanation | undefined;
   providerMetadata: AiProviderMetadata;
+};
+
+export type ArchitecturePatchPreviewResponse =
+  | ArchitecturePatchPreview
+  | ArchitecturePatchClarification;
+
+export type CreateArchitecturePatchPreviewRequest = {
+  architectureJson: ArchitectureJson;
+  instruction: string;
+  selectedTargetResourceId?: string | undefined;
+  connectionTargetResourceId?: string | undefined;
+  skipConnection?: boolean | undefined;
 };
 
 export type CreateArchitectureDraftRequest = {
@@ -1313,6 +1482,17 @@ export type AiArchitectureDraftResult = {
   metadata: AiResultMetadata;
   llmExplanation?: LlmExplanation | undefined;
 };
+
+export type ArchitectureDraftClarification = {
+  status: "needs_clarification";
+  question: string;
+  suggestions: string[];
+  providerMetadata: AiProviderMetadata;
+};
+
+export type CreateArchitectureDraftResponse =
+  | AiArchitectureDraftResult
+  | ArchitectureDraftClarification;
 
 export type MoneyEstimate = {
   amount: number;

@@ -48,8 +48,8 @@ const RESOURCE_ITEMS_BY_TERRAFORM_TYPE = new Map<string, ResourceItem>(
 export function convertArchitectureJsonToDiagramJson(architectureJson: ArchitectureJson): DiagramJson {
   const nodeIds = new Set(architectureJson.nodes.map((node) => node.id));
   const convertedNodes = architectureJson.nodes.map(convertArchitectureNodeToDiagramNode);
-  const nodes = fitAreaNodesToChildren(
-    applyAreaParentMetadata(addServerStorageAreaNodes(convertedNodes), architectureJson.edges)
+  const nodes = applyDiagramLayerOrder(
+    fitAreaNodesToChildren(applyAreaParentMetadata(addServerStorageAreaNodes(convertedNodes), architectureJson.edges))
   );
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
 
@@ -348,6 +348,38 @@ function fitAreaNodesToChildren(nodes: readonly DiagramNode[]): DiagramNode[] {
   return currentNodes;
 }
 
+function applyDiagramLayerOrder(nodes: readonly DiagramNode[]): DiagramNode[] {
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+
+  return nodes.map((node) => {
+    const depth = getAreaDepth(node, nodeById);
+    const zIndex = isAreaDiagramNode(node) ? 1 + depth : 100 + depth;
+
+    return {
+      ...node,
+      zIndex
+    };
+  });
+}
+
+function getAreaDepth(node: DiagramNode, nodeById: ReadonlyMap<string, DiagramNode>): number {
+  let depth = 0;
+  let parentAreaNodeId = node.metadata?.parentAreaNodeId;
+  const visitedNodeIds = new Set<string>();
+
+  while (parentAreaNodeId) {
+    if (visitedNodeIds.has(parentAreaNodeId)) {
+      return depth;
+    }
+
+    visitedNodeIds.add(parentAreaNodeId);
+    depth += 1;
+    parentAreaNodeId = nodeById.get(parentAreaNodeId)?.metadata?.parentAreaNodeId;
+  }
+
+  return depth;
+}
+
 // 깊게 중첩된 Region/VPC/AZ/SG/Subnet 박스가 안정될 때 반복 계산을 멈춥니다.
 function areNodeLayoutsEqual(leftNodes: readonly DiagramNode[], rightNodes: readonly DiagramNode[]): boolean {
   return leftNodes.every((leftNode, index) => {
@@ -506,6 +538,12 @@ function findConfigParentAreaNodeId(
   node: DiagramNode,
   nodeById: ReadonlyMap<string, DiagramNode>
 ): string | undefined {
+  const routeTableAssociationParentAreaNodeId = findRouteTableAssociationParentAreaNodeId(node, nodeById);
+
+  if (routeTableAssociationParentAreaNodeId) {
+    return routeTableAssociationParentAreaNodeId;
+  }
+
   const subnetNode = findConfigAreaNodeByParameter(node, "subnetId", nodeById);
 
   if (subnetNode && subnetNode.id !== node.id) {
@@ -517,15 +555,40 @@ function findConfigParentAreaNodeId(
   return vpcNode && vpcNode.id !== node.id ? vpcNode.id : undefined;
 }
 
+function findRouteTableAssociationParentAreaNodeId(
+  node: DiagramNode,
+  nodeById: ReadonlyMap<string, DiagramNode>
+): string | undefined {
+  if ((node.parameters?.resourceType ?? node.type) !== "aws_route_table_association") {
+    return undefined;
+  }
+
+  const routeTableNode = findConfigNodeByParameter(node, "routeTableId", nodeById);
+  const vpcNode = routeTableNode
+    ? findConfigAreaNodeByParameter(routeTableNode, "vpcId", nodeById)
+    : undefined;
+
+  return vpcNode && vpcNode.id !== node.id ? vpcNode.id : undefined;
+}
+
 function findConfigAreaNodeByParameter(
   node: DiagramNode,
   parameterName: string,
   nodeById: ReadonlyMap<string, DiagramNode>
 ): DiagramNode | undefined {
-  const referenceValue = getStringParameterValue(node, parameterName);
-  const referencedNode = referenceValue ? findReferencedNode(referenceValue, nodeById) : undefined;
+  const referencedNode = findConfigNodeByParameter(node, parameterName, nodeById);
 
   return referencedNode && isAreaDiagramNode(referencedNode) ? referencedNode : undefined;
+}
+
+function findConfigNodeByParameter(
+  node: DiagramNode,
+  parameterName: string,
+  nodeById: ReadonlyMap<string, DiagramNode>
+): DiagramNode | undefined {
+  const referenceValue = getStringParameterValue(node, parameterName);
+
+  return referenceValue ? findReferencedNode(referenceValue, nodeById) : undefined;
 }
 
 function findReferencedNode(

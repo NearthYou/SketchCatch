@@ -65,8 +65,8 @@ export function ReverseEngineeringFindingsPanel({
             일부 AWS 리소스를 읽지 못했습니다. 이 결과는 현재 AWS 상태 전체가 아닐 수 있습니다.
           </p>
           <ul className={styles.reverseResultList}>
-            {scanErrors.map((scanError) => (
-              <li key={scanError.id} className={styles.reverseResultItem}>
+            {scanErrors.map((scanError, index) => (
+              <li key={`${scanError.id}-${index}`} className={styles.reverseResultItem}>
                 <strong>{scanError.resourceType}</strong>
                 <span>
                   stage: {scanError.stage} · reason: {scanError.reason} · retryable:{" "}
