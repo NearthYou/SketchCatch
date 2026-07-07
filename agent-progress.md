@@ -105,6 +105,21 @@ Verification:
 - `pnpm typecheck`
 - `pnpm build`
 
+- Fixed AI Architecture Draft to Diagram conversion so Terraform reference strings are rewritten after resource naming conventions change declaration names.
+- Prevented Terraform Preview rendering from emitting AI semantic metadata fields such as `bucketPurpose`, `servicePurpose`, `originResourceId`, and `publicAccessBlock` as provider arguments.
+- Added regression coverage for stale reference rewrites across IAM, AMI, Subnet, Security Group, EC2, and CloudWatch alarm dimensions, plus Terraform rendering metadata filtering.
+
+Verification:
+
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-diagram-adapter.test.ts`
+- `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-preview.test.ts`
+- `pnpm --filter @sketchcatch/web typecheck`
+- `pnpm --filter @sketchcatch/api typecheck`
+- `pnpm harness:check`
+- `pnpm lint`
+- `pnpm typecheck`
+- `pnpm build`
+
 - Corrected diagram edge handling so only `contains`/`hosts` are removed as area containment; runtime and configuration relationships remain visible.
 - Added endpoint-based styling so IAM/KMS/AMI/security configuration relationships render as thin solid dependency lines even when the AI label is generic.
 - Kept async/event/log/monitoring relationships dashed, Terraform/deploy relationships operational dashed, and runtime HTTPS/data relationships solid.
