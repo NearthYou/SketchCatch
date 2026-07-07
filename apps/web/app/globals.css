@@ -4480,6 +4480,42 @@ nextjs-portal {
   opacity: 0.5;
 }
 
+.workspaceStartCheckbox {
+  align-items: flex-start;
+  color: var(--dashboard-muted);
+  cursor: pointer;
+  display: grid;
+  gap: 3px 10px;
+  grid-template-columns: 18px minmax(0, 1fr);
+  max-width: 460px;
+}
+
+.workspaceStartCheckbox input {
+  accent-color: var(--dashboard-accent);
+  height: 16px;
+  margin: 2px 0 0;
+  width: 16px;
+}
+
+.workspaceStartCheckbox span {
+  color: #ffffff;
+  font-size: 0.84rem;
+  font-weight: 850;
+}
+
+.workspaceStartCheckbox small {
+  color: var(--dashboard-subtle);
+  font-size: 0.76rem;
+  font-weight: 700;
+  grid-column: 2;
+  line-height: 1.45;
+}
+
+.workspaceStartCheckbox:has(input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 .reverseCandidateSelectionPanel {
   background: #ffffff;
   border: 1px solid #dfe6f1;
