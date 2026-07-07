@@ -27,6 +27,7 @@ import {
   listAwsConnections,
   listDeployments,
   listGitCicdHandoffs,
+  listGitHubInstalledRepositories,
   listTerraformOutputs,
   listCostUsageAnalysis,
   listProjects,
@@ -84,6 +85,66 @@ test("listProjects fetches projects for the authenticated user", async (context)
   assert.equal(requests[0]?.init?.method, undefined);
   assert.equal(new Headers(requests[0]?.init?.headers).get("authorization"), "Bearer access-token");
   assert.deepEqual(projects, [project]);
+});
+
+test("listGitHubInstalledRepositories fetches GitHub App installation repository candidates", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+
+  installAuthSession();
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+
+    return new Response(
+      JSON.stringify({
+        projectId: project.id,
+        state: "signed-state",
+        expiresAt: "2026-07-07T00:10:00.000Z",
+        repositories: [
+          {
+            installationId: "12345",
+            installationAccountLogin: "NearthYou",
+            installationAccountType: "Organization",
+            installationRepositorySelection: "selected",
+            githubRepositoryId: "repo-1",
+            owner: "NearthYou",
+            name: "sketchcatch-iac-handoff-test",
+            fullName: "NearthYou/sketchcatch-iac-handoff-test",
+            defaultBranch: "main",
+            repositoryUrl: "https://github.com/NearthYou/sketchcatch-iac-handoff-test",
+            visibility: "private",
+            archived: false,
+            connectedSourceRepositoryId: null,
+            connectedStatus: null
+          }
+        ]
+      }),
+      {
+        headers: {
+          "Content-Type": "application/json"
+        },
+        status: 200
+      }
+    );
+  };
+
+  const result = await listGitHubInstalledRepositories(project.id);
+
+  assert.equal(
+    String(requests[0]?.input),
+    `/api/projects/${project.id}/source-repositories/github/installed-repositories`
+  );
+  assert.equal(requests[0]?.init?.method, "POST");
+  assert.equal(result.state, "signed-state");
+  assert.equal(result.repositories[0]?.fullName, "NearthYou/sketchcatch-iac-handoff-test");
+  assert.equal(result.repositories[0]?.installationId, "12345");
 });
 
 test("listCostUsageAnalysis fetches actual usage analysis with range and AWS connection query", async (context) => {
@@ -482,6 +543,49 @@ test("uploadProjectAsset uploads terraform content to the presigned URL", async 
   assert.equal(String(requests[0]?.input), "https://s3.example.test/upload");
   assert.equal(requests[0]?.init?.method, "PUT");
   assert.equal(new Headers(requests[0]?.init?.headers).get("content-type"), "text/plain");
+  assert.equal(requests[0]?.init?.body, "resource {}");
+});
+
+test("uploadProjectAsset sends auth headers for same-origin API uploads", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+
+  installAuthSession();
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+
+    return new Response(null, {
+      status: 204
+    });
+  };
+
+  await uploadProjectAsset(
+    {
+      method: "PUT",
+      url: `/api/projects/${project.id}/assets/66666666-6666-4666-8666-666666666666/upload-content`,
+      headers: { "Content-Type": "text/plain" },
+      expiresInSeconds: 900
+    },
+    "resource {}"
+  );
+
+  const headers = new Headers(requests[0]?.init?.headers);
+
+  assert.equal(
+    String(requests[0]?.input),
+    `/api/projects/${project.id}/assets/66666666-6666-4666-8666-666666666666/upload-content`
+  );
+  assert.equal(requests[0]?.init?.method, "PUT");
+  assert.equal(requests[0]?.init?.credentials, "include");
+  assert.equal(headers.get("authorization"), "Bearer access-token");
+  assert.equal(headers.get("content-type"), "text/plain");
   assert.equal(requests[0]?.init?.body, "resource {}");
 });
 

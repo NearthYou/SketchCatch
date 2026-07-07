@@ -6,6 +6,7 @@ export type ApiErrorCode =
   | "unauthorized"
   | "not_found"
   | "conflict"
+  | "github_oauth_required"
   | "too_many_requests"
   | "internal_server_error";
 
@@ -449,6 +450,22 @@ export type ListGitHubInstallationRepositoriesRequest = {
 export type ListGitHubInstallationRepositoriesResponse = {
   projectId: string;
   repositories: GitHubRepositoryCandidate[];
+};
+
+export type GitHubInstalledRepositoryCandidate = GitHubRepositoryCandidate & {
+  installationId: string;
+  installationAccountLogin: string;
+  installationAccountType: string | null;
+  installationRepositorySelection: "all" | "selected" | null;
+  connectedSourceRepositoryId: string | null;
+  connectedStatus: "active" | "inactive" | null;
+};
+
+export type ListGitHubInstalledRepositoriesResponse = {
+  projectId: string;
+  state: string;
+  expiresAt: IsoDateTimeString;
+  repositories: GitHubInstalledRepositoryCandidate[];
 };
 
 export type ConnectGitHubSourceRepositoryRequest = {

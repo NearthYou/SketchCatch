@@ -4,34 +4,29 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Currently Verified
 
-- Branch: `codex/github-existing-repo-first`
-- Worktree: `C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch-worktrees\aws-runtime-policy-deploy-fix`
-- GitHub connect now opens an in-app repository chooser before GitHub App install/configure.
+- Branch: `codex/git-cicd-permission-message`
+- Worktree: `C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch-worktrees\git-cicd-handoff-create-fix`
+- Local tests, typecheck, lint, build, and harness check pass.
 
 ## Changes This Session
 
-- Deployment Panel lists known GitHub source repositories first.
-- Selecting a known repository opens the internal GitHub callback repository picker.
-- GitHub App install/configure is now an explicit add-permissions action.
-- Backend callback URL creation can target a selected known source repository, including inactive previous connections.
-- GitHub callback page has an install/permission-expansion button when the desired repository is missing.
-- PR #227 review feedback was addressed with modal-local error rendering and UUID route validation.
+- Live production E2E smoke created a temporary SketchCatch user/project/architecture/Terraform artifact and connected an installed GitHub repository.
+- Handoff creation failed with `github_oauth_required`, which points to missing GitHub App repository write permissions for PR/workflow file creation.
+- Added `github_oauth_required` to shared API error codes and made the web/API message explain that Contents, Pull requests, and Workflows write access must be approved.
 
 ## Broken Or Unverified
 
-- No known broken behavior remains in this branch.
-- Production deployment has not been run from this branch.
+- Actual GitHub PR creation remains blocked until the GitHub App permissions are updated and the installation owner approves the new permissions.
 
 ## Verification
 
-- `pnpm harness:check`
-- Focused API source repository tests
-- Focused web workspace layout test
-- `pnpm lint`
+- `pnpm --filter @sketchcatch/api exec tsx --test src/routes/git-cicd-handoffs.test.ts`
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/api.test.ts`
 - `pnpm typecheck`
+- `pnpm lint`
 - `pnpm build`
-- Final `pnpm harness:check`
+- `pnpm harness:check`
 
 ## Best Next Action
 
-- Review the PR and merge to `dev`, then deploy if the production site should receive this UX change immediately.
+- Merge and deploy this message fix, update the GitHub App repository permissions externally, then rerun the production E2E smoke.

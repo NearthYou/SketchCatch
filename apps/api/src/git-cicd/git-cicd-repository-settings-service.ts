@@ -1,4 +1,5 @@
 import type { GitCicdRepositorySettingsApplyResponse } from "@sketchcatch/types";
+import { requireGitHubAppConfig } from "../config/env.js";
 import {
   createGitHubAppClient,
   type GitHubAppClient
@@ -51,7 +52,7 @@ export function createGitHubRepositorySettingsApplier(
           owner: sourceRepository.owner,
           name: sourceRepository.name,
           environmentName: preview.environmentName,
-          variables: preview.variables
+          variables: removeBlankVariableValues(preview.variables)
         });
 
         return {
@@ -65,7 +66,7 @@ export function createGitHubRepositorySettingsApplier(
       } catch (error) {
         if (isGitHubPermissionError(error)) {
           throw new GitCicdRepositorySettingsPermissionError(
-            "GitHub App does not have permission to create environments or Actions variables"
+            "GitHub App does not have permission to create environments or Actions variables. Approve Administration and Variables repository permissions as Read and write."
           );
         }
 
@@ -96,14 +97,15 @@ export function createGitHubOAuthRepositorySettingsApplier(
           body: {}
         });
 
-        const variableNames = Object.keys(preview.variables).sort();
+        const variables = removeBlankVariableValues(preview.variables);
+        const variableNames = Object.keys(variables).sort();
 
         for (const variableName of variableNames) {
           await upsertRepositoryVariableWithOAuth(fetchImpl, accessToken, {
             owner: sourceRepository.owner,
             name: sourceRepository.name,
             variableName,
-            value: preview.variables[variableName] ?? ""
+            value: variables[variableName] ?? ""
           });
         }
 
@@ -118,7 +120,7 @@ export function createGitHubOAuthRepositorySettingsApplier(
       } catch (error) {
         if (isGitHubPermissionError(error)) {
           throw new GitCicdRepositorySettingsPermissionError(
-            "GitHub OAuth token does not have permission to create environments or Actions variables"
+            "GitHub OAuth token does not have permission to create environments or Actions variables. Approve Administration and Variables repository permissions as Read and write."
           );
         }
 
@@ -163,18 +165,19 @@ export async function applyGitCicdRepositorySettings(
 }
 
 function createGitHubAppClientFromEnv(): GitHubAppClient {
-  const appId = process.env.GITHUB_APP_ID;
-  const privateKey = process.env.GITHUB_APP_PRIVATE_KEY;
+  let config: ReturnType<typeof requireGitHubAppConfig>;
 
-  if (!appId || !privateKey) {
+  try {
+    config = requireGitHubAppConfig();
+  } catch (error) {
     throw new GitCicdRepositorySettingsPermissionError(
-      "GitHub App credentials are not configured"
+      `GitHub App credentials are not configured: ${getErrorMessage(error)}`
     );
   }
 
   return createGitHubAppClient({
-    appId,
-    privateKey
+    appId: config.appId,
+    privateKey: config.privateKey
   });
 }
 
@@ -185,6 +188,18 @@ function isGitHubPermissionError(error: unknown): boolean {
     "statusCode" in error &&
     ((error as { readonly statusCode?: unknown }).statusCode === 401 ||
       (error as { readonly statusCode?: unknown }).statusCode === 403)
+  );
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "Unknown error";
+}
+
+function removeBlankVariableValues(variables: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(variables).filter(
+      ([, value]) => typeof value === "string" && value.trim().length > 0
+    )
   );
 }
 

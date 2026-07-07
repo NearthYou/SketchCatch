@@ -8,10 +8,12 @@ import {
 
 test("createGitCicdAutomationFiles renders infra app destroy workflows and manifests", () => {
   const files = createGitCicdAutomationFiles({
+    handoffId: "handoff-123",
     projectSlug: "demo-project",
     repositoryOwner: "owner",
     repositoryName: "repo",
     targetBranch: "main",
+    userAcceptedChangeId: "accepted-change-123",
     environmentName: "sketchcatch-production",
     awsRegion: "ap-northeast-2",
     awsRoleArn: "arn:aws:iam::123456789012:role/SketchCatchTerraformExecutionRole",
@@ -29,7 +31,8 @@ test("createGitCicdAutomationFiles renders infra app destroy workflows and manif
       ".github/workflows/sketchcatch-app.yml",
       ".github/workflows/sketchcatch-destroy.yml",
       "sketchcatch/demo-project/ci-cd/repository-settings.json",
-      "sketchcatch/demo-project/ci-cd/aws-role-diff.json"
+      "sketchcatch/demo-project/ci-cd/aws-role-diff.json",
+      "sketchcatch/demo-project/ci-cd/handoff.json"
     ]
   );
   assert.match(files[0]?.content ?? "", /terraform plan/);
@@ -40,6 +43,12 @@ test("createGitCicdAutomationFiles renders infra app destroy workflows and manif
   assert.match(files[1]?.content ?? "", /LaunchTemplateName/);
   assert.match(files[1]?.content ?? "", /describe-instance-refreshes/);
   assert.match(files[2]?.content ?? "", /terraform destroy/);
+  const manifest = files.find(
+    (file) => file.path === "sketchcatch/demo-project/ci-cd/handoff.json"
+  );
+  assert.ok(manifest);
+  assert.match(manifest.content, /"handoffId": "handoff-123"/);
+  assert.match(manifest.content, /"userAcceptedChangeId": "accepted-change-123"/);
 });
 
 test("repository settings preview masks secrets and includes required variables", () => {

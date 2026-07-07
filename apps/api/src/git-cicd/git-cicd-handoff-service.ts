@@ -334,6 +334,13 @@ export class GitCicdHandoffProviderPermissionError extends Error {
   }
 }
 
+export class GitCicdHandoffProviderConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "GitCicdHandoffProviderConflictError";
+  }
+}
+
 const allowedGitCicdHandoffStatusTransitions: Record<
   GitCicdHandoffStatus,
   readonly GitCicdHandoffStatus[]
@@ -416,10 +423,12 @@ export function createGitHubGitCicdHandoffProvider(
               contentType: input.terraformArtifact.contentType
             },
             ...createGitCicdAutomationFiles({
+              handoffId: input.handoffId,
               projectSlug: input.projectSlug,
               repositoryOwner: input.sourceRepository.owner,
               repositoryName: input.sourceRepository.name,
               targetBranch: input.targetBranch,
+              userAcceptedChangeId: input.userAcceptedChangeId,
               environmentName: input.environmentName,
               awsRegion: input.awsRegion,
               awsRoleArn: input.awsRoleArn,
@@ -436,7 +445,19 @@ export function createGitHubGitCicdHandoffProvider(
       } catch (error) {
         if (isGitProviderPermissionError(error)) {
           throw new GitCicdHandoffProviderPermissionError(
-            "GitHub repository permission is required before Git/CI/CD handoff can be created"
+            "GitHub App repository permissions must allow Contents, Pull requests, and Workflows write access before Git/CI/CD handoff can be created"
+          );
+        }
+
+        if (isGitProviderNoChangesError(error)) {
+          throw new GitCicdHandoffProviderConflictError(
+            "GitHub PR could not be created because the handoff files did not change"
+          );
+        }
+
+        if (isGitProviderConflictError(error)) {
+          throw new GitCicdHandoffProviderConflictError(
+            "GitHub PR could not be created because the repository rejected the generated files"
           );
         }
 
@@ -806,6 +827,23 @@ function isGitProviderPermissionError(error: unknown): boolean {
     "statusCode" in error &&
     ((error as { readonly statusCode?: unknown }).statusCode === 401 ||
       (error as { readonly statusCode?: unknown }).statusCode === 403)
+  );
+}
+
+function isGitProviderNoChangesError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    error.message === "No Git/CI/CD handoff file changes were needed"
+  );
+}
+
+function isGitProviderConflictError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "statusCode" in error &&
+    ((error as { readonly statusCode?: unknown }).statusCode === 409 ||
+      (error as { readonly statusCode?: unknown }).statusCode === 422)
   );
 }
 

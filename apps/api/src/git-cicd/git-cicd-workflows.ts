@@ -6,10 +6,12 @@ import type {
 export const defaultGitCicdEnvironmentName = "sketchcatch-production";
 
 export type GitCicdWorkflowRenderInput = {
+  handoffId?: string | undefined;
   projectSlug: string;
   repositoryOwner: string;
   repositoryName: string;
   targetBranch: string;
+  userAcceptedChangeId?: string | undefined;
   environmentName?: string | undefined;
   awsRegion?: string | undefined;
   awsRoleArn?: string | null | undefined;
@@ -59,8 +61,25 @@ export function createGitCicdAutomationFiles(
       path: `sketchcatch/${input.projectSlug}/ci-cd/aws-role-diff.json`,
       content: `${JSON.stringify(createAwsRoleDiffPreview(input), null, 2)}\n`,
       contentType: "application/json"
+    },
+    {
+      path: `sketchcatch/${input.projectSlug}/ci-cd/handoff.json`,
+      content: `${JSON.stringify(createHandoffManifest(input), null, 2)}\n`,
+      contentType: "application/json"
     }
   ];
+}
+
+function createHandoffManifest(input: GitCicdWorkflowRenderInput) {
+  return {
+    schemaVersion: 1,
+    generatedBy: "sketchcatch",
+    handoffId: input.handoffId ?? null,
+    userAcceptedChangeId: input.userAcceptedChangeId ?? null,
+    repository: `${input.repositoryOwner}/${input.repositoryName}`,
+    targetBranch: input.targetBranch,
+    environmentName: input.environmentName ?? defaultGitCicdEnvironmentName
+  };
 }
 
 export function createRepositorySettingsPreview(
