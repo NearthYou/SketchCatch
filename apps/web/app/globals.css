@@ -2152,6 +2152,10 @@ nextjs-portal {
   gap: 6px;
 }
 
+.providerDropdown {
+  position: relative;
+}
+
 .providerSelect {
   align-items: center;
   background: #ffffff;
@@ -2166,9 +2170,68 @@ nextjs-portal {
   padding: 0 8px;
 }
 
+.providerVersionTrigger {
+  min-width: 118px;
+}
+
 .providerSelectActive {
   border-color: #6b7cff;
   box-shadow: 0 0 0 2px rgba(107, 124, 255, 0.12);
+}
+
+.providerVersionValue {
+  color: #151b29;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.providerVersionChevron {
+  color: #66748a;
+  transition: transform 120ms ease;
+}
+
+.providerVersionChevronOpen {
+  transform: rotate(180deg);
+}
+
+.providerVersionMenu {
+  background: #ffffff;
+  border: 1px solid #d8e1ee;
+  border-radius: 6px;
+  box-shadow: 0 10px 22px rgba(43, 51, 84, 0.12);
+  display: grid;
+  gap: 2px;
+  left: 0;
+  min-width: 118px;
+  padding: 4px;
+  position: absolute;
+  top: calc(100% + 6px);
+  z-index: 20;
+}
+
+.providerVersionOption,
+.providerVersionOptionActive {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  color: #151b29;
+  display: flex;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  height: 30px;
+  justify-content: flex-start;
+  padding: 0 8px;
+  text-align: left;
+}
+
+.providerVersionOption:hover,
+.providerVersionOption:focus-visible,
+.providerVersionOptionActive {
+  background: #f0edff;
+  color: #5f3de8;
+  outline: none;
 }
 
 .providerVersionSelect {

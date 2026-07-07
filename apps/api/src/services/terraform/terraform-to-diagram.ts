@@ -26,6 +26,7 @@ const ATTRIBUTE_PATTERN = /^\s*([A-Za-z_][A-Za-z0-9_-]*)\s*=\s*(.*)$/;
 const IDENTIFIER_PATTERN = /^[A-Za-z_][A-Za-z0-9_-]*$/;
 const REFERENCE_PATTERN =
   /^(?:var|local|each|count|path|terraform)\.[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)*$|^module\.[A-Za-z0-9_]+\.[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*$|^aws_[A-Za-z0-9_]+\.[A-Za-z0-9_]+\.[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*$|^data\.aws_[A-Za-z0-9_]+\.[A-Za-z0-9_]+\.[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*$/;
+const TERRAFORM_UTILITY_BLOCK_KEYS = new Set(["resource/random_password", "resource/terraform_data"]);
 type ParsedBlock = {
   blockType: TerraformBlockType;
   resourceType: string;
@@ -79,7 +80,10 @@ export function syncTerraformToDiagramJson(
     };
   }
 
-  if (parseResult.blocks.length === 0) {
+  const syncBlocks = parseResult.blocks.filter((block) => !isKnownTerraformUtilityBlock(block.identity));
+  const ignoredUtilityBlockCount = parseResult.blocks.length - syncBlocks.length;
+
+  if (syncBlocks.length === 0) {
     if (isTerraformSyncInputBlank(input)) {
       return {
         diagramJson,
@@ -88,7 +92,7 @@ export function syncTerraformToDiagramJson(
       };
     }
 
-    if (parseResult.ignoredProviderBlockCount > 0) {
+    if (parseResult.ignoredProviderBlockCount > 0 || ignoredUtilityBlockCount > 0) {
       return {
         diagramJson,
         diagnostics: [],
@@ -121,18 +125,18 @@ export function syncTerraformToDiagramJson(
 
   const nodeByIdentityKey = nodeMapResult.nodeByIdentityKey;
   const blockByIdentityKey = new Map(
-    parseResult.blocks.map((block) => [createTerraformBlockIdentityKey(block.identity), block])
+    syncBlocks.map((block) => [createTerraformBlockIdentityKey(block.identity), block])
   );
   const availabilityZoneProposalPlan = createAvailabilityZoneProposalPlan(
     diagramJson.nodes,
-    parseResult.blocks
+    syncBlocks
   );
   const diagnostics: TerraformDiagnostic[] = [];
   const valuesByNodeId = new Map<string, Record<string, unknown>>();
   const metadataByNodeId = new Map<string, DiagramNode["metadata"]>();
   const terraformOnlyBlocks: ParsedBlock[] = [];
 
-  for (const block of parseResult.blocks) {
+  for (const block of syncBlocks) {
     const blockKey = createTerraformBlockIdentityKey(block.identity);
     const node = nodeByIdentityKey.get(blockKey);
 
@@ -543,6 +547,12 @@ function isProposalSupportedBlock(identity: TerraformBlockIdentity): boolean {
   );
 }
 
+function isKnownTerraformUtilityBlock(identity: TerraformBlockIdentity): boolean {
+  return TERRAFORM_UTILITY_BLOCK_KEYS.has(
+    `${identity.terraformBlockType}/${identity.resourceType}`
+  );
+}
+
 function normalizeComparisonValue(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map((item) => normalizeComparisonValue(item));
@@ -699,6 +709,21 @@ function parseTerraformBlocks(sourceFileName: string, terraformCode: string): Pa
       continue;
     }
 
+    if (isKnownTerraformUtilityBlock(identity)) {
+      blocks.push({
+        blockType,
+        resourceType,
+        resourceName,
+        address,
+        identity,
+        line: index + 1,
+        sourceFileName,
+        values: {}
+      });
+      index = bodyResult.endIndex;
+      continue;
+    }
+
     const valuesResult = parseAttributes(
       bodyResult.bodyLines,
       address,
@@ -843,7 +868,7 @@ function parseAttributes(
         continue;
       }
 
-      const nestedValues = parseAttributes(nestedBlock.bodyLines, resourceAddress);
+      const nestedValues = parseAttributes(nestedBlock.bodyLines, resourceAddress, resourceType);
       diagnostics.push(...nestedValues.diagnostics);
       appendNestedBlockValue(values, nestedBlockName, nestedValues.values);
       continue;
