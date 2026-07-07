@@ -1,4 +1,5 @@
 import type { GitCicdRepositorySettingsApplyResponse } from "@sketchcatch/types";
+import { requireGitHubAppConfig } from "../config/env.js";
 import {
   createGitHubAppClient,
   type GitHubAppClient
@@ -163,18 +164,19 @@ export async function applyGitCicdRepositorySettings(
 }
 
 function createGitHubAppClientFromEnv(): GitHubAppClient {
-  const appId = process.env.GITHUB_APP_ID;
-  const privateKey = process.env.GITHUB_APP_PRIVATE_KEY;
+  let config: ReturnType<typeof requireGitHubAppConfig>;
 
-  if (!appId || !privateKey) {
+  try {
+    config = requireGitHubAppConfig();
+  } catch (error) {
     throw new GitCicdRepositorySettingsPermissionError(
-      "GitHub App credentials are not configured"
+      `GitHub App credentials are not configured: ${getErrorMessage(error)}`
     );
   }
 
   return createGitHubAppClient({
-    appId,
-    privateKey
+    appId: config.appId,
+    privateKey: config.privateKey
   });
 }
 
@@ -186,6 +188,10 @@ function isGitHubPermissionError(error: unknown): boolean {
     ((error as { readonly statusCode?: unknown }).statusCode === 401 ||
       (error as { readonly statusCode?: unknown }).statusCode === 403)
   );
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "Unknown error";
 }
 
 async function upsertRepositoryVariableWithOAuth(
