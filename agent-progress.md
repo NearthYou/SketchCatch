@@ -120,6 +120,20 @@ Verification:
 - `pnpm typecheck`
 - `pnpm build`
 
+- Added browser speech recognition to the full-screen new-project AI start composer with a mic button, listening state, and shared Korean status/error handling.
+- Added static regression coverage for the new voice button wiring, SpeechRecognition support helper, and responsive composer styling.
+
+Verification:
+
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-new-project-start-mode.test.ts`
+- `pnpm --filter @sketchcatch/web typecheck`
+- `pnpm harness:check`
+- `pnpm lint`
+- `pnpm typecheck`
+- `pnpm build` (first run timed out at the command limit; rerun with a longer timeout passed from cache)
+- Local dev server started at `http://localhost:3000`; `/workspace/new` returned HTTP 200.
+- Browser screenshot attempt was blocked because the local Playwright browser binary is not installed.
+
 - Corrected diagram edge handling so only `contains`/`hosts` are removed as area containment; runtime and configuration relationships remain visible.
 - Added endpoint-based styling so IAM/KMS/AMI/security configuration relationships render as thin solid dependency lines even when the AI label is generic.
 - Kept async/event/log/monitoring relationships dashed, Terraform/deploy relationships operational dashed, and runtime HTTPS/data relationships solid.
