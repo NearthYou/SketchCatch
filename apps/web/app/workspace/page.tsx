@@ -1,11 +1,13 @@
 import { ProjectWorkspaceDraftManager, WorkspaceDraftManager } from "../../features/workspace";
 import { isWorkspaceCloudPlatform } from "../../features/workspace/project-draft-persistence";
+import { getWorkspaceDiagramFixture } from "../../features/workspace/workspace-diagram-fixtures";
 import { WorkspaceAuthGate } from "./workspace-auth-gate";
 import { resolveInitialWorkspaceRightPanelView } from "./workspace-start-mode";
 
 type WorkspacePageProps = {
   readonly searchParams?: Promise<{
     readonly cloudPlatform?: string | string[] | undefined;
+    readonly diagramFixture?: string | string[] | undefined;
     readonly projectId?: string | string[] | undefined;
     readonly projectName?: string | string[] | undefined;
     readonly startMode?: string | string[] | undefined;
@@ -37,10 +39,12 @@ export default async function WorkspacePage({ searchParams }: WorkspacePageProps
   }
 
   const projectName = getSingleSearchParam(params?.projectName)?.trim();
+  const initialDiagramOverride = getWorkspaceDiagramFixture(getSingleSearchParam(params?.diagramFixture));
 
   return (
     <WorkspaceAuthGate>
       <WorkspaceDraftManager
+        initialDiagramOverride={initialDiagramOverride}
         initialProjectName={projectName || undefined}
         initialRightPanelView={initialRightPanelView}
       />

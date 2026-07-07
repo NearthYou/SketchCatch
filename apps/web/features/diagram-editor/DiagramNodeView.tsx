@@ -90,7 +90,8 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
   const areaNodeIconUrl = isArea ? getAreaNodeIconUrl(node) : undefined;
   const areaNodeLabel = isArea ? getAreaNodeLabel(node) : "";
   const areaNodeMetaLabel = isArea ? getAreaNodeMetaLabel(node) : undefined;
-  const resourceNodeLabelStyle = getResourceNodeLabelStyle(node.label, node.size.width, textColor);
+  const resourceNodeLabel = getResourceNodeLabel(node);
+  const resourceNodeLabelStyle = getResourceNodeLabelStyle(resourceNodeLabel, node.size.width, textColor);
 
   useEffect(() => {
     updateNodeInternals(id);
@@ -248,7 +249,7 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
               )}
             </div>
             <div className={styles.resourceNodeLabel} style={resourceNodeLabelStyle}>
-              {node.label}
+              {resourceNodeLabel}
             </div>
             <div className={styles.resourceNodeType}>{node.type}</div>
             {isDataNode ? <div className={styles.resourceNodeBadge}>Data</div> : null}
@@ -256,7 +257,11 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
         ) : (
           <>
             <div className={styles.nodeGlyph} aria-hidden="true">
-              D
+              {node.iconUrl ? (
+                <img alt="" className={styles.nodeGlyphIcon} draggable={false} src={node.iconUrl} />
+              ) : (
+                "D"
+              )}
             </div>
             <div className={styles.nodeContent}>
               <div className={styles.nodeType}>Design</div>
@@ -335,6 +340,12 @@ function getNodeShellStyle(isArea: boolean, isResourceNode: boolean, borderColor
   }
 
   return { borderColor };
+}
+
+function getResourceNodeLabel(node: DiagramFlowNode["data"]["node"]): string {
+  const resourceName = node.parameters?.resourceName?.trim();
+
+  return resourceName ? resourceName : node.label;
 }
 
 function getResourceNodeLabelStyle(label: string, nodeWidth: number, textColor: string): CSSProperties {

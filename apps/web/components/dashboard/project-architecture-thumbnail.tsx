@@ -34,6 +34,7 @@ type ThumbnailEdge = {
   readonly x2: number;
   readonly y2: number;
   readonly color: string | undefined;
+  readonly dasharray: string | undefined;
   readonly width: number;
 };
 
@@ -107,6 +108,7 @@ export function ProjectArchitectureThumbnail({
               className="projectArchitectureEdge"
               key={edge.id}
               stroke={edge.color}
+              strokeDasharray={edge.dasharray}
               strokeWidth={edge.width}
               x1={edge.x1}
               x2={edge.x2}
@@ -246,8 +248,21 @@ function toThumbnailEdge(
     x2: target.x + target.width / 2,
     y2: target.y + target.height / 2,
     color: edge.style?.color,
+    dasharray: getThumbnailEdgeDasharray(edge),
     width: edge.style?.width === "thick" ? 3 : edge.style?.width === "thin" ? 1.4 : 2
   };
+}
+
+function getThumbnailEdgeDasharray(edge: DiagramEdge): string | undefined {
+  if (edge.style?.lineStyle === "dashed") {
+    return "7 5";
+  }
+
+  if (edge.style?.lineStyle === "dotted") {
+    return "2 5";
+  }
+
+  return undefined;
 }
 
 function getDiagramBounds(nodes: readonly ThumbnailNode[]) {

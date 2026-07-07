@@ -219,6 +219,62 @@ test("toFlowEdges keeps existing React Flow source and target handle ids stable"
   assert.equal(flowEdges[0]?.targetHandle, "target-handle-top");
 });
 
+test("toFlowEdges renders dashed diagram edge styles outside preview mode", () => {
+  const flowEdges = toFlowEdges(
+    [
+      {
+        ...makeEdge("api-1", "queue-1"),
+        style: {
+          color: "#476582",
+          lineStyle: "dashed",
+          width: "medium"
+        }
+      }
+    ],
+    []
+  );
+
+  assert.equal(flowEdges[0]?.style?.stroke, "#476582");
+  assert.equal(flowEdges[0]?.style?.strokeDasharray, "7 5");
+});
+
+test("toFlowEdges derives line style from legacy edge labels", () => {
+  const flowEdges = toFlowEdges(
+    [
+      { ...makeEdge("client-1", "api-1"), id: "https", label: "HTTPS" },
+      { ...makeEdge("api-1", "queue-1"), id: "event", label: "event queue" },
+      { ...makeEdge("pipeline-1", "api-1"), id: "deploy", label: "Terraform apply" }
+    ],
+    []
+  );
+
+  const edgeById = new Map(flowEdges.map((edge) => [edge.id, edge]));
+
+  assert.equal(edgeById.get("https")?.style?.strokeDasharray, undefined);
+  assert.equal(edgeById.get("https")?.style?.stroke, "#506176");
+  assert.equal(edgeById.get("event")?.style?.strokeDasharray, "7 5");
+  assert.equal(edgeById.get("event")?.style?.stroke, "#476582");
+  assert.equal(edgeById.get("deploy")?.style?.strokeDasharray, "7 5");
+  assert.equal(edgeById.get("deploy")?.style?.stroke, "#8a5a00");
+  assert.equal(edgeById.get("deploy")?.style?.strokeWidth, 4);
+});
+
+test("toFlowEdges hides containment labels from rendered edges", () => {
+  const flowEdges = toFlowEdges(
+    [
+      { ...makeEdge("vpc-1", "subnet-1"), id: "contains", label: "contains" },
+      { ...makeEdge("subnet-1", "instance-1"), id: "hosts", label: "hosts" },
+      { ...makeEdge("client-1", "api-1"), id: "https", label: "HTTPS" }
+    ],
+    []
+  );
+
+  assert.deepEqual(
+    flowEdges.map((edge) => edge.id),
+    ["https"]
+  );
+});
+
 test("flow mappers make AI preview nodes and edges read-only", () => {
   const instance = makeNode({ id: "instance-1", resourceType: "aws_instance" });
   const flowNodes = toFlowNodes([instance], ["instance-1"], "instance-1", false, handlers, { isPreview: true });

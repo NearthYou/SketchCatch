@@ -156,6 +156,11 @@ type DiagramJson = {
 };
 ```
 
+`DiagramEdge.style.lineStyle`은 보드에서 연결선의 의미를 보존하기 위한 표현 계약이다. 기본 런타임 트래픽은
+`solid`, 비동기/이벤트/큐 흐름과 Terraform plan/apply 또는 CI/CD 같은 운영 흐름은 `dashed`를 사용한다.
+`contains`, `hosts`처럼 포함 관계를 나타내는 edge는 렌더링 선으로 남기지 않고 `node.metadata.parentAreaNodeId`
+containment로 변환한다.
+
 보드 전용 node metadata는 `node.metadata`에 둔다. `metadata`는 화면 편집 상태를 복구하기 위한 값이며,
 Terraform resource/data block 생성에는 사용하지 않는다.
 

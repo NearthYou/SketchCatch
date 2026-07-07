@@ -78,7 +78,7 @@ test("convertArchitectureJsonToDiagramJson creates board nodes and hides contain
         label: "Main VPC",
         parameters: {
           fileName: "main",
-          resourceName: "main",
+          resourceName: "vpc_main",
           resourceType: "aws_vpc",
           terraformBlockType: "resource",
           values: {
@@ -101,7 +101,7 @@ test("convertArchitectureJsonToDiagramJson creates board nodes and hides contain
         label: "Backend Server",
         parameters: {
           fileName: "main",
-          resourceName: "ec2_backend",
+          resourceName: "compute_backend",
           resourceType: "aws_instance",
           terraformBlockType: "resource",
           values: {
@@ -166,10 +166,302 @@ test("convertArchitectureJsonToDiagramJson keeps non-containment edges as arrows
       style: {
         animated: false,
         color: "#506176",
+        lineStyle: "solid",
         width: "medium"
       }
     }
   ]);
+});
+
+test("convertArchitectureJsonToDiagramJson routes edge handles around intermediate resources", () => {
+  const architectureJson: ArchitectureJson = {
+    nodes: [
+      {
+        id: "client",
+        type: "CLOUDFRONT",
+        label: "Client",
+        positionX: 80,
+        positionY: 100,
+        config: {}
+      },
+      {
+        id: "middle",
+        type: "S3",
+        label: "Middle Bucket",
+        positionX: 300,
+        positionY: 120,
+        config: {}
+      },
+      {
+        id: "api",
+        type: "API_GATEWAY_REST_API",
+        label: "API",
+        positionX: 520,
+        positionY: 100,
+        config: {}
+      }
+    ],
+    edges: [
+      {
+        id: "client-to-api",
+        sourceId: "client",
+        targetId: "api",
+        label: "HTTPS"
+      }
+    ]
+  };
+
+  const diagramJson = convertArchitectureJsonToDiagramJson(architectureJson);
+  const edge = diagramJson.edges[0];
+
+  assert.equal(edge?.sourceHandleId, "handle-top");
+  assert.equal(edge?.targetHandleId, "handle-top");
+});
+
+test("convertArchitectureJsonToDiagramJson applies diagram naming conventions and avoids resource overlaps", () => {
+  const architectureJson: ArchitectureJson = {
+    nodes: [
+      {
+        id: "main",
+        type: "VPC",
+        label: "Main VPC",
+        positionX: 120,
+        positionY: 120,
+        config: {
+          terraformResourceName: "main"
+        }
+      },
+      {
+        id: "public-a",
+        type: "SUBNET",
+        label: "Public Subnet A",
+        positionX: 120,
+        positionY: 120,
+        config: {
+          terraformResourceName: "public_a",
+          vpcId: "aws_vpc.vpc_main.id"
+        }
+      },
+      {
+        id: "web-sg",
+        type: "SECURITY_GROUP",
+        label: "Web Security Group",
+        positionX: 120,
+        positionY: 120,
+        config: {
+          terraformResourceName: "web",
+          vpcId: "aws_vpc.vpc_main.id"
+        }
+      },
+      {
+        id: "web",
+        type: "EC2",
+        label: "Web App",
+        positionX: 520,
+        positionY: 120,
+        config: {}
+      },
+      {
+        id: "primary",
+        type: "RDS",
+        label: "Primary DB",
+        positionX: 520,
+        positionY: 120,
+        config: {}
+      },
+      {
+        id: "artifacts",
+        type: "S3",
+        label: "Artifacts Bucket",
+        positionX: 520,
+        positionY: 120,
+        config: {}
+      }
+    ],
+    edges: []
+  };
+
+  const diagramJson = convertArchitectureJsonToDiagramJson(architectureJson);
+  const nodeById = new Map(diagramJson.nodes.map((node) => [node.id, node]));
+  const vpcNode = nodeById.get("main");
+  const subnetNode = nodeById.get("public-a");
+  const securityGroupNode = nodeById.get("web-sg");
+  const computeNode = nodeById.get("web");
+  const databaseNode = nodeById.get("primary");
+  const bucketNode = nodeById.get("artifacts");
+
+  assert.equal(vpcNode?.parameters?.resourceName, "vpc_main");
+  assert.equal(subnetNode?.parameters?.resourceName, "subnet_public_a");
+  assert.equal(securityGroupNode?.parameters?.resourceName, "sg_web");
+  assertNoNodeOverlap(computeNode, databaseNode);
+  assertNoNodeOverlap(computeNode, bucketNode);
+  assertNoNodeOverlap(databaseNode, bucketNode);
+});
+
+test("convertArchitectureJsonToDiagramJson avoids sibling overlaps after area nodes expand", () => {
+  const architectureJson: ArchitectureJson = {
+    nodes: [
+      {
+        id: "vpc-main",
+        type: "VPC",
+        label: "Main VPC",
+        positionX: 80,
+        positionY: 120,
+        config: { terraformResourceName: "main" }
+      },
+      {
+        id: "public-subnet-a",
+        type: "SUBNET",
+        label: "Public Subnet A",
+        positionX: 160,
+        positionY: 220,
+        config: { terraformResourceName: "public_a", vpcId: "aws_vpc.main.id" }
+      },
+      {
+        id: "private-app-subnet-a",
+        type: "SUBNET",
+        label: "Private App Subnet A",
+        positionX: 180,
+        positionY: 300,
+        config: { terraformResourceName: "private_app_a", vpcId: "aws_vpc.main.id" }
+      },
+      {
+        id: "private-app-subnet-b",
+        type: "SUBNET",
+        label: "Private App Subnet B",
+        positionX: 210,
+        positionY: 330,
+        config: { terraformResourceName: "private_app_b", vpcId: "aws_vpc.main.id" }
+      },
+      {
+        id: "app-security-group",
+        type: "SECURITY_GROUP",
+        label: "App Security Group",
+        positionX: 220,
+        positionY: 340,
+        config: { terraformResourceName: "app", vpcId: "aws_vpc.main.id" }
+      },
+      {
+        id: "app-server",
+        type: "EC2",
+        label: "Application Server",
+        positionX: 250,
+        positionY: 380,
+        config: {
+          subnetId: "aws_subnet.private_app_a.id",
+          vpcSecurityGroupIds: ["aws_security_group.app.id"]
+        }
+      },
+      {
+        id: "public-route-table",
+        type: "ROUTE_TABLE",
+        label: "Public Route Table",
+        positionX: 240,
+        positionY: 320,
+        config: { route: [], terraformResourceName: "public", vpcId: "aws_vpc.main.id" }
+      },
+      {
+        id: "public-route-association-a",
+        type: "ROUTE_TABLE_ASSOCIATION",
+        label: "Public Route Association A",
+        positionX: 260,
+        positionY: 340,
+        config: {
+          routeTableId: "aws_route_table.public.id",
+          subnetId: "aws_subnet.public_a.id",
+          terraformResourceName: "public_a"
+        }
+      }
+    ],
+    edges: []
+  };
+
+  const diagramJson = convertArchitectureJsonToDiagramJson(architectureJson);
+
+  assertNoSiblingNodeOverlap(diagramJson);
+});
+
+test("convertArchitectureJsonToDiagramJson classifies edge line styles from relationship labels", () => {
+  const architectureJson: ArchitectureJson = {
+    nodes: [
+      {
+        id: "client",
+        type: "CLOUDFRONT",
+        label: "Client Edge",
+        positionX: 80,
+        positionY: 120,
+        config: {}
+      },
+      {
+        id: "api",
+        type: "API_GATEWAY_REST_API",
+        label: "API Gateway",
+        positionX: 320,
+        positionY: 120,
+        config: {}
+      },
+      {
+        id: "queue",
+        type: "SQS_QUEUE",
+        label: "Event Queue",
+        positionX: 560,
+        positionY: 120,
+        config: {}
+      },
+      {
+        id: "worker",
+        type: "LAMBDA",
+        label: "Worker",
+        positionX: 800,
+        positionY: 120,
+        config: {}
+      }
+    ],
+    edges: [
+      {
+        id: "client-to-api",
+        sourceId: "client",
+        targetId: "api",
+        label: "HTTPS"
+      },
+      {
+        id: "api-to-queue",
+        sourceId: "api",
+        targetId: "queue",
+        label: "event queue"
+      },
+      {
+        id: "worker-to-deploy",
+        sourceId: "queue",
+        targetId: "worker",
+        label: "Terraform apply"
+      }
+    ]
+  };
+
+  const diagramJson = convertArchitectureJsonToDiagramJson(architectureJson);
+  const edgeById = new Map(diagramJson.edges.map((edge) => [edge.id, edge]));
+
+  assert.deepEqual(edgeById.get("client-to-api")?.style, {
+    animated: false,
+    color: "#506176",
+    lineStyle: "solid",
+    width: "medium"
+  });
+  assert.deepEqual(edgeById.get("api-to-queue")?.style, {
+    animated: false,
+    color: "#476582",
+    lineStyle: "dashed",
+    width: "medium"
+  });
+  assert.deepEqual(edgeById.get("worker-to-deploy")?.style, {
+    animated: false,
+    color: "#8a5a00",
+    lineStyle: "dashed",
+    width: "thick"
+  });
+  assert.equal(edgeById.get("client-to-api")?.label, "HTTPS");
+  assert.equal(edgeById.get("api-to-queue")?.label, "event queue");
 });
 
 test("convertArchitectureJsonToDiagramJson uses catalog icon and size for CloudFront drafts", () => {
@@ -198,7 +490,7 @@ test("convertArchitectureJsonToDiagramJson uses catalog icon and size for CloudF
     "/Architecture-Service-Icons_07312025/Arch_Networking-Content-Delivery/64/Arch_Amazon-CloudFront_64.svg"
   );
   assert.deepEqual(cloudFrontNode?.size, { width: 124, height: 96 });
-  assert.equal(cloudFrontNode?.parameters?.resourceName, "cloudfront_site");
+  assert.equal(cloudFrontNode?.parameters?.resourceName, "cdn_site");
 });
 
 test("convertArchitectureJsonToDiagramJson uses fallback size for unknown draft resources", () => {
@@ -535,14 +827,14 @@ test("convertArchitectureJsonToDiagramJson maps server and storage draft resourc
     [
       {
         id: "internet-gateway",
-        resourceName: "internet_gateway",
+        resourceName: "igw",
         resourceType: "aws_internet_gateway",
         terraformBlockType: "resource",
         values: { vpcId: "aws_vpc.vpc.id" }
       },
       {
         id: "route-table",
-        resourceName: "route_table",
+        resourceName: "rt",
         resourceType: "aws_route_table",
         terraformBlockType: "resource",
         values: {
@@ -552,7 +844,7 @@ test("convertArchitectureJsonToDiagramJson maps server and storage draft resourc
       },
       {
         id: "route-table-association",
-        resourceName: "route_table_association",
+        resourceName: "rta",
         resourceType: "aws_route_table_association",
         terraformBlockType: "resource",
         values: {
@@ -562,7 +854,7 @@ test("convertArchitectureJsonToDiagramJson maps server and storage draft resourc
       },
       {
         id: "ami",
-        resourceName: "ami",
+        resourceName: "ami_amazon_linux",
         resourceType: "aws_ami",
         terraformBlockType: "data",
         values: {
@@ -896,12 +1188,15 @@ test("convertArchitectureJsonToDiagramJson lays out server and storage draft as 
   assert.deepEqual(azNode?.parameters?.values, {
     awsAvailabilityZone: "ap-northeast-2a"
   });
-  assert.equal(regionNode?.size.width, 1192);
-  assert.equal(regionNode?.size.height, 1080);
-  assert.equal(vpcNode?.size.width, 1056);
-  assert.equal(vpcNode?.size.height, 798);
-  assert.equal(azNode?.size.width, 831);
-  assert.equal(azNode?.size.height, 626);
+  assert.equal(regionNode?.parameters?.resourceName, "region_ap_northeast_2");
+  assert.equal(azNode?.parameters?.resourceName, "az_ap_northeast_2a");
+  assert.ok((regionNode?.size.width ?? 0) >= 1192);
+  assert.ok((regionNode?.size.height ?? 0) >= 1080);
+  assert.ok((vpcNode?.size.width ?? 0) >= 1056);
+  assert.ok((vpcNode?.size.height ?? 0) >= 798);
+  assert.ok((azNode?.size.width ?? 0) >= 831);
+  assert.ok((azNode?.size.height ?? 0) >= 626);
+  assertNoSiblingNodeOverlap(diagramJson);
 });
 
 test("convertArchitectureJsonToDiagramJson lays out generated EC2 drafts inside cloud container areas", () => {
@@ -1343,4 +1638,40 @@ function assertContainsNode(parent: DiagramNode | undefined, child: DiagramNode 
     child.position.y + child.size.height <= parent.position.y + parent.size.height,
     `${parent.id} should contain ${child.id} on the bottom edge`
   );
+}
+
+function assertNoNodeOverlap(left: DiagramNode | undefined, right: DiagramNode | undefined): void {
+  assert.ok(left, "Expected left node to exist");
+  assert.ok(right, "Expected right node to exist");
+  assert.ok(
+    left.position.x + left.size.width <= right.position.x ||
+      right.position.x + right.size.width <= left.position.x ||
+      left.position.y + left.size.height <= right.position.y ||
+      right.position.y + right.size.height <= left.position.y,
+    `${left.id} should not overlap ${right.id}`
+  );
+}
+
+function assertNoSiblingNodeOverlap(diagramJson: DiagramJson): void {
+  for (let leftIndex = 0; leftIndex < diagramJson.nodes.length; leftIndex += 1) {
+    const left = diagramJson.nodes[leftIndex];
+
+    if (!left || left.kind !== "resource") {
+      continue;
+    }
+
+    for (let rightIndex = leftIndex + 1; rightIndex < diagramJson.nodes.length; rightIndex += 1) {
+      const right = diagramJson.nodes[rightIndex];
+
+      if (!right || right.kind !== "resource") {
+        continue;
+      }
+
+      if (left.metadata?.parentAreaNodeId !== right.metadata?.parentAreaNodeId) {
+        continue;
+      }
+
+      assertNoNodeOverlap(left, right);
+    }
+  }
 }

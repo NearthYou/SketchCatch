@@ -38,6 +38,7 @@ const validDiagram: DiagramJson = {
       type: "smoothstep",
       style: {
         color: "#506176",
+        lineStyle: "solid",
         width: "medium",
         animated: false
       }
@@ -61,6 +62,26 @@ test("save project draft body accepts full DiagramJson", () => {
 
   assert.equal(parsed.diagramJson.nodes[0]?.parameters?.values.instanceType, "t3.micro");
   assert.equal(parsed.diagramJson.viewport.zoom, 1);
+});
+
+test("save project draft body preserves diagram edge line style", () => {
+  const parsed = saveProjectDraftBodySchema.parse({
+    diagramJson: {
+      ...validDiagram,
+      edges: [
+        {
+          ...validDiagram.edges[0]!,
+          style: {
+            color: "#476582",
+            lineStyle: "dashed",
+            width: "medium"
+          }
+        }
+      ]
+    }
+  });
+
+  assert.equal(parsed.diagramJson.edges[0]?.style?.lineStyle, "dashed");
 });
 
 test("save project draft body preserves diagram node metadata", () => {

@@ -368,6 +368,14 @@
   position: absolute;
 }
 
+.canvasPanel :global(.react-flow__edges) {
+  z-index: 1;
+}
+
+.canvasPanel :global(.react-flow__nodes) {
+  z-index: 2;
+}
+
 .canvasPanel :global(.react-flow__edges svg) {
   overflow: visible;
   pointer-events: none;
@@ -896,6 +904,13 @@
   height: 38px;
   justify-content: center;
   width: 38px;
+}
+
+.nodeGlyphIcon {
+  display: block;
+  height: 28px;
+  object-fit: contain;
+  width: 28px;
 }
 
 .nodeContent {

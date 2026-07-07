@@ -16,6 +16,7 @@ import {
 import type { LocalProjectDraft } from "./project-draft-persistence";
 import { WorkspaceAiChatDock } from "./WorkspaceAiChatDock";
 import { WorkspaceRightPanel } from "./WorkspaceRightPanel";
+import { normalizeDiagramJsonConventions } from "./workspace-ai-diagram-adapter";
 import type { WorkspaceRightPanelView } from "./workspace-right-panel.types";
 import type {
   TerraformIssueAiRequest,
@@ -30,6 +31,7 @@ const LOCAL_PROJECT_NAME = "Local workspace";
 const LOCAL_SAVE_DEBOUNCE_MS = 800;
 
 export type WorkspaceDraftManagerProps = {
+  readonly initialDiagramOverride?: DiagramJson | undefined;
   readonly initialProjectName?: string | undefined;
   readonly initialRightPanelView?: WorkspaceRightPanelView | undefined;
 };
@@ -45,6 +47,7 @@ const saveStatusLabels: Record<SaveState, string> = {
 };
 
 export function WorkspaceDraftManager({
+  initialDiagramOverride,
   initialProjectName,
   initialRightPanelView
 }: WorkspaceDraftManagerProps) {
@@ -119,6 +122,27 @@ export function WorkspaceDraftManager({
 
     async function loadWorkspace() {
       try {
+        if (initialDiagramOverride) {
+          const nextWorkspaceId = "workspace-diagram-fixture";
+          const nextProjectName = initialProjectName ?? LOCAL_PROJECT_NAME;
+
+          if (cancelled) {
+            return;
+          }
+
+          const nextDiagram = normalizeDiagramJsonConventions(initialDiagramOverride);
+          latestDiagramRef.current = nextDiagram;
+          hasUnsavedChangesRef.current = false;
+          draftChangeVersionRef.current = 0;
+          setWorkspaceId(nextWorkspaceId);
+          setProjectName(nextProjectName);
+          setInitialDiagram(nextDiagram);
+          setCurrentLocalDraft(null);
+          setSaveState("idle");
+          setLoadState("ready");
+          return;
+        }
+
         const metadata = await readWorkspaceClientMetadata();
         const nextWorkspaceId = metadata?.workspaceId ?? createWorkspaceId();
         const nextProjectName = initialProjectName ?? normalizeProjectName(metadata?.activeProjectName);
@@ -140,7 +164,7 @@ export function WorkspaceDraftManager({
           return;
         }
 
-        const nextDiagram = storedLocalDraft?.diagramJson ?? EMPTY_DIAGRAM;
+        const nextDiagram = normalizeDiagramJsonConventions(storedLocalDraft?.diagramJson ?? EMPTY_DIAGRAM);
         latestDiagramRef.current = nextDiagram;
         hasUnsavedChangesRef.current = false;
         draftChangeVersionRef.current = 0;
@@ -166,7 +190,7 @@ export function WorkspaceDraftManager({
       cancelled = true;
       clearLocalSaveTimer();
     };
-  }, [clearLocalSaveTimer, initialProjectName, setCurrentLocalDraft]);
+  }, [clearLocalSaveTimer, initialDiagramOverride, initialProjectName, setCurrentLocalDraft]);
 
   useEffect(() => {
     function handleVisibilityChange() {
