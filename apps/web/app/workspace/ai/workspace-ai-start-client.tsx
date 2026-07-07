@@ -83,6 +83,7 @@ export function WorkspaceAiStartClient() {
     useState<CreateArchitectureDraftRequest | null>(null);
   const [requestState, setRequestState] = useState<RequestState>("idle");
   const [errorMessage, setErrorMessage] = useState("");
+  const [createdProjectId, setCreatedProjectId] = useState<string | null>(null);
   const transcriptRef = useRef<HTMLDivElement>(null);
 
   const projectName = projectDraft?.projectName ?? "";
@@ -247,9 +248,17 @@ export function WorkspaceAiStartClient() {
     setErrorMessage("");
 
     try {
-      const project = await createProject({
-        name: projectDraft.projectName
-      });
+      let activeProjectId = createdProjectId;
+
+      if (!activeProjectId) {
+        const project = await createProject({
+          name: projectDraft.projectName
+        });
+
+        activeProjectId = project.id;
+        setCreatedProjectId(project.id);
+      }
+
       const approvedMessages = appendMessage(
         createChatMessage(
           "assistant",
@@ -259,15 +268,15 @@ export function WorkspaceAiStartClient() {
       );
 
       await saveProjectDraft({
-        projectId: project.id,
+        projectId: activeProjectId,
         diagramJson: previewDiagram
       });
-      storeApprovedChatHistory(project.id, approvedMessages);
+      storeApprovedChatHistory(activeProjectId, approvedMessages);
       clearAiStartDraft();
 
       const params = new URLSearchParams({
-        projectId: project.id,
-        projectName: project.name
+        projectId: activeProjectId,
+        projectName: projectDraft.projectName
       });
 
       router.push(`/workspace?${params.toString()}`);
@@ -612,10 +621,14 @@ function storeApprovedChatHistory(projectId: string, messages: readonly AiStartC
     return;
   }
 
-  window.localStorage.setItem(
-    createWorkspaceAiChatStorageKey(projectId),
-    JSON.stringify(trimChatMessages(messages))
-  );
+  try {
+    window.localStorage.setItem(
+      createWorkspaceAiChatStorageKey(projectId),
+      JSON.stringify(trimChatMessages(messages))
+    );
+  } catch (error) {
+    console.error("Failed to store approved chat history to localStorage:", error);
+  }
 }
 
 function createChatMessage(

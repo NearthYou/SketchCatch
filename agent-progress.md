@@ -14,6 +14,7 @@ Recent branch work:
 
 - Fixed Korean text rendering on `/workspace/new` by moving raw Unicode escape text into `COPY` constants rendered as JSX expressions.
 - Improved `/workspace/ai` chat UX with transcript auto-scroll, Enter-to-send, Shift+Enter newline, icon-based mini previews, and stable project-name input focus background.
+- Addressed PR #224 review feedback by reusing the created project ID after an approval save failure and by guarding local/session storage writes.
 - Added source and browser regressions for the new project start and AI start flow.
 - Committed the branch work as `2bab6899`.
 
@@ -32,6 +33,7 @@ Verification so far:
 - `pnpm typecheck` passed after completing the merge, with non-fatal Turbo cache rename warnings.
 - `pnpm build` first failed in the sandbox on `.next` unlink `EPERM`; elevated rerun passed.
 - Final `pnpm harness:check` passed after build verification.
+- PR #224 review fix verification passed: focused workspace start tests, harness, lint, typecheck, and elevated build after sandbox `.next` unlink `EPERM`.
 
 ## Session Record
 
@@ -44,7 +46,11 @@ Verification so far:
 - Resolved the only merge conflict in `agent-progress.md` by preserving the current branch summary and adopting the latest concise English-only progress-file format from `dev`.
 - Completed the merge commit.
 - Verified the merge with harness, lint, typecheck, build, final harness, and clean worktree status.
+- Inspected PR #224 review threads and found four unresolved actionable comments from Gemini Code Assist.
+- Added `createdProjectId` reuse in AI approval so retrying after `saveProjectDraft` failure does not create duplicate projects.
+- Wrapped AI start `localStorage.setItem` and new-project `sessionStorage.setItem` calls in `try/catch`.
+- Added regression assertions for the PR review fixes.
 
 Next steps:
 
-- No pending local merge work remains.
+- No pending local PR #224 review-fix work remains after this commit is pushed.

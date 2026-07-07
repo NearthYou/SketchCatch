@@ -17,6 +17,8 @@ test("new project start removes cloud platform selection and exposes start modes
   assert.match(workspaceStartClientSource, /blank: "\\uBE48\\uBCF4\\uB4DC"/);
   assert.match(workspaceStartClientSource, /const canChooseStartMode = title\.trim\(\)\.length > 0/);
   assert.match(workspaceStartClientSource, /writeAiStartDraft/);
+  assert.match(workspaceStartClientSource, /try \{\s+window\.sessionStorage\.setItem/s);
+  assert.match(workspaceStartClientSource, /Failed to write AI start draft to sessionStorage/);
   assert.match(workspaceStartClientSource, /router\.push\("\/workspace\/ai"\)/);
   assert.match(workspaceStartClientSource, /listAwsConnections/);
   assert.match(workspaceStartClientSource, /resolveWorkspaceStartAction/);
@@ -47,8 +49,13 @@ test("AI start page previews real diagram data and persists approval into the bo
   assert.match(workspaceAiStartClientSource, /<image/);
   assert.doesNotMatch(workspaceAiStartClientSource, /<text[\s>]/);
   assert.match(workspaceAiStartClientSource, /saveProjectDraft/);
+  assert.match(workspaceAiStartClientSource, /createdProjectId/);
+  assert.match(workspaceAiStartClientSource, /setCreatedProjectId\(project\.id\)/);
+  assert.match(workspaceAiStartClientSource, /let activeProjectId = createdProjectId/);
   assert.match(workspaceAiStartClientSource, /createWorkspaceAiChatStorageKey/);
   assert.match(workspaceAiStartClientSource, /storeApprovedChatHistory/);
+  assert.match(workspaceAiStartClientSource, /try \{\s+window\.localStorage\.setItem/s);
+  assert.match(workspaceAiStartClientSource, /Failed to store approved chat history to localStorage/);
   assert.match(workspaceAiStartClientSource, /COPY\.approve/);
   assert.match(workspaceAiStartClientSource, /COPY\.cancel/);
   assert.match(workspaceAiStartClientSource, /COPY\.regenerate/);

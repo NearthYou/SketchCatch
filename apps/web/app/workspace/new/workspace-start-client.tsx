@@ -191,7 +191,11 @@ function writeAiStartDraft(draft: WorkspaceStartDraft): void {
     return;
   }
 
-  window.sessionStorage.setItem(AI_START_DRAFT_STORAGE_KEY, JSON.stringify(draft));
+  try {
+    window.sessionStorage.setItem(AI_START_DRAFT_STORAGE_KEY, JSON.stringify(draft));
+  } catch (error) {
+    console.error("Failed to write AI start draft to sessionStorage:", error);
+  }
 }
 
 function isWorkspaceStartDraft(value: unknown): value is WorkspaceStartDraft {
