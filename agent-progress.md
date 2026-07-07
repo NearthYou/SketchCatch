@@ -49,13 +49,22 @@ Next steps:
 
 - Fixed board-only `User / Client` and `Internet` design nodes so dropped nodes retain `iconUrl`.
 - Updated design node rendering to show the retained icon instead of the generic `D` glyph when an icon is available.
+- Updated icon-backed design node rendering so `User / Client` and `Internet` use the same icon tile layout as regular resource nodes while remaining non-Terraform design nodes.
+- Reworked generated diagram readability for shared architecture conversion/normalization paths, not just the QA fixture.
+- Added readable topology lanes for common serverless/resource groups and route ordering so runtime/storage, observability, and control-plane edges compete for handles more predictably.
+- Updated route scoring to account for React Flow handle stubs, prior route overlap/crossing, shared handles, endpoint node re-entry, and control-plane/runtime endpoint preferences.
+- Verified the convention fixture in the real workspace UI: 11 nodes, 9 edges, 4 dashed edges, no resource-resource overlaps, no edge-resource hits, no line crossings, and no line overlap beyond endpoint stubs.
 
 Verification:
 
 - `pnpm harness:check`
 - `.\node_modules\.bin\tsx.CMD --test features\diagram-editor\diagram-utils.test.ts` from `apps/web` with elevated sandbox permissions because Node test runner spawn was blocked by EPERM.
 - `.\node_modules\.bin\tsx.CMD --test features\resource-settings\catalog.test.ts features\diagram-editor\diagram-utils.test.ts` from `apps/web` with elevated sandbox permissions because Node test runner spawn was blocked by EPERM.
+- `.\node_modules\.bin\tsx.CMD --test features\diagram-editor\DiagramNodeView.test.ts features\diagram-editor\diagram-utils.test.ts` from `apps/web` with elevated sandbox permissions because Node test runner spawn was blocked by EPERM.
+- `.\node_modules\.bin\tsx.CMD --test features\workspace\workspace-ai-diagram-adapter.test.ts features\diagram-editor\flow-mappers.test.ts` from `apps/web` with elevated sandbox permissions because Node test runner spawn was blocked by EPERM.
 - `pnpm lint`
 - `pnpm typecheck`
 - `pnpm build` (first sandboxed run hit Next.js `.next` unlink EPERM; elevated rerun passed)
 - Final `pnpm harness:check`
+- Browser visual verification was attempted against `http://localhost:3000/workspace?projectName=Diagram%20Convention%20QA`, but the existing dev server/browser session returned the Next dev payload instead of a hydrated app UI.
+- Browser DOM/SVG verification passed against `http://localhost:3000/workspace?projectName=Diagram%20Convention%20QA%20Readable&diagramFixture=conventions`: `nodeCount: 11`, `edgeCount: 9`, `dashedCount: 4`, `overlaps: []`, `edgeHits: []`, `lineOverlaps: []`, `crossings: []`.
