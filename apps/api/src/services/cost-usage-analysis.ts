@@ -9,6 +9,7 @@ import type {
   CostMetricSeries,
   CostOptimizationRecommendation,
   CostProjectUsage,
+  CostResourceUsage,
   CostUsageAnalysisRange,
   CostUsageAnalysisResponse,
   CostUsageTrendPoint,
@@ -154,6 +155,13 @@ export function createAwsCostUsageAnalysisProvider(
       taggedProjectCosts,
       totalCostAmount
     });
+    const resourceCosts = createResourceUsageCosts({
+      deployedResources: input.deployedResources,
+      deployments: input.deployments,
+      projectCosts,
+      projects: input.projects,
+      totalCostAmount
+    });
     const metricSnapshots = await fetchWasteMetricSnapshots({
       cloudWatch,
       deployedResources: input.deployedResources,
@@ -177,6 +185,7 @@ export function createAwsCostUsageAnalysisProvider(
       generatedAt: now.toISOString(),
       metricSeries: createMetricSeries(metricSnapshots),
       projectCosts,
+      resourceCosts,
       range: input.range,
       recommendations,
       serviceCosts,
@@ -209,6 +218,14 @@ export function createSampleCostUsageAnalysis(
     taggedProjectCosts,
     totalCostAmount
   });
+  const resourceCosts = createResourceUsageCosts({
+    allowSampleResources: true,
+    deployedResources: input.deployedResources,
+    deployments: input.deployments,
+    projectCosts,
+    projects: input.projects,
+    totalCostAmount
+  });
   const fallbackProject = input.projects[0] ?? {
     id: "sample-web-service",
     name: "샘플 웹 서비스"
@@ -227,6 +244,7 @@ export function createSampleCostUsageAnalysis(
     generatedAt: now.toISOString(),
     metricSeries: createSampleMetricSeries(rangeDates),
     projectCosts,
+    resourceCosts,
     range: input.range,
     recommendations: createRecommendationsFromWaste(sampleWasteResources),
     serviceCosts,
@@ -288,6 +306,76 @@ export function createWasteInsightsFromMetricSnapshots(
       }
     ];
   });
+}
+
+export function createResourceUsageCosts(input: {
+  readonly allowSampleResources?: boolean;
+  readonly deployedResources: readonly CostUsageDeployedResource[];
+  readonly deployments: readonly CostUsageDeployment[];
+  readonly projectCosts: readonly CostProjectUsage[];
+  readonly projects: readonly Project[];
+  readonly totalCostAmount: number;
+}): CostResourceUsage[] {
+  if (input.deployedResources.length === 0) {
+    return input.allowSampleResources === true
+      ? createSampleResourceUsageCosts(input.projectCosts, input.totalCostAmount)
+      : [];
+  }
+
+  const projectById = new Map(input.projects.map((project) => [project.id, project]));
+  const projectCostById = new Map(
+    input.projectCosts
+      .filter((projectCost) => projectCost.projectId !== null)
+      .map((projectCost) => [projectCost.projectId as string, projectCost])
+  );
+  const projectIdByDeploymentId = new Map(
+    input.deployments.map((deployment) => [deployment.id, deployment.projectId])
+  );
+  const resourcesByProjectId = new Map<string, CostUsageDeployedResource[]>();
+
+  for (const resource of input.deployedResources) {
+    const projectId = projectIdByDeploymentId.get(resource.deploymentId);
+
+    if (projectId === undefined || !projectCostById.has(projectId)) {
+      continue;
+    }
+
+    resourcesByProjectId.set(projectId, [...(resourcesByProjectId.get(projectId) ?? []), resource]);
+  }
+
+  return [...resourcesByProjectId.entries()]
+    .flatMap(([projectId, resources]) => {
+      const projectCost = projectCostById.get(projectId);
+      const project = projectById.get(projectId);
+
+      if (projectCost === undefined || resources.length === 0) {
+        return [];
+      }
+
+      const amountPerResource = projectCost.amount / resources.length;
+
+      return resources.map((resource, index) => {
+        const amount =
+          index === resources.length - 1
+            ? roundUsd(projectCost.amount - roundUsd(amountPerResource) * (resources.length - 1))
+            : roundUsd(amountPerResource);
+
+        return {
+          amount,
+          id: resource.id,
+          percentage: calculatePercentage(amount, input.totalCostAmount),
+          projectId,
+          projectName: project?.name ?? projectCost.projectName,
+          resourceId: resource.resourceId,
+          resourceName: resource.resourceId ?? resource.terraformAddress,
+          resourceType: resource.terraformType,
+          service: getCostServiceForTerraformType(resource.terraformType),
+          source: "deployed_resource_estimate" as const,
+          terraformAddress: resource.terraformAddress
+        };
+      });
+    })
+    .sort(compareCostResourceUsageRows);
 }
 
 function createTaggedProjectUsageCosts(input: {
@@ -402,6 +490,91 @@ function createNoProjectSampleUsageCosts(totalCostAmount: number): CostProjectUs
       source: "sample" as const
     }
   ].sort(compareCostProjectUsageRows);
+}
+
+function createSampleResourceUsageCosts(
+  projectCosts: readonly CostProjectUsage[],
+  totalCostAmount: number
+): CostResourceUsage[] {
+  return projectCosts.flatMap((projectCost) => {
+    const resourceTemplates = createSampleResourceTemplates(projectCost);
+    const totalWeight = resourceTemplates.reduce((sum, resource) => sum + resource.weight, 0);
+
+    return resourceTemplates.map((resource, index) => {
+      const amount =
+        index === resourceTemplates.length - 1
+          ? roundUsd(
+              projectCost.amount -
+                resourceTemplates
+                  .slice(0, -1)
+                  .reduce(
+                    (sum, previous) =>
+                      sum + roundUsd((projectCost.amount * previous.weight) / totalWeight),
+                    0
+                  )
+            )
+          : roundUsd((projectCost.amount * resource.weight) / totalWeight);
+
+      return {
+        amount,
+        id: `${projectCost.projectId ?? projectCost.projectName}-${resource.terraformAddress}`,
+        percentage: calculatePercentage(amount, totalCostAmount),
+        ...(projectCost.projectId === null
+          ? {}
+          : {
+              projectId: projectCost.projectId,
+              projectName: projectCost.projectName
+            }),
+        resourceId: resource.resourceId,
+        resourceName: resource.resourceName,
+        resourceType: resource.resourceType,
+        service: resource.service,
+        source: "sample" as const,
+        terraformAddress: resource.terraformAddress
+      };
+    });
+  });
+}
+
+function createSampleResourceTemplates(projectCost: CostProjectUsage): Array<{
+  readonly resourceId: string | null;
+  readonly resourceName: string;
+  readonly resourceType: string;
+  readonly service: string;
+  readonly terraformAddress: string;
+  readonly weight: number;
+}> {
+  const projectSlug = (projectCost.projectId ?? projectCost.projectName)
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, "-")
+    .replace(/^-|-$/g, "");
+
+  return [
+    {
+      resourceId: `${projectSlug}-db`,
+      resourceName: `${projectCost.projectName} DB`,
+      resourceType: "aws_db_instance",
+      service: "Amazon Relational Database Service",
+      terraformAddress: "aws_db_instance.main",
+      weight: 4
+    },
+    {
+      resourceId: `${projectSlug}-ec2`,
+      resourceName: `${projectCost.projectName} API`,
+      resourceType: "aws_instance",
+      service: "Amazon Elastic Compute Cloud",
+      terraformAddress: "aws_instance.api",
+      weight: 3
+    },
+    {
+      resourceId: `${projectSlug}-alb`,
+      resourceName: `${projectCost.projectName} ALB`,
+      resourceType: "aws_lb",
+      service: "Elastic Load Balancing",
+      terraformAddress: "aws_lb.public",
+      weight: 2
+    }
+  ];
 }
 
 async function fetchDailyCostTrend(
@@ -880,6 +1053,31 @@ function calculatePercentage(amount: number, totalAmount: number): number {
 
 function compareCostProjectUsageRows(left: CostProjectUsage, right: CostProjectUsage): number {
   return right.amount - left.amount || left.projectName.localeCompare(right.projectName);
+}
+
+function compareCostResourceUsageRows(left: CostResourceUsage, right: CostResourceUsage): number {
+  return (
+    right.amount - left.amount ||
+    (left.projectName ?? "").localeCompare(right.projectName ?? "") ||
+    left.resourceName.localeCompare(right.resourceName)
+  );
+}
+
+function getCostServiceForTerraformType(terraformType: string): string {
+  switch (terraformType) {
+    case "aws_db_instance":
+      return "Amazon Relational Database Service";
+    case "aws_instance":
+      return "Amazon Elastic Compute Cloud";
+    case "aws_lb":
+      return "Elastic Load Balancing";
+    case "aws_nat_gateway":
+      return "Amazon Virtual Private Cloud";
+    case "aws_s3_bucket":
+      return "Amazon Simple Storage Service";
+    default:
+      return terraformType.replace(/^aws_/, "AWS ");
+  }
 }
 
 function getRecommendationSeverity(amount: number): RiskLevel {

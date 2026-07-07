@@ -11,6 +11,7 @@ import type {
   CostProjectEstimate,
   CostProjectEstimateListResponse,
   CostProjectUsage,
+  CostResourceUsage,
   CostServiceUsage,
   CostUsageAnalysisRange,
   CostUsageAnalysisResponse,
@@ -33,14 +34,17 @@ import {
 } from "lucide-react";
 import { DashboardIcon } from "../../components/dashboard/dashboard-icons";
 import {
+  analyzeCostUsageTrendShape,
   createCostUsageLineChart,
   createServiceCostBars,
   sumEstimatedMonthlySavings
 } from "../../features/costs/cost-usage-charts";
 import {
   COST_USAGE_ALL_PROJECTS_KEY,
+  createScopedCostUsageDailyTrend,
   createCostUsageProjectOptions,
   normalizeCostUsageProjectKey,
+  selectCostUsageResourceCosts,
   selectCostUsageProject
 } from "../../features/costs/cost-usage-project-view";
 import {
@@ -826,10 +830,6 @@ function CostUsageAnalysisTab({
     COST_USAGE_ALL_PROJECTS_KEY
   );
   const projectCosts = usageData?.projectCosts;
-  const lineChart = useMemo(
-    () => createCostUsageLineChart(usageData?.dailyTrend ?? []),
-    [usageData]
-  );
   const serviceBars = useMemo(
     () => createServiceCostBars(usageData?.serviceCosts ?? []),
     [usageData]
@@ -849,6 +849,27 @@ function CostUsageAnalysisTab({
   const scopedRecommendations = useMemo(
     () => getScopedRecommendations(usageData?.recommendations ?? [], selectedUsageProject),
     [selectedUsageProject, usageData?.recommendations]
+  );
+  const scopedResourceCosts = useMemo(
+    () => selectCostUsageResourceCosts(usageData?.resourceCosts ?? [], selectedUsageProject),
+    [selectedUsageProject, usageData?.resourceCosts]
+  );
+  const scopedDailyTrend = useMemo(
+    () =>
+      createScopedCostUsageDailyTrend({
+        dailyTrend: usageData?.dailyTrend ?? [],
+        selectedProject: selectedUsageProject,
+        totalCostAmount: usageData?.totalCost.amount ?? 0
+      }),
+    [selectedUsageProject, usageData?.dailyTrend, usageData?.totalCost.amount]
+  );
+  const lineChart = useMemo(
+    () => createCostUsageLineChart(scopedDailyTrend),
+    [scopedDailyTrend]
+  );
+  const trendInsight = useMemo(
+    () => analyzeCostUsageTrendShape(scopedDailyTrend),
+    [scopedDailyTrend]
   );
   const monthlySavings = useMemo(
     () => sumEstimatedMonthlySavings(scopedRecommendations),
@@ -1015,13 +1036,16 @@ function CostUsageAnalysisTab({
                 <h2 id="cost-daily-chart-title">일별 비용 추세</h2>
               </div>
               <span className="dashboardCountBadge">
-                {selectedUsageProject === null ? `${usageData.dailyTrend.length}일` : "전체 계정 기준"}
+                {selectedUsageProject === null ? `${usageData.dailyTrend.length}일` : "프로젝트 추세"}
               </span>
             </div>
-            {usageData.dailyTrend.length === 0 ? (
+            {scopedDailyTrend.length === 0 ? (
               <CostStatus message="표시할 일별 비용 데이터가 없습니다." />
             ) : (
-              <DailyCostLineChart chart={lineChart} dailyTrend={usageData.dailyTrend} />
+              <>
+                <DailyCostLineChart chart={lineChart} dailyTrend={scopedDailyTrend} />
+                <CostTrendInsightCard insight={trendInsight} selectedProject={selectedUsageProject} />
+              </>
             )}
           </section>
 
@@ -1050,6 +1074,20 @@ function CostUsageAnalysisTab({
               onSelectedProjectChange={setSelectedUsageProjectKey}
               projectCosts={usageData.projectCosts}
               selectedProjectKey={selectedUsageProjectKey}
+            />
+          </section>
+
+          <section className="dashboardPanel costProjectPanel" aria-labelledby="cost-resource-usage-title">
+            <div className="dashboardPanelHeader">
+              <div>
+                <p className="dashboardPanelKicker">Resource billing</p>
+                <h2 id="cost-resource-usage-title">리소스별 비용</h2>
+              </div>
+              <span className="dashboardCountBadge">{scopedResourceCosts.length}개</span>
+            </div>
+            <ResourceUsageTable
+              resourceCosts={scopedResourceCosts}
+              selectedProject={selectedUsageProject}
             />
           </section>
 
@@ -1322,6 +1360,27 @@ function DailyCostLineChart({
   );
 }
 
+function CostTrendInsightCard({
+  insight,
+  selectedProject
+}: {
+  readonly insight: ReturnType<typeof analyzeCostUsageTrendShape>;
+  readonly selectedProject: CostProjectUsage | null;
+}) {
+  return (
+    <div className={`costTrendInsight costTrendInsight-${insight.severity}`}>
+      <strong>{insight.title}</strong>
+      <span>{insight.message}</span>
+      {selectedProject === null ? null : (
+        <small>
+          프로젝트별 일별 Cost Explorer 태그 데이터가 없으면 전체 계정 추세를 프로젝트 비용 비중으로
+          환산합니다.
+        </small>
+      )}
+    </div>
+  );
+}
+
 function ServiceCostBars({
   bars,
   serviceCosts
@@ -1345,6 +1404,48 @@ function ServiceCostBars({
             <span style={{ width: `${bar.widthPercentage}%` }} />
           </div>
           <small>{formatPercent(bar.percentage)}</small>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ResourceUsageTable({
+  resourceCosts,
+  selectedProject
+}: {
+  readonly resourceCosts: readonly CostResourceUsage[];
+  readonly selectedProject: CostProjectUsage | null;
+}) {
+  if (resourceCosts.length === 0) {
+    return (
+      <CostStatus
+        message={
+          selectedProject === null
+            ? "표시할 배포 리소스별 비용 데이터가 없습니다."
+            : "선택한 프로젝트의 배포 리소스별 비용 데이터가 없습니다."
+        }
+      />
+    );
+  }
+
+  return (
+    <div className="dashboardTable costResourceUsageTable">
+      <div className="dashboardTableHeader">
+        <span>리소스</span>
+        <span>서비스</span>
+        <span>비용</span>
+        <span>근거</span>
+      </div>
+      {resourceCosts.map((resource) => (
+        <div className="dashboardTableRow" key={resource.id}>
+          <strong>
+            {resource.resourceName}
+            <small>{resource.terraformAddress}</small>
+          </strong>
+          <span>{resource.service}</span>
+          <span>{formatUsd(resource.amount)}</span>
+          <span>{getResourceUsageSourceLabel(resource.source)}</span>
         </div>
       ))}
     </div>
@@ -1657,6 +1758,17 @@ function getProjectUsageSourceLabel(project: CostProjectUsage): string {
       return "프로젝트 태그";
     case "deployed_resource_estimate":
       return `${project.resourceCount}개 리소스 근사`;
+    case "sample":
+      return "샘플";
+  }
+}
+
+function getResourceUsageSourceLabel(source: CostResourceUsage["source"]): string {
+  switch (source) {
+    case "cost_explorer_resource":
+      return "리소스 실제 청구";
+    case "deployed_resource_estimate":
+      return "배포 리소스 배분";
     case "sample":
       return "샘플";
   }

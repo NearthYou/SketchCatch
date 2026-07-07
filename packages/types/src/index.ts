@@ -871,6 +871,25 @@ export type CostProjectUsage = {
   resourceCount: number;
 };
 
+export type CostResourceUsageSource =
+  | "cost_explorer_resource"
+  | "deployed_resource_estimate"
+  | "sample";
+
+export type CostResourceUsage = {
+  id: string;
+  projectId?: string | undefined;
+  projectName?: string | undefined;
+  resourceId: string | null;
+  resourceName: string;
+  resourceType: string;
+  service: string;
+  terraformAddress: string;
+  amount: number;
+  percentage: number;
+  source: CostResourceUsageSource;
+};
+
 export type CostMetricSeriesPoint = {
   timestamp: IsoDateTimeString;
   value: number;
@@ -924,6 +943,7 @@ export type CostUsageAnalysisResponse = {
   dailyTrend: CostUsageTrendPoint[];
   serviceCosts: CostServiceUsage[];
   projectCosts: CostProjectUsage[];
+  resourceCosts: CostResourceUsage[];
   wasteResources: CostWasteResourceInsight[];
   recommendations: CostOptimizationRecommendation[];
   metricSeries: CostMetricSeries[];

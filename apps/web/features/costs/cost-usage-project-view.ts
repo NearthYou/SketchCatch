@@ -1,4 +1,4 @@
-import type { CostProjectUsage } from "@sketchcatch/types";
+import type { CostProjectUsage, CostResourceUsage, CostUsageTrendPoint } from "@sketchcatch/types";
 
 export const COST_USAGE_ALL_PROJECTS_KEY = "all-projects";
 
@@ -54,8 +54,51 @@ export function selectCostUsageProject(
   );
 }
 
+export function createScopedCostUsageDailyTrend(input: {
+  readonly dailyTrend: readonly CostUsageTrendPoint[];
+  readonly selectedProject: CostProjectUsage | null;
+  readonly totalCostAmount: number;
+}): CostUsageTrendPoint[] {
+  if (input.selectedProject === null) {
+    return [...input.dailyTrend];
+  }
+
+  if (input.totalCostAmount <= 0 || input.selectedProject.amount <= 0) {
+    return input.dailyTrend.map((point) => ({
+      amount: 0,
+      date: point.date
+    }));
+  }
+
+  const scale = input.selectedProject.amount / input.totalCostAmount;
+
+  return input.dailyTrend.map((point) => ({
+    amount: roundUsd(point.amount * scale),
+    date: point.date
+  }));
+}
+
+export function selectCostUsageResourceCosts(
+  resourceCosts: readonly CostResourceUsage[],
+  selectedProject: CostProjectUsage | null
+): CostResourceUsage[] {
+  if (selectedProject === null) {
+    return [...resourceCosts];
+  }
+
+  if (selectedProject.projectId === null) {
+    return [];
+  }
+
+  return resourceCosts.filter((resource) => resource.projectId === selectedProject.projectId);
+}
+
 function createCostUsageProjectKey(project: CostProjectUsage, index: number): string {
   return project.projectId === null
     ? `project-name:${project.projectName}:${index}`
     : `project-id:${project.projectId}`;
+}
+
+function roundUsd(amount: number): number {
+  return Math.round((amount + Number.EPSILON) * 100) / 100;
 }

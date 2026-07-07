@@ -22,6 +22,12 @@ export type CostServiceBar = {
   readonly widthPercentage: number;
 };
 
+export type CostUsageTrendInsight = {
+  readonly severity: "normal" | "warning";
+  readonly title: string;
+  readonly message: string;
+};
+
 export function createCostUsageLineChart(
   dailyTrend: readonly CostUsageTrendPoint[],
   options: {
@@ -76,6 +82,67 @@ export function sumEstimatedMonthlySavings(
       0
     )
   );
+}
+
+export function analyzeCostUsageTrendShape(
+  dailyTrend: readonly CostUsageTrendPoint[]
+): CostUsageTrendInsight {
+  if (dailyTrend.length < 3) {
+    return {
+      message: "Cost Explorer 일별 데이터가 충분하지 않습니다. 최소 3일 이상 누적 후 추세를 다시 확인하세요.",
+      severity: "warning",
+      title: "데이터 부족"
+    };
+  }
+
+  const amounts = dailyTrend.map((point) => point.amount);
+  const averageAmount = amounts.reduce((sum, amount) => sum + amount, 0) / amounts.length;
+  const maxAmount = Math.max(...amounts);
+  const firstAmount = amounts[0] ?? 0;
+  const lastAmount = amounts[amounts.length - 1] ?? 0;
+  const averageDailyChange =
+    amounts.slice(1).reduce((sum, amount, index) => {
+      const previousAmount = amounts[index] ?? amount;
+      return sum + Math.abs(amount - previousAmount);
+    }, 0) / Math.max(amounts.length - 1, 1);
+
+  if (averageAmount <= 0) {
+    return {
+      message: "분석 기간에 청구 비용이 거의 없습니다. 배포 리소스가 실제로 실행 중인지 먼저 확인하세요.",
+      severity: "normal",
+      title: "비용 없음"
+    };
+  }
+
+  if (maxAmount / averageAmount >= 1.8) {
+    return {
+      message: "특정 일자 비용이 평균보다 크게 튑니다. 배포 이벤트, 트래픽 급증, NAT/데이터 전송량을 먼저 확인하세요.",
+      severity: "warning",
+      title: "일별 비용 급증"
+    };
+  }
+
+  if (lastAmount > firstAmount * 1.35 && lastAmount - firstAmount > 1) {
+    return {
+      message: "최근 비용이 계속 올라가는 흐름입니다. 새로 추가된 리소스나 스케일링 설정을 확인하세요.",
+      severity: "warning",
+      title: "상승 추세"
+    };
+  }
+
+  if (averageDailyChange / averageAmount > 0.28) {
+    return {
+      message: "일별 비용 변동폭이 큽니다. 주기적 배치, 로그 증가, 요청량 변동을 서비스별 비용과 함께 비교하세요.",
+      severity: "warning",
+      title: "변동성 큼"
+    };
+  }
+
+  return {
+    message: "분석 기간의 비용 흐름이 비교적 안정적입니다. 큰 이상 징후는 보이지 않습니다.",
+    severity: "normal",
+    title: "추세 안정"
+  };
 }
 
 function createSvgPath(

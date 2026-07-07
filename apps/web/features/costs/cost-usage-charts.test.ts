@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  analyzeCostUsageTrendShape,
   createCostUsageLineChart,
   createServiceCostBars,
   sumEstimatedMonthlySavings
@@ -47,7 +48,7 @@ test("createServiceCostBars limits rows and scales each bar by the largest servi
 test("sumEstimatedMonthlySavings returns the recommendation total", () => {
   const total = sumEstimatedMonthlySavings([
     {
-      actionLabel: "중지 검토",
+      actionLabel: "Stop",
       estimatedMonthlySavings: {
         amount: 7.5,
         currency: "USD"
@@ -56,10 +57,10 @@ test("sumEstimatedMonthlySavings returns the recommendation total", () => {
       reason: "low usage",
       severity: "low",
       targetType: "resource",
-      title: "EC2 절감"
+      title: "EC2 savings"
     },
     {
-      actionLabel: "스케일 다운",
+      actionLabel: "Scale down",
       estimatedMonthlySavings: {
         amount: 18,
         currency: "USD"
@@ -68,9 +69,31 @@ test("sumEstimatedMonthlySavings returns the recommendation total", () => {
       reason: "low cpu",
       severity: "medium",
       targetType: "resource",
-      title: "RDS 절감"
+      title: "RDS savings"
     }
   ]);
 
   assert.equal(total, 25.5);
+});
+
+test("analyzeCostUsageTrendShape flags a daily cost spike", () => {
+  const insight = analyzeCostUsageTrendShape([
+    { amount: 5, date: "2026-07-01" },
+    { amount: 30, date: "2026-07-02" },
+    { amount: 6, date: "2026-07-03" }
+  ]);
+
+  assert.equal(insight.severity, "warning");
+  assert.equal(insight.title, "일별 비용 급증");
+});
+
+test("analyzeCostUsageTrendShape returns a stable trend insight", () => {
+  const insight = analyzeCostUsageTrendShape([
+    { amount: 5, date: "2026-07-01" },
+    { amount: 5.2, date: "2026-07-02" },
+    { amount: 5.1, date: "2026-07-03" }
+  ]);
+
+  assert.equal(insight.severity, "normal");
+  assert.equal(insight.title, "추세 안정");
 });

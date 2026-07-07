@@ -3,8 +3,10 @@ import { test } from "node:test";
 import type { CostProjectUsage } from "@sketchcatch/types";
 import {
   COST_USAGE_ALL_PROJECTS_KEY,
+  createScopedCostUsageDailyTrend,
   createCostUsageProjectOptions,
   normalizeCostUsageProjectKey,
+  selectCostUsageResourceCosts,
   selectCostUsageProject
 } from "./cost-usage-project-view";
 
@@ -59,6 +61,36 @@ test("normalizeCostUsageProjectKey falls back to all projects when the selected 
   );
 });
 
+test("createScopedCostUsageDailyTrend scales the account trend for a selected project", () => {
+  assert.deepEqual(
+    createScopedCostUsageDailyTrend({
+      dailyTrend: [
+        { amount: 10, date: "2026-07-01" },
+        { amount: 20, date: "2026-07-02" }
+      ],
+      selectedProject: projectCosts[0]!,
+      totalCostAmount: 40
+    }),
+    [
+      { amount: 6.05, date: "2026-07-01" },
+      { amount: 12.1, date: "2026-07-02" }
+    ]
+  );
+});
+
+test("selectCostUsageResourceCosts returns only resources for the selected project", () => {
+  assert.deepEqual(
+    selectCostUsageResourceCosts(
+      [
+        createResourceUsage({ id: "resource-a", projectId: "project-a" }),
+        createResourceUsage({ id: "resource-b", projectId: "project-b" })
+      ],
+      projectCosts[0]!
+    ).map((resource) => resource.id),
+    ["resource-a"]
+  );
+});
+
 function createProjectUsage(
   overrides: Pick<CostProjectUsage, "amount" | "percentage" | "projectId" | "projectName">
 ): CostProjectUsage {
@@ -66,5 +98,21 @@ function createProjectUsage(
     resourceCount: 3,
     source: "deployed_resource_estimate",
     ...overrides
+  };
+}
+
+function createResourceUsage(overrides: { readonly id: string; readonly projectId: string }) {
+  return {
+    amount: 10,
+    id: overrides.id,
+    percentage: 25,
+    projectId: overrides.projectId,
+    projectName: "Project",
+    resourceId: overrides.id,
+    resourceName: overrides.id,
+    resourceType: "aws_instance",
+    service: "Amazon Elastic Compute Cloud",
+    source: "deployed_resource_estimate" as const,
+    terraformAddress: "aws_instance.app"
   };
 }

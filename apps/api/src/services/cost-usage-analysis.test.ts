@@ -4,6 +4,7 @@ import type { Project } from "@sketchcatch/types";
 import {
   createProjectUsageCosts,
   createRecommendationsFromWaste,
+  createResourceUsageCosts,
   createSampleCostUsageAnalysis,
   createWasteInsightsFromMetricSnapshots,
   type CostUsageDeployedResource,
@@ -39,6 +40,7 @@ test("createSampleCostUsageAnalysis returns deterministic fallback usage data", 
   assert.equal(result.endDate, "2026-07-07");
   assert.equal(result.dailyTrend.length, 7);
   assert.equal(result.serviceCosts.length > 0, true);
+  assert.equal(result.resourceCosts.length > 0, true);
   assert.equal(result.wasteResources.length, 2);
   assert.equal(result.recommendations.length, 2);
 });
@@ -148,6 +150,47 @@ test("createProjectUsageCosts approximates project costs from latest deployed re
     [
       [projectA.id, 30, 3, "deployed_resource_estimate"],
       [projectB.id, 10, 1, "deployed_resource_estimate"]
+    ]
+  );
+});
+
+test("createResourceUsageCosts splits project cost across deployed resources", () => {
+  const projectCosts = createProjectUsageCosts({
+    deployedResources: [
+      makeResource({ deploymentId: "deployment-a", id: "resource-a1" }),
+      makeResource({ deploymentId: "deployment-a", id: "resource-a2" })
+    ],
+    deployments: [
+      makeDeployment({
+        id: "deployment-a",
+        projectId: projectA.id
+      })
+    ],
+    projects: [projectA],
+    taggedProjectCosts: new Map(),
+    totalCostAmount: 40
+  });
+  const result = createResourceUsageCosts({
+    deployedResources: [
+      makeResource({ deploymentId: "deployment-a", id: "resource-a1" }),
+      makeResource({ deploymentId: "deployment-a", id: "resource-a2" })
+    ],
+    deployments: [
+      makeDeployment({
+        id: "deployment-a",
+        projectId: projectA.id
+      })
+    ],
+    projectCosts,
+    projects: [projectA],
+    totalCostAmount: 40
+  });
+
+  assert.deepEqual(
+    result.map((row) => [row.projectId, row.amount, row.source]),
+    [
+      [projectA.id, 20, "deployed_resource_estimate"],
+      [projectA.id, 20, "deployed_resource_estimate"]
     ]
   );
 });
