@@ -2,6 +2,24 @@
 
 Short English-only working log for the current agent context.
 
+## 2026-07-08 UI Contrast Fix
+
+- Branch/worktree: `codex/contrast-fix` in `C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch-worktrees\contrast-fix`.
+- Scope: restore readable contrast for the workspace Issues panel and disabled project action menu items.
+- Fixed a stale workspace CSS block so Issues panel overrides are syntactically isolated.
+- Removed obsolete `panelPlan*` CSS that should not exist now that the right panel has only Issues and Deploy actions.
+- Raised disabled project menu contrast without making disabled actions look active.
+
+Verification:
+
+- `pnpm harness:check` - passed before edits.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts` - passed, 63 tests.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/projects/project-delete-flow.test.ts` - passed, 4 tests.
+- `pnpm lint` - passed.
+- `pnpm typecheck` - passed.
+- `pnpm build` - passed.
+- `pnpm harness:check` - passed after edits.
+
 ## Current Verified State
 
 - Branch/worktree: `codex/github-app-204-settings` in `C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch-worktrees\git-cicd-handoff-create-fix`.
