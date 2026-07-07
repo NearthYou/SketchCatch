@@ -32,6 +32,13 @@ test("WorkspaceStartClient renders the blank board as a small helper label", () 
   assert.doesNotMatch(startClientSource, /workspaceStartOptionButtonSecondary/);
 });
 
+test("WorkspaceStartClient can connect GitHub immediately after blank project creation", () => {
+  assert.match(startClientSource, /connectGitHubAfterCreate/);
+  assert.match(startClientSource, /workspaceStartCheckbox/);
+  assert.match(startClientSource, /createGitHubSourceRepositoryInstallUrl\(project\.id\)/);
+  assert.match(startClientSource, /window\.location\.assign\(installUrl\)/);
+});
+
 test("resolveWorkspaceStartAction sends Reverse users without a verified AWS Role to settings", () => {
   const action = resolveWorkspaceStartAction({
     cloudPlatform: "aws",

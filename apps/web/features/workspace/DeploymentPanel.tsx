@@ -16,7 +16,6 @@ import type {
   DeploymentLog,
   GitCicdHandoff,
   GitCicdHandoffPipelineStatus,
-  GitHubInstalledRepositoryCandidate,
   SourceRepository,
   TerraformDiagnostic,
   TerraformSourceLocation,
@@ -32,12 +31,9 @@ import {
   applyGitCicdRepositorySettings,
   applyGitCicdRepositorySettingsWithGitHubOAuth,
   cancelDeployment as cancelDeploymentRun,
-  connectGitHubSourceRepository,
   createGitCicdGitHubOAuthStartUrl,
   createDeployment,
   createGitCicdHandoff,
-  createGitHubExistingInstallationCallbackUrl,
-  createGitHubSourceRepositoryInstallUrl,
   getGitCicdHandoffPipelineStatus,
   getDeploymentFailureExplanation,
   listAwsConnections,
@@ -45,7 +41,6 @@ import {
   listDeploymentLogs,
   listDeployments,
   listGitCicdHandoffs,
-  listGitHubInstalledRepositories,
   listSourceRepositories,
   listTerraformOutputs,
   runDeploymentInit,
@@ -89,10 +84,6 @@ type DeploymentRuntimeSnapshot = {
 };
 type DeploymentPanelSnapshot = DeploymentRuntimeSnapshot & {
   readonly awsConnections: AwsConnection[];
-};
-type InstalledGitHubRepositorySelection = {
-  readonly state: string;
-  readonly repositories: GitHubInstalledRepositoryCandidate[];
 };
 const DEPLOYMENT_EXPANDED_DEFAULT_DETAILS_PERCENT = 50;
 const DEPLOYMENT_EXPANDED_MIN_DETAILS_PERCENT = 28;
@@ -146,9 +137,6 @@ export function DeploymentPanel({
     useState<GitCicdHandoffPipelineStatus["source"] | null>(null);
   const [showApplyConfirmation, setShowApplyConfirmation] = useState(false);
   const [showDestroyConfirmation, setShowDestroyConfirmation] = useState(false);
-  const [showGitHubRepositoryChooser, setShowGitHubRepositoryChooser] = useState(false);
-  const [installedGitHubRepositorySelection, setInstalledGitHubRepositorySelection] =
-    useState<InstalledGitHubRepositorySelection | null>(null);
   const [requestState, setRequestState] = useState<RequestState>("idle");
   const [errorMessage, setErrorMessage] = useState("");
   const [deploymentPanelMode, setDeploymentPanelMode] = useState<DeploymentPanelMode>("setup");
@@ -235,13 +223,7 @@ export function DeploymentPanel({
       ) ?? null,
     [sourceRepositories]
   );
-  const knownGitHubSourceRepositories = useMemo(
-    () =>
-      sourceRepositories.filter(
-        (repository) => repository.provider === "github" && repository.githubInstallationId
-      ),
-    [sourceRepositories]
-  );
+  const projectGithubSettingsHref = `/projects/${encodeURIComponent(projectId)}/settings?tab=github`;
   const hasDeploymentRecords = deployments.length > 0;
   const hasGitCicdHandoffs = gitCicdHandoffs.length > 0;
   const compactDeploymentPanelMode = hasDeploymentRecords ? deploymentPanelMode : "setup";
@@ -1025,59 +1007,6 @@ export function DeploymentPanel({
     }
   }
 
-  async function startGitHubConnection(): Promise<void> {
-    setShowGitHubRepositoryChooser(true);
-    setInstalledGitHubRepositorySelection(null);
-    await runRequest(async () => {
-      const result = await listGitHubInstalledRepositories(projectId);
-
-      setInstalledGitHubRepositorySelection({
-        state: result.state,
-        repositories: result.repositories
-      });
-    }, "GitHub App 설치 repository 목록을 불러오지 못했습니다.");
-  }
-
-  async function openKnownGitHubRepositoryInstallation(
-    sourceRepositoryId: string
-  ): Promise<void> {
-    await runRequest(async () => {
-      const { callbackUrl } = await createGitHubExistingInstallationCallbackUrl(
-        projectId,
-        sourceRepositoryId
-      );
-
-      window.location.assign(callbackUrl);
-    }, "기존 GitHub repository 목록을 열지 못했습니다.");
-  }
-
-  async function connectInstalledGitHubRepository(
-    repository: GitHubInstalledRepositoryCandidate
-  ): Promise<void> {
-    if (!installedGitHubRepositorySelection) {
-      return;
-    }
-
-    await runRequest(async () => {
-      const connectedRepository = await connectGitHubSourceRepository({
-        projectId,
-        installationId: repository.installationId,
-        githubRepositoryId: repository.githubRepositoryId,
-        state: installedGitHubRepositorySelection.state
-      });
-      const snapshot = await loadDeploymentPanelSnapshot();
-
-      applyDeploymentPanelSnapshot({
-        ...snapshot,
-        sourceRepositories: [
-          connectedRepository,
-          ...snapshot.sourceRepositories.filter((item) => item.id !== connectedRepository.id)
-        ]
-      });
-      setShowGitHubRepositoryChooser(false);
-    }, "GitHub repository를 프로젝트에 연결하지 못했습니다.");
-  }
-
   async function createGitCicdAutoDeployHandoff(): Promise<void> {
     if (!activeGitHubSourceRepository || !selectedDeployment) {
       return;
@@ -1136,14 +1065,6 @@ export function DeploymentPanel({
       await applyGitCicdAwsRoleDiff(selectedGitCicdHandoff.id);
       applyDeploymentPanelSnapshot(await loadDeploymentPanelSnapshot());
     }, "AWS 실행 Role 연결을 적용하지 못했습니다.");
-  }
-
-  async function startNewGitHubInstallation(): Promise<void> {
-    await runRequest(async () => {
-      const { installUrl } = await createGitHubSourceRepositoryInstallUrl(projectId);
-
-      window.location.assign(installUrl);
-    }, "GitHub 설치를 시작하지 못했습니다.");
   }
 
   async function startGitHubOAuthForRepositorySettings(): Promise<void> {
@@ -1394,28 +1315,14 @@ export function DeploymentPanel({
           >
             Refresh
           </button>
-          <button
+          <a
             className={styles.deploymentSecondaryButton}
-            disabled={requestState === "loading"}
-            onClick={startGitHubConnection}
-            title="Connect GitHub repository"
-            type="button"
+            href={projectGithubSettingsHref}
+            title="프로젝트 GitHub 설정 열기"
           >
             <GitBranch size={16} />
-            {activeGitHubSourceRepository ? "Repo 변경" : "GitHub 연결"}
-          </button>
-          {activeGitHubSourceRepository ? (
-            <button
-              className={styles.deploymentSecondaryButton}
-              disabled={requestState === "loading"}
-              onClick={startNewGitHubInstallation}
-              title="Install GitHub App on another account or organization"
-              type="button"
-            >
-              <GitBranch size={16} />
-              다른 설치
-            </button>
-          ) : null}
+            GitHub 설정
+          </a>
           <button
             className={styles.deploymentSecondaryButton}
             disabled={!canCreateGitCicdHandoff || requestState === "loading"}
@@ -1448,7 +1355,11 @@ export function DeploymentPanel({
               value={activeGitHubSourceRepository.repositoryUrl}
             />
           </>
-        ) : null}
+        ) : (
+          <p className={styles.deploymentHint}>
+            프로젝트 GitHub 설정에서 repository를 먼저 연결하세요.
+          </p>
+        )}
       </div>
 
       {hasGitCicdHandoffs ? (
@@ -1512,15 +1423,13 @@ export function DeploymentPanel({
                   </p>
                   <div className={styles.deploymentActionGroup}>
                     <div className={styles.deploymentActionItem}>
-                      <button
+                      <a
                         className={styles.deploymentSecondaryButton}
-                        disabled={requestState === "loading"}
-                        onClick={() => void startNewGitHubInstallation()}
-                        type="button"
+                        href={projectGithubSettingsHref}
                       >
                         <GitBranch size={16} />
-                        App 권한 추가하러 가기
-                      </button>
+                        프로젝트 GitHub 설정 열기
+                      </a>
                       <p>GitHub App에 Workflows, Administration, Variables 권한을 추가합니다.</p>
                     </div>
                     <div className={styles.deploymentActionItem}>
@@ -1894,123 +1803,6 @@ export function DeploymentPanel({
     onExpandedClose?.();
   }
 
-  const renderGitHubRepositoryChooser = () => {
-    if (!showGitHubRepositoryChooser) {
-      return null;
-    }
-
-    const installedRepositories = installedGitHubRepositorySelection?.repositories ?? [];
-
-    return (
-      <div className={styles.deploymentModalOverlay}>
-        <section
-          aria-labelledby="github-repository-chooser-title"
-          aria-modal="true"
-          className={styles.deploymentModal}
-          role="dialog"
-        >
-          <header className={styles.deploymentModalHeader}>
-            <div>
-              <p className={styles.projectEyebrow}>GitHub App</p>
-              <h3 id="github-repository-chooser-title">Repository 선택</h3>
-            </div>
-            <button
-              aria-label="GitHub repository 선택 창 닫기"
-              className={styles.deploymentExpandButton}
-              onClick={() => setShowGitHubRepositoryChooser(false)}
-              type="button"
-            >
-              <X size={16} aria-hidden="true" />
-            </button>
-          </header>
-
-          <p className={styles.deploymentModalText}>
-            GitHub App에 이미 권한이 있는 repository를 먼저 보여줍니다. 원하는 repository가
-            없거나 권한을 추가해야 하면 GitHub App 설치/권한 추가로 이동하세요.
-          </p>
-
-          {requestState === "error" && errorMessage ? (
-            <p className={styles.deploymentError} role="alert">
-              {errorMessage}
-            </p>
-          ) : null}
-
-          {requestState === "loading" ? (
-            <p className={styles.deploymentNotice}>GitHub App repository 목록을 불러오는 중입니다.</p>
-          ) : null}
-
-          {installedRepositories.length > 0 ? (
-            <div className={styles.githubRepositoryChoiceList}>
-              {installedRepositories.map((repository) => (
-                <button
-                  className={styles.githubRepositoryChoice}
-                  disabled={requestState === "loading" || repository.archived}
-                  key={`${repository.installationId}-${repository.githubRepositoryId}`}
-                  onClick={() => void connectInstalledGitHubRepository(repository)}
-                  type="button"
-                >
-                  <span>{repository.fullName}</span>
-                  <strong>
-                    {repository.connectedStatus === "active"
-                      ? "현재 연결됨"
-                      : repository.connectedStatus === "inactive"
-                        ? "이전 연결"
-                        : `${repository.installationAccountLogin} 설치에서 감지됨`}
-                    {repository.archived ? " / archived" : ""}
-                  </strong>
-                </button>
-              ))}
-            </div>
-          ) : knownGitHubSourceRepositories.length > 0 ? (
-            <div className={styles.githubRepositoryChoiceList}>
-              {knownGitHubSourceRepositories.map((repository) => (
-                <button
-                  className={styles.githubRepositoryChoice}
-                  disabled={requestState === "loading"}
-                  key={repository.id}
-                  onClick={() => void openKnownGitHubRepositoryInstallation(repository.id)}
-                  type="button"
-                >
-                  <span>
-                    {repository.owner}/{repository.name}
-                  </span>
-                  <strong>
-                    {repository.status === "active" ? "현재 연결됨" : "이전 연결"}
-                    {repository.archived ? " / archived" : ""}
-                  </strong>
-                </button>
-              ))}
-            </div>
-          ) : (
-            <p className={styles.deploymentHint}>
-              GitHub App에서 접근 가능한 repository를 아직 찾지 못했습니다.
-            </p>
-          )}
-
-          <div className={styles.deploymentModalActions}>
-            <button
-              className={styles.deploymentSecondaryButton}
-              disabled={requestState === "loading"}
-              onClick={() => setShowGitHubRepositoryChooser(false)}
-              type="button"
-            >
-              닫기
-            </button>
-            <button
-              className={styles.deploymentPrimaryButton}
-              disabled={requestState === "loading"}
-              onClick={() => void startNewGitHubInstallation()}
-              type="button"
-            >
-              <GitBranch size={16} aria-hidden="true" />
-              GitHub App 설치/권한 추가
-            </button>
-          </div>
-        </section>
-      </div>
-    );
-  };
-
   return (
     <div className={fullScreenOnly ? styles.deploymentPanelFullscreenHost : styles.deploymentPanel}>
       {!fullScreenOnly ? (
@@ -2133,7 +1925,6 @@ export function DeploymentPanel({
         </div>
       ) : null}
 
-      {renderGitHubRepositoryChooser()}
     </div>
   );
 }
