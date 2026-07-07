@@ -1,18 +1,15 @@
 # Agent Progress
 
-This file is the short, English-only working log for the current agent context. Keep it concise.
+Short English-only working log for the current agent context.
 
 ## Current Verified State
 
-- Branch/worktree: `codex/github-app-204-settings` in `C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch-worktrees\git-cicd-handoff-create-fix`.
-- PR #241 was merged to `dev` and deployed to production by GitHub Actions run `28888021622`.
-- Production health and DB health returned `ok`.
-- Production Git/CI/CD live smoke created PR #14 in `NearthYou/sketchcatch-iac-handoff-test`.
-- Smoke status is `passed_or_waiting`: repository settings applied, 5 variables applied, pipeline status is `pr_created`, infra is `waiting_for_merge`.
-
-- Branch: `fix/ck/diagram-position`
-- Worktree: `C:\Jungle\SketchCatch`
-- Base: local `dev` updated to `384429c0` and merged into this branch.
+- Branch/worktree: `codex/github-project-settings` in `C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch-worktrees\github-project-settings`.
+- Base: latest `origin/dev` at the start of this worktree.
+- Scope: move GitHub source repository setup out of the deployment panel and fix the deployment console open path.
+- Deployment now opens the full-screen console without closing the right panel host first.
+- GitHub repository connection now lives in project creation and project settings.
+- Deployment panel only shows source repository status, a project GitHub settings link, and Git/CI/CD handoff actions.
 
 ## Session Record
 
@@ -145,47 +142,33 @@ Verification:
 - Updated unsupported-resource handling so panel-backed resources are no longer reported as omitted, while unsupported workflow automation such as CI/CD handoff remains guarded.
 - Merged latest `dev` into `fix/ck/diagram-position`; the only manual conflict was this progress log.
 
+- Removed in-panel GitHub repository chooser/install actions from `DeploymentPanel`.
+- Added `/projects/[projectId]/settings` with a project GitHub repository settings client.
+- Added a project creation checkbox to start GitHub repository connection after creating a blank project.
+- Added regression coverage for deployment console opening, project-level GitHub ownership, and project creation GitHub handoff.
+
+Verification:
+
+- `pnpm harness:check` - passed before edits.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts` - passed, 63 tests.
+- `pnpm --filter @sketchcatch/web exec tsx --test app/workspace/new/workspace-start-options.test.ts` - passed, 6 tests.
+- `pnpm --filter @sketchcatch/web exec tsx --test --test-reporter spec` - new project GitHub settings tests passed; 3 unrelated baseline source tests failed.
+- `pnpm lint` - passed.
+- `pnpm typecheck` - passed.
+- `pnpm build` - passed.
+- `pnpm harness:check` - passed after edits.
+
+Known risks:
+
+- Full web source-test sweep still has 3 unrelated baseline failures in reverse workspace, workspace auth gate, and legacy AI route assertions.
+- Browser click QA against production has not been run yet in this worktree.
+
+- Updated local `dev` to `838a3e94` and merged it into `fix/ck/245-terraform-error`.
+- Resolved the only manual conflict in this progress log, preserving both branch records.
+
 Verification:
 
 - `pnpm harness:check`
-- `.\node_modules\.bin\tsx.CMD --test features\workspace\workspace-ai-diagram-adapter.test.ts features\diagram-editor\flow-mappers.test.ts` from `apps/web`
-- Browser verification against `http://localhost:3000/workspace?projectName=Diagram%20Fresh%20Check&diagramFixture=conventions`: 11 nodes, 9 edges, 5 thin dependency edges, 2 dashed async edges, no resource-resource overlaps, and no sampled edge-resource hits.
-- Browser verification against the generated project workspace: 22 nodes, 10 edges, 1 thin dependency edge, 2 dashed async edges, and no sampled edge-resource hits.
-- `.\node_modules\.bin\tsx.CMD --test src\services\aiArchitectureDrafts.test.ts src\routes\ai.test.ts` from `apps/api`
-- `pnpm lint` (passed; Turbo cache rename warnings only)
-- `pnpm typecheck` (passed; Turbo cache rename warnings only)
-- `pnpm build` (first sandboxed run hit Next.js `.next` unlink EPERM; elevated rerun passed)
-## Completed Fixes
-
-- GitHub App config path now uses the shared `GIT_APP_*` env loader.
-- GitHub App permission messages distinguish PR creation and repository settings permission gaps.
-- Blank repository variables are skipped before applying GitHub repository settings.
-- Smoke script sends explicit JSON bodies and records useful API error evidence.
-- GitHub App client now treats `204 No Content` as a successful empty response.
-
-## Verification
-
-- `pnpm harness:check`
-- `pnpm --filter @sketchcatch/api exec tsx --test src/source-repositories/github-app-client.test.ts`
-- `pnpm --filter @sketchcatch/api exec tsx --test src/git-cicd/git-cicd-repository-settings-service.test.ts src/routes/git-cicd-handoffs.test.ts`
 - `pnpm lint`
-- `pnpm typecheck`
 - `pnpm build`
-- Production smoke report: `docs/sw/git-cicd-live-smoke-pr-created-current.json`
-
-Dev merge context:
-
-- PR #234 and PR #235 were merged and deployed before this branch update.
-- Latest `dev` includes Git/CI/CD handoff permission messaging, repository settings, cost usage work, and production smoke follow-up updates.
-- The dev-side production smoke blocker remains GitHub App permission approval for generated PR files, especially workflow files.
-- Merged and deployed the GitHub App repository settings fixes through PRs #237, #238, #239, #240, and #241.
-- Reran production live smoke after PR #241 deployment and verified repository settings apply now passes.
-- Left generated handoff PR #14 open for review/merge because real AWS mutation requires explicit approval.
-
-## Remaining Demo Work
-
-- Run focused checks after the merge if more code changes are made.
-- Push `fix/ck/diagram-position` and open/update the PR into `dev` when ready.
-- Merge a generated handoff PR only when real AWS apply is approved.
-- Run the downstream GitHub Actions pipeline and verify live static/API URLs.
-- Run cleanup/destroy verification after any real AWS deployment.
+- `pnpm typecheck` (first run failed because `.next/types/validator.ts` was absent before build regenerated Next types; rerun passed)

@@ -3261,6 +3261,10 @@
   width: 100%;
 }
 
+.deploymentPanelFullscreenHost {
+  display: contents;
+}
+
 .deploymentPanelContent {
   align-content: start;
   display: grid;
@@ -3358,6 +3362,161 @@
   gap: 8px;
   justify-content: flex-end;
   min-width: 0;
+}
+
+.deploymentActionGroup {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  min-width: 0;
+}
+
+.deploymentActionItem {
+  align-content: start;
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.deploymentActionItem .deploymentSecondaryButton {
+  justify-self: start;
+}
+
+.deploymentActionItem p {
+  color: #52657f;
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.deploymentStagePanel {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.deploymentStageCard {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #d8e1ee;
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 34px minmax(0, 1fr) minmax(150px, auto);
+  min-height: 82px;
+  min-width: 0;
+  padding: 12px;
+}
+
+.deploymentStageCard[data-state="active"] {
+  border-color: #8bb8ff;
+  box-shadow: inset 3px 0 0 #1f6feb;
+}
+
+.deploymentStageCard[data-state="done"] {
+  border-color: #bbf7d0;
+  box-shadow: inset 3px 0 0 #16a34a;
+}
+
+.deploymentStageCard[data-state="error"] {
+  background: #fff7ed;
+  border-color: #fdba74;
+  box-shadow: inset 3px 0 0 #ea580c;
+}
+
+.deploymentStageCard[data-state="idle"] {
+  background: #f8fafc;
+}
+
+.deploymentStageNumber {
+  align-items: center;
+  background: #eaf2ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  color: #1d4ed8;
+  display: inline-flex;
+  font-size: 14px;
+  font-weight: 900;
+  height: 30px;
+  justify-content: center;
+  width: 30px;
+}
+
+.deploymentStageCard[data-state="done"] .deploymentStageNumber {
+  background: #dcfce7;
+  border-color: #86efac;
+  color: #15803d;
+}
+
+.deploymentStageCard[data-state="error"] .deploymentStageNumber {
+  background: #ffedd5;
+  border-color: #fdba74;
+  color: #c2410c;
+}
+
+.deploymentStageBody {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.deploymentStageBody h3 {
+  color: #172033;
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1.25;
+  margin: 0;
+}
+
+.deploymentStageStatus {
+  color: #526174;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.35;
+  margin: 0;
+  min-height: 17px;
+  overflow-wrap: anywhere;
+}
+
+.deploymentStageSettings {
+  display: grid;
+  gap: 8px;
+  grid-column: 2 / 4;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-width: 0;
+}
+
+.deploymentStageAlert {
+  background: #fff7ed;
+  border: 1px solid #fb923c;
+  border-radius: 8px;
+  color: #9a3412;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.45;
+  margin: 0;
+  min-height: 38px;
+  overflow-wrap: anywhere;
+  padding: 10px 12px;
+}
+
+@media (max-width: 760px) {
+  .deploymentStageCard {
+    align-items: stretch;
+    grid-template-columns: 34px minmax(0, 1fr);
+  }
+
+  .deploymentStageCard > .deploymentPrimaryButton,
+  .deploymentStageCard > .deploymentSecondaryButton {
+    grid-column: 1 / -1;
+    min-height: 42px;
+  }
+
+  .deploymentStageSettings {
+    grid-column: 1 / -1;
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .deploymentField {

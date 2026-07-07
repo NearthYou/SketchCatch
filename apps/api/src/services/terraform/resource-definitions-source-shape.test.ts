@@ -168,6 +168,68 @@ const requestedResourceDefinitions = [
     id: "aws-eks-cluster",
     resourceType: "EKS_CLUSTER",
     terraformResourceType: "aws_eks_cluster"
+  },
+  {
+    id: "aws-cloudfront-origin-access-control",
+    resourceType: "CLOUDFRONT",
+    terraformResourceType: "aws_cloudfront_origin_access_control"
+  },
+  {
+    id: "aws-codebuild-project",
+    resourceType: "UNKNOWN",
+    terraformResourceType: "aws_codebuild_project"
+  },
+  {
+    id: "aws-codedeploy-app",
+    resourceType: "UNKNOWN",
+    terraformResourceType: "aws_codedeploy_app"
+  },
+  {
+    id: "aws-codedeploy-deployment-group",
+    resourceType: "UNKNOWN",
+    terraformResourceType: "aws_codedeploy_deployment_group"
+  },
+  {
+    id: "aws-codepipeline",
+    resourceType: "UNKNOWN",
+    terraformResourceType: "aws_codepipeline"
+  },
+  {
+    id: "aws-codestarconnections-connection",
+    resourceType: "UNKNOWN",
+    terraformResourceType: "aws_codestarconnections_connection"
+  },
+  {
+    id: "aws-iam-role-policy",
+    resourceType: "IAM_POLICY",
+    terraformResourceType: "aws_iam_role_policy"
+  },
+  {
+    id: "aws-iam-role-policy-attachment",
+    resourceType: "IAM_POLICY",
+    terraformResourceType: "aws_iam_role_policy_attachment"
+  },
+  {
+    id: "aws-route",
+    resourceType: "ROUTE_TABLE",
+    terraformResourceType: "aws_route"
+  },
+  {
+    id: "aws-secretsmanager-secret-version",
+    resourceType: "SECRETS_MANAGER_SECRET",
+    terraformResourceType: "aws_secretsmanager_secret_version"
+  },
+  {
+    id: "aws-caller-identity",
+    resourceType: "UNKNOWN",
+    terraformBlockType: "data",
+    terraformResourceType: "aws_caller_identity"
+  },
+  {
+    id: "aws-ssm-parameter",
+    resourceType: "UNKNOWN",
+    terraformBlockType: "data",
+    terraformResourceType: "aws_ssm_parameter"
   }
 ] as const;
 
@@ -199,7 +261,10 @@ test("priority AWS ResourceTypes are represented by explicit shared definitions"
 
     assert.ok(definition, `Missing shared definition ${expected.id}`);
     assert.equal(definition.resourceType, expected.resourceType, expected.id);
-    assert.equal(definition.terraform.blockType, "resource", expected.id);
+    const terraformBlockType =
+      "terraformBlockType" in expected ? expected.terraformBlockType : "resource";
+
+    assert.equal(definition.terraform.blockType, terraformBlockType, expected.id);
     assert.equal(definition.terraform.resourceType, expected.terraformResourceType, expected.id);
     assert.equal(definition.capabilities.terraformPreview, true, expected.id);
     assert.equal(definition.capabilities.terraformSync, true, expected.id);

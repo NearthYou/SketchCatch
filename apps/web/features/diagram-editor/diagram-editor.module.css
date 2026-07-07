@@ -170,8 +170,8 @@
 .rightRailResizeHandle:hover::after,
 .rightRailResizeHandle:focus-visible::after,
 .rightRailResizeHandle:active::after {
-  background: #7c5cff;
-  box-shadow: 0 0 0 3px rgba(124, 92, 255, 0.14);
+  background: transparent;
+  box-shadow: none;
 }
 
 .leftRailResizeHandle:focus-visible,
@@ -739,12 +739,14 @@
 }
 
 .nodeShellArea {
+  --area-body-background: rgba(255, 255, 255, 0.14);
   --area-border-color: var(--node-border-color, #8b98aa);
   --area-border-width: 2px;
 
   align-items: flex-start;
-  background: rgba(255, 255, 255, 0.14);
+  background: var(--area-body-background);
   border-color: var(--area-border-color);
+  border-top-left-radius: 0;
   border-width: var(--area-border-width);
   box-shadow: 0 10px 24px rgba(33, 41, 69, 0.06);
   display: block;
@@ -805,7 +807,7 @@
 }
 
 .areaNodeHeader::before {
-  background: rgba(255, 255, 255, 0.96);
+  background: var(--area-body-background);
   bottom: calc(-1 * var(--area-border-width));
   content: "";
   height: var(--area-border-width);
@@ -813,19 +815,6 @@
   pointer-events: none;
   position: absolute;
   right: 0;
-}
-
-.areaNodeHeader::after {
-  border-bottom: var(--area-border-width) solid var(--area-border-color);
-  border-left: var(--area-border-width) solid var(--area-border-color);
-  border-bottom-left-radius: 12px;
-  bottom: 0;
-  content: "";
-  height: 14px;
-  pointer-events: none;
-  position: absolute;
-  right: -30px;
-  width: 30px;
 }
 
 .areaNodeHitEdge {
