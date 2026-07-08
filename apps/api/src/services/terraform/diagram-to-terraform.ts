@@ -22,7 +22,7 @@ export class TerraformDiagramValidationError extends Error {
 
 export function renderTerraformFromInfrastructureGraph(graph: InfrastructureGraph): string {
   return graph.nodes
-    .map(renderBlock)
+    .flatMap((node) => [renderBlock(node), ...renderCompanionBlocks(node, graph)])
     .join("\n\n");
 }
 
@@ -39,6 +39,63 @@ function renderBlock(node: InfrastructureGraphNode): string {
   return [
     `${terraformBlockType} "${node.iac.resourceType}" "${node.iac.resourceName}" {`,
     ...body,
+    "}"
+  ].join("\n");
+}
+
+function renderCompanionBlocks(
+  node: InfrastructureGraphNode,
+  graph: InfrastructureGraph
+): string[] {
+  if (!shouldRenderS3PublicAccessBlock(node, graph)) {
+    return [];
+  }
+
+  return [renderS3PublicAccessBlock(node)];
+}
+
+function shouldRenderS3PublicAccessBlock(
+  node: InfrastructureGraphNode,
+  graph: InfrastructureGraph
+): boolean {
+  return (
+    node.iac.terraformBlockType === "resource" &&
+    node.iac.resourceType === "aws_s3_bucket" &&
+    !hasExplicitPublicAccessBlockForBucket(node, graph)
+  );
+}
+
+function hasExplicitPublicAccessBlockForBucket(
+  bucketNode: InfrastructureGraphNode,
+  graph: InfrastructureGraph
+): boolean {
+  const bucketReferencePrefix = `aws_s3_bucket.${bucketNode.iac.resourceName}.`;
+
+  return graph.nodes.some((node) => {
+    if (
+      node.iac.terraformBlockType !== "resource" ||
+      node.iac.resourceType !== "aws_s3_bucket_public_access_block"
+    ) {
+      return false;
+    }
+
+    const bucketValue = node.config["bucket"];
+
+    return (
+      typeof bucketValue === "string" &&
+      bucketValue.startsWith(bucketReferencePrefix)
+    );
+  });
+}
+
+function renderS3PublicAccessBlock(bucketNode: InfrastructureGraphNode): string {
+  return [
+    `resource "aws_s3_bucket_public_access_block" "${bucketNode.iac.resourceName}_public_access" {`,
+    `${INDENT_UNIT}bucket = aws_s3_bucket.${bucketNode.iac.resourceName}.id`,
+    `${INDENT_UNIT}block_public_acls = true`,
+    `${INDENT_UNIT}block_public_policy = true`,
+    `${INDENT_UNIT}ignore_public_acls = true`,
+    `${INDENT_UNIT}restrict_public_buckets = true`,
     "}"
   ].join("\n");
 }

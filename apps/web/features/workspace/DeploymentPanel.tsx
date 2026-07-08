@@ -1,9 +1,6 @@
 ﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
-  CSSProperties,
   Dispatch,
-  KeyboardEvent as ReactKeyboardEvent,
-  PointerEvent as ReactPointerEvent,
   SetStateAction
 } from "react";
 import type {
@@ -55,7 +52,6 @@ import {
   streamDeploymentLogs
 } from "./api";
 import {
-  getDefaultDeploymentPanelMode,
   getDeploymentActionState,
   getGitCicdHandoffStatusLabel,
   getDeploymentLogMessageTokens,
@@ -64,8 +60,7 @@ import {
   shouldAutoRefreshDeployment,
   shouldAutoRefreshGitCicdHandoff,
   shouldShowDeploymentInfoValue,
-  type DeploymentLogMessageToken,
-  type DeploymentPanelMode
+  type DeploymentLogMessageToken
 } from "./deployment-actions";
 import {
   createWorkspaceAiBoardSnapshot,
@@ -97,19 +92,12 @@ export type DeploymentPreDeploymentCheckState = {
   readonly fingerprint: string | null;
   readonly requestState: AiRequestState;
 };
-const DEPLOYMENT_EXPANDED_DEFAULT_DETAILS_PERCENT = 50;
-const DEPLOYMENT_EXPANDED_MIN_DETAILS_PERCENT = 28;
-const DEPLOYMENT_EXPANDED_MAX_DETAILS_PERCENT = 72;
 export const initialPreDeploymentCheckState: DeploymentPreDeploymentCheckState = {
   analysis: null,
   errorMessage: "",
   fingerprint: null,
   requestState: "idle"
 };
-
-function clampNumber(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
 
 export function DeploymentPanel({
   currentNodeCount,
@@ -163,18 +151,13 @@ export function DeploymentPanel({
   const [showDestroyConfirmation, setShowDestroyConfirmation] = useState(false);
   const [requestState, setRequestState] = useState<RequestState>("idle");
   const [errorMessage, setErrorMessage] = useState("");
-  const [deploymentPanelMode, setDeploymentPanelMode] = useState<DeploymentPanelMode>("setup");
-  const [deploymentDetailsWidthPercent, setDeploymentDetailsWidthPercent] = useState(
-    DEPLOYMENT_EXPANDED_DEFAULT_DETAILS_PERCENT
-  );
   const [failureExplanation, setFailureExplanation] =
     useState<DeploymentFailureExplanation | null>(null);
   const [failureExplanationState, setFailureExplanationState] = useState<RequestState>("idle");
   const [failureExplanationErrorMessage, setFailureExplanationErrorMessage] = useState("");
   const [isDeploymentExpanded, setIsDeploymentExpanded] = useState(initialExpanded);
-  const deploymentExpandedGridRef = useRef<HTMLDivElement | null>(null);
-  const deploymentResizeCleanupRef = useRef<(() => void) | null>(null);
   const trafficAbortControllerRef = useRef<AbortController | null>(null);
+  const isDeploymentOverlayOpen = fullScreenOnly || isDeploymentExpanded;
 
   const verifiedAwsConnections = useMemo(
     () => awsConnections.filter((connection) => connection.status === "verified"),
@@ -243,9 +226,7 @@ export function DeploymentPanel({
     [sourceRepositories]
   );
   const projectGithubSettingsHref = `/projects/${encodeURIComponent(projectId)}/settings?tab=github`;
-  const hasDeploymentRecords = deployments.length > 0;
   const hasGitCicdHandoffs = gitCicdHandoffs.length > 0;
-  const compactDeploymentPanelMode = hasDeploymentRecords ? deploymentPanelMode : "setup";
   const canStartDeploymentReview =
     selectedAwsConnectionId.length > 0 &&
     requestState !== "loading";
@@ -315,38 +296,6 @@ export function DeploymentPanel({
     shouldShowPlanButton
   });
   const primaryDeploymentStepStatus = getPrimaryDeploymentStepStatus(selectedDeployment);
-  const deploymentExpandedGridStyle = useMemo(
-    () =>
-      ({
-        "--deployment-details-width": `${deploymentDetailsWidthPercent}%`
-      }) as CSSProperties,
-    [deploymentDetailsWidthPercent]
-  );
-
-  const updateDeploymentDetailsWidthFromClientX = useCallback((clientX: number): void => {
-    const grid = deploymentExpandedGridRef.current;
-
-    if (!grid) {
-      return;
-    }
-
-    const rect = grid.getBoundingClientRect();
-
-    if (rect.width <= 0) {
-      return;
-    }
-
-    const nextPercent = ((clientX - rect.left) / rect.width) * 100;
-
-    setDeploymentDetailsWidthPercent(
-      clampNumber(
-        nextPercent,
-        DEPLOYMENT_EXPANDED_MIN_DETAILS_PERCENT,
-        DEPLOYMENT_EXPANDED_MAX_DETAILS_PERCENT
-      )
-    );
-  }, []);
-
   const loadDeploymentRuntimeSnapshot = useCallback(async (): Promise<DeploymentRuntimeSnapshot> => {
     const [
       nextDeployments,
@@ -437,7 +386,6 @@ export function DeploymentPanel({
         setSelectedAwsConnectionId((currentId) => currentId || latestVerifiedConnection?.id || "");
         setSelectedDeploymentId((currentId) => currentId || latestDeployment?.id || "");
         setSelectedGitCicdHandoffId((currentId) => currentId || latestGitCicdHandoff?.id || "");
-        setDeploymentPanelMode(getDefaultDeploymentPanelMode(snapshot.deployments));
       }, "배포 정보를 불러오지 못했습니다.");
     }
 
@@ -449,12 +397,9 @@ export function DeploymentPanel({
   }, [applyDeploymentPanelSnapshot, loadDeploymentPanelSnapshot]);
 
   useEffect(() => {
-    if (deployments.length > 0) {
-      return;
+    if (deployments.length === 0) {
+      setIsDeploymentExpanded(false);
     }
-
-    setDeploymentPanelMode("setup");
-    setIsDeploymentExpanded(false);
   }, [deployments.length]);
 
   useEffect(() => {
@@ -470,7 +415,6 @@ export function DeploymentPanel({
 
   useEffect(
     () => () => {
-      deploymentResizeCleanupRef.current?.();
       trafficAbortControllerRef.current?.abort();
     },
     []
@@ -811,7 +755,6 @@ export function DeploymentPanel({
 
       setDeployments((currentDeployments) => [prewarmedDeployment, ...currentDeployments]);
       setSelectedDeploymentId(prewarmedDeployment.id);
-      setDeploymentPanelMode("records");
       setDeploymentLogs([]);
       setDeploymentResources([]);
       setTerraformOutputs([]);
@@ -1148,80 +1091,6 @@ export function DeploymentPanel({
     }, "OAuth로 GitHub 저장소 준비를 적용하지 못했습니다.");
   }
 
-  function startDeploymentPanelResize(event: ReactPointerEvent<HTMLDivElement>): void {
-    if (event.button !== 0) {
-      return;
-    }
-
-    event.preventDefault();
-    updateDeploymentDetailsWidthFromClientX(event.clientX);
-    deploymentResizeCleanupRef.current?.();
-
-    const previousCursor = document.body.style.cursor;
-    const previousUserSelect = document.body.style.userSelect;
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-
-    const handlePointerMove = (pointerEvent: PointerEvent): void => {
-      pointerEvent.preventDefault();
-      updateDeploymentDetailsWidthFromClientX(pointerEvent.clientX);
-    };
-    const stopResize = (): void => {
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerup", stopResize);
-      window.removeEventListener("pointercancel", stopResize);
-      document.body.style.cursor = previousCursor;
-      document.body.style.userSelect = previousUserSelect;
-      deploymentResizeCleanupRef.current = null;
-    };
-
-    window.addEventListener("pointermove", handlePointerMove);
-    window.addEventListener("pointerup", stopResize, { once: true });
-    window.addEventListener("pointercancel", stopResize, { once: true });
-    deploymentResizeCleanupRef.current = stopResize;
-  }
-
-  function handleDeploymentPanelResizeKeyDown(
-    event: ReactKeyboardEvent<HTMLDivElement>
-  ): void {
-    const step = event.shiftKey ? 10 : 4;
-
-    if (event.key === "ArrowLeft") {
-      event.preventDefault();
-      setDeploymentDetailsWidthPercent((currentPercent) =>
-        clampNumber(
-          currentPercent - step,
-          DEPLOYMENT_EXPANDED_MIN_DETAILS_PERCENT,
-          DEPLOYMENT_EXPANDED_MAX_DETAILS_PERCENT
-        )
-      );
-      return;
-    }
-
-    if (event.key === "ArrowRight") {
-      event.preventDefault();
-      setDeploymentDetailsWidthPercent((currentPercent) =>
-        clampNumber(
-          currentPercent + step,
-          DEPLOYMENT_EXPANDED_MIN_DETAILS_PERCENT,
-          DEPLOYMENT_EXPANDED_MAX_DETAILS_PERCENT
-        )
-      );
-      return;
-    }
-
-    if (event.key === "Home") {
-      event.preventDefault();
-      setDeploymentDetailsWidthPercent(DEPLOYMENT_EXPANDED_MIN_DETAILS_PERCENT);
-      return;
-    }
-
-    if (event.key === "End") {
-      event.preventDefault();
-      setDeploymentDetailsWidthPercent(DEPLOYMENT_EXPANDED_MAX_DETAILS_PERCENT);
-    }
-  }
-
   const renderPreDeploymentCheckSection = () => null;
 
   const renderSetupSection = () => (
@@ -1279,7 +1148,7 @@ export function DeploymentPanel({
             emptyLabel="AWS 연결 없음"
             onChange={setSelectedAwsConnectionId}
             options={awsConnectionOptions}
-            size={isDeploymentExpanded ? "large" : "regular"}
+            size={isDeploymentOverlayOpen ? "large" : "regular"}
             value={selectedAwsConnectionId}
           />
           <SelectMenu
@@ -1287,7 +1156,7 @@ export function DeploymentPanel({
             emptyLabel="Live profile 없음"
             onChange={(value) => setSelectedLiveProfile(value as DeploymentLiveProfile)}
             options={liveProfileOptions}
-            size={isDeploymentExpanded ? "large" : "regular"}
+            size={isDeploymentOverlayOpen ? "large" : "regular"}
             value={selectedLiveProfile}
           />
         </div>
@@ -1431,7 +1300,7 @@ export function DeploymentPanel({
                 setGitCicdPipelineStatusSource(null);
               }}
               options={gitCicdHandoffOptions}
-              size={isDeploymentExpanded ? "large" : "regular"}
+              size={isDeploymentOverlayOpen ? "large" : "regular"}
               value={selectedGitCicdHandoffId}
             />
           </div>
@@ -1643,7 +1512,7 @@ export function DeploymentPanel({
           emptyLabel="Deployment 없음"
           onChange={setSelectedDeploymentId}
           options={deploymentOptions}
-          size={isDeploymentExpanded ? "large" : "regular"}
+            size={isDeploymentOverlayOpen ? "large" : "regular"}
           value={selectedDeploymentId}
         />
       </div>
@@ -1843,6 +1712,39 @@ export function DeploymentPanel({
     </section>
   );
 
+  const renderSecondarySections = () => (
+    <section className={styles.deploymentSecondaryPanel} aria-label="보조 배포 정보">
+      <details className={styles.deploymentDisclosure}>
+        <summary>
+          <span>실행 기록과 결과</span>
+          <small>{deployments.length} records</small>
+        </summary>
+        <div className={styles.deploymentDisclosureBody}>
+          {renderRecordsSection()}
+          {renderResultsSection()}
+        </div>
+      </details>
+      <details className={styles.deploymentDisclosure}>
+        <summary>
+          <span>Git/CI/CD handoff</span>
+          <small>{gitCicdHandoffs.length} handoffs</small>
+        </summary>
+        <div className={styles.deploymentDisclosureBody}>
+          {renderGitCicdHandoffSection()}
+        </div>
+      </details>
+      <details className={styles.deploymentDisclosure}>
+        <summary>
+          <span>Logs</span>
+          <small>{deploymentLogs.length} lines</small>
+        </summary>
+        <div className={styles.deploymentDisclosureBody}>
+          {renderLogsSection()}
+        </div>
+      </details>
+    </section>
+  );
+
   const renderStatusMessages = () => (
     <>
       {requestState === "loading" ? <p className={styles.deploymentNotice}>요청을 처리하는 중입니다.</p> : null}
@@ -1883,49 +1785,14 @@ export function DeploymentPanel({
 
       {!fullScreenOnly ? (
         <div className={styles.deploymentPanelContent}>
-        {compactDeploymentPanelMode === "setup" ? (
-          <>
-            {renderPreDeploymentCheckSection()}
-            {renderSetupSection()}
-          </>
-        ) : null}
-
-        {compactDeploymentPanelMode === "records" ? (
-          <>
-            {renderRecordsSection()}
-            {renderResultsSection()}
-          </>
-        ) : null}
-
-        {renderGitCicdHandoffSection()}
-        {renderStatusMessages()}
+          {renderPreDeploymentCheckSection()}
+          {renderSetupSection()}
+          {renderStatusMessages()}
+          {renderSecondarySections()}
         </div>
       ) : null}
 
-      {!fullScreenOnly && hasDeploymentRecords ? (
-        <div className={styles.deploymentModeSwitch} role="group" aria-label="Deployment 화면 전환">
-          <button
-            className={`${styles.deploymentModeButton} ${
-              compactDeploymentPanelMode === "setup" ? styles.deploymentModeButtonActive : ""
-            }`}
-            onClick={() => setDeploymentPanelMode("setup")}
-            type="button"
-          >
-            배포 검토
-          </button>
-          <button
-            className={`${styles.deploymentModeButton} ${
-              compactDeploymentPanelMode === "records" ? styles.deploymentModeButtonActive : ""
-            }`}
-            onClick={() => setDeploymentPanelMode("records")}
-            type="button"
-          >
-            Records
-          </button>
-        </div>
-      ) : null}
-
-      {isDeploymentExpanded ? (
+      {isDeploymentOverlayOpen ? (
         <div
           aria-label="Deployment console"
           aria-modal="true"
@@ -1948,34 +1815,11 @@ export function DeploymentPanel({
                 <X size={18} aria-hidden="true" />
               </button>
             </header>
-            <div
-              className={styles.deploymentExpandedGrid}
-              ref={deploymentExpandedGridRef}
-              style={deploymentExpandedGridStyle}
-            >
-              <div className={styles.deploymentExpandedDetails}>
-                {renderPreDeploymentCheckSection()}
-                {renderSetupSection()}
-                {renderRecordsSection()}
-                {renderResultsSection()}
-                {renderGitCicdHandoffSection()}
-                {renderStatusMessages()}
-              </div>
-              <div
-                aria-label="Deployment 좌우 패널 크기 조절"
-                aria-orientation="vertical"
-                aria-valuemax={DEPLOYMENT_EXPANDED_MAX_DETAILS_PERCENT}
-                aria-valuemin={DEPLOYMENT_EXPANDED_MIN_DETAILS_PERCENT}
-                aria-valuenow={Math.round(deploymentDetailsWidthPercent)}
-                className={styles.deploymentExpandedResizeHandle}
-                onKeyDown={handleDeploymentPanelResizeKeyDown}
-                onPointerDown={startDeploymentPanelResize}
-                role="separator"
-                tabIndex={0}
-              />
-              <aside className={styles.deploymentExpandedLogs}>
-                {renderLogsSection()}
-              </aside>
+            <div className={styles.deploymentExpandedBody}>
+              {renderPreDeploymentCheckSection()}
+              {renderSetupSection()}
+              {renderStatusMessages()}
+              {renderSecondarySections()}
             </div>
           </div>
         </div>
@@ -1995,8 +1839,6 @@ function DeploymentPreDeploymentSummary({
   const failCount = countChecklistItems(analysis, "fail");
   const warningCount = countChecklistItems(analysis, "warning");
   const gateLevel = getPreDeploymentGateLevel(analysis);
-  const visibleFindings = analysis.findings.slice(0, 3);
-  const hiddenFindingCount = Math.max(0, analysis.findings.length - visibleFindings.length);
 
   return (
     <div className={styles.deploymentPreflightSummary} data-level={gateLevel}>
@@ -2019,9 +1861,9 @@ function DeploymentPreDeploymentSummary({
           Warning
         </span>
       </div>
-      {visibleFindings.length > 0 ? (
+      {analysis.findings.length > 0 ? (
         <ul className={styles.deploymentPreflightFindings}>
-          {visibleFindings.map((finding) => (
+          {analysis.findings.map((finding) => (
             <DeploymentPreDeploymentFindingItem
               finding={finding}
               key={finding.id}
@@ -2032,9 +1874,6 @@ function DeploymentPreDeploymentSummary({
       ) : (
         <p className={styles.deploymentHint}>표시할 Check Finding이 없습니다.</p>
       )}
-      {hiddenFindingCount > 0 ? (
-        <p className={styles.deploymentPreflightMore}>외 {hiddenFindingCount}개 항목</p>
-      ) : null}
     </div>
   );
 }

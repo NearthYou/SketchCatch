@@ -84,6 +84,91 @@ resource "aws_subnet" "public" {
   );
 });
 
+test("renders S3 buckets with a default public access block companion", () => {
+  const graph: InfrastructureGraph = {
+    nodes: [
+      {
+        id: "bucket-1",
+        label: "service_bucket",
+        iac: {
+          provider: "aws",
+          terraformBlockType: "resource",
+          resourceType: "aws_s3_bucket",
+          resourceName: "service_bucket",
+          fileName: "storage"
+        },
+        config: {
+          bucket: "service-bucket"
+        }
+      }
+    ],
+    edges: []
+  };
+
+  assert.equal(
+    renderTerraformFromInfrastructureGraph(graph),
+    `resource "aws_s3_bucket" "service_bucket" {
+  bucket = "service-bucket"
+}
+
+resource "aws_s3_bucket_public_access_block" "service_bucket_public_access" {
+  bucket = aws_s3_bucket.service_bucket.id
+  block_public_acls = true
+  block_public_policy = true
+  ignore_public_acls = true
+  restrict_public_buckets = true
+}`
+  );
+});
+
+test("does not duplicate an explicit S3 public access block", () => {
+  const graph: InfrastructureGraph = {
+    nodes: [
+      {
+        id: "bucket-1",
+        label: "service_bucket",
+        iac: {
+          provider: "aws",
+          terraformBlockType: "resource",
+          resourceType: "aws_s3_bucket",
+          resourceName: "service_bucket",
+          fileName: "storage"
+        },
+        config: {
+          bucket: "service-bucket"
+        }
+      },
+      {
+        id: "bucket-public-access-1",
+        label: "service_bucket_public_access",
+        iac: {
+          provider: "aws",
+          terraformBlockType: "resource",
+          resourceType: "aws_s3_bucket_public_access_block",
+          resourceName: "service_bucket_public_access",
+          fileName: "storage"
+        },
+        config: {
+          bucket: "aws_s3_bucket.service_bucket.id",
+          blockPublicAcls: true,
+          blockPublicPolicy: true,
+          ignorePublicAcls: true,
+          restrictPublicBuckets: true
+        }
+      }
+    ],
+    edges: []
+  };
+
+  const terraformCode = renderTerraformFromInfrastructureGraph(graph);
+
+  assert.equal(
+    terraformCode.match(/resource "aws_s3_bucket_public_access_block"/g)?.length,
+    1
+  );
+  assert.match(terraformCode, /resource "aws_s3_bucket_public_access_block" "service_bucket_public_access"/);
+});
+
 test("rejects unsafe Terraform identifiers while rendering InfrastructureGraph", () => {
   const graph: InfrastructureGraph = {
     nodes: [

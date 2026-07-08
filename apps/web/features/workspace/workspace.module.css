@@ -3119,7 +3119,7 @@
 .deploymentPanel {
   display: grid;
   gap: 16px;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr);
   height: 100%;
   max-width: 100%;
   min-height: 0;
@@ -3351,8 +3351,18 @@
   display: grid;
   gap: 8px;
   grid-column: 2 / 4;
+  grid-row: 2;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   min-width: 0;
+}
+
+.deploymentStageCard > .deploymentPrimaryButton,
+.deploymentStageCard > .deploymentSecondaryButton {
+  grid-column: 3;
+  grid-row: 1;
+  justify-self: end;
+  min-width: 118px;
+  white-space: nowrap;
 }
 
 .deploymentStageAlert {
@@ -3378,11 +3388,15 @@
   .deploymentStageCard > .deploymentPrimaryButton,
   .deploymentStageCard > .deploymentSecondaryButton {
     grid-column: 1 / -1;
+    grid-row: auto;
+    justify-self: stretch;
     min-height: 42px;
+    min-width: 0;
   }
 
   .deploymentStageSettings {
     grid-column: 1 / -1;
+    grid-row: auto;
     grid-template-columns: minmax(0, 1fr);
   }
 }
@@ -3534,11 +3548,7 @@
   gap: 6px;
   list-style: none;
   margin: 0;
-  max-height: min(68vh, 760px);
-  overflow-y: auto;
   padding: 0;
-  padding-right: 4px;
-  scrollbar-gutter: stable;
 }
 
 .deploymentPreflightFindings > li {
@@ -4267,50 +4277,6 @@
   font-size: 11px;
 }
 
-.deploymentModeSwitch {
-  align-items: center;
-  background: #f8fafc;
-  border: 1px solid #dce3ee;
-  border-radius: 6px;
-  display: grid;
-  gap: 6px;
-  grid-auto-rows: 32px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  min-width: 0;
-  padding: 3px;
-}
-
-.deploymentModeButton {
-  align-items: center;
-  background: transparent;
-  border: 0;
-  border-radius: 5px;
-  color: #526174;
-  cursor: pointer;
-  display: inline-flex;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 850;
-  height: 32px;
-  justify-content: center;
-  line-height: 1.2;
-  min-height: 0;
-  padding: 0 8px;
-}
-
-.deploymentModeButton:hover,
-.deploymentModeButton:focus-visible {
-  background: #eef2f7;
-  color: #172033;
-  outline: none;
-}
-
-.deploymentModeButtonActive {
-  background: #ffffff;
-  box-shadow: 0 1px 2px rgb(15 23 42 / 12%);
-  color: #172033;
-}
-
 .deploymentExpandedOverlay {
   background: rgb(15 23 42 / 38%);
   inset: 0;
@@ -4359,18 +4325,7 @@
   font-weight: 800;
 }
 
-.deploymentExpandedGrid {
-  --deployment-details-width: 50%;
-
-  display: grid;
-  grid-template-columns:
-    minmax(0, calc(var(--deployment-details-width) - 6px))
-    12px
-    minmax(0, calc(100% - var(--deployment-details-width) - 6px));
-  min-height: 0;
-}
-
-.deploymentExpandedDetails {
+.deploymentExpandedBody {
   align-content: start;
   display: grid;
   gap: 16px;
@@ -4381,83 +4336,94 @@
   padding: 16px;
 }
 
-.deploymentExpandedDetails .deploymentSection h3 {
+.deploymentExpandedBody .deploymentSection h3 {
   font-size: 15px;
 }
 
-.deploymentExpandedDetails .deploymentField {
+.deploymentExpandedBody .deploymentField {
   font-size: 13px;
   gap: 7px;
 }
 
-.deploymentExpandedDetails .deploymentPrimaryButton,
-.deploymentExpandedDetails .deploymentSecondaryButton,
-.deploymentExpandedDetails .deploymentDangerButton {
+.deploymentExpandedBody .deploymentPrimaryButton,
+.deploymentExpandedBody .deploymentSecondaryButton,
+.deploymentExpandedBody .deploymentDangerButton {
   font-size: 14px;
   gap: 7px;
   min-height: 40px;
   padding: 8px 12px;
 }
 
-.deploymentExpandedDetails .deploymentRefreshButton {
+.deploymentExpandedBody .deploymentRefreshButton {
   font-size: 12px;
 }
 
-.deploymentExpandedDetails .deploymentSummary {
+.deploymentExpandedBody .deploymentSummary {
   gap: 10px;
   padding: 12px;
 }
 
-.deploymentExpandedDetails .deploymentSummary span {
+.deploymentExpandedBody .deploymentSummary span {
   font-size: 12px;
 }
 
-.deploymentExpandedDetails .deploymentSummary strong {
+.deploymentExpandedBody .deploymentSummary strong {
   font-size: 13px;
   line-height: 1.4;
 }
 
-.deploymentExpandedLogs {
-  background: #0f172a;
+.deploymentSecondaryPanel {
   display: grid;
-  grid-template-rows: minmax(0, 1fr);
-  max-width: 100%;
-  min-height: 0;
+  gap: 8px;
   min-width: 0;
-  overflow: hidden;
-  padding: 16px;
 }
 
-.deploymentExpandedResizeHandle {
+.deploymentDisclosure {
+  background: #ffffff;
+  border: 1px solid #dce3ee;
+  border-radius: 8px;
+  min-width: 0;
+}
+
+.deploymentDisclosure summary {
   align-items: center;
-  background: #f1f5f9;
-  border: 0;
-  border-left: 1px solid #d9e2ef;
-  border-right: 1px solid #d9e2ef;
-  cursor: col-resize;
+  color: #243044;
+  cursor: pointer;
   display: flex;
-  justify-content: center;
-  min-height: 0;
-  padding: 0;
-  touch-action: none;
+  font-size: 13px;
+  font-weight: 900;
+  gap: 10px;
+  justify-content: space-between;
+  line-height: 1.35;
+  min-height: 42px;
+  padding: 10px 12px;
 }
 
-.deploymentExpandedResizeHandle::before {
-  background: #94a3b8;
-  border-radius: 999px;
-  box-shadow:
-    -3px 0 0 #cbd5e1,
-    3px 0 0 #cbd5e1;
-  content: "";
-  height: 44px;
-  width: 2px;
+.deploymentDisclosure summary::marker {
+  color: #64748b;
 }
 
-.deploymentExpandedResizeHandle:hover,
-.deploymentExpandedResizeHandle:focus-visible {
-  background: #e2e8f0;
-  outline: 2px solid #2563eb;
-  outline-offset: -2px;
+.deploymentDisclosure small {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.deploymentDisclosure[open] summary {
+  border-bottom: 1px solid #e3e9f2;
+}
+
+.deploymentDisclosureBody {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding: 12px;
+}
+
+.deploymentDisclosureBody .deploymentSection {
+  border-top: 0;
+  padding-top: 0;
 }
 
 .deploymentModalOverlay {
@@ -4558,23 +4524,6 @@
   justify-content: flex-end;
 }
 
-.deploymentExpandedLogs .deploymentSection {
-  border-top: 0;
-  display: grid;
-  gap: 10px;
-  grid-template-rows: auto minmax(0, 1fr);
-  min-height: 0;
-  padding-top: 0;
-}
-
-.deploymentExpandedLogs .deploymentSection h3 {
-  color: #e2e8f0;
-}
-
-.deploymentExpandedLogs .deploymentHint {
-  color: #94a3b8;
-}
-
 .deploymentLogList {
   background: #111827;
   border: 1px solid #243247;
@@ -4589,7 +4538,7 @@
   max-width: 100%;
   min-height: 0;
   min-width: 0;
-  overflow: auto;
+  overflow: visible;
   padding: 12px;
   tab-size: 2;
 }
@@ -4696,19 +4645,6 @@
     border-radius: 0;
   }
 
-  .deploymentExpandedGrid {
-    grid-template-columns: 1fr;
-  }
-
-  .deploymentExpandedResizeHandle {
-    display: none;
-  }
-
-  .deploymentExpandedLogs {
-    border-left: 0;
-    border-top: 1px solid #1e293b;
-  }
-
   .aiChatLauncher,
   .aiChatLauncher[data-right-panel-open="true"] {
     bottom: 14px;
@@ -4801,7 +4737,7 @@
 
 .panelModeToggle,
 .rightPanelUtilityGroup,
-.deploymentModeSwitch {
+.deploymentDisclosure {
   background: var(--bp-paper-2);
   border: 1px solid var(--bp-line);
   border-radius: var(--bp-r);
@@ -5174,23 +5110,10 @@
   border-radius: var(--bp-r);
 }
 
-.deploymentExpandedLogs {
-  background: #101923;
-  border-left: 1px solid #2d4255;
-  padding: 16px;
-}
-
-.deploymentExpandedLogs h3,
-.deploymentExpandedLogs span,
-.deploymentExpandedLogs p {
-  color: #cfe1ef;
-}
-
 .deploymentLogList {
   background: linear-gradient(rgba(126, 167, 198, 0.08) 1px, transparent 1px), #0e151d;
   background-size: 100% 28px;
   border: 1px solid #33495c;
-  min-height: calc(100vh - 174px);
   padding: 14px;
 }
 

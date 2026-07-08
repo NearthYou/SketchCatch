@@ -91,6 +91,63 @@ test("evaluateDeploymentSafetyGate preserves generic Trivy warning codes", () =>
   assert.equal(summary.warnings[0]?.blocksApproval, false);
 });
 
+test("evaluateDeploymentSafetyGate makes known demo web service warnings acknowledgement-only", () => {
+  const summary = evaluateDeploymentSafetyGate({
+    operation: "apply",
+    liveProfile: "demo_web_service",
+    planSummary: createPlanSummary(),
+    findings: [
+      createFinding({
+        id: "trivy:aws-0087:main.tf:aws_s3_bucket_public_access_block.site:150",
+        severity: "high",
+        resourceId: "aws_s3_bucket_public_access_block.site",
+        sourceLocation: {
+          fileName: "main.tf",
+          line: 150,
+          resourceAddress: "aws_s3_bucket_public_access_block.site"
+        }
+      }),
+      createFinding({
+        id: "trivy:aws-0164:main.tf:aws_subnet.public_a:41",
+        severity: "high",
+        resourceId: "aws_subnet.public_a",
+        sourceLocation: {
+          fileName: "main.tf",
+          line: 41,
+          resourceAddress: "aws_subnet.public_a"
+        }
+      })
+    ]
+  });
+
+  assert.equal(summary.warnings.length, 2);
+  assert.equal(summary.warnings.every((warning) => warning.requiresAcknowledgement), true);
+  assert.equal(summary.warnings.every((warning) => !warning.blocksApproval), true);
+});
+
+test("evaluateDeploymentSafetyGate keeps non-demo high findings blocking in demo profile", () => {
+  const summary = evaluateDeploymentSafetyGate({
+    operation: "apply",
+    liveProfile: "demo_web_service",
+    planSummary: createPlanSummary(),
+    findings: [
+      createFinding({
+        id: "trivy:aws-0107:main.tf:aws_security_group.open_ssh:13",
+        severity: "high",
+        resourceId: "aws_security_group.open_ssh",
+        sourceLocation: {
+          fileName: "main.tf",
+          line: 13,
+          resourceAddress: "aws_security_group.open_ssh"
+        }
+      })
+    ]
+  });
+
+  assert.equal(summary.warnings[0]?.requiresAcknowledgement, false);
+  assert.equal(summary.warnings[0]?.blocksApproval, true);
+});
+
 test("evaluateDeploymentSafetyGate creates stable ids for unsupported resource warnings", () => {
   const input = {
     operation: "destroy" as const,

@@ -21,6 +21,104 @@ Known risks:
 - Full `pnpm build` was not rerun after this narrow matcher/order fix; an earlier build run in this workstream was interrupted/timed out.
 - `apps/web/next-env.d.ts` is modified by the running Next dev server and should stay out of the commit for this fix.
 
+## 2026-07-08 S3 And EC2 Demo Smoke Scope
+
+- Branch/worktree: `codex/demo-s3-ec2-smoke` in `C:\Users\siwon\.codex\worktrees\d98a\SketchCatch`.
+- Scope: make the live demo smoke stop before ALB/ASG and deploy only S3 static website plus one EC2 API instance.
+- Reverted the abandoned IAM role permission expansion path and did not keep those changes.
+- Updated Terraform artifact safety so only managed SketchCatch demo user data is allowed on `aws_instance` in demo live profiles.
+- Changed `scripts/smoke/live-demo-web-service.ps1` to generate S3 website + EC2 API Terraform by default, with no ALB, ASG, launch template, target group, or listener.
+- The smoke now verifies `static_site_url`, `api_base_url`, and `api_instance_id`.
+- Left unrelated untracked `pr-handoff-payload-flow-diagram.md` untouched.
+
+Verification:
+
+- `pnpm harness:check` - passed before edits.
+- `pnpm --filter @sketchcatch/api exec tsx --test src/deployments/terraform-artifact-safety.test.ts src/deployments/deployment-safety-gate.test.ts`
+- PowerShell script parse check for `scripts/smoke/live-demo-web-service.ps1`
+- Generated smoke Terraform, then `terraform init -backend=false -input=false` and `terraform validate`
+- `git diff --check`
+- `pnpm lint`
+- `pnpm typecheck`
+- `pnpm build`
+
+## 2026-07-08 Demo Web Service Approval Gate Fix
+
+- Branch/worktree: `codex/demo-safety-gate-ack` in `C:\Users\siwon\.codex\worktrees\d98a\SketchCatch`.
+- Scope: unblock `scripts/smoke/live-demo-web-service.ps1` when the demo profile intentionally creates public web resources.
+- Added live profile context to deployment safety gate warning creation.
+- Kept ordinary high Trivy findings blocking, but made known `demo_web_service` public web findings acknowledgement-only for the managed demo resource addresses.
+- Hardened the smoke Terraform with launch template IMDSv2, security group rule descriptions, and ALB invalid-header dropping.
+- Updated the smoke script to submit acknowledgement ids from `planSummary.warnings` during approve.
+- Left unrelated untracked `pr-handoff-payload-flow-diagram.md` untouched.
+
+Verification:
+
+- `pnpm harness:check` - passed before edits.
+- `pnpm --filter @sketchcatch/api exec tsx --test src/deployments/deployment-safety-gate.test.ts src/deployments/deployment-plan-service.test.ts`
+- PowerShell script parse check for `scripts/smoke/live-demo-web-service.ps1`
+- `git diff --check`
+- `pnpm lint`
+- `pnpm typecheck`
+- `pnpm build`
+- `pnpm harness:check` - passed after build.
+
+## 2026-07-08 Demo Smoke PowerShell Compatibility Fix
+
+- Branch/worktree: `dev` in `C:\Users\siwon\.codex\worktrees\d98a\SketchCatch`.
+- Scope: unblock `scripts/smoke/live-demo-web-service.ps1` on Windows PowerShell runtimes without `SHA256.HashData`.
+- Replaced the managed demo user-data hash call with `SHA256.Create().ComputeHash()` and disposed the hasher.
+- Resolved relative `/api/...` project asset upload URLs to the configured API root and attached bearer auth for API uploads in both live demo and S3 smoke scripts.
+- Left unrelated untracked `pr-handoff-payload-flow-diagram.md` untouched.
+
+Verification:
+
+- `pnpm harness:check` - passed before edits.
+- Extracted and invoked `New-ManagedDemoUserDataBase64`; it produced base64 user data with the managed SHA-256 marker.
+- Extracted and invoked `Resolve-ProjectAssetUpload`; it converted `/api/projects/.../upload-content` to `https://sketchcatch.net/api/projects/.../upload-content` and preserved auth/content-type headers.
+- `pnpm harness:check` - passed after edits.
+
+## 2026-07-08 S3 Public Access Deployment Gate Fix
+
+- Branch/worktree: `codex/s3-public-access-default` in `C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch-worktrees\s3-public-access-default`.
+- Scope: remove the confusing S3 public-access warning path for service buckets.
+- Terraform rendering now adds an `aws_s3_bucket_public_access_block` companion resource for every rendered `aws_s3_bucket` unless the board already has an explicit public access block for that bucket.
+- The companion sets `block_public_acls`, `block_public_policy`, `ignore_public_acls`, and `restrict_public_buckets` to `true`.
+- Pre-deployment analysis now deduplicates repeated findings for the same resource, title, and recommended fix so the UI does not show the same root issue many times.
+- Verified generated S3 bucket Terraform scans with no Trivy findings after the default public access block is added.
+
+Verification:
+
+- `pnpm harness:check` - passed before edits.
+- `pnpm --filter @sketchcatch/api exec tsx --test src/services/aiPreDeploymentCheck.test.ts`
+- `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/diagram-to-terraform.test.ts src/services/terraform/terraform-preview.test.ts`
+- Manual tsx smoke: generated `aws_s3_bucket` plus public access block and Trivy scanner returned `[]`.
+- `pnpm lint`
+- `pnpm typecheck`
+- `pnpm build`
+- `pnpm harness:check` - passed after edits.
+
+## 2026-07-08 Deployment Console UX Cleanup
+
+- Branch/worktree: `codex/deployment-ux-cleanup` in `C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch-worktrees\deployment-ux-cleanup`.
+- Scope: reduce deployment console clutter and remove nested/split scrolling.
+- Kept the primary deployment screen focused on the three-step flow: save, review, deploy.
+- Moved records, results, Git/CI/CD handoff, and logs into collapsed secondary disclosures.
+- Removed the expanded console split pane, resize handle, and separate logs column.
+- Removed inner scrolling from pre-deployment findings and deployment logs so the console has one main scroll path.
+- Updated layout regression tests to enforce the simplified information architecture.
+
+Verification:
+
+- `pnpm harness:check` - passed before edits.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts` - passed, 63 tests.
+- `pnpm lint` - passed.
+- `pnpm typecheck` - passed.
+- `pnpm build` - passed.
+- `pnpm harness:check` - passed after build.
+- Local web server returned HTTP 200 on `http://localhost:3000`.
+- Browser screenshot QA was not run because Playwright is not installed in the local REPL environment.
+
 ## 2026-07-08 UI Contrast Fix
 
 - Branch/worktree: `codex/contrast-fix` in `C:\Users\siwon\Desktop\Jungle\Week17~21\SketchCatch-worktrees\contrast-fix`.
@@ -341,6 +439,42 @@ Known risks:
 
 - Full web source-test sweep still has 3 unrelated baseline failures in reverse workspace, workspace auth gate, and legacy AI route assertions.
 - Browser click QA against production has not been run yet in this worktree.
+
+### 2026-07-08 - Local Deploy button console visibility fix
+
+- Goal: Fix the local right-panel `Deploy` action not visibly opening the deployment console.
+- Completed:
+  - Made `DeploymentPanel` render the expanded deployment overlay whenever it is hosted in `fullScreenOnly` mode.
+  - Removed the obsolete right-panel `panelPlan*` CSS block whose missing closing brace was swallowing later rules.
+  - Updated workspace right-panel layout source coverage for the full-screen deployment overlay condition.
+- Verification:
+  - `pnpm harness:check` - passed before edits.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts` - passed, 63 tests.
+  - `pnpm --filter @sketchcatch/web typecheck` - passed.
+  - `pnpm --filter @sketchcatch/web lint` - passed.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed.
+- Known risks:
+  - Browser click QA reached only the unauthenticated landing page locally; the authenticated Deploy click itself still needs user-session confirmation.
+
+### 2026-07-08 - Deployment review UI list and stage button fix
+
+- Goal: Fix the broken deployment review stage button layout and render all pre-deployment findings instead of the `외 N개 항목` truncation row.
+- Completed:
+  - Removed the three-finding cap from `DeploymentPreDeploymentSummary`; every finding now renders inside the existing scrollable list.
+  - Pinned deployment stage action buttons to the action column so the review button cannot fall into the narrow stage-number column.
+  - Kept full-screen deployment select sizing tied to the overlay-open state.
+  - Added source-layout regression coverage for full finding rendering, scrollable findings, and stable stage action button placement.
+- Verification:
+  - `pnpm harness:check` - passed before edits.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts` - passed, 63 tests.
+  - `pnpm --filter @sketchcatch/web typecheck` - passed.
+  - `pnpm --filter @sketchcatch/web lint` - passed.
+  - `pnpm lint` - passed.
+  - `pnpm typecheck` - passed.
+  - `pnpm build` - passed.
+  - `pnpm harness:check` - passed after edits.
 
 - Updated local `dev` to `838a3e94` and merged it into `fix/ck/245-terraform-error`.
 - Resolved the only manual conflict in this progress log, preserving both branch records.

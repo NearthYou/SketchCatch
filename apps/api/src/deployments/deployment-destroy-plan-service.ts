@@ -329,6 +329,7 @@ export async function runDeploymentDestroyPlan(
     const planSummary = evaluateDeploymentSafetyGate({
       operation: "destroy",
       planSummary: basePlanSummary,
+      liveProfile: deployment.liveProfile,
       unsupportedResourceTypes,
       warnings:
         basePlanSummary.deleteCount === 0 && basePlanSummary.replaceCount === 0

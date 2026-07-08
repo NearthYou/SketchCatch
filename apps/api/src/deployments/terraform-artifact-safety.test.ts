@@ -259,17 +259,49 @@ test("assertTerraformArtifactIsSafe rejects local file functions inside interpol
   );
 });
 
-test("assertTerraformArtifactIsSafe rejects EC2 user_data before live deployment", () => {
+test("assertTerraformArtifactIsSafe rejects unmanaged EC2 user_data before live deployment", () => {
+  assert.throws(
+    () =>
+      assertTerraformArtifactIsSafe(
+        `
+          resource "aws_instance" "web" {
+            ami           = "ami-1234567890abcdef0"
+            instance_type = "t3.micro"
+            user_data     = "echo hello"
+          }
+        `,
+        { liveProfile: "demo_web_service" }
+      ),
+    /must be a literal managed base64 value/
+  );
+});
+
+test("assertTerraformArtifactIsSafe accepts managed demo EC2 user data for demo profile", () => {
+  assert.doesNotThrow(() =>
+    assertTerraformArtifactIsSafe(
+      `
+        resource "aws_instance" "api" {
+          ami              = "ami-1234567890abcdef0"
+          instance_type    = "t3.micro"
+          user_data_base64 = "${createManagedDemoUserDataBase64()}"
+        }
+      `,
+      { liveProfile: "demo_web_service" }
+    )
+  );
+});
+
+test("assertTerraformArtifactIsSafe rejects managed demo EC2 user data outside the demo profile", () => {
   assert.throws(
     () =>
       assertTerraformArtifactIsSafe(`
-        resource "aws_instance" "web" {
-          ami           = "ami-1234567890abcdef0"
-          instance_type = "t3.micro"
-          user_data     = "echo hello"
+        resource "aws_instance" "api" {
+          ami              = "ami-1234567890abcdef0"
+          instance_type    = "t3.micro"
+          user_data_base64 = "${createManagedDemoUserDataBase64()}"
         }
       `),
-    /EC2 user_data is not allowed/
+    /EC2 user_data_base64 is not allowed for practice/
   );
 });
 
@@ -281,7 +313,7 @@ test("assertTerraformArtifactIsSafe accepts managed demo launch template user da
           name_prefix   = "sketchcatch-demo-"
           image_id      = "ami-1234567890abcdef0"
           instance_type = "t3.micro"
-          user_data_base64 = "${createManagedDemoUserDataBase64()}"
+          user_data     = "${createManagedDemoUserDataBase64()}"
         }
 
         resource "aws_lb" "web" {
@@ -303,10 +335,10 @@ test("assertTerraformArtifactIsSafe rejects demo launch template user data outsi
           name_prefix      = "sketchcatch-demo-"
           image_id         = "ami-1234567890abcdef0"
           instance_type    = "t3.micro"
-          user_data_base64 = "${createManagedDemoUserDataBase64()}"
+          user_data        = "${createManagedDemoUserDataBase64()}"
         }
       `),
-    /launch template user_data_base64 is not allowed for practice/
+    /launch template user_data is not allowed for practice/
   );
 });
 
@@ -319,7 +351,7 @@ test("assertTerraformArtifactIsSafe rejects unmarked demo launch template user d
             name_prefix      = "sketchcatch-demo-"
             image_id         = "ami-1234567890abcdef0"
             instance_type    = "t3.micro"
-            user_data_base64 = "${Buffer.from("#!/bin/bash\necho unsafe\n").toString("base64")}"
+            user_data        = "${Buffer.from("#!/bin/bash\necho unsafe\n").toString("base64")}"
           }
         `,
         { liveProfile: "demo_web_service" }
