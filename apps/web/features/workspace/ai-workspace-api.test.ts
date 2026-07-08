@@ -205,6 +205,33 @@ test("createAiArchitectureDraft preserves API rejection message for non-architec
   }
 });
 
+test("createAiArchitectureDraft rejects empty prompts before posting to the API", async (context) => {
+  const originalFetch = globalThis.fetch;
+  let requestCount = 0;
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  globalThis.fetch = async () => {
+    requestCount += 1;
+    return new Response("{}", { status: 200 });
+  };
+
+  try {
+    await createAiArchitectureDraft({
+      prompt: "   "
+    });
+    assert.fail("expected createAiArchitectureDraft to reject");
+  } catch (error) {
+    assert.equal(requestCount, 0);
+    assert.equal(
+      getApiErrorMessage(error, "Architecture Draft 생성 중 오류가 발생했습니다."),
+      "Requirement Prompt를 먼저 입력해주세요."
+    );
+  }
+});
+
 test("runAiTerraformErrorExplanation posts Terraform stage and raw message from the real workspace panel", async (context) => {
   const originalFetch = globalThis.fetch;
   const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];

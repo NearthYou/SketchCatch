@@ -354,6 +354,20 @@ test("workspace AI chat keeps the floating dock width without prompt guide chips
   assert.match(composerRule, /grid-template-columns:\s*minmax\(0,\s*1fr\)\s*auto\s*auto/);
 });
 
+test("workspace AI chat does not submit while Korean IME text is still composing", () => {
+  assert.match(aiChatDockSource, /composerTextareaRef\s*=\s*useRef<HTMLTextAreaElement \| null>\(null\)/);
+  assert.match(aiChatDockSource, /composerTextareaRef\.current\?\.value \?\? composerValue/);
+  assert.match(aiChatDockSource, /event\.nativeEvent\.isComposing/);
+  assert.match(aiChatDockSource, /ref=\{composerTextareaRef\}/);
+});
+
+test("workspace AI chat blocks empty draft requests at the final chat boundary", () => {
+  assert.match(aiChatDockSource, /const prompt = draftRequest\.prompt\.trim\(\)/);
+  assert.match(aiChatDockSource, /if \(prompt\.length === 0\)/);
+  assert.match(aiChatDockSource, /appendAssistantMessage\(\s*"question"/s);
+  assert.match(aiChatDockSource, /prompt\s*\}/);
+});
+
 test("terraform leave guard covers workspace escape actions while editing", () => {
   assert.match(componentSource, /PendingTerraformLeaveAction/);
   assert.match(componentSource, /pendingTerraformLeaveActionRef/);

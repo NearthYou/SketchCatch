@@ -2,6 +2,55 @@
 
 Short English-only working log for the current agent context.
 
+## 2026-07-09 AI Chat Empty Prompt Boundary Fix
+
+- Branch/worktree: `fix/ck/267-ai-error-bug-fix` in `C:\Jungle\SketchCatch`.
+- Scope: investigate whether the intermittent AI chat "empty input" symptom could have causes beyond Korean IME Enter composition.
+- Found a second real boundary gap: `createAiArchitectureDraft` posted whitespace-only prompts to the API if any caller bypassed local composer guards.
+- Added a client-side API boundary guard that trims Architecture Draft prompts and rejects empty prompts before `fetch`.
+- Added a final `WorkspaceAiChatDock.createDraftFromRequest` guard so empty draft requests become an assistant follow-up question instead of an API error card.
+- Added regression coverage that whitespace prompts do not reach the API and that the chat final draft boundary guards empty prompt requests.
+
+Verification:
+
+- `pnpm harness:check` - passed before edits.
+- `pnpm --filter @sketchcatch/web exec tsx --test --test-name-pattern "createAiArchitectureDraft rejects empty prompts" features/workspace/ai-workspace-api.test.ts` - failed before the API boundary guard, then passed after the fix.
+- `pnpm --filter @sketchcatch/web exec tsx --test --test-name-pattern "workspace AI chat blocks empty draft requests" features/workspace/workspace-right-panel-layout.test.ts` - failed before the chat boundary guard, then passed after the fix.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/ai-workspace-api.test.ts features/workspace/workspace-right-panel-layout.test.ts` - passed, 72 tests.
+- `pnpm --filter @sketchcatch/web lint` - passed.
+- `pnpm --filter @sketchcatch/web typecheck` - passed.
+- `pnpm lint` - passed.
+- `pnpm typecheck` - passed.
+- `pnpm build` - passed.
+
+Known risks:
+
+- Browser reproduction was not run in an authenticated workspace session; the confirmed non-IME boundary issue is covered by deterministic source/API tests.
+
+## 2026-07-09 AI Chat Korean IME Submit Fix
+
+- Branch/worktree: `fix/ck/267-ai-error-bug-fix` in `C:\Jungle\SketchCatch`.
+- Scope: diagnose and fix intermittent empty-input behavior when submitting text from the AI chat composer.
+- Root cause: the composer handled every Enter keydown as submit. During Korean IME composition, Enter can mean "confirm the composing text", so the submit path could run before React state reflected the committed textarea value.
+- Added a textarea ref so submit reads the live textarea value when available instead of only relying on `composerValue`.
+- Guarded Enter submission while `event.nativeEvent.isComposing` is true, preserving Shift+Enter newline behavior and normal Enter submit after composition is complete.
+- Added source regression coverage for the live textarea submit value and IME composition guard.
+
+Verification:
+
+- `pnpm harness:check` - passed before edits.
+- `pnpm --filter @sketchcatch/web exec tsx --test --test-name-pattern "workspace AI chat does not submit while Korean IME text is still composing" features/workspace/workspace-right-panel-layout.test.ts` - failed before the fix, then passed after the fix.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts` - passed, 65 tests.
+- `pnpm --filter @sketchcatch/web lint` - passed.
+- `pnpm --filter @sketchcatch/web typecheck` - passed.
+- `pnpm lint` - passed.
+- `pnpm typecheck` - passed.
+- `pnpm build` - passed.
+
+Known risks:
+
+- Browser IME click QA was not run in an authenticated workspace session; the fix is covered by source regression tests and full build gates.
+
 ## 2026-07-09 Deployment And AI Overlay Click Blocking Fix
 
 - Branch/worktree: `fix/ck/267-ai-error-bug-fix` in `C:\Jungle\SketchCatch`.

@@ -222,6 +222,7 @@ export function WorkspaceAiChatDock({
   const [draftErrorMessage, setDraftErrorMessage] = useState("");
   const [simulationErrorMessage, setSimulationErrorMessage] = useState("");
   const [simulationFingerprint, setSimulationFingerprint] = useState<string | null>(null);
+  const composerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const transcriptRef = useRef<HTMLDivElement | null>(null);
   const transcriptScrollFrameRef = useRef<number | null>(null);
   const speechRecognitionRef = useRef<BrowserSpeechRecognition | null>(null);
@@ -503,7 +504,7 @@ export function WorkspaceAiChatDock({
   async function submitChatPrompt(event?: FormEvent<HTMLFormElement>): Promise<void> {
     event?.preventDefault();
 
-    await submitUserMessage(composerValue);
+    await submitUserMessage(composerTextareaRef.current?.value ?? composerValue);
   }
 
   function clearActiveChatHistory(): void {
@@ -829,21 +830,36 @@ export function WorkspaceAiChatDock({
   }
 
   async function createDraftFromRequest(draftRequest: CreateArchitectureDraftRequest): Promise<void> {
+    const prompt = draftRequest.prompt.trim();
+
+    if (prompt.length === 0) {
+      appendAssistantMessage(
+        "question",
+        "질문: 어떤 서비스를 만들고 싶은지 먼저 알려주세요. 예를 들면 정적 웹사이트, 파일 업로드, 로그인 같은 말로 시작하면 됩니다."
+      );
+      return;
+    }
+
+    const normalizedDraftRequest: CreateArchitectureDraftRequest = {
+      ...draftRequest,
+      prompt
+    };
+
     setDraftState("loading");
     setDraftErrorMessage("");
     setDraft(null);
     setPatchPreviewModel(null);
     setPatchClarification(null);
     setDraftFollowUpSession(null);
-    setLastDraftRequest(draftRequest);
+    setLastDraftRequest(normalizedDraftRequest);
     context.setPreviewDiagram(null);
 
     try {
-      const result = await createAiArchitectureDraft(draftRequest);
+      const result = await createAiArchitectureDraft(normalizedDraftRequest);
 
       if (isArchitectureDraftClarification(result)) {
         setDraftClarification({
-          prompt: draftRequest.prompt,
+          prompt,
           clarification: result
         });
         setDraftState("idle");
@@ -851,7 +867,7 @@ export function WorkspaceAiChatDock({
         return;
       }
 
-      const previewDecision = planArchitectureDraftPreview(draftRequest, result);
+      const previewDecision = planArchitectureDraftPreview(normalizedDraftRequest, result);
       if (previewDecision.action === "ask_follow_up") {
         setDraftFollowUpSession(previewDecision.session);
         setDraftState("idle");
@@ -1033,6 +1049,10 @@ export function WorkspaceAiChatDock({
   }
 
   function handleComposerKeyDown(event: ReactKeyboardEvent<HTMLTextAreaElement>): void {
+    if (event.nativeEvent.isComposing) {
+      return;
+    }
+
     if (event.key !== "Enter" || event.shiftKey) {
       return;
     }
@@ -1470,6 +1490,7 @@ export function WorkspaceAiChatDock({
             aria-label="AI 채팅 입력"
             onChange={(event) => setComposerValue(event.target.value)}
             onKeyDown={handleComposerKeyDown}
+            ref={composerTextareaRef}
             rows={2}
             value={composerValue}
           />

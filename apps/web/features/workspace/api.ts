@@ -325,7 +325,19 @@ export async function syncTerraformToDiagram({
 export async function createAiArchitectureDraft(
   input: CreateArchitectureDraftRequest
 ): Promise<CreateArchitectureDraftResponse> {
-  return postPublicAiJson<CreateArchitectureDraftResponse>("/ai/architecture-draft", input);
+  const prompt = input.prompt.trim();
+
+  if (prompt.length === 0) {
+    throw new ApiClientError(400, {
+      error: "bad_request",
+      message: "Requirement Prompt를 먼저 입력해주세요."
+    });
+  }
+
+  return postPublicAiJson<CreateArchitectureDraftResponse>("/ai/architecture-draft", {
+    ...input,
+    prompt
+  });
 }
 
 export async function createAiArchitecturePatchPreview(
