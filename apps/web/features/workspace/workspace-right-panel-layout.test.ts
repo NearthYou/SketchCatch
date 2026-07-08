@@ -212,10 +212,12 @@ test("workspace AI opens from a floating chat dock instead of the right panel", 
   assert.match(projectDraftManagerSource, /<WorkspaceAiChatDock/);
   assert.match(workspaceDraftManagerSource, /<WorkspaceAiChatDock/);
   assert.match(aiChatDockSource, /className=\{styles\.aiChatLauncher/);
-  assert.match(aiChatDockSource, /className=\{styles\.aiChatOverlay\}\s+onClick=\{closeChatDock\}/);
+  assert.match(aiChatDockSource, /className=\{styles\.aiChatOverlay\}\s+onClick=\{\(event\) => \{/);
+  assert.match(aiChatDockSource, /event\.target === event\.currentTarget/);
+  assert.match(aiChatDockSource, /closeChatDock\(\)/);
   assert.match(aiChatDockSource, /className=\{styles\.aiChatDock/);
   assert.match(aiChatDockSource, /data-terraform-leave-guard-ignore/);
-  assert.match(aiChatDockSource, /onClick=\{\(event\) => event\.stopPropagation\(\)\}/);
+  assert.doesNotMatch(aiChatDockSource, /event\.stopPropagation\(\)/);
   assert.match(stylesSource, /\.aiChatLauncher\s*\{/);
   assert.match(stylesSource, /\.aiChatOverlay\s*\{/);
   assert.match(stylesSource, /\.aiChatDock\s*\{/);
@@ -557,8 +559,10 @@ test("deployment expanded overlay sits above the floating AI dock and blocks low
     expandedOverlayZIndex > floatingPanelSlotZIndex,
     `Expected deployment overlay z-index ${expandedOverlayZIndex} to exceed floating AI slot ${floatingPanelSlotZIndex}`
   );
-  assert.match(deploymentPanelSource, /className=\{styles\.deploymentExpandedOverlay\}\s+onClick=\{closeExpandedDeployment\}/);
-  assert.match(deploymentPanelSource, /className=\{styles\.deploymentExpandedShell\}\s+onClick=\{\(event\) => event\.stopPropagation\(\)\}/);
+  assert.match(deploymentPanelSource, /className=\{styles\.deploymentExpandedOverlay\}\s+onClick=\{\(event\) => \{/);
+  assert.match(deploymentPanelSource, /event\.target === event\.currentTarget/);
+  assert.match(deploymentPanelSource, /closeExpandedDeployment\(\)/);
+  assert.match(deploymentPanelSource, /className=\{styles\.deploymentExpandedShell\}/);
   assert.match(expandedOverlayRule, /\bpointer-events:\s*auto;/);
 });
 

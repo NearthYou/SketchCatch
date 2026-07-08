@@ -1180,14 +1180,20 @@ export function WorkspaceAiChatDock({
   }
 
   return (
-    <div className={styles.aiChatOverlay} onClick={closeChatDock}>
+    <div
+      className={styles.aiChatOverlay}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) {
+          closeChatDock();
+        }
+      }}
+    >
       <section
       aria-label="AI 채팅"
         className={styles.aiChatDock}
         data-chat-tab={activeChatTab}
         data-right-panel-open={context.isRightPanelOpen}
         data-terraform-leave-guard-ignore
-        onClick={(event) => event.stopPropagation()}
       >
       <header className={styles.aiChatHeader}>
         <div>

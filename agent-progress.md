@@ -2,6 +2,28 @@
 
 Short English-only working log for the current agent context.
 
+## 2026-07-09 PR 268 Review Feedback
+
+- Branch/worktree: `fix/ck/267-ai-error-bug-fix` in `C:\Jungle\SketchCatch`.
+- Scope: address unresolved Gemini Code Assist review threads on PR #268.
+- Tightened Amazon Q compact payload creation so fallback excerpt JSON is measured after `JSON.stringify` and reduced until it fits the provider prompt budget.
+- Added regression coverage that Amazon Q compact prompt payload sections remain parseable JSON while staying within the ChatSync limit.
+- Replaced deployment and AI chat overlay `stopPropagation()` handling with `event.target === event.currentTarget` backdrop checks so outside-click close behavior no longer interferes with global event propagation.
+- Updated workspace layout regression coverage for the new overlay click pattern.
+
+Verification:
+
+- `pnpm harness:check` - passed before edits.
+- `pnpm --filter @sketchcatch/api exec tsx --test src/services/aiProviderRouter.test.ts` - passed, 18 tests.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts` - passed, 66 tests.
+- `pnpm lint` - passed.
+- `pnpm typecheck` - passed.
+- `pnpm build` - passed.
+
+Known risks:
+
+- Browser click QA was not run in an authenticated workspace session; the reviewed overlay behavior is covered by source regression tests and full build gates.
+
 ## 2026-07-09 AI Chat Empty Prompt Boundary Fix
 
 - Branch/worktree: `fix/ck/267-ai-error-bug-fix` in `C:\Jungle\SketchCatch`.

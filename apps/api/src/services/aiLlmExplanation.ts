@@ -687,10 +687,26 @@ function createAmazonQPayloadText(target: LlmExplanationTarget, payload: unknown
     return compactText;
   }
 
-  return JSON.stringify({
+  let excerptBudget = Math.max(20, budget - target.length - 50);
+  let payloadText = JSON.stringify({
     target,
-    payloadExcerpt: trimProviderPrompt(compactText, Math.max(20, budget - 40))
+    payloadExcerpt: trimProviderPrompt(compactText, excerptBudget)
   });
+
+  while (payloadText.length > budget && excerptBudget > 20) {
+    excerptBudget = Math.max(20, excerptBudget - (payloadText.length - budget) - 10);
+    payloadText = JSON.stringify({
+      target,
+      payloadExcerpt: trimProviderPrompt(compactText, excerptBudget)
+    });
+  }
+
+  return payloadText.length <= budget
+    ? payloadText
+    : JSON.stringify({
+        target,
+        payloadExcerpt: ""
+      });
 }
 
 function compactPayloadForAmazonQ(target: LlmExplanationTarget, payload: unknown): unknown {

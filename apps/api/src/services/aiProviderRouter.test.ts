@@ -380,6 +380,7 @@ test("createAiProviderBackedLlmExplanation keeps Amazon Q Terraform preview prom
   assert.equal(result.fallbackUsed, false);
   assert.ok(prompt.length <= 2_048, `Amazon Q prompt length was ${prompt.length}`);
   assert.match(prompt, /terraform_preview_explanation/);
+  assert.doesNotThrow(() => JSON.parse(readAmazonQPromptPayload(prompt)));
 });
 
 test("createAiProviderBackedLlmExplanation preserves Amazon Q code suggestions without Well-Architected guidance", async () => {
@@ -485,6 +486,7 @@ test("createAiProviderBackedLlmExplanation keeps Amazon Q Terraform error prompt
   assert.ok(prompt.length <= 2_048, `Amazon Q prompt length was ${prompt.length}`);
   assert.match(prompt, /terraform_error_explanation/);
   assert.match(prompt, /Invalid block header/);
+  assert.doesNotThrow(() => JSON.parse(readAmazonQPromptPayload(prompt)));
 });
 
 test("createAiProviderBackedLlmExplanation preserves Amazon Q deletion code suggestions", async () => {
@@ -883,3 +885,12 @@ test("createAiProviderBackedLlmExplanation keeps daily limits across rate window
   assert.equal(second.fallbackReason, "daily_limit_exceeded");
   assert.equal(calls.length, 1);
 });
+
+function readAmazonQPromptPayload(prompt: string): string {
+  const marker = "Payload:\n";
+  const markerIndex = prompt.indexOf(marker);
+
+  assert.ok(markerIndex >= 0, "Expected Amazon Q prompt to include a payload marker");
+
+  return prompt.slice(markerIndex + marker.length);
+}
