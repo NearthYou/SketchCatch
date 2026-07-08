@@ -224,7 +224,7 @@ systemctl enable --now sketchcatch-demo-api.service
   [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes("$script`n"))
 }
 
-function New-DemoTerraform {
+function New-DemoTerraformWithAlbAsg {
   param(
     [string]$Bucket,
     [string]$Region,
@@ -549,6 +549,219 @@ output "asg_name" {
 "@
 }
 
+function New-DemoTerraform {
+  param(
+    [string]$Bucket,
+    [string]$Region,
+    [string]$RunId,
+    [string]$Prefix
+  )
+
+  $userDataBase64 = New-ManagedDemoUserDataBase64
+
+@"
+terraform {
+  required_version = ">= 1.6.0"
+
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+}
+
+provider "aws" {
+  region = "$Region"
+}
+
+resource "aws_vpc" "demo" {
+  cidr_block           = "10.42.0.0/16"
+  enable_dns_hostnames = true
+  enable_dns_support   = true
+
+  tags = {
+    Name = "$Prefix-vpc"
+    SketchCatchDemo = "true"
+    SketchCatchRunId = "$RunId"
+  }
+}
+
+resource "aws_internet_gateway" "demo" {
+  vpc_id = aws_vpc.demo.id
+
+  tags = {
+    Name = "$Prefix-igw"
+    SketchCatchDemo = "true"
+  }
+}
+
+resource "aws_subnet" "public_a" {
+  vpc_id                  = aws_vpc.demo.id
+  cidr_block              = "10.42.1.0/24"
+  availability_zone       = "${Region}a"
+  map_public_ip_on_launch = true
+
+  tags = {
+    Name = "$Prefix-public-a"
+    SketchCatchDemo = "true"
+  }
+}
+
+resource "aws_route_table" "public" {
+  vpc_id = aws_vpc.demo.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.demo.id
+  }
+
+  tags = {
+    Name = "$Prefix-public-rt"
+    SketchCatchDemo = "true"
+  }
+}
+
+resource "aws_route_table_association" "public_a" {
+  subnet_id      = aws_subnet.public_a.id
+  route_table_id = aws_route_table.public.id
+}
+
+resource "aws_security_group" "api" {
+  name        = "$Prefix-api"
+  description = "SketchCatch demo API"
+  vpc_id      = aws_vpc.demo.id
+
+  ingress {
+    description = "Allow demo API traffic from the internet"
+    from_port   = 8080
+    to_port     = 8080
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    description = "Allow outbound package and metadata access"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "$Prefix-api-sg"
+    SketchCatchDemo = "true"
+  }
+}
+
+resource "aws_s3_bucket" "site" {
+  bucket        = "$Bucket"
+  force_destroy = true
+
+  tags = {
+    Name = "$Prefix-site"
+    SketchCatchDemo = "true"
+    SketchCatchRunId = "$RunId"
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "site" {
+  bucket = aws_s3_bucket.site.id
+
+  block_public_acls       = true
+  block_public_policy     = false
+  ignore_public_acls      = true
+  restrict_public_buckets = false
+}
+
+resource "aws_s3_bucket_website_configuration" "site" {
+  bucket = aws_s3_bucket.site.id
+
+  index_document {
+    suffix = "index.html"
+  }
+}
+
+resource "aws_s3_bucket_policy" "site" {
+  bucket = aws_s3_bucket.site.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid = "PublicReadGetObject"
+        Effect = "Allow"
+        Principal = "*"
+        Action = "s3:GetObject"
+        Resource = "`${aws_s3_bucket.site.arn}/*"
+      }
+    ]
+  })
+
+  depends_on = [aws_s3_bucket_public_access_block.site]
+}
+
+data "aws_ami" "al2023" {
+  most_recent = true
+  owners      = ["amazon"]
+
+  filter {
+    name   = "name"
+    values = ["al2023-ami-*-x86_64"]
+  }
+}
+
+resource "aws_instance" "api" {
+  ami                         = data.aws_ami.al2023.id
+  instance_type               = "t3.micro"
+  subnet_id                   = aws_subnet.public_a.id
+  vpc_security_group_ids      = [aws_security_group.api.id]
+  associate_public_ip_address = true
+  user_data_base64            = "$userDataBase64"
+
+  metadata_options {
+    http_endpoint = "enabled"
+    http_tokens   = "required"
+  }
+
+  tags = {
+    Name = "$Prefix-api"
+    SketchCatchDemo = "true"
+    SketchCatchRunId = "$RunId"
+  }
+}
+
+resource "aws_s3_object" "index" {
+  bucket       = aws_s3_bucket.site.id
+  key          = "index.html"
+  content_type = "text/html"
+  content      = "<!doctype html><html><head><meta charset=\"utf-8\"><title>SketchCatch demo</title></head><body><h1>SketchCatch demo web service</h1><img src=\"/logo.svg\" width=\"120\" alt=\"SketchCatch\"><p id=\"api\">API: http://`${aws_instance.api.public_dns}:8080/api/health</p><script>fetch('http://`${aws_instance.api.public_dns}:8080/api/health').then(r=>r.json()).then(d=>document.body.insertAdjacentHTML('beforeend','<pre>'+JSON.stringify(d,null,2)+'</pre>')).catch(e=>document.body.insertAdjacentHTML('beforeend','<pre>'+e+'</pre>'));</script></body></html>"
+}
+
+resource "aws_s3_object" "logo" {
+  bucket       = aws_s3_bucket.site.id
+  key          = "logo.svg"
+  content_type = "image/svg+xml"
+  content      = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 120\"><rect width=\"120\" height=\"120\" rx=\"18\" fill=\"#172033\"/><path d=\"M24 70 52 30l44 60H38l16-22 12 16h10L52 50 34 78h44l-8-12\" fill=\"#38bdf8\"/></svg>"
+}
+
+output "static_site_bucket" {
+  value = aws_s3_bucket.site.bucket
+}
+
+output "static_site_url" {
+  value = "http://`${aws_s3_bucket_website_configuration.site.website_endpoint}"
+}
+
+output "api_base_url" {
+  value = "http://`${aws_instance.api.public_dns}:8080"
+}
+
+output "api_instance_id" {
+  value = aws_instance.api.id
+}
+"@
+}
+
 function Wait-DeploymentStatus {
   param(
     [string]$DeploymentId,
@@ -622,8 +835,7 @@ $architectureResponse = Invoke-SketchCatchApi -Method POST -Path "/projects/$($p
   architectureJson = @{
     nodes = @(
       @{ id = "site"; type = "S3"; label = $bucketName; positionX = 0; positionY = 0; config = @{ bucketName = $bucketName; region = $AwsRegion } },
-      @{ id = "api"; type = "EC2"; label = "$namePrefix-api"; positionX = 240; positionY = 0; config = @{ instanceType = "t3.micro"; desiredCapacity = 2 } },
-      @{ id = "alb"; type = "UNKNOWN"; label = "$namePrefix-alb"; positionX = 120; positionY = 120; config = @{} }
+      @{ id = "api"; type = "EC2"; label = "$namePrefix-api"; positionX = 240; positionY = 0; config = @{ instanceType = "t3.micro" } }
     )
     edges = @()
   }
@@ -677,7 +889,7 @@ $outputsResponse = Invoke-SketchCatchApi -Method GET -Path "/deployments/$($depl
 $logsResponse = Invoke-SketchCatchApi -Method GET -Path "/deployments/$($deployment.id)/logs"
 $staticSiteUrl = Get-OutputValue -Outputs $outputsResponse.outputs -Name "static_site_url"
 $apiBaseUrl = Get-OutputValue -Outputs $outputsResponse.outputs -Name "api_base_url"
-$asgName = Get-OutputValue -Outputs $outputsResponse.outputs -Name "asg_name"
+$apiInstanceId = Get-OutputValue -Outputs $outputsResponse.outputs -Name "api_instance_id"
 
 if (-not $staticSiteUrl) {
   throw "static_site_url output was not found."
@@ -685,8 +897,8 @@ if (-not $staticSiteUrl) {
 if (-not $apiBaseUrl) {
   throw "api_base_url output was not found."
 }
-if (-not $asgName) {
-  throw "asg_name output was not found."
+if (-not $apiInstanceId) {
+  throw "api_instance_id output was not found."
 }
 
 $siteResponse = Invoke-WebRequest -UseBasicParsing -Uri $staticSiteUrl -TimeoutSec 30
@@ -721,7 +933,7 @@ $report = [ordered]@{
   deploymentId = $deployment.id
   staticSiteUrl = $staticSiteUrl
   apiBaseUrl = $apiBaseUrl
-  asgName = $asgName
+  apiInstanceId = $apiInstanceId
   resourceCount = $resourcesResponse.resources.Count
   outputCount = $outputsResponse.outputs.Count
   logCount = $logsResponse.logs.Count
@@ -735,6 +947,6 @@ Set-Content -Path $ReportPath -Value $reportJson -Encoding utf8
 Write-Host "SketchCatch live demo web service smoke completed."
 Write-Host "Static site: $staticSiteUrl"
 Write-Host "API: $apiBaseUrl/api/health"
-Write-Host "ASG: $asgName"
+Write-Host "EC2 instance: $apiInstanceId"
 Write-Host "Deployment: $($deployment.id)"
 Write-Host "Report: $ReportPath"
