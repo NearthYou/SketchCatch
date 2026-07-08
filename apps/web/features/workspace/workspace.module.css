@@ -2647,6 +2647,12 @@
   transform: translateY(-1px);
 }
 
+.aiChatOverlay {
+  inset: 0;
+  pointer-events: auto;
+  position: fixed;
+}
+
 .aiChatDock {
   background: #ffffff;
   border: 1px solid var(--bp-line);
@@ -4281,8 +4287,9 @@
   background: rgb(15 23 42 / 38%);
   inset: 0;
   padding: 18px;
+  pointer-events: auto;
   position: fixed;
-  z-index: 60;
+  z-index: 120;
 }
 
 .deploymentExpandedShell {

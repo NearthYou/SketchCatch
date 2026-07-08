@@ -1797,6 +1797,11 @@ export function DeploymentPanel({
           aria-label="Deployment console"
           aria-modal="true"
           className={styles.deploymentExpandedOverlay}
+          onClick={(event) => {
+            if (event.target === event.currentTarget) {
+              closeExpandedDeployment();
+            }
+          }}
           role="dialog"
         >
           <div className={styles.deploymentExpandedShell}>

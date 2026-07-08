@@ -317,6 +317,72 @@ test("createAiProviderBackedLlmExplanation uses Amazon Q for Terraform preview e
   assert.equal(bedrockCalls.length, 0);
 });
 
+test("createAiProviderBackedLlmExplanation keeps Amazon Q Terraform preview prompts within ChatSync limits", async () => {
+  const qCalls: unknown[] = [];
+  const qExplanation: LlmExplanation = {
+    target: "terraform_preview_explanation",
+    summary: "Amazon Q received a compact Terraform preview prompt.",
+    highlights: [
+      "운영 우수성: Review change tracking.",
+      "보안: Review access boundaries.",
+      "신뢰성: Review recovery paths.",
+      "성능 효율성: Review resource sizing.",
+      "비용 최적화: Review idle capacity.",
+      "지속 가능성: Review cleanup paths."
+    ],
+    nextActions: ["Review the six-pillar result."],
+    fallbackUsed: false,
+    wellArchitectedConclusion: "The compact payload is still enough for a pillar review."
+  };
+  const createLlmExplanation = createAiProviderBackedLlmExplanation({
+    amazonQProvider: createProvider("amazon_q", qExplanation, qCalls),
+    fallbackProvider: createFallbackOnlyLlmExplanation,
+    creditPolicy: {
+      bedrock: true,
+      amazonQ: true,
+      transcribe: false,
+      billingMode: "aws_credit_only"
+    },
+    limits: { dailyCallLimit: 10, windowCallLimit: 10, windowMs: 60_000 }
+  });
+
+  const result = await createLlmExplanation({
+    target: "terraform_preview_explanation",
+    result: createTerraformPreviewResult({
+      summary: "Terraform preview includes a long generated plan summary.",
+      findings: Array.from({ length: 20 }, (_, index) => ({
+        id: `finding-${index}`,
+        category: "security",
+        severity: "medium",
+        title: `Finding ${index}`,
+        description: "Review the generated Terraform resource configuration.".repeat(10),
+        recommendation: "Tighten access and rerun checks.".repeat(10)
+      })),
+      checklist: Array.from({ length: 20 }, (_, index) => ({
+        id: `check-${index}`,
+        label: `Checklist ${index}`,
+        status: "warning",
+        relatedFindingIds: [`finding-${index}`]
+      })),
+      wellArchitectedGuidance: Array.from({ length: 20 }, (_, index) => ({
+        pillar: "security",
+        title: `Pillar ${index}`,
+        observation: "The generated resource needs a focused review.".repeat(10),
+        recommendation: "Keep least privilege and explicit approval gates.".repeat(10)
+      })),
+      consensusRecommendation: "Review the generated Terraform before any deployment.".repeat(20)
+    })
+  });
+
+  const prompt = String((qCalls[0] as { prompt?: unknown }).prompt);
+
+  assert.equal(result.providerMetadata?.provider, "amazon_q");
+  assert.equal(result.fallbackUsed, false);
+  assert.ok(prompt.length <= 2_048, `Amazon Q prompt length was ${prompt.length}`);
+  assert.match(prompt, /terraform_preview_explanation/);
+  assert.doesNotThrow(() => JSON.parse(readAmazonQPromptPayload(prompt)));
+});
+
 test("createAiProviderBackedLlmExplanation preserves Amazon Q code suggestions without Well-Architected guidance", async () => {
   const qCalls: unknown[] = [];
   const bedrockCalls: unknown[] = [];
@@ -363,6 +429,64 @@ test("createAiProviderBackedLlmExplanation preserves Amazon Q code suggestions w
   assert.match(String((qCalls[0] as { prompt?: unknown }).prompt), /rawMessage/);
   assert.match(String((qCalls[0] as { prompt?: unknown }).prompt), /AccessDenied/);
   assert.match(String((qCalls[0] as { prompt?: unknown }).prompt), /empty string/);
+});
+
+test("createAiProviderBackedLlmExplanation keeps Amazon Q Terraform error prompts within ChatSync limits", async () => {
+  const qCalls: unknown[] = [];
+  const qExplanation: LlmExplanation = {
+    target: "terraform_error_explanation",
+    summary: "Amazon Q received a compact Terraform error prompt.",
+    highlights: ["The payload is short enough for ChatSync."],
+    nextActions: ["Review the suggested fix and rerun validation."],
+    fallbackUsed: false
+  };
+  const createLlmExplanation = createAiProviderBackedLlmExplanation({
+    amazonQProvider: createProvider("amazon_q", qExplanation, qCalls),
+    fallbackProvider: createFallbackOnlyLlmExplanation,
+    creditPolicy: {
+      bedrock: true,
+      amazonQ: true,
+      transcribe: false,
+      billingMode: "aws_credit_only"
+    },
+    limits: { dailyCallLimit: 10, windowCallLimit: 10, windowMs: 60_000 }
+  });
+  const terraformCodeContext = [
+    'resource "aws_security_group" "web" {',
+    '  name = "web"',
+    "}",
+    "invalid terraform token",
+    'resource "aws_s3_bucket" "site" {',
+    '  bucket = "site"',
+    "}",
+    "x".repeat(20_000)
+  ].join("\n");
+
+  const result = await createLlmExplanation({
+    target: "terraform_error_explanation",
+    result: createTerraformErrorResult({
+      rawMessage: "Invalid block header",
+      diagnosticExplanation: {
+        errorType: "terraform.sync.block_header",
+        plainExplanation: "The Terraform file contains an invalid standalone line.",
+        fixExplanation: "Delete the invalid line and rerun validation.",
+        codeFrame: [],
+        canApply: false,
+        line: 4,
+        sourceFileName: "main.tf"
+      }
+    }),
+    terraformCodeContext
+  });
+
+  const prompt = String((qCalls[0] as { prompt?: unknown }).prompt);
+
+  assert.equal(result.providerMetadata?.provider, "amazon_q");
+  assert.equal(result.fallbackUsed, false);
+  assert.ok(prompt.length <= 2_048, `Amazon Q prompt length was ${prompt.length}`);
+  assert.match(prompt, /terraform_error_explanation/);
+  assert.match(prompt, /Invalid block header/);
+  assert.doesNotThrow(() => JSON.parse(readAmazonQPromptPayload(prompt)));
 });
 
 test("createAiProviderBackedLlmExplanation preserves Amazon Q deletion code suggestions", async () => {
@@ -761,3 +885,12 @@ test("createAiProviderBackedLlmExplanation keeps daily limits across rate window
   assert.equal(second.fallbackReason, "daily_limit_exceeded");
   assert.equal(calls.length, 1);
 });
+
+function readAmazonQPromptPayload(prompt: string): string {
+  const marker = "Payload:\n";
+  const markerIndex = prompt.indexOf(marker);
+
+  assert.ok(markerIndex >= 0, "Expected Amazon Q prompt to include a payload marker");
+
+  return prompt.slice(markerIndex + marker.length);
+}

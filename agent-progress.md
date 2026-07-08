@@ -10,10 +10,44 @@ Short English-only working log for the current agent context.
 - Removed the global topbar notification button from `DashboardShell`.
 - Added source-level regression coverage for the route gate and removed bell button.
 
+## 2026-07-09 PR 268 Review Feedback
+
+- Branch/worktree: `fix/ck/267-ai-error-bug-fix` in `C:\Jungle\SketchCatch`.
+- Scope: address unresolved Gemini Code Assist review threads on PR #268.
+- Tightened Amazon Q compact payload creation so fallback excerpt JSON is measured after `JSON.stringify` and reduced until it fits the provider prompt budget.
+- Added regression coverage that Amazon Q compact prompt payload sections remain parseable JSON while staying within the ChatSync limit.
+- Replaced deployment and AI chat overlay `stopPropagation()` handling with `event.target === event.currentTarget` backdrop checks so outside-click close behavior no longer interferes with global event propagation.
+- Updated workspace layout regression coverage for the new overlay click pattern.
+
 Verification:
 
 - `pnpm harness:check` - passed before edits.
 - `pnpm --filter @sketchcatch/web exec tsx --test components/dashboard/dashboard-shell.test.ts` - passed, 2 tests.
+- `pnpm --filter @sketchcatch/api exec tsx --test src/services/aiProviderRouter.test.ts` - passed, 18 tests.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts` - passed, 66 tests.
+- `pnpm lint` - passed.
+- `pnpm typecheck` - passed.
+- `pnpm build` - passed.
+
+Known risks:
+
+- Browser click QA was not run in an authenticated workspace session; the reviewed overlay behavior is covered by source regression tests and full build gates.
+
+## 2026-07-09 AI Chat Empty Prompt Boundary Fix
+
+- Branch/worktree: `fix/ck/267-ai-error-bug-fix` in `C:\Jungle\SketchCatch`.
+- Scope: investigate whether the intermittent AI chat "empty input" symptom could have causes beyond Korean IME Enter composition.
+- Found a second real boundary gap: `createAiArchitectureDraft` posted whitespace-only prompts to the API if any caller bypassed local composer guards.
+- Added a client-side API boundary guard that trims Architecture Draft prompts and rejects empty prompts before `fetch`.
+- Added a final `WorkspaceAiChatDock.createDraftFromRequest` guard so empty draft requests become an assistant follow-up question instead of an API error card.
+- Added regression coverage that whitespace prompts do not reach the API and that the chat final draft boundary guards empty prompt requests.
+
+Verification:
+
+- `pnpm harness:check` - passed before edits.
+- `pnpm --filter @sketchcatch/web exec tsx --test --test-name-pattern "createAiArchitectureDraft rejects empty prompts" features/workspace/ai-workspace-api.test.ts` - failed before the API boundary guard, then passed after the fix.
+- `pnpm --filter @sketchcatch/web exec tsx --test --test-name-pattern "workspace AI chat blocks empty draft requests" features/workspace/workspace-right-panel-layout.test.ts` - failed before the chat boundary guard, then passed after the fix.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/ai-workspace-api.test.ts features/workspace/workspace-right-panel-layout.test.ts` - passed, 72 tests.
 - `pnpm --filter @sketchcatch/web lint` - passed.
 - `pnpm --filter @sketchcatch/web typecheck` - passed.
 - `pnpm lint` - passed.
@@ -24,6 +58,74 @@ Known risks:
 
 - In-app browser automation was unavailable in this session, so visual screenshot QA was not run.
 - The local DB/API/Web servers that were started for the user remain running.
+- Browser reproduction was not run in an authenticated workspace session; the confirmed non-IME boundary issue is covered by deterministic source/API tests.
+
+## 2026-07-09 AI Chat Korean IME Submit Fix
+
+- Branch/worktree: `fix/ck/267-ai-error-bug-fix` in `C:\Jungle\SketchCatch`.
+- Scope: diagnose and fix intermittent empty-input behavior when submitting text from the AI chat composer.
+- Root cause: the composer handled every Enter keydown as submit. During Korean IME composition, Enter can mean "confirm the composing text", so the submit path could run before React state reflected the committed textarea value.
+- Added a textarea ref so submit reads the live textarea value when available instead of only relying on `composerValue`.
+- Guarded Enter submission while `event.nativeEvent.isComposing` is true, preserving Shift+Enter newline behavior and normal Enter submit after composition is complete.
+- Added source regression coverage for the live textarea submit value and IME composition guard.
+
+Verification:
+
+- `pnpm harness:check` - passed before edits.
+- `pnpm --filter @sketchcatch/web exec tsx --test --test-name-pattern "workspace AI chat does not submit while Korean IME text is still composing" features/workspace/workspace-right-panel-layout.test.ts` - failed before the fix, then passed after the fix.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts` - passed, 65 tests.
+- `pnpm --filter @sketchcatch/web lint` - passed.
+- `pnpm --filter @sketchcatch/web typecheck` - passed.
+- `pnpm lint` - passed.
+- `pnpm typecheck` - passed.
+- `pnpm build` - passed.
+
+Known risks:
+
+- Browser IME click QA was not run in an authenticated workspace session; the fix is covered by source regression tests and full build gates.
+
+## 2026-07-09 Deployment And AI Overlay Click Blocking Fix
+
+- Branch/worktree: `fix/ck/267-ai-error-bug-fix` in `C:\Jungle\SketchCatch`.
+- Scope: prevent the floating AI chat controls from appearing above the full-screen deployment console, and prevent clicks from passing through deployment or AI chat overlays to workspace buttons underneath.
+- Raised the deployment expanded overlay above the diagram floating-panel slot and made the overlay explicitly consume pointer events.
+- Wrapped the open AI chat dock in a transparent fixed overlay so clicks outside the chat do not reach lower workspace controls while the chat is open.
+- Preserved outside-click-to-close behavior by closing from the overlay backdrop while stopping click propagation inside the deployment console and AI chat dock.
+- Added source-layout regression coverage for deployment overlay z-index/pointer blocking and AI chat overlay pointer blocking.
+- Updated one stale AI draft acceptance assertion in the same layout test to match the current `getDiagramJsonForArchitectureDraft` helper path.
+
+Verification:
+
+- `pnpm harness:check` - passed before edits.
+- `pnpm --filter @sketchcatch/web exec tsx --test --test-name-pattern "deployment expanded overlay" features/workspace/workspace-right-panel-layout.test.ts` - failed before the overlay z-index fix, then passed after the fix.
+- `pnpm --filter @sketchcatch/web exec tsx --test --test-name-pattern "workspace AI opens" features/workspace/workspace-right-panel-layout.test.ts` - failed before the AI chat overlay wrapper, then passed after the fix.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts` - passed, 64 tests.
+- `pnpm --filter @sketchcatch/web lint` - passed.
+- `pnpm --filter @sketchcatch/web typecheck` - passed.
+- `pnpm lint` - passed.
+- `pnpm typecheck` - passed.
+- `pnpm build` - passed.
+- `pnpm harness:check` - passed after edits.
+
+Known risks:
+
+- Browser click QA was not run in an authenticated workspace session; the fix is covered by static layout/source regression tests and full build gates.
+
+## 2026-07-08 Amazon Q Terraform Explanation Request Fix
+
+- Branch/worktree: current `C:\Jungle\SketchCatch` workspace.
+- Scope: diagnose production-only `terraform_error_explanation` Amazon Q invalid request fallbacks.
+- Found that the Amazon Q ChatSync prompt for Terraform error explanations was already over 2,048 characters without Terraform code context and could grow past 22,000 characters with full code context.
+- Added Amazon Q-specific compact prompts for Terraform error and Terraform preview explanations while leaving Bedrock/OpenAI prompts unchanged.
+- Added regression coverage that long Terraform error and preview payloads stay within the ChatSync prompt limit and still return Amazon Q metadata.
+
+Verification:
+
+- `pnpm harness:check` - passed before edits.
+- `pnpm --filter @sketchcatch/api exec tsx --test src/services/aiProviderRouter.test.ts` - passed, 18 tests.
+- `pnpm lint` - passed.
+- `pnpm typecheck` - passed after fixing a test fixture type.
+- `pnpm build` - passed after fixing a test fixture type.
 
 ## 2026-07-08 Demo API Health Wait
 
