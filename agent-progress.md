@@ -2,6 +2,33 @@
 
 Short English-only working log for the current agent context.
 
+## 2026-07-09 Deployment And AI Overlay Click Blocking Fix
+
+- Branch/worktree: `fix/ck/267-ai-error-bug-fix` in `C:\Jungle\SketchCatch`.
+- Scope: prevent the floating AI chat controls from appearing above the full-screen deployment console, and prevent clicks from passing through deployment or AI chat overlays to workspace buttons underneath.
+- Raised the deployment expanded overlay above the diagram floating-panel slot and made the overlay explicitly consume pointer events.
+- Wrapped the open AI chat dock in a transparent fixed overlay so clicks outside the chat do not reach lower workspace controls while the chat is open.
+- Preserved outside-click-to-close behavior by closing from the overlay backdrop while stopping click propagation inside the deployment console and AI chat dock.
+- Added source-layout regression coverage for deployment overlay z-index/pointer blocking and AI chat overlay pointer blocking.
+- Updated one stale AI draft acceptance assertion in the same layout test to match the current `getDiagramJsonForArchitectureDraft` helper path.
+
+Verification:
+
+- `pnpm harness:check` - passed before edits.
+- `pnpm --filter @sketchcatch/web exec tsx --test --test-name-pattern "deployment expanded overlay" features/workspace/workspace-right-panel-layout.test.ts` - failed before the overlay z-index fix, then passed after the fix.
+- `pnpm --filter @sketchcatch/web exec tsx --test --test-name-pattern "workspace AI opens" features/workspace/workspace-right-panel-layout.test.ts` - failed before the AI chat overlay wrapper, then passed after the fix.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts` - passed, 64 tests.
+- `pnpm --filter @sketchcatch/web lint` - passed.
+- `pnpm --filter @sketchcatch/web typecheck` - passed.
+- `pnpm lint` - passed.
+- `pnpm typecheck` - passed.
+- `pnpm build` - passed.
+- `pnpm harness:check` - passed after edits.
+
+Known risks:
+
+- Browser click QA was not run in an authenticated workspace session; the fix is covered by static layout/source regression tests and full build gates.
+
 ## 2026-07-08 Amazon Q Terraform Explanation Request Fix
 
 - Branch/worktree: current `C:\Jungle\SketchCatch` workspace.

@@ -1797,9 +1797,10 @@ export function DeploymentPanel({
           aria-label="Deployment console"
           aria-modal="true"
           className={styles.deploymentExpandedOverlay}
+          onClick={closeExpandedDeployment}
           role="dialog"
         >
-          <div className={styles.deploymentExpandedShell}>
+          <div className={styles.deploymentExpandedShell} onClick={(event) => event.stopPropagation()}>
             <header className={styles.deploymentExpandedHeader}>
               <div>
                 <p className={styles.projectEyebrow}>Deployment</p>

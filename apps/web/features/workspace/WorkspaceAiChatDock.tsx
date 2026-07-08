@@ -1160,13 +1160,15 @@ export function WorkspaceAiChatDock({
   }
 
   return (
-    <section
+    <div className={styles.aiChatOverlay} onClick={closeChatDock}>
+      <section
       aria-label="AI 채팅"
-      className={styles.aiChatDock}
-      data-chat-tab={activeChatTab}
-      data-right-panel-open={context.isRightPanelOpen}
-      data-terraform-leave-guard-ignore
-    >
+        className={styles.aiChatDock}
+        data-chat-tab={activeChatTab}
+        data-right-panel-open={context.isRightPanelOpen}
+        data-terraform-leave-guard-ignore
+        onClick={(event) => event.stopPropagation()}
+      >
       <header className={styles.aiChatHeader}>
         <div>
           <span>자연어 다이어그램</span>
@@ -1498,7 +1500,8 @@ export function WorkspaceAiChatDock({
           </p>
         ) : null}
       </form>
-    </section>
+      </section>
+    </div>
   );
 }
 

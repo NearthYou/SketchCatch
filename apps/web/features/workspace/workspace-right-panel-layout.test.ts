@@ -204,6 +204,7 @@ test("right panel redesign does not add deployment shortcut or focus plumbing", 
 
 test("workspace AI opens from a floating chat dock instead of the right panel", () => {
   const floatingPanelSlotRule = getCssRule(diagramEditorStylesSource, "floatingPanelSlot");
+  const aiChatOverlayRule = getCssRule(stylesSource, "aiChatOverlay");
 
   assert.match(diagramEditorSource, /floatingPanel\?\.\(panelContext\)/);
   assert.match(projectDraftManagerSource, /floatingPanel=\{\(context\) => \(/);
@@ -211,10 +212,16 @@ test("workspace AI opens from a floating chat dock instead of the right panel", 
   assert.match(projectDraftManagerSource, /<WorkspaceAiChatDock/);
   assert.match(workspaceDraftManagerSource, /<WorkspaceAiChatDock/);
   assert.match(aiChatDockSource, /className=\{styles\.aiChatLauncher/);
+  assert.match(aiChatDockSource, /className=\{styles\.aiChatOverlay\}\s+onClick=\{closeChatDock\}/);
   assert.match(aiChatDockSource, /className=\{styles\.aiChatDock/);
   assert.match(aiChatDockSource, /data-terraform-leave-guard-ignore/);
+  assert.match(aiChatDockSource, /onClick=\{\(event\) => event\.stopPropagation\(\)\}/);
   assert.match(stylesSource, /\.aiChatLauncher\s*\{/);
+  assert.match(stylesSource, /\.aiChatOverlay\s*\{/);
   assert.match(stylesSource, /\.aiChatDock\s*\{/);
+  assert.match(aiChatOverlayRule, /inset:\s*0/);
+  assert.match(aiChatOverlayRule, /pointer-events:\s*auto/);
+  assert.match(aiChatOverlayRule, /position:\s*fixed/);
   assert.match(floatingPanelSlotRule, /pointer-events:\s*none/);
   assert.match(floatingPanelSlotRule, /z-index:\s*90/);
 });
@@ -304,11 +311,11 @@ test("accepted AI drafts apply the current draft instead of a stale preview diag
   assert.doesNotMatch(aiPanelSource, stalePreviewFallbackPattern);
   assert.match(
     aiChatDockSource,
-    /context\.applyDiagramJson\(\s*convertArchitectureJsonToDiagramJson\(draft\.architectureJson\)\s*\)/s
+    /context\.applyDiagramJson\(\s*getDiagramJsonForArchitectureDraft\(draft\)\s*\)/s
   );
   assert.match(
     aiPanelSource,
-    /context\.applyDiagramJson\(\s*convertArchitectureJsonToDiagramJson\(draft\.architectureJson\)\s*\)/s
+    /context\.applyDiagramJson\(\s*getDiagramJsonForArchitectureDraft\(draft\)\s*\)/s
   );
 });
 
@@ -524,6 +531,21 @@ test("deployment expanded panel uses one readable body instead of a split pane",
   assert.doesNotMatch(deploymentPanelSource, /handleDeploymentPanelResizeKeyDown/);
   assert.doesNotMatch(stylesSource, /\.deploymentExpandedGrid\s*\{/);
   assert.doesNotMatch(stylesSource, /\.deploymentExpandedResizeHandle\s*\{/);
+});
+
+test("deployment expanded overlay sits above the floating AI dock and blocks lower controls", () => {
+  const expandedOverlayRule = getCssRule(stylesSource, "deploymentExpandedOverlay");
+  const floatingPanelSlotRule = getCssRule(diagramEditorStylesSource, "floatingPanelSlot");
+  const expandedOverlayZIndex = readCssNumber(expandedOverlayRule, "z-index");
+  const floatingPanelSlotZIndex = readCssNumber(floatingPanelSlotRule, "z-index");
+
+  assert.ok(
+    expandedOverlayZIndex > floatingPanelSlotZIndex,
+    `Expected deployment overlay z-index ${expandedOverlayZIndex} to exceed floating AI slot ${floatingPanelSlotZIndex}`
+  );
+  assert.match(deploymentPanelSource, /className=\{styles\.deploymentExpandedOverlay\}\s+onClick=\{closeExpandedDeployment\}/);
+  assert.match(deploymentPanelSource, /className=\{styles\.deploymentExpandedShell\}\s+onClick=\{\(event\) => event\.stopPropagation\(\)\}/);
+  assert.match(expandedOverlayRule, /\bpointer-events:\s*auto;/);
 });
 
 test("deployment expanded body uses larger action and record text", () => {
@@ -1031,4 +1053,13 @@ function getCssRule(source: string, className: string): string {
   assert.ok(match?.groups?.body, `Expected .${className} CSS rule to exist`);
 
   return match.groups.body;
+}
+
+function readCssNumber(rule: string, propertyName: string): number {
+  const escapedPropertyName = propertyName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = new RegExp(`\\b${escapedPropertyName}:\\s*(?<value>\\d+);`).exec(rule);
+
+  assert.ok(match?.groups?.value, `Expected ${propertyName} to exist in CSS rule`);
+
+  return Number.parseInt(match.groups.value, 10);
 }
