@@ -2,6 +2,22 @@
 
 Short English-only working log for the current agent context.
 
+## 2026-07-08 Amazon Q Terraform Explanation Request Fix
+
+- Branch/worktree: current `C:\Jungle\SketchCatch` workspace.
+- Scope: diagnose production-only `terraform_error_explanation` Amazon Q invalid request fallbacks.
+- Found that the Amazon Q ChatSync prompt for Terraform error explanations was already over 2,048 characters without Terraform code context and could grow past 22,000 characters with full code context.
+- Added Amazon Q-specific compact prompts for Terraform error and Terraform preview explanations while leaving Bedrock/OpenAI prompts unchanged.
+- Added regression coverage that long Terraform error and preview payloads stay within the ChatSync prompt limit and still return Amazon Q metadata.
+
+Verification:
+
+- `pnpm harness:check` - passed before edits.
+- `pnpm --filter @sketchcatch/api exec tsx --test src/services/aiProviderRouter.test.ts` - passed, 18 tests.
+- `pnpm lint` - passed.
+- `pnpm typecheck` - passed after fixing a test fixture type.
+- `pnpm build` - passed after fixing a test fixture type.
+
 ## 2026-07-08 Demo API Health Wait
 
 - Branch/worktree: `codex/demo-api-health-wait` in `C:\Users\siwon\.codex\worktrees\d98a\SketchCatch`.

@@ -42,6 +42,7 @@ const OPENAI_MAX_RETRIES = 0;
 const DEFAULT_AI_DAILY_CALL_LIMIT = 50;
 const DEFAULT_AI_WINDOW_CALL_LIMIT = 10;
 const DEFAULT_AI_WINDOW_MS = 60_000;
+const AMAZON_Q_USER_MESSAGE_MAX_LENGTH = 2_048;
 
 export type OpenAiParseRequest = {
   readonly model: string;
@@ -554,7 +555,7 @@ async function tryProvider(input: {
   }
 
   try {
-    const prompt = createProviderPrompt(input.input.target, payload);
+    const prompt = createProviderPrompt(input.provider.provider, input.input.target, payload);
     const response = await input.provider.generate({
       target: input.input.target,
       instructions: createSystemInstructions(),
@@ -599,7 +600,15 @@ async function tryProvider(input: {
   }
 }
 
-function createProviderPrompt(target: LlmExplanationTarget, payload: unknown): string {
+function createProviderPrompt(provider: AiProvider, target: LlmExplanationTarget, payload: unknown): string {
+  if (provider === "amazon_q") {
+    return createAmazonQProviderPrompt(target, payload);
+  }
+
+  return createDefaultProviderPrompt(target, payload);
+}
+
+function createDefaultProviderPrompt(target: LlmExplanationTarget, payload: unknown): string {
   const terraformErrorInstructions =
     target === "terraform_error_explanation"
       ? [
@@ -640,6 +649,124 @@ function createProviderPrompt(target: LlmExplanationTarget, payload: unknown): s
     "Provider input:",
     JSON.stringify(payload)
   ].join("\n");
+}
+
+function createAmazonQProviderPrompt(target: LlmExplanationTarget, payload: unknown): string {
+  const targetInstructions =
+    target === "terraform_error_explanation"
+      ? [
+          "Explain the Terraform error and the exact next fix.",
+          "For syntax errors, include codeSuggestion only when currentCode is exact; use empty string as suggestedCode for deletion.",
+          "Do not provide Well-Architected guidance."
+        ]
+      : target === "terraform_preview_explanation"
+        ? [
+            "Review the Terraform preview using the six AWS Well-Architected pillars.",
+            "Return exactly six highlights and an overall wellArchitectedConclusion.",
+            "Do not include codeSuggestion."
+          ]
+        : ["Use the deterministic payload as source of truth."];
+  const header = [
+    "Return Korean JSON only, no markdown.",
+    '{"target":"TARGET","summary":"short","highlights":["item"],"nextActions":["item"],"fallbackUsed":false,"codeSuggestion":null,"wellArchitectedConclusion":null}',
+    `TARGET="${target}".`,
+    ...targetInstructions,
+    "Payload:"
+  ].join("\n");
+  const payloadBudget = Math.max(200, AMAZON_Q_USER_MESSAGE_MAX_LENGTH - header.length - 1);
+  const payloadText = createAmazonQPayloadText(target, payload, payloadBudget);
+
+  return trimProviderPrompt(`${header}\n${payloadText}`, AMAZON_Q_USER_MESSAGE_MAX_LENGTH);
+}
+
+function createAmazonQPayloadText(target: LlmExplanationTarget, payload: unknown, budget: number): string {
+  const compactPayload = compactPayloadForAmazonQ(target, payload);
+  const compactText = JSON.stringify(compactPayload);
+
+  if (compactText.length <= budget) {
+    return compactText;
+  }
+
+  return JSON.stringify({
+    target,
+    payloadExcerpt: trimProviderPrompt(compactText, Math.max(20, budget - 40))
+  });
+}
+
+function compactPayloadForAmazonQ(target: LlmExplanationTarget, payload: unknown): unknown {
+  if (!isJsonRecord(payload)) {
+    return payload;
+  }
+
+  if (target === "terraform_error_explanation") {
+    const diagnostic = isJsonRecord(payload.diagnosticExplanation) ? payload.diagnosticExplanation : {};
+
+    return {
+      target,
+      stage: trimProviderPayloadValue(payload.stage, 40),
+      category: trimProviderPayloadValue(payload.category, 40),
+      severity: trimProviderPayloadValue(payload.severity, 20),
+      rawMessage: trimProviderPayloadValue(payload.rawMessage, 220),
+      summary: trimProviderPayloadValue(payload.summary, 220),
+      likelyCause: trimProviderPayloadValue(payload.likelyCause, 220),
+      nextActions: trimProviderPayloadArray(payload.nextActions, 3, 120),
+      diagnosticExplanation: {
+        errorType: trimProviderPayloadValue(diagnostic.errorType, 80),
+        line: diagnostic.line,
+        sourceFileName: trimProviderPayloadValue(diagnostic.sourceFileName, 80),
+        plainExplanation: trimProviderPayloadValue(diagnostic.plainExplanation, 160),
+        fixExplanation: trimProviderPayloadValue(diagnostic.fixExplanation, 160),
+        canApply: diagnostic.canApply,
+        codeFrame: Array.isArray(diagnostic.codeFrame) ? diagnostic.codeFrame.slice(0, 5) : []
+      },
+      relatedResourceId: trimProviderPayloadValue(payload.relatedResourceId, 120),
+      terraformCodeContext: trimProviderPayloadValue(payload.terraformCodeContext, 360)
+    };
+  }
+
+  if (target === "terraform_preview_explanation") {
+    return {
+      target,
+      summary: trimProviderPayloadValue(payload.summary, 220),
+      findings: trimProviderPayloadArray(payload.findings, 6, 140),
+      checklist: trimProviderPayloadArray(payload.checklist, 6, 140),
+      wellArchitectedGuidance: trimProviderPayloadArray(payload.wellArchitectedGuidance, 6, 160),
+      consensusRecommendation: trimProviderPayloadValue(payload.consensusRecommendation, 220)
+    };
+  }
+
+  return payload;
+}
+
+function isJsonRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function trimProviderPayloadArray(value: unknown, maxItems: number, maxLength: number): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .slice(0, maxItems)
+    .map((item) => trimProviderPayloadValue(item, maxLength))
+    .filter((item) => item.length > 0);
+}
+
+function trimProviderPayloadValue(value: unknown, maxLength: number): string {
+  if (value === undefined || value === null) {
+    return "";
+  }
+
+  return trimProviderPrompt(String(value), maxLength);
+}
+
+function trimProviderPrompt(value: string, maxLength: number): string {
+  if (value.length <= maxLength) {
+    return value;
+  }
+
+  return value.slice(0, Math.max(0, maxLength - 1)).trimEnd();
 }
 
 function parseProviderExplanationText(input: {
