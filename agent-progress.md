@@ -2,6 +2,42 @@
 
 Short English-only working log for the current agent context.
 
+## 2026-07-08 Reference Diagram PR Preparation
+
+- Branch/worktree: `chore/ck/253-diagram-presentation` in `C:\Jungle\SketchCatch`.
+- Merged latest `origin/dev` through PR #264 into the branch before opening the follow-up PR.
+- Resolved the `agent-progress.md` merge conflict by preserving both the reference diagram restore record and the latest demo smoke records.
+- Rewrote the stale conflicted `session-handoff.md` into a concise current handoff.
+- Kept generated `apps/web/next-env.d.ts` route-type path changes out of the PR diff.
+
+Verification:
+
+- `pnpm harness:check` - passed before PR-prep edits.
+- `pnpm --filter @sketchcatch/api exec tsx --test src/services/aiArchitectureDrafts.test.ts` - passed, 23 tests.
+- `pnpm lint` - passed.
+- `pnpm typecheck` - passed.
+- `pnpm build` - passed.
+- `pnpm harness:check` - passed after PR-prep edits.
+
+## 2026-07-08 SketchCatch Reference Diagram Restore
+
+- Branch/worktree: `chore/ck/253-diagram-presentation` in `C:\Jungle\SketchCatch`.
+- Restored the exact selected-answer path so it returns the recovered SketchCatch reference `diagramJson` before missing-question clarification can redirect the flow.
+- Made the fixed selection matcher resilient to answer whitespace differences and ASCII-stable anchors from the selected choices.
+- Confirmed the localhost API returns the recovered fixture for the same choices: 84 nodes, 26 edges, `vpc-main` at `(540, 444)`, and reference node `node-mrb8gls3-rdjo68` at `(948, 756)`.
+
+Verification:
+
+- `pnpm harness:check` - passed after edits.
+- `pnpm --filter @sketchcatch/api exec tsx --test src/services/aiArchitectureDrafts.test.ts` - passed, 23 tests.
+- `pnpm --filter @sketchcatch/api typecheck` - passed.
+- Direct POST to `http://localhost:4000/api/ai/architecture-draft` with the fixed selected-answer prompt returned the exact recovered fixture.
+
+Known risks:
+
+- Full `pnpm build` was not rerun after this narrow matcher/order fix; an earlier build run in this workstream was interrupted/timed out.
+- `apps/web/next-env.d.ts` is modified by the running Next dev server and should stay out of the commit for this fix.
+
 ## 2026-07-08 Managed Demo Resource Trivy Acknowledgement
 
 - Branch/worktree: `codex/demo-ec2-public-warning-ack` in `C:\Users\siwon\.codex\worktrees\d98a\SketchCatch`.

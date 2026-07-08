@@ -25,7 +25,10 @@ const REFERENCE_SELECTION_TERMS = [
 export function isSketchCatchReferenceDeploymentSelection(prompt: string): boolean {
   const normalizedPrompt = normalizePrompt(prompt);
 
-  return REFERENCE_SELECTION_TERMS.every((term) => normalizedPrompt.includes(normalizePrompt(term)));
+  return (
+    REFERENCE_SELECTION_TERMS.every((term) => normalizedPrompt.includes(normalizePrompt(term))) ||
+    isAsciiStableReferenceDeploymentSelection(normalizedPrompt)
+  );
 }
 
 export function createSketchCatchReferenceDeploymentDraft(): AiArchitectureDraftResult {
@@ -508,7 +511,20 @@ function edge(
 }
 
 function normalizePrompt(prompt: string): string {
-  return prompt.normalize("NFKC").toLowerCase().replace(/\s+/gu, " ");
+  return prompt.normalize("NFKC").toLowerCase().replace(/\s+/gu, "");
+}
+
+function isAsciiStableReferenceDeploymentSelection(normalizedPrompt: string): boolean {
+  return [
+    "react/vue/angular",
+    "springboot",
+    "django",
+    "50-200",
+    "http",
+    "10mb-100mb",
+    "99.9",
+    "10gb"
+  ].every((term) => normalizedPrompt.includes(term));
 }
 
 type EdgeDisplayOptions = {

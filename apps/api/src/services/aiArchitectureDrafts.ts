@@ -225,6 +225,10 @@ export async function createAmazonQArchitectureDraftResponse(
   const creditPolicy = options.creditPolicy ?? readAiCreditPolicyFromEnv();
   const provider = options.provider;
 
+  if (isSketchCatchReferenceDeploymentSelection(request.prompt)) {
+    return createSketchCatchReferenceDeploymentDraft();
+  }
+
   if (creditPolicy.billingMode !== "aws_credit_only" || !creditPolicy.amazonQ) {
     return createFallbackArchitectureDraftResponse(request, "credit_not_confirmed", creditPolicy.billingMode);
   }
@@ -243,10 +247,6 @@ export async function createAmazonQArchitectureDraftResponse(
 
   if (conditionalQuestion !== null) {
     return createArchitectureDraftClarification(conditionalQuestion, request, provider, creditPolicy.billingMode);
-  }
-
-  if (isSketchCatchReferenceDeploymentSelection(request.prompt)) {
-    return createSketchCatchReferenceDeploymentDraft();
   }
 
   const architectureDecisionSpace = createArchitectureDecisionSpace(request.prompt);

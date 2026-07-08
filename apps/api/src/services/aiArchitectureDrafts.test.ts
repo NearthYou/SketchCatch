@@ -177,6 +177,57 @@ test("createArchitectureDraft uses the same fixed SketchCatch deployment draft w
   assert.equal(draft.architectureJson.nodes.some((node) => node.id === "app-database"), true);
 });
 
+test("createArchitectureDraft matches the fixed SketchCatch deployment path even when answer spacing differs", () => {
+  const draft = createArchitectureDraft({
+    prompt: [
+      "웹서비스를 배포하고 싶어",
+      "어떤 종류의 웹사이트인가요? 동적 웹 애플리케이션 (쇼핑몰, 게시판, 회원 시스템)",
+      "예상 트래픽 규모는 중간 규모 (일 1,000명, 동시 50명)",
+      "데이터베이스가 필요한가요? 간단한 데이터 (사용자 정보, 게시글 등 < 10GB)",
+      "프론트엔드 기술은 React/Vue/Angular (SPA 프레임워크)",
+      "백엔드가 필요한가요? 복잡한 비즈니스 로직 (Spring Boot, Django 등)",
+      "주요 사용자 지역은 한국만 (서울 리전)",
+      "월 예산 범위는 50-200만원 (고성능)",
+      "SSL 인증서(HTTPS)가 필요한가요? 선택사항 (HTTP도 괜찮음)",
+      "파일 업로드 기능이 있나요? 없음 (텍스트만)",
+      "실시간 기능이 필요한가요? 필요 없음",
+      "관리 복잡도 선호도는 반관리형 (일부 서버 관리)",
+      "페이지 로딩 시간 목표는 3초 이내 (적당함)",
+      "전체 웹사이트 크기는 10MB-100MB (일반적인 사이트)",
+      "트래픽 패턴은 시간대별 차이 (낮에 많음)",
+      "서비스 중단 허용 시간은 월 1시간 이내 (99.9% 가용성)"
+    ].join("\n")
+  });
+
+  assert.equal(draft.title, "SketchCatch Web Service Deployment Architecture");
+  assert.deepEqual(draft.diagramJson, SKETCHCATCH_REFERENCE_DIAGRAM_JSON);
+});
+
+test("createArchitectureDraft matches the fixed SketchCatch deployment path from ASCII-stable answer anchors", () => {
+  const draft = createArchitectureDraft({
+    prompt: [
+      "website deployment",
+      "traffic: 1000 daily users, concurrent 50",
+      "database: simple data less than 10GB",
+      "frontend: React/Vue/Angular SPA framework",
+      "backend: complex business logic with Spring Boot and Django",
+      "region: Seoul Korea",
+      "budget: 50-200",
+      "SSL: optional, HTTP acceptable",
+      "file upload: none",
+      "realtime: none",
+      "management: semi managed",
+      "loading: 3 seconds",
+      "website size: 10MB-100MB",
+      "traffic pattern: daytime peak",
+      "availability: 99.9"
+    ].join("\n")
+  });
+
+  assert.equal(draft.title, "SketchCatch Web Service Deployment Architecture");
+  assert.deepEqual(draft.diagramJson, SKETCHCATCH_REFERENCE_DIAGRAM_JSON);
+});
+
 test("createAmazonQArchitectureDraftResponse keeps similar non-matching answer paths on the existing provider flow", async () => {
   let callCount = 0;
   const provider = createFakeAmazonQProvider(() => {
