@@ -5,7 +5,7 @@ Use this file only for compact continuation context. Write it in English.
 ## Currently Verified
 
 - Branch: `chore/ck/253-diagram-presentation` in `C:\Jungle\SketchCatch`.
-- The branch has been updated with latest `origin/dev` through PR #263.
+- The branch has been updated with latest `origin/dev` through PR #264.
 - The SketchCatch reference diagram restore path returns the recovered fixed fixture for the exact selected-answer flow.
 - Focused reference-draft tests and the required PR gates pass after the merge-conflict cleanup.
 

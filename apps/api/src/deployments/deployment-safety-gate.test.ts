@@ -92,40 +92,41 @@ test("evaluateDeploymentSafetyGate preserves generic Trivy warning codes", () =>
 });
 
 test("evaluateDeploymentSafetyGate makes known demo web service warnings acknowledgement-only", () => {
+  const demoFindings = [
+    ["trivy:aws-0178:main.tf:aws_vpc.demo:20", "aws_vpc.demo", 20],
+    ["trivy:aws-0164:main.tf:aws_subnet.public_a:41", "aws_subnet.public_a", 41],
+    ["trivy:aws-0104:main.tf:aws_security_group.api:78", "aws_security_group.api", 78],
+    ["trivy:aws-0087:main.tf:aws_s3_bucket_public_access_block.site:110", "aws_s3_bucket_public_access_block.site", 110],
+    ["trivy:aws-0132:main.tf:aws_s3_bucket.site:98", "aws_s3_bucket.site", 98],
+    ["trivy:aws-0131:main.tf:aws_instance.api:151", "aws_instance.api", 151],
+    ["trivy:aws-0052:main.tf:aws_lb.demo:224", "aws_lb.demo", 224],
+    ["trivy:aws-0054:main.tf:aws_lb_listener.http:251", "aws_lb_listener.http", 251],
+    ["trivy:aws-9999:main.tf:aws_route_table.public:58", "aws_route_table.public", 58]
+  ] as const;
   const summary = evaluateDeploymentSafetyGate({
     operation: "apply",
     liveProfile: "demo_web_service",
     planSummary: createPlanSummary(),
-    findings: [
+    findings: demoFindings.map(([id, resourceAddress, line]) =>
       createFinding({
-        id: "trivy:aws-0087:main.tf:aws_s3_bucket_public_access_block.site:150",
+        id,
         severity: "high",
-        resourceId: "aws_s3_bucket_public_access_block.site",
+        resourceId: resourceAddress,
         sourceLocation: {
           fileName: "main.tf",
-          line: 150,
-          resourceAddress: "aws_s3_bucket_public_access_block.site"
-        }
-      }),
-      createFinding({
-        id: "trivy:aws-0164:main.tf:aws_subnet.public_a:41",
-        severity: "high",
-        resourceId: "aws_subnet.public_a",
-        sourceLocation: {
-          fileName: "main.tf",
-          line: 41,
-          resourceAddress: "aws_subnet.public_a"
+          line,
+          resourceAddress
         }
       })
-    ]
+    )
   });
 
-  assert.equal(summary.warnings.length, 2);
+  assert.equal(summary.warnings.length, demoFindings.length);
   assert.equal(summary.warnings.every((warning) => warning.requiresAcknowledgement), true);
   assert.equal(summary.warnings.every((warning) => !warning.blocksApproval), true);
 });
 
-test("evaluateDeploymentSafetyGate keeps non-demo high findings blocking in demo profile", () => {
+test("evaluateDeploymentSafetyGate keeps high findings outside managed demo Trivy resources blocking", () => {
   const summary = evaluateDeploymentSafetyGate({
     operation: "apply",
     liveProfile: "demo_web_service",
@@ -140,12 +141,24 @@ test("evaluateDeploymentSafetyGate keeps non-demo high findings blocking in demo
           line: 13,
           resourceAddress: "aws_security_group.open_ssh"
         }
+      }),
+      createFinding({
+        id: "manual:aws-instance-risk",
+        severity: "high",
+        resourceId: "aws_instance.api",
+        sourceLocation: {
+          fileName: "main.tf",
+          line: 151,
+          resourceAddress: "aws_instance.api"
+        }
       })
     ]
   });
 
   assert.equal(summary.warnings[0]?.requiresAcknowledgement, false);
   assert.equal(summary.warnings[0]?.blocksApproval, true);
+  assert.equal(summary.warnings[1]?.requiresAcknowledgement, false);
+  assert.equal(summary.warnings[1]?.blocksApproval, true);
 });
 
 test("evaluateDeploymentSafetyGate creates stable ids for unsupported resource warnings", () => {
