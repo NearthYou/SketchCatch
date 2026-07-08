@@ -2,6 +2,26 @@
 
 Short English-only working log for the current agent context.
 
+## 2026-07-08 Demo API Health Wait
+
+- Branch/worktree: `codex/demo-api-health-wait` in `C:\Users\siwon\.codex\worktrees\d98a\SketchCatch`.
+- Scope: stop the live demo smoke from failing immediately when the EC2 user-data API is not ready right after Terraform apply.
+- Added `api_public_ip_url` Terraform output as a fallback to the public DNS URL.
+- Added `Wait-ApiHealth` polling with the existing smoke timeout and interval.
+- Replaced the single `/api/health` request with a wait loop over DNS and public IP URLs.
+- Left unrelated untracked `pr-handoff-payload-flow-diagram.md` untouched.
+
+Verification:
+
+- `pnpm harness:check` - passed before edits.
+- PowerShell script parse check for `scripts/smoke/live-demo-web-service.ps1`
+- Confirmed no direct one-shot `Invoke-RestMethod ... /api/health` remains.
+- `git diff --check`
+- Generated smoke Terraform, then `terraform init -backend=false -input=false` and `terraform validate`
+- `pnpm lint`
+- `pnpm typecheck`
+- `pnpm build`
+
 ## 2026-07-08 Reference Diagram PR Preparation
 
 - Branch/worktree: `chore/ck/253-diagram-presentation` in `C:\Jungle\SketchCatch`.

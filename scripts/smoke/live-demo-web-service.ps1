@@ -756,6 +756,10 @@ output "api_base_url" {
   value = "http://`${aws_instance.api.public_dns}:8080"
 }
 
+output "api_public_ip_url" {
+  value = "http://`${aws_instance.api.public_ip}:8080"
+}
+
 output "api_instance_id" {
   value = aws_instance.api.id
 }
@@ -797,6 +801,43 @@ function Get-OutputValue {
   }
 
   [string]$output.value
+}
+
+function Wait-ApiHealth {
+  param(
+    [string[]]$BaseUrls
+  )
+
+  $deadline = (Get-Date).AddSeconds($PollTimeoutSeconds)
+  $lastError = $null
+
+  while ((Get-Date) -lt $deadline) {
+    foreach ($baseUrl in $BaseUrls) {
+      if (-not $baseUrl) {
+        continue
+      }
+
+      $healthUrl = "$($baseUrl.TrimEnd('/'))/api/health"
+
+      try {
+        $health = Invoke-RestMethod -Uri $healthUrl -TimeoutSec 10
+        if ($health.ok -eq $true) {
+          return @{
+            BaseUrl = $baseUrl
+            Health = $health
+          }
+        }
+
+        $lastError = "API health at $healthUrl returned ok=$($health.ok)"
+      } catch {
+        $lastError = $_.Exception.Message
+      }
+    }
+
+    Start-Sleep -Seconds $PollIntervalSeconds
+  }
+
+  throw "API health did not become ready before timeout. Last error: $lastError"
 }
 
 function Approve-DeploymentWarnings {
@@ -889,6 +930,7 @@ $outputsResponse = Invoke-SketchCatchApi -Method GET -Path "/deployments/$($depl
 $logsResponse = Invoke-SketchCatchApi -Method GET -Path "/deployments/$($deployment.id)/logs"
 $staticSiteUrl = Get-OutputValue -Outputs $outputsResponse.outputs -Name "static_site_url"
 $apiBaseUrl = Get-OutputValue -Outputs $outputsResponse.outputs -Name "api_base_url"
+$apiPublicIpUrl = Get-OutputValue -Outputs $outputsResponse.outputs -Name "api_public_ip_url"
 $apiInstanceId = Get-OutputValue -Outputs $outputsResponse.outputs -Name "api_instance_id"
 
 if (-not $staticSiteUrl) {
@@ -906,10 +948,8 @@ if ($siteResponse.StatusCode -lt 200 -or $siteResponse.StatusCode -ge 300) {
   throw "Static site returned HTTP $($siteResponse.StatusCode)."
 }
 
-$apiHealth = Invoke-RestMethod -Uri "$($apiBaseUrl.TrimEnd('/'))/api/health" -TimeoutSec 30
-if ($apiHealth.ok -ne $true) {
-  throw "API health did not return ok=true."
-}
+$apiHealthResult = Wait-ApiHealth -BaseUrls @($apiBaseUrl, $apiPublicIpUrl)
+$apiBaseUrl = [string]$apiHealthResult.BaseUrl
 
 $destroyStatus = "SKIPPED"
 if (-not $SkipDestroy) {
