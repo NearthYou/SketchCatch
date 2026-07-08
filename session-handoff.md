@@ -7,7 +7,7 @@ Use this file only for compact continuation context. Write it in English.
 - Branch: `chore/ck/253-diagram-presentation` in `C:\Jungle\SketchCatch`.
 - The branch has been updated with latest `origin/dev` through PR #263.
 - The SketchCatch reference diagram restore path returns the recovered fixed fixture for the exact selected-answer flow.
-- Earlier focused verification passed for `aiArchitectureDrafts.test.ts` and API typecheck; full PR gate checks still need to run after the merge-conflict cleanup commit.
+- Focused reference-draft tests and the required PR gates pass after the merge-conflict cleanup.
 
 ## Changes This Session
 
@@ -24,9 +24,12 @@ Use this file only for compact continuation context. Write it in English.
 ## Verification
 
 - `pnpm harness:check` passed before PR-prep edits.
-- `pnpm --filter @sketchcatch/api exec tsx --test src/services/aiArchitectureDrafts.test.ts` previously passed for the restore.
-- `pnpm --filter @sketchcatch/api typecheck` previously passed for the restore.
+- `pnpm --filter @sketchcatch/api exec tsx --test src/services/aiArchitectureDrafts.test.ts` passed, 23 tests.
+- `pnpm lint` passed.
+- `pnpm typecheck` passed.
+- `pnpm build` passed.
+- `pnpm harness:check` passed after PR-prep edits.
 
 ## Best Next Action
 
-- Run `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build`, then open and merge the PR into `dev` if the gates pass.
+- Run the final `pnpm harness:check`, then open and merge the PR into `dev`.

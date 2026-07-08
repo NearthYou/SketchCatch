@@ -2,6 +2,23 @@
 
 Short English-only working log for the current agent context.
 
+## 2026-07-08 Reference Diagram PR Preparation
+
+- Branch/worktree: `chore/ck/253-diagram-presentation` in `C:\Jungle\SketchCatch`.
+- Merged latest `origin/dev` through PR #263 into the branch before opening the follow-up PR.
+- Resolved the `agent-progress.md` merge conflict by preserving both the reference diagram restore record and the latest demo smoke records.
+- Rewrote the stale conflicted `session-handoff.md` into a concise current handoff.
+- Kept generated `apps/web/next-env.d.ts` route-type path changes out of the PR diff.
+
+Verification:
+
+- `pnpm harness:check` - passed before PR-prep edits.
+- `pnpm --filter @sketchcatch/api exec tsx --test src/services/aiArchitectureDrafts.test.ts` - passed, 23 tests.
+- `pnpm lint` - passed.
+- `pnpm typecheck` - passed.
+- `pnpm build` - passed.
+- `pnpm harness:check` - passed after PR-prep edits.
+
 ## 2026-07-08 SketchCatch Reference Diagram Restore
 
 - Branch/worktree: `chore/ck/253-diagram-presentation` in `C:\Jungle\SketchCatch`.
