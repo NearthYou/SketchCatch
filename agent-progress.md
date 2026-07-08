@@ -2,6 +2,14 @@
 
 Short English-only working log for the current agent context.
 
+## 2026-07-09 Dashboard Topbar Action Cleanup
+
+- Branch/worktree: current feature branch in `C:\krafton_jungle\SketchCatch`.
+- Scope: remove the global notification bell from dashboard pages and hide the global new-workspace action on Projects, Templates, Costs, and Settings.
+- Updated `DashboardShell` so the new-workspace action stays available on Home but is hidden on `/projects`, `/templates`, `/costs`, and `/settings`.
+- Removed the global topbar notification button from `DashboardShell`.
+- Added source-level regression coverage for the route gate and removed bell button.
+
 ## 2026-07-09 PR 268 Review Feedback
 
 - Branch/worktree: `fix/ck/267-ai-error-bug-fix` in `C:\Jungle\SketchCatch`.
@@ -14,6 +22,7 @@ Short English-only working log for the current agent context.
 Verification:
 
 - `pnpm harness:check` - passed before edits.
+- `pnpm --filter @sketchcatch/web exec tsx --test components/dashboard/dashboard-shell.test.ts` - passed, 2 tests.
 - `pnpm --filter @sketchcatch/api exec tsx --test src/services/aiProviderRouter.test.ts` - passed, 18 tests.
 - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts` - passed, 66 tests.
 - `pnpm lint` - passed.
@@ -47,6 +56,8 @@ Verification:
 
 Known risks:
 
+- In-app browser automation was unavailable in this session, so visual screenshot QA was not run.
+- The local DB/API/Web servers that were started for the user remain running.
 - Browser reproduction was not run in an authenticated workspace session; the confirmed non-IME boundary issue is covered by deterministic source/API tests.
 
 ## 2026-07-09 AI Chat Korean IME Submit Fix
