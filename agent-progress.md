@@ -2,6 +2,25 @@
 
 Short English-only working log for the current agent context.
 
+## 2026-07-08 Managed Demo Resource Trivy Acknowledgement
+
+- Branch/worktree: `codex/demo-ec2-public-warning-ack` in `C:\Users\siwon\.codex\worktrees\d98a\SketchCatch`.
+- Scope: stop one-by-one Trivy warning fixes for the managed S3+EC2 demo smoke.
+- Replaced individual demo warning code matching with an exact managed demo Terraform resource-address allowlist.
+- Demo-profile Trivy high findings for generated resources such as `aws_instance.api`, `aws_security_group.api`, `aws_subnet.public_a`, `aws_s3_bucket.site`, and legacy ALB/ASG demo resources now require acknowledgement instead of blocking approval.
+- Non-Trivy high findings and high findings outside the managed demo resource addresses still block approval.
+- Left unrelated untracked `pr-handoff-payload-flow-diagram.md` untouched.
+
+Verification:
+
+- `pnpm harness:check` - passed before edits.
+- `pnpm --filter @sketchcatch/api exec tsx --test src/deployments/deployment-safety-gate.test.ts src/deployments/terraform-artifact-safety.test.ts`
+- PowerShell script parse check for `scripts/smoke/live-demo-web-service.ps1`
+- `git diff --check`
+- `pnpm lint`
+- `pnpm typecheck`
+- `pnpm build`
+
 ## 2026-07-08 S3 And EC2 Demo Smoke Scope
 
 - Branch/worktree: `codex/demo-s3-ec2-smoke` in `C:\Users\siwon\.codex\worktrees\d98a\SketchCatch`.

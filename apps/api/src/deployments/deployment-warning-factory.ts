@@ -11,6 +11,30 @@ type CreatePreDeploymentCheckWarningOptions = {
   liveProfile?: DeploymentLiveProfile | undefined;
 };
 
+const demoProfileAcknowledgementResources = new Set([
+  "aws_autoscaling_group.api",
+  "aws_instance.api",
+  "aws_internet_gateway.demo",
+  "aws_launch_template.api",
+  "aws_lb.demo",
+  "aws_lb_listener.http",
+  "aws_lb_target_group.api",
+  "aws_route_table.public",
+  "aws_route_table_association.public_a",
+  "aws_route_table_association.public_c",
+  "aws_s3_bucket.site",
+  "aws_s3_bucket_policy.site",
+  "aws_s3_bucket_public_access_block.site",
+  "aws_s3_bucket_website_configuration.site",
+  "aws_s3_object.index",
+  "aws_s3_object.logo",
+  "aws_security_group.alb",
+  "aws_security_group.api",
+  "aws_subnet.public_a",
+  "aws_subnet.public_c",
+  "aws_vpc.demo"
+]);
+
 export function createPreDeploymentCheckWarning(
   finding: CheckFinding,
   options: CreatePreDeploymentCheckWarningOptions = {}
@@ -63,40 +87,10 @@ function isDemoProfileAcknowledgementFinding(
     ""
   ).toLowerCase();
 
-  if (
-    normalizedId.includes("aws-0052") ||
-    normalizedId.includes("aws-0053") ||
-    normalizedId.includes("aws-0054")
-  ) {
-    return normalizedResource === "aws_lb.demo" || normalizedResource === "aws_lb_listener.http";
-  }
-
-  if (normalizedId.includes("aws-0087") || normalizedId.includes("aws-0132")) {
-    return (
-      normalizedResource === "aws_s3_bucket.site" ||
-      normalizedResource === "aws_s3_bucket_public_access_block.site"
-    );
-  }
-
-  if (normalizedId.includes("aws-0104")) {
-    return (
-      normalizedResource === "aws_security_group.alb" ||
-      normalizedResource === "aws_security_group.api"
-    );
-  }
-
-  if (normalizedId.includes("aws-0130")) {
-    return normalizedResource === "aws_launch_template.api";
-  }
-
-  if (normalizedId.includes("aws-0164")) {
-    return (
-      normalizedResource === "aws_subnet.public_a" ||
-      normalizedResource === "aws_subnet.public_c"
-    );
-  }
-
-  return false;
+  return (
+    normalizedId.startsWith("trivy:") &&
+    demoProfileAcknowledgementResources.has(normalizedResource)
+  );
 }
 
 export function createUnsupportedResourceWarning(
