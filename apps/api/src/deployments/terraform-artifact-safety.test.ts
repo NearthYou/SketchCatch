@@ -259,17 +259,49 @@ test("assertTerraformArtifactIsSafe rejects local file functions inside interpol
   );
 });
 
-test("assertTerraformArtifactIsSafe rejects EC2 user_data before live deployment", () => {
+test("assertTerraformArtifactIsSafe rejects unmanaged EC2 user_data before live deployment", () => {
+  assert.throws(
+    () =>
+      assertTerraformArtifactIsSafe(
+        `
+          resource "aws_instance" "web" {
+            ami           = "ami-1234567890abcdef0"
+            instance_type = "t3.micro"
+            user_data     = "echo hello"
+          }
+        `,
+        { liveProfile: "demo_web_service" }
+      ),
+    /must be a literal managed base64 value/
+  );
+});
+
+test("assertTerraformArtifactIsSafe accepts managed demo EC2 user data for demo profile", () => {
+  assert.doesNotThrow(() =>
+    assertTerraformArtifactIsSafe(
+      `
+        resource "aws_instance" "api" {
+          ami              = "ami-1234567890abcdef0"
+          instance_type    = "t3.micro"
+          user_data_base64 = "${createManagedDemoUserDataBase64()}"
+        }
+      `,
+      { liveProfile: "demo_web_service" }
+    )
+  );
+});
+
+test("assertTerraformArtifactIsSafe rejects managed demo EC2 user data outside the demo profile", () => {
   assert.throws(
     () =>
       assertTerraformArtifactIsSafe(`
-        resource "aws_instance" "web" {
-          ami           = "ami-1234567890abcdef0"
-          instance_type = "t3.micro"
-          user_data     = "echo hello"
+        resource "aws_instance" "api" {
+          ami              = "ami-1234567890abcdef0"
+          instance_type    = "t3.micro"
+          user_data_base64 = "${createManagedDemoUserDataBase64()}"
         }
       `),
-    /EC2 user_data is not allowed/
+    /EC2 user_data_base64 is not allowed for practice/
   );
 });
 

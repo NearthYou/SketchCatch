@@ -352,22 +352,31 @@ function validateDeploymentResourceAttributes(
   for (const resource of extractResourceBlocks(source)) {
     const body = stripHclComments(resource.body);
 
-    if (resource.type === "aws_instance" && /\buser_data(?:_base64)?\s*=/.test(body)) {
-      throw new TerraformArtifactSafetyError(
-        `Terraform EC2 user_data is not allowed before live deployment at line ${resource.line}`
-      );
+    if (resource.type === "aws_instance" && /\buser_data\s*=/.test(body)) {
+      validateManagedDemoUserData(body, resource.line, liveProfile, "user_data", "EC2");
+    }
+
+    if (resource.type === "aws_instance" && /\buser_data_base64\s*=/.test(body)) {
+      validateManagedDemoUserData(body, resource.line, liveProfile, "user_data_base64", "EC2");
     }
 
     if (resource.type === "aws_launch_template" && /\buser_data\s*=/.test(body)) {
-      validateManagedLaunchTemplateUserData(body, resource.line, liveProfile, "user_data");
-    }
-
-    if (resource.type === "aws_launch_template" && /\buser_data_base64\s*=/.test(body)) {
-      validateManagedLaunchTemplateUserData(
+      validateManagedDemoUserData(
         body,
         resource.line,
         liveProfile,
-        "user_data_base64"
+        "user_data",
+        "launch template"
+      );
+    }
+
+    if (resource.type === "aws_launch_template" && /\buser_data_base64\s*=/.test(body)) {
+      validateManagedDemoUserData(
+        body,
+        resource.line,
+        liveProfile,
+        "user_data_base64",
+        "launch template"
       );
     }
 
@@ -395,15 +404,16 @@ function validateDeploymentResourceAttributes(
   }
 }
 
-function validateManagedLaunchTemplateUserData(
+function validateManagedDemoUserData(
   body: string,
   line: number,
   liveProfile: DeploymentLiveProfile,
-  argumentName: "user_data" | "user_data_base64"
+  argumentName: "user_data" | "user_data_base64",
+  resourceLabel: "EC2" | "launch template"
 ): void {
   if (liveProfile !== "demo_web_service" && liveProfile !== "demo_web_service_with_rds") {
     throw new TerraformArtifactSafetyError(
-      `Terraform launch template ${argumentName} is not allowed for ${liveProfile} live deployment at line ${line}`
+      `Terraform ${resourceLabel} ${argumentName} is not allowed for ${liveProfile} live deployment at line ${line}`
     );
   }
 
@@ -411,7 +421,7 @@ function validateManagedLaunchTemplateUserData(
 
   if (!match?.[1]) {
     throw new TerraformArtifactSafetyError(
-      `Terraform launch template ${argumentName} must be a literal managed base64 value before live deployment at line ${line}`
+      `Terraform ${resourceLabel} ${argumentName} must be a literal managed base64 value before live deployment at line ${line}`
     );
   }
 
@@ -419,7 +429,7 @@ function validateManagedLaunchTemplateUserData(
 
   if (!decoded.includes(managedDemoUserDataMarker)) {
     throw new TerraformArtifactSafetyError(
-      `Terraform launch template ${argumentName} is missing the SketchCatch managed marker at line ${line}`
+      `Terraform ${resourceLabel} ${argumentName} is missing the SketchCatch managed marker at line ${line}`
     );
   }
 
@@ -430,7 +440,7 @@ function validateManagedLaunchTemplateUserData(
 
   if (!hashMatch?.[1]) {
     throw new TerraformArtifactSafetyError(
-      `Terraform launch template ${argumentName} is missing the SketchCatch managed hash at line ${line}`
+      `Terraform ${resourceLabel} ${argumentName} is missing the SketchCatch managed hash at line ${line}`
     );
   }
 
@@ -439,7 +449,7 @@ function validateManagedLaunchTemplateUserData(
 
   if (hashMatch[1] !== actualHash) {
     throw new TerraformArtifactSafetyError(
-      `Terraform launch template ${argumentName} managed hash does not match at line ${line}`
+      `Terraform ${resourceLabel} ${argumentName} managed hash does not match at line ${line}`
     );
   }
 }

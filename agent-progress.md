@@ -2,6 +2,27 @@
 
 Short English-only working log for the current agent context.
 
+## 2026-07-08 S3 And EC2 Demo Smoke Scope
+
+- Branch/worktree: `codex/demo-s3-ec2-smoke` in `C:\Users\siwon\.codex\worktrees\d98a\SketchCatch`.
+- Scope: make the live demo smoke stop before ALB/ASG and deploy only S3 static website plus one EC2 API instance.
+- Reverted the abandoned IAM role permission expansion path and did not keep those changes.
+- Updated Terraform artifact safety so only managed SketchCatch demo user data is allowed on `aws_instance` in demo live profiles.
+- Changed `scripts/smoke/live-demo-web-service.ps1` to generate S3 website + EC2 API Terraform by default, with no ALB, ASG, launch template, target group, or listener.
+- The smoke now verifies `static_site_url`, `api_base_url`, and `api_instance_id`.
+- Left unrelated untracked `pr-handoff-payload-flow-diagram.md` untouched.
+
+Verification:
+
+- `pnpm harness:check` - passed before edits.
+- `pnpm --filter @sketchcatch/api exec tsx --test src/deployments/terraform-artifact-safety.test.ts src/deployments/deployment-safety-gate.test.ts`
+- PowerShell script parse check for `scripts/smoke/live-demo-web-service.ps1`
+- Generated smoke Terraform, then `terraform init -backend=false -input=false` and `terraform validate`
+- `git diff --check`
+- `pnpm lint`
+- `pnpm typecheck`
+- `pnpm build`
+
 ## 2026-07-08 Demo Web Service Approval Gate Fix
 
 - Branch/worktree: `codex/demo-safety-gate-ack` in `C:\Users\siwon\.codex\worktrees\d98a\SketchCatch`.
