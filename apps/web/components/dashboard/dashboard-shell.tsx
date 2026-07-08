@@ -32,6 +32,8 @@ export function DashboardShell({ children, projectSearchQuery = "" }: DashboardS
   const [projectSearchInput, setProjectSearchInput] = useState(projectSearchQuery);
   const isCheckingSession = status === "loading";
   const canSearchProjects = pathname === "/mypage" || pathname === "/projects";
+  const shouldShowCreateAction =
+    pathname !== "/projects" && pathname !== "/templates" && pathname !== "/costs" && pathname !== "/settings";
   const projectSearchPath = pathname === "/projects" ? "/projects" : "/mypage";
   const displayName = user?.nickname ?? user?.username ?? "사용자";
   const avatarText = displayName.slice(0, 1).toUpperCase();
@@ -148,13 +150,12 @@ export function DashboardShell({ children, projectSearchQuery = "" }: DashboardS
               </button>
             </form>
           ) : null}
-          <Link className="dashboardTopbarAction" href="/workspace/new">
-            <DashboardIcon name="plus" />
-            <span>새로 만들기</span>
-          </Link>
-          <button className="dashboardIconButton" title="알림" type="button">
-            <DashboardIcon name="bell" />
-          </button>
+          {shouldShowCreateAction ? (
+            <Link className="dashboardTopbarAction" href="/workspace/new">
+              <DashboardIcon name="plus" />
+              <span>새로 만들기</span>
+            </Link>
+          ) : null}
         </header>
 
         {errorMessage ? (
