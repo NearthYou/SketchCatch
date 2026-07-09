@@ -180,6 +180,7 @@ test("deleteProjectRecords removes Git/CI/CD handoffs before deleting referenced
   });
 
   const handoffDeleteIndex = fakeDb.operations.indexOf("delete:git_cicd_handoffs");
+  const deploymentDeleteIndex = fakeDb.operations.indexOf("delete:deployments");
   const assetDeleteIndex = fakeDb.operations.indexOf("delete:project_assets");
   const architectureDeleteIndex = fakeDb.operations.indexOf("delete:architectures");
 
@@ -189,6 +190,7 @@ test("deleteProjectRecords removes Git/CI/CD handoffs before deleting referenced
     "projects/project-id/artifacts/main.tf"
   ]);
   assert.notEqual(handoffDeleteIndex, -1);
+  assert(handoffDeleteIndex < deploymentDeleteIndex);
   assert(handoffDeleteIndex < assetDeleteIndex);
   assert(handoffDeleteIndex < architectureDeleteIndex);
 });

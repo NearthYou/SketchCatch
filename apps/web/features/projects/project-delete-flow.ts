@@ -27,7 +27,7 @@ export function getDestroyDeleteAcknowledgedWarningIds(
 ): string[] {
   return (
     deployment?.planSummary?.warnings
-      .filter((warning) => warning.requiresAcknowledgement && !warning.blocksApproval)
+      ?.filter((warning) => warning.requiresAcknowledgement && !warning.blocksApproval)
       .map((warning) => warning.id) ?? []
   );
 }

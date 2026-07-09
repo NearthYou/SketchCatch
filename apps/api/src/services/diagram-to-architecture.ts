@@ -65,7 +65,7 @@ function getConvertibleResourceNodeParameters(node: DiagramNode): DiagramNodePar
 
   return {
     fileName: "main",
-    resourceName: toTerraformName(node.label || node.id),
+    resourceName: createFallbackResourceName(node),
     resourceType,
     terraformBlockType: DEFAULT_TERRAFORM_BLOCK_TYPE,
     values: {}
@@ -166,4 +166,10 @@ function toTerraformName(value: string): string {
     .replace(/^_+|_+$/g, "");
 
   return normalized.length > 0 ? normalized : "resource";
+}
+
+function createFallbackResourceName(node: DiagramNode): string {
+  const labelName = toTerraformName(node.label);
+
+  return labelName === "resource" ? toTerraformName(node.id) : labelName;
 }

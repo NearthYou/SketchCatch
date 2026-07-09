@@ -21,6 +21,7 @@ Short English-only working log for the current agent context. Older records are 
 - Removed blocking local DB AWS connection/deployment records for user `herry612` at the user's request; this was metadata cleanup only and did not mutate AWS resources.
 - Improved AWS Role verification diagnostics so STS `AccessDenied` is reported as an AssumeRole permission problem instead of a generic connection-test failure.
 - Fixed AI board conversion so visible DiagramJson resource nodes without saved parameter values still count as architecture resources instead of making the AI chat behave like the board is empty.
+- Addressed PR #274 review feedback: guarded destroy warning acknowledgement when `warnings` is missing, made API fallback Terraform names use `node.id` when non-ASCII labels normalize to `resource`, and deleted Git/CI/CD handoffs before deployment rows.
 
 Verification:
 
@@ -33,6 +34,8 @@ Verification:
 - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-panel-state.test.ts` - failed before the unconfigured resource conversion fix, then passed.
 - `pnpm --filter @sketchcatch/api exec tsx --test src/services/diagram-to-architecture.test.ts` - passed after aligning API conversion behavior.
 - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-diagram-adapter.test.ts` - passed after the conversion change.
+- `pnpm --filter @sketchcatch/api exec tsx --test src/projects/project-deletion-service.test.ts src/services/diagram-to-architecture.test.ts` - passed after PR #274 review fixes.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/projects/project-delete-flow.test.ts` - passed after PR #274 review fixes.
 - `pnpm lint` - passed.
 - `pnpm typecheck` - passed.
 - `pnpm build` - passed.

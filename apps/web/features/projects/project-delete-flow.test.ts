@@ -144,6 +144,16 @@ test("destroy delete approval acknowledges non-blocking destroy warnings", () =>
 test("destroy delete approval has no warning acknowledgements without a plan summary", () => {
   assert.deepEqual(getDestroyDeleteAcknowledgedWarningIds(undefined), []);
   assert.deepEqual(getDestroyDeleteAcknowledgedWarningIds(createDeploymentWithWarnings([])), []);
+  assert.deepEqual(
+    getDestroyDeleteAcknowledgedWarningIds({
+      ...createDeploymentWithWarnings([]),
+      planSummary: {
+        ...createDeploymentWithWarnings([]).planSummary,
+        warnings: undefined
+      }
+    } as unknown as Deployment),
+    []
+  );
 });
 
 function readProjectFile(filePath: string): string {

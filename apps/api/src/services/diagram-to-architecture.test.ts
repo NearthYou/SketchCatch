@@ -204,6 +204,16 @@ test("infers missing parameters for resource nodes while skipping design, invali
         label: "missing"
       }),
       makeNode({
+        id: "node-hangul-web",
+        type: "aws_s3_bucket",
+        label: "정적사이트"
+      }),
+      makeNode({
+        id: "node-hangul-assets",
+        type: "aws_s3_bucket",
+        label: "업로드"
+      }),
+      makeNode({
         id: "null-parameters",
         type: "aws_instance",
         label: "null parameters",
@@ -246,7 +256,7 @@ test("infers missing parameters for resource nodes while skipping design, invali
 
   assert.deepEqual(
     architectureJson.nodes.map((node) => node.id),
-    ["vpc-1", "missing-parameters", "null-parameters"]
+    ["vpc-1", "missing-parameters", "node-hangul-web", "node-hangul-assets", "null-parameters"]
   );
   assert.deepEqual(architectureJson.nodes[1], {
     id: "missing-parameters",
@@ -259,6 +269,8 @@ test("infers missing parameters for resource nodes while skipping design, invali
       terraformResourceType: "aws_instance"
     }
   });
+  assert.equal(architectureJson.nodes[2]?.config.terraformResourceName, "node_hangul_web");
+  assert.equal(architectureJson.nodes[3]?.config.terraformResourceName, "node_hangul_assets");
   assert.deepEqual(architectureJson.edges, [
     {
       id: "valid-self-edge",
