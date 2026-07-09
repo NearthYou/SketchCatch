@@ -514,6 +514,12 @@ export function createArchitecturePatchPreview(
     return createNoResourceAdditionPreview(input, providerMetadata);
   }
 
+  const structuralPreview = createStructuralPatchPreview(input, providerMetadata);
+
+  if (structuralPreview !== undefined) {
+    return structuralPreview;
+  }
+
   const compoundChanges = createCompoundPatchChanges(input);
 
   if (compoundChanges !== undefined) {
@@ -604,6 +610,245 @@ function createNoResourceAdditionPreview(
     requiresUserAcceptance: true,
     userAcceptedChange: null,
     providerMetadata
+  };
+}
+
+function createStructuralPatchPreview(
+  input: CreateArchitecturePatchPreviewInput,
+  providerMetadata: AiProviderMetadata
+): ArchitecturePatchPreview | undefined {
+  const normalizedInstruction = normalizeSearchText(input.instruction);
+
+  if (!isServerlessMigrationInstruction(normalizedInstruction)) {
+    return undefined;
+  }
+
+  return createServerlessMigrationPreview(input, providerMetadata);
+}
+
+function isServerlessMigrationInstruction(normalizedInstruction: string): boolean {
+  return (
+    includesAnyPhrase(normalizedInstruction, [
+      "serverless",
+      "lambda",
+      "api gateway",
+      "서버리스",
+      "람다"
+    ]) &&
+    includesAnyPhrase(normalizedInstruction, [
+      "ec2",
+      "instance",
+      "server",
+      "runtime",
+      "environment",
+      "architecture",
+      "구조",
+      "환경"
+    ]) &&
+    includesAnyPhrase(normalizedInstruction, [
+      "convert",
+      "change",
+      "replace",
+      "migrate",
+      "전환",
+      "변경",
+      "수정",
+      "교체",
+      "바꿔"
+    ])
+  );
+}
+
+function createServerlessMigrationPreview(
+  input: CreateArchitecturePatchPreviewInput,
+  providerMetadata: AiProviderMetadata
+): ArchitecturePatchPreview | undefined {
+  const ec2Nodes = input.architectureJson.nodes.filter((node) => node.type === "EC2");
+
+  if (ec2Nodes.length === 0) {
+    return undefined;
+  }
+
+  const intent: ArchitecturePatchIntent = {
+    instruction: input.instruction,
+    requestedAction: "modify_resource",
+    resourceType: "EC2",
+    ...(input.selectedTargetResourceId ? { targetResourceId: input.selectedTargetResourceId } : {}),
+    ...(input.connectionTargetResourceId
+      ? { connectionTargetResourceId: input.connectionTargetResourceId }
+      : {}),
+    ...(input.skipConnection === true ? { skipConnection: true } : {})
+  };
+  const removedResourceIds = findServerlessMigrationRemovedResourceIds(input.architectureJson);
+  const dataTargetNodes = findRuntimeDataTargets(input.architectureJson, removedResourceIds);
+  const basePosition = getAverageNodePosition(ec2Nodes);
+  const filteredNodes = input.architectureJson.nodes
+    .filter((node) => !removedResourceIds.has(node.id))
+    .map((node) => ({ ...node, config: { ...node.config } }));
+  const changes: ArchitecturePatchPreviewChange[] = input.architectureJson.nodes
+    .filter((node) => removedResourceIds.has(node.id))
+    .map((node) => ({
+      action: "remove_resource",
+      resourceType: node.type,
+      resourceId: node.id,
+      summary: `${node.label ?? node.id} resource is removed from the EC2 runtime path.`
+    }));
+  let nextNodes = [...filteredNodes];
+  let apiGatewayNode = findBestNode(nextNodes, ["API_GATEWAY_REST_API"]);
+
+  if (apiGatewayNode === undefined) {
+    apiGatewayNode = createBundleNode("API_GATEWAY_REST_API", nextNodes, {
+      label: "API Gateway REST API",
+      positionX: basePosition.positionX - 180,
+      positionY: basePosition.positionY,
+      config: {
+        ...createNewResourceConfig("API_GATEWAY_REST_API", nextNodes, intent),
+        endpointType: "REGIONAL"
+      }
+    });
+    nextNodes.push(apiGatewayNode);
+    changes.push({
+      action: "add_resource",
+      resourceType: "API_GATEWAY_REST_API",
+      summary: "API Gateway REST API resource is added as the serverless traffic entry."
+    });
+  }
+
+  let lambdaNode = findBestNode(nextNodes, ["LAMBDA"]);
+
+  if (lambdaNode === undefined) {
+    lambdaNode = createBundleNode("LAMBDA", nextNodes, {
+      label: "Lambda Function",
+      positionX: basePosition.positionX + 40,
+      positionY: basePosition.positionY,
+      config: {
+        ...createNewResourceConfig("LAMBDA", nextNodes, intent),
+        ...createServerlessRuntimeConfig(intent)
+      }
+    });
+    nextNodes.push(lambdaNode);
+    changes.push({
+      action: "add_resource",
+      resourceType: "LAMBDA",
+      summary: "Lambda resource is added as the serverless runtime."
+    });
+  } else {
+    nextNodes = nextNodes.map((node) =>
+      node.id === lambdaNode?.id
+        ? {
+            ...node,
+            config: {
+              ...node.config,
+              ...createServerlessRuntimeConfig(intent)
+            }
+          }
+        : node
+    );
+    lambdaNode = nextNodes.find((node) => node.id === lambdaNode?.id) ?? lambdaNode;
+  }
+
+  let nextEdges = input.architectureJson.edges.filter(
+    (edge) => !removedResourceIds.has(edge.sourceId) && !removedResourceIds.has(edge.targetId)
+  );
+
+  if (input.skipConnection !== true) {
+    nextEdges = addSpecificConnectionEdge(nextEdges, apiGatewayNode, lambdaNode, "routes to Lambda");
+    nextEdges = dataTargetNodes.reduce(
+      (edges, targetNode) =>
+        addSpecificConnectionEdge(edges, lambdaNode, targetNode, createConnectionLabel(lambdaNode, targetNode)),
+      nextEdges
+    );
+  }
+
+  return {
+    status: "preview",
+    intent,
+    baseArchitectureJson: input.architectureJson,
+    proposedArchitectureJson: {
+      nodes: nextNodes,
+      edges: nextEdges
+    },
+    changes,
+    requiresUserAcceptance: true,
+    userAcceptedChange: null,
+    providerMetadata
+  };
+}
+
+const SERVERLESS_MIGRATION_REMOVED_RESOURCE_TYPES: ReadonlySet<ResourceType> = new Set([
+  "EC2",
+  "AMI",
+  "IAM_INSTANCE_PROFILE",
+  "LOAD_BALANCER",
+  "LOAD_BALANCER_LISTENER",
+  "LOAD_BALANCER_TARGET_GROUP",
+  "LOAD_BALANCER_TARGET_GROUP_ATTACHMENT",
+  "AUTO_SCALING_GROUP",
+  "LAUNCH_TEMPLATE"
+]);
+
+const RUNTIME_DATA_RESOURCE_TYPES: ReadonlySet<ResourceType> = new Set([
+  "S3",
+  "RDS",
+  "RDS_CLUSTER",
+  "DYNAMODB_TABLE",
+  "ELASTICACHE_REDIS",
+  "SECRETS_MANAGER_SECRET",
+  "CLOUDWATCH_LOG_GROUP",
+  "KMS_KEY"
+]);
+
+function findServerlessMigrationRemovedResourceIds(
+  architectureJson: ArchitectureJson
+): ReadonlySet<string> {
+  return new Set(
+    architectureJson.nodes
+      .filter((node) => SERVERLESS_MIGRATION_REMOVED_RESOURCE_TYPES.has(node.type))
+      .map((node) => node.id)
+  );
+}
+
+function findRuntimeDataTargets(
+  architectureJson: ArchitectureJson,
+  removedResourceIds: ReadonlySet<string>
+): ResourceNode[] {
+  const dataNodeIds = new Set(
+    architectureJson.edges
+      .filter(
+        (edge) =>
+          removedResourceIds.has(edge.sourceId) !== removedResourceIds.has(edge.targetId)
+      )
+      .flatMap((edge) => [edge.sourceId, edge.targetId])
+      .filter((resourceId) => !removedResourceIds.has(resourceId))
+  );
+
+  return architectureJson.nodes.filter(
+    (node) => dataNodeIds.has(node.id) && RUNTIME_DATA_RESOURCE_TYPES.has(node.type)
+  );
+}
+
+function getAverageNodePosition(
+  nodes: readonly ResourceNode[]
+): Pick<ResourceNode, "positionX" | "positionY"> {
+  if (nodes.length === 0) {
+    return {
+      positionX: 240,
+      positionY: 180
+    };
+  }
+
+  return {
+    positionX: Math.round(nodes.reduce((total, node) => total + node.positionX, 0) / nodes.length),
+    positionY: Math.round(nodes.reduce((total, node) => total + node.positionY, 0) / nodes.length)
+  };
+}
+
+function createServerlessRuntimeConfig(intent: ArchitecturePatchIntent): Record<string, unknown> {
+  return {
+    runtime: "nodejs20.x",
+    handler: "index.handler",
+    memorySize: findMemorySize(normalizeSearchText(intent.instruction)) ?? 256,
+    timeout: findTimeoutSeconds(normalizeSearchText(intent.instruction)) ?? 30
   };
 }
 
@@ -1934,7 +2179,7 @@ function modifyResource(
             ...node,
             config: {
               ...node.config,
-              ...createModificationConfig(intent)
+              ...createModificationConfig(intent, node)
             }
           }
         : node
@@ -1943,14 +2188,131 @@ function modifyResource(
   };
 }
 
-function createModificationConfig(intent: ArchitecturePatchIntent): Record<string, unknown> {
+function createModificationConfig(
+  intent: ArchitecturePatchIntent,
+  targetNode: ResourceNode
+): Record<string, unknown> {
   const normalizedInstruction = normalizeSearchText(intent.instruction);
-  const instanceType = findEc2InstanceType(normalizedInstruction);
+  const resourceType = intent.resourceType ?? targetNode.type;
+  const updates: Record<string, unknown> = {};
 
-  if (intent.resourceType === "EC2" && instanceType) {
-    return {
-      instanceType
-    };
+  if (resourceType === "EC2") {
+    const instanceType = findEc2InstanceType(normalizedInstruction);
+
+    if (instanceType) {
+      updates.instanceType = instanceType;
+    }
+  }
+
+  if (resourceType === "LAMBDA") {
+    const memorySize = findMemorySize(normalizedInstruction);
+    const timeout = findTimeoutSeconds(normalizedInstruction);
+    const runtime = findLambdaRuntime(normalizedInstruction);
+
+    if (memorySize !== undefined) {
+      updates.memorySize = memorySize;
+    }
+
+    if (timeout !== undefined) {
+      updates.timeout = timeout;
+    }
+
+    if (runtime !== undefined) {
+      updates.runtime = runtime;
+    }
+  }
+
+  if (resourceType === "RDS" || resourceType === "RDS_CLUSTER") {
+    const instanceClass = findRdsInstanceClass(normalizedInstruction);
+    const allocatedStorage = findStorageGb(normalizedInstruction);
+    const engine = findDatabaseEngine(normalizedInstruction);
+
+    if (instanceClass !== undefined) {
+      updates.instanceClass = instanceClass;
+    }
+
+    if (allocatedStorage !== undefined) {
+      updates.allocatedStorage = allocatedStorage;
+    }
+
+    if (engine !== undefined) {
+      updates.engine = engine;
+    }
+  }
+
+  if (resourceType === "S3") {
+    const versioning = findBooleanPreference(normalizedInstruction, [
+      "versioning",
+      "bucket version",
+      "버전 관리",
+      "버저닝"
+    ]);
+
+    if (versioning !== undefined) {
+      updates.versioning = versioning;
+    }
+  }
+
+  if (resourceType === "SECURITY_GROUP") {
+    const port = findPort(normalizedInstruction);
+
+    if (port !== undefined) {
+      updates.ingress = upsertIngressPort(targetNode.config.ingress, port);
+    }
+  }
+
+  if (resourceType === "LOAD_BALANCER") {
+    const internalPreference = findBooleanPreference(normalizedInstruction, [
+      "internal",
+      "private",
+      "내부",
+      "프라이빗"
+    ]);
+    const publicPreference = findBooleanPreference(normalizedInstruction, [
+      "internet-facing",
+      "public",
+      "외부",
+      "퍼블릭"
+    ]);
+
+    if (internalPreference !== undefined) {
+      updates.internal = internalPreference;
+    } else if (publicPreference !== undefined) {
+      updates.internal = !publicPreference;
+    }
+  }
+
+  if (resourceType === "AUTO_SCALING_GROUP") {
+    const desiredCapacity = findCapacityValue(normalizedInstruction, [
+      "desired",
+      "desired capacity"
+    ]);
+    const minSize = findCapacityValue(normalizedInstruction, ["min", "minimum"]);
+    const maxSize = findCapacityValue(normalizedInstruction, ["max", "maximum"]);
+
+    if (desiredCapacity !== undefined) {
+      updates.desiredCapacity = desiredCapacity;
+    }
+
+    if (minSize !== undefined) {
+      updates.minSize = minSize;
+    }
+
+    if (maxSize !== undefined) {
+      updates.maxSize = maxSize;
+    }
+  }
+
+  if (resourceType === "CODEBUILD_PROJECT") {
+    const timeoutInMinutes = findTimeoutMinutes(normalizedInstruction);
+
+    if (timeoutInMinutes !== undefined) {
+      updates.timeoutInMinutes = timeoutInMinutes;
+    }
+  }
+
+  if (Object.keys(updates).length > 0) {
+    return updates;
   }
 
   return {
@@ -1964,6 +2326,199 @@ function findEc2InstanceType(normalizedInstruction: string): string | undefined 
       /\b(?:instance\s*type|instancetype|type|인스턴스\s*타입|타입)\s*(?:to|=|:|을|를|은|는)?\s*((?:[a-z][0-9][a-z]?\.[a-z0-9]+))/i
     )?.[1] ?? normalizedInstruction.match(/\b(?:[a-z][0-9][a-z]?\.[a-z0-9]+)\b/i)?.[0]
   );
+}
+
+function findMemorySize(normalizedInstruction: string): number | undefined {
+  return parsePositiveInteger(
+    normalizedInstruction.match(/\bmemory\b.*?\b(\d{2,5})\s*(?:mb|mib)?\b/i)?.[1] ??
+      normalizedInstruction.match(/\b(\d{2,5})\s*(?:mb|mib)\b.*?\bmemory\b/i)?.[1] ??
+      normalizedInstruction.match(/(?:메모리|memorysize).*?(\d{2,5})/iu)?.[1]
+  );
+}
+
+function findTimeoutSeconds(normalizedInstruction: string): number | undefined {
+  const seconds = parsePositiveInteger(
+    normalizedInstruction.match(/\btimeout\b.*?\b(\d{1,4})\s*(?:seconds?|secs?|s)\b/i)?.[1] ??
+      normalizedInstruction.match(/\b(\d{1,4})\s*(?:seconds?|secs?|s)\b.*?\btimeout\b/i)?.[1] ??
+      normalizedInstruction.match(/(?:타임아웃|timeout).*?(\d{1,4})\s*초/iu)?.[1]
+  );
+
+  if (seconds !== undefined) {
+    return seconds;
+  }
+
+  const minutes = parsePositiveInteger(
+    normalizedInstruction.match(/\btimeout\b.*?\b(\d{1,3})\s*(?:minutes?|mins?)\b/i)?.[1] ??
+      normalizedInstruction.match(/(?:타임아웃|timeout).*?(\d{1,3})\s*분/iu)?.[1]
+  );
+
+  return minutes === undefined ? undefined : minutes * 60;
+}
+
+function findTimeoutMinutes(normalizedInstruction: string): number | undefined {
+  return parsePositiveInteger(
+    normalizedInstruction.match(/\btimeout\b.*?\b(\d{1,3})\s*(?:minutes?|mins?)?\b/i)?.[1] ??
+      normalizedInstruction.match(/(?:타임아웃|timeout).*?(\d{1,3})\s*분?/iu)?.[1]
+  );
+}
+
+function findLambdaRuntime(normalizedInstruction: string): string | undefined {
+  if (includesAnyPhrase(normalizedInstruction, ["nodejs20", "node.js 20", "node 20"])) {
+    return "nodejs20.x";
+  }
+
+  if (includesAnyPhrase(normalizedInstruction, ["nodejs18", "node.js 18", "node 18"])) {
+    return "nodejs18.x";
+  }
+
+  if (includesAnyPhrase(normalizedInstruction, ["python 3.12", "python3.12"])) {
+    return "python3.12";
+  }
+
+  if (includesAnyPhrase(normalizedInstruction, ["python 3.11", "python3.11"])) {
+    return "python3.11";
+  }
+
+  return undefined;
+}
+
+function findRdsInstanceClass(normalizedInstruction: string): string | undefined {
+  return normalizedInstruction.match(/\bdb\.[a-z0-9]+(?:\.[a-z0-9]+)+\b/i)?.[0];
+}
+
+function findStorageGb(normalizedInstruction: string): number | undefined {
+  return parsePositiveInteger(
+    normalizedInstruction.match(/\bstorage\b.*?\b(\d{1,5})\s*(?:gb|gib)\b/i)?.[1] ??
+      normalizedInstruction.match(/\b(\d{1,5})\s*(?:gb|gib)\b.*?\bstorage\b/i)?.[1] ??
+      normalizedInstruction.match(/(?:스토리지|저장공간).*?(\d{1,5})\s*gb/iu)?.[1]
+  );
+}
+
+function findDatabaseEngine(normalizedInstruction: string): string | undefined {
+  if (includesAnyPhrase(normalizedInstruction, ["postgresql", "postgres"])) {
+    return "postgres";
+  }
+
+  if (includesAnyPhrase(normalizedInstruction, ["mysql"])) {
+    return "mysql";
+  }
+
+  if (includesAnyPhrase(normalizedInstruction, ["mariadb", "maria db"])) {
+    return "mariadb";
+  }
+
+  return undefined;
+}
+
+function findBooleanPreference(
+  normalizedInstruction: string,
+  subjectPhrases: readonly string[]
+): boolean | undefined {
+  if (!includesAnyPhrase(normalizedInstruction, subjectPhrases)) {
+    return undefined;
+  }
+
+  if (
+    includesAnyPhrase(normalizedInstruction, [
+      "disable",
+      "off",
+      "false",
+      "remove",
+      "without",
+      "끄",
+      "비활성",
+      "없"
+    ])
+  ) {
+    return false;
+  }
+
+  if (
+    includesAnyPhrase(normalizedInstruction, [
+      "enable",
+      "on",
+      "true",
+      "use",
+      "allow",
+      "open",
+      "켜",
+      "활성",
+      "사용",
+      "허용"
+    ])
+  ) {
+    return true;
+  }
+
+  return undefined;
+}
+
+function findPort(normalizedInstruction: string): number | undefined {
+  const port = parsePositiveInteger(
+    normalizedInstruction.match(/\bport\b.*?\b(\d{1,5})\b/i)?.[1] ??
+      normalizedInstruction.match(/\b(\d{1,5})\s*(?:port|포트)\b/iu)?.[1] ??
+      normalizedInstruction.match(/(?:포트|port).*?(\d{1,5})/iu)?.[1]
+  );
+
+  return port !== undefined && port > 0 && port <= 65535 ? port : undefined;
+}
+
+function upsertIngressPort(currentIngress: unknown, port: number): unknown[] {
+  const currentRules = Array.isArray(currentIngress) ? currentIngress : [];
+
+  if (
+    currentRules.some(
+      (rule) =>
+        typeof rule === "object" &&
+        rule !== null &&
+        "port" in rule &&
+        Number((rule as { readonly port?: unknown }).port) === port
+    )
+  ) {
+    return currentRules;
+  }
+
+  return [
+    ...currentRules,
+    {
+      protocol: "tcp",
+      port,
+      cidr: "0.0.0.0/0"
+    }
+  ];
+}
+
+function findCapacityValue(
+  normalizedInstruction: string,
+  labels: readonly string[]
+): number | undefined {
+  for (const label of labels) {
+    const value = parsePositiveInteger(
+      normalizedInstruction.match(
+        new RegExp(`\\b${escapeRegExp(label)}\\b.*?\\b(\\d{1,3})\\b`, "i")
+      )?.[1]
+    );
+
+    if (value !== undefined) {
+      return value;
+    }
+  }
+
+  return undefined;
+}
+
+function parsePositiveInteger(value: string | undefined): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function getNewResourcePosition(

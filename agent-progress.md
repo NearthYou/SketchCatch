@@ -5,17 +5,33 @@ Short English-only working log for the current agent context. Older records are 
 ## Current Verified State
 
 - Branch: `feat/ck/287-ai-diagram`.
-- Current scope: make AI architecture drafts and patch previews use the shared left-panel Terraform resource catalog as selectable generation material.
+- Current scope: make AI architecture drafts and patch previews use the shared left-panel Terraform resource catalog as selectable generation and modification material.
 - The shared catalog now has ResourceType values for formerly UNKNOWN panel resources including caller identity, SSM Parameter, CodeBuild, CodeDeploy, CodePipeline, and CodeStar connection.
 - The AI draft prompt, top-level payload, and referenceKnowledge payload now receive the same generated resource catalog.
 - Generated CI/CD resources now carry deploy-ready default config guidance and pass Terraform Preview, diagnostics, and live apply safety support checks.
 - Amazon Q preview self-validation now rejects missing explicitly requested resource-panel types and undersized EC2 fleets before accepting a draft.
 - Amazon Q preview self-validation now also rejects no-upload violations, disconnected ALB/ASG/EC2 runtime paths, EC2 fleets not distributed across requested private subnets, and EC2 fleets visually grouped into one private subnet box.
 - Architecture Drafts now always send a deterministic normalized requirement plan to Amazon Q, and can merge in OpenAI Requirement Normalizer output when the normalizer is enabled; Amazon Q remains the diagram generator and deterministic validation remains the acceptance gate.
+- AI patch previews now apply deployable config changes for supported parameters and can migrate an EC2 runtime path to API Gateway plus Lambda serverless topology.
 - Targeted API tests plus full lint/typecheck/build passed during this session.
 - No Terraform apply/destroy, deployment, AWS calls, or cloud mutation was run.
 
 ## Session Record
+
+### 2026-07-10 - AI patch preview deployable modification support
+
+- Goal: Ensure AI architecture modification can do more than insert resources: deployable parameter edits and large topology changes should be previewed before user acceptance.
+- Completed:
+  - Added a structural patch preview path for EC2 runtime to serverless migration that removes EC2 runtime support resources, adds API Gateway and Lambda, and reconnects preserved data dependencies.
+  - Extended modify-resource config extraction for Lambda memory/timeout/runtime, RDS class/storage/engine, S3 versioning, Security Group ports, Load Balancer public/private mode, Auto Scaling Group capacity, and CodeBuild timeout.
+  - Kept broad add-resource behavior catalog-backed while narrowing serverless migration detection so simple S3-to-Lambda replacement requests are not misread as full runtime migration.
+  - Added regression tests for deployable Lambda parameter edits, S3/security group parameter edits, and EC2-to-serverless topology migration.
+- Verification:
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/aiArchitecturePatchPreview.test.ts` passed.
+  - Korean smoke check for `EC2 환경인데 서버리스로 수정하고 싶어` returned a preview with EC2 removal plus API Gateway/Lambda additions.
+  - `pnpm typecheck`, `pnpm lint`, `pnpm build`, and `pnpm harness:check` passed.
+- Risk:
+  - This only changes architecture patch preview behavior before user acceptance. No Terraform apply/destroy, deployment, AWS calls, or cloud mutation was run.
 
 ### 2026-07-10 - Deterministic normalized requirements for all AI drafts
 

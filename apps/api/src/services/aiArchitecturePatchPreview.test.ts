@@ -889,6 +889,139 @@ test("createArchitecturePatchPreview updates requested resource attributes witho
   });
 });
 
+test("createArchitecturePatchPreview updates Lambda runtime parameters as deployable config", () => {
+  const response = createArchitecturePatchPreview({
+    architectureJson: {
+      nodes: [
+        makeNode({
+          id: "worker",
+          type: "LAMBDA",
+          label: "Worker Lambda",
+          config: {
+            memorySize: 128,
+            timeout: 10,
+            runtime: "nodejs18.x"
+          }
+        })
+      ],
+      edges: []
+    },
+    instruction: "change Lambda timeout to 30 seconds and memory to 512 MB"
+  });
+
+  assert.equal(response.status, "preview");
+  assert.equal(response.changes[0]?.action, "modify_resource");
+  assert.equal(response.changes[0]?.resourceId, "worker");
+  assert.deepEqual(response.proposedArchitectureJson.nodes[0]?.config, {
+    memorySize: 512,
+    timeout: 30,
+    runtime: "nodejs18.x"
+  });
+});
+
+test("createArchitecturePatchPreview updates storage and network parameters as deployable config", () => {
+  const s3Response = createArchitecturePatchPreview({
+    architectureJson: {
+      nodes: [
+        makeNode({
+          id: "assets",
+          type: "S3",
+          label: "Assets Bucket",
+          config: {
+            versioning: false
+          }
+        })
+      ],
+      edges: []
+    },
+    instruction: "enable versioning on the S3 bucket"
+  });
+
+  assert.equal(s3Response.status, "preview");
+  assert.equal(s3Response.proposedArchitectureJson.nodes[0]?.config.versioning, true);
+
+  const securityGroupResponse = createArchitecturePatchPreview({
+    architectureJson: {
+      nodes: [
+        makeNode({
+          id: "web-sg",
+          type: "SECURITY_GROUP",
+          label: "Web Security Group",
+          config: {
+            ingress: [{ protocol: "tcp", port: 80, cidr: "0.0.0.0/0" }]
+          }
+        })
+      ],
+      edges: []
+    },
+    instruction: "open port 443 on the security group"
+  });
+
+  assert.equal(securityGroupResponse.status, "preview");
+  assert.deepEqual(securityGroupResponse.proposedArchitectureJson.nodes[0]?.config.ingress, [
+    { protocol: "tcp", port: 80, cidr: "0.0.0.0/0" },
+    { protocol: "tcp", port: 443, cidr: "0.0.0.0/0" }
+  ]);
+});
+
+test("createArchitecturePatchPreview migrates an EC2 runtime path to serverless", () => {
+  const response = createArchitecturePatchPreview({
+    architectureJson: {
+      nodes: [
+        makeNode({ id: "alb", type: "LOAD_BALANCER", label: "Application Load Balancer" }),
+        makeNode({ id: "asg", type: "AUTO_SCALING_GROUP", label: "Auto Scaling Group" }),
+        makeNode({ id: "ami", type: "AMI", label: "Amazon Linux AMI" }),
+        makeNode({ id: "app-server", type: "EC2", label: "App Server", positionX: 320 }),
+        makeNode({ id: "db", type: "RDS", label: "App Database" }),
+        makeNode({ id: "assets", type: "S3", label: "Assets Bucket" })
+      ],
+      edges: [
+        { id: "alb-to-app", sourceId: "alb", targetId: "app-server", label: "routes traffic" },
+        { id: "asg-to-app", sourceId: "asg", targetId: "app-server", label: "scales" },
+        { id: "ami-to-app", sourceId: "ami", targetId: "app-server", label: "launch image" },
+        { id: "app-to-db", sourceId: "app-server", targetId: "db", label: "uses database" },
+        { id: "app-to-assets", sourceId: "app-server", targetId: "assets", label: "uses bucket" }
+      ]
+    },
+    instruction: "convert the EC2 environment to serverless with API Gateway and Lambda"
+  });
+
+  assert.equal(response.status, "preview");
+
+  const nodeTypes = response.proposedArchitectureJson.nodes.map((node) => node.type);
+  assert.equal(nodeTypes.includes("EC2"), false);
+  assert.equal(nodeTypes.includes("LOAD_BALANCER"), false);
+  assert.equal(nodeTypes.includes("AUTO_SCALING_GROUP"), false);
+  assert.equal(nodeTypes.includes("AMI"), false);
+  assert.equal(nodeTypes.includes("API_GATEWAY_REST_API"), true);
+  assert.equal(nodeTypes.includes("LAMBDA"), true);
+
+  const lambdaNode = response.proposedArchitectureJson.nodes.find((node) => node.type === "LAMBDA");
+  const apiNode = response.proposedArchitectureJson.nodes.find(
+    (node) => node.type === "API_GATEWAY_REST_API"
+  );
+  assert.ok(lambdaNode);
+  assert.ok(apiNode);
+  assert.equal(
+    response.proposedArchitectureJson.edges.some(
+      (edge) => edge.sourceId === apiNode.id && edge.targetId === lambdaNode.id
+    ),
+    true
+  );
+  assert.equal(
+    response.proposedArchitectureJson.edges.some(
+      (edge) => edge.sourceId === lambdaNode.id && edge.targetId === "db"
+    ),
+    true
+  );
+  assert.equal(
+    response.proposedArchitectureJson.edges.some(
+      (edge) => edge.sourceId === lambdaNode.id && edge.targetId === "assets"
+    ),
+    true
+  );
+});
+
 function makeNode(
   node: Partial<ArchitectureJson["nodes"][number]> &
     Pick<ArchitectureJson["nodes"][number], "id" | "type">
