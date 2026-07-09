@@ -25,6 +25,7 @@ Short English-only working log for the current agent context. Older records are 
 - Ran a local live S3 direct deployment smoke through the SketchCatch service API for the `test` user. Created project `48e9627e-732f-4574-8f98-4448f007da93`, uploaded a Terraform S3 artifact, created deployment `aa003d86-633b-4ec6-88ac-0441a0b67730`, approved the plan, and applied it successfully. Destroy was intentionally not run at the user's request.
 - Fixed the cost usage page so selecting a project no longer reloads `/costs/usage` with a project-scoped query. The page now keeps the full account response for total cost and project options, then scopes daily trend, services, resources, waste, and recommendations locally for the selected project.
 - Ran a second local live S3 direct deployment smoke to verify cost-usage project separation. Created project `8f1794b7-05bd-4c26-b0ff-b44a86b7347b`, uploaded a tagged Terraform S3 artifact, created deployment `c3282642-bb9a-40de-89f8-5fc1c5affc70`, acknowledged 2 non-blocking plan warnings, and applied it successfully. Destroy was intentionally not run at the user's request.
+- Cleaned up the two live S3 smoke deployments after the user approved destroy. Deployment `aa003d86-633b-4ec6-88ac-0441a0b67730` and deployment `c3282642-bb9a-40de-89f8-5fc1c5affc70` both reached `DESTROYED`.
 
 Verification:
 
@@ -54,9 +55,10 @@ Verification:
 - AWS read-only verification with the stored connection role - `head-bucket` passed for `sketchcatch-smoke-sketchcatchtest-ap-northeast-2-db1076b6`, and all four S3 Public Access Block flags were `true`.
 - SketchCatch deployment `c3282642-bb9a-40de-89f8-5fc1c5affc70` - service status `SUCCESS`, deployed `aws_s3_bucket.site` and `aws_s3_bucket_public_access_block.site`, and exposed `bucket_arn` plus `bucket_name` outputs.
 - Cost usage API verification after deployment `c3282642-bb9a-40de-89f8-5fc1c5affc70` - full `/costs/usage` returned `dataSource=aws_cost_explorer`, `fallbackUsed=false`, 3 project rows, 4 resource rows, and 2 resources for project `8f1794b7-05bd-4c26-b0ff-b44a86b7347b`; project-scoped query returned 1 project row and 2 resource rows for that project.
+- SketchCatch destroy verification - deployments `aa003d86-633b-4ec6-88ac-0441a0b67730` and `c3282642-bb9a-40de-89f8-5fc1c5affc70` both completed destroy with 0 warnings and 0 deployed resources remaining in the service response.
+- AWS read-only cleanup verification - `HeadBucket` returned HTTP 404 for `sketchcatch-smoke-sketchcatchtest-ap-northeast-2-db1076b6` and `sketchcatch-smoke-sketchcatchtest-ap-northeast-2-cc80e26d`.
 
 Known risks:
 
-- A real AWS S3 bucket remains live because the user explicitly asked not to run destroy: `sketchcatch-smoke-sketchcatchtest-ap-northeast-2-db1076b6`.
-- A second real AWS S3 bucket remains live because the user explicitly asked not to run destroy: `sketchcatch-smoke-sketchcatchtest-ap-northeast-2-cc80e26d`.
+- No live S3 smoke buckets are known to remain from deployments `aa003d86-633b-4ec6-88ac-0441a0b67730` or `c3282642-bb9a-40de-89f8-5fc1c5affc70`; both were destroyed and verified with S3 `HeadBucket` 404.
 - The earlier smoke project `2a7a30a3-21a3-4bd4-9861-38952fee1dc9` reached plan only and was not applied because blocking S3 safety warnings prevented approval.
