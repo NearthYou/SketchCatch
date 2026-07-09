@@ -27,8 +27,11 @@ import type { NodeResizeHandlePosition, NodeResizeUpdate } from "./node-resize";
 import {
   RESOURCE_NODE_BORDER_COLOR,
   canChangeNodeBorderColor,
-  getNodeDisplayBorderColor
+  getNodeDisplayBorderColor,
+  getNodeDisplayBorderStyle
 } from "./node-style";
+import { getResourceNodeIconFrameSize } from "./resource-node-icon-size";
+import { getResourceNodeLabelStyle } from "./resource-node-label-style";
 import type { DiagramFlowNode } from "./types";
 import styles from "./diagram-editor.module.css";
 
@@ -45,6 +48,8 @@ const AREA_NODE_HIT_EDGES = [
   styles.areaNodeHitEdgeBottom,
   styles.areaNodeHitEdgeLeft
 ] as const;
+
+const DEFAULT_RESOURCE_NODE_ICON_FRAME_SIZE = getResourceNodeIconFrameSize({ height: 56, width: 56 });
 
 const RESIZE_HANDLES: readonly {
   className: string;
@@ -84,10 +89,18 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
   const usesIconTileLayout = isResourceNode || (node.kind === "design" && !isArea && Boolean(node.iconUrl));
   const canChangeBorderColor = canChangeNodeBorderColor(node);
   const borderColor = getNodeDisplayBorderColor(node);
+  const borderStyle = getNodeDisplayBorderStyle(node);
   const textColor = node.style?.textColor ?? "#172033";
   const isDataNode = node.parameters?.terraformBlockType === "data";
   const resizeBounds = getNodeResizeBounds(node);
-  const nodeShellStyle = getNodeShellStyle(isArea, usesIconTileLayout, borderColor);
+  const resourceNodeIconFrameSize = usesIconTileLayout ? getResourceNodeIconFrameSize(node.size) : undefined;
+  const nodeShellStyle = getNodeShellStyle(
+    isArea,
+    usesIconTileLayout,
+    borderColor,
+    borderStyle,
+    resourceNodeIconFrameSize
+  );
   const areaNodeIconUrl = isArea ? getAreaNodeIconUrl(node) : undefined;
   const areaNodeLabel = isArea ? getAreaNodeLabel(node) : "";
   const areaNodeMetaLabel = isArea ? getAreaNodeMetaLabel(node) : undefined;
@@ -331,13 +344,22 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
   );
 }
 
-function getNodeShellStyle(isArea: boolean, usesIconTileLayout: boolean, borderColor: string): CSSProperties {
+function getNodeShellStyle(
+  isArea: boolean,
+  usesIconTileLayout: boolean,
+  borderColor: string,
+  borderStyle: string,
+  resourceNodeIconFrameSize: number | undefined
+): CSSProperties {
   if (isArea) {
-    return { "--node-border-color": borderColor } as CSSProperties;
+    return { "--node-border-color": borderColor, "--area-border-style": borderStyle } as CSSProperties;
   }
 
   if (usesIconTileLayout) {
-    return { "--resource-node-border-color": RESOURCE_NODE_BORDER_COLOR } as CSSProperties;
+    return {
+      "--resource-node-border-color": RESOURCE_NODE_BORDER_COLOR,
+      "--resource-node-icon-frame-size": `${resourceNodeIconFrameSize ?? DEFAULT_RESOURCE_NODE_ICON_FRAME_SIZE}px`
+    } as CSSProperties;
   }
 
   return { borderColor };
@@ -353,17 +375,6 @@ function getResourceNodeLabel(node: DiagramFlowNode["data"]["node"]): string {
   const resourceName = node.parameters?.resourceName?.trim();
 
   return resourceName ? resourceName : node.label;
-}
-
-function getResourceNodeLabelStyle(label: string, nodeWidth: number, textColor: string): CSSProperties {
-  const usableWidth = Math.max(42, nodeWidth - 12);
-  const estimatedTextWidth = Math.max(1, label.length) * 7.1;
-  const fittedFontSize = Math.min(12.5, Math.max(8, (usableWidth / estimatedTextWidth) * 12.5));
-
-  return {
-    color: textColor,
-    fontSize: `${fittedFontSize.toFixed(2)}px`
-  };
 }
 
 type ColorMenuProps = {

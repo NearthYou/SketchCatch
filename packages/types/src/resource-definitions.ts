@@ -68,10 +68,23 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-route",
-    parameterPanel: false,
     resourceType: "ROUTE_TABLE",
     terraformPreview: true,
     terraformResourceType: "aws_route",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-network-acl",
+    resourceType: "NETWORK_ACL",
+    terraformPreview: true,
+    terraformResourceType: "aws_network_acl",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-network-acl-rule",
+    resourceType: "NETWORK_ACL_RULE",
+    terraformPreview: true,
+    terraformResourceType: "aws_network_acl_rule",
     terraformSync: true
   }),
   createAwsResourceDefinition({
@@ -83,26 +96,51 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-cloudfront-origin-access-control",
-    parameterPanel: false,
     resourceType: "CLOUDFRONT",
     terraformPreview: true,
     terraformResourceType: "aws_cloudfront_origin_access_control",
     terraformSync: true
   }),
   createAwsResourceDefinition({
+    id: "aws-cloudfront-cache-policy",
+    resourceType: "CLOUDFRONT",
+    terraformPreview: true,
+    terraformResourceType: "aws_cloudfront_cache_policy",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-cloudfront-origin-request-policy",
+    resourceType: "CLOUDFRONT",
+    terraformPreview: true,
+    terraformResourceType: "aws_cloudfront_origin_request_policy",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
     id: "aws-route53-record",
-    parameterPanel: false,
     resourceType: "ROUTE53_RECORD",
     terraformPreview: true,
     terraformResourceType: "aws_route53_record",
     terraformSync: true
   }),
   createAwsResourceDefinition({
+    id: "aws-route53-zone",
+    resourceType: "ROUTE53_ZONE",
+    terraformPreview: true,
+    terraformResourceType: "aws_route53_zone",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
     id: "aws-wafv2-web-acl",
-    parameterPanel: false,
     resourceType: "WAF_WEB_ACL",
     terraformPreview: true,
     terraformResourceType: "aws_wafv2_web_acl",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-wafv2-web-acl-association",
+    resourceType: "WAF_WEB_ACL_ASSOCIATION",
+    terraformPreview: true,
+    terraformResourceType: "aws_wafv2_web_acl_association",
     terraformSync: true
   }),
   createAwsResourceDefinition({
@@ -117,6 +155,13 @@ export const resourceDefinitions = [
     resourceType: "VPC_ENDPOINT",
     terraformPreview: true,
     terraformResourceType: "aws_vpc_endpoint",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-vpc-peering-connection",
+    resourceType: "VPC_PEERING_CONNECTION",
+    terraformPreview: true,
+    terraformResourceType: "aws_vpc_peering_connection",
     terraformSync: true
   }),
   createAwsResourceDefinition({
@@ -149,7 +194,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-iam-role-policy",
-    parameterPanel: false,
     resourceType: "IAM_POLICY",
     terraformPreview: true,
     terraformResourceType: "aws_iam_role_policy",
@@ -157,7 +201,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-iam-role-policy-attachment",
-    parameterPanel: false,
     resourceType: "IAM_POLICY",
     terraformPreview: true,
     terraformResourceType: "aws_iam_role_policy_attachment",
@@ -175,6 +218,13 @@ export const resourceDefinitions = [
     resourceType: "KMS_KEY",
     terraformPreview: true,
     terraformResourceType: "aws_kms_key",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-kms-alias",
+    resourceType: "KMS_ALIAS",
+    terraformPreview: true,
+    terraformResourceType: "aws_kms_alias",
     terraformSync: true
   }),
   createAwsResourceDefinition({
@@ -240,7 +290,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-lb",
-    parameterPanel: false,
     resourceType: "LOAD_BALANCER",
     terraformPreview: true,
     terraformResourceType: "aws_lb",
@@ -248,15 +297,20 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-lb-target-group",
-    parameterPanel: false,
     resourceType: "LOAD_BALANCER_TARGET_GROUP",
     terraformPreview: true,
     terraformResourceType: "aws_lb_target_group",
     terraformSync: true
   }),
   createAwsResourceDefinition({
+    id: "aws-lb-target-group-attachment",
+    resourceType: "LOAD_BALANCER_TARGET_GROUP_ATTACHMENT",
+    terraformPreview: true,
+    terraformResourceType: "aws_lb_target_group_attachment",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
     id: "aws-lb-listener",
-    parameterPanel: false,
     resourceType: "LOAD_BALANCER_LISTENER",
     terraformPreview: true,
     terraformResourceType: "aws_lb_listener",
@@ -271,7 +325,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-s3-object",
-    parameterPanel: false,
     resourceType: "S3",
     terraformPreview: true,
     terraformResourceType: "aws_s3_object",
@@ -279,7 +332,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-s3-bucket-policy",
-    parameterPanel: false,
     resourceType: "S3",
     terraformPreview: true,
     terraformResourceType: "aws_s3_bucket_policy",
@@ -329,6 +381,34 @@ export const resourceDefinitions = [
     terraformSync: true
   }),
   createAwsResourceDefinition({
+    id: "aws-volume-attachment",
+    resourceType: "VOLUME_ATTACHMENT",
+    terraformPreview: true,
+    terraformResourceType: "aws_volume_attachment",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-efs-file-system",
+    resourceType: "EFS_FILE_SYSTEM",
+    terraformPreview: true,
+    terraformResourceType: "aws_efs_file_system",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-efs-mount-target",
+    resourceType: "EFS_MOUNT_TARGET",
+    terraformPreview: true,
+    terraformResourceType: "aws_efs_mount_target",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-efs-access-point",
+    resourceType: "EFS_ACCESS_POINT",
+    terraformPreview: true,
+    terraformResourceType: "aws_efs_access_point",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
     id: "aws-rds-instance",
     resourceType: "RDS",
     terraformPreview: true,
@@ -345,10 +425,16 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-rds-cluster",
-    parameterPanel: false,
     resourceType: "RDS_CLUSTER",
     terraformPreview: true,
     terraformResourceType: "aws_rds_cluster",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-rds-cluster-instance",
+    resourceType: "RDS_CLUSTER_INSTANCE",
+    terraformPreview: true,
+    terraformResourceType: "aws_rds_cluster_instance",
     terraformSync: true
   }),
   createAwsResourceDefinition({
@@ -388,15 +474,27 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-elasticache-redis",
-    parameterPanel: false,
     resourceType: "ELASTICACHE_REDIS",
     terraformPreview: true,
     terraformResourceType: "aws_elasticache_replication_group",
     terraformSync: true
   }),
   createAwsResourceDefinition({
+    id: "aws-elasticache-subnet-group",
+    resourceType: "ELASTICACHE_SUBNET_GROUP",
+    terraformPreview: true,
+    terraformResourceType: "aws_elasticache_subnet_group",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-elasticache-parameter-group",
+    resourceType: "ELASTICACHE_PARAMETER_GROUP",
+    terraformPreview: true,
+    terraformResourceType: "aws_elasticache_parameter_group",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
     id: "aws-secretsmanager-secret",
-    parameterPanel: false,
     resourceType: "SECRETS_MANAGER_SECRET",
     terraformPreview: true,
     terraformResourceType: "aws_secretsmanager_secret",
@@ -404,7 +502,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-secretsmanager-secret-version",
-    parameterPanel: false,
     resourceType: "SECRETS_MANAGER_SECRET",
     terraformPreview: true,
     terraformResourceType: "aws_secretsmanager_secret_version",
@@ -425,8 +522,14 @@ export const resourceDefinitions = [
     terraformSync: true
   }),
   createAwsResourceDefinition({
+    id: "aws-lambda-alias",
+    resourceType: "LAMBDA_ALIAS",
+    terraformPreview: true,
+    terraformResourceType: "aws_lambda_alias",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
     id: "aws-lambda-event-source-mapping",
-    parameterPanel: false,
     resourceType: "LAMBDA_EVENT_SOURCE_MAPPING",
     terraformPreview: true,
     terraformResourceType: "aws_lambda_event_source_mapping",
@@ -441,10 +544,30 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-api-gateway-websocket-api",
-    parameterPanel: false,
     resourceType: "API_GATEWAY_WEBSOCKET_API",
     terraformPreview: true,
     terraformResourceType: "aws_apigatewayv2_api",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-api-gateway-v2-route",
+    resourceType: "API_GATEWAY_V2_ROUTE",
+    terraformPreview: true,
+    terraformResourceType: "aws_apigatewayv2_route",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-api-gateway-v2-integration",
+    resourceType: "API_GATEWAY_V2_INTEGRATION",
+    terraformPreview: true,
+    terraformResourceType: "aws_apigatewayv2_integration",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-api-gateway-v2-stage",
+    resourceType: "API_GATEWAY_V2_STAGE",
+    terraformPreview: true,
+    terraformResourceType: "aws_apigatewayv2_stage",
     terraformSync: true
   }),
   createAwsResourceDefinition({
@@ -469,8 +592,14 @@ export const resourceDefinitions = [
     terraformSync: true
   }),
   createAwsResourceDefinition({
+    id: "aws-api-gateway-deployment",
+    resourceType: "API_GATEWAY_DEPLOYMENT",
+    terraformPreview: true,
+    terraformResourceType: "aws_api_gateway_deployment",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
     id: "aws-api-gateway-stage",
-    parameterPanel: false,
     resourceType: "API_GATEWAY_STAGE",
     terraformPreview: true,
     terraformResourceType: "aws_api_gateway_stage",
@@ -481,6 +610,20 @@ export const resourceDefinitions = [
     resourceType: "CLOUDWATCH_LOG_GROUP",
     terraformPreview: true,
     terraformResourceType: "aws_cloudwatch_log_group",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-cloudwatch-log-stream",
+    resourceType: "CLOUDWATCH_LOG_STREAM",
+    terraformPreview: true,
+    terraformResourceType: "aws_cloudwatch_log_stream",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-cloudwatch-log-resource-policy",
+    resourceType: "CLOUDWATCH_LOG_RESOURCE_POLICY",
+    terraformPreview: true,
+    terraformResourceType: "aws_cloudwatch_log_resource_policy",
     terraformSync: true
   }),
   createAwsResourceDefinition({
@@ -512,8 +655,21 @@ export const resourceDefinitions = [
     terraformSync: true
   }),
   createAwsResourceDefinition({
+    id: "aws-eventbridge-permission",
+    resourceType: "EVENTBRIDGE_PERMISSION",
+    terraformPreview: true,
+    terraformResourceType: "aws_cloudwatch_event_permission",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-scheduler-schedule",
+    resourceType: "SCHEDULER_SCHEDULE",
+    terraformPreview: true,
+    terraformResourceType: "aws_scheduler_schedule",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
     id: "aws-codebuild-project",
-    parameterPanel: false,
     resourceType: "UNKNOWN",
     terraformPreview: true,
     terraformResourceType: "aws_codebuild_project",
@@ -521,7 +677,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-codedeploy-app",
-    parameterPanel: false,
     resourceType: "UNKNOWN",
     terraformPreview: true,
     terraformResourceType: "aws_codedeploy_app",
@@ -529,7 +684,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-codedeploy-deployment-group",
-    parameterPanel: false,
     resourceType: "UNKNOWN",
     terraformPreview: true,
     terraformResourceType: "aws_codedeploy_deployment_group",
@@ -537,7 +691,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-codepipeline",
-    parameterPanel: false,
     resourceType: "UNKNOWN",
     terraformPreview: true,
     terraformResourceType: "aws_codepipeline",
@@ -559,8 +712,14 @@ export const resourceDefinitions = [
     terraformSync: true
   }),
   createAwsResourceDefinition({
+    id: "aws-sns-topic-subscription",
+    resourceType: "SNS_TOPIC_SUBSCRIPTION",
+    terraformPreview: true,
+    terraformResourceType: "aws_sns_topic_subscription",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
     id: "aws-sqs-queue",
-    parameterPanel: false,
     resourceType: "SQS_QUEUE",
     terraformPreview: true,
     terraformResourceType: "aws_sqs_queue",
@@ -576,10 +735,16 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-acm-certificate",
-    parameterPanel: false,
     resourceType: "ACM_CERTIFICATE",
     terraformPreview: true,
     terraformResourceType: "aws_acm_certificate",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-acm-certificate-validation",
+    resourceType: "ACM_CERTIFICATE_VALIDATION",
+    terraformPreview: true,
+    terraformResourceType: "aws_acm_certificate_validation",
     terraformSync: true
   }),
   createAwsResourceDefinition({
@@ -600,15 +765,20 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-ecr-repository",
-    parameterPanel: false,
     resourceType: "ECR_REPOSITORY",
     terraformPreview: true,
     terraformResourceType: "aws_ecr_repository",
     terraformSync: true
   }),
   createAwsResourceDefinition({
+    id: "aws-ecr-lifecycle-policy",
+    resourceType: "ECR_LIFECYCLE_POLICY",
+    terraformPreview: true,
+    terraformResourceType: "aws_ecr_lifecycle_policy",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
     id: "aws-ecs-cluster",
-    parameterPanel: false,
     resourceType: "ECS_CLUSTER",
     terraformPreview: true,
     terraformResourceType: "aws_ecs_cluster",
@@ -616,7 +786,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-ecs-service",
-    parameterPanel: false,
     resourceType: "ECS_SERVICE",
     terraformPreview: true,
     terraformResourceType: "aws_ecs_service",
@@ -624,18 +793,93 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-ecs-task-definition",
-    parameterPanel: false,
     resourceType: "ECS_TASK_DEFINITION",
     terraformPreview: true,
     terraformResourceType: "aws_ecs_task_definition",
     terraformSync: true
   }),
   createAwsResourceDefinition({
+    id: "aws-ecs-capacity-provider",
+    resourceType: "ECS_CAPACITY_PROVIDER",
+    terraformPreview: true,
+    terraformResourceType: "aws_ecs_capacity_provider",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
     id: "aws-eks-cluster",
-    parameterPanel: false,
     resourceType: "EKS_CLUSTER",
     terraformPreview: true,
     terraformResourceType: "aws_eks_cluster",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-eks-node-group",
+    resourceType: "EKS_NODE_GROUP",
+    terraformPreview: true,
+    terraformResourceType: "aws_eks_node_group",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-eks-addon",
+    resourceType: "EKS_ADDON",
+    terraformPreview: true,
+    terraformResourceType: "aws_eks_addon",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-config-configuration-recorder",
+    resourceType: "CONFIG_CONFIGURATION_RECORDER",
+    terraformPreview: true,
+    terraformResourceType: "aws_config_configuration_recorder",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-config-delivery-channel",
+    resourceType: "CONFIG_DELIVERY_CHANNEL",
+    terraformPreview: true,
+    terraformResourceType: "aws_config_delivery_channel",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-config-rule",
+    resourceType: "CONFIG_RULE",
+    terraformPreview: true,
+    terraformResourceType: "aws_config_config_rule",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-cloudtrail",
+    resourceType: "CLOUDTRAIL",
+    terraformPreview: true,
+    terraformResourceType: "aws_cloudtrail",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-xray-group",
+    resourceType: "XRAY_GROUP",
+    terraformPreview: true,
+    terraformResourceType: "aws_xray_group",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-xray-sampling-rule",
+    resourceType: "XRAY_SAMPLING_RULE",
+    terraformPreview: true,
+    terraformResourceType: "aws_xray_sampling_rule",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-shield-protection",
+    resourceType: "SHIELD_PROTECTION",
+    terraformPreview: true,
+    terraformResourceType: "aws_shield_protection",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-guardduty-detector",
+    resourceType: "GUARDDUTY_DETECTOR",
+    terraformPreview: true,
+    terraformResourceType: "aws_guardduty_detector",
     terraformSync: true
   })
 ] as const satisfies readonly ResourceDefinition[];
@@ -660,14 +904,19 @@ export function getResourceDefinitionByTerraform(
   blockType: TerraformBlockType,
   resourceType: string
 ): ResourceDefinition | undefined {
-  return resourceDefinitionByTerraformKey.get(createTerraformDefinitionKey(blockType, resourceType));
+  return resourceDefinitionByTerraformKey.get(
+    createTerraformDefinitionKey(blockType, resourceType)
+  );
 }
 
 function createDefaultResourceDefinitionByResourceType(): Map<ResourceType, ResourceDefinition> {
   const definitions = new Map<ResourceType, ResourceDefinition>();
 
   for (const definition of resourceDefinitions) {
-    if (definition.resourceType === DEFAULT_RESOURCE_TYPE || definitions.has(definition.resourceType)) {
+    if (
+      definition.resourceType === DEFAULT_RESOURCE_TYPE ||
+      definitions.has(definition.resourceType)
+    ) {
       continue;
     }
 

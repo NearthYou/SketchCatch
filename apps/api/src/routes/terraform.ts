@@ -75,7 +75,8 @@ const diagramNodeSchema = z.object({
   style: z
     .object({
       textColor: z.string().min(1).optional(),
-      borderColor: z.string().min(1).optional()
+      borderColor: z.string().min(1).optional(),
+      borderStyle: z.enum(["solid", "dashed", "dotted"]).optional()
     })
     .optional(),
   metadata: diagramNodeMetadataSchema.optional(),

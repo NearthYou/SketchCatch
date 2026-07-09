@@ -3506,6 +3506,37 @@ nextjs-portal {
   padding: 10px 8px 12px;
 }
 
+.resourceCategoryGroups {
+  display: grid;
+  gap: 12px;
+}
+
+.resourceCategoryGroup {
+  display: grid;
+  gap: 7px;
+}
+
+.resourceCategoryHeader {
+  align-items: center;
+  color: #69778d;
+  display: flex;
+  font-size: 0.68rem;
+  font-weight: 800;
+  justify-content: space-between;
+  letter-spacing: 0;
+  line-height: 1.2;
+  padding: 0 2px;
+  text-transform: uppercase;
+}
+
+.resourceCategoryCount {
+  color: #8a96a8;
+  font-size: 0.62rem;
+  font-weight: 850;
+  line-height: 1.2;
+  padding-left: 8px;
+}
+
 .resourcePanel .resourceGrid {
   display: flex;
   flex-wrap: wrap;

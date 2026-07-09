@@ -4,6 +4,7 @@ import type { DiagramNode, ResourceItem } from "../../../../packages/types/src";
 import {
   applyNodeParametersUpdateWithResourceLabel,
   clearActiveResourceDragPayload,
+  createDiagramEdge,
   createDiagramNodeFromPayload,
   createPastedNodes,
   getActiveResourceDragPayload,
@@ -59,6 +60,13 @@ test("createPastedNodes clears stale parent area metadata from copied nodes", ()
 
   assert.equal(pastedNode?.metadata?.parentAreaNodeId, undefined);
   assert.equal(pastedNode?.metadata?.moduleSource?.moduleId, "network-basic");
+});
+
+test("createDiagramEdge creates thin solid connection lines by default", () => {
+  const edge = createDiagramEdge("api-1", "queue-1", undefined, undefined, []);
+
+  assert.equal(edge?.style?.width, "thin");
+  assert.equal(edge?.style?.lineStyle, "solid");
 });
 
 test("createDiagramNodeFromPayload does not auto-fill Terraform parameter values for resource icons", () => {

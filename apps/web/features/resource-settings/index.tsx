@@ -70,6 +70,11 @@ type ResourcePanelSection = {
   kind: "modules" | "resources";
 };
 
+type ResourceCategoryGroup = {
+  readonly category: string;
+  readonly items: ResourceItem[];
+};
+
 const resourceSections: ResourcePanelSection[] = [
   { id: "modules", label: "Modules", icon: Component, defaultOpen: true, kind: "modules" },
   { id: "design", label: "Design", icon: Brush, kind: "resources" },
@@ -91,6 +96,45 @@ const resourceSections: ResourcePanelSection[] = [
   { id: "iot", label: "IoT", icon: RadioTower, kind: "resources" },
   { id: "other", label: areaLabels.other, icon: Grid2X2, kind: "resources" }
 ];
+
+const resourceCategoryOrderByArea: Partial<Record<ResourcePanelSectionId, readonly string[]>> = {
+  application: ["Lambda", "API Gateway REST", "API Gateway v2", "Workflow"],
+  compute: ["EC2 Core", "EC2 Launch & Scaling"],
+  containers: ["Board Containers", "ECR", "ECS", "EKS"],
+  database: [
+    "RDS Instances",
+    "RDS Cluster",
+    "RDS Supporting Resources",
+    "DynamoDB",
+    "ElastiCache"
+  ],
+  network: [
+    "VPC Core",
+    "Routing & Gateways",
+    "Network Access Control",
+    "Load Balancing",
+    "Edge / CDN",
+    "DNS"
+  ],
+  "security-identity": [
+    "Network Security",
+    "IAM",
+    "KMS",
+    "Certificates",
+    "Secrets",
+    "Identity",
+    "Web Protection"
+  ],
+  storage: ["S3 Core", "S3 Controls", "EBS", "EFS"],
+  tools: [
+    "CI/CD",
+    "Messaging",
+    "EventBridge / Scheduler",
+    "Observability",
+    "Governance / Config",
+    "Terraform Data Sources"
+  ]
+};
 
 export type ResourceSettingsPanelProps = {
   catalogProvider?: ResourceCatalogProvider | undefined;
@@ -455,6 +499,7 @@ function ResourceSection({
   section: ResourcePanelSection;
 }) {
   const SectionIcon = section.icon;
+  const categoryGroups = getResourceCategoryGroups(section.id, items);
 
   return (
     <section className="resourceArea">
@@ -497,9 +542,19 @@ function ResourceSection({
       {isOpen && section.kind === "resources" ? (
         <div className="resourceSectionBody">
           {items.length > 0 ? (
-            <div className="resourceGrid">
-              {items.map((item) => (
-                <ResourceTile item={item} key={item.id} search="" />
+            <div className="resourceCategoryGroups">
+              {categoryGroups.map((group) => (
+                <section className="resourceCategoryGroup" key={group.category}>
+                  <div className="resourceCategoryHeader">
+                    <span>{group.category}</span>
+                    <span className="resourceCategoryCount">{group.items.length}</span>
+                  </div>
+                  <div className="resourceCategoryGrid resourceGrid">
+                    {group.items.map((item) => (
+                      <ResourceTile item={item} key={item.id} search="" />
+                    ))}
+                  </div>
+                </section>
               ))}
             </div>
           ) : (
@@ -567,6 +622,44 @@ function getResourcesBySection(resources: readonly ResourceItem[]) {
   }
 
   return grouped;
+}
+
+function getResourceCategoryGroups(
+  area: ResourcePanelSectionId,
+  items: readonly ResourceItem[]
+): ResourceCategoryGroup[] {
+  const groupsByCategory = new Map<string, ResourceItem[]>();
+  const categoryOrder = resourceCategoryOrderByArea[area] ?? [];
+  const categoryOrderIndex = new Map(categoryOrder.map((category, index) => [category, index]));
+
+  for (const item of items) {
+    const category = item.category ?? "Other";
+    const categoryItems = groupsByCategory.get(category) ?? [];
+
+    categoryItems.push(item);
+    groupsByCategory.set(category, categoryItems);
+  }
+
+  return [...groupsByCategory.entries()]
+    .map(([category, categoryItems]) => ({ category, items: categoryItems }))
+    .sort((left, right) =>
+      compareResourceCategoryGroups(left.category, right.category, categoryOrderIndex)
+    );
+}
+
+function compareResourceCategoryGroups(
+  left: string,
+  right: string,
+  categoryOrderIndex: ReadonlyMap<string, number>
+) {
+  const leftIndex = categoryOrderIndex.get(left);
+  const rightIndex = categoryOrderIndex.get(right);
+
+  if (leftIndex !== undefined || rightIndex !== undefined) {
+    return (leftIndex ?? Number.POSITIVE_INFINITY) - (rightIndex ?? Number.POSITIVE_INFINITY);
+  }
+
+  return left.localeCompare(right);
 }
 
 function IconFallback({ name, iconUrl }: { name: string; iconUrl: string }) {

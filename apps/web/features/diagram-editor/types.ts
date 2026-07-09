@@ -58,9 +58,10 @@ export type DiagramEditorProps = {
   onDiagramChange?: ((diagram: DiagramJson) => void) | undefined;
   onDiagramSaveRequest?: (() => Promise<unknown>) | undefined;
   rightPanel?: ((context: DiagramEditorPanelContext) => ReactNode) | null | undefined;
+  dashboardHref?: string | undefined;
   projectName?: string | undefined;
-  myPageHref?: string | undefined;
   saveStatus?: string | undefined;
+  workspaceUserName?: string | undefined;
 };
 
 export type DiagramEdgeKind = "default" | "smoothstep" | "step" | "straight";
