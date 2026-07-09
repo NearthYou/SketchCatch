@@ -122,7 +122,7 @@ export async function testAwsConnection(
       throw error;
     }
 
-    throw new AwsConnectionTestError("AWS Role connection test failed");
+    throw toAwsConnectionTestError(error);
   }
 }
 
@@ -247,16 +247,49 @@ export async function assertAwsRoleRequiresExternalId(
 }
 
 function isExpectedAssumeRoleDeniedError(error: unknown): boolean {
+  return isAwsAccessDeniedError(error);
+}
+
+function toAwsConnectionTestError(error: unknown): AwsConnectionTestError {
+  if (isAwsAccessDeniedError(error)) {
+    return new AwsConnectionTestError("AWS Role assume permission denied");
+  }
+
+  if (isAwsCredentialError(error)) {
+    return new AwsConnectionTestError("AWS caller credentials are invalid or expired");
+  }
+
+  return new AwsConnectionTestError("AWS Role connection test failed");
+}
+
+function isAwsAccessDeniedError(error: unknown): boolean {
   if (typeof error !== "object" || error === null) {
     return false;
   }
 
   const errorName = "name" in error && typeof error.name === "string" ? error.name : "";
   const message = "message" in error && typeof error.message === "string" ? error.message : "";
+  const normalizedMessage = message.toLowerCase();
 
   return (
     errorName === "AccessDenied" ||
     errorName === "AccessDeniedException" ||
-    message.toLowerCase().includes("accessdenied")
+    normalizedMessage.includes("accessdenied") ||
+    normalizedMessage.includes("not authorized to perform: sts:assumerole")
+  );
+}
+
+function isAwsCredentialError(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) {
+    return false;
+  }
+
+  const errorName = "name" in error && typeof error.name === "string" ? error.name : "";
+
+  return (
+    errorName === "ExpiredToken" ||
+    errorName === "ExpiredTokenException" ||
+    errorName === "InvalidClientTokenId" ||
+    errorName === "UnrecognizedClientException"
   );
 }

@@ -2,6 +2,32 @@
 
 Short English-only working log for the current agent context.
 
+## 2026-07-09 AWS SSO AssumeRole Connection Diagnosis
+
+- Branch/worktree: current `C:\Jungle\SketchCatch` workspace.
+- Scope: diagnose local AWS Role connection verification failing after moving the caller principal to an AWS SSO reserved role.
+- Root cause found in the live STS probe: the local caller can authenticate as the SSO session, but `sts:AssumeRole` to the generated `SketchCatchTerraformExecutionRole-*` target role is denied.
+- Most likely operational fix: add the SketchCatch caller AssumeRole policy to the source account SSO Permission Set or execution role, and verify the target role Trust Policy Principal and External ID match the current connection.
+- Fixed the API connection tester so STS `AccessDenied` failures return `AWS Role assume permission denied` instead of the generic connection-test failure.
+- Added web error translation so the UI tells the user to check the source SSO Permission Set/execution role and target Trust Policy/External ID.
+- Kept AWS SDK error details sanitized so ARNs, keys, tokens, and raw provider messages are not echoed back through the app.
+
+Verification:
+
+- `pnpm harness:check` - passed before edits.
+- `pnpm --filter @sketchcatch/api exec tsx --test src/aws-connections/aws-connection-test-service.test.ts` - failed before the mapper change, then passed.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/api-client-error-message.test.ts` - passed.
+- `pnpm --filter @sketchcatch/api typecheck` - passed.
+- `pnpm --filter @sketchcatch/web typecheck` - passed.
+- `pnpm lint` - passed.
+- `pnpm typecheck` - passed.
+- `pnpm build` - passed.
+
+Known risks:
+
+- No real AWS IAM, IAM Identity Center, CloudFormation, or Terraform mutation was performed. The user still needs to apply the caller-side `sts:AssumeRole` permission and confirm the target role trust policy in AWS.
+- The API/Web dev servers were already running from the user session; this change relies on dev hot reload or a server restart to show the new message locally.
+
 ## 2026-07-09 Project Delete Destroy Fallback Flow
 
 - Branch/worktree: current `C:\Jungle\SketchCatch` workspace.
