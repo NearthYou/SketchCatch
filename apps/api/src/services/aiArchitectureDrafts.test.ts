@@ -850,14 +850,14 @@ test("createAmazonQArchitectureDraftResponse repairs EC2 fleets not split across
         title: "Single Subnet EC2 Fleet",
         architectureJson: {
           nodes: [
-            node("vpc", "VPC", "Application VPC", 100, 40),
-            node("private-a", "SUBNET", "Private App Subnet A", 1060, 100),
-            node("private-b", "SUBNET", "Private App Subnet B", 1060, 360),
-            node("alb", "LOAD_BALANCER", "Application Load Balancer", 100, 260),
-            node("asg", "AUTO_SCALING_GROUP", "Auto Scaling Group", 420, 260),
-            node("app-a", "EC2", "Application Server A", 740, 100),
-            node("app-b", "EC2", "Application Server B", 740, 260),
-            node("app-c", "EC2", "Application Server C", 740, 420)
+            node("vpc", "VPC", "Application VPC", 900, 900),
+            node("private-a", "SUBNET", "Private App Subnet A", 100, 100),
+            node("private-b", "SUBNET", "Private App Subnet B", 100, 340),
+            node("alb", "LOAD_BALANCER", "Application Load Balancer", 500, 100),
+            node("asg", "AUTO_SCALING_GROUP", "Auto Scaling Group", 720, 100),
+            configuredNode(node("app-a", "EC2", "Application Server A", 120, 120), { subnetId: "private-a" }),
+            configuredNode(node("app-b", "EC2", "Application Server B", 140, 140), { subnetId: "private-a" }),
+            configuredNode(node("app-c", "EC2", "Application Server C", 160, 160), { subnetId: "private-a" })
           ],
           edges: [
             { id: "alb-to-asg", sourceId: "alb", targetId: "asg", label: "routes" },
@@ -878,23 +878,18 @@ test("createAmazonQArchitectureDraftResponse repairs EC2 fleets not split across
       title: "Split Private Subnet EC2 Fleet",
       architectureJson: {
         nodes: [
-            node("vpc", "VPC", "Application VPC", 100, 40),
-            node("private-a", "SUBNET", "Private App Subnet A", 1060, 100),
-            node("private-b", "SUBNET", "Private App Subnet B", 1060, 360),
-            node("alb", "LOAD_BALANCER", "Application Load Balancer", 100, 260),
-            node("asg", "AUTO_SCALING_GROUP", "Auto Scaling Group", 420, 260),
-            node("app-a", "EC2", "Application Server A", 740, 100),
-            node("app-b", "EC2", "Application Server B", 740, 260),
-            node("app-c", "EC2", "Application Server C", 740, 420)
+            node("vpc", "VPC", "Application VPC", 900, 900),
+            node("private-a", "SUBNET", "Private App Subnet A", 100, 100),
+            node("private-b", "SUBNET", "Private App Subnet B", 100, 340),
+            node("alb", "LOAD_BALANCER", "Application Load Balancer", 500, 600),
+            node("asg", "AUTO_SCALING_GROUP", "Auto Scaling Group", 760, 600),
+            configuredNode(node("app-a", "EC2", "Application Server A", 120, 120), { subnetId: "private-a" }),
+            configuredNode(node("app-b", "EC2", "Application Server B", 120, 360), { subnetId: "private-b" }),
+            node("app-c", "EC2", "Application Server C", 1000, 500)
         ],
         edges: [
           { id: "alb-to-asg", sourceId: "alb", targetId: "asg", label: "routes" },
-          { id: "asg-to-app-a", sourceId: "asg", targetId: "app-a", label: "scales" },
-          { id: "asg-to-app-b", sourceId: "asg", targetId: "app-b", label: "scales" },
-          { id: "asg-to-app-c", sourceId: "asg", targetId: "app-c", label: "scales" },
-          { id: "private-a-to-app-a", sourceId: "private-a", targetId: "app-a", label: "places" },
-          { id: "private-b-to-app-b", sourceId: "private-b", targetId: "app-b", label: "places" },
-          { id: "private-b-to-app-c", sourceId: "private-b", targetId: "app-c", label: "places" }
+          { id: "asg-to-app-a", sourceId: "asg", targetId: "app-a", label: "scales" }
         ]
       },
       requirementCoverage: sampleRequirementCoverage(["vpc", "private-a", "private-b", "alb", "asg", "app-a", "app-b", "app-c"])
@@ -918,6 +913,91 @@ test("createAmazonQArchitectureDraftResponse repairs EC2 fleets not split across
   assert.equal(response.title, "Split Private Subnet EC2 Fleet");
 });
 
+test("createAmazonQArchitectureDraftResponse repairs EC2 fleets visually grouped in one private subnet despite split edges", async () => {
+  const requestedPrompts: string[] = [];
+  let callCount = 0;
+  const prompt = [
+    "Required components: EC2 3 instances, Auto Scaling Group, Application Load Balancer, VPC, and two private app subnets.",
+    "Architecture flow: ALB -> Auto Scaling Group -> EC2 fleet.",
+    "Validation checklist: EC2 3대를 프라이빗 서브넷 2개에 나눠 배치하고 ALB 뒤에서 트래픽을 받는 구조.",
+    "database: none no database.",
+    "file upload: optional, not related to EC2 runtime.",
+    "region: Korea only Seoul region ap-northeast-2.",
+    "availability: 99.99%."
+  ].join("\n");
+  const provider = createFakeAmazonQProvider((request) => {
+    requestedPrompts.push(request.prompt);
+    callCount += 1;
+
+    if (callCount === 1) {
+      return JSON.stringify({
+        status: "preview",
+        title: "Visually Single Subnet Fleet",
+        architectureJson: {
+          nodes: [
+            node("vpc", "VPC", "Application VPC", 40, 40),
+            node("private-a", "SUBNET", "Private App Subnet A", 100, 120),
+            node("private-b", "SUBNET", "Private App Subnet B", 100, 320),
+            node("alb", "LOAD_BALANCER", "Application Load Balancer", 420, 180),
+            node("asg", "AUTO_SCALING_GROUP", "Auto Scaling Group", 680, 180),
+            configuredNode(node("app-a", "EC2", "Application Server A", 140, 150), { subnetId: "private-a" }),
+            configuredNode(node("app-b", "EC2", "Application Server B", 180, 160), { subnetId: "private-b" }),
+            configuredNode(node("app-c", "EC2", "Application Server C", 220, 170), { subnetId: "private-b" })
+          ],
+          edges: [
+            { id: "alb-to-asg", sourceId: "alb", targetId: "asg", label: "routes" },
+            { id: "asg-to-app-a", sourceId: "asg", targetId: "app-a", label: "scales" },
+            { id: "asg-to-app-b", sourceId: "asg", targetId: "app-b", label: "scales" },
+            { id: "asg-to-app-c", sourceId: "asg", targetId: "app-c", label: "scales" },
+            { id: "private-a-to-app-a", sourceId: "private-a", targetId: "app-a", label: "places" },
+            { id: "private-b-to-app-b", sourceId: "private-b", targetId: "app-b", label: "places" },
+            { id: "private-b-to-app-c", sourceId: "private-b", targetId: "app-c", label: "places" }
+          ]
+        },
+        requirementCoverage: deploymentRequirementCoverage(["vpc", "private-a", "private-b", "alb", "asg", "app-a", "app-b", "app-c"])
+      });
+    }
+
+    return JSON.stringify({
+      status: "preview",
+      title: "Visually Split Private Subnet Fleet",
+      architectureJson: {
+        nodes: [
+          node("vpc", "VPC", "Application VPC", 900, 900),
+          node("private-a", "SUBNET", "Private App Subnet A", 100, 120),
+          node("private-b", "SUBNET", "Private App Subnet B", 100, 320),
+          node("alb", "LOAD_BALANCER", "Application Load Balancer", 500, 600),
+          node("asg", "AUTO_SCALING_GROUP", "Auto Scaling Group", 760, 600),
+          configuredNode(node("app-a", "EC2", "Application Server A", 120, 130), { subnetId: "private-a" }),
+          configuredNode(node("app-b", "EC2", "Application Server B", 120, 340), { subnetId: "private-b" }),
+          node("app-c", "EC2", "Application Server C", 1000, 500)
+        ],
+        edges: [
+          { id: "alb-to-asg", sourceId: "alb", targetId: "asg", label: "routes" },
+          { id: "asg-to-app-a", sourceId: "asg", targetId: "app-a", label: "scales" }
+        ]
+      },
+      requirementCoverage: deploymentRequirementCoverage(["vpc", "private-a", "private-b", "alb", "asg", "app-a", "app-b", "app-c"])
+    });
+  });
+
+  const response = await createAmazonQArchitectureDraftResponse(
+    { prompt },
+    {
+      provider,
+      creditPolicy: confirmedCreditPolicy
+    }
+  );
+
+  if ("status" in response) {
+    assert.fail(`Expected preview, got clarification: ${response.question}`);
+  }
+
+  assert.equal(requestedPrompts.length, 2);
+  assert.match(requestedPrompts[1] ?? "", /visually placed across at least two private app subnets/);
+  assert.equal(response.title, "Visually Split Private Subnet Fleet");
+});
+
 test("createArchitectureDraft keeps high budget answers from triggering low-budget DB follow-up", () => {
   const response = createArchitectureDraft({
     prompt: [
@@ -935,6 +1015,44 @@ test("createArchitectureDraft keeps high budget answers from triggering low-budg
     response.metadata.guardrailWarnings?.some((warning) => warning.code === "low_budget_rds_cost"),
     false
   );
+});
+
+test("createArchitectureDraft treats neutral file answers as not requiring upload buckets", () => {
+  const response = createArchitectureDraft({
+    prompt: [
+      "EC2 3대를 프라이빗 서브넷 2개에 나눠 배치하고, ALB 뒤에서 트래픽을 받는 구조로 만들어줘.",
+      "운영 배포 가능한 형태여야 하고 Auto Scaling Group도 포함해줘.",
+      "동적 웹 애플리케이션",
+      "중간 규모",
+      "DB 필요하면 간단한 데이터",
+      "React/Vue/Angular",
+      "복잡한 비즈니스 로직",
+      "한국만 / 서울 리전",
+      "50-200만원 이상",
+      "SSL 필수",
+      "파일은 아무거나, EC2랑 직접 상관은 적음",
+      "실시간은 없어도 됨",
+      "직접 관리 또는 반관리형",
+      "3초 이내",
+      "10MB-100MB 이상",
+      "시간대별 차이 또는 이벤트성 급증",
+      "일 1시간 이내 또는 절대 안 됨 / 99.99%"
+    ].join("\n")
+  });
+
+  const uploadLikeNodes = response.architectureJson.nodes.filter((node) =>
+    /upload|media|attachment|file[_\s-]*upload/iu.test(`${node.id} ${node.label ?? ""} ${JSON.stringify(node.config ?? {})}`)
+  );
+  const ec2SubnetIds = response.architectureJson.nodes
+    .filter((node) => node.type === "EC2")
+    .map((node) => String(node.config?.subnetId ?? ""));
+
+  assert.equal(uploadLikeNodes.length, 0);
+  assert.equal(response.architectureJson.nodes.filter((node) => node.type === "EC2").length, 3);
+  assert.deepEqual([...new Set(ec2SubnetIds)].sort(), [
+    "aws_subnet.private_app_subnet_a.id",
+    "aws_subnet.private_app_subnet_b.id"
+  ]);
 });
 
 test("createAmazonQArchitectureDraftResponse creates deterministic decision spaces that vary by answer profile", async () => {
@@ -2969,6 +3087,19 @@ function node(
   };
 }
 
+function configuredNode(
+  architectureNode: ArchitectureJson["nodes"][number],
+  config: ArchitectureJson["nodes"][number]["config"]
+): ArchitectureJson["nodes"][number] {
+  return {
+    ...architectureNode,
+    config: {
+      ...architectureNode.config,
+      ...config
+    }
+  };
+}
+
 function readDecisionSpace(payload: unknown): {
   answerProfile: { upload?: string };
   preferredPatterns: Array<{ id?: string }>;
@@ -2997,6 +3128,25 @@ function sampleRequirementCoverage(nodes: string[] = []): Array<{
       capability: "selectedPattern: baseline_architecture; rejectedPatterns: not applicable",
       nodes,
       assumption: "Selected answers are represented by the listed topology nodes with pattern trade-off rationale."
+    }
+  ];
+}
+
+function deploymentRequirementCoverage(nodes: string[] = []): Array<{
+  answer: string;
+  status: string;
+  capability: string;
+  nodes: string[];
+  assumption: string;
+}> {
+  return [
+    {
+      answer: "deployment selected answers",
+      status: "satisfied",
+      capability:
+        "selectedPattern: alb_asg_ec2; rejectedPatterns: serverless because the user explicitly required EC2. Backend API entry uses ALB to Auto Scaling Group to EC2. High availability uses redundant EC2 placement across private subnets with Auto Scaling Group failover capacity.",
+      nodes,
+      assumption: "No file upload path is included; any object storage is static delivery or deployment artifact storage only."
     }
   ];
 }

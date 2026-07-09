@@ -1391,10 +1391,17 @@ function findRuntimeTopologyValidationIssues(
 
   if (requiresEc2PrivateSubnetSplit(normalizedPrompt)) {
     const spread = getEc2SubnetSpread(architectureJson);
+    const visualSpread = getEc2VisualPrivateSubnetSpread(architectureJson);
 
     if (spread.privateSubnetCount < 2 || spread.ec2SubnetCount < 2) {
       issues.push(
         `The user requested EC2 instances split across two private subnets, but the preview shows ${spread.ec2SubnetCount} private subnet placement(s) for EC2 across ${spread.privateSubnetCount} private subnet node(s). Regenerate with EC2 nodes distributed across at least two private app subnets.`
+      );
+    }
+
+    if (visualSpread.privateSubnetCount >= 2 && visualSpread.ec2SubnetCount < 2) {
+      issues.push(
+        `The user requested EC2 instances split across two private subnets, but the preview visually places EC2 nodes across only ${visualSpread.ec2SubnetCount} private subnet box(es). Regenerate with EC2 nodes visually placed across at least two private app subnets, not grouped inside one subnet/security-group area.`
       );
     }
   }
@@ -1558,6 +1565,35 @@ function getEc2SubnetSpread(architectureJson: ArchitectureJson): {
   return {
     ec2SubnetCount: ec2SubnetIds.size,
     privateSubnetCount: privateSubnetIds.size
+  };
+}
+
+function getEc2VisualPrivateSubnetSpread(architectureJson: ArchitectureJson): {
+  readonly ec2SubnetCount: number;
+  readonly privateSubnetCount: number;
+} {
+  const privateSubnetNodes = architectureJson.nodes.filter(
+    (node) => node.type === "SUBNET" && /\bprivate\b|프라이빗|사설/iu.test(createNodeSearchText(node))
+  );
+  const ec2SubnetIds = new Set<string>();
+
+  for (const node of architectureJson.nodes) {
+    if (node.type !== "EC2") {
+      continue;
+    }
+
+    const center = getPreviewNodeCenter(node);
+
+    for (const subnetNode of privateSubnetNodes) {
+      if (pointInRect(center, createPreviewNodeRect(subnetNode))) {
+        ec2SubnetIds.add(subnetNode.id);
+      }
+    }
+  }
+
+  return {
+    ec2SubnetCount: ec2SubnetIds.size,
+    privateSubnetCount: privateSubnetNodes.length
   };
 }
 

@@ -1005,6 +1005,85 @@ test("convertArchitectureJsonToDiagramJson marks VPC and Subnet containment for 
   assert.deepEqual(diagramJson.edges, []);
 });
 
+test("convertArchitectureJsonToDiagramJson keeps EC2 instances in their explicit subnets when they share a security group", () => {
+  const architectureJson: ArchitectureJson = {
+    nodes: [
+      {
+        id: "vpc-main",
+        type: "VPC",
+        label: "Main VPC",
+        positionX: 80,
+        positionY: 80,
+        config: { cidrBlock: "10.0.0.0/16" }
+      },
+      {
+        id: "subnet-app-a",
+        type: "SUBNET",
+        label: "Private App Subnet A",
+        positionX: 140,
+        positionY: 150,
+        config: { cidrBlock: "10.0.1.0/24", vpcId: "vpc-main", terraformResourceName: "private_app_a" }
+      },
+      {
+        id: "subnet-app-b",
+        type: "SUBNET",
+        label: "Private App Subnet B",
+        positionX: 140,
+        positionY: 350,
+        config: { cidrBlock: "10.0.2.0/24", vpcId: "vpc-main", terraformResourceName: "private_app_b" }
+      },
+      {
+        id: "sg-app",
+        type: "SECURITY_GROUP",
+        label: "App Security Group",
+        positionX: 220,
+        positionY: 190,
+        config: { vpcId: "vpc-main" }
+      },
+      {
+        id: "ec2-a",
+        type: "EC2",
+        label: "API Server A",
+        positionX: 300,
+        positionY: 190,
+        config: { subnetId: "aws_subnet.private_app_a.id", securityGroupIds: ["sg-app"] }
+      },
+      {
+        id: "ec2-b",
+        type: "EC2",
+        label: "API Server B",
+        positionX: 300,
+        positionY: 390,
+        config: { subnetId: "aws_subnet.private_app_b.id", securityGroupIds: ["sg-app"] }
+      },
+      {
+        id: "ec2-c",
+        type: "EC2",
+        label: "API Server C",
+        positionX: 440,
+        positionY: 390,
+        config: { subnetId: "aws_subnet.private_app_b.id", securityGroupIds: ["sg-app"] }
+      }
+    ],
+    edges: [
+      { id: "subnet-a-to-ec2-a", sourceId: "subnet-app-a", targetId: "ec2-a", label: "hosts" },
+      { id: "subnet-b-to-ec2-b", sourceId: "subnet-app-b", targetId: "ec2-b", label: "hosts" },
+      { id: "subnet-b-to-ec2-c", sourceId: "subnet-app-b", targetId: "ec2-c", label: "hosts" }
+    ]
+  };
+
+  const diagramJson = convertArchitectureJsonToDiagramJson(architectureJson);
+  const parentByNodeId = new Map(diagramJson.nodes.map((node) => [node.id, node.metadata?.parentAreaNodeId]));
+  const nodeById = new Map(diagramJson.nodes.map((node) => [node.id, node]));
+
+  assert.equal(parentByNodeId.get("ec2-a"), "sg-app");
+  assert.equal(parentByNodeId.get("ec2-b"), "subnet-app-b");
+  assert.equal(parentByNodeId.get("ec2-c"), "subnet-app-b");
+  assertContainsNode(nodeById.get("subnet-app-a"), nodeById.get("ec2-a"));
+  assertContainsNode(nodeById.get("subnet-app-b"), nodeById.get("ec2-b"));
+  assertContainsNode(nodeById.get("subnet-app-b"), nodeById.get("ec2-c"));
+});
+
 test("convertArchitectureJsonToDiagramJson maps server and storage draft resources to Terraform nodes", () => {
   const architectureJson: ArchitectureJson = {
     nodes: [
@@ -1697,7 +1776,7 @@ test("convertArchitectureJsonToDiagramJson lays out server and storage draft as 
       {
         id: "ec2-instance",
         kind: "resource",
-        parentAreaNodeId: "security-group",
+        parentAreaNodeId: "subnet",
         type: "aws_instance"
       },
       {
@@ -1745,7 +1824,7 @@ test("convertArchitectureJsonToDiagramJson lays out server and storage draft as 
   assertContainsNode(vpcNode, azNode);
   assertContainsNode(azNode, subnetNode);
   assertContainsNode(subnetNode, securityGroupNode);
-  assertContainsNode(securityGroupNode, instanceNode);
+  assertContainsNode(subnetNode, instanceNode);
   assert.deepEqual(regionNode?.parameters?.values, {
     awsRegion: "ap-northeast-2"
   });
@@ -1756,10 +1835,10 @@ test("convertArchitectureJsonToDiagramJson lays out server and storage draft as 
   assert.equal(azNode?.parameters?.resourceName, "az_ap_northeast_2a");
   assert.ok((regionNode?.size.width ?? 0) <= 1100);
   assert.ok((regionNode?.size.height ?? 0) <= 1040);
-  assert.ok((vpcNode?.size.width ?? 0) <= 1000);
+  assert.ok((vpcNode?.size.width ?? 0) <= 1100);
   assert.ok((vpcNode?.size.height ?? 0) <= 780);
   assert.ok((azNode?.size.width ?? 0) <= 440);
-  assert.ok((azNode?.size.height ?? 0) <= 400);
+  assert.ok((azNode?.size.height ?? 0) <= 700);
   assertNoSiblingNodeOverlap(diagramJson);
 });
 

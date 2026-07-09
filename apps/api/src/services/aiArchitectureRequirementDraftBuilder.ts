@@ -822,6 +822,9 @@ function addPurposeSpecificResources(context: DraftBuildContext): void {
       });
       return;
     case "reservation_service":
+      if (!context.factSet.has("file_upload")) {
+        return;
+      }
       addPurposeBucket(context, {
         id: "reservation-attachments-bucket",
         label: "Reservation Attachment Bucket",
@@ -832,6 +835,9 @@ function addPurposeSpecificResources(context: DraftBuildContext): void {
       });
       return;
     case "content_board":
+      if (!context.factSet.has("file_upload")) {
+        return;
+      }
       addPurposeBucket(context, {
         id: "content-media-bucket",
         label: "Content Media Bucket",

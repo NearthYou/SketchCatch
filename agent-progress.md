@@ -10,12 +10,27 @@ Short English-only working log for the current agent context. Older records are 
 - The AI draft prompt, top-level payload, and referenceKnowledge payload now receive the same generated resource catalog.
 - Generated CI/CD resources now carry deploy-ready default config guidance and pass Terraform Preview, diagnostics, and live apply safety support checks.
 - Amazon Q preview self-validation now rejects missing explicitly requested resource-panel types and undersized EC2 fleets before accepting a draft.
-- Amazon Q preview self-validation now also rejects no-upload violations, disconnected ALB/ASG/EC2 runtime paths, and EC2 fleets not distributed across requested private subnets.
+- Amazon Q preview self-validation now also rejects no-upload violations, disconnected ALB/ASG/EC2 runtime paths, EC2 fleets not distributed across requested private subnets, and EC2 fleets visually grouped into one private subnet box.
 - Architecture Drafts can now optionally use OpenAI as a Requirement Normalizer before Amazon Q; Amazon Q remains the diagram generator and deterministic validation remains the acceptance gate.
 - Targeted API tests plus full lint/typecheck/build passed during this session.
 - No Terraform apply/destroy, deployment, AWS calls, or cloud mutation was run.
 
 ## Session Record
+
+### 2026-07-10 - AI EC2 subnet visual placement guardrail
+
+- Goal: Fix AI draft outputs that kept showing EC2 fleets visually grouped in one subnet, disconnected ASG/ALB placement, and upload/media buckets from neutral file answers.
+- Completed:
+  - Added Amazon Q preview validation for EC2 fleets that are semantically split by subnet references but visually placed inside only one private subnet box.
+  - Updated the workspace ArchitectureJson adapter so EC2 nodes with explicit `subnetId` are not forced into a shared security-group parent when that would collapse multiple subnet placements into one visual area.
+  - Treated neutral file answers such as "file is anything / not related to EC2" as non-upload requirements and stopped content/reservation purpose buckets unless `file_upload` is actually selected.
+  - Added API and web regression tests for visual subnet spread, neutral file answers, and shared-security-group EC2 subnet placement.
+- Verification:
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/aiArchitectureDrafts.test.ts` passed.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-diagram-adapter.test.ts` passed.
+  - `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
+- Risk:
+  - No real AWS, Terraform apply/destroy, deployment, or Git/CI/CD handoff was run.
 
 ### 2026-07-10 - OpenAI requirement normalizer for Amazon Q drafts
 

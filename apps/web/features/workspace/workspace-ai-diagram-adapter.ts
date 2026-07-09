@@ -1312,8 +1312,8 @@ function applyAreaParentMetadata(
 
   return nodes.map((node) => {
     const parentAreaNodeId =
-      findSecurityBoundaryParentAreaNodeId(node, nodeById) ??
       node.metadata?.parentAreaNodeId ??
+      findSubnetAwareSecurityBoundaryParentAreaNodeId(node, nodeById) ??
       findConfigParentAreaNodeId(node, nodeById) ??
       findEdgeParentAreaNodeId(node, nodeById, edges) ??
       findDefaultRegionParentAreaNodeId(node, nodeById);
@@ -1333,6 +1333,31 @@ function applyAreaParentMetadata(
 }
 
 // 자식이 밖으로 튀어나오지 않도록 VPC/Subnet 박스 크기를 필요한 만큼 키웁니다.
+function findSubnetAwareSecurityBoundaryParentAreaNodeId(
+  node: DiagramNode,
+  nodeById: ReadonlyMap<string, DiagramNode>
+): string | undefined {
+  const securityParentAreaNodeId = findSecurityBoundaryParentAreaNodeId(node, nodeById);
+  const subnetNode = findConfigAreaNodeByParameter(node, "subnetId", nodeById);
+  const explicitSubnetParentAreaNodeId = subnetNode && subnetNode.id !== node.id ? subnetNode.id : undefined;
+
+  if (!securityParentAreaNodeId || !explicitSubnetParentAreaNodeId) {
+    return securityParentAreaNodeId;
+  }
+
+  const securityParentNode = nodeById.get(securityParentAreaNodeId);
+
+  if (!securityParentNode || !isSecurityGroupAreaNode(securityParentNode)) {
+    return securityParentAreaNodeId;
+  }
+
+  const protectedSubnetAreaNodeId = findProtectedSubnetAreaNodeId(securityParentNode, nodeById);
+
+  return protectedSubnetAreaNodeId && protectedSubnetAreaNodeId !== explicitSubnetParentAreaNodeId
+    ? explicitSubnetParentAreaNodeId
+    : securityParentAreaNodeId;
+}
+
 function fitAreaNodesToChildren(nodes: readonly DiagramNode[]): DiagramNode[] {
   let currentNodes = [...nodes];
 

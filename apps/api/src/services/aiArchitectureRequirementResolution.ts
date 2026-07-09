@@ -428,6 +428,7 @@ function createRequirementFacts(
 
   addKoreanRequirementFacts(normalizedPrompt, facts);
   addPurposeRequirementFacts(normalizedPrompt, facts);
+  applyNeutralFileRequirementConstraints(normalizedPrompt, facts);
 
   for (const rule of unsupportedRequirementMatches) {
     for (const fact of rule.substitution?.facts ?? []) {
@@ -546,7 +547,9 @@ function inferServicePurpose(
   requirementFacts: readonly ArchitectureRequirementFact[]
 ): ArchitectureServicePurpose {
   const normalizedPrompt = normalizePrompt(prompt);
-  const promptPurpose = inferPromptServicePurpose(normalizedPrompt);
+  const promptPurpose = hasNeutralFileRequirement(normalizedPrompt)
+    ? undefined
+    : inferPromptServicePurpose(normalizedPrompt);
   const factSet = new Set(requirementFacts);
 
   if (promptPurpose !== undefined) {
@@ -793,6 +796,33 @@ function addDerivedRequirementFacts(facts: Set<ArchitectureRequirementFact>): vo
   if (facts.has("object_storage")) {
     facts.add("iam_permissions");
   }
+}
+
+function applyNeutralFileRequirementConstraints(
+  normalizedPrompt: string,
+  facts: Set<ArchitectureRequirementFact>
+): void {
+  if (!hasNeutralFileRequirement(normalizedPrompt)) {
+    return;
+  }
+
+  facts.delete("file_upload");
+
+  if (!hasExplicitObjectStorageRequirement(normalizedPrompt)) {
+    facts.delete("object_storage");
+  }
+}
+
+function hasNeutralFileRequirement(normalizedPrompt: string): boolean {
+  return /(?:file\s*(?:upload|handling|storage)?\s*:\s*(?:optional|any|not\s+related)|files?\s+(?:optional|any|not\s+related)|\uD30C\uC77C\uC740\s*\uC544\uBB34\uAC70\uB098|\uD30C\uC77C[\s\S]{0,40}(?:ec2|runtime|\uB7F0\uD0C0\uC784)[\s\S]{0,40}(?:\uC0C1\uAD00|\uAD00\uACC4)\s*(?:\uC5C6|\uC801\uC74C))/iu.test(
+    normalizedPrompt
+  );
+}
+
+function hasExplicitObjectStorageRequirement(normalizedPrompt: string): boolean {
+  return /\b(?:s3|bucket|object\s+storage)\b|\uBC84\uD0B7|\uC624\uBE0C\uC81D\uD2B8\s*\uC2A4\uD1A0\uB9AC\uC9C0/iu.test(
+    normalizedPrompt
+  );
 }
 
 function sortRequirementFacts(facts: ReadonlySet<ArchitectureRequirementFact>): ArchitectureRequirementFact[] {
