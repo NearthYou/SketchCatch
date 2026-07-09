@@ -4,6 +4,12 @@ import { fileURLToPath } from "node:url";
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const problems = [];
+const conflictMarkerPattern = /^(<<<<<<<|=======|>>>>>>>)(?:\s|$)/m;
+
+const stateFileLimits = [
+  { path: "agent-progress.md", maxLines: 220, maxBytes: 24_000 },
+  { path: "session-handoff.md", maxLines: 80, maxBytes: 12_000 }
+];
 
 function readText(relativePath) {
   const filePath = join(repoRoot, relativePath);
@@ -23,6 +29,34 @@ function requireIncludes(relativePath, needle, message) {
 
 function requireHeading(relativePath, heading) {
   requireIncludes(relativePath, heading, `missing required heading ${heading}`);
+}
+
+function lineCount(content) {
+  if (content.length === 0) {
+    return 0;
+  }
+  return content.split(/\r\n|\r|\n/).length;
+}
+
+function checkStateFileSize(relativePath, content, maxLines, maxBytes) {
+  const lines = lineCount(content);
+  const bytes = Buffer.byteLength(content, "utf8");
+  if (lines > maxLines) {
+    problems.push(
+      `${relativePath}: ${lines} lines exceeds ${maxLines}; archive old entries under docs/agent-history/`
+    );
+  }
+  if (bytes > maxBytes) {
+    problems.push(
+      `${relativePath}: ${bytes} bytes exceeds ${maxBytes}; archive old entries under docs/agent-history/`
+    );
+  }
+}
+
+function checkNoConflictMarkers(relativePath, content) {
+  if (conflictMarkerPattern.test(content)) {
+    problems.push(`${relativePath}: merge conflict marker remains`);
+  }
 }
 
 function checkFeatureList() {
@@ -86,6 +120,9 @@ function checkFeatureList() {
 }
 
 function checkMarkdownStateFiles() {
+  const progress = readText("agent-progress.md");
+  const handoff = readText("session-handoff.md");
+
   requireHeading("agent-progress.md", "## Current Verified State");
   requireHeading("agent-progress.md", "## Session Record");
   requireHeading("session-handoff.md", "## Currently Verified");
@@ -96,10 +133,16 @@ function checkMarkdownStateFiles() {
   requireHeading("evaluator-rubric.md", "## Hard Fail");
   requireHeading("quality-document.md", "## 제품 도메인 스냅샷");
 
-  if (/^- pending\s*$/m.test(readText("agent-progress.md"))) {
+  for (const { path, maxLines, maxBytes } of stateFileLimits) {
+    const content = path === "agent-progress.md" ? progress : handoff;
+    checkStateFileSize(path, content, maxLines, maxBytes);
+    checkNoConflictMarkers(path, content);
+  }
+
+  if (/^- pending\s*$/m.test(progress)) {
     problems.push("agent-progress.md: unresolved '- pending' placeholder remains");
   }
-  if (/^- pending\s*$/m.test(readText("session-handoff.md"))) {
+  if (/^- pending\s*$/m.test(handoff)) {
     problems.push("session-handoff.md: unresolved '- pending' placeholder remains");
   }
 }
@@ -107,8 +150,10 @@ function checkMarkdownStateFiles() {
 function checkWiring() {
   requireIncludes("AGENTS.md", "## Harness Operating Loop", "Harness Operating Loop is not wired into root instructions");
   requireIncludes("AGENTS.md", "feature_list.json", "feature_list.json is not referenced");
+  requireIncludes("AGENTS.md", "docs/agent-history/", "agent progress archive is not referenced");
   requireIncludes("AGENTS.md", "clean-state-checklist.md", "clean-state checklist is not referenced");
   requireIncludes("docs/README.md", "../agent-progress.md", "agent-progress.md is not in the docs map");
+  requireIncludes("docs/README.md", "./agent-history/", "agent progress archive is not in the docs map");
   requireIncludes("docs/README.md", "../feature_list.json", "feature_list.json is not in the docs map");
 }
 
