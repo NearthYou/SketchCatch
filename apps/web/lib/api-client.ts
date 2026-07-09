@@ -30,6 +30,8 @@ const API_MESSAGE_TRANSLATIONS: Partial<Record<string, string>> = {
   "Authentication required": "인증이 필요합니다.",
   "AWS account ID must be 12 digits": "AWS Account ID는 12자리 숫자여야 합니다.",
   "AWS account is already connected": "이미 연결된 AWS Account입니다.",
+  "AWS connection is used by a deployment":
+    "이 AWS 연결은 배포 기록에서 사용 중이라 삭제할 수 없습니다. 먼저 해당 프로젝트 또는 배포 기록을 정리한 뒤 다시 시도해주세요.",
   "AWS Role account mismatch": "입력한 Account ID와 AWS에서 확인된 Account가 다릅니다.",
   "AWS Role connection test failed":
     "AWS Role 연결 검증에 실패했습니다. CloudFormation Stack 생성 완료 후 잠시 기다렸다가 다시 시도하고, Account ID와 Trust Policy를 확인해주세요.",

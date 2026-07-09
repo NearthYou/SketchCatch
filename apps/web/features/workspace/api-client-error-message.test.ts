@@ -14,6 +14,18 @@ test("getApiErrorMessage translates AWS Role verification failures instead of ge
   );
 });
 
+test("getApiErrorMessage explains AWS connection deletion conflicts", () => {
+  const error = new ApiClientError(409, {
+    error: "conflict",
+    message: "AWS connection is used by a deployment"
+  });
+
+  assert.equal(
+    getApiErrorMessage(error, "AWS 연결 삭제에 실패했습니다."),
+    "이 AWS 연결은 배포 기록에서 사용 중이라 삭제할 수 없습니다. 먼저 해당 프로젝트 또는 배포 기록을 정리한 뒤 다시 시도해주세요."
+  );
+});
+
 test("getApiErrorMessage explains GitHub repository settings permission gaps", () => {
   const error = new ApiClientError(409, {
     error: "github_oauth_required",

@@ -2,6 +2,27 @@
 
 Short English-only working log for the current agent context.
 
+## 2026-07-09 AWS Connection Delete Conflict Message
+
+- Branch/worktree: current `C:\Jungle\SketchCatch` workspace.
+- Scope: investigate why deleting an AWS account/connection shows a vague "already in use" message.
+- Root cause: the API intentionally returns `409 conflict` with `AWS connection is used by a deployment` when any deployment history references the AWS connection, but the web API error mapper had no translation for that server message and fell back to the generic conflict text.
+- Added a specific Korean translation explaining that the AWS connection cannot be deleted while deployment history still references it.
+- Added regression coverage for the AWS connection deletion conflict message.
+
+Verification:
+
+- `pnpm harness:check` - passed before edits.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/api-client-error-message.test.ts` - failed before the translation, then passed after the fix.
+- `pnpm lint` - passed.
+- `pnpm typecheck` - passed.
+- `pnpm build` - passed.
+- `pnpm harness:check` - passed after edits.
+
+Known risks:
+
+- This change clarifies the UI message only; it does not change the backend deletion rule that protects deployment history references.
+
 ## 2026-07-09 Project Delete After SSO And Handoff Fix
 
 - Branch/worktree: current `C:\Jungle\SketchCatch` workspace.
