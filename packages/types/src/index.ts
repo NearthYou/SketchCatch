@@ -26,6 +26,9 @@ export const RESOURCE_TYPES = [
   "INTERNET_GATEWAY",
   "ROUTE_TABLE",
   "ROUTE_TABLE_ASSOCIATION",
+  "NETWORK_ACL",
+  "NETWORK_ACL_RULE",
+  "VPC_PEERING_CONNECTION",
   "NAT_GATEWAY",
   "EC2",
   "AUTO_SCALING_GROUP",
@@ -33,52 +36,86 @@ export const RESOURCE_TYPES = [
   "KEY_PAIR",
   "ELASTIC_IP",
   "EBS_VOLUME",
+  "VOLUME_ATTACHMENT",
+  "EFS_FILE_SYSTEM",
+  "EFS_MOUNT_TARGET",
+  "EFS_ACCESS_POINT",
   "RDS",
   "RDS_READ_REPLICA",
   "RDS_CLUSTER",
+  "RDS_CLUSTER_INSTANCE",
   "S3",
   "DYNAMODB_TABLE",
   "ELASTICACHE_REDIS",
+  "ELASTICACHE_SUBNET_GROUP",
+  "ELASTICACHE_PARAMETER_GROUP",
   "SECURITY_GROUP",
   "CLOUDFRONT",
   "LOAD_BALANCER_TARGET_GROUP",
+  "LOAD_BALANCER_TARGET_GROUP_ATTACHMENT",
   "ROUTE53_RECORD",
+  "ROUTE53_ZONE",
   "WAF_WEB_ACL",
+  "WAF_WEB_ACL_ASSOCIATION",
   "LOAD_BALANCER",
   "LOAD_BALANCER_LISTENER",
   "LAMBDA",
+  "LAMBDA_ALIAS",
   "LAMBDA_EVENT_SOURCE_MAPPING",
   "AMI",
   "IAM_ROLE",
   "IAM_POLICY",
   "IAM_INSTANCE_PROFILE",
   "KMS_KEY",
+  "KMS_ALIAS",
   "ACM_CERTIFICATE",
+  "ACM_CERTIFICATE_VALIDATION",
   "COGNITO_USER_POOL",
   "COGNITO_USER_POOL_CLIENT",
   "DB_SUBNET_GROUP",
   "SECRETS_MANAGER_SECRET",
   "VPC_ENDPOINT",
   "CLOUDWATCH_LOG_GROUP",
+  "CLOUDWATCH_LOG_STREAM",
   "CLOUDWATCH_METRIC_ALARM",
   "CLOUDWATCH_DASHBOARD",
+  "CLOUDWATCH_LOG_RESOURCE_POLICY",
+  "CLOUDTRAIL",
+  "XRAY_GROUP",
+  "XRAY_SAMPLING_RULE",
   "API_GATEWAY_REST_API",
   "API_GATEWAY_WEBSOCKET_API",
   "API_GATEWAY_RESOURCE",
   "API_GATEWAY_METHOD",
   "API_GATEWAY_INTEGRATION",
+  "API_GATEWAY_DEPLOYMENT",
   "API_GATEWAY_STAGE",
+  "API_GATEWAY_V2_ROUTE",
+  "API_GATEWAY_V2_INTEGRATION",
+  "API_GATEWAY_V2_STAGE",
   "LAMBDA_PERMISSION",
   "SNS_TOPIC",
+  "SNS_TOPIC_SUBSCRIPTION",
   "SQS_QUEUE",
   "EVENTBRIDGE_RULE",
   "EVENTBRIDGE_TARGET",
+  "EVENTBRIDGE_PERMISSION",
+  "SCHEDULER_SCHEDULE",
   "STEP_FUNCTIONS_STATE_MACHINE",
   "ECR_REPOSITORY",
+  "ECR_LIFECYCLE_POLICY",
   "ECS_CLUSTER",
   "ECS_SERVICE",
   "ECS_TASK_DEFINITION",
+  "ECS_CAPACITY_PROVIDER",
   "EKS_CLUSTER",
+  "EKS_NODE_GROUP",
+  "EKS_ADDON",
+  "CONFIG_CONFIGURATION_RECORDER",
+  "CONFIG_DELIVERY_CHANNEL",
+  "CONFIG_RULE",
+  "SHIELD_PROTECTION",
+  "GUARDDUTY_DETECTOR",
   "UNKNOWN"
 ] as const;
 
@@ -282,10 +319,7 @@ export type ProjectDeletePreviewMode =
   | "blocked_running_deployment"
   | "blocked_multiple_active_deployments";
 
-export type ProjectDeleteAction =
-  | "delete_project"
-  | "delete_project_only"
-  | "destroy_then_delete";
+export type ProjectDeleteAction = "delete_project" | "delete_project_only" | "destroy_then_delete";
 
 export type DeleteProjectRequest = {
   action: Exclude<ProjectDeleteAction, "destroy_then_delete">;
@@ -361,10 +395,12 @@ export type ProjectDetailsResponse = {
 export type CreateArchitectureSnapshotRequest = {
   version?: number | undefined;
   source?: string | undefined;
-  reverseEngineering?: {
-    sourceScanId: string;
-    draftId: string;
-  } | undefined;
+  reverseEngineering?:
+    | {
+        sourceScanId: string;
+        draftId: string;
+      }
+    | undefined;
   architectureJson: ArchitectureJson;
 };
 
@@ -958,10 +994,7 @@ export type CreateDeploymentRequest = {
   liveProfile?: DeploymentLiveProfile | undefined;
 };
 
-export type DeploymentLiveProfile =
-  | "practice"
-  | "demo_web_service"
-  | "demo_web_service_with_rds";
+export type DeploymentLiveProfile = "practice" | "demo_web_service" | "demo_web_service_with_rds";
 
 export type DeploymentResponse = {
   deployment: Deployment;
@@ -999,10 +1032,7 @@ export type CostUsageAnalysisRange = "7d" | "30d" | "month_to_date";
 
 export type CostUsageDataSource = "aws_cost_explorer" | "sample";
 
-export type CostProjectUsageSource =
-  | "cost_explorer_tag"
-  | "deployed_resource_estimate"
-  | "sample";
+export type CostProjectUsageSource = "cost_explorer_tag" | "deployed_resource_estimate" | "sample";
 
 export type CostUsageTrendPoint = {
   date: string;
@@ -1255,7 +1285,12 @@ export type BudgetLimit = {
 
 export type RiskLevel = "low" | "medium" | "high";
 
-export type AiResultSource = "prompt" | "github" | "amazon_q" | "template_fallback" | "llm_fallback";
+export type AiResultSource =
+  | "prompt"
+  | "github"
+  | "amazon_q"
+  | "template_fallback"
+  | "llm_fallback";
 
 export type AiConfidence = "low" | "medium" | "high";
 
@@ -1405,14 +1440,7 @@ export type RequirementPrompt = {
   confirmedAt: IsoDateTimeString;
 };
 
-export type VoiceRequirementMediaFormat =
-  | "mp3"
-  | "mp4"
-  | "wav"
-  | "flac"
-  | "ogg"
-  | "amr"
-  | "webm";
+export type VoiceRequirementMediaFormat = "mp3" | "mp4" | "wav" | "flac" | "ogg" | "amr" | "webm";
 
 export type VoiceRequirementInput = {
   mediaUri: string;
@@ -1875,10 +1903,12 @@ export type ArchitectureNode = ResourceNode;
 export type ArchitectureEdge = ResourceEdge;
 
 export type DiagramNodeKind = "resource" | "design";
+export type DiagramNodeBorderStyle = "solid" | "dashed" | "dotted";
 
 export type DiagramNodeStyle = {
   textColor?: string | undefined;
   borderColor?: string | undefined;
+  borderStyle?: DiagramNodeBorderStyle | undefined;
 };
 
 export type AwsRegionCode =
@@ -1892,16 +1922,20 @@ export type AwsRegionCode =
 
 export type DiagramNodeMetadata = {
   parentAreaNodeId?: string | undefined;
-  moduleSource?: {
-    moduleId: string;
-    moduleVersion: string;
-    expandedAt: IsoDateTimeString;
-  } | undefined;
-  reverseEngineering?: {
-    source: "aws_scan";
-    protectedValueKeys: string[];
-    editableValueKeys: string[];
-  } | undefined;
+  moduleSource?:
+    | {
+        moduleId: string;
+        moduleVersion: string;
+        expandedAt: IsoDateTimeString;
+      }
+    | undefined;
+  reverseEngineering?:
+    | {
+        source: "aws_scan";
+        protectedValueKeys: string[];
+        editableValueKeys: string[];
+      }
+    | undefined;
 };
 
 export type DiagramNodeParameters = {
@@ -2055,6 +2089,7 @@ export type ResourceParameterDefinition = {
   required: boolean;
   optional: boolean;
   computed: boolean;
+  core?: boolean | undefined;
   sensitive: boolean;
   description?: string | undefined;
   inputKind: ParameterInputKind;

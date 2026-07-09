@@ -36,6 +36,55 @@ test("diagram editor clears active connection handles on fallback release events
   assert.match(diagramEditorSource, /window\.removeEventListener\("blur",\s*resetConnectionStateOnCancel\)/);
 });
 
+test("diagram editor keeps the canvas white with a smaller dotted grid", () => {
+  const editorShellBlock = getCssBlock(".editorShell");
+  const canvasPanelBlock = getCssBlock(".canvasPanel");
+  const reactFlowBlock = getCssRuleContaining(".canvasPanel :global(.react-flow)");
+
+  assert.match(editorShellBlock, /--workspace-page:\s*#ffffff;/);
+  assert.match(canvasPanelBlock, /background:\s*var\(--workspace-page\);/);
+  assert.match(reactFlowBlock, /background:\s*var\(--workspace-page\);/);
+  assert.match(
+    diagramEditorSource,
+    /<Background\s+bgColor="#ffffff"\s+color="#d8e0ef"\s+gap=\{24\}\s+size=\{1\}\s+variant=\{BackgroundVariant\.Dots\}\s+\/>/
+  );
+});
+
+test("diagram editor shows the workspace context switcher without save status text", () => {
+  const contextLinkBlock = getCssBlock(".toolbarContextLink");
+  const avatarBlock = getCssBlock(".toolbarAvatar");
+  const userNameBlock = getCssBlock(".toolbarUserName");
+
+  assert.match(diagramEditorSource, /dashboardHref = "\/dashboard"/);
+  assert.match(diagramEditorSource, /href=\{dashboardHref\}/);
+  assert.match(diagramEditorSource, /workspaceUserName = "Personal workspace"/);
+  assert.match(diagramEditorSource, /getWorkspaceInitials\(workspaceUserName\)/);
+  assert.match(diagramEditorSource, /className=\{styles\.toolbarContextLink\}/);
+  assert.match(diagramEditorSource, /className=\{styles\.toolbarProjectName\}/);
+  assert.match(diagramEditorSource, /className=\{styles\.toolbarUserName\}/);
+  assert.doesNotMatch(diagramEditorSource, /ChevronDown/);
+  assert.doesNotMatch(diagramEditorSource, /myPageHref/);
+  assert.doesNotMatch(diagramEditorSource, /className=\{styles\.toolbarStatus\}/);
+  assert.doesNotMatch(diagramEditorSource, /<span>\{saveStatus\}<\/span>/);
+
+  assert.match(contextLinkBlock, /grid-template-columns:\s*34px minmax\(0, 1fr\);/);
+  assert.match(contextLinkBlock, /background:\s*var\(--workspace-surface\);/);
+  assert.match(contextLinkBlock, /border:\s*1px solid var\(--workspace-line\);/);
+  assert.match(contextLinkBlock, /border-radius:\s*8px;/);
+  assert.match(avatarBlock, /background:\s*var\(--workspace-accent\);/);
+  assert.match(userNameBlock, /color:\s*var\(--workspace-muted\);/);
+});
+
+test("collapsed right panel does not leave the mobile fixed rail shell visible", () => {
+  const collapsedMobileRightRailRule = getCssRuleContaining(".editorShellRightCollapsed .rightRail");
+
+  assert.match(collapsedMobileRightRailRule, /background:\s*transparent;/);
+  assert.match(collapsedMobileRightRailRule, /border:\s*0;/);
+  assert.match(collapsedMobileRightRailRule, /box-shadow:\s*none;/);
+  assert.match(collapsedMobileRightRailRule, /height:\s*0;/);
+  assert.match(collapsedMobileRightRailRule, /width:\s*0;/);
+});
+
 test("right panel resize handle does not show a purple hover rail", () => {
   const rightRailStateRule = getCssRuleContaining(".rightRailResizeHandle:hover::after");
 
@@ -61,23 +110,21 @@ test("left and right resize handle hover states share one transparent rule", () 
   );
 });
 
-test("area node header uses a folder tab shape", () => {
+test("area node header sits inside a rectangular area node", () => {
   const areaBlock = getCssBlock(".nodeShellArea");
   const headerBlock = getCssBlock(".areaNodeHeader");
-  const headerBeforeBlock = getCssBlock(".areaNodeHeader::before");
 
   assert.match(areaBlock, /--area-body-background:\s*rgba\(255,\s*255,\s*255,\s*0\.14\);/);
   assert.match(areaBlock, /--area-border-width:\s*2px;/);
-  assert.match(areaBlock, /--area-border-color:\s*var\(--node-border-color, #8b98aa\);/);
+  assert.match(areaBlock, /--area-border-color:\s*var\(--node-border-color, #cbd5e1\);/);
   assert.match(areaBlock, /background:\s*var\(--area-body-background\);/);
-  assert.match(areaBlock, /border-top-left-radius:\s*0;/);
-  assert.match(headerBlock, /border:\s*var\(--area-border-width\) solid var\(--area-border-color\);/);
-  assert.match(headerBlock, /border-bottom:\s*0;/);
-  assert.match(headerBlock, /border-radius:\s*10px 18px 0 0;/);
-  assert.match(headerBlock, /top:\s*0;/);
-  assert.match(headerBlock, /transform:\s*translateY\(-100%\);/);
-  assert.doesNotMatch(headerBlock, /border-radius:\s*999px;/);
-  assert.match(headerBeforeBlock, /background:\s*var\(--area-body-background\);/);
+  assert.doesNotMatch(areaBlock, /border-top-left-radius:\s*0;/);
+  assert.match(headerBlock, /background:\s*transparent;/);
+  assert.match(headerBlock, /border:\s*0;/);
+  assert.match(headerBlock, /left:\s*14px;/);
+  assert.match(headerBlock, /top:\s*14px;/);
+  assert.doesNotMatch(headerBlock, /transform:\s*translateY\(-100%\);/);
+  assert.equal(diagramEditorStyles.includes(".areaNodeHeader::before {"), false);
   assert.equal(diagramEditorStyles.includes(".areaNodeHeader::after {"), false);
 });
 

@@ -112,6 +112,28 @@ test("resource panel preserves templates, search, and section states", () => {
   }
 });
 
+test("resource areas render readable category groups without changing flat search results", () => {
+  assert.match(panelSource, /resourceCategoryOrderByArea/);
+  assert.match(panelSource, /getResourceCategoryGroups\(section\.id,\s*items\)/);
+  assert.match(panelSource, /className="resourceCategoryGroup"/);
+  assert.match(panelSource, /className="resourceCategoryHeader"/);
+  assert.match(panelSource, /className="resourceCategoryCount"/);
+  assert.match(panelSource, /className="resourceCategoryGrid resourceGrid"/);
+  assert.match(panelSource, /VPC Core/);
+  assert.match(panelSource, /Routing & Gateways/);
+  assert.match(panelSource, /Load Balancing/);
+  assert.match(panelSource, /API Gateway REST/);
+  assert.match(panelSource, /EventBridge \/ Scheduler/);
+  assert.match(panelSource, /Terraform Data Sources/);
+
+  assert.match(panelSource, /searchResults\.map\(\(item\) =>/);
+  assert.doesNotMatch(panelSource, /Search results[\s\S]{0,800}resourceCategoryGroup/);
+
+  for (const className of ["resourceCategoryGroup", "resourceCategoryHeader", "resourceCategoryCount"]) {
+    assert.ok(getCssRule(stylesSource, className));
+  }
+});
+
 function readLocalFile(fileName: string): string {
   return readFileSync(fileURLToPath(new URL(fileName, import.meta.url)), "utf8");
 }

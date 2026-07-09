@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { DiagramNode } from "../../../../packages/types/src";
 import type { ParameterCatalog, ParameterCatalogDefinition } from "../parameter-input/catalog";
+import { terraformParameterCatalog } from "../parameter-input/catalog";
 import { buildResourceListItems } from "./resource-list-summary";
 
 const catalog: ParameterCatalog = {
@@ -66,6 +67,38 @@ test("buildResourceListItems orders reference rows before required and active op
       ["availabilityZone", "optional", "ap-northeast-2a"]
     ]
   );
+});
+
+test("buildResourceListItems summarizes extended RDS instance parameters from the catalog", () => {
+  const items = buildResourceListItems(
+    [
+      makeResourceNode({
+        id: "db-1",
+        label: "Primary DB",
+        resourceName: "primary",
+        resourceType: "aws_db_instance",
+        values: {
+          backupRetentionPeriod: 7,
+          caCertIdentifier: "rds-ca-rsa2048-g1",
+          deletionProtection: true,
+          enabledCloudwatchLogsExports: ["postgresql"],
+          iamDatabaseAuthenticationEnabled: true,
+          maxAllocatedStorage: 100,
+          multiAz: true,
+          storageEncrypted: true,
+          storageType: "gp3"
+        }
+      })
+    ],
+    terraformParameterCatalog
+  );
+
+  const rowsByKey = new Map(items[0]?.rows.map((row) => [row.key, row]));
+
+  assert.equal(rowsByKey.get("caCertIdentifier")?.label, "CA certificate");
+  assert.equal(rowsByKey.get("iamDatabaseAuthenticationEnabled")?.label, "IAM database authentication");
+  assert.equal(rowsByKey.get("enabledCloudwatchLogsExports")?.label, "CloudWatch log exports");
+  assert.equal(rowsByKey.get("enabledCloudwatchLogsExports")?.value, "postgresql");
 });
 
 test("buildResourceListItems summarizes Region nodes with the selected AWS Region", () => {

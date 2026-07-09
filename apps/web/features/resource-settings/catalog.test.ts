@@ -239,12 +239,62 @@ test("resourceCatalog exposes requested missing resources with public icon asset
   }
 });
 
+test("resourceCatalog assigns readable subcategories inside each large resource area", () => {
+  assertCatalogCategory("aws-vpc", "VPC Core");
+  assertCatalogCategory("aws-route", "Routing & Gateways");
+  assertCatalogCategory("aws-lb-target-group-attachment", "Load Balancing");
+  assertCatalogCategory("aws-cloudfront-cache-policy", "Edge / CDN");
+  assertCatalogCategory("aws-route53-zone", "DNS");
+  assertCatalogCategory("aws-s3-public-access-block", "S3 Controls");
+  assertCatalogCategory("aws-volume-attachment", "EBS");
+  assertCatalogCategory("aws-efs-mount-target", "EFS");
+  assertCatalogCategory("aws-rds-cluster-instance", "RDS Cluster");
+  assertCatalogCategory("aws-elasticache-subnet-group", "ElastiCache");
+  assertCatalogCategory("aws-iam-role-policy-attachment", "IAM");
+  assertCatalogCategory("aws-acm-certificate", "Certificates");
+  assertCatalogCategory("aws-cognito-user-pool", "Identity");
+  assertCatalogCategory("aws-wafv2-web-acl-association", "Web Protection");
+  assertCatalogCategory("aws-api-gateway-deployment", "API Gateway REST");
+  assertCatalogCategory("aws-api-gateway-v2-route", "API Gateway v2");
+  assertCatalogCategory("aws-eventbridge-target", "EventBridge / Scheduler");
+  assertCatalogCategory("aws-sns-topic-subscription", "Messaging");
+  assertCatalogCategory("aws-cloudtrail", "Observability");
+  assertCatalogCategory("aws-config-rule", "Governance / Config");
+  assertCatalogCategory("aws-ecs-capacity-provider", "ECS");
+  assertCatalogCategory("aws-eks-addon", "EKS");
+});
+
 test("RDS parameters include the read replica source field", () => {
   const rdsParameters = terraformParameterCatalog.resources["aws_db_instance"] ?? [];
   const readReplicaField = rdsParameters.find((parameter) => parameter.name === "replicateSourceDb");
 
   assert.ok(readReplicaField, "Missing aws_db_instance.replicateSourceDb");
   assert.equal(readReplicaField.terraformName, "replicate_source_db");
+});
+
+test("RDS parameters include the expanded main parameter example from the JH inventory", () => {
+  const rdsParameters = terraformParameterCatalog.resources["aws_db_instance"] ?? [];
+  const rdsParameterNames = new Set(rdsParameters.map((parameter) => parameter.name));
+
+  for (const parameterName of [
+    "backupRetentionPeriod",
+    "caCertIdentifier",
+    "deletionProtection",
+    "enabledCloudwatchLogsExports",
+    "iamDatabaseAuthenticationEnabled",
+    "maxAllocatedStorage",
+    "multiAz",
+    "storageEncrypted",
+    "storageType"
+  ]) {
+    assert.ok(rdsParameterNames.has(parameterName), `Missing aws_db_instance.${parameterName}`);
+  }
+
+  const iamAuthField = rdsParameters.find(
+    (parameter) => parameter.name === "iamDatabaseAuthenticationEnabled"
+  );
+
+  assert.equal(iamAuthField?.terraformName, "iam_database_authentication_enabled");
 });
 
 function getResourceSize(resourceType: string) {
@@ -261,6 +311,13 @@ function getCatalogDefaults(resourceId: string) {
   assert.ok(resource, `Missing catalog resource: ${resourceId}`);
 
   return resource.nodeDefaults;
+}
+
+function assertCatalogCategory(resourceId: string, expectedCategory: string) {
+  const resource = resourceCatalog.find((item) => item.id === resourceId);
+
+  assert.ok(resource, `Missing catalog resource: ${resourceId}`);
+  assert.equal(resource.category, expectedCategory, resourceId);
 }
 
 function getTerraformCatalogItems() {

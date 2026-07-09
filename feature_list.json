@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "lastUpdated": "2026-07-07",
-  "purpose": "Tracks agent-harness hardening work. Product scope remains in docs/product.md.",
+  "lastUpdated": "2026-07-09",
+  "purpose": "Tracks agent-harness hardening work and active cross-session workstreams. Product scope remains in docs/product.md.",
   "statusRules": {
     "allowedStatuses": ["not_started", "in_progress", "blocked", "passing"],
     "singleActiveFeature": true,
@@ -179,6 +179,22 @@
         "notes": "Git/CI/CD auto-deploy smoke runner records preflight readiness and live mutation gates, but the live smoke workstream is intentionally deferred by product decision. The stale docs/sw live-smoke plan and current JSON reports were removed from active documentation on 2026-07-09."
       },
       "notes": "Blocked by product decision: live GitHub/AWS smoke is not being pursued now. Reopen this feature only when the team decides to collect real deployment evidence again."
+    },
+    {
+      "id": "ECS-MIGRATION-000",
+      "priority": 1,
+      "area": "production-infra",
+      "title": "ECS migration operating plan and Fargate foundation",
+      "user_visible_behavior": "SketchCatch 운영 인프라를 EC2/SSM/docker run에서 ECS/Fargate로 전환하기 위한 phase, 비용 기준, rollback 기준을 팀원이 같은 문서와 tracker에서 확인한다.",
+      "status": "in_progress",
+      "verification": [
+        "feature_list.json에 ECS migration workstream이 active 항목으로 존재한다.",
+        "동시에 in_progress 상태인 feature/workstream이 1개 이하이다.",
+        "docs/sw/spec.md와 docs/sw/plan.md가 parallel ALB cutover, Phase 1 single ECS task, RunTask one-off worker, SQS deferred decision을 기록한다.",
+        "infra/aws/terraform이 ECR, ECS/Fargate, task definition, IAM, CloudWatch Logs, security groups, parallel ALB, listener, Fargate ip target group을 정의한다.",
+        "agent-progress.md와 session-handoff.md가 Phase 1 foundation 상태와 다음 phase 기준을 기록한다."
+      ],
+      "notes": "Phase 1 scope adds Terraform ECS/Fargate foundation only. Do not implement GitHub Actions ECS deployment, secret migration, worker code, ALB path routing split, EC2/SSM removal, or live AWS mutation in this phase."
     }
   ]
 }

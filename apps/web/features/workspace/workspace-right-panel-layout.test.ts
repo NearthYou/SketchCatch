@@ -12,6 +12,7 @@ const resourceWorkspaceSource = readWorkspaceFile("ResourceWorkspacePanel.tsx");
 const diagramEditorTypesSource = readFeatureFile("../diagram-editor/types.ts");
 const terraformLeaveDialogSource = readWorkspaceFile("TerraformLeaveDialog.tsx");
 const terraformPanelSource = readWorkspaceFile("TerraformCodePanel.tsx");
+const workspaceRightPanelTypesSource = readWorkspaceFile("workspace-right-panel.types.ts");
 const projectDraftManagerSource = readWorkspaceFile("ProjectWorkspaceDraftManager.tsx");
 const workspaceDraftManagerSource = readWorkspaceFile("WorkspaceDraftManager.tsx");
 const stylesSource = readWorkspaceFile("workspace.module.css");
@@ -109,7 +110,7 @@ test("workspace shell follows DESIGN.md neutral surface and typography tokens", 
   const workspaceRule = getCssRule(diagramEditorStylesSource, "workspace");
   const canvasPanelRule = getCssRule(diagramEditorStylesSource, "canvasPanel");
   const canvasToolbarRule = getCssRule(diagramEditorStylesSource, "canvasToolbar");
-  const toolbarHomeLinkRule = getCssRule(diagramEditorStylesSource, "toolbarHomeLink");
+  const toolbarContextLinkRule = getCssRule(diagramEditorStylesSource, "toolbarContextLink");
   const projectShellRule = getCssRule(stylesSource, "projectShell");
   const primaryButtonRule = getCssRule(stylesSource, "primaryButton");
   const rightPanelShellRule = getCssRule(stylesSource, "rightPanelShell");
@@ -141,9 +142,9 @@ test("workspace shell follows DESIGN.md neutral surface and typography tokens", 
   assert.match(canvasPanelRule, /\bbackground:\s*var\(--workspace-page\);/);
   assert.doesNotMatch(canvasPanelRule, /#f8faff/);
   assert.match(canvasToolbarRule, /\bborder:\s*1px solid var\(--workspace-line\);/);
-  assert.match(toolbarHomeLinkRule, /\bbackground:\s*var\(--workspace-surface-muted\);/);
-  assert.match(toolbarHomeLinkRule, /\bborder:\s*1px solid var\(--workspace-line\);/);
-  assert.match(toolbarHomeLinkRule, /\bcolor:\s*var\(--workspace-link\);/);
+  assert.match(toolbarContextLinkRule, /\bbackground:\s*var\(--workspace-surface\);/);
+  assert.match(toolbarContextLinkRule, /\bborder:\s*1px solid var\(--workspace-line\);/);
+  assert.match(toolbarContextLinkRule, /\bcolor:\s*var\(--workspace-text\);/);
 
   assert.match(projectShellRule, /\bbackground:\s*#ffffff;/);
   assert.match(projectShellRule, /\bcolor:\s*#171717;/);
@@ -166,7 +167,7 @@ test("workspace shell follows DESIGN.md neutral surface and typography tokens", 
     workspaceRule,
     canvasPanelRule,
     canvasToolbarRule,
-    toolbarHomeLinkRule,
+    toolbarContextLinkRule,
     projectShellRule,
     primaryButtonRule,
     rightPanelShellRule,
@@ -223,14 +224,29 @@ test("workspace internal panel polish uses DESIGN.md tokens instead of legacy Bl
     "deploymentExpandedShell",
     finalPolishIndex
   );
-  const polishedDeploymentExpandedHeaderRule = getLastCssRuleAfter(
-    stylesSource,
-    "deploymentExpandedHeader",
-    finalPolishIndex
-  );
   const polishedDeploymentExpandedBodyRule = getLastCssRuleAfter(
     stylesSource,
     "deploymentExpandedBody",
+    finalPolishIndex
+  );
+  const polishedDeploymentStageStepperRule = getLastCssRuleAfter(
+    stylesSource,
+    "deploymentStageStepper",
+    finalPolishIndex
+  );
+  const polishedDeploymentStageDotRule = getLastCssRuleAfter(
+    stylesSource,
+    "deploymentStageDot",
+    finalPolishIndex
+  );
+  const polishedDeploymentStageActionCardRule = getLastCssRuleAfter(
+    stylesSource,
+    "deploymentStageActionCard",
+    finalPolishIndex
+  );
+  const polishedDeploymentStageSummaryPanelRule = getLastCssRuleAfter(
+    stylesSource,
+    "deploymentStageSummaryPanel",
     finalPolishIndex
   );
   const polishedTerraformPreviewButtonRule = getLastCssRuleAfter(
@@ -281,9 +297,15 @@ test("workspace internal panel polish uses DESIGN.md tokens instead of legacy Bl
   assert.match(polishedDeploymentExpandedShellRule, /\bbackground:\s*var\(--workspace-surface,/);
   assert.match(polishedDeploymentExpandedShellRule, /\bborder:\s*1px solid var\(--workspace-line,/);
   assert.match(polishedDeploymentExpandedShellRule, /\bfont-family:\s*var\(--workspace-font,/);
-  assert.match(polishedDeploymentExpandedHeaderRule, /\bbackground:\s*var\(--workspace-surface,/);
-  assert.match(polishedDeploymentExpandedHeaderRule, /\bborder-bottom:\s*1px solid var\(--workspace-line,/);
   assert.match(polishedDeploymentExpandedBodyRule, /\bbackground:\s*var\(--workspace-surface-muted,/);
+  assert.match(polishedDeploymentStageStepperRule, /\bbackground:\s*var\(--workspace-surface,/);
+  assert.match(polishedDeploymentStageStepperRule, /\bborder:\s*1px solid var\(--workspace-line,/);
+  assert.match(polishedDeploymentStageDotRule, /\bbackground:\s*var\(--workspace-surface,/);
+  assert.match(polishedDeploymentStageDotRule, /\bborder:\s*1px solid var\(--workspace-line,/);
+  assert.match(polishedDeploymentStageActionCardRule, /\bbackground:\s*var\(--workspace-surface,/);
+  assert.match(polishedDeploymentStageActionCardRule, /\bborder:\s*1px solid var\(--workspace-line,/);
+  assert.match(polishedDeploymentStageSummaryPanelRule, /\bbackground:\s*var\(--workspace-surface-muted,/);
+  assert.match(polishedDeploymentStageSummaryPanelRule, /\bborder:\s*1px solid var\(--workspace-line,/);
   assert.match(polishedTerraformPreviewButtonRule, /\bcolor:\s*var\(--workspace-text,/);
   assert.match(polishedAiPrimaryButtonRule, /\bbackground:\s*var\(--workspace-accent,/);
   assert.match(polishedAiPrimaryButtonRule, /\bborder-color:\s*var\(--workspace-accent,/);
@@ -313,8 +335,11 @@ test("workspace internal panel polish uses DESIGN.md tokens instead of legacy Bl
     polishedAiPanelHeaderRule,
     polishedDeploymentHeaderRule,
     polishedDeploymentExpandedShellRule,
-    polishedDeploymentExpandedHeaderRule,
     polishedDeploymentExpandedBodyRule,
+    polishedDeploymentStageStepperRule,
+    polishedDeploymentStageDotRule,
+    polishedDeploymentStageActionCardRule,
+    polishedDeploymentStageSummaryPanelRule,
     polishedTerraformPreviewButtonRule,
     polishedAiPrimaryButtonRule,
     polishedDeploymentPrimaryButtonRule,
@@ -352,7 +377,7 @@ test("deployment panel keeps setup, status, and secondary sections in one flow",
   assert.doesNotMatch(deploymentPanelSource, /className=\{styles\.deploymentModeSwitch\}/);
 });
 
-test("right panel exposes only the persistent Issues and Deploy text actions", () => {
+test("right panel exposes resources, terraform, and deploy while Issues live inside terraform", () => {
   const utilityBarIndex = componentSource.indexOf("className={styles.rightPanelUtilityBar}");
   const modeBarIndex = componentSource.indexOf("className={styles.rightPanelModeBar}");
   const toolbarContentEndIndex = componentSource.indexOf(
@@ -373,10 +398,11 @@ test("right panel exposes only the persistent Issues and Deploy text actions", (
   assert.ok(modeBarIndex > utilityBarIndex);
   assert.ok(resourcesButtonIndex > -1);
   assert.ok(codeButtonIndex > resourcesButtonIndex);
-  assert.ok(issuesButtonIndex > codeButtonIndex);
-  assert.ok(deployButtonIndex > issuesButtonIndex);
+  assert.equal(issuesButtonIndex, -1);
+  assert.ok(deployButtonIndex > codeButtonIndex);
   assert.match(codeButtonSource, /data-terraform-editor-navigation/);
   assert.match(codeButtonSource, /onClick=\{\(\) => requestView\("terraform"\)\}/);
+  assert.match(codeButtonSource, /aria-label=\{`\$\{terraformDiagnostics\.length\} issues`\}/);
   assert.match(modeBarSource, /onClick=\{openDeploymentConsole\}/);
   assert.match(componentSource, /title="Terraform code"/);
   assert.match(componentSource, /styles\.panelModeTextButton/);
@@ -492,6 +518,17 @@ test("resource list identity starts with the service icon", () => {
   assert.doesNotMatch(stylesSource, /\.resourceListCubeIcon\s*\{/);
   assert.doesNotMatch(serviceIconRule, /\bborder-left:/);
   assert.match(serviceIconRule, /\bwidth:\s*36px;/);
+});
+
+test("selected resource list card uses a clear blue border only for the active state", () => {
+  const activeCardRule = getCssRuleAfter(
+    stylesSource,
+    "resourceListItemActive",
+    stylesSource.indexOf(".resourceListItem:hover")
+  );
+
+  assert.match(activeCardRule, /\bborder-color:\s*#2563eb;/);
+  assert.match(activeCardRule, /\bbox-shadow:\s*0 0 0 1px rgba\(37,\s*99,\s*235,\s*0\.18\);/);
 });
 
 test("resource card menu omits data source switch and maximize actions", () => {
@@ -630,18 +667,69 @@ test("terraform leave guard covers workspace escape actions while editing", () =
   assert.match(componentSource, /window\.addEventListener\("beforeunload", handleBeforeUnload\)/);
   assert.match(componentSource, /onClick=\{requestRightPanelClose\}/);
   assert.match(componentSource, /requestTerraformLeave\(\{ kind: "view", view: nextView \}\)/);
-  assert.match(componentSource, /requestTerraformLeave\(\{ kind: "resource-settings" \}\)/);
+  assert.doesNotMatch(componentSource, /requestTerraformLeave\(\{ kind: "resource-settings" \}\)/);
   assert.match(componentSource, /kind: "replay-click"/);
   assert.doesNotMatch(componentSource, /activeView === "terraform" \|\| activeView === "issues"/);
 });
 
-test("terraform issues navigation bypasses the leave guard as an internal terraform workflow", () => {
-  assert.doesNotMatch(componentSource, /canOpenTerraformIssuesDuringEdit/);
-  assert.match(componentSource, /nextView === "issues"/);
-  assert.match(componentSource, /data-terraform-issues-navigation/);
-  assert.match(componentSource, /isTerraformIssuesNavigationTarget/);
-  assert.match(componentSource, /isTerraformIssuesNavigationTarget\(target\)/);
-  assert.match(componentSource, /openCollapsedView\("issues"\)/);
+test("terraform code editor no longer opens resource parameter settings from highlighted blocks", () => {
+  assert.doesNotMatch(terraformPanelSource, /Settings,/);
+  assert.doesNotMatch(terraformPanelSource, /onOpenResourceSettings/);
+  assert.doesNotMatch(terraformPanelSource, /Open resource settings/);
+  assert.doesNotMatch(terraformPanelSource, /terraformBlockSettingsButton/);
+  assert.doesNotMatch(componentSource, /onOpenResourceSettings=\{/);
+  assert.doesNotMatch(componentSource, /kind: "resource-settings"/);
+  assert.doesNotMatch(stylesSource, /\.terraformBlockSettingsButton\b/);
+});
+
+test("terraform view embeds issues below code with a resizable split instead of a separate Issues tab", () => {
+  const modeBarStartIndex = componentSource.indexOf("className={styles.rightPanelModeBar}");
+  const modeBarEndIndex = componentSource.indexOf("<div className={styles.rightPanelView}", modeBarStartIndex);
+  const modeBarSource = componentSource.slice(modeBarStartIndex, modeBarEndIndex);
+  const terraformViewStartIndex = componentSource.indexOf('hidden={activeView !== "terraform"}');
+  const terraformViewEndIndex = componentSource.indexOf("{showTerraformLeaveDialog ? (", terraformViewStartIndex);
+  const terraformViewSource = componentSource.slice(terraformViewStartIndex, terraformViewEndIndex);
+
+  assert.ok(modeBarStartIndex > -1);
+  assert.ok(modeBarEndIndex > modeBarStartIndex);
+  assert.ok(terraformViewStartIndex > -1);
+  assert.ok(terraformViewEndIndex > terraformViewStartIndex);
+  assert.doesNotMatch(workspaceRightPanelTypesSource, /"issues"/);
+  assert.doesNotMatch(modeBarSource, /<span>Issues<\/span>/);
+  assert.doesNotMatch(modeBarSource, /requestView\("issues"\)/);
+  assert.doesNotMatch(componentSource, /openCollapsedView\("issues"\)/);
+  assert.doesNotMatch(componentSource, /hidden=\{activeView !== "issues"\}/);
+  assert.doesNotMatch(componentSource, /isTerraformIssuesNavigationTarget/);
+  assert.match(componentSource, /DEFAULT_TERRAFORM_CODE_PANE_RATIO = 62/);
+  assert.match(componentSource, /MIN_TERRAFORM_CODE_PANE_RATIO = 32/);
+  assert.match(componentSource, /MAX_TERRAFORM_CODE_PANE_RATIO = 78/);
+  assert.match(componentSource, /clampTerraformCodePaneRatio/);
+  assert.match(componentSource, /startTerraformSplitResize/);
+  assert.match(componentSource, /if \(splitBounds\.height <= 0\) \{\s*return;\s*\}/);
+  assert.match(componentSource, /handleTerraformSplitKeyDown/);
+  assert.match(terraformViewSource, /className=\{styles\.terraformSplitLayout\}/);
+  assert.match(terraformViewSource, /className=\{styles\.terraformCodePane\}/);
+  assert.match(terraformViewSource, /className=\{styles\.terraformSplitResizeHandle\}/);
+  assert.match(terraformViewSource, /role="separator"/);
+  assert.match(terraformViewSource, /aria-orientation="horizontal"/);
+  assert.match(terraformViewSource, /aria-valuemin=\{MIN_TERRAFORM_CODE_PANE_RATIO\}/);
+  assert.match(terraformViewSource, /aria-valuemax=\{MAX_TERRAFORM_CODE_PANE_RATIO\}/);
+  assert.match(terraformViewSource, /aria-valuenow=\{terraformCodePaneRatio\}/);
+  assert.match(terraformViewSource, /onPointerDown=\{startTerraformSplitResize\}/);
+  assert.match(terraformViewSource, /onKeyDown=\{handleTerraformSplitKeyDown\}/);
+  assert.match(terraformViewSource, /className=\{styles\.terraformIssuesPane\}/);
+  assert.match(terraformViewSource, /<TerraformIssuesPanel issues=\{terraformIssues\}/);
+  assert.match(getCssRule(stylesSource, "terraformSplitLayout"), /grid-template-rows:\s*var\(--terraform-code-pane-ratio\) 10px minmax\(0,\s*1fr\);/);
+  assert.match(getCssRule(stylesSource, "terraformCodePane"), /\bmin-height:\s*0;/);
+  assert.match(getCssRule(stylesSource, "terraformSplitResizeHandle"), /\bcursor:\s*row-resize;/);
+  assert.match(getCssRule(stylesSource, "terraformIssuesPane"), /\bmin-height:\s*0;/);
+});
+
+test("terraform issue banner focuses the embedded Issues panel instead of navigating to a tab", () => {
+  assert.match(terraformPanelSource, /Issues 보기/);
+  assert.doesNotMatch(terraformPanelSource, /Issues 탭으로 이동/);
+  assert.match(componentSource, /focusTerraformIssuesPane/);
+  assert.match(componentSource, /onOpenIssues=\{focusTerraformIssuesPane\}/);
 });
 
 test("terraform issue AI resolution bypasses the leave guard while editing", () => {
@@ -655,7 +743,7 @@ test("terraform issue AI resolution bypasses the leave guard while editing", () 
   assert.match(issuesPanelSource, /onResolveWithAi\(issue\)/);
 });
 
-test("terraform code navigation stays reachable from issues after a blocked save", () => {
+test("terraform code navigation stays reachable after a blocked save", () => {
   const requestViewIndex = componentSource.indexOf("const requestView = useCallback");
   const requestViewEditorBypassIndex = componentSource.indexOf('if (nextView === "terraform")', requestViewIndex);
   const requestViewLeaveGuardIndex = componentSource.indexOf(
@@ -727,6 +815,18 @@ test("terraform leave dialog uses Korean copy", () => {
   assert.match(terraformLeaveDialogSource, /저장하고 나가기/);
   assert.doesNotMatch(terraformLeaveDialogSource, /Save changes before leaving\?/);
   assert.doesNotMatch(terraformLeaveDialogSource, /Discard Changes/);
+});
+
+test("terraform leave dialog continue action uses the stronger hover tint as its base color", () => {
+  const secondaryButtonRule = getCssRule(stylesSource, "terraformDialogSecondaryButton");
+
+  assert.match(secondaryButtonRule, /background:\s*var\(--bp-blue-tint\);/);
+  assert.doesNotMatch(secondaryButtonRule, /background:\s*#ffffff;/);
+  assert.doesNotMatch(secondaryButtonRule, /background:\s*var\(--bp-paper-2\);/);
+  assert.match(
+    stylesSource,
+    /\.terraformDialogSecondaryButton:hover,[\s\S]*?background:\s*color-mix\(in srgb, var\(--bp-blue-tint\) 74%, var\(--bp-blue\)\);/
+  );
 });
 
 test("terraform leave dialog exposes blocked save feedback instead of ignoring failed saves", () => {
@@ -801,6 +901,10 @@ test("deployment expanded panel uses one readable body instead of a split pane",
 
 test("deployment expanded overlay sits above the floating AI dock and blocks lower controls", () => {
   const expandedOverlayRule = getCssRule(stylesSource, "deploymentExpandedOverlay");
+  const expandedShellRule = getCssRule(stylesSource, "deploymentExpandedShell");
+  const expandedCloseButtonRule = getCssRule(stylesSource, "deploymentExpandedCloseButton");
+  const expandedTitleRowRule = getCssRule(stylesSource, "deploymentExpandedTitleRow");
+  const expandedTitleRule = getCssRule(stylesSource, "deploymentExpandedTitle");
   const floatingPanelSlotRule = getCssRule(diagramEditorStylesSource, "floatingPanelSlot");
   const expandedOverlayZIndex = readCssNumber(expandedOverlayRule, "z-index");
   const floatingPanelSlotZIndex = readCssNumber(floatingPanelSlotRule, "z-index");
@@ -813,7 +917,17 @@ test("deployment expanded overlay sits above the floating AI dock and blocks low
   assert.match(deploymentPanelSource, /event\.target === event\.currentTarget/);
   assert.match(deploymentPanelSource, /closeExpandedDeployment\(\)/);
   assert.match(deploymentPanelSource, /className=\{styles\.deploymentExpandedShell\}/);
+  assert.match(deploymentPanelSource, /className=\{styles\.deploymentExpandedCloseButton\}/);
+  assert.match(deploymentPanelSource, /className=\{styles\.deploymentExpandedTitleRow\}/);
+  assert.match(deploymentPanelSource, /<h2 className=\{styles\.deploymentExpandedTitle\}>배포 콘솔<\/h2>/);
+  assert.doesNotMatch(deploymentPanelSource, /className=\{styles\.deploymentExpandedHeader\}/);
   assert.match(expandedOverlayRule, /\bpointer-events:\s*auto;/);
+  assert.match(expandedShellRule, /\bposition:\s*relative;/);
+  assert.match(expandedCloseButtonRule, /\bposition:\s*absolute;/);
+  assert.match(expandedCloseButtonRule, /\bright:\s*18px;/);
+  assert.match(expandedTitleRowRule, /\bpadding-right:\s*56px;/);
+  assert.match(expandedTitleRule, /\bfont-size:\s*18px;/);
+  assert.match(expandedTitleRule, /\bfont-weight:\s*900;/);
 });
 
 test("deployment expanded body uses larger action and record text", () => {
@@ -882,12 +996,65 @@ test("GitHub repository setup is owned by project settings, not the deployment p
 });
 
 test("deployment setup exposes a three-step workflow with one primary path", () => {
+  const finalPolishIndex = stylesSource.indexOf("/* DESIGN.md workspace internal panel pass */");
   const stagePanelRule = getCssRule(stylesSource, "deploymentStagePanel");
-  const stageCardRule = getCssRule(stylesSource, "deploymentStageCard");
+  const stageStepperRule = getCssRule(stylesSource, "deploymentStageStepper");
+  const stageStepRule = getCssRule(stylesSource, "deploymentStageStep");
+  const stageDotRule = getCssRule(stylesSource, "deploymentStageDot");
+  const stageActionsRule = getCssRule(stylesSource, "deploymentStageActions");
+  const stageActionCardRule = getCssRule(stylesSource, "deploymentStageActionCard");
+  const stageSummaryPanelRule = getCssRule(stylesSource, "deploymentStageSummaryPanel");
+  const stageSummaryNoticeRule = getCssRule(stylesSource, "deploymentStageSummaryNotice");
+  const stageFooterRule = getCssRule(stylesSource, "deploymentStageFooter");
+  const stageNextButtonRule = getCssRule(stylesSource, "deploymentStageNextButton");
   const stageSettingsRule = getCssRule(stylesSource, "deploymentStageSettings");
   const stageAlertRule = getCssRule(stylesSource, "deploymentStageAlert");
+  const finalStageSummaryNoticeRule = getLastCssRuleContainingAfter(
+    stylesSource,
+    ".deploymentStageSummaryNotice",
+    finalPolishIndex
+  );
+  const finalStageAlertRule = getLastCssRuleContainingAfter(
+    stylesSource,
+    ".deploymentStageAlert",
+    finalPolishIndex
+  );
+  const activeStageDotRule = getLastCssRuleContainingAfter(
+    stylesSource,
+    '.deploymentStageStep[data-state="active"] .deploymentStageDot',
+    finalPolishIndex
+  );
+  const doneStageDotRule = getLastCssRuleContainingAfter(
+    stylesSource,
+    '.deploymentStageStep[data-state="done"] .deploymentStageDot',
+    finalPolishIndex
+  );
+  const activeStageActionRule = getLastCssRuleContainingAfter(
+    stylesSource,
+    '.deploymentStageActionCard[data-state="active"]',
+    finalPolishIndex
+  );
+  const doneStageActionRule = getLastCssRuleContainingAfter(
+    stylesSource,
+    '.deploymentStageActionCard[data-state="done"]',
+    finalPolishIndex
+  );
+  const errorStageDotRule = getLastCssRuleContainingAfter(
+    stylesSource,
+    '.deploymentStageStep[data-state="error"] .deploymentStageDot',
+    0
+  );
+  const errorStageActionRule = getLastCssRuleContainingAfter(
+    stylesSource,
+    '.deploymentStageActionCard[data-state="error"]',
+    0
+  );
+  const stageActionsSource = deploymentPanelSource.slice(
+    deploymentPanelSource.indexOf('<div className={styles.deploymentStageActions}>'),
+    deploymentPanelSource.indexOf('{preDeploymentState === "error"')
+  );
   const stageActionButtonRule =
-    /\.deploymentStageCard > \.deploymentPrimaryButton,\s*\.deploymentStageCard > \.deploymentSecondaryButton\s*\{[\s\S]*?\bgrid-column:\s*3;[\s\S]*?\bgrid-row:\s*1;[\s\S]*?\bjustify-self:\s*end;[\s\S]*?\bmin-width:\s*118px;[\s\S]*?\bwhite-space:\s*nowrap;/;
+    /\.deploymentStageActionCard > \.deploymentPrimaryButton,\s*\.deploymentStageActionCard > \.deploymentSecondaryButton\s*\{[\s\S]*?\bgrid-column:\s*2;[\s\S]*?\bgrid-row:\s*1;[\s\S]*?\bjustify-self:\s*end;[\s\S]*?\bmin-width:\s*118px;[\s\S]*?\bwhite-space:\s*nowrap;/;
   const saveIndex = deploymentPanelSource.indexOf("배포 전 저장");
   const reviewIndex = deploymentPanelSource.indexOf("배포 전 검사 및 리뷰", saveIndex);
   const deployIndex = deploymentPanelSource.indexOf("<h3>배포</h3>", reviewIndex);
@@ -895,6 +1062,42 @@ test("deployment setup exposes a three-step workflow with one primary path", () 
   assert.ok(saveIndex > -1);
   assert.ok(reviewIndex > saveIndex);
   assert.ok(deployIndex > reviewIndex);
+  assert.match(deploymentPanelSource, /const deploymentStageSteps = \[/);
+  assert.match(deploymentPanelSource, /label:\s*"저장"/);
+  assert.match(deploymentPanelSource, /label:\s*"검사"/);
+  assert.match(deploymentPanelSource, /label:\s*"배포"/);
+  assert.match(deploymentPanelSource, /deploymentStageSteps\.map\(\(stage\) =>/);
+  assert.match(deploymentPanelSource, /type DeploymentWizardStep = "baseline" \| "review" \| "deploy";/);
+  assert.match(
+    deploymentPanelSource,
+    /const \[deploymentWizardStep, setDeploymentWizardStep\] = useState<DeploymentWizardStep>/
+  );
+  assert.match(deploymentPanelSource, /getSuggestedDeploymentWizardStep/);
+  assert.match(deploymentPanelSource, /canOpenDeploymentWizardStep/);
+  assert.match(deploymentPanelSource, /moveToDeploymentWizardStep/);
+  assert.match(deploymentPanelSource, /renderDeploymentStageAction\(activeDeploymentStage\.id\)/);
+  assert.match(deploymentPanelSource, /renderDeploymentStageSummaryPanel\(activeDeploymentStage\.id\)/);
+  assert.match(deploymentPanelSource, /aria-current=\{stage\.id === deploymentWizardStep \? "step" : undefined\}/);
+  assert.match(deploymentPanelSource, /className=\{styles\.deploymentStageStepper\}/);
+  assert.match(deploymentPanelSource, /className=\{styles\.deploymentStageDot\}/);
+  assert.match(deploymentPanelSource, /className=\{styles\.deploymentStageActions\}/);
+  assert.match(deploymentPanelSource, /className=\{styles\.deploymentStageActionCard\}/);
+  assert.match(deploymentPanelSource, /className=\{styles\.deploymentStageSummaryPanel\}/);
+  assert.match(deploymentPanelSource, /className=\{styles\.deploymentStageSummaryNotice\}/);
+  assert.match(deploymentPanelSource, /className=\{styles\.deploymentStageFooter\}/);
+  assert.match(deploymentPanelSource, /className=\{styles\.deploymentStageNextButton\}/);
+  assert.match(deploymentPanelSource, /읽기 전용 요약/);
+  assert.match(deploymentPanelSource, /현재 단계와 관련된 판단 근거만 보여줍니다\./);
+  assert.match(deploymentPanelSource, /다음: 검사/);
+  assert.match(deploymentPanelSource, /다음: 배포/);
+  assert.match(deploymentPanelSource, /disabled=\{hasUnsavedDeploymentBaseline \|\| requestState === "loading"\}/);
+  assert.match(deploymentPanelSource, /disabled=\{!selectedDeployment \|\| requestState === "loading"\}/);
+  assert.match(deploymentPanelSource, /moveToDeploymentWizardStep\("review"\)/);
+  assert.match(deploymentPanelSource, /moveToDeploymentWizardStep\("deploy"\)/);
+  assert.match(stageActionsSource, /renderDeploymentStageAction\(activeDeploymentStage\.id\)/);
+  assert.doesNotMatch(stageActionsSource, /data-state=\{baselineStageState\}/);
+  assert.doesNotMatch(stageActionsSource, /data-state=\{reviewStageState\}/);
+  assert.doesNotMatch(stageActionsSource, /data-state=\{deployStageState\}/);
   assert.match(deploymentPanelSource, /runDeploymentReviewStep/);
   assert.match(deploymentPanelSource, /startPrimaryDeploymentStep/);
   assert.match(deploymentPanelSource, /검사 및 리뷰/);
@@ -902,12 +1105,70 @@ test("deployment setup exposes a three-step workflow with one primary path", () 
   assert.match(deploymentPanelSource, /Plan 승인/);
   assert.match(deploymentPanelSource, /배포 실행/);
   assert.match(stagePanelRule, /\bdisplay:\s*grid;/);
-  assert.match(stageCardRule, /grid-template-columns:\s*34px minmax\(0,\s*1fr\) minmax\(150px,\s*auto\);/);
-  assert.match(stageCardRule, /\bmin-height:\s*82px;/);
+  assert.match(stageStepperRule, /\bgrid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\);/);
+  assert.match(stageStepperRule, /\bborder-radius:\s*12px;/);
+  assert.match(stageStepperRule, /\bmin-height:\s*150px;/);
+  assert.match(stageStepperRule, /\bpadding:\s*24px;/);
+  assert.match(stageStepRule, /\bdisplay:\s*grid;/);
+  assert.match(stageDotRule, /\bborder-radius:\s*999px;/);
+  assert.match(stageDotRule, /\bheight:\s*64px;/);
+  assert.match(stageDotRule, /\bwidth:\s*64px;/);
+  assert.match(stageDotRule, /\bfont-size:\s*22px;/);
+  assert.match(stageActionsRule, /\bdisplay:\s*grid;/);
+  assert.match(stageActionsRule, /grid-template-columns:\s*minmax\(0,\s*1fr\) 352px;/);
+  assert.match(stageActionCardRule, /grid-template-columns:\s*minmax\(0,\s*1fr\) auto;/);
+  assert.match(stageActionCardRule, /\bmin-height:\s*238px;/);
+  assert.match(stageActionCardRule, /\bpadding:\s*26px;/);
+  assert.match(stageSummaryPanelRule, /\bdisplay:\s*grid;/);
+  assert.match(stageSummaryPanelRule, /\bmin-height:\s*238px;/);
+  assert.match(stageSummaryPanelRule, /\bborder-radius:\s*12px;/);
+  assert.match(stageSummaryNoticeRule, /\bbackground:\s*#eef6ff;/);
+  assert.match(stageSummaryNoticeRule, /\bborder:\s*1px solid #bfdbfe;/);
+  assert.match(stageSummaryNoticeRule, /\bcolor:\s*#1e3a8a;/);
+  assert.match(stageFooterRule, /\bdisplay:\s*flex;/);
+  assert.match(stageFooterRule, /\bjustify-content:\s*flex-end;/);
+  assert.match(stageNextButtonRule, /\bmin-width:\s*118px;/);
   assert.match(stageSettingsRule, /grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\);/);
   assert.match(stageSettingsRule, /\bgrid-row:\s*2;/);
   assert.match(stylesSource, stageActionButtonRule);
   assert.match(stageAlertRule, /\bmin-height:\s*38px;/);
+  assert.match(stageAlertRule, /\bbackground:\s*#fef2f2;/);
+  assert.match(stageAlertRule, /\bborder:\s*1px solid #f87171;/);
+  assert.match(stageAlertRule, /\bcolor:\s*#991b1b;/);
+  assert.match(finalStageSummaryNoticeRule, /\bbackground:\s*#eef6ff;/);
+  assert.match(finalStageSummaryNoticeRule, /\bborder-color:\s*#bfdbfe;/);
+  assert.match(finalStageSummaryNoticeRule, /\bcolor:\s*#1e3a8a;/);
+  assert.match(finalStageAlertRule, /\bbackground:\s*#fef2f2;/);
+  assert.match(finalStageAlertRule, /\bborder-color:\s*#f87171;/);
+  assert.match(finalStageAlertRule, /\bcolor:\s*#991b1b;/);
+  assert.match(activeStageDotRule, /\bbackground:\s*#2563eb;/);
+  assert.match(activeStageDotRule, /\bborder-color:\s*#2563eb;/);
+  assert.match(activeStageDotRule, /\bbox-shadow:\s*0 0 0 6px rgba\(37,\s*99,\s*235,\s*0\.16\);/);
+  assert.match(doneStageDotRule, /\bbackground:\s*#0f766e;/);
+  assert.match(doneStageDotRule, /\bborder-color:\s*#0f766e;/);
+  assert.match(activeStageActionRule, /\bborder-color:\s*#2563eb;/);
+  assert.match(doneStageActionRule, /\bborder-color:\s*#0f766e;/);
+  assert.match(errorStageDotRule, /\bbackground:\s*#fee2e2;/);
+  assert.match(errorStageDotRule, /\bborder-color:\s*#f87171;/);
+  assert.match(errorStageDotRule, /\bcolor:\s*#991b1b;/);
+  assert.match(errorStageActionRule, /\bbackground:\s*#fef2f2;/);
+  assert.match(errorStageActionRule, /\bborder-color:\s*#f87171;/);
+  assert.doesNotMatch(activeStageDotRule, /var\(--workspace-accent|#171717|#000000/);
+  assert.doesNotMatch(doneStageDotRule, /#16a34a/);
+  assert.doesNotMatch(
+    [
+      stageSummaryNoticeRule,
+      stageAlertRule,
+      finalStageSummaryNoticeRule,
+      finalStageAlertRule,
+      errorStageDotRule,
+      errorStageActionRule
+    ].join("\n"),
+    /#fff7ed|#fed7aa|#ffedd5|#fdba74|#fb923c|#9a3412|#c2410c/
+  );
+  assert.doesNotMatch(deploymentPanelSource, /deploymentStageNumber/);
+  assert.doesNotMatch(stylesSource, /\.deploymentStageNumber\s*\{/);
+  assert.doesNotMatch(stylesSource, /grid-template-columns:\s*34px minmax\(0,\s*1fr\) minmax\(150px,\s*auto\);/);
   assert.doesNotMatch(deploymentPanelSource, /배포 기준 저장/);
   assert.doesNotMatch(deploymentPanelSource, /배포 검토 시작/);
   assert.doesNotMatch(deploymentPanelSource, /설계 버전 저장/);
@@ -1050,7 +1311,8 @@ test("terraform errors surface as an issues banner and AI resolution lives in th
   assert.doesNotMatch(terraformPanelSource, /terraformErrorExplanationPanel/);
   assert.doesNotMatch(terraformPanelSource, /terraformErrorExplanationList/);
   assert.match(terraformPanelSource, /className=\{styles\.terraformIssueBanner\}/);
-  assert.match(terraformPanelSource, /Issues 탭으로 이동/);
+  assert.match(terraformPanelSource, /Issues 보기/);
+  assert.doesNotMatch(terraformPanelSource, /Issues 탭으로 이동/);
   assert.match(componentSource, /readStoredTerraformIssues/);
   assert.match(componentSource, /markTerraformIssuesStale/);
   assert.match(componentSource, /mergeTerraformValidationDiagnostics/);
@@ -1215,6 +1477,30 @@ test("terraform editor renders syntax colors and squiggly error underlines", () 
   assert.match(stringRule, /\bcolor:\s*#f0a77d;/);
   assert.match(braceRule, /\bcolor:\s*#9bd7ff;/);
   assert.match(lineNumberErrorRule, /\bcolor:\s*#fca5a5;/);
+});
+
+test("terraform selected block scrolls to the editor center with a clamped target", () => {
+  const selectedBlockEffectIndex = terraformPanelSource.indexOf(
+    "if (!isVisible || isResourceCodeMode || !selectedBlock || !textareaRef.current)"
+  );
+  const sourceLocationEffectIndex = terraformPanelSource.indexOf(
+    "if (!pendingSourceLocation || !isVisible || isResourceCodeMode)",
+    selectedBlockEffectIndex
+  );
+  const selectedBlockEffectSource = terraformPanelSource.slice(
+    selectedBlockEffectIndex,
+    sourceLocationEffectIndex
+  );
+
+  assert.ok(selectedBlockEffectIndex > -1);
+  assert.ok(sourceLocationEffectIndex > selectedBlockEffectIndex);
+  assert.match(terraformPanelSource, /function clampTerraformEditorScrollTop/);
+  assert.match(selectedBlockEffectSource, /const blockTop = TERRAFORM_EDITOR_VERTICAL_PADDING \+ \(selectedBlock\.startLine - 1\) \* lineHeight;/);
+  assert.match(selectedBlockEffectSource, /const blockHeight = Math\.max\(1, selectedBlock\.endLine - selectedBlock\.startLine \+ 1\) \* lineHeight;/);
+  assert.match(selectedBlockEffectSource, /const targetScrollTop = blockTop \+ blockHeight \/ 2 - textarea\.clientHeight \/ 2;/);
+  assert.match(selectedBlockEffectSource, /clampTerraformEditorScrollTop\(targetScrollTop, textarea\)/);
+  assert.match(selectedBlockEffectSource, /lineNumberRef\.current\.scrollTop = textarea\.scrollTop;/);
+  assert.doesNotMatch(selectedBlockEffectSource, /selectedBlock\.startLine - 2/);
 });
 
 test("terraform preview explanation is triggered from the terraform code panel", () => {

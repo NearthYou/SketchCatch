@@ -4,6 +4,7 @@ import type {
   DiagramEdge,
   DiagramJson,
   DiagramNode,
+  DiagramNodeBorderStyle,
   DiagramNodeParameters,
   ResourceConfig,
   ResourceDragPayload,
@@ -28,7 +29,7 @@ const DEFAULT_EDGE_STYLE: NonNullable<DiagramEdge["style"]> = {
   animated: false,
   color: "#506176",
   lineStyle: "solid",
-  width: "medium"
+  width: "thin"
 };
 const ASYNC_EDGE_STYLE: NonNullable<DiagramEdge["style"]> = {
   animated: false,
@@ -243,6 +244,7 @@ function convertArchitectureNodeToDiagramNode(node: ArchitectureJson["nodes"][nu
     return presentationNode;
   }
 
+  const config = node.config ?? {};
   const terraformResourceType = mapResourceTypeToTerraform(node.type);
   const position = {
     x: node.positionX,
@@ -256,13 +258,26 @@ function convertArchitectureNodeToDiagramNode(node: ArchitectureJson["nodes"][nu
     id: node.id,
     label: node.label ?? baseNode.label,
     locked: false,
-    metadata: readDiagramNodeMetadata(node.config) ?? baseNode.metadata,
+    metadata: readDiagramNodeMetadata(config) ?? baseNode.metadata,
     parameters: createDiagramNodeParameters(node, terraformResourceType, baseNode.parameters),
     position,
-    size: readDiagramNodeSize(node.config) ?? baseNode.size,
+    size: readDiagramNodeSize(config) ?? baseNode.size,
+    style: mergeDiagramNodeStyle(baseNode.style, readDiagramNodeStyle(config)),
     type: terraformResourceType,
     zIndex
   };
+}
+
+function mergeDiagramNodeStyle(
+  baseStyle: DiagramNode["style"],
+  overrideStyle: DiagramNode["style"]
+): DiagramNode["style"] | undefined {
+  const style = {
+    ...(baseStyle ?? {}),
+    ...(overrideStyle ?? {})
+  };
+
+  return Object.keys(style).length > 0 ? style : undefined;
 }
 
 function createPresentationDiagramNode(
@@ -321,12 +336,18 @@ function readDiagramNodeIconUrl(config: ResourceConfig): string | undefined {
 function readDiagramNodeStyle(config: ResourceConfig): DiagramNode["style"] | undefined {
   const textColor = config["diagramTextColor"];
   const borderColor = config["diagramBorderColor"];
-  const style = {
+  const borderStyle = readDiagramBorderStyle(config["diagramBorderStyle"]);
+  const style: NonNullable<DiagramNode["style"]> = {
     ...(typeof textColor === "string" && textColor.trim().length > 0 ? { textColor } : {}),
-    ...(typeof borderColor === "string" && borderColor.trim().length > 0 ? { borderColor } : {})
+    ...(typeof borderColor === "string" && borderColor.trim().length > 0 ? { borderColor } : {}),
+    ...(borderStyle ? { borderStyle } : {})
   };
 
   return Object.keys(style).length > 0 ? style : undefined;
+}
+
+function readDiagramBorderStyle(value: unknown): DiagramNodeBorderStyle | undefined {
+  return value === "solid" || value === "dashed" || value === "dotted" ? value : undefined;
 }
 
 // jh Resource catalog를 거쳐 수동 drag/drop 노드와 같은 iconUrl, size, 기본 style을 사용합니다.

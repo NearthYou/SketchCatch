@@ -6,11 +6,14 @@ import {
   AREA_NODE_DEFAULT_BORDER_COLOR,
   RESOURCE_NODE_BORDER_COLOR,
   canChangeNodeBorderColor,
-  getNodeDisplayBorderColor
+  getNodeDisplayBorderColor,
+  getNodeDisplayBorderStyle
 } from "./node-style";
 
 test("getNodeDisplayBorderColor keeps area border colors independent from resource borders", () => {
-  assert.equal(getNodeDisplayBorderColor(makeResourceNode("aws_vpc")), AREA_NODE_DEFAULT_BORDER_COLOR);
+  assert.equal(AREA_NODE_DEFAULT_BORDER_COLOR, "#cbd5e1");
+  assert.equal(getNodeDisplayBorderColor(makeResourceNode("aws_vpc")), "#cbd5e1");
+  assert.equal(getNodeDisplayBorderColor(makeDesignNode("design_region")), "#cbd5e1");
   assert.equal(getNodeDisplayBorderColor(makeResourceNode("aws_vpc", "#2f8c55")), "#2f8c55");
   assert.equal(getNodeDisplayBorderColor(makeResourceNode("aws_instance", "#c9473d")), RESOURCE_NODE_BORDER_COLOR);
 });
@@ -22,7 +25,33 @@ test("canChangeNodeBorderColor allows border color changes only for area nodes",
   assert.equal(canChangeNodeBorderColor(makeResourceNode("aws_instance")), false);
 });
 
-function makeResourceNode(resourceType: string, borderColor?: string): DiagramNode {
+test("getNodeDisplayBorderStyle follows AWS group defaults for area nodes", () => {
+  assert.equal(getNodeDisplayBorderStyle(makeResourceNode("aws_region")), "dashed");
+  assert.equal(getNodeDisplayBorderStyle(makeResourceNode("aws_availability_zone")), "dashed");
+  assert.equal(getNodeDisplayBorderStyle(makeResourceNode("aws_autoscaling_group")), "dashed");
+  assert.equal(getNodeDisplayBorderStyle(makeDesignNode("design_group")), "dashed");
+  assert.equal(getNodeDisplayBorderStyle(makeResourceNode("aws_vpc")), "solid");
+  assert.equal(getNodeDisplayBorderStyle(makeResourceNode("aws_subnet")), "solid");
+  assert.equal(getNodeDisplayBorderStyle(makeResourceNode("aws_security_group")), "solid");
+  assert.equal(getNodeDisplayBorderStyle(makeResourceNode("aws_instance")), "solid");
+});
+
+test("getNodeDisplayBorderStyle lets explicit area border style override the AWS default", () => {
+  assert.equal(getNodeDisplayBorderStyle(makeResourceNode("aws_region", undefined, "dotted")), "dotted");
+  assert.equal(getNodeDisplayBorderStyle(makeResourceNode("aws_vpc", undefined, "dashed")), "dashed");
+  assert.equal(getNodeDisplayBorderStyle(makeResourceNode("aws_instance", undefined, "dashed")), "solid");
+});
+
+function makeResourceNode(
+  resourceType: string,
+  borderColor?: string,
+  borderStyle?: "solid" | "dashed" | "dotted"
+): DiagramNode {
+  const style = {
+    ...(borderColor ? { borderColor } : {}),
+    ...(borderStyle ? { borderStyle } : {})
+  };
+
   return {
     id: `${resourceType}-1`,
     kind: "resource",
@@ -39,7 +68,7 @@ function makeResourceNode(resourceType: string, borderColor?: string): DiagramNo
       fileName: "main",
       values: {}
     },
-    ...(borderColor ? { style: { borderColor } } : {})
+    ...(Object.keys(style).length > 0 ? { style } : {})
   };
 }
 

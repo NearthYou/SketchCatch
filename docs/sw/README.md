@@ -6,7 +6,13 @@
 
 ## 현재 실행 기준
 
-현재 `docs/sw` 안에 남은 active 실행 계획은 없다. 새 workstream이 시작되면 해당 작업에 필요한 계약과 실행 계획만 추가하고, 완료된 뒤에는 canonical 문서나 구현 참고 가이드로 합친다.
+현재 `docs/sw`의 active workstream은 ECS 전환 및 RunTask Worker 전환이다. 작업자는 아래 세 문서를 먼저 읽고 phase를 시작한다.
+
+| 문서 | 책임 |
+| --- | --- |
+| [spec.md](./spec.md) | ECS 전환 및 RunTask Worker 전환 6개월 운영형 제품/운영 계약 |
+| [plan.md](./plan.md) | 우선순위 기반 phase 마일스톤과 완료 기준 |
+| [agents.md](./agents.md) | ECS 전환 작업자가 지켜야 할 규범 |
 
 ## 구현 참고 계약
 

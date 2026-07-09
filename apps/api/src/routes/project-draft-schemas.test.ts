@@ -17,7 +17,8 @@ const validDiagram: DiagramJson = {
       zIndex: 1,
       style: {
         textColor: "#172033",
-        borderColor: "#2f6db3"
+        borderColor: "#2f6db3",
+        borderStyle: "solid"
       },
       parameters: {
         terraformBlockType: "resource",
@@ -82,6 +83,42 @@ test("save project draft body preserves diagram edge line style", () => {
   });
 
   assert.equal(parsed.diagramJson.edges[0]?.style?.lineStyle, "dashed");
+});
+
+test("save project draft body preserves diagram node border style", () => {
+  const parsed = saveProjectDraftBodySchema.parse({
+    diagramJson: {
+      ...validDiagram,
+      nodes: [
+        {
+          ...validDiagram.nodes[0]!,
+          style: {
+            borderStyle: "dashed"
+          }
+        }
+      ]
+    }
+  });
+
+  assert.equal(parsed.diagramJson.nodes[0]?.style?.borderStyle, "dashed");
+});
+
+test("save project draft body rejects invalid diagram node border style", () => {
+  const result = saveProjectDraftBodySchema.safeParse({
+    diagramJson: {
+      ...validDiagram,
+      nodes: [
+        {
+          ...validDiagram.nodes[0]!,
+          style: {
+            borderStyle: "double"
+          }
+        }
+      ]
+    }
+  });
+
+  assert.equal(result.success, false);
 });
 
 test("save project draft body preserves diagram node metadata", () => {

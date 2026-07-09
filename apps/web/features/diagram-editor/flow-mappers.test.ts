@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { MarkerType } from "@xyflow/react";
 import type { DiagramEdge, DiagramNode } from "../../../../packages/types/src";
 import { toFlowEdges, toFlowNodes } from "./flow-mappers";
 import type { DiagramFlowNodeHandlers } from "./types";
@@ -217,6 +218,23 @@ test("toFlowEdges keeps existing React Flow source and target handle ids stable"
 
   assert.equal(flowEdges[0]?.sourceHandle, "source-handle-bottom");
   assert.equal(flowEdges[0]?.targetHandle, "target-handle-top");
+});
+
+test("toFlowEdges renders connection arrowheads as elongated filled triangles", () => {
+  const flowEdges = toFlowEdges([makeEdge("api-1", "queue-1")], []);
+
+  assert.deepEqual(flowEdges[0]?.markerEnd, {
+    type: MarkerType.ArrowClosed,
+    color: "#506176",
+    width: 36,
+    height: 10
+  });
+});
+
+test("toFlowEdges renders plain connection lines as thin by default", () => {
+  const flowEdges = toFlowEdges([makeEdge("api-1", "queue-1")], []);
+
+  assert.equal(flowEdges[0]?.style?.strokeWidth, 1.5);
 });
 
 test("toFlowEdges renders dashed diagram edge styles outside preview mode", () => {

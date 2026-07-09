@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { DiagramJson } from "../../../../packages/types/src";
+import { useAuth } from "../../components/auth/auth-provider";
 import { DiagramEditor } from "../diagram-editor";
 import { EMPTY_DIAGRAM } from "../diagram-editor/constants";
 import {
@@ -51,6 +52,7 @@ export function WorkspaceDraftManager({
   initialProjectName,
   initialRightPanelView
 }: WorkspaceDraftManagerProps) {
+  const { user } = useAuth();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [projectName, setProjectName] = useState(initialProjectName ?? LOCAL_PROJECT_NAME);
@@ -70,6 +72,8 @@ export function WorkspaceDraftManager({
   const localSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasUnsavedChangesRef = useRef(false);
   const draftChangeVersionRef = useRef(0);
+  const workspaceUserName =
+    user?.nickname?.trim() || user?.username?.trim() || user?.email?.trim() || "Personal workspace";
 
   const setCurrentLocalDraft = useCallback((draft: LocalProjectDraft | null) => {
     localDraftRef.current = draft;
@@ -256,6 +260,7 @@ export function WorkspaceDraftManager({
       onDiagramChange={handleDiagramChange}
       onDiagramSaveRequest={saveCurrentDraftLocally}
       projectName={projectName}
+      workspaceUserName={workspaceUserName}
       rightPanel={(context) => (
         <WorkspaceRightPanel
           context={context}

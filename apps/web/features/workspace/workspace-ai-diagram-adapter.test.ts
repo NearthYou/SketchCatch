@@ -22,6 +22,27 @@ test("workspace AI diagram adapter uses shared resource definitions for Terrafor
   assert.match(source, /getResourceDefinitionByTerraform/);
 });
 
+test("convertArchitectureJsonToDiagramJson preserves authored node border style", () => {
+  const diagramJson = convertArchitectureJsonToDiagramJson({
+    nodes: [
+      {
+        id: "region-1",
+        type: "VPC",
+        label: "Region",
+        positionX: 0,
+        positionY: 0,
+        config: {
+          diagramBorderStyle: "dashed",
+          terraformResourceType: "aws_region"
+        }
+      }
+    ],
+    edges: []
+  });
+
+  assert.equal(diagramJson.nodes[0]?.style?.borderStyle, "dashed");
+});
+
 test("convertArchitectureJsonToDiagramJson creates board nodes and hides containment arrows from an Architecture Draft", () => {
   const architectureJson: ArchitectureJson = {
     nodes: [
@@ -169,7 +190,7 @@ test("convertArchitectureJsonToDiagramJson keeps non-containment edges as arrows
         animated: false,
         color: "#506176",
         lineStyle: "solid",
-        width: "medium"
+        width: "thin"
       }
     }
   ]);
@@ -584,7 +605,7 @@ test("convertArchitectureJsonToDiagramJson classifies edge line styles from rela
     animated: false,
     color: "#506176",
     lineStyle: "solid",
-    width: "medium"
+    width: "thin"
   });
   assert.deepEqual(edgeById.get("api-to-queue")?.style, {
     animated: false,

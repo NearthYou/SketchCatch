@@ -10,56 +10,56 @@ test("getNodeResizeBounds removes area node max limits while keeping minimum siz
   };
 
   assert.deepEqual(getNodeResizeBounds(makeDesignNode("design_region")), {
-    minWidth: 96,
-    minHeight: 72,
+    minWidth: 48,
+    minHeight: 36,
     ...unrestrictedMax
   });
   assert.deepEqual(getNodeResizeBounds(makeDesignNode("design_az")), {
-    minWidth: 96,
-    minHeight: 72,
+    minWidth: 48,
+    minHeight: 36,
     ...unrestrictedMax
   });
   assert.deepEqual(getNodeResizeBounds(makeDesignNode("design_group")), {
-    minWidth: 96,
-    minHeight: 72,
+    minWidth: 48,
+    minHeight: 36,
     ...unrestrictedMax
   });
   assert.deepEqual(getNodeResizeBounds(makeResourceNode("aws_region")), {
-    minWidth: 260,
-    minHeight: 180,
+    minWidth: 130,
+    minHeight: 90,
     ...unrestrictedMax
   });
   assert.deepEqual(getNodeResizeBounds(makeResourceNode("aws_availability_zone")), {
-    minWidth: 220,
-    minHeight: 150,
+    minWidth: 110,
+    minHeight: 75,
     ...unrestrictedMax
   });
   assert.deepEqual(getNodeResizeBounds(makeResourceNode("aws_vpc")), {
-    minWidth: 240,
-    minHeight: 160,
+    minWidth: 120,
+    minHeight: 80,
     ...unrestrictedMax
   });
   assert.deepEqual(getNodeResizeBounds(makeResourceNode("aws_subnet")), {
-    minWidth: 144,
-    minHeight: 112,
+    minWidth: 72,
+    minHeight: 56,
     ...unrestrictedMax
   });
   assert.deepEqual(getNodeResizeBounds(makeResourceNode("aws_security_group")), {
-    minWidth: 144,
-    minHeight: 112,
+    minWidth: 72,
+    minHeight: 56,
     ...unrestrictedMax
   });
   assert.deepEqual(getNodeResizeBounds(makeResourceNode("aws_autoscaling_group")), {
-    minWidth: 200,
-    minHeight: 130,
+    minWidth: 100,
+    minHeight: 65,
     ...unrestrictedMax
   });
 });
 
-test("getNodeResizeBounds keeps regular resource bounds unchanged", () => {
+test("getNodeResizeBounds keeps regular resource bounds aligned with compact icon defaults", () => {
   assert.deepEqual(getNodeResizeBounds(makeResourceNode("aws_instance")), {
-    minWidth: 74,
-    minHeight: 74,
+    minWidth: 56,
+    minHeight: 56,
     maxWidth: 260,
     maxHeight: 260
   });
