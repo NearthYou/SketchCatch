@@ -112,6 +112,8 @@ export function WorkspaceRightPanel({
   const [terraformDiscardRequestId, setTerraformDiscardRequestId] = useState(0);
   const [terraformIssues, setTerraformIssues] = useState<TerraformIssueRecord[]>([]);
   const [loadedTerraformIssuesProjectId, setLoadedTerraformIssuesProjectId] = useState<string | null>(null);
+  const [pendingTerraformIssueFixSourceLocation, setPendingTerraformIssueFixSourceLocation] =
+    useState<TerraformSourceLocation | null>(null);
   const [preDeploymentCheckState, setPreDeploymentCheckState] =
     useState<DeploymentPreDeploymentCheckState>(initialPreDeploymentCheckState);
   const [isDeploymentConsoleOpen, setIsDeploymentConsoleOpen] = useState(
@@ -157,13 +159,22 @@ export function WorkspaceRightPanel({
     });
   }, []);
 
+  const openTerraformIssueSourceLocation = useCallback((sourceLocation: TerraformSourceLocation): void => {
+    context.setRightPanelOpen(true);
+    setActiveView("terraform");
+    setPendingTerraformIssueFixSourceLocation(sourceLocation);
+  }, [context]);
+
   const handleTerraformIssueAiClick = useCallback((issue: TerraformIssueRecord): void => {
+    const sourceLocation = getTerraformIssueSourceLocation(issue);
+    openTerraformIssueSourceLocation(sourceLocation);
+
     onTerraformIssueAiRequest({
       id: Date.now(),
       issue,
       terraformCode: terraformPanelRef.current?.getCurrentTerraformCode() ?? ""
     });
-  }, [onTerraformIssueAiRequest]);
+  }, [onTerraformIssueAiRequest, openTerraformIssueSourceLocation]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -204,6 +215,11 @@ export function WorkspaceRightPanel({
     async function applySafeFix(): Promise<void> {
       const result = await terraformPanelRef.current?.applyTerraformSafeFix(request.diagnostic, request.codePreview);
 
+      if (result?.applied) {
+        const sourceLocation = getTerraformIssueFixSourceLocation(request);
+        openTerraformIssueSourceLocation(sourceLocation);
+      }
+
       onTerraformSafeFixApplyResult({
         requestId: request.id,
         applied: result?.applied ?? false,
@@ -212,7 +228,20 @@ export function WorkspaceRightPanel({
     }
 
     void applySafeFix();
-  }, [onTerraformSafeFixApplyResult, terraformSafeFixApplyRequest]);
+  }, [onTerraformSafeFixApplyResult, openTerraformIssueSourceLocation, terraformSafeFixApplyRequest]);
+
+  useEffect(() => {
+    if (
+      activeView !== "terraform" ||
+      !context.isRightPanelOpen ||
+      pendingTerraformIssueFixSourceLocation === null
+    ) {
+      return;
+    }
+
+    terraformPanelRef.current?.openTerraformSourceLocation(pendingTerraformIssueFixSourceLocation);
+    setPendingTerraformIssueFixSourceLocation(null);
+  }, [activeView, context.isRightPanelOpen, pendingTerraformIssueFixSourceLocation]);
 
   const requestTerraformLeave = useCallback((action: PendingTerraformLeaveAction): boolean => {
     if (!hasUnsavedTerraformChanges || skipTerraformLeaveGuardRef.current) {
@@ -766,4 +795,24 @@ function isTerraformIssuesNavigationTarget(target: Node): boolean {
 
 function isTerraformIssueAiResolutionTarget(target: Node): boolean {
   return target instanceof Element && Boolean(target.closest("[data-terraform-issue-ai-resolution]"));
+}
+
+function getTerraformIssueFixSourceLocation(
+  request: TerraformSafeFixApplyRequest
+): TerraformSourceLocation {
+  return {
+    fileName: request.diagnostic.sourceFileName ?? "main.tf",
+    line: request.codePreview?.sourceLine ?? request.diagnostic.line ?? 1,
+    ...(request.diagnostic.resourceAddress ? { resourceAddress: request.diagnostic.resourceAddress } : {})
+  };
+}
+
+function getTerraformIssueSourceLocation(
+  issue: TerraformIssueRecord
+): TerraformSourceLocation {
+  return {
+    fileName: issue.diagnostic.sourceFileName ?? "main.tf",
+    line: issue.diagnostic.line ?? 1,
+    ...(issue.diagnostic.resourceAddress ? { resourceAddress: issue.diagnostic.resourceAddress } : {})
+  };
 }

@@ -99,6 +99,80 @@ test("AI start page previews real diagram data and persists approval into the bo
   assert.match(globalStylesSource, /\.workspaceStartForm \.textInput:focus/);
 });
 
+test("AI start page gates unrelated prompts before draft generation", () => {
+  const submitPromptBody = workspaceAiStartClientSource.slice(
+    workspaceAiStartClientSource.indexOf("async function submitPrompt"),
+    workspaceAiStartClientSource.indexOf("async function handleDraftClarificationMessage")
+  );
+  const classificationIndex = submitPromptBody.indexOf("classifyWorkspaceAiChatPrompt(trimmedPrompt)");
+  const draftIndex = submitPromptBody.indexOf("await createDraftFromRequest");
+
+  assert.match(workspaceAiStartClientSource, /classifyWorkspaceAiChatPrompt/);
+  assert.match(workspaceAiStartClientSource, /createWorkspaceAiPromptGateMessage/);
+  assert.match(submitPromptBody, /appendAssistantMessage\(\s*"question",\s*createWorkspaceAiPromptGateMessage/);
+  assert.ok(classificationIndex >= 0);
+  assert.ok(classificationIndex < draftIndex);
+});
+
+test("AI start page edits an existing preview instead of restarting draft clarification", () => {
+  const submitPromptBody = workspaceAiStartClientSource.slice(
+    workspaceAiStartClientSource.indexOf("async function submitPrompt"),
+    workspaceAiStartClientSource.indexOf("async function handlePatchClarificationMessage")
+  );
+  const existingPreviewIndex = submitPromptBody.indexOf("draft !== null && previewDiagram !== null");
+  const patchIndex = submitPromptBody.indexOf("await createPatchPreviewFromPrompt(trimmedPrompt, previewDiagram)");
+  const draftIndex = submitPromptBody.indexOf("await createDraftFromRequest");
+  const createPatchBody = workspaceAiStartClientSource.slice(
+    workspaceAiStartClientSource.indexOf("async function createPatchPreviewFromPrompt"),
+    workspaceAiStartClientSource.indexOf("function showPatchPreview")
+  );
+  const showPatchBody = workspaceAiStartClientSource.slice(
+    workspaceAiStartClientSource.indexOf("function showPatchPreview"),
+    workspaceAiStartClientSource.indexOf("function showDraftPreview")
+  );
+
+  assert.match(workspaceAiStartClientSource, /createAiArchitecturePatchPreview/);
+  assert.match(workspaceAiStartClientSource, /convertDiagramJsonToArchitectureJson/);
+  assert.match(workspaceAiStartClientSource, /ArchitecturePatchClarification/);
+  assert.ok(existingPreviewIndex >= 0);
+  assert.ok(patchIndex > existingPreviewIndex);
+  assert.ok(patchIndex < draftIndex);
+  assert.match(createPatchBody, /architectureJson:\s*convertDiagramJsonToArchitectureJson\(baseDiagram\)/);
+  assert.match(createPatchBody, /isArchitecturePatchClarification\(response\)/);
+  assert.match(createPatchBody, /setPatchClarification\(\{\s*baseDiagram,\s*clarification: response\s*\}\)/);
+  assert.match(showPatchBody, /architectureJson:\s*preview\.proposedArchitectureJson/);
+  assert.match(showPatchBody, /setPreviewDiagram\(nextDraft\.diagramJson/);
+  assert.match(showPatchBody, /createPatchPreviewSummary\(preview\)/);
+});
+
+test("AI start page hides the old preview while a preview edit is awaiting clarification", () => {
+  const createPatchBody = workspaceAiStartClientSource.slice(
+    workspaceAiStartClientSource.indexOf("async function createPatchPreviewFromPrompt"),
+    workspaceAiStartClientSource.indexOf("function showPatchPreview")
+  );
+  const loadingIndex = createPatchBody.indexOf('setRequestState("loading")');
+  const clearDraftIndex = createPatchBody.indexOf("setDraft(null)");
+  const clearPreviewIndex = createPatchBody.indexOf("setPreviewDiagram(null)");
+  const requestIndex = createPatchBody.indexOf("createAiArchitecturePatchPreview");
+  const clarificationIndex = createPatchBody.indexOf("isArchitecturePatchClarification(response)");
+
+  assert.ok(loadingIndex >= 0);
+  assert.ok(clearDraftIndex > loadingIndex);
+  assert.ok(clearPreviewIndex > clearDraftIndex);
+  assert.ok(clearPreviewIndex < requestIndex);
+  assert.ok(requestIndex < clarificationIndex);
+});
+
+test("AI start page disables previously submitted suggestion choices", () => {
+  assert.match(workspaceAiStartClientSource, /readonly selectedSuggestions\?: readonly string\[\];/);
+  assert.match(workspaceAiStartClientSource, /type AiStartSuggestionSelection/);
+  assert.match(workspaceAiStartClientSource, /markAiStartMessageSuggestionsSelected\(messagesRef\.current, suggestionSelection\)/);
+  assert.match(workspaceAiStartClientSource, /const submittedSuggestions = message\.selectedSuggestions \?\? \[\];/);
+  assert.match(workspaceAiStartClientSource, /const hasSubmittedSuggestion = submittedSuggestions\.length > 0;/);
+  assert.match(workspaceAiStartClientSource, /disabled=\{isSuggestionDisabled\}/);
+  assert.match(workspaceAiStartClientSource, /isSuggestionSelected \? "true" : undefined/);
+});
+
 function readAppWorkspaceFile(fileName: string): string {
   return readFileSync(fileURLToPath(new URL(`../../app/workspace/${fileName}`, import.meta.url)), "utf8");
 }
