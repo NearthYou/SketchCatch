@@ -166,7 +166,7 @@ export function getProjectById(projectId: string): ProjectSummary | undefined {
 }
 
 export function getProjectHref(projectId: string): string {
-  return `/projects/${projectId}`;
+  return `/dashboard/projects/${projectId}`;
 }
 
 export function formatUsd(amount: number): string {

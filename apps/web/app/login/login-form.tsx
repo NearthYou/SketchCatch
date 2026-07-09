@@ -32,7 +32,7 @@ export function LoginForm() {
 
   useEffect(() => {
     if (status === "authenticated") {
-      router.replace("/mypage");
+      router.replace("/dashboard");
     }
   }, [router, status]);
 
@@ -56,7 +56,7 @@ export function LoginForm() {
 
     try {
       await login(payload);
-      router.replace("/mypage");
+      router.replace("/dashboard");
     } catch (error) {
       setErrorMessage(getApiErrorMessage(error, "로그인에 실패했습니다."));
     } finally {

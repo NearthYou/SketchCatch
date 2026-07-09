@@ -1,19 +1,23 @@
 .editorShell {
   --left-panel-width: 346px;
   --right-panel-width: 440px;
-  --workspace-page: #f6f7fb;
+  --workspace-font: "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif;
+  --workspace-page: #ffffff;
   --workspace-surface: #ffffff;
-  --workspace-surface-muted: #f8f9fd;
-  --workspace-line: #dfe6f1;
-  --workspace-line-strong: #cfd8e7;
-  --workspace-text: #182033;
-  --workspace-muted: #66748a;
-  --workspace-accent: #7357ff;
-  --workspace-accent-soft: #f0edff;
+  --workspace-surface-muted: #fafafa;
+  --workspace-line: #f0f0f3;
+  --workspace-line-strong: #dcdee0;
+  --workspace-text: #171717;
+  --workspace-muted: #60646c;
+  --workspace-accent: #000000;
+  --workspace-accent-active: #1a1a1a;
+  --workspace-accent-soft: #f0f0f3;
+  --workspace-link: #0d74ce;
 
   background: var(--workspace-page);
   color: var(--workspace-text);
   display: grid;
+  font-family: var(--workspace-font);
   grid-template-columns: 0 minmax(0, 1fr) var(--right-panel-width);
   height: 100dvh;
   min-height: 0;
@@ -44,7 +48,7 @@
 .leftRail {
   border: 1px solid var(--workspace-line);
   border-radius: 8px;
-  box-shadow: 0 16px 36px rgba(31, 41, 55, 0.12);
+  box-shadow: 0 18px 48px rgba(23, 23, 23, 0.08);
   grid-column: 1;
   height: calc(100dvh - 84px);
   left: 12px;
@@ -60,7 +64,7 @@
   background: var(--workspace-surface);
   border: 1px solid var(--workspace-line);
   border-radius: 8px;
-  box-shadow: 0 14px 30px rgba(20, 30, 50, 0.14);
+  box-shadow: 0 14px 30px rgba(23, 23, 23, 0.1);
   display: grid;
   gap: 6px;
   left: 12px;
@@ -86,8 +90,8 @@
 
 .collapsedLeftPanelButton:hover,
 .collapsedLeftPanelButton:focus-visible {
-  background: #f0edff;
-  border-color: #d8ceff;
+  background: var(--workspace-surface-muted);
+  border-color: var(--workspace-line-strong);
   color: var(--workspace-accent);
   outline: none;
 }
@@ -184,9 +188,7 @@
 }
 
 .workspace {
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.68), rgba(244, 247, 252, 0.86)),
-    #f6f8fc;
+  background: var(--workspace-page);
   grid-column: 2;
   min-width: 0;
   overflow: hidden;
@@ -195,10 +197,10 @@
 
 .canvasToolbar {
   align-items: center;
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid #dfe7f4;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid var(--workspace-line);
   border-radius: 8px;
-  box-shadow: 0 12px 30px rgba(31, 41, 55, 0.1);
+  box-shadow: 0 16px 42px rgba(23, 23, 23, 0.08);
   display: flex;
   flex-wrap: wrap;
   gap: 7px;
@@ -222,10 +224,10 @@
 
 .toolbarHomeLink {
   align-items: center;
-  background: #f8f9fd;
-  border: 1px solid #e1e7f3;
-  border-radius: 6px;
-  color: #5f3de8;
+  background: var(--workspace-surface-muted);
+  border: 1px solid var(--workspace-line);
+  border-radius: 8px;
+  color: var(--workspace-link);
   display: inline-flex;
   flex: 0 0 auto;
   height: 30px;
@@ -236,15 +238,15 @@
 
 .toolbarHomeLink:hover,
 .toolbarHomeLink:focus-visible {
-  background: #f0edff;
-  border-color: #d8ceff;
+  background: var(--workspace-surface);
+  border-color: var(--workspace-line-strong);
   outline: none;
 }
 
 .toolbarTitle {
-  color: #161b2e;
+  color: var(--workspace-text);
   font-size: 0.86rem;
-  font-weight: 850;
+  font-weight: 700;
   line-height: 1.15;
   max-width: 210px;
   overflow: hidden;
@@ -254,8 +256,8 @@
 
 .toolbarGroup {
   align-items: center;
-  background: #f7f8fd;
-  border: 1px solid #e1e7f3;
+  background: var(--workspace-surface-muted);
+  border: 1px solid var(--workspace-line);
   border-radius: 6px;
   display: inline-flex;
   gap: 2px;
@@ -283,7 +285,7 @@
 
 .toolbarStatus {
   align-items: center;
-  color: #6f778c;
+  color: var(--workspace-muted);
   display: inline-flex;
   font-size: 0.72rem;
   gap: 4px;
@@ -292,8 +294,8 @@
 }
 
 .toolbarStatus span {
-  background: #f1f4fa;
-  border: 1px solid #e1e7f3;
+  background: var(--workspace-surface-muted);
+  border: 1px solid var(--workspace-line);
   border-radius: 999px;
   max-width: 96px;
   overflow: hidden;
@@ -314,17 +316,17 @@
 }
 
 .canvasPanel {
-  background: #f8faff;
+  background: var(--workspace-page);
   height: 100%;
   min-height: 0;
   position: relative;
 }
 
 .canvasPanel :global(.react-flow) {
-  --xy-edge-stroke-selected-default: #6f4cf6;
-  --xy-handle-background-color-default: #6f4cf6;
+  --xy-edge-stroke-selected-default: var(--workspace-accent);
+  --xy-handle-background-color-default: var(--workspace-accent);
   --xy-handle-border-color-default: #ffffff;
-  background: #f8faff;
+  background: var(--workspace-page);
   height: 100%;
   width: 100%;
 }
@@ -401,10 +403,10 @@
 }
 
 .canvasPanel :global(.react-flow__handle) {
-  background: #6f4cf6;
+  background: var(--workspace-accent);
   border: 2px solid #ffffff;
   border-radius: 999px;
-  box-shadow: 0 4px 10px rgba(111, 76, 246, 0.22);
+  box-shadow: 0 4px 10px rgba(23, 23, 23, 0.2);
   height: 11px;
   min-height: 11px;
   min-width: 11px;
@@ -443,8 +445,8 @@
 }
 
 .canvasPanel :global(.react-flow__selection) {
-  background: rgba(111, 76, 246, 0.08);
-  border: 1px dotted rgba(111, 76, 246, 0.72);
+  background: rgba(23, 23, 23, 0.06);
+  border: 1px dotted rgba(23, 23, 23, 0.56);
 }
 
 .canvasPanel :global(.react-flow__edge-text) {

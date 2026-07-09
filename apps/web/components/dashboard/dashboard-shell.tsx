@@ -12,12 +12,19 @@ const navItems: ReadonlyArray<{
   readonly icon: DashboardIconName;
   readonly label: string;
 }> = [
-  { href: "/mypage", icon: "home", label: "홈 화면" },
-  { href: "/projects", icon: "folder", label: "내 프로젝트" },
-  { href: "/templates", icon: "layers", label: "템플릿 허브" },
-  { href: "/costs", icon: "billing", label: "비용관리" },
-  { href: "/settings", icon: "settings", label: "환경설정" }
+  { href: "/dashboard", icon: "home", label: "대시보드" },
+  { href: "/dashboard/projects", icon: "folder", label: "내 프로젝트" },
+  { href: "/dashboard/templates", icon: "layers", label: "템플릿 허브" },
+  { href: "/dashboard/costs", icon: "billing", label: "비용관리" },
+  { href: "/dashboard/settings", icon: "settings", label: "환경설정" }
 ];
+
+const topbarActionHiddenPaths = new Set([
+  "/dashboard/projects",
+  "/dashboard/templates",
+  "/dashboard/costs",
+  "/dashboard/settings"
+]);
 
 type DashboardShellProps = {
   readonly children: ReactNode;
@@ -31,10 +38,9 @@ export function DashboardShell({ children, projectSearchQuery = "" }: DashboardS
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [projectSearchInput, setProjectSearchInput] = useState(projectSearchQuery);
   const isCheckingSession = status === "loading";
-  const canSearchProjects = pathname === "/mypage" || pathname === "/projects";
-  const shouldShowCreateAction =
-    pathname !== "/projects" && pathname !== "/templates" && pathname !== "/costs" && pathname !== "/settings";
-  const projectSearchPath = pathname === "/projects" ? "/projects" : "/mypage";
+  const canSearchProjects = pathname === "/dashboard/projects";
+  const shouldShowCreateAction = !topbarActionHiddenPaths.has(pathname);
+  const projectSearchPath = "/dashboard/projects";
   const displayName = user?.nickname ?? user?.username ?? "사용자";
   const avatarText = displayName.slice(0, 1).toUpperCase();
 
@@ -95,14 +101,15 @@ export function DashboardShell({ children, projectSearchQuery = "" }: DashboardS
   return (
     <main className="dashboardShell">
       <aside className="dashboardSidebar" aria-label="SketchCatch dashboard">
-        <Link className="dashboardBrand" href="/mypage" aria-label="SketchCatch 홈">
+        <Link className="dashboardBrand" href="/dashboard" aria-label="SketchCatch 대시보드">
           <img className="dashboardBrandLogo" src="/sketchcatch-logo.svg" alt="" />
           <span>SketchCatch</span>
         </Link>
 
         <nav className="dashboardNav" aria-label="주요 메뉴">
           {navItems.map((item) => {
-            const isActive = pathname === item.href;
+            const isActive =
+              pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(`${item.href}/`));
 
             return (
               <Link
