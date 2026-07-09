@@ -532,15 +532,31 @@ test("createAmazonQArchitectureDraftResponse accepts panel-backed ResourceType v
     assert.fail(`Expected preview, got clarification: ${response.question}`);
   }
 
-  const payload = requestedPayload as { supportedResourceTypes?: string[] };
+  const payload = requestedPayload as {
+    supportedResourceCatalog?: Array<{
+      displayName?: string;
+      id?: string;
+      nodeType?: string;
+      terraformBlockType?: string;
+      terraformResourceType?: string;
+    }>;
+    supportedResourceTypes?: string[];
+  };
   const sharedResourceTypes = new Set(
     resourceDefinitions
       .map((definition) => definition.resourceType)
       .filter((resourceType) => resourceType !== "UNKNOWN")
   );
+  const catalogByTerraformType = new Map(
+    payload.supportedResourceCatalog?.map((definition) => [definition.terraformResourceType, definition])
+  );
 
   assert.match(requestedPrompt, /EKS_CLUSTER/);
   assert.deepEqual(new Set(payload.supportedResourceTypes), sharedResourceTypes);
+  assert.equal(catalogByTerraformType.get("aws_codebuild_project")?.nodeType, "CODEBUILD_PROJECT");
+  assert.equal(catalogByTerraformType.get("aws_codedeploy_app")?.nodeType, "CODEDEPLOY_APP");
+  assert.equal(catalogByTerraformType.get("aws_codepipeline")?.nodeType, "CODEPIPELINE");
+  assert.equal(catalogByTerraformType.get("aws_ssm_parameter")?.terraformBlockType, "data");
   assert.deepEqual(
     response.architectureJson.nodes.map((node) => node.type),
     ["EKS_CLUSTER", "AUTO_SCALING_GROUP", "DYNAMODB_TABLE", "SQS_QUEUE"]
@@ -1505,6 +1521,11 @@ test("createAmazonQArchitectureDraftResponse sends detailed architecture briefs 
       size?: string;
       sourceUrls?: string[];
       guidance?: string[];
+      generatedResourceCatalog?: Array<{
+        nodeType?: string;
+        terraformBlockType?: string;
+        terraformResourceType?: string;
+      }>;
     };
     architectureDecisionSpace?: {
       unsupportedSubstitutions?: Array<{ requestedService?: string }>;
@@ -1515,6 +1536,15 @@ test("createAmazonQArchitectureDraftResponse sends detailed architecture briefs 
   assert.equal(payload.referenceKnowledge?.size, "compact");
   assert.equal(payload.referenceKnowledge?.sourceUrls?.includes("https://aws.amazon.com/ko/solutions/"), true);
   assert.ok((payload.referenceKnowledge?.guidance?.length ?? 0) <= 8);
+  const generatedCatalogByTerraformType = new Map(
+    payload.referenceKnowledge?.generatedResourceCatalog?.map((definition) => [
+      definition.terraformResourceType,
+      definition
+    ])
+  );
+  assert.equal(generatedCatalogByTerraformType.get("aws_codebuild_project")?.nodeType, "CODEBUILD_PROJECT");
+  assert.equal(generatedCatalogByTerraformType.get("aws_codepipeline")?.nodeType, "CODEPIPELINE");
+  assert.equal(generatedCatalogByTerraformType.get("aws_ssm_parameter")?.terraformBlockType, "data");
   assert.equal(
     payload.architectureDecisionSpace?.unsupportedSubstitutions?.some(
       (substitution) => substitution.requestedService === "Auto Scaling Group"

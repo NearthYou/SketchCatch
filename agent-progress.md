@@ -7,7 +7,8 @@ Short English-only working log for the current agent context. Older records are 
 - Branch: `feat/ck/287-ai-diagram`.
 - Current scope: make AI architecture drafts and patch previews use the shared left-panel Terraform resource catalog as selectable generation material.
 - The shared catalog now has ResourceType values for formerly UNKNOWN panel resources including caller identity, SSM Parameter, CodeBuild, CodeDeploy, CodePipeline, and CodeStar connection.
-- Targeted API/web tests plus full lint/typecheck/build passed during this session.
+- The AI draft prompt, top-level payload, and referenceKnowledge payload now receive the same generated resource catalog.
+- Targeted API tests plus full lint/typecheck/build passed during this session.
 - No Terraform apply/destroy, deployment, AWS calls, or cloud mutation was run.
 
 ## Session Record
@@ -30,6 +31,20 @@ Short English-only working log for the current agent context. Older records are 
   - `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
 - Risk:
   - This changes draft selection and patch recognition only; no deployment or cloud mutation was run.
+
+### 2026-07-10 - AI generated resource catalog payload sync
+
+- Goal: Ensure the resource information sent to AI includes the newly generatable resource-panel items.
+- Completed:
+  - Extracted a shared API-side generated resource catalog helper from shared resource definitions.
+  - Reused the same catalog in the Amazon Q draft prompt, top-level payload, and `referenceKnowledge.generatedResourceCatalog`.
+  - Added payload assertions for CodeBuild, CodeDeploy, CodePipeline, and SSM Parameter catalog entries.
+- Verification:
+  - `pnpm --filter @sketchcatch/api typecheck` passed.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/aiArchitectureDrafts.test.ts` passed.
+  - `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
+- Risk:
+  - Payload size increases because referenceKnowledge now carries the generated resource catalog, but it stays derived from the shared compact resource definitions.
 
 ### 2026-07-10 - Merge latest dev into AI fixed-response removal branch
 

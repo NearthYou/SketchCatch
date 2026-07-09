@@ -10,8 +10,11 @@ import type {
   LlmExplanationFallbackReason,
   ResourceType
 } from "@sketchcatch/types";
-import { resourceDefinitions } from "@sketchcatch/types/resource-definitions";
 import { applyGuardrailMetadata } from "./aiArchitectureDraftMetadata.js";
+import {
+  SUPPORTED_ARCHITECTURE_RESOURCE_CATALOG,
+  SUPPORTED_ARCHITECTURE_RESOURCE_TYPES
+} from "./aiArchitectureResourceCatalog.js";
 import { planPracticeArchitecture } from "./aiArchitectureRequirementDraftBuilder.js";
 import { applyOperatingConditionConfig } from "./aiArchitectureOperatingConditions.js";
 import { resolveArchitectureResourceQuantities } from "./aiArchitectureResourceQuantities.js";
@@ -35,22 +38,8 @@ import {
 
 const ARCHITECTURE_DRAFT_TARGET = "architecture_draft";
 
-const SUPPORTED_RESOURCE_TYPES = Array.from(
-  new Set(
-    resourceDefinitions
-      .map((definition) => definition.resourceType)
-      .filter((resourceType) => resourceType !== "UNKNOWN")
-  )
-) satisfies ResourceType[];
-
-const SUPPORTED_RESOURCE_CATALOG = resourceDefinitions
-  .filter((definition) => definition.resourceType !== "UNKNOWN")
-  .map((definition) => ({
-    id: definition.id,
-    nodeType: definition.resourceType,
-    terraformBlockType: definition.terraform.blockType,
-    terraformResourceType: definition.terraform.resourceType
-  }));
+const SUPPORTED_RESOURCE_TYPES = SUPPORTED_ARCHITECTURE_RESOURCE_TYPES;
+const SUPPORTED_RESOURCE_CATALOG = SUPPORTED_ARCHITECTURE_RESOURCE_CATALOG;
 
 const SUPPORTED_RESOURCE_TYPE_SET = new Set<ResourceType>(SUPPORTED_RESOURCE_TYPES);
 const DEFAULT_PREVIEW_NODE_SIZE = { width: 124, height: 96 } as const;
