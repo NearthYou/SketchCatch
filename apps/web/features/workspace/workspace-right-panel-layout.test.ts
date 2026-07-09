@@ -104,6 +104,231 @@ test("workspace rails use the Brainboard panel widths", () => {
   assert.match(leftRailRule, /\btop:\s*72px;/);
 });
 
+test("workspace shell follows DESIGN.md neutral surface and typography tokens", () => {
+  const editorShellRule = getCssRule(diagramEditorStylesSource, "editorShell");
+  const workspaceRule = getCssRule(diagramEditorStylesSource, "workspace");
+  const canvasPanelRule = getCssRule(diagramEditorStylesSource, "canvasPanel");
+  const canvasToolbarRule = getCssRule(diagramEditorStylesSource, "canvasToolbar");
+  const toolbarHomeLinkRule = getCssRule(diagramEditorStylesSource, "toolbarHomeLink");
+  const projectShellRule = getCssRule(stylesSource, "projectShell");
+  const primaryButtonRule = getCssRule(stylesSource, "primaryButton");
+  const rightPanelShellRule = getCssRule(stylesSource, "rightPanelShell");
+  const rightPanelModeBarRule = getCssRule(stylesSource, "rightPanelModeBar");
+  const rightPanelViewRule = getCssRule(stylesSource, "rightPanelView");
+  const panelModeTextButtonRuleIndex = stylesSource.indexOf(".panelModeTextButton {");
+  const panelModeTextButtonActiveRule = getCssRuleAfter(
+    stylesSource,
+    "panelModeTextButtonActive",
+    panelModeTextButtonRuleIndex
+  );
+
+  assert.match(
+    editorShellRule,
+    /--workspace-font:\s*"Pretendard", "Noto Sans KR", Inter, Geist, sans-serif;/
+  );
+  assert.match(editorShellRule, /--workspace-page:\s*#ffffff;/);
+  assert.match(editorShellRule, /--workspace-surface-muted:\s*#fafafa;/);
+  assert.match(editorShellRule, /--workspace-line:\s*#f0f0f3;/);
+  assert.match(editorShellRule, /--workspace-line-strong:\s*#dcdee0;/);
+  assert.match(editorShellRule, /--workspace-text:\s*#171717;/);
+  assert.match(editorShellRule, /--workspace-muted:\s*#60646c;/);
+  assert.match(editorShellRule, /--workspace-accent:\s*#000000;/);
+  assert.match(editorShellRule, /--workspace-link:\s*#0d74ce;/);
+  assert.match(editorShellRule, /\bfont-family:\s*var\(--workspace-font\);/);
+
+  assert.match(workspaceRule, /\bbackground:\s*var\(--workspace-page\);/);
+  assert.doesNotMatch(workspaceRule, /linear-gradient|#f6f8fc/);
+  assert.match(canvasPanelRule, /\bbackground:\s*var\(--workspace-page\);/);
+  assert.doesNotMatch(canvasPanelRule, /#f8faff/);
+  assert.match(canvasToolbarRule, /\bborder:\s*1px solid var\(--workspace-line\);/);
+  assert.match(toolbarHomeLinkRule, /\bbackground:\s*var\(--workspace-surface-muted\);/);
+  assert.match(toolbarHomeLinkRule, /\bborder:\s*1px solid var\(--workspace-line\);/);
+  assert.match(toolbarHomeLinkRule, /\bcolor:\s*var\(--workspace-link\);/);
+
+  assert.match(projectShellRule, /\bbackground:\s*#ffffff;/);
+  assert.match(projectShellRule, /\bcolor:\s*#171717;/);
+  assert.match(primaryButtonRule, /\bbackground:\s*#000000;/);
+  assert.match(primaryButtonRule, /\bborder:\s*1px solid #000000;/);
+  assert.match(primaryButtonRule, /\bborder-radius:\s*8px;/);
+  assert.match(rightPanelShellRule, /\bfont-family:\s*var\(--workspace-font,/);
+  assert.match(rightPanelShellRule, /\bcolor:\s*var\(--workspace-text,/);
+  assert.match(rightPanelModeBarRule, /\bborder-bottom:\s*1px solid var\(--workspace-line,/);
+  assert.match(rightPanelViewRule, /\bbackground:\s*var\(--workspace-surface-muted,/);
+  assert.match(panelModeTextButtonActiveRule, /\bbackground:\s*var\(--workspace-accent,/);
+  assert.match(panelModeTextButtonActiveRule, /\bborder-color:\s*var\(--workspace-accent,/);
+  assert.match(panelModeTextButtonActiveRule, /\bcolor:\s*#ffffff;/);
+
+  const oldLandingAccentTokens =
+    /#7357ff|#5f3de8|#6f4cf6|#f4f1ff|#d8ceff|#1f6feb|#f6f7fb|#f4f7fb|#fafbfe/i;
+
+  for (const shellRule of [
+    editorShellRule,
+    workspaceRule,
+    canvasPanelRule,
+    canvasToolbarRule,
+    toolbarHomeLinkRule,
+    projectShellRule,
+    primaryButtonRule,
+    rightPanelShellRule,
+    rightPanelModeBarRule,
+    rightPanelViewRule,
+    panelModeTextButtonActiveRule,
+  ]) {
+    assert.doesNotMatch(shellRule, oldLandingAccentTokens);
+  }
+});
+
+test("workspace internal panel polish uses DESIGN.md tokens instead of legacy Blueprint tokens", () => {
+  const legacyBlueprintIndex = stylesSource.indexOf(
+    "/* Legacy workspace panel compatibility layer, overridden by the DESIGN.md pass below. */"
+  );
+  const legacyRightPanelIndex = stylesSource.indexOf(
+    "/* Legacy right panel sizing compatibility layer, overridden by the DESIGN.md pass below. */"
+  );
+  const finalPolishIndex = stylesSource.indexOf("/* DESIGN.md workspace internal panel pass */");
+
+  assert.ok(legacyBlueprintIndex > -1, "Expected the legacy workspace compatibility block to exist");
+  assert.ok(
+    legacyRightPanelIndex > legacyBlueprintIndex,
+    "Expected the legacy right panel sizing block to follow the first compatibility block"
+  );
+  assert.ok(finalPolishIndex > -1, "Expected the workspace panel polish block to exist");
+  assert.ok(
+    finalPolishIndex > legacyRightPanelIndex,
+    "Expected the DESIGN.md polish block to override the legacy compatibility blocks"
+  );
+  assert.doesNotMatch(stylesSource, /\/\* Blueprint panel polish pass \*\//);
+  assert.doesNotMatch(stylesSource, /\/\* Brainboard right panel reproduction \*\//);
+
+  const polishedRightPanelShellRule = getLastCssRuleAfter(
+    stylesSource,
+    "rightPanelShell",
+    finalPolishIndex
+  );
+  const polishedTerraformPanelRule = getLastCssRuleAfter(stylesSource, "terraformPanel", finalPolishIndex);
+  const polishedIssuesPanelRule = getLastCssRuleAfter(stylesSource, "issuesPanel", finalPolishIndex);
+  const polishedPanelModeTextButtonActiveRule = getLastCssRuleAfter(
+    stylesSource,
+    "panelModeTextButtonActive",
+    finalPolishIndex
+  );
+  const polishedAiPanelHeaderRule = getLastCssRuleAfter(stylesSource, "aiPanelHeader", finalPolishIndex);
+  const polishedDeploymentHeaderRule = getLastCssRuleAfter(
+    stylesSource,
+    "deploymentHeader",
+    finalPolishIndex
+  );
+  const polishedDeploymentExpandedShellRule = getLastCssRuleAfter(
+    stylesSource,
+    "deploymentExpandedShell",
+    finalPolishIndex
+  );
+  const polishedDeploymentExpandedHeaderRule = getLastCssRuleAfter(
+    stylesSource,
+    "deploymentExpandedHeader",
+    finalPolishIndex
+  );
+  const polishedDeploymentExpandedBodyRule = getLastCssRuleAfter(
+    stylesSource,
+    "deploymentExpandedBody",
+    finalPolishIndex
+  );
+  const polishedTerraformPreviewButtonRule = getLastCssRuleAfter(
+    stylesSource,
+    "terraformPreviewButton",
+    finalPolishIndex
+  );
+  const polishedAiPrimaryButtonRule = getLastCssRuleAfter(stylesSource, "aiPrimaryButton", finalPolishIndex);
+  const polishedDeploymentPrimaryButtonRule = getLastCssRuleAfter(
+    stylesSource,
+    "deploymentPrimaryButton",
+    finalPolishIndex
+  );
+  const polishedAiChatLauncherRule = getLastCssRuleAfter(stylesSource, "aiChatLauncher", finalPolishIndex);
+  const polishedAiChatDockRule = getLastCssRuleAfter(stylesSource, "aiChatDock", finalPolishIndex);
+  const polishedAiChatTranscriptRule = getLastCssRuleAfter(
+    stylesSource,
+    "aiChatTranscript",
+    finalPolishIndex
+  );
+  const polishedAiChatSendButtonRule = getLastCssRuleAfter(
+    stylesSource,
+    "aiChatSendButton",
+    finalPolishIndex
+  );
+  const polishedIconButtonActiveRule = getLastCssRuleContainingAfter(
+    stylesSource,
+    ".panelModeIconGroup .panelModeButtonActive",
+    finalPolishIndex
+  );
+  const polishedTextButtonActiveHoverRule = getLastCssRuleContainingAfter(
+    stylesSource,
+    ".panelModeTextButtonActive:hover",
+    finalPolishIndex
+  );
+
+  assert.match(polishedRightPanelShellRule, /\bbackground:\s*var\(--workspace-surface,/);
+  assert.match(polishedRightPanelShellRule, /\bcolor:\s*var\(--workspace-text,/);
+  assert.match(polishedRightPanelShellRule, /\bfont-family:\s*var\(--workspace-font,/);
+  assert.match(polishedTerraformPanelRule, /\bbackground:\s*var\(--workspace-surface-muted,/);
+  assert.match(polishedIssuesPanelRule, /\bbackground:\s*var\(--workspace-surface-muted,/);
+  assert.match(polishedPanelModeTextButtonActiveRule, /\bbackground:\s*var\(--workspace-accent,/);
+  assert.match(polishedPanelModeTextButtonActiveRule, /\bcolor:\s*#ffffff;/);
+  assert.match(polishedAiPanelHeaderRule, /\bbackground:\s*var\(--workspace-surface,/);
+  assert.match(polishedAiPanelHeaderRule, /\bborder:\s*1px solid var\(--workspace-line,/);
+  assert.match(polishedDeploymentHeaderRule, /\bbackground:\s*var\(--workspace-surface,/);
+  assert.match(polishedDeploymentHeaderRule, /\bborder:\s*1px solid var\(--workspace-line,/);
+  assert.match(polishedDeploymentExpandedShellRule, /\bbackground:\s*var\(--workspace-surface,/);
+  assert.match(polishedDeploymentExpandedShellRule, /\bborder:\s*1px solid var\(--workspace-line,/);
+  assert.match(polishedDeploymentExpandedShellRule, /\bfont-family:\s*var\(--workspace-font,/);
+  assert.match(polishedDeploymentExpandedHeaderRule, /\bbackground:\s*var\(--workspace-surface,/);
+  assert.match(polishedDeploymentExpandedHeaderRule, /\bborder-bottom:\s*1px solid var\(--workspace-line,/);
+  assert.match(polishedDeploymentExpandedBodyRule, /\bbackground:\s*var\(--workspace-surface-muted,/);
+  assert.match(polishedTerraformPreviewButtonRule, /\bcolor:\s*var\(--workspace-text,/);
+  assert.match(polishedAiPrimaryButtonRule, /\bbackground:\s*var\(--workspace-accent,/);
+  assert.match(polishedAiPrimaryButtonRule, /\bborder-color:\s*var\(--workspace-accent,/);
+  assert.match(polishedDeploymentPrimaryButtonRule, /\bbackground:\s*var\(--workspace-accent,/);
+  assert.match(polishedDeploymentPrimaryButtonRule, /\bborder-color:\s*var\(--workspace-accent,/);
+  assert.match(polishedAiChatLauncherRule, /\bbackground:\s*var\(--workspace-accent,/);
+  assert.match(polishedAiChatDockRule, /\bborder:\s*1px solid var\(--workspace-line,/);
+  assert.match(polishedAiChatDockRule, /\bcolor:\s*var\(--workspace-text,/);
+  assert.match(polishedAiChatTranscriptRule, /\bbackground:\s*var\(--workspace-surface-muted,/);
+  assert.doesNotMatch(polishedAiChatTranscriptRule, /linear-gradient/);
+  assert.match(polishedAiChatSendButtonRule, /\bbackground:\s*var\(--workspace-accent,/);
+  assert.match(polishedIconButtonActiveRule, /\bbackground:\s*var\(--workspace-accent,/);
+  assert.match(polishedIconButtonActiveRule, /\bborder-radius:\s*8px;/);
+  assert.match(polishedIconButtonActiveRule, /\bcolor:\s*#ffffff;/);
+  assert.match(polishedTextButtonActiveHoverRule, /\bbackground:\s*var\(--workspace-accent,/);
+  assert.match(polishedTextButtonActiveHoverRule, /\bborder-color:\s*var\(--workspace-accent,/);
+  assert.match(polishedTextButtonActiveHoverRule, /\bcolor:\s*#ffffff;/);
+
+  const legacyPanelTokens =
+    /var\(--bp-|var\(--bb-|#704dff|#5f3fe6|#f0f1ff|#6f4cf6|#5f3de8|#d8ceff|#1f6feb|#f7fbff/i;
+
+  for (const polishedRule of [
+    polishedRightPanelShellRule,
+    polishedTerraformPanelRule,
+    polishedIssuesPanelRule,
+    polishedPanelModeTextButtonActiveRule,
+    polishedAiPanelHeaderRule,
+    polishedDeploymentHeaderRule,
+    polishedDeploymentExpandedShellRule,
+    polishedDeploymentExpandedHeaderRule,
+    polishedDeploymentExpandedBodyRule,
+    polishedTerraformPreviewButtonRule,
+    polishedAiPrimaryButtonRule,
+    polishedDeploymentPrimaryButtonRule,
+    polishedAiChatLauncherRule,
+    polishedAiChatDockRule,
+    polishedAiChatTranscriptRule,
+    polishedAiChatSendButtonRule,
+    polishedIconButtonActiveRule,
+    polishedTextButtonActiveHoverRule,
+  ]) {
+    assert.doesNotMatch(polishedRule, legacyPanelTokens);
+  }
+});
+
 test("deployment panel uses one primary scroll area without a mode switch", () => {
   const deploymentPanelRule = getCssRule(stylesSource, "deploymentPanel");
   const panelContentRule = getCssRule(stylesSource, "deploymentPanelContent");
@@ -621,7 +846,7 @@ test("GitHub repository setup is owned by project settings, not the deployment p
   assert.match(deploymentPanelSource, /projectGithubSettingsHref/);
   assert.match(
     deploymentPanelSource,
-    /\/projects\/\$\{encodeURIComponent\(projectId\)\}\/settings\?tab=github/
+    /\/dashboard\/projects\/\$\{encodeURIComponent\(projectId\)\}\/settings\?tab=github/
   );
   assert.match(deploymentPanelSource, /createGitCicdAutoDeployHandoff/);
   assert.match(deploymentPanelSource, /activeGitHubSourceRepository/);
@@ -1069,6 +1294,53 @@ function getCssRule(source: string, className: string): string {
   const match = new RegExp(`\\.${className}\\s*\\{(?<body>[^}]*)\\}`).exec(source);
 
   assert.ok(match?.groups?.body, `Expected .${className} CSS rule to exist`);
+
+  return match.groups.body;
+}
+
+function getCssRuleAfter(source: string, className: string, fromIndex: number): string {
+  assert.ok(fromIndex > -1, `Expected a starting point before .${className} CSS rule`);
+
+  const match = new RegExp(`\\.${className}\\s*\\{(?<body>[^}]*)\\}`).exec(
+    source.slice(fromIndex)
+  );
+
+  assert.ok(match?.groups?.body, `Expected .${className} CSS rule to exist`);
+
+  return match.groups.body;
+}
+
+function getLastCssRuleAfter(source: string, className: string, fromIndex: number): string {
+  assert.ok(fromIndex > -1, `Expected a starting point before .${className} CSS rule`);
+
+  const matches = Array.from(
+    source
+      .slice(fromIndex)
+      .matchAll(new RegExp(`\\.${className}\\s*\\{(?<body>[^}]*)\\}`, "g"))
+  );
+  const match = matches.at(-1);
+
+  assert.ok(match?.groups?.body, `Expected .${className} CSS rule to exist`);
+
+  return match.groups.body;
+}
+
+function getLastCssRuleContainingAfter(
+  source: string,
+  selectorFragment: string,
+  fromIndex: number
+): string {
+  assert.ok(fromIndex > -1, `Expected a starting point before ${selectorFragment} CSS rule`);
+
+  const escapedSelectorFragment = selectorFragment.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const matches = Array.from(
+    source
+      .slice(fromIndex)
+      .matchAll(new RegExp(`[^{}]*${escapedSelectorFragment}[^{}]*\\{(?<body>[^}]*)\\}`, "g"))
+  );
+  const match = matches.at(-1);
+
+  assert.ok(match?.groups?.body, `Expected ${selectorFragment} CSS rule to exist`);
 
   return match.groups.body;
 }

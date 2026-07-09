@@ -74,7 +74,7 @@ export function resolveWorkspaceStartAction({
     if (!hasVerifiedAwsConnection) {
       return {
         kind: "redirect",
-        href: "/settings?tab=aws&next=reverse"
+        href: "/dashboard/settings?tab=aws&next=reverse"
       };
     }
 

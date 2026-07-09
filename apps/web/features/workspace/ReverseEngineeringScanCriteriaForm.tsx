@@ -96,7 +96,7 @@ export function ReverseEngineeringScanCriteriaForm({
         {awsConnections.length === 0 ? (
           <div className={styles.deploymentNotice}>
             <p>환경설정에서 AWS Role을 먼저 연결해 주세요.</p>
-            <a className={styles.deploymentSecondaryButton} href="/settings?tab=aws&next=reverse">
+            <a className={styles.deploymentSecondaryButton} href="/dashboard/settings?tab=aws&next=reverse">
               환경설정으로 이동
             </a>
           </div>
