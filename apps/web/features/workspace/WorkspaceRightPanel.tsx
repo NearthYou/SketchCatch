@@ -336,6 +336,11 @@ export function WorkspaceRightPanel({
 
     event.preventDefault();
     const splitBounds = splitElement.getBoundingClientRect();
+
+    if (splitBounds.height <= 0) {
+      return;
+    }
+
     const resizeHandle = event.currentTarget;
     const pointerId = event.pointerId;
 

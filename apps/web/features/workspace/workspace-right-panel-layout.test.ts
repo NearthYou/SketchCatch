@@ -705,6 +705,7 @@ test("terraform view embeds issues below code with a resizable split instead of 
   assert.match(componentSource, /MAX_TERRAFORM_CODE_PANE_RATIO = 78/);
   assert.match(componentSource, /clampTerraformCodePaneRatio/);
   assert.match(componentSource, /startTerraformSplitResize/);
+  assert.match(componentSource, /if \(splitBounds\.height <= 0\) \{\s*return;\s*\}/);
   assert.match(componentSource, /handleTerraformSplitKeyDown/);
   assert.match(terraformViewSource, /className=\{styles\.terraformSplitLayout\}/);
   assert.match(terraformViewSource, /className=\{styles\.terraformCodePane\}/);

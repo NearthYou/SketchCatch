@@ -30,6 +30,21 @@ test("ParameterInputPanel select menus use the neutral DESIGN.md tone", () => {
   assert.match(panelSource, /tone="workspace"/);
 });
 
+test("ParameterInputPanel counts only main definition errors in the Main parameters summary", () => {
+  assert.match(
+    panelSource,
+    /const mainParameterNames = new Set\(mainDefinitions\.map\(\(definition\) => definition\.name\)\);/
+  );
+  assert.match(
+    panelSource,
+    /Object\.keys\(validation\.parameterErrors\)\.filter\(\s*\(parameterName\) =>\s*mainParameterNames\.has\(parameterName\)\s*\)\.length/s
+  );
+  assert.doesNotMatch(
+    panelSource,
+    /const mainParameterIssueCount = Object\.keys\(validation\.parameterErrors\)\.length;/
+  );
+});
+
 test("ParameterInputPanel lays out metadata and main parameters for dense scanning", () => {
   const resourceDetailSource = getSourceSlice(
     panelSource,

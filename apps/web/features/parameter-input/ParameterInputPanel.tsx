@@ -152,6 +152,7 @@ export function ParameterInputPanel({
   const parameters = mergeNodeParameters(selectedNode, parameterCatalog);
   const catalogDefinitions = parameterCatalog.resources[parameters.resourceType] ?? [];
   const mainDefinitions = getMainDefinitions(catalogDefinitions);
+  const mainParameterNames = new Set(mainDefinitions.map((definition) => definition.name));
   const validationDefinitions = getValidationDefinitions(catalogDefinitions, parameters.values);
   const metadataRows = buildResourceMetadataRows(parameters);
   const validation = validateParameters(
@@ -207,7 +208,9 @@ export function ParameterInputPanel({
   const configuredMainParameterCount = mainDefinitions.filter(
     (definition) => !isEmptyParameterValue(parameters.values[definition.name])
   ).length;
-  const mainParameterIssueCount = Object.keys(validation.parameterErrors).length;
+  const mainParameterIssueCount = Object.keys(validation.parameterErrors).filter((parameterName) =>
+    mainParameterNames.has(parameterName)
+  ).length;
   const requiredMainParameterCount = mainDefinitions.filter(
     (definition) => definition.required
   ).length;

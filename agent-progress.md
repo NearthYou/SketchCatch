@@ -12,6 +12,19 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-10 - Review feedback: parameter summary counts and split resize guard
+
+- Goal: Address PR review feedback for the resource parameter summary and Terraform split resize behavior.
+- Completed:
+  - Counted only main-definition parameter validation errors in the Main parameters summary.
+  - Added a defensive guard so Terraform split resizing skips ratio calculation when the split container height is zero or negative.
+  - Added source regression tests for both review comments.
+- Verification:
+  - Focused parameter-input and workspace-right-panel source tests passed, 86 tests.
+  - `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
+- Risk: Frontend logic and source regression tests only; no API, Terraform execution, deployment, AWS calls, or cloud mutation was run.
+- Next action: Review and commit the changes if the PR feedback is accepted.
+
 ### 2026-07-10 - Resolve PR conflicts with origin/dev
 
 - Goal: Resolve remote PR conflicts after `origin/dev` moved ahead of the UI/UX branch.
