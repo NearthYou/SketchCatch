@@ -225,7 +225,7 @@ export function DeploymentPanel({
       ) ?? null,
     [sourceRepositories]
   );
-  const projectGithubSettingsHref = `/projects/${encodeURIComponent(projectId)}/settings?tab=github`;
+  const projectGithubSettingsHref = `/dashboard/projects/${encodeURIComponent(projectId)}/settings?tab=github`;
   const hasGitCicdHandoffs = gitCicdHandoffs.length > 0;
   const canStartDeploymentReview =
     selectedAwsConnectionId.length > 0 &&

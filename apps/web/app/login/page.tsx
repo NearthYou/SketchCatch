@@ -3,25 +3,28 @@ import { LoginForm } from "./login-form";
 
 export default function LoginPage() {
   return (
-    <main className="authPage">
-      <div className="authBlueprintShell authBlueprintShellSingle">
-        <section className="authPanel" aria-labelledby="login-title">
-          <Link className="authBrand" href="/">
-            <img className="brandLogoImage" src="/sketchcatch-logo.svg" alt="" />
+    <main className="authDesignPage">
+      <section className="authDesignShell" aria-labelledby="login-title">
+        <div className="authDesignPanel">
+          <Link className="authDesignBrand" href="/">
             <span>SketchCatch</span>
           </Link>
-          <div className="authIntro">
-            <p className="eyebrow">Welcome back</p>
+          <div className="authDesignIntro">
+            <p className="authDesignBadge">Terraform-first operations</p>
             <h1 id="login-title">로그인</h1>
+            <p>
+              Practice Architecture부터 IaC Preview, Pre-Deployment Check까지 승인된 운영 흐름으로
+              이어가세요.
+            </p>
           </div>
 
           <LoginForm />
 
-          <p className="authSwitch">
+          <p className="authDesignSwitch">
             계정이 없나요? <Link href="/signup">회원가입</Link>
           </p>
-        </section>
-      </div>
+        </div>
+      </section>
     </main>
   );
 }

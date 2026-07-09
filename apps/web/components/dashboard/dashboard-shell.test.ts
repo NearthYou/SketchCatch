@@ -9,10 +9,10 @@ const dashboardShellSource = readFileSync(join(currentDir, "dashboard-shell.tsx"
 
 test("dashboard topbar hides global actions on the requested dashboard pages", () => {
   assert.match(dashboardShellSource, /shouldShowCreateAction/);
-  assert.match(dashboardShellSource, /pathname !== "\/projects"/);
-  assert.match(dashboardShellSource, /pathname !== "\/templates"/);
-  assert.match(dashboardShellSource, /pathname !== "\/costs"/);
-  assert.match(dashboardShellSource, /pathname !== "\/settings"/);
+  assert.match(dashboardShellSource, /"\/dashboard\/projects"/);
+  assert.match(dashboardShellSource, /"\/dashboard\/templates"/);
+  assert.match(dashboardShellSource, /"\/dashboard\/costs"/);
+  assert.match(dashboardShellSource, /"\/dashboard\/settings"/);
   assert.match(dashboardShellSource, /shouldShowCreateAction\s*\?\s*\(/);
 });
 

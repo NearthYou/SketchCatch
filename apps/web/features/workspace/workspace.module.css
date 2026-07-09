@@ -1,8 +1,9 @@
 .projectShell {
   align-items: center;
-  background: #f4f7fb;
-  color: #172033;
+  background: #ffffff;
+  color: #171717;
   display: flex;
+  font-family: var(--workspace-font, "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif);
   min-height: 100vh;
   padding: 32px;
 }
@@ -10,9 +11,9 @@
 .projectForm,
 .noticePanel {
   background: #ffffff;
-  border: 1px solid #dce3ee;
+  border: 1px solid #f0f0f3;
   border-radius: 8px;
-  box-shadow: 0 18px 48px rgb(36 50 70 / 10%);
+  box-shadow: 0 18px 48px rgb(23 23 23 / 8%);
   display: flex;
   flex-direction: column;
   gap: 18px;
@@ -35,7 +36,7 @@
 }
 
 .projectEyebrow {
-  color: #4f6177;
+  color: #60646c;
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0;
@@ -49,7 +50,7 @@
 }
 
 .field span {
-  color: #2b3a4f;
+  color: #171717;
   font-size: 13px;
   font-weight: 700;
 }
@@ -57,9 +58,9 @@
 .field input,
 .field textarea {
   background: #ffffff;
-  border: 1px solid #cbd5e1;
-  border-radius: 6px;
-  color: #172033;
+  border: 1px solid #dcdee0;
+  border-radius: 8px;
+  color: #171717;
   font: inherit;
   min-width: 0;
   padding: 10px 12px;
@@ -68,16 +69,16 @@
 
 .field input:focus,
 .field textarea:focus {
-  border-color: #2f6db3;
-  box-shadow: 0 0 0 3px rgb(47 109 179 / 16%);
+  border-color: #171717;
+  box-shadow: 0 0 0 3px rgb(23 23 23 / 10%);
   outline: none;
 }
 
 .primaryButton {
   align-items: center;
-  background: #1f6feb;
-  border: 0;
-  border-radius: 6px;
+  background: #000000;
+  border: 1px solid #000000;
+  border-radius: 8px;
   color: #ffffff;
   cursor: pointer;
   display: inline-flex;
@@ -89,7 +90,8 @@
 }
 
 .primaryButton:disabled {
-  background: #9fb2cc;
+  background: #a1a1aa;
+  border-color: #a1a1aa;
   cursor: not-allowed;
 }
 
@@ -102,10 +104,10 @@
 .draftStatusPanel {
   align-items: center;
   background: rgba(255, 255, 255, 0.9);
-  border: 1px solid #dfe7f4;
+  border: 1px solid #f0f0f3;
   border-radius: 8px;
-  box-shadow: 0 10px 24px rgba(31, 41, 55, 0.08);
-  color: #39465c;
+  box-shadow: 0 10px 24px rgba(23, 23, 23, 0.06);
+  color: #60646c;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
@@ -116,18 +118,18 @@
 }
 
 .draftStatusLabel {
-  color: #65758d;
+  color: #60646c;
   font-size: 11px;
-  font-weight: 900;
+  font-weight: 700;
   line-height: 1.2;
   text-transform: uppercase;
 }
 
 .draftStatusItem {
-  background: #f4f7fb;
-  border: 1px solid #dfe7f4;
+  background: #fafafa;
+  border: 1px solid #f0f0f3;
   border-radius: 6px;
-  color: #2d3a50;
+  color: #171717;
   font-size: 12px;
   font-weight: 800;
   line-height: 1.2;
@@ -151,9 +153,10 @@
 }
 
 .rightPanelShell {
-  background: #ffffff;
-  color: #172033;
+  background: var(--workspace-surface, #ffffff);
+  color: var(--workspace-text, #171717);
   display: grid;
+  font-family: var(--workspace-font, "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif);
   font-size: 12px;
   grid-template-rows: auto auto minmax(0, 1fr);
   height: 100%;
@@ -167,10 +170,10 @@
 
 .collapsedRightPanel {
   align-items: center;
-  background: #ffffff;
-  border: 1px solid #dde5f2;
+  background: var(--workspace-surface, #ffffff);
+  border: 1px solid var(--workspace-line, #f0f0f3);
   border-radius: 8px;
-  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.14);
+  box-shadow: 0 14px 32px rgba(23, 23, 23, 0.1);
   display: flex;
   flex-direction: row;
   font-size: 13px;
@@ -189,7 +192,7 @@
 }
 
 .collapsedRightPanel > button:first-child::after {
-  background: #d8e0ec;
+  background: var(--workspace-line, #f0f0f3);
   content: "";
   height: 22px;
   pointer-events: none;
@@ -203,8 +206,8 @@
 .rightPanelToolbar,
 .rightPanelUtilityBar {
   align-items: center;
-  background: #ffffff;
-  border-bottom: 1px solid #e2e9f3;
+  background: var(--workspace-surface, #ffffff);
+  border-bottom: 1px solid var(--workspace-line, #f0f0f3);
   display: flex;
   gap: 8px;
   justify-content: space-between;
@@ -230,8 +233,8 @@
 
 .rightPanelModeBar {
   align-items: center;
-  background: #ffffff;
-  border-bottom: 1px solid #e2e9f3;
+  background: var(--workspace-surface, #ffffff);
+  border-bottom: 1px solid var(--workspace-line, #f0f0f3);
   display: flex;
   gap: 8px;
   max-width: 100%;
@@ -244,7 +247,7 @@
 }
 
 .rightPanelView {
-  background: #fafbfe;
+  background: var(--workspace-surface-muted, #fafafa);
   display: grid;
   height: 100%;
   max-width: 100%;
@@ -260,9 +263,9 @@
 
 .panelModeToggle {
   align-items: center;
-  background: #eef0f4;
-  border: 1px solid #e2e8f0;
-  border-radius: 7px;
+  background: var(--workspace-surface-muted, #fafafa);
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  border-radius: 8px;
   display: inline-flex;
   gap: 3px;
   padding: 3px;
@@ -280,7 +283,7 @@
 .panelModeTextButtonActive {
   align-items: center;
   border: 1px solid transparent;
-  border-radius: 4px;
+  border-radius: 6px;
   cursor: pointer;
   display: inline-flex;
   flex: 0 0 auto;
@@ -299,15 +302,15 @@
 }
 
 .panelModeTextButton {
-  background: #ffffff;
-  border-color: #e1e7f1;
-  color: #4f5d74;
+  background: var(--workspace-surface, #ffffff);
+  border-color: var(--workspace-line, #f0f0f3);
+  color: var(--workspace-muted, #60646c);
 }
 
 .panelModeTextButtonActive {
-  background: #f4f1ff;
-  border-color: #d8ceff;
-  color: #5f3de8;
+  background: var(--workspace-accent, #000000);
+  border-color: var(--workspace-accent, #000000);
+  color: #ffffff;
 }
 
 .panelModeButton,
@@ -321,7 +324,7 @@
   background: transparent;
   border: 1px solid transparent;
   border-radius: 6px;
-  color: #58677d;
+  color: var(--workspace-muted, #60646c);
   cursor: pointer;
   display: inline-flex;
   height: 30px;
@@ -334,28 +337,28 @@
 .panelModeButtonActive,
 .panelIconButtonActive,
 .collapsedPanelButtonActive {
-  background: #ffffff;
-  border-color: #d8ceff;
-  box-shadow: 0 1px 4px rgba(23, 32, 51, 0.12);
-  color: #6f4cf6;
+  background: var(--workspace-accent, #000000);
+  border-color: var(--workspace-accent, #000000);
+  box-shadow: 0 1px 4px rgba(23, 23, 23, 0.12);
+  color: #ffffff;
 }
 
 .panelIconButton,
 .panelIconButtonActive {
-  background: #ffffff;
-  border-color: #cbd5e1;
+  background: var(--workspace-surface, #ffffff);
+  border-color: var(--workspace-line, #f0f0f3);
 }
 
 .panelCollapseButton {
-  background: #f8fafc;
-  border-color: #d7dee9;
-  color: #243044;
+  background: var(--workspace-surface-muted, #fafafa);
+  border-color: var(--workspace-line, #f0f0f3);
+  color: var(--workspace-text, #171717);
   flex: 0 0 auto;
 }
 
 .collapsedPanelButton,
 .collapsedPanelButtonActive {
-  background: #ffffff;
+  background: var(--workspace-surface, #ffffff);
   border-color: transparent;
 }
 
@@ -369,9 +372,9 @@
 .panelCollapseButton:focus-visible,
 .collapsedPanelButton:hover,
 .collapsedPanelButton:focus-visible {
-  background: #f6f3ff;
-  border-color: #d8ceff;
-  color: #5f3de8;
+  background: var(--workspace-surface-muted, #fafafa);
+  border-color: var(--workspace-line-strong, #dcdee0);
+  color: var(--workspace-text, #171717);
   outline: none;
 }
 
@@ -392,8 +395,8 @@
 }
 
 .panelIssueBadge {
-  background: #eef2ff;
-  color: #3730a3;
+  background: var(--workspace-accent-soft, #f0f0f3);
+  color: var(--workspace-text, #171717);
 }
 
 .panelIssueBadgeError {
@@ -409,8 +412,8 @@
 }
 
 .resourceWorkspacePanel {
-  background: #fafbfe;
-  color: #172033;
+  background: var(--workspace-surface-muted, #fafafa);
+  color: var(--workspace-text, #171717);
   display: grid;
   font-size: 12px;
   grid-template-rows: minmax(0, 1fr);
@@ -419,7 +422,7 @@
 }
 
 .resourceSettingsPanel {
-  background: #ffffff;
+  background: var(--workspace-surface, #ffffff);
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   min-height: 0;
@@ -428,8 +431,8 @@
 
 .resourceSettingsHeader {
   align-items: center;
-  background: #fafbfe;
-  border-bottom: 1px solid #dce3ee;
+  background: var(--workspace-surface-muted, #fafafa);
+  border-bottom: 1px solid var(--workspace-line, #f0f0f3);
   display: flex;
   justify-content: flex-start;
   min-height: 48px;
@@ -438,15 +441,15 @@
 
 .resourceSettingsBackButton {
   align-items: center;
-  background: #ffffff;
-  border: 1px solid #dce3ee;
-  border-radius: 6px;
-  color: #243044;
+  background: var(--workspace-surface, #ffffff);
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  border-radius: 8px;
+  color: var(--workspace-text, #171717);
   cursor: pointer;
   display: inline-flex;
   font: inherit;
   font-size: 12px;
-  font-weight: 850;
+  font-weight: 700;
   gap: 7px;
   min-height: 32px;
   padding: 0 10px;
@@ -454,9 +457,9 @@
 
 .resourceSettingsBackButton:hover,
 .resourceSettingsBackButton:focus-visible {
-  background: var(--bp-blue-tint);
-  border-color: color-mix(in srgb, var(--bp-blue) 32%, var(--bp-line));
-  color: var(--bp-blue);
+  background: var(--workspace-surface-muted, #fafafa);
+  border-color: var(--workspace-line-strong, #dcdee0);
+  color: var(--workspace-text, #171717);
   outline: none;
 }
 
@@ -475,10 +478,10 @@
 
 .resourceListItem,
 .resourceListItemActive {
-  background: #ffffff;
-  border: 1px solid #dce3ee;
-  border-radius: 7px;
-  color: #172033;
+  background: var(--workspace-surface, #ffffff);
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  border-radius: 8px;
+  color: var(--workspace-text, #171717);
   cursor: pointer;
   display: grid;
   gap: 9px;
@@ -493,14 +496,14 @@
 .resourceListItem:hover,
 .resourceListItem:focus-visible,
 .resourceListItemActive:focus-visible {
-  border-color: color-mix(in srgb, var(--bp-blue) 38%, var(--bp-line));
-  box-shadow: 0 8px 20px color-mix(in srgb, var(--bp-blue) 12%, transparent);
+  border-color: var(--workspace-line-strong, #dcdee0);
+  box-shadow: 0 8px 20px rgba(23, 23, 23, 0.08);
   outline: none;
 }
 
 .resourceListItemActive {
-  border-color: var(--bp-blue);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--bp-blue) 66%, transparent);
+  border-color: var(--workspace-text, #171717);
+  box-shadow: 0 0 0 1px rgba(23, 23, 23, 0.18);
 }
 
 .resourceListHeader {
@@ -516,7 +519,7 @@
   background: transparent;
   border: 1px solid transparent;
   border-radius: 6px;
-  color: #172033;
+  color: var(--workspace-text, #171717);
   cursor: pointer;
   display: inline-flex;
   flex: 0 0 auto;
@@ -528,9 +531,9 @@
 
 .resourceListMoreButton:hover,
 .resourceListMoreButton:focus-visible {
-  background: var(--bp-blue-tint);
-  border-color: color-mix(in srgb, var(--bp-blue) 32%, var(--bp-line));
-  color: var(--bp-blue);
+  background: var(--workspace-surface-muted, #fafafa);
+  border-color: var(--workspace-line-strong, #dcdee0);
+  color: var(--workspace-text, #171717);
   outline: none;
 }
 
@@ -4708,7 +4711,7 @@
   }
 }
 
-/* Blueprint panel polish pass */
+/* Legacy workspace panel compatibility layer, overridden by the DESIGN.md pass below. */
 .rightPanelShell,
 .resourceWorkspacePanel,
 .terraformPanel,
@@ -5128,7 +5131,7 @@
   color: #7ea7c6;
 }
 
-/* Brainboard right panel reproduction */
+/* Legacy right panel sizing compatibility layer, overridden by the DESIGN.md pass below. */
 .rightPanelShell {
   --bb-white: #ffffff;
   --bb-page: #fafafa;
@@ -5306,4 +5309,520 @@
   .deploymentGateFacts {
     grid-template-columns: 1fr;
   }
+}
+
+/* DESIGN.md workspace internal panel pass */
+.rightPanelShell {
+  background: var(--workspace-surface, #ffffff);
+  color: var(--workspace-text, #171717);
+  font-family: var(--workspace-font, "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif);
+}
+
+.rightPanelToolbar,
+.rightPanelUtilityBar,
+.rightPanelModeBar,
+.terraformTopBar,
+.resourceActionBar,
+.resourceCodeHeader,
+.terraformDiagnostics,
+.aiChatHeader,
+.aiChatTabBar,
+.aiChatComposer {
+  background: var(--workspace-surface, #ffffff);
+  border-color: var(--workspace-line, #f0f0f3);
+}
+
+.rightPanelView,
+.resourceWorkspacePanel,
+.terraformPanel,
+.issuesPanel,
+.aiPanel,
+.deploymentPanel {
+  background: var(--workspace-surface-muted, #fafafa);
+  color: var(--workspace-text, #171717);
+  font-family: var(--workspace-font, "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif);
+}
+
+.terraformPanel {
+  background: var(--workspace-surface-muted, #fafafa);
+  color: var(--workspace-text, #171717);
+  font-family: var(--workspace-font, "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif);
+}
+
+.issuesPanel {
+  background: var(--workspace-surface-muted, #fafafa);
+  color: var(--workspace-text, #171717);
+  font-family: var(--workspace-font, "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif);
+}
+
+.panelModeToggle,
+.rightPanelUtilityGroup,
+.aiChatTabs,
+.deploymentDisclosure {
+  background: var(--workspace-surface-muted, #fafafa);
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+.panelModeButton,
+.panelModeButtonActive,
+.panelModeTextButton,
+.panelModeTextButtonActive,
+.panelIconButton,
+.panelIconButtonActive,
+.panelCollapseButton,
+.collapsedPanelButton,
+.collapsedPanelButtonActive,
+.resourceSettingsBackButton,
+.resourceActionSecondary,
+.terraformFileButton,
+.terraformPreviewButton,
+.deploymentExpandButton,
+.aiChatCloseButton,
+.aiChatClearButton,
+.aiChatSuggestionButton {
+  border-radius: 8px;
+  color: var(--workspace-text, #171717);
+  font-family: var(--workspace-font, "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif);
+  font-weight: 700;
+}
+
+.panelModeButtonActive,
+.panelModeTextButtonActive,
+.panelIconButtonActive,
+.collapsedPanelButtonActive {
+  background: var(--workspace-accent, #000000);
+  border-color: var(--workspace-accent, #000000);
+  box-shadow: none;
+  color: #ffffff;
+}
+
+.panelModeTextButtonActive {
+  background: var(--workspace-accent, #000000);
+  border-color: var(--workspace-accent, #000000);
+  color: #ffffff;
+}
+
+.panelModeButton:hover,
+.panelModeButton:focus-visible,
+.panelModeTextButton:hover,
+.panelModeTextButton:focus-visible,
+.panelIconButton:hover,
+.panelIconButton:focus-visible,
+.panelCollapseButton:hover,
+.panelCollapseButton:focus-visible,
+.collapsedPanelButton:hover,
+.collapsedPanelButton:focus-visible,
+.resourceSettingsBackButton:hover,
+.resourceSettingsBackButton:focus-visible,
+.resourceActionSecondary:not(:disabled):hover,
+.resourceActionSecondary:not(:disabled):focus-visible,
+.terraformFileButton:hover,
+.terraformFileButton:focus-visible,
+.terraformPreviewButton:not(:disabled):hover,
+.terraformPreviewButton:not(:disabled):focus-visible,
+.deploymentExpandButton:hover,
+.deploymentExpandButton:focus-visible,
+.aiChatCloseButton:hover,
+.aiChatCloseButton:focus-visible,
+.aiChatSuggestionButton:hover,
+.aiChatSuggestionButton:focus-visible {
+  background: var(--workspace-surface-muted, #fafafa);
+  border-color: var(--workspace-line-strong, #dcdee0);
+  color: var(--workspace-text, #171717);
+  outline: none;
+}
+
+.terraformFileButton,
+.terraformFileMenu,
+.terraformFileSearch,
+.terraformEmpty,
+.terraformNotice,
+.terraformError,
+.terraformDiagnosticList li,
+.terraformPreviewExplanationPanel,
+.terraformPreviewExplanationResult,
+.terraformIssueFixPlan,
+.terraformIssueCodeFrame,
+.terraformIssueCodePreview section,
+.aiField textarea,
+.aiField input,
+.aiField select,
+.aiResultCard,
+.aiExplanation,
+.aiWarning,
+.aiTerraformPreviewConclusion,
+.aiTerraformPreviewAgentCard,
+.aiSafetyFindingCard,
+.aiSimulationCard,
+.aiChatSimulationIntro,
+.aiChatAssistantMessage p,
+.aiChatDraftCard,
+.aiSafetyNotice,
+.deploymentSection,
+.deploymentStageCard,
+.deploymentPreflightSummary,
+.deploymentFindingAiExplanation,
+.deploymentSummary,
+.deploymentApplyConfirm,
+.deploymentDestroyConfirm,
+.deploymentField input,
+.deploymentField select,
+.deploymentField textarea,
+.reverseAdvancedSettings,
+.reverseResourceToggle,
+.reverseResultItem,
+.reverseLogList li,
+.reverseCandidateCard,
+.reverseResultDetails {
+  background: var(--workspace-surface, #ffffff);
+  border-color: var(--workspace-line, #f0f0f3);
+  border-radius: 8px;
+  box-shadow: none;
+  color: var(--workspace-text, #171717);
+}
+
+.terraformFileSearch:focus,
+.aiField textarea:focus,
+.aiField input:focus,
+.deploymentField input:focus,
+.deploymentField select:focus,
+.deploymentField textarea:focus,
+.aiChatInput textarea:focus {
+  border-color: var(--workspace-accent, #000000);
+  box-shadow: 0 0 0 3px rgba(23, 23, 23, 0.1);
+  outline: none;
+}
+
+.aiPanelHeader,
+.deploymentHeader {
+  background: var(--workspace-surface, #ffffff);
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  border-radius: 8px;
+  padding: 14px;
+  position: relative;
+}
+
+.aiPanelHeader {
+  background: var(--workspace-surface, #ffffff);
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  border-radius: 8px;
+}
+
+.deploymentHeader {
+  background: var(--workspace-surface, #ffffff);
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  border-radius: 8px;
+}
+
+.aiPanelHeader::before,
+.aiPanelHeader::after,
+.deploymentHeader::before,
+.deploymentHeader::after,
+.aiSection::before,
+.deploymentSection::before {
+  content: none;
+}
+
+.aiPanelHeader span,
+.deploymentHeader > span,
+.deploymentHeaderTop span,
+.aiChatHeader span {
+  color: var(--workspace-muted, #60646c);
+  font-family: var(--workspace-font, "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.terraformDiagnosticsHeader h3,
+.aiPanelHeader h2,
+.deploymentHeader h2,
+.deploymentSection h3,
+.aiChatHeader h2 {
+  color: var(--workspace-text, #171717);
+  font-family: var(--workspace-font, "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif);
+  letter-spacing: 0;
+}
+
+.terraformDiagnosticsHeader,
+.aiField,
+.deploymentField,
+.deploymentHint,
+.terraformDiagnosticList span,
+.aiHint,
+.aiNotice,
+.aiStaleNotice,
+.aiError,
+.aiExplanation p,
+.aiResultSummary,
+.aiSafetyFindingDetails dt,
+.aiSafetyFindingSteps li,
+.aiListBlock li,
+.deploymentActionItem p,
+.deploymentStageStatus,
+.deploymentPreflightSummary p,
+.deploymentFindingAiExplanation p,
+.reverseResultItem span,
+.reverseLogList span,
+.reverseCandidateCard span {
+  color: var(--workspace-muted, #60646c);
+}
+
+.terraformIssueCount,
+.panelIssueBadge,
+.terraformDiagnosticSeverity,
+.terraformPreviewExplanationStats span,
+.aiResultHeader span,
+.aiExplanationHeader span,
+.aiSafetyFindingMeta span,
+.aiSimulationCostMeta span {
+  background: var(--workspace-accent-soft, #f0f0f3);
+  color: var(--workspace-text, #171717);
+}
+
+.terraformIssueCountError,
+.panelIssueBadgeError {
+  background: #fef2f2;
+  color: #b42318;
+}
+
+.terraformNotice,
+.terraformPreviewExplanationNotice,
+.aiNotice {
+  background: var(--workspace-accent-soft, #f0f0f3);
+  border-color: var(--workspace-line-strong, #dcdee0);
+  color: var(--workspace-text, #171717);
+}
+
+.terraformError,
+.deploymentStaleNotice,
+.deploymentStageAlert,
+.aiWarning,
+.aiStaleNotice {
+  background: #fff7ed;
+  border-color: #fed7aa;
+  color: #9a3412;
+}
+
+.aiPrimaryButton,
+.deploymentPrimaryButton,
+.aiChatLauncher,
+.aiChatSendButton,
+.aiChatSelectionSubmitButton,
+.terraformDiagnosticAiButton {
+  background: var(--workspace-accent, #000000);
+  border-color: var(--workspace-accent, #000000);
+  color: #ffffff;
+}
+
+.aiPrimaryButton:not(:disabled):hover,
+.aiPrimaryButton:not(:disabled):focus-visible,
+.deploymentPrimaryButton:not(:disabled):hover,
+.deploymentPrimaryButton:not(:disabled):focus-visible,
+.aiChatLauncher:hover,
+.aiChatLauncher:focus-visible,
+.aiChatSendButton:not(:disabled):hover,
+.aiChatSendButton:not(:disabled):focus-visible,
+.aiChatSelectionSubmitButton:hover,
+.aiChatSelectionSubmitButton:focus-visible,
+.terraformDiagnosticAiButton:hover,
+.terraformDiagnosticAiButton:focus-visible {
+  background: var(--workspace-accent-active, #1a1a1a);
+  border-color: var(--workspace-accent-active, #1a1a1a);
+  box-shadow: 0 18px 44px rgba(23, 23, 23, 0.16);
+  color: #ffffff;
+  outline: none;
+}
+
+.aiChatSendButton {
+  background: var(--workspace-accent, #000000);
+  border-color: var(--workspace-accent, #000000);
+  color: #ffffff;
+}
+
+.aiSecondaryButton,
+.deploymentSecondaryButton,
+.resourceActionSecondary,
+.terraformPreviewButton {
+  background: var(--workspace-surface, #ffffff);
+  border-color: var(--workspace-line, #f0f0f3);
+  color: var(--workspace-text, #171717);
+}
+
+.terraformPreviewButton {
+  background: var(--workspace-surface, #ffffff);
+  border-color: var(--workspace-line, #f0f0f3);
+  color: var(--workspace-text, #171717);
+}
+
+.aiPrimaryButton {
+  background: var(--workspace-accent, #000000);
+  border-color: var(--workspace-accent, #000000);
+  color: #ffffff;
+}
+
+.deploymentPrimaryButton {
+  background: var(--workspace-accent, #000000);
+  border-color: var(--workspace-accent, #000000);
+  color: #ffffff;
+}
+
+.aiSecondaryButton:not(:disabled):hover,
+.aiSecondaryButton:not(:disabled):focus-visible,
+.deploymentSecondaryButton:not(:disabled):hover,
+.deploymentSecondaryButton:not(:disabled):focus-visible {
+  background: var(--workspace-surface-muted, #fafafa);
+  border-color: var(--workspace-line-strong, #dcdee0);
+  color: var(--workspace-text, #171717);
+  outline: none;
+}
+
+.aiChatLauncher {
+  background: var(--workspace-accent, #000000);
+  border-color: var(--workspace-accent, #000000);
+  box-shadow: 0 18px 44px rgba(23, 23, 23, 0.16);
+  color: #ffffff;
+}
+
+.aiChatDock {
+  background: var(--workspace-surface, #ffffff);
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  border-radius: 8px;
+  box-shadow: 0 24px 70px rgba(23, 23, 23, 0.16);
+  color: var(--workspace-text, #171717);
+}
+
+.aiChatTranscript {
+  background: var(--workspace-surface-muted, #fafafa);
+}
+
+.aiChatTabButton[aria-selected="true"] {
+  background: var(--workspace-accent, #000000);
+  box-shadow: none;
+  color: #ffffff;
+}
+
+.aiChatUserMessage p {
+  background: var(--workspace-accent, #000000);
+  border-color: var(--workspace-accent, #000000);
+  color: #ffffff;
+}
+
+.aiChatAssistantMessage[data-kind="question"] p {
+  background: var(--workspace-surface, #ffffff);
+  border-color: var(--workspace-line-strong, #dcdee0);
+  box-shadow: inset 3px 0 0 var(--workspace-accent, #000000);
+}
+
+.aiChatSuggestionButtonSelected {
+  background: var(--workspace-accent, #000000);
+  border-color: var(--workspace-accent, #000000);
+  color: #ffffff;
+}
+
+.panelModeIconGroup .panelModeButtonActive,
+.panelModeIconGroup .panelModeButtonActive:hover,
+.panelModeIconGroup .panelModeButtonActive:focus-visible,
+.rightPanelUtilityGroup .panelModeButtonActive,
+.rightPanelUtilityGroup .panelModeButtonActive:hover,
+.rightPanelUtilityGroup .panelModeButtonActive:focus-visible,
+.panelModeTextButtonActive,
+.panelModeTextButtonActive:hover,
+.panelModeTextButtonActive:focus-visible {
+  background: var(--workspace-accent, #000000);
+  border-color: var(--workspace-accent, #000000);
+  border-radius: 8px;
+  box-shadow: none;
+  color: #ffffff;
+  outline: none;
+}
+
+.aiChatInput textarea {
+  background: var(--workspace-surface, #ffffff);
+  border-color: var(--workspace-line, #f0f0f3);
+  border-radius: 8px;
+  color: var(--workspace-text, #171717);
+}
+
+.aiChatVoiceButton {
+  background: var(--workspace-surface, #ffffff);
+  border-color: var(--workspace-line, #f0f0f3);
+  border-radius: 8px;
+  color: var(--workspace-text, #171717);
+}
+
+.aiChatVoiceButton[data-listening="true"] {
+  background: var(--workspace-accent-soft, #f0f0f3);
+  border-color: var(--workspace-accent, #000000);
+  box-shadow: 0 0 0 3px rgba(23, 23, 23, 0.1);
+  color: var(--workspace-text, #171717);
+}
+
+.deploymentStageCard[data-state="active"] {
+  border-color: var(--workspace-accent, #000000);
+  box-shadow: inset 3px 0 0 var(--workspace-accent, #000000);
+}
+
+.deploymentStageCard[data-state="idle"] {
+  background: var(--workspace-surface-muted, #fafafa);
+}
+
+.deploymentStageNumber {
+  background: var(--workspace-accent-soft, #f0f0f3);
+  border-color: var(--workspace-line, #f0f0f3);
+  color: var(--workspace-text, #171717);
+}
+
+.deploymentLogList {
+  background: #171717;
+  background-size: auto;
+  border: 1px solid #303030;
+  border-radius: 8px;
+}
+
+.deploymentLogPrefix {
+  color: #b0b4ba;
+}
+
+.deploymentExpandedOverlay {
+  background: rgba(23, 23, 23, 0.32);
+}
+
+.deploymentExpandedShell {
+  background: var(--workspace-surface, #ffffff);
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  border-radius: 8px;
+  box-shadow: 0 24px 70px rgba(23, 23, 23, 0.16);
+  color: var(--workspace-text, #171717);
+  font-family: var(--workspace-font, "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif);
+}
+
+.deploymentExpandedHeader {
+  background: var(--workspace-surface, #ffffff);
+  border-bottom: 1px solid var(--workspace-line, #f0f0f3);
+}
+
+.deploymentExpandedHeader h2 {
+  color: var(--workspace-text, #171717);
+  font-family: var(--workspace-font, "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif);
+  letter-spacing: 0;
+}
+
+.deploymentExpandedHeader span {
+  color: var(--workspace-muted, #60646c);
+  font-family: var(--workspace-font, "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif);
+  letter-spacing: 0;
+}
+
+.deploymentExpandedBody {
+  background: var(--workspace-surface-muted, #fafafa);
+}
+
+.serverSaveToast {
+  border-left-width: 1px;
+  border-radius: 8px;
+  font-size: 16px;
 }
