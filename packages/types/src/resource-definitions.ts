@@ -245,7 +245,7 @@ export const resourceDefinitions = [
   createAwsResourceDefinition({
     id: "aws-caller-identity",
     parameterPanel: false,
-    resourceType: "UNKNOWN",
+    resourceType: "AWS_CALLER_IDENTITY",
     terraformBlockType: "data",
     terraformPreview: true,
     terraformResourceType: "aws_caller_identity",
@@ -254,7 +254,7 @@ export const resourceDefinitions = [
   createAwsResourceDefinition({
     id: "aws-ssm-parameter",
     parameterPanel: false,
-    resourceType: "UNKNOWN",
+    resourceType: "SSM_PARAMETER",
     terraformBlockType: "data",
     terraformPreview: true,
     terraformResourceType: "aws_ssm_parameter",
@@ -670,28 +670,28 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-codebuild-project",
-    resourceType: "UNKNOWN",
+    resourceType: "CODEBUILD_PROJECT",
     terraformPreview: true,
     terraformResourceType: "aws_codebuild_project",
     terraformSync: true
   }),
   createAwsResourceDefinition({
     id: "aws-codedeploy-app",
-    resourceType: "UNKNOWN",
+    resourceType: "CODEDEPLOY_APP",
     terraformPreview: true,
     terraformResourceType: "aws_codedeploy_app",
     terraformSync: true
   }),
   createAwsResourceDefinition({
     id: "aws-codedeploy-deployment-group",
-    resourceType: "UNKNOWN",
+    resourceType: "CODEDEPLOY_DEPLOYMENT_GROUP",
     terraformPreview: true,
     terraformResourceType: "aws_codedeploy_deployment_group",
     terraformSync: true
   }),
   createAwsResourceDefinition({
     id: "aws-codepipeline",
-    resourceType: "UNKNOWN",
+    resourceType: "CODEPIPELINE",
     terraformPreview: true,
     terraformResourceType: "aws_codepipeline",
     terraformSync: true
@@ -699,7 +699,7 @@ export const resourceDefinitions = [
   createAwsResourceDefinition({
     id: "aws-codestarconnections-connection",
     parameterPanel: false,
-    resourceType: "UNKNOWN",
+    resourceType: "CODESTAR_CONNECTION",
     terraformPreview: true,
     terraformResourceType: "aws_codestarconnections_connection",
     terraformSync: true
