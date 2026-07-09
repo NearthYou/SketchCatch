@@ -4,10 +4,10 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- Branch: `fix/ck/275-ai-chat-bug-fix`.
-- Base: current branch includes the prior AI chat suggestion-locking commit.
-- GitHub issue: #275, AI chat bug fixes.
-- Scope: prevent stale suggestion reuse, block unrelated free-form AI chat prompts, and keep mobile app requests out of website-specific clarification paths.
+- Branch: `codex/ecs-01-foundation`.
+- Active workstream: `ECS-MIGRATION-000`, Phase 1 foundation.
+- Scope: add Terraform definitions for parallel ECS/Fargate production foundation while keeping the existing EC2/SSM/docker run rollback path intact.
+- Do not implement GitHub Actions ECS deploy workflow rewrite, secret migration, worker code, ALB path routing split, EC2/SSM removal, or live AWS mutation in Phase 1.
 
 ## Session Record
 
@@ -37,6 +37,15 @@ Short English-only working log for the current agent context. Older records are 
 - Cleaned `docs/sw` before the ECS planning work. Removed stale SW spec, plan, smoke, evidence, and one-off agent-rule files from the active docs folder. Kept `spec6.md` as Git/CI/CD implementation-contract reference and updated `docs/sw/README.md`.
 - Updated `docs/AGENTS.md` so future documentation work removes stale `docs/sw` workstream files instead of preserving old `spec*`, `plan*`, smoke, and one-off agent-rule documents.
 - Marked HARNESS-007 as blocked/deferred because the user decided not to pursue GitHub/AWS live smoke now.
+- Created the active ECS migration workstream docs under `docs/sw`: `spec.md`, `plan.md`, and `agents.md`, and linked them from `docs/sw/README.md`.
+- Started ECS migration Phase 0 tracking on `dev`; added `ECS-MIGRATION-000` as the only in-progress workstream in `feature_list.json`.
+- Aligned the active ECS docs with the agreed strategy: parallel ALB cutover, Phase 1 single ECS task with nginx/web/api, API/worker separation only after ECS production stability, ECS RunTask one-off worker execution, SQS/always-on worker service deferred, and later ECS task secret injection.
+- Created branch `codex/ecs-01-foundation` from the Phase 0 worktree on `dev`.
+- Added `infra/aws/terraform` as the ECS/Fargate foundation root with ECR repositories for api/web/nginx, ECS cluster/service/task definition, CloudWatch log groups, task execution role, task role, security groups, parallel ALB, listener, and Fargate-compatible `ip` target group.
+- Kept Route53 alias creation disabled by default so the existing EC2 ALB remains the production rollback path until ECS smoke passes.
+- Added an ECS task nginx command that writes an ECS-local nginx config routing `/api`, `/health`, and `/health/db` to `127.0.0.1:4000` and web traffic to `127.0.0.1:3000` inside the same task.
+- Added Terraform local-state ignore rules and documented the ECS foundation, cost-bearing resources, required variables, and Phase 2/3 secret/image handoff inputs.
+- Updated `docs/deployment.md` to describe the Phase 1 ECS foundation as a parallel path, not a production cutover.
 
 Verification:
 
@@ -132,6 +141,23 @@ Verification:
 - `pnpm build` - passed after PR #280 review feedback fixes.
 - `pnpm harness:check` - passed after PR #280 review feedback fixes.
 - `pnpm harness:check` - passed after the docs/sw cleanup and harness state repair.
+- `pnpm harness:check` - passed after creating the ECS migration docs.
+- `git diff --check` - passed after creating the ECS migration docs.
+- `pnpm harness:check` - passed before ECS Phase 0 edits.
+- `node -e "..."` feature tracker check - confirmed exactly one `in_progress` workstream: `ECS-MIGRATION-000`.
+- `pnpm harness:check` - passed after ECS Phase 0 tracking/doc updates.
+- `git diff --check` - passed after ECS Phase 0 tracking/doc updates; Git reported LF-to-CRLF working-copy warnings only.
+- `pnpm harness:check` - passed before ECS Phase 1 edits.
+- `terraform -chdir=infra/aws/terraform fmt -check -recursive` - passed after adding ECS foundation files.
+- `node -e "..."` feature tracker check - confirmed exactly one `in_progress` workstream: `ECS-MIGRATION-000`.
+- `terraform -chdir=infra/aws/terraform init -backend=false` - passed; downloaded the AWS provider and created `infra/aws/terraform/.terraform.lock.hcl` without configuring remote state or contacting AWS APIs.
+- `terraform -chdir=infra/aws/terraform validate` - passed.
+- `pnpm harness:check` - passed after ECS Phase 1 implementation.
+- `pnpm lint` - passed.
+- `pnpm typecheck` - failed first because stale generated `apps/web/.next/types/validator.ts` referenced removed legacy route files; removed ignored `.next` output, then reran and passed.
+- `pnpm build` - passed.
+- `pnpm harness:check` - passed after build.
+- `git diff --check` - passed after build; Git reported LF-to-CRLF working-copy warnings only.
 
 Known risks:
 
@@ -139,3 +165,8 @@ Known risks:
 - The user still needs to apply caller-side `sts:AssumeRole` permission in AWS IAM Identity Center and confirm the target Role Trust Policy/External ID.
 - This is a documentation-only cleanup. No product source code, package metadata, or generated deployment artifacts were intentionally changed.
 - Git/CI/CD live smoke evidence is intentionally deferred, so HARNESS-007 remains blocked until the team decides to collect real deployment evidence again.
+- ECS Phase 0 did not create GitHub issues or branches and did not run live AWS commands or mutate cloud resources.
+- Next recommended issue/branch: `Chore: ECS 전환 운영 계획과 비용 기준 정리` on `chore/sw/{issue}-ecs-operating-plan`, then Phase 1 as `Feat: nginx 포함 ECS 운영 서비스 기반 추가` on `feature/sw/{issue}-ecs-app-service`.
+- ECS Phase 1 has not pushed images to ECR, rewritten GitHub Actions, created task secrets, changed Route53, or run Terraform plan/apply.
+- Phase 2/3 will need GitHub variables for ECR repository URLs, ECS cluster/service/task family, AWS role permissions for ECR/ECS deployment, and task secret ARNs for `DATABASE_URL`, `AUTH_TOKEN_SECRET`, `CLOUDFORMATION_TEMPLATE_TOKEN_SECRET`, OAuth/GitHub App secrets, `REDIS_URL`, and AI provider keys.
+- Terraform `plan` was intentionally not run because it can require backend/provider credentials and read AWS state; no live AWS commands were run.
