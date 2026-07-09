@@ -370,6 +370,15 @@ test("workspace AI chat blocks empty draft requests at the final chat boundary",
   assert.match(aiChatDockSource, /prompt\s*\}/);
 });
 
+test("workspace AI chat disables previously submitted suggestion choices", () => {
+  assert.match(aiChatDockSource, /readonly selectedSuggestions\?: readonly string\[\];/);
+  assert.match(aiChatDockSource, /markChatMessageSuggestionsSelected\(messages, suggestionSelection\)/);
+  assert.match(aiChatDockSource, /const hasSubmittedSuggestion = submittedSuggestions\.length > 0;/);
+  assert.match(aiChatDockSource, /disabled=\{isSuggestionDisabled\}/);
+  assert.match(aiChatDockSource, /hasSubmittedSuggestion \|\|/);
+  assert.match(aiChatDockSource, /candidate\.selectedSuggestions === undefined/);
+});
+
 test("terraform leave guard covers workspace escape actions while editing", () => {
   assert.match(componentSource, /PendingTerraformLeaveAction/);
   assert.match(componentSource, /pendingTerraformLeaveActionRef/);

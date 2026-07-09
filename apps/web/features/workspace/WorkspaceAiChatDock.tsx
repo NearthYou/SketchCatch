@@ -103,7 +103,13 @@ type WorkspaceAiChatMessage = {
   readonly role: WorkspaceAiChatMessageRole;
   readonly scope?: WorkspaceAiChatScope;
   readonly selectionMode?: WorkspaceAiChatSelectionMode;
+  readonly selectedSuggestions?: readonly string[];
   readonly suggestions?: readonly string[];
+};
+
+type WorkspaceAiChatSuggestionSelection = {
+  readonly messageId: string;
+  readonly suggestions: readonly string[];
 };
 
 type PendingArchitectureDraftClarification = {
@@ -555,7 +561,10 @@ export function WorkspaceAiChatDock({
     context.setPreviewDiagram(null);
   }
 
-  async function submitUserMessage(value: string): Promise<void> {
+  async function submitUserMessage(
+    value: string,
+    suggestionSelection?: WorkspaceAiChatSuggestionSelection
+  ): Promise<void> {
     const trimmedPrompt = value.trim();
 
     if (trimmedPrompt.length === 0 || draftState === "loading") {
@@ -563,7 +572,10 @@ export function WorkspaceAiChatDock({
     }
 
     const userMessage = createChatMessage("user", "status", trimmedPrompt, [], "single", "draft");
-    const nextMessages = trimChatMessages([...messages, userMessage]);
+    const messagesWithSelection = suggestionSelection
+      ? markChatMessageSuggestionsSelected(messages, suggestionSelection)
+      : messages;
+    const nextMessages = trimChatMessages([...messagesWithSelection, userMessage]);
 
     setComposerValue("");
     setSelectedSuggestionLabelsByMessageId({});
@@ -1001,7 +1013,10 @@ export function WorkspaceAiChatDock({
       return;
     }
 
-    await submitUserMessage(selectedSuggestions.join(", "));
+    await submitUserMessage(selectedSuggestions.join(", "), {
+      messageId: message.id,
+      suggestions: selectedSuggestions
+    });
   }
 
   async function runDesignSimulation(): Promise<void> {
@@ -1279,7 +1294,11 @@ export function WorkspaceAiChatDock({
 
         {visibleMessages.map((message) => {
           const isMultiSelect = message.selectionMode === "multiple";
-          const selectedSuggestions = selectedSuggestionLabelsByMessageId[message.id] ?? [];
+          const submittedSuggestions = message.selectedSuggestions ?? [];
+          const hasSubmittedSuggestion = submittedSuggestions.length > 0;
+          const selectedSuggestions = hasSubmittedSuggestion
+            ? submittedSuggestions
+            : selectedSuggestionLabelsByMessageId[message.id] ?? [];
 
           return (
             <article
@@ -1295,6 +1314,7 @@ export function WorkspaceAiChatDock({
                 <div className={styles.aiChatSuggestions} aria-label="추천 답안">
                   {message.suggestions.map((suggestion) => {
                     const isSelected = selectedSuggestions.includes(suggestion);
+                    const isSuggestionDisabled = draftState === "loading" || hasSubmittedSuggestion;
                     const suggestionButtonClassName = isSelected
                       ? `${styles.aiChatSuggestionButton} ${styles.aiChatSuggestionButtonSelected}`
                       : styles.aiChatSuggestionButton;
@@ -1303,12 +1323,16 @@ export function WorkspaceAiChatDock({
                       <button
                         aria-pressed={isMultiSelect ? isSelected : undefined}
                         className={suggestionButtonClassName}
-                        disabled={draftState === "loading"}
+                        disabled={isSuggestionDisabled}
                         key={suggestion}
                         onClick={
                           isMultiSelect
                             ? () => toggleSuggestionSelection(message.id, suggestion)
-                            : () => void submitUserMessage(suggestion)
+                            : () =>
+                                void submitUserMessage(suggestion, {
+                                  messageId: message.id,
+                                  suggestions: [suggestion]
+                                })
                         }
                         type="button"
                       >
@@ -1319,7 +1343,11 @@ export function WorkspaceAiChatDock({
                   {isMultiSelect ? (
                     <button
                       className={styles.aiChatSelectionSubmitButton}
-                      disabled={draftState === "loading" || selectedSuggestions.length === 0}
+                      disabled={
+                        draftState === "loading" ||
+                        hasSubmittedSuggestion ||
+                        selectedSuggestions.length === 0
+                      }
                       onClick={() => void submitSelectedSuggestions(message)}
                       type="button"
                     >
@@ -1952,6 +1980,37 @@ function trimChatMessages(messages: readonly WorkspaceAiChatMessage[]): Workspac
   return messages.slice(-MAX_CHAT_MESSAGES);
 }
 
+function markChatMessageSuggestionsSelected(
+  messages: readonly WorkspaceAiChatMessage[],
+  selection: WorkspaceAiChatSuggestionSelection
+): WorkspaceAiChatMessage[] {
+  const selectedSuggestions = Array.from(new Set(selection.suggestions));
+
+  if (selectedSuggestions.length === 0) {
+    return [...messages];
+  }
+
+  return messages.map((message) => {
+    if (message.id !== selection.messageId) {
+      return message;
+    }
+
+    const existingSuggestions = message.selectedSuggestions ?? [];
+    const nextSelectedSuggestions = [...existingSuggestions];
+
+    for (const suggestion of selectedSuggestions) {
+      if (!nextSelectedSuggestions.includes(suggestion)) {
+        nextSelectedSuggestions.push(suggestion);
+      }
+    }
+
+    return {
+      ...message,
+      selectedSuggestions: nextSelectedSuggestions
+    };
+  });
+}
+
 function isWorkspaceAiChatMessage(value: unknown): value is WorkspaceAiChatMessage {
   if (!value || typeof value !== "object") {
     return false;
@@ -1972,6 +2031,9 @@ function isWorkspaceAiChatMessage(value: unknown): value is WorkspaceAiChatMessa
     (candidate.selectionMode === undefined ||
       candidate.selectionMode === "single" ||
       candidate.selectionMode === "multiple") &&
+    (candidate.selectedSuggestions === undefined ||
+      (Array.isArray(candidate.selectedSuggestions) &&
+        candidate.selectedSuggestions.every((suggestion) => typeof suggestion === "string"))) &&
     (candidate.suggestions === undefined ||
       (Array.isArray(candidate.suggestions) &&
         candidate.suggestions.every((suggestion) => typeof suggestion === "string"))) &&
