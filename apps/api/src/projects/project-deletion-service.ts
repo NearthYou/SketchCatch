@@ -16,6 +16,7 @@ import {
   deploymentLogs,
   deploymentPlanArtifacts,
   deployments,
+  gitCicdHandoffs,
   projectAssets,
   projectDrafts,
   projects,
@@ -426,6 +427,7 @@ async function deleteProjectDatabaseRows(input: {
       await tx.delete(deployments).where(inArray(deployments.id, input.deploymentIds));
     }
 
+    await tx.delete(gitCicdHandoffs).where(eq(gitCicdHandoffs.projectId, input.projectId));
     await tx.delete(projectAssets).where(eq(projectAssets.projectId, input.projectId));
     await tx.delete(projectDrafts).where(eq(projectDrafts.projectId, input.projectId));
     await tx.delete(architectures).where(eq(architectures.projectId, input.projectId));

@@ -2,6 +2,31 @@
 
 Short English-only working log for the current agent context.
 
+## 2026-07-09 Project Delete After SSO And Handoff Fix
+
+- Branch/worktree: current `C:\Jungle\SketchCatch` workspace.
+- Scope: fix project deletion failures that appeared after SSO and for projects with deployment/Git handoff history.
+- Root cause: project deletion removed project assets and architectures before removing `git_cicd_handoffs`, so real database `restrict` references could block deletion for handoff/deployed projects.
+- Root cause: OAuth verified-email collisions were rejected for Naver instead of linking the existing user, which could split SSO login from the project-owning password user.
+- Updated project deletion to delete Git/CI/CD handoffs before project assets and architectures.
+- Updated OAuth user connection so verified provider emails link to an existing active user across providers, while untrusted/no-email profiles still keep the existing safeguards.
+- Added regression coverage for handoff-first deletion order and Naver verified-email account linking through both service and route paths.
+
+Verification:
+
+- `pnpm harness:check` - passed before edits.
+- `pnpm --filter @sketchcatch/api exec tsx --test src/projects/project-deletion-service.test.ts` - failed before the handoff deletion fix, then passed.
+- `pnpm --filter @sketchcatch/api exec tsx --test src/auth/oauth-users.test.ts src/routes/oauth.test.ts` - passed, 29 tests.
+- `pnpm --filter @sketchcatch/api exec tsx --test src/projects/project-deletion-service.test.ts src/routes/projects.auth.test.ts` - passed, 26 tests.
+- `pnpm --filter @sketchcatch/api typecheck` - passed.
+- `pnpm lint` - passed.
+- `pnpm typecheck` - passed.
+- `pnpm build` - first run completed all tasks but the shell timed out; rerun passed with exit code 0.
+
+Known risks:
+
+- Existing projects already assigned to `system-migration-user` still need an explicit operator-approved ownership repair to a known user; this change prevents future verified-email SSO splits and fixes the deployed/handoff deletion FK blocker.
+
 ## 2026-07-09 Dashboard Topbar Action Cleanup
 
 - Branch/worktree: current feature branch in `C:\krafton_jungle\SketchCatch`.
