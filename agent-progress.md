@@ -7,7 +7,7 @@ Short English-only working log for the current agent context. Older records are 
 - Branch: `fix/ck/270-delete-project-bug-fix`.
 - Base: latest `origin/dev` has been merged into this branch.
 - GitHub issue: #270, project deletion and AWS connection follow-up fixes.
-- Scope: fix project deletion blockers after SSO/deployment history, add destroy-failure fallback behavior, clarify AWS connection deletion/verification errors, and preserve the compact harness state-file structure from `dev`.
+- Scope: fix project deletion blockers after SSO/deployment history, add destroy-failure fallback behavior, clarify AWS connection deletion/verification errors, keep AI chat aware of unconfigured diagram resources, and preserve the compact harness state-file structure from `dev`.
 
 ## Session Record
 
@@ -20,6 +20,7 @@ Short English-only working log for the current agent context. Older records are 
 - Clarified AWS connection deletion conflicts when deployment history still references an AWS connection.
 - Removed blocking local DB AWS connection/deployment records for user `herry612` at the user's request; this was metadata cleanup only and did not mutate AWS resources.
 - Improved AWS Role verification diagnostics so STS `AccessDenied` is reported as an AssumeRole permission problem instead of a generic connection-test failure.
+- Fixed AI board conversion so visible DiagramJson resource nodes without saved parameter values still count as architecture resources instead of making the AI chat behave like the board is empty.
 
 Verification:
 
@@ -29,6 +30,9 @@ Verification:
 - `pnpm --filter @sketchcatch/web exec tsx --test features/projects/project-delete-flow.test.ts` - passed after the destroy fallback UI/helper changes.
 - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/api-client-error-message.test.ts` - passed after AWS connection message updates.
 - `pnpm --filter @sketchcatch/api exec tsx --test src/aws-connections/aws-connection-test-service.test.ts` - failed before the AssumeRole mapper change, then passed.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-panel-state.test.ts` - failed before the unconfigured resource conversion fix, then passed.
+- `pnpm --filter @sketchcatch/api exec tsx --test src/services/diagram-to-architecture.test.ts` - passed after aligning API conversion behavior.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-diagram-adapter.test.ts` - passed after the conversion change.
 - `pnpm lint` - passed.
 - `pnpm typecheck` - passed.
 - `pnpm build` - passed.
@@ -38,4 +42,3 @@ Known risks:
 
 - No real AWS IAM, IAM Identity Center, CloudFormation, Terraform apply, or Terraform destroy mutation was performed.
 - The user still needs to apply caller-side `sts:AssumeRole` permission in AWS IAM Identity Center and confirm the target Role Trust Policy/External ID.
-- A final post-merge verification pass is still needed after resolving this merge.
