@@ -30,6 +30,7 @@ Short English-only working log for the current agent context. Older records are 
 - Updated the low-budget DB follow-up choice from `DB 없이 다시 만들기` to `DB 없이 만들기` and removed the internal "recreate" wording from the regenerated prompt.
 - Fixed the Terraform issue AI fix application handshake so the AI chat keeps the original issue request id through the apply request/result cycle, opens the edited source line after the Terraform panel is visible, and keeps the source-line highlight visible longer.
 - Fixed Terraform issue AI resolution navigation so the Issues tab `AI resolve` action immediately opens the Terraform source line, and source-line navigation now focuses and scrolls the editor, syntax layer, and line numbers together.
+- Fixed the new-project AI start chat so it uses the same prompt relevance gate before draft generation and disables already submitted suggestion choices.
 
 Verification:
 
@@ -98,6 +99,14 @@ Verification:
 - `pnpm typecheck` - passed after the issue-source navigation and deterministic scroll/focus fix.
 - `pnpm build` - passed after the issue-source navigation and deterministic scroll/focus fix.
 - `pnpm harness:check` - passed after the issue-source navigation and deterministic scroll/focus fix.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-new-project-start-mode.test.ts` - failed before the new-project AI start chat gate/suggestion lock fix, then passed.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-chat-routing.test.ts` - passed after the new-project AI start chat fix.
+- `pnpm --filter @sketchcatch/web typecheck` - passed after clearing stale `.next` route types from the `origin/dev` merge and after the new-project AI start chat fix.
+- `pnpm --filter @sketchcatch/web lint` - passed after the new-project AI start chat fix.
+- `pnpm lint` - passed after the new-project AI start chat fix.
+- `pnpm typecheck` - passed after the new-project AI start chat fix.
+- `pnpm build` - passed after the new-project AI start chat fix.
+- `pnpm harness:check` - passed after the new-project AI start chat fix.
 
 Known risks:
 

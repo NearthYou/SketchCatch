@@ -99,6 +99,31 @@ test("AI start page previews real diagram data and persists approval into the bo
   assert.match(globalStylesSource, /\.workspaceStartForm \.textInput:focus/);
 });
 
+test("AI start page gates unrelated prompts before draft generation", () => {
+  const submitPromptBody = workspaceAiStartClientSource.slice(
+    workspaceAiStartClientSource.indexOf("async function submitPrompt"),
+    workspaceAiStartClientSource.indexOf("async function handleDraftClarificationMessage")
+  );
+  const classificationIndex = submitPromptBody.indexOf("classifyWorkspaceAiChatPrompt(trimmedPrompt)");
+  const draftIndex = submitPromptBody.indexOf("await createDraftFromRequest");
+
+  assert.match(workspaceAiStartClientSource, /classifyWorkspaceAiChatPrompt/);
+  assert.match(workspaceAiStartClientSource, /createWorkspaceAiPromptGateMessage/);
+  assert.match(submitPromptBody, /appendAssistantMessage\(\s*"question",\s*createWorkspaceAiPromptGateMessage/);
+  assert.ok(classificationIndex >= 0);
+  assert.ok(classificationIndex < draftIndex);
+});
+
+test("AI start page disables previously submitted suggestion choices", () => {
+  assert.match(workspaceAiStartClientSource, /readonly selectedSuggestions\?: readonly string\[\];/);
+  assert.match(workspaceAiStartClientSource, /type AiStartSuggestionSelection/);
+  assert.match(workspaceAiStartClientSource, /markAiStartMessageSuggestionsSelected\(messagesRef\.current, suggestionSelection\)/);
+  assert.match(workspaceAiStartClientSource, /const submittedSuggestions = message\.selectedSuggestions \?\? \[\];/);
+  assert.match(workspaceAiStartClientSource, /const hasSubmittedSuggestion = submittedSuggestions\.length > 0;/);
+  assert.match(workspaceAiStartClientSource, /disabled=\{isSuggestionDisabled\}/);
+  assert.match(workspaceAiStartClientSource, /isSuggestionSelected \? "true" : undefined/);
+});
+
 function readAppWorkspaceFile(fileName: string): string {
   return readFileSync(fileURLToPath(new URL(`../../app/workspace/${fileName}`, import.meta.url)), "utf8");
 }

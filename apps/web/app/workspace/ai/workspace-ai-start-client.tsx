@@ -22,6 +22,10 @@ import {
   resolveArchitectureDraftFollowUpAnswer,
   type ArchitectureDraftFollowUpSession
 } from "../../../features/workspace/workspace-ai-draft-follow-up";
+import {
+  classifyWorkspaceAiChatPrompt,
+  createWorkspaceAiPromptGateMessage
+} from "../../../features/workspace/workspace-ai-chat-routing";
 import { createWorkspaceAiChatStorageKey } from "../../../features/workspace/WorkspaceAiChatDock";
 import {
   getAreaNodeIconUrl,
@@ -78,7 +82,13 @@ type AiStartChatMessage = {
   readonly role: "assistant" | "user";
   readonly scope: "draft";
   readonly selectionMode: "single";
+  readonly selectedSuggestions?: readonly string[];
   readonly suggestions?: readonly string[] | undefined;
+};
+
+type AiStartSuggestionSelection = {
+  readonly messageId: string;
+  readonly suggestions: readonly string[];
 };
 
 type PendingArchitectureDraftClarification = {
@@ -150,13 +160,21 @@ export function WorkspaceAiStartClient() {
     scrollTranscriptToBottom();
   }, [draft, errorMessage, messages, requestState]);
 
-  async function submitPrompt(value = composerValue): Promise<void> {
+  async function submitPrompt(
+    value = composerValue,
+    suggestionSelection?: AiStartSuggestionSelection
+  ): Promise<void> {
     const trimmedPrompt = value.trim();
 
     if (!trimmedPrompt || requestState === "loading") {
       return;
     }
 
+    const messagesWithSelection = suggestionSelection
+      ? markAiStartMessageSuggestionsSelected(messagesRef.current, suggestionSelection)
+      : messagesRef.current;
+    messagesRef.current = messagesWithSelection;
+    setMessages(messagesWithSelection);
     appendMessage(createChatMessage("user", "status", trimmedPrompt));
     setComposerValue("");
 
@@ -167,6 +185,13 @@ export function WorkspaceAiStartClient() {
 
     if (draftClarification) {
       await handleDraftClarificationMessage(trimmedPrompt);
+      return;
+    }
+
+    const promptClassification = classifyWorkspaceAiChatPrompt(trimmedPrompt);
+
+    if (promptClassification !== "architecture") {
+      appendAssistantMessage("question", createWorkspaceAiPromptGateMessage(promptClassification));
       return;
     }
 
@@ -412,16 +437,29 @@ export function WorkspaceAiStartClient() {
               <p>{message.content}</p>
               {message.suggestions && message.suggestions.length > 0 ? (
                 <div className="workspaceAiStartSuggestions">
-                  {message.suggestions.map((suggestion) => (
-                    <button
-                      disabled={requestState === "loading"}
-                      key={suggestion}
-                      onClick={() => void submitPrompt(suggestion)}
-                      type="button"
-                    >
-                      {suggestion}
-                    </button>
-                  ))}
+                  {message.suggestions.map((suggestion) => {
+                    const submittedSuggestions = message.selectedSuggestions ?? [];
+                    const hasSubmittedSuggestion = submittedSuggestions.length > 0;
+                    const isSuggestionSelected = submittedSuggestions.includes(suggestion);
+                    const isSuggestionDisabled = requestState === "loading" || hasSubmittedSuggestion;
+
+                    return (
+                      <button
+                        data-selected={isSuggestionSelected ? "true" : undefined}
+                        disabled={isSuggestionDisabled}
+                        key={suggestion}
+                        onClick={() =>
+                          void submitPrompt(suggestion, {
+                            messageId: message.id,
+                            suggestions: [suggestion]
+                          })
+                        }
+                        type="button"
+                      >
+                        {suggestion}
+                      </button>
+                    );
+                  })}
                 </div>
               ) : null}
             </article>
@@ -1017,6 +1055,37 @@ function createChatMessageId(): string {
 
 function trimChatMessages(messages: readonly AiStartChatMessage[]): AiStartChatMessage[] {
   return messages.slice(-MAX_CHAT_MESSAGES);
+}
+
+function markAiStartMessageSuggestionsSelected(
+  messages: readonly AiStartChatMessage[],
+  selection: AiStartSuggestionSelection
+): AiStartChatMessage[] {
+  const selectedSuggestions = Array.from(new Set(selection.suggestions));
+
+  if (selectedSuggestions.length === 0) {
+    return [...messages];
+  }
+
+  return messages.map((message) => {
+    if (message.id !== selection.messageId) {
+      return message;
+    }
+
+    const existingSuggestions = message.selectedSuggestions ?? [];
+    const nextSelectedSuggestions = [...existingSuggestions];
+
+    for (const suggestion of selectedSuggestions) {
+      if (!nextSelectedSuggestions.includes(suggestion)) {
+        nextSelectedSuggestions.push(suggestion);
+      }
+    }
+
+    return {
+      ...message,
+      selectedSuggestions: nextSelectedSuggestions
+    };
+  });
 }
 
 function isArchitectureDraftClarification(
