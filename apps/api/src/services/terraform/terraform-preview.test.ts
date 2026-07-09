@@ -7,46 +7,6 @@ import {
   isTerraformNestedBlockAttribute
 } from "./terraform-nested-blocks.js";
 import { generateTerraformFromDiagramJson } from "./terraform-preview.js";
-import {
-  SKETCHCATCH_REFERENCE_TERRAFORM_CODE,
-  SKETCHCATCH_REFERENCE_TERRAFORM_MARKER
-} from "./sketchcatch-reference-terraform-code.js";
-
-test("returns the fixed SketchCatch reference Terraform code when the diagram carries the reference marker", () => {
-  const diagramJson: DiagramJson = {
-    nodes: [
-      makeNode({
-        id: "vpc-main",
-        type: "aws_vpc",
-        kind: "resource",
-        label: "sketchcatch-vpc",
-        parameters: {
-          terraformBlockType: "resource",
-          resourceType: "aws_vpc",
-          resourceName: "vpc",
-          fileName: "main",
-          values: {
-            cidrBlock: "10.0.0.0/16",
-            sketchcatchReferenceTerraform: SKETCHCATCH_REFERENCE_TERRAFORM_MARKER
-          }
-        }
-      })
-    ],
-    edges: [],
-    viewport: {
-      x: 0,
-      y: 0,
-      zoom: 1
-    }
-  };
-
-  const terraformCode = generateTerraformFromDiagramJson(diagramJson);
-
-  assert.equal(terraformCode, SKETCHCATCH_REFERENCE_TERRAFORM_CODE);
-  assert.match(terraformCode, /resource "aws_vpc" "vpc"/);
-  assert.match(terraformCode, /resource "aws_codepipeline" "codepipeline"/);
-  assert.match(terraformCode, /resource "aws_codedeploy_deployment_group" "codedeploy_deployment_group"/);
-});
 
 test("generates Terraform code from resource nodes", () => {
   const diagramJson: DiagramJson = {

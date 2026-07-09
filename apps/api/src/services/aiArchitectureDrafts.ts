@@ -13,10 +13,6 @@ import type {
 import { resourceDefinitions } from "@sketchcatch/types/resource-definitions";
 import { applyGuardrailMetadata } from "./aiArchitectureDraftMetadata.js";
 import { planPracticeArchitecture } from "./aiArchitectureRequirementDraftBuilder.js";
-import {
-  createSketchCatchReferenceDeploymentDraft,
-  isSketchCatchReferenceDeploymentSelection
-} from "./aiArchitectureSketchcatchReferenceDraft.js";
 import { applyOperatingConditionConfig } from "./aiArchitectureOperatingConditions.js";
 import { resolveArchitectureResourceQuantities } from "./aiArchitectureResourceQuantities.js";
 import { resolveArchitectureRequirement } from "./aiArchitectureRequirementResolution.js";
@@ -168,10 +164,6 @@ export type CreateAmazonQArchitectureDraftResponseOptions = {
 export function createArchitectureDraft(input: string | CreateArchitectureDraftRequest): AiArchitectureDraftResult {
   const request = normalizeArchitectureDraftRequest(input);
 
-  if (isSketchCatchReferenceDeploymentSelection(request.prompt)) {
-    return createSketchCatchReferenceDeploymentDraft();
-  }
-
   const resolution = resolveArchitectureRequirement(request);
   const resourceQuantities = resolveArchitectureResourceQuantities(request.prompt);
   const draft = planPracticeArchitecture(resolution, resourceQuantities);
@@ -224,10 +216,6 @@ export async function createAmazonQArchitectureDraftResponse(
   const request = normalizeArchitectureDraftRequest(input);
   const creditPolicy = options.creditPolicy ?? readAiCreditPolicyFromEnv();
   const provider = options.provider;
-
-  if (isSketchCatchReferenceDeploymentSelection(request.prompt)) {
-    return createSketchCatchReferenceDeploymentDraft();
-  }
 
   if (creditPolicy.billingMode !== "aws_credit_only" || !creditPolicy.amazonQ) {
     return createFallbackArchitectureDraftResponse(request, "credit_not_confirmed", creditPolicy.billingMode);

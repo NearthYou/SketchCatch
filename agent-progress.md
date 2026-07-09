@@ -37,6 +37,8 @@ Short English-only working log for the current agent context. Older records are 
 - Cleaned `docs/sw` before the ECS planning work. Removed stale SW spec, plan, smoke, evidence, and one-off agent-rule files from the active docs folder. Kept `spec6.md` as Git/CI/CD implementation-contract reference and updated `docs/sw/README.md`.
 - Updated `docs/AGENTS.md` so future documentation work removes stale `docs/sw` workstream files instead of preserving old `spec*`, `plan*`, smoke, and one-off agent-rule documents.
 - Marked HARNESS-007 as blocked/deferred because the user decided not to pursue GitHub/AWS live smoke now.
+- Removed the fixed selected-answer SketchCatch web deployment draft, fixed diagram fixture, and fixed Terraform Preview marker override so that the web deployment answer path goes through the Amazon Q architecture draft provider flow.
+- Removed the web-side fixed-reference layout bypass so ArchitectureJson drafts now use the normal diagram conversion pipeline unless an exact `diagramJson` is explicitly returned by the draft response.
 
 Verification:
 
@@ -132,10 +134,17 @@ Verification:
 - `pnpm build` - passed after PR #280 review feedback fixes.
 - `pnpm harness:check` - passed after PR #280 review feedback fixes.
 - `pnpm harness:check` - passed after the docs/sw cleanup and harness state repair.
+- `pnpm --filter @sketchcatch/api exec tsx --test src/services/aiArchitectureDrafts.test.ts` - failed before updating the fixed selected-answer regression, then passed.
+- `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-preview.test.ts` - passed after removing the fixed Terraform marker override.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-diagram-adapter.test.ts` - passed after removing the fixed-reference layout bypass.
+- `pnpm lint` - passed after removing unused imports from deleted fixed-reference tests.
+- `pnpm typecheck` - passed.
+- `pnpm build` - passed.
+- `pnpm harness:check` - passed after progress log update.
 
 Known risks:
 
 - No real AWS IAM, IAM Identity Center, CloudFormation, Terraform apply, or Terraform destroy mutation was performed.
 - The user still needs to apply caller-side `sts:AssumeRole` permission in AWS IAM Identity Center and confirm the target Role Trust Policy/External ID.
-- This is a documentation-only cleanup. No product source code, package metadata, or generated deployment artifacts were intentionally changed.
+- Product source code and tests changed only to remove the fixed selected-answer draft/diagram/Terraform override. No package metadata or generated deployment artifacts were intentionally changed.
 - Git/CI/CD live smoke evidence is intentionally deferred, so HARNESS-007 remains blocked until the team decides to collect real deployment evidence again.
