@@ -66,18 +66,15 @@ import {
   createTerraformIssueChatSummary,
   createTerraformIssueFixPlan,
   type TerraformIssueAiRequest,
-  type TerraformIssueCodePreview,
   type TerraformPreviewAiRequest,
+  type TerraformSafeFixApplyRequest,
   type TerraformSafeFixApplyResult
 } from "./workspace-terraform-ai";
 import styles from "./workspace.module.css";
 
 export type WorkspaceAiChatDockProps = {
   readonly context: DiagramEditorPanelContext;
-  readonly onApplyTerraformIssueFix: (
-    diagnostic: TerraformDiagnostic,
-    codePreview?: TerraformIssueCodePreview | undefined
-  ) => void;
+  readonly onApplyTerraformIssueFix: (request: TerraformSafeFixApplyRequest) => void;
   readonly projectId: string;
   readonly terraformIssueRequest: TerraformIssueAiRequest | null;
   readonly terraformPreviewRequest: TerraformPreviewAiRequest | null;
@@ -1453,11 +1450,14 @@ export function WorkspaceAiChatDock({
                             className={styles.aiPrimaryButton}
                             disabled={hasCompletedTerraformFix || applyingTerraformFixRequestId === terraformIssueResolution.request.id}
                             onClick={() => {
-                              setApplyingTerraformFixRequestId(terraformIssueResolution.request.id);
-                              onApplyTerraformIssueFix(
-                                terraformIssueResolution.request.issue.diagnostic,
-                                fixPlan.codePreview
-                              );
+                              const applyRequest = {
+                                codePreview: fixPlan.codePreview,
+                                diagnostic: terraformIssueResolution.request.issue.diagnostic,
+                                id: terraformIssueResolution.request.id
+                              };
+
+                              setApplyingTerraformFixRequestId(applyRequest.id);
+                              onApplyTerraformIssueFix(applyRequest);
                             }}
                             type="button"
                           >

@@ -112,6 +112,8 @@ export function WorkspaceRightPanel({
   const [terraformDiscardRequestId, setTerraformDiscardRequestId] = useState(0);
   const [terraformIssues, setTerraformIssues] = useState<TerraformIssueRecord[]>([]);
   const [loadedTerraformIssuesProjectId, setLoadedTerraformIssuesProjectId] = useState<string | null>(null);
+  const [pendingTerraformIssueFixSourceLocation, setPendingTerraformIssueFixSourceLocation] =
+    useState<TerraformSourceLocation | null>(null);
   const [preDeploymentCheckState, setPreDeploymentCheckState] =
     useState<DeploymentPreDeploymentCheckState>(initialPreDeploymentCheckState);
   const [isDeploymentConsoleOpen, setIsDeploymentConsoleOpen] = useState(
@@ -208,7 +210,7 @@ export function WorkspaceRightPanel({
         const sourceLocation = getTerraformIssueFixSourceLocation(request);
         context.setRightPanelOpen(true);
         setActiveView("terraform");
-        terraformPanelRef.current?.openTerraformSourceLocation(sourceLocation);
+        setPendingTerraformIssueFixSourceLocation(sourceLocation);
       }
 
       onTerraformSafeFixApplyResult({
@@ -220,6 +222,19 @@ export function WorkspaceRightPanel({
 
     void applySafeFix();
   }, [context, onTerraformSafeFixApplyResult, terraformSafeFixApplyRequest]);
+
+  useEffect(() => {
+    if (
+      activeView !== "terraform" ||
+      !context.isRightPanelOpen ||
+      pendingTerraformIssueFixSourceLocation === null
+    ) {
+      return;
+    }
+
+    terraformPanelRef.current?.openTerraformSourceLocation(pendingTerraformIssueFixSourceLocation);
+    setPendingTerraformIssueFixSourceLocation(null);
+  }, [activeView, context.isRightPanelOpen, pendingTerraformIssueFixSourceLocation]);
 
   const requestTerraformLeave = useCallback((action: PendingTerraformLeaveAction): boolean => {
     if (!hasUnsavedTerraformChanges || skipTerraformLeaveGuardRef.current) {

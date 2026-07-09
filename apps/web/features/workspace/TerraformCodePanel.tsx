@@ -968,7 +968,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
 
     const timerId = window.setTimeout(() => {
       setActiveSourceHighlightLine(null);
-    }, 2500);
+    }, 8000);
 
     return () => window.clearTimeout(timerId);
   }, [activeSourceHighlightLine]);

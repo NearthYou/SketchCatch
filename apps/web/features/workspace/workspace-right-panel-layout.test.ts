@@ -877,18 +877,26 @@ test("terraform issue AI resolution shows a fix plan before apply", () => {
 
 test("terraform issue AI fix opens the edited code and locks the apply button", () => {
   assert.match(componentSource, /getTerraformIssueFixSourceLocation/);
+  assert.match(componentSource, /pendingTerraformIssueFixSourceLocation/);
   assert.match(componentSource, /request\.codePreview\?\.sourceLine \?\? request\.diagnostic\.line \?\? 1/);
   assert.match(componentSource, /context\.setRightPanelOpen\(true\);/);
   assert.match(componentSource, /setActiveView\("terraform"\);/);
-  assert.match(componentSource, /terraformPanelRef\.current\?\.openTerraformSourceLocation\(sourceLocation\)/);
+  assert.match(componentSource, /setPendingTerraformIssueFixSourceLocation\(sourceLocation\)/);
+  assert.match(componentSource, /terraformPanelRef\.current\?\.openTerraformSourceLocation\(pendingTerraformIssueFixSourceLocation\)/);
+  assert.match(projectDraftManagerSource, /const requestTerraformSafeFixApply = useCallback\(\(\s*request: TerraformSafeFixApplyRequest/);
+  assert.match(workspaceDraftManagerSource, /const requestTerraformSafeFixApply = useCallback\(\(\s*request: TerraformSafeFixApplyRequest/);
+  assert.match(projectDraftManagerSource, /setTerraformSafeFixApplyRequest\(request\)/);
+  assert.match(workspaceDraftManagerSource, /setTerraformSafeFixApplyRequest\(request\)/);
   assert.match(aiChatDockSource, /completedTerraformFixRequestIds/);
   assert.match(aiChatDockSource, /setCompletedTerraformFixRequestIds/);
   assert.match(aiChatDockSource, /const hasCompletedTerraformFix/);
+  assert.match(aiChatDockSource, /id: terraformIssueResolution\.request\.id/);
   assert.match(
     aiChatDockSource,
     /disabled=\{hasCompletedTerraformFix \|\| applyingTerraformFixRequestId === terraformIssueResolution\.request\.id\}/
   );
   assert.match(aiChatDockSource, /수정완료/);
+  assert.match(terraformPanelSource, /8000/);
 });
 
 test("terraform issue AI fix keeps remaining diagnostics visible after a partial repair", () => {

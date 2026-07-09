@@ -28,6 +28,7 @@ Short English-only working log for the current agent context. Older records are 
 - Fixed AI chat relevance classification so DB deletion requests such as `db 지우고 싶어` enter the Practice Architecture patch flow, while bare resource names such as `db` stay ambiguous instead of executing a modification.
 - Fixed Terraform issue AI resolution so applying a suggested fix opens the Terraform code panel at the edited source line, highlights it, and changes the AI chat apply button to a disabled `수정완료` state.
 - Updated the low-budget DB follow-up choice from `DB 없이 다시 만들기` to `DB 없이 만들기` and removed the internal "recreate" wording from the regenerated prompt.
+- Fixed the Terraform issue AI fix application handshake so the AI chat keeps the original issue request id through the apply request/result cycle, opens the edited source line after the Terraform panel is visible, and keeps the source-line highlight visible longer.
 
 Verification:
 
@@ -82,6 +83,13 @@ Verification:
 - `pnpm typecheck` - passed after the low-budget DB follow-up copy change.
 - `pnpm build` - passed after the low-budget DB follow-up copy change.
 - `pnpm harness:check` - passed after the low-budget DB follow-up copy change.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts` - failed before the Terraform issue AI apply handshake/focus fix, then passed.
+- `pnpm --filter @sketchcatch/web typecheck` - passed after the Terraform issue AI apply handshake/focus fix.
+- `pnpm --filter @sketchcatch/web lint` - passed after the Terraform issue AI apply handshake/focus fix.
+- `pnpm lint` - passed after the Terraform issue AI apply handshake/focus fix.
+- `pnpm typecheck` - passed after the Terraform issue AI apply handshake/focus fix.
+- `pnpm build` - passed after the Terraform issue AI apply handshake/focus fix.
+- `pnpm harness:check` - passed after the Terraform issue AI apply handshake/focus fix.
 
 Known risks:
 
