@@ -2161,6 +2161,74 @@ test("createAmazonQArchitectureDraftResponse sends normalized requirements to Am
   }
 });
 
+test("createAmazonQArchitectureDraftResponse sends deterministic normalized requirements without an OpenAI normalizer", async () => {
+  const amazonQCalls: Array<Parameters<AiTextProvider["generate"]>[0]> = [];
+  const provider = createFakeAmazonQProvider((request) => {
+    amazonQCalls.push(request);
+    return JSON.stringify(createDynamicWebDeploymentPreview());
+  });
+
+  const response = await createAmazonQArchitectureDraftResponse(
+    {
+      prompt: [
+        "Dynamic web application for GitHub main branch deployment to AWS.",
+        "Required resources: CodeStar Connection, CodePipeline, CodeBuild Project, CodeDeploy App, CodeDeploy Deployment Group, IAM Role.",
+        "Runtime must be Application Load Balancer -> Auto Scaling Group -> EC2 3 instances spread across two private subnets.",
+        "Database: simple data under 10GB.",
+        "Frontend: React/Vue/Angular SPA.",
+        "Backend: complex business logic with Spring Boot or Django.",
+        "Region: Korea only Seoul ap-northeast-2.",
+        "Budget: 50-200만원.",
+        "SSL: required.",
+        "File upload: none no file upload.",
+        "Realtime: none no realtime.",
+        "Management: direct management.",
+        "Loading time: 3 seconds.",
+        "Website size: 10MB-100MB.",
+        "Traffic pattern: event spike.",
+        "Downtime: 1 hour per day, 99.9% availability."
+      ].join("\n")
+    },
+    {
+      provider,
+      creditPolicy: confirmedCreditPolicy
+    }
+  );
+
+  if ("status" in response) {
+    assert.fail(`Expected preview, got clarification: ${response.question}`);
+  }
+
+  const amazonQPayload = amazonQCalls.at(-1)?.payload as {
+    normalizedRequirement?: {
+      requiredResources?: string[];
+      forbiddenCapabilities?: string[];
+      resourceQuantities?: Record<string, number>;
+      runtimeTopology?: {
+        trafficEntry?: string;
+        compute?: string;
+        computeCount?: number;
+        spreadAcrossPrivateSubnets?: boolean;
+        autoScaling?: boolean;
+      };
+    };
+  };
+
+  assert.ok(amazonQPayload.normalizedRequirement);
+  assert.deepEqual(amazonQPayload.normalizedRequirement.resourceQuantities, { EC2: 3 });
+  assert.equal(amazonQPayload.normalizedRequirement.runtimeTopology?.trafficEntry, "LOAD_BALANCER");
+  assert.equal(amazonQPayload.normalizedRequirement.runtimeTopology?.compute, "EC2");
+  assert.equal(amazonQPayload.normalizedRequirement.runtimeTopology?.computeCount, 3);
+  assert.equal(amazonQPayload.normalizedRequirement.runtimeTopology?.spreadAcrossPrivateSubnets, true);
+  assert.equal(amazonQPayload.normalizedRequirement.runtimeTopology?.autoScaling, true);
+  assert.equal(amazonQPayload.normalizedRequirement.requiredResources?.includes("CODEPIPELINE"), true);
+  assert.equal(amazonQPayload.normalizedRequirement.requiredResources?.includes("AUTO_SCALING_GROUP"), true);
+  assert.equal(amazonQPayload.normalizedRequirement.requiredResources?.includes("EC2"), true);
+  assert.equal(amazonQPayload.normalizedRequirement.forbiddenCapabilities?.includes("file_upload"), true);
+  assert.equal(amazonQPayload.normalizedRequirement.forbiddenCapabilities?.includes("realtime"), true);
+  assert.match(amazonQCalls[0]?.prompt ?? "", /Normalized Architecture Intent Plan/);
+});
+
 test("createAmazonQArchitectureDraftResponse asks Amazon Q to regenerate previews that fail self-validation", async () => {
   const requestedPrompts: string[] = [];
   const requestedPayloads: unknown[] = [];

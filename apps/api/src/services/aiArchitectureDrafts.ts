@@ -245,10 +245,14 @@ export async function createAmazonQArchitectureDraftResponse(
   }
 
   const architectureDecisionSpace = createArchitectureDecisionSpace(request.prompt);
-  const normalizedRequirement = await createNormalizedArchitectureIntentPlan({
+  const providerNormalizedRequirement = await createNormalizedArchitectureIntentPlan({
     prompt: request.prompt,
     provider: options.requirementNormalizerProvider
   });
+  const normalizedRequirement = mergeArchitectureIntentPlans(
+    providerNormalizedRequirement,
+    createDeterministicArchitectureIntentPlan(request.prompt)
+  );
   const architectureBrief = createAmazonQArchitectureBrief(request.prompt);
   const referenceKnowledge = createAwsArchitectureReferenceKnowledgePayload();
   const payload = maskSecretsForAi({
@@ -1339,6 +1343,12 @@ function findNormalizedRequirementValidationIssues(
     );
   }
 
+  if (forbiddenCapabilities.has("realtime") && hasForbiddenRealtimeArchitectureNodes(architectureJson)) {
+    issues.push(
+      "The normalized requirement plan forbids realtime features, but the preview includes realtime/notification-specific resources, coverage, or assumptions. Remove realtime-specific paths."
+    );
+  }
+
   const topology = normalizedRequirement.runtimeTopology;
 
   if (topology !== undefined) {
@@ -1357,18 +1367,226 @@ function findNormalizedRequirementValidationIssues(
       );
     }
 
+    if (compute === "EC2" && topology.computeCount !== undefined) {
+      const actualCount = architectureJson.nodes.filter((node) => node.type === "EC2").length;
+
+      if (actualCount < topology.computeCount) {
+        issues.push(
+          `The normalized requirement plan requires ${topology.computeCount} EC2 runtime node(s), but the preview includes ${actualCount}. Regenerate with enough visible EC2 nodes.`
+        );
+      }
+    }
+
     if (topology.spreadAcrossPrivateSubnets === true && compute === "EC2") {
       const spread = getEc2SubnetSpread(architectureJson);
+      const visualSpread = getEc2VisualPrivateSubnetSpread(architectureJson);
 
       if (spread.privateSubnetCount < 2 || spread.ec2SubnetCount < 2) {
         issues.push(
           `The normalized requirement plan requires EC2 spread across private subnets, but the preview shows ${spread.ec2SubnetCount} private subnet placement(s) across ${spread.privateSubnetCount} private subnet node(s).`
         );
       }
+
+      if (visualSpread.privateSubnetCount >= 2 && visualSpread.ec2SubnetCount < 2) {
+        issues.push(
+          `The normalized requirement plan requires EC2 to be visually spread across private subnets, but the preview places EC2 nodes across only ${visualSpread.ec2SubnetCount} private subnet box(es).`
+        );
+      }
     }
   }
 
   return issues;
+}
+
+function createDeterministicArchitectureIntentPlan(prompt: string): ArchitectureIntentPlan | null {
+  const normalizedPrompt = prompt.normalize("NFKC").toLowerCase();
+  const requiredResources = new Set<ResourceType>(findExplicitResourceTypesInPrompt(normalizedPrompt));
+  const resourceQuantities: Record<string, number> = {};
+  const forbiddenCapabilities = new Set<string>();
+  const amazonQBrief: string[] = [];
+  const quantities = resolveArchitectureResourceQuantities(prompt);
+
+  if (requiresAlbEc2TrafficPath(normalizedPrompt)) {
+    requiredResources.add("LOAD_BALANCER");
+    requiredResources.add("EC2");
+    amazonQBrief.push("Route user traffic through a visible load balancer path to the EC2 runtime.");
+  }
+
+  if (mentionsAutoScalingGroup(normalizedPrompt)) {
+    requiredResources.add("AUTO_SCALING_GROUP");
+    amazonQBrief.push("Include a visible Auto Scaling Group when autoscaling is requested.");
+  }
+
+  if (requiresAutoScalingGroupEc2RuntimePath(normalizedPrompt)) {
+    requiredResources.add("AUTO_SCALING_GROUP");
+    requiredResources.add("EC2");
+  }
+
+  if (requiresEc2PrivateSubnetSplit(normalizedPrompt)) {
+    requiredResources.add("EC2");
+    amazonQBrief.push("Place EC2 runtime nodes across at least two private subnet boxes, not visually grouped into one subnet.");
+  }
+
+  if (quantities.ec2Instances > 1 || requiredResources.has("EC2")) {
+    resourceQuantities.EC2 = quantities.ec2Instances;
+  }
+
+  if (quantities.s3Buckets > 1 && requiredResources.has("S3")) {
+    resourceQuantities.S3 = quantities.s3Buckets;
+  }
+
+  if (hasNoFileUploadRequirement(normalizedPrompt)) {
+    forbiddenCapabilities.add("file_upload");
+    amazonQBrief.push("Do not include upload/media/file-upload resources when file upload is excluded.");
+  }
+
+  if (hasNoRealtimeRequirement(normalizedPrompt)) {
+    forbiddenCapabilities.add("realtime");
+    amazonQBrief.push("Do not include realtime, notification, WebSocket, or SSE-specific resources when realtime is excluded.");
+  }
+
+  const runtimeTopology = createDeterministicRuntimeTopology(normalizedPrompt, quantities.ec2Instances);
+  const plan: ArchitectureIntentPlan = {
+    ...(requiredResources.size === 0 ? {} : { requiredResources: [...requiredResources] }),
+    ...(Object.keys(resourceQuantities).length === 0 ? {} : { resourceQuantities }),
+    ...(forbiddenCapabilities.size === 0 ? {} : { forbiddenCapabilities: [...forbiddenCapabilities] }),
+    ...(runtimeTopology === undefined ? {} : { runtimeTopology }),
+    ...(requiresKoreaOnlyRegion(normalizedPrompt) ? { region: "ap-northeast-2" } : {}),
+    ...(requiresNoDatabase(normalizedPrompt) ? { database: "none" } : requiresDatabase(normalizedPrompt) ? { database: "required" } : {}),
+    ...(requiresVeryHighAvailability(normalizedPrompt) ? { availability: "99.99" } : {}),
+    ...(amazonQBrief.length === 0 ? {} : { amazonQBrief })
+  };
+
+  return Object.keys(plan).length === 0 ? null : plan;
+}
+
+function createDeterministicRuntimeTopology(
+  normalizedPrompt: string,
+  ec2Count: number
+): ArchitectureIntentPlan["runtimeTopology"] {
+  const topology: NonNullable<ArchitectureIntentPlan["runtimeTopology"]> = {};
+
+  if (requiresAlbEc2TrafficPath(normalizedPrompt)) {
+    topology.trafficEntry = "LOAD_BALANCER";
+    topology.compute = "EC2";
+  }
+
+  if (requiresAutoScalingGroupEc2RuntimePath(normalizedPrompt)) {
+    topology.compute = "EC2";
+    topology.autoScaling = true;
+  }
+
+  if (requiresEc2PrivateSubnetSplit(normalizedPrompt)) {
+    topology.compute = "EC2";
+    topology.placement = "private_subnets";
+    topology.spreadAcrossPrivateSubnets = true;
+  }
+
+  if (topology.compute === "EC2" && ec2Count > 1) {
+    topology.computeCount = ec2Count;
+  }
+
+  return Object.keys(topology).length === 0 ? undefined : topology;
+}
+
+function mergeArchitectureIntentPlans(
+  providerPlan: ArchitectureIntentPlan | null,
+  deterministicPlan: ArchitectureIntentPlan | null
+): ArchitectureIntentPlan | null {
+  if (providerPlan === null) {
+    return deterministicPlan;
+  }
+
+  if (deterministicPlan === null) {
+    return providerPlan;
+  }
+
+  const requiredResources = mergeUniqueTextItems(providerPlan.requiredResources, deterministicPlan.requiredResources);
+  const forbiddenCapabilities = mergeUniqueTextItems(
+    providerPlan.forbiddenCapabilities,
+    deterministicPlan.forbiddenCapabilities
+  );
+  const amazonQBrief = mergeUniqueTextItems(providerPlan.amazonQBrief, deterministicPlan.amazonQBrief);
+  const resourceQuantities = mergeResourceQuantityPlans(
+    providerPlan.resourceQuantities,
+    deterministicPlan.resourceQuantities
+  );
+  const runtimeTopology = mergeRuntimeTopologyPlans(providerPlan.runtimeTopology, deterministicPlan.runtimeTopology);
+  const merged: ArchitectureIntentPlan = {
+    ...(providerPlan.intent === undefined ? {} : { intent: providerPlan.intent }),
+    ...(providerPlan.region === undefined && deterministicPlan.region === undefined
+      ? {}
+      : { region: deterministicPlan.region ?? providerPlan.region }),
+    ...(requiredResources.length === 0 ? {} : { requiredResources }),
+    ...(Object.keys(resourceQuantities).length === 0 ? {} : { resourceQuantities }),
+    ...(forbiddenCapabilities.length === 0 ? {} : { forbiddenCapabilities }),
+    ...(runtimeTopology === undefined ? {} : { runtimeTopology }),
+    ...(providerPlan.database === undefined && deterministicPlan.database === undefined
+      ? {}
+      : { database: deterministicPlan.database ?? providerPlan.database }),
+    ...(providerPlan.availability === undefined && deterministicPlan.availability === undefined
+      ? {}
+      : { availability: deterministicPlan.availability ?? providerPlan.availability }),
+    ...(amazonQBrief.length === 0 ? {} : { amazonQBrief })
+  };
+
+  return Object.keys(merged).length === 0 ? null : merged;
+}
+
+function mergeUniqueTextItems(
+  left: readonly string[] | undefined,
+  right: readonly string[] | undefined
+): string[] {
+  const items = new Set<string>();
+
+  for (const item of [...(left ?? []), ...(right ?? [])]) {
+    const trimmed = item.trim();
+
+    if (trimmed.length > 0) {
+      items.add(trimmed);
+    }
+  }
+
+  return [...items];
+}
+
+function mergeResourceQuantityPlans(
+  providerQuantities: Record<string, number> | undefined,
+  deterministicQuantities: Record<string, number> | undefined
+): Record<string, number> {
+  const merged: Record<string, number> = {};
+
+  for (const [resourceType, quantity] of Object.entries(providerQuantities ?? {})) {
+    merged[resourceType] = quantity;
+  }
+
+  for (const [resourceType, quantity] of Object.entries(deterministicQuantities ?? {})) {
+    merged[resourceType] = Math.max(merged[resourceType] ?? 0, quantity);
+  }
+
+  return merged;
+}
+
+function mergeRuntimeTopologyPlans(
+  providerTopology: ArchitectureIntentPlan["runtimeTopology"],
+  deterministicTopology: ArchitectureIntentPlan["runtimeTopology"]
+): ArchitectureIntentPlan["runtimeTopology"] {
+  if (providerTopology === undefined) {
+    return deterministicTopology;
+  }
+
+  if (deterministicTopology === undefined) {
+    return providerTopology;
+  }
+
+  return {
+    ...providerTopology,
+    ...deterministicTopology,
+    computeCount:
+      providerTopology.computeCount === undefined && deterministicTopology.computeCount === undefined
+        ? undefined
+        : Math.max(providerTopology.computeCount ?? 0, deterministicTopology.computeCount ?? 0)
+  };
 }
 
 function findRuntimeTopologyValidationIssues(
@@ -2249,22 +2467,7 @@ function hasForbiddenUploadResource(architectureJson: ArchitectureJson): boolean
 }
 
 function hasForbiddenRealtimeResource(preview: AmazonQArchitectureDraftPreview): boolean {
-  const hasRealtimeNode = preview.architectureJson.nodes.some((node) => {
-    const nodeText = createNodeSearchText(node);
-
-    if (hasPositiveRealtimeSignal(nodeText)) {
-      return true;
-    }
-
-    return (
-      hasAnyNodeType(new Set([node.type]), ["API_GATEWAY_REST_API", "LAMBDA", "EC2"]) &&
-      /(user|client|push|message|event|realtime|real-time|websocket|web\s*socket|\bsse\b|notification|notify|\uC2E4\uC2DC\uAC04|\uC54C\uB9BC|\uCC44\uD305)/iu.test(
-        nodeText
-      )
-    );
-  });
-
-  if (hasRealtimeNode) {
+  if (hasForbiddenRealtimeArchitectureNodes(preview.architectureJson)) {
     return true;
   }
 
@@ -2279,6 +2482,23 @@ function hasForbiddenRealtimeResource(preview: AmazonQArchitectureDraftPreview):
       ].join(" ")
     )
   );
+}
+
+function hasForbiddenRealtimeArchitectureNodes(architectureJson: ArchitectureJson): boolean {
+  return architectureJson.nodes.some((node) => {
+    const nodeText = createNodeSearchText(node);
+
+    if (hasPositiveRealtimeSignal(nodeText)) {
+      return true;
+    }
+
+    return (
+      hasAnyNodeType(new Set([node.type]), ["API_GATEWAY_REST_API", "LAMBDA", "EC2"]) &&
+      /(user|client|push|message|event|realtime|real-time|websocket|web\s*socket|\bsse\b|notification|notify|\uC2E4\uC2DC\uAC04|\uC54C\uB9BC|\uCC44\uD305)/iu.test(
+        nodeText
+      )
+    );
+  });
 }
 
 function hasPositiveRealtimeSignal(text: string): boolean {
@@ -2764,6 +2984,16 @@ function requiresAutoScalingGroupEc2RuntimePath(normalizedPrompt: string): boole
 }
 
 function requiresEc2PrivateSubnetSplit(normalizedPrompt: string): boolean {
+  if (
+    [
+      /(ec2|instances?|servers?)[\s\S]{0,120}(split|spread|distribut|across|between)[\s\S]{0,80}(two|2)[\s\S]{0,30}private\s*subnets?/iu,
+      /(ec2|instances?|servers?)[\s\S]{0,120}(two|2)[\s\S]{0,30}private\s*subnets?[\s\S]{0,80}(split|spread|distribut|across|between)/iu,
+      /private\s*subnets?[\s\S]{0,40}(two|2)[\s\S]{0,120}(ec2|instances?|servers?)[\s\S]{0,80}(split|spread|distribut|across|between)/iu
+    ].some((pattern) => pattern.test(normalizedPrompt))
+  ) {
+    return true;
+  }
+
   return /((ec2|인스턴스|서버)[\s\S]{0,120}(private\s*subnets?\s*2|2\s*private\s*subnets|프라이빗\s*서브넷\s*2|서브넷\s*2개)[\s\S]{0,80}(split|spread|distribut|나눠|분산|배치)|(private\s*subnets?\s*2|2\s*private\s*subnets|프라이빗\s*서브넷\s*2|서브넷\s*2개)[\s\S]{0,120}(ec2|인스턴스|서버)[\s\S]{0,80}(split|spread|distribut|나눠|분산|배치))/iu.test(
     normalizedPrompt
   );

@@ -11,11 +11,26 @@ Short English-only working log for the current agent context. Older records are 
 - Generated CI/CD resources now carry deploy-ready default config guidance and pass Terraform Preview, diagnostics, and live apply safety support checks.
 - Amazon Q preview self-validation now rejects missing explicitly requested resource-panel types and undersized EC2 fleets before accepting a draft.
 - Amazon Q preview self-validation now also rejects no-upload violations, disconnected ALB/ASG/EC2 runtime paths, EC2 fleets not distributed across requested private subnets, and EC2 fleets visually grouped into one private subnet box.
-- Architecture Drafts can now optionally use OpenAI as a Requirement Normalizer before Amazon Q; Amazon Q remains the diagram generator and deterministic validation remains the acceptance gate.
+- Architecture Drafts now always send a deterministic normalized requirement plan to Amazon Q, and can merge in OpenAI Requirement Normalizer output when the normalizer is enabled; Amazon Q remains the diagram generator and deterministic validation remains the acceptance gate.
 - Targeted API tests plus full lint/typecheck/build passed during this session.
 - No Terraform apply/destroy, deployment, AWS calls, or cloud mutation was run.
 
 ## Session Record
+
+### 2026-07-10 - Deterministic normalized requirements for all AI drafts
+
+- Goal: Ensure the Architecture Draft normalizer behavior is generic and not tied to one EC2/ALB prompt case or to OpenAI being enabled.
+- Completed:
+  - Added a deterministic backend ArchitectureIntentPlan builder that extracts explicit supported resources, resource quantities, forbidden capabilities, region/database/availability hints, and runtime topology constraints from every Amazon Q architecture draft request.
+  - Merged deterministic hard constraints with optional OpenAI normalizer output so OpenAI can enrich the plan while backend-derived constraints stay present when OpenAI is disabled.
+  - Extended normalized requirement validation for realtime exclusions, runtime compute count, and visual private-subnet spread.
+  - Added a regression test proving Amazon Q receives a normalizedRequirement payload and prompt section even without an OpenAI normalizer provider.
+- Verification:
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/aiArchitectureDrafts.test.ts` passed.
+  - `pnpm --filter @sketchcatch/api typecheck` passed.
+  - `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check` passed.
+- Risk:
+  - No real AWS, Terraform apply/destroy, deployment, or Git/CI/CD handoff was run.
 
 ### 2026-07-10 - AI EC2 subnet visual placement guardrail
 
