@@ -11,10 +11,27 @@ Short English-only working log for the current agent context. Older records are 
 - Generated CI/CD resources now carry deploy-ready default config guidance and pass Terraform Preview, diagnostics, and live apply safety support checks.
 - Amazon Q preview self-validation now rejects missing explicitly requested resource-panel types and undersized EC2 fleets before accepting a draft.
 - Amazon Q preview self-validation now also rejects no-upload violations, disconnected ALB/ASG/EC2 runtime paths, and EC2 fleets not distributed across requested private subnets.
+- Architecture Drafts can now optionally use OpenAI as a Requirement Normalizer before Amazon Q; Amazon Q remains the diagram generator and deterministic validation remains the acceptance gate.
 - Targeted API tests plus full lint/typecheck/build passed during this session.
 - No Terraform apply/destroy, deployment, AWS calls, or cloud mutation was run.
 
 ## Session Record
+
+### 2026-07-10 - OpenAI requirement normalizer for Amazon Q drafts
+
+- Goal: Let AI Architecture Drafts use OpenAI only to normalize user requirements before Amazon Q generates the diagram.
+- Completed:
+  - Added an opt-in OpenAI Requirement Normalizer provider controlled by `AI_ARCHITECTURE_REQUIREMENT_NORMALIZER=openai`.
+  - Added a sanitized `ArchitectureIntentPlan` contract for required resources, resource quantities, forbidden capabilities, runtime topology, region, database, availability, and Amazon Q brief lines.
+  - Sent normalized requirements to Amazon Q payloads and prompts while keeping Amazon Q as the diagram generator.
+  - Extended Amazon Q preview self-validation so normalized required resources, quantities, forbidden file upload capability, and ALB/ASG/EC2 topology are enforced before accepting a draft.
+  - Added regression coverage for the normalizer-to-Amazon-Q contract and repair payload validation issues.
+- Verification:
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/aiArchitectureDrafts.test.ts` passed.
+  - `pnpm --filter @sketchcatch/api typecheck` passed.
+  - `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
+- Risk:
+  - The OpenAI normalizer is opt-in and is not a deployment or cloud mutation path. No Terraform apply/destroy, deployment, AWS calls, or cloud mutation was run.
 
 ### 2026-07-10 - AI draft runtime topology validation
 

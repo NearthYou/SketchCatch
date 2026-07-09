@@ -44,6 +44,8 @@ const DEFAULT_AI_WINDOW_CALL_LIMIT = 10;
 const DEFAULT_AI_WINDOW_MS = 60_000;
 const AMAZON_Q_USER_MESSAGE_MAX_LENGTH = 2_048;
 
+export type AiTextProviderTarget = LlmExplanationTarget | "architecture_requirement_normalization";
+
 export type OpenAiParseRequest = {
   readonly model: string;
   readonly instructions: string;
@@ -200,7 +202,7 @@ function classifyOpenAiError(error: unknown): LlmExplanationFallbackReason {
 }
 
 export type AiTextProviderRequest = {
-  readonly target: LlmExplanationTarget;
+  readonly target: AiTextProviderTarget;
   readonly instructions: string;
   readonly prompt: string;
   readonly payload: unknown;

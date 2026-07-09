@@ -1942,6 +1942,107 @@ test("createAmazonQArchitectureDraftResponse sends detailed architecture briefs 
   assert.equal(response.title, "Detailed Global Dynamic Website");
 });
 
+test("createAmazonQArchitectureDraftResponse sends normalized requirements to Amazon Q when a normalizer is configured", async () => {
+  const normalizerCalls: Array<Parameters<AiTextProvider["generate"]>[0]> = [];
+  const amazonQCalls: Array<Parameters<AiTextProvider["generate"]>[0]> = [];
+  const normalizerProvider = createFakeOpenAiNormalizerProvider((request) => {
+    normalizerCalls.push(request);
+    return JSON.stringify({
+      intent: "dynamic_web_application",
+      region: "ap-northeast-2",
+      requiredResources: [
+        "CODESTAR_CONNECTION",
+        "CODEPIPELINE",
+        "CODEBUILD_PROJECT",
+        "CODEDEPLOY_APP",
+        "CODEDEPLOY_DEPLOYMENT_GROUP",
+        "LOAD_BALANCER",
+        "AUTO_SCALING_GROUP",
+        "EC2",
+        "IAM_ROLE"
+      ],
+      resourceQuantities: {
+        EC2: 3
+      },
+      forbiddenCapabilities: ["file_upload"],
+      runtimeTopology: {
+        trafficEntry: "LOAD_BALANCER",
+        compute: "EC2",
+        computeCount: 3,
+        placement: "private_subnets",
+        spreadAcrossPrivateSubnets: true,
+        autoScaling: true
+      },
+      database: "simple",
+      availability: "99.9",
+      amazonQBrief: [
+        "GitHub main branch deploys to AWS through CodeStar Connection, CodePipeline, CodeBuild, and CodeDeploy.",
+        "Runtime must be ALB -> Auto Scaling Group -> exactly 3 EC2 instances spread across private subnets.",
+        "No file upload resources or upload/media buckets are allowed."
+      ]
+    });
+  });
+  const provider = createFakeAmazonQProvider((request) => {
+    amazonQCalls.push(request);
+    return JSON.stringify(createDynamicWebDeploymentPreview());
+  });
+
+  const response = await createAmazonQArchitectureDraftResponse(
+    {
+      prompt: [
+        "GitHub main 브랜치에서 AWS로 배포되는 동적 웹 애플리케이션을 만들고 싶어.",
+        "반드시 CodeStar Connection, CodePipeline, CodeBuild Project, CodeDeploy App, CodeDeploy Deployment Group을 포함해줘.",
+        "런타임은 ALB 뒤의 EC2 3대와 Auto Scaling Group으로 구성해줘.",
+        "파일 업로드는 없고, 서울 리전, 중간 규모, 99.9% 가용성으로 해줘.",
+        "간단한 데이터, React/Vue/Angular, 복잡한 비즈니스 로직, 50-200만원, SSL 필수, 실시간 필요 없음, 직접 관리, 3초 이내, 10MB-100MB, 이벤트성 급증"
+      ].join("\n")
+    },
+    {
+      provider,
+      requirementNormalizerProvider: normalizerProvider,
+      creditPolicy: confirmedCreditPolicy
+    }
+  );
+
+  if ("status" in response) {
+    assert.fail(`Expected preview, got clarification: ${response.question}`);
+  }
+
+  assert.equal(normalizerCalls.length, 1);
+  assert.ok(amazonQCalls.length >= 1);
+  assert.equal(normalizerCalls[0]?.target, "architecture_requirement_normalization");
+  assert.match(normalizerCalls[0]?.instructions ?? "", /Requirement Normalizer/);
+  assert.match(normalizerCalls[0]?.prompt ?? "", /Supported resource panel catalog/);
+
+  const amazonQPayload = amazonQCalls.at(-1)?.payload as {
+    normalizedRequirement?: {
+      intent?: string;
+      requiredResources?: string[];
+      forbiddenCapabilities?: string[];
+      resourceQuantities?: Record<string, number>;
+      runtimeTopology?: { computeCount?: number; spreadAcrossPrivateSubnets?: boolean };
+    };
+  };
+  assert.equal(amazonQPayload.normalizedRequirement?.intent, "dynamic_web_application");
+  assert.deepEqual(amazonQPayload.normalizedRequirement?.resourceQuantities, { EC2: 3 });
+  assert.equal(amazonQPayload.normalizedRequirement?.runtimeTopology?.computeCount, 3);
+  assert.equal(amazonQPayload.normalizedRequirement?.runtimeTopology?.spreadAcrossPrivateSubnets, true);
+  assert.equal(amazonQPayload.normalizedRequirement?.requiredResources?.includes("CODEPIPELINE"), true);
+  assert.equal(amazonQPayload.normalizedRequirement?.forbiddenCapabilities?.includes("file_upload"), true);
+  for (const amazonQCall of amazonQCalls) {
+    assert.match(amazonQCall.prompt, /Normalized Architecture Intent Plan/);
+    assert.match(amazonQCall.prompt, /exactly 3 EC2 instances/);
+    assert.match(amazonQCall.prompt, /No file upload resources/);
+  }
+  if (amazonQCalls.length > 1) {
+    const repairPayload = amazonQCalls.at(-1)?.payload as { validationIssues?: string[] };
+    assert.equal(
+      repairPayload.validationIssues?.some((issue) => /normalized requirement plan/i.test(issue)),
+      true
+    );
+  }
+});
+
 test("createAmazonQArchitectureDraftResponse asks Amazon Q to regenerate previews that fail self-validation", async () => {
   const requestedPrompts: string[] = [];
   const requestedPayloads: unknown[] = [];
@@ -2905,6 +3006,24 @@ function createFakeAmazonQProvider(generate: (request: Parameters<AiTextProvider
     provider: "amazon_q",
     service: "amazon_q_business",
     model: "fake-q-application",
+    generate: async (request) => {
+      const text = generate(request);
+
+      return {
+        text,
+        outputCharacters: text.length
+      };
+    }
+  };
+}
+
+function createFakeOpenAiNormalizerProvider(
+  generate: (request: Parameters<AiTextProvider["generate"]>[0]) => string
+): AiTextProvider {
+  return {
+    provider: "openai",
+    service: "openai_responses",
+    model: "fake-openai-normalizer",
     generate: async (request) => {
       const text = generate(request);
 

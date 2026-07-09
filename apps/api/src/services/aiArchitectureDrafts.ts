@@ -12,6 +12,11 @@ import type {
 } from "@sketchcatch/types";
 import { applyGuardrailMetadata } from "./aiArchitectureDraftMetadata.js";
 import {
+  createNormalizedArchitectureIntentPlan,
+  createOpenAiRequirementNormalizerProviderFromEnv,
+  type ArchitectureIntentPlan
+} from "./aiArchitectureRequirementNormalizer.js";
+import {
   SUPPORTED_ARCHITECTURE_RESOURCE_CATALOG,
   SUPPORTED_ARCHITECTURE_RESOURCE_TYPES
 } from "./aiArchitectureResourceCatalog.js";
@@ -155,6 +160,7 @@ export type CreateArchitectureDraftResponseFactory = (
 
 export type CreateAmazonQArchitectureDraftResponseOptions = {
   readonly provider?: AiTextProvider | undefined;
+  readonly requirementNormalizerProvider?: AiTextProvider | undefined;
   readonly creditPolicy?: AiCreditPolicy | undefined;
 };
 
@@ -199,10 +205,13 @@ export function createConfiguredAmazonQArchitectureDraftResponse(): CreateArchit
       : createAmazonQBusinessTextProviderFromEnv({
           region: regions.amazonQRegion
         });
+  const requirementNormalizerProvider =
+    process.env.NODE_ENV === "test" ? undefined : createOpenAiRequirementNormalizerProviderFromEnv();
 
   return (request) =>
     createAmazonQArchitectureDraftResponse(request, {
       provider,
+      requirementNormalizerProvider,
       creditPolicy: readAiCreditPolicyFromEnv()
     });
 }
@@ -236,11 +245,16 @@ export async function createAmazonQArchitectureDraftResponse(
   }
 
   const architectureDecisionSpace = createArchitectureDecisionSpace(request.prompt);
+  const normalizedRequirement = await createNormalizedArchitectureIntentPlan({
+    prompt: request.prompt,
+    provider: options.requirementNormalizerProvider
+  });
   const architectureBrief = createAmazonQArchitectureBrief(request.prompt);
   const referenceKnowledge = createAwsArchitectureReferenceKnowledgePayload();
   const payload = maskSecretsForAi({
     architectureBrief,
     architectureDecisionSpace,
+    ...(normalizedRequirement === null ? {} : { normalizedRequirement }),
     prompt: request.prompt,
     referenceKnowledge,
     supportedResourceTypes: SUPPORTED_RESOURCE_TYPES,
@@ -252,18 +266,19 @@ export async function createAmazonQArchitectureDraftResponse(
     let response = await provider.generate({
       target: ARCHITECTURE_DRAFT_TARGET,
       instructions: createAmazonQArchitectureDraftInstructions(),
-      prompt: createAmazonQArchitectureDraftPrompt(request.prompt, architectureDecisionSpace),
+      prompt: createAmazonQArchitectureDraftPrompt(request.prompt, architectureDecisionSpace, normalizedRequirement),
       payload: activePayload
     });
     let parsedResponse = parseAmazonQArchitectureDraftResponse(response.text);
 
     if (parsedResponse.status === "preview") {
-      const validationIssues = findAmazonQPreviewValidationIssues(request.prompt, parsedResponse);
+      const validationIssues = findAmazonQPreviewValidationIssues(request.prompt, parsedResponse, normalizedRequirement);
 
       if (validationIssues.length > 0) {
         activePayload = maskSecretsForAi({
           architectureBrief,
           architectureDecisionSpace,
+          ...(normalizedRequirement === null ? {} : { normalizedRequirement }),
           prompt: request.prompt,
           referenceKnowledge,
           validationIssues,
@@ -277,6 +292,7 @@ export async function createAmazonQArchitectureDraftResponse(
           prompt: createAmazonQArchitectureDraftRepairPrompt(
             request.prompt,
             architectureDecisionSpace,
+            normalizedRequirement,
             validationIssues,
             parsedResponse.architectureJson
           ),
@@ -285,7 +301,9 @@ export async function createAmazonQArchitectureDraftResponse(
         parsedResponse = parseAmazonQArchitectureDraftResponse(response.text);
 
         const retryValidationIssues =
-          parsedResponse.status === "preview" ? findAmazonQPreviewValidationIssues(request.prompt, parsedResponse) : [];
+          parsedResponse.status === "preview"
+            ? findAmazonQPreviewValidationIssues(request.prompt, parsedResponse, normalizedRequirement)
+            : [];
 
         if (parsedResponse.status === "preview" && retryValidationIssues.length > 0) {
           throw new Error("Amazon Q architecture draft failed self-validation after retry");
@@ -1032,12 +1050,14 @@ function createAmazonQArchitectureDraftInstructions(): string {
 
 function createAmazonQArchitectureDraftPrompt(
   prompt: string,
-  architectureDecisionSpace: ArchitectureDecisionSpace
+  architectureDecisionSpace: ArchitectureDecisionSpace,
+  normalizedRequirement: ArchitectureIntentPlan | null
 ): string {
   return [
     createAmazonQArchitectureDraftInstructions(),
     createAwsArchitectureReferenceKnowledgePrompt(),
     createAmazonQArchitectureBrief(prompt),
+    createNormalizedArchitectureIntentPlanPromptSection(normalizedRequirement),
     "Supported resource panel catalog:",
     JSON.stringify(SUPPORTED_RESOURCE_CATALOG, null, 2),
     "ArchitectureDecisionSpace:",
@@ -1050,6 +1070,7 @@ function createAmazonQArchitectureDraftPrompt(
 function createAmazonQArchitectureDraftRepairPrompt(
   prompt: string,
   architectureDecisionSpace: ArchitectureDecisionSpace,
+  normalizedRequirement: ArchitectureIntentPlan | null,
   validationIssues: readonly string[],
   previousArchitectureJson: ArchitectureJson
 ): string {
@@ -1061,6 +1082,7 @@ function createAmazonQArchitectureDraftRepairPrompt(
     "The regenerated response must include requirementCoverage entries proving how every selected answer is represented.",
     createAwsArchitectureReferenceKnowledgePrompt(),
     createAmazonQArchitectureBrief(prompt),
+    createNormalizedArchitectureIntentPlanPromptSection(normalizedRequirement),
     "ArchitectureDecisionSpace:",
     JSON.stringify(architectureDecisionSpace, null, 2),
     "Validation issues:",
@@ -1070,6 +1092,22 @@ function createAmazonQArchitectureDraftRepairPrompt(
     "Previous invalid architectureJson:",
     JSON.stringify(previousArchitectureJson)
   ].join("\n\n");
+}
+
+function createNormalizedArchitectureIntentPlanPromptSection(
+  normalizedRequirement: ArchitectureIntentPlan | null
+): string {
+  if (normalizedRequirement === null) {
+    return "";
+  }
+
+  const briefLines = (normalizedRequirement.amazonQBrief ?? []).map((line) => `- ${line}`);
+
+  return [
+    "Normalized Architecture Intent Plan:",
+    JSON.stringify(normalizedRequirement, null, 2),
+    ...(briefLines.length === 0 ? [] : ["Normalizer-to-Amazon-Q imperative brief:", ...briefLines])
+  ].join("\n");
 }
 
 function createAmazonQArchitectureBrief(prompt: string): string {
@@ -1156,7 +1194,8 @@ function createAmazonQArchitectureBrief(prompt: string): string {
 
 function findAmazonQPreviewValidationIssues(
   prompt: string,
-  preview: AmazonQArchitectureDraftPreview
+  preview: AmazonQArchitectureDraftPreview,
+  normalizedRequirement: ArchitectureIntentPlan | null
 ): string[] {
   const normalizedPrompt = prompt.normalize("NFKC").toLowerCase();
   const architectureJson = preview.architectureJson;
@@ -1167,7 +1206,7 @@ function findAmazonQPreviewValidationIssues(
     issues.push("The user requested serverless or no EC2, but the preview includes EC2. Regenerate without EC2 and use serverless supported resources such as LAMBDA and API_GATEWAY_REST_API when compute is needed.");
   }
 
-  issues.push(...findRequirementCoverageValidationIssues(normalizedPrompt, preview));
+  issues.push(...findRequirementCoverageValidationIssues(normalizedPrompt, preview, normalizedRequirement));
   issues.push(...findArchitectureLayoutValidationIssues(architectureJson));
 
   return issues;
@@ -1175,7 +1214,8 @@ function findAmazonQPreviewValidationIssues(
 
 function findRequirementCoverageValidationIssues(
   normalizedPrompt: string,
-  preview: AmazonQArchitectureDraftPreview
+  preview: AmazonQArchitectureDraftPreview,
+  normalizedRequirement: ArchitectureIntentPlan | null
 ): string[] {
   const issues: string[] = [];
   const architectureJson = preview.architectureJson;
@@ -1197,6 +1237,7 @@ function findRequirementCoverageValidationIssues(
   issues.push(...findExplicitResourceTypeValidationIssues(normalizedPrompt, architectureJson));
   issues.push(...findRequestedResourceQuantityValidationIssues(normalizedPrompt, architectureJson));
   issues.push(...findRuntimeTopologyValidationIssues(normalizedPrompt, architectureJson));
+  issues.push(...findNormalizedRequirementValidationIssues(normalizedRequirement, architectureJson));
 
   if (requiresNoDatabase(normalizedPrompt) && (nodeTypes.has("RDS") || nodeTypes.has("DB_SUBNET_GROUP") || hasForbiddenDatabaseResource(architectureJson))) {
     issues.push("The user selected no database, but the preview includes database resources or database-specific labels/config. Regenerate without database resources.");
@@ -1252,6 +1293,79 @@ function findRequirementCoverageValidationIssues(
 
   if (requiresKoreaOnlyRegion(normalizedPrompt) && mentionsForbiddenMultiRegionScope(coverageText)) {
     issues.push("The user selected Korea-only scope, but the preview claims or implies multi-region API/database coverage.");
+  }
+
+  return issues;
+}
+
+function findNormalizedRequirementValidationIssues(
+  normalizedRequirement: ArchitectureIntentPlan | null,
+  architectureJson: ArchitectureJson
+): string[] {
+  if (normalizedRequirement === null) {
+    return [];
+  }
+
+  const issues: string[] = [];
+  const actualResourceTypes = new Set(architectureJson.nodes.map((node) => node.type));
+  const missingResourceTypes = (normalizedRequirement.requiredResources ?? []).filter(
+    (resourceType) => !actualResourceTypes.has(resourceType as ResourceType)
+  );
+
+  if (missingResourceTypes.length > 0) {
+    issues.push(
+      `The normalized requirement plan requires supported ResourceNode types that are missing from the preview: ${missingResourceTypes.join(", ")}. Regenerate with visible nodes for each required normalized resource.`
+    );
+  }
+
+  for (const [resourceType, quantity] of Object.entries(normalizedRequirement.resourceQuantities ?? {})) {
+    const requiredResourceType = resourceType as ResourceType;
+    const actualCount = architectureJson.nodes.filter((node) => node.type === requiredResourceType).length;
+
+    if (actualCount < quantity) {
+      issues.push(
+        `The normalized requirement plan requires ${quantity} ${resourceType} node(s), but the preview includes ${actualCount}. Regenerate with enough visible ${resourceType} nodes.`
+      );
+    }
+  }
+
+  const forbiddenCapabilities = new Set(
+    (normalizedRequirement.forbiddenCapabilities ?? []).map((capability) => capability.toLowerCase())
+  );
+
+  if (forbiddenCapabilities.has("file_upload") && hasForbiddenUploadResource(architectureJson)) {
+    issues.push(
+      "The normalized requirement plan forbids file upload, but the preview includes upload/media/file-upload resources. Remove upload buckets, media buckets, presigned URL flows, and upload-specific IAM paths."
+    );
+  }
+
+  const topology = normalizedRequirement.runtimeTopology;
+
+  if (topology !== undefined) {
+    const trafficEntry = topology.trafficEntry?.toUpperCase();
+    const compute = topology.compute?.toUpperCase();
+
+    if (trafficEntry === "LOAD_BALANCER" && compute === "EC2" && !hasAlbToEc2TrafficPath(architectureJson)) {
+      issues.push(
+        "The normalized requirement plan requires ALB traffic to reach EC2 runtime nodes, but the preview does not show a connected ALB/listener -> ASG/target -> EC2 path."
+      );
+    }
+
+    if (topology.autoScaling === true && compute === "EC2" && !hasAutoScalingGroupToEc2Path(architectureJson)) {
+      issues.push(
+        "The normalized requirement plan requires Auto Scaling for EC2, but the preview does not connect AUTO_SCALING_GROUP to the EC2 fleet."
+      );
+    }
+
+    if (topology.spreadAcrossPrivateSubnets === true && compute === "EC2") {
+      const spread = getEc2SubnetSpread(architectureJson);
+
+      if (spread.privateSubnetCount < 2 || spread.ec2SubnetCount < 2) {
+        issues.push(
+          `The normalized requirement plan requires EC2 spread across private subnets, but the preview shows ${spread.ec2SubnetCount} private subnet placement(s) across ${spread.privateSubnetCount} private subnet node(s).`
+        );
+      }
+    }
   }
 
   return issues;
