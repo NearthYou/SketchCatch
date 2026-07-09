@@ -13,7 +13,8 @@ const diagramSizeSchema = z.object({
 
 const diagramNodeStyleSchema = z.object({
   textColor: z.string().min(1).optional(),
-  borderColor: z.string().min(1).optional()
+  borderColor: z.string().min(1).optional(),
+  borderStyle: z.enum(["solid", "dashed", "dotted"]).optional()
 });
 
 const diagramNodeMetadataSchema: z.ZodType<DiagramNodeMetadata> = z.object({

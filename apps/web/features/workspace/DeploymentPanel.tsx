@@ -86,6 +86,10 @@ type DeploymentRuntimeSnapshot = {
 type DeploymentPanelSnapshot = DeploymentRuntimeSnapshot & {
   readonly awsConnections: AwsConnection[];
 };
+
+type DeploymentStageState = "active" | "done" | "error" | "idle";
+type DeploymentWizardStep = "baseline" | "review" | "deploy";
+
 export type DeploymentPreDeploymentCheckState = {
   readonly analysis: AiPreDeploymentAnalysisResult | null;
   readonly errorMessage: string;
@@ -214,6 +218,13 @@ export function DeploymentPanel({
     () => deployments.find((deployment) => deployment.id === selectedDeploymentId) ?? null,
     [deployments, selectedDeploymentId]
   );
+  const suggestedDeploymentWizardStep = getSuggestedDeploymentWizardStep({
+    hasUnsavedDeploymentBaseline,
+    selectedDeployment
+  });
+  const [deploymentWizardStep, setDeploymentWizardStep] = useState<DeploymentWizardStep>(
+    suggestedDeploymentWizardStep
+  );
   const selectedGitCicdHandoff = useMemo(
     () => gitCicdHandoffs.find((handoff) => handoff.id === selectedGitCicdHandoffId) ?? null,
     [gitCicdHandoffs, selectedGitCicdHandoffId]
@@ -296,6 +307,28 @@ export function DeploymentPanel({
     shouldShowPlanButton
   });
   const primaryDeploymentStepStatus = getPrimaryDeploymentStepStatus(selectedDeployment);
+
+  useEffect(() => {
+    setDeploymentWizardStep((currentStep) => {
+      if (
+        !canOpenDeploymentWizardStep(currentStep, {
+          hasUnsavedDeploymentBaseline,
+          selectedDeployment
+        })
+      ) {
+        return suggestedDeploymentWizardStep;
+      }
+
+      if (
+        getDeploymentWizardStepIndex(suggestedDeploymentWizardStep) >
+        getDeploymentWizardStepIndex(currentStep)
+      ) {
+        return suggestedDeploymentWizardStep;
+      }
+
+      return currentStep;
+    });
+  }, [hasUnsavedDeploymentBaseline, selectedDeployment, suggestedDeploymentWizardStep]);
   const loadDeploymentRuntimeSnapshot = useCallback(async (): Promise<DeploymentRuntimeSnapshot> => {
     const [
       nextDeployments,
@@ -1093,139 +1126,303 @@ export function DeploymentPanel({
 
   const renderPreDeploymentCheckSection = () => null;
 
-  const renderSetupSection = () => (
-    <section className={styles.deploymentStagePanel} aria-label="배포 단계">
-      <article
-        className={styles.deploymentStageCard}
-        data-state={hasUnsavedDeploymentBaseline ? "active" : "done"}
-      >
-        <span className={styles.deploymentStageNumber}>1</span>
-        <div className={styles.deploymentStageBody}>
-          <h3>배포 전 저장</h3>
-          <p className={styles.deploymentStageStatus}>
-            {hasUnsavedDeploymentBaseline ? "변경사항 저장 필요" : "저장됨"}
+  function moveToDeploymentWizardStep(nextStep: DeploymentWizardStep): void {
+    if (
+      canOpenDeploymentWizardStep(nextStep, {
+        hasUnsavedDeploymentBaseline,
+        selectedDeployment
+      })
+    ) {
+      setDeploymentWizardStep(nextStep);
+    }
+  }
+
+  const renderSetupSection = () => {
+    const baselineStageStatus = hasUnsavedDeploymentBaseline ? "변경사항 저장 필요" : "저장됨";
+    const baselineStageState: DeploymentStageState = hasUnsavedDeploymentBaseline
+      ? "active"
+      : "done";
+    const reviewStageStatus = getDeploymentReviewStepStatus({
+      hasStalePreDeploymentAnalysis,
+      preDeploymentAnalysis,
+      preDeploymentErrorMessage,
+      preDeploymentState,
+      requestState,
+      selectedDeployment
+    });
+    const reviewStageState: DeploymentStageState =
+      preDeploymentState === "error" || requestState === "error"
+        ? "error"
+        : selectedDeployment
+          ? "done"
+          : hasUnsavedDeploymentBaseline
+            ? "idle"
+            : "active";
+    const deployStageState: DeploymentStageState =
+      selectedDeployment?.status === "FAILED"
+        ? "error"
+        : selectedDeployment?.status === "SUCCESS" || selectedDeployment?.status === "DESTROYED"
+          ? "done"
+          : selectedDeployment
+            ? "active"
+            : "idle";
+
+    function getDeploymentStageDisplayState(
+      stepId: DeploymentWizardStep,
+      stageState: DeploymentStageState
+    ): DeploymentStageState {
+      if (stageState === "error") {
+        return "error";
+      }
+
+      return deploymentWizardStep === stepId ? "active" : stageState;
+    }
+
+    const deploymentStageSteps = [
+      {
+        id: "baseline",
+        label: "저장",
+        number: "1",
+        state: getDeploymentStageDisplayState("baseline", baselineStageState),
+        status: baselineStageStatus,
+        title: "배포 전 저장"
+      },
+      {
+        id: "review",
+        label: "검사",
+        number: "2",
+        state: getDeploymentStageDisplayState("review", reviewStageState),
+        status: reviewStageStatus,
+        title: "배포 전 검사 및 리뷰"
+      },
+      {
+        id: "deploy",
+        label: "배포",
+        number: "3",
+        state: getDeploymentStageDisplayState("deploy", deployStageState),
+        status: primaryDeploymentStepStatus,
+        title: "배포"
+      }
+    ] as const;
+    const activeDeploymentStage =
+      deploymentStageSteps.find((stage) => stage.id === deploymentWizardStep) ??
+      deploymentStageSteps[0];
+
+    function renderDeploymentStageAction(stepId: DeploymentWizardStep) {
+      if (stepId === "baseline") {
+        return (
+          <article className={styles.deploymentStageActionCard} data-state={baselineStageState}>
+            <div className={styles.deploymentStageBody}>
+              <h3>배포 전 저장</h3>
+              <p className={styles.deploymentStageStatus}>{baselineStageStatus}</p>
+            </div>
+            <button
+              className={styles.deploymentSecondaryButton}
+              disabled={requestState === "loading"}
+              onClick={saveDeploymentBaseline}
+              type="button"
+            >
+              <DeploymentBaselineIcon size={16} aria-hidden="true" />
+              저장
+            </button>
+            <div className={styles.deploymentStageFooter}>
+              <button
+                className={styles.deploymentStageNextButton}
+                disabled={hasUnsavedDeploymentBaseline || requestState === "loading"}
+                onClick={() => moveToDeploymentWizardStep("review")}
+                type="button"
+              >
+                다음: 검사
+              </button>
+            </div>
+          </article>
+        );
+      }
+
+      if (stepId === "review") {
+        return (
+          <article className={styles.deploymentStageActionCard} data-state={reviewStageState}>
+            <div className={styles.deploymentStageBody}>
+              <h3>배포 전 검사 및 리뷰</h3>
+              <p className={styles.deploymentStageStatus}>{reviewStageStatus}</p>
+            </div>
+            <div className={styles.deploymentStageSettings}>
+              <SelectMenu
+                ariaLabel="AWS 연결 선택"
+                disabled={awsConnectionOptions.length === 0 || requestState === "loading"}
+                emptyLabel="AWS 연결 없음"
+                onChange={setSelectedAwsConnectionId}
+                options={awsConnectionOptions}
+                size={isDeploymentOverlayOpen ? "large" : "regular"}
+                value={selectedAwsConnectionId}
+              />
+              <SelectMenu
+                ariaLabel="Live deployment profile"
+                emptyLabel="Live profile 없음"
+                onChange={(value) => setSelectedLiveProfile(value as DeploymentLiveProfile)}
+                options={liveProfileOptions}
+                size={isDeploymentOverlayOpen ? "large" : "regular"}
+                value={selectedLiveProfile}
+              />
+            </div>
+            <button
+              className={styles.deploymentPrimaryButton}
+              disabled={!canRunDeploymentReviewStep}
+              onClick={() => void runDeploymentReviewStep()}
+              type="button"
+            >
+              <ShieldCheck size={16} aria-hidden="true" />
+              {preDeploymentState === "loading" || requestState === "loading"
+                ? "진행 중"
+                : selectedDeployment
+                  ? "다시 리뷰"
+                  : "검사 및 리뷰"}
+            </button>
+            <div className={styles.deploymentStageFooter}>
+              <button
+                className={styles.deploymentStageNextButton}
+                disabled={!selectedDeployment || requestState === "loading"}
+                onClick={() => moveToDeploymentWizardStep("deploy")}
+                type="button"
+              >
+                다음: 배포
+              </button>
+            </div>
+          </article>
+        );
+      }
+
+      return (
+        <article className={styles.deploymentStageActionCard} data-state={deployStageState}>
+          <div className={styles.deploymentStageBody}>
+            <h3>배포</h3>
+            <p className={styles.deploymentStageStatus}>{primaryDeploymentStepStatus}</p>
+          </div>
+          <button
+            className={styles.deploymentPrimaryButton}
+            disabled={!canRunPrimaryDeploymentStep}
+            onClick={startPrimaryDeploymentStep}
+            type="button"
+          >
+            <DashboardIcon name="rocket" />
+            {primaryDeploymentStepLabel}
+          </button>
+        </article>
+      );
+    }
+
+    function renderDeploymentStageSummaryPanel(stepId: DeploymentWizardStep) {
+      const selectedAwsConnection =
+        verifiedAwsConnections.find((connection) => connection.id === selectedAwsConnectionId) ??
+        null;
+      const selectedAwsConnectionSummary = selectedAwsConnection
+        ? `${selectedAwsConnection.accountId ?? "Unknown AWS account"} · ${selectedAwsConnection.region}`
+        : "AWS 연결 필요";
+
+      if (stepId === "baseline") {
+        return (
+          <aside className={styles.deploymentStageSummaryPanel} aria-label="저장 단계 요약">
+            <div>
+              <h3>읽기 전용 요약</h3>
+              <p>현재 단계와 관련된 판단 근거만 보여줍니다.</p>
+            </div>
+            <div className={styles.deploymentStageSummaryRows}>
+              <InfoRow label="저장 상태" value={baselineStageStatus} />
+              <InfoRow label="Terraform artifact" value="저장 후 동기화" />
+              <InfoRow label="다음 단계" value="배포 전 검사" />
+            </div>
+            <p className={styles.deploymentStageSummaryNotice}>
+              저장이 끝나면 AWS 연결과 Pre-Deployment Gate만 확인합니다.
+            </p>
+          </aside>
+        );
+      }
+
+      if (stepId === "review") {
+        return (
+          <aside className={styles.deploymentStageSummaryPanel} aria-label="검사 단계 요약">
+            <div>
+              <h3>읽기 전용 요약</h3>
+              <p>현재 단계와 관련된 판단 근거만 보여줍니다.</p>
+            </div>
+            <div className={styles.deploymentStageSummaryRows}>
+              <InfoRow label="AWS 연결" value={selectedAwsConnectionSummary} />
+              <InfoRow label="검사 상태" value={reviewStageStatus} />
+              <InfoRow label="다음 단계" value={selectedDeployment ? "Plan 실행" : "리뷰 완료 후 이동"} />
+            </div>
+            <p className={styles.deploymentStageSummaryNotice}>
+              Apply 전 사용자 승인과 로그 기록은 계속 필수입니다.
+            </p>
+          </aside>
+        );
+      }
+
+      return (
+        <aside className={styles.deploymentStageSummaryPanel} aria-label="배포 단계 요약">
+          <div>
+            <h3>읽기 전용 요약</h3>
+            <p>현재 단계와 관련된 판단 근거만 보여줍니다.</p>
+          </div>
+          <div className={styles.deploymentStageSummaryRows}>
+            <InfoRow label="Deployment 상태" value={selectedDeployment?.status ?? "대기"} />
+            <InfoRow label="현재 액션" value={primaryDeploymentStepLabel} />
+            <InfoRow label="Plan" value={hasCurrentPlan ? "생성됨" : "아직 없음"} />
+          </div>
+          <p className={styles.deploymentStageSummaryNotice}>
+            실제 Apply와 Cleanup은 승인된 plan과 안전 게이트를 기준으로 실행됩니다.
           </p>
-        </div>
-        <button
-          className={styles.deploymentSecondaryButton}
-          disabled={requestState === "loading"}
-          onClick={saveDeploymentBaseline}
-          type="button"
-        >
-          <DeploymentBaselineIcon size={16} aria-hidden="true" />
-          저장
-        </button>
-      </article>
+        </aside>
+      );
+    }
 
-      <article
-        className={styles.deploymentStageCard}
-        data-state={
-          preDeploymentState === "error" || requestState === "error"
-            ? "error"
-            : selectedDeployment
-              ? "done"
-              : "active"
-        }
-      >
-        <span className={styles.deploymentStageNumber}>2</span>
-        <div className={styles.deploymentStageBody}>
-          <h3>배포 전 검사 및 리뷰</h3>
-          <p className={styles.deploymentStageStatus}>
-            {getDeploymentReviewStepStatus({
-              hasStalePreDeploymentAnalysis,
-              preDeploymentAnalysis,
-              preDeploymentErrorMessage,
-              preDeploymentState,
-              requestState,
-              selectedDeployment
-            })}
+    return (
+      <section className={styles.deploymentStagePanel} aria-label="배포 단계">
+        <ol className={styles.deploymentStageStepper} aria-label="배포 진행 단계">
+          {deploymentStageSteps.map((stage) => (
+            <li
+              aria-current={stage.id === deploymentWizardStep ? "step" : undefined}
+              className={styles.deploymentStageStep}
+              data-state={stage.state}
+              key={stage.number}
+            >
+              <span className={styles.deploymentStageDot}>{stage.number}</span>
+              <span className={styles.deploymentStageLabel}>{stage.label}</span>
+              <span className={styles.deploymentStageStepStatus}>{stage.status}</span>
+            </li>
+          ))}
+        </ol>
+
+        <div className={styles.deploymentStageActions}>
+          {renderDeploymentStageAction(activeDeploymentStage.id)}
+          {renderDeploymentStageSummaryPanel(activeDeploymentStage.id)}
+        </div>
+
+        {preDeploymentState === "error" ? (
+          <p className={styles.deploymentStageAlert} role="alert">
+            {preDeploymentErrorMessage}
           </p>
-        </div>
-        <div className={styles.deploymentStageSettings}>
-          <SelectMenu
-            ariaLabel="AWS 연결 선택"
-            disabled={awsConnectionOptions.length === 0 || requestState === "loading"}
-            emptyLabel="AWS 연결 없음"
-            onChange={setSelectedAwsConnectionId}
-            options={awsConnectionOptions}
-            size={isDeploymentOverlayOpen ? "large" : "regular"}
-            value={selectedAwsConnectionId}
+        ) : null}
+        {requestState === "error" ? (
+          <p className={styles.deploymentStageAlert} role="alert">
+            {errorMessage}
+          </p>
+        ) : null}
+        {selectedDeployment?.status === "FAILED" ? (
+          <p className={styles.deploymentStageAlert} role="alert">
+            {selectedDeployment.errorSummary ?? "배포가 실패했습니다. 아래 실행 기록에서 원인을 확인하세요."}
+          </p>
+        ) : null}
+        {deploymentWizardStep === "review" &&
+        preDeploymentAnalysis !== null &&
+        !hasStalePreDeploymentAnalysis ? (
+          <DeploymentPreDeploymentSummary
+            analysis={preDeploymentAnalysis}
+            onOpenFindingTerraformSource={onOpenFindingTerraformSource}
           />
-          <SelectMenu
-            ariaLabel="Live deployment profile"
-            emptyLabel="Live profile 없음"
-            onChange={(value) => setSelectedLiveProfile(value as DeploymentLiveProfile)}
-            options={liveProfileOptions}
-            size={isDeploymentOverlayOpen ? "large" : "regular"}
-            value={selectedLiveProfile}
-          />
-        </div>
-        <button
-          className={styles.deploymentPrimaryButton}
-          disabled={!canRunDeploymentReviewStep}
-          onClick={() => void runDeploymentReviewStep()}
-          type="button"
-        >
-          <ShieldCheck size={16} aria-hidden="true" />
-          {preDeploymentState === "loading" || requestState === "loading"
-            ? "진행 중"
-            : selectedDeployment
-              ? "다시 리뷰"
-              : "검사 및 리뷰"}
-        </button>
-      </article>
-
-      <article
-        className={styles.deploymentStageCard}
-        data-state={
-          selectedDeployment?.status === "FAILED"
-            ? "error"
-            : selectedDeployment?.status === "SUCCESS" || selectedDeployment?.status === "DESTROYED"
-              ? "done"
-              : selectedDeployment
-                ? "active"
-                : "idle"
-        }
-      >
-        <span className={styles.deploymentStageNumber}>3</span>
-        <div className={styles.deploymentStageBody}>
-          <h3>배포</h3>
-          <p className={styles.deploymentStageStatus}>{primaryDeploymentStepStatus}</p>
-        </div>
-        <button
-          className={styles.deploymentPrimaryButton}
-          disabled={!canRunPrimaryDeploymentStep}
-          onClick={startPrimaryDeploymentStep}
-          type="button"
-        >
-          <DashboardIcon name="rocket" />
-          {primaryDeploymentStepLabel}
-        </button>
-      </article>
-
-      {preDeploymentState === "error" ? (
-        <p className={styles.deploymentStageAlert} role="alert">
-          {preDeploymentErrorMessage}
-        </p>
-      ) : null}
-      {requestState === "error" ? (
-        <p className={styles.deploymentStageAlert} role="alert">
-          {errorMessage}
-        </p>
-      ) : null}
-      {selectedDeployment?.status === "FAILED" ? (
-        <p className={styles.deploymentStageAlert} role="alert">
-          {selectedDeployment.errorSummary ?? "배포가 실패했습니다. 아래 실행 기록에서 원인을 확인하세요."}
-        </p>
-      ) : null}
-      {preDeploymentAnalysis !== null && !hasStalePreDeploymentAnalysis ? (
-        <DeploymentPreDeploymentSummary
-          analysis={preDeploymentAnalysis}
-          onOpenFindingTerraformSource={onOpenFindingTerraformSource}
-        />
-      ) : null}
-    </section>
-  );
+        ) : null}
+      </section>
+    );
+  };
 
   const renderGitCicdHandoffSection = () => (
     <section className={styles.deploymentSection}>
@@ -1805,22 +2002,18 @@ export function DeploymentPanel({
           role="dialog"
         >
           <div className={styles.deploymentExpandedShell}>
-            <header className={styles.deploymentExpandedHeader}>
-              <div>
-                <p className={styles.projectEyebrow}>Deployment</p>
-                <h2>{projectName}</h2>
-                <span>{currentNodeCount} board nodes</span>
-              </div>
-              <button
-                aria-label="Deployment 패널 닫기"
-                className={styles.deploymentExpandButton}
-                onClick={closeExpandedDeployment}
-                type="button"
-              >
-                <X size={18} aria-hidden="true" />
-              </button>
-            </header>
+            <button
+              aria-label="Deployment 패널 닫기"
+              className={styles.deploymentExpandedCloseButton}
+              onClick={closeExpandedDeployment}
+              type="button"
+            >
+              <X size={18} aria-hidden="true" />
+            </button>
             <div className={styles.deploymentExpandedBody}>
+              <div className={styles.deploymentExpandedTitleRow}>
+                <h2 className={styles.deploymentExpandedTitle}>배포 콘솔</h2>
+              </div>
               {renderPreDeploymentCheckSection()}
               {renderSetupSection()}
               {renderStatusMessages()}
@@ -1992,6 +2185,61 @@ function DeploymentGateCard({ deployment }: { readonly deployment: Deployment })
       </dl>
     </div>
     )
+}
+
+function getSuggestedDeploymentWizardStep({
+  hasUnsavedDeploymentBaseline,
+  selectedDeployment
+}: {
+  readonly hasUnsavedDeploymentBaseline: boolean;
+  readonly selectedDeployment: Deployment | null;
+}): DeploymentWizardStep {
+  if (hasUnsavedDeploymentBaseline) {
+    return "baseline";
+  }
+
+  if (selectedDeployment) {
+    return "deploy";
+  }
+
+  return "review";
+}
+
+function canOpenDeploymentWizardStep(
+  step: DeploymentWizardStep,
+  {
+    hasUnsavedDeploymentBaseline,
+    selectedDeployment
+  }: {
+    readonly hasUnsavedDeploymentBaseline: boolean;
+    readonly selectedDeployment: Deployment | null;
+  }
+): boolean {
+  if (step === "baseline") {
+    return true;
+  }
+
+  if (hasUnsavedDeploymentBaseline) {
+    return false;
+  }
+
+  if (step === "review") {
+    return true;
+  }
+
+  return selectedDeployment !== null;
+}
+
+function getDeploymentWizardStepIndex(step: DeploymentWizardStep): number {
+  if (step === "baseline") {
+    return 0;
+  }
+
+  if (step === "review") {
+    return 1;
+  }
+
+  return 2;
 }
 
 function DeploymentFailureExplanationCard({

@@ -21,14 +21,26 @@ const RESOURCE_KEYWORDS: readonly {
   readonly keywords: readonly string[];
   readonly label: string;
 }[] = [
-  { resourceType: "VPC", keywords: ["vpc", "virtual private cloud", "network", "네트워크", "네트워크 공간", "브이피씨"], label: "VPC" },
-  { resourceType: "SUBNET", keywords: ["subnet", "sub net", "서브넷", "작은 네트워크"], label: "서브넷" },
+  {
+    resourceType: "VPC",
+    keywords: ["vpc", "virtual private cloud", "network", "네트워크", "네트워크 공간", "브이피씨"],
+    label: "VPC"
+  },
+  {
+    resourceType: "SUBNET",
+    keywords: ["subnet", "sub net", "서브넷", "작은 네트워크"],
+    label: "서브넷"
+  },
   {
     resourceType: "INTERNET_GATEWAY",
     keywords: ["internet gateway", "igw", "internet gw", "인터넷 게이트웨이", "인터넷 gateway"],
     label: "인터넷 게이트웨이"
   },
-  { resourceType: "ROUTE_TABLE", keywords: ["route table", "routing table", "라우트 테이블", "라우팅 테이블"], label: "라우트 테이블" },
+  {
+    resourceType: "ROUTE_TABLE",
+    keywords: ["route table", "routing table", "라우트 테이블", "라우팅 테이블"],
+    label: "라우트 테이블"
+  },
   {
     resourceType: "ROUTE_TABLE_ASSOCIATION",
     keywords: ["route table association", "route association", "라우트 테이블 연결", "라우팅 연결"],
@@ -41,27 +53,85 @@ const RESOURCE_KEYWORDS: readonly {
   },
   {
     resourceType: "RDS",
-    keywords: ["rds", "database", "db", "postgres", "mysql", "데이터베이스", "디비", "데이터 저장소", "데이터 저장 공간"],
+    keywords: [
+      "rds",
+      "database",
+      "db",
+      "postgres",
+      "mysql",
+      "데이터베이스",
+      "디비",
+      "데이터 저장소",
+      "데이터 저장 공간"
+    ],
     label: "RDS 데이터베이스"
   },
-  { resourceType: "S3", keywords: ["s3", "bucket", "storage", "file", "upload", "버킷", "스토리지", "파일", "파일 저장 공간", "업로드"], label: "S3 버킷" },
+  {
+    resourceType: "S3",
+    keywords: [
+      "s3",
+      "bucket",
+      "storage",
+      "file",
+      "upload",
+      "버킷",
+      "스토리지",
+      "파일",
+      "파일 저장 공간",
+      "업로드"
+    ],
+    label: "S3 버킷"
+  },
   {
     resourceType: "SECURITY_GROUP",
-    keywords: ["security group", "securitygroup", "firewall", "ssh", "보안 그룹", "보안그룹", "보안 설정", "방화벽"],
+    keywords: [
+      "security group",
+      "securitygroup",
+      "firewall",
+      "ssh",
+      "보안 그룹",
+      "보안그룹",
+      "보안 설정",
+      "방화벽"
+    ],
     label: "보안 그룹"
   },
-  { resourceType: "CLOUDFRONT", keywords: ["cloudfront", "cloud front", "cdn", "클라우드프론트"], label: "CloudFront CDN" },
-  { resourceType: "LAMBDA", keywords: ["lambda", "serverless", "function", "람다", "서버리스", "함수"], label: "Lambda 함수" },
-  { resourceType: "AMI", keywords: ["ami", "machine image", "image", "이미지", "머신 이미지"], label: "AMI" },
-  { resourceType: "API_GATEWAY_REST_API", keywords: ["api gateway", "rest api", "apigateway", "api 게이트웨이", "api 입구"], label: "API Gateway" },
+  {
+    resourceType: "CLOUDFRONT",
+    keywords: ["cloudfront", "cloud front", "cdn", "클라우드프론트"],
+    label: "CloudFront CDN"
+  },
+  {
+    resourceType: "LAMBDA",
+    keywords: ["lambda", "serverless", "function", "람다", "서버리스", "함수"],
+    label: "Lambda 함수"
+  },
+  {
+    resourceType: "AMI",
+    keywords: ["ami", "machine image", "image", "이미지", "머신 이미지"],
+    label: "AMI"
+  },
+  {
+    resourceType: "API_GATEWAY_REST_API",
+    keywords: ["api gateway", "rest api", "apigateway", "api 게이트웨이", "api 입구"],
+    label: "API Gateway"
+  },
   { resourceType: "IAM_ROLE", keywords: ["iam role", "role", "역할", "롤"], label: "IAM 역할" },
-  { resourceType: "IAM_POLICY", keywords: ["iam policy", "policy", "정책", "폴리시"], label: "IAM 정책" },
+  {
+    resourceType: "IAM_POLICY",
+    keywords: ["iam policy", "policy", "정책", "폴리시"],
+    label: "IAM 정책"
+  },
   {
     resourceType: "IAM_INSTANCE_PROFILE",
     keywords: ["iam instance profile", "instance profile", "인스턴스 프로파일"],
     label: "IAM 인스턴스 프로파일"
   },
-  { resourceType: "KMS_KEY", keywords: ["kms", "kms key", "key", "encryption key", "암호화 키", "키"], label: "KMS 키" },
+  {
+    resourceType: "KMS_KEY",
+    keywords: ["kms", "kms key", "key", "encryption key", "암호화 키", "키"],
+    label: "KMS 키"
+  },
   {
     resourceType: "CLOUDWATCH_LOG_GROUP",
     keywords: ["cloudwatch log", "cloudwatch logs", "log group", "logs", "로그 그룹", "로그그룹"],
@@ -212,13 +282,33 @@ const WHOLE_SCOPE_PATCH_KEYWORDS = [
 ] as const;
 
 const ADD_RESOURCE_PURPOSE_SUGGESTIONS: Partial<Record<ResourceType, readonly string[]>> = {
-  RDS: ["로그인/회원 데이터를 저장할래", "주문이나 예약 데이터를 저장할래", "기존 서버가 읽고 쓰는 서비스 DB로 쓸래"],
+  RDS: [
+    "로그인/회원 데이터를 저장할래",
+    "주문이나 예약 데이터를 저장할래",
+    "기존 서버가 읽고 쓰는 서비스 DB로 쓸래"
+  ],
   S3: ["사용자 업로드 파일을 저장할래", "정적 웹사이트 파일을 배포할래", "로그나 백업을 보관할래"],
   EC2: ["웹/API 서버를 실행할래", "백그라운드 작업을 처리할래", "관리용 서버로 쓸래"],
-  SECURITY_GROUP: ["웹 서버 접근을 제한할래", "DB 접근을 앱에서만 허용할래", "관리자 접속만 열어둘래"],
-  SUBNET: ["외부 진입용 public subnet으로 쓸래", "앱 서버용 private subnet으로 쓸래", "DB용 private subnet으로 쓸래"],
-  API_GATEWAY_REST_API: ["외부 API 입구로 쓸래", "Lambda 앞단 API로 쓸래", "앱 서버 앞단 API로 쓸래"],
-  CLOUDFRONT: ["정적 웹사이트를 빠르게 배포할래", "S3 파일을 CDN으로 배포할래", "웹서비스 앞단 캐시로 쓸래"]
+  SECURITY_GROUP: [
+    "웹 서버 접근을 제한할래",
+    "DB 접근을 앱에서만 허용할래",
+    "관리자 접속만 열어둘래"
+  ],
+  SUBNET: [
+    "외부 진입용 public subnet으로 쓸래",
+    "앱 서버용 private subnet으로 쓸래",
+    "DB용 private subnet으로 쓸래"
+  ],
+  API_GATEWAY_REST_API: [
+    "외부 API 입구로 쓸래",
+    "Lambda 앞단 API로 쓸래",
+    "앱 서버 앞단 API로 쓸래"
+  ],
+  CLOUDFRONT: [
+    "정적 웹사이트를 빠르게 배포할래",
+    "S3 파일을 CDN으로 배포할래",
+    "웹서비스 앞단 캐시로 쓸래"
+  ]
 };
 
 const GENERIC_ADD_RESOURCE_PURPOSE_SUGGESTIONS = [
@@ -238,7 +328,7 @@ const STATIC_SITE_INTENT_PHRASES = [
   "intro"
 ] as const;
 
-const ENGLISH_RESOURCE_LABELS: Record<ResourceType, string> = {
+const ENGLISH_RESOURCE_LABELS: Partial<Record<ResourceType, string>> = {
   VPC: "VPC",
   SUBNET: "Subnet",
   INTERNET_GATEWAY: "Internet Gateway",
@@ -321,14 +411,20 @@ export function createArchitecturePatchPreview(
       instruction: input.instruction,
       requestedAction: "manual_review",
       ...(input.skipConnection === true ? { skipConnection: true } : {}),
-      ...(input.connectionTargetResourceId ? { connectionTargetResourceId: input.connectionTargetResourceId } : {})
+      ...(input.connectionTargetResourceId
+        ? { connectionTargetResourceId: input.connectionTargetResourceId }
+        : {})
     };
 
     return {
       status: "preview",
       intent,
       baseArchitectureJson: input.architectureJson,
-      proposedArchitectureJson: applyResolvedPreviewChanges(input.architectureJson, compoundChanges, intent),
+      proposedArchitectureJson: applyResolvedPreviewChanges(
+        input.architectureJson,
+        compoundChanges,
+        intent
+      ),
       changes: compoundChanges,
       requiresUserAcceptance: true,
       userAcceptedChange: null,
@@ -359,8 +455,16 @@ export function createArchitecturePatchPreview(
     });
   }
 
-  const changes = createResolvedPatchChanges(input.architectureJson, resolvedIntent, targetResolution.targetNode);
-  const proposedArchitectureJson = applyResolvedPreviewChanges(input.architectureJson, changes, resolvedIntent);
+  const changes = createResolvedPatchChanges(
+    input.architectureJson,
+    resolvedIntent,
+    targetResolution.targetNode
+  );
+  const proposedArchitectureJson = applyResolvedPreviewChanges(
+    input.architectureJson,
+    changes,
+    resolvedIntent
+  );
 
   return {
     status: "preview",
@@ -414,7 +518,10 @@ function createCompoundPatchChanges(
     const normalizedClause = normalizeSearchText(clause);
 
     if (includesAnyPhrase(normalizedClause, REMOVE_ACTION_KEYWORDS)) {
-      for (const node of findRemovableNodesForClause(input.architectureJson.nodes, normalizedClause)) {
+      for (const node of findRemovableNodesForClause(
+        input.architectureJson.nodes,
+        normalizedClause
+      )) {
         if (removedResourceIds.has(node.id)) {
           continue;
         }
@@ -465,9 +572,7 @@ export function withArchitecturePatchProviderMetadata(
   };
 }
 
-function resolvePatchIntent(
-  input: CreateArchitecturePatchPreviewInput
-): ArchitecturePatchIntent {
+function resolvePatchIntent(input: CreateArchitecturePatchPreviewInput): ArchitecturePatchIntent {
   const instruction = input.instruction;
   const normalizedInstruction = normalizeSearchText(instruction);
   const replacementIntent = resolveReplacementPatchIntent(normalizedInstruction);
@@ -478,7 +583,7 @@ function resolvePatchIntent(
       : undefined;
   const resourceType = replacementIntent
     ? replacementIntent.sourceResourceType
-    : explicitResourceType ?? serviceExpansionResourceType;
+    : (explicitResourceType ?? serviceExpansionResourceType);
   const naturalLanguageAction = resolvePatchActionFromNaturalLanguage(normalizedInstruction);
   const requestedAction = replacementIntent
     ? "modify_resource"
@@ -490,13 +595,17 @@ function resolvePatchIntent(
     instruction,
     requestedAction,
     ...(input.selectedTargetResourceId ? { targetResourceId: input.selectedTargetResourceId } : {}),
-    ...(input.connectionTargetResourceId ? { connectionTargetResourceId: input.connectionTargetResourceId } : {}),
+    ...(input.connectionTargetResourceId
+      ? { connectionTargetResourceId: input.connectionTargetResourceId }
+      : {}),
     ...(input.skipConnection === true ? { skipConnection: true } : {}),
     ...(resourceType ? { resourceType } : {})
   };
 }
 
-function resolvePatchActionFromNaturalLanguage(normalizedInstruction: string): ArchitecturePatchAction {
+function resolvePatchActionFromNaturalLanguage(
+  normalizedInstruction: string
+): ArchitecturePatchAction {
   if (includesAnyPhrase(normalizedInstruction, REMOVE_ACTION_KEYWORDS)) {
     return "remove_resource";
   }
@@ -521,7 +630,9 @@ function isNoResourceAdditionInstruction(instruction: string): boolean {
   );
 }
 
-function resolveReplacementPatchIntent(normalizedInstruction: string): ReplacementPatchIntent | undefined {
+function resolveReplacementPatchIntent(
+  normalizedInstruction: string
+): ReplacementPatchIntent | undefined {
   const replacementSegments = splitReplacementInstruction(normalizedInstruction);
 
   if (replacementSegments === undefined) {
@@ -558,7 +669,10 @@ function splitReplacementInstruction(
     /^(?<source>.+?)\s+(?<replacement>.+?)(?:로|으로)\s*(?:교체|대체|바꿔|바꾸|변경).*/u
   );
 
-  if (koreanLooseReplacementMatch?.groups?.source && koreanLooseReplacementMatch.groups.replacement) {
+  if (
+    koreanLooseReplacementMatch?.groups?.source &&
+    koreanLooseReplacementMatch.groups.replacement
+  ) {
     return {
       sourceText: koreanLooseReplacementMatch.groups.source,
       replacementText: koreanLooseReplacementMatch.groups.replacement
@@ -603,7 +717,8 @@ function findResourceType(normalizedInstruction: string): ResourceType | undefin
         resourceType: item.resourceType,
         score: compactSearchText(keyword).length
       }))
-  ).sort((left, right) => right.score - left.score || left.resourceIndex - right.resourceIndex)[0]?.resourceType;
+  ).sort((left, right) => right.score - left.score || left.resourceIndex - right.resourceIndex)[0]
+    ?.resourceType;
 }
 
 function findResourceTypes(normalizedInstruction: string): ResourceType[] {
@@ -625,7 +740,9 @@ function findResourceTypes(normalizedInstruction: string): ResourceType[] {
   const selectedMatches: typeof matches = [];
 
   for (const match of matches) {
-    if (selectedMatches.some((selectedMatch) => selectedMatch.resourceType === match.resourceType)) {
+    if (
+      selectedMatches.some((selectedMatch) => selectedMatch.resourceType === match.resourceType)
+    ) {
       continue;
     }
 
@@ -641,7 +758,9 @@ function findResourceTypes(normalizedInstruction: string): ResourceType[] {
   }
 
   return selectedMatches
-    .sort((left, right) => left.textIndex - right.textIndex || left.resourceIndex - right.resourceIndex)
+    .sort(
+      (left, right) => left.textIndex - right.textIndex || left.resourceIndex - right.resourceIndex
+    )
     .map((match) => match.resourceType);
 }
 
@@ -712,7 +831,8 @@ function isNodeDependentOn(node: ResourceNode, rootNode: ResourceNode): boolean 
     return (
       doesConfigReferenceNode(node.config, rootNode) ||
       (node.type === "SUBNET" && includesAnyPhrase(normalizeSearchText(node.id), ["subnet"])) ||
-      (node.type === "SECURITY_GROUP" && includesAnyPhrase(normalizeSearchText(node.id), ["security", "sg"]))
+      (node.type === "SECURITY_GROUP" &&
+        includesAnyPhrase(normalizeSearchText(node.id), ["security", "sg"]))
     );
   }
 
@@ -750,11 +870,21 @@ function inferServiceExpansionResourceType(
   normalizedInstruction: string,
   existingNodes: readonly ResourceNode[]
 ): ResourceType | undefined {
-  const hasResourceType = (resourceType: ResourceType) => existingNodes.some((node) => node.type === resourceType);
+  const hasResourceType = (resourceType: ResourceType) =>
+    existingNodes.some((node) => node.type === resourceType);
   const hasStaticWebsiteIntent = isStaticSiteIntent(normalizedInstruction);
 
   if (
-    includesAnyPhrase(normalizedInstruction, ["로그인", "회원", "사용자", "계정", "예약", "신청", "주문", "결제"]) &&
+    includesAnyPhrase(normalizedInstruction, [
+      "로그인",
+      "회원",
+      "사용자",
+      "계정",
+      "예약",
+      "신청",
+      "주문",
+      "결제"
+    ]) &&
     !hasResourceType("RDS")
   ) {
     return "RDS";
@@ -765,7 +895,15 @@ function inferServiceExpansionResourceType(
   }
 
   if (
-    includesAnyPhrase(normalizedInstruction, ["파일 업로드", "업로드", "이미지", "첨부", "정적", "웹사이트", "사이트"]) &&
+    includesAnyPhrase(normalizedInstruction, [
+      "파일 업로드",
+      "업로드",
+      "이미지",
+      "첨부",
+      "정적",
+      "웹사이트",
+      "사이트"
+    ]) &&
     !hasResourceType("S3")
   ) {
     return "S3";
@@ -894,7 +1032,9 @@ function resolveTarget(
 
     return {
       status: "needs_clarification",
-      candidates: (mentionedNodes.length > 0 ? mentionedNodes : architectureJson.nodes).map(toClarificationCandidate)
+      candidates: (mentionedNodes.length > 0 ? mentionedNodes : architectureJson.nodes).map(
+        toClarificationCandidate
+      )
     };
   }
 
@@ -924,18 +1064,24 @@ function resolveTarget(
 
   return {
     status: "needs_clarification",
-    candidates: (matchingNodes.length > 0 ? matchingNodes : architectureJson.nodes).map(toClarificationCandidate)
+    candidates: (matchingNodes.length > 0 ? matchingNodes : architectureJson.nodes).map(
+      toClarificationCandidate
+    )
   };
 }
 
 function findMentionedNodes(nodes: readonly ResourceNode[], instruction: string): ResourceNode[] {
   const normalizedInstruction = normalizeSearchText(instruction);
 
-  return nodes.filter((node) => nodeSearchAliases(node).some((alias) => includesPhrase(normalizedInstruction, alias)));
+  return nodes.filter((node) =>
+    nodeSearchAliases(node).some((alias) => includesPhrase(normalizedInstruction, alias))
+  );
 }
 
 function nodeSearchAliases(node: ResourceNode): string[] {
-  return [node.id, node.label].filter((alias): alias is string => alias !== undefined && alias.trim().length > 0);
+  return [node.id, node.label].filter(
+    (alias): alias is string => alias !== undefined && alias.trim().length > 0
+  );
 }
 
 function getAddResourcePurposeSuggestions(resourceType: ResourceType): readonly string[] {
@@ -1259,26 +1405,30 @@ function addEc2RuntimeBundle(
 ): ArchitectureJson {
   const nextNodes = [...architectureJson.nodes];
   const basePosition = getNewResourcePosition(nextNodes);
-  const vpcNode = findBestNode(nextNodes, ["VPC"]) ?? createBundleNode("VPC", nextNodes, {
-    label: "VPC",
-    positionX: basePosition.positionX,
-    positionY: basePosition.positionY,
-    config: {
-      cidrBlock: "10.0.0.0/16"
-    }
-  });
+  const vpcNode =
+    findBestNode(nextNodes, ["VPC"]) ??
+    createBundleNode("VPC", nextNodes, {
+      label: "VPC",
+      positionX: basePosition.positionX,
+      positionY: basePosition.positionY,
+      config: {
+        cidrBlock: "10.0.0.0/16"
+      }
+    });
   addNodeIfMissing(nextNodes, vpcNode);
 
-  const subnetNode = findBestNode(nextNodes, ["SUBNET"]) ?? createBundleNode("SUBNET", nextNodes, {
-    label: "Public Subnet",
-    positionX: vpcNode.positionX + 90,
-    positionY: vpcNode.positionY + 160,
-    config: {
-      cidrBlock: "10.0.1.0/24",
-      mapPublicIpOnLaunch: true,
-      vpcId: createTerraformReference(vpcNode, "aws_vpc")
-    }
-  });
+  const subnetNode =
+    findBestNode(nextNodes, ["SUBNET"]) ??
+    createBundleNode("SUBNET", nextNodes, {
+      label: "Public Subnet",
+      positionX: vpcNode.positionX + 90,
+      positionY: vpcNode.positionY + 160,
+      config: {
+        cidrBlock: "10.0.1.0/24",
+        mapPublicIpOnLaunch: true,
+        vpcId: createTerraformReference(vpcNode, "aws_vpc")
+      }
+    });
   addNodeIfMissing(nextNodes, subnetNode);
 
   const securityGroupNode =
@@ -1295,16 +1445,18 @@ function addEc2RuntimeBundle(
     });
   addNodeIfMissing(nextNodes, securityGroupNode);
 
-  const amiNode = findBestNode(nextNodes, ["AMI"]) ?? createBundleNode("AMI", nextNodes, {
-    label: "Amazon Linux AMI",
-    positionX: subnetNode.positionX - 160,
-    positionY: subnetNode.positionY + 140,
-    config: {
-      mostRecent: true,
-      nameRegex: "^al2023-ami-2023.*-x86_64$",
-      owners: ["amazon"]
-    }
-  });
+  const amiNode =
+    findBestNode(nextNodes, ["AMI"]) ??
+    createBundleNode("AMI", nextNodes, {
+      label: "Amazon Linux AMI",
+      positionX: subnetNode.positionX - 160,
+      positionY: subnetNode.positionY + 140,
+      config: {
+        mostRecent: true,
+        nameRegex: "^al2023-ami-2023.*-x86_64$",
+        owners: ["amazon"]
+      }
+    });
   addNodeIfMissing(nextNodes, amiNode);
 
   const ec2Node = createBundleNode("EC2", nextNodes, {
@@ -1381,7 +1533,12 @@ function createNewResourceConfig(
   existingNodes: readonly ResourceNode[]
 ): ResourceNode["config"] {
   if (resourceType === "CLOUDFRONT") {
-    const originNode = findBestNode(existingNodes, ["S3", "EC2", "LOAD_BALANCER", "API_GATEWAY_REST_API"]);
+    const originNode = findBestNode(existingNodes, [
+      "S3",
+      "EC2",
+      "LOAD_BALANCER",
+      "API_GATEWAY_REST_API"
+    ]);
 
     return originNode ? { originResourceId: originNode.id } : {};
   }
@@ -1446,7 +1603,9 @@ function inferConnection(
   newNode: ResourceNode,
   intent: ArchitecturePatchIntent
 ): { readonly sourceNode: ResourceNode; readonly targetNode: ResourceNode } | undefined {
-  if (includesAnyPhrase(normalizeSearchText(intent.instruction), ["연결 없이", "연결하지", "따로 둘"])) {
+  if (
+    includesAnyPhrase(normalizeSearchText(intent.instruction), ["연결 없이", "연결하지", "따로 둘"])
+  ) {
     return undefined;
   }
 
@@ -1466,7 +1625,13 @@ function inferConnection(
   }
 
   if (isExternallyEnteredResource(newNode.type)) {
-    const targetNode = findBestNode(existingNodes, ["LOAD_BALANCER", "API_GATEWAY_REST_API", "CLOUDFRONT", "EC2", "LAMBDA"]);
+    const targetNode = findBestNode(existingNodes, [
+      "LOAD_BALANCER",
+      "API_GATEWAY_REST_API",
+      "CLOUDFRONT",
+      "EC2",
+      "LAMBDA"
+    ]);
 
     return targetNode ? { sourceNode: newNode, targetNode } : undefined;
   }
@@ -1491,14 +1656,32 @@ function inferConnection(
     return sourceNode ? { sourceNode, targetNode: newNode } : undefined;
   }
 
-  if (newNode.type === "S3" && includesAnyPhrase(normalizeSearchText(intent.instruction), ["정적", "웹사이트", "cdn", "배포"])) {
-    const sourceNode = findBestNode(existingNodes, ["CLOUDFRONT", "API_GATEWAY_REST_API", "LOAD_BALANCER", "EC2", "LAMBDA"]);
+  if (
+    newNode.type === "S3" &&
+    includesAnyPhrase(normalizeSearchText(intent.instruction), ["정적", "웹사이트", "cdn", "배포"])
+  ) {
+    const sourceNode = findBestNode(existingNodes, [
+      "CLOUDFRONT",
+      "API_GATEWAY_REST_API",
+      "LOAD_BALANCER",
+      "EC2",
+      "LAMBDA"
+    ]);
 
     return sourceNode ? { sourceNode, targetNode: newNode } : undefined;
   }
 
-  if (["RDS", "S3", "CLOUDWATCH_LOG_GROUP", "SECRETS_MANAGER_SECRET", "KMS_KEY"].includes(newNode.type)) {
-    const sourceNode = findBestNode(existingNodes, ["EC2", "LAMBDA", "API_GATEWAY_REST_API", "LOAD_BALANCER"]);
+  if (
+    ["RDS", "S3", "CLOUDWATCH_LOG_GROUP", "SECRETS_MANAGER_SECRET", "KMS_KEY"].includes(
+      newNode.type
+    )
+  ) {
+    const sourceNode = findBestNode(existingNodes, [
+      "EC2",
+      "LAMBDA",
+      "API_GATEWAY_REST_API",
+      "LOAD_BALANCER"
+    ]);
 
     return sourceNode ? { sourceNode, targetNode: newNode } : undefined;
   }
@@ -1515,7 +1698,12 @@ function inferConnection(
     return sourceNode ? { sourceNode, targetNode: newNode } : undefined;
   }
 
-  const sourceNode = findBestNode(existingNodes, ["EC2", "LAMBDA", "API_GATEWAY_REST_API", "LOAD_BALANCER"]);
+  const sourceNode = findBestNode(existingNodes, [
+    "EC2",
+    "LAMBDA",
+    "API_GATEWAY_REST_API",
+    "LOAD_BALANCER"
+  ]);
 
   return sourceNode ? { sourceNode, targetNode: newNode } : undefined;
 }
@@ -1526,9 +1714,7 @@ function addSpecificConnectionEdge(
   targetNode: ResourceNode,
   label: string
 ): ArchitectureJson["edges"] {
-  if (
-    edges.some((edge) => edge.sourceId === sourceNode.id && edge.targetId === targetNode.id)
-  ) {
+  if (edges.some((edge) => edge.sourceId === sourceNode.id && edge.targetId === targetNode.id)) {
     return edges;
   }
 
@@ -1550,7 +1736,13 @@ function isStaticSiteIntent(normalizedInstruction: string): boolean {
 }
 
 function isExternallyEnteredResource(resourceType: ResourceType): boolean {
-  return ["ROUTE53_RECORD", "WAF_WEB_ACL", "CLOUDFRONT", "LOAD_BALANCER", "API_GATEWAY_REST_API"].includes(resourceType);
+  return [
+    "ROUTE53_RECORD",
+    "WAF_WEB_ACL",
+    "CLOUDFRONT",
+    "LOAD_BALANCER",
+    "API_GATEWAY_REST_API"
+  ].includes(resourceType);
 }
 
 function findBestNode(
@@ -1625,7 +1817,9 @@ function findEc2InstanceType(normalizedInstruction: string): string | undefined 
   );
 }
 
-function getNewResourcePosition(nodes: readonly ResourceNode[]): Pick<ResourceNode, "positionX" | "positionY"> {
+function getNewResourcePosition(
+  nodes: readonly ResourceNode[]
+): Pick<ResourceNode, "positionX" | "positionY"> {
   if (nodes.length === 0) {
     return {
       positionX: 160,
@@ -1642,7 +1836,10 @@ function getNewResourcePosition(nodes: readonly ResourceNode[]): Pick<ResourceNo
   };
 }
 
-function createUniqueResourceId(resourceType: ResourceType, nodes: readonly ResourceNode[]): string {
+function createUniqueResourceId(
+  resourceType: ResourceType,
+  nodes: readonly ResourceNode[]
+): string {
   const baseId = resourceType.toLowerCase().replace(/_/g, "-");
   const existingIds = new Set(nodes.map((node) => node.id));
   let sequence = nodes.length + 1;
@@ -1660,7 +1857,10 @@ function createPreviewResourceId(baseId: string, sequence: number): string {
   return `${baseId}-${sequence}`;
 }
 
-function createUniqueEdgeId(baseId: string, edges: readonly ArchitectureJson["edges"][number][]): string {
+function createUniqueEdgeId(
+  baseId: string,
+  edges: readonly ArchitectureJson["edges"][number][]
+): string {
   const existingIds = new Set(edges.map((edge) => edge.id));
 
   if (!existingIds.has(baseId)) {
@@ -1727,7 +1927,9 @@ function _applyPreviewChanges(
   architectureJson: ArchitectureJson,
   changes: readonly ArchitecturePatchPreviewChange[]
 ): ArchitectureJson {
-  const addChanges = changes.filter((change) => change.action === "add_resource" && change.resourceType !== undefined);
+  const addChanges = changes.filter(
+    (change) => change.action === "add_resource" && change.resourceType !== undefined
+  );
 
   if (addChanges.length === 0) {
     return architectureJson;
@@ -1745,7 +1947,8 @@ function _applyPreviewChanges(
     nextNodes.push({
       id: _createResourceId(resourceType, nextNodes.length + 1),
       type: resourceType,
-      label: RESOURCE_KEYWORDS.find((item) => item.resourceType === resourceType)?.label ?? resourceType,
+      label:
+        RESOURCE_KEYWORDS.find((item) => item.resourceType === resourceType)?.label ?? resourceType,
       positionX: 160 + nextNodes.length * 80,
       positionY: 160 + nextNodes.length * 40,
       config: {}

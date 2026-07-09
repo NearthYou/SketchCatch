@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { DiagramJson } from "../../../../packages/types/src";
+import { useAuth } from "../../components/auth/auth-provider";
 import { DiagramEditor } from "../diagram-editor";
 import { EMPTY_DIAGRAM } from "../diagram-editor/constants";
 import { WorkspaceAiChatDock } from "./WorkspaceAiChatDock";
@@ -78,6 +79,7 @@ export function ProjectWorkspaceDraftManager({
   serverCheckpointIntervalMs = SERVER_CHECKPOINT_INTERVAL_MS,
   workspaceId
 }: ProjectWorkspaceDraftManagerProps) {
+  const { user } = useAuth();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [initialDiagram, setInitialDiagram] = useState<DiagramJson | null>(null);
   const [localSaveState, setLocalSaveState] = useState<ProjectLocalSaveState>("idle");
@@ -104,6 +106,8 @@ export function ProjectWorkspaceDraftManager({
   const serverSaveToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onDraftPersistenceReadyRef =
     useRef<ProjectWorkspaceDraftManagerProps["onDraftPersistenceReady"]>(onDraftPersistenceReady);
+  const workspaceUserName =
+    user?.nickname?.trim() || user?.username?.trim() || user?.email?.trim() || "Personal workspace";
 
   const setCurrentLocalDraft = useCallback((draft: LocalProjectDraft | null) => {
     localDraftRef.current = draft;
@@ -448,6 +452,7 @@ export function ProjectWorkspaceDraftManager({
         onDiagramChange={handleDiagramChange}
         onDiagramSaveRequest={() => flushDraftToServer("manual")}
         projectName={projectName}
+        workspaceUserName={workspaceUserName}
         rightPanel={(context) => (
           <WorkspaceRightPanel
             context={context}

@@ -100,12 +100,20 @@ const resourceTypeAliases: Record<string, string> = {
 
 export function getVisibleDefinitions(definitions: readonly ParameterCatalogDefinition[]) {
   return getConfigurableDefinitions(definitions).sort(
-    (left, right) => Number(right.required) - Number(left.required)
+    (left, right) =>
+      Number(right.required) - Number(left.required) ||
+      Number(right.core ?? false) - Number(left.core ?? false)
   );
 }
 
 export function getRequiredDefinitions(definitions: readonly ParameterCatalogDefinition[]) {
   return getVisibleDefinitions(definitions).filter((definition) => definition.required);
+}
+
+export function getMainDefinitions(definitions: readonly ParameterCatalogDefinition[]) {
+  return getVisibleDefinitions(definitions).filter(
+    (definition) => definition.required || definition.core
+  );
 }
 
 export function getOptionalDefinitions(definitions: readonly ParameterCatalogDefinition[]) {
@@ -118,9 +126,10 @@ export function getActiveOptionalDefinitions(
   definitions: readonly ParameterCatalogDefinition[],
   values: Record<string, unknown>
 ) {
-  return getOptionalDefinitions(definitions).filter((definition) =>
-    Object.prototype.hasOwnProperty.call(values, definition.name) &&
-    !isEmptyParameterValue(values[definition.name])
+  return getOptionalDefinitions(definitions).filter(
+    (definition) =>
+      Object.prototype.hasOwnProperty.call(values, definition.name) &&
+      !isEmptyParameterValue(values[definition.name])
   );
 }
 
@@ -128,7 +137,10 @@ export function getValidationDefinitions(
   definitions: readonly ParameterCatalogDefinition[],
   values: Record<string, unknown>
 ) {
-  return [...getRequiredDefinitions(definitions), ...getActiveOptionalDefinitions(definitions, values)];
+  return [
+    ...getRequiredDefinitions(definitions),
+    ...getActiveOptionalDefinitions(definitions, values)
+  ];
 }
 
 function getConfigurableDefinitions(definitions: readonly ParameterCatalogDefinition[]) {
@@ -180,7 +192,8 @@ export function mergeNodeParameters(
     ...defaults,
     ...node.parameters,
     terraformBlockType: node.parameters.terraformBlockType ?? defaults.terraformBlockType,
-    resourceType: normalizeResourceType(node.parameters.resourceType, catalog) ?? defaults.resourceType,
+    resourceType:
+      normalizeResourceType(node.parameters.resourceType, catalog) ?? defaults.resourceType,
     resourceName: node.parameters.resourceName || defaults.resourceName,
     fileName: node.parameters.fileName || defaults.fileName,
     values: node.parameters.values ?? defaults.values
@@ -202,8 +215,7 @@ export function validateParameters(
   if (!trimmedResourceName) {
     metadataErrors.resourceName = "Resource name은 필수입니다.";
   } else if (!terraformLocalNamePattern.test(trimmedResourceName)) {
-    metadataErrors.resourceName =
-      "영문자 또는 _로 시작하고 영문자, 숫자, _만 사용할 수 있습니다.";
+    metadataErrors.resourceName = "영문자 또는 _로 시작하고 영문자, 숫자, _만 사용할 수 있습니다.";
   } else if (hasDuplicateResourceName(params, nodes, currentNodeId, catalog)) {
     metadataErrors.resourceName = "같은 resource type 안에서 이미 사용 중인 이름입니다.";
   }
@@ -488,9 +500,10 @@ function hasReferenceTarget(
 }
 
 function parseTerraformReference(value: string) {
-  const match = /^(data\.)?(aws_[A-Za-z0-9_]+)\.([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)$/.exec(
-    value
-  );
+  const match =
+    /^(data\.)?(aws_[A-Za-z0-9_]+)\.([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)$/.exec(
+      value
+    );
 
   if (!match) {
     return null;

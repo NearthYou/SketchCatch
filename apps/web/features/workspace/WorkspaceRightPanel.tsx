@@ -2,6 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
+  CSSProperties,
+  KeyboardEvent as ReactKeyboardEvent,
+  PointerEvent as ReactPointerEvent
+} from "react";
+import type {
   CheckFinding,
   TerraformDiagnostic,
   TerraformSourceLocation,
@@ -9,7 +14,6 @@ import type {
 } from "@sketchcatch/types";
 import { createPortal } from "react-dom";
 import {
-  AlertCircle,
   Code2,
   GalleryVerticalEnd,
   PanelRightClose,
@@ -74,8 +78,12 @@ type PendingTerraformLeaveAction =
   | { readonly kind: "view"; readonly view: WorkspaceRightPanelView }
   | { readonly kind: "deployment-console" }
   | { readonly kind: "right-panel-close" }
-  | { readonly kind: "resource-settings" }
   | { readonly kind: "replay-click"; readonly target: HTMLElement };
+
+const DEFAULT_TERRAFORM_CODE_PANE_RATIO = 62;
+const MIN_TERRAFORM_CODE_PANE_RATIO = 32;
+const MAX_TERRAFORM_CODE_PANE_RATIO = 78;
+const TERRAFORM_SPLIT_KEYBOARD_STEP = 4;
 
 // 오른쪽 패널은 작업 중 필요한 모드만 노출하고, Reverse는 새 프로젝트 시작 흐름에서만 진입하게 둡니다.
 export function WorkspaceRightPanel({
@@ -89,7 +97,9 @@ export function WorkspaceRightPanel({
   terraformSafeFixApplyRequest
 }: WorkspaceRightPanelProps) {
   const terraformPanelRef = useRef<TerraformCodePanelHandle | null>(null);
+  const terraformSplitRef = useRef<HTMLDivElement | null>(null);
   const terraformViewRef = useRef<HTMLDivElement | null>(null);
+  const terraformIssuesPaneRef = useRef<HTMLDivElement | null>(null);
   const pendingTerraformLeaveActionRef = useRef<PendingTerraformLeaveAction | null>(null);
   const skipTerraformLeaveGuardRef = useRef(false);
   const latestTerraformDiagnosticsRef = useRef<TerraformDiagnostic[]>([]);
@@ -110,6 +120,9 @@ export function WorkspaceRightPanel({
   const [terraformLeaveSaveMessage, setTerraformLeaveSaveMessage] = useState("");
   const [terraformSaveRequestId, setTerraformSaveRequestId] = useState(0);
   const [terraformDiscardRequestId, setTerraformDiscardRequestId] = useState(0);
+  const [terraformCodePaneRatio, setTerraformCodePaneRatio] = useState(
+    DEFAULT_TERRAFORM_CODE_PANE_RATIO
+  );
   const [terraformIssues, setTerraformIssues] = useState<TerraformIssueRecord[]>([]);
   const [loadedTerraformIssuesProjectId, setLoadedTerraformIssuesProjectId] = useState<string | null>(null);
   const [preDeploymentCheckState, setPreDeploymentCheckState] =
@@ -252,12 +265,6 @@ export function WorkspaceRightPanel({
         return;
       }
 
-      if (pendingAction.kind === "resource-settings") {
-        setResourceWorkspaceView("settings");
-        setActiveView("resource");
-        return;
-      }
-
       pendingAction.target.click();
     } finally {
       window.setTimeout(() => {
@@ -276,17 +283,82 @@ export function WorkspaceRightPanel({
       return;
     }
 
-    if (nextView === "issues") {
-      setActiveView("issues");
-      return;
-    }
-
     if (!requestTerraformLeave({ kind: "view", view: nextView })) {
       return;
     }
 
     setActiveView(nextView);
   }, [activeView, requestTerraformLeave]);
+
+  const focusTerraformIssuesPane = useCallback((): void => {
+    context.setRightPanelOpen(true);
+    setActiveView("terraform");
+    window.requestAnimationFrame(() => {
+      terraformIssuesPaneRef.current?.focus({ preventScroll: true });
+    });
+  }, [context]);
+
+  const startTerraformSplitResize = useCallback((event: ReactPointerEvent<HTMLDivElement>): void => {
+    const splitElement = terraformSplitRef.current;
+
+    if (!splitElement) {
+      return;
+    }
+
+    event.preventDefault();
+    const splitBounds = splitElement.getBoundingClientRect();
+    const resizeHandle = event.currentTarget;
+    const pointerId = event.pointerId;
+
+    resizeHandle.setPointerCapture(pointerId);
+
+    const updateTerraformCodePaneRatio = (clientY: number): void => {
+      const nextRatio = ((clientY - splitBounds.top) / splitBounds.height) * 100;
+      setTerraformCodePaneRatio(clampTerraformCodePaneRatio(nextRatio));
+    };
+
+    const handlePointerMove = (pointerEvent: PointerEvent): void => {
+      updateTerraformCodePaneRatio(pointerEvent.clientY);
+    };
+
+    const stopTerraformSplitResize = (): void => {
+      if (resizeHandle.hasPointerCapture(pointerId)) {
+        resizeHandle.releasePointerCapture(pointerId);
+      }
+
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", stopTerraformSplitResize);
+      window.removeEventListener("pointercancel", stopTerraformSplitResize);
+    };
+
+    updateTerraformCodePaneRatio(event.clientY);
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", stopTerraformSplitResize);
+    window.addEventListener("pointercancel", stopTerraformSplitResize);
+  }, []);
+
+  const handleTerraformSplitKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>): void => {
+    if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) {
+      return;
+    }
+
+    event.preventDefault();
+    setTerraformCodePaneRatio((currentRatio) => {
+      if (event.key === "Home") {
+        return MIN_TERRAFORM_CODE_PANE_RATIO;
+      }
+
+      if (event.key === "End") {
+        return MAX_TERRAFORM_CODE_PANE_RATIO;
+      }
+
+      const delta = event.key === "ArrowUp"
+        ? -TERRAFORM_SPLIT_KEYBOARD_STEP
+        : TERRAFORM_SPLIT_KEYBOARD_STEP;
+
+      return clampTerraformCodePaneRatio(currentRatio + delta);
+    });
+  }, []);
 
   const openDeploymentConsole = useCallback((): void => {
     if (!requestTerraformLeave({ kind: "deployment-console" })) {
@@ -380,12 +452,6 @@ export function WorkspaceRightPanel({
     if (nextView === "terraform") {
       context.setRightPanelOpen(true);
       setActiveView("terraform");
-      return;
-    }
-
-    if (nextView === "issues") {
-      context.setRightPanelOpen(true);
-      setActiveView("issues");
       return;
     }
 
@@ -490,10 +556,6 @@ export function WorkspaceRightPanel({
         return;
       }
 
-      if (isTerraformIssuesNavigationTarget(target)) {
-        return;
-      }
-
       if (isTerraformIssueAiResolutionTarget(target)) {
         return;
       }
@@ -559,6 +621,9 @@ export function WorkspaceRightPanel({
   const deploymentConsole = deploymentConsoleContent
     ? createPortal(deploymentConsoleContent, document.body)
     : null;
+  const terraformSplitStyle = {
+    "--terraform-code-pane-ratio": `${terraformCodePaneRatio}%`
+  } as CSSProperties;
 
   if (!context.isRightPanelOpen) {
     return (
@@ -588,15 +653,6 @@ export function WorkspaceRightPanel({
             type="button"
           >
             <Code2 size={18} aria-hidden="true" />
-          </button>
-          <button
-            className={styles.collapsedPanelButton}
-            data-terraform-issues-navigation
-            onClick={() => openCollapsedView("issues")}
-            title="Issues"
-            type="button"
-          >
-            <AlertCircle size={18} aria-hidden="true" />
             <span className={hasTerraformIssueErrors ? styles.panelIssueBadgeError : styles.panelIssueBadge}>
               {terraformDiagnostics.length}
             </span>
@@ -648,28 +704,14 @@ export function WorkspaceRightPanel({
               type="button"
             >
               <Code2 size={16} aria-hidden="true" />
+              <span
+                className={hasTerraformIssueErrors ? styles.panelIssueBadgeError : styles.panelIssueBadge}
+                aria-label={`${terraformDiagnostics.length} issues`}
+              >
+                {terraformDiagnostics.length}
+              </span>
             </button>
           </div>
-          <button
-            aria-pressed={activeView === "issues"}
-            className={
-              activeView === "issues"
-                ? `${styles.panelModeTextButton} ${styles.panelModeTextButtonActive}`
-                : styles.panelModeTextButton
-            }
-            data-terraform-issues-navigation
-            onClick={() => requestView("issues")}
-            type="button"
-          >
-            <AlertCircle size={14} aria-hidden="true" />
-            <span>Issues</span>
-            <span
-              className={hasTerraformIssueErrors ? styles.panelIssueBadgeError : styles.panelIssueBadge}
-              aria-label={`${terraformDiagnostics.length} issues`}
-            >
-              {terraformDiagnostics.length}
-            </span>
-          </button>
           <button
             className={styles.panelModeTextButton}
             onClick={openDeploymentConsole}
@@ -689,29 +731,45 @@ export function WorkspaceRightPanel({
           />
         </div>
         <div ref={terraformViewRef} className={styles.rightPanelView} hidden={activeView !== "terraform"}>
-          <TerraformCodePanel
-            ref={terraformPanelRef}
-            context={context}
-            externalDiscardRequestId={terraformDiscardRequestId}
-            externalSaveRequestId={terraformSaveRequestId}
-            isVisible={activeView === "terraform"}
-            onDiagnosticsChange={handleTerraformDiagnosticsChange}
-            onDirtyChange={handleTerraformDirtyChange}
-            onExternalSaveComplete={handleTerraformExternalSaveComplete}
-            onOpenIssues={() => requestView("issues")}
-            onOpenResourceSettings={() => {
-              if (!requestTerraformLeave({ kind: "resource-settings" })) {
-                return;
-              }
-
-              setResourceWorkspaceView("settings");
-              setActiveView("resource");
-            }}
-            onTerraformPreviewAiRequest={onTerraformPreviewAiRequest}
-          />
-        </div>
-        <div className={styles.rightPanelView} hidden={activeView !== "issues"}>
-          <TerraformIssuesPanel issues={terraformIssues} onResolveWithAi={handleTerraformIssueAiClick} />
+          <div
+            className={styles.terraformSplitLayout}
+            ref={terraformSplitRef}
+            style={terraformSplitStyle}
+          >
+            <div className={styles.terraformCodePane}>
+              <TerraformCodePanel
+                ref={terraformPanelRef}
+                context={context}
+                externalDiscardRequestId={terraformDiscardRequestId}
+                externalSaveRequestId={terraformSaveRequestId}
+                isVisible={activeView === "terraform"}
+                onDiagnosticsChange={handleTerraformDiagnosticsChange}
+                onDirtyChange={handleTerraformDirtyChange}
+                onExternalSaveComplete={handleTerraformExternalSaveComplete}
+                onOpenIssues={focusTerraformIssuesPane}
+                onTerraformPreviewAiRequest={onTerraformPreviewAiRequest}
+              />
+            </div>
+            <div
+              aria-label="Resize Terraform code and issues panels"
+              aria-orientation="horizontal"
+              aria-valuemax={MAX_TERRAFORM_CODE_PANE_RATIO}
+              aria-valuemin={MIN_TERRAFORM_CODE_PANE_RATIO}
+              aria-valuenow={terraformCodePaneRatio}
+              className={styles.terraformSplitResizeHandle}
+              onKeyDown={handleTerraformSplitKeyDown}
+              onPointerDown={startTerraformSplitResize}
+              role="separator"
+              tabIndex={0}
+            />
+            <div
+              className={styles.terraformIssuesPane}
+              ref={terraformIssuesPaneRef}
+              tabIndex={-1}
+            >
+              <TerraformIssuesPanel issues={terraformIssues} onResolveWithAi={handleTerraformIssueAiClick} />
+            </div>
+          </div>
         </div>
         {showTerraformLeaveDialog ? (
           <TerraformLeaveDialog
@@ -725,6 +783,13 @@ export function WorkspaceRightPanel({
       </aside>
       {deploymentConsole}
     </>
+  );
+}
+
+function clampTerraformCodePaneRatio(ratio: number): number {
+  return Math.min(
+    MAX_TERRAFORM_CODE_PANE_RATIO,
+    Math.max(MIN_TERRAFORM_CODE_PANE_RATIO, Math.round(ratio))
   );
 }
 
@@ -758,10 +823,6 @@ function isTerraformLeaveGuardIgnoredTarget(target: Node): boolean {
 
 function isTerraformEditorNavigationTarget(target: Node): boolean {
   return target instanceof Element && Boolean(target.closest("[data-terraform-editor-navigation]"));
-}
-
-function isTerraformIssuesNavigationTarget(target: Node): boolean {
-  return target instanceof Element && Boolean(target.closest("[data-terraform-issues-navigation]"));
 }
 
 function isTerraformIssueAiResolutionTarget(target: Node): boolean {

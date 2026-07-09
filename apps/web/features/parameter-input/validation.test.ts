@@ -5,6 +5,7 @@ import type { ParameterCatalog } from "./catalog";
 import type { ParameterCatalogDefinition } from "./catalog";
 import {
   getActiveOptionalDefinitions,
+  getMainDefinitions,
   getOptionalDefinitions,
   getRequiredDefinitions,
   getValidationDefinitions,
@@ -14,13 +15,27 @@ import {
 test("getRequiredDefinitions returns only provider-required parameters", () => {
   const definitions = [
     makeDefinition({ name: "cidrBlock", required: true }),
-    makeDefinition({ name: "tags", optional: true }),
+    makeDefinition({ name: "tags", optional: true, core: true }),
     makeDefinition({ name: "arn", computed: true })
   ];
 
   assert.deepEqual(
     getRequiredDefinitions(definitions).map((definition) => definition.name),
     ["cidrBlock"]
+  );
+});
+
+test("getMainDefinitions includes provider-required and core parameters", () => {
+  const definitions = [
+    makeDefinition({ name: "cidrBlock", required: true }),
+    makeDefinition({ name: "name", optional: true, core: true }),
+    makeDefinition({ name: "tags", optional: true }),
+    makeDefinition({ name: "arn", computed: true })
+  ];
+
+  assert.deepEqual(
+    getMainDefinitions(definitions).map((definition) => definition.name),
+    ["cidrBlock", "name"]
   );
 });
 
@@ -109,11 +124,14 @@ test("getValidationDefinitions ignores uncataloged raw editor values", () => {
 
 function makeDefinition({
   computed = false,
+  core = false,
   name,
   optional = false,
   required = false,
   type = "string"
-}: Partial<Pick<ParameterCatalogDefinition, "computed" | "optional" | "required" | "type">> &
+}: Partial<
+  Pick<ParameterCatalogDefinition, "computed" | "core" | "optional" | "required" | "type">
+> &
   Pick<ParameterCatalogDefinition, "name">): ParameterCatalogDefinition {
   return {
     name,
@@ -123,6 +141,7 @@ function makeDefinition({
     required,
     optional,
     computed,
+    core,
     sensitive: false,
     inputKind: "text"
   };

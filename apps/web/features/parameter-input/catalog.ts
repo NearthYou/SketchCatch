@@ -1,5 +1,628 @@
-export {
-  terraformAwsParameterCatalog,
-  terraformParameterCatalog
-} from "./catalog.generated";
+import { resourceDefinitions } from "@sketchcatch/types/resource-definitions";
+import { terraformAwsParameterCatalog as generatedTerraformAwsParameterCatalog } from "./catalog.generated";
+import type { ParameterCatalog, ParameterCatalogDefinition } from "./catalog.generated";
+
 export type { ParameterCatalog, ParameterCatalogDefinition } from "./catalog.generated";
+
+type FieldInput = Omit<
+  ParameterCatalogDefinition,
+  "computed" | "inputKind" | "optional" | "required" | "sensitive" | "type"
+> &
+  Partial<
+    Pick<
+      ParameterCatalogDefinition,
+      "computed" | "core" | "inputKind" | "optional" | "required" | "sensitive" | "type"
+    >
+  >;
+
+const commonTags = field({
+  name: "tags",
+  terraformName: "tags",
+  label: "Tags",
+  type: "map",
+  inputKind: "key-value",
+  core: true,
+  description: "AWS 콘솔과 비용 추적에서 리소스를 구분하기 위한 key-value 태그입니다."
+});
+
+const priorityResourceFallbacks: Record<string, readonly ParameterCatalogDefinition[]> = {
+  aws_route: [
+    ref("routeTableId", "route_table_id", "Route table", ["aws_route_table"]),
+    core("destinationCidrBlock", "destination_cidr_block", "Destination CIDR", "0.0.0.0/0"),
+    ref("gatewayId", "gateway_id", "Gateway", ["aws_internet_gateway"], false),
+    ref("natGatewayId", "nat_gateway_id", "NAT gateway", ["aws_nat_gateway"], false),
+    ref(
+      "vpcPeeringConnectionId",
+      "vpc_peering_connection_id",
+      "VPC peering",
+      ["aws_vpc_peering_connection"],
+      false
+    )
+  ],
+  aws_network_acl: [
+    ref("vpcId", "vpc_id", "VPC", ["aws_vpc"]),
+    list("subnetIds", "subnet_ids", "Subnets"),
+    commonTags
+  ],
+  aws_network_acl_rule: [
+    ref("networkAclId", "network_acl_id", "Network ACL", ["aws_network_acl"]),
+    number("ruleNumber", "rule_number", "Rule number", true, "100"),
+    select("ruleAction", "rule_action", "Rule action", ["allow", "deny"], true),
+    select("protocol", "protocol", "Protocol", ["tcp", "udp", "icmp", "-1"], true),
+    boolean("egress", "egress", "Egress"),
+    core("cidrBlock", "cidr_block", "CIDR block", "0.0.0.0/0"),
+    number("fromPort", "from_port", "From port", false, "443"),
+    number("toPort", "to_port", "To port", false, "443")
+  ],
+  aws_cloudfront_origin_access_control: [
+    required("name", "name", "Name"),
+    select(
+      "originAccessControlOriginType",
+      "origin_access_control_origin_type",
+      "Origin type",
+      ["s3", "mediastore", "mediapackagev2", "lambda"],
+      true
+    ),
+    select(
+      "signingBehavior",
+      "signing_behavior",
+      "Signing behavior",
+      ["always", "never", "no-override"],
+      true
+    ),
+    select("signingProtocol", "signing_protocol", "Signing protocol", ["sigv4"], true)
+  ],
+  aws_cloudfront_cache_policy: [
+    required("name", "name", "Name"),
+    core("comment", "comment", "Comment"),
+    number("defaultTtl", "default_ttl", "Default TTL", false, "86400"),
+    number("maxTtl", "max_ttl", "Max TTL", false, "31536000"),
+    number("minTtl", "min_ttl", "Min TTL", false, "0")
+  ],
+  aws_cloudfront_origin_request_policy: [
+    required("name", "name", "Name"),
+    core("comment", "comment", "Comment")
+  ],
+  aws_route53_record: [
+    ref("zoneId", "zone_id", "Hosted zone", ["aws_route53_zone"]),
+    required("name", "name", "Record name"),
+    select("type", "type", "Record type", ["A", "AAAA", "CNAME", "TXT", "MX", "NS"], true),
+    number("ttl", "ttl", "TTL", false, "300"),
+    list("records", "records", "Records")
+  ],
+  aws_route53_zone: [
+    required("name", "name", "Zone name", "example.com"),
+    core("comment", "comment", "Comment"),
+    commonTags
+  ],
+  aws_wafv2_web_acl: [
+    required("name", "name", "Name"),
+    select("scope", "scope", "Scope", ["REGIONAL", "CLOUDFRONT"], true),
+    core("description", "description", "Description"),
+    commonTags
+  ],
+  aws_wafv2_web_acl_association: [
+    required("resourceArn", "resource_arn", "Resource ARN"),
+    required("webAclArn", "web_acl_arn", "Web ACL ARN")
+  ],
+  aws_vpc_peering_connection: [
+    ref("vpcId", "vpc_id", "Requester VPC", ["aws_vpc"]),
+    ref("peerVpcId", "peer_vpc_id", "Peer VPC", ["aws_vpc"]),
+    core("peerOwnerId", "peer_owner_id", "Peer owner ID"),
+    boolean("autoAccept", "auto_accept", "Auto accept"),
+    commonTags
+  ],
+  aws_iam_role_policy: [
+    ref("role", "role", "Role", ["aws_iam_role"], true, "name"),
+    required("policy", "policy", "Policy JSON")
+  ],
+  aws_iam_role_policy_attachment: [
+    ref("role", "role", "Role", ["aws_iam_role"], true, "name"),
+    ref("policyArn", "policy_arn", "Policy ARN", ["aws_iam_policy"], true, "arn")
+  ],
+  aws_kms_alias: [
+    required("name", "name", "Alias name", "alias/app-key"),
+    ref("targetKeyId", "target_key_id", "Target KMS key", ["aws_kms_key"])
+  ],
+  aws_lb: [
+    core("name", "name", "Name"),
+    select("loadBalancerType", "load_balancer_type", "Type", ["application", "network", "gateway"]),
+    list("subnets", "subnets", "Subnets"),
+    list("securityGroups", "security_groups", "Security groups"),
+    commonTags
+  ],
+  aws_lb_target_group: [
+    core("name", "name", "Name"),
+    number("port", "port", "Port", false, "80"),
+    select("protocol", "protocol", "Protocol", ["HTTP", "HTTPS", "TCP", "TLS", "UDP"]),
+    ref("vpcId", "vpc_id", "VPC", ["aws_vpc"], false),
+    commonTags
+  ],
+  aws_lb_target_group_attachment: [
+    ref("targetGroupArn", "target_group_arn", "Target group", ["aws_lb_target_group"], true, "arn"),
+    required("targetId", "target_id", "Target ID"),
+    number("port", "port", "Port", false, "80")
+  ],
+  aws_lb_listener: [
+    ref("loadBalancerArn", "load_balancer_arn", "Load balancer", ["aws_lb"], true, "arn"),
+    number("port", "port", "Port", true, "443"),
+    select("protocol", "protocol", "Protocol", ["HTTP", "HTTPS", "TCP", "TLS"], true),
+    ref("certificateArn", "certificate_arn", "Certificate", ["aws_acm_certificate"], false, "arn")
+  ],
+  aws_s3_object: [
+    ref("bucket", "bucket", "Bucket", ["aws_s3_bucket"], true, "id"),
+    required("key", "key", "Object key"),
+    core("source", "source", "Source path"),
+    core("contentType", "content_type", "Content type")
+  ],
+  aws_s3_bucket_policy: [
+    ref("bucket", "bucket", "Bucket", ["aws_s3_bucket"], true, "id"),
+    required("policy", "policy", "Policy JSON")
+  ],
+  aws_volume_attachment: [
+    required("deviceName", "device_name", "Device name", "/dev/sdf"),
+    ref("volumeId", "volume_id", "EBS volume", ["aws_ebs_volume"]),
+    ref("instanceId", "instance_id", "EC2 instance", ["aws_instance"])
+  ],
+  aws_efs_file_system: [
+    core("creationToken", "creation_token", "Creation token"),
+    boolean("encrypted", "encrypted", "Encrypted"),
+    select("performanceMode", "performance_mode", "Performance mode", ["generalPurpose", "maxIO"]),
+    select("throughputMode", "throughput_mode", "Throughput mode", [
+      "bursting",
+      "provisioned",
+      "elastic"
+    ]),
+    commonTags
+  ],
+  aws_efs_mount_target: [
+    ref("fileSystemId", "file_system_id", "EFS file system", ["aws_efs_file_system"]),
+    ref("subnetId", "subnet_id", "Subnet", ["aws_subnet"]),
+    list("securityGroups", "security_groups", "Security groups")
+  ],
+  aws_efs_access_point: [
+    ref("fileSystemId", "file_system_id", "EFS file system", ["aws_efs_file_system"]),
+    commonTags
+  ],
+  aws_rds_cluster: [
+    core("clusterIdentifier", "cluster_identifier", "Cluster identifier"),
+    select(
+      "engine",
+      "engine",
+      "Engine",
+      ["aurora-mysql", "aurora-postgresql", "mysql", "postgres"],
+      true
+    ),
+    core("databaseName", "database_name", "Database name"),
+    core("masterUsername", "master_username", "Master username"),
+    boolean("storageEncrypted", "storage_encrypted", "Storage encrypted"),
+    boolean("deletionProtection", "deletion_protection", "Deletion protection"),
+    commonTags
+  ],
+  aws_rds_cluster_instance: [
+    core("identifier", "identifier", "Identifier"),
+    ref(
+      "clusterIdentifier",
+      "cluster_identifier",
+      "RDS cluster",
+      ["aws_rds_cluster"],
+      true,
+      "cluster_identifier"
+    ),
+    required("instanceClass", "instance_class", "Instance class", "db.t3.medium"),
+    select("engine", "engine", "Engine", ["aurora-mysql", "aurora-postgresql"], true),
+    commonTags
+  ],
+  aws_elasticache_replication_group: [
+    required("replicationGroupId", "replication_group_id", "Replication group ID"),
+    core("description", "description", "Description"),
+    core("nodeType", "node_type", "Node type", "cache.t4g.micro"),
+    number("numCacheClusters", "num_cache_clusters", "Cache clusters", false, "1"),
+    boolean("automaticFailoverEnabled", "automatic_failover_enabled", "Automatic failover")
+  ],
+  aws_elasticache_subnet_group: [
+    required("name", "name", "Name"),
+    list("subnetIds", "subnet_ids", "Subnets", true),
+    core("description", "description", "Description")
+  ],
+  aws_elasticache_parameter_group: [
+    required("name", "name", "Name"),
+    required("family", "family", "Family", "redis7"),
+    core("description", "description", "Description")
+  ],
+  aws_secretsmanager_secret: [
+    core("name", "name", "Name"),
+    core("description", "description", "Description"),
+    ref("kmsKeyId", "kms_key_id", "KMS key", ["aws_kms_key"], false),
+    commonTags
+  ],
+  aws_secretsmanager_secret_version: [
+    ref("secretId", "secret_id", "Secret", ["aws_secretsmanager_secret"], true, "id"),
+    field({
+      name: "secretString",
+      terraformName: "secret_string",
+      label: "Secret string",
+      required: true,
+      sensitive: true,
+      description:
+        "Terraform state에 저장될 수 있으므로 실제 운영 secret 입력은 승인된 경로에서만 사용하세요."
+    })
+  ],
+  aws_lambda_alias: [
+    required("name", "name", "Alias name"),
+    ref(
+      "functionName",
+      "function_name",
+      "Lambda function",
+      ["aws_lambda_function"],
+      true,
+      "function_name"
+    ),
+    required("functionVersion", "function_version", "Function version")
+  ],
+  aws_lambda_event_source_mapping: [
+    required("eventSourceArn", "event_source_arn", "Event source ARN"),
+    ref(
+      "functionName",
+      "function_name",
+      "Lambda function",
+      ["aws_lambda_function"],
+      true,
+      "function_name"
+    ),
+    number("batchSize", "batch_size", "Batch size", false, "10"),
+    boolean("enabled", "enabled", "Enabled")
+  ],
+  aws_apigatewayv2_api: [
+    required("name", "name", "Name"),
+    select("protocolType", "protocol_type", "Protocol type", ["HTTP", "WEBSOCKET"], true)
+  ],
+  aws_apigatewayv2_route: [
+    ref("apiId", "api_id", "API", ["aws_apigatewayv2_api"], true, "id"),
+    required("routeKey", "route_key", "Route key", "GET /items"),
+    core("target", "target", "Target")
+  ],
+  aws_apigatewayv2_integration: [
+    ref("apiId", "api_id", "API", ["aws_apigatewayv2_api"], true, "id"),
+    select(
+      "integrationType",
+      "integration_type",
+      "Integration type",
+      ["AWS_PROXY", "HTTP_PROXY", "MOCK"],
+      true
+    ),
+    core("integrationUri", "integration_uri", "Integration URI")
+  ],
+  aws_apigatewayv2_stage: [
+    ref("apiId", "api_id", "API", ["aws_apigatewayv2_api"], true, "id"),
+    required("name", "name", "Stage name", "$default"),
+    boolean("autoDeploy", "auto_deploy", "Auto deploy")
+  ],
+  aws_api_gateway_deployment: [
+    ref("restApiId", "rest_api_id", "REST API", ["aws_api_gateway_rest_api"], true, "id"),
+    core("stageName", "stage_name", "Stage name"),
+    core("description", "description", "Description")
+  ],
+  aws_api_gateway_stage: [
+    ref("restApiId", "rest_api_id", "REST API", ["aws_api_gateway_rest_api"], true, "id"),
+    ref("deploymentId", "deployment_id", "Deployment", ["aws_api_gateway_deployment"], true, "id"),
+    required("stageName", "stage_name", "Stage name")
+  ],
+  aws_cloudwatch_log_stream: [
+    required("name", "name", "Stream name"),
+    ref("logGroupName", "log_group_name", "Log group", ["aws_cloudwatch_log_group"], true, "name")
+  ],
+  aws_cloudwatch_log_resource_policy: [
+    required("policyName", "policy_name", "Policy name"),
+    required("policyDocument", "policy_document", "Policy document")
+  ],
+  aws_cloudwatch_event_permission: [
+    required("principal", "principal", "Principal"),
+    required("statementId", "statement_id", "Statement ID"),
+    core("action", "action", "Action", "events:PutEvents")
+  ],
+  aws_scheduler_schedule: [
+    required("name", "name", "Name"),
+    required("scheduleExpression", "schedule_expression", "Schedule expression", "rate(5 minutes)"),
+    select("state", "state", "State", ["ENABLED", "DISABLED"])
+  ],
+  aws_codebuild_project: [
+    required("name", "name", "Name"),
+    required("serviceRole", "service_role", "Service role ARN"),
+    core("description", "description", "Description")
+  ],
+  aws_codedeploy_app: [
+    required("name", "name", "Name"),
+    select("computePlatform", "compute_platform", "Compute platform", ["Server", "Lambda", "ECS"])
+  ],
+  aws_codedeploy_deployment_group: [
+    required("appName", "app_name", "App name"),
+    required("deploymentGroupName", "deployment_group_name", "Deployment group name"),
+    required("serviceRoleArn", "service_role_arn", "Service role ARN")
+  ],
+  aws_codepipeline: [required("name", "name", "Name"), required("roleArn", "role_arn", "Role ARN")],
+  aws_sns_topic_subscription: [
+    ref("topicArn", "topic_arn", "SNS topic", ["aws_sns_topic"], true, "arn"),
+    select("protocol", "protocol", "Protocol", ["http", "https", "email", "sqs", "lambda"], true),
+    required("endpoint", "endpoint", "Endpoint")
+  ],
+  aws_sqs_queue: [
+    core("name", "name", "Name"),
+    number(
+      "visibilityTimeoutSeconds",
+      "visibility_timeout_seconds",
+      "Visibility timeout",
+      false,
+      "30"
+    ),
+    commonTags
+  ],
+  aws_acm_certificate: [
+    required("domainName", "domain_name", "Domain name", "example.com"),
+    select("validationMethod", "validation_method", "Validation method", ["DNS", "EMAIL"]),
+    list("subjectAlternativeNames", "subject_alternative_names", "Subject alternative names"),
+    commonTags
+  ],
+  aws_acm_certificate_validation: [
+    ref("certificateArn", "certificate_arn", "Certificate", ["aws_acm_certificate"], true, "arn"),
+    list("validationRecordFqdns", "validation_record_fqdns", "Validation record FQDNs")
+  ],
+  aws_ecr_repository: [
+    required("name", "name", "Name"),
+    select("imageTagMutability", "image_tag_mutability", "Image tag mutability", [
+      "MUTABLE",
+      "IMMUTABLE"
+    ]),
+    commonTags
+  ],
+  aws_ecr_lifecycle_policy: [
+    ref("repository", "repository", "Repository", ["aws_ecr_repository"], true, "name"),
+    required("policy", "policy", "Lifecycle policy JSON")
+  ],
+  aws_ecs_cluster: [core("name", "name", "Name"), commonTags],
+  aws_ecs_service: [
+    required("name", "name", "Name"),
+    ref("cluster", "cluster", "ECS cluster", ["aws_ecs_cluster"], true, "id"),
+    ref(
+      "taskDefinition",
+      "task_definition",
+      "Task definition",
+      ["aws_ecs_task_definition"],
+      true,
+      "arn"
+    ),
+    number("desiredCount", "desired_count", "Desired count", false, "1")
+  ],
+  aws_ecs_task_definition: [
+    required("family", "family", "Family"),
+    select("networkMode", "network_mode", "Network mode", ["awsvpc", "bridge", "host", "none"]),
+    list("requiresCompatibilities", "requires_compatibilities", "Requires compatibilities"),
+    core("cpu", "cpu", "CPU", "256"),
+    core("memory", "memory", "Memory", "512")
+  ],
+  aws_ecs_capacity_provider: [required("name", "name", "Name"), commonTags],
+  aws_eks_cluster: [
+    required("name", "name", "Name"),
+    required("roleArn", "role_arn", "Role ARN"),
+    core("version", "version", "Kubernetes version"),
+    commonTags
+  ],
+  aws_eks_node_group: [
+    ref("clusterName", "cluster_name", "EKS cluster", ["aws_eks_cluster"], true, "name"),
+    required("nodeGroupName", "node_group_name", "Node group name"),
+    required("nodeRoleArn", "node_role_arn", "Node role ARN"),
+    list("subnetIds", "subnet_ids", "Subnets", true)
+  ],
+  aws_eks_addon: [
+    ref("clusterName", "cluster_name", "EKS cluster", ["aws_eks_cluster"], true, "name"),
+    required("addonName", "addon_name", "Add-on name")
+  ],
+  aws_config_configuration_recorder: [
+    core("name", "name", "Name"),
+    required("roleArn", "role_arn", "Role ARN")
+  ],
+  aws_config_delivery_channel: [
+    core("name", "name", "Name"),
+    required("s3BucketName", "s3_bucket_name", "S3 bucket name")
+  ],
+  aws_config_config_rule: [
+    required("name", "name", "Name"),
+    core("description", "description", "Description")
+  ],
+  aws_cloudtrail: [
+    required("name", "name", "Name"),
+    required("s3BucketName", "s3_bucket_name", "S3 bucket name"),
+    boolean(
+      "includeGlobalServiceEvents",
+      "include_global_service_events",
+      "Include global service events"
+    ),
+    boolean("isMultiRegionTrail", "is_multi_region_trail", "Multi-region trail"),
+    commonTags
+  ],
+  aws_xray_group: [
+    required("groupName", "group_name", "Group name"),
+    core("filterExpression", "filter_expression", "Filter expression")
+  ],
+  aws_xray_sampling_rule: [
+    required("ruleName", "rule_name", "Rule name"),
+    number("priority", "priority", "Priority", true, "10000"),
+    number("reservoirSize", "reservoir_size", "Reservoir size", true, "1"),
+    number("fixedRate", "fixed_rate", "Fixed rate", true, "0.05"),
+    required("serviceName", "service_name", "Service name", "*"),
+    required("serviceType", "service_type", "Service type", "*"),
+    required("host", "host", "Host", "*"),
+    required("httpMethod", "http_method", "HTTP method", "*"),
+    required("urlPath", "url_path", "URL path", "*"),
+    number("version", "version", "Version", true, "1")
+  ],
+  aws_shield_protection: [
+    required("name", "name", "Name"),
+    required("resourceArn", "resource_arn", "Resource ARN"),
+    commonTags
+  ],
+  aws_guardduty_detector: [boolean("enable", "enable", "Enable", true)]
+} satisfies Record<string, readonly ParameterCatalogDefinition[]>;
+
+export const terraformAwsParameterCatalog = {
+  ...generatedTerraformAwsParameterCatalog,
+  source: `${generatedTerraformAwsParameterCatalog.source}+priority-resource-fallbacks`,
+  resources: createResourceParameterCatalog()
+} satisfies ParameterCatalog;
+
+export const terraformParameterCatalog = terraformAwsParameterCatalog;
+
+function createResourceParameterCatalog(): ParameterCatalog["resources"] {
+  const resources: ParameterCatalog["resources"] = {
+    ...generatedTerraformAwsParameterCatalog.resources
+  };
+
+  for (const definition of resourceDefinitions) {
+    if (!definition.capabilities.parameterPanel || resources[definition.terraform.resourceType]) {
+      continue;
+    }
+
+    const fallback = priorityResourceFallbacks[definition.terraform.resourceType] ?? [
+      core("name", "name", "Name"),
+      commonTags
+    ];
+
+    resources[definition.terraform.resourceType] = [...fallback];
+  }
+
+  return resources;
+}
+
+function required(
+  name: string,
+  terraformName: string,
+  label: string,
+  placeholder?: string
+): ParameterCatalogDefinition {
+  return field({
+    name,
+    terraformName,
+    label,
+    required: true,
+    ...(placeholder === undefined ? {} : { placeholder })
+  });
+}
+
+function core(
+  name: string,
+  terraformName: string,
+  label: string,
+  placeholder?: string
+): ParameterCatalogDefinition {
+  return field({
+    name,
+    terraformName,
+    label,
+    core: true,
+    ...(placeholder === undefined ? {} : { placeholder })
+  });
+}
+
+function ref(
+  name: string,
+  terraformName: string,
+  label: string,
+  referenceTargetTypes: string[],
+  requiredField = true,
+  referenceAttribute?: string
+): ParameterCatalogDefinition {
+  return field({
+    name,
+    terraformName,
+    label,
+    required: requiredField,
+    core: !requiredField,
+    inputKind: "reference-picker",
+    referenceTargetTypes,
+    ...(referenceAttribute === undefined ? {} : { referenceAttribute })
+  });
+}
+
+function list(
+  name: string,
+  terraformName: string,
+  label: string,
+  requiredField = false
+): ParameterCatalogDefinition {
+  return field({
+    name,
+    terraformName,
+    label,
+    type: "list",
+    inputKind: "text",
+    required: requiredField,
+    core: !requiredField
+  });
+}
+
+function number(
+  name: string,
+  terraformName: string,
+  label: string,
+  requiredField = false,
+  placeholder?: string
+): ParameterCatalogDefinition {
+  return field({
+    name,
+    terraformName,
+    label,
+    type: "number",
+    inputKind: "number",
+    required: requiredField,
+    core: !requiredField,
+    ...(placeholder === undefined ? {} : { placeholder })
+  });
+}
+
+function boolean(
+  name: string,
+  terraformName: string,
+  label: string,
+  coreField = true
+): ParameterCatalogDefinition {
+  return field({
+    name,
+    terraformName,
+    label,
+    type: "boolean",
+    inputKind: "checkbox",
+    core: coreField
+  });
+}
+
+function select(
+  name: string,
+  terraformName: string,
+  label: string,
+  options: string[],
+  requiredField = false
+): ParameterCatalogDefinition {
+  return field({
+    name,
+    terraformName,
+    label,
+    inputKind: "select",
+    options,
+    required: requiredField,
+    core: !requiredField
+  });
+}
+
+function field(input: FieldInput): ParameterCatalogDefinition {
+  const requiredField = input.required ?? false;
+
+  return {
+    ...input,
+    type: input.type ?? "string",
+    required: requiredField,
+    optional: input.optional ?? !requiredField,
+    computed: input.computed ?? false,
+    sensitive: input.sensitive ?? false,
+    inputKind: input.inputKind ?? "text"
+  };
+}

@@ -2,6 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { DiagramEdge, DiagramJson, DiagramNode } from "@sketchcatch/types";
+import { isAreaNode } from "../../features/diagram-editor/area-nodes";
+import {
+  getNodeDisplayBorderColor,
+  getNodeDisplayBorderStyle
+} from "../../features/diagram-editor/node-style";
 import { getProjectDraft } from "../../features/workspace/api";
 
 type DraftThumbnailState = "loading" | "ready" | "empty" | "error";
@@ -21,6 +26,7 @@ type ThumbnailNode = {
   readonly height: number;
   readonly zIndex: number;
   readonly borderColor: string | undefined;
+  readonly borderDasharray: string | undefined;
 };
 
 type ScaledThumbnailNode = ThumbnailNode & {
@@ -123,6 +129,7 @@ export function ProjectArchitectureThumbnail({
                 height={node.height}
                 rx={node.kind === "design" ? 6 : 5}
                 stroke={node.borderColor}
+                strokeDasharray={node.borderDasharray}
                 width={node.width}
                 x={node.x}
                 y={node.y}
@@ -196,6 +203,8 @@ function buildThumbnailModel(diagram: DiagramJson) {
 }
 
 function toThumbnailNode(node: DiagramNode): ThumbnailNode {
+  const isArea = isAreaNode(node);
+
   return {
     id: node.id,
     kind: node.kind,
@@ -205,7 +214,8 @@ function toThumbnailNode(node: DiagramNode): ThumbnailNode {
     width: Math.max(node.size.width, 1),
     height: Math.max(node.size.height, 1),
     zIndex: node.zIndex,
-    borderColor: node.style?.borderColor
+    borderColor: isArea ? getNodeDisplayBorderColor(node) : node.style?.borderColor,
+    borderDasharray: isArea ? getThumbnailNodeBorderDasharray(getNodeDisplayBorderStyle(node)) : undefined
   };
 }
 
@@ -259,6 +269,18 @@ function getThumbnailEdgeDasharray(edge: DiagramEdge): string | undefined {
   }
 
   if (edge.style?.lineStyle === "dotted") {
+    return "2 5";
+  }
+
+  return undefined;
+}
+
+function getThumbnailNodeBorderDasharray(borderStyle: NonNullable<DiagramNode["style"]>["borderStyle"]) {
+  if (borderStyle === "dashed") {
+    return "7 5";
+  }
+
+  if (borderStyle === "dotted") {
     return "2 5";
   }
 

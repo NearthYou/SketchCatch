@@ -146,7 +146,7 @@ export function createDiagramEdge(
     style: {
       color: "#506176",
       lineStyle: "solid",
-      width: "medium",
+      width: "thin",
       animated: false
     }
   };

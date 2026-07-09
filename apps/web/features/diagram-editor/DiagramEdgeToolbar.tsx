@@ -42,7 +42,7 @@ export function DiagramEdgeToolbar({
 }: DiagramEdgeToolbarProps) {
   const color = edge.style?.color ?? "#506176";
   const lineStyle = edge.style?.lineStyle ?? "solid";
-  const width = edge.style?.width ?? "medium";
+  const width = edge.style?.width ?? "thin";
 
   return (
     <div aria-label="연결선 도구" className={styles.edgeToolbar}>
