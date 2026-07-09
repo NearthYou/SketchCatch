@@ -31,6 +31,8 @@ Short English-only working log for the current agent context. Older records are 
 - Fixed the Terraform issue AI fix application handshake so the AI chat keeps the original issue request id through the apply request/result cycle, opens the edited source line after the Terraform panel is visible, and keeps the source-line highlight visible longer.
 - Fixed Terraform issue AI resolution navigation so the Issues tab `AI resolve` action immediately opens the Terraform source line, and source-line navigation now focuses and scrolls the editor, syntax layer, and line numbers together.
 - Fixed the new-project AI start chat so it uses the same prompt relevance gate before draft generation and disables already submitted suggestion choices.
+- Fixed the new-project AI start preview edit flow so messages like "add db here" patch the current PREVIEW instead of restarting architecture-draft clarification.
+- Fixed the new-project AI start patch-clarification state so the old PREVIEW is hidden while Amazon Q asks for missing DB/resource details, then the revised PREVIEW appears only after the answer is processed.
 
 Verification:
 
@@ -107,6 +109,18 @@ Verification:
 - `pnpm typecheck` - passed after the new-project AI start chat fix.
 - `pnpm build` - passed after the new-project AI start chat fix.
 - `pnpm harness:check` - passed after the new-project AI start chat fix.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-new-project-start-mode.test.ts` - passed after the new-project AI start preview edit fix.
+- `pnpm --filter @sketchcatch/web exec tsx -e "import { classifyWorkspaceAiChatPrompt } from './features/workspace/workspace-ai-chat-routing.ts'; console.log(classifyWorkspaceAiChatPrompt('여기에 db 추가해줘')); console.log(classifyWorkspaceAiChatPrompt('db 추가해줘'));"` - returned `architecture` for both prompts.
+- `pnpm --filter @sketchcatch/web typecheck` - passed after the new-project AI start preview edit fix.
+- `pnpm lint` - passed after the new-project AI start preview edit fix.
+- `pnpm typecheck` - passed after the new-project AI start preview edit fix.
+- `pnpm build` - passed after the new-project AI start preview edit fix.
+- `pnpm harness:check` - passed after the new-project AI start preview edit fix.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-new-project-start-mode.test.ts` - failed before hiding stale PREVIEW during patch clarification, then passed.
+- `pnpm --filter @sketchcatch/web typecheck` - passed after the patch-clarification preview visibility fix.
+- `pnpm lint` - passed after the patch-clarification preview visibility fix.
+- `pnpm typecheck` - passed after the patch-clarification preview visibility fix.
+- `pnpm build` - passed after the patch-clarification preview visibility fix.
 
 Known risks:
 
