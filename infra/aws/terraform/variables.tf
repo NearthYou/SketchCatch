@@ -189,6 +189,22 @@ variable "api_environment" {
   type        = map(string)
   default     = {}
   sensitive   = false
+
+  validation {
+    condition = length(setintersection(toset(keys(var.api_environment)), toset([
+      "AUTH_TOKEN_SECRET",
+      "CLOUDFORMATION_TEMPLATE_TOKEN_SECRET",
+      "DATABASE_URL",
+      "GIT_APP_PRIVATE_KEY_BASE64",
+      "GIT_APP_STATE_SECRET",
+      "GIT_OAUTH_CLIENT_SECRET",
+      "KAKAO_OAUTH_CLIENT_SECRET",
+      "NAVER_OAUTH_CLIENT_SECRET",
+      "OPENAI_API_KEY",
+      "REDIS_URL"
+    ]))) == 0
+    error_message = "Sensitive API values must be provided through api_secret_arns, not api_environment."
+  }
 }
 
 variable "web_environment" {
@@ -199,9 +215,34 @@ variable "web_environment" {
 }
 
 variable "api_secret_arns" {
-  description = "Map of API environment variable name to Secrets Manager or SSM SecureString ARN. Phase 3 should replace generated env files with these references."
+  description = "Map of sensitive API environment variable name to Secrets Manager or SSM SecureString ARN. ECS uses task definition secrets instead of generated env files."
   type        = map(string)
   default     = {}
+  sensitive   = true
+
+  validation {
+    condition = length(setsubtract(toset(keys(var.api_secret_arns)), toset([
+      "AUTH_TOKEN_SECRET",
+      "CLOUDFORMATION_TEMPLATE_TOKEN_SECRET",
+      "DATABASE_URL",
+      "GIT_APP_PRIVATE_KEY_BASE64",
+      "GIT_APP_STATE_SECRET",
+      "GIT_OAUTH_CLIENT_SECRET",
+      "KAKAO_OAUTH_CLIENT_SECRET",
+      "NAVER_OAUTH_CLIENT_SECRET",
+      "OPENAI_API_KEY",
+      "REDIS_URL"
+    ]))) == 0
+    error_message = "api_secret_arns may only contain the approved ECS API secret environment names."
+  }
+
+  validation {
+    condition = alltrue([
+      for value_from in values(var.api_secret_arns) :
+      can(regex("^arn:aws[a-zA-Z-]*:(secretsmanager|ssm):", value_from))
+    ])
+    error_message = "api_secret_arns values must be Secrets Manager or SSM parameter ARNs, never raw secret values."
+  }
 }
 
 variable "secret_kms_key_arns" {
