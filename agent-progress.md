@@ -2,6 +2,30 @@
 
 Short English-only working log for the current agent context.
 
+## 2026-07-09 Project Delete Destroy Fallback Flow
+
+- Branch/worktree: current `C:\Jungle\SketchCatch` workspace.
+- Scope: make project deletion recover when resource-included cleanup cannot complete because AWS resources were already manually deleted or Terraform cannot resolve a destroy target.
+- Added a project delete flow helper that exposes a project-only metadata deletion fallback after a resource-included destroy plan or destroy execution error.
+- Updated the Projects page deletion dialog so a failed `destroy_then_delete` attempt can continue with `delete_project_only` via a visible "project record only" action.
+- Updated resource-included project deletion approval to acknowledge non-blocking destroy warnings, including no-op destroy plans where Terraform finds no resources to delete.
+- Added regression coverage for destroy failure fallback visibility and no-op/non-blocking destroy warning acknowledgement.
+
+Verification:
+
+- `pnpm harness:check` - passed before edits.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/projects/project-delete-flow.test.ts` - failed before each new helper, then passed after implementation.
+- `pnpm --filter @sketchcatch/web lint` - passed.
+- `pnpm --filter @sketchcatch/web typecheck` - passed.
+- `pnpm lint` - passed.
+- `pnpm typecheck` - passed.
+- `pnpm build` - passed.
+- `pnpm harness:check` - passed after edits.
+
+Known risks:
+
+- This fallback deletes SketchCatch project metadata and stored artifacts only; it still does not destroy real AWS resources that may remain outside Terraform's current plan/state view.
+
 ## 2026-07-09 herry612 AWS Connection Data Cleanup
 
 - Branch/worktree: current `C:\Jungle\SketchCatch` workspace.
