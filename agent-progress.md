@@ -4,10 +4,10 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- Branch: `fix/ck/270-delete-project-bug-fix`.
-- Base: latest `origin/dev` has been merged into this branch.
-- GitHub issue: #270, project deletion and AWS connection follow-up fixes.
-- Scope: fix project deletion blockers after SSO/deployment history, add destroy-failure fallback behavior, clarify AWS connection deletion/verification errors, keep AI chat aware of unconfigured diagram resources, and preserve the compact harness state-file structure from `dev`.
+- Branch: `fix/ck/275-ai-chat-bug-fix`.
+- Base: current branch includes the prior AI chat suggestion-locking commit.
+- GitHub issue: #275, AI chat bug fixes.
+- Scope: prevent stale suggestion reuse and block unrelated free-form AI chat prompts before diagram generation or patch preview starts.
 
 ## Session Record
 
@@ -23,6 +23,7 @@ Short English-only working log for the current agent context. Older records are 
 - Fixed AI board conversion so visible DiagramJson resource nodes without saved parameter values still count as architecture resources instead of making the AI chat behave like the board is empty.
 - Addressed PR #274 review feedback: guarded destroy warning acknowledgement when `warnings` is missing, made API fallback Terraform names use `node.id` when non-ASCII labels normalize to `resource`, and deleted Git/CI/CD handoffs before deployment rows.
 - Fixed AI chat suggestion buttons so previously submitted diagram-generation choices remain selected and disabled, including restored chat history.
+- Added an AI chat prompt relevance gate so unrelated or vague free-form messages do not start diagram generation or patch preview requests.
 
 Verification:
 
@@ -47,6 +48,12 @@ Verification:
 - `pnpm typecheck` - passed after the AI chat suggestion locking fix.
 - `pnpm build` - passed after the AI chat suggestion locking fix.
 - `pnpm harness:check` - passed after the AI chat suggestion locking fix.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-chat-routing.test.ts` - failed before adding prompt relevance classification, then passed.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts` - failed before the chat dock gate, then passed.
+- `pnpm --filter @sketchcatch/web typecheck` - passed after the prompt relevance gate.
+- `pnpm lint` - passed after the prompt relevance gate.
+- `pnpm typecheck` - passed after the prompt relevance gate.
+- `pnpm build` - passed after the prompt relevance gate.
 
 Known risks:
 

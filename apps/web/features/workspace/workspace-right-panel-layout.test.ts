@@ -379,6 +379,22 @@ test("workspace AI chat disables previously submitted suggestion choices", () =>
   assert.match(aiChatDockSource, /candidate\.selectedSuggestions === undefined/);
 });
 
+test("workspace AI chat gates free-form prompts before diagram generation or patching", () => {
+  const handleUserMessageBody = aiChatDockSource.slice(
+    aiChatDockSource.indexOf("async function handleUserMessage"),
+    aiChatDockSource.indexOf("async function handlePatchClarificationMessage")
+  );
+  const gateIndex = handleUserMessageBody.indexOf("classifyWorkspaceAiChatPrompt(trimmedPrompt)");
+  const pendingPreviewIndex = handleUserMessageBody.indexOf("const pendingPreviewAction");
+  const chatActionIndex = handleUserMessageBody.indexOf("const chatAction");
+
+  assert.match(aiChatDockSource, /classifyWorkspaceAiChatPrompt/);
+  assert.match(handleUserMessageBody, /appendAssistantMessage\(\s*"question",\s*createWorkspaceAiPromptGateMessage/);
+  assert.ok(gateIndex >= 0);
+  assert.ok(gateIndex < pendingPreviewIndex);
+  assert.ok(gateIndex < chatActionIndex);
+});
+
 test("terraform leave guard covers workspace escape actions while editing", () => {
   assert.match(componentSource, /PendingTerraformLeaveAction/);
   assert.match(componentSource, /pendingTerraformLeaveActionRef/);

@@ -1,6 +1,7 @@
 ﻿import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  classifyWorkspaceAiChatPrompt,
   resolvePendingPreviewChatAction,
   resolveWorkspaceAiChatAction,
   resolveWorkspaceAiChatMode
@@ -93,4 +94,42 @@ test("resolvePendingPreviewChatAction keeps new prompts as fresh drafts while re
     }),
     "patch"
   );
+});
+
+test("classifyWorkspaceAiChatPrompt accepts diagram generation and edit requests", () => {
+  const prompts = [
+    "create a login service diagram",
+    "upload images and serve them from a web app",
+    "add an S3 bucket for uploads",
+    "remove the existing database",
+    "정적 웹사이트 다이어그램 만들어줘",
+    "로그인 있는 작은 웹서비스가 필요해",
+    "여기에 데이터베이스 하나 추가해줘"
+  ];
+
+  for (const prompt of prompts) {
+    assert.equal(classifyWorkspaceAiChatPrompt(prompt), "architecture", prompt);
+  }
+});
+
+test("classifyWorkspaceAiChatPrompt blocks unrelated chat before generation or patching", () => {
+  const prompts = [
+    "hello",
+    "ㅋㅋㅋ",
+    "점심 뭐 먹지?",
+    "오늘 날씨 어때?",
+    "주식 추천해줘"
+  ];
+
+  for (const prompt of prompts) {
+    assert.equal(classifyWorkspaceAiChatPrompt(prompt), "unrelated", prompt);
+  }
+});
+
+test("classifyWorkspaceAiChatPrompt asks for more detail on vague change requests", () => {
+  const prompts = ["해줘", "수정해줘", "make it better", "좋게 바꿔줘"];
+
+  for (const prompt of prompts) {
+    assert.equal(classifyWorkspaceAiChatPrompt(prompt), "ambiguous", prompt);
+  }
 });

@@ -1,5 +1,28 @@
 export type WorkspaceAiChatMode = "draft" | "patch";
 export type WorkspaceAiChatAction = "draft" | "patch";
+export type WorkspaceAiChatPromptClassification = "architecture" | "ambiguous" | "unrelated";
+
+export function classifyWorkspaceAiChatPrompt(prompt: string): WorkspaceAiChatPromptClassification {
+  const normalizedPrompt = normalizeChatPrompt(prompt);
+
+  if (normalizedPrompt.length === 0) {
+    return "ambiguous";
+  }
+
+  if (hasArchitecturePromptSignal(normalizedPrompt)) {
+    return "architecture";
+  }
+
+  if (hasUnrelatedPromptSignal(normalizedPrompt)) {
+    return "unrelated";
+  }
+
+  if (hasVagueDiagramChangeSignal(normalizedPrompt)) {
+    return "ambiguous";
+  }
+
+  return "unrelated";
+}
 
 export function resolveWorkspaceAiChatMode(input: {
   readonly boardHasResources: boolean;
@@ -36,6 +59,185 @@ export function resolvePendingPreviewChatAction(input: {
     prompt: input.prompt
   });
 }
+
+function hasArchitecturePromptSignal(normalizedPrompt: string): boolean {
+  const hasArchitectureTarget = ARCHITECTURE_TARGET_KEYWORDS.some((keyword) =>
+    normalizedPrompt.includes(keyword)
+  );
+  const hasArchitectureAction = ARCHITECTURE_ACTION_KEYWORDS.some((keyword) =>
+    normalizedPrompt.includes(keyword)
+  );
+
+  if (hasArchitectureTarget && hasArchitectureAction) {
+    return true;
+  }
+
+  if (hasArchitectureTarget && hasExplicitArchitectureNoun(normalizedPrompt)) {
+    return true;
+  }
+
+  return RESOURCE_KEYWORDS.some((keyword) => normalizedPrompt.includes(keyword));
+}
+
+function hasExplicitArchitectureNoun(normalizedPrompt: string): boolean {
+  return EXPLICIT_ARCHITECTURE_NOUNS.some((keyword) => normalizedPrompt.includes(keyword));
+}
+
+function hasVagueDiagramChangeSignal(normalizedPrompt: string): boolean {
+  return VAGUE_CHANGE_KEYWORDS.some((keyword) => normalizedPrompt.includes(keyword));
+}
+
+function hasUnrelatedPromptSignal(normalizedPrompt: string): boolean {
+  return UNRELATED_PROMPT_KEYWORDS.some((keyword) => normalizedPrompt.includes(keyword));
+}
+
+function normalizeChatPrompt(prompt: string): string {
+  return prompt.normalize("NFKC").trim().toLowerCase();
+}
+
+const ARCHITECTURE_ACTION_KEYWORDS = [
+  "add",
+  "build",
+  "change",
+  "create",
+  "delete",
+  "deploy",
+  "design",
+  "draw",
+  "generate",
+  "make",
+  "modify",
+  "need",
+  "remove",
+  "replace",
+  "serve",
+  "update",
+  "그려",
+  "넣어",
+  "만들",
+  "바꿔",
+  "변경",
+  "삭제",
+  "생성",
+  "수정",
+  "제거",
+  "추가",
+  "필요",
+  "배포",
+  "구성",
+  "설계"
+] as const;
+
+const ARCHITECTURE_TARGET_KEYWORDS = [
+  "architecture",
+  "backend",
+  "bucket",
+  "cloud",
+  "database",
+  "diagram",
+  "frontend",
+  "iac",
+  "infrastructure",
+  "service",
+  "server",
+  "site",
+  "storage",
+  "terraform",
+  "upload",
+  "web app",
+  "website",
+  "api",
+  "aws",
+  "다이어그램",
+  "백엔드",
+  "버킷",
+  "서비스",
+  "서버",
+  "스토리지",
+  "아키텍처",
+  "업로드",
+  "웹사이트",
+  "인프라",
+  "정적",
+  "클라우드",
+  "테라폼",
+  "프론트엔드",
+  "데이터베이스",
+  "로그인"
+] as const;
+
+const EXPLICIT_ARCHITECTURE_NOUNS = [
+  "architecture",
+  "diagram",
+  "iac",
+  "infrastructure",
+  "terraform",
+  "다이어그램",
+  "아키텍처",
+  "인프라",
+  "테라폼"
+] as const;
+
+const RESOURCE_KEYWORDS = [
+  "alb",
+  "api gateway",
+  "cloudfront",
+  "cloudwatch",
+  "dynamodb",
+  "ec2",
+  "ecs",
+  "eks",
+  "gateway",
+  "iam",
+  "lambda",
+  "load balancer",
+  "rds",
+  "route table",
+  "s3",
+  "security group",
+  "subnet",
+  "vpc",
+  "게이트웨이",
+  "라우트 테이블",
+  "람다",
+  "로드밸런서",
+  "보안 그룹",
+  "서브넷",
+  "인스턴스",
+  "클라우드프론트",
+  "함수"
+] as const;
+
+const VAGUE_CHANGE_KEYWORDS = [
+  "do it",
+  "fix it",
+  "make it better",
+  "update it",
+  "change it",
+  "해줘",
+  "고쳐",
+  "바꿔",
+  "수정",
+  "좋게"
+] as const;
+
+const UNRELATED_PROMPT_KEYWORDS = [
+  "hello",
+  "hi",
+  "weather",
+  "lunch",
+  "stock",
+  "recipe",
+  "joke",
+  "안녕",
+  "날씨",
+  "점심",
+  "주식",
+  "추천",
+  "요리",
+  "농담",
+  "ㅋㅋ"
+] as const;
 
 function isNewServiceDraftRequest(prompt: string): boolean {
   const normalizedPrompt = prompt.toLowerCase();
