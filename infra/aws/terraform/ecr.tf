@@ -32,6 +32,19 @@ resource "aws_ecr_lifecycle_policy" "service" {
         action = {
           type = "expire"
         }
+      },
+      {
+        rulePriority = 2
+        description  = "Expire untagged images older than 14 days to limit ECR storage cost."
+        selection = {
+          tagStatus   = "untagged"
+          countType   = "sinceImagePushed"
+          countUnit   = "days"
+          countNumber = 14
+        }
+        action = {
+          type = "expire"
+        }
       }
     ]
   })
