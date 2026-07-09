@@ -4,31 +4,40 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Currently Verified
 
-- Current branch: `codex/ecs-01-foundation`.
+- Current branch: `feature/sw/288-ecs-deploy-workflow`.
 - Active workstream: `ECS-MIGRATION-000` in `feature_list.json`.
-- Exactly one workstream is currently `in_progress`.
-- `terraform fmt -check`, `terraform init -backend=false`, `terraform validate`, `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed for Phase 1.
-- Phase 1 scope is Terraform ECS/Fargate foundation only. Do not implement GitHub Actions ECS deployment, secret migration, worker code, ALB path routing split, EC2/SSM removal, or live AWS mutation in this phase.
+- The ECS/Fargate foundation PR has been merged into `dev`.
+- Live Terraform execution was intentionally started against AWS account `555980271919`.
+- `terraform init` with the S3 backend passed, initial `terraform plan -out=tfplan` passed with 25 creates, and `terraform apply tfplan` partially created resources before failing on IAM role creation.
+- After permission refresh, `terraform apply tfplan-remaining` created both ECS IAM roles, then failed on `iam:ListAttachedRolePolicies`.
+- After adding `iam:ListAttachedRolePolicies`, the final remaining plan applied successfully and a follow-up Terraform plan reported no changes.
+- Route53 alias creation stayed disabled and `ecs_desired_count=0` was used, so no DNS cutover and no running Fargate tasks were started.
+- Phase 2 implementation adds a separate manual ECS deploy workflow while keeping the existing EC2/SSM production workflow as rollback.
 - `docs/sw/spec.md`, `docs/sw/plan.md`, and `docs/sw/agents.md` are the active ECS migration execution references.
 
 ## Changes This Session
 
-- Added ECS migration tracking as the only `in_progress` workstream in `feature_list.json`.
-- Aligned ECS migration docs around the agreed strategy: parallel ALB cutover, Phase 1 nginx/web/api single ECS task, EC2/SSM rollback retained until ECS smoke passes, secrets migration in a later phase, and API/worker separation only after ECS production stability.
-- Replaced the previous SQS/always-on worker service plan with ECS `RunTask` one-off worker execution as the next worker direction; SQS FIFO/DLQ and always-on worker services are deferred pending a later decision.
-- Added `infra/aws/terraform` ECS foundation definitions for ECR, ECS cluster/service/task definition, IAM roles/policies, CloudWatch Logs, security groups, parallel ALB, listener, and Fargate `ip` target group.
-- Kept Route53 alias creation disabled by default so the EC2 ALB remains the active rollback path.
-- Documented Phase 1 cost-bearing resources and required Phase 2/3 variables/secrets in `infra/aws/terraform/README.md` and `docs/deployment.md`.
-- Added Terraform local-state ignore rules while keeping `.terraform.lock.hcl` trackable for provider reproducibility.
+- Fast-forwarded local `dev` to latest `origin/dev`.
+- Used profile `sketchcatch-dev`, region `ap-northeast-2`.
+- Initialized backend `s3://sketchcatch-terraform-state-555980271919-ap-northeast-2/production/ecs-foundation/terraform.tfstate`.
+- Applied the saved plan until IAM role creation failed.
+- Created resources now tracked in Terraform state: ECR repos/lifecycle policies, CloudWatch log groups, ECS cluster, parallel ECS ALB/listener/target group, ECS ALB/service security groups, and related security group rules.
+- Generated `tfplan-remaining`, then applied it far enough to create and track the ECS execution role and ECS task role.
+- Untainted the two IAM roles after the interrupted apply, regenerated `tfplan-remaining-3`, and applied the final 4 resources successfully.
+- Final outputs include ECR URLs for api/nginx/web, ECS ALB DNS `sketchcatch-production-ecs-909071745.ap-northeast-2.elb.amazonaws.com`, cluster `sketchcatch-production-cluster`, and service `sketchcatch-production-app`.
+- Created issue #288 and linked branch `feature/sw/288-ecs-deploy-workflow`.
+- Added `.github/workflows/deploy-ecs.yml` for ECR push, task definition rendering, and ECS service update.
+- Updated the GitHub Actions deploy role policy document with ECR/ECS/iam:PassRole permissions needed by the ECS workflow.
+- Documented the Phase 2 ECS workflow and required GitHub variables in `docs/deployment.md`.
 
 ## Broken Or Unverified
 
-- No GitHub issue was created in this session.
-- No live AWS commands, Terraform plan/apply/destroy, IAM changes, Route53 cutover, or cloud mutations were run. `terraform plan` remains intentionally unverified.
-- No GitHub Actions ECS deploy workflow, secret migration implementation, worker code, ALB path routing split, or EC2/SSM removal was done.
-- ECR image push and ECS smoke are still pending future phases.
+- `sketchcatch-admin` and `sketchcatch-caller` profiles exist but had invalid credentials during this session.
+- ECS service exists but is intentionally scaled to `desiredCount=0`.
+- ECR image push workflow has been added but not live-run in this local session.
+- Task secrets, ECS smoke, and Route53 cutover are still pending future phases.
 
 ## Best Next Action
 
-- Next implementation phase should be `Feat: ECR 기반 ECS 배포 워크플로 전환` on `feature/sw/{issue}-ecs-deploy-workflow`.
-- Phase 2 should wire ECR image push and ECS service update using the Terraform outputs from `infra/aws/terraform`.
+- Finish verification, open the Phase 2 PR, wait for review comments, resolve them, then merge if checks pass.
+- After Phase 2 merge, configure the required GitHub variables and run the manual ECS workflow only when task secrets and smoke criteria are ready.
