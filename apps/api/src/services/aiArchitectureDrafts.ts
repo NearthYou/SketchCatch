@@ -43,6 +43,15 @@ const SUPPORTED_RESOURCE_TYPES = Array.from(
   )
 ) satisfies ResourceType[];
 
+const SUPPORTED_RESOURCE_CATALOG = resourceDefinitions
+  .filter((definition) => definition.resourceType !== "UNKNOWN")
+  .map((definition) => ({
+    id: definition.id,
+    nodeType: definition.resourceType,
+    terraformBlockType: definition.terraform.blockType,
+    terraformResourceType: definition.terraform.resourceType
+  }));
+
 const SUPPORTED_RESOURCE_TYPE_SET = new Set<ResourceType>(SUPPORTED_RESOURCE_TYPES);
 const DEFAULT_PREVIEW_NODE_SIZE = { width: 124, height: 96 } as const;
 const PREVIEW_LABEL_CHARACTER_WIDTH = 7;
@@ -245,7 +254,8 @@ export async function createAmazonQArchitectureDraftResponse(
     architectureDecisionSpace,
     prompt: request.prompt,
     referenceKnowledge,
-    supportedResourceTypes: SUPPORTED_RESOURCE_TYPES
+    supportedResourceTypes: SUPPORTED_RESOURCE_TYPES,
+    supportedResourceCatalog: SUPPORTED_RESOURCE_CATALOG
   });
 
   try {
@@ -269,7 +279,8 @@ export async function createAmazonQArchitectureDraftResponse(
           referenceKnowledge,
           validationIssues,
           previousArchitectureJson: parsedResponse.architectureJson,
-          supportedResourceTypes: SUPPORTED_RESOURCE_TYPES
+          supportedResourceTypes: SUPPORTED_RESOURCE_TYPES,
+          supportedResourceCatalog: SUPPORTED_RESOURCE_CATALOG
         });
         response = await provider.generate({
           target: ARCHITECTURE_DRAFT_TARGET,
@@ -1006,6 +1017,7 @@ function createAmazonQArchitectureDraftInstructions(): string {
     "Do not perform deployment, apply, update, delete, or destroy actions.",
     "All architecture changes must remain user-accepted previews.",
     `Use only these ResourceNode.type values: ${SUPPORTED_RESOURCE_TYPES.join(", ")}.`,
+    "The visible left resource panel is represented by supportedResourceCatalog. When the user asks for a specific panel Terraform resource, create a ResourceNode whose type is the catalog nodeType and include config.terraformResourceType with the catalog terraformResourceType. Include config.terraformBlockType when terraformBlockType is data.",
     "Use the persistent compact AWS/Terraform referenceKnowledge payload as design precedent. Do not request or quote the full source documents; apply the compact guidance only when it fits the user's selected constraints.",
     "The ArchitectureDecisionSpace is not a fixed skeleton. hardConstraints are binding only for explicit none choices or clear contradictions; preferredPatterns are candidate patterns you may choose, adapt, or combine.",
     "Select the preferredPattern that best fits the answerProfile and evaluationCriteria. If you choose a lower-priority or combined pattern, explain why in requirementCoverage.",
@@ -1037,6 +1049,8 @@ function createAmazonQArchitectureDraftPrompt(
     createAmazonQArchitectureDraftInstructions(),
     createAwsArchitectureReferenceKnowledgePrompt(),
     createAmazonQArchitectureBrief(prompt),
+    "Supported resource panel catalog:",
+    JSON.stringify(SUPPORTED_RESOURCE_CATALOG, null, 2),
     "ArchitectureDecisionSpace:",
     JSON.stringify(architectureDecisionSpace, null, 2),
     "User requirement prompt:",

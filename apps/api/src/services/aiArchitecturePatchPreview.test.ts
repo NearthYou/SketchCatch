@@ -144,6 +144,65 @@ test("createArchitecturePatchPreview recognizes broad natural-language add reque
   }
 });
 
+test("createArchitecturePatchPreview recognizes catalog-backed resource panel add requests", () => {
+  const addCases: readonly {
+    readonly instruction: string;
+    readonly resourceType: ResourceType;
+    readonly terraformBlockType?: "data";
+    readonly terraformResourceType: string;
+  }[] = [
+    {
+      instruction: "ECS Service 추가해줘",
+      resourceType: "ECS_SERVICE",
+      terraformResourceType: "aws_ecs_service"
+    },
+    {
+      instruction: "CodeBuild Project 추가해줘",
+      resourceType: "CODEBUILD_PROJECT",
+      terraformResourceType: "aws_codebuild_project"
+    },
+    {
+      instruction: "SSM Parameter 추가해줘",
+      resourceType: "SSM_PARAMETER",
+      terraformBlockType: "data",
+      terraformResourceType: "aws_ssm_parameter"
+    },
+    {
+      instruction: "S3 Bucket Policy 추가해줘",
+      resourceType: "S3",
+      terraformResourceType: "aws_s3_bucket_policy"
+    }
+  ];
+
+  for (const addCase of addCases) {
+    const response = createArchitecturePatchPreview({
+      architectureJson: {
+        nodes: [makeNode({ id: "app-server", type: "EC2", label: "App Server" })],
+        edges: []
+      },
+      instruction: addCase.instruction,
+      skipConnection: true
+    });
+
+    assert.equal(response.status, "preview", addCase.instruction);
+    assert.equal(response.changes[0]?.resourceType, addCase.resourceType, addCase.instruction);
+    assert.equal(response.proposedArchitectureJson.nodes.at(-1)?.type, addCase.resourceType, addCase.instruction);
+    assert.equal(
+      response.proposedArchitectureJson.nodes.at(-1)?.config["terraformResourceType"],
+      addCase.terraformResourceType,
+      addCase.instruction
+    );
+
+    if (addCase.terraformBlockType) {
+      assert.equal(
+        response.proposedArchitectureJson.nodes.at(-1)?.config["terraformBlockType"],
+        addCase.terraformBlockType,
+        addCase.instruction
+      );
+    }
+  }
+});
+
 test("createArchitecturePatchPreview asks how to use a new resource before previewing it", () => {
   const response = createArchitecturePatchPreview({
     architectureJson: {

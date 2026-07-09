@@ -3,7 +3,10 @@ import { test } from "node:test";
 import type { ArchitectureJson } from "@sketchcatch/types";
 import { resourceDefinitions } from "@sketchcatch/types/resource-definitions";
 import type { AiTextProvider } from "./aiLlmExplanation.js";
-import { createAmazonQArchitectureDraftResponse } from "./aiArchitectureDrafts.js";
+import {
+  createAmazonQArchitectureDraftResponse,
+  createArchitectureDraft
+} from "./aiArchitectureDrafts.js";
 
 const confirmedCreditPolicy = {
   bedrock: false,
@@ -542,6 +545,26 @@ test("createAmazonQArchitectureDraftResponse accepts panel-backed ResourceType v
     response.architectureJson.nodes.map((node) => node.type),
     ["EKS_CLUSTER", "AUTO_SCALING_GROUP", "DYNAMODB_TABLE", "SQS_QUEUE"]
   );
+});
+
+test("createArchitectureDraft assembles explicitly requested resource-panel items in fallback drafts", () => {
+  const response = createArchitectureDraft({
+    prompt: [
+      "Required components: ECS Cluster, ECS Service, ECS Task Definition, SQS Queue, CodeBuild Project, and SSM Parameter.",
+      "Architecture flow: Fargate service processes queue jobs and CodeBuild packages deployments.",
+      "Validation checklist: include those exact resource-panel components."
+    ].join("\n")
+  });
+
+  const nodesByType = new Map(response.architectureJson.nodes.map((node) => [node.type, node]));
+
+  assert.equal(nodesByType.get("ECS_CLUSTER")?.config["terraformResourceType"], "aws_ecs_cluster");
+  assert.equal(nodesByType.get("ECS_SERVICE")?.config["terraformResourceType"], "aws_ecs_service");
+  assert.equal(nodesByType.get("ECS_TASK_DEFINITION")?.config["terraformResourceType"], "aws_ecs_task_definition");
+  assert.equal(nodesByType.get("SQS_QUEUE")?.config["terraformResourceType"], "aws_sqs_queue");
+  assert.equal(nodesByType.get("CODEBUILD_PROJECT")?.config["terraformResourceType"], "aws_codebuild_project");
+  assert.equal(nodesByType.get("SSM_PARAMETER")?.config["terraformResourceType"], "aws_ssm_parameter");
+  assert.equal(nodesByType.get("SSM_PARAMETER")?.config["terraformBlockType"], "data");
 });
 
 test("createAmazonQArchitectureDraftResponse creates deterministic decision spaces that vary by answer profile", async () => {

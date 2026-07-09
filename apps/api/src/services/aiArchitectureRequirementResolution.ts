@@ -17,9 +17,17 @@ export type ArchitectureRequirementResolution = {
   readonly servicePurpose: ArchitectureServicePurpose;
   readonly capabilities: ArchitectureCapability[];
   readonly requirementFacts: ArchitectureRequirementFact[];
+  readonly explicitResourceDefinitions: ExplicitResourceDefinition[];
   readonly explicitResourceTypes: ResourceType[];
   readonly operatingProfile: ArchitectureDraftOperatingProfile;
   readonly guardrailWarnings: ArchitectureGuardrailWarning[];
+};
+
+export type ExplicitResourceDefinition = {
+  readonly id: string;
+  readonly resourceType: ResourceType;
+  readonly terraformBlockType: "resource" | "data";
+  readonly terraformResourceType: string;
 };
 
 export class AmbiguousArchitecturePromptError extends Error {
@@ -306,7 +314,8 @@ export function resolveArchitectureRequirement(
   const unsupportedRequirementMatches = findUnsupportedRequirementMatches(request.prompt);
   const intent = interpretRequirement(request.prompt, unsupportedRequirementMatches);
   const requirementFacts = createRequirementFacts(request.prompt, unsupportedRequirementMatches);
-  const explicitResourceTypes = findExplicitResourceTypes(request.prompt);
+  const explicitResourceDefinitions = findExplicitResourceDefinitions(request.prompt);
+  const explicitResourceTypes = getExplicitResourceTypes(explicitResourceDefinitions);
   const hasPromptSignal = requirementFacts.length > 0 || explicitResourceTypes.length > 0;
   const unsupportedWarnings = createUnsupportedRequirementWarnings(unsupportedRequirementMatches);
   const servicePurpose = intent.servicePurpose;
@@ -324,6 +333,7 @@ export function resolveArchitectureRequirement(
       intent,
       servicePurpose,
       capabilities,
+      explicitResourceDefinitions,
       requirementFacts,
       explicitResourceTypes,
       operatingProfile: createOperatingProfile(request.prompt, requirementFacts),
@@ -966,8 +976,12 @@ function findUnsupportedRequirementMatches(prompt: string): UnsupportedRequireme
 }
 
 export function findExplicitResourceTypes(prompt: string): ResourceType[] {
+  return getExplicitResourceTypes(findExplicitResourceDefinitions(prompt));
+}
+
+function findExplicitResourceDefinitions(prompt: string): ExplicitResourceDefinition[] {
   const normalizedPrompt = normalizePrompt(prompt);
-  const resourceTypes = new Set<ResourceType>();
+  const definitions = new Map<string, ExplicitResourceDefinition>();
 
   for (const definition of resourceDefinitions) {
     if (definition.resourceType === "UNKNOWN") {
@@ -981,11 +995,22 @@ export function findExplicitResourceTypes(prompt: string): ResourceType[] {
           !hasNegatedResourceAlias(normalizedPrompt, alias)
       )
     ) {
-      resourceTypes.add(definition.resourceType);
+      definitions.set(definition.id, {
+        id: definition.id,
+        resourceType: definition.resourceType,
+        terraformBlockType: definition.terraform.blockType,
+        terraformResourceType: definition.terraform.resourceType
+      });
     }
   }
 
-  return Array.from(resourceTypes);
+  return Array.from(definitions.values());
+}
+
+function getExplicitResourceTypes(
+  explicitResourceDefinitions: readonly ExplicitResourceDefinition[]
+): ResourceType[] {
+  return Array.from(new Set(explicitResourceDefinitions.map((definition) => definition.resourceType)));
 }
 
 function isCoveredBySupportedExplicitResource(
@@ -1033,9 +1058,73 @@ function createResourceAliases(definition: (typeof resourceDefinitions)[number])
     definition.resourceType.replaceAll("_", " "),
     definition.id.replace(/^aws-/, "").replaceAll("-", " "),
     definition.terraform.resourceType.replace(/^aws_/, "").replaceAll("_", " "),
-    definition.terraform.resourceType
+    definition.terraform.resourceType,
+    ...createResourceServiceAliases(definition)
   ].map((alias) => normalizePrompt(alias));
 }
+
+function createResourceServiceAliases(definition: (typeof resourceDefinitions)[number]): string[] {
+  const aliases: string[] = [];
+  const normalizedResourceType = definition.resourceType.toLowerCase();
+  const normalizedId = definition.id.toLowerCase();
+  const normalizedTerraformType = definition.terraform.resourceType.toLowerCase();
+
+  for (const serviceAlias of SUPPORTED_RESOURCE_SERVICE_ALIASES) {
+    if (
+      normalizedResourceType.includes(serviceAlias.token) ||
+      normalizedId.includes(serviceAlias.token) ||
+      normalizedTerraformType.includes(serviceAlias.token)
+    ) {
+      aliases.push(serviceAlias.alias);
+    }
+  }
+
+  if (normalizedId.includes("ecs") || normalizedTerraformType.includes("ecs")) {
+    aliases.push("fargate");
+  }
+
+  return aliases;
+}
+
+const SUPPORTED_RESOURCE_SERVICE_ALIASES = [
+  { token: "acm", alias: "acm" },
+  { token: "api_gateway", alias: "api gateway" },
+  { token: "apigateway", alias: "api gateway" },
+  { token: "autoscaling", alias: "auto scaling" },
+  { token: "cloudfront", alias: "cloudfront" },
+  { token: "cloudtrail", alias: "cloudtrail" },
+  { token: "cloudwatch", alias: "cloudwatch" },
+  { token: "codebuild", alias: "codebuild" },
+  { token: "codedeploy", alias: "codedeploy" },
+  { token: "codepipeline", alias: "codepipeline" },
+  { token: "codestar", alias: "codestar" },
+  { token: "cognito", alias: "cognito" },
+  { token: "config", alias: "aws config" },
+  { token: "dynamodb", alias: "dynamodb" },
+  { token: "ecr", alias: "ecr" },
+  { token: "ecs", alias: "ecs" },
+  { token: "efs", alias: "efs" },
+  { token: "eks", alias: "eks" },
+  { token: "elasticache", alias: "elasticache" },
+  { token: "eventbridge", alias: "eventbridge" },
+  { token: "guardduty", alias: "guardduty" },
+  { token: "iam", alias: "iam" },
+  { token: "kms", alias: "kms" },
+  { token: "lambda", alias: "lambda" },
+  { token: "rds", alias: "rds" },
+  { token: "route53", alias: "route 53" },
+  { token: "s3", alias: "s3" },
+  { token: "scheduler", alias: "scheduler" },
+  { token: "secretsmanager", alias: "secrets manager" },
+  { token: "sfn", alias: "step functions" },
+  { token: "shield", alias: "shield" },
+  { token: "sns", alias: "sns" },
+  { token: "sqs", alias: "sqs" },
+  { token: "ssm", alias: "ssm" },
+  { token: "vpc", alias: "vpc" },
+  { token: "waf", alias: "waf" },
+  { token: "xray", alias: "x-ray" }
+] as const;
 
 function includesResourceAlias(normalizedPrompt: string, alias: string): boolean {
   if (alias.length < 3) {

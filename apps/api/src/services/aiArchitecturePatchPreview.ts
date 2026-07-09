@@ -12,11 +12,12 @@ import type {
   ResourceNode,
   ResourceType
 } from "@sketchcatch/types";
+import { resourceDefinitions } from "@sketchcatch/types/resource-definitions";
 import { createNormalizedAiCacheKey, estimateAiUsage } from "./aiProviderSafety.js";
 
 export type CreateArchitecturePatchPreviewInput = CreateArchitecturePatchPreviewRequest;
 
-const RESOURCE_KEYWORDS: readonly {
+const MANUAL_RESOURCE_KEYWORDS: readonly {
   readonly resourceType: ResourceType;
   readonly keywords: readonly string[];
   readonly label: string;
@@ -316,6 +317,114 @@ const GENERIC_ADD_RESOURCE_PURPOSE_SUGGESTIONS = [
   "운영 보조 리소스로 쓸래",
   "지금은 연결 없이 따로 둘래"
 ] as const;
+
+function createResourceDefinitionKeywords(
+  definition: (typeof resourceDefinitions)[number]
+): string[] {
+  return uniqueStrings([
+    definition.resourceType,
+    definition.resourceType.replaceAll("_", " "),
+    definition.id.replace(/^aws-/, "").replaceAll("-", " "),
+    definition.terraform.resourceType,
+    definition.terraform.resourceType.replace(/^aws_/, "").replaceAll("_", " "),
+    ...createResourceDefinitionServiceAliases(definition)
+  ]).filter((keyword) => keyword.trim().length >= 2);
+}
+
+function createResourceDefinitionServiceAliases(
+  definition: (typeof resourceDefinitions)[number]
+): string[] {
+  const haystack = [
+    definition.id,
+    definition.resourceType,
+    definition.terraform.resourceType
+  ].join(" ").toLowerCase();
+  const aliases: string[] = [];
+
+  for (const serviceAlias of RESOURCE_SERVICE_ALIASES) {
+    if (haystack.includes(serviceAlias.token)) {
+      aliases.push(serviceAlias.alias);
+    }
+  }
+
+  if (haystack.includes("ecs")) {
+    aliases.push("fargate");
+  }
+
+  return aliases;
+}
+
+const RESOURCE_SERVICE_ALIASES = [
+  { token: "acm", alias: "acm" },
+  { token: "apigateway", alias: "api gateway" },
+  { token: "api_gateway", alias: "api gateway" },
+  { token: "autoscaling", alias: "auto scaling" },
+  { token: "cloudfront", alias: "cloudfront" },
+  { token: "cloudtrail", alias: "cloudtrail" },
+  { token: "cloudwatch", alias: "cloudwatch" },
+  { token: "codebuild", alias: "codebuild" },
+  { token: "codedeploy", alias: "codedeploy" },
+  { token: "codepipeline", alias: "codepipeline" },
+  { token: "codestar", alias: "codestar" },
+  { token: "cognito", alias: "cognito" },
+  { token: "dynamodb", alias: "dynamodb" },
+  { token: "ecr", alias: "ecr" },
+  { token: "ecs", alias: "ecs" },
+  { token: "efs", alias: "efs" },
+  { token: "eks", alias: "eks" },
+  { token: "elasticache", alias: "elasticache" },
+  { token: "eventbridge", alias: "eventbridge" },
+  { token: "guardduty", alias: "guardduty" },
+  { token: "iam", alias: "iam" },
+  { token: "kms", alias: "kms" },
+  { token: "lambda", alias: "lambda" },
+  { token: "rds", alias: "rds" },
+  { token: "route53", alias: "route 53" },
+  { token: "s3", alias: "s3" },
+  { token: "scheduler", alias: "scheduler" },
+  { token: "secretsmanager", alias: "secrets manager" },
+  { token: "sfn", alias: "step functions" },
+  { token: "shield", alias: "shield" },
+  { token: "sns", alias: "sns" },
+  { token: "sqs", alias: "sqs" },
+  { token: "ssm", alias: "ssm" },
+  { token: "vpc", alias: "vpc" },
+  { token: "waf", alias: "waf" },
+  { token: "xray", alias: "x-ray" }
+] as const;
+
+function uniqueStrings(values: readonly string[]): string[] {
+  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
+}
+
+function formatGeneratedResourceLabel(resourceId: string): string {
+  return resourceId
+    .replace(/^aws-/, "")
+    .split("-")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+const RESOURCE_DEFINITION_KEYWORDS = resourceDefinitions
+  .filter((definition) => definition.resourceType !== "UNKNOWN")
+  .map((definition) => ({
+    definition,
+    keywords: createResourceDefinitionKeywords(definition),
+    label: formatGeneratedResourceLabel(definition.id)
+  }));
+
+const RESOURCE_KEYWORDS: readonly {
+  readonly resourceType: ResourceType;
+  readonly keywords: readonly string[];
+  readonly label: string;
+}[] = [
+  ...MANUAL_RESOURCE_KEYWORDS,
+  ...RESOURCE_DEFINITION_KEYWORDS.map((item) => ({
+    resourceType: item.definition.resourceType,
+    keywords: item.keywords,
+    label: item.label
+  }))
+];
 
 const STATIC_SITE_INTENT_PHRASES = [
   "\uC815\uC801",
@@ -762,6 +871,26 @@ function findResourceTypes(normalizedInstruction: string): ResourceType[] {
       (left, right) => left.textIndex - right.textIndex || left.resourceIndex - right.resourceIndex
     )
     .map((match) => match.resourceType);
+}
+
+function findResourceDefinitionForInstruction(
+  normalizedInstruction: string,
+  resourceType: ResourceType
+): (typeof resourceDefinitions)[number] | undefined {
+  return RESOURCE_DEFINITION_KEYWORDS.flatMap((item, resourceIndex) => {
+    if (item.definition.resourceType !== resourceType) {
+      return [];
+    }
+
+    return item.keywords
+      .filter((keyword) => includesPhrase(normalizedInstruction, keyword))
+      .map((keyword) => ({
+        definition: item.definition,
+        resourceIndex,
+        score: compactSearchText(keyword).length
+      }));
+  }).sort((left, right) => right.score - left.score || left.resourceIndex - right.resourceIndex)[0]
+    ?.definition;
 }
 
 function splitPatchOperationClauses(instruction: string): string[] {
@@ -1324,7 +1453,11 @@ function createStaticSiteReorganizationChanges(
 }
 
 function formatPatchResourceType(resourceType: ResourceType): string {
-  return ENGLISH_RESOURCE_LABELS[resourceType] ?? resourceType;
+  const defaultDefinition = RESOURCE_DEFINITION_KEYWORDS.find(
+    (item) => item.definition.resourceType === resourceType
+  );
+
+  return ENGLISH_RESOURCE_LABELS[resourceType] ?? defaultDefinition?.label ?? resourceType;
 }
 
 function formatPatchAction(action: ArchitecturePatchAction): string {
@@ -1388,7 +1521,7 @@ function addResource(
     type: resourceType,
     label: formatPatchResourceType(resourceType),
     ...getNewResourcePosition(nextNodes),
-    config: createNewResourceConfig(resourceType, nextNodes)
+    config: createNewResourceConfig(resourceType, nextNodes, intent)
   };
 
   nextNodes.push(newNode);
@@ -1530,8 +1663,22 @@ function addRuntimeDataEdges(
 
 function createNewResourceConfig(
   resourceType: ResourceType,
-  existingNodes: readonly ResourceNode[]
+  existingNodes: readonly ResourceNode[],
+  intent: ArchitecturePatchIntent
 ): ResourceNode["config"] {
+  const matchingDefinition = findResourceDefinitionForInstruction(
+    normalizeSearchText(intent.instruction),
+    resourceType
+  );
+  const baseConfig: ResourceNode["config"] = matchingDefinition
+    ? {
+        terraformResourceType: matchingDefinition.terraform.resourceType,
+        ...(matchingDefinition.terraform.blockType !== "resource"
+          ? { terraformBlockType: matchingDefinition.terraform.blockType }
+          : {})
+      }
+    : {};
+
   if (resourceType === "CLOUDFRONT") {
     const originNode = findBestNode(existingNodes, [
       "S3",
@@ -1540,10 +1687,10 @@ function createNewResourceConfig(
       "API_GATEWAY_REST_API"
     ]);
 
-    return originNode ? { originResourceId: originNode.id } : {};
+    return originNode ? { ...baseConfig, originResourceId: originNode.id } : baseConfig;
   }
 
-  return {};
+  return baseConfig;
 }
 
 function createTerraformReference(
