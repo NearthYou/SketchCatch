@@ -571,7 +571,7 @@ function isTrafficAnswered(prompt: string): boolean {
 }
 
 function isDatabaseAnswered(prompt: string): boolean {
-  return hasPromptTerm(prompt, ["database", " db", "rds", "postgres", "postgresql", "mysql", "dynamodb", "데이터베이스", "정적 콘텐츠", "사용자 정보", "게시글", "?곗씠", "肄섑뀗", "寃뚯떆", "10gb", "100gb"]);
+  return hasPromptTerm(prompt, ["database", " db", "rds", "postgres", "postgresql", "mysql", "dynamodb", "데이터베이스", "간단한 데이터", "중간 규모 데이터", "대용량 데이터", "정적 콘텐츠", "사용자 정보", "게시글", "?곗씠", "肄섑뀗", "寃뚯떆", "10gb", "100gb"]);
 }
 
 function isFrontendAnswered(prompt: string): boolean {
@@ -1196,6 +1196,7 @@ function findRequirementCoverageValidationIssues(
 
   issues.push(...findExplicitResourceTypeValidationIssues(normalizedPrompt, architectureJson));
   issues.push(...findRequestedResourceQuantityValidationIssues(normalizedPrompt, architectureJson));
+  issues.push(...findRuntimeTopologyValidationIssues(normalizedPrompt, architectureJson));
 
   if (requiresNoDatabase(normalizedPrompt) && (nodeTypes.has("RDS") || nodeTypes.has("DB_SUBNET_GROUP") || hasForbiddenDatabaseResource(architectureJson))) {
     issues.push("The user selected no database, but the preview includes database resources or database-specific labels/config. Regenerate without database resources.");
@@ -1256,6 +1257,37 @@ function findRequirementCoverageValidationIssues(
   return issues;
 }
 
+function findRuntimeTopologyValidationIssues(
+  normalizedPrompt: string,
+  architectureJson: ArchitectureJson
+): string[] {
+  const issues: string[] = [];
+
+  if (requiresAlbEc2TrafficPath(normalizedPrompt) && !hasAlbToEc2TrafficPath(architectureJson)) {
+    issues.push(
+      "The user requested EC2 runtime behind an ALB, but the preview does not connect LOAD_BALANCER/LOAD_BALANCER_LISTENER through Auto Scaling or target resources to EC2 nodes. Regenerate with a visible ALB -> ASG/target group -> EC2 traffic path."
+    );
+  }
+
+  if (requiresAutoScalingGroupEc2RuntimePath(normalizedPrompt) && !hasAutoScalingGroupToEc2Path(architectureJson)) {
+    issues.push(
+      "The user requested an Auto Scaling Group, but the preview does not connect AUTO_SCALING_GROUP to the EC2 fleet. Regenerate with ASG visibly managing or scaling the EC2 nodes."
+    );
+  }
+
+  if (requiresEc2PrivateSubnetSplit(normalizedPrompt)) {
+    const spread = getEc2SubnetSpread(architectureJson);
+
+    if (spread.privateSubnetCount < 2 || spread.ec2SubnetCount < 2) {
+      issues.push(
+        `The user requested EC2 instances split across two private subnets, but the preview shows ${spread.ec2SubnetCount} private subnet placement(s) for EC2 across ${spread.privateSubnetCount} private subnet node(s). Regenerate with EC2 nodes distributed across at least two private app subnets.`
+      );
+    }
+  }
+
+  return issues;
+}
+
 function findExplicitResourceTypeValidationIssues(
   normalizedPrompt: string,
   architectureJson: ArchitectureJson
@@ -1287,6 +1319,174 @@ function findRequestedResourceQuantityValidationIssues(
   return [
     `The user requested ${requestedQuantities.ec2Instances} EC2 instances, but the preview includes only ${ec2NodeCount}. Regenerate with at least ${requestedQuantities.ec2Instances} visible EC2 ResourceNode entries.`
   ];
+}
+
+function hasAlbToEc2TrafficPath(architectureJson: ArchitectureJson): boolean {
+  return hasPathBetweenNodeTypes(
+    architectureJson,
+    ["LOAD_BALANCER", "LOAD_BALANCER_LISTENER"],
+    ["EC2"],
+    ["LOAD_BALANCER", "LOAD_BALANCER_LISTENER", "LOAD_BALANCER_TARGET_GROUP", "LOAD_BALANCER_TARGET_GROUP_ATTACHMENT", "AUTO_SCALING_GROUP", "EC2"],
+    4
+  );
+}
+
+function hasAutoScalingGroupToEc2Path(architectureJson: ArchitectureJson): boolean {
+  return hasPathBetweenNodeTypes(
+    architectureJson,
+    ["AUTO_SCALING_GROUP"],
+    ["EC2"],
+    ["LOAD_BALANCER", "LOAD_BALANCER_LISTENER", "LOAD_BALANCER_TARGET_GROUP", "LOAD_BALANCER_TARGET_GROUP_ATTACHMENT", "AUTO_SCALING_GROUP", "EC2", "LAUNCH_TEMPLATE"],
+    3
+  );
+}
+
+function hasPathBetweenNodeTypes(
+  architectureJson: ArchitectureJson,
+  sourceTypes: readonly ResourceType[],
+  targetTypes: readonly ResourceType[],
+  allowedTypes: readonly ResourceType[],
+  maxDepth: number
+): boolean {
+  const allowedTypeSet = new Set(allowedTypes);
+  const targetTypeSet = new Set(targetTypes);
+  const nodesById = new Map(architectureJson.nodes.map((node) => [node.id, node]));
+  const adjacency = createUndirectedAdjacency(architectureJson.edges);
+  const startNodeIds = architectureJson.nodes
+    .filter((node) => sourceTypes.includes(node.type))
+    .map((node) => node.id);
+
+  for (const startNodeId of startNodeIds) {
+    const queue: Array<{ readonly nodeId: string; readonly depth: number }> = [{ nodeId: startNodeId, depth: 0 }];
+    const visited = new Set<string>([startNodeId]);
+
+    while (queue.length > 0) {
+      const current = queue.shift();
+
+      if (!current) {
+        continue;
+      }
+
+      const currentNode = nodesById.get(current.nodeId);
+
+      if (current.depth > 0 && currentNode && targetTypeSet.has(currentNode.type)) {
+        return true;
+      }
+
+      if (current.depth >= maxDepth) {
+        continue;
+      }
+
+      for (const nextNodeId of adjacency.get(current.nodeId) ?? []) {
+        if (visited.has(nextNodeId)) {
+          continue;
+        }
+
+        const nextNode = nodesById.get(nextNodeId);
+
+        if (!nextNode || !allowedTypeSet.has(nextNode.type)) {
+          continue;
+        }
+
+        visited.add(nextNodeId);
+        queue.push({ nodeId: nextNodeId, depth: current.depth + 1 });
+      }
+    }
+  }
+
+  return false;
+}
+
+function createUndirectedAdjacency(
+  edges: readonly ArchitectureJson["edges"][number][]
+): Map<string, Set<string>> {
+  const adjacency = new Map<string, Set<string>>();
+
+  for (const edge of edges) {
+    addAdjacentNode(adjacency, edge.sourceId, edge.targetId);
+    addAdjacentNode(adjacency, edge.targetId, edge.sourceId);
+  }
+
+  return adjacency;
+}
+
+function addAdjacentNode(adjacency: Map<string, Set<string>>, sourceId: string, targetId: string): void {
+  const adjacentNodeIds = adjacency.get(sourceId) ?? new Set<string>();
+
+  adjacentNodeIds.add(targetId);
+  adjacency.set(sourceId, adjacentNodeIds);
+}
+
+function getEc2SubnetSpread(architectureJson: ArchitectureJson): {
+  readonly ec2SubnetCount: number;
+  readonly privateSubnetCount: number;
+} {
+  const nodesById = new Map(architectureJson.nodes.map((node) => [node.id, node]));
+  const privateSubnetIds = new Set(
+    architectureJson.nodes
+      .filter((node) => node.type === "SUBNET" && /\bprivate\b|프라이빗|사설/iu.test(createNodeSearchText(node)))
+      .map((node) => node.id)
+  );
+  const ec2SubnetIds = new Set<string>();
+
+  for (const node of architectureJson.nodes) {
+    if (node.type !== "EC2") {
+      continue;
+    }
+
+    for (const subnetId of findAssociatedSubnetIds(node, architectureJson, nodesById)) {
+      if (privateSubnetIds.has(subnetId)) {
+        ec2SubnetIds.add(subnetId);
+      }
+    }
+  }
+
+  return {
+    ec2SubnetCount: ec2SubnetIds.size,
+    privateSubnetCount: privateSubnetIds.size
+  };
+}
+
+function findAssociatedSubnetIds(
+  node: ArchitectureJson["nodes"][number],
+  architectureJson: ArchitectureJson,
+  nodesById: ReadonlyMap<string, ArchitectureJson["nodes"][number]>
+): string[] {
+  const subnetIds = new Set<string>();
+  const configSubnetNode = findConfigAreaNodeByKey(node, "subnetId", nodesById);
+
+  if (configSubnetNode?.type === "SUBNET") {
+    subnetIds.add(configSubnetNode.id);
+  }
+
+  for (const edge of architectureJson.edges) {
+    const candidateNodeId =
+      edge.sourceId === node.id ? edge.targetId : edge.targetId === node.id ? edge.sourceId : null;
+
+    if (!candidateNodeId) {
+      continue;
+    }
+
+    const candidateNode = nodesById.get(candidateNodeId);
+
+    if (candidateNode?.type === "SUBNET") {
+      subnetIds.add(candidateNode.id);
+    }
+  }
+
+  const nodeRect = createPreviewNodeRect(node);
+
+  for (const candidateNode of nodesById.values()) {
+    if (candidateNode.type !== "SUBNET") {
+      continue;
+    }
+
+    if (rectContains(createPreviewNodeRect(candidateNode), nodeRect)) {
+      subnetIds.add(candidateNode.id);
+    }
+  }
+
+  return [...subnetIds];
 }
 
 function findExplicitResourceTypesInPrompt(normalizedPrompt: string): ResourceType[] {
@@ -2368,7 +2568,7 @@ function requiresSpaFrontend(normalizedPrompt: string): boolean {
 }
 
 function requiresComplexBackend(normalizedPrompt: string): boolean {
-  return /(complex\s+backend|complex\s+business|business\s+logic|spring\s*boot|django|microservice|\uBCF5\uC7A1|\uBE44\uC988\uB2C8\uC2A4\s*\uB85C\uC9C1|\uB9C8\uC774\uD06C\uB85C\uC11C\uBE44\uC2A4)/iu.test(
+  return /(complex\s+backend|complex\s+business|business\s+logic|spring\s*boot|django|microservice|\uBCF5\uC7A1\s*(?:\uBE44\uC988\uB2C8\uC2A4|\uBC31\uC5D4\uB4DC)|\uBE44\uC988\uB2C8\uC2A4\s*\uB85C\uC9C1|\uB9C8\uC774\uD06C\uB85C\uC11C\uBE44\uC2A4)/iu.test(
     normalizedPrompt
   );
 }
@@ -2403,6 +2603,22 @@ function mentionsRealtimePath(text: string): boolean {
   return /(realtime|real-time|notification|websocket|\bsse\b|notify|\uC2E4\uC2DC\uAC04\s*\uC54C\uB9BC|\uCC44\uD305)/iu.test(text);
 }
 
+function requiresAlbEc2TrafficPath(normalizedPrompt: string): boolean {
+  return /((alb|application\s*load\s*balancer|load\s*balancer|로드\s*밸런서)[\s\S]{0,80}(ec2|auto\s*scaling|autoscaling|asg|인스턴스|서버|뒤|트래픽)|(ec2|인스턴스|서버)[\s\S]{0,80}(alb|application\s*load\s*balancer|load\s*balancer|로드\s*밸런서)\s*(뒤|behind)?)/iu.test(
+    normalizedPrompt
+  );
+}
+
+function requiresAutoScalingGroupEc2RuntimePath(normalizedPrompt: string): boolean {
+  return mentionsAutoScalingGroup(normalizedPrompt) && /(ec2|instance|instances|fleet|runtime|런타임|인스턴스|서버|alb|load\s*balancer|로드\s*밸런서)/iu.test(normalizedPrompt);
+}
+
+function requiresEc2PrivateSubnetSplit(normalizedPrompt: string): boolean {
+  return /((ec2|인스턴스|서버)[\s\S]{0,120}(private\s*subnets?\s*2|2\s*private\s*subnets|프라이빗\s*서브넷\s*2|서브넷\s*2개)[\s\S]{0,80}(split|spread|distribut|나눠|분산|배치)|(private\s*subnets?\s*2|2\s*private\s*subnets|프라이빗\s*서브넷\s*2|서브넷\s*2개)[\s\S]{0,120}(ec2|인스턴스|서버)[\s\S]{0,80}(split|spread|distribut|나눠|분산|배치))/iu.test(
+    normalizedPrompt
+  );
+}
+
 function requiresKoreaOnlyRegion(normalizedPrompt: string): boolean {
   return /(region:\s*(korea|seoul)|korea\s*only|seoul\s*region|ap-northeast-2|\uD55C\uAD6D\uB9CC|\uC11C\uC6B8\s*\uB9AC\uC804)/iu.test(
     normalizedPrompt
@@ -2410,7 +2626,7 @@ function requiresKoreaOnlyRegion(normalizedPrompt: string): boolean {
 }
 
 function hasNoFileUploadRequirement(normalizedPrompt: string): boolean {
-  return /(?:file\s*upload:\s*(?:none|no)|no\s+file\s+upload|upload:\s*none|text\s*only|\uD30C\uC77C[\s\S]{0,80}\uC5C6\uC74C|\uC5C6\uC74C\s*\(\uD14D\uC2A4\uD2B8\uB9CC\)|\uD14D\uC2A4\uD2B8\uB9CC)/iu.test(
+  return /(?:file\s*upload:\s*(?:none|no)|no\s+file\s+upload|upload:\s*none|text\s*only|\uD30C\uC77C[\s\S]{0,80}(?:\uC5C6\uC74C|\uC5C6\uACE0|\uC5C6\uB2E4|\uC5C6\uAC8C|\uC5C6\uC774|\uC5C6\uB294|\uC81C\uC678)|\uC5C6\uC74C\s*\(\uD14D\uC2A4\uD2B8\uB9CC\)|\uD14D\uC2A4\uD2B8\uB9CC)/iu.test(
     normalizedPrompt
   );
 }
@@ -2428,7 +2644,7 @@ function hasExplicitDatabaseMarker(normalizedPrompt: string): boolean {
 }
 
 function hasExplicitComplexBackendMarker(normalizedPrompt: string): boolean {
-  return /(complex\s+backend|complex\s+business|business\s+logic|spring\s*boot|django|microservice)/iu.test(
+  return /(complex\s+backend|complex\s+business|business\s+logic|spring\s*boot|django|microservice|\uBCF5\uC7A1\s*(?:\uBE44\uC988\uB2C8\uC2A4|\uBC31\uC5D4\uB4DC)|\uBE44\uC988\uB2C8\uC2A4\s*\uB85C\uC9C1|\uB9C8\uC774\uD06C\uB85C\uC11C\uBE44\uC2A4)/iu.test(
     normalizedPrompt
   );
 }

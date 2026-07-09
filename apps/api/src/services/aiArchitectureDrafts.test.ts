@@ -643,12 +643,17 @@ test("createAmazonQArchitectureDraftResponse repairs previews missing explicit C
           node("artifact-bucket", "S3", "Artifact Bucket", 1700, 100),
           node("service-role", "IAM_ROLE", "Pipeline Service Role", 2020, 100),
           node("alb", "LOAD_BALANCER", "Application Load Balancer", 100, 360),
-          node("asg", "AUTO_SCALING_GROUP", "Auto Scaling Group", 420, 360),
-          node("app-a", "EC2", "Application Server A", 740, 360),
-          node("app-b", "EC2", "Application Server B", 1060, 360),
-          node("app-c", "EC2", "Application Server C", 1380, 360)
+          node("asg", "AUTO_SCALING_GROUP", "Auto Scaling Group", 420, 420),
+          node("app-a", "EC2", "Application Server A", 740, 260),
+          node("app-b", "EC2", "Application Server B", 740, 420),
+          node("app-c", "EC2", "Application Server C", 740, 580)
         ],
-        edges: []
+        edges: [
+          { id: "alb-to-asg", sourceId: "alb", targetId: "asg", label: "routes" },
+          { id: "asg-to-app-a", sourceId: "asg", targetId: "app-a", label: "scales" },
+          { id: "asg-to-app-b", sourceId: "asg", targetId: "app-b", label: "scales" },
+          { id: "asg-to-app-c", sourceId: "asg", targetId: "app-c", label: "scales" }
+        ]
       },
       requirementCoverage: sampleRequirementCoverage([
         "codestar",
@@ -685,6 +690,251 @@ test("createAmazonQArchitectureDraftResponse repairs previews missing explicit C
   assert.equal(response.title, "Corrected CI/CD EC2 Deployment");
   assert.equal(response.architectureJson.nodes.filter((node) => node.type === "EC2").length, 3);
   assert.ok(response.architectureJson.nodes.some((node) => node.type === "CODEBUILD_PROJECT"));
+});
+
+test("createAmazonQArchitectureDraftResponse repairs no-upload CI/CD drafts with disconnected ALB and ASG topology", async () => {
+  const requestedPrompts: string[] = [];
+  let callCount = 0;
+  const prompt = [
+    "GitHub main 브랜치에서 AWS로 배포되는 동적 웹 애플리케이션을 만들고 싶어.",
+    "반드시 CodeStar Connection, CodePipeline, CodeBuild Project, CodeDeploy App, CodeDeploy Deployment Group을 포함해줘.",
+    "런타임은 ALB 뒤의 EC2 3대와 Auto Scaling Group으로 구성해줘.",
+    "어떤 종류의 웹사이트인가요? 동적 웹 애플리케이션입니다.",
+    "예상 트래픽 규모는 중간 규모입니다.",
+    "데이터베이스가 필요한가요? 간단한 데이터입니다.",
+    "프론트엔드 기술은? React/Vue/Angular SPA 프레임워크입니다.",
+    "백엔드가 필요한가요? 복잡한 비즈니스 로직입니다.",
+    "주요 사용자 지역은 한국만 서울 리전입니다.",
+    "월 예산 범위는 50-200만원 고성능입니다.",
+    "SSL 인증서(HTTPS)가 필요한가요? 선택사항입니다.",
+    "파일 업로드는 없고 텍스트만 처리합니다.",
+    "실시간 기능이 필요한가요? 필요 없음.",
+    "관리 복잡도 선호도는 직접 관리입니다.",
+    "페이지 로딩 시간 목표는 3초 이내입니다.",
+    "전체 웹사이트 크기는 10MB-100MB입니다.",
+    "트래픽 패턴은 이벤트성 급증입니다.",
+    "서비스 중단 허용 시간은 일 1시간 이내 99.9% 가용성입니다."
+  ].join("\n");
+  const provider = createFakeAmazonQProvider((request) => {
+    requestedPrompts.push(request.prompt);
+    callCount += 1;
+
+    if (callCount === 1) {
+      return JSON.stringify({
+        status: "preview",
+        title: "Disconnected CI/CD Deployment",
+        architectureJson: {
+          nodes: [
+            node("codestar", "CODESTAR_CONNECTION", "CodeStar Connection", 100, 100),
+            node("pipeline", "CODEPIPELINE", "CodePipeline", 420, 100),
+            node("build", "CODEBUILD_PROJECT", "CodeBuild Project", 740, 100),
+            node("deploy-app", "CODEDEPLOY_APP", "CodeDeploy App", 1060, 100),
+            node("deploy-group", "CODEDEPLOY_DEPLOYMENT_GROUP", "CodeDeploy Deployment Group", 1380, 100),
+            node("artifact-bucket", "S3", "Artifact Bucket", 1700, 100),
+            node("service-role", "IAM_ROLE", "Pipeline Service Role", 2020, 100),
+            node("alb", "LOAD_BALANCER", "Application Load Balancer", 100, 360),
+            node("asg", "AUTO_SCALING_GROUP", "Auto Scaling Group", 420, 360),
+            node("app-a", "EC2", "Application Server A", 740, 360),
+            node("app-b", "EC2", "Application Server B", 1060, 360),
+            node("app-c", "EC2", "Application Server C", 1380, 360),
+            node("upload-bucket", "S3", "Upload Bucket", 1700, 360),
+            node("media-bucket", "S3", "Content Media Bucket", 2020, 360)
+          ],
+          edges: [
+            { id: "pipeline-to-build", sourceId: "pipeline", targetId: "build", label: "builds" },
+            { id: "deploy-to-asg", sourceId: "deploy-group", targetId: "asg", label: "deploys" }
+          ]
+        },
+        requirementCoverage: sampleRequirementCoverage([
+          "codestar",
+          "pipeline",
+          "build",
+          "deploy-app",
+          "deploy-group",
+          "artifact-bucket",
+          "service-role",
+          "alb",
+          "asg",
+          "app-a",
+          "app-b",
+          "app-c"
+        ])
+      });
+    }
+
+    return JSON.stringify({
+      status: "preview",
+      title: "Corrected No Upload CI/CD Deployment",
+      architectureJson: {
+        nodes: [
+          node("codestar", "CODESTAR_CONNECTION", "CodeStar Connection", 100, 100),
+          node("pipeline", "CODEPIPELINE", "CodePipeline", 420, 100),
+          node("build", "CODEBUILD_PROJECT", "CodeBuild Project", 740, 100),
+          node("deploy-app", "CODEDEPLOY_APP", "CodeDeploy App", 1060, 100),
+          node("deploy-group", "CODEDEPLOY_DEPLOYMENT_GROUP", "CodeDeploy Deployment Group", 1380, 100),
+          node("artifact-bucket", "S3", "Artifact Bucket", 1700, 100),
+          node("service-role", "IAM_ROLE", "Pipeline Service Role", 2020, 100),
+          node("alb", "LOAD_BALANCER", "Application Load Balancer", 100, 360),
+          node("asg", "AUTO_SCALING_GROUP", "Auto Scaling Group", 420, 420),
+          node("app-a", "EC2", "Application Server A", 740, 260),
+          node("app-b", "EC2", "Application Server B", 740, 420),
+          node("app-c", "EC2", "Application Server C", 740, 580),
+          node("db-subnets", "DB_SUBNET_GROUP", "DB Subnet Group", 1060, 580),
+          node("database", "RDS", "Application Database", 1380, 580)
+        ],
+        edges: [
+          { id: "pipeline-to-build", sourceId: "pipeline", targetId: "build", label: "builds" },
+          { id: "build-to-deploy-app", sourceId: "build", targetId: "deploy-app", label: "deploy artifact" },
+          { id: "deploy-app-to-group", sourceId: "deploy-app", targetId: "deploy-group", label: "uses group" },
+          { id: "alb-to-asg", sourceId: "alb", targetId: "asg", label: "routes" },
+          { id: "asg-to-app-a", sourceId: "asg", targetId: "app-a", label: "scales" },
+          { id: "asg-to-app-b", sourceId: "asg", targetId: "app-b", label: "scales" },
+          { id: "asg-to-app-c", sourceId: "asg", targetId: "app-c", label: "scales" }
+        ]
+      },
+      requirementCoverage: sampleRequirementCoverage([
+        "codestar",
+        "pipeline",
+        "build",
+        "deploy-app",
+        "deploy-group",
+        "artifact-bucket",
+        "service-role",
+        "alb",
+        "asg",
+        "app-a",
+        "app-b",
+        "app-c",
+        "database"
+      ])
+    });
+  });
+
+  const response = await createAmazonQArchitectureDraftResponse(
+    { prompt },
+    {
+      provider,
+      creditPolicy: confirmedCreditPolicy
+    }
+  );
+
+  if ("status" in response) {
+    assert.fail(`Expected preview, got clarification: ${response.question}`);
+  }
+
+  assert.equal(requestedPrompts.length, 2);
+  assert.match(requestedPrompts[1] ?? "", /selected no file upload/);
+  assert.match(requestedPrompts[1] ?? "", /ALB -> ASG\/target group -> EC2/);
+  assert.match(requestedPrompts[1] ?? "", /AUTO_SCALING_GROUP to the EC2 fleet/);
+  assert.equal(response.title, "Corrected No Upload CI/CD Deployment");
+  assert.equal(response.architectureJson.nodes.some((node) => /upload|media/iu.test(node.id)), false);
+});
+
+test("createAmazonQArchitectureDraftResponse repairs EC2 fleets not split across requested private subnets", async () => {
+  const requestedPrompts: string[] = [];
+  let callCount = 0;
+  const prompt = [
+    "Required components: EC2 3 instances, Auto Scaling Group, Application Load Balancer, VPC, and two private app subnets.",
+    "Architecture flow: ALB -> Auto Scaling Group -> EC2 fleet.",
+    "Validation checklist: EC2 3대를 프라이빗 서브넷 2개에 나눠 배치하고 ALB 뒤에서 트래픽을 받는 구조.",
+    "database: none no database.",
+    "file upload: none no file upload."
+  ].join("\n");
+  const provider = createFakeAmazonQProvider((request) => {
+    requestedPrompts.push(request.prompt);
+    callCount += 1;
+
+    if (callCount === 1) {
+      return JSON.stringify({
+        status: "preview",
+        title: "Single Subnet EC2 Fleet",
+        architectureJson: {
+          nodes: [
+            node("vpc", "VPC", "Application VPC", 100, 40),
+            node("private-a", "SUBNET", "Private App Subnet A", 1060, 100),
+            node("private-b", "SUBNET", "Private App Subnet B", 1060, 360),
+            node("alb", "LOAD_BALANCER", "Application Load Balancer", 100, 260),
+            node("asg", "AUTO_SCALING_GROUP", "Auto Scaling Group", 420, 260),
+            node("app-a", "EC2", "Application Server A", 740, 100),
+            node("app-b", "EC2", "Application Server B", 740, 260),
+            node("app-c", "EC2", "Application Server C", 740, 420)
+          ],
+          edges: [
+            { id: "alb-to-asg", sourceId: "alb", targetId: "asg", label: "routes" },
+            { id: "asg-to-app-a", sourceId: "asg", targetId: "app-a", label: "scales" },
+            { id: "asg-to-app-b", sourceId: "asg", targetId: "app-b", label: "scales" },
+            { id: "asg-to-app-c", sourceId: "asg", targetId: "app-c", label: "scales" },
+            { id: "private-a-to-app-a", sourceId: "private-a", targetId: "app-a", label: "places" },
+            { id: "private-a-to-app-b", sourceId: "private-a", targetId: "app-b", label: "places" },
+            { id: "private-a-to-app-c", sourceId: "private-a", targetId: "app-c", label: "places" }
+          ]
+        },
+        requirementCoverage: sampleRequirementCoverage(["vpc", "private-a", "private-b", "alb", "asg", "app-a", "app-b", "app-c"])
+      });
+    }
+
+    return JSON.stringify({
+      status: "preview",
+      title: "Split Private Subnet EC2 Fleet",
+      architectureJson: {
+        nodes: [
+            node("vpc", "VPC", "Application VPC", 100, 40),
+            node("private-a", "SUBNET", "Private App Subnet A", 1060, 100),
+            node("private-b", "SUBNET", "Private App Subnet B", 1060, 360),
+            node("alb", "LOAD_BALANCER", "Application Load Balancer", 100, 260),
+            node("asg", "AUTO_SCALING_GROUP", "Auto Scaling Group", 420, 260),
+            node("app-a", "EC2", "Application Server A", 740, 100),
+            node("app-b", "EC2", "Application Server B", 740, 260),
+            node("app-c", "EC2", "Application Server C", 740, 420)
+        ],
+        edges: [
+          { id: "alb-to-asg", sourceId: "alb", targetId: "asg", label: "routes" },
+          { id: "asg-to-app-a", sourceId: "asg", targetId: "app-a", label: "scales" },
+          { id: "asg-to-app-b", sourceId: "asg", targetId: "app-b", label: "scales" },
+          { id: "asg-to-app-c", sourceId: "asg", targetId: "app-c", label: "scales" },
+          { id: "private-a-to-app-a", sourceId: "private-a", targetId: "app-a", label: "places" },
+          { id: "private-b-to-app-b", sourceId: "private-b", targetId: "app-b", label: "places" },
+          { id: "private-b-to-app-c", sourceId: "private-b", targetId: "app-c", label: "places" }
+        ]
+      },
+      requirementCoverage: sampleRequirementCoverage(["vpc", "private-a", "private-b", "alb", "asg", "app-a", "app-b", "app-c"])
+    });
+  });
+
+  const response = await createAmazonQArchitectureDraftResponse(
+    { prompt },
+    {
+      provider,
+      creditPolicy: confirmedCreditPolicy
+    }
+  );
+
+  if ("status" in response) {
+    assert.fail(`Expected preview, got clarification: ${response.question}`);
+  }
+
+  assert.equal(requestedPrompts.length, 2);
+  assert.match(requestedPrompts[1] ?? "", /split across two private subnets/);
+  assert.equal(response.title, "Split Private Subnet EC2 Fleet");
+});
+
+test("createArchitectureDraft keeps high budget answers from triggering low-budget DB follow-up", () => {
+  const response = createArchitectureDraft({
+    prompt: [
+      "GitHub main 브랜치에서 AWS로 배포되는 동적 웹 애플리케이션을 만들고 싶어.",
+      "데이터베이스가 필요한가요? 간단한 데이터 (사용자 정보, 게시글 등 < 10GB)",
+      "프론트엔드 기술은? React/Vue/Angular (SPA 프레임워크)",
+      "백엔드가 필요한가요? 복잡한 비즈니스 로직 (Spring Boot, Django 등)",
+      "월 예산 범위는? 50-200만원 (고성능)",
+      "파일 업로드는 없고, 서울 리전, 중간 규모, 99.9% 가용성으로 해줘."
+    ].join("\n")
+  });
+
+  assert.equal(response.metadata.operatingProfile?.budgetLevel, "normal");
+  assert.equal(
+    response.metadata.guardrailWarnings?.some((warning) => warning.code === "low_budget_rds_cost"),
+    false
+  );
 });
 
 test("createAmazonQArchitectureDraftResponse creates deterministic decision spaces that vary by answer profile", async () => {

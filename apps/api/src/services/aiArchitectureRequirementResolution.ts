@@ -820,12 +820,30 @@ function createOperatingProfile(
 ): ArchitectureDraftOperatingProfile {
   const normalizedPrompt = normalizePrompt(prompt);
   const factSet = new Set(requirementFacts);
-  const lowBudgetKeywords = ["저렴", "낮은 예산", "비용 낮", "low budget", "연습용", "소수", "처음엔", "최소", "간단", "작게"];
+  const explicitNonLowBudgetKeywords = [
+    "10-50만원",
+    "50-200만원",
+    "200만원 이상",
+    "적당한 성능",
+    "고성능",
+    "엔터프라이즈",
+    "normal budget",
+    "high budget",
+    "enterprise"
+  ];
+  const lowBudgetKeywords = ["저렴", "낮은 예산", "비용 낮", "low budget", "연습용", "소수", "처음엔", "최소 비용", "작게"];
   const growthKeywords = ["방문자 증가", "홍보", "공개 서비스", "트래픽", "growth", "여러 사람", "많은 사용자"];
   const highSecurityKeywords = ["보호", "보안", "개인정보", "로그인", "회원", "계정", "private", "암호화"];
+  const budgetLevel =
+    explicitNonLowBudgetKeywords.some((keyword) => normalizedPrompt.includes(keyword.toLowerCase())) ||
+    /월\s*예산[\s\S]{0,40}(10-50|50-200|200만원|고성능|엔터프라이즈)/u.test(normalizedPrompt)
+      ? "normal"
+      : lowBudgetKeywords.some((keyword) => normalizedPrompt.includes(keyword.toLowerCase()))
+        ? "low"
+        : "normal";
 
   return {
-    budgetLevel: lowBudgetKeywords.some((keyword) => normalizedPrompt.includes(keyword)) ? "low" : "normal",
+    budgetLevel,
     trafficLevel: growthKeywords.some((keyword) => normalizedPrompt.includes(keyword.toLowerCase()))
       ? "normal"
       : "small",

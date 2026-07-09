@@ -10,10 +10,26 @@ Short English-only working log for the current agent context. Older records are 
 - The AI draft prompt, top-level payload, and referenceKnowledge payload now receive the same generated resource catalog.
 - Generated CI/CD resources now carry deploy-ready default config guidance and pass Terraform Preview, diagnostics, and live apply safety support checks.
 - Amazon Q preview self-validation now rejects missing explicitly requested resource-panel types and undersized EC2 fleets before accepting a draft.
+- Amazon Q preview self-validation now also rejects no-upload violations, disconnected ALB/ASG/EC2 runtime paths, and EC2 fleets not distributed across requested private subnets.
 - Targeted API tests plus full lint/typecheck/build passed during this session.
 - No Terraform apply/destroy, deployment, AWS calls, or cloud mutation was run.
 
 ## Session Record
+
+### 2026-07-10 - AI draft runtime topology validation
+
+- Goal: Stop accepting Amazon Q diagrams that place requested CI/CD and runtime resources as disconnected icons or contradict selected questionnaire answers.
+- Completed:
+  - Added runtime topology validation for ALB to ASG/EC2 traffic paths.
+  - Added ASG-to-EC2 fleet validation when ASG is requested as part of an EC2 runtime.
+  - Added private subnet spread validation for prompts that request EC2 placement across two private subnets.
+  - Expanded no-file-upload detection for Korean answers such as `파일 업로드는 없고`.
+  - Prevented `관리 복잡도` and `간단한 데이터` from being misread as complex backend or low-budget signals.
+- Verification:
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/aiArchitectureDrafts.test.ts src/services/aiArchitectureResourceQuantities.test.ts` passed.
+  - `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
+- Risk:
+  - This changes deterministic AI preview validation only. No Terraform apply/destroy, deployment, AWS calls, or cloud mutation was run.
 
 ### 2026-07-10 - AI draft explicit resource validation
 
