@@ -39,10 +39,17 @@ export function resolveArchitectureResourceQuantities(prompt: string): Architect
 function findRequestedResourceCount(normalizedPrompt: string, keywords: readonly string[]): number {
   const keywordPattern = keywords.map(escapeRegExp).join("|");
   const countPattern = `\\d{1,2}|${Array.from(KOREAN_COUNT_WORDS.keys()).join("|")}`;
-  const countSuffixPattern = `\\s*(?:개|대|정도|쯤|가량|필요|있어|있는|$)`;
+  const unitPattern = "(?:개|대|instances?|servers?|buckets?)";
+  const optionalParticlePattern = "(?:은|는|이|가|을|를|로|으로|:)?";
   const countNearKeywordPatterns = [
-    new RegExp(`(?:${keywordPattern})[^\\n]{0,16}(?:한\\s+)?(${countPattern})(?=${countSuffixPattern})`, "u"),
-    new RegExp(`(${countPattern})(?=${countSuffixPattern})\\s*(?:있는|짜리|의)?\\s*(?:${keywordPattern})`, "u")
+    new RegExp(
+      `(?:${keywordPattern})\\s*${optionalParticlePattern}\\s*(?:한\\s+)?(${countPattern})\\s*${unitPattern}?`,
+      "u"
+    ),
+    new RegExp(
+      `(${countPattern})\\s*${unitPattern}?\\s*(?:있는|짜리|의)?\\s*(?:${keywordPattern})`,
+      "u"
+    )
   ];
 
   for (const pattern of countNearKeywordPatterns) {

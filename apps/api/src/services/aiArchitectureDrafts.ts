@@ -1194,6 +1194,9 @@ function findRequirementCoverageValidationIssues(
     issues.push("Requirement coverage missing: Amazon Q must record the selected pattern and rejected/alternative pattern rationale.");
   }
 
+  issues.push(...findExplicitResourceTypeValidationIssues(normalizedPrompt, architectureJson));
+  issues.push(...findRequestedResourceQuantityValidationIssues(normalizedPrompt, architectureJson));
+
   if (requiresNoDatabase(normalizedPrompt) && (nodeTypes.has("RDS") || nodeTypes.has("DB_SUBNET_GROUP") || hasForbiddenDatabaseResource(architectureJson))) {
     issues.push("The user selected no database, but the preview includes database resources or database-specific labels/config. Regenerate without database resources.");
   }
@@ -1251,6 +1254,148 @@ function findRequirementCoverageValidationIssues(
   }
 
   return issues;
+}
+
+function findExplicitResourceTypeValidationIssues(
+  normalizedPrompt: string,
+  architectureJson: ArchitectureJson
+): string[] {
+  const requestedResourceTypes = findExplicitResourceTypesInPrompt(normalizedPrompt);
+  const actualResourceTypes = new Set(architectureJson.nodes.map((node) => node.type));
+  const missingResourceTypes = requestedResourceTypes.filter((resourceType) => !actualResourceTypes.has(resourceType));
+
+  if (missingResourceTypes.length === 0) {
+    return [];
+  }
+
+  return [
+    `The user explicitly requested supported resource-panel types that are missing from the preview: ${missingResourceTypes.join(", ")}. Regenerate with visible ResourceNode entries for each missing type.`
+  ];
+}
+
+function findRequestedResourceQuantityValidationIssues(
+  normalizedPrompt: string,
+  architectureJson: ArchitectureJson
+): string[] {
+  const requestedQuantities = resolveArchitectureResourceQuantities(normalizedPrompt);
+  const ec2NodeCount = architectureJson.nodes.filter((node) => node.type === "EC2").length;
+
+  if (requestedQuantities.ec2Instances <= 1 || ec2NodeCount >= requestedQuantities.ec2Instances) {
+    return [];
+  }
+
+  return [
+    `The user requested ${requestedQuantities.ec2Instances} EC2 instances, but the preview includes only ${ec2NodeCount}. Regenerate with at least ${requestedQuantities.ec2Instances} visible EC2 ResourceNode entries.`
+  ];
+}
+
+function findExplicitResourceTypesInPrompt(normalizedPrompt: string): ResourceType[] {
+  const normalizedSearchText = normalizeResourceSearchText(normalizedPrompt);
+  const compactSearchText = normalizedSearchText.replaceAll(" ", "");
+  const resourceTypes = new Set<ResourceType>();
+
+  for (const definition of SUPPORTED_RESOURCE_CATALOG) {
+    if (
+      createResourcePromptAliases(definition).some((alias) =>
+        resourceSearchTextIncludesAlias(normalizedSearchText, compactSearchText, alias)
+      )
+    ) {
+      resourceTypes.add(definition.nodeType);
+    }
+  }
+
+  return [...resourceTypes];
+}
+
+function resourceSearchTextIncludesAlias(
+  normalizedSearchText: string,
+  compactSearchText: string,
+  alias: string
+): boolean {
+  const normalizedAlias = normalizeResourceSearchText(alias);
+
+  if (normalizedAlias.length === 0) {
+    return false;
+  }
+
+  if (normalizedAlias === "s3") {
+    return new RegExp("(^|\\s)s3($|\\s)", "u").test(normalizedSearchText);
+  }
+
+  if (!normalizedAlias.includes(" ") && normalizedAlias.length <= 3) {
+    return new RegExp(`(^|\\s)${escapeRegExp(normalizedAlias)}($|\\s)`, "u").test(normalizedSearchText);
+  }
+
+  return (
+    normalizedSearchText.includes(normalizedAlias) ||
+    compactSearchText.includes(normalizedAlias.replaceAll(" ", ""))
+  );
+}
+
+function createResourcePromptAliases(definition: (typeof SUPPORTED_RESOURCE_CATALOG)[number]): string[] {
+  const terraformName = definition.terraformResourceType.replace(/^aws_/u, "").replaceAll("_", " ");
+  const catalogName = definition.id.replace(/^aws-/u, "").replaceAll("-", " ");
+  const aliases = [
+    definition.displayName,
+    definition.id,
+    catalogName,
+    definition.nodeType,
+    definition.nodeType.replaceAll("_", " "),
+    definition.terraformResourceType,
+    terraformName
+  ];
+
+  switch (definition.nodeType) {
+    case "S3":
+      aliases.push("s3", "s3 bucket", "artifact bucket");
+      break;
+    case "IAM_ROLE":
+      aliases.push("iam role", "service role");
+      break;
+    case "EC2":
+      aliases.push("ec2", "ec2 instance", "ec2 instances");
+      break;
+    case "AUTO_SCALING_GROUP":
+      aliases.push("auto scaling group", "autoscaling group", "asg");
+      break;
+    case "LOAD_BALANCER":
+      aliases.push("application load balancer", "load balancer", "alb");
+      break;
+    case "CODEBUILD_PROJECT":
+      aliases.push("codebuild project", "code build project");
+      break;
+    case "CODEDEPLOY_APP":
+      aliases.push("codedeploy app", "code deploy app");
+      break;
+    case "CODEDEPLOY_DEPLOYMENT_GROUP":
+      aliases.push("codedeploy deployment group", "code deploy deployment group");
+      break;
+    case "CODEPIPELINE":
+      aliases.push("codepipeline", "code pipeline");
+      break;
+    case "CODESTAR_CONNECTION":
+      aliases.push("codestar connection", "code star connection", "codestarconnections connection");
+      break;
+    default:
+      break;
+  }
+
+  return aliases;
+}
+
+function normalizeResourceSearchText(value: string): string {
+  return value
+    .normalize("NFKC")
+    .toLowerCase()
+    .replaceAll("_", " ")
+    .replaceAll("-", " ")
+    .replace(/[^a-z0-9가-힣]+/gu, " ")
+    .replace(/\s+/gu, " ")
+    .trim();
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function findArchitectureLayoutValidationIssues(architectureJson: ArchitectureJson): string[] {

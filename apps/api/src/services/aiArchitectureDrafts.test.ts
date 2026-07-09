@@ -583,6 +583,110 @@ test("createArchitectureDraft assembles explicitly requested resource-panel item
   assert.equal(nodesByType.get("SSM_PARAMETER")?.config["terraformBlockType"], "data");
 });
 
+test("createAmazonQArchitectureDraftResponse repairs previews missing explicit CI/CD resources and EC2 count", async () => {
+  const requestedPrompts: string[] = [];
+  let callCount = 0;
+  const prompt = [
+    "Required components: CodeStar Connection, CodePipeline, CodeBuild Project, CodeDeploy App, CodeDeploy Deployment Group, S3 artifact bucket, IAM Role, EC2 3 instances, Auto Scaling Group, and Application Load Balancer.",
+    "Architecture flow: GitHub main -> CodeStar Connection -> CodePipeline -> CodeBuild Project -> CodeDeploy App and Deployment Group -> Auto Scaling Group -> EC2 fleet behind ALB.",
+    "Validation checklist: include every listed resource-panel component as visible ResourceNode.type values and at least 3 EC2 nodes.",
+    "file upload: none no file upload."
+  ].join("\n");
+  const provider = createFakeAmazonQProvider((request) => {
+    requestedPrompts.push(request.prompt);
+    callCount += 1;
+
+    if (callCount === 1) {
+      return JSON.stringify({
+        status: "preview",
+        title: "Incomplete CI/CD EC2 Deployment",
+        architectureJson: {
+          nodes: [
+            node("codestar", "CODESTAR_CONNECTION", "CodeStar Connection", 100, 100),
+            node("pipeline", "CODEPIPELINE", "CodePipeline", 420, 100),
+            node("deploy-app", "CODEDEPLOY_APP", "CodeDeploy App", 740, 100),
+            node("deploy-group", "CODEDEPLOY_DEPLOYMENT_GROUP", "CodeDeploy Deployment Group", 1060, 100),
+            node("artifact-bucket", "S3", "Artifact Bucket", 1380, 100),
+            node("service-role", "IAM_ROLE", "Pipeline Service Role", 1700, 100),
+            node("alb", "LOAD_BALANCER", "Application Load Balancer", 100, 360),
+            node("asg", "AUTO_SCALING_GROUP", "Auto Scaling Group", 420, 360),
+            node("app-a", "EC2", "Application Server A", 740, 360),
+            node("app-b", "EC2", "Application Server B", 1060, 360)
+          ],
+          edges: []
+        },
+        requirementCoverage: sampleRequirementCoverage([
+          "codestar",
+          "pipeline",
+          "deploy-app",
+          "deploy-group",
+          "artifact-bucket",
+          "service-role",
+          "alb",
+          "asg",
+          "app-a",
+          "app-b"
+        ])
+      });
+    }
+
+    return JSON.stringify({
+      status: "preview",
+      title: "Corrected CI/CD EC2 Deployment",
+      architectureJson: {
+        nodes: [
+          node("codestar", "CODESTAR_CONNECTION", "CodeStar Connection", 100, 100),
+          node("pipeline", "CODEPIPELINE", "CodePipeline", 420, 100),
+          node("build", "CODEBUILD_PROJECT", "CodeBuild Project", 740, 100),
+          node("deploy-app", "CODEDEPLOY_APP", "CodeDeploy App", 1060, 100),
+          node("deploy-group", "CODEDEPLOY_DEPLOYMENT_GROUP", "CodeDeploy Deployment Group", 1380, 100),
+          node("artifact-bucket", "S3", "Artifact Bucket", 1700, 100),
+          node("service-role", "IAM_ROLE", "Pipeline Service Role", 2020, 100),
+          node("alb", "LOAD_BALANCER", "Application Load Balancer", 100, 360),
+          node("asg", "AUTO_SCALING_GROUP", "Auto Scaling Group", 420, 360),
+          node("app-a", "EC2", "Application Server A", 740, 360),
+          node("app-b", "EC2", "Application Server B", 1060, 360),
+          node("app-c", "EC2", "Application Server C", 1380, 360)
+        ],
+        edges: []
+      },
+      requirementCoverage: sampleRequirementCoverage([
+        "codestar",
+        "pipeline",
+        "build",
+        "deploy-app",
+        "deploy-group",
+        "artifact-bucket",
+        "service-role",
+        "alb",
+        "asg",
+        "app-a",
+        "app-b",
+        "app-c"
+      ])
+    });
+  });
+
+  const response = await createAmazonQArchitectureDraftResponse(
+    { prompt },
+    {
+      provider,
+      creditPolicy: confirmedCreditPolicy
+    }
+  );
+
+  if ("status" in response) {
+    assert.fail(`Expected preview, got clarification: ${response.question}`);
+  }
+
+  assert.equal(requestedPrompts.length, 2);
+  assert.match(requestedPrompts[1] ?? "", /CODEBUILD_PROJECT/);
+  assert.match(requestedPrompts[1] ?? "", /requested 3 EC2 instances/);
+  assert.equal(response.title, "Corrected CI/CD EC2 Deployment");
+  assert.equal(response.architectureJson.nodes.filter((node) => node.type === "EC2").length, 3);
+  assert.ok(response.architectureJson.nodes.some((node) => node.type === "CODEBUILD_PROJECT"));
+});
+
 test("createAmazonQArchitectureDraftResponse creates deterministic decision spaces that vary by answer profile", async () => {
   const staticPrompt = createStaticWebsiteCompletePrompt("file upload: none no file upload text only");
   const imageUploadPrompt = createStaticWebsiteCompletePrompt("file upload: image upload only profile image");
@@ -1389,6 +1493,14 @@ test("createAmazonQArchitectureDraftResponse sends detailed architecture briefs 
             config: {}
           },
           {
+            id: "app-asg",
+            type: "AUTO_SCALING_GROUP",
+            label: "EC2 Auto Scaling Group",
+            positionX: 840,
+            positionY: 160,
+            config: {}
+          },
+          {
             id: "https-listener",
             type: "LOAD_BALANCER_LISTENER",
             label: "HTTPS Listener",
@@ -1400,7 +1512,7 @@ test("createAmazonQArchitectureDraftResponse sends detailed architecture briefs 
             id: "app-a",
             type: "EC2",
             label: "App Target A",
-            positionX: 840,
+            positionX: 1080,
             positionY: 120,
             config: {}
           },
@@ -1408,7 +1520,7 @@ test("createAmazonQArchitectureDraftResponse sends detailed architecture briefs 
             id: "app-b",
             type: "EC2",
             label: "App Target B",
-            positionX: 840,
+            positionX: 1080,
             positionY: 280,
             config: {}
           },
@@ -1416,7 +1528,7 @@ test("createAmazonQArchitectureDraftResponse sends detailed architecture briefs 
             id: "database-subnets",
             type: "DB_SUBNET_GROUP",
             label: "DB Subnet Group",
-            positionX: 1080,
+            positionX: 1320,
             positionY: 160,
             config: {}
           },
@@ -1424,9 +1536,17 @@ test("createAmazonQArchitectureDraftResponse sends detailed architecture briefs 
             id: "database",
             type: "RDS",
             label: "RDS Multi-AZ",
-            positionX: 1360,
+            positionX: 1640,
             positionY: 160,
             config: { multiAz: true }
+          },
+          {
+            id: "vpc",
+            type: "VPC",
+            label: "Application VPC",
+            positionX: 1880,
+            positionY: 160,
+            config: {}
           },
           {
             id: "realtime-api",
@@ -1449,11 +1569,29 @@ test("createAmazonQArchitectureDraftResponse sends detailed architecture briefs 
             sourceId: "cdn",
             targetId: "alb",
             label: "api origin"
+          },
+          {
+            id: "alb-to-asg",
+            sourceId: "alb",
+            targetId: "app-asg",
+            label: "routes"
+          },
+          {
+            id: "asg-to-app-a",
+            sourceId: "app-asg",
+            targetId: "app-a",
+            label: "scales"
+          },
+          {
+            id: "asg-to-app-b",
+            sourceId: "app-asg",
+            targetId: "app-b",
+            label: "scales"
           }
         ]
       },
       requirementCoverage: [
-        ...sampleRequirementCoverage(["spa-bucket", "cdn", "alb", "app-a", "app-b"]),
+        ...sampleRequirementCoverage(["spa-bucket", "cdn", "alb", "app-asg", "app-a", "app-b", "vpc"]),
         {
           answer: "99.99% availability and database",
           status: "satisfied",

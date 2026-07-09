@@ -9,10 +9,25 @@ Short English-only working log for the current agent context. Older records are 
 - The shared catalog now has ResourceType values for formerly UNKNOWN panel resources including caller identity, SSM Parameter, CodeBuild, CodeDeploy, CodePipeline, and CodeStar connection.
 - The AI draft prompt, top-level payload, and referenceKnowledge payload now receive the same generated resource catalog.
 - Generated CI/CD resources now carry deploy-ready default config guidance and pass Terraform Preview, diagnostics, and live apply safety support checks.
+- Amazon Q preview self-validation now rejects missing explicitly requested resource-panel types and undersized EC2 fleets before accepting a draft.
 - Targeted API tests plus full lint/typecheck/build passed during this session.
 - No Terraform apply/destroy, deployment, AWS calls, or cloud mutation was run.
 
 ## Session Record
+
+### 2026-07-10 - AI draft explicit resource validation
+
+- Goal: Prevent Amazon Q drafts from accepting diagrams that only partially satisfy explicit CI/CD and multi-EC2 resource requests.
+- Completed:
+  - Fixed explicit EC2/S3 quantity parsing for Korean and English count phrases such as `EC2 3대` and `3 EC2 instances`.
+  - Added Amazon Q preview validation for missing explicitly requested supported resource-panel types.
+  - Added Amazon Q preview validation for requested EC2 fleet counts that are not visible in the returned ArchitectureJson.
+  - Updated detailed-brief test fixtures so required ASG/VPC resources are actually represented.
+- Verification:
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/aiArchitectureResourceQuantities.test.ts src/services/aiArchitectureDrafts.test.ts` passed.
+  - `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
+- Risk:
+  - This is deterministic validation only. No Terraform apply/destroy, deployment, AWS calls, or cloud mutation was run.
 
 ### 2026-07-10 - AI draft resource-panel catalog coverage
 
