@@ -4,14 +4,32 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- Branch: `chore/ck/281-delete-code-diagram`.
-- Local `dev` has been fast-forwarded to latest `origin/dev` as of 2026-07-10.
-- Merge of latest `dev` into this branch is in progress and conflicts have been resolved locally.
-- Scope from this branch: remove fixed SketchCatch web deployment draft/diagram/Terraform override, keep AI-generated ArchitectureJson on the normal conversion path, and share runtime ResourceType validation across API routes.
-- Upstream `dev` includes expanded AWS ResourceType coverage, UI/UX refinements, and ECS/Fargate foundation files.
+- Branch: `feat/ck/287-ai-diagram`.
+- Current scope: make AI architecture drafts and patch previews use the shared left-panel Terraform resource catalog as selectable generation material.
+- The shared catalog now has ResourceType values for formerly UNKNOWN panel resources including caller identity, SSM Parameter, CodeBuild, CodeDeploy, CodePipeline, and CodeStar connection.
+- Targeted API/web tests plus full lint/typecheck/build passed during this session.
 - No Terraform apply/destroy, deployment, AWS calls, or cloud mutation was run.
 
 ## Session Record
+
+### 2026-07-10 - AI draft resource-panel catalog coverage
+
+- Goal: Let the AI auto draft and diagram patch flow generate every Terraform resource from the main left resource panel as catalog-backed resources.
+- Completed:
+  - Added ResourceType coverage for previously UNKNOWN panel resources.
+  - Sent the shared resource panel catalog to Amazon Q draft prompts and payloads.
+  - Updated deterministic fallback drafts to add explicitly requested panel resources with exact Terraform resource/data metadata.
+  - Updated patch preview add-resource recognition to derive keywords from the shared catalog.
+  - Preserved AI-provided `config.terraformResourceType` during web ArchitectureJson to DiagramJson conversion.
+  - Added API and web regression tests for catalog-backed automatic draft, patch preview, and diagram conversion behavior.
+- Verification:
+  - `pnpm --filter @sketchcatch/api typecheck` passed.
+  - `pnpm --filter @sketchcatch/web typecheck` passed.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/aiArchitectureDrafts.test.ts src/services/aiArchitecturePatchPreview.test.ts` passed.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-diagram-adapter.test.ts` passed.
+  - `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
+- Risk:
+  - This changes draft selection and patch recognition only; no deployment or cloud mutation was run.
 
 ### 2026-07-10 - Merge latest dev into AI fixed-response removal branch
 
