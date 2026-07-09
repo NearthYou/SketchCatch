@@ -245,7 +245,7 @@ function convertArchitectureNodeToDiagramNode(node: ArchitectureJson["nodes"][nu
   }
 
   const config = node.config ?? {};
-  const terraformResourceType = mapResourceTypeToTerraform(node.type);
+  const terraformResourceType = resolveArchitectureTerraformResourceType(node);
   const position = {
     x: node.positionX,
     y: node.positionY
@@ -2483,6 +2483,24 @@ function getArchitectureResourceName(node: ArchitectureJson["nodes"][number]): s
 
 function isValidPort(port: number): boolean {
   return Number.isInteger(port) && port >= 0 && port <= 65_535;
+}
+
+function resolveArchitectureTerraformResourceType(node: ArchitectureJson["nodes"][number]): string {
+  const configuredTerraformResourceType = node.config?.["terraformResourceType"];
+  const terraformBlockType = node.config?.["terraformBlockType"] === "data" ? "data" : DEFAULT_TERRAFORM_BLOCK_TYPE;
+
+  if (typeof configuredTerraformResourceType === "string" && configuredTerraformResourceType.trim().length > 0) {
+    const resourceDefinition = getResourceDefinitionByTerraform(
+      terraformBlockType,
+      configuredTerraformResourceType.trim()
+    );
+
+    if (resourceDefinition?.resourceType === node.type) {
+      return resourceDefinition.terraform.resourceType;
+    }
+  }
+
+  return mapResourceTypeToTerraform(node.type);
 }
 
 function mapResourceTypeToTerraform(resourceType: ResourceType): string {

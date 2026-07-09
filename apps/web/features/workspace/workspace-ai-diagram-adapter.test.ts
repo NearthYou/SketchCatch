@@ -658,6 +658,30 @@ test("convertArchitectureJsonToDiagramJson uses catalog icon and size for CloudF
   assert.equal(cloudFrontNode?.parameters?.resourceName, "cdn_site");
 });
 
+test("convertArchitectureJsonToDiagramJson preserves configured catalog Terraform resource types", () => {
+  const architectureJson: ArchitectureJson = {
+    nodes: [
+      {
+        id: "bucket-policy",
+        type: "S3",
+        label: "Bucket Policy",
+        positionX: 120,
+        positionY: 80,
+        config: {
+          terraformResourceType: "aws_s3_bucket_policy"
+        }
+      }
+    ],
+    edges: []
+  };
+
+  const diagramJson = convertArchitectureJsonToDiagramJson(architectureJson);
+  const policyNode = diagramJson.nodes[0];
+
+  assert.equal(policyNode?.type, "aws_s3_bucket_policy");
+  assert.equal(policyNode?.parameters?.resourceType, "aws_s3_bucket_policy");
+});
+
 test("convertArchitectureJsonToDiagramJson uses fallback size for unknown draft resources", () => {
   const architectureJson: ArchitectureJson = {
     nodes: [
