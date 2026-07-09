@@ -16,6 +16,7 @@ import {
   deploymentLogs,
   deploymentPlanArtifacts,
   deployments,
+  gitCicdHandoffs,
   projectAssets,
   projectDrafts,
   projects,
@@ -403,6 +404,8 @@ async function deleteProjectDatabaseRows(input: {
   userId: string;
 }): Promise<void> {
   await input.db.transaction(async (tx) => {
+    await tx.delete(gitCicdHandoffs).where(eq(gitCicdHandoffs.projectId, input.projectId));
+
     if (input.deploymentIds.length > 0) {
       await tx
         .update(deployments)

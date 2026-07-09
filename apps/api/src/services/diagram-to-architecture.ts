@@ -12,17 +12,21 @@ import { getResourceDefinitionByTerraform } from "@sketchcatch/types/resource-de
 const DEFAULT_TERRAFORM_BLOCK_TYPE: TerraformBlockType = "resource";
 
 export function convertDiagramJsonToArchitectureJson(diagramJson: DiagramJson): ArchitectureJson {
-  const nodes = diagramJson.nodes.filter(isConvertibleResourceNode).map((node) => {
-    const parameters = node.parameters;
+  const nodes = diagramJson.nodes.flatMap((node) => {
+    const parameters = getConvertibleResourceNodeParameters(node);
 
-    return {
+    if (!parameters) {
+      return [];
+    }
+
+    return [{
       id: node.id,
       type: mapTerraformResourceType(parameters),
       label: node.label,
       positionX: node.position.x,
       positionY: node.position.y,
       config: createArchitectureConfig(parameters)
-    };
+    }];
   });
   const nodeIds = new Set(nodes.map((node) => node.id));
   const edges = diagramJson.edges
@@ -40,10 +44,32 @@ export function convertDiagramJsonToArchitectureJson(diagramJson: DiagramJson): 
   };
 }
 
-function isConvertibleResourceNode(
-  node: DiagramNode
-): node is DiagramNode & { parameters: DiagramNodeParameters } {
-  return node.kind === "resource" && node.parameters != null && node.parameters.invalid !== true;
+function getConvertibleResourceNodeParameters(node: DiagramNode): DiagramNodeParameters | null {
+  if (node.kind !== "resource") {
+    return null;
+  }
+
+  if (node.parameters?.invalid === true) {
+    return null;
+  }
+
+  if (node.parameters != null) {
+    return node.parameters;
+  }
+
+  const resourceType = node.type.trim();
+
+  if (!getResourceDefinitionByTerraform(DEFAULT_TERRAFORM_BLOCK_TYPE, resourceType)) {
+    return null;
+  }
+
+  return {
+    fileName: "main",
+    resourceName: createFallbackResourceName(node),
+    resourceType,
+    terraformBlockType: DEFAULT_TERRAFORM_BLOCK_TYPE,
+    values: {}
+  };
 }
 
 function mapTerraformResourceType(parameters: DiagramNodeParameters): ResourceType {
@@ -130,4 +156,20 @@ function isRecord(value: unknown): value is ResourceConfig {
 
 function isString(value: unknown): value is string {
   return typeof value === "string";
+}
+
+function toTerraformName(value: string): string {
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+
+  return normalized.length > 0 ? normalized : "resource";
+}
+
+function createFallbackResourceName(node: DiagramNode): string {
+  const labelName = toTerraformName(node.label);
+
+  return labelName === "resource" ? toTerraformName(node.id) : labelName;
 }

@@ -209,7 +209,7 @@ test("testAwsConnection rejects a role that can be assumed without externalId", 
   );
 });
 
-test("testAwsConnection maps STS failures to a sanitized error", async () => {
+test("testAwsConnection maps STS permission failures to a caller action error", async () => {
   const gateway: AwsConnectionStsGateway = {
     async assumeRole() {
       throw new Error("AccessDenied: temporary-secret-access-key should not leak");
@@ -235,7 +235,7 @@ test("testAwsConnection maps STS failures to a sanitized error", async () => {
       ),
     (error) => {
       assert.equal(error instanceof AwsConnectionTestError, true);
-      assert.equal((error as Error).message, "AWS Role connection test failed");
+      assert.equal((error as Error).message, "AWS Role assume permission denied");
       assert.equal((error as Error).message.includes("temporary-secret-access-key"), false);
 
       return true;

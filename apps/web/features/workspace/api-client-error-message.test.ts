@@ -14,6 +14,30 @@ test("getApiErrorMessage translates AWS Role verification failures instead of ge
   );
 });
 
+test("getApiErrorMessage explains AWS AssumeRole permission failures", () => {
+  const error = new ApiClientError(400, {
+    error: "bad_request",
+    message: "AWS Role assume permission denied"
+  });
+
+  assert.equal(
+    getApiErrorMessage(error, "AWS 연결 검증에 실패했습니다."),
+    "AWS Role을 AssumeRole할 권한이 없습니다. 로컬 SSO Permission Set 또는 실행 Role에 sts:AssumeRole 권한을 추가하고, 대상 Role Trust Policy의 Principal과 External ID가 현재 연결 정보와 일치하는지 확인해주세요."
+  );
+});
+
+test("getApiErrorMessage explains AWS connection deletion conflicts", () => {
+  const error = new ApiClientError(409, {
+    error: "conflict",
+    message: "AWS connection is used by a deployment"
+  });
+
+  assert.equal(
+    getApiErrorMessage(error, "AWS 연결 삭제에 실패했습니다."),
+    "이 AWS 연결은 배포 기록에서 사용 중이라 삭제할 수 없습니다. 먼저 해당 프로젝트 또는 배포 기록을 정리한 뒤 다시 시도해주세요."
+  );
+});
+
 test("getApiErrorMessage explains GitHub repository settings permission gaps", () => {
   const error = new ApiClientError(409, {
     error: "github_oauth_required",

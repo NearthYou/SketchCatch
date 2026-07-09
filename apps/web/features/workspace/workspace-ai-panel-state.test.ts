@@ -50,6 +50,29 @@ test("createWorkspaceAiBoardSnapshot keeps the fingerprint stable when only view
   assert.equal(viewportOnlyChangeSnapshot.fingerprint, snapshot.fingerprint);
 });
 
+test("createWorkspaceAiBoardSnapshot treats diagram resources without parameter values as resources", () => {
+  const snapshot = createWorkspaceAiBoardSnapshot({
+    edges: [],
+    nodes: [
+      {
+        id: "bucket-unconfigured",
+        kind: "resource",
+        label: "Uploads Bucket",
+        locked: false,
+        position: { x: 20, y: 40 },
+        size: { width: 180, height: 96 },
+        type: "aws_s3_bucket",
+        zIndex: 1
+      }
+    ],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  });
+
+  assert.equal(snapshot.hasResources, true);
+  assert.equal(snapshot.architectureJson.nodes.length, 1);
+  assert.equal(snapshot.architectureJson.nodes[0]?.type, "S3");
+});
+
 test("isWorkspaceAiResultStale only marks existing results stale after board changes", () => {
   const snapshot = createWorkspaceAiBoardSnapshot(diagramJson);
 

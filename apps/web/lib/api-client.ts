@@ -30,9 +30,15 @@ const API_MESSAGE_TRANSLATIONS: Partial<Record<string, string>> = {
   "Authentication required": "인증이 필요합니다.",
   "AWS account ID must be 12 digits": "AWS Account ID는 12자리 숫자여야 합니다.",
   "AWS account is already connected": "이미 연결된 AWS Account입니다.",
+  "AWS connection is used by a deployment":
+    "이 AWS 연결은 배포 기록에서 사용 중이라 삭제할 수 없습니다. 먼저 해당 프로젝트 또는 배포 기록을 정리한 뒤 다시 시도해주세요.",
   "AWS Role account mismatch": "입력한 Account ID와 AWS에서 확인된 Account가 다릅니다.",
   "AWS Role connection test failed":
     "AWS Role 연결 검증에 실패했습니다. CloudFormation Stack 생성 완료 후 잠시 기다렸다가 다시 시도하고, Account ID와 Trust Policy를 확인해주세요.",
+  "AWS Role assume permission denied":
+    "AWS Role을 AssumeRole할 권한이 없습니다. 로컬 SSO Permission Set 또는 실행 Role에 sts:AssumeRole 권한을 추가하고, 대상 Role Trust Policy의 Principal과 External ID가 현재 연결 정보와 일치하는지 확인해주세요.",
+  "AWS caller credentials are invalid or expired":
+    "로컬 AWS 자격 증명이 만료되었거나 유효하지 않습니다. AWS SSO를 다시 로그인한 뒤 API 서버를 재시작하고 다시 시도해주세요.",
   "AWS Role external ID requirement could not be verified":
     "AWS Role의 External ID 조건을 확인하지 못했습니다. CloudFormation Stack의 Trust Policy에 SketchCatch External ID 조건이 있는지 확인해주세요.",
   "AWS Role trust policy must require external ID":

@@ -379,7 +379,7 @@ test("GET /api/auth/oauth/kakao/callback completes login without an email scope"
   }
 });
 
-test("GET /api/auth/oauth/naver/callback rejects email collisions instead of auto-linking", async () => {
+test("GET /api/auth/oauth/naver/callback links existing users by verified email", async () => {
   const restoreEnv = setOAuthEnv();
   const existingUser = makeUser({
     email: "demo@example.com",
@@ -415,11 +415,17 @@ test("GET /api/auth/oauth/naver/callback rejects email collisions instead of aut
       url: "/api/auth/oauth/naver/callback?code=authorization-code&state=state-token"
     });
 
-    assertOAuthErrorRedirect(response, "email_already_registered");
+    assert.equal(response.statusCode, 302);
+    assert.equal(getHeaderValue(response, "location"), "/mypage");
     assert.equal(requests.length, 2);
     assert.equal(fakeDb.userRows.length, 0);
-    assert.equal(fakeDb.oauthAccountRows.length, 0);
-    assert.equal(fakeDb.refreshTokenRows.length, 0);
+    assert.equal(fakeDb.oauthAccountRows.length, 1);
+    assert.equal(fakeDb.oauthAccountRows[0]?.provider, "naver");
+    assert.equal(fakeDb.oauthAccountRows[0]?.providerUserId, "naver-user-id");
+    assert.equal(fakeDb.oauthAccountRows[0]?.userId, existingUser.id);
+    assert.equal(fakeDb.refreshTokenRows.length, 1);
+    assert.equal(fakeDb.refreshTokenRows[0]?.userId, existingUser.id);
+    assertRefreshTokenCookie(response.headers["set-cookie"]);
     assertClearedOAuthStateCookie(response.headers["set-cookie"]);
   } finally {
     restoreFetch();
