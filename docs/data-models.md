@@ -766,7 +766,7 @@ DB 기준: `deployment_jobs`
 type DeploymentJob = {
   id: string;
   deploymentId: string;
-  operation: "plan" | "apply" | "destroy_plan" | "destroy";
+  operation: "init" | "plan" | "apply" | "destroy_plan" | "destroy";
   status: "QUEUED" | "DISPATCHING" | "RUNNING" | "SUCCEEDED" | "FAILED" | "CANCELLED";
   requestedByUserId: string;
   accessContext: {

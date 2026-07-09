@@ -2,7 +2,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   assertNoStaticAwsCredentialsForApiServer,
+  getDeploymentWorkerMode,
   getRuntimeEnv,
+  requireEcsWorkerDispatcherConfig,
   requireGitHubAppConfig,
   requireGitHubAppStateSecret,
   requireSketchCatchAwsCallerPrincipalArn
@@ -107,6 +109,57 @@ test("requireGitHubAppStateSecret accepts GIT_APP_STATE_SECRET", () => {
   } finally {
     restoreEnvValues(originalValues);
   }
+});
+
+test("getDeploymentWorkerMode defaults to in_process and accepts ecs", () => {
+  assert.equal(getDeploymentWorkerMode({ ...getRuntimeEnv(), deploymentWorkerMode: undefined }), "in_process");
+  assert.equal(getDeploymentWorkerMode({ ...getRuntimeEnv(), deploymentWorkerMode: "ecs" }), "ecs");
+});
+
+test("getDeploymentWorkerMode rejects unknown modes", () => {
+  assert.throws(
+    () => getDeploymentWorkerMode({ ...getRuntimeEnv(), deploymentWorkerMode: "sqs" }),
+    /DEPLOYMENT_WORKER_MODE must be one of/
+  );
+});
+
+test("requireEcsWorkerDispatcherConfig validates ECS worker dispatch settings", () => {
+  const config = requireEcsWorkerDispatcherConfig({
+    ...getRuntimeEnv(),
+    deploymentWorkerMode: "ecs",
+    ecsWorkerAssignPublicIp: "DISABLED",
+    ecsWorkerCluster: "arn:aws:ecs:ap-northeast-2:123456789012:cluster/sketchcatch",
+    ecsWorkerCommand: "[\"node\",\"dist/worker.cjs\"]",
+    ecsWorkerContainerName: "worker",
+    ecsWorkerEnvironment: "{\"NODE_ENV\":\"production\"}",
+    ecsWorkerSecurityGroupIds: "sg-123, sg-456",
+    ecsWorkerSubnets: "subnet-123, subnet-456",
+    ecsWorkerTaskDefinition:
+      "arn:aws:ecs:ap-northeast-2:123456789012:task-definition/sketchcatch-worker:1"
+  });
+
+  assert.deepEqual(config.command, ["node", "dist/worker.cjs"]);
+  assert.deepEqual(config.environment, { NODE_ENV: "production" });
+  assert.deepEqual(config.securityGroupIds, ["sg-123", "sg-456"]);
+  assert.deepEqual(config.subnetIds, ["subnet-123", "subnet-456"]);
+  assert.equal(config.assignPublicIp, "DISABLED");
+});
+
+test("requireEcsWorkerDispatcherConfig rejects malformed worker command JSON", () => {
+  assert.throws(
+    () =>
+      requireEcsWorkerDispatcherConfig({
+        ...getRuntimeEnv(),
+        deploymentWorkerMode: "ecs",
+        ecsWorkerCluster: "cluster",
+        ecsWorkerCommand: "node dist/worker.cjs",
+        ecsWorkerContainerName: "worker",
+        ecsWorkerSecurityGroupIds: "sg-123",
+        ecsWorkerSubnets: "subnet-123",
+        ecsWorkerTaskDefinition: "task-definition"
+      }),
+    /ECS_WORKER_COMMAND must be a JSON array of strings/
+  );
 });
 
 function restoreEnvValue(key: string, value: string | undefined): void {

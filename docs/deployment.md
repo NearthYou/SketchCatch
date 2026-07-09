@@ -561,3 +561,64 @@ Rollback 기준은 다음과 같습니다.
 - EC2 rollback workflow는 기존 `api.env`/`web.env` 생성과 S3 presigned env download를 계속 사용할 수 있습니다.
 - ECS smoke 또는 cutover 이후에는 ECS task definition의 secret ARN 매핑과 ECR image tag가 rollback 판단 기준입니다.
 - ECS secret 값을 갱신하면 새 task가 값을 읽도록 ECS service `force-new-deployment`가 필요합니다.
+
+## ECS worker RunTask dispatch
+
+Phase 5부터 API는 `DEPLOYMENT_WORKER_MODE=ecs`가 설정된 경우 Terraform 실행을 API process 안에서 바로 시작하지 않고,
+`deployment_jobs` row를 만든 뒤 ECS `RunTask` one-off worker task로 넘깁니다. 기본값은 `in_process`이므로 Phase 5/6
+worker runtime이 실제 운영 검증을 끝내기 전까지 기존 direct background 실행을 유지할 수 있습니다.
+
+ECS worker mode에 필요한 API runtime environment:
+
+```text
+DEPLOYMENT_WORKER_MODE=ecs
+ECS_WORKER_CLUSTER=<ECS cluster name or ARN>
+ECS_WORKER_TASK_DEFINITION=<worker task definition family/revision or ARN>
+ECS_WORKER_CONTAINER_NAME=<worker container name>
+ECS_WORKER_SUBNETS=<subnet-id-1,subnet-id-2>
+ECS_WORKER_SECURITY_GROUP_IDS=<sg-id-1,sg-id-2>
+ECS_WORKER_COMMAND=["node","dist/worker.cjs"]
+ECS_WORKER_ENVIRONMENT={"NODE_ENV":"production"}
+ECS_WORKER_ASSIGN_PUBLIC_IP=DISABLED
+```
+
+`ECS_WORKER_COMMAND`는 JSON string array여야 하며, `ECS_WORKER_ENVIRONMENT`는 string 값만 가진 JSON object여야 합니다.
+API는 dispatch 시 `SKETCHCATCH_DEPLOYMENT_ID`, `SKETCHCATCH_DEPLOYMENT_JOB_ID`,
+`SKETCHCATCH_DEPLOYMENT_OPERATION`을 container override environment로 추가합니다. worker runtime 자체는 Phase 5 범위가 아니며,
+Phase 6에서 이 값을 읽어 plan/apply/destroy 실행을 이어받아야 합니다.
+
+API task role에는 최소한 아래 권한이 필요합니다. 실제 ARN은 production 계정/region/task family에 맞춰 좁혀야 합니다.
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": ["ecs:RunTask"],
+      "Resource": "arn:aws:ecs:<region>:<account-id>:task-definition/<worker-task-family>:*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": ["ecs:StopTask", "ecs:DescribeTasks"],
+      "Resource": "arn:aws:ecs:<region>:<account-id>:task/<cluster-name>/*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": [
+        "arn:aws:iam::<account-id>:role/<worker-task-execution-role>",
+        "arn:aws:iam::<account-id>:role/<worker-task-role>"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "iam:PassedToService": "ecs-tasks.amazonaws.com"
+        }
+      }
+    }
+  ]
+}
+```
+
+`ecs:RunTask`는 worker task definition으로, `ecs:StopTask`/`ecs:DescribeTasks`는 worker cluster task ARN으로 제한합니다.
+`iam:PassRole`은 worker task execution role과 worker task role에만 허용하고, `ecs-tasks.amazonaws.com` 조건을 유지합니다.

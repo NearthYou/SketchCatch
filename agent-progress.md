@@ -4,13 +4,40 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- Branch: `feature/sw/293-deployment-runtask-jobs`.
-- Active workstream: `ECS-MIGRATION-000`, Phase 4 deployment job model for future ECS RunTask execution.
-- Phases 1, 2, and 3 are merged into `dev`.
-- Phase 4 keeps public deployment API response shapes stable and preserves the existing in-process background execution behavior.
-- Phase 4 must not run live AWS commands.
+- Branch: `feature/sw/295-ecs-worker-task-dispatch`.
+- Active workstream: `ECS-MIGRATION-000`, Phase 5 API-side ECS worker RunTask dispatch.
+- Phases 1, 2, 3, and 4 are merged into `dev`.
+- Phase 5 keeps public deployment API response shapes stable and preserves in-process background execution unless `DEPLOYMENT_WORKER_MODE=ecs`.
+- Phase 5 must not run live AWS commands.
 
 ## Session Record
+
+### 2026-07-10 - Start ECS Phase 5 API worker dispatch
+
+- Goal: Add API-side ECS worker dispatch so Terraform execution can move from in-process background jobs to ECS RunTask one-off worker tasks when explicitly enabled.
+- Completed:
+  - Merged Phase 4 PR #294 into `dev`.
+  - Created GitHub issue #295.
+  - Created linked branch `feature/sw/295-ecs-worker-task-dispatch` from updated `dev` with `gh issue develop`.
+  - Added `DEPLOYMENT_WORKER_MODE` and ECS worker dispatch env validation for cluster, task definition, subnets, security groups, container name, command, static worker env, and public IP setting.
+  - Added ECS/local deployment worker dispatcher abstraction using `RunTask`, `DescribeTasks`, and `StopTask`.
+  - Wired deployment init/plan/apply/destroy-plan/destroy routes to create a `DeploymentJob` and dispatch ECS RunTask when ECS worker mode is enabled.
+  - Wired cancel to call ECS StopTask when an active job has an ECS task ARN; otherwise the existing stale RUNNING fail-safe still marks the deployment failed.
+  - Added `init` to `deployment_job_operation` with migration `0028_deployment_job_init_operation.sql`.
+  - Added route/config/dispatcher tests and updated `docs/deployment.md` with env and least-privilege IAM requirements.
+- Verification so far:
+  - `pnpm harness:check` passed.
+  - `pnpm lint` passed.
+  - `pnpm typecheck` passed.
+  - `pnpm build` passed.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/deployments/deployment-worker-dispatcher.test.ts src/config/env.test.ts src/routes/deployments.test.ts` passed.
+  - `pnpm --filter @sketchcatch/api typecheck` passed.
+  - `pnpm --filter @sketchcatch/api lint` passed.
+  - `pnpm --filter @sketchcatch/api test -- deployments` ran the whole API suite because the package script does not filter test files; Phase 5 tests passed, but pre-existing unrelated AI fixture and missing docs/jh fixture failures were reported.
+- Risk:
+  - Worker runtime is still out of scope; ECS-dispatched tasks need Phase 6 code to consume `SKETCHCATCH_DEPLOYMENT_JOB_ID` and finish deployment state updates.
+  - The requested API deployments test command currently exits 1 because of unrelated pre-existing failures in `aiLlmExplanationRoutes.test.ts` and a missing `docs/jh/000_AWS리소스목록_JH.md` fixture.
+  - No live AWS commands should be run in Phase 5.
 
 ### 2026-07-10 - Start ECS Phase 4 deployment job model
 
