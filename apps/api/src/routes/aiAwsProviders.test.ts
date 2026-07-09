@@ -122,6 +122,72 @@ test("POST /api/ai/architecture-patch-preview returns a preview that requires us
   }
 });
 
+test("POST /api/ai/architecture-patch-preview accepts generated load balancer resource types", async () => {
+  const app = buildApp({
+    createLlmExplanation: async (input) => ({
+      target: input.target,
+      summary: "Patch preview explanation.",
+      highlights: ["The existing load balancer remains part of the board."],
+      nextActions: ["Review the preview before applying it."],
+      fallbackUsed: false
+    })
+  });
+
+  try {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/ai/architecture-patch-preview",
+      payload: {
+        architectureJson: {
+          nodes: [
+            {
+              id: "vpc-main",
+              type: "VPC",
+              label: "Main VPC",
+              positionX: 80,
+              positionY: 120,
+              config: {}
+            },
+            {
+              id: "subnet-public-a",
+              type: "SUBNET",
+              label: "Public Subnet A",
+              positionX: 240,
+              positionY: 120,
+              config: {}
+            },
+            {
+              id: "app-security-group",
+              type: "SECURITY_GROUP",
+              label: "App Security Group",
+              positionX: 400,
+              positionY: 120,
+              config: {}
+            },
+            {
+              id: "app-load-balancer",
+              type: "LOAD_BALANCER",
+              label: "Application Load Balancer",
+              positionX: 560,
+              positionY: 120,
+              config: {
+                loadBalancerType: "application"
+              }
+            }
+          ],
+          edges: []
+        },
+        instruction: "S3 bucket add"
+      }
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.match(response.json().status, /^(needs_clarification|preview)$/);
+  } finally {
+    await app.close();
+  }
+});
+
 test("POST /api/ai/voice-requirement/confirm creates RequirementPrompt only from confirmed transcript text", async () => {
   const app = buildApp();
 

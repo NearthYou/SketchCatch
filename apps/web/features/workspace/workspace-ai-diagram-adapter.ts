@@ -25,7 +25,6 @@ const DEFAULT_VIEWPORT: DiagramJson["viewport"] = { x: 0, y: 0, zoom: 1 };
 const DEFAULT_NODE_SIZE: DiagramNode["size"] = { width: 56, height: 56 };
 const DEFAULT_TERRAFORM_BLOCK_TYPE: TerraformBlockType = "resource";
 const UNKNOWN_TERRAFORM_RESOURCE_TYPE = "unknown_resource";
-const SKETCHCATCH_REFERENCE_TERRAFORM_MARKER = "sketchcatch-reference-web-service-deployment";
 const DEFAULT_EDGE_STYLE: NonNullable<DiagramEdge["style"]> = {
   animated: false,
   color: "#506176",
@@ -183,21 +182,16 @@ const RESOURCE_NAME_CONVENTIONS: Readonly<Record<string, { readonly prefix: stri
 // AI Draft를 실제 Architecture Board가 받을 수 있는 DiagramJson으로 바꾸는 gg 경계입니다.
 export function convertArchitectureJsonToDiagramJson(architectureJson: ArchitectureJson): DiagramJson {
   const nodeIds = new Set(architectureJson.nodes.map((node) => node.id));
-  const isSketchCatchReference = hasSketchCatchReferenceArchitectureMarker(architectureJson);
   const convertedNodes = architectureJson.nodes.map(convertArchitectureNodeToDiagramNode);
-  const preparedNodes = isSketchCatchReference
-    ? convertedNodes
-    : applyAreaParentMetadata(
-        applyDiagramResourceNameConventions(addServerStorageAreaNodes(convertedNodes)),
-        architectureJson.edges
-      );
-  const nodes = isSketchCatchReference
-    ? applyDiagramLayerOrder(preparedNodes)
-    : applyDiagramLayerOrder(
-        fitAreaNodesToChildren(
-          resolveSiblingNodeCollisions(fitAreaNodesToChildren(applyReadableTopologyLayout(preparedNodes)))
-        )
-      );
+  const preparedNodes = applyAreaParentMetadata(
+    applyDiagramResourceNameConventions(addServerStorageAreaNodes(convertedNodes)),
+    architectureJson.edges
+  );
+  const nodes = applyDiagramLayerOrder(
+    fitAreaNodesToChildren(
+      resolveSiblingNodeCollisions(fitAreaNodesToChildren(applyReadableTopologyLayout(preparedNodes)))
+    )
+  );
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
 
   return {
@@ -354,14 +348,6 @@ function readDiagramNodeStyle(config: ResourceConfig): DiagramNode["style"] | un
 
 function readDiagramBorderStyle(value: unknown): DiagramNodeBorderStyle | undefined {
   return value === "solid" || value === "dashed" || value === "dotted" ? value : undefined;
-}
-
-function hasSketchCatchReferenceArchitectureMarker(architectureJson: ArchitectureJson): boolean {
-  return architectureJson.nodes.some(
-    (node) =>
-      node.config?.["sketchcatchReferenceTerraform"] ===
-      SKETCHCATCH_REFERENCE_TERRAFORM_MARKER
-  );
 }
 
 // jh Resource catalog를 거쳐 수동 drag/drop 노드와 같은 iconUrl, size, 기본 style을 사용합니다.

@@ -8,7 +8,7 @@ import {
   convertDiagramJsonToArchitectureJson,
   getDiagramJsonForArchitectureDraft
 } from "./workspace-ai-diagram-adapter";
-import { getAreaNodeLabel, isAreaNode } from "../diagram-editor/area-nodes";
+import { isAreaNode } from "../diagram-editor/area-nodes";
 
 test("workspace AI diagram adapter uses shared resource definitions for Terraform mapping", () => {
   const source = readFileSync(
@@ -729,99 +729,6 @@ test("getDiagramJsonForArchitectureDraft prefers an exact DiagramJson fixture wh
   };
 
   assert.equal(getDiagramJsonForArchitectureDraft(draft), exactDiagramJson);
-});
-
-test("convertArchitectureJsonToDiagramJson preserves fixed SketchCatch reference coordinates", () => {
-  const architectureJson: ArchitectureJson = {
-    nodes: [
-      {
-        id: "region-seoul",
-        type: "UNKNOWN",
-        label: "Asia pacific (Seoul)",
-        positionX: 230,
-        positionY: 14,
-        config: {
-          diagramKind: "design",
-          diagramType: "sketchcatch_region",
-          diagramWidth: 2010,
-          diagramHeight: 1490
-        }
-      },
-      {
-        id: "vpc-main",
-        type: "VPC",
-        label: "vpc",
-        positionX: 648,
-        positionY: 430,
-        config: {
-          cidrBlock: "10.0.0.0/16",
-          diagramAreaLabel: "vpc",
-          diagramWidth: 1580,
-          diagramHeight: 1055,
-          parentAreaNodeId: "region-seoul",
-          sketchcatchReferenceTerraform: "sketchcatch-reference-web-service-deployment",
-          terraformResourceName: "vpc"
-        }
-      },
-      {
-        id: "github",
-        type: "UNKNOWN",
-        label: "Github",
-        positionX: 560,
-        positionY: 82,
-        config: {
-          diagramHeight: 72,
-          diagramIconUrl: "/github.svg",
-          diagramKind: "design",
-          diagramType: "sketchcatch_service",
-          diagramWidth: 76,
-          parentAreaNodeId: "region-seoul"
-        }
-      }
-    ],
-    edges: [
-      {
-        id: "region-to-vpc",
-        sourceId: "region-seoul",
-        targetId: "vpc-main",
-        label: "contains"
-      },
-      {
-        id: "github-to-vpc",
-        sourceId: "github",
-        targetId: "vpc-main",
-        label: "requests",
-        diagramSourceHandleId: "handle-right",
-        diagramTargetHandleId: "handle-left",
-        diagramColor: "#7f8b9a",
-        diagramLineStyle: "solid",
-        diagramWidth: "medium"
-      } as ArchitectureJson["edges"][number]
-    ]
-  };
-
-  const diagramJson = convertArchitectureJsonToDiagramJson(architectureJson);
-  const vpcNode = diagramJson.nodes.find((node) => node.id === "vpc-main");
-  const githubNode = diagramJson.nodes.find((node) => node.id === "github");
-  const githubEdge = diagramJson.edges.find((edge) => edge.id === "github-to-vpc");
-
-  assert.equal(diagramJson.nodes.some((node) => node.id.startsWith("region_ap_")), false);
-  assert.equal(diagramJson.nodes.some((node) => node.id.startsWith("az_ap_")), false);
-  assert.deepEqual(vpcNode?.position, { x: 648, y: 430 });
-  assert.deepEqual(vpcNode?.size, { width: 1580, height: 1055 });
-  assert.equal(vpcNode ? isAreaNode(vpcNode) : false, true);
-  assert.equal(vpcNode ? getAreaNodeLabel(vpcNode) : undefined, "vpc");
-  assert.equal(githubNode?.kind, "design");
-  assert.equal(githubNode?.iconUrl, "/github.svg");
-  assert.deepEqual(githubNode?.position, { x: 560, y: 82 });
-  assert.equal(githubEdge?.sourceHandleId, "handle-right");
-  assert.equal(githubEdge?.targetHandleId, "handle-left");
-  assert.deepEqual(githubEdge?.style, {
-    animated: false,
-    color: "#7f8b9a",
-    lineStyle: "solid",
-    width: "medium"
-  });
 });
 
 test("convertArchitectureJsonToDiagramJson expands area nodes to include upper-left children", () => {

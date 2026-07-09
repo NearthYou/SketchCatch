@@ -21,6 +21,7 @@ import type {
   TranscribeConfirmation,
   VoiceRequirementInput
 } from "@sketchcatch/types";
+import { RESOURCE_TYPES } from "@sketchcatch/types";
 import {
   createConfiguredAmazonQArchitectureDraftResponse,
   type CreateArchitectureDraftResponseFactory,
@@ -65,29 +66,7 @@ const MAX_SAFETY_EXPLANATION_GENERATION_COUNT = 8;
 const SAFETY_EXPLANATION_GENERATION_CONCURRENCY = 2;
 const DEFAULT_SAFETY_EXPLANATION_TIMEOUT_MS = 2_500;
 
-const resourceTypeSchema = z.enum([
-  "VPC",
-  "SUBNET",
-  "INTERNET_GATEWAY",
-  "ROUTE_TABLE",
-  "ROUTE_TABLE_ASSOCIATION",
-  "EC2",
-  "RDS",
-  "S3",
-  "SECURITY_GROUP",
-  "CLOUDFRONT",
-  "LAMBDA",
-  "AMI",
-  "IAM_ROLE",
-  "IAM_POLICY",
-  "IAM_INSTANCE_PROFILE",
-  "KMS_KEY",
-  "CLOUDWATCH_LOG_GROUP",
-  "CLOUDWATCH_METRIC_ALARM",
-  "API_GATEWAY_REST_API",
-  "LAMBDA_PERMISSION",
-  "UNKNOWN"
-]);
+const resourceTypeSchema = z.enum(RESOURCE_TYPES);
 
 const resourceNodeSchema = z.object({
   id: z.string().min(1),

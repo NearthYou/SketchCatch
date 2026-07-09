@@ -4,73 +4,52 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- Branch: `Refactor/jh/277-workspace-uiux-수정`.
-- PR conflict resolution completed by merging latest `origin/dev` into the UI/UX branch.
-- Current UI scope: workspace context chip links to `/dashboard` and no longer shows a false dropdown affordance.
-- Upstream `origin/dev` includes the ECS/Fargate foundation workstream state and Terraform foundation files.
-- No Terraform apply/destroy, deployment, AWS calls, or cloud mutation was run during this conflict-resolution session.
+- Branch: `chore/ck/281-delete-code-diagram`.
+- Local `dev` has been fast-forwarded to latest `origin/dev` as of 2026-07-10.
+- Merge of latest `dev` into this branch is in progress and conflicts have been resolved locally.
+- Scope from this branch: remove fixed SketchCatch web deployment draft/diagram/Terraform override, keep AI-generated ArchitectureJson on the normal conversion path, and share runtime ResourceType validation across API routes.
+- Upstream `dev` includes expanded AWS ResourceType coverage, UI/UX refinements, and ECS/Fargate foundation files.
+- No Terraform apply/destroy, deployment, AWS calls, or cloud mutation was run.
 
 ## Session Record
 
-### 2026-07-10 - Review feedback: parameter summary counts and split resize guard
+### 2026-07-10 - Merge latest dev into AI fixed-response removal branch
 
-- Goal: Address PR review feedback for the resource parameter summary and Terraform split resize behavior.
+- Goal: Bring latest `dev` into `chore/ck/281-delete-code-diagram`.
 - Completed:
-  - Counted only main-definition parameter validation errors in the Main parameters summary.
-  - Added a defensive guard so Terraform split resizing skips ratio calculation when the split container height is zero or negative.
-  - Added source regression tests for both review comments.
+  - Fetched `origin` and fast-forwarded local `dev` from `7487b3b2` to `7ed51f19`.
+  - Merged local `dev` into `chore/ck/281-delete-code-diagram`.
+  - Resolved conflicts in `agent-progress.md`, `apps/web/features/workspace/workspace-ai-diagram-adapter.ts`, and `packages/types/src/index.ts`.
+  - Kept upstream `diagramBorderStyle` support while preserving this branch's removal of fixed SketchCatch reference marker behavior.
+  - Combined upstream expanded ResourceType coverage with this branch's runtime `RESOURCE_TYPES` constant.
 - Verification:
-  - Focused parameter-input and workspace-right-panel source tests passed, 86 tests.
-  - `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
-- Risk: Frontend logic and source regression tests only; no API, Terraform execution, deployment, AWS calls, or cloud mutation was run.
-- Next action: Review and commit the changes if the PR feedback is accepted.
-
-### 2026-07-10 - Resolve PR conflicts with origin/dev
-
-- Goal: Resolve remote PR conflicts after `origin/dev` moved ahead of the UI/UX branch.
-- Completed:
-  - Merged `origin/dev` into `Refactor/jh/277-workspace-uiux-수정`.
-  - Combined the Terraform editor selected-block behavior so it keeps the centered scroll target and also avoids repeated scroll jumps for the same selected node.
-  - Reconciled this progress log by preserving the UI branch summary and the upstream ECS foundation context.
-- Verification:
-  - Baseline `pnpm harness:check` passed before resolving conflicts.
-  - Focused workspace tests passed, 95 tests.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/routes/aiDesignSimulation.test.ts src/routes/aiAwsProviders.test.ts` passed.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-diagram-adapter.test.ts` passed.
+  - `pnpm --filter @sketchcatch/api typecheck` passed.
   - `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
-- Risk: Git conflict resolution only; no live infrastructure mutation was run.
+- Risk:
+  - Merge resolution touched shared types and workspace diagram conversion, but focused API/web tests and full checks passed.
 
-### 2026-07-10 - Workspace context chip dashboard link
+### 2026-07-09 - AI fixed-response removal and ResourceType validation fix
 
-- Goal: Make the top-left workspace context chip navigate to Dashboard and remove the misleading dropdown affordance.
+- Goal: Let Amazon Q generate web deployment answers instead of using a hardcoded selected-answer code/diagram path.
 - Completed:
-  - Changed the DiagramEditor context chip default link from `/mypage` to `/dashboard`.
-  - Removed the chevron icon because the chip does not open a selectable menu.
-  - Renamed the internal href prop from `myPageHref` to `dashboardHref` and updated regression coverage.
+  - Removed fixed selected-answer SketchCatch web deployment draft, fixed diagram fixture, and fixed Terraform Preview marker override.
+  - Removed web-side fixed-reference layout bypass so ArchitectureJson drafts use the normal diagram conversion pipeline unless an exact `diagramJson` is returned.
+  - Fixed intermittent AI chat 400s caused by stale route-level ResourceType enums rejecting generated ArchitectureJson nodes such as `LOAD_BALANCER`.
+  - Promoted the shared ResourceType list to a runtime `RESOURCE_TYPES` constant and reused it in AI, project architecture, and Reverse Engineering route validation.
 - Verification:
-  - Focused diagram-editor and workspace layout tests passed, 84 tests.
-  - Playwright confirmed the rendered context chip `href` is `/dashboard` and captured `output/playwright/workspace-context-dashboard-link.png`.
-  - `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
-- Risk: Frontend toolbar navigation/presentation only; no API, Terraform execution, deployment, AWS calls, or cloud mutation was run.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/aiArchitectureDrafts.test.ts` passed.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-preview.test.ts` passed.
+  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-diagram-adapter.test.ts` passed.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/routes/aiDesignSimulation.test.ts src/routes/aiAwsProviders.test.ts` passed after the ResourceType schema fix.
+  - `pnpm --filter @sketchcatch/api typecheck` passed.
+  - `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check` passed before the latest dev merge.
+- Risk:
+  - No real AWS IAM, IAM Identity Center, CloudFormation, Terraform apply, Terraform destroy, or deployment mutation was performed.
 
-### 2026-07-09 - Workspace UI/UX refinement summary
+### 2026-07-10 - Upstream dev context
 
-- Goal: Apply the requested workspace UI/UX refinements around resource parameters, Deploy modal readability, connector styling, panel behavior, and workspace navigation.
-- Completed:
-  - Improved the resource detail parameter form readability for parameter-heavy resources.
-  - Iterated the Deploy modal structure, stage presentation, colors, and fullscreen title behavior.
-  - Updated connector arrowhead/default line-weight behavior and area-node border conventions.
-  - Moved Terraform Issues into the Terraform panel split view and kept AI resolution/navigation flows reachable.
-  - Added the C-style workspace context chip, then corrected it to link to `/dashboard` without a dropdown affordance.
-- Verification:
-  - Relevant focused web tests, lint, typecheck, build, harness checks, and Playwright screenshots were recorded in prior session entries.
-- Risk: Frontend UI/UX and diagram contract changes only; no Terraform execution, deployment, AWS calls, or cloud mutation was run.
-
-### 2026-07-09 - Upstream ECS foundation context from origin/dev
-
-- Goal: Carry forward the latest `origin/dev` context while resolving the UI/UX PR conflict.
-- Upstream context:
-  - `origin/dev` includes ECS/Fargate foundation Terraform under `infra/aws/terraform` and active `ECS-MIGRATION-000` tracking.
-  - The ECS work keeps the existing EC2/SSM/docker-run production rollback path intact and does not perform production cutover by default.
-  - Route53 alias creation remains disabled by default until ECS smoke passes.
-- Known upstream risks:
-  - ECS images, GitHub Actions rewrite, task secrets, Route53 cutover, and Terraform plan/apply remain future work.
-  - No real AWS IAM, CloudFormation, Terraform apply, or Terraform destroy mutation was performed for that upstream context.
+- `dev` includes ECS/Fargate foundation Terraform under `infra/aws/terraform`.
+- `dev` includes expanded AWS resource catalog/type coverage and workspace UI/UX refinements.
+- Known upstream ECS follow-up remains: image publishing, GitHub Actions rewrite, task secrets, Route53 cutover, and Terraform plan/apply are future work.

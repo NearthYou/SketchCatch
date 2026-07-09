@@ -3,9 +3,7 @@ import { test } from "node:test";
 import type { ArchitectureJson } from "@sketchcatch/types";
 import { resourceDefinitions } from "@sketchcatch/types/resource-definitions";
 import type { AiTextProvider } from "./aiLlmExplanation.js";
-import { createAmazonQArchitectureDraftResponse, createArchitectureDraft } from "./aiArchitectureDrafts.js";
-import { SKETCHCATCH_REFERENCE_DIAGRAM_JSON } from "./aiArchitectureSketchcatchReferenceDiagram.js";
-import { SKETCHCATCH_REFERENCE_TERRAFORM_MARKER } from "./terraform/sketchcatch-reference-terraform-code.js";
+import { createAmazonQArchitectureDraftResponse } from "./aiArchitectureDrafts.js";
 
 const confirmedCreditPolicy = {
   bedrock: false,
@@ -14,233 +12,16 @@ const confirmedCreditPolicy = {
   billingMode: "aws_credit_only"
 } as const;
 
-test("createAmazonQArchitectureDraftResponse uses the fixed SketchCatch deployment draft for the selected answer path", async () => {
+test("createAmazonQArchitectureDraftResponse sends the web deployment answer path to Amazon Q", async () => {
   let callCount = 0;
   const provider = createFakeAmazonQProvider(() => {
     callCount += 1;
-    return "{}";
-  });
-
-  const response = await createAmazonQArchitectureDraftResponse(
-    {
-      prompt: createSketchCatchReferenceSelectionPrompt()
-    },
-    {
-      provider,
-      creditPolicy: confirmedCreditPolicy
-    }
-  );
-
-  assert.equal(callCount, 0);
-  if ("status" in response) {
-    assert.fail(`Expected fixed preview, got clarification: ${response.question}`);
-  }
-
-  assert.equal(response.title, "SketchCatch Web Service Deployment Architecture");
-  assert.equal(response.metadata.confidence, "high");
-  assert.deepEqual(response.diagramJson, SKETCHCATCH_REFERENCE_DIAGRAM_JSON);
-  assert.equal(response.diagramJson?.nodes.length, 84);
-  assert.equal(response.diagramJson?.edges.length, 26);
-  assert.deepEqual(response.diagramJson?.nodes.find((node) => node.id === "region-seoul")?.position, {
-    x: 230,
-    y: -42
-  });
-  assert.deepEqual(response.diagramJson?.nodes.find((node) => node.id === "vpc-main")?.position, {
-    x: 540,
-    y: 444
-  });
-  assert.deepEqual(response.diagramJson?.nodes.find((node) => node.id === "node-mrb8gls3-rdjo68")?.position, {
-    x: 948,
-    y: 756
-  });
-  assert.equal(
-    response.architectureJson.nodes.find((node) => node.id === "vpc-main")?.config?.["sketchcatchReferenceTerraform"],
-    SKETCHCATCH_REFERENCE_TERRAFORM_MARKER
-  );
-
-  const nodeTypes = new Set(response.architectureJson.nodes.map((node) => node.type));
-  for (const expectedType of [
-    "VPC",
-    "SUBNET",
-    "INTERNET_GATEWAY",
-    "NAT_GATEWAY",
-    "LOAD_BALANCER",
-    "LOAD_BALANCER_LISTENER",
-    "LOAD_BALANCER_TARGET_GROUP",
-    "LAUNCH_TEMPLATE",
-    "AUTO_SCALING_GROUP",
-    "RDS",
-    "DB_SUBNET_GROUP",
-    "S3",
-    "CLOUDFRONT",
-    "SECRETS_MANAGER_SECRET"
-  ] as const) {
-    assert.equal(nodeTypes.has(expectedType), true, `Expected ${expectedType} in fixed draft`);
-  }
-
-  assert.equal(response.architectureJson.nodes.filter((node) => node.type === "SUBNET").length, 6);
-  assertReferenceNodePosition(response.architectureJson, "region-seoul", 230, 14, 2010, 1490);
-  assertReferenceNodePosition(response.architectureJson, "vpc-main", 648, 430, 1580, 1055);
-  assertReferenceNodePosition(response.architectureJson, "cicd-artifacts-group", 522, 52, 142, 150);
-  assertReferenceNodePosition(response.architectureJson, "pipeline-group", 705, 52, 545, 150);
-  assertReferenceNodePosition(response.architectureJson, "cloudfront-distribution", 320, 945);
-  assertReferenceNodePosition(response.architectureJson, "api-alb", 878, 680);
-  assertReferenceNodePosition(response.architectureJson, "http-listener", 1148, 690);
-  assertReferenceNodePosition(response.architectureJson, "api-autoscaling-group", 1442, 632, 282, 615);
-  assertReferenceNodePosition(response.architectureJson, "app-database", 1920, 890);
-  assertReferenceNodePosition(response.architectureJson, "standby-database", 1920, 1135);
-  assertAllExplicitReferenceChildrenFitInsideParents(response.architectureJson);
-
-  const autoscalingGroupConfig = response.architectureJson.nodes.find(
-    (node) => node.id === "api-autoscaling-group"
-  )?.config;
-
-  assert.equal(autoscalingGroupConfig?.desiredCapacity, 2);
-  assert.equal(autoscalingGroupConfig?.launchTemplateId, "aws_launch_template.launch_template.id");
-  assert.equal(autoscalingGroupConfig?.maxSize, 4);
-  assert.equal(autoscalingGroupConfig?.minSize, 2);
-  assert.deepEqual(autoscalingGroupConfig?.targetGroupArns, ["aws_lb_target_group.api_target_group.arn"]);
-  assert.deepEqual(autoscalingGroupConfig?.vpcZoneIdentifier, [
-    "aws_subnet.private_app_subnet_a.id",
-    "aws_subnet.private_app_subnet_c.id"
-  ]);
-  assert.equal(autoscalingGroupConfig?.diagramAreaLabel, "autoscaling_group");
-  assert.equal(autoscalingGroupConfig?.parentAreaNodeId, "vpc-main");
-});
-
-function assertReferenceNodePosition(
-  architectureJson: ArchitectureJson,
-  nodeId: string,
-  positionX: number,
-  positionY: number,
-  diagramWidth?: number,
-  diagramHeight?: number
-): void {
-  const node = architectureJson.nodes.find((candidate) => candidate.id === nodeId);
-
-  assert.ok(node, `Expected ${nodeId} in fixed draft`);
-  assert.equal(node.positionX, positionX, nodeId);
-  assert.equal(node.positionY, positionY, nodeId);
-
-  if (diagramWidth !== undefined) {
-    assert.equal(node.config.diagramWidth, diagramWidth, nodeId);
-  }
-
-  if (diagramHeight !== undefined) {
-    assert.equal(node.config.diagramHeight, diagramHeight, nodeId);
-  }
-}
-
-function assertAllExplicitReferenceChildrenFitInsideParents(architectureJson: ArchitectureJson): void {
-  const nodesById = new Map(architectureJson.nodes.map((node) => [node.id, node]));
-
-  for (const node of architectureJson.nodes) {
-    const parentAreaNodeId = node.config.parentAreaNodeId;
-
-    if (typeof parentAreaNodeId !== "string") {
-      continue;
-    }
-
-    const parentNode = nodesById.get(parentAreaNodeId);
-
-    assert.ok(parentNode, `Expected parent ${parentAreaNodeId} for ${node.id}`);
-
-    const childWidth = readFixtureDimension(node.config.diagramWidth, 76);
-    const childHeight = readFixtureDimension(node.config.diagramHeight, 72);
-    const parentWidth = readFixtureDimension(parentNode.config.diagramWidth, 0);
-    const parentHeight = readFixtureDimension(parentNode.config.diagramHeight, 0);
-
-    assert.ok(parentWidth > 0 && parentHeight > 0, `Expected explicit size for parent ${parentAreaNodeId}`);
-    assert.ok(node.positionX >= parentNode.positionX, `${node.id} left is outside ${parentAreaNodeId}`);
-    assert.ok(node.positionY >= parentNode.positionY, `${node.id} top is outside ${parentAreaNodeId}`);
-    assert.ok(
-      node.positionX + childWidth <= parentNode.positionX + parentWidth,
-      `${node.id} right is outside ${parentAreaNodeId}`
-    );
-    assert.ok(
-      node.positionY + childHeight <= parentNode.positionY + parentHeight,
-      `${node.id} bottom is outside ${parentAreaNodeId}`
-    );
-  }
-}
-
-function readFixtureDimension(value: unknown, fallback: number): number {
-  return typeof value === "number" && value > 0 ? value : fallback;
-}
-
-test("createArchitectureDraft uses the same fixed SketchCatch deployment draft without Amazon Q", () => {
-  const draft = createArchitectureDraft({ prompt: createSketchCatchReferenceSelectionPrompt() });
-
-  assert.equal(draft.title, "SketchCatch Web Service Deployment Architecture");
-  assert.deepEqual(draft.diagramJson, SKETCHCATCH_REFERENCE_DIAGRAM_JSON);
-  assert.equal(draft.architectureJson.nodes.some((node) => node.id === "cloudfront-distribution"), true);
-  assert.equal(draft.architectureJson.nodes.some((node) => node.id === "app-database"), true);
-});
-
-test("createArchitectureDraft matches the fixed SketchCatch deployment path even when answer spacing differs", () => {
-  const draft = createArchitectureDraft({
-    prompt: [
-      "웹서비스를 배포하고 싶어",
-      "어떤 종류의 웹사이트인가요? 동적 웹 애플리케이션 (쇼핑몰, 게시판, 회원 시스템)",
-      "예상 트래픽 규모는 중간 규모 (일 1,000명, 동시 50명)",
-      "데이터베이스가 필요한가요? 간단한 데이터 (사용자 정보, 게시글 등 < 10GB)",
-      "프론트엔드 기술은 React/Vue/Angular (SPA 프레임워크)",
-      "백엔드가 필요한가요? 복잡한 비즈니스 로직 (Spring Boot, Django 등)",
-      "주요 사용자 지역은 한국만 (서울 리전)",
-      "월 예산 범위는 50-200만원 (고성능)",
-      "SSL 인증서(HTTPS)가 필요한가요? 선택사항 (HTTP도 괜찮음)",
-      "파일 업로드 기능이 있나요? 없음 (텍스트만)",
-      "실시간 기능이 필요한가요? 필요 없음",
-      "관리 복잡도 선호도는 반관리형 (일부 서버 관리)",
-      "페이지 로딩 시간 목표는 3초 이내 (적당함)",
-      "전체 웹사이트 크기는 10MB-100MB (일반적인 사이트)",
-      "트래픽 패턴은 시간대별 차이 (낮에 많음)",
-      "서비스 중단 허용 시간은 월 1시간 이내 (99.9% 가용성)"
-    ].join("\n")
-  });
-
-  assert.equal(draft.title, "SketchCatch Web Service Deployment Architecture");
-  assert.deepEqual(draft.diagramJson, SKETCHCATCH_REFERENCE_DIAGRAM_JSON);
-});
-
-test("createArchitectureDraft matches the fixed SketchCatch deployment path from ASCII-stable answer anchors", () => {
-  const draft = createArchitectureDraft({
-    prompt: [
-      "website deployment",
-      "traffic: 1000 daily users, concurrent 50",
-      "database: simple data less than 10GB",
-      "frontend: React/Vue/Angular SPA framework",
-      "backend: complex business logic with Spring Boot and Django",
-      "region: Seoul Korea",
-      "budget: 50-200",
-      "SSL: optional, HTTP acceptable",
-      "file upload: none",
-      "realtime: none",
-      "management: semi managed",
-      "loading: 3 seconds",
-      "website size: 10MB-100MB",
-      "traffic pattern: daytime peak",
-      "availability: 99.9"
-    ].join("\n")
-  });
-
-  assert.equal(draft.title, "SketchCatch Web Service Deployment Architecture");
-  assert.deepEqual(draft.diagramJson, SKETCHCATCH_REFERENCE_DIAGRAM_JSON);
-});
-
-test("createAmazonQArchitectureDraftResponse keeps similar non-matching answer paths on the existing provider flow", async () => {
-  let callCount = 0;
-  const provider = createFakeAmazonQProvider(() => {
-    callCount += 1;
-    return "{}";
+    return JSON.stringify(createDynamicWebDeploymentPreview());
   });
 
   await createAmazonQArchitectureDraftResponse(
     {
-      prompt: createSketchCatchReferenceSelectionPrompt().replace(
-        "월 예산 범위는 50-200만원 (고성능)입니다.",
-        "월 예산 범위는 10-50만원 (적당한 성능)입니다."
-      )
+      prompt: createDynamicWebDeploymentSelectionPrompt()
     },
     {
       provider,
@@ -248,7 +29,7 @@ test("createAmazonQArchitectureDraftResponse keeps similar non-matching answer p
     }
   );
 
-  assert.equal(callCount, 1);
+  assert.ok(callCount > 0);
 });
 
 test("createAmazonQArchitectureDraftResponse asks the next required website question before calling Amazon Q", async () => {
@@ -2492,7 +2273,7 @@ function createKoreaNoUploadNoRealtimePrompt(): string {
   ].join("\n");
 }
 
-function createSketchCatchReferenceSelectionPrompt(): string {
+function createDynamicWebDeploymentSelectionPrompt(): string {
   return [
     "웹서비스를 배포하고 싶어",
     "어떤 종류의 웹사이트인가요? 동적 웹 애플리케이션 (쇼핑몰, 게시판, 회원 시스템)입니다.",
@@ -2581,6 +2362,68 @@ function createStaticPreview(nodes: string[]): {
       ]
     },
     requirementCoverage: sampleRequirementCoverage(nodes)
+  };
+}
+
+function createDynamicWebDeploymentPreview(): {
+  status: "preview";
+  title: string;
+  architectureJson: ArchitectureJson;
+  requirementCoverage: ReturnType<typeof sampleRequirementCoverage>;
+  assumptions: string[];
+} {
+  const architectureJson: ArchitectureJson = {
+    nodes: [
+      node("spa-bucket", "S3", "SPA", 0, 0),
+      node("cdn", "CLOUDFRONT", "CDN", 420, 0),
+      node("alb", "LOAD_BALANCER", "ALB", 840, 0),
+      node("listener", "LOAD_BALANCER_LISTENER", "HTTP", 1260, 0),
+      node("asg", "AUTO_SCALING_GROUP", "ASG", 1680, 0),
+      node("db-subnet-group", "DB_SUBNET_GROUP", "DB subnets", 2100, 0),
+      node("database", "RDS", "RDS", 2520, 0)
+    ],
+    edges: [
+      { id: "cdn-to-bucket", sourceId: "cdn", targetId: "spa-bucket", label: "static delivery" },
+      { id: "cdn-to-alb", sourceId: "cdn", targetId: "alb", label: "api origin" },
+      { id: "alb-to-listener", sourceId: "alb", targetId: "listener", label: "listens" },
+      { id: "listener-to-asg", sourceId: "listener", targetId: "asg", label: "backend runtime" },
+      { id: "asg-to-db", sourceId: "asg", targetId: "database", label: "database access" },
+      { id: "db-group-to-db", sourceId: "db-subnet-group", targetId: "database", label: "placement" }
+    ]
+  };
+
+  return {
+    status: "preview",
+    title: "Amazon Q Dynamic Web Deployment",
+    architectureJson,
+    requirementCoverage: [
+      {
+        answer: "dynamic web application selected answers",
+        status: "satisfied",
+        capability:
+          "selectedPattern: alb-asg-rds; rejectedPatterns: serverless because complex Spring Boot/Django backend prefers EC2 runtime. SPA frontend static delivery uses CloudFront and S3. Backend API entry uses ALB and Auto Scaling Group. Database requirement uses RDS durable data persistence in Seoul Korea only.",
+        nodes: architectureJson.nodes.map((candidate) => candidate.id),
+        assumption: "No file upload and no realtime paths are included. CloudFront is used for static delivery only, while API and RDS stay single-region in Seoul."
+      }
+    ],
+    assumptions: ["AUTO_SCALING_GROUP handles medium daytime traffic with 2-4 EC2 instances."]
+  };
+}
+
+function node(
+  id: string,
+  type: ArchitectureJson["nodes"][number]["type"],
+  label: string,
+  positionX: number,
+  positionY: number
+): ArchitectureJson["nodes"][number] {
+  return {
+    config: {},
+    id,
+    label,
+    positionX,
+    positionY,
+    type
   };
 }
 
