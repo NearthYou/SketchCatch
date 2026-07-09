@@ -875,6 +875,22 @@ test("terraform issue AI resolution shows a fix plan before apply", () => {
   assert.match(terraformPanelSource, /codePreview\.source === "safe_fix"/);
 });
 
+test("terraform issue AI resolution opens the issue source before the chat answer returns", () => {
+  const aiClickIndex = componentSource.indexOf("const handleTerraformIssueAiClick");
+  const requestIndex = componentSource.indexOf("onTerraformIssueAiRequest", aiClickIndex);
+
+  assert.ok(aiClickIndex > -1);
+  assert.ok(requestIndex > aiClickIndex);
+  assert.match(componentSource.slice(aiClickIndex, requestIndex), /getTerraformIssueSourceLocation\(issue\)/);
+  assert.match(componentSource.slice(aiClickIndex, requestIndex), /openTerraformIssueSourceLocation\(sourceLocation\)/);
+  assert.match(componentSource, /function getTerraformIssueSourceLocation\(\s*issue: TerraformIssueRecord\s*\)/);
+  assert.match(componentSource, /line: issue\.diagnostic\.line \?\? 1/);
+  assert.match(componentSource, /const openTerraformIssueSourceLocation = useCallback/);
+  assert.match(componentSource, /context\.setRightPanelOpen\(true\);/);
+  assert.match(componentSource, /setActiveView\("terraform"\);/);
+  assert.match(componentSource, /setPendingTerraformIssueFixSourceLocation\(sourceLocation\);/);
+});
+
 test("terraform issue AI fix opens the edited code and locks the apply button", () => {
   assert.match(componentSource, /getTerraformIssueFixSourceLocation/);
   assert.match(componentSource, /pendingTerraformIssueFixSourceLocation/);
@@ -916,6 +932,17 @@ test("terraform issue AI fix keeps remaining diagnostics visible after a partial
   assert.ok(remainingDiagnosticsIndex > originalDiagnosticIndex);
   assert.ok(syncIndex > remainingDiagnosticsIndex);
   assert.match(terraformPanelSource, /combineTerraformDiagnostics\(validationDiagnostics, syncResult\.diagnostics\)/);
+});
+
+test("terraform source navigation scrolls and focuses the target line deterministically", () => {
+  assert.match(terraformPanelSource, /const scrollTerraformEditorToLine = useCallback/);
+  assert.match(terraformPanelSource, /textarea\.focus\(\{ preventScroll: true \}\)/);
+  assert.match(terraformPanelSource, /textarea\.setSelectionRange\(cursorOffset, cursorOffset\)/);
+  assert.match(terraformPanelSource, /textarea\.scrollTop = targetScrollTop/);
+  assert.match(terraformPanelSource, /textarea\.scrollLeft = 0/);
+  assert.match(terraformPanelSource, /setCodeScrollTop\(textarea\.scrollTop\)/);
+  assert.match(terraformPanelSource, /setCodeScrollLeft\(textarea\.scrollLeft\)/);
+  assert.match(terraformPanelSource, /lineNumberRef\.current\.scrollTop = textarea\.scrollTop/);
 });
 
 test("terraform issue AI resolution can close the chat dock without trapping the issue card", () => {

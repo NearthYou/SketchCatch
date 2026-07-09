@@ -900,6 +900,38 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     onDirtyChange(hasLocalEdits);
   }, [hasLocalEdits, onDirtyChange]);
 
+  const scrollTerraformEditorToLine = useCallback((
+    line: number,
+    options: { readonly shouldFocus?: boolean } = {}
+  ): boolean => {
+    const textarea = textareaRef.current;
+
+    if (!textarea) {
+      return false;
+    }
+
+    const targetLine = Math.max(1, Math.min(line, lineNumbers.length));
+    const lineHeight = Number.parseFloat(window.getComputedStyle(textarea).lineHeight) || TERRAFORM_EDITOR_LINE_HEIGHT;
+    const targetScrollTop = Math.max(0, (targetLine - 2) * lineHeight);
+    const cursorOffset = getTerraformLineStartOffset(displayedTerraformCode, targetLine);
+
+    if (options.shouldFocus) {
+      textarea.focus({ preventScroll: true });
+      textarea.setSelectionRange(cursorOffset, cursorOffset);
+    }
+
+    textarea.scrollTop = targetScrollTop;
+    textarea.scrollLeft = 0;
+    setCodeScrollTop(textarea.scrollTop);
+    setCodeScrollLeft(textarea.scrollLeft);
+
+    if (lineNumberRef.current) {
+      lineNumberRef.current.scrollTop = textarea.scrollTop;
+    }
+
+    return true;
+  }, [displayedTerraformCode, lineNumbers.length]);
+
   useEffect(() => {
     if (!isVisible || isResourceCodeMode || !selectedBlock || !textareaRef.current) {
       return;
@@ -910,17 +942,8 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
       return;
     }
 
-    const textarea = textareaRef.current;
-    const lineHeight = Number.parseFloat(window.getComputedStyle(textarea).lineHeight) || 20;
-    textarea.scrollTop = Math.max(0, (selectedBlock.startLine - 2) * lineHeight);
-    setCodeScrollTop(textarea.scrollTop);
-    setCodeScrollLeft(textarea.scrollLeft);
-
-    if (lineNumberRef.current) {
-      lineNumberRef.current.scrollTop = textarea.scrollTop;
-    }
-
-  }, [activeFileName, isResourceCodeMode, isVisible, selectedBlock]);
+    scrollTerraformEditorToLine(selectedBlock.startLine);
+  }, [activeFileName, isResourceCodeMode, isVisible, scrollTerraformEditorToLine, selectedBlock]);
 
   useEffect(() => {
     if (!pendingSourceLocation || !isVisible || isResourceCodeMode) {
@@ -932,33 +955,22 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
       return;
     }
 
-    const textarea = textareaRef.current;
+    const targetLine = Math.max(1, Math.min(pendingSourceLocation.line, lineNumbers.length));
+    const didScroll = scrollTerraformEditorToLine(targetLine, { shouldFocus: true });
 
-    if (!textarea) {
+    if (!didScroll) {
       return;
     }
 
-    const targetLine = Math.max(1, Math.min(pendingSourceLocation.line, lineNumbers.length));
-    const lineHeight = Number.parseFloat(window.getComputedStyle(textarea).lineHeight) || TERRAFORM_EDITOR_LINE_HEIGHT;
-    textarea.scrollTop = Math.max(0, (targetLine - 2) * lineHeight);
-    setCodeScrollTop(textarea.scrollTop);
-
-    if (lineNumberRef.current) {
-      lineNumberRef.current.scrollTop = textarea.scrollTop;
-    }
-
-    const cursorOffset = getTerraformLineStartOffset(displayedTerraformCode, targetLine);
-    textarea.focus();
-    textarea.setSelectionRange(cursorOffset, cursorOffset);
     setActiveSourceHighlightLine(targetLine);
     setPendingSourceLocation(null);
   }, [
     activeFileName,
-    displayedTerraformCode,
     isResourceCodeMode,
     isVisible,
     lineNumbers.length,
-    pendingSourceLocation
+    pendingSourceLocation,
+    scrollTerraformEditorToLine
   ]);
 
   useEffect(() => {

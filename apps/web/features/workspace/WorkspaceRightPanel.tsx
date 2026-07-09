@@ -159,13 +159,22 @@ export function WorkspaceRightPanel({
     });
   }, []);
 
+  const openTerraformIssueSourceLocation = useCallback((sourceLocation: TerraformSourceLocation): void => {
+    context.setRightPanelOpen(true);
+    setActiveView("terraform");
+    setPendingTerraformIssueFixSourceLocation(sourceLocation);
+  }, [context]);
+
   const handleTerraformIssueAiClick = useCallback((issue: TerraformIssueRecord): void => {
+    const sourceLocation = getTerraformIssueSourceLocation(issue);
+    openTerraformIssueSourceLocation(sourceLocation);
+
     onTerraformIssueAiRequest({
       id: Date.now(),
       issue,
       terraformCode: terraformPanelRef.current?.getCurrentTerraformCode() ?? ""
     });
-  }, [onTerraformIssueAiRequest]);
+  }, [onTerraformIssueAiRequest, openTerraformIssueSourceLocation]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -208,9 +217,7 @@ export function WorkspaceRightPanel({
 
       if (result?.applied) {
         const sourceLocation = getTerraformIssueFixSourceLocation(request);
-        context.setRightPanelOpen(true);
-        setActiveView("terraform");
-        setPendingTerraformIssueFixSourceLocation(sourceLocation);
+        openTerraformIssueSourceLocation(sourceLocation);
       }
 
       onTerraformSafeFixApplyResult({
@@ -221,7 +228,7 @@ export function WorkspaceRightPanel({
     }
 
     void applySafeFix();
-  }, [context, onTerraformSafeFixApplyResult, terraformSafeFixApplyRequest]);
+  }, [onTerraformSafeFixApplyResult, openTerraformIssueSourceLocation, terraformSafeFixApplyRequest]);
 
   useEffect(() => {
     if (
@@ -797,5 +804,15 @@ function getTerraformIssueFixSourceLocation(
     fileName: request.diagnostic.sourceFileName ?? "main.tf",
     line: request.codePreview?.sourceLine ?? request.diagnostic.line ?? 1,
     ...(request.diagnostic.resourceAddress ? { resourceAddress: request.diagnostic.resourceAddress } : {})
+  };
+}
+
+function getTerraformIssueSourceLocation(
+  issue: TerraformIssueRecord
+): TerraformSourceLocation {
+  return {
+    fileName: issue.diagnostic.sourceFileName ?? "main.tf",
+    line: issue.diagnostic.line ?? 1,
+    ...(issue.diagnostic.resourceAddress ? { resourceAddress: issue.diagnostic.resourceAddress } : {})
   };
 }
