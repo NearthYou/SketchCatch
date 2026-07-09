@@ -62,7 +62,7 @@ test("draft guardrail warnings hold the preview until the user answers", () => {
     decision.session.question,
     "질문: DB가 포함되면 비용이 늘 수 있습니다. 낮은 예산을 우선해서 DB 없는 구조로 만들까요?"
   );
-  assert.deepEqual(decision.session.suggestions, ["DB 없이 다시 만들기", "DB 포함해서 진행"]);
+  assert.deepEqual(decision.session.suggestions, ["DB 없이 만들기", "DB 포함해서 진행"]);
 });
 
 test("database removal answers regenerate with a non-database draft request", () => {
@@ -76,7 +76,7 @@ test("database removal answers regenerate with a non-database draft request", ()
 
   const resolution = resolveArchitectureDraftFollowUpAnswer(
     decision.session,
-    "DB 없이 다시 만들기"
+    "DB 없이 만들기"
   );
 
   assert.equal(resolution.action, "regenerate");

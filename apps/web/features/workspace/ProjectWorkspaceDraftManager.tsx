@@ -412,14 +412,9 @@ export function ProjectWorkspaceDraftManager({
   }, []);
 
   const requestTerraformSafeFixApply = useCallback((
-    diagnostic: TerraformSafeFixApplyRequest["diagnostic"],
-    codePreview?: TerraformSafeFixApplyRequest["codePreview"]
+    request: TerraformSafeFixApplyRequest
   ): void => {
-    setTerraformSafeFixApplyRequest({
-      codePreview,
-      diagnostic,
-      id: Date.now()
-    });
+    setTerraformSafeFixApplyRequest(request);
   }, []);
 
   if (loadState === "loading") {

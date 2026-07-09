@@ -264,6 +264,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
   const latestExternalSaveRequestIdRef = useRef(externalSaveRequestId);
   const latestTerraformRefreshRequestIdRef = useRef(context.terraformRefreshRequestId);
   const lineNumberRef = useRef<HTMLOListElement | null>(null);
+  const lastScrolledNodeIdRef = useRef<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const combinedTerraformCode = useMemo(() => combineTerraformFiles(terraformFiles), [terraformFiles]);
@@ -904,13 +905,53 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     onDirtyChange(hasLocalEdits);
   }, [hasLocalEdits, onDirtyChange]);
 
+  const scrollTerraformEditorToLine = useCallback((
+    line: number,
+    options: { readonly shouldFocus?: boolean } = {}
+  ): boolean => {
+    const textarea = textareaRef.current;
+
+    if (!textarea) {
+      return false;
+    }
+
+    const code = textarea.value;
+    const lineCount = code.split(/\r\n|\r|\n/).length;
+    const targetLine = Math.max(1, Math.min(line, lineCount));
+    const lineHeight = Number.parseFloat(window.getComputedStyle(textarea).lineHeight) || TERRAFORM_EDITOR_LINE_HEIGHT;
+    const targetScrollTop = Math.max(0, (targetLine - 2) * lineHeight);
+    const cursorOffset = getTerraformLineStartOffset(code, targetLine);
+
+    if (options.shouldFocus) {
+      textarea.focus({ preventScroll: true });
+      textarea.setSelectionRange(cursorOffset, cursorOffset);
+    }
+
+    textarea.scrollTop = targetScrollTop;
+    textarea.scrollLeft = 0;
+    setCodeScrollTop(textarea.scrollTop);
+    setCodeScrollLeft(textarea.scrollLeft);
+
+    if (lineNumberRef.current) {
+      lineNumberRef.current.scrollTop = textarea.scrollTop;
+    }
+
+    return true;
+  }, []);
+
   useEffect(() => {
     if (!isVisible || isResourceCodeMode || !selectedBlock || !textareaRef.current) {
+      lastScrolledNodeIdRef.current = null;
       return;
     }
 
     if (selectedBlock.fileName !== activeFileName) {
       setActiveFileName(selectedBlock.fileName);
+      return;
+    }
+
+    const selectedNodeId = selectedNode?.id ?? null;
+    if (lastScrolledNodeIdRef.current === selectedNodeId) {
       return;
     }
 
@@ -927,7 +968,8 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
       lineNumberRef.current.scrollTop = textarea.scrollTop;
     }
 
-  }, [activeFileName, isResourceCodeMode, isVisible, selectedBlock]);
+    lastScrolledNodeIdRef.current = selectedNodeId;
+  }, [activeFileName, isResourceCodeMode, isVisible, selectedBlock, selectedNode?.id]);
 
   useEffect(() => {
     if (!pendingSourceLocation || !isVisible || isResourceCodeMode) {
@@ -939,33 +981,22 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
       return;
     }
 
-    const textarea = textareaRef.current;
+    const targetLine = Math.max(1, Math.min(pendingSourceLocation.line, lineNumbers.length));
+    const didScroll = scrollTerraformEditorToLine(targetLine, { shouldFocus: true });
 
-    if (!textarea) {
+    if (!didScroll) {
       return;
     }
 
-    const targetLine = Math.max(1, Math.min(pendingSourceLocation.line, lineNumbers.length));
-    const lineHeight = Number.parseFloat(window.getComputedStyle(textarea).lineHeight) || TERRAFORM_EDITOR_LINE_HEIGHT;
-    textarea.scrollTop = Math.max(0, (targetLine - 2) * lineHeight);
-    setCodeScrollTop(textarea.scrollTop);
-
-    if (lineNumberRef.current) {
-      lineNumberRef.current.scrollTop = textarea.scrollTop;
-    }
-
-    const cursorOffset = getTerraformLineStartOffset(displayedTerraformCode, targetLine);
-    textarea.focus();
-    textarea.setSelectionRange(cursorOffset, cursorOffset);
     setActiveSourceHighlightLine(targetLine);
     setPendingSourceLocation(null);
   }, [
     activeFileName,
-    displayedTerraformCode,
     isResourceCodeMode,
     isVisible,
     lineNumbers.length,
-    pendingSourceLocation
+    pendingSourceLocation,
+    scrollTerraformEditorToLine
   ]);
 
   useEffect(() => {
@@ -975,7 +1006,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
 
     const timerId = window.setTimeout(() => {
       setActiveSourceHighlightLine(null);
-    }, 2500);
+    }, 8000);
 
     return () => window.clearTimeout(timerId);
   }, [activeSourceHighlightLine]);

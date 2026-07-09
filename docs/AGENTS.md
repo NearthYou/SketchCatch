@@ -15,11 +15,12 @@ This folder contains product, architecture, data model, development, and deploym
 3. When adding or renaming a reference document under `docs/ck`, `docs/sw`, `docs/ys`, or `docs/adr`, update that folder's `README.md`. For `docs/gg`, update `docs/gg/006_문서구조_gg.md`.
 4. Keep the regular reading set small.
 5. Remove or merge stale content instead of preserving old versions.
-6. Keep product direction aligned with the multi-cloud-ready IaC operations service positioning. MVP implementation is AWS-first and Terraform-first, but the domain model must stay provider-neutral.
-7. Keep the first MVP goal explicit: users must be able to move from Requirement Input, Source Repository evidence, or Reverse Engineering input to a Practice Architecture, IaC Preview, Pre-Deployment Check, and either an approved Direct Deployment Path or Git/CI/CD Deployment Path.
-8. Treat presentation flows as Representative Use Journeys. Do not let demo-only wording replace the service's real user journey.
-9. Keep safety boundaries explicit: no real cloud apply unless it is explicit Deployment work or approved Git/CI/CD handoff, no secrets, no frontend cloud SDK calls, no AI or voice input state changes without user acceptance.
-10. Document Redis as internal Runtime Cache infrastructure only unless a separate product decision turns it into a user Practice Architecture Resource.
+6. Keep `docs/sw` focused on active execution references and implementation guides; remove stale `spec*`, `plan*`, smoke, and one-off agent-rule files once the workstream is no longer active.
+7. Keep product direction aligned with the multi-cloud-ready IaC operations service positioning. MVP implementation is AWS-first and Terraform-first, but the domain model must stay provider-neutral.
+8. Keep the first MVP goal explicit: users must be able to move from Requirement Input, Source Repository evidence, or Reverse Engineering input to a Practice Architecture, IaC Preview, Pre-Deployment Check, and either an approved Direct Deployment Path or Git/CI/CD Deployment Path.
+9. Treat presentation flows as Representative Use Journeys. Do not let demo-only wording replace the service's real user journey.
+10. Keep safety boundaries explicit: no real cloud apply unless it is explicit Deployment work or approved Git/CI/CD handoff, no secrets, no frontend cloud SDK calls, no AI or voice input state changes without user acceptance.
+11. Document Redis as internal Runtime Cache infrastructure only unless a separate product decision turns it into a user Practice Architecture Resource.
 
 ## Document Filename Rules
 
