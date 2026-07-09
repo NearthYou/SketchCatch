@@ -27,6 +27,7 @@
 ## 핸드오프
 
 - [ ] `agent-progress.md`에 이번 세션의 완료/검증/리스크/다음 행동을 기록했다.
+- [ ] `agent-progress.md`와 `session-handoff.md`가 짧게 유지된다. 오래된 기록은 `docs/agent-history/`로 옮겼다.
 - [ ] 다음 세션이 이어받아야 할 미완성 상태가 있으면 `session-handoff.md`를 갱신했다.
 - [ ] 변경 파일, 실행한 체크, 실패한 체크를 최종 응답에 요약했다.
 

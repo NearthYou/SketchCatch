@@ -33,13 +33,14 @@ Before making changes, read this file and the nearest `AGENTS.md`. Read addition
 ## Harness Operating Loop
 
 1. For every non-trivial work session, run `pnpm harness:check` before editing files. If `pnpm` is unavailable, run `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/init-harness.ps1`.
-2. After the harness check, read `agent-progress.md` and `feature_list.json`. If the task continues prior work or leaves any risk unfinished, also read `session-handoff.md`.
+2. After the harness check, read `agent-progress.md` and `feature_list.json`. Read `session-handoff.md` only when the task continues prior work, the handoff says there is active continuation context, or unfinished risk is relevant to the task. Read archived progress under `docs/agent-history/` only when older evidence is explicitly needed.
 3. Use `scripts/init-harness.ps1` as the standard startup helper. Run it without flags for a lightweight baseline, with `-Verify` for lint/typecheck, and with `-Full` before finishing substantial code or infrastructure changes.
 4. Keep `feature_list.json` as the machine-readable harness tracker. Product scope belongs in `docs/product.md`; shared contracts belong in `docs/data-models.md`.
 5. Work on at most one active feature/workstream at a time. Do not leave more than one `in_progress` item in `feature_list.json`.
 6. Do not mark a feature `passing` unless `evidence.lastVerified` and concrete verification commands are recorded.
-7. Before finishing, run `pnpm harness:check` again and apply `clean-state-checklist.md`. Update `agent-progress.md` with completed work, verification, known risks, and next action. Update `session-handoff.md` only when the next session needs a compressed continuation point.
-8. Use `evaluator-rubric.md` for adversarial self-review when a change affects safety, deployment, contracts, or multi-session continuity.
+7. Keep `agent-progress.md` and `session-handoff.md` concise. If `agent-progress.md` is getting large, move old records to `docs/agent-history/YYYY-MM.md` before adding new entries.
+8. Before finishing, run `pnpm harness:check` again and apply `clean-state-checklist.md`. Update `agent-progress.md` with completed work, verification, known risks, and next action. Update `session-handoff.md` only when the next session needs a compressed continuation point.
+9. Use `evaluator-rubric.md` for adversarial self-review when a change affects safety, deployment, contracts, or multi-session continuity.
 
 ## Language Rules
 
