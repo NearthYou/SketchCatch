@@ -8,6 +8,7 @@ Short English-only working log for the current agent context. Older records are 
 - Current scope: make AI architecture drafts and patch previews use the shared left-panel Terraform resource catalog as selectable generation material.
 - The shared catalog now has ResourceType values for formerly UNKNOWN panel resources including caller identity, SSM Parameter, CodeBuild, CodeDeploy, CodePipeline, and CodeStar connection.
 - The AI draft prompt, top-level payload, and referenceKnowledge payload now receive the same generated resource catalog.
+- Generated CI/CD resources now carry deploy-ready default config guidance and pass Terraform Preview, diagnostics, and live apply safety support checks.
 - Targeted API tests plus full lint/typecheck/build passed during this session.
 - No Terraform apply/destroy, deployment, AWS calls, or cloud mutation was run.
 
@@ -45,6 +46,20 @@ Short English-only working log for the current agent context. Older records are 
   - `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
 - Risk:
   - Payload size increases because referenceKnowledge now carries the generated resource catalog, but it stays derived from the shared compact resource definitions.
+
+### 2026-07-10 - AI-generated resource deployment readiness
+
+- Goal: Make newly generatable AI resources deploy-ready by SketchCatch Terraform Preview and deployment safety standards.
+- Completed:
+  - Added deployment default config and deployment notes to the shared AI resource catalog for CI/CD and data-source resources.
+  - Reused deployment defaults in deterministic fallback drafts and architecture patch previews.
+  - Allowed CodeBuild, CodeDeploy, CodePipeline, CodeStar connection, IAM role companions, caller identity, and SSM parameter through deployment support checks.
+  - Added Terraform Preview, diagnostics, resource definition, plan summary, and artifact safety tests for the generated CI/CD/data-source resources.
+- Verification:
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-preview.test.ts src/deployments/terraform-artifact-safety.test.ts src/deployments/deployment-plan-summary.test.ts src/services/terraform/resource-definitions-source-shape.test.ts src/services/aiArchitectureDrafts.test.ts src/services/aiArchitecturePatchPreview.test.ts` passed.
+  - `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
+- Risk:
+  - No Terraform apply/destroy or AWS API call was run. Some AWS resources still require real user-owned IAM policy scope, repository IDs, and CodeStar connection authorization before a production apply.
 
 ### 2026-07-10 - Merge latest dev into AI fixed-response removal branch
 

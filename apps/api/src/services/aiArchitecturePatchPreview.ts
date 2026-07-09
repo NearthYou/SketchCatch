@@ -13,6 +13,7 @@ import type {
   ResourceType
 } from "@sketchcatch/types";
 import { resourceDefinitions } from "@sketchcatch/types/resource-definitions";
+import { createArchitectureResourceDeploymentConfig } from "./aiArchitectureResourceCatalog.js";
 import { createNormalizedAiCacheKey, estimateAiUsage } from "./aiProviderSafety.js";
 
 export type CreateArchitecturePatchPreviewInput = CreateArchitecturePatchPreviewRequest;
@@ -1672,6 +1673,7 @@ function createNewResourceConfig(
   );
   const baseConfig: ResourceNode["config"] = matchingDefinition
     ? {
+        ...createArchitectureResourceDeploymentConfig(matchingDefinition.terraform.resourceType),
         terraformResourceType: matchingDefinition.terraform.resourceType,
         ...(matchingDefinition.terraform.blockType !== "resource"
           ? { terraformBlockType: matchingDefinition.terraform.blockType }

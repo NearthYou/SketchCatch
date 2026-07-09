@@ -74,14 +74,159 @@ test("assertTerraformArtifactIsSafe accepts supported AWS AMI data sources", () 
   );
 });
 
+test("assertTerraformArtifactIsSafe accepts AI-generated CI/CD resource types", () => {
+  assert.doesNotThrow(() =>
+    assertTerraformArtifactIsSafe(`
+      provider "aws" {
+        region = "ap-northeast-2"
+      }
+
+      resource "aws_iam_role" "codebuild_service_role" {
+        name = "sketchcatch-codebuild-service-role"
+        assume_role_policy = jsonencode({
+          Version = "2012-10-17"
+          Statement = [{
+            Effect = "Allow"
+            Principal = {
+              Service = "codebuild.amazonaws.com"
+            }
+            Action = "sts:AssumeRole"
+          }]
+        })
+      }
+
+      resource "aws_codebuild_project" "build" {
+        name = "sketchcatch-build"
+        service_role = aws_iam_role.codebuild_service_role.arn
+
+        artifacts {
+          type = "NO_ARTIFACTS"
+        }
+
+        environment {
+          compute_type = "BUILD_GENERAL1_SMALL"
+          image = "aws/codebuild/standard:7.0"
+          type = "LINUX_CONTAINER"
+        }
+
+        source {
+          type = "NO_SOURCE"
+          buildspec = "version: 0.2"
+        }
+      }
+
+      resource "aws_codedeploy_app" "app" {
+        name = "sketchcatch-app"
+        compute_platform = "Server"
+      }
+
+      resource "aws_iam_role" "codedeploy_service_role" {
+        name = "sketchcatch-codedeploy-service-role"
+        assume_role_policy = jsonencode({
+          Version = "2012-10-17"
+          Statement = [{
+            Effect = "Allow"
+            Principal = {
+              Service = "codedeploy.amazonaws.com"
+            }
+            Action = "sts:AssumeRole"
+          }]
+        })
+      }
+
+      resource "aws_codedeploy_deployment_group" "group" {
+        app_name = aws_codedeploy_app.app.name
+        deployment_group_name = "sketchcatch-deployment-group"
+        service_role_arn = aws_iam_role.codedeploy_service_role.arn
+      }
+
+      resource "aws_codestarconnections_connection" "github" {
+        name = "sketchcatch-github"
+        provider_type = "GitHub"
+      }
+
+      resource "aws_s3_bucket" "codepipeline_artifacts" {
+        bucket = "sketchcatch-pipeline-artifacts-example"
+      }
+
+      resource "aws_iam_role" "codepipeline_service_role" {
+        name = "sketchcatch-codepipeline-service-role"
+        assume_role_policy = jsonencode({
+          Version = "2012-10-17"
+          Statement = [{
+            Effect = "Allow"
+            Principal = {
+              Service = "codepipeline.amazonaws.com"
+            }
+            Action = "sts:AssumeRole"
+          }]
+        })
+      }
+
+      resource "aws_codepipeline" "pipeline" {
+        name = "sketchcatch-pipeline"
+        role_arn = aws_iam_role.codepipeline_service_role.arn
+
+        artifact_store {
+          location = aws_s3_bucket.codepipeline_artifacts.bucket
+          type = "S3"
+        }
+
+        stage {
+          name = "Source"
+
+          action {
+            category = "Source"
+            name = "Source"
+            owner = "AWS"
+            provider = "CodeStarSourceConnection"
+            version = "1"
+            output_artifacts = ["source_output"]
+
+            configuration = {
+              BranchName = "main"
+              ConnectionArn = aws_codestarconnections_connection.github.arn
+              FullRepositoryId = "example-org/example-repo"
+            }
+          }
+        }
+
+        stage {
+          name = "Build"
+
+          action {
+            category = "Build"
+            name = "Build"
+            owner = "AWS"
+            provider = "CodeBuild"
+            version = "1"
+            input_artifacts = ["source_output"]
+            output_artifacts = ["build_output"]
+
+            configuration = {
+              ProjectName = aws_codebuild_project.build.name
+            }
+          }
+        }
+      }
+
+      data "aws_caller_identity" "current" {}
+
+      data "aws_ssm_parameter" "ami" {
+        name = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
+      }
+    `)
+  );
+});
+
 test("assertTerraformArtifactIsSafe rejects unsupported data sources before live deployment", () => {
   assert.throws(
     () =>
       assertTerraformArtifactIsSafe(`
-        data "aws_caller_identity" "current" {
+        data "aws_region" "current" {
         }
       `),
-    /data source "aws_caller_identity" is not allowed/
+    /data source "aws_region" is not allowed/
   );
 });
 

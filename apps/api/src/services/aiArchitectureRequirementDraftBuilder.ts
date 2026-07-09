@@ -7,6 +7,7 @@ import type {
   ResourceType
 } from "@sketchcatch/types";
 import { getDefaultResourceDefinitionByResourceType } from "@sketchcatch/types/resource-definitions";
+import { createArchitectureResourceDeploymentConfig } from "./aiArchitectureResourceCatalog.js";
 import type {
   ArchitectureRequirementResolution,
   ExplicitResourceDefinition
@@ -1106,6 +1107,7 @@ function createExplicitResourceConfig(
   definition: ExplicitResourceDefinition
 ): ArchitectureJson["nodes"][number]["config"] {
   return {
+    ...createArchitectureResourceDeploymentConfig(definition.terraformResourceType),
     ...(definition.terraformBlockType === "data" ? { terraformBlockType: "data" } : {}),
     terraformResourceType: definition.terraformResourceType
   };
