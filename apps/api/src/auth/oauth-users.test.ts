@@ -6,7 +6,6 @@ import type { NormalizedOAuthProfile } from "./oauth-profile.js";
 import {
   createSocialUsername,
   findOrCreateOAuthUser,
-  OAUTH_EMAIL_ALREADY_REGISTERED,
   OAUTH_EMAIL_REQUIRED,
   OAUTH_USER_DELETED,
   OAUTH_USER_LINK_FAILED,
@@ -71,7 +70,7 @@ test("findOrCreateOAuthUser links an existing active user by verified email", as
   assert.equal(insertedAccount.profileImageUrl, "https://example.com/avatar.png");
 });
 
-test("findOrCreateOAuthUser rejects Naver email collisions instead of auto-linking", async () => {
+test("findOrCreateOAuthUser links an existing Naver user by verified email", async () => {
   const existingUser = makeUser({
     email: "demo@example.com",
     id: "password-user-id",
@@ -79,13 +78,18 @@ test("findOrCreateOAuthUser rejects Naver email collisions instead of auto-linki
   });
   const fakeDb = new FakeOAuthDb([[], [existingUser]]);
 
-  await assertOAuthUserConnectionError(
-    () => findOrCreateOAuthUser(fakeDb.db, makeProfile()),
-    OAUTH_EMAIL_ALREADY_REGISTERED
-  );
+  const result = await findOrCreateOAuthUser(fakeDb.db, makeProfile());
 
+  assert.equal(result.id, existingUser.id);
   assert.equal(fakeDb.insertedUsers.length, 0);
-  assert.equal(fakeDb.insertedOAuthAccounts.length, 0);
+  assert.equal(fakeDb.insertedOAuthAccounts.length, 1);
+
+  const insertedAccount = getOnlyRow(fakeDb.insertedOAuthAccounts);
+
+  assert.equal(insertedAccount.userId, existingUser.id);
+  assert.equal(insertedAccount.provider, "naver");
+  assert.equal(insertedAccount.providerUserId, "naver-user-id");
+  assert.equal(insertedAccount.email, "demo@example.com");
 });
 
 test("findOrCreateOAuthUser creates a new user and OAuth account when no match exists", async () => {

@@ -211,17 +211,21 @@ export function convertArchitectureJsonToDiagramJson(architectureJson: Architect
 
 // 현재 보드 상태를 gg 분석 API가 이해하는 ArchitectureJson으로 되돌립니다.
 export function convertDiagramJsonToArchitectureJson(diagramJson: DiagramJson): ArchitectureJson {
-  const nodes = diagramJson.nodes.filter(isConvertibleResourceNode).map((node) => {
-    const parameters = node.parameters;
+  const nodes = diagramJson.nodes.flatMap((node) => {
+    const parameters = getConvertibleResourceNodeParameters(node);
 
-    return {
+    if (!parameters) {
+      return [];
+    }
+
+    return [{
       config: createArchitectureConfig(parameters),
       id: node.id,
       label: node.label,
       positionX: node.position.x,
       positionY: node.position.y,
       type: mapTerraformResourceType(parameters)
-    };
+    }];
   });
   const nodeIds = new Set(nodes.map((node) => node.id));
 
@@ -2378,10 +2382,32 @@ function getStringParameterValues(node: DiagramNode, key: string): string[] {
   return value.filter(isString).filter((item) => item.trim().length > 0);
 }
 
-function isConvertibleResourceNode(
-  node: DiagramNode
-): node is DiagramNode & { parameters: DiagramNodeParameters } {
-  return node.kind === "resource" && node.parameters != null && node.parameters.invalid !== true;
+function getConvertibleResourceNodeParameters(node: DiagramNode): DiagramNodeParameters | null {
+  if (node.kind !== "resource") {
+    return null;
+  }
+
+  if (node.parameters?.invalid === true) {
+    return null;
+  }
+
+  if (node.parameters != null) {
+    return node.parameters;
+  }
+
+  const resourceType = node.type.trim();
+
+  if (!getResourceDefinitionByTerraform(DEFAULT_TERRAFORM_BLOCK_TYPE, resourceType)) {
+    return null;
+  }
+
+  return {
+    fileName: "main",
+    resourceName: createConventionResourceName(resourceType, node.id, [node.label, node.id]),
+    resourceType,
+    terraformBlockType: DEFAULT_TERRAFORM_BLOCK_TYPE,
+    values: {}
+  };
 }
 
 function createArchitectureConfig(parameters: DiagramNodeParameters): ResourceConfig {

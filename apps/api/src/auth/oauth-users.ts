@@ -7,7 +7,6 @@ import type { NormalizedOAuthProfile } from "./oauth-profile.js";
 import type { PublicUserRow } from "./session.js";
 
 export const OAUTH_EMAIL_REQUIRED = "email_required";
-export const OAUTH_EMAIL_ALREADY_REGISTERED = "email_already_registered";
 export const OAUTH_USER_DELETED = "user_deleted";
 export const OAUTH_USER_LINK_FAILED = "user_link_failed";
 
@@ -22,7 +21,6 @@ const userForOAuthColumns = {
 
 type OAuthUserConnectionErrorCode =
   | typeof OAUTH_EMAIL_REQUIRED
-  | typeof OAUTH_EMAIL_ALREADY_REGISTERED
   | typeof OAUTH_USER_DELETED
   | typeof OAUTH_USER_LINK_FAILED;
 
@@ -62,10 +60,6 @@ export async function findOrCreateOAuthUser(
         : null;
 
       if (existingEmailUser) {
-        if (!emailResolution.canLinkByEmail) {
-          throw new OAuthUserConnectionError(profile.provider, OAUTH_EMAIL_ALREADY_REGISTERED);
-        }
-
         const publicUser = ensureActivePublicUser(existingEmailUser, profile.provider);
 
         await createOAuthAccount(tx, publicUser.id, profile, emailResolution.email);
@@ -96,7 +90,6 @@ export function createSocialUsername(provider: OAuthProvider, providerUserId: st
 }
 
 type OAuthEmailResolution = {
-  canLinkByEmail: boolean;
   email: string;
   shouldCheckExistingEmail: boolean;
 };
@@ -104,7 +97,6 @@ type OAuthEmailResolution = {
 function resolveOAuthEmail(profile: NormalizedOAuthProfile): OAuthEmailResolution {
   if (profile.email && profile.emailVerified) {
     return {
-      canLinkByEmail: canLinkExistingUserByEmail(profile.provider),
       email: profile.email,
       shouldCheckExistingEmail: true
     };
@@ -112,7 +104,6 @@ function resolveOAuthEmail(profile: NormalizedOAuthProfile): OAuthEmailResolutio
 
   if (profile.provider === "kakao") {
     return {
-      canLinkByEmail: false,
       email: createKakaoPlaceholderEmail(profile.providerUserId),
       shouldCheckExistingEmail: false
     };
@@ -123,14 +114,9 @@ function resolveOAuthEmail(profile: NormalizedOAuthProfile): OAuthEmailResolutio
   }
 
   return {
-    canLinkByEmail: true,
     email: profile.email,
     shouldCheckExistingEmail: true
   };
-}
-
-function canLinkExistingUserByEmail(provider: OAuthProvider): boolean {
-  return provider === "github";
 }
 
 function createKakaoPlaceholderEmail(providerUserId: string): string {

@@ -2,6 +2,11 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import type { Deployment, ProjectDeletePreview } from "@sketchcatch/types";
+import {
+  getDestroyDeleteAcknowledgedWarningIds,
+  shouldShowProjectOnlyDeleteFallback
+} from "./project-delete-flow";
 
 const projectsClientSource = readProjectFile("../../app/projects/projects-client.tsx");
 const stylesSource = readProjectFile("../../app/globals.css");
@@ -53,6 +58,104 @@ test("disabled project menu actions remain readable", () => {
   assert.match(disabledDangerRule, /opacity:\s*1;/);
 });
 
+test("destroy delete failures expose a project-only fallback", () => {
+  const preview = createPreview({
+    availableActions: ["destroy_then_delete", "delete_project_only"]
+  });
+
+  assert.equal(
+    shouldShowProjectOnlyDeleteFallback({
+      errorMessage: "Terraform destroy failed because the resource no longer exists.",
+      preview,
+      selectedAction: "destroy_then_delete",
+      status: "ready"
+    }),
+    true
+  );
+  assert.equal(
+    shouldShowProjectOnlyDeleteFallback({
+      errorMessage: "Terraform destroy failed because the resource no longer exists.",
+      preview,
+      selectedAction: "destroy_then_delete",
+      status: "approval"
+    }),
+    true
+  );
+});
+
+test("project-only fallback stays hidden without a destroy failure", () => {
+  const preview = createPreview({
+    availableActions: ["destroy_then_delete", "delete_project_only"]
+  });
+
+  assert.equal(
+    shouldShowProjectOnlyDeleteFallback({
+      errorMessage: undefined,
+      preview,
+      selectedAction: "destroy_then_delete",
+      status: "ready"
+    }),
+    false
+  );
+  assert.equal(
+    shouldShowProjectOnlyDeleteFallback({
+      errorMessage: "Terraform destroy failed.",
+      preview,
+      selectedAction: "delete_project_only",
+      status: "ready"
+    }),
+    false
+  );
+  assert.equal(
+    shouldShowProjectOnlyDeleteFallback({
+      errorMessage: "Terraform destroy failed.",
+      preview: createPreview({ availableActions: ["destroy_then_delete"] }),
+      selectedAction: "destroy_then_delete",
+      status: "ready"
+    }),
+    false
+  );
+});
+
+test("destroy delete approval acknowledges non-blocking destroy warnings", () => {
+  const warningIds = getDestroyDeleteAcknowledgedWarningIds(
+    createDeploymentWithWarnings([
+      {
+        blocksApproval: false,
+        id: "terraform_plan:UNKNOWN_TERRAFORM_ACTION:destroy:no-op",
+        requiresAcknowledgement: true
+      },
+      {
+        blocksApproval: false,
+        id: "terraform_plan:LOW_NOTE",
+        requiresAcknowledgement: false
+      },
+      {
+        blocksApproval: true,
+        id: "terraform_plan:UNSUPPORTED_RESOURCE:destroy:aws_unsupported",
+        requiresAcknowledgement: false
+      }
+    ])
+  );
+
+  assert.deepEqual(warningIds, ["terraform_plan:UNKNOWN_TERRAFORM_ACTION:destroy:no-op"]);
+});
+
+test("destroy delete approval has no warning acknowledgements without a plan summary", () => {
+  assert.deepEqual(getDestroyDeleteAcknowledgedWarningIds(undefined), []);
+  assert.deepEqual(getDestroyDeleteAcknowledgedWarningIds(createDeploymentWithWarnings([])), []);
+  assert.deepEqual(
+    getDestroyDeleteAcknowledgedWarningIds({
+      ...createDeploymentWithWarnings([]),
+      planSummary: {
+        ...createDeploymentWithWarnings([]).planSummary,
+        warnings: undefined
+      }
+    } as unknown as Deployment),
+    []
+  );
+});
+
 function readProjectFile(filePath: string): string {
   return readFileSync(fileURLToPath(new URL(filePath, import.meta.url)), "utf8");
 }
@@ -73,4 +176,79 @@ function getCssRule(source: string, className: string): string {
   assert.ok(match?.groups?.body, `Expected .${className} CSS rule to exist`);
 
   return match.groups.body;
+}
+
+function createPreview(input: {
+  readonly availableActions: ProjectDeletePreview["availableActions"];
+}): ProjectDeletePreview {
+  return {
+    activeDeploymentCount: 1,
+    activeDeploymentId: "deployment-1",
+    activeResourceCount: 3,
+    availableActions: input.availableActions,
+    hasDeploymentHistory: true,
+    hasPlanHistory: true,
+    latestDeploymentStatus: "SUCCESS",
+    message: "preview",
+    mode: "active_resources",
+    projectId: "project-1"
+  };
+}
+
+function createDeploymentWithWarnings(
+  warnings: Array<{
+    readonly blocksApproval: boolean;
+    readonly id: string;
+    readonly requiresAcknowledgement: boolean;
+  }>
+): Deployment {
+  return {
+    activeStage: null,
+    approvedAt: null,
+    approvedAwsAccountId: null,
+    approvedAwsRegion: null,
+    approvedByUserId: null,
+    approvedPlanArtifactId: null,
+    approvedTerraformArtifactHash: null,
+    approvedTerraformArtifactId: null,
+    approvedTfplanHash: null,
+    architectureId: "architecture-1",
+    awsConnectionId: "aws-connection-1",
+    blockedBy: null,
+    blockedReason: null,
+    cancelRequestedAt: null,
+    cancelledAt: null,
+    completedAt: null,
+    createdAt: "2026-07-09T00:00:00.000Z",
+    currentPlanArtifactId: "plan-1",
+    currentPlanOperation: "destroy",
+    errorSummary: null,
+    failedAt: null,
+    failureStage: null,
+    id: "deployment-1",
+    isBlocked: true,
+    liveProfile: "practice",
+    planSummary: {
+      blocked: false,
+      createCount: 0,
+      deleteCount: 0,
+      replaceCount: 0,
+      updateCount: 0,
+      warnings: warnings.map((warning) => ({
+        category: "configuration",
+        code: "UNKNOWN_TERRAFORM_ACTION",
+        level: warning.blocksApproval ? "high" : "medium",
+        message: warning.id,
+        source: "terraform_plan",
+        ...warning
+      }))
+    },
+    projectId: "project-1",
+    resultWarningSummary: null,
+    startedAt: null,
+    stateObjectKey: "deployments/deployment-1/state/terraform.tfstate",
+    status: "SUCCESS",
+    terraformArtifactId: "terraform-artifact-1",
+    updatedAt: "2026-07-09T00:00:00.000Z"
+  };
 }

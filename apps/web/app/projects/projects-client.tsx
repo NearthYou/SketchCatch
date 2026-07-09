@@ -33,6 +33,10 @@ import {
   getProjectActionMenuItems,
   type ProjectActionMenuItemKind
 } from "../../features/projects/project-action-menu";
+import {
+  getDestroyDeleteAcknowledgedWarningIds,
+  shouldShowProjectOnlyDeleteFallback
+} from "../../features/projects/project-delete-flow";
 import { filterProjectsByName } from "../../features/projects/project-search";
 
 const DELETE_DEPLOYMENT_POLL_INTERVAL_MS = 2500;
@@ -362,7 +366,10 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
     });
 
     try {
-      await approveDeploymentPlan(deployment.id);
+      await approveDeploymentPlan(
+        deployment.id,
+        getDestroyDeleteAcknowledgedWarningIds(deployment)
+      );
       await runDeploymentDestroy(deployment.id);
       await waitForProjectDeployment({
         checkMounted: () => isMountedRef.current,
@@ -434,6 +441,14 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
       deleteDialog.status === "deleting";
     const projectName = deleteDialog.project.name;
     const selectedAction = deleteDialog.selectedAction;
+    const projectOnlyDeleteFallback =
+      deleteDialog.status !== "loading" &&
+      shouldShowProjectOnlyDeleteFallback({
+        errorMessage: deleteDialog.errorMessage,
+        preview: deleteDialog.preview,
+        selectedAction,
+        status: deleteDialog.status
+      });
     const shouldShowDeleteAction = (action: ProjectDeleteAction): boolean =>
       deleteDialog.status !== "loading" &&
       deleteDialog.preview.availableActions.includes(action) &&
@@ -548,6 +563,18 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
               >
                 <DashboardIcon name="trash" />
                 <span>프로젝트만 삭제</span>
+              </button>
+            ) : null}
+
+            {projectOnlyDeleteFallback ? (
+              <button
+                className="dashboardDangerButton"
+                disabled={isBusy}
+                onClick={() => void confirmProjectDelete("delete_project_only")}
+                type="button"
+              >
+                <DashboardIcon name="trash" />
+                <span>프로젝트 기록만 삭제</span>
               </button>
             ) : null}
 

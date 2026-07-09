@@ -181,7 +181,7 @@ test("converts aws_db_instance with replicate source into an RDS read replica Re
   assert.equal(architectureJson.nodes[0]?.type, "RDS_READ_REPLICA");
 });
 
-test("skips design nodes, missing parameters, invalid nodes, and dangling edges", () => {
+test("infers missing parameters for resource nodes while skipping design, invalid, unknown, and dangling edges", () => {
   const architectureJson = convertDiagramJsonToArchitectureJson({
     nodes: [
       makeNode({
@@ -204,11 +204,26 @@ test("skips design nodes, missing parameters, invalid nodes, and dangling edges"
         label: "missing"
       }),
       makeNode({
+        id: "node-hangul-web",
+        type: "aws_s3_bucket",
+        label: "정적사이트"
+      }),
+      makeNode({
+        id: "node-hangul-assets",
+        type: "aws_s3_bucket",
+        label: "업로드"
+      }),
+      makeNode({
         id: "null-parameters",
         type: "aws_instance",
         label: "null parameters",
         parameters: null
       } as unknown as DiagramNode),
+      makeNode({
+        id: "unknown-resource",
+        type: "unknown_resource",
+        label: "unknown"
+      }),
       makeNode({
         id: "invalid-resource",
         type: "aws_s3_bucket",
@@ -228,7 +243,7 @@ test("skips design nodes, missing parameters, invalid nodes, and dangling edges"
       {
         id: "dangling-edge",
         sourceNodeId: "vpc-1",
-        targetNodeId: "missing-parameters"
+        targetNodeId: "unknown-resource"
       },
       {
         id: "null-parameters-edge",
@@ -241,13 +256,32 @@ test("skips design nodes, missing parameters, invalid nodes, and dangling edges"
 
   assert.deepEqual(
     architectureJson.nodes.map((node) => node.id),
-    ["vpc-1"]
+    ["vpc-1", "missing-parameters", "node-hangul-web", "node-hangul-assets", "null-parameters"]
   );
+  assert.deepEqual(architectureJson.nodes[1], {
+    id: "missing-parameters",
+    type: "EC2",
+    label: "missing",
+    positionX: 0,
+    positionY: 0,
+    config: {
+      terraformResourceName: "missing",
+      terraformResourceType: "aws_instance"
+    }
+  });
+  assert.equal(architectureJson.nodes[2]?.config.terraformResourceName, "node_hangul_web");
+  assert.equal(architectureJson.nodes[3]?.config.terraformResourceName, "node_hangul_assets");
   assert.deepEqual(architectureJson.edges, [
     {
       id: "valid-self-edge",
       sourceId: "vpc-1",
       targetId: "vpc-1",
+      label: undefined
+    },
+    {
+      id: "null-parameters-edge",
+      sourceId: "vpc-1",
+      targetId: "null-parameters",
       label: undefined
     }
   ]);
