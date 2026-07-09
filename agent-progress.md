@@ -2,6 +2,26 @@
 
 Short English-only working log for the current agent context.
 
+## 2026-07-09 herry612 AWS Connection Data Cleanup
+
+- Branch/worktree: current `C:\Jungle\SketchCatch` workspace.
+- Scope: remove database records blocking AWS connection deletion for user `herry612`.
+- Found one active user row for `herry612` and seven AWS connection rows.
+- Found seven deployments referencing the verified AWS connection and no reverse engineering scans referencing those connections.
+- Deleted the seven deployment rows and seven AWS connection rows in a database transaction; deployment child rows such as logs and plan artifacts were removed by existing cascade constraints.
+- Verified that `herry612` has zero remaining AWS connections and zero remaining deployment/reverse-scan references through AWS connections.
+
+Verification:
+
+- `pnpm harness:check` - passed before the database operation.
+- Database pre-delete count query: seven AWS connections, seven deployments, 2,758 deployment logs, 13 deployment plan artifacts, no reverse engineering scans.
+- Database delete transaction: deleted seven deployments and seven AWS connections.
+- Database post-delete verification: zero remaining AWS connections and zero remaining deployment/reverse-scan references for `herry612`.
+
+Known risks:
+
+- This was a direct database metadata cleanup only; it did not destroy any real AWS resources such as IAM roles, CloudFormation stacks, Terraform-created infrastructure, or S3 artifacts.
+
 ## 2026-07-09 AWS Connection Delete Conflict Message
 
 - Branch/worktree: current `C:\Jungle\SketchCatch` workspace.
