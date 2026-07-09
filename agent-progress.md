@@ -26,6 +26,7 @@ Short English-only working log for the current agent context. Older records are 
 - Added an AI chat prompt relevance gate so unrelated or vague free-form messages do not start diagram generation or patch preview requests.
 - Fixed Play Store/mobile app prompts so they are treated as mobile app backend architecture requests instead of asking the website type question.
 - Fixed AI chat relevance classification so DB deletion requests such as `db 지우고 싶어` enter the Practice Architecture patch flow, while bare resource names such as `db` stay ambiguous instead of executing a modification.
+- Fixed Terraform issue AI resolution so applying a suggested fix opens the Terraform code panel at the edited source line, highlights it, and changes the AI chat apply button to a disabled `수정완료` state.
 
 Verification:
 
@@ -68,6 +69,13 @@ Verification:
 - `pnpm typecheck` - passed after the DB deletion prompt classification fix.
 - `pnpm build` - passed after the DB deletion prompt classification fix.
 - `pnpm harness:check` - passed after the DB deletion prompt classification fix.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts` - failed before the Terraform issue AI fix navigation/button-state change, then passed.
+- `pnpm --filter @sketchcatch/web typecheck` - passed after the Terraform issue AI fix navigation/button-state change.
+- `pnpm --filter @sketchcatch/web lint` - passed after the Terraform issue AI fix navigation/button-state change.
+- `pnpm lint` - passed after the Terraform issue AI fix navigation/button-state change.
+- `pnpm typecheck` - passed after the Terraform issue AI fix navigation/button-state change.
+- `pnpm build` - passed after the Terraform issue AI fix navigation/button-state change.
+- `pnpm harness:check` - passed after the Terraform issue AI fix navigation/button-state change.
 
 Known risks:
 

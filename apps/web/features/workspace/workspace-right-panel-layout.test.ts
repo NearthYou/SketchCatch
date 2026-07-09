@@ -875,6 +875,22 @@ test("terraform issue AI resolution shows a fix plan before apply", () => {
   assert.match(terraformPanelSource, /codePreview\.source === "safe_fix"/);
 });
 
+test("terraform issue AI fix opens the edited code and locks the apply button", () => {
+  assert.match(componentSource, /getTerraformIssueFixSourceLocation/);
+  assert.match(componentSource, /request\.codePreview\?\.sourceLine \?\? request\.diagnostic\.line \?\? 1/);
+  assert.match(componentSource, /context\.setRightPanelOpen\(true\);/);
+  assert.match(componentSource, /setActiveView\("terraform"\);/);
+  assert.match(componentSource, /terraformPanelRef\.current\?\.openTerraformSourceLocation\(sourceLocation\)/);
+  assert.match(aiChatDockSource, /completedTerraformFixRequestIds/);
+  assert.match(aiChatDockSource, /setCompletedTerraformFixRequestIds/);
+  assert.match(aiChatDockSource, /const hasCompletedTerraformFix/);
+  assert.match(
+    aiChatDockSource,
+    /disabled=\{hasCompletedTerraformFix \|\| applyingTerraformFixRequestId === terraformIssueResolution\.request\.id\}/
+  );
+  assert.match(aiChatDockSource, /수정완료/);
+});
+
 test("terraform issue AI fix keeps remaining diagnostics visible after a partial repair", () => {
   const safeFixIndex = terraformPanelSource.indexOf("const applyTerraformSafeFixToCode");
   const originalDiagnosticIndex = terraformPanelSource.indexOf(

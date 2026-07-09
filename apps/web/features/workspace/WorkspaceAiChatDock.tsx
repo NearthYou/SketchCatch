@@ -225,6 +225,9 @@ export function WorkspaceAiChatDock({
   const [applyingTerraformFixRequestId, setApplyingTerraformFixRequestId] = useState<number | null>(
     null
   );
+  const [completedTerraformFixRequestIds, setCompletedTerraformFixRequestIds] = useState<
+    readonly number[]
+  >([]);
   const [draftState, setDraftState] = useState<AiRequestState>("idle");
   const [simulationState, setSimulationState] = useState<AiRequestState>("idle");
   const [draftErrorMessage, setDraftErrorMessage] = useState("");
@@ -275,6 +278,7 @@ export function WorkspaceAiChatDock({
   useEffect(() => {
     setMessages(readStoredChatMessages(projectId));
     setSelectedSuggestionLabelsByMessageId({});
+    setCompletedTerraformFixRequestIds([]);
     loadedProjectIdRef.current = projectId;
   }, [projectId]);
 
@@ -478,6 +482,15 @@ export function WorkspaceAiChatDock({
 
     latestTerraformSafeFixResultRequestIdRef.current = terraformSafeFixApplyResult.requestId;
     setApplyingTerraformFixRequestId(null);
+
+    if (terraformSafeFixApplyResult.applied) {
+      setCompletedTerraformFixRequestIds((currentRequestIds) =>
+        currentRequestIds.includes(terraformSafeFixApplyResult.requestId)
+          ? currentRequestIds
+          : [...currentRequestIds, terraformSafeFixApplyResult.requestId]
+      );
+    }
+
     appendAssistantMessage(
       terraformSafeFixApplyResult.applied ? "terraform_issue" : "error",
       terraformSafeFixApplyResult.message,
@@ -545,6 +558,7 @@ export function WorkspaceAiChatDock({
       );
       setTerraformIssueResolution(null);
       setApplyingTerraformFixRequestId(null);
+      setCompletedTerraformFixRequestIds([]);
       return;
     }
 
@@ -560,6 +574,7 @@ export function WorkspaceAiChatDock({
     setDraftState("idle");
     setTerraformIssueResolution(null);
     setApplyingTerraformFixRequestId(null);
+    setCompletedTerraformFixRequestIds([]);
     context.setPreviewDiagram(null);
   }
 
@@ -1427,13 +1442,16 @@ export function WorkspaceAiChatDock({
                       explanation: terraformIssueResolution.explanation,
                       terraformCode: terraformIssueResolution.request.terraformCode
                     });
+                    const hasCompletedTerraformFix = completedTerraformFixRequestIds.includes(
+                      terraformIssueResolution.request.id
+                    );
 
                     return (
                       <>
                         {fixPlan.canApply ? (
                           <button
                             className={styles.aiPrimaryButton}
-                            disabled={applyingTerraformFixRequestId === terraformIssueResolution.request.id}
+                            disabled={hasCompletedTerraformFix || applyingTerraformFixRequestId === terraformIssueResolution.request.id}
                             onClick={() => {
                               setApplyingTerraformFixRequestId(terraformIssueResolution.request.id);
                               onApplyTerraformIssueFix(
@@ -1443,7 +1461,11 @@ export function WorkspaceAiChatDock({
                             }}
                             type="button"
                           >
-                            {applyingTerraformFixRequestId === terraformIssueResolution.request.id ? "수정 중" : "수정"}
+                            {hasCompletedTerraformFix
+                              ? "수정완료"
+                              : applyingTerraformFixRequestId === terraformIssueResolution.request.id
+                                ? "수정 중"
+                                : "수정"}
                           </button>
                         ) : null}
                         <button className={styles.aiSecondaryButton} disabled type="button">

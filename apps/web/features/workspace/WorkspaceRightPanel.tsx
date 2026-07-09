@@ -204,6 +204,13 @@ export function WorkspaceRightPanel({
     async function applySafeFix(): Promise<void> {
       const result = await terraformPanelRef.current?.applyTerraformSafeFix(request.diagnostic, request.codePreview);
 
+      if (result?.applied) {
+        const sourceLocation = getTerraformIssueFixSourceLocation(request);
+        context.setRightPanelOpen(true);
+        setActiveView("terraform");
+        terraformPanelRef.current?.openTerraformSourceLocation(sourceLocation);
+      }
+
       onTerraformSafeFixApplyResult({
         requestId: request.id,
         applied: result?.applied ?? false,
@@ -212,7 +219,7 @@ export function WorkspaceRightPanel({
     }
 
     void applySafeFix();
-  }, [onTerraformSafeFixApplyResult, terraformSafeFixApplyRequest]);
+  }, [context, onTerraformSafeFixApplyResult, terraformSafeFixApplyRequest]);
 
   const requestTerraformLeave = useCallback((action: PendingTerraformLeaveAction): boolean => {
     if (!hasUnsavedTerraformChanges || skipTerraformLeaveGuardRef.current) {
@@ -766,4 +773,14 @@ function isTerraformIssuesNavigationTarget(target: Node): boolean {
 
 function isTerraformIssueAiResolutionTarget(target: Node): boolean {
   return target instanceof Element && Boolean(target.closest("[data-terraform-issue-ai-resolution]"));
+}
+
+function getTerraformIssueFixSourceLocation(
+  request: TerraformSafeFixApplyRequest
+): TerraformSourceLocation {
+  return {
+    fileName: request.diagnostic.sourceFileName ?? "main.tf",
+    line: request.codePreview?.sourceLine ?? request.diagnostic.line ?? 1,
+    ...(request.diagnostic.resourceAddress ? { resourceAddress: request.diagnostic.resourceAddress } : {})
+  };
 }
