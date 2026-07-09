@@ -1,4 +1,4 @@
-﻿# Agent Progress
+# Agent Progress
 
 Short English-only working log for the current agent context. Older records are archived under `docs/agent-history/`.
 
@@ -34,6 +34,9 @@ Short English-only working log for the current agent context. Older records are 
 - Fixed the new-project AI start preview edit flow so messages like "add db here" patch the current PREVIEW instead of restarting architecture-draft clarification.
 - Fixed the new-project AI start patch-clarification state so the old PREVIEW is hidden while Amazon Q asks for missing DB/resource details, then the revised PREVIEW appears only after the answer is processed.
 - Addressed PR #280 review feedback: prevented Terraform editor scroll jumps while typing and kept `web app` prompts out of the mobile-app classification path.
+- Cleaned `docs/sw` before the ECS planning work. Removed stale SW spec, plan, smoke, evidence, and one-off agent-rule files from the active docs folder. Kept `spec6.md` as Git/CI/CD implementation-contract reference and updated `docs/sw/README.md`.
+- Updated `docs/AGENTS.md` so future documentation work removes stale `docs/sw` workstream files instead of preserving old `spec*`, `plan*`, smoke, and one-off agent-rule documents.
+- Marked HARNESS-007 as blocked/deferred because the user decided not to pursue GitHub/AWS live smoke now.
 
 Verification:
 
@@ -128,8 +131,11 @@ Verification:
 - `pnpm typecheck` - passed after PR #280 review feedback fixes.
 - `pnpm build` - passed after PR #280 review feedback fixes.
 - `pnpm harness:check` - passed after PR #280 review feedback fixes.
+- `pnpm harness:check` - passed after the docs/sw cleanup and harness state repair.
 
 Known risks:
 
 - No real AWS IAM, IAM Identity Center, CloudFormation, Terraform apply, or Terraform destroy mutation was performed.
 - The user still needs to apply caller-side `sts:AssumeRole` permission in AWS IAM Identity Center and confirm the target Role Trust Policy/External ID.
+- This is a documentation-only cleanup. No product source code, package metadata, or generated deployment artifacts were intentionally changed.
+- Git/CI/CD live smoke evidence is intentionally deferred, so HARNESS-007 remains blocked until the team decides to collect real deployment evidence again.
