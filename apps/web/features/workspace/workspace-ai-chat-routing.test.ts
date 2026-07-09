@@ -104,6 +104,7 @@ test("classifyWorkspaceAiChatPrompt accepts diagram generation and edit requests
     "remove the existing database",
     "정적 웹사이트 다이어그램 만들어줘",
     "로그인 있는 작은 웹서비스가 필요해",
+    "구글 플레이스토어에 올릴 앱 하나 만들고 싶어",
     "여기에 데이터베이스 하나 추가해줘"
   ];
 

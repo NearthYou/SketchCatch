@@ -7,7 +7,7 @@ Short English-only working log for the current agent context. Older records are 
 - Branch: `fix/ck/275-ai-chat-bug-fix`.
 - Base: current branch includes the prior AI chat suggestion-locking commit.
 - GitHub issue: #275, AI chat bug fixes.
-- Scope: prevent stale suggestion reuse and block unrelated free-form AI chat prompts before diagram generation or patch preview starts.
+- Scope: prevent stale suggestion reuse, block unrelated free-form AI chat prompts, and keep mobile app requests out of website-specific clarification paths.
 
 ## Session Record
 
@@ -24,6 +24,7 @@ Short English-only working log for the current agent context. Older records are 
 - Addressed PR #274 review feedback: guarded destroy warning acknowledgement when `warnings` is missing, made API fallback Terraform names use `node.id` when non-ASCII labels normalize to `resource`, and deleted Git/CI/CD handoffs before deployment rows.
 - Fixed AI chat suggestion buttons so previously submitted diagram-generation choices remain selected and disabled, including restored chat history.
 - Added an AI chat prompt relevance gate so unrelated or vague free-form messages do not start diagram generation or patch preview requests.
+- Fixed Play Store/mobile app prompts so they are treated as mobile app backend architecture requests instead of asking the website type question.
 
 Verification:
 
@@ -54,6 +55,13 @@ Verification:
 - `pnpm lint` - passed after the prompt relevance gate.
 - `pnpm typecheck` - passed after the prompt relevance gate.
 - `pnpm build` - passed after the prompt relevance gate.
+- `pnpm --filter @sketchcatch/api exec tsx --test src/services/aiArchitectureDrafts.test.ts` - failed before the Play Store/mobile app clarification fix, then passed.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-chat-routing.test.ts` - failed before adding Play Store/mobile app prompt classification, then passed.
+- `pnpm --filter @sketchcatch/web typecheck` - passed after the Play Store/mobile app fix.
+- `pnpm --filter @sketchcatch/api typecheck` - passed after the Play Store/mobile app fix.
+- `pnpm lint` - passed after the Play Store/mobile app fix.
+- `pnpm typecheck` - passed after the Play Store/mobile app fix.
+- `pnpm build` - passed after the Play Store/mobile app fix.
 
 Known risks:
 

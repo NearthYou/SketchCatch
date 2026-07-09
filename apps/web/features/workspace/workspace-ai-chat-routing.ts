@@ -108,6 +108,7 @@ const ARCHITECTURE_ACTION_KEYWORDS = [
   "make",
   "modify",
   "need",
+  "publish",
   "remove",
   "replace",
   "serve",
@@ -148,7 +149,13 @@ const ARCHITECTURE_TARGET_KEYWORDS = [
   "website",
   "api",
   "aws",
+  "app",
+  "app store",
+  "google play",
+  "mobile app",
+  "play store",
   "다이어그램",
+  "구글 플레이",
   "백엔드",
   "버킷",
   "서비스",
@@ -163,7 +170,11 @@ const ARCHITECTURE_TARGET_KEYWORDS = [
   "테라폼",
   "프론트엔드",
   "데이터베이스",
-  "로그인"
+  "로그인",
+  "모바일 앱",
+  "앱",
+  "앱 스토어",
+  "플레이스토어"
 ] as const;
 
 const EXPLICIT_ARCHITECTURE_NOUNS = [
