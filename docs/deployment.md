@@ -180,6 +180,42 @@ GitHub Actions
 -> api/web/nginx 컨테이너 재시작
 ```
 
+### ECS 배포 워크플로 Phase 2
+
+Phase 2에서는 기존 `Deploy Production` EC2/SSM 워크플로를 rollback 경로로 유지하고, 별도 `Deploy Production ECS` 워크플로를 추가합니다. ECS 워크플로는 수동 실행(`workflow_dispatch`)으로만 시작하며, `docker save`와 S3 이미지 tarball 업로드를 사용하지 않습니다.
+
+ECS 배포 흐름:
+
+```text
+GitHub Actions
+-> pnpm lint/typecheck/build
+-> api/web/nginx Docker image build
+-> ECR push
+-> 현재 ECS task definition 조회
+-> api/web/nginx image tag가 반영된 새 task definition revision 등록
+-> ECS service update
+```
+
+정상 ECS 배포에서는 DB migration을 자동 실행하지 않습니다. migration은 기존처럼 별도 수동 workflow에서 다룹니다. ECS smoke가 통과하고 Route53 cutover가 승인되기 전까지 production traffic은 기존 EC2/SSM 경로가 담당합니다.
+
+ECS workflow에 필요한 GitHub `production` environment variables:
+
+```text
+AWS_REGION=ap-northeast-2
+AWS_ROLE_TO_ASSUME=<GitHub Actions OIDC Role ARN>
+ECR_API_REPOSITORY=sketchcatch-production-api
+ECR_WEB_REPOSITORY=sketchcatch-production-web
+ECR_NGINX_REPOSITORY=sketchcatch-production-nginx
+ECS_CLUSTER_NAME=sketchcatch-production-cluster
+ECS_SERVICE_NAME=sketchcatch-production-app
+ECS_TASK_DEFINITION_FAMILY=sketchcatch-production-app
+ECS_API_CONTAINER_NAME=api
+ECS_WEB_CONTAINER_NAME=web
+ECS_NGINX_CONTAINER_NAME=nginx
+```
+
+ECS workflow는 application secret 원문을 GitHub Actions log나 task definition 파일에 직접 쓰지 않습니다. Phase 3에서 `api_secret_arns` 기반 ECS task secret 주입이 정리되기 전까지는 `desiredCount=0` 상태를 유지하거나, smoke 전 별도 secret 준비를 끝낸 뒤 service count를 올려야 합니다.
+
 ## EC2 정보
 
 ```text
