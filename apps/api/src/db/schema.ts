@@ -108,6 +108,7 @@ export const deploymentPlanOperationEnum = pgEnum("deployment_plan_operation", [
 ]);
 
 export const deploymentJobOperationEnum = pgEnum("deployment_job_operation", [
+  "init",
   "plan",
   "apply",
   "destroy_plan",

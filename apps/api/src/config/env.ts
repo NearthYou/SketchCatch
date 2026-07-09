@@ -16,6 +16,15 @@ export type RuntimeEnv = {
   cloudFormationTemplateTokenSecret: string | undefined;
   databaseUrl: string | undefined;
   databaseSsl: boolean;
+  deploymentWorkerMode?: string | undefined;
+  ecsWorkerAssignPublicIp?: string | undefined;
+  ecsWorkerCluster?: string | undefined;
+  ecsWorkerCommand?: string | undefined;
+  ecsWorkerContainerName?: string | undefined;
+  ecsWorkerEnvironment?: string | undefined;
+  ecsWorkerSecurityGroupIds?: string | undefined;
+  ecsWorkerSubnets?: string | undefined;
+  ecsWorkerTaskDefinition?: string | undefined;
   githubOauthClientId: string | undefined;
   githubOauthClientSecret: string | undefined;
   githubAppId?: string | undefined;
@@ -62,6 +71,15 @@ export function getRuntimeEnv(): RuntimeEnv {
     cloudFormationTemplateTokenSecret: process.env.CLOUDFORMATION_TEMPLATE_TOKEN_SECRET,
     databaseUrl: process.env.DATABASE_URL,
     databaseSsl: process.env.DATABASE_SSL === "true",
+    deploymentWorkerMode: process.env.DEPLOYMENT_WORKER_MODE,
+    ecsWorkerAssignPublicIp: process.env.ECS_WORKER_ASSIGN_PUBLIC_IP,
+    ecsWorkerCluster: process.env.ECS_WORKER_CLUSTER,
+    ecsWorkerCommand: process.env.ECS_WORKER_COMMAND,
+    ecsWorkerContainerName: process.env.ECS_WORKER_CONTAINER_NAME,
+    ecsWorkerEnvironment: process.env.ECS_WORKER_ENVIRONMENT,
+    ecsWorkerSecurityGroupIds: process.env.ECS_WORKER_SECURITY_GROUP_IDS,
+    ecsWorkerSubnets: process.env.ECS_WORKER_SUBNETS,
+    ecsWorkerTaskDefinition: process.env.ECS_WORKER_TASK_DEFINITION,
     githubOauthClientId: process.env.GIT_OAUTH_CLIENT_ID,
     githubOauthClientSecret: process.env.GIT_OAUTH_CLIENT_SECRET,
     githubAppId: process.env.GIT_APP_ID,
@@ -82,6 +100,50 @@ export function getRuntimeEnv(): RuntimeEnv {
     transcribeCreditConfirmed: process.env.TRANSCRIBE_CREDIT_CONFIRMED,
     transcribeLanguageCode: process.env.TRANSCRIBE_LANGUAGE_CODE,
     transcribeMediaBucket: process.env.TRANSCRIBE_MEDIA_BUCKET
+  };
+}
+
+export type DeploymentWorkerMode = "in_process" | "ecs";
+
+export type EcsWorkerDispatcherConfig = {
+  assignPublicIp: "ENABLED" | "DISABLED";
+  cluster: string;
+  command: string[];
+  containerName: string;
+  environment: Record<string, string>;
+  securityGroupIds: string[];
+  subnetIds: string[];
+  taskDefinition: string;
+};
+
+export function getDeploymentWorkerMode(env: RuntimeEnv = getRuntimeEnv()): DeploymentWorkerMode {
+  const mode = env.deploymentWorkerMode?.trim() || "in_process";
+
+  if (mode === "in_process" || mode === "ecs") {
+    return mode;
+  }
+
+  throw new Error("DEPLOYMENT_WORKER_MODE must be one of: in_process, ecs");
+}
+
+export function requireEcsWorkerDispatcherConfig(
+  env: RuntimeEnv = getRuntimeEnv()
+): EcsWorkerDispatcherConfig {
+  return {
+    assignPublicIp: parseAssignPublicIp(env.ecsWorkerAssignPublicIp),
+    cluster: requireNonEmptyEnv(env.ecsWorkerCluster, "ECS_WORKER_CLUSTER"),
+    command: parseJsonStringArray(env.ecsWorkerCommand, "ECS_WORKER_COMMAND"),
+    containerName: requireNonEmptyEnv(env.ecsWorkerContainerName, "ECS_WORKER_CONTAINER_NAME"),
+    environment: parseJsonStringRecord(env.ecsWorkerEnvironment, "ECS_WORKER_ENVIRONMENT"),
+    securityGroupIds: parseCommaSeparatedEnv(
+      env.ecsWorkerSecurityGroupIds,
+      "ECS_WORKER_SECURITY_GROUP_IDS"
+    ),
+    subnetIds: parseCommaSeparatedEnv(env.ecsWorkerSubnets, "ECS_WORKER_SUBNETS"),
+    taskDefinition: requireNonEmptyEnv(
+      env.ecsWorkerTaskDefinition,
+      "ECS_WORKER_TASK_DEFINITION"
+    )
   };
 }
 
@@ -219,4 +281,95 @@ export function assertNoStaticAwsCredentialsForApiServer(
       "or an IAM role on deployed runtime infrastructure."
     ].join(" ")
   );
+}
+
+function requireNonEmptyEnv(value: string | undefined, name: string): string {
+  const trimmedValue = value?.trim();
+
+  if (!trimmedValue) {
+    throw new Error(`${name} is required when DEPLOYMENT_WORKER_MODE=ecs`);
+  }
+
+  return trimmedValue;
+}
+
+function parseCommaSeparatedEnv(value: string | undefined, name: string): string[] {
+  const values = requireNonEmptyEnv(value, name)
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+
+  if (values.length === 0) {
+    throw new Error(`${name} must contain at least one value`);
+  }
+
+  return values;
+}
+
+function parseJsonStringArray(value: string | undefined, name: string): string[] {
+  const rawValue = requireNonEmptyEnv(value, name);
+  let parsedValue: unknown;
+
+  try {
+    parsedValue = JSON.parse(rawValue);
+  } catch {
+    throw new Error(`${name} must be a JSON array of strings`);
+  }
+
+  if (
+    !Array.isArray(parsedValue) ||
+    parsedValue.length === 0 ||
+    parsedValue.some((entry) => typeof entry !== "string" || entry.trim().length === 0)
+  ) {
+    throw new Error(`${name} must be a non-empty JSON array of non-empty strings`);
+  }
+
+  return parsedValue.map((entry) => entry.trim());
+}
+
+function parseJsonStringRecord(value: string | undefined, name: string): Record<string, string> {
+  const rawValue = value?.trim();
+
+  if (!rawValue) {
+    return {};
+  }
+
+  let parsedValue: unknown;
+
+  try {
+    parsedValue = JSON.parse(rawValue);
+  } catch {
+    throw new Error(`${name} must be a JSON object with string values`);
+  }
+
+  if (
+    !parsedValue ||
+    typeof parsedValue !== "object" ||
+    Array.isArray(parsedValue) ||
+    Object.values(parsedValue).some((entry) => typeof entry !== "string")
+  ) {
+    throw new Error(`${name} must be a JSON object with string values`);
+  }
+
+  return Object.fromEntries(
+    Object.entries(parsedValue).map(([key, entry]) => [key, entry.trim()])
+  );
+}
+
+function parseAssignPublicIp(value: string | undefined): "ENABLED" | "DISABLED" {
+  const normalizedValue = value?.trim().toUpperCase();
+
+  if (!normalizedValue) {
+    return "DISABLED";
+  }
+
+  if (normalizedValue === "TRUE" || normalizedValue === "ENABLED") {
+    return "ENABLED";
+  }
+
+  if (normalizedValue === "FALSE" || normalizedValue === "DISABLED") {
+    return "DISABLED";
+  }
+
+  throw new Error("ECS_WORKER_ASSIGN_PUBLIC_IP must be ENABLED or DISABLED");
 }
