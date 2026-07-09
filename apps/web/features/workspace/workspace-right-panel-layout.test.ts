@@ -1161,6 +1161,9 @@ test("terraform issue AI fix keeps remaining diagnostics visible after a partial
 
 test("terraform source navigation scrolls and focuses the target line deterministically", () => {
   assert.match(terraformPanelSource, /const scrollTerraformEditorToLine = useCallback/);
+  assert.match(terraformPanelSource, /lastScrolledNodeIdRef/);
+  assert.match(terraformPanelSource, /const code = textarea\.value/);
+  assert.match(terraformPanelSource, /const lineCount = code\.split/);
   assert.match(terraformPanelSource, /textarea\.focus\(\{ preventScroll: true \}\)/);
   assert.match(terraformPanelSource, /textarea\.setSelectionRange\(cursorOffset, cursorOffset\)/);
   assert.match(terraformPanelSource, /textarea\.scrollTop = targetScrollTop/);
@@ -1168,6 +1171,7 @@ test("terraform source navigation scrolls and focuses the target line determinis
   assert.match(terraformPanelSource, /setCodeScrollTop\(textarea\.scrollTop\)/);
   assert.match(terraformPanelSource, /setCodeScrollLeft\(textarea\.scrollLeft\)/);
   assert.match(terraformPanelSource, /lineNumberRef\.current\.scrollTop = textarea\.scrollTop/);
+  assert.doesNotMatch(terraformPanelSource, /}, \[displayedTerraformCode, lineNumbers\.length\]\);/);
 });
 
 test("terraform issue AI resolution can close the chat dock without trapping the issue card", () => {

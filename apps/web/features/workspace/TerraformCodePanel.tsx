@@ -260,6 +260,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
   const latestExternalSaveRequestIdRef = useRef(externalSaveRequestId);
   const latestTerraformRefreshRequestIdRef = useRef(context.terraformRefreshRequestId);
   const lineNumberRef = useRef<HTMLOListElement | null>(null);
+  const lastScrolledNodeIdRef = useRef<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const combinedTerraformCode = useMemo(() => combineTerraformFiles(terraformFiles), [terraformFiles]);
@@ -910,10 +911,12 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
       return false;
     }
 
-    const targetLine = Math.max(1, Math.min(line, lineNumbers.length));
+    const code = textarea.value;
+    const lineCount = code.split(/\r\n|\r|\n/).length;
+    const targetLine = Math.max(1, Math.min(line, lineCount));
     const lineHeight = Number.parseFloat(window.getComputedStyle(textarea).lineHeight) || TERRAFORM_EDITOR_LINE_HEIGHT;
     const targetScrollTop = Math.max(0, (targetLine - 2) * lineHeight);
-    const cursorOffset = getTerraformLineStartOffset(displayedTerraformCode, targetLine);
+    const cursorOffset = getTerraformLineStartOffset(code, targetLine);
 
     if (options.shouldFocus) {
       textarea.focus({ preventScroll: true });
@@ -930,10 +933,11 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     }
 
     return true;
-  }, [displayedTerraformCode, lineNumbers.length]);
+  }, []);
 
   useEffect(() => {
     if (!isVisible || isResourceCodeMode || !selectedBlock || !textareaRef.current) {
+      lastScrolledNodeIdRef.current = null;
       return;
     }
 
@@ -942,8 +946,14 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
       return;
     }
 
+    const selectedNodeId = selectedNode?.id ?? null;
+    if (lastScrolledNodeIdRef.current === selectedNodeId) {
+      return;
+    }
+
     scrollTerraformEditorToLine(selectedBlock.startLine);
-  }, [activeFileName, isResourceCodeMode, isVisible, scrollTerraformEditorToLine, selectedBlock]);
+    lastScrolledNodeIdRef.current = selectedNodeId;
+  }, [activeFileName, isResourceCodeMode, isVisible, scrollTerraformEditorToLine, selectedBlock, selectedNode?.id]);
 
   useEffect(() => {
     if (!pendingSourceLocation || !isVisible || isResourceCodeMode) {

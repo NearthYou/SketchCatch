@@ -559,9 +559,23 @@ function isWebsiteTypeAnswered(prompt: string): boolean {
 function isMobileAppPrompt(prompt: string): boolean {
   const normalizedPrompt = prompt.normalize("NFKC").toLowerCase();
 
-  return /(?:mobile\s+app|app\s+store|play\s*store|google\s*play|모바일\s*앱|네이티브|웹뷰|플레이스토어|구글\s*플레이|앱\s*스토어|앱\s*하나)/iu.test(
-    normalizedPrompt
+  return (
+    /(?:mobile\s+app|app\s+store|play\s*store|google\s*play|모바일\s*앱|네이티브|웹뷰|플레이스토어|구글\s*플레이|앱\s*스토어)/iu.test(
+      normalizedPrompt
+    ) || hasStandaloneMobileAppCreationPrompt(normalizedPrompt)
   );
+}
+
+function hasStandaloneMobileAppCreationPrompt(normalizedPrompt: string): boolean {
+  for (const match of normalizedPrompt.matchAll(/앱\s*하나/giu)) {
+    const prefix = normalizedPrompt.slice(Math.max(0, match.index - 2), match.index).replace(/\s+/g, "");
+
+    if (!prefix.endsWith("웹")) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 function isTrafficAnswered(prompt: string): boolean {

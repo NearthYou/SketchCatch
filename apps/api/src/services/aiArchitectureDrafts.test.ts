@@ -310,6 +310,32 @@ test("createAmazonQArchitectureDraftResponse treats Play Store app prompts as mo
   assert.equal(response.question, "예상 트래픽 규모는?");
 });
 
+test("createAmazonQArchitectureDraftResponse does not classify web app prompts as mobile app requests", async () => {
+  let callCount = 0;
+  const provider = createFakeAmazonQProvider(() => {
+    callCount += 1;
+    return "{}";
+  });
+
+  const response = await createAmazonQArchitectureDraftResponse(
+    {
+      prompt: "웹 앱 하나 만들고 싶어"
+    },
+    {
+      provider,
+      creditPolicy: confirmedCreditPolicy
+    }
+  );
+
+  assert.equal(callCount, 0);
+  if (!("status" in response)) {
+    assert.fail("Expected a clarification response");
+  }
+
+  assert.equal(response.status, "needs_clarification");
+  assert.equal(response.question, "어떤 종류의 웹사이트인가요?");
+});
+
 test("createAmazonQArchitectureDraftResponse treats concurrent user capacity as traffic information", async () => {
   const provider = createFakeAmazonQProvider(() => "{}");
 

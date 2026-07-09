@@ -33,6 +33,7 @@ Short English-only working log for the current agent context. Older records are 
 - Fixed the new-project AI start chat so it uses the same prompt relevance gate before draft generation and disables already submitted suggestion choices.
 - Fixed the new-project AI start preview edit flow so messages like "add db here" patch the current PREVIEW instead of restarting architecture-draft clarification.
 - Fixed the new-project AI start patch-clarification state so the old PREVIEW is hidden while Amazon Q asks for missing DB/resource details, then the revised PREVIEW appears only after the answer is processed.
+- Addressed PR #280 review feedback: prevented Terraform editor scroll jumps while typing and kept `web app` prompts out of the mobile-app classification path.
 
 Verification:
 
@@ -121,6 +122,12 @@ Verification:
 - `pnpm lint` - passed after the patch-clarification preview visibility fix.
 - `pnpm typecheck` - passed after the patch-clarification preview visibility fix.
 - `pnpm build` - passed after the patch-clarification preview visibility fix.
+- `pnpm --filter @sketchcatch/api exec tsx --test src/services/aiArchitectureDrafts.test.ts` - passed after PR #280 review feedback fixes.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-right-panel-layout.test.ts` - passed after PR #280 review feedback fixes.
+- `pnpm lint` - passed after PR #280 review feedback fixes.
+- `pnpm typecheck` - passed after PR #280 review feedback fixes.
+- `pnpm build` - passed after PR #280 review feedback fixes.
+- `pnpm harness:check` - passed after PR #280 review feedback fixes.
 
 Known risks:
 
