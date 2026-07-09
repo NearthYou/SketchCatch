@@ -73,7 +73,7 @@ export function resolveArchitectureDraftFollowUpAnswer(
     return {
       action: "regenerate",
       request: {
-        prompt: `${session.originalRequest.prompt}\n처음엔 저렴하게 시작하고 싶어. DB 없이 단일 API 서버 구조로 다시 만들어줘.`
+        prompt: `${session.originalRequest.prompt}\n처음엔 저렴하게 시작하고 싶어. DB 없이 단일 API 서버 구조로 만들어줘.`
       }
     };
   }
@@ -139,7 +139,7 @@ function createFollowUpCopy(
       return {
         question:
           "질문: DB가 포함되면 비용이 늘 수 있습니다. 낮은 예산을 우선해서 DB 없는 구조로 만들까요?",
-        suggestions: ["DB 없이 다시 만들기", "DB 포함해서 진행"]
+        suggestions: ["DB 없이 만들기", "DB 포함해서 진행"]
       };
   }
 }

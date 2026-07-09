@@ -27,6 +27,7 @@ Short English-only working log for the current agent context. Older records are 
 - Fixed Play Store/mobile app prompts so they are treated as mobile app backend architecture requests instead of asking the website type question.
 - Fixed AI chat relevance classification so DB deletion requests such as `db 지우고 싶어` enter the Practice Architecture patch flow, while bare resource names such as `db` stay ambiguous instead of executing a modification.
 - Fixed Terraform issue AI resolution so applying a suggested fix opens the Terraform code panel at the edited source line, highlights it, and changes the AI chat apply button to a disabled `수정완료` state.
+- Updated the low-budget DB follow-up choice from `DB 없이 다시 만들기` to `DB 없이 만들기` and removed the internal "recreate" wording from the regenerated prompt.
 
 Verification:
 
@@ -76,6 +77,11 @@ Verification:
 - `pnpm typecheck` - passed after the Terraform issue AI fix navigation/button-state change.
 - `pnpm build` - passed after the Terraform issue AI fix navigation/button-state change.
 - `pnpm harness:check` - passed after the Terraform issue AI fix navigation/button-state change.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-draft-follow-up.test.ts` - passed after the low-budget DB follow-up copy change.
+- `pnpm lint` - passed after the low-budget DB follow-up copy change.
+- `pnpm typecheck` - passed after the low-budget DB follow-up copy change.
+- `pnpm build` - passed after the low-budget DB follow-up copy change.
+- `pnpm harness:check` - passed after the low-budget DB follow-up copy change.
 
 Known risks:
 
