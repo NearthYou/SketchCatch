@@ -39,6 +39,8 @@ Short English-only working log for the current agent context. Older records are 
 - Marked HARNESS-007 as blocked/deferred because the user decided not to pursue GitHub/AWS live smoke now.
 - Removed the fixed selected-answer SketchCatch web deployment draft, fixed diagram fixture, and fixed Terraform Preview marker override so that the web deployment answer path goes through the Amazon Q architecture draft provider flow.
 - Removed the web-side fixed-reference layout bypass so ArchitectureJson drafts now use the normal diagram conversion pipeline unless an exact `diagramJson` is explicitly returned by the draft response.
+- Fixed intermittent AI chat 400s caused by stale route-level ResourceType enums rejecting generated ArchitectureJson nodes such as `LOAD_BALANCER`.
+- Promoted the shared ResourceType list to a runtime `RESOURCE_TYPES` constant and reused it in AI, project architecture, and Reverse Engineering route validation.
 
 Verification:
 
@@ -141,6 +143,13 @@ Verification:
 - `pnpm typecheck` - passed.
 - `pnpm build` - passed.
 - `pnpm harness:check` - passed after progress log update.
+- `pnpm --filter @sketchcatch/api exec tsx --test src/routes/aiDesignSimulation.test.ts --test-name-pattern "accepts generated load balancer"` - failed before the ResourceType schema fix, then passed.
+- `pnpm --filter @sketchcatch/api exec tsx --test src/routes/aiAwsProviders.test.ts --test-name-pattern "accepts generated load balancer"` - failed before the ResourceType schema fix, then passed.
+- `pnpm --filter @sketchcatch/api exec tsx --test src/routes/aiDesignSimulation.test.ts src/routes/aiAwsProviders.test.ts` - passed after the ResourceType schema fix.
+- `pnpm --filter @sketchcatch/api typecheck` - passed after the ResourceType schema fix.
+- `pnpm lint` - passed after the ResourceType schema fix.
+- `pnpm typecheck` - first run failed because it was run concurrently with `pnpm build` while Next.js `.next/types` were being regenerated; reran after build and passed.
+- `pnpm build` - passed after the ResourceType schema fix.
 
 Known risks:
 

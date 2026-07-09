@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
+import { RESOURCE_TYPES } from "@sketchcatch/types";
 import { requireActiveUserId } from "../auth/current-user.js";
 import { getDatabaseClient, type DatabaseClient } from "../db/client.js";
 import {
@@ -21,30 +22,8 @@ const scanRouteParamsSchema = routeParamsSchema.extend({
   scanId: z.uuid()
 });
 
-const resourceTypeSchema = z.enum([
-  "ALL",
-  "VPC",
-  "SUBNET",
-  "INTERNET_GATEWAY",
-  "ROUTE_TABLE",
-  "ROUTE_TABLE_ASSOCIATION",
-  "EC2",
-  "RDS",
-  "S3",
-  "SECURITY_GROUP",
-  "CLOUDFRONT",
-  "LAMBDA",
-  "AMI",
-  "IAM_ROLE",
-  "IAM_POLICY",
-  "IAM_INSTANCE_PROFILE",
-  "KMS_KEY",
-  "CLOUDWATCH_LOG_GROUP",
-  "CLOUDWATCH_METRIC_ALARM",
-  "API_GATEWAY_REST_API",
-  "LAMBDA_PERMISSION",
-  "UNKNOWN"
-]);
+const reverseEngineeringResourceTypes = ["ALL", ...RESOURCE_TYPES] as const;
+const resourceTypeSchema = z.enum(reverseEngineeringResourceTypes);
 
 const createScanBodySchema = z.object({
   awsConnectionId: z.uuid(),

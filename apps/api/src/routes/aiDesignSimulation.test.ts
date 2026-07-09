@@ -191,6 +191,66 @@ test("POST /api/ai/design-simulation estimates flow, bottlenecks, failures, and 
   await app.close();
 });
 
+test("POST /api/ai/design-simulation accepts generated load balancer resource types", async () => {
+  const app = buildApp();
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/ai/design-simulation",
+    payload: {
+      trafficLevel: "normal",
+      budgetLevel: "low",
+      architectureJson: {
+        nodes: [
+          {
+            id: "vpc-main",
+            type: "VPC",
+            label: "Main VPC",
+            positionX: 80,
+            positionY: 120,
+            config: {}
+          },
+          {
+            id: "subnet-public-a",
+            type: "SUBNET",
+            label: "Public Subnet A",
+            positionX: 240,
+            positionY: 120,
+            config: {}
+          },
+          {
+            id: "app-security-group",
+            type: "SECURITY_GROUP",
+            label: "App Security Group",
+            positionX: 400,
+            positionY: 120,
+            config: {}
+          },
+          {
+            id: "app-load-balancer",
+            type: "LOAD_BALANCER",
+            label: "Application Load Balancer",
+            positionX: 560,
+            positionY: 120,
+            config: {
+              loadBalancerType: "application"
+            }
+          }
+        ],
+        edges: []
+      }
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+
+  const body = designSimulationResponseSchema.parse(response.json());
+
+  assert.ok(body.costEstimate.resources.some((item) => item.resourceType === "LOAD_BALANCER"));
+
+  await app.close();
+});
+
 test("POST /api/ai/design-simulation returns fallback llmExplanation when Bedrock credit is not confirmed", async () => {
   const restoreAiEnv = forceAwsAiCreditBlocked();
 
