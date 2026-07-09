@@ -521,3 +521,43 @@ curl -X POST http://13.125.49.82/api/projects/<project-id>/assets/presigned-uplo
 sudo env RELEASE_ID=<previous-sha> RELEASE_URL=<previous-image-archive-presigned-url> \
   bash /tmp/sketchcatch-deploy.sh
 ```
+
+# ECS 런타임 설정과 secret 주입
+
+Phase 3부터 ECS production 경로는 generated `api.env`/`web.env` 파일과 S3 presigned env download를 사용하지 않습니다. EC2/SSM rollback 경로는 기존 파일 모델을 유지하지만, ECS 경로의 runtime source of truth는 ECS task definition입니다.
+
+ECS task definition의 책임은 다음처럼 나눕니다.
+
+| 구분 | 저장 위치 | 예시 |
+| --- | --- | --- |
+| GitHub Actions vars | 배포 workflow가 image build/push와 service update에 쓰는 비민감 설정 | `AWS_REGION`, `ECR_API_REPOSITORY`, `ECS_CLUSTER_NAME`, `ECS_SERVICE_NAME`, `ECS_TASK_DEFINITION_FAMILY`, `ECS_API_CONTAINER_NAME` |
+| ECS environment | task definition에 평문으로 남아도 되는 비민감 runtime 설정 | `NODE_ENV`, `PORT`, `DATABASE_SSL`, `S3_BUCKET_NAME`, `SKETCHCATCH_PUBLIC_BASE_URL`, `OAUTH_REDIRECT_BASE_URL`, `GIT_APP_ID`, `GIT_APP_SLUG`, OAuth client ID |
+| Secrets Manager | DB credential 또는 외부 provider secret | `DATABASE_URL`, `GIT_APP_PRIVATE_KEY_BASE64`, `OPENAI_API_KEY`, `NAVER_OAUTH_CLIENT_SECRET`, `KAKAO_OAUTH_CLIENT_SECRET`, `GIT_OAUTH_CLIENT_SECRET` |
+| SSM Parameter Store SecureString | 서명 secret 또는 secure runtime endpoint | `AUTH_TOKEN_SECRET`, `CLOUDFORMATION_TEMPLATE_TOKEN_SECRET`, `GIT_APP_STATE_SECRET`, `REDIS_URL` |
+| GitHub Actions secrets | EC2 rollback workflow가 아직 필요로 하는 legacy secret 값 | 기존 `Deploy Production` EC2/SSM workflow 전용 |
+
+ECS Terraform에는 secret 원문을 넣지 않고 ARN만 넣습니다.
+
+```hcl
+api_secret_arns = {
+  DATABASE_URL                         = "arn:aws:secretsmanager:ap-northeast-2:<account-id>:secret:sketchcatch/production/database-url-..."
+  GIT_APP_PRIVATE_KEY_BASE64           = "arn:aws:secretsmanager:ap-northeast-2:<account-id>:secret:sketchcatch/production/git-app-private-key-base64-..."
+  OPENAI_API_KEY                       = "arn:aws:secretsmanager:ap-northeast-2:<account-id>:secret:sketchcatch/production/openai-api-key-..."
+  NAVER_OAUTH_CLIENT_SECRET            = "arn:aws:secretsmanager:ap-northeast-2:<account-id>:secret:sketchcatch/production/naver-oauth-client-secret-..."
+  KAKAO_OAUTH_CLIENT_SECRET            = "arn:aws:secretsmanager:ap-northeast-2:<account-id>:secret:sketchcatch/production/kakao-oauth-client-secret-..."
+  GIT_OAUTH_CLIENT_SECRET              = "arn:aws:secretsmanager:ap-northeast-2:<account-id>:secret:sketchcatch/production/git-oauth-client-secret-..."
+  AUTH_TOKEN_SECRET                    = "arn:aws:ssm:ap-northeast-2:<account-id>:parameter/sketchcatch/production/auth-token-secret"
+  CLOUDFORMATION_TEMPLATE_TOKEN_SECRET = "arn:aws:ssm:ap-northeast-2:<account-id>:parameter/sketchcatch/production/cloudformation-template-token-secret"
+  GIT_APP_STATE_SECRET                 = "arn:aws:ssm:ap-northeast-2:<account-id>:parameter/sketchcatch/production/git-app-state-secret"
+  REDIS_URL                            = "arn:aws:ssm:ap-northeast-2:<account-id>:parameter/sketchcatch/production/redis-url"
+}
+```
+
+`Deploy Production ECS` workflow는 현재 ECS task definition을 다운로드한 뒤 image만 교체합니다. 이때 API container에 위 secret 이름들이 `environment`가 아니라 `secrets`로 들어 있는지 검증하고, 누락되거나 평문 environment로 들어 있으면 배포를 중단합니다. workflow artifact와 log에는 secret 원문이 남지 않아야 합니다.
+
+Rollback 기준은 다음과 같습니다.
+
+- Route53 cutover 전에는 기존 EC2/SSM production 경로가 rollback 경로입니다.
+- EC2 rollback workflow는 기존 `api.env`/`web.env` 생성과 S3 presigned env download를 계속 사용할 수 있습니다.
+- ECS smoke 또는 cutover 이후에는 ECS task definition의 secret ARN 매핑과 ECR image tag가 rollback 판단 기준입니다.
+- ECS secret 값을 갱신하면 새 task가 값을 읽도록 ECS service `force-new-deployment`가 필요합니다.

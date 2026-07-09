@@ -134,6 +134,42 @@ jobs:
             --query taskDefinition \
             --output json > .release/ecs-task-definition.json
 
+      - name: Validate ECS runtime config
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          required_api_secrets=(
+            AUTH_TOKEN_SECRET
+            CLOUDFORMATION_TEMPLATE_TOKEN_SECRET
+            DATABASE_URL
+            GIT_APP_PRIVATE_KEY_BASE64
+            GIT_APP_STATE_SECRET
+            GIT_OAUTH_CLIENT_SECRET
+            KAKAO_OAUTH_CLIENT_SECRET
+            NAVER_OAUTH_CLIENT_SECRET
+            OPENAI_API_KEY
+            REDIS_URL
+          )
+
+          api_container="$(jq --arg name "${ECS_API_CONTAINER_NAME}" -c '.containerDefinitions[] | select(.name == $name)' .release/ecs-task-definition.json)"
+          if [ -z "${api_container}" ]; then
+            echo "::error::API container ${ECS_API_CONTAINER_NAME} was not found in the ECS task definition."
+            exit 1
+          fi
+
+          for name in "${required_api_secrets[@]}"; do
+            if jq --arg name "${name}" -e '.environment // [] | any(.name == $name)' <<<"${api_container}" > /dev/null; then
+              echo "::error::${name} must be an ECS task secret, not a plain environment variable."
+              exit 1
+            fi
+
+            if ! jq --arg name "${name}" -e '.secrets // [] | any(.name == $name)' <<<"${api_container}" > /dev/null; then
+              echo "::error::${name} is required in the API container ECS secrets list."
+              exit 1
+            fi
+          done
+
       - name: Render API image
         id: render-api
         uses: aws-actions/amazon-ecs-render-task-definition@v1
