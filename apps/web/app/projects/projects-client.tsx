@@ -671,7 +671,7 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
       {displayProjects.length === 0 && isSearchActive ? (
         <div className="projectListEmpty">
           <p>일치하는 프로젝트가 없습니다.</p>
-          <Link className="dashboardSecondaryButton" href="/projects">
+          <Link className="dashboardSecondaryButton" href="/dashboard/projects">
             <DashboardIcon name="close" />
             <span>검색 해제</span>
           </Link>

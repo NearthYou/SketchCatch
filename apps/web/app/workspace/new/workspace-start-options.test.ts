@@ -49,7 +49,7 @@ test("resolveWorkspaceStartAction sends Reverse users without a verified AWS Rol
 
   assert.deepEqual(action, {
     kind: "redirect",
-    href: "/settings?tab=aws&next=reverse"
+    href: "/dashboard/settings?tab=aws&next=reverse"
   });
 });
 
