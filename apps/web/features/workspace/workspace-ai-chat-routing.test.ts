@@ -105,7 +105,9 @@ test("classifyWorkspaceAiChatPrompt accepts diagram generation and edit requests
     "정적 웹사이트 다이어그램 만들어줘",
     "로그인 있는 작은 웹서비스가 필요해",
     "구글 플레이스토어에 올릴 앱 하나 만들고 싶어",
-    "여기에 데이터베이스 하나 추가해줘"
+    "여기에 데이터베이스 하나 추가해줘",
+    "db 지우고 싶어",
+    "여기에서 db는 지워도 될거같아"
   ];
 
   for (const prompt of prompts) {
@@ -129,6 +131,14 @@ test("classifyWorkspaceAiChatPrompt blocks unrelated chat before generation or p
 
 test("classifyWorkspaceAiChatPrompt asks for more detail on vague change requests", () => {
   const prompts = ["해줘", "수정해줘", "make it better", "좋게 바꿔줘"];
+
+  for (const prompt of prompts) {
+    assert.equal(classifyWorkspaceAiChatPrompt(prompt), "ambiguous", prompt);
+  }
+});
+
+test("classifyWorkspaceAiChatPrompt treats bare resource names as ambiguous", () => {
+  const prompts = ["db", "s3", "rds", "api gateway"];
 
   for (const prompt of prompts) {
     assert.equal(classifyWorkspaceAiChatPrompt(prompt), "ambiguous", prompt);

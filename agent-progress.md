@@ -25,6 +25,7 @@ Short English-only working log for the current agent context. Older records are 
 - Fixed AI chat suggestion buttons so previously submitted diagram-generation choices remain selected and disabled, including restored chat history.
 - Added an AI chat prompt relevance gate so unrelated or vague free-form messages do not start diagram generation or patch preview requests.
 - Fixed Play Store/mobile app prompts so they are treated as mobile app backend architecture requests instead of asking the website type question.
+- Fixed AI chat relevance classification so DB deletion requests such as `db 지우고 싶어` enter the Practice Architecture patch flow, while bare resource names such as `db` stay ambiguous instead of executing a modification.
 
 Verification:
 
@@ -62,6 +63,11 @@ Verification:
 - `pnpm lint` - passed after the Play Store/mobile app fix.
 - `pnpm typecheck` - passed after the Play Store/mobile app fix.
 - `pnpm build` - passed after the Play Store/mobile app fix.
+- `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-chat-routing.test.ts` - failed before the DB deletion prompt classification fix, then passed.
+- `pnpm lint` - passed after the DB deletion prompt classification fix.
+- `pnpm typecheck` - passed after the DB deletion prompt classification fix.
+- `pnpm build` - passed after the DB deletion prompt classification fix.
+- `pnpm harness:check` - passed after the DB deletion prompt classification fix.
 
 Known risks:
 

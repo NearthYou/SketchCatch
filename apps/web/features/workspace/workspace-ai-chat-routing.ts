@@ -13,6 +13,10 @@ export function classifyWorkspaceAiChatPrompt(prompt: string): WorkspaceAiChatPr
     return "architecture";
   }
 
+  if (hasArchitectureResourceSignal(normalizedPrompt)) {
+    return "ambiguous";
+  }
+
   if (hasUnrelatedPromptSignal(normalizedPrompt)) {
     return "unrelated";
   }
@@ -62,13 +66,14 @@ export function resolvePendingPreviewChatAction(input: {
 
 function hasArchitecturePromptSignal(normalizedPrompt: string): boolean {
   const hasArchitectureTarget = ARCHITECTURE_TARGET_KEYWORDS.some((keyword) =>
-    normalizedPrompt.includes(keyword)
+    matchesChatKeyword(normalizedPrompt, keyword)
   );
   const hasArchitectureAction = ARCHITECTURE_ACTION_KEYWORDS.some((keyword) =>
-    normalizedPrompt.includes(keyword)
+    matchesChatKeyword(normalizedPrompt, keyword)
   );
+  const hasArchitectureResource = hasArchitectureResourceSignal(normalizedPrompt);
 
-  if (hasArchitectureTarget && hasArchitectureAction) {
+  if ((hasArchitectureTarget || hasArchitectureResource) && hasArchitectureAction) {
     return true;
   }
 
@@ -76,23 +81,43 @@ function hasArchitecturePromptSignal(normalizedPrompt: string): boolean {
     return true;
   }
 
-  return RESOURCE_KEYWORDS.some((keyword) => normalizedPrompt.includes(keyword));
+  return false;
 }
 
 function hasExplicitArchitectureNoun(normalizedPrompt: string): boolean {
-  return EXPLICIT_ARCHITECTURE_NOUNS.some((keyword) => normalizedPrompt.includes(keyword));
+  return EXPLICIT_ARCHITECTURE_NOUNS.some((keyword) => matchesChatKeyword(normalizedPrompt, keyword));
+}
+
+function hasArchitectureResourceSignal(normalizedPrompt: string): boolean {
+  return RESOURCE_KEYWORDS.some((keyword) => matchesChatKeyword(normalizedPrompt, keyword));
 }
 
 function hasVagueDiagramChangeSignal(normalizedPrompt: string): boolean {
-  return VAGUE_CHANGE_KEYWORDS.some((keyword) => normalizedPrompt.includes(keyword));
+  return VAGUE_CHANGE_KEYWORDS.some((keyword) => matchesChatKeyword(normalizedPrompt, keyword));
 }
 
 function hasUnrelatedPromptSignal(normalizedPrompt: string): boolean {
-  return UNRELATED_PROMPT_KEYWORDS.some((keyword) => normalizedPrompt.includes(keyword));
+  return UNRELATED_PROMPT_KEYWORDS.some((keyword) => matchesChatKeyword(normalizedPrompt, keyword));
 }
 
 function normalizeChatPrompt(prompt: string): string {
   return prompt.normalize("NFKC").trim().toLowerCase();
+}
+
+function matchesChatKeyword(normalizedPrompt: string, keyword: string): boolean {
+  if (!isShortAsciiToken(keyword)) {
+    return normalizedPrompt.includes(keyword);
+  }
+
+  return new RegExp(`(^|[^a-z0-9])${escapeRegExp(keyword)}([^a-z0-9]|$)`).test(normalizedPrompt);
+}
+
+function isShortAsciiToken(keyword: string): boolean {
+  return /^[a-z0-9]+$/.test(keyword) && keyword.length <= 3;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 const ARCHITECTURE_ACTION_KEYWORDS = [
@@ -104,6 +129,7 @@ const ARCHITECTURE_ACTION_KEYWORDS = [
   "deploy",
   "design",
   "draw",
+  "erase",
   "generate",
   "make",
   "modify",
@@ -113,6 +139,9 @@ const ARCHITECTURE_ACTION_KEYWORDS = [
   "replace",
   "serve",
   "update",
+  "지우",
+  "지워",
+  "없애",
   "그려",
   "넣어",
   "만들",
@@ -135,6 +164,7 @@ const ARCHITECTURE_TARGET_KEYWORDS = [
   "bucket",
   "cloud",
   "database",
+  "db",
   "diagram",
   "frontend",
   "iac",
@@ -192,6 +222,8 @@ const EXPLICIT_ARCHITECTURE_NOUNS = [
 const RESOURCE_KEYWORDS = [
   "alb",
   "api gateway",
+  "database",
+  "db",
   "cloudfront",
   "cloudwatch",
   "dynamodb",
