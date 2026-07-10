@@ -98,19 +98,29 @@
 
 .rightRail {
   background: var(--workspace-surface);
-  border-width: 0 0 0 1px;
+  border: 1px solid var(--workspace-line);
+  border-radius: 8px;
+  box-shadow: 0 18px 48px rgba(23, 23, 23, 0.08);
   grid-column: 3;
   max-width: 100%;
+  min-height: 0;
   min-width: 0;
+  height: calc(100dvh - 24px);
   overflow: hidden;
-  position: relative;
-  width: 100%;
+  position: fixed;
+  right: 12px;
+  top: 12px;
+  width: min(var(--right-panel-width), calc(100vw - 24px));
+  z-index: 21;
 }
 
 .editorShellRightCollapsed .rightRail {
-  border-width: 0;
-  overflow: visible;
+  border: 0;
+  box-shadow: none;
   pointer-events: none;
+  width: 0;
+  min-width: 0;
+  overflow: visible;
 }
 
 .floatingPanelSlot {
@@ -1315,10 +1325,10 @@
     border-radius: 8px;
     box-shadow: 0 16px 36px rgba(31, 41, 55, 0.12);
     display: block;
-    height: min(840px, calc(100dvh - 86px));
+    height: min(840px, calc(100dvh - 24px));
     position: fixed;
     right: 10px;
-    top: 74px;
+    top: 12px;
     width: min(var(--right-panel-width), calc(100vw - 20px));
     z-index: 20;
   }

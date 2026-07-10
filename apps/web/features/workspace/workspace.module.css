@@ -182,8 +182,8 @@
   padding: 6px;
   pointer-events: auto;
   position: fixed;
-  right: 18px;
-  top: 16px;
+  right: 12px;
+  top: 12px;
   z-index: 30;
 }
 
@@ -5825,4 +5825,11 @@
   border-left-width: 1px;
   border-radius: 8px;
   font-size: 16px;
+}
+
+@media (max-width: 900px) {
+  .collapsedRightPanel {
+    right: 10px;
+    top: 74px;
+  }
 }
