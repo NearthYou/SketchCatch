@@ -331,6 +331,7 @@ test("createAmazonQArchitectureDraftResponse asks clarification questions in the
 test("createAmazonQArchitectureDraftResponse returns the Amazon Q architecture preview when requirements are complete", async () => {
   let requestedPrompt = "";
   let requestedPayload: unknown;
+  const progressStages: string[] = [];
   const provider = createFakeAmazonQProvider((request) => {
     requestedPrompt = request.prompt;
     requestedPayload = request.payload;
@@ -401,7 +402,8 @@ test("createAmazonQArchitectureDraftResponse returns the Amazon Q architecture p
     },
     {
       provider,
-      creditPolicy: confirmedCreditPolicy
+      creditPolicy: confirmedCreditPolicy,
+      onProgress: (stage) => progressStages.push(stage)
     }
   );
 
@@ -446,6 +448,13 @@ test("createAmazonQArchitectureDraftResponse returns the Amazon Q architecture p
   assert.equal(response.architectureJson.nodes[0]?.type, "S3");
   assert.equal(response.llmExplanation?.fallbackUsed, false);
   assert.equal(response.llmExplanation?.providerMetadata?.provider, "amazon_q");
+  assert.deepEqual(progressStages, [
+    "preparing_requirements",
+    "normalizing_requirements",
+    "querying_amazon_q",
+    "validating_architecture",
+    "building_diagram"
+  ]);
 });
 
 test("createAmazonQArchitectureDraftResponse materializes a compact Amazon Q architecture plan", async () => {

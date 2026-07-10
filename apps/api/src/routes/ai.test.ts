@@ -1767,6 +1767,93 @@ test("POST /api/ai/architecture-draft returns 503 when verified generation fails
   await app.close();
 });
 
+test("POST /api/ai/architecture-draft/stream emits backend progress and the final Q result", async () => {
+  const app = buildApp({
+    createArchitectureDraftResponse: async (_request, options) => {
+      options?.onProgress?.("preparing_requirements");
+      options?.onProgress?.("querying_amazon_q");
+      options?.onProgress?.("validating_architecture");
+      options?.onProgress?.("building_diagram");
+
+      return {
+        architectureJson: { nodes: [], edges: [] },
+        title: "Q Architecture Draft",
+        metadata: {
+          source: "amazon_q",
+          confidence: "medium",
+          assumptions: [],
+          explanations: []
+        }
+      };
+    }
+  });
+
+  const response = await app.inject({
+    headers: {
+      origin: "http://localhost:3000"
+    },
+    method: "POST",
+    url: "/api/ai/architecture-draft/stream",
+    payload: {
+      prompt: "운영 가능한 웹 아키텍처를 만들어줘"
+    }
+  });
+  const events = response.body
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line) as { type: string; stage?: string; result?: { title: string } });
+
+  assert.equal(response.statusCode, 200);
+  assert.match(response.headers["content-type"] ?? "", /^application\/x-ndjson/);
+  assert.equal(response.headers["access-control-allow-origin"], "http://localhost:3000");
+  assert.deepEqual(
+    events.filter((event) => event.type === "progress").map((event) => event.stage),
+    [
+      "preparing_requirements",
+      "querying_amazon_q",
+      "validating_architecture",
+      "building_diagram"
+    ]
+  );
+  assert.equal(events.at(-1)?.type, "result");
+  assert.equal(events.at(-1)?.result?.title, "Q Architecture Draft");
+
+  await app.close();
+});
+
+test("POST /api/ai/architecture-draft/stream emits a typed error when Q generation fails", async () => {
+  const app = buildApp({
+    createArchitectureDraftResponse: async (_request, options) => {
+      options?.onProgress?.("querying_amazon_q");
+      throw new ArchitectureDraftGenerationError(new Error("Amazon Q request failed"));
+    }
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft/stream",
+    payload: {
+      prompt: "운영 가능한 웹 아키텍처를 만들어줘"
+    }
+  });
+  const events = response.body
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line) as { type: string; error?: { error: string; message: string } });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(events[0]?.type, "progress");
+  assert.deepEqual(events[1], {
+    type: "error",
+    error: {
+      error: "service_unavailable",
+      message: "Amazon Q 아키텍처 생성에 실패했습니다. 잠시 후 다시 시도해주세요."
+    }
+  });
+
+  await app.close();
+});
+
 test("OPTIONS /api/ai/architecture-draft responds to browser CORS preflight", async () => {
   const app = buildApp();
 

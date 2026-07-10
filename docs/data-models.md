@@ -1213,6 +1213,18 @@ type ArchitectureDraftClarification = {
 
 type CreateArchitectureDraftResponse = AiArchitectureDraftResult | ArchitectureDraftClarification;
 
+type ArchitectureDraftProgressStage =
+  | "preparing_requirements"
+  | "normalizing_requirements"
+  | "querying_amazon_q"
+  | "validating_architecture"
+  | "building_diagram";
+
+type ArchitectureDraftStreamEvent =
+  | { type: "progress"; stage: ArchitectureDraftProgressStage }
+  | { type: "result"; result: CreateArchitectureDraftResponse }
+  | { type: "error"; error: ApiErrorResponse };
+
 type ArchitectureRequirementFact =
   | "web_frontend"
   | "static_delivery"
@@ -1267,6 +1279,8 @@ type ArchitectureIntent = {
   missingQuestions: string[];
 };
 ```
+
+`POST /api/ai/architecture-draft/stream`은 newline-delimited JSON으로 실제 처리 단계와 최종 `CreateArchitectureDraftResponse`를 전달한다. 스트림이 시작된 뒤 발생한 오류도 `error` event의 표준 `ApiErrorResponse`로 전달한다. 기존 `POST /api/ai/architecture-draft` JSON 계약은 비스트리밍 호출 호환을 위해 유지한다.
 
 `ArchitectureIntent`는 자유 형식 Requirement Prompt를 표준 설계 의도로 해석한 중간 결과다. 자동 생성 흐름은 `prompt -> interpretRequirement(prompt) -> ArchitectureIntent -> planPracticeArchitecture(intent/resolution) -> ArchitectureJson` 순서로 다룬다. LLM이나 rule fallback은 intent 추출과 설명 보조에 사용할 수 있지만, 실제 보드 리소스 조립은 지원 가능한 `ResourceType`만 사용하는 deterministic planner가 담당한다.
 

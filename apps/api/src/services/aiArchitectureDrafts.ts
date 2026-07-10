@@ -3,6 +3,7 @@ import type {
   AiArchitectureDraftResult,
   AiBillingMode,
   AiProviderMetadata,
+  ArchitectureDraftProgressStage,
   ArchitectureDraftClarification,
   ArchitectureJson,
   CreateArchitectureDraftRequest,
@@ -178,13 +179,17 @@ type AmazonQArchitectureDraftResponse =
   | AmazonQArchitectureDraftPlan;
 
 export type CreateArchitectureDraftResponseFactory = (
-  request: CreateArchitectureDraftRequest
+  request: CreateArchitectureDraftRequest,
+  options?: {
+    readonly onProgress?: ((stage: ArchitectureDraftProgressStage) => void) | undefined;
+  }
 ) => Promise<CreateArchitectureDraftResponse> | CreateArchitectureDraftResponse;
 
 export type CreateAmazonQArchitectureDraftResponseOptions = {
   readonly provider?: AiTextProvider | undefined;
   readonly requirementNormalizerProvider?: AiTextProvider | undefined;
   readonly creditPolicy?: AiCreditPolicy | undefined;
+  readonly onProgress?: ((stage: ArchitectureDraftProgressStage) => void) | undefined;
 };
 
 // 자연어 요청을 보드가 열 수 있는 ArchitectureJson 초안으로 바꾸는 1차 진입점입니다.
@@ -241,11 +246,12 @@ export function createConfiguredAmazonQArchitectureDraftResponse(input: {
     });
   }
 
-  return (request) =>
+  return (request, operationOptions) =>
     createAmazonQArchitectureDraftResponse(request, {
       provider,
       requirementNormalizerProvider,
-      creditPolicy: readAiCreditPolicyFromEnv()
+      creditPolicy: readAiCreditPolicyFromEnv(),
+      onProgress: operationOptions?.onProgress
     });
 }
 
@@ -256,6 +262,8 @@ export async function createAmazonQArchitectureDraftResponse(
   const request = normalizeArchitectureDraftRequest(input);
   const creditPolicy = options.creditPolicy ?? readAiCreditPolicyFromEnv();
   const provider = options.provider;
+
+  reportArchitectureDraftProgress(options.onProgress, "preparing_requirements");
 
   if (creditPolicy.billingMode !== "aws_credit_only" || !creditPolicy.amazonQ) {
     return createFallbackArchitectureDraftResponse(request, "credit_not_confirmed", creditPolicy.billingMode);
@@ -277,6 +285,7 @@ export async function createAmazonQArchitectureDraftResponse(
     return createArchitectureDraftClarification(conditionalQuestion, request, provider, creditPolicy.billingMode);
   }
 
+  reportArchitectureDraftProgress(options.onProgress, "normalizing_requirements");
   const architectureDecisionSpace = createArchitectureDecisionSpace(request.prompt);
   const providerNormalizedRequirement = await createNormalizedArchitectureIntentPlan({
     prompt: request.prompt,
@@ -301,12 +310,14 @@ export async function createAmazonQArchitectureDraftResponse(
   try {
     let activePayload = payload;
     let retryUsed = false;
+    reportArchitectureDraftProgress(options.onProgress, "querying_amazon_q");
     let response = await provider.generate({
       target: ARCHITECTURE_DRAFT_TARGET,
       instructions: createAmazonQArchitectureDraftInstructions(),
       prompt: createAmazonQArchitectureDraftPrompt(request.prompt, architectureDecisionSpace, normalizedRequirement),
       payload: activePayload
     });
+    reportArchitectureDraftProgress(options.onProgress, "validating_architecture");
     let parsedResponse = parseAmazonQArchitectureDraftResponse(response.text);
 
     if (parsedResponse.status === "preview") {
@@ -325,6 +336,7 @@ export async function createAmazonQArchitectureDraftResponse(
           supportedResourceTypes: SUPPORTED_RESOURCE_TYPES,
           supportedResourceCatalog: SUPPORTED_RESOURCE_CATALOG
         });
+        reportArchitectureDraftProgress(options.onProgress, "querying_amazon_q");
         response = await provider.generate({
           target: ARCHITECTURE_DRAFT_TARGET,
           instructions: createAmazonQArchitectureDraftInstructions(),
@@ -337,6 +349,7 @@ export async function createAmazonQArchitectureDraftResponse(
           ),
           payload: activePayload
         });
+        reportArchitectureDraftProgress(options.onProgress, "validating_architecture");
         parsedResponse = parseAmazonQArchitectureDraftResponse(response.text);
 
         const retryValidationIssues =
@@ -368,6 +381,7 @@ export async function createAmazonQArchitectureDraftResponse(
 
     if (parsedResponse.status === "plan") {
       try {
+        reportArchitectureDraftProgress(options.onProgress, "building_diagram");
         return createAmazonQPlanDraftResult(
           parsedResponse,
           request,
@@ -397,6 +411,7 @@ export async function createAmazonQArchitectureDraftResponse(
           supportedResourceTypes: SUPPORTED_RESOURCE_TYPES,
           supportedResourceCatalog: SUPPORTED_RESOURCE_CATALOG
         });
+        reportArchitectureDraftProgress(options.onProgress, "querying_amazon_q");
         response = await provider.generate({
           target: ARCHITECTURE_DRAFT_TARGET,
           instructions: createAmazonQArchitectureDraftInstructions(),
@@ -409,6 +424,7 @@ export async function createAmazonQArchitectureDraftResponse(
           ),
           payload: activePayload
         });
+        reportArchitectureDraftProgress(options.onProgress, "validating_architecture");
         parsedResponse = parseAmazonQArchitectureDraftResponse(response.text);
 
         if (parsedResponse.status !== "plan") {
@@ -425,6 +441,7 @@ export async function createAmazonQArchitectureDraftResponse(
           outputCharacters: response.outputCharacters ?? response.text.length
         });
 
+        reportArchitectureDraftProgress(options.onProgress, "building_diagram");
         return createAmazonQPlanDraftResult(
           parsedResponse,
           request,
@@ -434,9 +451,21 @@ export async function createAmazonQArchitectureDraftResponse(
       }
     }
 
+    reportArchitectureDraftProgress(options.onProgress, "building_diagram");
     return createAmazonQDraftResult(parsedResponse, providerMetadata);
   } catch (error) {
     throw new ArchitectureDraftGenerationError(error);
+  }
+}
+
+function reportArchitectureDraftProgress(
+  onProgress: ((stage: ArchitectureDraftProgressStage) => void) | undefined,
+  stage: ArchitectureDraftProgressStage
+): void {
+  try {
+    onProgress?.(stage);
+  } catch {
+    // Progress reporting is observational and must never interrupt Q generation.
   }
 }
 

@@ -1565,6 +1565,17 @@ export type CreateArchitectureDraftRequest = {
   prompt: string;
 };
 
+export const ARCHITECTURE_DRAFT_PROGRESS_STAGES = [
+  "preparing_requirements",
+  "normalizing_requirements",
+  "querying_amazon_q",
+  "validating_architecture",
+  "building_diagram"
+] as const;
+
+export type ArchitectureDraftProgressStage =
+  (typeof ARCHITECTURE_DRAFT_PROGRESS_STAGES)[number];
+
 export type AiArchitectureDraftResult = {
   architectureJson: ArchitectureJson;
   diagramJson?: DiagramJson | undefined;
@@ -1583,6 +1594,20 @@ export type ArchitectureDraftClarification = {
 export type CreateArchitectureDraftResponse =
   | AiArchitectureDraftResult
   | ArchitectureDraftClarification;
+
+export type ArchitectureDraftStreamEvent =
+  | {
+      type: "progress";
+      stage: ArchitectureDraftProgressStage;
+    }
+  | {
+      type: "result";
+      result: CreateArchitectureDraftResponse;
+    }
+  | {
+      type: "error";
+      error: ApiErrorResponse;
+    };
 
 export type MoneyEstimate = {
   amount: number;

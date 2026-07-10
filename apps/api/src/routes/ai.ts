@@ -9,6 +9,9 @@ import type {
   AiSafetyExplanation,
   AiTerraformErrorExplanationResult,
   AiTerraformPreviewExplanationResult,
+  ApiErrorResponse,
+  ArchitectureDraftProgressStage,
+  ArchitectureDraftStreamEvent,
   ArchitecturePatchPreviewResponse,
   ArchitectureJson,
   CheckFinding,
@@ -23,6 +26,7 @@ import type {
 } from "@sketchcatch/types";
 import { RESOURCE_TYPES } from "@sketchcatch/types";
 import {
+  ArchitectureDraftGenerationError,
   createConfiguredAmazonQArchitectureDraftResponse,
   type CreateArchitectureDraftResponseFactory,
   createArchitectureDraftFromRepositoryEvidence
@@ -251,6 +255,46 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
     const body = architectureDraftBodySchema.parse(request.body);
 
     return createArchitectureDraftResponse(body);
+  });
+
+  app.post("/ai/architecture-draft/stream", async (request, reply) => {
+    const body = architectureDraftBodySchema.parse(request.body);
+
+    reply.hijack();
+    for (const [name, value] of Object.entries(reply.getHeaders())) {
+      if (value !== undefined) {
+        reply.raw.setHeader(name, value);
+      }
+    }
+    reply.raw.statusCode = 200;
+    reply.raw.setHeader("cache-control", "no-cache, no-transform");
+    reply.raw.setHeader("content-type", "application/x-ndjson; charset=utf-8");
+    reply.raw.setHeader("x-accel-buffering", "no");
+    reply.raw.flushHeaders();
+
+    const writeEvent = (event: ArchitectureDraftStreamEvent): void => {
+      if (!reply.raw.destroyed && !reply.raw.writableEnded) {
+        reply.raw.write(`${JSON.stringify(event)}\n`);
+      }
+    };
+    const onProgress = (stage: ArchitectureDraftProgressStage): void => {
+      writeEvent({ type: "progress", stage });
+    };
+
+    try {
+      const result = await createArchitectureDraftResponse(body, { onProgress });
+      writeEvent({ type: "result", result });
+    } catch (error) {
+      app.log.warn(
+        { errorName: error instanceof Error ? error.name : typeof error },
+        "Architecture Draft stream failed"
+      );
+      writeEvent({ type: "error", error: createArchitectureDraftStreamError(error) });
+    } finally {
+      reply.raw.end();
+    }
+
+    return reply;
   });
 
   app.post("/ai/github-architecture-draft", async (request): Promise<AiArchitectureDraftResult> => {
@@ -612,6 +656,20 @@ function isAiSafetyExplanation(value: unknown): value is AiSafetyExplanation {
 
 function toRuntimeCacheJsonValue(value: AiSafetyExplanation): RuntimeCacheJsonValue {
   return JSON.parse(JSON.stringify(value)) as RuntimeCacheJsonValue;
+}
+
+function createArchitectureDraftStreamError(error: unknown): ApiErrorResponse {
+  if (error instanceof ArchitectureDraftGenerationError) {
+    return {
+      error: error.errorCode,
+      message: error.message
+    };
+  }
+
+  return {
+    error: "internal_server_error",
+    message: "아키텍처 초안 생성 중 오류가 발생했습니다."
+  };
 }
 
 type GitHubRepository = {
