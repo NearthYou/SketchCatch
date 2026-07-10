@@ -404,6 +404,49 @@ test("rejects unsafe Terraform identifiers while rendering InfrastructureGraph",
   );
 });
 
+test("renders deployable ECS service network, load balancer, and rollback blocks", () => {
+  const graph: InfrastructureGraph = {
+    nodes: [
+      {
+        id: "ecs-service",
+        label: "app",
+        iac: {
+          provider: "aws",
+          terraformBlockType: "resource",
+          resourceType: "aws_ecs_service",
+          resourceName: "app"
+        },
+        config: {
+          name: "app",
+          cluster: "aws_ecs_cluster.app.id",
+          taskDefinition: "aws_ecs_task_definition.app.arn",
+          desiredCount: 2,
+          launchType: "FARGATE",
+          deploymentCircuitBreaker: { enable: true, rollback: true },
+          networkConfiguration: {
+            assignPublicIp: false,
+            subnets: ["aws_subnet.private_a.id", "aws_subnet.private_b.id"],
+            securityGroups: ["aws_security_group.app.id"]
+          },
+          loadBalancer: {
+            targetGroupArn: "aws_lb_target_group.app.arn",
+            containerName: "app",
+            containerPort: 8080
+          }
+        }
+      }
+    ],
+    edges: []
+  };
+  const terraform = renderTerraformFromInfrastructureGraph(graph);
+
+  assert.match(terraform, /deployment_circuit_breaker \{/);
+  assert.match(terraform, /network_configuration \{/);
+  assert.match(terraform, /assign_public_ip = false/);
+  assert.match(terraform, /load_balancer \{/);
+  assert.match(terraform, /target_group_arn = aws_lb_target_group\.app\.arn/);
+});
+
 test("diagram-to-terraform renderer does not import diagram projection concerns", () => {
   const source = readFileSync(new URL("./diagram-to-terraform.ts", import.meta.url), "utf8");
 
