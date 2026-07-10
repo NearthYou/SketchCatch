@@ -26,10 +26,16 @@ test("diagram editor uses partial box selection for overlapping area nodes", () 
 });
 
 test("clicking any interactive flow node replaces the current single selection", () => {
-  assert.match(
-    diagramEditorSource,
-    /const handleFlowNodeClick = useCallback\([\s\S]*setSelectedNodeIds\(\[node\.id\]\)/
-  );
+  const handleFlowNodeClickStart = diagramEditorSource.indexOf("const handleFlowNodeClick = useCallback(");
+  const handleFlowNodeClickEnd = diagramEditorSource.indexOf("const handleFlowNodeDoubleClick = useCallback(");
+
+  assert.notEqual(handleFlowNodeClickStart, -1);
+  assert.notEqual(handleFlowNodeClickEnd, -1);
+
+  const handleFlowNodeClickSource = diagramEditorSource.slice(handleFlowNodeClickStart, handleFlowNodeClickEnd);
+
+  assert.match(handleFlowNodeClickSource, /setSelectedNodeIds\(\[node\.id\]\)/);
+  assert.match(diagramEditorSource, /onNodeClick:\s*handleFlowNodeClick/);
 });
 
 test("diagram editor restores select mode after temporary middle-button pan", () => {
