@@ -324,7 +324,8 @@ function parseJsonStringArray(value: string | undefined, name: string): string[]
     throw new Error(`${name} must be a non-empty JSON array of non-empty strings`);
   }
 
-  return parsedValue.map((entry) => entry.trim());
+  const stringValues = parsedValue as string[];
+  return stringValues.map((entry) => entry.trim());
 }
 
 function parseJsonStringRecord(value: string | undefined, name: string): Record<string, string> {
@@ -351,8 +352,9 @@ function parseJsonStringRecord(value: string | undefined, name: string): Record<
     throw new Error(`${name} must be a JSON object with string values`);
   }
 
+  const stringRecord = parsedValue as Record<string, string>;
   return Object.fromEntries(
-    Object.entries(parsedValue).map(([key, entry]) => [key, entry.trim()])
+    Object.entries(stringRecord).map(([key, entry]) => [key, entry.trim()])
   );
 }
 

@@ -4476,150 +4476,6 @@ nextjs-portal {
   margin: 0;
 }
 
-.workspaceStartPanel {
-  max-width: 720px;
-}
-
-.workspaceStartForm {
-  display: grid;
-  gap: 20px;
-  max-width: 560px;
-}
-
-.workspaceStartField {
-  display: grid;
-  gap: 8px;
-}
-
-.dashboardShell .workspaceStartForm .textInput:focus {
-  background: var(--bp-paper-2);
-}
-
-.workspaceStartModeGrid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.workspaceStartHint {
-  color: var(--dashboard-subtle);
-  font-size: 0.86rem;
-  font-weight: 750;
-  margin: 0;
-}
-
-.workspaceStartModeButton {
-  align-items: flex-start;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid var(--dashboard-border);
-  border-radius: 6px;
-  color: var(--dashboard-muted);
-  cursor: pointer;
-  display: grid;
-  gap: 8px;
-  min-height: 118px;
-  padding: 14px;
-  text-align: left;
-  transition:
-    background 140ms ease,
-    border-color 140ms ease,
-    transform 140ms ease;
-}
-
-.workspaceStartModeButton:not(:disabled):hover,
-.workspaceStartModeButton:not(:disabled):focus-visible {
-  background: rgba(56, 189, 248, 0.1);
-  border-color: rgba(56, 189, 248, 0.42);
-  outline: none;
-  transform: translateY(-1px);
-}
-
-.workspaceStartModeButton:disabled {
-  cursor: not-allowed;
-  opacity: 0.52;
-}
-
-.workspaceStartModeButton span {
-  color: #ffffff;
-  font-size: 1rem;
-  font-weight: 900;
-}
-
-.workspaceStartModeButton small {
-  color: var(--dashboard-subtle);
-  font-size: 0.78rem;
-  font-weight: 750;
-  line-height: 1.45;
-}
-
-.workspaceStartBlankLabel {
-  align-items: center;
-  background: transparent;
-  border: 0;
-  color: var(--dashboard-subtle);
-  cursor: pointer;
-  display: inline-flex;
-  font-size: 0.82rem;
-  font-weight: 850;
-  gap: 8px;
-  justify-self: start;
-  padding: 2px 0;
-}
-
-.workspaceStartBlankLabel::after {
-  background: currentColor;
-  content: "";
-  display: inline-block;
-  height: 1px;
-  opacity: 0.55;
-  width: 28px;
-}
-
-.workspaceStartBlankLabel:not(:disabled):hover,
-.workspaceStartBlankLabel:not(:disabled):focus-visible {
-  color: #ffffff;
-  outline: none;
-}
-
-.workspaceStartBlankLabel:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-}
-
-.workspaceStartCheckbox {
-  align-items: flex-start;
-  color: var(--dashboard-muted);
-  cursor: pointer;
-  display: grid;
-  gap: 3px 10px;
-  grid-template-columns: 18px minmax(0, 1fr);
-  max-width: 460px;
-}
-
-.workspaceStartCheckbox input {
-  accent-color: var(--dashboard-accent);
-  height: 16px;
-  margin: 2px 0 0;
-  width: 16px;
-}
-
-.workspaceStartCheckbox span {
-  color: #ffffff;
-  font-size: 0.84rem;
-  font-weight: 850;
-}
-
-.workspaceStartCheckbox small {
-  color: var(--dashboard-subtle);
-  font-size: 0.76rem;
-  font-weight: 700;
-  grid-column: 2;
-  line-height: 1.45;
-}
-
-.workspaceStartCheckbox:has(input:disabled) {
-  cursor: not-allowed;
-  opacity: 0.72;
-}
-
 .reverseCandidateSelectionPanel {
   background: #ffffff;
   border: 1px solid #dfe6f1;
@@ -5212,14 +5068,6 @@ nextjs-portal {
 }
 
 @media (max-width: 720px) {
-  .workspaceStartModeGrid {
-    grid-template-columns: 1fr;
-  }
-
-  .workspaceStartModeButton {
-    min-height: 96px;
-  }
-
   .workspaceAiStartShell {
     padding: 0;
   }
@@ -5242,73 +5090,6 @@ nextjs-portal {
   .workspaceAiStartComposer textarea {
     grid-column: 1 / -1;
   }
-}
-
-.workspaceStartOptionGroup {
-  display: grid;
-  gap: 12px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.workspaceStartOptionButton {
-  align-items: flex-start;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid var(--dashboard-border);
-  border-radius: 16px;
-  color: var(--dashboard-text);
-  cursor: pointer;
-  display: grid;
-  gap: 8px;
-  min-height: 148px;
-  padding: 18px;
-  text-align: left;
-  transition:
-    background 0.2s ease,
-    border-color 0.2s ease,
-    transform 0.2s ease;
-}
-
-.workspaceStartOptionButton span {
-  color: var(--dashboard-muted);
-  font-size: 0.78rem;
-  font-weight: 800;
-  letter-spacing: 0;
-  text-transform: uppercase;
-}
-
-.workspaceStartOptionButton strong {
-  font-size: 1.05rem;
-  line-height: 1.2;
-}
-
-.workspaceStartOptionButton small {
-  color: var(--dashboard-muted);
-  font-size: 0.88rem;
-  line-height: 1.45;
-}
-
-.workspaceStartOptionButton:hover,
-.workspaceStartOptionButton:focus-visible {
-  background: rgba(45, 127, 249, 0.1);
-  border-color: rgba(45, 127, 249, 0.55);
-  outline: none;
-  transform: translateY(-1px);
-}
-
-.workspaceStartOptionButtonActive {
-  background: rgba(45, 127, 249, 0.14);
-  border-color: var(--dashboard-blue);
-}
-
-.workspaceStartOptionButtonSecondary {
-  grid-column: 1 / -1;
-  min-height: 88px;
-  padding: 14px 16px;
-}
-
-.workspaceStartActions {
-  display: flex;
-  justify-content: flex-end;
 }
 
 .dashboardShell .fieldLabel {
@@ -5350,13 +5131,6 @@ nextjs-portal {
   background: linear-gradient(135deg, var(--dashboard-purple), #2563eb);
   border-color: rgba(124, 92, 255, 0.8);
   color: #ffffff;
-}
-
-.workspaceStartError {
-  color: #fca5a5;
-  font-size: 0.88rem;
-  font-weight: 800;
-  margin: 0;
 }
 
 .projectListEmpty {
@@ -12132,6 +11906,282 @@ nextjs-portal {
   grid-template-columns: auto minmax(0, 1fr);
 }
 
+.workspaceNewMain {
+  display: grid;
+  gap: 0;
+}
+
+.workspaceNewTopbar {
+  align-items: flex-start;
+}
+
+.workspaceNewLayout {
+  align-items: start;
+  display: grid;
+  gap: 20px;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.42fr);
+  margin: 0 auto;
+  max-width: 1200px;
+}
+
+.workspaceNewPanel {
+  display: grid;
+  gap: 22px;
+}
+
+.workspaceNewForm {
+  display: grid;
+  gap: 20px;
+  max-width: 760px;
+}
+
+.workspaceNewField {
+  color: var(--dashboard-design-ink);
+  display: grid;
+  font-size: 0.9rem;
+  font-weight: 700;
+  gap: 8px;
+}
+
+.workspaceNewInput {
+  background: var(--dashboard-design-surface);
+  border: 1px solid var(--dashboard-design-hairline-strong);
+  border-radius: 8px;
+  color: var(--dashboard-design-ink);
+  font: inherit;
+  min-height: 46px;
+  min-width: 0;
+  padding: 0 14px;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.workspaceNewInput::placeholder {
+  color: var(--dashboard-design-muted);
+}
+
+.workspaceNewInput:focus {
+  border-color: var(--dashboard-design-link);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--dashboard-design-link) 16%, transparent);
+  outline: none;
+}
+
+.workspaceNewFieldset {
+  border: 1px solid var(--dashboard-design-hairline);
+  border-radius: 8px;
+  display: grid;
+  gap: 14px;
+  margin: 0;
+  min-width: 0;
+  padding: 18px;
+}
+
+.workspaceNewLegend {
+  color: var(--dashboard-design-ink);
+  font-size: 0.94rem;
+  font-weight: 700;
+  padding: 0 8px;
+}
+
+.workspaceNewHelp {
+  color: var(--dashboard-design-body);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.workspaceNewChoiceGrid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.workspaceNewChoiceButton {
+  background: var(--dashboard-design-surface);
+  border: 1px solid var(--dashboard-design-hairline-strong);
+  border-radius: 8px;
+  color: var(--dashboard-design-ink);
+  cursor: pointer;
+  display: grid;
+  gap: 10px;
+  min-height: 164px;
+  padding: 18px;
+  text-align: left;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.workspaceNewChoiceButton:hover,
+.workspaceNewChoiceButton:focus-visible {
+  background: var(--dashboard-design-canvas-soft);
+  border-color: var(--dashboard-design-ink);
+  box-shadow: 0 14px 36px color-mix(in srgb, var(--dashboard-design-ink) 8%, transparent);
+  outline: none;
+  transform: translateY(-1px);
+}
+
+.workspaceNewChoiceButton:disabled,
+.workspaceNewBlankButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+  transform: none;
+}
+
+.workspaceNewChoiceButton span {
+  align-items: center;
+  background: var(--dashboard-design-surface-strong);
+  border-radius: 999px;
+  color: var(--dashboard-design-ink);
+  display: inline-flex;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.4;
+  padding: 4px 10px;
+  width: fit-content;
+}
+
+.workspaceNewChoiceButton strong {
+  color: var(--dashboard-design-ink);
+  display: block;
+  font-size: 1.12rem;
+  line-height: 1.3;
+}
+
+.workspaceNewChoiceButton small {
+  color: var(--dashboard-design-body);
+  display: block;
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.workspaceNewBlankButton {
+  align-items: center;
+  background: var(--dashboard-design-surface);
+  border: 1px solid var(--dashboard-design-hairline-strong);
+  border-radius: 8px;
+  color: var(--dashboard-design-ink);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 700;
+  gap: 8px;
+  justify-content: center;
+  min-height: 42px;
+  padding: 0 14px;
+  width: fit-content;
+}
+
+.workspaceNewBlankButton::after {
+  color: var(--dashboard-design-muted);
+  content: "작게 시작";
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.workspaceNewBlankButton:hover,
+.workspaceNewBlankButton:focus-visible {
+  background: var(--dashboard-design-canvas-soft);
+  outline: none;
+}
+
+.workspaceNewCheckbox {
+  align-items: flex-start;
+  border-top: 1px solid var(--dashboard-design-hairline);
+  color: var(--dashboard-design-ink);
+  display: grid;
+  gap: 4px 10px;
+  grid-template-columns: auto minmax(0, 1fr);
+  padding-top: 14px;
+}
+
+.workspaceNewCheckbox input {
+  accent-color: var(--dashboard-design-primary);
+  margin-top: 2px;
+}
+
+.workspaceNewCheckbox span {
+  font-size: 0.9rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.workspaceNewCheckbox small {
+  color: var(--dashboard-design-body);
+  font-size: 0.84rem;
+  grid-column: 2;
+  line-height: 1.45;
+}
+
+.workspaceNewError {
+  background: color-mix(in srgb, var(--dashboard-design-error) 20%, var(--dashboard-design-surface));
+  border: 1px solid var(--dashboard-design-error);
+  border-radius: 8px;
+  color: var(--dashboard-design-ink);
+  font-size: 0.9rem;
+  font-weight: 700;
+  line-height: 1.45;
+  margin: 0;
+  padding: 12px 14px;
+}
+
+.workspaceNewGuide {
+  display: grid;
+  gap: 16px;
+  position: sticky;
+  top: 28px;
+}
+
+.workspaceNewGuideIcon {
+  align-items: center;
+  background: var(--dashboard-design-surface-strong);
+  border-radius: 8px;
+  color: var(--dashboard-design-link);
+  display: inline-flex;
+  height: 42px;
+  justify-content: center;
+  width: 42px;
+}
+
+.workspaceNewGuide h2 {
+  color: var(--dashboard-design-ink);
+  font-size: 1.12rem;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.workspaceNewGuideList {
+  display: grid;
+  gap: 10px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.workspaceNewGuideList li {
+  border: 1px solid var(--dashboard-design-hairline);
+  border-radius: 8px;
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+}
+
+.workspaceNewGuideList strong {
+  color: var(--dashboard-design-ink);
+  font-size: 0.9rem;
+  line-height: 1.35;
+}
+
+.workspaceNewGuideList span {
+  color: var(--dashboard-design-body);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
 @media (max-width: 1180px) {
   .designDashboardJourneyGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -12139,6 +12189,14 @@ nextjs-portal {
 
   .designDashboardTemplateGrid {
     grid-template-columns: 1fr;
+  }
+
+  .workspaceNewLayout {
+    grid-template-columns: 1fr;
+  }
+
+  .workspaceNewGuide {
+    position: static;
   }
 }
 
@@ -12243,6 +12301,18 @@ nextjs-portal {
 
   .designDashboardProjectList {
     overflow-x: auto;
+  }
+
+  .workspaceNewChoiceGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .workspaceNewBlankButton {
+    width: 100%;
+  }
+
+  .workspaceNewFieldset {
+    padding: 16px;
   }
 }
 

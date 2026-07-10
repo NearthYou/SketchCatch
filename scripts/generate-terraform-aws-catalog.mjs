@@ -234,6 +234,7 @@ function mergeDefinitionWithSchema(definition, block, parentPath, errorPath, err
     required,
     optional: required ? false : schemaValue.optional ?? definition.optional,
     computed: schemaValue.computed ?? definition.computed,
+    core: definition.core,
     sensitive: Boolean(schemaValue.sensitive || definition.sensitive),
     description: definition.description || providerDescription,
     inputKind: definition.inputKind,

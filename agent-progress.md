@@ -1,14 +1,13 @@
-# Agent Progress
+﻿# Agent Progress
 
 Short English-only working log for the current agent context. Older records are archived under `docs/agent-history/`.
 
 ## Current Verified State
 
-- Branch: `feature/sw/295-ecs-worker-task-dispatch`.
-- Active workstream: `ECS-MIGRATION-000`, Phase 5 API-side ECS worker RunTask dispatch.
-- Phases 1, 2, 3, and 4 are merged into `dev`.
-- Phase 5 keeps public deployment API response shapes stable and preserves in-process background execution unless `DEPLOYMENT_WORKER_MODE=ecs`.
-- Phase 5 must not run live AWS commands.
+- Branch: `fix/sw/302-ecs-worker-dispatch-safety`.
+- Active workstream: `ECS-MIGRATION-000`, post-merge hardening for Phase 5 PR #296 review findings.
+- Phase 5 is merged into `dev`; worker runtime and worker-specific Terraform resources are still pending.
+- Production must keep `DEPLOYMENT_WORKER_MODE=in_process` until the worker task definition, entrypoint, roles, security group, and runtime are implemented.
 
 ## Session Record
 
@@ -90,74 +89,25 @@ Short English-only working log for the current agent context. Older records are 
   - GitHub CLI is unavailable in this environment, so the PR review thread was not replied to or resolved.
 
 ### 2026-07-10 - Signup password error highlight fix
+### 2026-07-10 - Harden ECS worker dispatch after merged PR review
 
-- Goal: Highlight signup password policy failures and password mismatch messages in red.
+- Goal: Address valid post-merge review findings on PR #296 without running live AWS commands.
 - Completed:
-  - Added a compound auth error selector so the later generic help-text color cannot override `authErrorText`.
-  - Added regression coverage for the DESIGN.md signup error color.
-- Verification:
-  - Playwright reproduced the bug as computed color `rgb(96, 100, 108)`.
-  - Playwright verified all rendered password error messages use `rgb(159, 29, 35)` after the fix.
-  - `pnpm --filter @sketchcatch/web exec tsx features/auth/signup-page.test.ts` passed.
-  - `pnpm lint` passed.
-  - `pnpm typecheck` passed.
-  - `pnpm build` passed.
-
-### 2026-07-10 - DESIGN.md signup page alignment
-
-- Goal: Align `/signup` with the existing DESIGN.md-based `/login` experience while preserving signup validation and legal-document behavior.
-- Completed:
-  - Replaced the legacy blueprint signup shell, logo image, and auth classes with the shared `authDesignPage` login structure.
-  - Added signup-width, availability check, consent action, password toggle, status, and legal dialog styles using the existing auth design tokens.
-  - Kept the existing signup form state, duplicate checks, password policy, consent requirements, and submit behavior unchanged.
-  - Added source-level regression coverage for the signup shell and signup-specific design tokens.
-- Verification:
-  - `pnpm --filter @sketchcatch/web exec tsx features/auth/login-page.test.ts` passed.
-  - `pnpm --filter @sketchcatch/web exec tsx features/auth/signup-page.test.ts` passed.
-  - Playwright desktop screenshots confirmed the login-matched sky wash, white card, black CTA, and light legal dialog.
-  - Playwright at 375px confirmed all inputs and buttons fit without horizontal overflow.
-  - `pnpm lint` passed.
-  - `pnpm typecheck` passed.
-  - `pnpm build` passed.
-
-### 2026-07-10 - Responsive dashboard logout placement
-
-- Goal: Keep logout available in the dashboard header when the responsive layout hides the desktop sidebar footer.
-- Completed:
-  - Added a compact account footer variant that reuses the existing auth logout flow.
-  - Placed the compact logout action beside the SketchCatch brand below the 920px dashboard breakpoint.
-  - Preserved the desktop account footer as the only visible desktop logout action.
-  - Added regression coverage for the responsive header placement and visibility rules.
-- Verification:
-  - Reproduced the issue at 667px with Playwright: `FAIL: logout button hidden`.
-  - Verified the fix at 667px: one visible logout button at `539,20,108,40`.
-  - Verified 375px has no brand/button overlap and no page-level horizontal overflow.
-  - Verified 1440px keeps only the desktop sidebar logout visible.
-  - `pnpm --filter @sketchcatch/web exec tsx features/dashboard/design-dashboard.test.ts` passed.
-  - `pnpm lint` passed.
-  - `pnpm typecheck` passed.
-  - `pnpm build` passed.
-
-### 2026-07-10 - Dashboard login/logout UX fix
-
-- Goal: Make the landing login flow show the login screen instead of auto-forwarding an existing session to `/dashboard`, and replace the design dashboard safety footer with account name plus logout.
-- Completed:
-  - Removed the login form's `status === "authenticated"` auto-redirect so `/login` remains visible when a previous refresh session exists.
-  - Added a client-side design dashboard account footer that reads the current auth user, calls existing `logout()`, and returns to `/login`.
-  - Replaced the `Deployment Safety Gate` sidebar copy with the account footer and styled it with the DESIGN.md black 8px CTA and white-canvas dashboard tokens.
-  - Added source-level regression coverage for the login form and design dashboard footer.
+  - Re-read all five unresolved review threads with thread resolution and outdated state.
+  - Made missing `RunTask` task ARNs fail dispatch instead of leaving an untraceable running job.
+  - Made stale ECS cancellation paths terminalize the active deployment job before the existing deployment fail-safe runs.
+  - Made ECS task verification or stop API failures return a retryable result so the route responds with 503 and preserves the active lock against concurrent Terraform execution.
+  - Made JSON worker config parser casts explicit after runtime validation.
+  - Clarified that ECS worker mode must remain disabled until worker runtime and infrastructure exist, and documented public-IP and cluster-scoped IAM requirements.
 - Verification:
   - `pnpm harness:check` passed before and after edits.
-  - `pnpm --filter @sketchcatch/web lint` passed.
-  - `pnpm --filter @sketchcatch/web typecheck` passed after Next regenerated `.next/types`.
-  - `pnpm --filter @sketchcatch/web exec tsx features/auth/login-page.test.ts` passed.
-  - `pnpm --filter @sketchcatch/web exec tsx features/dashboard/design-dashboard.test.ts` passed.
   - `pnpm lint` passed.
   - `pnpm typecheck` passed.
   - `pnpm build` passed.
+  - `git diff --check` passed.
 - Risk:
-  - `pnpm --filter @sketchcatch/web test` still fails in this sandbox with `spawn EPERM` across every `node:test` file; targeted single-process test execution passed for the changed coverage.
-  - Pre-existing `apps/web/next-env.d.ts` local modification was not touched.
+  - No new tests were added or run per user direction.
+  - The worker task definition, worker roles, worker security group, and worker process are not implemented yet.
 
 ### 2026-07-10 - Start ECS Phase 5 API worker dispatch
 

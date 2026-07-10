@@ -110,7 +110,10 @@ function getRenderableConfig(
   node: DiagramNode,
   nodeById: ReadonlyMap<string, DiagramNode>
 ): Record<string, unknown> {
-  const values = filterRenderableConfigValues(node.parameters?.values ?? {});
+  const values = filterRenderableConfigValues(
+    node.parameters?.resourceType,
+    node.parameters?.values ?? {}
+  );
   const inheritedAvailabilityZone = getInheritedAvailabilityZone(node, nodeById);
 
   if (!inheritedAvailabilityZone || hasOwnAvailabilityZone(values)) {
@@ -123,9 +126,28 @@ function getRenderableConfig(
   };
 }
 
-function filterRenderableConfigValues(values: Record<string, unknown>): Record<string, unknown> {
+function filterRenderableConfigValues(
+  resourceType: string | undefined,
+  values: Record<string, unknown>
+): Record<string, unknown> {
   return Object.fromEntries(
-    Object.entries(values).filter(([key]) => !NON_RENDERABLE_TERRAFORM_CONFIG_KEYS.has(key))
+    Object.entries(values).filter(
+      ([key, value]) =>
+        !NON_RENDERABLE_TERRAFORM_CONFIG_KEYS.has(key) &&
+        !isInvalidAutoscalingGroupDesiredCapacity(resourceType, key, value)
+    )
+  );
+}
+
+function isInvalidAutoscalingGroupDesiredCapacity(
+  resourceType: string | undefined,
+  key: string,
+  value: unknown
+): boolean {
+  return (
+    resourceType === "aws_autoscaling_group" &&
+    (key === "desiredCapacity" || key === "desired_capacity") &&
+    typeof value !== "number"
   );
 }
 

@@ -7,6 +7,7 @@ import {
   getResourceDefinitionByTerraform,
   resourceDefinitions
 } from "@sketchcatch/types/resource-definitions";
+import { terraformAwsParameterCatalog as generatedTerraformAwsParameterCatalog } from "../parameter-input/catalog.generated";
 import { terraformParameterCatalog } from "../parameter-input/catalog";
 import { resourceCatalog } from "./catalog";
 
@@ -228,6 +229,110 @@ test("resource parameter panel capability matches the parameter catalog", () => 
   assert.deepEqual(capabilityResourceTypes, parameterCatalogResourceTypes);
 });
 
+test("Autoscaling Policy is available through the shared definition and resource catalog", () => {
+  const definition = getResourceDefinitionById("aws-autoscaling-policy");
+  const resource = resourceCatalog.find((item) => item.id === "aws-autoscaling-policy");
+
+  assert.deepEqual(definition, {
+    id: "aws-autoscaling-policy",
+    provider: "aws",
+    resourceType: "AUTO_SCALING_POLICY",
+    terraform: {
+      blockType: "resource",
+      resourceType: "aws_autoscaling_policy"
+    },
+    capabilities: {
+      parameterPanel: true,
+      terraformPreview: true,
+      terraformSync: true
+    }
+  });
+  assert.equal(resource?.category, "EC2 Launch & Scaling");
+  assert.equal(
+    resource?.iconUrl,
+    "/Resource-Icons_07312025/Res_Compute/Res_Amazon-EC2_Auto-Scaling_48.svg"
+  );
+});
+
+test("main parameter catalog exposes scaling, networking, listener, alarm, and policy controls", () => {
+  const asg = getParameters("aws_autoscaling_group");
+  assertMainParameter(asg, "minSize", "Min");
+  assertMainParameter(asg, "desiredCapacity", "Desired");
+  assertMainParameter(asg, "maxSize", "Max");
+  assert.equal(getParameter(asg, "desiredCapacity").optional, true);
+  assert.deepEqual(getParameter(asg, "targetGroupArns").referenceTargetTypes, ["aws_lb_target_group"]);
+  assert.equal(getParameter(asg, "targetGroupArns").referenceAttribute, "arn");
+
+  const securityGroup = getParameters("aws_security_group");
+  for (const name of ["vpcId", "ingress", "egress"]) {
+    assert.equal(getParameter(securityGroup, name).core, true, `Missing main/core ${name}`);
+  }
+  const ingressChildNames = getParameter(securityGroup, "ingress").children?.map((child) => child.name) ?? [];
+  for (const name of ["fromPort", "toPort", "protocol", "cidrBlocks"]) {
+    assert.ok(ingressChildNames.includes(name), `Missing nested ingress field ${name}`);
+  }
+
+  const listenerDefaultAction = getParameter(getParameters("aws_lb_listener"), "defaultAction");
+  assert.equal(listenerDefaultAction.core, true);
+  assert.deepEqual(listenerDefaultAction.children?.map((child) => child.name), ["type", "targetGroupArn"]);
+  assert.deepEqual(listenerDefaultAction.children?.[0]?.options, ["forward", "redirect", "fixed-response"]);
+  assert.deepEqual(listenerDefaultAction.children?.[1]?.referenceTargetTypes, ["aws_lb_target_group"]);
+  assert.equal(listenerDefaultAction.children?.[1]?.referenceAttribute, "arn");
+
+  const alarm = getParameters("aws_cloudwatch_metric_alarm");
+  assert.equal(getParameter(alarm, "dimensions").inputKind, "key-value");
+  assert.equal(getParameter(alarm, "dimensions").core, true);
+  assert.equal(getParameter(alarm, "alarmActions").core, true);
+  assert.deepEqual(getParameter(alarm, "alarmActions").referenceTargetTypes, [
+    "aws_sns_topic",
+    "aws_autoscaling_policy"
+  ]);
+  assert.equal(getParameter(alarm, "alarmActions").referenceAttribute, "arn");
+
+  const policy = getParameters("aws_autoscaling_policy");
+  for (const name of [
+    "name",
+    "autoscalingGroupName",
+    "policyType",
+    "adjustmentType",
+    "scalingAdjustment",
+    "cooldown",
+    "targetTrackingConfiguration"
+  ]) {
+    assert.equal(getParameter(policy, name).core, true, `Missing main/core ${name}`);
+  }
+  assert.deepEqual(getParameter(policy, "autoscalingGroupName").referenceTargetTypes, [
+    "aws_autoscaling_group"
+  ]);
+  assert.equal(getParameter(policy, "autoscalingGroupName").referenceAttribute, "name");
+  const tracking = getParameter(policy, "targetTrackingConfiguration");
+  assert.deepEqual(tracking.children?.map((child) => child.name), [
+    "targetValue",
+    "disableScaleIn",
+    "predefinedMetricSpecification"
+  ]);
+  const metric = tracking.children?.[2];
+  assert.deepEqual(metric?.children?.map((child) => child.name), [
+    "predefinedMetricType",
+    "resourceLabel"
+  ]);
+  assert.deepEqual(metric?.children?.[0]?.options, [
+    "ASGAverageCPUUtilization",
+    "ASGAverageNetworkIn",
+    "ASGAverageNetworkOut",
+    "ALBRequestCountPerTarget"
+  ]);
+  assert.equal(metric?.children?.[1]?.optional, true);
+});
+
+test("generated parameter catalog retains override core fields", () => {
+  const minSize = generatedTerraformAwsParameterCatalog.resources["aws_autoscaling_group"]?.find(
+    (parameter) => parameter.name === "minSize"
+  );
+
+  assert.equal(minSize?.core, true);
+});
+
 test("resourceCatalog exposes requested missing resources with public icon assets", () => {
   for (const expected of requestedMissingCatalogItems) {
     const resource = resourceCatalog.find((item) => item.id === expected.id);
@@ -297,6 +402,120 @@ test("RDS parameters include the expanded main parameter example from the JH inv
   assert.equal(iamAuthField?.terraformName, "iam_database_authentication_enabled");
 });
 
+test("parameter catalog covers Terraform CLI audit required right-panel paths", () => {
+  const requiredPathsByResource: Record<string, string[]> = {
+    aws_cloudfront_distribution: [
+      "default_cache_behavior",
+      "default_cache_behavior.allowed_methods",
+      "default_cache_behavior.cached_methods",
+      "default_cache_behavior.target_origin_id",
+      "default_cache_behavior.viewer_protocol_policy",
+      "enabled",
+      "origin",
+      "origin.domain_name",
+      "origin.origin_id",
+      "restrictions",
+      "restrictions.geo_restriction",
+      "restrictions.geo_restriction.restriction_type",
+      "viewer_certificate"
+    ],
+    aws_wafv2_web_acl: [
+      "default_action",
+      "visibility_config",
+      "visibility_config.cloudwatch_metrics_enabled",
+      "visibility_config.metric_name",
+      "visibility_config.sampled_requests_enabled"
+    ],
+    aws_s3_bucket_versioning: ["versioning_configuration"],
+    aws_s3_bucket_server_side_encryption_configuration: ["rule"],
+    aws_codebuild_project: [
+      "artifacts",
+      "artifacts.type",
+      "environment",
+      "environment.compute_type",
+      "environment.image",
+      "environment.type",
+      "source",
+      "source.type"
+    ],
+    aws_codepipeline: [
+      "artifact_store",
+      "artifact_store.location",
+      "artifact_store.type",
+      "stage",
+      "stage.action",
+      "stage.action.category",
+      "stage.action.name",
+      "stage.action.owner",
+      "stage.action.provider",
+      "stage.action.version",
+      "stage.name"
+    ],
+    aws_ecs_task_definition: ["container_definitions"],
+    aws_eks_cluster: ["vpc_config", "vpc_config.subnet_ids"],
+    aws_cloudfront_cache_policy: [
+      "parameters_in_cache_key_and_forwarded_to_origin",
+      "parameters_in_cache_key_and_forwarded_to_origin.cookies_config",
+      "parameters_in_cache_key_and_forwarded_to_origin.cookies_config.cookie_behavior",
+      "parameters_in_cache_key_and_forwarded_to_origin.headers_config",
+      "parameters_in_cache_key_and_forwarded_to_origin.query_strings_config",
+      "parameters_in_cache_key_and_forwarded_to_origin.query_strings_config.query_string_behavior"
+    ],
+    aws_cloudfront_origin_request_policy: [
+      "cookies_config",
+      "cookies_config.cookie_behavior",
+      "headers_config",
+      "query_strings_config",
+      "query_strings_config.query_string_behavior"
+    ],
+    aws_scheduler_schedule: [
+      "flexible_time_window",
+      "flexible_time_window.mode",
+      "target",
+      "target.arn",
+      "target.role_arn"
+    ],
+    aws_eks_node_group: [
+      "scaling_config",
+      "scaling_config.desired_size",
+      "scaling_config.max_size",
+      "scaling_config.min_size"
+    ],
+    aws_config_config_rule: ["source", "source.owner"],
+    aws_xray_sampling_rule: ["resource_arn"]
+  };
+
+  for (const [resourceType, requiredPaths] of Object.entries(requiredPathsByResource)) {
+    const parameterPaths = collectParameterTerraformPaths(getParameters(resourceType));
+
+    for (const requiredPath of requiredPaths) {
+      assert.ok(
+        parameterPaths.has(requiredPath),
+        `Missing ${resourceType}.${requiredPath} from the right-panel parameter catalog`
+      );
+    }
+  }
+});
+
+test("Terraform CLI audit sample defaults use provider-valid catalog values", () => {
+  const codebuild = getParameters("aws_codebuild_project");
+  assert.match(String(getParameter(codebuild, "serviceRole").placeholder), /^arn:aws:iam::/);
+
+  const codepipeline = getParameters("aws_codepipeline");
+  assert.equal(getParameter(codepipeline, "stage").type, "list");
+
+  const ecsTaskDefinition = getParameters("aws_ecs_task_definition");
+  assert.deepEqual(getParameter(ecsTaskDefinition, "requiresCompatibilities").options, [
+    "FARGATE",
+    "EC2",
+    "EXTERNAL",
+    "MANAGED_INSTANCES"
+  ]);
+
+  const xraySamplingRule = getParameters("aws_xray_sampling_rule");
+  assert.equal(getParameter(xraySamplingRule, "priority").placeholder, "1000");
+});
+
 function getResourceSize(resourceType: string) {
   const resource = resourceCatalog.find((item) => item.nodeDefaults.type === resourceType);
 
@@ -322,6 +541,55 @@ function assertCatalogCategory(resourceId: string, expectedCategory: string) {
 
 function getTerraformCatalogItems() {
   return resourceCatalog.filter((resource) => terraformDefinitionKeys.has(createCatalogResourceKey(resource)));
+}
+
+function getParameters(resourceType: string) {
+  const parameters = terraformParameterCatalog.resources[resourceType];
+
+  assert.ok(parameters, `Missing parameter catalog for ${resourceType}`);
+  return parameters;
+}
+
+function getParameter(
+  parameters: readonly NonNullable<(typeof terraformParameterCatalog.resources)[string]>[number][],
+  name: string
+) {
+  const parameter = parameters.find((candidate) => candidate.name === name);
+
+  assert.ok(parameter, `Missing parameter ${name}`);
+  return parameter;
+}
+
+function assertMainParameter(
+  parameters: readonly NonNullable<(typeof terraformParameterCatalog.resources)[string]>[number][],
+  name: string,
+  label: string
+) {
+  const parameter = getParameter(parameters, name);
+
+  assert.equal(parameter.label, label);
+  assert.equal(parameter.core, true, `Missing main/core ${name}`);
+}
+
+function collectParameterTerraformPaths(
+  parameters: readonly NonNullable<(typeof terraformParameterCatalog.resources)[string]>[number][],
+  parentPath = ""
+): Set<string> {
+  const paths = new Set<string>();
+
+  for (const parameter of parameters) {
+    const path = parentPath
+      ? `${parentPath}.${parameter.terraformName}`
+      : parameter.terraformName;
+
+    paths.add(path);
+
+    for (const childPath of collectParameterTerraformPaths(parameter.children ?? [], path)) {
+      paths.add(childPath);
+    }
+  }
+
+  return paths;
 }
 
 function createCatalogResourceKey(resource: (typeof resourceCatalog)[number]): string {

@@ -169,6 +169,214 @@ test("does not duplicate an explicit S3 public access block", () => {
   assert.match(terraformCode, /resource "aws_s3_bucket_public_access_block" "service_bucket_public_access"/);
 });
 
+test("renders Security Group ingress and egress as Terraform nested blocks", () => {
+  const graph: InfrastructureGraph = {
+    nodes: [
+      {
+        id: "security-group-1",
+        label: "web_security_group",
+        iac: {
+          provider: "aws",
+          terraformBlockType: "resource",
+          resourceType: "aws_security_group",
+          resourceName: "web",
+          fileName: "network"
+        },
+        config: {
+          name: "web",
+          vpcId: "aws_vpc.main.id",
+          ingress: [
+            {
+              fromPort: 443,
+              toPort: 443,
+              protocol: "tcp",
+              cidrBlocks: ["10.0.0.0/16"]
+            }
+          ],
+          egress: [
+            {
+              fromPort: 0,
+              toPort: 0,
+              protocol: "-1",
+              cidrBlocks: ["0.0.0.0/0"]
+            }
+          ]
+        }
+      }
+    ],
+    edges: []
+  };
+
+  assert.equal(
+    renderTerraformFromInfrastructureGraph(graph),
+    `resource "aws_security_group" "web" {
+  name = "web"
+  vpc_id = aws_vpc.main.id
+  ingress {
+    from_port = 443
+    to_port = 443
+    protocol = "tcp"
+    cidr_blocks = [
+      "10.0.0.0/16",
+    ]
+  }
+  egress {
+    from_port = 0
+    to_port = 0
+    protocol = "-1"
+    cidr_blocks = [
+      "0.0.0.0/0",
+    ]
+  }
+}`
+  );
+});
+
+test("renders Listener default_action with an unquoted target group reference", () => {
+  const graph: InfrastructureGraph = {
+    nodes: [
+      {
+        id: "listener-1",
+        label: "https_listener",
+        iac: {
+          provider: "aws",
+          terraformBlockType: "resource",
+          resourceType: "aws_lb_listener",
+          resourceName: "https",
+          fileName: "load-balancer"
+        },
+        config: {
+          loadBalancerArn: "aws_lb.app.arn",
+          port: 443,
+          protocol: "HTTPS",
+          defaultAction: [
+            {
+              type: "forward",
+              targetGroupArn: "aws_lb_target_group.app.arn"
+            }
+          ]
+        }
+      }
+    ],
+    edges: []
+  };
+
+  assert.equal(
+    renderTerraformFromInfrastructureGraph(graph),
+    `resource "aws_lb_listener" "https" {
+  load_balancer_arn = aws_lb.app.arn
+  port = 443
+  protocol = "HTTPS"
+  default_action {
+    type = "forward"
+    target_group_arn = aws_lb_target_group.app.arn
+  }
+}`
+  );
+});
+
+test("renders Autoscaling Policy nested target tracking configuration", () => {
+  const graph: InfrastructureGraph = {
+    nodes: [
+      {
+        id: "autoscaling-policy-1",
+        label: "cpu_target",
+        iac: {
+          provider: "aws",
+          terraformBlockType: "resource",
+          resourceType: "aws_autoscaling_policy",
+          resourceName: "cpu_target",
+          fileName: "compute"
+        },
+        config: {
+          name: "cpu-target",
+          autoscalingGroupName: "aws_autoscaling_group.app.name",
+          policyType: "TargetTrackingScaling",
+          targetTrackingConfiguration: {
+            targetValue: 70,
+            predefinedMetricSpecification: [
+              {
+                predefinedMetricType: "ASGAverageCPUUtilization",
+                resourceLabel: "app/targetgroup"
+              }
+            ]
+          }
+        }
+      }
+    ],
+    edges: []
+  };
+
+  assert.equal(
+    renderTerraformFromInfrastructureGraph(graph),
+    `resource "aws_autoscaling_policy" "cpu_target" {
+  name = "cpu-target"
+  autoscaling_group_name = aws_autoscaling_group.app.name
+  policy_type = "TargetTrackingScaling"
+  target_tracking_configuration {
+    target_value = 70
+    predefined_metric_specification {
+      predefined_metric_type = "ASGAverageCPUUtilization"
+      resource_label = "app/targetgroup"
+    }
+  }
+}`
+  );
+});
+
+test("renders CloudWatch Alarm dimensions and Autoscaling Policy action reference", () => {
+  const graph: InfrastructureGraph = {
+    nodes: [
+      {
+        id: "alarm-1",
+        label: "cpu_alarm",
+        iac: {
+          provider: "aws",
+          terraformBlockType: "resource",
+          resourceType: "aws_cloudwatch_metric_alarm",
+          resourceName: "cpu_high",
+          fileName: "monitoring"
+        },
+        config: {
+          alarmName: "cpu-high",
+          comparisonOperator: "GreaterThanThreshold",
+          evaluationPeriods: 2,
+          metricName: "CPUUtilization",
+          namespace: "AWS/EC2",
+          period: 60,
+          statistic: "Average",
+          threshold: 80,
+          dimensions: {
+            AutoScalingGroupName: "app-asg"
+          },
+          alarmActions: ["aws_autoscaling_policy.cpu_target.arn"]
+        }
+      }
+    ],
+    edges: []
+  };
+
+  assert.equal(
+    renderTerraformFromInfrastructureGraph(graph),
+    `resource "aws_cloudwatch_metric_alarm" "cpu_high" {
+  alarm_name = "cpu-high"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods = 2
+  metric_name = "CPUUtilization"
+  namespace = "AWS/EC2"
+  period = 60
+  statistic = "Average"
+  threshold = 80
+  dimensions = {
+    AutoScalingGroupName = "app-asg"
+  }
+  alarm_actions = [
+    aws_autoscaling_policy.cpu_target.arn,
+  ]
+}`
+  );
+});
+
 test("rejects unsafe Terraform identifiers while rendering InfrastructureGraph", () => {
   const graph: InfrastructureGraph = {
     nodes: [
