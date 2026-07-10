@@ -6,6 +6,8 @@ import type {
   AiTerraformStage,
   ApiErrorCode,
   ApiErrorResponse,
+  ArchitectureDraftProgressStage,
+  ArchitectureDraftStreamEvent,
   ArchitecturePatchPreviewResponse,
   ArchitectureSnapshot,
   ApproveDeploymentPlanRequest,
@@ -323,7 +325,8 @@ export async function syncTerraformToDiagram({
 
 // 실제 Workspace AI 패널에서 Requirement Prompt 기반 Architecture Draft를 요청합니다.
 export async function createAiArchitectureDraft(
-  input: CreateArchitectureDraftRequest
+  input: CreateArchitectureDraftRequest,
+  onProgress?: ((stage: ArchitectureDraftProgressStage) => void) | undefined
 ): Promise<CreateArchitectureDraftResponse> {
   const prompt = input.prompt.trim();
 
@@ -334,9 +337,87 @@ export async function createAiArchitectureDraft(
     });
   }
 
-  return postPublicAiJson<CreateArchitectureDraftResponse>("/ai/architecture-draft", {
-    ...input,
-    prompt
+  const response = await fetch(`${AI_API_BASE_URL}/ai/architecture-draft/stream`, {
+    body: JSON.stringify({
+      ...input,
+      prompt
+    }),
+    headers: {
+      Accept: "application/x-ndjson",
+      "Content-Type": "application/json"
+    },
+    method: "POST"
+  });
+
+  if (!response.ok) {
+    throw await readPublicAiError(response);
+  }
+
+  return readArchitectureDraftStream(response, onProgress);
+}
+
+async function readArchitectureDraftStream(
+  response: Response,
+  onProgress: ((stage: ArchitectureDraftProgressStage) => void) | undefined
+): Promise<CreateArchitectureDraftResponse> {
+  if (response.body === null) {
+    throw createInvalidArchitectureDraftStreamError();
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let result: CreateArchitectureDraftResponse | undefined;
+
+  const consumeLine = (line: string): void => {
+    const trimmedLine = line.trim();
+
+    if (trimmedLine.length === 0) {
+      return;
+    }
+
+    const event = JSON.parse(trimmedLine) as ArchitectureDraftStreamEvent;
+
+    if (event.type === "progress") {
+      onProgress?.(event.stage);
+      return;
+    }
+
+    if (event.type === "error") {
+      throw new ApiClientError(event.error.error === "service_unavailable" ? 503 : 500, event.error);
+    }
+
+    result = event.result;
+  };
+
+  while (true) {
+    const chunk = await reader.read();
+    buffer += decoder.decode(chunk.value, { stream: !chunk.done });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+
+    for (const line of lines) {
+      consumeLine(line);
+    }
+
+    if (chunk.done) {
+      break;
+    }
+  }
+
+  consumeLine(buffer);
+
+  if (result === undefined) {
+    throw createInvalidArchitectureDraftStreamError();
+  }
+
+  return result;
+}
+
+function createInvalidArchitectureDraftStreamError(): ApiClientError {
+  return new ApiClientError(500, {
+    error: "internal_server_error",
+    message: "아키텍처 생성 응답을 확인하지 못했습니다. 다시 시도해주세요."
   });
 }
 

@@ -5,6 +5,7 @@ import type {
   AiArchitectureDraftResult,
   AiTerraformErrorExplanationResult,
   AiTerraformPreviewExplanationResult,
+  ArchitectureDraftProgressStage,
   ArchitectureDraftClarification,
   ArchitecturePatchClarification,
   ArchitecturePatchClarificationCandidate,
@@ -226,6 +227,8 @@ export function WorkspaceAiChatDock({
     readonly number[]
   >([]);
   const [draftState, setDraftState] = useState<AiRequestState>("idle");
+  const [draftProgressStage, setDraftProgressStage] =
+    useState<ArchitectureDraftProgressStage | null>(null);
   const [simulationState, setSimulationState] = useState<AiRequestState>("idle");
   const [draftErrorMessage, setDraftErrorMessage] = useState("");
   const [simulationErrorMessage, setSimulationErrorMessage] = useState("");
@@ -300,6 +303,7 @@ export function WorkspaceAiChatDock({
     activeChatTab,
     designSimulation,
     draft,
+    draftProgressStage,
     draftState,
     isOpen,
     lastVisibleMessageId,
@@ -569,6 +573,7 @@ export function WorkspaceAiChatDock({
     setDraftFollowUpSession(null);
     setDraftErrorMessage("");
     setDraftState("idle");
+    setDraftProgressStage(null);
     setTerraformIssueResolution(null);
     setApplyingTerraformFixRequestId(null);
     setCompletedTerraformFixRequestIds([]);
@@ -767,6 +772,7 @@ export function WorkspaceAiChatDock({
     } = {}
   ): Promise<void> {
     setDraftState("loading");
+    setDraftProgressStage(null);
     setDraftErrorMessage("");
     setDraft(null);
     setPatchPreviewModel(null);
@@ -816,6 +822,7 @@ export function WorkspaceAiChatDock({
     setPatchPreviewModel(model);
     context.setPreviewDiagram(model.visualPreviewDiagram, model.annotations);
     setDraftState("idle");
+    setDraftProgressStage(null);
     appendAssistantMessage("patch", createPatchPreviewSummary(preview));
   }
 
@@ -879,6 +886,7 @@ export function WorkspaceAiChatDock({
     };
 
     setDraftState("loading");
+    setDraftProgressStage("preparing_requirements");
     setDraftErrorMessage("");
     setDraft(null);
     setPatchPreviewModel(null);
@@ -888,7 +896,10 @@ export function WorkspaceAiChatDock({
     context.setPreviewDiagram(null);
 
     try {
-      const result = await createAiArchitectureDraft(normalizedDraftRequest);
+      const result = await createAiArchitectureDraft(
+        normalizedDraftRequest,
+        setDraftProgressStage
+      );
 
       if (isArchitectureDraftClarification(result)) {
         setDraftClarification({
@@ -896,6 +907,7 @@ export function WorkspaceAiChatDock({
           clarification: result
         });
         setDraftState("idle");
+        setDraftProgressStage(null);
         appendAssistantMessage("question", result.question, result.suggestions);
         return;
       }
@@ -904,6 +916,7 @@ export function WorkspaceAiChatDock({
       if (previewDecision.action === "ask_follow_up") {
         setDraftFollowUpSession(previewDecision.session);
         setDraftState("idle");
+        setDraftProgressStage(null);
         appendAssistantMessage(
           "question",
           previewDecision.session.question,
@@ -917,6 +930,7 @@ export function WorkspaceAiChatDock({
       const message = getApiErrorMessage(error, "아키텍처 초안 생성 중 오류가 발생했습니다.");
 
       setDraftState("error");
+      setDraftProgressStage(null);
       setDraftErrorMessage(message);
       appendAssistantMessage("error", message);
     }
@@ -937,6 +951,7 @@ export function WorkspaceAiChatDock({
     setDraftClarification(null);
     context.setPreviewDiagram(previewDiagram);
     setDraftState("idle");
+    setDraftProgressStage(null);
     appendAssistantMessage(
       "draft",
       `${result.title} 초안을 보드에 반투명 미리보기로 띄웠습니다. 생성할까요?`
@@ -992,6 +1007,7 @@ export function WorkspaceAiChatDock({
     setDraftFollowUpSession(null);
     setDraftErrorMessage("");
     setDraftState("idle");
+    setDraftProgressStage(null);
     appendAssistantMessage("status", "초안 미리보기를 취소했습니다.");
   }
 
@@ -1001,6 +1017,7 @@ export function WorkspaceAiChatDock({
     setPatchClarification(null);
     setDraftErrorMessage("");
     setDraftState("idle");
+    setDraftProgressStage(null);
     appendAssistantMessage("status", "수정 미리보기를 취소했습니다.");
   }
 
@@ -1382,7 +1399,11 @@ export function WorkspaceAiChatDock({
         })}
 
         {activeChatTab === "draft" ? (
-          <WorkspaceAiRequestMessage state={draftState} message={draftErrorMessage} />
+          <WorkspaceAiRequestMessage
+            state={draftState}
+            message={draftErrorMessage}
+            progressStage={draftProgressStage}
+          />
         ) : null}
         {activeChatTab === "simulation" ? (
           <WorkspaceAiRequestMessage state={simulationState} message={simulationErrorMessage} />

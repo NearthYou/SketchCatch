@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import type {
   AiArchitectureDraftResult,
+  ArchitectureDraftProgressStage,
   ArchitectureDraftClarification,
   ArchitectureGuardrailWarning,
   CreateArchitectureDraftResponse,
@@ -48,6 +49,8 @@ export function WorkspaceAiPanel({ context }: WorkspaceAiPanelProps) {
   const [draft, setDraft] = useState<AiArchitectureDraftResult | null>(null);
   const [designSimulation, setDesignSimulation] = useState<DesignSimulationResult | null>(null);
   const [draftState, setDraftState] = useState<AiRequestState>("idle");
+  const [draftProgressStage, setDraftProgressStage] =
+    useState<ArchitectureDraftProgressStage | null>(null);
   const [simulationState, setSimulationState] = useState<AiRequestState>("idle");
   const [draftErrorMessage, setDraftErrorMessage] = useState("");
   const [simulationErrorMessage, setSimulationErrorMessage] = useState("");
@@ -72,17 +75,20 @@ export function WorkspaceAiPanel({ context }: WorkspaceAiPanelProps) {
     }
 
     setDraftState("loading");
+    setDraftProgressStage("preparing_requirements");
     setDraftErrorMessage("");
     setDraft(null);
     context.setPreviewDiagram(null);
 
     try {
-      const result = await createAiArchitectureDraft({
-        prompt
-      });
+      const result = await createAiArchitectureDraft(
+        { prompt },
+        setDraftProgressStage
+      );
 
       if (isArchitectureDraftClarification(result)) {
         setDraftState("error");
+        setDraftProgressStage(null);
         setDraftErrorMessage(result.question);
         return;
       }
@@ -92,8 +98,10 @@ export function WorkspaceAiPanel({ context }: WorkspaceAiPanelProps) {
       setDraft(result);
       context.setPreviewDiagram(previewDiagram);
       setDraftState("idle");
+      setDraftProgressStage(null);
     } catch (error) {
       setDraftState("error");
+      setDraftProgressStage(null);
       setDraftErrorMessage(getApiErrorMessage(error, "아키텍처 초안 생성 중 오류가 발생했습니다."));
     }
   }
@@ -123,6 +131,7 @@ export function WorkspaceAiPanel({ context }: WorkspaceAiPanelProps) {
     setDraft(null);
     setDraftErrorMessage("");
     setDraftState("idle");
+    setDraftProgressStage(null);
   }
 
   async function runDesignSimulation(): Promise<void> {
@@ -181,7 +190,11 @@ export function WorkspaceAiPanel({ context }: WorkspaceAiPanelProps) {
             {draftState === "loading" ? "초안 생성 중" : "초안 미리보기 생성"}
           </button>
         ) : null}
-        <WorkspaceAiRequestMessage state={draftState} message={draftErrorMessage} />
+        <WorkspaceAiRequestMessage
+          state={draftState}
+          message={draftErrorMessage}
+          progressStage={draftProgressStage}
+        />
         {draft !== null ? (
           <article className={styles.aiResultCard}>
             <div className={styles.aiResultHeader}>

@@ -1,4 +1,5 @@
 import type {
+  ArchitectureDraftProgressStage,
   ArchitectureGuardrailWarning,
   AiProvider,
   AiPreDeploymentAnalysisResult,
@@ -8,7 +9,9 @@ import type {
   DesignSimulationResult,
   LlmExplanation
 } from "@sketchcatch/types";
+import { Check, Circle, LoaderCircle } from "lucide-react";
 import { SelectMenu } from "../../components/ui/SelectMenu";
+import { createArchitectureDraftProgressItems } from "./workspace-ai-progress";
 import styles from "./workspace.module.css";
 
 export type AiRequestState = "idle" | "loading" | "error";
@@ -76,12 +79,18 @@ export function WorkspaceAiActionHeader({
 // AI 요청 상태를 패널 안에서 같은 경고/진행 문구로 보여줍니다.
 export function WorkspaceAiRequestMessage({
   message,
+  progressStage,
   state
 }: {
   readonly message: string;
+  readonly progressStage?: ArchitectureDraftProgressStage | null | undefined;
   readonly state: AiRequestState;
 }) {
   if (state === "loading") {
+    if (progressStage !== undefined && progressStage !== null) {
+      return <WorkspaceAiArchitectureProgress stage={progressStage} />;
+    }
+
     return <p className={styles.aiNotice}>요청 처리 중입니다.</p>;
   }
 
@@ -94,6 +103,43 @@ export function WorkspaceAiRequestMessage({
   }
 
   return null;
+}
+
+function WorkspaceAiArchitectureProgress({
+  stage
+}: {
+  readonly stage: ArchitectureDraftProgressStage;
+}) {
+  const items = createArchitectureDraftProgressItems(stage);
+  const activeItem = items.find((item) => item.status === "active") ?? items[0];
+
+  return (
+    <div className={styles.aiProgress} role="status" aria-live="polite">
+      <div className={styles.aiProgressHeader}>
+        <LoaderCircle aria-hidden="true" className={styles.aiProgressSpinner} size={16} />
+        <div>
+          <strong>아키텍처 생성 중</strong>
+          <span>{activeItem?.label}</span>
+        </div>
+      </div>
+      <ol className={styles.aiProgressList}>
+        {items.map((item) => (
+          <li data-status={item.status} key={item.stage}>
+            <span className={styles.aiProgressIcon}>
+              {item.status === "complete" ? (
+                <Check aria-hidden="true" size={12} strokeWidth={3} />
+              ) : item.status === "active" ? (
+                <LoaderCircle aria-hidden="true" size={12} />
+              ) : (
+                <Circle aria-hidden="true" size={8} />
+              )}
+            </span>
+            <span>{item.label}</span>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
 }
 
 // LLM 설명을 요약, 핵심, 다음 행동 순서로 한 번씩만 묶어 보여줍니다.
