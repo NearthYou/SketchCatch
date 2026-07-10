@@ -9,33 +9,6 @@ Short English-only working log for the current agent context. Older records are 
 - The branch covers new-node safe defaults, parameter-reference edge metadata/synchronization, parameter editing, and Terraform Preview output without cloud mutation.
 - `feature_list.json` and `session-handoff.md` remain unchanged by scoped-task instruction.
 
-## Session Record
-
-### 2026-07-10 - Add Terraform validate-required panel parameters
-
-- Goal: Add right-panel parameter coverage for the 14 Terraform audit `parameter_panel_gap` resources, then rerun Terraform CLI validate.
-- Completed: Added minimal nested parameter catalog entries and Terraform nested-block mappings for CloudFront, WAFv2, S3 versioning/encryption, CodeBuild, CodePipeline, ECS task definition, EKS, Scheduler, Config Rule, and X-Ray resources. Added regression coverage so required audit paths stay exposed in the right panel.
-- Verification: `pnpm harness:check`, targeted web/API tests, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed. The final Terraform audit completed with 96 `validate_passed`, 0 `parameter_panel_gap`, 15 `generation_error`, 2 `dependency_blocked`, 5 `unsupported_by_ui`, 2 `excluded_area_node`, and 3 `excluded_data_source` results.
-- Risk: The audit is still local Terraform CLI init/schema/validate only; it does not run plan/apply or prove AWS account/API readiness. Existing generated `apps/web/next-env.d.ts` dev-mode diff remains unrelated.
-
-### 2026-07-10 - Add Terraform CLI resource parameter audit
-
-- Goal: Add a backend/tooling audit that checks current resource catalog Terraform output with Terraform CLI validate using only right-panel parameter catalog values.
-- Completed: Added `runTerraformProvidersSchemaJson`, a resource validation audit service, a root CLI script, and API package command `pnpm --filter @sketchcatch/api terraform:audit:validate`. The audit reads the current web resource catalog and parameter catalog, runs `terraform init`, `terraform providers schema -json`, and per-resource `terraform validate` in a temp workspace without plan/apply.
-- Verification: `pnpm harness:check`, `pnpm --filter @sketchcatch/api exec tsx --test src/deployments/terraform-runner.test.ts src/services/terraform/terraform-resource-validation-audit.test.ts`, `pnpm --filter @sketchcatch/api lint`, `pnpm --filter @sketchcatch/api typecheck`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed. The live audit command completed with 80 `validate_passed`, 14 `parameter_panel_gap`, 17 `generation_error`, 2 `dependency_blocked`, 5 `unsupported_by_ui`, 2 `excluded_area_node`, and 3 `excluded_data_source` results.
-- Risk: The audit performs Terraform CLI init/schema/validate only; it does not run plan/apply or prove AWS API creation success. Existing generated `apps/web/next-env.d.ts` dev-mode diff remains unrelated.
-- Next action: Use the audit output to prioritize adding right-panel parameters for the 14 `parameter_panel_gap` resources, then address generator/reference sample issues separately.
-
-### 2026-07-10 - Complete Workspace infrastructure settings Task 4
-
-- Goal: Record the Task 1-3 contracts and run the required integrated verification.
-- Completed: Updated `docs/data-models.md` for new-node-only safe defaults in `parameters.values`, parameter-reference `DiagramEdge.metadata`, and Terraform Preview ASG `desiredCapacity` omission rules. Updated the ignored JH worklogs and Task 4 report. Fixed the Architecture Draft catalog lookup so `RDS_READ_REPLICA` retains its own catalog defaults instead of inheriting the general RDS defaults through `aws_db_instance`.
-- Verification: `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed. `pnpm --filter @sketchcatch/web test` passed 640/640 after updating the Architecture Draft safe-default expectations.
-- Final-review verification: the new RDS read-replica regression test was RED before the catalog fix and GREEN after it; `workspace-ai-diagram-adapter.test.ts` passed 30/30, `terraform.test.ts` passed 19/19, and Web/API typechecks plus `pnpm lint` passed.
-- Test baseline: full `pnpm test` still exits 1 because eight pre-existing API tests fail in unchanged deployment path-normalization and AI `llmExplanation` areas; the Workspace-focused Web/API tests pass.
-- Risk: `pnpm build` generated the production import in `apps/web/next-env.d.ts`; the controller restored the exact pre-existing dev-mode import (`./.next/dev/types/routes.d.ts`) and kept that file outside the commit. No user verification is pending for this generated-file restoration.
-- Next action: Task 4 is complete; review and merge the full Task 1-4 branch.
-
 ### 2026-07-10 - Start ECS Phase 5 API worker dispatch
 
 - Goal: Add API-side ECS worker dispatch so Terraform execution can move from in-process background jobs to ECS RunTask one-off worker tasks when explicitly enabled.
