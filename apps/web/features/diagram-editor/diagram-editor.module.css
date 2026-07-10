@@ -1272,7 +1272,7 @@
 
 .paletteItem:hover,
 .paletteItem:focus-visible {
-  border-color: #8b71ff;
+  border-color: var(--workspace-accent);
   box-shadow: 0 10px 22px rgba(43, 51, 84, 0.08);
   outline: none;
   transform: translateY(-1px);
@@ -1337,7 +1337,7 @@
 
 .nodeShellSelected {
   box-shadow:
-    0 0 0 3px rgba(111, 76, 246, 0.16),
+    0 0 0 3px color-mix(in srgb, var(--workspace-accent) 16%, transparent),
     0 14px 26px rgba(33, 41, 69, 0.14);
 }
 
@@ -1438,11 +1438,11 @@
 }
 
 .nodeShellArea.nodeShellSelected {
-  --area-border-color: var(--node-border-color, #6f4cf6);
+  --area-border-color: var(--node-border-color, var(--workspace-accent));
 
   border-color: var(--area-border-color);
   box-shadow:
-    0 0 0 3px rgba(111, 76, 246, 0.14),
+    0 0 0 3px rgba(0, 0, 0, 0.12),
     0 14px 28px rgba(33, 41, 69, 0.08);
 }
 
@@ -1553,10 +1553,10 @@
 
 .nodeGlyph {
   align-items: center;
-  background: #f1edff;
-  border: 1px solid #dcd2ff;
+  background: var(--workspace-accent-soft);
+  border: 1px solid var(--workspace-line-strong);
   border-radius: 8px;
-  color: #6f4cf6;
+  color: var(--workspace-accent);
   display: flex;
   font-size: 0.9rem;
   font-weight: 900;
@@ -1623,10 +1623,10 @@
 
 .resourceNodeIconFallback {
   align-items: center;
-  background: #f1edff;
-  border: 1px solid #d6cbff;
+  background: var(--workspace-accent-soft);
+  border: 1px solid var(--workspace-line-strong);
   border-radius: 10px;
-  color: #5f3de8;
+  color: var(--workspace-accent);
   display: flex;
   font-size: 0.72rem;
   font-weight: 900;
@@ -1787,8 +1787,8 @@
 .iconButtonSelected,
 .iconButtonDanger:hover,
 .iconButtonDanger:focus-visible {
-  background: #f0edff;
-  border-color: #d8ceff;
+  background: var(--workspace-accent-soft);
+  border-color: var(--workspace-line-strong);
   outline: none;
 }
 
@@ -1844,7 +1844,7 @@
 .swatchButton[aria-pressed="true"] {
   box-shadow:
     0 0 0 1px #ffffff,
-    0 0 0 3px #6f4cf6;
+    0 0 0 3px var(--workspace-accent);
 }
 
 .colorInput {
@@ -1857,7 +1857,7 @@
 }
 
 .resizeHandle {
-  background: #6f4cf6;
+  background: var(--workspace-accent);
   border: 2px solid #ffffff;
   border-radius: 999px;
   height: 11px;
@@ -1865,11 +1865,11 @@
 }
 
 .resizeLine {
-  border-color: #6f4cf6;
+  border-color: var(--workspace-accent);
 }
 
 .manualResizeHandle {
-  background: #6f4cf6;
+  background: var(--workspace-accent);
   border: 2px solid #ffffff;
   border-radius: 999px;
   box-shadow: 0 1px 4px rgba(23, 32, 51, 0.24);
@@ -1909,7 +1909,7 @@
 .manualResizeHandle:hover,
 .manualResizeHandle:focus-visible {
   box-shadow:
-    0 0 0 3px rgba(111, 76, 246, 0.2),
+    0 0 0 3px color-mix(in srgb, var(--workspace-accent) 20%, transparent),
     0 1px 4px rgba(23, 32, 51, 0.24);
   outline: none;
 }
@@ -1942,7 +1942,7 @@
 
 .segmentButtonActive {
   background: #ffffff;
-  color: #6f4cf6;
+  color: var(--workspace-accent);
   box-shadow: 0 1px 3px rgba(23, 32, 51, 0.12);
 }
 

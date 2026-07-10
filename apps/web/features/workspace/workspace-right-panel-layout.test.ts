@@ -8,6 +8,7 @@ const aiChatDockSource = readWorkspaceFile("WorkspaceAiChatDock.tsx");
 const aiPanelSource = readWorkspaceFile("WorkspaceAiPanel.tsx");
 const deploymentPanelSource = readWorkspaceFile("DeploymentPanel.tsx");
 const diagramEditorSource = readFeatureFile("../diagram-editor/DiagramEditor.tsx");
+const flowMappersSource = readFeatureFile("../diagram-editor/flow-mappers.ts");
 const resourceWorkspaceSource = readWorkspaceFile("ResourceWorkspacePanel.tsx");
 const diagramEditorTypesSource = readFeatureFile("../diagram-editor/types.ts");
 const terraformLeaveDialogSource = readWorkspaceFile("TerraformLeaveDialog.tsx");
@@ -218,27 +219,17 @@ test("mobile AI launcher stays above the canvas toolbar", () => {
   );
 });
 
-test("workspace internal panel polish uses DESIGN.md tokens instead of legacy Blueprint tokens", () => {
-  const legacyBlueprintIndex = stylesSource.indexOf(
-    "/* Legacy workspace panel compatibility layer, overridden by the DESIGN.md pass below. */"
-  );
-  const legacyRightPanelIndex = stylesSource.indexOf(
-    "/* Legacy right panel sizing compatibility layer, overridden by the DESIGN.md pass below. */"
-  );
+test("workspace internal panels keep only the DESIGN.md surface layer", () => {
   const finalPolishIndex = stylesSource.indexOf("/* DESIGN.md workspace internal panel pass */");
 
-  assert.ok(legacyBlueprintIndex > -1, "Expected the legacy workspace compatibility block to exist");
-  assert.ok(
-    legacyRightPanelIndex > legacyBlueprintIndex,
-    "Expected the legacy right panel sizing block to follow the first compatibility block"
-  );
   assert.ok(finalPolishIndex > -1, "Expected the workspace panel polish block to exist");
-  assert.ok(
-    finalPolishIndex > legacyRightPanelIndex,
-    "Expected the DESIGN.md polish block to override the legacy compatibility blocks"
-  );
+  assert.doesNotMatch(stylesSource, /Legacy workspace panel compatibility layer/);
+  assert.doesNotMatch(stylesSource, /Legacy right panel sizing compatibility layer/);
+  assert.doesNotMatch(stylesSource, /var\(--bp-/);
+  assert.doesNotMatch(stylesSource, /var\(--bb-/);
   assert.doesNotMatch(stylesSource, /\/\* Blueprint panel polish pass \*\//);
   assert.doesNotMatch(stylesSource, /\/\* Brainboard right panel reproduction \*\//);
+  assert.doesNotMatch(flowMappersSource, /var\(--bp-head\)/);
 
   const polishedRightPanelShellRule = getLastCssRuleAfter(
     stylesSource,
@@ -364,7 +355,9 @@ test("workspace internal panel polish uses DESIGN.md tokens instead of legacy Bl
   assert.match(polishedTextButtonActiveHoverRule, /\bcolor:\s*#ffffff;/);
 
   const legacyPanelTokens =
-    /var\(--bp-|var\(--bb-|#704dff|#5f3fe6|#f0f1ff|#6f4cf6|#5f3de8|#d8ceff|#1f6feb|#f7fbff/i;
+    /var\(--bp-|var\(--bb-|#704dff|#5f3fe6|#f0f1ff|#f0edff|#f6f3ff|#6f4cf6|#5f3de8|#d8ceff|#1f6feb|#f7fbff|rgba\(111,\s*76,\s*246/i;
+
+  assert.doesNotMatch(stylesSource, legacyPanelTokens);
 
   for (const polishedRule of [
     polishedRightPanelShellRule,
@@ -856,15 +849,15 @@ test("terraform leave dialog uses Korean copy", () => {
   assert.doesNotMatch(terraformLeaveDialogSource, /Discard Changes/);
 });
 
-test("terraform leave dialog continue action uses the stronger hover tint as its base color", () => {
+test("terraform leave dialog continue action uses the neutral workspace tint", () => {
   const secondaryButtonRule = getCssRule(stylesSource, "terraformDialogSecondaryButton");
 
-  assert.match(secondaryButtonRule, /background:\s*var\(--bp-blue-tint\);/);
+  assert.match(secondaryButtonRule, /background:\s*var\(--workspace-accent-soft, #f0f0f3\);/);
   assert.doesNotMatch(secondaryButtonRule, /background:\s*#ffffff;/);
-  assert.doesNotMatch(secondaryButtonRule, /background:\s*var\(--bp-paper-2\);/);
+  assert.doesNotMatch(secondaryButtonRule, /var\(--bp-/);
   assert.match(
     stylesSource,
-    /\.terraformDialogSecondaryButton:hover,[\s\S]*?background:\s*color-mix\(in srgb, var\(--bp-blue-tint\) 74%, var\(--bp-blue\)\);/
+    /\.terraformDialogSecondaryButton:hover,[\s\S]*?background:\s*color-mix\(in srgb, var\(--workspace-accent-soft, #f0f0f3\) 74%, var\(--workspace-accent, #000000\)\);/
   );
 });
 
@@ -1365,7 +1358,7 @@ test("terraform errors surface as an issues banner and AI resolution lives in th
   assert.doesNotMatch(aiChatDockSource, /Well-Architected/);
   assert.match(aiChatDockSource, /onApplyTerraformIssueFix/);
   assert.match(issueBannerRule, /\bbackground:\s*#fff7ed;/);
-  assert.match(aiButtonRule, /\bbackground:\s*var\(--bp-blue\);/);
+  assert.match(aiButtonRule, /\bbackground:\s*var\(--workspace-accent, #000000\);/);
   assert.match(issuesPanelRule, /\bheight:\s*100%;/);
   assert.match(issuesPanelRule, /\bmin-height:\s*0;/);
   assert.match(issuesPanelRule, /\boverflow:\s*hidden;/);
@@ -1376,10 +1369,19 @@ test("terraform errors surface as an issues banner and AI resolution lives in th
   assert.doesNotMatch(stylesSource, /\.issuesPanel\s*\{[^}]*background:\s*var\(--bb-dark\);/s);
   assert.doesNotMatch(stylesSource, /\.issuesPanel \.terraformDiagnostics\s*\{[^}]*background:\s*var\(--bb-dark\);/s);
   assert.doesNotMatch(stylesSource, /\.panelPlanActionDangerButton[^{}]*\{[^}]*\.issuesPanel/s);
-  assert.match(stylesSource, /\.issuesPanel \.terraformDiagnosticList strong\s*\{[^}]*color:\s*#172033;/s);
-  assert.match(stylesSource, /\.issuesPanel \.terraformDiagnosticList span\s*\{[^}]*color:\s*#334155;/s);
-  assert.match(stylesSource, /\.issuesPanel \.terraformDiagnosticSeverity\s*\{[^}]*color:\s*#991b1b;/s);
-  assert.match(stylesSource, /\.issuesPanel \.terraformDiagnosticMeta span\s*\{[^}]*color:\s*#334155;/s);
+  assert.match(
+    stylesSource,
+    /\.issuesPanel \.terraformDiagnosticList strong\s*\{[^}]*color:\s*var\(--workspace-text, #171717\);/s
+  );
+  assert.match(
+    stylesSource,
+    /\.issuesPanel \.terraformDiagnosticList span,[\s\S]*?color:\s*var\(--workspace-muted, #60646c\);/
+  );
+  assert.match(stylesSource, /\.issuesPanel \.terraformDiagnosticSeverity\s*\{[^}]*color:\s*#b42318;/s);
+  assert.match(
+    stylesSource,
+    /\.issuesPanel \.terraformDiagnosticMeta span\s*\{[^}]*background:\s*var\(--workspace-surface, #ffffff\);[^}]*border-color:\s*var\(--workspace-line-strong, #dcdee0\);/s
+  );
 });
 
 test("terraform issue AI resolution shows a fix plan before apply", () => {

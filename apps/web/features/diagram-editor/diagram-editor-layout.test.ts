@@ -15,10 +15,23 @@ const diagramNodeViewSource = readFileSync(
   fileURLToPath(new URL("./DiagramNodeView.tsx", import.meta.url)),
   "utf8"
 );
+const diagramEdgeToolbarSource = readFileSync(
+  fileURLToPath(new URL("./DiagramEdgeToolbar.tsx", import.meta.url)),
+  "utf8"
+);
 const workspaceProjectBarSource = readFileSync(
   fileURLToPath(new URL("./WorkspaceProjectBar.tsx", import.meta.url)),
   "utf8"
 );
+
+test("Architecture Board styles do not restore the removed purple UI theme", () => {
+  assert.doesNotMatch(
+    diagramEditorStyles,
+    /#6f4cf6|#5f3de8|#8b71ff|#f0edff|#f1edff|#d6cbff|#d8ceff|#dcd2ff|rgba\(111,\s*76,\s*246/i
+  );
+  assert.match(diagramEdgeToolbarSource, /tone="workspace"/);
+  assert.doesNotMatch(diagramEdgeToolbarSource, /tone="purple"/);
+});
 
 test("diagram editor uses partial box selection for overlapping area nodes", () => {
   assert.match(diagramEditorSource, /selectionOnDrag=\{interactionMode === "select" && !isPreviewActive\}/);
