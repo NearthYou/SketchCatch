@@ -12,6 +12,19 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-10 - DESIGN.md cost dashboard prototype
+
+- Goal: Explore `/dashboard/costs` UI directions without changing the service implementation or comparing estimated and actual costs.
+- Completed:
+  - Added a standalone HTML prototype with three switchable layouts: operations tabs, project workspace, and cost operations board.
+  - Applied DESIGN.md typography, color, spacing, control, border, and responsive conventions.
+  - Kept estimate and actual usage as separate decision views rather than a comparison metric.
+- Verification:
+  - Playwright verified all three variants at 1440px and 375px without horizontal overflow.
+  - Playwright verified keyboard variant switching and zero console errors or warnings.
+- Risk:
+  - This is a disposable prototype under `output/prototypes`; no `/dashboard/costs` application code was changed.
+
 ### 2026-07-10 - Prevent duplicate dashboard logout requests
 
 - Goal: Apply the selected review comment so repeated logout clicks cannot start duplicate requests.
