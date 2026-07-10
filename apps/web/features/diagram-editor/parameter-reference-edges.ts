@@ -19,60 +19,112 @@ export function syncParameterReferenceEdgesForNode(
   edges: readonly DiagramEdge[],
   sourceNodeId: string
 ): DiagramEdge[] {
-  const sourceNode = nodes.find((node) => node.id === sourceNodeId);
-  const preservedEdges = edges.filter(
+  const preservedEdges = removeManagedEdgesForSources(edges, new Set([sourceNodeId]));
+
+  return [...preservedEdges, ...createParameterReferenceEdges(nodes, new Set([sourceNodeId]))];
+}
+
+export function syncParameterReferenceEdges(
+  nodes: readonly DiagramNode[],
+  edges: readonly DiagramEdge[]
+): DiagramEdge[] {
+  return [
+    ...edges.filter((edge) => edge.metadata?.managedBy !== parameterReferenceEdgeManager),
+    ...createParameterReferenceEdges(nodes)
+  ];
+}
+
+function removeManagedEdgesForSources(
+  edges: readonly DiagramEdge[],
+  sourceNodeIds: ReadonlySet<string>
+): DiagramEdge[] {
+  return edges.filter(
     (edge) =>
-      edge.sourceNodeId !== sourceNodeId || edge.metadata?.managedBy !== parameterReferenceEdgeManager
+      !sourceNodeIds.has(edge.sourceNodeId) || edge.metadata?.managedBy !== parameterReferenceEdgeManager
   );
+}
 
-  if (!sourceNode?.parameters) {
-    return preservedEdges;
-  }
-
+function createParameterReferenceEdges(
+  nodes: readonly DiagramNode[],
+  sourceNodeIds?: ReadonlySet<string>
+): DiagramEdge[] {
+  const targetNodeByIdentity = createTargetNodeByIdentity(nodes);
   const nextEdges: DiagramEdge[] = [];
   const seenReferences = new Set<string>();
 
-  for (const parameterReference of getParameterReferences(sourceNode)) {
-    if (typeof parameterReference.value !== "string") {
+  for (const sourceNode of nodes) {
+    if (!sourceNode.parameters || (sourceNodeIds && !sourceNodeIds.has(sourceNode.id))) {
       continue;
     }
 
-    const terraformReference = parseTerraformReference(parameterReference.value);
-
-    if (!terraformReference || terraformReference.resourceType !== parameterReference.targetResourceType) {
-      continue;
-    }
-
-    const targetNode = nodes.find((node) => isReferenceTarget(node, terraformReference));
-
-    if (!targetNode) {
-      continue;
-    }
-
-    const semanticKey = `${parameterReference.parameterPath}:${targetNode.id}`;
-
-    if (seenReferences.has(semanticKey)) {
-      continue;
-    }
-
-    seenReferences.add(semanticKey);
-    nextEdges.push({
-      id: `parameter-reference:${sourceNodeId}:${parameterReference.parameterPath}:${targetNode.id}`,
-      sourceNodeId,
-      targetNodeId: targetNode.id,
-      type: "smoothstep",
-      style: {
-        lineStyle: "solid",
-        width: "thin"
-      },
-      metadata: {
-        managedBy: parameterReferenceEdgeManager,
-        parameterPath: parameterReference.parameterPath
+    for (const parameterReference of getParameterReferences(sourceNode)) {
+      if (typeof parameterReference.value !== "string") {
+        continue;
       }
-    });
+
+      const terraformReference = parseTerraformReference(parameterReference.value);
+
+      if (!terraformReference || terraformReference.resourceType !== parameterReference.targetResourceType) {
+        continue;
+      }
+
+      const targetNode = targetNodeByIdentity.get(getTerraformIdentity(terraformReference));
+
+      if (!targetNode) {
+        continue;
+      }
+
+      const semanticKey = `${sourceNode.id}:${parameterReference.parameterPath}:${targetNode.id}`;
+
+      if (seenReferences.has(semanticKey)) {
+        continue;
+      }
+
+      seenReferences.add(semanticKey);
+      nextEdges.push({
+        id: `parameter-reference:${sourceNode.id}:${parameterReference.parameterPath}:${targetNode.id}`,
+        sourceNodeId: sourceNode.id,
+        targetNodeId: targetNode.id,
+        type: "smoothstep",
+        style: {
+          lineStyle: "solid",
+          width: "thin"
+        },
+        metadata: {
+          managedBy: parameterReferenceEdgeManager,
+          parameterPath: parameterReference.parameterPath
+        }
+      });
+    }
   }
 
-  return [...preservedEdges, ...nextEdges];
+  return nextEdges;
+}
+
+function createTargetNodeByIdentity(nodes: readonly DiagramNode[]): Map<string, DiagramNode> {
+  const targetNodeByIdentity = new Map<string, DiagramNode>();
+
+  for (const node of nodes) {
+    if (node.kind !== "resource" || !node.parameters) {
+      continue;
+    }
+
+    const identity = getTerraformIdentity({
+      terraformBlockType: node.parameters.terraformBlockType ?? "resource",
+      resourceType: node.parameters.resourceType,
+      resourceName: node.parameters.resourceName
+    });
+
+    if (!targetNodeByIdentity.has(identity)) {
+      targetNodeByIdentity.set(identity, node);
+    }
+  }
+
+  return targetNodeByIdentity;
+}
+
+function getTerraformIdentity(reference: TerraformReference): string {
+  return `${reference.terraformBlockType}:${reference.resourceType}:${reference.resourceName}`;
 }
 
 function getParameterReferences(sourceNode: DiagramNode): ParameterReference[] {
@@ -163,18 +215,6 @@ function parseTerraformReference(value: string): TerraformReference | null {
     resourceType: match[2],
     resourceName: match[3]
   };
-}
-
-function isReferenceTarget(node: DiagramNode, reference: TerraformReference): boolean {
-  const params = node.parameters;
-
-  return Boolean(
-    params &&
-      node.kind === "resource" &&
-      params.resourceType === reference.resourceType &&
-      params.resourceName === reference.resourceName &&
-      (params.terraformBlockType ?? "resource") === reference.terraformBlockType
-  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

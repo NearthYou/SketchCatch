@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { DiagramEdge, DiagramNode } from "../../../../packages/types/src";
-import { syncParameterReferenceEdgesForNode } from "./parameter-reference-edges";
+import {
+  syncParameterReferenceEdges,
+  syncParameterReferenceEdgesForNode
+} from "./parameter-reference-edges";
 
 test("syncs supported Terraform parameter references into deterministic edges", () => {
   const loadBalancer = makeNode("lb", "aws_lb", "web");
@@ -117,6 +120,36 @@ test("replaces and removes only the updated source node's automatic parameter-re
   assert.deepEqual(removedEdges.map(toEdgeSummary), [
     ["asg", "target-a", undefined],
     ["other-asg", "target-b", "targetGroupArns[0]"]
+  ]);
+});
+
+test("recalculates automatic edges when a referenced target identity changes", () => {
+  const listener = makeNode("listener", "aws_lb_listener", "http", {
+    loadBalancerArn: "aws_lb.web.arn"
+  });
+  const matchingLoadBalancer = makeNode("lb", "aws_lb", "web");
+  const renamedLoadBalancer = makeNode("lb", "aws_lb", "renamed");
+  const manualEdge: DiagramEdge = {
+    id: "manual-listener-edge",
+    sourceNodeId: listener.id,
+    targetNodeId: matchingLoadBalancer.id
+  };
+
+  const initialEdges = syncParameterReferenceEdges([listener, matchingLoadBalancer], [manualEdge]);
+  const afterRename = syncParameterReferenceEdges([listener, renamedLoadBalancer], initialEdges);
+  const afterMatchingIdentityIsRestored = syncParameterReferenceEdges(
+    [listener, matchingLoadBalancer],
+    afterRename
+  );
+
+  assert.deepEqual(initialEdges.map(toEdgeSummary), [
+    ["listener", "lb", undefined],
+    ["listener", "lb", "loadBalancerArn"]
+  ]);
+  assert.deepEqual(afterRename.map(toEdgeSummary), [["listener", "lb", undefined]]);
+  assert.deepEqual(afterMatchingIdentityIsRestored.map(toEdgeSummary), [
+    ["listener", "lb", undefined],
+    ["listener", "lb", "loadBalancerArn"]
   ]);
 });
 

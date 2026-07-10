@@ -96,7 +96,7 @@ import {
   updateNodeById
 } from "./diagram-utils";
 import { toFlowEdges, toFlowNodes } from "./flow-mappers";
-import { syncParameterReferenceEdgesForNode } from "./parameter-reference-edges";
+import { syncParameterReferenceEdges } from "./parameter-reference-edges";
 import {
   applyContainingReferenceDropTargets,
   findInnermostVisualDropTarget
@@ -575,7 +575,7 @@ function DiagramEditorInner({
         return {
           ...currentDiagram,
           nodes: nextNodes,
-          edges: syncParameterReferenceEdgesForNode(nextNodes, currentDiagram.edges, nodeId)
+          edges: syncParameterReferenceEdges(nextNodes, currentDiagram.edges)
         };
       });
     },
