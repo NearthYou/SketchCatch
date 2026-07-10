@@ -873,12 +873,12 @@ type DeploymentPlanSummary = {
 
 Plan summary는 사용자 승인 화면에 필요한 최소 요약이다. 현재 기본 흐름에서는 `terraform plan -out=tfplan` 이후 `terraform show -json tfplan` 결과의 `resource_changes`를 파싱해 생성한다.
 
-Plan 단계의 Safety Gate는 최종 실행 전 점검 결과를 `warnings`에 보존한다. Plan 저장 자체는 `deployments.isBlocked`를 세우지 않으며, 사용자가 승인한 plan과 apply 대상 plan은 같은 artifact/hash 기준이어야 한다.
+Plan 단계의 Safety Gate는 최종 실행 전 점검 결과를 `warnings`에 보존한다. Risk warning은 승인/배포를 차단하지 않고 사용자에게 노출되는 검토 정보로 남긴다. Plan 저장 자체는 `deployments.isBlocked`를 세우지 않으며, 사용자가 승인한 plan과 apply 대상 plan은 같은 artifact/hash 기준이어야 한다.
 
-Pre-Deployment Check의 보안 finding은 Terraform 파일이 제공되면 Trivy `config` misconfiguration scan 결과를 우선 사용한다. Trivy rule이 기존 `PUBLIC_SSH`, `PUBLIC_RDS`, `PUBLIC_S3`, `IAM_WILDCARD` 코드로 안전하게 분류되지 않으면 `TRIVY_MISCONFIGURATION`으로 보존한다. Trivy 실패는 Safety Gate를 대체하지 않고 해당 scan 결과만 생략하며, deterministic cost/config/product policy finding은 계속 반환한다.
+Pre-Deployment Check의 보안 finding은 Terraform 파일이 제공되면 Trivy `config` misconfiguration scan 결과를 우선 사용한다. Trivy rule이 기존 `PUBLIC_SSH`, `PUBLIC_RDS`, `PUBLIC_S3`, `IAM_WILDCARD` 코드로 안전하게 분류되지 않으면 `TRIVY_MISCONFIGURATION`으로 보존한다. Trivy 기반 High finding도 승인/배포를 막지 않고 warning으로 보존한다. Trivy 실패는 Safety Gate를 대체하지 않고 해당 scan 결과만 생략하며, deterministic cost/config/product policy finding은 계속 반환한다.
 
-MVP Direct Deployment Path live apply는 안전 범위를 위해 아래 Terraform resource type만 허용한다.
-이외 resource type이 변경 대상에 포함되면 warning의 `blocksApproval`을 `true` metadata로 남겨 승인 화면과 수정 안내에서 high-risk로 표시한다.
+MVP Direct Deployment Path live apply는 아래 Terraform resource type을 우선 지원 범위로 둔다.
+이외 resource type이 변경 대상에 포함되면 warning metadata로 남겨 승인 화면과 수정 안내에서 high-risk로 표시하지만, 승인/배포 자체는 차단하지 않는다.
 
 - `aws_vpc`
 - `aws_subnet`

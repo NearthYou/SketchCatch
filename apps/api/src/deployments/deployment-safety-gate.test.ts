@@ -34,7 +34,8 @@ test("evaluateDeploymentSafetyGate records high risk findings without blocking p
       "terraform_plan:DESTRUCTIVE_CHANGE:apply"
     ]
   );
-  assert.equal(summary.warnings[0]?.blocksApproval, true);
+  assert.equal(summary.warnings[0]?.requiresAcknowledgement, false);
+  assert.equal(summary.warnings[0]?.blocksApproval, false);
   assert.deepEqual(summary.warnings[0]?.sourceLocation, {
     fileName: "main.tf",
     line: 15,
@@ -46,7 +47,7 @@ test("evaluateDeploymentSafetyGate records high risk findings without blocking p
   assert.equal(summary.warnings[1]?.code, "DESTRUCTIVE_CHANGE");
 });
 
-test("evaluateDeploymentSafetyGate leaves medium and low warnings approvable after acknowledgement", () => {
+test("evaluateDeploymentSafetyGate leaves medium and low warnings approvable", () => {
   const summary = evaluateDeploymentSafetyGate({
     operation: "apply",
     planSummary: createPlanSummary(),
@@ -65,7 +66,7 @@ test("evaluateDeploymentSafetyGate leaves medium and low warnings approvable aft
 
   assert.equal(summary.blocked, false);
   assert.equal(summary.warnings.every((warning) => !warning.blocksApproval), true);
-  assert.equal(summary.warnings.every((warning) => warning.requiresAcknowledgement), true);
+  assert.equal(summary.warnings.every((warning) => !warning.requiresAcknowledgement), true);
 });
 
 test("evaluateDeploymentSafetyGate preserves generic Trivy warning codes", () => {
@@ -87,11 +88,11 @@ test("evaluateDeploymentSafetyGate preserves generic Trivy warning codes", () =>
 
   assert.equal(summary.warnings[0]?.code, "TRIVY_MISCONFIGURATION");
   assert.equal(summary.warnings[0]?.relatedFindingId, "trivy:aws-9999:main.tf:aws_vpc.main:3");
-  assert.equal(summary.warnings[0]?.requiresAcknowledgement, true);
+  assert.equal(summary.warnings[0]?.requiresAcknowledgement, false);
   assert.equal(summary.warnings[0]?.blocksApproval, false);
 });
 
-test("evaluateDeploymentSafetyGate makes known demo web service warnings acknowledgement-only", () => {
+test("evaluateDeploymentSafetyGate makes demo web service warnings non-blocking", () => {
   const demoFindings = [
     ["trivy:aws-0178:main.tf:aws_vpc.demo:20", "aws_vpc.demo", 20],
     ["trivy:aws-0164:main.tf:aws_subnet.public_a:41", "aws_subnet.public_a", 41],
@@ -122,11 +123,11 @@ test("evaluateDeploymentSafetyGate makes known demo web service warnings acknowl
   });
 
   assert.equal(summary.warnings.length, demoFindings.length);
-  assert.equal(summary.warnings.every((warning) => warning.requiresAcknowledgement), true);
+  assert.equal(summary.warnings.every((warning) => !warning.requiresAcknowledgement), true);
   assert.equal(summary.warnings.every((warning) => !warning.blocksApproval), true);
 });
 
-test("evaluateDeploymentSafetyGate keeps high findings outside managed demo Trivy resources blocking", () => {
+test("evaluateDeploymentSafetyGate keeps high findings outside managed demo resources approvable", () => {
   const summary = evaluateDeploymentSafetyGate({
     operation: "apply",
     liveProfile: "demo_web_service",
@@ -156,9 +157,9 @@ test("evaluateDeploymentSafetyGate keeps high findings outside managed demo Triv
   });
 
   assert.equal(summary.warnings[0]?.requiresAcknowledgement, false);
-  assert.equal(summary.warnings[0]?.blocksApproval, true);
+  assert.equal(summary.warnings[0]?.blocksApproval, false);
   assert.equal(summary.warnings[1]?.requiresAcknowledgement, false);
-  assert.equal(summary.warnings[1]?.blocksApproval, true);
+  assert.equal(summary.warnings[1]?.blocksApproval, false);
 });
 
 test("evaluateDeploymentSafetyGate creates stable ids for unsupported resource warnings", () => {

@@ -12,6 +12,24 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-10 - Make deployment warnings non-blocking
+
+- Goal: Let Direct Deployment proceed even when high-risk Trivy or deployment safety warnings are present.
+- Completed:
+  - Changed Pre-Deployment/Safety Gate warning creation so high-risk findings, unsupported-resource warnings, and destructive-change warnings no longer set `blocksApproval`.
+  - Removed approval-time rejection for stored blocking or acknowledgement-only warnings, so older plan summaries cannot block approval only because of warning metadata.
+  - Updated workspace deployment action state so the Plan approval button stays enabled even when `planSummary.warnings` contains `blocksApproval: true`.
+  - Updated `docs/data-models.md` to describe warning preservation without approval/deployment blocking.
+- Verification:
+  - `pnpm harness:check` passed before edits.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/deployments/deployment-safety-gate.test.ts src/deployments/deployment-approval-service.test.ts src/deployments/deployment-plan-service.test.ts` passed.
+  - `pnpm --filter @sketchcatch/web exec tsx features/workspace/deployment-actions.test.ts` passed.
+  - `pnpm lint` passed.
+  - `pnpm typecheck` passed.
+  - `pnpm build` passed.
+- Risk:
+  - Terraform validation, plan creation, artifact/hash drift checks, approval snapshot checks, AWS account/region drift checks, and actual Terraform apply failures still remain hard gates. This change only removes warning metadata as an approval blocker.
+
 ### 2026-07-10 - Connect dashboard project inventory to live user projects
 
 - Goal: Replace the static `/dashboard/projects` sample with projects owned by the authenticated user.
