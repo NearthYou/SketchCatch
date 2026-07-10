@@ -108,7 +108,6 @@ export type GitHubReadRepositoryEvidenceInput = {
   readonly installationId: string;
   readonly owner: string;
   readonly name: string;
-  readonly ref: string;
 };
 
 export type GitHubRepositoryEvidenceFile = {
@@ -369,13 +368,26 @@ export function createGitHubAppClient(
       return repositories.sort((left, right) => left.fullName.localeCompare(right.fullName));
     },
 
-    // Repository를 실행하지 않고 tree와 허용된 텍스트 설정 파일만 읽는다.
+    // branch를 commit SHA로 고정한 뒤 tree와 허용된 텍스트 설정 파일만 읽는다.
     async readRepositoryEvidence(input) {
+      const repository = await requestWithInstallationToken<GitHubRepositoryApiResponse>(
+        input.installationId,
+        createRepositoryPath(input, "")
+      );
+      const defaultBranch = readRequiredString(
+        repository.default_branch,
+        "repository default branch"
+      );
+      const commit = await requestWithInstallationToken<GitHubCommitResponse>(
+        input.installationId,
+        createRepositoryPath(input, `/commits/${encodeURIComponent(defaultBranch)}`)
+      );
+      const revision = readRequiredString(commit.sha, "repository commit sha");
       const tree = await requestWithInstallationToken<GitHubRecursiveTreeResponse>(
         input.installationId,
         createRepositoryPath(
           input,
-          `/git/trees/${encodeURIComponent(input.ref)}?recursive=1`
+          `/git/trees/${encodeURIComponent(revision)}?recursive=1`
         )
       );
 
@@ -391,7 +403,7 @@ export function createGitHubAppClient(
         const contents = await getRepositoryContent(
           input,
           path,
-          input.ref,
+          revision,
           requestWithInstallationToken
         );
 
@@ -404,7 +416,7 @@ export function createGitHubAppClient(
       }
 
       return {
-        revision: readRequiredString(tree.sha, "repository tree sha"),
+        revision,
         treePaths,
         files
       };

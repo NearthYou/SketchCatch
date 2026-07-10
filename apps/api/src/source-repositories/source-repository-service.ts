@@ -435,8 +435,7 @@ export async function analyzeSourceRepository(
   const snapshot = await evidenceReader.readRepositoryEvidence({
     installationId: sourceRepository.githubInstallationId,
     owner: sourceRepository.owner,
-    name: sourceRepository.name,
-    ref: sourceRepository.defaultBranch
+    name: sourceRepository.name
   });
 
   return {

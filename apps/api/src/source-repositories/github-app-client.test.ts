@@ -129,9 +129,20 @@ test("readRepositoryEvidence reads the recursive tree and only allowed static ev
         return jsonResponse({ token: "installation-token" });
       }
 
-      if (pathname === "/repos/owner/repo/git/trees/main" && search === "?recursive=1") {
+      if (pathname === "/repos/owner/repo") {
+        return jsonResponse({ default_branch: "trunk" });
+      }
+
+      if (pathname === "/repos/owner/repo/commits/trunk") {
+        return jsonResponse({ sha: "commit-sha" });
+      }
+
+      if (
+        pathname === "/repos/owner/repo/git/trees/commit-sha" &&
+        search === "?recursive=1"
+      ) {
         return jsonResponse({
-          sha: "revision-sha",
+          sha: "tree-sha",
           truncated: false,
           tree: [
             { path: "package.json", type: "blob" },
@@ -162,11 +173,10 @@ test("readRepositoryEvidence reads the recursive tree and only allowed static ev
   const snapshot = await client.readRepositoryEvidence({
     installationId: "42",
     owner: "owner",
-    name: "repo",
-    ref: "main"
+    name: "repo"
   });
 
-  assert.equal(snapshot.revision, "revision-sha");
+  assert.equal(snapshot.revision, "commit-sha");
   assert.deepEqual(snapshot.treePaths, [
     "README.md",
     "apps/web/next.config.mjs",
@@ -194,6 +204,12 @@ test("readRepositoryEvidence reads the recursive tree and only allowed static ev
     calls.some((call) => call.pathname.endsWith("/pnpm-lock.yaml")),
     false
   );
+  assert.equal(
+    calls
+      .filter((call) => call.pathname.includes("/contents/"))
+      .every((call) => call.search === "?ref=commit-sha"),
+    true
+  );
 });
 
 test("readRepositoryEvidence rejects truncated recursive trees", async () => {
@@ -205,8 +221,16 @@ test("readRepositoryEvidence rejects truncated recursive trees", async () => {
         return jsonResponse({ token: "installation-token" });
       }
 
+      if (pathname === "/repos/owner/repo") {
+        return jsonResponse({ default_branch: "main" });
+      }
+
+      if (pathname === "/repos/owner/repo/commits/main") {
+        return jsonResponse({ sha: "commit-sha" });
+      }
+
       return jsonResponse({
-        sha: "revision-sha",
+        sha: "tree-sha",
         truncated: true,
         tree: []
       });
@@ -217,8 +241,7 @@ test("readRepositoryEvidence rejects truncated recursive trees", async () => {
     client.readRepositoryEvidence({
       installationId: "42",
       owner: "owner",
-      name: "repo",
-      ref: "main"
+      name: "repo"
     }),
     GitHubRepositoryTreeTruncatedError
   );
@@ -233,9 +256,17 @@ test("readRepositoryEvidence rejects unsupported file encoding", async () => {
         return jsonResponse({ token: "installation-token" });
       }
 
-      if (pathname === "/repos/owner/repo/git/trees/main") {
+      if (pathname === "/repos/owner/repo") {
+        return jsonResponse({ default_branch: "main" });
+      }
+
+      if (pathname === "/repos/owner/repo/commits/main") {
+        return jsonResponse({ sha: "commit-sha" });
+      }
+
+      if (pathname === "/repos/owner/repo/git/trees/commit-sha") {
         return jsonResponse({
-          sha: "revision-sha",
+          sha: "tree-sha",
           truncated: false,
           tree: [{ path: "package.json", type: "blob" }]
         });
@@ -249,8 +280,7 @@ test("readRepositoryEvidence rejects unsupported file encoding", async () => {
     client.readRepositoryEvidence({
       installationId: "42",
       owner: "owner",
-      name: "repo",
-      ref: "main"
+      name: "repo"
     }),
     GitHubRepositoryFileEncodingError
   );

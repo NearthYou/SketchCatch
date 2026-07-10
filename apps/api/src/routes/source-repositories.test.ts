@@ -39,7 +39,6 @@ test("source repository routes analyze an active repository without storing the 
     installationId: string;
     owner: string;
     name: string;
-    ref: string;
   }> = [];
   const githubRepositoryEvidenceReader: GitHubRepositoryEvidenceReader = {
     // active repository 분석이 GitHub 읽기 경계에 넘기는 값을 기록한다.
@@ -84,8 +83,7 @@ test("source repository routes analyze an active repository without storing the 
     {
       installationId: "12345",
       owner: "owner",
-      name: "repo",
-      ref: "main"
+      name: "repo"
     }
   ]);
   assert.equal(repository.rows.length, 1);
