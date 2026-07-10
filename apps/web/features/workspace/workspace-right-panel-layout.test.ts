@@ -10,6 +10,8 @@ const deploymentPanelSource = readWorkspaceFile("DeploymentPanel.tsx");
 const diagramEditorSource = readFeatureFile("../diagram-editor/DiagramEditor.tsx");
 const flowMappersSource = readFeatureFile("../diagram-editor/flow-mappers.ts");
 const resourceWorkspaceSource = readWorkspaceFile("ResourceWorkspacePanel.tsx");
+const resourceListSource = readWorkspaceFile("ResourceListPanel.tsx");
+const resourceCardMenuSource = readWorkspaceFile("ResourceCardMenu.tsx");
 const diagramEditorTypesSource = readFeatureFile("../diagram-editor/types.ts");
 const terraformLeaveDialogSource = readWorkspaceFile("TerraformLeaveDialog.tsx");
 const terraformPanelSource = readWorkspaceFile("TerraformCodePanel.tsx");
@@ -515,8 +517,8 @@ test("resource workspace omits the decorative list toolbar", () => {
   const resourceWorkspacePanelRule = getCssRule(stylesSource, "resourceWorkspacePanel");
   const resourceListPanelRule = getCssRule(stylesSource, "resourceListPanel");
 
-  assert.doesNotMatch(resourceWorkspaceSource, /className=\{styles\.resourceSectionToolbar\}/);
-  assert.doesNotMatch(resourceWorkspaceSource, /aria-label="Resource list"/);
+  assert.doesNotMatch(resourceListSource, /className=\{styles\.resourceSectionToolbar\}/);
+  assert.doesNotMatch(resourceListSource, /aria-label="Resource list"/);
   assert.match(resourceWorkspacePanelRule, /\bgrid-template-rows:\s*minmax\(0,\s*1fr\);/);
   assert.match(resourceListPanelRule, /\bpadding:\s*24px 12px 12px;/);
 });
@@ -546,7 +548,7 @@ test("resource detail back action sits inside the detail view", () => {
 test("resource list identity starts with the service icon", () => {
   const serviceIconRule = getCssRule(stylesSource, "resourceListServiceIcon");
 
-  assert.doesNotMatch(resourceWorkspaceSource, /resourceListCubeIcon/);
+  assert.doesNotMatch(resourceListSource, /resourceListCubeIcon/);
   assert.doesNotMatch(stylesSource, /\.resourceListCubeIcon\s*\{/);
   assert.doesNotMatch(serviceIconRule, /\bborder-left:/);
   assert.match(serviceIconRule, /\bwidth:\s*36px;/);
@@ -564,19 +566,13 @@ test("selected resource list card uses a clear blue border only for the active s
 });
 
 test("resource card menu omits data source switch and maximize actions", () => {
-  const menuStartIndex = resourceWorkspaceSource.indexOf("function ResourceCardMenu");
-  const menuEndIndex = resourceWorkspaceSource.indexOf("function selectNode", menuStartIndex);
-  const menuSource = resourceWorkspaceSource.slice(menuStartIndex, menuEndIndex);
-
-  assert.ok(menuStartIndex > -1);
-  assert.ok(menuEndIndex > menuStartIndex);
-  assert.doesNotMatch(menuSource, /Switch to data source|Switch to resource/);
-  assert.doesNotMatch(menuSource, /switchTerraformBlockType/);
-  assert.doesNotMatch(menuSource, /onToggleSize/);
-  assert.doesNotMatch(menuSource, /Maximize2|Minimize2/);
-  assert.match(menuSource, /Edit config/);
-  assert.match(menuSource, /Duplicate/);
-  assert.match(menuSource, /Delete/);
+  assert.doesNotMatch(resourceCardMenuSource, /Switch to data source|Switch to resource/);
+  assert.doesNotMatch(resourceCardMenuSource, /switchTerraformBlockType/);
+  assert.doesNotMatch(resourceCardMenuSource, /onToggleSize/);
+  assert.doesNotMatch(resourceCardMenuSource, /Maximize2|Minimize2/);
+  assert.match(resourceCardMenuSource, /Edit config/);
+  assert.match(resourceCardMenuSource, /Duplicate/);
+  assert.match(resourceCardMenuSource, /Delete/);
 });
 
 test("workspace AI has a dedicated error tab for Terraform issue resolution", () => {
