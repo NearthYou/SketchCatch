@@ -14,6 +14,7 @@ Use this file only for compact continuation context. Write it in English.
 - `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, focused AI tests, Terraform formatting, and `git diff --check` passed.
 - Live Q retrieval and Architecture Draft generation were exercised without infrastructure mutation.
 - Live Q returned exact citations and deployment guidance for SPA, Fargate, and Multi-AZ RDS; the API materialized a matching role-specific graph with no orphan nodes.
+- Contradictory Q plans that request EC2 private-subnet spread with one node are normalized to a deployable two-node minimum before materialization.
 
 ## Changes This Session
 
@@ -26,6 +27,7 @@ Use this file only for compact continuation context. Write it in English.
 - Fargate materialization now separates public/app/DB subnets, NAT routes, IAM roles, logs, ALB target registration, upload storage, and Multi-AZ RDS configuration.
 - Terraform renders ECS service network, load balancer, and deployment circuit-breaker blocks.
 - The Architecture Draft client consumes the dedicated stream, preserves typed Q failures, and displays completed/current/pending generation stages.
+- Live direct API, Next proxy, and Chrome checks returned Q-backed previews after the EC2 spread invariant repair; no generated fallback was added.
 
 ## Broken Or Unverified
 

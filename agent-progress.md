@@ -205,3 +205,14 @@ Short English-only working log for the current agent context. Older records are 
   - New API stream tests (3) and affected web tests (26) passed; lint, typecheck, build, and harness checks passed.
 - Risk:
   - Three pre-existing `ai.test.ts` expectations remain failing in isolation (EKS warning text, Korean quantity extraction, and equivalent-wording S3 count); none execute the new stream path.
+
+### 2026-07-11 - Repair contradictory Amazon Q EC2 spread plans
+- Goal: Stop valid Q-backed drafts from becoming 500/503 errors when Q requests private-subnet spread with only one EC2.
+- Completed:
+  - Reconciled EC2 quantity and runtime `computeCount` to at least two whenever the Q plan requires private-subnet spread, while preserving larger explicit quantities.
+  - Added bounded cause-chain logging for streamed draft failures without adding a generated fallback.
+- Verification:
+  - Live direct API, Next proxy, and Chrome flows returned `source=amazon_q`; Chrome displayed a 31-resource `alb-asg-ec2 + spa-cloudfront-s3 + multi-az-rds` PREVIEW.
+  - Architecture Draft tests (36), lint, typecheck, build, and diff checks passed.
+- Risk:
+  - Three pre-existing isolated route tests still fail for unrelated deterministic draft expectations.
