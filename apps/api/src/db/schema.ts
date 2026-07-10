@@ -21,6 +21,7 @@ import type {
   GitCicdHandoffKind,
   GitCicdPipelineDetailStatus,
   GitCicdRepositorySettingsPreview,
+  RepositoryAnalysisAiHandoff,
   ReverseEngineeringResourceSelection,
   ReverseEngineeringScanResult
 } from "@sketchcatch/types";
@@ -346,6 +347,9 @@ export const sourceRepositories = pgTable(
     repositoryUrl: text("repository_url"),
     visibility: varchar("visibility", { length: 20 }),
     archived: boolean("archived").notNull().default(false),
+    analysisResult: jsonb("analysis_result").$type<RepositoryAnalysisAiHandoff>(),
+    analysisRevision: varchar("analysis_revision", { length: 128 }),
+    analyzedAt: timestamp("analyzed_at", { withTimezone: true }),
     disconnectedAt: timestamp("disconnected_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()

@@ -421,6 +421,25 @@ function createInMemorySourceRepositoryRepository(
       rows.push(row);
 
       return row;
+    },
+    // 실제 repository와 같은 active-row 조건으로 분석 저장 경쟁을 재현한다.
+    async saveProjectSourceRepositoryAnalysis(input) {
+      const row = rows.find(
+        (candidate) =>
+          candidate.projectId === input.projectId &&
+          candidate.id === input.sourceRepositoryId &&
+          candidate.status === "active"
+      );
+
+      if (!row) {
+        return undefined;
+      }
+
+      row.analysisResult = input.aiHandoff;
+      row.analysisRevision = input.repositoryRevision;
+      row.analyzedAt = input.analyzedAt;
+      row.updatedAt = input.analyzedAt;
+      return row;
     }
   };
 }
@@ -461,6 +480,9 @@ function createSourceRepositoryRecord(
     repositoryUrl: overrides.repositoryUrl ?? "https://github.com/owner/repo",
     visibility: overrides.visibility ?? "private",
     archived: overrides.archived ?? false,
+    analysisResult: overrides.analysisResult ?? null,
+    analysisRevision: overrides.analysisRevision ?? null,
+    analyzedAt: overrides.analyzedAt ?? null,
     disconnectedAt: overrides.disconnectedAt ?? null,
     createdAt: overrides.createdAt ?? now,
     updatedAt: overrides.updatedAt ?? now

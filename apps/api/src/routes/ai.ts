@@ -21,7 +21,7 @@ import type {
   TranscribeConfirmation,
   VoiceRequirementInput
 } from "@sketchcatch/types";
-import { RESOURCE_TYPES } from "@sketchcatch/types";
+import { RESOURCE_TYPES, TEMPLATE_IDS } from "@sketchcatch/types";
 import {
   createConfiguredAmazonQArchitectureDraftResponse,
   type CreateArchitectureDraftResponseFactory,
@@ -90,7 +90,8 @@ const architectureJsonSchema: z.ZodType<ArchitectureJson> = z.object({
 });
 
 const architectureDraftBodySchema: z.ZodType<CreateArchitectureDraftRequest> = z.object({
-  prompt: z.string().trim().min(1)
+  prompt: z.string().trim().min(1),
+  templateId: z.enum(TEMPLATE_IDS).optional()
 });
 
 const githubArchitectureDraftBodySchema = z.object({

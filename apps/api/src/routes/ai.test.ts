@@ -246,6 +246,49 @@ test("POST /api/ai/architecture-draft returns a board-ready ArchitectureJson for
   await app.close();
 });
 
+test("POST /api/ai/architecture-draft keeps the Repository Analysis Template selection", async () => {
+  const app = buildApp();
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    payload: {
+      prompt: "정적 웹사이트를 S3와 CloudFront로 배포하고 싶어",
+      templateId: "static-web-hosting"
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+
+  const body = architectureDraftResponseSchema.parse(response.json());
+
+  assert.equal(
+    body.metadata.assumptions.some((assumption) =>
+      assumption.includes("Static Web Hosting (static-web-hosting) Template을 기본 결정으로 유지")
+    ),
+    true
+  );
+
+  await app.close();
+});
+
+test("POST /api/ai/architecture-draft rejects an unknown Repository Analysis Template", async () => {
+  const app = buildApp();
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    payload: {
+      prompt: "정적 웹사이트를 배포하고 싶어",
+      templateId: "unknown-template"
+    }
+  });
+
+  assert.equal(response.statusCode, 400);
+
+  await app.close();
+});
+
 test("POST /api/ai/architecture-draft selects API server and database backend templates", async () => {
   const app = buildApp();
 

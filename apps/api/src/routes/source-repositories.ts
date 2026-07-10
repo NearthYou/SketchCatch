@@ -18,6 +18,7 @@ import {
 } from "../config/env.js";
 import {
   createGitHubAppClient,
+  GitHubApiRequestError,
   type GitHubAppClient,
   type GitHubRepositoryEvidenceReader
 } from "../source-repositories/github-app-client.js";
@@ -97,7 +98,7 @@ const defaultSourceRepositoryAnalysisRateLimiter = createInMemoryRateLimiter({
   windowMs: 60_000
 });
 
-// Source Repository 연결과 비영속 Repository Analysis HTTP 계약을 등록한다.
+// Source Repository 연결과 마지막 Repository Analysis 조회/실행 계약을 등록한다.
 export async function registerSourceRepositoryRoutes(
   app: FastifyInstance,
   options?: SourceRepositoryRouteOptions
@@ -449,6 +450,7 @@ async function getSourceRepositoryRequestContext(
   };
 }
 
+// RDS에 저장된 마지막 Repository Analysis를 SourceRepository 조회 응답에 복원합니다.
 function toSourceRepository(row: SourceRepositoryRecord): SourceRepository {
   return {
     id: row.id,
@@ -463,6 +465,14 @@ function toSourceRepository(row: SourceRepositoryRecord): SourceRepository {
     repositoryUrl: row.repositoryUrl,
     visibility: toSourceRepositoryVisibility(row.visibility),
     archived: row.archived,
+    analysis:
+      row.analysisResult && row.analysisRevision && row.analyzedAt
+        ? {
+            repositoryRevision: row.analysisRevision,
+            analyzedAt: row.analyzedAt.toISOString(),
+            aiHandoff: row.analysisResult
+          }
+        : null,
     disconnectedAt: row.disconnectedAt ? row.disconnectedAt.toISOString() : null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString()
@@ -479,6 +489,7 @@ function toSourceRepositoryVisibility(
   return null;
 }
 
+// GitHub App와 Source Repository 내부 오류를 안정적인 사용자 응답 코드로 바꿉니다.
 function handleSourceRepositoryError(error: unknown, reply: FastifyReply) {
   if (error instanceof SourceRepositoryNotFoundError) {
     return reply.status(404).send({
@@ -498,6 +509,18 @@ function handleSourceRepositoryError(error: unknown, reply: FastifyReply) {
     return reply.status(409).send({
       error: "conflict",
       message: error.message
+    });
+  }
+
+  if (error instanceof GitHubApiRequestError) {
+    const message =
+      error.statusCode === 401 || error.statusCode === 403
+        ? "GIT_APP_AUTHENTICATION_FAILED"
+        : "GIT_APP_REPOSITORY_ACCESS_UNAVAILABLE";
+
+    return reply.status(409).send({
+      error: "conflict",
+      message
     });
   }
 

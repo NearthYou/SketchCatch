@@ -459,6 +459,7 @@ export type SourceRepository = {
   repositoryUrl: string | null;
   visibility: "public" | "private" | "internal" | null;
   archived: boolean;
+  analysis: SourceRepositoryAnalysis | null;
   disconnectedAt: IsoDateTimeString | null;
   createdAt: IsoDateTimeString;
   updatedAt: IsoDateTimeString;
@@ -574,8 +575,14 @@ export type RepositoryAnalysisAiHandoff =
 export type AnalyzeSourceRepositoryResponse = {
   readonly sourceRepositoryId: string;
   readonly repositoryRevision: string;
+  readonly analyzedAt: IsoDateTimeString;
   readonly aiHandoff: RepositoryAnalysisAiHandoff;
 };
+
+export type SourceRepositoryAnalysis = Omit<
+  AnalyzeSourceRepositoryResponse,
+  "sourceRepositoryId"
+>;
 
 export type GitCicdHandoffStatus =
   | "draft"
@@ -1632,6 +1639,7 @@ export type CreateArchitecturePatchPreviewRequest = {
 
 export type CreateArchitectureDraftRequest = {
   prompt: string;
+  templateId?: TemplateId | undefined;
 };
 
 export type AiArchitectureDraftResult = {

@@ -14,6 +14,8 @@
 | [0006-template-selection-failure-on-repository-mismatch.md](./0006-template-selection-failure-on-repository-mismatch.md) | 지원 Template과 맞지 않으면 Template을 고르지 않고 불일치 이유를 반환한다 | Template과 맞지 않는 Repository Analysis 결과를 다룰 때 |
 | [0007-template-selection-failure-ai-handoff.md](./0007-template-selection-failure-ai-handoff.md) | Template Selection Failure도 fallback 없이 AI Handoff로 전달한다 | Template 선택 실패와 AI 파트 연결을 다룰 때 |
 | [0008-non-persistent-repository-analysis.md](./0008-non-persistent-repository-analysis.md) | Repository Analysis 결과를 저장하지 않고 요청마다 새로 정적 분석한다 | 분석 결과 저장과 재분석 조건을 다룰 때 |
+| [0009-persist-latest-repository-analysis-summary.md](./0009-persist-latest-repository-analysis-summary.md) | 원본 source 없이 마지막 Repository Analysis 요약과 revision을 저장하며 0008을 대체한다 | 분석 결과 조회, 새로고침 복원, 재분석 조건을 다룰 때 |
+| [0010-ai-preserves-gg-template-selection.md](./0010-ai-preserves-gg-template-selection.md) | AI는 gg가 선택한 Template을 교체하지 않고 부족한 요구사항만 보완한다 | AI Handoff와 Architecture Draft 책임 경계를 다룰 때 |
 
 ## 추가 규칙
 

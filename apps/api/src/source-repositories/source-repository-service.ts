@@ -3,7 +3,8 @@ import { and, desc, eq } from "drizzle-orm";
 import type {
   AnalyzeSourceRepositoryResponse,
   GitHubInstalledRepositoryCandidate,
-  GitHubRepositoryCandidate
+  GitHubRepositoryCandidate,
+  RepositoryAnalysisAiHandoff
 } from "@sketchcatch/types";
 import type { Database } from "../db/client.js";
 import { projects, sourceRepositories, touchUpdatedAt } from "../db/schema.js";
@@ -29,6 +30,9 @@ export type SourceRepositoryRepository = {
     sourceRepositoryId: string
   ): Promise<SourceRepositoryRecord | undefined>;
   createActiveGitHubSourceRepository(input: CreateActiveGitHubSourceRepositoryInput): Promise<SourceRepositoryRecord>;
+  saveProjectSourceRepositoryAnalysis(
+    input: SaveProjectSourceRepositoryAnalysisInput
+  ): Promise<SourceRepositoryRecord | undefined>;
 };
 
 export type CreateActiveGitHubSourceRepositoryInput = {
@@ -107,6 +111,14 @@ export type AnalyzeSourceRepositoryInput = {
   readonly accessContext: ProjectAccessContext;
 };
 
+export type SaveProjectSourceRepositoryAnalysisInput = {
+  readonly projectId: string;
+  readonly sourceRepositoryId: string;
+  readonly repositoryRevision: string;
+  readonly analyzedAt: Date;
+  readonly aiHandoff: RepositoryAnalysisAiHandoff;
+};
+
 export class SourceRepositoryNotFoundError extends Error {
   constructor(message: string) {
     super(message);
@@ -128,6 +140,7 @@ export class SourceRepositoryConflictError extends Error {
   }
 }
 
+// Source Repository 연결과 마지막 분석 결과를 같은 RDS row에서 관리합니다.
 export function createPostgresSourceRepositoryRepository(
   db: Database
 ): SourceRepositoryRepository {
@@ -205,6 +218,27 @@ export function createPostgresSourceRepositoryRepository(
 
         return repository;
       });
+    },
+
+    async saveProjectSourceRepositoryAnalysis(input) {
+      const [repository] = await db
+        .update(sourceRepositories)
+        .set({
+          analysisResult: input.aiHandoff,
+          analysisRevision: input.repositoryRevision,
+          analyzedAt: input.analyzedAt,
+          ...touchUpdatedAt
+        })
+        .where(
+          and(
+            eq(sourceRepositories.projectId, input.projectId),
+            eq(sourceRepositories.id, input.sourceRepositoryId),
+            eq(sourceRepositories.status, "active")
+          )
+        )
+        .returning();
+
+      return repository;
     }
   };
 }
@@ -400,7 +434,8 @@ export async function listSourceRepositories(
   return repository.listProjectSourceRepositories(input.projectId);
 }
 
-// active GitHub Source Repository를 요청 시 읽고 결과를 저장하지 않은 채 반환한다.
+// active GitHub Source Repository를 정적으로 읽고 구조화된 분석 요약만 저장한다.
+// 저장소 코드를 실행하지 않고 고정 revision의 evidence만 분석해 마지막 AI Handoff를 저장합니다.
 export async function analyzeSourceRepository(
   input: AnalyzeSourceRepositoryInput,
   repository: SourceRepositoryRepository,
@@ -440,10 +475,25 @@ export async function analyzeSourceRepository(
     name: sourceRepository.name
   });
 
+  const aiHandoff = analyzeRepositoryEvidence(snapshot);
+  const analyzedAt = new Date();
+  const savedRepository = await repository.saveProjectSourceRepositoryAnalysis({
+    projectId: input.projectId,
+    sourceRepositoryId: sourceRepository.id,
+    repositoryRevision: snapshot.revision,
+    analyzedAt,
+    aiHandoff
+  });
+
+  if (!savedRepository) {
+    throw new SourceRepositoryConflictError("Source repository changed during analysis");
+  }
+
   return {
     sourceRepositoryId: sourceRepository.id,
     repositoryRevision: snapshot.revision,
-    aiHandoff: analyzeRepositoryEvidence(snapshot)
+    analyzedAt: analyzedAt.toISOString(),
+    aiHandoff
   };
 }
 
