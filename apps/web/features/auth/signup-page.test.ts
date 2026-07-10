@@ -6,11 +6,10 @@ import { fileURLToPath } from "node:url";
 const signupPageSource = readAppFile("signup/page.tsx");
 const signupFormSource = readAppFile("signup/signup-form.tsx");
 
-test("signup route keeps the signup form in the minimal shell", () => {
-  assert.match(signupPageSource, /RoutePlaceholder/);
+test("signup route renders the shared authentication shell", () => {
+  assert.match(signupPageSource, /AuthShell/);
   assert.match(signupPageSource, /<SignupForm \/>/);
-  assert.match(signupPageSource, /href: "\/login"/);
-  assert.doesNotMatch(signupPageSource, /authDesignPage|authDesignPanel|authDesignShell/);
+  assert.doesNotMatch(signupPageSource, /RoutePlaceholder/);
 });
 
 test("signup form keeps the authentication contract", () => {

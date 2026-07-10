@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import "@xyflow/react/dist/style.css";
+import "./globals.css";
+import "../components/auth/auth.css";
 import { AuthProvider } from "../components/auth/auth-provider";
 
 export const metadata: Metadata = {

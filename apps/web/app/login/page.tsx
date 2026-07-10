@@ -1,14 +1,20 @@
-import { RoutePlaceholder } from "../../components/runtime/route-placeholder";
+import Link from "next/link";
+import { AuthShell } from "../../components/auth/auth-shell";
 import { LoginForm } from "./login-form";
 
 export default function LoginPage() {
   return (
-    <RoutePlaceholder
-      description="인증 연결부는 유지하고, 새 UI가 다시 연결될 최소 화면만 제공합니다."
-      links={[{ href: "/signup", label: "회원가입" }]}
+    <AuthShell
+      description="계정으로 돌아와 이어서 Practice Architecture를 설계하세요."
+      eyebrow="Welcome back"
+      footer={
+        <p>
+          계정이 없나요? <Link href="/signup">회원가입</Link>
+        </p>
+      }
       title="로그인"
     >
       <LoginForm />
-    </RoutePlaceholder>
+    </AuthShell>
   );
 }

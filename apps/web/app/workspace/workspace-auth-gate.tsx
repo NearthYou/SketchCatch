@@ -10,7 +10,8 @@ export function WorkspaceAuthGate({ children }: { readonly children: ReactNode }
 
   useEffect(() => {
     if (status === "unauthenticated") {
-      router.replace("/login");
+      const returnTo = `${window.location.pathname}${window.location.search}`;
+      router.replace(`/login?returnTo=${encodeURIComponent(returnTo)}`);
     }
   }, [router, status]);
 

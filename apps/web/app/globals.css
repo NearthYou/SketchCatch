@@ -1,0 +1,77 @@
+:root {
+  --color-canvas: #ffffff;
+  --color-ink: #171717;
+  --color-body: #55585f;
+  --color-muted: #777b84;
+  --color-hairline: #f0f0f3;
+  --color-hairline-strong: #dcdee0;
+  --color-surface-soft: #f7f8fa;
+  --color-primary: #000000;
+  --color-on-primary: #ffffff;
+  --color-text-link: #0d74ce;
+  --color-error: #b42318;
+  --color-error-surface: #fff3f2;
+  --color-success: #067647;
+  --color-success-surface: #ecfdf3;
+  --color-warning: #8a4b08;
+  --color-warning-surface: #fff8eb;
+  --font-sans: "Pretendard", "Noto Sans KR", "Inter", "Geist", sans-serif;
+  --radius-control: 8px;
+  --radius-card: 12px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-width: 320px;
+  min-height: 100%;
+  background: var(--color-canvas);
+}
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  letter-spacing: 0;
+  word-break: keep-all;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  letter-spacing: 0;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+a {
+  color: inherit;
+}
+
+button:not(:disabled),
+a[href] {
+  cursor: pointer;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--color-ink);
+  outline-offset: 3px;
+}
+
+::selection {
+  background: #d9ebff;
+  color: var(--color-ink);
+}
