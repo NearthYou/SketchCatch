@@ -15,6 +15,18 @@ const scanCriteriaFormSource = readWorkspaceFile("ReverseEngineeringScanCriteria
 const scanHistoryPanelSource = readWorkspaceFile("ReverseEngineeringScanHistoryPanel.tsx");
 const scanHistoryHookSource = readWorkspaceFile("useReverseEngineeringScanHistory.ts");
 const reverseWorkspaceClientSource = readAppWorkspaceFile("reverse/reverse-workspace-client.tsx");
+const reverseStylesSource = readWorkspaceFile("reverse-engineering.module.css");
+
+test("Reverse Engineering uses its own new UI styles instead of Deployment panel styles", () => {
+  assert.match(panelSource, /reverse-engineering\.module\.css/);
+  assert.match(scanCriteriaFormSource, /reverse-engineering\.module\.css/);
+  assert.match(resultPanelSource, /reverse-engineering\.module\.css/);
+  assert.doesNotMatch(panelSource, /styles\.deploymentPanel/);
+  assert.doesNotMatch(scanCriteriaFormSource, /styles\.deploymentSection/);
+  assert.doesNotMatch(resultPanelSource, /styles\.deploymentSection/);
+  assert.match(reverseStylesSource, /\.primaryButton\s*\{/);
+  assert.match(reverseStylesSource, /background:\s*var\(--reverse-accent\)/);
+});
 
 test("Reverse Engineering panel exposes all grilling resource filters by default", () => {
   assert.match(resourceTypesSource, /REVERSE_ENGINEERING_ALL_RESOURCE_SELECTION = "ALL"/);
