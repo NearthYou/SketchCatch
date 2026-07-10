@@ -4,7 +4,7 @@ import {
 } from "@sketchcatch/types/resource-definitions";
 import type { ResourceArea, ResourceItem } from "@sketchcatch/types";
 
-const size = { width: 62, height: 48 };
+const size = { width: 48, height: 48 };
 const vpcAreaSize = { width: 240, height: 160 };
 const subnetAreaSize = { width: 180, height: 120 };
 const securityGroupAreaSize = subnetAreaSize;

@@ -50,6 +50,17 @@ test("resource icon frames cover the dotted canvas grid", () => {
   );
 });
 
+test("resource labels stay outside the icon-only resize geometry", () => {
+  assert.match(
+    diagramEditorCssSource,
+    /\.resourceNodeIconFrame\s*\{[^}]*max-height:\s*100%;[^}]*max-width:\s*100%;/s
+  );
+  assert.match(
+    diagramEditorCssSource,
+    /\.resourceNodeLabel\s*\{[^}]*left:\s*50%;[^}]*position:\s*absolute;[^}]*top:\s*calc\(100% \+ 4px\);[^}]*transform:\s*translateX\(-50%\);/s
+  );
+});
+
 test("manual resize handles are small hollow squares", () => {
   assert.match(
     diagramEditorCssSource,

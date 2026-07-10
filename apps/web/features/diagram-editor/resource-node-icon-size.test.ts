@@ -15,12 +15,7 @@ test("getResourceNodeIconFrameSize changes smoothly while resizing square resour
   }
 });
 
-test("getResourceNodeIconFrameSize reserves label space below the icon", () => {
-  assert.equal(getResourceNodeIconFrameSize({ width: 112, height: 112 }), 90);
-  assert.equal(getResourceNodeIconFrameSize({ width: 168, height: 96 }), 74);
-});
-
-test("getResourceNodeIconFrameSize fits compact regular and fallback resource nodes", () => {
-  assert.equal(getResourceNodeIconFrameSize({ width: 62, height: 48 }), 26);
-  assert.equal(getResourceNodeIconFrameSize({ width: 28, height: 28 }), 14);
+test("getResourceNodeIconFrameSize uses the full square node when the label is external", () => {
+  assert.equal(getResourceNodeIconFrameSize({ width: 48, height: 48 }), 48);
+  assert.equal(getResourceNodeIconFrameSize({ width: 28, height: 28 }), 28);
 });

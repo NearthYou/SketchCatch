@@ -953,7 +953,7 @@
   height: var(--resource-node-icon-frame-size, 90px);
   justify-content: center;
   margin: 0 auto;
-  max-height: calc(100% - 22px);
+  max-height: 100%;
   max-width: 100%;
   min-height: 0;
   min-width: 0;
@@ -998,13 +998,18 @@
   flex: 0 0 auto;
   font-size: 14px;
   font-weight: 900;
+  left: 50%;
   line-height: 1.15;
   max-width: max(100%, 220px);
   min-height: 1.1em;
   overflow: visible;
   overflow-wrap: anywhere;
+  pointer-events: none;
+  position: absolute;
   text-align: center;
   text-overflow: clip;
+  top: calc(100% + 4px);
+  transform: translateX(-50%);
   white-space: normal;
   width: max-content;
 }

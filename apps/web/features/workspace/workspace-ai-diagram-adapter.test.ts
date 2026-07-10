@@ -135,7 +135,7 @@ test("convertArchitectureJsonToDiagramJson creates board nodes and hides contain
           }
         },
         position: { x: 360, y: 220 },
-        size: { width: 62, height: 48 },
+        size: { width: 48, height: 48 },
         style: {
           borderColor: "#2f6db3",
           textColor: "#172033"
@@ -679,7 +679,7 @@ test("convertArchitectureJsonToDiagramJson uses catalog icon and size for CloudF
     cloudFrontNode?.iconUrl,
     "/Architecture-Service-Icons_07312025/Arch_Networking-Content-Delivery/64/Arch_Amazon-CloudFront_64.svg"
   );
-  assert.deepEqual(cloudFrontNode?.size, { width: 62, height: 48 });
+  assert.deepEqual(cloudFrontNode?.size, { width: 48, height: 48 });
   assert.equal(cloudFrontNode?.parameters?.resourceName, "cdn_site");
 });
 
@@ -702,7 +702,7 @@ test("convertArchitectureJsonToDiagramJson uses fallback size for unknown draft 
   const unknownNode = diagramJson.nodes[0];
 
   assert.equal(unknownNode?.type, "unknown_resource");
-  assert.deepEqual(unknownNode?.size, { width: 28, height: 28 });
+  assert.deepEqual(unknownNode?.size, { width: 48, height: 48 });
 });
 
 test("getDiagramJsonForArchitectureDraft prefers an exact DiagramJson fixture when present", () => {
