@@ -12,7 +12,7 @@ const DEFAULT_TERRAFORM_BLOCK_TYPE: TerraformBlockType = "resource";
 const INDENT_UNIT = "  ";
 export const TERRAFORM_IDENTIFIER_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_-]*$/;
 const TERRAFORM_REFERENCE_PATTERN =
-  /^(?:var|local|each|count|path|terraform)\.[a-zA-Z_][a-zA-Z0-9_-]*$|^module\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+(?:\.[a-zA-Z0-9_-]+)*$|^(?:aws|kubernetes)_[a-zA-Z0-9_]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+(?:\.[a-zA-Z0-9_-]+)*$|^data\.(?:aws|kubernetes)_[a-zA-Z0-9_]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+(?:\.[a-zA-Z0-9_-]+)*$/;
+  /^(?:var|local|each|count|path|terraform)\.[a-zA-Z_][a-zA-Z0-9_-]*$|^module\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+(?:\.[a-zA-Z0-9_-]+)*$|^(?:aws|kubernetes|archive)_[a-zA-Z0-9_]+\.[a-zA-Z0-9_-]+(?:\.[a-zA-Z0-9_-]+)*$|^data\.(?:aws|kubernetes|archive)_[a-zA-Z0-9_]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+(?:\.[a-zA-Z0-9_-]+)*$/;
 
 export class TerraformDiagramValidationError extends Error {
   readonly reason = "invalid_identifier";
@@ -35,7 +35,7 @@ function renderBlock(node: InfrastructureGraphNode): string {
   assertTerraformIdentifier(node.iac.resourceType, "resource type");
   assertTerraformIdentifier(node.iac.resourceName, "resource name");
 
-  const body = Object.entries(node.config).flatMap(([key, value]) =>
+  const body = Object.entries(createRenderableResourceConfig(node)).flatMap(([key, value]) =>
     renderBodyEntry(node.iac.resourceType, key, value, 1)
   );
 
@@ -50,11 +50,58 @@ function renderCompanionBlocks(
   node: InfrastructureGraphNode,
   graph: InfrastructureGraph
 ): string[] {
-  if (!shouldRenderS3PublicAccessBlock(node, graph)) {
-    return [];
+  const blocks: string[] = [];
+
+  if (shouldRenderS3PublicAccessBlock(node, graph)) {
+    blocks.push(renderS3PublicAccessBlock(node));
   }
 
-  return [renderS3PublicAccessBlock(node)];
+  if (hasInlineLambdaSource(node)) {
+    blocks.push(renderInlineLambdaArchive(node));
+  }
+
+  return blocks;
+}
+
+function createRenderableResourceConfig(
+  node: InfrastructureGraphNode
+): Record<string, unknown> {
+  const config = { ...node.config };
+
+  if (!hasInlineLambdaSource(node)) {
+    return config;
+  }
+
+  delete config["inlineSource"];
+  const archiveAddress = `data.archive_file.${node.iac.resourceName}_bundle`;
+  config["filename"] = `${archiveAddress}.output_path`;
+  config["sourceCodeHash"] = `${archiveAddress}.output_base64sha256`;
+  return config;
+}
+
+function hasInlineLambdaSource(node: InfrastructureGraphNode): boolean {
+  return node.iac.resourceType === "aws_lambda_function" &&
+    typeof node.config["inlineSource"] === "string" &&
+    node.config["inlineSource"].length > 0;
+}
+
+function renderInlineLambdaArchive(node: InfrastructureGraphNode): string {
+  const source = node.config["inlineSource"];
+
+  if (typeof source !== "string") {
+    return "";
+  }
+
+  const archiveName = `${node.iac.resourceName}_bundle`;
+
+  return [
+    `data "archive_file" "${archiveName}" {`,
+    `${INDENT_UNIT}type = "zip"`,
+    `${INDENT_UNIT}source_content = ${JSON.stringify(source)}`,
+    `${INDENT_UNIT}source_content_filename = "index.mjs"`,
+    `${INDENT_UNIT}output_path = "\${path.module}/${archiveName}.zip"`,
+    "}"
+  ].join("\n");
 }
 
 function shouldRenderS3PublicAccessBlock(

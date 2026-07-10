@@ -22,9 +22,13 @@ void main();
 async function main(): Promise<void> {
   const validationRoot = await mkdtemp(join(tmpdir(), "sketchcatch-template-validation-"));
   const results: TemplateTerraformValidationResult[] = [];
+  const requestedTemplateIds = process.argv.slice(2).filter((value) => value !== "--");
+  const templateIds = requestedTemplateIds.length > 0
+    ? requestedTemplateIds.map(parseTemplateId)
+    : TEMPLATE_IDS;
 
   try {
-    for (const templateId of TEMPLATE_IDS) {
+    for (const templateId of templateIds) {
       const startedAt = Date.now();
       const workdir = join(validationRoot, templateId);
       const files = createTemplateTerraformValidationFiles(templateId, {
@@ -75,4 +79,14 @@ async function main(): Promise<void> {
   if (results.some((result) => result.initExitCode !== 0 || result.validateExitCode !== 0)) {
     process.exitCode = 1;
   }
+}
+
+function parseTemplateId(value: string): TemplateId {
+  const templateId = TEMPLATE_IDS.find((candidate) => candidate === value);
+
+  if (!templateId) {
+    throw new Error(`Unknown AWS template ID: ${value}`);
+  }
+
+  return templateId;
 }

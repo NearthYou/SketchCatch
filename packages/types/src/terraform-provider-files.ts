@@ -10,6 +10,11 @@ const KUBERNETES_REQUIRED_PROVIDER = `    kubernetes = {
       version = "~> 2.0"
     }`;
 
+const ARCHIVE_REQUIRED_PROVIDER = `    archive = {
+      source  = "hashicorp/archive"
+      version = "~> 2.0"
+    }`;
+
 export function createTerraformProviderFiles(
   diagramJson: DiagramJson
 ): readonly TerraformSyncFileInput[] {
@@ -18,6 +23,10 @@ export function createTerraformProviderFiles(
   const usesKubernetes = [...resourceTypes].some((resourceType) =>
     resourceType.startsWith("kubernetes_")
   );
+  const usesArchive = diagramJson.nodes.some((node) =>
+    getTerraformResourceType(node) === "aws_lambda_function" &&
+    typeof node.parameters?.values?.inlineSource === "string"
+  );
 
   if (!usesAws && !usesKubernetes) {
     return [];
@@ -25,6 +34,7 @@ export function createTerraformProviderFiles(
 
   const requiredProviders = [
     ...(usesAws ? [AWS_REQUIRED_PROVIDER] : []),
+    ...(usesArchive ? [ARCHIVE_REQUIRED_PROVIDER] : []),
     ...(usesKubernetes ? [KUBERNETES_REQUIRED_PROVIDER] : [])
   ].join("\n");
   const eksCluster = usesKubernetes

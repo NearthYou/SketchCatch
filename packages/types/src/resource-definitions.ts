@@ -555,6 +555,13 @@ export const resourceDefinitions = [
     terraformSync: true
   }),
   createAwsResourceDefinition({
+    id: "aws-api-gateway-authorizer",
+    resourceType: "API_GATEWAY_AUTHORIZER",
+    terraformPreview: true,
+    terraformResourceType: "aws_api_gateway_authorizer",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
     id: "aws-api-gateway-websocket-api",
     resourceType: "API_GATEWAY_WEBSOCKET_API",
     terraformPreview: true,

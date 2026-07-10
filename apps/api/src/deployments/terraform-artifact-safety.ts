@@ -3,10 +3,16 @@ import type { DeploymentLiveProfile } from "@sketchcatch/types";
 import { getLiveApplySupportedResourceTypes } from "./deployment-plan-summary.js";
 
 const allowedTopLevelBlocks = new Set(["terraform", "provider", "resource", "data", "variable", "output", "locals"]);
-const liveApplySupportedDataSourceTypes = new Set(["aws_ami"]);
+const liveApplySupportedDataSourceTypes = new Set([
+  "archive_file",
+  "aws_ami",
+  "aws_eks_cluster_auth"
+]);
 const allowedProviderSources = new Set([
   "hashicorp/aws",
   "registry.terraform.io/hashicorp/aws",
+  "hashicorp/archive",
+  "registry.terraform.io/hashicorp/archive",
   "hashicorp/kubernetes",
   "registry.terraform.io/hashicorp/kubernetes"
 ]);
@@ -226,6 +232,7 @@ function validateRequiredProviderAssignment(
 
   if (
     providerName.value !== "aws" &&
+    providerName.value !== "archive" &&
     providerName.value !== "kubernetes" &&
     providerName.value !== "source" &&
     providerName.value !== "version"

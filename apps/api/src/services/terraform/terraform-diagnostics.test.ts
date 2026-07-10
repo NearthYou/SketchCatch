@@ -120,6 +120,22 @@ test("keeps unbalanced provider blocks as blocking diagnostics", () => {
   assert.equal(diagnostics[0]?.severity, "error");
 });
 
+test("accepts Terraform required provider declarations used by deployment artifacts", () => {
+  const diagnostics = createTerraformDiagnostics(`terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+}`);
+
+  assert.deepEqual(
+    diagnostics.filter((diagnostic) => diagnostic.severity === "error"),
+    []
+  );
+});
+
 test("detects unexpected tokens after a closed block", () => {
   const diagnostics = createTerraformDiagnostics(`resource "aws_instance" "web" {
   ami = "ami-12345678"

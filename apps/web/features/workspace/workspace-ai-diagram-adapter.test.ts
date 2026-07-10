@@ -6,7 +6,8 @@ import type { AiArchitectureDraftResult, ArchitectureJson, DiagramJson, DiagramN
 import {
   convertArchitectureJsonToDiagramJson,
   convertDiagramJsonToArchitectureJson,
-  getDiagramJsonForArchitectureDraft
+  getDiagramJsonForArchitectureDraft,
+  normalizeDiagramJsonConventions
 } from "./workspace-ai-diagram-adapter";
 import { isAreaNode } from "../diagram-editor/area-nodes";
 
@@ -20,6 +21,56 @@ test("workspace AI diagram adapter uses shared resource definitions for Terrafor
   assert.doesNotMatch(source, /TERRAFORM_RESOURCE_TYPE_TO_RESOURCE/);
   assert.match(source, /getDefaultResourceDefinitionByResourceType/);
   assert.match(source, /getResourceDefinitionByTerraform/);
+});
+
+test("normalizeDiagramJsonConventions rewrites arbitrary and embedded Terraform references", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      makeDiagramNode({
+        id: "bucket",
+        label: "S3 Bucket",
+        type: "aws_s3_bucket",
+        parameters: {
+          fileName: "main.tf",
+          resourceName: "sketchcatch_bucket_workspace",
+          resourceType: "aws_s3_bucket",
+          terraformBlockType: "resource",
+          values: {}
+        }
+      }),
+      makeDiagramNode({
+        id: "distribution",
+        label: "CloudFront Distribution",
+        type: "aws_cloudfront_distribution",
+        parameters: {
+          fileName: "main.tf",
+          resourceName: "sketchcatch_distribution_workspace",
+          resourceType: "aws_cloudfront_distribution",
+          terraformBlockType: "resource",
+          values: {
+            domainName: "aws_s3_bucket.sketchcatch_bucket_workspace.bucket_regional_domain_name",
+            policy: "{\"Resource\":\"${aws_s3_bucket.sketchcatch_bucket_workspace.arn}/*\"}"
+          }
+        }
+      })
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  const normalized = normalizeDiagramJsonConventions(diagramJson);
+  const bucket = normalized.nodes.find((node) => node.id === "bucket");
+  const distribution = normalized.nodes.find((node) => node.id === "distribution");
+
+  assert.equal(bucket?.parameters?.resourceName, "bucket_sketchcatch_workspace");
+  assert.equal(
+    distribution?.parameters?.values.domainName,
+    "aws_s3_bucket.bucket_sketchcatch_workspace.bucket_regional_domain_name"
+  );
+  assert.equal(
+    distribution?.parameters?.values.policy,
+    "{\"Resource\":\"${aws_s3_bucket.bucket_sketchcatch_workspace.arn}/*\"}"
+  );
 });
 
 test("convertArchitectureJsonToDiagramJson preserves authored node border style", () => {

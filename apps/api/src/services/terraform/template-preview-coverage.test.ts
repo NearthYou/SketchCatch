@@ -28,6 +28,21 @@ test("all AWS templates generate Terraform Preview from their shared definitions
 
     if (template.id === "minimal-serverless-api") {
       assert.match(terraformCode, /parent_id = aws_api_gateway_rest_api\..*\.root_resource_id/);
+      assert.match(terraformCode, /data "archive_file"/);
+      assert.match(terraformCode, /filename = data\.archive_file\..*\.output_path/);
+      assert.match(
+        terraformCode,
+        /resource "aws_api_gateway_deployment"[\s\S]*depends_on = \[[\s\S]*aws_api_gateway_integration\./
+      );
+    }
+
+    if (template.id === "full-serverless-web-app") {
+      assert.match(terraformCode, /data "archive_file"/);
+      assert.match(terraformCode, /filename = data\.archive_file\..*\.output_path/);
+      assert.match(
+        terraformCode,
+        /resource "aws_api_gateway_deployment"[\s\S]*depends_on = \[[\s\S]*aws_api_gateway_integration\./
+      );
     }
 
     if (template.id === "three-tier-web-app") {
@@ -45,6 +60,17 @@ test("all AWS templates generate Terraform Preview from their shared definitions
       assert.match(
         terraformCode,
         /resource "kubernetes_service"[\s\S]*selector = \{[\s\S]*app = "web"/
+      );
+      assert.match(
+        terraformCode,
+        /resource "aws_eks_cluster"[\s\S]*depends_on = \[[\s\S]*aws_iam_role_policy_attachment\./
+      );
+    }
+
+    if (template.id === "ecs-fargate-container-app") {
+      assert.match(
+        terraformCode,
+        /resource "aws_ecs_service"[\s\S]*depends_on = \[[\s\S]*aws_lb_listener\./
       );
     }
   }
