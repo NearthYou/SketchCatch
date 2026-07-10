@@ -106,6 +106,8 @@ test("convertArchitectureJsonToDiagramJson creates board nodes and hides contain
           terraformBlockType: "resource",
           values: {
             cidrBlock: "10.0.0.0/16",
+            enableDnsSupport: true,
+            instanceTenancy: "default",
             terraformResourceName: "main"
           }
         },
@@ -128,6 +130,7 @@ test("convertArchitectureJsonToDiagramJson creates board nodes and hides contain
           resourceType: "aws_instance",
           terraformBlockType: "resource",
           values: {
+            associatePublicIpAddress: false,
             instanceType: "t3.micro"
           }
         },
