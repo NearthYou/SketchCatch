@@ -48,35 +48,6 @@ Short English-only working log for the current agent context. Older records are 
   - Q Business retrieval usage still consumes the existing anonymous application's capacity, and the index must be re-ingested after pattern document changes.
   - The canonical registry currently covers the six verified pattern families; new families require a reviewed pattern document and canonical topology before activation.
 
-### 2026-07-10 - DESIGN.md cost dashboard prototype
-
-- Goal: Explore `/dashboard/costs` UI directions without changing the service implementation or comparing estimated and actual costs.
-- Completed:
-  - Added a standalone HTML prototype with three switchable layouts: operations tabs, project workspace, and cost operations board.
-  - Applied DESIGN.md typography, color, spacing, control, border, and responsive conventions.
-  - Kept estimate and actual usage as separate decision views rather than a comparison metric.
-- Verification:
-  - Playwright verified all three variants at 1440px and 375px without horizontal overflow.
-  - Playwright verified keyboard variant switching and zero console errors or warnings.
-- Risk:
-  - This is a disposable prototype under `output/prototypes`; no `/dashboard/costs` application code was changed.
-
-### 2026-07-10 - Prevent duplicate dashboard logout requests
-
-- Goal: Apply the selected review comment so repeated logout clicks cannot start duplicate requests.
-- Completed:
-  - Added local `isPending` state to the dashboard account footer.
-  - Disabled logout while auth is loading or the current logout request is pending.
-  - Reset pending state in `finally` for both success and failure paths.
-  - Added focused regression coverage for the pending-state flow.
-- Verification:
-  - `pnpm --filter @sketchcatch/web exec tsx features/dashboard/design-dashboard.test.ts` passed.
-  - `pnpm lint` passed.
-  - `pnpm typecheck` passed.
-  - `pnpm build` passed.
-- Risk:
-  - GitHub CLI is unavailable in this environment, so the PR review thread was not replied to or resolved.
-
 ### 2026-07-10 - Signup password error highlight fix
 ### 2026-07-10 - Harden ECS worker dispatch after merged PR review
 
@@ -207,3 +178,20 @@ Short English-only working log for the current agent context. Older records are 
 - Risk:
   - Creator-mode `ChatSync` is not yet callable from the SketchCatch backend. IAM Identity Center applications require identity-aware SigV4 credentials through trusted identity propagation; the current backend uses ordinary ECS task credentials and an optional `userId` only.
   - The application must not replace `AMAZON_Q_APPLICATION_ID` until a compatible OIDC identity token, TIP credential provider, and end-to-end Creator-mode call are implemented and verified.
+
+### 2026-07-10 - Bound Architecture Draft latency and remove false success fallbacks
+- Goal: Prevent long Architecture Draft requests from ending as generic HTTP 500 responses while preserving verified Amazon Q output.
+- Completed:
+  - Replaced sequential per-pattern Q Business calls with one retrieval-mode `ChatSync` request using an OR attribute filter.
+  - Required every selected canonical pattern document ID to be cited before materializing the deterministic plan.
+  - Added one-hour successful citation caching and in-flight request coalescing; provider failures now return an explicit `503 service_unavailable` instead of a template preview.
+  - Raised Nginx API proxy and ECS ALB idle timeouts to 120 seconds so variable Q latency is not converted into a gateway failure at the previous 60-second boundary.
+  - Added the shared `service_unavailable` API contract and Korean client messaging.
+- Verification:
+  - Live Q retrieval cited all six indexed pattern documents in one request in 11.9 seconds.
+  - Live end-to-end Architecture Draft returned `amazon_q` previews; a repeated cached request completed in 5.3 seconds.
+  - Focused Q tests (9), Q quality tests (2), Architecture Draft tests (35), and the HTTP 503 route test passed.
+  - `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, `terraform fmt -check infra/aws/terraform/alb.tf`, and `git diff --check` passed.
+- Risk:
+  - Uncached Q Business latency remains externally variable (observed roughly 11-47 seconds), but only one Q request is sent and the 120-second transport budget prevents the prior 60-second cutoff.
+  - The citation cache is process-local; a fresh API process performs one verified Q retrieval before subsequent requests become fast.

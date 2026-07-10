@@ -4,25 +4,25 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Currently Verified
 
-- Current branch: `fix/sw/302-ecs-worker-dispatch-safety`.
+- Current branch: `feat/ck/287-ai-diagram`.
 - Active workstream: `ECS-MIGRATION-000`.
-- Phase 5 PR #296 is merged; issue #302 tracks valid post-merge review hardening.
-- `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check` passed during this session.
-- No live AWS commands were run.
+- Architecture Draft uses one Q Business retrieval-mode request for all selected indexed patterns and validates every expected document citation.
+- `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, focused AI tests, Terraform formatting, and `git diff --check` passed.
+- Live Q retrieval and Architecture Draft generation were exercised without infrastructure mutation.
 
 ## Changes This Session
 
-- Missing ECS RunTask task ARNs now fail dispatch.
-- Stale ECS cancellation paths terminalize the active deployment job.
-- ECS verification/stop API failures return 503 while preserving the active lock for safe retry.
-- Worker JSON config type boundaries and deployment/IAM guidance were tightened.
+- Removed sequential per-pattern Q requests and replaced them with one OR-filtered request that must cite all selected pattern documents.
+- Added one-hour verified-citation caching and in-flight request coalescing.
+- Q generation failures now surface as `503 service_unavailable`; they no longer return a template draft as if generation succeeded.
+- Nginx and ECS ALB request budgets are 120 seconds for externally variable Q latency.
 
 ## Broken Or Unverified
 
-- No tests were added or run per user direction.
-- Worker runtime, task definition, roles, and worker security group are not implemented.
-- Keep production `DEPLOYMENT_WORKER_MODE=in_process` until those Phase 6 resources exist.
+- Uncached Q Business latency is variable; observed retrieval latency ranged from about 11 to 47 seconds.
+- Citation caching is process-local, so a fresh API process performs one Q request before cached requests become fast.
+- The separate ECS migration workstream remains in progress and is not changed by this Architecture Draft fix.
 
 ## Best Next Action
 
-- Run remaining static checks, publish the issue #302 fix PR, link it from PR #296 review threads, and resolve the addressed threads.
+- Deploy the API/Nginx/ALB changes, then measure the production `/api/ai/architecture-draft` first and repeated request latency from the browser.
