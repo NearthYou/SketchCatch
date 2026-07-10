@@ -66,6 +66,7 @@ const resourceTypeLabels: Record<ResourceType, string> = {
   XRAY_GROUP: "X-Ray Group",
   XRAY_SAMPLING_RULE: "X-Ray Sampling Rule",
   API_GATEWAY_REST_API: "API Gateway REST API",
+  API_GATEWAY_AUTHORIZER: "API Gateway Authorizer",
   API_GATEWAY_WEBSOCKET_API: "API Gateway WebSocket API",
   API_GATEWAY_RESOURCE: "API Gateway Resource",
   API_GATEWAY_METHOD: "API Gateway Method",
