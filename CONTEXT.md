@@ -28,6 +28,10 @@ _Avoid_: User Redis, cache resource, cloud cache node
 A reusable starter Practice Architecture that a user can choose instead of starting from a blank prompt.
 _Avoid_: Preset, sample, example
 
+**TemplateDefinition**:
+The internal definition of a Template's Resources, relationships, IaC identities, default parameters, and deployment conditions. It is the shared source used to produce the Architecture Board shape and deployable IaC path.
+_Avoid_: UI-only template data, diagram preset
+
 **Template Selection**:
 The gg-owned decision that chooses exactly one repository-level Template from Repository Analysis, or explicitly returns that no Template was selected when the repository does not match a supported Template. The AI handoff receives the selected Template rather than a list of competing Template candidates.
 _Avoid_: Template recommendation list, AI template choice
