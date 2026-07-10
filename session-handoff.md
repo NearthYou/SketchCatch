@@ -14,6 +14,8 @@ Use this file only for compact continuation context. Write it in English.
 ## Changes This Session
 
 - Added DeploymentJob worker orchestration with RUNNING status and requester access-context validation.
+- Worker cleanup now explicitly terminates the one-off process with its final exit code.
+- Unsupported runtime operation values fail with a clear error and a FAILED job.
 - Reused existing init/plan/apply/destroy-plan/destroy services.
 - Added masked SUCCEEDED/FAILED/CANCELLED job finalization.
 - Added the worker process entrypoint and same-image Docker command override support.
@@ -28,4 +30,4 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Best Next Action
 
-- Publish issue #306 as a PR to `dev`, wait for automated review, address actionable feedback, and merge when checks are acceptable.
+- Add the worker-specific ECS task definition, IAM roles, security group, and smoke evidence before enabling ECS worker mode in production.

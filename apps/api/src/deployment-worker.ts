@@ -30,16 +30,21 @@ async function runDeploymentWorker(): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  let exitCode = 0;
+
   try {
     await runDeploymentWorker();
   } catch (error) {
     reportWorkerFailure(error);
+    exitCode = 1;
   } finally {
     try {
       await closeDatabaseClient();
     } catch (error) {
       reportWorkerFailure(error);
+      exitCode = 1;
     }
+    process.exit(exitCode);
   }
 }
 

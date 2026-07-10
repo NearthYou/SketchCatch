@@ -191,6 +191,8 @@ export function createDeploymentWorkerOperationRunner(
           deploymentRepository
         );
         break;
+      default:
+        throw new Error(`Unsupported deployment worker operation: ${String(input.operation)}`);
     }
 
     return {
