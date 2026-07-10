@@ -238,7 +238,7 @@
 ### Task 7: Live Chrome QA, cleanup, and gg verification record
 
 **Files:**
-- Create after live runs: `docs/gg/feat-infrastructure-template/010_AWS템플릿배포검증기록_gg.md`
+- Create after live runs: `docs/gg/feat-infrastructure-template/011_AWS템플릿배포검증기록_gg.md`
 - Modify: `docs/gg/feat-infrastructure-template/007_AWS템플릿패턴_gg.md` with verified status and measured durations
 
 - [ ] **Step 1: Run repository checks before live work**
