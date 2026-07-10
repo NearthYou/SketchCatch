@@ -36,6 +36,17 @@ test("diagram node view renders icon design nodes with resource icon tile layout
   );
 });
 
+test("resource node shells reset the base minimum height to match explicit geometry", () => {
+  assert.match(
+    diagramEditorCssSource,
+    /\.nodeShell\s*\{[^}]*min-height:\s*72px;/s
+  );
+  assert.match(
+    diagramEditorCssSource,
+    /\.nodeShellResource\s*\{[^}]*min-height:\s*0;/s
+  );
+});
+
 test("diagram node view renders resource icon labels in bold", () => {
   assert.match(
     diagramEditorCssSource,
