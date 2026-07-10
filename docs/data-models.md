@@ -1758,6 +1758,61 @@ GitHub App installation repository 목록은 DB에 저장하지 않습니다. ca
 
 Git/CI/CD handoff 생성 요청은 `sourceRepositoryId`만 받습니다. repository owner/name/provider/default branch는 DB의 active source repository에서 읽습니다. 이 원칙은 클라이언트가 임의 GitHub repository identity를 body로 보내는 위험을 막기 위한 서비스 계약입니다.
 
+### Repository Analysis와 AI Handoff
+
+Repository Analysis는 active GitHub Source Repository의 최신 default branch를 요청 시점에 정적으로 읽는 비영속 분석이다. repository tree, `package.json`, lockfile, `Dockerfile`, framework config, `README`만 evidence로 사용하며 Repository 코드를 실행하지 않는다. 분석 결과와 원본 파일 내용은 RDS/S3에 저장하지 않는다.
+
+```ts
+type RepositoryEvidenceKind =
+  | "repository_tree"
+  | "package_json"
+  | "lockfile"
+  | "dockerfile"
+  | "framework_config"
+  | "readme";
+
+type RepositoryApplicationUnit = {
+  id: string;
+  rootPath: string;
+  kind: "frontend" | "backend" | "fullstack" | "unknown";
+  frameworks: string[];
+  evidencePaths: string[];
+};
+
+type RepositoryAnalysisEvidence = {
+  kind: RepositoryEvidenceKind;
+  path: string;
+  applicationUnitId: string | null;
+  signals: string[];
+};
+
+type RepositoryAnalysisAiHandoff =
+  | {
+      status: "template_selected";
+      templateId: TemplateId;
+      applicationUnits: RepositoryApplicationUnit[];
+      evidence: RepositoryAnalysisEvidence[];
+      missingEvidence: RepositoryEvidenceKind[];
+      selectionReasons: string[];
+    }
+  | {
+      status: "template_selection_failed";
+      templateId: null;
+      applicationUnits: RepositoryApplicationUnit[];
+      evidence: RepositoryAnalysisEvidence[];
+      missingEvidence: RepositoryEvidenceKind[];
+      mismatchReasons: string[];
+    };
+
+type AnalyzeSourceRepositoryResponse = {
+  sourceRepositoryId: string;
+  repositoryRevision: string;
+  aiHandoff: RepositoryAnalysisAiHandoff;
+};
+```
+
+monorepo는 하나의 Repository Analysis 안에 여러 Application Unit을 둔다. Template Selection은 저장소 전체에 대해 한 번만 수행한다. 성공 응답은 선택한 Template 하나와 근거를 포함하고, 지원 패턴과 맞지 않으면 `templateId: null`과 mismatch 이유를 반환한다. 후보 목록과 confidence 점수는 계약에 포함하지 않는다.
+
 ### Git/CI/CD 자동 배포 handoff 확장
 
 `GitCicdHandoff`는 하나의 record로 유지하되, merge 후 자동 배포를 위해 infra/app/destroy workflow 상태를 분리해 저장합니다. 기존 단일 `pipelineRunUrl`은 summary 링크로 유지하고, 새 UI와 polling은 아래 상세 필드를 함께 사용합니다.

@@ -1,4 +1,6 @@
 // allow: SIZE_OK - shared package root contract; splitting needs a separate repo-wide migration.
+import type { TemplateId } from "./template-definitions.js";
+
 export type IsoDateTimeString = string;
 
 export type ApiErrorCode =
@@ -520,6 +522,58 @@ export type ConnectGitHubSourceRepositoryRequest = {
 
 export type SourceRepositoryResponse = {
   repository: SourceRepository;
+};
+
+export const REPOSITORY_EVIDENCE_KINDS = [
+  "repository_tree",
+  "package_json",
+  "lockfile",
+  "dockerfile",
+  "framework_config",
+  "readme"
+] as const;
+
+export type RepositoryEvidenceKind = (typeof REPOSITORY_EVIDENCE_KINDS)[number];
+
+export type RepositoryApplicationUnitKind = "frontend" | "backend" | "fullstack" | "unknown";
+
+export type RepositoryAnalysisEvidence = {
+  readonly kind: RepositoryEvidenceKind;
+  readonly path: string;
+  readonly applicationUnitId: string | null;
+  readonly signals: readonly string[];
+};
+
+export type RepositoryApplicationUnit = {
+  readonly id: string;
+  readonly rootPath: string;
+  readonly kind: RepositoryApplicationUnitKind;
+  readonly frameworks: readonly string[];
+  readonly evidencePaths: readonly string[];
+};
+
+type RepositoryAnalysisAiHandoffBase = {
+  readonly applicationUnits: readonly RepositoryApplicationUnit[];
+  readonly evidence: readonly RepositoryAnalysisEvidence[];
+  readonly missingEvidence: readonly RepositoryEvidenceKind[];
+};
+
+export type RepositoryAnalysisAiHandoff =
+  | (RepositoryAnalysisAiHandoffBase & {
+      readonly status: "template_selected";
+      readonly templateId: TemplateId;
+      readonly selectionReasons: readonly string[];
+    })
+  | (RepositoryAnalysisAiHandoffBase & {
+      readonly status: "template_selection_failed";
+      readonly templateId: null;
+      readonly mismatchReasons: readonly string[];
+    });
+
+export type AnalyzeSourceRepositoryResponse = {
+  readonly sourceRepositoryId: string;
+  readonly repositoryRevision: string;
+  readonly aiHandoff: RepositoryAnalysisAiHandoff;
 };
 
 export type GitCicdHandoffStatus =
