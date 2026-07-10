@@ -39,6 +39,16 @@ test("mobile dashboard keeps the logout action in the brand header", () => {
   );
 });
 
+test("dashboard logout disables repeated requests while logout is pending", () => {
+  assert.match(
+    accountFooterSource,
+    /const \[isPending, setIsPending\] = useState\(false\)/
+  );
+  assert.match(accountFooterSource, /status === "loading" \|\| isPending/);
+  assert.match(accountFooterSource, /setIsPending\(true\)[\s\S]*await logout\(\)/);
+  assert.match(accountFooterSource, /finally\s*{\s*setIsPending\(false\)/);
+});
+
 function readLocalFile(relativePath: string): string {
   return readFileSync(fileURLToPath(new URL(relativePath, import.meta.url)), "utf8");
 }

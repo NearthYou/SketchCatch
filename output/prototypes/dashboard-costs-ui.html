@@ -1,0 +1,643 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="data:," />
+    <title>SketchCatch 비용관리 UI Prototype</title>
+    <style>
+      :root {
+        --canvas: #ffffff;
+        --canvas-soft: #fafafa;
+        --surface: #ffffff;
+        --surface-strong: #f0f0f3;
+        --ink: #171717;
+        --body: #60646c;
+        --muted: #999999;
+        --line: #f0f0f3;
+        --line-strong: #dcdee0;
+        --primary: #000000;
+        --primary-active: #1a1a1a;
+        --link: #0d74ce;
+        --success: #16803a;
+        --success-bg: #effaf3;
+        --warning: #9a5b00;
+        --warning-bg: #fff7e8;
+        --danger: #9f1d23;
+        --danger-bg: #fff1f2;
+        --font: Pretendard, "Noto Sans KR", Inter, Arial, sans-serif;
+        --sidebar: 232px;
+      }
+
+      * { box-sizing: border-box; }
+
+      html { background: var(--canvas); }
+
+      body {
+        margin: 0;
+        color: var(--ink);
+        background: var(--canvas);
+        font-family: var(--font);
+        letter-spacing: 0;
+      }
+
+      button, select, input { font: inherit; letter-spacing: 0; }
+      button { cursor: pointer; }
+      button:focus-visible, select:focus-visible, input:focus-visible {
+        outline: 2px solid var(--ink);
+        outline-offset: 2px;
+      }
+
+      .icon {
+        width: 18px;
+        height: 18px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.9;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        flex: 0 0 auto;
+      }
+
+      .app-shell {
+        display: grid;
+        grid-template-columns: var(--sidebar) minmax(0, 1fr);
+        min-height: 100vh;
+      }
+
+      .sidebar {
+        position: sticky;
+        top: 0;
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+        gap: 28px;
+        padding: 28px 18px 20px;
+        border-right: 1px solid var(--line);
+        background: var(--canvas);
+      }
+
+      .brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        color: var(--ink);
+        font-size: 22px;
+        font-weight: 700;
+        line-height: 1;
+      }
+
+      .brand-mark {
+        display: grid;
+        place-items: center;
+        width: 28px;
+        height: 28px;
+        border: 1px solid var(--ink);
+        border-radius: 7px;
+      }
+
+      .nav { display: grid; gap: 4px; }
+
+      .nav-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-height: 42px;
+        padding: 0 12px;
+        border-radius: 8px;
+        color: var(--body);
+        font-size: 14px;
+        font-weight: 650;
+        text-decoration: none;
+      }
+
+      .nav-item.active { background: var(--surface-strong); color: var(--ink); }
+
+      .sidebar-account {
+        margin-top: auto;
+        display: grid;
+        grid-template-columns: 34px minmax(0, 1fr);
+        gap: 10px;
+        align-items: center;
+        padding-top: 18px;
+        border-top: 1px solid var(--line);
+      }
+
+      .avatar {
+        display: grid;
+        place-items: center;
+        width: 34px;
+        height: 34px;
+        border-radius: 8px;
+        background: var(--surface-strong);
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .account-copy { min-width: 0; }
+      .account-copy strong, .account-copy span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .account-copy strong { font-size: 13px; }
+      .account-copy span { margin-top: 3px; color: var(--muted); font-size: 11px; }
+
+      .main { min-width: 0; padding: 30px 38px 110px; }
+      .content { width: min(1180px, 100%); margin: 0 auto; }
+
+      .page-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 24px;
+        padding-bottom: 24px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .eyebrow {
+        margin: 0 0 8px;
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+      }
+
+      h1 { margin: 0; font-size: 30px; line-height: 1.18; }
+      .header-copy { margin: 10px 0 0; color: var(--body); font-size: 14px; line-height: 1.55; }
+
+      .header-actions { display: flex; align-items: center; gap: 8px; }
+
+      .prototype-chip {
+        padding: 6px 9px;
+        border-radius: 4px;
+        background: var(--warning-bg);
+        color: var(--warning);
+        font-size: 11px;
+        font-weight: 700;
+      }
+
+      .icon-button, .secondary-button, .primary-button {
+        min-height: 40px;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      .icon-button {
+        width: 40px;
+        display: grid;
+        place-items: center;
+        border: 1px solid var(--line-strong);
+        background: var(--surface);
+        color: var(--ink);
+      }
+
+      .secondary-button, .primary-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 0 14px;
+      }
+
+      .secondary-button { border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink); }
+      .primary-button { border: 1px solid var(--primary); background: var(--primary); color: #fff; }
+      .primary-button:hover { background: var(--primary-active); }
+
+      .mode-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        margin-top: 24px;
+      }
+
+      .segmented {
+        display: inline-grid;
+        grid-auto-flow: column;
+        gap: 2px;
+        padding: 3px;
+        border-radius: 8px;
+        background: var(--surface-strong);
+      }
+
+      .segmented button {
+        min-height: 36px;
+        padding: 0 13px;
+        border: 0;
+        border-radius: 6px;
+        background: transparent;
+        color: var(--body);
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      .segmented button.active { background: var(--surface); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+
+      .context-note { color: var(--muted); font-size: 12px; }
+
+      .connection-band {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        gap: 12px;
+        align-items: center;
+        margin-top: 18px;
+        padding: 13px 14px;
+        border: 1px solid #cde7d4;
+        border-radius: 8px;
+        background: var(--success-bg);
+      }
+
+      .connection-icon {
+        display: grid;
+        place-items: center;
+        width: 34px;
+        height: 34px;
+        border-radius: 8px;
+        color: var(--success);
+        background: #fff;
+      }
+
+      .connection-copy strong { display: block; font-size: 13px; }
+      .connection-copy span { display: block; margin-top: 3px; color: var(--success); font-size: 12px; }
+      .connection-meta { color: var(--success); font-size: 12px; font-weight: 700; }
+
+      .metric-strip {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        margin-top: 22px;
+        border-block: 1px solid var(--line);
+      }
+
+      .metric {
+        min-width: 0;
+        padding: 20px 18px;
+        border-right: 1px solid var(--line);
+      }
+
+      .metric:first-child { padding-left: 0; }
+      .metric:last-child { border-right: 0; }
+      .metric span { display: block; color: var(--muted); font-size: 12px; font-weight: 600; }
+      .metric strong { display: block; margin-top: 8px; font-size: 24px; line-height: 1; }
+      .metric small { display: block; margin-top: 8px; color: var(--body); font-size: 11px; }
+
+      .grid-2 { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(280px, .7fr); gap: 22px; margin-top: 24px; }
+      .grid-even { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; margin-top: 24px; }
+
+      .panel {
+        min-width: 0;
+        border: 1px solid var(--line-strong);
+        border-radius: 8px;
+        background: var(--surface);
+      }
+
+      .panel-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 18px 18px 14px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .panel-header h2 { margin: 0; font-size: 16px; line-height: 1.3; }
+      .panel-header p { margin: 5px 0 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
+
+      .field-row { display: flex; gap: 8px; align-items: center; }
+      select, input {
+        min-height: 38px;
+        padding: 0 10px;
+        border: 1px solid var(--line-strong);
+        border-radius: 8px;
+        background: var(--surface);
+        color: var(--ink);
+        font-size: 12px;
+      }
+
+      .chart-wrap { padding: 18px; }
+      .chart {
+        position: relative;
+        height: 230px;
+        border-bottom: 1px solid var(--line-strong);
+        background-image: linear-gradient(to bottom, transparent 24%, var(--line) 25%, transparent 26%, transparent 49%, var(--line) 50%, transparent 51%, transparent 74%, var(--line) 75%, transparent 76%);
+      }
+
+      .chart svg { width: 100%; height: 100%; overflow: visible; }
+      .chart-labels { display: flex; justify-content: space-between; padding-top: 10px; color: var(--muted); font-size: 10px; }
+
+      .list { display: grid; }
+      .list-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 16px;
+        align-items: center;
+        min-height: 64px;
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--line);
+      }
+      .list-row:last-child { border-bottom: 0; }
+      .list-main { min-width: 0; }
+      .list-main strong { display: block; font-size: 13px; }
+      .list-main span { display: block; margin-top: 4px; color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .list-value { text-align: right; }
+      .list-value strong { display: block; font-size: 13px; }
+      .list-value span { display: block; margin-top: 4px; color: var(--muted); font-size: 11px; }
+
+      .service-row {
+        display: grid;
+        grid-template-columns: 150px minmax(80px, 1fr) 70px;
+        gap: 12px;
+        align-items: center;
+        padding: 13px 16px;
+        border-bottom: 1px solid var(--line);
+        font-size: 12px;
+      }
+      .service-row:last-child { border-bottom: 0; }
+      .bar-track { height: 6px; border-radius: 3px; background: var(--surface-strong); overflow: hidden; }
+      .bar-fill { height: 100%; background: var(--ink); border-radius: 3px; }
+      .service-amount { text-align: right; font-weight: 700; }
+
+      .alert-list { padding: 4px 16px 12px; }
+      .alert-item { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 13px 0; border-bottom: 1px solid var(--line); }
+      .alert-item:last-child { border-bottom: 0; }
+      .alert-icon { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 7px; background: var(--warning-bg); color: var(--warning); }
+      .alert-copy strong { display: block; font-size: 12px; }
+      .alert-copy span { display: block; margin-top: 3px; color: var(--muted); font-size: 11px; line-height: 1.4; }
+      .text-button { border: 0; background: transparent; color: var(--link); font-size: 12px; font-weight: 700; }
+
+      .estimate-controls { display: grid; gap: 14px; padding: 18px; }
+      .control { display: grid; gap: 7px; }
+      .control label { color: var(--body); font-size: 11px; font-weight: 700; }
+      .assumption { padding: 14px; border-radius: 8px; background: var(--canvas-soft); color: var(--body); font-size: 11px; line-height: 1.55; }
+
+      /* Variant B */
+      .project-workspace { display: grid; grid-template-columns: 278px minmax(0, 1fr); min-height: 680px; margin-top: 24px; border: 1px solid var(--line-strong); border-radius: 8px; overflow: hidden; }
+      .project-rail { border-right: 1px solid var(--line); background: var(--canvas-soft); }
+      .rail-header { padding: 18px; border-bottom: 1px solid var(--line); }
+      .rail-header strong { font-size: 13px; }
+      .rail-search { position: relative; margin-top: 12px; }
+      .rail-search input { width: 100%; padding-left: 34px; background: #fff; }
+      .rail-search .icon { position: absolute; left: 10px; top: 10px; color: var(--muted); width: 16px; height: 16px; }
+      .project-button { width: 100%; display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 8px; padding: 14px 18px; border: 0; border-bottom: 1px solid var(--line); background: transparent; color: var(--ink); text-align: left; }
+      .project-button.active { background: #fff; box-shadow: inset 3px 0 0 var(--ink); }
+      .project-button strong { display: block; font-size: 12px; }
+      .project-button span { display: block; margin-top: 4px; color: var(--muted); font-size: 10px; }
+      .project-button b { font-size: 12px; }
+      .project-main { min-width: 0; padding: 22px; }
+      .project-title-row { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
+      .project-title-row h2 { margin: 0; font-size: 20px; }
+      .project-title-row p { margin: 6px 0 0; color: var(--muted); font-size: 12px; }
+      .status { display: inline-flex; align-items: center; gap: 6px; color: var(--success); font-size: 11px; font-weight: 700; }
+      .status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+      .project-summary { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 1px; margin-top: 20px; background: var(--line); border: 1px solid var(--line); }
+      .project-summary div { padding: 16px; background: #fff; }
+      .project-summary span { display: block; color: var(--muted); font-size: 10px; }
+      .project-summary strong { display: block; margin-top: 7px; font-size: 18px; }
+
+      /* Variant C */
+      .workflow-note { margin-top: 18px; padding: 12px 14px; border-left: 3px solid var(--ink); background: var(--canvas-soft); color: var(--body); font-size: 12px; line-height: 1.5; }
+      .lane-board { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); margin-top: 22px; border: 1px solid var(--line-strong); border-radius: 8px; overflow: hidden; }
+      .lane { min-width: 0; min-height: 650px; padding: 18px; border-right: 1px solid var(--line); background: var(--canvas-soft); }
+      .lane:last-child { border-right: 0; }
+      .lane-heading { display: flex; align-items: center; gap: 10px; padding-bottom: 14px; border-bottom: 1px solid var(--line-strong); }
+      .lane-number { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 7px; background: var(--ink); color: #fff; font-size: 11px; font-weight: 700; }
+      .lane-heading h2 { margin: 0; font-size: 14px; }
+      .lane-heading span { display: block; margin-top: 3px; color: var(--muted); font-size: 10px; }
+      .lane-block { margin-top: 14px; padding: 14px; border: 1px solid var(--line-strong); border-radius: 8px; background: #fff; }
+      .lane-block-kicker { color: var(--muted); font-size: 10px; font-weight: 700; text-transform: uppercase; }
+      .lane-block h3 { margin: 7px 0 0; font-size: 13px; line-height: 1.4; }
+      .lane-block p { margin: 7px 0 0; color: var(--body); font-size: 11px; line-height: 1.5; }
+      .lane-amount { margin-top: 14px; font-size: 25px; font-weight: 700; }
+      .mini-chart { height: 90px; margin-top: 12px; border-bottom: 1px solid var(--line-strong); }
+      .mini-chart svg { width: 100%; height: 100%; }
+      .checklist { display: grid; gap: 9px; margin-top: 12px; }
+      .check-row { display: grid; grid-template-columns: 18px minmax(0,1fr); gap: 8px; align-items: start; color: var(--body); font-size: 11px; line-height: 1.4; }
+      .check-box { display: grid; place-items: center; width: 18px; height: 18px; border-radius: 5px; background: var(--surface-strong); color: var(--ink); font-size: 10px; font-weight: 700; }
+
+      .prototype-switcher {
+        position: fixed;
+        left: 50%;
+        bottom: 18px;
+        z-index: 50;
+        display: grid;
+        grid-template-columns: 38px minmax(180px, auto) 38px;
+        align-items: center;
+        transform: translateX(-50%);
+        border: 1px solid #333;
+        border-radius: 8px;
+        background: #111;
+        color: #fff;
+        box-shadow: 0 12px 28px rgba(0,0,0,.24);
+        overflow: hidden;
+      }
+      .prototype-switcher button { height: 42px; border: 0; background: transparent; color: #fff; font-size: 19px; }
+      .prototype-switcher button:hover { background: #292929; }
+      .variant-label { padding: 0 14px; text-align: center; font-size: 12px; font-weight: 700; white-space: nowrap; }
+
+      @media (max-width: 980px) {
+        .app-shell { grid-template-columns: 1fr; }
+        .sidebar { position: static; height: auto; padding: 18px 20px; border-right: 0; border-bottom: 1px solid var(--line); gap: 16px; }
+        .sidebar .nav { display: flex; overflow-x: auto; }
+        .nav-item { flex: 0 0 auto; }
+        .sidebar-account { display: none; }
+        .main { padding: 24px 20px 100px; }
+        .metric-strip { grid-template-columns: repeat(2,minmax(0,1fr)); }
+        .metric:nth-child(2) { border-right: 0; }
+        .metric:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
+        .grid-2, .grid-even { grid-template-columns: 1fr; }
+        .project-workspace { grid-template-columns: 220px minmax(0,1fr); }
+        .lane-board { grid-template-columns: 1fr; }
+        .lane { min-height: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+      }
+
+      @media (max-width: 680px) {
+        .sidebar { padding: 16px; }
+        .brand { font-size: 20px; }
+        .nav-item { padding: 0 10px; }
+        .main { padding: 20px 16px 100px; }
+        .page-header { display: grid; }
+        .header-actions { justify-content: space-between; }
+        h1 { font-size: 26px; }
+        .mode-row { display: grid; }
+        .segmented { width: 100%; grid-template-columns: repeat(2,minmax(0,1fr)); }
+        .connection-band { grid-template-columns: auto minmax(0,1fr); }
+        .connection-meta { grid-column: 2; }
+        .metric-strip { grid-template-columns: 1fr; }
+        .metric { padding: 16px 0; border-right: 0; border-bottom: 1px solid var(--line); }
+        .metric:last-child { border-bottom: 0; }
+        .chart { height: 180px; }
+        .field-row { width: 100%; }
+        .field-row select { flex: 1; min-width: 0; }
+        .service-row { grid-template-columns: minmax(100px,1fr) 70px; }
+        .service-row .bar-track { grid-column: 1 / -1; grid-row: 2; }
+        .project-workspace { display: block; }
+        .project-rail { border-right: 0; border-bottom: 1px solid var(--line); }
+        .project-list { display: flex; overflow-x: auto; }
+        .project-button { min-width: 190px; border-right: 1px solid var(--line); }
+        .project-summary { grid-template-columns: 1fr; }
+        .project-title-row { display: grid; }
+        .prototype-switcher { bottom: 10px; grid-template-columns: 36px minmax(150px,auto) 36px; max-width: calc(100vw - 24px); }
+        .variant-label { overflow: hidden; text-overflow: ellipsis; }
+      }
+    </style>
+  </head>
+  <body>
+    <!-- PROTOTYPE: Three standalone /dashboard/costs UI directions, switchable with ?variant=A|B|C. -->
+    <svg aria-hidden="true" width="0" height="0" style="position:absolute">
+      <symbol id="i-home" viewBox="0 0 24 24"><path d="m3 11 9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/></symbol>
+      <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 2-9 5 9 5 9-5-9-5Z"/><path d="m3 12 9 5 9-5"/><path d="m3 17 9 5 9-5"/></symbol>
+      <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="m9 13-2 2 2 2"/><path d="m15 13 2 2-2 2"/></symbol>
+      <symbol id="i-dollar" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M16 8h-6a2 2 0 0 0 0 4h4a2 2 0 0 1 0 4H8"/><path d="M12 6v12"/></symbol>
+      <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1A1.7 1.7 0 0 0 9 4.6 1.7 1.7 0 0 0 10 3v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"/></symbol>
+      <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M17.5 19H7a5 5 0 1 1 1-9.9A7 7 0 0 1 21 12.5 3.5 3.5 0 0 1 17.5 19Z"/><path d="m9 14 2 2 4-4"/></symbol>
+      <symbol id="i-calc" viewBox="0 0 24 24"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 6h8"/><path d="M8 11h.01M12 11h.01M16 11h.01M8 15h.01M12 15h.01M16 15h.01M8 19h.01M12 19h.01M16 19h.01"/></symbol>
+      <symbol id="i-activity" viewBox="0 0 24 24"><path d="M3 12h4l2-7 4 14 2-7h6"/></symbol>
+      <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 7h-5V2"/><path d="M20 7a9 9 0 1 0 2 8"/></symbol>
+      <symbol id="i-alert" viewBox="0 0 24 24"><path d="M10.3 3.7 2.4 18a2 2 0 0 0 1.8 3h15.6a2 2 0 0 0 1.8-3L13.7 3.7a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></symbol>
+      <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></symbol>
+      <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></symbol>
+      <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+    </svg>
+    <div id="app"></div>
+    <script>
+      const variants = [
+        { key: "A", name: "탭 중심 운영 콘솔" },
+        { key: "B", name: "프로젝트 중심 워크스페이스" },
+        { key: "C", name: "비용 운영 흐름 보드" }
+      ];
+
+      const projects = [
+        { id: "commerce", name: "Commerce API Launch", source: "Requirement Input", estimate: 42.8, actual: 36.42, resources: 7 },
+        { id: "recovery", name: "Ops Recovery Scan", source: "Reverse Engineering", estimate: 18.2, actual: 21.18, resources: 4 },
+        { id: "handoff", name: "Team Git Handoff", source: "Source Repository", estimate: 31.1, actual: 18.7, resources: 5 }
+      ];
+
+      const state = {
+        variant: new URL(location.href).searchParams.get("variant") || "A",
+        modeA: "usage",
+        modeB: "usage",
+        projectId: "commerce",
+        range: "30d"
+      };
+
+      if (!variants.some((variant) => variant.key === state.variant)) state.variant = "A";
+
+      function icon(name) {
+        return `<svg class="icon" aria-hidden="true"><use href="#i-${name}"></use></svg>`;
+      }
+
+      function sidebar() {
+        return `<aside class="sidebar">
+          <div class="brand"><span class="brand-mark">${icon("layers")}</span><span>SketchCatch</span></div>
+          <nav class="nav" aria-label="대시보드 탐색">
+            <a class="nav-item" href="#">${icon("home")}<span>홈</span></a>
+            <a class="nav-item" href="#">${icon("layers")}<span>프로젝트</span></a>
+            <a class="nav-item" href="#">${icon("file")}<span>템플릿</span></a>
+            <a class="nav-item active" href="#">${icon("dollar")}<span>비용관리</span></a>
+            <a class="nav-item" href="#">${icon("settings")}<span>환경설정</span></a>
+          </nav>
+          <div class="sidebar-account"><span class="avatar">YS</span><div class="account-copy"><strong>윤석 사용자</strong><span>ys@sketchcatch.dev</span></div></div>
+        </aside>`;
+      }
+
+      function header(subtitle) {
+        return `<header class="page-header">
+          <div><p class="eyebrow">Terraform-first operations</p><h1>비용 관리</h1><p class="header-copy">${subtitle}</p></div>
+          <div class="header-actions"><span class="prototype-chip">PROTOTYPE</span><button class="icon-button" title="새로고침" aria-label="새로고침">${icon("refresh")}</button></div>
+        </header>`;
+      }
+
+      function shell(content, subtitle) {
+        return `<div class="app-shell">${sidebar()}<main class="main"><div class="content">${header(subtitle)}${content}</div></main>${switcher()}</div>`;
+      }
+
+      function switcher() {
+        const current = variants.find((variant) => variant.key === state.variant);
+        return `<div class="prototype-switcher" aria-label="프로토타입 변형 선택">
+          <button data-action="prev-variant" aria-label="이전 변형">←</button>
+          <div class="variant-label">${current.key} — ${current.name}</div>
+          <button data-action="next-variant" aria-label="다음 변형">→</button>
+        </div>`;
+      }
+
+      function connectionBand() {
+        return `<div class="connection-band"><span class="connection-icon">${icon("cloud")}</span><div class="connection-copy"><strong>SketchCatch 운영 계정 연결됨</strong><span>Cost Explorer · CloudWatch · ap-northeast-2</span></div><span class="connection-meta">방금 동기화</span></div>`;
+      }
+
+      function actualMetrics() {
+        return `<div class="metric-strip"><div class="metric"><span>현재 사용 비용</span><strong>$76.30</strong><small>최근 30일</small></div><div class="metric"><span>월말 예상 청구</span><strong>$93.80</strong><small>현재 사용 추세 기준</small></div><div class="metric"><span>운영 프로젝트</span><strong>3개</strong><small>성공 배포 기준</small></div><div class="metric"><span>절감 검토</span><strong>$24.00</strong><small>CloudWatch 저사용 탐지</small></div></div>`;
+      }
+
+      function estimateMetrics() {
+        return `<div class="metric-strip"><div class="metric"><span>월 예상 합계</span><strong>$92.10</strong><small>3개 프로젝트 설계 기준</small></div><div class="metric"><span>예상 사용자</span><strong>1,000명</strong><small>비용 추정 가정치</small></div><div class="metric"><span>적용 리전</span><strong>서울</strong><small>ap-northeast-2</small></div><div class="metric"><span>단가 출처</span><strong>혼합</strong><small>AWS Pricing API + 추정</small></div></div>`;
+      }
+
+      function lineChart() {
+        return `<div class="chart-wrap"><div class="chart"><svg viewBox="0 0 700 220" preserveAspectRatio="none" role="img" aria-label="최근 30일 비용 추세"><path d="M0 190 C70 178 95 182 140 160 S220 155 270 128 S350 142 410 105 S500 88 555 96 S640 60 700 48" fill="none" stroke="#171717" stroke-width="3"/><path d="M0 190 C70 178 95 182 140 160 S220 155 270 128 S350 142 410 105 S500 88 555 96 S640 60 700 48 L700 220 L0 220 Z" fill="rgba(23,23,23,.06)"/></svg></div><div class="chart-labels"><span>6월 11일</span><span>6월 18일</span><span>6월 25일</span><span>7월 10일</span></div></div>`;
+      }
+
+      function serviceList() {
+        return `<div class="list"><div class="service-row"><span>Amazon RDS</span><div class="bar-track"><div class="bar-fill" style="width:42%"></div></div><span class="service-amount">$32.05</span></div><div class="service-row"><span>Amazon EC2</span><div class="bar-track"><div class="bar-fill" style="width:31%"></div></div><span class="service-amount">$23.65</span></div><div class="service-row"><span>Amazon VPC</span><div class="bar-track"><div class="bar-fill" style="width:16%"></div></div><span class="service-amount">$12.21</span></div><div class="service-row"><span>Load Balancing</span><div class="bar-track"><div class="bar-fill" style="width:11%"></div></div><span class="service-amount">$8.39</span></div></div>`;
+      }
+
+      function optimizationList() {
+        return `<div class="alert-list"><div class="alert-item"><span class="alert-icon">${icon("alert")}</span><div class="alert-copy"><strong>commerce-db CPU 평균 2.8%</strong><span>테스트 DB라면 작은 클래스로 낮추거나 스냅샷 후 중지를 검토하세요.</span></div><button class="text-button">검토</button></div><div class="alert-item"><span class="alert-icon">${icon("alert")}</span><div class="alert-copy"><strong>practice-alb 일 평균 요청 74건</strong><span>공유 ALB로 합치거나 실습 종료 후 정리할 수 있습니다.</span></div><button class="text-button">검토</button></div><div class="alert-item"><span class="alert-icon">${icon("alert")}</span><div class="alert-copy"><strong>nat-01 전송량 0.6MB/일</strong><span>외부 호출이 필요하지 않다면 NAT 제거를 우선 확인하세요.</span></div><button class="text-button">검토</button></div></div>`;
+      }
+
+      function estimateResourceList() {
+        return `<div class="list">${projects.map((project) => `<div class="list-row"><div class="list-main"><strong>${project.name}</strong><span>${project.resources}개 리소스 · ${project.source}</span></div><div class="list-value"><strong>$${project.estimate.toFixed(2)} / 월</strong><span>${project.id === "commerce" ? "AWS Pricing API" : "일부 추정 단가"}</span></div></div>`).join("")}</div>`;
+      }
+
+      function renderVariantA() {
+        const usage = state.modeA === "usage";
+        const content = `<div class="mode-row"><div class="segmented"><button class="${!usage ? "active" : ""}" data-action="mode-a" data-mode="estimate">${icon("calc")} 예상 비용</button><button class="${usage ? "active" : ""}" data-action="mode-a" data-mode="usage">${icon("activity")} 실제 사용량</button></div><span class="context-note">두 값은 목적이 달라 직접 비교하지 않습니다.</span></div>
+          ${usage ? connectionBand() + actualMetrics() + `<div class="grid-2"><section class="panel"><div class="panel-header"><div><h2>일별 비용 추세</h2><p>Cost Explorer · UnblendedCost</p></div><div class="field-row"><select data-action="range"><option>최근 30일</option><option>최근 7일</option><option>이번 달</option></select></div></div>${lineChart()}</section><section class="panel"><div class="panel-header"><div><h2>서비스별 비용</h2><p>계정 전체 청구 분포</p></div></div>${serviceList()}</section></div><section class="panel" style="margin-top:22px"><div class="panel-header"><div><h2>절감 검토 큐</h2><p>CloudWatch 저사용 신호를 운영 액션으로 정리합니다.</p></div><button class="secondary-button">${icon("refresh")} 다시 분석</button></div>${optimizationList()}</section>` : estimateMetrics() + `<div class="grid-2"><section class="panel"><div class="panel-header"><div><h2>프로젝트 예상 비용</h2><p>최신 Practice Architecture 기준</p></div></div>${estimateResourceList()}</section><aside class="panel"><div class="panel-header"><div><h2>계산 조건</h2><p>배포 전 계획에만 사용합니다.</p></div></div><div class="estimate-controls"><div class="control"><label>기간</label><select><option>월</option><option>주</option><option>일</option></select></div><div class="control"><label>예상 사용자 수</label><input value="1000" inputmode="numeric" /></div><div class="control"><label>리전</label><select><option>서울 ap-northeast-2</option></select></div><button class="primary-button">${icon("calc")} 다시 계산</button><div class="assumption">예상 사용자 수는 실제 트래픽이 아니라 요청량·저장량을 추정하기 위한 가정입니다.</div></div></aside></div>`}`;
+        return shell(content, "예상 비용은 배포 전 계획에, AWS 사용량은 운영과 절감 판단에 사용합니다.");
+      }
+
+      function renderVariantB() {
+        const selected = projects.find((project) => project.id === state.projectId) || projects[0];
+        const usage = state.modeB === "usage";
+        const rail = `<aside class="project-rail"><div class="rail-header"><strong>프로젝트 비용</strong><div class="rail-search">${icon("search")}<input aria-label="프로젝트 검색" placeholder="프로젝트 검색" /></div></div><div class="project-list">${projects.map((project) => `<button class="project-button ${project.id === selected.id ? "active" : ""}" data-action="select-project" data-project="${project.id}"><span><strong>${project.name}</strong><span>${project.source}</span></span><b>$${(usage ? project.actual : project.estimate).toFixed(2)}</b></button>`).join("")}</div></aside>`;
+        const projectBody = usage ? `${connectionBand()}<div class="project-summary"><div><span>현재 사용 비용</span><strong>$${selected.actual.toFixed(2)}</strong></div><div><span>산정 리소스</span><strong>${selected.resources}개</strong></div><div><span>데이터 출처</span><strong>Cost Explorer</strong></div></div><div class="grid-even"><section class="panel"><div class="panel-header"><div><h2>${selected.name} 비용 추세</h2><p>프로젝트 태그 또는 배포 리소스 배분</p></div></div>${lineChart()}</section><section class="panel"><div class="panel-header"><div><h2>리소스 운영 신호</h2><p>비용이 아니라 사용량 관점의 다음 액션</p></div></div>${optimizationList()}</section></div>` : `<div class="project-summary"><div><span>월 예상 비용</span><strong>$${selected.estimate.toFixed(2)}</strong></div><div><span>설계 리소스</span><strong>${selected.resources}개</strong></div><div><span>가격 기준</span><strong>서울 리전</strong></div></div><div class="grid-even"><section class="panel"><div class="panel-header"><div><h2>리소스별 예상 근거</h2><p>ArchitectureJson과 예상 사용량으로 계산</p></div></div><div class="list"><div class="list-row"><div class="list-main"><strong>RDS PostgreSQL</strong><span>db.t4g.micro · 730h/month</span></div><div class="list-value"><strong>$18.40</strong><span>AWS Pricing API</span></div></div><div class="list-row"><div class="list-main"><strong>EC2 API</strong><span>t3.micro · expected capacity x1</span></div><div class="list-value"><strong>$8.50</strong><span>추정 단가</span></div></div><div class="list-row"><div class="list-main"><strong>ALB</strong><span>시간 기준 + 처리량</span></div><div class="list-value"><strong>$15.90</strong><span>추정 단가</span></div></div></div></section><section class="panel"><div class="panel-header"><div><h2>계획 조건</h2><p>이 프로젝트에만 적용</p></div></div><div class="estimate-controls"><div class="control"><label>예상 사용자</label><input value="1000" /></div><div class="control"><label>기간</label><select><option>월</option><option>주</option></select></div><button class="primary-button">${icon("calc")} 계산 적용</button></div></section></div>`;
+        const main = `<section class="project-main"><div class="project-title-row"><div><h2>${selected.name}</h2><p>${selected.source} · ${selected.resources} resources</p></div><span class="status">AWS 연결 확인됨</span></div><div class="mode-row"><div class="segmented"><button class="${!usage ? "active" : ""}" data-action="mode-b" data-mode="estimate">계획 비용</button><button class="${usage ? "active" : ""}" data-action="mode-b" data-mode="usage">실사용 운영</button></div><span class="context-note">선택한 관점의 정보만 표시합니다.</span></div>${projectBody}</section>`;
+        return shell(`<div class="project-workspace">${rail}${main}</div>`, "프로젝트를 먼저 고르고, 계획 비용과 실사용 운영을 각각 깊게 확인합니다.");
+      }
+
+      function renderVariantC() {
+        const content = `<div class="workflow-note"><strong>운영 원칙:</strong> 계획 비용, 실제 청구, 절감 액션은 순서대로 이어지지만 서로의 정확도를 평가하는 비교 지표로 사용하지 않습니다.</div><div class="lane-board"><section class="lane"><div class="lane-heading"><span class="lane-number">1</span><div><h2>Plan</h2><span>배포 전 비용 계획</span></div></div><div class="lane-block"><span class="lane-block-kicker">Monthly estimate</span><h3>현재 설계 예상 비용</h3><div class="lane-amount">$92.10</div><p>3개 프로젝트 · 예상 사용자 1,000명 · 서울 리전</p></div><div class="lane-block"><span class="lane-block-kicker">High pressure</span><h3>비용 압력이 큰 리소스</h3><div class="checklist"><div class="check-row"><span class="check-box">1</span><span>RDS 실행 시간과 스토리지</span></div><div class="check-row"><span class="check-box">2</span><span>NAT Gateway 시간당 비용</span></div><div class="check-row"><span class="check-box">3</span><span>ALB 고정 실행 비용</span></div></div></div><button class="primary-button" style="width:100%;margin-top:14px">${icon("calc")} 계획 조건 열기</button></section><section class="lane"><div class="lane-heading"><span class="lane-number">2</span><div><h2>Monitor</h2><span>AWS 실사용 관찰</span></div></div><div class="lane-block"><span class="lane-block-kicker">Cost Explorer</span><h3>최근 30일 사용 비용</h3><div class="lane-amount">$76.30</div><p>UnblendedCost · 운영 계정 연결됨</p><div class="mini-chart"><svg viewBox="0 0 300 90" preserveAspectRatio="none"><path d="M0 78 C40 70 60 74 90 55 S150 58 175 42 S225 35 300 14" fill="none" stroke="#171717" stroke-width="2.5"/></svg></div></div><div class="lane-block"><span class="lane-block-kicker">Service mix</span><h3>비용 집중 서비스</h3><div class="checklist"><div class="check-row"><span class="check-box">42</span><span>Amazon RDS · $32.05</span></div><div class="check-row"><span class="check-box">31</span><span>Amazon EC2 · $23.65</span></div><div class="check-row"><span class="check-box">16</span><span>Amazon VPC · $12.21</span></div></div></div></section><section class="lane"><div class="lane-heading"><span class="lane-number">3</span><div><h2>Optimize</h2><span>검토 가능한 절감 액션</span></div></div><div class="lane-block"><span class="lane-block-kicker">CloudWatch signal</span><h3>저사용 리소스 3개</h3><p>CPU, 요청 수, 네트워크 전송량을 기준으로 검토 큐를 만들었습니다.</p></div><div class="lane-block"><span class="lane-block-kicker">Recommended first</span><h3>commerce-db 크기 축소</h3><p>평균 CPU 2.8%. 테스트 DB라면 작은 클래스로 낮추는 것을 먼저 검토하세요.</p><button class="secondary-button" style="width:100%;margin-top:12px">검토 열기 ${icon("chevron")}</button></div><div class="lane-block"><span class="lane-block-kicker">Cleanup</span><h3>실습 리소스 정리</h3><div class="checklist"><div class="check-row"><span class="check-box">✓</span><span>Auto Cleanup 상태 확인</span></div><div class="check-row"><span class="check-box">·</span><span>ALB 공유 여부 검토</span></div><div class="check-row"><span class="check-box">·</span><span>NAT 필요성 재확인</span></div></div></div></section></div>`;
+        return shell(content, "비용 정보를 계획, 관찰, 절감의 세 운영 단계로 나눠 처리합니다.");
+      }
+
+      function render() {
+        document.getElementById("app").innerHTML = state.variant === "A" ? renderVariantA() : state.variant === "B" ? renderVariantB() : renderVariantC();
+      }
+
+      function setVariant(offset) {
+        const index = variants.findIndex((variant) => variant.key === state.variant);
+        state.variant = variants[(index + offset + variants.length) % variants.length].key;
+        const url = new URL(location.href);
+        url.searchParams.set("variant", state.variant);
+        history.replaceState({}, "", url);
+        render();
+      }
+
+      document.addEventListener("click", (event) => {
+        const target = event.target.closest("[data-action]");
+        if (!target) return;
+        const action = target.dataset.action;
+        if (action === "prev-variant") setVariant(-1);
+        if (action === "next-variant") setVariant(1);
+        if (action === "mode-a") { state.modeA = target.dataset.mode; render(); }
+        if (action === "mode-b") { state.modeB = target.dataset.mode; render(); }
+        if (action === "select-project") { state.projectId = target.dataset.project; render(); }
+      });
+
+      document.addEventListener("keydown", (event) => {
+        const tag = event.target.tagName;
+        if (["INPUT", "TEXTAREA", "SELECT"].includes(tag) || event.target.isContentEditable) return;
+        if (event.key === "ArrowLeft") setVariant(-1);
+        if (event.key === "ArrowRight") setVariant(1);
+      });
+
+      render();
+    </script>
+  </body>
+</html>

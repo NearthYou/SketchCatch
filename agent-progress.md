@@ -1,4 +1,4 @@
-# Agent Progress
+﻿# Agent Progress
 
 Short English-only working log for the current agent context. Older records are archived under `docs/agent-history/`.
 
@@ -11,6 +11,84 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-10 - Make deployment warnings non-blocking
+
+- Goal: Let Direct Deployment proceed even when high-risk Trivy or deployment safety warnings are present.
+- Completed:
+  - Changed Pre-Deployment/Safety Gate warning creation so high-risk findings, unsupported-resource warnings, and destructive-change warnings no longer set `blocksApproval`.
+  - Removed approval-time rejection for stored blocking or acknowledgement-only warnings, so older plan summaries cannot block approval only because of warning metadata.
+  - Updated workspace deployment action state so the Plan approval button stays enabled even when `planSummary.warnings` contains `blocksApproval: true`.
+  - Updated `docs/data-models.md` to describe warning preservation without approval/deployment blocking.
+- Verification:
+  - `pnpm harness:check` passed before edits.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/deployments/deployment-safety-gate.test.ts src/deployments/deployment-approval-service.test.ts src/deployments/deployment-plan-service.test.ts` passed.
+  - `pnpm --filter @sketchcatch/web exec tsx features/workspace/deployment-actions.test.ts` passed.
+  - `pnpm lint` passed.
+  - `pnpm typecheck` passed.
+  - `pnpm build` passed.
+- Risk:
+  - Terraform validation, plan creation, artifact/hash drift checks, approval snapshot checks, AWS account/region drift checks, and actual Terraform apply failures still remain hard gates. This change only removes warning metadata as an approval blocker.
+
+### 2026-07-10 - Connect dashboard project inventory to live user projects
+
+- Goal: Replace the static `/dashboard/projects` sample with projects owned by the authenticated user.
+- Completed:
+  - Added a focused DESIGN.md project inventory client backed by `GET /api/projects` through `listProjects()`.
+  - Added selectable recent-work and recent-creation sorting, project-name search, loading/error/empty states, and workspace links carrying the real project ID.
+  - Removed fake source, risk, and deployment-status columns from the live inventory surface.
+  - Added responsive project inventory styles and source-level regression coverage.
+- Verification:
+  - Project inventory, project sorting, project search, and dashboard route tests passed.
+  - `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check` passed.
+  - Playwright verified search filtering, both sort orders, and 1440px and 375px layouts without horizontal overflow.
+- Risk:
+  - The Playwright session had no authenticated user cookie, so populated visual QA used a browser-only mocked `GET /api/projects` response. The existing API ownership tests cover active-user filtering.
+
+### 2026-07-10 - Apply DESIGN.md cost dashboard UI
+
+- Goal: Apply the selected cost operations prototype to `/dashboard/costs` without adding estimated-versus-actual comparison behavior.
+- Completed:
+  - Connected the live `CostsClient` to the DESIGN.md dashboard shell instead of the static cost sample.
+  - Made actual AWS usage the default view and kept pre-deployment estimates in a separate tab.
+  - Added verified AWS connection treatment, four usage metrics, a two-column trend/service layout, project usage navigation, and optimization review surfaces.
+  - Added isolated DESIGN.md cost styles with responsive layouts and source-level route coverage.
+- Verification:
+  - Dashboard and cost feature tests passed.
+  - `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check` passed.
+  - Playwright verified both tabs at 1440px and 375px; mobile document width remained 375px.
+- Risk:
+  - The local browser had no authenticated user session, so populated AWS usage visual QA used browser-only mocked API responses. Production API contracts and backend behavior were not changed.
+
+### 2026-07-10 - DESIGN.md cost dashboard prototype
+
+- Goal: Explore `/dashboard/costs` UI directions without changing the service implementation or comparing estimated and actual costs.
+- Completed:
+  - Added a standalone HTML prototype with three switchable layouts: operations tabs, project workspace, and cost operations board.
+  - Applied DESIGN.md typography, color, spacing, control, border, and responsive conventions.
+  - Kept estimate and actual usage as separate decision views rather than a comparison metric.
+- Verification:
+  - Playwright verified all three variants at 1440px and 375px without horizontal overflow.
+  - Playwright verified keyboard variant switching and zero console errors or warnings.
+- Risk:
+  - This is a disposable prototype under `output/prototypes`; no `/dashboard/costs` application code was changed.
+
+### 2026-07-10 - Prevent duplicate dashboard logout requests
+
+- Goal: Apply the selected review comment so repeated logout clicks cannot start duplicate requests.
+- Completed:
+  - Added local `isPending` state to the dashboard account footer.
+  - Disabled logout while auth is loading or the current logout request is pending.
+  - Reset pending state in `finally` for both success and failure paths.
+  - Added focused regression coverage for the pending-state flow.
+- Verification:
+  - `pnpm --filter @sketchcatch/web exec tsx features/dashboard/design-dashboard.test.ts` passed.
+  - `pnpm lint` passed.
+  - `pnpm typecheck` passed.
+  - `pnpm build` passed.
+- Risk:
+  - GitHub CLI is unavailable in this environment, so the PR review thread was not replied to or resolved.
+
+### 2026-07-10 - Signup password error highlight fix
 ### 2026-07-10 - Harden ECS worker dispatch after merged PR review
 
 - Goal: Address valid post-merge review findings on PR #296 without running live AWS commands.
@@ -83,29 +161,3 @@ Short English-only working log for the current agent context. Older records are 
   - Phase 4 does not dispatch ECS tasks; Phase 5 must wire the job model into deployment routes and worker dispatcher config.
   - The requested API deployment test command currently exits 1 because of unrelated pre-existing failures in `aiLlmExplanationRoutes.test.ts` and a missing `docs/jh/000_AWS리소스목록_JH.md` fixture.
   - No live AWS commands should be run in Phase 4.
-
-### 2026-07-10 - Start ECS Phase 3 runtime config/secrets transition
-
-- Goal: Implement Phase 3 only: replace ECS runtime dependence on generated env files with ECS task definition environment/secrets references while keeping EC2 rollback intact.
-- Completed:
-  - Created GitHub issue #290.
-  - Created linked branch `feature/sw/290-ecs-secrets-config` from `dev` with `gh issue develop`.
-  - Read root `AGENTS.md`, `docs/AGENTS.md`, `infra/AGENTS.md`, and ECS migration references under `docs/sw`.
-  - Added Terraform runtime config guardrails so sensitive API env names cannot be passed through `api_environment`.
-  - Restricted `api_secret_arns` to approved ECS API secret names and Secrets Manager/SSM ARN formats.
-  - Added `runtime-config.tf` to document the ECS API secret name groups used by Phase 3.
-  - Added an ECS deploy workflow check that fails if required sensitive API values are missing from task definition secrets or appear as plain environment variables.
-  - Updated deployment/Terraform docs with GitHub vars, ECS environment, Secrets Manager, SSM SecureString, and EC2 rollback responsibilities.
-- Verification:
-  - `pnpm harness:check` passed before Phase 3 edits.
-  - `pnpm harness:check` passed after Phase 3 edits.
-  - `pnpm lint` passed.
-  - `pnpm typecheck` passed.
-  - `pnpm build` passed.
-  - `terraform -chdir=infra/aws/terraform fmt -check -recursive` passed.
-  - Static Node check confirmed `.github/workflows/deploy-ecs.yml` contains the runtime config validation and does not generate env files or presigned env downloads.
-  - `terraform -chdir=infra/aws/terraform validate` passed without live AWS mutation.
-- Risk:
-  - No live AWS commands should be run in Phase 3.
-  - ECS service is currently cost-bearing if left at `desiredCount=1` from the prior smoke session.
-  - The RDS security group rule opened manually for ECS smoke should be captured in a later Terraform/drift follow-up.
