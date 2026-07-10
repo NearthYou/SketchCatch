@@ -1,15 +1,15 @@
 # 배포 운영 문서
 
-SketchCatch production steady state는 Docker image를 ECR에 push하고 ECS/Fargate의 API와 web service를 순차 배포합니다. ALB가 path routing을 담당하며 Docker Compose와 ECS nginx를 사용하지 않습니다. 기존 EC2/SSM/docker run/nginx 경로는 명시적으로 종료하기 전까지 rollback 전용으로 유지합니다.
+SketchCatch production steady state는 Docker image를 ECR에 push하고 ECS/Fargate의 API와 web service를 병렬 배포합니다. ALB가 path routing을 담당하며 Docker Compose와 ECS nginx를 사용하지 않습니다. 기존 EC2/SSM/docker run/nginx 경로는 명시적으로 종료하기 전까지 rollback 전용으로 유지합니다.
 
 이 문서는 SketchCatch 운영 배포와 사용자가 만든 IaC를 실행하는 경로를 구분합니다.
 
-| 구분 | 의미 | 기준 |
-| --- | --- | --- |
-| 운영 배포 | SketchCatch 서비스 자체를 ECS/Fargate에 배포 | Docker, ECR, ECS service update, ALB path routing |
-| Production infra IaC | SketchCatch 자체 AWS infrastructure를 관리 | 분리된 S3 state, native lockfile, manual plan/import/apply approval |
-| Direct Deployment Path | SketchCatch가 사용자가 승인한 IaC Preview를 직접 실행 | Terraform Plan/Apply/Destroy, approval, logs, cleanup |
-| Git/CI/CD Deployment Path | SketchCatch가 IaC Preview를 Source Repository PR과 외부 pipeline으로 넘김 | Terraform commit/PR, pipeline template/status, team review |
+| 구분                      | 의미                                                                      | 기준                                                                |
+| ------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| 운영 배포                 | SketchCatch 서비스 자체를 ECS/Fargate에 배포                              | Docker, ECR, ECS service update, ALB path routing                   |
+| Production infra IaC      | SketchCatch 자체 AWS infrastructure를 관리                                | 분리된 S3 state, native lockfile, manual plan/import/apply approval |
+| Direct Deployment Path    | SketchCatch가 사용자가 승인한 IaC Preview를 직접 실행                     | Terraform Plan/Apply/Destroy, approval, logs, cleanup               |
+| Git/CI/CD Deployment Path | SketchCatch가 IaC Preview를 Source Repository PR과 외부 pipeline으로 넘김 | Terraform commit/PR, pipeline template/status, team review          |
 
 ## 핵심 서비스 실행 기준
 
@@ -187,7 +187,7 @@ GitHub Actions
 
 ### ECS 배포 워크플로
 
-기존 `Deploy Production` EC2/SSM 워크플로는 rollback 경로로 유지합니다. 별도 `Deploy Production ECS` 워크플로는 수동 실행(`workflow_dispatch`)으로만 시작하며, `docker save`와 S3 image tarball 업로드를 사용하지 않습니다.
+`Deploy Production EC2 Rollback` 워크플로는 rollback 경로로만 유지하며 `main` push에서 자동 실행되지 않습니다. 운영자가 수동 실행(`workflow_dispatch`)하면서 `deploy-ec2-rollback`을 입력한 경우에만 기존 EC2/SSM 배포를 시작합니다. 별도 `Deploy Production ECS` 워크플로도 migration sequencing과 service revision을 검토한 뒤 수동 실행하며, `docker save`와 S3 image tarball 업로드를 사용하지 않습니다. 따라서 `main` 병합 자체는 production cloud resource를 변경하지 않습니다.
 
 ECS 배포 흐름:
 
@@ -227,12 +227,12 @@ ECS workflow는 application secret 원문을 GitHub Actions log나 task definiti
 
 Phase 9부터 SketchCatch 자체 production infrastructure를 Terraform-managed IaC로 전환할 구조를 `infra/aws/production`에 둡니다. 이 경로는 사용자의 Direct Deployment Path 및 Git/CI/CD Deployment Path와 state, credential, workflow를 공유하지 않습니다.
 
-| group | root | 범위 | 기본 보호 |
-| --- | --- | --- | --- |
-| `runtime` | `infra/aws/terraform` | ECS, ALB, ECR, IAM, CloudWatch, runtime security group | 기존 `production/ecs-foundation/terraform.tfstate` 유지, state audit 우선 |
-| `edge` | `infra/aws/production/edge` | Route53, ACM | DNS/certificate owner와 rollback 승인 전 빈 root |
-| `data` | `infra/aws/production/data` | S3 artifact bucket, RDS, Redis/ElastiCache | backup/deletion protection/restore evidence 전 빈 root |
-| `legacy-rollback` | `infra/aws/production/legacy-rollback` | EC2/SSM/nginx와 legacy edge | rollback 종료 승인 전 빈 root |
+| group             | root                                   | 범위                                                   | 기본 보호                                                                 |
+| ----------------- | -------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------- |
+| `runtime`         | `infra/aws/terraform`                  | ECS, ALB, ECR, IAM, CloudWatch, runtime security group | 기존 `production/ecs-foundation/terraform.tfstate` 유지, state audit 우선 |
+| `edge`            | `infra/aws/production/edge`            | Route53, ACM                                           | DNS/certificate owner와 rollback 승인 전 빈 root                          |
+| `data`            | `infra/aws/production/data`            | S3 artifact bucket, RDS, Redis/ElastiCache             | backup/deletion protection/restore evidence 전 빈 root                    |
+| `legacy-rollback` | `infra/aws/production/legacy-rollback` | EC2/SSM/nginx와 legacy edge                            | rollback 종료 승인 전 빈 root                                             |
 
 모든 group은 versioning과 encryption이 적용된 production S3 backend의 서로 다른 key를 사용하고 `use_lockfile = true`로 lock을 획득합니다. runtime key는 state migration이 승인되기 전까지 변경하지 않습니다. backend bucket은 자신의 state에서 관리하지 않습니다.
 
@@ -566,13 +566,13 @@ Phase 3부터 ECS production 경로는 generated `api.env`/`web.env` 파일과 S
 
 ECS task definition의 책임은 다음처럼 나눕니다.
 
-| 구분 | 저장 위치 | 예시 |
-| --- | --- | --- |
-| GitHub Actions vars | 배포 workflow가 image build/push와 service update에 쓰는 비민감 설정 | `AWS_REGION`, `ECR_API_REPOSITORY`, `ECR_WEB_REPOSITORY`, `ECS_CLUSTER_NAME`, `ECS_API_SERVICE_NAME`, `ECS_WEB_SERVICE_NAME`, API/web task family와 container name |
-| ECS environment | task definition에 평문으로 남아도 되는 비민감 runtime 설정 | `NODE_ENV`, `PORT`, `DATABASE_SSL`, `S3_BUCKET_NAME`, `SKETCHCATCH_PUBLIC_BASE_URL`, `OAUTH_REDIRECT_BASE_URL`, `GIT_APP_ID`, `GIT_APP_SLUG`, OAuth client ID |
-| Secrets Manager | DB credential 또는 외부 provider secret | `DATABASE_URL`, `GIT_APP_PRIVATE_KEY_BASE64`, `OPENAI_API_KEY`, `NAVER_OAUTH_CLIENT_SECRET`, `KAKAO_OAUTH_CLIENT_SECRET`, `GIT_OAUTH_CLIENT_SECRET` |
-| SSM Parameter Store SecureString | 서명 secret 또는 secure runtime endpoint | `AUTH_TOKEN_SECRET`, `CLOUDFORMATION_TEMPLATE_TOKEN_SECRET`, `GIT_APP_STATE_SECRET`, `REDIS_URL` |
-| GitHub Actions secrets | EC2 rollback workflow가 아직 필요로 하는 legacy secret 값 | 기존 `Deploy Production` EC2/SSM workflow 전용 |
+| 구분                             | 저장 위치                                                            | 예시                                                                                                                                                               |
+| -------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| GitHub Actions vars              | 배포 workflow가 image build/push와 service update에 쓰는 비민감 설정 | `AWS_REGION`, `ECR_API_REPOSITORY`, `ECR_WEB_REPOSITORY`, `ECS_CLUSTER_NAME`, `ECS_API_SERVICE_NAME`, `ECS_WEB_SERVICE_NAME`, API/web task family와 container name |
+| ECS environment                  | task definition에 평문으로 남아도 되는 비민감 runtime 설정           | `NODE_ENV`, `PORT`, `DATABASE_SSL`, `S3_BUCKET_NAME`, `SKETCHCATCH_PUBLIC_BASE_URL`, `OAUTH_REDIRECT_BASE_URL`, `GIT_APP_ID`, `GIT_APP_SLUG`, OAuth client ID      |
+| Secrets Manager                  | DB credential 또는 외부 provider secret                              | `DATABASE_URL`, `GIT_APP_PRIVATE_KEY_BASE64`, `OPENAI_API_KEY`, `NAVER_OAUTH_CLIENT_SECRET`, `KAKAO_OAUTH_CLIENT_SECRET`, `GIT_OAUTH_CLIENT_SECRET`                |
+| SSM Parameter Store SecureString | 서명 secret 또는 secure runtime endpoint                             | `AUTH_TOKEN_SECRET`, `CLOUDFORMATION_TEMPLATE_TOKEN_SECRET`, `GIT_APP_STATE_SECRET`, `REDIS_URL`                                                                   |
+| GitHub Actions secrets           | EC2 rollback workflow가 아직 필요로 하는 legacy secret 값            | 기존 `Deploy Production EC2 Rollback` workflow 전용                                                                                                                |
 
 ECS Terraform에는 secret 원문을 넣지 않고 ARN만 넣습니다.
 
@@ -703,15 +703,15 @@ ecs:RunTask는 worker task definition과 cluster로 제한합니다. ecs:StopTas
 
 API startup은 `DEPLOYMENT_WORKER_MODE`에 따라 `RUNNING` deployment를 복구합니다.
 
-| 조건 | startup 처리 |
-| --- | --- |
-| `in_process` mode | API process 재시작 중 중단된 `RUNNING` deployment를 기존 방식대로 `FAILED`로 정리합니다. |
-| ECS task가 `PENDING`, `RUNNING` 등 active 상태 | `deployment_jobs`의 deployment를 보호하고 worker가 계속 완료하도록 둡니다. |
-| `DescribeTasks`가 일시적으로 실패 | 실행 중인 deployment를 실패로 오판하지 않고 보호하며 경고를 남깁니다. |
-| ECS task가 `STOPPED` | active job을 `FAILED`로 종료하고 해당 deployment를 interrupted recovery로 정리합니다. |
-| ECS task가 잠시 보이지 않음 | job 갱신 후 5분 안에는 eventual consistency로 보고 보호하며, grace period 이후에도 `MISSING`이면 실패 처리합니다. |
-| task ARN 없는 `QUEUED`/`DISPATCHING` job | 5분 안에는 보호하고 이후에는 stale dispatch로 실패 처리합니다. |
-| task ARN 없는 `RUNNING` job | 유효하지 않은 실행 상태로 보고 job과 deployment를 실패 처리합니다. |
+| 조건                                           | startup 처리                                                                                                      |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `in_process` mode                              | API process 재시작 중 중단된 `RUNNING` deployment를 기존 방식대로 `FAILED`로 정리합니다.                          |
+| ECS task가 `PENDING`, `RUNNING` 등 active 상태 | `deployment_jobs`의 deployment를 보호하고 worker가 계속 완료하도록 둡니다.                                        |
+| `DescribeTasks`가 일시적으로 실패              | 실행 중인 deployment를 실패로 오판하지 않고 보호하며 경고를 남깁니다.                                             |
+| ECS task가 `STOPPED`                           | active job을 `FAILED`로 종료하고 해당 deployment를 interrupted recovery로 정리합니다.                             |
+| ECS task가 잠시 보이지 않음                    | job 갱신 후 5분 안에는 eventual consistency로 보고 보호하며, grace period 이후에도 `MISSING`이면 실패 처리합니다. |
+| task ARN 없는 `QUEUED`/`DISPATCHING` job       | 5분 안에는 보호하고 이후에는 stale dispatch로 실패 처리합니다.                                                    |
+| task ARN 없는 `RUNNING` job                    | 유효하지 않은 실행 상태로 보고 job과 deployment를 실패 처리합니다.                                                |
 
 DB의 active `deployment_jobs`가 실행권의 source of truth입니다. ECS 조회 오류만으로 job을 terminal 처리하지 않습니다. startup log에는
 `activeDeploymentCount`, `deferredInspectionCount`, `failedJobCount`, `recoveryRetryCount`, `recoveredDeploymentCount`만 기록하며 secret이나 원문 오류를 남기지 않습니다.
@@ -720,12 +720,12 @@ retryable 상태가 없어지면 중단하며 timer는 `unref` 처리되어 proc
 
 ### CloudWatch Logs와 alarms
 
-| container | log group | 기본 filter 목적 |
-| --- | --- | --- |
-| API | `/sketchcatch/<environment>/ecs/api` | Pino `level = 50` error |
-| web | `/sketchcatch/<environment>/ecs/web` | `ERROR`, `Error`, `error` text |
-| nginx (legacy rollback) | `/sketchcatch/<environment>/ecs/nginx` | ECS steady-state filter 없음 |
-| worker | `/sketchcatch/<environment>/ecs/worker` | `Deployment worker failed` process log |
+| container               | log group                               | 기본 filter 목적                       |
+| ----------------------- | --------------------------------------- | -------------------------------------- |
+| API                     | `/sketchcatch/<environment>/ecs/api`    | Pino `level = 50` error                |
+| web                     | `/sketchcatch/<environment>/ecs/web`    | `ERROR`, `Error`, `error` text         |
+| nginx (legacy rollback) | `/sketchcatch/<environment>/ecs/nginx`  | ECS steady-state filter 없음           |
+| worker                  | `/sketchcatch/<environment>/ecs/worker` | `Deployment worker failed` process log |
 
 log group은 `log_retention_days` 동안 유지합니다. `enable_ecs_observability_alarms` 기본값은 `false`입니다.
 `true`로 바꾸면 custom metric과 alarm 비용이 발생합니다. 활성화 시 API/web/worker error, API/web target health, API/web ECS CPU와 memory alarm을 만들며,
