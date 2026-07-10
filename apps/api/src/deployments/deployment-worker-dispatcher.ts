@@ -27,8 +27,18 @@ export type StopDeploymentWorkerResult = {
   errorSummary?: string;
 };
 
+export type InspectDeploymentWorkerInput = {
+  job: DeploymentJobRecord;
+};
+
+export type InspectDeploymentWorkerResult = {
+  state: "ACTIVE" | "STOPPED" | "MISSING";
+  lastStatus: string | null;
+};
+
 export type DeploymentWorkerDispatcher = {
   dispatch(input: DispatchDeploymentWorkerInput): Promise<DispatchDeploymentWorkerResult>;
+  inspect(input: InspectDeploymentWorkerInput): Promise<InspectDeploymentWorkerResult>;
   stop(input: StopDeploymentWorkerInput): Promise<StopDeploymentWorkerResult>;
 };
 
@@ -36,6 +46,9 @@ export function createLocalDeploymentWorkerDispatcher(): DeploymentWorkerDispatc
   return {
     async dispatch() {
       return { taskArn: null };
+    },
+    async inspect() {
+      return { state: "MISSING", lastStatus: null };
     },
     async stop() {
       return { stopped: false };
@@ -109,6 +122,31 @@ export function createEcsDeploymentWorkerDispatcher(input: {
 
       return {
         taskArn
+      };
+    },
+
+    async inspect({ job }) {
+      if (!job.ecsTaskArn) {
+        return { state: "MISSING", lastStatus: null };
+      }
+
+      const result = await ecsClient.send(
+        new DescribeTasksCommand({
+          cluster: config.cluster,
+          tasks: [job.ecsTaskArn]
+        })
+      );
+      const task = result.tasks?.[0];
+
+      if (!task) {
+        return { state: "MISSING", lastStatus: null };
+      }
+
+      const lastStatus = task.lastStatus ?? null;
+
+      return {
+        state: lastStatus === "STOPPED" ? "STOPPED" : "ACTIVE",
+        lastStatus
       };
     },
 

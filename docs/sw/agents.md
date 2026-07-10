@@ -25,3 +25,7 @@
 24. Redis는 내부 Runtime Cache이며 Practice Architecture Resource로 설명하지 않는다.
 25. 실제 AWS 생성/삭제 전에는 비용, rollback, cleanup 기준을 PR에 명시한다.
 26. 완료 전 `pnpm harness:check`를 실행하고 코드/인프라 변경이면 lint/typecheck/build도 실행한다.
+27. SketchCatch production infrastructure state는 사용자 Deployment state와 공유하지 않는다.
+28. production infra import/apply/destroy는 product API나 worker에서 실행하지 않는다.
+29. Route53/ACM, S3/RDS/Redis, legacy rollback은 별도 state와 approval gate로 격리한다.
+30. CloudFormation이 소유한 resource는 stack이 존재하는 동안 Terraform으로 중복 소유하지 않는다.

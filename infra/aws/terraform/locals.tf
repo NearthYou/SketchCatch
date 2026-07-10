@@ -7,11 +7,14 @@ locals {
       Environment = var.environment
       ManagedBy   = "Terraform"
       Workstream  = "ecs-migration"
-      Phase       = "phase-1-foundation"
+      Phase       = "phase-8-alb-path-routing"
     },
     var.tags
   )
 
+  api_path_patterns = ["/api", "/api/*", "/health", "/health/db"]
+
+  # The nginx repository and log group remain only for the documented ECS/EC2 rollback window.
   ecr_repositories = {
     api   = "${local.name_prefix}-api"
     web   = "${local.name_prefix}-web"
@@ -19,9 +22,16 @@ locals {
   }
 
   log_group_names = {
-    api   = "/sketchcatch/${var.environment}/ecs/api"
-    web   = "/sketchcatch/${var.environment}/ecs/web"
-    nginx = "/sketchcatch/${var.environment}/ecs/nginx"
+    api    = "/sketchcatch/${var.environment}/ecs/api"
+    web    = "/sketchcatch/${var.environment}/ecs/web"
+    nginx  = "/sketchcatch/${var.environment}/ecs/nginx"
+    worker = "/sketchcatch/${var.environment}/ecs/worker"
+  }
+
+  ecs_error_filter_patterns = {
+    api    = "{ $.level = 50 }"
+    web    = "?ERROR ?Error ?error"
+    worker = "\"Deployment worker failed\""
   }
 
   api_environment = merge(

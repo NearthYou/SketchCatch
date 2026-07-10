@@ -23,9 +23,10 @@ export class TerraformDiagramValidationError extends Error {
   }
 }
 
+// 기본 Resource block 뒤에 inline Lambda source의 archive companion block을 함께 렌더링한다.
 export function renderTerraformFromInfrastructureGraph(graph: InfrastructureGraph): string {
   return graph.nodes
-    .flatMap((node) => [renderBlock(node), ...renderCompanionBlocks(node, graph)])
+    .flatMap((node) => [renderBlock(node), ...renderCompanionBlocks(node)])
     .join("\n\n");
 }
 
@@ -46,21 +47,8 @@ function renderBlock(node: InfrastructureGraphNode): string {
   ].join("\n");
 }
 
-function renderCompanionBlocks(
-  node: InfrastructureGraphNode,
-  graph: InfrastructureGraph
-): string[] {
-  const blocks: string[] = [];
-
-  if (shouldRenderS3PublicAccessBlock(node, graph)) {
-    blocks.push(renderS3PublicAccessBlock(node));
-  }
-
-  if (hasInlineLambdaSource(node)) {
-    blocks.push(renderInlineLambdaArchive(node));
-  }
-
-  return blocks;
+function renderCompanionBlocks(node: InfrastructureGraphNode): string[] {
+  return hasInlineLambdaSource(node) ? [renderInlineLambdaArchive(node)] : [];
 }
 
 function createRenderableResourceConfig(
@@ -100,52 +88,6 @@ function renderInlineLambdaArchive(node: InfrastructureGraphNode): string {
     `${INDENT_UNIT}source_content = ${JSON.stringify(source)}`,
     `${INDENT_UNIT}source_content_filename = "index.mjs"`,
     `${INDENT_UNIT}output_path = "\${path.module}/${archiveName}.zip"`,
-    "}"
-  ].join("\n");
-}
-
-function shouldRenderS3PublicAccessBlock(
-  node: InfrastructureGraphNode,
-  graph: InfrastructureGraph
-): boolean {
-  return (
-    node.iac.terraformBlockType === "resource" &&
-    node.iac.resourceType === "aws_s3_bucket" &&
-    !hasExplicitPublicAccessBlockForBucket(node, graph)
-  );
-}
-
-function hasExplicitPublicAccessBlockForBucket(
-  bucketNode: InfrastructureGraphNode,
-  graph: InfrastructureGraph
-): boolean {
-  const bucketReferencePrefix = `aws_s3_bucket.${bucketNode.iac.resourceName}.`;
-
-  return graph.nodes.some((node) => {
-    if (
-      node.iac.terraformBlockType !== "resource" ||
-      node.iac.resourceType !== "aws_s3_bucket_public_access_block"
-    ) {
-      return false;
-    }
-
-    const bucketValue = node.config["bucket"];
-
-    return (
-      typeof bucketValue === "string" &&
-      bucketValue.startsWith(bucketReferencePrefix)
-    );
-  });
-}
-
-function renderS3PublicAccessBlock(bucketNode: InfrastructureGraphNode): string {
-  return [
-    `resource "aws_s3_bucket_public_access_block" "${bucketNode.iac.resourceName}_public_access" {`,
-    `${INDENT_UNIT}bucket = aws_s3_bucket.${bucketNode.iac.resourceName}.id`,
-    `${INDENT_UNIT}block_public_acls = true`,
-    `${INDENT_UNIT}block_public_policy = true`,
-    `${INDENT_UNIT}ignore_public_acls = true`,
-    `${INDENT_UNIT}restrict_public_buckets = true`,
     "}"
   ].join("\n");
 }

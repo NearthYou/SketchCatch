@@ -377,14 +377,6 @@ test("defaults missing terraformBlockType to resource", () => {
     generateTerraformFromDiagramJson(diagramJson),
     `resource "aws_s3_bucket" "logs" {
   bucket = "sketchcatch-logs"
-}
-
-resource "aws_s3_bucket_public_access_block" "logs_public_access" {
-  bucket = aws_s3_bucket.logs.id
-  block_public_acls = true
-  block_public_policy = true
-  ignore_public_acls = true
-  restrict_public_buckets = true
 }`
   );
 });
@@ -855,7 +847,7 @@ test("omits AI semantic metadata that is not accepted by the Terraform provider"
   assert.match(terraformCode, /enabled = true/);
   assert.match(terraformCode, /price_class = "PriceClass_100"/);
   assert.match(terraformCode, /instance_type = "t3.micro"/);
-  assert.match(terraformCode, /resource "aws_s3_bucket_public_access_block" "assets_public_access"/);
+  assert.doesNotMatch(terraformCode, /resource "aws_s3_bucket_public_access_block"/);
   assert.doesNotMatch(
     terraformCode,
     /bucket_purpose|public_access_block\s*=|service_purpose|origin_resource_id|application_purpose|terraform_resource_name|terraform_resource_type/

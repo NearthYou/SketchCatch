@@ -4,25 +4,28 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Currently Verified
 
-- Current branch: `fix/sw/302-ecs-worker-dispatch-safety`.
-- Active workstream: `ECS-MIGRATION-000`.
-- Phase 5 PR #296 is merged; issue #302 tracks valid post-merge review hardening.
-- `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check` passed during this session.
-- No live AWS commands were run.
+- Current branch: `feature/sw/314-production-infra-terraform`.
+- Active workstream: `ECS-MIGRATION-000`, issue #314.
+- The existing ECS runtime root and backend key are preserved.
+- Four production state groups have unique S3 backend keys and native lockfile configuration.
+- Static guards, four backend-free Terraform init/validate runs, runtime Terraform tests, and full repository checks pass.
+- No live AWS or remote Terraform operation has run.
 
 ## Changes This Session
 
-- Missing ECS RunTask task ARNs now fail dispatch.
-- Stale ECS cancellation paths terminalize the active deployment job.
-- ECS verification/stop API failures return 503 while preserving the active lock for safe retry.
-- Worker JSON config type boundaries and deployment/IAM guidance were tightened.
+- Added `infra/aws/production` with edge, data, and legacy rollback import-gate roots, backend examples, import manifest, and Korean runbook.
+- Added a manual `production-infra-plan` workflow requiring group confirmation and GitHub Environment approval.
+- Added a Node static checker for state groups, resource inventory, empty high-risk roots, and forbidden workflow operations.
+- Raised the runtime Terraform minimum to 1.10 and protected the production Route53 record from destroy.
+- Separated production infrastructure execution from product Deployment execution in canonical and docs/sw documents.
 
 ## Broken Or Unverified
 
-- No tests were added or run per user direction.
-- Worker runtime, task definition, roles, and worker security group are not implemented.
-- Keep production `DEPLOYMENT_WORKER_MODE=in_process` until those Phase 6 resources exist.
+- All requested local/static checks pass; live backend, state, and AWS ownership checks remain pending.
+- Backend bucket controls, OIDC plan role, existing state membership, and live resource ownership are not verified.
+- No import/resource blocks exist in edge/data/legacy roots by design.
+- CloudFormation and EC2 rollback remain external owners/rollback dependencies.
 
 ## Best Next Action
 
-- Run remaining static checks, publish the issue #302 fix PR, link it from PR #296 review threads, and resolve the addressed threads.
+- Complete final self-review, publish the PR, wait five minutes, resolve feedback, re-verify, and merge.

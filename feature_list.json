@@ -192,11 +192,13 @@
         "동시에 in_progress 상태인 feature/workstream이 1개 이하이다.",
         "docs/sw/spec.md와 docs/sw/plan.md가 parallel ALB cutover, Phase 1 single ECS task, RunTask one-off worker, SQS deferred decision을 기록한다.",
         "infra/aws/terraform이 ECR, ECS/Fargate, task definition, IAM, CloudWatch Logs, security groups, parallel ALB, listener, Fargate ip target group을 정의한다.",
+        "Phase 8 Terraform이 API/web 독립 service와 target group, ALB API/health path rule, web default action을 정의하고 ECS steady state에서 nginx를 제외한다.",
+        "Phase 9가 SketchCatch production infra를 runtime/edge/data/legacy state로 격리하고 backend lock, import inventory, plan-only approval을 기록한다.",
         "DeploymentJob 모델이 Terraform 실행 요청, 상태 전이, ECS task ARN placeholder, 실패 요약을 기록한다.",
         "API route가 ECS worker mode에서 DeploymentJob을 만들고 ECS RunTask dispatcher로 실행을 위임한다.",
         "agent-progress.md와 session-handoff.md가 최신 phase 상태와 다음 phase 기준을 기록한다."
       ],
-      "notes": "Phase 5 is merged. Follow-up issue #302 on branch fix/sw/302-ecs-worker-dispatch-safety hardens RunTask task ARN validation, cancellation job cleanup, retry-safe ECS API failure handling, and worker configuration guidance. Worker runtime and worker-specific Terraform resources remain pending; do not enable ECS worker mode in production yet."
+      "notes": "Phase 9 is active on issue #314 and branch feature/sw/314-production-infra-terraform. Production infrastructure is separated into runtime, edge, data, and legacy rollback state groups with S3 lockfile and plan-only approval gates. No live import/apply/destroy or AWS mutation is allowed in this phase."
     }
   ]
 }

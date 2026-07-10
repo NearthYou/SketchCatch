@@ -1,10 +1,55 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import type { InfrastructureGraph } from "@sketchcatch/types";
+import { renderTerraformFromInfrastructureGraph } from "../services/terraform/diagram-to-terraform.js";
 import {
   assertTerraformArtifactIsSafe,
   TerraformArtifactSafetyError
 } from "./terraform-artifact-safety.js";
+
+test("generated practice S3 artifacts omit synthetic public access blocks and pass safety", () => {
+  const graph: InfrastructureGraph = {
+    nodes: [
+      {
+        id: "bucket-1",
+        label: "service_bucket",
+        iac: {
+          provider: "aws",
+          terraformBlockType: "resource",
+          resourceType: "aws_s3_bucket",
+          resourceName: "service_bucket",
+          fileName: "storage"
+        },
+        config: {
+          bucket: "service-bucket"
+        }
+      }
+    ],
+    edges: []
+  };
+  const terraformCode = renderTerraformFromInfrastructureGraph(graph);
+
+  assert.doesNotMatch(terraformCode, /aws_s3_bucket_public_access_block/);
+  assert.doesNotThrow(() =>
+    assertTerraformArtifactIsSafe(terraformCode, { liveProfile: "practice" })
+  );
+});
+
+test("practice safety accepts legacy S3 public access block artifacts", () => {
+  assert.doesNotThrow(() =>
+    assertTerraformArtifactIsSafe(
+      `resource "aws_s3_bucket_public_access_block" "service_bucket_public_access" {
+        bucket = aws_s3_bucket.service_bucket.id
+        block_public_acls = true
+        block_public_policy = true
+        ignore_public_acls = true
+        restrict_public_buckets = true
+      }`,
+      { liveProfile: "practice" }
+    )
+  );
+});
 
 test("assertTerraformArtifactIsSafe accepts the MVP AWS resource subset", () => {
   assert.doesNotThrow(() =>
