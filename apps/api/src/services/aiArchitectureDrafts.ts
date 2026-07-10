@@ -11,6 +11,7 @@ import type {
   LlmExplanationFallbackReason,
   ResourceType
 } from "@sketchcatch/types";
+import type { RuntimeCache } from "../runtime-cache/index.js";
 import { applyGuardrailMetadata } from "./aiArchitectureDraftMetadata.js";
 import {
   createNormalizedArchitectureIntentPlan,
@@ -216,13 +217,16 @@ export function createArchitectureDraftFromRepositoryEvidence(
   };
 }
 
-export function createConfiguredAmazonQArchitectureDraftResponse(): CreateArchitectureDraftResponseFactory {
+export function createConfiguredAmazonQArchitectureDraftResponse(input: {
+  readonly runtimeCache?: RuntimeCache | undefined;
+} = {}): CreateArchitectureDraftResponseFactory {
   const regions = resolveAiProviderRegions(process.env);
   const provider =
     process.env.NODE_ENV === "test"
       ? undefined
       : createAmazonQArchitectureDraftProviderFromEnv({
-          region: regions.amazonQRegion
+          region: regions.amazonQRegion,
+          ...(input.runtimeCache === undefined ? {} : { runtimeCache: input.runtimeCache })
         });
   const requirementNormalizerProvider =
     process.env.NODE_ENV === "test" ? undefined : createOpenAiRequirementNormalizerProviderFromEnv();

@@ -5,6 +5,7 @@ import {
   type ChatSyncOutput
 } from "@aws-sdk/client-qbusiness";
 import type { ResourceType } from "@sketchcatch/types";
+import type { RuntimeCache } from "../runtime-cache/index.js";
 import {
   ARCHITECTURE_PATTERN_IDS,
   parseArchitectureIntentPlan,
@@ -12,9 +13,12 @@ import {
   type ArchitecturePatternId
 } from "./aiArchitectureRequirementNormalizer.js";
 import type { AiTextProvider } from "./aiLlmExplanation.js";
+import { createNormalizedAiCacheKey } from "./aiProviderSafety.js";
 
 const AMAZON_Q_MESSAGE_MAX_LENGTH = 2_048;
 const AMAZON_Q_PATTERN_VERIFICATION_TTL_MS = 60 * 60 * 1000;
+const AMAZON_Q_RECOVERY_CONCURRENCY = 2;
+const AMAZON_Q_PATTERN_CACHE_NAMESPACE = "ai:q-architecture-pattern-verification:v1";
 const PATTERN_ID_SET = new Set<string>(ARCHITECTURE_PATTERN_IDS);
 const LOAD_BALANCER_RESOURCE_TYPES = new Set<ResourceType>([
   "LOAD_BALANCER",
@@ -155,6 +159,7 @@ const CANONICAL_PATTERNS: Record<ArchitecturePatternId, CanonicalPatternDefiniti
 
 export function createAmazonQArchitectureDraftProviderFromEnv(input: {
   readonly region: string;
+  readonly runtimeCache?: RuntimeCache | undefined;
 }): AiTextProvider | undefined {
   if (process.env.AMAZON_Q_ENABLED !== "true") {
     return undefined;
@@ -170,7 +175,8 @@ export function createAmazonQArchitectureDraftProviderFromEnv(input: {
 
   return createAmazonQArchitectureDraftProvider({
     region: input.region,
-    retrievalApplicationId
+    retrievalApplicationId,
+    ...(input.runtimeCache === undefined ? {} : { runtimeCache: input.runtimeCache })
   });
 }
 
@@ -180,20 +186,59 @@ export function createAmazonQArchitectureDraftProvider(input: {
   readonly retrievalClient?: AmazonQBusinessArchitectureClient | undefined;
   readonly retrievalCacheTtlMs?: number | undefined;
   readonly now?: (() => number) | undefined;
+  readonly runtimeCache?: RuntimeCache | undefined;
 }): AiTextProvider {
   const retrievalClient = input.retrievalClient ?? createDefaultAmazonQClient(input.region);
   const now = input.now ?? Date.now;
   const retrievalCacheTtlMs = input.retrievalCacheTtlMs ?? AMAZON_Q_PATTERN_VERIFICATION_TTL_MS;
   const verifiedPatterns = new Map<ArchitecturePatternId, number>();
   const pendingVerifications = new Map<ArchitecturePatternId, Promise<void>>();
+  const createPatternCacheKey = (patternId: ArchitecturePatternId) => ({
+    namespace: AMAZON_Q_PATTERN_CACHE_NAMESPACE,
+    key: createNormalizedAiCacheKey({
+      provider: "amazon_q",
+      routeTarget: "architecture_draft",
+      model: input.retrievalApplicationId,
+      payload: {
+        documentId: CANONICAL_PATTERNS[patternId].documentId,
+        patternId
+      }
+    })
+  });
+  const isPatternVerified = async (patternId: ArchitecturePatternId): Promise<boolean> => {
+    if ((verifiedPatterns.get(patternId) ?? 0) > now()) {
+      return true;
+    }
+
+    if (input.runtimeCache === undefined) {
+      return false;
+    }
+
+    try {
+      const cached = await input.runtimeCache.get<{ documentId?: string }>(
+        createPatternCacheKey(patternId)
+      );
+      if (cached?.documentId !== CANONICAL_PATTERNS[patternId].documentId) {
+        return false;
+      }
+
+      verifiedPatterns.set(patternId, now() + retrievalCacheTtlMs);
+      return true;
+    } catch {
+      return false;
+    }
+  };
 
   const verifyPatterns = async (
     patternIds: readonly ArchitecturePatternId[],
     normalizedRequirement: ArchitectureIntentPlan | null
   ): Promise<void> => {
-    const unverifiedPatternIds = patternIds.filter(
-      (patternId) => (verifiedPatterns.get(patternId) ?? 0) <= now()
-    );
+    const unverifiedPatternIds: ArchitecturePatternId[] = [];
+    for (const patternId of patternIds) {
+      if (!(await isPatternVerified(patternId))) {
+        unverifiedPatternIds.push(patternId);
+      }
+    }
     if (unverifiedPatternIds.length === 0) {
       return;
     }
@@ -206,23 +251,68 @@ export function createAmazonQArchitectureDraftProvider(input: {
       return verifyPatterns(patternIds, normalizedRequirement);
     }
 
-    const verification = (async () => {
-      const response = await retrievalClient.send(
-        new ChatSyncCommand({
-          applicationId: input.retrievalApplicationId,
-          chatMode: "RETRIEVAL_MODE",
-          attributeFilter: createPatternAttributeFilter(unverifiedPatternIds),
-          userMessage: createArchitectureKnowledgeRetrievalPrompt(
-            unverifiedPatternIds,
-            normalizedRequirement
-          )
-        })
-      );
-
-      assertExpectedPatternCitations(unverifiedPatternIds, response);
+    const cacheVerifiedPatterns = async (
+      patternIdsToCache: readonly ArchitecturePatternId[]
+    ): Promise<void> => {
       const verifiedUntil = now() + retrievalCacheTtlMs;
-      for (const patternId of unverifiedPatternIds) {
+      for (const patternId of patternIdsToCache) {
         verifiedPatterns.set(patternId, verifiedUntil);
+
+        if (input.runtimeCache !== undefined) {
+          try {
+            await input.runtimeCache.set(
+              createPatternCacheKey(patternId),
+              { documentId: CANONICAL_PATTERNS[patternId].documentId },
+              { ttlMs: retrievalCacheTtlMs }
+            );
+          } catch {
+            // Cache writes are an optimization; verified Q evidence remains authoritative.
+          }
+        }
+      }
+    };
+    const verifyPatternsIndividually = async (
+      patternIdsToVerify: readonly ArchitecturePatternId[]
+    ): Promise<void> => {
+      await mapWithConcurrency(
+        patternIdsToVerify,
+        AMAZON_Q_RECOVERY_CONCURRENCY,
+        async (patternId) => {
+          const response = await sendArchitectureKnowledgeRetrieval(
+            retrievalClient,
+            input.retrievalApplicationId,
+            [patternId],
+            normalizedRequirement
+          );
+
+          assertExpectedPatternCitations([patternId], response);
+          await cacheVerifiedPatterns([patternId]);
+        }
+      );
+    };
+    const verification = (async () => {
+      let response: Pick<ChatSyncOutput, "systemMessage" | "sourceAttributions">;
+
+      try {
+        response = await sendArchitectureKnowledgeRetrieval(
+          retrievalClient,
+          input.retrievalApplicationId,
+          unverifiedPatternIds,
+          normalizedRequirement
+        );
+      } catch {
+        await verifyPatternsIndividually(unverifiedPatternIds);
+        return;
+      }
+
+      const missingPatternIds = findMissingPatternCitations(unverifiedPatternIds, response);
+      const citedPatternIds = unverifiedPatternIds.filter(
+        (patternId) => !missingPatternIds.includes(patternId)
+      );
+      await cacheVerifiedPatterns(citedPatternIds);
+
+      if (missingPatternIds.length > 0) {
+        await verifyPatternsIndividually(missingPatternIds);
       }
     })();
 
@@ -281,6 +371,44 @@ export function createAmazonQArchitectureDraftProvider(input: {
       };
     }
   };
+}
+
+async function sendArchitectureKnowledgeRetrieval(
+  retrievalClient: AmazonQBusinessArchitectureClient,
+  applicationId: string,
+  patternIds: readonly ArchitecturePatternId[],
+  normalizedRequirement: ArchitectureIntentPlan | null
+): Promise<Pick<ChatSyncOutput, "systemMessage" | "sourceAttributions">> {
+  return retrievalClient.send(
+    new ChatSyncCommand({
+      applicationId,
+      chatMode: "RETRIEVAL_MODE",
+      attributeFilter: createPatternAttributeFilter(patternIds),
+      userMessage: createArchitectureKnowledgeRetrievalPrompt(patternIds, normalizedRequirement)
+    })
+  );
+}
+
+async function mapWithConcurrency<TValue>(
+  values: readonly TValue[],
+  concurrency: number,
+  mapper: (value: TValue) => Promise<void>
+): Promise<void> {
+  let nextIndex = 0;
+  const workerCount = Math.min(concurrency, values.length);
+
+  await Promise.all(
+    Array.from({ length: workerCount }, async () => {
+      while (nextIndex < values.length) {
+        const value = values[nextIndex];
+        nextIndex += 1;
+
+        if (value !== undefined) {
+          await mapper(value);
+        }
+      }
+    })
+  );
 }
 
 export function resolveArchitecturePatternIds(
@@ -466,18 +594,28 @@ function assertExpectedPatternCitations(
   patternIds: readonly ArchitecturePatternId[],
   response: Pick<ChatSyncOutput, "sourceAttributions">
 ): void {
+  const missingPatternIds = findMissingPatternCitations(patternIds, response);
+
+  if (missingPatternIds.length > 0) {
+    throw new Error(
+      `Amazon Q retrieval citation did not include the expected pattern document(s): ${missingPatternIds
+        .map((patternId) => CANONICAL_PATTERNS[patternId].documentId)
+        .join(", ")}`
+    );
+  }
+}
+
+function findMissingPatternCitations(
+  patternIds: readonly ArchitecturePatternId[],
+  response: Pick<ChatSyncOutput, "sourceAttributions">
+): ArchitecturePatternId[] {
   const citedDocumentIds = new Set(
     (response.sourceAttributions ?? []).map((source) => source?.documentId)
   );
-  const missingDocumentIds = patternIds
-    .map((patternId) => CANONICAL_PATTERNS[patternId].documentId)
-    .filter((documentId) => !citedDocumentIds.has(documentId));
 
-  if (missingDocumentIds.length > 0) {
-    throw new Error(
-      `Amazon Q retrieval citation did not include the expected pattern document(s): ${missingDocumentIds.join(", ")}`
-    );
-  }
+  return patternIds.filter(
+    (patternId) => !citedDocumentIds.has(CANONICAL_PATTERNS[patternId].documentId)
+  );
 }
 
 function createRetrievalArchitectureRequirement(payload: unknown): ArchitectureIntentPlan | null {

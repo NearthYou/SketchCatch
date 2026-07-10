@@ -217,7 +217,8 @@ export type AiRouteOptions = {
 export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOptions = {}): Promise<void> {
   const createLlmExplanation = options.createLlmExplanation ?? createConfiguredAiExplanation();
   const createArchitectureDraftResponse =
-    options.createArchitectureDraftResponse ?? createConfiguredAmazonQArchitectureDraftResponse();
+    options.createArchitectureDraftResponse ??
+    createConfiguredAmazonQArchitectureDraftResponse({ runtimeCache: options.runtimeCache });
   const createSafetyFindingExplanation =
     options.createSafetyFindingExplanation ?? createConfiguredOpenAiSafetyFindingExplanation();
   const safetyExplanationTimeoutMs =

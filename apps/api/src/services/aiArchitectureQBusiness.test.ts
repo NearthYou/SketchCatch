@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { ChatSyncCommand, ChatSyncCommandInput } from "@aws-sdk/client-qbusiness";
+import { createInMemoryRuntimeCache } from "../runtime-cache/index.js";
 import {
   createAmazonQArchitectureDraftProvider,
   createArchitecturePatternAttributeFilter,
@@ -189,6 +190,176 @@ test("architecture provider retrieves all selected patterns in one Q request", a
     "spa-cloudfront-s3",
     "github-cicd-codedeploy",
     "multi-az-rds"
+  ]);
+});
+
+test("architecture provider retries only pattern citations omitted from a batched Q response", async () => {
+  const requestedPatternIds: string[][] = [];
+  const provider = createAmazonQArchitectureDraftProvider({
+    region: "ap-southeast-2",
+    retrievalApplicationId: "retrieval-app",
+    retrievalClient: {
+      send: async (command) => {
+        const patternIds = readFilteredPatternIds(command);
+        requestedPatternIds.push(patternIds);
+        const citedPatternIds = requestedPatternIds.length === 1
+          ? patternIds.filter((patternId) => patternId !== "multi-az-rds")
+          : patternIds;
+
+        return {
+          systemMessage: `Verified ${citedPatternIds.join(", ")}.`,
+          sourceAttributions: citedPatternIds.map((patternId) => ({
+            documentId: `sketchcatch-pattern-${patternId}-v1`
+          }))
+        };
+      }
+    }
+  });
+
+  const response = await provider.generate({
+    target: "architecture_draft",
+    instructions: "Return a plan.",
+    prompt: "Create a highly available web runtime with CI/CD and RDS.",
+    payload: {
+      normalizedRequirement: {
+        patternIds: ["alb-asg-ec2", "github-cicd-codedeploy", "multi-az-rds"]
+      }
+    }
+  });
+
+  assert.equal(JSON.parse(response.text).status, "plan");
+  assert.deepEqual(requestedPatternIds, [
+    ["alb-asg-ec2", "github-cicd-codedeploy", "multi-az-rds"],
+    ["multi-az-rds"]
+  ]);
+});
+
+test("architecture provider reuses verified citations across provider restarts", async () => {
+  const runtimeCache = createInMemoryRuntimeCache({ cleanupIntervalMs: null });
+  let retrievalCount = 0;
+  const createProvider = () => createAmazonQArchitectureDraftProvider({
+    region: "ap-southeast-2",
+    retrievalApplicationId: "retrieval-app",
+    runtimeCache,
+    retrievalClient: {
+      send: async (command) => {
+        retrievalCount += 1;
+        const patternIds = readFilteredPatternIds(command);
+
+        return {
+          systemMessage: `Verified ${patternIds.join(", ")}.`,
+          sourceAttributions: patternIds.map((patternId) => ({
+            documentId: `sketchcatch-pattern-${patternId}-v1`
+          }))
+        };
+      }
+    }
+  });
+  const request = {
+    target: "architecture_draft" as const,
+    instructions: "Return a plan.",
+    prompt: "Create an ALB fleet.",
+    payload: { normalizedRequirement: { patternIds: ["alb-asg-ec2"] } }
+  };
+
+  await createProvider().generate(request);
+  await createProvider().generate(request);
+
+  assert.equal(retrievalCount, 1);
+});
+
+test("architecture provider reads persistent verification cache without connection races", async () => {
+  const cachedDocumentIds = [
+    "sketchcatch-pattern-alb-asg-ec2-v1",
+    "sketchcatch-pattern-github-cicd-codedeploy-v1",
+    "sketchcatch-pattern-multi-az-rds-v1"
+  ];
+  let activeReads = 0;
+  let maxConcurrentReads = 0;
+  let nextCachedDocumentIndex = 0;
+  const provider = createAmazonQArchitectureDraftProvider({
+    region: "ap-southeast-2",
+    retrievalApplicationId: "retrieval-app",
+    runtimeCache: {
+      get: async <TValue>() => {
+        const documentId = cachedDocumentIds[nextCachedDocumentIndex]!;
+        nextCachedDocumentIndex += 1;
+        activeReads += 1;
+        maxConcurrentReads = Math.max(maxConcurrentReads, activeReads);
+
+        try {
+          if (activeReads > 1) {
+            throw new Error("Concurrent cache connection race");
+          }
+          await new Promise<void>((resolve) => setImmediate(resolve));
+          return { documentId } as TValue;
+        } finally {
+          activeReads -= 1;
+        }
+      },
+      set: async () => undefined,
+      delete: async () => false
+    },
+    retrievalClient: {
+      send: async () => assert.fail("Q retrieval must not run when every citation is cached")
+    }
+  });
+
+  await provider.generate({
+    target: "architecture_draft",
+    instructions: "Return a plan.",
+    prompt: "Create a highly available web runtime with CI/CD and RDS.",
+    payload: {
+      normalizedRequirement: {
+        patternIds: ["alb-asg-ec2", "github-cicd-codedeploy", "multi-az-rds"]
+      }
+    }
+  });
+
+  assert.equal(maxConcurrentReads, 1);
+});
+
+test("architecture provider recovers from a transient batched Q request failure", async () => {
+  const requestedPatternIds: string[][] = [];
+  const provider = createAmazonQArchitectureDraftProvider({
+    region: "ap-southeast-2",
+    retrievalApplicationId: "retrieval-app",
+    retrievalClient: {
+      send: async (command) => {
+        const patternIds = readFilteredPatternIds(command);
+        requestedPatternIds.push(patternIds);
+
+        if (requestedPatternIds.length === 1) {
+          throw new Error("Transient Q request failure");
+        }
+
+        return {
+          systemMessage: `Verified ${patternIds.join(", ")}.`,
+          sourceAttributions: patternIds.map((patternId) => ({
+            documentId: `sketchcatch-pattern-${patternId}-v1`
+          }))
+        };
+      }
+    }
+  });
+
+  const response = await provider.generate({
+    target: "architecture_draft",
+    instructions: "Return a plan.",
+    prompt: "Create a highly available web runtime with CI/CD and RDS.",
+    payload: {
+      normalizedRequirement: {
+        patternIds: ["alb-asg-ec2", "github-cicd-codedeploy", "multi-az-rds"]
+      }
+    }
+  });
+
+  assert.equal(JSON.parse(response.text).status, "plan");
+  assert.deepEqual(requestedPatternIds, [
+    ["alb-asg-ec2", "github-cicd-codedeploy", "multi-az-rds"],
+    ["alb-asg-ec2"],
+    ["github-cicd-codedeploy"],
+    ["multi-az-rds"]
   ]);
 });
 
