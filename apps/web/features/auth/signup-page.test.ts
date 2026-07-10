@@ -23,6 +23,7 @@ test("signup controls and legal dialog use the DESIGN.md auth tokens", () => {
   const wideShellRule = extractCssRule(".authDesignShellWide");
   const checkButtonRule = extractCssRule(".authDesignPage .authCheckButton");
   const consentButtonRule = extractCssRule(".authDesignPage .authConsentViewButton");
+  const errorTextRule = extractCssRule(".authDesignPage .authHelpText.authErrorText");
   const legalDialogRule = extractCssRule(".authDesignPage .authLegalDialog");
   const legalConfirmRule = extractCssRule(".authDesignPage .authLegalConfirmButton");
 
@@ -30,6 +31,7 @@ test("signup controls and legal dialog use the DESIGN.md auth tokens", () => {
   assert.match(checkButtonRule, /border-radius:\s*8px/);
   assert.match(checkButtonRule, /background:\s*var\(--auth-design-canvas\)/);
   assert.match(consentButtonRule, /color:\s*var\(--auth-design-link\)/);
+  assert.match(errorTextRule, /color:\s*#9f1d23/);
   assert.match(legalDialogRule, /background:\s*var\(--auth-design-canvas\)/);
   assert.match(legalDialogRule, /border-radius:\s*8px/);
   assert.match(legalConfirmRule, /background:\s*var\(--auth-design-primary\)/);

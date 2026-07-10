@@ -12,6 +12,20 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-10 - Signup password error highlight fix
+
+- Goal: Highlight signup password policy failures and password mismatch messages in red.
+- Completed:
+  - Added a compound auth error selector so the later generic help-text color cannot override `authErrorText`.
+  - Added regression coverage for the DESIGN.md signup error color.
+- Verification:
+  - Playwright reproduced the bug as computed color `rgb(96, 100, 108)`.
+  - Playwright verified all rendered password error messages use `rgb(159, 29, 35)` after the fix.
+  - `pnpm --filter @sketchcatch/web exec tsx features/auth/signup-page.test.ts` passed.
+  - `pnpm lint` passed.
+  - `pnpm typecheck` passed.
+  - `pnpm build` passed.
+
 ### 2026-07-10 - DESIGN.md signup page alignment
 
 - Goal: Align `/signup` with the existing DESIGN.md-based `/login` experience while preserving signup validation and legal-document behavior.

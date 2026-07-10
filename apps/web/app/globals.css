@@ -11271,6 +11271,10 @@ nextjs-portal {
   color: var(--auth-design-body);
 }
 
+.authDesignPage .authHelpText.authErrorText {
+  color: #9f1d23;
+}
+
 .authDesignPage .authWarningText {
   color: var(--auth-design-warning);
 }
