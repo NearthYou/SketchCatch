@@ -4,7 +4,7 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- Branch: fix/sw/316-ecs-production-cutover-및-worker-격리-안전성-보강.
+- Release PR: #319, dev to main.
 - Active workstream: ECS-MIGRATION-000, production cutover and worker isolation.
 - Issue: #316.
 - Production Route53 still points to the EC2 ALB.
@@ -24,6 +24,14 @@ Short English-only working log for the current agent context. Older records are 
 - Worker dispatch remains disabled until the worker caller principal is trusted by existing customer execution roles and a worker smoke passes.
 - Added production secret completeness preconditions, ALB deletion protection, invalid header dropping, Terraform tests, and Korean operations documentation.
 
+### 2026-07-11 - Resolve v2.0.0 release review
+
+- Restored the access token TTL to 15 minutes so session extension uses the existing refresh-token rotation path.
+- Corrected generic deployment warning classification and normalized managed Terraform user data before hash verification.
+- Updated generated GitHub Actions to use `python3` and made default S3 bucket names safe at the 63-character boundary.
+- Avoided redundant string conversion for downloaded Git artifacts.
+- Kept the two reverse-engineering record guards local because their array semantics differ and a shared helper would change behavior or add coupling.
+
 ## Verification
 
 - Initial harness check passed.
@@ -33,6 +41,8 @@ Short English-only working log for the current agent context. Older records are 
 - The revised production warmup plan has no legacy service, target group, or security group delete/replace actions.
 - Its only delete is the non-production ECS ALB HTTP forward listener, replaced by HTTP redirect plus HTTPS while legacy remains weight 100.
 - No Terraform apply, worker RunTask, or Route53 mutation has run yet.
+- Release review targeted tests passed 38 of 38.
+- Full repository lint, typecheck, and build passed after the review fixes.
 
 ## Risk
 
@@ -44,6 +54,5 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Next Action
 
-- Full repository checks, Terraform validation/tests, production structure guard, workflow/JSON formatting, and diff checks passed.
-- Open and merge the issue #316 PR after review.
-- Re-plan from merged dev, apply warmup, verify target health and direct HTTPS smoke, then separately apply split and perform the approved Route53 cutover.
+- Push the verified review patch to dev, resolve PR #319 review threads, and recheck CI before the release merge decision.
+- Re-plan production infrastructure from the released revision before any approved live warmup or cutover operation.

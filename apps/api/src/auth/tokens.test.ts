@@ -1,8 +1,18 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createAccessToken, createRefreshToken, hashToken, verifyAccessToken } from "./tokens.js";
+import {
+  ACCESS_TOKEN_TTL_SECONDS,
+  createAccessToken,
+  createRefreshToken,
+  hashToken,
+  verifyAccessToken
+} from "./tokens.js";
 
 process.env.AUTH_TOKEN_SECRET = "test-auth-token-secret-with-at-least-32-characters";
+
+test("access token lifetime stays short enough for refresh-token rotation", () => {
+  assert.equal(ACCESS_TOKEN_TTL_SECONDS, 15 * 60);
+});
 
 test("access token round trip exposes the signed user id", async () => {
   const token = await createAccessToken("user-1");

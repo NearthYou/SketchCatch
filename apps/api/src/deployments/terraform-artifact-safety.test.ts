@@ -336,6 +336,21 @@ test("assertTerraformArtifactIsSafe accepts managed demo EC2 user data for demo 
   );
 });
 
+test("assertTerraformArtifactIsSafe accepts canonical managed hashes with CRLF user data", () => {
+  assert.doesNotThrow(() =>
+    assertTerraformArtifactIsSafe(
+      `
+        resource "aws_instance" "api" {
+          ami              = "ami-1234567890abcdef0"
+          instance_type    = "t3.micro"
+          user_data_base64 = "${createManagedDemoUserDataBase64("\r\n")}"
+        }
+      `,
+      { liveProfile: "demo_web_service" }
+    )
+  );
+});
+
 test("assertTerraformArtifactIsSafe rejects managed demo EC2 user data outside the demo profile", () => {
   assert.throws(
     () =>
@@ -470,7 +485,7 @@ test("assertTerraformArtifactIsSafe rejects heredoc values", () => {
   );
 });
 
-function createManagedDemoUserDataBase64(): string {
+function createManagedDemoUserDataBase64(lineEnding: "\n" | "\r\n" = "\n"): string {
   const hashPrefix = "sketchcatch-demo-managed-user-data-sha256:";
   const normalized = [
     "#!/bin/bash",
@@ -479,7 +494,9 @@ function createManagedDemoUserDataBase64(): string {
     "echo sketchcatch-demo"
   ].join("\n");
   const hash = createHash("sha256").update(`${normalized}\n`).digest("hex");
-  const script = normalized.replace(`# ${hashPrefix}`, `# ${hashPrefix}${hash}`);
+  const script = normalized
+    .replace(`# ${hashPrefix}`, `# ${hashPrefix}${hash}`)
+    .replace(/\n/g, lineEnding);
 
-  return Buffer.from(`${script}\n`, "utf8").toString("base64");
+  return Buffer.from(`${script}${lineEnding}`, "utf8").toString("base64");
 }
