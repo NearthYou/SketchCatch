@@ -11388,28 +11388,88 @@ nextjs-portal {
   border: 1px solid var(--dashboard-design-hairline);
   border-radius: 8px;
   color: var(--dashboard-design-body);
+  display: grid;
+  gap: 12px;
   margin-top: auto;
   padding: 14px;
 }
 
-.designDashboardSidebarFooter p,
-.designDashboardSidebarFooter strong {
-  display: block;
-  margin: 0;
+.designDashboardAccountSummary {
+  align-items: center;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: auto minmax(0, 1fr);
 }
 
-.designDashboardSidebarFooter p {
-  color: var(--dashboard-design-muted);
-  font-size: 0.78rem;
-  font-weight: 700;
-  line-height: 1.4;
-}
-
-.designDashboardSidebarFooter strong {
+.designDashboardAccountIcon {
+  align-items: center;
+  background: var(--dashboard-design-surface-strong);
+  border-radius: 8px;
   color: var(--dashboard-design-ink);
+  display: inline-flex;
+  height: 34px;
+  justify-content: center;
+  width: 34px;
+}
+
+.designDashboardAccountSummary strong,
+.designDashboardAccountSummary span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.designDashboardAccountSummary strong {
+  color: var(--dashboard-design-ink);
+  font-size: 0.9rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.designDashboardAccountSummary span,
+.designDashboardAccountError {
+  color: var(--dashboard-design-body);
+  font-size: 0.78rem;
+  line-height: 1.4;
+  margin: 3px 0 0;
+}
+
+.designDashboardLogoutButton {
+  align-items: center;
+  background: var(--dashboard-design-primary);
+  border: 1px solid var(--dashboard-design-primary);
+  border-radius: 8px;
+  color: #ffffff;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
   font-size: 0.88rem;
-  line-height: 1.45;
-  margin-top: 8px;
+  font-weight: 700;
+  gap: 8px;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0 12px;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease;
+}
+
+.designDashboardLogoutButton:hover,
+.designDashboardLogoutButton:focus-visible {
+  background: var(--dashboard-design-primary-active);
+  border-color: var(--dashboard-design-primary-active);
+  outline: none;
+}
+
+.designDashboardLogoutButton:disabled {
+  cursor: progress;
+  opacity: 0.68;
+}
+
+.designDashboardAccountError {
+  color: var(--dashboard-design-error);
+  margin-top: 0;
 }
 
 .designDashboardMain {

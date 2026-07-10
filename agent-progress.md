@@ -12,6 +12,27 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-10 - Dashboard login/logout UX fix
+
+- Goal: Make the landing login flow show the login screen instead of auto-forwarding an existing session to `/dashboard`, and replace the design dashboard safety footer with account name plus logout.
+- Completed:
+  - Removed the login form's `status === "authenticated"` auto-redirect so `/login` remains visible when a previous refresh session exists.
+  - Added a client-side design dashboard account footer that reads the current auth user, calls existing `logout()`, and returns to `/login`.
+  - Replaced the `Deployment Safety Gate` sidebar copy with the account footer and styled it with the DESIGN.md black 8px CTA and white-canvas dashboard tokens.
+  - Added source-level regression coverage for the login form and design dashboard footer.
+- Verification:
+  - `pnpm harness:check` passed before and after edits.
+  - `pnpm --filter @sketchcatch/web lint` passed.
+  - `pnpm --filter @sketchcatch/web typecheck` passed after Next regenerated `.next/types`.
+  - `pnpm --filter @sketchcatch/web exec tsx features/auth/login-page.test.ts` passed.
+  - `pnpm --filter @sketchcatch/web exec tsx features/dashboard/design-dashboard.test.ts` passed.
+  - `pnpm lint` passed.
+  - `pnpm typecheck` passed.
+  - `pnpm build` passed.
+- Risk:
+  - `pnpm --filter @sketchcatch/web test` still fails in this sandbox with `spawn EPERM` across every `node:test` file; targeted single-process test execution passed for the changed coverage.
+  - Pre-existing `apps/web/next-env.d.ts` local modification was not touched.
+
 ### 2026-07-10 - Start ECS Phase 5 API worker dispatch
 
 - Goal: Add API-side ECS worker dispatch so Terraform execution can move from in-process background jobs to ECS RunTask one-off worker tasks when explicitly enabled.
