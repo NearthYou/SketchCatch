@@ -6,31 +6,35 @@ export function expandParentAreaNodesForChildren(
   childNodeIds: ReadonlySet<string>
 ): DiagramNode[] {
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const children = nodes.filter((node) => childNodeIds.has(node.id) && !isAreaNode(node));
 
-  for (const childNodeId of childNodeIds) {
-    const child = nodeById.get(childNodeId);
+  for (let pass = 0; pass < nodes.length; pass += 1) {
+    let expandedAnyParent = false;
 
-    if (!child || isAreaNode(child)) {
-      continue;
+    for (const child of children) {
+      const margin = { x: child.size.width / 2, y: child.size.height / 2 };
+      const visited = new Set<string>([child.id]);
+      let subject = child;
+      let parentId = child.metadata?.parentAreaNodeId;
+
+      while (parentId && !visited.has(parentId)) {
+        const parent = nodeById.get(parentId);
+
+        if (!parent || !isAreaNode(parent)) {
+          break;
+        }
+
+        visited.add(parentId);
+        const expanded = expandAreaToContain(parent, subject, margin);
+        expandedAnyParent ||= expanded !== parent;
+        nodeById.set(parent.id, expanded);
+        subject = expanded;
+        parentId = expanded.metadata?.parentAreaNodeId;
+      }
     }
 
-    const margin = { x: child.size.width / 2, y: child.size.height / 2 };
-    const visited = new Set<string>([child.id]);
-    let subject = child;
-    let parentId = child.metadata?.parentAreaNodeId;
-
-    while (parentId && !visited.has(parentId)) {
-      const parent = nodeById.get(parentId);
-
-      if (!parent || !isAreaNode(parent)) {
-        break;
-      }
-
-      visited.add(parentId);
-      const expanded = expandAreaToContain(parent, subject, margin);
-      nodeById.set(parent.id, expanded);
-      subject = expanded;
-      parentId = expanded.metadata?.parentAreaNodeId;
+    if (!expandedAnyParent) {
+      break;
     }
   }
 

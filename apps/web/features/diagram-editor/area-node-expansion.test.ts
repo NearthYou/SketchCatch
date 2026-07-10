@@ -61,6 +61,38 @@ test("does not shrink an area that already contains the child margin", () => {
   assert.deepEqual(getNode(result, child.id), child);
 });
 
+test("expands mixed-size siblings independently of child Set order", () => {
+  const region = makeArea("region", undefined, { x: 0, y: 0 }, { width: 160, height: 160 });
+  const vpc = makeArea("vpc", region.id, { x: 100, y: 50 }, { width: 40, height: 40 });
+  const largeIcon = makeIcon("large", vpc.id, { x: 100, y: 50 }, { width: 40, height: 40 });
+  const smallIcon = makeIcon("small", vpc.id, { x: 200, y: 65 }, { width: 10, height: 10 });
+  const nodes = [region, vpc, largeIcon, smallIcon];
+
+  const largeFirst = expandParentAreaNodesForChildren(
+    nodes,
+    new Set([largeIcon.id, smallIcon.id])
+  );
+  const smallFirst = expandParentAreaNodesForChildren(
+    nodes,
+    new Set([smallIcon.id, largeIcon.id])
+  );
+
+  assert.deepEqual(getNode(largeFirst, vpc.id), getNode(smallFirst, vpc.id));
+  assert.deepEqual(getNode(largeFirst, region.id), getNode(smallFirst, region.id));
+  assert.deepEqual(getNode(largeFirst, vpc.id)?.position, { x: 80, y: 30 });
+  assert.deepEqual(getNode(largeFirst, vpc.id)?.size, { width: 135, height: 80 });
+  assert.deepEqual(getNode(largeFirst, region.id)?.size, { width: 235, height: 160 });
+
+  const expandedVpc = getNode(largeFirst, vpc.id);
+  const expandedRegion = getNode(largeFirst, region.id);
+  assert.equal(
+    (expandedRegion?.position.x ?? 0) + (expandedRegion?.size.width ?? 0),
+    (expandedVpc?.position.x ?? 0) +
+      (expandedVpc?.size.width ?? 0) +
+      largeIcon.size.width / 2
+  );
+});
+
 function makeArea(
   id: string,
   parentAreaNodeId: string | undefined,
