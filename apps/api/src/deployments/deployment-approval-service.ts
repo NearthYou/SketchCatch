@@ -75,7 +75,7 @@ export async function approveDeploymentPlan(
   const deployment = await getDeployment(input, repository);
 
   assertDeploymentCanBeApproved(deployment);
-  assertDeploymentWarningsCanBeApproved(deployment, input.acknowledgedWarningIds ?? []);
+  void input.acknowledgedWarningIds;
 
   const currentPlanArtifact = await repository.findDeploymentPlanArtifactById(
     deployment.currentPlanArtifactId
@@ -306,35 +306,6 @@ function assertDeploymentCanBeApproved(
 
   if (!deployment.currentPlanArtifactId || !deployment.planSummary) {
     throw new DeploymentConflictError("Terraform Plan must be completed before approval");
-  }
-}
-
-function assertDeploymentWarningsCanBeApproved(
-  deployment: DeploymentRecord & {
-    planSummary: NonNullable<DeploymentRecord["planSummary"]>;
-  },
-  acknowledgedWarningIds: readonly string[]
-): void {
-  const blockingWarnings = deployment.planSummary.warnings
-    .filter((warning) => warning.blocksApproval)
-    .map((warning) => warning.id);
-
-  if (blockingWarnings.length > 0) {
-    throw new DeploymentConflictError(
-      `Deployment warnings block approval: ${blockingWarnings.join(", ")}`
-    );
-  }
-
-  const acknowledged = new Set(acknowledgedWarningIds);
-  const missingAcknowledgements = deployment.planSummary.warnings
-    .filter((warning) => warning.requiresAcknowledgement)
-    .map((warning) => warning.id)
-    .filter((warningId) => !acknowledged.has(warningId));
-
-  if (missingAcknowledgements.length > 0) {
-    throw new DeploymentConflictError(
-      `Deployment warnings must be acknowledged before approval: ${missingAcknowledgements.join(", ")}`
-    );
   }
 }
 

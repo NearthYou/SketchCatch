@@ -11,6 +11,11 @@ const startClientSource = readFileSync(
   fileURLToPath(new URL("workspace-start-client.tsx", import.meta.url)),
   "utf8"
 );
+const startPageSource = readFileSync(fileURLToPath(new URL("page.tsx", import.meta.url)), "utf8");
+const globalStylesSource = readFileSync(
+  fileURLToPath(new URL("../../globals.css", import.meta.url)),
+  "utf8"
+);
 
 test("createWorkspaceStartOptions makes AI and Reverse main choices and keeps blank board small", () => {
   const options = createWorkspaceStartOptions();
@@ -25,16 +30,20 @@ test("createWorkspaceStartOptions makes AI and Reverse main choices and keeps bl
   );
 });
 
-test("WorkspaceStartClient renders the blank board as a small helper label", () => {
-  assert.match(startClientSource, /workspaceStartBlankLabel/);
+test("WorkspaceStartClient uses dashboard style without reviving the old workspaceStart CSS", () => {
+  assert.match(startPageSource, /designDashboardPage/);
+  assert.match(startPageSource, /workspaceNewPanel/);
+  assert.match(startClientSource, /className="workspaceNewForm"/);
+  assert.match(startClientSource, /className="workspaceNewChoiceButton"/);
+  assert.match(globalStylesSource, /\.workspaceNewChoiceButton/);
+  assert.doesNotMatch(globalStylesSource, /workspaceStart/);
   assert.match(startClientSource, /option\.priority === "primary"/);
   assert.match(startClientSource, /blankStartOption/);
-  assert.doesNotMatch(startClientSource, /workspaceStartOptionButtonSecondary/);
 });
 
 test("WorkspaceStartClient can connect GitHub immediately after blank project creation", () => {
   assert.match(startClientSource, /connectGitHubAfterCreate/);
-  assert.match(startClientSource, /workspaceStartCheckbox/);
+  assert.match(startClientSource, /type="checkbox"/);
   assert.match(startClientSource, /createGitHubSourceRepositoryInstallUrl\(project\.id\)/);
   assert.match(startClientSource, /window\.location\.assign\(installUrl\)/);
 });

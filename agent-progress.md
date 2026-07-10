@@ -5,215 +5,182 @@ Short English-only working log for the current agent context. Older records are 
 ## Current Verified State
 
 - Branch: `feat/ck/287-ai-diagram`.
-- Current scope: make AI architecture drafts and patch previews use the shared left-panel Terraform resource catalog as selectable generation and modification material.
-- The shared catalog now has ResourceType values for formerly UNKNOWN panel resources including caller identity, SSM Parameter, CodeBuild, CodeDeploy, CodePipeline, and CodeStar connection.
-- The AI draft prompt, top-level payload, and referenceKnowledge payload now receive the same generated resource catalog.
-- Generated CI/CD resources now carry deploy-ready default config guidance and pass Terraform Preview, diagnostics, and live apply safety support checks.
-- Amazon Q preview self-validation now rejects missing explicitly requested resource-panel types and undersized EC2 fleets before accepting a draft.
-- Amazon Q preview self-validation now also rejects no-upload violations, disconnected ALB/ASG/EC2 runtime paths, EC2 fleets not distributed across requested private subnets, and EC2 fleets visually grouped into one private subnet box.
-- Architecture Drafts now always send a deterministic normalized requirement plan to Amazon Q, and can merge in OpenAI Requirement Normalizer output when the normalizer is enabled; Amazon Q remains the diagram generator and deterministic validation remains the acceptance gate.
-- The OpenAI Requirement Normalizer now uses a dedicated Structured Outputs wire schema and converts nullable wire values into the existing optional internal plan without changing other OpenAI features.
-- AI patch previews now apply deployable config changes for supported parameters and can migrate an EC2 runtime path to API Gateway plus Lambda serverless topology.
-- Latest `dev` workspace parameter editing, Terraform validation, and ECS deployment worker changes are merged into this branch.
-- Targeted API tests plus full lint/typecheck/build passed during this session.
-- No Terraform apply/destroy, deployment, AWS calls, or cloud mutation was run.
+- Current scope: keep Amazon Q Business architecture planning and validation while integrating the latest `dev` changes.
+- Local `dev` and `origin/dev` point to `314b0c35`.
+- Architecture Draft uses OpenAI normalization, compact Amazon Q planning, and backend materialization/validation with safe fallback.
+- Latest deployment warning, dashboard project inventory, cost UI, and ECS worker dispatch hardening from `dev` are included.
+- Production must keep `DEPLOYMENT_WORKER_MODE=in_process` until the worker task definition, entrypoint, roles, security group, and runtime are implemented.
+- No Terraform apply/destroy, deployment execution, or cloud mutation was run during the merge.
 
 ## Session Record
 
-### 2026-07-10 - Merge latest dev into AI diagram branch
+### 2026-07-10 - Make deployment warnings non-blocking
 
-- Goal: Update local `dev` to the latest remote state and merge it into `feat/ck/287-ai-diagram` without losing AI work or local generated-file changes.
+- Goal: Let Direct Deployment proceed even when high-risk Trivy or deployment safety warnings are present.
 - Completed:
-  - Fetched `origin/dev` at `aecff9fc` and fast-forwarded the local `dev` reference from `7ed51f19`.
-  - Merged `dev` into the AI diagram branch and resolved the single `agent-progress.md` conflict by preserving both AI and upstream Workspace/ECS records.
-  - Preserved the pre-existing `apps/web/next-env.d.ts` development-mode change outside the merge commit.
+  - Changed Pre-Deployment/Safety Gate warning creation so high-risk findings, unsupported-resource warnings, and destructive-change warnings no longer set `blocksApproval`.
+  - Removed approval-time rejection for stored blocking or acknowledgement-only warnings, so older plan summaries cannot block approval only because of warning metadata.
+  - Updated workspace deployment action state so the Plan approval button stays enabled even when `planSummary.warnings` contains `blocksApproval: true`.
+  - Updated `docs/data-models.md` to describe warning preservation without approval/deployment blocking.
 - Verification:
-  - Focused API tests passed with 77 tests covering AI drafts, patch previews, requirement normalization, and Terraform Preview.
-  - Focused web tests passed with 47 tests covering Workspace diagram conversion, parameter references, and validation.
-  - `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed after the merge.
+  - `pnpm harness:check` passed before edits.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/deployments/deployment-safety-gate.test.ts src/deployments/deployment-approval-service.test.ts src/deployments/deployment-plan-service.test.ts` passed.
+  - `pnpm --filter @sketchcatch/web exec tsx features/workspace/deployment-actions.test.ts` passed.
+  - `pnpm lint` passed.
+  - `pnpm typecheck` passed.
+  - `pnpm build` passed.
 - Risk:
-  - No live AWS commands, Terraform apply/destroy, deployment execution, or cloud mutation was run.
+  - Terraform validation, plan creation, artifact/hash drift checks, approval snapshot checks, AWS account/region drift checks, and actual Terraform apply failures still remain hard gates. This change only removes warning metadata as an approval blocker.
 
-### 2026-07-10 - OpenAI requirement normalizer runtime fix
+### 2026-07-10 - Connect dashboard project inventory to live user projects
 
-- Goal: Make the enabled Architecture Draft OpenAI normalizer work without changing shared OpenAI explanation or safety behavior.
+- Goal: Replace the static `/dashboard/projects` sample with projects owned by the authenticated user.
 - Completed:
-  - Split the OpenAI Structured Outputs wire schema from the optional internal `ArchitectureIntentPlan` schema.
-  - Represented resource quantities as a strict wire array and converted it back to the existing internal resource quantity map before Amazon Q handoff.
-  - Removed nullable wire fields during normalization and increased only the requirement normalizer timeout from 10 to 30 seconds.
-  - Added a regression test that rejects optional-field and unsupported `propertyNames` schema regressions.
+  - Added a focused DESIGN.md project inventory client backed by `GET /api/projects` through `listProjects()`.
+  - Added selectable recent-work and recent-creation sorting, project-name search, loading/error/empty states, and workspace links carrying the real project ID.
+  - Removed fake source, risk, and deployment-status columns from the live inventory surface.
+  - Added responsive project inventory styles and source-level regression coverage.
 - Verification:
-  - A real configured `gpt-5.5` call returned a normalized EC2/ALB/ASG/private-subnet plan instead of `null`.
-  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/aiArchitectureRequirementNormalizer.test.ts src/services/aiArchitectureDrafts.test.ts src/services/aiLlmExplanation.test.ts src/services/aiSafetyFindingExplanation.test.ts` passed with 47 tests.
-  - `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
-- Risk:
-  - The normalizer can add up to 30 seconds to an Architecture Draft request. Deterministic normalization remains the fallback and acceptance constraints remain backend-validated.
-
-### 2026-07-10 - AI patch preview deployable modification support
-
-- Goal: Ensure AI architecture modification can do more than insert resources: deployable parameter edits and large topology changes should be previewed before user acceptance.
-- Completed:
-  - Added a structural patch preview path for EC2 runtime to serverless migration that removes EC2 runtime support resources, adds API Gateway and Lambda, and reconnects preserved data dependencies.
-  - Extended modify-resource config extraction for Lambda memory/timeout/runtime, RDS class/storage/engine, S3 versioning, Security Group ports, Load Balancer public/private mode, Auto Scaling Group capacity, and CodeBuild timeout.
-  - Kept broad add-resource behavior catalog-backed while narrowing serverless migration detection so simple S3-to-Lambda replacement requests are not misread as full runtime migration.
-  - Added regression tests for deployable Lambda parameter edits, S3/security group parameter edits, and EC2-to-serverless topology migration.
-- Verification:
-  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/aiArchitecturePatchPreview.test.ts` passed.
-  - Korean smoke check for `EC2 환경인데 서버리스로 수정하고 싶어` returned a preview with EC2 removal plus API Gateway/Lambda additions.
-  - `pnpm typecheck`, `pnpm lint`, `pnpm build`, and `pnpm harness:check` passed.
-- Risk:
-  - This only changes architecture patch preview behavior before user acceptance. No Terraform apply/destroy, deployment, AWS calls, or cloud mutation was run.
-
-### 2026-07-10 - Deterministic normalized requirements for all AI drafts
-
-- Goal: Ensure the Architecture Draft normalizer behavior is generic and not tied to one EC2/ALB prompt case or to OpenAI being enabled.
-- Completed:
-  - Added a deterministic backend ArchitectureIntentPlan builder that extracts explicit supported resources, resource quantities, forbidden capabilities, region/database/availability hints, and runtime topology constraints from every Amazon Q architecture draft request.
-  - Merged deterministic hard constraints with optional OpenAI normalizer output so OpenAI can enrich the plan while backend-derived constraints stay present when OpenAI is disabled.
-  - Extended normalized requirement validation for realtime exclusions, runtime compute count, and visual private-subnet spread.
-  - Added a regression test proving Amazon Q receives a normalizedRequirement payload and prompt section even without an OpenAI normalizer provider.
-- Verification:
-  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/aiArchitectureDrafts.test.ts` passed.
-  - `pnpm --filter @sketchcatch/api typecheck` passed.
+  - Project inventory, project sorting, project search, and dashboard route tests passed.
   - `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check` passed.
+  - Playwright verified search filtering, both sort orders, and 1440px and 375px layouts without horizontal overflow.
 - Risk:
-  - No real AWS, Terraform apply/destroy, deployment, or Git/CI/CD handoff was run.
+  - The Playwright session had no authenticated user cookie, so populated visual QA used a browser-only mocked `GET /api/projects` response. The existing API ownership tests cover active-user filtering.
 
-### 2026-07-10 - AI EC2 subnet visual placement guardrail
+### 2026-07-10 - Apply DESIGN.md cost dashboard UI
 
-- Goal: Fix AI draft outputs that kept showing EC2 fleets visually grouped in one subnet, disconnected ASG/ALB placement, and upload/media buckets from neutral file answers.
+- Goal: Apply the selected cost operations prototype to `/dashboard/costs` without adding estimated-versus-actual comparison behavior.
 - Completed:
-  - Added Amazon Q preview validation for EC2 fleets that are semantically split by subnet references but visually placed inside only one private subnet box.
-  - Updated the workspace ArchitectureJson adapter so EC2 nodes with explicit `subnetId` are not forced into a shared security-group parent when that would collapse multiple subnet placements into one visual area.
-  - Treated neutral file answers such as "file is anything / not related to EC2" as non-upload requirements and stopped content/reservation purpose buckets unless `file_upload` is actually selected.
-  - Added API and web regression tests for visual subnet spread, neutral file answers, and shared-security-group EC2 subnet placement.
+  - Connected the live `CostsClient` to the DESIGN.md dashboard shell instead of the static cost sample.
+  - Made actual AWS usage the default view and kept pre-deployment estimates in a separate tab.
+  - Added verified AWS connection treatment, four usage metrics, a two-column trend/service layout, project usage navigation, and optimization review surfaces.
+  - Added isolated DESIGN.md cost styles with responsive layouts and source-level route coverage.
 - Verification:
-  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/aiArchitectureDrafts.test.ts` passed.
-  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-diagram-adapter.test.ts` passed.
-  - `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
+  - Dashboard and cost feature tests passed.
+  - `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check` passed.
+  - Playwright verified both tabs at 1440px and 375px; mobile document width remained 375px.
 - Risk:
-  - No real AWS, Terraform apply/destroy, deployment, or Git/CI/CD handoff was run.
+  - The local browser had no authenticated user session, so populated AWS usage visual QA used browser-only mocked API responses. Production API contracts and backend behavior were not changed.
 
-### 2026-07-10 - OpenAI requirement normalizer for Amazon Q drafts
+### 2026-07-10 - DESIGN.md cost dashboard prototype
 
-- Goal: Let AI Architecture Drafts use OpenAI only to normalize user requirements before Amazon Q generates the diagram.
+- Goal: Explore `/dashboard/costs` UI directions without changing the service implementation or comparing estimated and actual costs.
 - Completed:
-  - Added an opt-in OpenAI Requirement Normalizer provider controlled by `AI_ARCHITECTURE_REQUIREMENT_NORMALIZER=openai`.
-  - Added a sanitized `ArchitectureIntentPlan` contract for required resources, resource quantities, forbidden capabilities, runtime topology, region, database, availability, and Amazon Q brief lines.
-  - Sent normalized requirements to Amazon Q payloads and prompts while keeping Amazon Q as the diagram generator.
-  - Extended Amazon Q preview self-validation so normalized required resources, quantities, forbidden file upload capability, and ALB/ASG/EC2 topology are enforced before accepting a draft.
-  - Added regression coverage for the normalizer-to-Amazon-Q contract and repair payload validation issues.
+  - Added a standalone HTML prototype with three switchable layouts: operations tabs, project workspace, and cost operations board.
+  - Applied DESIGN.md typography, color, spacing, control, border, and responsive conventions.
+  - Kept estimate and actual usage as separate decision views rather than a comparison metric.
 - Verification:
-  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/aiArchitectureDrafts.test.ts` passed.
+  - Playwright verified all three variants at 1440px and 375px without horizontal overflow.
+  - Playwright verified keyboard variant switching and zero console errors or warnings.
+- Risk:
+  - This is a disposable prototype under `output/prototypes`; no `/dashboard/costs` application code was changed.
+
+### 2026-07-10 - Prevent duplicate dashboard logout requests
+
+- Goal: Apply the selected review comment so repeated logout clicks cannot start duplicate requests.
+- Completed:
+  - Added local `isPending` state to the dashboard account footer.
+  - Disabled logout while auth is loading or the current logout request is pending.
+  - Reset pending state in `finally` for both success and failure paths.
+  - Added focused regression coverage for the pending-state flow.
+- Verification:
+  - `pnpm --filter @sketchcatch/web exec tsx features/dashboard/design-dashboard.test.ts` passed.
+  - `pnpm lint` passed.
+  - `pnpm typecheck` passed.
+  - `pnpm build` passed.
+- Risk:
+  - GitHub CLI is unavailable in this environment, so the PR review thread was not replied to or resolved.
+
+### 2026-07-10 - Signup password error highlight fix
+### 2026-07-10 - Harden ECS worker dispatch after merged PR review
+
+- Goal: Address valid post-merge review findings on PR #296 without running live AWS commands.
+- Completed:
+  - Re-read all five unresolved review threads with thread resolution and outdated state.
+  - Made missing `RunTask` task ARNs fail dispatch instead of leaving an untraceable running job.
+  - Made stale ECS cancellation paths terminalize the active deployment job before the existing deployment fail-safe runs.
+  - Made ECS task verification or stop API failures return a retryable result so the route responds with 503 and preserves the active lock against concurrent Terraform execution.
+  - Made JSON worker config parser casts explicit after runtime validation.
+  - Clarified that ECS worker mode must remain disabled until worker runtime and infrastructure exist, and documented public-IP and cluster-scoped IAM requirements.
+- Verification:
+  - `pnpm harness:check` passed before and after edits.
+  - `pnpm lint` passed.
+  - `pnpm typecheck` passed.
+  - `pnpm build` passed.
+  - `git diff --check` passed.
+- Risk:
+  - No new tests were added or run per user direction.
+  - The worker task definition, worker roles, worker security group, and worker process are not implemented yet.
+
+### 2026-07-10 - Start ECS Phase 5 API worker dispatch
+
+- Goal: Add API-side ECS worker dispatch so Terraform execution can move from in-process background jobs to ECS RunTask one-off worker tasks when explicitly enabled.
+- Completed:
+  - Merged Phase 4 PR #294 into `dev`.
+  - Created GitHub issue #295.
+  - Created linked branch `feature/sw/295-ecs-worker-task-dispatch` from updated `dev` with `gh issue develop`.
+  - Added `DEPLOYMENT_WORKER_MODE` and ECS worker dispatch env validation for cluster, task definition, subnets, security groups, container name, command, static worker env, and public IP setting.
+  - Added ECS/local deployment worker dispatcher abstraction using `RunTask`, `DescribeTasks`, and `StopTask`.
+  - Wired deployment init/plan/apply/destroy-plan/destroy routes to create a `DeploymentJob` and dispatch ECS RunTask when ECS worker mode is enabled.
+  - Wired cancel to call ECS StopTask when an active job has an ECS task ARN; otherwise the existing stale RUNNING fail-safe still marks the deployment failed.
+  - Added `init` to `deployment_job_operation` with migration `0028_deployment_job_init_operation.sql`.
+  - Added route/config/dispatcher tests and updated `docs/deployment.md` with env and least-privilege IAM requirements.
+- Verification so far:
+  - `pnpm harness:check` passed.
+  - `pnpm lint` passed.
+  - `pnpm typecheck` passed.
+  - `pnpm build` passed.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/deployments/deployment-worker-dispatcher.test.ts src/config/env.test.ts src/routes/deployments.test.ts` passed.
   - `pnpm --filter @sketchcatch/api typecheck` passed.
-  - `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
+  - `pnpm --filter @sketchcatch/api lint` passed.
+  - `pnpm --filter @sketchcatch/api test -- deployments` ran the whole API suite because the package script does not filter test files; Phase 5 tests passed, but pre-existing unrelated AI fixture and missing docs/jh fixture failures were reported.
 - Risk:
-  - The OpenAI normalizer is opt-in and is not a deployment or cloud mutation path. No Terraform apply/destroy, deployment, AWS calls, or cloud mutation was run.
+  - Worker runtime is still out of scope; ECS-dispatched tasks need Phase 6 code to consume `SKETCHCATCH_DEPLOYMENT_JOB_ID` and finish deployment state updates.
+  - The requested API deployments test command currently exits 1 because of unrelated pre-existing failures in `aiLlmExplanationRoutes.test.ts` and a missing `docs/jh/000_AWS리소스목록_JH.md` fixture.
+  - No live AWS commands should be run in Phase 5.
 
-### 2026-07-10 - AI draft runtime topology validation
+### 2026-07-10 - Start ECS Phase 4 deployment job model
 
-- Goal: Stop accepting Amazon Q diagrams that place requested CI/CD and runtime resources as disconnected icons or contradict selected questionnaire answers.
+- Goal: Add a deployment job model for Terraform execution jobs so Phase 5 can dispatch ECS RunTask one-off workers.
 - Completed:
-  - Added runtime topology validation for ALB to ASG/EC2 traffic paths.
-  - Added ASG-to-EC2 fleet validation when ASG is requested as part of an EC2 runtime.
-  - Added private subnet spread validation for prompts that request EC2 placement across two private subnets.
-  - Expanded no-file-upload detection for Korean answers such as `파일 업로드는 없고`.
-  - Prevented `관리 복잡도` and `간단한 데이터` from being misread as complex backend or low-budget signals.
-- Verification:
-  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/aiArchitectureDrafts.test.ts src/services/aiArchitectureResourceQuantities.test.ts` passed.
-  - `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
-- Risk:
-  - This changes deterministic AI preview validation only. No Terraform apply/destroy, deployment, AWS calls, or cloud mutation was run.
-
-### 2026-07-10 - AI draft explicit resource validation
-
-- Goal: Prevent Amazon Q drafts from accepting diagrams that only partially satisfy explicit CI/CD and multi-EC2 resource requests.
-- Completed:
-  - Fixed explicit EC2/S3 quantity parsing for Korean and English count phrases such as `EC2 3대` and `3 EC2 instances`.
-  - Added Amazon Q preview validation for missing explicitly requested supported resource-panel types.
-  - Added Amazon Q preview validation for requested EC2 fleet counts that are not visible in the returned ArchitectureJson.
-  - Updated detailed-brief test fixtures so required ASG/VPC resources are actually represented.
-- Verification:
-  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/aiArchitectureResourceQuantities.test.ts src/services/aiArchitectureDrafts.test.ts` passed.
-  - `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
-- Risk:
-  - This is deterministic validation only. No Terraform apply/destroy, deployment, AWS calls, or cloud mutation was run.
-
-### 2026-07-10 - AI draft resource-panel catalog coverage
-
-- Goal: Let the AI auto draft and diagram patch flow generate every Terraform resource from the main left resource panel as catalog-backed resources.
-- Completed:
-  - Added ResourceType coverage for previously UNKNOWN panel resources.
-  - Sent the shared resource panel catalog to Amazon Q draft prompts and payloads.
-  - Updated deterministic fallback drafts to add explicitly requested panel resources with exact Terraform resource/data metadata.
-  - Updated patch preview add-resource recognition to derive keywords from the shared catalog.
-  - Preserved AI-provided `config.terraformResourceType` during web ArchitectureJson to DiagramJson conversion.
-  - Added API and web regression tests for catalog-backed automatic draft, patch preview, and diagram conversion behavior.
-- Verification:
+  - Created GitHub issue #293.
+  - Created linked branch `feature/sw/293-deployment-runtask-jobs` from `dev` with `gh issue develop`.
+  - Read root `AGENTS.md`, `docs/sw/agents.md`, `docs/sw/spec.md`, `docs/sw/plan.md`, and `apps/api/AGENTS.md`.
+  - Added `deployment_jobs` DB schema/migration with operation/status enums, requester/access context, source deployment state, ECS task ARN placeholder, timestamps, error summary, and active-job duplicate protection.
+  - Added internal deployment job repository/service helpers for create, dispatching/running, task ARN recording, success, failure, and cancellation transitions.
+  - Added deployment job service tests for creation, state transitions, duplicate protection, and masked failure/cancellation recording.
+  - Updated `docs/data-models.md` with the internal `DeploymentJob` contract while noting public Deployment API shapes remain stable.
+- Verification so far:
+  - `pnpm harness:check` passed before Phase 4 edits.
+  - `pnpm harness:check` passed after Phase 4 edits.
+  - `pnpm lint` passed.
+  - `pnpm typecheck` passed.
+  - `pnpm build` passed.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/deployments/deployment-job-service.test.ts` passed.
+  - `pnpm --filter @sketchcatch/api lint` passed.
   - `pnpm --filter @sketchcatch/api typecheck` passed.
-  - `pnpm --filter @sketchcatch/web typecheck` passed.
-  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/aiArchitectureDrafts.test.ts src/services/aiArchitecturePatchPreview.test.ts` passed.
-  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-diagram-adapter.test.ts` passed.
-  - `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
+  - `pnpm --filter @sketchcatch/api test -- deployment` ran the whole API suite because the package script does not filter test files; the new deployment job tests passed, but pre-existing unrelated AI fixture and missing docs/jh fixture failures were reported.
 - Risk:
-  - This changes draft selection and patch recognition only; no deployment or cloud mutation was run.
-
-### 2026-07-10 - AI generated resource catalog payload sync
-
-- Goal: Ensure the resource information sent to AI includes the newly generatable resource-panel items.
-- Completed:
-  - Extracted a shared API-side generated resource catalog helper from shared resource definitions.
-  - Reused the same catalog in the Amazon Q draft prompt, top-level payload, and `referenceKnowledge.generatedResourceCatalog`.
-  - Added payload assertions for CodeBuild, CodeDeploy, CodePipeline, and SSM Parameter catalog entries.
-- Verification:
-  - `pnpm --filter @sketchcatch/api typecheck` passed.
-  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/aiArchitectureDrafts.test.ts` passed.
-  - `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
-- Risk:
-  - Payload size increases because referenceKnowledge now carries the generated resource catalog, but it stays derived from the shared compact resource definitions.
-
-### 2026-07-10 - AI-generated resource deployment readiness
-
-- Goal: Make newly generatable AI resources deploy-ready by SketchCatch Terraform Preview and deployment safety standards.
-- Completed:
-  - Added deployment default config and deployment notes to the shared AI resource catalog for CI/CD and data-source resources.
-  - Reused deployment defaults in deterministic fallback drafts and architecture patch previews.
-  - Allowed CodeBuild, CodeDeploy, CodePipeline, CodeStar connection, IAM role companions, caller identity, and SSM parameter through deployment support checks.
-  - Added Terraform Preview, diagnostics, resource definition, plan summary, and artifact safety tests for the generated CI/CD/data-source resources.
-- Verification:
-  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-preview.test.ts src/deployments/terraform-artifact-safety.test.ts src/deployments/deployment-plan-summary.test.ts src/services/terraform/resource-definitions-source-shape.test.ts src/services/aiArchitectureDrafts.test.ts src/services/aiArchitecturePatchPreview.test.ts` passed.
-  - `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
-- Risk:
-  - No Terraform apply/destroy or AWS API call was run. Some AWS resources still require real user-owned IAM policy scope, repository IDs, and CodeStar connection authorization before a production apply.
-
-### 2026-07-10 - Merge latest dev into AI fixed-response removal branch
-
-- Goal: Bring latest `dev` into `chore/ck/281-delete-code-diagram`.
-
-- Completed:
-  - Fetched `origin` and fast-forwarded local `dev` from `7487b3b2` to `7ed51f19`.
-  - Merged local `dev` into `chore/ck/281-delete-code-diagram`.
-  - Resolved conflicts in `agent-progress.md`, `apps/web/features/workspace/workspace-ai-diagram-adapter.ts`, and `packages/types/src/index.ts`.
-  - Kept upstream `diagramBorderStyle` support while preserving this branch's removal of fixed SketchCatch reference marker behavior.
-  - Combined upstream expanded ResourceType coverage with this branch's runtime `RESOURCE_TYPES` constant.
-- Verification:
-  - `pnpm --filter @sketchcatch/api exec tsx --test src/routes/aiDesignSimulation.test.ts src/routes/aiAwsProviders.test.ts` passed.
-  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-diagram-adapter.test.ts` passed.
-  - `pnpm --filter @sketchcatch/api typecheck` passed.
-  - `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
-- Risk:
-  - Merge resolution touched shared types and workspace diagram conversion, but focused API/web tests and full checks passed.
-
-### 2026-07-10 - Upstream ECS phases 3-5 archived
-
-- Detailed ECS runtime secret, deployment job, and RunTask dispatcher records moved to `docs/agent-history/2026-07.md` after the dev merge.
+  - Phase 4 does not dispatch ECS tasks; Phase 5 must wire the job model into deployment routes and worker dispatcher config.
+  - The requested API deployment test command currently exits 1 because of unrelated pre-existing failures in `aiLlmExplanationRoutes.test.ts` and a missing `docs/jh/000_AWS리소스목록_JH.md` fixture.
+  - No live AWS commands should be run in Phase 4.
 
 ### 2026-07-10 - Amazon Q Business architecture planning
 - Goal: Use Q Business as the Architecture Draft planner without changing other OpenAI or Q explanation paths.
 - Completed:
-  - Added target-scoped `CREATOR_MODE`, compact ChatSync planning input, typed plan parsing, deterministic materialization, and ALB-ASG-EC2 topology edges.
-  - Preserved legacy full-preview compatibility and safe fallback for malformed Q plans.
+  - Added target-scoped `CREATOR_MODE`, compact ChatSync planning input, typed plan parsing, deterministic materialization, exclusion cleanup, and backend validation.
+  - Preserved legacy full-preview compatibility and safe fallback for malformed, contradictory, or unmaterializable Q plans.
 - Verification:
-  - Focused API tests (53), `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed; `pnpm test` still has three unrelated web baseline failures.
+  - Focused API tests (53), `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed; `pnpm test` still had three unrelated web baseline failures.
 - Risk:
   - Live Q connectivity works, but the application has `creatorModeControl=DISABLED`; no AWS configuration mutation was performed.
+
+### 2026-07-10 - Merge latest dev into AI diagram branch
+- Goal: Update local `dev` and integrate it into `feat/ck/287-ai-diagram` while preserving Amazon Q work and local generated-file changes.
+- Completed:
+  - Fast-forwarded local `dev` to `origin/dev` at `314b0c35` and merged it into the AI branch.
+  - Resolved progress-history conflicts by keeping the latest upstream records and the current Amazon Q planning record.
+- Verification:
+  - `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and 53 focused AI API tests passed.
+- Risk:
+  - No Terraform apply/destroy, deployment execution, or cloud mutation was run.

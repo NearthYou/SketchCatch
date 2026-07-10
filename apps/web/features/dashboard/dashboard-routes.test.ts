@@ -7,6 +7,8 @@ const appRoot = new URL("../../app/", import.meta.url);
 const featureRoot = new URL("./", import.meta.url);
 const dashboardShellSource = readAppFile("../components/dashboard/dashboard-shell.tsx");
 const designDashboardSource = readFeatureFile("design-dashboard.tsx");
+const dashboardCostsPageSource = readAppFile("dashboard/costs/page.tsx");
+const costsClientSource = readAppFile("costs/costs-client.tsx");
 const globalStyles = readLocalFile("../../app/globals.css");
 const loginFormSource = readAppFile("login/login-form.tsx");
 const signupFormSource = readAppFile("signup/signup-form.tsx");
@@ -74,6 +76,20 @@ test("new dashboard styles follow the DESIGN.md product surface tokens", () => {
   assert.match(primaryActionRule, /background:\s*var\(--dashboard-design-primary\)/);
   assert.match(primaryActionRule, /border-radius:\s*8px/);
   assert.match(globalStyles, /@media \(max-width: 920px\)[\s\S]*\.designDashboardShell/);
+});
+
+test("dashboard costs route renders the live cost client inside the DESIGN.md shell", () => {
+  assert.match(dashboardCostsPageSource, /CostsClient/);
+  assert.match(dashboardCostsPageSource, /<DesignDashboardPage view="costs">/);
+  assert.match(designDashboardSource, /children \?\? renderView\(view, projectId\)/);
+  assert.match(costsClientSource, /useState<CostTab>\("usage"\)/);
+  assert.match(costsClientSource, /예상 비용/);
+  assert.match(costsClientSource, /실제 사용량/);
+  assert.match(costsClientSource, /두 값은 목적이 달라 직접 비교하지 않습니다/);
+  assert.match(costsClientSource, /designCostChartGrid/);
+  assert.match(costsClientSource, /검토 가능한 절감액/);
+  assert.match(globalStyles, /\.designCostPage\s*{/);
+  assert.match(globalStyles, /\.designCostChartGrid\s*{/);
 });
 
 test("legacy top-level dashboard tab pages are removed", () => {

@@ -138,11 +138,11 @@ export function WorkspaceStartClient() {
   }
 
   return (
-    <div className="workspaceStartForm">
-      <label className="workspaceStartField" htmlFor="workspace-title-input">
-        <span className="fieldLabel">{COPY.projectNameLabel}</span>
+    <form className="workspaceNewForm" onSubmit={(event) => event.preventDefault()}>
+      <label className="workspaceNewField" htmlFor="workspace-title-input">
+        <span>{COPY.projectNameLabel}</span>
         <input
-          className="textInput"
+          className="workspaceNewInput"
           id="workspace-title-input"
           maxLength={80}
           onChange={(event) => {
@@ -155,17 +155,17 @@ export function WorkspaceStartClient() {
         />
       </label>
 
-      <div className="workspaceStartField">
-        <span className="fieldLabel">{COPY.startModeLabel}</span>
-        <p className="workspaceStartHint">{helperText}</p>
-        <div className="choiceGrid workspaceStartModeGrid" aria-label={COPY.startModeLabel}>
+      <fieldset className="workspaceNewFieldset">
+        <legend className="workspaceNewLegend">{COPY.startModeLabel}</legend>
+        <p className="workspaceNewHelp">{helperText}</p>
+        <div className="workspaceNewChoiceGrid">
           {primaryStartModeOptions.map((option) => {
             const isDisabled = !canChooseStartMode || isSubmittingMode !== null;
             const isSubmitting = isSubmittingMode === option.kind;
 
             return (
               <button
-                className="workspaceStartModeButton"
+                className="workspaceNewChoiceButton"
                 disabled={isDisabled}
                 key={option.kind}
                 onClick={() => void handleStartMode(option.kind)}
@@ -180,7 +180,7 @@ export function WorkspaceStartClient() {
         </div>
         {blankStartOption ? (
           <button
-            className="workspaceStartBlankLabel"
+            className="workspaceNewBlankButton"
             disabled={!canChooseStartMode || isSubmittingMode !== null}
             onClick={() => void handleStartMode(blankStartOption.kind)}
             type="button"
@@ -188,7 +188,7 @@ export function WorkspaceStartClient() {
             {isSubmittingMode === "blank" ? COPY.submitting : blankStartOption.actionLabel}
           </button>
         ) : null}
-        <label className="workspaceStartCheckbox">
+        <label className="workspaceNewCheckbox">
           <input
             checked={connectGitHubAfterCreate}
             disabled={!canChooseStartMode || isSubmittingMode !== null}
@@ -198,14 +198,14 @@ export function WorkspaceStartClient() {
           <span>{COPY.connectGitHubAfterCreate}</span>
           <small>{COPY.connectGitHubHelp}</small>
         </label>
-      </div>
+      </fieldset>
 
       {errorMessage ? (
-        <p className="workspaceStartError" role="alert">
+        <p className="workspaceNewError" role="alert">
           {errorMessage}
         </p>
       ) : null}
-    </div>
+    </form>
   );
 }
 

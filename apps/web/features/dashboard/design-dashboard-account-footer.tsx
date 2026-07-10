@@ -14,18 +14,22 @@ export function DesignDashboardAccountFooter({ compact = false }: DesignDashboar
   const router = useRouter();
   const { logout, status, user } = useAuth();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isPending, setIsPending] = useState(false);
   const displayName = user?.nickname || user?.username || "로그인 사용자";
   const accountDetail = user?.email ?? "세션 확인 중";
-  const isLoggingOutDisabled = status === "loading";
+  const isLoggingOutDisabled = status === "loading" || isPending;
 
   async function handleLogout(): Promise<void> {
     setErrorMessage(null);
+    setIsPending(true);
 
     try {
       await logout();
       router.replace("/login");
     } catch (error) {
       setErrorMessage(getApiErrorMessage(error, "로그아웃에 실패했습니다."));
+    } finally {
+      setIsPending(false);
     }
   }
 
