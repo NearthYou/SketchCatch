@@ -13,7 +13,7 @@
 | 단계 | 결과물 | 검증 | 커밋 기준 | 상태 |
 | --- | --- | --- | --- | --- |
 | M0 | 설계·구현 계획 문서 | 문서 placeholder scan, `git diff --check` | `Docs: AWS Template 구현 설계 및 계획 문서 추가` | 완료 |
-| M1 | shared `TemplateDefinition` 계약과 여섯 Template registry | shared type test, deterministic DiagramJson test, types typecheck | `Feat: AWS Template 공통 정의 추가` | 진행 전 |
+| M1 | shared `TemplateDefinition` 계약과 여섯 Template registry | shared type test, deterministic DiagramJson test, types typecheck | `Feat: AWS Template 공통 정의 추가` | 완료 |
 | M2 | 누락 ResourceDefinition과 Terraform provider/nested block 지원 | resource coverage, preview, sync, artifact safety tests | `Feat: AWS Template 리소스 및 Terraform 지원 추가` | 진행 전 |
 | M3 | Template 카탈로그와 Workspace 적용 흐름 | web template/workspace tests, lint, typecheck | `Feat: AWS Template 카탈로그 연결` | 진행 전 |
 | M4 | 여섯 Template Terraform Preview와 배포 시간 표시 | template preview tests, deployment duration tests, build | `Feat: AWS Template 배포 흐름 연결` | 진행 전 |
@@ -36,7 +36,9 @@
 
 ### M1
 
-- 시작 전
+- 완료: `c627b7ed Feat: AWS Template 공통 정의 추가`
+- `TemplateDefinition`, 여섯 Template registry, deterministic `DiagramJson` builder를 추가했다.
+- `@sketchcatch/types` typecheck/build/lint와 shared registry 테스트를 통과했다.
 
 ### M2
 
