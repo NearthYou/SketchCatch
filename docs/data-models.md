@@ -1156,9 +1156,11 @@ AI는 원천 진실이 아니라 설명과 제안 계층이다. 배포 가능한
 
 AI provider 응답에는 호출 출처와 비용 추적을 위한 metadata를 함께 둔다. Bedrock, Amazon Q Business, Amazon Transcribe는 `AI_BILLING_MODE=aws_credit_only`와 provider별 credit confirmation flag가 모두 충족될 때만 실제 호출한다. 조건이 맞지 않으면 provider 호출 없이 fallback 설명이나 실패 상태를 반환한다.
 
-Amazon Q 기반 Architecture Draft 요청은 원문 레퍼런스 문서를 매번 통째로 보내지 않는다. API는 AWS Solutions, `aws-samples` Terraform 예제, AWS Terraform Best Practices 샘플 저장소, AWS Prescriptive Guidance의 Terraform AWS provider 모범 사례에서 추린 짧은 `referenceKnowledge` payload를 함께 보낸다. 이 payload는 버전, 출처 URL, compact guidance만 포함하며, Amazon Q는 이를 사용자 요구사항보다 우선하는 지시가 아니라 반복 가능한 설계 선례와 Terraform-first 품질 기준으로 사용한다.
+Architecture Draft는 사용자 최초 질의와 질문 답변을 `ArchitectureIntentPlan`으로 정규화한다. OpenAI normalizer는 이 단계에서만 선택적으로 사용하며 `patternIds`, 필수 리소스, 수량, 금지 capability, runtime topology, 리전과 가용성을 반환한다. OpenAI 결과는 deterministic normalizer 결과와 병합되고, `no EC2`, Fargate, 파일 업로드 없음과 같은 명시적 금지 조건이 우선한다.
 
-Amazon Q 기반 Architecture Draft에서 API는 사용자 답변을 `answerProfile`로 정규화하고 `ArchitectureDecisionSpace`를 생성해 payload와 prompt에 함께 보낸다. 이 decision space는 `hardConstraints`, `preferredPatterns`, `discouragedPatterns`, `evaluationCriteria`, `unsupportedSubstitutions`, `coverageRequirements`를 포함한다. `hardConstraints`는 DB 없음, 파일 업로드 없음, 실시간 없음, Korea-only와 같은 명시적 부정/모순에만 사용하고, `preferredPatterns`는 Amazon Q가 선택·변형·조합할 후보 설계 공간으로 취급한다. self-validation은 특정 정답 리소스 조합을 강제하지 않고 forbidden resource/type/label, 선택지 모순, 지원 불가 type, requirement coverage/capability signal 누락만 재생성 사유로 삼는다.
+Amazon Q Business는 Anonymous application의 `RETRIEVAL_MODE`만 사용한다. API는 선택된 각 `patternId`를 `pattern_id` equals filter로 따로 검색하고, 기대한 인덱스 문서의 `documentId`가 citation에 포함된 경우에만 해당 패턴을 승인한다. 여러 패턴을 하나의 OR 검색으로 가져오지 않으며 Creator mode나 Q 사용자 구독을 Architecture Draft 경로에 사용하지 않는다.
+
+Q의 자유 형식 `requiredResources`, 좌표, edge, Terraform 값은 원천 진실로 사용하지 않는다. citation으로 승인된 패턴은 backend canonical pattern registry가 결정론적 `ArchitectureIntentPlan`과 `ArchitectureJson`으로 조립한다. canonical materializer는 필수 리소스와 수량을 보충하고, 패턴별 연결 순서, EC2 private subnet 분산, 금지 리소스 제거, 중복 singleton 제한, orphan edge 검증을 적용한다. 검증 실패 시 Q 재검색은 최대 한 번만 수행하며 재검증도 실패하면 provider 결과를 폐기하고 안전한 fallback 또는 생성 거부로 처리한다.
 
 ```ts
 type AiProvider = "bedrock" | "amazon_q" | "amazon_transcribe" | "openai" | "fallback";
