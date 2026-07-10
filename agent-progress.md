@@ -5,8 +5,8 @@ Short English-only working log for the current agent context. Older records are 
 ## Current Verified State
 
 - Branch: `codex/workspace-parameter-editing`.
-- Scoped work: Workspace infrastructure settings Task 4 documentation and integrated verification.
-- Task 4 documents only new-node safe defaults, parameter-reference edge metadata, and Terraform Preview input behavior; it does not change product behavior.
+- Scoped work: Workspace infrastructure settings Tasks 1-4, including final-review fixes and integrated verification.
+- The branch covers new-node safe defaults, parameter-reference edge metadata/synchronization, parameter editing, and Terraform Preview output without cloud mutation.
 - `feature_list.json` and `session-handoff.md` remain unchanged by scoped-task instruction.
 
 ## Session Record
@@ -15,7 +15,7 @@ Short English-only working log for the current agent context. Older records are 
 
 - Goal: Record the Task 1-3 contracts and run the required integrated verification.
 - Completed: Updated `docs/data-models.md` for new-node-only safe defaults in `parameters.values`, parameter-reference `DiagramEdge.metadata`, and Terraform Preview ASG `desiredCapacity` omission rules. Updated the ignored JH worklogs and Task 4 report. Fixed the Architecture Draft catalog lookup so `RDS_READ_REPLICA` retains its own catalog defaults instead of inheriting the general RDS defaults through `aws_db_instance`.
-- Verification: `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed. `pnpm --filter @sketchcatch/web test` passed 639/639 after updating the Architecture Draft safe-default expectation.
+- Verification: `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed. `pnpm --filter @sketchcatch/web test` passed 640/640 after updating the Architecture Draft safe-default expectations.
 - Final-review verification: the new RDS read-replica regression test was RED before the catalog fix and GREEN after it; `workspace-ai-diagram-adapter.test.ts` passed 30/30, `terraform.test.ts` passed 19/19, and Web/API typechecks plus `pnpm lint` passed.
 - Test baseline: full `pnpm test` still exits 1 because eight pre-existing API tests fail in unchanged deployment path-normalization and AI `llmExplanation` areas; the Workspace-focused Web/API tests pass.
 - Risk: `pnpm build` generated the production import in `apps/web/next-env.d.ts`; the controller restored the exact pre-existing dev-mode import (`./.next/dev/types/routes.d.ts`) and kept that file outside the commit. No user verification is pending for this generated-file restoration.
