@@ -29,6 +29,12 @@ test("product entry carries the landing preview Board, IaC, and Check interactio
   assert.match(workspacePreviewSource, /Pre-Deployment Check/);
 });
 
+test("landing header keeps a visible login entry next to signup", () => {
+  assert.match(productEntrySource, /href="\/login"/);
+  assert.match(productEntrySource, />\s*로그인\s*<\/Link>/s);
+  assert.match(productEntrySource, /href="\/signup"/);
+});
+
 test("product entry carries every section from the landing reference", () => {
   assert.match(productEntrySource, /LandingWorkflowSection/);
   assert.match(productEntrySource, /LandingProductSections/);

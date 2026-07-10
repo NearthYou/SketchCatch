@@ -18,6 +18,7 @@ const FLOW_STEPS = [
   "Deployment Paths"
 ] as const;
 
+// 로그인 전 사용자가 제품을 둘러보고 로그인이나 회원가입으로 들어가는 첫 화면입니다.
 export function ProductEntry() {
   const router = useRouter();
   const { status } = useAuth();
@@ -63,6 +64,9 @@ export function ProductEntry() {
           <a className={`${styles.button} ${styles.buttonSecondary} ${styles.desktopAction}`} href="#workspace">
             제품 둘러보기
           </a>
+          <Link className={`${styles.button} ${styles.buttonSecondary}`} href="/login">
+            로그인
+          </Link>
           <Link className={`${styles.button} ${styles.buttonPrimary}`} href="/signup">
             시작하기
           </Link>
