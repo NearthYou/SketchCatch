@@ -17,7 +17,7 @@ test("dashboard route entry points use the minimal shell", () => {
   for (const route of dashboardRoutes) {
     const source = readAppFile(route);
 
-    assert.match(source, /RoutePlaceholder/);
+    assert.match(source, /RoutePlaceholder|SettingsIntegrationsClient/);
     assert.doesNotMatch(source, /DesignDashboardPage|DashboardShell|designDashboard/);
   }
 });

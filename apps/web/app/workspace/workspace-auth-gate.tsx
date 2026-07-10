@@ -15,19 +15,11 @@ export function WorkspaceAuthGate({ children }: { readonly children: ReactNode }
   }, [router, status]);
 
   if (status === "loading") {
-    return (
-      <main className="workspaceShell workspaceStateShell">
-        <p className="workspaceStateText">Checking session</p>
-      </main>
-    );
+    return <main><p>Checking session</p></main>;
   }
 
   if (status === "unauthenticated") {
-    return (
-      <main className="workspaceShell workspaceStateShell">
-        <p className="workspaceStateText">Redirecting to login</p>
-      </main>
-    );
+    return <main><p>Redirecting to login</p></main>;
   }
 
   return <>{children}</>;

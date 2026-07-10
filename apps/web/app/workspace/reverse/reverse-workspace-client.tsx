@@ -125,7 +125,7 @@ function ReverseBoardCandidateSelectionPanel({
       ) : (
         <div className="reverseCandidateSelectionEmpty">
           <strong>아직 감지된 구조가 없습니다</strong>
-          <span>오른쪽에서 기존 AWS 가져오기를 누르면 이곳에 자동 감지 결과가 표시됩니다.</span>
+          <span>기존 AWS 가져오기를 누르면 이곳에 자동 감지 결과가 표시됩니다.</span>
         </div>
       )}
 

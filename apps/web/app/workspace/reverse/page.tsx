@@ -1,4 +1,5 @@
-import { RoutePlaceholder } from "../../../components/runtime/route-placeholder";
+import { WorkspaceAuthGate } from "../workspace-auth-gate";
+import { ReverseWorkspaceClient } from "./reverse-workspace-client";
 
 type ReverseWorkspacePageProps = {
   readonly searchParams?: Promise<{
@@ -11,13 +12,9 @@ export default async function ReverseWorkspacePage({ searchParams }: ReverseWork
   const projectName = getSingleSearchParam(params?.projectName)?.trim() || "기존 AWS 가져오기";
 
   return (
-    <RoutePlaceholder
-      description="Provider Adapter, AWS 연결, 스캔, 후보 판단, ArchitectureJson 적용 연결부는 보존되어 있습니다."
-      links={[{ href: "/workspace/new", label: "시작 방식 다시 선택" }]}
-      title="Reverse Engineering 연결부"
-    >
-      <p>프로젝트 이름: {projectName}</p>
-    </RoutePlaceholder>
+    <WorkspaceAuthGate>
+      <ReverseWorkspaceClient projectName={projectName} />
+    </WorkspaceAuthGate>
   );
 }
 

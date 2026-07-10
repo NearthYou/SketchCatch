@@ -21,9 +21,8 @@ test("new project start keeps the three start modes and core API calls", () => {
   assert.doesNotMatch(workspaceStartClientSource, /workspaceStartProviderGrid/);
 });
 
-test("AI route is a minimal shell while its implementation stays available for reconnection", () => {
-  assert.match(workspaceAiRouteSource, /RoutePlaceholder/);
-  assert.doesNotMatch(workspaceAiRouteSource, /WorkspaceAiStartClient/);
+test("AI route keeps the AI start flow connected", () => {
+  assert.match(workspaceAiRouteSource, /WorkspaceAiStartClient/);
 });
 
 test("AI implementation keeps ArchitectureJson conversion, approval persistence, and voice input", () => {

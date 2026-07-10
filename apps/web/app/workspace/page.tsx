@@ -1,32 +1,55 @@
-import { RoutePlaceholder } from "../../components/runtime/route-placeholder";
+import { ProjectWorkspaceDraftManager, WorkspaceDraftManager } from "../../features/workspace";
+import { isWorkspaceCloudPlatform } from "../../features/workspace/project-draft-persistence";
+import { getWorkspaceDiagramFixture } from "../../features/workspace/workspace-diagram-fixtures";
+import { WorkspaceAuthGate } from "./workspace-auth-gate";
+import { resolveInitialWorkspaceRightPanelView } from "./workspace-start-mode";
 
 type WorkspacePageProps = {
   readonly searchParams?: Promise<{
+    readonly cloudPlatform?: string | string[] | undefined;
+    readonly diagramFixture?: string | string[] | undefined;
     readonly projectId?: string | string[] | undefined;
+    readonly projectName?: string | string[] | undefined;
+    readonly startMode?: string | string[] | undefined;
   }>;
 };
 
 export default async function WorkspacePage({ searchParams }: WorkspacePageProps) {
   const params = await searchParams;
   const projectId = getSingleSearchParam(params?.projectId)?.trim();
+  const initialRightPanelView = resolveInitialWorkspaceRightPanelView(
+    getSingleSearchParam(params?.startMode)
+  );
+
+  if (projectId) {
+    const projectName = getSingleSearchParam(params?.projectName)?.trim();
+    const cloudPlatform = getSingleSearchParam(params?.cloudPlatform);
+
+    return (
+      <WorkspaceAuthGate>
+        <ProjectWorkspaceDraftManager
+          cloudPlatform={isWorkspaceCloudPlatform(cloudPlatform) ? cloudPlatform : undefined}
+          initialRightPanelView={initialRightPanelView}
+          projectId={projectId}
+          projectName={projectName || "Project workspace"}
+        />
+      </WorkspaceAuthGate>
+    );
+  }
+
+  const projectName = getSingleSearchParam(params?.projectName)?.trim();
+  const initialDiagramOverride = getWorkspaceDiagramFixture(
+    getSingleSearchParam(params?.diagramFixture)
+  );
 
   return (
-    <RoutePlaceholder
-      description="Architecture Board, ArchitectureJson 저장·불러오기, IaC Preview, Deployment 연결부는 보존되어 있으며 새 UI가 연결될 자리입니다."
-      links={[
-        { href: "/workspace/new", label: "새 프로젝트 시작" },
-        { href: "/workspace/ai", label: "AI Architecture Draft 시작" },
-        { href: "/workspace/reverse", label: "Reverse Engineering 시작" }
-      ]}
-      title="Workspace 연결부"
-    >
-      <dl>
-        <dt>Project ID</dt>
-        <dd>{projectId || "새 프로젝트 또는 로컬 Workspace"}</dd>
-        <dt>다시 연결할 핵심 흐름</dt>
-        <dd>Architecture Board → IaC Preview → Pre-Deployment Check → Deployment</dd>
-      </dl>
-    </RoutePlaceholder>
+    <WorkspaceAuthGate>
+      <WorkspaceDraftManager
+        initialDiagramOverride={initialDiagramOverride}
+        initialProjectName={projectName || undefined}
+        initialRightPanelView={initialRightPanelView}
+      />
+    </WorkspaceAuthGate>
   );
 }
 

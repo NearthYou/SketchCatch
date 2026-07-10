@@ -25,9 +25,8 @@ test("workspace draft result exposes guardrail metadata sections", () => {
   assert.match(draftMetadataPanelSource, /guardrailWarnings/);
 });
 
-test("AI route is now a minimal shell while the old client remains available for reconnection", () => {
+test("AI route keeps the AI start client connected", () => {
   const workspaceAiRouteSource = readFileSync(workspaceAiRoutePath, "utf8");
 
-  assert.match(workspaceAiRouteSource, /RoutePlaceholder/);
-  assert.doesNotMatch(workspaceAiRouteSource, /WorkspaceAiStartClient/);
+  assert.match(workspaceAiRouteSource, /WorkspaceAiStartClient/);
 });

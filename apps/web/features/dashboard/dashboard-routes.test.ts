@@ -19,7 +19,7 @@ test("dashboard routes remain available without the old dashboard presentation",
     const source = readAppFile(route);
 
     assert.equal(existsSync(fileURLToPath(new URL(route, appRoot))), true);
-    assert.match(source, /RoutePlaceholder/);
+    assert.match(source, /RoutePlaceholder|SettingsIntegrationsClient/);
     assert.doesNotMatch(source, /designDashboard|DashboardShell|DesignDashboardPage/);
   }
 });
