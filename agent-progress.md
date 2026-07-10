@@ -14,24 +14,6 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
-### 2026-07-10 - Stabilize Anonymous Q architecture generation
-
-- Goal: Produce distinct, deployable Architecture Drafts from project answers without a paid Q Business Creator subscription.
-- Completed:
-  - Added normalized pattern IDs and exact `pattern_id` retrieval filters for six verified architecture patterns.
-  - Changed Q retrieval to one cited request per selected pattern and made the backend materialize only canonical, deployable resources and topology.
-  - Added generic EC2, serverless, SPA, ECS Fargate, GitHub CI/CD, Multi-AZ RDS, and composed-pattern handling, including explicit EC2 negation.
-  - Preserved the existing OpenAI and Amazon Q explanation paths by routing only `architecture_draft` through the dedicated retrieval provider.
-- Verification:
-  - `node docs/diagram-templates/verify.mjs` passed for six patterns, 104 supported resource types, and 154 source repositories.
-  - 64 focused API tests passed, including 42 exact project-answer pattern selections and 12 repeatable canonical materializations.
-  - A live Anonymous Q run used 10 `ChatSync` retrieval calls across six profiles; all six used `amazon_q`, had zero orphan nodes, and produced six distinct signatures.
-  - `terraform fmt -check infra/aws/terraform` passed.
-  - `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check` passed.
-- Risk:
-  - Q Business retrieval usage still consumes the existing anonymous application's capacity, and the index must be re-ingested after pattern document changes.
-  - The canonical registry currently covers the six verified pattern families; new families require a reviewed pattern document and canonical topology before activation.
-
 ### 2026-07-10 - Signup password error highlight fix
 ### 2026-07-10 - Harden ECS worker dispatch after merged PR review
 
@@ -216,3 +198,16 @@ Short English-only working log for the current agent context. Older records are 
   - Architecture Draft tests (36), lint, typecheck, build, and diff checks passed.
 - Risk:
   - Three pre-existing isolated route tests still fail for unrelated deterministic draft expectations.
+
+### 2026-07-11 - Preserve Q layouts and harden deployable EC2 materialization
+- Goal: Keep the Amazon Q-backed layout as the visual baseline while repairing only invalid topology, parameters, overlaps, and routing.
+- Completed:
+  - Materialized ALB/ASG/EC2 plans with two-AZ public, app, and DB tiers, NAT routing, launch identity, observability, private uploads, and deployable Terraform parameters.
+  - Fixed questionnaire upload parsing so the answer block stops at the next question and cannot inherit words from another prompt.
+  - Preserved authored resource positions by default; retained collision, containment, and edge-overlap safeguards without deleting semantic edges.
+  - Changed the AI start preview to route orthogonal lines from the selected node handles instead of drawing every edge from node centers.
+- Verification:
+  - Architecture Draft tests (37), Q Business/profile tests (20), Terraform graph/preview tests (32), and web diagram adapter tests (33) passed.
+  - `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check` passed.
+- Risk:
+  - Compact Q plans select cited patterns but do not carry coordinates; deterministic materialization supplies positions in that response mode, while full Q preview responses retain Q-authored coordinates.

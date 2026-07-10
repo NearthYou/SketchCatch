@@ -15,6 +15,8 @@ Use this file only for compact continuation context. Write it in English.
 - Live Q retrieval and Architecture Draft generation were exercised without infrastructure mutation.
 - Live Q returned exact citations and deployment guidance for SPA, Fargate, and Multi-AZ RDS; the API materialized a matching role-specific graph with no orphan nodes.
 - Contradictory Q plans that request EC2 private-subnet spread with one node are normalized to a deployable two-node minimum before materialization.
+- Authored ArchitectureJson coordinates are now the default visual baseline; the web adapter only applies containment, collision, and edge-routing corrections.
+- Canonical EC2 materialization includes deployable two-AZ networking, ALB/ASG/launch-template identity, upload storage when selected, Multi-AZ RDS, and observability.
 
 ## Changes This Session
 
@@ -28,6 +30,8 @@ Use this file only for compact continuation context. Write it in English.
 - Terraform renders ECS service network, load balancer, and deployment circuit-breaker blocks.
 - The Architecture Draft client consumes the dedicated stream, preserves typed Q failures, and displays completed/current/pending generation stages.
 - Live direct API, Next proxy, and Chrome checks returned Q-backed previews after the EC2 spread invariant repair; no generated fallback was added.
+- The preview renderer now uses selected edge handles and orthogonal paths instead of center-to-center curves; semantic edges remain intact.
+- Upload questionnaire parsing reads only the answer block before the next question, preventing image/document words in the question from creating false upload resources.
 
 ## Broken Or Unverified
 
@@ -36,7 +40,8 @@ Use this file only for compact continuation context. Write it in English.
 - The separate ECS migration workstream remains in progress and is not changed by this Architecture Draft fix.
 - Anonymous Q Business supplies retrieval text and citations only; SketchCatch remains responsible for deterministic graph construction and semantic validation.
 - Three pre-existing isolated route tests fail on EKS warning text, Korean quantity extraction, and equivalent-wording S3 counts; the new stream and web progress tests pass.
+- The focused suites for this work pass; the broader web suite still has unrelated landing/start-page style expectation failures.
 
 ## Best Next Action
 
-- Repair the three pre-existing deterministic Architecture Draft route expectations, then inspect generated Terraform before approving any deployment.
+- Regenerate the open Architecture Draft preview so the client recomputes it with the Q-coordinate baseline, then inspect the resulting Terraform before approval.
