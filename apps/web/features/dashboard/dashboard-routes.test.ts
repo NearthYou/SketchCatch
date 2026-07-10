@@ -13,15 +13,30 @@ const dashboardRoutes = [
   "dashboard/costs/page.tsx",
   "dashboard/settings/page.tsx"
 ] as const;
+const dashboardLayoutSource = readAppFile("dashboard/layout.tsx");
 
-test("dashboard routes remain available without the old dashboard presentation", () => {
+test("dashboard routes use the rebuilt shell without temporary placeholders", () => {
+  assert.match(dashboardLayoutSource, /DashboardShell/);
+
   for (const route of dashboardRoutes) {
     const source = readAppFile(route);
 
     assert.equal(existsSync(fileURLToPath(new URL(route, appRoot))), true);
-    assert.match(source, /RoutePlaceholder|SettingsIntegrationsClient/);
-    assert.doesNotMatch(source, /designDashboard|DashboardShell|DesignDashboardPage/);
+    assert.doesNotMatch(source, /RoutePlaceholder/);
   }
+});
+
+test("dashboard route entry points connect the real feature clients", () => {
+  assert.match(readAppFile("dashboard/page.tsx"), /DashboardOverview/);
+  assert.match(readAppFile("dashboard/projects/page.tsx"), /DashboardProjectsRoute/);
+  assert.match(readAppFile("dashboard/costs/page.tsx"), /CostsClient/);
+  assert.match(readAppFile("dashboard/templates/page.tsx"), /BuiltInTemplateLibrary/);
+  assert.match(readAppFile("dashboard/settings/page.tsx"), /SettingsIntegrationsClient/);
+  assert.match(readAppFile("dashboard/projects/[projectId]/page.tsx"), /ProjectDetailClient/);
+  assert.match(
+    readAppFile("dashboard/projects/[projectId]/settings/page.tsx"),
+    /ProjectGitHubSettingsClient/
+  );
 });
 
 function readAppFile(path: string): string {

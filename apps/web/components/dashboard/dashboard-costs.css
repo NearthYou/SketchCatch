@@ -1,0 +1,372 @@
+.costControlGrid,
+.costUsageControlGrid {
+  display: grid;
+  align-items: end;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.costOverviewSettings {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 20px;
+}
+
+.costHeroPanel {
+  display: grid;
+  align-items: stretch;
+  border-radius: 16px;
+  padding: 24px;
+  background: #ffffff;
+  box-shadow: var(--shadow-card);
+  grid-template-columns: minmax(0, 1.45fr) minmax(260px, 0.55fr);
+  gap: 20px;
+}
+
+.costOverviewPanel,
+.costChartPanel,
+.costProjectPanel,
+.costDetailPanel,
+.costNoticePanel,
+.costRecommendationPanel,
+.costUsageMetricPanel,
+.costAwsConnectionPanel,
+.costAwsSetupPanel {
+  border-radius: 12px;
+  padding: 22px;
+  background: #ffffff;
+  box-shadow: var(--shadow-card);
+}
+
+.costOverviewPanel.costHeroPanel {
+  border-radius: 16px;
+  padding: 24px;
+}
+
+.costSummaryCard,
+.costMetricCard {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+  border: 0;
+  border-radius: 12px;
+  padding: 18px;
+  background: #ffffff;
+  box-shadow: var(--shadow-card);
+}
+
+.costSummaryAmount {
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.costSummaryMeta,
+.costMetricCard span,
+.costAwsConnectionNote,
+.costResourceSupportReason,
+.costReviewMessages,
+.costWasteMeta {
+  color: #777b84;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.costDataSourceBanner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  border: 1px solid #a8abb2;
+  border-left: 3px solid #171717;
+  border-radius: 8px;
+  padding: 12px 14px;
+  background: #f7f8fa;
+}
+
+.costDataSourceBanner strong {
+  flex: 0 0 auto;
+  font-size: 12px;
+}
+
+.costDataSourceBanner p {
+  margin: 0;
+  color: #555861;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.costUsageMetricGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.costMetricIcon,
+.costAwsConnectionIcon {
+  display: inline-grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 1px solid #dcdee0;
+  border-radius: 8px;
+  background: #f7f8fa;
+}
+
+.dashboardTable {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: collapse;
+}
+
+.dashboardTableHeader,
+.dashboardTableRow {
+  display: grid;
+  align-items: center;
+  border-bottom: 1px solid #f0f0f3;
+  grid-template-columns: minmax(200px, 1.5fr) repeat(3, minmax(120px, 1fr));
+}
+
+.dashboardTableHeader {
+  color: #777b84;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.dashboardTableHeader > *,
+.dashboardTableRow > * {
+  min-width: 0;
+  padding: 13px 12px;
+}
+
+.dashboardTableRow {
+  font-size: 12px;
+}
+
+.dashboardTableRow strong,
+.dashboardTableRow span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.costProjectPanel,
+.costDetailPanel {
+  overflow-x: auto;
+}
+
+.costProjectNameCell {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.costProjectNameButton,
+.costRecommendationAction {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: #0d74ce;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.costProjectCheckbox input {
+  width: 16px;
+  height: 16px;
+  accent-color: #000000;
+}
+
+.costLineChart {
+  display: grid;
+  min-height: 280px;
+  grid-template-columns: 56px minmax(0, 1fr);
+  gap: 12px;
+}
+
+.costLineChartYAxis {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  color: #777b84;
+  font-size: 10px;
+  text-align: right;
+}
+
+.costLineChartPlot {
+  position: relative;
+  min-width: 0;
+}
+
+.costLineChartSvg {
+  width: 100%;
+  height: 240px;
+  overflow: visible;
+}
+
+.costLineChartGrid {
+  stroke: #f0f0f3;
+  stroke-width: 1;
+}
+
+.costLineChartPath {
+  fill: none;
+  stroke: #171717;
+  stroke-width: 2;
+}
+
+.costLineChartMeta {
+  display: flex;
+  justify-content: space-between;
+  color: #777b84;
+  font-size: 10px;
+}
+
+.costServiceBars,
+.costRecommendationList,
+.costWasteList,
+.costResourceList {
+  display: grid;
+  gap: 12px;
+}
+
+.costServiceBarRow,
+.costRecommendationItem,
+.costWasteItem,
+.costResourceDetails {
+  border-bottom: 1px solid #f0f0f3;
+  padding: 12px 0;
+}
+
+.costServiceBarLabel,
+.costServiceBarMeta,
+.costRecommendationHeader,
+.costResourceSummaryTitle,
+.costResourceSummaryMeta,
+.costWasteMeta {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.costServiceBarName {
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.costServiceStackedBar {
+  height: 8px;
+  margin-top: 8px;
+  border-radius: 999px;
+  background: #f0f0f3;
+  overflow: hidden;
+}
+
+.costServiceStackedBar > * {
+  height: 100%;
+  background: #171717;
+}
+
+.costAwsConnectionHeader,
+.costAwsSetupHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.costAwsConnectionInfo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.costAwsConnectionControls,
+.costAwsConnectionActions,
+.costAwsVerifyRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.costAwsConnectionSelect,
+.costUsageProjectSelect {
+  min-width: 220px;
+}
+
+.costAwsTemplateArea {
+  margin-top: 16px;
+  border-radius: 12px;
+  padding: 16px;
+  background: #171717;
+  color: #f7f8fa;
+  font-family: "Geist Mono", "SFMono-Regular", Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.6;
+  overflow: auto;
+}
+
+.costMetricSeriesPreview {
+  height: 4px;
+  border-radius: 999px;
+  background: #dcdee0;
+}
+
+@media (max-width: 1000px) {
+  .costHeroPanel {
+    grid-template-columns: 1fr;
+  }
+
+  .costUsageMetricGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .costOverviewSettings,
+  .costControlGrid,
+  .costUsageControlGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .costUsageMetricGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .costHeroPanel,
+  .costOverviewPanel,
+  .costChartPanel,
+  .costProjectPanel,
+  .costDetailPanel,
+  .costNoticePanel,
+  .costRecommendationPanel,
+  .costUsageMetricPanel,
+  .costAwsConnectionPanel,
+  .costAwsSetupPanel {
+    padding: 18px;
+  }
+
+  .costAwsConnectionHeader,
+  .costAwsSetupHeader {
+    flex-direction: column;
+  }
+
+  .costAwsConnectionSelect,
+  .costUsageProjectSelect {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .costDataSourceBanner {
+    display: grid;
+  }
+}

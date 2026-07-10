@@ -1,4 +1,4 @@
-import { RoutePlaceholder } from "../../../../../components/runtime/route-placeholder";
+import { ProjectGitHubSettingsClient } from "../../../../projects/[projectId]/settings/project-github-settings-client";
 
 type ProjectSettingsPageProps = {
   readonly params: Promise<{
@@ -10,12 +10,15 @@ export default async function ProjectSettingsPage({ params }: ProjectSettingsPag
   const { projectId } = await params;
 
   return (
-    <RoutePlaceholder
-      description="프로젝트 설정과 Source Repository 연결 계약은 보존되어 있습니다."
-      links={[{ href: `/dashboard/projects/${projectId}`, label: "프로젝트 상세 연결부" }]}
-      title="프로젝트 설정 연결부"
-    >
-      <p>Project ID: {projectId}</p>
-    </RoutePlaceholder>
+    <div className="dashboardRouteStack">
+      <header className="dashboardPageHeader">
+        <div>
+          <p className="dashboardEyebrow">Project settings</p>
+          <h1>Source Repository 연결</h1>
+          <p>Git/CI/CD에 사용할 GitHub Repository를 프로젝트 단위로 관리합니다.</p>
+        </div>
+      </header>
+      <ProjectGitHubSettingsClient projectId={projectId} />
+    </div>
   );
 }

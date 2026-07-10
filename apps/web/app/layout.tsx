@@ -9,7 +9,7 @@ export const metadata: Metadata = {
   title: "SketchCatch",
   description: "Terraform-first, multi-cloud-ready IaC operations service",
   icons: {
-    icon: "/favicon.svg"
+    icon: "/favicon.png"
   }
 };
 
