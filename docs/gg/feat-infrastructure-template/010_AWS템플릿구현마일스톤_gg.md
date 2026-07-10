@@ -70,6 +70,7 @@
 - 진행 중
 - Lambda, API Gateway stage/permission, IAM assume policy, 3-Tier launch template/AMI lookup, ECS task/network defaults, EKS node policies를 기본 정의에 반영했다.
 - `demo_web_service_with_rds` live profile에 여섯 Template의 확장 Resource와 Kubernetes workload를 허용하고, Template 보드에는 해당 profile을 자동 추천하도록 연결했다.
+- 실제 Dashboard의 시작 템플릿 화면도 같은 registry를 사용해 여섯 개 카드와 Workspace 선택 URL을 노출한다.
 - 남은 검증: 실제 Terraform CLI validate/plan, Chrome live apply/destroy, AWS 연결 상태와 패턴별 배포 시간 기록.
 
 ### M6

@@ -31,6 +31,7 @@ import {
   type LucideIcon
 } from "lucide-react";
 import { DesignDashboardAccountFooter } from "./design-dashboard-account-footer";
+import { listBoardTemplates } from "../resource-settings/template-library";
 
 export type DesignDashboardView =
   | "overview"
@@ -148,27 +149,6 @@ const journey = [
   { label: "Git/CI/CD Deployment Path", detail: "PR과 pipeline handoff", icon: GitBranch },
   { label: "Deployment History", detail: "로그, output, 변경 이력", icon: History },
   { label: "Auto Cleanup", detail: "실습 리소스 정리 상태", icon: Trash2 }
-];
-
-const templates = [
-  {
-    title: "Requirement Input",
-    body: "서비스 요구사항을 Practice Architecture와 Terraform-first IaC Preview로 연결합니다.",
-    href: "/workspace/new",
-    icon: Sparkles
-  },
-  {
-    title: "Source Repository",
-    body: "기존 repo evidence를 읽어 Git/CI/CD Deployment Path로 넘길 변경 단위를 만듭니다.",
-    href: "/workspace/new?source=repository",
-    icon: GitBranch
-  },
-  {
-    title: "Reverse Engineering",
-    body: "기존 cloud state를 Provider Adapter로 스캔해 import 제안과 설계 초안을 복원합니다.",
-    href: "/workspace/reverse",
-    icon: UploadCloud
-  }
 ];
 
 export function DesignDashboardPage({ children, view, projectId = "commerce-api" }: DesignDashboardPageProps) {
@@ -466,19 +446,23 @@ function ProjectSettingsView({ projectId }: { readonly projectId: string }) {
 }
 
 function TemplatesView() {
+  const templates = listBoardTemplates();
+
   return (
     <section className="designDashboardTemplateGrid" aria-label="시작 템플릿">
       {templates.map((template) => {
-        const Icon = template.icon;
-
         return (
-          <Link className="designDashboardTemplate" href={template.href} key={template.title}>
+          <Link
+            className="designDashboardTemplate"
+            href={`/workspace?templateId=${encodeURIComponent(template.id)}&projectName=${encodeURIComponent(template.title)}`}
+            key={template.id}
+          >
             <span className="designDashboardIconPlate">
-              <Icon aria-hidden="true" size={18} />
+              <FileCode2 aria-hidden="true" size={18} />
             </span>
             <div>
               <h2>{template.title}</h2>
-              <p>{template.body}</p>
+              <p>{template.description}</p>
             </div>
             <ArrowRight aria-hidden="true" size={16} />
           </Link>

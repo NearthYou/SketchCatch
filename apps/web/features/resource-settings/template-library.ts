@@ -1,8 +1,8 @@
 import {
   buildTemplateDiagramJson,
-  templateDefinitions,
-  type DiagramJson
-} from "../../../../packages/types/src";
+  templateDefinitions
+} from "../../../../packages/types/src/template-definitions";
+type DiagramJson = ReturnType<typeof buildTemplateDiagramJson>;
 
 export const TEMPLATE_OVERWRITE_BACKUP_STORAGE_KEY = "sketchcatch.templateOverwriteBackups";
 
