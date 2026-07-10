@@ -17,9 +17,9 @@ const confirmedCreditPolicy = {
 
 test("createAmazonQArchitectureDraftResponse sends the web deployment answer path to Amazon Q", async () => {
   let callCount = 0;
-  const provider = createFakeAmazonQProvider(() => {
+  const provider = createFakeAmazonQProvider((request) => {
     callCount += 1;
-    return JSON.stringify(createDynamicWebDeploymentPreview());
+    return createNormalizedRequirementPlan(request);
   });
 
   await createAmazonQArchitectureDraftResponse(
@@ -511,7 +511,7 @@ test("createAmazonQArchitectureDraftResponse materializes a compact Amazon Q arc
   assert.equal(response.llmExplanation?.providerMetadata?.provider, "amazon_q");
 });
 
-test("createAmazonQArchitectureDraftResponse falls back when Amazon Q returns an invalid compact plan", async () => {
+test("createAmazonQArchitectureDraftResponse rejects when Amazon Q returns an invalid compact plan", async () => {
   const provider = createFakeAmazonQProvider(() =>
     JSON.stringify({
       status: "plan",
@@ -520,26 +520,21 @@ test("createAmazonQArchitectureDraftResponse falls back when Amazon Q returns an
     })
   );
 
-  const response = await createAmazonQArchitectureDraftResponse(
-    {
-      prompt: createDynamicWebDeploymentSelectionPrompt()
-    },
-    {
-      provider,
-      creditPolicy: confirmedCreditPolicy
-    }
+  await assert.rejects(
+    createAmazonQArchitectureDraftResponse(
+      {
+        prompt: createDynamicWebDeploymentSelectionPrompt()
+      },
+      {
+        provider,
+        creditPolicy: confirmedCreditPolicy
+      }
+    ),
+    { name: "ArchitectureDraftGenerationError" }
   );
-
-  if ("status" in response) {
-    assert.fail(`Expected fallback preview, got clarification: ${response.question}`);
-  }
-
-  assert.equal(response.metadata.source, "template_fallback");
-  assert.equal(response.llmExplanation?.fallbackUsed, true);
-  assert.equal(response.llmExplanation?.fallbackReason, "provider_error");
 });
 
-test("createAmazonQArchitectureDraftResponse falls back when compact plan quantities cannot be materialized", async () => {
+test("createAmazonQArchitectureDraftResponse rejects when compact plan quantities cannot be materialized", async () => {
   const provider = createFakeAmazonQProvider(() =>
     JSON.stringify({
       status: "plan",
@@ -549,18 +544,13 @@ test("createAmazonQArchitectureDraftResponse falls back when compact plan quanti
     })
   );
 
-  const response = await createAmazonQArchitectureDraftResponse(
-    { prompt: createDynamicWebDeploymentSelectionPrompt() },
-    { provider, creditPolicy: confirmedCreditPolicy }
+  await assert.rejects(
+    createAmazonQArchitectureDraftResponse(
+      { prompt: createDynamicWebDeploymentSelectionPrompt() },
+      { provider, creditPolicy: confirmedCreditPolicy }
+    ),
+    { name: "ArchitectureDraftGenerationError" }
   );
-
-  if ("status" in response) {
-    assert.fail(`Expected fallback preview, got clarification: ${response.question}`);
-  }
-
-  assert.equal(response.metadata.source, "template_fallback");
-  assert.equal(response.llmExplanation?.fallbackUsed, true);
-  assert.equal(response.llmExplanation?.fallbackReason, "provider_error");
 });
 
 test("createAmazonQArchitectureDraftResponse retries once when a compact plan fails materialization", async () => {
@@ -624,18 +614,13 @@ test("createAmazonQArchitectureDraftResponse rejects compact plans that contradi
     })
   );
 
-  const response = await createAmazonQArchitectureDraftResponse(
-    { prompt: createStaticWebsiteCompletePrompt("file upload: none no file upload text only") },
-    { provider, creditPolicy: confirmedCreditPolicy }
+  await assert.rejects(
+    createAmazonQArchitectureDraftResponse(
+      { prompt: createStaticWebsiteCompletePrompt("file upload: none no file upload text only") },
+      { provider, creditPolicy: confirmedCreditPolicy }
+    ),
+    { name: "ArchitectureDraftGenerationError" }
   );
-
-  if ("status" in response) {
-    assert.fail(`Expected fallback preview, got clarification: ${response.question}`);
-  }
-
-  assert.equal(response.metadata.source, "template_fallback");
-  assert.equal(response.llmExplanation?.fallbackUsed, true);
-  assert.equal(response.llmExplanation?.fallbackReason, "provider_error");
 });
 
 test("createAmazonQArchitectureDraftResponse accepts panel-backed ResourceType values from Amazon Q", async () => {
@@ -1257,7 +1242,7 @@ test("createAmazonQArchitectureDraftResponse creates deterministic decision spac
     {
       provider: createFakeAmazonQProvider((request) => {
         firstPayloads.push(request.payload);
-        return JSON.stringify(createStaticPreview(["site-bucket", "cdn"]));
+        return createNormalizedRequirementPlan(request);
       }),
       creditPolicy: confirmedCreditPolicy
     }
@@ -1268,7 +1253,7 @@ test("createAmazonQArchitectureDraftResponse creates deterministic decision spac
     {
       provider: createFakeAmazonQProvider((request) => {
         secondPayloads.push(request.payload);
-        return JSON.stringify(createStaticPreview(["site-bucket", "cdn"]));
+        return createNormalizedRequirementPlan(request);
       }),
       creditPolicy: confirmedCreditPolicy
     }
@@ -1279,7 +1264,7 @@ test("createAmazonQArchitectureDraftResponse creates deterministic decision spac
     {
       provider: createFakeAmazonQProvider((request) => {
         imagePayloads.push(request.payload);
-        return JSON.stringify(createStaticPreview(["site-bucket", "cdn"]));
+        return createNormalizedRequirementPlan(request);
       }),
       creditPolicy: confirmedCreditPolicy
     }
@@ -2292,7 +2277,7 @@ test("createAmazonQArchitectureDraftResponse sends normalized requirements to Am
   });
   const provider = createFakeAmazonQProvider((request) => {
     amazonQCalls.push(request);
-    return JSON.stringify(createDynamicWebDeploymentPreview());
+    return createNormalizedRequirementPlan(request);
   });
 
   const response = await createAmazonQArchitectureDraftResponse(
@@ -2355,11 +2340,12 @@ test("createAmazonQArchitectureDraftResponse sends deterministic normalized requ
   const amazonQCalls: Array<Parameters<AiTextProvider["generate"]>[0]> = [];
   const provider = createFakeAmazonQProvider((request) => {
     amazonQCalls.push(request);
-    return JSON.stringify(createDynamicWebDeploymentPreview());
+    return createNormalizedRequirementPlan(request);
   });
 
-  const response = await createAmazonQArchitectureDraftResponse(
-    {
+  await assert.rejects(
+    createAmazonQArchitectureDraftResponse(
+      {
       prompt: [
         "Dynamic web application for GitHub main branch deployment to AWS.",
         "Required resources: CodeStar Connection, CodePipeline, CodeBuild Project, CodeDeploy App, CodeDeploy Deployment Group, IAM Role.",
@@ -2378,16 +2364,14 @@ test("createAmazonQArchitectureDraftResponse sends deterministic normalized requ
         "Traffic pattern: event spike.",
         "Downtime: 1 hour per day, 99.9% availability."
       ].join("\n")
-    },
-    {
-      provider,
-      creditPolicy: confirmedCreditPolicy
-    }
+      },
+      {
+        provider,
+        creditPolicy: confirmedCreditPolicy
+      }
+    ),
+    { name: "ArchitectureDraftGenerationError" }
   );
-
-  if ("status" in response) {
-    assert.fail(`Expected preview, got clarification: ${response.question}`);
-  }
 
   const amazonQPayload = amazonQCalls.at(-1)?.payload as {
     normalizedRequirement?: {
@@ -3232,102 +3216,6 @@ function createStaticWebsiteCompletePrompt(uploadAnswer: string): string {
   ].join("\n");
 }
 
-function createStaticPreview(nodes: string[]): {
-  status: "preview";
-  title: string;
-  architectureJson: {
-    nodes: Array<{
-      id: string;
-      type: string;
-      label: string;
-      positionX: number;
-      positionY: number;
-      config: Record<string, unknown>;
-    }>;
-    edges: Array<{ id: string; sourceId: string; targetId: string; label: string }>;
-  };
-  requirementCoverage: ReturnType<typeof sampleRequirementCoverage>;
-} {
-  return {
-    status: "preview",
-    title: "Static Website",
-    architectureJson: {
-      nodes: [
-        {
-          id: "site-bucket",
-          type: "S3",
-          label: "Static Site Bucket",
-          positionX: 120,
-          positionY: 180,
-          config: {}
-        },
-        {
-          id: "cdn",
-          type: "CLOUDFRONT",
-          label: "CloudFront CDN",
-          positionX: 360,
-          positionY: 180,
-          config: {}
-        }
-      ],
-      edges: [
-        {
-          id: "cdn-to-site",
-          sourceId: "cdn",
-          targetId: "site-bucket",
-          label: "origin"
-        }
-      ]
-    },
-    requirementCoverage: sampleRequirementCoverage(nodes)
-  };
-}
-
-function createDynamicWebDeploymentPreview(): {
-  status: "preview";
-  title: string;
-  architectureJson: ArchitectureJson;
-  requirementCoverage: ReturnType<typeof sampleRequirementCoverage>;
-  assumptions: string[];
-} {
-  const architectureJson: ArchitectureJson = {
-    nodes: [
-      node("spa-bucket", "S3", "SPA", 0, 0),
-      node("cdn", "CLOUDFRONT", "CDN", 420, 0),
-      node("alb", "LOAD_BALANCER", "ALB", 840, 0),
-      node("listener", "LOAD_BALANCER_LISTENER", "HTTP", 1260, 0),
-      node("asg", "AUTO_SCALING_GROUP", "ASG", 1680, 0),
-      node("db-subnet-group", "DB_SUBNET_GROUP", "DB subnets", 2100, 0),
-      node("database", "RDS", "RDS", 2520, 0)
-    ],
-    edges: [
-      { id: "cdn-to-bucket", sourceId: "cdn", targetId: "spa-bucket", label: "static delivery" },
-      { id: "cdn-to-alb", sourceId: "cdn", targetId: "alb", label: "api origin" },
-      { id: "alb-to-listener", sourceId: "alb", targetId: "listener", label: "listens" },
-      { id: "listener-to-asg", sourceId: "listener", targetId: "asg", label: "backend runtime" },
-      { id: "asg-to-db", sourceId: "asg", targetId: "database", label: "database access" },
-      { id: "db-group-to-db", sourceId: "db-subnet-group", targetId: "database", label: "placement" }
-    ]
-  };
-
-  return {
-    status: "preview",
-    title: "Amazon Q Dynamic Web Deployment",
-    architectureJson,
-    requirementCoverage: [
-      {
-        answer: "dynamic web application selected answers",
-        status: "satisfied",
-        capability:
-          "selectedPattern: alb-asg-rds; rejectedPatterns: serverless because complex Spring Boot/Django backend prefers EC2 runtime. SPA frontend static delivery uses CloudFront and S3. Backend API entry uses ALB and Auto Scaling Group. Database requirement uses RDS durable data persistence in Seoul Korea only.",
-        nodes: architectureJson.nodes.map((candidate) => candidate.id),
-        assumption: "No file upload and no realtime paths are included. CloudFront is used for static delivery only, while API and RDS stay single-region in Seoul."
-      }
-    ],
-    assumptions: ["AUTO_SCALING_GROUP handles medium daytime traffic with 2-4 EC2 instances."]
-  };
-}
-
 function node(
   id: string,
   type: ArchitectureJson["nodes"][number]["type"],
@@ -3423,6 +3311,20 @@ function createFakeAmazonQProvider(generate: (request: Parameters<AiTextProvider
       };
     }
   };
+}
+
+function createNormalizedRequirementPlan(
+  request: Parameters<AiTextProvider["generate"]>[0]
+): string {
+  const payload = request.payload as {
+    normalizedRequirement?: Record<string, unknown> | undefined;
+  };
+
+  return JSON.stringify({
+    status: "plan",
+    title: "Verified Requirement Plan",
+    ...(payload.normalizedRequirement ?? {})
+  });
 }
 
 function createFakeOpenAiNormalizerProvider(

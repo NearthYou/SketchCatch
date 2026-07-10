@@ -1,4 +1,5 @@
 import type {
+  ApiErrorCode,
   AiArchitectureDraftResult,
   AiBillingMode,
   AiProviderMetadata,
@@ -40,6 +41,17 @@ import {
 } from "./aiProviderSafety.js";
 
 const ARCHITECTURE_DRAFT_TARGET = "architecture_draft";
+
+export class ArchitectureDraftGenerationError extends Error {
+  readonly statusCode = 503;
+  readonly errorCode: ApiErrorCode = "service_unavailable";
+  readonly exposeMessage = true;
+
+  constructor(cause: unknown) {
+    super("Amazon Q 아키텍처 생성에 실패했습니다. 잠시 후 다시 시도해주세요.", { cause });
+    this.name = "ArchitectureDraftGenerationError";
+  }
+}
 
 const SUPPORTED_RESOURCE_TYPES = SUPPORTED_ARCHITECTURE_RESOURCE_TYPES;
 const SUPPORTED_RESOURCE_CATALOG = SUPPORTED_ARCHITECTURE_RESOURCE_CATALOG;
@@ -409,8 +421,8 @@ export async function createAmazonQArchitectureDraftResponse(
     }
 
     return createAmazonQDraftResult(parsedResponse, providerMetadata);
-  } catch {
-    return createFallbackArchitectureDraftResponse(request, "provider_error", creditPolicy.billingMode);
+  } catch (error) {
+    throw new ArchitectureDraftGenerationError(error);
   }
 }
 

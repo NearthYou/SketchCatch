@@ -14,6 +14,7 @@ import {
 import type { AiTextProvider } from "./aiLlmExplanation.js";
 
 const AMAZON_Q_MESSAGE_MAX_LENGTH = 2_048;
+const AMAZON_Q_PATTERN_VERIFICATION_TTL_MS = 60 * 60 * 1000;
 const PATTERN_ID_SET = new Set<string>(ARCHITECTURE_PATTERN_IDS);
 const LOAD_BALANCER_RESOURCE_TYPES = new Set<ResourceType>([
   "LOAD_BALANCER",
@@ -177,8 +178,68 @@ export function createAmazonQArchitectureDraftProvider(input: {
   readonly region: string;
   readonly retrievalApplicationId: string;
   readonly retrievalClient?: AmazonQBusinessArchitectureClient | undefined;
+  readonly retrievalCacheTtlMs?: number | undefined;
+  readonly now?: (() => number) | undefined;
 }): AiTextProvider {
   const retrievalClient = input.retrievalClient ?? createDefaultAmazonQClient(input.region);
+  const now = input.now ?? Date.now;
+  const retrievalCacheTtlMs = input.retrievalCacheTtlMs ?? AMAZON_Q_PATTERN_VERIFICATION_TTL_MS;
+  const verifiedPatterns = new Map<ArchitecturePatternId, number>();
+  const pendingVerifications = new Map<ArchitecturePatternId, Promise<void>>();
+
+  const verifyPatterns = async (
+    patternIds: readonly ArchitecturePatternId[],
+    normalizedRequirement: ArchitectureIntentPlan | null
+  ): Promise<void> => {
+    const unverifiedPatternIds = patternIds.filter(
+      (patternId) => (verifiedPatterns.get(patternId) ?? 0) <= now()
+    );
+    if (unverifiedPatternIds.length === 0) {
+      return;
+    }
+
+    const existingVerifications = unverifiedPatternIds
+      .map((patternId) => pendingVerifications.get(patternId))
+      .filter((verification): verification is Promise<void> => verification !== undefined);
+    if (existingVerifications.length > 0) {
+      await Promise.all(existingVerifications);
+      return verifyPatterns(patternIds, normalizedRequirement);
+    }
+
+    const verification = (async () => {
+      const response = await retrievalClient.send(
+        new ChatSyncCommand({
+          applicationId: input.retrievalApplicationId,
+          chatMode: "RETRIEVAL_MODE",
+          attributeFilter: createPatternAttributeFilter(unverifiedPatternIds),
+          userMessage: createArchitectureKnowledgeRetrievalPrompt(
+            unverifiedPatternIds,
+            normalizedRequirement
+          )
+        })
+      );
+
+      assertExpectedPatternCitations(unverifiedPatternIds, response);
+      const verifiedUntil = now() + retrievalCacheTtlMs;
+      for (const patternId of unverifiedPatternIds) {
+        verifiedPatterns.set(patternId, verifiedUntil);
+      }
+    })();
+
+    for (const patternId of unverifiedPatternIds) {
+      pendingVerifications.set(patternId, verification);
+    }
+
+    try {
+      await verification;
+    } finally {
+      for (const patternId of unverifiedPatternIds) {
+        if (pendingVerifications.get(patternId) === verification) {
+          pendingVerifications.delete(patternId);
+        }
+      }
+    }
+  };
 
   return {
     provider: "amazon_q",
@@ -196,18 +257,7 @@ export function createAmazonQArchitectureDraftProvider(input: {
         throw new Error("No verified architecture pattern could be selected from the normalized requirement");
       }
 
-      for (const patternId of patternIds) {
-        const response = await retrievalClient.send(
-          new ChatSyncCommand({
-            applicationId: input.retrievalApplicationId,
-            chatMode: "RETRIEVAL_MODE",
-            attributeFilter: createSinglePatternAttributeFilter(patternId),
-            userMessage: createArchitectureKnowledgeRetrievalPrompt(patternId, normalizedRequirement)
-          })
-        );
-
-        assertExpectedPatternCitation(patternId, response);
-      }
+      await verifyPatterns(patternIds, normalizedRequirement);
 
       const plan = createCanonicalArchitecturePlan(patternIds, normalizedRequirement);
       const governanceNotes = createSecurityAndCostNotes(normalizedRequirement);
@@ -325,6 +375,11 @@ function createSinglePatternAttributeFilter(patternId: ArchitecturePatternId): A
   };
 }
 
+function createPatternAttributeFilter(patternIds: readonly ArchitecturePatternId[]): AttributeFilter {
+  const filters = patternIds.map(createSinglePatternAttributeFilter);
+  return filters.length === 1 ? filters[0]! : { orAllFilters: filters };
+}
+
 function createCanonicalArchitecturePlan(
   patternIds: readonly ArchitecturePatternId[],
   normalizedRequirement: ArchitectureIntentPlan | null
@@ -407,17 +462,21 @@ function createCanonicalArchitecturePlan(
   };
 }
 
-function assertExpectedPatternCitation(
-  patternId: ArchitecturePatternId,
+function assertExpectedPatternCitations(
+  patternIds: readonly ArchitecturePatternId[],
   response: Pick<ChatSyncOutput, "sourceAttributions">
 ): void {
-  const expectedDocumentId = CANONICAL_PATTERNS[patternId].documentId;
-  const hasExpectedCitation = (response.sourceAttributions ?? []).some(
-    (source) => source?.documentId === expectedDocumentId
+  const citedDocumentIds = new Set(
+    (response.sourceAttributions ?? []).map((source) => source?.documentId)
   );
+  const missingDocumentIds = patternIds
+    .map((patternId) => CANONICAL_PATTERNS[patternId].documentId)
+    .filter((documentId) => !citedDocumentIds.has(documentId));
 
-  if (!hasExpectedCitation) {
-    throw new Error(`Amazon Q retrieval citation did not include the expected pattern document: ${expectedDocumentId}`);
+  if (missingDocumentIds.length > 0) {
+    throw new Error(
+      `Amazon Q retrieval citation did not include the expected pattern document(s): ${missingDocumentIds.join(", ")}`
+    );
   }
 }
 
@@ -770,13 +829,13 @@ function readNormalizedRequirement(payload: unknown): ArchitectureIntentPlan | n
 }
 
 function createArchitectureKnowledgeRetrievalPrompt(
-  patternId: ArchitecturePatternId,
+  patternIds: readonly ArchitecturePatternId[],
   normalizedRequirement: ArchitectureIntentPlan | null
 ): string {
   return fitText(
     [
-      `Retrieve only the verified SketchCatch pattern with pattern_id=${patternId}.`,
-      "Summarize its required resources, connection order, placement, deployable parameters, validation gates, and forbidden structures.",
+      `Retrieve and cite every one of these exact verified SketchCatch patterns: ${patternIds.join(", ")}.`,
+      "Return one compact checklist line per pattern covering required resources, connection order, placement, deployable parameters, validation gates, and forbidden structures.",
       `Normalized project requirement: ${JSON.stringify(normalizedRequirement ?? {})}`
     ].join("\n"),
     AMAZON_Q_MESSAGE_MAX_LENGTH

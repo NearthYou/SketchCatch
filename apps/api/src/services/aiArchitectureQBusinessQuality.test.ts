@@ -201,11 +201,13 @@ async function materializeScenario(scenario: QualityCase) {
     retrievalApplicationId: "retrieval-app",
     retrievalClient: {
       send: async (command: ChatSyncCommand) => {
-        const patternId = command.input.attributeFilter?.equalsTo?.value?.stringValue;
+        const patternIds = readFilteredPatternIds(command);
 
         return {
-          systemMessage: `Verified ${patternId}.`,
-          sourceAttributions: [{ documentId: `sketchcatch-pattern-${patternId}-v1` }]
+          systemMessage: `Verified ${patternIds.join(", ")}.`,
+          sourceAttributions: patternIds.map((patternId) => ({
+            documentId: `sketchcatch-pattern-${patternId}-v1`
+          }))
         };
       }
     }
@@ -228,6 +230,15 @@ async function materializeScenario(scenario: QualityCase) {
   }
 
   return response;
+}
+
+function readFilteredPatternIds(command: Pick<ChatSyncCommand, "input">): string[] {
+  const filter = command.input.attributeFilter;
+  const filters = filter?.orAllFilters ?? (filter === undefined ? [] : [filter]);
+
+  return filters
+    .map((item) => item.equalsTo?.value?.stringValue)
+    .filter((patternId): patternId is string => patternId !== undefined);
 }
 
 function createArchitectureSignature(architectureJson: {

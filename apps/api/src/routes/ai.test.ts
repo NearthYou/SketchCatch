@@ -4,6 +4,7 @@ import { z } from "zod";
 import { resourceDefinitions } from "@sketchcatch/types/resource-definitions";
 import { buildApp } from "../app.js";
 import { createInMemoryRuntimeCache } from "../runtime-cache/index.js";
+import { ArchitectureDraftGenerationError } from "../services/aiArchitectureDrafts.js";
 
 process.env.NODE_ENV = "test";
 
@@ -1738,6 +1739,30 @@ test("POST /api/ai/architecture-draft rejects an empty prompt", async () => {
   });
 
   assert.equal(response.statusCode, 400);
+
+  await app.close();
+});
+
+test("POST /api/ai/architecture-draft returns 503 when verified generation fails", async () => {
+  const app = buildApp({
+    createArchitectureDraftResponse: async () => {
+      throw new ArchitectureDraftGenerationError(new Error("Amazon Q request failed"));
+    }
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    payload: {
+      prompt: "운영 가능한 웹 아키텍처를 만들어줘"
+    }
+  });
+
+  assert.equal(response.statusCode, 503);
+  assert.deepEqual(response.json(), {
+    error: "service_unavailable",
+    message: "Amazon Q 아키텍처 생성에 실패했습니다. 잠시 후 다시 시도해주세요."
+  });
 
   await app.close();
 });

@@ -78,17 +78,15 @@ test("architecture provider retrieves each selected pattern and returns a canoni
     retrievalClient: {
       send: async (command: ChatSyncCommand) => {
         retrievalInputs.push(command.input);
-        const filter = command.input.attributeFilter?.equalsTo?.value?.stringValue;
+        const patternIds = readFilteredPatternIds(command);
 
         return {
-          systemMessage: `Verified ${filter} knowledge.`,
-          sourceAttributions: [
-            {
-              title: filter,
-              documentId: `sketchcatch-pattern-${filter}-v1`,
-              snippet: `Verified ${filter} pattern.`
-            }
-          ]
+          systemMessage: `Verified ${patternIds.join(", ")} knowledge.`,
+          sourceAttributions: patternIds.map((patternId) => ({
+            title: patternId,
+            documentId: `sketchcatch-pattern-${patternId}-v1`,
+            snippet: `Verified ${patternId} pattern.`
+          }))
         };
       }
     }
@@ -116,9 +114,9 @@ test("architecture provider retrieves each selected pattern and returns a canoni
     }
   });
 
-  assert.equal(retrievalInputs.length, 3);
+  assert.equal(retrievalInputs.length, 1);
   assert.deepEqual(
-    retrievalInputs.map((input) => input.attributeFilter?.equalsTo?.value?.stringValue),
+    readFilteredPatternIds({ input: retrievalInputs[0]! }),
     ["alb-asg-ec2", "github-cicd-codedeploy", "multi-az-rds"]
   );
   assert.equal(retrievalInputs.every((input) => input.applicationId === "retrieval-app"), true);
@@ -133,6 +131,65 @@ test("architecture provider retrieves each selected pattern and returns a canoni
   assert.equal(plan.requiredResources?.includes("LOAD_BALANCER_TARGET_GROUP"), true);
   assert.equal(plan.requiredResources?.includes("CODEDEPLOY_DEPLOYMENT_GROUP"), true);
   assert.equal(plan.requiredResources?.includes("DB_SUBNET_GROUP"), true);
+
+  await provider.generate({
+    target: "architecture_draft",
+    instructions: "Return a plan.",
+    prompt: "Create the same verified architecture again.",
+    payload: {
+      normalizedRequirement: {
+        patternIds: ["alb-asg-ec2", "github-cicd-codedeploy", "multi-az-rds"]
+      }
+    }
+  });
+
+  assert.equal(retrievalInputs.length, 1, "verified pattern citations should be reused within the TTL");
+});
+
+test("architecture provider retrieves all selected patterns in one Q request", async () => {
+  let startedRequestCount = 0;
+  let requestedPatternIds: string[] = [];
+  const provider = createAmazonQArchitectureDraftProvider({
+    region: "ap-southeast-2",
+    retrievalApplicationId: "retrieval-app",
+    retrievalClient: {
+      send: async (command) => {
+        startedRequestCount += 1;
+        requestedPatternIds = readFilteredPatternIds(command);
+
+        return {
+          systemMessage: `Verified ${requestedPatternIds.join(", ")}.`,
+          sourceAttributions: requestedPatternIds.map((patternId) => ({
+            documentId: `sketchcatch-pattern-${patternId}-v1`
+          }))
+        };
+      }
+    }
+  });
+
+  await provider.generate({
+    target: "architecture_draft",
+    instructions: "Return a plan.",
+    prompt: "Create a highly available web runtime with CI/CD and RDS.",
+    payload: {
+      normalizedRequirement: {
+        patternIds: [
+          "alb-asg-ec2",
+          "spa-cloudfront-s3",
+          "github-cicd-codedeploy",
+          "multi-az-rds"
+        ]
+      }
+    }
+  });
+
+  assert.equal(startedRequestCount, 1);
+  assert.deepEqual(requestedPatternIds, [
+    "alb-asg-ec2",
+    "spa-cloudfront-s3",
+    "github-cicd-codedeploy",
+    "multi-az-rds"
+  ]);
 });
 
 test("architecture provider rejects retrieval evidence from the wrong document", async () => {
@@ -209,11 +266,13 @@ test("canonical Q plans materialize serverless, Fargate, and composed deployment
       retrievalApplicationId: "retrieval-app",
       retrievalClient: {
         send: async (command) => {
-          const patternId = command.input.attributeFilter?.equalsTo?.value?.stringValue;
+          const patternIds = readFilteredPatternIds(command);
 
           return {
-            systemMessage: `Verified ${patternId}.`,
-            sourceAttributions: [{ documentId: `sketchcatch-pattern-${patternId}-v1` }]
+            systemMessage: `Verified ${patternIds.join(", ")}.`,
+            sourceAttributions: patternIds.map((patternId) => ({
+              documentId: `sketchcatch-pattern-${patternId}-v1`
+            }))
           };
         }
       }
@@ -466,11 +525,13 @@ async function materializePageSelectionScenario(
     retrievalApplicationId: "retrieval-app",
     retrievalClient: {
       send: async (command) => {
-        const patternId = command.input.attributeFilter?.equalsTo?.value?.stringValue;
+        const patternIds = readFilteredPatternIds(command);
 
         return {
-          systemMessage: `Verified ${patternId}.`,
-          sourceAttributions: [{ documentId: `sketchcatch-pattern-${patternId}-v1` }]
+          systemMessage: `Verified ${patternIds.join(", ")}.`,
+          sourceAttributions: patternIds.map((patternId) => ({
+            documentId: `sketchcatch-pattern-${patternId}-v1`
+          }))
         };
       }
     }
@@ -539,4 +600,13 @@ function createPageSelectionPrompt(
     request,
     ...answers.map(([question, answer]) => `질문\n${question}\n\n나\n${answer}`)
   ].join("\n\n");
+}
+
+function readFilteredPatternIds(command: Pick<ChatSyncCommand, "input">): string[] {
+  const filter = command.input.attributeFilter;
+  const filters = filter?.orAllFilters ?? (filter === undefined ? [] : [filter]);
+
+  return filters
+    .map((item) => item.equalsTo?.value?.stringValue)
+    .filter((patternId): patternId is string => patternId !== undefined);
 }

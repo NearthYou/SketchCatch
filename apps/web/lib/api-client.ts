@@ -22,6 +22,7 @@ const DEFAULT_API_ERROR_MESSAGES = {
   conflict: "이미 사용 중인 정보입니다.",
   internal_server_error: "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.",
   not_found: "요청한 정보를 찾을 수 없습니다.",
+  service_unavailable: "AI 생성 서비스를 일시적으로 사용할 수 없습니다. 잠시 후 다시 시도해주세요.",
   too_many_requests: "요청이 너무 많습니다. 잠시 후 다시 시도해주세요.",
   unauthorized: "인증이 필요합니다."
 } satisfies Partial<Record<ApiErrorCode, string>>;

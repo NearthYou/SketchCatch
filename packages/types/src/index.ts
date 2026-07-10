@@ -8,6 +8,7 @@ export type ApiErrorCode =
   | "conflict"
   | "github_oauth_required"
   | "too_many_requests"
+  | "service_unavailable"
   | "internal_server_error";
 
 export type ApiErrorResponse = {
