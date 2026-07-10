@@ -94,6 +94,13 @@ const COMPACT_AREA_MIN_SIZES: Readonly<Record<string, DiagramNode["size"]>> = {
 const AREA_PARENT_EDGE_LABELS = new Set(["contains", "hosts"]);
 const TERRAFORM_REFERENCE_ATTRIBUTE_SUFFIXES = ["id", "arn", "name", "execution_arn"] as const;
 const SECURITY_GROUP_REFERENCE_KEYS = ["securityGroupIds", "vpcSecurityGroupIds", "securityGroupId"] as const;
+const SECURITY_GROUP_MEMBER_RESOURCE_TYPES = new Set([
+  "aws_db_instance",
+  "aws_ecs_service",
+  "aws_instance",
+  "aws_lambda_function",
+  "aws_lb"
+]);
 const RESOURCE_ITEMS_BY_DEFINITION_ID = new Map(resourceCatalog.map((resourceItem) => [resourceItem.id, resourceItem]));
 const RESOURCE_ITEMS_BY_TERRAFORM_TYPE = createResourceItemsByTerraformType(resourceCatalog);
 const EDGE_STYLE_LABEL_PATTERNS: ReadonlyArray<{
@@ -1313,28 +1320,34 @@ function applyAreaParentMetadata(
   nodes: readonly DiagramNode[],
   edges: readonly ArchitectureJson["edges"][number][]
 ): DiagramNode[] {
-  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  let currentNodes = [...nodes];
 
-  return nodes.map((node) => {
-    const parentAreaNodeId =
-      node.metadata?.parentAreaNodeId ??
-      findSubnetAwareSecurityBoundaryParentAreaNodeId(node, nodeById) ??
-      findConfigParentAreaNodeId(node, nodeById) ??
-      findEdgeParentAreaNodeId(node, nodeById, edges) ??
-      findDefaultRegionParentAreaNodeId(node, nodeById);
+  for (let pass = 0; pass < 3; pass += 1) {
+    const nodeById = new Map(currentNodes.map((node) => [node.id, node]));
+    currentNodes = currentNodes.map((node) => {
+      const parentAreaNodeId =
+        node.metadata?.parentAreaNodeId ??
+        findSubnetAwareSecurityBoundaryParentAreaNodeId(node, nodeById) ??
+        findConfigParentAreaNodeId(node, nodeById) ??
+        findReferencedResourceParentAreaNodeId(node, nodeById) ??
+        findEdgeParentAreaNodeId(node, nodeById, edges) ??
+        findDefaultRegionParentAreaNodeId(node, nodeById);
 
-    if (!parentAreaNodeId) {
-      return node;
-    }
-
-    return {
-      ...node,
-      metadata: {
-        ...node.metadata,
-        parentAreaNodeId
+      if (!parentAreaNodeId) {
+        return node;
       }
-    };
-  });
+
+      return {
+        ...node,
+        metadata: {
+          ...node.metadata,
+          parentAreaNodeId
+        }
+      };
+    });
+  }
+
+  return currentNodes;
 }
 
 // 자식이 밖으로 튀어나오지 않도록 VPC/Subnet 박스 크기를 필요한 만큼 키웁니다.
@@ -1358,9 +1371,9 @@ function findSubnetAwareSecurityBoundaryParentAreaNodeId(
 
   const protectedSubnetAreaNodeId = findProtectedSubnetAreaNodeId(securityParentNode, nodeById);
 
-  return protectedSubnetAreaNodeId && protectedSubnetAreaNodeId !== explicitSubnetParentAreaNodeId
-    ? explicitSubnetParentAreaNodeId
-    : securityParentAreaNodeId;
+  return protectedSubnetAreaNodeId === explicitSubnetParentAreaNodeId
+    ? securityParentAreaNodeId
+    : explicitSubnetParentAreaNodeId;
 }
 
 function fitAreaNodesToChildren(nodes: readonly DiagramNode[]): DiagramNode[] {
@@ -1397,7 +1410,10 @@ function findDefaultRegionParentAreaNodeId(
   node: DiagramNode,
   nodeById: ReadonlyMap<string, DiagramNode>
 ): string | undefined {
-  if (node.kind !== "resource" || isAreaDiagramNode(node)) {
+  if (
+    node.kind !== "resource" ||
+    getDiagramNodeResourceType(node) === "aws_region"
+  ) {
     return undefined;
   }
 
@@ -2171,6 +2187,13 @@ function findSecurityBoundaryParentAreaNodeId(
     return findProtectedSubnetAreaNodeId(node, nodeById);
   }
 
+  if (
+    !SECURITY_GROUP_MEMBER_RESOURCE_TYPES.has(getDiagramNodeResourceType(node)) ||
+    getStringParameterValues(node, "subnets").length > 1
+  ) {
+    return undefined;
+  }
+
   const securityGroupNode = findReferencedSecurityGroupAreaNodes(node, nodeById)[0];
 
   return securityGroupNode?.id;
@@ -2180,6 +2203,8 @@ function findProtectedSubnetAreaNodeId(
   securityGroupNode: DiagramNode,
   nodeById: ReadonlyMap<string, DiagramNode>
 ): string | undefined {
+  const referencedSubnetIds = new Set<string>();
+
   for (const node of nodeById.values()) {
     if (node.id === securityGroupNode.id || !referencesSecurityGroup(node, securityGroupNode, nodeById)) {
       continue;
@@ -2188,7 +2213,23 @@ function findProtectedSubnetAreaNodeId(
     const subnetNode = findConfigAreaNodeByParameter(node, "subnetId", nodeById);
 
     if (subnetNode && subnetNode.id !== securityGroupNode.id) {
-      return subnetNode.id;
+      referencedSubnetIds.add(subnetNode.id);
+    }
+  }
+
+  return referencedSubnetIds.size === 1 ? [...referencedSubnetIds][0] : undefined;
+}
+
+function findReferencedResourceParentAreaNodeId(
+  node: DiagramNode,
+  nodeById: ReadonlyMap<string, DiagramNode>
+): string | undefined {
+  for (const parameterName of ["loadBalancerArn"] as const) {
+    const referencedNode = findConfigNodeByParameter(node, parameterName, nodeById);
+    const parentAreaNodeId = referencedNode?.metadata?.parentAreaNodeId;
+
+    if (parentAreaNodeId && parentAreaNodeId !== node.id) {
+      return parentAreaNodeId;
     }
   }
 
@@ -2236,7 +2277,61 @@ function findConfigParentAreaNodeId(
 
   const vpcNode = findConfigAreaNodeByParameter(node, "vpcId", nodeById);
 
-  return vpcNode && vpcNode.id !== node.id ? vpcNode.id : undefined;
+  if (vpcNode && vpcNode.id !== node.id) {
+    return vpcNode.id;
+  }
+
+  return findCommonVpcParentFromSubnetReferences(node, nodeById);
+}
+
+function findCommonVpcParentFromSubnetReferences(
+  node: DiagramNode,
+  nodeById: ReadonlyMap<string, DiagramNode>
+): string | undefined {
+  const subnetReferences = ["subnets", "subnetIds"].flatMap((parameterName) =>
+    getStringParameterValues(node, parameterName)
+  );
+
+  if (subnetReferences.length === 0) {
+    return undefined;
+  }
+
+  const vpcIds = subnetReferences
+    .map((referenceValue) => findReferencedNode(referenceValue, nodeById))
+    .map((subnetNode) =>
+      subnetNode ? findAncestorAreaNodeIdByResourceType(subnetNode, "aws_vpc", nodeById) : undefined
+    );
+  const distinctVpcIds = new Set(vpcIds.filter((vpcId): vpcId is string => vpcId !== undefined));
+
+  return vpcIds.length === subnetReferences.length && distinctVpcIds.size === 1
+    ? [...distinctVpcIds][0]
+    : undefined;
+}
+
+function findAncestorAreaNodeIdByResourceType(
+  node: DiagramNode,
+  resourceType: string,
+  nodeById: ReadonlyMap<string, DiagramNode>
+): string | undefined {
+  let parentAreaNodeId = node.metadata?.parentAreaNodeId;
+  const visitedNodeIds = new Set<string>();
+
+  while (parentAreaNodeId && !visitedNodeIds.has(parentAreaNodeId)) {
+    visitedNodeIds.add(parentAreaNodeId);
+    const parentNode = nodeById.get(parentAreaNodeId);
+
+    if (!parentNode) {
+      return undefined;
+    }
+
+    if (getDiagramNodeResourceType(parentNode) === resourceType) {
+      return parentNode.id;
+    }
+
+    parentAreaNodeId = parentNode.metadata?.parentAreaNodeId;
+  }
+
+  return undefined;
 }
 
 function findRouteTableAssociationParentAreaNodeId(

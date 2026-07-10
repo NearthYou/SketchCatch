@@ -978,6 +978,135 @@ test("convertArchitectureJsonToDiagramJson resolves common Terraform reference a
   assert.equal(parentByNodeId.get("web-server"), "public-a");
 });
 
+test("convertArchitectureJsonToDiagramJson creates one area per Availability Zone and keeps subnet-backed resources in the VPC", () => {
+  const architectureJson: ArchitectureJson = {
+    nodes: [
+      {
+        id: "vpc-main",
+        type: "VPC",
+        label: "Main VPC",
+        positionX: 80,
+        positionY: 320,
+        config: { cidrBlock: "10.0.0.0/16" }
+      },
+      {
+        id: "public-subnet-a",
+        type: "SUBNET",
+        label: "Public Subnet A",
+        positionX: 160,
+        positionY: 500,
+        config: {
+          availabilityZone: "ap-northeast-2a",
+          vpcId: "aws_vpc.vpc_main.id"
+        }
+      },
+      {
+        id: "public-subnet-b",
+        type: "SUBNET",
+        label: "Public Subnet B",
+        positionX: 760,
+        positionY: 500,
+        config: {
+          availabilityZone: "ap-northeast-2b",
+          vpcId: "aws_vpc.vpc_main.id"
+        }
+      },
+      {
+        id: "private-db-subnet-a",
+        type: "SUBNET",
+        label: "Private DB Subnet A",
+        positionX: 160,
+        positionY: 820,
+        config: {
+          availabilityZone: "ap-northeast-2a",
+          vpcId: "aws_vpc.vpc_main.id"
+        }
+      },
+      {
+        id: "private-db-subnet-b",
+        type: "SUBNET",
+        label: "Private DB Subnet B",
+        positionX: 760,
+        positionY: 820,
+        config: {
+          availabilityZone: "ap-northeast-2b",
+          vpcId: "aws_vpc.vpc_main.id"
+        }
+      },
+      {
+        id: "app-server-a",
+        type: "EC2",
+        label: "App Server A",
+        positionX: 220,
+        positionY: 660,
+        config: { subnetId: "aws_subnet.public_subnet_a.id" }
+      },
+      {
+        id: "app-server-b",
+        type: "EC2",
+        label: "App Server B",
+        positionX: 820,
+        positionY: 660,
+        config: { subnetId: "aws_subnet.public_subnet_b.id" }
+      },
+      {
+        id: "application-load-balancer",
+        type: "LOAD_BALANCER",
+        label: "Application Load Balancer",
+        positionX: 520,
+        positionY: 420,
+        config: {
+          subnets: [
+            "aws_subnet.public_subnet_a.id",
+            "aws_subnet.public_subnet_b.id"
+          ]
+        }
+      },
+      {
+        id: "db-subnet-group",
+        type: "DB_SUBNET_GROUP",
+        label: "DB Subnet Group",
+        positionX: 520,
+        positionY: 860,
+        config: {
+          subnetIds: [
+            "aws_subnet.private_db_subnet_a.id",
+            "aws_subnet.private_db_subnet_b.id"
+          ]
+        }
+      }
+    ],
+    edges: []
+  };
+
+  const diagramJson = convertArchitectureJsonToDiagramJson(architectureJson);
+  const nodeById = new Map(diagramJson.nodes.map((node) => [node.id, node]));
+  const azNodes = diagramJson.nodes.filter(
+    (node) => node.parameters?.resourceType === "aws_availability_zone"
+  );
+
+  assert.equal(azNodes.length, 2);
+  assert.deepEqual(
+    new Set(azNodes.map((node) => node.parameters?.values?.["awsAvailabilityZone"])),
+    new Set(["ap-northeast-2a", "ap-northeast-2b"])
+  );
+  assert.deepEqual(
+    new Set(azNodes.map((node) => node.parameters?.resourceName)),
+    new Set(["az_ap_northeast_2a", "az_ap_northeast_2b"])
+  );
+  assert.notEqual(
+    nodeById.get("public-subnet-a")?.metadata?.parentAreaNodeId,
+    nodeById.get("public-subnet-b")?.metadata?.parentAreaNodeId
+  );
+  assert.equal(
+    nodeById.get("application-load-balancer")?.metadata?.parentAreaNodeId,
+    "vpc-main"
+  );
+  assert.equal(nodeById.get("db-subnet-group")?.metadata?.parentAreaNodeId, "vpc-main");
+  assertContainsNode(nodeById.get("vpc-main"), nodeById.get("application-load-balancer"));
+  assertContainsNode(nodeById.get("vpc-main"), nodeById.get("db-subnet-group"));
+});
+
 test("convertArchitectureJsonToDiagramJson marks VPC and Subnet containment for board area nodes", () => {
   const architectureJson: ArchitectureJson = {
     nodes: [
@@ -1125,7 +1254,8 @@ test("convertArchitectureJsonToDiagramJson keeps EC2 instances in their explicit
   const parentByNodeId = new Map(diagramJson.nodes.map((node) => [node.id, node.metadata?.parentAreaNodeId]));
   const nodeById = new Map(diagramJson.nodes.map((node) => [node.id, node]));
 
-  assert.equal(parentByNodeId.get("ec2-a"), "sg-app");
+  assert.equal(parentByNodeId.get("sg-app"), "vpc-main");
+  assert.equal(parentByNodeId.get("ec2-a"), "subnet-app-a");
   assert.equal(parentByNodeId.get("ec2-b"), "subnet-app-b");
   assert.equal(parentByNodeId.get("ec2-c"), "subnet-app-b");
   assertContainsNode(nodeById.get("subnet-app-a"), nodeById.get("ec2-a"));
