@@ -609,6 +609,10 @@ class FakeSourceRepositoryRepository implements SourceRepositoryRepository {
 
   constructor(readonly rows: SourceRepositoryRecord[] = []) {}
 
+  async findGitHubProviderUserId(candidateUserId: string) {
+    return candidateUserId === userId ? "github-account-1" : null;
+  }
+
   async findAccessibleProject(candidateProjectId: string, accessContext: ProjectAccessContext) {
     this.findAccessibleProjectCalls.push({
       projectId: candidateProjectId,
@@ -726,6 +730,7 @@ function createFakeGitHubAppClient(repositories: GitHubRepositoryCandidate[]): G
       return [
         {
           installationId: "12345",
+          accountId: "github-account-1",
           accountLogin: "owner",
           accountType: "Organization",
           repositorySelection: "selected",

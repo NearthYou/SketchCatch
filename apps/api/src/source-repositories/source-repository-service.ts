@@ -7,7 +7,7 @@ import type {
   RepositoryAnalysisAiHandoff
 } from "@sketchcatch/types";
 import type { Database } from "../db/client.js";
-import { projects, sourceRepositories, touchUpdatedAt } from "../db/schema.js";
+import { oauthAccounts, projects, sourceRepositories, touchUpdatedAt } from "../db/schema.js";
 import type { ProjectAccessContext } from "../git-cicd/git-cicd-handoff-service.js";
 import { createGitHubAppState, verifyGitHubAppState } from "./github-app-state.js";
 import type {
@@ -20,6 +20,7 @@ export type SourceRepositoryRecord = typeof sourceRepositories.$inferSelect;
 export type SourceRepositoryProjectRecord = typeof projects.$inferSelect;
 
 export type SourceRepositoryRepository = {
+  findGitHubProviderUserId(userId: string): Promise<string | null>;
   findAccessibleProject(
     projectId: string,
     accessContext: ProjectAccessContext
@@ -145,6 +146,14 @@ export function createPostgresSourceRepositoryRepository(
   db: Database
 ): SourceRepositoryRepository {
   return {
+    async findGitHubProviderUserId(userId) {
+      const [account] = await db
+        .select({ providerUserId: oauthAccounts.providerUserId })
+        .from(oauthAccounts)
+        .where(and(eq(oauthAccounts.userId, userId), eq(oauthAccounts.provider, "github")));
+
+      return account?.providerUserId ?? null;
+    },
     async findAccessibleProject(projectId, accessContext) {
       const [project] = await db
         .select()
@@ -320,6 +329,7 @@ export async function listGitHubInstallationRepositories(
   githubAppClient: GitHubAppClient
 ): Promise<ListGitHubInstallationRepositoriesResult> {
   const state = await verifyAndAuthorizeState(input, repository);
+  await requireOwnedGitHubInstallation(state.userId, input.installationId, repository, githubAppClient);
   const repositories = await githubAppClient.listInstallationRepositories(input.installationId);
 
   return {
@@ -348,7 +358,11 @@ export async function listGitHubInstalledRepositories(
   };
   const { state, expiresAt } = await createGitHubAppState(stateInput);
   const knownRepositories = await repository.listProjectSourceRepositories(input.projectId);
-  const installations = await githubAppClient.listInstallations();
+  const installations = await listOwnedGitHubInstallations(
+    input.accessContext.userId,
+    repository,
+    githubAppClient
+  );
   const repositories: GitHubInstalledRepositoryCandidate[] = [];
 
   for (const installation of installations) {
@@ -396,7 +410,13 @@ export async function connectGitHubSourceRepository(
   githubAppClient: GitHubAppClient,
   generateId: () => string = randomUUID
 ): Promise<SourceRepositoryRecord> {
-  await verifyAndAuthorizeState(input, repository);
+  const state = await verifyAndAuthorizeState(input, repository);
+  await requireOwnedGitHubInstallation(
+    state.userId,
+    input.installationId,
+    repository,
+    githubAppClient
+  );
 
   const repositories = await githubAppClient.listInstallationRepositories(input.installationId);
   const selectedRepository = repositories.find(
@@ -538,6 +558,39 @@ async function verifyAndAuthorizeState(
     userId: state.userId,
     projectId: state.projectId
   };
+}
+
+async function listOwnedGitHubInstallations(
+  userId: string,
+  repository: SourceRepositoryRepository,
+  githubAppClient: GitHubAppClient
+) {
+  const providerUserId = await repository.findGitHubProviderUserId(userId);
+
+  if (!providerUserId) {
+    throw new SourceRepositoryConflictError("GIT_APP_GITHUB_IDENTITY_REQUIRED");
+  }
+
+  const installations = await githubAppClient.listInstallations();
+  return installations.filter((installation) => installation.accountId === providerUserId);
+}
+
+async function requireOwnedGitHubInstallation(
+  userId: string,
+  installationId: string,
+  repository: SourceRepositoryRepository,
+  githubAppClient: GitHubAppClient
+) {
+  const installations = await listOwnedGitHubInstallations(userId, repository, githubAppClient);
+  const installation = installations.find(
+    (candidate) => candidate.installationId === installationId
+  );
+
+  if (!installation) {
+    throw new SourceRepositoryConflictError("GIT_APP_INSTALLATION_FORBIDDEN");
+  }
+
+  return installation;
 }
 
 async function requireAccessibleProject(

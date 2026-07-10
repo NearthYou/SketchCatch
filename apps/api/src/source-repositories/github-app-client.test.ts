@@ -93,6 +93,7 @@ test("listInstallations returns GitHub App installation account metadata", async
             repository_selection: "selected",
             html_url: "https://github.com/settings/installations/42",
             account: {
+              id: 987654,
               login: "NearthYou",
               type: "Organization"
             }
@@ -107,6 +108,7 @@ test("listInstallations returns GitHub App installation account metadata", async
   assert.deepEqual(await client.listInstallations(), [
     {
       installationId: "42",
+      accountId: "987654",
       accountLogin: "NearthYou",
       accountType: "Organization",
       repositorySelection: "selected",

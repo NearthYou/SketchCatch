@@ -14,6 +14,12 @@ import {
   listSourceRepositories
 } from "../../../../features/workspace/api";
 import { GitHubRepositoryConnectionPanel } from "./github-repository-connection-panel";
+import {
+  applyRepositoryAnalysis,
+  canRunRepositoryAnalysis,
+  findActiveGitHubRepository,
+  shouldLoadProjectSettings
+} from "./project-github-settings-state";
 import { RepositoryAnalysisResult } from "./repository-analysis-result";
 import styles from "./project-github-settings.module.css";
 
@@ -35,15 +41,12 @@ export function ProjectGitHubSettingsClient({ projectId }: { readonly projectId:
   const [errorMessage, setErrorMessage] = useState("");
 
   const activeRepository = useMemo(
-    () =>
-      sourceRepositories.find(
-        (repository) => repository.provider === "github" && repository.status === "active"
-      ) ?? null,
+    () => findActiveGitHubRepository(sourceRepositories),
     [sourceRepositories]
   );
 
   useEffect(() => {
-    if (authStatus !== "authenticated") {
+    if (!shouldLoadProjectSettings(authStatus)) {
       return;
     }
 
@@ -128,7 +131,7 @@ export function ProjectGitHubSettingsClient({ projectId }: { readonly projectId:
 
   // active repository 분석을 한 번만 실행하고 저장된 AI Handoff를 현재 화면에도 반영합니다.
   async function runRepositoryAnalysis(): Promise<void> {
-    if (!activeRepository || analysisState === "loading") {
+    if (!canRunRepositoryAnalysis(activeRepository, analysisState)) {
       return;
     }
 
@@ -139,18 +142,7 @@ export function ProjectGitHubSettingsClient({ projectId }: { readonly projectId:
       const result = await analyzeSourceRepository(projectId, activeRepository.id);
 
       setSourceRepositories((currentRepositories) =>
-        currentRepositories.map((repository) =>
-          repository.id === result.sourceRepositoryId
-            ? {
-                ...repository,
-                analysis: {
-                  repositoryRevision: result.repositoryRevision,
-                  analyzedAt: result.analyzedAt,
-                  aiHandoff: result.aiHandoff
-                }
-              }
-            : repository
-        )
+        applyRepositoryAnalysis(currentRepositories, result)
       );
       setAnalysisState("idle");
     } catch (error) {

@@ -253,7 +253,7 @@ test("POST /api/ai/architecture-draft keeps the Repository Analysis Template sel
     method: "POST",
     url: "/api/ai/architecture-draft",
     payload: {
-      prompt: "정적 웹사이트를 S3와 CloudFront로 배포하고 싶어",
+      prompt: "EC2와 RDS 기반 3계층 애플리케이션으로 바꿔줘",
       templateId: "static-web-hosting"
     }
   });
@@ -267,6 +267,19 @@ test("POST /api/ai/architecture-draft keeps the Repository Analysis Template sel
       assumption.includes("Static Web Hosting (static-web-hosting) Template을 기본 결정으로 유지")
     ),
     true
+  );
+  assert.deepEqual(
+    body.architectureJson.nodes
+      .filter((node) => node.id.startsWith("fixed-template-static-web-hosting-"))
+      .map((node) => node.config.terraformResourceType),
+    [
+      "aws_s3_bucket",
+      "aws_s3_object",
+      "aws_s3_bucket_public_access_block",
+      "aws_cloudfront_origin_access_control",
+      "aws_cloudfront_distribution",
+      "aws_s3_bucket_policy"
+    ]
   );
 
   await app.close();

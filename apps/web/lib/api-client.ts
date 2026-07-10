@@ -30,6 +30,10 @@ const API_MESSAGE_TRANSLATIONS: Partial<Record<string, string>> = {
   "Authentication required": "인증이 필요합니다.",
   "GIT_APP_AUTHENTICATION_FAILED":
     "GitHub App 인증에 실패했습니다. GitHub App 설치와 서버 설정을 확인해주세요.",
+  "GIT_APP_GITHUB_IDENTITY_REQUIRED":
+    "GitHub로 로그인한 계정만 GitHub App repository를 연결할 수 있습니다.",
+  "GIT_APP_INSTALLATION_FORBIDDEN":
+    "현재 GitHub 계정이 소유한 GitHub App 설치가 아닙니다. 올바른 계정으로 다시 연결해주세요.",
   "GIT_APP_REPOSITORY_ACCESS_UNAVAILABLE":
     "GitHub App 연결이 해제됐거나 repository 접근 권한이 없습니다. 다시 연결해주세요.",
   "GIT_APP_REPOSITORY_ARCHIVED":

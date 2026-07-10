@@ -9,6 +9,7 @@ import type {
   LlmExplanation,
   LlmExplanationFallbackReason,
   ResourceType,
+  TemplateDefinition,
   TemplateId
 } from "@sketchcatch/types";
 import { getTemplateDefinitionById } from "@sketchcatch/types";
@@ -37,11 +38,7 @@ import {
 
 const ARCHITECTURE_DRAFT_TARGET = "architecture_draft";
 
-type FixedTemplateSelection = {
-  readonly id: TemplateId;
-  readonly title: string;
-  readonly resourceTypes: readonly string[];
-};
+type FixedTemplateSelection = TemplateDefinition;
 
 const SUPPORTED_RESOURCE_TYPES = Array.from(
   new Set(
@@ -177,7 +174,7 @@ export function createArchitectureDraft(input: string | CreateArchitectureDraftR
   const draft = planPracticeArchitecture(resolution, resourceQuantities);
   const configuredDraft = applyOperatingConditionConfig(draft, resolution.operatingProfile);
 
-  return applyFixedTemplateSelectionMetadata(
+  return applyFixedTemplateSelection(
     applyGuardrailMetadata(configuredDraft, request, resolution),
     request.templateId
   );
@@ -329,7 +326,10 @@ export async function createAmazonQArchitectureDraftResponse(
       };
     }
 
-    return createAmazonQDraftResult(parsedResponse, providerMetadata);
+    return applyFixedTemplateSelection(
+      createAmazonQDraftResult(parsedResponse, providerMetadata),
+      request.templateId
+    );
   } catch {
     return createFallbackArchitectureDraftResponse(request, "provider_error", creditPolicy.billingMode);
   }
@@ -1101,13 +1101,7 @@ function createFixedTemplateSelection(templateId: TemplateId | undefined): Fixed
     return null;
   }
 
-  const definition = getTemplateDefinitionById(templateId);
-
-  return {
-    id: definition.id,
-    title: definition.title,
-    resourceTypes: definition.resources.map((resource) => resource.terraformResourceType)
-  };
+  return getTemplateDefinitionById(templateId);
 }
 
 // AI prompt에 선택 Template을 기본 결정으로 유지하고 부족한 요구만 보완하라고 명시합니다.
@@ -1125,7 +1119,7 @@ function createFixedTemplateSelectionPrompt(selection: FixedTemplateSelection | 
 }
 
 // fallback 결과에도 어떤 Template을 기본 결정으로 받은 것인지 사용자 설명으로 남깁니다.
-function applyFixedTemplateSelectionMetadata(
+function applyFixedTemplateSelection(
   draft: AiArchitectureDraftResult,
   templateId: TemplateId | undefined
 ): AiArchitectureDraftResult {
@@ -1134,9 +1128,53 @@ function applyFixedTemplateSelectionMetadata(
   }
 
   const definition = getTemplateDefinitionById(templateId);
+  const fixedNodes = definition.resources.map((resource) => {
+    const resourceDefinition = resourceDefinitions.find(
+      (candidate) => candidate.terraform.resourceType === resource.terraformResourceType
+    );
+
+    if (!resourceDefinition || resourceDefinition.resourceType === "UNKNOWN") {
+      throw new Error(
+        `Template resource is not supported by Architecture Draft: ${resource.terraformResourceType}`
+      );
+    }
+
+    return {
+      id: `fixed-template-${definition.id}-${resource.id}`,
+      type: resourceDefinition.resourceType,
+      label: resource.label,
+      positionX: resource.position.x,
+      positionY: resource.position.y,
+      config: {
+        templateResourceId: resource.id,
+        terraformBlockType: resource.terraformBlockType,
+        terraformResourceType: resource.terraformResourceType,
+        values: resource.values
+      }
+    };
+  });
+  const fixedNodeIds = new Set(fixedNodes.map((node) => node.id));
+  const fixedEdges = definition.relationships.map((relationship) => ({
+    id: `fixed-template-${definition.id}-${relationship.id}`,
+    sourceId: `fixed-template-${definition.id}-${relationship.sourceResourceId}`,
+    targetId: `fixed-template-${definition.id}-${relationship.targetResourceId}`,
+    label: relationship.label
+  }));
 
   return {
     ...draft,
+    architectureJson: {
+      nodes: [
+        ...fixedNodes,
+        ...draft.architectureJson.nodes.filter((node) => !fixedNodeIds.has(node.id))
+      ],
+      edges: [
+        ...fixedEdges,
+        ...draft.architectureJson.edges.filter(
+          (edge) => !fixedEdges.some((fixedEdge) => fixedEdge.id === edge.id)
+        )
+      ]
+    },
     metadata: {
       ...draft.metadata,
       assumptions: [

@@ -62,6 +62,15 @@ test("getApiErrorMessage explains Repository Analysis GitHub connection failures
       expected: "GitHub App 연결이 해제됐거나 repository 접근 권한이 없습니다. 다시 연결해주세요."
     },
     {
+      message: "GIT_APP_GITHUB_IDENTITY_REQUIRED",
+      expected: "GitHub로 로그인한 계정만 GitHub App repository를 연결할 수 있습니다."
+    },
+    {
+      message: "GIT_APP_INSTALLATION_FORBIDDEN",
+      expected:
+        "현재 GitHub 계정이 소유한 GitHub App 설치가 아닙니다. 올바른 계정으로 다시 연결해주세요."
+    },
+    {
       message: "GIT_APP_REPOSITORY_FILE_ENCODING_UNSUPPORTED",
       expected: "분석 파일의 문자 인코딩을 읽을 수 없어 Repository Analysis를 중단했습니다."
     },

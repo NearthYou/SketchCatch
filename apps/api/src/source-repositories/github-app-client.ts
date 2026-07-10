@@ -77,6 +77,7 @@ export type GitHubActionsPipelineStatus = {
 
 export type GitHubAppInstallation = {
   installationId: string;
+  accountId: string;
   accountLogin: string;
   accountType: string | null;
   repositorySelection: "all" | "selected" | null;
@@ -217,6 +218,7 @@ type GitHubInstallationApiResponse = {
   readonly repository_selection?: unknown;
   readonly html_url?: unknown;
   readonly account?: {
+    readonly id?: unknown;
     readonly login?: unknown;
     readonly type?: unknown;
   };
@@ -777,6 +779,7 @@ function toGitHubAppInstallation(
 
   return {
     installationId: String(readRequiredNumber(installation.id, "installation id")),
+    accountId: String(readRequiredNumber(installation.account?.id, "installation account id")),
     accountLogin: readRequiredString(installation.account?.login, "installation account login"),
     accountType:
       typeof installation.account?.type === "string" && installation.account.type
