@@ -18,6 +18,7 @@ import {
   type ArchitectureIntentPlan
 } from "./aiArchitectureRequirementNormalizer.js";
 import {
+  createArchitectureResourceDeploymentConfig,
   SUPPORTED_ARCHITECTURE_RESOURCE_CATALOG,
   SUPPORTED_ARCHITECTURE_RESOURCE_TYPES
 } from "./aiArchitectureResourceCatalog.js";
@@ -26,16 +27,12 @@ import { applyOperatingConditionConfig } from "./aiArchitectureOperatingConditio
 import { resolveArchitectureResourceQuantities } from "./aiArchitectureResourceQuantities.js";
 import { resolveArchitectureRequirement } from "./aiArchitectureRequirementResolution.js";
 import { createArchitectureDraftFallbackExplanation } from "./aiLlmExplanationFallbacks.js";
+import { createAmazonQArchitectureDraftProviderFromEnv } from "./aiArchitectureQBusiness.js";
 import {
   createAwsArchitectureReferenceKnowledgePayload,
   createAwsArchitectureReferenceKnowledgePrompt
 } from "./awsArchitectureReferenceKnowledge.js";
-import {
-  createAmazonQBusinessTextProviderFromEnv,
-  resolveAiProviderRegions,
-  type AiCreditPolicy,
-  type AiTextProvider
-} from "./aiLlmExplanation.js";
+import { resolveAiProviderRegions, type AiCreditPolicy, type AiTextProvider } from "./aiLlmExplanation.js";
 import {
   createNormalizedAiCacheKey,
   estimateAiUsage,
@@ -212,7 +209,7 @@ export function createConfiguredAmazonQArchitectureDraftResponse(): CreateArchit
   const provider =
     process.env.NODE_ENV === "test"
       ? undefined
-      : createAmazonQBusinessTextProviderFromEnv({
+      : createAmazonQArchitectureDraftProviderFromEnv({
           region: regions.amazonQRegion
         });
   const requirementNormalizerProvider =
@@ -277,6 +274,7 @@ export async function createAmazonQArchitectureDraftResponse(
 
   try {
     let activePayload = payload;
+    let retryUsed = false;
     let response = await provider.generate({
       target: ARCHITECTURE_DRAFT_TARGET,
       instructions: createAmazonQArchitectureDraftInstructions(),
@@ -289,6 +287,7 @@ export async function createAmazonQArchitectureDraftResponse(
       const validationIssues = findAmazonQPreviewValidationIssues(request.prompt, parsedResponse, normalizedRequirement);
 
       if (validationIssues.length > 0) {
+        retryUsed = true;
         activePayload = maskSecretsForAi({
           architectureBrief,
           architectureDecisionSpace,
@@ -325,7 +324,7 @@ export async function createAmazonQArchitectureDraftResponse(
       }
     }
 
-    const providerMetadata = createAiProviderMetadata({
+    let providerMetadata = createAiProviderMetadata({
       provider,
       billingMode: creditPolicy.billingMode,
       payload: activePayload,
@@ -342,18 +341,83 @@ export async function createAmazonQArchitectureDraftResponse(
     }
 
     if (parsedResponse.status === "plan") {
-      return createAmazonQPlanDraftResult(
-        parsedResponse,
-        request,
-        normalizedRequirement,
-        providerMetadata
-      );
+      try {
+        return createAmazonQPlanDraftResult(
+          parsedResponse,
+          request,
+          normalizedRequirement,
+          providerMetadata
+        );
+      } catch (error) {
+        if (retryUsed) {
+          throw error;
+        }
+
+        const validationIssues = [
+          `Architecture plan materialization validation failed: ${readArchitectureDraftErrorMessage(error)}`
+        ];
+        const previousPlan = {
+          title: parsedResponse.title,
+          ...parsedResponse.plan
+        };
+        activePayload = maskSecretsForAi({
+          architectureBrief,
+          architectureDecisionSpace,
+          ...(normalizedRequirement === null ? {} : { normalizedRequirement }),
+          prompt: request.prompt,
+          referenceKnowledge,
+          validationIssues,
+          previousPlan,
+          supportedResourceTypes: SUPPORTED_RESOURCE_TYPES,
+          supportedResourceCatalog: SUPPORTED_RESOURCE_CATALOG
+        });
+        response = await provider.generate({
+          target: ARCHITECTURE_DRAFT_TARGET,
+          instructions: createAmazonQArchitectureDraftInstructions(),
+          prompt: createAmazonQArchitecturePlanRepairPrompt(
+            request.prompt,
+            architectureDecisionSpace,
+            normalizedRequirement,
+            validationIssues,
+            previousPlan
+          ),
+          payload: activePayload
+        });
+        parsedResponse = parseAmazonQArchitectureDraftResponse(response.text);
+
+        if (parsedResponse.status !== "plan") {
+          throw new Error(
+            "Amazon Q must return a corrected architecture plan after materialization validation fails",
+            { cause: error }
+          );
+        }
+
+        providerMetadata = createAiProviderMetadata({
+          provider,
+          billingMode: creditPolicy.billingMode,
+          payload: activePayload,
+          outputCharacters: response.outputCharacters ?? response.text.length
+        });
+
+        return createAmazonQPlanDraftResult(
+          parsedResponse,
+          request,
+          normalizedRequirement,
+          providerMetadata
+        );
+      }
     }
 
     return createAmazonQDraftResult(parsedResponse, providerMetadata);
   } catch {
     return createFallbackArchitectureDraftResponse(request, "provider_error", creditPolicy.billingMode);
   }
+}
+
+function readArchitectureDraftErrorMessage(error: unknown): string {
+  return error instanceof Error && error.message.trim().length > 0
+    ? error.message.trim()
+    : "Unknown deterministic validation error";
 }
 
 // 문자열 입력과 요청 객체를 자연어 prompt 전용 계약으로 맞춥니다.
@@ -1117,6 +1181,30 @@ function createAmazonQArchitectureDraftRepairPrompt(
   ].join("\n\n");
 }
 
+function createAmazonQArchitecturePlanRepairPrompt(
+  prompt: string,
+  architectureDecisionSpace: ArchitectureDecisionSpace,
+  normalizedRequirement: ArchitectureIntentPlan | null,
+  validationIssues: readonly string[],
+  previousPlan: Record<string, unknown>
+): string {
+  return [
+    createAmazonQArchitectureDraftInstructions(),
+    "The previous compact architecture plan failed deterministic SketchCatch materialization validation.",
+    "Return a complete corrected plan JSON. Do not return a preview and do not repeat the invalid plan.",
+    createAmazonQArchitectureBrief(prompt),
+    createNormalizedArchitectureIntentPlanPromptSection(normalizedRequirement),
+    "ArchitectureDecisionSpace:",
+    JSON.stringify(architectureDecisionSpace, null, 2),
+    "Validation issues:",
+    ...validationIssues.map((issue) => `- ${issue}`),
+    "Previous invalid plan:",
+    JSON.stringify(previousPlan),
+    "Original user requirement prompt:",
+    prompt
+  ].join("\n\n");
+}
+
 function createNormalizedArchitectureIntentPlanPromptSection(
   normalizedRequirement: ArchitectureIntentPlan | null
 ): string {
@@ -1422,13 +1510,27 @@ function findNormalizedRequirementValidationIssues(
   return issues;
 }
 
-function createDeterministicArchitectureIntentPlan(prompt: string): ArchitectureIntentPlan | null {
+export function createDeterministicArchitectureIntentPlan(prompt: string): ArchitectureIntentPlan | null {
   const normalizedPrompt = prompt.normalize("NFKC").toLowerCase();
   const requiredResources = new Set<ResourceType>(findExplicitResourceTypesInPrompt(normalizedPrompt));
   const resourceQuantities: Record<string, number> = {};
   const forbiddenCapabilities = new Set<string>();
   const amazonQBrief: string[] = [];
   const quantities = resolveArchitectureResourceQuantities(prompt);
+  const fargateRuntime = requiresFargateArchitecture(normalizedPrompt);
+  const forbidsEc2Runtime = explicitlyForbidsEc2Runtime(normalizedPrompt) || fargateRuntime;
+
+  if (fargateRuntime) {
+    requiredResources.add("ECS_CLUSTER");
+    requiredResources.add("ECS_SERVICE");
+    requiredResources.add("ECS_TASK_DEFINITION");
+    requiredResources.add("ECR_REPOSITORY");
+    requiredResources.add("LOAD_BALANCER");
+    forbiddenCapabilities.add("ec2_runtime");
+    amazonQBrief.push("Use ECS Fargate tasks in private subnets without EC2 capacity resources.");
+  } else if (forbidsEc2Runtime) {
+    forbiddenCapabilities.add("ec2_runtime");
+  }
 
   if (requiresAlbEc2TrafficPath(normalizedPrompt)) {
     requiredResources.add("LOAD_BALANCER");
@@ -1449,6 +1551,20 @@ function createDeterministicArchitectureIntentPlan(prompt: string): Architecture
   if (requiresEc2PrivateSubnetSplit(normalizedPrompt)) {
     requiredResources.add("EC2");
     amazonQBrief.push("Place EC2 runtime nodes across at least two private subnet boxes, not visually grouped into one subnet.");
+  }
+
+  if (forbidsEc2Runtime) {
+    for (const resourceType of [
+      "EC2",
+      "AMI",
+      "IAM_INSTANCE_PROFILE",
+      "LAUNCH_TEMPLATE",
+      "AUTO_SCALING_GROUP",
+      "AUTO_SCALING_POLICY",
+      "ECS_CAPACITY_PROVIDER"
+    ] as const) {
+      requiredResources.delete(resourceType);
+    }
   }
 
   if (quantities.ec2Instances > 1 || requiredResources.has("EC2")) {
@@ -1490,6 +1606,22 @@ function createDeterministicRuntimeTopology(
 ): ArchitectureIntentPlan["runtimeTopology"] {
   const topology: NonNullable<ArchitectureIntentPlan["runtimeTopology"]> = {};
 
+  if (requiresFargateArchitecture(normalizedPrompt)) {
+    return {
+      trafficEntry: "LOAD_BALANCER",
+      compute: "ECS_FARGATE",
+      placement: "private_subnets",
+      autoScaling: true
+    };
+  }
+
+  if (explicitlyForbidsEc2Runtime(normalizedPrompt) && hasPromptTerm(normalizedPrompt, ["lambda", "serverless", "람다", "서버리스"])) {
+    return {
+      trafficEntry: "API_GATEWAY_REST_API",
+      compute: "LAMBDA"
+    };
+  }
+
   if (requiresAlbEc2TrafficPath(normalizedPrompt)) {
     topology.trafficEntry = "LOAD_BALANCER";
     topology.compute = "EC2";
@@ -1526,6 +1658,7 @@ function mergeArchitectureIntentPlans(
   }
 
   const requiredResources = mergeUniqueTextItems(providerPlan.requiredResources, deterministicPlan.requiredResources);
+  const patternIds = mergeUniqueTextItems(providerPlan.patternIds, deterministicPlan.patternIds);
   const forbiddenCapabilities = mergeUniqueTextItems(
     providerPlan.forbiddenCapabilities,
     deterministicPlan.forbiddenCapabilities
@@ -1541,6 +1674,7 @@ function mergeArchitectureIntentPlans(
     ...(providerPlan.region === undefined && deterministicPlan.region === undefined
       ? {}
       : { region: deterministicPlan.region ?? providerPlan.region }),
+    ...(patternIds.length === 0 ? {} : { patternIds }),
     ...(requiredResources.length === 0 ? {} : { requiredResources }),
     ...(Object.keys(resourceQuantities).length === 0 ? {} : { resourceQuantities }),
     ...(forbiddenCapabilities.length === 0 ? {} : { forbiddenCapabilities }),
@@ -1625,8 +1759,13 @@ function createAmazonQPlanDraftResult(
     prompt: createArchitecturePlanMaterializationPrompt(request.prompt, plan)
   });
   const sanitizedArchitectureJson = applyArchitecturePlanExclusions(draft.architectureJson, plan);
+  const canonicalArchitectureJson = ensureCanonicalPlanResources(sanitizedArchitectureJson, plan);
+  const connectedCanonicalArchitectureJson = connectCanonicalPatternTopologies(
+    canonicalArchitectureJson,
+    plan?.patternIds ?? []
+  );
   const architectureJson = connectArchitecturePlanRuntimeTopology(
-    sanitizedArchitectureJson,
+    connectedCanonicalArchitectureJson,
     plan?.runtimeTopology
   );
   const validationIssues = findMaterializedArchitecturePlanValidationIssues(
@@ -1669,13 +1808,51 @@ function applyArchitecturePlanExclusions(
   const forbiddenCapabilities = new Set(
     (plan?.forbiddenCapabilities ?? []).map((capability) => capability.toLowerCase())
   );
+  const canonicalResourceTypes =
+    (plan?.patternIds?.length ?? 0) > 0
+      ? new Set(plan?.requiredResources ?? [])
+      : null;
+  const canonicalNodeCounts = new Map<ResourceType, number>();
   const nodes = architectureJson.nodes.filter((node) => {
+    if (canonicalResourceTypes !== null && !canonicalResourceTypes.has(node.type)) {
+      return false;
+    }
+
+    if (
+      forbiddenCapabilities.has("ec2_runtime") &&
+      hasAnyNodeType(
+        new Set([node.type]),
+        [
+          "EC2",
+          "AMI",
+          "IAM_INSTANCE_PROFILE",
+          "LAUNCH_TEMPLATE",
+          "AUTO_SCALING_GROUP",
+          "AUTO_SCALING_POLICY",
+          "ECS_CAPACITY_PROVIDER"
+        ]
+      )
+    ) {
+      return false;
+    }
+
     if (forbiddenCapabilities.has("file_upload") && isForbiddenUploadResourceNode(node)) {
       return false;
     }
 
     if (forbiddenCapabilities.has("realtime") && isForbiddenRealtimeArchitectureNode(node)) {
       return false;
+    }
+
+    if (canonicalResourceTypes !== null) {
+      const count = canonicalNodeCounts.get(node.type) ?? 0;
+      const maxCount = getCanonicalPlanResourceMaxCount(plan, node.type);
+
+      if (count >= maxCount) {
+        return false;
+      }
+
+      canonicalNodeCounts.set(node.type, count + 1);
     }
 
     return true;
@@ -1700,7 +1877,7 @@ function findMaterializedArchitecturePlanValidationIssues(
   const issues = [
     ...findExplicitResourceTypeValidationIssues(normalizedPrompt, architectureJson),
     ...findRequestedResourceQuantityValidationIssues(normalizedPrompt, architectureJson),
-    ...findRuntimeTopologyValidationIssues(normalizedPrompt, architectureJson),
+    ...findRuntimeTopologyValidationIssues(normalizedPrompt, architectureJson, { validateVisualSpread: false }),
     ...findNormalizedRequirementValidationIssues(plan, architectureJson, { validateVisualSpread: false })
   ];
 
@@ -1784,11 +1961,46 @@ function connectArchitecturePlanRuntimeTopology(
   }
 
   const edges = [...architectureJson.edges];
-  const loadBalancer = architectureJson.nodes.find((node) => node.type === "LOAD_BALANCER");
-  const autoScalingGroup = architectureJson.nodes.find((node) => node.type === "AUTO_SCALING_GROUP");
-  const computeNodes = architectureJson.nodes.filter(
+  let nodes = [...architectureJson.nodes];
+  const loadBalancer = nodes.find((node) => node.type === "LOAD_BALANCER");
+  const autoScalingGroup = nodes.find((node) => node.type === "AUTO_SCALING_GROUP");
+  let computeNodes = nodes.filter(
     (node) => node.type === topology.compute?.toUpperCase()
   );
+
+  if (topology.compute?.toUpperCase() === "EC2" && topology.spreadAcrossPrivateSubnets === true) {
+    const subnets = nodes
+      .filter((node) => node.type === "SUBNET" && /\bprivate\b/iu.test(createNodeSearchText(node)))
+      .slice(0, 2);
+    const placements = new Map(
+      computeNodes.map((node, index) => [node.id, subnets[index % subnets.length]?.id])
+    );
+
+    nodes = nodes.map((node) => {
+      const subnetId = placements.get(node.id);
+
+      return subnetId === undefined
+        ? node
+        : { ...node, config: { ...node.config, subnetId } };
+    });
+    computeNodes = nodes.filter((node) => node.type === "EC2");
+
+    for (const computeNode of computeNodes) {
+      const subnetId = typeof computeNode.config.subnetId === "string"
+        ? computeNode.config.subnetId
+        : undefined;
+
+      if (subnetId !== undefined) {
+        addArchitectureEdge(
+          edges,
+          `canonical-${subnetId}-to-${computeNode.id}`,
+          subnetId,
+          computeNode.id,
+          "contains"
+        );
+      }
+    }
+  }
 
   if (topology.trafficEntry?.toUpperCase() === "LOAD_BALANCER" && loadBalancer !== undefined) {
     if (autoScalingGroup !== undefined && topology.autoScaling === true) {
@@ -1807,7 +2019,7 @@ function connectArchitecturePlanRuntimeTopology(
   }
 
   return {
-    nodes: architectureJson.nodes,
+    nodes,
     edges
   };
 }
@@ -1828,23 +2040,32 @@ function addArchitectureEdge(
 
 function findRuntimeTopologyValidationIssues(
   normalizedPrompt: string,
-  architectureJson: ArchitectureJson
+  architectureJson: ArchitectureJson,
+  options: { readonly validateVisualSpread?: boolean } = {}
 ): string[] {
   const issues: string[] = [];
 
-  if (requiresAlbEc2TrafficPath(normalizedPrompt) && !hasAlbToEc2TrafficPath(architectureJson)) {
+  if (
+    !explicitlyForbidsEc2Runtime(normalizedPrompt) &&
+    requiresAlbEc2TrafficPath(normalizedPrompt) &&
+    !hasAlbToEc2TrafficPath(architectureJson)
+  ) {
     issues.push(
       "The user requested EC2 runtime behind an ALB, but the preview does not connect LOAD_BALANCER/LOAD_BALANCER_LISTENER through Auto Scaling or target resources to EC2 nodes. Regenerate with a visible ALB -> ASG/target group -> EC2 traffic path."
     );
   }
 
-  if (requiresAutoScalingGroupEc2RuntimePath(normalizedPrompt) && !hasAutoScalingGroupToEc2Path(architectureJson)) {
+  if (
+    !explicitlyForbidsEc2Runtime(normalizedPrompt) &&
+    requiresAutoScalingGroupEc2RuntimePath(normalizedPrompt) &&
+    !hasAutoScalingGroupToEc2Path(architectureJson)
+  ) {
     issues.push(
       "The user requested an Auto Scaling Group, but the preview does not connect AUTO_SCALING_GROUP to the EC2 fleet. Regenerate with ASG visibly managing or scaling the EC2 nodes."
     );
   }
 
-  if (requiresEc2PrivateSubnetSplit(normalizedPrompt)) {
+  if (!explicitlyForbidsEc2Runtime(normalizedPrompt) && requiresEc2PrivateSubnetSplit(normalizedPrompt)) {
     const spread = getEc2SubnetSpread(architectureJson);
     const visualSpread = getEc2VisualPrivateSubnetSpread(architectureJson);
 
@@ -1854,7 +2075,11 @@ function findRuntimeTopologyValidationIssues(
       );
     }
 
-    if (visualSpread.privateSubnetCount >= 2 && visualSpread.ec2SubnetCount < 2) {
+    if (
+      options.validateVisualSpread !== false &&
+      visualSpread.privateSubnetCount >= 2 &&
+      visualSpread.ec2SubnetCount < 2
+    ) {
       issues.push(
         `The user requested EC2 instances split across two private subnets, but the preview visually places EC2 nodes across only ${visualSpread.ec2SubnetCount} private subnet box(es). Regenerate with EC2 nodes visually placed across at least two private app subnets, not grouped inside one subnet/security-group area.`
       );
@@ -1868,7 +2093,19 @@ function findExplicitResourceTypeValidationIssues(
   normalizedPrompt: string,
   architectureJson: ArchitectureJson
 ): string[] {
-  const requestedResourceTypes = findExplicitResourceTypesInPrompt(normalizedPrompt);
+  const requestedResourceTypes = findExplicitResourceTypesInPrompt(normalizedPrompt).filter(
+    (resourceType) =>
+      !explicitlyForbidsEc2Runtime(normalizedPrompt) ||
+      ![
+        "EC2",
+        "AMI",
+        "IAM_INSTANCE_PROFILE",
+        "LAUNCH_TEMPLATE",
+        "AUTO_SCALING_GROUP",
+        "AUTO_SCALING_POLICY",
+        "ECS_CAPACITY_PROVIDER"
+      ].includes(resourceType)
+  );
   const actualResourceTypes = new Set(architectureJson.nodes.map((node) => node.type));
   const missingResourceTypes = requestedResourceTypes.filter((resourceType) => !actualResourceTypes.has(resourceType));
 
@@ -2165,6 +2402,21 @@ function createResourcePromptAliases(definition: (typeof SUPPORTED_RESOURCE_CATA
       break;
     case "LOAD_BALANCER":
       aliases.push("application load balancer", "load balancer", "alb");
+      break;
+    case "API_GATEWAY_REST_API":
+      aliases.push("api gateway", "rest api gateway");
+      break;
+    case "ECR_REPOSITORY":
+      aliases.push("ecr", "ecr repository", "container registry");
+      break;
+    case "ECS_CLUSTER":
+      aliases.push("ecs cluster", "fargate cluster");
+      break;
+    case "ECS_SERVICE":
+      aliases.push("ecs service", "fargate service", "ecs fargate", "fargate runtime");
+      break;
+    case "ECS_TASK_DEFINITION":
+      aliases.push("ecs task definition", "task definition", "fargate task");
       break;
     case "CODEBUILD_PROJECT":
       aliases.push("codebuild project", "code build project");
@@ -2855,6 +3107,270 @@ function getStringConfigValues(node: ArchitectureJson["nodes"][number], key: str
 
 function requiresServerlessOnlyArchitecture(normalizedPrompt: string): boolean {
   return hasPromptTerm(normalizedPrompt, ["serverless", "lambda", "without ec2", "no ec2", "ec2 without", "ec2 excluded", "ec2 not allowed", "\uC11C\uBC84\uB9AC\uC2A4", "\uB78C\uB2E4"]);
+}
+
+function getCanonicalPlanResourceMaxCount(
+  plan: ArchitectureIntentPlan | null,
+  resourceType: ResourceType
+): number {
+  const requestedQuantity = plan?.resourceQuantities?.[resourceType];
+
+  if (requestedQuantity !== undefined) {
+    return requestedQuantity;
+  }
+
+  if (resourceType === "S3") {
+    return Math.max(
+      1,
+      (plan?.patternIds ?? []).filter((patternId) =>
+        ["spa-cloudfront-s3", "github-cicd-codedeploy"].includes(patternId)
+      ).length
+    );
+  }
+
+  if (["SUBNET", "SECURITY_GROUP", "ROUTE_TABLE", "ROUTE_TABLE_ASSOCIATION", "IAM_ROLE"].includes(resourceType)) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  return 1;
+}
+
+function ensureCanonicalPlanResources(
+  architectureJson: ArchitectureJson,
+  plan: ArchitectureIntentPlan | null
+): ArchitectureJson {
+  if ((plan?.patternIds?.length ?? 0) === 0) {
+    return architectureJson;
+  }
+
+  const nodes = [...architectureJson.nodes];
+  const edges = [...architectureJson.edges];
+  const requiredQuantities = new Map<ResourceType, number>();
+
+  for (const resourceType of plan?.requiredResources ?? []) {
+    requiredQuantities.set(resourceType as ResourceType, 1);
+  }
+
+  for (const [resourceType, quantity] of Object.entries(plan?.resourceQuantities ?? {})) {
+    requiredQuantities.set(
+      resourceType as ResourceType,
+      Math.max(requiredQuantities.get(resourceType as ResourceType) ?? 0, quantity)
+    );
+  }
+
+  for (const [resourceType, quantity] of requiredQuantities) {
+    let actualCount = nodes.filter((node) => node.type === resourceType).length;
+
+    while (actualCount < quantity) {
+      const definition = SUPPORTED_RESOURCE_CATALOG.find(
+        (candidate) => candidate.nodeType === resourceType
+      );
+
+      if (definition === undefined) {
+        break;
+      }
+
+      const sequence = actualCount + 1;
+      const index = nodes.length;
+      nodes.push({
+        id: createUniqueCanonicalNodeId(nodes, `${resourceType.toLowerCase()}-${sequence}`),
+        type: resourceType,
+        label: `${definition.displayName}${quantity > 1 ? ` ${sequence}` : ""}`,
+        positionX: 120 + (index % 6) * 180,
+        positionY: 120 + Math.floor(index / 6) * 140,
+        config: createArchitectureResourceDeploymentConfig(definition.terraformResourceType)
+      });
+      actualCount += 1;
+    }
+  }
+
+  const hasPublicIngressPattern = (plan?.patternIds ?? []).some((patternId) =>
+    patternId === "alb-asg-ec2" || patternId === "ecs-fargate"
+  );
+  let subnetIndex = 0;
+  const labeledNodes = nodes.map((node) => {
+    if (node.type !== "SUBNET") {
+      return node;
+    }
+
+    const isPublic = hasPublicIngressPattern && subnetIndex < 2;
+    const zoneLabel = subnetIndex % 2 === 0 ? "A" : "B";
+    subnetIndex += 1;
+
+    return {
+      ...node,
+      label: isPublic ? `Public Subnet ${zoneLabel}` : `Private Subnet ${zoneLabel}`,
+      config: { ...node.config, tier: isPublic ? "public" : "private" }
+    };
+  });
+
+  return { nodes: labeledNodes, edges };
+}
+
+function createUniqueCanonicalNodeId(
+  nodes: readonly ArchitectureJson["nodes"][number][],
+  baseId: string
+): string {
+  const ids = new Set(nodes.map((node) => node.id));
+  let candidate = `canonical-${baseId}`;
+  let suffix = 2;
+
+  while (ids.has(candidate)) {
+    candidate = `canonical-${baseId}-${suffix}`;
+    suffix += 1;
+  }
+
+  return candidate;
+}
+
+function connectCanonicalPatternTopologies(
+  architectureJson: ArchitectureJson,
+  patternIds: readonly string[]
+): ArchitectureJson {
+  const edges = [...architectureJson.edges];
+  const nodesByType = new Map<ResourceType, ArchitectureJson["nodes"]>();
+
+  for (const node of architectureJson.nodes) {
+    nodesByType.set(node.type, [...(nodesByType.get(node.type) ?? []), node]);
+  }
+
+  const connect = (sourceType: ResourceType, targetType: ResourceType, label: string): void => {
+    const source = nodesByType.get(sourceType)?.[0];
+    const target = nodesByType.get(targetType)?.[0];
+
+    if (source === undefined || target === undefined) {
+      return;
+    }
+
+    addArchitectureEdge(
+      edges,
+      `canonical-${source.id}-to-${target.id}`,
+      source.id,
+      target.id,
+      label
+    );
+  };
+  const connectOneToAll = (sourceType: ResourceType, targetType: ResourceType, label: string): void => {
+    const source = nodesByType.get(sourceType)?.[0];
+
+    if (source === undefined) {
+      return;
+    }
+
+    for (const target of nodesByType.get(targetType) ?? []) {
+      addArchitectureEdge(
+        edges,
+        `canonical-${source.id}-to-${target.id}`,
+        source.id,
+        target.id,
+        label
+      );
+    }
+  };
+  const connectAllToOne = (sourceType: ResourceType, targetType: ResourceType, label: string): void => {
+    const target = nodesByType.get(targetType)?.[0];
+
+    if (target === undefined) {
+      return;
+    }
+
+    for (const source of nodesByType.get(sourceType) ?? []) {
+      addArchitectureEdge(
+        edges,
+        `canonical-${source.id}-to-${target.id}`,
+        source.id,
+        target.id,
+        label
+      );
+    }
+  };
+
+  if (patternIds.includes("alb-asg-ec2") || patternIds.includes("ecs-fargate") || patternIds.includes("multi-az-rds")) {
+    connectOneToAll("VPC", "SUBNET", "contains");
+    connect("VPC", "INTERNET_GATEWAY", "attaches");
+    connectOneToAll("INTERNET_GATEWAY", "ROUTE_TABLE", "routes");
+    connectAllToOne("ROUTE_TABLE", "ROUTE_TABLE_ASSOCIATION", "associates");
+    connect("ROUTE_TABLE_ASSOCIATION", "SUBNET", "binds");
+  }
+
+  if (patternIds.includes("alb-asg-ec2")) {
+    connect("LOAD_BALANCER", "LOAD_BALANCER_LISTENER", "listens");
+    connect("LOAD_BALANCER_LISTENER", "LOAD_BALANCER_TARGET_GROUP", "forwards");
+    connect("LOAD_BALANCER_TARGET_GROUP", "AUTO_SCALING_GROUP", "targets");
+    connect("AUTO_SCALING_GROUP", "LAUNCH_TEMPLATE", "launches");
+    connectOneToAll("AUTO_SCALING_GROUP", "EC2", "manages");
+    connectAllToOne("SECURITY_GROUP", "LOAD_BALANCER", "protects");
+  }
+
+  if (patternIds.includes("serverless-api")) {
+    connect("API_GATEWAY_REST_API", "API_GATEWAY_RESOURCE", "contains");
+    connect("API_GATEWAY_RESOURCE", "API_GATEWAY_METHOD", "exposes");
+    connect("API_GATEWAY_METHOD", "API_GATEWAY_INTEGRATION", "integrates");
+    connect("API_GATEWAY_INTEGRATION", "LAMBDA", "invokes");
+    connect("LAMBDA_PERMISSION", "LAMBDA", "allows invoke");
+    connect("API_GATEWAY_DEPLOYMENT", "API_GATEWAY_STAGE", "publishes");
+    connect("IAM_ROLE", "LAMBDA", "authorizes");
+    connect("LAMBDA", "CLOUDWATCH_LOG_GROUP", "logs");
+  }
+
+  if (patternIds.includes("spa-cloudfront-s3")) {
+    connect("CLOUDFRONT", "S3", "private origin");
+  }
+
+  if (patternIds.includes("ecs-fargate")) {
+    connect("ECR_REPOSITORY", "ECS_TASK_DEFINITION", "image");
+    connect("ECS_CLUSTER", "ECS_SERVICE", "runs");
+    connect("ECS_TASK_DEFINITION", "ECS_SERVICE", "defines");
+    connect("LOAD_BALANCER", "LOAD_BALANCER_LISTENER", "listens");
+    connect("LOAD_BALANCER_LISTENER", "LOAD_BALANCER_TARGET_GROUP", "forwards");
+    connect("LOAD_BALANCER_TARGET_GROUP", "ECS_SERVICE", "targets ip");
+    connect("IAM_ROLE", "ECS_TASK_DEFINITION", "authorizes");
+    connect("ECS_TASK_DEFINITION", "CLOUDWATCH_LOG_GROUP", "logs");
+    connectAllToOne("SECURITY_GROUP", "ECS_SERVICE", "protects");
+  }
+
+  if (patternIds.includes("github-cicd-codedeploy")) {
+    connect("CODESTAR_CONNECTION", "CODEPIPELINE", "sources");
+    connect("CODEPIPELINE", "CODEBUILD_PROJECT", "builds");
+    connect("CODEBUILD_PROJECT", "S3", "stores artifact");
+    connect("S3", "CODEDEPLOY_APP", "releases");
+    connect("CODEDEPLOY_APP", "CODEDEPLOY_DEPLOYMENT_GROUP", "deploys");
+    connect("IAM_ROLE", "CODEPIPELINE", "authorizes");
+    connect("IAM_ROLE", "CODEBUILD_PROJECT", "authorizes");
+    connect("IAM_ROLE", "CODEDEPLOY_DEPLOYMENT_GROUP", "authorizes");
+  }
+
+  if (patternIds.includes("multi-az-rds")) {
+    connectOneToAll("SUBNET", "DB_SUBNET_GROUP", "members");
+    connect("DB_SUBNET_GROUP", "RDS", "places");
+    connectAllToOne("SECURITY_GROUP", "RDS", "protects");
+    connect("SECRETS_MANAGER_SECRET", "RDS", "credentials");
+    connect("RDS", "CLOUDWATCH_METRIC_ALARM", "monitors");
+  }
+
+  return {
+    nodes: architectureJson.nodes,
+    edges
+  };
+}
+
+function requiresFargateArchitecture(normalizedPrompt: string): boolean {
+  return hasPromptTerm(normalizedPrompt, ["ecs fargate", "fargate service", "fargate task", "fargate runtime"]);
+}
+
+function explicitlyForbidsEc2Runtime(normalizedPrompt: string): boolean {
+  return hasPromptTerm(normalizedPrompt, [
+    "without ec2",
+    "no ec2",
+    "no ec2 capacity",
+    "ec2 excluded",
+    "ec2 is excluded",
+    "ec2 not allowed",
+    "serverless runtime",
+    "lambda only",
+    "ec2 없이",
+    "ec2는 사용하지 않"
+  ]);
 }
 
 function resolveTrafficProfile(normalizedPrompt: string): ArchitectureAnswerProfile["traffic"] {

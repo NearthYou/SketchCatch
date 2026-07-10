@@ -847,7 +847,7 @@ test("createAmazonQBusinessTextProvider sends userId when one is configured", as
   ]);
 });
 
-test("createAmazonQBusinessTextProvider uses creator mode with a compact architecture plan prompt", async () => {
+test("createAmazonQBusinessTextProvider rejects architecture drafts outside the retrieval provider", async () => {
   const sentInputs: ChatSyncCommandInput[] = [];
   const provider = createAmazonQBusinessTextProvider({
     applicationId: "qbusiness-application-id",
@@ -860,7 +860,7 @@ test("createAmazonQBusinessTextProvider uses creator mode with a compact archite
     }
   });
 
-  await provider.generate({
+  await assert.rejects(() => provider.generate({
     target: "architecture_draft",
     instructions: "This deliberately large instruction block must not be sent verbatim.".repeat(100),
     prompt: "This deliberately large architecture prompt must not be sent verbatim.".repeat(100),
@@ -896,17 +896,9 @@ test("createAmazonQBusinessTextProvider uses creator mode with a compact archite
         ...Array.from({ length: 100 }, (_, index) => `SUPPORTED_RESOURCE_${index}`)
       ]
     }
-  });
+  }), /Anonymous Q retrieval provider/);
 
-  assert.equal(sentInputs.length, 1);
-  assert.equal(sentInputs[0]?.chatMode, "CREATOR_MODE");
-  assert.ok((sentInputs[0]?.userMessage?.length ?? 0) <= 2_048);
-  assert.match(sentInputs[0]?.userMessage ?? "", /compact architecture plan/i);
-  assert.match(sentInputs[0]?.userMessage ?? "", /AUTO_SCALING_GROUP/);
-  assert.match(sentInputs[0]?.userMessage ?? "", /"status":"plan"/);
-  assert.doesNotMatch(sentInputs[0]?.userMessage ?? "", /deliberately large architecture prompt/i);
-  const planningInput = (sentInputs[0]?.userMessage ?? "").split("Planning input:\n")[1];
-  assert.doesNotThrow(() => JSON.parse(planningInput ?? ""));
+  assert.equal(sentInputs.length, 0);
 });
 
 test("createAiProviderBackedLlmExplanation keeps daily limits across rate windows", async () => {

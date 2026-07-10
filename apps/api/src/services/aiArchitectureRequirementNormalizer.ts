@@ -18,6 +18,19 @@ const MAX_TEXT_ITEMS = 16;
 const MAX_TEXT_LENGTH = 240;
 const SUPPORTED_RESOURCE_TYPE_SET = new Set<ResourceType>(SUPPORTED_ARCHITECTURE_RESOURCE_TYPES);
 
+export const ARCHITECTURE_PATTERN_IDS = [
+  "alb-asg-ec2",
+  "serverless-api",
+  "spa-cloudfront-s3",
+  "ecs-fargate",
+  "github-cicd-codedeploy",
+  "multi-az-rds"
+] as const;
+
+export type ArchitecturePatternId = (typeof ARCHITECTURE_PATTERN_IDS)[number];
+
+const ARCHITECTURE_PATTERN_ID_SET = new Set<string>(ARCHITECTURE_PATTERN_IDS);
+
 const runtimeTopologySchema = z.object({
   trafficEntry: z.string().optional(),
   compute: z.string().optional(),
@@ -44,6 +57,7 @@ const openAiResourceQuantitySchema = z.object({
 const architectureIntentPlanSchema = z.object({
   intent: z.string().optional(),
   region: z.string().optional(),
+  patternIds: z.array(z.string()).optional(),
   requiredResources: z.array(z.string()).optional(),
   resourceQuantities: z.record(z.string(), z.number().int().positive().max(200)).optional(),
   forbiddenCapabilities: z.array(z.string()).optional(),
@@ -56,6 +70,7 @@ const architectureIntentPlanSchema = z.object({
 const openAiArchitectureIntentPlanSchema = z.object({
   intent: z.string().nullable(),
   region: z.string().nullable(),
+  patternIds: z.array(z.string()).nullable(),
   requiredResources: z.array(z.string()).nullable(),
   resourceQuantities: z.array(openAiResourceQuantitySchema).nullable(),
   forbiddenCapabilities: z.array(z.string()).nullable(),
@@ -198,6 +213,7 @@ export function createArchitectureRequirementNormalizerInstructions(): string {
     "You are SketchCatch's Requirement Normalizer.",
     "Convert the user's architecture request into a compact ArchitectureIntentPlan JSON object.",
     "Do not create a diagram. Do not invent unsupported ResourceNode.type values.",
+    `patternIds must contain only applicable verified pattern IDs: ${ARCHITECTURE_PATTERN_IDS.join(", ")}.`,
     "requiredResources must use only supported ResourceNode.type values from the resource panel catalog.",
     "resourceQuantities must capture explicit counts such as EC2 3 instances.",
     "forbiddenCapabilities must capture explicit exclusions such as no file upload or no realtime.",
@@ -212,7 +228,7 @@ function createArchitectureRequirementNormalizerPrompt(prompt: string): string {
     "Supported resource panel catalog:",
     JSON.stringify(SUPPORTED_ARCHITECTURE_RESOURCE_CATALOG, null, 2),
     "ArchitectureIntentPlan JSON shape:",
-    '{"intent":"dynamic_web_application","region":"ap-northeast-2","requiredResources":["EC2"],"resourceQuantities":[{"resourceType":"EC2","quantity":3}],"forbiddenCapabilities":["file_upload"],"runtimeTopology":{"trafficEntry":"LOAD_BALANCER","compute":"EC2","computeCount":3,"placement":"private_subnets","spreadAcrossPrivateSubnets":true,"autoScaling":true},"database":"simple","availability":"99.9","amazonQBrief":["short imperative line"]}',
+    '{"intent":"dynamic_web_application","region":"ap-northeast-2","patternIds":["alb-asg-ec2"],"requiredResources":["EC2"],"resourceQuantities":[{"resourceType":"EC2","quantity":3}],"forbiddenCapabilities":["file_upload"],"runtimeTopology":{"trafficEntry":"LOAD_BALANCER","compute":"EC2","computeCount":3,"placement":"private_subnets","spreadAcrossPrivateSubnets":true,"autoScaling":true},"database":"simple","availability":"99.9","amazonQBrief":["short imperative line"]}',
     "User requirement prompt:",
     prompt
   ].join("\n\n");
@@ -226,6 +242,7 @@ export function parseArchitectureIntentPlan(value: unknown): ArchitectureIntentP
   }
 
   const requiredResources = normalizeResourceTypes(parsed.data.requiredResources);
+  const patternIds = normalizePatternIds(parsed.data.patternIds);
   const resourceQuantities = normalizeResourceQuantities(parsed.data.resourceQuantities);
   const forbiddenCapabilities = normalizeTextItems(parsed.data.forbiddenCapabilities);
   const amazonQBrief = normalizeTextItems(parsed.data.amazonQBrief);
@@ -233,6 +250,7 @@ export function parseArchitectureIntentPlan(value: unknown): ArchitectureIntentP
   const plan: ArchitectureIntentPlan = {
     ...(normalizeText(parsed.data.intent) === undefined ? {} : { intent: normalizeText(parsed.data.intent) }),
     ...(normalizeText(parsed.data.region) === undefined ? {} : { region: normalizeText(parsed.data.region) }),
+    ...(patternIds.length === 0 ? {} : { patternIds }),
     ...(requiredResources.length === 0 ? {} : { requiredResources }),
     ...(Object.keys(resourceQuantities).length === 0 ? {} : { resourceQuantities }),
     ...(forbiddenCapabilities.length === 0 ? {} : { forbiddenCapabilities }),
@@ -243,6 +261,24 @@ export function parseArchitectureIntentPlan(value: unknown): ArchitectureIntentP
   };
 
   return Object.keys(plan).length === 0 ? null : plan;
+}
+
+function normalizePatternIds(values: readonly string[] | undefined): ArchitecturePatternId[] {
+  if (values === undefined) {
+    return [];
+  }
+
+  const normalized: ArchitecturePatternId[] = [];
+
+  for (const value of values) {
+    const candidate = value.trim().toLowerCase();
+
+    if (ARCHITECTURE_PATTERN_ID_SET.has(candidate) && !normalized.includes(candidate as ArchitecturePatternId)) {
+      normalized.push(candidate as ArchitecturePatternId);
+    }
+  }
+
+  return normalized;
 }
 
 function normalizeOpenAiResourceQuantities(value: unknown): unknown {

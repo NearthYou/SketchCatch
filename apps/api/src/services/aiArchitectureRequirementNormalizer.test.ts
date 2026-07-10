@@ -17,6 +17,7 @@ test("OpenAI requirement normalizer uses a Structured Outputs compatible wire sc
             output_parsed: {
               intent: "dynamic_web_application",
               region: null,
+              patternIds: ["alb-asg-ec2"],
               requiredResources: ["LOAD_BALANCER", "AUTO_SCALING_GROUP", "EC2"],
               resourceQuantities: [{ resourceType: "EC2", quantity: 3 }],
               forbiddenCapabilities: ["file_upload"],
@@ -58,6 +59,7 @@ test("OpenAI requirement normalizer uses a Structured Outputs compatible wire sc
   assert.doesNotMatch(JSON.stringify(capturedFormat), /"propertyNames"/);
   assert.deepEqual(JSON.parse(response.text), {
     intent: "dynamic_web_application",
+    patternIds: ["alb-asg-ec2"],
     requiredResources: ["LOAD_BALANCER", "AUTO_SCALING_GROUP", "EC2"],
     resourceQuantities: { EC2: 3 },
     forbiddenCapabilities: ["file_upload"],

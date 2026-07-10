@@ -466,14 +466,14 @@ export function createAmazonQBusinessTextProvider(input: {
     service: "amazon_q_business",
     model: input.applicationId,
     generate: async (request) => {
-      const isArchitectureDraft = request.target === "architecture_draft";
+      if (request.target === "architecture_draft") {
+        throw new Error("Architecture Drafts must use the Anonymous Q retrieval provider");
+      }
+
       const command = new ChatSyncCommand({
         applicationId: input.applicationId,
         ...(input.userId ? { userId: input.userId } : {}),
-        ...(isArchitectureDraft ? { chatMode: "CREATOR_MODE" as const } : {}),
-        userMessage: isArchitectureDraft
-          ? createAmazonQArchitecturePlanPrompt(request.payload)
-          : request.prompt
+        userMessage: request.prompt
       });
       const response = await client.send(command);
       const text = response.systemMessage ?? "";
@@ -486,7 +486,10 @@ export function createAmazonQBusinessTextProvider(input: {
   };
 }
 
-function createAmazonQArchitecturePlanPrompt(payload: unknown): string {
+export function createAmazonQArchitecturePlanPrompt(
+  payload: unknown,
+  maxLength = AMAZON_Q_USER_MESSAGE_MAX_LENGTH
+): string {
   const input = createAmazonQArchitecturePlanInput(payload);
   const header = [
     "Create a compact architecture plan from the normalized requirements.",
@@ -495,12 +498,12 @@ function createAmazonQArchitecturePlanPrompt(payload: unknown): string {
     '{"status":"plan","title":"short","requiredResources":["EC2"],"resourceQuantities":{"EC2":1},"runtimeTopology":{"trafficEntry":"LOAD_BALANCER","compute":"EC2","computeCount":1,"placement":"private_subnets","spreadAcrossPrivateSubnets":false,"autoScaling":false},"assumptions":[],"explanations":[]}',
     "Planning input:"
   ].join("\n");
-  const inputBudget = Math.max(200, AMAZON_Q_USER_MESSAGE_MAX_LENGTH - header.length - 1);
+  const inputBudget = Math.max(200, maxLength - header.length - 1);
   const compactInput = fitAmazonQArchitecturePlanInput(input, inputBudget);
 
   return trimProviderPrompt(
     `${header}\n${JSON.stringify(compactInput)}`,
-    AMAZON_Q_USER_MESSAGE_MAX_LENGTH
+    maxLength
   );
 }
 
@@ -525,6 +528,12 @@ function createAmazonQArchitecturePlanInput(payload: unknown): Record<string, un
   return {
     ...(isRecord(payload.normalizedRequirement)
       ? { normalizedRequirement: compactAmazonQNormalizedRequirement(payload.normalizedRequirement) }
+      : {}),
+    ...(Array.isArray(payload.validationIssues)
+      ? { validationIssues: payload.validationIssues.slice(0, 8) }
+      : {}),
+    ...(isRecord(payload.previousPlan)
+      ? { previousPlan: payload.previousPlan }
       : {}),
     ...(isRecord(decisionSpace?.answerProfile)
       ? { answerProfile: decisionSpace.answerProfile }
@@ -591,6 +600,7 @@ function compactAmazonQNormalizedRequirement(input: Record<string, unknown>): Re
   return {
     ...copyCompactTextField(input, "intent", 80),
     ...copyCompactTextField(input, "region", 80),
+    ...copyCompactTextArrayField(input, "patternIds", 6, 40),
     ...copyCompactTextArrayField(input, "requiredResources", 24, 80),
     ...copyCompactNumberRecordField(input, "resourceQuantities", 24, 80),
     ...copyCompactTextArrayField(input, "forbiddenCapabilities", 12, 80),

@@ -563,6 +563,58 @@ test("createAmazonQArchitectureDraftResponse falls back when compact plan quanti
   assert.equal(response.llmExplanation?.fallbackReason, "provider_error");
 });
 
+test("createAmazonQArchitectureDraftResponse retries once when a compact plan fails materialization", async () => {
+  const calls: Array<Parameters<AiTextProvider["generate"]>[0]> = [];
+  const provider = createFakeAmazonQProvider((request) => {
+    calls.push(request);
+
+    if (calls.length === 1) {
+      return JSON.stringify({
+        status: "plan",
+        title: "Invalid Quantity Plan",
+        requiredResources: ["IAM_ROLE"],
+        resourceQuantities: { IAM_ROLE: 3 }
+      });
+    }
+
+    return JSON.stringify({
+      status: "plan",
+      title: "Repaired ALB Fleet",
+      requiredResources: ["LOAD_BALANCER", "AUTO_SCALING_GROUP", "EC2"],
+      resourceQuantities: { EC2: 3 },
+      runtimeTopology: {
+        trafficEntry: "LOAD_BALANCER",
+        compute: "EC2",
+        computeCount: 3,
+        placement: "private_subnets",
+        spreadAcrossPrivateSubnets: true,
+        autoScaling: true
+      }
+    });
+  });
+
+  const response = await createAmazonQArchitectureDraftResponse(
+    { prompt: createDynamicWebDeploymentSelectionPrompt() },
+    { provider, creditPolicy: confirmedCreditPolicy }
+  );
+
+  if ("status" in response) {
+    assert.fail(`Expected repaired preview, got clarification: ${response.question}`);
+  }
+
+  assert.equal(calls.length, 2);
+  assert.equal(response.title, "Repaired ALB Fleet");
+  assert.equal(response.architectureJson.nodes.filter((node) => node.type === "EC2").length, 3);
+  const retryPayload = calls[1]?.payload as {
+    validationIssues?: string[];
+    previousPlan?: { title?: string; resourceQuantities?: Record<string, number> };
+  };
+  assert.equal(retryPayload.validationIssues?.length, 1);
+  assert.match(retryPayload.validationIssues?.[0] ?? "", /materialization/i);
+  assert.equal(retryPayload.previousPlan?.title, "Invalid Quantity Plan");
+  assert.deepEqual(retryPayload.previousPlan?.resourceQuantities, { IAM_ROLE: 3 });
+});
+
 test("createAmazonQArchitectureDraftResponse rejects compact plans that contradict no-backend answers", async () => {
   const provider = createFakeAmazonQProvider(() =>
     JSON.stringify({
