@@ -11,6 +11,23 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-10 - Restore practice S3 deployment after Trivy companion regression
+
+- Goal: Let practice S3 deployments proceed without synthesizing an S3 Public Access Block solely to silence Trivy findings.
+- Completed:
+  - Removed automatic `aws_s3_bucket_public_access_block` companion generation from DiagramJson-to-Terraform rendering.
+  - Preserved explicitly modeled Public Access Block resources and allowed the resource type in the practice live-apply set for existing Terraform artifact compatibility.
+  - Added regression coverage proving newly generated practice S3 artifacts contain only the bucket, pass artifact safety, and legacy artifacts with a Public Access Block remain deployable.
+  - Restarted the local API and web dev servers after the change.
+- Verification:
+  - Focused Terraform generation, artifact safety, Trivy analysis, Safety Gate, and deployment plan tests passed (74 tests).
+  - `pnpm lint` passed.
+  - `pnpm typecheck` passed.
+  - `pnpm build` passed.
+  - Local smoke checks returned 200 for `http://localhost:3000`, `http://localhost:4000/health`, and `http://localhost:4000/health/db`.
+- Risk:
+  - Trivy can still report a missing S3 Public Access Block as a non-blocking finding; this change intentionally keeps that result informational instead of mutating generated Terraform.
+
 ### 2026-07-10 - Make deployment warnings non-blocking
 
 - Goal: Let Direct Deployment proceed even when high-risk Trivy or deployment safety warnings are present.
