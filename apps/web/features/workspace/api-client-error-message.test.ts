@@ -49,3 +49,39 @@ test("getApiErrorMessage explains GitHub repository settings permission gaps", (
     "GitHub App 권한이 부족해서 repository settings를 적용할 수 없습니다. GitHub App repository permissions에서 Administration 권한과 Variables 권한을 Read and write로 승인한 뒤 다시 시도해주세요."
   );
 });
+
+test("getApiErrorMessage explains Repository Analysis GitHub connection failures", () => {
+  // Given
+  const cases = [
+    {
+      message: "GIT_APP_AUTHENTICATION_FAILED",
+      expected: "GitHub App 인증에 실패했습니다. GitHub App 설치와 서버 설정을 확인해주세요."
+    },
+    {
+      message: "GIT_APP_REPOSITORY_ACCESS_UNAVAILABLE",
+      expected: "GitHub App 연결이 해제됐거나 repository 접근 권한이 없습니다. 다시 연결해주세요."
+    },
+    {
+      message: "GIT_APP_REPOSITORY_FILE_ENCODING_UNSUPPORTED",
+      expected: "분석 파일의 문자 인코딩을 읽을 수 없어 Repository Analysis를 중단했습니다."
+    },
+    {
+      message: "GIT_APP_REPOSITORY_EVIDENCE_LIMIT_EXCEEDED",
+      expected: "repository가 안전한 정적 분석 범위를 초과했습니다. 분석 범위를 줄여주세요."
+    }
+  ] as const;
+
+  for (const testCase of cases) {
+    // When
+    const error = new ApiClientError(409, {
+      error: "conflict",
+      message: testCase.message
+    });
+
+    // Then
+    assert.equal(
+      getApiErrorMessage(error, "GitHub repository를 분석하지 못했습니다."),
+      testCase.expected
+    );
+  }
+});

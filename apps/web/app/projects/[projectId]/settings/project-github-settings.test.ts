@@ -3,8 +3,10 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
-const pageSource = readSettingsFile("page.tsx");
+const pageSource = readDashboardSettingsPage();
 const clientSource = readSettingsFile("project-github-settings-client.tsx");
+const resultSource = readSettingsFile("repository-analysis-result.tsx");
+const workspaceAiChatSource = readWorkspaceFile("WorkspaceAiChatDock.tsx");
 
 test("project settings owns GitHub source repository setup", () => {
   assert.match(pageSource, /ProjectGitHubSettingsClient/);
@@ -25,6 +27,51 @@ test("project GitHub settings lists existing installation repositories before in
   assert.match(clientSource, /GitHub App 설치\/권한 추가/);
 });
 
+test("project settings runs Repository Analysis once and restores the saved result", () => {
+  assert.match(clientSource, /analyzeSourceRepository\(projectId, activeRepository\.id\)/);
+  assert.match(clientSource, /analysisState === "loading"/);
+  assert.match(clientSource, /disabled=\{analysisState === "loading"/);
+  assert.match(clientSource, /activeRepository\.analysis/);
+  assert.match(clientSource, /RepositoryAnalysisResult/);
+});
+
+test("Repository Analysis renders selected and failed Template states with evidence", () => {
+  assert.match(resultSource, /handoff\.status === "template_selected"/);
+  assert.match(resultSource, /지원하는 Template을 선택하지 못했습니다/);
+  assert.match(resultSource, /handoff\.applicationUnits\.map/);
+  assert.match(resultSource, /감지된 Application Unit이 없습니다/);
+  assert.match(resultSource, /분석에 사용할 evidence를 찾지 못했습니다/);
+  assert.match(resultSource, /handoff\.missingEvidence\.map/);
+  assert.match(resultSource, /handoff\.selectionReasons/);
+  assert.match(resultSource, /handoff\.mismatchReasons/);
+  assert.match(resultSource, /createWorkspaceHref/);
+});
+
+test("selected Repository Template is handed to the Workspace AI request without replacement", () => {
+  assert.match(workspaceAiChatSource, /readRepositoryTemplateFromLocation/);
+  assert.match(workspaceAiChatSource, /params\.get\("sourceRepositoryId"\)/);
+  assert.match(workspaceAiChatSource, /draftRequest\.templateId \?\? repositoryTemplate\?\.id/);
+  assert.match(workspaceAiChatSource, /AI는 이 Template을 바꾸지 않고 부족한 요구사항만 보완합니다/);
+});
+
 function readSettingsFile(fileName: string): string {
   return readFileSync(fileURLToPath(new URL(fileName, import.meta.url)), "utf8");
+}
+
+// 실제 Workspace AI 요청까지 Template ID가 이어지는지 같은 소스 계약으로 확인합니다.
+function readWorkspaceFile(fileName: string): string {
+  return readFileSync(
+    fileURLToPath(new URL(`../../../../features/workspace/${fileName}`, import.meta.url)),
+    "utf8"
+  );
+}
+
+// orphan client가 아니라 실제 dashboard settings route에 연결됐는지 확인합니다.
+function readDashboardSettingsPage(): string {
+  return readFileSync(
+    fileURLToPath(
+      new URL("../../../dashboard/projects/[projectId]/settings/page.tsx", import.meta.url)
+    ),
+    "utf8"
+  );
 }

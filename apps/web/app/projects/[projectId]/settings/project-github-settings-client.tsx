@@ -5,15 +5,18 @@ import type { GitHubInstalledRepositoryCandidate, SourceRepository } from "@sket
 import { DashboardIcon } from "../../../../components/dashboard/dashboard-icons";
 import { getApiErrorMessage } from "../../../../lib/api-client";
 import {
+  analyzeSourceRepository,
   connectGitHubSourceRepository,
   createGitHubSourceRepositoryInstallUrl,
   getProject,
   listGitHubInstalledRepositories,
   listSourceRepositories
 } from "../../../../features/workspace/api";
+import { RepositoryAnalysisResult } from "./repository-analysis-result";
 
 type RequestState = "idle" | "loading" | "error";
 
+// active GitHub repository 연결, 분석 실행, 저장 결과 복원을 한 화면에서 제공합니다.
 export function ProjectGitHubSettingsClient({
   projectId
 }: {
@@ -28,6 +31,7 @@ export function ProjectGitHubSettingsClient({
   const [loadState, setLoadState] = useState<RequestState>("loading");
   const [repositoryState, setRepositoryState] = useState<RequestState>("idle");
   const [actionState, setActionState] = useState<RequestState>("idle");
+  const [analysisState, setAnalysisState] = useState<RequestState>("idle");
   const [errorMessage, setErrorMessage] = useState("");
 
   const activeRepository = useMemo(
@@ -118,6 +122,39 @@ export function ProjectGitHubSettingsClient({
     }
   }
 
+  // active repository 분석을 한 번만 실행하고 저장된 AI Handoff를 현재 화면에도 반영합니다.
+  async function runRepositoryAnalysis(): Promise<void> {
+    if (!activeRepository || analysisState === "loading") {
+      return;
+    }
+
+    setAnalysisState("loading");
+    setErrorMessage("");
+
+    try {
+      const result = await analyzeSourceRepository(projectId, activeRepository.id);
+
+      setSourceRepositories((currentRepositories) =>
+        currentRepositories.map((repository) =>
+          repository.id === result.sourceRepositoryId
+            ? {
+                ...repository,
+                analysis: {
+                  repositoryRevision: result.repositoryRevision,
+                  analyzedAt: result.analyzedAt,
+                  aiHandoff: result.aiHandoff
+                }
+              }
+            : repository
+        )
+      );
+      setAnalysisState("idle");
+    } catch (error) {
+      setAnalysisState("error");
+      setErrorMessage(getApiErrorMessage(error, "GitHub repository를 분석하지 못했습니다."));
+    }
+  }
+
   return (
     <section className="dashboardPanel integrationPanel" aria-labelledby="project-github-title">
       <div className="integrationHeader">
@@ -139,22 +176,47 @@ export function ProjectGitHubSettingsClient({
       ) : null}
 
       {activeRepository ? (
-        <div className="settingsInfoGrid">
-          <article>
-            <span>현재 repository</span>
-            <strong>
-              {activeRepository.owner}/{activeRepository.name}
-            </strong>
-          </article>
-          <article>
-            <span>Default branch</span>
-            <strong>{activeRepository.defaultBranch}</strong>
-          </article>
-          <article>
-            <span>Status</span>
-            <strong>{activeRepository.status}</strong>
-          </article>
-        </div>
+        <>
+          <div className="settingsInfoGrid">
+            <article>
+              <span>현재 repository</span>
+              <strong>
+                {activeRepository.owner}/{activeRepository.name}
+              </strong>
+            </article>
+            <article>
+              <span>Default branch</span>
+              <strong>{activeRepository.defaultBranch}</strong>
+            </article>
+            <article>
+              <span>Status</span>
+              <strong>{activeRepository.status}</strong>
+            </article>
+          </div>
+          <div className="settingsActionRow">
+            <button
+              className="dashboardTopbarAction"
+              disabled={analysisState === "loading" || actionState === "loading"}
+              onClick={() => void runRepositoryAnalysis()}
+              type="button"
+            >
+              <DashboardIcon name="search" />
+              <span>{analysisState === "loading" ? "Repository 분석 중" : "Repository 분석"}</span>
+            </button>
+          </div>
+          {analysisState === "loading" ? (
+            <p className="dashboardMessage" role="status">
+              Repository tree와 설정 파일을 정적으로 분석하고 있습니다.
+            </p>
+          ) : null}
+          {activeRepository.analysis ? (
+            <RepositoryAnalysisResult
+              analysis={activeRepository.analysis}
+              projectId={projectId}
+              repository={activeRepository}
+            />
+          ) : null}
+        </>
       ) : (
         <p className="dashboardMessage" role="status">
           아직 이 프로젝트에 연결된 GitHub repository가 없습니다.

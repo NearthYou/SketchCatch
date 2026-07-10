@@ -28,6 +28,20 @@ const DEFAULT_API_ERROR_MESSAGES = {
 const API_MESSAGE_TRANSLATIONS: Partial<Record<string, string>> = {
   "API request failed": "요청 처리 중 오류가 발생했습니다.",
   "Authentication required": "인증이 필요합니다.",
+  "GIT_APP_AUTHENTICATION_FAILED":
+    "GitHub App 인증에 실패했습니다. GitHub App 설치와 서버 설정을 확인해주세요.",
+  "GIT_APP_REPOSITORY_ACCESS_UNAVAILABLE":
+    "GitHub App 연결이 해제됐거나 repository 접근 권한이 없습니다. 다시 연결해주세요.",
+  "GIT_APP_REPOSITORY_ARCHIVED":
+    "연결된 GitHub repository가 archived 상태라 분석할 수 없습니다. 다른 repository를 연결해주세요.",
+  "GIT_APP_REPOSITORY_EVIDENCE_LIMIT_EXCEEDED":
+    "repository가 안전한 정적 분석 범위를 초과했습니다. 분석 범위를 줄여주세요.",
+  "GIT_APP_REPOSITORY_FILE_ENCODING_UNSUPPORTED":
+    "분석 파일의 문자 인코딩을 읽을 수 없어 Repository Analysis를 중단했습니다.",
+  "GIT_APP_REPOSITORY_IDENTITY_MISMATCH":
+    "연결 당시와 다른 GitHub repository가 감지되었습니다. repository를 다시 연결한 뒤 분석해주세요.",
+  "GIT_APP_REPOSITORY_TREE_TRUNCATED":
+    "GitHub가 repository tree 일부만 반환해 안전하게 분석할 수 없습니다.",
   "AWS account ID must be 12 digits": "AWS Account ID는 12자리 숫자여야 합니다.",
   "AWS account is already connected": "이미 연결된 AWS Account입니다.",
   "AWS connection is used by a deployment":
@@ -46,6 +60,12 @@ const API_MESSAGE_TRANSLATIONS: Partial<Record<string, string>> = {
   "Email already exists": "이미 사용 중인 이메일입니다.",
   "Refresh token is invalid or expired": "로그인 세션이 만료되었습니다. 다시 로그인해주세요.",
   "Route not found": "요청한 API 경로를 찾을 수 없습니다.",
+  "Only an active GitHub source repository can be analyzed":
+    "현재 연결된 active GitHub repository만 분석할 수 있습니다.",
+  "Source repository changed during analysis":
+    "분석 중 repository 연결 상태가 바뀌었습니다. 현재 연결을 확인하고 다시 시도해주세요.",
+  "GitHub repository analysis is not configured":
+    "GitHub Repository Analysis 설정이 준비되지 않았습니다. GitHub App 설정을 확인해주세요.",
   "Too many failed login attempts. Try again later.": "로그인 시도가 잠시 차단되었습니다. 잠시 후 다시 시도해주세요.",
   "Username already exists": "이미 사용 중인 아이디입니다.",
   "Username or password is incorrect": "아이디 또는 비밀번호가 올바르지 않습니다."

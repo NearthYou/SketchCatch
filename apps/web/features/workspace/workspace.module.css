@@ -2741,6 +2741,30 @@
   margin: 0;
 }
 
+.aiChatTemplateContext {
+  background: var(--dashboard-design-canvas-soft);
+  border-bottom: 1px solid var(--dashboard-design-hairline);
+  display: grid;
+  gap: 4px;
+  padding: 12px 18px;
+}
+
+.aiChatTemplateContext span,
+.aiChatTemplateContext code {
+  color: var(--dashboard-design-body);
+  font-size: 0.72rem;
+}
+
+.aiChatTemplateContext strong {
+  font-size: 0.86rem;
+}
+
+.aiChatTemplateContext p {
+  color: var(--dashboard-design-body);
+  font-size: 0.76rem;
+  margin: 0;
+}
+
 .aiChatCloseButton {
   align-items: center;
   background: #ffffff;

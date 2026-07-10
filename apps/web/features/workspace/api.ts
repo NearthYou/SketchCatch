@@ -65,6 +65,7 @@ import type {
   RecentSuccessfulDeploymentProject,
   RecentSuccessfulDeploymentProjectListResponse,
   SourceRepository,
+  AnalyzeSourceRepositoryResponse,
   SourceRepositoryListResponse,
   SourceRepositoryResponse,
   ConnectGitHubSourceRepositoryRequest,
@@ -791,6 +792,20 @@ export async function listSourceRepositories(projectId: string): Promise<SourceR
   );
 
   return response.repositories;
+}
+
+// 연결된 Source Repository의 최신 정적 분석을 실행하고 저장된 AI Handoff를 반환합니다.
+export async function analyzeSourceRepository(
+  projectId: string,
+  sourceRepositoryId: string
+): Promise<AnalyzeSourceRepositoryResponse> {
+  return apiFetch<AnalyzeSourceRepositoryResponse>(
+    `/projects/${encodeURIComponent(projectId)}/source-repositories/${encodeURIComponent(sourceRepositoryId)}/analyze`,
+    {
+      auth: true,
+      method: "POST"
+    }
+  );
 }
 
 export async function createGitHubSourceRepositoryInstallUrl(

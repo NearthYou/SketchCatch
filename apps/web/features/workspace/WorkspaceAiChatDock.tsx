@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { templateDefinitions } from "@sketchcatch/types";
 import type {
   AiArchitectureDraftResult,
   AiTerraformErrorExplanationResult,
@@ -182,6 +183,7 @@ type SpeechRecognitionWindow = Window & {
   readonly webkitSpeechRecognition?: BrowserSpeechRecognitionConstructor;
 };
 
+// Repository Analysis에서 넘긴 Template을 표시하고 이후 AI Draft 요청에 유지합니다.
 export function WorkspaceAiChatDock({
   context,
   onApplyTerraformIssueFix,
@@ -230,6 +232,9 @@ export function WorkspaceAiChatDock({
   const [draftErrorMessage, setDraftErrorMessage] = useState("");
   const [simulationErrorMessage, setSimulationErrorMessage] = useState("");
   const [simulationFingerprint, setSimulationFingerprint] = useState<string | null>(null);
+  const [repositoryTemplate, setRepositoryTemplate] = useState(() =>
+    readRepositoryTemplateFromLocation()
+  );
   const composerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const transcriptRef = useRef<HTMLDivElement | null>(null);
   const transcriptScrollFrameRef = useRef<number | null>(null);
@@ -252,6 +257,10 @@ export function WorkspaceAiChatDock({
     () => createDraftSafetyWarnings(draft, boardSnapshot.hasResources),
     [boardSnapshot.hasResources, draft]
   );
+
+  useEffect(() => {
+    setRepositoryTemplate(readRepositoryTemplateFromLocation());
+  }, [projectId]);
   const visibleMessages = useMemo(
     () => messages.filter((message) => getChatMessageScope(message) === activeChatTab),
     [activeChatTab, messages]
@@ -875,7 +884,10 @@ export function WorkspaceAiChatDock({
 
     const normalizedDraftRequest: CreateArchitectureDraftRequest = {
       ...draftRequest,
-      prompt
+      prompt,
+      ...(draftRequest.templateId ?? repositoryTemplate?.id
+        ? { templateId: draftRequest.templateId ?? repositoryTemplate?.id }
+        : {})
     };
 
     setDraftState("loading");
@@ -1246,6 +1258,15 @@ export function WorkspaceAiChatDock({
           <X size={18} aria-hidden="true" />
         </button>
       </header>
+
+      {repositoryTemplate ? (
+        <div className={styles.aiChatTemplateContext} role="status">
+          <span>Repository Analysis Template</span>
+          <strong>{repositoryTemplate.title}</strong>
+          <code>{repositoryTemplate.id}</code>
+          <p>AI는 이 Template을 바꾸지 않고 부족한 요구사항만 보완합니다.</p>
+        </div>
+      ) : null}
 
       <div className={styles.aiChatTabBar} aria-label="AI 채팅 기능">
         <div className={styles.aiChatTabs} role="tablist" aria-label="AI 기능">
@@ -2015,6 +2036,23 @@ function createChatMessageId(): string {
   }
 
   return `chat-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+// Repository Analysis에서 온 경우에만 URL의 TemplateDefinition을 AI Handoff 입력으로 복원합니다.
+function readRepositoryTemplateFromLocation() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const params = new URLSearchParams(window.location.search);
+
+  if (!params.get("sourceRepositoryId")) {
+    return null;
+  }
+
+  const templateId = params.get("templateId");
+
+  return templateDefinitions.find((template) => template.id === templateId) ?? null;
 }
 
 function trimChatMessages(messages: readonly WorkspaceAiChatMessage[]): WorkspaceAiChatMessage[] {
