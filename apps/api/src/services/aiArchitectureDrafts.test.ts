@@ -520,6 +520,60 @@ test("createAmazonQArchitectureDraftResponse materializes a compact Amazon Q arc
   assert.equal(response.llmExplanation?.providerMetadata?.provider, "amazon_q");
 });
 
+test("createAmazonQArchitectureDraftResponse repairs a one-node Q plan that requires EC2 subnet spread", async () => {
+  const provider = createFakeAmazonQProvider(() =>
+    JSON.stringify({
+      status: "plan",
+      title: "Amazon Q Multi-AZ EC2 Web App",
+      patternIds: ["alb-asg-ec2", "spa-cloudfront-s3", "multi-az-rds"],
+      requiredResources: [
+        "VPC",
+        "SUBNET",
+        "INTERNET_GATEWAY",
+        "ROUTE_TABLE",
+        "ROUTE_TABLE_ASSOCIATION",
+        "SECURITY_GROUP",
+        "LOAD_BALANCER",
+        "LOAD_BALANCER_LISTENER",
+        "LOAD_BALANCER_TARGET_GROUP",
+        "LAUNCH_TEMPLATE",
+        "AUTO_SCALING_GROUP",
+        "EC2",
+        "CLOUDFRONT",
+        "S3",
+        "RDS"
+      ],
+      resourceQuantities: { EC2: 1 },
+      runtimeTopology: {
+        trafficEntry: "LOAD_BALANCER",
+        compute: "EC2",
+        computeCount: 1,
+        placement: "private_subnets",
+        spreadAcrossPrivateSubnets: true,
+        autoScaling: true
+      }
+    })
+  );
+
+  const response = await createAmazonQArchitectureDraftResponse(
+    { prompt: createDynamicWebDeploymentSelectionPrompt() },
+    { provider, creditPolicy: confirmedCreditPolicy }
+  );
+
+  if ("status" in response) {
+    assert.fail(`Expected preview, got clarification: ${response.question}`);
+  }
+
+  const ec2Nodes = response.architectureJson.nodes.filter((node) => node.type === "EC2");
+  const ec2SubnetIds = new Set(
+    ec2Nodes.map((node) => node.config.subnetId).filter((value) => typeof value === "string")
+  );
+
+  assert.equal(response.metadata.source, "amazon_q");
+  assert.equal(ec2Nodes.length, 2);
+  assert.equal(ec2SubnetIds.size, 2);
+});
+
 test("createAmazonQArchitectureDraftResponse rejects when Amazon Q returns an invalid compact plan", async () => {
   const provider = createFakeAmazonQProvider(() =>
     JSON.stringify({

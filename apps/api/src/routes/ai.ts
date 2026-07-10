@@ -286,7 +286,10 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
       writeEvent({ type: "result", result });
     } catch (error) {
       app.log.warn(
-        { errorName: error instanceof Error ? error.name : typeof error },
+        {
+          errorName: error instanceof Error ? error.name : typeof error,
+          errorMessages: readErrorMessageChain(error)
+        },
         "Architecture Draft stream failed"
       );
       writeEvent({ type: "error", error: createArchitectureDraftStreamError(error) });
@@ -670,6 +673,18 @@ function createArchitectureDraftStreamError(error: unknown): ApiErrorResponse {
     error: "internal_server_error",
     message: "아키텍처 초안 생성 중 오류가 발생했습니다."
   };
+}
+
+function readErrorMessageChain(error: unknown): string[] {
+  const messages: string[] = [];
+  let current = error;
+
+  while (current instanceof Error && messages.length < 6) {
+    messages.push(`${current.name}: ${current.message}`);
+    current = current.cause;
+  }
+
+  return messages;
 }
 
 type GitHubRepository = {

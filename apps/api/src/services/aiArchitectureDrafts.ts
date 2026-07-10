@@ -1854,11 +1854,13 @@ function createAmazonQPlanDraftResult(
   providerMetadata: AiProviderMetadata
 ): AiArchitectureDraftResult {
   const providerPlanIsCanonical = (response.plan.patternIds?.length ?? 0) > 0;
-  const plan = reconcileCanonicalProviderPlan(
-    providerPlanIsCanonical
-      ? response.plan
-      : mergeArchitectureIntentPlans(response.plan, normalizedRequirement),
-    response.plan
+  const plan = normalizeArchitecturePlanTopologyInvariants(
+    reconcileCanonicalProviderPlan(
+      providerPlanIsCanonical
+        ? response.plan
+        : mergeArchitectureIntentPlans(response.plan, normalizedRequirement),
+      response.plan
+    )
   );
   const requestDraft = createArchitectureDraft(request);
   const draft = createArchitectureDraft({
@@ -1911,6 +1913,38 @@ function createAmazonQPlanDraftResult(
       nextActions: ["Terraform IaC Preview에서 생성 가능한 설정과 참조를 검토하세요."],
       fallbackUsed: false,
       providerMetadata
+    }
+  };
+}
+
+function normalizeArchitecturePlanTopologyInvariants(
+  plan: ArchitectureIntentPlan | null
+): ArchitectureIntentPlan | null {
+  const topology = plan?.runtimeTopology;
+
+  if (
+    plan === null ||
+    topology?.compute?.toUpperCase() !== "EC2" ||
+    topology.spreadAcrossPrivateSubnets !== true
+  ) {
+    return plan;
+  }
+
+  const computeCount = Math.max(
+    2,
+    topology.computeCount ?? 0,
+    plan.resourceQuantities?.EC2 ?? 0
+  );
+
+  return {
+    ...plan,
+    resourceQuantities: {
+      ...(plan.resourceQuantities ?? {}),
+      EC2: computeCount
+    },
+    runtimeTopology: {
+      ...topology,
+      computeCount
     }
   };
 }
