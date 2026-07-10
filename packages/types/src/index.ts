@@ -838,6 +838,22 @@ export type AwsConnectionListResponse = {
   awsConnections: AwsConnection[];
 };
 
+export {
+  buildTemplateDiagramJson,
+  getTemplateDefinitionById,
+  TEMPLATE_IDS,
+  templateDefinitions
+} from "./template-definitions.js";
+export type {
+  BuildTemplateDiagramInput,
+  TemplateDefinition,
+  TemplateId,
+  TemplateParameterDefinition,
+  TemplateProvider,
+  TemplateRelationship,
+  TemplateResourceDefinition
+} from "./template-definitions.js";
+
 export type ReverseEngineeringScanStatus =
   | "queued"
   | "running"
