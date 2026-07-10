@@ -25,6 +25,13 @@ test("diagram editor uses partial box selection for overlapping area nodes", () 
   assert.match(diagramEditorSource, /selectionMode=\{SelectionMode\.Partial\}/);
 });
 
+test("clicking any interactive flow node replaces the current single selection", () => {
+  assert.match(
+    diagramEditorSource,
+    /const handleFlowNodeClick = useCallback\([\s\S]*setSelectedNodeIds\(\[node\.id\]\)/
+  );
+});
+
 test("diagram editor restores select mode after temporary middle-button pan", () => {
   assert.match(diagramEditorSource, /getTemporaryPanReleaseMode/);
   assert.match(diagramEditorSource, /window\.addEventListener\("pointerup",\s*restoreTemporaryPanMode\)/);

@@ -42,6 +42,19 @@ test("toFlowNodes keeps dimmed nodes interactive when another node is selected",
   assert.equal(regularNode?.style?.pointerEvents, undefined);
 });
 
+test("toFlowNodes keeps an unselected regular node clickable while another node is selected", () => {
+  const vpc = makeNode({ id: "vpc-1", resourceType: "aws_vpc" });
+  const instance = makeNode({ id: "instance-1", resourceType: "aws_instance" });
+
+  const flowNodes = toFlowNodes([vpc, instance], ["vpc-1"], null, false, handlers);
+  const dimmedInstance = flowNodes.find((node) => node.id === instance.id);
+
+  assert.equal(dimmedInstance?.data.isDimmed, true);
+  assert.equal(dimmedInstance?.selectable, true);
+  assert.equal(dimmedInstance?.draggable, true);
+  assert.equal(dimmedInstance?.style?.pointerEvents, undefined);
+});
+
 test("toFlowNodes marks area nodes for click-through body hit testing", () => {
   const vpc = makeNode({ id: "vpc-1", resourceType: "aws_vpc" });
   const securityGroup = makeNode({ id: "security-group-1", resourceType: "aws_security_group" });
