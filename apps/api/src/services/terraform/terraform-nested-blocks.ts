@@ -53,6 +53,7 @@ const TERRAFORM_NESTED_BLOCK_ATTRIBUTES: Record<string, ReadonlySet<string>> = {
   ]),
   aws_instance: new Set(["rootBlockDevice"]),
   aws_lambda_function: new Set(["environment"]),
+  aws_launch_template: new Set(["iamInstanceProfile", "metadataOptions", "monitoring"]),
   aws_lb_listener: new Set(["defaultAction", "forward"]),
   aws_lb_target_group: new Set(["healthCheck", "stickiness"]),
   aws_route_table: new Set(["route"]),

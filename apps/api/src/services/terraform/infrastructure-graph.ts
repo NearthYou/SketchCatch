@@ -32,6 +32,8 @@ const NON_RENDERABLE_TERRAFORM_CONFIG_KEYS = new Set([
   "diagram_type",
   "diagramWidth",
   "diagram_width",
+  "managedByAutoScalingGroup",
+  "managed_by_auto_scaling_group",
   "originResourceId",
   "origin_resource_id",
   "publicAccessBlock",
@@ -79,6 +81,10 @@ function toInfrastructureGraphNode(
   nodeById: ReadonlyMap<string, DiagramNode>
 ): InfrastructureGraphNode | null {
   if (node.kind !== "resource" || !node.parameters) {
+    return null;
+  }
+
+  if (node.parameters.values?.["sketchcatchReferenceTerraform"] === true) {
     return null;
   }
 

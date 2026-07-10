@@ -574,6 +574,139 @@ test("createAmazonQArchitectureDraftResponse repairs a one-node Q plan that requ
   assert.equal(ec2SubnetIds.size, 2);
 });
 
+test("createAmazonQArchitectureDraftResponse materializes a deployable multi-AZ EC2 web app with image uploads", async () => {
+  const provider = createFakeAmazonQProvider(() =>
+    JSON.stringify({
+      status: "plan",
+      title: "Amazon Q Production EC2 Web App",
+      patternIds: ["alb-asg-ec2", "spa-cloudfront-s3", "multi-az-rds"],
+      requiredResources: [
+        "VPC",
+        "SUBNET",
+        "INTERNET_GATEWAY",
+        "ROUTE_TABLE",
+        "ROUTE_TABLE_ASSOCIATION",
+        "SECURITY_GROUP",
+        "LOAD_BALANCER",
+        "LOAD_BALANCER_LISTENER",
+        "LOAD_BALANCER_TARGET_GROUP",
+        "LAUNCH_TEMPLATE",
+        "AUTO_SCALING_GROUP",
+        "EC2",
+        "CLOUDFRONT",
+        "S3",
+        "DB_SUBNET_GROUP",
+        "RDS",
+        "SECRETS_MANAGER_SECRET",
+        "CLOUDWATCH_METRIC_ALARM"
+      ],
+      resourceQuantities: { EC2: 2, S3: 2 },
+      runtimeTopology: {
+        trafficEntry: "LOAD_BALANCER",
+        compute: "EC2",
+        computeCount: 2,
+        placement: "private_subnets",
+        spreadAcrossPrivateSubnets: true,
+        autoScaling: true
+      },
+      region: "ap-northeast-2",
+      database: "simple",
+      availability: "99.9"
+    })
+  );
+  const prompt = [
+    "website type: dynamic web application",
+    "traffic: small daily traffic under 100 concurrent users under 10",
+    "database: simple user and post data under 10GB",
+    "frontend: React/Vue/Angular SPA framework",
+    "backend: complex business logic Spring Boot or Django",
+    "region: Korea only Seoul ap-northeast-2",
+    "budget: 50-200만원 high performance",
+    "SSL HTTPS: optional HTTP acceptable",
+    "\uD30C\uC77C \uC5C5\uB85C\uB4DC \uAE30\uB2A5\uC774 \uC788\uB098\uC694? (\uC774\uBBF8\uC9C0, \uBB38\uC11C \uB4F1)",
+    "\uC774\uBBF8\uC9C0\uB9CC (\uD504\uB85C\uD544, \uAC8C\uC2DC\uAE00 \uC774\uBBF8\uC9C0)",
+    "\uC2E4\uC2DC\uAC04 \uAE30\uB2A5\uC774 \uD544\uC694\uD55C\uAC00\uC694? (\uCC44\uD305, \uC54C\uB9BC \uB4F1)",
+    "\uD544\uC694 \uC5C6\uC74C",
+    "management: semi-managed",
+    "loading target: within 3 seconds",
+    "website size: 10MB-100MB",
+    "traffic pattern: event spikes",
+    "availability: 99.9%, monthly downtime within 1 hour"
+  ].join("\n");
+
+  const response = await createAmazonQArchitectureDraftResponse(
+    { prompt },
+    { provider, creditPolicy: confirmedCreditPolicy }
+  );
+
+  if ("status" in response) {
+    assert.fail(`Expected preview, got clarification: ${response.question}`);
+  }
+
+  const nodes = response.architectureJson.nodes;
+  const edges = response.architectureJson.edges;
+  const publicSubnets = nodes.filter(
+    (node) => node.type === "SUBNET" && node.config.tier === "public"
+  );
+  const privateAppSubnets = nodes.filter(
+    (node) => node.type === "SUBNET" && node.config.tier === "private_app"
+  );
+  const privateDbSubnets = nodes.filter(
+    (node) => node.type === "SUBNET" && node.config.tier === "private_db"
+  );
+  const loadBalancer = nodes.find((node) => node.type === "LOAD_BALANCER");
+  const autoScalingGroup = nodes.find((node) => node.type === "AUTO_SCALING_GROUP");
+  const cloudFront = nodes.find((node) => node.type === "CLOUDFRONT");
+  const uploadBucket = nodes.find(
+    (node) => node.type === "S3" && node.config.bucketPurpose === "user_uploads"
+  );
+  const staticBucket = nodes.find(
+    (node) => node.type === "S3" && node.config.bucketPurpose === "static_website_origin"
+  );
+  const database = nodes.find((node) => node.type === "RDS");
+
+  assert.equal(publicSubnets.length, 2);
+  assert.equal(privateAppSubnets.length, 2);
+  assert.equal(privateDbSubnets.length, 2);
+  assert.deepEqual(
+    new Set(publicSubnets.map((node) => node.config.availabilityZone)),
+    new Set(["ap-northeast-2a", "ap-northeast-2b"])
+  );
+  assert.ok(loadBalancer);
+  assert.deepEqual(
+    loadBalancer.config.subnets,
+    publicSubnets.map((node) => `aws_subnet.${node.id.replaceAll("-", "_")}.id`)
+  );
+  assert.equal(nodes.filter((node) => node.type === "NAT_GATEWAY").length, 2);
+  assert.ok(autoScalingGroup);
+  assert.deepEqual(
+    autoScalingGroup.config.vpcZoneIdentifier,
+    privateAppSubnets.map((node) => `aws_subnet.${node.id.replaceAll("-", "_")}.id`)
+  );
+  assert.ok(uploadBucket);
+  assert.ok(staticBucket);
+  assert.equal(uploadBucket.config.publicAccessBlock, true);
+  assert.equal(database?.config.multiAz, true);
+  assert.equal(database?.config.publiclyAccessible, false);
+  assert.ok(cloudFront);
+  assert.ok(
+    edges.some((edge) => edge.sourceId === cloudFront.id && edge.targetId === loadBalancer.id)
+  );
+  assert.equal(
+    edges.some(
+      (edge) =>
+        edge.sourceId === cloudFront.id &&
+        nodes.some((node) => node.type === "EC2" && node.id === edge.targetId)
+    ),
+    false
+  );
+  assert.ok(
+    edges.some(
+      (edge) => edge.sourceId === autoScalingGroup.id && edge.targetId === uploadBucket.id
+    )
+  );
+});
+
 test("createAmazonQArchitectureDraftResponse rejects when Amazon Q returns an invalid compact plan", async () => {
   const provider = createFakeAmazonQProvider(() =>
     JSON.stringify({

@@ -11,5 +11,9 @@ test("resolveArchitectureResourceQuantities reads explicit EC2 and S3 counts nea
     ec2Instances: 3,
     s3Buckets: 2
   });
+  assert.deepEqual(resolveArchitectureResourceQuantities("three EC2 instances and two S3 buckets"), {
+    ec2Instances: 3,
+    s3Buckets: 2
+  });
 });
 

@@ -972,6 +972,7 @@ test("tracks curated nested block parameters as canonical camelCase keys", () =>
     aws_eks_cluster: ["vpcConfig"],
     aws_eks_node_group: ["scalingConfig"],
     aws_lambda_function: ["environment"],
+    aws_launch_template: ["iamInstanceProfile", "metadataOptions", "monitoring"],
     aws_route_table: ["route"],
     aws_s3_bucket_server_side_encryption_configuration: ["rule"],
     aws_s3_bucket_lifecycle_configuration: ["rule"],

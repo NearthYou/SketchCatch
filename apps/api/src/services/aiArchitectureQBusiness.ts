@@ -94,14 +94,23 @@ const CANONICAL_PATTERNS: Record<ArchitecturePatternId, CanonicalPatternDefiniti
       "VPC",
       "SUBNET",
       "INTERNET_GATEWAY",
+      "ELASTIC_IP",
+      "NAT_GATEWAY",
       "ROUTE_TABLE",
       "ROUTE_TABLE_ASSOCIATION",
       "SECURITY_GROUP",
+      "AMI",
+      "IAM_ROLE",
+      "IAM_POLICY",
+      "IAM_INSTANCE_PROFILE",
       "LOAD_BALANCER",
       "LOAD_BALANCER_LISTENER",
       "LOAD_BALANCER_TARGET_GROUP",
       "LAUNCH_TEMPLATE",
       "AUTO_SCALING_GROUP",
+      "AUTO_SCALING_POLICY",
+      "CLOUDWATCH_LOG_GROUP",
+      "CLOUDWATCH_METRIC_ALARM",
       "EC2"
     ]
   },
@@ -843,6 +852,7 @@ function createRetrievalArchitectureRequirement(payload: unknown): ArchitectureI
   }
 
   const hasRuntime = usesEks || usesEcs || usesLambda || (usesEc2 && !forbidsEc2);
+
 
   if (answerProfile.backend === "none") {
     patternIds.add("spa-cloudfront-s3");
