@@ -162,6 +162,7 @@ function DiagramEditorInner({
   allowPreviewInspection = false,
   dashboardHref = "/dashboard",
   draftStatusPanel,
+  emptyBoardDescription = "왼쪽 Resource에서 필요한 항목을 끌어오세요.",
   floatingPanel,
   initialDiagram,
   leftPanel,
@@ -2307,7 +2308,7 @@ function DiagramEditorInner({
           {visibleDiagram.nodes.length === 0 ? (
             <div className={styles.emptyState} aria-hidden="true">
               <strong>빈 보드</strong>
-              <span>왼쪽 Resource에서 필요한 항목을 끌어오세요.</span>
+              <span>{emptyBoardDescription}</span>
             </div>
           ) : null}
 

@@ -162,6 +162,11 @@ test("reverse preview can opt into read-only resource inspection", () => {
   );
 });
 
+test("a dedicated workflow can replace the default empty board guidance", () => {
+  assert.match(diagramEditorSource, /emptyBoardDescription = "왼쪽 Resource에서 필요한 항목을 끌어오세요\."/);
+  assert.match(diagramEditorSource, /<span>\{emptyBoardDescription\}<\/span>/);
+});
+
 test("collapsed right panel does not leave the mobile fixed rail shell visible", () => {
   const collapsedMobileRightRailRule = getCssRuleContaining(".editorShellRightCollapsed .rightRail");
 

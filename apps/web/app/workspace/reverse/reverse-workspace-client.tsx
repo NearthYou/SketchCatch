@@ -52,6 +52,7 @@ export function ReverseWorkspaceClient({ projectName }: ReverseWorkspaceClientPr
   return (
     <DiagramEditor
       allowPreviewInspection
+      emptyBoardDescription="기존 AWS를 가져오면 복원한 구조가 여기에 표시됩니다."
       initialDiagram={EMPTY_DIAGRAM}
       leftPanel={
         <ReverseBoardCandidateSelectionPanel

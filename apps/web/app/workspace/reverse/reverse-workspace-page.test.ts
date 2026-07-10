@@ -41,6 +41,7 @@ test("reverse preview lets users inspect provider values without editing them", 
 
 test("reverse workspace route starts from an empty preview board and creates the project only on apply", () => {
   assert.match(clientSource, /EMPTY_DIAGRAM/);
+  assert.match(clientSource, /emptyBoardDescription="기존 AWS를 가져오면 복원한 구조가 여기에 표시됩니다\."/);
   assert.match(clientSource, /REVERSE_PREVIEW_PROJECT_ID = "reverse-preview-project"/);
   assert.match(clientSource, /projectId=\{REVERSE_PREVIEW_PROJECT_ID\}/);
   assert.match(clientSource, /createProjectOnApply/);
