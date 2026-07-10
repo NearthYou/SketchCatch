@@ -1,5 +1,5 @@
 import { ArrowLeft, ChevronDown, FileCode2, Sparkles, X } from "lucide-react";
-import styles from "./workspace.module.css";
+import styles from "./TerraformCodeToolbar.module.css";
 
 export type TerraformCodeToolbarState = {
   readonly activeFileName: string;

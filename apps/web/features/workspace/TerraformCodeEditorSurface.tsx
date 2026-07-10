@@ -9,7 +9,7 @@ import type {
   TerraformHighlightedToken,
   TerraformTokenKind
 } from "./terraform-code-highlighting";
-import styles from "./workspace.module.css";
+import styles from "./TerraformCodeEditorSurface.module.css";
 
 const TERRAFORM_TOKEN_CLASS_NAMES: Record<TerraformTokenKind, string | undefined> = {
   brace: styles.terraformTokenBrace,

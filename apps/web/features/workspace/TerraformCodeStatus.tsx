@@ -1,5 +1,5 @@
 import type { TerraformSaveBanner } from "./terraform-panel-utils";
-import styles from "./workspace.module.css";
+import styles from "./TerraformCodeStatus.module.css";
 
 export type TerraformCodeStatusState = {
   readonly errorCount: number;

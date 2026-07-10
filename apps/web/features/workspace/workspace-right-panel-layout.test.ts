@@ -16,9 +16,12 @@ const resourceWorkspaceStylesSource = readWorkspaceFile("resource-workspace.modu
 const diagramEditorTypesSource = readFeatureFile("../diagram-editor/types.ts");
 const terraformLeaveDialogSource = readWorkspaceFile("TerraformLeaveDialog.tsx");
 const terraformEditorSource = readWorkspaceFile("TerraformCodeEditorSurface.tsx");
+const terraformEditorStylesSource = readWorkspaceFile("TerraformCodeEditorSurface.module.css");
 const terraformPanelSource = readWorkspaceFile("TerraformCodePanel.tsx");
 const terraformStatusSource = readWorkspaceFile("TerraformCodeStatus.tsx");
+const terraformStatusStylesSource = readWorkspaceFile("TerraformCodeStatus.module.css");
 const terraformToolbarSource = readWorkspaceFile("TerraformCodeToolbar.tsx");
+const terraformToolbarStylesSource = readWorkspaceFile("TerraformCodeToolbar.module.css");
 const terraformIssuesPanelSource = readWorkspaceFile("TerraformIssuesPanel.tsx");
 const terraformIssuesStylesSource = readWorkspaceFile("TerraformIssuesPanel.module.css");
 const workspaceRightPanelTypesSource = readWorkspaceFile("workspace-right-panel.types.ts");
@@ -1331,7 +1334,7 @@ test("pre-deployment finding fix buttons open the existing terraform source loca
 });
 
 test("terraform errors surface as an issues banner and AI resolution lives in the chat dock", () => {
-  const issueBannerRule = getCssRule(stylesSource, "terraformIssueBanner");
+  const issueBannerRule = getCssRule(terraformStatusStylesSource, "terraformIssueBanner");
   const aiButtonRule = getCssRule(terraformIssuesStylesSource, "terraformDiagnosticAiButton");
   const issuesPanelRule = getCssRule(terraformIssuesStylesSource, "issuesPanel");
   const issuesDiagnosticsRule = getCssRule(terraformIssuesStylesSource, "terraformDiagnostics");
@@ -1484,15 +1487,15 @@ test("terraform issue AI resolution can close the chat dock without trapping the
 });
 
 test("terraform editor renders syntax colors and squiggly error underlines", () => {
-  const syntaxHighlightLayerRule = getCssRule(stylesSource, "terraformSyntaxHighlightLayer");
-  const highlightedLineErrorRule = getCssRule(stylesSource, "terraformHighlightedLineError");
-  const lineNumberErrorRule = getCssRule(stylesSource, "terraformLineNumberError");
-  const textareaRule = getCssRule(stylesSource, "terraformTextarea");
-  const keywordRule = getCssRule(stylesSource, "terraformTokenKeyword");
-  const identifierRule = getCssRule(stylesSource, "terraformTokenIdentifier");
-  const referenceRule = getCssRule(stylesSource, "terraformTokenReference");
-  const stringRule = getCssRule(stylesSource, "terraformTokenString");
-  const braceRule = getCssRule(stylesSource, "terraformTokenBrace");
+  const syntaxHighlightLayerRule = getCssRule(terraformEditorStylesSource, "terraformSyntaxHighlightLayer");
+  const highlightedLineErrorRule = getCssRule(terraformEditorStylesSource, "terraformHighlightedLineError");
+  const lineNumberErrorRule = getCssRule(terraformEditorStylesSource, "terraformLineNumberError");
+  const textareaRule = getCssRule(terraformEditorStylesSource, "terraformTextarea");
+  const keywordRule = getCssRule(terraformEditorStylesSource, "terraformTokenKeyword");
+  const identifierRule = getCssRule(terraformEditorStylesSource, "terraformTokenIdentifier");
+  const referenceRule = getCssRule(terraformEditorStylesSource, "terraformTokenReference");
+  const stringRule = getCssRule(terraformEditorStylesSource, "terraformTokenString");
+  const braceRule = getCssRule(terraformEditorStylesSource, "terraformTokenBrace");
 
   assert.match(terraformPanelSource, /createTerraformDiagnosticLineNumbers/);
   assert.match(terraformPanelSource, /createTerraformHighlightedLines/);
@@ -1510,7 +1513,7 @@ test("terraform editor renders syntax colors and squiggly error underlines", () 
   assert.match(highlightedLineErrorRule, /\btext-decoration-style:\s*wavy;/);
   assert.match(highlightedLineErrorRule, /\btext-decoration-color:\s*#ef4444;/);
   assert.match(textareaRule, /\bcolor:\s*transparent;/);
-  assert.match(textareaRule, /\bcaret-color:\s*#d7e4f7;/);
+  assert.match(textareaRule, /\bcaret-color:\s*#ffffff;/);
   assert.match(keywordRule, /\bcolor:\s*#f6c85f;/);
   assert.match(identifierRule, /\bcolor:\s*#7fd2ff;/);
   assert.match(referenceRule, /\bcolor:\s*#5fe0c1;/);
@@ -1595,8 +1598,8 @@ test("terraform artifact preparation marks the terraform panel as loading", () =
 });
 
 test("terraform editor labels inline validation as fast Terraform error checking without progress UI", () => {
-  const topBarRule = getCssRule(stylesSource, "terraformTopBar");
-  const topActionsRule = getCssRule(stylesSource, "terraformTopActions");
+  const topBarRule = getCssRule(terraformToolbarStylesSource, "terraformTopBar");
+  const topActionsRule = getCssRule(terraformToolbarStylesSource, "terraformTopActions");
 
   assert.doesNotMatch(terraformPanelSource, /terraformValidationProgressBar/);
   assert.doesNotMatch(terraformPanelSource, /TerraformValidationProgress/);
@@ -1607,8 +1610,10 @@ test("terraform editor labels inline validation as fast Terraform error checking
   assert.doesNotMatch(stylesSource, /\.terraformValidationProgressWorking\s*\{/);
   assert.doesNotMatch(stylesSource, /\.terraformValidationProgressDone\s*\{/);
   assert.doesNotMatch(stylesSource, /\.terraformValidationProgressError\s*\{/);
-  assert.match(topBarRule, /\bflex-wrap:\s*wrap;/);
-  assert.match(topActionsRule, /\bflex-wrap:\s*wrap;/);
+  assert.match(topBarRule, /\balign-items:\s*center;/);
+  assert.match(topActionsRule, /\bmin-width:\s*0;/);
+  assert.match(terraformToolbarStylesSource, /@media \(max-width:\s*520px\)/);
+  assert.match(terraformToolbarStylesSource, /flex-direction:\s*column;/);
 });
 
 test("terraform panel does not warm provider validation when the panel becomes visible", () => {
