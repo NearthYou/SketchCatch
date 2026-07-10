@@ -12,6 +12,21 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-10 - Apply DESIGN.md cost dashboard UI
+
+- Goal: Apply the selected cost operations prototype to `/dashboard/costs` without adding estimated-versus-actual comparison behavior.
+- Completed:
+  - Connected the live `CostsClient` to the DESIGN.md dashboard shell instead of the static cost sample.
+  - Made actual AWS usage the default view and kept pre-deployment estimates in a separate tab.
+  - Added verified AWS connection treatment, four usage metrics, a two-column trend/service layout, project usage navigation, and optimization review surfaces.
+  - Added isolated DESIGN.md cost styles with responsive layouts and source-level route coverage.
+- Verification:
+  - Dashboard and cost feature tests passed.
+  - `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check` passed.
+  - Playwright verified both tabs at 1440px and 375px; mobile document width remained 375px.
+- Risk:
+  - The local browser had no authenticated user session, so populated AWS usage visual QA used browser-only mocked API responses. Production API contracts and backend behavior were not changed.
+
 ### 2026-07-10 - DESIGN.md cost dashboard prototype
 
 - Goal: Explore `/dashboard/costs` UI directions without changing the service implementation or comparing estimated and actual costs.

@@ -34,7 +34,8 @@ import { DashboardIcon } from "../../components/dashboard/dashboard-icons";
 import {
   analyzeCostUsageTrendShape,
   createCostUsageLineChart,
-  createServiceCostBars
+  createServiceCostBars,
+  sumEstimatedMonthlySavings
 } from "../../features/costs/cost-usage-charts";
 import {
   COST_USAGE_ALL_PROJECTS_KEY,
@@ -87,7 +88,7 @@ const DEFAULT_COST_QUERY: AppliedCostQuery = {
 const COST_USAGE_AWS_REGION = "ap-northeast-2";
 
 export function CostsClient() {
-  const [activeTab, setActiveTab] = useState<CostTab>("estimate");
+  const [activeTab, setActiveTab] = useState<CostTab>("usage");
   const [periodInput, setPeriodInput] = useState<CostEstimatePeriod>(DEFAULT_COST_QUERY.period);
   const [expectedUserCountInput, setExpectedUserCountInput] = useState(
     String(DEFAULT_COST_QUERY.expectedUserCount)
@@ -156,6 +157,10 @@ export function CostsClient() {
   );
 
   useEffect(() => {
+    if (activeTab !== "estimate") {
+      return undefined;
+    }
+
     let ignore = false;
 
     async function loadCostData(): Promise<void> {
@@ -210,7 +215,7 @@ export function CostsClient() {
     return () => {
       ignore = true;
     };
-  }, [appliedQuery]);
+  }, [activeTab, appliedQuery]);
 
   useEffect(() => {
     if (activeTab !== "usage") {
@@ -519,35 +524,31 @@ export function CostsClient() {
   const dailyAverageAmount = totalMonthlyAmount / 30;
 
   return (
-    <>
-      <div className="dashboardPageHeader">
-        <div>
-          <p className="dashboardEyebrow">Cost management</p>
-          <h1>비용관리</h1>
+    <div className="designCostPage">
+      <div className="designCostViewBar">
+        <div className="costTabs" role="tablist" aria-label="비용 관리 보기">
+          <button
+            aria-selected={activeTab === "estimate"}
+            className="costTabButton"
+            onClick={() => setActiveTab("estimate")}
+            role="tab"
+            type="button"
+          >
+            <Calculator size={16} aria-hidden="true" />
+            예상 비용
+          </button>
+          <button
+            aria-selected={activeTab === "usage"}
+            className="costTabButton"
+            onClick={() => setActiveTab("usage")}
+            role="tab"
+            type="button"
+          >
+            <Activity size={16} aria-hidden="true" />
+            실제 사용량
+          </button>
         </div>
-      </div>
-
-      <div className="costTabs" role="tablist" aria-label="비용 관리 보기">
-        <button
-          aria-selected={activeTab === "estimate"}
-          className="costTabButton"
-          onClick={() => setActiveTab("estimate")}
-          role="tab"
-          type="button"
-        >
-          <Calculator size={16} aria-hidden="true" />
-          예상 비용 계산
-        </button>
-        <button
-          aria-selected={activeTab === "usage"}
-          className="costTabButton"
-          onClick={() => setActiveTab("usage")}
-          role="tab"
-          type="button"
-        >
-          <Activity size={16} aria-hidden="true" />
-          사용량 분석
-        </button>
+        <p className="designCostViewNote">두 값은 목적이 달라 직접 비교하지 않습니다.</p>
       </div>
 
       {activeTab === "estimate" ? (
@@ -793,7 +794,7 @@ export function CostsClient() {
           verifiedAwsConnections={verifiedUsageAwsConnections}
         />
       )}
-    </>
+    </div>
   );
 }
 
@@ -919,6 +920,7 @@ function CostUsageAnalysisTab({
   );
   const selectedUsageAmount = selectedUsageProject?.amount ?? usageData?.totalCost.amount ?? 0;
   const selectedUsageLabel = selectedUsageProject?.projectName ?? "전체 프로젝트";
+  const reviewableMonthlySavings = sumEstimatedMonthlySavings(scopedRecommendations);
 
   useEffect(() => {
     setUsageProjectKeyInput((currentKey) =>
@@ -1070,41 +1072,48 @@ function CostUsageAnalysisTab({
                     : `${selectedUsageProject.resourceCount}개`
                 }
               />
+              <CostMetricCard
+                icon={<Calculator size={18} aria-hidden="true" />}
+                label="검토 가능한 절감액"
+                value={formatUsd(reviewableMonthlySavings)}
+              />
             </div>
           </section>
 
-          <section className="dashboardPanel costChartPanel" aria-labelledby="cost-daily-chart-title">
-            <div className="dashboardPanelHeader">
-              <div>
-                <p className="dashboardPanelKicker">Daily trend</p>
-                <h2 id="cost-daily-chart-title">일별 비용 추세</h2>
+          <div className="designCostChartGrid">
+            <section className="dashboardPanel costChartPanel" aria-labelledby="cost-daily-chart-title">
+              <div className="dashboardPanelHeader">
+                <div>
+                  <p className="dashboardPanelKicker">Daily trend</p>
+                  <h2 id="cost-daily-chart-title">일별 비용 추세</h2>
+                </div>
+                <span className="dashboardCountBadge">
+                  {selectedUsageProject === null ? `${usageData.dailyTrend.length}일` : "프로젝트 추세"}
+                </span>
               </div>
-              <span className="dashboardCountBadge">
-                {selectedUsageProject === null ? `${usageData.dailyTrend.length}일` : "프로젝트 추세"}
-              </span>
-            </div>
-            {scopedDailyTrend.length === 0 ? (
-              <CostStatus message="표시할 일별 비용 데이터가 없습니다." />
-            ) : (
-              <>
-                <DailyCostLineChart chart={lineChart} dailyTrend={scopedDailyTrend} />
-                <CostTrendInsightCard insight={trendInsight} selectedProject={selectedUsageProject} />
-              </>
-            )}
-          </section>
+              {scopedDailyTrend.length === 0 ? (
+                <CostStatus message="표시할 일별 비용 데이터가 없습니다." />
+              ) : (
+                <>
+                  <DailyCostLineChart chart={lineChart} dailyTrend={scopedDailyTrend} />
+                  <CostTrendInsightCard insight={trendInsight} selectedProject={selectedUsageProject} />
+                </>
+              )}
+            </section>
 
-          <section className="dashboardPanel costChartPanel" aria-labelledby="cost-service-chart-title">
-            <div className="dashboardPanelHeader">
-              <div>
-                <p className="dashboardPanelKicker">Service costs</p>
-                <h2 id="cost-service-chart-title">서비스별 비용</h2>
+            <section className="dashboardPanel costChartPanel" aria-labelledby="cost-service-chart-title">
+              <div className="dashboardPanelHeader">
+                <div>
+                  <p className="dashboardPanelKicker">Service costs</p>
+                  <h2 id="cost-service-chart-title">서비스별 비용</h2>
+                </div>
+                <span className="dashboardCountBadge">
+                  {`${scopedServiceCosts.length}개`}
+                </span>
               </div>
-              <span className="dashboardCountBadge">
-                {`${scopedServiceCosts.length}개`}
-              </span>
-            </div>
-            <ServiceCostBars bars={serviceBars} serviceCosts={scopedServiceCosts} />
-          </section>
+              <ServiceCostBars bars={serviceBars} serviceCosts={scopedServiceCosts} />
+            </section>
+          </div>
 
           <section className="dashboardPanel costProjectPanel" aria-labelledby="cost-usage-project-title">
             <div className="dashboardPanelHeader">
@@ -1209,7 +1218,14 @@ function CostUsageAwsConnectionPanel({
   const accountIdIsValid = /^\d{12}$/.test(awsAccountIdInput.trim());
 
   return (
-    <section className="costAwsConnectionPanel" aria-labelledby="cost-aws-connection-title">
+    <section
+      className={
+        selectedAwsConnection === null
+          ? "costAwsConnectionPanel"
+          : "costAwsConnectionPanel isVerified"
+      }
+      aria-labelledby="cost-aws-connection-title"
+    >
       <div className="costAwsConnectionHeader">
         <span className="costAwsConnectionIcon">
           <Cloud size={18} aria-hidden="true" />

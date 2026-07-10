@@ -44,6 +44,7 @@ export type DesignDashboardView =
 type DesignDashboardPageProps = {
   readonly view: DesignDashboardView;
   readonly projectId?: string;
+  readonly children?: ReactNode;
 };
 
 type NavItem = {
@@ -94,8 +95,8 @@ const viewMeta: Record<DesignDashboardView, { readonly title: string; readonly s
     subtitle: "Requirement Input, Source Repository, Reverse Engineering 입력 경로를 고릅니다."
   },
   costs: {
-    title: "비용과 위험",
-    subtitle: "Practice Architecture와 Deployment History 기준으로 비용 변화를 확인합니다."
+    title: "비용 관리",
+    subtitle: "예상 비용으로 배포를 준비하고, 실제 사용량으로 운영 비용을 관리합니다."
   },
   settings: {
     title: "워크스페이스 설정",
@@ -170,7 +171,7 @@ const templates = [
   }
 ];
 
-export function DesignDashboardPage({ view, projectId = "commerce-api" }: DesignDashboardPageProps) {
+export function DesignDashboardPage({ children, view, projectId = "commerce-api" }: DesignDashboardPageProps) {
   const meta = viewMeta[view];
 
   return (
@@ -223,7 +224,7 @@ export function DesignDashboardPage({ view, projectId = "commerce-api" }: Design
             </div>
           </header>
 
-          {renderView(view, projectId)}
+          {children ?? renderView(view, projectId)}
         </section>
       </div>
     </main>
