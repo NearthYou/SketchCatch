@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   createGitHubAppClient,
   GitHubRepositoryFileEncodingError,
+  GitHubRepositoryEvidenceLimitError,
   GitHubRepositoryTreeTruncatedError
 } from "./github-app-client.js";
 
@@ -210,6 +211,10 @@ test("readRepositoryEvidence reads the recursive tree and only allowed static ev
       .every((call) => call.search === "?ref=commit-sha"),
     true
   );
+  assert.equal(
+    calls.filter((call) => call.pathname === "/app/installations/42/access_tokens").length,
+    1
+  );
 });
 
 test("readRepositoryEvidence rejects truncated recursive trees", async () => {
@@ -283,6 +288,140 @@ test("readRepositoryEvidence rejects unsupported file encoding", async () => {
       name: "repo"
     }),
     GitHubRepositoryFileEncodingError
+  );
+});
+
+test("readRepositoryEvidence rejects repositories with too many evidence files", async () => {
+  const client = createGitHubAppClient({
+    appId: "12345",
+    privateKey,
+    fetch: createGitHubFetchStub([], ({ pathname }) => {
+      if (pathname === "/app/installations/42/access_tokens") {
+        return jsonResponse({ token: "installation-token" });
+      }
+
+      if (pathname === "/repos/owner/repo") {
+        return jsonResponse({ default_branch: "main" });
+      }
+
+      if (pathname === "/repos/owner/repo/commits/main") {
+        return jsonResponse({ sha: "commit-sha" });
+      }
+
+      if (pathname === "/repos/owner/repo/git/trees/commit-sha") {
+        return jsonResponse({
+          sha: "tree-sha",
+          truncated: false,
+          tree: Array.from({ length: 129 }, (_, index) => ({
+            path: `packages/package-${index}/package.json`,
+            type: "blob"
+          }))
+        });
+      }
+
+      return jsonResponse({ message: "not found" }, 404);
+    })
+  });
+
+  await assert.rejects(
+    client.readRepositoryEvidence({
+      installationId: "42",
+      owner: "owner",
+      name: "repo"
+    }),
+    (error: unknown) =>
+      error instanceof GitHubRepositoryEvidenceLimitError && error.reason === "file_count"
+  );
+});
+
+test("readRepositoryEvidence rejects oversized evidence content", async () => {
+  const oversizedContent = "a".repeat(300 * 1024);
+  const client = createGitHubAppClient({
+    appId: "12345",
+    privateKey,
+    fetch: createGitHubFetchStub([], ({ pathname }) => {
+      if (pathname === "/app/installations/42/access_tokens") {
+        return jsonResponse({ token: "installation-token" });
+      }
+
+      if (pathname === "/repos/owner/repo") {
+        return jsonResponse({ default_branch: "main" });
+      }
+
+      if (pathname === "/repos/owner/repo/commits/main") {
+        return jsonResponse({ sha: "commit-sha" });
+      }
+
+      if (pathname === "/repos/owner/repo/git/trees/commit-sha") {
+        return jsonResponse({
+          sha: "tree-sha",
+          truncated: false,
+          tree: [{ path: "README.md", type: "blob" }]
+        });
+      }
+
+      return jsonResponse({
+        encoding: "base64",
+        content: Buffer.from(oversizedContent).toString("base64")
+      });
+    })
+  });
+
+  await assert.rejects(
+    client.readRepositoryEvidence({
+      installationId: "42",
+      owner: "owner",
+      name: "repo"
+    }),
+    (error: unknown) =>
+      error instanceof GitHubRepositoryEvidenceLimitError && error.reason === "file_size"
+  );
+});
+
+test("readRepositoryEvidence rejects evidence beyond the total byte budget", async () => {
+  const fileContent = "a".repeat(240 * 1024);
+  const client = createGitHubAppClient({
+    appId: "12345",
+    privateKey,
+    fetch: createGitHubFetchStub([], ({ pathname }) => {
+      if (pathname === "/app/installations/42/access_tokens") {
+        return jsonResponse({ token: "installation-token" });
+      }
+
+      if (pathname === "/repos/owner/repo") {
+        return jsonResponse({ default_branch: "main" });
+      }
+
+      if (pathname === "/repos/owner/repo/commits/main") {
+        return jsonResponse({ sha: "commit-sha" });
+      }
+
+      if (pathname === "/repos/owner/repo/git/trees/commit-sha") {
+        return jsonResponse({
+          sha: "tree-sha",
+          truncated: false,
+          tree: Array.from({ length: 9 }, (_, index) => ({
+            path: `packages/package-${index}/README.md`,
+            type: "blob"
+          }))
+        });
+      }
+
+      return jsonResponse({
+        encoding: "base64",
+        content: Buffer.from(fileContent).toString("base64")
+      });
+    })
+  });
+
+  await assert.rejects(
+    client.readRepositoryEvidence({
+      installationId: "42",
+      owner: "owner",
+      name: "repo"
+    }),
+    (error: unknown) =>
+      error instanceof GitHubRepositoryEvidenceLimitError && error.reason === "total_size"
   );
 });
 

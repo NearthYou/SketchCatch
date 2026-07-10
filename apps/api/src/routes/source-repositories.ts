@@ -37,6 +37,10 @@ import {
   SourceRepositoryStateError
 } from "../source-repositories/source-repository-service.js";
 import type { ProjectAccessContext } from "../git-cicd/git-cicd-handoff-service.js";
+import {
+  createInMemoryRateLimiter,
+  type RateLimiter
+} from "../rate-limit/in-memory-rate-limiter.js";
 
 const projectParamsSchema = z.object({
   projectId: z.uuid()
@@ -71,6 +75,7 @@ export type SourceRepositoryRouteOptions = {
   githubAppSlug?: string;
   githubAppStateSecret?: string;
   githubAppCallbackUrl?: string;
+  sourceRepositoryAnalysisRateLimiter?: RateLimiter;
 };
 
 type SourceRepositoryRequestContext = {
@@ -87,6 +92,10 @@ type GitHubAppRouteRuntime = {
 };
 
 let cachedDefaultGitHubAppRouteRuntime: GitHubAppRouteRuntime | null = null;
+const defaultSourceRepositoryAnalysisRateLimiter = createInMemoryRateLimiter({
+  limit: 10,
+  windowMs: 60_000
+});
 
 // Source Repository 연결과 비영속 Repository Analysis HTTP 계약을 등록한다.
 export async function registerSourceRepositoryRoutes(
@@ -130,6 +139,20 @@ export async function registerSourceRepositoryRoutes(
         options,
         getSourceRepositoryDatabaseClient
       );
+      const rateLimitResult = (
+        options?.sourceRepositoryAnalysisRateLimiter ??
+        defaultSourceRepositoryAnalysisRateLimiter
+      ).consume(`source-repository-analysis:${accessContext.userId}:${params.projectId}`);
+
+      if (!rateLimitResult.allowed) {
+        return reply
+          .status(429)
+          .header("Retry-After", String(rateLimitResult.retryAfterSeconds))
+          .send({
+            error: "too_many_requests",
+            message: "Too many repository analysis requests"
+          });
+      }
 
       try {
         const runtime = getGitHubAppRouteRuntime(options);

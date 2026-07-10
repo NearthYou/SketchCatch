@@ -70,6 +70,7 @@ export type BuildAppOptions = {
     | "githubAppSlug"
     | "githubAppStateSecret"
     | "githubRepositoryEvidenceReader"
+    | "sourceRepositoryAnalysisRateLimiter"
   >;
   runtimeCache?: RuntimeCache;
   validateTerraformPreviewCode?: TerraformRouteOptions["validateTerraformPreviewCode"];

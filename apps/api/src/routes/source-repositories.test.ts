@@ -16,6 +16,7 @@ import {
   type SourceRepositoryRepository
 } from "../source-repositories/source-repository-service.js";
 import type { ProjectAccessContext } from "../git-cicd/git-cicd-handoff-service.js";
+import type { RateLimiter } from "../rate-limit/in-memory-rate-limiter.js";
 import { registerSourceRepositoryRoutes } from "./source-repositories.js";
 
 process.env.NODE_ENV = "test";
@@ -157,6 +158,46 @@ test("source repository routes reject inactive repositories before reading GitHu
   // Then
   assert.equal(response.statusCode, 409);
   assert.equal(response.json().error, "conflict");
+  assert.equal(readCount, 0);
+});
+
+test("source repository routes rate limit repeated analysis before reading GitHub", async (t) => {
+  // Given
+  const repository = new FakeSourceRepositoryRepository([
+    createSourceRepositoryRecord({ id: sourceRepositoryId })
+  ]);
+  let readCount = 0;
+  const githubRepositoryEvidenceReader: GitHubRepositoryEvidenceReader = {
+    // rate limit 뒤 GitHub 읽기가 실행되지 않는지 계수한다.
+    async readRepositoryEvidence() {
+      readCount += 1;
+      return { revision: "unused", treePaths: [], files: [] };
+    }
+  };
+  const sourceRepositoryAnalysisRateLimiter: RateLimiter = {
+    // QA 요청을 고정된 재시도 시간으로 차단한다.
+    consume() {
+      return { allowed: false, retryAfterSeconds: 42 };
+    }
+  };
+  const app = await buildSourceRepositoryRouteApp({
+    repository,
+    githubRepositoryEvidenceReader,
+    sourceRepositoryAnalysisRateLimiter
+  });
+  t.after(() => app.close());
+
+  // When
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/projects/${projectId}/source-repositories/${sourceRepositoryId}/analyze`,
+    headers: await authHeaders()
+  });
+
+  // Then
+  assert.equal(response.statusCode, 429);
+  assert.equal(response.headers["retry-after"], "42");
+  assert.equal(response.json().error, "too_many_requests");
   assert.equal(readCount, 0);
 });
 
@@ -370,6 +411,7 @@ async function buildSourceRepositoryRouteApp(input: {
   repository: FakeSourceRepositoryRepository;
   githubAppClient?: GitHubAppClient;
   githubRepositoryEvidenceReader?: GitHubRepositoryEvidenceReader;
+  sourceRepositoryAnalysisRateLimiter?: RateLimiter;
 }) {
   const app = Fastify({ logger: false });
   const fakeAuthDb = new SourceRepositoryRouteFakeAuthDb([createUserRecord()]);
@@ -392,6 +434,7 @@ async function buildSourceRepositoryRouteApp(input: {
     createSourceRepositoryRepository: () => input.repository,
     githubAppClient: input.githubAppClient ?? createFakeGitHubAppClient([]),
     githubRepositoryEvidenceReader: input.githubRepositoryEvidenceReader,
+    sourceRepositoryAnalysisRateLimiter: input.sourceRepositoryAnalysisRateLimiter,
     githubAppSlug: "sketchcatch-test",
     githubAppStateSecret: stateSecret,
     githubAppCallbackUrl: "https://sketchcatch.example/integrations/github/callback"
