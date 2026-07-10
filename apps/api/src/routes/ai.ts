@@ -218,7 +218,12 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
   const createLlmExplanation = options.createLlmExplanation ?? createConfiguredAiExplanation();
   const createArchitectureDraftResponse =
     options.createArchitectureDraftResponse ??
-    createConfiguredAmazonQArchitectureDraftResponse({ runtimeCache: options.runtimeCache });
+    createConfiguredAmazonQArchitectureDraftResponse({
+      runtimeCache: options.runtimeCache,
+      onWarmupError: (error) => {
+        app.log.warn({ error }, "Amazon Q architecture pattern warm-up failed");
+      }
+    });
   const createSafetyFindingExplanation =
     options.createSafetyFindingExplanation ?? createConfiguredOpenAiSafetyFindingExplanation();
   const safetyExplanationTimeoutMs =

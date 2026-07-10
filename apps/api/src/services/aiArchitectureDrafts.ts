@@ -29,7 +29,10 @@ import { applyOperatingConditionConfig } from "./aiArchitectureOperatingConditio
 import { resolveArchitectureResourceQuantities } from "./aiArchitectureResourceQuantities.js";
 import { resolveArchitectureRequirement } from "./aiArchitectureRequirementResolution.js";
 import { createArchitectureDraftFallbackExplanation } from "./aiLlmExplanationFallbacks.js";
-import { createAmazonQArchitectureDraftProviderFromEnv } from "./aiArchitectureQBusiness.js";
+import {
+  createAmazonQArchitectureDraftProviderFromEnv,
+  warmAmazonQArchitectureDraftProvider
+} from "./aiArchitectureQBusiness.js";
 import {
   createAwsArchitectureReferenceKnowledgePayload,
   createAwsArchitectureReferenceKnowledgePrompt
@@ -218,6 +221,7 @@ export function createArchitectureDraftFromRepositoryEvidence(
 }
 
 export function createConfiguredAmazonQArchitectureDraftResponse(input: {
+  readonly onWarmupError?: ((error: unknown) => void) | undefined;
   readonly runtimeCache?: RuntimeCache | undefined;
 } = {}): CreateArchitectureDraftResponseFactory {
   const regions = resolveAiProviderRegions(process.env);
@@ -230,6 +234,12 @@ export function createConfiguredAmazonQArchitectureDraftResponse(input: {
         });
   const requirementNormalizerProvider =
     process.env.NODE_ENV === "test" ? undefined : createOpenAiRequirementNormalizerProviderFromEnv();
+
+  if (provider !== undefined) {
+    void warmAmazonQArchitectureDraftProvider(provider).catch((error: unknown) => {
+      input.onWarmupError?.(error);
+    });
+  }
 
   return (request) =>
     createAmazonQArchitectureDraftResponse(request, {

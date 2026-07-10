@@ -5,7 +5,8 @@ import { createInMemoryRuntimeCache } from "../runtime-cache/index.js";
 import {
   createAmazonQArchitectureDraftProvider,
   createArchitecturePatternAttributeFilter,
-  resolveArchitecturePatternIds
+  resolveArchitecturePatternIds,
+  warmAmazonQArchitectureDraftProvider
 } from "./aiArchitectureQBusiness.js";
 import {
   createAmazonQArchitectureDraftResponse,
@@ -69,6 +70,32 @@ test("project answers exclude contradictory EC2 patterns and recognize Fargate",
   assert.equal(fargate?.requiredResources?.includes("EC2"), false);
   assert.equal(fargate?.requiredResources?.includes("ECS_SERVICE"), true);
   assert.equal(fargate?.requiredResources?.includes("ECS_TASK_DEFINITION"), true);
+});
+
+test("architecture provider warm-up verifies every indexed pattern before user traffic", async () => {
+  let patternIds: readonly string[] = [];
+
+  await warmAmazonQArchitectureDraftProvider({
+    provider: "amazon_q",
+    service: "amazon_q_business",
+    model: "retrieval-app",
+    generate: async (request) => {
+      const payload = request.payload as {
+        normalizedRequirement?: { patternIds?: readonly string[] };
+      };
+      patternIds = payload.normalizedRequirement?.patternIds ?? [];
+      return { text: "{}", outputCharacters: 2 };
+    }
+  });
+
+  assert.deepEqual(patternIds, [
+    "alb-asg-ec2",
+    "serverless-api",
+    "spa-cloudfront-s3",
+    "ecs-fargate",
+    "github-cicd-codedeploy",
+    "multi-az-rds"
+  ]);
 });
 
 test("architecture provider retrieves each selected pattern and returns a canonical plan", async () => {
@@ -319,6 +346,41 @@ test("architecture provider reads persistent verification cache without connecti
   assert.equal(maxConcurrentReads, 1);
 });
 
+test("architecture provider keeps verified Q citations in persistent cache for seven days", async () => {
+  let persistedTtlMs = 0;
+  const provider = createAmazonQArchitectureDraftProvider({
+    region: "ap-southeast-2",
+    retrievalApplicationId: "retrieval-app",
+    runtimeCache: {
+      get: async () => null,
+      set: async (_key, _value, options) => {
+        persistedTtlMs = options?.ttlMs ?? 0;
+      },
+      delete: async () => false
+    },
+    retrievalClient: {
+      send: async (command) => {
+        const patternIds = readFilteredPatternIds(command);
+        return {
+          systemMessage: "Verified exact pattern.",
+          sourceAttributions: patternIds.map((patternId) => ({
+            documentId: `sketchcatch-pattern-${patternId}-v1`
+          }))
+        };
+      }
+    }
+  });
+
+  await provider.generate({
+    target: "architecture_draft",
+    instructions: "Return a plan.",
+    prompt: "Create a private Multi-AZ RDS architecture.",
+    payload: { normalizedRequirement: { patternIds: ["multi-az-rds"] } }
+  });
+
+  assert.equal(persistedTtlMs, 7 * 24 * 60 * 60 * 1000);
+});
+
 test("architecture provider recovers from a transient batched Q request failure", async () => {
   const requestedPatternIds: string[][] = [];
   const provider = createAmazonQArchitectureDraftProvider({
@@ -361,6 +423,45 @@ test("architecture provider recovers from a transient batched Q request failure"
     ["github-cicd-codedeploy"],
     ["multi-az-rds"]
   ]);
+});
+
+test("architecture provider retries transient Q failures until verified evidence arrives", async () => {
+  let callCount = 0;
+  const provider = createAmazonQArchitectureDraftProvider({
+    region: "ap-southeast-2",
+    retrievalApplicationId: "retrieval-app",
+    retryDelay: async () => undefined,
+    retrievalClient: {
+      send: async (command) => {
+        callCount += 1;
+
+        if (callCount < 3) {
+          throw Object.assign(new Error("Amazon Q temporarily unavailable"), {
+            name: "ServiceUnavailableException",
+            $metadata: { httpStatusCode: 503 }
+          });
+        }
+
+        const patternIds = readFilteredPatternIds(command);
+        return {
+          systemMessage: `Verified ${patternIds.join(", ")}.`,
+          sourceAttributions: patternIds.map((patternId) => ({
+            documentId: `sketchcatch-pattern-${patternId}-v1`
+          }))
+        };
+      }
+    }
+  });
+
+  const response = await provider.generate({
+    target: "architecture_draft",
+    instructions: "Return a plan.",
+    prompt: "Create a private Multi-AZ RDS architecture.",
+    payload: { normalizedRequirement: { patternIds: ["multi-az-rds"] } }
+  });
+
+  assert.equal(JSON.parse(response.text).status, "plan");
+  assert.equal(callCount, 3);
 });
 
 test("architecture provider rejects retrieval evidence from the wrong document", async () => {

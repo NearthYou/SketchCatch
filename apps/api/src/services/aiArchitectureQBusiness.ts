@@ -17,8 +17,11 @@ import { createNormalizedAiCacheKey } from "./aiProviderSafety.js";
 
 const AMAZON_Q_MESSAGE_MAX_LENGTH = 2_048;
 const AMAZON_Q_PATTERN_VERIFICATION_TTL_MS = 60 * 60 * 1000;
+const AMAZON_Q_PATTERN_PERSISTENT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const AMAZON_Q_RECOVERY_CONCURRENCY = 2;
+const AMAZON_Q_INDIVIDUAL_RETRY_ATTEMPTS = 3;
 const AMAZON_Q_PATTERN_CACHE_NAMESPACE = "ai:q-architecture-pattern-verification:v1";
+const AMAZON_Q_PATTERN_KNOWLEDGE_REVISION = "2026-07-10-v1";
 const PATTERN_ID_SET = new Set<string>(ARCHITECTURE_PATTERN_IDS);
 const LOAD_BALANCER_RESOURCE_TYPES = new Set<ResourceType>([
   "LOAD_BALANCER",
@@ -197,12 +200,17 @@ export function createAmazonQArchitectureDraftProvider(input: {
   readonly retrievalApplicationId: string;
   readonly retrievalClient?: AmazonQBusinessArchitectureClient | undefined;
   readonly retrievalCacheTtlMs?: number | undefined;
+  readonly persistentCacheTtlMs?: number | undefined;
+  readonly retryDelay?: ((delayMs: number) => Promise<void>) | undefined;
   readonly now?: (() => number) | undefined;
   readonly runtimeCache?: RuntimeCache | undefined;
 }): AiTextProvider {
   const retrievalClient = input.retrievalClient ?? createDefaultAmazonQClient(input.region);
   const now = input.now ?? Date.now;
   const retrievalCacheTtlMs = input.retrievalCacheTtlMs ?? AMAZON_Q_PATTERN_VERIFICATION_TTL_MS;
+  const persistentCacheTtlMs =
+    input.persistentCacheTtlMs ?? AMAZON_Q_PATTERN_PERSISTENT_TTL_MS;
+  const retryDelay = input.retryDelay ?? waitForRetryDelay;
   const verifiedPatterns = new Map<ArchitecturePatternId, number>();
   const pendingVerifications = new Map<ArchitecturePatternId, Promise<void>>();
   const createPatternCacheKey = (patternId: ArchitecturePatternId) => ({
@@ -213,6 +221,7 @@ export function createAmazonQArchitectureDraftProvider(input: {
       model: input.retrievalApplicationId,
       payload: {
         documentId: CANONICAL_PATTERNS[patternId].documentId,
+        knowledgeRevision: AMAZON_Q_PATTERN_KNOWLEDGE_REVISION,
         patternId
       }
     })
@@ -275,7 +284,7 @@ export function createAmazonQArchitectureDraftProvider(input: {
             await input.runtimeCache.set(
               createPatternCacheKey(patternId),
               { documentId: CANONICAL_PATTERNS[patternId].documentId },
-              { ttlMs: retrievalCacheTtlMs }
+              { ttlMs: persistentCacheTtlMs }
             );
           } catch {
             // Cache writes are an optimization; verified Q evidence remains authoritative.
@@ -290,11 +299,12 @@ export function createAmazonQArchitectureDraftProvider(input: {
         patternIdsToVerify,
         AMAZON_Q_RECOVERY_CONCURRENCY,
         async (patternId) => {
-          const response = await sendArchitectureKnowledgeRetrieval(
+          const response = await sendArchitectureKnowledgeRetrievalWithRetry(
             retrievalClient,
             input.retrievalApplicationId,
             [patternId],
-            normalizedRequirement
+            normalizedRequirement,
+            retryDelay
           );
 
           assertExpectedPatternCitations([patternId], response);
@@ -385,6 +395,21 @@ export function createAmazonQArchitectureDraftProvider(input: {
   };
 }
 
+export async function warmAmazonQArchitectureDraftProvider(
+  provider: AiTextProvider
+): Promise<void> {
+  await provider.generate({
+    target: "architecture_draft",
+    instructions: "Verify all indexed architecture patterns.",
+    prompt: "Warm the verified SketchCatch architecture pattern knowledge cache.",
+    payload: {
+      normalizedRequirement: {
+        patternIds: [...ARCHITECTURE_PATTERN_IDS]
+      }
+    }
+  });
+}
+
 async function sendArchitectureKnowledgeRetrieval(
   retrievalClient: AmazonQBusinessArchitectureClient,
   applicationId: string,
@@ -399,6 +424,79 @@ async function sendArchitectureKnowledgeRetrieval(
       userMessage: createArchitectureKnowledgeRetrievalPrompt(patternIds, normalizedRequirement)
     })
   );
+}
+
+async function sendArchitectureKnowledgeRetrievalWithRetry(
+  retrievalClient: AmazonQBusinessArchitectureClient,
+  applicationId: string,
+  patternIds: readonly ArchitecturePatternId[],
+  normalizedRequirement: ArchitectureIntentPlan | null,
+  retryDelay: (delayMs: number) => Promise<void>
+): Promise<Pick<ChatSyncOutput, "systemMessage" | "sourceAttributions">> {
+  for (let attempt = 1; attempt <= AMAZON_Q_INDIVIDUAL_RETRY_ATTEMPTS; attempt += 1) {
+    try {
+      return await sendArchitectureKnowledgeRetrieval(
+        retrievalClient,
+        applicationId,
+        patternIds,
+        normalizedRequirement
+      );
+    } catch (error) {
+      if (attempt === AMAZON_Q_INDIVIDUAL_RETRY_ATTEMPTS || !isRetryableAmazonQError(error)) {
+        throw error;
+      }
+
+      await retryDelay(250 * 2 ** (attempt - 1));
+    }
+  }
+
+  throw new Error("Amazon Q retry loop completed without a response");
+}
+
+function isRetryableAmazonQError(error: unknown): boolean {
+  const name = error instanceof Error ? error.name : "";
+  const code = readErrorTextProperty(error, "code");
+  const httpStatusCode = readErrorHttpStatusCode(error);
+
+  return (
+    httpStatusCode === 429 ||
+    (httpStatusCode !== undefined && httpStatusCode >= 500) ||
+    [
+      "AbortError",
+      "InternalServerException",
+      "ServiceUnavailableException",
+      "ThrottlingException",
+      "TimeoutError"
+    ].includes(name) ||
+    ["ECONNRESET", "EPIPE", "ETIMEDOUT", "UND_ERR_CONNECT_TIMEOUT", "UND_ERR_HEADERS_TIMEOUT"].includes(code)
+  );
+}
+
+function readErrorTextProperty(error: unknown, key: string): string {
+  if (typeof error !== "object" || error === null) {
+    return "";
+  }
+
+  const value = Reflect.get(error, key);
+  return typeof value === "string" ? value : "";
+}
+
+function readErrorHttpStatusCode(error: unknown): number | undefined {
+  if (typeof error !== "object" || error === null) {
+    return undefined;
+  }
+
+  const metadata = Reflect.get(error, "$metadata");
+  if (typeof metadata !== "object" || metadata === null) {
+    return undefined;
+  }
+
+  const statusCode = Reflect.get(metadata, "httpStatusCode");
+  return typeof statusCode === "number" ? statusCode : undefined;
+}
+
+function waitForRetryDelay(delayMs: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, delayMs));
 }
 
 async function mapWithConcurrency<TValue>(
