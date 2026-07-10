@@ -180,6 +180,42 @@ GitHub Actions
 -> api/web/nginx 컨테이너 재시작
 ```
 
+### ECS 배포 워크플로 Phase 2
+
+Phase 2에서는 기존 `Deploy Production` EC2/SSM 워크플로를 rollback 경로로 유지하고, 별도 `Deploy Production ECS` 워크플로를 추가합니다. ECS 워크플로는 수동 실행(`workflow_dispatch`)으로만 시작하며, `docker save`와 S3 이미지 tarball 업로드를 사용하지 않습니다.
+
+ECS 배포 흐름:
+
+```text
+GitHub Actions
+-> pnpm lint/typecheck/build
+-> api/web/nginx Docker image build
+-> ECR push
+-> 현재 ECS task definition 조회
+-> api/web/nginx image tag가 반영된 새 task definition revision 등록
+-> ECS service update
+```
+
+정상 ECS 배포에서는 DB migration을 자동 실행하지 않습니다. migration은 기존처럼 별도 수동 workflow에서 다룹니다. ECS smoke가 통과하고 Route53 cutover가 승인되기 전까지 production traffic은 기존 EC2/SSM 경로가 담당합니다.
+
+ECS workflow에 필요한 GitHub `production` environment variables:
+
+```text
+AWS_REGION=ap-northeast-2
+AWS_ROLE_TO_ASSUME=<GitHub Actions OIDC Role ARN>
+ECR_API_REPOSITORY=sketchcatch-production-api
+ECR_WEB_REPOSITORY=sketchcatch-production-web
+ECR_NGINX_REPOSITORY=sketchcatch-production-nginx
+ECS_CLUSTER_NAME=sketchcatch-production-cluster
+ECS_SERVICE_NAME=sketchcatch-production-app
+ECS_TASK_DEFINITION_FAMILY=sketchcatch-production-app
+ECS_API_CONTAINER_NAME=api
+ECS_WEB_CONTAINER_NAME=web
+ECS_NGINX_CONTAINER_NAME=nginx
+```
+
+ECS workflow는 application secret 원문을 GitHub Actions log나 task definition 파일에 직접 쓰지 않습니다. Phase 3에서 `api_secret_arns` 기반 ECS task secret 주입이 정리되기 전까지는 `desiredCount=0` 상태를 유지하거나, smoke 전 별도 secret 준비를 끝낸 뒤 service count를 올려야 합니다.
+
 ## EC2 정보
 
 ```text
@@ -485,3 +521,104 @@ curl -X POST http://13.125.49.82/api/projects/<project-id>/assets/presigned-uplo
 sudo env RELEASE_ID=<previous-sha> RELEASE_URL=<previous-image-archive-presigned-url> \
   bash /tmp/sketchcatch-deploy.sh
 ```
+
+# ECS 런타임 설정과 secret 주입
+
+Phase 3부터 ECS production 경로는 generated `api.env`/`web.env` 파일과 S3 presigned env download를 사용하지 않습니다. EC2/SSM rollback 경로는 기존 파일 모델을 유지하지만, ECS 경로의 runtime source of truth는 ECS task definition입니다.
+
+ECS task definition의 책임은 다음처럼 나눕니다.
+
+| 구분 | 저장 위치 | 예시 |
+| --- | --- | --- |
+| GitHub Actions vars | 배포 workflow가 image build/push와 service update에 쓰는 비민감 설정 | `AWS_REGION`, `ECR_API_REPOSITORY`, `ECS_CLUSTER_NAME`, `ECS_SERVICE_NAME`, `ECS_TASK_DEFINITION_FAMILY`, `ECS_API_CONTAINER_NAME` |
+| ECS environment | task definition에 평문으로 남아도 되는 비민감 runtime 설정 | `NODE_ENV`, `PORT`, `DATABASE_SSL`, `S3_BUCKET_NAME`, `SKETCHCATCH_PUBLIC_BASE_URL`, `OAUTH_REDIRECT_BASE_URL`, `GIT_APP_ID`, `GIT_APP_SLUG`, OAuth client ID |
+| Secrets Manager | DB credential 또는 외부 provider secret | `DATABASE_URL`, `GIT_APP_PRIVATE_KEY_BASE64`, `OPENAI_API_KEY`, `NAVER_OAUTH_CLIENT_SECRET`, `KAKAO_OAUTH_CLIENT_SECRET`, `GIT_OAUTH_CLIENT_SECRET` |
+| SSM Parameter Store SecureString | 서명 secret 또는 secure runtime endpoint | `AUTH_TOKEN_SECRET`, `CLOUDFORMATION_TEMPLATE_TOKEN_SECRET`, `GIT_APP_STATE_SECRET`, `REDIS_URL` |
+| GitHub Actions secrets | EC2 rollback workflow가 아직 필요로 하는 legacy secret 값 | 기존 `Deploy Production` EC2/SSM workflow 전용 |
+
+ECS Terraform에는 secret 원문을 넣지 않고 ARN만 넣습니다.
+
+```hcl
+api_secret_arns = {
+  DATABASE_URL                         = "arn:aws:secretsmanager:ap-northeast-2:<account-id>:secret:sketchcatch/production/database-url-..."
+  GIT_APP_PRIVATE_KEY_BASE64           = "arn:aws:secretsmanager:ap-northeast-2:<account-id>:secret:sketchcatch/production/git-app-private-key-base64-..."
+  OPENAI_API_KEY                       = "arn:aws:secretsmanager:ap-northeast-2:<account-id>:secret:sketchcatch/production/openai-api-key-..."
+  NAVER_OAUTH_CLIENT_SECRET            = "arn:aws:secretsmanager:ap-northeast-2:<account-id>:secret:sketchcatch/production/naver-oauth-client-secret-..."
+  KAKAO_OAUTH_CLIENT_SECRET            = "arn:aws:secretsmanager:ap-northeast-2:<account-id>:secret:sketchcatch/production/kakao-oauth-client-secret-..."
+  GIT_OAUTH_CLIENT_SECRET              = "arn:aws:secretsmanager:ap-northeast-2:<account-id>:secret:sketchcatch/production/git-oauth-client-secret-..."
+  AUTH_TOKEN_SECRET                    = "arn:aws:ssm:ap-northeast-2:<account-id>:parameter/sketchcatch/production/auth-token-secret"
+  CLOUDFORMATION_TEMPLATE_TOKEN_SECRET = "arn:aws:ssm:ap-northeast-2:<account-id>:parameter/sketchcatch/production/cloudformation-template-token-secret"
+  GIT_APP_STATE_SECRET                 = "arn:aws:ssm:ap-northeast-2:<account-id>:parameter/sketchcatch/production/git-app-state-secret"
+  REDIS_URL                            = "arn:aws:ssm:ap-northeast-2:<account-id>:parameter/sketchcatch/production/redis-url"
+}
+```
+
+`Deploy Production ECS` workflow는 현재 ECS task definition을 다운로드한 뒤 image만 교체합니다. 이때 API container에 위 secret 이름들이 `environment`가 아니라 `secrets`로 들어 있는지 검증하고, 누락되거나 평문 environment로 들어 있으면 배포를 중단합니다. workflow artifact와 log에는 secret 원문이 남지 않아야 합니다.
+
+Rollback 기준은 다음과 같습니다.
+
+- Route53 cutover 전에는 기존 EC2/SSM production 경로가 rollback 경로입니다.
+- EC2 rollback workflow는 기존 `api.env`/`web.env` 생성과 S3 presigned env download를 계속 사용할 수 있습니다.
+- ECS smoke 또는 cutover 이후에는 ECS task definition의 secret ARN 매핑과 ECR image tag가 rollback 판단 기준입니다.
+- ECS secret 값을 갱신하면 새 task가 값을 읽도록 ECS service `force-new-deployment`가 필요합니다.
+
+## ECS worker RunTask dispatch
+
+Phase 5부터 API는 `DEPLOYMENT_WORKER_MODE=ecs`가 설정된 경우 Terraform 실행을 API process 안에서 바로 시작하지 않고,
+`deployment_jobs` row를 만든 뒤 ECS `RunTask` one-off worker task로 넘깁니다. 기본값은 `in_process`이므로 Phase 5/6
+worker runtime이 실제 운영 검증을 끝내기 전까지 기존 direct background 실행을 유지할 수 있습니다.
+
+ECS worker mode에 필요한 API runtime environment:
+
+```text
+DEPLOYMENT_WORKER_MODE=ecs
+ECS_WORKER_CLUSTER=<ECS cluster name or ARN>
+ECS_WORKER_TASK_DEFINITION=<worker task definition family/revision or ARN>
+ECS_WORKER_CONTAINER_NAME=<worker container name>
+ECS_WORKER_SUBNETS=<subnet-id-1,subnet-id-2>
+ECS_WORKER_SECURITY_GROUP_IDS=<sg-id-1,sg-id-2>
+ECS_WORKER_COMMAND=["node","dist/worker.cjs"]
+ECS_WORKER_ENVIRONMENT={"NODE_ENV":"production"}
+ECS_WORKER_ASSIGN_PUBLIC_IP=DISABLED
+```
+
+`ECS_WORKER_COMMAND`는 JSON string array여야 하며, `ECS_WORKER_ENVIRONMENT`는 string 값만 가진 JSON object여야 합니다.
+API는 dispatch 시 `SKETCHCATCH_DEPLOYMENT_ID`, `SKETCHCATCH_DEPLOYMENT_JOB_ID`,
+`SKETCHCATCH_DEPLOYMENT_OPERATION`을 container override environment로 추가합니다. worker runtime 자체는 Phase 5 범위가 아니며,
+Phase 6에서 이 값을 읽어 plan/apply/destroy 실행을 이어받아야 합니다.
+
+API task role에는 최소한 아래 권한이 필요합니다. 실제 ARN은 production 계정/region/task family에 맞춰 좁혀야 합니다.
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": ["ecs:RunTask"],
+      "Resource": "arn:aws:ecs:<region>:<account-id>:task-definition/<worker-task-family>:*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": ["ecs:StopTask", "ecs:DescribeTasks"],
+      "Resource": "arn:aws:ecs:<region>:<account-id>:task/<cluster-name>/*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": [
+        "arn:aws:iam::<account-id>:role/<worker-task-execution-role>",
+        "arn:aws:iam::<account-id>:role/<worker-task-role>"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "iam:PassedToService": "ecs-tasks.amazonaws.com"
+        }
+      }
+    }
+  ]
+}
+```
+
+`ecs:RunTask`는 worker task definition으로, `ecs:StopTask`/`ecs:DescribeTasks`는 worker cluster task ARN으로 제한합니다.
+`iam:PassRole`은 worker task execution role과 worker task role에만 허용하고, `ecs-tasks.amazonaws.com` 조건을 유지합니다.

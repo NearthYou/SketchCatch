@@ -30,6 +30,7 @@ import {
   WalletCards,
   type LucideIcon
 } from "lucide-react";
+import { DesignDashboardAccountFooter } from "./design-dashboard-account-footer";
 
 export type DesignDashboardView =
   | "overview"
@@ -176,9 +177,12 @@ export function DesignDashboardPage({ view, projectId = "commerce-api" }: Design
     <main className="designDashboardPage">
       <div className="designDashboardShell">
         <aside className="designDashboardSidebar" aria-label="Dashboard navigation">
-          <Link className="designDashboardBrand" href="/dashboard">
-            <span>SketchCatch</span>
-          </Link>
+          <div className="designDashboardSidebarHeader">
+            <Link className="designDashboardBrand" href="/dashboard">
+              <span>SketchCatch</span>
+            </Link>
+            <DesignDashboardAccountFooter compact />
+          </div>
           <nav className="designDashboardNav">
             {navItems.map((item) => {
               const Icon = item.icon;
@@ -197,10 +201,7 @@ export function DesignDashboardPage({ view, projectId = "commerce-api" }: Design
               );
             })}
           </nav>
-          <div className="designDashboardSidebarFooter">
-            <p>Deployment Safety Gate</p>
-            <strong>High risk 변경은 사용자 승인 전 실행되지 않습니다.</strong>
-          </div>
+          <DesignDashboardAccountFooter />
         </aside>
 
         <section className="designDashboardMain" aria-labelledby="dashboard-view-title">

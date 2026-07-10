@@ -107,6 +107,23 @@ export const deploymentPlanOperationEnum = pgEnum("deployment_plan_operation", [
   "destroy"
 ]);
 
+export const deploymentJobOperationEnum = pgEnum("deployment_job_operation", [
+  "init",
+  "plan",
+  "apply",
+  "destroy_plan",
+  "destroy"
+]);
+
+export const deploymentJobStatusEnum = pgEnum("deployment_job_status", [
+  "QUEUED",
+  "DISPATCHING",
+  "RUNNING",
+  "SUCCEEDED",
+  "FAILED",
+  "CANCELLED"
+]);
+
 export const deploymentLogLevelEnum = pgEnum("deployment_log_level", ["INFO", "WARN", "ERROR"]);
 
 export const reverseEngineeringScanStatusEnum = pgEnum("reverse_engineering_scan_status", [
@@ -485,6 +502,46 @@ export const deployments = pgTable(
   ]
 );
 
+export const deploymentJobs = pgTable(
+  "deployment_jobs",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    deploymentId: varchar("deployment_id", { length: 36 })
+      .notNull()
+      .references(() => deployments.id, { onDelete: "cascade" }),
+    operation: deploymentJobOperationEnum("operation").notNull(),
+    status: deploymentJobStatusEnum("status").notNull().default("QUEUED"),
+    requestedByUserId: varchar("requested_by_user_id", { length: 36 })
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    accessContext: jsonb("access_context")
+      .$type<{
+        kind: "user";
+        userId: string;
+      }>()
+      .notNull(),
+    startedFromStatus: deploymentStatusEnum("started_from_status").notNull(),
+    startedFromFailureStage: deploymentFailureStageEnum("started_from_failure_stage"),
+    ecsTaskArn: text("ecs_task_arn"),
+    errorSummary: text("error_summary"),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    failedAt: timestamp("failed_at", { withTimezone: true }),
+    cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    index("deployment_jobs_deployment_id_idx").on(table.deploymentId),
+    index("deployment_jobs_requested_by_user_id_idx").on(table.requestedByUserId),
+    index("deployment_jobs_status_idx").on(table.status),
+    index("deployment_jobs_ecs_task_arn_idx").on(table.ecsTaskArn),
+    uniqueIndex("deployment_jobs_deployment_active_unique")
+      .on(table.deploymentId)
+      .where(sql`${table.status} in ('QUEUED', 'DISPATCHING', 'RUNNING')`)
+  ]
+);
+
 export const gitCicdHandoffs = pgTable(
   "git_cicd_handoffs",
   {
@@ -658,6 +715,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   awsConnections: many(awsConnections),
   sourceRepositories: many(sourceRepositories),
   reverseEngineeringScans: many(reverseEngineeringScans),
+  deploymentJobs: many(deploymentJobs),
   gitCicdHandoffs: many(gitCicdHandoffs)
 }));
 
@@ -749,9 +807,21 @@ export const deploymentsRelations = relations(deployments, ({ one, many }) => ({
     references: [awsConnections.id]
   }),
   logs: many(deploymentLogs),
+  jobs: many(deploymentJobs),
   planArtifacts: many(deploymentPlanArtifacts),
   resources: many(deployedResources),
   outputs: many(terraformOutputs)
+}));
+
+export const deploymentJobsRelations = relations(deploymentJobs, ({ one }) => ({
+  deployment: one(deployments, {
+    fields: [deploymentJobs.deploymentId],
+    references: [deployments.id]
+  }),
+  requestedBy: one(users, {
+    fields: [deploymentJobs.requestedByUserId],
+    references: [users.id]
+  })
 }));
 
 export const sourceRepositoriesRelations = relations(sourceRepositories, ({ one, many }) => ({

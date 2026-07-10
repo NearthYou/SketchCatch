@@ -14,10 +14,25 @@ Short English-only working log for the current agent context. Older records are 
 - Architecture Drafts now always send a deterministic normalized requirement plan to Amazon Q, and can merge in OpenAI Requirement Normalizer output when the normalizer is enabled; Amazon Q remains the diagram generator and deterministic validation remains the acceptance gate.
 - The OpenAI Requirement Normalizer now uses a dedicated Structured Outputs wire schema and converts nullable wire values into the existing optional internal plan without changing other OpenAI features.
 - AI patch previews now apply deployable config changes for supported parameters and can migrate an EC2 runtime path to API Gateway plus Lambda serverless topology.
+- Latest `dev` workspace parameter editing, Terraform validation, and ECS deployment worker changes are merged into this branch.
 - Targeted API tests plus full lint/typecheck/build passed during this session.
 - No Terraform apply/destroy, deployment, AWS calls, or cloud mutation was run.
 
 ## Session Record
+
+### 2026-07-10 - Merge latest dev into AI diagram branch
+
+- Goal: Update local `dev` to the latest remote state and merge it into `feat/ck/287-ai-diagram` without losing AI work or local generated-file changes.
+- Completed:
+  - Fetched `origin/dev` at `aecff9fc` and fast-forwarded the local `dev` reference from `7ed51f19`.
+  - Merged `dev` into the AI diagram branch and resolved the single `agent-progress.md` conflict by preserving both AI and upstream Workspace/ECS records.
+  - Preserved the pre-existing `apps/web/next-env.d.ts` development-mode change outside the merge commit.
+- Verification:
+  - Focused API tests passed with 77 tests covering AI drafts, patch previews, requirement normalization, and Terraform Preview.
+  - Focused web tests passed with 47 tests covering Workspace diagram conversion, parameter references, and validation.
+  - `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed after the merge.
+- Risk:
+  - No live AWS commands, Terraform apply/destroy, deployment execution, or cloud mutation was run.
 
 ### 2026-07-10 - OpenAI requirement normalizer runtime fix
 
@@ -174,6 +189,7 @@ Short English-only working log for the current agent context. Older records are 
 ### 2026-07-10 - Merge latest dev into AI fixed-response removal branch
 
 - Goal: Bring latest `dev` into `chore/ck/281-delete-code-diagram`.
+
 - Completed:
   - Fetched `origin` and fast-forwarded local `dev` from `7487b3b2` to `7ed51f19`.
   - Merged local `dev` into `chore/ck/281-delete-code-diagram`.
@@ -188,26 +204,6 @@ Short English-only working log for the current agent context. Older records are 
 - Risk:
   - Merge resolution touched shared types and workspace diagram conversion, but focused API/web tests and full checks passed.
 
-### 2026-07-09 - AI fixed-response removal and ResourceType validation fix
+### 2026-07-10 - Upstream ECS phases 3-5 archived
 
-- Goal: Let Amazon Q generate web deployment answers instead of using a hardcoded selected-answer code/diagram path.
-- Completed:
-  - Removed fixed selected-answer SketchCatch web deployment draft, fixed diagram fixture, and fixed Terraform Preview marker override.
-  - Removed web-side fixed-reference layout bypass so ArchitectureJson drafts use the normal diagram conversion pipeline unless an exact `diagramJson` is returned.
-  - Fixed intermittent AI chat 400s caused by stale route-level ResourceType enums rejecting generated ArchitectureJson nodes such as `LOAD_BALANCER`.
-  - Promoted the shared ResourceType list to a runtime `RESOURCE_TYPES` constant and reused it in AI, project architecture, and Reverse Engineering route validation.
-- Verification:
-  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/aiArchitectureDrafts.test.ts` passed.
-  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/terraform/terraform-preview.test.ts` passed.
-  - `pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-diagram-adapter.test.ts` passed.
-  - `pnpm --filter @sketchcatch/api exec tsx --test src/routes/aiDesignSimulation.test.ts src/routes/aiAwsProviders.test.ts` passed after the ResourceType schema fix.
-  - `pnpm --filter @sketchcatch/api typecheck` passed.
-  - `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check` passed before the latest dev merge.
-- Risk:
-  - No real AWS IAM, IAM Identity Center, CloudFormation, Terraform apply, Terraform destroy, or deployment mutation was performed.
-
-### 2026-07-10 - Upstream dev context
-
-- `dev` includes ECS/Fargate foundation Terraform under `infra/aws/terraform`.
-- `dev` includes expanded AWS resource catalog/type coverage and workspace UI/UX refinements.
-- Known upstream ECS follow-up remains: image publishing, GitHub Actions rewrite, task secrets, Route53 cutover, and Terraform plan/apply are future work.
+- Detailed ECS runtime secret, deployment job, and RunTask dispatcher records moved to `docs/agent-history/2026-07.md` after the dev merge.

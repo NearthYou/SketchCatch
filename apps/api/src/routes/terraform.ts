@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type {
   ApiErrorResponse,
+  DiagramEdgeMetadata,
   DiagramJson,
   DiagramNodeMetadata,
   TerraformGenerateResponse,
@@ -52,6 +53,11 @@ const diagramNodeMetadataSchema: z.ZodType<DiagramNodeMetadata> = z.object({
   parentAreaNodeId: z.string().min(1).optional()
 }).strict();
 
+const diagramEdgeMetadataSchema: z.ZodType<DiagramEdgeMetadata> = z.object({
+  managedBy: z.literal("parameter-reference"),
+  parameterPath: z.string().min(1)
+}).strict();
+
 const diagramNodeSchema = z.object({
   id: z.string().min(1),
   type: z.string().min(1),
@@ -98,7 +104,8 @@ const diagramEdgeSchema = z.object({
       width: z.enum(["thin", "medium", "thick"]).optional(),
       animated: z.boolean().optional()
     })
-    .optional()
+    .optional(),
+  metadata: diagramEdgeMetadataSchema.optional()
 });
 
 const diagramJsonSchema: z.ZodType<DiagramJson> = z.object({

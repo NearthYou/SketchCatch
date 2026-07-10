@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { requireS3BucketName } from "../config/env.js";
+import { getDeploymentWorkerMode, requireS3BucketName } from "../config/env.js";
 import { requireActiveUserId } from "../auth/current-user.js";
 import { getDatabaseClient } from "../db/client.js";
 import type {
@@ -68,6 +68,22 @@ import {
   cancelTrackedDeploymentRun,
   startTrackedDeploymentRun
 } from "../deployments/deployment-run-registry.js";
+import {
+  cancelDeploymentJob,
+  createDeploymentJob,
+  createPostgresDeploymentJobRepository,
+  DeploymentJobConflictError,
+  failDeploymentJob,
+  markDeploymentJobDispatching,
+  markDeploymentJobRunning,
+  type DeploymentJobRecord,
+  type DeploymentJobRepository
+} from "../deployments/deployment-job-service.js";
+import {
+  createConfiguredDeploymentWorkerDispatcher,
+  createLocalDeploymentWorkerDispatcher,
+  type DeploymentWorkerDispatcher
+} from "../deployments/deployment-worker-dispatcher.js";
 import type {
   CreateLlmExplanation,
   LlmExplanationInput
@@ -124,6 +140,9 @@ const listDeploymentsParamsSchema = z.object({
 type DeploymentRouteOptions = {
   getDatabaseClient?: () => DatabaseClient;
   createDeploymentRepository?: (db: DatabaseClient["db"]) => DeploymentRepository;
+  createDeploymentJobRepository?: (db: DatabaseClient["db"]) => DeploymentJobRepository;
+  workerDispatcher?: DeploymentWorkerDispatcher;
+  workerDispatchMode?: "in_process" | "ecs";
   pruneProjectDeploymentStorage?: (input: {
     db: DatabaseClient["db"];
     projectId: string;
@@ -159,6 +178,7 @@ type DeploymentRouteOptions = {
 type DeploymentRequestContext = {
   accessContext: ProjectAccessContext;
   db: DatabaseClient["db"];
+  jobRepository: DeploymentJobRepository;
   repository: DeploymentRepository;
 };
 
@@ -208,6 +228,9 @@ async function getDeploymentRequestContext(
   return {
     accessContext: createUserProjectAccessContext(currentUserId),
     db: client.db,
+    jobRepository:
+      options?.createDeploymentJobRepository?.(client.db) ??
+      createPostgresDeploymentJobRepository(client.db),
     repository: options?.runtimeCache
       ? createRuntimeCachedDeploymentRepository({
           repository,
@@ -239,6 +262,59 @@ function createDefaultProjectDeploymentStoragePruner(
     });
 }
 
+function createDeploymentWorkerDispatch(
+  options: DeploymentRouteOptions | undefined
+): {
+  dispatcher: DeploymentWorkerDispatcher;
+  enabled: boolean;
+} {
+  const mode = options?.workerDispatchMode ?? getDeploymentWorkerMode();
+
+  if (mode !== "ecs") {
+    return {
+      dispatcher: createLocalDeploymentWorkerDispatcher(),
+      enabled: false
+    };
+  }
+
+  return {
+    dispatcher: options?.workerDispatcher ?? createConfiguredDeploymentWorkerDispatcher(),
+    enabled: true
+  };
+}
+
+async function dispatchDeploymentWorkerJob(
+  input: {
+    failureStage: "init" | "plan" | "apply" | "destroy";
+    job: DeploymentJobRecord;
+    staleFailureMessage: string;
+  },
+  dispatcher: DeploymentWorkerDispatcher,
+  jobRepository: DeploymentJobRepository,
+  repository: DeploymentRepository
+): Promise<void> {
+  await markDeploymentJobDispatching({ jobId: input.job.id }, jobRepository);
+
+  try {
+    const dispatchResult = await dispatcher.dispatch({ job: input.job });
+    await markDeploymentJobRunning(
+      {
+        jobId: input.job.id,
+        ecsTaskArn: dispatchResult.taskArn
+      },
+      jobRepository
+    );
+  } catch (error) {
+    const errorSummary = error instanceof Error ? error.message : input.staleFailureMessage;
+    await failDeploymentJob({ jobId: input.job.id, errorSummary }, jobRepository);
+    await repository.failDeployment(input.job.deploymentId, {
+      failureStage: input.failureStage,
+      errorSummary
+    });
+    throw error;
+  }
+}
+
 function handleDeploymentError(error: unknown, reply: FastifyReply) {
   if (error instanceof DeploymentNotFoundError) {
     return reply.status(404).send({
@@ -247,7 +323,7 @@ function handleDeploymentError(error: unknown, reply: FastifyReply) {
     });
   }
 
-  if (error instanceof DeploymentConflictError) {
+  if (error instanceof DeploymentConflictError || error instanceof DeploymentJobConflictError) {
     return reply.status(409).send({
       error: "conflict",
       message: error.message
@@ -524,12 +600,13 @@ export async function registerDeploymentRoutes(
 
   app.post("/deployments/:deploymentId/init", async (request, reply) => {
     const params = deploymentParamsSchema.parse(request.params);
-    const { accessContext, repository } = await getDeploymentRequestContext(
+    const { accessContext, jobRepository, repository } = await getDeploymentRequestContext(
       request,
       options,
       getDeploymentDatabaseClient
     );
     const runDeploymentInit = options?.runDeploymentInit ?? defaultRunDeploymentInit;
+    const workerDispatch = createDeploymentWorkerDispatch(options);
 
     try {
       const deployment = await getDeployment(
@@ -545,22 +622,56 @@ export async function registerDeploymentRoutes(
         throw new DeploymentConflictError("Deployment init is already running");
       }
 
+      const queuedJob = workerDispatch.enabled
+        ? await createDeploymentJob(
+            {
+              deploymentId: params.deploymentId,
+              operation: "init",
+              accessContext,
+              startedFromStatus: deployment.status
+            },
+            jobRepository
+          )
+        : undefined;
+
       const runningDeployment = await repository.markDeploymentInitRunning(deployment.id);
 
       if (!runningDeployment) {
+        if (queuedJob) {
+          await failDeploymentJob(
+            {
+              jobId: queuedJob.id,
+              errorSummary: "Deployment init could not be started"
+            },
+            jobRepository
+          );
+        }
         throw new DeploymentConflictError("Deployment init could not be started");
       }
 
-      startDeploymentInitJob(
-        {
-          deploymentId: params.deploymentId,
-          accessContext,
-          startedFromStatus: deployment.status
-        },
-        repository,
-        runDeploymentInit,
-        request.log
-      );
+      if (queuedJob) {
+        await dispatchDeploymentWorkerJob(
+          {
+            job: queuedJob,
+            failureStage: "init",
+            staleFailureMessage: "Deployment init ECS worker dispatch failed"
+          },
+          workerDispatch.dispatcher,
+          jobRepository,
+          repository
+        );
+      } else {
+        startDeploymentInitJob(
+          {
+            deploymentId: params.deploymentId,
+            accessContext,
+            startedFromStatus: deployment.status
+          },
+          repository,
+          runDeploymentInit,
+          request.log
+        );
+      }
 
       return reply.status(202).send({
         deployment: await toDeployment(runningDeployment, repository)
@@ -572,12 +683,13 @@ export async function registerDeploymentRoutes(
 
   app.post("/deployments/:deploymentId/plan", async (request, reply) => {
     const params = deploymentParamsSchema.parse(request.params);
-    const { accessContext, repository } = await getDeploymentRequestContext(
+    const { accessContext, jobRepository, repository } = await getDeploymentRequestContext(
       request,
       options,
       getDeploymentDatabaseClient
     );
     const runDeploymentPlan = options?.runDeploymentPlan ?? defaultRunDeploymentPlan;
+    const workerDispatch = createDeploymentWorkerDispatch(options);
 
     try {
       const deployment = await getDeployment(
@@ -599,22 +711,56 @@ export async function registerDeploymentRoutes(
 
       await requireNoRunningDeploymentInProject(deployment, repository);
 
+      const queuedJob = workerDispatch.enabled
+        ? await createDeploymentJob(
+            {
+              deploymentId: params.deploymentId,
+              operation: "plan",
+              accessContext,
+              startedFromStatus: deployment.status
+            },
+            jobRepository
+          )
+        : undefined;
+
       const runningDeployment = await repository.markDeploymentPlanRunning(deployment.id);
 
       if (!runningDeployment) {
+        if (queuedJob) {
+          await failDeploymentJob(
+            {
+              jobId: queuedJob.id,
+              errorSummary: "Deployment plan could not be started"
+            },
+            jobRepository
+          );
+        }
         throw new DeploymentConflictError("Deployment plan could not be started");
       }
 
-      startDeploymentPlanJob(
-        {
-          deploymentId: params.deploymentId,
-          accessContext,
-          startedFromStatus: deployment.status
-        },
-        repository,
-        runDeploymentPlan,
-        request.log
-      );
+      if (queuedJob) {
+        await dispatchDeploymentWorkerJob(
+          {
+            job: queuedJob,
+            failureStage: "plan",
+            staleFailureMessage: "Deployment plan ECS worker dispatch failed"
+          },
+          workerDispatch.dispatcher,
+          jobRepository,
+          repository
+        );
+      } else {
+        startDeploymentPlanJob(
+          {
+            deploymentId: params.deploymentId,
+            accessContext,
+            startedFromStatus: deployment.status
+          },
+          repository,
+          runDeploymentPlan,
+          request.log
+        );
+      }
 
       return reply.status(202).send({
         deployment: await toDeployment(runningDeployment, repository)
@@ -656,12 +802,13 @@ export async function registerDeploymentRoutes(
   app.post("/deployments/:deploymentId/apply", async (request, reply) => {
     const params = deploymentParamsSchema.parse(request.params);
     z.object({}).parse(request.body ?? {});
-    const { accessContext, repository } = await getDeploymentRequestContext(
+    const { accessContext, jobRepository, repository } = await getDeploymentRequestContext(
       request,
       options,
       getDeploymentDatabaseClient
     );
     const runDeploymentApply = options?.runDeploymentApply ?? defaultRunDeploymentApply;
+    const workerDispatch = createDeploymentWorkerDispatch(options);
 
     try {
       const deployment = await getDeployment(
@@ -675,22 +822,56 @@ export async function registerDeploymentRoutes(
       requireDeploymentCanStartApply(deployment);
       await requireNoRunningDeploymentInProject(deployment, repository);
 
+      const queuedJob = workerDispatch.enabled
+        ? await createDeploymentJob(
+            {
+              deploymentId: params.deploymentId,
+              operation: "apply",
+              accessContext,
+              startedFromStatus: deployment.status
+            },
+            jobRepository
+          )
+        : undefined;
+
       const runningDeployment = await repository.markDeploymentApplyRunning(deployment.id);
 
       if (!runningDeployment) {
+        if (queuedJob) {
+          await failDeploymentJob(
+            {
+              jobId: queuedJob.id,
+              errorSummary: "Deployment apply could not be started"
+            },
+            jobRepository
+          );
+        }
         throw new DeploymentConflictError("Deployment apply could not be started");
       }
 
-      startDeploymentApplyJob(
-        {
-          deploymentId: params.deploymentId,
-          accessContext,
-          startedFromStatus: deployment.status
-        },
-        repository,
-        runDeploymentApply,
-        request.log
-      );
+      if (queuedJob) {
+        await dispatchDeploymentWorkerJob(
+          {
+            job: queuedJob,
+            failureStage: "apply",
+            staleFailureMessage: "Deployment apply ECS worker dispatch failed"
+          },
+          workerDispatch.dispatcher,
+          jobRepository,
+          repository
+        );
+      } else {
+        startDeploymentApplyJob(
+          {
+            deploymentId: params.deploymentId,
+            accessContext,
+            startedFromStatus: deployment.status
+          },
+          repository,
+          runDeploymentApply,
+          request.log
+        );
+      }
 
       return reply.status(202).send({
         deployment: await toDeployment(runningDeployment, repository)
@@ -703,13 +884,14 @@ export async function registerDeploymentRoutes(
   app.post("/deployments/:deploymentId/destroy/plan", async (request, reply) => {
     const params = deploymentParamsSchema.parse(request.params);
     z.object({}).parse(request.body ?? {});
-    const { accessContext, repository } = await getDeploymentRequestContext(
+    const { accessContext, jobRepository, repository } = await getDeploymentRequestContext(
       request,
       options,
       getDeploymentDatabaseClient
     );
     const runDeploymentDestroyPlan =
       options?.runDeploymentDestroyPlan ?? defaultRunDeploymentDestroyPlan;
+    const workerDispatch = createDeploymentWorkerDispatch(options);
 
     try {
       const deployment = await getDeployment(
@@ -723,24 +905,59 @@ export async function registerDeploymentRoutes(
       requireDeploymentCanStartDestroyPlan(deployment);
       await requireNoRunningDeploymentInProject(deployment, repository);
 
+      const queuedJob = workerDispatch.enabled
+        ? await createDeploymentJob(
+            {
+              deploymentId: params.deploymentId,
+              operation: "destroy_plan",
+              accessContext,
+              startedFromStatus: deployment.status,
+              startedFromFailureStage: deployment.failureStage
+            },
+            jobRepository
+          )
+        : undefined;
+
       const runningDeployment = await repository.markDeploymentPlanRunning(deployment.id);
 
       if (!runningDeployment) {
+        if (queuedJob) {
+          await failDeploymentJob(
+            {
+              jobId: queuedJob.id,
+              errorSummary: "Deployment destroy plan could not be started"
+            },
+            jobRepository
+          );
+        }
         throw new DeploymentConflictError("Deployment destroy plan could not be started");
       }
 
-      startDeploymentDestroyPlanJob(
-        {
-          deploymentId: params.deploymentId,
-          accessContext,
-          startedFromStatus: deployment.status,
-          startedFromFailureStage: deployment.failureStage,
-          startedFromErrorSummary: deployment.errorSummary
-        },
-        repository,
-        runDeploymentDestroyPlan,
-        request.log
-      );
+      if (queuedJob) {
+        await dispatchDeploymentWorkerJob(
+          {
+            job: queuedJob,
+            failureStage: "plan",
+            staleFailureMessage: "Deployment destroy plan ECS worker dispatch failed"
+          },
+          workerDispatch.dispatcher,
+          jobRepository,
+          repository
+        );
+      } else {
+        startDeploymentDestroyPlanJob(
+          {
+            deploymentId: params.deploymentId,
+            accessContext,
+            startedFromStatus: deployment.status,
+            startedFromFailureStage: deployment.failureStage,
+            startedFromErrorSummary: deployment.errorSummary
+          },
+          repository,
+          runDeploymentDestroyPlan,
+          request.log
+        );
+      }
 
       return reply.status(202).send({
         deployment: await toDeployment(runningDeployment, repository)
@@ -753,12 +970,13 @@ export async function registerDeploymentRoutes(
   app.post("/deployments/:deploymentId/destroy", async (request, reply) => {
     const params = deploymentParamsSchema.parse(request.params);
     z.object({}).parse(request.body ?? {});
-    const { accessContext, repository } = await getDeploymentRequestContext(
+    const { accessContext, jobRepository, repository } = await getDeploymentRequestContext(
       request,
       options,
       getDeploymentDatabaseClient
     );
     const runDeploymentDestroy = options?.runDeploymentDestroy ?? defaultRunDeploymentDestroy;
+    const workerDispatch = createDeploymentWorkerDispatch(options);
 
     try {
       const deployment = await getDeployment(
@@ -772,23 +990,58 @@ export async function registerDeploymentRoutes(
       await requireDeploymentCanStartDestroy(deployment, repository);
       await requireNoRunningDeploymentInProject(deployment, repository);
 
+      const queuedJob = workerDispatch.enabled
+        ? await createDeploymentJob(
+            {
+              deploymentId: params.deploymentId,
+              operation: "destroy",
+              accessContext,
+              startedFromStatus: deployment.status,
+              startedFromFailureStage: deployment.failureStage
+            },
+            jobRepository
+          )
+        : undefined;
+
       const runningDeployment = await repository.markDeploymentDestroyRunning(deployment.id);
 
       if (!runningDeployment) {
+        if (queuedJob) {
+          await failDeploymentJob(
+            {
+              jobId: queuedJob.id,
+              errorSummary: "Deployment destroy could not be started"
+            },
+            jobRepository
+          );
+        }
         throw new DeploymentConflictError("Deployment destroy could not be started");
       }
 
-      startDeploymentDestroyJob(
-        {
-          deploymentId: params.deploymentId,
-          accessContext,
-          startedFromStatus: deployment.status,
-          startedFromFailureStage: deployment.failureStage
-        },
-        repository,
-        runDeploymentDestroy,
-        request.log
-      );
+      if (queuedJob) {
+        await dispatchDeploymentWorkerJob(
+          {
+            job: queuedJob,
+            failureStage: "destroy",
+            staleFailureMessage: "Deployment destroy ECS worker dispatch failed"
+          },
+          workerDispatch.dispatcher,
+          jobRepository,
+          repository
+        );
+      } else {
+        startDeploymentDestroyJob(
+          {
+            deploymentId: params.deploymentId,
+            accessContext,
+            startedFromStatus: deployment.status,
+            startedFromFailureStage: deployment.failureStage
+          },
+          repository,
+          runDeploymentDestroy,
+          request.log
+        );
+      }
 
       return reply.status(202).send({
         deployment: await toDeployment(runningDeployment, repository)
@@ -801,11 +1054,12 @@ export async function registerDeploymentRoutes(
   app.post("/deployments/:deploymentId/cancel", async (request, reply) => {
     const params = deploymentParamsSchema.parse(request.params);
     z.object({}).parse(request.body ?? {});
-    const { accessContext, repository } = await getDeploymentRequestContext(
+    const { accessContext, jobRepository, repository } = await getDeploymentRequestContext(
       request,
       options,
       getDeploymentDatabaseClient
     );
+    const workerDispatch = createDeploymentWorkerDispatch(options);
 
     try {
       const cancellationRequestedDeployment = await requestDeploymentCancellation(
@@ -818,6 +1072,31 @@ export async function registerDeploymentRoutes(
       const cancelledInMemory = cancelTrackedDeploymentRun(params.deploymentId);
 
       if (!cancelledInMemory) {
+        if (workerDispatch.enabled) {
+          const activeJob = await jobRepository.findActiveDeploymentJob(params.deploymentId);
+
+          if (activeJob?.ecsTaskArn) {
+            const stopResult = await workerDispatch.dispatcher.stop({
+              job: activeJob,
+              reason: "SketchCatch deployment cancellation requested"
+            });
+
+            if (stopResult.stopped) {
+              await cancelDeploymentJob(
+                {
+                  jobId: activeJob.id,
+                  errorSummary: "Cancellation was requested and ECS StopTask was sent."
+                },
+                jobRepository
+              );
+
+              return reply.status(202).send({
+                deployment: await toDeployment(cancellationRequestedDeployment, repository)
+              });
+            }
+          }
+        }
+
         const failedDeployment = await repository.failDeployment(params.deploymentId, {
           failureStage: cancellationRequestedDeployment.activeStage ?? "apply",
           errorSummary:

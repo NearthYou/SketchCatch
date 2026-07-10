@@ -40,6 +40,62 @@
       "Resource": "arn:aws:iam::555980271919:role/SketchCatch-EC2-Role"
     },
     {
+      "Sid": "AllowSketchCatchEcrImagePush",
+      "Effect": "Allow",
+      "Action": [
+        "ecr:BatchCheckLayerAvailability",
+        "ecr:BatchGetImage",
+        "ecr:CompleteLayerUpload",
+        "ecr:GetDownloadUrlForLayer",
+        "ecr:InitiateLayerUpload",
+        "ecr:PutImage",
+        "ecr:UploadLayerPart"
+      ],
+      "Resource": [
+        "arn:aws:ecr:ap-northeast-2:555980271919:repository/sketchcatch-production-api",
+        "arn:aws:ecr:ap-northeast-2:555980271919:repository/sketchcatch-production-web",
+        "arn:aws:ecr:ap-northeast-2:555980271919:repository/sketchcatch-production-nginx"
+      ]
+    },
+    {
+      "Sid": "AllowEcrAuthorizationForSketchCatchPush",
+      "Effect": "Allow",
+      "Action": "ecr:GetAuthorizationToken",
+      "Resource": "*"
+    },
+    {
+      "Sid": "AllowSketchCatchEcsServiceUpdate",
+      "Effect": "Allow",
+      "Action": [
+        "ecs:DescribeServices",
+        "ecs:UpdateService"
+      ],
+      "Resource": "arn:aws:ecs:ap-northeast-2:555980271919:service/sketchcatch-production-cluster/sketchcatch-production-app"
+    },
+    {
+      "Sid": "AllowSketchCatchTaskDefinitionDeployment",
+      "Effect": "Allow",
+      "Action": [
+        "ecs:DescribeTaskDefinition",
+        "ecs:RegisterTaskDefinition"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "AllowPassSketchCatchEcsTaskRoles",
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": [
+        "arn:aws:iam::555980271919:role/sketchcatch-production-ecs-execution",
+        "arn:aws:iam::555980271919:role/sketchcatch-production-ecs-task"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "iam:PassedToService": "ecs-tasks.amazonaws.com"
+        }
+      }
+    },
+    {
       "Sid": "AllowHttpsCloudFormationStack",
       "Effect": "Allow",
       "Action": [
