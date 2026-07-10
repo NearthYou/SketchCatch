@@ -15,6 +15,11 @@ type FieldInput = Omit<
     >
   >;
 
+type CatalogPatch = {
+  readonly definitions: readonly ParameterCatalogDefinition[];
+  readonly removeNames?: readonly string[] | undefined;
+};
+
 const commonTags = field({
   name: "tags",
   terraformName: "tags",
@@ -328,7 +333,12 @@ const priorityResourceFallbacks: Record<string, readonly ParameterCatalogDefinit
   ],
   aws_codebuild_project: [
     required("name", "name", "Name"),
-    required("serviceRole", "service_role", "Service role ARN"),
+    required(
+      "serviceRole",
+      "service_role",
+      "Service role ARN",
+      "arn:aws:iam::123456789012:role/sketchcatch-audit"
+    ),
     core("description", "description", "Description")
   ],
   aws_codedeploy_app: [
@@ -396,7 +406,15 @@ const priorityResourceFallbacks: Record<string, readonly ParameterCatalogDefinit
   aws_ecs_task_definition: [
     required("family", "family", "Family"),
     select("networkMode", "network_mode", "Network mode", ["awsvpc", "bridge", "host", "none"]),
-    list("requiresCompatibilities", "requires_compatibilities", "Requires compatibilities"),
+    field({
+      name: "requiresCompatibilities",
+      terraformName: "requires_compatibilities",
+      label: "Requires compatibilities",
+      type: "list",
+      inputKind: "multi-select",
+      options: ["FARGATE", "EC2", "EXTERNAL", "MANAGED_INSTANCES"],
+      core: true
+    }),
     core("cpu", "cpu", "CPU", "256"),
     core("memory", "memory", "Memory", "512")
   ],
@@ -446,7 +464,7 @@ const priorityResourceFallbacks: Record<string, readonly ParameterCatalogDefinit
   ],
   aws_xray_sampling_rule: [
     required("ruleName", "rule_name", "Rule name"),
-    number("priority", "priority", "Priority", true, "10000"),
+    number("priority", "priority", "Priority", true, "1000"),
     number("reservoirSize", "reservoir_size", "Reservoir size", true, "1"),
     number("fixedRate", "fixed_rate", "Fixed rate", true, "0.05"),
     required("serviceName", "service_name", "Service name", "*"),
@@ -464,9 +482,303 @@ const priorityResourceFallbacks: Record<string, readonly ParameterCatalogDefinit
   aws_guardduty_detector: [boolean("enable", "enable", "Enable", true)]
 } satisfies Record<string, readonly ParameterCatalogDefinition[]>;
 
+const terraformValidateRequiredAdditions = {
+  aws_cloudfront_distribution: {
+    definitions: [
+      field({
+        name: "enabled",
+        terraformName: "enabled",
+        label: "Enabled",
+        type: "boolean",
+        inputKind: "checkbox",
+        required: true
+      }),
+      nestedBlock("origin", "origin", "Origin", [
+        required("domainName", "domain_name", "Domain name", "example.com"),
+        required("originId", "origin_id", "Origin ID", "primary")
+      ]),
+      nestedBlock("defaultCacheBehavior", "default_cache_behavior", "Default cache behavior", [
+        field({
+          name: "allowedMethods",
+          terraformName: "allowed_methods",
+          label: "Allowed methods",
+          type: "list",
+          inputKind: "text",
+          required: true,
+          placeholder: "GET"
+        }),
+        field({
+          name: "cachedMethods",
+          terraformName: "cached_methods",
+          label: "Cached methods",
+          type: "list",
+          inputKind: "text",
+          required: true,
+          placeholder: "GET"
+        }),
+        required("targetOriginId", "target_origin_id", "Target origin ID", "primary"),
+        select(
+          "viewerProtocolPolicy",
+          "viewer_protocol_policy",
+          "Viewer protocol policy",
+          ["redirect-to-https", "allow-all", "https-only"],
+          true
+        )
+      ]),
+      nestedBlock("restrictions", "restrictions", "Restrictions", [
+        nestedBlock(
+          "geoRestriction",
+          "geo_restriction",
+          "Geo restriction",
+          [
+            select(
+              "restrictionType",
+              "restriction_type",
+              "Restriction type",
+              ["none", "whitelist", "blacklist"],
+              true
+            )
+          ],
+          true,
+          true
+        )
+      ]),
+      nestedBlock("viewerCertificate", "viewer_certificate", "Viewer certificate", [
+        field({
+          name: "cloudfrontDefaultCertificate",
+          terraformName: "cloudfront_default_certificate",
+          label: "CloudFront default certificate",
+          type: "boolean",
+          inputKind: "checkbox",
+          core: true
+        })
+      ])
+    ]
+  },
+  aws_wafv2_web_acl: {
+    definitions: [
+      nestedBlock("defaultAction", "default_action", "Default action", [
+        nestedBlock("allow", "allow", "Allow", [], true, true)
+      ]),
+      nestedBlock("visibilityConfig", "visibility_config", "Visibility config", [
+        field({
+          name: "cloudwatchMetricsEnabled",
+          terraformName: "cloudwatch_metrics_enabled",
+          label: "CloudWatch metrics",
+          type: "boolean",
+          inputKind: "checkbox",
+          required: true
+        }),
+        required("metricName", "metric_name", "Metric name", "sketchcatch-audit"),
+        field({
+          name: "sampledRequestsEnabled",
+          terraformName: "sampled_requests_enabled",
+          label: "Sampled requests",
+          type: "boolean",
+          inputKind: "checkbox",
+          required: true
+        })
+      ])
+    ]
+  },
+  aws_s3_bucket_versioning: {
+    removeNames: ["status"],
+    definitions: [
+      nestedBlock("versioningConfiguration", "versioning_configuration", "Versioning configuration", [
+        select("status", "status", "Status", ["Enabled", "Suspended"], true)
+      ])
+    ]
+  },
+  aws_s3_bucket_server_side_encryption_configuration: {
+    removeNames: ["sseAlgorithm", "kmsMasterKeyId"],
+    definitions: [
+      nestedBlock("rule", "rule", "Rule", [
+        nestedBlock(
+          "applyServerSideEncryptionByDefault",
+          "apply_server_side_encryption_by_default",
+          "Default encryption",
+          [
+            select("sseAlgorithm", "sse_algorithm", "SSE algorithm", ["AES256", "aws:kms"], true),
+            core("kmsMasterKeyId", "kms_master_key_id", "KMS key")
+          ],
+          true,
+          true
+        )
+      ])
+    ]
+  },
+  aws_codebuild_project: {
+    definitions: [
+      nestedBlock("artifacts", "artifacts", "Artifacts", [
+        select("type", "type", "Type", ["NO_ARTIFACTS", "S3", "CODEPIPELINE"], true)
+      ]),
+      nestedBlock("environment", "environment", "Environment", [
+        select("computeType", "compute_type", "Compute type", ["BUILD_GENERAL1_SMALL"], true),
+        required("image", "image", "Image", "aws/codebuild/standard:7.0"),
+        select("type", "type", "Type", ["LINUX_CONTAINER"], true)
+      ]),
+      nestedBlock("source", "source", "Source", [
+        select("type", "type", "Type", ["NO_SOURCE", "S3", "CODEPIPELINE", "GITHUB"], true)
+      ])
+    ]
+  },
+  aws_codepipeline: {
+    definitions: [
+      nestedBlock("artifactStore", "artifact_store", "Artifact store", [
+        required("location", "location", "Location", "sketchcatch-audit-artifacts"),
+        select("type", "type", "Type", ["S3"], true)
+      ]),
+      nestedBlock(
+        "stage",
+        "stage",
+        "Stage",
+        [
+          required("name", "name", "Stage name", "Source"),
+          nestedBlock(
+            "action",
+            "action",
+            "Action",
+            [
+              select("category", "category", "Category", ["Source", "Build", "Deploy"], true),
+              required("name", "name", "Action name", "Source"),
+              select("owner", "owner", "Owner", ["AWS", "ThirdParty", "Custom"], true),
+              required("provider", "provider", "Provider", "S3"),
+              required("version", "version", "Version", "1")
+            ],
+            true,
+            true
+          )
+        ],
+        true,
+        true
+      )
+    ]
+  },
+  aws_ecs_task_definition: {
+    definitions: [
+      required(
+        "containerDefinitions",
+        "container_definitions",
+        "Container definitions JSON",
+        "[{\"name\":\"app\",\"image\":\"public.ecr.aws/docker/library/nginx:latest\",\"essential\":true}]"
+      )
+    ]
+  },
+  aws_eks_cluster: {
+    definitions: [
+      nestedBlock("vpcConfig", "vpc_config", "VPC config", [
+        field({
+          name: "subnetIds",
+          terraformName: "subnet_ids",
+          label: "Subnets",
+          type: "list",
+          inputKind: "reference-picker",
+          required: true,
+          referenceTargetTypes: ["aws_subnet"]
+        })
+      ])
+    ]
+  },
+  aws_cloudfront_cache_policy: {
+    definitions: [
+      nestedBlock(
+        "parametersInCacheKeyAndForwardedToOrigin",
+        "parameters_in_cache_key_and_forwarded_to_origin",
+        "Cache key and origin forwarding",
+        [
+          nestedBlock(
+            "cookiesConfig",
+            "cookies_config",
+            "Cookies config",
+            [select("cookieBehavior", "cookie_behavior", "Cookie behavior", ["none", "all"], true)],
+            true,
+            true
+          ),
+          nestedBlock(
+            "headersConfig",
+            "headers_config",
+            "Headers config",
+            [select("headerBehavior", "header_behavior", "Header behavior", ["none", "whitelist"], true)],
+            true,
+            true
+          ),
+          nestedBlock(
+            "queryStringsConfig",
+            "query_strings_config",
+            "Query strings config",
+            [
+              select(
+                "queryStringBehavior",
+                "query_string_behavior",
+                "Query string behavior",
+                ["none", "all"],
+                true
+              )
+            ],
+            true,
+            true
+          )
+        ]
+      )
+    ]
+  },
+  aws_cloudfront_origin_request_policy: {
+    definitions: [
+      nestedBlock("cookiesConfig", "cookies_config", "Cookies config", [
+        select("cookieBehavior", "cookie_behavior", "Cookie behavior", ["none", "all"], true)
+      ]),
+      nestedBlock("headersConfig", "headers_config", "Headers config", [
+        select("headerBehavior", "header_behavior", "Header behavior", ["none", "allViewer"], true)
+      ]),
+      nestedBlock("queryStringsConfig", "query_strings_config", "Query strings config", [
+        select(
+          "queryStringBehavior",
+          "query_string_behavior",
+          "Query string behavior",
+          ["none", "all"],
+          true
+        )
+      ])
+    ]
+  },
+  aws_scheduler_schedule: {
+    definitions: [
+      nestedBlock("flexibleTimeWindow", "flexible_time_window", "Flexible time window", [
+        select("mode", "mode", "Mode", ["OFF", "FLEXIBLE"], true)
+      ]),
+      nestedBlock("target", "target", "Target", [
+        required("arn", "arn", "Target ARN", "arn:aws:sqs:ap-northeast-2:123456789012:audit"),
+        required("roleArn", "role_arn", "Role ARN", "arn:aws:iam::123456789012:role/sketchcatch-audit")
+      ])
+    ]
+  },
+  aws_eks_node_group: {
+    definitions: [
+      nestedBlock("scalingConfig", "scaling_config", "Scaling config", [
+        number("desiredSize", "desired_size", "Desired size", true, "1"),
+        number("maxSize", "max_size", "Max size", true, "1"),
+        number("minSize", "min_size", "Min size", true, "1")
+      ])
+    ]
+  },
+  aws_config_config_rule: {
+    definitions: [
+      nestedBlock("source", "source", "Source", [
+        select("owner", "owner", "Owner", ["AWS", "CUSTOM_LAMBDA", "CUSTOM_POLICY"], true),
+        core("sourceIdentifier", "source_identifier", "Source identifier", "S3_BUCKET_PUBLIC_READ_PROHIBITED")
+      ])
+    ]
+  },
+  aws_xray_sampling_rule: {
+    definitions: [
+      required("resourceArn", "resource_arn", "Resource ARN", "*")
+    ]
+  }
+} satisfies Record<string, CatalogPatch>;
+
 export const terraformAwsParameterCatalog = {
   ...generatedTerraformAwsParameterCatalog,
-  source: `${generatedTerraformAwsParameterCatalog.source}+priority-resource-fallbacks`,
+  source: `${generatedTerraformAwsParameterCatalog.source}+priority-resource-fallbacks+terraform-validate-required-additions`,
   resources: createResourceParameterCatalog()
 } satisfies ParameterCatalog;
 
@@ -490,7 +802,28 @@ function createResourceParameterCatalog(): ParameterCatalog["resources"] {
     resources[definition.terraform.resourceType] = [...fallback];
   }
 
+  applyTerraformValidateRequiredAdditions(resources);
+
   return resources;
+}
+
+function applyTerraformValidateRequiredAdditions(resources: ParameterCatalog["resources"]): void {
+  const additions = Object.entries(terraformValidateRequiredAdditions) as Array<
+    [string, CatalogPatch]
+  >;
+
+  for (const [resourceType, patch] of additions) {
+    const replacements = new Set([
+      ...(patch.removeNames ?? []),
+      ...patch.definitions.map((definition) => definition.name)
+    ]);
+    const existing = resources[resourceType] ?? [];
+
+    resources[resourceType] = [
+      ...existing.filter((definition) => !replacements.has(definition.name)),
+      ...patch.definitions
+    ];
+  }
 }
 
 function required(
@@ -610,6 +943,26 @@ function select(
     options,
     required: requiredField,
     core: !requiredField
+  });
+}
+
+function nestedBlock(
+  name: string,
+  terraformName: string,
+  label: string,
+  children: readonly ParameterCatalogDefinition[],
+  requiredField = true,
+  collection = false
+): ParameterCatalogDefinition {
+  return field({
+    name,
+    terraformName,
+    label,
+    type: collection ? "list" : "object",
+    inputKind: "nested-block",
+    required: requiredField,
+    core: !requiredField,
+    children: [...children]
   });
 }
 

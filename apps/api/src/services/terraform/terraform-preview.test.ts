@@ -954,11 +954,30 @@ test("tracks curated nested block parameters as canonical camelCase keys", () =>
     aws_autoscaling_group: ["launchTemplate", "tag"],
     aws_db_parameter_group: ["parameter"],
     aws_dynamodb_table: ["attribute"],
+    aws_cloudfront_cache_policy: ["parametersInCacheKeyAndForwardedToOrigin"],
+    aws_cloudfront_distribution: [
+      "defaultCacheBehavior",
+      "origin",
+      "restrictions",
+      "viewerCertificate"
+    ],
+    aws_cloudfront_origin_request_policy: [
+      "cookiesConfig",
+      "headersConfig",
+      "queryStringsConfig"
+    ],
+    aws_config_config_rule: ["source"],
     aws_instance: ["rootBlockDevice"],
+    aws_eks_cluster: ["vpcConfig"],
+    aws_eks_node_group: ["scalingConfig"],
     aws_lambda_function: ["environment"],
     aws_route_table: ["route"],
+    aws_s3_bucket_server_side_encryption_configuration: ["rule"],
     aws_s3_bucket_lifecycle_configuration: ["rule"],
-    aws_security_group: ["egress", "ingress"]
+    aws_s3_bucket_versioning: ["versioningConfiguration"],
+    aws_scheduler_schedule: ["flexibleTimeWindow", "target"],
+    aws_security_group: ["egress", "ingress"],
+    aws_wafv2_web_acl: ["defaultAction", "visibilityConfig"]
   };
 
   for (const [resourceType, expectedAttributes] of Object.entries(expectedNestedBlockAttributes)) {

@@ -402,6 +402,120 @@ test("RDS parameters include the expanded main parameter example from the JH inv
   assert.equal(iamAuthField?.terraformName, "iam_database_authentication_enabled");
 });
 
+test("parameter catalog covers Terraform CLI audit required right-panel paths", () => {
+  const requiredPathsByResource: Record<string, string[]> = {
+    aws_cloudfront_distribution: [
+      "default_cache_behavior",
+      "default_cache_behavior.allowed_methods",
+      "default_cache_behavior.cached_methods",
+      "default_cache_behavior.target_origin_id",
+      "default_cache_behavior.viewer_protocol_policy",
+      "enabled",
+      "origin",
+      "origin.domain_name",
+      "origin.origin_id",
+      "restrictions",
+      "restrictions.geo_restriction",
+      "restrictions.geo_restriction.restriction_type",
+      "viewer_certificate"
+    ],
+    aws_wafv2_web_acl: [
+      "default_action",
+      "visibility_config",
+      "visibility_config.cloudwatch_metrics_enabled",
+      "visibility_config.metric_name",
+      "visibility_config.sampled_requests_enabled"
+    ],
+    aws_s3_bucket_versioning: ["versioning_configuration"],
+    aws_s3_bucket_server_side_encryption_configuration: ["rule"],
+    aws_codebuild_project: [
+      "artifacts",
+      "artifacts.type",
+      "environment",
+      "environment.compute_type",
+      "environment.image",
+      "environment.type",
+      "source",
+      "source.type"
+    ],
+    aws_codepipeline: [
+      "artifact_store",
+      "artifact_store.location",
+      "artifact_store.type",
+      "stage",
+      "stage.action",
+      "stage.action.category",
+      "stage.action.name",
+      "stage.action.owner",
+      "stage.action.provider",
+      "stage.action.version",
+      "stage.name"
+    ],
+    aws_ecs_task_definition: ["container_definitions"],
+    aws_eks_cluster: ["vpc_config", "vpc_config.subnet_ids"],
+    aws_cloudfront_cache_policy: [
+      "parameters_in_cache_key_and_forwarded_to_origin",
+      "parameters_in_cache_key_and_forwarded_to_origin.cookies_config",
+      "parameters_in_cache_key_and_forwarded_to_origin.cookies_config.cookie_behavior",
+      "parameters_in_cache_key_and_forwarded_to_origin.headers_config",
+      "parameters_in_cache_key_and_forwarded_to_origin.query_strings_config",
+      "parameters_in_cache_key_and_forwarded_to_origin.query_strings_config.query_string_behavior"
+    ],
+    aws_cloudfront_origin_request_policy: [
+      "cookies_config",
+      "cookies_config.cookie_behavior",
+      "headers_config",
+      "query_strings_config",
+      "query_strings_config.query_string_behavior"
+    ],
+    aws_scheduler_schedule: [
+      "flexible_time_window",
+      "flexible_time_window.mode",
+      "target",
+      "target.arn",
+      "target.role_arn"
+    ],
+    aws_eks_node_group: [
+      "scaling_config",
+      "scaling_config.desired_size",
+      "scaling_config.max_size",
+      "scaling_config.min_size"
+    ],
+    aws_config_config_rule: ["source", "source.owner"],
+    aws_xray_sampling_rule: ["resource_arn"]
+  };
+
+  for (const [resourceType, requiredPaths] of Object.entries(requiredPathsByResource)) {
+    const parameterPaths = collectParameterTerraformPaths(getParameters(resourceType));
+
+    for (const requiredPath of requiredPaths) {
+      assert.ok(
+        parameterPaths.has(requiredPath),
+        `Missing ${resourceType}.${requiredPath} from the right-panel parameter catalog`
+      );
+    }
+  }
+});
+
+test("Terraform CLI audit sample defaults use provider-valid catalog values", () => {
+  const codebuild = getParameters("aws_codebuild_project");
+  assert.match(String(getParameter(codebuild, "serviceRole").placeholder), /^arn:aws:iam::/);
+
+  const codepipeline = getParameters("aws_codepipeline");
+  assert.equal(getParameter(codepipeline, "stage").type, "list");
+
+  const ecsTaskDefinition = getParameters("aws_ecs_task_definition");
+  assert.deepEqual(getParameter(ecsTaskDefinition, "requiresCompatibilities").options, [
+    "FARGATE",
+    "EC2",
+    "EXTERNAL",
+    "MANAGED_INSTANCES"
+  ]);
+
+  const xraySamplingRule = getParameters("aws_xray_sampling_rule");
+  assert.equal(getParameter(xraySamplingRule, "priority").placeholder, "1000");
+});
+
 function getResourceSize(resourceType: string) {
   const resource = resourceCatalog.find((item) => item.nodeDefaults.type === resourceType);
 
@@ -455,6 +569,27 @@ function assertMainParameter(
 
   assert.equal(parameter.label, label);
   assert.equal(parameter.core, true, `Missing main/core ${name}`);
+}
+
+function collectParameterTerraformPaths(
+  parameters: readonly NonNullable<(typeof terraformParameterCatalog.resources)[string]>[number][],
+  parentPath = ""
+): Set<string> {
+  const paths = new Set<string>();
+
+  for (const parameter of parameters) {
+    const path = parentPath
+      ? `${parentPath}.${parameter.terraformName}`
+      : parameter.terraformName;
+
+    paths.add(path);
+
+    for (const childPath of collectParameterTerraformPaths(parameter.children ?? [], path)) {
+      paths.add(childPath);
+    }
+  }
+
+  return paths;
 }
 
 function createCatalogResourceKey(resource: (typeof resourceCatalog)[number]): string {

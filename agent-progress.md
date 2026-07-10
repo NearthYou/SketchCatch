@@ -11,6 +11,21 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-10 - Add Terraform validate-required panel parameters
+
+- Goal: Add right-panel parameter coverage for the 14 Terraform audit `parameter_panel_gap` resources, then rerun Terraform CLI validate.
+- Completed: Added minimal nested parameter catalog entries and Terraform nested-block mappings for CloudFront, WAFv2, S3 versioning/encryption, CodeBuild, CodePipeline, ECS task definition, EKS, Scheduler, Config Rule, and X-Ray resources. Added regression coverage so required audit paths stay exposed in the right panel.
+- Verification: `pnpm harness:check`, targeted web/API tests, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed. The final Terraform audit completed with 96 `validate_passed`, 0 `parameter_panel_gap`, 15 `generation_error`, 2 `dependency_blocked`, 5 `unsupported_by_ui`, 2 `excluded_area_node`, and 3 `excluded_data_source` results.
+- Risk: The audit is still local Terraform CLI init/schema/validate only; it does not run plan/apply or prove AWS account/API readiness. Existing generated `apps/web/next-env.d.ts` dev-mode diff remains unrelated.
+
+### 2026-07-10 - Add Terraform CLI resource parameter audit
+
+- Goal: Add a backend/tooling audit that checks current resource catalog Terraform output with Terraform CLI validate using only right-panel parameter catalog values.
+- Completed: Added `runTerraformProvidersSchemaJson`, a resource validation audit service, a root CLI script, and API package command `pnpm --filter @sketchcatch/api terraform:audit:validate`. The audit reads the current web resource catalog and parameter catalog, runs `terraform init`, `terraform providers schema -json`, and per-resource `terraform validate` in a temp workspace without plan/apply.
+- Verification: `pnpm harness:check`, `pnpm --filter @sketchcatch/api exec tsx --test src/deployments/terraform-runner.test.ts src/services/terraform/terraform-resource-validation-audit.test.ts`, `pnpm --filter @sketchcatch/api lint`, `pnpm --filter @sketchcatch/api typecheck`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed. The live audit command completed with 80 `validate_passed`, 14 `parameter_panel_gap`, 17 `generation_error`, 2 `dependency_blocked`, 5 `unsupported_by_ui`, 2 `excluded_area_node`, and 3 `excluded_data_source` results.
+- Risk: The audit performs Terraform CLI init/schema/validate only; it does not run plan/apply or prove AWS API creation success. Existing generated `apps/web/next-env.d.ts` dev-mode diff remains unrelated.
+- Next action: Use the audit output to prioritize adding right-panel parameters for the 14 `parameter_panel_gap` resources, then address generator/reference sample issues separately.
+
 ### 2026-07-10 - Complete Workspace infrastructure settings Task 4
 
 - Goal: Record the Task 1-3 contracts and run the required integrated verification.
