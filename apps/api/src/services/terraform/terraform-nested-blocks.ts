@@ -46,6 +46,7 @@ const TERRAFORM_NESTED_BLOCK_ATTRIBUTES: Record<string, ReadonlySet<string>> = {
   aws_dynamodb_table: new Set(["attribute"]),
   aws_eks_cluster: new Set(["vpcConfig"]),
   aws_eks_node_group: new Set(["scalingConfig"]),
+  aws_ecs_service: new Set(["networkConfiguration"]),
   aws_instance: new Set(["rootBlockDevice"]),
   aws_lambda_function: new Set(["environment"]),
   aws_lb_listener: new Set(["defaultAction", "forward"]),
@@ -63,7 +64,19 @@ const TERRAFORM_NESTED_BLOCK_ATTRIBUTES: Record<string, ReadonlySet<string>> = {
   kubernetes_service: new Set(["metadata", "spec"])
 };
 
-const KUBERNETES_NESTED_BLOCKS = new Set(["container", "metadata", "port", "selector", "spec", "template"]);
+const GENERIC_TERRAFORM_NESTED_BLOCKS = new Set([
+  "container",
+  "cookies",
+  "forwardedValues",
+  "geoRestriction",
+  "loadBalancer",
+  "metadata",
+  "networkConfiguration",
+  "port",
+  "selector",
+  "spec",
+  "template"
+]);
 
 export function getTerraformNestedBlockAttributes(
   resourceType: string
@@ -78,8 +91,8 @@ export function isTerraformNestedBlockAttribute(
   return getTerraformNestedBlockAttributes(resourceType)?.has(toCamelCase(attributeName)) === true;
 }
 
-export function isKubernetesNestedBlock(attributeName: string): boolean {
-  return KUBERNETES_NESTED_BLOCKS.has(toCamelCase(attributeName));
+export function isGenericTerraformNestedBlock(attributeName: string): boolean {
+  return GENERIC_TERRAFORM_NESTED_BLOCKS.has(toCamelCase(attributeName));
 }
 
 function toCamelCase(value: string): string {

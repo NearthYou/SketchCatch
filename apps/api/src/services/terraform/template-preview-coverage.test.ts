@@ -16,7 +16,7 @@ test("all AWS templates generate Terraform Preview from their shared definitions
     for (const resource of template.resources) {
       assert.match(
         terraformCode,
-        new RegExp(`resource \\"${resource.terraformResourceType}\\"`),
+        new RegExp(`(?:resource|data) \\"${resource.terraformResourceType}\\"`),
         `${template.id} is missing ${resource.terraformResourceType}`
       );
     }

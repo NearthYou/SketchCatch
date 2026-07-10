@@ -16,9 +16,9 @@ const ATTRIBUTE_DOUBLE_EQUALS_PATTERN = /^\s*[A-Za-z_][A-Za-z0-9_]*\s*==/;
 const ATTRIBUTE_LIKE_PATTERN = /^\s*[A-Za-z_][A-Za-z0-9_]*\s+\S+/;
 const NESTED_BLOCK_PATTERN = /^\s*[A-Za-z_][A-Za-z0-9_]*\s*\{\s*$/;
 const QUOTED_REFERENCE_PATTERN =
-  /"((?:aws_[A-Za-z0-9_]+|data\.aws_[A-Za-z0-9_]+)\.[A-Za-z0-9_]+\.[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*)"/g;
+  /"((?:(?:aws|kubernetes)_[A-Za-z0-9_]+|data\.(?:aws|kubernetes)_[A-Za-z0-9_]+)\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*)"/g;
 const TERRAFORM_REFERENCE_PATTERN =
-  /\b(?:data\.aws_[A-Za-z0-9_]+\.[A-Za-z0-9_]+|aws_[A-Za-z0-9_]+\.[A-Za-z0-9_]+)(?:\.[A-Za-z0-9_]+)*\b/g;
+  /\b(?:data\.(?:aws|kubernetes)_[A-Za-z0-9_]+\.[A-Za-z0-9_-]+|(?:aws|kubernetes)_[A-Za-z0-9_]+\.[A-Za-z0-9_-]+)(?:\.[A-Za-z0-9_-]+)*\b/g;
 const TRAILING_ATTRIBUTE_COMMA_PATTERN = /^\s*[A-Za-z_][A-Za-z0-9_]*\s*=.+,\s*$/;
 const HEREDOC_MARKER_PATTERN = /<<-?\s*([A-Za-z_][A-Za-z0-9_]*)/g;
 const STRING_LITERAL_PATTERN = /^"(?:[^"\\]|\\.)*"$/s;

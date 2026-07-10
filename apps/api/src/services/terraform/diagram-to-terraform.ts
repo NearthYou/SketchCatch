@@ -4,7 +4,7 @@ import type {
   TerraformBlockType
 } from "@sketchcatch/types";
 import {
-  isKubernetesNestedBlock,
+  isGenericTerraformNestedBlock,
   isTerraformNestedBlockAttribute
 } from "./terraform-nested-blocks.js";
 
@@ -200,7 +200,7 @@ function renderNestedBlockEntry(key: string, value: unknown, indentLevel: number
     return renderNestedBlocks(key, value, indentLevel);
   }
 
-  if (isKubernetesNestedBlock(key) && isRecord(value)) {
+  if (isGenericTerraformNestedBlock(key) && isRecord(value)) {
     return renderNestedBlocks(key, value, indentLevel);
   }
 

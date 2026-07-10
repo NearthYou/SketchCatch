@@ -32,6 +32,43 @@ test("assertTerraformArtifactIsSafe accepts the MVP AWS resource subset", () => 
   );
 });
 
+test("assertTerraformArtifactIsSafe accepts approved Kubernetes template resources", () => {
+  assert.doesNotThrow(() =>
+    assertTerraformArtifactIsSafe(
+      `terraform {
+        required_providers {
+          aws = {
+            source = "hashicorp/aws"
+            version = "~> 6.0"
+          }
+          kubernetes = {
+            source = "hashicorp/kubernetes"
+            version = "~> 2.0"
+          }
+        }
+      }
+
+      provider "aws" {
+        region = "ap-northeast-2"
+      }
+
+      provider "kubernetes" {}
+
+      resource "kubernetes_namespace" "app" {
+        metadata {
+          name = "app"
+        }
+      }
+      resource "kubernetes_service" "app" {
+        metadata {
+          name = "app"
+        }
+      }`,
+      { liveProfile: "demo_web_service_with_rds" }
+    )
+  );
+});
+
 test("assertTerraformArtifactIsSafe rejects Terraform module blocks", () => {
   assert.throws(
     () =>

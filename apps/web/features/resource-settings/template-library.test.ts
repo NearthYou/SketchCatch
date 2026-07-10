@@ -34,7 +34,7 @@ test("buildBoardTemplateDiagram selects a shared template for Workspace startup"
     shortId: "workspace"
   });
 
-  assert.equal(diagram?.nodes.length, 7);
+  assert.equal(diagram?.nodes.length, 11);
   assert.ok(diagram?.nodes.every((node) => node.parameters?.resourceName?.startsWith("orders_")));
   assert.equal(buildBoardTemplateDiagram("unknown-template", {
     projectSlug: "orders",

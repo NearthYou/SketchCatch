@@ -54,6 +54,39 @@ export type BuildTemplateDiagramInput = {
   readonly shortId: string;
 };
 
+const LAMBDA_ASSUME_ROLE_POLICY = JSON.stringify({
+  Version: "2012-10-17",
+  Statement: [{
+    Effect: "Allow",
+    Principal: { Service: "lambda.amazonaws.com" },
+    Action: "sts:AssumeRole"
+  }]
+});
+const ECS_ASSUME_ROLE_POLICY = JSON.stringify({
+  Version: "2012-10-17",
+  Statement: [{
+    Effect: "Allow",
+    Principal: { Service: "ecs-tasks.amazonaws.com" },
+    Action: "sts:AssumeRole"
+  }]
+});
+const EKS_ASSUME_ROLE_POLICY = JSON.stringify({
+  Version: "2012-10-17",
+  Statement: [{
+    Effect: "Allow",
+    Principal: { Service: "eks.amazonaws.com" },
+    Action: "sts:AssumeRole"
+  }]
+});
+const EC2_ASSUME_ROLE_POLICY = JSON.stringify({
+  Version: "2012-10-17",
+  Statement: [{
+    Effect: "Allow",
+    Principal: { Service: "ec2.amazonaws.com" },
+    Action: "sts:AssumeRole"
+  }]
+});
+
 export const templateDefinitions = [
   createTemplate({
     id: "static-web-hosting",
@@ -75,11 +108,14 @@ export const templateDefinitions = [
         enabled: true,
         defaultRootObject: "index.html",
         priceClass: "PriceClass_100",
-        origin: [{ domainName: "@ref:bucket.bucket_regional_domain_name", originId: "static-bucket", originAccessControlId: "@ref:oac.id" }]
+        origin: [{ domainName: "@ref:bucket.bucket_regional_domain_name", originId: "static-bucket", originAccessControlId: "@ref:oac.id" }],
+        defaultCacheBehavior: [{ allowedMethods: ["GET", "HEAD"], cachedMethods: ["GET", "HEAD"], targetOriginId: "static-bucket", viewerProtocolPolicy: "redirect-to-https", forwardedValues: { queryString: false, cookies: { forward: "none" } } }],
+        restrictions: [{ geoRestriction: { restrictionType: "none" } }],
+        viewerCertificate: [{ cloudfrontDefaultCertificate: true }]
       }),
       resource("bucket-policy", "S3 Bucket Policy", "aws", "aws_s3_bucket_policy", 360, 360, {
         bucket: "@ref:bucket.id",
-        policy: "static-site-cloudfront-only"
+        policy: JSON.stringify({ Version: "2012-10-17", Statement: [] })
       })
     ],
     relationships: [
@@ -101,8 +137,12 @@ export const templateDefinitions = [
       resource("route", "API Route", "aws", "aws_api_gateway_resource", 300, 180, { pathPart: "items", restApiId: "@ref:api.id" }),
       resource("method", "POST Method", "aws", "aws_api_gateway_method", 500, 180, { httpMethod: "POST", authorization: "NONE", restApiId: "@ref:api.id", resourceId: "@ref:route.id" }),
       resource("integration", "Lambda Integration", "aws", "aws_api_gateway_integration", 700, 180, { type: "AWS_PROXY", httpMethod: "POST", restApiId: "@ref:api.id", resourceId: "@ref:route.id", integrationHttpMethod: "POST", uri: "@ref:handler.invoke_arn" }),
-      resource("handler", "Lambda Function", "aws", "aws_lambda_function", 300, 360, { functionName: "items-handler", handler: "index.handler", runtime: "nodejs24.x", memorySize: 128, timeout: 10 }),
-      resource("role", "Lambda IAM Role", "aws", "aws_iam_role", 80, 360, { name: "items-handler-role" }),
+      resource("deployment", "API Deployment", "aws", "aws_api_gateway_deployment", 900, 180, { restApiId: "@ref:api.id", triggers: { redeployment: "items-v1" } }),
+      resource("stage", "API Stage", "aws", "aws_api_gateway_stage", 1080, 180, { restApiId: "@ref:api.id", deploymentId: "@ref:deployment.id", stageName: "prod" }),
+      resource("handler", "Lambda Function", "aws", "aws_lambda_function", 300, 360, { functionName: "items-handler", packageType: "Image", imageUri: "public.ecr.aws/lambda/nodejs:22", memorySize: 128, timeout: 10, role: "@ref:role.arn" }),
+      resource("role", "Lambda IAM Role", "aws", "aws_iam_role", 80, 360, { name: "items-handler-role", assumeRolePolicy: LAMBDA_ASSUME_ROLE_POLICY }),
+      resource("role-policy", "Lambda DynamoDB Policy", "aws", "aws_iam_role_policy", 80, 500, { name: "items-handler-dynamodb", role: "@ref:role.id", policy: JSON.stringify({ Version: "2012-10-17", Statement: [{ Effect: "Allow", Action: ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem", "dynamodb:Query", "dynamodb:Scan"], Resource: "*" }] }) }),
+      resource("permission", "API Lambda Permission", "aws", "aws_lambda_permission", 900, 360, { statementId: "AllowApiGatewayInvoke", action: "lambda:InvokeFunction", functionName: "@ref:handler.function_name", principal: "apigateway.amazonaws.com", sourceArn: "@ref:api.execution_arn" }),
       resource("table", "DynamoDB Table", "aws", "aws_dynamodb_table", 560, 360, { name: "items", billingMode: "PAY_PER_REQUEST", hashKey: "id", attribute: [{ name: "id", type: "S" }] })
     ],
     relationships: [
@@ -125,7 +165,9 @@ export const templateDefinitions = [
       resource("user-pool", "Cognito User Pool", "aws", "aws_cognito_user_pool", 320, 180, { name: "serverless-users" }),
       resource("user-client", "Cognito User Pool Client", "aws", "aws_cognito_user_pool_client", 520, 180, { name: "serverless-web-client", userPoolId: "@ref:user-pool.id" }),
       resource("api", "API Gateway", "aws", "aws_api_gateway_rest_api", 760, 180, { name: "serverless-api" }),
-      resource("handler", "Lambda Function", "aws", "aws_lambda_function", 360, 380, { functionName: "serverless-handler", handler: "index.handler", runtime: "nodejs24.x", memorySize: 128, timeout: 10 }),
+      resource("handler", "Lambda Function", "aws", "aws_lambda_function", 360, 380, { functionName: "serverless-handler", packageType: "Image", imageUri: "public.ecr.aws/lambda/nodejs:22", memorySize: 128, timeout: 10, role: "@ref:role.arn" }),
+      resource("role", "Lambda IAM Role", "aws", "aws_iam_role", 100, 380, { name: "serverless-handler-role", assumeRolePolicy: LAMBDA_ASSUME_ROLE_POLICY }),
+      resource("role-policy", "Lambda DynamoDB Policy", "aws", "aws_iam_role_policy", 100, 540, { name: "serverless-handler-dynamodb", role: "@ref:role.id", policy: JSON.stringify({ Version: "2012-10-17", Statement: [{ Effect: "Allow", Action: ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem", "dynamodb:Query", "dynamodb:Scan"], Resource: "*" }] }) }),
       resource("table", "DynamoDB Table", "aws", "aws_dynamodb_table", 620, 380, { name: "serverless-items", billingMode: "PAY_PER_REQUEST", hashKey: "id", attribute: [{ name: "id", type: "S" }] })
     ],
     relationships: [
@@ -150,9 +192,12 @@ export const templateDefinitions = [
       resource("internet-gateway", "Internet Gateway", "aws", "aws_internet_gateway", 100, 440, { vpcId: "@ref:vpc.id" }),
       resource("nat-gateway", "NAT Gateway", "aws", "aws_nat_gateway", 360, 440, { allocationId: "@ref:nat-eip.id", subnetId: "@ref:public-subnet.id" }),
       resource("nat-eip", "NAT Elastic IP", "aws", "aws_eip", 620, 440, { domain: "vpc" }),
-      resource("load-balancer", "Application Load Balancer", "aws", "aws_lb", 100, 620, { name: "three-tier-alb", loadBalancerType: "application", subnets: ["@ref:public-subnet.id"] }),
-      resource("application-group", "Auto Scaling Group", "aws", "aws_autoscaling_group", 360, 620, { minSize: 1, maxSize: 2, desiredCapacity: 1, vpcZoneIdentifier: ["@ref:app-subnet.id"] }),
-      resource("database", "RDS Database", "aws", "aws_db_instance", 620, 620, { identifier: "three-tier-db", engine: "postgres", instanceClass: "db.t4g.micro", allocatedStorage: 20, publiclyAccessible: false })
+      resource("web-security-group", "Web Security Group", "aws", "aws_security_group", 80, 620, { name: "three-tier-web", description: "Allow HTTP for the practice ALB", vpcId: "@ref:vpc.id", ingress: [{ fromPort: 80, toPort: 80, protocol: "tcp", cidrBlocks: ["0.0.0.0/0"] }], egress: [{ fromPort: 0, toPort: 0, protocol: "-1", cidrBlocks: ["0.0.0.0/0"] }] }),
+      dataResource("latest-ami", "Latest Amazon Linux AMI", "aws", "aws_ami", 340, 620, { mostRecent: true, owners: ["amazon"], filter: [{ name: "name", values: ["al2023-ami-2023.*-kernel-6.1-arm64"] }, { name: "architecture", values: ["arm64"] }, { name: "virtualization-type", values: ["hvm"] }] }),
+      resource("launch-template", "Application Launch Template", "aws", "aws_launch_template", 560, 620, { namePrefix: "three-tier-app-", imageId: "@ref:latest-ami.id", instanceType: "t4g.micro" }),
+      resource("load-balancer", "Application Load Balancer", "aws", "aws_lb", 100, 780, { name: "three-tier-alb", loadBalancerType: "application", subnets: ["@ref:public-subnet.id"], securityGroups: ["@ref:web-security-group.id"] }),
+      resource("application-group", "Auto Scaling Group", "aws", "aws_autoscaling_group", 360, 780, { minSize: 1, maxSize: 2, desiredCapacity: 1, vpcZoneIdentifier: ["@ref:app-subnet.id"], launchTemplate: { id: "@ref:launch-template.id", version: "$Latest" } }),
+      resource("database", "RDS Database", "aws", "aws_db_instance", 620, 780, { identifier: "three-tier-db", engine: "postgres", instanceClass: "db.t4g.micro", allocatedStorage: 20, publiclyAccessible: false, manageMasterUserPassword: true, username: "appadmin", skipFinalSnapshot: true })
     ],
     relationships: [
       relationship("vpc-public", "vpc", "public-subnet", "contains"),
@@ -174,9 +219,11 @@ export const templateDefinitions = [
       resource("vpc", "VPC", "aws", "aws_vpc", 300, 80, { cidrBlock: "10.30.0.0/16", enableDnsSupport: true, enableDnsHostnames: true }),
       resource("subnet", "Public Subnet", "aws", "aws_subnet", 100, 260, { cidrBlock: "10.30.1.0/24", vpcId: "@ref:vpc.id", availabilityZone: "ap-northeast-2a" }, "resource", "vpc"),
       resource("cluster", "ECS Cluster", "aws", "aws_ecs_cluster", 500, 220, { name: "fargate-cluster" }),
-      resource("execution-role", "ECS Execution Role", "aws", "aws_iam_role", 100, 500, { name: "fargate-execution-role" }),
-      resource("task", "ECS Task Definition", "aws", "aws_ecs_task_definition", 340, 500, { family: "fargate-app", networkMode: "awsvpc", requiresCompatibilities: ["FARGATE"], cpu: 256, memory: 512, containerDefinitions: "public-sample-image" }),
-      resource("service", "ECS Service", "aws", "aws_ecs_service", 600, 500, { name: "fargate-service", cluster: "@ref:cluster.id", taskDefinition: "@ref:task.arn", desiredCount: 1, launchType: "FARGATE" })
+      resource("security-group", "ECS Security Group", "aws", "aws_security_group", 100, 500, { name: "fargate-app", description: "Allow HTTP for the practice service", vpcId: "@ref:vpc.id", ingress: [{ fromPort: 80, toPort: 80, protocol: "tcp", cidrBlocks: ["0.0.0.0/0"] }], egress: [{ fromPort: 0, toPort: 0, protocol: "-1", cidrBlocks: ["0.0.0.0/0"] }] }),
+      resource("execution-role", "ECS Execution Role", "aws", "aws_iam_role", 300, 500, { name: "fargate-execution-role", assumeRolePolicy: ECS_ASSUME_ROLE_POLICY }),
+      resource("execution-policy", "ECS Execution Policy", "aws", "aws_iam_role_policy_attachment", 500, 500, { role: "@ref:execution-role.name", policyArn: "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy" }),
+      resource("task", "ECS Task Definition", "aws", "aws_ecs_task_definition", 340, 660, { family: "fargate-app", networkMode: "awsvpc", requiresCompatibilities: ["FARGATE"], cpu: 256, memory: 512, executionRoleArn: "@ref:execution-role.arn", containerDefinitions: JSON.stringify([{ name: "web", image: "public.ecr.aws/docker/library/nginx:stable", essential: true, portMappings: [{ containerPort: 80, hostPort: 80 }] }]) }),
+      resource("service", "ECS Service", "aws", "aws_ecs_service", 600, 660, { name: "fargate-service", cluster: "@ref:cluster.id", taskDefinition: "@ref:task.arn", desiredCount: 1, launchType: "FARGATE", networkConfiguration: { subnets: ["@ref:subnet.id"], securityGroups: ["@ref:security-group.id"], assignPublicIp: true } })
     ],
     relationships: [
       relationship("vpc-subnet", "vpc", "subnet", "contains"),
@@ -194,8 +241,12 @@ export const templateDefinitions = [
     resources: [
       resource("vpc", "VPC", "aws", "aws_vpc", 300, 80, { cidrBlock: "10.40.0.0/16", enableDnsSupport: true, enableDnsHostnames: true }),
       resource("subnet", "EKS Subnet", "aws", "aws_subnet", 100, 260, { cidrBlock: "10.40.1.0/24", vpcId: "@ref:vpc.id", availabilityZone: "ap-northeast-2a" }, "resource", "vpc"),
-      resource("cluster-role", "EKS Cluster Role", "aws", "aws_iam_role", 520, 180, { name: "eks-cluster-role" }),
-      resource("node-role", "EKS Node Role", "aws", "aws_iam_role", 520, 340, { name: "eks-node-role" }),
+      resource("cluster-role", "EKS Cluster Role", "aws", "aws_iam_role", 520, 180, { name: "eks-cluster-role", assumeRolePolicy: EKS_ASSUME_ROLE_POLICY }),
+      resource("node-role", "EKS Node Role", "aws", "aws_iam_role", 520, 340, { name: "eks-node-role", assumeRolePolicy: EC2_ASSUME_ROLE_POLICY }),
+      resource("cluster-policy", "EKS Cluster Policy", "aws", "aws_iam_role_policy_attachment", 760, 180, { role: "@ref:cluster-role.name", policyArn: "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy" }),
+      resource("node-policy", "EKS Node Policy", "aws", "aws_iam_role_policy_attachment", 760, 340, { role: "@ref:node-role.name", policyArn: "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy" }),
+      resource("node-cni-policy", "EKS CNI Policy", "aws", "aws_iam_role_policy_attachment", 760, 500, { role: "@ref:node-role.name", policyArn: "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy" }),
+      resource("node-ecr-policy", "EKS ECR Policy", "aws", "aws_iam_role_policy_attachment", 760, 660, { role: "@ref:node-role.name", policyArn: "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly" }),
       resource("cluster", "EKS Cluster", "aws", "aws_eks_cluster", 300, 260, { name: "eks-app", roleArn: "@ref:cluster-role.arn", vpcConfig: { subnetIds: ["@ref:subnet.id"] } }),
       resource("node-group", "EKS Managed Node Group", "aws", "aws_eks_node_group", 300, 500, { clusterName: "@ref:cluster.name", nodeRoleArn: "@ref:node-role.arn", subnetIds: ["@ref:subnet.id"], scalingConfig: { desiredSize: 1, minSize: 1, maxSize: 2 } }),
       resource("namespace", "Kubernetes Namespace", "kubernetes", "kubernetes_namespace", 620, 500, { metadata: { name: "sketchcatch" } }),
@@ -358,6 +409,21 @@ function resource(
     position: { x, y },
     kind,
     ...(parentResourceId ? { parentResourceId } : {})
+  };
+}
+
+function dataResource(
+  id: string,
+  label: string,
+  provider: TemplateProvider,
+  terraformResourceType: string,
+  x: number,
+  y: number,
+  values: Record<string, unknown>
+): TemplateResourceDefinition {
+  return {
+    ...resource(id, label, provider, terraformResourceType, x, y, values),
+    terraformBlockType: "data"
   };
 }
 

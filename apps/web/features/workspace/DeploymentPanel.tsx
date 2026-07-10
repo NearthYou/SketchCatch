@@ -56,6 +56,7 @@ import {
   getGitCicdHandoffStatusLabel,
   getDeploymentLogMessageTokens,
   getDeploymentLogTone,
+  getRecommendedDeploymentLiveProfile,
   hasCompleteDeploymentApprovalSnapshot,
   shouldAutoRefreshDeployment,
   shouldAutoRefreshGitCicdHandoff,
@@ -144,7 +145,7 @@ export function DeploymentPanel({
   const [terraformOutputs, setTerraformOutputs] = useState<TerraformOutput[]>([]);
   const [selectedAwsConnectionId, setSelectedAwsConnectionId] = useState("");
   const [selectedLiveProfile, setSelectedLiveProfile] =
-    useState<DeploymentLiveProfile>("practice");
+    useState<DeploymentLiveProfile>(() => getRecommendedDeploymentLiveProfile(diagramJson));
   const [trafficSimulatorState, setTrafficSimulatorState] =
     useState<RequestState>("idle");
   const [trafficSimulatorSummary, setTrafficSimulatorSummary] = useState("");
@@ -192,7 +193,7 @@ export function DeploymentPanel({
       },
       {
         detail: "Demo web service plus RDS",
-        label: "Demo web service + RDS",
+        label: "AWS Template deployment",
         value: "demo_web_service_with_rds"
       }
     ],
