@@ -15,7 +15,7 @@
 | M0 | 설계·구현 계획 문서 | 문서 placeholder scan, `git diff --check` | `Docs: AWS Template 구현 설계 및 계획 문서 추가` | 완료 |
 | M1 | shared `TemplateDefinition` 계약과 여섯 Template registry | shared type test, deterministic DiagramJson test, types typecheck | `Feat: AWS Template 공통 정의 추가` | 완료 |
 | M2 | 누락 ResourceDefinition과 Terraform provider/nested block 지원 | resource coverage, preview, sync, artifact safety tests | `Feat: AWS Template 리소스 및 Terraform 지원 추가` | 완료 |
-| M3 | Template 카탈로그와 Workspace 적용 흐름 | web template/workspace tests, lint, typecheck | `Feat: AWS Template 카탈로그 연결` | 진행 전 |
+| M3 | Template 카탈로그와 Workspace 적용 흐름 | web template/workspace tests, lint, typecheck | `Feat: AWS Template 카탈로그 연결` | 완료 |
 | M4 | 여섯 Template Terraform Preview와 배포 시간 표시 | template preview tests, deployment duration tests, build | `Feat: AWS Template 배포 흐름 연결` | 진행 전 |
 | M5 | Chrome 실제 apply/destroy와 검증 기록 | 여섯 패턴 live QA, console check, cleanup 확인 | `Test: AWS Template 실제 배포 검증 기록` | 진행 전 |
 | M6 | PR 제출 | full checks, review-work, PR body and linked issue | `gh-create-pr` workflow | 진행 전 |
@@ -50,7 +50,11 @@
 
 ### M3
 
-- 시작 전
+- 완료 커밋: `Feat: AWS Template 카탈로그 연결`
+- 기존 수동 3개 fixture를 제거하고 여섯 `TemplateDefinition`을 Template library의 단일 원천으로 연결했다.
+- 템플릿 페이지에서 선택한 `templateId`를 Workspace 시작 URL로 전달하고, project slug 기반 이름으로 DiagramJson을 생성한다.
+- 기존 덮어쓰기 백업 경계와 Workspace 템플릿 모달 흐름은 유지했다.
+- template library, templates page, web typecheck를 통과했다.
 
 ### M4
 
