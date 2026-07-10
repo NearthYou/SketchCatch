@@ -190,7 +190,7 @@ export function convertArchitectureJsonToDiagramJson(architectureJson: Architect
   );
   const nodes = applyDiagramLayerOrder(
     fitAreaNodesToChildren(
-      resolveSiblingNodeCollisions(fitAreaNodesToChildren(applyReadableTopologyLayout(preparedNodes)))
+      resolveSiblingNodeCollisions(fitAreaNodesToChildren(preparedNodes))
     )
   );
   const nodeById = new Map(nodes.map((node) => [node.id, node]));

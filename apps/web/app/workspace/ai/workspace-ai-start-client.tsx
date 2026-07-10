@@ -916,7 +916,12 @@ function MiniDiagramCanvas({
           <g className="workspaceAiMiniDiagramEdgeGroup" key={edge.id}>
             <path
               className="workspaceAiMiniDiagramEdge"
-              d={createMiniDiagramEdgePath(source, target)}
+              d={createMiniDiagramEdgePath(
+                source,
+                target,
+                edge.sourceHandleId,
+                edge.targetHandleId
+              )}
             />
             {edge.label ? (
               <text
@@ -1086,15 +1091,63 @@ function createMiniDiagramNode(
   };
 }
 
-function createMiniDiagramEdgePath(source: MiniDiagramNode, target: MiniDiagramNode): string {
-  const midX = (source.centerX + target.centerX) / 2;
+function createMiniDiagramEdgePath(
+  source: MiniDiagramNode,
+  target: MiniDiagramNode,
+  sourceHandleId: string | undefined,
+  targetHandleId: string | undefined
+): string {
+  const sourcePoint = getMiniDiagramHandlePoint(source, sourceHandleId, target);
+  const targetPoint = getMiniDiagramHandlePoint(target, targetHandleId, source);
+
+  if (sourcePoint.x === targetPoint.x || sourcePoint.y === targetPoint.y) {
+    return `M ${sourcePoint.x} ${sourcePoint.y} L ${targetPoint.x} ${targetPoint.y}`;
+  }
+
+  if (isMiniDiagramVerticalHandle(sourceHandleId) && isMiniDiagramVerticalHandle(targetHandleId)) {
+    const midY = (sourcePoint.y + targetPoint.y) / 2;
+
+    return [
+      `M ${sourcePoint.x} ${sourcePoint.y}`,
+      `L ${sourcePoint.x} ${midY}`,
+      `L ${targetPoint.x} ${midY}`,
+      `L ${targetPoint.x} ${targetPoint.y}`
+    ].join(" ");
+  }
+
+  const midX = (sourcePoint.x + targetPoint.x) / 2;
 
   return [
-    `M ${source.centerX} ${source.centerY}`,
-    `C ${midX} ${source.centerY}`,
-    `${midX} ${target.centerY}`,
-    `${target.centerX} ${target.centerY}`
+    `M ${sourcePoint.x} ${sourcePoint.y}`,
+    `L ${midX} ${sourcePoint.y}`,
+    `L ${midX} ${targetPoint.y}`,
+    `L ${targetPoint.x} ${targetPoint.y}`
   ].join(" ");
+}
+
+function getMiniDiagramHandlePoint(
+  node: MiniDiagramNode,
+  handleId: string | undefined,
+  otherNode: MiniDiagramNode
+): { readonly x: number; readonly y: number } {
+  switch (handleId) {
+    case "handle-left":
+      return { x: node.x, y: node.centerY };
+    case "handle-right":
+      return { x: node.x + node.width, y: node.centerY };
+    case "handle-top":
+      return { x: node.centerX, y: node.y };
+    case "handle-bottom":
+      return { x: node.centerX, y: node.y + node.height };
+    default:
+      return Math.abs(otherNode.centerX - node.centerX) >= Math.abs(otherNode.centerY - node.centerY)
+        ? { x: otherNode.centerX >= node.centerX ? node.x + node.width : node.x, y: node.centerY }
+        : { x: node.centerX, y: otherNode.centerY >= node.centerY ? node.y + node.height : node.y };
+  }
+}
+
+function isMiniDiagramVerticalHandle(handleId: string | undefined): boolean {
+  return handleId === "handle-top" || handleId === "handle-bottom";
 }
 
 function getMiniDiagramResourceIconSize(node: DiagramNode): number {

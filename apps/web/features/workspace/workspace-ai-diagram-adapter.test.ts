@@ -10,6 +10,30 @@ import {
 } from "./workspace-ai-diagram-adapter";
 import { isAreaNode } from "../diagram-editor/area-nodes";
 
+test("convertArchitectureJsonToDiagramJson keeps non-overlapping authored positions as the default layout", () => {
+  const architectureJson: ArchitectureJson = {
+    nodes: [
+      { id: "source", type: "S3", label: "Source", positionX: 713, positionY: 119, config: {} },
+      { id: "target", type: "CLOUDFRONT", label: "Target", positionX: 127, positionY: 887, config: {} }
+    ],
+    edges: [{ id: "source-to-target", sourceId: "source", targetId: "target", label: "origin" }]
+  };
+
+  const diagramJson = convertArchitectureJsonToDiagramJson(architectureJson);
+
+  assert.deepEqual(
+    diagramJson.nodes.map((node) => ({ id: node.id, position: node.position })),
+    [
+      { id: "source", position: { x: 713, y: 119 } },
+      { id: "target", position: { x: 127, y: 887 } }
+    ]
+  );
+  assert.deepEqual(
+    diagramJson.edges.map((edge) => ({ id: edge.id, sourceNodeId: edge.sourceNodeId, targetNodeId: edge.targetNodeId })),
+    [{ id: "source-to-target", sourceNodeId: "source", targetNodeId: "target" }]
+  );
+});
+
 test("workspace AI diagram adapter uses shared resource definitions for Terraform mapping", () => {
   const source = readFileSync(
     fileURLToPath(new URL("workspace-ai-diagram-adapter.ts", import.meta.url)),
@@ -1350,7 +1374,7 @@ test("convertArchitectureJsonToDiagramJson maps operations and permission draft 
   );
 });
 
-test("convertArchitectureJsonToDiagramJson arranges serverless resources into readable lanes", () => {
+test("convertArchitectureJsonToDiagramJson preserves authored serverless lanes while correcting collisions", () => {
   const architectureJson: ArchitectureJson = {
     nodes: [
       {
@@ -1478,22 +1502,22 @@ test("convertArchitectureJsonToDiagramJson arranges serverless resources into re
   assert.ok(errorAlarm);
   assert.ok(cdn);
   assert.ok(webAssets);
-  assert.ok(apiGateway.position.x < permission.position.x);
-  assert.ok(permission.position.x < lambdaFunction.position.x);
-  assert.ok(lambdaFunction.position.x < uploadBucket.position.x);
-  assert.ok(lambdaFunction.position.x < logGroup.position.x);
-  assert.equal(uploadBucket.position.x, logGroup.position.x);
-  assert.ok(executionRole.position.y < lambdaFunction.position.y);
-  assert.ok(executionPolicy.position.y < lambdaFunction.position.y);
-  assert.ok(errorAlarm.position.y > lambdaFunction.position.y);
-  assert.ok(cdn.position.y < apiGateway.position.y);
-  assert.ok(webAssets.position.y < uploadBucket.position.y);
+  assert.deepEqual(apiGateway.position, { x: 40, y: 260 });
+  assert.deepEqual(permission.position, { x: 300, y: 500 });
+  assert.deepEqual(lambdaFunction.position, { x: 1100, y: 500 });
+  assert.deepEqual(uploadBucket.position, { x: 1420, y: 400 });
+  assert.deepEqual(logGroup.position, { x: 1740, y: 300 });
+  assert.deepEqual(executionRole.position, { x: 300, y: 120 });
+  assert.deepEqual(executionPolicy.position, { x: 1200, y: 120 });
+  assert.deepEqual(errorAlarm.position, { x: 840, y: 500 });
+  assert.deepEqual(cdn.position, { x: 650, y: 180 });
+  assert.deepEqual(webAssets.position, { x: 980, y: 200 });
   assertNoSiblingNodeOverlap(diagramJson);
   assertNoEdgeRouteOverlap(diagramJson);
   assertNoEdgeLineOverlap(diagramJson);
 });
 
-test("convertArchitectureJsonToDiagramJson keeps mixed cloud area drafts compact and routable", () => {
+test("convertArchitectureJsonToDiagramJson keeps mixed cloud authored layout bounded and routable", () => {
   const architectureJson: ArchitectureJson = {
     nodes: [
       {
@@ -1665,7 +1689,7 @@ test("convertArchitectureJsonToDiagramJson keeps mixed cloud area drafts compact
   const diagramJson = convertArchitectureJsonToDiagramJson(architectureJson);
   const bounds = getDiagramBounds(diagramJson.nodes);
 
-  assert.ok(bounds.width <= 1320, `Expected compact width, received ${bounds.width}`);
+  assert.ok(bounds.width <= 1900, `Expected bounded width, received ${bounds.width}`);
   assert.ok(bounds.height <= 1340, `Expected compact height, received ${bounds.height}`);
   assertNoSiblingNodeOverlap(diagramJson);
   assertNoNonAncestorAreaResourceOverlap(diagramJson);
