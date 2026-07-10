@@ -210,10 +210,10 @@ Short English-only working log for the current agent context. Older records are 
 - Risk:
   - A completely empty Redis still needs one live Q verification cycle; indexed document IDs are cached for one hour after that verified cycle.
 
-### 2026-07-10 - Gate AI project creation before authenticated persistence
+### 2026-07-10 - Harden authenticated AI project starts and natural-language routing
 - Completed:
-  - Wrapped `/workspace/new` and `/workspace/ai` with the existing `WorkspaceAuthGate` used by the persisted workspace routes.
+  - Gated `/workspace/new` and `/workspace/ai`, and classified Korean/English web-page creation and deployment phrases as Architecture Draft requests.
 - Verification:
-  - The focused auth-gate regression test, web lint, web typecheck, full build, and harness check passed.
+  - Focused auth/routing tests, a live Amazon Q clarification response, lint, typecheck, full build, and harness checks passed.
 - Risk:
   - The broader web test suite still has three unrelated pre-existing landing/start-page style assertion failures.
