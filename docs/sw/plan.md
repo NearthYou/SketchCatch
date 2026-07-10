@@ -142,6 +142,7 @@
 - API는 job id를 반환하고 ECS RunTask worker가 실행 결과를 기록한다.
 - Terraform 실행 상태가 기존 UI/API 계약으로 조회된다.
 - worker task 실패 후에도 stale lease recovery 대상이 된다.
+- worker task definition, execution/task role, security group이 API/web runtime과 분리된다.
 - cost guardrail 테스트가 통과한다.
 
 ## Phase 6. RunTask recovery/observability/smoke 강화
@@ -197,6 +198,7 @@
 범위:
 
 - ALB `/api`, `/api/*`, `/health`, `/health/db`는 API로, 기본 `/*`는 web으로 전달한다.
+- 최초 적용은 legacy target weight 100의 warmup 후 API/web target health를 확인하고 split weight로 전환한다.
 - API와 web을 독립 ECS task definition/service/target group으로 분리한다.
 - nginx container를 ECS steady state와 ECS deploy workflow에서 제거한다.
 - EC2/SSM rollback이 유지되는 동안 nginx image/config/ECR/log group은 legacy 자산으로 보존한다.

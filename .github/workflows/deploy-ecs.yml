@@ -29,9 +29,13 @@ env:
   ECS_WEB_CONTAINER_NAME: ${{ vars.ECS_WEB_CONTAINER_NAME }}
 
 jobs:
-  deploy-ecs:
+  build-and-push:
     runs-on: ubuntu-latest
     environment: production
+    outputs:
+      api-image: ${{ steps.images.outputs.api-image }}
+      image-tag: ${{ steps.images.outputs.image-tag }}
+      web-image: ${{ steps.images.outputs.web-image }}
 
     steps:
       - name: Checkout
@@ -120,6 +124,18 @@ jobs:
             echo "web-image=${web_image}"
           } >> "${GITHUB_OUTPUT}"
 
+  deploy-api:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
       - name: Download current API task definition
         shell: bash
         run: |
@@ -129,15 +145,6 @@ jobs:
             --task-definition "${ECS_API_TASK_DEFINITION_FAMILY}" \
             --query taskDefinition \
             --output json > .release/ecs-api-task-definition.json
-
-      - name: Download current web task definition
-        shell: bash
-        run: |
-          set -euo pipefail
-          aws ecs describe-task-definition \
-            --task-definition "${ECS_WEB_TASK_DEFINITION_FAMILY}" \
-            --query taskDefinition \
-            --output json > .release/ecs-web-task-definition.json
 
       - name: Validate ECS API runtime config
         shell: bash
@@ -181,15 +188,7 @@ jobs:
         with:
           task-definition: .release/ecs-api-task-definition.json
           container-name: ${{ env.ECS_API_CONTAINER_NAME }}
-          image: ${{ steps.images.outputs.api-image }}
-
-      - name: Render web image
-        id: render-web
-        uses: aws-actions/amazon-ecs-render-task-definition@v1
-        with:
-          task-definition: .release/ecs-web-task-definition.json
-          container-name: ${{ env.ECS_WEB_CONTAINER_NAME }}
-          image: ${{ steps.images.outputs.web-image }}
+          image: ${{ needs.build-and-push.outputs.api-image }}
 
       - name: Deploy API ECS service
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2
@@ -199,6 +198,36 @@ jobs:
           service: ${{ env.ECS_API_SERVICE_NAME }}
           wait-for-service-stability: true
 
+  deploy-web:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Download current web task definition
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .release
+          aws ecs describe-task-definition \
+            --task-definition "${ECS_WEB_TASK_DEFINITION_FAMILY}" \
+            --query taskDefinition \
+            --output json > .release/ecs-web-task-definition.json
+
+      - name: Render web image
+        id: render-web
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: .release/ecs-web-task-definition.json
+          container-name: ${{ env.ECS_WEB_CONTAINER_NAME }}
+          image: ${{ needs.build-and-push.outputs.web-image }}
+
       - name: Deploy web ECS service
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2
         with:
@@ -206,3 +235,14 @@ jobs:
           cluster: ${{ env.ECS_CLUSTER_NAME }}
           service: ${{ env.ECS_WEB_SERVICE_NAME }}
           wait-for-service-stability: true
+
+  deployment-summary:
+    needs:
+      - build-and-push
+      - deploy-api
+      - deploy-web
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Confirm parallel deployment
+        run: echo "API and web services are stable on image tag ${{ needs.build-and-push.outputs.image-tag }}."

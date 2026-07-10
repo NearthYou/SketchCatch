@@ -31,10 +31,13 @@
           "status": "state-audit-required",
           "addresses": [
             "aws_ecs_cluster.main",
+            "aws_ecs_service.app",
             "aws_ecs_service.api",
             "aws_ecs_service.web",
+            "aws_ecs_task_definition.app",
             "aws_ecs_task_definition.api",
-            "aws_ecs_task_definition.web"
+            "aws_ecs_task_definition.web",
+            "aws_ecs_task_definition.worker"
           ]
         },
         {
@@ -42,6 +45,7 @@
           "status": "state-audit-required",
           "addresses": [
             "aws_lb.ecs",
+            "aws_lb_target_group.ecs",
             "aws_lb_target_group.api",
             "aws_lb_target_group.web",
             "aws_lb_listener.http_forward[0]",
@@ -76,7 +80,12 @@
             "aws_iam_role.ecs_execution",
             "aws_iam_role_policy.ecs_execution",
             "aws_iam_role.ecs_task",
-            "aws_iam_role_policy.ecs_task"
+            "aws_iam_role_policy.ecs_task",
+            "aws_iam_role.ecs_web_task",
+            "aws_iam_role.ecs_worker_execution",
+            "aws_iam_role_policy.ecs_worker_execution",
+            "aws_iam_role.ecs_worker_task",
+            "aws_iam_role_policy.ecs_worker_task"
           ]
         },
         {
@@ -102,13 +111,18 @@
           "addresses": [
             "aws_security_group.ecs_alb",
             "aws_security_group.ecs_service",
+            "aws_security_group.ecs_web",
+            "aws_security_group.ecs_worker",
             "aws_vpc_security_group_ingress_rule.ecs_alb_http",
             "aws_vpc_security_group_ingress_rule.ecs_alb_https",
             "aws_vpc_security_group_egress_rule.ecs_alb_to_api",
             "aws_vpc_security_group_egress_rule.ecs_alb_to_web",
             "aws_vpc_security_group_ingress_rule.ecs_service_api_from_alb",
-            "aws_vpc_security_group_ingress_rule.ecs_service_web_from_alb",
-            "aws_vpc_security_group_egress_rule.ecs_service_all"
+            "aws_vpc_security_group_ingress_rule.ecs_web_from_alb",
+            "aws_vpc_security_group_egress_rule.ecs_service_all",
+            "aws_vpc_security_group_egress_rule.ecs_web_all",
+            "aws_vpc_security_group_egress_rule.ecs_worker_all",
+            "aws_vpc_security_group_ingress_rule.rds_from_ecs_worker"
           ]
         },
         {
