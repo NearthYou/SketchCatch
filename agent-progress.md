@@ -184,19 +184,19 @@ Short English-only working log for the current agent context. Older records are 
   - Uncached Q Business latency remains externally variable (observed roughly 11-47 seconds), but only one Q request is sent and the 120-second transport budget prevents the prior 60-second cutoff.
   - Without `REDIS_URL`, the citation cache is process-local; configured Runtime Cache persistence is required to keep restarts fast.
 
-### 2026-07-10 - Recover Q citation gaps and persist verification cache
-- Goal: Eliminate repeat `503 service_unavailable` responses and long Q revalidation after API restarts.
+### 2026-07-10 - Recover Q citation gaps and stabilize Architecture Draft latency
+- Goal: Eliminate repeat `503 service_unavailable` responses, restart revalidation, and the web proxy's cold-Q timeout without introducing generated fallbacks.
 - Completed:
-  - Added Q-only recovery for omitted batch citations and transient batch failures; missing patterns are reverified individually with bounded concurrency.
-  - Persisted successful `applicationId + patternId + documentId` verification in Runtime Cache and wired the AI route's shared cache into the Architecture Draft provider.
-  - Changed persistent cache reads to sequential access to avoid Redis initial-connection races that previously degraded into empty in-memory fallback state.
-  - Added local ignored `.env.local` configuration for the running Redis development container.
+  - Added bounded retries for transient batch and exact-pattern Q failures while preserving citation validation and deterministic materialization.
+  - Persisted versioned successful pattern verification for seven days, started all-six-pattern cache warm-up during AI route initialization, and retained request coalescing.
+  - Added a dedicated Next Route Handler with a 115-second backend request budget so cold Q responses are not cut off by the generic rewrite path.
+  - Preserved backend status and JSON bodies; Q failures still surface explicitly and never become template previews.
 - Verification:
-  - Q provider tests (13), Q quality tests (2), Architecture Draft tests (35), the HTTP 503 route test, lint, typecheck, build, and harness checks passed.
-  - A clean API process read six persisted pattern verifications and returned an EC2/CI/CD preview in 7.2 seconds without Runtime Cache degradation.
-  - Fresh-process HTTP checks returned Q-backed previews for serverless in 3.9 seconds and Fargate in 3.6 seconds.
+  - Q/Architecture Draft tests (54), web proxy tests (2), lint, typecheck, build, and harness checks passed.
+  - Live web-path checks returned four distinct Q-backed serverless, Fargate, EC2/ASG, and GitHub CI/CD previews in 4.0-6.4 seconds.
+  - Exact topology checks returned three EC2 instances, one ASG, one ALB, and every requested Code* resource for the CI/CD case.
 - Risk:
-  - A completely empty Redis still needs one live Q verification cycle; indexed document IDs are cached for one hour after that verified cycle.
+  - Completely cold Q retrieval remains externally variable, but initialization warm-up overlaps idle time and the dedicated route preserves up to 115 seconds for the exact Q response.
 
 ### 2026-07-10 - Verify and repair Q-backed architecture materialization
 - Completed:
