@@ -2,6 +2,8 @@ import {
   buildTemplateDiagramJson,
   templateDefinitions
 } from "../../../../packages/types/src/template-definitions";
+import { createDiagramNodeFromPayload } from "../diagram-editor/diagram-utils";
+import { resourceCatalog } from "./catalog";
 type DiagramJson = ReturnType<typeof buildTemplateDiagramJson>;
 
 export const TEMPLATE_OVERWRITE_BACKUP_STORAGE_KEY = "sketchcatch.templateOverwriteBackups";
@@ -31,10 +33,12 @@ const boardTemplates: readonly BoardTemplate[] = templateDefinitions.map((defini
   title: definition.title,
   description: definition.description,
   tags: definition.tags,
-  diagramJson: buildTemplateDiagramJson(definition.id, {
-    projectSlug: "sketchcatch",
-    shortId: definition.id
-  })
+  diagramJson: applyResourceCatalogPresentation(
+    buildTemplateDiagramJson(definition.id, {
+      projectSlug: "sketchcatch",
+      shortId: definition.id
+    })
+  )
 }));
 
 // 페이지와 보드 모달이 같은 템플릿 목록을 쓰도록 한 곳에서 목록을 제공합니다.
@@ -51,7 +55,7 @@ export function buildBoardTemplateDiagram(
 ): DiagramJson | undefined {
   const definition = templateDefinitions.find((candidate) => candidate.id === templateId);
 
-  return definition ? buildTemplateDiagramJson(definition.id, input) : undefined;
+  return definition ? applyResourceCatalogPresentation(buildTemplateDiagramJson(definition.id, input)) : undefined;
 }
 
 // 템플릿으로 덮어쓰기 직전에 현재 보드를 백업하고, 적용할 템플릿 보드를 돌려줍니다.
@@ -113,6 +117,46 @@ function cloneDiagramJson(diagramJson: DiagramJson): DiagramJson {
     })),
     variables: diagramJson.variables?.map((variable) => ({ ...variable })),
     viewport: { ...diagramJson.viewport }
+  };
+}
+
+function applyResourceCatalogPresentation(diagramJson: DiagramJson): DiagramJson {
+  return {
+    ...diagramJson,
+    nodes: diagramJson.nodes.map((node) => {
+      const resourceItem = resourceCatalog.find((item) => item.nodeDefaults.type === node.type);
+
+      if (!resourceItem) {
+        throw new Error(`Missing Resource catalog item for Template node: ${node.type}`);
+      }
+
+      const catalogNode = createDiagramNodeFromPayload(
+        { item: resourceItem, source: "resource-settings-panel" },
+        node.position,
+        node.zIndex
+      );
+      const diagramLabel = catalogNode.parameters?.resourceName ?? catalogNode.label;
+
+      return {
+        ...catalogNode,
+        id: node.id,
+        locked: node.locked,
+        metadata: node.metadata,
+        parameters: node.parameters
+          ? {
+              ...catalogNode.parameters,
+              ...node.parameters,
+              values: {
+                ...catalogNode.parameters?.values,
+                ...node.parameters.values,
+                diagramLabel
+              }
+            }
+          : catalogNode.parameters,
+        position: node.position,
+        zIndex: node.zIndex
+      };
+    })
   };
 }
 

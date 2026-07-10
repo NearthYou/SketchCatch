@@ -18,8 +18,8 @@
 | M3 | Template 카탈로그와 Workspace 적용 흐름 | web template/workspace tests, lint, typecheck | `Feat: AWS Template 카탈로그 연결` | 완료 |
 | M4 | 여섯 Template Terraform Preview와 배포 시간 표시 | template preview tests, deployment duration tests, build | `Feat: AWS Template 배포 흐름 연결` | 완료 |
 | M5a | AWS 실행 Role 등록과 verified connection 복구 | Chrome AWS 콘솔 Role 확인, STS AssumeRole, SketchCatch 연결 검증 | `Test: AWS Template 배포 연결 검증` | 완료 |
-| M5b | Template Board를 기존 Resource 카탈로그 노드로 전환 | 6개 Template icon/label/style, fallback 0개, Chrome 시각 QA | `Fix: AWS Template 카탈로그 Resource 노드 재사용` | 다음 작업 |
-| M5c | Chrome 실제 apply/destroy와 검증 기록 | 여섯 패턴 live QA, console check, cleanup 확인 | `Test: AWS Template 실제 배포 검증 기록` | M5b 후 진행 |
+| M5b | Template Board를 기존 Resource 카탈로그 노드로 전환 | 6개 Template icon/label/style, fallback 0개, Chrome 시각 QA | `Fix: AWS Template 카탈로그 Resource 노드 재사용` | 완료 |
+| M5c | Chrome 실제 apply/destroy와 검증 기록 | 여섯 패턴 live QA, console check, cleanup 확인 | `Test: AWS Template 실제 배포 검증 기록` | 진행 전 |
 | M6 | PR 제출 | full checks, review-work, PR body and linked issue | `gh-create-pr` workflow | 진행 전 |
 
 ## 커밋 규칙
@@ -79,11 +79,17 @@
 
 ### M5b
 
-- 다음 작업으로 시작한다. 사용자의 명시적 요청에 따라 Role 등록보다 먼저 코드를 수정하지 않았다.
-- 현재 Template Board가 `TemplateDefinition`에서 bare `DiagramNode`를 직접 만들어 일반 `AWS` fallback tile과 Terraform logical name을 노출하는 결함을 수정한다.
-- 여섯 Template 모두 기존 Resource 카탈로그의 `ResourceDefinition`/`ResourceItem` 생성 경로를 재사용한다.
+- 완료: 2026-07-11 KST
+- 사용자의 순서에 따라 M5a Role 등록과 STS 검증을 먼저 끝낸 뒤 코드를 수정했다.
+- `TemplateDefinition`의 Terraform identity는 유지하면서, Template 공개 경계에서 기존 Resource 카탈로그와 `createDiagramNodeFromPayload` 생성 경로를 재사용하도록 수정했다.
+- 여섯 Template의 47개 고유 Terraform resource type은 모두 기존 카탈로그에 존재했으며, 새 fallback이나 임시 Resource를 추가하지 않았다.
+- catalog icon, label, size, style, parameter default와 drag/drop 기본 표시 이름을 적용하고 Terraform logical name은 내부 `resourceName`으로 분리했다. Template이 명시한 parameter 값은 catalog default보다 우선한다.
+- VPC, Subnet, Security Group, Auto Scaling Group 같은 area Resource도 `diagramLabel`을 우선 표시하도록 보강했다.
 - Architecture Board에서 Raw Terraform Detail 노드는 허용하지 않는다. 필요한 세부 resource type이 카탈로그에 없으면 먼저 정식 카탈로그 Resource로 추가한다.
-- 완료 증거는 6개 Template의 fallback tile 0개, `*_workspace` 가시 label 0개, 카탈로그 icon/label/size/style 일치와 Chrome 시각 QA다.
+- TDD에서 bare S3 icon과 Workspace 시작 경로가 실패하는 Red, area Resource가 `*_workspace`를 표시하는 Red를 각각 확인한 뒤 Green으로 전환했다.
+- 관련 33 tests, Web typecheck, lint, `git diff --check`를 통과했다.
+- Chrome에서 양쪽 패널을 접고 여섯 Template을 모두 열어 노드 수와 icon 수가 각각 `6/6`, `12/12`, `16/16`, `30/30`, `18/18`, `19/19`임을 확인했다. 모든 보드에서 일반 `AWS` fallback tile 0개, `*_workspace` 가시 label 0개, 빈 label 0개, viewport 밖으로 잘린 node 0개였다.
+- 최종 소스와 여섯 fresh capture를 대상으로 한 독립 설계·기능 리뷰와 시각 정밀 리뷰가 모두 `PASS`했다.
 
 ### M5c
 

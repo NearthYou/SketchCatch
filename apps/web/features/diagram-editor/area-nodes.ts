@@ -64,6 +64,12 @@ export function getAreaNodeLabel(node: DiagramNode): string {
     return diagramAreaLabel;
   }
 
+  const diagramLabel = readDiagramTextValue(node, "diagramLabel");
+
+  if (diagramLabel) {
+    return diagramLabel;
+  }
+
   if (isResourceAreaNode(node)) {
     const resourceName = node.parameters?.resourceName?.trim();
 

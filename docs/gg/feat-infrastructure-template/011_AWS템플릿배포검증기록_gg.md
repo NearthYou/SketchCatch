@@ -6,7 +6,7 @@
 
 ## 한 줄 결론
 
-여섯 AWS Template의 Terraform 정적 검증과 AWS Role 연결 검증은 완료했다. Chrome 실제 apply/destroy와 클릭부터 terminal state까지의 시간 측정은 M5b의 Resource 노드 표현 결함을 수정한 뒤 이 문서에 관찰값으로 기록한다.
+여섯 AWS Template의 Terraform 정적 검증, AWS Role 연결 검증, Resource 카탈로그 노드 표현 검증은 완료했다. 다음 단계는 실제 apply용 최소권한 정책을 검증한 뒤 Chrome에서 apply/destroy와 클릭부터 terminal state까지의 시간을 측정하는 것이다.
 
 ## 검증 원칙
 
@@ -24,7 +24,7 @@
 | 항목 | 값 |
 | --- | --- |
 | 검증일 | 2026-07-10~2026-07-11 KST |
-| 애플리케이션 | Web `http://127.0.0.1:3010`, API `http://127.0.0.1:4010` |
+| 애플리케이션 | M5b Web `http://127.0.0.1:3001`; M5c Web/API 주소는 실행 시 추가 기록 |
 | 브라우저 | 사용자의 Chrome extension session |
 | Terraform provider | AWS `~> 5.0`, Archive, Kubernetes |
 | 배포 연결 | verified AWS connection, `AssumeRole`과 assumed identity 확인 완료, 세부 계정 정보 비기록 |
@@ -35,6 +35,7 @@
 | --- | --- | --- |
 | Template registry | 통과 | 정확히 6개 Template, deterministic DiagramJson |
 | AWS Role connection | 통과 | Chrome에서 Role 복구, 실제 `sts:AssumeRole` 및 `sts:GetCallerIdentity` exit 0 |
+| Architecture Board Resource 표현 | 통과 | 6개 Chrome 캡처, catalog icon·parameter default 일치, fallback·raw label·빈 label·clipping 0개 |
 | Web Template/Workspace | 통과 | catalog, template library, Terraform panel 관련 41 tests |
 | API Terraform 경로 | 통과 | resource coverage, preview, diagnostics, workspace 관련 75 tests |
 | Terraform CLI | 통과 | 6개 Template 각각 `terraform init`과 `terraform validate`, exit code 0 |
@@ -52,6 +53,21 @@
 | EKS Container App | exit 0 | exit 0 | 29.946초 |
 
 모든 `terraform validate` 출력은 `Success! The configuration is valid.`였다. 이 시간은 provider 초기화와 정적 검증 시간이며, 아래 Chrome 실제 배포 시간과 구분한다.
+
+### Architecture Board Resource 표현 결과
+
+| Template | 보드 노드 | catalog icon | 일반 `AWS` fallback | `*_workspace` 가시 label |
+| --- | ---: | ---: | ---: | ---: |
+| Static Web Hosting | 6 | 6 | 0 | 0 |
+| Minimal Serverless API | 12 | 12 | 0 | 0 |
+| Full Serverless Web App | 16 | 16 | 0 | 0 |
+| 3-Tier Web App | 30 | 30 | 0 | 0 |
+| ECS Fargate Container App | 18 | 18 | 0 | 0 |
+| EKS Container App | 19 | 19 | 0 | 0 |
+
+모든 페이지는 마지막 M5b 코드 수정 뒤 Chrome에서 양쪽 패널을 접고 새로 열어 `Fit view`를 적용해 캡처했다. 노드별 가시 label 존재와 viewport clipping 0개도 DOM 경계에서 확인했다. 오른쪽 Resources/configurator의 Terraform address는 내부 배포 식별 정보이며, 이 표의 Architecture Board node label 판정에는 포함하지 않는다.
+
+최종 캡처 여섯 장과 카탈로그 합성 소스를 각각 검토한 독립 설계·기능 리뷰와 시각 정밀 리뷰는 모두 `PASS`였고 blocking finding은 없었다.
 
 ## Chrome 실제 배포 결과
 

@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { DiagramJson } from "../../../../packages/types/src";
 import { TEMPLATE_IDS, templateDefinitions } from "../../../../packages/types/src";
+import { buildTemplateDiagramJson } from "../../../../packages/types/src/template-definitions";
+import { createDiagramNodeFromPayload } from "../diagram-editor/diagram-utils";
+import { resourceCatalog } from "./catalog";
 import {
   applyTemplateToDiagramWithBackup,
   buildBoardTemplateDiagram,
@@ -28,6 +31,56 @@ test("listBoardTemplates is backed by the deployable TemplateDefinition resource
   ));
 });
 
+test("all board templates reuse the Resource catalog node presentation", () => {
+  for (const template of listBoardTemplates()) {
+    const definition = templateDefinitions.find((candidate) => candidate.id === template.id);
+    assert.ok(definition, `missing Template definition for ${template.id}`);
+    const rawDiagram = buildTemplateDiagramJson(definition.id, {
+      projectSlug: "sketchcatch",
+      shortId: template.id
+    });
+
+    for (const node of template.diagramJson.nodes) {
+      const catalogItem = resourceCatalog.find((item) => item.nodeDefaults.type === node.type);
+      assert.ok(catalogItem, `missing Resource catalog item for ${node.type}`);
+      const rawNode = rawDiagram.nodes.find((candidate) => candidate.id === node.id);
+      assert.ok(rawNode?.parameters, `missing raw Template parameters for ${template.id}:${node.id}`);
+
+      const catalogNode = createDiagramNodeFromPayload(
+        { item: catalogItem, source: "resource-settings-panel" },
+        node.position,
+        node.zIndex
+      );
+      const diagramLabel = node.parameters?.values.diagramLabel;
+
+      assert.equal(node.iconUrl, catalogNode.iconUrl, `${template.id}:${node.id} icon`);
+      assert.equal(node.label, catalogNode.label, `${template.id}:${node.id} label`);
+      assert.deepEqual(node.size, catalogNode.size, `${template.id}:${node.id} size`);
+      assert.deepEqual(node.style, catalogNode.style, `${template.id}:${node.id} style`);
+      assert.equal(
+        diagramLabel,
+        catalogNode.parameters?.resourceName,
+        `${template.id}:${node.id} visible label`
+      );
+      assert.deepEqual(
+        node.parameters,
+        {
+          ...catalogNode.parameters,
+          ...rawNode.parameters,
+          values: {
+            ...catalogNode.parameters?.values,
+            ...rawNode.parameters.values,
+            diagramLabel
+          }
+        },
+        `${template.id}:${node.id} catalog parameter behavior`
+      );
+      assert.ok(typeof diagramLabel === "string");
+      assert.doesNotMatch(diagramLabel, /_workspace$/u);
+    }
+  }
+});
+
 test("buildBoardTemplateDiagram selects a shared template for Workspace startup", () => {
   const diagram = buildBoardTemplateDiagram("minimal-serverless-api", {
     projectSlug: "orders",
@@ -39,6 +92,8 @@ test("buildBoardTemplateDiagram selects a shared template for Workspace startup"
     templateDefinitions.find((definition) => definition.id === "minimal-serverless-api")?.resources.length
   );
   assert.ok(diagram?.nodes.every((node) => node.parameters?.resourceName?.startsWith("orders_")));
+  assert.ok(diagram?.nodes.every((node) => typeof node.iconUrl === "string"));
+  assert.ok(diagram?.nodes.every((node) => typeof node.parameters?.values.diagramLabel === "string"));
   assert.equal(buildBoardTemplateDiagram("unknown-template", {
     projectSlug: "orders",
     shortId: "workspace"

@@ -76,6 +76,19 @@ test("getAreaNodeLabel uses resource name for resource area nodes", () => {
   );
 });
 
+test("getAreaNodeLabel uses the catalog diagram label before the Terraform resource name", () => {
+  assert.equal(
+    getAreaNodeLabel(
+      makeResourceNode({
+        resourceName: "vpc_three_tier_web_app_workspace",
+        resourceType: "aws_vpc",
+        values: { diagramLabel: "vpc" }
+      })
+    ),
+    "vpc"
+  );
+});
+
 test("getAreaNodeLabel falls back to node label for design areas and unnamed resources", () => {
   assert.equal(getAreaNodeLabel(makeDesignNode({ label: "Asia Pacific", type: "design_region" })), "Asia Pacific");
   assert.equal(
