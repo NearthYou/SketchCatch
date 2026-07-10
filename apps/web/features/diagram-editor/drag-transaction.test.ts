@@ -156,6 +156,44 @@ test("finalizeDraggedNodes assigns children dropped inside an ASG area", () => {
   assert.equal(instance?.metadata?.parentAreaNodeId, "asg-1");
 });
 
+test("finalizeDraggedNodes expands assigned parent areas for moved icon resources", () => {
+  const nodes = [
+    makeResourceNode({
+      id: "vpc-1",
+      resourceName: "main",
+      resourceType: "aws_vpc",
+      width: 80,
+      height: 60,
+      x: 0,
+      y: 0
+    }),
+    makeResourceNode({
+      id: "instance-1",
+      resourceName: "web",
+      resourceType: "aws_instance",
+      width: 20,
+      height: 20,
+      x: 120,
+      y: 20
+    })
+  ];
+
+  const result = finalizeDraggedNodes({
+    anchorNodeId: "instance-1",
+    catalog: terraformParameterCatalog,
+    currentNodes: nodes,
+    directlyMovedNodeIds: new Set(["instance-1"]),
+    positionByNodeId: new Map([["instance-1", { x: 65, y: 20 }]]),
+    snapGridSize: 1,
+    snapshotNodes: nodes
+  });
+
+  const vpc = result.nodes.find((node) => node.id === "vpc-1");
+  const instance = result.nodes.find((node) => node.id === "instance-1");
+  assert.equal(instance?.metadata?.parentAreaNodeId, "vpc-1");
+  assert.deepEqual(vpc?.size, { width: 95, height: 60 });
+});
+
 function makeResourceNode({
   height = 72,
   id,

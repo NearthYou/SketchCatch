@@ -65,6 +65,7 @@ import {
   clearDeletedAreaParentAssignments,
   clearOutOfBoundsAreaParentAssignments
 } from "./area-node-movement";
+import { expandParentAreaNodesForChildren } from "./area-node-expansion";
 import { findInnermostAreaNodeAtPoint } from "./area-nodes";
 import {
   getAreaBlankInteractionTarget,
@@ -1560,11 +1561,13 @@ function DiagramEditorInner({
           nodesWithNextNode,
           new Set([nextNode.id])
         );
+        const nodesWithExpandedParents =
+          expandParentAreaNodesForChildren(nodesWithAssignedParents, new Set([nextNode.id]));
 
         return {
           ...currentDiagram,
           nodes: applyContainingReferenceDropTargets(
-            nodesWithAssignedParents,
+            nodesWithExpandedParents,
             new Set([nextNode.id]),
             terraformParameterCatalog
           )

@@ -147,6 +147,13 @@ test("parameter updates synchronize all reference edges within one diagram updat
   );
 });
 
+test("new resource drops expand assigned parent areas before applying reference targets", () => {
+  assert.match(
+    diagramEditorSource,
+    /expandParentAreaNodesForChildren\(nodesWithAssignedParents,\s*new Set\(\[nextNode\.id\]\)\)/s
+  );
+});
+
 function getCssBlock(selector: string): string {
   const selectorStart = diagramEditorStyles.indexOf(`${selector} {`);
 
