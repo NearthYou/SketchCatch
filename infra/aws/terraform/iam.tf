@@ -230,13 +230,17 @@ data "aws_iam_policy_document" "ecs_worker_execution" {
     resources = ["${aws_cloudwatch_log_group.ecs["worker"].arn}:*"]
   }
 
-  statement {
-    sid = "AllowReadWorkerSecrets"
-    actions = [
-      "secretsmanager:GetSecretValue",
-      "ssm:GetParameters"
-    ]
-    resources = values(local.worker_secret_arns)
+  dynamic "statement" {
+    for_each = length(local.worker_secret_arns) == 0 ? [] : [1]
+
+    content {
+      sid = "AllowReadWorkerSecrets"
+      actions = [
+        "secretsmanager:GetSecretValue",
+        "ssm:GetParameters"
+      ]
+      resources = values(local.worker_secret_arns)
+    }
   }
 
   dynamic "statement" {
