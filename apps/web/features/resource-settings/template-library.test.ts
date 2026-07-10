@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { DiagramJson } from "../../../../packages/types/src";
-import { TEMPLATE_IDS } from "../../../../packages/types/src";
+import { TEMPLATE_IDS, templateDefinitions } from "../../../../packages/types/src";
 import {
   applyTemplateToDiagramWithBackup,
   buildBoardTemplateDiagram,
@@ -34,7 +34,10 @@ test("buildBoardTemplateDiagram selects a shared template for Workspace startup"
     shortId: "workspace"
   });
 
-  assert.equal(diagram?.nodes.length, 11);
+  assert.equal(
+    diagram?.nodes.length,
+    templateDefinitions.find((definition) => definition.id === "minimal-serverless-api")?.resources.length
+  );
   assert.ok(diagram?.nodes.every((node) => node.parameters?.resourceName?.startsWith("orders_")));
   assert.equal(buildBoardTemplateDiagram("unknown-template", {
     projectSlug: "orders",

@@ -29,6 +29,7 @@ const resourceCategoryOverrides: Record<string, string> = {
   "aws-acm-certificate": "Certificates",
   "aws-acm-certificate-validation": "Certificates",
   "aws-api-gateway-deployment": "API Gateway REST",
+  "aws-api-gateway-authorizer": "API Gateway REST",
   "aws-api-gateway-integration": "API Gateway REST",
   "aws-api-gateway-method": "API Gateway REST",
   "aws-api-gateway-resource": "API Gateway REST",
@@ -750,6 +751,15 @@ const terraformResourcePresentations = [
     category: "Serverless / Application",
     iconUrl: `${serviceIconPath}/Arch_Networking-Content-Delivery/64/Arch_Amazon-API-Gateway_64.svg`,
     label: "REST API",
+    size
+  },
+  {
+    definitionId: "aws-api-gateway-authorizer",
+    name: "API Gateway Authorizer",
+    area: "application",
+    category: "Serverless / Application",
+    iconUrl: `${serviceIconPath}/Arch_Networking-Content-Delivery/64/Arch_Amazon-API-Gateway_64.svg`,
+    label: "API Authorizer",
     size
   },
   {
