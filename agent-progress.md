@@ -7,12 +7,30 @@ Short English-only working log for the current agent context. Older records are 
 - Branch: `feat/ck/287-ai-diagram`.
 - Current scope: keep Amazon Q Business architecture planning and validation while integrating the latest `dev` changes.
 - Local `dev` and `origin/dev` point to `314b0c35`.
-- Architecture Draft uses OpenAI normalization, compact Amazon Q planning, and backend materialization/validation with safe fallback.
+- Architecture Draft uses optional OpenAI normalization, pattern-scoped Anonymous Q retrieval, and deterministic backend materialization/validation with safe fallback.
 - Latest deployment warning, dashboard project inventory, cost UI, and ECS worker dispatch hardening from `dev` are included.
 - Production must keep `DEPLOYMENT_WORKER_MODE=in_process` until the worker task definition, entrypoint, roles, security group, and runtime are implemented.
 - No Terraform apply/destroy, deployment execution, or cloud mutation was run during the merge.
 
 ## Session Record
+
+### 2026-07-10 - Stabilize Anonymous Q architecture generation
+
+- Goal: Produce distinct, deployable Architecture Drafts from project answers without a paid Q Business Creator subscription.
+- Completed:
+  - Added normalized pattern IDs and exact `pattern_id` retrieval filters for six verified architecture patterns.
+  - Changed Q retrieval to one cited request per selected pattern and made the backend materialize only canonical, deployable resources and topology.
+  - Added generic EC2, serverless, SPA, ECS Fargate, GitHub CI/CD, Multi-AZ RDS, and composed-pattern handling, including explicit EC2 negation.
+  - Preserved the existing OpenAI and Amazon Q explanation paths by routing only `architecture_draft` through the dedicated retrieval provider.
+- Verification:
+  - `node docs/diagram-templates/verify.mjs` passed for six patterns, 104 supported resource types, and 154 source repositories.
+  - 64 focused API tests passed, including 42 exact project-answer pattern selections and 12 repeatable canonical materializations.
+  - A live Anonymous Q run used 10 `ChatSync` retrieval calls across six profiles; all six used `amazon_q`, had zero orphan nodes, and produced six distinct signatures.
+  - `terraform fmt -check infra/aws/terraform` passed.
+  - `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check` passed.
+- Risk:
+  - Q Business retrieval usage still consumes the existing anonymous application's capacity, and the index must be re-ingested after pattern document changes.
+  - The canonical registry currently covers the six verified pattern families; new families require a reviewed pattern document and canonical topology before activation.
 
 ### 2026-07-10 - DESIGN.md cost dashboard prototype
 

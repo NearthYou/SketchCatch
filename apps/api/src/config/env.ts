@@ -1,6 +1,7 @@
 ﻿import "./load-env.js";
 
 export type RuntimeEnv = {
+  aiArchitectureRequirementNormalizer?: string | undefined;
   aiBillingMode?: string | undefined;
   aiDailyCallLimit?: string | undefined;
   aiRateLimitPerMinute?: string | undefined;
@@ -8,6 +9,7 @@ export type RuntimeEnv = {
   amazonQCreditConfirmed?: string | undefined;
   amazonQEnabled?: string | undefined;
   amazonQRegion?: string | undefined;
+  amazonQRetrievalApplicationId?: string | undefined;
   amazonQUserId?: string | undefined;
   awsRegion: string;
   authTokenSecret: string | undefined;
@@ -56,6 +58,7 @@ const staticAwsCredentialEnvKeys = [
 
 export function getRuntimeEnv(): RuntimeEnv {
   return {
+    aiArchitectureRequirementNormalizer: process.env.AI_ARCHITECTURE_REQUIREMENT_NORMALIZER,
     aiBillingMode: process.env.AI_BILLING_MODE,
     aiDailyCallLimit: process.env.AI_DAILY_CALL_LIMIT,
     aiRateLimitPerMinute: process.env.AI_RATE_LIMIT_PER_MINUTE,
@@ -63,6 +66,7 @@ export function getRuntimeEnv(): RuntimeEnv {
     amazonQCreditConfirmed: process.env.AMAZON_Q_CREDIT_CONFIRMED,
     amazonQEnabled: process.env.AMAZON_Q_ENABLED,
     amazonQRegion: process.env.AMAZON_Q_REGION,
+    amazonQRetrievalApplicationId: process.env.AMAZON_Q_RETRIEVAL_APPLICATION_ID,
     amazonQUserId: process.env.AMAZON_Q_USER_ID,
     awsRegion: process.env.AWS_REGION ?? "ap-northeast-2",
     authTokenSecret: process.env.AUTH_TOKEN_SECRET,
