@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { generateKeyPairSync } from "node:crypto";
 import test from "node:test";
-import { createGitHubAppClient } from "./github-app-client.js";
+import {
+  createGitHubAppClient,
+  GitHubRepositoryFileEncodingError,
+  GitHubRepositoryTreeTruncatedError
+} from "./github-app-client.js";
 
 const privateKey = generateKeyPairSync("rsa", {
   modulusLength: 2048,
@@ -106,6 +110,150 @@ test("listInstallations returns GitHub App installation account metadata", async
       htmlUrl: "https://github.com/settings/installations/42"
     }
   ]);
+});
+
+test("readRepositoryEvidence reads the recursive tree and only allowed static evidence files", async () => {
+  const calls: GitHubApiCall[] = [];
+  const fileContents = new Map([
+    ["package.json", '{"workspaces":["apps/*"]}'],
+    ["apps/web/package.json", '{"dependencies":{"next":"16.2.9"}}'],
+    ["apps/web/next.config.mjs", "export default {}"],
+    ["docker/api.Dockerfile", "FROM node:24-alpine"],
+    ["README.md", "# Monorepo"]
+  ]);
+  const client = createGitHubAppClient({
+    appId: "12345",
+    privateKey,
+    fetch: createGitHubFetchStub(calls, ({ pathname, search }) => {
+      if (pathname === "/app/installations/42/access_tokens") {
+        return jsonResponse({ token: "installation-token" });
+      }
+
+      if (pathname === "/repos/owner/repo/git/trees/main" && search === "?recursive=1") {
+        return jsonResponse({
+          sha: "revision-sha",
+          truncated: false,
+          tree: [
+            { path: "package.json", type: "blob" },
+            { path: "apps/web/package.json", type: "blob" },
+            { path: "apps/web/next.config.mjs", type: "blob" },
+            { path: "docker/api.Dockerfile", type: "blob" },
+            { path: "pnpm-lock.yaml", type: "blob" },
+            { path: "README.md", type: "blob" },
+            { path: "apps/web/src/page.tsx", type: "blob" }
+          ]
+        });
+      }
+
+      const contentsPrefix = "/repos/owner/repo/contents/";
+      if (pathname.startsWith(contentsPrefix)) {
+        const path = decodeURIComponent(pathname.slice(contentsPrefix.length));
+        const content = fileContents.get(path);
+
+        return content
+          ? jsonResponse({ encoding: "base64", content: Buffer.from(content).toString("base64") })
+          : jsonResponse({ message: "not found" }, 404);
+      }
+
+      return jsonResponse({ message: "not found" }, 404);
+    })
+  });
+
+  const snapshot = await client.readRepositoryEvidence({
+    installationId: "42",
+    owner: "owner",
+    name: "repo",
+    ref: "main"
+  });
+
+  assert.equal(snapshot.revision, "revision-sha");
+  assert.deepEqual(snapshot.treePaths, [
+    "README.md",
+    "apps/web/next.config.mjs",
+    "apps/web/package.json",
+    "apps/web/src/page.tsx",
+    "docker/api.Dockerfile",
+    "package.json",
+    "pnpm-lock.yaml"
+  ]);
+  assert.deepEqual(
+    snapshot.files.map((file) => file.path),
+    [
+      "README.md",
+      "apps/web/next.config.mjs",
+      "apps/web/package.json",
+      "docker/api.Dockerfile",
+      "package.json"
+    ]
+  );
+  assert.equal(
+    calls.some((call) => call.pathname.endsWith("/apps/web/src/page.tsx")),
+    false
+  );
+  assert.equal(
+    calls.some((call) => call.pathname.endsWith("/pnpm-lock.yaml")),
+    false
+  );
+});
+
+test("readRepositoryEvidence rejects truncated recursive trees", async () => {
+  const client = createGitHubAppClient({
+    appId: "12345",
+    privateKey,
+    fetch: createGitHubFetchStub([], ({ pathname }) => {
+      if (pathname === "/app/installations/42/access_tokens") {
+        return jsonResponse({ token: "installation-token" });
+      }
+
+      return jsonResponse({
+        sha: "revision-sha",
+        truncated: true,
+        tree: []
+      });
+    })
+  });
+
+  await assert.rejects(
+    client.readRepositoryEvidence({
+      installationId: "42",
+      owner: "owner",
+      name: "repo",
+      ref: "main"
+    }),
+    GitHubRepositoryTreeTruncatedError
+  );
+});
+
+test("readRepositoryEvidence rejects unsupported file encoding", async () => {
+  const client = createGitHubAppClient({
+    appId: "12345",
+    privateKey,
+    fetch: createGitHubFetchStub([], ({ pathname }) => {
+      if (pathname === "/app/installations/42/access_tokens") {
+        return jsonResponse({ token: "installation-token" });
+      }
+
+      if (pathname === "/repos/owner/repo/git/trees/main") {
+        return jsonResponse({
+          sha: "revision-sha",
+          truncated: false,
+          tree: [{ path: "package.json", type: "blob" }]
+        });
+      }
+
+      return jsonResponse({ encoding: "utf-8", content: "{}" });
+    })
+  });
+
+  await assert.rejects(
+    client.readRepositoryEvidence({
+      installationId: "42",
+      owner: "owner",
+      name: "repo",
+      ref: "main"
+    }),
+    GitHubRepositoryFileEncodingError
+  );
 });
 
 test("createPullRequest updates a generated file even when the target branch already contains the SketchCatch path", async () => {
