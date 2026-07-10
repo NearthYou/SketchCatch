@@ -572,7 +572,7 @@ ECS task definition의 책임은 다음처럼 나눕니다.
 | ECS environment                  | task definition에 평문으로 남아도 되는 비민감 runtime 설정           | `NODE_ENV`, `PORT`, `DATABASE_SSL`, `S3_BUCKET_NAME`, `SKETCHCATCH_PUBLIC_BASE_URL`, `OAUTH_REDIRECT_BASE_URL`, `GIT_APP_ID`, `GIT_APP_SLUG`, OAuth client ID      |
 | Secrets Manager                  | DB credential 또는 외부 provider secret                              | `DATABASE_URL`, `GIT_APP_PRIVATE_KEY_BASE64`, `OPENAI_API_KEY`, `NAVER_OAUTH_CLIENT_SECRET`, `KAKAO_OAUTH_CLIENT_SECRET`, `GIT_OAUTH_CLIENT_SECRET`                |
 | SSM Parameter Store SecureString | 서명 secret 또는 secure runtime endpoint                             | `AUTH_TOKEN_SECRET`, `CLOUDFORMATION_TEMPLATE_TOKEN_SECRET`, `GIT_APP_STATE_SECRET`, `REDIS_URL`                                                                   |
-| GitHub Actions secrets           | EC2 rollback workflow가 아직 필요로 하는 legacy secret 값            | 기존 `Deploy Production` EC2/SSM workflow 전용                                                                                                                     |
+| GitHub Actions secrets           | EC2 rollback workflow가 아직 필요로 하는 legacy secret 값            | 기존 `Deploy Production EC2 Rollback` workflow 전용                                                                                                                |
 
 ECS Terraform에는 secret 원문을 넣지 않고 ARN만 넣습니다.
 
