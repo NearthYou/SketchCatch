@@ -97,9 +97,7 @@ export function TerraformCodeEditorSurface({
         onChange={(event) => actions.changeCode(event.currentTarget.value)}
         onKeyDown={actions.handleKeyDown}
         onScroll={actions.handleScroll}
-        placeholder={`resource "aws_vpc" "main" {
-  cidr_block = "10.0.0.0/16"
-}`}
+        placeholder="# Board에 Resource를 추가하면 Terraform Preview가 여기에 표시됩니다."
         spellCheck={false}
         value={state.code}
         wrap="off"
