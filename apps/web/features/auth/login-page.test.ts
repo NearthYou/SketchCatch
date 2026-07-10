@@ -4,6 +4,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const loginPageSource = readAppFile("login/page.tsx");
+const loginFormSource = readAppFile("login/login-form.tsx");
 const globalStyles = readLocalFile("../../app/globals.css");
 
 test("login route renders the DESIGN.md based auth experience", () => {
@@ -48,6 +49,14 @@ test("login route styles follow the DESIGN.md visual tokens", () => {
   assert.doesNotMatch(globalStyles, /\.authDesignFlow/);
   assert.doesNotMatch(globalStyles, /\.authDesignCode/);
   assert.doesNotMatch(globalStyles, /\.authDesignSafety/);
+});
+
+test("login form stays visible even when a previous session exists", () => {
+  assert.match(loginFormSource, /const \{ login \} = useAuth\(\)/);
+  assert.doesNotMatch(loginFormSource, /status\s*===\s*"authenticated"/);
+  assert.doesNotMatch(loginFormSource, /useAuth\(\).*status/s);
+  assert.match(loginFormSource, /await login\(payload\)/);
+  assert.match(loginFormSource, /router\.replace\("\/dashboard"\)/);
 });
 
 function readAppFile(path: string): string {
