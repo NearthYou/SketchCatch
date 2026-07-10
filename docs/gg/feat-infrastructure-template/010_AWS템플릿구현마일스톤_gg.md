@@ -16,7 +16,7 @@
 | M1 | shared `TemplateDefinition` 계약과 여섯 Template registry | shared type test, deterministic DiagramJson test, types typecheck | `Feat: AWS Template 공통 정의 추가` | 완료 |
 | M2 | 누락 ResourceDefinition과 Terraform provider/nested block 지원 | resource coverage, preview, sync, artifact safety tests | `Feat: AWS Template 리소스 및 Terraform 지원 추가` | 완료 |
 | M3 | Template 카탈로그와 Workspace 적용 흐름 | web template/workspace tests, lint, typecheck | `Feat: AWS Template 카탈로그 연결` | 완료 |
-| M4 | 여섯 Template Terraform Preview와 배포 시간 표시 | template preview tests, deployment duration tests, build | `Feat: AWS Template 배포 흐름 연결` | 진행 전 |
+| M4 | 여섯 Template Terraform Preview와 배포 시간 표시 | template preview tests, deployment duration tests, build | `Feat: AWS Template 배포 흐름 연결` | 완료 |
 | M5 | Chrome 실제 apply/destroy와 검증 기록 | 여섯 패턴 live QA, console check, cleanup 확인 | `Test: AWS Template 실제 배포 검증 기록` | 진행 전 |
 | M6 | PR 제출 | full checks, review-work, PR body and linked issue | `gh-create-pr` workflow | 진행 전 |
 
@@ -58,7 +58,12 @@
 
 ### M4
 
-- 시작 전
+- 완료 커밋: `Feat: AWS Template 배포 흐름 연결`
+- 여섯 TemplateDefinition을 모두 Terraform Preview로 생성하는 coverage를 추가했다.
+- VPC/subnet을 Preview에서 누락시키던 design kind를 deployable resource kind로 정리했다.
+- hyphen이 포함된 deterministic Terraform resource name reference가 문자열로 감싸지지 않도록 보강했다.
+- DeploymentPanel에 성공·실패·진행 중 상태의 `분 초` 소요 시간 표시와 실시간 갱신을 추가했다.
+- template preview coverage, deployment duration tests, API/Web typecheck와 lint를 통과했다.
 
 ### M5
 

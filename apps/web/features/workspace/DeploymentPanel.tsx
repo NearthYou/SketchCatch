@@ -73,6 +73,7 @@ import {
 import type { AiRequestState } from "./WorkspaceAiPanelPieces";
 import type { SavedWorkspaceTerraformArtifact } from "./workspace-deployment-artifacts";
 import type { RequestState } from "./workspace-right-panel.types";
+import { getDeploymentDurationLabel } from "./deployment-duration";
 import styles from "./workspace.module.css";
 
 type DeploymentRuntimeSnapshot = {
@@ -148,6 +149,7 @@ export function DeploymentPanel({
     useState<RequestState>("idle");
   const [trafficSimulatorSummary, setTrafficSimulatorSummary] = useState("");
   const [selectedDeploymentId, setSelectedDeploymentId] = useState("");
+  const [durationNow, setDurationNow] = useState(() => Date.now());
   const [selectedGitCicdHandoffId, setSelectedGitCicdHandoffId] = useState("");
   const [gitCicdPipelineStatusSource, setGitCicdPipelineStatusSource] =
     useState<GitCicdHandoffPipelineStatus["source"] | null>(null);
@@ -218,6 +220,18 @@ export function DeploymentPanel({
     () => deployments.find((deployment) => deployment.id === selectedDeploymentId) ?? null,
     [deployments, selectedDeploymentId]
   );
+
+  useEffect(() => {
+    setDurationNow(Date.now());
+
+    if (selectedDeployment?.status !== "RUNNING") {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => setDurationNow(Date.now()), 1_000);
+
+    return () => window.clearInterval(intervalId);
+  }, [selectedDeployment?.id, selectedDeployment?.status]);
   const suggestedDeploymentWizardStep = getSuggestedDeploymentWizardStep({
     hasUnsavedDeploymentBaseline,
     selectedDeployment
@@ -1719,6 +1733,7 @@ export function DeploymentPanel({
           <DeploymentGateCard deployment={selectedDeployment} />
           <div className={styles.deploymentSummary}>
             <InfoRow label="Status" value={selectedDeployment.status} />
+            <InfoRow label="소요 시간" value={getDeploymentDurationLabel(selectedDeployment, durationNow)} />
             <OptionalInfoRow label="Active stage" value={selectedDeployment.activeStage} />
             <InfoRow label="Approval" value={formatApprovalState(selectedDeployment)} />
             {selectedDeployment.planSummary ? (
