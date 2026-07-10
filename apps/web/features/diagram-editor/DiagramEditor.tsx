@@ -159,6 +159,7 @@ export function DiagramEditor(props: DiagramEditorProps) {
 }
 
 function DiagramEditorInner({
+  allowPreviewInspection = false,
   dashboardHref = "/dashboard",
   draftStatusPanel,
   floatingPanel,
@@ -2315,7 +2316,7 @@ function DiagramEditorInner({
             defaultViewport={DEFAULT_DIAGRAM_VIEWPORT}
             deleteKeyCode={null}
             edges={flowEdges}
-            elementsSelectable={!isPreviewActive}
+            elementsSelectable={!isPreviewActive || allowPreviewInspection}
             maxZoom={2}
             minZoom={0.25}
             multiSelectionKeyCode={["Shift", "Meta", "Control"]}
@@ -2335,6 +2336,9 @@ function DiagramEditorInner({
             snapToGrid={false}
             zoomOnDoubleClick={false}
             zoomActivationKeyCode={["Meta", "Control"]}
+            {...(!isPreviewActive || allowPreviewInspection
+              ? { onNodeClick: handleFlowNodeClick }
+              : {})}
             {...(!isPreviewActive
               ? {
                   onClickConnectEnd: handleConnectEnd,
@@ -2347,7 +2351,6 @@ function DiagramEditorInner({
                   onDrop: handleDrop,
                   onEdgesChange: handleEdgesChange,
                   onMoveEnd: handleMoveEnd,
-                  onNodeClick: handleFlowNodeClick,
                   onNodeDoubleClick: handleFlowNodeDoubleClick,
                   onNodeDrag: handleNodeDrag,
                   onNodeDragStart: handleNodeDragStart,

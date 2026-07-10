@@ -51,6 +51,7 @@ export type DiagramEditorPanelContext = {
 };
 
 export type DiagramEditorProps = {
+  allowPreviewInspection?: boolean | undefined;
   draftStatusPanel?: ReactNode | undefined;
   floatingPanel?: ((context: DiagramEditorPanelContext) => ReactNode) | undefined;
   initialDiagram?: DiagramJson | undefined;

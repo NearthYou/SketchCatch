@@ -153,6 +153,15 @@ test("a single node click opens the matching resource inspector", () => {
   );
 });
 
+test("reverse preview can opt into read-only resource inspection", () => {
+  assert.match(diagramEditorSource, /allowPreviewInspection = false/);
+  assert.match(diagramEditorSource, /elementsSelectable=\{!isPreviewActive \|\| allowPreviewInspection\}/);
+  assert.match(
+    diagramEditorSource,
+    /!isPreviewActive \|\| allowPreviewInspection\s*\? \{ onNodeClick: handleFlowNodeClick \}/s
+  );
+});
+
 test("collapsed right panel does not leave the mobile fixed rail shell visible", () => {
   const collapsedMobileRightRailRule = getCssRuleContaining(".editorShellRightCollapsed .rightRail");
 
