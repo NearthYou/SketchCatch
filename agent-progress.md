@@ -195,4 +195,17 @@ Short English-only working log for the current agent context. Older records are 
   - `node docs/diagram-templates/verify.mjs` passed for six patterns, 104 supported resource types, and 154 source repositories.
   - All 25 external references in the pattern and review documents returned successful HTTP responses.
 - Risk:
-  - S3 upload and Q Business sync are not complete. They require an approved cloud change to create a region-compatible knowledge bucket, crawler role, and data source before syncing.
+  - Automatic S3 connector sync requires an IAM-authorized crawler role and data source; direct ingestion must be rerun after document changes.
+
+### 2026-07-10 - Index diagram patterns in Amazon Q Business
+- Goal: Upload the verified pattern package to S3 and make all six documents retrievable from the live Q Business index.
+- Completed:
+  - Created a dedicated `ap-southeast-2` S3 knowledge bucket with ownership enforcement, public access blocking, versioning, and SSE-S3.
+  - Uploaded exactly six Markdown documents (40,447 bytes) under the architecture-pattern prefix.
+  - Confirmed the Developer SSO role cannot create the connector IAM role; no partial IAM role or data source was created.
+  - Used the official direct `BatchPutDocument` Blob path to ingest all six S3-backed source documents without a crawler role.
+- Verification:
+  - `BatchPutDocument` accepted six documents with zero failures.
+  - Retrieval-mode checks for ALB/ASG/EC2, serverless API, SPA, ECS Fargate, GitHub CodeDeploy CI/CD, and Multi-AZ RDS each returned the exact expected citation title and document.
+- Risk:
+  - The index is current, but no automatic S3 connector sync exists. Re-run direct ingestion after changing a pattern document unless an authorized crawler role/data source is added later.

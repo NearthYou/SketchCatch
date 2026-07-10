@@ -47,13 +47,13 @@ Amazon Q Business 데이터 소스의 포함 prefix는 `<prefix>/documents/`로 
 
 ## 완료 판정
 
-다음 증거가 모두 있어야 “Q Business 인덱싱 완료”로 판정한다.
+다음 공통 증거와 ingestion 방식별 증거가 있어야 “Q Business 인덱싱 완료”로 판정한다.
 
 - 여섯 Markdown 문서와 `manifest.json` 로컬 검증 통과
 - 대상 S3 prefix에서 여섯 객체의 key, ETag, size 확인
 - Q Business index가 `ACTIVE`
-- S3 data source가 존재하고 `ACTIVE`
-- 최신 data source sync job이 `SUCCEEDED`
 - 각 패턴별 대표 질의에서 해당 문서 citation 또는 기대 리소스 집합 확인
+
+S3 connector 방식은 data source가 `ACTIVE`이고 최신 sync job이 `SUCCEEDED`여야 한다. Direct ingestion 방식은 `BatchPutDocument`의 실패 문서가 0개이고, 여섯 document ID와 대표 질의 citation이 일치해야 한다. Direct ingestion은 자동 S3 재동기화를 제공하지 않으므로 문서 변경 시 다시 실행해야 한다.
 
 현재 AWS 반영 여부는 로컬 파일 존재만으로 판단하지 않는다.

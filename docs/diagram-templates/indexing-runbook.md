@@ -8,10 +8,13 @@
 - index: `ACTIVE`
 - index region: `ap-southeast-2`
 - S3 data source: 없음
-- 기존 SketchCatch S3 bucket region: `ap-northeast-2`
-- 패턴 문서 Q Business 인덱싱: 미완료
+- pattern knowledge bucket: `ap-southeast-2`, public access 차단, versioning, SSE-S3
+- S3 pattern objects: 6개, 40,447 bytes
+- direct `BatchPutDocument`: 6개 성공, 실패 0개
+- 대표 검색 검증: 6개 패턴 모두 기대 citation 반환
+- 패턴 문서 Q Business 인덱싱: direct ingestion 방식으로 완료
 
-Q Business S3 connector용 bucket은 index와 호환되는 region에 있어야 한다. 기존 서울 리전 bucket을 임의로 재사용하지 않고, 승인된 Deployment 작업에서 시드니 리전 전용 knowledge bucket과 crawler role/data source를 구성한다.
+전용 knowledge bucket과 index는 같은 region에 있다. 현재 Developer SSO role에는 `iam:CreateRole`과 `iam:PutRolePolicy` 권한이 없어 crawler role/data source는 생성하지 않았고, 공식 `BatchPutDocument` Blob 입력으로 같은 문서 바이트를 직접 인덱싱했다. 자동 S3 sync가 필요해지면 별도 승인된 IAM 변경으로 crawler role/data source를 추가한다.
 
 ## 업로드 대상
 
@@ -38,7 +41,7 @@ documents/architecture-patterns/multi-az-rds.md
 - metadata sidecar를 사용할 경우 connector가 custom metadata를 지원하고 `metadataFilesPrefix`가 `metadata/`로 설정된다.
 - 새 S3 connector를 사용하면 custom metadata가 지원되지 않으므로 Markdown 본문만 crawl한다.
 
-## 승인 후 실행 순서
+## S3 connector 실행 순서
 
 1. `node docs/diagram-templates/verify.mjs`를 실행한다.
 2. AWS 변경 plan에서 bucket, bucket policy, crawler role, Q Business data source를 검토한다.
@@ -48,6 +51,17 @@ documents/architecture-patterns/multi-az-rds.md
 6. Q Business data source sync job을 시작한다.
 7. sync job이 `SUCCEEDED`인지 확인한다.
 8. 아래 대표 질의로 검색 결과와 citation을 검증한다.
+
+## Direct ingestion 실행 순서
+
+1. `node docs/diagram-templates/verify.mjs`를 실행한다.
+2. 여섯 Markdown을 전용 S3 prefix에 업로드하고 object count와 전체 bytes를 검증한다.
+3. 각 파일의 바이트를 base64 Blob으로 넣은 `BatchPutDocument` 요청을 실행한다.
+4. 응답의 `failedDocuments`가 0개인지 확인한다.
+5. 인덱싱 대기 후 대표 검색 6개를 Retrieval mode로 실행한다.
+6. 각 응답의 `sourceAttributions[].documentId`와 title이 기대 패턴과 일치하는지 확인한다.
+
+Direct ingestion은 S3 connector data source와 sync job을 만들지 않는다. 문서가 변경되면 동일 document ID로 `BatchPutDocument`를 다시 실행하고 검색 검증을 반복한다.
 
 ## 대표 검색 검증
 
@@ -85,4 +99,4 @@ aws qbusiness list-data-source-sync-jobs `
   --region ap-southeast-2
 ```
 
-S3 객체 6개, `ACTIVE` data source, 최신 `SUCCEEDED` sync job, 대표 질의 6개의 기대 citation을 모두 확인해야 완료다.
+S3 connector 방식은 S3 객체 6개, `ACTIVE` data source, 최신 `SUCCEEDED` sync job, 대표 citation을 확인해야 완료다. Direct ingestion 방식은 S3 객체 6개, `BatchPutDocument` 실패 0개, 대표 질의 6개의 기대 citation을 확인해야 완료다.
