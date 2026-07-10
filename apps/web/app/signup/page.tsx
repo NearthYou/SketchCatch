@@ -1,30 +1,14 @@
-import Link from "next/link";
+import { RoutePlaceholder } from "../../components/runtime/route-placeholder";
 import { SignupForm } from "./signup-form";
 
 export default function SignupPage() {
   return (
-    <main className="authDesignPage">
-      <section className="authDesignShell authDesignShellWide" aria-labelledby="signup-title">
-        <div className="authDesignPanel authDesignPanelWide">
-          <Link className="authDesignBrand" href="/">
-            <span>SketchCatch</span>
-          </Link>
-          <div className="authDesignIntro">
-            <p className="authDesignBadge">Terraform-first operations</p>
-            <h1 id="signup-title">회원가입</h1>
-            <p>
-              Practice Architecture부터 IaC Preview, Pre-Deployment Check까지 이어갈 운영 계정을
-              만드세요.
-            </p>
-          </div>
-
-          <SignupForm />
-
-          <p className="authDesignSwitch">
-            이미 계정이 있나요? <Link href="/login">로그인</Link>
-          </p>
-        </div>
-      </section>
-    </main>
+    <RoutePlaceholder
+      description="회원가입 API와 인증 상태 처리는 유지하고, 새 UI가 연결될 최소 화면만 제공합니다."
+      links={[{ href: "/login", label: "로그인" }]}
+      title="회원가입"
+    >
+      <SignupForm />
+    </RoutePlaceholder>
   );
 }

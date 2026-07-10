@@ -1,41 +1,33 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 
-const currentDir = dirname(fileURLToPath(import.meta.url));
-const workspaceClientPath = join(currentDir, "AiWorkspaceClient.tsx");
-const draftMetadataPanelPath = join(currentDir, "DraftMetadataPanel.tsx");
-const workspaceAiRoutePath = join(currentDir, "ai/page.tsx");
-const globalsCssPath = join(currentDir, "../globals.css");
+const currentDir = fileURLToPath(new URL("./", import.meta.url));
+const workspaceClientPath = `${currentDir}/AiWorkspaceClient.tsx`;
+const draftMetadataPanelPath = `${currentDir}/DraftMetadataPanel.tsx`;
+const workspaceAiRoutePath = `${currentDir}/ai/page.tsx`;
 
-test("workspace resource chips use a class that does not inherit landing chip positioning", () => {
-	const workspaceClientSource = readFileSync(workspaceClientPath, "utf8");
-	const globalsCssSource = readFileSync(globalsCssPath, "utf8");
-	const workspaceChipCss = globalsCssSource.match(/\.workspaceResourceChip\s*{[^}]*}/s)?.[0] ?? "";
+test("workspace AI business logic remains available for the next UI", () => {
+  const workspaceClientSource = readFileSync(workspaceClientPath, "utf8");
 
-	assert.match(workspaceClientSource, /className="workspaceResourceChip"/);
-	assert.match(globalsCssSource, /\.workspaceResourceChip\s*{/);
-	assert.doesNotMatch(workspaceChipCss, /position\s*:\s*absolute/);
+  assert.match(workspaceClientSource, /runPromptDraft|\/ai\/architecture-draft/);
+  assert.match(workspaceClientSource, /DraftMetadataPanel/);
 });
 
 test("workspace draft result exposes guardrail metadata sections", () => {
-	const workspaceClientSource = readFileSync(workspaceClientPath, "utf8");
-	const draftMetadataPanelSource = readFileSync(draftMetadataPanelPath, "utf8");
-	const globalsCssSource = readFileSync(globalsCssPath, "utf8");
+  const workspaceClientSource = readFileSync(workspaceClientPath, "utf8");
+  const draftMetadataPanelSource = readFileSync(draftMetadataPanelPath, "utf8");
 
-	assert.match(workspaceClientSource, /DraftMetadataPanel/);
-	assert.match(draftMetadataPanelSource, /selectedDraftPattern/);
-	assert.match(draftMetadataPanelSource, /requirementFacts/);
-	assert.match(draftMetadataPanelSource, /guardrailWarnings/);
-	assert.match(globalsCssSource, /\.metadataBlock\s*{/);
-	assert.match(globalsCssSource, /\.warningList\s*{/);
+  assert.match(workspaceClientSource, /DraftMetadataPanel/);
+  assert.match(draftMetadataPanelSource, /selectedDraftPattern/);
+  assert.match(draftMetadataPanelSource, /requirementFacts/);
+  assert.match(draftMetadataPanelSource, /guardrailWarnings/);
 });
 
-test("legacy workspace AI route redirects to the board workspace", () => {
-	const workspaceAiRouteSource = readFileSync(workspaceAiRoutePath, "utf8");
+test("AI route is now a minimal shell while the old client remains available for reconnection", () => {
+  const workspaceAiRouteSource = readFileSync(workspaceAiRoutePath, "utf8");
 
-	assert.match(workspaceAiRouteSource, /redirect\("\/workspace"\)/);
-	assert.doesNotMatch(workspaceAiRouteSource, /AiWorkspaceClient/);
+  assert.match(workspaceAiRouteSource, /RoutePlaceholder/);
+  assert.doesNotMatch(workspaceAiRouteSource, /WorkspaceAiStartClient/);
 });

@@ -138,11 +138,11 @@ export function WorkspaceStartClient() {
   }
 
   return (
-    <form className="workspaceNewForm" onSubmit={(event) => event.preventDefault()}>
-      <label className="workspaceNewField" htmlFor="workspace-title-input">
-        <span>{COPY.projectNameLabel}</span>
+    <form onSubmit={(event) => event.preventDefault()}>
+      <p>
+        <label htmlFor="workspace-title-input">{COPY.projectNameLabel}</label>
+        <br />
         <input
-          className="workspaceNewInput"
           id="workspace-title-input"
           maxLength={80}
           onChange={(event) => {
@@ -153,58 +153,57 @@ export function WorkspaceStartClient() {
           type="text"
           value={title}
         />
-      </label>
+      </p>
 
-      <fieldset className="workspaceNewFieldset">
-        <legend className="workspaceNewLegend">{COPY.startModeLabel}</legend>
-        <p className="workspaceNewHelp">{helperText}</p>
-        <div className="workspaceNewChoiceGrid">
-          {primaryStartModeOptions.map((option) => {
-            const isDisabled = !canChooseStartMode || isSubmittingMode !== null;
-            const isSubmitting = isSubmittingMode === option.kind;
+      <fieldset>
+        <legend>{COPY.startModeLabel}</legend>
+        <p>{helperText}</p>
+        {primaryStartModeOptions.map((option) => {
+          const isDisabled = !canChooseStartMode || isSubmittingMode !== null;
+          const isSubmitting = isSubmittingMode === option.kind;
 
-            return (
+          return (
+            <p key={option.kind}>
               <button
-                className="workspaceNewChoiceButton"
                 disabled={isDisabled}
-                key={option.kind}
                 onClick={() => void handleStartMode(option.kind)}
                 type="button"
               >
-                <span>{isSubmitting ? COPY.submitting : startModeLabels[option.kind]}</span>
-                <strong>{option.actionLabel}</strong>
-                <small>{option.description}</small>
+                {isSubmitting ? COPY.submitting : option.actionLabel}
               </button>
-            );
-          })}
-        </div>
+              <span> ({startModeLabels[option.kind]})</span>
+              <br />
+              <small>{option.description}</small>
+            </p>
+          );
+        })}
         {blankStartOption ? (
-          <button
-            className="workspaceNewBlankButton"
-            disabled={!canChooseStartMode || isSubmittingMode !== null}
-            onClick={() => void handleStartMode(blankStartOption.kind)}
-            type="button"
-          >
-            {isSubmittingMode === "blank" ? COPY.submitting : blankStartOption.actionLabel}
-          </button>
+          <p>
+            <button
+              disabled={!canChooseStartMode || isSubmittingMode !== null}
+              onClick={() => void handleStartMode(blankStartOption.kind)}
+              type="button"
+            >
+              {isSubmittingMode === "blank" ? COPY.submitting : blankStartOption.actionLabel}
+            </button>
+          </p>
         ) : null}
-        <label className="workspaceNewCheckbox">
-          <input
-            checked={connectGitHubAfterCreate}
-            disabled={!canChooseStartMode || isSubmittingMode !== null}
-            onChange={(event) => setConnectGitHubAfterCreate(event.target.checked)}
-            type="checkbox"
-          />
-          <span>{COPY.connectGitHubAfterCreate}</span>
+        <p>
+          <label>
+            <input
+              checked={connectGitHubAfterCreate}
+              disabled={!canChooseStartMode || isSubmittingMode !== null}
+              onChange={(event) => setConnectGitHubAfterCreate(event.target.checked)}
+              type="checkbox"
+            />
+            {COPY.connectGitHubAfterCreate}
+          </label>
+          <br />
           <small>{COPY.connectGitHubHelp}</small>
-        </label>
+        </p>
       </fieldset>
 
-      {errorMessage ? (
-        <p className="workspaceNewError" role="alert">
-          {errorMessage}
-        </p>
-      ) : null}
+      {errorMessage ? <p role="alert">{errorMessage}</p> : null}
     </form>
   );
 }

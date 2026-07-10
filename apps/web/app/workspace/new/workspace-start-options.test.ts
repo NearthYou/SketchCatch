@@ -12,10 +12,6 @@ const startClientSource = readFileSync(
   "utf8"
 );
 const startPageSource = readFileSync(fileURLToPath(new URL("page.tsx", import.meta.url)), "utf8");
-const globalStylesSource = readFileSync(
-  fileURLToPath(new URL("../../globals.css", import.meta.url)),
-  "utf8"
-);
 
 test("createWorkspaceStartOptions makes AI and Reverse main choices and keeps blank board small", () => {
   const options = createWorkspaceStartOptions();
@@ -30,13 +26,11 @@ test("createWorkspaceStartOptions makes AI and Reverse main choices and keeps bl
   );
 });
 
-test("WorkspaceStartClient uses dashboard style without reviving the old workspaceStart CSS", () => {
-  assert.match(startPageSource, /designDashboardPage/);
-  assert.match(startPageSource, /workspaceNewPanel/);
-  assert.match(startClientSource, /className="workspaceNewForm"/);
-  assert.match(startClientSource, /className="workspaceNewChoiceButton"/);
-  assert.match(globalStylesSource, /\.workspaceNewChoiceButton/);
-  assert.doesNotMatch(globalStylesSource, /workspaceStart/);
+test("WorkspaceStartClient keeps the start flow without the old dashboard wrapper", () => {
+  assert.match(startPageSource, /RoutePlaceholder/);
+  assert.doesNotMatch(startPageSource, /designDashboardPage|designDashboardShell/);
+  assert.doesNotMatch(startClientSource, /className="workspaceNewForm"/);
+  assert.doesNotMatch(startClientSource, /className="workspaceNewChoiceButton"/);
   assert.match(startClientSource, /option\.priority === "primary"/);
   assert.match(startClientSource, /blankStartOption/);
 });
