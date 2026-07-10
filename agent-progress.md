@@ -14,10 +14,12 @@ Short English-only working log for the current agent context. Older records are 
 ### 2026-07-10 - Complete Workspace infrastructure settings Task 4
 
 - Goal: Record the Task 1-3 contracts and run the required integrated verification.
-- Completed: Updated `docs/data-models.md` for new-node-only safe defaults in `parameters.values`, parameter-reference `DiagramEdge.metadata`, and Terraform Preview ASG `desiredCapacity` omission rules. Updated the ignored JH worklogs and Task 4 report.
-- Verification: `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
+- Completed: Updated `docs/data-models.md` for new-node-only safe defaults in `parameters.values`, parameter-reference `DiagramEdge.metadata`, and Terraform Preview ASG `desiredCapacity` omission rules. Updated the ignored JH worklogs and Task 4 report. Fixed the Architecture Draft catalog lookup so `RDS_READ_REPLICA` retains its own catalog defaults instead of inheriting the general RDS defaults through `aws_db_instance`.
+- Verification: `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed. `pnpm --filter @sketchcatch/web test` passed 639/639 after updating the Architecture Draft safe-default expectation.
+- Final-review verification: the new RDS read-replica regression test was RED before the catalog fix and GREEN after it; `workspace-ai-diagram-adapter.test.ts` passed 30/30, `terraform.test.ts` passed 19/19, and Web/API typechecks plus `pnpm lint` passed.
+- Test baseline: full `pnpm test` still exits 1 because eight pre-existing API tests fail in unchanged deployment path-normalization and AI `llmExplanation` areas; the Workspace-focused Web/API tests pass.
 - Risk: `pnpm build` generated the production import in `apps/web/next-env.d.ts`; the controller restored the exact pre-existing dev-mode import (`./.next/dev/types/routes.d.ts`) and kept that file outside the commit. No user verification is pending for this generated-file restoration.
-- Next action: Task 4 is complete; review and merge only its tracked documentation changes.
+- Next action: Task 4 is complete; review and merge the full Task 1-4 branch.
 
 ### 2026-07-10 - Start ECS Phase 5 API worker dispatch
 

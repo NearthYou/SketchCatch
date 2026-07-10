@@ -148,6 +148,28 @@ test("convertArchitectureJsonToDiagramJson creates board nodes and hides contain
   assert.deepEqual(diagramJson.viewport, { x: 0, y: 0, zoom: 1 });
 });
 
+test("convertArchitectureJsonToDiagramJson keeps RDS read replicas separate from general RDS defaults", () => {
+  const diagramJson = convertArchitectureJsonToDiagramJson({
+    nodes: [
+      {
+        id: "rds-replica",
+        type: "RDS_READ_REPLICA",
+        label: "Reporting Replica",
+        positionX: 360,
+        positionY: 220,
+        config: {
+          replicateSourceDb: "aws_db_instance.primary.identifier"
+        }
+      }
+    ],
+    edges: []
+  });
+
+  assert.deepEqual(diagramJson.nodes[0]?.parameters?.values, {
+    replicateSourceDb: "aws_db_instance.primary.identifier"
+  });
+});
+
 test("convertArchitectureJsonToDiagramJson keeps non-containment edges as arrows", () => {
   const architectureJson: ArchitectureJson = {
     nodes: [
