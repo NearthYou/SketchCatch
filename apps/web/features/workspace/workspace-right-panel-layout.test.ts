@@ -1170,25 +1170,25 @@ test("deployment setup exposes a three-step workflow with one primary path", () 
   assert.match(stageAlertRule, /\bbackground:\s*#fef2f2;/);
   assert.match(stageAlertRule, /\bborder:\s*1px solid #f87171;/);
   assert.match(stageAlertRule, /\bcolor:\s*#991b1b;/);
-  assert.match(finalStageSummaryNoticeRule, /\bbackground:\s*#eef6ff;/);
-  assert.match(finalStageSummaryNoticeRule, /\bborder-color:\s*#bfdbfe;/);
-  assert.match(finalStageSummaryNoticeRule, /\bcolor:\s*#1e3a8a;/);
+  assert.match(finalStageSummaryNoticeRule, /\bbackground:\s*#f5f5f5;/);
+  assert.match(finalStageSummaryNoticeRule, /\bborder-color:\s*#dcdee0;/);
+  assert.match(finalStageSummaryNoticeRule, /\bcolor:\s*#44474d;/);
   assert.match(finalStageAlertRule, /\bbackground:\s*#fef2f2;/);
   assert.match(finalStageAlertRule, /\bborder-color:\s*#f87171;/);
   assert.match(finalStageAlertRule, /\bcolor:\s*#991b1b;/);
-  assert.match(activeStageDotRule, /\bbackground:\s*#2563eb;/);
-  assert.match(activeStageDotRule, /\bborder-color:\s*#2563eb;/);
-  assert.match(activeStageDotRule, /\bbox-shadow:\s*0 0 0 6px rgba\(37,\s*99,\s*235,\s*0\.16\);/);
+  assert.match(activeStageDotRule, /\bbackground:\s*var\(--workspace-accent,\s*#000000\);/);
+  assert.match(activeStageDotRule, /\bborder-color:\s*var\(--workspace-accent,\s*#000000\);/);
+  assert.match(activeStageDotRule, /\bbox-shadow:\s*0 0 0 6px rgba\(23,\s*23,\s*23,\s*0\.12\);/);
   assert.match(doneStageDotRule, /\bbackground:\s*#0f766e;/);
   assert.match(doneStageDotRule, /\bborder-color:\s*#0f766e;/);
-  assert.match(activeStageActionRule, /\bborder-color:\s*#2563eb;/);
+  assert.match(activeStageActionRule, /\bborder-color:\s*var\(--workspace-accent,\s*#000000\);/);
   assert.match(doneStageActionRule, /\bborder-color:\s*#0f766e;/);
   assert.match(errorStageDotRule, /\bbackground:\s*#fee2e2;/);
   assert.match(errorStageDotRule, /\bborder-color:\s*#f87171;/);
   assert.match(errorStageDotRule, /\bcolor:\s*#991b1b;/);
   assert.match(errorStageActionRule, /\bbackground:\s*#fef2f2;/);
   assert.match(errorStageActionRule, /\bborder-color:\s*#f87171;/);
-  assert.doesNotMatch(activeStageDotRule, /var\(--workspace-accent|#171717|#000000/);
+  assert.doesNotMatch(activeStageDotRule, /#2563eb|rgba\(37,\s*99,\s*235/i);
   assert.doesNotMatch(doneStageDotRule, /#16a34a/);
   assert.doesNotMatch(
     [

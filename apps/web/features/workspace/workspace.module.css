@@ -5500,9 +5500,9 @@
 }
 
 .deploymentStageSummaryNotice {
-  background: #eef6ff;
-  border-color: #bfdbfe;
-  color: #1e3a8a;
+  background: #f5f5f5;
+  border-color: #dcdee0;
+  color: #44474d;
 }
 
 .deploymentStageDot {
@@ -5512,8 +5512,8 @@
 }
 
 .deploymentStageActionCard[data-state="active"] {
-  background: #f8fbff;
-  border-color: #2563eb;
+  background: var(--workspace-surface, #ffffff);
+  border-color: var(--workspace-accent, #000000);
 }
 
 .deploymentStageActionCard[data-state="done"] {
@@ -5526,9 +5526,9 @@
 }
 
 .deploymentStageStep[data-state="active"] .deploymentStageDot {
-  background: #2563eb;
-  border-color: #2563eb;
-  box-shadow: 0 0 0 6px rgba(37, 99, 235, 0.16);
+  background: var(--workspace-accent, #000000);
+  border-color: var(--workspace-accent, #000000);
+  box-shadow: 0 0 0 6px rgba(23, 23, 23, 0.12);
   color: #ffffff;
 }
 
