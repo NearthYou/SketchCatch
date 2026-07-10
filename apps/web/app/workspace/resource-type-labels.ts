@@ -12,6 +12,7 @@ const resourceTypeLabels: Record<ResourceType, string> = {
   NAT_GATEWAY: "NAT Gateway",
   EC2: "EC2",
   AUTO_SCALING_GROUP: "Auto Scaling Group",
+  AUTO_SCALING_POLICY: "Autoscaling Policy",
   LAUNCH_TEMPLATE: "Launch Template",
   KEY_PAIR: "Key Pair",
   ELASTIC_IP: "Elastic IP",
