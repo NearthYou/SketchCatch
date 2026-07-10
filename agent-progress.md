@@ -209,3 +209,11 @@ Short English-only working log for the current agent context. Older records are 
   - Fresh-process HTTP checks returned Q-backed previews for serverless in 3.9 seconds and Fargate in 3.6 seconds.
 - Risk:
   - A completely empty Redis still needs one live Q verification cycle; indexed document IDs are cached for one hour after that verified cycle.
+
+### 2026-07-10 - Gate AI project creation before authenticated persistence
+- Completed:
+  - Wrapped `/workspace/new` and `/workspace/ai` with the existing `WorkspaceAuthGate` used by the persisted workspace routes.
+- Verification:
+  - The focused auth-gate regression test, web lint, web typecheck, full build, and harness check passed.
+- Risk:
+  - The broader web test suite still has three unrelated pre-existing landing/start-page style assertion failures.
