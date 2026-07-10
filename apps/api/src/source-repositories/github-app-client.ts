@@ -85,6 +85,7 @@ export type GitHubAppInstallation = {
 
 export type GitHubReadRepositoryEvidenceInput = {
   readonly installationId: string;
+  readonly expectedRepositoryId: string;
   readonly owner: string;
   readonly name: string;
 };
@@ -142,6 +143,15 @@ export class GitHubRepositoryArchivedError extends Error {
   // 연결 뒤 archived로 바뀐 Repository를 현재 분석에서 차단한다.
   constructor() {
     super("GIT_APP_REPOSITORY_ARCHIVED");
+  }
+}
+
+export class GitHubRepositoryIdentityMismatchError extends Error {
+  readonly name = "GitHubRepositoryIdentityMismatchError";
+
+  // 같은 owner/name 경로가 다른 Repository로 재사용된 경우 연결된 대상을 보호한다.
+  constructor() {
+    super("GIT_APP_REPOSITORY_IDENTITY_MISMATCH");
   }
 }
 
@@ -389,6 +399,11 @@ export function createGitHubAppClient(
         input.installationId,
         createRepositoryPath(input, "")
       );
+      const repositoryId = String(readRequiredNumber(repository.id, "repository id"));
+
+      if (repositoryId !== input.expectedRepositoryId) {
+        throw new GitHubRepositoryIdentityMismatchError();
+      }
 
       if (repository.archived === true) {
         throw new GitHubRepositoryArchivedError();

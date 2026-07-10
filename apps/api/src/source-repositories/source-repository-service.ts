@@ -425,6 +425,7 @@ export async function analyzeSourceRepository(
     sourceRepository.status !== "active" ||
     sourceRepository.provider !== "github" ||
     !sourceRepository.githubInstallationId ||
+    !sourceRepository.githubRepositoryId ||
     sourceRepository.archived
   ) {
     throw new SourceRepositoryConflictError(
@@ -434,6 +435,7 @@ export async function analyzeSourceRepository(
 
   const snapshot = await evidenceReader.readRepositoryEvidence({
     installationId: sourceRepository.githubInstallationId,
+    expectedRepositoryId: sourceRepository.githubRepositoryId,
     owner: sourceRepository.owner,
     name: sourceRepository.name
   });

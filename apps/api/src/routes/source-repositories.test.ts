@@ -10,7 +10,10 @@ import type {
   GitHubAppClient,
   GitHubRepositoryEvidenceReader
 } from "../source-repositories/github-app-client.js";
-import { GitHubRepositoryTreeTruncatedError } from "../source-repositories/github-app-client.js";
+import {
+  GitHubRepositoryIdentityMismatchError,
+  GitHubRepositoryTreeTruncatedError
+} from "../source-repositories/github-app-client.js";
 import {
   type CreateActiveGitHubSourceRepositoryInput,
   type SourceRepositoryRecord,
@@ -39,6 +42,7 @@ test("source repository routes analyze an active repository without storing the 
   ]);
   const readCalls: Array<{
     installationId: string;
+    expectedRepositoryId: string;
     owner: string;
     name: string;
   }> = [];
@@ -84,6 +88,7 @@ test("source repository routes analyze an active repository without storing the 
   assert.deepEqual(readCalls, [
     {
       installationId: "12345",
+      expectedRepositoryId: "repo-1",
       owner: "owner",
       name: "repo"
     }
@@ -230,6 +235,36 @@ test("source repository routes map incomplete GitHub trees to conflict", async (
   assert.equal(response.statusCode, 409);
   assert.equal(response.json().error, "conflict");
   assert.equal(response.json().message, "GIT_APP_REPOSITORY_TREE_TRUNCATED");
+});
+
+test("source repository routes reject a reused GitHub repository path", async (t) => {
+  // Given
+  const repository = new FakeSourceRepositoryRepository([
+    createSourceRepositoryRecord({ id: sourceRepositoryId })
+  ]);
+  const githubRepositoryEvidenceReader: GitHubRepositoryEvidenceReader = {
+    // 연결된 repository ID와 현재 경로의 ID가 다른 보안 경계를 재현한다.
+    async readRepositoryEvidence() {
+      throw new GitHubRepositoryIdentityMismatchError();
+    }
+  };
+  const app = await buildSourceRepositoryRouteApp({
+    repository,
+    githubRepositoryEvidenceReader
+  });
+  t.after(() => app.close());
+
+  // When
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/projects/${projectId}/source-repositories/${sourceRepositoryId}/analyze`,
+    headers: await authHeaders()
+  });
+
+  // Then
+  assert.equal(response.statusCode, 409);
+  assert.equal(response.json().error, "conflict");
+  assert.equal(response.json().message, "GIT_APP_REPOSITORY_IDENTITY_MISMATCH");
 });
 
 test("source repository routes issue a GitHub install URL with an API-signed state", async (t) => {

@@ -3,6 +3,7 @@ import { generateKeyPairSync } from "node:crypto";
 import test from "node:test";
 import {
   createGitHubAppClient,
+  GitHubRepositoryIdentityMismatchError,
   GitHubRepositoryArchivedError,
   GitHubRepositoryFileEncodingError,
   GitHubRepositoryEvidenceLimitError,
@@ -132,7 +133,7 @@ test("readRepositoryEvidence reads the recursive tree and only allowed static ev
       }
 
       if (pathname === "/repos/owner/repo") {
-        return jsonResponse({ default_branch: "trunk" });
+        return jsonResponse({ id: 1001, default_branch: "trunk" });
       }
 
       if (pathname === "/repos/owner/repo/commits/trunk") {
@@ -174,6 +175,7 @@ test("readRepositoryEvidence reads the recursive tree and only allowed static ev
 
   const snapshot = await client.readRepositoryEvidence({
     installationId: "42",
+    expectedRepositoryId: "1001",
     owner: "owner",
     name: "repo"
   });
@@ -218,6 +220,34 @@ test("readRepositoryEvidence reads the recursive tree and only allowed static ev
   );
 });
 
+test("readRepositoryEvidence rejects a reused repository path with a different id", async () => {
+  const client = createGitHubAppClient({
+    appId: "12345",
+    privateKey,
+    fetch: createGitHubFetchStub([], ({ pathname }) => {
+      if (pathname === "/app/installations/42/access_tokens") {
+        return jsonResponse({ token: "installation-token" });
+      }
+
+      if (pathname === "/repos/owner/repo") {
+        return jsonResponse({ id: 2002, default_branch: "main" });
+      }
+
+      return jsonResponse({ message: "not found" }, 404);
+    })
+  });
+
+  await assert.rejects(
+    client.readRepositoryEvidence({
+      installationId: "42",
+      expectedRepositoryId: "1001",
+      owner: "owner",
+      name: "repo"
+    }),
+    GitHubRepositoryIdentityMismatchError
+  );
+});
+
 test("readRepositoryEvidence rejects truncated recursive trees", async () => {
   const client = createGitHubAppClient({
     appId: "12345",
@@ -228,7 +258,7 @@ test("readRepositoryEvidence rejects truncated recursive trees", async () => {
       }
 
       if (pathname === "/repos/owner/repo") {
-        return jsonResponse({ default_branch: "main" });
+        return jsonResponse({ id: 1001, default_branch: "main" });
       }
 
       if (pathname === "/repos/owner/repo/commits/main") {
@@ -246,6 +276,7 @@ test("readRepositoryEvidence rejects truncated recursive trees", async () => {
   await assert.rejects(
     client.readRepositoryEvidence({
       installationId: "42",
+      expectedRepositoryId: "1001",
       owner: "owner",
       name: "repo"
     }),
@@ -263,7 +294,7 @@ test("readRepositoryEvidence rejects a repository archived after connection", as
       }
 
       if (pathname === "/repos/owner/repo") {
-        return jsonResponse({ default_branch: "main", archived: true });
+        return jsonResponse({ id: 1001, default_branch: "main", archived: true });
       }
 
       return jsonResponse({ message: "not found" }, 404);
@@ -273,6 +304,7 @@ test("readRepositoryEvidence rejects a repository archived after connection", as
   await assert.rejects(
     client.readRepositoryEvidence({
       installationId: "42",
+      expectedRepositoryId: "1001",
       owner: "owner",
       name: "repo"
     }),
@@ -290,7 +322,7 @@ test("readRepositoryEvidence rejects unsupported file encoding", async () => {
       }
 
       if (pathname === "/repos/owner/repo") {
-        return jsonResponse({ default_branch: "main" });
+        return jsonResponse({ id: 1001, default_branch: "main" });
       }
 
       if (pathname === "/repos/owner/repo/commits/main") {
@@ -312,6 +344,7 @@ test("readRepositoryEvidence rejects unsupported file encoding", async () => {
   await assert.rejects(
     client.readRepositoryEvidence({
       installationId: "42",
+      expectedRepositoryId: "1001",
       owner: "owner",
       name: "repo"
     }),
@@ -329,7 +362,7 @@ test("readRepositoryEvidence rejects repositories with too many evidence files",
       }
 
       if (pathname === "/repos/owner/repo") {
-        return jsonResponse({ default_branch: "main" });
+        return jsonResponse({ id: 1001, default_branch: "main" });
       }
 
       if (pathname === "/repos/owner/repo/commits/main") {
@@ -354,6 +387,7 @@ test("readRepositoryEvidence rejects repositories with too many evidence files",
   await assert.rejects(
     client.readRepositoryEvidence({
       installationId: "42",
+      expectedRepositoryId: "1001",
       owner: "owner",
       name: "repo"
     }),
@@ -373,7 +407,7 @@ test("readRepositoryEvidence rejects oversized evidence content", async () => {
       }
 
       if (pathname === "/repos/owner/repo") {
-        return jsonResponse({ default_branch: "main" });
+        return jsonResponse({ id: 1001, default_branch: "main" });
       }
 
       if (pathname === "/repos/owner/repo/commits/main") {
@@ -398,6 +432,7 @@ test("readRepositoryEvidence rejects oversized evidence content", async () => {
   await assert.rejects(
     client.readRepositoryEvidence({
       installationId: "42",
+      expectedRepositoryId: "1001",
       owner: "owner",
       name: "repo"
     }),
@@ -417,7 +452,7 @@ test("readRepositoryEvidence rejects evidence beyond the total byte budget", asy
       }
 
       if (pathname === "/repos/owner/repo") {
-        return jsonResponse({ default_branch: "main" });
+        return jsonResponse({ id: 1001, default_branch: "main" });
       }
 
       if (pathname === "/repos/owner/repo/commits/main") {
@@ -445,6 +480,7 @@ test("readRepositoryEvidence rejects evidence beyond the total byte budget", asy
   await assert.rejects(
     client.readRepositoryEvidence({
       installationId: "42",
+      expectedRepositoryId: "1001",
       owner: "owner",
       name: "repo"
     }),
