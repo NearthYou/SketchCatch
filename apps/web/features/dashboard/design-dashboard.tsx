@@ -177,9 +177,12 @@ export function DesignDashboardPage({ view, projectId = "commerce-api" }: Design
     <main className="designDashboardPage">
       <div className="designDashboardShell">
         <aside className="designDashboardSidebar" aria-label="Dashboard navigation">
-          <Link className="designDashboardBrand" href="/dashboard">
-            <span>SketchCatch</span>
-          </Link>
+          <div className="designDashboardSidebarHeader">
+            <Link className="designDashboardBrand" href="/dashboard">
+              <span>SketchCatch</span>
+            </Link>
+            <DesignDashboardAccountFooter compact />
+          </div>
           <nav className="designDashboardNav">
             {navItems.map((item) => {
               const Icon = item.icon;

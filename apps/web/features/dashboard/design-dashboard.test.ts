@@ -28,6 +28,17 @@ test("design dashboard account footer follows the DESIGN.md button tokens", () =
   assert.doesNotMatch(globalStyles, /Deployment Safety Gate/);
 });
 
+test("mobile dashboard keeps the logout action in the brand header", () => {
+  assert.match(dashboardSource, /designDashboardSidebarHeader/);
+  assert.match(dashboardSource, /<DesignDashboardAccountFooter compact \/>/);
+  assert.match(accountFooterSource, /compact\?: boolean/);
+  assert.match(globalStyles, /\.designDashboardMobileAccount\s*{[^}]*display:\s*none/s);
+  assert.match(
+    globalStyles,
+    /@media \(max-width: 920px\)[\s\S]*\.designDashboardMobileAccount\s*{[^}]*display:\s*grid/
+  );
+});
+
 function readLocalFile(relativePath: string): string {
   return readFileSync(fileURLToPath(new URL(relativePath, import.meta.url)), "utf8");
 }

@@ -6,7 +6,11 @@ import { useState } from "react";
 import { useAuth } from "../../components/auth/auth-provider";
 import { getApiErrorMessage } from "../../lib/api-client";
 
-export function DesignDashboardAccountFooter() {
+type DesignDashboardAccountFooterProps = {
+  readonly compact?: boolean;
+};
+
+export function DesignDashboardAccountFooter({ compact = false }: DesignDashboardAccountFooterProps) {
   const router = useRouter();
   const { logout, status, user } = useAuth();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -26,16 +30,18 @@ export function DesignDashboardAccountFooter() {
   }
 
   return (
-    <div className="designDashboardSidebarFooter">
-      <div className="designDashboardAccountSummary">
-        <span className="designDashboardAccountIcon" aria-hidden="true">
-          <UserRound size={16} strokeWidth={1.9} />
-        </span>
-        <div>
-          <strong>{displayName}</strong>
-          <span>{accountDetail}</span>
+    <div className={compact ? "designDashboardMobileAccount" : "designDashboardSidebarFooter"}>
+      {compact ? null : (
+        <div className="designDashboardAccountSummary">
+          <span className="designDashboardAccountIcon" aria-hidden="true">
+            <UserRound size={16} strokeWidth={1.9} />
+          </span>
+          <div>
+            <strong>{displayName}</strong>
+            <span>{accountDetail}</span>
+          </div>
         </div>
-      </div>
+      )}
       <button
         className="designDashboardLogoutButton"
         disabled={isLoggingOutDisabled}
