@@ -847,6 +847,68 @@ test("createAmazonQBusinessTextProvider sends userId when one is configured", as
   ]);
 });
 
+test("createAmazonQBusinessTextProvider uses creator mode with a compact architecture plan prompt", async () => {
+  const sentInputs: ChatSyncCommandInput[] = [];
+  const provider = createAmazonQBusinessTextProvider({
+    applicationId: "qbusiness-application-id",
+    region: "ap-southeast-2",
+    client: {
+      send: async (command: ChatSyncCommand) => {
+        sentInputs.push(command.input);
+        return { systemMessage: '{"status":"plan","requiredResources":["EC2"]}' };
+      }
+    }
+  });
+
+  await provider.generate({
+    target: "architecture_draft",
+    instructions: "This deliberately large instruction block must not be sent verbatim.".repeat(100),
+    prompt: "This deliberately large architecture prompt must not be sent verbatim.".repeat(100),
+    payload: {
+      architectureDecisionSpace: {
+        answerProfile: { management: "self_managed", traffic: "bursty" },
+        preferredPatterns: [{ id: "alb_asg_ec2" }]
+      },
+      normalizedRequirement: {
+        requiredResources: [
+          "LOAD_BALANCER",
+          "AUTO_SCALING_GROUP",
+          "EC2",
+          ...Array.from({ length: 100 }, (_, index) => `NORMALIZED_RESOURCE_${index}`)
+        ],
+        resourceQuantities: { EC2: 3 },
+        amazonQBrief: Array.from({ length: 16 }, () => "Preserve this deliberately long normalized requirement.".repeat(8)),
+        runtimeTopology: {
+          trafficEntry: "LOAD_BALANCER",
+          compute: "EC2",
+          computeCount: 3,
+          placement: "private_subnets",
+          spreadAcrossPrivateSubnets: true,
+          autoScaling: true
+        }
+      },
+      prompt: "EC2 3대를 ALB와 Auto Scaling Group 뒤에 배치해줘.",
+      supportedResourceTypes: [
+        "LOAD_BALANCER",
+        "AUTO_SCALING_GROUP",
+        "EC2",
+        "SUBNET",
+        ...Array.from({ length: 100 }, (_, index) => `SUPPORTED_RESOURCE_${index}`)
+      ]
+    }
+  });
+
+  assert.equal(sentInputs.length, 1);
+  assert.equal(sentInputs[0]?.chatMode, "CREATOR_MODE");
+  assert.ok((sentInputs[0]?.userMessage?.length ?? 0) <= 2_048);
+  assert.match(sentInputs[0]?.userMessage ?? "", /compact architecture plan/i);
+  assert.match(sentInputs[0]?.userMessage ?? "", /AUTO_SCALING_GROUP/);
+  assert.match(sentInputs[0]?.userMessage ?? "", /"status":"plan"/);
+  assert.doesNotMatch(sentInputs[0]?.userMessage ?? "", /deliberately large architecture prompt/i);
+  const planningInput = (sentInputs[0]?.userMessage ?? "").split("Planning input:\n")[1];
+  assert.doesNotThrow(() => JSON.parse(planningInput ?? ""));
+});
+
 test("createAiProviderBackedLlmExplanation keeps daily limits across rate windows", async () => {
   const calls: unknown[] = [];
   const bedrockExplanation: LlmExplanation = {

@@ -466,10 +466,14 @@ export function createAmazonQBusinessTextProvider(input: {
     service: "amazon_q_business",
     model: input.applicationId,
     generate: async (request) => {
+      const isArchitectureDraft = request.target === "architecture_draft";
       const command = new ChatSyncCommand({
         applicationId: input.applicationId,
         ...(input.userId ? { userId: input.userId } : {}),
-        userMessage: request.prompt
+        ...(isArchitectureDraft ? { chatMode: "CREATOR_MODE" as const } : {}),
+        userMessage: isArchitectureDraft
+          ? createAmazonQArchitecturePlanPrompt(request.payload)
+          : request.prompt
       });
       const response = await client.send(command);
       const text = response.systemMessage ?? "";
@@ -480,6 +484,194 @@ export function createAmazonQBusinessTextProvider(input: {
       };
     }
   };
+}
+
+function createAmazonQArchitecturePlanPrompt(payload: unknown): string {
+  const input = createAmazonQArchitecturePlanInput(payload);
+  const header = [
+    "Create a compact architecture plan from the normalized requirements.",
+    "Return JSON only. Preserve explicit resource, quantity, exclusion, and topology constraints.",
+    "Use only ResourceType values listed in supportedResourceTypes.",
+    '{"status":"plan","title":"short","requiredResources":["EC2"],"resourceQuantities":{"EC2":1},"runtimeTopology":{"trafficEntry":"LOAD_BALANCER","compute":"EC2","computeCount":1,"placement":"private_subnets","spreadAcrossPrivateSubnets":false,"autoScaling":false},"assumptions":[],"explanations":[]}',
+    "Planning input:"
+  ].join("\n");
+  const inputBudget = Math.max(200, AMAZON_Q_USER_MESSAGE_MAX_LENGTH - header.length - 1);
+  const compactInput = fitAmazonQArchitecturePlanInput(input, inputBudget);
+
+  return trimProviderPrompt(
+    `${header}\n${JSON.stringify(compactInput)}`,
+    AMAZON_Q_USER_MESSAGE_MAX_LENGTH
+  );
+}
+
+function createAmazonQArchitecturePlanInput(payload: unknown): Record<string, unknown> {
+  if (!isRecord(payload)) {
+    return {};
+  }
+
+  const decisionSpace = isRecord(payload.architectureDecisionSpace)
+    ? payload.architectureDecisionSpace
+    : undefined;
+  const preferredPatterns = Array.isArray(decisionSpace?.preferredPatterns)
+    ? decisionSpace.preferredPatterns.flatMap((pattern) => {
+        if (!isRecord(pattern) || typeof pattern.id !== "string") {
+          return [];
+        }
+
+        return [pattern.id];
+      })
+    : [];
+
+  return {
+    ...(isRecord(payload.normalizedRequirement)
+      ? { normalizedRequirement: compactAmazonQNormalizedRequirement(payload.normalizedRequirement) }
+      : {}),
+    ...(isRecord(decisionSpace?.answerProfile)
+      ? { answerProfile: decisionSpace.answerProfile }
+      : {}),
+    ...(preferredPatterns.length === 0 ? {} : { preferredPatterns }),
+    ...(Array.isArray(payload.supportedResourceTypes)
+      ? { supportedResourceTypes: payload.supportedResourceTypes }
+      : {}),
+    ...(typeof payload.prompt === "string"
+      ? { userRequirement: trimProviderPrompt(payload.prompt, 320) }
+      : {})
+  };
+}
+
+function fitAmazonQArchitecturePlanInput(
+  input: Record<string, unknown>,
+  budget: number
+): Record<string, unknown> {
+  const candidates: Record<string, unknown>[] = [
+    input,
+    omitRecordKey(input, "userRequirement"),
+    omitRecordKey(omitRecordKey(input, "userRequirement"), "answerProfile"),
+    omitRecordKey(omitRecordKey(omitRecordKey(input, "userRequirement"), "answerProfile"), "preferredPatterns")
+  ];
+
+  for (const candidate of candidates) {
+    if (JSON.stringify(candidate).length <= budget) {
+      return candidate;
+    }
+  }
+
+  const normalizedRequirement = isRecord(input.normalizedRequirement)
+    ? createHardConstraintAmazonQRequirement(input.normalizedRequirement)
+    : {};
+  const baseInput: Record<string, unknown> = {
+    normalizedRequirement,
+    ...(isRecord(input.answerProfile) ? { answerProfile: input.answerProfile } : {})
+  };
+  const compactBaseInput = JSON.stringify(baseInput).length <= budget
+    ? baseInput
+    : { normalizedRequirement };
+  const supportedResourceTypes = Array.isArray(input.supportedResourceTypes)
+    ? input.supportedResourceTypes.filter((value): value is string => typeof value === "string")
+    : [];
+  let fittedInput = { ...compactBaseInput, supportedResourceTypes: [] as string[] };
+
+  for (const resourceType of supportedResourceTypes) {
+    const candidate = {
+      ...compactBaseInput,
+      supportedResourceTypes: [...fittedInput.supportedResourceTypes, resourceType]
+    };
+
+    if (JSON.stringify(candidate).length > budget) {
+      break;
+    }
+
+    fittedInput = candidate;
+  }
+
+  return fittedInput;
+}
+
+function compactAmazonQNormalizedRequirement(input: Record<string, unknown>): Record<string, unknown> {
+  return {
+    ...copyCompactTextField(input, "intent", 80),
+    ...copyCompactTextField(input, "region", 80),
+    ...copyCompactTextArrayField(input, "requiredResources", 24, 80),
+    ...copyCompactNumberRecordField(input, "resourceQuantities", 24, 80),
+    ...copyCompactTextArrayField(input, "forbiddenCapabilities", 12, 80),
+    ...(isRecord(input.runtimeTopology) ? { runtimeTopology: input.runtimeTopology } : {}),
+    ...copyCompactTextField(input, "database", 80),
+    ...copyCompactTextField(input, "availability", 80),
+    ...copyCompactTextArrayField(input, "amazonQBrief", 4, 160)
+  };
+}
+
+function createHardConstraintAmazonQRequirement(input: Record<string, unknown>): Record<string, unknown> {
+  return {
+    ...copyCompactTextField(input, "region", 48),
+    ...copyCompactTextArrayField(input, "requiredResources", 12, 48),
+    ...copyCompactNumberRecordField(input, "resourceQuantities", 12, 48),
+    ...copyCompactTextArrayField(input, "forbiddenCapabilities", 8, 48),
+    ...(isRecord(input.runtimeTopology) ? { runtimeTopology: input.runtimeTopology } : {}),
+    ...copyCompactTextField(input, "database", 48),
+    ...copyCompactTextField(input, "availability", 48)
+  };
+}
+
+function copyCompactTextField(
+  input: Record<string, unknown>,
+  key: string,
+  maxLength: number
+): Record<string, string> {
+  const value = input[key];
+
+  return typeof value === "string" && value.trim().length > 0
+    ? { [key]: value.trim().slice(0, maxLength) }
+    : {};
+}
+
+function copyCompactTextArrayField(
+  input: Record<string, unknown>,
+  key: string,
+  maxItems: number,
+  maxLength: number
+): Record<string, string[]> {
+  const value = input[key];
+
+  if (!Array.isArray(value)) {
+    return {};
+  }
+
+  const items = value
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim().slice(0, maxLength))
+    .filter((item) => item.length > 0)
+    .slice(0, maxItems);
+
+  return items.length === 0 ? {} : { [key]: items };
+}
+
+function copyCompactNumberRecordField(
+  input: Record<string, unknown>,
+  key: string,
+  maxItems: number,
+  maxKeyLength: number
+): Record<string, Record<string, number>> {
+  const value = input[key];
+
+  if (!isRecord(value)) {
+    return {};
+  }
+
+  const entries = Object.entries(value)
+    .filter((entry): entry is [string, number] => typeof entry[1] === "number" && Number.isFinite(entry[1]))
+    .slice(0, maxItems)
+    .map(([entryKey, entryValue]) => [entryKey.slice(0, maxKeyLength), entryValue] as const);
+
+  return entries.length === 0 ? {} : { [key]: Object.fromEntries(entries) };
+}
+
+function omitRecordKey(input: Record<string, unknown>, key: string): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(input).filter(([entryKey]) => entryKey !== key));
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 function createDefaultAmazonQBusinessChatClient(region: string): AmazonQBusinessChatClient {
