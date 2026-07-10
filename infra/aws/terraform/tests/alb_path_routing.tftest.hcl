@@ -96,6 +96,14 @@ run "alb_path_routing" {
 
   assert {
     condition = (
+      one(jsondecode(aws_ecs_task_definition.api.container_definitions)).cpu == var.ecs_task_cpu &&
+      one(jsondecode(aws_ecs_task_definition.api.container_definitions)).memory == var.ecs_task_memory
+    )
+    error_message = "The single API container must be able to use all CPU and memory allocated to its task."
+  }
+
+  assert {
+    condition = (
       one(aws_ecs_service.api.load_balancer).container_name == "api" &&
       one(aws_ecs_service.api.load_balancer).container_port == 4000 &&
       one(aws_ecs_service.web.load_balancer).container_name == "web" &&

@@ -98,15 +98,15 @@ variable "ecs_task_memory" {
 }
 
 variable "api_container_cpu" {
-  description = "API container CPU units within the API task."
+  description = "API container CPU units within the single-container API task."
   type        = number
-  default     = 512
+  default     = 1024
 }
 
 variable "api_container_memory" {
-  description = "API container hard memory limit in MiB within the API task."
+  description = "API container hard memory limit in MiB within the single-container API task."
   type        = number
-  default     = 1024
+  default     = 2048
 }
 
 variable "web_task_cpu" {

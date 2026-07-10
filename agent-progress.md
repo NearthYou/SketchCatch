@@ -22,6 +22,7 @@ Short English-only working log for the current agent context. Older records are 
   - Split ECS deploy rendering and rollout into API then web service updates.
   - Added a Terraform routing contract test and a Fastify forwarded-header regression test.
   - Updated architecture, deployment, Terraform, and ECS migration planning docs.
+  - Addressed PR #313 feedback by aligning the single API container limits with the task allocation and adding a regression assertion.
 - Verification:
   - `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed on the final implementation diff.
   - Terraform fmt and validate passed; `terraform test` passed HTTP and HTTPS routing contracts (2 tests).
