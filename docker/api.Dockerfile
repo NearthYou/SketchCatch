@@ -40,4 +40,5 @@ COPY --from=build /repo/apps/api/dist ./dist
 COPY --from=build /repo/apps/api/drizzle ./drizzle
 RUN terraform -version && trivy --version
 EXPOSE 4000
+# ECS RunTask overrides this command with: node dist/deployment-worker.cjs
 CMD ["node", "dist/server.cjs"]

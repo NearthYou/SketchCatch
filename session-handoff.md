@@ -4,25 +4,28 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Currently Verified
 
-- Current branch: `fix/sw/302-ecs-worker-dispatch-safety`.
-- Active workstream: `ECS-MIGRATION-000`.
-- Phase 5 PR #296 is merged; issue #302 tracks valid post-merge review hardening.
-- `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check` passed during this session.
-- No live AWS commands were run.
+- Current branch: `feature/sw/306-deployment-worker-runtime`.
+- Active workstream: `ECS-MIGRATION-000`, issue #306.
+- Worker targeted tests, API lint, API typecheck, and API build pass.
+- API build produces `dist/deployment-worker.cjs`.
+- Full repository harness, lint, typecheck, and build pass.
+- No live AWS or Terraform mutation commands were run.
 
 ## Changes This Session
 
-- Missing ECS RunTask task ARNs now fail dispatch.
-- Stale ECS cancellation paths terminalize the active deployment job.
-- ECS verification/stop API failures return 503 while preserving the active lock for safe retry.
-- Worker JSON config type boundaries and deployment/IAM guidance were tightened.
+- Added DeploymentJob worker orchestration with RUNNING status and requester access-context validation.
+- Reused existing init/plan/apply/destroy-plan/destroy services.
+- Added masked SUCCEEDED/FAILED/CANCELLED job finalization.
+- Added the worker process entrypoint and same-image Docker command override support.
+- Updated deployment docs with the worker command and activation prerequisites.
 
 ## Broken Or Unverified
 
-- No tests were added or run per user direction.
-- Worker runtime, task definition, roles, and worker security group are not implemented.
-- Keep production `DEPLOYMENT_WORKER_MODE=in_process` until those Phase 6 resources exist.
+- The requested API test command runs the full suite and exits 1 on 3 unrelated pre-existing tests; all Phase 6 worker tests pass.
+- Local Docker image verification is pending because Docker Desktop was not running.
+- Worker-specific ECS task definition, IAM roles, security group, and live smoke remain pending outside this phase.
+- Production must keep `DEPLOYMENT_WORKER_MODE=in_process` until those resources and smoke evidence exist.
 
 ## Best Next Action
 
-- Run remaining static checks, publish the issue #302 fix PR, link it from PR #296 review threads, and resolve the addressed threads.
+- Publish issue #306 as a PR to `dev`, wait for automated review, address actionable feedback, and merge when checks are acceptable.
