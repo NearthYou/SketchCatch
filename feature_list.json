@@ -198,7 +198,7 @@
         "API route가 ECS worker mode에서 DeploymentJob을 만들고 ECS RunTask dispatcher로 실행을 위임한다.",
         "agent-progress.md와 session-handoff.md가 최신 phase 상태와 다음 phase 기준을 기록한다."
       ],
-      "notes": "Phase 9 is active on issue #314 and branch feature/sw/314-production-infra-terraform. Production infrastructure is separated into runtime, edge, data, and legacy rollback state groups with S3 lockfile and plan-only approval gates. No live import/apply/destroy or AWS mutation is allowed in this phase."
+      "notes": "Issue #316 is active on fix/sw/316-ecs-production-cutover-and-worker-isolation. The production runtime is being changed to staged warmup/split routing with protected legacy rollback, parallel API/web deployment, and a dedicated one-off worker task boundary. Live apply and Route53 cutover require reviewed plans and smoke evidence."
     }
   ]
 }

@@ -87,6 +87,8 @@ SketchCatch production infrastructure
 
 production infrastructure는 S3 backend의 group별 key와 native lockfile을 사용합니다. 기존 ECS runtime root와 `production/ecs-foundation/terraform.tfstate` key는 state migration 승인 전까지 유지합니다. Route53/ACM, S3/RDS/Redis, EC2 rollback은 서로 다른 state로 격리하고, high-risk root에는 discovery, backup, ownership, zero-change plan 검토 전 resource/import block을 추가하지 않습니다.
 
+runtime cutover는 warmup과 split 두 상태로 구분합니다. warmup은 legacy nginx target을 weight 100으로 유지하면서 API/web target을 weight 0으로 등록하고 health를 확보합니다. split은 API/web를 weight 100으로 전환하되 legacy ECS service와 target group을 weight 0 rollback으로 보존합니다.
+
 CloudFormation이 소유한 resource는 stack이 남아 있는 동안 Terraform으로 중복 소유하지 않습니다. import도 state를 변경하는 live operation이므로 plan-only workflow와 별도 승인 경계를 통과한 후에만 수행합니다.
 
 ## 데이터 저장 기준
@@ -171,9 +173,11 @@ Fastify는 route/service 분리가 쉽고, MVP API와 Zod 검증에 충분하다
 
 프로젝트와 설계 JSON은 RDS에 저장하고, Terraform 파일, tfplan, export zip은 S3에 저장한다.
 
-### ADR-004: 운영 배포는 ECS/Fargate와 ALB path routing을 사용한다
+### ADR-004: 운영 배포는 staged ECS/Fargate와 ALB path routing을 사용한다
 
-API와 web을 독립 Fargate service로 실행하고 ALB가 `/api`, `/api/*`, `/health`, `/health/db`를 API로, 기본 `/*`를 web으로 전달한다. nginx는 ECS steady state에서 제거하며 기존 EC2/SSM/docker run 경로는 승인된 rollback 보존 기간 동안만 유지한다.
+API와 web을 독립 Fargate service로 병렬 배포합니다. web은 permissionless task role과 별도 security group을 사용해 API의 RDS allowlist와 AWS runtime 권한에서 분리합니다. 최초 전환은 legacy nginx 100/API·web 0 warmup, target health와 direct ALB smoke, API·web 100/legacy 0 split, Route53 cutover 순서를 지킵니다. legacy ECS service와 기존 EC2/SSM/docker run 경로는 승인된 rollback 보존 기간 동안 유지합니다.
+
+Terraform 실행은 API process가 아니라 ECS RunTask one-off worker가 담당합니다. worker는 전용 task definition, execution role, task role, no-ingress security group을 사용하고, API에는 해당 worker를 dispatch·조회·중단·tag·PassRole하는 최소 권한만 둡니다. 기존 사용자 execution role trust를 worker principal로 재검증하기 전에는 worker dispatch를 활성화하지 않습니다.
 
 ### ADR-005: MVP는 Terraform 우선으로 간다
 

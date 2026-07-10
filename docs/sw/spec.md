@@ -75,6 +75,7 @@ API/worker 분리는 ECS production 배포가 안정화된 뒤 진행한다. Ter
 - Phase 1에서는 nginx + web + api single ECS service를 사용한다.
 - EC2 운영 구조와 컨테이너 경계를 유지해 첫 전환 리스크를 줄인다.
 - Phase 8부터 API/web를 독립 ECS service로 운영하고 ALB path routing을 사용한다.
+- 실제 전환은 legacy nginx 100/API·web 0 warmup, target health와 direct smoke, API·web 100/legacy 0 split 순서를 지킨다.
 
 ### RDS
 
@@ -100,7 +101,7 @@ API/worker 분리는 ECS production 배포가 안정화된 뒤 진행한다. Ter
 
 ## 비용 가드레일
 
-- production API와 web service만 각각 desired count 1로 24/7 실행한다.
+- production API와 web service는 각각 desired count 1로 24/7 실행한다. cutover 관찰 기간에는 legacy nginx service 1개가 추가로 실행된다.
 - staging app은 기본 0으로 둔다.
 - worker는 필요할 때만 ECS `RunTask`로 실행하고 상시 desired count를 두지 않는다.
 - NAT Gateway는 기본 생성하지 않는다.

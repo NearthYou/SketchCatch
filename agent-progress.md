@@ -1,41 +1,49 @@
 # Agent Progress
 
-Short English-only working log for the current agent context. Older records are archived under `docs/agent-history/`.
+Short English-only working log for the current agent context. Older records are archived under docs/agent-history/.
 
 ## Current Verified State
 
-- Branch: `feature/sw/314-production-infra-terraform`.
-- Active workstream: `ECS-MIGRATION-000`, Phase 9 production infrastructure Terraform transition.
-- Issue: #314.
-- Phase 8 is merged into `dev` through PR #313.
-- No live AWS, remote Terraform plan, import, apply, destroy, or state command has run in Phase 9.
+- Branch: fix/sw/316-ecs-production-cutover-및-worker-격리-안전성-보강.
+- Active workstream: ECS-MIGRATION-000, production cutover and worker isolation.
+- Issue: #316.
+- Production Route53 still points to the EC2 ALB.
+- The parallel ECS ALB currently serves the healthy legacy nginx app service.
+- The runtime state bucket has Versioning, AES256 encryption, Public Access Block, and no stale lock.
 
 ## Session Record
 
-### 2026-07-10 - Add production infrastructure Terraform management boundaries
+### 2026-07-10 - Stage the production split and isolate the one-off worker
 
-- Goal: Introduce safe state, import, and review-only planning structure for SketchCatch's own production infrastructure without mixing it with user Deployment execution.
-- Completed so far:
-  - Preserved the existing runtime root and `production/ecs-foundation/terraform.tfstate` key.
-  - Added separate empty Terraform import gates for edge, persistent data, and legacy rollback groups.
-  - Added S3 backend examples with encryption and native lockfiles for four unique state keys.
-  - Added a machine-readable import inventory covering ECS, ALB, ECR, IAM, CloudWatch, Route53/ACM, S3, RDS, Redis/ElastiCache, EC2/SSM, and CloudFormation ownership.
-  - Added a manual plan-only workflow with group confirmation, Environment approval, complete runtime tfvars, and no binary plan artifact.
-  - Added static guards that reject live operations, duplicate state keys, missing inventory, and premature resource/import blocks in high-risk roots.
-  - Added Route53 `prevent_destroy` protection and documented state-move requirements before edge ownership transfer.
-  - Updated architecture, deployment, docs/sw, runtime Terraform, and harness tracking.
-  - Addressed PR #315 feedback with malformed-manifest guards, missing-directory handling, and tested Terraform operation parsing.
-- Verification:
-  - `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
-  - Runtime, edge, data, and legacy rollback roots passed `terraform init -backend=false -input=false` and `terraform validate` without AWS backend access.
-  - Terraform fmt check passed and runtime Terraform tests passed 2 HTTP/HTTPS routing contracts.
-  - Production infrastructure structure guard, manifest/tracker JSON parsing, workflow Prettier, and `git diff --check` passed.
-- Risk:
-  - Backend bucket Versioning/encryption/public access and plan-role IAM are documented but not live-verified.
-  - Existing runtime state membership has not been audited against AWS.
-  - Edge/data/legacy roots intentionally contain no managed resources until separately approved discovery/import work.
-  - CloudFormation and EC2 rollback ownership remain active and must not be removed or duplicated.
+- Live discovery confirmed that Phase 8 had not been applied: only sketchcatch-production-app exists and the API/web/worker task families do not.
+- The original Phase 8 plan would destroy the legacy service and target group, replace the shared service security group, and route the listener before split targets were healthy.
+- Added warmup and split listener weights so legacy remains at 100 during service registration and at 0 after split.
+- Restored and protected the legacy app service, target group, and port 80 security group rules.
+- Added API/web service stability waits and parallel GitHub Actions deploy jobs.
+- Added a dedicated one-off worker task definition, execution role, task role, security group, RDS ingress, worker secrets, and scoped API dispatch permissions.
+- Worker dispatch remains disabled until the worker caller principal is trusted by existing customer execution roles and a worker smoke passes.
+- Added production secret completeness preconditions, ALB deletion protection, invalid header dropping, Terraform tests, and Korean operations documentation.
+
+## Verification
+
+- Initial harness check passed.
+- Terraform fmt and validate passed.
+- Terraform tests passed 2 of 2 warmup/split contracts.
+- Live refresh-only plan completed without mutation.
+- The revised production warmup plan has no legacy service, target group, or security group delete/replace actions.
+- Its only delete is the non-production ECS ALB HTTP forward listener, replaced by HTTP redirect plus HTTPS while legacy remains weight 100.
+- No Terraform apply, worker RunTask, or Route53 mutation has run yet.
+
+## Risk
+
+- The operator role may still need permission to create and pass the two new worker IAM roles.
+- Existing customer execution roles must trust the worker task role before worker dispatch is enabled.
+- Warmup temporarily runs three Fargate app tasks.
+- API/web remain desired count 1. Web now has a permissionless task role and separate SG; only the protected legacy rollback task still contains all three containers on the API/legacy SG.
+- Route53 ownership remains outside runtime state and requires a separately reviewed change and rollback batch.
 
 ## Next Action
 
-- Publish the PR, wait five minutes, resolve review feedback, re-verify, and merge only with green checks and no unresolved threads.
+- Full repository checks, Terraform validation/tests, production structure guard, workflow/JSON formatting, and diff checks passed.
+- Open and merge the issue #316 PR after review.
+- Re-plan from merged dev, apply warmup, verify target health and direct HTTPS smoke, then separately apply split and perform the approved Route53 cutover.

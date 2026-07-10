@@ -79,10 +79,50 @@ variable "route53_record_name" {
   default     = ""
 }
 
+variable "ecs_cutover_stage" {
+  description = "ALB routing stage. warmup keeps legacy nginx at weight 100 while API/web targets register; split sends traffic to API/web while retaining legacy at weight 0."
+  type        = string
+  default     = "warmup"
+
+  validation {
+    condition     = contains(["warmup", "split"], var.ecs_cutover_stage)
+    error_message = "ecs_cutover_stage must be warmup or split."
+  }
+}
+
 variable "ecs_desired_count" {
   description = "Desired task count for each production API and web ECS service. Cost-bearing: 1 creates two warm tasks after the split."
   type        = number
   default     = 1
+}
+
+variable "legacy_ecs_desired_count" {
+  description = "Desired count for the retained nginx rollback service. Keep 1 until post-cutover retirement is separately approved."
+  type        = number
+  default     = 1
+
+  validation {
+    condition     = var.legacy_ecs_desired_count >= 1
+    error_message = "legacy_ecs_desired_count must stay at least 1 while the rollback service is Terraform-protected."
+  }
+}
+
+variable "enable_ecs_worker_dispatch" {
+  description = "Switch API execution from in-process to the dedicated one-off ECS worker task. Enable only after worker role trust migration and smoke."
+  type        = bool
+  default     = false
+}
+
+variable "worker_rds_security_group_id" {
+  description = "Existing RDS security group that receives a PostgreSQL ingress rule from the dedicated worker SG."
+  type        = string
+  default     = ""
+}
+
+variable "worker_rds_port" {
+  description = "RDS port opened only from the dedicated worker security group."
+  type        = number
+  default     = 5432
 }
 
 variable "ecs_task_cpu" {
@@ -133,6 +173,42 @@ variable "web_container_memory" {
   default     = 512
 }
 
+variable "legacy_api_container_cpu" {
+  description = "API CPU units retained in the nginx rollback task."
+  type        = number
+  default     = 512
+}
+
+variable "legacy_api_container_memory" {
+  description = "API memory MiB retained in the nginx rollback task."
+  type        = number
+  default     = 1024
+}
+
+variable "legacy_nginx_container_cpu" {
+  description = "Nginx CPU units retained in the rollback task."
+  type        = number
+  default     = 128
+}
+
+variable "legacy_nginx_container_memory" {
+  description = "Nginx memory MiB retained in the rollback task."
+  type        = number
+  default     = 256
+}
+
+variable "worker_task_cpu" {
+  description = "CPU units for each one-off Terraform worker task. Cost-bearing only while a task runs."
+  type        = number
+  default     = 1024
+}
+
+variable "worker_task_memory" {
+  description = "Memory MiB for each one-off Terraform worker task. Cost-bearing only while a task runs."
+  type        = number
+  default     = 2048
+}
+
 variable "image_tag" {
   description = "Image tag shared by the steady-state API and web ECR images."
   type        = string
@@ -154,7 +230,7 @@ variable "log_retention_days" {
 variable "enable_alb_deletion_protection" {
   description = "Enable deletion protection for the parallel ECS ALB."
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "artifact_bucket_name" {
