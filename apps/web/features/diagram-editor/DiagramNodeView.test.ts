@@ -36,14 +36,14 @@ test("diagram node view renders icon design nodes with resource icon tile layout
   );
 });
 
-test("resource node shells reset the base minimum height to match explicit geometry", () => {
+test("resource node shells reset inherited box constraints to match explicit geometry", () => {
   assert.match(
     diagramEditorCssSource,
-    /\.nodeShell\s*\{[^}]*min-height:\s*72px;/s
+    /\.nodeShell\s*\{[^}]*border:\s*2px solid #9aa5b8;[^}]*min-height:\s*72px;/s
   );
   assert.match(
     diagramEditorCssSource,
-    /\.nodeShellResource\s*\{[^}]*min-height:\s*0;/s
+    /\.nodeShellResource\s*\{[^}]*border-width:\s*0;[^}]*min-height:\s*0;/s
   );
 });
 
