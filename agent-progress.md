@@ -4,13 +4,20 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- Branch: `feature/sw/295-ecs-worker-task-dispatch`.
-- Active workstream: `ECS-MIGRATION-000`, Phase 5 API-side ECS worker RunTask dispatch.
-- Phases 1, 2, 3, and 4 are merged into `dev`.
-- Phase 5 keeps public deployment API response shapes stable and preserves in-process background execution unless `DEPLOYMENT_WORKER_MODE=ecs`.
-- Phase 5 must not run live AWS commands.
+- Branch: `codex/workspace-parameter-editing`.
+- Scoped work: Workspace infrastructure settings Task 4 documentation and integrated verification.
+- Task 4 documents only new-node safe defaults, parameter-reference edge metadata, and Terraform Preview input behavior; it does not change product behavior.
+- `feature_list.json` and `session-handoff.md` remain unchanged by scoped-task instruction.
 
 ## Session Record
+
+### 2026-07-10 - Complete Workspace infrastructure settings Task 4
+
+- Goal: Record the Task 1-3 contracts and run the required integrated verification.
+- Completed: Updated `docs/data-models.md` for new-node-only safe defaults in `parameters.values`, parameter-reference `DiagramEdge.metadata`, and Terraform Preview ASG `desiredCapacity` omission rules. Updated the ignored JH worklogs and Task 4 report.
+- Verification: `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
+- Risk: `pnpm build` regenerated `apps/web/next-env.d.ts` and the pre-existing uncommitted user diff is no longer visible. The file was never staged or committed; the intended edit needs user verification because Git cannot restore its prior working-tree-only content.
+- Next action: Task 4 is complete; review and merge only its tracked documentation changes.
 
 ### 2026-07-10 - Start ECS Phase 5 API worker dispatch
 
