@@ -37,21 +37,40 @@ export function selectRepositoryTemplate(
   const hasBackend = input.applicationUnits.some(
     (unit) => unit.kind === "backend" || unit.kind === "fullstack"
   );
-  const hasServerlessApi =
-    /serverless\.(?:yml|yaml)|template\.(?:yml|yaml)/.test(searchableEvidence) &&
-    /functions:|lambda/.test(searchableEvidence) &&
-    /httpapi|api gateway|apigateway/.test(searchableEvidence);
-  const hasCognito = /cognito|userpool|user_pool/.test(searchableEvidence);
+  const applicationUnitEvidence = input.applicationUnits.map((unit) => ({
+    unit,
+    text: getApplicationUnitEvidenceText(input, unit.id)
+  }));
+  const serverlessApplicationUnits = applicationUnitEvidence.filter(
+    ({ unit, text }) =>
+      (unit.kind === "backend" || unit.kind === "fullstack") &&
+      /serverless\.(?:yml|yaml)|template\.(?:yml|yaml)/.test(text) &&
+      /functions:|lambda/.test(text) &&
+      /httpapi|api gateway|apigateway/.test(text)
+  );
+  const hasServerlessApi = serverlessApplicationUnits.length > 0;
+  const hasCognito = serverlessApplicationUnits.some(({ text }) =>
+    /cognito|userpool|user_pool/.test(text)
+  );
   const hasThreeTierInfrastructure =
     /\bvpc\b/.test(searchableEvidence) &&
     /\balb\b|application load balancer/.test(searchableEvidence) &&
     /\basg\b|auto scaling group/.test(searchableEvidence) &&
     /\brds\b|relational database service/.test(searchableEvidence);
   const hasDockerfile = input.evidence.some((item) => item.kind === "dockerfile");
-  const hasEcsFargate = /\becs\b/.test(searchableEvidence) && /\bfargate\b/.test(searchableEvidence);
-  const hasEksKubernetes =
-    /\beks\b/.test(searchableEvidence) &&
-    /kubernetes|kustomization|helm|deployment\.ya?ml/.test(searchableEvidence);
+  const dockerApplicationUnits = applicationUnitEvidence.filter(({ unit }) =>
+    input.evidence.some(
+      (item) => item.kind === "dockerfile" && item.applicationUnitId === unit.id
+    )
+  );
+  const hasEcsFargate = dockerApplicationUnits.some(
+    ({ text }) => /\becs\b/.test(text) && /\bfargate\b/.test(text)
+  );
+  const hasEksKubernetes = dockerApplicationUnits.some(
+    ({ text }) =>
+      /\beks\b/.test(text) &&
+      /kubernetes|kustomization|helm|deployment\.ya?ml/.test(text)
+  );
   const matches: readonly RepositoryTemplateMatch[] = [
     ...(hasFrontend &&
     !hasBackend &&
@@ -118,6 +137,27 @@ export function selectRepositoryTemplate(
       ? "둘 이상의 Template 신호가 동시에 명확해 하나를 확정할 수 없습니다."
       : "지원 Template 하나를 확정할 만큼 명확한 evidence가 없습니다."
   );
+}
+
+// Template 신호가 다른 Application Unit의 README나 설정과 섞이지 않도록 근거를 묶는다.
+function getApplicationUnitEvidenceText(
+  input: RepositoryTemplateSelectionInput,
+  applicationUnitId: string
+): string {
+  const evidencePaths = new Set(
+    input.evidence
+      .filter((item) => item.applicationUnitId === applicationUnitId)
+      .map((item) => item.path)
+  );
+
+  return [
+    ...evidencePaths,
+    ...input.snapshot.files
+      .filter((file) => evidencePaths.has(file.path))
+      .map((file) => file.content)
+  ]
+    .join("\n")
+    .toLowerCase();
 }
 
 // 성공 결과에는 후보 목록 없이 선택한 Template 하나만 넣는다.

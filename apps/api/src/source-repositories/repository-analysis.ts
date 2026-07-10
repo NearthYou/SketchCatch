@@ -4,6 +4,7 @@ import {
   type RepositoryAnalysisEvidence,
   type RepositoryApplicationUnit
 } from "@sketchcatch/types";
+import { matchesGlob } from "node:path";
 import { z } from "zod";
 import type {
   GitHubRepositoryEvidenceFile,
@@ -38,7 +39,7 @@ type ParsedPackageJson = {
   readonly path: string;
   readonly rootPath: string;
   readonly dependencies: Readonly<Record<string, string>>;
-  readonly hasWorkspaces: boolean;
+  readonly workspacePatterns: readonly string[] | null;
 };
 
 // 정적 repository snapshot을 저장하거나 실행하지 않고 AI Handoff로 변환한다.
@@ -94,7 +95,7 @@ function parsePackageJsonEvidence(file: GitHubRepositoryEvidenceFile): readonly 
           ...parsed.data.dependencies,
           ...parsed.data.devDependencies
         },
-        hasWorkspaces: parsed.data.workspaces !== undefined
+        workspacePatterns: getWorkspacePatterns(parsed.data.workspaces)
       }
     ];
   } catch (error) {
@@ -112,13 +113,50 @@ function detectApplicationUnits(
   treePaths: readonly string[],
   files: readonly GitHubRepositoryEvidenceFile[]
 ): RepositoryApplicationUnit[] {
-  const hasNestedPackage = packageFiles.some((file) => file.rootPath !== ".");
-  const packageUnits = packageFiles
-    .filter((file) => !(file.rootPath === "." && file.hasWorkspaces && hasNestedPackage))
+  const rootPackage = packageFiles.find((file) => file.rootPath === ".");
+  const workspacePackageFiles = rootPackage?.workspacePatterns
+    ? packageFiles.filter(
+        (file) =>
+          file.rootPath === "." ||
+          isDeclaredWorkspaceRoot(file.rootPath, rootPackage.workspacePatterns ?? [])
+      )
+    : packageFiles;
+  const hasNestedPackage = workspacePackageFiles.some((file) => file.rootPath !== ".");
+  const packageUnits = workspacePackageFiles
+    .filter(
+      (file) =>
+        !(file.rootPath === "." && file.workspacePatterns !== null && hasNestedPackage)
+    )
     .flatMap((file) => createApplicationUnit(file, files));
 
   return [...packageUnits, ...detectDockerApplicationUnits(treePaths, packageUnits)]
     .sort((left, right) => left.rootPath.localeCompare(right.rootPath));
+}
+
+// package.json workspaces의 배열형과 packages 객체형을 같은 glob 목록으로 정규화한다.
+function getWorkspacePatterns(
+  workspaces: z.infer<typeof packageJsonSchema>["workspaces"]
+): readonly string[] | null {
+  if (Array.isArray(workspaces)) {
+    return workspaces;
+  }
+
+  return workspaces?.packages ?? null;
+}
+
+// 선언된 workspace glob에 포함되고 제외 glob에는 걸리지 않는 실행 단위만 허용한다.
+function isDeclaredWorkspaceRoot(rootPath: string, patterns: readonly string[]): boolean {
+  const normalizedPatterns = patterns
+    .map((pattern) => pattern.trim().replace(/^\.\//, "").replace(/\/$/, ""))
+    .filter(Boolean);
+  const included = normalizedPatterns
+    .filter((pattern) => !pattern.startsWith("!"))
+    .some((pattern) => matchesGlob(rootPath, pattern));
+  const excluded = normalizedPatterns
+    .filter((pattern) => pattern.startsWith("!"))
+    .some((pattern) => matchesGlob(rootPath, pattern.slice(1)));
+
+  return included && !excluded;
 }
 
 // package framework가 없어도 Dockerfile이 나타내는 실행 단위를 보존한다.

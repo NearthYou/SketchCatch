@@ -154,3 +154,77 @@ test("keeps a Docker application as an unknown Application Unit", () => {
     }
   ]);
 });
+
+test("ignores nested packages outside declared workspace patterns", () => {
+  // Given
+  const snapshot = {
+    revision: "workspace-boundary-revision",
+    treePaths: [
+      "apps/web/package.json",
+      "apps/web/vite.config.ts",
+      "docs/example/package.json",
+      "package.json"
+    ],
+    files: [
+      {
+        path: "package.json",
+        content: JSON.stringify({ private: true, workspaces: ["apps/*"] })
+      },
+      {
+        path: "apps/web/package.json",
+        content: JSON.stringify({ dependencies: { react: "19.0.0", vite: "7.0.0" } })
+      },
+      { path: "apps/web/vite.config.ts", content: "export default {}" },
+      {
+        path: "docs/example/package.json",
+        content: JSON.stringify({ dependencies: { fastify: "5.0.0" } })
+      }
+    ]
+  } as const;
+
+  // When
+  const result = analyzeRepositoryEvidence(snapshot);
+
+  // Then
+  assert.equal(result.status, "template_selected");
+  assert.equal(result.templateId, "static-web-hosting");
+  assert.deepEqual(
+    result.applicationUnits.map((unit) => unit.rootPath),
+    ["apps/web"]
+  );
+});
+
+test("does not attach a root README container signal to a nested Docker unit", () => {
+  // Given
+  const snapshot = {
+    revision: "unrelated-readme-revision",
+    treePaths: [
+      "README.md",
+      "apps/api/Dockerfile",
+      "apps/api/package.json",
+      "package.json"
+    ],
+    files: [
+      {
+        path: "package.json",
+        content: JSON.stringify({ private: true, workspaces: ["apps/*"] })
+      },
+      {
+        path: "apps/api/package.json",
+        content: JSON.stringify({ dependencies: { fastify: "5.0.0" } })
+      },
+      { path: "apps/api/Dockerfile", content: "FROM node:24-alpine" },
+      {
+        path: "README.md",
+        content: "다른 서비스는 Amazon ECS의 Fargate launch type으로 배포합니다."
+      }
+    ]
+  } as const;
+
+  // When
+  const result = analyzeRepositoryEvidence(snapshot);
+
+  // Then
+  assert.equal(result.status, "template_selection_failed");
+  assert.equal(result.templateId, null);
+});
