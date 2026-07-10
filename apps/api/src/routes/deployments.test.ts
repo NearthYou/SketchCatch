@@ -885,7 +885,7 @@ class FakeDeploymentJobRepository implements DeploymentJobRepository {
   ) {
     return this.updateJob(jobId, {
       status: "RUNNING",
-      ecsTaskArn: input.ecsTaskArn ?? null,
+      ...(input.ecsTaskArn !== undefined ? { ecsTaskArn: input.ecsTaskArn } : {}),
       startedAt: fixedNow,
       updatedAt: fixedNow
     });

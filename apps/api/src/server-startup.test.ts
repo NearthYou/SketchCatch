@@ -186,6 +186,7 @@ function restoreEnvValue(key: string, value: string | undefined): void {
 
   process.env[key] = value;
 }
+
 test("startApiServer reports preserved ECS workers and deferred task inspections", async () => {
   const infoMessages: string[] = [];
   const warningMessages: string[] = [];
@@ -229,6 +230,31 @@ test("startApiServer reports preserved ECS workers and deferred task inspections
     warningMessages.includes("Interrupted deployments were marked failed before API startup"),
     false
   );
+});
+
+test("startApiServer passes the application logger to deployment recovery", async () => {
+  let recoveryLogger: unknown;
+  const logger = {
+    info: () => {},
+    warn: () => {}
+  };
+
+  await startApiServer({
+    app: {
+      listen: async () => {},
+      log: logger
+    },
+    host: "127.0.0.1",
+    port: 4000,
+    validateAwsCredentialSource: () => {},
+    warmTerraformPluginCache: async () => successfulWarmupResult,
+    recoverInterruptedDeployments: async (candidateLogger) => {
+      recoveryLogger = candidateLogger;
+      return [];
+    }
+  });
+
+  assert.equal(recoveryLogger, logger);
 });
 
 test("startApiServer schedules one reconciliation retry for retryable ECS recovery states", async () => {

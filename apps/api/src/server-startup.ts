@@ -28,7 +28,9 @@ export type StartApiServerOptions = {
   port: number;
   validateAwsCredentialSource?: () => void;
   warmTerraformPluginCache?: () => Promise<TerraformRunResult>;
-  recoverInterruptedDeployments?: () => Promise<DeploymentStartupReconciliationResult | unknown[]>;
+  recoverInterruptedDeployments?: (
+    logger?: StartupLogger
+  ) => Promise<DeploymentStartupReconciliationResult | unknown[]>;
   scheduleRecoveryRetry?: (callback: () => Promise<void>, delayMs: number) => void;
 };
 
@@ -68,7 +70,9 @@ export async function startApiServer(options: StartApiServerOptions): Promise<vo
   }
 }
 
-async function defaultRecoverInterruptedDeployments(): Promise<DeploymentStartupReconciliationResult> {
+async function defaultRecoverInterruptedDeployments(
+  logger?: StartupLogger
+): Promise<DeploymentStartupReconciliationResult> {
   const client = getDatabaseClient();
   const deploymentRepository = createPostgresDeploymentRepository(client.db);
   const jobRepository = createPostgresDeploymentJobRepository(client.db);
@@ -84,7 +88,8 @@ async function defaultRecoverInterruptedDeployments(): Promise<DeploymentStartup
     },
     jobRepository,
     deploymentRepository,
-    async (job) => dispatcher?.inspect({ job }) ?? { state: "MISSING", lastStatus: null }
+    async (job) => dispatcher?.inspect({ job }) ?? { state: "MISSING", lastStatus: null },
+    logger
   );
 }
 
@@ -114,10 +119,12 @@ async function warmTerraformCacheBeforeListen(
 
 async function recoverInterruptedDeploymentsBeforeListen(
   app: StartupApp,
-  recoverInterruptedDeployments: () => Promise<DeploymentStartupReconciliationResult | unknown[]>
+  recoverInterruptedDeployments: (
+    logger?: StartupLogger
+  ) => Promise<DeploymentStartupReconciliationResult | unknown[]>
 ): Promise<DeploymentStartupReconciliationResult> {
   try {
-    const outcome = await recoverInterruptedDeployments();
+    const outcome = await recoverInterruptedDeployments(app.log);
     const result = Array.isArray(outcome)
       ? {
           activeDeploymentCount: 0,

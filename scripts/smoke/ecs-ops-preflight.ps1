@@ -169,8 +169,18 @@ if ($CheckHttp) {
 
   $baseUrl = $EcsBaseUrl.TrimEnd("/")
   foreach ($path in @("/", "/health", "/health/db")) {
-    $response = Invoke-WebRequest -Uri "$baseUrl$path" -Method Get -UseBasicParsing -TimeoutSec 15
-    Add-Check -Name "HTTP $path" -Status "passed" -Evidence "status=$($response.StatusCode)"
+    try {
+      $response = Invoke-WebRequest -Uri "$baseUrl$path" -Method Get -UseBasicParsing -TimeoutSec 15
+      Add-Check -Name "HTTP $path" -Status "passed" -Evidence "status=$($response.StatusCode)"
+    } catch {
+      $statusCode = 0
+
+      if ($null -ne $_.Exception.Response) {
+        $statusCode = [int]$_.Exception.Response.StatusCode
+      }
+
+      Add-Check -Name "HTTP $path" -Status "failed" -Evidence "error=$($_.Exception.Message), status=$statusCode"
+    }
   }
 } else {
   Add-Check -Name "ECS HTTP health" -Status "skipped" -Evidence "Use -CheckHttp with the parallel ECS ALB URL."

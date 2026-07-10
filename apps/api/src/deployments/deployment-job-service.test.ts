@@ -89,9 +89,14 @@ class FakeDeploymentJobRepository implements DeploymentJobRepository {
       ecsTaskArn?: string | null;
     }
   ) {
+    const existingJob = this.jobs.get(jobId);
+
     return this.updateActiveJob(jobId, ["QUEUED", "DISPATCHING"], {
       status: "RUNNING",
-      ecsTaskArn: input.ecsTaskArn ?? null,
+      ecsTaskArn:
+        input.ecsTaskArn !== undefined
+          ? input.ecsTaskArn
+          : (existingJob?.ecsTaskArn ?? null),
       startedAt: fixedNow,
       updatedAt: fixedNow
     });
@@ -245,7 +250,7 @@ test("deployment job state transitions record dispatch, running task, and succes
   assert.equal(completedJob.completedAt?.toISOString(), fixedNow.toISOString());
 });
 
-test("recordDeploymentJobTaskArn can attach a task ARN before running state", async () => {
+test("recordDeploymentJobTaskArn preserves its task ARN when the job starts running", async () => {
   const repository = new FakeDeploymentJobRepository();
   const job = await createDeploymentJob(createJobInput(), repository);
 
@@ -257,6 +262,10 @@ test("recordDeploymentJobTaskArn can attach a task ARN before running state", as
 
   assert.equal(updatedJob.status, "QUEUED");
   assert.equal(updatedJob.ecsTaskArn, taskArn);
+
+  const runningJob = await markDeploymentJobRunning({ jobId: job.id }, repository);
+  assert.equal(runningJob.status, "RUNNING");
+  assert.equal(runningJob.ecsTaskArn, taskArn);
 });
 
 test("failDeploymentJob records a masked error summary and terminal timestamp", async () => {

@@ -121,8 +121,11 @@ export async function markDeploymentJobRunning(
   input: MarkDeploymentJobRunningInput,
   repository: DeploymentJobRepository
 ): Promise<DeploymentJobRecord> {
+  const taskArnUpdate =
+    input.ecsTaskArn === undefined ? {} : { ecsTaskArn: input.ecsTaskArn };
+
   return requireUpdatedJob(
-    repository.markDeploymentJobRunning(input.jobId, { ecsTaskArn: input.ecsTaskArn ?? null }),
+    repository.markDeploymentJobRunning(input.jobId, taskArnUpdate),
     "Deployment job could not be marked running"
   );
 }
@@ -244,7 +247,7 @@ export function createPostgresDeploymentJobRepository(db: Database): DeploymentJ
         .update(deploymentJobs)
         .set({
           status: "RUNNING",
-          ecsTaskArn: input.ecsTaskArn ?? null,
+          ...(input.ecsTaskArn !== undefined ? { ecsTaskArn: input.ecsTaskArn } : {}),
           startedAt: sql`coalesce(${deploymentJobs.startedAt}, now())`,
           ...touchUpdatedAt
         })

@@ -19,6 +19,10 @@ export type InspectDeploymentWorkerTask = (
   job: DeploymentJobRecord
 ) => Promise<InspectDeploymentWorkerResult>;
 
+export type DeploymentStartupReconciliationLogger = {
+  warn: (messageOrObject: unknown, message?: string) => void;
+};
+
 export type DeploymentStartupReconciliationResult = {
   activeDeploymentCount: number;
   deferredInspectionCount: number;
@@ -35,7 +39,8 @@ export async function reconcileDeploymentStartup(
   },
   jobs: DeploymentStartupJobStore,
   deployments: InterruptedDeploymentRecoveryStore,
-  inspectTask: InspectDeploymentWorkerTask
+  inspectTask: InspectDeploymentWorkerTask,
+  logger?: DeploymentStartupReconciliationLogger
 ): Promise<DeploymentStartupReconciliationResult> {
   if (input.workerMode === "in_process") {
     const recoveredDeployments = await deployments.recoverInterruptedDeployments();
@@ -75,7 +80,15 @@ export async function reconcileDeploymentStartup(
 
     try {
       inspection = await inspectTask(job);
-    } catch {
+    } catch (error) {
+      const errorName = error instanceof Error ? error.name : "UnknownError";
+      const errorSummary = maskDeploymentMessage(
+        error instanceof Error ? error.message : "Unknown ECS task inspection error"
+      );
+      logger?.warn(
+        { errorName, errorSummary, jobId: job.id, ecsTaskArn: job.ecsTaskArn },
+        "Failed to inspect ECS worker task during startup reconciliation"
+      );
       protectedDeploymentIds.add(job.deploymentId);
       deferredInspectionCount += 1;
       recoveryRetryCount += 1;

@@ -191,7 +191,7 @@ class FakeDeploymentJobRepository implements DeploymentJobRepository {
   async markDeploymentJobRunning(candidateJobId: string, input: { ecsTaskArn?: string | null }) {
     return this.update(candidateJobId, {
       status: "RUNNING",
-      ecsTaskArn: input.ecsTaskArn ?? null,
+      ...(input.ecsTaskArn !== undefined ? { ecsTaskArn: input.ecsTaskArn } : {}),
       startedAt: fixedNow
     });
   }

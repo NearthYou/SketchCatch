@@ -22,12 +22,13 @@ Short English-only working log for the current agent context. Older records are 
   - Added a worker CloudWatch log group and opt-in log metric filters and alarms for API, web, nginx, worker, ALB health, CPU, and memory.
   - Added `scripts/smoke/ecs-ops-preflight.ps1` with AWS-free preflight and separately gated read-only AWS/HTTP checks.
   - Added the recovery, observability, migration, Route53 cutover, EC2 rollback, and cleanup runbook to `docs/deployment.md`.
+  - Audited ECS migration PRs #284, #289, #291, #292, #294, #296, #304, #308, and #311; implemented remaining #289/#294/#311 feedback and confirmed #291 was fixed by #292.
 - Verification so far:
   - `pnpm harness:check` passed before edits.
-  - Reconciliation, dispatcher, job, worker, runtime-cache, and startup tests passed (37 tests).
+  - Reconciliation, dispatcher, job, worker, runtime-cache, and startup tests passed (38 tests).
   - `pnpm --filter @sketchcatch/api typecheck` passed.
   - `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed on the final diff.
-  - `pnpm --filter @sketchcatch/api test -- deployment` ran 882 tests; 879 passed and 3 pre-existing unrelated tests failed.
+  - `pnpm --filter @sketchcatch/api test -- deployment` ran 885 tests; 882 passed and 3 pre-existing unrelated tests failed.
   - `terraform -chdir=infra/aws/terraform fmt -check -recursive` passed.
   - `terraform -chdir=infra/aws/terraform init -backend=false -input=false` passed without AWS state access.
   - `terraform -chdir=infra/aws/terraform validate` passed.

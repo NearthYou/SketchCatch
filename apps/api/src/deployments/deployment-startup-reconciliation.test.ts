@@ -70,6 +70,8 @@ test("reconcileDeploymentStartup fails stopped ECS jobs and recovers their deplo
 test("reconcileDeploymentStartup preserves ECS jobs when task inspection is unavailable", async () => {
   const jobs = new FakeStartupJobStore([createJob()]);
   const deployments = new FakeInterruptedDeploymentStore();
+  const inspectionError = new Error("ECS DescribeTasks unavailable");
+  const warnings: Array<{ context: unknown; message: string | undefined }> = [];
 
   const result = await reconcileDeploymentStartup(
     {
@@ -80,7 +82,12 @@ test("reconcileDeploymentStartup preserves ECS jobs when task inspection is unav
     jobs,
     deployments,
     async () => {
-      throw new Error("ECS DescribeTasks unavailable");
+      throw inspectionError;
+    },
+    {
+      warn: (context, message) => {
+        warnings.push({ context, message });
+      }
     }
   );
 
@@ -89,6 +96,17 @@ test("reconcileDeploymentStartup preserves ECS jobs when task inspection is unav
   assert.equal(result.activeDeploymentCount, 0);
   assert.equal(result.deferredInspectionCount, 1);
   assert.equal(result.recoveryRetryCount, 1);
+  assert.deepEqual(warnings, [
+    {
+      context: {
+        errorName: "Error",
+        errorSummary: "ECS DescribeTasks unavailable",
+        jobId,
+        ecsTaskArn: taskArn
+      },
+      message: "Failed to inspect ECS worker task during startup reconciliation"
+    }
+  ]);
 });
 
 test("reconcileDeploymentStartup defers a recently missing ECS task during eventual consistency", async () => {
