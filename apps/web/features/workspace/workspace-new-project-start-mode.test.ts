@@ -8,16 +8,17 @@ const workspaceAiRouteSource = readAppWorkspaceFile("ai/page.tsx");
 const workspaceAiStartClientSource = readAppWorkspaceFile("ai/workspace-ai-start-client.tsx");
 const browserVoiceInputSource = readFeatureWorkspaceFile("use-browser-voice-input.ts");
 
-test("new project start keeps the three start modes and core API calls", () => {
+test("new project start keeps all five start modes and core API calls", () => {
   assert.match(workspaceStartClientSource, /createWorkspaceStartOptions/);
-  assert.match(workspaceStartClientSource, /startModeLabels/);
-  assert.match(workspaceStartClientSource, /ai: "AI"/);
-  assert.match(workspaceStartClientSource, /reverse: "\\uB9AC\\uBC84\\uC2A4"/);
-  assert.match(workspaceStartClientSource, /blank: "\\uBE48\\uBCF4\\uB4DC"/);
-  assert.match(workspaceStartClientSource, /router\.push\("\/workspace\/ai"\)/);
+  assert.match(workspaceStartClientSource, /ai: Bot/);
+  assert.match(workspaceStartClientSource, /reverse: CloudDownload/);
+  assert.match(workspaceStartClientSource, /template: Boxes/);
+  assert.match(workspaceStartClientSource, /github: GitBranch/);
+  assert.match(workspaceStartClientSource, /blank: LayoutPanelTop/);
   assert.match(workspaceStartClientSource, /listAwsConnections/);
   assert.match(workspaceStartClientSource, /resolveWorkspaceStartAction/);
   assert.match(workspaceStartClientSource, /createProject/);
+  assert.match(workspaceStartClientSource, /saveProjectDraft/);
   assert.doesNotMatch(workspaceStartClientSource, /workspaceStartProviderGrid/);
 });
 

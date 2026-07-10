@@ -13,7 +13,7 @@ const startClientSource = readFileSync(
 );
 const startPageSource = readFileSync(fileURLToPath(new URL("page.tsx", import.meta.url)), "utf8");
 
-test("createWorkspaceStartOptions makes AI and Reverse main choices and keeps blank board small", () => {
+test("createWorkspaceStartOptions exposes four guided starts and keeps blank board small", () => {
   const options = createWorkspaceStartOptions();
 
   assert.deepEqual(
@@ -21,25 +21,28 @@ test("createWorkspaceStartOptions makes AI and Reverse main choices and keeps bl
     [
       ["ai", "primary"],
       ["reverse", "primary"],
+      ["template", "primary"],
+      ["github", "primary"],
       ["blank", "secondary"]
     ]
   );
 });
 
-test("WorkspaceStartClient keeps the start flow without the old dashboard wrapper", () => {
-  assert.match(startPageSource, /RoutePlaceholder/);
+test("WorkspaceStartClient uses the rebuilt start shell without a placeholder", () => {
+  assert.match(startPageSource, /WorkspaceAuthGate/);
+  assert.doesNotMatch(startPageSource, /RoutePlaceholder/);
   assert.doesNotMatch(startPageSource, /designDashboardPage|designDashboardShell/);
-  assert.doesNotMatch(startClientSource, /className="workspaceNewForm"/);
-  assert.doesNotMatch(startClientSource, /className="workspaceNewChoiceButton"/);
-  assert.match(startClientSource, /option\.priority === "primary"/);
+  assert.match(startClientSource, /role="radiogroup"/);
+  assert.match(startClientSource, /TemplatePicker/);
   assert.match(startClientSource, /blankStartOption/);
 });
 
-test("WorkspaceStartClient can connect GitHub immediately after blank project creation", () => {
-  assert.match(startClientSource, /connectGitHubAfterCreate/);
-  assert.match(startClientSource, /type="checkbox"/);
+test("WorkspaceStartClient keeps Template and GitHub as separate real start paths", () => {
+  assert.match(startClientSource, /saveProjectDraft/);
+  assert.match(startClientSource, /selectedTemplate\.diagramJson/);
   assert.match(startClientSource, /createGitHubSourceRepositoryInstallUrl\(project\.id\)/);
   assert.match(startClientSource, /window\.location\.assign\(installUrl\)/);
+  assert.doesNotMatch(startClientSource, /connectGitHubAfterCreate/);
 });
 
 test("resolveWorkspaceStartAction sends Reverse users without a verified AWS Role to settings", () => {
@@ -70,20 +73,25 @@ test("resolveWorkspaceStartAction starts Reverse without creating a project firs
   });
 });
 
-test("resolveWorkspaceStartAction creates a project for AI and blank starts", () => {
+test("resolveWorkspaceStartAction opens AI before project creation", () => {
   const aiAction = resolveWorkspaceStartAction({
     cloudPlatform: "aws",
     hasVerifiedAwsConnection: true,
     projectName: "AI 설계",
     startKind: "ai"
   });
-  const blankAction = resolveWorkspaceStartAction({
+
+  assert.deepEqual(aiAction, { kind: "openAiDraft", href: "/workspace/ai" });
+});
+
+test("resolveWorkspaceStartAction creates projects for blank, Template, and GitHub starts", () => {
+  const starts = ["blank", "template", "github"] as const;
+  const actions = starts.map((startKind) => resolveWorkspaceStartAction({
     cloudPlatform: "aws",
     hasVerifiedAwsConnection: true,
-    projectName: "빈 보드",
-    startKind: "blank"
-  });
+    projectName: startKind,
+    startKind
+  }));
 
-  assert.deepEqual(aiAction, { kind: "createProject", openMode: "ai" });
-  assert.deepEqual(blankAction, { kind: "createProject", openMode: "blank" });
+  assert.deepEqual(actions, starts.map((openMode) => ({ kind: "createProject", openMode })));
 });
