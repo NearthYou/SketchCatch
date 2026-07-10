@@ -4,37 +4,37 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- Branch: `feature/sw/312-ecs-alb-path-routing`.
-- Active workstream: `ECS-MIGRATION-000`, Phase 8 ALB path routing and nginx steady-state removal.
-- Issue: #312.
-- No live AWS, Terraform plan/apply, ALB, or Route53 mutation command has run in this phase.
+- Branch: `feature/sw/314-production-infra-terraform`.
+- Active workstream: `ECS-MIGRATION-000`, Phase 9 production infrastructure Terraform transition.
+- Issue: #314.
+- Phase 8 is merged into `dev` through PR #313.
+- No live AWS, remote Terraform plan, import, apply, destroy, or state command has run in Phase 9.
 
 ## Session Record
 
-### 2026-07-10 - Split ECS API/web routing at the ALB
+### 2026-07-10 - Add production infrastructure Terraform management boundaries
 
-- Goal: Remove nginx from the ECS steady-state path and route API and web traffic directly to separate Fargate services.
+- Goal: Introduce safe state, import, and review-only planning structure for SketchCatch's own production infrastructure without mixing it with user Deployment execution.
 - Completed so far:
-  - Added API and web task definitions, services, target groups, security-group rules, and ALB path rules.
-  - Routed `/api`, `/api/*`, `/health`, and `/health/db` to API port 4000; the default action routes to web port 3000.
-  - Removed nginx from the ECS task/service and ECS image deployment workflow.
-  - Retained nginx Docker, ECR, log-group, EC2/SSM workflow, and deploy assets as legacy rollback dependencies.
-  - Split ECS deploy rendering and rollout into API then web service updates.
-  - Added a Terraform routing contract test and a Fastify forwarded-header regression test.
-  - Updated architecture, deployment, Terraform, and ECS migration planning docs.
-  - Addressed PR #313 feedback by aligning the single API container limits with the task allocation and adding a regression assertion.
+  - Preserved the existing runtime root and `production/ecs-foundation/terraform.tfstate` key.
+  - Added separate empty Terraform import gates for edge, persistent data, and legacy rollback groups.
+  - Added S3 backend examples with encryption and native lockfiles for four unique state keys.
+  - Added a machine-readable import inventory covering ECS, ALB, ECR, IAM, CloudWatch, Route53/ACM, S3, RDS, Redis/ElastiCache, EC2/SSM, and CloudFormation ownership.
+  - Added a manual plan-only workflow with group confirmation, Environment approval, complete runtime tfvars, and no binary plan artifact.
+  - Added static guards that reject live operations, duplicate state keys, missing inventory, and premature resource/import blocks in high-risk roots.
+  - Added Route53 `prevent_destroy` protection and documented state-move requirements before edge ownership transfer.
+  - Updated architecture, deployment, docs/sw, runtime Terraform, and harness tracking.
 - Verification:
-  - `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed on the final implementation diff.
-  - Terraform fmt and validate passed; `terraform test` passed HTTP and HTTPS routing contracts (2 tests).
-  - API app tests passed 8 tests, including ALB forwarded headers.
-  - `scripts/smoke/ecs-ops-preflight.ps1 -PreflightOnly` passed with `mutationCommandsExecuted = false`.
-  - Workflow Prettier, IAM/tracker JSON parsing, and `git diff --check` passed.
+  - `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
+  - Runtime, edge, data, and legacy rollback roots passed `terraform init -backend=false -input=false` and `terraform validate` without AWS backend access.
+  - Terraform fmt check passed and runtime Terraform tests passed 2 HTTP/HTTPS routing contracts.
+  - Production infrastructure structure guard, manifest/tracker JSON parsing, workflow Prettier, and `git diff --check` passed.
 - Risk:
-  - API and web deployment is sequential, not atomic; a partial rollout needs revision-aware rollback.
-  - Default desired count now runs one API task and one web task, increasing steady-state Fargate cost.
-  - API and web still share the existing ECS task role and service security group to preserve current runtime/RDS allowlists; least-privilege separation remains follow-up work.
-  - Live target health, authentication, forwarded headers, and Route53 behavior remain unverified until separately approved smoke/cutover work.
+  - Backend bucket Versioning/encryption/public access and plan-role IAM are documented but not live-verified.
+  - Existing runtime state membership has not been audited against AWS.
+  - Edge/data/legacy roots intentionally contain no managed resources until separately approved discovery/import work.
+  - CloudFormation and EC2 rollback ownership remain active and must not be removed or duplicated.
 
 ## Next Action
 
-- Run full repository and Terraform/static verification, publish the PR, wait five minutes, resolve review feedback, and merge only with green checks and no unresolved threads.
+- Publish the PR, wait five minutes, resolve review feedback, re-verify, and merge only with green checks and no unresolved threads.

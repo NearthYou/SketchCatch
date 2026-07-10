@@ -49,9 +49,20 @@ API/worker 분리는 ECS production 배포가 안정화된 뒤 진행한다. Ter
 
 ### IaC
 
-- `infra/aws/terraform`을 운영 인프라 source of truth로 둔다.
+- `infra/aws/terraform`을 ECS runtime 운영 인프라 source of truth로 유지한다.
+- `infra/aws/production`은 edge, persistent data, legacy rollback state와 import gate의 source of truth로 둔다.
 - EC2 기존 리소스와 ECS 신규 리소스가 cutover 동안 병렬로 존재할 수 있게 한다.
 - Terraform 변수로 6개월 저비용 모드와 optional private runtime 모드를 모두 지원한다.
+
+### Production infrastructure state
+
+- SketchCatch 자체 production infrastructure state는 사용자 project의 Terraform artifact/state와 분리한다.
+- 기존 ECS runtime backend key `production/ecs-foundation/terraform.tfstate`는 승인된 state migration 전까지 유지한다.
+- Route53/ACM은 `edge`, S3/RDS/Redis는 `data`, EC2/SSM/nginx rollback은 `legacy-rollback` state로 격리한다.
+- S3 backend는 encryption, bucket Versioning, `use_lockfile = true`를 요구한다.
+- import는 remote object 하나를 하나의 Terraform address/state만 소유하게 하며, CloudFormation child resource를 중복 import하지 않는다.
+- high-risk group은 backup, ownership, rollback, zero-change plan을 확인하기 전 resource/import block을 추가하지 않는다.
+- production infra plan/import/apply/destroy는 product API나 ECS worker에서 호출하지 않고 운영자 승인 경로만 사용한다.
 
 ### Cutover
 
@@ -101,6 +112,7 @@ API/worker 분리는 ECS production 배포가 안정화된 뒤 진행한다. Ter
 ## 안전 계약
 
 - Terraform plan/apply/destroy는 명시적 Deployment 작업 또는 승인된 worker job에서만 실행한다.
+- 위 사용자 Deployment 계약은 SketchCatch production infrastructure Terraform과 별개이며, production infra는 전용 state와 운영자 approval을 사용한다.
 - API는 job 생성, 상태 조회, 승인, 취소 요청을 담당한다.
 - ECS `RunTask` worker task는 Terraform/Trivy 실행과 artifact/status 기록을 담당한다.
 - job 상태, lease, cancel flag는 RDS에 남긴다.
@@ -122,6 +134,7 @@ API/worker 분리는 ECS production 배포가 안정화된 뒤 진행한다. Ter
 - 공통: `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`
 - Docker: `pnpm docker:build`
 - Terraform: `terraform fmt`, `terraform validate`, staging `terraform plan`
+- Production infra Phase 9: `node scripts/check-production-infra.mjs`, group별 `terraform init -backend=false`, `terraform validate`
 - App smoke: `/health`, `/health/db`, root page, login/API 기본 흐름
 - Worker tests: ECS RunTask 요청 계약, DB lease 획득 실패/성공, stale lease recovery
 - Cancel tests: DB cancel flag, Redis Pub/Sub signal, missed Pub/Sub 후 polling fallback
@@ -138,3 +151,4 @@ API/worker 분리는 ECS production 배포가 안정화된 뒤 진행한다. Ter
 - 기본 Terraform plan에서 NAT Gateway가 생성되지 않는다.
 - optional private runtime 모드가 Terraform 변수로 켜진다.
 - 운영자는 비용, rollback, cleanup, 로그 보존 기준을 문서와 Terraform에서 확인할 수 있다.
+- 운영자는 SketchCatch production infra의 state group, import 순서, locking, live-operation blocker를 repo에서 확인할 수 있다.
