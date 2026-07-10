@@ -184,3 +184,15 @@ Short English-only working log for the current agent context. Older records are 
   - `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and 53 focused AI API tests passed.
 - Risk:
   - No Terraform apply/destroy, deployment execution, or cloud mutation was run.
+
+### 2026-07-10 - Build diagram pattern knowledge package
+- Goal: Create six verified AWS architecture pattern documents for S3 and Amazon Q Business ingestion.
+- Completed:
+  - Reviewed the AWS Terraform best-practices repository, the 90-page Prescriptive Guidance, all 154 aws-samples Terraform/HCL search results, and relevant AWS Solutions/official service guidance.
+  - Added six independent pattern documents, a manifest, Amazon Q metadata sidecars, a full source inventory, review evidence, and a reproducible verifier under `docs/diagram-templates`.
+  - Confirmed the live Q Business application/index is active in `ap-southeast-2`, but has no data source; existing project buckets are in `ap-northeast-2` and are not a valid ready ingestion target.
+- Verification:
+  - `node docs/diagram-templates/verify.mjs` passed for six patterns, 104 supported resource types, and 154 source repositories.
+  - All 25 external references in the pattern and review documents returned successful HTTP responses.
+- Risk:
+  - S3 upload and Q Business sync are not complete. They require an approved cloud change to create a region-compatible knowledge bucket, crawler role, and data source before syncing.

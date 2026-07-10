@@ -1,0 +1,65 @@
+{
+  "schemaVersion": "1.0",
+  "collectionId": "sketchcatch-aws-architecture-patterns",
+  "provider": "aws",
+  "language": "ko-KR",
+  "reviewedAt": "2026-07-10",
+  "documentPrefix": "documents/architecture-patterns/",
+  "metadataPrefix": "metadata/",
+  "patterns": [
+    {
+      "id": "alb-asg-ec2",
+      "title": "ALB + Auto Scaling Group + EC2",
+      "document": "documents/architecture-patterns/alb-asg-ec2.md",
+      "metadata": "metadata/documents/architecture-patterns/alb-asg-ec2.md.metadata.json",
+      "status": "verified",
+      "requiredResourceTypes": ["VPC", "SUBNET", "INTERNET_GATEWAY", "ROUTE_TABLE", "ROUTE_TABLE_ASSOCIATION", "SECURITY_GROUP", "LOAD_BALANCER", "LOAD_BALANCER_LISTENER", "LOAD_BALANCER_TARGET_GROUP", "LAUNCH_TEMPLATE", "AUTO_SCALING_GROUP", "EC2"],
+      "forbiddenCapabilities": ["single_az_production", "public_ec2", "detached_load_balancer"]
+    },
+    {
+      "id": "serverless-api",
+      "title": "API Gateway + Lambda Serverless API",
+      "document": "documents/architecture-patterns/serverless-api.md",
+      "metadata": "metadata/documents/architecture-patterns/serverless-api.md.metadata.json",
+      "status": "verified",
+      "requiredResourceTypes": ["API_GATEWAY_REST_API", "API_GATEWAY_RESOURCE", "API_GATEWAY_METHOD", "API_GATEWAY_INTEGRATION", "API_GATEWAY_DEPLOYMENT", "API_GATEWAY_STAGE", "LAMBDA", "LAMBDA_PERMISSION", "IAM_ROLE", "CLOUDWATCH_LOG_GROUP"],
+      "forbiddenCapabilities": ["ec2_runtime", "public_database", "hardcoded_secret"]
+    },
+    {
+      "id": "spa-cloudfront-s3",
+      "title": "SPA + CloudFront + private S3",
+      "document": "documents/architecture-patterns/spa-cloudfront-s3.md",
+      "metadata": "metadata/documents/architecture-patterns/spa-cloudfront-s3.md.metadata.json",
+      "status": "verified",
+      "requiredResourceTypes": ["S3", "CLOUDFRONT"],
+      "forbiddenCapabilities": ["public_s3_origin", "server_side_runtime", "cloudfront_without_https"]
+    },
+    {
+      "id": "ecs-fargate",
+      "title": "ALB + ECS Fargate",
+      "document": "documents/architecture-patterns/ecs-fargate.md",
+      "metadata": "metadata/documents/architecture-patterns/ecs-fargate.md.metadata.json",
+      "status": "verified",
+      "requiredResourceTypes": ["VPC", "SUBNET", "INTERNET_GATEWAY", "ROUTE_TABLE", "ROUTE_TABLE_ASSOCIATION", "SECURITY_GROUP", "LOAD_BALANCER", "LOAD_BALANCER_LISTENER", "LOAD_BALANCER_TARGET_GROUP", "ECR_REPOSITORY", "ECS_CLUSTER", "ECS_TASK_DEFINITION", "ECS_SERVICE", "IAM_ROLE", "CLOUDWATCH_LOG_GROUP"],
+      "forbiddenCapabilities": ["public_fargate_task", "host_network_mode", "mutable_unpinned_image"]
+    },
+    {
+      "id": "github-cicd-codedeploy",
+      "title": "GitHub + CodePipeline + CodeBuild + CodeDeploy",
+      "document": "documents/architecture-patterns/github-cicd-codedeploy.md",
+      "metadata": "metadata/documents/architecture-patterns/github-cicd-codedeploy.md.metadata.json",
+      "status": "verified",
+      "requiredResourceTypes": ["CODESTAR_CONNECTION", "CODEPIPELINE", "CODEBUILD_PROJECT", "CODEDEPLOY_APP", "CODEDEPLOY_DEPLOYMENT_GROUP", "S3", "IAM_ROLE"],
+      "forbiddenCapabilities": ["long_lived_github_aws_key", "unencrypted_artifact_bucket", "deploy_without_approval"]
+    },
+    {
+      "id": "multi-az-rds",
+      "title": "Private Multi-AZ RDS",
+      "document": "documents/architecture-patterns/multi-az-rds.md",
+      "metadata": "metadata/documents/architecture-patterns/multi-az-rds.md.metadata.json",
+      "status": "verified",
+      "requiredResourceTypes": ["VPC", "SUBNET", "SECURITY_GROUP", "DB_SUBNET_GROUP", "RDS", "SECRETS_MANAGER_SECRET", "CLOUDWATCH_METRIC_ALARM"],
+      "forbiddenCapabilities": ["public_database", "single_az_production", "plaintext_database_password"]
+    }
+  ]
+}
