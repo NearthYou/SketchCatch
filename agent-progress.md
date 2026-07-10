@@ -167,18 +167,6 @@ Short English-only working log for the current agent context. Older records are 
 - Risk:
   - The index is current, but no automatic S3 connector sync exists. Re-run direct ingestion after changing a pattern document unless an authorized crawler role/data source is added later.
 
-### 2026-07-10 - Enable a dedicated Amazon Q Business Creator application
-- Goal: Enable Q Business Creator mode without changing the anonymous retrieval application that serves the architecture knowledge index.
-- Completed:
-  - Confirmed AWS rejects Creator mode updates for `ANONYMOUS` applications and left the existing retrieval application unchanged.
-  - Created a separate active `AWS_IAM_IDC` Q Business application, enabled `creatorModeControl`, assigned the existing IAM Identity Center user, and created a `Q_BUSINESS` subscription.
-- Verification:
-  - The new application's chat controls report `creatorModeControl=ENABLED`.
-  - The original anonymous application's retrieval mode and indexed pattern documents were not modified.
-- Risk:
-  - Creator-mode `ChatSync` is not yet callable from the SketchCatch backend. IAM Identity Center applications require identity-aware SigV4 credentials through trusted identity propagation; the current backend uses ordinary ECS task credentials and an optional `userId` only.
-  - The application must not replace `AMAZON_Q_APPLICATION_ID` until a compatible OIDC identity token, TIP credential provider, and end-to-end Creator-mode call are implemented and verified.
-
 ### 2026-07-10 - Bound Architecture Draft latency and remove false success fallbacks
 - Goal: Prevent long Architecture Draft requests from ending as generic HTTP 500 responses while preserving verified Amazon Q output.
 - Completed:
@@ -210,10 +198,14 @@ Short English-only working log for the current agent context. Older records are 
 - Risk:
   - A completely empty Redis still needs one live Q verification cycle; indexed document IDs are cached for one hour after that verified cycle.
 
-### 2026-07-10 - Harden authenticated AI project starts and natural-language routing
+### 2026-07-10 - Verify and repair Q-backed architecture materialization
 - Completed:
-  - Gated `/workspace/new` and `/workspace/ai`, and classified Korean/English web-page creation and deployment phrases as Architecture Draft requests.
+  - Confirmed live Q Business retrieval returns the exact SPA, Fargate, and Multi-AZ RDS documents and their deployment rules with all three expected citations.
+  - Made the cited canonical plan authoritative over stale normalizer additions and resolved `complex backend + fully managed` to Fargate unless Lambda is explicit.
+  - Rebuilt Fargate network, IAM, logging, ALB, upload, and RDS resources by semantic role; removed Lambda/DynamoDB/ACM/WAF leakage and orphan nodes.
+  - Added Terraform nested rendering for ECS network, load balancer, and deployment rollback blocks.
 - Verification:
-  - Focused auth/routing tests, a live Amazon Q clarification response, lint, typecheck, full build, and harness checks passed.
+  - Live API returned Q-backed `spa-cloudfront-s3 + ecs-fargate + multi-az-rds` with six role-specific subnets, `target_type=ip`, two private tasks, two DB subnets, no Lambda references, and no orphan nodes.
+  - Focused Architecture Draft/Q/Terraform tests (61), lint, typecheck, and full build passed.
 - Risk:
-  - The broader web test suite still has three unrelated pre-existing landing/start-page style assertion failures.
+  - Anonymous Q Business remains retrieval evidence, not a structured diagram generator; the backend deterministically materializes and validates the cited patterns.
