@@ -14,6 +14,22 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-10 - Generalize page-driven Q architecture drafts
+
+- Goal: Verify and fix Architecture Drafts whose natural-language requirements do not exactly match one of the six indexed patterns while still using every current project-page selection.
+- Completed:
+  - Kept the six cited Q patterns as verified backbones while preserving explicit supplemental panel resources such as EKS, SQS, DynamoDB, EventBridge, WAF, and ACM.
+  - Added page-answer runtime inference for generic shops, mobile APIs, microservices, static sites, and complex backends inside the Architecture Draft-only Q provider.
+  - Added consistent EC2/ALB negation, topology sanitization, supplemental edges, orphan prevention, and one retry without changing other OpenAI or Q explanation paths.
+  - Added security and cost policy for TLS, least-privilege IAM, logging, secrets, encryption, WAF, availability, and recurring-cost gates.
+- Verification:
+  - 65 focused AI API tests passed, including seven page-selection supplemental/security scenarios, 42 exact pattern profiles, and 12 stable materializations.
+  - A live Anonymous Q run used the current page's 15 selections plus natural language for 10 non-exact scenarios; all 10 were Q-backed, passed required/forbidden/orphan checks, and produced 10 distinct signatures across 18 ChatSync calls.
+  - `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check` passed.
+- Risk:
+  - Supplemental resources reuse the closest cited backbone and backend deployment catalog; a new standalone architecture family still needs its own reviewed Q pattern document before it can become an independent backbone.
+  - Anonymous Q retrieval consumes existing application capacity, so live regression runs remain intentionally bounded.
+
 ### 2026-07-10 - Stabilize Anonymous Q architecture generation
 
 - Goal: Produce distinct, deployable Architecture Drafts from project answers without a paid Q Business Creator subscription.
