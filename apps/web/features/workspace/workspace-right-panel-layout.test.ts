@@ -12,6 +12,7 @@ const flowMappersSource = readFeatureFile("../diagram-editor/flow-mappers.ts");
 const resourceWorkspaceSource = readWorkspaceFile("ResourceWorkspacePanel.tsx");
 const resourceListSource = readWorkspaceFile("ResourceListPanel.tsx");
 const resourceCardMenuSource = readWorkspaceFile("ResourceCardMenu.tsx");
+const resourceWorkspaceStylesSource = readWorkspaceFile("resource-workspace.module.css");
 const diagramEditorTypesSource = readFeatureFile("../diagram-editor/types.ts");
 const terraformLeaveDialogSource = readWorkspaceFile("TerraformLeaveDialog.tsx");
 const terraformPanelSource = readWorkspaceFile("TerraformCodePanel.tsx");
@@ -514,13 +515,13 @@ test("workspace AI opens from a floating chat dock instead of the right panel", 
 });
 
 test("resource workspace omits the decorative list toolbar", () => {
-  const resourceWorkspacePanelRule = getCssRule(stylesSource, "resourceWorkspacePanel");
-  const resourceListPanelRule = getCssRule(stylesSource, "resourceListPanel");
+  const resourceWorkspacePanelRule = getCssRule(resourceWorkspaceStylesSource, "resourceWorkspacePanel");
+  const resourceListPanelRule = getCssRule(resourceWorkspaceStylesSource, "resourceListPanel");
 
   assert.doesNotMatch(resourceListSource, /className=\{styles\.resourceSectionToolbar\}/);
   assert.doesNotMatch(resourceListSource, /aria-label="Resource list"/);
   assert.match(resourceWorkspacePanelRule, /\bgrid-template-rows:\s*minmax\(0,\s*1fr\);/);
-  assert.match(resourceListPanelRule, /\bpadding:\s*24px 12px 12px;/);
+  assert.match(resourceListPanelRule, /\bgrid-template-rows:\s*auto minmax\(0, 1fr\);/);
 });
 
 test("resource detail back action sits inside the detail view", () => {
@@ -530,39 +531,39 @@ test("resource detail back action sits inside the detail view", () => {
     settingsBranchIndex
   );
   const backButtonIndex = resourceWorkspaceSource.indexOf(
-    'aria-label="Back to resource list"',
+    'aria-label="Resource 목록으로 돌아가기"',
     settingsPanelIndex
   );
   const parameterPanelIndex = resourceWorkspaceSource.indexOf("<ParameterInputPanel", settingsPanelIndex);
-  const settingsPanelRule = getCssRule(stylesSource, "resourceSettingsPanel");
-  const settingsHeaderRule = getCssRule(stylesSource, "resourceSettingsHeader");
+  const settingsPanelRule = getCssRule(resourceWorkspaceStylesSource, "resourceSettingsPanel");
+  const settingsHeaderRule = getCssRule(resourceWorkspaceStylesSource, "resourceSettingsHeader");
 
   assert.ok(settingsBranchIndex > -1);
   assert.ok(settingsPanelIndex > settingsBranchIndex);
   assert.ok(backButtonIndex > settingsPanelIndex);
   assert.ok(parameterPanelIndex > backButtonIndex);
   assert.match(settingsPanelRule, /\bgrid-template-rows:\s*auto minmax\(0,\s*1fr\);/);
-  assert.match(settingsHeaderRule, /\bpadding:\s*16px 12px 8px;/);
+  assert.match(settingsHeaderRule, /\bpadding:\s*8px 12px;/);
 });
 
 test("resource list identity starts with the service icon", () => {
-  const serviceIconRule = getCssRule(stylesSource, "resourceListServiceIcon");
+  const serviceIconRule = getCssRule(resourceWorkspaceStylesSource, "resourceListServiceIcon");
 
   assert.doesNotMatch(resourceListSource, /resourceListCubeIcon/);
-  assert.doesNotMatch(stylesSource, /\.resourceListCubeIcon\s*\{/);
+  assert.doesNotMatch(resourceWorkspaceStylesSource, /\.resourceListCubeIcon\s*\{/);
   assert.doesNotMatch(serviceIconRule, /\bborder-left:/);
-  assert.match(serviceIconRule, /\bwidth:\s*36px;/);
+  assert.match(serviceIconRule, /\bwidth:\s*32px;/);
 });
 
-test("selected resource list card uses a clear blue border only for the active state", () => {
+test("selected resource list card uses the neutral DESIGN.md primary color", () => {
   const activeCardRule = getCssRuleAfter(
-    stylesSource,
+    resourceWorkspaceStylesSource,
     "resourceListItemActive",
-    stylesSource.indexOf(".resourceListItem:hover")
+    resourceWorkspaceStylesSource.indexOf(".resourceListItem:hover")
   );
 
-  assert.match(activeCardRule, /\bborder-color:\s*#2563eb;/);
-  assert.match(activeCardRule, /\bbox-shadow:\s*0 0 0 1px rgba\(37,\s*99,\s*235,\s*0\.18\);/);
+  assert.match(activeCardRule, /\bborder-color:\s*var\(--workspace-accent, #000000\);/);
+  assert.doesNotMatch(activeCardRule, /#2563eb|rgba\(37,\s*99,\s*235/i);
 });
 
 test("resource card menu omits data source switch and maximize actions", () => {
@@ -570,9 +571,9 @@ test("resource card menu omits data source switch and maximize actions", () => {
   assert.doesNotMatch(resourceCardMenuSource, /switchTerraformBlockType/);
   assert.doesNotMatch(resourceCardMenuSource, /onToggleSize/);
   assert.doesNotMatch(resourceCardMenuSource, /Maximize2|Minimize2/);
-  assert.match(resourceCardMenuSource, /Edit config/);
-  assert.match(resourceCardMenuSource, /Duplicate/);
-  assert.match(resourceCardMenuSource, /Delete/);
+  assert.match(resourceCardMenuSource, /설정 수정/);
+  assert.match(resourceCardMenuSource, /복제/);
+  assert.match(resourceCardMenuSource, /삭제/);
 });
 
 test("workspace AI has a dedicated error tab for Terraform issue resolution", () => {

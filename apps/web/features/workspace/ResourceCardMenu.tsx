@@ -2,7 +2,7 @@ import type { DiagramNode } from "@sketchcatch/types";
 import { CopyPlus, Edit3, Trash2 } from "lucide-react";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
 import { deleteResourceNode, duplicateResourceNode } from "./resource-workspace-actions";
-import styles from "./workspace.module.css";
+import styles from "./ResourceCardMenu.module.css";
 
 type ResourceCardMenuProps = {
   readonly context: DiagramEditorPanelContext;
@@ -27,7 +27,7 @@ export function ResourceCardMenu({
     >
       <button className={styles.resourceCardMenuItem} onClick={onEditConfig} role="menuitem" type="button">
         <Edit3 size={17} aria-hidden="true" />
-        <span>Edit config</span>
+        <span>설정 수정</span>
       </button>
       <button
         className={styles.resourceCardMenuItem}
@@ -39,7 +39,7 @@ export function ResourceCardMenu({
         type="button"
       >
         <CopyPlus size={17} aria-hidden="true" />
-        <span>Duplicate</span>
+        <span>복제</span>
       </button>
       <button
         className={`${styles.resourceCardMenuItem} ${styles.resourceCardMenuDanger}`}
@@ -51,7 +51,7 @@ export function ResourceCardMenu({
         type="button"
       >
         <Trash2 size={17} aria-hidden="true" />
-        <span>Delete</span>
+        <span>삭제</span>
       </button>
     </div>
   );

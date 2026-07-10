@@ -9,7 +9,7 @@ import {
   selectResourceNode
 } from "./resource-workspace-actions";
 import type { ResourceWorkspaceView } from "./workspace-right-panel.types";
-import styles from "./workspace.module.css";
+import styles from "./resource-workspace.module.css";
 
 const RESOURCE_SUMMARY_COLLAPSED_LIMIT = 5;
 
@@ -35,15 +35,24 @@ export function ResourceListPanel({
   if (items.length === 0) {
     return (
       <div className={styles.resourceListEmpty}>
-        <strong>No resources on canvas</strong>
-        <span>Drag resources onto the board to see them here.</span>
+        <Box aria-hidden="true" size={20} />
+        <strong>보드에 Resource가 없습니다</strong>
+        <span>왼쪽 목록에서 Resource를 보드에 추가해 주세요.</span>
       </div>
     );
   }
 
   return (
-    <div className={styles.resourceListPanel}>
-      {items.map((item) => {
+    <section className={styles.resourceListPanel} aria-label="보드 Resource 목록">
+      <header className={styles.resourceListTitle}>
+        <div>
+          <span>Resources</span>
+          <h2>보드 Resource</h2>
+        </div>
+        <strong>{items.length}개</strong>
+      </header>
+      <div className={styles.resourceListBody}>
+        {items.map((item) => {
         const { node } = item;
         const summaryRows = item.rows;
         const isActive = item.nodeId === context.selectedNodeId;
@@ -82,7 +91,7 @@ export function ResourceListPanel({
               <button
                 aria-expanded={openMenuNodeId === item.nodeId}
                 aria-haspopup="menu"
-                aria-label={`${item.displayName} actions`}
+                aria-label={`${item.displayName} 작업`}
                 className={styles.resourceListMoreButton}
                 onClick={(event) => {
                   event.stopPropagation();
@@ -134,17 +143,18 @@ export function ResourceListPanel({
                     type="button"
                   >
                     <span aria-hidden="true">{isExpanded ? "-" : "+"}</span>
-                    {isExpanded ? "Minimize details" : "Show all details"}
+                    {isExpanded ? "상세 접기" : "모두 보기"}
                   </button>
                 ) : null}
               </div>
             ) : (
-              <div className={styles.resourceListNoValues}>No key parameters</div>
+              <div className={styles.resourceListNoValues}>주요 파라미터 없음</div>
             )}
           </article>
         );
-      })}
-    </div>
+        })}
+      </div>
+    </section>
   );
 }
 
