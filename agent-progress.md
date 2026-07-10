@@ -4,10 +4,32 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- Branch: `codex/workspace-parameter-editing`.
-- Scoped work: Workspace infrastructure settings Tasks 1-4, including final-review fixes and integrated verification.
-- The branch covers new-node safe defaults, parameter-reference edge metadata/synchronization, parameter editing, and Terraform Preview output without cloud mutation.
-- `feature_list.json` and `session-handoff.md` remain unchanged by scoped-task instruction.
+- Branch: `fix/sw/302-ecs-worker-dispatch-safety`.
+- Active workstream: `ECS-MIGRATION-000`, post-merge hardening for Phase 5 PR #296 review findings.
+- Phase 5 is merged into `dev`; worker runtime and worker-specific Terraform resources are still pending.
+- Production must keep `DEPLOYMENT_WORKER_MODE=in_process` until the worker task definition, entrypoint, roles, security group, and runtime are implemented.
+
+## Session Record
+
+### 2026-07-10 - Harden ECS worker dispatch after merged PR review
+
+- Goal: Address valid post-merge review findings on PR #296 without running live AWS commands.
+- Completed:
+  - Re-read all five unresolved review threads with thread resolution and outdated state.
+  - Made missing `RunTask` task ARNs fail dispatch instead of leaving an untraceable running job.
+  - Made stale ECS cancellation paths terminalize the active deployment job before the existing deployment fail-safe runs.
+  - Made ECS task verification or stop API failures return a retryable result so the route responds with 503 and preserves the active lock against concurrent Terraform execution.
+  - Made JSON worker config parser casts explicit after runtime validation.
+  - Clarified that ECS worker mode must remain disabled until worker runtime and infrastructure exist, and documented public-IP and cluster-scoped IAM requirements.
+- Verification:
+  - `pnpm harness:check` passed before and after edits.
+  - `pnpm lint` passed.
+  - `pnpm typecheck` passed.
+  - `pnpm build` passed.
+  - `git diff --check` passed.
+- Risk:
+  - No new tests were added or run per user direction.
+  - The worker task definition, worker roles, worker security group, and worker process are not implemented yet.
 
 ### 2026-07-10 - Start ECS Phase 5 API worker dispatch
 
