@@ -1,5 +1,6 @@
 import type { TerraformDiagnostic } from "@sketchcatch/types";
 import { AlertCircle, GitBranch, Sparkles } from "lucide-react";
+import { formatTerraformDiagnosticSeverity } from "./terraform-diagnostic-presentation";
 import { formatTerraformDiagnosticTitle } from "./terraform-panel-utils";
 import type { TerraformIssueRecord } from "./terraform-issues-state";
 import { getTerraformSafeFix } from "./terraform-safe-fixes";
@@ -81,9 +82,4 @@ function formatTerraformDiagnosticLocation(diagnostic: TerraformDiagnostic): str
   ].filter(Boolean);
 
   return parts.join(" · ");
-}
-
-// API severity 값을 사용자가 바로 이해할 수 있는 한국어 상태로 바꿉니다.
-function formatTerraformDiagnosticSeverity(severity: TerraformDiagnostic["severity"]): string {
-  return severity === "error" ? "오류" : "경고";
 }
