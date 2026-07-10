@@ -16,6 +16,8 @@ const resourceWorkspaceStylesSource = readWorkspaceFile("resource-workspace.modu
 const diagramEditorTypesSource = readFeatureFile("../diagram-editor/types.ts");
 const terraformLeaveDialogSource = readWorkspaceFile("TerraformLeaveDialog.tsx");
 const terraformPanelSource = readWorkspaceFile("TerraformCodePanel.tsx");
+const terraformIssuesPanelSource = readWorkspaceFile("TerraformIssuesPanel.tsx");
+const terraformIssuesStylesSource = readWorkspaceFile("TerraformIssuesPanel.module.css");
 const workspaceRightPanelTypesSource = readWorkspaceFile("workspace-right-panel.types.ts");
 const projectDraftManagerSource = readWorkspaceFile("ProjectWorkspaceDraftManager.tsx");
 const workspaceDraftManagerSource = readWorkspaceFile("WorkspaceDraftManager.tsx");
@@ -240,7 +242,7 @@ test("workspace internal panels keep only the DESIGN.md surface layer", () => {
     finalPolishIndex
   );
   const polishedTerraformPanelRule = getLastCssRuleAfter(stylesSource, "terraformPanel", finalPolishIndex);
-  const polishedIssuesPanelRule = getLastCssRuleAfter(stylesSource, "issuesPanel", finalPolishIndex);
+  const polishedIssuesPanelRule = getCssRule(terraformIssuesStylesSource, "issuesPanel");
   const polishedPanelModeTextButtonActiveRule = getLastCssRuleAfter(
     stylesSource,
     "panelModeTextButtonActive",
@@ -762,14 +764,12 @@ test("terraform issue banner focuses the embedded Issues panel instead of naviga
 });
 
 test("terraform issue AI resolution bypasses the leave guard while editing", () => {
-  const issuesPanelSource = readWorkspaceFile("TerraformIssuesPanel.tsx");
-
-  assert.match(issuesPanelSource, /data-terraform-issue-ai-resolution/);
+  assert.match(terraformIssuesPanelSource, /data-terraform-issue-ai-resolution/);
   assert.match(componentSource, /isTerraformIssueAiResolutionTarget/);
   assert.match(componentSource, /isTerraformIssueAiResolutionTarget\(target\)/);
   assert.match(componentSource, /isTerraformLeaveGuardIgnoredTarget/);
   assert.match(aiChatDockSource, /data-terraform-leave-guard-ignore/);
-  assert.match(issuesPanelSource, /onResolveWithAi\(issue\)/);
+  assert.match(terraformIssuesPanelSource, /onResolveWithAi\(issue\)/);
 });
 
 test("terraform code navigation stays reachable after a blocked save", () => {
@@ -1329,9 +1329,9 @@ test("pre-deployment finding fix buttons open the existing terraform source loca
 
 test("terraform errors surface as an issues banner and AI resolution lives in the chat dock", () => {
   const issueBannerRule = getCssRule(stylesSource, "terraformIssueBanner");
-  const aiButtonRule = getCssRule(stylesSource, "terraformDiagnosticAiButton");
-  const issuesPanelRule = getCssRule(stylesSource, "issuesPanel");
-  const issuesDiagnosticsRule = getCssRule(stylesSource, "issuesPanel .terraformDiagnostics");
+  const aiButtonRule = getCssRule(terraformIssuesStylesSource, "terraformDiagnosticAiButton");
+  const issuesPanelRule = getCssRule(terraformIssuesStylesSource, "issuesPanel");
+  const issuesDiagnosticsRule = getCssRule(terraformIssuesStylesSource, "terraformDiagnostics");
 
   assert.doesNotMatch(terraformPanelSource, /runAiTerraformErrorExplanation/);
   assert.doesNotMatch(terraformPanelSource, /terraformErrorExplanationsByKey/);
@@ -1355,7 +1355,7 @@ test("terraform errors surface as an issues banner and AI resolution lives in th
   assert.doesNotMatch(aiChatDockSource, /Well-Architected/);
   assert.match(aiChatDockSource, /onApplyTerraformIssueFix/);
   assert.match(issueBannerRule, /\bbackground:\s*#fff7ed;/);
-  assert.match(aiButtonRule, /\bbackground:\s*var\(--workspace-accent, #000000\);/);
+  assert.match(aiButtonRule, /\bbackground:\s*var\(--workspace-surface, #ffffff\);/);
   assert.match(issuesPanelRule, /\bheight:\s*100%;/);
   assert.match(issuesPanelRule, /\bmin-height:\s*0;/);
   assert.match(issuesPanelRule, /\boverflow:\s*hidden;/);
@@ -1363,22 +1363,21 @@ test("terraform errors surface as an issues banner and AI resolution lives in th
   assert.match(issuesDiagnosticsRule, /\bmin-height:\s*0;/);
   assert.match(issuesDiagnosticsRule, /\boverflow-y:\s*auto;/);
   assert.match(issuesDiagnosticsRule, /\bscrollbar-gutter:\s*stable;/);
-  assert.doesNotMatch(stylesSource, /\.issuesPanel\s*\{[^}]*background:\s*var\(--bb-dark\);/s);
-  assert.doesNotMatch(stylesSource, /\.issuesPanel \.terraformDiagnostics\s*\{[^}]*background:\s*var\(--bb-dark\);/s);
-  assert.doesNotMatch(stylesSource, /\.panelPlanActionDangerButton[^{}]*\{[^}]*\.issuesPanel/s);
+  assert.doesNotMatch(terraformIssuesStylesSource, /var\(--bb-|#2563eb|#3730a3|#1d4ed8/);
   assert.match(
-    stylesSource,
-    /\.issuesPanel \.terraformDiagnosticList strong\s*\{[^}]*color:\s*var\(--workspace-text, #171717\);/s
+    terraformIssuesStylesSource,
+    /\.terraformDiagnosticList strong\s*\{[^}]*color:\s*var\(--workspace-text, #171717\);/s
   );
   assert.match(
-    stylesSource,
-    /\.issuesPanel \.terraformDiagnosticList span,[\s\S]*?color:\s*var\(--workspace-muted, #60646c\);/
+    terraformIssuesStylesSource,
+    /\.terraformDiagnosticList > li > span\s*\{[^}]*color:\s*var\(--workspace-muted, #60646c\);/s
   );
-  assert.match(stylesSource, /\.issuesPanel \.terraformDiagnosticSeverity\s*\{[^}]*color:\s*#b42318;/s);
+  assert.match(terraformIssuesStylesSource, /\.terraformDiagnosticSeverity\s*\{[^}]*color:\s*var\(--workspace-text, #171717\);/s);
   assert.match(
-    stylesSource,
-    /\.issuesPanel \.terraformDiagnosticMeta span\s*\{[^}]*background:\s*var\(--workspace-surface, #ffffff\);[^}]*border-color:\s*var\(--workspace-line-strong, #dcdee0\);/s
+    terraformIssuesStylesSource,
+    /\.terraformDiagnosticMeta span\s*\{[^}]*background:\s*var\(--workspace-surface-muted, #fafafa\);[^}]*border:\s*1px solid var\(--workspace-line, #f0f0f3\);/s
   );
+  assert.match(terraformIssuesPanelSource, /AI로 해결/);
 });
 
 test("terraform issue AI resolution shows a fix plan before apply", () => {
