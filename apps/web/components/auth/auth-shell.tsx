@@ -25,7 +25,7 @@ export function AuthShell({
     <main className={wide ? "authPage authPageWide" : "authPage"}>
       <header className="authTopbar">
         <Link className="authBrand" href="/" aria-label="SketchCatch 홈">
-          <Image alt="" height={32} priority src="/sketchcatch-logo.svg" width={36} />
+          <Image alt="" height={24} priority src="/sketchcatch-logo.png" width={16} />
           <span>SketchCatch</span>
         </Link>
       </header>
@@ -40,34 +40,6 @@ export function AuthShell({
           {children}
           {footer ? <div className="authSwitch">{footer}</div> : null}
         </section>
-
-        <aside className="authContext" aria-label="SketchCatch 작업 흐름">
-          <p className="authContextEyebrow">One workspace</p>
-          <h2>생각한 구조를<br />배포 가능한 흐름으로.</h2>
-          <ol>
-            <li>
-              <span>01</span>
-              <div>
-                <strong>Practice Architecture</strong>
-                <p>Resource와 관계를 Architecture Board에서 설계합니다.</p>
-              </div>
-            </li>
-            <li>
-              <span>02</span>
-              <div>
-                <strong>IaC Preview</strong>
-                <p>Terraform 변경 내용을 배포 전에 확인합니다.</p>
-              </div>
-            </li>
-            <li>
-              <span>03</span>
-              <div>
-                <strong>Safety Gate</strong>
-                <p>비용과 보안 위험을 확인하고 직접 승인합니다.</p>
-              </div>
-            </li>
-          </ol>
-        </aside>
       </div>
     </main>
   );

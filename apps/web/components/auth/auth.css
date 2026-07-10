@@ -1,15 +1,24 @@
 .authPage {
   min-height: 100vh;
-  background: #ffffff;
+  padding-top: 16px;
+  background: #fafafa;
   color: #171717;
 }
 
 .authTopbar {
+  position: sticky;
+  z-index: 20;
+  top: 16px;
   display: flex;
+  width: min(calc(100% - 48px), 1200px);
   min-height: 72px;
   align-items: center;
-  padding: 0 48px;
-  border-bottom: 1px solid #f0f0f3;
+  margin: 0 auto;
+  padding: 0 20px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: var(--shadow-card);
+  backdrop-filter: blur(16px);
 }
 
 .authBrand {
@@ -17,29 +26,36 @@
   align-items: center;
   gap: 10px;
   color: #171717;
-  font-size: 17px;
+  font-size: 18px;
   font-weight: 700;
+  line-height: 1;
   text-decoration: none;
 }
 
 .authBrand img {
   display: block;
-  width: auto;
+  width: 16px;
+  height: 24px;
+  flex: 0 0 auto;
+  object-fit: contain;
 }
 
 .authLayout {
   display: grid;
-  width: min(1040px, calc(100% - 96px));
-  margin: 0 auto;
-  padding: 72px 0 96px;
-  grid-template-columns: minmax(360px, 480px) minmax(280px, 1fr);
-  gap: 96px;
+  width: min(560px, calc(100% - 48px));
+  margin: 52px auto 80px;
+  border-radius: 16px;
+  padding: 48px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: var(--shadow-product);
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
 }
 
 .authPageWide .authLayout {
-  width: min(1184px, calc(100% - 96px));
-  grid-template-columns: minmax(560px, 720px) minmax(260px, 1fr);
-  gap: 72px;
+  width: min(820px, calc(100% - 48px));
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
 }
 
 .authPanel {
@@ -50,8 +66,7 @@
   margin-bottom: 32px;
 }
 
-.authEyebrow,
-.authContextEyebrow {
+.authEyebrow {
   margin: 0;
   color: #777b84;
   font-size: 12px;
@@ -73,55 +88,6 @@
   color: #55585f;
   font-size: 15px;
   line-height: 1.7;
-}
-
-.authContext {
-  align-self: start;
-  padding: 8px 0 8px 48px;
-  border-left: 1px solid #dcdee0;
-}
-
-.authContext h2 {
-  margin: 12px 0 32px;
-  font-size: 28px;
-  font-weight: 700;
-  line-height: 1.35;
-  letter-spacing: 0;
-}
-
-.authContext ol {
-  display: grid;
-  margin: 0;
-  padding: 0;
-  gap: 24px;
-  list-style: none;
-}
-
-.authContext li {
-  display: grid;
-  grid-template-columns: 28px minmax(0, 1fr);
-  gap: 12px;
-}
-
-.authContext li > span {
-  color: #9a9da4;
-  font-size: 11px;
-  font-weight: 700;
-  line-height: 1.5;
-}
-
-.authContext strong {
-  display: block;
-  font-size: 14px;
-  line-height: 1.5;
-  overflow-wrap: anywhere;
-}
-
-.authContext li p {
-  margin: 4px 0 0;
-  color: #777b84;
-  font-size: 13px;
-  line-height: 1.6;
 }
 
 .authForm {
@@ -154,6 +120,7 @@
   color: #171717;
   font-size: 14px;
   outline: 0;
+  box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.02);
 }
 
 .authForm input:not([type="checkbox"]):not([type="hidden"]):hover {
@@ -194,6 +161,7 @@
   font-size: 14px;
   font-weight: 600;
   text-decoration: none;
+  box-shadow: 0 1px 2px rgba(23, 23, 23, 0.04);
   transition: border-color 150ms ease, background-color 150ms ease;
 }
 
@@ -539,38 +507,48 @@
 
 @media (max-width: 900px) {
   .authTopbar {
-    padding: 0 32px;
+    width: calc(100% - 48px);
+    padding: 0 20px;
   }
 
   .authLayout,
   .authPageWide .authLayout {
     width: min(100% - 64px, 680px);
+    padding: 40px;
     grid-template-columns: 1fr;
-    gap: 64px;
+    gap: 40px;
   }
 
-  .authContext {
-    padding: 40px 0 0;
-    border-top: 1px solid #dcdee0;
-    border-left: 0;
-  }
 }
 
 @media (max-width: 639px) {
+  .authPage {
+    padding-top: 8px;
+  }
+
   .authTopbar {
+    top: 8px;
+    width: calc(100% - 32px);
     min-height: 64px;
-    padding: 0 20px;
+    padding: 0 14px;
   }
 
   .authBrand {
-    font-size: 15px;
+    gap: 8px;
+    font-size: 16px;
+  }
+
+  .authBrand img {
+    width: 14px;
+    height: 21px;
   }
 
   .authLayout,
   .authPageWide .authLayout {
-    width: calc(100% - 40px);
-    padding: 48px 0 64px;
-    gap: 48px;
+    width: calc(100% - 32px);
+    margin: 32px auto 48px;
+    padding: 28px 22px;
+    gap: 32px;
   }
 
   .authIntro {
@@ -579,10 +557,6 @@
 
   .authIntro h1 {
     font-size: 32px;
-  }
-
-  .authContext h2 {
-    font-size: 24px;
   }
 
   .authPageWide .authForm {
