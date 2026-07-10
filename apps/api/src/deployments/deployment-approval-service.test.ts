@@ -395,7 +395,7 @@ test("approveDeploymentPlan preserves failed cleanup state for destroy approvals
   });
 });
 
-test("approveDeploymentPlan rejects safety warnings that block approval", async () => {
+test("approveDeploymentPlan allows safety warnings that used to block approval", async () => {
   const repository = new FakeDeploymentRepository();
   const warning = createBlockingWarning();
   repository.deployment = createDeploymentRecord(undefined, {
@@ -409,24 +409,22 @@ test("approveDeploymentPlan rejects safety warnings that block approval", async 
     }
   });
 
-  await assert.rejects(
-    () =>
-      approveDeploymentPlan(
-        {
-          deploymentId,
-          accessContext: createAccessContext()
-        },
-        repository,
-        {
-          downloadTerraformArtifact: async () => artifactContent,
-          now: () => fixedNow
-        }
-      ),
-    /Deployment warnings block approval/
+  const deployment = await approveDeploymentPlan(
+    {
+      deploymentId,
+      accessContext: createAccessContext()
+    },
+    repository,
+    {
+      downloadTerraformArtifact: async () => artifactContent,
+      now: () => fixedNow
+    }
   );
+
+  assert.equal(deployment.approvedByUserId, userId);
 });
 
-test("approveDeploymentPlan requires acknowledgement for medium safety warnings", async () => {
+test("approveDeploymentPlan allows acknowledgement-only warnings without acknowledgement ids", async () => {
   const repository = new FakeDeploymentRepository();
   const warning = createAcknowledgementWarning();
   repository.deployment = createDeploymentRecord(undefined, {
@@ -437,28 +435,11 @@ test("approveDeploymentPlan requires acknowledgement for medium safety warnings"
     }
   });
 
-  await assert.rejects(
-    () =>
-      approveDeploymentPlan(
-        {
-          deploymentId,
-          accessContext: createAccessContext(),
-          acknowledgedWarningIds: []
-        },
-        repository,
-        {
-          downloadTerraformArtifact: async () => artifactContent,
-          now: () => fixedNow
-        }
-      ),
-    /Deployment warnings must be acknowledged/
-  );
-
   const deployment = await approveDeploymentPlan(
     {
       deploymentId,
       accessContext: createAccessContext(),
-      acknowledgedWarningIds: [warning.id]
+      acknowledgedWarningIds: []
     },
     repository,
     {

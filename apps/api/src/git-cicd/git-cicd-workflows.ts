@@ -269,7 +269,7 @@ jobs:
           fi
           RELEASE_ID="\${GITHUB_SHA}"
           aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names "$ASG_NAME" --query 'AutoScalingGroups[0]' --output json > sketchcatch-asg.json
-          LT_ID=$(python - <<'PY'
+          LT_ID=$(python3 - <<'PY'
           import json
           with open("sketchcatch-asg.json", encoding="utf-8") as handle:
               asg = json.load(handle) or {}
@@ -277,7 +277,7 @@ jobs:
           print(spec.get("LaunchTemplateId") or "")
           PY
           )
-          LT_NAME=$(python - <<'PY'
+          LT_NAME=$(python3 - <<'PY'
           import json
           with open("sketchcatch-asg.json", encoding="utf-8") as handle:
               asg = json.load(handle) or {}
@@ -285,7 +285,7 @@ jobs:
           print(spec.get("LaunchTemplateName") or "")
           PY
           )
-          LT_VERSION=$(python - <<'PY'
+          LT_VERSION=$(python3 - <<'PY'
           import json
           with open("sketchcatch-asg.json", encoding="utf-8") as handle:
               asg = json.load(handle) or {}
@@ -305,7 +305,7 @@ jobs:
           fi
           if [ "\${#LT_LOOKUP_ARGS[@]}" -gt 0 ]; then
             aws ec2 describe-launch-template-versions "\${LT_LOOKUP_ARGS[@]}" --versions "$LT_VERSION" --query 'LaunchTemplateVersions[0].LaunchTemplateData' --output json > sketchcatch-launch-template-data.json
-            python - "$RELEASE_ID" <<'PY'
+            python3 - "$RELEASE_ID" <<'PY'
           import base64
           import json
           import sys
@@ -421,10 +421,7 @@ jobs:
 }
 
 function createDefaultStateBucket(input: GitCicdWorkflowRenderInput): string {
-  return `sketchcatch-tfstate-${input.repositoryOwner}-${input.repositoryName}`
-    .toLowerCase()
-    .replace(/[^a-z0-9.-]/g, "-")
-    .slice(0, 63);
+  return createDefaultBucketName("sketchcatch-tfstate", input);
 }
 
 function createDefaultStateKey(input: GitCicdWorkflowRenderInput): string {
@@ -432,8 +429,13 @@ function createDefaultStateKey(input: GitCicdWorkflowRenderInput): string {
 }
 
 function createDefaultReleaseBucket(input: GitCicdWorkflowRenderInput): string {
-  return `sketchcatch-release-${input.repositoryOwner}-${input.repositoryName}`
+  return createDefaultBucketName("sketchcatch-release", input);
+}
+
+function createDefaultBucketName(prefix: string, input: GitCicdWorkflowRenderInput): string {
+  return `${prefix}-${input.repositoryOwner}-${input.repositoryName}`
     .toLowerCase()
     .replace(/[^a-z0-9.-]/g, "-")
-    .slice(0, 63);
+    .slice(0, 63)
+    .replace(/[-.]+$/, "");
 }

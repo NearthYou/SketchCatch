@@ -108,3 +108,639 @@ textarea:focus-visible {
     transition-duration: 1ms !important;
   }
 }
+
+/* DESIGN.md cost operations surface */
+.designCostPage {
+  --bp-high: #9f1d23;
+  --bp-high-tint: #fff1f1;
+  --bp-ink: var(--dashboard-design-ink);
+  --bp-line: var(--dashboard-design-hairline);
+  --bp-low: #0d6d31;
+  --bp-low-tint: #effaf4;
+  --bp-medium: #ab6400;
+  --bp-muted: var(--dashboard-design-body);
+  --bp-paper-2: var(--dashboard-design-canvas-soft);
+  --bp-r: 8px;
+  --dashboard-blue: var(--dashboard-design-ink);
+  color: var(--dashboard-design-ink);
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+  word-break: keep-all;
+}
+
+.designCostViewBar {
+  align-items: center;
+  border-bottom: 1px solid var(--dashboard-design-hairline);
+  display: flex;
+  gap: 18px;
+  justify-content: space-between;
+  padding-bottom: 16px;
+}
+
+.designCostViewNote {
+  color: var(--dashboard-design-muted);
+  font-size: 0.78rem;
+  line-height: 1.5;
+  margin: 0;
+  text-align: right;
+}
+
+.designCostPage .costTabs {
+  background: var(--dashboard-design-surface-strong);
+  border: 0;
+  border-radius: 8px;
+  display: inline-grid;
+  gap: 2px;
+  grid-auto-flow: column;
+  margin: 0;
+  padding: 4px;
+  width: fit-content;
+}
+
+.designCostPage .costTabButton {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: var(--dashboard-design-body);
+  display: inline-flex;
+  font-family: inherit;
+  font-size: 0.86rem;
+  font-weight: 700;
+  gap: 7px;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0 14px;
+  white-space: nowrap;
+}
+
+.designCostPage .costTabButton[aria-selected="true"] {
+  background: var(--dashboard-design-surface);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  color: var(--dashboard-design-ink);
+}
+
+.designCostPage .costTabButton:focus-visible,
+.designCostPage button:focus-visible,
+.designCostPage select:focus-visible,
+.designCostPage input:focus-visible,
+.designCostPage summary:focus-visible {
+  outline: 2px solid var(--dashboard-design-link);
+  outline-offset: 2px;
+}
+
+.designCostPage .dashboardPanel,
+.designCostPage .costAwsConnectionPanel {
+  background: var(--dashboard-design-surface);
+  border: 1px solid var(--dashboard-design-hairline-strong);
+  border-radius: 8px;
+  box-shadow: none;
+  color: var(--dashboard-design-ink);
+}
+
+.designCostPage .dashboardPanel::before {
+  display: none;
+}
+
+.designCostPage .dashboardPanelHeader h2,
+.designCostPage .costPanelTitle h2,
+.designCostPage .costAwsConnectionHeader h3 {
+  color: var(--dashboard-design-ink);
+  font-size: 1rem;
+  letter-spacing: 0;
+  line-height: 1.4;
+}
+
+.designCostPage .dashboardPanelHeader p,
+.designCostPage .costPanelTitle p,
+.designCostPage .costAwsConnectionHeader p {
+  color: var(--dashboard-design-body);
+}
+
+.designCostPage .dashboardPanelKicker {
+  color: var(--dashboard-design-muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.designCostPage .costOverviewPanel {
+  display: grid;
+  gap: 0;
+  grid-template-columns: minmax(0, 1.6fr) minmax(280px, 0.65fr);
+  overflow: hidden;
+  padding: 0;
+}
+
+.designCostPage .costOverviewSettings {
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+}
+
+.designCostPage .costControlGrid {
+  align-items: end;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
+  max-width: none;
+}
+
+.designCostPage .costField {
+  color: var(--dashboard-design-body);
+  display: grid;
+  font-size: 0.76rem;
+  font-weight: 700;
+  gap: 7px;
+}
+
+.designCostPage .costField input,
+.designCostPage .costField select {
+  background: var(--dashboard-design-surface);
+  border: 1px solid var(--dashboard-design-hairline-strong);
+  border-radius: 8px;
+  color: var(--dashboard-design-ink);
+  font: inherit;
+  min-height: 40px;
+  padding: 0 12px;
+  width: 100%;
+}
+
+.designCostPage .costApplyButton,
+.designCostPage .primaryButton {
+  align-items: center;
+  background: var(--dashboard-design-primary);
+  border: 1px solid var(--dashboard-design-primary);
+  border-radius: 8px;
+  color: #ffffff;
+  display: inline-flex;
+  font-family: inherit;
+  font-size: 0.86rem;
+  font-weight: 700;
+  gap: 7px;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0 16px;
+}
+
+.designCostPage .dashboardSecondaryButton,
+.designCostPage .costAwsVerifyButton {
+  background: var(--dashboard-design-surface);
+  border: 1px solid var(--dashboard-design-hairline-strong);
+  border-radius: 8px;
+  color: var(--dashboard-design-ink);
+  font-family: inherit;
+  font-weight: 700;
+  min-height: 40px;
+}
+
+.designCostPage .costSummaryCard {
+  align-content: start;
+  background: var(--dashboard-design-canvas-soft);
+  border: 0;
+  border-left: 1px solid var(--dashboard-design-hairline);
+  border-radius: 0;
+  box-shadow: none;
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+}
+
+.designCostPage .costSummaryCard .dashboardPanelKicker {
+  color: var(--dashboard-design-muted);
+}
+
+.designCostPage .costSummaryAmount strong {
+  color: var(--dashboard-design-ink);
+  font-size: 2rem;
+  letter-spacing: 0;
+  line-height: 1.1;
+}
+
+.designCostPage .costSummaryMeta span,
+.designCostPage .dashboardCountBadge {
+  background: var(--dashboard-design-surface-strong);
+  border: 0;
+  border-radius: 999px;
+  color: var(--dashboard-design-body);
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 5px 9px;
+}
+
+.designCostPage .costAwsConnectionPanel {
+  background: var(--dashboard-design-surface);
+  gap: 14px;
+  padding: 16px;
+}
+
+.designCostPage .costAwsConnectionPanel.isVerified {
+  background: #effaf4;
+  border-color: #b8dfc6;
+}
+
+.designCostPage .costAwsConnectionIcon {
+  background: #ffffff;
+  border: 0;
+  color: var(--dashboard-design-success);
+}
+
+.designCostPage .costAwsConnectionStatusLive {
+  background: transparent;
+  border: 0;
+  color: #0d6d31;
+}
+
+.designCostPage .costAwsConnectionInfo div,
+.designCostPage .costAwsSetupMeta div,
+.designCostPage .costAwsSetupFallback {
+  background: rgba(255, 255, 255, 0.82);
+  border-color: #cfe8d8;
+}
+
+.designCostPage .costUsageMetricPanel {
+  border-color: var(--dashboard-design-hairline);
+  padding: 18px;
+}
+
+.designCostPage .costUsageMetricGrid {
+  display: grid;
+  gap: 1px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  overflow: hidden;
+}
+
+.designCostPage .costMetricCard {
+  background: var(--dashboard-design-surface);
+  border: 0;
+  border-left: 1px solid var(--dashboard-design-hairline);
+  border-radius: 0;
+  min-height: 106px;
+  padding: 14px 16px;
+}
+
+.designCostPage .costMetricCard:first-child {
+  border-left: 0;
+}
+
+.designCostPage .costMetricCard span {
+  color: var(--dashboard-design-muted);
+  font-size: 0.76rem;
+}
+
+.designCostPage .costMetricCard strong {
+  color: var(--dashboard-design-ink);
+  font-size: 1.5rem;
+  letter-spacing: 0;
+}
+
+.designCostPage .costMetricIcon {
+  background: var(--dashboard-design-surface-strong);
+  border: 0;
+  color: var(--dashboard-design-ink);
+}
+
+.designCostChartGrid {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
+}
+
+.designCostPage .costChartPanel,
+.designCostPage .costProjectPanel,
+.designCostPage .costRecommendationPanel,
+.designCostPage .costDetailPanel {
+  gap: 16px;
+  padding: 18px;
+}
+
+.designCostPage .costChartPanel .dashboardPanelHeader,
+.designCostPage .costProjectPanel .dashboardPanelHeader {
+  border-bottom: 1px solid var(--dashboard-design-hairline);
+  padding-bottom: 12px;
+}
+
+.designCostPage .costLineChartSvg {
+  background: var(--dashboard-design-canvas-soft);
+  border-color: var(--dashboard-design-hairline);
+  border-radius: 8px;
+}
+
+.designCostPage .costLineChartSvg circle {
+  fill: #ffffff;
+  stroke: var(--dashboard-design-ink);
+}
+
+.designCostPage .costLineChartPath {
+  stroke: var(--dashboard-design-ink);
+  stroke-width: 3;
+}
+
+.designCostPage .costServiceStackedSegment-0 {
+  background: #171717;
+}
+
+.designCostPage .costServiceStackedSegment-1 {
+  background: #60646c;
+}
+
+.designCostPage .costServiceStackedSegment-2 {
+  background: #999999;
+}
+
+.designCostPage .costServiceStackedSegment-3 {
+  background: #b0b4ba;
+}
+
+.designCostPage .costServiceStackedSegment-4 {
+  background: #dcdee0;
+}
+
+.designCostPage .costServiceStackedSegment-5 {
+  background: #f0f0f3;
+}
+
+.designCostPage .costServiceBarMeta strong,
+.designCostPage .costRecommendationHeader strong {
+  color: var(--dashboard-design-ink);
+}
+
+.designCostPage .costUsageProjectRow:hover,
+.designCostPage .costUsageProjectRow:focus-visible,
+.designCostPage .costUsageProjectRow[aria-pressed="true"] {
+  background: var(--dashboard-design-canvas-soft);
+}
+
+.designCostPage .costUsageProjectRow[aria-pressed="true"] {
+  box-shadow: inset 3px 0 0 var(--dashboard-design-ink);
+}
+
+.designCostPage .costWasteItem,
+.designCostPage .costRecommendationItem,
+.designCostPage .costTrendInsight,
+.designCostPage .costResourceDetails {
+  background: var(--dashboard-design-canvas-soft);
+  border-color: var(--dashboard-design-hairline);
+  border-radius: 8px;
+}
+
+.designCostPage .costNoticePanel {
+  align-items: center;
+  background: var(--dashboard-design-canvas-soft);
+  border-color: var(--dashboard-design-hairline);
+  padding: 16px;
+}
+
+.designCostPage .costNoticePanel > .dashboardIcon {
+  background: var(--dashboard-design-surface-strong);
+  border: 0;
+}
+
+@media (max-width: 1180px) {
+  .designCostPage .costOverviewPanel,
+  .designCostChartGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .designCostPage .costSummaryCard {
+    border-left: 0;
+    border-top: 1px solid var(--dashboard-design-hairline);
+  }
+
+  .designCostPage .costUsageMetricGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .designCostPage .costMetricCard:nth-child(3) {
+    border-left: 0;
+    border-top: 1px solid var(--dashboard-design-hairline);
+  }
+
+  .designCostPage .costMetricCard:nth-child(4) {
+    border-top: 1px solid var(--dashboard-design-hairline);
+  }
+}
+
+@media (max-width: 720px) {
+  .designCostViewBar {
+    align-items: stretch;
+    display: grid;
+  }
+
+  .designCostViewNote {
+    text-align: left;
+  }
+
+  .designCostPage .costTabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .designCostPage .costControlGrid,
+  .designCostPage .costUsageMetricGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .designCostPage .costMetricCard,
+  .designCostPage .costMetricCard:nth-child(3),
+  .designCostPage .costMetricCard:nth-child(4) {
+    border-left: 0;
+    border-top: 1px solid var(--dashboard-design-hairline);
+  }
+
+  .designCostPage .costMetricCard:first-child {
+    border-top: 0;
+  }
+
+  .designCostPage .costOverviewSettings,
+  .designCostPage .costSummaryCard,
+  .designCostPage .costChartPanel,
+  .designCostPage .costProjectPanel,
+  .designCostPage .costRecommendationPanel,
+  .designCostPage .costDetailPanel {
+    padding: 16px;
+  }
+
+  .designCostPage .costLineChartPlot {
+    grid-template-columns: 48px minmax(0, 1fr);
+  }
+}
+
+/* DESIGN.md live project inventory */
+.designProjectsView .designDashboardPanel {
+  padding: 22px;
+}
+
+.designProjectsResultMeta {
+  align-items: center;
+  color: var(--dashboard-design-muted);
+  display: flex;
+  font-size: 0.76rem;
+  font-weight: 700;
+  gap: 12px;
+  justify-content: space-between;
+  margin-top: 18px;
+}
+
+.designProjectsResultMeta span:first-child {
+  color: var(--dashboard-design-ink);
+}
+
+.designProjectsSort {
+  align-items: center;
+  background: var(--dashboard-design-surface);
+  border: 1px solid var(--dashboard-design-hairline-strong);
+  border-radius: 8px;
+  color: var(--dashboard-design-body);
+  display: inline-flex;
+  gap: 4px;
+  min-height: 40px;
+  padding-left: 10px;
+}
+
+.designProjectsSort select {
+  background: transparent;
+  border: 0;
+  color: var(--dashboard-design-ink);
+  font: inherit;
+  font-weight: 700;
+  min-height: 38px;
+  outline: 0;
+  padding: 0 10px 0 4px;
+}
+
+.designProjectsSort:focus-within {
+  outline: 2px solid var(--dashboard-design-link);
+  outline-offset: 2px;
+}
+
+.designProjectsList {
+  border-color: var(--dashboard-design-hairline-strong);
+  margin-top: 10px;
+}
+
+.designDashboardProjectRow.designProjectsRow {
+  align-items: center;
+  gap: 18px;
+  grid-template-columns: minmax(260px, 1.4fr) minmax(190px, 0.7fr) minmax(170px, 0.6fr) auto;
+  min-width: 0;
+  padding: 15px 16px;
+}
+
+.designProjectsIdentity {
+  align-items: center;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: auto minmax(0, 1fr);
+  min-width: 0;
+}
+
+.designProjectsIdentity > div {
+  min-width: 0;
+}
+
+.designProjectsIdentity strong,
+.designProjectsIdentity p {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.designProjectsIdentity p {
+  margin-top: 4px;
+}
+
+.designProjectsDate {
+  align-items: center;
+  color: var(--dashboard-design-body);
+  display: inline-flex;
+  font-size: 0.82rem;
+  gap: 6px;
+  line-height: 1.45;
+}
+
+.designProjectsOpen {
+  align-items: center;
+  color: var(--dashboard-design-link);
+  display: inline-flex;
+  font-size: 0.84rem;
+  font-weight: 700;
+  gap: 4px;
+  justify-content: flex-end;
+  white-space: nowrap;
+}
+
+.designProjectsStatus {
+  align-items: center;
+  background: var(--dashboard-design-canvas-soft);
+  border: 1px solid var(--dashboard-design-hairline);
+  border-radius: 8px;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  margin-top: 18px;
+  min-height: 72px;
+  padding: 14px 16px;
+}
+
+.designProjectsStatus p {
+  color: var(--dashboard-design-body);
+  margin: 0;
+}
+
+.designProjectsStatus .designDashboardPrimaryAction,
+.designProjectsStatus .designDashboardSecondaryAction {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 1180px) {
+  .designDashboardProjectRow.designProjectsRow {
+    grid-template-columns: minmax(240px, 1fr) minmax(180px, 0.7fr) auto;
+  }
+
+  .designProjectsDate:nth-of-type(2) {
+    display: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .designProjectsView .designDashboardPanel {
+    padding: 16px;
+  }
+
+  .designProjectsList {
+    overflow: visible;
+  }
+
+  .designDashboardProjectRow.designProjectsRow {
+    align-items: start;
+    gap: 12px;
+    grid-template-columns: 1fr;
+    padding: 14px;
+  }
+
+  .designProjectsIdentity p {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+  }
+
+  .designProjectsDate:nth-of-type(2) {
+    display: inline-flex;
+  }
+
+  .designProjectsOpen {
+    justify-content: flex-start;
+  }
+
+  .designProjectsStatus {
+    align-items: stretch;
+    display: grid;
+  }
+
+  .designProjectsStatus .designDashboardPrimaryAction,
+  .designProjectsStatus .designDashboardSecondaryAction {
+    width: 100%;
+  }
+}

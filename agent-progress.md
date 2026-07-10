@@ -1,111 +1,69 @@
 # Agent Progress
 
-Short English-only working log for the current agent context. Older records are archived under `docs/agent-history/`.
+Short English-only working log for the current agent context. Older records are archived under docs/agent-history/.
 
 ## Current Verified State
 
-- Branch: `fix/sw/302-ecs-worker-dispatch-safety`.
-- Active workstream: `ECS-MIGRATION-000`, post-merge hardening for Phase 5 PR #296 review findings.
-- Phase 5 is merged into `dev`; worker runtime and worker-specific Terraform resources are still pending.
-- Production must keep `DEPLOYMENT_WORKER_MODE=in_process` until the worker task definition, entrypoint, roles, security group, and runtime are implemented.
+- Release PR: #319, dev to main, targeting v2.0.0.
+- Active workstream: ECS-MIGRATION-000, production cutover and worker isolation.
+- Production Route53 points to the split ECS ALB.
+- API, web, and protected legacy ECS services are healthy; public smoke passes through ECS.
+- ECS one-off worker dispatch is enabled and a worker-network migration smoke exited successfully.
+- The EC2/SSM/nginx path remains available only for explicit rollback.
 
 ## Session Record
 
-### 2026-07-10 - Harden ECS worker dispatch after merged PR review
+### 2026-07-10 - Stage the production split and isolate the one-off worker
 
-- Goal: Address valid post-merge review findings on PR #296 without running live AWS commands.
-- Completed:
-  - Re-read all five unresolved review threads with thread resolution and outdated state.
-  - Made missing `RunTask` task ARNs fail dispatch instead of leaving an untraceable running job.
-  - Made stale ECS cancellation paths terminalize the active deployment job before the existing deployment fail-safe runs.
-  - Made ECS task verification or stop API failures return a retryable result so the route responds with 503 and preserves the active lock against concurrent Terraform execution.
-  - Made JSON worker config parser casts explicit after runtime validation.
-  - Clarified that ECS worker mode must remain disabled until worker runtime and infrastructure exist, and documented public-IP and cluster-scoped IAM requirements.
-- Verification:
-  - `pnpm harness:check` passed before and after edits.
-  - `pnpm lint` passed.
-  - `pnpm typecheck` passed.
-  - `pnpm build` passed.
-  - `git diff --check` passed.
-- Risk:
-  - No new tests were added or run per user direction.
-  - The worker task definition, worker roles, worker security group, and worker process are not implemented yet.
+- Live discovery confirmed that Phase 8 had not been applied: only sketchcatch-production-app exists and the API/web/worker task families do not.
+- The original Phase 8 plan would destroy the legacy service and target group, replace the shared service security group, and route the listener before split targets were healthy.
+- Added warmup and split listener weights so legacy remains at 100 during service registration and at 0 after split.
+- Restored and protected the legacy app service, target group, and port 80 security group rules.
+- Added API/web service stability waits and parallel GitHub Actions deploy jobs.
+- Added a dedicated one-off worker task definition, execution role, task role, security group, RDS ingress, worker secrets, and scoped API dispatch permissions.
+- Worker dispatch remains disabled until the worker caller principal is trusted by existing customer execution roles and a worker smoke passes.
+- Added production secret completeness preconditions, ALB deletion protection, invalid header dropping, Terraform tests, and Korean operations documentation.
 
-### 2026-07-10 - Start ECS Phase 5 API worker dispatch
+### 2026-07-11 - Resolve v2.0.0 release review
 
-- Goal: Add API-side ECS worker dispatch so Terraform execution can move from in-process background jobs to ECS RunTask one-off worker tasks when explicitly enabled.
-- Completed:
-  - Merged Phase 4 PR #294 into `dev`.
-  - Created GitHub issue #295.
-  - Created linked branch `feature/sw/295-ecs-worker-task-dispatch` from updated `dev` with `gh issue develop`.
-  - Added `DEPLOYMENT_WORKER_MODE` and ECS worker dispatch env validation for cluster, task definition, subnets, security groups, container name, command, static worker env, and public IP setting.
-  - Added ECS/local deployment worker dispatcher abstraction using `RunTask`, `DescribeTasks`, and `StopTask`.
-  - Wired deployment init/plan/apply/destroy-plan/destroy routes to create a `DeploymentJob` and dispatch ECS RunTask when ECS worker mode is enabled.
-  - Wired cancel to call ECS StopTask when an active job has an ECS task ARN; otherwise the existing stale RUNNING fail-safe still marks the deployment failed.
-  - Added `init` to `deployment_job_operation` with migration `0028_deployment_job_init_operation.sql`.
-  - Added route/config/dispatcher tests and updated `docs/deployment.md` with env and least-privilege IAM requirements.
-- Verification so far:
-  - `pnpm harness:check` passed.
-  - `pnpm lint` passed.
-  - `pnpm typecheck` passed.
-  - `pnpm build` passed.
-  - `pnpm --filter @sketchcatch/api exec tsx --test src/deployments/deployment-worker-dispatcher.test.ts src/config/env.test.ts src/routes/deployments.test.ts` passed.
-  - `pnpm --filter @sketchcatch/api typecheck` passed.
-  - `pnpm --filter @sketchcatch/api lint` passed.
-  - `pnpm --filter @sketchcatch/api test -- deployments` ran the whole API suite because the package script does not filter test files; Phase 5 tests passed, but pre-existing unrelated AI fixture and missing docs/jh fixture failures were reported.
-- Risk:
-  - Worker runtime is still out of scope; ECS-dispatched tasks need Phase 6 code to consume `SKETCHCATCH_DEPLOYMENT_JOB_ID` and finish deployment state updates.
-  - The requested API deployments test command currently exits 1 because of unrelated pre-existing failures in `aiLlmExplanationRoutes.test.ts` and a missing `docs/jh/000_AWS리소스목록_JH.md` fixture.
-  - No live AWS commands should be run in Phase 5.
+- Restored the access token TTL to 15 minutes so session extension uses the existing refresh-token rotation path.
+- Corrected generic deployment warning classification and normalized managed Terraform user data before hash verification.
+- Updated generated GitHub Actions to use `python3` and made default S3 bucket names safe at the 63-character boundary.
+- Avoided redundant string conversion for downloaded Git artifacts.
+- Kept the two reverse-engineering record guards local because their array semantics differ and a shared helper would change behavior or add coupling.
 
-### 2026-07-10 - Start ECS Phase 4 deployment job model
+### 2026-07-11 - Complete ECS cutover and guard the EC2 rollback workflow
 
-- Goal: Add a deployment job model for Terraform execution jobs so Phase 5 can dispatch ECS RunTask one-off workers.
-- Completed:
-  - Created GitHub issue #293.
-  - Created linked branch `feature/sw/293-deployment-runtask-jobs` from `dev` with `gh issue develop`.
-  - Read root `AGENTS.md`, `docs/sw/agents.md`, `docs/sw/spec.md`, `docs/sw/plan.md`, and `apps/api/AGENTS.md`.
-  - Added `deployment_jobs` DB schema/migration with operation/status enums, requester/access context, source deployment state, ECS task ARN placeholder, timestamps, error summary, and active-job duplicate protection.
-  - Added internal deployment job repository/service helpers for create, dispatching/running, task ARN recording, success, failure, and cancellation transitions.
-  - Added deployment job service tests for creation, state transitions, duplicate protection, and masked failure/cancellation recording.
-  - Updated `docs/data-models.md` with the internal `DeploymentJob` contract while noting public Deployment API shapes remain stable.
-- Verification so far:
-  - `pnpm harness:check` passed before Phase 4 edits.
-  - `pnpm harness:check` passed after Phase 4 edits.
-  - `pnpm lint` passed.
-  - `pnpm typecheck` passed.
-  - `pnpm build` passed.
-  - `pnpm --filter @sketchcatch/api exec tsx --test src/deployments/deployment-job-service.test.ts` passed.
-  - `pnpm --filter @sketchcatch/api lint` passed.
-  - `pnpm --filter @sketchcatch/api typecheck` passed.
-  - `pnpm --filter @sketchcatch/api test -- deployment` ran the whole API suite because the package script does not filter test files; the new deployment job tests passed, but pre-existing unrelated AI fixture and missing docs/jh fixture failures were reported.
-- Risk:
-  - Phase 4 does not dispatch ECS tasks; Phase 5 must wire the job model into deployment routes and worker dispatcher config.
-  - The requested API deployment test command currently exits 1 because of unrelated pre-existing failures in `aiLlmExplanationRoutes.test.ts` and a missing `docs/jh/000_AWS리소스목록_JH.md` fixture.
-  - No live AWS commands should be run in Phase 4.
+- Applied the warmup and split Terraform plans with the legacy target retained at weight zero.
+- Ran the production database migrations after creating an encrypted pre-v2 RDS snapshot.
+- Switched Route53 to the ECS ALB and verified public web, API, and DB health responses from ECS addresses.
+- Enabled ECS one-off worker dispatch after extending the existing connection role trust to the API and worker task roles.
+- Added a dedicated GitHub Actions production infrastructure plan role and environment.
+- Changed the legacy EC2 deployment workflow to manual rollback only so a main merge cannot deploy the rollback stack.
 
-### 2026-07-10 - Start ECS Phase 3 runtime config/secrets transition
+## Verification
 
-- Goal: Implement Phase 3 only: replace ECS runtime dependence on generated env files with ECS task definition environment/secrets references while keeping EC2 rollback intact.
-- Completed:
-  - Created GitHub issue #290.
-  - Created linked branch `feature/sw/290-ecs-secrets-config` from `dev` with `gh issue develop`.
-  - Read root `AGENTS.md`, `docs/AGENTS.md`, `infra/AGENTS.md`, and ECS migration references under `docs/sw`.
-  - Added Terraform runtime config guardrails so sensitive API env names cannot be passed through `api_environment`.
-  - Restricted `api_secret_arns` to approved ECS API secret names and Secrets Manager/SSM ARN formats.
-  - Added `runtime-config.tf` to document the ECS API secret name groups used by Phase 3.
-  - Added an ECS deploy workflow check that fails if required sensitive API values are missing from task definition secrets or appear as plain environment variables.
-  - Updated deployment/Terraform docs with GitHub vars, ECS environment, Secrets Manager, SSM SecureString, and EC2 rollback responsibilities.
-- Verification:
-  - `pnpm harness:check` passed before Phase 3 edits.
-  - `pnpm harness:check` passed after Phase 3 edits.
-  - `pnpm lint` passed.
-  - `pnpm typecheck` passed.
-  - `pnpm build` passed.
-  - `terraform -chdir=infra/aws/terraform fmt -check -recursive` passed.
-  - Static Node check confirmed `.github/workflows/deploy-ecs.yml` contains the runtime config validation and does not generate env files or presigned env downloads.
-  - `terraform -chdir=infra/aws/terraform validate` passed without live AWS mutation.
-- Risk:
-  - No live AWS commands should be run in Phase 3.
-  - ECS service is currently cost-bearing if left at `desiredCount=1` from the prior smoke session.
-  - The RDS security group rule opened manually for ECS smoke should be captured in a later Terraform/drift follow-up.
+- Initial harness check passed.
+- Terraform fmt and validate passed.
+- Terraform tests passed 2 of 2 warmup/split contracts.
+- Warmup apply completed with 26 additions, 21 in-place changes, and only the expected HTTP listener removal.
+- Split apply changed only the HTTPS default action and API path rule weights.
+- Worker enable apply replaced only the API and legacy task definition revisions and updated their services.
+- Final Terraform refresh-only plan reports no changes.
+- Public `/`, `/health`, and `/health/db` return 200 from ECS; protected `/api/projects` returns 401.
+- Worker task smoke completed the idempotent database migration command with exit code 0.
+- Release review targeted tests passed 38 of 38.
+- Full repository lint, typecheck, and build passed after the review fixes.
+- Issue #320 passed workflow static assertions, Prettier, harness, lint, typecheck, and build.
+
+## Risk
+
+- API/web remain desired count 1 and do not provide multi-task application redundancy.
+- Route53 remains outside runtime Terraform state; the reviewed EC2 rollback UPSERT must be retained.
+- Existing external customer execution roles outside this AWS account may still require worker-principal trust migration.
+- The protected legacy rollback task still contains nginx, web, and API on the legacy security group.
+
+## Next Action
+
+- Merge issue #320's rollback-workflow guard into dev, then refresh release PR #319.
+- Keep the v2.0.0 tag and GitHub Release blocked until PR #319 is merged to main.

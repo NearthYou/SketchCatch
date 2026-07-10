@@ -37,6 +37,7 @@ export type DeploymentJobRepository = {
     }
   ): Promise<DeploymentJobRecord>;
   findActiveDeploymentJob(deploymentId: string): Promise<DeploymentJobRecord | undefined>;
+  listActiveDeploymentJobs(): Promise<DeploymentJobRecord[]>;
   findDeploymentJobById(jobId: string): Promise<DeploymentJobRecord | undefined>;
   markDeploymentJobDispatching(jobId: string): Promise<DeploymentJobRecord | undefined>;
   markDeploymentJobRunning(
@@ -120,8 +121,11 @@ export async function markDeploymentJobRunning(
   input: MarkDeploymentJobRunningInput,
   repository: DeploymentJobRepository
 ): Promise<DeploymentJobRecord> {
+  const taskArnUpdate =
+    input.ecsTaskArn === undefined ? {} : { ecsTaskArn: input.ecsTaskArn };
+
   return requireUpdatedJob(
-    repository.markDeploymentJobRunning(input.jobId, { ecsTaskArn: input.ecsTaskArn ?? null }),
+    repository.markDeploymentJobRunning(input.jobId, taskArnUpdate),
     "Deployment job could not be marked running"
   );
 }
@@ -213,6 +217,13 @@ export function createPostgresDeploymentJobRepository(db: Database): DeploymentJ
       return job;
     },
 
+    async listActiveDeploymentJobs() {
+      return db
+        .select()
+        .from(deploymentJobs)
+        .where(inArray(deploymentJobs.status, activeDeploymentJobStatuses));
+    },
+
     async findDeploymentJobById(jobId) {
       const [job] = await db.select().from(deploymentJobs).where(eq(deploymentJobs.id, jobId));
       return job;
@@ -236,12 +247,15 @@ export function createPostgresDeploymentJobRepository(db: Database): DeploymentJ
         .update(deploymentJobs)
         .set({
           status: "RUNNING",
-          ecsTaskArn: input.ecsTaskArn ?? null,
+          ...(input.ecsTaskArn !== undefined ? { ecsTaskArn: input.ecsTaskArn } : {}),
           startedAt: sql`coalesce(${deploymentJobs.startedAt}, now())`,
           ...touchUpdatedAt
         })
         .where(
-          and(eq(deploymentJobs.id, jobId), inArray(deploymentJobs.status, ["QUEUED", "DISPATCHING"]))
+          and(
+            eq(deploymentJobs.id, jobId),
+            inArray(deploymentJobs.status, ["QUEUED", "DISPATCHING"])
+          )
         )
         .returning();
 

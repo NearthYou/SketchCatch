@@ -1,4 +1,8 @@
-import type { DeploymentRecord, DeploymentLogRecord, DeploymentRepository } from "./deployment-service.js";
+import type {
+  DeploymentRecord,
+  DeploymentLogRecord,
+  DeploymentRepository
+} from "./deployment-service.js";
 import type { RuntimeCache, RuntimeCacheJsonValue } from "../runtime-cache/index.js";
 
 export const deploymentStatusCacheTtlMs = 60 * 60 * 1000;
@@ -153,8 +157,8 @@ export function createRuntimeCachedDeploymentRepository(input: {
 
       return deployment;
     },
-    recoverInterruptedDeployments: async () => {
-      const deployments = await repository.recoverInterruptedDeployments();
+    recoverInterruptedDeployments: async (recoveryInput) => {
+      const deployments = await repository.recoverInterruptedDeployments(recoveryInput);
 
       await Promise.all(deployments.map((deployment) => cacheStatus(deployment)));
 
@@ -312,11 +316,11 @@ function isDeploymentLogStreamCursorSnapshot(
 ): value is DeploymentLogStreamCursorSnapshot {
   return Boolean(
     value &&
-      value.kind === "deployment_log_cursor" &&
-      typeof value.deploymentId === "string" &&
-      Number.isInteger(value.lastSequence) &&
-      value.lastSequence >= 0 &&
-      typeof value.updatedAt === "string"
+    value.kind === "deployment_log_cursor" &&
+    typeof value.deploymentId === "string" &&
+    Number.isInteger(value.lastSequence) &&
+    value.lastSequence >= 0 &&
+    typeof value.updatedAt === "string"
   );
 }
 

@@ -1,8 +1,8 @@
 terraform {
-  required_version = ">= 1.6.0"
+  required_version = ">= 1.10.0"
 
-  # Configure with -backend-config in CI/operator runs. Phase 1 only adds
-  # definitions; this repository task does not initialize or mutate AWS state.
+  # Keep backend values in reviewed partial configuration files. Phase 9 preserves
+  # the existing runtime key and uses native S3 lockfiles in remote runs.
   backend "s3" {}
 
   required_providers {
