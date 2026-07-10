@@ -151,3 +151,16 @@ Short English-only working log for the current agent context. Older records are 
   - The full preview bounds improved from `2536x3048` to `2264x1686`; lint, typecheck, build, and diff checks passed.
 - Risk:
   - Dense deployable networking still produces many meaningful route and dependency edges; they are preserved and routed instead of removed.
+
+### 2026-07-11 - Represent architecture areas through containment only
+
+- Goal: Remove arrows entering or leaving Region, VPC, Availability Zone, and Subnet areas without deleting meaningful resource relationships.
+- Completed:
+  - Suppressed every AI preview edge whose source or target is a true area in both ArchitectureJson conversion and exact Q DiagramJson normalization paths.
+  - Rendered AI-generated Auto Scaling Groups and Security Groups as regular resource icons so their operational relationships remain visible instead of producing empty area boxes.
+  - Recomputed parent metadata while preserving Q-authored coordinates and filtered the presentation-only render flag from Terraform configuration.
+- Verification:
+  - Web adapter and area tests (47) and Terraform graph tests (13) passed.
+  - Live Chrome regeneration returned a Q-backed 43-resource preview with two AZs; `binds`, `hosts ALB`, and `member` area arrows were absent while resource edges such as `listens`, `manages fleet`, and `protects` remained.
+- Risk:
+  - One of the requested twenty random project-query combinations has been regenerated after this change; the remaining random matrix is still in progress.

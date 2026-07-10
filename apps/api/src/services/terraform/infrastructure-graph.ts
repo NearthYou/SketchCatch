@@ -26,6 +26,8 @@ const NON_RENDERABLE_TERRAFORM_CONFIG_KEYS = new Set([
   "diagram_kind",
   "diagramLabel",
   "diagram_label",
+  "diagramRenderAsResource",
+  "diagram_render_as_resource",
   "diagramTextColor",
   "diagram_text_color",
   "diagramType",

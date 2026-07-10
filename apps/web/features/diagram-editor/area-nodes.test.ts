@@ -30,6 +30,24 @@ test("isAreaNode excludes regular design and resource nodes", () => {
   assert.equal(isAreaNode(makeDesignNode({ type: "design_note" })), false);
   assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_instance" })), false);
   assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_internet_gateway" })), false);
+  assert.equal(
+    isAreaNode(
+      makeResourceNode({
+        resourceType: "aws_autoscaling_group",
+        values: { diagramRenderAsResource: true }
+      })
+    ),
+    false
+  );
+  assert.equal(
+    isAreaNode(
+      makeResourceNode({
+        resourceType: "aws_security_group",
+        values: { diagramRenderAsResource: true }
+      })
+    ),
+    false
+  );
 });
 
 test("area node helpers distinguish design containers from resource containers", () => {

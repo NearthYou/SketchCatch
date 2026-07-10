@@ -19,6 +19,8 @@ Use this file only for compact continuation context. Write it in English.
 - Canonical EC2 materialization includes deployable two-AZ networking, ALB/ASG/launch-template identity, upload storage when selected, Multi-AZ RDS, and observability.
 - Chat SSE materialization now includes HTTP message submission, a 120-second ALB stream path, and PostgreSQL `LISTEN/NOTIFY` coordination for multi-instance fan-out.
 - Board conversion creates one AZ area per configured zone and keeps subnet-spanning resources within their common VPC.
+- AI previews represent Region, VPC, Availability Zone, and Subnet only through parent containment; those area nodes cannot be edge endpoints.
+- AI-generated Auto Scaling Groups and Security Groups render as regular resource icons, preserving their operational arrows without empty area boxes.
 
 ## Changes This Session
 
@@ -37,6 +39,8 @@ Use this file only for compact continuation context. Write it in English.
 - Image-upload prompts retain a private upload-purpose bucket even when Q selects no separate SPA static-delivery pattern.
 - Shared security groups no longer absorb resources from multiple subnets, and listener placement follows the referenced ALB into the VPC.
 - Live Q/browser verification reduced the reported preview bounds from `2536x3048` to `2264x1686` with distinct `ap-northeast-2a` and `ap-northeast-2b` areas.
+- Exact Q DiagramJson previews now preserve Q coordinates while reapplying parent metadata and the area-only containment invariant.
+- A live Q regeneration produced 43 resources and removed `binds`, `hosts ALB`, and `member` area arrows while retaining meaningful resource edges.
 
 ## Broken Or Unverified
 
@@ -47,6 +51,7 @@ Use this file only for compact continuation context. Write it in English.
 - Three pre-existing isolated route tests fail on EKS warning text, Korean quantity extraction, and equivalent-wording S3 counts; the new stream and web progress tests pass.
 - The focused suites for this work pass; the broader web suite still has unrelated landing/start-page style expectation failures.
 - Deployable network diagrams remain edge-dense because route associations, IAM, logging, scaling, and database dependencies are intentionally preserved.
+- The twenty-case random project-query matrix is not complete; one post-fix live Q case is verified and nineteen remain.
 
 ## Best Next Action
 

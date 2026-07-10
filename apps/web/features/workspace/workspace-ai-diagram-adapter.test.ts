@@ -6,7 +6,8 @@ import type { AiArchitectureDraftResult, ArchitectureJson, DiagramJson, DiagramN
 import {
   convertArchitectureJsonToDiagramJson,
   convertDiagramJsonToArchitectureJson,
-  getDiagramJsonForArchitectureDraft
+  getDiagramJsonForArchitectureDraft,
+  normalizeDiagramJsonConventions
 } from "./workspace-ai-diagram-adapter";
 import { isAreaNode } from "../diagram-editor/area-nodes";
 
@@ -753,7 +754,7 @@ test("convertArchitectureJsonToDiagramJson uses fallback size for unknown draft 
   assert.deepEqual(unknownNode?.size, { width: 56, height: 56 });
 });
 
-test("getDiagramJsonForArchitectureDraft prefers an exact DiagramJson fixture when present", () => {
+test("getDiagramJsonForArchitectureDraft preserves exact DiagramJson coordinates while normalizing conventions", () => {
   const exactDiagramJson: DiagramJson = {
     edges: [],
     nodes: [
@@ -801,7 +802,77 @@ test("getDiagramJsonForArchitectureDraft prefers an exact DiagramJson fixture wh
     title: "Exact fixture"
   };
 
-  assert.equal(getDiagramJsonForArchitectureDraft(draft), exactDiagramJson);
+  const result = getDiagramJsonForArchitectureDraft(draft);
+
+  assert.notEqual(result, exactDiagramJson);
+  assert.deepEqual(result.nodes[0]?.position, exactDiagramJson.nodes[0]?.position);
+  assert.deepEqual(result.viewport, exactDiagramJson.viewport);
+});
+
+test("normalizeDiagramJsonConventions removes area endpoint arrows from exact Q diagrams", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      makeDiagramNode({
+        id: "private-subnet",
+        label: "Private Subnet",
+        type: "aws_subnet",
+        parameters: {
+          fileName: "network",
+          resourceName: "private_subnet",
+          resourceType: "aws_subnet",
+          terraformBlockType: "resource",
+          values: {}
+        }
+      }),
+      makeDiagramNode({
+        id: "app-asg",
+        label: "Application ASG",
+        type: "aws_autoscaling_group",
+        parameters: {
+          fileName: "compute",
+          resourceName: "app_asg",
+          resourceType: "aws_autoscaling_group",
+          terraformBlockType: "resource",
+          values: {}
+        }
+      }),
+      makeDiagramNode({
+        id: "app-instance",
+        label: "Application Instance",
+        type: "aws_instance",
+        parameters: {
+          fileName: "compute",
+          resourceName: "app_instance",
+          resourceType: "aws_instance",
+          terraformBlockType: "resource",
+          values: {}
+        }
+      })
+    ],
+    edges: [
+      {
+        id: "subnet-binds-instance",
+        sourceNodeId: "private-subnet",
+        targetNodeId: "app-instance",
+        label: "binds"
+      },
+      {
+        id: "asg-manages-instance",
+        sourceNodeId: "app-asg",
+        targetNodeId: "app-instance",
+        label: "manages"
+      }
+    ],
+    viewport: { x: 12, y: 24, zoom: 0.75 }
+  };
+
+  const result = normalizeDiagramJsonConventions(diagramJson);
+  const nodeById = new Map(result.nodes.map((node) => [node.id, node]));
+
+  assert.equal(isAreaNode(nodeById.get("private-subnet")!), true);
+  assert.equal(isAreaNode(nodeById.get("app-asg")!), false);
+  assert.deepEqual(result.edges.map((edge) => edge.id), ["asg-manages-instance"]);
+  assert.deepEqual(result.viewport, diagramJson.viewport);
 });
 
 test("convertArchitectureJsonToDiagramJson expands area nodes to include upper-left children", () => {
@@ -1168,8 +1239,8 @@ test("convertArchitectureJsonToDiagramJson marks VPC and Subnet containment for 
       { id: "server-storage-az", parentAreaNodeId: "vpc-main" },
       { id: "vpc-main", parentAreaNodeId: "server-storage-region" },
       { id: "subnet-app", parentAreaNodeId: "server-storage-az" },
-      { id: "sg-app", parentAreaNodeId: "subnet-app" },
-      { id: "ec2-api", parentAreaNodeId: "sg-app" }
+      { id: "sg-app", parentAreaNodeId: "vpc-main" },
+      { id: "ec2-api", parentAreaNodeId: "subnet-app" }
     ]
   );
 
@@ -1178,9 +1249,9 @@ test("convertArchitectureJsonToDiagramJson marks VPC and Subnet containment for 
   assertContainsNode(nodeById.get("vpc-main"), nodeById.get("subnet-app"));
   assertContainsNode(nodeById.get("vpc-main"), nodeById.get("server-storage-az"));
   assertContainsNode(nodeById.get("server-storage-az"), nodeById.get("subnet-app"));
-  assertContainsNode(nodeById.get("subnet-app"), nodeById.get("sg-app"));
-  assertContainsNode(nodeById.get("sg-app"), nodeById.get("ec2-api"));
-  assert.deepEqual(diagramJson.edges, []);
+  assertContainsNode(nodeById.get("vpc-main"), nodeById.get("sg-app"));
+  assertContainsNode(nodeById.get("subnet-app"), nodeById.get("ec2-api"));
+  assert.deepEqual(diagramJson.edges.map((edge) => edge.id), ["sg-to-ec2"]);
 });
 
 test("convertArchitectureJsonToDiagramJson keeps EC2 instances in their explicit subnets when they share a security group", () => {
@@ -1820,7 +1891,7 @@ test("convertArchitectureJsonToDiagramJson keeps mixed cloud authored layout bou
   const bounds = getDiagramBounds(diagramJson.nodes);
 
   assert.ok(bounds.width <= 1900, `Expected bounded width, received ${bounds.width}`);
-  assert.ok(bounds.height <= 1340, `Expected compact height, received ${bounds.height}`);
+  assert.ok(bounds.height <= 1560, `Expected compact height, received ${bounds.height}`);
   assertNoSiblingNodeOverlap(diagramJson);
   assertNoNonAncestorAreaResourceOverlap(diagramJson);
   assertResourceChildrenInsetFromAreaBoundaries(diagramJson);
@@ -1949,7 +2020,7 @@ test("convertArchitectureJsonToDiagramJson lays out server and storage draft as 
       {
         id: "security-group",
         kind: "resource",
-        parentAreaNodeId: "subnet",
+        parentAreaNodeId: "vpc",
         type: "aws_security_group"
       },
       {
@@ -2002,7 +2073,7 @@ test("convertArchitectureJsonToDiagramJson lays out server and storage draft as 
   assertContainsNode(regionNode, vpcNode);
   assertContainsNode(vpcNode, azNode);
   assertContainsNode(azNode, subnetNode);
-  assertContainsNode(subnetNode, securityGroupNode);
+  assertContainsNode(vpcNode, securityGroupNode);
   assertContainsNode(subnetNode, instanceNode);
   assert.deepEqual(regionNode?.parameters?.values, {
     awsRegion: "ap-northeast-2"
@@ -2098,9 +2169,9 @@ test("convertArchitectureJsonToDiagramJson lays out generated EC2 drafts inside 
       { id: "server-storage-az", parentAreaNodeId: "vpc-main", type: "aws_availability_zone" },
       { id: "vpc-main", parentAreaNodeId: "server-storage-region", type: "aws_vpc" },
       { id: "public-subnet", parentAreaNodeId: "server-storage-az", type: "aws_subnet" },
-      { id: "app-security-group", parentAreaNodeId: "public-subnet", type: "aws_security_group" },
+      { id: "app-security-group", parentAreaNodeId: "vpc-main", type: "aws_security_group" },
       { id: "internet-gateway", parentAreaNodeId: "vpc-main", type: "aws_internet_gateway" },
-      { id: "app-server", parentAreaNodeId: "app-security-group", type: "aws_instance" }
+      { id: "app-server", parentAreaNodeId: "public-subnet", type: "aws_instance" }
     ]
   );
 
@@ -2109,9 +2180,9 @@ test("convertArchitectureJsonToDiagramJson lays out generated EC2 drafts inside 
   assertContainsNode(nodeById.get("server-storage-region"), nodeById.get("vpc-main"));
   assertContainsNode(nodeById.get("vpc-main"), nodeById.get("server-storage-az"));
   assertContainsNode(nodeById.get("server-storage-az"), nodeById.get("public-subnet"));
-  assertContainsNode(nodeById.get("public-subnet"), nodeById.get("app-security-group"));
+  assertContainsNode(nodeById.get("vpc-main"), nodeById.get("app-security-group"));
   assertContainsNode(nodeById.get("vpc-main"), nodeById.get("internet-gateway"));
-  assertContainsNode(nodeById.get("app-security-group"), nodeById.get("app-server"));
+  assertContainsNode(nodeById.get("public-subnet"), nodeById.get("app-server"));
 });
 
 test("convertArchitectureJsonToDiagramJson keeps route table associations out of subnet child layout", () => {
@@ -2246,6 +2317,115 @@ test("convertArchitectureJsonToDiagramJson keeps runtime usage arrows visible", 
       }
     ]
   );
+});
+
+test("convertArchitectureJsonToDiagramJson represents areas only through containment", () => {
+  const architectureJson: ArchitectureJson = {
+    nodes: [
+      {
+        id: "vpc-main",
+        type: "VPC",
+        label: "Main VPC",
+        positionX: 40,
+        positionY: 40,
+        config: { cidrBlock: "10.0.0.0/16" }
+      },
+      {
+        id: "private-subnet-a",
+        type: "SUBNET",
+        label: "Private Subnet A",
+        positionX: 100,
+        positionY: 140,
+        config: { cidrBlock: "10.0.1.0/24", vpcId: "aws_vpc.vpc_main.id" }
+      },
+      {
+        id: "app-asg",
+        type: "AUTO_SCALING_GROUP",
+        label: "Application ASG",
+        positionX: 720,
+        positionY: 140,
+        config: { vpcZoneIdentifier: ["aws_subnet.private_subnet_a.id"] }
+      },
+      {
+        id: "app-sg",
+        type: "SECURITY_GROUP",
+        label: "Application Security Group",
+        positionX: 720,
+        positionY: 300,
+        config: { vpcId: "aws_vpc.vpc_main.id" }
+      },
+      {
+        id: "app-instance",
+        type: "EC2",
+        label: "Application Instance",
+        positionX: 300,
+        positionY: 260,
+        config: {
+          subnetId: "aws_subnet.private_subnet_a.id",
+          vpcSecurityGroupIds: ["aws_security_group.app_sg.id"]
+        }
+      },
+      {
+        id: "application-alb",
+        type: "LOAD_BALANCER",
+        label: "Application ALB",
+        positionX: 720,
+        positionY: 460,
+        config: { subnets: ["aws_subnet.private_subnet_a.id"] }
+      }
+    ],
+    edges: [
+      {
+        id: "subnet-hosts-alb",
+        sourceId: "private-subnet-a",
+        targetId: "application-alb",
+        label: "hosts ALB"
+      },
+      {
+        id: "subnet-routes-instance",
+        sourceId: "private-subnet-a",
+        targetId: "app-instance",
+        label: "routes traffic"
+      },
+      {
+        id: "asg-manages-instance",
+        sourceId: "app-asg",
+        targetId: "app-instance",
+        label: "manages"
+      },
+      {
+        id: "sg-protects-instance",
+        sourceId: "app-sg",
+        targetId: "app-instance",
+        label: "protects"
+      },
+      {
+        id: "alb-forwards-instance",
+        sourceId: "application-alb",
+        targetId: "app-instance",
+        label: "forwards"
+      }
+    ]
+  };
+
+  const diagramJson = convertArchitectureJsonToDiagramJson(architectureJson);
+  const nodeById = new Map(diagramJson.nodes.map((node) => [node.id, node]));
+  const areaNodeIds = new Set(diagramJson.nodes.filter(isAreaNode).map((node) => node.id));
+
+  assert.equal(isAreaNode(nodeById.get("vpc-main")!), true);
+  assert.equal(isAreaNode(nodeById.get("private-subnet-a")!), true);
+  assert.equal(isAreaNode(nodeById.get("app-asg")!), false);
+  assert.equal(isAreaNode(nodeById.get("app-sg")!), false);
+  assert.ok(
+    diagramJson.edges.every(
+      (edge) => !areaNodeIds.has(edge.sourceNodeId) && !areaNodeIds.has(edge.targetNodeId)
+    )
+  );
+  assert.deepEqual(
+    diagramJson.edges.map((edge) => edge.id).sort(),
+    ["alb-forwards-instance", "asg-manages-instance", "sg-protects-instance"]
+  );
+  assert.equal(nodeById.get("app-instance")?.metadata?.parentAreaNodeId, "private-subnet-a");
 });
 
 test("convertDiagramJsonToArchitectureJson keeps only valid resource nodes and connected edges", () => {

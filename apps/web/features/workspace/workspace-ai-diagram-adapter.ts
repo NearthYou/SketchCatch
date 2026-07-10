@@ -45,7 +45,9 @@ const OPERATION_EDGE_STYLE: NonNullable<DiagramEdge["style"]> = {
 };
 
 export function getDiagramJsonForArchitectureDraft(draft: AiArchitectureDraftResult): DiagramJson {
-  return draft.diagramJson ?? convertArchitectureJsonToDiagramJson(draft.architectureJson);
+  return draft.diagramJson
+    ? normalizeDiagramJsonConventions(draft.diagramJson)
+    : convertArchitectureJsonToDiagramJson(draft.architectureJson);
 }
 
 const DEPENDENCY_EDGE_STYLE: NonNullable<DiagramEdge["style"]> = {
@@ -91,6 +93,8 @@ const COMPACT_AREA_MIN_SIZES: Readonly<Record<string, DiagramNode["size"]>> = {
   aws_subnet: { width: 180, height: 120 },
   aws_vpc: { width: 420, height: 280 }
 };
+const AI_RESOURCE_RENDER_TYPES = new Set(["aws_autoscaling_group", "aws_security_group"]);
+const AI_RESOURCE_NODE_SIZE: DiagramNode["size"] = { width: 124, height: 96 };
 const AREA_PARENT_EDGE_LABELS = new Set(["contains", "hosts"]);
 const TERRAFORM_REFERENCE_ATTRIBUTE_SUFFIXES = ["id", "arn", "name", "execution_arn"] as const;
 const SECURITY_GROUP_REFERENCE_KEYS = ["securityGroupIds", "vpcSecurityGroupIds", "securityGroupId"] as const;
@@ -260,6 +264,8 @@ function convertArchitectureNodeToDiagramNode(node: ArchitectureJson["nodes"][nu
   };
   const zIndex = index + 1;
   const baseNode = createResourceCatalogDiagramNode(node.type, terraformResourceType, position, zIndex);
+  const renderAsResource = AI_RESOURCE_RENDER_TYPES.has(terraformResourceType);
+  const parameters = createDiagramNodeParameters(node, terraformResourceType, baseNode.parameters);
 
   return {
     ...baseNode,
@@ -267,9 +273,17 @@ function convertArchitectureNodeToDiagramNode(node: ArchitectureJson["nodes"][nu
     label: node.label ?? baseNode.label,
     locked: false,
     metadata: readDiagramNodeMetadata(config) ?? baseNode.metadata,
-    parameters: createDiagramNodeParameters(node, terraformResourceType, baseNode.parameters),
+    parameters: renderAsResource
+      ? {
+          ...parameters,
+          values: {
+            ...parameters.values,
+            diagramRenderAsResource: true
+          }
+        }
+      : parameters,
     position,
-    size: readDiagramNodeSize(config) ?? baseNode.size,
+    size: readDiagramNodeSize(config) ?? (renderAsResource ? AI_RESOURCE_NODE_SIZE : baseNode.size),
     style: mergeDiagramNodeStyle(baseNode.style, readDiagramNodeStyle(config)),
     type: terraformResourceType,
     zIndex
@@ -594,10 +608,21 @@ function isConfigurationDependencyRoutingType(resourceType: string): boolean {
 }
 
 export function normalizeDiagramJsonConventions(diagramJson: DiagramJson): DiagramJson {
+  const preparedNodes = applyAreaParentMetadata(
+    applyAiResourceRenderOverrides(
+      applyReadableTopologyLayout(applyDiagramResourceNameConventions(diagramJson.nodes))
+    ),
+    diagramJson.edges.map((edge) => ({
+      id: edge.id,
+      label: edge.label,
+      sourceId: edge.sourceNodeId,
+      targetId: edge.targetNodeId
+    }))
+  );
   const nodes = applyDiagramLayerOrder(
     fitAreaNodesToChildren(
       resolveSiblingNodeCollisions(
-        fitAreaNodesToChildren(applyReadableTopologyLayout(applyDiagramResourceNameConventions(diagramJson.nodes)))
+        fitAreaNodesToChildren(preparedNodes)
       )
     )
   );
@@ -611,6 +636,28 @@ export function normalizeDiagramJsonConventions(diagramJson: DiagramJson): Diagr
     ),
     nodes
   };
+}
+
+function applyAiResourceRenderOverrides(nodes: readonly DiagramNode[]): DiagramNode[] {
+  return nodes.map((node) => {
+    const resourceType = getDiagramNodeResourceType(node);
+
+    if (node.kind !== "resource" || !AI_RESOURCE_RENDER_TYPES.has(resourceType) || !node.parameters) {
+      return node;
+    }
+
+    return {
+      ...node,
+      parameters: {
+        ...node.parameters,
+        values: {
+          ...node.parameters.values,
+          diagramRenderAsResource: true
+        }
+      },
+      size: { ...AI_RESOURCE_NODE_SIZE }
+    };
+  });
 }
 
 function normalizeDiagramEdges(
@@ -693,7 +740,12 @@ function shouldRenderDiagramEdge(
     targetId: edge.targetNodeId
   };
 
-  return !isAreaContainmentEdgeLabel(edge.label) && !isAreaContainmentRenderEdge(architectureEdge, sourceNode, targetNode, nodeById);
+  return (
+    !isAreaDiagramNode(sourceNode) &&
+    !isAreaDiagramNode(targetNode) &&
+    !isAreaContainmentEdgeLabel(edge.label) &&
+    !isAreaContainmentRenderEdge(architectureEdge, sourceNode, targetNode, nodeById)
+  );
 }
 
 function getDiagramEdgeStyleForExistingEdge(
@@ -770,7 +822,11 @@ function shouldRenderArchitectureEdge(
     return false;
   }
 
-  return !isAreaContainmentRenderEdge(edge, sourceNode, targetNode, nodeById);
+  return (
+    !isAreaDiagramNode(sourceNode) &&
+    !isAreaDiagramNode(targetNode) &&
+    !isAreaContainmentRenderEdge(edge, sourceNode, targetNode, nodeById)
+  );
 }
 
 function isAreaContainmentRenderEdge(
@@ -2467,7 +2523,7 @@ function isAreaDiagramNode(node: DiagramNode): boolean {
 }
 
 function isSecurityGroupAreaNode(node: DiagramNode): boolean {
-  return node.kind === "resource" && (node.parameters?.resourceType ?? node.type) === "aws_security_group";
+  return isAreaDiagramNode(node) && getDiagramNodeResourceType(node) === "aws_security_group";
 }
 
 function getDiagramNodeResourceType(node: DiagramNode | undefined): string {
