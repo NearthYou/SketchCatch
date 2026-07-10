@@ -1,4 +1,4 @@
-import { type KeyboardEvent, useMemo, useState } from "react";
+import { type KeyboardEvent, useEffect, useMemo, useState } from "react";
 import type { DiagramNode } from "@sketchcatch/types";
 import {
   ArrowLeft,
@@ -34,6 +34,13 @@ export function ResourceWorkspacePanel({
   );
   const visibleView = getVisibleResourceWorkspaceView(view, context.selectedNodeId);
 
+  /** Board에서 선택한 Resource를 오른쪽 상세 설정으로 바로 연결합니다. */
+  useEffect(() => {
+    if (context.inspectedNodeId) {
+      onViewChange("settings");
+    }
+  }, [context.inspectedNodeId, onViewChange]);
+
   return (
     <div className={styles.resourceWorkspacePanel}>
       {visibleView === "settings" ? (
@@ -42,7 +49,10 @@ export function ResourceWorkspacePanel({
             <button
               aria-label="Back to resource list"
               className={styles.resourceSettingsBackButton}
-              onClick={() => onViewChange("list")}
+              onClick={() => {
+                context.closeInspectedNode();
+                onViewChange("list");
+              }}
               title="Back to resource list"
               type="button"
             >

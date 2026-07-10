@@ -91,9 +91,16 @@ test("right panel width stays locked after deployment leaves the panel", () => {
   assert.match(rightPanelViewRule, /\bmax-width:\s*100%;/);
 });
 
-test("workspace rails use the Brainboard panel widths", () => {
+test("workspace managers restore the saved DiagramJson through one identity-preserving boundary", () => {
+  assert.match(projectDraftManagerSource, /restoreSavedDiagram\(loadedDraft\.diagramJson, EMPTY_DIAGRAM\)/);
+  assert.match(
+    workspaceDraftManagerSource,
+    /restoreSavedDiagram\(storedLocalDraft\?\.diagramJson, EMPTY_DIAGRAM\)/
+  );
+});
+
+test("workspace rails keep stable widths while docking beside the canvas", () => {
   const editorShellRule = getCssRule(diagramEditorStylesSource, "editorShell");
-  const leftRailRule = getCssRule(diagramEditorStylesSource, "leftRail");
 
   assert.match(diagramEditorSource, /const DEFAULT_LEFT_PANEL_WIDTH = 346;/);
   assert.match(diagramEditorSource, /const DEFAULT_RIGHT_PANEL_WIDTH = 440;/);
@@ -101,8 +108,18 @@ test("workspace rails use the Brainboard panel widths", () => {
   assert.match(diagramEditorSource, /rightPanelWidth\.brainboardV1/);
   assert.match(editorShellRule, /--left-panel-width:\s*346px;/);
   assert.match(editorShellRule, /--right-panel-width:\s*440px;/);
-  assert.match(leftRailRule, /\bleft:\s*12px;/);
-  assert.match(leftRailRule, /\btop:\s*72px;/);
+  assert.match(
+    diagramEditorStylesSource,
+    /\.leftRail\s*\{[^}]*\bgrid-row:\s*2;[^}]*\bposition:\s*relative;/s
+  );
+  assert.match(
+    diagramEditorStylesSource,
+    /\.rightRail\s*\{[^}]*\bgrid-row:\s*2;[^}]*\bposition:\s*relative;/s
+  );
+  assert.match(
+    diagramEditorStylesSource,
+    /@media \(max-width: 1120px\)\s*\{[\s\S]*?\.leftRail\s*\{[^}]*\bposition:\s*fixed;/s
+  );
 });
 
 test("workspace shell follows DESIGN.md neutral surface and typography tokens", () => {
@@ -110,7 +127,8 @@ test("workspace shell follows DESIGN.md neutral surface and typography tokens", 
   const workspaceRule = getCssRule(diagramEditorStylesSource, "workspace");
   const canvasPanelRule = getCssRule(diagramEditorStylesSource, "canvasPanel");
   const canvasToolbarRule = getCssRule(diagramEditorStylesSource, "canvasToolbar");
-  const toolbarContextLinkRule = getCssRule(diagramEditorStylesSource, "toolbarContextLink");
+  const projectBarRule = getCssRule(diagramEditorStylesSource, "projectBar");
+  const projectBarBrandRule = getCssRule(diagramEditorStylesSource, "projectBarBrand");
   const projectShellRule = getCssRule(stylesSource, "projectShell");
   const primaryButtonRule = getCssRule(stylesSource, "primaryButton");
   const rightPanelShellRule = getCssRule(stylesSource, "rightPanelShell");
@@ -142,9 +160,10 @@ test("workspace shell follows DESIGN.md neutral surface and typography tokens", 
   assert.match(canvasPanelRule, /\bbackground:\s*var\(--workspace-page\);/);
   assert.doesNotMatch(canvasPanelRule, /#f8faff/);
   assert.match(canvasToolbarRule, /\bborder:\s*1px solid var\(--workspace-line\);/);
-  assert.match(toolbarContextLinkRule, /\bbackground:\s*var\(--workspace-surface\);/);
-  assert.match(toolbarContextLinkRule, /\bborder:\s*1px solid var\(--workspace-line\);/);
-  assert.match(toolbarContextLinkRule, /\bcolor:\s*var\(--workspace-text\);/);
+  assert.match(projectBarRule, /\bbackground:\s*var\(--workspace-surface\);/);
+  assert.match(projectBarRule, /\bborder-bottom:\s*1px solid var\(--workspace-line\);/);
+  assert.match(projectBarBrandRule, /\bbackground:\s*transparent;/);
+  assert.match(projectBarBrandRule, /\bcolor:\s*var\(--workspace-text\);/);
 
   assert.match(projectShellRule, /\bbackground:\s*#ffffff;/);
   assert.match(projectShellRule, /\bcolor:\s*#171717;/);
@@ -167,7 +186,8 @@ test("workspace shell follows DESIGN.md neutral surface and typography tokens", 
     workspaceRule,
     canvasPanelRule,
     canvasToolbarRule,
-    toolbarContextLinkRule,
+    projectBarRule,
+    projectBarBrandRule,
     projectShellRule,
     primaryButtonRule,
     rightPanelShellRule,
@@ -177,6 +197,25 @@ test("workspace shell follows DESIGN.md neutral surface and typography tokens", 
   ]) {
     assert.doesNotMatch(shellRule, oldLandingAccentTokens);
   }
+});
+
+test("save confirmation stays inside compact workspace viewports", () => {
+  assert.match(stylesSource, /\.serverSaveToast\s*{[\s\S]*?box-sizing:\s*border-box;/);
+  assert.match(
+    stylesSource,
+    /@media\s*\(max-width:\s*900px\)[\s\S]*?\.serverSaveToast\s*{[\s\S]*?max-width:\s*calc\(100vw\s*-\s*24px\);[\s\S]*?right:\s*12px;/
+  );
+});
+
+test("mobile AI launcher stays above the canvas toolbar", () => {
+  assert.match(
+    stylesSource,
+    /@media\s*\(max-width:\s*640px\)[\s\S]*?\.aiChatLauncher,[\s\S]*?bottom:\s*76px;/
+  );
+  assert.match(
+    diagramEditorStylesSource,
+    /@media\s*\(max-width:\s*640px\)[\s\S]*?\.canvasToolbar\s*{[\s\S]*?bottom:\s*10px;/
+  );
 });
 
 test("workspace internal panel polish uses DESIGN.md tokens instead of legacy Blueprint tokens", () => {
