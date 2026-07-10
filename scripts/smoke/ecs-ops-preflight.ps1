@@ -1,7 +1,8 @@
 param(
   [string]$AwsRegion = "ap-northeast-2",
   [string]$ClusterName,
-  [string]$ServiceName,
+  [string]$ApiServiceName,
+  [string]$WebServiceName,
   [string]$WorkerTaskDefinition,
   [string]$EcsBaseUrl,
   [string]$ReportPath,
@@ -59,6 +60,31 @@ function Test-FileContains {
   Add-Check -Name $CheckName -Status "passed" -Evidence $RelativePath
 }
 
+function Test-FileExcludes {
+  param(
+    [string]$RelativePath,
+    [string[]]$Patterns,
+    [string]$CheckName
+  )
+
+  $path = Join-Path $repositoryRoot $RelativePath
+
+  if (-not (Test-Path -LiteralPath $path)) {
+    Add-Check -Name $CheckName -Status "failed" -Evidence "Missing $RelativePath"
+    return
+  }
+
+  $content = Get-Content -LiteralPath $path -Raw
+  $presentPatterns = @($Patterns | Where-Object { $content.Contains($_) })
+
+  if ($presentPatterns.Count -gt 0) {
+    Add-Check -Name $CheckName -Status "failed" -Evidence "Forbidden markers: $($presentPatterns -join ', ')"
+    return
+  }
+
+  Add-Check -Name $CheckName -Status "passed" -Evidence $RelativePath
+}
+
 function Invoke-AwsJson {
   param([string[]]$Arguments)
 
@@ -77,16 +103,28 @@ Test-FileContains `
   -CheckName "CloudWatch observability template"
 Test-FileContains `
   -RelativePath "infra/aws/terraform/locals.tf" `
-  -Patterns @("/ecs/api", "/ecs/web", "/ecs/nginx", "/ecs/worker") `
-  -CheckName "API, web, nginx, worker log groups"
+  -Patterns @("/ecs/api", "/ecs/web", "/ecs/worker", "api_path_patterns") `
+  -CheckName "API, web, and worker routing/log locals"
+Test-FileContains `
+  -RelativePath "infra/aws/terraform/alb.tf" `
+  -Patterns @('aws_lb_target_group" "api"', 'aws_lb_target_group" "web"', 'aws_lb_listener_rule" "api_http"', 'aws_lb_listener_rule" "api_https"') `
+  -CheckName "ALB API/web path routing"
+Test-FileContains `
+  -RelativePath "infra/aws/terraform/ecs.tf" `
+  -Patterns @('aws_ecs_service" "api"', 'aws_ecs_service" "web"', 'container_name   = "api"', 'container_name   = "web"') `
+  -CheckName "Split API and web ECS services"
 Test-FileContains `
   -RelativePath "infra/aws/terraform/variables.tf" `
   -Patterns @('variable "enable_ecs_observability_alarms"', "default     = false") `
   -CheckName "Opt-in alarm cost gate"
 Test-FileContains `
   -RelativePath ".github/workflows/deploy-ecs.yml" `
-  -Patterns @("workflow_dispatch:", "cancel-in-progress: false", "environment: production") `
-  -CheckName "Manual ECS deployment workflow gate"
+  -Patterns @("workflow_dispatch:", "cancel-in-progress: false", "environment: production", "ECS_API_SERVICE_NAME", "ECS_WEB_SERVICE_NAME", "ECS_API_TASK_DEFINITION_FAMILY", "ECS_WEB_TASK_DEFINITION_FAMILY") `
+  -CheckName "Split ECS deployment workflow gate"
+Test-FileExcludes `
+  -RelativePath ".github/workflows/deploy-ecs.yml" `
+  -Patterns @("ECR_NGINX_REPOSITORY", "ECS_NGINX_CONTAINER_NAME", "docker/nginx.Dockerfile", "render-nginx") `
+  -CheckName "No nginx in ECS deployment workflow"
 Test-FileContains `
   -RelativePath ".github/workflows/migrate.yml" `
   -Patterns @("workflow_dispatch:", "environment: production", "Run migrations on EC2 with SSM") `
@@ -97,10 +135,11 @@ Test-FileContains `
   -CheckName "Route53 cutover defaults off"
 
 if ($ReadOnlyAws) {
-  foreach ($requiredValue in @{
+  foreach ($requiredValue in ([ordered]@{
     ClusterName = $ClusterName
-    ServiceName = $ServiceName
-  }.GetEnumerator()) {
+    ApiServiceName = $ApiServiceName
+    WebServiceName = $WebServiceName
+  }).GetEnumerator()) {
     if ([string]::IsNullOrWhiteSpace($requiredValue.Value)) {
       throw "$($requiredValue.Key) is required with -ReadOnlyAws."
     }
@@ -110,30 +149,36 @@ if ($ReadOnlyAws) {
     throw "AWS CLI is required with -ReadOnlyAws."
   }
 
-  $serviceResult = Invoke-AwsJson @(
-    "ecs", "describe-services", "--cluster", $ClusterName, "--services", $ServiceName
-  )
-  $service = @($serviceResult.services)[0]
+  foreach ($serviceEntry in ([ordered]@{
+    API = $ApiServiceName
+    Web = $WebServiceName
+  }).GetEnumerator()) {
+    $serviceResult = Invoke-AwsJson @(
+      "ecs", "describe-services", "--cluster", $ClusterName, "--services", $serviceEntry.Value
+    )
+    $service = @($serviceResult.services)[0]
 
-  if ($null -eq $service -or @($serviceResult.failures).Count -gt 0) {
-    Add-Check -Name "ECS service status" -Status "failed" -Evidence "Service was not found or describe-services returned failures."
-  } else {
-    Add-Check -Name "ECS service status" -Status "passed" -Evidence "status=$($service.status), running=$($service.runningCount), desired=$($service.desiredCount)"
-  }
+    if ($null -eq $service -or @($serviceResult.failures).Count -gt 0) {
+      Add-Check -Name "ECS $($serviceEntry.Key) service status" -Status "failed" -Evidence "Service was not found or describe-services returned failures."
+      continue
+    }
 
-  $taskList = Invoke-AwsJson @(
-    "ecs", "list-tasks", "--cluster", $ClusterName, "--service-name", $ServiceName
-  )
-  $taskArns = @($taskList.taskArns)
+    Add-Check -Name "ECS $($serviceEntry.Key) service status" -Status "passed" -Evidence "status=$($service.status), running=$($service.runningCount), desired=$($service.desiredCount)"
 
-  if ($taskArns.Count -gt 0) {
-    $taskResult = Invoke-AwsJson (@(
-      "ecs", "describe-tasks", "--cluster", $ClusterName, "--tasks"
-    ) + $taskArns)
-    $taskStates = @($taskResult.tasks | ForEach-Object { $_.lastStatus }) -join ","
-    Add-Check -Name "ECS app task status" -Status "passed" -Evidence "tasks=$($taskArns.Count), states=$taskStates"
-  } else {
-    Add-Check -Name "ECS app task status" -Status "failed" -Evidence "No service tasks were returned."
+    $taskList = Invoke-AwsJson @(
+      "ecs", "list-tasks", "--cluster", $ClusterName, "--service-name", $serviceEntry.Value
+    )
+    $taskArns = @($taskList.taskArns)
+
+    if ($taskArns.Count -gt 0) {
+      $taskResult = Invoke-AwsJson (@(
+        "ecs", "describe-tasks", "--cluster", $ClusterName, "--tasks"
+      ) + $taskArns)
+      $taskStates = @($taskResult.tasks | ForEach-Object { $_.lastStatus }) -join ","
+      Add-Check -Name "ECS $($serviceEntry.Key) task status" -Status "passed" -Evidence "tasks=$($taskArns.Count), states=$taskStates"
+    } else {
+      Add-Check -Name "ECS $($serviceEntry.Key) task status" -Status "failed" -Evidence "No service tasks were returned."
+    }
   }
 
   if (-not [string]::IsNullOrWhiteSpace($WorkerTaskDefinition)) {
@@ -148,14 +193,14 @@ if ($ReadOnlyAws) {
   $logGroups = Invoke-AwsJson @(
     "logs", "describe-log-groups", "--log-group-name-prefix", "/sketchcatch/"
   )
-  $expectedSuffixes = @("/ecs/api", "/ecs/web", "/ecs/nginx", "/ecs/worker")
+  $expectedSuffixes = @("/ecs/api", "/ecs/web", "/ecs/worker")
   $logGroupNames = @($logGroups.logGroups | ForEach-Object { $_.logGroupName })
   $missingLogGroups = @($expectedSuffixes | Where-Object {
     $suffix = $_
     -not ($logGroupNames | Where-Object { $_.EndsWith($suffix) })
   })
   Add-Check `
-    -Name "CloudWatch log groups" `
+    -Name "CloudWatch steady-state log groups" `
     -Status $(if ($missingLogGroups.Count -eq 0) { "passed" } else { "failed" }) `
     -Evidence $(if ($missingLogGroups.Count -eq 0) { "All expected log groups exist." } else { "Missing: $($missingLogGroups -join ', ')" })
 } else {
@@ -195,7 +240,7 @@ $report = [ordered]@{
   gatedNextSteps = @(
     "Run database migration only through the approved manual production workflow.",
     "Run worker RunTask smoke only after task definition, IAM, network, cost, and cleanup approval.",
-    "Switch Route53 only after ECS app and worker smoke pass; keep EC2 rollback available."
+    "Switch Route53 only after API and web service smoke pass; keep EC2/nginx rollback available."
   )
 }
 $reportJson = $report | ConvertTo-Json -Depth 8

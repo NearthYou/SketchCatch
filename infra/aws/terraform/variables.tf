@@ -80,61 +80,61 @@ variable "route53_record_name" {
 }
 
 variable "ecs_desired_count" {
-  description = "Desired task count for the production ECS service. Cost-bearing: 1 keeps the app warm 24/7."
+  description = "Desired task count for each production API and web ECS service. Cost-bearing: 1 creates two warm tasks after the split."
   type        = number
   default     = 1
 }
 
 variable "ecs_task_cpu" {
-  description = "Fargate task CPU units. Cost-bearing."
+  description = "API Fargate task CPU units, retained from the shared task sizing for migration safety. Cost-bearing."
   type        = number
   default     = 1024
 }
 
 variable "ecs_task_memory" {
-  description = "Fargate task memory MiB. Cost-bearing."
+  description = "API Fargate task memory MiB, retained from the shared task sizing for migration safety. Cost-bearing."
   type        = number
   default     = 2048
 }
 
 variable "api_container_cpu" {
-  description = "API container CPU units within the shared task."
+  description = "API container CPU units within the API task."
   type        = number
   default     = 512
 }
 
 variable "api_container_memory" {
-  description = "API container hard memory limit in MiB."
+  description = "API container hard memory limit in MiB within the API task."
   type        = number
   default     = 1024
 }
 
+variable "web_task_cpu" {
+  description = "Web Fargate task CPU units. Cost-bearing in addition to the API task."
+  type        = number
+  default     = 256
+}
+
+variable "web_task_memory" {
+  description = "Web Fargate task memory MiB. Cost-bearing in addition to the API task."
+  type        = number
+  default     = 512
+}
+
 variable "web_container_cpu" {
-  description = "Web container CPU units within the shared task."
+  description = "Web container CPU units within the web task."
   type        = number
   default     = 256
 }
 
 variable "web_container_memory" {
-  description = "Web container hard memory limit in MiB."
+  description = "Web container hard memory limit in MiB within the web task."
   type        = number
   default     = 512
 }
 
-variable "nginx_container_cpu" {
-  description = "Nginx container CPU units within the shared task."
-  type        = number
-  default     = 128
-}
-
-variable "nginx_container_memory" {
-  description = "Nginx container hard memory limit in MiB."
-  type        = number
-  default     = 256
-}
-
 variable "image_tag" {
-  description = "Image tag shared by api/web/nginx ECR images. Phase 2 should wire this to the deployed git SHA."
+  description = "Image tag shared by the steady-state API and web ECR images."
   type        = string
   default     = "latest"
 }

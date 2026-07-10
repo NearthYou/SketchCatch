@@ -47,7 +47,7 @@ flowchart TB
 | Runtime Cache | Redis | Deployment, Reverse Engineering, Git/CI/CD 상태 추적과 로그 스트리밍 보조 |
 | IaC | Terraform | MVP 기준 IaC, 멀티 클라우드 확장 기반 |
 | AI 계층 | Bedrock, Amazon Q, Amazon Transcribe | 추천, 설명, Guardrails, AWS 특화 reasoning, 음성 전사 |
-| 운영 배포 | Docker, EC2, SSM, Nginx | SSH 없는 운영 배포 |
+| 운영 배포 | ECS/Fargate, ALB, ECR | API/web 분리 서비스와 path routing |
 | CI/CD | GitHub Actions, OIDC | 장기 AWS key 없는 운영 배포 |
 
 ## 실행 경계
@@ -56,11 +56,11 @@ flowchart TB
 | --- | --- | --- |
 | UI 표시와 사용자 승인 | `apps/web` | AWS SDK 직접 호출, Terraform CLI 실행 |
 | Terraform 생성/검증 API | `apps/api` | 프론트에 실행 책임 위임 |
-| Terraform Plan/Apply/Destroy | `apps/api` 또는 future worker | 승인 없는 apply/destroy |
-| AWS 연결 확인 | `apps/api` 또는 future worker | credential 응답/로그 노출 |
-| Provider Adapter와 Reverse Engineering | `apps/api` 또는 future worker | provider별 credential/raw state 프론트 노출 |
-| Git/CI/CD handoff와 상태 추적 | `apps/api` 또는 future worker | 승인 없는 commit/apply, secret 저장 |
-| Runtime Cache 사용 | `apps/api` 또는 future worker | 사용자 Practice Architecture Resource로 노출 |
+| Terraform Plan/Apply/Destroy | `apps/api` 또는 ECS RunTask worker | 승인 없는 apply/destroy |
+| AWS 연결 확인 | `apps/api` 또는 ECS RunTask worker | credential 응답/로그 노출 |
+| Provider Adapter와 Reverse Engineering | `apps/api` 또는 ECS RunTask worker | provider별 credential/raw state 프론트 노출 |
+| Git/CI/CD handoff와 상태 추적 | `apps/api` 또는 ECS RunTask worker | 승인 없는 commit/apply, secret 저장 |
+| Runtime Cache 사용 | `apps/api` 또는 ECS RunTask worker | 사용자 Practice Architecture Resource로 노출 |
 | 파일 artifact 저장 | S3 + RDS metadata | Terraform 원문 RDS 영구 저장 |
 
 프론트엔드는 버튼과 상태를 보여줄 뿐 실제 클라우드 변경을 직접 수행하지 않는다. 실제 리소스 변경은 backend/worker에서 승인 게이트, 로그 마스킹, cleanup 경로를 갖춘 뒤 실행한다.
@@ -149,9 +149,9 @@ Fastify는 route/service 분리가 쉽고, MVP API와 Zod 검증에 충분하다
 
 프로젝트와 설계 JSON은 RDS에 저장하고, Terraform 파일, tfplan, export zip은 S3에 저장한다.
 
-### ADR-004: 운영 배포는 Docker + EC2 + SSM으로 한다
+### ADR-004: 운영 배포는 ECS/Fargate와 ALB path routing을 사용한다
 
-Docker image 단위 배포와 SSM Run Command를 사용해 SSH 없는 운영 배포를 유지한다.
+API와 web을 독립 Fargate service로 실행하고 ALB가 `/api`, `/api/*`, `/health`, `/health/db`를 API로, 기본 `/*`를 web으로 전달한다. nginx는 ECS steady state에서 제거하며 기존 EC2/SSM/docker run 경로는 승인된 rollback 보존 기간 동안만 유지한다.
 
 ### ADR-005: MVP는 Terraform 우선으로 간다
 

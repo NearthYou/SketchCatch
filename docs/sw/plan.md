@@ -189,24 +189,25 @@
 ## Phase 8. nginx 제거와 ALB path routing
 
 - Priority: P2
-- Issue title: `Refactor: ALB path routing 전환과 nginx 제거`
-- Branch: `refactor/sw/{issue}-alb-path-routing`
-- PR title: `Refactor: ALB path routing 전환과 nginx 제거`
-- Depends on: Phase 1, Phase 2
+- Issue title: `Feat: ECS nginx 제거와 ALB path routing 전환`
+- Branch: `feature/sw/{issue}-ecs-alb-path-routing`
+- PR title: `Feat: ECS nginx 제거와 ALB path routing 전환`
+- Depends on: Phase 1, Phase 2, Phase 7 운영 안정성 확인
 
 범위:
 
-- ALB `/api/* -> api`, `/* -> web` path routing으로 전환한다.
-- nginx container, image, config를 제거한다.
-- web/api를 별도 ECS service로 분리할지 최종 결정한다.
-- 기존 nginx 포함 rollback path 종료 시점을 정한다.
+- ALB `/api`, `/api/*`, `/health`, `/health/db`는 API로, 기본 `/*`는 web으로 전달한다.
+- API와 web을 독립 ECS task definition/service/target group으로 분리한다.
+- nginx container를 ECS steady state와 ECS deploy workflow에서 제거한다.
+- EC2/SSM rollback이 유지되는 동안 nginx image/config/ECR/log group은 legacy 자산으로 보존한다.
+- Next.js same-origin `/api`, Fastify forwarded headers, split service deploy 순서를 검증한다.
 
 완료 기준:
 
-- ALB path routing이 production smoke를 통과한다.
-- nginx 제거 후 root page와 API가 정상 동작한다.
-- task/service 구조가 장기 운영 구조와 일치한다.
-
+- Terraform 정적 contract가 listener rule, target group, task/service 분리를 검증한다.
+- nginx 없이 root page와 API/health path가 올바른 target group으로 전달되는 구성이 확인된다.
+- EC2 rollback 자산의 보존 범위와 제거 조건이 문서화된다.
+- live ALB/Route53 전환과 production smoke는 별도 명시 승인 후 운영 evidence로 남긴다.
 ## 전체 완료 기준
 
 - ECS 전환이 EC2 운영 경로를 대체한다.

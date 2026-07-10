@@ -70,13 +70,19 @@
         "ecs:DescribeServices",
         "ecs:UpdateService"
       ],
-      "Resource": "arn:aws:ecs:ap-northeast-2:555980271919:service/sketchcatch-production-cluster/sketchcatch-production-app"
+      "Resource": [
+        "arn:aws:ecs:ap-northeast-2:555980271919:service/sketchcatch-production-cluster/sketchcatch-production-api",
+        "arn:aws:ecs:ap-northeast-2:555980271919:service/sketchcatch-production-cluster/sketchcatch-production-web"
+      ]
     },
     {
       "Sid": "AllowSketchCatchTaskDefinitionRegistration",
       "Effect": "Allow",
       "Action": "ecs:RegisterTaskDefinition",
-      "Resource": "arn:aws:ecs:ap-northeast-2:555980271919:task-definition/sketchcatch-production-app:*"
+      "Resource": [
+        "arn:aws:ecs:ap-northeast-2:555980271919:task-definition/sketchcatch-production-api:*",
+        "arn:aws:ecs:ap-northeast-2:555980271919:task-definition/sketchcatch-production-web:*"
+      ]
     },
     {
       "Sid": "AllowSketchCatchTaskDefinitionRead",
