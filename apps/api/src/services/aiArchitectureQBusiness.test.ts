@@ -502,7 +502,7 @@ test("page selections adapt verified patterns with explicit supplemental resourc
       id: "generic-shop",
       request: "회원과 주문 기능이 있는 쇼핑몰을 만들고 싶어.",
       choices: {},
-      required: ["S3", "CLOUDFRONT", "API_GATEWAY_REST_API", "LAMBDA", "RDS", "ACM_CERTIFICATE"],
+      required: ["S3", "CLOUDFRONT", "API_GATEWAY_REST_API", "LAMBDA", "RDS"],
       forbidden: ["KMS_KEY", "WAF_WEB_ACL"]
     },
     {
@@ -580,7 +580,7 @@ test("page selections adapt verified patterns with explicit supplemental resourc
         size: "10MB 미만 (간단한 사이트)",
         trafficPattern: "일정함 (하루 종일 비슷)"
       },
-      required: ["S3", "CLOUDFRONT", "WAF_WEB_ACL", "WAF_WEB_ACL_ASSOCIATION", "ACM_CERTIFICATE"],
+      required: ["S3", "CLOUDFRONT", "WAF_WEB_ACL", "WAF_WEB_ACL_ASSOCIATION"],
       forbidden: ["EC2", "LAMBDA", "RDS"]
     },
     {
@@ -593,16 +593,21 @@ test("page selections adapt verified patterns with explicit supplemental resourc
         budget: "200만원 이상 (엔터프라이즈급)",
         downtime: "절대 안됨 (99.99% 가용성)"
       },
-      required: ["ACM_CERTIFICATE", "IAM_POLICY", "KMS_KEY", "WAF_WEB_ACL", "SECRETS_MANAGER_SECRET"],
+      required: ["IAM_POLICY", "KMS_KEY", "WAF_WEB_ACL", "SECRETS_MANAGER_SECRET"],
       forbidden: []
     }
   ] as const;
 
   for (const scenario of cases) {
-    const response = await materializePageSelectionScenario(
-      scenario.request,
-      scenario.choices
-    );
+    let response: Awaited<ReturnType<typeof materializePageSelectionScenario>>;
+    try {
+      response = await materializePageSelectionScenario(
+        scenario.request,
+        scenario.choices
+      );
+    } catch (error) {
+      throw new Error(`${scenario.id}: materialization failed`, { cause: error });
+    }
     const nodeTypes = response.architectureJson.nodes.map((node) => node.type);
 
     assert.equal(response.metadata.source, "amazon_q", `${scenario.id}: Q evidence was not used`);
@@ -641,6 +646,84 @@ test("non-architecture targets never enter the architecture retrieval pipeline",
       payload: {}
     }),
     /architecture_draft/
+  );
+});
+
+test("Q-backed SPA Fargate RDS plans materialize deployable role-specific resources", async () => {
+  const response = await materializePageSelectionScenario(
+    "웹페이지 하나 배포하고 싶어 다시 만들어봐",
+    {
+      backend: "complex business logic Spring Boot Django",
+      management: "fully managed serverless management minimum",
+      upload: "images profile post images",
+      trafficPattern: "event traffic spike",
+      downtime: "99% availability monthly 8 hours"
+    }
+  );
+  const { nodes } = response.architectureJson;
+  const serializedArchitecture = JSON.stringify(response.architectureJson).toLowerCase();
+  const subnets = nodes.filter((node) => node.type === "SUBNET");
+  const publicSubnets = subnets.filter((node) => node.config.tier === "public");
+  const privateAppSubnets = subnets.filter((node) => node.config.tier === "private_app");
+  const privateDbSubnets = subnets.filter((node) => node.config.tier === "private_db");
+  const ecsService = nodes.find((node) => node.type === "ECS_SERVICE");
+  const ecsNetworkConfiguration = ecsService?.config.networkConfiguration as
+    | Record<string, unknown>
+    | undefined;
+  const ecsTaskDefinition = nodes.find((node) => node.type === "ECS_TASK_DEFINITION");
+  const targetGroup = nodes.find((node) => node.type === "LOAD_BALANCER_TARGET_GROUP");
+  const dbSubnetGroup = nodes.find((node) => node.type === "DB_SUBNET_GROUP");
+  const ecsRoles = nodes.filter(
+    (node) =>
+      node.type === "IAM_ROLE" &&
+      JSON.stringify(node.config).includes("ecs-tasks.amazonaws.com")
+  );
+
+  assert.equal(response.metadata.source, "amazon_q");
+  assert.match(response.title, /spa-cloudfront-s3/);
+  assert.match(response.title, /ecs-fargate/);
+  assert.match(response.title, /multi-az-rds/);
+  assert.equal(nodes.some((node) => node.type === "LAMBDA"), false);
+  assert.equal(nodes.some((node) => node.type === "DYNAMODB_TABLE"), false);
+  assert.equal(nodes.some((node) => node.type === "ACM_CERTIFICATE"), false);
+  assert.equal(nodes.some((node) => node.type === "WAF_WEB_ACL"), false);
+  assert.doesNotMatch(serializedArchitecture, /lambda/);
+  assert.equal(publicSubnets.length, 2);
+  assert.equal(privateAppSubnets.length, 2);
+  assert.equal(privateDbSubnets.length, 2);
+  assert.equal(publicSubnets.every((node) => node.config.mapPublicIpOnLaunch === true), true);
+  assert.equal(
+    [...privateAppSubnets, ...privateDbSubnets].every(
+      (node) => node.config.mapPublicIpOnLaunch === false
+    ),
+    true
+  );
+  assert.deepEqual(
+    dbSubnetGroup?.config.subnetIds,
+    privateDbSubnets.map((node) => `aws_subnet.${node.id.replaceAll("-", "_")}.id`)
+  );
+  assert.equal(targetGroup?.config.targetType, "ip");
+  assert.equal(ecsService?.config.desiredCount, 2);
+  assert.equal(ecsNetworkConfiguration?.assignPublicIp, false);
+  assert.deepEqual(
+    ecsNetworkConfiguration?.subnets,
+    privateAppSubnets.map((node) => `aws_subnet.${node.id.replaceAll("-", "_")}.id`)
+  );
+  assert.equal(ecsTaskDefinition?.config.networkMode, "awsvpc");
+  assert.deepEqual(ecsTaskDefinition?.config.requiresCompatibilities, ["FARGATE"]);
+  assert.equal(ecsRoles.length >= 2, true);
+  assert.equal(
+    (response.metadata.guardrailWarnings ?? []).some((warning) =>
+      JSON.stringify(warning).includes("Auto Scaling")
+    ),
+    false
+  );
+  const connectedNodeIds = new Set(
+    response.architectureJson.edges.flatMap((edge) => [edge.sourceId, edge.targetId])
+  );
+  assert.deepEqual(
+    nodes.filter((node) => !connectedNodeIds.has(node.id)).map((node) => node.id),
+    []
   );
 });
 

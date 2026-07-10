@@ -1814,13 +1814,27 @@ function createAmazonQPlanDraftResult(
   normalizedRequirement: ArchitectureIntentPlan | null,
   providerMetadata: AiProviderMetadata
 ): AiArchitectureDraftResult {
-  const plan = mergeArchitectureIntentPlans(response.plan, normalizedRequirement);
+  const providerPlanIsCanonical = (response.plan.patternIds?.length ?? 0) > 0;
+  const plan = reconcileCanonicalProviderPlan(
+    providerPlanIsCanonical
+      ? response.plan
+      : mergeArchitectureIntentPlans(response.plan, normalizedRequirement),
+    response.plan
+  );
+  const requestDraft = createArchitectureDraft(request);
   const draft = createArchitectureDraft({
     ...request,
     prompt: createArchitecturePlanMaterializationPrompt(request.prompt, plan)
   });
   const sanitizedArchitectureJson = applyArchitecturePlanExclusions(draft.architectureJson, plan);
-  const canonicalArchitectureJson = ensureCanonicalPlanResources(sanitizedArchitectureJson, plan);
+  const roleSanitizedArchitectureJson = removeConflictingCanonicalPatternResources(
+    sanitizedArchitectureJson,
+    plan
+  );
+  const canonicalArchitectureJson = configureCanonicalPatternResources(
+    ensureCanonicalPlanResources(roleSanitizedArchitectureJson, plan),
+    plan
+  );
   const connectedCanonicalArchitectureJson = connectCanonicalPatternTopologies(
     canonicalArchitectureJson,
     plan?.patternIds ?? []
@@ -1846,10 +1860,10 @@ function createAmazonQPlanDraftResult(
     architectureJson,
     title: response.title,
     metadata: {
-      ...draft.metadata,
+      ...requestDraft.metadata,
       source: "amazon_q",
-      assumptions: assumptions.length === 0 ? draft.metadata.assumptions : assumptions,
-      explanations: explanations.length === 0 ? draft.metadata.explanations : explanations
+      assumptions: assumptions.length === 0 ? requestDraft.metadata.assumptions : assumptions,
+      explanations: explanations.length === 0 ? requestDraft.metadata.explanations : explanations
     },
     llmExplanation: {
       target: ARCHITECTURE_DRAFT_TARGET,
@@ -1859,6 +1873,58 @@ function createAmazonQPlanDraftResult(
       fallbackUsed: false,
       providerMetadata
     }
+  };
+}
+
+function reconcileCanonicalProviderPlan(
+  mergedPlan: ArchitectureIntentPlan | null,
+  providerPlan: ArchitectureIntentPlan
+): ArchitectureIntentPlan | null {
+  if (mergedPlan === null || (providerPlan.patternIds?.length ?? 0) === 0) {
+    return mergedPlan;
+  }
+
+  const providerPatternIds = new Set(providerPlan.patternIds ?? []);
+  const providerSelectedFargate =
+    providerPatternIds.has("ecs-fargate") && !providerPatternIds.has("serverless-api");
+
+  if (!providerSelectedFargate) {
+    return mergedPlan;
+  }
+
+  const resourceQuantities = { ...(mergedPlan.resourceQuantities ?? {}) };
+  for (const resourceType of [
+    "API_GATEWAY_REST_API",
+    "API_GATEWAY_RESOURCE",
+    "API_GATEWAY_METHOD",
+    "API_GATEWAY_INTEGRATION",
+    "API_GATEWAY_DEPLOYMENT",
+    "API_GATEWAY_STAGE",
+    "LAMBDA",
+    "LAMBDA_PERMISSION"
+  ]) {
+    delete resourceQuantities[resourceType];
+  }
+
+  return {
+    ...mergedPlan,
+    patternIds: (mergedPlan.patternIds ?? []).filter(
+      (patternId) => patternId !== "serverless-api"
+    ),
+    requiredResources: (mergedPlan.requiredResources ?? []).filter(
+      (resourceType) => ![
+        "API_GATEWAY_REST_API",
+        "API_GATEWAY_RESOURCE",
+        "API_GATEWAY_METHOD",
+        "API_GATEWAY_INTEGRATION",
+        "API_GATEWAY_DEPLOYMENT",
+        "API_GATEWAY_STAGE",
+        "LAMBDA",
+        "LAMBDA_PERMISSION"
+      ].includes(resourceType)
+    ),
+    resourceQuantities,
+    runtimeTopology: providerPlan.runtimeTopology ?? mergedPlan.runtimeTopology
   };
 }
 
@@ -1955,7 +2021,8 @@ function findMaterializedArchitecturePlanValidationIssues(
       : findRuntimeTopologyValidationIssues(normalizedPrompt, architectureJson, {
           validateVisualSpread: false
         })),
-    ...findNormalizedRequirementValidationIssues(plan, architectureJson, { validateVisualSpread: false })
+    ...findNormalizedRequirementValidationIssues(plan, architectureJson, { validateVisualSpread: false }),
+    ...findCanonicalPatternMaterializationIssues(plan, architectureJson)
   ];
 
   if (requiresServerlessOnlyArchitecture(normalizedPrompt) && nodeTypes.has("EC2")) {
@@ -1975,6 +2042,103 @@ function findMaterializedArchitecturePlanValidationIssues(
   }
 
   return issues;
+}
+
+function findCanonicalPatternMaterializationIssues(
+  plan: ArchitectureIntentPlan | null,
+  architectureJson: ArchitectureJson
+): string[] {
+  const patternIds = new Set(plan?.patternIds ?? []);
+  const usesRoleAwareEcs =
+    patternIds.has("ecs-fargate") &&
+    !patternIds.has("serverless-api") &&
+    architectureJson.nodes.some(
+      (node) => node.type === "ECS_SERVICE" || node.type === "ECS_TASK_DEFINITION"
+    );
+
+  if (!usesRoleAwareEcs) {
+    return [];
+  }
+
+  const issues: string[] = [];
+  const nodes = architectureJson.nodes;
+  const serializedArchitecture = JSON.stringify(architectureJson).toLowerCase();
+  const subnets = nodes.filter((node) => node.type === "SUBNET");
+  const publicSubnets = subnets.filter((node) => node.config.tier === "public");
+  const privateAppSubnets = subnets.filter((node) => node.config.tier === "private_app");
+  const privateDbSubnets = subnets.filter((node) => node.config.tier === "private_db");
+  const ecsService = nodes.find((node) => node.type === "ECS_SERVICE");
+  const ecsTaskDefinition = nodes.find((node) => node.type === "ECS_TASK_DEFINITION");
+  const targetGroup = nodes.find((node) => node.type === "LOAD_BALANCER_TARGET_GROUP");
+  const hasLoadBalancer = nodes.some((node) => node.type === "LOAD_BALANCER");
+  const ecsRoles = nodes.filter(
+    (node) =>
+      node.type === "IAM_ROLE" &&
+      JSON.stringify(node.config).includes("ecs-tasks.amazonaws.com")
+  );
+
+  if (serializedArchitecture.includes("lambda")) {
+    issues.push("The Fargate plan contains Lambda-specific resources or configuration.");
+  }
+  if (
+    publicSubnets.length !== 2 ||
+    publicSubnets.some((node) => node.config.mapPublicIpOnLaunch !== true)
+  ) {
+    issues.push("The Fargate ALB requires two correctly configured public subnets.");
+  }
+  if (
+    privateAppSubnets.length !== 2 ||
+    privateAppSubnets.some((node) => node.config.mapPublicIpOnLaunch !== false)
+  ) {
+    issues.push("The Fargate service requires two private application subnets.");
+  }
+  if (hasLoadBalancer && targetGroup?.config.targetType !== "ip") {
+    issues.push("The Fargate target group must use targetType ip.");
+  }
+  if (
+    ecsService?.config.desiredCount !== 2 ||
+    !isArchitectureConfigRecord(ecsService.config.networkConfiguration) ||
+    ecsService.config.networkConfiguration.assignPublicIp !== false ||
+    !Array.isArray(ecsService.config.networkConfiguration.subnets) ||
+    ecsService.config.networkConfiguration.subnets.length !== 2 ||
+    !isArchitectureConfigRecord(ecsService.config.loadBalancer) ||
+    ecsService.config.loadBalancer.containerName !== "app" ||
+    ecsService.config.loadBalancer.containerPort !== 8080
+  ) {
+    issues.push("The Fargate service must run two private tasks without public IPs.");
+  }
+  if (
+    ecsTaskDefinition?.config.networkMode !== "awsvpc" ||
+    !Array.isArray(ecsTaskDefinition.config.requiresCompatibilities) ||
+    !ecsTaskDefinition.config.requiresCompatibilities.includes("FARGATE")
+  ) {
+    issues.push("The task definition is not configured for Fargate awsvpc mode.");
+  }
+  if (ecsRoles.length < 2) {
+    issues.push("The Fargate plan requires separate execution and task IAM roles.");
+  }
+
+  if (patternIds.has("multi-az-rds")) {
+    const dbSubnetGroup = nodes.find((node) => node.type === "DB_SUBNET_GROUP");
+    if (
+      privateDbSubnets.length !== 2 ||
+      privateDbSubnets.some((node) => node.config.mapPublicIpOnLaunch !== false)
+    ) {
+      issues.push("The Multi-AZ RDS plan requires two private database subnets.");
+    }
+    if (
+      !Array.isArray(dbSubnetGroup?.config.subnetIds) ||
+      dbSubnetGroup.config.subnetIds.length !== 2
+    ) {
+      issues.push("The DB subnet group must reference both private database subnets.");
+    }
+  }
+
+  return issues;
+}
+
+function isArchitectureConfigRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function createArchitecturePlanMaterializationPrompt(
@@ -3238,6 +3402,318 @@ function getCanonicalPlanResourceMaxCount(
   return 1;
 }
 
+const ECS_ROLE_SENSITIVE_RESOURCE_TYPES = new Set<ResourceType>([
+  "SUBNET",
+  "ELASTIC_IP",
+  "NAT_GATEWAY",
+  "ROUTE_TABLE",
+  "ROUTE_TABLE_ASSOCIATION",
+  "SECURITY_GROUP",
+  "IAM_ROLE",
+  "IAM_POLICY",
+  "CLOUDWATCH_LOG_GROUP",
+  "CLOUDWATCH_METRIC_ALARM",
+  "DB_SUBNET_GROUP"
+]);
+
+function removeConflictingCanonicalPatternResources(
+  architectureJson: ArchitectureJson,
+  plan: ArchitectureIntentPlan | null
+): ArchitectureJson {
+  const patternIds = new Set(plan?.patternIds ?? []);
+  const hasEcsRuntime = (plan?.requiredResources ?? []).some(
+    (resourceType) => resourceType === "ECS_SERVICE" || resourceType === "ECS_TASK_DEFINITION"
+  );
+
+  if (!patternIds.has("ecs-fargate") || patternIds.has("serverless-api") || !hasEcsRuntime) {
+    return architectureJson;
+  }
+
+  const nodes = architectureJson.nodes.filter(
+    (node) => !ECS_ROLE_SENSITIVE_RESOURCE_TYPES.has(node.type)
+  );
+  const nodeIds = new Set(nodes.map((node) => node.id));
+
+  return {
+    nodes,
+    edges: architectureJson.edges.filter(
+      (edge) => nodeIds.has(edge.sourceId) && nodeIds.has(edge.targetId)
+    )
+  };
+}
+
+type CanonicalNodeSpec = {
+  readonly id: string;
+  readonly label: string;
+  readonly config: Record<string, unknown>;
+  readonly positionX: number;
+  readonly positionY: number;
+};
+
+function configureCanonicalPatternResources(
+  architectureJson: ArchitectureJson,
+  plan: ArchitectureIntentPlan | null
+): ArchitectureJson {
+  const patternIds = new Set(plan?.patternIds ?? []);
+  const hasEcsRuntime = architectureJson.nodes.some(
+    (node) => node.type === "ECS_SERVICE" || node.type === "ECS_TASK_DEFINITION"
+  );
+
+  if (!patternIds.has("ecs-fargate") || patternIds.has("serverless-api") || !hasEcsRuntime) {
+    return architectureJson;
+  }
+
+  const hasDatabase = patternIds.has("multi-az-rds");
+  const hasLoadBalancer = architectureJson.nodes.some(
+    (node) => node.type === "LOAD_BALANCER"
+  );
+  const region = plan?.region ?? "ap-northeast-2";
+  const vpcId = "vpc-main";
+  const vpcRef = canonicalTerraformReference("aws_vpc", vpcId);
+  const subnetSpecs: CanonicalNodeSpec[] = [
+    canonicalSubnetSpec("public-subnet-a", "Public Subnet A", "10.0.0.0/24", `${region}a`, "public", true, 180, 480, vpcRef),
+    canonicalSubnetSpec("public-subnet-b", "Public Subnet B", "10.0.1.0/24", `${region}b`, "public", true, 420, 480, vpcRef),
+    canonicalSubnetSpec("private-app-subnet-a", "Private App Subnet A", "10.0.10.0/24", `${region}a`, "private_app", false, 180, 700, vpcRef),
+    canonicalSubnetSpec("private-app-subnet-b", "Private App Subnet B", "10.0.11.0/24", `${region}b`, "private_app", false, 420, 700, vpcRef),
+    ...(hasDatabase
+      ? [
+          canonicalSubnetSpec("private-db-subnet-a", "Private DB Subnet A", "10.0.20.0/24", `${region}a`, "private_db", false, 180, 920, vpcRef),
+          canonicalSubnetSpec("private-db-subnet-b", "Private DB Subnet B", "10.0.21.0/24", `${region}b`, "private_db", false, 420, 920, vpcRef)
+        ]
+      : [])
+  ];
+  const routeTableSpecs: CanonicalNodeSpec[] = [
+    canonicalNodeSpec("public-route-table", "Public Route Table", 680, 480, {
+      vpcId: vpcRef,
+      route: [{ cidrBlock: "0.0.0.0/0", gatewayId: canonicalTerraformReference("aws_internet_gateway", "internet-gateway") }]
+    }),
+    canonicalNodeSpec("private-route-table-a", "Private Route Table A", 680, 700, {
+      vpcId: vpcRef,
+      route: [{ cidrBlock: "0.0.0.0/0", natGatewayId: canonicalTerraformReference("aws_nat_gateway", "nat-gateway-a") }]
+    }),
+    canonicalNodeSpec("private-route-table-b", "Private Route Table B", 900, 700, {
+      vpcId: vpcRef,
+      route: [{ cidrBlock: "0.0.0.0/0", natGatewayId: canonicalTerraformReference("aws_nat_gateway", "nat-gateway-b") }]
+    })
+  ];
+  const associationSpecs = createCanonicalRouteAssociationSpecs(hasDatabase);
+  const securityGroupSpecs: CanonicalNodeSpec[] = [
+    ...(hasLoadBalancer
+      ? [canonicalNodeSpec("alb-security-group", "ALB Security Group", 930, 480, {
+          name: "sketchcatch-alb",
+          description: "Public HTTP ingress through CloudFront or clients",
+          vpcId: vpcRef,
+          ingress: [{ protocol: "tcp", fromPort: 80, toPort: 80, cidrBlocks: ["0.0.0.0/0"] }]
+        })]
+      : []),
+    canonicalNodeSpec("app-security-group", "Fargate App Security Group", 930, 700, {
+      name: "sketchcatch-app",
+      description: hasLoadBalancer
+        ? "Application traffic from the ALB only"
+        : "Private application task traffic",
+      vpcId: vpcRef,
+      ingress: hasLoadBalancer
+        ? [{ protocol: "tcp", fromPort: 8080, toPort: 8080, securityGroups: [canonicalTerraformReference("aws_security_group", "alb-security-group")] }]
+        : []
+    }),
+    ...(hasDatabase
+      ? [canonicalNodeSpec("db-security-group", "Database Security Group", 930, 920, {
+          name: "sketchcatch-db",
+          description: "PostgreSQL traffic from Fargate tasks only",
+          vpcId: vpcRef,
+          ingress: [{ protocol: "tcp", fromPort: 5432, toPort: 5432, securityGroups: [canonicalTerraformReference("aws_security_group", "app-security-group")] }]
+        })]
+      : [])
+  ];
+  const roleTrustPolicy = JSON.stringify({
+    Version: "2012-10-17",
+    Statement: [{ Effect: "Allow", Principal: { Service: "ecs-tasks.amazonaws.com" }, Action: "sts:AssumeRole" }]
+  });
+  const specsByType = new Map<ResourceType, readonly CanonicalNodeSpec[]>([
+    ["SUBNET", subnetSpecs],
+    ["ELASTIC_IP", [
+      canonicalNodeSpec("nat-eip-a", "NAT Elastic IP A", 680, 350, { domain: "vpc" }),
+      canonicalNodeSpec("nat-eip-b", "NAT Elastic IP B", 900, 350, { domain: "vpc" })
+    ]],
+    ["NAT_GATEWAY", [
+      canonicalNodeSpec("nat-gateway-a", "NAT Gateway A", 680, 580, {
+        allocationId: canonicalTerraformReference("aws_eip", "nat-eip-a"),
+        subnetId: canonicalTerraformReference("aws_subnet", "public-subnet-a")
+      }),
+      canonicalNodeSpec("nat-gateway-b", "NAT Gateway B", 900, 580, {
+        allocationId: canonicalTerraformReference("aws_eip", "nat-eip-b"),
+        subnetId: canonicalTerraformReference("aws_subnet", "public-subnet-b")
+      })
+    ]],
+    ["ROUTE_TABLE", routeTableSpecs],
+    ["ROUTE_TABLE_ASSOCIATION", associationSpecs],
+    ["SECURITY_GROUP", securityGroupSpecs],
+    ["IAM_ROLE", [
+      canonicalNodeSpec("ecs-execution-role", "ECS Task Execution Role", 1180, 700, { assumeRolePolicy: roleTrustPolicy }),
+      canonicalNodeSpec("ecs-task-role", "ECS Task Role", 1380, 700, { assumeRolePolicy: roleTrustPolicy })
+    ]],
+    ["IAM_POLICY", [canonicalNodeSpec("ecs-task-policy", "ECS Task Policy", 1380, 840, {
+      policy: JSON.stringify({ Version: "2012-10-17", Statement: [{ Effect: "Allow", Action: ["logs:CreateLogStream", "logs:PutLogEvents", "s3:GetObject", "s3:PutObject"], Resource: "*" }] })
+    })]],
+    ["CLOUDWATCH_LOG_GROUP", [canonicalNodeSpec("ecs-log-group", "ECS Application Logs", 1180, 840, {
+      name: "/ecs/sketchcatch-app",
+      retentionInDays: 30
+    })]],
+    ["CLOUDWATCH_METRIC_ALARM", [
+      canonicalNodeSpec("app-cpu-alarm", "ECS Service CPU Alarm", 1180, 980, createCanonicalMetricAlarmConfig("sketchcatch-ecs-cpu", "AWS/ECS", "CPUUtilization", { ClusterName: canonicalTerraformReference("aws_ecs_cluster", "ecs-cluster", "name"), ServiceName: canonicalTerraformReference("aws_ecs_service", "ecs-service", "name") })),
+      ...(hasDatabase
+        ? [canonicalNodeSpec("db-cpu-alarm", "Database CPU Alarm", 1380, 980, createCanonicalMetricAlarmConfig("sketchcatch-rds-cpu", "AWS/RDS", "CPUUtilization", { DBInstanceIdentifier: canonicalTerraformReference("aws_db_instance", "app-database", "id") }))]
+        : [])
+    ]],
+    ...(hasDatabase
+      ? [["DB_SUBNET_GROUP", [canonicalNodeSpec("db-subnet-group", "DB Subnet Group", 680, 920, {
+          name: "sketchcatch-db-subnets",
+          subnetIds: [
+            canonicalTerraformReference("aws_subnet", "private-db-subnet-a"),
+            canonicalTerraformReference("aws_subnet", "private-db-subnet-b")
+          ]
+        })]] as const]
+      : [])
+  ]);
+  const replacementById = new Map<string, ArchitectureJson["nodes"][number]>();
+
+  for (const [resourceType, specs] of specsByType) {
+    const matchingNodes = architectureJson.nodes.filter((node) => node.type === resourceType);
+    specs.forEach((spec, index) => {
+      const node = matchingNodes[index];
+      if (node !== undefined) {
+        replacementById.set(node.id, { ...node, ...spec });
+      }
+    });
+  }
+
+  const publicSubnetRefs = ["public-subnet-a", "public-subnet-b"].map((id) =>
+    canonicalTerraformReference("aws_subnet", id)
+  );
+  const privateAppSubnetRefs = ["private-app-subnet-a", "private-app-subnet-b"].map((id) =>
+    canonicalTerraformReference("aws_subnet", id)
+  );
+  const staticBucket = architectureJson.nodes.find(
+    (node) => node.type === "S3" && node.config.bucketPurpose === "static_website_origin"
+  ) ?? architectureJson.nodes.find((node) => node.type === "S3");
+  const nodes = architectureJson.nodes.map((node) => {
+    const replacement = replacementById.get(node.id);
+    if (replacement !== undefined) {
+      return replacement;
+    }
+
+    switch (node.type) {
+      case "VPC":
+        return { ...node, id: vpcId, label: "Main VPC", config: { cidrBlock: "10.0.0.0/16", enableDnsHostnames: true, enableDnsSupport: true } };
+      case "INTERNET_GATEWAY":
+        return { ...node, id: "internet-gateway", label: "Internet Gateway", config: { vpcId: vpcRef } };
+      case "LOAD_BALANCER":
+        return { ...node, id: "application-load-balancer", label: "Application Load Balancer", config: { name: "sketchcatch-app", internal: false, loadBalancerType: "application", subnets: publicSubnetRefs, securityGroups: [canonicalTerraformReference("aws_security_group", "alb-security-group")] } };
+      case "LOAD_BALANCER_TARGET_GROUP":
+        return { ...node, id: "app-target-group", label: "Fargate Target Group", config: { name: "sketchcatch-app", port: 8080, protocol: "HTTP", targetType: "ip", vpcId: vpcRef, healthCheck: { path: "/health", matcher: "200-399" } } };
+      case "LOAD_BALANCER_LISTENER":
+        return { ...node, id: "http-listener", label: "ALB HTTP Listener", config: { loadBalancerArn: canonicalTerraformReference("aws_lb", "application-load-balancer", "arn"), port: 80, protocol: "HTTP", defaultAction: { type: "forward", targetGroupArn: canonicalTerraformReference("aws_lb_target_group", "app-target-group", "arn") } } };
+      case "ECR_REPOSITORY":
+        return { ...node, id: "app-repository", label: "Application ECR Repository", config: { name: "sketchcatch-app", imageTagMutability: "IMMUTABLE", imageScanningConfiguration: { scanOnPush: true } } };
+      case "ECS_CLUSTER":
+        return { ...node, id: "ecs-cluster", label: "Fargate ECS Cluster", config: { name: "sketchcatch-app" } };
+      case "ECS_TASK_DEFINITION":
+        return { ...node, id: "ecs-task-definition", label: "Fargate Task Definition", config: { family: "sketchcatch-app", networkMode: "awsvpc", requiresCompatibilities: ["FARGATE"], cpu: "512", memory: "1024", executionRoleArn: canonicalTerraformReference("aws_iam_role", "ecs-execution-role", "arn"), taskRoleArn: canonicalTerraformReference("aws_iam_role", "ecs-task-role", "arn"), containerDefinitions: JSON.stringify([{ name: "app", image: "public.ecr.aws/docker/library/nginx:1.27-alpine", essential: true, portMappings: [{ containerPort: 8080, protocol: "tcp" }], logConfiguration: { logDriver: "awslogs", options: { "awslogs-group": "/ecs/sketchcatch-app", "awslogs-region": region, "awslogs-stream-prefix": "app" } } }]) } };
+      case "ECS_SERVICE":
+        return { ...node, id: "ecs-service", label: "Fargate Application Service", config: { name: "sketchcatch-app", cluster: canonicalTerraformReference("aws_ecs_cluster", "ecs-cluster"), taskDefinition: canonicalTerraformReference("aws_ecs_task_definition", "ecs-task-definition", "arn"), desiredCount: 2, launchType: "FARGATE", healthCheckGracePeriodSeconds: 60, deploymentMinimumHealthyPercent: 100, deploymentMaximumPercent: 200, deploymentCircuitBreaker: { enable: true, rollback: true }, networkConfiguration: { assignPublicIp: false, subnets: privateAppSubnetRefs, securityGroups: [canonicalTerraformReference("aws_security_group", "app-security-group")] }, loadBalancer: { targetGroupArn: canonicalTerraformReference("aws_lb_target_group", "app-target-group", "arn"), containerName: "app", containerPort: 8080 } } };
+      case "CLOUDFRONT":
+        return { ...node, config: { ...node.config, ...(staticBucket === undefined ? {} : { originResourceId: staticBucket.id }), enabled: true, viewerProtocolPolicy: "redirect-to-https" } };
+      case "RDS":
+        return { ...node, id: "app-database", label: "Multi-AZ Application Database", config: { engine: "postgres", instanceClass: "db.t4g.small", allocatedStorage: 50, multiAz: true, publiclyAccessible: false, storageEncrypted: true, backupRetentionPeriod: 7, deletionProtection: true, skipFinalSnapshot: false, finalSnapshotIdentifier: "sketchcatch-app-final", dbSubnetGroupName: canonicalTerraformReference("aws_db_subnet_group", "db-subnet-group", "name"), vpcSecurityGroupIds: [canonicalTerraformReference("aws_security_group", "db-security-group")] } };
+      case "SECRETS_MANAGER_SECRET":
+        return { ...node, id: "database-secret", label: "Database Credentials Secret", config: { name: "sketchcatch/database/credentials", recoveryWindowInDays: 7 } };
+      default:
+        return node;
+    }
+  });
+
+  return { nodes, edges: architectureJson.edges };
+}
+
+function canonicalSubnetSpec(
+  id: string,
+  label: string,
+  cidrBlock: string,
+  availabilityZone: string,
+  tier: "public" | "private_app" | "private_db",
+  mapPublicIpOnLaunch: boolean,
+  positionX: number,
+  positionY: number,
+  vpcId: string
+): CanonicalNodeSpec {
+  return canonicalNodeSpec(id, label, positionX, positionY, {
+    availabilityZone,
+    cidrBlock,
+    mapPublicIpOnLaunch,
+    tier,
+    vpcId
+  });
+}
+
+function canonicalNodeSpec(
+  id: string,
+  label: string,
+  positionX: number,
+  positionY: number,
+  config: Record<string, unknown>
+): CanonicalNodeSpec {
+  return { id, label, positionX, positionY, config };
+}
+
+function createCanonicalRouteAssociationSpecs(hasDatabase: boolean): CanonicalNodeSpec[] {
+  const pairs = [
+    ["public-route-association-a", "Public Route Association A", "public-route-table", "public-subnet-a"],
+    ["public-route-association-b", "Public Route Association B", "public-route-table", "public-subnet-b"],
+    ["private-app-route-association-a", "Private App Route Association A", "private-route-table-a", "private-app-subnet-a"],
+    ["private-app-route-association-b", "Private App Route Association B", "private-route-table-b", "private-app-subnet-b"],
+    ...(hasDatabase
+      ? [
+          ["private-db-route-association-a", "Private DB Route Association A", "private-route-table-a", "private-db-subnet-a"],
+          ["private-db-route-association-b", "Private DB Route Association B", "private-route-table-b", "private-db-subnet-b"]
+        ]
+      : [])
+  ];
+
+  return pairs.map(([id, label, routeTableId, subnetId], index) =>
+    canonicalNodeSpec(id!, label!, 1120 + (index % 2) * 220, 350 + Math.floor(index / 2) * 140, {
+      routeTableId: canonicalTerraformReference("aws_route_table", routeTableId!),
+      subnetId: canonicalTerraformReference("aws_subnet", subnetId!)
+    })
+  );
+}
+
+function createCanonicalMetricAlarmConfig(
+  alarmName: string,
+  namespace: string,
+  metricName: string,
+  dimensions: Record<string, string>
+): Record<string, unknown> {
+  return {
+    alarmName,
+    comparisonOperator: "GreaterThanThreshold",
+    dimensions,
+    evaluationPeriods: 2,
+    metricName,
+    namespace,
+    period: 300,
+    statistic: "Average",
+    threshold: 80
+  };
+}
+
+function canonicalTerraformReference(
+  resourceType: string,
+  nodeId: string,
+  attribute = "id"
+): string {
+  return `${resourceType}.${nodeId.replaceAll("-", "_")}.${attribute}`;
+}
+
 function ensureCanonicalPlanResources(
   architectureJson: ArchitectureJson,
   plan: ArchitectureIntentPlan | null
@@ -3371,6 +3847,13 @@ function connectCanonicalPatternTopologies(
 ): ArchitectureJson {
   const edges = [...architectureJson.edges];
   const nodesByType = new Map<ResourceType, ArchitectureJson["nodes"]>();
+  const nodeById = new Map(architectureJson.nodes.map((node) => [node.id, node]));
+  const usesRoleAwareEcs =
+    patternIds.includes("ecs-fargate") &&
+    !patternIds.includes("serverless-api") &&
+    architectureJson.nodes.some(
+      (node) => node.type === "ECS_SERVICE" || node.type === "ECS_TASK_DEFINITION"
+    );
 
   for (const node of architectureJson.nodes) {
     nodesByType.set(node.type, [...(nodesByType.get(node.type) ?? []), node]);
@@ -3426,13 +3909,49 @@ function connectCanonicalPatternTopologies(
       );
     }
   };
+  const connectIds = (sourceId: string, targetId: string, label: string): void => {
+    if (!nodeById.has(sourceId) || !nodeById.has(targetId)) {
+      return;
+    }
+
+    addArchitectureEdge(
+      edges,
+      `canonical-${sourceId}-to-${targetId}`,
+      sourceId,
+      targetId,
+      label
+    );
+  };
 
   if (patternIds.includes("alb-asg-ec2") || patternIds.includes("ecs-fargate") || patternIds.includes("multi-az-rds")) {
-    connectOneToAll("VPC", "SUBNET", "contains");
-    connect("VPC", "INTERNET_GATEWAY", "attaches");
-    connectOneToAll("INTERNET_GATEWAY", "ROUTE_TABLE", "routes");
-    connectAllToOne("ROUTE_TABLE", "ROUTE_TABLE_ASSOCIATION", "associates");
-    connect("ROUTE_TABLE_ASSOCIATION", "SUBNET", "binds");
+    if (usesRoleAwareEcs) {
+      for (const subnet of nodesByType.get("SUBNET") ?? []) {
+        connectIds("vpc-main", subnet.id, "contains");
+      }
+      connectIds("vpc-main", "internet-gateway", "attaches");
+      connectIds("nat-eip-a", "nat-gateway-a", "allocates");
+      connectIds("nat-eip-b", "nat-gateway-b", "allocates");
+      connectIds("public-subnet-a", "nat-gateway-a", "hosts");
+      connectIds("public-subnet-b", "nat-gateway-b", "hosts");
+      const routeAssociations = [
+        ["public-route-table", "public-route-association-a", "public-subnet-a"],
+        ["public-route-table", "public-route-association-b", "public-subnet-b"],
+        ["private-route-table-a", "private-app-route-association-a", "private-app-subnet-a"],
+        ["private-route-table-b", "private-app-route-association-b", "private-app-subnet-b"],
+        ["private-route-table-a", "private-db-route-association-a", "private-db-subnet-a"],
+        ["private-route-table-b", "private-db-route-association-b", "private-db-subnet-b"]
+      ] as const;
+      for (const [routeTableId, associationId, subnetId] of routeAssociations) {
+        connectIds(routeTableId, associationId, "associates");
+        connectIds(associationId, subnetId, "binds");
+      }
+    } else {
+      connectOneToAll("VPC", "SUBNET", "contains");
+      connect("VPC", "INTERNET_GATEWAY", "attaches");
+      connectOneToAll("INTERNET_GATEWAY", "ROUTE_TABLE", "routes");
+      connectAllToOne("ROUTE_TABLE", "ROUTE_TABLE_ASSOCIATION", "associates");
+      connect("ROUTE_TABLE_ASSOCIATION", "SUBNET", "binds");
+    }
   }
 
   if (patternIds.includes("alb-asg-ec2")) {
@@ -3456,19 +3975,51 @@ function connectCanonicalPatternTopologies(
   }
 
   if (patternIds.includes("spa-cloudfront-s3")) {
-    connectOneToAll("CLOUDFRONT", "S3", "private origin");
+    const cloudFront = nodesByType.get("CLOUDFRONT")?.[0];
+    const staticBucket = (nodesByType.get("S3") ?? []).find(
+      (node) => node.config.bucketPurpose === "static_website_origin"
+    ) ?? nodesByType.get("S3")?.[0];
+    if (cloudFront !== undefined && staticBucket !== undefined) {
+      connectIds(cloudFront.id, staticBucket.id, "private origin");
+    }
+    if (usesRoleAwareEcs && cloudFront !== undefined) {
+      connectIds(cloudFront.id, "application-load-balancer", "API origin");
+    }
   }
 
   if (patternIds.includes("ecs-fargate")) {
-    connect("ECR_REPOSITORY", "ECS_TASK_DEFINITION", "image");
-    connect("ECS_CLUSTER", "ECS_SERVICE", "runs");
-    connect("ECS_TASK_DEFINITION", "ECS_SERVICE", "defines");
-    connect("LOAD_BALANCER", "LOAD_BALANCER_LISTENER", "listens");
-    connect("LOAD_BALANCER_LISTENER", "LOAD_BALANCER_TARGET_GROUP", "forwards");
-    connect("LOAD_BALANCER_TARGET_GROUP", "ECS_SERVICE", "targets ip");
-    connect("IAM_ROLE", "ECS_TASK_DEFINITION", "authorizes");
-    connect("ECS_TASK_DEFINITION", "CLOUDWATCH_LOG_GROUP", "logs");
-    connectAllToOne("SECURITY_GROUP", "ECS_SERVICE", "protects");
+    if (usesRoleAwareEcs) {
+      connectIds("app-repository", "ecs-task-definition", "image");
+      connectIds("ecs-cluster", "ecs-service", "runs");
+      connectIds("ecs-task-definition", "ecs-service", "defines");
+      connectIds("application-load-balancer", "http-listener", "listens");
+      connectIds("http-listener", "app-target-group", "forwards");
+      connectIds("app-target-group", "ecs-service", "targets ip");
+      connectIds("alb-security-group", "application-load-balancer", "protects");
+      connectIds("app-security-group", "ecs-service", "protects");
+      connectIds("ecs-execution-role", "ecs-task-definition", "pulls image and logs");
+      connectIds("ecs-task-role", "ecs-task-definition", "application permissions");
+      connectIds("ecs-task-policy", "ecs-task-role", "least privilege");
+      connectIds("ecs-task-definition", "ecs-log-group", "logs");
+      connectIds("ecs-service", "app-cpu-alarm", "monitors");
+      connectIds("private-app-subnet-a", "ecs-service", "places tasks");
+      connectIds("private-app-subnet-b", "ecs-service", "places tasks");
+      for (const bucket of nodesByType.get("S3") ?? []) {
+        if (bucket.config.bucketPurpose !== "static_website_origin") {
+          connectIds("ecs-service", bucket.id, "stores uploads");
+        }
+      }
+    } else {
+      connect("ECR_REPOSITORY", "ECS_TASK_DEFINITION", "image");
+      connect("ECS_CLUSTER", "ECS_SERVICE", "runs");
+      connect("ECS_TASK_DEFINITION", "ECS_SERVICE", "defines");
+      connect("LOAD_BALANCER", "LOAD_BALANCER_LISTENER", "listens");
+      connect("LOAD_BALANCER_LISTENER", "LOAD_BALANCER_TARGET_GROUP", "forwards");
+      connect("LOAD_BALANCER_TARGET_GROUP", "ECS_SERVICE", "targets ip");
+      connect("IAM_ROLE", "ECS_TASK_DEFINITION", "authorizes");
+      connect("ECS_TASK_DEFINITION", "CLOUDWATCH_LOG_GROUP", "logs");
+      connectAllToOne("SECURITY_GROUP", "ECS_SERVICE", "protects");
+    }
   }
 
   if (patternIds.includes("github-cicd-codedeploy")) {
@@ -3483,11 +4034,21 @@ function connectCanonicalPatternTopologies(
   }
 
   if (patternIds.includes("multi-az-rds")) {
-    connectOneToAll("SUBNET", "DB_SUBNET_GROUP", "members");
-    connect("DB_SUBNET_GROUP", "RDS", "places");
-    connectAllToOne("SECURITY_GROUP", "RDS", "protects");
-    connect("SECRETS_MANAGER_SECRET", "RDS", "credentials");
-    connect("RDS", "CLOUDWATCH_METRIC_ALARM", "monitors");
+    if (usesRoleAwareEcs) {
+      connectIds("private-db-subnet-a", "db-subnet-group", "member");
+      connectIds("private-db-subnet-b", "db-subnet-group", "member");
+      connectIds("db-subnet-group", "app-database", "places");
+      connectIds("db-security-group", "app-database", "protects");
+      connectIds("app-security-group", "db-security-group", "allows PostgreSQL");
+      connectIds("database-secret", "app-database", "credentials");
+      connectIds("app-database", "db-cpu-alarm", "monitors");
+    } else {
+      connectOneToAll("SUBNET", "DB_SUBNET_GROUP", "members");
+      connect("DB_SUBNET_GROUP", "RDS", "places");
+      connectAllToOne("SECURITY_GROUP", "RDS", "protects");
+      connect("SECRETS_MANAGER_SECRET", "RDS", "credentials");
+      connect("RDS", "CLOUDWATCH_METRIC_ALARM", "monitors");
+    }
   }
 
   connect("S3", "LAMBDA", "object event");
@@ -3518,7 +4079,9 @@ function connectCanonicalPatternTopologies(
   connect("API_GATEWAY_V2_ROUTE", "API_GATEWAY_V2_INTEGRATION", "integrates");
   connect("API_GATEWAY_V2_INTEGRATION", "LAMBDA", "invokes");
   connect("API_GATEWAY_V2_STAGE", "API_GATEWAY_V2_ROUTE", "publishes");
-  connect("IAM_POLICY", "IAM_ROLE", "least privilege");
+  if (!usesRoleAwareEcs) {
+    connect("IAM_POLICY", "IAM_ROLE", "least privilege");
+  }
   connect("ACM_CERTIFICATE", "ACM_CERTIFICATE_VALIDATION", "validates");
   connect("ACM_CERTIFICATE_VALIDATION", "CLOUDFRONT", "secures");
   connect("ACM_CERTIFICATE_VALIDATION", "LOAD_BALANCER_LISTENER", "secures");
@@ -3527,7 +4090,9 @@ function connectCanonicalPatternTopologies(
   connectOneToAll("KMS_KEY", "RDS", "encrypts");
   connectOneToAll("KMS_KEY", "DYNAMODB_TABLE", "encrypts");
   connectAllToOne("EC2", "CLOUDWATCH_LOG_GROUP", "logs");
-  connect("ECS_SERVICE", "CLOUDWATCH_METRIC_ALARM", "monitors");
+  if (!usesRoleAwareEcs) {
+    connect("ECS_SERVICE", "CLOUDWATCH_METRIC_ALARM", "monitors");
+  }
   connect("LAMBDA", "CLOUDWATCH_METRIC_ALARM", "monitors");
 
   return {

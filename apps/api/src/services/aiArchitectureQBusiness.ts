@@ -31,6 +31,16 @@ const ECS_RUNTIME_RESOURCE_TYPES = new Set<ResourceType>([
   "ECS_TASK_DEFINITION",
   "ECS_SERVICE"
 ]);
+const SERVERLESS_RUNTIME_RESOURCE_TYPES = new Set<ResourceType>([
+  "API_GATEWAY_REST_API",
+  "API_GATEWAY_RESOURCE",
+  "API_GATEWAY_METHOD",
+  "API_GATEWAY_INTEGRATION",
+  "API_GATEWAY_DEPLOYMENT",
+  "API_GATEWAY_STAGE",
+  "LAMBDA",
+  "LAMBDA_PERMISSION"
+]);
 const EC2_RUNTIME_RESOURCE_TYPES = new Set<ResourceType>([
   "EC2",
   "AMI",
@@ -117,6 +127,8 @@ const CANONICAL_PATTERNS: Record<ArchitecturePatternId, CanonicalPatternDefiniti
       "VPC",
       "SUBNET",
       "INTERNET_GATEWAY",
+      "ELASTIC_IP",
+      "NAT_GATEWAY",
       "ROUTE_TABLE",
       "ROUTE_TABLE_ASSOCIATION",
       "SECURITY_GROUP",
@@ -524,7 +536,10 @@ function createCanonicalArchitecturePlan(
   const shouldExcludeResource = (resourceType: ResourceType): boolean =>
     (normalizedForbiddenCapabilities.has("load_balancer") &&
       LOAD_BALANCER_RESOURCE_TYPES.has(resourceType)) ||
-    (usesEksRuntime && ECS_RUNTIME_RESOURCE_TYPES.has(resourceType));
+    (usesEksRuntime &&
+      (ECS_RUNTIME_RESOURCE_TYPES.has(resourceType) ||
+        resourceType === "NAT_GATEWAY" ||
+        resourceType === "ELASTIC_IP"));
 
   for (const patternId of patternIds) {
     for (const resourceType of CANONICAL_PATTERNS[patternId].requiredResources) {
@@ -550,10 +565,42 @@ function createCanonicalArchitecturePlan(
     }
   }
 
-  if (patternIds.includes("alb-asg-ec2") || patternIds.includes("ecs-fargate")) {
+  const hasVpcRuntime =
+    patternIds.includes("alb-asg-ec2") || patternIds.includes("ecs-fargate");
+  const hasRelationalDatabase = patternIds.includes("multi-az-rds");
+
+  if (hasVpcRuntime && hasRelationalDatabase) {
+    resourceQuantities.SUBNET = Math.max(resourceQuantities.SUBNET ?? 0, 6);
+  } else if (hasVpcRuntime) {
     resourceQuantities.SUBNET = Math.max(resourceQuantities.SUBNET ?? 0, 4);
   } else if (patternIds.includes("multi-az-rds")) {
     resourceQuantities.SUBNET = Math.max(resourceQuantities.SUBNET ?? 0, 2);
+  }
+
+  if (
+    patternIds.includes("ecs-fargate") &&
+    (requiredResources.has("ECS_SERVICE") || requiredResources.has("ECS_TASK_DEFINITION"))
+  ) {
+    resourceQuantities.ELASTIC_IP = Math.max(resourceQuantities.ELASTIC_IP ?? 0, 2);
+    resourceQuantities.NAT_GATEWAY = Math.max(resourceQuantities.NAT_GATEWAY ?? 0, 2);
+    resourceQuantities.ROUTE_TABLE = Math.max(resourceQuantities.ROUTE_TABLE ?? 0, 3);
+    resourceQuantities.ROUTE_TABLE_ASSOCIATION = Math.max(
+      resourceQuantities.ROUTE_TABLE_ASSOCIATION ?? 0,
+      hasRelationalDatabase ? 6 : 4
+    );
+    const securityGroupCount =
+      (requiredResources.has("LOAD_BALANCER") ? 2 : 1) + (hasRelationalDatabase ? 1 : 0);
+    resourceQuantities.SECURITY_GROUP = Math.max(
+      resourceQuantities.SECURITY_GROUP ?? 0,
+      securityGroupCount
+    );
+    resourceQuantities.IAM_ROLE = Math.max(resourceQuantities.IAM_ROLE ?? 0, 2);
+    if (hasRelationalDatabase) {
+      resourceQuantities.CLOUDWATCH_METRIC_ALARM = Math.max(
+        resourceQuantities.CLOUDWATCH_METRIC_ALARM ?? 0,
+        2
+      );
+    }
   }
 
   const s3PatternCount = patternIds.filter((patternId) =>
@@ -645,6 +692,19 @@ function createRetrievalArchitectureRequirement(payload: unknown): ArchitectureI
     requiredResources.add(resourceType);
   }
 
+  const prefersManagedComplexRuntime =
+    answerProfile.backend === "complex" &&
+    answerProfile.management === "fully_managed" &&
+    !promptExplicitlyRequestsLambda(prompt);
+
+  if (prefersManagedComplexRuntime) {
+    patternIds.delete("serverless-api");
+    for (const resourceType of SERVERLESS_RUNTIME_RESOURCE_TYPES) {
+      requiredResources.delete(resourceType);
+      delete resourceQuantities[resourceType];
+    }
+  }
+
   const forbidsLoadBalancer = promptForbidsLoadBalancer(prompt);
   const forbidsEc2 = promptForbidsEc2(prompt);
   const usesEks =
@@ -696,8 +756,31 @@ function createRetrievalArchitectureRequirement(payload: unknown): ArchitectureI
     requiredResources.add("CLOUDFRONT");
   }
 
-  if (!hasRuntime && answerProfile.backend !== "none") {
+  if (prefersManagedComplexRuntime) {
+    patternIds.add("ecs-fargate");
+    requiredResources.add("ECS_CLUSTER");
+    requiredResources.add("ECS_TASK_DEFINITION");
+    requiredResources.add("ECS_SERVICE");
+    requiredResources.add("ECR_REPOSITORY");
+    if (!forbidsLoadBalancer) {
+      requiredResources.add("LOAD_BALANCER");
+    }
+    forbiddenCapabilities.add("ec2_runtime");
+  } else if (!hasRuntime && answerProfile.backend !== "none") {
     if (answerProfile.backend === "microservices") {
+      patternIds.add("ecs-fargate");
+      requiredResources.add("ECS_CLUSTER");
+      requiredResources.add("ECS_TASK_DEFINITION");
+      requiredResources.add("ECS_SERVICE");
+      requiredResources.add("ECR_REPOSITORY");
+      if (!forbidsLoadBalancer) {
+        requiredResources.add("LOAD_BALANCER");
+      }
+      forbiddenCapabilities.add("ec2_runtime");
+    } else if (
+      answerProfile.backend === "complex" &&
+      answerProfile.management === "fully_managed"
+    ) {
       patternIds.add("ecs-fargate");
       requiredResources.add("ECS_CLUSTER");
       requiredResources.add("ECS_TASK_DEFINITION");
@@ -728,6 +811,10 @@ function createRetrievalArchitectureRequirement(payload: unknown): ArchitectureI
 
   if (answerProfile.upload !== undefined && answerProfile.upload !== "none") {
     requiredResources.add("S3");
+    resourceQuantities.S3 = Math.max(
+      resourceQuantities.S3 ?? 0,
+      patternIds.has("spa-cloudfront-s3") ? 2 : 1
+    );
   }
 
   if (
@@ -750,6 +837,7 @@ function createRetrievalArchitectureRequirement(payload: unknown): ArchitectureI
     requiredResources.delete("DB_SUBNET_GROUP");
     patternIds.delete("multi-az-rds");
   } else if (database !== "none" && answerProfile.backend !== "none") {
+    requiredResources.delete("DYNAMODB_TABLE");
     patternIds.add("multi-az-rds");
     requiredResources.add("RDS");
   }
@@ -775,7 +863,28 @@ function createRetrievalArchitectureRequirement(payload: unknown): ArchitectureI
     ...(forbiddenCapabilities.size === 0
       ? {}
       : { forbiddenCapabilities: [...forbiddenCapabilities] }),
-    ...(normalizedRequirement?.runtimeTopology === undefined
+    ...(usesEks
+      ? {
+          runtimeTopology: {
+            trafficEntry: forbidsLoadBalancer ? undefined : "LOAD_BALANCER",
+            compute: "EKS_CLUSTER",
+            placement: "private_subnets",
+            spreadAcrossPrivateSubnets: true,
+            autoScaling: true
+          }
+        }
+      : prefersManagedComplexRuntime
+      ? {
+          runtimeTopology: {
+            trafficEntry: forbidsLoadBalancer ? undefined : "LOAD_BALANCER",
+            compute: "ECS_FARGATE",
+            computeCount: 2,
+            placement: "private_subnets",
+            spreadAcrossPrivateSubnets: true,
+            autoScaling: true
+          }
+        }
+      : normalizedRequirement?.runtimeTopology === undefined
       ? {}
       : { runtimeTopology: normalizedRequirement.runtimeTopology }),
     ...(database === undefined ? {} : { database }),
@@ -832,6 +941,20 @@ function applySecurityAndCostResourcePolicy(input: {
     ["alb-asg-ec2", "serverless-api", "spa-cloudfront-s3", "ecs-fargate"].some(
       (patternId) => patternIds.has(patternId as ArchitecturePatternId)
     );
+  const hasExplicitWaf = /(?:^|[^a-z0-9])waf(?:[^a-z0-9]|$)|web\s+acl/iu.test(prompt);
+  const hasExplicitCustomerManagedKms = /customer[-\s]*managed\s+kms|고객\s*관리형\s*kms/iu.test(prompt);
+
+  if (patternIds.has("spa-cloudfront-s3") && !promptRequiresCustomDomain(prompt)) {
+    requiredResources.delete("ACM_CERTIFICATE");
+    requiredResources.delete("ACM_CERTIFICATE_VALIDATION");
+  }
+  if (!hasExplicitWaf && answerProfile.budget !== "enterprise") {
+    requiredResources.delete("WAF_WEB_ACL");
+    requiredResources.delete("WAF_WEB_ACL_ASSOCIATION");
+  }
+  if (!hasExplicitCustomerManagedKms && answerProfile.budget !== "enterprise") {
+    requiredResources.delete("KMS_KEY");
+  }
 
   if (hasRuntime) {
     requiredResources.add("IAM_ROLE");
@@ -844,13 +967,17 @@ function applySecurityAndCostResourcePolicy(input: {
     requiredResources.add("CLOUDWATCH_METRIC_ALARM");
   }
 
-  if (hasPublicEntry && promptRequiresSsl(prompt)) {
+  if (
+    hasPublicEntry &&
+    promptRequiresSsl(prompt) &&
+    (!patternIds.has("spa-cloudfront-s3") || promptRequiresCustomDomain(prompt))
+  ) {
     requiredResources.add("ACM_CERTIFICATE");
     requiredResources.add("ACM_CERTIFICATE_VALIDATION");
   }
 
   const needsCustomerManagedEncryption =
-    answerProfile.budget === "enterprise" || /customer[-\s]*managed\s+kms|고객\s*관리형\s*kms/iu.test(prompt);
+    answerProfile.budget === "enterprise" || hasExplicitCustomerManagedKms;
   if (
     needsCustomerManagedEncryption &&
     ["S3", "RDS", "DYNAMODB_TABLE"].some((resourceType) =>
@@ -917,6 +1044,14 @@ function findSupplementalExplicitResourceTypes(prompt: string): ResourceType[] {
 
 function promptRequiresSsl(prompt: string): boolean {
   return /(?:ssl|https)[\s\S]{0,80}(?:required|security\s+important|필수|보안\s*중요)/iu.test(prompt);
+}
+
+function promptRequiresCustomDomain(prompt: string): boolean {
+  return /custom\s+domain|route\s*53|도메인/iu.test(prompt);
+}
+
+function promptExplicitlyRequestsLambda(prompt: string): boolean {
+  return /(?:^|[^a-z0-9])lambda(?:[^a-z0-9]|$)|람다/iu.test(prompt);
 }
 
 function createSecurityAndCostNotes(
