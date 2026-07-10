@@ -130,7 +130,7 @@ function getTerraformIdentity(reference: TerraformReference): string {
 function getParameterReferences(sourceNode: DiagramNode): ParameterReference[] {
   const params = sourceNode.parameters;
 
-  if (!params) {
+  if (!params || !params.values) {
     return [];
   }
 
