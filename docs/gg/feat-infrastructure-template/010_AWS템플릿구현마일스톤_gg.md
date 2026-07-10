@@ -17,7 +17,9 @@
 | M2 | 누락 ResourceDefinition과 Terraform provider/nested block 지원 | resource coverage, preview, sync, artifact safety tests | `Feat: AWS Template 리소스 및 Terraform 지원 추가` | 완료 |
 | M3 | Template 카탈로그와 Workspace 적용 흐름 | web template/workspace tests, lint, typecheck | `Feat: AWS Template 카탈로그 연결` | 완료 |
 | M4 | 여섯 Template Terraform Preview와 배포 시간 표시 | template preview tests, deployment duration tests, build | `Feat: AWS Template 배포 흐름 연결` | 완료 |
-| M5 | Chrome 실제 apply/destroy와 검증 기록 | 여섯 패턴 live QA, console check, cleanup 확인 | `Test: AWS Template 실제 배포 검증 기록` | 진행 전 |
+| M5a | AWS 실행 Role 등록과 verified connection 복구 | Chrome AWS 콘솔 Role 확인, STS AssumeRole, SketchCatch 연결 검증 | `Test: AWS Template 배포 연결 검증` | 완료 |
+| M5b | Template Board를 기존 Resource 카탈로그 노드로 전환 | 6개 Template icon/label/style, fallback 0개, Chrome 시각 QA | `Fix: AWS Template 카탈로그 Resource 노드 재사용` | 다음 작업 |
+| M5c | Chrome 실제 apply/destroy와 검증 기록 | 여섯 패턴 live QA, console check, cleanup 확인 | `Test: AWS Template 실제 배포 검증 기록` | M5b 후 진행 |
 | M6 | PR 제출 | full checks, review-work, PR body and linked issue | `gh-create-pr` workflow | 진행 전 |
 
 ## 커밋 규칙
@@ -65,13 +67,32 @@
 - DeploymentPanel에 성공·실패·진행 중 상태의 `분 초` 소요 시간 표시와 실시간 갱신을 추가했다.
 - template preview coverage, deployment duration tests, API/Web typecheck와 lint를 통과했다.
 
-### M5
+### M5a
 
-- 진행 중
+- 완료: 2026-07-11 KST
+- 로그인된 AWS 콘솔에서 기존 Role과 trust policy를 먼저 확인하고 재사용 가능한 Role을 SketchCatch verified connection에 연결한다.
+- 기존 Role로 충족할 수 없는 필수 권한만 보강하며, 중복 Role을 임시로 만들지 않는다.
+- 기존 `brainboard` Role은 다른 외부 계정을 신뢰하고 `ReadOnlyAccess`만 보유하므로 SketchCatch용으로 재사용하지 않았다.
+- 기존 verified connection이 참조하던 `SketchCatchTerraformExecutionRole`을 복구하고, 해당 connection의 External ID를 요구하는 trust policy를 등록했다.
+- 로컬 caller에서 실제 `sts:AssumeRole`과 임시 자격 증명의 `sts:GetCallerIdentity`를 실행해 모두 통과했다.
+- 이 단계에서는 `AdministratorAccess` 같은 과도한 정책을 붙이지 않았다. 여섯 Template의 실제 apply용 최소권한 정책은 M5b 완료 후 M5c 진입 전에 별도로 검증한다.
+
+### M5b
+
+- 다음 작업으로 시작한다. 사용자의 명시적 요청에 따라 Role 등록보다 먼저 코드를 수정하지 않았다.
+- 현재 Template Board가 `TemplateDefinition`에서 bare `DiagramNode`를 직접 만들어 일반 `AWS` fallback tile과 Terraform logical name을 노출하는 결함을 수정한다.
+- 여섯 Template 모두 기존 Resource 카탈로그의 `ResourceDefinition`/`ResourceItem` 생성 경로를 재사용한다.
+- Architecture Board에서 Raw Terraform Detail 노드는 허용하지 않는다. 필요한 세부 resource type이 카탈로그에 없으면 먼저 정식 카탈로그 Resource로 추가한다.
+- 완료 증거는 6개 Template의 fallback tile 0개, `*_workspace` 가시 label 0개, 카탈로그 icon/label/size/style 일치와 Chrome 시각 QA다.
+
+### M5c
+
+- M5a와 M5b가 완료된 뒤 실제 apply/destroy를 시작한다.
 - Lambda, API Gateway stage/permission, IAM assume policy, 3-Tier launch template/AMI lookup, ECS task/network defaults, EKS node policies를 기본 정의에 반영했다.
 - `demo_web_service_with_rds` live profile에 여섯 Template의 확장 Resource와 Kubernetes workload를 허용하고, Template 보드에는 해당 profile을 자동 추천하도록 연결했다.
 - 실제 Dashboard의 시작 템플릿 화면도 같은 registry를 사용해 여섯 개 카드와 Workspace 선택 URL을 노출한다.
-- 남은 검증: 실제 Terraform CLI validate/plan, Chrome live apply/destroy, AWS 연결 상태와 패턴별 배포 시간 기록.
+- 여섯 Template 모두 실제 Terraform CLI `init`과 `validate`를 통과했다.
+- 남은 검증: Chrome live plan/apply/destroy, AWS 연결 상태와 패턴별 배포 시간 기록.
 
 ### M6
 
