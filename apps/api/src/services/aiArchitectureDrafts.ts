@@ -1421,7 +1421,9 @@ function findNormalizedRequirementValidationIssues(
   const issues: string[] = [];
   const actualResourceTypes = new Set(architectureJson.nodes.map((node) => node.type));
   const missingResourceTypes = (normalizedRequirement.requiredResources ?? []).filter(
-    (resourceType) => !actualResourceTypes.has(resourceType as ResourceType)
+    (resourceType) =>
+      !isResourceTypeForbiddenByPlan(normalizedRequirement, resourceType as ResourceType) &&
+      !actualResourceTypes.has(resourceType as ResourceType)
   );
 
   if (missingResourceTypes.length > 0) {
@@ -1432,6 +1434,11 @@ function findNormalizedRequirementValidationIssues(
 
   for (const [resourceType, quantity] of Object.entries(normalizedRequirement.resourceQuantities ?? {})) {
     const requiredResourceType = resourceType as ResourceType;
+
+    if (isResourceTypeForbiddenByPlan(normalizedRequirement, requiredResourceType)) {
+      continue;
+    }
+
     const actualCount = architectureJson.nodes.filter((node) => node.type === requiredResourceType).length;
 
     if (actualCount < quantity) {
@@ -1668,7 +1675,11 @@ function mergeArchitectureIntentPlans(
     providerPlan.resourceQuantities,
     deterministicPlan.resourceQuantities
   );
-  const runtimeTopology = mergeRuntimeTopologyPlans(providerPlan.runtimeTopology, deterministicPlan.runtimeTopology);
+  const runtimeTopology = sanitizeMergedRuntimeTopology(
+    mergeRuntimeTopologyPlans(providerPlan.runtimeTopology, deterministicPlan.runtimeTopology),
+    requiredResources,
+    forbiddenCapabilities
+  );
   const merged: ArchitectureIntentPlan = {
     ...(providerPlan.intent === undefined ? {} : { intent: providerPlan.intent }),
     ...(providerPlan.region === undefined && deterministicPlan.region === undefined
@@ -1745,6 +1756,40 @@ function mergeRuntimeTopologyPlans(
         ? undefined
         : Math.max(providerTopology.computeCount ?? 0, deterministicTopology.computeCount ?? 0)
   };
+}
+
+function sanitizeMergedRuntimeTopology(
+  topology: ArchitectureIntentPlan["runtimeTopology"],
+  requiredResources: readonly string[],
+  forbiddenCapabilities: readonly string[]
+): ArchitectureIntentPlan["runtimeTopology"] {
+  if (topology === undefined) {
+    return undefined;
+  }
+
+  const forbidden = new Set(forbiddenCapabilities.map((capability) => capability.toLowerCase()));
+  const resources = new Set(requiredResources);
+  const sanitized: NonNullable<ArchitectureIntentPlan["runtimeTopology"]> = { ...topology };
+
+  if (forbidden.has("load_balancer") && sanitized.trafficEntry?.toUpperCase() === "LOAD_BALANCER") {
+    delete sanitized.trafficEntry;
+  }
+
+  if (forbidden.has("ec2_runtime") && sanitized.compute?.toUpperCase() === "EC2") {
+    if (resources.has("EKS_CLUSTER")) {
+      sanitized.compute = "EKS_CLUSTER";
+    } else if (resources.has("ECS_SERVICE") || resources.has("ECS_TASK_DEFINITION")) {
+      sanitized.compute = "ECS_FARGATE";
+    } else if (resources.has("LAMBDA")) {
+      sanitized.compute = "LAMBDA";
+    } else {
+      delete sanitized.compute;
+    }
+    delete sanitized.computeCount;
+    delete sanitized.spreadAcrossPrivateSubnets;
+  }
+
+  return Object.keys(sanitized).length === 0 ? undefined : sanitized;
 }
 
 function createAmazonQPlanDraftResult(
@@ -1836,6 +1881,15 @@ function applyArchitecturePlanExclusions(
       return false;
     }
 
+    if (
+      forbiddenCapabilities.has("load_balancer") &&
+      ["LOAD_BALANCER", "LOAD_BALANCER_LISTENER", "LOAD_BALANCER_TARGET_GROUP"].includes(
+        node.type
+      )
+    ) {
+      return false;
+    }
+
     if (forbiddenCapabilities.has("file_upload") && isForbiddenUploadResourceNode(node)) {
       return false;
     }
@@ -1874,10 +1928,17 @@ function findMaterializedArchitecturePlanValidationIssues(
 ): string[] {
   const normalizedPrompt = prompt.normalize("NFKC").toLowerCase();
   const nodeTypes = new Set(architectureJson.nodes.map((node) => node.type));
+  const planForbidsEc2Runtime = (plan?.forbiddenCapabilities ?? []).some(
+    (capability) => capability.toLowerCase() === "ec2_runtime"
+  );
   const issues = [
     ...findExplicitResourceTypeValidationIssues(normalizedPrompt, architectureJson),
     ...findRequestedResourceQuantityValidationIssues(normalizedPrompt, architectureJson),
-    ...findRuntimeTopologyValidationIssues(normalizedPrompt, architectureJson, { validateVisualSpread: false }),
+    ...(planForbidsEc2Runtime
+      ? []
+      : findRuntimeTopologyValidationIssues(normalizedPrompt, architectureJson, {
+          validateVisualSpread: false
+        })),
     ...findNormalizedRequirementValidationIssues(plan, architectureJson, { validateVisualSpread: false })
   ];
 
@@ -2338,8 +2399,10 @@ function findExplicitResourceTypesInPrompt(normalizedPrompt: string): ResourceTy
 
   for (const definition of SUPPORTED_RESOURCE_CATALOG) {
     if (
-      createResourcePromptAliases(definition).some((alias) =>
-        resourceSearchTextIncludesAlias(normalizedSearchText, compactSearchText, alias)
+      createResourcePromptAliases(definition).some(
+        (alias) =>
+          !resourcePromptExplicitlyForbidsType(normalizedPrompt, definition.nodeType) &&
+          resourceSearchTextIncludesAlias(normalizedSearchText, compactSearchText, alias)
       )
     ) {
       resourceTypes.add(definition.nodeType);
@@ -2347,6 +2410,30 @@ function findExplicitResourceTypesInPrompt(normalizedPrompt: string): ResourceTy
   }
 
   return [...resourceTypes];
+}
+
+function resourcePromptExplicitlyForbidsType(
+  normalizedPrompt: string,
+  resourceType: ResourceType
+): boolean {
+  if (resourceType === "EC2") {
+    return (
+      /(?:(?:\b(?:no|without|exclude)\b)|do\s+not\s+use)[^.\n]{0,48}ec2/iu.test(normalizedPrompt) ||
+      /ec2[^.\n]{0,96}(?:not\s+needed|do\s+not\s+use|필요\s*없|사용하지\s*않|제외)/iu.test(
+        normalizedPrompt
+      )
+    );
+  }
+
+  return (
+    resourceType === "LOAD_BALANCER" &&
+    (/(?:(?:\b(?:no|without|exclude)\b)|do\s+not\s+use)[^.\n]{0,48}(?:alb|load\s+balancer)/iu.test(
+      normalizedPrompt
+    ) ||
+      /(?:alb|load\s+balancer|로드\s*밸런서|외부\s*트래픽)[^.\n]{0,96}(?:not\s+needed|do\s+not\s+use|필요\s*없|사용하지\s*않|제외)/iu.test(
+        normalizedPrompt
+      ))
+  );
 }
 
 function resourceSearchTextIncludesAlias(
@@ -3148,14 +3235,18 @@ function ensureCanonicalPlanResources(
   const requiredQuantities = new Map<ResourceType, number>();
 
   for (const resourceType of plan?.requiredResources ?? []) {
-    requiredQuantities.set(resourceType as ResourceType, 1);
+    if (!isResourceTypeForbiddenByPlan(plan, resourceType as ResourceType)) {
+      requiredQuantities.set(resourceType as ResourceType, 1);
+    }
   }
 
   for (const [resourceType, quantity] of Object.entries(plan?.resourceQuantities ?? {})) {
-    requiredQuantities.set(
-      resourceType as ResourceType,
-      Math.max(requiredQuantities.get(resourceType as ResourceType) ?? 0, quantity)
-    );
+    if (!isResourceTypeForbiddenByPlan(plan, resourceType as ResourceType)) {
+      requiredQuantities.set(
+        resourceType as ResourceType,
+        Math.max(requiredQuantities.get(resourceType as ResourceType) ?? 0, quantity)
+      );
+    }
   }
 
   for (const [resourceType, quantity] of requiredQuantities) {
@@ -3184,9 +3275,13 @@ function ensureCanonicalPlanResources(
     }
   }
 
-  const hasPublicIngressPattern = (plan?.patternIds ?? []).some((patternId) =>
-    patternId === "alb-asg-ec2" || patternId === "ecs-fargate"
-  );
+  const hasPublicIngressPattern =
+    !(plan?.forbiddenCapabilities ?? []).some(
+      (capability) => capability.toLowerCase() === "load_balancer"
+    ) &&
+    (plan?.patternIds ?? []).some(
+      (patternId) => patternId === "alb-asg-ec2" || patternId === "ecs-fargate"
+    );
   let subnetIndex = 0;
   const labeledNodes = nodes.map((node) => {
     if (node.type !== "SUBNET") {
@@ -3205,6 +3300,37 @@ function ensureCanonicalPlanResources(
   });
 
   return { nodes: labeledNodes, edges };
+}
+
+function isResourceTypeForbiddenByPlan(
+  plan: ArchitectureIntentPlan | null,
+  resourceType: ResourceType
+): boolean {
+  const forbiddenCapabilities = new Set(
+    (plan?.forbiddenCapabilities ?? []).map((capability) => capability.toLowerCase())
+  );
+
+  if (
+    forbiddenCapabilities.has("load_balancer") &&
+    ["LOAD_BALANCER", "LOAD_BALANCER_LISTENER", "LOAD_BALANCER_TARGET_GROUP"].includes(
+      resourceType
+    )
+  ) {
+    return true;
+  }
+
+  return (
+    forbiddenCapabilities.has("ec2_runtime") &&
+    [
+      "EC2",
+      "AMI",
+      "IAM_INSTANCE_PROFILE",
+      "LAUNCH_TEMPLATE",
+      "AUTO_SCALING_GROUP",
+      "AUTO_SCALING_POLICY",
+      "ECS_CAPACITY_PROVIDER"
+    ].includes(resourceType)
+  );
 }
 
 function createUniqueCanonicalNodeId(
@@ -3314,7 +3440,7 @@ function connectCanonicalPatternTopologies(
   }
 
   if (patternIds.includes("spa-cloudfront-s3")) {
-    connect("CLOUDFRONT", "S3", "private origin");
+    connectOneToAll("CLOUDFRONT", "S3", "private origin");
   }
 
   if (patternIds.includes("ecs-fargate")) {
@@ -3332,7 +3458,7 @@ function connectCanonicalPatternTopologies(
   if (patternIds.includes("github-cicd-codedeploy")) {
     connect("CODESTAR_CONNECTION", "CODEPIPELINE", "sources");
     connect("CODEPIPELINE", "CODEBUILD_PROJECT", "builds");
-    connect("CODEBUILD_PROJECT", "S3", "stores artifact");
+    connectOneToAll("CODEBUILD_PROJECT", "S3", "stores artifact");
     connect("S3", "CODEDEPLOY_APP", "releases");
     connect("CODEDEPLOY_APP", "CODEDEPLOY_DEPLOYMENT_GROUP", "deploys");
     connect("IAM_ROLE", "CODEPIPELINE", "authorizes");
@@ -3347,6 +3473,46 @@ function connectCanonicalPatternTopologies(
     connect("SECRETS_MANAGER_SECRET", "RDS", "credentials");
     connect("RDS", "CLOUDWATCH_METRIC_ALARM", "monitors");
   }
+
+  connect("S3", "LAMBDA", "object event");
+  connect("LAMBDA", "SQS_QUEUE", "enqueues");
+  connect("LAMBDA", "DYNAMODB_TABLE", "writes");
+  connect("SQS_QUEUE", "ECS_SERVICE", "work queue");
+  connect("EVENTBRIDGE_PERMISSION", "EVENTBRIDGE_RULE", "authorizes");
+  connect("EVENTBRIDGE_RULE", "EVENTBRIDGE_TARGET", "triggers");
+  connect("EVENTBRIDGE_TARGET", "ECS_TASK_DEFINITION", "runs task");
+  connect("EVENTBRIDGE_TARGET", "LAMBDA", "invokes");
+  connectOneToAll("SUBNET", "EKS_CLUSTER", "places");
+  connectAllToOne("SECURITY_GROUP", "EKS_CLUSTER", "protects");
+  connect("EKS_CLUSTER", "EKS_NODE_GROUP", "manages");
+  connectOneToAll("EKS_CLUSTER", "EKS_ADDON", "installs");
+  connect("LOAD_BALANCER", "EKS_CLUSTER", "routes");
+  connect("LOAD_BALANCER_TARGET_GROUP", "EKS_CLUSTER", "targets");
+  connect("IAM_ROLE", "EKS_CLUSTER", "authorizes");
+  connect("EKS_CLUSTER", "CLOUDWATCH_LOG_GROUP", "logs");
+  connect("WAF_WEB_ACL", "WAF_WEB_ACL_ASSOCIATION", "associates");
+  connect("WAF_WEB_ACL_ASSOCIATION", "CLOUDFRONT", "protects");
+  connect("WAF_WEB_ACL_ASSOCIATION", "LOAD_BALANCER", "protects");
+
+  if ((nodesByType.get("WAF_WEB_ACL_ASSOCIATION")?.length ?? 0) === 0) {
+    connect("WAF_WEB_ACL", "CLOUDFRONT", "protects");
+    connect("WAF_WEB_ACL", "LOAD_BALANCER", "protects");
+  }
+
+  connect("API_GATEWAY_V2_ROUTE", "API_GATEWAY_V2_INTEGRATION", "integrates");
+  connect("API_GATEWAY_V2_INTEGRATION", "LAMBDA", "invokes");
+  connect("API_GATEWAY_V2_STAGE", "API_GATEWAY_V2_ROUTE", "publishes");
+  connect("IAM_POLICY", "IAM_ROLE", "least privilege");
+  connect("ACM_CERTIFICATE", "ACM_CERTIFICATE_VALIDATION", "validates");
+  connect("ACM_CERTIFICATE_VALIDATION", "CLOUDFRONT", "secures");
+  connect("ACM_CERTIFICATE_VALIDATION", "LOAD_BALANCER_LISTENER", "secures");
+  connect("ACM_CERTIFICATE_VALIDATION", "API_GATEWAY_REST_API", "secures");
+  connectOneToAll("KMS_KEY", "S3", "encrypts");
+  connectOneToAll("KMS_KEY", "RDS", "encrypts");
+  connectOneToAll("KMS_KEY", "DYNAMODB_TABLE", "encrypts");
+  connectAllToOne("EC2", "CLOUDWATCH_LOG_GROUP", "logs");
+  connect("ECS_SERVICE", "CLOUDWATCH_METRIC_ALARM", "monitors");
+  connect("LAMBDA", "CLOUDWATCH_METRIC_ALARM", "monitors");
 
   return {
     nodes: architectureJson.nodes,
@@ -3369,7 +3535,9 @@ function explicitlyForbidsEc2Runtime(normalizedPrompt: string): boolean {
     "serverless runtime",
     "lambda only",
     "ec2 없이",
-    "ec2는 사용하지 않"
+    "ec2는 사용하지 않",
+    "ec2는 필요 없",
+    "ec2 제외"
   ]);
 }
 
