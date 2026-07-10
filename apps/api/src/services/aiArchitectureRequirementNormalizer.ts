@@ -12,7 +12,7 @@ import { maskSecretsForAi } from "./aiProviderSafety.js";
 
 const ARCHITECTURE_REQUIREMENT_NORMALIZATION_TARGET = "architecture_requirement_normalization";
 const DEFAULT_OPENAI_MODEL = "gpt-5.5";
-const OPENAI_TIMEOUT_MS = 10_000;
+const OPENAI_TIMEOUT_MS = 30_000;
 const OPENAI_MAX_RETRIES = 0;
 const MAX_TEXT_ITEMS = 16;
 const MAX_TEXT_LENGTH = 240;
@@ -27,6 +27,20 @@ const runtimeTopologySchema = z.object({
   autoScaling: z.boolean().optional()
 });
 
+const openAiRuntimeTopologySchema = z.object({
+  trafficEntry: z.string().nullable(),
+  compute: z.string().nullable(),
+  computeCount: z.number().int().positive().max(200).nullable(),
+  placement: z.string().nullable(),
+  spreadAcrossPrivateSubnets: z.boolean().nullable(),
+  autoScaling: z.boolean().nullable()
+});
+
+const openAiResourceQuantitySchema = z.object({
+  resourceType: z.string(),
+  quantity: z.number().int().positive().max(200)
+});
+
 const architectureIntentPlanSchema = z.object({
   intent: z.string().optional(),
   region: z.string().optional(),
@@ -39,7 +53,20 @@ const architectureIntentPlanSchema = z.object({
   amazonQBrief: z.array(z.string()).optional()
 });
 
+const openAiArchitectureIntentPlanSchema = z.object({
+  intent: z.string().nullable(),
+  region: z.string().nullable(),
+  requiredResources: z.array(z.string()).nullable(),
+  resourceQuantities: z.array(openAiResourceQuantitySchema).nullable(),
+  forbiddenCapabilities: z.array(z.string()).nullable(),
+  runtimeTopology: openAiRuntimeTopologySchema.nullable(),
+  database: z.string().nullable(),
+  availability: z.string().nullable(),
+  amazonQBrief: z.array(z.string()).nullable()
+});
+
 export type ArchitectureIntentPlan = z.infer<typeof architectureIntentPlanSchema>;
+type OpenAiArchitectureIntentPlan = z.infer<typeof openAiArchitectureIntentPlanSchema>;
 
 type OpenAiRequirementNormalizerClient = {
   readonly responses: {
@@ -49,7 +76,7 @@ type OpenAiRequirementNormalizerClient = {
       readonly input: string;
       readonly text: { readonly format: unknown; readonly verbosity?: "low" | "medium" | "high" };
       readonly store?: boolean;
-    }) => Promise<{ readonly output_parsed: ArchitectureIntentPlan | null }>;
+    }) => Promise<{ readonly output_parsed: OpenAiArchitectureIntentPlan | null }>;
   };
 };
 
@@ -93,7 +120,7 @@ export function createOpenAiRequirementNormalizerProvider(input: {
         instructions: request.instructions,
         input: request.prompt,
         text: {
-          format: zodTextFormat(architectureIntentPlanSchema, "architecture_requirement_normalization"),
+          format: zodTextFormat(openAiArchitectureIntentPlanSchema, "architecture_requirement_normalization"),
           verbosity: "low"
         },
         store: false
@@ -128,13 +155,13 @@ function createDefaultOpenAiRequirementNormalizerClient(input: {
           instructions: request.instructions,
           input: request.input,
           text: {
-            format: zodTextFormat(architectureIntentPlanSchema, "architecture_requirement_normalization"),
+            format: zodTextFormat(openAiArchitectureIntentPlanSchema, "architecture_requirement_normalization"),
             verbosity: "low"
           },
           store: false
         });
 
-        return { output_parsed: response.output_parsed as ArchitectureIntentPlan | null };
+        return { output_parsed: response.output_parsed as OpenAiArchitectureIntentPlan | null };
       }
     }
   };
@@ -185,14 +212,14 @@ function createArchitectureRequirementNormalizerPrompt(prompt: string): string {
     "Supported resource panel catalog:",
     JSON.stringify(SUPPORTED_ARCHITECTURE_RESOURCE_CATALOG, null, 2),
     "ArchitectureIntentPlan JSON shape:",
-    '{"intent":"dynamic_web_application","region":"ap-northeast-2","requiredResources":["EC2"],"resourceQuantities":{"EC2":3},"forbiddenCapabilities":["file_upload"],"runtimeTopology":{"trafficEntry":"LOAD_BALANCER","compute":"EC2","computeCount":3,"placement":"private_subnets","spreadAcrossPrivateSubnets":true,"autoScaling":true},"database":"simple","availability":"99.9","amazonQBrief":["short imperative line"]}',
+    '{"intent":"dynamic_web_application","region":"ap-northeast-2","requiredResources":["EC2"],"resourceQuantities":[{"resourceType":"EC2","quantity":3}],"forbiddenCapabilities":["file_upload"],"runtimeTopology":{"trafficEntry":"LOAD_BALANCER","compute":"EC2","computeCount":3,"placement":"private_subnets","spreadAcrossPrivateSubnets":true,"autoScaling":true},"database":"simple","availability":"99.9","amazonQBrief":["short imperative line"]}',
     "User requirement prompt:",
     prompt
   ].join("\n\n");
 }
 
 function normalizeArchitectureIntentPlan(value: unknown): ArchitectureIntentPlan | null {
-  const parsed = architectureIntentPlanSchema.safeParse(value);
+  const parsed = architectureIntentPlanSchema.safeParse(normalizeOpenAiResourceQuantities(removeNullObjectFields(value)));
 
   if (!parsed.success) {
     return null;
@@ -216,6 +243,49 @@ function normalizeArchitectureIntentPlan(value: unknown): ArchitectureIntentPlan
   };
 
   return Object.keys(plan).length === 0 ? null : plan;
+}
+
+function normalizeOpenAiResourceQuantities(value: unknown): unknown {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    return value;
+  }
+
+  const candidate = value as Record<string, unknown>;
+
+  if (!Array.isArray(candidate.resourceQuantities)) {
+    return value;
+  }
+
+  const resourceQuantities = Object.fromEntries(
+    candidate.resourceQuantities.flatMap((entry) => {
+      if (entry === null || typeof entry !== "object" || Array.isArray(entry)) {
+        return [];
+      }
+
+      const quantityEntry = entry as Record<string, unknown>;
+
+      return typeof quantityEntry.resourceType === "string" && typeof quantityEntry.quantity === "number"
+        ? [[quantityEntry.resourceType, quantityEntry.quantity]]
+        : [];
+    })
+  );
+
+  return {
+    ...candidate,
+    resourceQuantities
+  };
+}
+
+function removeNullObjectFields(value: unknown): unknown {
+  if (Array.isArray(value) || value === null || typeof value !== "object") {
+    return value;
+  }
+
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([, fieldValue]) => fieldValue !== null)
+      .map(([key, fieldValue]) => [key, removeNullObjectFields(fieldValue)])
+  );
 }
 
 function normalizeRuntimeTopology(value: ArchitectureIntentPlan["runtimeTopology"]): ArchitectureIntentPlan["runtimeTopology"] {

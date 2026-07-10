@@ -12,11 +12,27 @@ Short English-only working log for the current agent context. Older records are 
 - Amazon Q preview self-validation now rejects missing explicitly requested resource-panel types and undersized EC2 fleets before accepting a draft.
 - Amazon Q preview self-validation now also rejects no-upload violations, disconnected ALB/ASG/EC2 runtime paths, EC2 fleets not distributed across requested private subnets, and EC2 fleets visually grouped into one private subnet box.
 - Architecture Drafts now always send a deterministic normalized requirement plan to Amazon Q, and can merge in OpenAI Requirement Normalizer output when the normalizer is enabled; Amazon Q remains the diagram generator and deterministic validation remains the acceptance gate.
+- The OpenAI Requirement Normalizer now uses a dedicated Structured Outputs wire schema and converts nullable wire values into the existing optional internal plan without changing other OpenAI features.
 - AI patch previews now apply deployable config changes for supported parameters and can migrate an EC2 runtime path to API Gateway plus Lambda serverless topology.
 - Targeted API tests plus full lint/typecheck/build passed during this session.
 - No Terraform apply/destroy, deployment, AWS calls, or cloud mutation was run.
 
 ## Session Record
+
+### 2026-07-10 - OpenAI requirement normalizer runtime fix
+
+- Goal: Make the enabled Architecture Draft OpenAI normalizer work without changing shared OpenAI explanation or safety behavior.
+- Completed:
+  - Split the OpenAI Structured Outputs wire schema from the optional internal `ArchitectureIntentPlan` schema.
+  - Represented resource quantities as a strict wire array and converted it back to the existing internal resource quantity map before Amazon Q handoff.
+  - Removed nullable wire fields during normalization and increased only the requirement normalizer timeout from 10 to 30 seconds.
+  - Added a regression test that rejects optional-field and unsupported `propertyNames` schema regressions.
+- Verification:
+  - A real configured `gpt-5.5` call returned a normalized EC2/ALB/ASG/private-subnet plan instead of `null`.
+  - `pnpm --filter @sketchcatch/api exec tsx --test src/services/aiArchitectureRequirementNormalizer.test.ts src/services/aiArchitectureDrafts.test.ts src/services/aiLlmExplanation.test.ts src/services/aiSafetyFindingExplanation.test.ts` passed with 47 tests.
+  - `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
+- Risk:
+  - The normalizer can add up to 30 seconds to an Architecture Draft request. Deterministic normalization remains the fallback and acceptance constraints remain backend-validated.
 
 ### 2026-07-10 - AI patch preview deployable modification support
 
