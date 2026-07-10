@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, desc, eq, gt, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, notInArray, sql } from "drizzle-orm";
 import type {
   AwsConnection,
   DeployedResource,
@@ -169,6 +169,10 @@ export type DeploymentProjectRecord = {
   deployment: DeploymentRecord;
 };
 
+export type RecoverInterruptedDeploymentsInput = {
+  excludeDeploymentIds?: readonly string[];
+};
+
 export type DeploymentRepository = {
   findAccessibleProject(
     projectId: string,
@@ -248,7 +252,9 @@ export type DeploymentRepository = {
       errorSummary: string;
     }
   ): Promise<DeploymentRecord | undefined>;
-  recoverInterruptedDeployments(): Promise<DeploymentRecord[]>;
+  recoverInterruptedDeployments(
+    input?: RecoverInterruptedDeploymentsInput
+  ): Promise<DeploymentRecord[]>;
   createDeploymentLog(input: CreateDeploymentLogRecordInput): Promise<DeploymentLogRecord>;
   createDeploymentLogs(input: CreateDeploymentLogRecordInput[]): Promise<DeploymentLogRecord[]>;
   getNextDeploymentLogSequence(deploymentId: string): Promise<number>;
@@ -774,11 +780,13 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
       return deployment;
     },
 
-    async recoverInterruptedDeployments() {
-      const runningDeployments = await db
-        .select()
-        .from(deployments)
-        .where(eq(deployments.status, "RUNNING"));
+    async recoverInterruptedDeployments(input) {
+      const excludeDeploymentIds = [...(input?.excludeDeploymentIds ?? [])];
+      const recoveryFilter =
+        excludeDeploymentIds.length > 0
+          ? and(eq(deployments.status, "RUNNING"), notInArray(deployments.id, excludeDeploymentIds))
+          : eq(deployments.status, "RUNNING");
+      const runningDeployments = await db.select().from(deployments).where(recoveryFilter);
 
       const recoveredDeployments: DeploymentRecord[] = [];
 
@@ -1050,9 +1058,10 @@ export async function requestDeploymentCancellation(
 }
 
 export async function recoverInterruptedDeployments(
-  repository: DeploymentRepository
+  repository: DeploymentRepository,
+  input?: RecoverInterruptedDeploymentsInput
 ): Promise<DeploymentRecord[]> {
-  return repository.recoverInterruptedDeployments();
+  return repository.recoverInterruptedDeployments(input);
 }
 
 export async function appendDeploymentLog(

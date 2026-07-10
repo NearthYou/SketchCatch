@@ -174,6 +174,12 @@ class FakeDeploymentJobRepository implements DeploymentJobRepository {
     );
   }
 
+  async listActiveDeploymentJobs() {
+    return [...this.jobs.values()].filter((job) =>
+      ["QUEUED", "DISPATCHING", "RUNNING"].includes(job.status)
+    );
+  }
+
   async findDeploymentJobById(candidateJobId: string) {
     return this.jobs.get(candidateJobId);
   }
@@ -209,10 +215,7 @@ class FakeDeploymentJobRepository implements DeploymentJobRepository {
     });
   }
 
-  async cancelDeploymentJob(
-    candidateJobId: string,
-    input: { errorSummary?: string | null }
-  ) {
+  async cancelDeploymentJob(candidateJobId: string, input: { errorSummary?: string | null }) {
     return this.update(candidateJobId, {
       status: "CANCELLED",
       errorSummary: input.errorSummary ?? null,

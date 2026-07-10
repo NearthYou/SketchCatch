@@ -66,6 +66,12 @@ class FakeDeploymentJobRepository implements DeploymentJobRepository {
     );
   }
 
+  async listActiveDeploymentJobs() {
+    return [...this.jobs.values()].filter((job) =>
+      ["QUEUED", "DISPATCHING", "RUNNING"].includes(job.status)
+    );
+  }
+
   async findDeploymentJobById(jobId: string) {
     return this.jobs.get(jobId);
   }
@@ -244,7 +250,10 @@ test("recordDeploymentJobTaskArn can attach a task ARN before running state", as
   const job = await createDeploymentJob(createJobInput(), repository);
 
   const taskArn = "arn:aws:ecs:ap-northeast-2:555980271919:task/cluster/task-id";
-  const updatedJob = await recordDeploymentJobTaskArn({ jobId: job.id, ecsTaskArn: taskArn }, repository);
+  const updatedJob = await recordDeploymentJobTaskArn(
+    { jobId: job.id, ecsTaskArn: taskArn },
+    repository
+  );
 
   assert.equal(updatedJob.status, "QUEUED");
   assert.equal(updatedJob.ecsTaskArn, taskArn);

@@ -44,3 +44,22 @@ output "ecs_execution_role_arn" {
   description = "Task execution role ARN."
   value       = aws_iam_role.ecs_execution.arn
 }
+
+output "ecs_log_group_names" {
+  description = "CloudWatch log groups for API, web, nginx, and one-off worker tasks."
+  value = {
+    for name, log_group in aws_cloudwatch_log_group.ecs : name => log_group.name
+  }
+}
+
+output "ecs_observability_alarm_names" {
+  description = "CloudWatch alarms created only when enable_ecs_observability_alarms is true."
+  value = {
+    container_errors = {
+      for name, alarm in aws_cloudwatch_metric_alarm.ecs_container_errors : name => alarm.alarm_name
+    }
+    unhealthy_hosts = try(aws_cloudwatch_metric_alarm.ecs_unhealthy_hosts[0].alarm_name, null)
+    service_cpu     = try(aws_cloudwatch_metric_alarm.ecs_service_cpu_high[0].alarm_name, null)
+    service_memory  = try(aws_cloudwatch_metric_alarm.ecs_service_memory_high[0].alarm_name, null)
+  }
+}

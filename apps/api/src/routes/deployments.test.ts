@@ -66,6 +66,7 @@ import type {
 } from "../deployments/deployment-job-service.js";
 import type {
   DeploymentWorkerDispatcher,
+  InspectDeploymentWorkerInput,
   DispatchDeploymentWorkerInput,
   StopDeploymentWorkerInput
 } from "../deployments/deployment-worker-dispatcher.js";
@@ -859,6 +860,12 @@ class FakeDeploymentJobRepository implements DeploymentJobRepository {
     );
   }
 
+  async listActiveDeploymentJobs() {
+    return [...this.jobs.values()].filter((job) =>
+      ["QUEUED", "DISPATCHING", "RUNNING"].includes(job.status)
+    );
+  }
+
   async findDeploymentJobById(jobId: string) {
     return this.jobs.get(jobId);
   }
@@ -959,6 +966,12 @@ class FakeDeploymentWorkerDispatcher implements DeploymentWorkerDispatcher {
     };
   }
 
+  async inspect(input: InspectDeploymentWorkerInput) {
+    return input.job.ecsTaskArn
+      ? { state: "ACTIVE" as const, lastStatus: "RUNNING" }
+      : { state: "MISSING" as const, lastStatus: null };
+  }
+
   async stop(input: StopDeploymentWorkerInput) {
     this.stopCalls.push(input);
     return {
@@ -1043,7 +1056,9 @@ async function buildDeploymentTestApp(
       ? { createDeploymentJobRepository: routeOptions.createDeploymentJobRepository }
       : {}),
     ...(routeOptions.workerDispatcher ? { workerDispatcher: routeOptions.workerDispatcher } : {}),
-    ...(routeOptions.workerDispatchMode ? { workerDispatchMode: routeOptions.workerDispatchMode } : {}),
+    ...(routeOptions.workerDispatchMode
+      ? { workerDispatchMode: routeOptions.workerDispatchMode }
+      : {}),
     ...(routeOptions.runtimeCache ? { runtimeCache: routeOptions.runtimeCache } : {})
   });
 

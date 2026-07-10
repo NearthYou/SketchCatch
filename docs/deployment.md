@@ -649,3 +649,98 @@ API task role에는 최소한 아래 권한이 필요합니다. 실제 ARN은 pr
 `ecs:RunTask`는 worker task definition으로, `ecs:StopTask`/`ecs:DescribeTasks`는 worker cluster task ARN으로 제한합니다.
 `ecs:RunTask`의 `ecs:cluster` 조건과 task 작업의 cluster ARN 조건도 유지합니다. `iam:PassRole`은 worker task execution role과
 worker task role에만 허용하고, `ecs-tasks.amazonaws.com` 조건을 유지합니다.
+
+## ECS 복구, 관측성, smoke 운영
+
+### API startup reconciliation
+
+API startup은 `DEPLOYMENT_WORKER_MODE`에 따라 `RUNNING` deployment를 복구합니다.
+
+| 조건 | startup 처리 |
+| --- | --- |
+| `in_process` mode | API process 재시작 중 중단된 `RUNNING` deployment를 기존 방식대로 `FAILED`로 정리합니다. |
+| ECS task가 `PENDING`, `RUNNING` 등 active 상태 | `deployment_jobs`의 deployment를 보호하고 worker가 계속 완료하도록 둡니다. |
+| `DescribeTasks`가 일시적으로 실패 | 실행 중인 deployment를 실패로 오판하지 않고 보호하며 경고를 남깁니다. |
+| ECS task가 `STOPPED` | active job을 `FAILED`로 종료하고 해당 deployment를 interrupted recovery로 정리합니다. |
+| ECS task가 잠시 보이지 않음 | job 갱신 후 5분 안에는 eventual consistency로 보고 보호하며, grace period 이후에도 `MISSING`이면 실패 처리합니다. |
+| task ARN 없는 `QUEUED`/`DISPATCHING` job | 5분 안에는 보호하고 이후에는 stale dispatch로 실패 처리합니다. |
+| task ARN 없는 `RUNNING` job | 유효하지 않은 실행 상태로 보고 job과 deployment를 실패 처리합니다. |
+
+DB의 active `deployment_jobs`가 실행권의 source of truth입니다. ECS 조회 오류만으로 job을 terminal 처리하지 않습니다. startup log에는
+`activeDeploymentCount`, `deferredInspectionCount`, `failedJobCount`, `recoveryRetryCount`, `recoveredDeploymentCount`만 기록하며 secret이나 원문 오류를 남기지 않습니다.
+최근 `QUEUED`/`DISPATCHING`, `MISSING`, 일시적인 조회 오류가 있으면 API는 5분 간격으로 reconciliation을 반복합니다.
+retryable 상태가 없어지면 중단하며 timer는 `unref` 처리되어 process 종료를 막지 않습니다.
+
+### CloudWatch Logs와 alarms
+
+| container | log group | 기본 filter 목적 |
+| --- | --- | --- |
+| API | `/sketchcatch/<environment>/ecs/api` | Pino `level = 50` error |
+| web | `/sketchcatch/<environment>/ecs/web` | `ERROR`, `Error`, `error` text |
+| nginx | `/sketchcatch/<environment>/ecs/nginx` | HTTP 500/502/503/504 access log |
+| worker | `/sketchcatch/<environment>/ecs/worker` | `Deployment worker failed` process log |
+
+log group은 `log_retention_days` 동안 유지합니다. `enable_ecs_observability_alarms` 기본값은 `false`입니다.
+`true`로 바꾸면 custom metric과 alarm 비용이 발생합니다. 활성화 시 container error, ALB unhealthy host, ECS CPU와 memory alarm을 만들며,
+`cloudwatch_alarm_action_arns`에 운영 SNS topic ARN을 넣어야 알림이 전달됩니다.
+
+```hcl
+enable_ecs_observability_alarms    = true
+cloudwatch_alarm_action_arns       = ["arn:aws:sns:<region>:<account-id>:<topic>"]
+ecs_log_error_alarm_threshold      = 1
+ecs_service_cpu_alarm_threshold    = 80
+ecs_service_memory_alarm_threshold = 80
+```
+
+### non-mutating smoke
+
+기본 preflight는 AWS에 접속하지 않고 Terraform template, 수동 deploy/migration gate, Route53 기본 비활성화를 확인합니다.
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smoke/ecs-ops-preflight.ps1 -PreflightOnly
+```
+
+별도로 read-only AWS 조회를 승인한 경우에만 `-ReadOnlyAws`를 사용합니다. 이 mode도 `describe/list`만 실행합니다.
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smoke/ecs-ops-preflight.ps1 `
+  -ReadOnlyAws -AwsRegion ap-northeast-2 `
+  -ClusterName <cluster> -ServiceName <service> `
+  -WorkerTaskDefinition <worker-task-family:revision>
+```
+
+parallel ECS ALB의 `/`, `/health`, `/health/db` 확인에는 `-PreflightOnly -CheckHttp -EcsBaseUrl <url>`을 사용합니다.
+migration은 ECS deploy에 자동 결합하지 않고 `.github/workflows/migrate.yml`의 production approval을 사용합니다.
+실행 전 DB rollback 기준과 artifact SHA를 기록하고, 실행 후 `/health/db`, job query, application log에서 schema 오류가 없는지 확인합니다.
+
+worker live smoke는 preflight에 포함하지 않습니다. 별도 승인 시 다음 순서를 지킵니다.
+
+1. worker task revision, image SHA, roles, subnet, security group, secrets를 기록합니다.
+2. mutation 없는 검증 job으로 `deployment_jobs`, task status, worker log의 terminal 상태를 확인합니다.
+3. Terraform plan의 account, region, backend key, 예상 resource, cleanup owner를 확인합니다.
+4. apply/destroy는 명시적 live 승인, 비용 범위, destroy 기준이 모두 있을 때만 실행합니다.
+5. 종료 후 task가 `STOPPED`인지, active job과 임시 artifact/resource가 남지 않았는지 확인합니다.
+
+### Route53 cutover와 rollback checklist
+
+cutover 전:
+
+- ECS desired/running count, ALB target health, API/web/nginx/worker log를 확인합니다.
+- parallel ECS ALB에서 `/`, `/health`, `/health/db`, 로그인과 대표 read path를 확인합니다.
+- migration revision, ECS image SHA, worker 성공/실패/cancel/restart reconciliation evidence를 확보합니다.
+- EC2/SSM workflow, EC2 image/env, EC2 ALB DNS를 rollback 기준으로 보존합니다.
+- DNS TTL, 관찰 시간, rollback threshold와 결정권자를 기록합니다.
+
+cutover:
+
+- `create_route53_alias = true`는 별도 plan 검토와 명시적 apply 승인 후에만 적용합니다.
+- alias 대상이 parallel ECS ALB DNS/zone ID인지 확인하고 DNS, target health, 핵심 HTTP path, alarms를 연속 관찰합니다.
+- 관찰 시간 동안 EC2 resource와 rollback workflow를 제거하지 않습니다.
+
+rollback:
+
+- health, 5xx, authentication, DB, worker 중 하나라도 threshold를 넘으면 신규 mutation을 중단합니다.
+- Route53 alias를 기존 EC2 ALB로 되돌리는 변경도 plan과 명시적 apply 승인을 거칩니다.
+- 실패 ECS task와 logs는 incident evidence로 보존하고 진행 중인 mutation은 deployment별 cleanup 기준으로 종료합니다.
+- DNS와 EC2 smoke를 확인한 뒤 task, job/deployment 상태와 image SHA를 기록합니다.
+- ECS 안정화와 rollback 보존 기간이 끝난 뒤에만 EC2/SSM cleanup issue를 별도로 실행합니다.

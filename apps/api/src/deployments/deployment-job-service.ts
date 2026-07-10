@@ -37,6 +37,7 @@ export type DeploymentJobRepository = {
     }
   ): Promise<DeploymentJobRecord>;
   findActiveDeploymentJob(deploymentId: string): Promise<DeploymentJobRecord | undefined>;
+  listActiveDeploymentJobs(): Promise<DeploymentJobRecord[]>;
   findDeploymentJobById(jobId: string): Promise<DeploymentJobRecord | undefined>;
   markDeploymentJobDispatching(jobId: string): Promise<DeploymentJobRecord | undefined>;
   markDeploymentJobRunning(
@@ -213,6 +214,13 @@ export function createPostgresDeploymentJobRepository(db: Database): DeploymentJ
       return job;
     },
 
+    async listActiveDeploymentJobs() {
+      return db
+        .select()
+        .from(deploymentJobs)
+        .where(inArray(deploymentJobs.status, activeDeploymentJobStatuses));
+    },
+
     async findDeploymentJobById(jobId) {
       const [job] = await db.select().from(deploymentJobs).where(eq(deploymentJobs.id, jobId));
       return job;
@@ -241,7 +249,10 @@ export function createPostgresDeploymentJobRepository(db: Database): DeploymentJ
           ...touchUpdatedAt
         })
         .where(
-          and(eq(deploymentJobs.id, jobId), inArray(deploymentJobs.status, ["QUEUED", "DISPATCHING"]))
+          and(
+            eq(deploymentJobs.id, jobId),
+            inArray(deploymentJobs.status, ["QUEUED", "DISPATCHING"])
+          )
         )
         .returning();
 

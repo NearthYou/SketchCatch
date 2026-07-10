@@ -19,9 +19,17 @@ locals {
   }
 
   log_group_names = {
-    api   = "/sketchcatch/${var.environment}/ecs/api"
-    web   = "/sketchcatch/${var.environment}/ecs/web"
-    nginx = "/sketchcatch/${var.environment}/ecs/nginx"
+    api    = "/sketchcatch/${var.environment}/ecs/api"
+    web    = "/sketchcatch/${var.environment}/ecs/web"
+    nginx  = "/sketchcatch/${var.environment}/ecs/nginx"
+    worker = "/sketchcatch/${var.environment}/ecs/worker"
+  }
+
+  ecs_error_filter_patterns = {
+    api    = "{ $.level = 50 }"
+    web    = "?ERROR ?Error ?error"
+    nginx  = "?500 ?502 ?503 ?504"
+    worker = "\"Deployment worker failed\""
   }
 
   api_environment = merge(

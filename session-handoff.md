@@ -4,30 +4,30 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Currently Verified
 
-- Current branch: `feature/sw/306-deployment-worker-runtime`.
-- Active workstream: `ECS-MIGRATION-000`, issue #306.
-- Worker targeted tests, API lint, API typecheck, and API build pass.
-- API build produces `dist/deployment-worker.cjs`.
-- Full repository harness, lint, typecheck, and build pass.
+- Current branch: `feature/sw/309-runtask-worker-ops-hardening`.
+- Active workstream: `ECS-MIGRATION-000`, issue #309.
+- Startup reconciliation and ECS task inspector tests pass.
+- Full repository harness, lint, typecheck, and build pass on the final diff.
+- The focused Phase 7 recovery suite passes 37 tests.
+- Terraform fmt/init-without-backend/validate pass.
+- ECS operations preflight passes without AWS access or mutation.
 - No live AWS or Terraform mutation commands were run.
 
 ## Changes This Session
 
-- Added DeploymentJob worker orchestration with RUNNING status and requester access-context validation.
-- Worker cleanup now explicitly terminates the one-off process with its final exit code.
-- Unsupported runtime operation values fail with a clear error and a FAILED job.
-- Reused existing init/plan/apply/destroy-plan/destroy services.
-- Added masked SUCCEEDED/FAILED/CANCELLED job finalization.
-- Added the worker process entrypoint and same-image Docker command override support.
-- Updated deployment docs with the worker command and activation prerequisites.
+- API startup now reconciles active DeploymentJobs with ECS task state instead of failing every RUNNING deployment.
+- Active and temporarily unverifiable tasks are protected; stopped, missing, and stale dispatch jobs are recovered.
+- API, web, nginx, and worker log groups plus opt-in metric filters/alarms are defined.
+- Added an AWS-free preflight and optional read-only ECS/log/HTTP inspection script.
+- Added migration, Route53 cutover, EC2 rollback, and cleanup checklists.
 
 ## Broken Or Unverified
 
-- The requested API test command runs the full suite and exits 1 on 3 unrelated pre-existing tests; all Phase 6 worker tests pass.
-- Local Docker image verification is pending because Docker Desktop was not running.
-- Worker-specific ECS task definition, IAM roles, security group, and live smoke remain pending outside this phase.
+- The requested API command ran 882 tests; 879 passed and 3 pre-existing unrelated tests failed.
+- Worker-specific ECS task definition, IAM roles, security group, and live smoke remain pending.
+- CloudWatch alarms remain disabled by default and have not been applied.
 - Production must keep `DEPLOYMENT_WORKER_MODE=in_process` until those resources and smoke evidence exist.
 
 ## Best Next Action
 
-- Add the worker-specific ECS task definition, IAM roles, security group, and smoke evidence before enabling ECS worker mode in production.
+- Run full verification, review the diff, publish PR #309, resolve review feedback, and merge to `dev`.
