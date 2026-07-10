@@ -24,6 +24,7 @@ Short English-only working log for the current agent context. Older records are 
   - Added static guards that reject live operations, duplicate state keys, missing inventory, and premature resource/import blocks in high-risk roots.
   - Added Route53 `prevent_destroy` protection and documented state-move requirements before edge ownership transfer.
   - Updated architecture, deployment, docs/sw, runtime Terraform, and harness tracking.
+  - Addressed PR #315 feedback with malformed-manifest guards, missing-directory handling, and tested Terraform operation parsing.
 - Verification:
   - `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
   - Runtime, edge, data, and legacy rollback roots passed `terraform init -backend=false -input=false` and `terraform validate` without AWS backend access.

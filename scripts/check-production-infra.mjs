@@ -10,7 +10,14 @@ const failures = [];
 const check = (condition, message) => {
   if (!condition) failures.push(message);
 };
-const read = (relativePath) => fs.readFileSync(path.join(repositoryRoot, relativePath), "utf8");
+const read = (relativePath) => {
+  try {
+    return fs.readFileSync(path.join(repositoryRoot, relativePath), "utf8");
+  } catch (error) {
+    failures.push(`Unable to read ${relativePath}: ${error.message}`);
+    return "";
+  }
+};
 
 const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
 const expectedGroups = new Map([
@@ -47,7 +54,7 @@ for (const operation of [
   );
 }
 
-const groups = manifest.groups ?? [];
+const groups = Array.isArray(manifest.groups) ? manifest.groups : [];
 check(
   groups.length === expectedGroups.size,
   "manifest must contain exactly four management groups"
@@ -98,7 +105,9 @@ for (const [id, expected] of expectedGroups) {
 }
 
 const categories = new Set(
-  groups.flatMap((group) => group.resources.map((resource) => resource.category))
+  groups.flatMap((group) =>
+    (Array.isArray(group.resources) ? group.resources : []).map((resource) => resource.category)
+  )
 );
 for (const category of [
   "ECS",
@@ -119,6 +128,10 @@ for (const category of [
 
 for (const id of ["edge", "data", "legacy-rollback"]) {
   const root = path.join(repositoryRoot, expectedGroups.get(id).root);
+  if (!fs.existsSync(root)) {
+    failures.push(`${id} directory does not exist: ${root}`);
+    continue;
+  }
   const terraformFiles = fs.readdirSync(root).filter((name) => name.endsWith(".tf"));
   check(terraformFiles.length > 0, `${id} must be a valid Terraform root`);
   for (const fileName of terraformFiles) {
@@ -154,12 +167,34 @@ for (const marker of [
 ]) {
   check(workflow.includes(marker), `plan-only workflow is missing ${marker}`);
 }
-const terraformOperations = workflow
-  .split(/\r?\n/)
-  .map((line) => line.trim())
-  .filter((line) => line.startsWith("terraform "))
-  .map((line) => line.match(/^terraform(?:\s+-\S+)*\s+([a-z][a-z-]*)/i)?.[1]?.toLowerCase())
-  .filter(Boolean);
+const extractTerraformOperations = (workflowText) =>
+  workflowText
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith("#"))
+    .map((line) => line.replace(/^run:\s*/i, ""))
+    .map((line) =>
+      line
+        .match(/(?:^|&&|\|\||;|\b(?:if|then|do)\b)\s*terraform(?:\s+-\S+)*\s+([a-z][a-z-]*)/i)?.[1]
+        ?.toLowerCase()
+    )
+    .filter(Boolean);
+
+const parserFixtures = [
+  { source: "run: terraform init", expected: ["init"] },
+  { source: "build && terraform -chdir=infra plan", expected: ["plan"] },
+  { source: "if terraform apply; then exit 1; fi", expected: ["apply"] },
+  { source: "# terraform destroy", expected: [] },
+  { source: 'echo "Terraform import is forbidden"', expected: [] }
+];
+for (const fixture of parserFixtures) {
+  check(
+    JSON.stringify(extractTerraformOperations(fixture.source)) === JSON.stringify(fixture.expected),
+    `Terraform operation parser failed for: ${fixture.source}`
+  );
+}
+
+const terraformOperations = extractTerraformOperations(workflow);
 check(terraformOperations.includes("init"), "plan workflow must initialize the selected backend");
 check(terraformOperations.includes("plan"), "plan workflow must run Terraform plan");
 check(
