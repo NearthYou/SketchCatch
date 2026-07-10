@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { DiagramJson, DiagramNodeMetadata } from "@sketchcatch/types";
+import type { DiagramEdgeMetadata, DiagramJson, DiagramNodeMetadata } from "@sketchcatch/types";
 
 const diagramPositionSchema = z.object({
   x: z.number().finite(),
@@ -13,7 +13,8 @@ const diagramSizeSchema = z.object({
 
 const diagramNodeStyleSchema = z.object({
   textColor: z.string().min(1).optional(),
-  borderColor: z.string().min(1).optional()
+  borderColor: z.string().min(1).optional(),
+  borderStyle: z.enum(["solid", "dashed", "dotted"]).optional()
 });
 
 const diagramNodeMetadataSchema: z.ZodType<DiagramNodeMetadata> = z.object({
@@ -56,6 +57,11 @@ const diagramEdgeStyleSchema = z.object({
   animated: z.boolean().optional()
 });
 
+const diagramEdgeMetadataSchema: z.ZodType<DiagramEdgeMetadata> = z.object({
+  managedBy: z.literal("parameter-reference"),
+  parameterPath: z.string().min(1)
+}).strict();
+
 const diagramEdgeSchema = z.object({
   id: z.string().min(1),
   sourceNodeId: z.string().min(1),
@@ -64,7 +70,8 @@ const diagramEdgeSchema = z.object({
   targetHandleId: z.string().min(1).optional(),
   label: z.string().min(1).optional(),
   type: z.string().min(1).optional(),
-  style: diagramEdgeStyleSchema.optional()
+  style: diagramEdgeStyleSchema.optional(),
+  metadata: diagramEdgeMetadataSchema.optional()
 });
 
 export const diagramJsonSchema: z.ZodType<DiagramJson> = z.object({

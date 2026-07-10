@@ -502,8 +502,8 @@
 }
 
 .resourceListItemActive {
-  border-color: var(--workspace-text, #171717);
-  box-shadow: 0 0 0 1px rgba(23, 23, 23, 0.18);
+  border-color: #2563eb;
+  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.18);
 }
 
 .resourceListHeader {
@@ -737,6 +737,63 @@
   min-height: 0;
   overflow: hidden;
   position: relative;
+}
+
+.terraformSplitLayout {
+  --terraform-code-pane-ratio: 62%;
+
+  background: #f7f9fd;
+  display: grid;
+  grid-template-rows: var(--terraform-code-pane-ratio) 10px minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.terraformCodePane {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.terraformIssuesPane {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.terraformIssuesPane:focus {
+  outline: none;
+}
+
+.terraformSplitResizeHandle {
+  background: #ffffff;
+  border-bottom: 1px solid #dce3ee;
+  border-top: 1px solid #dce3ee;
+  cursor: row-resize;
+  min-height: 10px;
+  position: relative;
+}
+
+.terraformSplitResizeHandle::before {
+  background: #9ca3af;
+  border-radius: 999px;
+  content: "";
+  height: 2px;
+  left: 50%;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 36px;
+}
+
+.terraformSplitResizeHandle:hover,
+.terraformSplitResizeHandle:focus-visible {
+  background: #f8fafc;
+  outline: none;
+}
+
+.terraformSplitResizeHandle:hover::before,
+.terraformSplitResizeHandle:focus-visible::before {
+  background: #64748b;
 }
 
 .terraformTopBar {
@@ -1376,32 +1433,6 @@
   z-index: 4;
 }
 
-.terraformBlockSettingsButton {
-  align-items: center;
-  background: #242424;
-  border: 1px solid #6b7280;
-  border-radius: 5px;
-  color: #d7e4f7;
-  cursor: pointer;
-  display: inline-flex;
-  height: 24px;
-  justify-content: center;
-  padding: 0;
-  pointer-events: auto;
-  position: absolute;
-  right: 6px;
-  top: 3px;
-  width: 24px;
-}
-
-.terraformBlockSettingsButton:hover,
-.terraformBlockSettingsButton:focus-visible {
-  background: #f3f0ff;
-  border-color: #b9a9ff;
-  color: #6f4cf6;
-  outline: none;
-}
-
 .terraformSaveBanner,
 .terraformSaveBannerError {
   align-items: center;
@@ -1804,7 +1835,7 @@
 }
 
 .terraformDialogSecondaryButton {
-  background: #ffffff;
+  background: var(--bp-blue-tint);
   border: 1px solid var(--bp-line-strong);
   color: var(--bp-blue);
 }
@@ -1824,7 +1855,7 @@
 
 .terraformDialogSecondaryButton:hover,
 .terraformDialogSecondaryButton:focus-visible {
-  background: var(--bp-blue-tint);
+  background: color-mix(in srgb, var(--bp-blue-tint) 74%, var(--bp-blue));
   outline: none;
 }
 
@@ -3269,80 +3300,153 @@
 
 .deploymentStagePanel {
   display: grid;
-  gap: 10px;
+  gap: 20px;
   min-width: 0;
 }
 
-.deploymentStageCard {
+.deploymentStageStepper {
+  background: #ffffff;
+  border: 1px solid #d8e1ee;
+  border-radius: 12px;
+  display: grid;
+  gap: 0;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  list-style: none;
+  margin: 0;
+  min-height: 150px;
+  min-width: 0;
+  padding: 24px;
+}
+
+.deploymentStageStep {
+  align-content: start;
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  min-width: 0;
+  position: relative;
+  text-align: center;
+}
+
+.deploymentStageStep + .deploymentStageStep::before {
+  background: #d8e1ee;
+  content: "";
+  height: 4px;
+  left: calc(-50% + 48px);
+  position: absolute;
+  top: 30px;
+  width: calc(100% - 96px);
+}
+
+.deploymentStageDot {
+  align-items: center;
+  background: #eef2f7;
+  border: 1px solid #d8e1ee;
+  border-radius: 999px;
+  color: #172033;
+  display: inline-flex;
+  font-size: 22px;
+  font-weight: 900;
+  height: 64px;
+  justify-content: center;
+  position: relative;
+  width: 64px;
+  z-index: 1;
+}
+
+.deploymentStageLabel {
+  color: #172033;
+  font-size: 16px;
+  font-weight: 900;
+  line-height: 1.25;
+  min-width: 0;
+}
+
+.deploymentStageStepStatus {
+  color: #526174;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.35;
+  min-height: 15px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.deploymentStageStep[data-state="active"] .deploymentStageDot {
+  background: #2563eb;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 6px rgba(37, 99, 235, 0.16);
+  color: #ffffff;
+}
+
+.deploymentStageStep[data-state="done"] .deploymentStageDot {
+  background: #0f766e;
+  border-color: #0f766e;
+  color: #ffffff;
+}
+
+.deploymentStageStep[data-state="error"] .deploymentStageDot {
+  background: #fee2e2;
+  border-color: #f87171;
+  color: #991b1b;
+}
+
+.deploymentStageStep[data-state="idle"] .deploymentStageDot {
+  background: #ffffff;
+  border-color: #dcdee0;
+  color: #64748b;
+}
+
+.deploymentStageActions {
+  display: grid;
+  gap: 32px;
+  grid-template-columns: minmax(0, 1fr) 352px;
+  min-width: 0;
+}
+
+.deploymentStageActionCard {
   align-items: center;
   background: #ffffff;
   border: 1px solid #d8e1ee;
   border-radius: 8px;
   display: grid;
-  gap: 12px;
-  grid-template-columns: 34px minmax(0, 1fr) minmax(150px, auto);
-  min-height: 82px;
+  gap: 20px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 238px;
   min-width: 0;
-  padding: 12px;
+  padding: 26px;
 }
 
-.deploymentStageCard[data-state="active"] {
-  border-color: #8bb8ff;
-  box-shadow: inset 3px 0 0 #1f6feb;
+.deploymentStageActionCard[data-state="active"] {
+  background: #f8fbff;
+  border-color: #2563eb;
 }
 
-.deploymentStageCard[data-state="done"] {
-  border-color: #bbf7d0;
-  box-shadow: inset 3px 0 0 #16a34a;
+.deploymentStageActionCard[data-state="done"] {
+  background: #f0fdfa;
+  border-color: #0f766e;
 }
 
-.deploymentStageCard[data-state="error"] {
-  background: #fff7ed;
-  border-color: #fdba74;
-  box-shadow: inset 3px 0 0 #ea580c;
+.deploymentStageActionCard[data-state="error"] {
+  background: #fef2f2;
+  border-color: #f87171;
 }
 
-.deploymentStageCard[data-state="idle"] {
+.deploymentStageActionCard[data-state="idle"] {
   background: #f8fafc;
-}
-
-.deploymentStageNumber {
-  align-items: center;
-  background: #eaf2ff;
-  border: 1px solid #bfdbfe;
-  border-radius: 999px;
-  color: #1d4ed8;
-  display: inline-flex;
-  font-size: 14px;
-  font-weight: 900;
-  height: 30px;
-  justify-content: center;
-  width: 30px;
-}
-
-.deploymentStageCard[data-state="done"] .deploymentStageNumber {
-  background: #dcfce7;
-  border-color: #86efac;
-  color: #15803d;
-}
-
-.deploymentStageCard[data-state="error"] .deploymentStageNumber {
-  background: #ffedd5;
-  border-color: #fdba74;
-  color: #c2410c;
 }
 
 .deploymentStageBody {
   display: grid;
-  gap: 4px;
+  gap: 10px;
   min-width: 0;
 }
 
 .deploymentStageBody h3 {
   color: #172033;
-  font-size: 14px;
+  font-size: 24px;
   font-weight: 900;
-  line-height: 1.25;
+  line-height: 1.18;
   margin: 0;
 }
 
@@ -3352,33 +3456,143 @@
   font-weight: 800;
   line-height: 1.35;
   margin: 0;
-  min-height: 17px;
+  min-height: 0;
   overflow-wrap: anywhere;
 }
 
 .deploymentStageSettings {
   display: grid;
   gap: 8px;
-  grid-column: 2 / 4;
+  grid-column: 1 / 3;
   grid-row: 2;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   min-width: 0;
 }
 
-.deploymentStageCard > .deploymentPrimaryButton,
-.deploymentStageCard > .deploymentSecondaryButton {
-  grid-column: 3;
+.deploymentStageSummaryPanel {
+  align-content: start;
+  background: #fafafa;
+  border: 1px solid #f0f0f3;
+  border-radius: 12px;
+  color: #171717;
+  display: grid;
+  gap: 20px;
+  min-height: 238px;
+  min-width: 0;
+  padding: 26px;
+}
+
+.deploymentStageSummaryPanel h3 {
+  color: #171717;
+  font-size: 18px;
+  font-weight: 900;
+  line-height: 1.25;
+  margin: 0 0 8px;
+}
+
+.deploymentStageSummaryPanel p {
+  color: #60646c;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.deploymentStageSummaryRows {
+  border-top: 1px solid #dcdee0;
+  display: grid;
+  gap: 16px;
+  padding-top: 18px;
+}
+
+.deploymentStageSummaryRows > div {
+  align-items: start;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.deploymentStageSummaryRows span {
+  color: #60646c;
+  font-size: 12px;
+  font-weight: 750;
+  min-width: 0;
+}
+
+.deploymentStageSummaryRows strong {
+  color: #171717;
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1.35;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.deploymentStageSummaryNotice {
+  background: #eef6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 10px;
+  color: #1e3a8a;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.45;
+  padding: 12px 14px;
+}
+
+.deploymentStageActionCard > .deploymentPrimaryButton,
+.deploymentStageActionCard > .deploymentSecondaryButton {
+  grid-column: 2;
   grid-row: 1;
   justify-self: end;
   min-width: 118px;
   white-space: nowrap;
 }
 
-.deploymentStageAlert {
-  background: #fff7ed;
-  border: 1px solid #fb923c;
+.deploymentStageFooter {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  grid-column: 1 / 3;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.deploymentStageNextButton {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #d8e1ee;
   border-radius: 8px;
-  color: #9a3412;
+  color: #172033;
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 900;
+  justify-content: center;
+  min-height: 38px;
+  min-width: 118px;
+  padding: 0 14px;
+  white-space: nowrap;
+}
+
+.deploymentStageNextButton:not(:disabled):hover,
+.deploymentStageNextButton:not(:disabled):focus-visible {
+  background: #f8fafc;
+  border-color: #94a3b8;
+  outline: none;
+}
+
+.deploymentStageNextButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.deploymentStageAlert {
+  background: #fef2f2;
+  border: 1px solid #f87171;
+  border-radius: 8px;
+  color: #991b1b;
   font-size: 12px;
   font-weight: 900;
   line-height: 1.45;
@@ -3389,13 +3603,46 @@
 }
 
 @media (max-width: 760px) {
-  .deploymentStageCard {
-    align-items: stretch;
-    grid-template-columns: 34px minmax(0, 1fr);
+  .deploymentStageStepper {
+    min-height: 132px;
+    padding: 18px 12px;
   }
 
-  .deploymentStageCard > .deploymentPrimaryButton,
-  .deploymentStageCard > .deploymentSecondaryButton {
+  .deploymentStageDot {
+    font-size: 18px;
+    height: 52px;
+    width: 52px;
+  }
+
+  .deploymentStageStep + .deploymentStageStep::before {
+    left: calc(-50% + 40px);
+    top: 25px;
+    width: calc(100% - 80px);
+  }
+
+  .deploymentStageStepStatus {
+    display: none;
+  }
+
+  .deploymentStageActions {
+    gap: 12px;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .deploymentStageActionCard {
+    align-items: stretch;
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 0;
+    padding: 18px;
+  }
+
+  .deploymentStageSummaryPanel {
+    min-height: 0;
+    padding: 18px;
+  }
+
+  .deploymentStageActionCard > .deploymentPrimaryButton,
+  .deploymentStageActionCard > .deploymentSecondaryButton {
     grid-column: 1 / -1;
     grid-row: auto;
     justify-self: stretch;
@@ -3407,6 +3654,15 @@
     grid-column: 1 / -1;
     grid-row: auto;
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .deploymentStageFooter {
+    grid-column: 1 / -1;
+  }
+
+  .deploymentStageNextButton {
+    min-width: 0;
+    width: 100%;
   }
 }
 
@@ -4301,38 +4557,40 @@
   border-radius: 8px;
   box-shadow: 0 24px 60px rgb(15 23 42 / 28%);
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   height: 100%;
   min-height: 0;
   overflow: hidden;
+  position: relative;
 }
 
-.deploymentExpandedHeader {
+.deploymentExpandedCloseButton {
   align-items: center;
-  border-bottom: 1px solid #e3e9f2;
-  display: flex;
-  gap: 12px;
-  justify-content: space-between;
-  padding: 14px 16px;
+  background: #ffffff;
+  border: 1px solid #d8e1ee;
+  border-radius: 8px;
+  color: #334155;
+  cursor: pointer;
+  display: inline-flex;
+  height: 36px;
+  justify-content: center;
+  position: absolute;
+  right: 18px;
+  top: 18px;
+  transition:
+    background 0.16s ease,
+    border-color 0.16s ease,
+    color 0.16s ease;
+  width: 36px;
+  z-index: 2;
 }
 
-.deploymentExpandedHeader > div {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
-}
-
-.deploymentExpandedHeader h2 {
-  color: #172033;
-  font-size: 18px;
-  line-height: 1.2;
-  margin: 0;
-}
-
-.deploymentExpandedHeader span {
-  color: #68758b;
-  font-size: 12px;
-  font-weight: 800;
+.deploymentExpandedCloseButton:hover,
+.deploymentExpandedCloseButton:focus-visible {
+  background: #f8fafc;
+  border-color: #94a3b8;
+  color: #0f172a;
+  outline: none;
 }
 
 .deploymentExpandedBody {
@@ -4343,7 +4601,25 @@
   min-height: 0;
   min-width: 0;
   overflow: auto;
-  padding: 16px;
+  padding: 18px 16px 16px;
+}
+
+.deploymentExpandedTitleRow {
+  align-items: center;
+  display: flex;
+  min-height: 36px;
+  min-width: 0;
+  padding-right: 56px;
+}
+
+.deploymentExpandedTitle {
+  color: #172033;
+  font-size: 18px;
+  font-weight: 900;
+  line-height: 1.25;
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .deploymentExpandedBody .deploymentSection h3 {
@@ -4653,6 +4929,15 @@
 
   .deploymentExpandedShell {
     border-radius: 0;
+  }
+
+  .deploymentExpandedCloseButton {
+    right: 14px;
+    top: 14px;
+  }
+
+  .deploymentExpandedBody {
+    padding: 14px;
   }
 
   .aiChatLauncher,
@@ -5379,6 +5664,7 @@
 .terraformFileButton,
 .terraformPreviewButton,
 .deploymentExpandButton,
+.deploymentStageNextButton,
 .aiChatCloseButton,
 .aiChatClearButton,
 .aiChatSuggestionButton {
@@ -5424,6 +5710,8 @@
 .terraformPreviewButton:not(:disabled):focus-visible,
 .deploymentExpandButton:hover,
 .deploymentExpandButton:focus-visible,
+.deploymentStageNextButton:not(:disabled):hover,
+.deploymentStageNextButton:not(:disabled):focus-visible,
 .aiChatCloseButton:hover,
 .aiChatCloseButton:focus-visible,
 .aiChatSuggestionButton:hover,
@@ -5461,7 +5749,9 @@
 .aiChatDraftCard,
 .aiSafetyNotice,
 .deploymentSection,
-.deploymentStageCard,
+.deploymentStageStepper,
+.deploymentStageActionCard,
+.deploymentStageSummaryPanel,
 .deploymentPreflightSummary,
 .deploymentFindingAiExplanation,
 .deploymentSummary,
@@ -5563,6 +5853,7 @@
 .aiListBlock li,
 .deploymentActionItem p,
 .deploymentStageStatus,
+.deploymentStageStepStatus,
 .deploymentPreflightSummary p,
 .deploymentFindingAiExplanation p,
 .reverseResultItem span,
@@ -5599,12 +5890,17 @@
 
 .terraformError,
 .deploymentStaleNotice,
-.deploymentStageAlert,
 .aiWarning,
 .aiStaleNotice {
   background: #fff7ed;
   border-color: #fed7aa;
   color: #9a3412;
+}
+
+.deploymentStageAlert {
+  background: #fef2f2;
+  border-color: #f87171;
+  color: #991b1b;
 }
 
 .aiPrimaryButton,
@@ -5645,6 +5941,7 @@
 
 .aiSecondaryButton,
 .deploymentSecondaryButton,
+.deploymentStageNextButton,
 .resourceActionSecondary,
 .terraformPreviewButton {
   background: var(--workspace-surface, #ffffff);
@@ -5673,7 +5970,9 @@
 .aiSecondaryButton:not(:disabled):hover,
 .aiSecondaryButton:not(:disabled):focus-visible,
 .deploymentSecondaryButton:not(:disabled):hover,
-.deploymentSecondaryButton:not(:disabled):focus-visible {
+.deploymentSecondaryButton:not(:disabled):focus-visible,
+.deploymentStageNextButton:not(:disabled):hover,
+.deploymentStageNextButton:not(:disabled):focus-visible {
   background: var(--workspace-surface-muted, #fafafa);
   border-color: var(--workspace-line-strong, #dcdee0);
   color: var(--workspace-text, #171717);
@@ -5761,19 +6060,69 @@
   color: var(--workspace-text, #171717);
 }
 
-.deploymentStageCard[data-state="active"] {
-  border-color: var(--workspace-accent, #000000);
-  box-shadow: inset 3px 0 0 var(--workspace-accent, #000000);
+.deploymentStageStepper {
+  background: var(--workspace-surface, #ffffff);
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  border-radius: 12px;
 }
 
-.deploymentStageCard[data-state="idle"] {
+.deploymentStageActionCard {
+  background: var(--workspace-surface, #ffffff);
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  border-radius: 12px;
+  color: var(--workspace-text, #171717);
+}
+
+.deploymentStageSummaryPanel {
+  background: var(--workspace-surface-muted, #fafafa);
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  border-radius: 12px;
+  color: var(--workspace-text, #171717);
+}
+
+.deploymentStageSummaryNotice {
+  background: #eef6ff;
+  border-color: #bfdbfe;
+  color: #1e3a8a;
+}
+
+.deploymentStageDot {
+  background: var(--workspace-surface, #ffffff);
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  color: var(--workspace-text, #171717);
+}
+
+.deploymentStageActionCard[data-state="active"] {
+  background: #f8fbff;
+  border-color: #2563eb;
+}
+
+.deploymentStageActionCard[data-state="done"] {
+  background: #f0fdfa;
+  border-color: #0f766e;
+}
+
+.deploymentStageActionCard[data-state="idle"] {
   background: var(--workspace-surface-muted, #fafafa);
 }
 
-.deploymentStageNumber {
-  background: var(--workspace-accent-soft, #f0f0f3);
-  border-color: var(--workspace-line, #f0f0f3);
-  color: var(--workspace-text, #171717);
+.deploymentStageStep[data-state="active"] .deploymentStageDot {
+  background: #2563eb;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 6px rgba(37, 99, 235, 0.16);
+  color: #ffffff;
+}
+
+.deploymentStageStep[data-state="done"] .deploymentStageDot {
+  background: #0f766e;
+  border-color: #0f766e;
+  color: #ffffff;
+}
+
+.deploymentStageStep[data-state="idle"] .deploymentStageDot {
+  background: var(--workspace-surface, #ffffff);
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  color: var(--workspace-muted, #60646c);
 }
 
 .deploymentLogList {
@@ -5800,21 +6149,17 @@
   font-family: var(--workspace-font, "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif);
 }
 
-.deploymentExpandedHeader {
+.deploymentExpandedCloseButton {
   background: var(--workspace-surface, #ffffff);
-  border-bottom: 1px solid var(--workspace-line, #f0f0f3);
-}
-
-.deploymentExpandedHeader h2 {
+  border: 1px solid var(--workspace-line, #f0f0f3);
   color: var(--workspace-text, #171717);
   font-family: var(--workspace-font, "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif);
-  letter-spacing: 0;
 }
 
-.deploymentExpandedHeader span {
-  color: var(--workspace-muted, #60646c);
-  font-family: var(--workspace-font, "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif);
-  letter-spacing: 0;
+.deploymentExpandedCloseButton:hover,
+.deploymentExpandedCloseButton:focus-visible {
+  background: var(--workspace-surface-muted, #fafafa);
+  border-color: var(--workspace-hairline-strong, #dcdee0);
 }
 
 .deploymentExpandedBody {

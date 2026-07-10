@@ -10,6 +10,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import type { ApiErrorResponse, ArchitectureJson } from "@sketchcatch/types";
+import { RESOURCE_TYPES } from "@sketchcatch/types";
 import { requireActiveUserId } from "../auth/current-user.js";
 import { requireS3BucketName } from "../config/env.js";
 import { getDatabaseClient, type DatabaseClient } from "../db/client.js";
@@ -53,29 +54,7 @@ const assetRouteParamsSchema = z.object({
 
 const resourceNodeSchema = z.object({
   id: z.string().min(1),
-  type: z.enum([
-    "VPC",
-    "SUBNET",
-    "INTERNET_GATEWAY",
-    "ROUTE_TABLE",
-    "ROUTE_TABLE_ASSOCIATION",
-    "EC2",
-    "RDS",
-    "S3",
-    "SECURITY_GROUP",
-    "CLOUDFRONT",
-    "LAMBDA",
-    "AMI",
-    "IAM_ROLE",
-    "IAM_POLICY",
-    "IAM_INSTANCE_PROFILE",
-    "KMS_KEY",
-    "CLOUDWATCH_LOG_GROUP",
-    "CLOUDWATCH_METRIC_ALARM",
-    "API_GATEWAY_REST_API",
-    "LAMBDA_PERMISSION",
-    "UNKNOWN"
-  ]),
+  type: z.enum(RESOURCE_TYPES),
   label: z.string().min(1).optional(),
   positionX: z.number(),
   positionY: z.number(),

@@ -5,6 +5,9 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react"
 import { ArrowLeft, Check, Maximize2, Mic, RefreshCw, Send, X, ZoomIn, ZoomOut } from "lucide-react";
 import type {
   AiArchitectureDraftResult,
+  ArchitecturePatchClarification,
+  ArchitecturePatchClarificationCandidate,
+  ArchitecturePatchPreview,
   ArchitectureDraftClarification,
   CreateArchitectureDraftRequest,
   DiagramJson,
@@ -13,15 +16,23 @@ import type {
 import { getApiErrorMessage } from "../../../lib/api-client";
 import {
   createAiArchitectureDraft,
+  createAiArchitecturePatchPreview,
   createProject,
   saveProjectDraft
 } from "../../../features/workspace/api";
-import { convertArchitectureJsonToDiagramJson } from "../../../features/workspace/workspace-ai-diagram-adapter";
+import {
+  convertArchitectureJsonToDiagramJson,
+  convertDiagramJsonToArchitectureJson
+} from "../../../features/workspace/workspace-ai-diagram-adapter";
 import {
   planArchitectureDraftPreview,
   resolveArchitectureDraftFollowUpAnswer,
   type ArchitectureDraftFollowUpSession
 } from "../../../features/workspace/workspace-ai-draft-follow-up";
+import {
+  classifyWorkspaceAiChatPrompt,
+  createWorkspaceAiPromptGateMessage
+} from "../../../features/workspace/workspace-ai-chat-routing";
 import { createWorkspaceAiChatStorageKey } from "../../../features/workspace/WorkspaceAiChatDock";
 import {
   getAreaNodeIconUrl,
@@ -78,12 +89,23 @@ type AiStartChatMessage = {
   readonly role: "assistant" | "user";
   readonly scope: "draft";
   readonly selectionMode: "single";
+  readonly selectedSuggestions?: readonly string[];
   readonly suggestions?: readonly string[] | undefined;
+};
+
+type AiStartSuggestionSelection = {
+  readonly messageId: string;
+  readonly suggestions: readonly string[];
 };
 
 type PendingArchitectureDraftClarification = {
   readonly clarification: ArchitectureDraftClarification;
   readonly prompt: string;
+};
+
+type PendingArchitecturePatchClarification = {
+  readonly baseDiagram: DiagramJson;
+  readonly clarification: ArchitecturePatchClarification;
 };
 
 type RequestState = "idle" | "loading" | "error";
@@ -98,6 +120,8 @@ export function WorkspaceAiStartClient() {
   const [previewDiagram, setPreviewDiagram] = useState<DiagramJson | null>(null);
   const [draftClarification, setDraftClarification] =
     useState<PendingArchitectureDraftClarification | null>(null);
+  const [patchClarification, setPatchClarification] =
+    useState<PendingArchitecturePatchClarification | null>(null);
   const [draftFollowUpSession, setDraftFollowUpSession] =
     useState<ArchitectureDraftFollowUpSession | null>(null);
   const [lastDraftRequest, setLastDraftRequest] =
@@ -150,15 +174,28 @@ export function WorkspaceAiStartClient() {
     scrollTranscriptToBottom();
   }, [draft, errorMessage, messages, requestState]);
 
-  async function submitPrompt(value = composerValue): Promise<void> {
+  async function submitPrompt(
+    value = composerValue,
+    suggestionSelection?: AiStartSuggestionSelection
+  ): Promise<void> {
     const trimmedPrompt = value.trim();
 
     if (!trimmedPrompt || requestState === "loading") {
       return;
     }
 
+    const messagesWithSelection = suggestionSelection
+      ? markAiStartMessageSuggestionsSelected(messagesRef.current, suggestionSelection)
+      : messagesRef.current;
+    messagesRef.current = messagesWithSelection;
+    setMessages(messagesWithSelection);
     appendMessage(createChatMessage("user", "status", trimmedPrompt));
     setComposerValue("");
+
+    if (patchClarification) {
+      await handlePatchClarificationMessage(trimmedPrompt);
+      return;
+    }
 
     if (draftFollowUpSession) {
       await handleDraftFollowUpMessage(trimmedPrompt);
@@ -170,9 +207,70 @@ export function WorkspaceAiStartClient() {
       return;
     }
 
+    const promptClassification = classifyWorkspaceAiChatPrompt(trimmedPrompt);
+
+    if (promptClassification !== "architecture") {
+      appendAssistantMessage("question", createWorkspaceAiPromptGateMessage(promptClassification));
+      return;
+    }
+
+    if (draft !== null && previewDiagram !== null) {
+      await createPatchPreviewFromPrompt(trimmedPrompt, previewDiagram);
+      return;
+    }
+
     await createDraftFromRequest({
       prompt: trimmedPrompt
     });
+  }
+
+  async function handlePatchClarificationMessage(trimmedPrompt: string): Promise<void> {
+    if (!patchClarification) {
+      return;
+    }
+
+    const selectedCandidate = findPatchClarificationCandidate(
+      patchClarification.clarification,
+      trimmedPrompt
+    );
+
+    if (selectedCandidate) {
+      const clarification = patchClarification.clarification;
+      const baseDiagram = patchClarification.baseDiagram;
+
+      setPatchClarification(null);
+      await createPatchPreviewFromPrompt(clarification.intent.instruction, baseDiagram, {
+        ...(isAddResourceConnectionClarification(clarification)
+          ? { connectionTargetResourceId: selectedCandidate.resourceId }
+          : { selectedTargetResourceId: selectedCandidate.resourceId })
+      });
+      return;
+    }
+
+    const selectedSuggestion = findPatchClarificationSuggestion(
+      patchClarification.clarification,
+      trimmedPrompt
+    );
+
+    if (selectedSuggestion) {
+      const clarification = patchClarification.clarification;
+      const baseDiagram = patchClarification.baseDiagram;
+      const instruction = isSkipConnectionSuggestion(selectedSuggestion)
+        ? clarification.intent.instruction
+        : `${clarification.intent.instruction}\n${selectedSuggestion}`;
+
+      setPatchClarification(null);
+      await createPatchPreviewFromPrompt(instruction, baseDiagram, {
+        ...(isSkipConnectionSuggestion(selectedSuggestion) ? { skipConnection: true } : {})
+      });
+      return;
+    }
+
+    appendAssistantMessage(
+      "question",
+      patchClarification.clarification.question,
+      getPatchClarificationSuggestions(patchClarification.clarification)
+    );
   }
 
   async function handleDraftClarificationMessage(trimmedPrompt: string): Promise<void> {
@@ -218,6 +316,7 @@ export function WorkspaceAiStartClient() {
     setDraft(null);
     setPreviewDiagram(null);
     setDraftClarification(null);
+    setPatchClarification(null);
     setDraftFollowUpSession(null);
     setLastDraftRequest(draftRequest);
 
@@ -257,6 +356,80 @@ export function WorkspaceAiStartClient() {
       setErrorMessage(message);
       appendAssistantMessage("error", message);
     }
+  }
+
+  async function createPatchPreviewFromPrompt(
+    instruction: string,
+    baseDiagram: DiagramJson,
+    options: {
+      readonly selectedTargetResourceId?: string | undefined;
+      readonly connectionTargetResourceId?: string | undefined;
+      readonly skipConnection?: boolean | undefined;
+    } = {}
+  ): Promise<void> {
+    setRequestState("loading");
+    setErrorMessage("");
+    setDraft(null);
+    setPreviewDiagram(null);
+    setDraftClarification(null);
+    setPatchClarification(null);
+    setDraftFollowUpSession(null);
+
+    try {
+      const response = await createAiArchitecturePatchPreview({
+        architectureJson: convertDiagramJsonToArchitectureJson(baseDiagram),
+        instruction,
+        ...(options.selectedTargetResourceId !== undefined
+          ? { selectedTargetResourceId: options.selectedTargetResourceId }
+          : {}),
+        ...(options.connectionTargetResourceId !== undefined
+          ? { connectionTargetResourceId: options.connectionTargetResourceId }
+          : {}),
+        ...(options.skipConnection === true ? { skipConnection: true } : {})
+      });
+
+      if (isArchitecturePatchClarification(response)) {
+        setPatchClarification({
+          baseDiagram,
+          clarification: response
+        });
+        setRequestState("idle");
+        appendAssistantMessage("question", response.question, getPatchClarificationSuggestions(response));
+        return;
+      }
+
+      showPatchPreview(response);
+    } catch (error) {
+      const message = getApiErrorMessage(
+        error,
+        "Architecture Patch PREVIEW 생성 중 오류가 발생했습니다."
+      );
+
+      setRequestState("error");
+      setErrorMessage(message);
+      appendAssistantMessage("error", message);
+    }
+  }
+
+  function showPatchPreview(preview: ArchitecturePatchPreview): void {
+    const nextDraft: AiArchitectureDraftResult = {
+      architectureJson: preview.proposedArchitectureJson,
+      diagramJson: convertArchitectureJsonToDiagramJson(preview.proposedArchitectureJson),
+      title: draft?.title ?? "Practice Architecture",
+      metadata: draft?.metadata ?? {
+        assumptions: [],
+        confidence: "low",
+        explanations: [],
+        guardrailWarnings: [],
+        source: "prompt"
+      },
+      llmExplanation: preview.llmExplanation ?? draft?.llmExplanation
+    };
+
+    setDraft(nextDraft);
+    setPreviewDiagram(nextDraft.diagramJson ?? convertArchitectureJsonToDiagramJson(nextDraft.architectureJson));
+    setRequestState("idle");
+    appendAssistantMessage("draft", createPatchPreviewSummary(preview));
   }
 
   function showDraftPreview(result: AiArchitectureDraftResult): void {
@@ -412,16 +585,29 @@ export function WorkspaceAiStartClient() {
               <p>{message.content}</p>
               {message.suggestions && message.suggestions.length > 0 ? (
                 <div className="workspaceAiStartSuggestions">
-                  {message.suggestions.map((suggestion) => (
-                    <button
-                      disabled={requestState === "loading"}
-                      key={suggestion}
-                      onClick={() => void submitPrompt(suggestion)}
-                      type="button"
-                    >
-                      {suggestion}
-                    </button>
-                  ))}
+                  {message.suggestions.map((suggestion) => {
+                    const submittedSuggestions = message.selectedSuggestions ?? [];
+                    const hasSubmittedSuggestion = submittedSuggestions.length > 0;
+                    const isSuggestionSelected = submittedSuggestions.includes(suggestion);
+                    const isSuggestionDisabled = requestState === "loading" || hasSubmittedSuggestion;
+
+                    return (
+                      <button
+                        data-selected={isSuggestionSelected ? "true" : undefined}
+                        disabled={isSuggestionDisabled}
+                        key={suggestion}
+                        onClick={() =>
+                          void submitPrompt(suggestion, {
+                            messageId: message.id,
+                            suggestions: [suggestion]
+                          })
+                        }
+                        type="button"
+                      >
+                        {suggestion}
+                      </button>
+                    );
+                  })}
                 </div>
               ) : null}
             </article>
@@ -1019,8 +1205,131 @@ function trimChatMessages(messages: readonly AiStartChatMessage[]): AiStartChatM
   return messages.slice(-MAX_CHAT_MESSAGES);
 }
 
+function markAiStartMessageSuggestionsSelected(
+  messages: readonly AiStartChatMessage[],
+  selection: AiStartSuggestionSelection
+): AiStartChatMessage[] {
+  const selectedSuggestions = Array.from(new Set(selection.suggestions));
+
+  if (selectedSuggestions.length === 0) {
+    return [...messages];
+  }
+
+  return messages.map((message) => {
+    if (message.id !== selection.messageId) {
+      return message;
+    }
+
+    const existingSuggestions = message.selectedSuggestions ?? [];
+    const nextSelectedSuggestions = [...existingSuggestions];
+
+    for (const suggestion of selectedSuggestions) {
+      if (!nextSelectedSuggestions.includes(suggestion)) {
+        nextSelectedSuggestions.push(suggestion);
+      }
+    }
+
+    return {
+      ...message,
+      selectedSuggestions: nextSelectedSuggestions
+    };
+  });
+}
+
 function isArchitectureDraftClarification(
   response: AiArchitectureDraftResult | ArchitectureDraftClarification
 ): response is ArchitectureDraftClarification {
   return "status" in response && response.status === "needs_clarification";
+}
+
+function isArchitecturePatchClarification(
+  response: ArchitecturePatchPreview | ArchitecturePatchClarification
+): response is ArchitecturePatchClarification {
+  return "status" in response && response.status === "needs_clarification";
+}
+
+function createPatchPreviewSummary(preview: ArchitecturePatchPreview): string {
+  if (preview.changes.length === 0) {
+    return "변경 없이 현재 PREVIEW를 유지합니다.";
+  }
+
+  const changeSummary =
+    preview.changes.length === 1
+      ? preview.changes[0]?.summary
+      : `${preview.changes.length}개 변경 사항을 PREVIEW로 만들었습니다.`;
+
+  return changeSummary ?? "수정 PREVIEW를 만들었습니다. 승인할까요?";
+}
+
+function findPatchClarificationCandidate(
+  clarification: ArchitecturePatchClarification,
+  answer: string
+): ArchitecturePatchClarificationCandidate | undefined {
+  const normalizedAnswer = answer.trim().toLowerCase();
+
+  return clarification.candidates.find((candidate) => {
+    const suggestionLabel = formatPatchCandidateSuggestion(candidate).toLowerCase();
+
+    return (
+      normalizedAnswer === candidate.resourceId.toLowerCase() ||
+      normalizedAnswer === candidate.label.toLowerCase() ||
+      normalizedAnswer === suggestionLabel ||
+      normalizedAnswer.includes(candidate.resourceId.toLowerCase()) ||
+      normalizedAnswer.includes(candidate.label.toLowerCase())
+    );
+  });
+}
+
+function findPatchClarificationSuggestion(
+  clarification: ArchitecturePatchClarification,
+  answer: string
+): string | undefined {
+  const normalizedAnswer = normalizePatchClarificationAnswer(answer);
+
+  return clarification.suggestions?.find((suggestion) => {
+    const normalizedSuggestion = normalizePatchClarificationAnswer(suggestion);
+
+    return (
+      normalizedAnswer === normalizedSuggestion ||
+      normalizedAnswer.includes(normalizedSuggestion) ||
+      (normalizedAnswer.length > 1 && normalizedSuggestion.includes(normalizedAnswer))
+    );
+  });
+}
+
+function isAddResourceConnectionClarification(
+  clarification: ArchitecturePatchClarification
+): boolean {
+  return (
+    clarification.intent.requestedAction === "add_resource" &&
+    clarification.intent.resourceType !== undefined &&
+    clarification.candidates.length > 0
+  );
+}
+
+function isSkipConnectionSuggestion(suggestion: string): boolean {
+  return normalizePatchClarificationAnswer(suggestion) === normalizePatchClarificationAnswer("연결하지 않기");
+}
+
+function getPatchClarificationSuggestions(
+  clarification: ArchitecturePatchClarification
+): readonly string[] {
+  if (isAddResourceConnectionClarification(clarification)) {
+    return [
+      ...clarification.candidates.map(formatPatchCandidateSuggestion),
+      ...(clarification.suggestions ?? [])
+    ];
+  }
+
+  return clarification.suggestions && clarification.suggestions.length > 0
+    ? clarification.suggestions
+    : clarification.candidates.map(formatPatchCandidateSuggestion);
+}
+
+function normalizePatchClarificationAnswer(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function formatPatchCandidateSuggestion(candidate: ArchitecturePatchClarificationCandidate): string {
+  return `${candidate.label} (${candidate.resourceType})`;
 }

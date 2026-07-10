@@ -39,12 +39,11 @@ import {
 import {
   COST_USAGE_ALL_PROJECTS_KEY,
   createScopedCostUsageDailyTrend,
+  createScopedCostUsageServiceCosts,
   createCostUsageProjectOptions,
-  getCostUsageProjectIdFromKey,
   normalizeCostUsageProjectKey,
   selectCostUsageResourceCosts,
-  selectCostUsageProject,
-  type CostUsageProjectOption
+  selectCostUsageProject
 } from "../../features/costs/cost-usage-project-view";
 import {
   formatCostUsageAwsConnectionLabel,
@@ -225,17 +224,11 @@ export function CostsClient() {
       setUsageErrorMessage("");
 
       try {
-        const appliedUsageProjectId = getCostUsageProjectIdFromKey(appliedUsageProjectKey);
         const result = await listCostUsageAnalysis({
           ...(selectedUsageAwsConnection === null
             ? {}
             : {
                 awsConnectionId: selectedUsageAwsConnection.id
-              }),
-          ...(appliedUsageProjectId === null
-            ? {}
-            : {
-                projectId: appliedUsageProjectId
               }),
           range: appliedUsageRange
         });
@@ -263,7 +256,6 @@ export function CostsClient() {
     };
   }, [
     activeTab,
-    appliedUsageProjectKey,
     appliedUsageRange,
     selectedUsageAwsConnection?.id,
     usageReloadKey
@@ -865,24 +857,10 @@ function CostUsageAnalysisTab({
   readonly verifiedAwsConnections: readonly AwsConnection[];
 }) {
   const projectCosts = usageData?.projectCosts ?? [];
-  const [cachedProjectOptions, setCachedProjectOptions] = useState<
-    readonly CostUsageProjectOption[]
-  >([]);
-  const serviceBars = useMemo(
-    () => createServiceCostBars(usageData?.serviceCosts ?? []),
-    [usageData]
-  );
-  const projectOptionsFromData = useMemo(
+  const projectOptions = useMemo(
     () => createCostUsageProjectOptions(projectCosts),
     [projectCosts]
   );
-  useEffect(() => {
-    setCachedProjectOptions((currentOptions) =>
-      mergeCostUsageProjectOptions(currentOptions, projectOptionsFromData)
-    );
-  }, [projectOptionsFromData]);
-  const projectOptions =
-    cachedProjectOptions.length === 0 ? projectOptionsFromData : cachedProjectOptions;
   const selectableProjectCosts = useMemo(
     () => projectOptions.map((projectOption) => projectOption.project),
     [projectOptions]
@@ -902,6 +880,25 @@ function CostUsageAnalysisTab({
   const scopedResourceCosts = useMemo(
     () => selectCostUsageResourceCosts(usageData?.resourceCosts ?? [], selectedUsageProject),
     [selectedUsageProject, usageData?.resourceCosts]
+  );
+  const scopedServiceCosts = useMemo(
+    () =>
+      createScopedCostUsageServiceCosts({
+        resourceCosts: usageData?.resourceCosts ?? [],
+        selectedProject: selectedUsageProject,
+        serviceCosts: usageData?.serviceCosts ?? [],
+        totalCostAmount: usageData?.totalCost.amount ?? 0
+      }),
+    [
+      selectedUsageProject,
+      usageData?.resourceCosts,
+      usageData?.serviceCosts,
+      usageData?.totalCost.amount
+    ]
+  );
+  const serviceBars = useMemo(
+    () => createServiceCostBars(scopedServiceCosts),
+    [scopedServiceCosts]
   );
   const scopedDailyTrend = useMemo(
     () =>
@@ -1103,10 +1100,10 @@ function CostUsageAnalysisTab({
                 <h2 id="cost-service-chart-title">서비스별 비용</h2>
               </div>
               <span className="dashboardCountBadge">
-                {`${usageData.serviceCosts.length}개`}
+                {`${scopedServiceCosts.length}개`}
               </span>
             </div>
-            <ServiceCostBars bars={serviceBars} serviceCosts={usageData.serviceCosts} />
+            <ServiceCostBars bars={serviceBars} serviceCosts={scopedServiceCosts} />
           </section>
 
           <section className="dashboardPanel costProjectPanel" aria-labelledby="cost-usage-project-title">
@@ -1865,22 +1862,6 @@ function getScopedRecommendations(
   return recommendations.filter(
     (recommendation) => recommendation.projectId === selectedProject.projectId
   );
-}
-
-function mergeCostUsageProjectOptions(
-  currentOptions: readonly CostUsageProjectOption[],
-  nextOptions: readonly CostUsageProjectOption[]
-): readonly CostUsageProjectOption[] {
-  if (nextOptions.length === 0) {
-    return currentOptions;
-  }
-
-  const nextOptionByKey = new Map(nextOptions.map((option) => [option.key, option]));
-  const currentOptionKeys = new Set(currentOptions.map((option) => option.key));
-  const mergedOptions = currentOptions.map((option) => nextOptionByKey.get(option.key) ?? option);
-  const addedOptions = nextOptions.filter((option) => !currentOptionKeys.has(option.key));
-
-  return [...mergedOptions, ...addedOptions];
 }
 
 function getRecommendationSeverityLabel(severity: CostOptimizationRecommendation["severity"]): string {

@@ -59,6 +59,16 @@ import {
   type DeploymentLogStreamCursorSnapshot,
   type DeploymentRuntimeStatusSnapshot
 } from "../deployments/deployment-runtime-cache.js";
+import type {
+  CreateDeploymentJobInput,
+  DeploymentJobRecord,
+  DeploymentJobRepository
+} from "../deployments/deployment-job-service.js";
+import type {
+  DeploymentWorkerDispatcher,
+  DispatchDeploymentWorkerInput,
+  StopDeploymentWorkerInput
+} from "../deployments/deployment-worker-dispatcher.js";
 
 process.env.NODE_ENV = "test";
 process.env.AUTH_TOKEN_SECRET = "test-auth-token-secret-with-at-least-32-characters";
@@ -809,6 +819,154 @@ class FakeDeploymentRepository implements DeploymentRepository {
   }
 }
 
+class FakeDeploymentJobRepository implements DeploymentJobRepository {
+  readonly jobs = new Map<string, DeploymentJobRecord>();
+  nextId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+
+  async createDeploymentJob(
+    input: CreateDeploymentJobInput & {
+      id: string;
+    }
+  ) {
+    const job: DeploymentJobRecord = {
+      id: this.nextId,
+      deploymentId: input.deploymentId,
+      operation: input.operation,
+      status: "QUEUED",
+      requestedByUserId: input.accessContext.userId,
+      accessContext: input.accessContext,
+      startedFromStatus: input.startedFromStatus,
+      startedFromFailureStage: input.startedFromFailureStage ?? null,
+      ecsTaskArn: null,
+      errorSummary: null,
+      startedAt: null,
+      completedAt: null,
+      failedAt: null,
+      cancelledAt: null,
+      createdAt: fixedNow,
+      updatedAt: fixedNow
+    };
+
+    this.jobs.set(job.id, job);
+    return job;
+  }
+
+  async findActiveDeploymentJob(candidateDeploymentId: string) {
+    return [...this.jobs.values()].find(
+      (job) =>
+        job.deploymentId === candidateDeploymentId &&
+        ["QUEUED", "DISPATCHING", "RUNNING"].includes(job.status)
+    );
+  }
+
+  async findDeploymentJobById(jobId: string) {
+    return this.jobs.get(jobId);
+  }
+
+  async markDeploymentJobDispatching(jobId: string) {
+    return this.updateJob(jobId, {
+      status: "DISPATCHING",
+      updatedAt: fixedNow
+    });
+  }
+
+  async markDeploymentJobRunning(
+    jobId: string,
+    input: {
+      ecsTaskArn?: string | null;
+    }
+  ) {
+    return this.updateJob(jobId, {
+      status: "RUNNING",
+      ecsTaskArn: input.ecsTaskArn ?? null,
+      startedAt: fixedNow,
+      updatedAt: fixedNow
+    });
+  }
+
+  async recordDeploymentJobTaskArn(
+    jobId: string,
+    input: {
+      ecsTaskArn: string;
+    }
+  ) {
+    return this.updateJob(jobId, {
+      ecsTaskArn: input.ecsTaskArn,
+      updatedAt: fixedNow
+    });
+  }
+
+  async completeDeploymentJob(jobId: string) {
+    return this.updateJob(jobId, {
+      status: "SUCCEEDED",
+      completedAt: fixedNow,
+      updatedAt: fixedNow
+    });
+  }
+
+  async failDeploymentJob(
+    jobId: string,
+    input: {
+      errorSummary: string;
+    }
+  ) {
+    return this.updateJob(jobId, {
+      status: "FAILED",
+      errorSummary: input.errorSummary,
+      failedAt: fixedNow,
+      updatedAt: fixedNow
+    });
+  }
+
+  async cancelDeploymentJob(
+    jobId: string,
+    input: {
+      errorSummary?: string | null;
+    }
+  ) {
+    return this.updateJob(jobId, {
+      status: "CANCELLED",
+      errorSummary: input.errorSummary ?? null,
+      cancelledAt: fixedNow,
+      updatedAt: fixedNow
+    });
+  }
+
+  private updateJob(jobId: string, patch: Partial<DeploymentJobRecord>) {
+    const job = this.jobs.get(jobId);
+
+    if (!job) {
+      return undefined;
+    }
+
+    const updatedJob = { ...job, ...patch };
+    this.jobs.set(jobId, updatedJob);
+    return updatedJob;
+  }
+}
+
+class FakeDeploymentWorkerDispatcher implements DeploymentWorkerDispatcher {
+  readonly dispatchCalls: DispatchDeploymentWorkerInput[] = [];
+  readonly stopCalls: StopDeploymentWorkerInput[] = [];
+  taskArn: string | null =
+    "arn:aws:ecs:ap-northeast-2:555980271919:task/sketchcatch-production-worker/task-id";
+  stopResult = true;
+
+  async dispatch(input: DispatchDeploymentWorkerInput) {
+    this.dispatchCalls.push(input);
+    return {
+      taskArn: this.taskArn
+    };
+  }
+
+  async stop(input: StopDeploymentWorkerInput) {
+    this.stopCalls.push(input);
+    return {
+      stopped: this.stopResult
+    };
+  }
+}
+
 type DeploymentRouteTestOptions = {
   pruneProjectDeploymentStorage?: (input: {
     db: DatabaseClient["db"];
@@ -839,8 +997,11 @@ type DeploymentRouteTestOptions = {
     repository: DeploymentRepository
   ) => Promise<RunDeploymentDestroyResult>;
   createLlmExplanation?: CreateLlmExplanation;
+  createDeploymentJobRepository?: (db: DatabaseClient["db"]) => DeploymentJobRepository;
   runtimeCache?: RuntimeCache;
   userRows?: UserRecord[];
+  workerDispatcher?: DeploymentWorkerDispatcher;
+  workerDispatchMode?: "in_process" | "ecs";
 };
 
 async function buildDeploymentTestApp(
@@ -878,6 +1039,11 @@ async function buildDeploymentTestApp(
     ...(routeOptions.createLlmExplanation
       ? { createLlmExplanation: routeOptions.createLlmExplanation }
       : {}),
+    ...(routeOptions.createDeploymentJobRepository
+      ? { createDeploymentJobRepository: routeOptions.createDeploymentJobRepository }
+      : {}),
+    ...(routeOptions.workerDispatcher ? { workerDispatcher: routeOptions.workerDispatcher } : {}),
+    ...(routeOptions.workerDispatchMode ? { workerDispatchMode: routeOptions.workerDispatchMode } : {}),
     ...(routeOptions.runtimeCache ? { runtimeCache: routeOptions.runtimeCache } : {})
   });
 
@@ -1939,6 +2105,65 @@ test("POST /api/deployments/:deploymentId/apply starts Terraform apply in the ba
   await app.close();
 });
 
+test("POST /api/deployments/:deploymentId/apply dispatches an ECS worker task when worker mode is enabled", async () => {
+  const repository = new FakeDeploymentRepository();
+  const jobRepository = new FakeDeploymentJobRepository();
+  const dispatcher = new FakeDeploymentWorkerDispatcher();
+  let applyStarted = false;
+  repository.deployment = createDeploymentRecord(deploymentId, {
+    currentPlanArtifactId: planArtifactId,
+    planSummary: {
+      createCount: 1,
+      updateCount: 0,
+      deleteCount: 0,
+      replaceCount: 0,
+      blocked: false,
+      warnings: []
+    },
+    isBlocked: false,
+    blockedBy: null,
+    blockedReason: null,
+    approvedAt: fixedNow,
+    approvedByUserId: userId,
+    approvedTerraformArtifactId: terraformArtifactId,
+    approvedPlanArtifactId: planArtifactId,
+    approvedTerraformArtifactHash: "c".repeat(64),
+    approvedTfplanHash: "a".repeat(64),
+    approvedAwsAccountId: "123456789012",
+    approvedAwsRegion: "ap-northeast-2"
+  });
+  repository.deployments = [repository.deployment];
+  const app = await buildDeploymentTestApp(repository, {
+    createDeploymentJobRepository: () => jobRepository,
+    workerDispatcher: dispatcher,
+    workerDispatchMode: "ecs",
+    runDeploymentApply: async () => {
+      applyStarted = true;
+      throw new Error("in-process apply should not start in ECS worker mode");
+    }
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/deployments/${deploymentId}/apply`,
+    headers: await authHeaders(),
+    payload: {}
+  });
+
+  assert.equal(response.statusCode, 202);
+  const body = response.json() as DeploymentResponse;
+  assert.equal(body.deployment.status, "RUNNING");
+  assert.equal(applyStarted, false);
+  assert.equal(dispatcher.dispatchCalls.length, 1);
+  const activeJob = await jobRepository.findActiveDeploymentJob(deploymentId);
+  assert.equal(activeJob?.operation, "apply");
+  assert.equal(activeJob?.status, "RUNNING");
+  assert.equal(activeJob?.requestedByUserId, userId);
+  assert.equal(activeJob?.ecsTaskArn, dispatcher.taskArn);
+
+  await app.close();
+});
+
 test("POST /api/deployments/:deploymentId/apply rejects deployments without approval", async () => {
   const repository = new FakeDeploymentRepository();
   let applyStarted = false;
@@ -2191,6 +2416,62 @@ test("POST /api/deployments/:deploymentId/cancel marks stale running deployments
   assert.equal(body.deployment.failureStage, "apply");
   assert.equal(body.deployment.cancelRequestedAt, fixedNow.toISOString());
   assert.match(body.deployment.errorSummary ?? "", /no active Terraform process/);
+
+  await app.close();
+});
+
+test("POST /api/deployments/:deploymentId/cancel stops an active ECS worker task", async () => {
+  const repository = new FakeDeploymentRepository();
+  const jobRepository = new FakeDeploymentJobRepository();
+  const dispatcher = new FakeDeploymentWorkerDispatcher();
+  repository.deployment = createDeploymentRecord(deploymentId, {
+    status: "RUNNING",
+    activeStage: "apply"
+  });
+  const activeJob: DeploymentJobRecord = {
+    id: jobRepository.nextId,
+    deploymentId,
+    operation: "apply",
+    status: "RUNNING",
+    requestedByUserId: userId,
+    accessContext: {
+      kind: "user",
+      userId
+    },
+    startedFromStatus: "PENDING",
+    startedFromFailureStage: null,
+    ecsTaskArn: dispatcher.taskArn,
+    errorSummary: null,
+    startedAt: fixedNow,
+    completedAt: null,
+    failedAt: null,
+    cancelledAt: null,
+    createdAt: fixedNow,
+    updatedAt: fixedNow
+  };
+  jobRepository.jobs.set(activeJob.id, activeJob);
+  const app = await buildDeploymentTestApp(repository, {
+    createDeploymentJobRepository: () => jobRepository,
+    workerDispatcher: dispatcher,
+    workerDispatchMode: "ecs"
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/deployments/${deploymentId}/cancel`,
+    headers: await authHeaders(),
+    payload: {}
+  });
+
+  assert.equal(response.statusCode, 202);
+  const body = response.json() as DeploymentResponse;
+  assert.equal(body.deployment.status, "RUNNING");
+  assert.equal(body.deployment.cancelRequestedAt, fixedNow.toISOString());
+  assert.equal(dispatcher.stopCalls.length, 1);
+  assert.equal(dispatcher.stopCalls[0]?.job.ecsTaskArn, dispatcher.taskArn);
+  const cancelledJob = await jobRepository.findDeploymentJobById(activeJob.id);
+  assert.equal(cancelledJob?.status, "CANCELLED");
+  assert.match(cancelledJob?.errorSummary ?? "", /StopTask/);
 
   await app.close();
 });

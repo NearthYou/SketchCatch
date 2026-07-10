@@ -21,6 +21,8 @@ type FlowMapperOptions = {
 };
 
 const CONTAINMENT_EDGE_LABELS = new Set(["contains", "hosts"]);
+const EDGE_ARROW_MARKER_WIDTH = 36;
+const EDGE_ARROW_MARKER_HEIGHT = 10;
 const EDGE_STYLE_LABEL_PATTERNS: ReadonlyArray<{
   readonly patterns: readonly RegExp[];
   readonly style: NonNullable<DiagramEdge["style"]>;
@@ -157,8 +159,8 @@ export function toFlowEdges(
       markerEnd: {
         type: MarkerType.ArrowClosed,
         color,
-        width: 18,
-        height: 18
+        width: EDGE_ARROW_MARKER_WIDTH,
+        height: EDGE_ARROW_MARKER_HEIGHT
       },
       style: getFlowEdgeStyle(edge, selected, isPreview, previewState, nodeById)
     };
@@ -230,12 +232,12 @@ function getResolvedDiagramEdgeStyle(
     animated: edge.style?.animated ?? inferredStyle.animated ?? false,
     color: shouldPreferInferredStyle ? inferredStyle.color : (edge.style?.color ?? inferredStyle.color ?? "#506176"),
     lineStyle: shouldPreferInferredStyle ? inferredStyle.lineStyle : (edge.style?.lineStyle ?? inferredStyle.lineStyle ?? "solid"),
-    width: shouldPreferInferredStyle ? inferredStyle.width : (edge.style?.width ?? inferredStyle.width ?? "medium")
+    width: shouldPreferInferredStyle ? inferredStyle.width : (edge.style?.width ?? inferredStyle.width ?? "thin")
   };
 }
 
 function isNonDefaultDiagramEdgeStyle(style: NonNullable<DiagramEdge["style"]>): boolean {
-  return style.lineStyle !== "solid" || style.width !== "medium" || style.color !== "#506176";
+  return style.lineStyle !== "solid" || style.width !== "thin" || style.color !== "#506176";
 }
 
 function getDiagramEdgeStyleFromLabel(label: string | undefined): NonNullable<DiagramEdge["style"]> {
@@ -247,7 +249,7 @@ function getDiagramEdgeStyleFromLabel(label: string | undefined): NonNullable<Di
     }
   }
 
-  return { animated: false, color: "#506176", lineStyle: "solid", width: "medium" };
+  return { animated: false, color: "#506176", lineStyle: "solid", width: "thin" };
 }
 
 function getDiagramEdgeStyleFromEndpoints(
@@ -265,7 +267,7 @@ function getDiagramEdgeStyleFromEndpoints(
     return { animated: false, color: "#476582", lineStyle: "dashed", width: "medium" };
   }
 
-  return { animated: false, color: "#506176", lineStyle: "solid", width: "medium" };
+  return { animated: false, color: "#506176", lineStyle: "solid", width: "thin" };
 }
 
 function getNodeResourceType(node: DiagramNode | undefined): string {

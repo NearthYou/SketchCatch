@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { CostProjectUsage } from "@sketchcatch/types";
+import type { CostProjectUsage, CostResourceUsage, CostServiceUsage } from "@sketchcatch/types";
 import {
   COST_USAGE_ALL_PROJECTS_KEY,
   createScopedCostUsageDailyTrend,
+  createScopedCostUsageServiceCosts,
   createCostUsageProjectOptions,
   getCostUsageProjectIdFromKey,
   normalizeCostUsageProjectKey,
@@ -97,6 +98,62 @@ test("selectCostUsageResourceCosts returns only resources for the selected proje
   );
 });
 
+test("createScopedCostUsageServiceCosts keeps account service costs for all projects", () => {
+  const serviceCosts = [
+    createServiceUsage({ amount: 24, percentage: 60, service: "Amazon EC2" })
+  ];
+
+  assert.deepEqual(
+    createScopedCostUsageServiceCosts({
+      resourceCosts: [],
+      selectedProject: null,
+      serviceCosts,
+      totalCostAmount: 40
+    }),
+    serviceCosts
+  );
+});
+
+test("createScopedCostUsageServiceCosts groups selected project resources by service", () => {
+  assert.deepEqual(
+    createScopedCostUsageServiceCosts({
+      resourceCosts: [
+        createResourceUsage({
+          amount: 10,
+          id: "resource-a",
+          projectId: "project-a",
+          service: "Amazon EC2"
+        }),
+        createResourceUsage({
+          amount: 5,
+          id: "resource-b",
+          projectId: "project-a",
+          service: "Amazon S3"
+        }),
+        createResourceUsage({
+          amount: 5,
+          id: "resource-c",
+          projectId: "project-a",
+          service: "Amazon EC2"
+        }),
+        createResourceUsage({
+          amount: 30,
+          id: "resource-d",
+          projectId: "project-b",
+          service: "Amazon RDS"
+        })
+      ],
+      selectedProject: projectCosts[0]!,
+      serviceCosts: [createServiceUsage({ amount: 40, percentage: 100, service: "Account" })],
+      totalCostAmount: 40
+    }),
+    [
+      createServiceUsage({ amount: 15, percentage: 75, service: "Amazon EC2" }),
+      createServiceUsage({ amount: 5, percentage: 25, service: "Amazon S3" })
+    ]
+  );
+});
+
 function createProjectUsage(
   overrides: Pick<CostProjectUsage, "amount" | "percentage" | "projectId" | "projectName">
 ): CostProjectUsage {
@@ -107,9 +164,20 @@ function createProjectUsage(
   };
 }
 
-function createResourceUsage(overrides: { readonly id: string; readonly projectId: string }) {
+function createServiceUsage(overrides: CostServiceUsage): CostServiceUsage {
+  return overrides;
+}
+
+function createResourceUsage(
+  overrides: {
+    readonly amount?: number;
+    readonly id: string;
+    readonly projectId: string;
+    readonly service?: string;
+  }
+): CostResourceUsage {
   return {
-    amount: 10,
+    amount: overrides.amount ?? 10,
     id: overrides.id,
     percentage: 25,
     projectId: overrides.projectId,
@@ -117,7 +185,7 @@ function createResourceUsage(overrides: { readonly id: string; readonly projectI
     resourceId: overrides.id,
     resourceName: overrides.id,
     resourceType: "aws_instance",
-    service: "Amazon Elastic Compute Cloud",
+    service: overrides.service ?? "Amazon Elastic Compute Cloud",
     source: "deployed_resource_estimate" as const,
     terraformAddress: "aws_instance.app"
   };

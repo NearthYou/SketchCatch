@@ -4,6 +4,7 @@ import type {
   DiagramEdge,
   DiagramJson,
   DiagramNode,
+  DiagramNodeBorderStyle,
   DiagramNodeParameters,
   ResourceConfig,
   ResourceDragPayload,
@@ -24,12 +25,11 @@ const DEFAULT_VIEWPORT: DiagramJson["viewport"] = { x: 0, y: 0, zoom: 1 };
 const DEFAULT_NODE_SIZE: DiagramNode["size"] = { width: 56, height: 56 };
 const DEFAULT_TERRAFORM_BLOCK_TYPE: TerraformBlockType = "resource";
 const UNKNOWN_TERRAFORM_RESOURCE_TYPE = "unknown_resource";
-const SKETCHCATCH_REFERENCE_TERRAFORM_MARKER = "sketchcatch-reference-web-service-deployment";
 const DEFAULT_EDGE_STYLE: NonNullable<DiagramEdge["style"]> = {
   animated: false,
   color: "#506176",
   lineStyle: "solid",
-  width: "medium"
+  width: "thin"
 };
 const ASYNC_EDGE_STYLE: NonNullable<DiagramEdge["style"]> = {
   animated: false,
@@ -94,6 +94,7 @@ const COMPACT_AREA_MIN_SIZES: Readonly<Record<string, DiagramNode["size"]>> = {
 const AREA_PARENT_EDGE_LABELS = new Set(["contains", "hosts"]);
 const TERRAFORM_REFERENCE_ATTRIBUTE_SUFFIXES = ["id", "arn", "name", "execution_arn"] as const;
 const SECURITY_GROUP_REFERENCE_KEYS = ["securityGroupIds", "vpcSecurityGroupIds", "securityGroupId"] as const;
+const RESOURCE_ITEMS_BY_DEFINITION_ID = new Map(resourceCatalog.map((resourceItem) => [resourceItem.id, resourceItem]));
 const RESOURCE_ITEMS_BY_TERRAFORM_TYPE = createResourceItemsByTerraformType(resourceCatalog);
 const EDGE_STYLE_LABEL_PATTERNS: ReadonlyArray<{
   readonly patterns: readonly RegExp[];
@@ -182,21 +183,16 @@ const RESOURCE_NAME_CONVENTIONS: Readonly<Record<string, { readonly prefix: stri
 // AI Draft를 실제 Architecture Board가 받을 수 있는 DiagramJson으로 바꾸는 gg 경계입니다.
 export function convertArchitectureJsonToDiagramJson(architectureJson: ArchitectureJson): DiagramJson {
   const nodeIds = new Set(architectureJson.nodes.map((node) => node.id));
-  const isSketchCatchReference = hasSketchCatchReferenceArchitectureMarker(architectureJson);
   const convertedNodes = architectureJson.nodes.map(convertArchitectureNodeToDiagramNode);
-  const preparedNodes = isSketchCatchReference
-    ? convertedNodes
-    : applyAreaParentMetadata(
-        applyDiagramResourceNameConventions(addServerStorageAreaNodes(convertedNodes)),
-        architectureJson.edges
-      );
-  const nodes = isSketchCatchReference
-    ? applyDiagramLayerOrder(preparedNodes)
-    : applyDiagramLayerOrder(
-        fitAreaNodesToChildren(
-          resolveSiblingNodeCollisions(fitAreaNodesToChildren(applyReadableTopologyLayout(preparedNodes)))
-        )
-      );
+  const preparedNodes = applyAreaParentMetadata(
+    applyDiagramResourceNameConventions(addServerStorageAreaNodes(convertedNodes)),
+    architectureJson.edges
+  );
+  const nodes = applyDiagramLayerOrder(
+    fitAreaNodesToChildren(
+      resolveSiblingNodeCollisions(fitAreaNodesToChildren(applyReadableTopologyLayout(preparedNodes)))
+    )
+  );
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
 
   return {
@@ -249,26 +245,40 @@ function convertArchitectureNodeToDiagramNode(node: ArchitectureJson["nodes"][nu
     return presentationNode;
   }
 
+  const config = node.config ?? {};
   const terraformResourceType = mapResourceTypeToTerraform(node.type);
   const position = {
     x: node.positionX,
     y: node.positionY
   };
   const zIndex = index + 1;
-  const baseNode = createResourceCatalogDiagramNode(terraformResourceType, position, zIndex);
+  const baseNode = createResourceCatalogDiagramNode(node.type, terraformResourceType, position, zIndex);
 
   return {
     ...baseNode,
     id: node.id,
     label: node.label ?? baseNode.label,
     locked: false,
-    metadata: readDiagramNodeMetadata(node.config) ?? baseNode.metadata,
+    metadata: readDiagramNodeMetadata(config) ?? baseNode.metadata,
     parameters: createDiagramNodeParameters(node, terraformResourceType, baseNode.parameters),
     position,
-    size: readDiagramNodeSize(node.config) ?? baseNode.size,
+    size: readDiagramNodeSize(config) ?? baseNode.size,
+    style: mergeDiagramNodeStyle(baseNode.style, readDiagramNodeStyle(config)),
     type: terraformResourceType,
     zIndex
   };
+}
+
+function mergeDiagramNodeStyle(
+  baseStyle: DiagramNode["style"],
+  overrideStyle: DiagramNode["style"]
+): DiagramNode["style"] | undefined {
+  const style = {
+    ...(baseStyle ?? {}),
+    ...(overrideStyle ?? {})
+  };
+
+  return Object.keys(style).length > 0 ? style : undefined;
 }
 
 function createPresentationDiagramNode(
@@ -327,29 +337,31 @@ function readDiagramNodeIconUrl(config: ResourceConfig): string | undefined {
 function readDiagramNodeStyle(config: ResourceConfig): DiagramNode["style"] | undefined {
   const textColor = config["diagramTextColor"];
   const borderColor = config["diagramBorderColor"];
-  const style = {
+  const borderStyle = readDiagramBorderStyle(config["diagramBorderStyle"]);
+  const style: NonNullable<DiagramNode["style"]> = {
     ...(typeof textColor === "string" && textColor.trim().length > 0 ? { textColor } : {}),
-    ...(typeof borderColor === "string" && borderColor.trim().length > 0 ? { borderColor } : {})
+    ...(typeof borderColor === "string" && borderColor.trim().length > 0 ? { borderColor } : {}),
+    ...(borderStyle ? { borderStyle } : {})
   };
 
   return Object.keys(style).length > 0 ? style : undefined;
 }
 
-function hasSketchCatchReferenceArchitectureMarker(architectureJson: ArchitectureJson): boolean {
-  return architectureJson.nodes.some(
-    (node) =>
-      node.config?.["sketchcatchReferenceTerraform"] ===
-      SKETCHCATCH_REFERENCE_TERRAFORM_MARKER
-  );
+function readDiagramBorderStyle(value: unknown): DiagramNodeBorderStyle | undefined {
+  return value === "solid" || value === "dashed" || value === "dotted" ? value : undefined;
 }
 
 // jh Resource catalog를 거쳐 수동 drag/drop 노드와 같은 iconUrl, size, 기본 style을 사용합니다.
 function createResourceCatalogDiagramNode(
+  resourceType: ResourceType,
   terraformResourceType: string,
   position: DiagramNode["position"],
   zIndex: number
 ): DiagramNode {
-  const resourceItem = RESOURCE_ITEMS_BY_TERRAFORM_TYPE.get(terraformResourceType);
+  const definitionId = getDefaultResourceDefinitionByResourceType(resourceType)?.id;
+  const resourceItem =
+    (definitionId ? RESOURCE_ITEMS_BY_DEFINITION_ID.get(definitionId) : undefined) ??
+    RESOURCE_ITEMS_BY_TERRAFORM_TYPE.get(terraformResourceType);
 
   if (!resourceItem) {
     return createFallbackDiagramNode(terraformResourceType, position, zIndex);

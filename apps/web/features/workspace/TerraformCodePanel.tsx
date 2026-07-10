@@ -5,7 +5,6 @@ import {
   ArrowLeft,
   ChevronDown,
   FileCode2,
-  Settings,
   Sparkles,
   X
 } from "lucide-react";
@@ -132,6 +131,13 @@ function getTerraformLineStartOffset(code: string, line: number): number {
   return code.length;
 }
 
+function clampTerraformEditorScrollTop(targetScrollTop: number, textarea: HTMLTextAreaElement): number {
+  return Math.min(
+    Math.max(0, textarea.scrollHeight - textarea.clientHeight),
+    Math.max(0, targetScrollTop)
+  );
+}
+
 async function validateTerraformVirtualFiles({
   combinedTerraformCode,
   files
@@ -220,7 +226,6 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
   readonly onDirtyChange: (isDirty: boolean) => void;
   readonly onExternalSaveComplete: (saved: boolean, requestId: number) => void;
   readonly onOpenIssues: () => void;
-  readonly onOpenResourceSettings: () => void;
   readonly onTerraformPreviewAiRequest: (request: TerraformPreviewAiRequest) => void;
 }>(function TerraformCodePanel({
   context,
@@ -231,7 +236,6 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
   onDirtyChange,
   onExternalSaveComplete,
   onOpenIssues,
-  onOpenResourceSettings,
   onTerraformPreviewAiRequest
 }, ref) {
   const [terraformFiles, setTerraformFiles] = useState<TerraformVirtualFile[]>(() =>
@@ -260,6 +264,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
   const latestExternalSaveRequestIdRef = useRef(externalSaveRequestId);
   const latestTerraformRefreshRequestIdRef = useRef(context.terraformRefreshRequestId);
   const lineNumberRef = useRef<HTMLOListElement | null>(null);
+  const lastScrolledNodeIdRef = useRef<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const combinedTerraformCode = useMemo(() => combineTerraformFiles(terraformFiles), [terraformFiles]);
@@ -900,8 +905,43 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     onDirtyChange(hasLocalEdits);
   }, [hasLocalEdits, onDirtyChange]);
 
+  const scrollTerraformEditorToLine = useCallback((
+    line: number,
+    options: { readonly shouldFocus?: boolean } = {}
+  ): boolean => {
+    const textarea = textareaRef.current;
+
+    if (!textarea) {
+      return false;
+    }
+
+    const code = textarea.value;
+    const lineCount = code.split(/\r\n|\r|\n/).length;
+    const targetLine = Math.max(1, Math.min(line, lineCount));
+    const lineHeight = Number.parseFloat(window.getComputedStyle(textarea).lineHeight) || TERRAFORM_EDITOR_LINE_HEIGHT;
+    const targetScrollTop = Math.max(0, (targetLine - 2) * lineHeight);
+    const cursorOffset = getTerraformLineStartOffset(code, targetLine);
+
+    if (options.shouldFocus) {
+      textarea.focus({ preventScroll: true });
+      textarea.setSelectionRange(cursorOffset, cursorOffset);
+    }
+
+    textarea.scrollTop = targetScrollTop;
+    textarea.scrollLeft = 0;
+    setCodeScrollTop(textarea.scrollTop);
+    setCodeScrollLeft(textarea.scrollLeft);
+
+    if (lineNumberRef.current) {
+      lineNumberRef.current.scrollTop = textarea.scrollTop;
+    }
+
+    return true;
+  }, []);
+
   useEffect(() => {
     if (!isVisible || isResourceCodeMode || !selectedBlock || !textareaRef.current) {
+      lastScrolledNodeIdRef.current = null;
       return;
     }
 
@@ -910,9 +950,17 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
       return;
     }
 
+    const selectedNodeId = selectedNode?.id ?? null;
+    if (lastScrolledNodeIdRef.current === selectedNodeId) {
+      return;
+    }
+
     const textarea = textareaRef.current;
-    const lineHeight = Number.parseFloat(window.getComputedStyle(textarea).lineHeight) || 20;
-    textarea.scrollTop = Math.max(0, (selectedBlock.startLine - 2) * lineHeight);
+    const lineHeight = Number.parseFloat(window.getComputedStyle(textarea).lineHeight) || TERRAFORM_EDITOR_LINE_HEIGHT;
+    const blockTop = TERRAFORM_EDITOR_VERTICAL_PADDING + (selectedBlock.startLine - 1) * lineHeight;
+    const blockHeight = Math.max(1, selectedBlock.endLine - selectedBlock.startLine + 1) * lineHeight;
+    const targetScrollTop = blockTop + blockHeight / 2 - textarea.clientHeight / 2;
+    textarea.scrollTop = clampTerraformEditorScrollTop(targetScrollTop, textarea);
     setCodeScrollTop(textarea.scrollTop);
     setCodeScrollLeft(textarea.scrollLeft);
 
@@ -920,7 +968,8 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
       lineNumberRef.current.scrollTop = textarea.scrollTop;
     }
 
-  }, [activeFileName, isResourceCodeMode, isVisible, selectedBlock]);
+    lastScrolledNodeIdRef.current = selectedNodeId;
+  }, [activeFileName, isResourceCodeMode, isVisible, selectedBlock, selectedNode?.id]);
 
   useEffect(() => {
     if (!pendingSourceLocation || !isVisible || isResourceCodeMode) {
@@ -932,33 +981,22 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
       return;
     }
 
-    const textarea = textareaRef.current;
+    const targetLine = Math.max(1, Math.min(pendingSourceLocation.line, lineNumbers.length));
+    const didScroll = scrollTerraformEditorToLine(targetLine, { shouldFocus: true });
 
-    if (!textarea) {
+    if (!didScroll) {
       return;
     }
 
-    const targetLine = Math.max(1, Math.min(pendingSourceLocation.line, lineNumbers.length));
-    const lineHeight = Number.parseFloat(window.getComputedStyle(textarea).lineHeight) || TERRAFORM_EDITOR_LINE_HEIGHT;
-    textarea.scrollTop = Math.max(0, (targetLine - 2) * lineHeight);
-    setCodeScrollTop(textarea.scrollTop);
-
-    if (lineNumberRef.current) {
-      lineNumberRef.current.scrollTop = textarea.scrollTop;
-    }
-
-    const cursorOffset = getTerraformLineStartOffset(displayedTerraformCode, targetLine);
-    textarea.focus();
-    textarea.setSelectionRange(cursorOffset, cursorOffset);
     setActiveSourceHighlightLine(targetLine);
     setPendingSourceLocation(null);
   }, [
     activeFileName,
-    displayedTerraformCode,
     isResourceCodeMode,
     isVisible,
     lineNumbers.length,
-    pendingSourceLocation
+    pendingSourceLocation,
+    scrollTerraformEditorToLine
   ]);
 
   useEffect(() => {
@@ -968,7 +1006,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
 
     const timerId = window.setTimeout(() => {
       setActiveSourceHighlightLine(null);
-    }, 2500);
+    }, 8000);
 
     return () => window.clearTimeout(timerId);
   }, [activeSourceHighlightLine]);
@@ -1161,20 +1199,20 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
         <div className={saveBanner.kind === "error" ? styles.terraformSaveBannerError : styles.terraformSaveBanner}>
           <span>
             {saveBanner.kind === "error"
-              ? "Terraform 오류가 있습니다. Issues 탭에서 확인하세요."
+              ? "Terraform 오류가 있습니다. Issues에서 확인하세요."
               : "저장하지 않은 Terraform 변경이 있습니다. Ctrl+S로 저장하세요."}
           </span>
           <button data-terraform-issues-navigation onClick={handleSeeMore} type="button">
-            Issues 탭으로 이동
+            Issues 보기
           </button>
         </div>
       ) : null}
 
       {errorDiagnostics.length > 0 ? (
         <div className={styles.terraformIssueBanner} role="status">
-          <span>Terraform 오류가 있습니다. 자세한 내용은 Issues 탭에서 확인하세요.</span>
+          <span>Terraform 오류가 있습니다. 자세한 내용은 Issues에서 확인하세요.</span>
           <button data-terraform-issues-navigation onClick={handleSeeMore} type="button">
-            Issues 탭으로 이동
+            Issues 보기
           </button>
         </div>
       ) : null}
@@ -1235,17 +1273,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
             aria-label={`${highlightedBlock.address} code block`}
             className={styles.terraformBlockHighlightBox}
             style={highlightedBlockStyle}
-          >
-            <button
-              aria-label="Open resource settings"
-              className={styles.terraformBlockSettingsButton}
-              onClick={onOpenResourceSettings}
-              title="Resource settings"
-              type="button"
-            >
-              <Settings size={15} aria-hidden="true" />
-            </button>
-          </div>
+          />
         ) : null}
       </div>
 

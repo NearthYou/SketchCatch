@@ -15,6 +15,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "tsx --test \"src/**/*.test.ts\"",
+    "terraform:audit:validate": "tsx ../../scripts/terraform-resource-validation-audit.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:migrate:runtime": "tsx src/db/migrate.ts"
@@ -27,6 +28,7 @@
     "@aws-sdk/client-cloudwatch-logs": "3.1073.0",
     "@aws-sdk/client-cost-explorer": "3.1073.0",
     "@aws-sdk/client-ec2": "3.1073.0",
+    "@aws-sdk/client-ecs": "3.1073.0",
     "@aws-sdk/client-elastic-load-balancing-v2": "3.1073.0",
     "@aws-sdk/client-iam": "3.1073.0",
     "@aws-sdk/client-kms": "3.1073.0",

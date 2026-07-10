@@ -13,10 +13,6 @@ import type {
 import { resourceDefinitions } from "@sketchcatch/types/resource-definitions";
 import { applyGuardrailMetadata } from "./aiArchitectureDraftMetadata.js";
 import { planPracticeArchitecture } from "./aiArchitectureRequirementDraftBuilder.js";
-import {
-  createSketchCatchReferenceDeploymentDraft,
-  isSketchCatchReferenceDeploymentSelection
-} from "./aiArchitectureSketchcatchReferenceDraft.js";
 import { applyOperatingConditionConfig } from "./aiArchitectureOperatingConditions.js";
 import { resolveArchitectureResourceQuantities } from "./aiArchitectureResourceQuantities.js";
 import { resolveArchitectureRequirement } from "./aiArchitectureRequirementResolution.js";
@@ -168,10 +164,6 @@ export type CreateAmazonQArchitectureDraftResponseOptions = {
 export function createArchitectureDraft(input: string | CreateArchitectureDraftRequest): AiArchitectureDraftResult {
   const request = normalizeArchitectureDraftRequest(input);
 
-  if (isSketchCatchReferenceDeploymentSelection(request.prompt)) {
-    return createSketchCatchReferenceDeploymentDraft();
-  }
-
   const resolution = resolveArchitectureRequirement(request);
   const resourceQuantities = resolveArchitectureResourceQuantities(request.prompt);
   const draft = planPracticeArchitecture(resolution, resourceQuantities);
@@ -224,10 +216,6 @@ export async function createAmazonQArchitectureDraftResponse(
   const request = normalizeArchitectureDraftRequest(input);
   const creditPolicy = options.creditPolicy ?? readAiCreditPolicyFromEnv();
   const provider = options.provider;
-
-  if (isSketchCatchReferenceDeploymentSelection(request.prompt)) {
-    return createSketchCatchReferenceDeploymentDraft();
-  }
 
   if (creditPolicy.billingMode !== "aws_credit_only" || !creditPolicy.amazonQ) {
     return createFallbackArchitectureDraftResponse(request, "credit_not_confirmed", creditPolicy.billingMode);
@@ -550,7 +538,32 @@ const REQUIRED_ARCHITECTURE_QUESTIONS: readonly RequiredArchitectureQuestion[] =
   }
 ];
 function isWebsiteTypeAnswered(prompt: string): boolean {
-  return hasPromptTerm(prompt, ["static", "dynamic", "spa", "single page", "api server", "api 서버", "정적", "동적", "블로그", "포트폴리오", "회사", "소개", "쇼핑몰", "게시판", "회원", "?뺤쟻", "?숈쟻", "釉붾줈", "寃뚯떆", "?뚯썝"]);
+  return (
+    hasPromptTerm(prompt, ["static", "dynamic", "spa", "single page", "api server", "api 서버", "정적", "동적", "블로그", "포트폴리오", "회사", "소개", "쇼핑몰", "게시판", "회원", "?뺤쟻", "?숈쟻", "釉붾줈", "寃뚯떆", "?뚯썝"]) ||
+    isMobileAppPrompt(prompt)
+  );
+}
+
+function isMobileAppPrompt(prompt: string): boolean {
+  const normalizedPrompt = prompt.normalize("NFKC").toLowerCase();
+
+  return (
+    /(?:mobile\s+app|app\s+store|play\s*store|google\s*play|모바일\s*앱|네이티브|웹뷰|플레이스토어|구글\s*플레이|앱\s*스토어)/iu.test(
+      normalizedPrompt
+    ) || hasStandaloneMobileAppCreationPrompt(normalizedPrompt)
+  );
+}
+
+function hasStandaloneMobileAppCreationPrompt(normalizedPrompt: string): boolean {
+  for (const match of normalizedPrompt.matchAll(/앱\s*하나/giu)) {
+    const prefix = normalizedPrompt.slice(Math.max(0, match.index - 2), match.index).replace(/\s+/g, "");
+
+    if (!prefix.endsWith("웹")) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 function isTrafficAnswered(prompt: string): boolean {
@@ -1906,7 +1919,7 @@ function resolveTrafficProfile(normalizedPrompt: string): ArchitectureAnswerProf
 }
 
 function resolveFrontendProfile(normalizedPrompt: string): ArchitectureAnswerProfile["frontend"] {
-  if (/(mobile\s+app|모바일\s*앱|네이티브|웹뷰)/iu.test(normalizedPrompt)) {
+  if (isMobileAppPrompt(normalizedPrompt)) {
     return "mobile";
   }
 

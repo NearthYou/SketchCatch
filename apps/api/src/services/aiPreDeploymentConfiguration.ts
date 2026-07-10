@@ -2,7 +2,9 @@ import type { CheckFinding, ResourceConfig, ResourceNode } from "@sketchcatch/ty
 
 // Resource가 Terraform 생성에 필요한 기본 설정값을 가지고 있는지 확인합니다.
 export function createConfigurationFindings(node: ResourceNode): CheckFinding[] {
-  const missingKeys = getRequiredConfigKeys(node).filter((key) => !hasRequiredConfigValue(node, key));
+  const missingKeys = getRequiredConfigKeys(node).filter(
+    (key) => !hasRequiredConfigValue(node, key)
+  );
 
   if (missingKeys.length === 0) {
     return [];
@@ -16,7 +18,8 @@ export function createConfigurationFindings(node: ResourceNode): CheckFinding[] 
       resourceId: node.id,
       title: "필수 Resource 설정이 빠져 있습니다",
       description: `${node.label ?? node.id}에 ${missingKeys.join(", ")} 설정이 필요합니다.`,
-      recommendation: "Architecture Board의 Resource 설정 패널에서 빠진 값을 채운 뒤 다시 확인하세요."
+      recommendation:
+        "Architecture Board의 Resource 설정 패널에서 빠진 값을 채운 뒤 다시 확인하세요."
     }
   ];
 }
@@ -113,12 +116,17 @@ function getRequiredConfigKeys(node: ResourceNode): readonly string[] {
     case "UNKNOWN":
       return [];
   }
+
+  return [];
 }
 
 // 빈 문자열이나 빈 배열은 "입력 안 됨"으로 봅니다.
 function hasRequiredConfigValue(node: ResourceNode, key: string): boolean {
   if (node.type === "EC2" && key === "securityGroupIds") {
-    return hasConfigValue(node.config, "securityGroupIds") || hasConfigValue(node.config, "vpcSecurityGroupIds");
+    return (
+      hasConfigValue(node.config, "securityGroupIds") ||
+      hasConfigValue(node.config, "vpcSecurityGroupIds")
+    );
   }
 
   return hasConfigValue(node.config, key);

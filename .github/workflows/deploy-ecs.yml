@@ -1,0 +1,203 @@
+name: Deploy Production ECS
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag to push and deploy. Defaults to the commit SHA."
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: production-ecs
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  ECR_API_REPOSITORY: ${{ vars.ECR_API_REPOSITORY }}
+  ECR_WEB_REPOSITORY: ${{ vars.ECR_WEB_REPOSITORY }}
+  ECR_NGINX_REPOSITORY: ${{ vars.ECR_NGINX_REPOSITORY }}
+  ECS_CLUSTER_NAME: ${{ vars.ECS_CLUSTER_NAME }}
+  ECS_SERVICE_NAME: ${{ vars.ECS_SERVICE_NAME }}
+  ECS_TASK_DEFINITION_FAMILY: ${{ vars.ECS_TASK_DEFINITION_FAMILY }}
+  ECS_API_CONTAINER_NAME: ${{ vars.ECS_API_CONTAINER_NAME }}
+  ECS_WEB_CONTAINER_NAME: ${{ vars.ECS_WEB_CONTAINER_NAME }}
+  ECS_NGINX_CONTAINER_NAME: ${{ vars.ECS_NGINX_CONTAINER_NAME }}
+
+jobs:
+  deploy-ecs:
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.8.0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Build
+        run: pnpm build
+
+      - name: Validate ECS deployment variables
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          required_vars=(
+            AWS_REGION
+            ECR_API_REPOSITORY
+            ECR_WEB_REPOSITORY
+            ECR_NGINX_REPOSITORY
+            ECS_CLUSTER_NAME
+            ECS_SERVICE_NAME
+            ECS_TASK_DEFINITION_FAMILY
+            ECS_API_CONTAINER_NAME
+            ECS_WEB_CONTAINER_NAME
+            ECS_NGINX_CONTAINER_NAME
+          )
+
+          for name in "${required_vars[@]}"; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::${name} is required for ECS deployment."
+              exit 1
+            fi
+          done
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push ECS images
+        id: images
+        shell: bash
+        env:
+          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          IMAGE_TAG_INPUT: ${{ inputs.image_tag }}
+        run: |
+          set -euo pipefail
+
+          image_tag="${IMAGE_TAG_INPUT:-${GITHUB_SHA}}"
+          api_image="${ECR_REGISTRY}/${ECR_API_REPOSITORY}:${image_tag}"
+          web_image="${ECR_REGISTRY}/${ECR_WEB_REPOSITORY}:${image_tag}"
+          nginx_image="${ECR_REGISTRY}/${ECR_NGINX_REPOSITORY}:${image_tag}"
+
+          docker build -f docker/api.Dockerfile -t "${api_image}" .
+          docker build -f docker/web.Dockerfile -t "${web_image}" .
+          docker build -f docker/nginx.Dockerfile -t "${nginx_image}" .
+
+          docker push "${api_image}"
+          docker push "${web_image}"
+          docker push "${nginx_image}"
+
+          {
+            echo "image-tag=${image_tag}"
+            echo "api-image=${api_image}"
+            echo "web-image=${web_image}"
+            echo "nginx-image=${nginx_image}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Download current ECS task definition
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .release
+          aws ecs describe-task-definition \
+            --task-definition "${ECS_TASK_DEFINITION_FAMILY}" \
+            --query taskDefinition \
+            --output json > .release/ecs-task-definition.json
+
+      - name: Validate ECS runtime config
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          required_api_secrets=(
+            AUTH_TOKEN_SECRET
+            CLOUDFORMATION_TEMPLATE_TOKEN_SECRET
+            DATABASE_URL
+            GIT_APP_PRIVATE_KEY_BASE64
+            GIT_APP_STATE_SECRET
+            GIT_OAUTH_CLIENT_SECRET
+            KAKAO_OAUTH_CLIENT_SECRET
+            NAVER_OAUTH_CLIENT_SECRET
+            OPENAI_API_KEY
+            REDIS_URL
+          )
+
+          api_container="$(jq --arg name "${ECS_API_CONTAINER_NAME}" -c '.containerDefinitions[] | select(.name == $name)' .release/ecs-task-definition.json)"
+          if [ -z "${api_container}" ]; then
+            echo "::error::API container ${ECS_API_CONTAINER_NAME} was not found in the ECS task definition."
+            exit 1
+          fi
+
+          for name in "${required_api_secrets[@]}"; do
+            if jq --arg name "${name}" -e '.environment // [] | any(.name == $name)' <<<"${api_container}" > /dev/null; then
+              echo "::error::${name} must be an ECS task secret, not a plain environment variable."
+              exit 1
+            fi
+
+            if ! jq --arg name "${name}" -e '.secrets // [] | any(.name == $name)' <<<"${api_container}" > /dev/null; then
+              echo "::error::${name} is required in the API container ECS secrets list."
+              exit 1
+            fi
+          done
+
+      - name: Render API image
+        id: render-api
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: .release/ecs-task-definition.json
+          container-name: ${{ env.ECS_API_CONTAINER_NAME }}
+          image: ${{ steps.images.outputs.api-image }}
+
+      - name: Render web image
+        id: render-web
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: ${{ steps.render-api.outputs.task-definition }}
+          container-name: ${{ env.ECS_WEB_CONTAINER_NAME }}
+          image: ${{ steps.images.outputs.web-image }}
+
+      - name: Render nginx image
+        id: render-nginx
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: ${{ steps.render-web.outputs.task-definition }}
+          container-name: ${{ env.ECS_NGINX_CONTAINER_NAME }}
+          image: ${{ steps.images.outputs.nginx-image }}
+
+      - name: Deploy ECS service
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.render-nginx.outputs.task-definition }}
+          cluster: ${{ env.ECS_CLUSTER_NAME }}
+          service: ${{ env.ECS_SERVICE_NAME }}
+          wait-for-service-stability: true

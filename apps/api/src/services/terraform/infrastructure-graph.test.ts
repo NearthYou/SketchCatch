@@ -101,6 +101,105 @@ test("buildInfrastructureGraphFromDiagramJson keeps invalid nodes for preview sk
   assert.equal(graph.nodes[0]?.iac.resourceType, "aws_subnet");
 });
 
+test("buildInfrastructureGraphFromDiagramJson omits invalid ASG desired capacity values while retaining zero", () => {
+  const graph = buildInfrastructureGraphFromDiagramJson({
+    nodes: [
+      makeNode({
+        id: "missing-desired-capacity",
+        type: "aws_autoscaling_group",
+        kind: "resource",
+        label: "missing",
+        parameters: {
+          resourceType: "aws_autoscaling_group",
+          resourceName: "missing",
+          fileName: "compute",
+          values: {
+            minSize: 1,
+            maxSize: 3
+          }
+        }
+      }),
+      makeNode({
+        id: "null-desired-capacity",
+        type: "aws_autoscaling_group",
+        kind: "resource",
+        label: "null",
+        parameters: {
+          resourceType: "aws_autoscaling_group",
+          resourceName: "null",
+          fileName: "compute",
+          values: {
+            minSize: 1,
+            desiredCapacity: null,
+            maxSize: 3
+          }
+        }
+      }),
+      makeNode({
+        id: "blank-desired-capacity",
+        type: "aws_autoscaling_group",
+        kind: "resource",
+        label: "blank",
+        parameters: {
+          resourceType: "aws_autoscaling_group",
+          resourceName: "blank",
+          fileName: "compute",
+          values: {
+            minSize: 1,
+            desired_capacity: "",
+            maxSize: 3
+          }
+        }
+      }),
+      makeNode({
+        id: "text-desired-capacity",
+        type: "aws_autoscaling_group",
+        kind: "resource",
+        label: "text",
+        parameters: {
+          resourceType: "aws_autoscaling_group",
+          resourceName: "text",
+          fileName: "compute",
+          values: {
+            minSize: 1,
+            desiredCapacity: "2",
+            maxSize: 3
+          }
+        }
+      }),
+      makeNode({
+        id: "zero-desired-capacity",
+        type: "aws_autoscaling_group",
+        kind: "resource",
+        label: "zero",
+        parameters: {
+          resourceType: "aws_autoscaling_group",
+          resourceName: "zero",
+          fileName: "compute",
+          values: {
+            minSize: 0,
+            desiredCapacity: 0,
+            maxSize: 3
+          }
+        }
+      })
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  });
+
+  assert.deepEqual(
+    graph.nodes.map((node) => node.config),
+    [
+      { minSize: 1, maxSize: 3 },
+      { minSize: 1, maxSize: 3 },
+      { minSize: 1, maxSize: 3 },
+      { minSize: 1, maxSize: 3 },
+      { minSize: 0, desiredCapacity: 0, maxSize: 3 }
+    ]
+  );
+});
+
 test("all shared resource definitions support Terraform Preview and Sync", () => {
   assert.ok(resourceDefinitions.length >= 66);
   assert.deepEqual(

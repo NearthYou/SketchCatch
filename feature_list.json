@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "lastUpdated": "2026-07-07",
-  "purpose": "Tracks agent-harness hardening work. Product scope remains in docs/product.md.",
+  "lastUpdated": "2026-07-10",
+  "purpose": "Tracks agent-harness hardening work and active cross-session workstreams. Product scope remains in docs/product.md.",
   "statusRules": {
     "allowedStatuses": ["not_started", "in_progress", "blocked", "passing"],
     "singleActiveFeature": true,
@@ -162,7 +162,7 @@
       "area": "e2e",
       "title": "Baseline user-journey smoke",
       "user_visible_behavior": "핵심 MVP 흐름이 브라우저 또는 API smoke로 확인되어 조기 완료 선언을 막는다.",
-      "status": "in_progress",
+      "status": "blocked",
       "verification": [
         "Representative Use Journey의 최소 happy path가 자동 또는 반자동 smoke로 표현된다.",
         "실제 AWS apply가 필요한 경로는 명시 승인과 cleanup plan 없이 실행하지 않는다.",
@@ -174,12 +174,29 @@
           "pnpm harness:check",
           "PowerShell PSParser check for scripts/smoke/git-cicd-auto-deploy.ps1",
           "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\smoke\\git-cicd-auto-deploy.ps1 -PreflightOnly -SkipRepositorySettingsApply -SkipAwsRoleDiffApply",
-          "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\smoke\\git-cicd-auto-deploy.ps1 -PreflightOnly -SkipRepositorySettingsApply -SkipAwsRoleDiffApply -FailOnBlocked -ReportPath docs\\sw\\git-cicd-live-smoke-preflight-current.json",
           "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\smoke\\git-cicd-auto-deploy.ps1 -AccessToken fake -HandoffId 00000000-0000-4000-8000-000000000000 -SkipRepositorySettingsApply -SkipAwsRoleDiffApply -SkipUrlCheck"
         ],
-        "notes": "Git/CI/CD auto-deploy smoke runner now records preflight readiness, explicit live mutation approval, repo settings apply, role diff apply, infra/app/destroy pipeline status, static/API URL marker checks, and pipeline/destroy success waits. Latest current preflight report recorded production API health HTTP 200 and blocked on missing SKETCHCATCH_ACCESS_TOKEN plus SKETCHCATCH_HANDOFF_ID. Real AWS/GitHub live smoke evidence is still pending."
+        "notes": "Git/CI/CD auto-deploy smoke runner records preflight readiness and live mutation gates, but the live smoke workstream is intentionally deferred by product decision. The stale docs/sw live-smoke plan and current JSON reports were removed from active documentation on 2026-07-09."
       },
-      "notes": "현재는 unit/type/build checks 중심이다. 실제 서비스 여정 smoke가 하네스의 다음 큰 빈틈이다."
+      "notes": "Blocked by product decision: live GitHub/AWS smoke is not being pursued now. Reopen this feature only when the team decides to collect real deployment evidence again."
+    },
+    {
+      "id": "ECS-MIGRATION-000",
+      "priority": 1,
+      "area": "production-infra",
+      "title": "ECS migration operating plan and Fargate foundation",
+      "user_visible_behavior": "SketchCatch 운영 인프라를 EC2/SSM/docker run에서 ECS/Fargate로 전환하기 위한 phase, 비용 기준, rollback 기준을 팀원이 같은 문서와 tracker에서 확인한다.",
+      "status": "in_progress",
+      "verification": [
+        "feature_list.json에 ECS migration workstream이 active 항목으로 존재한다.",
+        "동시에 in_progress 상태인 feature/workstream이 1개 이하이다.",
+        "docs/sw/spec.md와 docs/sw/plan.md가 parallel ALB cutover, Phase 1 single ECS task, RunTask one-off worker, SQS deferred decision을 기록한다.",
+        "infra/aws/terraform이 ECR, ECS/Fargate, task definition, IAM, CloudWatch Logs, security groups, parallel ALB, listener, Fargate ip target group을 정의한다.",
+        "DeploymentJob 모델이 Terraform 실행 요청, 상태 전이, ECS task ARN placeholder, 실패 요약을 기록한다.",
+        "API route가 ECS worker mode에서 DeploymentJob을 만들고 ECS RunTask dispatcher로 실행을 위임한다.",
+        "agent-progress.md와 session-handoff.md가 최신 phase 상태와 다음 phase 기준을 기록한다."
+      ],
+      "notes": "Phase 5 is active on issue #295 and branch feature/sw/295-ecs-worker-task-dispatch. Scope is API-side ECS worker RunTask dispatch wiring only. Do not run live AWS commands in this phase."
     }
   ]
 }

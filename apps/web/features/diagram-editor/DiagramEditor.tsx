@@ -96,6 +96,7 @@ import {
   updateNodeById
 } from "./diagram-utils";
 import { toFlowEdges, toFlowNodes } from "./flow-mappers";
+import { syncParameterReferenceEdges } from "./parameter-reference-edges";
 import {
   applyContainingReferenceDropTargets,
   findInnermostVisualDropTarget
@@ -136,6 +137,22 @@ const DIAGRAM_SNAP_GRID: [number, number] = [DIAGRAM_SNAP_GRID_SIZE, DIAGRAM_SNA
 const SNAP_ANIMATION_MS = 110;
 const SNAP_ANIMATION_CLEAR_MS = SNAP_ANIMATION_MS + 30;
 
+function getWorkspaceInitials(workspaceUserName: string): string {
+  const words = workspaceUserName.trim().split(/\s+/u).filter(Boolean);
+
+  if (words.length === 0) {
+    return "SC";
+  }
+
+  const glyphs =
+    words.length > 1
+      ? [words[0], words[1]].map((word) => Array.from(word ?? "")[0]).filter(Boolean)
+      : Array.from(words[0] ?? "").slice(0, 2);
+  const initials = glyphs.join("").toUpperCase();
+
+  return initials || "SC";
+}
+
 type AreaBlankDragState = {
   before: DiagramJson;
   hasMoved: boolean;
@@ -156,18 +173,19 @@ export function DiagramEditor(props: DiagramEditorProps) {
 }
 
 function DiagramEditorInner({
+  dashboardHref = "/dashboard",
   draftStatusPanel,
   floatingPanel,
   initialDiagram,
   leftPanel,
   onDiagramChange,
   onDiagramSaveRequest,
-  myPageHref = "/mypage",
   projectName = "Project workspace",
   rightPanel,
-  saveStatus = "Local editing"
+  workspaceUserName = "Personal workspace"
 }: DiagramEditorProps) {
   const reactFlow = useReactFlow<DiagramFlowNode, DiagramFlowEdge>();
+  const workspaceInitials = getWorkspaceInitials(workspaceUserName);
   const [diagram, setDiagram] = useState<DiagramJson>(() => cloneDiagram(initialDiagram ?? EMPTY_DIAGRAM));
   const diagramRef = useRef(diagram);
   const [previewDiagram, setPreviewDiagramState] = useState<DiagramJson | null>(null);
@@ -549,12 +567,17 @@ function DiagramEditorInner({
 
   const updateNodeParameters = useCallback<DiagramEditorPanelContext["updateNodeParameters"]>(
     (nodeId, update) => {
-      commitDiagramUpdate((currentDiagram) => ({
-        ...currentDiagram,
-        nodes: updateNodeById(currentDiagram.nodes, nodeId, (node) =>
+      commitDiagramUpdate((currentDiagram) => {
+        const nextNodes = updateNodeById(currentDiagram.nodes, nodeId, (node) =>
           applyNodeParametersUpdateWithResourceLabel(node, update)
-        )
-      }));
+        );
+
+        return {
+          ...currentDiagram,
+          nodes: nextNodes,
+          edges: syncParameterReferenceEdges(nextNodes, currentDiagram.edges)
+        };
+      });
     },
     [commitDiagramUpdate]
   );
@@ -2006,10 +2029,23 @@ function DiagramEditorInner({
       <div className={styles.workspace}>
         <header className={styles.canvasToolbar}>
           <div className={styles.toolbarBrand}>
-            <a aria-label="Go to my page" className={styles.toolbarHomeLink} href={myPageHref} title="My page">
-              <UserRound aria-hidden="true" size={16} />
+            <a
+              aria-label={`Open dashboard for ${workspaceUserName} workspace: ${projectName}`}
+              className={styles.toolbarContextLink}
+              href={dashboardHref}
+              title={`Dashboard / ${workspaceUserName} / ${projectName}`}
+            >
+              <span aria-hidden="true" className={styles.toolbarAvatar}>
+                {workspaceInitials}
+              </span>
+              <span className={styles.toolbarContextText}>
+                <span className={styles.toolbarProjectName}>{projectName}</span>
+                <span className={styles.toolbarUserName}>
+                  <UserRound aria-hidden="true" size={12} />
+                  <span>{workspaceUserName}</span>
+                </span>
+              </span>
             </a>
-            <span className={styles.toolbarTitle}>{projectName}</span>
           </div>
 
           <div className={styles.toolbarGroup} aria-label="편집 도구">
@@ -2076,9 +2112,6 @@ function DiagramEditorInner({
             </button>
           </div>
 
-          <div className={styles.toolbarStatus}>
-            <span>{saveStatus}</span>
-          </div>
         </header>
 
         {draftStatusPanel ? (
@@ -2167,7 +2200,7 @@ function DiagramEditorInner({
                 }
               : {})}
           >
-            <Background color="#d8e0ef" gap={24} size={2} variant={BackgroundVariant.Dots} />
+            <Background bgColor="#ffffff" color="#d8e0ef" gap={24} size={1} variant={BackgroundVariant.Dots} />
           </ReactFlow>
         </div>
       </div>

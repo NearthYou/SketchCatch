@@ -3506,6 +3506,37 @@ nextjs-portal {
   padding: 10px 8px 12px;
 }
 
+.resourceCategoryGroups {
+  display: grid;
+  gap: 12px;
+}
+
+.resourceCategoryGroup {
+  display: grid;
+  gap: 7px;
+}
+
+.resourceCategoryHeader {
+  align-items: center;
+  color: #69778d;
+  display: flex;
+  font-size: 0.68rem;
+  font-weight: 800;
+  justify-content: space-between;
+  letter-spacing: 0;
+  line-height: 1.2;
+  padding: 0 2px;
+  text-transform: uppercase;
+}
+
+.resourceCategoryCount {
+  color: #8a96a8;
+  font-size: 0.62rem;
+  font-weight: 850;
+  line-height: 1.2;
+  padding-left: 8px;
+}
+
 .resourcePanel .resourceGrid {
   display: flex;
   flex-wrap: wrap;
@@ -10809,6 +10840,11 @@ nextjs-portal {
   width: 100%;
 }
 
+.authDesignShellWide {
+  grid-template-columns: minmax(0, 584px);
+  max-width: 584px;
+}
+
 .authDesignPanel {
   background: var(--auth-design-canvas);
   border: 1px solid var(--auth-design-hairline-strong);
@@ -10816,6 +10852,10 @@ nextjs-portal {
   box-shadow: 0 26px 76px rgba(23, 23, 23, 0.12);
   padding: clamp(28px, 4vw, 40px);
   width: 100%;
+}
+
+.authDesignPanelWide {
+  padding: clamp(28px, 4vw, 40px);
 }
 
 .authDesignBrand {
@@ -10917,6 +10957,70 @@ nextjs-portal {
   color: var(--auth-design-muted);
 }
 
+.authDesignPage .authPasswordToggle {
+  color: var(--auth-design-body);
+}
+
+.authDesignPage .authPasswordToggle:hover,
+.authDesignPage .authPasswordToggle:focus-visible {
+  background: var(--auth-design-hairline);
+  color: var(--auth-design-ink);
+  outline: none;
+}
+
+.authDesignPage .authCheckButton {
+  background: var(--auth-design-canvas);
+  border: 1px solid var(--auth-design-hairline-strong);
+  border-radius: 8px;
+  color: var(--auth-design-ink);
+  font-family: var(--auth-design-sans);
+  min-height: 44px;
+}
+
+.authDesignPage .authCheckButton:hover,
+.authDesignPage .authCheckButton:focus-visible {
+  background: var(--auth-design-canvas-soft);
+  border-color: var(--auth-design-ink);
+  color: var(--auth-design-ink);
+  outline: none;
+}
+
+.authDesignPage .authCheckButton:disabled {
+  background: var(--auth-design-canvas-soft);
+  border-color: var(--auth-design-hairline-strong);
+  color: var(--auth-design-body);
+  opacity: 0.58;
+}
+
+.authDesignPage .authConsentViewButton {
+  background: var(--auth-design-canvas);
+  border: 1px solid var(--auth-design-hairline-strong);
+  border-radius: 8px;
+  color: var(--auth-design-link);
+  font-family: var(--auth-design-sans);
+}
+
+.authDesignPage .authConsentViewButton:hover,
+.authDesignPage .authConsentViewButton:focus-visible {
+  background: var(--auth-design-canvas-soft);
+  border-color: var(--auth-design-link);
+  color: var(--auth-design-link);
+  outline: none;
+}
+
+.authDesignPage .authFieldStatusSuccess {
+  color: var(--auth-design-success);
+}
+
+.authDesignPage .authFieldStatusError,
+.authDesignPage .authErrorText {
+  color: #9f1d23;
+}
+
+.authDesignPage .authFieldStatusNeutral {
+  color: var(--auth-design-body);
+}
+
 .authDesignPage .authForm .authCheckboxLabel {
   color: var(--auth-design-body);
 }
@@ -10939,6 +11043,10 @@ nextjs-portal {
 
 .authDesignPage .authHelpText {
   color: var(--auth-design-body);
+}
+
+.authDesignPage .authHelpText.authErrorText {
+  color: #9f1d23;
 }
 
 .authDesignPage .authWarningText {
@@ -10982,6 +11090,70 @@ nextjs-portal {
   color: #9f1d23;
 }
 
+.authDesignPage .authLegalOverlay {
+  background: rgba(23, 23, 23, 0.48);
+}
+
+.authDesignPage .authLegalDialog {
+  background: var(--auth-design-canvas);
+  border: 1px solid var(--auth-design-hairline-strong);
+  border-radius: 8px;
+  box-shadow: 0 26px 76px rgba(23, 23, 23, 0.2);
+  color: var(--auth-design-body);
+}
+
+.authDesignPage .authLegalHeader,
+.authDesignPage .authLegalSummary,
+.authDesignPage .authLegalActions {
+  border-color: var(--auth-design-hairline);
+}
+
+.authDesignPage .authLegalHeader h2,
+.authDesignPage .authLegalSection h3 {
+  color: var(--auth-design-ink);
+}
+
+.authDesignPage .authLegalEyebrow {
+  color: var(--auth-design-link);
+}
+
+.authDesignPage .authLegalCloseButton {
+  background: var(--auth-design-canvas-soft);
+  border: 1px solid var(--auth-design-hairline-strong);
+  border-radius: 8px;
+  color: var(--auth-design-body);
+}
+
+.authDesignPage .authLegalCloseButton:hover,
+.authDesignPage .authLegalCloseButton:focus-visible {
+  background: var(--auth-design-hairline);
+  color: var(--auth-design-ink);
+  outline: none;
+}
+
+.authDesignPage .authLegalSummary,
+.authDesignPage .authLegalSection p,
+.authDesignPage .authLegalSection li {
+  color: var(--auth-design-body);
+}
+
+.authDesignPage .authLegalConfirmButton {
+  background: var(--auth-design-primary);
+  border: 1px solid var(--auth-design-primary);
+  border-radius: 8px;
+  color: var(--auth-design-on-primary);
+  font-family: var(--auth-design-sans);
+  min-height: 40px;
+}
+
+.authDesignPage .authLegalConfirmButton:hover,
+.authDesignPage .authLegalConfirmButton:focus-visible {
+  background: var(--auth-design-primary-active);
+  border-color: var(--auth-design-primary-active);
+  color: var(--auth-design-on-primary);
+  outline: none;
+}
+
 .authDesignSwitch {
   color: var(--auth-design-body);
   font-size: 0.94rem;
@@ -10997,6 +11169,10 @@ nextjs-portal {
 
   .authDesignShell {
     max-width: 448px;
+  }
+
+  .authDesignShellWide {
+    max-width: 584px;
   }
 }
 
@@ -11020,6 +11196,14 @@ nextjs-portal {
   .authDesignPage .authSocialButton,
   .authDesignPage .authSubmit,
   .authDesignPage .authForm input {
+    width: 100%;
+  }
+
+  .authDesignPage .authInlineControl {
+    grid-template-columns: 1fr;
+  }
+
+  .authDesignPage .authCheckButton {
     width: 100%;
   }
 }
@@ -11086,6 +11270,10 @@ nextjs-portal {
   height: 100vh;
 }
 
+.designDashboardSidebarHeader {
+  min-width: 0;
+}
+
 .designDashboardBrand {
   align-items: center;
   color: var(--dashboard-design-ink);
@@ -11093,6 +11281,10 @@ nextjs-portal {
   font-size: 1.35rem;
   font-weight: 700;
   line-height: 1;
+}
+
+.designDashboardMobileAccount {
+  display: none;
 }
 
 .designDashboardNav {
@@ -11131,28 +11323,88 @@ nextjs-portal {
   border: 1px solid var(--dashboard-design-hairline);
   border-radius: 8px;
   color: var(--dashboard-design-body);
+  display: grid;
+  gap: 12px;
   margin-top: auto;
   padding: 14px;
 }
 
-.designDashboardSidebarFooter p,
-.designDashboardSidebarFooter strong {
-  display: block;
-  margin: 0;
+.designDashboardAccountSummary {
+  align-items: center;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: auto minmax(0, 1fr);
 }
 
-.designDashboardSidebarFooter p {
-  color: var(--dashboard-design-muted);
-  font-size: 0.78rem;
-  font-weight: 700;
-  line-height: 1.4;
-}
-
-.designDashboardSidebarFooter strong {
+.designDashboardAccountIcon {
+  align-items: center;
+  background: var(--dashboard-design-surface-strong);
+  border-radius: 8px;
   color: var(--dashboard-design-ink);
+  display: inline-flex;
+  height: 34px;
+  justify-content: center;
+  width: 34px;
+}
+
+.designDashboardAccountSummary strong,
+.designDashboardAccountSummary span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.designDashboardAccountSummary strong {
+  color: var(--dashboard-design-ink);
+  font-size: 0.9rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.designDashboardAccountSummary span,
+.designDashboardAccountError {
+  color: var(--dashboard-design-body);
+  font-size: 0.78rem;
+  line-height: 1.4;
+  margin: 3px 0 0;
+}
+
+.designDashboardLogoutButton {
+  align-items: center;
+  background: var(--dashboard-design-primary);
+  border: 1px solid var(--dashboard-design-primary);
+  border-radius: 8px;
+  color: #ffffff;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
   font-size: 0.88rem;
-  line-height: 1.45;
-  margin-top: 8px;
+  font-weight: 700;
+  gap: 8px;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0 12px;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease;
+}
+
+.designDashboardLogoutButton:hover,
+.designDashboardLogoutButton:focus-visible {
+  background: var(--dashboard-design-primary-active);
+  border-color: var(--dashboard-design-primary-active);
+  outline: none;
+}
+
+.designDashboardLogoutButton:disabled {
+  cursor: progress;
+  opacity: 0.68;
+}
+
+.designDashboardAccountError {
+  color: var(--dashboard-design-error);
+  margin-top: 0;
 }
 
 .designDashboardMain {
@@ -11960,6 +12212,29 @@ nextjs-portal {
     height: auto;
     padding: 20px;
     position: static;
+  }
+
+  .designDashboardSidebarHeader {
+    align-items: center;
+    display: flex;
+    gap: 16px;
+    justify-content: space-between;
+  }
+
+  .designDashboardMobileAccount {
+    display: grid;
+    flex: 0 0 auto;
+    gap: 8px;
+    justify-items: end;
+  }
+
+  .designDashboardMobileAccount .designDashboardLogoutButton {
+    min-width: 108px;
+  }
+
+  .designDashboardMobileAccount .designDashboardAccountError {
+    max-width: 240px;
+    text-align: right;
   }
 
   .designDashboardNav {

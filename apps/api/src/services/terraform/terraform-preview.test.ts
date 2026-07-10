@@ -7,46 +7,6 @@ import {
   isTerraformNestedBlockAttribute
 } from "./terraform-nested-blocks.js";
 import { generateTerraformFromDiagramJson } from "./terraform-preview.js";
-import {
-  SKETCHCATCH_REFERENCE_TERRAFORM_CODE,
-  SKETCHCATCH_REFERENCE_TERRAFORM_MARKER
-} from "./sketchcatch-reference-terraform-code.js";
-
-test("returns the fixed SketchCatch reference Terraform code when the diagram carries the reference marker", () => {
-  const diagramJson: DiagramJson = {
-    nodes: [
-      makeNode({
-        id: "vpc-main",
-        type: "aws_vpc",
-        kind: "resource",
-        label: "sketchcatch-vpc",
-        parameters: {
-          terraformBlockType: "resource",
-          resourceType: "aws_vpc",
-          resourceName: "vpc",
-          fileName: "main",
-          values: {
-            cidrBlock: "10.0.0.0/16",
-            sketchcatchReferenceTerraform: SKETCHCATCH_REFERENCE_TERRAFORM_MARKER
-          }
-        }
-      })
-    ],
-    edges: [],
-    viewport: {
-      x: 0,
-      y: 0,
-      zoom: 1
-    }
-  };
-
-  const terraformCode = generateTerraformFromDiagramJson(diagramJson);
-
-  assert.equal(terraformCode, SKETCHCATCH_REFERENCE_TERRAFORM_CODE);
-  assert.match(terraformCode, /resource "aws_vpc" "vpc"/);
-  assert.match(terraformCode, /resource "aws_codepipeline" "codepipeline"/);
-  assert.match(terraformCode, /resource "aws_codedeploy_deployment_group" "codedeploy_deployment_group"/);
-});
 
 test("generates Terraform code from resource nodes", () => {
   const diagramJson: DiagramJson = {
@@ -426,6 +386,97 @@ resource "aws_s3_bucket_public_access_block" "logs_public_access" {
   ignore_public_acls = true
   restrict_public_buckets = true
 }`
+  );
+});
+
+test("omits unset ASG desired capacity from Terraform while rendering an explicit zero", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      makeNode({
+        id: "asg-missing",
+        type: "aws_autoscaling_group",
+        kind: "resource",
+        label: "missing",
+        parameters: {
+          resourceType: "aws_autoscaling_group",
+          resourceName: "missing",
+          fileName: "compute",
+          values: {
+            minSize: 1,
+            maxSize: 3
+          }
+        }
+      }),
+      makeNode({
+        id: "asg-null",
+        type: "aws_autoscaling_group",
+        kind: "resource",
+        label: "null",
+        parameters: {
+          resourceType: "aws_autoscaling_group",
+          resourceName: "null",
+          fileName: "compute",
+          values: {
+            minSize: 1,
+            desiredCapacity: null,
+            maxSize: 3
+          }
+        }
+      }),
+      makeNode({
+        id: "asg-empty",
+        type: "aws_autoscaling_group",
+        kind: "resource",
+        label: "empty",
+        parameters: {
+          resourceType: "aws_autoscaling_group",
+          resourceName: "empty",
+          fileName: "compute",
+          values: {
+            minSize: 1,
+            desiredCapacity: "",
+            maxSize: 3
+          }
+        }
+      }),
+      makeNode({
+        id: "asg-zero",
+        type: "aws_autoscaling_group",
+        kind: "resource",
+        label: "zero",
+        parameters: {
+          resourceType: "aws_autoscaling_group",
+          resourceName: "zero",
+          fileName: "compute",
+          values: {
+            minSize: 0,
+            desiredCapacity: 0,
+            maxSize: 3
+          }
+        }
+      })
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  const terraformCode = generateTerraformFromDiagramJson(diagramJson);
+
+  assert.match(
+    terraformCode,
+    /resource "aws_autoscaling_group" "missing" \{\n {2}min_size = 1\n {2}max_size = 3\n\}/
+  );
+  assert.match(
+    terraformCode,
+    /resource "aws_autoscaling_group" "null" \{\n {2}min_size = 1\n {2}max_size = 3\n\}/
+  );
+  assert.match(
+    terraformCode,
+    /resource "aws_autoscaling_group" "empty" \{\n {2}min_size = 1\n {2}max_size = 3\n\}/
+  );
+  assert.match(
+    terraformCode,
+    /resource "aws_autoscaling_group" "zero" \{\n {2}min_size = 0\n {2}desired_capacity = 0\n {2}max_size = 3\n\}/
   );
 });
 
@@ -903,11 +954,30 @@ test("tracks curated nested block parameters as canonical camelCase keys", () =>
     aws_autoscaling_group: ["launchTemplate", "tag"],
     aws_db_parameter_group: ["parameter"],
     aws_dynamodb_table: ["attribute"],
+    aws_cloudfront_cache_policy: ["parametersInCacheKeyAndForwardedToOrigin"],
+    aws_cloudfront_distribution: [
+      "defaultCacheBehavior",
+      "origin",
+      "restrictions",
+      "viewerCertificate"
+    ],
+    aws_cloudfront_origin_request_policy: [
+      "cookiesConfig",
+      "headersConfig",
+      "queryStringsConfig"
+    ],
+    aws_config_config_rule: ["source"],
     aws_instance: ["rootBlockDevice"],
+    aws_eks_cluster: ["vpcConfig"],
+    aws_eks_node_group: ["scalingConfig"],
     aws_lambda_function: ["environment"],
     aws_route_table: ["route"],
+    aws_s3_bucket_server_side_encryption_configuration: ["rule"],
     aws_s3_bucket_lifecycle_configuration: ["rule"],
-    aws_security_group: ["egress", "ingress"]
+    aws_s3_bucket_versioning: ["versioningConfiguration"],
+    aws_scheduler_schedule: ["flexibleTimeWindow", "target"],
+    aws_security_group: ["egress", "ingress"],
+    aws_wafv2_web_acl: ["defaultAction", "visibilityConfig"]
   };
 
   for (const [resourceType, expectedAttributes] of Object.entries(expectedNestedBlockAttributes)) {

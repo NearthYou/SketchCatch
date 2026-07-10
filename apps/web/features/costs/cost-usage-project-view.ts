@@ -1,4 +1,9 @@
-import type { CostProjectUsage, CostResourceUsage, CostUsageTrendPoint } from "@sketchcatch/types";
+import type {
+  CostProjectUsage,
+  CostResourceUsage,
+  CostServiceUsage,
+  CostUsageTrendPoint
+} from "@sketchcatch/types";
 
 export const COST_USAGE_ALL_PROJECTS_KEY = "all-projects";
 
@@ -99,12 +104,74 @@ export function selectCostUsageResourceCosts(
   return resourceCosts.filter((resource) => resource.projectId === selectedProject.projectId);
 }
 
+export function createScopedCostUsageServiceCosts(input: {
+  readonly resourceCosts: readonly CostResourceUsage[];
+  readonly selectedProject: CostProjectUsage | null;
+  readonly serviceCosts: readonly CostServiceUsage[];
+  readonly totalCostAmount: number;
+}): CostServiceUsage[] {
+  if (input.selectedProject === null) {
+    return [...input.serviceCosts];
+  }
+
+  if (input.selectedProject.projectId === null) {
+    return [];
+  }
+
+  const selectedResources = selectCostUsageResourceCosts(input.resourceCosts, input.selectedProject);
+
+  if (selectedResources.length > 0) {
+    return createServiceCostsFromEntries(groupResourceCostsByService(selectedResources));
+  }
+
+  if (input.totalCostAmount <= 0 || input.selectedProject.amount <= 0) {
+    return [];
+  }
+
+  const scale = input.selectedProject.amount / input.totalCostAmount;
+
+  return createServiceCostsFromEntries(
+    input.serviceCosts.map((service) => [
+      service.service,
+      roundUsd(service.amount * scale)
+    ])
+  );
+}
+
 function createCostUsageProjectKey(project: CostProjectUsage, index: number): string {
   return project.projectId === null
     ? `project-name:${project.projectName}:${index}`
     : `project-id:${project.projectId}`;
 }
 
+function groupResourceCostsByService(
+  resourceCosts: readonly CostResourceUsage[]
+): readonly [string, number][] {
+  const serviceCosts = new Map<string, number>();
+
+  for (const resource of resourceCosts) {
+    serviceCosts.set(resource.service, (serviceCosts.get(resource.service) ?? 0) + resource.amount);
+  }
+
+  return [...serviceCosts.entries()];
+}
+
+function createServiceCostsFromEntries(entries: readonly [string, number][]): CostServiceUsage[] {
+  const totalAmount = entries.reduce((sum, [, amount]) => sum + amount, 0);
+
+  return entries
+    .map(([service, amount]) => ({
+      amount: roundUsd(amount),
+      percentage: totalAmount > 0 ? roundPercent((amount / totalAmount) * 100) : 0,
+      service
+    }))
+    .sort((left, right) => right.amount - left.amount || left.service.localeCompare(right.service));
+}
+
 function roundUsd(amount: number): number {
   return Math.round((amount + Number.EPSILON) * 100) / 100;
+}
+
+function roundPercent(value: number): number {
+  return Math.round((value + Number.EPSILON) * 10) / 10;
 }
