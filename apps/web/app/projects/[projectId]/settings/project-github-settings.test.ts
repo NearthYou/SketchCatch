@@ -5,7 +5,9 @@ import { fileURLToPath } from "node:url";
 
 const pageSource = readDashboardSettingsPage();
 const clientSource = readSettingsFile("project-github-settings-client.tsx");
+const connectionPanelSource = readSettingsFile("github-repository-connection-panel.tsx");
 const resultSource = readSettingsFile("repository-analysis-result.tsx");
+const settingsStyles = readSettingsFile("project-github-settings.module.css");
 const workspaceAiChatSource = readWorkspaceFile("WorkspaceAiChatDock.tsx");
 
 test("project settings owns GitHub source repository setup", () => {
@@ -23,8 +25,10 @@ test("project GitHub settings lists existing installation repositories before in
   assert.ok(listIndex > -1);
   assert.ok(installIndex > listIndex);
   assert.match(clientSource, /listGitHubInstalledRepositories\(projectId\)/);
-  assert.match(clientSource, /installedRepositories\.map/);
-  assert.match(clientSource, /GitHub App 설치\/권한 추가/);
+  assert.match(clientSource, /GitHubRepositoryConnectionPanel/);
+  assert.match(connectionPanelSource, /installedRepositories\.map/);
+  assert.match(connectionPanelSource, /GitHub App 설치\/권한 추가/);
+  assert.match(connectionPanelSource, /이 repository 연결/);
 });
 
 test("project settings runs Repository Analysis once and restores the saved result", () => {
@@ -33,6 +37,17 @@ test("project settings runs Repository Analysis once and restores the saved resu
   assert.match(clientSource, /disabled=\{analysisState === "loading"/);
   assert.match(clientSource, /activeRepository\.analysis/);
   assert.match(clientSource, /RepositoryAnalysisResult/);
+});
+
+test("project settings waits for authentication recovery before loading repository data", () => {
+  assert.match(clientSource, /useAuth/);
+  assert.match(clientSource, /authStatus !== "authenticated"/);
+  assert.match(clientSource, /\[authStatus, projectId\]/);
+});
+
+test("project settings keeps metadata readable and mobile actions touch accessible", () => {
+  assert.match(settingsStyles, /settingsInfoGrid span/);
+  assert.match(settingsStyles, /min-height: 44px/);
 });
 
 test("Repository Analysis renders selected and failed Template states with evidence", () => {

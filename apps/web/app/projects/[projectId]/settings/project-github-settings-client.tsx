@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { GitHubInstalledRepositoryCandidate, SourceRepository } from "@sketchcatch/types";
+import { useAuth } from "../../../../components/auth/auth-provider";
 import { DashboardIcon } from "../../../../components/dashboard/dashboard-icons";
 import { getApiErrorMessage } from "../../../../lib/api-client";
 import {
@@ -12,16 +13,15 @@ import {
   listGitHubInstalledRepositories,
   listSourceRepositories
 } from "../../../../features/workspace/api";
+import { GitHubRepositoryConnectionPanel } from "./github-repository-connection-panel";
 import { RepositoryAnalysisResult } from "./repository-analysis-result";
+import styles from "./project-github-settings.module.css";
 
 type RequestState = "idle" | "loading" | "error";
 
 // active GitHub repository 연결, 분석 실행, 저장 결과 복원을 한 화면에서 제공합니다.
-export function ProjectGitHubSettingsClient({
-  projectId
-}: {
-  readonly projectId: string;
-}) {
+export function ProjectGitHubSettingsClient({ projectId }: { readonly projectId: string }) {
+  const { status: authStatus } = useAuth();
   const [projectName, setProjectName] = useState("Project");
   const [sourceRepositories, setSourceRepositories] = useState<SourceRepository[]>([]);
   const [installedRepositories, setInstalledRepositories] = useState<
@@ -43,8 +43,12 @@ export function ProjectGitHubSettingsClient({
   );
 
   useEffect(() => {
+    if (authStatus !== "authenticated") {
+      return;
+    }
+
     void loadProjectSettings();
-  }, [projectId]);
+  }, [authStatus, projectId]);
 
   async function loadProjectSettings(): Promise<void> {
     setLoadState("loading");
@@ -156,14 +160,17 @@ export function ProjectGitHubSettingsClient({
   }
 
   return (
-    <section className="dashboardPanel integrationPanel" aria-labelledby="project-github-title">
+    <section
+      className={`dashboardPanel integrationPanel ${styles.scope}`}
+      aria-labelledby="project-github-title"
+    >
       <div className="integrationHeader">
         <span className="integrationIcon">
           <DashboardIcon name="github" />
         </span>
         <div>
           <p className="dashboardPanelKicker">GitHub</p>
-          <h2 id="project-github-title">{projectName} repository 연결</h2>
+          <h2 className={styles.title} id="project-github-title">{projectName} repository 연결</h2>
         </div>
       </div>
 
@@ -223,62 +230,15 @@ export function ProjectGitHubSettingsClient({
         </p>
       )}
 
-      <div className="settingsActionRow">
-        <button
-          className="dashboardSecondaryButton"
-          disabled={repositoryState === "loading" || actionState === "loading"}
-          onClick={() => void loadInstalledRepositories()}
-          type="button"
-        >
-          <DashboardIcon name="github" />
-          <span>
-            {repositoryState === "loading" ? "불러오는 중" : "연결 가능한 repository 보기"}
-          </span>
-        </button>
-        <button
-          className="dashboardTopbarAction"
-          disabled={actionState === "loading"}
-          onClick={() => void openGitHubInstallation()}
-          type="button"
-        >
-          <DashboardIcon name="link" />
-          <span>GitHub App 설치/권한 추가</span>
-        </button>
-      </div>
-
-      {installedRepositories.length > 0 ? (
-        <div className="settingsInfoGrid" aria-label="GitHub repository 후보">
-          {installedRepositories.map((repository) => (
-            <article key={`${repository.installationId}-${repository.githubRepositoryId}`}>
-              <span>{repository.installationAccountLogin}</span>
-              <strong>{repository.fullName}</strong>
-              <button
-                className="dashboardSecondaryButton"
-                disabled={
-                  actionState === "loading" ||
-                  repository.archived ||
-                  repository.connectedStatus === "active"
-                }
-                onClick={() => void connectRepository(repository)}
-                type="button"
-              >
-                <DashboardIcon name="link" />
-                <span>
-                  {repository.connectedStatus === "active"
-                    ? "연결됨"
-                    : repository.archived
-                      ? "Archived"
-                      : "이 repository 연결"}
-                </span>
-              </button>
-            </article>
-          ))}
-        </div>
-      ) : repositoryState === "idle" && installationState ? (
-        <p className="dashboardMessage" role="status">
-          현재 GitHub App 권한으로 접근 가능한 repository가 없습니다.
-        </p>
-      ) : null}
+      <GitHubRepositoryConnectionPanel
+        actionState={actionState}
+        installationState={installationState}
+        installedRepositories={installedRepositories}
+        onConnectRepository={(repository) => void connectRepository(repository)}
+        onLoadInstalledRepositories={() => void loadInstalledRepositories()}
+        onOpenGitHubInstallation={() => void openGitHubInstallation()}
+        repositoryState={repositoryState}
+      />
 
       {errorMessage ? (
         <p className="dashboardMessage" role="alert">

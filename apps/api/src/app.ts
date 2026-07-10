@@ -289,8 +289,16 @@ function createTerraformRouteOptions(
 
 function setCorsHeaders(request: FastifyRequest, reply: FastifyReply): void {
   const origin = firstHeaderValue(request.headers.origin);
+  const configuredPublicBaseUrl = process.env.SKETCHCATCH_PUBLIC_BASE_URL?.trim();
+  const configuredPublicOrigin =
+    configuredPublicBaseUrl && URL.canParse(configuredPublicBaseUrl)
+      ? new URL(configuredPublicBaseUrl).origin
+      : undefined;
 
-  if (origin === undefined || !allowedCorsOrigins.has(origin)) {
+  if (
+    origin === undefined ||
+    (!allowedCorsOrigins.has(origin) && origin !== configuredPublicOrigin)
+  ) {
     return;
   }
 
@@ -299,6 +307,7 @@ function setCorsHeaders(request: FastifyRequest, reply: FastifyReply): void {
     fallbackCorsAllowedHeaders;
 
   reply.header("Access-Control-Allow-Origin", origin);
+  reply.header("Access-Control-Allow-Credentials", "true");
   reply.header("Access-Control-Allow-Methods", corsAllowedMethods);
   reply.header("Access-Control-Allow-Headers", requestedHeaders);
   reply.header("Vary", "Origin");
