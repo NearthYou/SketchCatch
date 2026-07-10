@@ -39,6 +39,7 @@ const resourceCategoryOverrides: Record<string, string> = {
   "aws-api-gateway-v2-stage": "API Gateway v2",
   "aws-api-gateway-websocket-api": "API Gateway v2",
   "aws-autoscaling-group": "EC2 Launch & Scaling",
+  "aws-autoscaling-policy": "EC2 Launch & Scaling",
   "aws-cloudfront-cache-policy": "Edge / CDN",
   "aws-cloudfront-distribution": "Edge / CDN",
   "aws-cloudfront-origin-access-control": "Edge / CDN",
@@ -485,6 +486,15 @@ const terraformResourcePresentations = [
     iconUrl: `${serviceIconPath}/Arch_Compute/64/Arch_Amazon-EC2-Auto-Scaling_64.svg`,
     label: "Auto Scaling Group",
     size: autoscalingGroupAreaSize
+  },
+  {
+    definitionId: "aws-autoscaling-policy",
+    name: "Autoscaling Policy",
+    area: "compute",
+    category: "Compute",
+    iconUrl: `${resourceIconPath}/Res_Compute/Res_Amazon-EC2_Auto-Scaling_48.svg`,
+    label: "Autoscaling Policy",
+    size
   },
   {
     definitionId: "aws-lb",

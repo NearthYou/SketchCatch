@@ -7,6 +7,7 @@ import {
   getResourceDefinitionByTerraform,
   resourceDefinitions
 } from "@sketchcatch/types/resource-definitions";
+import { terraformAwsParameterCatalog as generatedTerraformAwsParameterCatalog } from "../parameter-input/catalog.generated";
 import { terraformParameterCatalog } from "../parameter-input/catalog";
 import { resourceCatalog } from "./catalog";
 
@@ -228,6 +229,110 @@ test("resource parameter panel capability matches the parameter catalog", () => 
   assert.deepEqual(capabilityResourceTypes, parameterCatalogResourceTypes);
 });
 
+test("Autoscaling Policy is available through the shared definition and resource catalog", () => {
+  const definition = getResourceDefinitionById("aws-autoscaling-policy");
+  const resource = resourceCatalog.find((item) => item.id === "aws-autoscaling-policy");
+
+  assert.deepEqual(definition, {
+    id: "aws-autoscaling-policy",
+    provider: "aws",
+    resourceType: "AUTO_SCALING_POLICY",
+    terraform: {
+      blockType: "resource",
+      resourceType: "aws_autoscaling_policy"
+    },
+    capabilities: {
+      parameterPanel: true,
+      terraformPreview: true,
+      terraformSync: true
+    }
+  });
+  assert.equal(resource?.category, "EC2 Launch & Scaling");
+  assert.equal(
+    resource?.iconUrl,
+    "/Resource-Icons_07312025/Res_Compute/Res_Amazon-EC2_Auto-Scaling_48.svg"
+  );
+});
+
+test("main parameter catalog exposes scaling, networking, listener, alarm, and policy controls", () => {
+  const asg = getParameters("aws_autoscaling_group");
+  assertMainParameter(asg, "minSize", "Min");
+  assertMainParameter(asg, "desiredCapacity", "Desired");
+  assertMainParameter(asg, "maxSize", "Max");
+  assert.equal(getParameter(asg, "desiredCapacity").optional, true);
+  assert.deepEqual(getParameter(asg, "targetGroupArns").referenceTargetTypes, ["aws_lb_target_group"]);
+  assert.equal(getParameter(asg, "targetGroupArns").referenceAttribute, "arn");
+
+  const securityGroup = getParameters("aws_security_group");
+  for (const name of ["vpcId", "ingress", "egress"]) {
+    assert.equal(getParameter(securityGroup, name).core, true, `Missing main/core ${name}`);
+  }
+  const ingressChildNames = getParameter(securityGroup, "ingress").children?.map((child) => child.name) ?? [];
+  for (const name of ["fromPort", "toPort", "protocol", "cidrBlocks"]) {
+    assert.ok(ingressChildNames.includes(name), `Missing nested ingress field ${name}`);
+  }
+
+  const listenerDefaultAction = getParameter(getParameters("aws_lb_listener"), "defaultAction");
+  assert.equal(listenerDefaultAction.core, true);
+  assert.deepEqual(listenerDefaultAction.children?.map((child) => child.name), ["type", "targetGroupArn"]);
+  assert.deepEqual(listenerDefaultAction.children?.[0]?.options, ["forward", "redirect", "fixed-response"]);
+  assert.deepEqual(listenerDefaultAction.children?.[1]?.referenceTargetTypes, ["aws_lb_target_group"]);
+  assert.equal(listenerDefaultAction.children?.[1]?.referenceAttribute, "arn");
+
+  const alarm = getParameters("aws_cloudwatch_metric_alarm");
+  assert.equal(getParameter(alarm, "dimensions").inputKind, "key-value");
+  assert.equal(getParameter(alarm, "dimensions").core, true);
+  assert.equal(getParameter(alarm, "alarmActions").core, true);
+  assert.deepEqual(getParameter(alarm, "alarmActions").referenceTargetTypes, [
+    "aws_sns_topic",
+    "aws_autoscaling_policy"
+  ]);
+  assert.equal(getParameter(alarm, "alarmActions").referenceAttribute, "arn");
+
+  const policy = getParameters("aws_autoscaling_policy");
+  for (const name of [
+    "name",
+    "autoscalingGroupName",
+    "policyType",
+    "adjustmentType",
+    "scalingAdjustment",
+    "cooldown",
+    "targetTrackingConfiguration"
+  ]) {
+    assert.equal(getParameter(policy, name).core, true, `Missing main/core ${name}`);
+  }
+  assert.deepEqual(getParameter(policy, "autoscalingGroupName").referenceTargetTypes, [
+    "aws_autoscaling_group"
+  ]);
+  assert.equal(getParameter(policy, "autoscalingGroupName").referenceAttribute, "name");
+  const tracking = getParameter(policy, "targetTrackingConfiguration");
+  assert.deepEqual(tracking.children?.map((child) => child.name), [
+    "targetValue",
+    "disableScaleIn",
+    "predefinedMetricSpecification"
+  ]);
+  const metric = tracking.children?.[2];
+  assert.deepEqual(metric?.children?.map((child) => child.name), [
+    "predefinedMetricType",
+    "resourceLabel"
+  ]);
+  assert.deepEqual(metric?.children?.[0]?.options, [
+    "ASGAverageCPUUtilization",
+    "ASGAverageNetworkIn",
+    "ASGAverageNetworkOut",
+    "ALBRequestCountPerTarget"
+  ]);
+  assert.equal(metric?.children?.[1]?.optional, true);
+});
+
+test("generated parameter catalog retains override core fields", () => {
+  const minSize = generatedTerraformAwsParameterCatalog.resources["aws_autoscaling_group"]?.find(
+    (parameter) => parameter.name === "minSize"
+  );
+
+  assert.equal(minSize?.core, true);
+});
+
 test("resourceCatalog exposes requested missing resources with public icon assets", () => {
   for (const expected of requestedMissingCatalogItems) {
     const resource = resourceCatalog.find((item) => item.id === expected.id);
@@ -322,6 +427,34 @@ function assertCatalogCategory(resourceId: string, expectedCategory: string) {
 
 function getTerraformCatalogItems() {
   return resourceCatalog.filter((resource) => terraformDefinitionKeys.has(createCatalogResourceKey(resource)));
+}
+
+function getParameters(resourceType: string) {
+  const parameters = terraformParameterCatalog.resources[resourceType];
+
+  assert.ok(parameters, `Missing parameter catalog for ${resourceType}`);
+  return parameters;
+}
+
+function getParameter(
+  parameters: readonly NonNullable<(typeof terraformParameterCatalog.resources)[string]>[number][],
+  name: string
+) {
+  const parameter = parameters.find((candidate) => candidate.name === name);
+
+  assert.ok(parameter, `Missing parameter ${name}`);
+  return parameter;
+}
+
+function assertMainParameter(
+  parameters: readonly NonNullable<(typeof terraformParameterCatalog.resources)[string]>[number][],
+  name: string,
+  label: string
+) {
+  const parameter = getParameter(parameters, name);
+
+  assert.equal(parameter.label, label);
+  assert.equal(parameter.core, true, `Missing main/core ${name}`);
 }
 
 function createCatalogResourceKey(resource: (typeof resourceCatalog)[number]): string {

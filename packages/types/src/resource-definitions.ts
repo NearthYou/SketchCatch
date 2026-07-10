@@ -289,6 +289,13 @@ export const resourceDefinitions = [
     terraformSync: true
   }),
   createAwsResourceDefinition({
+    id: "aws-autoscaling-policy",
+    resourceType: "AUTO_SCALING_POLICY",
+    terraformPreview: true,
+    terraformResourceType: "aws_autoscaling_policy",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
     id: "aws-lb",
     resourceType: "LOAD_BALANCER",
     terraformPreview: true,
