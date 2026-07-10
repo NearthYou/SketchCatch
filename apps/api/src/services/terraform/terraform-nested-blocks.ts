@@ -2,6 +2,7 @@ const TERRAFORM_NESTED_BLOCK_ATTRIBUTES: Record<string, ReadonlySet<string>> = {
   aws_ami: new Set(["filter"]),
   aws_api_gateway_rest_api: new Set(["endpointConfiguration"]),
   aws_autoscaling_group: new Set(["launchTemplate", "tag"]),
+  aws_autoscaling_policy: new Set(["targetTrackingConfiguration"]),
   aws_codebuild_project: new Set([
     "artifacts",
     "buildStatusConfig",

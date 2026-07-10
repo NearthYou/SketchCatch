@@ -389,6 +389,97 @@ resource "aws_s3_bucket_public_access_block" "logs_public_access" {
   );
 });
 
+test("omits unset ASG desired capacity from Terraform while rendering an explicit zero", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      makeNode({
+        id: "asg-missing",
+        type: "aws_autoscaling_group",
+        kind: "resource",
+        label: "missing",
+        parameters: {
+          resourceType: "aws_autoscaling_group",
+          resourceName: "missing",
+          fileName: "compute",
+          values: {
+            minSize: 1,
+            maxSize: 3
+          }
+        }
+      }),
+      makeNode({
+        id: "asg-null",
+        type: "aws_autoscaling_group",
+        kind: "resource",
+        label: "null",
+        parameters: {
+          resourceType: "aws_autoscaling_group",
+          resourceName: "null",
+          fileName: "compute",
+          values: {
+            minSize: 1,
+            desiredCapacity: null,
+            maxSize: 3
+          }
+        }
+      }),
+      makeNode({
+        id: "asg-empty",
+        type: "aws_autoscaling_group",
+        kind: "resource",
+        label: "empty",
+        parameters: {
+          resourceType: "aws_autoscaling_group",
+          resourceName: "empty",
+          fileName: "compute",
+          values: {
+            minSize: 1,
+            desiredCapacity: "",
+            maxSize: 3
+          }
+        }
+      }),
+      makeNode({
+        id: "asg-zero",
+        type: "aws_autoscaling_group",
+        kind: "resource",
+        label: "zero",
+        parameters: {
+          resourceType: "aws_autoscaling_group",
+          resourceName: "zero",
+          fileName: "compute",
+          values: {
+            minSize: 0,
+            desiredCapacity: 0,
+            maxSize: 3
+          }
+        }
+      })
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  const terraformCode = generateTerraformFromDiagramJson(diagramJson);
+
+  assert.match(
+    terraformCode,
+    /resource "aws_autoscaling_group" "missing" \{\n {2}min_size = 1\n {2}max_size = 3\n\}/
+  );
+  assert.match(
+    terraformCode,
+    /resource "aws_autoscaling_group" "null" \{\n {2}min_size = 1\n {2}max_size = 3\n\}/
+  );
+  assert.match(
+    terraformCode,
+    /resource "aws_autoscaling_group" "empty" \{\n {2}min_size = 1\n {2}max_size = 3\n\}/
+  );
+  assert.match(
+    terraformCode,
+    /resource "aws_autoscaling_group" "zero" \{\n {2}min_size = 0\n {2}desired_capacity = 0\n {2}max_size = 3\n\}/
+  );
+});
+
 test("rejects unsafe Terraform block labels before rendering HCL", () => {
   const diagramJson: DiagramJson = {
     nodes: [
