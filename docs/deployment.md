@@ -568,8 +568,12 @@ Phase 5부터 API는 `DEPLOYMENT_WORKER_MODE=ecs`가 설정된 경우 Terraform 
 `deployment_jobs` row를 만든 뒤 ECS `RunTask` one-off worker task로 넘깁니다. 기본값은 `in_process`이므로 Phase 5/6
 worker runtime이 실제 운영 검증을 끝내기 전까지 기존 direct background 실행을 유지할 수 있습니다.
 
+Phase 6부터 API image에는 `dist/deployment-worker.cjs` worker entrypoint가 포함됩니다. worker는
+`SKETCHCATCH_DEPLOYMENT_JOB_ID`로 `RUNNING` job을 조회하고, 검증된 access context로 기존 deployment service를 실행한 뒤
+job을 `SUCCEEDED`, `FAILED`, `CANCELLED` 중 하나로 종료합니다. 실패 요약과 process error log에는 기존 masking을 적용합니다.
+
 현재 `infra/aws/terraform`에는 `nginx`, `web`, `api`용 app task definition만 있고 worker 전용 task definition,
-container entrypoint, task role, security group은 아직 없습니다. 이 리소스와 worker runtime이 추가되기 전에는 운영 API의
+task role, security group은 아직 없습니다. 이 리소스가 추가되고 worker task smoke를 통과하기 전에는 운영 API의
 `DEPLOYMENT_WORKER_MODE`를 `in_process`로 유지해야 하며, app task definition을 worker task로 재사용하지 않습니다.
 
 ECS worker mode에 필요한 API runtime environment:
@@ -581,15 +585,15 @@ ECS_WORKER_TASK_DEFINITION=<worker task definition family/revision or ARN>
 ECS_WORKER_CONTAINER_NAME=<worker container name>
 ECS_WORKER_SUBNETS=<subnet-id-1,subnet-id-2>
 ECS_WORKER_SECURITY_GROUP_IDS=<sg-id-1,sg-id-2>
-ECS_WORKER_COMMAND=["node","dist/worker.cjs"]
+ECS_WORKER_COMMAND=["node","dist/deployment-worker.cjs"]
 ECS_WORKER_ENVIRONMENT={"NODE_ENV":"production"}
 ECS_WORKER_ASSIGN_PUBLIC_IP=ENABLED
 ```
 
 `ECS_WORKER_COMMAND`는 JSON string array여야 하며, `ECS_WORKER_ENVIRONMENT`는 string 값만 가진 JSON object여야 합니다.
 API는 dispatch 시 `SKETCHCATCH_DEPLOYMENT_ID`, `SKETCHCATCH_DEPLOYMENT_JOB_ID`,
-`SKETCHCATCH_DEPLOYMENT_OPERATION`을 container override environment로 추가합니다. worker runtime 자체는 Phase 5 범위가 아니며,
-Phase 6에서 이 값을 읽어 plan/apply/destroy 실행을 이어받아야 합니다.
+`SKETCHCATCH_DEPLOYMENT_OPERATION`을 container override environment로 추가합니다. worker runtime은 operation과 access context의
+source of truth로 DB의 `deployment_jobs` row를 사용하며, override의 operation 값만 신뢰해 실행하지 않습니다.
 
 현재 Phase 1 네트워크는 NAT Gateway 없이 public subnet을 사용하므로 worker도 같은 구성을 사용한다면
 `ECS_WORKER_ASSIGN_PUBLIC_IP=ENABLED`가 필요합니다. private subnet과 NAT Gateway 또는 필요한 VPC endpoint를 갖춘 뒤에만
