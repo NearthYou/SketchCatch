@@ -194,10 +194,10 @@
 
 .templatePicker {
   display: grid;
-  gap: 12px;
+  gap: 18px;
   border-top: 1px solid #dcdee0;
   border-bottom: 1px solid #dcdee0;
-  padding: 20px 0;
+  padding: 24px 0;
 }
 
 .templatePickerHeader {
@@ -216,56 +216,6 @@
   font-size: 12px;
 }
 
-.templateList {
-  display: grid;
-  gap: 8px;
-}
-
-.templateOption {
-  display: flex;
-  min-height: 66px;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  border: 1px solid #dcdee0;
-  border-radius: 8px;
-  padding: 12px 14px;
-  background: #ffffff;
-  color: #171717;
-  cursor: pointer;
-  font: inherit;
-  text-align: left;
-}
-
-.templateOption:hover {
-  border-color: #999999;
-}
-
-.templateOptionSelected {
-  border: 2px solid #171717;
-  padding: 11px 13px;
-}
-
-.templateOption > span {
-  display: grid;
-  min-width: 0;
-  gap: 4px;
-}
-
-.templateOption strong {
-  font-size: 13px;
-}
-
-.templateOption small,
-.templateOption em {
-  color: #777b84;
-  font-size: 11px;
-  font-style: normal;
-}
-
-.templateOption em {
-  flex: 0 0 auto;
-}
 
 .boundaryNotice,
 .errorMessage {
@@ -368,7 +318,6 @@
   .option:nth-child(2n),
   .option:nth-last-child(-n + 2) { border-right: 0; border-bottom: 1px solid #f0f0f3; }
   .option:last-child { border-bottom: 0; }
-  .templateOption { align-items: flex-start; flex-direction: column; gap: 7px; }
   .actions { align-items: stretch; flex-direction: column; }
   .primaryAction { width: 100%; }
   .blankAction { align-self: center; }

@@ -14,6 +14,7 @@ import {
   type LucideIcon
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { TemplateGallery } from "../../../components/templates/TemplateGallery";
 import {
   createGitHubSourceRepositoryInstallUrl,
   createProject,
@@ -60,11 +61,20 @@ const mainStartOptions = startModeOptions.filter((option) => option.kind !== "bl
 const blankStartOption = startModeOptions.find((option) => option.kind === "blank");
 const boardTemplates = listBoardTemplates();
 
-export function WorkspaceStartClient() {
+// 프로젝트 이름과 시작 방식을 받아 알맞은 생성 흐름으로 연결합니다.
+export function WorkspaceStartClient({
+  initialStartKind,
+  initialTemplateId
+}: {
+  readonly initialStartKind?: WorkspaceStartKind | undefined;
+  readonly initialTemplateId?: string | undefined;
+} = {}) {
   const router = useRouter();
   const [title, setTitle] = useState("");
-  const [selectedKind, setSelectedKind] = useState<WorkspaceStartKind>("ai");
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const [selectedKind, setSelectedKind] = useState<WorkspaceStartKind>(initialStartKind ?? "ai");
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(
+    boardTemplates.some((template) => template.id === initialTemplateId) ? initialTemplateId ?? null : null
+  );
   const [errorMessage, setErrorMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const selectedTemplate = useMemo(
@@ -77,6 +87,10 @@ export function WorkspaceStartClient() {
     (selectedKind !== "template" || selectedTemplate !== null);
 
   useEffect(() => {
+    if (initialStartKind) {
+      return;
+    }
+
     const storedForm = readWorkspaceStartForm();
 
     if (storedForm) {
@@ -89,7 +103,7 @@ export function WorkspaceStartClient() {
     if (aiDraft?.projectName) {
       setTitle(aiDraft.projectName);
     }
-  }, []);
+  }, [initialStartKind]);
 
   useEffect(() => {
     writeWorkspaceStartForm({ projectName: title, selectedKind });
@@ -301,6 +315,7 @@ async function resolveStartAction({
   });
 }
 
+// 공통 Template Gallery를 새 프로젝트의 선택 단계로 보여줍니다.
 function TemplatePicker({
   onSelect,
   selectedTemplateId,
@@ -316,27 +331,12 @@ function TemplatePicker({
         <h2 id="template-picker-title">Template 선택</h2>
         <span>{templates.length}개</span>
       </div>
-      <div className={styles.templateList}>
-        {templates.map((template) => {
-          const selected = template.id === selectedTemplateId;
-
-          return (
-            <button
-              aria-pressed={selected}
-              className={selected ? `${styles.templateOption} ${styles.templateOptionSelected}` : styles.templateOption}
-              key={template.id}
-              onClick={() => onSelect(template.id)}
-              type="button"
-            >
-              <span>
-                <strong>{template.title}</strong>
-                <small>{template.tags.join(" · ")}</small>
-              </span>
-              <em>{template.diagramJson.nodes.length} Resources · {template.diagramJson.edges.length} relations</em>
-            </button>
-          );
-        })}
-      </div>
+      <TemplateGallery
+        actionLabel="이 Template 선택"
+        onSelect={onSelect}
+        selectedTemplateId={selectedTemplateId}
+        templates={templates}
+      />
     </section>
   );
 }
