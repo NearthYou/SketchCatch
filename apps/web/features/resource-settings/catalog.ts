@@ -80,6 +80,10 @@ const resourceCategoryOverrides: Record<string, string> = {
   "aws-eks-addon": "EKS",
   "aws-eks-cluster": "EKS",
   "aws-eks-node-group": "EKS",
+  "aws-amplify-app": "Frontend / Web Mobile",
+  "kubernetes-namespace": "Kubernetes",
+  "kubernetes-deployment": "Kubernetes",
+  "kubernetes-service": "Kubernetes",
   "aws-elasticache-parameter-group": "ElastiCache",
   "aws-elasticache-redis": "ElastiCache",
   "aws-elasticache-subnet-group": "ElastiCache",
@@ -413,6 +417,15 @@ const terraformResourcePresentations = [
     category: "Security",
     iconUrl: `${serviceIconPath}/Arch_Security-Identity-Compliance/64/Arch_Amazon-Cognito_64.svg`,
     label: "Pool Client",
+    size
+  },
+  {
+    definitionId: "aws-amplify-app",
+    name: "Amplify App",
+    area: "application",
+    category: "Frontend / Web Mobile",
+    iconUrl: `${serviceIconPath}/Arch_Front-End-Web-Mobile/64/Arch_AWS-Amplify_64.svg`,
+    label: "Amplify App",
     size
   },
   {
@@ -1223,6 +1236,33 @@ const terraformResourcePresentations = [
     category: "Containers",
     iconUrl: `${serviceIconPath}/Arch_Containers/64/Arch_Amazon-Elastic-Kubernetes-Service_64.svg`,
     label: "EKS Add-on",
+    size
+  },
+  {
+    definitionId: "kubernetes-namespace",
+    name: "Kubernetes Namespace",
+    area: "containers",
+    category: "Containers",
+    iconUrl: `${serviceIconPath}/Arch_Containers/64/Arch_Amazon-Elastic-Kubernetes-Service_64.svg`,
+    label: "Namespace",
+    size
+  },
+  {
+    definitionId: "kubernetes-deployment",
+    name: "Kubernetes Deployment",
+    area: "containers",
+    category: "Containers",
+    iconUrl: `${serviceIconPath}/Arch_Containers/64/Arch_Amazon-Elastic-Kubernetes-Service_64.svg`,
+    label: "Deployment",
+    size
+  },
+  {
+    definitionId: "kubernetes-service",
+    name: "Kubernetes Service",
+    area: "containers",
+    category: "Containers",
+    iconUrl: `${serviceIconPath}/Arch_Containers/64/Arch_Amazon-Elastic-Kubernetes-Service_64.svg`,
+    label: "Service",
     size
   },
   {

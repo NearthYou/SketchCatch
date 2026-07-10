@@ -3,13 +3,16 @@ import type {
   InfrastructureGraphNode,
   TerraformBlockType
 } from "@sketchcatch/types";
-import { isTerraformNestedBlockAttribute } from "./terraform-nested-blocks.js";
+import {
+  isKubernetesNestedBlock,
+  isTerraformNestedBlockAttribute
+} from "./terraform-nested-blocks.js";
 
 const DEFAULT_TERRAFORM_BLOCK_TYPE: TerraformBlockType = "resource";
 const INDENT_UNIT = "  ";
 export const TERRAFORM_IDENTIFIER_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_-]*$/;
 const TERRAFORM_REFERENCE_PATTERN =
-  /^(?:var|local|each|count|path|terraform)\.[a-zA-Z_][a-zA-Z0-9_]*$|^module\.[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)*$|^aws_[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)*$|^data\.aws_[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)*$/;
+  /^(?:var|local|each|count|path|terraform)\.[a-zA-Z_][a-zA-Z0-9_]*$|^module\.[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)*$|^(?:aws|kubernetes)_[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)*$|^data\.(?:aws|kubernetes)_[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)*$/;
 
 export class TerraformDiagramValidationError extends Error {
   readonly reason = "invalid_identifier";
@@ -194,6 +197,10 @@ function renderNestedBlocks(
 
 function renderNestedBlockEntry(key: string, value: unknown, indentLevel: number): string[] {
   if (Array.isArray(value) && value.every(isRecord)) {
+    return renderNestedBlocks(key, value, indentLevel);
+  }
+
+  if (isKubernetesNestedBlock(key) && isRecord(value)) {
     return renderNestedBlocks(key, value, indentLevel);
   }
 

@@ -27,6 +27,11 @@ type AwsResourceDefinitionInput = {
   readonly terraformSync?: boolean | undefined;
 };
 
+type ResourceDefinitionInput = Omit<AwsResourceDefinitionInput, "terraformResourceType"> & {
+  readonly provider: CloudProvider;
+  readonly terraformResourceType: string;
+};
+
 const DEFAULT_RESOURCE_TYPE: ResourceType = "UNKNOWN";
 const DEFAULT_TERRAFORM_BLOCK_TYPE: TerraformBlockType = "resource";
 
@@ -771,6 +776,13 @@ export const resourceDefinitions = [
     terraformSync: true
   }),
   createAwsResourceDefinition({
+    id: "aws-amplify-app",
+    resourceType: "AMPLIFY_APP",
+    terraformPreview: true,
+    terraformResourceType: "aws_amplify_app",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
     id: "aws-ecr-repository",
     resourceType: "ECR_REPOSITORY",
     terraformPreview: true,
@@ -831,6 +843,30 @@ export const resourceDefinitions = [
     resourceType: "EKS_ADDON",
     terraformPreview: true,
     terraformResourceType: "aws_eks_addon",
+    terraformSync: true
+  }),
+  createResourceDefinition({
+    id: "kubernetes-namespace",
+    provider: "kubernetes",
+    resourceType: "KUBERNETES_NAMESPACE",
+    terraformPreview: true,
+    terraformResourceType: "kubernetes_namespace",
+    terraformSync: true
+  }),
+  createResourceDefinition({
+    id: "kubernetes-deployment",
+    provider: "kubernetes",
+    resourceType: "KUBERNETES_DEPLOYMENT",
+    terraformPreview: true,
+    terraformResourceType: "kubernetes_deployment",
+    terraformSync: true
+  }),
+  createResourceDefinition({
+    id: "kubernetes-service",
+    provider: "kubernetes",
+    resourceType: "KUBERNETES_SERVICE",
+    terraformPreview: true,
+    terraformResourceType: "kubernetes_service",
     terraformSync: true
   }),
   createAwsResourceDefinition({
@@ -961,9 +997,31 @@ function createAwsResourceDefinition({
   terraformResourceType,
   terraformSync = false
 }: AwsResourceDefinitionInput): ResourceDefinition {
-  return {
+  return createResourceDefinition({
     id,
     provider: "aws",
+    resourceType,
+    parameterPanel,
+    terraformBlockType,
+    terraformPreview,
+    terraformResourceType,
+    terraformSync
+  });
+}
+
+function createResourceDefinition({
+  id,
+  provider,
+  parameterPanel = true,
+  resourceType = DEFAULT_RESOURCE_TYPE,
+  terraformBlockType = DEFAULT_TERRAFORM_BLOCK_TYPE,
+  terraformPreview = false,
+  terraformResourceType,
+  terraformSync = false
+}: ResourceDefinitionInput): ResourceDefinition {
+  return {
+    id,
+    provider,
     resourceType,
     terraform: {
       blockType: terraformBlockType,

@@ -73,6 +73,7 @@ export const RESOURCE_TYPES = [
   "ACM_CERTIFICATE_VALIDATION",
   "COGNITO_USER_POOL",
   "COGNITO_USER_POOL_CLIENT",
+  "AMPLIFY_APP",
   "DB_SUBNET_GROUP",
   "SECRETS_MANAGER_SECRET",
   "VPC_ENDPOINT",
@@ -112,6 +113,9 @@ export const RESOURCE_TYPES = [
   "EKS_CLUSTER",
   "EKS_NODE_GROUP",
   "EKS_ADDON",
+  "KUBERNETES_NAMESPACE",
+  "KUBERNETES_DEPLOYMENT",
+  "KUBERNETES_SERVICE",
   "CONFIG_CONFIGURATION_RECORDER",
   "CONFIG_DELIVERY_CHANNEL",
   "CONFIG_RULE",
@@ -124,7 +128,7 @@ export type ResourceType = (typeof RESOURCE_TYPES)[number];
 
 export type ReverseEngineeringResourceSelection = "ALL" | ResourceType;
 
-export type CloudProvider = "aws";
+export type CloudProvider = "aws" | "kubernetes";
 
 export type TerraformBlockType = "resource" | "data";
 
