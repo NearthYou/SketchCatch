@@ -11,6 +11,7 @@ import type {
 } from "../../../../packages/types/src";
 
 import { DEFAULT_DIAGRAM_VIEWPORT, RESOURCE_DRAG_MIME_TYPE } from "./constants";
+import { getDefaultParameterValues } from "./default-parameter-values";
 import { cloneParameterValue } from "./parameter-value-utils";
 import type { DiagramEdgeKind, DiagramNodeMetadataUpdate } from "./types";
 
@@ -462,7 +463,10 @@ function createDefaultNodeParameters(
     resourceType,
     resourceName,
     fileName: "main",
-    values: areaDefaults ? { ...areaDefaults.values } : {}
+    values: {
+      ...(areaDefaults?.values ?? {}),
+      ...getDefaultParameterValues(item.id)
+    }
   };
 }
 

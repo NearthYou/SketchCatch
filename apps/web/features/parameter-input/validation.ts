@@ -238,11 +238,40 @@ export function validateParameters(
     );
   }
 
+  collectAutoScalingGroupCapacityErrors(params, parameterErrors);
+
   return {
     invalid: Object.keys(metadataErrors).length > 0 || Object.keys(parameterErrors).length > 0,
     metadataErrors,
     parameterErrors
   };
+}
+
+function collectAutoScalingGroupCapacityErrors(
+  params: ResourceNodeParameters,
+  errors: Record<string, string>
+) {
+  if (params.resourceType !== "aws_autoscaling_group") {
+    return;
+  }
+
+  const { desiredCapacity, maxSize, minSize } = params.values;
+
+  if (isFiniteNumber(minSize) && isFiniteNumber(maxSize) && minSize > maxSize) {
+    errors.minSize = "minSize는 maxSize보다 클 수 없습니다.";
+  }
+
+  if (
+    isFiniteNumber(desiredCapacity) &&
+    ((isFiniteNumber(minSize) && desiredCapacity < minSize) ||
+      (isFiniteNumber(maxSize) && desiredCapacity > maxSize))
+  ) {
+    errors.desiredCapacity = "desiredCapacity는 minSize와 maxSize 범위 안에 있어야 합니다.";
+  }
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
 }
 
 export function buildReferenceOptions(

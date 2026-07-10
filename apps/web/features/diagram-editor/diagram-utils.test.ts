@@ -69,7 +69,7 @@ test("createDiagramEdge creates thin solid connection lines by default", () => {
   assert.equal(edge?.style?.lineStyle, "solid");
 });
 
-test("createDiagramNodeFromPayload does not auto-fill Terraform parameter values for resource icons", () => {
+test("createDiagramNodeFromPayload stores only VPC safety defaults for new nodes", () => {
   const node = createDiagramNodeFromPayload(
     makeResourceDragPayload(resourceItem),
     { x: 120, y: 80 },
@@ -86,6 +86,42 @@ test("createDiagramNodeFromPayload does not auto-fill Terraform parameter values
   assert.equal(node.parameters?.resourceType, "aws_vpc");
   assert.equal(node.parameters?.resourceName, "vpc");
   assert.equal(node.parameters?.fileName, "main");
+  assert.deepEqual(node.parameters?.values, {
+    enableDnsSupport: true,
+    instanceTenancy: "default"
+  });
+});
+
+test("createDiagramNodeFromPayload does not set desiredCapacity for new Auto Scaling Groups", () => {
+  const node = createDiagramNodeFromPayload(
+    makeResourceDragPayload(
+      makeResourceItem({
+        id: "aws-autoscaling-group",
+        resourceType: "aws_autoscaling_group",
+        label: "Auto Scaling Group"
+      })
+    ),
+    { x: 0, y: 0 },
+    1
+  );
+
+  assert.deepEqual(node.parameters?.values, {});
+  assert.equal("desiredCapacity" in (node.parameters?.values ?? {}), false);
+});
+
+test("createDiagramNodeFromPayload does not apply RDS instance defaults to read replicas", () => {
+  const node = createDiagramNodeFromPayload(
+    makeResourceDragPayload(
+      makeResourceItem({
+        id: "aws-rds-read-replica",
+        resourceType: "aws_db_instance",
+        label: "RDS Read Replica"
+      })
+    ),
+    { x: 0, y: 0 },
+    1
+  );
+
   assert.deepEqual(node.parameters?.values, {});
 });
 
@@ -108,7 +144,10 @@ test("createDiagramNodeFromPayload appends a numeric suffix for duplicate resour
   );
 
   assert.equal(node.parameters?.resourceName, "vpc_3");
-  assert.deepEqual(node.parameters?.values, {});
+  assert.deepEqual(node.parameters?.values, {
+    enableDnsSupport: true,
+    instanceTenancy: "default"
+  });
 });
 
 test("createDiagramNodeFromPayload appends numeric suffixes for duplicate ASG resource names", () => {

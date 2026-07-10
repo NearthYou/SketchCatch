@@ -96,6 +96,7 @@ import {
   updateNodeById
 } from "./diagram-utils";
 import { toFlowEdges, toFlowNodes } from "./flow-mappers";
+import { syncParameterReferenceEdges } from "./parameter-reference-edges";
 import {
   applyContainingReferenceDropTargets,
   findInnermostVisualDropTarget
@@ -566,12 +567,17 @@ function DiagramEditorInner({
 
   const updateNodeParameters = useCallback<DiagramEditorPanelContext["updateNodeParameters"]>(
     (nodeId, update) => {
-      commitDiagramUpdate((currentDiagram) => ({
-        ...currentDiagram,
-        nodes: updateNodeById(currentDiagram.nodes, nodeId, (node) =>
+      commitDiagramUpdate((currentDiagram) => {
+        const nextNodes = updateNodeById(currentDiagram.nodes, nodeId, (node) =>
           applyNodeParametersUpdateWithResourceLabel(node, update)
-        )
-      }));
+        );
+
+        return {
+          ...currentDiagram,
+          nodes: nextNodes,
+          edges: syncParameterReferenceEdges(nextNodes, currentDiagram.edges)
+        };
+      });
     },
     [commitDiagramUpdate]
   );

@@ -94,6 +94,7 @@ const COMPACT_AREA_MIN_SIZES: Readonly<Record<string, DiagramNode["size"]>> = {
 const AREA_PARENT_EDGE_LABELS = new Set(["contains", "hosts"]);
 const TERRAFORM_REFERENCE_ATTRIBUTE_SUFFIXES = ["id", "arn", "name", "execution_arn"] as const;
 const SECURITY_GROUP_REFERENCE_KEYS = ["securityGroupIds", "vpcSecurityGroupIds", "securityGroupId"] as const;
+const RESOURCE_ITEMS_BY_DEFINITION_ID = new Map(resourceCatalog.map((resourceItem) => [resourceItem.id, resourceItem]));
 const RESOURCE_ITEMS_BY_TERRAFORM_TYPE = createResourceItemsByTerraformType(resourceCatalog);
 const EDGE_STYLE_LABEL_PATTERNS: ReadonlyArray<{
   readonly patterns: readonly RegExp[];
@@ -251,7 +252,7 @@ function convertArchitectureNodeToDiagramNode(node: ArchitectureJson["nodes"][nu
     y: node.positionY
   };
   const zIndex = index + 1;
-  const baseNode = createResourceCatalogDiagramNode(terraformResourceType, position, zIndex);
+  const baseNode = createResourceCatalogDiagramNode(node.type, terraformResourceType, position, zIndex);
 
   return {
     ...baseNode,
@@ -352,11 +353,15 @@ function readDiagramBorderStyle(value: unknown): DiagramNodeBorderStyle | undefi
 
 // jh Resource catalog를 거쳐 수동 drag/drop 노드와 같은 iconUrl, size, 기본 style을 사용합니다.
 function createResourceCatalogDiagramNode(
+  resourceType: ResourceType,
   terraformResourceType: string,
   position: DiagramNode["position"],
   zIndex: number
 ): DiagramNode {
-  const resourceItem = RESOURCE_ITEMS_BY_TERRAFORM_TYPE.get(terraformResourceType);
+  const definitionId = getDefaultResourceDefinitionByResourceType(resourceType)?.id;
+  const resourceItem =
+    (definitionId ? RESOURCE_ITEMS_BY_DEFINITION_ID.get(definitionId) : undefined) ??
+    RESOURCE_ITEMS_BY_TERRAFORM_TYPE.get(terraformResourceType);
 
   if (!resourceItem) {
     return createFallbackDiagramNode(terraformResourceType, position, zIndex);

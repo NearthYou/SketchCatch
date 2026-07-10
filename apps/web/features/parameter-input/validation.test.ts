@@ -9,7 +9,8 @@ import {
   getOptionalDefinitions,
   getRequiredDefinitions,
   getValidationDefinitions,
-  mergeNodeParameters
+  mergeNodeParameters,
+  validateParameters
 } from "./validation";
 
 test("getRequiredDefinitions returns only provider-required parameters", () => {
@@ -122,6 +123,60 @@ test("getValidationDefinitions ignores uncataloged raw editor values", () => {
   );
 });
 
+test("validateParameters accepts ordered Auto Scaling Group capacities", () => {
+  const result = validateAsgParameters({
+    minSize: 1,
+    desiredCapacity: 2,
+    maxSize: 3
+  });
+
+  assert.equal(result.invalid, false);
+  assert.deepEqual(result.parameterErrors, {});
+});
+
+test("validateParameters accepts Auto Scaling Group min and max when desired capacity is absent", () => {
+  const result = validateAsgParameters({
+    minSize: 1,
+    maxSize: 3
+  });
+
+  assert.equal(result.invalid, false);
+  assert.deepEqual(result.parameterErrors, {});
+});
+
+test("validateParameters reports Auto Scaling Group min and max ordering errors", () => {
+  const result = validateAsgParameters({
+    minSize: 4,
+    desiredCapacity: 4,
+    maxSize: 3
+  });
+
+  assert.equal(result.invalid, true);
+  assert.ok(result.parameterErrors.minSize ?? result.parameterErrors.maxSize);
+});
+
+test("validateParameters reports Auto Scaling Group desired capacity below min", () => {
+  const result = validateAsgParameters({
+    minSize: 2,
+    desiredCapacity: 1,
+    maxSize: 3
+  });
+
+  assert.equal(result.invalid, true);
+  assert.ok(result.parameterErrors.desiredCapacity);
+});
+
+test("validateParameters reports Auto Scaling Group desired capacity above max", () => {
+  const result = validateAsgParameters({
+    minSize: 1,
+    desiredCapacity: 4,
+    maxSize: 3
+  });
+
+  assert.equal(result.invalid, true);
+  assert.ok(result.parameterErrors.desiredCapacity);
+});
+
 function makeDefinition({
   computed = false,
   core = false,
@@ -159,6 +214,22 @@ function makeCatalog(): ParameterCatalog {
       ]
     }
   };
+}
+
+function validateAsgParameters(values: Record<string, unknown>) {
+  return validateParameters(
+    {
+      terraformBlockType: "resource",
+      resourceType: "aws_autoscaling_group",
+      resourceName: "web",
+      fileName: "main",
+      values
+    },
+    [],
+    [],
+    "asg-1",
+    makeCatalog()
+  );
 }
 
 function makeResourceNode(overrides: Partial<DiagramNode> = {}): DiagramNode {

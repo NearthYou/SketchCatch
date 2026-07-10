@@ -74,6 +74,80 @@ test("POST /api/terraform/generate returns Terraform code for an active user", a
   await app.close();
 });
 
+test("POST /api/terraform/generate accepts parameter-reference edge metadata", async () => {
+  const fakeDb = new AuthOnlyFakeDb({
+    users: [
+      {
+        id: ACTIVE_USER_ID,
+        deletedAt: null
+      }
+    ]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/terraform/generate",
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: {
+      diagramJson: {
+        nodes: [
+          {
+            id: "autoscaling-group",
+            type: "aws_vpc",
+            kind: "resource",
+            label: "autoscaling_group",
+            parameters: {
+              resourceType: "aws_vpc",
+              resourceName: "autoscaling_group",
+              fileName: "main",
+              values: {
+                cidrBlock: "10.0.0.0/16"
+              }
+            }
+          },
+          {
+            id: "target-group",
+            type: "aws_vpc",
+            kind: "resource",
+            label: "target_group",
+            parameters: {
+              resourceType: "aws_vpc",
+              resourceName: "target_group",
+              fileName: "main",
+              values: {
+                cidrBlock: "10.1.0.0/16"
+              }
+            }
+          }
+        ],
+        edges: [
+          {
+            id: "autoscaling-group-target-group-reference",
+            sourceNodeId: "autoscaling-group",
+            targetNodeId: "target-group",
+            metadata: {
+              managedBy: "parameter-reference",
+              parameterPath: "targetGroupArns[0]"
+            }
+          }
+        ],
+        viewport: {
+          x: 0,
+          y: 0,
+          zoom: 1
+        }
+      }
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+
+  await app.close();
+});
+
 test("POST /api/terraform/generate accepts Region and AZ area resource parameters", async () => {
   const fakeDb = new AuthOnlyFakeDb({
     users: [
