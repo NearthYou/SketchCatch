@@ -22,7 +22,7 @@ import { resourceCatalog } from "../resource-settings/catalog";
 import { addServerStorageAreaNodes } from "./server-storage-board-layout";
 
 const DEFAULT_VIEWPORT: DiagramJson["viewport"] = { x: 0, y: 0, zoom: 1 };
-const DEFAULT_NODE_SIZE: DiagramNode["size"] = { width: 56, height: 56 };
+const DEFAULT_NODE_SIZE: DiagramNode["size"] = { width: 28, height: 28 };
 const DEFAULT_TERRAFORM_BLOCK_TYPE: TerraformBlockType = "resource";
 const UNKNOWN_TERRAFORM_RESOURCE_TYPE = "unknown_resource";
 const DEFAULT_EDGE_STYLE: NonNullable<DiagramEdge["style"]> = {

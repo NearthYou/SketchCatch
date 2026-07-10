@@ -8,6 +8,6 @@ test("default resource palette icons create half-size nodes", () => {
 
   assert.ok(resourceItems.length > 0);
   for (const item of resourceItems) {
-    assert.deepEqual(item.nodeDefaults.size, { width: 56, height: 56 }, item.id);
+    assert.deepEqual(item.nodeDefaults.size, { width: 28, height: 28 }, item.id);
   }
 });

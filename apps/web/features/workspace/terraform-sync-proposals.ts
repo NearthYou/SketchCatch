@@ -10,8 +10,8 @@ import { resourceCatalog } from "../resource-settings/catalog";
 
 type ApprovedProposalIds = ReadonlySet<string> | readonly string[];
 const DEFAULT_CREATED_NODE_SIZE = {
-  width: 56,
-  height: 56
+  width: 28,
+  height: 28
 } as const;
 const AREA_CHILD_MARGIN = 24;
 const AREA_CHILD_HEADER_OFFSET = 40;
