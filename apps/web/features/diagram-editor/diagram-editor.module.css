@@ -947,6 +947,7 @@
 .resourceNodeIconFrame {
   align-items: center;
   aspect-ratio: 1;
+  background: #ffffff;
   display: flex;
   flex: 0 0 auto;
   height: var(--resource-node-icon-frame-size, 90px);
@@ -1202,41 +1203,41 @@
 }
 
 .manualResizeHandle {
-  background: #6f4cf6;
-  border: 2px solid #ffffff;
-  border-radius: 999px;
-  box-shadow: 0 1px 4px rgba(23, 32, 51, 0.24);
-  height: 13px;
+  background: transparent;
+  border: 1px solid #6f4cf6;
+  border-radius: 1px;
+  box-shadow: none;
+  height: 8px;
   padding: 0;
   pointer-events: all;
   position: absolute;
   touch-action: none;
-  width: 13px;
+  width: 8px;
   z-index: 3;
 }
 
 .manualResizeHandleTopLeft {
   cursor: nwse-resize;
-  left: -6px;
-  top: -6px;
+  left: -4px;
+  top: -4px;
 }
 
 .manualResizeHandleTopRight {
   cursor: nesw-resize;
-  right: -6px;
-  top: -6px;
+  right: -4px;
+  top: -4px;
 }
 
 .manualResizeHandleBottomLeft {
-  bottom: -6px;
+  bottom: -4px;
   cursor: nesw-resize;
-  left: -6px;
+  left: -4px;
 }
 
 .manualResizeHandleBottomRight {
-  bottom: -6px;
+  bottom: -4px;
   cursor: nwse-resize;
-  right: -6px;
+  right: -4px;
 }
 
 .manualResizeHandle:hover,

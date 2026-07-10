@@ -43,6 +43,20 @@ test("diagram node view renders resource icon labels in bold", () => {
   );
 });
 
+test("resource icon frames cover the dotted canvas grid", () => {
+  assert.match(
+    diagramEditorCssSource,
+    /\.resourceNodeIconFrame\s*\{[^}]*background:\s*#ffffff;/s
+  );
+});
+
+test("manual resize handles are small hollow squares", () => {
+  assert.match(
+    diagramEditorCssSource,
+    /\.manualResizeHandle\s*\{[^}]*background:\s*transparent;[^}]*border:\s*1px solid #6f4cf6;[^}]*border-radius:\s*1px;[^}]*height:\s*8px;[^}]*width:\s*8px;/s
+  );
+});
+
 test("hides Terraform data source implementation labels", () => {
   assert.doesNotMatch(diagramNodeViewSource, /resourceNodeBadge/);
   assert.doesNotMatch(diagramNodeViewSource, /isDataNode/);
