@@ -12,6 +12,22 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-10 - Prevent duplicate dashboard logout requests
+
+- Goal: Apply the selected review comment so repeated logout clicks cannot start duplicate requests.
+- Completed:
+  - Added local `isPending` state to the dashboard account footer.
+  - Disabled logout while auth is loading or the current logout request is pending.
+  - Reset pending state in `finally` for both success and failure paths.
+  - Added focused regression coverage for the pending-state flow.
+- Verification:
+  - `pnpm --filter @sketchcatch/web exec tsx features/dashboard/design-dashboard.test.ts` passed.
+  - `pnpm lint` passed.
+  - `pnpm typecheck` passed.
+  - `pnpm build` passed.
+- Risk:
+  - GitHub CLI is unavailable in this environment, so the PR review thread was not replied to or resolved.
+
 ### 2026-07-10 - Signup password error highlight fix
 
 - Goal: Highlight signup password policy failures and password mismatch messages in red.
