@@ -75,6 +75,9 @@
 - 기존 `brainboard` Role은 다른 외부 계정을 신뢰하고 `ReadOnlyAccess`만 보유하므로 SketchCatch용으로 재사용하지 않았다.
 - 기존 verified connection이 참조하던 `SketchCatchTerraformExecutionRole`을 복구하고, 해당 connection의 External ID를 요구하는 trust policy를 등록했다.
 - 로컬 caller에서 실제 `sts:AssumeRole`과 임시 자격 증명의 `sts:GetCallerIdentity`를 실행해 모두 통과했다.
+- 2026-07-11 Chrome 재점검에서 실제 계정에는 별도 `SketchCatchRuntimeRole`이 없고, `SketchCatchTerraformExecutionRole`이 `SketchCatchLocalCallerUser`를 External ID 조건으로 직접 신뢰하는 로컬 실행 구조임을 확인했다. 존재하지 않는 Runtime Role을 새로 만들지 않고 이 연결을 재사용한다.
+- 기존 환경이 다른 계정의 artifact bucket을 가리켜 S3 `AccessDenied`가 발생한 것을 확인했다. 현재 계정에 이미 있던 `sketchcatch-local-artifacts-*` bucket을 재사용하고, Local Caller에는 해당 bucket만 대상으로 `GetBucketLocation`, `ListBucket`, `GetObject`, `PutObject`, `DeleteObject`, `AbortMultipartUpload`를 허용하는 `SketchCatchLocalArtifactBucketAccess` 인라인 정책을 추가했다.
+- Chrome의 실제 배포 전 저장 버튼으로 Architecture와 Terraform artifact 저장이 성공해 S3 upload 경로가 복구됐음을 확인했다. bucket 이름, account ID, credential은 문서와 Git에 저장하지 않는다.
 - 이 단계에서는 `AdministratorAccess` 같은 과도한 정책을 붙이지 않았다. 여섯 Template의 실제 apply용 최소권한 정책은 M5b 완료 후 M5c 진입 전에 별도로 검증한다.
 
 ### M5b
