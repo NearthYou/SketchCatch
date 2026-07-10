@@ -84,7 +84,7 @@ resource "aws_subnet" "public" {
   );
 });
 
-test("renders S3 buckets with a default public access block companion", () => {
+test("renders S3 buckets without synthetic companion resources", () => {
   const graph: InfrastructureGraph = {
     nodes: [
       {
@@ -109,19 +109,11 @@ test("renders S3 buckets with a default public access block companion", () => {
     renderTerraformFromInfrastructureGraph(graph),
     `resource "aws_s3_bucket" "service_bucket" {
   bucket = "service-bucket"
-}
-
-resource "aws_s3_bucket_public_access_block" "service_bucket_public_access" {
-  bucket = aws_s3_bucket.service_bucket.id
-  block_public_acls = true
-  block_public_policy = true
-  ignore_public_acls = true
-  restrict_public_buckets = true
 }`
   );
 });
 
-test("does not duplicate an explicit S3 public access block", () => {
+test("renders an explicit S3 public access block once", () => {
   const graph: InfrastructureGraph = {
     nodes: [
       {

@@ -27,7 +27,8 @@ export const practiceLiveApplySupportedResourceTypes = new Set([
   "aws_security_group",
   "aws_security_group_rule",
   "aws_instance",
-  "aws_s3_bucket"
+  "aws_s3_bucket",
+  "aws_s3_bucket_public_access_block"
 ]);
 
 const demoWebServiceLiveApplySupportedResourceTypes = new Set([
@@ -38,7 +39,6 @@ const demoWebServiceLiveApplySupportedResourceTypes = new Set([
   "aws_lb_listener",
   "aws_lb_target_group",
   "aws_s3_bucket_policy",
-  "aws_s3_bucket_public_access_block",
   "aws_s3_bucket_website_configuration",
   "aws_s3_object"
 ]);
