@@ -4,28 +4,23 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Currently Verified
 
-- Current branch: `feature/sw/314-production-infra-terraform`.
-- Active workstream: `ECS-MIGRATION-000`, issue #314.
-- The existing ECS runtime root and backend key are preserved.
-- Four production state groups have unique S3 backend keys and native lockfile configuration.
-- Static guards, four backend-free Terraform init/validate runs, runtime Terraform tests, and full repository checks pass.
-- No live AWS or remote Terraform operation has run.
+- Current branch: `feat/gg/0-github-template`.
+- PR #317 targets `dev`, is mergeable, and has green CI checks.
+- GitHub Repository Analysis reads bounded static evidence at a commit-pinned revision and verifies the stored repository ID.
+- Monorepo Application Units honor declared workspace globs and keep deployment evidence scoped to the owning unit.
+- No repository code, live AWS, or Terraform mutation was run for Repository Analysis.
 
 ## Changes This Session
 
-- Added `infra/aws/production` with edge, data, and legacy rollback import-gate roots, backend examples, import manifest, and Korean runbook.
-- Added a manual `production-infra-plan` workflow requiring group confirmation and GitHub Environment approval.
-- Added a Node static checker for state groups, resource inventory, empty high-risk roots, and forbidden workflow operations.
-- Raised the runtime Terraform minimum to 1.10 and protected the production Route53 record from destroy.
-- Separated production infrastructure execution from product Deployment execution in canonical and docs/sw documents.
+- Added Repository Analysis shared contracts, GitHub evidence reading, Template Selection, Source Repository API, ADRs, and milestone records.
+- Added repository identity mismatch rejection and Application Unit evidence isolation after independent review.
+- Merged latest `dev` and kept inline Lambda archive rendering while following the latest explicit-S3-resource contract.
 
 ## Broken Or Unverified
 
-- All requested local/static checks pass; live backend, state, and AWS ownership checks remain pending.
-- Backend bucket controls, OIDC plan role, existing state membership, and live resource ownership are not verified.
-- No import/resource blocks exist in edge/data/legacy roots by design.
-- CloudFormation and EC2 rollback remain external owners/rollback dependencies.
+- Full `pnpm test` has unrelated existing failures in missing docs fixtures, S3 test env, Windows path assertions, and AI fixtures/contracts.
+- Focused Repository Analysis tests, focused Terraform merge tests, required static checks, build, independent gate review, and GitHub CI all pass.
 
 ## Best Next Action
 
-- Complete final self-review, publish the PR, wait five minutes, resolve feedback, re-verify, and merge.
+- Obtain required team review for PR #317 and resolve any new thread before merge.

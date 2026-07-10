@@ -4,13 +4,30 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- Branch: `feature/sw/314-production-infra-terraform`.
-- Active workstream: `ECS-MIGRATION-000`, Phase 9 production infrastructure Terraform transition.
-- Issue: #314.
-- Phase 8 is merged into `dev` through PR #313.
-- No live AWS, remote Terraform plan, import, apply, destroy, or state command has run in Phase 9.
+- Branch: `feat/gg/0-github-template`.
+- Active workstream: AWS Template and request-time GitHub Repository Analysis.
+- PR: #317, targeting `dev`.
+- Latest `dev` is merged and the PR is mergeable with green CI checks.
+- No repository code, live AWS, Terraform apply, destroy, import, or remote state command ran for Repository Analysis.
 
 ## Session Record
+
+### 2026-07-10 - Complete GitHub Repository Analysis and Template Selection
+
+- Goal: Analyze an active GitHub Source Repository without execution or persistence, identify monorepo Application Units, and select exactly one supported Template or return Template Selection Failure.
+- Completed:
+  - Added bounded GitHub App evidence reads pinned to the current default-branch commit SHA.
+  - Added immutable GitHub repository ID verification before evidence reads.
+  - Added declared-workspace Application Unit detection and per-unit deployment evidence isolation.
+  - Added one-Template selection, explicit mismatch failure, shared AI handoff types, API route, ADRs, and milestone documentation.
+  - Merged latest `dev` and resolved the Terraform renderer contract by preserving inline Lambda archive blocks without synthesizing S3 resources.
+- Verification:
+  - Repository Analysis, GitHub evidence, service, and route tests passed 53/53.
+  - Focused Terraform merge tests passed 31/31.
+  - `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check` passed.
+  - Independent gate re-review passed with no remaining blocker; GitHub CI checks passed.
+- Risk:
+  - Full `pnpm test` still reports unrelated existing Web/API fixture, environment, Windows-path, and AI contract failures documented in the gg milestone and PR body.
 
 ### 2026-07-10 - Add production infrastructure Terraform management boundaries
 
@@ -38,4 +55,4 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Next Action
 
-- Publish the PR, wait five minutes, resolve review feedback, re-verify, and merge only with green checks and no unresolved threads.
+- Review and merge PR #317 after the required team approval; address any new review thread before merge.
