@@ -4,10 +4,10 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- Branch: `fix/sw/302-ecs-worker-dispatch-safety`.
-- Active workstream: `ECS-MIGRATION-000`, post-merge hardening for Phase 5 PR #296 review findings.
-- Phase 5 is merged into `dev`; worker runtime and worker-specific Terraform resources are still pending.
-- Production must keep `DEPLOYMENT_WORKER_MODE=in_process` until the worker task definition, entrypoint, roles, security group, and runtime are implemented.
+- Branch: `feature/sw/306-deployment-worker-runtime`.
+- Active workstream: `ECS-MIGRATION-000`, Phase 6 deployment worker runtime.
+- Phase 5 dispatch and its review hardening are merged into `dev`.
+- Production must keep `DEPLOYMENT_WORKER_MODE=in_process` until the worker task definition, roles, security group, and runtime smoke are implemented.
 
 ## Session Record
 
@@ -27,6 +27,33 @@ Short English-only working log for the current agent context. Older records are 
   - Local smoke checks returned 200 for `http://localhost:3000`, `http://localhost:4000/health`, and `http://localhost:4000/health/db`.
 - Risk:
   - Trivy can still report a missing S3 Public Access Block as a non-blocking finding; this change intentionally keeps that result informational instead of mutating generated Terraform.
+### 2026-07-10 - Add Phase 6 deployment worker runtime
+
+- Goal: Add the one-off ECS RunTask worker process that consumes a DeploymentJob and invokes existing deployment services.
+- Completed:
+  - Created issue #306 and linked branch `feature/sw/306-deployment-worker-runtime` from updated `dev`.
+  - Added a worker orchestration service that reads and validates RUNNING jobs, verifies requester access context, invokes init/plan/apply/destroy-plan/destroy services, and records terminal job status.
+  - Added secret-masked failure handling for thrown errors and FAILED deployment results.
+  - Added `src/deployment-worker.ts`, `dist/deployment-worker.cjs` build wiring, and the `start:worker` command.
+  - Kept Terraform and Trivy in the existing API image and documented the ECS command override.
+  - Addressed PR #308 review feedback by explicitly exiting the one-off process after cleanup and rejecting unsupported runtime operation values.
+  - Rebased onto the latest `dev` while preserving concurrent progress records and unrelated local changes.
+  - Updated deployment documentation with worker behavior, DB source-of-truth, command, and remaining activation prerequisites.
+- Verification so far:
+  - `pnpm harness:check` passed before and after edits.
+  - Worker targeted tests passed (7 tests).
+  - `pnpm --filter @sketchcatch/api lint` passed.
+  - `pnpm --filter @sketchcatch/api typecheck` passed.
+  - Post-review `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
+  - Post-review worker targeted tests passed (7 tests).
+  - `pnpm --filter @sketchcatch/api build` passed and produced `dist/deployment-worker.cjs`.
+  - `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
+  - `pnpm --filter @sketchcatch/api test -- deployment` ran the whole API suite; all Phase 6 tests passed, while 3 pre-existing unrelated tests failed.
+- Risk:
+  - Worker-specific ECS task definition, task roles, security group, and live smoke are not part of this phase.
+  - Local Docker image verification is pending because the Docker Desktop engine was not running.
+  - The requested API test command still exits 1 for unrelated AI explanation fixtures and a missing AWS resource coverage fixture.
+  - No live AWS or live Terraform mutation commands may run in this phase.
 
 ### 2026-07-10 - Make deployment warnings non-blocking
 
