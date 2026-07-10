@@ -830,14 +830,26 @@ function findConditionalArchitectureQuestion(prompt: string): RequiredArchitectu
   }
 
   if (requiresRealtime(normalizedPrompt) && !hasRealtimeImplementationDecision(normalizedPrompt)) {
+    const realtimeProfile = resolveRealtimeProfile(normalizedPrompt);
+
     return {
       id: "realtime_implementation",
-      question: "실시간 알림은 어떤 방식으로 표현할까요?",
-      suggestions: [
-        "WebSocket 연결 경로",
-        "SSE 단방향 알림 경로",
-        "간단 폴링 방식과 비용 절감 경고"
-      ],
+      question:
+        realtimeProfile === "chat"
+          ? "실시간 채팅 연결은 어떤 방식으로 표현할까요?"
+          : "실시간 알림은 어떤 방식으로 표현할까요?",
+      suggestions:
+        realtimeProfile === "chat"
+          ? [
+              "WebSocket 양방향 연결 경로",
+              "HTTP 메시지 전송 + SSE 수신 경로",
+              "간단 폴링 방식과 비용 절감 경고"
+            ]
+          : [
+              "WebSocket 연결 경로",
+              "SSE 단방향 알림 경로",
+              "간단 폴링 방식과 비용 절감 경고"
+            ],
       isAnswered: () => true
     };
   }
@@ -1880,7 +1892,8 @@ function createAmazonQPlanDraftResult(
   );
   const connectedCanonicalArchitectureJson = connectCanonicalPatternTopologies(
     canonicalArchitectureJson,
-    plan?.patternIds ?? []
+    plan?.patternIds ?? [],
+    request.prompt
   );
   const architectureJson = connectArchitecturePlanRuntimeTopology(
     connectedCanonicalArchitectureJson,
@@ -2169,7 +2182,7 @@ function findMaterializedArchitecturePlanValidationIssues(
           validateVisualSpread: false
         })),
     ...findNormalizedRequirementValidationIssues(plan, architectureJson, { validateVisualSpread: false }),
-    ...findCanonicalPatternMaterializationIssues(plan, architectureJson)
+    ...findCanonicalPatternMaterializationIssues(normalizedPrompt, plan, architectureJson)
   ];
 
   if (requiresServerlessOnlyArchitecture(normalizedPrompt) && nodeTypes.has("EC2")) {
@@ -2192,6 +2205,7 @@ function findMaterializedArchitecturePlanValidationIssues(
 }
 
 function findCanonicalPatternMaterializationIssues(
+  normalizedPrompt: string,
   plan: ArchitectureIntentPlan | null,
   architectureJson: ArchitectureJson
 ): string[] {
@@ -2208,7 +2222,7 @@ function findCanonicalPatternMaterializationIssues(
     !usesRoleAwareEcs;
 
   if (usesRoleAwareEc2) {
-    return findCanonicalEc2PatternMaterializationIssues(plan, architectureJson);
+    return findCanonicalEc2PatternMaterializationIssues(normalizedPrompt, plan, architectureJson);
   }
 
   if (!usesRoleAwareEcs) {
@@ -2293,6 +2307,7 @@ function findCanonicalPatternMaterializationIssues(
 }
 
 function findCanonicalEc2PatternMaterializationIssues(
+  normalizedPrompt: string,
   plan: ArchitectureIntentPlan | null,
   architectureJson: ArchitectureJson
 ): string[] {
@@ -2388,15 +2403,63 @@ function findCanonicalEc2PatternMaterializationIssues(
   ) {
     issues.push("CloudFront must not bypass the ALB and route directly to EC2 fleet nodes.");
   }
+  if (
+    cloudFront !== undefined &&
+    loadBalancer !== undefined &&
+    edges.some((edge) => edge.sourceId === cloudFront.id && edge.targetId === loadBalancer.id) &&
+    cloudFront.config.originResourceId !== loadBalancer.id
+  ) {
+    issues.push("CloudFront must not show an ALB origin that is absent from its deployable configuration.");
+  }
+  if (resolveRealtimeTransport(normalizedPrompt) === "sse") {
+    if (
+      typeof loadBalancer?.config.idleTimeout !== "number" ||
+      loadBalancer.config.idleTimeout < 120
+    ) {
+      issues.push("SSE requires an ALB idle timeout of at least 120 seconds.");
+    }
+    if (
+      listener === undefined ||
+      targetGroup === undefined ||
+      !edges.some(
+        (edge) =>
+          edge.sourceId === listener.id &&
+          edge.targetId === targetGroup.id &&
+          /sse/iu.test(edge.label ?? "")
+      )
+    ) {
+      issues.push("SSE requires an explicit listener-to-target streaming path.");
+    }
+    const database = nodes.find((node) => node.type === "RDS");
+    if (
+      resolveRealtimeProfile(normalizedPrompt) === "chat" &&
+      database !== undefined &&
+      autoScalingGroup !== undefined &&
+      !edges.some(
+        (edge) =>
+          edge.sourceId === autoScalingGroup.id &&
+          edge.targetId === database.id &&
+          /listen\/notify/iu.test(edge.label ?? "")
+      )
+    ) {
+      issues.push("Multi-instance SSE chat requires a shared message and fan-out path.");
+    }
+  }
   const forbidsUpload = (plan?.forbiddenCapabilities ?? []).some(
     (capability) => capability.toLowerCase() === "file_upload"
   );
-  if ((plan?.resourceQuantities?.S3 ?? 0) > 1 && !forbidsUpload) {
+  const uploadProfile = resolveUploadProfile(normalizedPrompt);
+  if (uploadProfile !== undefined && uploadProfile !== "none" && !forbidsUpload) {
     const uploadBucket = nodes.find(
       (node) => node.type === "S3" && node.config.bucketPurpose === "user_uploads"
     );
     if (uploadBucket === undefined || uploadBucket.config.publicAccessBlock !== true) {
       issues.push("Image upload requires a private upload-purpose S3 bucket.");
+    }
+
+    const runtimePolicy = nodes.find((node) => node.type === "IAM_POLICY");
+    if (hasWildcardPolicyResourceForAction(runtimePolicy?.config.policy, "s3:")) {
+      issues.push("Image upload permissions must scope S3 access to the upload bucket.");
     }
   }
   if (patternIds.has("multi-az-rds")) {
@@ -2419,6 +2482,34 @@ function findCanonicalEc2PatternMaterializationIssues(
 
 function isArchitectureConfigRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function hasWildcardPolicyResourceForAction(policy: unknown, actionPrefix: string): boolean {
+  if (typeof policy !== "string") {
+    return false;
+  }
+
+  try {
+    const document = JSON.parse(policy) as { Statement?: unknown[] };
+
+    return (document.Statement ?? []).some((statement) => {
+      if (!isArchitectureConfigRecord(statement)) {
+        return false;
+      }
+
+      const actions = Array.isArray(statement.Action)
+        ? statement.Action
+        : [statement.Action];
+
+      return (
+        actions.some((action) =>
+          typeof action === "string" && action.toLowerCase().startsWith(actionPrefix)
+        ) && statement.Resource === "*"
+      );
+    });
+  } catch {
+    return false;
+  }
 }
 
 function createArchitecturePlanMaterializationPrompt(
@@ -3779,6 +3870,7 @@ function configureCanonicalPatternResources(
   }
 
   const hasDatabase = patternIds.has("multi-az-rds");
+  const realtimeTransport = resolveRealtimeTransport(prompt.normalize("NFKC").toLowerCase());
   const hasLoadBalancer = architectureJson.nodes.some(
     (node) => node.type === "LOAD_BALANCER"
   );
@@ -3923,7 +4015,7 @@ function configureCanonicalPatternResources(
       case "INTERNET_GATEWAY":
         return { ...node, id: "internet-gateway", label: "Internet Gateway", config: { vpcId: vpcRef } };
       case "LOAD_BALANCER":
-        return { ...node, id: "application-load-balancer", label: "Application Load Balancer", config: { name: "sketchcatch-app", internal: false, loadBalancerType: "application", subnets: publicSubnetRefs, securityGroups: [canonicalTerraformReference("aws_security_group", "alb-security-group")] } };
+        return { ...node, id: "application-load-balancer", label: "Application Load Balancer", config: { name: "sketchcatch-app", internal: false, idleTimeout: realtimeTransport === "sse" ? 120 : 60, loadBalancerType: "application", subnets: publicSubnetRefs, securityGroups: [canonicalTerraformReference("aws_security_group", "alb-security-group")] } };
       case "LOAD_BALANCER_TARGET_GROUP":
         return { ...node, id: "app-target-group", label: "Fargate Target Group", config: { name: "sketchcatch-app", port: 8080, protocol: "HTTP", targetType: "ip", vpcId: vpcRef, healthCheck: { path: "/health", matcher: "200-399" } } };
       case "LOAD_BALANCER_LISTENER":
@@ -3976,13 +4068,13 @@ function configureCanonicalEc2PatternResources(
   );
   const subnetSpecs: CanonicalNodeSpec[] = [
     canonicalSubnetSpec("public-subnet-a", "Public Subnet A", "10.0.0.0/24", `${region}a`, "public", true, 180, 480, vpcRef),
-    canonicalSubnetSpec("public-subnet-b", "Public Subnet B", "10.0.1.0/24", `${region}b`, "public", true, 500, 480, vpcRef),
+    canonicalSubnetSpec("public-subnet-b", "Public Subnet B", "10.0.1.0/24", `${region}b`, "public", true, 850, 480, vpcRef),
     canonicalSubnetSpec("private-app-subnet-a", "Private App Subnet A", "10.0.10.0/24", `${region}a`, "private_app", false, 180, 760, vpcRef),
-    canonicalSubnetSpec("private-app-subnet-b", "Private App Subnet B", "10.0.11.0/24", `${region}b`, "private_app", false, 500, 760, vpcRef),
+    canonicalSubnetSpec("private-app-subnet-b", "Private App Subnet B", "10.0.11.0/24", `${region}b`, "private_app", false, 850, 760, vpcRef),
     ...(hasDatabase
       ? [
           canonicalSubnetSpec("private-db-subnet-a", "Private DB Subnet A", "10.0.20.0/24", `${region}a`, "private_db", false, 180, 1040, vpcRef),
-          canonicalSubnetSpec("private-db-subnet-b", "Private DB Subnet B", "10.0.21.0/24", `${region}b`, "private_db", false, 500, 1040, vpcRef)
+          canonicalSubnetSpec("private-db-subnet-b", "Private DB Subnet B", "10.0.21.0/24", `${region}b`, "private_db", false, 850, 1040, vpcRef)
         ]
       : [])
   ];
@@ -3992,46 +4084,51 @@ function configureCanonicalEc2PatternResources(
   });
   const uploadProfile = resolveUploadProfile(prompt.normalize("NFKC").toLowerCase());
   const uploadEnabled = uploadProfile !== undefined && uploadProfile !== "none";
+  const realtimeTransport = resolveRealtimeTransport(prompt.normalize("NFKC").toLowerCase());
+  const staticWebsiteOriginEnabled = patternIds.has("spa-cloudfront-s3");
+  const databaseAllocatedStorage = resolveDatabaseAllocatedStorage(
+    prompt.normalize("NFKC").toLowerCase()
+  );
   const specsByType = new Map<ResourceType, readonly CanonicalNodeSpec[]>([
     ["SUBNET", subnetSpecs],
     ["ELASTIC_IP", [
-      canonicalNodeSpec("nat-eip-a", "NAT Elastic IP A", 840, 420, { domain: "vpc" }),
-      canonicalNodeSpec("nat-eip-b", "NAT Elastic IP B", 1040, 420, { domain: "vpc" })
+      canonicalNodeSpec("nat-eip-a", "NAT Elastic IP A", 80, 260, { domain: "vpc" }),
+      canonicalNodeSpec("nat-eip-b", "NAT Elastic IP B", 260, 260, { domain: "vpc" })
     ]],
     ["NAT_GATEWAY", [
-      canonicalNodeSpec("nat-gateway-a", "NAT Gateway A", 840, 560, {
+      canonicalNodeSpec("nat-gateway-a", "NAT Gateway A", 220, 540, {
         allocationId: canonicalTerraformReference("aws_eip", "nat-eip-a"),
         subnetId: canonicalTerraformReference("aws_subnet", "public-subnet-a")
       }),
-      canonicalNodeSpec("nat-gateway-b", "NAT Gateway B", 1040, 560, {
+      canonicalNodeSpec("nat-gateway-b", "NAT Gateway B", 890, 540, {
         allocationId: canonicalTerraformReference("aws_eip", "nat-eip-b"),
         subnetId: canonicalTerraformReference("aws_subnet", "public-subnet-b")
       })
     ]],
     ["ROUTE_TABLE", [
-      canonicalNodeSpec("public-route-table", "Public Route Table", 1260, 480, {
+      canonicalNodeSpec("public-route-table", "Public Route Table", 1380, 480, {
         vpcId: vpcRef,
         route: [{ cidrBlock: "0.0.0.0/0", gatewayId: canonicalTerraformReference("aws_internet_gateway", "internet-gateway") }]
       }),
-      canonicalNodeSpec("private-route-table-a", "Private Route Table A", 1260, 700, {
+      canonicalNodeSpec("private-route-table-a", "Private Route Table A", 1380, 700, {
         vpcId: vpcRef,
         route: [{ cidrBlock: "0.0.0.0/0", natGatewayId: canonicalTerraformReference("aws_nat_gateway", "nat-gateway-a") }]
       }),
-      canonicalNodeSpec("private-route-table-b", "Private Route Table B", 1460, 700, {
+      canonicalNodeSpec("private-route-table-b", "Private Route Table B", 1580, 700, {
         vpcId: vpcRef,
         route: [{ cidrBlock: "0.0.0.0/0", natGatewayId: canonicalTerraformReference("aws_nat_gateway", "nat-gateway-b") }]
       })
     ]],
     ["ROUTE_TABLE_ASSOCIATION", createCanonicalRouteAssociationSpecs(hasDatabase)],
     ["SECURITY_GROUP", [
-      canonicalNodeSpec("alb-security-group", "ALB Security Group", 840, 700, {
+      canonicalNodeSpec("alb-security-group", "ALB Security Group", 1180, 480, {
         name: "sketchcatch-alb",
         description: "Public HTTP ingress to the application load balancer",
         vpcId: vpcRef,
         ingress: [{ protocol: "tcp", fromPort: 80, toPort: 80, cidrBlocks: ["0.0.0.0/0"] }],
         egress: [{ protocol: "-1", fromPort: 0, toPort: 0, cidrBlocks: ["0.0.0.0/0"] }]
       }),
-      canonicalNodeSpec("app-security-group", "EC2 App Security Group", 1040, 840, {
+      canonicalNodeSpec("app-security-group", "EC2 App Security Group", 1180, 760, {
         name: "sketchcatch-app",
         description: "Application traffic from the ALB only",
         vpcId: vpcRef,
@@ -4039,7 +4136,7 @@ function configureCanonicalEc2PatternResources(
         egress: [{ protocol: "-1", fromPort: 0, toPort: 0, cidrBlocks: ["0.0.0.0/0"] }]
       }),
       ...(hasDatabase
-        ? [canonicalNodeSpec("db-security-group", "Database Security Group", 1040, 1060, {
+        ? [canonicalNodeSpec("db-security-group", "Database Security Group", 680, 1040, {
             name: "sketchcatch-db",
             description: "PostgreSQL traffic from the EC2 application tier only",
             vpcId: vpcRef,
@@ -4047,7 +4144,7 @@ function configureCanonicalEc2PatternResources(
           })]
         : [])
     ]],
-    ["AMI", [canonicalNodeSpec("app-ami", "Amazon Linux 2023 AMI", 1680, 700, {
+    ["AMI", [canonicalNodeSpec("app-ami", "Amazon Linux 2023 AMI", 620, 100, {
       mostRecent: true,
       owners: ["amazon"],
       filter: [
@@ -4055,71 +4152,88 @@ function configureCanonicalEc2PatternResources(
         { name: "virtualization-type", values: ["hvm"] }
       ]
     })]],
-    ["IAM_ROLE", [canonicalNodeSpec("app-runtime-role", "EC2 Runtime Role", 1680, 840, {
+    ["IAM_ROLE", [canonicalNodeSpec("app-runtime-role", "EC2 Runtime Role", 820, 100, {
       assumeRolePolicy: ec2TrustPolicy
     })]],
-    ["IAM_POLICY", [canonicalNodeSpec("app-runtime-policy", "EC2 Runtime Policy", 1880, 840, {
+    ["IAM_POLICY", [canonicalNodeSpec("app-runtime-policy", "EC2 Runtime Policy", 1020, 100, {
       policy: JSON.stringify({
         Version: "2012-10-17",
-        Statement: [{
-          Effect: "Allow",
-          Action: [
-            "logs:CreateLogStream",
-            "logs:PutLogEvents",
-            "cloudwatch:PutMetricData",
-            "ssm:UpdateInstanceInformation",
-            ...(uploadEnabled ? ["s3:GetObject", "s3:PutObject"] : [])
-          ],
-          Resource: "*"
-        }]
+        Statement: [
+          {
+            Effect: "Allow",
+            Action: ["logs:CreateLogStream", "logs:PutLogEvents"],
+            Resource: `arn:aws:logs:${region}:*:log-group:/sketchcatch/ec2/app:*`
+          },
+          {
+            Effect: "Allow",
+            Action: ["cloudwatch:PutMetricData", "ssm:UpdateInstanceInformation"],
+            Resource: "*"
+          },
+          ...(uploadEnabled
+            ? [{
+                Effect: "Allow",
+                Action: ["s3:GetObject", "s3:PutObject"],
+                Resource: "arn:aws:s3:::sketchcatch-image-uploads-*/*"
+              }]
+            : [])
+        ]
       })
     })]],
-    ["IAM_INSTANCE_PROFILE", [canonicalNodeSpec("app-instance-profile", "EC2 Instance Profile", 1880, 700, {
+    ["IAM_INSTANCE_PROFILE", [canonicalNodeSpec("app-instance-profile", "EC2 Instance Profile", 1220, 100, {
       name: "sketchcatch-app",
       role: canonicalTerraformReference("aws_iam_role", "app-runtime-role", "name")
     })]],
-    ["CLOUDWATCH_LOG_GROUP", [canonicalNodeSpec("app-log-group", "Application Logs", 1680, 980, {
+    ["CLOUDWATCH_LOG_GROUP", [canonicalNodeSpec("app-log-group", "Application Logs", 1420, 100, {
       name: "/sketchcatch/ec2/app",
       retentionInDays: 30
     })]],
     ["CLOUDWATCH_METRIC_ALARM", [
-      canonicalNodeSpec("app-cpu-alarm", "ASG CPU Alarm", 1880, 980, {
+      canonicalNodeSpec("app-cpu-alarm", "ASG CPU Alarm", 1620, 100, {
         ...createCanonicalMetricAlarmConfig("sketchcatch-ec2-cpu", "AWS/EC2", "CPUUtilization", {
           AutoScalingGroupName: canonicalTerraformReference("aws_autoscaling_group", "app-auto-scaling-group", "name")
         }),
         alarmActions: [canonicalTerraformReference("aws_autoscaling_policy", "app-scaling-policy", "arn")]
       }),
       ...(hasDatabase
-        ? [canonicalNodeSpec("db-cpu-alarm", "Database CPU Alarm", 1880, 1120, createCanonicalMetricAlarmConfig("sketchcatch-rds-cpu", "AWS/RDS", "CPUUtilization", {
+        ? [canonicalNodeSpec("db-cpu-alarm", "Database CPU Alarm", 1820, 100, createCanonicalMetricAlarmConfig("sketchcatch-rds-cpu", "AWS/RDS", "CPUUtilization", {
             DBInstanceIdentifier: canonicalTerraformReference("aws_db_instance", "app-database", "id")
           }))]
         : [])
     ]],
     ["DB_SUBNET_GROUP", hasDatabase
-      ? [canonicalNodeSpec("db-subnet-group", "DB Subnet Group", 840, 1040, {
+      ? [canonicalNodeSpec("db-subnet-group", "DB Subnet Group", 580, 1040, {
           name: "sketchcatch-db-subnets",
           subnetIds: privateDbSubnetIds.map((id) => canonicalTerraformReference("aws_subnet", id))
         })]
       : []],
     ["S3", [
-      canonicalNodeSpec("web-assets-bucket", "Web Assets Bucket", 420, 140, {
-        bucketPurpose: "static_website_origin",
-        publicAccessBlock: true,
-        forceDestroy: false
-      }),
-      ...(uploadEnabled
-        ? [canonicalNodeSpec("image-upload-bucket", "Private Image Upload Bucket", 680, 140, {
-            bucketPurpose: "user_uploads",
+      ...(staticWebsiteOriginEnabled
+        ? [canonicalNodeSpec("web-assets-bucket", "Web Assets Bucket", 180, 100, {
+            bucketPurpose: "static_website_origin",
             publicAccessBlock: true,
             forceDestroy: false
           })]
+        : []),
+      ...(uploadEnabled
+        ? [canonicalNodeSpec(
+            "image-upload-bucket",
+            "Private Image Upload Bucket",
+            staticWebsiteOriginEnabled ? 380 : 180,
+            100,
+            {
+            bucketPrefix: "sketchcatch-image-uploads-",
+            bucketPurpose: "user_uploads",
+            publicAccessBlock: true,
+            forceDestroy: false
+            }
+          )]
         : [])
     ]],
     ["EC2", Array.from({ length: computeCount }, (_, index) =>
       canonicalNodeSpec(
         `app-server-${index + 1}`,
         `EC2 Fleet Instance ${index + 1}`,
-        index % 2 === 0 ? 300 : 620,
+        index % 2 === 0 ? 260 : 930,
         820 + Math.floor(index / 2) * 120,
         {
           associatePublicIpAddress: false,
@@ -4151,27 +4265,27 @@ function configureCanonicalEc2PatternResources(
 
     switch (node.type) {
       case "VPC":
-        return { ...node, id: vpcId, label: "Main VPC", config: { cidrBlock: "10.0.0.0/16", enableDnsHostnames: true, enableDnsSupport: true } };
+        return { ...node, id: vpcId, label: "Main VPC", positionX: 60, positionY: 380, config: { cidrBlock: "10.0.0.0/16", enableDnsHostnames: true, enableDnsSupport: true } };
       case "INTERNET_GATEWAY":
-        return { ...node, id: "internet-gateway", label: "Internet Gateway", config: { vpcId: vpcRef } };
+        return { ...node, id: "internet-gateway", label: "Internet Gateway", positionX: 80, positionY: 420, config: { vpcId: vpcRef } };
       case "LOAD_BALANCER":
-        return { ...node, id: "application-load-balancer", label: "Application Load Balancer", config: { name: "sketchcatch-app", internal: false, loadBalancerType: "application", subnets: publicSubnetRefs, securityGroups: [canonicalTerraformReference("aws_security_group", "alb-security-group")] } };
+        return { ...node, id: "application-load-balancer", label: "Application Load Balancer", positionX: 570, positionY: 480, config: { name: "sketchcatch-app", internal: false, idleTimeout: realtimeTransport === "sse" ? 120 : 60, loadBalancerType: "application", subnets: publicSubnetRefs, securityGroups: [canonicalTerraformReference("aws_security_group", "alb-security-group")] } };
       case "LOAD_BALANCER_TARGET_GROUP":
-        return { ...node, id: "app-target-group", label: "EC2 Target Group", config: { name: "sketchcatch-app", port: 8080, protocol: "HTTP", targetType: "instance", vpcId: vpcRef, healthCheck: { path: "/health", matcher: "200-399" } } };
+        return { ...node, id: "app-target-group", label: "EC2 Target Group", positionX: 570, positionY: 760, config: { name: "sketchcatch-app", port: 8080, protocol: "HTTP", targetType: "instance", vpcId: vpcRef, healthCheck: { path: "/health", matcher: "200-399" } } };
       case "LOAD_BALANCER_LISTENER":
-        return { ...node, id: "http-listener", label: "ALB HTTP Listener", config: { loadBalancerArn: canonicalTerraformReference("aws_lb", "application-load-balancer", "arn"), port: 80, protocol: "HTTP", defaultAction: { type: "forward", targetGroupArn: canonicalTerraformReference("aws_lb_target_group", "app-target-group", "arn") } } };
+        return { ...node, id: "http-listener", label: "ALB HTTP Listener", positionX: 570, positionY: 620, config: { loadBalancerArn: canonicalTerraformReference("aws_lb", "application-load-balancer", "arn"), port: 80, protocol: "HTTP", defaultAction: { type: "forward", targetGroupArn: canonicalTerraformReference("aws_lb_target_group", "app-target-group", "arn") } } };
       case "LAUNCH_TEMPLATE":
-        return { ...node, id: "app-launch-template", label: "EC2 Launch Template", config: { namePrefix: "sketchcatch-app-", imageId: canonicalTerraformReference("data.aws_ami", "app-ami"), instanceType: "t3.small", vpcSecurityGroupIds: [canonicalTerraformReference("aws_security_group", "app-security-group")], iamInstanceProfile: { name: canonicalTerraformReference("aws_iam_instance_profile", "app-instance-profile", "name") }, metadataOptions: { httpEndpoint: "enabled", httpTokens: "required" }, monitoring: { enabled: true } } };
+        return { ...node, id: "app-launch-template", label: "EC2 Launch Template", positionX: 620, positionY: 260, config: { namePrefix: "sketchcatch-app-", imageId: canonicalTerraformReference("data.aws_ami", "app-ami"), instanceType: "t3.small", vpcSecurityGroupIds: [canonicalTerraformReference("aws_security_group", "app-security-group")], iamInstanceProfile: { name: canonicalTerraformReference("aws_iam_instance_profile", "app-instance-profile", "name") }, metadataOptions: { httpEndpoint: "enabled", httpTokens: "required" }, monitoring: { enabled: true } } };
       case "AUTO_SCALING_GROUP":
-        return { ...node, id: "app-auto-scaling-group", label: "Application Auto Scaling Group", config: { name: "sketchcatch-app", minSize: 2, desiredCapacity: computeCount, maxSize: Math.max(4, computeCount * 2), vpcZoneIdentifier: privateAppSubnetRefs, targetGroupArns: [canonicalTerraformReference("aws_lb_target_group", "app-target-group", "arn")], healthCheckType: "ELB", healthCheckGracePeriod: 120, launchTemplate: { id: canonicalTerraformReference("aws_launch_template", "app-launch-template"), version: "$Latest" } } };
+        return { ...node, id: "app-auto-scaling-group", label: "Application Auto Scaling Group", positionX: 840, positionY: 260, config: { name: "sketchcatch-app", minSize: 2, desiredCapacity: computeCount, maxSize: Math.max(4, computeCount * 2), vpcZoneIdentifier: privateAppSubnetRefs, targetGroupArns: [canonicalTerraformReference("aws_lb_target_group", "app-target-group", "arn")], healthCheckType: "ELB", healthCheckGracePeriod: 120, launchTemplate: { id: canonicalTerraformReference("aws_launch_template", "app-launch-template"), version: "$Latest" } } };
       case "AUTO_SCALING_POLICY":
-        return { ...node, id: "app-scaling-policy", label: "CPU Scaling Policy", config: { name: "sketchcatch-cpu-scale-out", autoscalingGroupName: canonicalTerraformReference("aws_autoscaling_group", "app-auto-scaling-group", "name"), policyType: "SimpleScaling", adjustmentType: "ChangeInCapacity", scalingAdjustment: 1, cooldown: 120 } };
+        return { ...node, id: "app-scaling-policy", label: "CPU Scaling Policy", positionX: 1060, positionY: 260, config: { name: "sketchcatch-cpu-scale-out", autoscalingGroupName: canonicalTerraformReference("aws_autoscaling_group", "app-auto-scaling-group", "name"), policyType: "SimpleScaling", adjustmentType: "ChangeInCapacity", scalingAdjustment: 1, cooldown: 120 } };
       case "CLOUDFRONT":
-        return { ...node, id: "cloudfront-distribution", label: "CloudFront Public Entry", config: { ...node.config, originResourceId: "web-assets-bucket", enabled: true, viewerProtocolPolicy: "redirect-to-https" } };
+        return { ...node, id: "cloudfront-distribution", label: "CloudFront Public Entry", positionX: 80, positionY: 100, config: { ...node.config, originResourceId: "web-assets-bucket", enabled: true, viewerProtocolPolicy: "redirect-to-https" } };
       case "RDS":
-        return { ...node, id: "app-database", label: "Multi-AZ Application Database", config: { engine: "postgres", instanceClass: "db.t4g.small", allocatedStorage: 20, multiAz: true, publiclyAccessible: false, storageEncrypted: true, backupRetentionPeriod: 7, deletionProtection: true, skipFinalSnapshot: false, finalSnapshotIdentifier: "sketchcatch-app-final", dbSubnetGroupName: canonicalTerraformReference("aws_db_subnet_group", "db-subnet-group", "name"), vpcSecurityGroupIds: [canonicalTerraformReference("aws_security_group", "db-security-group")] } };
+        return { ...node, id: "app-database", label: "Multi-AZ Application Database", positionX: 730, positionY: 1120, config: { engine: "postgres", instanceClass: "db.t4g.small", allocatedStorage: databaseAllocatedStorage, multiAz: true, publiclyAccessible: false, storageEncrypted: true, backupRetentionPeriod: 7, deletionProtection: true, skipFinalSnapshot: false, finalSnapshotIdentifier: "sketchcatch-app-final", dbSubnetGroupName: canonicalTerraformReference("aws_db_subnet_group", "db-subnet-group", "name"), vpcSecurityGroupIds: [canonicalTerraformReference("aws_security_group", "db-security-group")] } };
       case "SECRETS_MANAGER_SECRET":
-        return { ...node, id: "database-secret", label: "Database Credentials Secret", config: { name: "sketchcatch/database/credentials", recoveryWindowInDays: 7 } };
+        return { ...node, id: "database-secret", label: "Database Credentials Secret", positionX: 1280, positionY: 260, config: { name: "sketchcatch/database/credentials", recoveryWindowInDays: 7 } };
       default:
         return node;
     }
@@ -4225,7 +4339,7 @@ function createCanonicalRouteAssociationSpecs(hasDatabase: boolean): CanonicalNo
   ];
 
   return pairs.map(([id, label, routeTableId, subnetId], index) =>
-    canonicalNodeSpec(id!, label!, 1120 + (index % 2) * 220, 350 + Math.floor(index / 2) * 140, {
+    canonicalNodeSpec(id!, label!, 1780 + (index % 2) * 180, 480 + Math.floor(index / 2) * 280, {
       routeTableId: canonicalTerraformReference("aws_route_table", routeTableId!),
       subnetId: canonicalTerraformReference("aws_subnet", subnetId!)
     })
@@ -4249,6 +4363,18 @@ function createCanonicalMetricAlarmConfig(
     statistic: "Average",
     threshold: 80
   };
+}
+
+function resolveDatabaseAllocatedStorage(normalizedPrompt: string): number {
+  if (/(100gb\s*(이상|or\s*more)|대용량\s*데이터|large\s+database)/iu.test(normalizedPrompt)) {
+    return 100;
+  }
+
+  if (/(10gb\s*[~-]\s*100gb|10gb\s*~\s*100gb|중간\s*규모\s*데이터|medium\s+database)/iu.test(normalizedPrompt)) {
+    return 50;
+  }
+
+  return 20;
 }
 
 function canonicalTerraformReference(
@@ -4388,7 +4514,8 @@ function createUniqueCanonicalNodeId(
 
 function connectCanonicalPatternTopologies(
   architectureJson: ArchitectureJson,
-  patternIds: readonly string[]
+  patternIds: readonly string[],
+  prompt: string
 ): ArchitectureJson {
   const edges = [...architectureJson.edges];
   const nodesByType = new Map<ResourceType, ArchitectureJson["nodes"]>();
@@ -4405,6 +4532,15 @@ function connectCanonicalPatternTopologies(
     !usesRoleAwareEcs;
   const usesRoleAwareNetwork = usesRoleAwareEcs || usesRoleAwareEc2;
   const roleAwarePrivateAppSubnetIds = ["private-app-subnet-a", "private-app-subnet-b"];
+  const normalizedPrompt = prompt.normalize("NFKC").toLowerCase();
+  const realtimeTransport = resolveRealtimeTransport(normalizedPrompt);
+  const realtimeProfile = resolveRealtimeProfile(normalizedPrompt);
+  const forwardLabel =
+    realtimeTransport === "sse"
+      ? "POST /messages + SSE /events"
+      : realtimeTransport === "websocket"
+        ? "WebSocket upgrade"
+        : "forwards";
 
   for (const node of architectureJson.nodes) {
     nodesByType.set(node.type, [...(nodesByType.get(node.type) ?? []), node]);
@@ -4510,8 +4646,12 @@ function connectCanonicalPatternTopologies(
       connectIds("public-subnet-a", "application-load-balancer", "hosts ALB");
       connectIds("public-subnet-b", "application-load-balancer", "hosts ALB");
       connectIds("application-load-balancer", "http-listener", "listens");
-      connectIds("http-listener", "app-target-group", "forwards");
-      connectIds("app-target-group", "app-auto-scaling-group", "targets fleet");
+      connectIds("http-listener", "app-target-group", forwardLabel);
+      connectIds(
+        "app-target-group",
+        "app-auto-scaling-group",
+        realtimeTransport === "sse" ? "streams to fleet" : "targets fleet"
+      );
       connectIds("app-auto-scaling-group", "app-launch-template", "launches");
       connectIds("app-ami", "app-launch-template", "machine image");
       connectIds("app-instance-profile", "app-launch-template", "instance identity");
@@ -4534,6 +4674,9 @@ function connectCanonicalPatternTopologies(
         if (bucket.config.bucketPurpose === "user_uploads") {
           connectIds("app-auto-scaling-group", bucket.id, "stores uploads");
         }
+      }
+      if (realtimeTransport === "sse" && realtimeProfile === "chat") {
+        connectIds("app-auto-scaling-group", "app-database", "messages + PostgreSQL LISTEN/NOTIFY");
       }
     } else {
       connect("LOAD_BALANCER", "LOAD_BALANCER_LISTENER", "listens");
@@ -4564,9 +4707,6 @@ function connectCanonicalPatternTopologies(
     if (cloudFront !== undefined && staticBucket !== undefined) {
       connectIds(cloudFront.id, staticBucket.id, "private origin");
     }
-    if (usesRoleAwareNetwork && cloudFront !== undefined) {
-      connectIds(cloudFront.id, "application-load-balancer", "API origin");
-    }
   }
 
   if (patternIds.includes("ecs-fargate")) {
@@ -4575,7 +4715,7 @@ function connectCanonicalPatternTopologies(
       connectIds("ecs-cluster", "ecs-service", "runs");
       connectIds("ecs-task-definition", "ecs-service", "defines");
       connectIds("application-load-balancer", "http-listener", "listens");
-      connectIds("http-listener", "app-target-group", "forwards");
+      connectIds("http-listener", "app-target-group", forwardLabel);
       connectIds("app-target-group", "ecs-service", "targets ip");
       connectIds("alb-security-group", "application-load-balancer", "protects");
       connectIds("app-security-group", "ecs-service", "protects");
@@ -4590,6 +4730,9 @@ function connectCanonicalPatternTopologies(
         if (bucket.config.bucketPurpose !== "static_website_origin") {
           connectIds("ecs-service", bucket.id, "stores uploads");
         }
+      }
+      if (realtimeTransport === "sse" && realtimeProfile === "chat") {
+        connectIds("ecs-service", "app-database", "messages + PostgreSQL LISTEN/NOTIFY");
       }
     } else {
       connect("ECR_REPOSITORY", "ECS_TASK_DEFINITION", "image");
@@ -4973,6 +5116,24 @@ function hasRealtimeImplementationDecision(normalizedPrompt: string): boolean {
   return /(websocket|web\s*socket|sse|server-sent\s*events|polling|api\s*gateway|\uC6F9\uC18C\uCF13|\uC5F0\uACB0\s*\uACBD\uB85C|\uD3F4\uB9C1)/iu.test(
     normalizedPrompt
   );
+}
+
+type RealtimeTransport = "polling" | "sse" | "websocket";
+
+function resolveRealtimeTransport(normalizedPrompt: string): RealtimeTransport | undefined {
+  if (/(\bsse\b|server-sent\s*events|http\s*메시지\s*전송\s*\+\s*sse)/iu.test(normalizedPrompt)) {
+    return "sse";
+  }
+
+  if (/(websocket|web\s*socket|웹소켓)/iu.test(normalizedPrompt)) {
+    return "websocket";
+  }
+
+  if (/(polling|폴링)/iu.test(normalizedPrompt)) {
+    return "polling";
+  }
+
+  return undefined;
 }
 
 function mentionsAutoScalingGroup(normalizedPrompt: string): boolean {

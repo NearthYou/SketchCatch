@@ -574,7 +574,7 @@ test("createAmazonQArchitectureDraftResponse repairs a one-node Q plan that requ
   assert.equal(ec2SubnetIds.size, 2);
 });
 
-test("createAmazonQArchitectureDraftResponse materializes a deployable multi-AZ EC2 web app with image uploads", async () => {
+test("createAmazonQArchitectureDraftResponse materializes a deployable multi-AZ EC2 web app with image uploads and SSE chat", async () => {
   const provider = createFakeAmazonQProvider(() =>
     JSON.stringify({
       status: "plan",
@@ -617,7 +617,7 @@ test("createAmazonQArchitectureDraftResponse materializes a deployable multi-AZ 
   const prompt = [
     "website type: dynamic web application",
     "traffic: small daily traffic under 100 concurrent users under 10",
-    "database: simple user and post data under 10GB",
+    "database: medium data 10GB-100GB",
     "frontend: React/Vue/Angular SPA framework",
     "backend: complex business logic Spring Boot or Django",
     "region: Korea only Seoul ap-northeast-2",
@@ -626,12 +626,13 @@ test("createAmazonQArchitectureDraftResponse materializes a deployable multi-AZ 
     "\uD30C\uC77C \uC5C5\uB85C\uB4DC \uAE30\uB2A5\uC774 \uC788\uB098\uC694? (\uC774\uBBF8\uC9C0, \uBB38\uC11C \uB4F1)",
     "\uC774\uBBF8\uC9C0\uB9CC (\uD504\uB85C\uD544, \uAC8C\uC2DC\uAE00 \uC774\uBBF8\uC9C0)",
     "\uC2E4\uC2DC\uAC04 \uAE30\uB2A5\uC774 \uD544\uC694\uD55C\uAC00\uC694? (\uCC44\uD305, \uC54C\uB9BC \uB4F1)",
-    "\uD544\uC694 \uC5C6\uC74C",
+    "\uC2E4\uC2DC\uAC04 \uCC44\uD305",
     "management: semi-managed",
     "loading target: within 3 seconds",
     "website size: 10MB-100MB",
     "traffic pattern: event spikes",
-    "availability: 99.9%, monthly downtime within 1 hour"
+    "availability: 99%, monthly downtime within 8 hours",
+    "realtime implementation: SSE \uB2E8\uBC29\uD5A5 \uC54C\uB9BC \uACBD\uB85C"
   ].join("\n");
 
   const response = await createAmazonQArchitectureDraftResponse(
@@ -655,6 +656,8 @@ test("createAmazonQArchitectureDraftResponse materializes a deployable multi-AZ 
     (node) => node.type === "SUBNET" && node.config.tier === "private_db"
   );
   const loadBalancer = nodes.find((node) => node.type === "LOAD_BALANCER");
+  const listener = nodes.find((node) => node.type === "LOAD_BALANCER_LISTENER");
+  const targetGroup = nodes.find((node) => node.type === "LOAD_BALANCER_TARGET_GROUP");
   const autoScalingGroup = nodes.find((node) => node.type === "AUTO_SCALING_GROUP");
   const cloudFront = nodes.find((node) => node.type === "CLOUDFRONT");
   const uploadBucket = nodes.find(
@@ -664,6 +667,7 @@ test("createAmazonQArchitectureDraftResponse materializes a deployable multi-AZ 
     (node) => node.type === "S3" && node.config.bucketPurpose === "static_website_origin"
   );
   const database = nodes.find((node) => node.type === "RDS");
+  const runtimePolicy = nodes.find((node) => node.type === "IAM_POLICY");
 
   assert.equal(publicSubnets.length, 2);
   assert.equal(privateAppSubnets.length, 2);
@@ -673,6 +677,7 @@ test("createAmazonQArchitectureDraftResponse materializes a deployable multi-AZ 
     new Set(["ap-northeast-2a", "ap-northeast-2b"])
   );
   assert.ok(loadBalancer);
+  assert.equal(loadBalancer.config.idleTimeout, 120);
   assert.deepEqual(
     loadBalancer.config.subnets,
     publicSubnets.map((node) => `aws_subnet.${node.id.replaceAll("-", "_")}.id`)
@@ -688,9 +693,11 @@ test("createAmazonQArchitectureDraftResponse materializes a deployable multi-AZ 
   assert.equal(uploadBucket.config.publicAccessBlock, true);
   assert.equal(database?.config.multiAz, true);
   assert.equal(database?.config.publiclyAccessible, false);
+  assert.equal(database?.config.allocatedStorage, 50);
   assert.ok(cloudFront);
-  assert.ok(
-    edges.some((edge) => edge.sourceId === cloudFront.id && edge.targetId === loadBalancer.id)
+  assert.equal(
+    edges.some((edge) => edge.sourceId === cloudFront.id && edge.targetId === loadBalancer.id),
+    false
   );
   assert.equal(
     edges.some(
@@ -704,6 +711,42 @@ test("createAmazonQArchitectureDraftResponse materializes a deployable multi-AZ 
     edges.some(
       (edge) => edge.sourceId === autoScalingGroup.id && edge.targetId === uploadBucket.id
     )
+  );
+  assert.ok(listener);
+  assert.ok(targetGroup);
+  assert.ok(
+    edges.some(
+      (edge) =>
+        edge.sourceId === listener.id &&
+        edge.targetId === targetGroup.id &&
+        /SSE/i.test(edge.label ?? "")
+    )
+  );
+  assert.ok(
+    edges.some(
+      (edge) =>
+        edge.sourceId === autoScalingGroup.id &&
+        edge.targetId === database?.id &&
+        /LISTEN\/NOTIFY/i.test(edge.label ?? "")
+    )
+  );
+  const policyDocument = JSON.parse(String(runtimePolicy?.config.policy ?? "{}")) as {
+    Statement?: unknown[];
+  };
+  const policyStatements = policyDocument.Statement ?? [];
+  assert.ok(policyStatements.length >= 2);
+  assert.equal(
+    policyStatements.some(
+      (statement) =>
+        typeof statement === "object" &&
+        statement !== null &&
+        Array.isArray((statement as { Action?: unknown }).Action) &&
+        (statement as { Action: unknown[] }).Action.some((action) =>
+          String(action).startsWith("s3:")
+        ) &&
+        (statement as { Resource?: unknown }).Resource === "*"
+    ),
+    false
   );
 });
 
@@ -3344,6 +3387,43 @@ test("createAmazonQArchitectureDraftResponse asks the realtime implementation qu
   assert.deepEqual(response.suggestions, [
     "WebSocket 연결 경로",
     "SSE 단방향 알림 경로",
+    "간단 폴링 방식과 비용 절감 경고"
+  ]);
+});
+
+test("createAmazonQArchitectureDraftResponse asks a chat-specific realtime implementation question", async () => {
+  const provider = createFakeAmazonQProvider(() => "{}");
+  const response = await createAmazonQArchitectureDraftResponse(
+    {
+      prompt: [
+        "website type: dynamic web application",
+        "traffic: medium daily traffic 1000 concurrent users 50",
+        "database: medium data 10GB-100GB",
+        "frontend: HTML/CSS/JS only pure web",
+        "backend: simple API Node.js",
+        "region: Korea only Seoul region ap-northeast-2",
+        "budget: 50-200만원 high performance",
+        "SSL HTTPS: optional HTTP acceptable",
+        "file upload: image upload only",
+        "realtime: real-time chat",
+        "management: semi-managed",
+        "loading time: 3 seconds",
+        "website size: 100MB-1GB",
+        "traffic pattern: event spikes",
+        "availability: 99%"
+      ].join("\n")
+    },
+    { provider, creditPolicy: confirmedCreditPolicy }
+  );
+
+  if (!("status" in response)) {
+    assert.fail("Expected a clarification response");
+  }
+
+  assert.equal(response.question, "실시간 채팅 연결은 어떤 방식으로 표현할까요?");
+  assert.deepEqual(response.suggestions, [
+    "WebSocket 양방향 연결 경로",
+    "HTTP 메시지 전송 + SSE 수신 경로",
     "간단 폴링 방식과 비용 절감 경고"
   ]);
 });
