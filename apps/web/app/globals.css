@@ -12714,3 +12714,181 @@ nextjs-portal {
     grid-template-columns: 48px minmax(0, 1fr);
   }
 }
+
+/* DESIGN.md live project inventory */
+.designProjectsView .designDashboardPanel {
+  padding: 22px;
+}
+
+.designProjectsResultMeta {
+  align-items: center;
+  color: var(--dashboard-design-muted);
+  display: flex;
+  font-size: 0.76rem;
+  font-weight: 700;
+  gap: 12px;
+  justify-content: space-between;
+  margin-top: 18px;
+}
+
+.designProjectsResultMeta span:first-child {
+  color: var(--dashboard-design-ink);
+}
+
+.designProjectsSort {
+  align-items: center;
+  background: var(--dashboard-design-surface);
+  border: 1px solid var(--dashboard-design-hairline-strong);
+  border-radius: 8px;
+  color: var(--dashboard-design-body);
+  display: inline-flex;
+  gap: 4px;
+  min-height: 40px;
+  padding-left: 10px;
+}
+
+.designProjectsSort select {
+  background: transparent;
+  border: 0;
+  color: var(--dashboard-design-ink);
+  font: inherit;
+  font-weight: 700;
+  min-height: 38px;
+  outline: 0;
+  padding: 0 10px 0 4px;
+}
+
+.designProjectsSort:focus-within {
+  outline: 2px solid var(--dashboard-design-link);
+  outline-offset: 2px;
+}
+
+.designProjectsList {
+  border-color: var(--dashboard-design-hairline-strong);
+  margin-top: 10px;
+}
+
+.designDashboardProjectRow.designProjectsRow {
+  align-items: center;
+  gap: 18px;
+  grid-template-columns: minmax(260px, 1.4fr) minmax(190px, 0.7fr) minmax(170px, 0.6fr) auto;
+  min-width: 0;
+  padding: 15px 16px;
+}
+
+.designProjectsIdentity {
+  align-items: center;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: auto minmax(0, 1fr);
+  min-width: 0;
+}
+
+.designProjectsIdentity > div {
+  min-width: 0;
+}
+
+.designProjectsIdentity strong,
+.designProjectsIdentity p {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.designProjectsIdentity p {
+  margin-top: 4px;
+}
+
+.designProjectsDate {
+  align-items: center;
+  color: var(--dashboard-design-body);
+  display: inline-flex;
+  font-size: 0.82rem;
+  gap: 6px;
+  line-height: 1.45;
+}
+
+.designProjectsOpen {
+  align-items: center;
+  color: var(--dashboard-design-link);
+  display: inline-flex;
+  font-size: 0.84rem;
+  font-weight: 700;
+  gap: 4px;
+  justify-content: flex-end;
+  white-space: nowrap;
+}
+
+.designProjectsStatus {
+  align-items: center;
+  background: var(--dashboard-design-canvas-soft);
+  border: 1px solid var(--dashboard-design-hairline);
+  border-radius: 8px;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  margin-top: 18px;
+  min-height: 72px;
+  padding: 14px 16px;
+}
+
+.designProjectsStatus p {
+  color: var(--dashboard-design-body);
+  margin: 0;
+}
+
+.designProjectsStatus .designDashboardPrimaryAction,
+.designProjectsStatus .designDashboardSecondaryAction {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 1180px) {
+  .designDashboardProjectRow.designProjectsRow {
+    grid-template-columns: minmax(240px, 1fr) minmax(180px, 0.7fr) auto;
+  }
+
+  .designProjectsDate:nth-of-type(2) {
+    display: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .designProjectsView .designDashboardPanel {
+    padding: 16px;
+  }
+
+  .designProjectsList {
+    overflow: visible;
+  }
+
+  .designDashboardProjectRow.designProjectsRow {
+    align-items: start;
+    gap: 12px;
+    grid-template-columns: 1fr;
+    padding: 14px;
+  }
+
+  .designProjectsIdentity p {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+  }
+
+  .designProjectsDate:nth-of-type(2) {
+    display: inline-flex;
+  }
+
+  .designProjectsOpen {
+    justify-content: flex-start;
+  }
+
+  .designProjectsStatus {
+    align-items: stretch;
+    display: grid;
+  }
+
+  .designProjectsStatus .designDashboardPrimaryAction,
+  .designProjectsStatus .designDashboardSecondaryAction {
+    width: 100%;
+  }
+}

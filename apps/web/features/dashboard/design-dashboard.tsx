@@ -80,7 +80,7 @@ const viewMeta: Record<DesignDashboardView, { readonly title: string; readonly s
   },
   projects: {
     title: "프로젝트",
-    subtitle: "Practice Architecture와 IaC Preview 상태를 기준으로 운영 단위를 정리합니다."
+    subtitle: "내가 만든 Practice Architecture와 최근 작업 상태를 확인합니다."
   },
   "project-detail": {
     title: "프로젝트 상세",

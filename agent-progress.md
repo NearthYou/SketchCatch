@@ -12,6 +12,21 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-10 - Connect dashboard project inventory to live user projects
+
+- Goal: Replace the static `/dashboard/projects` sample with projects owned by the authenticated user.
+- Completed:
+  - Added a focused DESIGN.md project inventory client backed by `GET /api/projects` through `listProjects()`.
+  - Added selectable recent-work and recent-creation sorting, project-name search, loading/error/empty states, and workspace links carrying the real project ID.
+  - Removed fake source, risk, and deployment-status columns from the live inventory surface.
+  - Added responsive project inventory styles and source-level regression coverage.
+- Verification:
+  - Project inventory, project sorting, project search, and dashboard route tests passed.
+  - `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check` passed.
+  - Playwright verified search filtering, both sort orders, and 1440px and 375px layouts without horizontal overflow.
+- Risk:
+  - The Playwright session had no authenticated user cookie, so populated visual QA used a browser-only mocked `GET /api/projects` response. The existing API ownership tests cover active-user filtering.
+
 ### 2026-07-10 - Apply DESIGN.md cost dashboard UI
 
 - Goal: Apply the selected cost operations prototype to `/dashboard/costs` without adding estimated-versus-actual comparison behavior.
@@ -178,29 +193,3 @@ Short English-only working log for the current agent context. Older records are 
   - Phase 4 does not dispatch ECS tasks; Phase 5 must wire the job model into deployment routes and worker dispatcher config.
   - The requested API deployment test command currently exits 1 because of unrelated pre-existing failures in `aiLlmExplanationRoutes.test.ts` and a missing `docs/jh/000_AWS리소스목록_JH.md` fixture.
   - No live AWS commands should be run in Phase 4.
-
-### 2026-07-10 - Start ECS Phase 3 runtime config/secrets transition
-
-- Goal: Implement Phase 3 only: replace ECS runtime dependence on generated env files with ECS task definition environment/secrets references while keeping EC2 rollback intact.
-- Completed:
-  - Created GitHub issue #290.
-  - Created linked branch `feature/sw/290-ecs-secrets-config` from `dev` with `gh issue develop`.
-  - Read root `AGENTS.md`, `docs/AGENTS.md`, `infra/AGENTS.md`, and ECS migration references under `docs/sw`.
-  - Added Terraform runtime config guardrails so sensitive API env names cannot be passed through `api_environment`.
-  - Restricted `api_secret_arns` to approved ECS API secret names and Secrets Manager/SSM ARN formats.
-  - Added `runtime-config.tf` to document the ECS API secret name groups used by Phase 3.
-  - Added an ECS deploy workflow check that fails if required sensitive API values are missing from task definition secrets or appear as plain environment variables.
-  - Updated deployment/Terraform docs with GitHub vars, ECS environment, Secrets Manager, SSM SecureString, and EC2 rollback responsibilities.
-- Verification:
-  - `pnpm harness:check` passed before Phase 3 edits.
-  - `pnpm harness:check` passed after Phase 3 edits.
-  - `pnpm lint` passed.
-  - `pnpm typecheck` passed.
-  - `pnpm build` passed.
-  - `terraform -chdir=infra/aws/terraform fmt -check -recursive` passed.
-  - Static Node check confirmed `.github/workflows/deploy-ecs.yml` contains the runtime config validation and does not generate env files or presigned env downloads.
-  - `terraform -chdir=infra/aws/terraform validate` passed without live AWS mutation.
-- Risk:
-  - No live AWS commands should be run in Phase 3.
-  - ECS service is currently cost-bearing if left at `desiredCount=1` from the prior smoke session.
-  - The RDS security group rule opened manually for ECS smoke should be captured in a later Terraform/drift follow-up.
