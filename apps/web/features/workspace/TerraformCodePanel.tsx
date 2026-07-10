@@ -3,6 +3,7 @@ import type { KeyboardEvent as ReactKeyboardEvent, UIEvent } from "react";
 import type { DiagramJson, TerraformDiagnostic, TerraformSourceLocation, TerraformSyncFileInput } from "@sketchcatch/types";
 import { getApiErrorMessage } from "../../lib/api-client";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
+import { TerraformCodeEditorSurface } from "./TerraformCodeEditorSurface";
 import { TerraformCodeStatus } from "./TerraformCodeStatus";
 import { TerraformCodeToolbar } from "./TerraformCodeToolbar";
 import {
@@ -26,9 +27,7 @@ import {
 } from "./terraform-panel-utils";
 import { createTerraformDiagnosticLineNumbers } from "./terraform-diagnostic-line-highlights";
 import {
-  createTerraformHighlightedLines,
-  type TerraformHighlightedToken,
-  type TerraformTokenKind
+  createTerraformHighlightedLines
 } from "./terraform-code-highlighting";
 import { applyAllTerraformSyncProposals } from "./terraform-sync-proposals";
 import {
@@ -44,18 +43,6 @@ import styles from "./workspace.module.css";
 
 const TERRAFORM_EDITOR_LINE_HEIGHT = 19.2;
 const TERRAFORM_EDITOR_VERTICAL_PADDING = 12;
-
-const TERRAFORM_TOKEN_CLASS_NAMES: Record<TerraformTokenKind, string | undefined> = {
-  brace: styles.terraformTokenBrace,
-  comment: styles.terraformTokenComment,
-  identifier: styles.terraformTokenIdentifier,
-  keyword: styles.terraformTokenKeyword,
-  number: styles.terraformTokenNumber,
-  operator: styles.terraformTokenOperator,
-  plain: styles.terraformTokenPlain,
-  reference: styles.terraformTokenReference,
-  string: styles.terraformTokenString
-};
 
 type TerraformPreviewExplanationScope = {
   readonly code: string;
@@ -185,14 +172,6 @@ function addTerraformDiagnosticSource(
     sourceFileName: diagnostic.sourceFileName ?? sourceFileName,
     ...(diagnostic.line !== undefined ? { line: diagnostic.line + sourceLineOffset } : {})
   };
-}
-
-function renderTerraformToken(token: TerraformHighlightedToken, index: number) {
-  return (
-    <span className={TERRAFORM_TOKEN_CLASS_NAMES[token.kind]} key={`${index}-${token.kind}-${token.text}`}>
-      {token.text}
-    </span>
-  );
 }
 
 export type PreparedTerraformArtifactSource = {
@@ -1117,65 +1096,24 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
         }}
       />
 
-      <div className={styles.terraformEditorFrame}>
-        <ol ref={lineNumberRef} className={styles.terraformLineNumbers} aria-hidden="true">
-          {lineNumbers.map((lineNumber) => (
-            <li
-              className={diagnosticLineNumberSet.has(lineNumber) ? styles.terraformLineNumberError : undefined}
-              key={lineNumber}
-            >
-              {lineNumber}
-            </li>
-          ))}
-        </ol>
-        <div className={styles.terraformSyntaxHighlightLayer} aria-hidden="true">
-          <pre className={styles.terraformSyntaxHighlightCode} style={terraformSyntaxHighlightStyle}>
-            {highlightedTerraformLines.map((line) => (
-              <span
-                className={
-                  line.hasDiagnostic
-                    ? `${styles.terraformHighlightedLine} ${styles.terraformHighlightedLineError}`
-                    : styles.terraformHighlightedLine
-                }
-                key={line.line}
-              >
-                {line.tokens.map(renderTerraformToken)}
-              </span>
-            ))}
-          </pre>
-        </div>
-        <textarea
-          ref={textareaRef}
-          autoCapitalize="off"
-          autoComplete="off"
-          autoCorrect="off"
-          aria-label="Terraform 코드"
-          className={styles.terraformTextarea}
-          onChange={(event) => handleCodeChange(event.target.value)}
-          onKeyDown={handleCodeKeyDown}
-          onScroll={handleCodeScroll}
-          placeholder={`resource "aws_vpc" "main" {
-  cidr_block = "10.0.0.0/16"
-}`}
-          spellCheck={false}
-          value={displayedTerraformCode}
-          wrap="off"
-        />
-        {sourceLineHighlightStyle ? (
-          <div
-            aria-hidden="true"
-            className={styles.terraformSourceLineHighlight}
-            style={sourceLineHighlightStyle}
-          />
-        ) : null}
-        {highlightedBlock && highlightedBlockStyle ? (
-          <div
-            aria-label={`${highlightedBlock.address} code block`}
-            className={styles.terraformBlockHighlightBox}
-            style={highlightedBlockStyle}
-          />
-        ) : null}
-      </div>
+      <TerraformCodeEditorSurface
+        actions={{
+          changeCode: handleCodeChange,
+          handleKeyDown: handleCodeKeyDown,
+          handleScroll: handleCodeScroll
+        }}
+        refs={{ lineNumbers: lineNumberRef, textarea: textareaRef }}
+        state={{
+          code: displayedTerraformCode,
+          diagnosticLineNumbers: diagnosticLineNumberSet,
+          highlightedBlockAddress: highlightedBlock?.address ?? null,
+          highlightedBlockStyle,
+          highlightedLines: highlightedTerraformLines,
+          lineNumbers,
+          sourceLineHighlightStyle,
+          syntaxHighlightStyle: terraformSyntaxHighlightStyle
+        }}
+      />
 
     </div>
   );
