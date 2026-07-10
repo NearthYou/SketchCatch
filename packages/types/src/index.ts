@@ -1,5 +1,5 @@
 // allow: SIZE_OK - shared package root contract; splitting needs a separate repo-wide migration.
-import type { TemplateId } from "./template-definitions.js";
+import type { TemplateId } from "./template-definitions.ts";
 
 export type IsoDateTimeString = string;
 
@@ -901,7 +901,7 @@ export {
   getTemplateDefinitionById,
   TEMPLATE_IDS,
   templateDefinitions
-} from "./template-definitions.js";
+} from "./template-definitions.ts";
 export type {
   BuildTemplateDiagramInput,
   TemplateDefinition,
@@ -910,7 +910,7 @@ export type {
   TemplateProvider,
   TemplateRelationship,
   TemplateResourceDefinition
-} from "./template-definitions.js";
+} from "./template-definitions.ts";
 
 export type ReverseEngineeringScanStatus =
   | "queued"

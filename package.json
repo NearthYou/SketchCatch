@@ -8,6 +8,7 @@
     "build": "turbo build",
     "catalog:check": "node scripts/generate-terraform-aws-catalog.mjs --check",
     "catalog:generate": "node scripts/generate-terraform-aws-catalog.mjs",
+    "templates:validate": "pnpm --filter @sketchcatch/api exec tsx ../../scripts/validate-aws-template-terraform.ts",
     "harness:check": "node scripts/check-harness.mjs",
     "lint": "turbo lint",
     "typecheck": "turbo typecheck",

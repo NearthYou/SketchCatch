@@ -100,7 +100,7 @@ export const templateDefinitions = [
       }),
       resource("oac", "CloudFront Origin Access Control", "aws", "aws_cloudfront_origin_access_control", 360, 180, {
         name: "static-site-oac",
-        originType: "s3",
+        originAccessControlOriginType: "s3",
         signingBehavior: "always",
         signingProtocol: "sigv4"
       }),
@@ -134,7 +134,7 @@ export const templateDefinitions = [
     tags: ["API Gateway", "Lambda", "DynamoDB"],
     resources: [
       resource("api", "API Gateway", "aws", "aws_api_gateway_rest_api", 80, 180, { name: "items-api" }),
-      resource("route", "API Route", "aws", "aws_api_gateway_resource", 300, 180, { pathPart: "items", restApiId: "@ref:api.id" }),
+      resource("route", "API Route", "aws", "aws_api_gateway_resource", 300, 180, { pathPart: "items", restApiId: "@ref:api.id", parentId: "@ref:api.root_resource_id" }),
       resource("method", "POST Method", "aws", "aws_api_gateway_method", 500, 180, { httpMethod: "POST", authorization: "NONE", restApiId: "@ref:api.id", resourceId: "@ref:route.id" }),
       resource("integration", "Lambda Integration", "aws", "aws_api_gateway_integration", 700, 180, { type: "AWS_PROXY", httpMethod: "POST", restApiId: "@ref:api.id", resourceId: "@ref:route.id", integrationHttpMethod: "POST", uri: "@ref:handler.invoke_arn" }),
       resource("deployment", "API Deployment", "aws", "aws_api_gateway_deployment", 900, 180, { restApiId: "@ref:api.id", triggers: { redeployment: "items-v1" } }),
@@ -250,7 +250,7 @@ export const templateDefinitions = [
       resource("cluster", "EKS Cluster", "aws", "aws_eks_cluster", 300, 260, { name: "eks-app", roleArn: "@ref:cluster-role.arn", vpcConfig: { subnetIds: ["@ref:subnet.id"] } }),
       resource("node-group", "EKS Managed Node Group", "aws", "aws_eks_node_group", 300, 500, { clusterName: "@ref:cluster.name", nodeRoleArn: "@ref:node-role.arn", subnetIds: ["@ref:subnet.id"], scalingConfig: { desiredSize: 1, minSize: 1, maxSize: 2 } }),
       resource("namespace", "Kubernetes Namespace", "kubernetes", "kubernetes_namespace", 620, 500, { metadata: { name: "sketchcatch" } }),
-      resource("deployment", "Kubernetes Deployment", "kubernetes", "kubernetes_deployment", 620, 660, { metadata: { name: "web" }, spec: { replicas: 1, selector: { matchLabels: { app: "web" } }, template: { metadata: { labels: { app: "web" } }, spec: { container: [{ name: "web", image: "nginx:stable", port: [{ containerPort: 80 }] }] } } } }),
+      resource("deployment", "Kubernetes Deployment", "kubernetes", "kubernetes_deployment", 620, 660, { metadata: { name: "web" }, spec: { replicas: 1, selector: [{ matchLabels: { app: "web" } }], template: { metadata: { labels: { app: "web" } }, spec: { container: [{ name: "web", image: "nginx:stable", port: [{ containerPort: 80 }] }] } } } }),
       resource("service", "Kubernetes Service", "kubernetes", "kubernetes_service", 860, 660, { metadata: { name: "web" }, spec: { selector: { app: "web" }, port: [{ port: 80, targetPort: 80 }], type: "ClusterIP" } })
     ],
     relationships: [
@@ -369,7 +369,8 @@ function resolveTemplateValueEntry(
       throw new Error(`Invalid TemplateDefinition reference: ${value}`);
     }
 
-    return `${resource.terraformResourceType}.${resourceName}.${attribute}`;
+    const addressPrefix = resource.terraformBlockType === "data" ? "data." : "";
+    return `${addressPrefix}${resource.terraformResourceType}.${resourceName}.${attribute}`;
   }
 
   if (Array.isArray(value)) {

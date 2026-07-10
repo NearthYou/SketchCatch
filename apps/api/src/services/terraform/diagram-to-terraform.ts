@@ -112,7 +112,7 @@ function renderBodyEntry(
   const normalizedValue = normalizeTopLevelValue(resourceType, key, value);
 
   if (shouldRenderNestedBlocks(resourceType, key, normalizedValue)) {
-    return renderNestedBlocks(key, normalizedValue, indentLevel);
+    return renderNestedBlocks(resourceType, key, normalizedValue, indentLevel);
   }
 
   return [renderAttribute(key, normalizedValue, indentLevel)];
@@ -175,6 +175,7 @@ function shouldRenderNestedBlocks(
 }
 
 function renderNestedBlocks(
+  resourceType: string,
   key: string,
   value: Record<string, unknown> | Record<string, unknown>[],
   indentLevel: number
@@ -188,20 +189,29 @@ function renderNestedBlocks(
     [
       `${indent(indentLevel)}${blockName} {`,
       ...Object.entries(value).flatMap(([nestedKey, nestedValue]) =>
-        renderNestedBlockEntry(nestedKey, nestedValue, indentLevel + 1)
+        renderNestedBlockEntry(resourceType, nestedKey, nestedValue, indentLevel + 1)
       ),
       `${indent(indentLevel)}}`
     ].join("\n")
   );
 }
 
-function renderNestedBlockEntry(key: string, value: unknown, indentLevel: number): string[] {
+function renderNestedBlockEntry(
+  resourceType: string,
+  key: string,
+  value: unknown,
+  indentLevel: number
+): string[] {
   if (Array.isArray(value) && value.every(isRecord)) {
-    return renderNestedBlocks(key, value, indentLevel);
+    return renderNestedBlocks(resourceType, key, value, indentLevel);
   }
 
-  if (isGenericTerraformNestedBlock(key) && isRecord(value)) {
-    return renderNestedBlocks(key, value, indentLevel);
+  if (
+    isGenericTerraformNestedBlock(key) &&
+    isRecord(value) &&
+    !(resourceType === "kubernetes_service" && key === "selector")
+  ) {
+    return renderNestedBlocks(resourceType, key, value, indentLevel);
   }
 
   return [renderAttribute(key, value, indentLevel)];
