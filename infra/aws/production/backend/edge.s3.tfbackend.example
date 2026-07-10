@@ -1,0 +1,5 @@
+bucket       = "sketchcatch-terraform-state-555980271919-ap-northeast-2"
+key          = "production/edge/terraform.tfstate"
+region       = "ap-northeast-2"
+encrypt      = true
+use_lockfile = true

@@ -2,6 +2,8 @@
 
 이 Terraform root는 SketchCatch production의 parallel ECS ALB 경로를 관리합니다. Phase 8 steady state는 nginx 없이 ALB path routing으로 API와 web Fargate service에 직접 전달합니다. 기존 EC2/SSM/docker run 경로와 nginx 자산은 rollback 보존 기간 동안 유지합니다.
 
+이 root는 Phase 9 management group 중 `runtime`이며 기존 backend key `production/ecs-foundation/terraform.tfstate`를 유지합니다. Route53/ACM, S3/RDS/Redis, EC2 rollback의 분리 state와 import 정책은 `infra/aws/production/README.md`를 따릅니다. 이 production state는 사용자 Deployment state와 공유하지 않습니다.
+
 ## 최종 ECS layout
 
 ```text

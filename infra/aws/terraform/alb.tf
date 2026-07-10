@@ -153,6 +153,8 @@ resource "aws_route53_record" "ecs_alias" {
   }
 
   lifecycle {
+    prevent_destroy = true
+
     precondition {
       condition     = var.route53_zone_id != "" && var.route53_record_name != ""
       error_message = "route53_zone_id and route53_record_name are required when create_route53_alias is true."
