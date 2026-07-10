@@ -31,6 +31,7 @@ import {
   getNodeDisplayBorderStyle
 } from "./node-style";
 import { getResourceNodeIconFrameSize } from "./resource-node-icon-size";
+import { getResourceNodeDisplayLabel } from "./resource-node-display-label";
 import { getResourceNodeLabelStyle } from "./resource-node-label-style";
 import type { DiagramFlowNode } from "./types";
 import styles from "./diagram-editor.module.css";
@@ -91,7 +92,6 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
   const borderColor = getNodeDisplayBorderColor(node);
   const borderStyle = getNodeDisplayBorderStyle(node);
   const textColor = node.style?.textColor ?? "#172033";
-  const isDataNode = node.parameters?.terraformBlockType === "data";
   const resizeBounds = getNodeResizeBounds(node);
   const resourceNodeIconFrameSize = usesIconTileLayout ? getResourceNodeIconFrameSize(node.size) : undefined;
   const nodeShellStyle = getNodeShellStyle(
@@ -102,9 +102,10 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
     resourceNodeIconFrameSize
   );
   const areaNodeIconUrl = isArea ? getAreaNodeIconUrl(node) : undefined;
-  const areaNodeLabel = isArea ? getAreaNodeLabel(node) : "";
   const areaNodeMetaLabel = isArea ? getAreaNodeMetaLabel(node) : undefined;
-  const resourceNodeLabel = getResourceNodeLabel(node);
+  const resourceNodeLabel = isResourceNode
+    ? getResourceNodeDisplayLabel(node)
+    : getAreaNodeLabel(node).toLocaleUpperCase();
   const resourceNodeLabelStyle = getResourceNodeLabelStyle(resourceNodeLabel, node.size.width, textColor);
 
   useEffect(() => {
@@ -247,7 +248,7 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
               {areaNodeIconUrl ? (
                 <img alt="" className={styles.areaNodeHeaderIcon} draggable={false} src={areaNodeIconUrl} />
               ) : null}
-              <span className={styles.areaNodeHeaderText}>{areaNodeLabel}</span>
+              <span className={styles.areaNodeHeaderText}>{resourceNodeLabel}</span>
               {areaNodeMetaLabel ? <span className={styles.areaNodeHeaderMeta}>{areaNodeMetaLabel}</span> : null}
             </div>
           </>
@@ -266,7 +267,6 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
               {resourceNodeLabel}
             </div>
             <div className={styles.resourceNodeType}>{node.type}</div>
-            {isDataNode ? <div className={styles.resourceNodeBadge}>Data</div> : null}
           </>
         ) : (
           <>
@@ -363,18 +363,6 @@ function getNodeShellStyle(
   }
 
   return { borderColor };
-}
-
-function getResourceNodeLabel(node: DiagramFlowNode["data"]["node"]): string {
-  const diagramLabel = node.parameters?.values?.["diagramLabel"];
-
-  if (typeof diagramLabel === "string" && diagramLabel.trim().length > 0) {
-    return diagramLabel;
-  }
-
-  const resourceName = node.parameters?.resourceName?.trim();
-
-  return resourceName ? resourceName : node.label;
 }
 
 type ColorMenuProps = {

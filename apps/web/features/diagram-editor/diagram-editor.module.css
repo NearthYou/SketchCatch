@@ -1012,19 +1012,6 @@
   display: none;
 }
 
-.resourceNodeBadge {
-  background: #eef2ff;
-  border: 1px solid #c7d2fe;
-  border-radius: 999px;
-  color: #3730a3;
-  flex: 0 0 auto;
-  font-size: 0.62rem;
-  font-weight: 900;
-  line-height: 1;
-  padding: 3px 7px;
-  text-transform: uppercase;
-}
-
 .lockBadge {
   align-items: center;
   background: #171c2f;

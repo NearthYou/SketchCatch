@@ -43,6 +43,21 @@ test("diagram node view renders resource icon labels in bold", () => {
   );
 });
 
+test("hides Terraform data source implementation labels", () => {
+  assert.doesNotMatch(diagramNodeViewSource, /resourceNodeBadge/);
+  assert.doesNotMatch(diagramNodeViewSource, /isDataNode/);
+  assert.doesNotMatch(diagramEditorCssSource, /\.resourceNodeBadge\s*\{/);
+});
+
+test("uses the presentation-only label helper", () => {
+  assert.match(diagramNodeViewSource, /getResourceNodeDisplayLabel\(node\)/);
+  assert.match(
+    diagramNodeViewSource,
+    /isResourceNode\s*\?\s*getResourceNodeDisplayLabel\(node\)\s*:\s*getAreaNodeLabel\(node\)\.toLocaleUpperCase\(\)/s
+  );
+  assert.doesNotMatch(diagramNodeViewSource, /parameters\?\.resourceName\?\.trim/);
+});
+
 test("diagram node view applies computed area border style through CSS variables", () => {
   assert.match(diagramNodeViewSource, /getNodeDisplayBorderStyle/);
   assert.match(diagramNodeViewSource, /"--area-border-style": borderStyle/);
