@@ -10,6 +10,7 @@ import type {
   GitHubAppClient,
   GitHubRepositoryEvidenceReader
 } from "../source-repositories/github-app-client.js";
+import { GitHubRepositoryTreeTruncatedError } from "../source-repositories/github-app-client.js";
 import {
   type CreateActiveGitHubSourceRepositoryInput,
   type SourceRepositoryRecord,
@@ -199,6 +200,36 @@ test("source repository routes rate limit repeated analysis before reading GitHu
   assert.equal(response.headers["retry-after"], "42");
   assert.equal(response.json().error, "too_many_requests");
   assert.equal(readCount, 0);
+});
+
+test("source repository routes map incomplete GitHub trees to conflict", async (t) => {
+  // Given
+  const repository = new FakeSourceRepositoryRepository([
+    createSourceRepositoryRecord({ id: sourceRepositoryId })
+  ]);
+  const githubRepositoryEvidenceReader: GitHubRepositoryEvidenceReader = {
+    // GitHub가 일부 tree만 반환한 정적 분석 실패를 재현한다.
+    async readRepositoryEvidence() {
+      throw new GitHubRepositoryTreeTruncatedError();
+    }
+  };
+  const app = await buildSourceRepositoryRouteApp({
+    repository,
+    githubRepositoryEvidenceReader
+  });
+  t.after(() => app.close());
+
+  // When
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/projects/${projectId}/source-repositories/${sourceRepositoryId}/analyze`,
+    headers: await authHeaders()
+  });
+
+  // Then
+  assert.equal(response.statusCode, 409);
+  assert.equal(response.json().error, "conflict");
+  assert.equal(response.json().message, "GIT_APP_REPOSITORY_TREE_TRUNCATED");
 });
 
 test("source repository routes issue a GitHub install URL with an API-signed state", async (t) => {

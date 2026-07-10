@@ -92,3 +92,65 @@ test("detects common monorepo units but refuses a Template without deployment ev
     }
   ]);
 });
+
+test("ignores generated dependency evidence during Template Selection", () => {
+  // Given
+  const snapshot = {
+    revision: "generated-dependency-revision",
+    treePaths: [
+      "node_modules/vendor/package.json",
+      "node_modules/vendor/serverless.yml"
+    ],
+    files: [
+      {
+        path: "node_modules/vendor/package.json",
+        content: JSON.stringify({
+          dependencies: { fastify: "5.0.0", serverless: "4.0.0" }
+        })
+      },
+      {
+        path: "node_modules/vendor/serverless.yml",
+        content: "functions:\n  api:\n    events:\n      - httpApi: '*'"
+      }
+    ]
+  } as const;
+
+  // When
+  const result = analyzeRepositoryEvidence(snapshot);
+
+  // Then
+  assert.equal(result.status, "template_selection_failed");
+  assert.deepEqual(result.applicationUnits, []);
+  assert.deepEqual(result.evidence, []);
+});
+
+test("keeps a Docker application as an unknown Application Unit", () => {
+  // Given
+  const snapshot = {
+    revision: "docker-only-revision",
+    treePaths: ["Dockerfile", "README.md"],
+    files: [
+      { path: "Dockerfile", content: "FROM nginx:stable" },
+      {
+        path: "README.md",
+        content: "이 container는 Amazon ECS의 Fargate launch type으로 배포합니다."
+      }
+    ]
+  } as const;
+
+  // When
+  const result = analyzeRepositoryEvidence(snapshot);
+
+  // Then
+  assert.equal(result.status, "template_selected");
+  assert.equal(result.templateId, "ecs-fargate-container-app");
+  assert.deepEqual(result.applicationUnits, [
+    {
+      id: ".",
+      rootPath: ".",
+      kind: "unknown",
+      frameworks: [],
+      evidencePaths: ["Dockerfile"]
+    }
+  ]);
+});

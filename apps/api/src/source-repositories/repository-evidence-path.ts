@@ -29,6 +29,16 @@ const repositoryFrameworkConfigFileNames = new Set([
   "wrangler.jsonc",
   "wrangler.toml"
 ]);
+const ignoredRepositoryEvidenceDirectories = new Set([
+  ".git",
+  ".next",
+  ".nuxt",
+  "build",
+  "coverage",
+  "dist",
+  "node_modules",
+  "vendor"
+]);
 
 // repository 상대 경로를 합의한 evidence 종류로 분류한다.
 export function getRepositoryEvidenceKind(path: string): RepositoryEvidenceKind | null {
@@ -55,4 +65,11 @@ export function isRepositoryEvidenceContentPath(path: string): boolean {
 export function isRepositoryFrameworkConfigPath(path: string): boolean {
   const fileName = path.split("/").at(-1) ?? "";
   return repositoryFrameworkConfigFileNames.has(fileName);
+}
+
+// 생성물과 vendored dependency 경로를 모든 분석 신호에서 제외한다.
+export function isIgnoredRepositoryEvidencePath(path: string): boolean {
+  return path
+    .split("/")
+    .some((segment) => ignoredRepositoryEvidenceDirectories.has(segment));
 }

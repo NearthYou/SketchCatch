@@ -11,6 +11,7 @@ import type {
 } from "./github-app-client.js";
 import {
   getRepositoryEvidenceKind,
+  isIgnoredRepositoryEvidencePath,
   isRepositoryFrameworkConfigPath
 } from "./repository-evidence-path.js";
 import { selectRepositoryTemplate } from "./repository-template-selection.js";
@@ -44,15 +45,28 @@ type ParsedPackageJson = {
 export function analyzeRepositoryEvidence(
   snapshot: GitHubRepositoryEvidenceSnapshot
 ): RepositoryAnalysisAiHandoff {
-  const packageFiles = snapshot.files.flatMap(parsePackageJsonEvidence);
-  const applicationUnits = detectApplicationUnits(packageFiles, snapshot.files);
-  const evidence = collectRepositoryEvidence(snapshot, applicationUnits, packageFiles);
+  const analysisSnapshot = {
+    revision: snapshot.revision,
+    treePaths: snapshot.treePaths.filter((path) => !isIgnoredRepositoryEvidencePath(path)),
+    files: snapshot.files.filter((file) => !isIgnoredRepositoryEvidencePath(file.path))
+  };
+  const packageFiles = analysisSnapshot.files.flatMap(parsePackageJsonEvidence);
+  const applicationUnits = detectApplicationUnits(
+    packageFiles,
+    analysisSnapshot.treePaths,
+    analysisSnapshot.files
+  );
+  const evidence = collectRepositoryEvidence(
+    analysisSnapshot,
+    applicationUnits,
+    packageFiles
+  );
   const missingEvidence = REPOSITORY_EVIDENCE_KINDS.filter(
     (kind) => !evidence.some((item) => item.kind === kind)
   );
 
   return selectRepositoryTemplate({
-    snapshot,
+    snapshot: analysisSnapshot,
     applicationUnits,
     evidence,
     missingEvidence
@@ -95,14 +109,46 @@ function parsePackageJsonEvidence(file: GitHubRepositoryEvidenceFile): readonly 
 // workspace 묶음용 root package를 제외하고 실제 실행 가능한 Application Unit을 찾는다.
 function detectApplicationUnits(
   packageFiles: readonly ParsedPackageJson[],
+  treePaths: readonly string[],
   files: readonly GitHubRepositoryEvidenceFile[]
 ): RepositoryApplicationUnit[] {
   const hasNestedPackage = packageFiles.some((file) => file.rootPath !== ".");
-
-  return packageFiles
+  const packageUnits = packageFiles
     .filter((file) => !(file.rootPath === "." && file.hasWorkspaces && hasNestedPackage))
-    .flatMap((file) => createApplicationUnit(file, files))
+    .flatMap((file) => createApplicationUnit(file, files));
+
+  return [...packageUnits, ...detectDockerApplicationUnits(treePaths, packageUnits)]
     .sort((left, right) => left.rootPath.localeCompare(right.rootPath));
+}
+
+// package framework가 없어도 Dockerfile이 나타내는 실행 단위를 보존한다.
+function detectDockerApplicationUnits(
+  treePaths: readonly string[],
+  packageUnits: readonly RepositoryApplicationUnit[]
+): RepositoryApplicationUnit[] {
+  const dockerPaths = treePaths.filter(
+    (path) => getRepositoryEvidenceKind(path) === "dockerfile"
+  );
+  const rootPaths = [...new Set(dockerPaths.map(getParentPath))];
+
+  return rootPaths.flatMap((rootPath) => {
+    const paths = dockerPaths.filter((path) => getParentPath(path) === rootPath);
+    const belongsToPackageUnit = paths.some((path) =>
+      packageUnits.some((unit) => isWithinRoot(path, unit.rootPath))
+    );
+
+    return belongsToPackageUnit
+      ? []
+      : [
+          {
+            id: rootPath,
+            rootPath,
+            kind: "unknown" as const,
+            frameworks: [],
+            evidencePaths: paths.sort()
+          }
+        ];
+  });
 }
 
 // 하나의 package.json에서 framework와 실행 단위 종류를 결정한다.

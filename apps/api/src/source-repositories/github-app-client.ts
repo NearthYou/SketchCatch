@@ -5,7 +5,10 @@ import type {
   GitCicdPipelineDetailStatus,
   GitHubRepositoryCandidate
 } from "@sketchcatch/types";
-import { isRepositoryEvidenceContentPath } from "./repository-evidence-path.js";
+import {
+  isIgnoredRepositoryEvidencePath,
+  isRepositoryEvidenceContentPath
+} from "./repository-evidence-path.js";
 
 const githubApiBaseUrl = "https://api.github.com";
 const githubJwtTtlSeconds = 9 * 60;
@@ -14,16 +17,6 @@ const maxRepositoryTreeEntries = 20_000;
 const maxRepositoryEvidenceFiles = 64;
 const maxRepositoryEvidenceFileBytes = 256 * 1024;
 const maxRepositoryEvidenceTotalBytes = 2 * 1024 * 1024;
-const ignoredRepositoryEvidenceDirectories = new Set([
-  ".git",
-  ".next",
-  ".nuxt",
-  "build",
-  "coverage",
-  "dist",
-  "node_modules",
-  "vendor"
-]);
 
 export type GitHubAppClientOptions = {
   appId: string;
@@ -130,7 +123,7 @@ export class GitHubRepositoryTreeTruncatedError extends Error {
 
   // 일부 tree만으로 잘못된 Template을 고르지 않도록 분석을 중단한다.
   constructor() {
-    super("GitHub repository tree response was truncated");
+    super("GIT_APP_REPOSITORY_TREE_TRUNCATED");
   }
 }
 
@@ -139,7 +132,16 @@ export class GitHubRepositoryFileEncodingError extends Error {
 
   // 해석할 수 없는 파일을 근거로 쓰지 않도록 문제 경로를 함께 남긴다.
   constructor(readonly path: string) {
-    super(`GitHub repository evidence file has unsupported encoding: ${path}`);
+    super("GIT_APP_REPOSITORY_FILE_ENCODING_UNSUPPORTED");
+  }
+}
+
+export class GitHubRepositoryArchivedError extends Error {
+  readonly name = "GitHubRepositoryArchivedError";
+
+  // 연결 뒤 archived로 바뀐 Repository를 현재 분석에서 차단한다.
+  constructor() {
+    super("GIT_APP_REPOSITORY_ARCHIVED");
   }
 }
 
@@ -387,6 +389,11 @@ export function createGitHubAppClient(
         input.installationId,
         createRepositoryPath(input, "")
       );
+
+      if (repository.archived === true) {
+        throw new GitHubRepositoryArchivedError();
+      }
+
       const defaultBranch = readRequiredString(
         repository.default_branch,
         "repository default branch"
@@ -746,13 +753,6 @@ function decodeRepositoryEvidenceFile(
     content: contentBuffer.toString("utf8"),
     byteLength: contentBuffer.byteLength
   };
-}
-
-// 생성물과 vendored dependency 아래의 중복 설정 파일을 분석 대상에서 제외한다.
-function isIgnoredRepositoryEvidencePath(path: string): boolean {
-  return path
-    .split("/")
-    .some((segment) => ignoredRepositoryEvidenceDirectories.has(segment));
 }
 
 function toGitHubAppInstallation(

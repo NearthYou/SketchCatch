@@ -3,6 +3,7 @@ import { generateKeyPairSync } from "node:crypto";
 import test from "node:test";
 import {
   createGitHubAppClient,
+  GitHubRepositoryArchivedError,
   GitHubRepositoryFileEncodingError,
   GitHubRepositoryEvidenceLimitError,
   GitHubRepositoryTreeTruncatedError
@@ -249,6 +250,33 @@ test("readRepositoryEvidence rejects truncated recursive trees", async () => {
       name: "repo"
     }),
     GitHubRepositoryTreeTruncatedError
+  );
+});
+
+test("readRepositoryEvidence rejects a repository archived after connection", async () => {
+  const client = createGitHubAppClient({
+    appId: "12345",
+    privateKey,
+    fetch: createGitHubFetchStub([], ({ pathname }) => {
+      if (pathname === "/app/installations/42/access_tokens") {
+        return jsonResponse({ token: "installation-token" });
+      }
+
+      if (pathname === "/repos/owner/repo") {
+        return jsonResponse({ default_branch: "main", archived: true });
+      }
+
+      return jsonResponse({ message: "not found" }, 404);
+    })
+  });
+
+  await assert.rejects(
+    client.readRepositoryEvidence({
+      installationId: "42",
+      owner: "owner",
+      name: "repo"
+    }),
+    GitHubRepositoryArchivedError
   );
 });
 
