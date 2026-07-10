@@ -21,6 +21,8 @@ test("resolveWorkspaceAiChatAction no longer routes new service requests to pre-
   const prompts = [
     "build a website",
     "create a login service",
+    "웹페이지 하나 만들고 싶어",
+    "웹페이지 하나 배포하고 싶어 다시 만들어봐",
     "웹사이트 하나 배포하고 싶어",
     "로그인 있는 작은 웹서비스가 필요해"
   ];
@@ -90,6 +92,13 @@ test("resolvePendingPreviewChatAction keeps new prompts as fresh drafts while re
   assert.equal(
     resolvePendingPreviewChatAction({
       needsDraftClarification: true,
+      prompt: "웹페이지 하나 배포하고 싶어 다시 만들어봐"
+    }),
+    "draft"
+  );
+  assert.equal(
+    resolvePendingPreviewChatAction({
+      needsDraftClarification: true,
       prompt: "organize this as a static intro website"
     }),
     "patch"
@@ -102,6 +111,11 @@ test("classifyWorkspaceAiChatPrompt accepts diagram generation and edit requests
     "upload images and serve them from a web app",
     "add an S3 bucket for uploads",
     "remove the existing database",
+    "create a webpage",
+    "deploy a web page",
+    "웹페이지 하나 만들고 싶어",
+    "웹 페이지 하나 배포하고 싶어",
+    "웹페이지 하나 배포하고 싶어 다시 만들어봐",
     "정적 웹사이트 다이어그램 만들어줘",
     "로그인 있는 작은 웹서비스가 필요해",
     "구글 플레이스토어에 올릴 앱 하나 만들고 싶어",
