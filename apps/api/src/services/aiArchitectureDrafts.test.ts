@@ -448,6 +448,144 @@ test("createAmazonQArchitectureDraftResponse returns the Amazon Q architecture p
   assert.equal(response.llmExplanation?.providerMetadata?.provider, "amazon_q");
 });
 
+test("createAmazonQArchitectureDraftResponse materializes a compact Amazon Q architecture plan", async () => {
+  const provider = createFakeAmazonQProvider(() =>
+    JSON.stringify({
+      status: "plan",
+      title: "Amazon Q ALB Fleet",
+      requiredResources: ["LOAD_BALANCER", "AUTO_SCALING_GROUP", "EC2"],
+      resourceQuantities: { EC2: 3 },
+      runtimeTopology: {
+        trafficEntry: "LOAD_BALANCER",
+        compute: "EC2",
+        computeCount: 3,
+        placement: "private_subnets",
+        spreadAcrossPrivateSubnets: true,
+        autoScaling: true
+      },
+      assumptions: ["The application runtime is managed as an EC2 fleet."],
+      explanations: ["Amazon Q selected ALB and Auto Scaling for burst traffic."]
+    })
+  );
+
+  const response = await createAmazonQArchitectureDraftResponse(
+    {
+      prompt: createDynamicWebDeploymentSelectionPrompt()
+    },
+    {
+      provider,
+      creditPolicy: confirmedCreditPolicy
+    }
+  );
+
+  if ("status" in response) {
+    assert.fail(`Expected preview, got clarification: ${response.question}`);
+  }
+
+  const nodesByType = new Map<string, string[]>();
+  for (const node of response.architectureJson.nodes) {
+    nodesByType.set(node.type, [...(nodesByType.get(node.type) ?? []), node.id]);
+  }
+  const loadBalancerId = nodesByType.get("LOAD_BALANCER")?.[0];
+  const autoScalingGroupId = nodesByType.get("AUTO_SCALING_GROUP")?.[0];
+  const ec2Ids = nodesByType.get("EC2") ?? [];
+
+  assert.equal(response.title, "Amazon Q ALB Fleet");
+  assert.equal(response.metadata.source, "amazon_q");
+  assert.equal(ec2Ids.length, 3);
+  assert.ok(loadBalancerId);
+  assert.ok(autoScalingGroupId);
+  assert.ok(
+    response.architectureJson.edges.some(
+      (edge) => edge.sourceId === loadBalancerId && edge.targetId === autoScalingGroupId
+    )
+  );
+  for (const ec2Id of ec2Ids) {
+    assert.ok(
+      response.architectureJson.edges.some(
+        (edge) => edge.sourceId === autoScalingGroupId && edge.targetId === ec2Id
+      )
+    );
+  }
+  assert.equal(response.llmExplanation?.fallbackUsed, false);
+  assert.equal(response.llmExplanation?.providerMetadata?.provider, "amazon_q");
+});
+
+test("createAmazonQArchitectureDraftResponse falls back when Amazon Q returns an invalid compact plan", async () => {
+  const provider = createFakeAmazonQProvider(() =>
+    JSON.stringify({
+      status: "plan",
+      title: "Invalid Q Plan",
+      requiredResources: ["NOT_A_SUPPORTED_RESOURCE"]
+    })
+  );
+
+  const response = await createAmazonQArchitectureDraftResponse(
+    {
+      prompt: createDynamicWebDeploymentSelectionPrompt()
+    },
+    {
+      provider,
+      creditPolicy: confirmedCreditPolicy
+    }
+  );
+
+  if ("status" in response) {
+    assert.fail(`Expected fallback preview, got clarification: ${response.question}`);
+  }
+
+  assert.equal(response.metadata.source, "template_fallback");
+  assert.equal(response.llmExplanation?.fallbackUsed, true);
+  assert.equal(response.llmExplanation?.fallbackReason, "provider_error");
+});
+
+test("createAmazonQArchitectureDraftResponse falls back when compact plan quantities cannot be materialized", async () => {
+  const provider = createFakeAmazonQProvider(() =>
+    JSON.stringify({
+      status: "plan",
+      title: "Unsupported Quantity Plan",
+      requiredResources: ["IAM_ROLE"],
+      resourceQuantities: { IAM_ROLE: 3 }
+    })
+  );
+
+  const response = await createAmazonQArchitectureDraftResponse(
+    { prompt: createDynamicWebDeploymentSelectionPrompt() },
+    { provider, creditPolicy: confirmedCreditPolicy }
+  );
+
+  if ("status" in response) {
+    assert.fail(`Expected fallback preview, got clarification: ${response.question}`);
+  }
+
+  assert.equal(response.metadata.source, "template_fallback");
+  assert.equal(response.llmExplanation?.fallbackUsed, true);
+  assert.equal(response.llmExplanation?.fallbackReason, "provider_error");
+});
+
+test("createAmazonQArchitectureDraftResponse rejects compact plans that contradict no-backend answers", async () => {
+  const provider = createFakeAmazonQProvider(() =>
+    JSON.stringify({
+      status: "plan",
+      title: "Contradictory Compute Plan",
+      requiredResources: ["EC2"]
+    })
+  );
+
+  const response = await createAmazonQArchitectureDraftResponse(
+    { prompt: createStaticWebsiteCompletePrompt("file upload: none no file upload text only") },
+    { provider, creditPolicy: confirmedCreditPolicy }
+  );
+
+  if ("status" in response) {
+    assert.fail(`Expected fallback preview, got clarification: ${response.question}`);
+  }
+
+  assert.equal(response.metadata.source, "template_fallback");
+  assert.equal(response.llmExplanation?.fallbackUsed, true);
+  assert.equal(response.llmExplanation?.fallbackReason, "provider_error");
+});
+
 test("createAmazonQArchitectureDraftResponse accepts panel-backed ResourceType values from Amazon Q", async () => {
   let requestedPrompt = "";
   let requestedPayload: unknown;

@@ -14,6 +14,7 @@ import { applyGuardrailMetadata } from "./aiArchitectureDraftMetadata.js";
 import {
   createNormalizedArchitectureIntentPlan,
   createOpenAiRequirementNormalizerProviderFromEnv,
+  parseArchitectureIntentPlan,
   type ArchitectureIntentPlan
 } from "./aiArchitectureRequirementNormalizer.js";
 import {
@@ -150,9 +151,18 @@ type AmazonQArchitectureDraftClarification = {
   readonly suggestions?: readonly string[] | undefined;
 };
 
+type AmazonQArchitectureDraftPlan = {
+  readonly status: "plan";
+  readonly title: string;
+  readonly plan: ArchitectureIntentPlan;
+  readonly assumptions?: readonly string[] | undefined;
+  readonly explanations?: readonly string[] | undefined;
+};
+
 type AmazonQArchitectureDraftResponse =
   | AmazonQArchitectureDraftPreview
-  | AmazonQArchitectureDraftClarification;
+  | AmazonQArchitectureDraftClarification
+  | AmazonQArchitectureDraftPlan;
 
 export type CreateArchitectureDraftResponseFactory = (
   request: CreateArchitectureDraftRequest
@@ -329,6 +339,15 @@ export async function createAmazonQArchitectureDraftResponse(
         suggestions: [...(parsedResponse.suggestions ?? [])],
         providerMetadata
       };
+    }
+
+    if (parsedResponse.status === "plan") {
+      return createAmazonQPlanDraftResult(
+        parsedResponse,
+        request,
+        normalizedRequirement,
+        providerMetadata
+      );
     }
 
     return createAmazonQDraftResult(parsedResponse, providerMetadata);
@@ -1304,7 +1323,8 @@ function findRequirementCoverageValidationIssues(
 
 function findNormalizedRequirementValidationIssues(
   normalizedRequirement: ArchitectureIntentPlan | null,
-  architectureJson: ArchitectureJson
+  architectureJson: ArchitectureJson,
+  options: { readonly validateVisualSpread?: boolean } = {}
 ): string[] {
   if (normalizedRequirement === null) {
     return [];
@@ -1387,7 +1407,11 @@ function findNormalizedRequirementValidationIssues(
         );
       }
 
-      if (visualSpread.privateSubnetCount >= 2 && visualSpread.ec2SubnetCount < 2) {
+      if (
+        options.validateVisualSpread !== false &&
+        visualSpread.privateSubnetCount >= 2 &&
+        visualSpread.ec2SubnetCount < 2
+      ) {
         issues.push(
           `The normalized requirement plan requires EC2 to be visually spread across private subnets, but the preview places EC2 nodes across only ${visualSpread.ec2SubnetCount} private subnet box(es).`
         );
@@ -1587,6 +1611,219 @@ function mergeRuntimeTopologyPlans(
         ? undefined
         : Math.max(providerTopology.computeCount ?? 0, deterministicTopology.computeCount ?? 0)
   };
+}
+
+function createAmazonQPlanDraftResult(
+  response: AmazonQArchitectureDraftPlan,
+  request: CreateArchitectureDraftRequest,
+  normalizedRequirement: ArchitectureIntentPlan | null,
+  providerMetadata: AiProviderMetadata
+): AiArchitectureDraftResult {
+  const plan = mergeArchitectureIntentPlans(response.plan, normalizedRequirement);
+  const draft = createArchitectureDraft({
+    ...request,
+    prompt: createArchitecturePlanMaterializationPrompt(request.prompt, plan)
+  });
+  const sanitizedArchitectureJson = applyArchitecturePlanExclusions(draft.architectureJson, plan);
+  const architectureJson = connectArchitecturePlanRuntimeTopology(
+    sanitizedArchitectureJson,
+    plan?.runtimeTopology
+  );
+  const validationIssues = findMaterializedArchitecturePlanValidationIssues(
+    request.prompt,
+    plan,
+    architectureJson
+  );
+
+  if (validationIssues.length > 0) {
+    throw new Error(`Amazon Q architecture plan failed materialization: ${validationIssues.join(" ")}`);
+  }
+
+  const assumptions = [...(response.assumptions ?? [])];
+  const explanations = [...(response.explanations ?? [])];
+
+  return {
+    architectureJson,
+    title: response.title,
+    metadata: {
+      ...draft.metadata,
+      source: "amazon_q",
+      assumptions: assumptions.length === 0 ? draft.metadata.assumptions : assumptions,
+      explanations: explanations.length === 0 ? draft.metadata.explanations : explanations
+    },
+    llmExplanation: {
+      target: ARCHITECTURE_DRAFT_TARGET,
+      summary: `${response.title} Architecture Draft를 생성했습니다.`,
+      highlights: explanations.slice(0, 5),
+      nextActions: ["Terraform IaC Preview에서 생성 가능한 설정과 참조를 검토하세요."],
+      fallbackUsed: false,
+      providerMetadata
+    }
+  };
+}
+
+function applyArchitecturePlanExclusions(
+  architectureJson: ArchitectureJson,
+  plan: ArchitectureIntentPlan | null
+): ArchitectureJson {
+  const forbiddenCapabilities = new Set(
+    (plan?.forbiddenCapabilities ?? []).map((capability) => capability.toLowerCase())
+  );
+  const nodes = architectureJson.nodes.filter((node) => {
+    if (forbiddenCapabilities.has("file_upload") && isForbiddenUploadResourceNode(node)) {
+      return false;
+    }
+
+    if (forbiddenCapabilities.has("realtime") && isForbiddenRealtimeArchitectureNode(node)) {
+      return false;
+    }
+
+    return true;
+  });
+  const nodeIds = new Set(nodes.map((node) => node.id));
+
+  return {
+    nodes,
+    edges: architectureJson.edges.filter(
+      (edge) => nodeIds.has(edge.sourceId) && nodeIds.has(edge.targetId)
+    )
+  };
+}
+
+function findMaterializedArchitecturePlanValidationIssues(
+  prompt: string,
+  plan: ArchitectureIntentPlan | null,
+  architectureJson: ArchitectureJson
+): string[] {
+  const normalizedPrompt = prompt.normalize("NFKC").toLowerCase();
+  const nodeTypes = new Set(architectureJson.nodes.map((node) => node.type));
+  const issues = [
+    ...findExplicitResourceTypeValidationIssues(normalizedPrompt, architectureJson),
+    ...findRequestedResourceQuantityValidationIssues(normalizedPrompt, architectureJson),
+    ...findRuntimeTopologyValidationIssues(normalizedPrompt, architectureJson),
+    ...findNormalizedRequirementValidationIssues(plan, architectureJson, { validateVisualSpread: false })
+  ];
+
+  if (requiresServerlessOnlyArchitecture(normalizedPrompt) && nodeTypes.has("EC2")) {
+    issues.push("The user requested serverless or no EC2, but the materialized plan includes EC2.");
+  }
+
+  if (requiresNoDatabase(normalizedPrompt) && hasAnyNodeType(nodeTypes, ["RDS", "DB_SUBNET_GROUP"])) {
+    issues.push("The user selected no database, but the materialized plan includes database resources.");
+  }
+
+  if (requiresNoBackend(normalizedPrompt) && hasAnyNodeType(nodeTypes, ["EC2", "LAMBDA", "API_GATEWAY_REST_API", "LOAD_BALANCER", "LOAD_BALANCER_LISTENER"])) {
+    issues.push("The user selected no backend, but the materialized plan includes backend resources.");
+  }
+
+  if (hasNoFileUploadRequirement(normalizedPrompt) && hasForbiddenUploadResource(architectureJson)) {
+    issues.push("The user selected no file upload, but the materialized plan includes upload resources.");
+  }
+
+  return issues;
+}
+
+function createArchitecturePlanMaterializationPrompt(
+  prompt: string,
+  plan: ArchitectureIntentPlan | null
+): string {
+  if (plan === null) {
+    return prompt;
+  }
+
+  const requiredResources = plan.requiredResources ?? [];
+  const quantities = Object.entries(plan.resourceQuantities ?? {});
+  const topology = plan.runtimeTopology;
+  const lines = [prompt, "Amazon Q selected architecture plan:"];
+
+  if (requiredResources.length > 0) {
+    lines.push(`Required resources: ${requiredResources.join(", ")}.`);
+  }
+
+  for (const [resourceType, quantity] of quantities) {
+    lines.push(`${resourceType} ${quantity} instances required.`);
+  }
+
+  if (topology?.compute?.toUpperCase() === "EC2") {
+    lines.push("EC2 server runtime required.");
+  }
+
+  if (topology !== undefined) {
+    lines.push(`Runtime topology: ${JSON.stringify(topology)}.`);
+  }
+
+  for (const capability of plan.forbiddenCapabilities ?? []) {
+    if (capability.toLowerCase() === "file_upload") {
+      lines.push("File upload: none; no file upload resources.");
+    } else if (capability.toLowerCase() === "realtime") {
+      lines.push("Realtime: none; no realtime resources.");
+    }
+  }
+
+  if (plan.region !== undefined) {
+    lines.push(`Region: ${plan.region}.`);
+  }
+
+  if (plan.database !== undefined) {
+    lines.push(`Database: ${plan.database}.`);
+  }
+
+  if (plan.availability !== undefined) {
+    lines.push(`Availability: ${plan.availability}.`);
+  }
+
+  return lines.join("\n");
+}
+
+function connectArchitecturePlanRuntimeTopology(
+  architectureJson: ArchitectureJson,
+  topology: ArchitectureIntentPlan["runtimeTopology"]
+): ArchitectureJson {
+  if (topology === undefined) {
+    return architectureJson;
+  }
+
+  const edges = [...architectureJson.edges];
+  const loadBalancer = architectureJson.nodes.find((node) => node.type === "LOAD_BALANCER");
+  const autoScalingGroup = architectureJson.nodes.find((node) => node.type === "AUTO_SCALING_GROUP");
+  const computeNodes = architectureJson.nodes.filter(
+    (node) => node.type === topology.compute?.toUpperCase()
+  );
+
+  if (topology.trafficEntry?.toUpperCase() === "LOAD_BALANCER" && loadBalancer !== undefined) {
+    if (autoScalingGroup !== undefined && topology.autoScaling === true) {
+      addArchitectureEdge(edges, "amazon-q-load-balancer-to-auto-scaling-group", loadBalancer.id, autoScalingGroup.id, "routes traffic");
+    } else {
+      for (const computeNode of computeNodes) {
+        addArchitectureEdge(edges, `amazon-q-load-balancer-to-${computeNode.id}`, loadBalancer.id, computeNode.id, "routes traffic");
+      }
+    }
+  }
+
+  if (autoScalingGroup !== undefined && topology.autoScaling === true) {
+    for (const computeNode of computeNodes) {
+      addArchitectureEdge(edges, `amazon-q-auto-scaling-group-to-${computeNode.id}`, autoScalingGroup.id, computeNode.id, "manages fleet");
+    }
+  }
+
+  return {
+    nodes: architectureJson.nodes,
+    edges
+  };
+}
+
+function addArchitectureEdge(
+  edges: ArchitectureJson["edges"],
+  id: string,
+  sourceId: string,
+  targetId: string,
+  label: string
+): void {
+  if (edges.some((edge) => edge.sourceId === sourceId && edge.targetId === targetId)) {
+    return;
+  }
+
+  edges.push({ id, sourceId, targetId, label });
 }
 
 function findRuntimeTopologyValidationIssues(
@@ -2451,19 +2688,21 @@ function hasForbiddenDatabaseResource(architectureJson: ArchitectureJson): boole
 }
 
 function hasForbiddenUploadResource(architectureJson: ArchitectureJson): boolean {
-  return architectureJson.nodes.some((node) => {
-    const nodeText = createNodeSearchText(node);
+  return architectureJson.nodes.some(isForbiddenUploadResourceNode);
+}
 
-    if (node.type === "S3") {
-      return /upload|media|image|profile\s*image|post\s*image|attachment|presigned/iu.test(nodeText);
-    }
+function isForbiddenUploadResourceNode(node: ArchitectureJson["nodes"][number]): boolean {
+  const nodeText = createNodeSearchText(node);
 
-    if (hasAnyNodeType(new Set([node.type]), ["IAM_POLICY", "IAM_ROLE", "LAMBDA", "KMS_KEY"])) {
-      return /upload|media|presigned|file\s*processing|image\s*processing/iu.test(nodeText);
-    }
+  if (node.type === "S3") {
+    return /upload|media|image|profile\s*image|post\s*image|attachment|presigned/iu.test(nodeText);
+  }
 
-    return /presigned\s*url|file\s*upload\s*flow|direct[-\s]*to[-\s]*s3\s*upload/iu.test(nodeText);
-  });
+  if (hasAnyNodeType(new Set([node.type]), ["IAM_POLICY", "IAM_ROLE", "LAMBDA", "KMS_KEY"])) {
+    return /upload|media|presigned|file\s*processing|image\s*processing/iu.test(nodeText);
+  }
+
+  return /presigned\s*url|file\s*upload\s*flow|direct[-\s]*to[-\s]*s3\s*upload/iu.test(nodeText);
 }
 
 function hasForbiddenRealtimeResource(preview: AmazonQArchitectureDraftPreview): boolean {
@@ -2485,20 +2724,22 @@ function hasForbiddenRealtimeResource(preview: AmazonQArchitectureDraftPreview):
 }
 
 function hasForbiddenRealtimeArchitectureNodes(architectureJson: ArchitectureJson): boolean {
-  return architectureJson.nodes.some((node) => {
-    const nodeText = createNodeSearchText(node);
+  return architectureJson.nodes.some(isForbiddenRealtimeArchitectureNode);
+}
 
-    if (hasPositiveRealtimeSignal(nodeText)) {
-      return true;
-    }
+function isForbiddenRealtimeArchitectureNode(node: ArchitectureJson["nodes"][number]): boolean {
+  const nodeText = createNodeSearchText(node);
 
-    return (
-      hasAnyNodeType(new Set([node.type]), ["API_GATEWAY_REST_API", "LAMBDA", "EC2"]) &&
-      /(user|client|push|message|event|realtime|real-time|websocket|web\s*socket|\bsse\b|notification|notify|\uC2E4\uC2DC\uAC04|\uC54C\uB9BC|\uCC44\uD305)/iu.test(
-        nodeText
-      )
-    );
-  });
+  if (hasPositiveRealtimeSignal(nodeText)) {
+    return true;
+  }
+
+  return (
+    hasAnyNodeType(new Set([node.type]), ["API_GATEWAY_REST_API", "LAMBDA", "EC2"]) &&
+    /(user|client|push|message|event|realtime|real-time|websocket|web\s*socket|\bsse\b|notification|notify|\uC2E4\uC2DC\uAC04|\uC54C\uB9BC|\uCC44\uD305)/iu.test(
+      nodeText
+    )
+  );
 }
 
 function hasPositiveRealtimeSignal(text: string): boolean {
@@ -3045,6 +3286,24 @@ function parseAmazonQArchitectureDraftResponse(text: string): AmazonQArchitectur
       status: "needs_clarification",
       question: parsed.question.trim(),
       suggestions: readStringArray(parsed.suggestions)
+    };
+  }
+
+  if (parsed.status === "plan") {
+    const plan = parseArchitectureIntentPlan(parsed);
+
+    if (plan === null) {
+      throw new Error("Amazon Q architecture plan must include supported planning fields");
+    }
+
+    return {
+      status: "plan",
+      title: typeof parsed.title === "string" && parsed.title.trim().length > 0
+        ? parsed.title.trim()
+        : "Amazon Q Architecture Draft",
+      plan,
+      assumptions: readStringArray(parsed.assumptions),
+      explanations: readStringArray(parsed.explanations)
     };
   }
 

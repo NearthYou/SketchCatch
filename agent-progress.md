@@ -207,3 +207,13 @@ Short English-only working log for the current agent context. Older records are 
 ### 2026-07-10 - Upstream ECS phases 3-5 archived
 
 - Detailed ECS runtime secret, deployment job, and RunTask dispatcher records moved to `docs/agent-history/2026-07.md` after the dev merge.
+
+### 2026-07-10 - Amazon Q Business architecture planning
+- Goal: Use Q Business as the Architecture Draft planner without changing other OpenAI or Q explanation paths.
+- Completed:
+  - Added target-scoped `CREATOR_MODE`, compact ChatSync planning input, typed plan parsing, deterministic materialization, and ALB-ASG-EC2 topology edges.
+  - Preserved legacy full-preview compatibility and safe fallback for malformed Q plans.
+- Verification:
+  - Focused API tests (53), `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed; `pnpm test` still has three unrelated web baseline failures.
+- Risk:
+  - Live Q connectivity works, but the application has `creatorModeControl=DISABLED`; no AWS configuration mutation was performed.

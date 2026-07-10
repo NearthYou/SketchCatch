@@ -125,7 +125,7 @@ export function createOpenAiRequirementNormalizerProvider(input: {
         },
         store: false
       });
-      const normalized = normalizeArchitectureIntentPlan(response.output_parsed);
+      const normalized = parseArchitectureIntentPlan(response.output_parsed);
       const text = normalized === null ? "{}" : JSON.stringify(normalized);
 
       return {
@@ -187,7 +187,7 @@ export async function createNormalizedArchitectureIntentPlan(input: {
       })
     });
 
-    return normalizeArchitectureIntentPlan(parseJsonObject(response.text));
+    return parseArchitectureIntentPlan(parseJsonObject(response.text));
   } catch {
     return null;
   }
@@ -218,7 +218,7 @@ function createArchitectureRequirementNormalizerPrompt(prompt: string): string {
   ].join("\n\n");
 }
 
-function normalizeArchitectureIntentPlan(value: unknown): ArchitectureIntentPlan | null {
+export function parseArchitectureIntentPlan(value: unknown): ArchitectureIntentPlan | null {
   const parsed = architectureIntentPlanSchema.safeParse(normalizeOpenAiResourceQuantities(removeNullObjectFields(value)));
 
   if (!parsed.success) {
