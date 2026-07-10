@@ -489,7 +489,7 @@ export function ReverseEngineeringPanel({
           <section className={styles.section}>
             <h3>결과</h3>
             <p className={styles.sectionDescription}>
-              스캔이 끝나면 Resource 개수와 적용할 구조를 여기서 확인합니다.
+              스캔이 끝나면 Resource 개수와 적용 구조를 확인할 수 있습니다.
             </p>
           </section>
         )}

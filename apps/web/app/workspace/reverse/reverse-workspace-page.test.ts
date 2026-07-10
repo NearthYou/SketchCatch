@@ -28,6 +28,12 @@ test("reverse workspace has a dedicated neutral layout instead of global class n
   assert.match(stylesSource, /\.rightPanel\s*\{/);
   assert.match(stylesSource, /--reverse-accent:\s*#000000/);
   assert.doesNotMatch(stylesSource, /#6f4cf6|#5f3de8|rgba\(111,\s*76,\s*246/i);
+  assert.match(stylesSource, /\.startBackButton\s*\{[^}]*margin-bottom:\s*24px/s);
+});
+
+test("reverse empty states keep mobile guidance short", () => {
+  assert.match(clientSource, /가져온 구조가 여기에 표시됩니다\./);
+  assert.doesNotMatch(clientSource, /자동 감지 결과가 표시됩니다/);
 });
 
 test("reverse preview lets users inspect provider values without editing them", () => {

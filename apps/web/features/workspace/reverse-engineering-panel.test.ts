@@ -28,6 +28,11 @@ test("Reverse Engineering uses its own new UI styles instead of Deployment panel
   assert.match(reverseStylesSource, /background:\s*var\(--reverse-accent\)/);
 });
 
+test("Reverse Engineering empty result copy stays readable on mobile", () => {
+  assert.match(panelSource, /스캔이 끝나면 Resource 개수와 적용 구조를 확인할 수 있습니다\./);
+  assert.doesNotMatch(panelSource, /적용할 구조를 여기서 확인합니다/);
+});
+
 test("Reverse Engineering panel exposes all grilling resource filters by default", () => {
   assert.match(resourceTypesSource, /REVERSE_ENGINEERING_ALL_RESOURCE_SELECTION = "ALL"/);
   assert.match(resourceTypesSource, /"ALL"/);
