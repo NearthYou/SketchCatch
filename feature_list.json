@@ -196,7 +196,7 @@
         "API route가 ECS worker mode에서 DeploymentJob을 만들고 ECS RunTask dispatcher로 실행을 위임한다.",
         "agent-progress.md와 session-handoff.md가 최신 phase 상태와 다음 phase 기준을 기록한다."
       ],
-      "notes": "Phase 5 is active on issue #295 and branch feature/sw/295-ecs-worker-task-dispatch. Scope is API-side ECS worker RunTask dispatch wiring only. Do not run live AWS commands in this phase."
+      "notes": "Phase 5 is merged. Follow-up issue #302 on branch fix/sw/302-ecs-worker-dispatch-safety hardens RunTask task ARN validation, cancellation job cleanup, retry-safe ECS API failure handling, and worker configuration guidance. Worker runtime and worker-specific Terraform resources remain pending; do not enable ECS worker mode in production yet."
     }
   ]
 }

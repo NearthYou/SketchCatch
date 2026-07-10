@@ -297,6 +297,11 @@ async function dispatchDeploymentWorkerJob(
 
   try {
     const dispatchResult = await dispatcher.dispatch({ job: input.job });
+
+    if (!dispatchResult.taskArn) {
+      throw new Error("Deployment worker dispatch did not return a task ARN");
+    }
+
     await markDeploymentJobRunning(
       {
         jobId: input.job.id,
@@ -1075,21 +1080,44 @@ export async function registerDeploymentRoutes(
         if (workerDispatch.enabled) {
           const activeJob = await jobRepository.findActiveDeploymentJob(params.deploymentId);
 
-          if (activeJob?.ecsTaskArn) {
-            const stopResult = await workerDispatch.dispatcher.stop({
-              job: activeJob,
-              reason: "SketchCatch deployment cancellation requested"
-            });
+          if (activeJob) {
+            let stopped = false;
 
-            if (stopResult.stopped) {
-              await cancelDeploymentJob(
-                {
-                  jobId: activeJob.id,
-                  errorSummary: "Cancellation was requested and ECS StopTask was sent."
-                },
-                jobRepository
-              );
+            if (activeJob.ecsTaskArn) {
+              const stopResult = await workerDispatch.dispatcher.stop({
+                job: activeJob,
+                reason: "SketchCatch deployment cancellation requested"
+              });
 
+              if (stopResult.errorSummary) {
+                request.log.warn(
+                  {
+                    deploymentId: params.deploymentId,
+                    deploymentJobId: activeJob.id
+                  },
+                  stopResult.errorSummary
+                );
+
+                return reply.status(503).send({
+                  error: "worker_unavailable",
+                  message: stopResult.errorSummary
+                });
+              }
+
+              stopped = stopResult.stopped;
+            }
+
+            await cancelDeploymentJob(
+              {
+                jobId: activeJob.id,
+                errorSummary: stopped
+                  ? "Cancellation was requested and ECS StopTask was sent."
+                  : "Cancellation was requested, but no active ECS task was found."
+              },
+              jobRepository
+            );
+
+            if (stopped) {
               return reply.status(202).send({
                 deployment: await toDeployment(cancellationRequestedDeployment, repository)
               });

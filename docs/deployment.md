@@ -568,6 +568,10 @@ Phase 5부터 API는 `DEPLOYMENT_WORKER_MODE=ecs`가 설정된 경우 Terraform 
 `deployment_jobs` row를 만든 뒤 ECS `RunTask` one-off worker task로 넘깁니다. 기본값은 `in_process`이므로 Phase 5/6
 worker runtime이 실제 운영 검증을 끝내기 전까지 기존 direct background 실행을 유지할 수 있습니다.
 
+현재 `infra/aws/terraform`에는 `nginx`, `web`, `api`용 app task definition만 있고 worker 전용 task definition,
+container entrypoint, task role, security group은 아직 없습니다. 이 리소스와 worker runtime이 추가되기 전에는 운영 API의
+`DEPLOYMENT_WORKER_MODE`를 `in_process`로 유지해야 하며, app task definition을 worker task로 재사용하지 않습니다.
+
 ECS worker mode에 필요한 API runtime environment:
 
 ```text
@@ -579,13 +583,18 @@ ECS_WORKER_SUBNETS=<subnet-id-1,subnet-id-2>
 ECS_WORKER_SECURITY_GROUP_IDS=<sg-id-1,sg-id-2>
 ECS_WORKER_COMMAND=["node","dist/worker.cjs"]
 ECS_WORKER_ENVIRONMENT={"NODE_ENV":"production"}
-ECS_WORKER_ASSIGN_PUBLIC_IP=DISABLED
+ECS_WORKER_ASSIGN_PUBLIC_IP=ENABLED
 ```
 
 `ECS_WORKER_COMMAND`는 JSON string array여야 하며, `ECS_WORKER_ENVIRONMENT`는 string 값만 가진 JSON object여야 합니다.
 API는 dispatch 시 `SKETCHCATCH_DEPLOYMENT_ID`, `SKETCHCATCH_DEPLOYMENT_JOB_ID`,
 `SKETCHCATCH_DEPLOYMENT_OPERATION`을 container override environment로 추가합니다. worker runtime 자체는 Phase 5 범위가 아니며,
 Phase 6에서 이 값을 읽어 plan/apply/destroy 실행을 이어받아야 합니다.
+
+현재 Phase 1 네트워크는 NAT Gateway 없이 public subnet을 사용하므로 worker도 같은 구성을 사용한다면
+`ECS_WORKER_ASSIGN_PUBLIC_IP=ENABLED`가 필요합니다. private subnet과 NAT Gateway 또는 필요한 VPC endpoint를 갖춘 뒤에만
+`DISABLED`로 전환합니다. worker security group은 inbound rule 없이 필요한 AWS API, RDS, Redis egress만 허용하는 전용 그룹을
+사용합니다.
 
 API task role에는 최소한 아래 권한이 필요합니다. 실제 ARN은 production 계정/region/task family에 맞춰 좁혀야 합니다.
 
@@ -594,16 +603,29 @@ API task role에는 최소한 아래 권한이 필요합니다. 실제 ARN은 pr
   "Version": "2012-10-17",
   "Statement": [
     {
+      "Sid": "RunWorkerTask",
       "Effect": "Allow",
       "Action": ["ecs:RunTask"],
-      "Resource": "arn:aws:ecs:<region>:<account-id>:task-definition/<worker-task-family>:*"
+      "Resource": "arn:aws:ecs:<region>:<account-id>:task-definition/<worker-task-family>:*",
+      "Condition": {
+        "ArnEquals": {
+          "ecs:cluster": "arn:aws:ecs:<region>:<account-id>:cluster/<cluster-name>"
+        }
+      }
     },
     {
+      "Sid": "ManageWorkerTask",
       "Effect": "Allow",
       "Action": ["ecs:StopTask", "ecs:DescribeTasks"],
-      "Resource": "arn:aws:ecs:<region>:<account-id>:task/<cluster-name>/*"
+      "Resource": "arn:aws:ecs:<region>:<account-id>:task/<cluster-name>/*",
+      "Condition": {
+        "ArnEquals": {
+          "ecs:cluster": "arn:aws:ecs:<region>:<account-id>:cluster/<cluster-name>"
+        }
+      }
     },
     {
+      "Sid": "PassWorkerTaskRoles",
       "Effect": "Allow",
       "Action": "iam:PassRole",
       "Resource": [
@@ -621,4 +643,5 @@ API task role에는 최소한 아래 권한이 필요합니다. 실제 ARN은 pr
 ```
 
 `ecs:RunTask`는 worker task definition으로, `ecs:StopTask`/`ecs:DescribeTasks`는 worker cluster task ARN으로 제한합니다.
-`iam:PassRole`은 worker task execution role과 worker task role에만 허용하고, `ecs-tasks.amazonaws.com` 조건을 유지합니다.
+`ecs:RunTask`의 `ecs:cluster` 조건과 task 작업의 cluster ARN 조건도 유지합니다. `iam:PassRole`은 worker task execution role과
+worker task role에만 허용하고, `ecs-tasks.amazonaws.com` 조건을 유지합니다.
