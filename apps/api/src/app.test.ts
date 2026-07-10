@@ -20,6 +20,32 @@ test("GET /health returns ok", async () => {
   await app.close();
 });
 
+test("trusts ALB forwarded protocol and client IP headers", async () => {
+  const app = buildApp();
+
+  app.get("/forwarded-context", async (request) => ({
+    ip: request.ip,
+    protocol: request.protocol
+  }));
+
+  const response = await app.inject({
+    headers: {
+      "x-forwarded-for": "203.0.113.10, 10.0.0.5",
+      "x-forwarded-proto": "https"
+    },
+    method: "GET",
+    url: "/forwarded-context"
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.json(), {
+    ip: "203.0.113.10",
+    protocol: "https"
+  });
+
+  await app.close();
+});
+
 test("GET /api/projects requires authentication", async () => {
   const app = buildApp();
 

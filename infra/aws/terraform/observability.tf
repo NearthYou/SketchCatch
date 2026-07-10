@@ -33,10 +33,13 @@ resource "aws_cloudwatch_metric_alarm" "ecs_container_errors" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "ecs_unhealthy_hosts" {
-  count = var.enable_ecs_observability_alarms ? 1 : 0
+  for_each = var.enable_ecs_observability_alarms ? {
+    api = aws_lb_target_group.api.arn_suffix
+    web = aws_lb_target_group.web.arn_suffix
+  } : {}
 
-  alarm_name          = "${local.name_prefix}-unhealthy-hosts"
-  alarm_description   = "The parallel ECS ALB target group has unhealthy Fargate targets."
+  alarm_name          = "${local.name_prefix}-${each.key}-unhealthy-hosts"
+  alarm_description   = "The parallel ECS ALB ${each.key} target group has unhealthy Fargate targets."
   comparison_operator = "GreaterThanOrEqualToThreshold"
   evaluation_periods  = 2
   threshold           = 1
@@ -50,15 +53,18 @@ resource "aws_cloudwatch_metric_alarm" "ecs_unhealthy_hosts" {
 
   dimensions = {
     LoadBalancer = aws_lb.ecs.arn_suffix
-    TargetGroup  = aws_lb_target_group.ecs.arn_suffix
+    TargetGroup  = each.value
   }
 }
 
 resource "aws_cloudwatch_metric_alarm" "ecs_service_cpu_high" {
-  count = var.enable_ecs_observability_alarms ? 1 : 0
+  for_each = var.enable_ecs_observability_alarms ? {
+    api = aws_ecs_service.api.name
+    web = aws_ecs_service.web.name
+  } : {}
 
-  alarm_name          = "${local.name_prefix}-service-cpu-high"
-  alarm_description   = "The SketchCatch ECS app service CPU utilization stayed high."
+  alarm_name          = "${local.name_prefix}-${each.key}-cpu-high"
+  alarm_description   = "The SketchCatch ECS ${each.key} service CPU utilization stayed high."
   comparison_operator = "GreaterThanOrEqualToThreshold"
   evaluation_periods  = 3
   threshold           = var.ecs_service_cpu_alarm_threshold
@@ -72,15 +78,18 @@ resource "aws_cloudwatch_metric_alarm" "ecs_service_cpu_high" {
 
   dimensions = {
     ClusterName = aws_ecs_cluster.main.name
-    ServiceName = aws_ecs_service.app.name
+    ServiceName = each.value
   }
 }
 
 resource "aws_cloudwatch_metric_alarm" "ecs_service_memory_high" {
-  count = var.enable_ecs_observability_alarms ? 1 : 0
+  for_each = var.enable_ecs_observability_alarms ? {
+    api = aws_ecs_service.api.name
+    web = aws_ecs_service.web.name
+  } : {}
 
-  alarm_name          = "${local.name_prefix}-service-memory-high"
-  alarm_description   = "The SketchCatch ECS app service memory utilization stayed high."
+  alarm_name          = "${local.name_prefix}-${each.key}-memory-high"
+  alarm_description   = "The SketchCatch ECS ${each.key} service memory utilization stayed high."
   comparison_operator = "GreaterThanOrEqualToThreshold"
   evaluation_periods  = 3
   threshold           = var.ecs_service_memory_alarm_threshold
@@ -94,6 +103,6 @@ resource "aws_cloudwatch_metric_alarm" "ecs_service_memory_high" {
 
   dimensions = {
     ClusterName = aws_ecs_cluster.main.name
-    ServiceName = aws_ecs_service.app.name
+    ServiceName = each.value
   }
 }
