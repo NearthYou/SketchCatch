@@ -125,6 +125,6 @@ test("Lambda templates use an inline archive and least-privilege table policies"
 
     assert.equal(typeof lambda?.values.inlineSource, "string", templateId);
     assert.equal(lambda?.values.packageType, undefined, templateId);
-    assert.doesNotMatch(String(rolePolicy?.values.policy), /\"Resource\":\"\*\"/, templateId);
+    assert.doesNotMatch(String(rolePolicy?.values.policy), /"Resource":"\*"/, templateId);
   }
 });
