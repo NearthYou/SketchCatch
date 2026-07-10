@@ -14,54 +14,6 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
-### 2026-07-10 - Make deployment warnings non-blocking
-
-- Goal: Let Direct Deployment proceed even when high-risk Trivy or deployment safety warnings are present.
-- Completed:
-  - Changed Pre-Deployment/Safety Gate warning creation so high-risk findings, unsupported-resource warnings, and destructive-change warnings no longer set `blocksApproval`.
-  - Removed approval-time rejection for stored blocking or acknowledgement-only warnings, so older plan summaries cannot block approval only because of warning metadata.
-  - Updated workspace deployment action state so the Plan approval button stays enabled even when `planSummary.warnings` contains `blocksApproval: true`.
-  - Updated `docs/data-models.md` to describe warning preservation without approval/deployment blocking.
-- Verification:
-  - `pnpm harness:check` passed before edits.
-  - `pnpm --filter @sketchcatch/api exec tsx --test src/deployments/deployment-safety-gate.test.ts src/deployments/deployment-approval-service.test.ts src/deployments/deployment-plan-service.test.ts` passed.
-  - `pnpm --filter @sketchcatch/web exec tsx features/workspace/deployment-actions.test.ts` passed.
-  - `pnpm lint` passed.
-  - `pnpm typecheck` passed.
-  - `pnpm build` passed.
-- Risk:
-  - Terraform validation, plan creation, artifact/hash drift checks, approval snapshot checks, AWS account/region drift checks, and actual Terraform apply failures still remain hard gates. This change only removes warning metadata as an approval blocker.
-
-### 2026-07-10 - Connect dashboard project inventory to live user projects
-
-- Goal: Replace the static `/dashboard/projects` sample with projects owned by the authenticated user.
-- Completed:
-  - Added a focused DESIGN.md project inventory client backed by `GET /api/projects` through `listProjects()`.
-  - Added selectable recent-work and recent-creation sorting, project-name search, loading/error/empty states, and workspace links carrying the real project ID.
-  - Removed fake source, risk, and deployment-status columns from the live inventory surface.
-  - Added responsive project inventory styles and source-level regression coverage.
-- Verification:
-  - Project inventory, project sorting, project search, and dashboard route tests passed.
-  - `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check` passed.
-  - Playwright verified search filtering, both sort orders, and 1440px and 375px layouts without horizontal overflow.
-- Risk:
-  - The Playwright session had no authenticated user cookie, so populated visual QA used a browser-only mocked `GET /api/projects` response. The existing API ownership tests cover active-user filtering.
-
-### 2026-07-10 - Apply DESIGN.md cost dashboard UI
-
-- Goal: Apply the selected cost operations prototype to `/dashboard/costs` without adding estimated-versus-actual comparison behavior.
-- Completed:
-  - Connected the live `CostsClient` to the DESIGN.md dashboard shell instead of the static cost sample.
-  - Made actual AWS usage the default view and kept pre-deployment estimates in a separate tab.
-  - Added verified AWS connection treatment, four usage metrics, a two-column trend/service layout, project usage navigation, and optimization review surfaces.
-  - Added isolated DESIGN.md cost styles with responsive layouts and source-level route coverage.
-- Verification:
-  - Dashboard and cost feature tests passed.
-  - `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check` passed.
-  - Playwright verified both tabs at 1440px and 375px; mobile document width remained 375px.
-- Risk:
-  - The local browser had no authenticated user session, so populated AWS usage visual QA used browser-only mocked API responses. Production API contracts and backend behavior were not changed.
-
 ### 2026-07-10 - DESIGN.md cost dashboard prototype
 
 - Goal: Explore `/dashboard/costs` UI directions without changing the service implementation or comparing estimated and actual costs.
@@ -209,3 +161,15 @@ Short English-only working log for the current agent context. Older records are 
   - Retrieval-mode checks for ALB/ASG/EC2, serverless API, SPA, ECS Fargate, GitHub CodeDeploy CI/CD, and Multi-AZ RDS each returned the exact expected citation title and document.
 - Risk:
   - The index is current, but no automatic S3 connector sync exists. Re-run direct ingestion after changing a pattern document unless an authorized crawler role/data source is added later.
+
+### 2026-07-10 - Enable a dedicated Amazon Q Business Creator application
+- Goal: Enable Q Business Creator mode without changing the anonymous retrieval application that serves the architecture knowledge index.
+- Completed:
+  - Confirmed AWS rejects Creator mode updates for `ANONYMOUS` applications and left the existing retrieval application unchanged.
+  - Created a separate active `AWS_IAM_IDC` Q Business application, enabled `creatorModeControl`, assigned the existing IAM Identity Center user, and created a `Q_BUSINESS` subscription.
+- Verification:
+  - The new application's chat controls report `creatorModeControl=ENABLED`.
+  - The original anonymous application's retrieval mode and indexed pattern documents were not modified.
+- Risk:
+  - Creator-mode `ChatSync` is not yet callable from the SketchCatch backend. IAM Identity Center applications require identity-aware SigV4 credentials through trusted identity propagation; the current backend uses ordinary ECS task credentials and an optional `userId` only.
+  - The application must not replace `AMAZON_Q_APPLICATION_ID` until a compatible OIDC identity token, TIP credential provider, and end-to-end Creator-mode call are implemented and verified.
