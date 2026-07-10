@@ -16,7 +16,7 @@ Short English-only working log for the current agent context. Older records are 
 - Goal: Record the Task 1-3 contracts and run the required integrated verification.
 - Completed: Updated `docs/data-models.md` for new-node-only safe defaults in `parameters.values`, parameter-reference `DiagramEdge.metadata`, and Terraform Preview ASG `desiredCapacity` omission rules. Updated the ignored JH worklogs and Task 4 report.
 - Verification: `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
-- Risk: `pnpm build` regenerated `apps/web/next-env.d.ts` and the pre-existing uncommitted user diff is no longer visible. The file was never staged or committed; the intended edit needs user verification because Git cannot restore its prior working-tree-only content.
+- Risk: `pnpm build` generated the production import in `apps/web/next-env.d.ts`; the controller restored the exact pre-existing dev-mode import (`./.next/dev/types/routes.d.ts`) and kept that file outside the commit. No user verification is pending for this generated-file restoration.
 - Next action: Task 4 is complete; review and merge only its tracked documentation changes.
 
 ### 2026-07-10 - Start ECS Phase 5 API worker dispatch
