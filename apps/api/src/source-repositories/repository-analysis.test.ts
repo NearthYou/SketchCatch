@@ -76,6 +76,16 @@ test("selects minimal serverless API for a backend with Lambda and API Gateway e
   // Then
   assert.equal(result.status, "template_selected");
   assert.equal(result.templateId, "minimal-serverless-api");
+  assert.deepEqual(
+    result.evidence.find((evidence) => evidence.path === "serverless.yml"),
+    {
+      kind: "framework_config",
+      path: "serverless.yml",
+      applicationUnitId: ".",
+      signals: ["serverless.yml"]
+    }
+  );
+  assert.equal(result.missingEvidence.includes("framework_config"), false);
 });
 
 test("selects full serverless web app for frontend backend API and Cognito evidence", () => {
@@ -223,4 +233,13 @@ test("selects EKS container app with Docker Kubernetes and EKS evidence", () => 
   // Then
   assert.equal(result.status, "template_selected");
   assert.equal(result.templateId, "eks-container-app");
+  assert.deepEqual(
+    result.evidence.find((evidence) => evidence.path === "deploy/eks/kustomization.yaml"),
+    {
+      kind: "framework_config",
+      path: "deploy/eks/kustomization.yaml",
+      applicationUnitId: ".",
+      signals: ["kustomization.yaml"]
+    }
+  );
 });

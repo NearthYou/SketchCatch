@@ -5,39 +5,10 @@ import type {
   GitCicdPipelineDetailStatus,
   GitHubRepositoryCandidate
 } from "@sketchcatch/types";
+import { isRepositoryEvidenceContentPath } from "./repository-evidence-path.js";
 
 const githubApiBaseUrl = "https://api.github.com";
 const githubJwtTtlSeconds = 9 * 60;
-
-const repositoryEvidenceFileNames = new Set([
-  "angular.json",
-  "app.yaml",
-  "cdk.json",
-  "compose.yaml",
-  "compose.yml",
-  "docker-compose.yaml",
-  "docker-compose.yml",
-  "kustomization.yaml",
-  "kustomization.yml",
-  "netlify.toml",
-  "next.config.js",
-  "next.config.mjs",
-  "next.config.ts",
-  "nuxt.config.js",
-  "nuxt.config.ts",
-  "samconfig.toml",
-  "serverless.yaml",
-  "serverless.yml",
-  "template.yaml",
-  "template.yml",
-  "vercel.json",
-  "vite.config.js",
-  "vite.config.mjs",
-  "vite.config.ts",
-  "wrangler.json",
-  "wrangler.jsonc",
-  "wrangler.toml"
-]);
 
 export type GitHubAppClientOptions = {
   appId: string;
@@ -671,25 +642,6 @@ function readRepositoryTreePaths(tree: GitHubRecursiveTreeResponse): string[] {
         : []
     )
     .sort();
-}
-
-// 분석 근거로 합의한 작은 설정 파일만 content API 조회 대상으로 허용한다.
-function isRepositoryEvidenceContentPath(path: string): boolean {
-  const fileName = path.split("/").at(-1) ?? "";
-  const lowerFileName = fileName.toLowerCase();
-
-  if (
-    lowerFileName === "package.json" ||
-    /^readme(?:\.(?:md|mdx|rst|txt))?$/.test(lowerFileName)
-  ) {
-    return true;
-  }
-
-  if (fileName === "Dockerfile" || fileName.endsWith(".Dockerfile")) {
-    return true;
-  }
-
-  return repositoryEvidenceFileNames.has(fileName);
 }
 
 // GitHub content API의 base64 텍스트만 UTF-8 evidence로 변환한다.

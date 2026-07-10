@@ -2,14 +2,17 @@ import {
   REPOSITORY_EVIDENCE_KINDS,
   type RepositoryAnalysisAiHandoff,
   type RepositoryAnalysisEvidence,
-  type RepositoryApplicationUnit,
-  type RepositoryEvidenceKind
+  type RepositoryApplicationUnit
 } from "@sketchcatch/types";
 import { z } from "zod";
 import type {
   GitHubRepositoryEvidenceFile,
   GitHubRepositoryEvidenceSnapshot
 } from "./github-app-client.js";
+import {
+  getRepositoryEvidenceKind,
+  isRepositoryFrameworkConfigPath
+} from "./repository-evidence-path.js";
 import { selectRepositoryTemplate } from "./repository-template-selection.js";
 
 const dependencyRecordSchema = z.record(z.string(), z.string());
@@ -130,7 +133,7 @@ function createApplicationUnit(
     .filter(
       (path) =>
         path === packageFile.path ||
-        (isWithinRoot(path, packageFile.rootPath) && isFrameworkConfigPath(path))
+        (isWithinRoot(path, packageFile.rootPath) && isRepositoryFrameworkConfigPath(path))
     )
     .sort();
 
@@ -174,7 +177,7 @@ function collectRepositoryEvidence(
   }
 
   for (const path of snapshot.treePaths) {
-    const kind = getPathEvidenceKind(path);
+    const kind = getRepositoryEvidenceKind(path);
 
     if (kind && kind !== "package_json") {
       const unit = findApplicationUnitForPath(path, applicationUnits);
@@ -188,26 +191,6 @@ function collectRepositoryEvidence(
   }
 
   return evidence.sort((left, right) => left.path.localeCompare(right.path));
-}
-
-// 파일 경로를 분석 계약의 evidence 종류로 분류한다.
-function getPathEvidenceKind(path: string): RepositoryEvidenceKind | null {
-  const fileName = getFileName(path);
-  const lowerFileName = fileName.toLowerCase();
-
-  if (lowerFileName === "package.json") return "package_json";
-  if (/^(?:pnpm-lock\.yaml|yarn\.lock|package-lock\.json|bun\.lockb?)$/.test(lowerFileName)) {
-    return "lockfile";
-  }
-  if (fileName === "Dockerfile" || fileName.endsWith(".Dockerfile")) return "dockerfile";
-  if (/^readme(?:\.(?:md|mdx|rst|txt))?$/.test(lowerFileName)) return "readme";
-  if (isFrameworkConfigPath(path)) return "framework_config";
-  return null;
-}
-
-// 알려진 framework config 이름만 framework evidence로 인정한다.
-function isFrameworkConfigPath(path: string): boolean {
-  return /\/(?:vite|next|nuxt)\.config\.(?:js|mjs|ts)$/.test(`/${path}`);
 }
 
 // 가장 구체적인 Application Unit에 evidence 경로를 연결한다.
