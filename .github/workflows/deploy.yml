@@ -1,17 +1,19 @@
-﻿name: Deploy Production
+﻿name: Deploy Production EC2 Rollback
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
+    inputs:
+      confirmation:
+        description: "Enter deploy-ec2-rollback"
+        required: true
+        type: string
 
 permissions:
   contents: read
   id-token: write
 
 concurrency:
-  group: production
+  group: production-ec2-rollback
   cancel-in-progress: false
 
 jobs:
@@ -20,6 +22,17 @@ jobs:
     environment: production
 
     steps:
+      - name: Validate EC2 rollback confirmation
+        shell: bash
+        env:
+          ROLLBACK_CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          if [ "${ROLLBACK_CONFIRMATION}" != "deploy-ec2-rollback" ]; then
+            echo "::error::confirmation must be deploy-ec2-rollback"
+            exit 1
+          fi
+
       - name: Checkout
         uses: actions/checkout@v4
 
