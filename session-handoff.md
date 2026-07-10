@@ -10,6 +10,7 @@ Use this file only for compact continuation context. Write it in English.
 - Missing citations and transient batch or exact-document failures are recovered through bounded Q revalidation retries.
 - Versioned verified pattern document IDs persist for seven days through the shared Runtime Cache when `REDIS_URL` is configured.
 - AI route initialization starts verification warm-up for all six indexed patterns, and the dedicated Next route allows up to 115 seconds for a cold exact-Q response.
+- Architecture Draft generation streams real backend progress stages through NDJSON to an accessible workspace progress panel.
 - `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, focused AI tests, Terraform formatting, and `git diff --check` passed.
 - Live Q retrieval and Architecture Draft generation were exercised without infrastructure mutation.
 - Live Q returned exact citations and deployment guidance for SPA, Fargate, and Multi-AZ RDS; the API materialized a matching role-specific graph with no orphan nodes.
@@ -24,6 +25,7 @@ Use this file only for compact continuation context. Write it in English.
 - Canonical Q plans now override stale normalizer resources, and complex fully managed backends select Fargate unless Lambda is explicit.
 - Fargate materialization now separates public/app/DB subnets, NAT routes, IAM roles, logs, ALB target registration, upload storage, and Multi-AZ RDS configuration.
 - Terraform renders ECS service network, load balancer, and deployment circuit-breaker blocks.
+- The Architecture Draft client consumes the dedicated stream, preserves typed Q failures, and displays completed/current/pending generation stages.
 
 ## Broken Or Unverified
 
@@ -31,7 +33,8 @@ Use this file only for compact continuation context. Write it in English.
 - A completely empty Redis still performs one Q verification cycle, but warm-up starts during route initialization and later API processes reuse citations for seven days.
 - The separate ECS migration workstream remains in progress and is not changed by this Architecture Draft fix.
 - Anonymous Q Business supplies retrieval text and citations only; SketchCatch remains responsible for deterministic graph construction and semantic validation.
+- Three pre-existing isolated route tests fail on EKS warning text, Korean quantity extraction, and equivalent-wording S3 counts; the new stream and web progress tests pass.
 
 ## Best Next Action
 
-- Exercise the corrected Architecture Draft in the browser and inspect the generated Terraform plan before approving any deployment.
+- Repair the three pre-existing deterministic Architecture Draft route expectations, then inspect generated Terraform before approving any deployment.
