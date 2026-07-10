@@ -114,6 +114,72 @@ test("createEcsDeploymentWorkerDispatcher reports no stop when task is missing",
   assert.equal(sentCommands[0] instanceof DescribeTasksCommand, true);
 });
 
+test("createEcsDeploymentWorkerDispatcher inspects active and stopped task states", async () => {
+  const sentCommands: unknown[] = [];
+  let lastStatus = "PENDING";
+  const dispatcher = createEcsDeploymentWorkerDispatcher({
+    config,
+    ecsClient: {
+      async send(command) {
+        sentCommands.push(command);
+        return { tasks: [{ taskArn, lastStatus }] };
+      }
+    }
+  });
+
+  const activeResult = await dispatcher.inspect({
+    job: createJobRecord({ ecsTaskArn: taskArn })
+  });
+  lastStatus = "STOPPED";
+  const stoppedResult = await dispatcher.inspect({
+    job: createJobRecord({ ecsTaskArn: taskArn })
+  });
+
+  assert.deepEqual(activeResult, {
+    state: "ACTIVE",
+    lastStatus: "PENDING"
+  });
+  assert.deepEqual(stoppedResult, {
+    state: "STOPPED",
+    lastStatus: "STOPPED"
+  });
+  assert.equal(sentCommands.length, 2);
+  assert.equal(
+    sentCommands.every((command) => command instanceof DescribeTasksCommand),
+    true
+  );
+});
+
+test("createEcsDeploymentWorkerDispatcher reports missing tasks without an ARN or ECS task", async () => {
+  const sentCommands: unknown[] = [];
+  const dispatcher = createEcsDeploymentWorkerDispatcher({
+    config,
+    ecsClient: {
+      async send(command) {
+        sentCommands.push(command);
+        return { tasks: [] };
+      }
+    }
+  });
+
+  const missingArnResult = await dispatcher.inspect({
+    job: createJobRecord({ ecsTaskArn: null })
+  });
+  const missingTaskResult = await dispatcher.inspect({
+    job: createJobRecord({ ecsTaskArn: taskArn })
+  });
+
+  assert.deepEqual(missingArnResult, {
+    state: "MISSING",
+    lastStatus: null
+  });
+  assert.deepEqual(missingTaskResult, {
+    state: "MISSING",
+    lastStatus: null
+  });
+  assert.equal(sentCommands.length, 1);
+});
+
 function createJobRecord(overrides: Partial<DeploymentJobRecord> = {}): DeploymentJobRecord {
   return {
     id: jobId,

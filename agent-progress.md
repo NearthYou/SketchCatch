@@ -1,15 +1,45 @@
-﻿# Agent Progress
+# Agent Progress
 
 Short English-only working log for the current agent context. Older records are archived under `docs/agent-history/`.
 
 ## Current Verified State
 
-- Branch: `feature/sw/306-deployment-worker-runtime`.
-- Active workstream: `ECS-MIGRATION-000`, Phase 6 deployment worker runtime.
-- Phase 5 dispatch and its review hardening are merged into `dev`.
-- Production must keep `DEPLOYMENT_WORKER_MODE=in_process` until the worker task definition, roles, security group, and runtime smoke are implemented.
+- Branch: `feature/sw/309-runtask-worker-ops-hardening`.
+- Active workstream: `ECS-MIGRATION-000`, Phase 7 recovery, observability, and smoke hardening.
+- Phase 6 worker runtime is merged into `dev`.
+- Production must keep `DEPLOYMENT_WORKER_MODE=in_process` until worker task infrastructure and approved smoke evidence exist.
 
 ## Session Record
+
+### 2026-07-10 - Harden ECS recovery, observability, and smoke
+
+- Goal: Prevent API restarts from failing active ECS worker deployments and add operational observability and non-mutating smoke gates.
+- Completed:
+  - Created issue #309 and linked branch `feature/sw/309-runtask-worker-ops-hardening` from merged Phase 6 `dev`.
+  - Added startup reconciliation that compares active DeploymentJobs with ECS task status behind an inspector abstraction.
+  - Preserved active or temporarily unverifiable ECS tasks, protected state-transition races for retry, failed stopped/missing tasks, and applied a five-minute dispatch grace period.
+  - Kept the existing in-process interrupted deployment recovery behavior.
+  - Added a worker CloudWatch log group and opt-in log metric filters and alarms for API, web, nginx, worker, ALB health, CPU, and memory.
+  - Added `scripts/smoke/ecs-ops-preflight.ps1` with AWS-free preflight and separately gated read-only AWS/HTTP checks.
+  - Added the recovery, observability, migration, Route53 cutover, EC2 rollback, and cleanup runbook to `docs/deployment.md`.
+  - Audited ECS migration PRs #284, #289, #291, #292, #294, #296, #304, #308, and #311; implemented remaining #289/#294/#311 feedback and confirmed #291 was fixed by #292.
+- Verification so far:
+  - `pnpm harness:check` passed before edits.
+  - Reconciliation, dispatcher, job, worker, runtime-cache, and startup tests passed (38 tests).
+  - `pnpm --filter @sketchcatch/api typecheck` passed.
+  - `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed on the final diff.
+  - `pnpm --filter @sketchcatch/api test -- deployment` ran 885 tests; 882 passed and 3 pre-existing unrelated tests failed.
+  - `terraform -chdir=infra/aws/terraform fmt -check -recursive` passed.
+  - `terraform -chdir=infra/aws/terraform init -backend=false -input=false` passed without AWS state access.
+  - `terraform -chdir=infra/aws/terraform validate` passed.
+  - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smoke/ecs-ops-preflight.ps1 -PreflightOnly` passed without AWS access or mutation.
+- Risk:
+  - Final Terraform fmt/validate and AWS-free ECS operations preflight passed with `mutationCommandsExecuted = false`.
+  - `git diff --check` passed.
+  - Worker-specific task definition, roles, security group, and live RunTask smoke are still missing.
+  - CloudWatch custom metrics and alarms are cost-bearing and remain disabled by default.
+  - Read-only AWS, HTTP, migration, Route53, Terraform plan/apply/destroy, and live worker smoke were not run.
+  - EC2/SSM remains the production rollback path and ECS worker mode must stay disabled until approved live evidence exists.
 
 ### 2026-07-10 - Restore practice S3 deployment after Trivy companion regression
 
@@ -179,29 +209,3 @@ Short English-only working log for the current agent context. Older records are 
   - Worker runtime is still out of scope; ECS-dispatched tasks need Phase 6 code to consume `SKETCHCATCH_DEPLOYMENT_JOB_ID` and finish deployment state updates.
   - The requested API deployments test command currently exits 1 because of unrelated pre-existing failures in `aiLlmExplanationRoutes.test.ts` and a missing `docs/jh/000_AWS리소스목록_JH.md` fixture.
   - No live AWS commands should be run in Phase 5.
-
-### 2026-07-10 - Start ECS Phase 4 deployment job model
-
-- Goal: Add a deployment job model for Terraform execution jobs so Phase 5 can dispatch ECS RunTask one-off workers.
-- Completed:
-  - Created GitHub issue #293.
-  - Created linked branch `feature/sw/293-deployment-runtask-jobs` from `dev` with `gh issue develop`.
-  - Read root `AGENTS.md`, `docs/sw/agents.md`, `docs/sw/spec.md`, `docs/sw/plan.md`, and `apps/api/AGENTS.md`.
-  - Added `deployment_jobs` DB schema/migration with operation/status enums, requester/access context, source deployment state, ECS task ARN placeholder, timestamps, error summary, and active-job duplicate protection.
-  - Added internal deployment job repository/service helpers for create, dispatching/running, task ARN recording, success, failure, and cancellation transitions.
-  - Added deployment job service tests for creation, state transitions, duplicate protection, and masked failure/cancellation recording.
-  - Updated `docs/data-models.md` with the internal `DeploymentJob` contract while noting public Deployment API shapes remain stable.
-- Verification so far:
-  - `pnpm harness:check` passed before Phase 4 edits.
-  - `pnpm harness:check` passed after Phase 4 edits.
-  - `pnpm lint` passed.
-  - `pnpm typecheck` passed.
-  - `pnpm build` passed.
-  - `pnpm --filter @sketchcatch/api exec tsx --test src/deployments/deployment-job-service.test.ts` passed.
-  - `pnpm --filter @sketchcatch/api lint` passed.
-  - `pnpm --filter @sketchcatch/api typecheck` passed.
-  - `pnpm --filter @sketchcatch/api test -- deployment` ran the whole API suite because the package script does not filter test files; the new deployment job tests passed, but pre-existing unrelated AI fixture and missing docs/jh fixture failures were reported.
-- Risk:
-  - Phase 4 does not dispatch ECS tasks; Phase 5 must wire the job model into deployment routes and worker dispatcher config.
-  - The requested API deployment test command currently exits 1 because of unrelated pre-existing failures in `aiLlmExplanationRoutes.test.ts` and a missing `docs/jh/000_AWS리소스목록_JH.md` fixture.
-  - No live AWS commands should be run in Phase 4.

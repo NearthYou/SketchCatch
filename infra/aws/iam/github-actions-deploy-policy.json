@@ -73,12 +73,15 @@
       "Resource": "arn:aws:ecs:ap-northeast-2:555980271919:service/sketchcatch-production-cluster/sketchcatch-production-app"
     },
     {
-      "Sid": "AllowSketchCatchTaskDefinitionDeployment",
+      "Sid": "AllowSketchCatchTaskDefinitionRegistration",
       "Effect": "Allow",
-      "Action": [
-        "ecs:DescribeTaskDefinition",
-        "ecs:RegisterTaskDefinition"
-      ],
+      "Action": "ecs:RegisterTaskDefinition",
+      "Resource": "arn:aws:ecs:ap-northeast-2:555980271919:task-definition/sketchcatch-production-app:*"
+    },
+    {
+      "Sid": "AllowSketchCatchTaskDefinitionRead",
+      "Effect": "Allow",
+      "Action": "ecs:DescribeTaskDefinition",
       "Resource": "*"
     },
     {

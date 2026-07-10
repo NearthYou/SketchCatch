@@ -409,3 +409,38 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "enable_ecs_observability_alarms" {
+  description = "Create cost-bearing CloudWatch metric filters and alarms for ECS app and worker operations."
+  type        = bool
+  default     = false
+}
+
+variable "cloudwatch_alarm_action_arns" {
+  description = "SNS topic ARNs notified by ECS CloudWatch alarms. Empty means alarms have no notification action."
+  type        = list(string)
+  default     = []
+}
+
+variable "ecs_log_error_alarm_threshold" {
+  description = "Five-minute container error count that moves a log alarm to ALARM."
+  type        = number
+  default     = 1
+
+  validation {
+    condition     = var.ecs_log_error_alarm_threshold >= 1
+    error_message = "ecs_log_error_alarm_threshold must be at least 1."
+  }
+}
+
+variable "ecs_service_cpu_alarm_threshold" {
+  description = "Average ECS service CPU percentage that triggers after three five-minute periods."
+  type        = number
+  default     = 80
+}
+
+variable "ecs_service_memory_alarm_threshold" {
+  description = "Average ECS service memory percentage that triggers after three five-minute periods."
+  type        = number
+  default     = 80
+}
