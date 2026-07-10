@@ -164,3 +164,16 @@ Short English-only working log for the current agent context. Older records are 
   - Live Chrome regeneration returned a Q-backed 43-resource preview with two AZs; `binds`, `hosts ALB`, and `member` area arrows were absent while resource edges such as `listens`, `manages fleet`, and `protects` remained.
 - Risk:
   - One of the requested twenty random project-query combinations has been regenerated after this change; the remaining random matrix is still in progress.
+
+### 2026-07-11 - Add external user journey nodes to public architectures
+
+- Goal: Make the visible request path start outside AWS when a generated architecture has a public entry point.
+- Completed:
+  - Added board-only `User / Client` and `Internet` design nodes for CloudFront, public ALB, API Gateway, and Route 53 entry architectures.
+  - Connected one representative public entry as `User / Client -> Internet -> public entry`, selected from the Q-authored layout to avoid unnecessary fan-out and crossings.
+  - Kept internal-only ALBs free of synthetic external actors and made exact Q DiagramJson normalization idempotent.
+- Verification:
+  - Web adapter, area, exact-Q normalization, collision, and edge-routing tests (50) passed with web typecheck.
+  - Live Chrome regeneration returned a Q-backed 43-resource preview with separate User / Client and Internet icons plus `requests` and `public traffic` edges; presentation nodes were excluded from the resource count.
+- Risk:
+  - The external journey intentionally targets one representative public entry instead of drawing fan-out lines to every public endpoint.

@@ -21,6 +21,7 @@ Use this file only for compact continuation context. Write it in English.
 - Board conversion creates one AZ area per configured zone and keeps subnet-spanning resources within their common VPC.
 - AI previews represent Region, VPC, Availability Zone, and Subnet only through parent containment; those area nodes cannot be edge endpoints.
 - AI-generated Auto Scaling Groups and Security Groups render as regular resource icons, preserving their operational arrows without empty area boxes.
+- Public AI architectures add board-only User / Client and Internet nodes and show one representative external request path; internal-only ALBs do not.
 
 ## Changes This Session
 
@@ -41,6 +42,7 @@ Use this file only for compact continuation context. Write it in English.
 - Live Q/browser verification reduced the reported preview bounds from `2536x3048` to `2264x1686` with distinct `ap-northeast-2a` and `ap-northeast-2b` areas.
 - Exact Q DiagramJson previews now preserve Q coordinates while reapplying parent metadata and the area-only containment invariant.
 - A live Q regeneration produced 43 resources and removed `binds`, `hosts ALB`, and `member` area arrows while retaining meaningful resource edges.
+- A later live Q regeneration preserved the 43 deployable resources and added User / Client, Internet, `requests`, and `public traffic` presentation flow without Terraform impact.
 
 ## Broken Or Unverified
 

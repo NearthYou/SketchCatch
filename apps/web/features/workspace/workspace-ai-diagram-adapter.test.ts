@@ -23,14 +23,18 @@ test("convertArchitectureJsonToDiagramJson keeps non-overlapping authored positi
   const diagramJson = convertArchitectureJsonToDiagramJson(architectureJson);
 
   assert.deepEqual(
-    diagramJson.nodes.map((node) => ({ id: node.id, position: node.position })),
+    diagramJson.nodes
+      .filter((node) => node.kind === "resource")
+      .map((node) => ({ id: node.id, position: node.position })),
     [
       { id: "source", position: { x: 713, y: 119 } },
       { id: "target", position: { x: 127, y: 887 } }
     ]
   );
   assert.deepEqual(
-    diagramJson.edges.map((edge) => ({ id: edge.id, sourceNodeId: edge.sourceNodeId, targetNodeId: edge.targetNodeId })),
+    diagramJson.edges
+      .filter((edge) => edge.id === "source-to-target")
+      .map((edge) => ({ id: edge.id, sourceNodeId: edge.sourceNodeId, targetNodeId: edge.targetNodeId })),
     [{ id: "source-to-target", sourceNodeId: "source", targetNodeId: "target" }]
   );
 });
@@ -875,6 +879,47 @@ test("normalizeDiagramJsonConventions removes area endpoint arrows from exact Q 
   assert.deepEqual(result.viewport, diagramJson.viewport);
 });
 
+test("normalizeDiagramJsonConventions adds one reusable external flow to exact Q diagrams", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      makeDiagramNode({
+        id: "public-api",
+        label: "Public API",
+        type: "aws_apigatewayv2_api",
+        parameters: {
+          fileName: "api",
+          resourceName: "public_api",
+          resourceType: "aws_apigatewayv2_api",
+          terraformBlockType: "resource",
+          values: { protocolType: "HTTP" }
+        }
+      })
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  const once = normalizeDiagramJsonConventions(diagramJson);
+  const twice = normalizeDiagramJsonConventions(once);
+
+  assert.deepEqual(
+    twice.nodes
+      .filter((node) => node.kind === "design")
+      .map((node) => ({ id: node.id, type: node.type })),
+    [
+      { id: "flow-user-client", type: "sketchcatch_user_client" },
+      { id: "flow-internet", type: "sketchcatch_internet" }
+    ]
+  );
+  assert.deepEqual(
+    twice.edges.map((edge) => ({ sourceNodeId: edge.sourceNodeId, targetNodeId: edge.targetNodeId })),
+    [
+      { sourceNodeId: "flow-user-client", targetNodeId: "flow-internet" },
+      { sourceNodeId: "flow-internet", targetNodeId: "public-api" }
+    ]
+  );
+});
+
 test("convertArchitectureJsonToDiagramJson expands area nodes to include upper-left children", () => {
   const architectureJson: ArchitectureJson = {
     nodes: [
@@ -1557,11 +1602,13 @@ test("convertArchitectureJsonToDiagramJson maps operations and permission draft 
   const diagramJson = convertArchitectureJsonToDiagramJson(architectureJson);
 
   assert.deepEqual(
-    diagramJson.nodes.map((node) => ({
-      id: node.id,
-      resourceType: node.parameters?.resourceType,
-      terraformBlockType: node.parameters?.terraformBlockType
-    })),
+    diagramJson.nodes
+      .filter((node) => node.kind === "resource")
+      .map((node) => ({
+        id: node.id,
+        resourceType: node.parameters?.resourceType,
+        terraformBlockType: node.parameters?.terraformBlockType
+      })),
     [
       { id: "api-gateway", resourceType: "aws_api_gateway_rest_api", terraformBlockType: "resource" },
       { id: "lambda-execution-role", resourceType: "aws_iam_role", terraformBlockType: "resource" },
@@ -2423,9 +2470,102 @@ test("convertArchitectureJsonToDiagramJson represents areas only through contain
   );
   assert.deepEqual(
     diagramJson.edges.map((edge) => edge.id).sort(),
-    ["alb-forwards-instance", "asg-manages-instance", "sg-protects-instance"]
+    [
+      "alb-forwards-instance",
+      "asg-manages-instance",
+      "flow-internet-to-application-alb",
+      "flow-user-to-internet",
+      "sg-protects-instance"
+    ]
   );
   assert.equal(nodeById.get("app-instance")?.metadata?.parentAreaNodeId, "private-subnet-a");
+});
+
+test("convertArchitectureJsonToDiagramJson adds external actors for public entry points", () => {
+  const diagramJson = convertArchitectureJsonToDiagramJson({
+    nodes: [
+      {
+        id: "public-cdn",
+        type: "CLOUDFRONT",
+        label: "Public CDN",
+        positionX: 520,
+        positionY: 120,
+        config: {}
+      },
+      {
+        id: "public-alb",
+        type: "LOAD_BALANCER",
+        label: "Public ALB",
+        positionX: 780,
+        positionY: 300,
+        config: { internal: false }
+      },
+      {
+        id: "internal-alb",
+        type: "LOAD_BALANCER",
+        label: "Internal ALB",
+        positionX: 780,
+        positionY: 500,
+        config: { internal: true }
+      }
+    ],
+    edges: []
+  });
+  const nodeById = new Map(diagramJson.nodes.map((node) => [node.id, node]));
+  const userNode = nodeById.get("flow-user-client");
+  const internetNode = nodeById.get("flow-internet");
+
+  assert.equal(userNode?.kind, "design");
+  assert.equal(userNode?.type, "sketchcatch_user_client");
+  assert.equal(
+    userNode?.iconUrl,
+    "/Resource-Icons_07312025/Res_General-Icons/Res_48_Light/Res_Client_48_Light.svg"
+  );
+  assert.equal(internetNode?.kind, "design");
+  assert.equal(internetNode?.type, "sketchcatch_internet");
+  assert.deepEqual(
+    diagramJson.edges.map((edge) => ({
+      label: edge.label,
+      sourceNodeId: edge.sourceNodeId,
+      targetNodeId: edge.targetNodeId
+    })),
+    [
+      {
+        label: "requests",
+        sourceNodeId: "flow-user-client",
+        targetNodeId: "flow-internet"
+      },
+      {
+        label: "public traffic",
+        sourceNodeId: "flow-internet",
+        targetNodeId: "public-cdn"
+      },
+    ]
+  );
+});
+
+test("convertArchitectureJsonToDiagramJson omits external actors for internal-only entry points", () => {
+  const diagramJson = convertArchitectureJsonToDiagramJson({
+    nodes: [
+      {
+        id: "internal-alb",
+        type: "LOAD_BALANCER",
+        label: "Internal ALB",
+        positionX: 320,
+        positionY: 240,
+        config: { internal: true }
+      }
+    ],
+    edges: []
+  });
+
+  assert.equal(
+    diagramJson.nodes.some(
+      (node) => node.type === "sketchcatch_user_client" || node.type === "sketchcatch_internet"
+    ),
+    false
+  );
+  assert.deepEqual(diagramJson.edges, []);
 });
 
 test("convertDiagramJsonToArchitectureJson keeps only valid resource nodes and connected edges", () => {

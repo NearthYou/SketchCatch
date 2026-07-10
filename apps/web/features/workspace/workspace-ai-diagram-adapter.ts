@@ -95,6 +95,19 @@ const COMPACT_AREA_MIN_SIZES: Readonly<Record<string, DiagramNode["size"]>> = {
 };
 const AI_RESOURCE_RENDER_TYPES = new Set(["aws_autoscaling_group", "aws_security_group"]);
 const AI_RESOURCE_NODE_SIZE: DiagramNode["size"] = { width: 124, height: 96 };
+const EXTERNAL_FLOW_NODE_SIZE: DiagramNode["size"] = { width: 124, height: 96 };
+const EXTERNAL_FLOW_HORIZONTAL_GAP = 48;
+const EXTERNAL_ENTRY_RESOURCE_TYPES = new Set([
+  "aws_api_gateway_rest_api",
+  "aws_apigatewayv2_api",
+  "aws_cloudfront_distribution",
+  "aws_lb",
+  "aws_route53_record"
+]);
+const USER_CLIENT_ICON_URL =
+  "/Resource-Icons_07312025/Res_General-Icons/Res_48_Light/Res_Client_48_Light.svg";
+const INTERNET_ICON_URL =
+  "/Resource-Icons_07312025/Res_General-Icons/Res_48_Light/Res_Internet_48_Light.svg";
 const AREA_PARENT_EDGE_LABELS = new Set(["contains", "hosts"]);
 const TERRAFORM_REFERENCE_ATTRIBUTE_SUFFIXES = ["id", "arn", "name", "execution_arn"] as const;
 const SECURITY_GROUP_REFERENCE_KEYS = ["securityGroupIds", "vpcSecurityGroupIds", "securityGroupId"] as const;
@@ -193,11 +206,14 @@ const RESOURCE_NAME_CONVENTIONS: Readonly<Record<string, { readonly prefix: stri
 
 // AI Draft를 실제 Architecture Board가 받을 수 있는 DiagramJson으로 바꾸는 gg 경계입니다.
 export function convertArchitectureJsonToDiagramJson(architectureJson: ArchitectureJson): DiagramJson {
-  const nodeIds = new Set(architectureJson.nodes.map((node) => node.id));
   const convertedNodes = architectureJson.nodes.map(convertArchitectureNodeToDiagramNode);
+  const externalTrafficFlow = createExternalTrafficFlow(convertedNodes, architectureJson.edges);
+  const sourceNodes = [...convertedNodes, ...externalTrafficFlow.nodes];
+  const sourceEdges = [...architectureJson.edges, ...externalTrafficFlow.edges];
+  const nodeIds = new Set(sourceNodes.map((node) => node.id));
   const preparedNodes = applyAreaParentMetadata(
-    applyDiagramResourceNameConventions(addServerStorageAreaNodes(convertedNodes)),
-    architectureJson.edges
+    applyDiagramResourceNameConventions(addServerStorageAreaNodes(sourceNodes)),
+    sourceEdges
   );
   const nodes = applyDiagramLayerOrder(
     fitAreaNodesToChildren(
@@ -208,7 +224,7 @@ export function convertArchitectureJsonToDiagramJson(architectureJson: Architect
 
   return {
     edges: convertArchitectureEdgesToDiagramEdges(
-      architectureJson.edges.filter((edge) => shouldRenderArchitectureEdge(edge, nodeIds, nodeById)),
+      sourceEdges.filter((edge) => shouldRenderArchitectureEdge(edge, nodeIds, nodeById)),
       nodeById
     ),
     nodes,
@@ -549,6 +565,10 @@ function getEdgeRoutingPriority(
   const sourceType = getDiagramNodeResourceType(nodeById.get(sourceNodeId));
   const targetType = getDiagramNodeResourceType(nodeById.get(targetNodeId));
 
+  if (isExternalFlowNodeType(sourceType) || isExternalFlowNodeType(targetType)) {
+    return 0;
+  }
+
   if (isObservabilityRoutingType(sourceType) || isObservabilityRoutingType(targetType)) {
     return 10;
   }
@@ -562,6 +582,10 @@ function getEdgeRoutingPriority(
   }
 
   return 40;
+}
+
+function isExternalFlowNodeType(nodeType: string): boolean {
+  return nodeType === "sketchcatch_user_client" || nodeType === "sketchcatch_internet";
 }
 
 function isObservabilityRoutingType(resourceType: string): boolean {
@@ -608,11 +632,29 @@ function isConfigurationDependencyRoutingType(resourceType: string): boolean {
 }
 
 export function normalizeDiagramJsonConventions(diagramJson: DiagramJson): DiagramJson {
+  const architectureEdges = diagramJson.edges.map((edge) => ({
+    id: edge.id,
+    label: edge.label,
+    sourceId: edge.sourceNodeId,
+    targetId: edge.targetNodeId
+  }));
+  const externalTrafficFlow = createExternalTrafficFlow(diagramJson.nodes, architectureEdges);
+  const sourceEdges: DiagramEdge[] = [
+    ...diagramJson.edges,
+    ...externalTrafficFlow.edges.map((edge) => ({
+      id: edge.id,
+      label: edge.label,
+      sourceNodeId: edge.sourceId,
+      targetNodeId: edge.targetId
+    }))
+  ];
   const preparedNodes = applyAreaParentMetadata(
     applyAiResourceRenderOverrides(
-      applyReadableTopologyLayout(applyDiagramResourceNameConventions(diagramJson.nodes))
+      applyReadableTopologyLayout(
+        applyDiagramResourceNameConventions([...diagramJson.nodes, ...externalTrafficFlow.nodes])
+      )
     ),
-    diagramJson.edges.map((edge) => ({
+    sourceEdges.map((edge) => ({
       id: edge.id,
       label: edge.label,
       sourceId: edge.sourceNodeId,
@@ -631,11 +673,171 @@ export function normalizeDiagramJsonConventions(diagramJson: DiagramJson): Diagr
   return {
     ...diagramJson,
     edges: normalizeDiagramEdges(
-      diagramJson.edges.filter((edge) => shouldRenderDiagramEdge(edge, nodeById)),
+      sourceEdges.filter((edge) => shouldRenderDiagramEdge(edge, nodeById)),
       nodeById
     ),
     nodes
   };
+}
+
+function createExternalTrafficFlow(
+  nodes: readonly DiagramNode[],
+  edges: readonly ArchitectureJson["edges"][number][]
+): {
+  nodes: DiagramNode[];
+  edges: ArchitectureJson["edges"];
+} {
+  const entryNodes = nodes
+    .filter(isPublicExternalEntryNode)
+    .sort((left, right) => left.position.x - right.position.x || left.position.y - right.position.y)
+    .slice(0, 1);
+
+  if (entryNodes.length === 0) {
+    return { nodes: [], edges: [] };
+  }
+
+  const existingNodeIds = new Set(nodes.map((node) => node.id));
+  const existingEdgeIds = new Set(edges.map((edge) => edge.id));
+  const existingPairs = new Set(edges.map((edge) => `${edge.sourceId}->${edge.targetId}`));
+  const minimumEntryX = Math.min(...entryNodes.map((node) => node.position.x));
+  const minimumEntryY = Math.min(...entryNodes.map((node) => node.position.y));
+  const flowY = Math.max(40, minimumEntryY);
+  const userNode = nodes.find((node) => node.kind === "design" && node.type === "sketchcatch_user_client");
+  const internetNode = nodes.find((node) => node.kind === "design" && node.type === "sketchcatch_internet");
+  const userNodeId = userNode?.id ?? createUniqueId("flow-user-client", existingNodeIds);
+  existingNodeIds.add(userNodeId);
+  const internetNodeId = internetNode?.id ?? createUniqueId("flow-internet", existingNodeIds);
+  existingNodeIds.add(internetNodeId);
+  const addedNodes: DiagramNode[] = [];
+  const highestZIndex = nodes.reduce((maximum, node) => Math.max(maximum, node.zIndex), 0);
+
+  if (!userNode) {
+    addedNodes.push(
+      createExternalFlowNode({
+        id: userNodeId,
+        iconUrl: USER_CLIENT_ICON_URL,
+        label: "User / Client",
+        position: {
+          x: minimumEntryX - EXTERNAL_FLOW_NODE_SIZE.width * 2 - EXTERNAL_FLOW_HORIZONTAL_GAP * 2,
+          y: flowY
+        },
+        type: "sketchcatch_user_client",
+        zIndex: highestZIndex + 1
+      })
+    );
+  }
+
+  if (!internetNode) {
+    addedNodes.push(
+      createExternalFlowNode({
+        id: internetNodeId,
+        iconUrl: INTERNET_ICON_URL,
+        label: "Internet",
+        position: {
+          x: minimumEntryX - EXTERNAL_FLOW_NODE_SIZE.width - EXTERNAL_FLOW_HORIZONTAL_GAP,
+          y: flowY
+        },
+        type: "sketchcatch_internet",
+        zIndex: highestZIndex + 2
+      })
+    );
+  }
+
+  const addedEdges: ArchitectureJson["edges"] = [];
+  addExternalFlowEdge({
+    addedEdges,
+    existingEdgeIds,
+    existingPairs,
+    id: "flow-user-to-internet",
+    label: "requests",
+    sourceId: userNodeId,
+    targetId: internetNodeId
+  });
+
+  for (const entryNode of entryNodes) {
+    addExternalFlowEdge({
+      addedEdges,
+      existingEdgeIds,
+      existingPairs,
+      id: `flow-internet-to-${entryNode.id}`,
+      label: "public traffic",
+      sourceId: internetNodeId,
+      targetId: entryNode.id
+    });
+  }
+
+  return { nodes: addedNodes, edges: addedEdges };
+}
+
+function isPublicExternalEntryNode(node: DiagramNode): boolean {
+  const resourceType = getDiagramNodeResourceType(node);
+
+  if (node.kind !== "resource" || !EXTERNAL_ENTRY_RESOURCE_TYPES.has(resourceType)) {
+    return false;
+  }
+
+  return resourceType !== "aws_lb" || node.parameters?.values["internal"] !== true;
+}
+
+function createExternalFlowNode(input: {
+  id: string;
+  iconUrl: string;
+  label: string;
+  position: DiagramNode["position"];
+  type: string;
+  zIndex: number;
+}): DiagramNode {
+  return {
+    id: input.id,
+    iconUrl: input.iconUrl,
+    kind: "design",
+    label: input.label,
+    locked: false,
+    position: input.position,
+    size: { ...EXTERNAL_FLOW_NODE_SIZE },
+    type: input.type,
+    zIndex: input.zIndex
+  };
+}
+
+function addExternalFlowEdge(input: {
+  addedEdges: ArchitectureJson["edges"];
+  existingEdgeIds: Set<string>;
+  existingPairs: Set<string>;
+  id: string;
+  label: string;
+  sourceId: string;
+  targetId: string;
+}): void {
+  const pair = `${input.sourceId}->${input.targetId}`;
+
+  if (input.existingPairs.has(pair)) {
+    return;
+  }
+
+  const id = createUniqueId(input.id, input.existingEdgeIds);
+  input.existingEdgeIds.add(id);
+  input.existingPairs.add(pair);
+  input.addedEdges.push({
+    id,
+    label: input.label,
+    sourceId: input.sourceId,
+    targetId: input.targetId
+  });
+}
+
+function createUniqueId(baseId: string, existingIds: ReadonlySet<string>): string {
+  if (!existingIds.has(baseId)) {
+    return baseId;
+  }
+
+  let suffix = 2;
+
+  while (existingIds.has(`${baseId}-${suffix}`)) {
+    suffix += 1;
+  }
+
+  return `${baseId}-${suffix}`;
 }
 
 function applyAiResourceRenderOverrides(nodes: readonly DiagramNode[]): DiagramNode[] {
