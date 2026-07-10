@@ -912,6 +912,8 @@ export type {
   TemplateResourceDefinition
 } from "./template-definitions.ts";
 
+export { createTerraformProviderFiles } from "./terraform-provider-files.ts";
+
 export type ReverseEngineeringScanStatus =
   | "queued"
   | "running"
