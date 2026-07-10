@@ -228,6 +228,63 @@
   color: #7dd3fc;
 }
 
+.workspaceTone {
+  --workspace-surface-strong: var(--workspace-accent-soft, #f0f0f3);
+}
+
+.workspaceTone .selectMenuTrigger {
+  background: var(--workspace-surface, #ffffff);
+  border-color: var(--workspace-line, #f0f0f3);
+  color: var(--workspace-text, #171717);
+}
+
+.workspaceTone .selectMenuTrigger:hover,
+.workspaceTone .selectMenuTrigger:focus-visible,
+.workspaceTone .selectMenuTriggerOpen {
+  border-color: var(--workspace-accent, #000000);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--workspace-accent, #000000) 10%, transparent);
+}
+
+.workspaceTone .selectMenuTrigger:disabled {
+  background: var(--workspace-surface-muted, #fafafa);
+  color: var(--workspace-muted, #60646c);
+}
+
+.workspaceTone .selectMenuTrigger svg {
+  color: var(--workspace-muted, #60646c);
+}
+
+.workspaceTone .selectMenuDropdown {
+  background: var(--workspace-surface, #ffffff);
+  border-color: var(--workspace-line, #f0f0f3);
+}
+
+.workspaceTone .selectMenuOption {
+  background: var(--workspace-surface, #ffffff);
+  color: var(--workspace-text, #171717);
+}
+
+.workspaceTone .selectMenuOption:hover,
+.workspaceTone .selectMenuOption:focus-visible,
+.workspaceTone .selectMenuOptionActive {
+  background: var(--workspace-surface-muted, #fafafa);
+}
+
+.workspaceTone .selectMenuOptionSelected {
+  background: var(--workspace-surface-strong, #f0f0f3);
+  color: var(--workspace-text, #171717);
+}
+
+.workspaceTone .selectMenuOptionSelected.selectMenuOptionActive {
+  background: var(--workspace-surface-strong, #f0f0f3);
+}
+
+.workspaceTone .selectMenuOptionDetail,
+.workspaceTone .selectMenuOptionSelected .selectMenuOptionDetail,
+.workspaceTone .selectMenuOptionSelected svg {
+  color: var(--workspace-muted, #60646c);
+}
+
 .purpleTone .selectMenuTrigger:hover,
 .purpleTone .selectMenuTrigger:focus-visible,
 .purpleTone .selectMenuTriggerOpen {

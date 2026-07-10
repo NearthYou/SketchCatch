@@ -4,6 +4,7 @@ import type {
   ApiErrorResponse,
   TerraformGenerateResponse,
   TerraformSyncToDiagramResponse,
+  TerraformValidateRequest,
   TerraformValidateResponse
 } from "@sketchcatch/types";
 import { buildApp } from "../app.js";
@@ -41,7 +42,6 @@ test("POST /api/terraform/generate returns Terraform code for an active user", a
             kind: "resource",
             label: "main_vpc",
             metadata: {
-              awsRegion: "ap-northeast-2",
               parentAreaNodeId: "area-1"
             },
             parameters: {
@@ -70,6 +70,204 @@ test("POST /api/terraform/generate returns Terraform code for an active user", a
   cidr_block = "10.0.0.0/16"
 }`
   });
+
+  await app.close();
+});
+
+test("POST /api/terraform/generate accepts parameter-reference edge metadata", async () => {
+  const fakeDb = new AuthOnlyFakeDb({
+    users: [
+      {
+        id: ACTIVE_USER_ID,
+        deletedAt: null
+      }
+    ]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/terraform/generate",
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: {
+      diagramJson: {
+        nodes: [
+          {
+            id: "autoscaling-group",
+            type: "aws_vpc",
+            kind: "resource",
+            label: "autoscaling_group",
+            parameters: {
+              resourceType: "aws_vpc",
+              resourceName: "autoscaling_group",
+              fileName: "main",
+              values: {
+                cidrBlock: "10.0.0.0/16"
+              }
+            }
+          },
+          {
+            id: "target-group",
+            type: "aws_vpc",
+            kind: "resource",
+            label: "target_group",
+            parameters: {
+              resourceType: "aws_vpc",
+              resourceName: "target_group",
+              fileName: "main",
+              values: {
+                cidrBlock: "10.1.0.0/16"
+              }
+            }
+          }
+        ],
+        edges: [
+          {
+            id: "autoscaling-group-target-group-reference",
+            sourceNodeId: "autoscaling-group",
+            targetNodeId: "target-group",
+            metadata: {
+              managedBy: "parameter-reference",
+              parameterPath: "targetGroupArns[0]"
+            }
+          }
+        ],
+        viewport: {
+          x: 0,
+          y: 0,
+          zoom: 1
+        }
+      }
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+
+  await app.close();
+});
+
+test("POST /api/terraform/generate accepts Region and AZ area resource parameters", async () => {
+  const fakeDb = new AuthOnlyFakeDb({
+    users: [
+      {
+        id: ACTIVE_USER_ID,
+        deletedAt: null
+      }
+    ]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/terraform/generate",
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: {
+      diagramJson: {
+        nodes: [
+          {
+            id: "region-1",
+            type: "aws_region",
+            kind: "resource",
+            label: "Region",
+            parameters: {
+              resourceType: "aws_region",
+              resourceName: "ap_northeast_2",
+              fileName: "main",
+              values: {
+                awsRegion: "ap-northeast-2"
+              }
+            }
+          },
+          {
+            id: "az-1",
+            type: "aws_availability_zone",
+            kind: "resource",
+            label: "AZ",
+            metadata: {
+              parentAreaNodeId: "region-1"
+            },
+            parameters: {
+              resourceType: "aws_availability_zone",
+              resourceName: "ap_northeast_2a",
+              fileName: "main",
+              values: {
+                awsAvailabilityZone: "ap-northeast-2a"
+              }
+            }
+          }
+        ],
+        edges: [],
+        viewport: {
+          x: 0,
+          y: 0,
+          zoom: 1
+        }
+      }
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.json() as TerraformGenerateResponse, {
+    terraformCode: ""
+  });
+
+  await app.close();
+});
+
+test("POST /api/terraform/generate rejects legacy awsRegion metadata", async () => {
+  const fakeDb = new AuthOnlyFakeDb({
+    users: [
+      {
+        id: ACTIVE_USER_ID,
+        deletedAt: null
+      }
+    ]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/terraform/generate",
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: {
+      diagramJson: {
+        nodes: [
+          {
+            id: "node-1",
+            type: "aws_vpc",
+            kind: "resource",
+            label: "main_vpc",
+            metadata: {
+              awsRegion: "ap-northeast-2"
+            },
+            parameters: {
+              resourceType: "aws_vpc",
+              resourceName: "main",
+              fileName: "main",
+              values: {
+                cidrBlock: "10.0.0.0/16"
+              }
+            }
+          }
+        ],
+        edges: [],
+        viewport: {
+          x: 0,
+          y: 0,
+          zoom: 1
+        }
+      }
+    }
+  });
+
+  assert.equal(response.statusCode, 400);
+  assertErrorResponse(response.json() as ApiErrorResponse, "bad_request");
 
   await app.close();
 });
@@ -128,6 +326,287 @@ test("POST /api/terraform/generate returns 400 for an invalid body", async () =>
 
   assert.equal(response.statusCode, 400);
   assertErrorResponse(response.json() as ApiErrorResponse, "bad_request");
+
+  await app.close();
+});
+
+test("POST /api/terraform/generate rejects unsafe Terraform resource names", async () => {
+  const fakeDb = new AuthOnlyFakeDb({
+    users: [
+      {
+        id: ACTIVE_USER_ID,
+        deletedAt: null
+      }
+    ]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/terraform/generate",
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: {
+      diagramJson: {
+        nodes: [
+          {
+            id: "node-1",
+            type: "aws_instance",
+            kind: "resource",
+            label: "web",
+            parameters: {
+              resourceType: "aws_instance",
+              resourceName: `web" {\n}\nresource "aws_s3_bucket" "owned`,
+              fileName: "main",
+              values: {
+                ami: "ami-1234567890abcdef0"
+              }
+            }
+          }
+        ],
+        edges: [],
+        viewport: {
+          x: 0,
+          y: 0,
+          zoom: 1
+        }
+      }
+    }
+  });
+
+  assert.equal(response.statusCode, 400);
+  assertErrorResponse(response.json() as ApiErrorResponse, "bad_request");
+
+  await app.close();
+});
+
+test("POST /api/terraform/generate maps Terraform render errors to 400 responses", async () => {
+  const fakeDb = new AuthOnlyFakeDb({
+    users: [
+      {
+        id: ACTIVE_USER_ID,
+        deletedAt: null
+      }
+    ]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/terraform/generate",
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: {
+      diagramJson: {
+        nodes: [
+          {
+            id: "node-1",
+            type: "aws_instance",
+            kind: "resource",
+            label: "web",
+            parameters: {
+              resourceType: "aws_instance",
+              resourceName: "web",
+              fileName: "main",
+              values: {
+                [`ami"\nresource "aws_s3_bucket" "owned"`]: "ami-1234567890abcdef0"
+              }
+            }
+          }
+        ],
+        edges: [],
+        viewport: {
+          x: 0,
+          y: 0,
+          zoom: 1
+        }
+      }
+    }
+  });
+
+  assert.equal(response.statusCode, 400);
+  assertErrorResponse(response.json() as ApiErrorResponse, "bad_request");
+
+  await app.close();
+});
+
+test("POST /api/terraform/validate forwards validation input to the injected service", async () => {
+  const fakeDb = new AuthOnlyFakeDb({
+    users: [
+      {
+        id: ACTIVE_USER_ID,
+        deletedAt: null
+      }
+    ]
+  });
+  let capturedRequest: TerraformValidateRequest | null = null;
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client,
+    validateTerraformPreviewCode: async (input) => {
+      capturedRequest = input;
+      return {
+        diagnostics: []
+      };
+    }
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/terraform/validate",
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: {
+      terraformCode: "",
+      terraformFiles: [
+        {
+          fileName: "main.tf",
+          terraformCode: `resource "aws_vpc" "main" {}`
+        }
+      ]
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.json() as TerraformValidateResponse, {
+    diagnostics: []
+  });
+  assert.deepEqual(capturedRequest, {
+    terraformCode: "",
+    terraformFiles: [
+      {
+        fileName: "main.tf",
+        terraformCode: `resource "aws_vpc" "main" {}`
+      }
+    ]
+  });
+
+  await app.close();
+});
+
+test("POST /api/terraform/validate returns fast Terraform diagnostics without provider initialization", async () => {
+  const fakeDb = new AuthOnlyFakeDb({
+    users: [
+      {
+        id: ACTIVE_USER_ID,
+        deletedAt: null
+      }
+    ]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/terraform/validate",
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: {
+      terraformCode: "",
+      terraformFiles: [
+        {
+          fileName: "main.tf",
+          terraformCode: `resource "aws_security_group_rule" "web" {
+  from_port = "eighty"
+}
+
+resource "aws_s3_bucket" "assets" {
+  bucket_purpose = "static-site"
+}
+
+resource "aws_instance" "web" {
+  instance_type = "not-real-instance-type"
+}`
+        }
+      ]
+    }
+  });
+
+  const body = response.json() as TerraformValidateResponse;
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(
+    body.diagnostics.map((diagnostic) => ({
+      code: diagnostic.code,
+      line: diagnostic.line,
+      sourceFileName: diagnostic.sourceFileName
+    })),
+    [
+      {
+        code: "terraform.attribute_type",
+        line: 2,
+        sourceFileName: "main.tf"
+      },
+      {
+        code: "terraform.unsupported_argument",
+        line: 6,
+        sourceFileName: "main.tf"
+      },
+      {
+        code: "terraform.invalid_catalog_value",
+        line: 10,
+        sourceFileName: "main.tf"
+      }
+    ]
+  );
+
+  await app.close();
+});
+
+test("POST /api/terraform/validate rejects legacy validation mode fields", async () => {
+  const fakeDb = new AuthOnlyFakeDb({
+    users: [
+      {
+        id: ACTIVE_USER_ID,
+        deletedAt: null
+      }
+    ]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/terraform/validate",
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: {
+      mode: "full",
+      projectId: "project-1",
+      terraformCode: `resource "aws_vpc" "main" {}`
+    }
+  });
+
+  assert.equal(response.statusCode, 400);
+  assertErrorResponse(response.json() as ApiErrorResponse, "bad_request");
+
+  await app.close();
+});
+
+test("POST /api/terraform/validate/prepare remains removed", async () => {
+  const fakeDb = new AuthOnlyFakeDb({
+    users: [
+      {
+        id: ACTIVE_USER_ID,
+        deletedAt: null
+      }
+    ]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/terraform/validate/prepare",
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: {
+      projectId: "project-1",
+      provider: "aws"
+    }
+  });
+
+  assert.equal(response.statusCode, 404);
 
   await app.close();
 });
@@ -201,10 +680,7 @@ test("POST /api/terraform/validate returns diagnostics for an active user", asyn
   });
 
   assert.equal(response.statusCode, 200);
-  assert.equal(
-    (response.json() as TerraformValidateResponse).diagnostics[0]?.code,
-    "terraform.quoted_reference"
-  );
+  assert.equal((response.json() as TerraformValidateResponse).diagnostics[0]?.code, "terraform.quoted_reference");
 
   await app.close();
 });
@@ -283,7 +759,6 @@ test("POST /api/terraform/sync-to-diagram updates matching DiagramJson values", 
             kind: "resource",
             label: "main_vpc",
             metadata: {
-              awsRegion: "ap-northeast-2",
               parentAreaNodeId: "area-1"
             },
             parameters: {
@@ -323,7 +798,6 @@ test("POST /api/terraform/sync-to-diagram updates matching DiagramJson values", 
     cidrBlock: "10.1.0.0/16"
   });
   assert.deepEqual(body.diagramJson.nodes[0]?.metadata, {
-    awsRegion: "ap-northeast-2",
     parentAreaNodeId: "area-1"
   });
   assert.deepEqual(body.diagramJson.edges, [
@@ -333,6 +807,118 @@ test("POST /api/terraform/sync-to-diagram updates matching DiagramJson values", 
       targetNodeId: "node-2"
     }
   ]);
+
+  await app.close();
+});
+
+test("POST /api/terraform/sync-to-diagram accepts Terraform file inputs", async () => {
+  const fakeDb = new AuthOnlyFakeDb({
+    users: [
+      {
+        id: ACTIVE_USER_ID,
+        deletedAt: null
+      }
+    ]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/terraform/sync-to-diagram",
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: {
+      diagramJson: {
+        nodes: [],
+        edges: [],
+        viewport: {
+          x: 0,
+          y: 0,
+          zoom: 1
+        }
+      },
+      terraformCode: "",
+      terraformFiles: [
+        {
+          fileName: "network.tf",
+          terraformCode: `resource "aws_vpc" "main" {
+  cidr_block = "10.0.0.0/16"
+}`
+        }
+      ]
+    }
+  });
+
+  const body = response.json() as TerraformSyncToDiagramResponse;
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(body.diagnostics, []);
+  assert.equal(body.proposals?.[0]?.kind, "create_candidate");
+  assert.equal(body.proposals?.[0]?.sourceFileName, "network.tf");
+
+  await app.close();
+});
+
+test("POST /api/terraform/sync-to-diagram treats provider-only input as no-op", async () => {
+  const fakeDb = new AuthOnlyFakeDb({
+    users: [
+      {
+        id: ACTIVE_USER_ID,
+        deletedAt: null
+      }
+    ]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+  const diagramJson = {
+    nodes: [
+      {
+        id: "node-1",
+        type: "aws_vpc",
+        kind: "resource",
+        label: "main_vpc",
+        position: { x: 0, y: 0 },
+        size: { width: 160, height: 96 },
+        locked: false,
+        zIndex: 0,
+        parameters: {
+          resourceType: "aws_vpc",
+          resourceName: "main",
+          fileName: "main",
+          values: {
+            cidrBlock: "10.0.0.0/16"
+          }
+        }
+      }
+    ],
+    edges: [],
+    viewport: {
+      x: 0,
+      y: 0,
+      zoom: 1
+    }
+  };
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/terraform/sync-to-diagram",
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: {
+      diagramJson,
+      terraformCode: `provider "aws" {
+  region = "ap-northeast-2"
+}`
+    }
+  });
+
+  const body = response.json() as TerraformSyncToDiagramResponse;
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(body.diagnostics, []);
+  assert.deepEqual(body.proposals, []);
+  assert.deepEqual(body.diagramJson, diagramJson);
 
   await app.close();
 });

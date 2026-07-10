@@ -1,477 +1,1337 @@
-import type { ResourceItem } from "../../../../packages/types/src/index";
+import {
+  getResourceDefinitionById,
+  type ResourceDefinition
+} from "@sketchcatch/types/resource-definitions";
+import type { ResourceArea, ResourceItem } from "@sketchcatch/types";
 
-const size = { width: 112, height: 112 };
+const size = { width: 124, height: 96 };
 const vpcAreaSize = { width: 240, height: 160 };
 const subnetAreaSize = { width: 180, height: 120 };
 const securityGroupAreaSize = subnetAreaSize;
+const autoscalingGroupAreaSize = { width: 200, height: 130 };
 
 const groupIconPath = "/Architecture-Group-Icons_07312025";
 const serviceIconPath = "/Architecture-Service-Icons_07312025";
 const resourceIconPath = "/Resource-Icons_07312025";
 
-export const resourceCatalog: ResourceItem[] = [
+type TerraformResourcePresentation = {
+  readonly area: ResourceArea;
+  readonly category: string;
+  readonly definitionId: string;
+  readonly iconUrl: string;
+  readonly label: string;
+  readonly name: string;
+  readonly size: ResourceItem["nodeDefaults"]["size"];
+};
+
+const resourceCategoryOverrides: Record<string, string> = {
+  "aws-ami": "EC2 Core",
+  "aws-acm-certificate": "Certificates",
+  "aws-acm-certificate-validation": "Certificates",
+  "aws-api-gateway-deployment": "API Gateway REST",
+  "aws-api-gateway-integration": "API Gateway REST",
+  "aws-api-gateway-method": "API Gateway REST",
+  "aws-api-gateway-resource": "API Gateway REST",
+  "aws-api-gateway-rest-api": "API Gateway REST",
+  "aws-api-gateway-stage": "API Gateway REST",
+  "aws-api-gateway-v2-integration": "API Gateway v2",
+  "aws-api-gateway-v2-route": "API Gateway v2",
+  "aws-api-gateway-v2-stage": "API Gateway v2",
+  "aws-api-gateway-websocket-api": "API Gateway v2",
+  "aws-autoscaling-group": "EC2 Launch & Scaling",
+  "aws-autoscaling-policy": "EC2 Launch & Scaling",
+  "aws-cloudfront-cache-policy": "Edge / CDN",
+  "aws-cloudfront-distribution": "Edge / CDN",
+  "aws-cloudfront-origin-access-control": "Edge / CDN",
+  "aws-cloudfront-origin-request-policy": "Edge / CDN",
+  "aws-cloudtrail": "Observability",
+  "aws-cloudwatch-dashboard": "Observability",
+  "aws-cloudwatch-log-group": "Observability",
+  "aws-cloudwatch-log-resource-policy": "Observability",
+  "aws-cloudwatch-log-stream": "Observability",
+  "aws-cloudwatch-metric-alarm": "Observability",
+  "aws-codebuild-project": "CI/CD",
+  "aws-codedeploy-app": "CI/CD",
+  "aws-codedeploy-deployment-group": "CI/CD",
+  "aws-codepipeline": "CI/CD",
+  "aws-codestarconnections-connection": "CI/CD",
+  "aws-config-configuration-recorder": "Governance / Config",
+  "aws-config-delivery-channel": "Governance / Config",
+  "aws-config-rule": "Governance / Config",
+  "aws-cognito-user-pool": "Identity",
+  "aws-cognito-user-pool-client": "Identity",
+  "aws-db-option-group": "RDS Supporting Resources",
+  "aws-db-parameter-group": "RDS Supporting Resources",
+  "aws-db-snapshot": "RDS Supporting Resources",
+  "aws-db-subnet-group": "RDS Supporting Resources",
+  "aws-dynamodb-table": "DynamoDB",
+  "aws-ebs-volume": "EBS",
+  "aws-ec2-instance": "EC2 Core",
+  "aws-ecr-lifecycle-policy": "ECR",
+  "aws-ecr-repository": "ECR",
+  "aws-ecs-capacity-provider": "ECS",
+  "aws-ecs-cluster": "ECS",
+  "aws-ecs-service": "ECS",
+  "aws-ecs-task-definition": "ECS",
+  "aws-efs-access-point": "EFS",
+  "aws-efs-file-system": "EFS",
+  "aws-efs-mount-target": "EFS",
+  "aws-eip": "EC2 Core",
+  "aws-eks-addon": "EKS",
+  "aws-eks-cluster": "EKS",
+  "aws-eks-node-group": "EKS",
+  "aws-elasticache-parameter-group": "ElastiCache",
+  "aws-elasticache-redis": "ElastiCache",
+  "aws-elasticache-subnet-group": "ElastiCache",
+  "aws-eventbridge-permission": "EventBridge / Scheduler",
+  "aws-eventbridge-rule": "EventBridge / Scheduler",
+  "aws-eventbridge-target": "EventBridge / Scheduler",
+  "aws-guardduty-detector": "Web Protection",
+  "aws-iam-instance-profile": "IAM",
+  "aws-iam-policy": "IAM",
+  "aws-iam-role": "IAM",
+  "aws-iam-role-policy": "IAM",
+  "aws-iam-role-policy-attachment": "IAM",
+  "aws-internet-gateway": "Routing & Gateways",
+  "aws-key-pair": "EC2 Core",
+  "aws-kms-alias": "KMS",
+  "aws-kms-key": "KMS",
+  "aws-launch-template": "EC2 Launch & Scaling",
+  "aws-lambda-alias": "Lambda",
+  "aws-lambda-event-source-mapping": "Lambda",
+  "aws-lambda-function": "Lambda",
+  "aws-lambda-permission": "Lambda",
+  "aws-lb": "Load Balancing",
+  "aws-lb-listener": "Load Balancing",
+  "aws-lb-target-group": "Load Balancing",
+  "aws-lb-target-group-attachment": "Load Balancing",
+  "aws-nat-gateway": "Routing & Gateways",
+  "aws-network-acl": "Network Access Control",
+  "aws-network-acl-rule": "Network Access Control",
+  "aws-rds-cluster": "RDS Cluster",
+  "aws-rds-cluster-instance": "RDS Cluster",
+  "aws-rds-instance": "RDS Instances",
+  "aws-rds-read-replica": "RDS Instances",
+  "aws-route": "Routing & Gateways",
+  "aws-route-table": "Routing & Gateways",
+  "aws-route-table-association": "Routing & Gateways",
+  "aws-route53-record": "DNS",
+  "aws-route53-zone": "DNS",
+  "aws-s3-bucket": "S3 Core",
+  "aws-s3-bucket-policy": "S3 Controls",
+  "aws-s3-encryption": "S3 Controls",
+  "aws-s3-lifecycle": "S3 Controls",
+  "aws-s3-object": "S3 Core",
+  "aws-s3-public-access-block": "S3 Controls",
+  "aws-s3-versioning": "S3 Controls",
+  "aws-s3-website-configuration": "S3 Controls",
+  "aws-scheduler-schedule": "EventBridge / Scheduler",
+  "aws-security-group": "Network Security",
+  "aws-security-group-rule": "Network Security",
+  "aws-secretsmanager-secret": "Secrets",
+  "aws-secretsmanager-secret-version": "Secrets",
+  "aws-shield-protection": "Web Protection",
+  "aws-sns-topic": "Messaging",
+  "aws-sns-topic-subscription": "Messaging",
+  "aws-sqs-queue": "Messaging",
+  "aws-step-functions-state-machine": "Workflow",
+  "aws-vpc": "VPC Core",
+  "aws-vpc-endpoint": "VPC Core",
+  "aws-vpc-peering-connection": "VPC Core",
+  "aws-subnet": "VPC Core",
+  "aws-volume-attachment": "EBS",
+  "aws-wafv2-web-acl": "Web Protection",
+  "aws-wafv2-web-acl-association": "Web Protection",
+  "aws-xray-group": "Observability",
+  "aws-xray-sampling-rule": "Observability"
+};
+
+const designCatalogItems: ResourceItem[] = [
   {
-    id: "design-region",
+    id: "design-user-client",
+    name: "User / Client",
+    cloudProvider: "aws",
+    area: "other",
+    category: "Flow",
+    iconUrl: `${resourceIconPath}/Res_General-Icons/Res_48_Light/Res_Client_48_Light.svg`,
+    enabled: true,
+    nodeDefaults: {
+      type: "sketchcatch_user_client",
+      label: "User / Client",
+      size
+    }
+  },
+  {
+    id: "design-internet",
+    name: "Internet",
+    cloudProvider: "aws",
+    area: "network",
+    category: "Flow",
+    iconUrl: `${resourceIconPath}/Res_General-Icons/Res_48_Light/Res_Internet_48_Light.svg`,
+    enabled: true,
+    nodeDefaults: {
+      type: "sketchcatch_internet",
+      label: "Internet",
+      size
+    }
+  },
+  {
+    id: "aws-region",
     name: "Region",
     cloudProvider: "aws",
     area: "containers",
-    category: "Containers",
+    category: "Board Containers",
     iconUrl: `${groupIconPath}/Region_32.svg`,
     enabled: true,
-    nodeDefaults: { type: "design_region", label: "Region", size: { width: 260, height: 180 } }
+    nodeDefaults: { type: "aws_region", label: "Region", size: { width: 260, height: 180 } }
   },
   {
-    id: "design-az",
+    id: "aws-availability-zone",
     name: "AZ",
     cloudProvider: "aws",
     area: "containers",
-    category: "Containers",
+    category: "Board Containers",
     iconUrl: `${groupIconPath}/AWS-Cloud_32.svg`,
     enabled: true,
-    nodeDefaults: { type: "design_az", label: "Availability Zone", size: { width: 220, height: 150 } }
+    nodeDefaults: { type: "aws_availability_zone", label: "AZ", size: { width: 220, height: 150 } }
   },
   {
     id: "design-group",
     name: "Group",
     cloudProvider: "aws",
     area: "containers",
-    category: "Containers",
+    category: "Board Containers",
     iconUrl: `${groupIconPath}/Auto-Scaling-group_32.svg`,
     enabled: true,
     nodeDefaults: { type: "design_group", label: "Group", size: { width: 200, height: 130 } }
-  },
+  }
+];
+
+const terraformResourcePresentations = [
   {
-    id: "aws-vpc",
+    definitionId: "aws-vpc",
     name: "VPC",
-    cloudProvider: "aws",
     area: "network",
     category: "Network",
     iconUrl: `${serviceIconPath}/Arch_Networking-Content-Delivery/64/Arch_Amazon-Virtual-Private-Cloud_64.svg`,
-    enabled: true,
-    nodeDefaults: { type: "aws_vpc", label: "VPC", size: vpcAreaSize }
+    label: "VPC",
+    size: vpcAreaSize
   },
   {
-    id: "aws-subnet",
+    definitionId: "aws-subnet",
     name: "Subnet",
-    cloudProvider: "aws",
     area: "network",
     category: "Network",
     iconUrl: `${groupIconPath}/Private-subnet_32.svg`,
-    enabled: true,
-    nodeDefaults: { type: "aws_subnet", label: "Subnet", size: subnetAreaSize }
+    label: "Subnet",
+    size: subnetAreaSize
   },
   {
-    id: "aws-internet-gateway",
+    definitionId: "aws-internet-gateway",
     name: "Internet Gateway",
-    cloudProvider: "aws",
     area: "network",
     category: "Network",
     iconUrl: `${resourceIconPath}/Res_Networking-Content-Delivery/Res_Amazon-VPC_Internet-Gateway_48.svg`,
-    enabled: true,
-    nodeDefaults: { type: "aws_internet_gateway", label: "Internet Gateway", size }
+    label: "Internet Gateway",
+    size
   },
   {
-    id: "aws-route-table",
+    definitionId: "aws-route-table",
     name: "Route Table",
-    cloudProvider: "aws",
     area: "network",
     category: "Network",
     iconUrl: `${resourceIconPath}/Res_Networking-Content-Delivery/Res_Amazon-Route-53_Route-Table_48.svg`,
-    enabled: true,
-    nodeDefaults: { type: "aws_route_table", label: "Route Table", size }
+    label: "Route Table",
+    size
   },
   {
-    id: "aws-route-table-association",
+    definitionId: "aws-route-table-association",
     name: "Route Table Association",
-    cloudProvider: "aws",
     area: "network",
     category: "Network",
     iconUrl: `${resourceIconPath}/Res_Networking-Content-Delivery/Res_AWS-Cloud-WAN_Transit-Gateway-Route-Table-Attachment_48.svg`,
-    enabled: true,
-    nodeDefaults: { type: "aws_route_table_association", label: "Route Table Association", size }
+    label: "Route Table Association",
+    size
   },
   {
-    id: "aws-nat-gateway",
+    definitionId: "aws-route",
+    name: "Route",
+    area: "network",
+    category: "Network",
+    iconUrl: `${resourceIconPath}/Res_Networking-Content-Delivery/Res_Amazon-VPC_Router_48.svg`,
+    label: "Route",
+    size
+  },
+  {
+    definitionId: "aws-cloudfront-distribution",
+    name: "CloudFront Distribution",
+    area: "network",
+    category: "Network",
+    iconUrl: `${serviceIconPath}/Arch_Networking-Content-Delivery/64/Arch_Amazon-CloudFront_64.svg`,
+    label: "CloudFront Distribution",
+    size
+  },
+  {
+    definitionId: "aws-cloudfront-origin-access-control",
+    name: "CloudFront OAC",
+    area: "network",
+    category: "Network",
+    iconUrl: `${serviceIconPath}/Arch_Networking-Content-Delivery/64/Arch_Amazon-CloudFront_64.svg`,
+    label: "CloudFront OAC",
+    size
+  },
+  {
+    definitionId: "aws-route53-record",
+    name: "Route 53 Record",
+    area: "network",
+    category: "Network",
+    iconUrl: `${serviceIconPath}/Arch_Networking-Content-Delivery/64/Arch_Amazon-Route-53_64.svg`,
+    label: "Route 53 Record",
+    size
+  },
+  {
+    definitionId: "aws-wafv2-web-acl",
+    name: "WAF Web ACL",
+    area: "security-identity",
+    category: "Security",
+    iconUrl: `${serviceIconPath}/Arch_Security-Identity-Compliance/64/Arch_AWS-WAF_64.svg`,
+    label: "WAF Web ACL",
+    size
+  },
+  {
+    definitionId: "aws-nat-gateway",
     name: "NAT Gateway",
-    cloudProvider: "aws",
     area: "network",
     category: "Network",
     iconUrl: `${resourceIconPath}/Res_Networking-Content-Delivery/Res_Amazon-VPC_NAT-Gateway_48.svg`,
-    enabled: true,
-    nodeDefaults: { type: "aws_nat_gateway", label: "NAT Gateway", size }
+    label: "NAT Gateway",
+    size
   },
   {
-    id: "aws-vpc-endpoint",
+    definitionId: "aws-vpc-endpoint",
     name: "VPC Endpoint",
-    cloudProvider: "aws",
     area: "network",
     category: "Network",
     iconUrl: `${resourceIconPath}/Res_Networking-Content-Delivery/Res_Amazon-VPC_Endpoints_48.svg`,
-    enabled: true,
-    nodeDefaults: { type: "aws_vpc_endpoint", label: "VPC Endpoint", size }
+    label: "VPC Endpoint",
+    size
   },
   {
-    id: "aws-security-group",
+    definitionId: "aws-security-group",
     name: "Security Group",
-    cloudProvider: "aws",
     area: "security-identity",
     category: "Security",
     iconUrl: `${serviceIconPath}/Arch_Security-Identity-Compliance/64/Arch_AWS-Network-Firewall_64.svg`,
-    enabled: true,
-    nodeDefaults: { type: "aws_security_group", label: "Security Group", size: securityGroupAreaSize }
+    label: "Security Group",
+    size: securityGroupAreaSize
   },
   {
-    id: "aws-security-group-rule",
+    definitionId: "aws-security-group-rule",
     name: "Security Group Rule",
-    cloudProvider: "aws",
     area: "security-identity",
     category: "Security",
     iconUrl: `${resourceIconPath}/Res_Security-Identity-Compliance/Res_AWS-Network-Firewall_Endpoints_48.svg`,
-    enabled: true,
-    nodeDefaults: { type: "aws_security_group_rule", label: "Security Group Rule", size }
+    label: "Security Group Rule",
+    size
   },
   {
-    id: "aws-iam-role",
+    definitionId: "aws-iam-role",
     name: "IAM Role",
-    cloudProvider: "aws",
     area: "security-identity",
     category: "Security",
     iconUrl: `${resourceIconPath}/Res_Security-Identity-Compliance/Res_AWS-Identity-Access-Management_Role_48.svg`,
-    enabled: true,
-    nodeDefaults: { type: "aws_iam_role", label: "IAM Role", size }
+    label: "IAM Role",
+    size
   },
   {
-    id: "aws-iam-policy",
+    definitionId: "aws-iam-policy",
     name: "IAM Policy",
-    cloudProvider: "aws",
     area: "security-identity",
     category: "Security",
     iconUrl: `${resourceIconPath}/Res_Security-Identity-Compliance/Res_AWS-Identity-Access-Management_Permissions_48.svg`,
-    enabled: true,
-    nodeDefaults: { type: "aws_iam_policy", label: "IAM Policy", size }
+    label: "IAM Policy",
+    size
   },
   {
-    id: "aws-iam-instance-profile",
+    definitionId: "aws-iam-role-policy",
+    name: "IAM Role Policy",
+    area: "security-identity",
+    category: "Security",
+    iconUrl: `${resourceIconPath}/Res_Security-Identity-Compliance/Res_AWS-Identity-Access-Management_Permissions_48.svg`,
+    label: "Role Policy",
+    size
+  },
+  {
+    definitionId: "aws-iam-role-policy-attachment",
+    name: "IAM Role Policy Attachment",
+    area: "security-identity",
+    category: "Security",
+    iconUrl: `${resourceIconPath}/Res_Security-Identity-Compliance/Res_AWS-Identity-Access-Management_Permissions_48.svg`,
+    label: "Policy Attachment",
+    size
+  },
+  {
+    definitionId: "aws-iam-instance-profile",
     name: "IAM Instance Profile",
-    cloudProvider: "aws",
     area: "security-identity",
     category: "Security",
     iconUrl: `${serviceIconPath}/Arch_Security-Identity-Compliance/64/Arch_AWS-Identity-and-Access-Management_64.svg`,
-    enabled: true,
-    nodeDefaults: { type: "aws_iam_instance_profile", label: "IAM Instance Profile", size }
+    label: "IAM Instance Profile",
+    size
   },
   {
-    id: "aws-kms-key",
+    definitionId: "aws-kms-key",
     name: "KMS Key",
-    cloudProvider: "aws",
     area: "security-identity",
     category: "Security",
     iconUrl: `${serviceIconPath}/Arch_Security-Identity-Compliance/64/Arch_AWS-Key-Management-Service_64.svg`,
-    enabled: true,
-    nodeDefaults: { type: "aws_kms_key", label: "KMS Key", size }
+    label: "KMS Key",
+    size
   },
   {
-    id: "aws-ec2-instance",
+    definitionId: "aws-acm-certificate",
+    name: "ACM Certificate",
+    area: "security-identity",
+    category: "Security",
+    iconUrl: `${serviceIconPath}/Arch_Security-Identity-Compliance/64/Arch_AWS-Certificate-Manager_64.svg`,
+    label: "ACM Certificate",
+    size
+  },
+  {
+    definitionId: "aws-cognito-user-pool",
+    name: "Cognito User Pool",
+    area: "security-identity",
+    category: "Security",
+    iconUrl: `${serviceIconPath}/Arch_Security-Identity-Compliance/64/Arch_Amazon-Cognito_64.svg`,
+    label: "User Pool",
+    size
+  },
+  {
+    definitionId: "aws-cognito-user-pool-client",
+    name: "Cognito User Pool Client",
+    area: "security-identity",
+    category: "Security",
+    iconUrl: `${serviceIconPath}/Arch_Security-Identity-Compliance/64/Arch_Amazon-Cognito_64.svg`,
+    label: "Pool Client",
+    size
+  },
+  {
+    definitionId: "aws-ec2-instance",
     name: "EC2 Instance",
-    cloudProvider: "aws",
     area: "compute",
     category: "Compute",
     iconUrl: `${serviceIconPath}/Arch_Compute/64/Arch_Amazon-EC2_64.svg`,
-    enabled: true,
-    nodeDefaults: { type: "aws_instance", label: "EC2 Instance", size }
+    label: "EC2 Instance",
+    size
   },
   {
-    id: "aws-ami",
+    definitionId: "aws-ami",
     name: "AMI",
-    cloudProvider: "aws",
     area: "compute",
     category: "Compute",
     iconUrl: `${resourceIconPath}/Res_Compute/Res_Amazon-EC2_AMI_48.svg`,
-    enabled: true,
-    nodeDefaults: { terraformBlockType: "data", type: "aws_ami", label: "AMI", size }
+    label: "AMI",
+    size
   },
   {
-    id: "aws-key-pair",
+    definitionId: "aws-caller-identity",
+    name: "Caller Identity",
+    area: "tools",
+    category: "Terraform Data Sources",
+    iconUrl: `${serviceIconPath}/Arch_Security-Identity-Compliance/64/Arch_AWS-Identity-and-Access-Management_64.svg`,
+    label: "Caller Identity",
+    size
+  },
+  {
+    definitionId: "aws-ssm-parameter",
+    name: "SSM Parameter",
+    area: "tools",
+    category: "Terraform Data Sources",
+    iconUrl: `${resourceIconPath}/Res_Management-Governance/Res_AWS-Systems-Manager_Parameter-Store_48.svg`,
+    label: "SSM Parameter",
+    size
+  },
+  {
+    definitionId: "aws-key-pair",
     name: "Key Pair",
-    cloudProvider: "aws",
     area: "compute",
     category: "Compute",
     iconUrl: `${serviceIconPath}/Arch_Compute/64/Arch_Amazon-EC2_64.svg`,
-    enabled: true,
-    nodeDefaults: { type: "aws_key_pair", label: "Key Pair", size }
+    label: "Key Pair",
+    size
   },
   {
-    id: "aws-eip",
+    definitionId: "aws-eip",
     name: "Elastic IP",
-    cloudProvider: "aws",
     area: "compute",
     category: "Compute",
     iconUrl: `${resourceIconPath}/Res_Compute/Res_Amazon-EC2_Elastic-IP-Address_48.svg`,
-    enabled: true,
-    nodeDefaults: { type: "aws_eip", label: "Elastic IP", size }
+    label: "Elastic IP",
+    size
   },
   {
-    id: "aws-launch-template",
+    definitionId: "aws-launch-template",
     name: "Launch Template",
-    cloudProvider: "aws",
     area: "compute",
     category: "Compute",
     iconUrl: `${serviceIconPath}/Arch_Compute/64/Arch_Amazon-EC2_64.svg`,
-    enabled: true,
-    nodeDefaults: { type: "aws_launch_template", label: "Launch Template", size }
+    label: "Launch Template",
+    size
   },
   {
-    id: "aws-autoscaling-group",
+    definitionId: "aws-autoscaling-group",
     name: "Auto Scaling Group",
-    cloudProvider: "aws",
     area: "compute",
     category: "Compute",
     iconUrl: `${serviceIconPath}/Arch_Compute/64/Arch_Amazon-EC2-Auto-Scaling_64.svg`,
-    enabled: true,
-    nodeDefaults: { type: "aws_autoscaling_group", label: "Auto Scaling Group", size }
+    label: "Auto Scaling Group",
+    size: autoscalingGroupAreaSize
   },
   {
-    id: "aws-s3-bucket",
+    definitionId: "aws-autoscaling-policy",
+    name: "Autoscaling Policy",
+    area: "compute",
+    category: "Compute",
+    iconUrl: `${resourceIconPath}/Res_Compute/Res_Amazon-EC2_Auto-Scaling_48.svg`,
+    label: "Autoscaling Policy",
+    size
+  },
+  {
+    definitionId: "aws-lb",
+    name: "Application Load Balancer",
+    area: "network",
+    category: "Network",
+    iconUrl: `${serviceIconPath}/Arch_Networking-Content-Delivery/64/Arch_Elastic-Load-Balancing_64.svg`,
+    label: "Load Balancer",
+    size
+  },
+  {
+    definitionId: "aws-lb-target-group",
+    name: "ALB Target Group",
+    area: "network",
+    category: "Network",
+    iconUrl: `${resourceIconPath}/Res_Networking-Content-Delivery/Res_Elastic-Load-Balancing_Application-Load-Balancer_48.svg`,
+    label: "Target Group",
+    size
+  },
+  {
+    definitionId: "aws-lb-listener",
+    name: "ALB Listener",
+    area: "network",
+    category: "Network",
+    iconUrl: `${resourceIconPath}/Res_Networking-Content-Delivery/Res_Elastic-Load-Balancing_Application-Load-Balancer_48.svg`,
+    label: "ALB Listener",
+    size
+  },
+  {
+    definitionId: "aws-s3-bucket",
     name: "S3 Bucket",
-    cloudProvider: "aws",
     area: "storage",
     category: "Storage",
     iconUrl: `${resourceIconPath}/Res_Storage/Res_Amazon-Simple-Storage-Service_Bucket_48.svg`,
-    enabled: true,
-    nodeDefaults: { type: "aws_s3_bucket", label: "S3 Bucket", size }
+    label: "S3 Bucket",
+    size
   },
   {
-    id: "aws-s3-public-access-block",
-    name: "S3 Bucket Public Access Block",
-    cloudProvider: "aws",
+    definitionId: "aws-s3-object",
+    name: "S3 Object",
     area: "storage",
     category: "Storage",
     iconUrl: `${resourceIconPath}/Res_Storage/Res_Amazon-Simple-Storage-Service_S3-Standard_48.svg`,
-    enabled: true,
-    nodeDefaults: { type: "aws_s3_bucket_public_access_block", label: "S3 Public Access", size }
+    label: "S3 Object",
+    size
   },
   {
-    id: "aws-s3-versioning",
+    definitionId: "aws-s3-bucket-policy",
+    name: "S3 Bucket Policy",
+    area: "storage",
+    category: "Storage",
+    iconUrl: `${resourceIconPath}/Res_Storage/Res_Amazon-Simple-Storage-Service_Bucket_48.svg`,
+    label: "S3 Policy",
+    size
+  },
+  {
+    definitionId: "aws-s3-website-configuration",
+    name: "S3 Website Configuration",
+    area: "storage",
+    category: "Storage",
+    iconUrl: `${resourceIconPath}/Res_Storage/Res_Amazon-Simple-Storage-Service_S3-Standard_48.svg`,
+    label: "S3 Website",
+    size
+  },
+  {
+    definitionId: "aws-s3-public-access-block",
+    name: "S3 Bucket Public Access Block",
+    area: "storage",
+    category: "Storage",
+    iconUrl: `${resourceIconPath}/Res_Storage/Res_Amazon-Simple-Storage-Service_S3-Standard_48.svg`,
+    label: "S3 Public Access",
+    size
+  },
+  {
+    definitionId: "aws-s3-versioning",
     name: "S3 Bucket Versioning",
-    cloudProvider: "aws",
     area: "storage",
     category: "Storage",
     iconUrl: `${resourceIconPath}/Res_Storage/Res_Amazon-Simple-Storage-Service_S3-Object-Lock_48.svg`,
-    enabled: true,
-    nodeDefaults: { type: "aws_s3_bucket_versioning", label: "S3 Versioning", size }
+    label: "S3 Versioning",
+    size
   },
   {
-    id: "aws-s3-encryption",
+    definitionId: "aws-s3-encryption",
     name: "S3 Bucket Server Side Encryption",
-    cloudProvider: "aws",
     area: "storage",
     category: "Storage",
     iconUrl: `${resourceIconPath}/Res_Storage/Res_Amazon-Simple-Storage-Service_S3-Standard_48.svg`,
-    enabled: true,
-    nodeDefaults: {
-      type: "aws_s3_bucket_server_side_encryption_configuration",
-      label: "S3 Encryption",
-      size
-    }
+    label: "S3 Encryption",
+    size
   },
   {
-    id: "aws-s3-lifecycle",
+    definitionId: "aws-s3-lifecycle",
     name: "S3 Bucket Lifecycle",
-    cloudProvider: "aws",
     area: "storage",
     category: "Storage",
     iconUrl: `${resourceIconPath}/Res_Storage/Res_Amazon-Simple-Storage-Service_S3-Intelligent-Tiering_48.svg`,
-    enabled: true,
-    nodeDefaults: { type: "aws_s3_bucket_lifecycle_configuration", label: "S3 Lifecycle", size }
+    label: "S3 Lifecycle",
+    size
   },
   {
-    id: "aws-ebs-volume",
+    definitionId: "aws-ebs-volume",
     name: "EBS Volume",
-    cloudProvider: "aws",
     area: "storage",
     category: "Storage",
     iconUrl: `${serviceIconPath}/Arch_Storage/64/Arch_Amazon-Elastic-Block-Store_64.svg`,
-    enabled: true,
-    nodeDefaults: { type: "aws_ebs_volume", label: "EBS Volume", size }
+    label: "EBS Volume",
+    size
   },
   {
-    id: "aws-rds-instance",
+    definitionId: "aws-rds-instance",
     name: "RDS Instance",
-    cloudProvider: "aws",
     area: "database",
     category: "Database",
     iconUrl: `${serviceIconPath}/Arch_Database/64/Arch_Amazon-RDS_64.svg`,
-    enabled: true,
-    nodeDefaults: { type: "aws_db_instance", label: "RDS Instance", size }
+    label: "RDS Instance",
+    size
   },
   {
-    id: "aws-db-subnet-group",
+    definitionId: "aws-rds-read-replica",
+    name: "RDS Read Replica",
+    area: "database",
+    category: "Database",
+    iconUrl: `${serviceIconPath}/Arch_Database/64/Arch_Amazon-RDS_64.svg`,
+    label: "RDS Replica",
+    size
+  },
+  {
+    definitionId: "aws-rds-cluster",
+    name: "RDS Cluster",
+    area: "database",
+    category: "Database",
+    iconUrl: `${resourceIconPath}/Res_Database/Res_Amazon-RDS_Multi-AZ-DB-Cluster_48.svg`,
+    label: "RDS Cluster",
+    size
+  },
+  {
+    definitionId: "aws-db-subnet-group",
     name: "DB Subnet Group",
-    cloudProvider: "aws",
     area: "database",
     category: "Database",
     iconUrl: `${serviceIconPath}/Arch_Database/64/Arch_Amazon-RDS_64.svg`,
-    enabled: true,
-    nodeDefaults: { type: "aws_db_subnet_group", label: "DB Subnet Group", size }
+    label: "DB Subnet Group",
+    size
   },
   {
-    id: "aws-db-parameter-group",
+    definitionId: "aws-db-parameter-group",
     name: "RDS Parameter Group",
-    cloudProvider: "aws",
     area: "database",
     category: "Database",
     iconUrl: `${serviceIconPath}/Arch_Database/64/Arch_Amazon-RDS_64.svg`,
-    enabled: true,
-    nodeDefaults: { type: "aws_db_parameter_group", label: "RDS Parameter Group", size }
+    label: "RDS Parameter Group",
+    size
   },
   {
-    id: "aws-db-option-group",
+    definitionId: "aws-db-option-group",
     name: "RDS Option Group",
-    cloudProvider: "aws",
     area: "database",
     category: "Database",
     iconUrl: `${serviceIconPath}/Arch_Database/64/Arch_Amazon-RDS_64.svg`,
-    enabled: true,
-    nodeDefaults: { type: "aws_db_option_group", label: "RDS Option Group", size }
+    label: "RDS Option Group",
+    size
   },
   {
-    id: "aws-db-snapshot",
+    definitionId: "aws-db-snapshot",
     name: "RDS Snapshot",
-    cloudProvider: "aws",
     area: "database",
     category: "Database",
     iconUrl: `${serviceIconPath}/Arch_Database/64/Arch_Amazon-RDS_64.svg`,
-    enabled: true,
-    nodeDefaults: { type: "aws_db_snapshot", label: "RDS Snapshot", size }
+    label: "RDS Snapshot",
+    size
   },
   {
-    id: "aws-dynamodb-table",
+    definitionId: "aws-dynamodb-table",
     name: "DynamoDB Table",
-    cloudProvider: "aws",
     area: "database",
     category: "Database",
     iconUrl: `${serviceIconPath}/Arch_Database/64/Arch_Amazon-DynamoDB_64.svg`,
-    enabled: true,
-    nodeDefaults: { type: "aws_dynamodb_table", label: "DynamoDB Table", size }
+    label: "DynamoDB Table",
+    size
   },
   {
-    id: "aws-lambda-function",
+    definitionId: "aws-elasticache-redis",
+    name: "ElastiCache Redis",
+    area: "database",
+    category: "Database",
+    iconUrl: `${resourceIconPath}/Res_Database/Res_Amazon-ElastiCache_ElastiCache-for-Redis_48.svg`,
+    label: "Redis",
+    size
+  },
+  {
+    definitionId: "aws-secretsmanager-secret",
+    name: "Secrets Manager Secret",
+    area: "security-identity",
+    category: "Security",
+    iconUrl: `${serviceIconPath}/Arch_Security-Identity-Compliance/64/Arch_AWS-Secrets-Manager_64.svg`,
+    label: "Secrets Manager Secret",
+    size
+  },
+  {
+    definitionId: "aws-secretsmanager-secret-version",
+    name: "Secrets Manager Secret Version",
+    area: "security-identity",
+    category: "Security",
+    iconUrl: `${serviceIconPath}/Arch_Security-Identity-Compliance/64/Arch_AWS-Secrets-Manager_64.svg`,
+    label: "Secret Version",
+    size
+  },
+  {
+    definitionId: "aws-lambda-function",
     name: "Lambda Function",
-    cloudProvider: "aws",
     area: "application",
     category: "Serverless / Application",
     iconUrl: `${serviceIconPath}/Arch_Compute/64/Arch_AWS-Lambda_64.svg`,
-    enabled: true,
-    nodeDefaults: { type: "aws_lambda_function", label: "Lambda Function", size }
+    label: "Lambda Function",
+    size
   },
   {
-    id: "aws-lambda-permission",
+    definitionId: "aws-lambda-permission",
     name: "Lambda Permission",
-    cloudProvider: "aws",
     area: "application",
     category: "Serverless / Application",
     iconUrl: `${resourceIconPath}/Res_Compute/Res_AWS-Lambda_Lambda-Function_48.svg`,
-    enabled: true,
-    nodeDefaults: { type: "aws_lambda_permission", label: "Lambda Permission", size }
+    label: "Lambda Permission",
+    size
   },
   {
-    id: "aws-api-gateway-rest-api",
+    definitionId: "aws-lambda-event-source-mapping",
+    name: "Lambda Event Source Mapping",
+    area: "application",
+    category: "Serverless / Application",
+    iconUrl: `${resourceIconPath}/Res_Compute/Res_AWS-Lambda_Lambda-Function_48.svg`,
+    label: "Event Source",
+    size
+  },
+  {
+    definitionId: "aws-api-gateway-rest-api",
     name: "API Gateway REST API",
-    cloudProvider: "aws",
     area: "application",
     category: "Serverless / Application",
     iconUrl: `${serviceIconPath}/Arch_Networking-Content-Delivery/64/Arch_Amazon-API-Gateway_64.svg`,
-    enabled: true,
-    nodeDefaults: { type: "aws_api_gateway_rest_api", label: "REST API", size }
+    label: "REST API",
+    size
   },
   {
-    id: "aws-api-gateway-resource",
+    definitionId: "aws-api-gateway-websocket-api",
+    name: "API Gateway WebSocket API",
+    area: "application",
+    category: "Serverless / Application",
+    iconUrl: `${serviceIconPath}/Arch_Networking-Content-Delivery/64/Arch_Amazon-API-Gateway_64.svg`,
+    label: "WebSocket API",
+    size
+  },
+  {
+    definitionId: "aws-api-gateway-resource",
     name: "API Gateway Resource",
-    cloudProvider: "aws",
     area: "application",
     category: "Serverless / Application",
     iconUrl: `${resourceIconPath}/Res_Networking-Content-Delivery/Res_Amazon-API-Gateway_Endpoint_48.svg`,
-    enabled: true,
-    nodeDefaults: { type: "aws_api_gateway_resource", label: "API Resource", size }
+    label: "API Resource",
+    size
   },
   {
-    id: "aws-api-gateway-method",
+    definitionId: "aws-api-gateway-method",
     name: "API Gateway Method",
-    cloudProvider: "aws",
     area: "application",
     category: "Serverless / Application",
     iconUrl: `${resourceIconPath}/Res_Networking-Content-Delivery/Res_Amazon-API-Gateway_Endpoint_48.svg`,
-    enabled: true,
-    nodeDefaults: { type: "aws_api_gateway_method", label: "API Method", size }
+    label: "API Method",
+    size
   },
   {
-    id: "aws-api-gateway-integration",
+    definitionId: "aws-api-gateway-integration",
     name: "API Gateway Integration",
-    cloudProvider: "aws",
     area: "application",
     category: "Serverless / Application",
     iconUrl: `${resourceIconPath}/Res_Networking-Content-Delivery/Res_Amazon-API-Gateway_Endpoint_48.svg`,
-    enabled: true,
-    nodeDefaults: { type: "aws_api_gateway_integration", label: "API Integration", size }
+    label: "API Integration",
+    size
   },
   {
-    id: "aws-cloudwatch-log-group",
+    definitionId: "aws-api-gateway-stage",
+    name: "API Gateway Stage",
+    area: "application",
+    category: "Serverless / Application",
+    iconUrl: `${resourceIconPath}/Res_Networking-Content-Delivery/Res_Amazon-API-Gateway_Endpoint_48.svg`,
+    label: "API Stage",
+    size
+  },
+  {
+    definitionId: "aws-cloudwatch-log-group",
     name: "CloudWatch Log Group",
-    cloudProvider: "aws",
     area: "tools",
     category: "Observability / Operations",
     iconUrl: `${resourceIconPath}/Res_Management-Governance/Res_Amazon-CloudWatch_Logs_48.svg`,
-    enabled: true,
-    nodeDefaults: { type: "aws_cloudwatch_log_group", label: "Log Group", size }
+    label: "Log Group",
+    size
   },
   {
-    id: "aws-cloudwatch-metric-alarm",
+    definitionId: "aws-cloudwatch-metric-alarm",
     name: "CloudWatch Metric Alarm",
-    cloudProvider: "aws",
     area: "tools",
     category: "Observability / Operations",
     iconUrl: `${resourceIconPath}/Res_Management-Governance/Res_Amazon-CloudWatch_Alarm_48.svg`,
-    enabled: true,
-    nodeDefaults: { type: "aws_cloudwatch_metric_alarm", label: "Metric Alarm", size }
+    label: "Metric Alarm",
+    size
   },
   {
-    id: "aws-cloudwatch-dashboard",
+    definitionId: "aws-cloudwatch-dashboard",
     name: "CloudWatch Dashboard",
-    cloudProvider: "aws",
     area: "tools",
     category: "Observability / Operations",
     iconUrl: `${serviceIconPath}/Arch_Management-Governance/64/Arch_Amazon-CloudWatch_64.svg`,
-    enabled: true,
-    nodeDefaults: { type: "aws_cloudwatch_dashboard", label: "Dashboard", size }
+    label: "Dashboard",
+    size
   },
   {
-    id: "aws-eventbridge-rule",
+    definitionId: "aws-eventbridge-rule",
     name: "EventBridge Rule",
-    cloudProvider: "aws",
     area: "tools",
     category: "Observability / Operations",
     iconUrl: `${resourceIconPath}/Res_Application-Integration/Res_Amazon-EventBridge_Rule_48.svg`,
-    enabled: true,
-    nodeDefaults: { type: "aws_cloudwatch_event_rule", label: "Event Rule", size }
+    label: "Event Rule",
+    size
   },
   {
-    id: "aws-eventbridge-target",
+    definitionId: "aws-eventbridge-target",
     name: "EventBridge Target",
-    cloudProvider: "aws",
     area: "tools",
     category: "Observability / Operations",
     iconUrl: `${serviceIconPath}/Arch_App-Integration/64/Arch_Amazon-EventBridge_64.svg`,
-    enabled: true,
-    nodeDefaults: { type: "aws_cloudwatch_event_target", label: "Event Target", size }
+    label: "Event Target",
+    size
   },
   {
-    id: "aws-sns-topic",
+    definitionId: "aws-codebuild-project",
+    name: "CodeBuild Project",
+    area: "tools",
+    category: "CI/CD",
+    iconUrl: `${serviceIconPath}/Arch_Developer-Tools/64/Arch_AWS-CodeBuild_64.svg`,
+    label: "CodeBuild",
+    size
+  },
+  {
+    definitionId: "aws-codedeploy-app",
+    name: "CodeDeploy App",
+    area: "tools",
+    category: "CI/CD",
+    iconUrl: `${serviceIconPath}/Arch_Developer-Tools/64/Arch_AWS-CodeDeploy_64.svg`,
+    label: "CodeDeploy App",
+    size
+  },
+  {
+    definitionId: "aws-codedeploy-deployment-group",
+    name: "CodeDeploy Deployment Group",
+    area: "tools",
+    category: "CI/CD",
+    iconUrl: `${serviceIconPath}/Arch_Developer-Tools/64/Arch_AWS-CodeDeploy_64.svg`,
+    label: "Deployment Group",
+    size
+  },
+  {
+    definitionId: "aws-codepipeline",
+    name: "CodePipeline",
+    area: "tools",
+    category: "CI/CD",
+    iconUrl: `${serviceIconPath}/Arch_Developer-Tools/64/Arch_AWS-CodePipeline_64.svg`,
+    label: "CodePipeline",
+    size
+  },
+  {
+    definitionId: "aws-codestarconnections-connection",
+    name: "CodeStar Connection",
+    area: "tools",
+    category: "CI/CD",
+    iconUrl: `${serviceIconPath}/Arch_Developer-Tools/64/Arch_AWS-CodePipeline_64.svg`,
+    label: "CodeStar Connection",
+    size
+  },
+  {
+    definitionId: "aws-sns-topic",
     name: "SNS Topic",
-    cloudProvider: "aws",
     area: "tools",
     category: "Observability / Operations",
     iconUrl: `${resourceIconPath}/Res_Application-Integration/Res_Amazon-Simple-Notification-Service_Topic_48.svg`,
-    enabled: true,
-    nodeDefaults: { type: "aws_sns_topic", label: "SNS Topic", size }
+    label: "SNS Topic",
+    size
+  },
+  {
+    definitionId: "aws-sqs-queue",
+    name: "SQS Queue",
+    area: "tools",
+    category: "Messaging / Events",
+    iconUrl: `${resourceIconPath}/Res_Application-Integration/Res_Amazon-Simple-Queue-Service_Queue_48.svg`,
+    label: "SQS Queue",
+    size
+  },
+  {
+    definitionId: "aws-step-functions-state-machine",
+    name: "Step Functions State Machine",
+    area: "application",
+    category: "Serverless / Application",
+    iconUrl: `${serviceIconPath}/Arch_App-Integration/64/Arch_AWS-Step-Functions_64.svg`,
+    label: "State Machine",
+    size
+  },
+  {
+    definitionId: "aws-ecr-repository",
+    name: "ECR Repository",
+    area: "containers",
+    category: "Containers",
+    iconUrl: `${resourceIconPath}/Res_Containers/Res_Amazon-Elastic-Container-Registry_Registry_48.svg`,
+    label: "ECR Repository",
+    size
+  },
+  {
+    definitionId: "aws-ecs-cluster",
+    name: "ECS Cluster",
+    area: "containers",
+    category: "Containers",
+    iconUrl: `${serviceIconPath}/Arch_Containers/64/Arch_Amazon-Elastic-Container-Service_64.svg`,
+    label: "ECS Cluster",
+    size
+  },
+  {
+    definitionId: "aws-ecs-service",
+    name: "ECS Service",
+    area: "containers",
+    category: "Containers",
+    iconUrl: `${resourceIconPath}/Res_Containers/Res_Amazon-Elastic-Container-Service_Service_48.svg`,
+    label: "ECS Service",
+    size
+  },
+  {
+    definitionId: "aws-ecs-task-definition",
+    name: "ECS Task Definition",
+    area: "containers",
+    category: "Containers",
+    iconUrl: `${resourceIconPath}/Res_Containers/Res_Amazon-Elastic-Container-Service_Task_48.svg`,
+    label: "Task Definition",
+    size
+  },
+  {
+    definitionId: "aws-eks-cluster",
+    name: "EKS Cluster",
+    area: "containers",
+    category: "Containers",
+    iconUrl: `${serviceIconPath}/Arch_Containers/64/Arch_Amazon-Elastic-Kubernetes-Service_64.svg`,
+    label: "EKS Cluster",
+    size
+  },
+  {
+    definitionId: "aws-network-acl",
+    name: "Network ACL",
+    area: "network",
+    category: "Network",
+    iconUrl: `${resourceIconPath}/Res_Networking-Content-Delivery/Res_Amazon-VPC_Network-Access-Control-List_48.svg`,
+    label: "Network ACL",
+    size
+  },
+  {
+    definitionId: "aws-network-acl-rule",
+    name: "Network ACL Rule",
+    area: "network",
+    category: "Network",
+    iconUrl: `${resourceIconPath}/Res_Networking-Content-Delivery/Res_Amazon-VPC_Network-Access-Control-List_48.svg`,
+    label: "NACL Rule",
+    size
+  },
+  {
+    definitionId: "aws-cloudfront-cache-policy",
+    name: "CloudFront Cache Policy",
+    area: "network",
+    category: "Network",
+    iconUrl: `${serviceIconPath}/Arch_Networking-Content-Delivery/64/Arch_Amazon-CloudFront_64.svg`,
+    label: "Cache Policy",
+    size
+  },
+  {
+    definitionId: "aws-cloudfront-origin-request-policy",
+    name: "CloudFront Origin Request Policy",
+    area: "network",
+    category: "Network",
+    iconUrl: `${serviceIconPath}/Arch_Networking-Content-Delivery/64/Arch_Amazon-CloudFront_64.svg`,
+    label: "Origin Request Policy",
+    size
+  },
+  {
+    definitionId: "aws-route53-zone",
+    name: "Route 53 Hosted Zone",
+    area: "network",
+    category: "Network",
+    iconUrl: `${resourceIconPath}/Res_Networking-Content-Delivery/Res_Amazon-Route-53-Hosted-Zone_48.svg`,
+    label: "Hosted Zone",
+    size
+  },
+  {
+    definitionId: "aws-wafv2-web-acl-association",
+    name: "WAF Web ACL Association",
+    area: "security-identity",
+    category: "Security",
+    iconUrl: `${serviceIconPath}/Arch_Security-Identity-Compliance/64/Arch_AWS-WAF_64.svg`,
+    label: "WAF Association",
+    size
+  },
+  {
+    definitionId: "aws-vpc-peering-connection",
+    name: "VPC Peering Connection",
+    area: "network",
+    category: "Network",
+    iconUrl: `${resourceIconPath}/Res_Networking-Content-Delivery/Res_Amazon-VPC_Peering-Connection_48.svg`,
+    label: "VPC Peering",
+    size
+  },
+  {
+    definitionId: "aws-kms-alias",
+    name: "KMS Alias",
+    area: "security-identity",
+    category: "Security",
+    iconUrl: `${serviceIconPath}/Arch_Security-Identity-Compliance/64/Arch_AWS-Key-Management-Service_64.svg`,
+    label: "KMS Alias",
+    size
+  },
+  {
+    definitionId: "aws-lb-target-group-attachment",
+    name: "ALB Target Group Attachment",
+    area: "network",
+    category: "Network",
+    iconUrl: `${resourceIconPath}/Res_Networking-Content-Delivery/Res_Elastic-Load-Balancing_Application-Load-Balancer_48.svg`,
+    label: "Target Attachment",
+    size
+  },
+  {
+    definitionId: "aws-volume-attachment",
+    name: "EBS Volume Attachment",
+    area: "storage",
+    category: "Storage",
+    iconUrl: `${resourceIconPath}/Res_Storage/Res_Amazon-Elastic-Block-Store_Volume_48.svg`,
+    label: "Volume Attachment",
+    size
+  },
+  {
+    definitionId: "aws-efs-file-system",
+    name: "EFS File System",
+    area: "storage",
+    category: "Storage",
+    iconUrl: `${resourceIconPath}/Res_Storage/Res_Amazon-Elastic-File-System_EFS-Standard_48.svg`,
+    label: "EFS File System",
+    size
+  },
+  {
+    definitionId: "aws-efs-mount-target",
+    name: "EFS Mount Target",
+    area: "storage",
+    category: "Storage",
+    iconUrl: `${serviceIconPath}/Arch_Storage/64/Arch_Amazon-EFS_64.svg`,
+    label: "EFS Mount Target",
+    size
+  },
+  {
+    definitionId: "aws-efs-access-point",
+    name: "EFS Access Point",
+    area: "storage",
+    category: "Storage",
+    iconUrl: `${serviceIconPath}/Arch_Storage/64/Arch_Amazon-EFS_64.svg`,
+    label: "EFS Access Point",
+    size
+  },
+  {
+    definitionId: "aws-rds-cluster-instance",
+    name: "RDS Cluster Instance",
+    area: "database",
+    category: "Database",
+    iconUrl: `${resourceIconPath}/Res_Database/Res_Amazon-Aurora_Amazon-RDS-Instance_48.svg`,
+    label: "Cluster Instance",
+    size
+  },
+  {
+    definitionId: "aws-elasticache-subnet-group",
+    name: "ElastiCache Subnet Group",
+    area: "database",
+    category: "Database",
+    iconUrl: `${serviceIconPath}/Arch_Database/64/Arch_Amazon-ElastiCache_64.svg`,
+    label: "Cache Subnet Group",
+    size
+  },
+  {
+    definitionId: "aws-elasticache-parameter-group",
+    name: "ElastiCache Parameter Group",
+    area: "database",
+    category: "Database",
+    iconUrl: `${serviceIconPath}/Arch_Database/64/Arch_Amazon-ElastiCache_64.svg`,
+    label: "Cache Parameter Group",
+    size
+  },
+  {
+    definitionId: "aws-lambda-alias",
+    name: "Lambda Alias",
+    area: "application",
+    category: "Serverless / Application",
+    iconUrl: `${resourceIconPath}/Res_Compute/Res_AWS-Lambda_Lambda-Function_48.svg`,
+    label: "Lambda Alias",
+    size
+  },
+  {
+    definitionId: "aws-api-gateway-v2-route",
+    name: "API Gateway V2 Route",
+    area: "application",
+    category: "Serverless / Application",
+    iconUrl: `${resourceIconPath}/Res_Networking-Content-Delivery/Res_Amazon-API-Gateway_Endpoint_48.svg`,
+    label: "V2 Route",
+    size
+  },
+  {
+    definitionId: "aws-api-gateway-v2-integration",
+    name: "API Gateway V2 Integration",
+    area: "application",
+    category: "Serverless / Application",
+    iconUrl: `${resourceIconPath}/Res_Networking-Content-Delivery/Res_Amazon-API-Gateway_Endpoint_48.svg`,
+    label: "V2 Integration",
+    size
+  },
+  {
+    definitionId: "aws-api-gateway-v2-stage",
+    name: "API Gateway V2 Stage",
+    area: "application",
+    category: "Serverless / Application",
+    iconUrl: `${resourceIconPath}/Res_Networking-Content-Delivery/Res_Amazon-API-Gateway_Endpoint_48.svg`,
+    label: "V2 Stage",
+    size
+  },
+  {
+    definitionId: "aws-api-gateway-deployment",
+    name: "API Gateway Deployment",
+    area: "application",
+    category: "Serverless / Application",
+    iconUrl: `${resourceIconPath}/Res_Networking-Content-Delivery/Res_Amazon-API-Gateway_Endpoint_48.svg`,
+    label: "API Deployment",
+    size
+  },
+  {
+    definitionId: "aws-cloudwatch-log-stream",
+    name: "CloudWatch Log Stream",
+    area: "tools",
+    category: "Observability / Operations",
+    iconUrl: `${resourceIconPath}/Res_Management-Governance/Res_Amazon-CloudWatch_Logs_48.svg`,
+    label: "Log Stream",
+    size
+  },
+  {
+    definitionId: "aws-cloudwatch-log-resource-policy",
+    name: "CloudWatch Log Resource Policy",
+    area: "tools",
+    category: "Observability / Operations",
+    iconUrl: `${serviceIconPath}/Arch_Management-Governance/64/Arch_Amazon-CloudWatch_64.svg`,
+    label: "Log Resource Policy",
+    size
+  },
+  {
+    definitionId: "aws-eventbridge-permission",
+    name: "EventBridge Permission",
+    area: "tools",
+    category: "Messaging / Events",
+    iconUrl: `${serviceIconPath}/Arch_App-Integration/64/Arch_Amazon-EventBridge_64.svg`,
+    label: "Event Permission",
+    size
+  },
+  {
+    definitionId: "aws-scheduler-schedule",
+    name: "EventBridge Scheduler Schedule",
+    area: "tools",
+    category: "Messaging / Events",
+    iconUrl: `${resourceIconPath}/Res_Application-Integration/Res_Amazon-EventBridge_Scheduler_48.svg`,
+    label: "Schedule",
+    size
+  },
+  {
+    definitionId: "aws-sns-topic-subscription",
+    name: "SNS Topic Subscription",
+    area: "tools",
+    category: "Messaging / Events",
+    iconUrl: `${resourceIconPath}/Res_Application-Integration/Res_Amazon-Simple-Notification-Service_HTTP-Notification_48.svg`,
+    label: "SNS Subscription",
+    size
+  },
+  {
+    definitionId: "aws-acm-certificate-validation",
+    name: "ACM Certificate Validation",
+    area: "security-identity",
+    category: "Security",
+    iconUrl: `${serviceIconPath}/Arch_Security-Identity-Compliance/64/Arch_AWS-Certificate-Manager_64.svg`,
+    label: "Cert Validation",
+    size
+  },
+  {
+    definitionId: "aws-ecr-lifecycle-policy",
+    name: "ECR Lifecycle Policy",
+    area: "containers",
+    category: "Containers",
+    iconUrl: `${resourceIconPath}/Res_Containers/Res_Amazon-Elastic-Container-Registry_Registry_48.svg`,
+    label: "ECR Lifecycle",
+    size
+  },
+  {
+    definitionId: "aws-ecs-capacity-provider",
+    name: "ECS Capacity Provider",
+    area: "containers",
+    category: "Containers",
+    iconUrl: `${serviceIconPath}/Arch_Containers/64/Arch_Amazon-Elastic-Container-Service_64.svg`,
+    label: "Capacity Provider",
+    size
+  },
+  {
+    definitionId: "aws-eks-node-group",
+    name: "EKS Node Group",
+    area: "containers",
+    category: "Containers",
+    iconUrl: `${serviceIconPath}/Arch_Containers/64/Arch_Amazon-Elastic-Kubernetes-Service_64.svg`,
+    label: "Node Group",
+    size
+  },
+  {
+    definitionId: "aws-eks-addon",
+    name: "EKS Add-on",
+    area: "containers",
+    category: "Containers",
+    iconUrl: `${serviceIconPath}/Arch_Containers/64/Arch_Amazon-Elastic-Kubernetes-Service_64.svg`,
+    label: "EKS Add-on",
+    size
+  },
+  {
+    definitionId: "aws-config-configuration-recorder",
+    name: "AWS Config Recorder",
+    area: "tools",
+    category: "Governance / Config",
+    iconUrl: `${serviceIconPath}/Arch_Management-Governance/64/Arch_AWS-Config_64.svg`,
+    label: "Config Recorder",
+    size
+  },
+  {
+    definitionId: "aws-config-delivery-channel",
+    name: "AWS Config Delivery Channel",
+    area: "tools",
+    category: "Governance / Config",
+    iconUrl: `${serviceIconPath}/Arch_Management-Governance/64/Arch_AWS-Config_64.svg`,
+    label: "Delivery Channel",
+    size
+  },
+  {
+    definitionId: "aws-config-rule",
+    name: "AWS Config Rule",
+    area: "tools",
+    category: "Governance / Config",
+    iconUrl: `${serviceIconPath}/Arch_Management-Governance/64/Arch_AWS-Config_64.svg`,
+    label: "Config Rule",
+    size
+  },
+  {
+    definitionId: "aws-cloudtrail",
+    name: "CloudTrail",
+    area: "tools",
+    category: "Observability / Operations",
+    iconUrl: `${serviceIconPath}/Arch_Management-Governance/64/Arch_AWS-CloudTrail_64.svg`,
+    label: "CloudTrail",
+    size
+  },
+  {
+    definitionId: "aws-xray-group",
+    name: "X-Ray Group",
+    area: "tools",
+    category: "Observability / Operations",
+    iconUrl: `${serviceIconPath}/Arch_Developer-Tools/64/Arch_AWS-X-Ray_64.svg`,
+    label: "X-Ray Group",
+    size
+  },
+  {
+    definitionId: "aws-xray-sampling-rule",
+    name: "X-Ray Sampling Rule",
+    area: "tools",
+    category: "Observability / Operations",
+    iconUrl: `${serviceIconPath}/Arch_Developer-Tools/64/Arch_AWS-X-Ray_64.svg`,
+    label: "Sampling Rule",
+    size
+  },
+  {
+    definitionId: "aws-shield-protection",
+    name: "Shield Protection",
+    area: "security-identity",
+    category: "Security",
+    iconUrl: `${serviceIconPath}/Arch_Security-Identity-Compliance/64/Arch_AWS-Shield_64.svg`,
+    label: "Shield Protection",
+    size
+  },
+  {
+    definitionId: "aws-guardduty-detector",
+    name: "GuardDuty Detector",
+    area: "security-identity",
+    category: "Security",
+    iconUrl: `${serviceIconPath}/Arch_Security-Identity-Compliance/64/Arch_Amazon-GuardDuty_64.svg`,
+    label: "GuardDuty",
+    size
   }
+] as const satisfies readonly TerraformResourcePresentation[];
+
+export const resourceCatalog: ResourceItem[] = [
+  ...designCatalogItems,
+  ...terraformResourcePresentations.map(createTerraformResourceItem)
 ];
+
+function createTerraformResourceItem(presentation: TerraformResourcePresentation): ResourceItem {
+  const definition = requireResourceDefinition(presentation.definitionId);
+
+  return {
+    id: definition.id,
+    name: presentation.name,
+    cloudProvider: definition.provider,
+    area: presentation.area,
+    category: resourceCategoryOverrides[definition.id] ?? presentation.category,
+    iconUrl: presentation.iconUrl,
+    enabled: true,
+    nodeDefaults: {
+      ...(definition.terraform.blockType !== "resource"
+        ? { terraformBlockType: definition.terraform.blockType }
+        : {}),
+      type: definition.terraform.resourceType,
+      label: presentation.label,
+      size: presentation.size
+    }
+  };
+}
+
+function requireResourceDefinition(definitionId: string): ResourceDefinition {
+  const definition = getResourceDefinitionById(definitionId);
+
+  if (!definition) {
+    throw new Error(`Missing shared resource definition: ${definitionId}`);
+  }
+
+  return definition;
+}

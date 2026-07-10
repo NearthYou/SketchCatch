@@ -1,8 +1,8 @@
 import type {
   AiTerraformPreviewExplanationResult,
+  WellArchitectedPillar,
   TerraformDiagnostic
 } from "@sketchcatch/types";
-import { ResultList } from "./ResultList";
 
 type TerraformPreviewPanelProps = {
   readonly hasStaleTerraformDiagnostics: boolean;
@@ -69,14 +69,23 @@ export function TerraformPreviewPanel({
         hasValidated={hasValidatedTerraform}
       />
       {terraformPreview === null ? null : (
-        <ResultList
-          items={terraformPreview.detectedResources.map((resource) => ({
-            id: `${resource.terraformType}-${resource.label}`,
-            label: resource.label,
-            text: resource.explanation
-          }))}
-          summary={terraformPreview.summary}
-        />
+        <div className="terraformPreviewAssessment">
+          <p className="resultTitle">{terraformPreview.summary}</p>
+          <section className="terraformPreviewConclusion">
+            <strong>결론</strong>
+            <p>{terraformPreview.consensusRecommendation}</p>
+          </section>
+          <div className="terraformPreviewAgentGrid">
+            {terraformPreview.wellArchitectedGuidance.map((guidance) => (
+              <section key={guidance.pillar} className="terraformPreviewAgentCard">
+                <span>{guidance.title}</span>
+                <strong>{formatWellArchitectedPillar(guidance.pillar)}</strong>
+                <p>{guidance.observation}</p>
+                <p>{guidance.recommendation}</p>
+              </section>
+            ))}
+          </div>
+        </div>
       )}
     </section>
   );
@@ -128,7 +137,11 @@ function formatDiagnosticTitle(diagnostic: TerraformDiagnostic): string {
   const parts = [diagnostic.severity.toUpperCase()];
 
   if (diagnostic.line !== undefined) {
-    parts.push(`${diagnostic.line}행`);
+    parts.push(
+      diagnostic.sourceFileName
+        ? `${diagnostic.sourceFileName}:${diagnostic.line}`
+        : `${diagnostic.line}행`
+    );
   }
 
   if (diagnostic.resourceAddress !== undefined) {
@@ -136,4 +149,17 @@ function formatDiagnosticTitle(diagnostic: TerraformDiagnostic): string {
   }
 
   return parts.join(" · ");
+}
+
+function formatWellArchitectedPillar(pillar: WellArchitectedPillar): string {
+  const labels: Record<WellArchitectedPillar, string> = {
+    operational_excellence: "운영 우수성",
+    security: "보안",
+    reliability: "신뢰성",
+    performance_efficiency: "성능 효율성",
+    cost_optimization: "비용 최적화",
+    sustainability: "지속 가능성"
+  };
+
+  return labels[pillar];
 }

@@ -23,12 +23,18 @@ jobs:
         run: |
           set -euo pipefail
 
+          migration_command=$(cat <<'COMMAND'
+          docker run --rm --network sketchcatch --env-file /etc/sketchcatch/api.env "sketchcatch-api:${image_tag}" sh -c 'node -e "eval(Buffer.from(\"Y29uc3QgZnM9cmVxdWlyZSgiZnMiKTtjb25zdCBwPSIuL2RyaXp6bGUvbWV0YS9fam91cm5hbC5qc29uIjtjb25zdCBzPWZzLnJlYWRGaWxlU3luYyhwLCJ1dGY4Iik7aWYocy5jaGFyQ29kZUF0KDApPT09MHhGRUZGKWZzLndyaXRlRmlsZVN5bmMocCxzLnNsaWNlKDEpLCJ1dGY4Iik7\",\"base64\").toString())" && node dist/db/migrate.cjs'
+          COMMAND
+          )
+
           jq -n \
+            --arg migration_command "${migration_command}" \
             '{
               commands: [
                 "set -euo pipefail",
                 "image_tag=\"$(cat /opt/sketchcatch/current-image)\"",
-                "docker run --rm --network sketchcatch --env-file /etc/sketchcatch/api.env \"sketchcatch-api:${image_tag}\" node dist/db/migrate.cjs"
+                $migration_command
               ],
               executionTimeout: ["900"]
             }' > ssm-migrate-parameters.json

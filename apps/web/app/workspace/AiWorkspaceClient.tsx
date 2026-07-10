@@ -8,11 +8,9 @@ import type {
   AiTerraformErrorExplanationResult,
   AiTerraformStage,
   AiTerraformPreviewExplanationResult,
-  ArchitectureDraftBudgetLevel,
-  ArchitectureDraftScenarioHint,
-  ArchitectureDraftSecurityPriority,
-  ArchitectureDraftTrafficLevel,
   ArchitectureJson,
+  ArchitectureDraftClarification,
+  CreateArchitectureDraftResponse,
   DesignSimulationResult,
   TerraformDiagnostic,
   TerraformValidateResponse
@@ -32,13 +30,21 @@ import {
 } from "./workspace-api-client";
 import { sampleDiagramTerraform, samplePrompt, sampleTerraform } from "./workspace-options";
 
+const TERRAFORM_VALIDATE_ERROR_EXAMPLE = `Error: Unsupported argument
+
+  on main.tf line 12, in resource "aws_instance" "web":
+  12: instance_typ = "t3.micro"
+
+An argument named "instance_typ" is not expected here. Did you mean "instance_type"?`;
+
+const DESIGN_SIMULATION_DEFAULTS = {
+  budgetLevel: "normal",
+  trafficLevel: "normal"
+} as const;
+
 // gg AI API를 팀에 보여주기 위한 임시 작업 화면입니다. 최종 보드 UI가 붙으면 대체될 수 있습니다.
 export function AiWorkspaceClient() {
   const [prompt, setPrompt] = useState(samplePrompt);
-  const [scenarioHint, setScenarioHint] = useState<ArchitectureDraftScenarioHint>("backend_with_db");
-  const [budgetLevel, setBudgetLevel] = useState<ArchitectureDraftBudgetLevel>("low");
-  const [trafficLevel, setTrafficLevel] = useState<ArchitectureDraftTrafficLevel>("small");
-  const [securityPriority, setSecurityPriority] = useState<ArchitectureDraftSecurityPriority>("basic");
   const [repositoryUrl, setRepositoryUrl] = useState("");
   const [terraformCode, setTerraformCode] = useState(sampleTerraform);
   const [draft, setDraft] = useState<AiArchitectureDraftResult | null>(null);
@@ -68,14 +74,17 @@ export function AiWorkspaceClient() {
   // 자연어 입력을 AI Architecture Draft API로 보내고 결과 설계도를 화면에 저장합니다.
   async function runPromptDraft(): Promise<void> {
     await runRequest(async () => {
-      const result = await postJson<AiArchitectureDraftResult>("/ai/architecture-draft", {
-        budgetLevel,
-        prompt,
-        scenarioHint,
-        securityPriority,
-        trafficLevel
+      const result = await postJson<CreateArchitectureDraftResponse>("/ai/architecture-draft", {
+        prompt
       });
-      setDraft(result);
+
+      if (isArchitectureDraftClarification(result)) {
+        throw new Error(result.question);
+      }
+
+      const draftResult: AiArchitectureDraftResult = result;
+
+      setDraft(draftResult);
       setAnalysis(null);
       setDesignSimulation(null);
     });
@@ -120,8 +129,7 @@ export function AiWorkspaceClient() {
     await runRequest(async () => {
       const result = await requestDesignSimulation({
         architectureJson,
-        budgetLevel,
-        trafficLevel
+        ...DESIGN_SIMULATION_DEFAULTS
       });
       setDesignSimulation(result);
     });
@@ -152,6 +160,15 @@ export function AiWorkspaceClient() {
   }
 
   // 사용자가 붙여 넣은 Terraform 오류 메시지를 Preview 설명과 분리해 해석합니다.
+  function useTerraformValidateErrorExample(): void {
+    setTerraformErrorStage("validate");
+    setTerraformErrorMessage(TERRAFORM_VALIDATE_ERROR_EXAMPLE);
+    setTerraformErrorResourceId("aws_instance.web");
+    setTerraformErrorExplanation(null);
+    setStatus("idle");
+    setErrorMessage("");
+  }
+
   async function runTerraformErrorExplanation(): Promise<void> {
     const rawMessage = terraformErrorMessage.trim();
 
@@ -247,21 +264,13 @@ export function AiWorkspaceClient() {
   return (
     <div className="workspaceGrid workspaceGridWide">
       <ArchitectureDraftPanel
-        budgetLevel={budgetLevel}
         isLoading={status === "loading"}
-        onBudgetLevelChange={setBudgetLevel}
         onGitHubDraft={runGitHubDraft}
         onPromptChange={setPrompt}
         onPromptDraft={runPromptDraft}
         onRepositoryUrlChange={setRepositoryUrl}
-        onScenarioHintChange={setScenarioHint}
-        onSecurityPriorityChange={setSecurityPriority}
-        onTrafficLevelChange={setTrafficLevel}
         prompt={prompt}
         repositoryUrl={repositoryUrl}
-        scenarioHint={scenarioHint}
-        securityPriority={securityPriority}
-        trafficLevel={trafficLevel}
       />
 
       <section className="workspacePanel resultPanel">
@@ -324,6 +333,7 @@ export function AiWorkspaceClient() {
         onRelatedResourceIdChange={setTerraformErrorResourceId}
         onStageChange={setTerraformErrorStage}
         onTerraformErrorExplanation={runTerraformErrorExplanation}
+        onUseValidateExample={useTerraformValidateErrorExample}
         rawMessage={terraformErrorMessage}
         relatedResourceId={terraformErrorResourceId}
         stage={terraformErrorStage}
@@ -333,4 +343,10 @@ export function AiWorkspaceClient() {
       {status === "loading" ? <p className="loadingBanner">AI fallback 응답을 생성하는 중입니다.</p> : null}
     </div>
   );
+}
+
+function isArchitectureDraftClarification(
+  response: CreateArchitectureDraftResponse
+): response is ArchitectureDraftClarification {
+  return "status" in response && response.status === "needs_clarification";
 }

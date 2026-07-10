@@ -433,6 +433,7 @@ function createDeploymentRecord(
     architectureId,
     terraformArtifactId,
     awsConnectionId,
+    liveProfile: "practice",
     currentPlanArtifactId: null,
     stateObjectKey: null,
     resultWarningSummary: null,
@@ -630,7 +631,7 @@ function createPlanJson(resourceChanges: unknown[]): string {
   });
 }
 
-test("runDeploymentPlan saves a tfplan artifact, summary, block, logs, and current pointer", async () => {
+test("runDeploymentPlan saves a tfplan artifact, summary, warnings, logs, and current pointer", async () => {
   const repository = new FakeDeploymentRepository();
   repository.deployment = createDeploymentRecord(deploymentId, {
     approvedAt: fixedNow,
@@ -708,11 +709,12 @@ test("runDeploymentPlan saves a tfplan artifact, summary, block, logs, and curre
     updateCount: 0,
     deleteCount: 0,
     replaceCount: 0,
-    blocked: true,
+    blocked: false,
     warnings: []
   });
-  assert.equal(result.deployment.isBlocked, true);
-  assert.equal(result.deployment.blockedBy, "missing_approval");
+  assert.equal(result.deployment.isBlocked, false);
+  assert.equal(result.deployment.blockedBy, null);
+  assert.equal(result.deployment.blockedReason, null);
   assert.equal(result.deployment.approvedAt, null);
   assert.equal(result.deployment.approvedByUserId, null);
   assert.equal(result.deployment.approvedTerraformArtifactId, null);
@@ -827,16 +829,16 @@ test("runDeploymentPlan reuses an unchanged pending plan artifact without rerunn
     updateCount: 0,
     deleteCount: 0,
     replaceCount: 0,
-    blocked: true,
+    blocked: false,
     warnings: []
   };
   repository.deployment = createDeploymentRecord(deploymentId, {
     status: "RUNNING",
     currentPlanArtifactId: planArtifactId,
     planSummary,
-    isBlocked: true,
-    blockedBy: "missing_approval",
-    blockedReason: "Terraform Plan requires user approval before apply"
+    isBlocked: false,
+    blockedBy: null,
+    blockedReason: null
   });
   const planArtifactStorage = new FakePlanArtifactStorage();
   const runnerStages: string[] = [];
@@ -897,12 +899,12 @@ test("runDeploymentPlan does not reuse an existing plan after a completed deploy
       updateCount: 0,
       deleteCount: 0,
       replaceCount: 0,
-      blocked: true,
+      blocked: false,
       warnings: []
     },
-    isBlocked: true,
-    blockedBy: "missing_approval",
-    blockedReason: "Terraform Plan requires user approval before apply"
+    isBlocked: false,
+    blockedBy: null,
+    blockedReason: null
   });
   const planArtifactStorage = new FakePlanArtifactStorage();
   const runnerStages: string[] = [];
@@ -948,7 +950,7 @@ test("runDeploymentPlan does not reuse an existing plan after a completed deploy
   assert.equal(planArtifactStorage.uploads.length, 1);
 });
 
-test("runDeploymentPlan blocks destructive or high-risk plans with risk_analysis", async () => {
+test("runDeploymentPlan records destructive or high-risk warnings without blocking plan state", async () => {
   const repository = new FakeDeploymentRepository();
   const planArtifactStorage = new FakePlanArtifactStorage();
 
@@ -1002,14 +1004,106 @@ test("runDeploymentPlan blocks destructive or high-risk plans with risk_analysis
     }
   );
 
-  assert.equal(result.deployment.blockedBy, "risk_analysis");
+  assert.equal(result.deployment.isBlocked, false);
+  assert.equal(result.deployment.blockedBy, null);
+  assert.equal(result.deployment.blockedReason, null);
   assert.equal(result.deployment.planSummary?.deleteCount, 1);
   assert.equal(result.deployment.planSummary?.replaceCount, 1);
   assert.deepEqual(result.deployment.planSummary?.warnings, [
     {
+      id: "pre_deployment_check:finding-1",
       level: "high",
+      category: "security",
+      source: "pre_deployment_check",
+      code: "PUBLIC_SSH",
       message: "Public ingress: Restrict CIDR",
-      relatedResourceId: "sg-1"
+      relatedFindingId: "finding-1",
+      relatedResourceId: "sg-1",
+      requiresAcknowledgement: false,
+      blocksApproval: false
+    },
+    {
+      id: "terraform_plan:DESTRUCTIVE_CHANGE:apply",
+      level: "high",
+      category: "configuration",
+      source: "terraform_plan",
+      code: "DESTRUCTIVE_CHANGE",
+      message: "Terraform apply plan includes delete or replace changes",
+      requiresAcknowledgement: false,
+      blocksApproval: false
+    }
+  ]);
+});
+
+test("runDeploymentPlan feeds Terraform artifact content into Trivy-backed safety analysis", async () => {
+  const repository = new FakeDeploymentRepository();
+  const planArtifactStorage = new FakePlanArtifactStorage();
+  let analyzedTerraformCode = "";
+
+  const result = await runDeploymentPlan(
+    {
+      deploymentId,
+      accessContext: createAccessContext()
+    },
+    repository,
+    {
+      generatePlanArtifactId: () => planArtifactId,
+      planArtifactStorage,
+      readTerraformArtifactFile: async () => terraformArtifactContent,
+      analyzePreDeployment: async (input) => {
+        analyzedTerraformCode = input.terraformFiles?.[0]?.terraformCode ?? "";
+
+        return createAnalysis([
+          {
+            id: "trivy:aws-0107:main.tf:aws_security_group.open_ssh:13",
+            category: "network",
+            severity: "high",
+            resourceId: "aws_security_group.open_ssh",
+            sourceLocation: {
+              fileName: "main.tf",
+              line: 13,
+              resourceAddress: "aws_security_group.open_ssh"
+            },
+            title: "Security groups should not allow unrestricted ingress to SSH or RDP from any IP address.",
+            description: "Public SSH is exposed.",
+            recommendation: "Restrict SSH to a trusted CIDR."
+          }
+        ]);
+      },
+      prepareTerraformWorkspace: async () => ({
+        workdir: "C:/tmp/sketchcatch-terraform-trivy-plan",
+        mainFilePath: "C:/tmp/sketchcatch-terraform-trivy-plan/main.tf",
+        cleanup: async () => undefined
+      }),
+      prepareTerraformAwsCredentialEnv: async () => createPreparedCredentials(),
+      runTerraformInit: async () => createRunnerResult("init"),
+      runTerraformPlan: async () => createRunnerResult("plan"),
+      runTerraformShowJson: async () =>
+        createRunnerResult("show", {
+          stdout: createPlanJson([])
+        })
+    }
+  );
+
+  assert.equal(analyzedTerraformCode, terraformArtifactContent);
+  assert.deepEqual(result.deployment.planSummary?.warnings, [
+    {
+      id: "pre_deployment_check:trivy:aws-0107:main.tf:aws_security_group.open_ssh:13",
+      level: "high",
+      category: "network",
+      source: "pre_deployment_check",
+      code: "PUBLIC_SSH",
+      message:
+        "Security groups should not allow unrestricted ingress to SSH or RDP from any IP address.: Restrict SSH to a trusted CIDR.",
+      relatedFindingId: "trivy:aws-0107:main.tf:aws_security_group.open_ssh:13",
+      relatedResourceId: "aws_security_group.open_ssh",
+      sourceLocation: {
+        fileName: "main.tf",
+        line: 13,
+        resourceAddress: "aws_security_group.open_ssh"
+      },
+      requiresAcknowledgement: false,
+      blocksApproval: false
     }
   ]);
 });

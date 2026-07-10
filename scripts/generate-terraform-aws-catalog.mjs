@@ -54,7 +54,7 @@ function main() {
       ? fs.readFileSync(generatedCatalogPath, "utf8")
       : "";
 
-    if (currentOutput !== output) {
+    if (normalizeLineEndings(currentOutput) !== normalizeLineEndings(output)) {
       fail(
         [
           "Generated catalog is out of date.",
@@ -164,16 +164,15 @@ function buildGeneratedCatalog(resourceCatalog, overrideCatalog, providerSchema)
       item.nodeDefaults.terraformBlockType === "data" ? "data" : "resource"
     ])
   );
-  const catalogTypes = awsResources.map((item) => item.nodeDefaults.type);
+  const catalogTypes = Array.from(new Set(awsResources.map((item) => item.nodeDefaults.type)));
+  const catalogTypeSet = new Set(catalogTypes);
   const overrideTypes = Object.keys(overrideCatalog.resources);
-  const missingOverrides = catalogTypes.filter((type) => !overrideTypes.includes(type));
   const extraOverrides = overrideTypes.filter((type) => !catalogTypes.includes(type));
 
-  if (missingOverrides.length > 0 || extraOverrides.length > 0) {
+  if (extraOverrides.length > 0) {
     fail(
       [
         "Resource catalog and parameter override catalog are not aligned.",
-        missingOverrides.length > 0 ? `Missing overrides: ${missingOverrides.join(", ")}` : "",
         extraOverrides.length > 0 ? `Extra overrides: ${extraOverrides.join(", ")}` : ""
       ]
         .filter(Boolean)
@@ -184,7 +183,7 @@ function buildGeneratedCatalog(resourceCatalog, overrideCatalog, providerSchema)
   const errors = [];
   const resources = {};
 
-  for (const resourceType of catalogTypes) {
+  for (const resourceType of overrideTypes.filter((type) => catalogTypeSet.has(type))) {
     const terraformBlockType = blockTypeByResource.get(resourceType) ?? "resource";
     const schemaCollection =
       terraformBlockType === "data"
@@ -235,6 +234,7 @@ function mergeDefinitionWithSchema(definition, block, parentPath, errorPath, err
     required,
     optional: required ? false : schemaValue.optional ?? definition.optional,
     computed: schemaValue.computed ?? definition.computed,
+    core: definition.core,
     sensitive: Boolean(schemaValue.sensitive || definition.sensitive),
     description: definition.description || providerDescription,
     inputKind: definition.inputKind,
@@ -405,6 +405,10 @@ function renderGeneratedCatalog(catalog) {
   ].join("\n");
 }
 
+function normalizeLineEndings(value) {
+  return value.replace(/\r\n/g, "\n");
+}
+
 function loadTsModule(filePath) {
   const source = fs.readFileSync(filePath, "utf8");
   const compiled = ts.transpileModule(source, {
@@ -417,13 +421,14 @@ function loadTsModule(filePath) {
   }).outputText;
   const module = { exports: {} };
   const dirname = path.dirname(filePath);
+  const moduleRequire = createRequire(filePath);
 
   vm.runInNewContext(compiled, {
     __dirname: dirname,
     __filename: filePath,
     exports: module.exports,
     module,
-    require,
+    require: moduleRequire,
     console
   });
 

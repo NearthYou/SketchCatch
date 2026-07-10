@@ -1,4 +1,9 @@
-import type { DeploymentPlanSummary, DeploymentPlanWarning } from "@sketchcatch/types";
+import type {
+  DeploymentLiveProfile,
+  DeploymentPlanSummary,
+  DeploymentPlanWarning
+} from "@sketchcatch/types";
+import { createUnknownTerraformActionWarning } from "./deployment-warning-factory.js";
 
 type TerraformShowJson = {
   resource_changes?: unknown;
@@ -13,7 +18,7 @@ type TerraformResourceChange = {
   };
 };
 
-export const liveApplySupportedResourceTypes = new Set([
+export const practiceLiveApplySupportedResourceTypes = new Set([
   "aws_vpc",
   "aws_subnet",
   "aws_internet_gateway",
@@ -22,8 +27,41 @@ export const liveApplySupportedResourceTypes = new Set([
   "aws_security_group",
   "aws_security_group_rule",
   "aws_instance",
-  "aws_s3_bucket"
+  "aws_s3_bucket",
+  "aws_s3_bucket_public_access_block"
 ]);
+
+const demoWebServiceLiveApplySupportedResourceTypes = new Set([
+  ...practiceLiveApplySupportedResourceTypes,
+  "aws_autoscaling_group",
+  "aws_launch_template",
+  "aws_lb",
+  "aws_lb_listener",
+  "aws_lb_target_group",
+  "aws_s3_bucket_policy",
+  "aws_s3_bucket_website_configuration",
+  "aws_s3_object"
+]);
+
+const demoWebServiceWithRdsLiveApplySupportedResourceTypes = new Set([
+  ...demoWebServiceLiveApplySupportedResourceTypes,
+  "aws_db_instance",
+  "aws_db_subnet_group"
+]);
+
+export function getLiveApplySupportedResourceTypes(
+  liveProfile: DeploymentLiveProfile = "practice"
+): ReadonlySet<string> {
+  if (liveProfile === "demo_web_service_with_rds") {
+    return demoWebServiceWithRdsLiveApplySupportedResourceTypes;
+  }
+
+  if (liveProfile === "demo_web_service") {
+    return demoWebServiceLiveApplySupportedResourceTypes;
+  }
+
+  return practiceLiveApplySupportedResourceTypes;
+}
 
 export class DeploymentPlanSummaryParseError extends Error {
   constructor(message: string) {
@@ -56,7 +94,7 @@ export function createDeploymentPlanSummaryFromTerraformShowJson(
     const actions = resourceChange.change?.actions;
 
     if (!Array.isArray(actions) || !actions.every((action) => typeof action === "string")) {
-      warnings.push(createUnknownActionWarning(resourceChange.address, "missing actions"));
+      warnings.push(createUnknownTerraformActionWarning(resourceChange.address, "missing actions"));
       continue;
     }
 
@@ -84,18 +122,20 @@ export function createDeploymentPlanSummaryFromTerraformShowJson(
       continue;
     }
 
-    warnings.push(createUnknownActionWarning(resourceChange.address, actions.join(",")));
+    warnings.push(createUnknownTerraformActionWarning(resourceChange.address, actions.join(",")));
   }
 
   return summary;
 }
 
 export function findUnsupportedLiveApplyResourceTypesFromTerraformShowJson(
-  terraformShowJson: string
+  terraformShowJson: string,
+  liveProfile: DeploymentLiveProfile = "practice"
 ): string[] {
   const parsed = parseTerraformShowJson(terraformShowJson);
   const resourceChanges = Array.isArray(parsed.resource_changes) ? parsed.resource_changes : [];
   const unsupportedTypes = new Set<string>();
+  const supportedResourceTypes = getLiveApplySupportedResourceTypes(liveProfile);
 
   for (const resourceChange of resourceChanges) {
     if (!isTerraformResourceChange(resourceChange) || resourceChange.mode === "data") {
@@ -118,7 +158,7 @@ export function findUnsupportedLiveApplyResourceTypesFromTerraformShowJson(
       continue;
     }
 
-    if (!liveApplySupportedResourceTypes.has(resourceType)) {
+    if (!supportedResourceTypes.has(resourceType)) {
       unsupportedTypes.add(resourceType);
     }
   }
@@ -153,19 +193,4 @@ function isSameActions(actions: string[], expectedActions: string[]): boolean {
     actions.length === expectedActions.length &&
     actions.every((action, index) => action === expectedActions[index])
   );
-}
-
-function createUnknownActionWarning(
-  resourceAddress: unknown,
-  actionsDescription: string
-): DeploymentPlanWarning {
-  const message =
-    typeof resourceAddress === "string" && resourceAddress.trim().length > 0
-      ? `Unsupported Terraform plan action for ${resourceAddress}: ${actionsDescription}`
-      : `Unsupported Terraform plan action: ${actionsDescription}`;
-
-  return {
-    level: "medium",
-    message
-  };
 }

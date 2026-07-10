@@ -3,20 +3,46 @@ import { ZodError } from "zod";
 import type { ApiErrorCode } from "@sketchcatch/types";
 import { startRefreshTokenCleanupJob } from "./auth/cleanup.js";
 import { type DatabaseClient, getDatabaseClient } from "./db/client.js";
-import { registerAiRoutes } from "./routes/ai.js";
+import { registerAiRoutes, type AiRouteOptions } from "./routes/ai.js";
+import type { CostPricingRateProvider } from "./services/cost-analysis.js";
+import type { CostUsageAnalysisProvider } from "./services/cost-usage-analysis.js";
 import type { CreateLlmExplanation } from "./services/aiLlmExplanation.js";
+import type { CreateSafetyFindingExplanation } from "./services/aiSafetyFindingExplanation.js";
 import { registerHealthRoutes } from "./routes/health.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerOAuthRoutes } from "./routes/oauth.js";
 import { registerProjectRoutes, type ProjectAssetStorage } from "./routes/projects.js";
+import {
+  registerSourceRepositoryRoutes,
+  type SourceRepositoryRouteOptions
+} from "./routes/source-repositories.js";
 import { registerDeploymentRoutes } from "./routes/deployments.js";
-import { registerTerraformRoutes } from "./routes/terraform.js";
+import { registerGitCicdHandoffRoutes } from "./routes/git-cicd-handoffs.js";
+import { registerCostRoutes } from "./routes/costs.js";
+import {
+  createDelegatingGitCicdHandoffProvider,
+  createGitHubGitCicdHandoffProvider
+} from "./git-cicd/git-cicd-handoff-service.js";
+import { createGitHubAppGitProvider } from "./git-cicd/github-app-git-provider.js";
+import { createGitHubActionsPipelineStatusProvider } from "./git-cicd/github-actions-pipeline-status-provider.js";
+import {
+  registerTerraformRoutes,
+  type TerraformRouteOptions
+} from "./routes/terraform.js";
 import { registerAwsConnectionRoutes } from "./routes/aws-connections.js";
+import {
+  registerReverseEngineeringRoutes,
+  type ReverseEngineeringRouteOptions
+} from "./routes/reverse-engineering.js";
 import type { ProjectDeletionStorage } from "./projects/project-deletion-service.js";
 import {
   createInMemoryRateLimiter,
   type RateLimiter
 } from "./rate-limit/in-memory-rate-limiter.js";
+import {
+  createRuntimeCacheFromEnv,
+  type RuntimeCache
+} from "./runtime-cache/index.js";
 
 const allowedCorsOrigins = new Set(["http://localhost:3000", "http://127.0.0.1:3000"]);
 const corsAllowedMethods = "GET,POST,PUT,DELETE,OPTIONS";
@@ -24,13 +50,26 @@ const fallbackCorsAllowedHeaders = "content-type,authorization";
 
 export type BuildAppOptions = {
   getDatabaseClient?: () => DatabaseClient;
+  analyzePreDeploymentCheck?: AiRouteOptions["analyzePreDeploymentCheck"];
+  createArchitectureDraftResponse?: AiRouteOptions["createArchitectureDraftResponse"];
   createLlmExplanation?: CreateLlmExplanation;
+  createSafetyFindingExplanation?: CreateSafetyFindingExplanation;
+  safetyExplanationTimeoutMs?: AiRouteOptions["safetyExplanationTimeoutMs"];
+  pricingRateProvider?: CostPricingRateProvider;
+  costUsageProvider?: CostUsageAnalysisProvider;
   oauthCallbackRateLimiter?: RateLimiter;
   oauthStartRateLimiter?: RateLimiter;
   passwordResetRequestEmailRateLimiter?: RateLimiter;
   passwordResetRequestIpRateLimiter?: RateLimiter;
   projectAssetStorage?: ProjectAssetStorage;
   projectDeletionStorage?: ProjectDeletionStorage;
+  sourceRepositoryRoutes?: Pick<
+    SourceRepositoryRouteOptions,
+    "createSourceRepositoryRepository" | "githubAppClient" | "githubAppSlug" | "githubAppStateSecret"
+  >;
+  runtimeCache?: RuntimeCache;
+  validateTerraformPreviewCode?: TerraformRouteOptions["validateTerraformPreviewCode"];
+  reverseEngineeringServiceOptions?: ReverseEngineeringRouteOptions["serviceOptions"];
 };
 
 // 테스트와 서버가 같은 앱을 쓰되, LLM 호출 계층은 옵션으로만 주입합니다.
@@ -64,6 +103,13 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     logger: process.env.NODE_ENV !== "test",
     trustProxy: true
   });
+  const runtimeCache =
+    options.runtimeCache ??
+    createRuntimeCacheFromEnv({
+      onDegraded: (error) => {
+        app.log.warn({ error }, "Runtime Cache degraded; continuing with fallback state");
+      }
+    });
   const stopRefreshTokenCleanupJob =
     process.env.NODE_ENV === "test"
       ? undefined
@@ -114,7 +160,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   });
 
   app.register(registerHealthRoutes);
-  app.register(registerAiRoutes, createAiRouteOptions(options));
+  app.register(registerAiRoutes, createAiRouteOptions(options, runtimeCache));
   app.register(registerAuthRoutes, {
     prefix: "/api",
     getDatabaseClient: getAppDatabaseClient,
@@ -133,31 +179,106 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     projectAssetStorage: options.projectAssetStorage,
     projectDeletionStorage: options.projectDeletionStorage
   });
+  app.register(registerSourceRepositoryRoutes, {
+    prefix: "/api",
+    getDatabaseClient: getAppDatabaseClient,
+    ...options.sourceRepositoryRoutes
+  });
   app.register(registerDeploymentRoutes, {
     prefix: "/api",
-    getDatabaseClient: getAppDatabaseClient
+    getDatabaseClient: getAppDatabaseClient,
+    runtimeCache
   });
-  app.register(registerTerraformRoutes, {
+  app.register(registerGitCicdHandoffRoutes, {
     prefix: "/api",
-    getDatabaseClient: getAppDatabaseClient
+    getDatabaseClient: getAppDatabaseClient,
+    gitCicdHandoffProvider: createDelegatingGitCicdHandoffProvider({
+      githubProvider: createGitHubGitCicdHandoffProvider(createGitHubAppGitProvider())
+    }),
+    gitCicdPipelineStatusProvider: createGitHubActionsPipelineStatusProvider(),
+    runtimeCache
   });
+  app.register(registerCostRoutes, createCostRouteOptions(options, getAppDatabaseClient));
+  app.register(
+    registerTerraformRoutes,
+    createTerraformRouteOptions(options, getAppDatabaseClient)
+  );
   app.register(registerAwsConnectionRoutes, {
     prefix: "/api",
     getDatabaseClient: getAppDatabaseClient
+  });
+  app.register(registerReverseEngineeringRoutes, {
+    prefix: "/api",
+    getDatabaseClient: getAppDatabaseClient,
+    serviceOptions: options.reverseEngineeringServiceOptions
   });
 
   return app;
 }
 
 // AI route 옵션은 undefined 필드를 넘기지 않게 분리해 exact optional 타입을 지킵니다.
-function createAiRouteOptions(options: BuildAppOptions): { readonly prefix: "/api"; readonly createLlmExplanation?: CreateLlmExplanation } {
-  if (options.createLlmExplanation === undefined) {
-    return { prefix: "/api" };
+function createAiRouteOptions(
+  options: BuildAppOptions,
+  runtimeCache: RuntimeCache
+): AiRouteOptions & { readonly prefix: "/api" } {
+  if (
+    options.analyzePreDeploymentCheck === undefined &&
+    options.createArchitectureDraftResponse === undefined &&
+    options.createLlmExplanation === undefined &&
+    options.createSafetyFindingExplanation === undefined &&
+    options.safetyExplanationTimeoutMs === undefined &&
+    options.pricingRateProvider === undefined
+  ) {
+    return { prefix: "/api", runtimeCache };
   }
 
   return {
     prefix: "/api",
-    createLlmExplanation: options.createLlmExplanation
+    runtimeCache,
+    ...(options.analyzePreDeploymentCheck !== undefined
+      ? { analyzePreDeploymentCheck: options.analyzePreDeploymentCheck }
+      : {}),
+    ...(options.createArchitectureDraftResponse !== undefined
+      ? { createArchitectureDraftResponse: options.createArchitectureDraftResponse }
+      : {}),
+    ...(options.createLlmExplanation === undefined ? {} : { createLlmExplanation: options.createLlmExplanation }),
+    ...(options.createSafetyFindingExplanation === undefined
+      ? {}
+      : { createSafetyFindingExplanation: options.createSafetyFindingExplanation }),
+    ...(options.safetyExplanationTimeoutMs === undefined
+      ? {}
+      : { safetyExplanationTimeoutMs: options.safetyExplanationTimeoutMs }),
+    ...(options.pricingRateProvider === undefined ? {} : { pricingRateProvider: options.pricingRateProvider })
+  };
+}
+
+function createCostRouteOptions(
+  options: BuildAppOptions,
+  getDatabaseClient: () => DatabaseClient
+): {
+  readonly prefix: "/api";
+  readonly getDatabaseClient: () => DatabaseClient;
+  readonly pricingRateProvider?: CostPricingRateProvider;
+  readonly costUsageProvider?: CostUsageAnalysisProvider;
+} {
+  return {
+    prefix: "/api",
+    getDatabaseClient,
+    ...(options.pricingRateProvider === undefined ? {} : { pricingRateProvider: options.pricingRateProvider }),
+    ...(options.costUsageProvider === undefined ? {} : { costUsageProvider: options.costUsageProvider })
+  };
+}
+
+function createTerraformRouteOptions(
+  options: BuildAppOptions,
+  getDatabaseClient: () => DatabaseClient
+): TerraformRouteOptions & { readonly prefix: "/api" } {
+  return {
+    prefix: "/api",
+    getDatabaseClient,
+    ...(options.validateTerraformPreviewCode !== undefined
+      ? { validateTerraformPreviewCode: options.validateTerraformPreviewCode }
+      : {})
   };
 }
 

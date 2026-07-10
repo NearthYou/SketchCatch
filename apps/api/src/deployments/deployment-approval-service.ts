@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto";
-import type { AwsConnection, DeploymentFailureStage, DeploymentStatus } from "@sketchcatch/types";
-import {
-  assertAwsApplyPreconditions,
-  AwsConnectionRuntimeCredentialsError
-} from "../aws-connections/aws-connection-runtime-credentials.js";
+import type {
+  ApproveDeploymentPlanRequest,
+  AwsConnection,
+  DeploymentFailureStage,
+  DeploymentStatus
+} from "@sketchcatch/types";
 import {
   defaultTerraformArtifactMaxBytes,
   downloadTerraformArtifactFromS3
@@ -22,6 +23,7 @@ import {
 export type ApproveDeploymentPlanInput = {
   deploymentId: string;
   accessContext: ProjectAccessContext;
+  acknowledgedWarningIds?: ApproveDeploymentPlanRequest["acknowledgedWarningIds"];
 };
 
 export type ApproveDeploymentPlanOptions = {
@@ -42,6 +44,24 @@ export type AssertDeploymentDestroyPreconditionsInput = AssertDeploymentApplyPre
   sourceFailureStage: DeploymentFailureStage | null;
 };
 
+export type DeploymentApplyPreconditionReason =
+  | "approval_snapshot"
+  | "plan_operation"
+  | "terraform_artifact"
+  | "terraform_plan"
+  | "aws_account"
+  | "aws_region";
+
+export class DeploymentApplyPreconditionError extends DeploymentConflictError {
+  readonly reason: DeploymentApplyPreconditionReason;
+
+  constructor(reason: DeploymentApplyPreconditionReason, message: string) {
+    super(message);
+    this.name = "DeploymentApplyPreconditionError";
+    this.reason = reason;
+  }
+}
+
 export async function approveDeploymentPlan(
   input: ApproveDeploymentPlanInput,
   repository: DeploymentRepository,
@@ -55,6 +75,7 @@ export async function approveDeploymentPlan(
   const deployment = await getDeployment(input, repository);
 
   assertDeploymentCanBeApproved(deployment);
+  void input.acknowledgedWarningIds;
 
   const currentPlanArtifact = await repository.findDeploymentPlanArtifactById(
     deployment.currentPlanArtifactId
@@ -99,7 +120,9 @@ export async function approveDeploymentPlan(
 
   const terraformArtifactContent = await downloadTerraformArtifact(terraformArtifact.objectKey);
 
-  assertTerraformArtifactIsSafe(terraformArtifactContent);
+  assertTerraformArtifactIsSafe(terraformArtifactContent, {
+    liveProfile: deployment.liveProfile
+  });
 
   const terraformArtifactHash = createSha256(terraformArtifactContent);
   const plannedTerraformArtifactSha256 = currentPlanArtifact.terraformArtifactSha256;
@@ -142,14 +165,24 @@ export function assertDeploymentApplyPreconditions(
 ): void {
   const deployment = input.deployment;
 
-  assertDeploymentApprovalSnapshot(deployment);
+  assertDeploymentApprovalSnapshot(deployment, "apply");
 
   if (input.currentPlanArtifact.operation !== "apply") {
-    throw new DeploymentConflictError("Terraform apply plan is required before apply");
+    throw new DeploymentApplyPreconditionError(
+      "plan_operation",
+      `Terraform apply plan is required before apply: current plan operation is ${input.currentPlanArtifact.operation}`
+    );
+  }
+
+  if (deployment.isBlocked) {
+    throw new DeploymentConflictError("Blocked deployment cannot be applied");
   }
 
   if (deployment.approvedTerraformArtifactId !== deployment.terraformArtifactId) {
-    throw new DeploymentConflictError("Terraform artifact changed after approval");
+    throw new DeploymentApplyPreconditionError(
+      "terraform_artifact",
+      `Terraform artifact changed after approval: approved artifact ${deployment.approvedTerraformArtifactId}, current artifact ${deployment.terraformArtifactId}`
+    );
   }
 
   if (
@@ -157,32 +190,45 @@ export function assertDeploymentApplyPreconditions(
     deployment.approvedPlanArtifactId !== input.currentPlanArtifact.id ||
     input.currentPlanArtifact.deploymentId !== deployment.id
   ) {
-    throw new DeploymentConflictError("Terraform plan changed after approval");
+    throw new DeploymentApplyPreconditionError(
+      "terraform_plan",
+      `Terraform plan changed after approval: approved plan ${deployment.approvedPlanArtifactId}, current plan ${deployment.currentPlanArtifactId ?? "missing"}`
+    );
   }
 
   if (deployment.approvedTerraformArtifactHash !== input.currentTerraformArtifactHash) {
-    throw new DeploymentConflictError("Terraform artifact content changed after approval");
+    throw new DeploymentApplyPreconditionError(
+      "terraform_artifact",
+      `Terraform artifact content changed after approval: approved artifact hash ${formatShortHash(deployment.approvedTerraformArtifactHash)}, current artifact hash ${formatShortHash(input.currentTerraformArtifactHash)}`
+    );
   }
 
   if (!input.currentAwsConnection.accountId) {
-    throw new DeploymentConflictError("AWS connection account is missing before apply");
+    throw new DeploymentApplyPreconditionError(
+      "aws_account",
+      `AWS connection account is missing before apply: approved AWS account ${deployment.approvedAwsAccountId}, current AWS account missing`
+    );
   }
 
-  try {
-    assertAwsApplyPreconditions({
-      approvedAccountId: deployment.approvedAwsAccountId,
-      currentAccountId: input.currentAwsConnection.accountId,
-      approvedRegion: deployment.approvedAwsRegion,
-      currentRegion: input.currentAwsConnection.region,
-      approvedTfplanHash: deployment.approvedTfplanHash,
-      currentTfplanHash: input.currentTfplanHash
-    });
-  } catch (error) {
-    if (error instanceof AwsConnectionRuntimeCredentialsError) {
-      throw new DeploymentConflictError(error.message);
-    }
+  if (deployment.approvedAwsAccountId !== input.currentAwsConnection.accountId) {
+    throw new DeploymentApplyPreconditionError(
+      "aws_account",
+      `AWS account changed before apply: approved AWS account ${deployment.approvedAwsAccountId}, current AWS account ${input.currentAwsConnection.accountId}`
+    );
+  }
 
-    throw error;
+  if (deployment.approvedAwsRegion !== input.currentAwsConnection.region) {
+    throw new DeploymentApplyPreconditionError(
+      "aws_region",
+      `AWS region changed before apply: approved AWS region ${deployment.approvedAwsRegion}, current AWS region ${input.currentAwsConnection.region}`
+    );
+  }
+
+  if (deployment.approvedTfplanHash !== input.currentTfplanHash) {
+    throw new DeploymentApplyPreconditionError(
+      "terraform_plan",
+      `Terraform plan changed before apply: approved tfplan hash ${formatShortHash(deployment.approvedTfplanHash)}, current tfplan hash ${formatShortHash(input.currentTfplanHash)}`
+    );
   }
 }
 
@@ -191,7 +237,7 @@ export function assertDeploymentDestroyPreconditions(
 ): void {
   const deployment = input.deployment;
 
-  assertDeploymentApprovalSnapshot(deployment);
+  assertDeploymentApprovalSnapshot(deployment, "destroy");
 
   if (input.currentPlanArtifact.operation !== "destroy") {
     throw new DeploymentConflictError("Terraform destroy plan is required before destroy");
@@ -261,10 +307,6 @@ function assertDeploymentCanBeApproved(
   if (!deployment.currentPlanArtifactId || !deployment.planSummary) {
     throw new DeploymentConflictError("Terraform Plan must be completed before approval");
   }
-
-  if (!deployment.isBlocked || deployment.blockedBy !== "missing_approval") {
-    throw new DeploymentConflictError("Blocked deployment cannot be approved");
-  }
 }
 
 function getApprovedDeploymentStatus(
@@ -287,7 +329,8 @@ function getApprovedDeploymentStatus(
 }
 
 function assertDeploymentApprovalSnapshot(
-  deployment: DeploymentRecord
+  deployment: DeploymentRecord,
+  operation: "apply" | "destroy"
 ): asserts deployment is DeploymentRecord & {
   approvedTerraformArtifactId: string;
   approvedPlanArtifactId: string;
@@ -296,18 +339,32 @@ function assertDeploymentApprovalSnapshot(
   approvedAwsAccountId: string;
   approvedAwsRegion: string;
 } {
-  if (
-    !deployment.approvedAt ||
-    !deployment.approvedByUserId ||
-    !deployment.approvedTerraformArtifactId ||
-    !deployment.approvedPlanArtifactId ||
-    !deployment.approvedTerraformArtifactHash ||
-    !deployment.approvedTfplanHash ||
-    !deployment.approvedAwsAccountId ||
-    !deployment.approvedAwsRegion
-  ) {
-    throw new DeploymentConflictError("Deployment approval is required before apply");
+  const missingFields = getMissingApprovalSnapshotFields(deployment);
+
+  if (missingFields.length > 0) {
+    const message = `Deployment approval snapshot is incomplete before ${operation}: missing ${missingFields.join(", ")}`;
+
+    if (operation === "apply") {
+      throw new DeploymentApplyPreconditionError("approval_snapshot", message);
+    }
+
+    throw new DeploymentConflictError(message);
   }
+}
+
+function getMissingApprovalSnapshotFields(deployment: DeploymentRecord): string[] {
+  const snapshotFields: Array<readonly [string, unknown]> = [
+    ["approvedAt", deployment.approvedAt],
+    ["approvedByUserId", deployment.approvedByUserId],
+    ["approvedTerraformArtifactId", deployment.approvedTerraformArtifactId],
+    ["approvedPlanArtifactId", deployment.approvedPlanArtifactId],
+    ["approvedTerraformArtifactHash", deployment.approvedTerraformArtifactHash],
+    ["approvedTfplanHash", deployment.approvedTfplanHash],
+    ["approvedAwsAccountId", deployment.approvedAwsAccountId],
+    ["approvedAwsRegion", deployment.approvedAwsRegion]
+  ];
+
+  return snapshotFields.filter(([, value]) => !value).map(([field]) => field);
 }
 
 async function requireDeploymentAwsConnection(
@@ -336,4 +393,8 @@ async function requireDeploymentAwsConnection(
 
 function createSha256(value: Buffer | Uint8Array | string): string {
   return createHash("sha256").update(Buffer.from(value)).digest("hex");
+}
+
+function formatShortHash(hash: string): string {
+  return hash.length > 12 ? `${hash.slice(0, 12)}...` : hash;
 }

@@ -1,4 +1,6 @@
-import { liveApplySupportedResourceTypes } from "./deployment-plan-summary.js";
+import { createHash } from "node:crypto";
+import type { DeploymentLiveProfile } from "@sketchcatch/types";
+import { getLiveApplySupportedResourceTypes } from "./deployment-plan-summary.js";
 
 const allowedTopLevelBlocks = new Set(["terraform", "provider", "resource", "data", "variable", "output", "locals"]);
 const liveApplySupportedDataSourceTypes = new Set(["aws_ami"]);
@@ -46,6 +48,10 @@ type HclBlock = {
   line: number;
 };
 
+export type TerraformArtifactSafetyOptions = {
+  liveProfile?: DeploymentLiveProfile | undefined;
+};
+
 export class TerraformArtifactSafetyError extends Error {
   constructor(message: string) {
     super(message);
@@ -53,7 +59,14 @@ export class TerraformArtifactSafetyError extends Error {
   }
 }
 
-export function assertTerraformArtifactIsSafe(terraformCode: Buffer | Uint8Array | string): void {
+export const managedDemoUserDataMarker = "sketchcatch-demo-managed-user-data:v1";
+export const managedDemoUserDataHashPrefix =
+  "sketchcatch-demo-managed-user-data-sha256:";
+
+export function assertTerraformArtifactIsSafe(
+  terraformCode: Buffer | Uint8Array | string,
+  options: TerraformArtifactSafetyOptions = {}
+): void {
   const code = Buffer.isBuffer(terraformCode)
     ? terraformCode.toString("utf8")
     : terraformCode instanceof Uint8Array
@@ -68,7 +81,10 @@ export function assertTerraformArtifactIsSafe(terraformCode: Buffer | Uint8Array
   validateProviderSourceAttributes(tokens);
   validateDisallowedTerraformFunctionCalls(tokens);
   validateDisallowedStringInterpolations(tokens);
-  validateDeploymentResourceAttributes(code);
+  const liveProfile = options.liveProfile ?? "practice";
+  const supportedResourceTypes = getLiveApplySupportedResourceTypes(liveProfile);
+
+  validateDeploymentResourceAttributes(code, liveProfile);
 
   for (let index = 0; index < tokens.length; index += 1) {
     const token = tokens[index]!;
@@ -97,7 +113,7 @@ export function assertTerraformArtifactIsSafe(terraformCode: Buffer | Uint8Array
       attributeValueDepths.delete(depth);
 
       if (block) {
-        validateBlock(block, stack);
+        validateBlock(block, stack, supportedResourceTypes);
         stack.push(block);
       }
 
@@ -128,9 +144,13 @@ export function assertTerraformArtifactIsSafe(terraformCode: Buffer | Uint8Array
   }
 }
 
-function validateBlock(block: HclBlock, stack: HclBlock[]): void {
+function validateBlock(
+  block: HclBlock,
+  stack: HclBlock[],
+  supportedResourceTypes: ReadonlySet<string>
+): void {
   if (stack.length === 0) {
-    validateTopLevelBlock(block);
+    validateTopLevelBlock(block, supportedResourceTypes);
     return;
   }
 
@@ -149,7 +169,7 @@ function validateBlock(block: HclBlock, stack: HclBlock[]): void {
   }
 }
 
-function validateTopLevelBlock(block: HclBlock): void {
+function validateTopLevelBlock(block: HclBlock, supportedResourceTypes: ReadonlySet<string>): void {
   if (!allowedTopLevelBlocks.has(block.type)) {
     throw new TerraformArtifactSafetyError(
       `Terraform top-level block "${block.type}" is not allowed before live deployment at line ${block.line}`
@@ -175,7 +195,7 @@ function validateTopLevelBlock(block: HclBlock): void {
   if (block.type === "resource") {
     const resourceType = block.labels[0];
 
-    if (!resourceType || !liveApplySupportedResourceTypes.has(resourceType)) {
+    if (!resourceType || !supportedResourceTypes.has(resourceType)) {
       throw new TerraformArtifactSafetyError(
         `Terraform resource "${resourceType ?? ""}" is not allowed before live deployment at line ${block.line}`
       );
@@ -325,13 +345,38 @@ type TerraformResourceBlock = {
   line: number;
 };
 
-function validateDeploymentResourceAttributes(source: string): void {
+function validateDeploymentResourceAttributes(
+  source: string,
+  liveProfile: DeploymentLiveProfile
+): void {
   for (const resource of extractResourceBlocks(source)) {
     const body = stripHclComments(resource.body);
 
-    if (resource.type === "aws_instance" && /\buser_data(?:_base64)?\s*=/.test(body)) {
-      throw new TerraformArtifactSafetyError(
-        `Terraform EC2 user_data is not allowed before live deployment at line ${resource.line}`
+    if (resource.type === "aws_instance" && /\buser_data\s*=/.test(body)) {
+      validateManagedDemoUserData(body, resource.line, liveProfile, "user_data", "EC2");
+    }
+
+    if (resource.type === "aws_instance" && /\buser_data_base64\s*=/.test(body)) {
+      validateManagedDemoUserData(body, resource.line, liveProfile, "user_data_base64", "EC2");
+    }
+
+    if (resource.type === "aws_launch_template" && /\buser_data\s*=/.test(body)) {
+      validateManagedDemoUserData(
+        body,
+        resource.line,
+        liveProfile,
+        "user_data",
+        "launch template"
+      );
+    }
+
+    if (resource.type === "aws_launch_template" && /\buser_data_base64\s*=/.test(body)) {
+      validateManagedDemoUserData(
+        body,
+        resource.line,
+        liveProfile,
+        "user_data_base64",
+        "launch template"
       );
     }
 
@@ -357,6 +402,71 @@ function validateDeploymentResourceAttributes(source: string): void {
       validatePublicRemoteAccessIngress(body, resource.line);
     }
   }
+}
+
+function validateManagedDemoUserData(
+  body: string,
+  line: number,
+  liveProfile: DeploymentLiveProfile,
+  argumentName: "user_data" | "user_data_base64",
+  resourceLabel: "EC2" | "launch template"
+): void {
+  if (liveProfile !== "demo_web_service" && liveProfile !== "demo_web_service_with_rds") {
+    throw new TerraformArtifactSafetyError(
+      `Terraform ${resourceLabel} ${argumentName} is not allowed for ${liveProfile} live deployment at line ${line}`
+    );
+  }
+
+  const match = new RegExp(`\\b${argumentName}\\s*=\\s*"([A-Za-z0-9+/=]+)"`).exec(body);
+
+  if (!match?.[1]) {
+    throw new TerraformArtifactSafetyError(
+      `Terraform ${resourceLabel} ${argumentName} must be a literal managed base64 value before live deployment at line ${line}`
+    );
+  }
+
+  const decoded = decodeBase64UserData(match[1], line);
+
+  if (!decoded.includes(managedDemoUserDataMarker)) {
+    throw new TerraformArtifactSafetyError(
+      `Terraform ${resourceLabel} ${argumentName} is missing the SketchCatch managed marker at line ${line}`
+    );
+  }
+
+  const canonicalDecoded = decoded.replace(/\r\n/g, "\n");
+  const hashMatch = new RegExp(
+    `^\\s*#\\s*${escapeRegExp(managedDemoUserDataHashPrefix)}([a-f0-9]{64})\\s*$`,
+    "m"
+  ).exec(canonicalDecoded);
+
+  if (!hashMatch?.[1]) {
+    throw new TerraformArtifactSafetyError(
+      `Terraform ${resourceLabel} ${argumentName} is missing the SketchCatch managed hash at line ${line}`
+    );
+  }
+
+  const normalized = canonicalDecoded.replace(hashMatch[0], `# ${managedDemoUserDataHashPrefix}`);
+  const actualHash = createHash("sha256").update(normalized).digest("hex");
+
+  if (hashMatch[1] !== actualHash) {
+    throw new TerraformArtifactSafetyError(
+      `Terraform ${resourceLabel} ${argumentName} managed hash does not match at line ${line}`
+    );
+  }
+}
+
+function decodeBase64UserData(value: string, line: number): string {
+  try {
+    return Buffer.from(value, "base64").toString("utf8");
+  } catch {
+    throw new TerraformArtifactSafetyError(
+      `Terraform launch template user_data could not be decoded at line ${line}`
+    );
+  }
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function validatePublicRemoteAccessIngress(body: string, line: number): void {

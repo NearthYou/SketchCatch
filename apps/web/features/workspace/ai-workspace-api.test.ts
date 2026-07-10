@@ -5,10 +5,12 @@ import {
   requestTerraformErrorExplanation
 } from "../../app/workspace/workspace-api-client";
 import {
+  createAiArchitectureDraft,
   runAiTerraformErrorExplanation,
   runAiTerraformPreviewExplanation
 } from "./api";
 import type { ArchitectureJson } from "../../../../packages/types/src";
+import { getApiErrorMessage } from "../../lib/api-client";
 
 const architectureJson: ArchitectureJson = {
   nodes: [
@@ -138,7 +140,16 @@ test("runAiTerraformPreviewExplanation posts Terraform code from the real worksp
           }
         ],
         findings: [],
-        checklist: []
+        checklist: [],
+        wellArchitectedGuidance: [
+          {
+            pillar: "security",
+            title: "보안 에이전트",
+            observation: "공개 접근은 감지되지 않았습니다.",
+            recommendation: "배포 전 권한 범위를 확인하세요."
+          }
+        ],
+        consensusRecommendation: "결론: 배포 전 6개 기준을 확인하세요."
       }),
       {
         headers: {
@@ -156,6 +167,69 @@ test("runAiTerraformPreviewExplanation posts Terraform code from the real worksp
     terraformCode: 'resource "aws_vpc" "main" {}'
   });
   assert.equal(result.summary, "VPC와 EC2가 감지되었습니다.");
+});
+
+test("createAiArchitectureDraft preserves API rejection message for non-architecture prompts", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const rejectionMessage =
+    "자연어 요구사항에서 명확한 아키텍처 단서를 찾지 못해 초안을 생성하지 않았습니다.";
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  globalThis.fetch = async () =>
+    new Response(
+      JSON.stringify({
+        error: "bad_request",
+        message: rejectionMessage
+      }),
+      {
+        headers: {
+          "Content-Type": "application/json"
+        },
+        status: 400
+      }
+    );
+
+  try {
+    await createAiArchitectureDraft({
+      prompt: "된장찌개 레시피 알려줘"
+    });
+    assert.fail("expected createAiArchitectureDraft to reject");
+  } catch (error) {
+    assert.equal(
+      getApiErrorMessage(error, "Architecture Draft 생성 중 오류가 발생했습니다."),
+      rejectionMessage
+    );
+  }
+});
+
+test("createAiArchitectureDraft rejects empty prompts before posting to the API", async (context) => {
+  const originalFetch = globalThis.fetch;
+  let requestCount = 0;
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  globalThis.fetch = async () => {
+    requestCount += 1;
+    return new Response("{}", { status: 200 });
+  };
+
+  try {
+    await createAiArchitectureDraft({
+      prompt: "   "
+    });
+    assert.fail("expected createAiArchitectureDraft to reject");
+  } catch (error) {
+    assert.equal(requestCount, 0);
+    assert.equal(
+      getApiErrorMessage(error, "Architecture Draft 생성 중 오류가 발생했습니다."),
+      "Requirement Prompt를 먼저 입력해주세요."
+    );
+  }
 });
 
 test("runAiTerraformErrorExplanation posts Terraform stage and raw message from the real workspace panel", async (context) => {
@@ -191,14 +265,16 @@ test("runAiTerraformErrorExplanation posts Terraform stage and raw message from 
   const result = await runAiTerraformErrorExplanation({
     rawMessage: "AccessDenied",
     relatedResourceId: "ec2-backend",
-    stage: "plan"
+    stage: "plan",
+    terraformCodeContext: 'resource "aws_instance" "backend" {}'
   });
 
   assert.equal(String(requests[0]?.input), "/api/ai/terraform-error-explanation");
   assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
     rawMessage: "AccessDenied",
     relatedResourceId: "ec2-backend",
-    stage: "plan"
+    stage: "plan",
+    terraformCodeContext: 'resource "aws_instance" "backend" {}'
   });
   assert.equal(result.category, "permission");
 });

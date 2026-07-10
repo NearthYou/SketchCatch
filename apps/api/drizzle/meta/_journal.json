@@ -148,6 +148,62 @@
       "when": 1782950400000,
       "tag": "0020_project_asset_upload_status",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1783036800000,
+      "tag": "0021_git_cicd_handoffs",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1783123200000,
+      "tag": "0022_git_cicd_github_provider",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1783296000000,
+      "tag": "0023_source_repositories",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1783209600000,
+      "tag": "0024_reverse_engineering_scans",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1783382400000,
+      "tag": "0025_demo_web_service_live_profile",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1783468800000,
+      "tag": "0026_git_cicd_infra_app_auto_deploy",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1783641600000,
+      "tag": "0027_deployment_jobs",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1783728000000,
+      "tag": "0028_deployment_job_init_operation",
+      "breakpoints": true
     }
   ]
 }

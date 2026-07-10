@@ -1,14 +1,22 @@
 import type {
   AiTerraformDetectedResource,
   AiTerraformPreviewExplanationResult,
+  AiWellArchitectedGuidance,
   CheckFinding
 } from "@sketchcatch/types";
 
 // Terraform 코드 조각을 읽고 어떤 Resource와 위험 신호가 있는지 설명합니다.
 export function explainTerraformPreview(terraformCode: string): AiTerraformPreviewExplanationResult {
   const normalizedCode = terraformCode.toLowerCase();
-  const detectedResources = detectTerraformResources(terraformCode);
+  const resourceBlocks = parseTerraformResourceBlocks(terraformCode);
+  const detectedResources = detectTerraformResources(terraformCode, resourceBlocks);
   const findings = createTerraformPreviewFindings(normalizedCode);
+  const evaluationContext: TerraformPreviewEvaluationContext = {
+    detectedResources,
+    findings,
+    normalizedCode,
+    resourceBlocks
+  };
 
   return {
     summary: createTerraformPreviewSummary(detectedResources),
@@ -21,7 +29,9 @@ export function explainTerraformPreview(terraformCode: string): AiTerraformPrevi
         status: findings.length > 0 ? "warning" : "pass",
         relatedFindingIds: findings.map((finding) => finding.id)
       }
-    ]
+    ],
+    wellArchitectedGuidance: createTerraformPreviewWellArchitectedGuidance(evaluationContext),
+    consensusRecommendation: createTerraformPreviewConsensusRecommendation(evaluationContext)
   };
 }
 
@@ -34,6 +44,22 @@ type TerraformResourceBlock = {
 type TerraformResourceExplanation = {
   readonly label: string;
   readonly explain: (block: TerraformResourceBlock) => string;
+};
+
+type TerraformPreviewEvaluationContext = {
+  readonly detectedResources: readonly AiTerraformDetectedResource[];
+  readonly findings: readonly CheckFinding[];
+  readonly normalizedCode: string;
+  readonly resourceBlocks: readonly TerraformResourceBlock[];
+};
+
+type TerraformPreviewPillarEvaluator = {
+  readonly pillar: AiWellArchitectedGuidance["pillar"];
+  readonly title: string;
+  readonly evaluate: (context: TerraformPreviewEvaluationContext) => {
+    readonly observation: string;
+    readonly recommendation: string;
+  };
 };
 
 const terraformResourceExplanations: Record<string, TerraformResourceExplanation> = {
@@ -166,6 +192,145 @@ const terraformResourceExplanations: Record<string, TerraformResourceExplanation
     }
   }
 };
+
+const terraformPreviewPillarEvaluators: TerraformPreviewPillarEvaluator[] = [
+  {
+    pillar: "operational_excellence",
+    title: "운영 우수성 에이전트",
+    evaluate: (context) => {
+      if (context.detectedResources.length === 0) {
+        return {
+          observation: "현재 코드 범위에서는 평가할 Terraform resource 블록이 없습니다.",
+          recommendation: "provider, variable, output만 있는 조각이라면 실제 resource가 포함된 파일 범위에서 다시 Preview 설명을 요청하세요."
+        };
+      }
+
+      return {
+        observation: `${context.detectedResources.length}개 Terraform resource를 기준으로 변경 영향과 검증 순서를 평가했습니다.`,
+        recommendation: "변경 전 `terraform validate`와 plan 검토를 통과시키고, 경고가 있는 항목은 배포 승인 전에 코드 위치에서 먼저 수정하세요."
+      };
+    }
+  },
+  {
+    pillar: "security",
+    title: "보안 에이전트",
+    evaluate: (context) => {
+      const openSshFinding = context.findings.find((finding) => finding.id === "terraform-security-open-ssh");
+
+      if (openSshFinding) {
+        return {
+          observation: "Security Group Rule에서 SSH 22번 포트가 0.0.0.0/0으로 열려 있어 외부 공격 표면이 큽니다.",
+          recommendation: "관리자 고정 IP나 VPN CIDR만 허용하고, 가능하면 Session Manager 같은 비공개 운영 접속 경로로 전환하세요."
+        };
+      }
+
+      if (hasTerraformResourceType(context, "aws_security_group") || hasTerraformResourceType(context, "aws_security_group_rule")) {
+        return {
+          observation: "보안 그룹 관련 리소스가 있으나, 현재 rule 기반 검사에서는 전체 공개 SSH 패턴은 감지되지 않았습니다.",
+          recommendation: "ingress/egress 범위, 관리 포트, 암호화 관련 설정을 실제 요구사항 기준으로 한 번 더 좁혀 검토하세요."
+        };
+      }
+
+      return {
+        observation: "현재 코드 범위에서 명시적인 네트워크 보안 경계가 보이지 않습니다.",
+        recommendation: "컴퓨트나 데이터 저장소가 포함된 다이어그램이라면 Security Group, IAM, 암호화 설정이 함께 정의되어 있는지 확인하세요."
+      };
+    }
+  },
+  {
+    pillar: "reliability",
+    title: "신뢰성 에이전트",
+    evaluate: (context) => {
+      const rdsBlocks = findTerraformBlocksByType(context, "aws_db_instance");
+      const hasRdsWithoutMultiAz = rdsBlocks.some((block) => readTerraformAttribute(block.body, "multi_az") !== "true");
+
+      if (hasRdsWithoutMultiAz) {
+        return {
+          observation: "RDS 인스턴스가 있지만 `multi_az = true`가 보이지 않아 단일 AZ 장애에 취약할 수 있습니다.",
+          recommendation: "운영 성격의 다이어그램이면 Multi-AZ, backup retention, 삭제 보호 설정을 Preview 코드에 명시하세요."
+        };
+      }
+
+      if (countTerraformBlocksByType(context, "aws_subnet") < 2 && hasRuntimeResource(context)) {
+        return {
+          observation: "런타임 리소스가 보이지만 Subnet 구성이 2개 미만이라 가용 영역 분산 근거가 약합니다.",
+          recommendation: "고가용성이 필요한 서비스라면 최소 2개 AZ의 Subnet과 라우팅 경로를 함께 검토하세요."
+        };
+      }
+
+      return {
+        observation: "현재 rule 기반 평가에서는 명확한 단일 장애점 경고가 크지 않습니다.",
+        recommendation: "배포 전에는 Terraform plan에서 교체/삭제 대상과 복구 설정을 확인해 장애 대응 경로를 보강하세요."
+      };
+    }
+  },
+  {
+    pillar: "performance_efficiency",
+    title: "성능 효율성 에이전트",
+    evaluate: (context) => {
+      const instanceTypes = findTerraformAttributeValues(context, "aws_instance", "instance_type");
+      const dbClasses = findTerraformAttributeValues(context, "aws_db_instance", "instance_class");
+      const sizingValues = [...instanceTypes, ...dbClasses];
+
+      if (sizingValues.length > 0) {
+        return {
+          observation: `성능을 좌우하는 크기 설정이 감지되었습니다: ${sizingValues.join(", ")}.`,
+          recommendation: "예상 트래픽, 연결 수, 처리량을 기준으로 초기 크기를 정하고 CloudWatch 지표로 조정할 수 있게 모니터링을 붙이세요."
+        };
+      }
+
+      return {
+        observation: "현재 코드 범위에서는 인스턴스 크기나 처리량 설정을 판단할 정보가 제한적입니다.",
+        recommendation: "런타임, 데이터베이스, 캐시, 큐 리소스가 있다면 크기와 스케일링 기준을 Terraform 코드에 명시하세요."
+      };
+    }
+  },
+  {
+    pillar: "cost_optimization",
+    title: "비용 최적화 에이전트",
+    evaluate: (context) => {
+      const costFinding = context.findings.find((finding) => finding.category === "cost");
+
+      if (costFinding) {
+        return {
+          observation: "RDS처럼 상시 과금될 수 있는 리소스가 포함되어 비용 검토가 필요합니다.",
+          recommendation: "연습/검증 환경이면 작은 instance_class, 짧은 보존 기간, 명확한 cleanup 경로를 먼저 설정하세요."
+        };
+      }
+
+      if (context.detectedResources.length > 0) {
+        return {
+          observation: "현재 rule 기반 비용 경고는 크지 않지만 Terraform resource는 생성 즉시 과금될 수 있습니다.",
+          recommendation: "배포 전 비용 산정과 태그 기준 정리를 거쳐 유휴 리소스를 추적할 수 있게 하세요."
+        };
+      }
+
+      return {
+        observation: "비용을 만들 resource 블록이 현재 코드 범위에서 확인되지 않았습니다.",
+        recommendation: "실제 배포 대상 파일 범위에서 다시 평가해 상시 실행 리소스와 저장소 비용을 확인하세요."
+      };
+    }
+  },
+  {
+    pillar: "sustainability",
+    title: "지속 가능성 에이전트",
+    evaluate: (context) => {
+      const hasTags = context.normalizedCode.includes("tags") || context.normalizedCode.includes("tag");
+
+      if (!hasTags && context.detectedResources.length > 0) {
+        return {
+          observation: "리소스는 감지되지만 태그/소유자 표시가 보이지 않아 정리 대상 추적이 어려울 수 있습니다.",
+          recommendation: "프로젝트, 환경, 만료 시점 태그를 추가하고 Auto Cleanup 또는 destroy 절차에서 같은 기준으로 회수하세요."
+        };
+      }
+
+      return {
+        observation: "현재 코드 범위는 리소스 정리와 소유 추적을 함께 검토할 수 있는 상태입니다.",
+        recommendation: "필요한 리소스만 남기고 Practice Session 종료 시 destroy/cleanup이 가능한지 배포 기록과 함께 확인하세요."
+      };
+    }
+  }
+];
 
 function createTerraformPreviewSummary(resources: AiTerraformDetectedResource[]): string {
   if (resources.length === 0) {
@@ -324,9 +489,10 @@ function readTerraformAttribute(body: string, attributeName: string): string | n
 }
 
 // Terraform resource 블록 이름을 기준으로 현재 코드가 만들 대상을 감지합니다.
-function detectTerraformResources(terraformCode: string): AiTerraformDetectedResource[] {
-  const resourceBlocks = parseTerraformResourceBlocks(terraformCode);
-
+function detectTerraformResources(
+  terraformCode: string,
+  resourceBlocks = parseTerraformResourceBlocks(terraformCode)
+): AiTerraformDetectedResource[] {
   if (resourceBlocks.length > 0) {
     return resourceBlocks.map(createTerraformDetectedResource);
   }
@@ -367,6 +533,71 @@ function detectTerraformResources(terraformCode: string): AiTerraformDetectedRes
   }
 
   return resources;
+}
+
+function createTerraformPreviewWellArchitectedGuidance(
+  context: TerraformPreviewEvaluationContext
+): AiWellArchitectedGuidance[] {
+  return terraformPreviewPillarEvaluators.map((evaluator) => {
+    const evaluation = evaluator.evaluate(context);
+
+    return {
+      pillar: evaluator.pillar,
+      title: evaluator.title,
+      observation: evaluation.observation,
+      recommendation: evaluation.recommendation
+    };
+  });
+}
+
+function createTerraformPreviewConsensusRecommendation(context: TerraformPreviewEvaluationContext): string {
+  const hasHighFinding = context.findings.some((finding) => finding.severity === "high");
+  const hasMediumFinding = context.findings.some((finding) => finding.severity === "medium");
+
+  if (hasHighFinding) {
+    return "결론: 이 Terraform Preview는 배포 전에 보안 위험을 먼저 줄여야 합니다. 특히 공개 SSH 같은 high finding을 수정하고 다시 검증한 뒤 Plan 단계로 넘어가세요.";
+  }
+
+  if (hasMediumFinding) {
+    return "결론: 이 다이어그램은 생성 가능한 구조지만 비용이나 운영 설정 보강이 필요합니다. medium finding을 확인하고 환경 규모에 맞게 값을 조정하세요.";
+  }
+
+  if (context.detectedResources.length === 0) {
+    return "결론: 현재 코드 조각만으로는 다이어그램 리소스 평가가 부족합니다. 실제 resource 블록이 포함된 Terraform 코드로 다시 평가하세요.";
+  }
+
+  return "결론: 현재 rule 기반 평가에서는 즉시 차단할 위험은 크지 않습니다. 그래도 배포 전 plan, 비용 산정, 보안 범위 검토를 통과시킨 뒤 승인하세요.";
+}
+
+function hasTerraformResourceType(context: TerraformPreviewEvaluationContext, terraformType: string): boolean {
+  return context.resourceBlocks.some((block) => block.terraformType === terraformType);
+}
+
+function findTerraformBlocksByType(
+  context: TerraformPreviewEvaluationContext,
+  terraformType: string
+): TerraformResourceBlock[] {
+  return context.resourceBlocks.filter((block) => block.terraformType === terraformType);
+}
+
+function countTerraformBlocksByType(context: TerraformPreviewEvaluationContext, terraformType: string): number {
+  return findTerraformBlocksByType(context, terraformType).length;
+}
+
+function findTerraformAttributeValues(
+  context: TerraformPreviewEvaluationContext,
+  terraformType: string,
+  attributeName: string
+): string[] {
+  return findTerraformBlocksByType(context, terraformType)
+    .map((block) => readTerraformAttribute(block.body, attributeName))
+    .filter((value): value is string => Boolean(value));
+}
+
+function hasRuntimeResource(context: TerraformPreviewEvaluationContext): boolean {
+  return ["aws_instance", "aws_lambda_function", "aws_ecs_service", "aws_eks_cluster"].some((terraformType) =>
+    hasTerraformResourceType(context, terraformType)
+  );
 }
 
 // Terraform 코드에서 보안/비용 경고를 모아 finding 목록으로 만듭니다.

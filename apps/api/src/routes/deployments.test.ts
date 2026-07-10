@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import Fastify from "fastify";
 import type {
   AwsConnection,
+  DeploymentFailureExplanationResponse,
   RecentSuccessfulDeploymentProjectListResponse
 } from "@sketchcatch/types";
 import { createAccessToken } from "../auth/tokens.js";
@@ -30,6 +31,7 @@ import type {
 import type { ApproveDeploymentPlanInput } from "../deployments/deployment-approval-service.js";
 import type { PruneProjectDeploymentStorageResult } from "../deployments/deployment-retention.js";
 import { users } from "../db/schema.js";
+import type { CreateLlmExplanation } from "../services/aiLlmExplanation.js";
 import {
   type ApproveDeploymentInput,
   type ArchitectureRecord,
@@ -48,6 +50,26 @@ import {
   type TerraformArtifactRecord
 } from "../deployments/deployment-service.js";
 import { registerDeploymentRoutes, writeDeploymentLogStreamChunk } from "./deployments.js";
+import { createInMemoryRuntimeCache } from "../runtime-cache/index.js";
+import type { RuntimeCache } from "../runtime-cache/index.js";
+import {
+  createDeploymentRuntimeCacheKey,
+  deploymentLogCursorCacheNamespace,
+  deploymentStatusCacheNamespace,
+  type DeploymentLogStreamCursorSnapshot,
+  type DeploymentRuntimeStatusSnapshot
+} from "../deployments/deployment-runtime-cache.js";
+import type {
+  CreateDeploymentJobInput,
+  DeploymentJobRecord,
+  DeploymentJobRepository
+} from "../deployments/deployment-job-service.js";
+import type {
+  DeploymentWorkerDispatcher,
+  InspectDeploymentWorkerInput,
+  DispatchDeploymentWorkerInput,
+  StopDeploymentWorkerInput
+} from "../deployments/deployment-worker-dispatcher.js";
 
 process.env.NODE_ENV = "test";
 process.env.AUTH_TOKEN_SECRET = "test-auth-token-secret-with-at-least-32-characters";
@@ -798,6 +820,166 @@ class FakeDeploymentRepository implements DeploymentRepository {
   }
 }
 
+class FakeDeploymentJobRepository implements DeploymentJobRepository {
+  readonly jobs = new Map<string, DeploymentJobRecord>();
+  nextId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+
+  async createDeploymentJob(
+    input: CreateDeploymentJobInput & {
+      id: string;
+    }
+  ) {
+    const job: DeploymentJobRecord = {
+      id: this.nextId,
+      deploymentId: input.deploymentId,
+      operation: input.operation,
+      status: "QUEUED",
+      requestedByUserId: input.accessContext.userId,
+      accessContext: input.accessContext,
+      startedFromStatus: input.startedFromStatus,
+      startedFromFailureStage: input.startedFromFailureStage ?? null,
+      ecsTaskArn: null,
+      errorSummary: null,
+      startedAt: null,
+      completedAt: null,
+      failedAt: null,
+      cancelledAt: null,
+      createdAt: fixedNow,
+      updatedAt: fixedNow
+    };
+
+    this.jobs.set(job.id, job);
+    return job;
+  }
+
+  async findActiveDeploymentJob(candidateDeploymentId: string) {
+    return [...this.jobs.values()].find(
+      (job) =>
+        job.deploymentId === candidateDeploymentId &&
+        ["QUEUED", "DISPATCHING", "RUNNING"].includes(job.status)
+    );
+  }
+
+  async listActiveDeploymentJobs() {
+    return [...this.jobs.values()].filter((job) =>
+      ["QUEUED", "DISPATCHING", "RUNNING"].includes(job.status)
+    );
+  }
+
+  async findDeploymentJobById(jobId: string) {
+    return this.jobs.get(jobId);
+  }
+
+  async markDeploymentJobDispatching(jobId: string) {
+    return this.updateJob(jobId, {
+      status: "DISPATCHING",
+      updatedAt: fixedNow
+    });
+  }
+
+  async markDeploymentJobRunning(
+    jobId: string,
+    input: {
+      ecsTaskArn?: string | null;
+    }
+  ) {
+    return this.updateJob(jobId, {
+      status: "RUNNING",
+      ...(input.ecsTaskArn !== undefined ? { ecsTaskArn: input.ecsTaskArn } : {}),
+      startedAt: fixedNow,
+      updatedAt: fixedNow
+    });
+  }
+
+  async recordDeploymentJobTaskArn(
+    jobId: string,
+    input: {
+      ecsTaskArn: string;
+    }
+  ) {
+    return this.updateJob(jobId, {
+      ecsTaskArn: input.ecsTaskArn,
+      updatedAt: fixedNow
+    });
+  }
+
+  async completeDeploymentJob(jobId: string) {
+    return this.updateJob(jobId, {
+      status: "SUCCEEDED",
+      completedAt: fixedNow,
+      updatedAt: fixedNow
+    });
+  }
+
+  async failDeploymentJob(
+    jobId: string,
+    input: {
+      errorSummary: string;
+    }
+  ) {
+    return this.updateJob(jobId, {
+      status: "FAILED",
+      errorSummary: input.errorSummary,
+      failedAt: fixedNow,
+      updatedAt: fixedNow
+    });
+  }
+
+  async cancelDeploymentJob(
+    jobId: string,
+    input: {
+      errorSummary?: string | null;
+    }
+  ) {
+    return this.updateJob(jobId, {
+      status: "CANCELLED",
+      errorSummary: input.errorSummary ?? null,
+      cancelledAt: fixedNow,
+      updatedAt: fixedNow
+    });
+  }
+
+  private updateJob(jobId: string, patch: Partial<DeploymentJobRecord>) {
+    const job = this.jobs.get(jobId);
+
+    if (!job) {
+      return undefined;
+    }
+
+    const updatedJob = { ...job, ...patch };
+    this.jobs.set(jobId, updatedJob);
+    return updatedJob;
+  }
+}
+
+class FakeDeploymentWorkerDispatcher implements DeploymentWorkerDispatcher {
+  readonly dispatchCalls: DispatchDeploymentWorkerInput[] = [];
+  readonly stopCalls: StopDeploymentWorkerInput[] = [];
+  taskArn: string | null =
+    "arn:aws:ecs:ap-northeast-2:555980271919:task/sketchcatch-production-worker/task-id";
+  stopResult = true;
+
+  async dispatch(input: DispatchDeploymentWorkerInput) {
+    this.dispatchCalls.push(input);
+    return {
+      taskArn: this.taskArn
+    };
+  }
+
+  async inspect(input: InspectDeploymentWorkerInput) {
+    return input.job.ecsTaskArn
+      ? { state: "ACTIVE" as const, lastStatus: "RUNNING" }
+      : { state: "MISSING" as const, lastStatus: null };
+  }
+
+  async stop(input: StopDeploymentWorkerInput) {
+    this.stopCalls.push(input);
+    return {
+      stopped: this.stopResult
+    };
+  }
+}
+
 type DeploymentRouteTestOptions = {
   pruneProjectDeploymentStorage?: (input: {
     db: DatabaseClient["db"];
@@ -827,7 +1009,12 @@ type DeploymentRouteTestOptions = {
     input: RunDeploymentDestroyInput,
     repository: DeploymentRepository
   ) => Promise<RunDeploymentDestroyResult>;
+  createLlmExplanation?: CreateLlmExplanation;
+  createDeploymentJobRepository?: (db: DatabaseClient["db"]) => DeploymentJobRepository;
+  runtimeCache?: RuntimeCache;
   userRows?: UserRecord[];
+  workerDispatcher?: DeploymentWorkerDispatcher;
+  workerDispatchMode?: "in_process" | "ecs";
 };
 
 async function buildDeploymentTestApp(
@@ -861,7 +1048,18 @@ async function buildDeploymentTestApp(
       : {}),
     ...(routeOptions.runDeploymentDestroy
       ? { runDeploymentDestroy: routeOptions.runDeploymentDestroy }
-      : {})
+      : {}),
+    ...(routeOptions.createLlmExplanation
+      ? { createLlmExplanation: routeOptions.createLlmExplanation }
+      : {}),
+    ...(routeOptions.createDeploymentJobRepository
+      ? { createDeploymentJobRepository: routeOptions.createDeploymentJobRepository }
+      : {}),
+    ...(routeOptions.workerDispatcher ? { workerDispatcher: routeOptions.workerDispatcher } : {}),
+    ...(routeOptions.workerDispatchMode
+      ? { workerDispatchMode: routeOptions.workerDispatchMode }
+      : {}),
+    ...(routeOptions.runtimeCache ? { runtimeCache: routeOptions.runtimeCache } : {})
   });
 
   return app;
@@ -877,6 +1075,7 @@ function createDeploymentRecord(
     architectureId,
     terraformArtifactId,
     awsConnectionId,
+    liveProfile: "practice",
     currentPlanArtifactId: null,
     stateObjectKey: null,
     resultWarningSummary: null,
@@ -1059,6 +1258,20 @@ function createUserRecord(overrides: Partial<UserRecord> = {}): UserRecord {
   };
 }
 
+function createThrowingRuntimeCache(): RuntimeCache {
+  return {
+    async get() {
+      throw new Error("runtime cache get failed");
+    },
+    async set() {
+      throw new Error("runtime cache set failed");
+    },
+    async delete() {
+      throw new Error("runtime cache delete failed");
+    }
+  };
+}
+
 async function authHeaders(activeUserId = userId): Promise<Record<string, string>> {
   return {
     authorization: `Bearer ${await createAccessToken(activeUserId)}`
@@ -1156,6 +1369,7 @@ test("POST /api/projects/:projectId/deployments returns a created deployment", a
         architectureId,
         terraformArtifactId,
         awsConnectionId,
+        liveProfile: "practice",
         status: "PENDING"
       }
     }
@@ -1293,6 +1507,124 @@ test("GET /api/deployments/:deploymentId maps missing deployments to not_found",
       deploymentId
     }
   ]);
+
+  await app.close();
+});
+
+test("GET /api/deployments/:deploymentId/failure-explanation returns a masked fallback explanation", async () => {
+  const repository = new FakeDeploymentRepository();
+  const leakedSecret = "temporary-secret-access-key";
+  repository.deployment = createDeploymentRecord(deploymentId, {
+    status: "FAILED",
+    failureStage: "apply",
+    errorSummary: `apply failed AWS_SECRET_ACCESS_KEY=${leakedSecret}`,
+    stateObjectKey,
+    failedAt: fixedNow
+  });
+  repository.logs = [
+    {
+      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      deploymentId,
+      sequence: 1,
+      stage: "apply",
+      level: "ERROR",
+      message: `AccessDenied: not authorized AWS_SECRET_ACCESS_KEY=${leakedSecret}`,
+      relatedResourceId: null,
+      createdAt: fixedNow
+    }
+  ];
+  const app = await buildDeploymentTestApp(repository, {
+    createLlmExplanation: async (input) => ({
+      target: input.target,
+      summary: "fallback summary",
+      highlights: ["fallback highlight"],
+      nextActions: ["fallback next action"],
+      fallbackUsed: true,
+      fallbackReason: "missing_api_key"
+    })
+  });
+
+  const response = await app.inject({
+    method: "GET",
+    url: `/api/deployments/${deploymentId}/failure-explanation`,
+    headers: await authHeaders()
+  });
+
+  assert.equal(response.statusCode, 200);
+  const body = response.json<DeploymentFailureExplanationResponse>();
+
+  assert.equal(body.explanation.deploymentId, deploymentId);
+  assert.equal(body.explanation.stage, "apply");
+  assert.equal(body.explanation.cleanupRequired, true);
+  assert.equal(body.explanation.firstErrorLog?.includes(leakedSecret), false);
+  assert.match(body.explanation.summary, /apply/);
+  assert.match(body.explanation.summary, /첫 오류 로그/);
+  assert.match(body.explanation.summary, /Cleanup 필요 여부: 필요/);
+  assert.equal(body.explanation.llmExplanation?.fallbackUsed, true);
+  assert.equal(body.explanation.llmExplanation?.fallbackReason, "missing_api_key");
+
+  await app.close();
+});
+
+test("GET /api/deployments/:deploymentId/failure-explanation uses the earliest error without overlong excerpts", async () => {
+  const repository = new FakeDeploymentRepository();
+  const longFirstError = "x".repeat(700);
+  repository.deployment = createDeploymentRecord(deploymentId, {
+    status: "FAILED",
+    failureStage: "plan",
+    failedAt: fixedNow
+  });
+  repository.logs = [
+    {
+      id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      deploymentId,
+      sequence: 20,
+      stage: "plan",
+      level: "ERROR",
+      message: "later error should not be selected",
+      relatedResourceId: null,
+      createdAt: fixedNow
+    },
+    {
+      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      deploymentId,
+      sequence: 10,
+      stage: "plan",
+      level: "ERROR",
+      message: longFirstError,
+      relatedResourceId: null,
+      createdAt: fixedNow
+    }
+  ];
+  const app = await buildDeploymentTestApp(repository);
+
+  const response = await app.inject({
+    method: "GET",
+    url: `/api/deployments/${deploymentId}/failure-explanation`,
+    headers: await authHeaders()
+  });
+
+  assert.equal(response.statusCode, 200);
+  const body = response.json<DeploymentFailureExplanationResponse>();
+
+  assert.equal(body.explanation.firstErrorLog?.length, 600);
+  assert.match(body.explanation.firstErrorLog ?? "", /^x+\.\.\.$/);
+  assert.equal(body.explanation.firstErrorLog?.includes("later error"), false);
+
+  await app.close();
+});
+
+test("GET /api/deployments/:deploymentId/failure-explanation rejects non-failed deployments", async () => {
+  const repository = new FakeDeploymentRepository();
+  const app = await buildDeploymentTestApp(repository);
+
+  const response = await app.inject({
+    method: "GET",
+    url: `/api/deployments/${deploymentId}/failure-explanation`,
+    headers: await authHeaders()
+  });
+
+  assert.equal(response.statusCode, 409);
 
   await app.close();
 });
@@ -1566,6 +1898,46 @@ test("POST /api/deployments/:deploymentId/plan starts Terraform plan in the back
   await app.close();
 });
 
+test("POST /api/deployments/:deploymentId/plan writes a runtime cache status snapshot", async () => {
+  const repository = new FakeDeploymentRepository();
+  const runtimeCache = createInMemoryRuntimeCache({ cleanupIntervalMs: null });
+  const app = await buildDeploymentTestApp(repository, {
+    runtimeCache,
+    runDeploymentPlan: async (input) => ({
+      deployment: createDeploymentRecord(input.deploymentId, {
+        status: "PENDING"
+      }),
+      terraform: {
+        init: null,
+        validate: null,
+        plan: null,
+        showJson: null
+      }
+    })
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/deployments/${deploymentId}/plan`,
+    headers: await authHeaders()
+  });
+
+  assert.equal(response.statusCode, 202);
+  const snapshot = await runtimeCache.get<DeploymentRuntimeStatusSnapshot>({
+    namespace: deploymentStatusCacheNamespace,
+    key: createDeploymentRuntimeCacheKey(deploymentId)
+  });
+
+  assert.equal(snapshot?.kind, "deployment_status");
+  assert.equal(snapshot?.deploymentId, deploymentId);
+  assert.equal(snapshot?.projectId, projectId);
+  assert.equal(snapshot?.status, "RUNNING");
+  assert.equal(snapshot?.activeStage, "plan");
+  assert.equal(typeof snapshot?.cachedAt, "string");
+
+  await app.close();
+});
+
 test("POST /api/deployments/:deploymentId/plan rejects a deployment that is already running", async () => {
   const repository = new FakeDeploymentRepository();
   repository.deployment = createDeploymentRecord(deploymentId, {
@@ -1664,6 +2036,7 @@ test("POST /api/deployments/:deploymentId/approve approves the current plan", as
   assert.deepEqual(approveCalls, [
     {
       deploymentId,
+      acknowledgedWarningIds: [],
       accessContext: {
         kind: "user",
         userId
@@ -1743,6 +2116,65 @@ test("POST /api/deployments/:deploymentId/apply starts Terraform apply in the ba
       userId
     }
   });
+
+  await app.close();
+});
+
+test("POST /api/deployments/:deploymentId/apply dispatches an ECS worker task when worker mode is enabled", async () => {
+  const repository = new FakeDeploymentRepository();
+  const jobRepository = new FakeDeploymentJobRepository();
+  const dispatcher = new FakeDeploymentWorkerDispatcher();
+  let applyStarted = false;
+  repository.deployment = createDeploymentRecord(deploymentId, {
+    currentPlanArtifactId: planArtifactId,
+    planSummary: {
+      createCount: 1,
+      updateCount: 0,
+      deleteCount: 0,
+      replaceCount: 0,
+      blocked: false,
+      warnings: []
+    },
+    isBlocked: false,
+    blockedBy: null,
+    blockedReason: null,
+    approvedAt: fixedNow,
+    approvedByUserId: userId,
+    approvedTerraformArtifactId: terraformArtifactId,
+    approvedPlanArtifactId: planArtifactId,
+    approvedTerraformArtifactHash: "c".repeat(64),
+    approvedTfplanHash: "a".repeat(64),
+    approvedAwsAccountId: "123456789012",
+    approvedAwsRegion: "ap-northeast-2"
+  });
+  repository.deployments = [repository.deployment];
+  const app = await buildDeploymentTestApp(repository, {
+    createDeploymentJobRepository: () => jobRepository,
+    workerDispatcher: dispatcher,
+    workerDispatchMode: "ecs",
+    runDeploymentApply: async () => {
+      applyStarted = true;
+      throw new Error("in-process apply should not start in ECS worker mode");
+    }
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/deployments/${deploymentId}/apply`,
+    headers: await authHeaders(),
+    payload: {}
+  });
+
+  assert.equal(response.statusCode, 202);
+  const body = response.json() as DeploymentResponse;
+  assert.equal(body.deployment.status, "RUNNING");
+  assert.equal(applyStarted, false);
+  assert.equal(dispatcher.dispatchCalls.length, 1);
+  const activeJob = await jobRepository.findActiveDeploymentJob(deploymentId);
+  assert.equal(activeJob?.operation, "apply");
+  assert.equal(activeJob?.status, "RUNNING");
+  assert.equal(activeJob?.requestedByUserId, userId);
+  assert.equal(activeJob?.ecsTaskArn, dispatcher.taskArn);
 
   await app.close();
 });
@@ -2003,6 +2435,62 @@ test("POST /api/deployments/:deploymentId/cancel marks stale running deployments
   await app.close();
 });
 
+test("POST /api/deployments/:deploymentId/cancel stops an active ECS worker task", async () => {
+  const repository = new FakeDeploymentRepository();
+  const jobRepository = new FakeDeploymentJobRepository();
+  const dispatcher = new FakeDeploymentWorkerDispatcher();
+  repository.deployment = createDeploymentRecord(deploymentId, {
+    status: "RUNNING",
+    activeStage: "apply"
+  });
+  const activeJob: DeploymentJobRecord = {
+    id: jobRepository.nextId,
+    deploymentId,
+    operation: "apply",
+    status: "RUNNING",
+    requestedByUserId: userId,
+    accessContext: {
+      kind: "user",
+      userId
+    },
+    startedFromStatus: "PENDING",
+    startedFromFailureStage: null,
+    ecsTaskArn: dispatcher.taskArn,
+    errorSummary: null,
+    startedAt: fixedNow,
+    completedAt: null,
+    failedAt: null,
+    cancelledAt: null,
+    createdAt: fixedNow,
+    updatedAt: fixedNow
+  };
+  jobRepository.jobs.set(activeJob.id, activeJob);
+  const app = await buildDeploymentTestApp(repository, {
+    createDeploymentJobRepository: () => jobRepository,
+    workerDispatcher: dispatcher,
+    workerDispatchMode: "ecs"
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/deployments/${deploymentId}/cancel`,
+    headers: await authHeaders(),
+    payload: {}
+  });
+
+  assert.equal(response.statusCode, 202);
+  const body = response.json() as DeploymentResponse;
+  assert.equal(body.deployment.status, "RUNNING");
+  assert.equal(body.deployment.cancelRequestedAt, fixedNow.toISOString());
+  assert.equal(dispatcher.stopCalls.length, 1);
+  assert.equal(dispatcher.stopCalls[0]?.job.ecsTaskArn, dispatcher.taskArn);
+  const cancelledJob = await jobRepository.findDeploymentJobById(activeJob.id);
+  assert.equal(cancelledJob?.status, "CANCELLED");
+  assert.match(cancelledJob?.errorSummary ?? "", /StopTask/);
+
+  await app.close();
+});
+
 test("GET /api/projects/:projectId/deployments returns project deployments", async () => {
   const repository = new FakeDeploymentRepository();
   const app = await buildDeploymentTestApp(repository);
@@ -2234,6 +2722,84 @@ test("GET /api/deployments/:deploymentId/logs/stream returns uncached SSE log ev
   assert.match(response.body, /event: log/);
   assert.match(response.body, /"sequence":2/);
   assert.doesNotMatch(response.body, /"sequence":1/);
+
+  await app.close();
+});
+
+test("GET /api/deployments/:deploymentId/logs/stream writes a runtime cache cursor", async () => {
+  const repository = new FakeDeploymentRepository();
+  const runtimeCache = createInMemoryRuntimeCache({ cleanupIntervalMs: null });
+  repository.logs = [
+    {
+      id: "log-1",
+      deploymentId,
+      sequence: 1,
+      stage: "plan",
+      level: "INFO",
+      message: "old log",
+      relatedResourceId: null,
+      createdAt: fixedNow
+    },
+    {
+      id: "log-2",
+      deploymentId,
+      sequence: 2,
+      stage: "apply",
+      level: "WARN",
+      message: "new log",
+      relatedResourceId: null,
+      createdAt: fixedNow
+    }
+  ];
+  const app = await buildDeploymentTestApp(repository, { runtimeCache });
+
+  const response = await app.inject({
+    method: "GET",
+    url: `/api/deployments/${deploymentId}/logs/stream?sinceSequence=1&once=true`,
+    headers: await authHeaders()
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.match(response.body, /"sequence":2/);
+  const cursor = await runtimeCache.get<DeploymentLogStreamCursorSnapshot>({
+    namespace: deploymentLogCursorCacheNamespace,
+    key: createDeploymentRuntimeCacheKey(deploymentId)
+  });
+
+  assert.equal(cursor?.kind, "deployment_log_cursor");
+  assert.equal(cursor?.deploymentId, deploymentId);
+  assert.equal(cursor?.lastSequence, 2);
+
+  await app.close();
+});
+
+test("GET /api/deployments/:deploymentId/logs/stream falls back to RDS when cursor cache fails", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.logs = [
+    {
+      id: "log-1",
+      deploymentId,
+      sequence: 1,
+      stage: "plan",
+      level: "INFO",
+      message: "old log",
+      relatedResourceId: null,
+      createdAt: fixedNow
+    }
+  ];
+  const app = await buildDeploymentTestApp(repository, {
+    runtimeCache: createThrowingRuntimeCache()
+  });
+
+  const response = await app.inject({
+    method: "GET",
+    url: `/api/deployments/${deploymentId}/logs/stream?sinceSequence=0&once=true`,
+    headers: await authHeaders()
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.match(response.body, /"sequence":1/);
+  assert(repository.calls.some((call) => call.name === "listDeploymentLogs"));
 
   await app.close();
 });

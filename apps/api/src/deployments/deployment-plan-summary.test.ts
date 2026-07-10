@@ -174,3 +174,50 @@ test("findUnsupportedLiveApplyResourceTypesFromTerraformShowJson returns changed
 
   assert.deepEqual(unsupportedTypes, ["aws_lambda_function", "aws_s3_bucket_versioning"]);
 });
+
+test("findUnsupportedLiveApplyResourceTypesFromTerraformShowJson allows demo web service resources only for the demo profile", () => {
+  const terraformShowJson = JSON.stringify({
+    resource_changes: [
+      {
+        mode: "managed",
+        type: "aws_lb",
+        change: {
+          actions: ["create"]
+        }
+      },
+      {
+        mode: "managed",
+        type: "aws_autoscaling_group",
+        change: {
+          actions: ["create"]
+        }
+      },
+      {
+        mode: "managed",
+        type: "aws_db_instance",
+        change: {
+          actions: ["create"]
+        }
+      }
+    ]
+  });
+
+  assert.deepEqual(
+    findUnsupportedLiveApplyResourceTypesFromTerraformShowJson(terraformShowJson),
+    ["aws_autoscaling_group", "aws_db_instance", "aws_lb"]
+  );
+  assert.deepEqual(
+    findUnsupportedLiveApplyResourceTypesFromTerraformShowJson(
+      terraformShowJson,
+      "demo_web_service"
+    ),
+    ["aws_db_instance"]
+  );
+  assert.deepEqual(
+    findUnsupportedLiveApplyResourceTypesFromTerraformShowJson(
+      terraformShowJson,
+      "demo_web_service_with_rds"
+    ),
+    []
+  );
+});

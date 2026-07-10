@@ -513,6 +513,7 @@ function createDeploymentRecord(
     architectureId,
     terraformArtifactId,
     awsConnectionId,
+    liveProfile: "practice",
     currentPlanArtifactId: null,
     stateObjectKey: null,
     resultWarningSummary: null,
@@ -677,6 +678,7 @@ test("createDeployment verifies project, architecture, and terraform artifact ow
         architectureId,
         terraformArtifactId,
         awsConnectionId,
+        liveProfile: "practice",
         status: "PENDING"
       }
     }

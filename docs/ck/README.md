@@ -1,6 +1,6 @@
 # CK 배포 실행 문서 인덱스
 
-이 폴더는 Deployment, AWS Role 연결, Terraform Plan/Apply/Destroy, cleanup 관련 구현 참고 문서를 모은다. 실제 공통 정책은 `docs/deployment.md`, API/DB 계약은 `docs/data-models.md`, 실행 경계는 `docs/architecture.md`가 우선한다.
+이 폴더는 Deployment, AWS Role 연결, Terraform Plan/Apply/Destroy, cleanup, AI 다이어그램 검수 관련 구현 참고 문서를 모은다. 실제 공통 정책은 `docs/deployment.md`, API/DB 계약은 `docs/data-models.md`, 실행 경계는 `docs/architecture.md`가 우선한다.
 
 ## 빠른 읽기 순서
 
@@ -9,6 +9,8 @@
 3. 파트 간 입력/출력은 [003_배포파트의존성정리.md](./003_배포파트의존성정리.md)를 본다.
 4. 실제 구현 순서는 [005_배포파트구현순서.md](./005_배포파트구현순서.md)와 [006_실제배포실행구현순서.md](./006_실제배포실행구현순서.md)를 본다.
 5. Apply/Destroy 세부는 [010_TerraformApply실행흐름정리.md](./010_TerraformApply실행흐름정리.md)와 [012_TerraformDestroy실행흐름정리.md](./012_TerraformDestroy실행흐름정리.md)를 본다.
+6. 자연어 다이어그램 생성 실행 흐름은 [ai/003_자연어다이어그램생성구현정리.md](./ai/003_자연어다이어그램생성구현정리.md)를 본다.
+7. AI 다이어그램을 검수할 때는 [ai/002_아키텍처다이어그램검수가이드.md](./ai/002_아키텍처다이어그램검수가이드.md)를 본다.
 
 ## 문서 목록
 
@@ -28,9 +30,15 @@
 | [012_TerraformDestroy실행흐름정리.md](./012_TerraformDestroy실행흐름정리.md) | Terraform Destroy와 cleanup 실행 흐름 |
 | [013_PlanApplyDestroy실행속도개선정리.md](./013_PlanApplyDestroy실행속도개선정리.md) | Plan/Apply/Destroy 실행 속도 개선 |
 | [014_PlanApplyDestroy문제해결흐름정리.md](./014_PlanApplyDestroy문제해결흐름정리.md) | Plan/Apply/Destroy 문제 해결 흐름 |
+| [ai/001_AIProvider실행흐름정리.md](./ai/001_AIProvider실행흐름정리.md) | AI Provider 실행 흐름과 승인 경계 |
+| [ai/002_아키텍처다이어그램검수가이드.md](./ai/002_아키텍처다이어그램검수가이드.md) | 일반 클라우드 아키텍처 다이어그램 검수 기준 |
+| [ai/003_자연어다이어그램생성구현정리.md](./ai/003_자연어다이어그램생성구현정리.md) | 자연어 다이어그램 생성 브랜치 실행 흐름과 코드 읽는 순서 |
+| [ai/spec_1.md](./ai/spec_1.md) | Terraform 오류 Issues 고정 및 AI 해결 적용 스펙 |
+| [ai/plan_1.md](./ai/plan_1.md) | Terraform 오류 Issues 고정 및 AI 해결 적용 구현 마일스톤 |
 
 ## 정리 규칙
 
 - 완료 상태를 바꿀 때는 `001_배포실행파트구현계획.md`를 먼저 갱신한다.
 - 실제 실행 정책이 바뀌면 `docs/deployment.md`에도 반영한다.
 - shared type, DB, DTO가 바뀌면 `docs/data-models.md`와 코드 계약을 함께 갱신한다.
+- AI 다이어그램 지식 문서는 특정 구현 상태보다 일반 개념과 검수 기준을 우선한다.

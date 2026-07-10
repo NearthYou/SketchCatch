@@ -6,6 +6,7 @@ export type ApiErrorCode =
   | "unauthorized"
   | "not_found"
   | "conflict"
+  | "github_oauth_required"
   | "too_many_requests"
   | "internal_server_error";
 
@@ -19,24 +20,119 @@ export type LoginLockedErrorResponse = ApiErrorResponse & {
   lockedUntil: IsoDateTimeString;
 };
 
-export type ResourceType =
-  | "VPC"
-  | "SUBNET"
-  | "INTERNET_GATEWAY"
-  | "ROUTE_TABLE"
-  | "ROUTE_TABLE_ASSOCIATION"
-  | "EC2"
-  | "RDS"
-  | "S3"
-  | "SECURITY_GROUP"
-  | "CLOUDFRONT"
-  | "LAMBDA"
-  | "AMI"
-  | "UNKNOWN";
+export const RESOURCE_TYPES = [
+  "VPC",
+  "SUBNET",
+  "INTERNET_GATEWAY",
+  "ROUTE_TABLE",
+  "ROUTE_TABLE_ASSOCIATION",
+  "NETWORK_ACL",
+  "NETWORK_ACL_RULE",
+  "VPC_PEERING_CONNECTION",
+  "NAT_GATEWAY",
+  "EC2",
+  "AUTO_SCALING_GROUP",
+  "AUTO_SCALING_POLICY",
+  "LAUNCH_TEMPLATE",
+  "KEY_PAIR",
+  "ELASTIC_IP",
+  "EBS_VOLUME",
+  "VOLUME_ATTACHMENT",
+  "EFS_FILE_SYSTEM",
+  "EFS_MOUNT_TARGET",
+  "EFS_ACCESS_POINT",
+  "RDS",
+  "RDS_READ_REPLICA",
+  "RDS_CLUSTER",
+  "RDS_CLUSTER_INSTANCE",
+  "S3",
+  "DYNAMODB_TABLE",
+  "ELASTICACHE_REDIS",
+  "ELASTICACHE_SUBNET_GROUP",
+  "ELASTICACHE_PARAMETER_GROUP",
+  "SECURITY_GROUP",
+  "CLOUDFRONT",
+  "LOAD_BALANCER_TARGET_GROUP",
+  "LOAD_BALANCER_TARGET_GROUP_ATTACHMENT",
+  "ROUTE53_RECORD",
+  "ROUTE53_ZONE",
+  "WAF_WEB_ACL",
+  "WAF_WEB_ACL_ASSOCIATION",
+  "LOAD_BALANCER",
+  "LOAD_BALANCER_LISTENER",
+  "LAMBDA",
+  "LAMBDA_ALIAS",
+  "LAMBDA_EVENT_SOURCE_MAPPING",
+  "AMI",
+  "IAM_ROLE",
+  "IAM_POLICY",
+  "IAM_INSTANCE_PROFILE",
+  "KMS_KEY",
+  "KMS_ALIAS",
+  "ACM_CERTIFICATE",
+  "ACM_CERTIFICATE_VALIDATION",
+  "COGNITO_USER_POOL",
+  "COGNITO_USER_POOL_CLIENT",
+  "DB_SUBNET_GROUP",
+  "SECRETS_MANAGER_SECRET",
+  "VPC_ENDPOINT",
+  "CLOUDWATCH_LOG_GROUP",
+  "CLOUDWATCH_LOG_STREAM",
+  "CLOUDWATCH_METRIC_ALARM",
+  "CLOUDWATCH_DASHBOARD",
+  "CLOUDWATCH_LOG_RESOURCE_POLICY",
+  "CLOUDTRAIL",
+  "XRAY_GROUP",
+  "XRAY_SAMPLING_RULE",
+  "API_GATEWAY_REST_API",
+  "API_GATEWAY_WEBSOCKET_API",
+  "API_GATEWAY_RESOURCE",
+  "API_GATEWAY_METHOD",
+  "API_GATEWAY_INTEGRATION",
+  "API_GATEWAY_DEPLOYMENT",
+  "API_GATEWAY_STAGE",
+  "API_GATEWAY_V2_ROUTE",
+  "API_GATEWAY_V2_INTEGRATION",
+  "API_GATEWAY_V2_STAGE",
+  "LAMBDA_PERMISSION",
+  "SNS_TOPIC",
+  "SNS_TOPIC_SUBSCRIPTION",
+  "SQS_QUEUE",
+  "EVENTBRIDGE_RULE",
+  "EVENTBRIDGE_TARGET",
+  "EVENTBRIDGE_PERMISSION",
+  "SCHEDULER_SCHEDULE",
+  "STEP_FUNCTIONS_STATE_MACHINE",
+  "ECR_REPOSITORY",
+  "ECR_LIFECYCLE_POLICY",
+  "ECS_CLUSTER",
+  "ECS_SERVICE",
+  "ECS_TASK_DEFINITION",
+  "ECS_CAPACITY_PROVIDER",
+  "EKS_CLUSTER",
+  "EKS_NODE_GROUP",
+  "EKS_ADDON",
+  "CONFIG_CONFIGURATION_RECORDER",
+  "CONFIG_DELIVERY_CHANNEL",
+  "CONFIG_RULE",
+  "SHIELD_PROTECTION",
+  "GUARDDUTY_DETECTOR",
+  "UNKNOWN"
+] as const;
+
+export type ResourceType = (typeof RESOURCE_TYPES)[number];
+
+export type ReverseEngineeringResourceSelection = "ALL" | ResourceType;
 
 export type CloudProvider = "aws";
 
 export type TerraformBlockType = "resource" | "data";
+
+export type TerraformBlockIdentity = {
+  terraformBlockType: TerraformBlockType;
+  resourceType: string;
+  resourceName: string;
+};
 
 export type ResourceConfig = Record<string, unknown>;
 
@@ -71,7 +167,6 @@ export type InfrastructureGraphNodeIaC = {
 
 export type InfrastructureGraphNode = {
   id: string;
-  type: ResourceType;
   label?: string | undefined;
   iac: InfrastructureGraphNodeIaC;
   config: ResourceConfig;
@@ -225,10 +320,7 @@ export type ProjectDeletePreviewMode =
   | "blocked_running_deployment"
   | "blocked_multiple_active_deployments";
 
-export type ProjectDeleteAction =
-  | "delete_project"
-  | "delete_project_only"
-  | "destroy_then_delete";
+export type ProjectDeleteAction = "delete_project" | "delete_project_only" | "destroy_then_delete";
 
 export type DeleteProjectRequest = {
   action: Exclude<ProjectDeleteAction, "destroy_then_delete">;
@@ -304,6 +396,12 @@ export type ProjectDetailsResponse = {
 export type CreateArchitectureSnapshotRequest = {
   version?: number | undefined;
   source?: string | undefined;
+  reverseEngineering?:
+    | {
+        sourceScanId: string;
+        draftId: string;
+      }
+    | undefined;
   architectureJson: ArchitectureJson;
 };
 
@@ -337,6 +435,262 @@ export type TerraformArtifact = ProjectAsset & {
   uploadStatus: "uploaded";
 };
 
+export type SourceRepositoryProvider = "internal" | "github";
+
+export type SourceRepositoryStatus = "active" | "inactive";
+
+export type SourceRepository = {
+  id: string;
+  projectId: string;
+  provider: SourceRepositoryProvider;
+  status: SourceRepositoryStatus;
+  githubInstallationId: string | null;
+  githubRepositoryId: string | null;
+  owner: string;
+  name: string;
+  defaultBranch: string;
+  repositoryUrl: string | null;
+  visibility: "public" | "private" | "internal" | null;
+  archived: boolean;
+  disconnectedAt: IsoDateTimeString | null;
+  createdAt: IsoDateTimeString;
+  updatedAt: IsoDateTimeString;
+};
+
+export type SourceRepositoryListResponse = {
+  repositories: SourceRepository[];
+};
+
+export type GitHubAppInstallUrlResponse = {
+  installUrl: string;
+  expiresAt: IsoDateTimeString;
+};
+
+export type GitHubAppExistingInstallationCallbackUrlResponse = {
+  callbackUrl: string;
+  expiresAt: IsoDateTimeString;
+};
+
+export type GitHubRepositoryCandidate = {
+  githubRepositoryId: string;
+  owner: string;
+  name: string;
+  fullName: string;
+  defaultBranch: string;
+  repositoryUrl: string | null;
+  visibility: "public" | "private" | "internal";
+  archived: boolean;
+};
+
+export type ListGitHubInstallationRepositoriesRequest = {
+  installationId: string;
+  state: string;
+};
+
+export type ListGitHubInstallationRepositoriesResponse = {
+  projectId: string;
+  repositories: GitHubRepositoryCandidate[];
+};
+
+export type GitHubInstalledRepositoryCandidate = GitHubRepositoryCandidate & {
+  installationId: string;
+  installationAccountLogin: string;
+  installationAccountType: string | null;
+  installationRepositorySelection: "all" | "selected" | null;
+  connectedSourceRepositoryId: string | null;
+  connectedStatus: "active" | "inactive" | null;
+};
+
+export type ListGitHubInstalledRepositoriesResponse = {
+  projectId: string;
+  state: string;
+  expiresAt: IsoDateTimeString;
+  repositories: GitHubInstalledRepositoryCandidate[];
+};
+
+export type ConnectGitHubSourceRepositoryRequest = {
+  installationId: string;
+  githubRepositoryId: string;
+  state: string;
+};
+
+export type SourceRepositoryResponse = {
+  repository: SourceRepository;
+};
+
+export type GitCicdHandoffStatus =
+  | "draft"
+  | "pr_created"
+  | "pipeline_running"
+  | "pipeline_success"
+  | "pipeline_failed"
+  | "cancelled";
+
+export type GitCicdHandoffKind = "terraform_iac" | "static_site";
+
+export type GitCicdDeploymentMode = "terraform_iac" | "static_site" | "infra_and_app";
+
+export type GitCicdPipelineDetailStatus =
+  | "not_started"
+  | "waiting_for_merge"
+  | "waiting_for_approval"
+  | "running"
+  | "success"
+  | "failed"
+  | "cancelled";
+
+export type GitCicdRepositorySettingsPreview = {
+  environmentName: string;
+  variables: Record<string, string>;
+  secrets: string[];
+  workflowFiles: string[];
+};
+
+export type GitCicdAwsRoleDiff = {
+  roleArn: string | null;
+  repository: string;
+  targetBranch: string;
+  environmentName: string;
+  requiredTrustConditions: Record<string, string>;
+  approved: boolean;
+  approvedByUserId: string | null;
+  approvedAt: IsoDateTimeString | null;
+  applied?: boolean | undefined;
+  appliedAt?: IsoDateTimeString | null | undefined;
+  verified?: boolean | undefined;
+};
+
+export type GitCicdHandoff = {
+  id: string;
+  projectId: string;
+  architectureId: string;
+  terraformArtifactId: string;
+  handoffKind: GitCicdHandoffKind;
+  sourceDeploymentId: string | null;
+  deploymentMode: GitCicdDeploymentMode;
+  requiresEnvironmentApproval: boolean;
+  sourceRepositoryId: string;
+  repositoryProvider: SourceRepositoryProvider;
+  repositoryOwner: string;
+  repositoryName: string;
+  targetBranch: string;
+  sourceBranch: string | null;
+  commitMessage: string | null;
+  pullRequestTitle: string | null;
+  pullRequestUrl: string | null;
+  pullRequestNumber: number | null;
+  pullRequestHeadSha: string | null;
+  mergeCommitSha: string | null;
+  environmentName: string;
+  pipelineRunUrl: string | null;
+  infraPipelineRunUrl: string | null;
+  infraPipelineStatus: GitCicdPipelineDetailStatus;
+  appPipelineRunUrl: string | null;
+  appPipelineStatus: GitCicdPipelineDetailStatus;
+  destroyPipelineRunUrl: string | null;
+  destroyPipelineStatus: GitCicdPipelineDetailStatus;
+  staticSiteUrl: string | null;
+  apiBaseUrl: string | null;
+  repositorySettingsPreview: GitCicdRepositorySettingsPreview | null;
+  awsRoleDiff: GitCicdAwsRoleDiff | null;
+  githubOAuthRequired: boolean;
+  status: GitCicdHandoffStatus;
+  statusMessage: string | null;
+  userAcceptedChangeId: string;
+  createdByUserId: string;
+  createdAt: IsoDateTimeString;
+  updatedAt: IsoDateTimeString;
+};
+
+export type CreateGitCicdHandoffRequest = {
+  architectureId: string;
+  terraformArtifactId: string;
+  handoffKind?: GitCicdHandoffKind | undefined;
+  sourceDeploymentId?: string | null | undefined;
+  deploymentMode?: GitCicdDeploymentMode | undefined;
+  sourceRepositoryId: string;
+  targetBranch?: string | undefined;
+  sourceBranch?: string | undefined;
+  commitMessage?: string | undefined;
+  pullRequestTitle?: string | undefined;
+  environmentName?: string | undefined;
+  rdsEnabled?: boolean | undefined;
+  awsRegion?: string | undefined;
+  awsRoleArn?: string | null | undefined;
+  tfStateBucket?: string | undefined;
+  releaseBucket?: string | undefined;
+  staticSiteUrl?: string | null | undefined;
+  apiBaseUrl?: string | null | undefined;
+  approveAwsRoleDiff?: boolean | undefined;
+  planSummary?: DeploymentPlanSummary | undefined;
+  userAcceptedChangeId: string;
+};
+
+export type UpdateGitCicdHandoffStatusRequest = {
+  status: GitCicdHandoffStatus;
+  pullRequestUrl?: string | null | undefined;
+  pipelineRunUrl?: string | null | undefined;
+  pullRequestHeadSha?: string | null | undefined;
+  statusMessage?: string | null | undefined;
+};
+
+export type GitCicdHandoffPipelineStatus = {
+  id: string;
+  projectId: string;
+  status: GitCicdHandoffStatus;
+  pullRequestUrl: string | null;
+  pullRequestNumber: number | null;
+  mergeCommitSha: string | null;
+  pipelineRunUrl: string | null;
+  infraPipelineRunUrl: string | null;
+  infraPipelineStatus: GitCicdPipelineDetailStatus;
+  appPipelineRunUrl: string | null;
+  appPipelineStatus: GitCicdPipelineDetailStatus;
+  destroyPipelineRunUrl: string | null;
+  destroyPipelineStatus: GitCicdPipelineDetailStatus;
+  environmentName: string;
+  staticSiteUrl: string | null;
+  apiBaseUrl: string | null;
+  statusMessage: string | null;
+  updatedAt: IsoDateTimeString;
+  source: "runtime_cache" | "rds";
+};
+
+export type GitCicdHandoffResponse = {
+  handoff: GitCicdHandoff;
+};
+
+export type GitCicdHandoffListResponse = {
+  handoffs: GitCicdHandoff[];
+};
+
+export type GitCicdHandoffPipelineStatusResponse = {
+  pipelineStatus: GitCicdHandoffPipelineStatus;
+};
+
+export type GitCicdGitHubOAuthStartResponse = {
+  authorizationUrl: string;
+  expiresAt: IsoDateTimeString;
+};
+
+export type GitCicdRepositorySettingsApplyResponse = {
+  applied: boolean;
+  environmentName: string;
+  variables: string[];
+  secrets: string[];
+  workflowFiles: string[];
+  githubOAuthRequired: boolean;
+};
+
+export type GitCicdAwsRoleDiffApplyResponse = {
+  applied: boolean;
+  roleArn: string;
+  repository: string;
+  environmentName: string;
+  appliedAt: IsoDateTimeString;
+  verified: boolean;
+};
+
 export type DeploymentStatus =
   | "PENDING"
   | "RUNNING"
@@ -351,6 +705,7 @@ export type Deployment = DeploymentBlock & {
   architectureId: string;
   terraformArtifactId: string;
   awsConnectionId: string | null;
+  liveProfile: DeploymentLiveProfile;
   currentPlanArtifactId: string | null;
   currentPlanOperation: "apply" | "destroy" | null;
   stateObjectKey: string | null;
@@ -386,10 +741,44 @@ export type DeploymentBlock = {
 export type DeploymentWarningLevel = "low" | "medium" | "high";
 export type DeploymentBlockedBy = "risk_analysis" | "cost_analysis" | "missing_approval";
 
+export type DeploymentPlanWarningSource =
+  | "pre_deployment_check"
+  | "terraform_plan"
+  | "cost_risk"
+  | "approval_snapshot";
+
+export type DeploymentPlanWarningCode =
+  | "PUBLIC_RDS"
+  | "PUBLIC_SSH"
+  | "PUBLIC_S3"
+  | "IAM_WILDCARD"
+  | "DESTRUCTIVE_CHANGE"
+  | "UNSUPPORTED_RESOURCE"
+  | "TRIVY_MISCONFIGURATION"
+  | "UNKNOWN_TERRAFORM_ACTION"
+  | "MISSING_APPROVAL";
+
+export type TerraformSourceLocation = {
+  fileName: string;
+  line: number;
+  column?: number | undefined;
+  resourceAddress?: string | undefined;
+  terraformBlockType?: string | undefined;
+  terraformBlockName?: string | undefined;
+};
+
 export type DeploymentPlanWarning = {
+  id: string;
   level: DeploymentWarningLevel;
+  category?: CheckFindingCategory;
+  source: DeploymentPlanWarningSource;
+  code: DeploymentPlanWarningCode;
   message: string;
+  relatedFindingId?: string;
   relatedResourceId?: string;
+  sourceLocation?: TerraformSourceLocation | undefined;
+  requiresAcknowledgement: boolean;
+  blocksApproval: boolean;
 };
 
 export type DeploymentPlanSummary = {
@@ -399,6 +788,10 @@ export type DeploymentPlanSummary = {
   replaceCount: number;
   blocked: boolean;
   warnings: DeploymentPlanWarning[];
+};
+
+export type ApproveDeploymentPlanRequest = {
+  acknowledgedWarningIds: string[];
 };
 
 export type DeploymentStage = "init" | "validate" | "plan" | "apply" | "destroy";
@@ -445,11 +838,164 @@ export type AwsConnectionListResponse = {
   awsConnections: AwsConnection[];
 };
 
+export type ReverseEngineeringScanStatus =
+  | "queued"
+  | "running"
+  | "completed"
+  | "failed"
+  | "cancelled";
+
+export type ReverseEngineeringScanStage =
+  | "credential"
+  | "region"
+  | "provider_api"
+  | "normalize"
+  | "draft"
+  | "analysis"
+  | "import_suggestion";
+
+export type ReverseEngineeringScanLogLevel = "INFO" | "WARN" | "ERROR";
+
+export type ReverseEngineeringScan = {
+  id: string;
+  projectId: string;
+  awsConnectionId: string;
+  provider: CloudProvider;
+  region: string;
+  resourceTypes: ReverseEngineeringResourceSelection[];
+  status: ReverseEngineeringScanStatus;
+  createdAt: IsoDateTimeString;
+  updatedAt: IsoDateTimeString;
+  startedAt: IsoDateTimeString | null;
+  completedAt: IsoDateTimeString | null;
+  cancelRequestedAt: IsoDateTimeString | null;
+  deletedAt: IsoDateTimeString | null;
+  errorSummary: string | null;
+};
+
+export type DiscoveredResourceRelationshipType = "contains" | "connects_to" | "depends_on";
+
+export type DiscoveredResourceRelationship = {
+  type: DiscoveredResourceRelationshipType;
+  targetResourceId: string;
+  label?: string | undefined;
+};
+
+export type ReverseEngineeringImportSuggestionStatus =
+  | "ready"
+  | "unsupported_resource_type"
+  | "manual_review";
+
+export type DiscoveredResource = {
+  id: string;
+  provider: CloudProvider;
+  providerResourceType: string;
+  providerResourceId: string;
+  region: string;
+  displayName: string;
+  resourceType: ResourceType;
+  config: ResourceConfig;
+  relationships?: DiscoveredResourceRelationship[] | undefined;
+  analysisExcluded?: boolean | undefined;
+  importSuggestionStatus?: ReverseEngineeringImportSuggestionStatus | undefined;
+};
+
+export type ReverseEngineeringAnalysisExclusionReason =
+  | "unsupported_resource_type"
+  | "missing_required_data";
+
+export type ReverseEngineeringAnalysisExclusion = {
+  id: string;
+  resourceId: string;
+  reason: ReverseEngineeringAnalysisExclusionReason;
+  message: string;
+};
+
+export type ReverseEngineeringDraft = {
+  id: string;
+  scanId: string;
+  architectureJson: ArchitectureJson;
+  protectedValueKeys: string[];
+  editableValueKeys: string[];
+  createdAt: IsoDateTimeString;
+};
+
+export type ReverseEngineeringImportSuggestion = {
+  id: string;
+  resourceId: string;
+  status: ReverseEngineeringImportSuggestionStatus;
+  handoffReady: boolean;
+  terraformAddress?: string | undefined;
+  importCommand?: string | undefined;
+  terraformBlockDraft?: string | undefined;
+  reason?: string | undefined;
+};
+
+export type ReverseEngineeringScanErrorReason =
+  | "permission_denied"
+  | "invalid_region"
+  | "expired_credential"
+  | "throttled"
+  | "provider_error"
+  | "unknown";
+
+export type ReverseEngineeringScanError = {
+  id: string;
+  resourceType: ResourceType | "UNKNOWN";
+  stage: ReverseEngineeringScanStage;
+  reason: ReverseEngineeringScanErrorReason;
+  message: string;
+  retryable: boolean;
+};
+
+export type ReverseEngineeringScanLogLine = {
+  id: string;
+  scanId: string;
+  sequence: number;
+  stage: ReverseEngineeringScanStage;
+  level: ReverseEngineeringScanLogLevel;
+  message: string;
+  createdAt: IsoDateTimeString;
+};
+
+export type ReverseEngineeringScanResult = {
+  scan: ReverseEngineeringScan;
+  discoveredResources: DiscoveredResource[];
+  reverseEngineeringDraft: ReverseEngineeringDraft;
+  architectureJson: ArchitectureJson;
+  findings: CheckFinding[];
+  analysisExclusions: ReverseEngineeringAnalysisExclusion[];
+  importSuggestions: ReverseEngineeringImportSuggestion[];
+  scanErrors: ReverseEngineeringScanError[];
+};
+
+export type CreateReverseEngineeringScanRequest = {
+  awsConnectionId: string;
+  region: string;
+  resourceTypes: ReverseEngineeringResourceSelection[];
+};
+
+export type ReverseEngineeringScanResponse = {
+  scan: ReverseEngineeringScan;
+  result?: ReverseEngineeringScanResult | undefined;
+};
+
+export type ReverseEngineeringScanListResponse = {
+  scans: ReverseEngineeringScan[];
+};
+
+export type ReverseEngineeringScanLogListResponse = {
+  logs: ReverseEngineeringScanLogLine[];
+};
+
 export type CreateDeploymentRequest = {
   architectureId: string;
   terraformArtifactId: string;
   awsConnectionId: string;
+  liveProfile?: DeploymentLiveProfile | undefined;
 };
+
+export type DeploymentLiveProfile = "practice" | "demo_web_service" | "demo_web_service_with_rds";
 
 export type DeploymentResponse = {
   deployment: Deployment;
@@ -469,8 +1015,142 @@ export type RecentSuccessfulDeploymentProjectListResponse = {
   items: RecentSuccessfulDeploymentProject[];
 };
 
+export type CostProjectEstimate = {
+  project: Project;
+  costEstimate: CostEstimateResult | null;
+};
+
+export type CostProjectEstimateListResponse = {
+  period: CostEstimatePeriod;
+  expectedUserCount: number;
+  region: AwsRegionCode | string;
+  totalEstimate: MoneyEstimate;
+  totalMonthlyEstimate: MoneyEstimate;
+  projects: CostProjectEstimate[];
+};
+
+export type CostUsageAnalysisRange = "7d" | "30d" | "month_to_date";
+
+export type CostUsageDataSource = "aws_cost_explorer" | "sample";
+
+export type CostProjectUsageSource = "cost_explorer_tag" | "deployed_resource_estimate" | "sample";
+
+export type CostUsageTrendPoint = {
+  date: string;
+  amount: number;
+};
+
+export type CostServiceUsage = {
+  service: string;
+  amount: number;
+  percentage: number;
+};
+
+export type CostProjectUsage = {
+  projectId: string | null;
+  projectName: string;
+  amount: number;
+  percentage: number;
+  source: CostProjectUsageSource;
+  resourceCount: number;
+};
+
+export type CostResourceUsageSource =
+  | "cost_explorer_resource"
+  | "deployed_resource_estimate"
+  | "sample";
+
+export type CostResourceUsage = {
+  id: string;
+  projectId?: string | undefined;
+  projectName?: string | undefined;
+  resourceId: string | null;
+  resourceName: string;
+  resourceType: string;
+  service: string;
+  terraformAddress: string;
+  amount: number;
+  percentage: number;
+  source: CostResourceUsageSource;
+};
+
+export type CostMetricSeriesPoint = {
+  timestamp: IsoDateTimeString;
+  value: number;
+};
+
+export type CostMetricSeries = {
+  id: string;
+  label: string;
+  unit: string;
+  points: CostMetricSeriesPoint[];
+};
+
+export type CostWasteResourceInsight = {
+  id: string;
+  resourceId: string | null;
+  resourceName: string;
+  resourceType: string;
+  service: string;
+  projectId?: string | undefined;
+  projectName?: string | undefined;
+  metricName: string;
+  averageValue: number;
+  unit: string;
+  finding: string;
+  estimatedMonthlyWaste: MoneyEstimate;
+};
+
+export type CostOptimizationRecommendation = {
+  id: string;
+  targetType: "resource" | "project" | "service";
+  severity: RiskLevel;
+  title: string;
+  estimatedMonthlySavings: MoneyEstimate;
+  reason: string;
+  actionLabel: string;
+  resourceId?: string | undefined;
+  projectId?: string | undefined;
+  service?: string | undefined;
+};
+
+export type CostUsageAnalysisResponse = {
+  range: CostUsageAnalysisRange;
+  generatedAt: IsoDateTimeString;
+  startDate: string;
+  endDate: string;
+  currency: "USD";
+  dataSource: CostUsageDataSource;
+  fallbackUsed: boolean;
+  totalCost: MoneyEstimate;
+  forecastMonthEndCost: MoneyEstimate;
+  dailyTrend: CostUsageTrendPoint[];
+  serviceCosts: CostServiceUsage[];
+  projectCosts: CostProjectUsage[];
+  resourceCosts: CostResourceUsage[];
+  wasteResources: CostWasteResourceInsight[];
+  recommendations: CostOptimizationRecommendation[];
+  metricSeries: CostMetricSeries[];
+};
+
 export type DeploymentLogListResponse = {
   logs: DeploymentLog[];
+};
+
+export type DeploymentFailureExplanation = {
+  deploymentId: string;
+  stage: DeploymentFailureStage | null;
+  severity: RiskLevel;
+  summary: string;
+  likelyCause: string;
+  nextActions: string[];
+  firstErrorLog: string | null;
+  cleanupRequired: boolean;
+  llmExplanation?: LlmExplanation | undefined;
+};
+
+export type DeploymentFailureExplanationResponse = {
+  explanation: DeploymentFailureExplanation;
 };
 
 export type DeployedResource = {
@@ -606,39 +1286,113 @@ export type BudgetLimit = {
 
 export type RiskLevel = "low" | "medium" | "high";
 
-export type AiResultSource = "prompt" | "github" | "template_fallback" | "llm_fallback";
+export type AiResultSource =
+  | "prompt"
+  | "github"
+  | "amazon_q"
+  | "template_fallback"
+  | "llm_fallback";
 
 export type AiConfidence = "low" | "medium" | "high";
+
+export type AiProvider = "bedrock" | "amazon_q" | "amazon_transcribe" | "openai" | "fallback";
+
+export type AiProviderService =
+  | "bedrock_runtime"
+  | "amazon_q_business"
+  | "amazon_transcribe"
+  | "openai_responses"
+  | "rule_fallback";
+
+export type AiBillingMode = "aws_credit_only" | "standard" | "disabled";
+
+export type AiEstimatedUsage = {
+  inputCharacters: number;
+  inputTokensEstimate: number;
+  outputCharacters?: number | undefined;
+  outputTokensEstimate?: number | undefined;
+};
+
+export type AiProviderMetadata = {
+  provider: AiProvider;
+  service: AiProviderService;
+  model?: string | undefined;
+  routeTarget: string;
+  cacheHit: boolean;
+  cacheKey: string;
+  estimatedUsage: AiEstimatedUsage;
+  billingMode: AiBillingMode;
+  generatedAt: IsoDateTimeString;
+};
 
 export type AiResultMetadata = {
   source: AiResultSource;
   confidence: AiConfidence;
   assumptions: string[];
   explanations: string[];
-  selectedScenario?: ArchitectureScenario;
-  scenarioScores?: ArchitectureScenarioScore[];
+  selectedDraftPattern?: ArchitectureDraftPattern;
+  architectureIntent?: ArchitectureIntent;
+  servicePurpose?: ArchitectureServicePurpose;
+  capabilities?: ArchitectureCapability[];
+  requirementFacts?: ArchitectureRequirementFact[];
+  operatingProfile?: ArchitectureDraftOperatingProfile;
   guardrailWarnings?: ArchitectureGuardrailWarning[];
 };
 
-export type ArchitectureScenario = "static_site" | "api_server" | "backend_with_db" | "server_storage";
+export type ArchitectureDraftPattern =
+  | "static_site"
+  | "api_server"
+  | "backend_with_db"
+  | "server_storage"
+  | "serverless_function";
 
-export type ArchitectureScenarioScore = {
-  scenario: ArchitectureScenario;
-  score: number;
-  reasons: string[];
+export type ArchitectureServicePurpose =
+  | "landing_page"
+  | "file_upload_service"
+  | "auth_web_service"
+  | "reservation_service"
+  | "content_board"
+  | "api_backend"
+  | "data_storage"
+  | "unknown";
+
+export type ArchitectureCapability =
+  | "static_delivery"
+  | "file_upload"
+  | "authentication"
+  | "relational_data"
+  | "admin_workflow"
+  | "public_api"
+  | "private_user_data"
+  | "media_storage";
+
+export type ArchitectureIntentConstraints = {
+  budget?: ArchitectureDraftBudgetLevel;
+  traffic?: "small" | "growth";
+  security?: "basic" | "sensitive";
+  computePreference?: "ec2" | "serverless" | "unspecified";
+};
+
+export type ArchitectureIntent = {
+  servicePurpose: ArchitectureServicePurpose;
+  capabilities: ArchitectureCapability[];
+  constraints: ArchitectureIntentConstraints;
+  confidence: number;
+  missingQuestions: string[];
 };
 
 export type ArchitectureGuardrailWarningCode =
-  | "scenario_conflict"
-  | "unsupported_requirement"
-  | "low_budget_rds_cost";
+  | "low_budget_rds_cost"
+  | "unsupported_resource_omitted"
+  | "unsupported_requirement_substituted"
+  | "partial_generation"
+  | "guardrail_adjusted_config"
+  | "board_replacement_required";
 
 export type ArchitectureGuardrailWarning = {
   code: ArchitectureGuardrailWarningCode;
   message: string;
 };
-
-export type ArchitectureDraftScenarioHint = "auto" | ArchitectureScenario;
 
 export type ArchitectureDraftBudgetLevel = "low" | "normal";
 
@@ -646,34 +1400,237 @@ export type ArchitectureDraftTrafficLevel = "small" | "normal";
 
 export type ArchitectureDraftSecurityPriority = "basic" | "high";
 
-// Architecture Draft를 만들 때 AI가 자유롭게 해석하지 않도록 입력 선택지를 좁힌 계약입니다.
-export type CreateArchitectureDraftRequest = {
-  prompt: string;
-  scenarioHint: ArchitectureDraftScenarioHint;
+export type ArchitectureRequirementFact =
+  | "web_frontend"
+  | "static_delivery"
+  | "server_runtime"
+  | "database"
+  | "object_storage"
+  | "file_upload"
+  | "auth_or_user_data"
+  | "serverless_runtime"
+  | "network_boundary"
+  | "iam_permissions"
+  | "observability"
+  | "encryption";
+
+export type ArchitectureDraftOperatingProfile = {
   budgetLevel: ArchitectureDraftBudgetLevel;
   trafficLevel: ArchitectureDraftTrafficLevel;
   securityPriority: ArchitectureDraftSecurityPriority;
 };
 
+// Architecture Draft는 자연어 요구사항과 확인 질문 답변을 기준으로 결정적으로 생성한다.
+export type RequirementInputMode = "text" | "voice";
+
+export type RequirementInput = {
+  mode: RequirementInputMode;
+  text: string;
+  transcriptSource?: "amazon_transcribe" | undefined;
+  confirmedByUser: boolean;
+};
+
+export type RequirementPromptSource = "text" | "voice_transcript";
+
+export type RequirementPrompt = {
+  text: string;
+  source: RequirementPromptSource;
+  requirementInput: RequirementInput;
+  confirmedByUser: boolean;
+  confirmedByUserId?: string | undefined;
+  confirmedAt: IsoDateTimeString;
+};
+
+export type VoiceRequirementMediaFormat = "mp3" | "mp4" | "wav" | "flac" | "ogg" | "amr" | "webm";
+
+export type VoiceRequirementInput = {
+  mediaUri: string;
+  mediaFormat: VoiceRequirementMediaFormat;
+  languageCode?: string | undefined;
+};
+
+export type TranscribeConfirmationStatus =
+  | "transcribing"
+  | "awaiting_user_confirmation"
+  | "confirmed"
+  | "failed";
+
+export type TranscribeConfirmation = {
+  transcriptionJobName: string | null;
+  voiceRequirementInput: VoiceRequirementInput | null;
+  transcriptText: string | null;
+  confirmedText: string | null;
+  confirmedByUser: boolean;
+  confirmedByUserId?: string | undefined;
+  status: TranscribeConfirmationStatus;
+  failureReason?: string | undefined;
+  providerMetadata: AiProviderMetadata;
+};
+
+export type ConfirmTranscribeRequest = {
+  transcriptText: string;
+  confirmedText: string;
+  confirmedByUserId?: string | undefined;
+};
+
+export type ConfirmTranscribeResponse = {
+  confirmation: TranscribeConfirmation;
+  requirementPrompt: RequirementPrompt;
+};
+
+export type UserAcceptedChangeTarget =
+  | "architecture_draft"
+  | "architecture_suggestion"
+  | "architecture_patch_preview"
+  | "iac_handoff"
+  | "git_change"
+  | "deployment_action";
+
+export type UserAcceptedChange = {
+  target: UserAcceptedChangeTarget;
+  acceptedByUserId: string;
+  acceptedAt: IsoDateTimeString;
+};
+
+export type ArchitecturePatchAction =
+  | "add_resource"
+  | "remove_resource"
+  | "modify_resource"
+  | "manual_review";
+
+export type ArchitecturePatchIntent = {
+  instruction: string;
+  requestedAction: ArchitecturePatchAction;
+  targetResourceId?: string | undefined;
+  resourceType?: ResourceType | undefined;
+  connectionTargetResourceId?: string | undefined;
+  skipConnection?: boolean | undefined;
+};
+
+export type ArchitecturePatchPreviewChange = {
+  action: ArchitecturePatchAction;
+  resourceType?: ResourceType | undefined;
+  resourceId?: string | undefined;
+  summary: string;
+};
+
+export type ArchitecturePatchClarificationCandidate = {
+  resourceId: string;
+  resourceType: ResourceType;
+  label: string;
+};
+
+export type ArchitecturePatchClarification = {
+  status: "needs_clarification";
+  intent: ArchitecturePatchIntent;
+  question: string;
+  candidates: ArchitecturePatchClarificationCandidate[];
+  suggestions?: string[] | undefined;
+  providerMetadata: AiProviderMetadata;
+};
+
+export type ArchitecturePatchPreview = {
+  status: "preview";
+  intent: ArchitecturePatchIntent;
+  baseArchitectureJson: ArchitectureJson;
+  proposedArchitectureJson: ArchitectureJson;
+  changes: ArchitecturePatchPreviewChange[];
+  requiresUserAcceptance: true;
+  userAcceptedChange: UserAcceptedChange | null;
+  llmExplanation?: LlmExplanation | undefined;
+  providerMetadata: AiProviderMetadata;
+};
+
+export type ArchitecturePatchPreviewResponse =
+  | ArchitecturePatchPreview
+  | ArchitecturePatchClarification;
+
+export type CreateArchitecturePatchPreviewRequest = {
+  architectureJson: ArchitectureJson;
+  instruction: string;
+  selectedTargetResourceId?: string | undefined;
+  connectionTargetResourceId?: string | undefined;
+  skipConnection?: boolean | undefined;
+};
+
+export type CreateArchitectureDraftRequest = {
+  prompt: string;
+};
+
 export type AiArchitectureDraftResult = {
   architectureJson: ArchitectureJson;
+  diagramJson?: DiagramJson | undefined;
   title: string;
   metadata: AiResultMetadata;
   llmExplanation?: LlmExplanation | undefined;
 };
+
+export type ArchitectureDraftClarification = {
+  status: "needs_clarification";
+  question: string;
+  suggestions: string[];
+  providerMetadata: AiProviderMetadata;
+};
+
+export type CreateArchitectureDraftResponse =
+  | AiArchitectureDraftResult
+  | ArchitectureDraftClarification;
 
 export type MoneyEstimate = {
   amount: number;
   currency: "USD" | "KRW";
 };
 
+export type CostEstimatePeriod = "day" | "week" | "month";
+
+export type CostPricingSource = "aws_pricing_api" | "fallback";
+
+export type CostEstimateSupportLevel =
+  | "aws_pricing_api"
+  | "fallback_estimate"
+  | "no_direct_cost"
+  | "not_estimated";
+
+export type CostUsageAssumption = {
+  label: string;
+  value: string;
+};
+
 export type ResourceCostEstimate = {
   resourceId: string;
   resourceType: ResourceType;
+  terraformResourceType?: string | undefined;
   name: string;
   monthlyEstimate: MoneyEstimate;
+  periodEstimate: MoneyEstimate;
+  supportLevel: CostEstimateSupportLevel;
+  supportReason: string;
   costDrivers: string[];
   explanation: string;
+  pricingSource?: CostPricingSource | undefined;
+  usageAssumptions?: CostUsageAssumption[] | undefined;
+  recommendation?: string | undefined;
+};
+
+export type CostEstimateRequest = {
+  architectureJson: ArchitectureJson;
+  period: CostEstimatePeriod;
+  expectedUserCount: number;
+  region: AwsRegionCode | string;
+};
+
+export type CostEstimateResult = {
+  totalEstimate: MoneyEstimate;
+  totalMonthlyEstimate: MoneyEstimate;
+  period: CostEstimatePeriod;
+  expectedUserCount: number;
+  region: AwsRegionCode | string;
+  pricingSource: CostPricingSource;
+  fallbackUsed: boolean;
+  assumptions: string[];
+  resources: ResourceCostEstimate[];
+  reviewMessages: string[];
+  pricingAssumption: string;
 };
 
 export type CheckFindingCategory =
@@ -685,11 +1642,24 @@ export type CheckFindingCategory =
   | "performance"
   | "availability";
 
+export type AiSafetyExplanation = {
+  riskSummary: string;
+  whyDangerous: string;
+  recommendedFix: string;
+  terraformHint?: string | undefined;
+  verificationSteps: string[];
+  fallbackUsed: boolean;
+  fallbackReason?: LlmExplanationFallbackReason | undefined;
+  providerMetadata?: AiProviderMetadata | undefined;
+};
+
 export type CheckFinding = {
   id: string;
   category: CheckFindingCategory;
   severity: RiskLevel;
   resourceId?: string | undefined;
+  sourceLocation?: TerraformSourceLocation | undefined;
+  aiSafetyExplanation?: AiSafetyExplanation | undefined;
   title: string;
   description: string;
   recommendation: string;
@@ -734,16 +1704,27 @@ export type LlmExplanationTarget =
   | "architecture_draft"
   | "design_simulation"
   | "pre_deployment_check"
-  | "terraform_error_explanation";
+  | "terraform_error_explanation"
+  | "terraform_preview_explanation"
+  | "architecture_patch_preview";
 
 export type LlmExplanationFallbackReason =
   | "missing_api_key"
+  | "provider_not_configured"
+  | "credit_not_confirmed"
+  | "daily_limit_exceeded"
   | "timeout"
   | "rate_limited"
   | "invalid_request"
   | "auth_error"
   | "provider_error"
   | "invalid_response";
+
+export type LlmCodeSuggestion = {
+  currentCode: string;
+  suggestedCode: string;
+  rationale: string;
+};
 
 export type LlmExplanation = {
   target: LlmExplanationTarget;
@@ -752,6 +1733,9 @@ export type LlmExplanation = {
   nextActions: string[];
   fallbackUsed: boolean;
   fallbackReason?: LlmExplanationFallbackReason | undefined;
+  codeSuggestion?: LlmCodeSuggestion | undefined;
+  wellArchitectedConclusion?: string | undefined;
+  providerMetadata?: AiProviderMetadata | undefined;
 };
 
 export type AiPreDeploymentAnalysisResult = {
@@ -766,10 +1750,18 @@ export type AiPreDeploymentAnalysisResult = {
   llmExplanation?: LlmExplanation | undefined;
 };
 
+export type AiPreDeploymentCheckRequest = {
+  architectureJson: ArchitectureJson;
+  terraformFiles?: TerraformSyncFileInput[] | undefined;
+};
+
 export type CreateDesignSimulationRequest = {
   architectureJson: ArchitectureJson;
   trafficLevel: ArchitectureDraftTrafficLevel;
   budgetLevel: ArchitectureDraftBudgetLevel;
+  period?: CostEstimatePeriod | undefined;
+  expectedUserCount?: number | undefined;
+  region?: AwsRegionCode | string | undefined;
 };
 
 export type DesignSimulationRequestFlowStep = {
@@ -801,6 +1793,7 @@ export type DesignSimulationResult = {
   bottlenecks: DesignSimulationBottleneck[];
   failureScenarios: DesignSimulationFailureScenario[];
   costPressure: string[];
+  costEstimate?: CostEstimateResult | undefined;
   recommendations: string[];
   llmExplanation?: LlmExplanation | undefined;
 };
@@ -820,6 +1813,54 @@ export type AiTerraformErrorCategory =
   | "dependency"
   | "unknown";
 
+export type WellArchitectedPillar =
+  | "operational_excellence"
+  | "security"
+  | "reliability"
+  | "performance_efficiency"
+  | "cost_optimization"
+  | "sustainability";
+
+export type AiWellArchitectedGuidance = {
+  pillar: WellArchitectedPillar;
+  title: string;
+  observation: string;
+  recommendation: string;
+};
+
+export type AiTerraformSafeFix = {
+  applicable: boolean;
+  code: string;
+  label: string;
+  description: string;
+};
+
+export type AiTerraformCodeFrameLine = {
+  lineNumber: number;
+  text: string;
+  isErrorLine: boolean;
+};
+
+export type AiTerraformCodeSuggestionSource = "rule" | "amazon_q";
+
+export type AiTerraformCodeSuggestion = {
+  currentCode: string;
+  suggestedCode: string;
+  rationale: string;
+  source: AiTerraformCodeSuggestionSource;
+};
+
+export type AiTerraformDiagnosticExplanation = {
+  errorType: string;
+  plainExplanation: string;
+  fixExplanation: string;
+  codeFrame: AiTerraformCodeFrameLine[];
+  canApply: boolean;
+  codeSuggestion?: AiTerraformCodeSuggestion | undefined;
+  line?: number | undefined;
+  sourceFileName?: string | undefined;
+};
+
 export type AiTerraformErrorExplanationResult = {
   stage: AiTerraformStage;
   category: AiTerraformErrorCategory;
@@ -828,6 +1869,10 @@ export type AiTerraformErrorExplanationResult = {
   summary: string;
   likelyCause: string;
   nextActions: string[];
+  wellArchitectedGuidance: AiWellArchitectedGuidance[];
+  consensusRecommendation: string;
+  safeFix?: AiTerraformSafeFix | undefined;
+  diagnosticExplanation?: AiTerraformDiagnosticExplanation | undefined;
   relatedResourceId?: string | undefined;
   llmExplanation?: LlmExplanation | undefined;
 };
@@ -843,6 +1888,9 @@ export type AiTerraformPreviewExplanationResult = {
   detectedResources: AiTerraformDetectedResource[];
   findings: CheckFinding[];
   checklist: ChecklistItem[];
+  wellArchitectedGuidance: AiWellArchitectedGuidance[];
+  consensusRecommendation: string;
+  llmExplanation?: LlmExplanation | undefined;
 };
 
 export type PracticeSession = {
@@ -856,10 +1904,12 @@ export type ArchitectureNode = ResourceNode;
 export type ArchitectureEdge = ResourceEdge;
 
 export type DiagramNodeKind = "resource" | "design";
+export type DiagramNodeBorderStyle = "solid" | "dashed" | "dotted";
 
 export type DiagramNodeStyle = {
   textColor?: string | undefined;
   borderColor?: string | undefined;
+  borderStyle?: DiagramNodeBorderStyle | undefined;
 };
 
 export type AwsRegionCode =
@@ -872,8 +1922,21 @@ export type AwsRegionCode =
   | "eu-central-1";
 
 export type DiagramNodeMetadata = {
-  awsRegion?: AwsRegionCode | undefined;
   parentAreaNodeId?: string | undefined;
+  moduleSource?:
+    | {
+        moduleId: string;
+        moduleVersion: string;
+        expandedAt: IsoDateTimeString;
+      }
+    | undefined;
+  reverseEngineering?:
+    | {
+        source: "aws_scan";
+        protectedValueKeys: string[];
+        editableValueKeys: string[];
+      }
+    | undefined;
 };
 
 export type DiagramNodeParameters = {
@@ -902,8 +1965,14 @@ export type DiagramNode = {
 
 export type DiagramEdgeStyle = {
   color?: string | undefined;
+  lineStyle?: "solid" | "dashed" | "dotted" | undefined;
   width?: "thin" | "medium" | "thick" | undefined;
   animated?: boolean | undefined;
+};
+
+export type DiagramEdgeMetadata = {
+  managedBy: "parameter-reference";
+  parameterPath: string;
 };
 
 export type DiagramEdge = {
@@ -915,6 +1984,7 @@ export type DiagramEdge = {
   label?: string | undefined;
   type?: string | undefined;
   style?: DiagramEdgeStyle | undefined;
+  metadata?: DiagramEdgeMetadata | undefined;
 };
 
 export type DiagramViewport = {
@@ -923,10 +1993,27 @@ export type DiagramViewport = {
   zoom: number;
 };
 
+export type DiagramVariableBinding = {
+  nodeId: string;
+  parameterKey: string;
+};
+
+export type DiagramVariableSource = "module" | "user";
+
+export type DiagramVariable = {
+  id: string;
+  name: string;
+  type: string;
+  value: unknown;
+  bindings: DiagramVariableBinding[];
+  source: DiagramVariableSource;
+};
+
 export type DiagramJson = {
   nodes: DiagramNode[];
   edges: DiagramEdge[];
   viewport: DiagramViewport;
+  variables?: DiagramVariable[] | undefined;
 };
 
 export type ProjectDraft = {
@@ -1009,6 +2096,7 @@ export type ResourceParameterDefinition = {
   required: boolean;
   optional: boolean;
   computed: boolean;
+  core?: boolean | undefined;
   sensitive: boolean;
   description?: string | undefined;
   inputKind: ParameterInputKind;
@@ -1033,12 +2121,14 @@ export type TerraformDiagnostic = {
   message: string;
   code?: string | undefined;
   line?: number | undefined;
+  sourceFileName?: string | undefined;
   resourceAddress?: string | undefined;
   nodeId?: string | undefined;
 };
 
 export type TerraformValidateRequest = {
   terraformCode: string;
+  terraformFiles?: TerraformSyncFileInput[] | undefined;
 };
 
 export type TerraformValidateResponse = {
@@ -1048,9 +2138,43 @@ export type TerraformValidateResponse = {
 export type TerraformSyncToDiagramRequest = {
   diagramJson: DiagramJson;
   terraformCode: string;
+  terraformFiles?: TerraformSyncFileInput[] | undefined;
 };
+
+export type TerraformSyncFileInput = {
+  fileName: string;
+  terraformCode: string;
+};
+
+export type TerraformDiagramChangeProposal =
+  | {
+      kind: "create_candidate";
+      identity: TerraformBlockIdentity;
+      nodeId?: string | undefined;
+      sourceFileName?: string | undefined;
+      line?: number | undefined;
+      metadata?: DiagramNodeMetadata | undefined;
+      position?: DiagramNode["position"] | undefined;
+      parameters: DiagramNodeParameters;
+    }
+  | {
+      kind: "delete_candidate";
+      identity: TerraformBlockIdentity;
+      nodeId: string;
+      resourceAddress: string;
+    }
+  | {
+      kind: "rename_candidate";
+      from: TerraformBlockIdentity;
+      to: TerraformBlockIdentity;
+      sourceFileName?: string | undefined;
+      line?: number | undefined;
+      nodeId: string;
+      resourceAddress: string;
+    };
 
 export type TerraformSyncToDiagramResponse = {
   diagramJson: DiagramJson;
   diagnostics: TerraformDiagnostic[];
+  proposals?: TerraformDiagramChangeProposal[] | undefined;
 };

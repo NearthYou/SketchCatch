@@ -1,34 +1,60 @@
 import type {
-  AiArchitectureDraftResult,
   AiPreDeploymentAnalysisResult,
+  AiPreDeploymentCheckRequest,
   AiTerraformErrorExplanationResult,
   AiTerraformPreviewExplanationResult,
   AiTerraformStage,
-  ArchitectureJson,
+  ApiErrorCode,
+  ApiErrorResponse,
+  ArchitecturePatchPreviewResponse,
   ArchitectureSnapshot,
+  ApproveDeploymentPlanRequest,
   AwsConnectionCloudFormationTemplateResponse,
   AwsConnection,
   AwsConnectionListResponse,
+  CostEstimatePeriod,
+  CostProjectEstimateListResponse,
+  CostUsageAnalysisRange,
+  CostUsageAnalysisResponse,
   CreateArchitectureSnapshotRequest,
   CreateArchitectureDraftRequest,
+  CreateArchitectureDraftResponse,
   CreateAwsConnectionRequest,
   CreateAwsConnectionResponse,
   CreateDeploymentRequest,
+  CreateGitCicdHandoffRequest,
   ConfirmProjectAssetUploadResponse,
+  CreateArchitecturePatchPreviewRequest,
   CreateDesignSimulationRequest,
   CreateProjectAssetUploadRequest,
   CreateProjectRequest,
+  CreateReverseEngineeringScanRequest,
   DeleteProjectRequest,
   DeleteProjectResponse,
   DesignSimulationResult,
   DeployedResource,
   Deployment,
+  DeploymentFailureExplanation,
+  DeploymentFailureExplanationResponse,
   DeploymentListResponse,
   DeploymentLog,
   DeploymentLogListResponse,
   DeploymentResourceListResponse,
   DeploymentResponse,
   DiagramJson,
+  GitCicdHandoff,
+  GitCicdHandoffListResponse,
+  GitCicdHandoffPipelineStatus,
+  GitCicdHandoffPipelineStatusResponse,
+  GitCicdHandoffResponse,
+  GitCicdGitHubOAuthStartResponse,
+  GitCicdRepositorySettingsApplyResponse,
+  GitCicdAwsRoleDiffApplyResponse,
+  GitHubAppExistingInstallationCallbackUrlResponse,
+  GitHubAppInstallUrlResponse,
+  ListGitHubInstalledRepositoriesResponse,
+  ListGitHubInstallationRepositoriesRequest,
+  ListGitHubInstallationRepositoriesResponse,
   Project,
   ProjectAssetUploadResponse,
   ProjectDetailsResponse,
@@ -38,19 +64,31 @@ import type {
   ProjectResponse,
   RecentSuccessfulDeploymentProject,
   RecentSuccessfulDeploymentProjectListResponse,
+  SourceRepository,
+  SourceRepositoryListResponse,
+  SourceRepositoryResponse,
+  ConnectGitHubSourceRepositoryRequest,
+  ReverseEngineeringScan,
+  ReverseEngineeringScanListResponse,
+  ReverseEngineeringScanLogLine,
+  ReverseEngineeringScanLogListResponse,
+  ReverseEngineeringScanResponse,
   SaveProjectDraftRequest,
+  TerraformDiagnostic,
   TerraformOutput,
   TerraformOutputListResponse,
   TestAwsConnectionRequest,
   TestAwsConnectionResponse,
   TerraformGenerateResponse,
+  TerraformSyncFileInput,
   TerraformSyncToDiagramResponse,
+  TerraformValidateRequest,
   TerraformValidateResponse,
   VerifyAwsConnectionCreatedRoleRequest,
   VerifyAwsConnectionRequest,
   VerifyAwsConnectionResponse
 } from "../../../../packages/types/src";
-import { apiFetch, buildApiUrl } from "../../lib/api-client";
+import { ApiClientError, apiFetch, buildApiUrl } from "../../lib/api-client";
 import { readStoredAuthSession } from "../../lib/auth-storage";
 
 const AI_API_BASE_URL = (
@@ -58,9 +96,11 @@ const AI_API_BASE_URL = (
 ).replace(/\/+$/, "");
 
 type AiTerraformErrorExplanationRequest = {
+  readonly diagnostic?: TerraformDiagnostic | undefined;
   readonly stage: AiTerraformStage;
   readonly rawMessage: string;
   readonly relatedResourceId?: string | undefined;
+  readonly terraformCodeContext?: string | undefined;
 };
 
 type ArchitectureSnapshotResponse = {
@@ -213,9 +253,22 @@ export async function uploadProjectAsset(
   upload: ProjectAssetUploadResponse["upload"],
   content: string | Blob
 ): Promise<void> {
-  const response = await fetch(upload.url, {
+  const headers = new Headers(upload.headers);
+  const isApiUpload = upload.url.startsWith("/api/");
+  const uploadUrl = isApiUpload ? buildApiUrl(upload.url.slice(4)) : upload.url;
+
+  if (isApiUpload) {
+    const session = readStoredAuthSession();
+
+    if (session) {
+      headers.set("Authorization", `Bearer ${session.accessToken}`);
+    }
+  }
+
+  const response = await fetch(uploadUrl, {
     method: upload.method,
-    headers: upload.headers,
+    credentials: isApiUpload ? "include" : "same-origin",
+    headers,
     body: content
   });
 
@@ -237,30 +290,33 @@ export async function generateTerraformCode(diagramJson: DiagramJson): Promise<s
 }
 
 export async function validateTerraformCode(
-  terraformCode: string
+  input: string | TerraformValidateRequest
 ): Promise<TerraformValidateResponse> {
+  const body = typeof input === "string" ? { terraformCode: input } : input;
+
   return apiFetch<TerraformValidateResponse>("/terraform/validate", {
     auth: true,
     method: "POST",
-    body: {
-      terraformCode
-    }
+    body
   });
 }
 
 export async function syncTerraformToDiagram({
   diagramJson,
-  terraformCode
+  terraformCode,
+  terraformFiles
 }: {
   diagramJson: DiagramJson;
   terraformCode: string;
+  terraformFiles?: TerraformSyncFileInput[] | undefined;
 }): Promise<TerraformSyncToDiagramResponse> {
   return apiFetch<TerraformSyncToDiagramResponse>("/terraform/sync-to-diagram", {
     auth: true,
     method: "POST",
     body: {
       diagramJson,
-      terraformCode
+      terraformCode,
+      ...(terraformFiles !== undefined ? { terraformFiles } : {})
     }
   });
 }
@@ -268,16 +324,45 @@ export async function syncTerraformToDiagram({
 // 실제 Workspace AI 패널에서 Requirement Prompt 기반 Architecture Draft를 요청합니다.
 export async function createAiArchitectureDraft(
   input: CreateArchitectureDraftRequest
-): Promise<AiArchitectureDraftResult> {
-  return postPublicAiJson<AiArchitectureDraftResult>("/ai/architecture-draft", input);
+): Promise<CreateArchitectureDraftResponse> {
+  const prompt = input.prompt.trim();
+
+  if (prompt.length === 0) {
+    throw new ApiClientError(400, {
+      error: "bad_request",
+      message: "Requirement Prompt를 먼저 입력해주세요."
+    });
+  }
+
+  return postPublicAiJson<CreateArchitectureDraftResponse>("/ai/architecture-draft", {
+    ...input,
+    prompt
+  });
+}
+
+export async function createAiArchitecturePatchPreview(
+  input: CreateArchitecturePatchPreviewRequest
+): Promise<ArchitecturePatchPreviewResponse> {
+  return postPublicAiJson<ArchitecturePatchPreviewResponse>("/ai/architecture-patch-preview", {
+    architectureJson: input.architectureJson,
+    instruction: input.instruction,
+    ...(input.selectedTargetResourceId !== undefined
+      ? { selectedTargetResourceId: input.selectedTargetResourceId }
+      : {}),
+    ...(input.connectionTargetResourceId !== undefined
+      ? { connectionTargetResourceId: input.connectionTargetResourceId }
+      : {}),
+    ...(input.skipConnection === true ? { skipConnection: true } : {})
+  });
 }
 
 // 현재 Architecture Board를 기준으로 Pre-Deployment Check를 실행합니다.
 export async function runAiPreDeploymentCheck(
-  architectureJson: ArchitectureJson
+  input: AiPreDeploymentCheckRequest
 ): Promise<AiPreDeploymentAnalysisResult> {
   return postPublicAiJson<AiPreDeploymentAnalysisResult>("/ai/pre-deployment-check", {
-    architectureJson
+    architectureJson: input.architectureJson,
+    ...(input.terraformFiles !== undefined ? { terraformFiles: input.terraformFiles } : {})
   });
 }
 
@@ -305,9 +390,11 @@ export async function runAiTerraformErrorExplanation(
   input: AiTerraformErrorExplanationRequest
 ): Promise<AiTerraformErrorExplanationResult> {
   return postPublicAiJson<AiTerraformErrorExplanationResult>("/ai/terraform-error-explanation", {
+    diagnostic: input.diagnostic,
     rawMessage: input.rawMessage,
     relatedResourceId: input.relatedResourceId,
-    stage: input.stage
+    stage: input.stage,
+    terraformCodeContext: input.terraformCodeContext
   });
 }
 
@@ -325,30 +412,51 @@ async function postPublicAiJson<ResponseBody>(
   });
 
   if (!response.ok) {
-    throw new Error(await readPublicAiErrorMessage(response));
+    throw await readPublicAiError(response);
   }
 
   return response.json() as Promise<ResponseBody>;
 }
 
-// API 서버의 JSON 오류를 사람이 읽을 수 있는 message로 낮춥니다.
-async function readPublicAiErrorMessage(response: Response): Promise<string> {
+// API 서버의 JSON 오류를 공용 에러 타입으로 유지해 화면별 메시지 fallback에 덮이지 않게 합니다.
+async function readPublicAiError(response: Response): Promise<ApiClientError> {
   try {
     const body: unknown = await response.json();
 
-    return isPublicAiErrorBody(body) ? body.message : `API 요청 실패: ${response.status}`;
+    if (isPublicAiErrorBody(body)) {
+      return new ApiClientError(response.status, body);
+    }
   } catch {
-    return `API 요청 실패: ${response.status}`;
+    // Fall through to a typed fallback error below.
   }
+
+  return new ApiClientError(response.status, {
+    error: response.status >= 500 ? "internal_server_error" : "bad_request",
+    message: `API 요청 실패: ${response.status}`
+  });
 }
 
-// API 오류 응답에서 message 필드가 있는 경우에만 사용자 메시지로 사용합니다.
-function isPublicAiErrorBody(value: unknown): value is { readonly message: string } {
+// API 오류 응답에서 표준 error/message 필드가 있는 경우에만 사용자 메시지로 사용합니다.
+function isPublicAiErrorBody(value: unknown): value is ApiErrorResponse {
   return (
     typeof value === "object" &&
     value !== null &&
+    "error" in value &&
     "message" in value &&
+    isApiErrorCode(value.error) &&
     typeof value.message === "string"
+  );
+}
+
+function isApiErrorCode(value: unknown): value is ApiErrorCode {
+  return (
+    value === "bad_request" ||
+    value === "unauthorized" ||
+    value === "not_found" ||
+    value === "conflict" ||
+    value === "github_oauth_required" ||
+    value === "too_many_requests" ||
+    value === "internal_server_error"
   );
 }
 
@@ -445,11 +553,121 @@ export async function getAwsConnectionCloudFormationTemplate({
   );
 }
 
+export async function createReverseEngineeringScan({
+  projectId,
+  ...input
+}: {
+  projectId: string;
+} & CreateReverseEngineeringScanRequest): Promise<ReverseEngineeringScanResponse> {
+  return apiFetch<ReverseEngineeringScanResponse>(
+    `/projects/${encodeURIComponent(projectId)}/reverse-engineering/scans`,
+    {
+      auth: true,
+      method: "POST",
+      body: input
+    }
+  );
+}
+
+// 새 프로젝트를 만들기 전 AWS를 먼저 읽어 보드 후보만 받아옵니다.
+export async function createReverseEngineeringPreviewScan(
+  input: CreateReverseEngineeringScanRequest
+): Promise<ReverseEngineeringScanResponse> {
+  return apiFetch<ReverseEngineeringScanResponse>(
+    "/reverse-engineering/scans/preview",
+    {
+      auth: true,
+      method: "POST",
+      body: input
+    }
+  );
+}
+
+export async function listReverseEngineeringScans(projectId: string): Promise<ReverseEngineeringScan[]> {
+  const response = await apiFetch<ReverseEngineeringScanListResponse>(
+    `/projects/${encodeURIComponent(projectId)}/reverse-engineering/scans`,
+    {
+      auth: true
+    }
+  );
+
+  return response.scans;
+}
+
+export async function getReverseEngineeringScan({
+  projectId,
+  scanId
+}: {
+  projectId: string;
+  scanId: string;
+}): Promise<ReverseEngineeringScanResponse> {
+  return apiFetch<ReverseEngineeringScanResponse>(
+    `/projects/${encodeURIComponent(projectId)}/reverse-engineering/scans/${encodeURIComponent(scanId)}`,
+    {
+      auth: true
+    }
+  );
+}
+
+// 실행 중인 스캔에 취소 요청을 보내고, 서버가 기록한 최신 상태를 받습니다.
+export async function cancelReverseEngineeringScan({
+  projectId,
+  scanId
+}: {
+  projectId: string;
+  scanId: string;
+}): Promise<ReverseEngineeringScan> {
+  const response = await apiFetch<ReverseEngineeringScanResponse>(
+    `/projects/${encodeURIComponent(projectId)}/reverse-engineering/scans/${encodeURIComponent(scanId)}/cancel`,
+    {
+      auth: true,
+      method: "POST"
+    }
+  );
+
+  return response.scan;
+}
+
+// 저장된 스캔 기록만 지우고, 사용자가 적용한 보드 저장본은 건드리지 않습니다.
+export async function deleteReverseEngineeringScan({
+  projectId,
+  scanId
+}: {
+  projectId: string;
+  scanId: string;
+}): Promise<void> {
+  await apiFetch<void>(
+    `/projects/${encodeURIComponent(projectId)}/reverse-engineering/scans/${encodeURIComponent(scanId)}`,
+    {
+      auth: true,
+      method: "DELETE"
+    }
+  );
+}
+
+export async function listReverseEngineeringScanLogs({
+  projectId,
+  scanId
+}: {
+  projectId: string;
+  scanId: string;
+}): Promise<ReverseEngineeringScanLogLine[]> {
+  const response = await apiFetch<ReverseEngineeringScanLogListResponse>(
+    `/projects/${encodeURIComponent(projectId)}/reverse-engineering/scans/${encodeURIComponent(scanId)}/logs`,
+    {
+      auth: true
+    }
+  );
+
+  return response.logs;
+}
+
 export async function createDeployment({
   projectId,
   architectureId,
   terraformArtifactId,
-  awsConnectionId
+  awsConnectionId,
+  liveProfile
 }: {
   projectId: string;
 } & CreateDeploymentRequest): Promise<Deployment> {
@@ -461,7 +679,8 @@ export async function createDeployment({
       body: {
         architectureId,
         terraformArtifactId,
-        awsConnectionId
+        awsConnectionId,
+        ...(liveProfile !== undefined ? { liveProfile } : {})
       }
     }
   );
@@ -480,6 +699,189 @@ export async function listDeployments(projectId: string): Promise<Deployment[]> 
   return response.deployments;
 }
 
+export async function listGitCicdHandoffs(projectId: string): Promise<GitCicdHandoff[]> {
+  const response = await apiFetch<GitCicdHandoffListResponse>(
+    `/projects/${encodeURIComponent(projectId)}/git-cicd-handoffs`,
+    {
+      auth: true
+    }
+  );
+
+  return response.handoffs;
+}
+
+export async function createGitCicdHandoff({
+  projectId,
+  ...input
+}: {
+  projectId: string;
+} & CreateGitCicdHandoffRequest): Promise<GitCicdHandoff> {
+  const response = await apiFetch<GitCicdHandoffResponse>(
+    `/projects/${encodeURIComponent(projectId)}/git-cicd-handoffs`,
+    {
+      auth: true,
+      method: "POST",
+      body: input
+    }
+  );
+
+  return response.handoff;
+}
+
+export async function applyGitCicdRepositorySettings(
+  handoffId: string
+): Promise<GitCicdRepositorySettingsApplyResponse> {
+  return apiFetch<GitCicdRepositorySettingsApplyResponse>(
+    `/git-cicd-handoffs/${encodeURIComponent(handoffId)}/repository-settings/apply`,
+    {
+      auth: true,
+      method: "POST",
+      body: {}
+    }
+  );
+}
+
+export async function createGitCicdGitHubOAuthStartUrl(
+  handoffId: string
+): Promise<GitCicdGitHubOAuthStartResponse> {
+  return apiFetch<GitCicdGitHubOAuthStartResponse>(
+    `/git-cicd-handoffs/${encodeURIComponent(handoffId)}/github-oauth/start`,
+    {
+      auth: true,
+      method: "POST",
+      body: {}
+    }
+  );
+}
+
+export async function applyGitCicdRepositorySettingsWithGitHubOAuth(
+  handoffId: string
+): Promise<GitCicdRepositorySettingsApplyResponse> {
+  return apiFetch<GitCicdRepositorySettingsApplyResponse>(
+    `/git-cicd-handoffs/${encodeURIComponent(
+      handoffId
+    )}/repository-settings/apply-with-github-oauth`,
+    {
+      auth: true,
+      method: "POST",
+      body: {}
+    }
+  );
+}
+
+export async function applyGitCicdAwsRoleDiff(
+  handoffId: string
+): Promise<GitCicdAwsRoleDiffApplyResponse> {
+  return apiFetch<GitCicdAwsRoleDiffApplyResponse>(
+    `/git-cicd-handoffs/${encodeURIComponent(handoffId)}/aws-role-diff/apply`,
+    {
+      auth: true,
+      method: "POST",
+      body: {}
+    }
+  );
+}
+
+export async function listSourceRepositories(projectId: string): Promise<SourceRepository[]> {
+  const response = await apiFetch<SourceRepositoryListResponse>(
+    `/projects/${encodeURIComponent(projectId)}/source-repositories`,
+    {
+      auth: true
+    }
+  );
+
+  return response.repositories;
+}
+
+export async function createGitHubSourceRepositoryInstallUrl(
+  projectId: string
+): Promise<GitHubAppInstallUrlResponse> {
+  return apiFetch<GitHubAppInstallUrlResponse>(
+    `/projects/${encodeURIComponent(projectId)}/source-repositories/github/install-url`,
+    {
+      auth: true,
+      method: "POST"
+    }
+  );
+}
+
+export async function createGitHubExistingInstallationCallbackUrl(
+  projectId: string,
+  sourceRepositoryId?: string
+): Promise<GitHubAppExistingInstallationCallbackUrlResponse> {
+  const path = sourceRepositoryId
+    ? `/projects/${encodeURIComponent(
+        projectId
+      )}/source-repositories/github/${encodeURIComponent(
+        sourceRepositoryId
+      )}/existing-installation-callback-url`
+    : `/projects/${encodeURIComponent(projectId)}/source-repositories/github/existing-installation-callback-url`;
+
+  return apiFetch<GitHubAppExistingInstallationCallbackUrlResponse>(
+    path,
+    {
+      auth: true,
+      method: "POST"
+    }
+  );
+}
+
+export async function listGitHubInstalledRepositories(
+  projectId: string
+): Promise<ListGitHubInstalledRepositoriesResponse> {
+  return apiFetch<ListGitHubInstalledRepositoriesResponse>(
+    `/projects/${encodeURIComponent(projectId)}/source-repositories/github/installed-repositories`,
+    {
+      auth: true,
+      method: "POST"
+    }
+  );
+}
+
+export async function listGitHubInstallationRepositories(
+  input: ListGitHubInstallationRepositoriesRequest
+): Promise<ListGitHubInstallationRepositoriesResponse> {
+  return apiFetch<ListGitHubInstallationRepositoriesResponse>(
+    "/source-repositories/github/installation-repositories",
+    {
+      auth: true,
+      method: "POST",
+      body: input
+    }
+  );
+}
+
+export async function connectGitHubSourceRepository({
+  projectId,
+  ...input
+}: {
+  projectId: string;
+} & ConnectGitHubSourceRepositoryRequest): Promise<SourceRepository> {
+  const response = await apiFetch<SourceRepositoryResponse>(
+    `/projects/${encodeURIComponent(projectId)}/source-repositories/github`,
+    {
+      auth: true,
+      method: "POST",
+      body: input
+    }
+  );
+
+  return response.repository;
+}
+
+export async function getGitCicdHandoffPipelineStatus(
+  handoffId: string
+): Promise<GitCicdHandoffPipelineStatus> {
+  const response = await apiFetch<GitCicdHandoffPipelineStatusResponse>(
+    `/git-cicd-handoffs/${encodeURIComponent(handoffId)}/pipeline-status`,
+    {
+      auth: true
+    }
+  );
+
+  return response.pipelineStatus;
+}
+
 export async function listRecentSuccessfulDeploymentProjects(): Promise<
   RecentSuccessfulDeploymentProject[]
 > {
@@ -491,6 +893,44 @@ export async function listRecentSuccessfulDeploymentProjects(): Promise<
   );
 
   return response.items;
+}
+
+export async function listCostProjectEstimates(input: {
+  expectedUserCount: number;
+  period: CostEstimatePeriod;
+  region?: string | undefined;
+}): Promise<CostProjectEstimateListResponse> {
+  const params = new URLSearchParams({
+    expectedUserCount: String(input.expectedUserCount),
+    period: input.period,
+    region: input.region ?? "ap-northeast-2"
+  });
+
+  return apiFetch<CostProjectEstimateListResponse>(`/costs/projects?${params.toString()}`, {
+    auth: true
+  });
+}
+
+export async function listCostUsageAnalysis(input: {
+  awsConnectionId?: string | undefined;
+  projectId?: string | undefined;
+  range: CostUsageAnalysisRange;
+}): Promise<CostUsageAnalysisResponse> {
+  const params = new URLSearchParams({
+    range: input.range
+  });
+
+  if (input.awsConnectionId !== undefined) {
+    params.set("awsConnectionId", input.awsConnectionId);
+  }
+
+  if (input.projectId !== undefined) {
+    params.set("projectId", input.projectId);
+  }
+
+  return apiFetch<CostUsageAnalysisResponse>(`/costs/usage?${params.toString()}`, {
+    auth: true
+  });
 }
 
 export async function runDeploymentInit(deploymentId: string): Promise<Deployment> {
@@ -517,13 +957,18 @@ export async function runDeploymentPlan(deploymentId: string): Promise<Deploymen
   return response.deployment;
 }
 
-export async function approveDeploymentPlan(deploymentId: string): Promise<Deployment> {
+export async function approveDeploymentPlan(
+  deploymentId: string,
+  acknowledgedWarningIds: ApproveDeploymentPlanRequest["acknowledgedWarningIds"] = []
+): Promise<Deployment> {
   const response = await apiFetch<DeploymentResponse>(
     `/deployments/${encodeURIComponent(deploymentId)}/approve`,
     {
       auth: true,
       method: "POST",
-      body: {}
+      body: {
+        acknowledgedWarningIds
+      }
     }
   );
 
@@ -591,6 +1036,19 @@ export async function listDeploymentLogs(deploymentId: string): Promise<Deployme
   );
 
   return response.logs;
+}
+
+export async function getDeploymentFailureExplanation(
+  deploymentId: string
+): Promise<DeploymentFailureExplanation> {
+  const response = await apiFetch<DeploymentFailureExplanationResponse>(
+    `/deployments/${encodeURIComponent(deploymentId)}/failure-explanation`,
+    {
+      auth: true
+    }
+  );
+
+  return response.explanation;
 }
 
 export async function streamDeploymentLogs(input: {

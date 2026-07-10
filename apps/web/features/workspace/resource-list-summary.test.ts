@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { DiagramNode } from "../../../../packages/types/src";
 import type { ParameterCatalog, ParameterCatalogDefinition } from "../parameter-input/catalog";
+import { terraformParameterCatalog } from "../parameter-input/catalog";
 import { buildResourceListItems } from "./resource-list-summary";
 
 const catalog: ParameterCatalog = {
@@ -26,7 +27,7 @@ test("buildResourceListItems includes Terraform resources and design area nodes"
   const items = buildResourceListItems(
     [
       makeResourceNode({ id: "subnet-1", resourceType: "aws_subnet" }),
-      makeDesignNode({ id: "region-1", label: "Region", type: "sketchcatch_region" }),
+      makeResourceNode({ id: "region-1", label: "Region", resourceType: "aws_region" }),
       makeDesignNode({ id: "note-1", label: "Note", type: "sketchcatch_note" })
     ],
     catalog
@@ -38,6 +39,7 @@ test("buildResourceListItems includes Terraform resources and design area nodes"
   );
   assert.equal(items[0]?.typeLabel, "aws_subnet");
   assert.equal(items[1]?.typeLabel, "Area / Region");
+  assert.equal(items[1]?.terraformAddress, undefined);
 });
 
 test("buildResourceListItems orders reference rows before required and active optional values", () => {
@@ -67,16 +69,50 @@ test("buildResourceListItems orders reference rows before required and active op
   );
 });
 
-test("buildResourceListItems summarizes Region nodes with the selected AWS Region", () => {
+test("buildResourceListItems summarizes extended RDS instance parameters from the catalog", () => {
   const items = buildResourceListItems(
     [
-      makeDesignNode({
-        id: "region-1",
-        label: "Production Region",
-        metadata: { awsRegion: "ap-northeast-1" },
-        type: "sketchcatch_region"
+      makeResourceNode({
+        id: "db-1",
+        label: "Primary DB",
+        resourceName: "primary",
+        resourceType: "aws_db_instance",
+        values: {
+          backupRetentionPeriod: 7,
+          caCertIdentifier: "rds-ca-rsa2048-g1",
+          deletionProtection: true,
+          enabledCloudwatchLogsExports: ["postgresql"],
+          iamDatabaseAuthenticationEnabled: true,
+          maxAllocatedStorage: 100,
+          multiAz: true,
+          storageEncrypted: true,
+          storageType: "gp3"
+        }
       })
     ],
+    terraformParameterCatalog
+  );
+
+  const rowsByKey = new Map(items[0]?.rows.map((row) => [row.key, row]));
+
+  assert.equal(rowsByKey.get("caCertIdentifier")?.label, "CA certificate");
+  assert.equal(rowsByKey.get("iamDatabaseAuthenticationEnabled")?.label, "IAM database authentication");
+  assert.equal(rowsByKey.get("enabledCloudwatchLogsExports")?.label, "CloudWatch log exports");
+  assert.equal(rowsByKey.get("enabledCloudwatchLogsExports")?.value, "postgresql");
+});
+
+test("buildResourceListItems summarizes Region nodes with the selected AWS Region", () => {
+  const regionNode = makeResourceNode({
+    id: "region-1",
+    label: "Production Region",
+    resourceName: "primary",
+    resourceType: "aws_region",
+    values: {
+      awsRegion: "ap-northeast-1"
+    }
+  });
+  const items = buildResourceListItems(
+    [regionNode],
     catalog
   );
 
@@ -87,6 +123,34 @@ test("buildResourceListItems summarizes Region nodes with the selected AWS Regio
       kind: "metadata",
       label: "Region",
       value: "Asia Pacific (Tokyo)"
+    }
+  ]);
+});
+
+test("buildResourceListItems summarizes AZ nodes with the selected availability zone", () => {
+  const items = buildResourceListItems(
+    [
+      makeResourceNode({
+        id: "az-1",
+        label: "Public AZ",
+        resourceName: "public_a",
+        resourceType: "aws_availability_zone",
+        values: {
+          awsAvailabilityZone: "us-east-1c"
+        }
+      })
+    ],
+    catalog
+  );
+
+  assert.equal(items[0]?.displayName, "Public AZ");
+  assert.equal(items[0]?.terraformAddress, undefined);
+  assert.deepEqual(items[0]?.rows, [
+    {
+      key: "awsAvailabilityZone",
+      kind: "metadata",
+      label: "Availability Zone",
+      value: "US East (N. Virginia) / us-east-1c"
     }
   ]);
 });

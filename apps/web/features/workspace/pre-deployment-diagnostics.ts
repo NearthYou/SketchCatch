@@ -52,21 +52,56 @@ export function addTerraformDiagnosticsToPreDeploymentAnalysis(
   };
 }
 
+export function createPreDeploymentAnalysisFromTerraformDiagnostics(
+  diagnostics: readonly TerraformDiagnostic[]
+): AiPreDeploymentAnalysisResult {
+  return addTerraformDiagnosticsToPreDeploymentAnalysis(
+    {
+      summary: "Terraform 코드 진단을 먼저 해결해야 합니다.",
+      totalMonthlyEstimate: {
+        amount: 0,
+        currency: "USD",
+        pricingAssumption: "Terraform diagnostics fail-fast 결과라 비용 산정을 실행하지 않았습니다."
+      },
+      resourceCostEstimates: [],
+      findings: [],
+      checklist: [],
+      suggestions: []
+    },
+    diagnostics
+  );
+}
+
 function createTerraformDiagnosticFinding(
   diagnostic: TerraformDiagnostic,
   index: number
 ): CheckFinding {
+  const sourceLocation = diagnostic.line
+    ? {
+        fileName: diagnostic.sourceFileName ?? "main.tf",
+        line: diagnostic.line,
+        ...(diagnostic.resourceAddress ? { resourceAddress: diagnostic.resourceAddress } : {})
+      }
+    : null;
+
   return {
     id: `terraform-diagnostic-${index}-${diagnostic.code ?? diagnostic.severity}`,
     category: "configuration",
     severity: diagnostic.severity === "error" ? "high" : "medium",
     resourceId: diagnostic.resourceAddress ?? diagnostic.nodeId,
+    ...(sourceLocation ? { sourceLocation } : {}),
     title: diagnostic.line
-      ? `Terraform 코드 ${diagnostic.line}번째 줄 확인 필요`
+      ? `Terraform 코드 ${formatTerraformDiagnosticLocation(diagnostic)} 확인 필요`
       : "Terraform 코드 확인 필요",
     description: diagnostic.message,
     recommendation: "Terraform 탭에서 해당 진단을 수정한 뒤 Validate 또는 저장을 다시 실행하세요."
   };
+}
+
+function formatTerraformDiagnosticLocation(diagnostic: TerraformDiagnostic): string {
+  return diagnostic.sourceFileName
+    ? `${diagnostic.sourceFileName}:${diagnostic.line}`
+    : `${diagnostic.line}번째 줄`;
 }
 
 function createPreDeploymentSummaryWithTerraformDiagnostics(

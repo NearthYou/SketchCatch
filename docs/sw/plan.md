@@ -1,139 +1,246 @@
-# Workspace Snapshot 및 Terraform Artifact 구현 계획
+# ECS 전환 및 RunTask Worker 실행 마일스톤
 
-## 마일스톤 1. 현재 구조 확인 및 작업 브랜치 준비
+## 작업 전 공통 규칙
 
-우선순위: P0
+모든 phase 작업자는 `docs/sw/spec.md`, `docs/sw/plan.md`, `docs/sw/agents.md`를 먼저 읽고 시작한다. 범위와 계약이 충돌하면 canonical 문서인 `docs/product.md`, `docs/data-models.md`, `docs/architecture.md`, `docs/deployment.md`를 우선한다.
 
-- `dev` 브랜치를 최신 상태로 맞춘다.
-- 이슈 `#84` 기준으로 기능 브랜치를 생성한다.
-- 기존 backend API가 제공하는 다음 흐름을 다시 확인한다.
-  - `POST /projects/:id/architectures`
-  - `POST /projects/:id/assets/presigned-upload`
-  - DeploymentPanel의 snapshot/artifact 목록 조회 방식
-- 구현 전 `apps/web/features/workspace`의 현재 Terraform 패널, DeploymentPanel, WorkspaceRightPanel 상태 흐름을 다시 확인한다.
+우선순위 기준:
 
-완료 기준:
+- P0: ECS 전환을 안전하게 시작하거나 비용 폭주를 막기 위해 선행되어야 하는 작업
+- P1: ECS production 안정화 이후 Terraform 실행 격리와 운영 안정성을 위해 필요한 핵심 구조 작업
+- P2: 안정화 후 구조 개선 또는 운영 편의성 강화 작업
 
-- 기능 브랜치가 준비되어 있다.
-- 기존 API를 추가 backend 작업 없이 재사용할 수 있는지 확인되어 있다.
-- 변경 범위가 frontend 중심인지, shared type 변경이 필요한지 확정되어 있다.
+## Phase 0. 운영 계획과 추적 기준 정리
 
-## 마일스톤 2. Shared Type 및 API Client 연결
+- Priority: P0
+- Issue title: `Chore: ECS 전환 운영 계획과 비용 기준 정리`
+- Branch: `chore/sw/{issue}-ecs-operating-plan`
+- PR title: `Chore: ECS 전환 운영 계획과 비용 기준 정리`
+- Depends on: 없음
 
-우선순위: P0
+범위:
 
-- `ArchitectureSource`에 `ai_draft`를 추가한다.
-- `apps/web/features/workspace/api.ts`에 Architecture snapshot 생성 client를 추가한다.
-- `apps/web/features/workspace/api.ts`에 project asset presigned upload 생성 client를 추가한다.
-- presigned URL로 Terraform 파일을 업로드하는 helper를 추가한다.
-- byte size 계산은 `TextEncoder` 기준으로 처리한다.
-- Terraform artifact의 `contentType`은 backend presigned header와 일치하도록 한 값으로 고정한다.
+- `docs/sw/spec.md`, `docs/sw/plan.md`, `docs/sw/agents.md`를 기준 문서로 둔다.
+- ECS 전환 feature tracker와 비용 guardrail을 정리한다.
+- Terraform runtime mode 기본값과 optional private runtime 의사결정을 기록한다.
+- parallel ALB cutover, Phase 1 single ECS task, RunTask one-off worker, SQS deferred decision을 추적 기준에 반영한다.
 
 완료 기준:
 
-- Web 코드에서 snapshot 생성, asset row 생성, S3 업로드를 호출할 수 있다.
-- API client 단위 테스트로 요청 URL, method, body, 실패 처리가 검증된다.
+- 팀원이 ECS 전환 목표, 비용 기준, phase 순서를 문서만 보고 이해할 수 있다.
+- 각 phase의 issue/branch/PR 규칙이 프로젝트 Git 규칙과 맞다.
+- `pnpm harness:check`가 통과한다.
 
-## 마일스톤 3. Workspace 저장 Orchestrator 추가
+## Phase 1. nginx 포함 ECS lift-and-shift
 
-우선순위: P0
+- Priority: P0
+- Issue title: `Feat: nginx 포함 ECS 운영 서비스 기반 추가`
+- Branch: `feature/sw/{issue}-ecs-app-service`
+- PR title: `Feat: nginx 포함 ECS 운영 서비스 기반 추가`
+- Depends on: Phase 0
 
-- Workspace 저장 흐름을 담당하는 helper를 추가한다.
-- snapshot-only 저장 함수와 snapshot+artifact 저장 함수를 분리한다.
-- snapshot-only 저장은 Terraform 검증 없이 현재 `DiagramJson`만 저장한다.
-- snapshot+artifact 저장은 Terraform 검증을 먼저 통과해야 한다.
-- Terraform 검증 실패 시 snapshot과 artifact를 만들지 않는다.
-- artifact 저장은 새 Architecture snapshot을 만든 뒤 그 snapshot id에 연결한다.
+범위:
 
-완료 기준:
-
-- 현재 `DiagramJson`을 `ArchitectureJson`으로 변환해 저장할 수 있다.
-- 현재 Terraform 코드를 검증 후 S3에 업로드할 수 있다.
-- 실패 단계별 에러가 호출자에게 전달된다.
-
-## 마일스톤 4. TerraformCodePanel 상태 노출
-
-우선순위: P0
-
-- TerraformCodePanel 내부의 현재 Terraform code와 dirty 상태를 WorkspaceRightPanel에서 사용할 수 있게 만든다.
-- dirty 상태면 기존 `saveCodeToDiagram()` 흐름을 먼저 실행한다.
-- 저장 결과로 최신 `diagramJson`과 Terraform code를 함께 반환한다.
-- Terraform 패널이 보이지 않는 상태에서도 DeploymentPanel의 자동 저장 흐름이 최신 코드를 사용할 수 있어야 한다.
+- Terraform backend, ECR, ECS cluster, task definition, service, ALB, target group, security group을 추가한다.
+- nginx + web + api single ECS task로 기존 EC2 `docker run` 구조를 유지한다.
+- parallel ALB와 Route53 cutover path를 만든다.
+- 기본 Terraform plan에서 NAT Gateway가 생성되지 않게 한다.
 
 완료 기준:
 
-- DeploymentPanel에서 배포 전 자동 저장을 실행할 때 최신 Terraform code를 가져올 수 있다.
-- Terraform code와 graph가 어긋난 상태로 artifact가 만들어지지 않는다.
+- staging 또는 preview 환경에서 ECS app task가 기동된다.
+- ALB health check가 통과한다.
+- `/health`, `/health/db`, root page smoke가 통과한다.
+- EC2 production rollback 경로가 아직 제거되지 않는다.
+- API/worker 분리, ECS RunTask worker, secret 구조 전환은 이 phase에서 구현하지 않는다.
 
-## 마일스톤 5. UI 저장 액션 연결
+## Phase 2. ECR/ECS 배포 안정화
 
-우선순위: P1
+- Priority: P0
+- Issue title: `Feat: ECR 기반 ECS 배포 워크플로 전환`
+- Branch: `feature/sw/{issue}-ecs-deploy-workflow`
+- PR title: `Feat: ECR 기반 ECS 배포 워크플로 전환`
+- Depends on: Phase 1
 
-- Workspace 또는 DeploymentPanel 영역에 “설계 버전 저장” 액션을 연결한다.
-- Terraform 패널에 현재 Terraform code를 artifact로 저장하는 액션을 연결한다.
-- 저장 중에는 버튼 중복 클릭을 막는다.
-- 저장 성공 후 project details를 refresh한다.
-- 새 Architecture snapshot과 Terraform artifact를 DeploymentPanel의 선택값으로 반영한다.
-- 실패 시 사용자에게 단계별 메시지를 표시한다.
+범위:
 
-완료 기준:
-
-- 사용자가 명시적으로 설계 버전을 저장할 수 있다.
-- 사용자가 명시적으로 Terraform artifact를 저장할 수 있다.
-- 저장 직후 새 항목이 DeploymentPanel 선택지에 표시된다.
-
-## 마일스톤 6. Deployment 생성 전 자동 저장 연결
-
-우선순위: P1
-
-- Deployment 생성 버튼 클릭 시 현재 보드와 Terraform code를 먼저 저장한다.
-- 자동 저장으로 생성된 `architectureId`, `terraformArtifactId`를 Deployment 생성 요청에 사용한다.
-- AWS connection이 없으면 자동 저장 전에 기존처럼 배포 생성을 막는다.
-- Terraform 검증 실패, snapshot 저장 실패, S3 업로드 실패 시 Deployment 생성을 중단한다.
-- 성공 후 DeploymentPanel 목록과 선택 상태를 refresh한다.
+- Docker tar/S3/SSM 배포를 ECR push + ECS service update로 전환한다.
+- GitHub Actions가 api/web/nginx 이미지를 ECR에 push한다.
+- ECS service update와 rollout 상태 확인을 배포 절차에 넣는다.
+- EC2 rollback 유지 기간과 cleanup runbook을 문서화한다.
 
 완료 기준:
 
-- 배포 생성 시 항상 현재 Workspace 상태 기준의 snapshot/artifact가 생성된다.
-- Deployment record가 방금 만든 snapshot/artifact를 참조한다.
-- 실패 시 배포 record가 생성되지 않는다.
+- 이미지 tag와 task definition revision이 추적 가능하다.
+- ECS rollout 실패 시 배포가 실패로 끝난다.
+- EC2 rollback 절차가 남아 있다.
+- `pnpm docker:build` 또는 동등한 Docker build 검증이 통과한다.
 
-## 마일스톤 7. 테스트 및 회귀 확인
+## Phase 3. secret/runtime config 정리
 
-우선순위: P1
+- Priority: P0
+- Issue title: `Feat: ECS 런타임 Secret 주입 구조 정리`
+- Branch: `feature/sw/{issue}-ecs-secrets-config`
+- PR title: `Feat: ECS 런타임 Secret 주입 구조 정리`
+- Depends on: Phase 1
 
-- API client 테스트를 추가한다.
-- 저장 orchestrator 테스트를 추가한다.
-- Deployment 생성 전 자동 저장 흐름 테스트를 추가한다.
-- Terraform 검증 실패 케이스를 테스트한다.
-- project details refresh 후 선택값 반영을 테스트한다.
-- 전체 체크를 실행한다.
-  - `pnpm lint`
-  - `pnpm typecheck`
-  - `pnpm build`
+범위:
 
-완료 기준:
-
-- 핵심 저장 흐름이 테스트로 보호된다.
-- 기존 Terraform 편집, 그래프 동기화, DeploymentPanel 선택 기능이 깨지지 않는다.
-- 필수 체크 결과가 PR에 기록된다.
-
-## 마일스톤 8. PR 정리
-
-우선순위: P2
-
-- 변경 파일을 검토한다.
-- 불필요한 generated/no-op 변경이 있으면 제외한다.
-- 커밋 메시지는 기능 범위가 드러나게 작성한다.
-- PR 제목은 `Feat: Workspace 배포 기준 저장 흐름 연결`로 작성한다.
-- PR 본문에는 다음 내용을 포함한다.
-  - 이슈 번호
-  - 구현 요약
-  - 테스트 결과
-  - 남은 제한 사항
+- 기존 `/etc/sketchcatch/api.env` 모델을 ECS task env/secrets 주입으로 대체한다.
+- Secrets Manager, SSM SecureString, ECS plain env의 책임을 분리한다.
+- GitHub Actions가 secret 원문을 파일, S3, presigned URL, 로그에 남기지 않게 한다.
+- task definition secret ARN 주입을 Terraform으로 관리한다.
 
 완료 기준:
 
-- 브랜치가 push되어 있다.
-- PR이 생성되어 있다.
-- PR 본문만 보고 reviewer가 snapshot/artifact 저장 흐름을 이해할 수 있다.
+- DB credential, GitHub App private key, OAuth secrets, OpenAI key는 Secrets Manager에서 읽는다.
+- auth signing secret, Redis URL 등 secure config는 SSM SecureString에서 읽는다.
+- non-secret config만 ECS env에 남는다.
+- secret masking regression check가 통과한다.
+
+## Phase 4. Deployment job 모델과 RunTask 계약
+
+- Priority: P1
+- Issue title: `Feat: Deployment RunTask job 모델 추가`
+- Branch: `feature/sw/{issue}-deployment-runtask-jobs`
+- PR title: `Feat: Deployment RunTask job 모델 추가`
+- Depends on: Phase 1, Phase 2
+
+범위:
+
+- `deployment_jobs` 모델, DB lease, job status 계약을 추가한다.
+- plan/apply/destroy 요청을 job으로 표현한다.
+- API가 ECS `RunTask` one-off worker task를 요청하기 위한 provider-neutral job 계약을 정리한다.
+- 기존 public deployment API endpoint는 유지한다.
+- RDS/S3/Redis 기록 계약을 `docs/data-models.md`와 맞춘다.
+- SQS queue와 상시 worker service는 추가하지 않는다.
+
+완료 기준:
+
+- job 생성, lease 획득, 상태 전이, 실패 기록이 테스트된다.
+- 같은 job을 두 RunTask worker가 동시에 실행하지 못한다.
+- 기존 deployment history 조회가 깨지지 않는다.
+
+## Phase 5. ECS RunTask one-off worker runtime
+
+- Priority: P1
+- Issue title: `Feat: Terraform 실행을 ECS RunTask worker로 이관`
+- Branch: `feature/sw/{issue}-deployment-runtask-worker`
+- PR title: `Feat: Terraform 실행을 ECS RunTask worker로 이관`
+- Depends on: Phase 4
+
+범위:
+
+- worker entrypoint를 추가한다.
+- 기존 plan/apply/destroy service 실행을 ECS RunTask worker task로 옮긴다.
+- API route는 inline background 실행 대신 job 생성과 ECS RunTask 요청을 담당한다.
+- Terraform/Trivy cache 전략을 ephemeral 기본값으로 두고, 필요 시 EFS 또는 bake-in으로 확장 가능하게 둔다.
+- SQS FIFO, DLQ, plan/mutation queue, always-on worker service는 이 phase에서 구현하지 않는다.
+
+완료 기준:
+
+- API는 job id를 반환하고 ECS RunTask worker가 실행 결과를 기록한다.
+- Terraform 실행 상태가 기존 UI/API 계약으로 조회된다.
+- worker task 실패 후에도 stale lease recovery 대상이 된다.
+- worker task definition, execution/task role, security group이 API/web runtime과 분리된다.
+- cost guardrail 테스트가 통과한다.
+
+## Phase 6. RunTask recovery/observability/smoke 강화
+
+- Priority: P1
+- Issue title: `Feat: RunTask worker 복구와 운영 관측성 강화`
+- Branch: `feature/sw/{issue}-runtask-worker-ops-hardening`
+- PR title: `Feat: RunTask worker 복구와 운영 관측성 강화`
+- Depends on: Phase 5
+
+범위:
+
+- Redis cancel signal, DB polling fallback, stale lease recovery를 구현한다.
+- CloudWatch alarms, budget alarms, log retention, failed RunTask alarm을 추가한다.
+- cleanup runbook과 rollback runbook을 정리한다.
+- app smoke와 RunTask worker smoke를 분리한다.
+
+완료 기준:
+
+- Pub/Sub cancel을 놓쳐도 DB polling으로 취소가 반영된다.
+- stale lease가 재시도 또는 실패 상태로 정리된다.
+- budget alarm과 failed RunTask alarm이 Terraform plan에 나타난다.
+- 운영 runbook이 `docs/deployment.md` 또는 관련 문서에 연결된다.
+
+## Phase 7. Queue 기반 worker 확장 판단
+
+- Priority: P2
+- Issue title: `Chore: Queue 기반 worker 확장 필요성 판단`
+- Branch: `chore/sw/{issue}-worker-queue-decision`
+- PR title: `Chore: Queue 기반 worker 확장 필요성 판단`
+- Depends on: Phase 6
+
+범위:
+
+- ECS RunTask 운영 증거를 기준으로 SQS FIFO, DLQ, plan/mutation queue, always-on worker service가 필요한지 판단한다.
+- 필요한 경우 별도 implementation phase를 만든다.
+- 필요하지 않으면 RunTask worker 운영 기준을 유지한다.
+
+완료 기준:
+
+- queue 기반 worker service가 현재 범위에 들어오는지 명확히 결정된다.
+- 결정 결과가 `docs/sw/spec.md` 또는 canonical 운영 문서에 반영된다.
+- 구현이 필요하면 phase/issue/rollback/cost 기준이 별도로 생긴다.
+
+## Phase 8. nginx 제거와 ALB path routing
+
+- Priority: P2
+- Issue title: `Feat: ECS nginx 제거와 ALB path routing 전환`
+- Branch: `feature/sw/{issue}-ecs-alb-path-routing`
+- PR title: `Feat: ECS nginx 제거와 ALB path routing 전환`
+- Depends on: Phase 1, Phase 2, Phase 7 운영 안정성 확인
+
+범위:
+
+- ALB `/api`, `/api/*`, `/health`, `/health/db`는 API로, 기본 `/*`는 web으로 전달한다.
+- 최초 적용은 legacy target weight 100의 warmup 후 API/web target health를 확인하고 split weight로 전환한다.
+- API와 web을 독립 ECS task definition/service/target group으로 분리한다.
+- nginx container를 ECS steady state와 ECS deploy workflow에서 제거한다.
+- EC2/SSM rollback이 유지되는 동안 nginx image/config/ECR/log group은 legacy 자산으로 보존한다.
+- Next.js same-origin `/api`, Fastify forwarded headers, split service deploy 순서를 검증한다.
+
+완료 기준:
+
+- Terraform 정적 contract가 listener rule, target group, task/service 분리를 검증한다.
+- nginx 없이 root page와 API/health path가 올바른 target group으로 전달되는 구성이 확인된다.
+- EC2 rollback 자산의 보존 범위와 제거 조건이 문서화된다.
+- live ALB/Route53 전환과 production smoke는 별도 명시 승인 후 운영 evidence로 남긴다.
+
+## Phase 9. SketchCatch production infra Terraform 전환
+
+- Priority: P1
+- Issue title: `Feat: SketchCatch production infra Terraform 관리 기반 추가`
+- Branch: `feature/sw/{issue}-production-infra-terraform`
+- PR title: `Feat: SketchCatch production infra Terraform 관리 기반 추가`
+- Depends on: Phase 8 merge와 ECS production 안정성 확인
+
+범위:
+
+- 기존 ECS runtime Terraform root와 backend key를 보존한다.
+- Route53/ACM, S3/RDS/Redis, EC2 rollback을 별도 state/import gate로 격리한다.
+- S3 backend encryption, Versioning, native lockfile 전략을 기록한다.
+- ECS, ALB, target group/listener, ECR, IAM, CloudWatch, Route53/ACM, S3, RDS, Redis/ElastiCache import inventory와 순서를 만든다.
+- manual plan-only GitHub Actions와 static forbidden-command guard를 추가한다.
+- production infra와 사용자 Terraform Deployment 실행 경계를 문서화한다.
+
+완료 기준:
+
+- AWS credential 없이 모든 Terraform root의 fmt/init-without-backend/validate가 통과한다.
+- plan workflow에 import/apply/destroy 및 binary plan artifact가 없다.
+- high-risk root는 discovery/backup/ownership 승인 전 빈 import gate로 유지된다.
+- EC2/SSM/nginx rollback과 CloudFormation ownership이 제거되지 않는다.
+- live import/apply/destroy와 AWS mutation은 실행하지 않는다.
+
+## 전체 완료 기준
+
+- ECS 전환이 EC2 운영 경로를 대체한다.
+- 기본 6개월 모드에서 NAT Gateway가 생성되지 않는다.
+- optional private runtime 모드가 Terraform 변수로 동작한다.
+- ECS production 안정화 후 Terraform 실행이 ECS RunTask one-off worker, DB lease, RDS/S3/Redis 기록 계약을 통해 수행된다.
+- 비용 guardrail, cleanup, rollback, 로그 보존 기준이 문서와 Terraform에 반영된다.
+- SQS FIFO와 always-on worker service는 별도 결정 전까지 scope 밖으로 유지된다.

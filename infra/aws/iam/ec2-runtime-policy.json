@@ -33,6 +33,21 @@
       "Effect": "Allow",
       "Action": "logs:DescribeLogGroups",
       "Resource": "*"
+    },
+    {
+      "Sid": "AllowSketchCatchAwsConnectionAssumeRole",
+      "Effect": "Allow",
+      "Action": "sts:AssumeRole",
+      "Resource": [
+        "arn:aws:iam::*:role/SketchCatchTerraformExecutionRole",
+        "arn:aws:iam::*:role/SketchCatchTerraformExecutionRole-*"
+      ]
+    },
+    {
+      "Sid": "AllowSketchCatchAiProviderCalls",
+      "Effect": "Allow",
+      "Action": ["bedrock:InvokeModel", "qbusiness:ChatSync"],
+      "Resource": "*"
     }
   ]
 }

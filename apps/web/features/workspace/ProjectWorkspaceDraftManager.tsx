@@ -2,9 +2,18 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { DiagramJson } from "../../../../packages/types/src";
+import { useAuth } from "../../components/auth/auth-provider";
 import { DiagramEditor } from "../diagram-editor";
 import { EMPTY_DIAGRAM } from "../diagram-editor/constants";
+import { WorkspaceAiChatDock } from "./WorkspaceAiChatDock";
 import { WorkspaceRightPanel } from "./WorkspaceRightPanel";
+import { normalizeDiagramJsonConventions } from "./workspace-ai-diagram-adapter";
+import type {
+  TerraformIssueAiRequest,
+  TerraformPreviewAiRequest,
+  TerraformSafeFixApplyRequest,
+  TerraformSafeFixApplyResult
+} from "./workspace-terraform-ai";
 import type { LocalProjectDraft } from "./project-draft-persistence";
 import { shouldFlushProjectDraftBeforePageExit } from "./project-draft-page-exit";
 import {
@@ -19,6 +28,7 @@ import {
 } from "./project-draft-save-status";
 import type { WorkspaceCloudPlatform } from "./project-draft-persistence";
 import type { SavedServerProjectDiagramDraft } from "./project-draft-sync";
+import type { WorkspaceRightPanelView } from "./workspace-right-panel.types";
 import styles from "./workspace.module.css";
 
 const LOCAL_SAVE_DEBOUNCE_MS = 800;
@@ -47,6 +57,7 @@ export type ProjectDraftPersistenceController = {
 
 export type ProjectWorkspaceDraftManagerProps = {
   cloudPlatform?: WorkspaceCloudPlatform | undefined;
+  initialRightPanelView?: WorkspaceRightPanelView | undefined;
   localCacheWorkspaceId?: string | undefined;
   localSaveDebounceMs?: number | undefined;
   onDraftPersistenceReady?: ((controller: ProjectDraftPersistenceController) => void) | undefined;
@@ -58,6 +69,7 @@ export type ProjectWorkspaceDraftManagerProps = {
 };
 
 export function ProjectWorkspaceDraftManager({
+  initialRightPanelView,
   localCacheWorkspaceId,
   localSaveDebounceMs = LOCAL_SAVE_DEBOUNCE_MS,
   onDraftPersistenceReady,
@@ -67,12 +79,21 @@ export function ProjectWorkspaceDraftManager({
   serverCheckpointIntervalMs = SERVER_CHECKPOINT_INTERVAL_MS,
   workspaceId
 }: ProjectWorkspaceDraftManagerProps) {
+  const { user } = useAuth();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [initialDiagram, setInitialDiagram] = useState<DiagramJson | null>(null);
   const [localSaveState, setLocalSaveState] = useState<ProjectLocalSaveState>("idle");
   const [serverSaveState, setServerSaveState] = useState<ProjectServerSaveState>("server-idle");
   const [serverSaveToastVisible, setServerSaveToastVisible] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [terraformIssueAiRequest, setTerraformIssueAiRequest] =
+    useState<TerraformIssueAiRequest | null>(null);
+  const [terraformPreviewAiRequest, setTerraformPreviewAiRequest] =
+    useState<TerraformPreviewAiRequest | null>(null);
+  const [terraformSafeFixApplyRequest, setTerraformSafeFixApplyRequest] =
+    useState<TerraformSafeFixApplyRequest | null>(null);
+  const [terraformSafeFixApplyResult, setTerraformSafeFixApplyResult] =
+    useState<TerraformSafeFixApplyResult | null>(null);
   const latestDiagramRef = useRef<DiagramJson>(EMPTY_DIAGRAM);
   const localDraftRef = useRef<LocalProjectDraft | null>(null);
   const localSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -85,6 +106,8 @@ export function ProjectWorkspaceDraftManager({
   const serverSaveToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onDraftPersistenceReadyRef =
     useRef<ProjectWorkspaceDraftManagerProps["onDraftPersistenceReady"]>(onDraftPersistenceReady);
+  const workspaceUserName =
+    user?.nickname?.trim() || user?.username?.trim() || user?.email?.trim() || "Personal workspace";
 
   const setCurrentLocalDraft = useCallback((draft: LocalProjectDraft | null) => {
     localDraftRef.current = draft;
@@ -295,11 +318,12 @@ export function ProjectWorkspaceDraftManager({
           return;
         }
 
-        latestDiagramRef.current = loadedDraft.diagramJson;
+        const nextDiagram = normalizeDiagramJsonConventions(loadedDraft.diagramJson);
+        latestDiagramRef.current = nextDiagram;
         hasPendingLocalChangesRef.current = false;
         serverDirtyRef.current = loadedDraft.source === "local";
         draftChangeVersionRef.current = 0;
-        setInitialDiagram(loadedDraft.diagramJson);
+        setInitialDiagram(nextDiagram);
         setCurrentLocalDraft(loadedDraft.localDraft);
         setLocalSaveState(loadedDraft.localDraft ? "local-saved" : "idle");
         setServerSaveState(sourceServerSaveState[loadedDraft.source]);
@@ -383,6 +407,16 @@ export function ProjectWorkspaceDraftManager({
     [clearLocalSaveTimer, localSaveDebounceMs, persistLocalDraftNow]
   );
 
+  const requestTerraformIssueAi = useCallback((request: TerraformIssueAiRequest): void => {
+    setTerraformIssueAiRequest(request);
+  }, []);
+
+  const requestTerraformSafeFixApply = useCallback((
+    request: TerraformSafeFixApplyRequest
+  ): void => {
+    setTerraformSafeFixApplyRequest(request);
+  }, []);
+
   if (loadState === "loading") {
     return <WorkspaceNotice title="Project loading" body="DB에 저장된 프로젝트 draft를 불러오는 중입니다." />;
   }
@@ -399,11 +433,32 @@ export function ProjectWorkspaceDraftManager({
   return (
     <>
       <DiagramEditor
+        floatingPanel={(context) => (
+          <WorkspaceAiChatDock
+            context={context}
+            onApplyTerraformIssueFix={requestTerraformSafeFixApply}
+            projectId={projectId}
+            terraformIssueRequest={terraformIssueAiRequest}
+            terraformPreviewRequest={terraformPreviewAiRequest}
+            terraformSafeFixApplyResult={terraformSafeFixApplyResult}
+          />
+        )}
         initialDiagram={initialDiagram}
         onDiagramChange={handleDiagramChange}
+        onDiagramSaveRequest={() => flushDraftToServer("manual")}
         projectName={projectName}
+        workspaceUserName={workspaceUserName}
         rightPanel={(context) => (
-          <WorkspaceRightPanel context={context} projectId={projectId} projectName={projectName} />
+          <WorkspaceRightPanel
+            context={context}
+            initialView={initialRightPanelView}
+            onTerraformIssueAiRequest={requestTerraformIssueAi}
+            onTerraformPreviewAiRequest={setTerraformPreviewAiRequest}
+            onTerraformSafeFixApplyResult={setTerraformSafeFixApplyResult}
+            projectId={projectId}
+            projectName={projectName}
+            terraformSafeFixApplyRequest={terraformSafeFixApplyRequest}
+          />
         )}
         saveStatus={getProjectSaveStatus(localSaveState, serverSaveState)}
       />

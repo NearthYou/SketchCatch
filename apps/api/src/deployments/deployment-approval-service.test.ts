@@ -4,7 +4,8 @@ import assert from "node:assert/strict";
 import type { AwsConnection, DeploymentPlanSummary } from "@sketchcatch/types";
 import {
   approveDeploymentPlan,
-  assertDeploymentApplyPreconditions
+  assertDeploymentApplyPreconditions,
+  DeploymentApplyPreconditionError
 } from "./deployment-approval-service.js";
 import {
   DeploymentConflictError,
@@ -394,35 +395,61 @@ test("approveDeploymentPlan preserves failed cleanup state for destroy approvals
   });
 });
 
-test("approveDeploymentPlan rejects risk blocked deployments", async () => {
+test("approveDeploymentPlan allows safety warnings that used to block approval", async () => {
   const repository = new FakeDeploymentRepository();
+  const warning = createBlockingWarning();
   repository.deployment = createDeploymentRecord(undefined, {
-    isBlocked: true,
-    blockedBy: "risk_analysis",
-    blockedReason: "Plan includes delete or replace changes"
+    isBlocked: false,
+    blockedBy: null,
+    blockedReason: null,
+    planSummary: {
+      ...createPlanSummary(),
+      blocked: false,
+      warnings: [warning]
+    }
   });
 
-  await assert.rejects(
-    () =>
-      approveDeploymentPlan(
-        {
-          deploymentId,
-          accessContext: createAccessContext()
-        },
-        repository,
-        {
-          downloadTerraformArtifact: async () => artifactContent,
-          now: () => fixedNow
-        }
-      ),
-    (error) => {
-      assert.equal(error instanceof DeploymentConflictError, true);
-      assert.equal((error as Error).message, "Blocked deployment cannot be approved");
-
-      return true;
+  const deployment = await approveDeploymentPlan(
+    {
+      deploymentId,
+      accessContext: createAccessContext()
+    },
+    repository,
+    {
+      downloadTerraformArtifact: async () => artifactContent,
+      now: () => fixedNow
     }
   );
-  assert.equal(repository.approvals.length, 0);
+
+  assert.equal(deployment.approvedByUserId, userId);
+});
+
+test("approveDeploymentPlan allows acknowledgement-only warnings without acknowledgement ids", async () => {
+  const repository = new FakeDeploymentRepository();
+  const warning = createAcknowledgementWarning();
+  repository.deployment = createDeploymentRecord(undefined, {
+    planSummary: {
+      ...createPlanSummary(),
+      blocked: false,
+      warnings: [warning]
+    }
+  });
+
+  const deployment = await approveDeploymentPlan(
+    {
+      deploymentId,
+      accessContext: createAccessContext(),
+      acknowledgedWarningIds: []
+    },
+    repository,
+    {
+      downloadTerraformArtifact: async () => artifactContent,
+      now: () => fixedNow
+    }
+  );
+
+  assert.equal(deployment.approvedByUserId, userId);
+  assert.deepEqual(deployment.planSummary?.warnings, [warning]);
 });
 
 test("approveDeploymentPlan rejects unsafe Terraform artifacts before approval", async () => {
@@ -569,6 +596,60 @@ test("assertDeploymentApplyPreconditions blocks artifact plan and AWS drift", ()
   );
 });
 
+test("assertDeploymentApplyPreconditions rejects AWS region drift before apply", () => {
+  assert.throws(
+    () =>
+      assertDeploymentApplyPreconditions({
+        deployment: createApprovedDeploymentRecord(),
+        currentPlanArtifact: createPlanArtifactRecord(),
+        currentTerraformArtifactHash: artifactHash,
+        currentTfplanHash: tfplanHash,
+        currentAwsConnection: createVerifiedAwsConnection({ region: "us-east-1" })
+      }),
+    /AWS region changed before apply/
+  );
+});
+
+test("assertDeploymentApplyPreconditions rejects missing approval snapshot fields", () => {
+  const requiredSnapshotFields: Array<keyof DeploymentRecord> = [
+    "approvedAt",
+    "approvedByUserId",
+    "approvedTerraformArtifactId",
+    "approvedPlanArtifactId",
+    "approvedTerraformArtifactHash",
+    "approvedTfplanHash",
+    "approvedAwsAccountId",
+    "approvedAwsRegion"
+  ];
+
+  for (const field of requiredSnapshotFields) {
+    assert.throws(
+      () =>
+        assertDeploymentApplyPreconditions({
+          deployment: {
+            ...createApprovedDeploymentRecord(),
+            [field]: null
+          },
+          currentPlanArtifact: createPlanArtifactRecord(),
+          currentTerraformArtifactHash: artifactHash,
+          currentTfplanHash: tfplanHash,
+          currentAwsConnection: createVerifiedAwsConnection()
+        }),
+      (error) => {
+        assert.equal(error instanceof DeploymentApplyPreconditionError, true, String(field));
+        assert.match(
+          (error as Error).message,
+          new RegExp(`Deployment approval snapshot is incomplete before apply: missing ${String(field)}`),
+          String(field)
+        );
+
+        return true;
+      },
+      String(field)
+    );
+  }
+});
+
 function createAccessContext(): ProjectAccessContext {
   return {
     kind: "user",
@@ -586,6 +667,7 @@ function createDeploymentRecord(
     architectureId,
     terraformArtifactId,
     awsConnectionId,
+    liveProfile: "practice",
     currentPlanArtifactId: planArtifactId,
     stateObjectKey: null,
     resultWarningSummary: null,
@@ -647,6 +729,35 @@ function createPlanSummary(): DeploymentPlanSummary {
     replaceCount: 0,
     blocked: true,
     warnings: []
+  };
+}
+
+function createBlockingWarning(): DeploymentPlanSummary["warnings"][number] {
+  return {
+    id: "pre_deployment_check:security-open-ssh",
+    level: "high",
+    category: "security",
+    source: "pre_deployment_check",
+    code: "PUBLIC_SSH",
+    message: "Public SSH: Restrict CIDR",
+    relatedFindingId: "security-open-ssh",
+    relatedResourceId: "sg-app",
+    requiresAcknowledgement: false,
+    blocksApproval: true
+  };
+}
+
+function createAcknowledgementWarning(): DeploymentPlanSummary["warnings"][number] {
+  return {
+    id: "pre_deployment_check:cost-risk",
+    level: "medium",
+    category: "cost",
+    source: "pre_deployment_check",
+    code: "TRIVY_MISCONFIGURATION",
+    message: "Cost risk: Review before apply",
+    relatedFindingId: "cost-risk",
+    requiresAcknowledgement: true,
+    blocksApproval: false
   };
 }
 

@@ -224,7 +224,7 @@ test("createOpenAiExplanation keeps valid fields and replaces invalid fields wit
           output_parsed: {
             target: "design_simulation",
             summary: "OpenAI가 만든 정상 요약입니다.",
-            highlights: ["", "단일 EC2 병목 가능성이 있습니다.", "x".repeat(121)],
+            highlights: ["", "단일 EC2 병목 가능성이 있습니다.", "deployment is guaranteed"],
             nextActions: ["트래픽 증가 전 확장 구조를 검토하세요."],
             fallbackUsed: false
           }

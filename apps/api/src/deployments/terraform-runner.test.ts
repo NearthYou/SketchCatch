@@ -6,6 +6,7 @@ import { join } from "node:path";
 import {
   createTerraformProcessEnv,
   runTerraformDestroyPlan,
+  runTerraformProvidersSchemaJson,
   runTerraformValidate
 } from "./terraform-runner.js";
 
@@ -96,6 +97,28 @@ test("runTerraformDestroyPlan uses a saved destroy plan file", async () => {
       "-no-color",
       "-out=destroy.tfplan"
     ]);
+  } finally {
+    await rm(workdir, { recursive: true, force: true });
+  }
+});
+
+test("runTerraformProvidersSchemaJson requests provider schema as JSON", async () => {
+  const workdir = await mkdtemp(join(tmpdir(), "sketchcatch-terraform-runner-test-"));
+
+  try {
+    await writeFile(
+      join(workdir, "providers"),
+      "console.log(JSON.stringify(process.argv.slice(2)));\n",
+      "utf8"
+    );
+
+    const result = await runTerraformProvidersSchemaJson(workdir, {
+      terraformBinary: process.execPath,
+      timeoutMs: 5_000
+    });
+
+    assert.equal(result.exitCode, 0);
+    assert.deepEqual(JSON.parse(result.stdout), ["schema", "-json"]);
   } finally {
     await rm(workdir, { recursive: true, force: true });
   }

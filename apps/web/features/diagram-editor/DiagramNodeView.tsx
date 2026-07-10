@@ -12,22 +12,26 @@ import {
   Handle,
   NodeToolbar,
   Position,
-  useReactFlow
+  useReactFlow,
+  useUpdateNodeInternals
 } from "@xyflow/react";
 import type { NodeProps } from "@xyflow/react";
-import { useCallback } from "react";
+import { Fragment, useCallback, useEffect } from "react";
 import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode } from "react";
 
 import { BORDER_COLOR_SWATCHES, NODE_COLOR_SWATCHES } from "./constants";
-import { getAreaNodeIconUrl, getAreaNodeLabel, isAreaNode } from "./area-nodes";
+import { getAreaNodeIconUrl, getAreaNodeLabel, getAreaNodeMetaLabel, isAreaNode } from "./area-nodes";
 import { getNodeResizeBounds } from "./node-resize-bounds";
 import { calculateNodeResize } from "./node-resize";
 import type { NodeResizeHandlePosition, NodeResizeUpdate } from "./node-resize";
 import {
   RESOURCE_NODE_BORDER_COLOR,
   canChangeNodeBorderColor,
-  getNodeDisplayBorderColor
+  getNodeDisplayBorderColor,
+  getNodeDisplayBorderStyle
 } from "./node-style";
+import { getResourceNodeIconFrameSize } from "./resource-node-icon-size";
+import { getResourceNodeLabelStyle } from "./resource-node-label-style";
 import type { DiagramFlowNode } from "./types";
 import styles from "./diagram-editor.module.css";
 
@@ -44,6 +48,8 @@ const AREA_NODE_HIT_EDGES = [
   styles.areaNodeHitEdgeBottom,
   styles.areaNodeHitEdgeLeft
 ] as const;
+
+const DEFAULT_RESOURCE_NODE_ICON_FRAME_SIZE = getResourceNodeIconFrameSize({ height: 56, width: 56 });
 
 const RESIZE_HANDLES: readonly {
   className: string;
@@ -74,19 +80,37 @@ const RESIZE_HANDLES: readonly {
 
 export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps<DiagramFlowNode>) {
   const reactFlow = useReactFlow();
+  const updateNodeInternals = useUpdateNodeInternals();
   const node = data.node;
-  const toolbarVisible = selected && data.selectedNodeCount === 1;
-  const canConnect = isConnectable && !node.locked;
+  const toolbarVisible = !data.isPreview && selected && data.selectedNodeCount === 1;
+  const canConnect = !data.isPreview && Boolean(isConnectable) && !node.locked;
   const isResourceNode = node.kind === "resource";
   const isArea = isAreaNode(node);
+  const usesIconTileLayout = isResourceNode || (node.kind === "design" && !isArea && Boolean(node.iconUrl));
   const canChangeBorderColor = canChangeNodeBorderColor(node);
   const borderColor = getNodeDisplayBorderColor(node);
+  const borderStyle = getNodeDisplayBorderStyle(node);
   const textColor = node.style?.textColor ?? "#172033";
   const isDataNode = node.parameters?.terraformBlockType === "data";
   const resizeBounds = getNodeResizeBounds(node);
-  const nodeShellStyle = getNodeShellStyle(isArea, isResourceNode, borderColor);
+  const resourceNodeIconFrameSize = usesIconTileLayout ? getResourceNodeIconFrameSize(node.size) : undefined;
+  const nodeShellStyle = getNodeShellStyle(
+    isArea,
+    usesIconTileLayout,
+    borderColor,
+    borderStyle,
+    resourceNodeIconFrameSize
+  );
   const areaNodeIconUrl = isArea ? getAreaNodeIconUrl(node) : undefined;
   const areaNodeLabel = isArea ? getAreaNodeLabel(node) : "";
+  const areaNodeMetaLabel = isArea ? getAreaNodeMetaLabel(node) : undefined;
+  const resourceNodeLabel = getResourceNodeLabel(node);
+  const resourceNodeLabelStyle = getResourceNodeLabelStyle(resourceNodeLabel, node.size.width, textColor);
+
+  useEffect(() => {
+    updateNodeInternals(id);
+  }, [id, node.size.height, node.size.width, updateNodeInternals]);
+
   const handleResizePointerDown = useCallback(
     (event: ReactPointerEvent<HTMLButtonElement>, handlePosition: NodeResizeHandlePosition) => {
       if (node.locked) {
@@ -116,7 +140,7 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
             y: moveEvent.clientY - startY
           },
           handlePosition,
-          resizeMode: isResourceNode && !isArea ? "square" : "free",
+          resizeMode: usesIconTileLayout && !isArea ? "square" : "free",
           startPosition,
           startSize,
           zoom
@@ -133,18 +157,18 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
       window.addEventListener("pointermove", handlePointerMove);
       window.addEventListener("pointerup", handlePointerUp, { once: true });
     },
-    [data, id, isArea, isResourceNode, node.locked, node.position, node.size, reactFlow, resizeBounds]
+    [data, id, isArea, node.locked, node.position, node.size, reactFlow, resizeBounds, usesIconTileLayout]
   );
 
   return (
     <>
       <NodeToolbar
         align="center"
-        className={styles.nodeToolbar}
+        className={[styles.nodeToolbar, isArea ? styles.nodeToolbarArea : undefined].filter(Boolean).join(" ")}
         isVisible={toolbarVisible}
         nodeId={id}
         offset={10}
-        position={Position.Top}
+        position={isArea ? Position.Bottom : Position.Top}
       >
         <button
           aria-label="앞으로 가져오기"
@@ -197,9 +221,13 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
           styles.nodeShell,
           selected ? styles.nodeShellSelected : undefined,
           data.isDimmed ? styles.nodeShellDimmed : undefined,
+          data.isPreview ? styles.nodeShellAiPreview : undefined,
+          data.previewState === "added" ? styles.nodeShellPatchAdded : undefined,
+          data.previewState === "modified" ? styles.nodeShellPatchModified : undefined,
+          data.previewState === "deleted" ? styles.nodeShellPatchDeleted : undefined,
           data.isReferenceDropTarget ? styles.nodeShellReferenceDropTarget : undefined,
           isArea ? styles.nodeShellArea : undefined,
-          node.kind === "design" ? styles.nodeShellDesign : styles.nodeShellResource,
+          !isArea ? (usesIconTileLayout ? styles.nodeShellResource : styles.nodeShellDesign) : undefined,
           node.locked ? styles.nodeShellLocked : undefined
         ]
           .filter(Boolean)
@@ -220,9 +248,10 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
                 <img alt="" className={styles.areaNodeHeaderIcon} draggable={false} src={areaNodeIconUrl} />
               ) : null}
               <span className={styles.areaNodeHeaderText}>{areaNodeLabel}</span>
+              {areaNodeMetaLabel ? <span className={styles.areaNodeHeaderMeta}>{areaNodeMetaLabel}</span> : null}
             </div>
           </>
-        ) : isResourceNode ? (
+        ) : usesIconTileLayout ? (
           <>
             <div className={styles.resourceNodeIconFrame}>
               {node.iconUrl ? (
@@ -233,15 +262,20 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
                 </div>
               )}
             </div>
-            <div className={styles.resourceNodeLabel} style={{ color: textColor }}>
-              {node.label}
+            <div className={styles.resourceNodeLabel} style={resourceNodeLabelStyle}>
+              {resourceNodeLabel}
             </div>
+            <div className={styles.resourceNodeType}>{node.type}</div>
             {isDataNode ? <div className={styles.resourceNodeBadge}>Data</div> : null}
           </>
         ) : (
           <>
             <div className={styles.nodeGlyph} aria-hidden="true">
-              D
+              {node.iconUrl ? (
+                <img alt="" className={styles.nodeGlyphIcon} draggable={false} src={node.iconUrl} />
+              ) : (
+                "D"
+              )}
             </div>
             <div className={styles.nodeContent}>
               <div className={styles.nodeType}>Design</div>
@@ -259,7 +293,7 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
         ) : null}
       </div>
 
-      {selected && !node.locked ? (
+      {selected && !node.locked && !data.isPreview ? (
         <>
           {RESIZE_HANDLES.map((handle) => (
             <button
@@ -274,33 +308,73 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
         </>
       ) : null}
 
-      {canConnect ? (
-        <>
-          {CONNECTION_HANDLES.map((handle) => (
-            <Handle
-              className={styles.connectionHandle}
-              id={handle.id}
-              key={handle.id}
-              position={handle.position}
-              type="source"
-            />
-          ))}
-        </>
-      ) : null}
+      {CONNECTION_HANDLES.map((handle) => (
+        <Fragment key={handle.id}>
+          <Handle
+            className={[
+              styles.connectionHandle,
+              styles.connectionHandleSource,
+              canConnect ? undefined : styles.connectionHandleInactive,
+              data.isConnectionActive ? styles.connectionHandleActive : undefined
+            ]
+              .filter(Boolean)
+              .join(" ")}
+            id={`source-${handle.id}`}
+            isConnectable={canConnect}
+            position={handle.position}
+            type="source"
+          />
+          <Handle
+            className={[
+              styles.connectionHandle,
+              styles.connectionHandleTarget,
+              canConnect ? undefined : styles.connectionHandleInactive,
+              data.isConnectionActive ? styles.connectionHandleActive : undefined
+            ]
+              .filter(Boolean)
+              .join(" ")}
+            id={`target-${handle.id}`}
+            isConnectable={canConnect}
+            position={handle.position}
+            type="target"
+          />
+        </Fragment>
+      ))}
     </>
   );
 }
 
-function getNodeShellStyle(isArea: boolean, isResourceNode: boolean, borderColor: string): CSSProperties {
+function getNodeShellStyle(
+  isArea: boolean,
+  usesIconTileLayout: boolean,
+  borderColor: string,
+  borderStyle: string,
+  resourceNodeIconFrameSize: number | undefined
+): CSSProperties {
   if (isArea) {
-    return { "--node-border-color": borderColor, borderColor } as CSSProperties;
+    return { "--node-border-color": borderColor, "--area-border-style": borderStyle } as CSSProperties;
   }
 
-  if (isResourceNode) {
-    return { "--resource-node-border-color": RESOURCE_NODE_BORDER_COLOR } as CSSProperties;
+  if (usesIconTileLayout) {
+    return {
+      "--resource-node-border-color": RESOURCE_NODE_BORDER_COLOR,
+      "--resource-node-icon-frame-size": `${resourceNodeIconFrameSize ?? DEFAULT_RESOURCE_NODE_ICON_FRAME_SIZE}px`
+    } as CSSProperties;
   }
 
   return { borderColor };
+}
+
+function getResourceNodeLabel(node: DiagramFlowNode["data"]["node"]): string {
+  const diagramLabel = node.parameters?.values?.["diagramLabel"];
+
+  if (typeof diagramLabel === "string" && diagramLabel.trim().length > 0) {
+    return diagramLabel;
+  }
+
+  const resourceName = node.parameters?.resourceName?.trim();
+
+  return resourceName ? resourceName : node.label;
 }
 
 type ColorMenuProps = {

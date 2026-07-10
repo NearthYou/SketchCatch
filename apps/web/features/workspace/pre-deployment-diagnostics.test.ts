@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { AiPreDeploymentAnalysisResult, TerraformDiagnostic } from "@sketchcatch/types";
-import { addTerraformDiagnosticsToPreDeploymentAnalysis } from "./pre-deployment-diagnostics";
+import {
+  addTerraformDiagnosticsToPreDeploymentAnalysis,
+  createPreDeploymentAnalysisFromTerraformDiagnostics
+} from "./pre-deployment-diagnostics";
 
 test("addTerraformDiagnosticsToPreDeploymentAnalysis keeps clean analysis unchanged", () => {
   const analysis = createAnalysis();
@@ -37,6 +40,11 @@ test("addTerraformDiagnosticsToPreDeploymentAnalysis turns terraform errors into
   assert.equal(result.findings[0]?.category, "configuration");
   assert.equal(result.findings[0]?.severity, "high");
   assert.equal(result.findings[0]?.resourceId, "aws_route_table.public");
+  assert.deepEqual(result.findings[0]?.sourceLocation, {
+    fileName: "main.tf",
+    line: 30,
+    resourceAddress: "aws_route_table.public"
+  });
   assert.equal(result.findings[0]?.title, "Terraform 코드 30번째 줄 확인 필요");
   assert.equal(result.suggestions[0]?.findingId, result.findings[0]?.id);
   assert.equal(result.suggestions[0]?.action, "manual_review");
@@ -57,6 +65,24 @@ test("addTerraformDiagnosticsToPreDeploymentAnalysis keeps warning-only diagnost
   assert.equal(result.checklist[0]?.status, "warning");
   assert.equal(result.findings[0]?.severity, "medium");
   assert.equal(result.findings[0]?.resourceId, "s3-bucket");
+});
+
+test("createPreDeploymentAnalysisFromTerraformDiagnostics creates diagnostics-only fail-fast analysis", () => {
+  const result = createPreDeploymentAnalysisFromTerraformDiagnostics([
+    {
+      severity: "error",
+      message: "Unsupported argument",
+      code: "unsupported-argument",
+      sourceFileName: "security.tf",
+      line: 4
+    }
+  ]);
+
+  assert.match(result.summary, /오류 1개/);
+  assert.equal(result.totalMonthlyEstimate.pricingAssumption.includes("fail-fast"), true);
+  assert.equal(result.findings.length, 1);
+  assert.equal(result.findings[0]?.sourceLocation?.fileName, "security.tf");
+  assert.equal(result.checklist[0]?.status, "fail");
 });
 
 function createAnalysis(): AiPreDeploymentAnalysisResult {

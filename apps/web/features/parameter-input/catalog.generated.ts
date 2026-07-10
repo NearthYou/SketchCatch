@@ -289,6 +289,20 @@ export const terraformAwsParameterCatalog = {
         ]
       }
     ],
+    "aws_cloudfront_distribution": [
+      {
+        "name": "tags",
+        "terraformName": "tags",
+        "label": "Tags",
+        "type": "map",
+        "required": false,
+        "optional": true,
+        "computed": false,
+        "sensitive": false,
+        "description": "AWS 콘솔과 비용 추적에서 리소스를 구분하기 위한 key-value 태그입니다.",
+        "inputKind": "key-value"
+      }
+    ],
     "aws_nat_gateway": [
       {
         "name": "subnetId",
@@ -483,6 +497,7 @@ export const terraformAwsParameterCatalog = {
         "required": false,
         "optional": true,
         "computed": true,
+        "core": true,
         "sensitive": false,
         "description": "보안 그룹을 둘 VPC입니다.",
         "inputKind": "reference-picker",
@@ -498,6 +513,7 @@ export const terraformAwsParameterCatalog = {
         "required": false,
         "optional": true,
         "computed": true,
+        "core": true,
         "sensitive": false,
         "description": "리소스로 들어오는 트래픽 규칙입니다.",
         "inputKind": "nested-block",
@@ -582,6 +598,7 @@ export const terraformAwsParameterCatalog = {
         "required": false,
         "optional": true,
         "computed": true,
+        "core": true,
         "sensitive": false,
         "description": "리소스에서 나가는 트래픽 규칙입니다.",
         "inputKind": "nested-block",
@@ -1207,30 +1224,44 @@ export const terraformAwsParameterCatalog = {
         "inputKind": "checkbox"
       },
       {
-        "name": "filterName",
-        "terraformName": "filter.name",
-        "label": "Filter name",
-        "type": "string",
-        "required": true,
-        "optional": false,
-        "computed": false,
-        "sensitive": false,
-        "description": "AMI 조회 filter 이름입니다.",
-        "inputKind": "text",
-        "placeholder": "name"
-      },
-      {
-        "name": "filterValues",
-        "terraformName": "filter.values",
-        "label": "Filter values",
+        "name": "filter",
+        "terraformName": "filter",
+        "label": "Filter",
         "type": "set",
         "required": true,
         "optional": false,
         "computed": false,
         "sensitive": false,
-        "description": "AMI 조회 filter 값 목록입니다.",
-        "inputKind": "text",
-        "placeholder": "amzn2-ami-hvm-*-x86_64-gp2"
+        "description": "AMI 조회 filter 조건입니다.",
+        "inputKind": "nested-block",
+        "children": [
+          {
+            "name": "name",
+            "terraformName": "name",
+            "label": "Name",
+            "type": "string",
+            "required": true,
+            "optional": false,
+            "computed": false,
+            "sensitive": false,
+            "description": "AMI 조회 filter 이름입니다.",
+            "inputKind": "text",
+            "placeholder": "name"
+          },
+          {
+            "name": "values",
+            "terraformName": "values",
+            "label": "Values",
+            "type": "set",
+            "required": true,
+            "optional": false,
+            "computed": false,
+            "sensitive": false,
+            "description": "AMI 조회 filter 값 목록입니다.",
+            "inputKind": "text",
+            "placeholder": "amzn2-ami-hvm-*-x86_64-gp2"
+          }
+        ]
       }
     ],
     "aws_key_pair": [
@@ -1438,11 +1469,12 @@ export const terraformAwsParameterCatalog = {
       {
         "name": "minSize",
         "terraformName": "min_size",
-        "label": "Min size",
+        "label": "Min",
         "type": "number",
         "required": true,
         "optional": false,
         "computed": false,
+        "core": true,
         "sensitive": false,
         "description": "최소 인스턴스 수입니다.",
         "inputKind": "number",
@@ -1451,11 +1483,12 @@ export const terraformAwsParameterCatalog = {
       {
         "name": "maxSize",
         "terraformName": "max_size",
-        "label": "Max size",
+        "label": "Max",
         "type": "number",
         "required": true,
         "optional": false,
         "computed": false,
+        "core": true,
         "sensitive": false,
         "description": "최대 인스턴스 수입니다.",
         "inputKind": "number",
@@ -1464,11 +1497,12 @@ export const terraformAwsParameterCatalog = {
       {
         "name": "desiredCapacity",
         "terraformName": "desired_capacity",
-        "label": "Desired capacity",
+        "label": "Desired",
         "type": "number",
         "required": false,
         "optional": true,
         "computed": true,
+        "core": true,
         "sensitive": false,
         "description": "원하는 인스턴스 수입니다.",
         "inputKind": "number",
@@ -1488,6 +1522,23 @@ export const terraformAwsParameterCatalog = {
         "referenceTargetTypes": [
           "aws_subnet"
         ]
+      },
+      {
+        "name": "targetGroupArns",
+        "terraformName": "target_group_arns",
+        "label": "Target groups",
+        "type": "set",
+        "required": false,
+        "optional": true,
+        "computed": true,
+        "core": true,
+        "sensitive": false,
+        "description": "Auto Scaling Group 트래픽을 받을 Target Group 목록입니다.",
+        "inputKind": "reference-picker",
+        "referenceTargetTypes": [
+          "aws_lb_target_group"
+        ],
+        "referenceAttribute": "arn"
       },
       {
         "name": "launchTemplate",
@@ -1580,6 +1631,300 @@ export const terraformAwsParameterCatalog = {
             "sensitive": false,
             "description": "새로 생성되는 EC2 인스턴스에 태그를 전파할지 정합니다.",
             "inputKind": "checkbox"
+          }
+        ]
+      }
+    ],
+    "aws_lb_listener": [
+      {
+        "name": "loadBalancerArn",
+        "terraformName": "load_balancer_arn",
+        "label": "Load balancer",
+        "type": "string",
+        "required": true,
+        "optional": false,
+        "computed": false,
+        "sensitive": false,
+        "description": "Listener를 연결할 Load Balancer입니다.",
+        "inputKind": "reference-picker",
+        "referenceTargetTypes": [
+          "aws_lb"
+        ],
+        "referenceAttribute": "arn"
+      },
+      {
+        "name": "port",
+        "terraformName": "port",
+        "label": "Port",
+        "type": "number",
+        "required": true,
+        "optional": false,
+        "computed": false,
+        "sensitive": false,
+        "description": "Listener 포트입니다.",
+        "inputKind": "number",
+        "placeholder": "443"
+      },
+      {
+        "name": "protocol",
+        "terraformName": "protocol",
+        "label": "Protocol",
+        "type": "string",
+        "required": true,
+        "optional": false,
+        "computed": true,
+        "sensitive": false,
+        "description": "Listener 프로토콜입니다.",
+        "inputKind": "select",
+        "options": [
+          "HTTP",
+          "HTTPS",
+          "TCP",
+          "TLS"
+        ]
+      },
+      {
+        "name": "certificateArn",
+        "terraformName": "certificate_arn",
+        "label": "Certificate",
+        "type": "string",
+        "required": false,
+        "optional": true,
+        "computed": false,
+        "sensitive": false,
+        "description": "HTTPS 또는 TLS Listener의 인증서입니다.",
+        "inputKind": "reference-picker",
+        "referenceTargetTypes": [
+          "aws_acm_certificate"
+        ],
+        "referenceAttribute": "arn"
+      },
+      {
+        "name": "defaultAction",
+        "terraformName": "default_action",
+        "label": "Default action",
+        "type": "list",
+        "required": true,
+        "optional": false,
+        "computed": false,
+        "core": true,
+        "sensitive": false,
+        "description": "Listener 기본 요청 처리 방식입니다.",
+        "inputKind": "nested-block",
+        "children": [
+          {
+            "name": "type",
+            "terraformName": "type",
+            "label": "Type",
+            "type": "string",
+            "required": true,
+            "optional": false,
+            "computed": false,
+            "sensitive": false,
+            "description": "기본 액션 유형입니다.",
+            "inputKind": "select",
+            "options": [
+              "forward",
+              "redirect",
+              "fixed-response"
+            ]
+          },
+          {
+            "name": "targetGroupArn",
+            "terraformName": "target_group_arn",
+            "label": "Target group",
+            "type": "string",
+            "required": false,
+            "optional": true,
+            "computed": false,
+            "sensitive": false,
+            "description": "forward 액션의 Target Group입니다.",
+            "inputKind": "reference-picker",
+            "referenceTargetTypes": [
+              "aws_lb_target_group"
+            ],
+            "referenceAttribute": "arn"
+          }
+        ]
+      }
+    ],
+    "aws_autoscaling_policy": [
+      {
+        "name": "name",
+        "terraformName": "name",
+        "label": "Name",
+        "type": "string",
+        "required": false,
+        "optional": true,
+        "computed": false,
+        "core": true,
+        "sensitive": false,
+        "description": "Autoscaling Policy 이름입니다.",
+        "inputKind": "text",
+        "placeholder": "scale-out"
+      },
+      {
+        "name": "autoscalingGroupName",
+        "terraformName": "autoscaling_group_name",
+        "label": "Auto Scaling Group",
+        "type": "string",
+        "required": true,
+        "optional": false,
+        "computed": false,
+        "core": true,
+        "sensitive": false,
+        "description": "Policy를 적용할 Auto Scaling Group입니다.",
+        "inputKind": "reference-picker",
+        "referenceTargetTypes": [
+          "aws_autoscaling_group"
+        ],
+        "referenceAttribute": "name"
+      },
+      {
+        "name": "policyType",
+        "terraformName": "policy_type",
+        "label": "Policy type",
+        "type": "string",
+        "required": false,
+        "optional": true,
+        "computed": false,
+        "core": true,
+        "sensitive": false,
+        "description": "Autoscaling Policy 방식입니다.",
+        "inputKind": "select",
+        "options": [
+          "SimpleScaling",
+          "StepScaling",
+          "TargetTrackingScaling"
+        ]
+      },
+      {
+        "name": "adjustmentType",
+        "terraformName": "adjustment_type",
+        "label": "Adjustment type",
+        "type": "string",
+        "required": false,
+        "optional": true,
+        "computed": false,
+        "core": true,
+        "sensitive": false,
+        "description": "용량 변경 단위입니다.",
+        "inputKind": "select",
+        "options": [
+          "ChangeInCapacity",
+          "ExactCapacity",
+          "PercentChangeInCapacity"
+        ]
+      },
+      {
+        "name": "scalingAdjustment",
+        "terraformName": "scaling_adjustment",
+        "label": "Scaling adjustment",
+        "type": "number",
+        "required": false,
+        "optional": true,
+        "computed": false,
+        "core": true,
+        "sensitive": false,
+        "description": "Simple 또는 Step scaling의 용량 변경값입니다.",
+        "inputKind": "number",
+        "placeholder": "1"
+      },
+      {
+        "name": "cooldown",
+        "terraformName": "cooldown",
+        "label": "Cooldown",
+        "type": "number",
+        "required": false,
+        "optional": true,
+        "computed": false,
+        "core": true,
+        "sensitive": false,
+        "description": "다음 scaling 전에 기다릴 시간(초)입니다.",
+        "inputKind": "number",
+        "placeholder": "300"
+      },
+      {
+        "name": "targetTrackingConfiguration",
+        "terraformName": "target_tracking_configuration",
+        "label": "Target tracking configuration",
+        "type": "list",
+        "required": false,
+        "optional": true,
+        "computed": false,
+        "core": true,
+        "sensitive": false,
+        "description": "대상 metric을 추적해 용량을 조절합니다.",
+        "inputKind": "nested-block",
+        "children": [
+          {
+            "name": "targetValue",
+            "terraformName": "target_value",
+            "label": "Target value",
+            "type": "number",
+            "required": true,
+            "optional": false,
+            "computed": false,
+            "sensitive": false,
+            "description": "유지할 metric 목표값입니다.",
+            "inputKind": "number",
+            "placeholder": "50"
+          },
+          {
+            "name": "disableScaleIn",
+            "terraformName": "disable_scale_in",
+            "label": "Disable scale in",
+            "type": "boolean",
+            "required": false,
+            "optional": true,
+            "computed": false,
+            "sensitive": false,
+            "description": "축소를 막을지 정합니다.",
+            "inputKind": "checkbox"
+          },
+          {
+            "name": "predefinedMetricSpecification",
+            "terraformName": "predefined_metric_specification",
+            "label": "Predefined metric",
+            "type": "list",
+            "required": true,
+            "optional": false,
+            "computed": false,
+            "sensitive": false,
+            "description": "추적할 AWS 사전 정의 metric입니다.",
+            "inputKind": "nested-block",
+            "children": [
+              {
+                "name": "predefinedMetricType",
+                "terraformName": "predefined_metric_type",
+                "label": "Metric type",
+                "type": "string",
+                "required": true,
+                "optional": false,
+                "computed": false,
+                "sensitive": false,
+                "description": "사전 정의 metric 유형입니다.",
+                "inputKind": "select",
+                "options": [
+                  "ASGAverageCPUUtilization",
+                  "ASGAverageNetworkIn",
+                  "ASGAverageNetworkOut",
+                  "ALBRequestCountPerTarget"
+                ]
+              },
+              {
+                "name": "resourceLabel",
+                "terraformName": "resource_label",
+                "label": "Resource label",
+                "type": "string",
+                "required": false,
+                "optional": true,
+                "computed": false,
+                "sensitive": false,
+                "description": "ALBRequestCountPerTarget에 필요한 ALB와 Target Group label입니다.",
+                "inputKind": "text"
+              }
+            ]
           }
         ]
       }
@@ -1943,6 +2288,23 @@ export const terraformAwsParameterCatalog = {
         "placeholder": "practice-db"
       },
       {
+        "name": "replicateSourceDb",
+        "terraformName": "replicate_source_db",
+        "label": "Replication source",
+        "type": "string",
+        "required": false,
+        "optional": true,
+        "computed": false,
+        "sensitive": false,
+        "description": "Read Replica로 만들 때 복제 원본 RDS Instance 식별자나 Terraform 참조를 입력합니다.",
+        "inputKind": "reference-picker",
+        "referenceTargetTypes": [
+          "aws_db_instance"
+        ],
+        "referenceAttribute": "identifier",
+        "placeholder": "aws_db_instance.primary.identifier"
+      },
+      {
         "name": "allocatedStorage",
         "terraformName": "allocated_storage",
         "label": "Allocated storage",
@@ -2043,6 +2405,132 @@ export const terraformAwsParameterCatalog = {
         "description": "처음 만들 데이터베이스 이름입니다.",
         "inputKind": "text",
         "placeholder": "appdb"
+      },
+      {
+        "name": "backupRetentionPeriod",
+        "terraformName": "backup_retention_period",
+        "label": "Backup retention",
+        "type": "number",
+        "required": false,
+        "optional": true,
+        "computed": true,
+        "sensitive": false,
+        "description": "자동 백업을 보존할 기간입니다. 단위는 일입니다.",
+        "inputKind": "number",
+        "placeholder": "7"
+      },
+      {
+        "name": "caCertIdentifier",
+        "terraformName": "ca_cert_identifier",
+        "label": "CA certificate",
+        "type": "string",
+        "required": false,
+        "optional": true,
+        "computed": true,
+        "sensitive": false,
+        "description": "DB 인스턴스에 사용할 RDS CA certificate identifier입니다.",
+        "inputKind": "text",
+        "placeholder": "rds-ca-rsa2048-g1"
+      },
+      {
+        "name": "deletionProtection",
+        "terraformName": "deletion_protection",
+        "label": "Deletion protection",
+        "type": "boolean",
+        "required": false,
+        "optional": true,
+        "computed": false,
+        "sensitive": false,
+        "description": "실수로 DB 인스턴스가 삭제되지 않도록 보호할지 정합니다.",
+        "inputKind": "checkbox"
+      },
+      {
+        "name": "enabledCloudwatchLogsExports",
+        "terraformName": "enabled_cloudwatch_logs_exports",
+        "label": "CloudWatch log exports",
+        "type": "set",
+        "required": false,
+        "optional": true,
+        "computed": false,
+        "sensitive": false,
+        "description": "CloudWatch Logs로 내보낼 DB 로그 유형입니다.",
+        "inputKind": "multi-select",
+        "options": [
+          "postgresql",
+          "upgrade",
+          "slowquery",
+          "error",
+          "general",
+          "audit"
+        ]
+      },
+      {
+        "name": "iamDatabaseAuthenticationEnabled",
+        "terraformName": "iam_database_authentication_enabled",
+        "label": "IAM database authentication",
+        "type": "boolean",
+        "required": false,
+        "optional": true,
+        "computed": false,
+        "sensitive": false,
+        "description": "IAM 기반 DB 인증을 사용할지 정합니다.",
+        "inputKind": "checkbox"
+      },
+      {
+        "name": "maxAllocatedStorage",
+        "terraformName": "max_allocated_storage",
+        "label": "Max allocated storage",
+        "type": "number",
+        "required": false,
+        "optional": true,
+        "computed": false,
+        "sensitive": false,
+        "description": "스토리지 autoscaling이 늘릴 수 있는 최대 크기입니다. 단위는 GiB입니다.",
+        "inputKind": "number",
+        "placeholder": "100"
+      },
+      {
+        "name": "multiAz",
+        "terraformName": "multi_az",
+        "label": "Multi-AZ",
+        "type": "boolean",
+        "required": false,
+        "optional": true,
+        "computed": true,
+        "sensitive": false,
+        "description": "고가용성을 위해 Multi-AZ 배치를 사용할지 정합니다.",
+        "inputKind": "checkbox"
+      },
+      {
+        "name": "storageEncrypted",
+        "terraformName": "storage_encrypted",
+        "label": "Storage encrypted",
+        "type": "boolean",
+        "required": false,
+        "optional": true,
+        "computed": false,
+        "sensitive": false,
+        "description": "DB 스토리지 암호화를 사용할지 정합니다.",
+        "inputKind": "checkbox"
+      },
+      {
+        "name": "storageType",
+        "terraformName": "storage_type",
+        "label": "Storage type",
+        "type": "string",
+        "required": false,
+        "optional": true,
+        "computed": true,
+        "sensitive": false,
+        "description": "DB 스토리지 유형입니다.",
+        "inputKind": "select",
+        "options": [
+          "gp3",
+          "gp2",
+          "io1",
+          "io2",
+          "standard"
+        ]
       },
       {
         "name": "vpcSecurityGroupIds",
@@ -3193,6 +3681,19 @@ export const terraformAwsParameterCatalog = {
         ]
       },
       {
+        "name": "dimensions",
+        "terraformName": "dimensions",
+        "label": "Dimensions",
+        "type": "map",
+        "required": false,
+        "optional": true,
+        "computed": false,
+        "core": true,
+        "sensitive": false,
+        "description": "Metric을 특정 리소스로 좁히는 key-value dimensions입니다.",
+        "inputKind": "key-value"
+      },
+      {
         "name": "alarmActions",
         "terraformName": "alarm_actions",
         "label": "Alarm actions",
@@ -3200,11 +3701,13 @@ export const terraformAwsParameterCatalog = {
         "required": false,
         "optional": true,
         "computed": false,
+        "core": true,
         "sensitive": false,
-        "description": "알람 발생 시 알림을 보낼 SNS Topic입니다.",
+        "description": "알람 발생 시 실행할 SNS Topic 또는 Autoscaling Policy입니다.",
         "inputKind": "reference-picker",
         "referenceTargetTypes": [
-          "aws_sns_topic"
+          "aws_sns_topic",
+          "aws_autoscaling_policy"
         ],
         "referenceAttribute": "arn"
       }

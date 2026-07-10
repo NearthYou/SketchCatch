@@ -325,7 +325,9 @@ test("runDeploymentDestroyPlan restores state and stores a destroy plan artifact
 
   assert.equal(result.deployment.status, "SUCCESS");
   assert.equal(result.deployment.currentPlanArtifactId, planArtifactId);
-  assert.equal(result.deployment.blockedBy, "missing_approval");
+  assert.equal(result.deployment.isBlocked, false);
+  assert.equal(result.deployment.blockedBy, null);
+  assert.equal(result.deployment.blockedReason, null);
   assert.equal(applyArtifactStorage.downloadedStateObjectKey, stateObjectKey);
   assert.equal(writtenState?.filePath.endsWith("\\terraform.tfstate"), true);
   assert.deepEqual(writtenState?.content, Buffer.from('{"version":4}'));
@@ -334,7 +336,9 @@ test("runDeploymentDestroyPlan restores state and stores a destroy plan artifact
   assert.equal(repository.savedPlans[0]?.planArtifact.operation, "destroy");
   assert.equal(repository.savedPlans[0]?.planArtifact.terraformArtifactSha256, terraformArtifactSha256);
   assert.equal(repository.savedPlans[0]?.terminalStatus, "SUCCESS");
-  assert.equal(repository.savedPlans[0]?.blockedBy, "missing_approval");
+  assert.equal(repository.savedPlans[0]?.isBlocked, false);
+  assert.equal(repository.savedPlans[0]?.blockedBy, null);
+  assert.equal(repository.savedPlans[0]?.blockedReason, null);
   assert(
     repository.logs.some((log) =>
       log.message.startsWith("[duration] terraform lock file upload completed in ")
@@ -434,6 +438,7 @@ function createDeploymentRecord(
     architectureId,
     terraformArtifactId,
     awsConnectionId,
+    liveProfile: "practice",
     currentPlanArtifactId: planArtifactId,
     stateObjectKey,
     resultWarningSummary: null,

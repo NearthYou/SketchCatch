@@ -2,10 +2,7 @@
 
 import { Check, ChevronDown, Plus, Search, Trash2 } from "lucide-react";
 import { useId, useMemo, useRef, useState } from "react";
-import type {
-  FocusEvent as ReactFocusEvent,
-  KeyboardEvent as ReactKeyboardEvent
-} from "react";
+import type { FocusEvent as ReactFocusEvent, KeyboardEvent as ReactKeyboardEvent } from "react";
 import type {
   AwsRegionCode,
   DiagramNode,
@@ -15,10 +12,9 @@ import type {
 import { SelectMenu } from "../../components/ui/SelectMenu";
 import type { DiagramEditorPanelContext } from "../diagram-editor/types";
 import {
-  filterAdvancedDefinitions,
-  getAdvancedDefinitions,
-  getAdvancedPickerEmptyMessage
-} from "./advanced-parameters";
+  getAwsAvailabilityZoneLabel,
+  awsAvailabilityZoneOptions
+} from "./aws-availability-zone-options";
 import {
   filterAwsRegionOptions,
   getAwsRegionLabel,
@@ -27,16 +23,17 @@ import {
 import type { ParameterCatalog, ParameterCatalogDefinition } from "./catalog";
 import { terraformParameterCatalog } from "./catalog";
 import {
-  createRegionNodeMetadata,
+  getAvailabilityZoneNodeValue,
   getRegionNodeAwsRegion,
-  isRegionDesignNode
+  isAvailabilityZoneResourceNode,
+  isRegionResourceNode,
+  updateAvailabilityZoneNodeParameters,
+  updateRegionNodeParameters
 } from "./region-node-metadata";
 import { buildResourceMetadataRows } from "./resource-metadata-rows";
 import {
   buildReferenceOptions,
-  getActiveOptionalDefinitions,
-  getOptionalDefinitions,
-  getRequiredDefinitions,
+  getMainDefinitions,
   getValidationDefinitions,
   isEmptyParameterValue,
   mergeNodeParameters,
@@ -64,8 +61,6 @@ export function ParameterInputPanel({
     () => nodes.find((node) => node.id === selectedNodeId) ?? null,
     [nodes, selectedNodeId]
   );
-  const [advancedParameterQuery, setAdvancedParameterQuery] = useState("");
-  const [addedOptionalParameterNames, setAddedOptionalParameterNames] = useState<string[]>([]);
 
   if (!selectedNode) {
     return (
@@ -78,22 +73,59 @@ export function ParameterInputPanel({
     );
   }
 
-  if (isRegionDesignNode(selectedNode)) {
+  if (isRegionResourceNode(selectedNode) && selectedNode.parameters) {
     const selectedRegion = getRegionNodeAwsRegion(selectedNode);
 
     return (
       <aside className={styles.panel} aria-label="파라미터 입력 패널">
         <PanelHeader node={selectedNode} parameters={null} />
 
-        <section className={styles.section} aria-label="Main parameters">
+        <DesignAreaNameSection
+          node={selectedNode}
+          onChange={(label) => updateNodeMetadata(selectedNode.id, { label })}
+        />
+
+        <section className={styles.section} aria-label="Region settings">
           <div className={styles.fieldGroup}>
             <RegionField
               onChange={(awsRegion) =>
-                updateNodeMetadata(selectedNode.id, {
-                  metadata: createRegionNodeMetadata(selectedNode, awsRegion)
-                })
+                updateNodeParameters(selectedNode.id, (parameters) =>
+                  parameters ? updateRegionNodeParameters(parameters, awsRegion) : parameters
+                )
               }
+              showLabel={false}
               value={selectedRegion}
+            />
+          </div>
+        </section>
+      </aside>
+    );
+  }
+
+  if (isAvailabilityZoneResourceNode(selectedNode) && selectedNode.parameters) {
+    const selectedAvailabilityZone = getAvailabilityZoneNodeValue(selectedNode);
+
+    return (
+      <aside className={styles.panel} aria-label="파라미터 입력 패널">
+        <PanelHeader node={selectedNode} parameters={null} />
+
+        <DesignAreaNameSection
+          node={selectedNode}
+          onChange={(label) => updateNodeMetadata(selectedNode.id, { label })}
+        />
+
+        <section className={styles.section} aria-label="Availability Zone settings">
+          <div className={styles.fieldGroup}>
+            <AvailabilityZoneField
+              onChange={(awsAvailabilityZone) =>
+                updateNodeParameters(selectedNode.id, (parameters) =>
+                  parameters
+                    ? updateAvailabilityZoneNodeParameters(parameters, awsAvailabilityZone)
+                    : parameters
+                )
+              }
+              showLabel={false}
+              value={selectedAvailabilityZone}
             />
           </div>
         </section>
@@ -105,6 +137,10 @@ export function ParameterInputPanel({
     return (
       <aside className={styles.panel} aria-label="파라미터 입력 패널">
         <PanelHeader node={selectedNode} parameters={null} />
+        <DesignAreaNameSection
+          node={selectedNode}
+          onChange={(label) => updateNodeMetadata(selectedNode.id, { label })}
+        />
         <EmptyPanel
           title="디자인 타입"
           description="Region, AZ, Group 같은 디자인 타입은 Terraform 리소스 파라미터를 가지지 않습니다."
@@ -115,24 +151,8 @@ export function ParameterInputPanel({
 
   const parameters = mergeNodeParameters(selectedNode, parameterCatalog);
   const catalogDefinitions = parameterCatalog.resources[parameters.resourceType] ?? [];
-  const mainDefinitions = getRequiredDefinitions(catalogDefinitions);
-  const optionalDefinitions = getOptionalDefinitions(catalogDefinitions);
-  const activeOptionalDefinitions = getActiveOptionalDefinitions(catalogDefinitions, parameters.values);
-  const advancedDefinitions = getAdvancedDefinitions(
-    activeOptionalDefinitions,
-    optionalDefinitions,
-    addedOptionalParameterNames
-  );
-  const availableAdvancedDefinitions = filterAdvancedDefinitions(
-    optionalDefinitions,
-    advancedDefinitions,
-    advancedParameterQuery
-  );
-  const advancedPickerEmptyMessage = getAdvancedPickerEmptyMessage(
-    optionalDefinitions,
-    advancedDefinitions,
-    advancedParameterQuery
-  );
+  const mainDefinitions = getMainDefinitions(catalogDefinitions);
+  const mainParameterNames = new Set(mainDefinitions.map((definition) => definition.name));
   const validationDefinitions = getValidationDefinitions(catalogDefinitions, parameters.values);
   const metadataRows = buildResourceMetadataRows(parameters);
   const validation = validateParameters(
@@ -144,7 +164,10 @@ export function ParameterInputPanel({
   );
 
   const commitParameters = (nextParameters: ResourceNodeParameters) => {
-    const nextValidationDefinitions = getValidationDefinitions(catalogDefinitions, nextParameters.values);
+    const nextValidationDefinitions = getValidationDefinitions(
+      catalogDefinitions,
+      nextParameters.values
+    );
     const nextValidation = validateParameters(
       nextParameters,
       nextValidationDefinitions,
@@ -159,10 +182,7 @@ export function ParameterInputPanel({
     });
   };
 
-  const updateMetadataField = (
-    field: "resourceName" | "fileName",
-    value: string
-  ) => {
+  const updateMetadataField = (field: "resourceName" | "fileName", value: string) => {
     const nextParameters = {
       ...parameters,
       [field]: value
@@ -185,34 +205,25 @@ export function ParameterInputPanel({
       values: nextValues
     });
   };
-
-  const addAdvancedParameter = (definition: ParameterCatalogDefinition) => {
-    setAddedOptionalParameterNames((currentNames) =>
-      currentNames.includes(definition.name) ? currentNames : [...currentNames, definition.name]
-    );
-    setAdvancedParameterQuery("");
-  };
-
-  const removeAdvancedParameter = (definition: ParameterCatalogDefinition) => {
-    setAddedOptionalParameterNames((currentNames) =>
-      currentNames.filter((name) => name !== definition.name)
-    );
-
-    commitParameters({
-      ...parameters,
-      values: deleteRecordValue(parameters.values, definition.name)
-    });
-  };
+  const configuredMainParameterCount = mainDefinitions.filter(
+    (definition) => !isEmptyParameterValue(parameters.values[definition.name])
+  ).length;
+  const mainParameterIssueCount = Object.keys(validation.parameterErrors).filter((parameterName) =>
+    mainParameterNames.has(parameterName)
+  ).length;
+  const requiredMainParameterCount = mainDefinitions.filter(
+    (definition) => definition.required
+  ).length;
 
   return (
     <aside className={styles.panel} aria-label="파라미터 입력 패널">
       <PanelHeader node={selectedNode} parameters={parameters} />
 
-      <section className={styles.section} aria-label="Metadata">
+      <section className={`${styles.section} ${styles.metadataSection}`} aria-label="Metadata">
         <div className={styles.sectionHeader}>
           <h3>Metadata</h3>
         </div>
-        <div className={styles.fieldGroup}>
+        <div className={`${styles.fieldGroup} ${styles.metadataGrid}`}>
           {metadataRows.map((row) =>
             row.editable ? (
               <MetadataField
@@ -229,26 +240,36 @@ export function ParameterInputPanel({
         </div>
       </section>
 
-      <section className={styles.section} aria-label="Main parameters">
+      <section
+        className={`${styles.section} ${styles.mainParametersSection}`}
+        aria-label="Main parameters"
+      >
         <div className={styles.sectionHeader}>
           <h3>Main parameters</h3>
         </div>
         {mainDefinitions.length > 0 ? (
-          <div className={styles.fieldGroup}>
-            {mainDefinitions.map((definition) => (
-              <ParameterField
-                catalog={parameterCatalog}
-                currentNodeId={selectedNode.id}
-                definition={definition}
-                errors={validation.parameterErrors}
-                key={definition.name}
-                nodes={nodes}
-                onChange={(value) => updateParameterValue(definition, value)}
-                path={definition.name}
-                value={parameters.values[definition.name]}
-              />
-            ))}
-          </div>
+          <>
+            <ParameterSummaryBar
+              configuredCount={configuredMainParameterCount}
+              issueCount={mainParameterIssueCount}
+              requiredCount={requiredMainParameterCount}
+            />
+            <div className={`${styles.fieldGroup} ${styles.parameterFieldList}`}>
+              {mainDefinitions.map((definition) => (
+                <ParameterField
+                  catalog={parameterCatalog}
+                  currentNodeId={selectedNode.id}
+                  definition={definition}
+                  errors={validation.parameterErrors}
+                  key={definition.name}
+                  nodes={nodes}
+                  onChange={(value) => updateParameterValue(definition, value)}
+                  path={definition.name}
+                  value={parameters.values[definition.name]}
+                />
+              ))}
+            </div>
+          </>
         ) : (
           <p className={styles.inlineEmpty}>
             {catalogDefinitions.length > 0
@@ -257,81 +278,63 @@ export function ParameterInputPanel({
           </p>
         )}
       </section>
-
-      <section className={styles.section} aria-label="Advanced Parameters">
-        <div className={styles.sectionHeader}>
-          <h3>Advanced Parameters</h3>
-        </div>
-
-        {advancedDefinitions.length > 0 ? (
-          <div className={styles.fieldGroup}>
-            {advancedDefinitions.map((definition) => (
-              <ParameterField
-                catalog={parameterCatalog}
-                currentNodeId={selectedNode.id}
-                definition={definition}
-                errors={validation.parameterErrors}
-                key={definition.name}
-                nodes={nodes}
-                onChange={(value) => updateParameterValue(definition, value)}
-                onRemove={() => removeAdvancedParameter(definition)}
-                path={definition.name}
-                value={parameters.values[definition.name]}
-              />
-            ))}
-          </div>
-        ) : (
-          <p className={styles.inlineEmpty}>추가된 optional 파라미터가 없습니다.</p>
-        )}
-
-        <div className={styles.advancedPicker}>
-          <label className={styles.advancedSearch}>
-            <Search aria-hidden="true" size={16} />
-            <input
-              aria-label="Optional parameter search"
-              className={styles.input}
-              onChange={(event) => setAdvancedParameterQuery(event.currentTarget.value)}
-              placeholder="Search optional parameter..."
-              value={advancedParameterQuery}
-            />
-          </label>
-
-          {availableAdvancedDefinitions.length > 0 ? (
-            <div className={styles.advancedOptionList}>
-              {availableAdvancedDefinitions.map((definition) => (
-                <button
-                  className={styles.advancedOptionButton}
-                  key={definition.name}
-                  onClick={() => addAdvancedParameter(definition)}
-                  type="button"
-                >
-                  <Plus aria-hidden="true" size={14} />
-                  <span className={styles.advancedOptionText}>
-                    <span className={styles.advancedOptionLabel}>{definition.label}</span>
-                    <span className={styles.advancedOptionMeta}>{definition.terraformName}</span>
-                    {definition.description ? (
-                      <span className={styles.advancedOptionDescription}>
-                        {definition.description}
-                      </span>
-                    ) : null}
-                  </span>
-                </button>
-              ))}
-            </div>
-          ) : (
-            <p className={styles.inlineEmpty}>{advancedPickerEmptyMessage}</p>
-          )}
-        </div>
-      </section>
     </aside>
+  );
+}
+
+function ParameterSummaryBar({
+  configuredCount,
+  issueCount,
+  requiredCount
+}: {
+  configuredCount: number;
+  issueCount: number;
+  requiredCount: number;
+}) {
+  return (
+    <dl className={styles.parameterSummaryBar} aria-label="Main parameter summary">
+      <div className={styles.parameterSummaryItem}>
+        <dt>Required</dt>
+        <dd>{requiredCount}</dd>
+      </div>
+      <div className={styles.parameterSummaryItem}>
+        <dt>Configured</dt>
+        <dd>{configuredCount}</dd>
+      </div>
+      <div className={styles.parameterSummaryItem}>
+        <dt>Issues</dt>
+        <dd>{issueCount}</dd>
+      </div>
+    </dl>
+  );
+}
+
+function DesignAreaNameSection({
+  node,
+  onChange
+}: {
+  node: DiagramNode;
+  onChange: (label: string) => void;
+}) {
+  return (
+    <section className={styles.section} aria-label="Area metadata">
+      <div className={styles.sectionHeader}>
+        <h3>Metadata</h3>
+      </div>
+      <div className={styles.fieldGroup}>
+        <MetadataField label="Name" onChange={onChange} value={node.label} />
+      </div>
+    </section>
   );
 }
 
 function RegionField({
   onChange,
+  showLabel = true,
   value
 }: {
   onChange: (value: AwsRegionCode) => void;
+  showLabel?: boolean;
   value: AwsRegionCode;
 }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -430,9 +433,11 @@ function RegionField({
 
   return (
     <div className={styles.field}>
-      <div className={styles.fieldHeader}>
-        <span className={styles.fieldLabel}>Region</span>
-      </div>
+      {showLabel ? (
+        <div className={styles.fieldHeader}>
+          <span className={styles.fieldLabel}>Region</span>
+        </div>
+      ) : null}
 
       <div
         className={styles.regionCombobox}
@@ -515,6 +520,33 @@ function RegionField({
           </div>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+function AvailabilityZoneField({
+  onChange,
+  showLabel = true,
+  value
+}: {
+  onChange: (value: string) => void;
+  showLabel?: boolean;
+  value: string;
+}) {
+  return (
+    <div className={styles.field}>
+      {showLabel ? (
+        <div className={styles.fieldHeader}>
+          <span className={styles.fieldLabel}>Availability Zone</span>
+        </div>
+      ) : null}
+      <SelectMenu
+        ariaLabel={`가용 영역 선택: ${getAwsAvailabilityZoneLabel(value)}`}
+        emptyLabel="Availability Zone"
+        onChange={onChange}
+        options={awsAvailabilityZoneOptions}
+        value={value}
+      />
     </div>
   );
 }
@@ -638,33 +670,50 @@ function ParameterField({
   value: unknown;
 }) {
   const error = errors[path];
+  const requirementLabel = definition.required ? "Required" : definition.core ? "Core" : "Optional";
 
   return (
-    <div className={styles.field}>
+    <div
+      className={`${styles.field} ${styles.parameterField} ${
+        error ? styles.parameterFieldInvalid : ""
+      }`}
+    >
       <div className={styles.fieldHeader}>
-        <span className={styles.fieldLabel}>
-          {definition.label}
-          {definition.required ? <span className={styles.requiredMark}> *</span> : null}
+        <span className={styles.parameterLabelStack}>
+          <span className={styles.fieldLabel}>
+            {definition.label}
+            {definition.required ? <span className={styles.requiredMark}> *</span> : null}
+          </span>
+          {definition.description ? (
+            <span className={styles.parameterDescription}>{definition.description}</span>
+          ) : null}
         </span>
-        {onRemove ? (
-          <IconButton
-            className={styles.fieldActionButton}
-            label={`${definition.label} 삭제`}
-            onClick={onRemove}
-          />
-        ) : null}
+        <span className={styles.parameterMeta}>
+          <span className={styles.parameterToken}>{definition.terraformName}</span>
+          <span className={styles.parameterBadge}>{requirementLabel}</span>
+          {definition.sensitive ? <span className={styles.parameterBadge}>Sensitive</span> : null}
+          {onRemove ? (
+            <IconButton
+              className={styles.fieldActionButton}
+              label={`${definition.label} 삭제`}
+              onClick={onRemove}
+            />
+          ) : null}
+        </span>
       </div>
 
-      <ParameterControl
-        catalog={catalog}
-        currentNodeId={currentNodeId}
-        definition={definition}
-        errors={errors}
-        nodes={nodes}
-        onChange={onChange}
-        path={path}
-        value={value}
-      />
+      <div className={styles.parameterControl}>
+        <ParameterControl
+          catalog={catalog}
+          currentNodeId={currentNodeId}
+          definition={definition}
+          errors={errors}
+          nodes={nodes}
+          onChange={onChange}
+          path={path}
+          value={value}
+        />
+      </div>
 
       {error ? <p className={styles.errorText}>{error}</p> : null}
     </div>
@@ -792,7 +841,7 @@ function SelectControl({
         label: option,
         value: option
       }))}
-      tone="purple"
+      tone="workspace"
       value={selectedValue}
     />
   );
@@ -818,9 +867,7 @@ function MultiSelectControl({
           <label className={styles.optionPill} key={option}>
             <input
               checked={checked}
-              onChange={() =>
-                onChange(toggleStringValue(selectedValues, option, !checked))
-              }
+              onChange={() => onChange(toggleStringValue(selectedValues, option, !checked))}
               type="checkbox"
             />
             <span>{option}</span>
@@ -890,7 +937,7 @@ function ReferencePicker({
         label: option.label,
         value: option.reference
       }))}
-      tone="purple"
+      tone="workspace"
       value={typeof value === "string" ? value : ""}
     />
   );
@@ -915,7 +962,11 @@ function ListEditor({
           <input
             className={styles.input}
             onChange={(event) =>
-              onChange(values.map((item, itemIndex) => (itemIndex === index ? event.currentTarget.value : item)))
+              onChange(
+                values.map((item, itemIndex) =>
+                  itemIndex === index ? event.currentTarget.value : item
+                )
+              )
             }
             placeholder={placeholder}
             value={entry}
@@ -1014,12 +1065,14 @@ function NestedEditor({
 }) {
   const children = definition.children ?? [];
 
-  if (definition.type === "list") {
+  if (definition.type === "list" || definition.type === "set") {
     const blocks = Array.isArray(value) ? value.map(toRecord) : [];
 
     return (
       <div className={styles.nestedEditor}>
-        {blocks.length === 0 ? <p className={styles.inlineEmpty}>nested block이 없습니다.</p> : null}
+        {blocks.length === 0 ? (
+          <p className={styles.inlineEmpty}>nested block이 없습니다.</p>
+        ) : null}
         {blocks.map((block, blockIndex) => (
           <details className={styles.nestedBlock} key={blockIndex} open>
             <summary>{`${definition.label} ${blockIndex + 1}`}</summary>
@@ -1034,7 +1087,9 @@ function NestedEditor({
                   nodes={nodes}
                   onChange={(childValue) => {
                     const nextBlock = setRecordValue(block, child.name, childValue);
-                    onChange(blocks.map((item, index) => (index === blockIndex ? nextBlock : item)));
+                    onChange(
+                      blocks.map((item, index) => (index === blockIndex ? nextBlock : item))
+                    );
                   }}
                   path={`${path}.${blockIndex}.${child.name}`}
                   value={block[child.name]}
@@ -1051,7 +1106,11 @@ function NestedEditor({
             </div>
           </details>
         ))}
-        <button className={styles.addButton} onClick={() => onChange([...blocks, {}])} type="button">
+        <button
+          className={styles.addButton}
+          onClick={() => onChange([...blocks, {}])}
+          type="button"
+        >
           <Plus aria-hidden="true" size={14} />
           블록 추가
         </button>
@@ -1116,12 +1175,6 @@ function setRecordValue(record: RecordValue, key: string, value: unknown): Recor
   }
 
   nextRecord[key] = value;
-  return nextRecord;
-}
-
-function deleteRecordValue(record: RecordValue, key: string): RecordValue {
-  const nextRecord = { ...record };
-  delete nextRecord[key];
   return nextRecord;
 }
 

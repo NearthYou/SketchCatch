@@ -1,0 +1,329 @@
+param(
+  [string]$ApiBaseUrl = $env:API_BASE_URL,
+  [string]$AccessToken = $env:ACCESS_TOKEN,
+  [string]$SmokeEmail = $env:SMOKE_EMAIL,
+  [string]$SmokePassword = $env:SMOKE_PASSWORD,
+  [string]$SmokeCreateUser = $env:SMOKE_CREATE_USER,
+  [string]$AwsConnectionId = $env:AWS_CONNECTION_ID,
+  [string]$SmokeAccountId = $env:SMOKE_ACCOUNT_ID,
+  [string]$AwsRegion = $(if ($env:AWS_REGION) { $env:AWS_REGION } else { "ap-northeast-2" }),
+  [string]$ReportPath = $env:SMOKE_REPORT_PATH,
+  [int]$PollTimeoutSeconds = 900,
+  [int]$PollIntervalSeconds = 5
+)
+
+$ErrorActionPreference = "Stop"
+
+if (-not $ApiBaseUrl) {
+  throw "API_BASE_URL is required."
+}
+
+if (-not $AwsConnectionId) {
+  throw "AWS_CONNECTION_ID is required. Prepare an AWS connection in SketchCatch before running this smoke."
+}
+
+if (-not $SmokeAccountId) {
+  throw "SMOKE_ACCOUNT_ID is required for the unique S3 bucket name."
+}
+
+$apiRoot = $ApiBaseUrl.TrimEnd("/")
+if (-not $apiRoot.EndsWith("/api")) {
+  $apiRoot = "$apiRoot/api"
+}
+
+$shortRunId = ([Guid]::NewGuid().ToString("N")).Substring(0, 8).ToLowerInvariant()
+$bucketName = "sketchcatch-smoke-$SmokeAccountId-$AwsRegion-$shortRunId".ToLowerInvariant()
+$projectName = "SketchCatch smoke $shortRunId"
+
+if (-not $ReportPath) {
+  $ReportPath = Join-Path $env:TEMP "sketchcatch-smoke-$shortRunId.json"
+}
+
+function Invoke-SketchCatchApi {
+  param(
+    [ValidateSet("GET", "POST", "PUT", "DELETE", "PATCH")]
+    [string]$Method,
+    [string]$Path,
+    [object]$Body = $null,
+    [switch]$NoAuth
+  )
+
+  $headers = @{
+    Accept = "application/json"
+  }
+
+  if (-not $NoAuth) {
+    if (-not $script:AccessToken) {
+      throw "ACCESS_TOKEN is not available."
+    }
+
+    $headers.Authorization = "Bearer $script:AccessToken"
+  }
+
+  $invokeParams = @{
+    Method = $Method
+    Uri = "$apiRoot$Path"
+    Headers = $headers
+  }
+
+  if ($null -ne $Body) {
+    $headers["Content-Type"] = "application/json"
+    $invokeParams.Body = ($Body | ConvertTo-Json -Depth 30)
+  } elseif ($Method -in @("POST", "PUT", "PATCH")) {
+    $headers["Content-Type"] = "application/json"
+    $invokeParams.Body = "{}"
+  }
+
+  Invoke-RestMethod @invokeParams
+}
+
+function Resolve-ProjectAssetUpload {
+  param(
+    [Parameter(Mandatory = $true)]
+    [object]$Upload
+  )
+
+  $headers = @{}
+  foreach ($property in $Upload.headers.PSObject.Properties) {
+    $headers[$property.Name] = [string]$property.Value
+  }
+
+  $url = [string]$Upload.url
+  if ($url.StartsWith("/api/")) {
+    if (-not $script:AccessToken) {
+      throw "ACCESS_TOKEN is not available."
+    }
+
+    $headers.Authorization = "Bearer $script:AccessToken"
+    return @{
+      Url = "$apiRoot$($url.Substring(4))"
+      Headers = $headers
+      ContentType = [string]$headers["Content-Type"]
+    }
+  }
+
+  return @{
+    Url = $url
+    Headers = $headers
+    ContentType = [string]$headers["Content-Type"]
+  }
+}
+
+function Get-SmokeAccessToken {
+  if ($script:AccessToken) {
+    return
+  }
+
+  if (-not $SmokeEmail -or -not $SmokePassword) {
+    throw "ACCESS_TOKEN is empty. Provide SMOKE_EMAIL and SMOKE_PASSWORD, or set ACCESS_TOKEN."
+  }
+
+  $username = ($SmokeEmail.Split("@")[0] -replace "[^a-zA-Z0-9_-]", "-")
+  if ($username.Length -lt 3) {
+    $username = "smoke-$shortRunId"
+  }
+  if ($username.Length -gt 30) {
+    $username = $username.Substring(0, 30)
+  }
+
+  try {
+    $login = Invoke-SketchCatchApi -Method POST -Path "/auth/login" -NoAuth -Body @{
+      username = $username
+      password = $SmokePassword
+      rememberMe = $false
+    }
+    $script:AccessToken = $login.session.accessToken
+    return
+  } catch {
+    if ($SmokeCreateUser -ne "true") {
+      throw
+    }
+  }
+
+  Invoke-SketchCatchApi -Method POST -Path "/auth/signup" -NoAuth -Body @{
+    username = $username
+    email = $SmokeEmail
+    nickname = "Smoke $shortRunId"
+    password = $SmokePassword
+    privacyAccepted = $true
+    termsAccepted = $true
+  } | Out-Null
+
+  $loginAfterSignup = Invoke-SketchCatchApi -Method POST -Path "/auth/login" -NoAuth -Body @{
+    username = $username
+    password = $SmokePassword
+    rememberMe = $false
+  }
+  $script:AccessToken = $loginAfterSignup.session.accessToken
+}
+
+function New-SmokeTerraform {
+  param(
+    [string]$Bucket,
+    [string]$Region,
+    [string]$RunId
+  )
+
+@"
+terraform {
+  required_version = ">= 1.6.0"
+
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+}
+
+provider "aws" {
+  region = "$Region"
+}
+
+resource "aws_s3_bucket" "smoke" {
+  bucket        = "$Bucket"
+  force_destroy = true
+
+  tags = {
+    SketchCatchSmoke = "true"
+    SketchCatchRunId = "$RunId"
+  }
+}
+
+output "bucket_name" {
+  value = aws_s3_bucket.smoke.bucket
+}
+
+output "bucket_arn" {
+  value = aws_s3_bucket.smoke.arn
+}
+"@
+}
+
+function Wait-DeploymentStatus {
+  param(
+    [string]$DeploymentId,
+    [string[]]$TerminalStatuses,
+    [string]$Label
+  )
+
+  $deadline = (Get-Date).AddSeconds($PollTimeoutSeconds)
+
+  while ((Get-Date) -lt $deadline) {
+    $deploymentResponse = Invoke-SketchCatchApi -Method GET -Path "/deployments/$DeploymentId"
+    $deployment = $deploymentResponse.deployment
+
+    if ($TerminalStatuses -contains $deployment.status) {
+      return $deployment
+    }
+
+    Start-Sleep -Seconds $PollIntervalSeconds
+  }
+
+  throw "$Label timed out after $PollTimeoutSeconds seconds."
+}
+
+Get-SmokeAccessToken
+
+$terraformCode = New-SmokeTerraform -Bucket $bucketName -Region $AwsRegion -RunId $shortRunId
+$terraformBytes = [System.Text.Encoding]::UTF8.GetBytes($terraformCode)
+
+$projectResponse = Invoke-SketchCatchApi -Method POST -Path "/projects" -Body @{
+  name = $projectName
+  description = "Live S3 deployment smoke generated by scripts/smoke/live-s3-deployment.ps1"
+}
+$project = $projectResponse.project
+
+$architectureResponse = Invoke-SketchCatchApi -Method POST -Path "/projects/$($project.id)/architectures" -Body @{
+  source = "smoke"
+  architectureJson = @{
+    nodes = @(
+      @{
+        id = "smoke-s3"
+        type = "S3"
+        label = $bucketName
+        positionX = 0
+        positionY = 0
+        config = @{
+          bucketName = $bucketName
+          region = $AwsRegion
+        }
+      }
+    )
+    edges = @()
+  }
+}
+$architecture = $architectureResponse.architecture
+
+$uploadResponse = Invoke-SketchCatchApi -Method POST -Path "/projects/$($project.id)/assets/presigned-upload" -Body @{
+  architectureId = $architecture.id
+  assetType = "terraform_file"
+  fileName = "main.tf"
+  contentType = "text/plain"
+  byteSize = $terraformBytes.Length
+}
+
+$uploadTarget = Resolve-ProjectAssetUpload -Upload $uploadResponse.upload
+
+Invoke-RestMethod -Method PUT -Uri $uploadTarget.Url -Headers $uploadTarget.Headers -ContentType $uploadTarget.ContentType -Body $terraformBytes | Out-Null
+
+$assetResponse = Invoke-SketchCatchApi -Method POST -Path "/projects/$($project.id)/assets/$($uploadResponse.asset.id)/confirm-upload"
+$terraformAsset = $assetResponse.asset
+
+$deploymentResponse = Invoke-SketchCatchApi -Method POST -Path "/projects/$($project.id)/deployments" -Body @{
+  architectureId = $architecture.id
+  terraformArtifactId = $terraformAsset.id
+  awsConnectionId = $AwsConnectionId
+}
+$deployment = $deploymentResponse.deployment
+
+Invoke-SketchCatchApi -Method POST -Path "/deployments/$($deployment.id)/init" | Out-Null
+$deployment = Wait-DeploymentStatus -DeploymentId $deployment.id -TerminalStatuses @("PENDING", "FAILED", "CANCELLED") -Label "init"
+if ($deployment.status -ne "PENDING") {
+  throw "init failed with status $($deployment.status): $($deployment.errorSummary)"
+}
+
+Invoke-SketchCatchApi -Method POST -Path "/deployments/$($deployment.id)/plan" | Out-Null
+$deployment = Wait-DeploymentStatus -DeploymentId $deployment.id -TerminalStatuses @("PENDING", "FAILED", "CANCELLED") -Label "plan"
+if ($deployment.status -ne "PENDING") {
+  throw "plan failed with status $($deployment.status): $($deployment.errorSummary)"
+}
+
+Invoke-SketchCatchApi -Method POST -Path "/deployments/$($deployment.id)/approve" | Out-Null
+Invoke-SketchCatchApi -Method POST -Path "/deployments/$($deployment.id)/apply" | Out-Null
+$deployment = Wait-DeploymentStatus -DeploymentId $deployment.id -TerminalStatuses @("SUCCESS", "FAILED", "CANCELLED") -Label "apply"
+if ($deployment.status -ne "SUCCESS") {
+  throw "apply failed with status $($deployment.status): $($deployment.errorSummary)"
+}
+
+$resourcesResponse = Invoke-SketchCatchApi -Method GET -Path "/deployments/$($deployment.id)/resources"
+$outputsResponse = Invoke-SketchCatchApi -Method GET -Path "/deployments/$($deployment.id)/outputs"
+$logsResponse = Invoke-SketchCatchApi -Method GET -Path "/deployments/$($deployment.id)/logs"
+
+Invoke-SketchCatchApi -Method POST -Path "/deployments/$($deployment.id)/destroy/plan" | Out-Null
+$deployment = Wait-DeploymentStatus -DeploymentId $deployment.id -TerminalStatuses @("SUCCESS", "FAILED", "CANCELLED") -Label "destroy plan"
+if ($deployment.status -ne "SUCCESS") {
+  throw "destroy plan failed with status $($deployment.status): $($deployment.errorSummary)"
+}
+
+Invoke-SketchCatchApi -Method POST -Path "/deployments/$($deployment.id)/approve" | Out-Null
+Invoke-SketchCatchApi -Method POST -Path "/deployments/$($deployment.id)/destroy" | Out-Null
+$deployment = Wait-DeploymentStatus -DeploymentId $deployment.id -TerminalStatuses @("DESTROYED", "FAILED", "CANCELLED") -Label "destroy"
+if ($deployment.status -ne "DESTROYED") {
+  throw "destroy failed with status $($deployment.status): $($deployment.errorSummary)"
+}
+
+$report = [ordered]@{
+  bucketName = $bucketName
+  deploymentId = $deployment.id
+  applyStatus = "SUCCESS"
+  destroyStatus = $deployment.status
+}
+
+$reportJson = $report | ConvertTo-Json -Depth 10
+Set-Content -Path $ReportPath -Value $reportJson -Encoding utf8
+
+Write-Host "SketchCatch live S3 smoke completed."
+Write-Host "Bucket: $bucketName"
+Write-Host "Deployment: $($deployment.id)"
+Write-Host "Report: $ReportPath"

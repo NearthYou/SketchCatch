@@ -21,6 +21,7 @@ export type ExchangeOAuthCodeForAccessTokenOptions = {
   provider: OAuthProvider;
   code: string;
   state: string;
+  redirectPath?: string;
   env?: RuntimeEnv;
   fetcher?: typeof fetch;
 };
@@ -39,7 +40,8 @@ export async function exchangeOAuthCodeForAccessToken(
 ): Promise<OAuthProviderAccessToken> {
   const providerConfig = getOAuthProviderStaticConfig(options.provider);
   const runtimeConfig = requireOAuthProviderConfig(options.provider, options.env);
-  const redirectUri = `${runtimeConfig.redirectBaseUrl}/api/auth/oauth/${options.provider}/callback`;
+  const redirectPath = options.redirectPath ?? `/api/auth/oauth/${options.provider}/callback`;
+  const redirectUri = `${runtimeConfig.redirectBaseUrl}${redirectPath}`;
   const body = new URLSearchParams({
     client_id: runtimeConfig.clientId,
     code: options.code,

@@ -4,37 +4,29 @@ import type {
   DiagramNode,
   DiagramNodeParameters,
   ResourceConfig,
-  ResourceType
+  ResourceType,
+  TerraformBlockType
 } from "@sketchcatch/types";
+import { getResourceDefinitionByTerraform } from "@sketchcatch/types/resource-definitions";
 
-const TERRAFORM_RESOURCE_TYPE_TO_RESOURCE_TYPE: Record<string, ResourceType> = {
-  aws_ami: "AMI",
-  aws_cloudfront_distribution: "CLOUDFRONT",
-  aws_db_instance: "RDS",
-  aws_internet_gateway: "INTERNET_GATEWAY",
-  aws_instance: "EC2",
-  aws_lambda_function: "LAMBDA",
-  aws_route_table: "ROUTE_TABLE",
-  aws_route_table_association: "ROUTE_TABLE_ASSOCIATION",
-  aws_s3_bucket: "S3",
-  aws_security_group: "SECURITY_GROUP",
-  aws_security_group_rule: "SECURITY_GROUP",
-  aws_subnet: "SUBNET",
-  aws_vpc: "VPC"
-};
+const DEFAULT_TERRAFORM_BLOCK_TYPE: TerraformBlockType = "resource";
 
 export function convertDiagramJsonToArchitectureJson(diagramJson: DiagramJson): ArchitectureJson {
-  const nodes = diagramJson.nodes.filter(isConvertibleResourceNode).map((node) => {
-    const parameters = node.parameters;
+  const nodes = diagramJson.nodes.flatMap((node) => {
+    const parameters = getConvertibleResourceNodeParameters(node);
 
-    return {
+    if (!parameters) {
+      return [];
+    }
+
+    return [{
       id: node.id,
-      type: mapTerraformResourceType(parameters.resourceType),
+      type: mapTerraformResourceType(parameters),
       label: node.label,
       positionX: node.position.x,
       positionY: node.position.y,
       config: createArchitectureConfig(parameters)
-    };
+    }];
   });
   const nodeIds = new Set(nodes.map((node) => node.id));
   const edges = diagramJson.edges
@@ -52,14 +44,55 @@ export function convertDiagramJsonToArchitectureJson(diagramJson: DiagramJson): 
   };
 }
 
-function isConvertibleResourceNode(
-  node: DiagramNode
-): node is DiagramNode & { parameters: DiagramNodeParameters } {
-  return node.kind === "resource" && node.parameters != null && node.parameters.invalid !== true;
+function getConvertibleResourceNodeParameters(node: DiagramNode): DiagramNodeParameters | null {
+  if (node.kind !== "resource") {
+    return null;
+  }
+
+  if (node.parameters?.invalid === true) {
+    return null;
+  }
+
+  if (node.parameters != null) {
+    return node.parameters;
+  }
+
+  const resourceType = node.type.trim();
+
+  if (!getResourceDefinitionByTerraform(DEFAULT_TERRAFORM_BLOCK_TYPE, resourceType)) {
+    return null;
+  }
+
+  return {
+    fileName: "main",
+    resourceName: createFallbackResourceName(node),
+    resourceType,
+    terraformBlockType: DEFAULT_TERRAFORM_BLOCK_TYPE,
+    values: {}
+  };
 }
 
-function mapTerraformResourceType(terraformResourceType: string): ResourceType {
-  return TERRAFORM_RESOURCE_TYPE_TO_RESOURCE_TYPE[terraformResourceType] ?? "UNKNOWN";
+function mapTerraformResourceType(parameters: DiagramNodeParameters): ResourceType {
+  if (isRdsReadReplica(parameters)) {
+    return "RDS_READ_REPLICA";
+  }
+
+  const terraformBlockType = parameters.terraformBlockType ?? DEFAULT_TERRAFORM_BLOCK_TYPE;
+
+  return (
+    getResourceDefinitionByTerraform(terraformBlockType, parameters.resourceType)?.resourceType ?? "UNKNOWN"
+  );
+}
+
+function isRdsReadReplica(parameters: DiagramNodeParameters): boolean {
+  if (parameters.resourceType !== "aws_db_instance") {
+    return false;
+  }
+
+  const values = isRecord(parameters.values) ? parameters.values : {};
+  const replicateSourceDb = values["replicateSourceDb"] ?? values["replicate_source_db"];
+
+  return typeof replicateSourceDb === "string" && replicateSourceDb.trim().length > 0;
 }
 
 function createArchitectureConfig(parameters: DiagramNodeParameters): ResourceConfig {
@@ -123,4 +156,20 @@ function isRecord(value: unknown): value is ResourceConfig {
 
 function isString(value: unknown): value is string {
   return typeof value === "string";
+}
+
+function toTerraformName(value: string): string {
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+
+  return normalized.length > 0 ? normalized : "resource";
+}
+
+function createFallbackResourceName(node: DiagramNode): string {
+  const labelName = toTerraformName(node.label);
+
+  return labelName === "resource" ? toTerraformName(node.id) : labelName;
 }

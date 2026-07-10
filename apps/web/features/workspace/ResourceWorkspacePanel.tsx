@@ -5,19 +5,15 @@ import {
   Box,
   CopyPlus,
   Edit3,
-  Maximize2,
   MoreHorizontal,
-  Minimize2,
   Trash2
 } from "lucide-react";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
+import { applyNodeParametersUpdateWithResourceLabel } from "../diagram-editor/diagram-utils";
 import { ParameterInputPanel, terraformParameterCatalog } from "../parameter-input";
 import { getResourceCardKeyboardActivation } from "./resource-card-interaction";
 import { buildResourceListItems } from "./resource-list-summary";
-import {
-  getResourceWorkspaceToolbarState,
-  getVisibleResourceWorkspaceView
-} from "./resource-workspace-view";
+import { getVisibleResourceWorkspaceView } from "./resource-workspace-view";
 import type { ResourceWorkspaceView } from "./workspace-right-panel.types";
 import styles from "./workspace.module.css";
 
@@ -37,39 +33,25 @@ export function ResourceWorkspacePanel({
     [context.nodes]
   );
   const visibleView = getVisibleResourceWorkspaceView(view, context.selectedNodeId);
-  const toolbarState = getResourceWorkspaceToolbarState(visibleView);
 
   return (
     <div className={styles.resourceWorkspacePanel}>
-      <div className={styles.resourceSectionToolbar}>
-        <div className={styles.resourceSectionTabs} aria-label="Resource navigation">
-          {toolbarState.action === "back-to-list" ? (
+      {visibleView === "settings" ? (
+        <div className={styles.resourceSettingsPanel}>
+          <div className={styles.resourceSettingsHeader}>
             <button
               aria-label="Back to resource list"
-              className={styles.resourceSectionButton}
+              className={styles.resourceSettingsBackButton}
               onClick={() => onViewChange("list")}
               title="Back to resource list"
               type="button"
             >
               <ArrowLeft size={18} aria-hidden="true" />
+              <span>Resource list</span>
             </button>
-          ) : (
-            <button
-              aria-label="Resource list"
-              aria-pressed={true}
-              className={styles.resourceSectionButtonActive}
-              onClick={() => onViewChange("list")}
-              title="Resource list"
-              type="button"
-            >
-              <Box size={18} aria-hidden="true" />
-            </button>
-          )}
+          </div>
+          <ParameterInputPanel {...context} />
         </div>
-      </div>
-
-      {visibleView === "settings" ? (
-        <ParameterInputPanel {...context} />
       ) : (
         <ResourceListPanel context={context} items={resourceListItems} onViewChange={onViewChange} />
       )}
@@ -121,9 +103,6 @@ function ResourceListPanel({
           >
             <div className={styles.resourceListHeader}>
               <span className={styles.resourceListIdentity}>
-                <span className={styles.resourceListCubeIcon}>
-                  <Box size={16} aria-hidden="true" />
-                </span>
                 <span className={styles.resourceListServiceIcon}>
                   {item.iconUrl ? (
                     <img alt="" draggable={false} src={item.iconUrl} />
@@ -153,22 +132,12 @@ function ResourceListPanel({
               {openMenuNodeId === item.nodeId ? (
                 <ResourceCardMenu
                   context={context}
-                  isExpanded={isExpanded}
                   node={node}
                   onClose={() => setOpenMenuNodeId(null)}
                   onEditConfig={() => {
                     openResourceConfig(context, item.nodeId, onViewChange);
                     setOpenMenuNodeId(null);
                   }}
-                  onToggleSize={() => {
-                    setExpandedNodeIds((currentNodeIds) =>
-                      isExpanded
-                        ? removeSetValue(currentNodeIds, item.nodeId)
-                        : addSetValue(currentNodeIds, item.nodeId)
-                    );
-                    setOpenMenuNodeId(null);
-                  }}
-                  canMaximize={hasHiddenSummaryRows}
                 />
               ) : null}
             </div>
@@ -235,26 +204,16 @@ function handleResourceCardKeyDown(
 }
 
 function ResourceCardMenu({
-  canMaximize,
   context,
-  isExpanded,
   node,
   onClose,
-  onEditConfig,
-  onToggleSize
+  onEditConfig
 }: {
-  readonly canMaximize: boolean;
   readonly context: DiagramEditorPanelContext;
-  readonly isExpanded: boolean;
   readonly node: DiagramNode;
   readonly onClose: () => void;
   readonly onEditConfig: () => void;
-  readonly onToggleSize: () => void;
 }) {
-  const terraformBlockType = node.parameters?.terraformBlockType === "data" ? "data" : "resource";
-  const switchLabel = terraformBlockType === "data" ? "Switch to resource" : "Switch to data source";
-  const isToggleDisabled = !isExpanded && !canMaximize;
-
   return (
     <div
       className={styles.resourceCardMenu}
@@ -276,18 +235,6 @@ function ResourceCardMenu({
       <button
         className={styles.resourceCardMenuItem}
         onClick={() => {
-          switchTerraformBlockType(context, node);
-          onClose();
-        }}
-        role="menuitem"
-        type="button"
-      >
-        <Box size={17} aria-hidden="true" />
-        <span>{switchLabel}</span>
-      </button>
-      <button
-        className={styles.resourceCardMenuItem}
-        onClick={() => {
           duplicateResourceNode(context, node);
           onClose();
         }}
@@ -296,20 +243,6 @@ function ResourceCardMenu({
       >
         <CopyPlus size={17} aria-hidden="true" />
         <span>Duplicate</span>
-      </button>
-      <button
-        className={styles.resourceCardMenuItem}
-        disabled={isToggleDisabled}
-        onClick={onToggleSize}
-        role="menuitem"
-        type="button"
-      >
-        {isExpanded ? (
-          <Minimize2 size={17} aria-hidden="true" />
-        ) : (
-          <Maximize2 size={17} aria-hidden="true" />
-        )}
-        <span>{isExpanded ? "Minimize" : "Maximize"}</span>
       </button>
       <button
         className={`${styles.resourceCardMenuItem} ${styles.resourceCardMenuDanger}`}
@@ -340,21 +273,10 @@ function openResourceConfig(
   onViewChange("settings");
 }
 
-function switchTerraformBlockType(context: DiagramEditorPanelContext, node: DiagramNode): void {
-  if (!node.parameters) {
-    return;
-  }
-
-  context.updateNodeParameters(node.id, {
-    ...node.parameters,
-    terraformBlockType: node.parameters.terraformBlockType === "data" ? "resource" : "data"
-  });
-}
-
 function duplicateResourceNode(context: DiagramEditorPanelContext, node: DiagramNode): void {
   const nextNodeId = createResourceNodeId(node.id);
-  const nextResourceName = node.parameters?.resourceName ? `${node.parameters.resourceName}_copy` : undefined;
-  const duplicatedNode: DiagramNode = {
+  const nextResourceName = createDuplicateResourceName(context.nodes, node);
+  const duplicatedNodeBase: DiagramNode = {
     ...node,
     id: nextNodeId,
     label: `${getNodeDisplayName(node)} copy`,
@@ -363,19 +285,52 @@ function duplicateResourceNode(context: DiagramEditorPanelContext, node: Diagram
       y: node.position.y + 36
     },
     zIndex: getNextResourceZIndex(context.nodes),
-    parameters: node.parameters
-      ? {
-          ...structuredClone(node.parameters),
-          resourceName: nextResourceName ?? node.parameters.resourceName
-        }
-      : undefined
+    parameters: node.parameters ? structuredClone(node.parameters) : undefined
   };
+  const duplicatedNode = node.parameters && nextResourceName
+    ? applyNodeParametersUpdateWithResourceLabel(
+        duplicatedNodeBase,
+        {
+          ...structuredClone(node.parameters),
+          resourceName: nextResourceName
+        }
+      )
+    : duplicatedNodeBase;
 
   context.applyDiagramJson({
     ...context.diagram,
     nodes: [...context.diagram.nodes, duplicatedNode]
   });
   context.focusResourceNode(nextNodeId);
+}
+
+function createDuplicateResourceName(
+  nodes: readonly DiagramNode[],
+  node: DiagramNode
+): string | undefined {
+  const resourceType = node.parameters?.resourceType;
+  const resourceName = node.parameters?.resourceName;
+
+  if (!resourceType || !resourceName) {
+    return undefined;
+  }
+
+  const usedNames = new Set(
+    nodes
+      .filter((candidate) => candidate.parameters?.resourceType === resourceType)
+      .map((candidate) => candidate.parameters?.resourceName)
+      .filter((candidateName): candidateName is string => Boolean(candidateName))
+  );
+  const baseName = resourceName.replace(/_copy(?:_\d+)?$/u, "") || "resource";
+  let candidate = `${baseName}_copy`;
+  let index = 2;
+
+  while (usedNames.has(candidate)) {
+    candidate = `${baseName}_copy_${index}`;
+    index += 1;
+  }
+
+  return candidate;
 }
 
 function deleteResourceNode(context: DiagramEditorPanelContext, nodeId: string): void {

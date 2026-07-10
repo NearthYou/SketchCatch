@@ -80,6 +80,30 @@ class TransientProbeFailureGateway extends FakeAwsConnectionStsGateway {
   }
 }
 
+class EventuallyConsistentAssumeRoleGateway extends FakeAwsConnectionStsGateway {
+  private remainingTransientFailures: number;
+
+  constructor(transientFailures: number) {
+    super();
+    this.remainingTransientFailures = transientFailures;
+  }
+
+  override async assumeRole(input: {
+    roleArn: string;
+    externalId?: string;
+    region: string;
+    roleSessionName: string;
+  }) {
+    if (input.externalId && this.remainingTransientFailures > 0) {
+      this.remainingTransientFailures -= 1;
+      this.assumeRoleCalls.push(input);
+      throw new Error("AccessDenied: IAM role propagation is still pending");
+    }
+
+    return super.assumeRole(input);
+  }
+}
+
 test("testAwsConnection assumes the target role and returns caller identity without credentials", async () => {
   const gateway = new FakeAwsConnectionStsGateway();
 
@@ -91,7 +115,8 @@ test("testAwsConnection assumes the target role and returns caller identity with
     },
     gateway,
     {
-      createRoleSessionName: () => "sketchcatch-connection-test"
+      createRoleSessionName: () => "sketchcatch-connection-test",
+      retryDelayMs: 0
     }
   );
 
@@ -131,6 +156,31 @@ test("testAwsConnection assumes the target role and returns caller identity with
   assert.equal("sessionToken" in result, false);
 });
 
+test("testAwsConnection retries transient AssumeRole failures before returning caller identity", async () => {
+  const gateway = new EventuallyConsistentAssumeRoleGateway(2);
+
+  const result = await testAwsConnection(
+    {
+      roleArn,
+      externalId,
+      region
+    },
+    gateway,
+    {
+      createRoleSessionName: () => "sketchcatch-connection-test",
+      maxAssumeRoleAttempts: 3,
+      retryDelayMs: 0
+    }
+  );
+
+  assert.equal(result.ok, true);
+  assert.equal(result.accountId, "123456789012");
+  assert.deepEqual(
+    gateway.assumeRoleCalls.map((call) => call.externalId ?? null),
+    [externalId, externalId, externalId, null]
+  );
+});
+
 test("testAwsConnection rejects a role that can be assumed without externalId", async () => {
   const gateway = new FakeAwsConnectionStsGateway({
     allowAssumeWithoutExternalId: true
@@ -146,7 +196,8 @@ test("testAwsConnection rejects a role that can be assumed without externalId", 
         },
         gateway,
         {
-          createRoleSessionName: () => "sketchcatch-connection-test"
+          createRoleSessionName: () => "sketchcatch-connection-test",
+          retryDelayMs: 0
         }
       ),
     (error) => {
@@ -158,7 +209,7 @@ test("testAwsConnection rejects a role that can be assumed without externalId", 
   );
 });
 
-test("testAwsConnection maps STS failures to a sanitized error", async () => {
+test("testAwsConnection maps STS permission failures to a caller action error", async () => {
   const gateway: AwsConnectionStsGateway = {
     async assumeRole() {
       throw new Error("AccessDenied: temporary-secret-access-key should not leak");
@@ -178,12 +229,13 @@ test("testAwsConnection maps STS failures to a sanitized error", async () => {
         },
         gateway,
         {
-          createRoleSessionName: () => "sketchcatch-connection-test"
+          createRoleSessionName: () => "sketchcatch-connection-test",
+          retryDelayMs: 0
         }
       ),
     (error) => {
       assert.equal(error instanceof AwsConnectionTestError, true);
-      assert.equal((error as Error).message, "AWS Role connection test failed");
+      assert.equal((error as Error).message, "AWS Role assume permission denied");
       assert.equal((error as Error).message.includes("temporary-secret-access-key"), false);
 
       return true;

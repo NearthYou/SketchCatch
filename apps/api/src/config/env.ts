@@ -1,21 +1,50 @@
-import "./load-env.js";
+﻿import "./load-env.js";
 
 export type RuntimeEnv = {
+  aiBillingMode?: string | undefined;
+  aiDailyCallLimit?: string | undefined;
+  aiRateLimitPerMinute?: string | undefined;
+  amazonQApplicationId?: string | undefined;
+  amazonQCreditConfirmed?: string | undefined;
+  amazonQEnabled?: string | undefined;
+  amazonQRegion?: string | undefined;
+  amazonQUserId?: string | undefined;
   awsRegion: string;
   authTokenSecret: string | undefined;
+  bedrockCreditConfirmed?: string | undefined;
+  bedrockModelId?: string | undefined;
   cloudFormationTemplateTokenSecret: string | undefined;
   databaseUrl: string | undefined;
   databaseSsl: boolean;
+  deploymentWorkerMode?: string | undefined;
+  ecsWorkerAssignPublicIp?: string | undefined;
+  ecsWorkerCluster?: string | undefined;
+  ecsWorkerCommand?: string | undefined;
+  ecsWorkerContainerName?: string | undefined;
+  ecsWorkerEnvironment?: string | undefined;
+  ecsWorkerSecurityGroupIds?: string | undefined;
+  ecsWorkerSubnets?: string | undefined;
+  ecsWorkerTaskDefinition?: string | undefined;
   githubOauthClientId: string | undefined;
   githubOauthClientSecret: string | undefined;
+  githubAppId?: string | undefined;
+  githubAppSlug?: string | undefined;
+  githubAppPrivateKeyBase64?: string | undefined;
+  githubAppCallbackUrl?: string | undefined;
+  githubAppStateSecret?: string | undefined;
   kakaoOauthClientId: string | undefined;
   kakaoOauthClientSecret: string | undefined;
   naverOauthClientId: string | undefined;
   naverOauthClientSecret: string | undefined;
+  nodeEnv?: string | undefined;
   oauthRedirectBaseUrl: string | undefined;
+  redisUrl?: string | undefined;
   s3BucketName: string | undefined;
   sketchcatchAwsCallerPrincipalArn: string | undefined;
   sketchcatchPublicBaseUrl: string | undefined;
+  transcribeCreditConfirmed?: string | undefined;
+  transcribeLanguageCode?: string | undefined;
+  transcribeMediaBucket?: string | undefined;
 };
 
 const AUTH_TOKEN_SECRET_PLACEHOLDER = "replace-with-a-local-secret-of-at-least-32-characters";
@@ -27,21 +56,94 @@ const staticAwsCredentialEnvKeys = [
 
 export function getRuntimeEnv(): RuntimeEnv {
   return {
+    aiBillingMode: process.env.AI_BILLING_MODE,
+    aiDailyCallLimit: process.env.AI_DAILY_CALL_LIMIT,
+    aiRateLimitPerMinute: process.env.AI_RATE_LIMIT_PER_MINUTE,
+    amazonQApplicationId: process.env.AMAZON_Q_APPLICATION_ID,
+    amazonQCreditConfirmed: process.env.AMAZON_Q_CREDIT_CONFIRMED,
+    amazonQEnabled: process.env.AMAZON_Q_ENABLED,
+    amazonQRegion: process.env.AMAZON_Q_REGION,
+    amazonQUserId: process.env.AMAZON_Q_USER_ID,
     awsRegion: process.env.AWS_REGION ?? "ap-northeast-2",
     authTokenSecret: process.env.AUTH_TOKEN_SECRET,
+    bedrockCreditConfirmed: process.env.BEDROCK_CREDIT_CONFIRMED,
+    bedrockModelId: process.env.BEDROCK_MODEL_ID,
     cloudFormationTemplateTokenSecret: process.env.CLOUDFORMATION_TEMPLATE_TOKEN_SECRET,
     databaseUrl: process.env.DATABASE_URL,
     databaseSsl: process.env.DATABASE_SSL === "true",
+    deploymentWorkerMode: process.env.DEPLOYMENT_WORKER_MODE,
+    ecsWorkerAssignPublicIp: process.env.ECS_WORKER_ASSIGN_PUBLIC_IP,
+    ecsWorkerCluster: process.env.ECS_WORKER_CLUSTER,
+    ecsWorkerCommand: process.env.ECS_WORKER_COMMAND,
+    ecsWorkerContainerName: process.env.ECS_WORKER_CONTAINER_NAME,
+    ecsWorkerEnvironment: process.env.ECS_WORKER_ENVIRONMENT,
+    ecsWorkerSecurityGroupIds: process.env.ECS_WORKER_SECURITY_GROUP_IDS,
+    ecsWorkerSubnets: process.env.ECS_WORKER_SUBNETS,
+    ecsWorkerTaskDefinition: process.env.ECS_WORKER_TASK_DEFINITION,
     githubOauthClientId: process.env.GIT_OAUTH_CLIENT_ID,
     githubOauthClientSecret: process.env.GIT_OAUTH_CLIENT_SECRET,
+    githubAppId: process.env.GIT_APP_ID,
+    githubAppSlug: process.env.GIT_APP_SLUG,
+    githubAppPrivateKeyBase64: process.env.GIT_APP_PRIVATE_KEY_BASE64,
+    githubAppCallbackUrl: process.env.GIT_APP_CALLBACK_URL,
+    githubAppStateSecret: process.env.GIT_APP_STATE_SECRET,
     kakaoOauthClientId: process.env.KAKAO_OAUTH_CLIENT_ID,
     kakaoOauthClientSecret: process.env.KAKAO_OAUTH_CLIENT_SECRET,
     naverOauthClientId: process.env.NAVER_OAUTH_CLIENT_ID,
     naverOauthClientSecret: process.env.NAVER_OAUTH_CLIENT_SECRET,
+    nodeEnv: process.env.NODE_ENV,
     oauthRedirectBaseUrl: process.env.OAUTH_REDIRECT_BASE_URL,
+    redisUrl: process.env.REDIS_URL,
     s3BucketName: process.env.S3_BUCKET_NAME,
     sketchcatchAwsCallerPrincipalArn: process.env.SKETCHCATCH_AWS_CALLER_PRINCIPAL_ARN,
-    sketchcatchPublicBaseUrl: process.env.SKETCHCATCH_PUBLIC_BASE_URL
+    sketchcatchPublicBaseUrl: process.env.SKETCHCATCH_PUBLIC_BASE_URL,
+    transcribeCreditConfirmed: process.env.TRANSCRIBE_CREDIT_CONFIRMED,
+    transcribeLanguageCode: process.env.TRANSCRIBE_LANGUAGE_CODE,
+    transcribeMediaBucket: process.env.TRANSCRIBE_MEDIA_BUCKET
+  };
+}
+
+export type DeploymentWorkerMode = "in_process" | "ecs";
+
+export type EcsWorkerDispatcherConfig = {
+  assignPublicIp: "ENABLED" | "DISABLED";
+  cluster: string;
+  command: string[];
+  containerName: string;
+  environment: Record<string, string>;
+  securityGroupIds: string[];
+  subnetIds: string[];
+  taskDefinition: string;
+};
+
+export function getDeploymentWorkerMode(env: RuntimeEnv = getRuntimeEnv()): DeploymentWorkerMode {
+  const mode = env.deploymentWorkerMode?.trim() || "in_process";
+
+  if (mode === "in_process" || mode === "ecs") {
+    return mode;
+  }
+
+  throw new Error("DEPLOYMENT_WORKER_MODE must be one of: in_process, ecs");
+}
+
+export function requireEcsWorkerDispatcherConfig(
+  env: RuntimeEnv = getRuntimeEnv()
+): EcsWorkerDispatcherConfig {
+  return {
+    assignPublicIp: parseAssignPublicIp(env.ecsWorkerAssignPublicIp),
+    cluster: requireNonEmptyEnv(env.ecsWorkerCluster, "ECS_WORKER_CLUSTER"),
+    command: parseJsonStringArray(env.ecsWorkerCommand, "ECS_WORKER_COMMAND"),
+    containerName: requireNonEmptyEnv(env.ecsWorkerContainerName, "ECS_WORKER_CONTAINER_NAME"),
+    environment: parseJsonStringRecord(env.ecsWorkerEnvironment, "ECS_WORKER_ENVIRONMENT"),
+    securityGroupIds: parseCommaSeparatedEnv(
+      env.ecsWorkerSecurityGroupIds,
+      "ECS_WORKER_SECURITY_GROUP_IDS"
+    ),
+    subnetIds: parseCommaSeparatedEnv(env.ecsWorkerSubnets, "ECS_WORKER_SUBNETS"),
+    taskDefinition: requireNonEmptyEnv(
+      env.ecsWorkerTaskDefinition,
+      "ECS_WORKER_TASK_DEFINITION"
+    )
   };
 }
 
@@ -61,6 +163,58 @@ export function requireAuthTokenSecret(): string {
   }
 
   return authTokenSecret;
+}
+
+export function requireGitHubAppConfig(): {
+  appId: string;
+  appSlug: string;
+  privateKey: string;
+  callbackUrl: string;
+} {
+  const appId = process.env.GIT_APP_ID?.trim();
+  const appSlug = process.env.GIT_APP_SLUG?.trim();
+  const privateKeyBase64 = process.env.GIT_APP_PRIVATE_KEY_BASE64?.trim();
+  const callbackUrl = process.env.GIT_APP_CALLBACK_URL?.trim();
+
+  if (!appId) {
+    throw new Error("GIT_APP_ID is required");
+  }
+
+  if (!appSlug) {
+    throw new Error("GIT_APP_SLUG is required");
+  }
+
+  if (!privateKeyBase64) {
+    throw new Error("GIT_APP_PRIVATE_KEY_BASE64 is required");
+  }
+
+  if (!callbackUrl) {
+    throw new Error("GIT_APP_CALLBACK_URL is required");
+  }
+
+  let privateKey: string;
+
+  try {
+    privateKey = Buffer.from(privateKeyBase64, "base64").toString("utf8");
+  } catch {
+    throw new Error("GIT_APP_PRIVATE_KEY_BASE64 must be valid base64");
+  }
+
+  if (!privateKey.includes("BEGIN") || !privateKey.includes("PRIVATE KEY")) {
+    throw new Error("GIT_APP_PRIVATE_KEY_BASE64 must decode to a PEM private key");
+  }
+
+  return { appId, appSlug, privateKey, callbackUrl };
+}
+
+export function requireGitHubAppStateSecret(): string {
+  const stateSecret = process.env.GIT_APP_STATE_SECRET?.trim() || requireAuthTokenSecret();
+
+  if (stateSecret.length < 32) {
+    throw new Error("GIT_APP_STATE_SECRET must be at least 32 characters");
+  }
+
+  return stateSecret;
 }
 
 export function requireDatabaseUrl(): string {
@@ -127,4 +281,97 @@ export function assertNoStaticAwsCredentialsForApiServer(
       "or an IAM role on deployed runtime infrastructure."
     ].join(" ")
   );
+}
+
+function requireNonEmptyEnv(value: string | undefined, name: string): string {
+  const trimmedValue = value?.trim();
+
+  if (!trimmedValue) {
+    throw new Error(`${name} is required when DEPLOYMENT_WORKER_MODE=ecs`);
+  }
+
+  return trimmedValue;
+}
+
+function parseCommaSeparatedEnv(value: string | undefined, name: string): string[] {
+  const values = requireNonEmptyEnv(value, name)
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+
+  if (values.length === 0) {
+    throw new Error(`${name} must contain at least one value`);
+  }
+
+  return values;
+}
+
+function parseJsonStringArray(value: string | undefined, name: string): string[] {
+  const rawValue = requireNonEmptyEnv(value, name);
+  let parsedValue: unknown;
+
+  try {
+    parsedValue = JSON.parse(rawValue);
+  } catch {
+    throw new Error(`${name} must be a JSON array of strings`);
+  }
+
+  if (
+    !Array.isArray(parsedValue) ||
+    parsedValue.length === 0 ||
+    parsedValue.some((entry) => typeof entry !== "string" || entry.trim().length === 0)
+  ) {
+    throw new Error(`${name} must be a non-empty JSON array of non-empty strings`);
+  }
+
+  const stringValues = parsedValue as string[];
+  return stringValues.map((entry) => entry.trim());
+}
+
+function parseJsonStringRecord(value: string | undefined, name: string): Record<string, string> {
+  const rawValue = value?.trim();
+
+  if (!rawValue) {
+    return {};
+  }
+
+  let parsedValue: unknown;
+
+  try {
+    parsedValue = JSON.parse(rawValue);
+  } catch {
+    throw new Error(`${name} must be a JSON object with string values`);
+  }
+
+  if (
+    !parsedValue ||
+    typeof parsedValue !== "object" ||
+    Array.isArray(parsedValue) ||
+    Object.values(parsedValue).some((entry) => typeof entry !== "string")
+  ) {
+    throw new Error(`${name} must be a JSON object with string values`);
+  }
+
+  const stringRecord = parsedValue as Record<string, string>;
+  return Object.fromEntries(
+    Object.entries(stringRecord).map(([key, entry]) => [key, entry.trim()])
+  );
+}
+
+function parseAssignPublicIp(value: string | undefined): "ENABLED" | "DISABLED" {
+  const normalizedValue = value?.trim().toUpperCase();
+
+  if (!normalizedValue) {
+    return "DISABLED";
+  }
+
+  if (normalizedValue === "TRUE" || normalizedValue === "ENABLED") {
+    return "ENABLED";
+  }
+
+  if (normalizedValue === "FALSE" || normalizedValue === "DISABLED") {
+    return "DISABLED";
+  }
+
+  throw new Error("ECS_WORKER_ASSIGN_PUBLIC_IP must be ENABLED or DISABLED");
 }

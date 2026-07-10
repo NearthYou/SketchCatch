@@ -1,11 +1,16 @@
 import { ProjectWorkspaceDraftManager, WorkspaceDraftManager } from "../../features/workspace";
 import { isWorkspaceCloudPlatform } from "../../features/workspace/project-draft-persistence";
+import { getWorkspaceDiagramFixture } from "../../features/workspace/workspace-diagram-fixtures";
+import { WorkspaceAuthGate } from "./workspace-auth-gate";
+import { resolveInitialWorkspaceRightPanelView } from "./workspace-start-mode";
 
 type WorkspacePageProps = {
   readonly searchParams?: Promise<{
     readonly cloudPlatform?: string | string[] | undefined;
+    readonly diagramFixture?: string | string[] | undefined;
     readonly projectId?: string | string[] | undefined;
     readonly projectName?: string | string[] | undefined;
+    readonly startMode?: string | string[] | undefined;
   }>;
 };
 
@@ -13,21 +18,38 @@ type WorkspacePageProps = {
 export default async function WorkspacePage({ searchParams }: WorkspacePageProps) {
   const params = await searchParams;
   const projectId = getSingleSearchParam(params?.projectId)?.trim();
+  const initialRightPanelView = resolveInitialWorkspaceRightPanelView(
+    getSingleSearchParam(params?.startMode)
+  );
 
   if (projectId) {
     const projectName = getSingleSearchParam(params?.projectName)?.trim();
     const cloudPlatform = getSingleSearchParam(params?.cloudPlatform);
 
     return (
-      <ProjectWorkspaceDraftManager
-        cloudPlatform={isWorkspaceCloudPlatform(cloudPlatform) ? cloudPlatform : undefined}
-        projectId={projectId}
-        projectName={projectName || "Project workspace"}
-      />
+      <WorkspaceAuthGate>
+        <ProjectWorkspaceDraftManager
+          cloudPlatform={isWorkspaceCloudPlatform(cloudPlatform) ? cloudPlatform : undefined}
+          initialRightPanelView={initialRightPanelView}
+          projectId={projectId}
+          projectName={projectName || "Project workspace"}
+        />
+      </WorkspaceAuthGate>
     );
   }
 
-  return <WorkspaceDraftManager />;
+  const projectName = getSingleSearchParam(params?.projectName)?.trim();
+  const initialDiagramOverride = getWorkspaceDiagramFixture(getSingleSearchParam(params?.diagramFixture));
+
+  return (
+    <WorkspaceAuthGate>
+      <WorkspaceDraftManager
+        initialDiagramOverride={initialDiagramOverride}
+        initialProjectName={projectName || undefined}
+        initialRightPanelView={initialRightPanelView}
+      />
+    </WorkspaceAuthGate>
+  );
 }
 
 function getSingleSearchParam(value: string | string[] | undefined): string | undefined {

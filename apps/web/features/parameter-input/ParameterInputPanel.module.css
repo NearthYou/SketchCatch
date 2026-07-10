@@ -283,70 +283,6 @@ div.resourceIcon,
   overflow-wrap: anywhere;
 }
 
-.advancedPicker,
-.advancedOptionList {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-width: 0;
-}
-
-.advancedSearch {
-  align-items: center;
-  display: grid;
-  gap: 8px;
-  grid-template-columns: 18px minmax(0, 1fr);
-}
-
-.advancedSearch svg {
-  color: #738096;
-}
-
-.advancedOptionButton {
-  align-items: start;
-  background: #ffffff;
-  border: 1px solid #e0e7f2;
-  border-radius: 6px;
-  color: #3c4559;
-  cursor: pointer;
-  display: grid;
-  font: inherit;
-  font-size: 0.82rem;
-  gap: 8px;
-  grid-template-columns: 14px minmax(0, 1fr);
-  min-height: 44px;
-  padding: 7px 9px;
-  text-align: left;
-}
-
-.advancedOptionButton:hover,
-.advancedOptionButton:focus-visible {
-  border-color: #8b71ff;
-  box-shadow: 0 0 0 3px rgba(111, 76, 246, 0.1);
-  outline: none;
-}
-
-.advancedOptionText {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.advancedOptionLabel {
-  color: #252c42;
-  font-weight: 800;
-  overflow-wrap: anywhere;
-}
-
-.advancedOptionMeta,
-.advancedOptionDescription {
-  color: #687388;
-  font-size: 0.75rem;
-  line-height: 1.35;
-  overflow-wrap: anywhere;
-}
-
 .regionCombobox {
   min-width: 0;
   position: relative;
@@ -556,5 +492,399 @@ div.resourceIcon,
   .mapRow input:nth-child(2) {
     grid-column: 1 / -1;
     grid-row: 2;
+  }
+}
+
+/* Blueprint inspector skin */
+.panel {
+  background: var(--bp-paper);
+  border-left: 1px solid var(--bp-line);
+  color: var(--bp-text);
+  font-family: var(--bp-body);
+}
+
+.resourceIcon,
+.emptyIcon,
+.input,
+.readonlyValue,
+.optionPill,
+.regionControl,
+.addButton,
+.removeBlockButton,
+.iconButton,
+.nestedBlock {
+  border-radius: var(--bp-r);
+}
+
+div.resourceIcon,
+.emptyIcon {
+  background: var(--bp-blue-tint);
+  border-color: var(--bp-line);
+  color: var(--bp-blue);
+}
+
+.headerText h2,
+.emptyState h2,
+.sectionHeader h3,
+.fieldLabel,
+.regionOptionLabel {
+  color: var(--bp-ink);
+  font-family: var(--bp-head);
+}
+
+.section {
+  border-top-color: var(--bp-line);
+}
+
+.input,
+.readonlyValue,
+.optionPill,
+.regionControl,
+.nestedBlock {
+  background: var(--bp-paper-2);
+  border-color: var(--bp-line);
+  color: var(--bp-text);
+}
+
+.input:focus,
+.regionControl:focus-visible {
+  border-color: var(--bp-blue);
+  box-shadow: 0 0 0 3px var(--bp-blue-tint);
+}
+
+.addButton {
+  background: var(--bp-blue-tint);
+  border-color: var(--bp-line);
+  color: var(--bp-blue);
+}
+
+.removeBlockButton,
+.iconButtonDanger,
+.errorText,
+.requiredMark {
+  color: var(--bp-high);
+}
+
+.removeBlockButton,
+.iconButtonDanger {
+  background: var(--bp-high-tint);
+  border-color: color-mix(in srgb, var(--bp-high) 30%, var(--bp-line));
+}
+
+.inlineEmpty,
+.checkboxRow span,
+.regionOptionCode,
+.emptyState p {
+  color: var(--bp-muted);
+}
+
+/* DESIGN.md parameter input pass */
+.panel {
+  --workspace-surface-strong: var(--workspace-accent-soft, #f0f0f3);
+  --parameter-input-error: #eb8e90;
+
+  background: var(--workspace-surface-muted, #fafafa);
+  border-left: 0;
+  color: var(--workspace-text, #171717);
+  container-type: inline-size;
+  font-family: var(--workspace-font, "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif);
+}
+
+div.resourceIcon,
+.emptyIcon {
+  background: var(--workspace-surface-strong, #f0f0f3);
+  border-color: var(--workspace-line, #f0f0f3);
+  color: var(--workspace-text, #171717);
+}
+
+.headerText h2,
+.emptyState h2,
+.sectionHeader h3,
+.fieldLabel,
+.regionOptionLabel {
+  color: var(--workspace-text, #171717);
+  font-family: var(--workspace-font, "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif);
+  letter-spacing: 0;
+}
+
+.section {
+  background: var(--workspace-surface, #ffffff);
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(23, 23, 23, 0.03);
+  gap: 14px;
+  padding: 14px;
+}
+
+.sectionHeader {
+  border-bottom: 1px solid var(--workspace-line, #f0f0f3);
+  padding-bottom: 10px;
+}
+
+.metadataSection,
+.mainParametersSection {
+  border-color: var(--workspace-line, #f0f0f3);
+}
+
+.mainParametersSection {
+  box-shadow:
+    0 1px 2px rgba(23, 23, 23, 0.03),
+    0 0 0 1px color-mix(in srgb, var(--workspace-accent, #000000) 5%, transparent);
+}
+
+.metadataGrid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
+.parameterSummaryBar {
+  background: var(--workspace-surface-muted, #fafafa);
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  border-radius: 6px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.parameterSummaryItem {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 3px;
+  min-width: 0;
+  padding: 9px 10px;
+}
+
+.parameterSummaryItem + .parameterSummaryItem {
+  border-left: 1px solid var(--workspace-line, #f0f0f3);
+}
+
+.parameterSummaryItem dt {
+  color: var(--workspace-muted, #60646c);
+  font-size: 0.68rem;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.parameterSummaryItem dd {
+  color: var(--workspace-text, #171717);
+  font-size: 1rem;
+  font-weight: 900;
+  line-height: 1.1;
+  margin: 0;
+}
+
+.parameterFieldList {
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  border-radius: 8px;
+  display: grid;
+  gap: 0;
+  overflow: hidden;
+}
+
+.parameterField {
+  align-items: start;
+  background: var(--workspace-surface, #ffffff);
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr);
+  padding: 13px;
+}
+
+.parameterField + .parameterField {
+  border-top: 1px solid var(--workspace-line, #f0f0f3);
+}
+
+.parameterFieldInvalid {
+  background: color-mix(in srgb, var(--parameter-input-error) 5%, var(--workspace-surface, #ffffff));
+}
+
+.parameterField > .fieldHeader {
+  align-items: flex-start;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.parameterLabelStack {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.parameterDescription {
+  color: var(--workspace-muted, #60646c);
+  font-size: 0.76rem;
+  line-height: 1.45;
+  max-width: 64ch;
+  overflow-wrap: anywhere;
+}
+
+.parameterMeta {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.parameterToken,
+.parameterBadge {
+  align-items: center;
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 0.68rem;
+  font-weight: 800;
+  line-height: 1.2;
+  min-height: 20px;
+  padding: 3px 7px;
+}
+
+.parameterToken {
+  background: var(--workspace-surface-muted, #fafafa);
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  color: var(--workspace-muted, #60646c);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  overflow-wrap: anywhere;
+}
+
+.parameterBadge {
+  background: var(--workspace-surface-strong, #f0f0f3);
+  color: var(--workspace-text, #171717);
+}
+
+.parameterControl {
+  min-width: 0;
+}
+
+.parameterField > .errorText {
+  grid-column: 1;
+}
+
+.input:focus,
+.regionControl:focus-visible,
+.regionControlOpen {
+  border-color: var(--workspace-accent, #000000);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--workspace-accent, #000000) 10%, transparent);
+  outline: none;
+}
+
+.addButton {
+  background: var(--workspace-accent, #000000);
+  border-color: var(--workspace-accent, #000000);
+  color: #ffffff;
+}
+
+.addButton:hover,
+.addButton:focus-visible {
+  background: var(--workspace-accent-active, #1a1a1a);
+  border-color: var(--workspace-accent-active, #1a1a1a);
+  color: #ffffff;
+  outline: none;
+}
+
+.removeBlockButton,
+.iconButtonDanger {
+  background: var(--workspace-surface, #ffffff);
+  border-color: var(--parameter-input-error);
+  color: var(--parameter-input-error);
+}
+
+.errorText,
+.requiredMark {
+  color: var(--parameter-input-error);
+}
+
+.inlineEmpty,
+.checkboxRow span,
+.regionOptionCode,
+.emptyState p {
+  color: var(--workspace-muted, #60646c);
+}
+
+.regionSearch {
+  border-bottom-color: var(--workspace-line, #f0f0f3);
+  color: var(--workspace-muted, #60646c);
+}
+
+.regionSearch input {
+  color: var(--workspace-text, #171717);
+}
+
+.regionSearch input::placeholder {
+  color: var(--workspace-muted, #60646c);
+}
+
+.regionOption:hover,
+.regionOption:focus-visible,
+.regionOptionActive {
+  background: var(--workspace-surface-muted, #fafafa);
+}
+
+.regionOptionSelected .regionOptionCode {
+  color: var(--workspace-muted, #60646c);
+}
+
+.input,
+.readonlyValue,
+.optionPill,
+.regionControl,
+.regionDropdown,
+.regionOption,
+.nestedBlock {
+  background: var(--workspace-surface, #ffffff);
+  border-color: var(--workspace-line, #f0f0f3);
+  color: var(--workspace-text, #171717);
+}
+
+.optionPill input,
+.checkboxRow input {
+  accent-color: var(--workspace-accent, #000000);
+}
+
+.iconButton {
+  background: var(--workspace-surface, #ffffff);
+  border-color: var(--workspace-line, #f0f0f3);
+  color: var(--workspace-muted, #60646c);
+}
+
+.iconButton:hover,
+.iconButton:focus-visible {
+  background: var(--workspace-surface-muted, #fafafa);
+  border-color: var(--workspace-line-strong, #dcdee0);
+  color: var(--workspace-text, #171717);
+  outline: none;
+}
+
+.readonlyValue,
+.nestedBlock {
+  background: var(--workspace-surface-muted, #fafafa);
+}
+
+.regionOptionSelected {
+  background: var(--workspace-surface-strong, #f0f0f3);
+  color: var(--workspace-text, #171717);
+}
+
+@container (min-width: 560px) {
+  .parameterField {
+    grid-template-columns: minmax(0, 0.86fr) minmax(220px, 1.14fr);
+  }
+
+  .parameterField > .errorText {
+    grid-column: 2;
+  }
+}
+
+@media (max-width: 760px) {
+  .parameterSummaryBar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .parameterSummaryItem + .parameterSummaryItem {
+    border-left: 0;
+    border-top: 1px solid var(--workspace-line, #f0f0f3);
   }
 }

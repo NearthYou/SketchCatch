@@ -3,22 +3,27 @@ import { LoginForm } from "./login-form";
 
 export default function LoginPage() {
   return (
-    <main className="authPage">
-      <section className="authPanel" aria-labelledby="login-title">
-        <Link className="authBrand" href="/">
-          SketchCatch
-        </Link>
-        <div className="authIntro">
-          <p className="eyebrow">Welcome back</p>
-          <h1 id="login-title">로그인</h1>
-          <p>저장된 AWS 실습 프로젝트와 Terraform 검토 흐름으로 돌아갑니다.</p>
+    <main className="authDesignPage">
+      <section className="authDesignShell" aria-labelledby="login-title">
+        <div className="authDesignPanel">
+          <Link className="authDesignBrand" href="/">
+            <span>SketchCatch</span>
+          </Link>
+          <div className="authDesignIntro">
+            <p className="authDesignBadge">Terraform-first operations</p>
+            <h1 id="login-title">로그인</h1>
+            <p>
+              Practice Architecture부터 IaC Preview, Pre-Deployment Check까지 승인된 운영 흐름으로
+              이어가세요.
+            </p>
+          </div>
+
+          <LoginForm />
+
+          <p className="authDesignSwitch">
+            계정이 없나요? <Link href="/signup">회원가입</Link>
+          </p>
         </div>
-
-        <LoginForm />
-
-        <p className="authSwitch">
-          계정이 없나요? <Link href="/signup">회원가입</Link>
-        </p>
       </section>
     </main>
   );

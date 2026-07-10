@@ -5,22 +5,38 @@ import type { ParameterCatalog } from "./catalog";
 import type { ParameterCatalogDefinition } from "./catalog";
 import {
   getActiveOptionalDefinitions,
+  getMainDefinitions,
   getOptionalDefinitions,
   getRequiredDefinitions,
   getValidationDefinitions,
-  mergeNodeParameters
+  mergeNodeParameters,
+  validateParameters
 } from "./validation";
 
 test("getRequiredDefinitions returns only provider-required parameters", () => {
   const definitions = [
     makeDefinition({ name: "cidrBlock", required: true }),
-    makeDefinition({ name: "tags", optional: true }),
+    makeDefinition({ name: "tags", optional: true, core: true }),
     makeDefinition({ name: "arn", computed: true })
   ];
 
   assert.deepEqual(
     getRequiredDefinitions(definitions).map((definition) => definition.name),
     ["cidrBlock"]
+  );
+});
+
+test("getMainDefinitions includes provider-required and core parameters", () => {
+  const definitions = [
+    makeDefinition({ name: "cidrBlock", required: true }),
+    makeDefinition({ name: "name", optional: true, core: true }),
+    makeDefinition({ name: "tags", optional: true }),
+    makeDefinition({ name: "arn", computed: true })
+  ];
+
+  assert.deepEqual(
+    getMainDefinitions(definitions).map((definition) => definition.name),
+    ["cidrBlock", "name"]
   );
 });
 
@@ -107,13 +123,70 @@ test("getValidationDefinitions ignores uncataloged raw editor values", () => {
   );
 });
 
+test("validateParameters accepts ordered Auto Scaling Group capacities", () => {
+  const result = validateAsgParameters({
+    minSize: 1,
+    desiredCapacity: 2,
+    maxSize: 3
+  });
+
+  assert.equal(result.invalid, false);
+  assert.deepEqual(result.parameterErrors, {});
+});
+
+test("validateParameters accepts Auto Scaling Group min and max when desired capacity is absent", () => {
+  const result = validateAsgParameters({
+    minSize: 1,
+    maxSize: 3
+  });
+
+  assert.equal(result.invalid, false);
+  assert.deepEqual(result.parameterErrors, {});
+});
+
+test("validateParameters reports Auto Scaling Group min and max ordering errors", () => {
+  const result = validateAsgParameters({
+    minSize: 4,
+    desiredCapacity: 4,
+    maxSize: 3
+  });
+
+  assert.equal(result.invalid, true);
+  assert.ok(result.parameterErrors.minSize ?? result.parameterErrors.maxSize);
+});
+
+test("validateParameters reports Auto Scaling Group desired capacity below min", () => {
+  const result = validateAsgParameters({
+    minSize: 2,
+    desiredCapacity: 1,
+    maxSize: 3
+  });
+
+  assert.equal(result.invalid, true);
+  assert.ok(result.parameterErrors.desiredCapacity);
+});
+
+test("validateParameters reports Auto Scaling Group desired capacity above max", () => {
+  const result = validateAsgParameters({
+    minSize: 1,
+    desiredCapacity: 4,
+    maxSize: 3
+  });
+
+  assert.equal(result.invalid, true);
+  assert.ok(result.parameterErrors.desiredCapacity);
+});
+
 function makeDefinition({
   computed = false,
+  core = false,
   name,
   optional = false,
   required = false,
   type = "string"
-}: Partial<Pick<ParameterCatalogDefinition, "computed" | "optional" | "required" | "type">> &
+}: Partial<
+  Pick<ParameterCatalogDefinition, "computed" | "core" | "optional" | "required" | "type">
+> &
   Pick<ParameterCatalogDefinition, "name">): ParameterCatalogDefinition {
   return {
     name,
@@ -123,6 +196,7 @@ function makeDefinition({
     required,
     optional,
     computed,
+    core,
     sensitive: false,
     inputKind: "text"
   };
@@ -140,6 +214,22 @@ function makeCatalog(): ParameterCatalog {
       ]
     }
   };
+}
+
+function validateAsgParameters(values: Record<string, unknown>) {
+  return validateParameters(
+    {
+      terraformBlockType: "resource",
+      resourceType: "aws_autoscaling_group",
+      resourceName: "web",
+      fileName: "main",
+      values
+    },
+    [],
+    [],
+    "asg-1",
+    makeCatalog()
+  );
 }
 
 function makeResourceNode(overrides: Partial<DiagramNode> = {}): DiagramNode {

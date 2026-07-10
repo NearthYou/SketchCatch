@@ -147,7 +147,9 @@ export async function runDeploymentDestroy(
     workspace = preparedWorkspace;
 
     const terraformArtifactContent = await readTerraformArtifactFile(workspace.mainFilePath);
-    assertTerraformArtifactIsSafe(terraformArtifactContent);
+    assertTerraformArtifactIsSafe(terraformArtifactContent, {
+      liveProfile: deployment.liveProfile
+    });
     const currentTerraformArtifactHash = createSha256(terraformArtifactContent);
     const currentTfplanHash = createSha256(planBuffer);
 

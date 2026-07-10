@@ -3,28 +3,47 @@ import assert from "node:assert/strict";
 import {
   approveDeploymentPlan,
   abortProjectAssetUpload,
+  applyGitCicdAwsRoleDiff,
+  applyGitCicdRepositorySettings,
+  applyGitCicdRepositorySettingsWithGitHubOAuth,
   confirmProjectAssetUpload,
+  createAiArchitecturePatchPreview,
   createArchitectureSnapshot,
   createAwsConnectionSetup,
   createDeployment,
+  createGitCicdGitHubOAuthStartUrl,
   createProjectAssetUpload,
+  cancelReverseEngineeringScan,
+  createReverseEngineeringPreviewScan,
+  createReverseEngineeringScan,
   deleteAwsConnection,
   deleteProject,
+  deleteReverseEngineeringScan,
   getAwsConnectionCloudFormationTemplate,
+  getDeploymentFailureExplanation,
+  getGitCicdHandoffPipelineStatus,
   getProjectDeletePreview,
   listDeploymentResources,
   listAwsConnections,
   listDeployments,
+  listGitCicdHandoffs,
+  listGitHubInstalledRepositories,
   listTerraformOutputs,
+  listCostUsageAnalysis,
   listProjects,
+  listReverseEngineeringScanLogs,
+  listReverseEngineeringScans,
   runDeploymentDestroy,
   runDeploymentDestroyPlan,
+  runAiPreDeploymentCheck,
   runDeploymentPlan,
   runDeploymentApply,
   saveProjectDraft,
   testAwsConnection,
   uploadProjectAsset,
-  verifyAwsConnection
+  validateTerraformCode,
+  verifyAwsConnection,
+  verifyAwsConnectionCreatedRole
 } from "./api";
 import type { Project } from "../../../../packages/types/src";
 import { clearStoredAuthSession, writeStoredAuthSession } from "../../lib/auth-storage";
@@ -67,6 +86,129 @@ test("listProjects fetches projects for the authenticated user", async (context)
   assert.equal(requests[0]?.init?.method, undefined);
   assert.equal(new Headers(requests[0]?.init?.headers).get("authorization"), "Bearer access-token");
   assert.deepEqual(projects, [project]);
+});
+
+test("listGitHubInstalledRepositories fetches GitHub App installation repository candidates", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+
+  installAuthSession();
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+
+    return new Response(
+      JSON.stringify({
+        projectId: project.id,
+        state: "signed-state",
+        expiresAt: "2026-07-07T00:10:00.000Z",
+        repositories: [
+          {
+            installationId: "12345",
+            installationAccountLogin: "NearthYou",
+            installationAccountType: "Organization",
+            installationRepositorySelection: "selected",
+            githubRepositoryId: "repo-1",
+            owner: "NearthYou",
+            name: "sketchcatch-iac-handoff-test",
+            fullName: "NearthYou/sketchcatch-iac-handoff-test",
+            defaultBranch: "main",
+            repositoryUrl: "https://github.com/NearthYou/sketchcatch-iac-handoff-test",
+            visibility: "private",
+            archived: false,
+            connectedSourceRepositoryId: null,
+            connectedStatus: null
+          }
+        ]
+      }),
+      {
+        headers: {
+          "Content-Type": "application/json"
+        },
+        status: 200
+      }
+    );
+  };
+
+  const result = await listGitHubInstalledRepositories(project.id);
+
+  assert.equal(
+    String(requests[0]?.input),
+    `/api/projects/${project.id}/source-repositories/github/installed-repositories`
+  );
+  assert.equal(requests[0]?.init?.method, "POST");
+  assert.equal(result.state, "signed-state");
+  assert.equal(result.repositories[0]?.fullName, "NearthYou/sketchcatch-iac-handoff-test");
+  assert.equal(result.repositories[0]?.installationId, "12345");
+});
+
+test("listCostUsageAnalysis fetches actual usage analysis with range and AWS connection query", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+
+  installAuthSession();
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+
+    return new Response(
+      JSON.stringify({
+        currency: "USD",
+        dailyTrend: [],
+        dataSource: "sample",
+        endDate: "2026-07-07",
+        fallbackUsed: true,
+        forecastMonthEndCost: {
+          amount: 42,
+          currency: "USD"
+        },
+        generatedAt: "2026-07-07T00:00:00.000Z",
+        metricSeries: [],
+        projectCosts: [],
+        range: "30d",
+        recommendations: [],
+        serviceCosts: [],
+        startDate: "2026-06-08",
+        totalCost: {
+          amount: 40,
+          currency: "USD"
+        },
+        wasteResources: []
+      }),
+      {
+        headers: {
+          "Content-Type": "application/json"
+        },
+        status: 200
+      }
+    );
+  };
+
+  const response = await listCostUsageAnalysis({
+    awsConnectionId: "33333333-3333-4333-8333-333333333333",
+    projectId: "44444444-4444-4444-8444-444444444444",
+    range: "30d"
+  });
+
+  assert.equal(
+    String(requests[0]?.input),
+    "/api/costs/usage?range=30d&awsConnectionId=33333333-3333-4333-8333-333333333333&projectId=44444444-4444-4444-8444-444444444444"
+  );
+  assert.equal(new Headers(requests[0]?.init?.headers).get("authorization"), "Bearer access-token");
+  assert.equal(response.totalCost.amount, 40);
+  assert.equal(response.fallbackUsed, true);
 });
 
 test("saveProjectDraft sends authenticated PUT request with diagram json", async (context) => {
@@ -121,6 +263,122 @@ test("saveProjectDraft sends authenticated PUT request with diagram json", async
   });
 });
 
+test("validateTerraformCode sends Terraform validation files only", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+
+  installAuthSession();
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+
+    return new Response(
+      JSON.stringify({
+        diagnostics: []
+      }),
+      {
+        headers: {
+          "Content-Type": "application/json"
+        },
+        status: 200
+      }
+    );
+  };
+
+  const response = await validateTerraformCode({
+    terraformCode: "",
+    terraformFiles: [
+      {
+        fileName: "main.tf",
+        terraformCode: `resource "aws_vpc" "main" {}`
+      }
+    ]
+  });
+
+  assert.deepEqual(response, {
+    diagnostics: []
+  });
+  assert.equal(String(requests[0]?.input), "/api/terraform/validate");
+  assert.equal(requests[0]?.init?.method, "POST");
+  assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
+    terraformCode: "",
+    terraformFiles: [
+      {
+        fileName: "main.tf",
+        terraformCode: `resource "aws_vpc" "main" {}`
+      }
+    ]
+  });
+});
+
+test("runAiPreDeploymentCheck sends Terraform files with the architecture", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+
+    return new Response(
+      JSON.stringify({
+        summary: "ok",
+        totalMonthlyEstimate: {
+          amount: 0,
+          currency: "USD",
+          pricingAssumption: "test"
+        },
+        resourceCostEstimates: [],
+        findings: [],
+        checklist: [],
+        suggestions: []
+      }),
+      {
+        headers: {
+          "Content-Type": "application/json"
+        },
+        status: 200
+      }
+    );
+  };
+
+  await runAiPreDeploymentCheck({
+    architectureJson: {
+      nodes: [],
+      edges: []
+    },
+    terraformFiles: [
+      {
+        fileName: "security.tf",
+        terraformCode: "resource \"aws_security_group\" \"open_ssh\" {}"
+      }
+    ]
+  });
+
+  assert.equal(String(requests[0]?.input), "/api/ai/pre-deployment-check");
+  assert.equal(requests[0]?.init?.method, "POST");
+  assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
+    architectureJson: {
+      nodes: [],
+      edges: []
+    },
+    terraformFiles: [
+      {
+        fileName: "security.tf",
+        terraformCode: "resource \"aws_security_group\" \"open_ssh\" {}"
+      }
+    ]
+  });
+});
+
 test("createArchitectureSnapshot posts converted architecture json", async (context) => {
   const originalFetch = globalThis.fetch;
   const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
@@ -170,6 +428,86 @@ test("createArchitectureSnapshot posts converted architecture json", async (cont
     architectureJson: { nodes: [], edges: [] }
   });
   assert.equal(architecture.id, "55555555-5555-4555-8555-555555555555");
+});
+
+test("createAiArchitecturePatchPreview posts natural language edit requests to the public AI patch endpoint", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+
+    return new Response(
+      JSON.stringify({
+        status: "preview",
+        intent: {
+          instruction: "delete bucket",
+          requestedAction: "remove_resource",
+          resourceType: "S3",
+          targetResourceId: "assets-bucket"
+        },
+        baseArchitectureJson: {
+          nodes: [],
+          edges: []
+        },
+        proposedArchitectureJson: {
+          nodes: [],
+          edges: []
+        },
+        changes: [],
+        requiresUserAcceptance: true,
+        userAcceptedChange: null,
+        providerMetadata: {
+          provider: "fallback",
+          service: "rule_fallback",
+          routeTarget: "architecture_patch_preview",
+          cacheHit: false,
+          cacheKey: "test",
+          estimatedUsage: {
+            inputCharacters: 1,
+            inputTokensEstimate: 1
+          },
+          billingMode: "disabled",
+          generatedAt: new Date(0).toISOString()
+        }
+      }),
+      {
+        headers: {
+          "Content-Type": "application/json"
+        },
+        status: 200
+      }
+    );
+  };
+
+  const response = await createAiArchitecturePatchPreview({
+    architectureJson: {
+      nodes: [],
+      edges: []
+    },
+    instruction: "delete bucket",
+    selectedTargetResourceId: "assets-bucket",
+    connectionTargetResourceId: "app-server",
+    skipConnection: true
+  });
+
+  assert.equal(String(requests[0]?.input), "/api/ai/architecture-patch-preview");
+  assert.equal(requests[0]?.init?.method, "POST");
+  assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
+    architectureJson: {
+      nodes: [],
+      edges: []
+    },
+    instruction: "delete bucket",
+    selectedTargetResourceId: "assets-bucket",
+    connectionTargetResourceId: "app-server",
+    skipConnection: true
+  });
+  assert.equal(response.status, "preview");
 });
 
 test("createProjectAssetUpload requests terraform file presigned upload metadata", async (context) => {
@@ -269,6 +607,49 @@ test("uploadProjectAsset uploads terraform content to the presigned URL", async 
   assert.equal(String(requests[0]?.input), "https://s3.example.test/upload");
   assert.equal(requests[0]?.init?.method, "PUT");
   assert.equal(new Headers(requests[0]?.init?.headers).get("content-type"), "text/plain");
+  assert.equal(requests[0]?.init?.body, "resource {}");
+});
+
+test("uploadProjectAsset sends auth headers for same-origin API uploads", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+
+  installAuthSession();
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+
+    return new Response(null, {
+      status: 204
+    });
+  };
+
+  await uploadProjectAsset(
+    {
+      method: "PUT",
+      url: `/api/projects/${project.id}/assets/66666666-6666-4666-8666-666666666666/upload-content`,
+      headers: { "Content-Type": "text/plain" },
+      expiresInSeconds: 900
+    },
+    "resource {}"
+  );
+
+  const headers = new Headers(requests[0]?.init?.headers);
+
+  assert.equal(
+    String(requests[0]?.input),
+    `/api/projects/${project.id}/assets/66666666-6666-4666-8666-666666666666/upload-content`
+  );
+  assert.equal(requests[0]?.init?.method, "PUT");
+  assert.equal(requests[0]?.init?.credentials, "include");
+  assert.equal(headers.get("authorization"), "Bearer access-token");
+  assert.equal(headers.get("content-type"), "text/plain");
   assert.equal(requests[0]?.init?.body, "resource {}");
 });
 
@@ -481,9 +862,9 @@ test("createAwsConnectionSetup requests generated Role setup values", async (con
           updatedAt: "2026-06-26T00:00:00.000Z"
         },
         callerPrincipalArn: "arn:aws:iam::123456789012:role/SketchCatchRuntimeRole",
-        recommendedRoleName: "SketchCatchTerraformExecutionRole",
+        recommendedRoleName: "SketchCatchTerraformExecutionRole-33333333",
         roleSetup: {
-          roleName: "SketchCatchTerraformExecutionRole",
+          roleName: "SketchCatchTerraformExecutionRole-33333333",
           trustedPrincipalArn: "arn:aws:iam::123456789012:role/SketchCatchRuntimeRole",
           externalId: "sc_conn_33333333-3333-4333-8333-333333333333_random",
           trustPolicy: {
@@ -498,14 +879,17 @@ test("createAwsConnectionSetup requests generated Role setup values", async (con
         },
         callerRoleSetup: {
           policyName: "SketchCatchAssumeTerraformExecutionRole",
-          assumableRoleArnPattern: "arn:aws:iam::*:role/SketchCatchTerraformExecutionRole",
+          assumableRoleArnPattern: "arn:aws:iam::*:role/SketchCatchTerraformExecutionRole*",
           policyDocument: {
             Version: "2012-10-17",
             Statement: [
               {
                 Effect: "Allow",
                 Action: "sts:AssumeRole",
-                Resource: "arn:aws:iam::*:role/SketchCatchTerraformExecutionRole"
+                Resource: [
+                  "arn:aws:iam::*:role/SketchCatchTerraformExecutionRole",
+                  "arn:aws:iam::*:role/SketchCatchTerraformExecutionRole-*"
+                ]
               }
             ]
           }
@@ -542,7 +926,7 @@ test("createAwsConnectionSetup requests generated Role setup values", async (con
     response.callerPrincipalArn,
     "arn:aws:iam::123456789012:role/SketchCatchRuntimeRole"
   );
-  assert.equal(response.roleSetup.roleName, "SketchCatchTerraformExecutionRole");
+  assert.equal(response.roleSetup.roleName, "SketchCatchTerraformExecutionRole-33333333");
   assert.equal(
     response.roleSetup.externalId,
     "sc_conn_33333333-3333-4333-8333-333333333333_random"
@@ -553,7 +937,7 @@ test("createAwsConnectionSetup requests generated Role setup values", async (con
   assert.equal(response.roleSetup.permissionSetup.initialPolicyDocument, null);
   assert.equal(
     response.callerRoleSetup.assumableRoleArnPattern,
-    "arn:aws:iam::*:role/SketchCatchTerraformExecutionRole"
+    "arn:aws:iam::*:role/SketchCatchTerraformExecutionRole*"
   );
 });
 
@@ -731,6 +1115,72 @@ test("verifyAwsConnection stores verified AWS connection metadata", async (conte
   assert.equal("sessionToken" in response, false);
 });
 
+test("verifyAwsConnectionCreatedRole stores the CloudFormation-created role by account id", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+
+  installAuthSession();
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+
+    return new Response(
+      JSON.stringify({
+        ok: true,
+        accountId: "123456789012",
+        callerArn:
+          "arn:aws:sts::123456789012:assumed-role/SketchCatchTerraformExecutionRole/sketchcatch-connection-test",
+        region: "ap-northeast-2",
+        awsConnection: {
+          id: "33333333-3333-4333-8333-333333333333",
+          userId: "22222222-2222-4222-8222-222222222222",
+          accountId: "123456789012",
+          roleArn: "arn:aws:iam::123456789012:role/SketchCatchTerraformExecutionRole",
+          externalId: "sc_conn_33333333-3333-4333-8333-333333333333_random",
+          region: "ap-northeast-2",
+          status: "verified",
+          lastVerifiedAt: "2026-06-26T00:00:00.000Z",
+          createdAt: "2026-06-26T00:00:00.000Z",
+          updatedAt: "2026-06-26T00:00:00.000Z"
+        }
+      }),
+      {
+        headers: {
+          "Content-Type": "application/json"
+        },
+        status: 200
+      }
+    );
+  };
+
+  const response = await verifyAwsConnectionCreatedRole({
+    accountId: "123456789012",
+    connectionId: "33333333-3333-4333-8333-333333333333"
+  });
+
+  assert.equal(
+    String(requests[0]?.input),
+    "/api/aws/connections/33333333-3333-4333-8333-333333333333/verify-created-role"
+  );
+  assert.equal(requests[0]?.init?.method, "POST");
+  assert.equal(new Headers(requests[0]?.init?.headers).get("authorization"), "Bearer access-token");
+  assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
+    accountId: "123456789012"
+  });
+  assert.equal(response.awsConnection.status, "verified");
+  assert.equal(response.awsConnection.accountId, "123456789012");
+  assert.equal("credentials" in response, false);
+  assert.equal("accessKeyId" in response, false);
+  assert.equal("secretAccessKey" in response, false);
+  assert.equal("sessionToken" in response, false);
+});
+
 test("deleteAwsConnection sends an authenticated DELETE request", async (context) => {
   const originalFetch = globalThis.fetch;
   const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
@@ -778,7 +1228,7 @@ test("getAwsConnectionCloudFormationTemplate fetches the launch stack setup", as
 
     return new Response(
       JSON.stringify({
-        roleName: "SketchCatchTerraformExecutionRole",
+        roleName: "SketchCatchTerraformExecutionRole-33333333",
         stackName: "sketchcatch-aws-connection-33333333",
         region: "ap-northeast-2",
         capabilities: ["CAPABILITY_NAMED_IAM"],
@@ -810,10 +1260,268 @@ test("getAwsConnectionCloudFormationTemplate fetches the launch stack setup", as
   );
   assert.equal(requests[0]?.init?.method, undefined);
   assert.equal(new Headers(requests[0]?.init?.headers).get("authorization"), "Bearer access-token");
-  assert.equal(response.roleName, "SketchCatchTerraformExecutionRole");
+  assert.equal(response.roleName, "SketchCatchTerraformExecutionRole-33333333");
   assert.equal(response.capabilities[0], "CAPABILITY_NAMED_IAM");
   assert.equal(response.manualTemplateFallbackAvailable, false);
   assert.match(response.launchStackUrl ?? "", /cloudformation\/home/);
+});
+
+test("createReverseEngineeringScan starts an authenticated AWS scan", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+
+  installAuthSession();
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+
+    return new Response(
+      JSON.stringify({
+        scan: createReverseEngineeringScanPayload({
+          id: "77777777-7777-4777-8777-777777777777",
+          projectId: project.id,
+          status: "running"
+        })
+      }),
+      {
+        headers: {
+          "Content-Type": "application/json"
+        },
+        status: 202
+      }
+    );
+  };
+
+  const response = await createReverseEngineeringScan({
+    projectId: project.id,
+    awsConnectionId: "33333333-3333-4333-8333-333333333333",
+    region: "ap-northeast-2",
+    resourceTypes: ["VPC", "SUBNET", "EC2", "RDS", "S3", "SECURITY_GROUP"]
+  });
+
+  assert.equal(
+    String(requests[0]?.input),
+    `/api/projects/${project.id}/reverse-engineering/scans`
+  );
+  assert.equal(requests[0]?.init?.method, "POST");
+  assert.equal(new Headers(requests[0]?.init?.headers).get("authorization"), "Bearer access-token");
+  assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
+    awsConnectionId: "33333333-3333-4333-8333-333333333333",
+    region: "ap-northeast-2",
+    resourceTypes: ["VPC", "SUBNET", "EC2", "RDS", "S3", "SECURITY_GROUP"]
+  });
+  assert.equal(response.scan.status, "running");
+  assert.equal(response.result, undefined);
+});
+
+test("createReverseEngineeringPreviewScan starts an authenticated AWS scan without a project", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+
+  installAuthSession();
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+
+    const scan = createReverseEngineeringScanPayload({
+      id: "77777777-7777-4777-8777-777777777777",
+      projectId: "00000000-0000-4000-8000-000000000000",
+      status: "completed"
+    });
+
+    return new Response(
+      JSON.stringify({
+        scan,
+        result: {
+          scan,
+          discoveredResources: [],
+          reverseEngineeringDraft: {
+            id: `draft-${scan.id}`,
+            scanId: scan.id,
+            architectureJson: { nodes: [], edges: [] },
+            protectedValueKeys: [],
+            editableValueKeys: [],
+            createdAt: "2026-07-05T00:00:01.000Z"
+          },
+          architectureJson: { nodes: [], edges: [] },
+          findings: [],
+          analysisExclusions: [],
+          importSuggestions: [],
+          scanErrors: []
+        }
+      }),
+      {
+        headers: {
+          "Content-Type": "application/json"
+        },
+        status: 200
+      }
+    );
+  };
+
+  const response = await createReverseEngineeringPreviewScan({
+    awsConnectionId: "33333333-3333-4333-8333-333333333333",
+    region: "ap-northeast-2",
+    resourceTypes: ["ALL"]
+  });
+
+  assert.equal(String(requests[0]?.input), "/api/reverse-engineering/scans/preview");
+  assert.equal(requests[0]?.init?.method, "POST");
+  assert.equal(new Headers(requests[0]?.init?.headers).get("authorization"), "Bearer access-token");
+  assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
+    awsConnectionId: "33333333-3333-4333-8333-333333333333",
+    region: "ap-northeast-2",
+    resourceTypes: ["ALL"]
+  });
+  assert.equal(response.scan.status, "completed");
+  assert.equal(response.result?.reverseEngineeringDraft.scanId, response.scan.id);
+});
+
+test("reverseEngineering helpers list scans and logs", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+
+  installAuthSession();
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+
+    if (String(input).endsWith("/logs")) {
+      return new Response(
+        JSON.stringify({
+          logs: [
+            {
+              id: "log-1",
+              scanId: "77777777-7777-4777-8777-777777777777",
+              sequence: 1,
+              stage: "provider_api",
+              level: "INFO",
+              message: "VPC 목록을 읽었습니다.",
+              createdAt: "2026-07-05T00:00:00.000Z"
+            }
+          ]
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json"
+          },
+          status: 200
+        }
+      );
+    }
+
+    return new Response(
+      JSON.stringify({
+        scans: [
+          createReverseEngineeringScanPayload({
+            id: "77777777-7777-4777-8777-777777777777",
+            projectId: project.id
+          })
+        ]
+      }),
+      {
+        headers: {
+          "Content-Type": "application/json"
+        },
+        status: 200
+      }
+    );
+  };
+
+  const scans = await listReverseEngineeringScans(project.id);
+  const logs = await listReverseEngineeringScanLogs({
+    projectId: project.id,
+    scanId: "77777777-7777-4777-8777-777777777777"
+  });
+
+  assert.equal(
+    String(requests[0]?.input),
+    `/api/projects/${project.id}/reverse-engineering/scans`
+  );
+  assert.equal(
+    String(requests[1]?.input),
+    `/api/projects/${project.id}/reverse-engineering/scans/77777777-7777-4777-8777-777777777777/logs`
+  );
+  assert.equal(new Headers(requests[0]?.init?.headers).get("authorization"), "Bearer access-token");
+  assert.equal(scans[0]?.status, "completed");
+  assert.equal(logs[0]?.stage, "provider_api");
+});
+
+test("reverseEngineering helpers cancel and delete scans", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+
+  installAuthSession();
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+
+    if (init?.method === "DELETE") {
+      return new Response(null, { status: 204 });
+    }
+
+    return new Response(
+      JSON.stringify({
+        scan: createReverseEngineeringScanPayload({
+          id: "77777777-7777-4777-8777-777777777777",
+          projectId: project.id,
+          status: "cancelled"
+        })
+      }),
+      {
+        headers: {
+          "Content-Type": "application/json"
+        },
+        status: 200
+      }
+    );
+  };
+
+  const cancelledScan = await cancelReverseEngineeringScan({
+    projectId: project.id,
+    scanId: "77777777-7777-4777-8777-777777777777"
+  });
+  await deleteReverseEngineeringScan({
+    projectId: project.id,
+    scanId: "77777777-7777-4777-8777-777777777777"
+  });
+
+  assert.equal(
+    String(requests[0]?.input),
+    `/api/projects/${project.id}/reverse-engineering/scans/77777777-7777-4777-8777-777777777777/cancel`
+  );
+  assert.equal(requests[0]?.init?.method, "POST");
+  assert.equal(
+    String(requests[1]?.input),
+    `/api/projects/${project.id}/reverse-engineering/scans/77777777-7777-4777-8777-777777777777`
+  );
+  assert.equal(requests[1]?.init?.method, "DELETE");
+  assert.equal(new Headers(requests[0]?.init?.headers).get("authorization"), "Bearer access-token");
+  assert.equal(cancelledScan.status, "cancelled");
 });
 
 test("createDeployment posts selected artifact and verified AWS connection", async (context) => {
@@ -1021,6 +1729,37 @@ test("deployment helpers list records, start plan, approve plan, apply, destroy,
       );
     }
 
+    if (String(input).endsWith("/failure-explanation")) {
+      return new Response(
+        JSON.stringify({
+          explanation: {
+            deploymentId: "44444444-4444-4444-8444-444444444444",
+            stage: "apply",
+            severity: "high",
+            summary: "apply 단계에서 Direct Deployment가 실패했습니다.",
+            likelyCause: "권한 부족",
+            nextActions: ["권한을 확인하세요."],
+            firstErrorLog: "AccessDenied",
+            cleanupRequired: true,
+            llmExplanation: {
+              target: "terraform_error_explanation",
+              summary: "fallback summary",
+              highlights: [],
+              nextActions: ["권한을 확인하세요."],
+              fallbackUsed: true,
+              fallbackReason: "missing_api_key"
+            }
+          }
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json"
+          },
+          status: 200
+        }
+      );
+    }
+
     return new Response(
       JSON.stringify({
         deployments: [
@@ -1041,7 +1780,9 @@ test("deployment helpers list records, start plan, approve plan, apply, destroy,
 
   const deployments = await listDeployments(project.id);
   const runningDeployment = await runDeploymentPlan("44444444-4444-4444-8444-444444444444");
-  const approvedDeployment = await approveDeploymentPlan("44444444-4444-4444-8444-444444444444");
+  const approvedDeployment = await approveDeploymentPlan("44444444-4444-4444-8444-444444444444", [
+    "pre_deployment_check:cost-risk"
+  ]);
   const applyingDeployment = await runDeploymentApply("44444444-4444-4444-8444-444444444444");
   const destroyPlanningDeployment = await runDeploymentDestroyPlan(
     "44444444-4444-4444-8444-444444444444"
@@ -1049,6 +1790,9 @@ test("deployment helpers list records, start plan, approve plan, apply, destroy,
   const destroyingDeployment = await runDeploymentDestroy("44444444-4444-4444-8444-444444444444");
   const resources = await listDeploymentResources("44444444-4444-4444-8444-444444444444");
   const outputs = await listTerraformOutputs("44444444-4444-4444-8444-444444444444");
+  const failureExplanation = await getDeploymentFailureExplanation(
+    "44444444-4444-4444-8444-444444444444"
+  );
 
   assert.equal(String(requests[0]?.input), `/api/projects/${project.id}/deployments`);
   assert.equal(
@@ -1061,7 +1805,9 @@ test("deployment helpers list records, start plan, approve plan, apply, destroy,
     "/api/deployments/44444444-4444-4444-8444-444444444444/approve"
   );
   assert.equal(requests[2]?.init?.method, "POST");
-  assert.deepEqual(JSON.parse(String(requests[2]?.init?.body)), {});
+  assert.deepEqual(JSON.parse(String(requests[2]?.init?.body)), {
+    acknowledgedWarningIds: ["pre_deployment_check:cost-risk"]
+  });
   assert.equal(
     String(requests[3]?.input),
     "/api/deployments/44444444-4444-4444-8444-444444444444/apply"
@@ -1088,6 +1834,10 @@ test("deployment helpers list records, start plan, approve plan, apply, destroy,
     String(requests[7]?.input),
     "/api/deployments/44444444-4444-4444-8444-444444444444/outputs"
   );
+  assert.equal(
+    String(requests[8]?.input),
+    "/api/deployments/44444444-4444-4444-8444-444444444444/failure-explanation"
+  );
   assert.equal(deployments[0]?.status, "PENDING");
   assert.equal(runningDeployment.status, "RUNNING");
   assert.equal(approvedDeployment.approvedPlanArtifactId, "99999999-9999-4999-8999-999999999999");
@@ -1096,6 +1846,194 @@ test("deployment helpers list records, start plan, approve plan, apply, destroy,
   assert.equal(destroyingDeployment.currentPlanOperation, "destroy");
   assert.equal(resources[0]?.resourceId, "i-0123456789abcdef0");
   assert.equal(outputs[0]?.name, "instance_id");
+  assert.equal(failureExplanation.cleanupRequired, true);
+});
+
+test("Git/CI/CD handoff helpers list handoffs and read pipeline status", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+
+  installAuthSession();
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+
+    if (String(input).endsWith("/pipeline-status")) {
+      return new Response(
+        JSON.stringify({
+          pipelineStatus: {
+            id: "44444444-4444-4444-8444-444444444444",
+            projectId: project.id,
+            status: "pipeline_running",
+            pullRequestUrl: "https://github.com/sketchcatch/infra-live/pull/42",
+            pullRequestNumber: 42,
+            mergeCommitSha: "merge1234",
+            pipelineRunUrl: "https://github.com/sketchcatch/infra-live/actions/runs/1",
+            infraPipelineRunUrl: "https://github.com/sketchcatch/infra-live/actions/runs/1",
+            infraPipelineStatus: "running",
+            appPipelineRunUrl: null,
+            appPipelineStatus: "not_started",
+            destroyPipelineRunUrl: null,
+            destroyPipelineStatus: "not_started",
+            environmentName: "sketchcatch-production",
+            staticSiteUrl: null,
+            apiBaseUrl: null,
+            statusMessage: "Pipeline is running",
+            updatedAt: "2026-06-26T00:00:00.000Z",
+            source: "runtime_cache"
+          }
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json"
+          },
+          status: 200
+        }
+      );
+    }
+
+    if (String(input).endsWith("/repository-settings/apply")) {
+      return new Response(
+        JSON.stringify({
+          applied: true,
+          environmentName: "sketchcatch-production",
+          variables: ["SKETCHCATCH_AWS_REGION"],
+          secrets: [],
+          workflowFiles: [".github/workflows/sketchcatch-app.yml"],
+          githubOAuthRequired: false
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json"
+          },
+          status: 200
+        }
+      );
+    }
+
+    if (String(input).endsWith("/github-oauth/start")) {
+      return new Response(
+        JSON.stringify({
+          authorizationUrl: "https://github.com/login/oauth/authorize?state=state-token",
+          expiresAt: "2026-01-01T00:10:00.000Z"
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json"
+          },
+          status: 201
+        }
+      );
+    }
+
+    if (String(input).endsWith("/repository-settings/apply-with-github-oauth")) {
+      return new Response(
+        JSON.stringify({
+          applied: true,
+          environmentName: "sketchcatch-production",
+          variables: ["SKETCHCATCH_AWS_REGION"],
+          secrets: [],
+          workflowFiles: [".github/workflows/sketchcatch-app.yml"],
+          githubOAuthRequired: false
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json"
+          },
+          status: 200
+        }
+      );
+    }
+
+    if (String(input).endsWith("/aws-role-diff/apply")) {
+      return new Response(
+        JSON.stringify({
+          applied: true,
+          roleArn: "arn:aws:iam::123456789012:role/SketchCatchGitHubDeployRole",
+          repository: "sketchcatch/infra-live",
+          environmentName: "sketchcatch-production",
+          appliedAt: "2026-01-01T00:00:00.000Z",
+          verified: true
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json"
+          },
+          status: 200
+        }
+      );
+    }
+
+    return new Response(
+      JSON.stringify({
+        handoffs: [
+          createGitCicdHandoffPayload({
+            id: "44444444-4444-4444-8444-444444444444",
+            projectId: project.id
+          })
+        ]
+      }),
+      {
+        headers: {
+          "Content-Type": "application/json"
+        },
+        status: 200
+      }
+    );
+  };
+
+  const handoffs = await listGitCicdHandoffs(project.id);
+  const pipelineStatus = await getGitCicdHandoffPipelineStatus(
+    "44444444-4444-4444-8444-444444444444"
+  );
+  const settingsApply = await applyGitCicdRepositorySettings(
+    "44444444-4444-4444-8444-444444444444"
+  );
+  const oauthStart = await createGitCicdGitHubOAuthStartUrl(
+    "44444444-4444-4444-8444-444444444444"
+  );
+  const oauthSettingsApply = await applyGitCicdRepositorySettingsWithGitHubOAuth(
+    "44444444-4444-4444-8444-444444444444"
+  );
+  const roleApply = await applyGitCicdAwsRoleDiff(
+    "44444444-4444-4444-8444-444444444444"
+  );
+
+  assert.equal(String(requests[0]?.input), `/api/projects/${project.id}/git-cicd-handoffs`);
+  assert.equal(
+    String(requests[1]?.input),
+    "/api/git-cicd-handoffs/44444444-4444-4444-8444-444444444444/pipeline-status"
+  );
+  assert.equal(
+    String(requests[2]?.input),
+    "/api/git-cicd-handoffs/44444444-4444-4444-8444-444444444444/repository-settings/apply"
+  );
+  assert.equal(
+    String(requests[3]?.input),
+    "/api/git-cicd-handoffs/44444444-4444-4444-8444-444444444444/github-oauth/start"
+  );
+  assert.equal(
+    String(requests[4]?.input),
+    "/api/git-cicd-handoffs/44444444-4444-4444-8444-444444444444/repository-settings/apply-with-github-oauth"
+  );
+  assert.equal(
+    String(requests[5]?.input),
+    "/api/git-cicd-handoffs/44444444-4444-4444-8444-444444444444/aws-role-diff/apply"
+  );
+  assert.equal(new Headers(requests[0]?.init?.headers).get("authorization"), "Bearer access-token");
+  assert.equal(handoffs[0]?.repositoryProvider, "github");
+  assert.equal(pipelineStatus.status, "pipeline_running");
+  assert.equal(pipelineStatus.source, "runtime_cache");
+  assert.equal(settingsApply.githubOAuthRequired, false);
+  assert.match(oauthStart.authorizationUrl, /^https:\/\/github\.com\/login\/oauth\/authorize/);
+  assert.equal(oauthSettingsApply.githubOAuthRequired, false);
+  assert.equal(roleApply.verified, true);
 });
 
 function createDeploymentPayload(input: {
@@ -1130,6 +2068,73 @@ function createDeploymentPayload(input: {
     approvedTfplanHash: input.approved ? "b".repeat(64) : null,
     approvedAwsAccountId: input.approved ? "123456789012" : null,
     approvedAwsRegion: input.approved ? "ap-northeast-2" : null,
+    createdAt: "2026-06-26T00:00:00.000Z",
+    updatedAt: "2026-06-26T00:00:00.000Z"
+  };
+}
+
+function createReverseEngineeringScanPayload(input: {
+  id: string;
+  projectId: string;
+  status?: "running" | "completed" | "cancelled";
+}) {
+  return {
+    id: input.id,
+    projectId: input.projectId,
+    awsConnectionId: "33333333-3333-4333-8333-333333333333",
+    provider: "aws",
+    region: "ap-northeast-2",
+    resourceTypes: ["VPC", "SUBNET", "EC2", "RDS", "S3", "SECURITY_GROUP"],
+    status: input.status ?? "completed",
+    createdAt: "2026-07-05T00:00:00.000Z",
+    updatedAt: "2026-07-05T00:00:01.000Z",
+    startedAt: "2026-07-05T00:00:00.000Z",
+    completedAt: "2026-07-05T00:00:01.000Z",
+    cancelRequestedAt: null,
+    deletedAt: null,
+    errorSummary: null
+  };
+}
+
+function createGitCicdHandoffPayload(input: { id: string; projectId: string }) {
+  return {
+    id: input.id,
+    projectId: input.projectId,
+    architectureId: "55555555-5555-4555-8555-555555555555",
+    terraformArtifactId: "66666666-6666-4666-8666-666666666666",
+    handoffKind: "terraform_iac",
+    sourceDeploymentId: null,
+    deploymentMode: "infra_and_app",
+    requiresEnvironmentApproval: true,
+    sourceRepositoryId: "repo-1",
+    repositoryProvider: "github",
+    repositoryOwner: "sketchcatch",
+    repositoryName: "infra-live",
+    targetBranch: "main",
+    sourceBranch: "sketchcatch/iac-preview",
+    commitMessage: "Add SketchCatch Terraform preview",
+    pullRequestTitle: "SketchCatch IaC preview",
+    pullRequestUrl: "https://github.com/sketchcatch/infra-live/pull/42",
+    pullRequestNumber: 42,
+    pullRequestHeadSha: "abc1234",
+    mergeCommitSha: null,
+    environmentName: "sketchcatch-production",
+    pipelineRunUrl: null,
+    infraPipelineRunUrl: null,
+    infraPipelineStatus: "waiting_for_merge",
+    appPipelineRunUrl: null,
+    appPipelineStatus: "not_started",
+    destroyPipelineRunUrl: null,
+    destroyPipelineStatus: "not_started",
+    staticSiteUrl: null,
+    apiBaseUrl: null,
+    repositorySettingsPreview: null,
+    awsRoleDiff: null,
+    githubOAuthRequired: true,
+    status: "pr_created",
+    statusMessage: "GitHub PR created",
+    userAcceptedChangeId: "accepted-change-1",
+    createdByUserId: "22222222-2222-4222-8222-222222222222",
     createdAt: "2026-06-26T00:00:00.000Z",
     updatedAt: "2026-06-26T00:00:00.000Z"
   };

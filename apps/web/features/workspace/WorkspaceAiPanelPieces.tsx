@@ -1,5 +1,6 @@
 import type {
   ArchitectureGuardrailWarning,
+  AiProvider,
   AiPreDeploymentAnalysisResult,
   AiTerraformErrorExplanationResult,
   AiTerraformPreviewExplanationResult,
@@ -41,7 +42,7 @@ export function WorkspaceAiSelect<Value extends string>({
       <span>{label}</span>
       <SelectMenu
         ariaLabel={`${label} 선택`}
-        emptyLabel="Select a value"
+        emptyLabel="값 선택"
         onChange={handleChange}
         options={options}
         value={value}
@@ -105,15 +106,34 @@ export function WorkspaceAiExplanation({ explanation }: { readonly explanation: 
     <div className={styles.aiExplanation}>
       <div className={styles.aiExplanationHeader}>
         <strong>AI 설명</strong>
-        <span>{explanation.fallbackUsed ? "기본 설명" : "OpenAI 설명"}</span>
+        <span>{explanation.fallbackUsed ? "기본 설명" : getWorkspaceAiProviderLabel(explanation.providerMetadata?.provider)}</span>
       </div>
       <p>{explanation.summary}</p>
+      {explanation.wellArchitectedConclusion ? (
+        <WorkspaceAiTextList title="종합 평가" items={[explanation.wellArchitectedConclusion]} />
+      ) : null}
       {explanation.highlights.length > 0 ? <WorkspaceAiTextList title="핵심" items={explanation.highlights} /> : null}
       {explanation.nextActions.length > 0 ? (
         <WorkspaceAiTextList title="다음 행동" items={explanation.nextActions} />
       ) : null}
     </div>
   );
+}
+
+function getWorkspaceAiProviderLabel(provider: AiProvider | undefined): string {
+  switch (provider) {
+    case "bedrock":
+      return "Bedrock 설명";
+    case "amazon_q":
+      return "Amazon Q 설명";
+    case "amazon_transcribe":
+      return "Amazon Transcribe";
+    case "openai":
+      return "OpenAI legacy 설명";
+    case "fallback":
+    case undefined:
+      return "AI 설명";
+  }
 }
 
 // Architecture Draft가 MVP 범위 밖 요구를 감지했을 때 사용자가 놓치지 않게 보여줍니다.
@@ -145,8 +165,11 @@ export function WorkspaceAiGuardrailWarnings({
 function getGuardrailWarningLabel(code: ArchitectureGuardrailWarning["code"]): string {
   const warningLabels = {
     low_budget_rds_cost: "예산 확인",
-    scenario_conflict: "선택값 확인",
-    unsupported_requirement: "MVP 범위 밖"
+    unsupported_resource_omitted: "일부 제외",
+    unsupported_requirement_substituted: "대체 생성",
+    partial_generation: "부분 생성",
+    guardrail_adjusted_config: "설정 조정",
+    board_replacement_required: "전체 교체"
   } satisfies Record<ArchitectureGuardrailWarning["code"], string>;
 
   return warningLabels[code];
@@ -165,7 +188,7 @@ export function WorkspaceAiPreDeploymentResult({
       <WorkspaceAiFindingList findings={analysis.findings} />
       <WorkspaceAiTextList
         title="체크리스트"
-        items={analysis.checklist.map((item) => `${item.status.toUpperCase()} · ${item.label}`)}
+        items={analysis.checklist.map((item) => `${formatAiSignalLabel(item.status)} · ${item.label}`)}
       />
     </div>
   );
@@ -177,26 +200,65 @@ export function WorkspaceAiDesignSimulationResult({
 }: {
   readonly simulation: DesignSimulationResult;
 }) {
+  const costReviewItems = simulation.costEstimate?.reviewMessages ?? simulation.costPressure;
+  const costRecommendationItems = simulation.recommendations.filter(
+    (item) => !costReviewItems.includes(item)
+  );
+
   return (
-    <div className={styles.aiResultStack}>
+    <div className={`${styles.aiResultStack} ${styles.aiSimulationResult}`}>
       <p className={styles.aiResultSummary}>{simulation.summary}</p>
+      <div className={styles.aiSimulationGrid}>
+        <section className={styles.aiSimulationCard}>
+          <strong>요청 흐름</strong>
+          <ul>
+            {simulation.requestFlow.map((step, index) => (
+              <li key={`flow-${index}-${step.fromResourceId}-${step.toResourceId}`}>
+                <span>{step.fromResourceId} -&gt; {step.toResourceId}</span>
+                <p>{step.description}</p>
+              </li>
+            ))}
+          </ul>
+        </section>
+        <section className={styles.aiSimulationCard}>
+          <strong>병목 후보</strong>
+          <ul>
+            {simulation.bottlenecks.map((item, index) => (
+              <li key={`bottleneck-${index}-${item.title}`}>
+                <span>{item.severity.toUpperCase()}</span>
+                <p>{item.title}</p>
+              </li>
+            ))}
+          </ul>
+        </section>
+        <section className={styles.aiSimulationCard}>
+          <strong>장애 대응</strong>
+          <ul>
+            {simulation.failureScenarios.map((item, index) => (
+              <li key={`failure-${index}-${item.title}`}>
+                <span>{item.title}</span>
+                <p>{item.mitigation}</p>
+              </li>
+            ))}
+          </ul>
+        </section>
+        <section className={styles.aiSimulationCard}>
+          <strong>비용·다음 검토</strong>
+          {simulation.costEstimate !== undefined ? (
+            <div className={styles.aiSimulationCostMeta}>
+              <span>${formatMoney(simulation.costEstimate.totalEstimate.amount)}</span>
+            </div>
+          ) : null}
+          <ul>
+            {[...costReviewItems, ...costRecommendationItems].map((item, index) => (
+              <li key={`cost-${index}-${item}`}>
+                <p>{item}</p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      </div>
       <WorkspaceAiExplanation explanation={simulation.llmExplanation} />
-      <WorkspaceAiTextList
-        title="요청 흐름"
-        items={simulation.requestFlow.map((step) => `${step.fromResourceId} -> ${step.toResourceId}: ${step.description}`)}
-      />
-      <WorkspaceAiTextList
-        title="병목 후보"
-        items={simulation.bottlenecks.map((item) => `${item.severity.toUpperCase()} · ${item.title}`)}
-      />
-      <WorkspaceAiTextList
-        title="장애 시나리오"
-        items={simulation.failureScenarios.map((item) => `${item.title}: ${item.mitigation}`)}
-      />
-      <WorkspaceAiTextList
-        title="비용과 다음 검토"
-        items={[...simulation.costPressure, ...simulation.recommendations]}
-      />
     </div>
   );
 }
@@ -208,19 +270,23 @@ export function WorkspaceAiTerraformPreviewResult({
   readonly preview: AiTerraformPreviewExplanationResult;
 }) {
   return (
-    <div className={styles.aiResultStack}>
+    <div className={`${styles.aiResultStack} ${styles.aiTerraformPreviewAssessment}`}>
       <p className={styles.aiResultSummary}>{preview.summary}</p>
-      <WorkspaceAiTextList
-        title="감지된 Resource"
-        items={preview.detectedResources.map(
-          (resource) => `${resource.terraformType} · ${resource.label}: ${resource.explanation}`
-        )}
-      />
+      <section className={styles.aiTerraformPreviewConclusion}>
+        <strong>결론</strong>
+        <p>{preview.consensusRecommendation}</p>
+      </section>
+      <div className={styles.aiTerraformPreviewAgentGrid}>
+        {preview.wellArchitectedGuidance.map((guidance) => (
+          <section key={guidance.pillar} className={styles.aiTerraformPreviewAgentCard}>
+            <span>{guidance.title}</span>
+            <strong>{formatAiSignalLabel(guidance.pillar)}</strong>
+            <p>{guidance.observation}</p>
+            <p>{guidance.recommendation}</p>
+          </section>
+        ))}
+      </div>
       <WorkspaceAiFindingList findings={preview.findings} />
-      <WorkspaceAiTextList
-        title="체크리스트"
-        items={preview.checklist.map((item) => `${item.status.toUpperCase()} · ${item.label}`)}
-      />
     </div>
   );
 }
@@ -238,7 +304,7 @@ export function WorkspaceAiTerraformErrorResult({
       <WorkspaceAiTextList
         title="원인"
         items={[
-          `${explanation.stage} · ${explanation.severity.toUpperCase()} · ${explanation.category}: ${
+          `${formatAiSignalLabel(explanation.stage)} · ${formatAiSignalLabel(explanation.severity)} · ${formatAiSignalLabel(explanation.category)}: ${
             explanation.likelyCause
           }`
         ]}
@@ -266,23 +332,102 @@ function WorkspaceAiTextList({ items, title }: { readonly items: readonly string
   );
 }
 
+type AiSignalLabelKey =
+  | "apply"
+  | "architecture"
+  | "availability"
+  | "configuration"
+  | "cost"
+  | "critical"
+  | "error"
+  | "export"
+  | "fail"
+  | "failed"
+  | "high"
+  | "info"
+  | "low"
+  | "medium"
+  | "network"
+  | "operational_excellence"
+  | "pass"
+  | "performance"
+  | "performance_efficiency"
+  | "permission"
+  | "plan"
+  | "cost_optimization"
+  | "reliability"
+  | "security"
+  | "success"
+  | "sustainability"
+  | "validate"
+  | "warning";
+
+const AI_SIGNAL_LABELS = {
+  apply: "적용",
+  architecture: "아키텍처",
+  availability: "가용성",
+  configuration: "구성",
+  cost: "비용",
+  critical: "치명",
+  error: "오류",
+  export: "내보내기",
+  fail: "실패",
+  failed: "실패",
+  high: "높음",
+  info: "정보",
+  low: "낮음",
+  medium: "중간",
+  network: "네트워크",
+  operational_excellence: "운영 우수성",
+  pass: "통과",
+  performance: "성능",
+  performance_efficiency: "성능 효율성",
+  permission: "권한",
+  plan: "계획",
+  cost_optimization: "비용 최적화",
+  reliability: "신뢰성",
+  security: "보안",
+  success: "성공",
+  sustainability: "지속 가능성",
+  validate: "검증",
+  warning: "경고"
+} satisfies Record<AiSignalLabelKey, string>;
+
+function isAiSignalLabelKey(value: string): value is AiSignalLabelKey {
+  return Object.hasOwn(AI_SIGNAL_LABELS, value);
+}
+
+function formatAiSignalLabel(value: string): string {
+  const normalizedValue = value.toLowerCase();
+
+  if (isAiSignalLabelKey(normalizedValue)) {
+    return AI_SIGNAL_LABELS[normalizedValue];
+  }
+
+  return value;
+}
+
 // Check Finding은 Resource 연결 여부를 잃지 않도록 한 줄씩 표시합니다.
 function WorkspaceAiFindingList({ findings }: { readonly findings: readonly CheckFinding[] }) {
   if (findings.length === 0) {
-    return <p className={styles.aiHint}>표시할 Check Finding이 없습니다.</p>;
+    return <p className={styles.aiHint}>표시할 점검 결과가 없습니다.</p>;
   }
 
   return (
     <div className={styles.aiListBlock}>
-      <strong>Check Finding</strong>
+      <strong>점검 결과</strong>
       <ul>
         {findings.map((finding) => (
           <li key={finding.id}>
-            {finding.severity.toUpperCase()} · {finding.title}
+            {formatAiSignalLabel(finding.severity)} · {finding.title}
             {finding.resourceId ? ` · ${finding.resourceId}` : ""}
           </li>
         ))}
       </ul>
     </div>
   );
+}
+
+function formatMoney(amount: number): string {
+  return amount.toFixed(2);
 }

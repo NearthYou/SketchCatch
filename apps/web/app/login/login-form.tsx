@@ -15,7 +15,7 @@ import { getApiErrorMessage } from "../../lib/api-client";
 
 export function LoginForm() {
   const router = useRouter();
-  const { login, status } = useAuth();
+  const { login } = useAuth();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isPasswordCapsLockOn, setIsPasswordCapsLockOn] = useState(false);
@@ -29,12 +29,6 @@ export function LoginForm() {
       setErrorMessage(getOAuthErrorMessage(oauthError));
     }
   }, []);
-
-  useEffect(() => {
-    if (status === "authenticated") {
-      router.replace("/mypage");
-    }
-  }, [router, status]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
@@ -56,7 +50,7 @@ export function LoginForm() {
 
     try {
       await login(payload);
-      router.replace("/mypage");
+      router.replace("/dashboard");
     } catch (error) {
       setErrorMessage(getApiErrorMessage(error, "로그인에 실패했습니다."));
     } finally {

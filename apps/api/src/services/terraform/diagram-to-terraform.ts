@@ -1,45 +1,41 @@
 import type {
-  DiagramJson,
-  DiagramNodeParameters,
+  InfrastructureGraph,
+  InfrastructureGraphNode,
   TerraformBlockType
 } from "@sketchcatch/types";
+import { isTerraformNestedBlockAttribute } from "./terraform-nested-blocks.js";
 
 const DEFAULT_TERRAFORM_BLOCK_TYPE: TerraformBlockType = "resource";
 const INDENT_UNIT = "  ";
-const HCL_IDENTIFIER_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_-]*$/;
+export const TERRAFORM_IDENTIFIER_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_-]*$/;
 const TERRAFORM_REFERENCE_PATTERN =
   /^(?:var|local|each|count|path|terraform)\.[a-zA-Z_][a-zA-Z0-9_]*$|^module\.[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)*$|^aws_[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)*$|^data\.aws_[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)*$/;
-const TERRAFORM_NESTED_BLOCK_ATTRIBUTES: Record<string, ReadonlySet<string>> = {
-  aws_route_table: new Set(["route"]),
-  aws_security_group: new Set(["egress", "ingress"])
-};
 
-// DiagramJson 전체를 Terraform 코드 문자열 하나로 변환하는 공개 순수 함수다.
-export function generateTerraformFromDiagramJson(diagramJson: DiagramJson): string {
-  return diagramJson.nodes
-    .filter((node) => node.kind === "resource")
-    .map((node) => node.parameters)
-    .filter(isRenderableParameters)
-    .map(renderBlock)
-    .join("\n\n");
+export class TerraformDiagramValidationError extends Error {
+  readonly reason = "invalid_identifier";
+
+  constructor(label: string, value: string) {
+    super(`Invalid Terraform ${label}: ${value}`);
+    this.name = "TerraformDiagramValidationError";
+  }
 }
 
-// parameters가 없거나 invalid 표시가 있는 resource node는 Terraform 출력에서 제외한다.
-function isRenderableParameters(
-  parameters: DiagramNodeParameters | undefined
-): parameters is DiagramNodeParameters {
-  return parameters !== undefined && parameters.invalid !== true;
+export function renderTerraformFromInfrastructureGraph(graph: InfrastructureGraph): string {
+  return graph.nodes.map((node) => renderBlock(node)).join("\n\n");
 }
 
 // resource/data block 하나를 만든다. 예: resource "aws_vpc" "main" { ... }
-function renderBlock(parameters: DiagramNodeParameters): string {
-  const terraformBlockType = parameters.terraformBlockType ?? DEFAULT_TERRAFORM_BLOCK_TYPE;
-  const body = Object.entries(parameters.values).flatMap(([key, value]) =>
-    renderBodyEntry(parameters.resourceType, key, value, 1)
+function renderBlock(node: InfrastructureGraphNode): string {
+  const terraformBlockType = node.iac.terraformBlockType ?? DEFAULT_TERRAFORM_BLOCK_TYPE;
+  assertTerraformIdentifier(node.iac.resourceType, "resource type");
+  assertTerraformIdentifier(node.iac.resourceName, "resource name");
+
+  const body = Object.entries(node.config).flatMap(([key, value]) =>
+    renderBodyEntry(node.iac.resourceType, key, value, 1)
   );
 
   return [
-    `${terraformBlockType} "${parameters.resourceType}" "${parameters.resourceName}" {`,
+    `${terraformBlockType} "${node.iac.resourceType}" "${node.iac.resourceName}" {`,
     ...body,
     "}"
   ].join("\n");
@@ -109,22 +105,26 @@ function shouldRenderNestedBlocks(
   resourceType: string,
   key: string,
   value: unknown
-): value is Record<string, unknown>[] {
+): value is Record<string, unknown> | Record<string, unknown>[] {
   return (
-    TERRAFORM_NESTED_BLOCK_ATTRIBUTES[resourceType]?.has(key) === true &&
-    Array.isArray(value) &&
-    value.every(isRecord)
+    isTerraformNestedBlockAttribute(resourceType, key) &&
+    ((Array.isArray(value) && value.every(isRecord)) || isRecord(value))
   );
 }
 
 function renderNestedBlocks(
   key: string,
-  values: Record<string, unknown>[],
+  value: Record<string, unknown> | Record<string, unknown>[],
   indentLevel: number
 ): string[] {
+  const blockName = toSnakeCase(key);
+  const values = Array.isArray(value) ? value : [value];
+
+  assertTerraformIdentifier(blockName, "nested block name");
+
   return values.map((value) =>
     [
-      `${indent(indentLevel)}${toSnakeCase(key)} {`,
+      `${indent(indentLevel)}${blockName} {`,
       ...Object.entries(value).flatMap(([nestedKey, nestedValue]) =>
         renderNestedBlockEntry(nestedKey, nestedValue, indentLevel + 1)
       ),
@@ -141,9 +141,11 @@ function renderNestedBlockEntry(key: string, value: unknown, indentLevel: number
   return [renderAttribute(key, value, indentLevel)];
 }
 
-// DiagramJson의 top-level values key/value 하나를 Terraform attribute 한 줄로 바꾼다.
 function renderAttribute(key: string, value: unknown, indentLevel: number): string {
-  return `${indent(indentLevel)}${toSnakeCase(key)} = ${renderValue(value, indentLevel)}`;
+  const attributeName = toSnakeCase(key);
+  assertTerraformIdentifier(attributeName, "attribute name");
+
+  return `${indent(indentLevel)}${attributeName} = ${renderValue(value, indentLevel)}`;
 }
 
 // JavaScript 값을 Terraform HCL 값 표현으로 바꾼다.
@@ -203,7 +205,7 @@ function renderObject(value: Record<string, unknown>, indentLevel: number): stri
 }
 
 function renderObjectKey(key: string): string {
-  return HCL_IDENTIFIER_PATTERN.test(key) ? key : JSON.stringify(key);
+  return TERRAFORM_IDENTIFIER_PATTERN.test(key) ? key : JSON.stringify(key);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -225,4 +227,12 @@ function toSnakeCase(value: string): string {
 
 function indent(level: number): string {
   return INDENT_UNIT.repeat(level);
+}
+
+function assertTerraformIdentifier(value: string, label: string): void {
+  if (TERRAFORM_IDENTIFIER_PATTERN.test(value)) {
+    return;
+  }
+
+  throw new TerraformDiagramValidationError(label, value);
 }

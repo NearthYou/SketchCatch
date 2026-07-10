@@ -1,17 +1,19 @@
-name: Deploy Production
+﻿name: Deploy Production EC2 Rollback
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
+    inputs:
+      confirmation:
+        description: "Enter deploy-ec2-rollback"
+        required: true
+        type: string
 
 permissions:
   contents: read
   id-token: write
 
 concurrency:
-  group: production
+  group: production-ec2-rollback
   cancel-in-progress: false
 
 jobs:
@@ -20,6 +22,17 @@ jobs:
     environment: production
 
     steps:
+      - name: Validate EC2 rollback confirmation
+        shell: bash
+        env:
+          ROLLBACK_CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          if [ "${ROLLBACK_CONFIRMATION}" != "deploy-ec2-rollback" ]; then
+            echo "::error::confirmation must be deploy-ec2-rollback"
+            exit 1
+          fi
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -67,6 +80,22 @@ jobs:
           role-to-assume: ${{ vars.AWS_ROLE_TO_ASSUME }}
           aws-region: ${{ vars.AWS_REGION }}
 
+      - name: Apply EC2 runtime IAM policy
+        run: |
+          aws iam put-role-policy \
+            --role-name "${SKETCHCATCH_RUNTIME_ROLE_NAME}" \
+            --policy-name "${SKETCHCATCH_RUNTIME_POLICY_NAME}" \
+            --policy-document file://infra/aws/iam/ec2-runtime-policy.json
+
+          aws iam get-role-policy \
+            --role-name "${SKETCHCATCH_RUNTIME_ROLE_NAME}" \
+            --policy-name "${SKETCHCATCH_RUNTIME_POLICY_NAME}" \
+            --query "PolicyDocument.Statement[?Sid=='AllowSketchCatchAwsConnectionAssumeRole']" \
+            --output json
+        env:
+          SKETCHCATCH_RUNTIME_ROLE_NAME: ${{ vars.SKETCHCATCH_RUNTIME_ROLE_NAME || 'SketchCatch-EC2-Role' }}
+          SKETCHCATCH_RUNTIME_POLICY_NAME: ${{ vars.SKETCHCATCH_RUNTIME_POLICY_NAME || 'SketchCatchRuntimePolicy' }}
+
       - name: Upload Docker image artifact to S3
         run: |
           aws s3 cp \
@@ -105,6 +134,7 @@ jobs:
           DATABASE_URL=${DATABASE_URL}
           DATABASE_SSL=${DATABASE_SSL:-false}
           TF_PLUGIN_CACHE_DIR=${TF_PLUGIN_CACHE_DIR}
+          TRIVY_CACHE_DIR=${TRIVY_CACHE_DIR}
           RDS_ENDPOINT=${RDS_ENDPOINT}
           AWS_REGION=${AWS_REGION}
           S3_BUCKET_NAME=${S3_BUCKET_NAME}
@@ -119,8 +149,24 @@ jobs:
           KAKAO_OAUTH_CLIENT_SECRET=${KAKAO_OAUTH_CLIENT_SECRET}
           GIT_OAUTH_CLIENT_ID=${GIT_OAUTH_CLIENT_ID}
           GIT_OAUTH_CLIENT_SECRET=${GIT_OAUTH_CLIENT_SECRET}
+          GIT_APP_ID=${GIT_APP_ID}
+          GIT_APP_SLUG=${GIT_APP_SLUG}
+          GIT_APP_PRIVATE_KEY_BASE64=${GIT_APP_PRIVATE_KEY_BASE64}
+          GIT_APP_CALLBACK_URL=${GIT_APP_CALLBACK_URL}
+          GIT_APP_STATE_SECRET=${GIT_APP_STATE_SECRET}
+          REDIS_URL=${REDIS_URL}
           OPENAI_API_KEY=${OPENAI_API_KEY}
           OPENAI_MODEL=${OPENAI_MODEL}
+          AI_BILLING_MODE=${AI_BILLING_MODE}
+          AI_DAILY_CALL_LIMIT=${AI_DAILY_CALL_LIMIT}
+          AI_RATE_LIMIT_PER_MINUTE=${AI_RATE_LIMIT_PER_MINUTE}
+          BEDROCK_CREDIT_CONFIRMED=${BEDROCK_CREDIT_CONFIRMED}
+          BEDROCK_MODEL_ID=${BEDROCK_MODEL_ID}
+          AMAZON_Q_ENABLED=${AMAZON_Q_ENABLED}
+          AMAZON_Q_REGION=${AMAZON_Q_REGION}
+          AMAZON_Q_CREDIT_CONFIRMED=${AMAZON_Q_CREDIT_CONFIRMED}
+          AMAZON_Q_APPLICATION_ID=${AMAZON_Q_APPLICATION_ID}
+          AMAZON_Q_USER_ID=${AMAZON_Q_USER_ID:-}
           ENV
 
           aws s3 cp deploy/ec2/bootstrap-amazon-linux.sh \
@@ -172,6 +218,7 @@ jobs:
             --arg cloudwatch_logs_enabled "${CLOUDWATCH_LOGS_ENABLED}" \
             --arg cloudwatch_log_group_prefix "${CLOUDWATCH_LOG_GROUP_PREFIX}" \
             --arg terraform_plugin_cache_dir "${TF_PLUGIN_CACHE_DIR}" \
+            --arg trivy_cache_dir "${TRIVY_CACHE_DIR}" \
             '{
               commands: [
                 "set -euo pipefail",
@@ -183,7 +230,7 @@ jobs:
                 "sudo install -d -m 0755 /etc/sketchcatch",
                 "sudo install -m 0600 /tmp/sketchcatch-web.env /etc/sketchcatch/web.env",
                 "sudo install -m 0600 /tmp/sketchcatch-api.env /etc/sketchcatch/api.env",
-                "sudo env AWS_REGION=" + ($aws_region | @sh) + " CLOUDWATCH_LOGS_ENABLED=" + ($cloudwatch_logs_enabled | @sh) + " CLOUDWATCH_LOG_GROUP_PREFIX=" + ($cloudwatch_log_group_prefix | @sh) + " TF_PLUGIN_CACHE_DIR=" + ($terraform_plugin_cache_dir | @sh) + " RELEASE_ID=" + ($release_id | @sh) + " RELEASE_URL=" + ($release_url | @sh) + " bash /tmp/sketchcatch-deploy.sh"
+                "sudo env AWS_REGION=" + ($aws_region | @sh) + " CLOUDWATCH_LOGS_ENABLED=" + ($cloudwatch_logs_enabled | @sh) + " CLOUDWATCH_LOG_GROUP_PREFIX=" + ($cloudwatch_log_group_prefix | @sh) + " TF_PLUGIN_CACHE_DIR=" + ($terraform_plugin_cache_dir | @sh) + " TRIVY_CACHE_DIR=" + ($trivy_cache_dir | @sh) + " RELEASE_ID=" + ($release_id | @sh) + " RELEASE_URL=" + ($release_url | @sh) + " bash /tmp/sketchcatch-deploy.sh"
               ],
               executionTimeout: ["1800"]
             }' > .release/ssm-deploy-parameters.json
@@ -232,11 +279,17 @@ jobs:
           DEPLOY_ARTIFACT_BUCKET: ${{ vars.DEPLOY_ARTIFACT_BUCKET }}
           EC2_INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID || 'i-02a591d2abee94f02' }}
           TF_PLUGIN_CACHE_DIR: ${{ vars.TF_PLUGIN_CACHE_DIR || '/var/cache/sketchcatch/terraform-plugin-cache' }}
+          TRIVY_CACHE_DIR: ${{ vars.TRIVY_CACHE_DIR || '/var/cache/sketchcatch/trivy' }}
           AUTH_TOKEN_SECRET: ${{ secrets.AUTH_TOKEN_SECRET }}
           CLOUDFORMATION_TEMPLATE_TOKEN_SECRET: ${{ secrets.CLOUDFORMATION_TEMPLATE_TOKEN_SECRET }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           GIT_OAUTH_CLIENT_ID: ${{ vars.GIT_OAUTH_CLIENT_ID }}
           GIT_OAUTH_CLIENT_SECRET: ${{ secrets.GIT_OAUTH_CLIENT_SECRET }}
+          GIT_APP_ID: ${{ vars.GIT_APP_ID }}
+          GIT_APP_SLUG: ${{ vars.GIT_APP_SLUG }}
+          GIT_APP_PRIVATE_KEY_BASE64: ${{ secrets.GIT_APP_PRIVATE_KEY_BASE64 }}
+          GIT_APP_CALLBACK_URL: ${{ vars.GIT_APP_CALLBACK_URL }}
+          GIT_APP_STATE_SECRET: ${{ secrets.GIT_APP_STATE_SECRET }}
           KAKAO_OAUTH_CLIENT_ID: ${{ vars.KAKAO_OAUTH_CLIENT_ID }}
           KAKAO_OAUTH_CLIENT_SECRET: ${{ secrets.KAKAO_OAUTH_CLIENT_SECRET }}
           NAVER_OAUTH_CLIENT_ID: ${{ vars.NAVER_OAUTH_CLIENT_ID }}
@@ -244,7 +297,18 @@ jobs:
           OAUTH_REDIRECT_BASE_URL: ${{ vars.OAUTH_REDIRECT_BASE_URL || 'https://sketchcatch.net' }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-5.5' }}
+          AI_BILLING_MODE: ${{ vars.AI_BILLING_MODE || 'disabled' }}
+          AI_DAILY_CALL_LIMIT: ${{ vars.AI_DAILY_CALL_LIMIT || '100' }}
+          AI_RATE_LIMIT_PER_MINUTE: ${{ vars.AI_RATE_LIMIT_PER_MINUTE || '10' }}
+          BEDROCK_CREDIT_CONFIRMED: ${{ vars.BEDROCK_CREDIT_CONFIRMED || 'false' }}
+          BEDROCK_MODEL_ID: ${{ vars.BEDROCK_MODEL_ID || 'apac.amazon.nova-pro-v1:0' }}
+          AMAZON_Q_ENABLED: ${{ vars.AMAZON_Q_ENABLED || 'false' }}
+          AMAZON_Q_REGION: ${{ vars.AMAZON_Q_REGION || vars.AWS_REGION || 'ap-northeast-2' }}
+          AMAZON_Q_CREDIT_CONFIRMED: ${{ vars.AMAZON_Q_CREDIT_CONFIRMED || 'false' }}
+          AMAZON_Q_APPLICATION_ID: ${{ vars.AMAZON_Q_APPLICATION_ID }}
+          AMAZON_Q_USER_ID: ${{ vars.AMAZON_Q_USER_ID }}
           RDS_ENDPOINT: ${{ vars.RDS_ENDPOINT }}
+          REDIS_URL: ${{ secrets.REDIS_URL }}
           S3_BUCKET_NAME: ${{ vars.S3_BUCKET_NAME }}
           SKETCHCATCH_AWS_CALLER_PRINCIPAL_ARN: ${{ vars.SKETCHCATCH_AWS_CALLER_PRINCIPAL_ARN }}
           SKETCHCATCH_PUBLIC_BASE_URL: ${{ vars.SKETCHCATCH_PUBLIC_BASE_URL || 'https://sketchcatch.net' }}

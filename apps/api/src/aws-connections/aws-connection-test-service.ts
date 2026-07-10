@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { setTimeout as delay } from "node:timers/promises";
 import { AssumeRoleCommand, GetCallerIdentityCommand, STSClient } from "@aws-sdk/client-sts";
 import type { TestAwsConnectionResponse } from "@sketchcatch/types";
 
@@ -41,6 +42,8 @@ export type AwsConnectionTester = {
 
 export type TestAwsConnectionOptions = {
   createRoleSessionName?: () => string;
+  maxAssumeRoleAttempts?: number;
+  retryDelayMs?: number;
 };
 
 export class AwsConnectionTestError extends Error {
@@ -76,12 +79,19 @@ export async function testAwsConnection(
       throw new AwsConnectionTestError("AWS connection external ID is missing");
     }
 
-    const credentials = await gateway.assumeRole({
-      roleArn: input.roleArn,
-      externalId: input.externalId,
-      region: input.region,
-      roleSessionName
-    });
+    const credentials = await assumeRoleWithRetry(
+      {
+        roleArn: input.roleArn,
+        externalId: input.externalId,
+        region: input.region,
+        roleSessionName
+      },
+      gateway,
+      {
+        maxAttempts: options.maxAssumeRoleAttempts ?? 4,
+        retryDelayMs: options.retryDelayMs ?? 1_000
+      }
+    );
     const identity = await gateway.getCallerIdentity({
       region: input.region,
       credentials
@@ -112,8 +122,43 @@ export async function testAwsConnection(
       throw error;
     }
 
-    throw new AwsConnectionTestError("AWS Role connection test failed");
+    throw toAwsConnectionTestError(error);
   }
+}
+
+async function assumeRoleWithRetry(
+  input: {
+    roleArn: string;
+    externalId: string;
+    region: string;
+    roleSessionName: string;
+  },
+  gateway: AwsConnectionStsGateway,
+  options: {
+    maxAttempts: number;
+    retryDelayMs: number;
+  }
+): Promise<AwsTemporaryCredentials> {
+  const maxAttempts = Math.max(1, Math.floor(options.maxAttempts));
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return await gateway.assumeRole(input);
+    } catch (error) {
+      lastError = error;
+
+      if (attempt === maxAttempts || error instanceof AwsConnectionTestError) {
+        throw error;
+      }
+
+      if (options.retryDelayMs > 0) {
+        await delay(options.retryDelayMs);
+      }
+    }
+  }
+
+  throw lastError;
 }
 
 export function createAwsSdkStsGateway(): AwsConnectionStsGateway {
@@ -202,16 +247,49 @@ export async function assertAwsRoleRequiresExternalId(
 }
 
 function isExpectedAssumeRoleDeniedError(error: unknown): boolean {
+  return isAwsAccessDeniedError(error);
+}
+
+function toAwsConnectionTestError(error: unknown): AwsConnectionTestError {
+  if (isAwsAccessDeniedError(error)) {
+    return new AwsConnectionTestError("AWS Role assume permission denied");
+  }
+
+  if (isAwsCredentialError(error)) {
+    return new AwsConnectionTestError("AWS caller credentials are invalid or expired");
+  }
+
+  return new AwsConnectionTestError("AWS Role connection test failed");
+}
+
+function isAwsAccessDeniedError(error: unknown): boolean {
   if (typeof error !== "object" || error === null) {
     return false;
   }
 
   const errorName = "name" in error && typeof error.name === "string" ? error.name : "";
   const message = "message" in error && typeof error.message === "string" ? error.message : "";
+  const normalizedMessage = message.toLowerCase();
 
   return (
     errorName === "AccessDenied" ||
     errorName === "AccessDeniedException" ||
-    message.toLowerCase().includes("accessdenied")
+    normalizedMessage.includes("accessdenied") ||
+    normalizedMessage.includes("not authorized to perform: sts:assumerole")
+  );
+}
+
+function isAwsCredentialError(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) {
+    return false;
+  }
+
+  const errorName = "name" in error && typeof error.name === "string" ? error.name : "";
+
+  return (
+    errorName === "ExpiredToken" ||
+    errorName === "ExpiredTokenException" ||
+    errorName === "InvalidClientTokenId" ||
+    errorName === "UnrecognizedClientException"
   );
 }

@@ -1,73 +1,29 @@
-# 세션 핸드오프
+# Session Handoff
 
-이 파일은 최신 세션 하나를 다음 세션이 빠르게 이어받기 위한 압축본이다. 누적 이력은 `agent-progress.md`에 남긴다.
+Use this file only for compact continuation context. Write it in English.
 
-## 현재 검증된 것
+## Currently Verified
 
-- `pnpm harness:check`가 중복 상세 기획 문서 정리 후 통과했다.
-- `git diff --check`가 중복 상세 기획 문서 정리 후 통과했다.
-- 삭제 대상 문서 참조가 repo 전체에서 더 이상 나오지 않는다.
-- `pnpm harness:check`가 방어형 포지셔닝 문장 제거 후 통과했다.
-- `git diff --check`가 방어형 포지셔닝 문장 제거 후 통과했다.
-- 요청받은 방어형 포지셔닝/낮은 숙련도 중심 검색어가 repo 전체에서 더 이상 나오지 않는다.
-- `pnpm harness:check`가 타깃 사용자 표현 보정 후 통과했다.
-- `git diff --check`가 타깃 사용자 표현 보정 후 통과했다.
-- `pnpm harness:check`가 상세 기획서 추가 후 통과했다.
-- `git diff --check`가 상세 기획서 변경 후 통과했다.
-- `scripts/init-harness.ps1` 기본 실행이 통과했다.
-- `pnpm harness:check`가 통과했다.
-- `feature_list.json`은 PowerShell `ConvertFrom-Json`과 Node JSON parse를 통과했다.
-- docs H1 scan에서 H1 없는 markdown 파일이 더 이상 나오지 않았다.
-- `pnpm lint`, `pnpm typecheck`, `pnpm build`가 모두 통과했다.
-- `HARNESS-001`부터 `HARNESS-006`까지 `passing` evidence가 기록되었다.
+- Branch: fix/sw/320-main-병합-시-legacy-ec2-자동-배포-차단, issue #320.
+- Route53 targets the split ECS ALB; API, web, and legacy services are healthy.
+- Public web/API/DB smoke passes from ECS addresses.
+- ECS worker dispatch is enabled and the worker-network migration smoke exited 0.
+- Final runtime Terraform refresh-only plan reports no changes.
 
-## 이번 세션의 변경 사항
+## Changes This Session
 
-- 별도 재구성본 파일과 관련 기록을 삭제했다.
-- `docs/README.md`에서 별도 재구성본 링크와 문서 정리 기준을 삭제했다.
-- `docs/product.md`, `docs/000_상세기획서.md`의 대상 사용자 소개에서 부정형/방어형 포지셔닝 문장을 삭제했다.
-- `docs/product.md`, `docs/000_상세기획서.md`의 타깃 사용자 표현을 플랫폼/DevOps 엔지니어와 기술 리드/SRE까지 포함하는 톤으로 바꿨다.
-- `docs/gg/003_기획서.md`의 담당자별 참고 문서 타깃 사용자도 같은 방향으로 조정했다.
-- `docs/sw/003_테라폼동기화구조설명_sw.md`의 사용자 수준을 나누는 표현을 `사용자 관점/구현 관점`으로 바꿨다.
-- `docs/000_상세기획서.md`를 추가했다.
-- 상세 기획서에는 서비스 정의, 문제 정의, 현재 구현 상태, 핵심 서비스 여정, 기능 요구사항, 4인 책임 분배, Representative Use Journey, 보안/운영 정책, 성공 기준, 검증 전략, 리스크, 구현 순서를 담았다.
-- `docs/README.md`에 상세 기획서 링크와 책임 설명을 추가했다.
-- `docs/product.md`에 상세 기획서 참조 링크를 추가했다.
-- `docs/adr`, `docs/ck`, `docs/sw`, `docs/ys`에 README 인덱스를 추가했다.
-- `docs/README.md`의 담당자별 참고 문서 표를 폴더별 인덱스로 연결했다.
-- `docs/AGENTS.md`에 담당자별 참고 문서 추가/변경 시 인덱스 갱신 규칙을 추가했다.
-- H1이 없던 `docs/gg/004_역할분배.md`, `docs/ys/006-로그인&익명로그인_삭제관련.md`에 제목을 추가했다.
-- root `AGENTS.md`에 Harness Operating Loop를 추가했다.
-- 루트에 `agent-progress.md`, `feature_list.json`, `session-handoff.md`, `clean-state-checklist.md`, `evaluator-rubric.md`, `quality-document.md`를 추가했다.
-- `scripts/check-harness.mjs`와 `scripts/init-harness.ps1`를 추가해 시작 기준선과 하네스 규칙을 검사한다.
-- `docs/README.md`에 하네스 파일을 문서 map과 SSOT 우선순위에 추가했다.
+- Applied warmup, split, and worker-enable Terraform plans.
+- Created a pre-v2 RDS snapshot and completed migrations.
+- Cut Route53 over to ECS while retaining the EC2 rollback batch and legacy resources.
+- Added GitHub production plan/deploy IAM and environment configuration.
+- Made the EC2 deployment workflow manual rollback-only for release safety.
 
-## 아직 깨졌거나 미검증된 것
+## Broken Or Unverified
 
-- `pnpm lint`, `pnpm typecheck`, `pnpm build`는 문서 전용 변경이라 이번 상세 기획서 작업 후에는 실행하지 않았다.
-- `HARNESS-007`: Representative Use Journey의 browser/API smoke는 아직 없다.
-- Turbo는 체크를 통과하지만 sandbox git user 때문에 dubious ownership warning을 출력한다.
-- 기존 unrelated 변경 `apps/web/next-env.d.ts`는 이 세션에서 건드리지 않았다.
-- 이번 docs 정리는 삭제/이동 없이 인덱스 추가와 제목 보강으로 제한했다.
+- PR #319 is not merged and the v2.0.0 tag/release does not exist yet.
+- API/web desired count remains 1.
+- External customer execution roles may still need worker-principal trust updates.
 
-## 다음으로 최선의 행동
+## Best Next Action
 
-- 공유 문서에서 사용자군 설명이 과하게 방어적으로 읽히지 않는지 팀 피드백을 확인한다.
-- `docs/000_상세기획서.md`의 "개발자가 바로 잡아야 할 구현 순서"에서 하나의 workstream을 골라 구현한다.
-- `HARNESS-007`로 넘어가 Representative Use Journey의 최소 smoke를 정의한다. 실제 AWS apply/destroy는 사용자 승인과 cleanup plan 없이는 실행하지 않는다.
-
-## 건드리지 말아야 할 것
-
-- `.env`, private key, AWS credential, DB password, real access token
-- 사용자 승인 없는 Terraform apply/destroy, cloud mutation, Git/CI/CD handoff
-- 사용자 확인 없는 Voice Requirement Input 또는 AI 제안의 Practice Architecture 반영
-
-## 참고 명령
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/init-harness.ps1
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/init-harness.ps1 -Verify
-pnpm lint
-pnpm typecheck
-pnpm build
-```
+- Verify and merge issue #320 into dev, update PR #319 live evidence, then make a separate main merge decision.

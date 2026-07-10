@@ -1,7 +1,8 @@
 import type {
-  AiArchitectureDraftResult,
   AiPreDeploymentAnalysisResult,
   AiTerraformErrorExplanationResult,
+  AiTerraformPreviewExplanationResult,
+  ArchitecturePatchPreview,
   DesignSimulationResult
 } from "@sketchcatch/types";
 import type { LlmExplanationInput } from "./aiLlmExplanationTypes.js";
@@ -18,10 +19,11 @@ type DesignSimulationSummaryPayload = {
 
 type ArchitectureDraftSummaryPayload = {
   readonly target: "architecture_draft";
+  readonly requirementPromptText: string | null;
   readonly title: string;
   readonly source: string;
   readonly confidence: string;
-  readonly selectedScenario: string | null;
+  readonly selectedDraftPattern: string | null;
   readonly nodeTypes: readonly string[];
   readonly edgeCount: number;
   readonly assumptions: readonly string[];
@@ -42,10 +44,31 @@ type TerraformErrorExplanationSummaryPayload = {
   readonly stage: string;
   readonly category: string;
   readonly severity: string;
+  readonly rawMessage: string;
   readonly summary: string;
   readonly likelyCause: string;
   readonly nextActions: readonly string[];
+  readonly diagnosticExplanation: AiTerraformErrorExplanationResult["diagnosticExplanation"] | null;
   readonly relatedResourceId: string | null;
+  readonly terraformCodeContext: string | null;
+};
+
+type TerraformPreviewExplanationSummaryPayload = {
+  readonly target: "terraform_preview_explanation";
+  readonly summary: string;
+  readonly findings: readonly string[];
+  readonly checklist: readonly string[];
+  readonly wellArchitectedGuidance: readonly string[];
+  readonly consensusRecommendation: string;
+};
+
+type ArchitecturePatchPreviewSummaryPayload = {
+  readonly target: "architecture_patch_preview";
+  readonly requestedAction: string;
+  readonly resourceType: string | null;
+  readonly targetResourceId: string | null;
+  readonly changes: readonly string[];
+  readonly requiresUserAcceptance: true;
 };
 
 // schema는 Structured Outputs에 맡기고, prompt에는 설명 기준과 금지 기준만 남깁니다.
@@ -65,27 +88,38 @@ export function createSummaryPayload(
   | ArchitectureDraftSummaryPayload
   | PreDeploymentCheckSummaryPayload
   | DesignSimulationSummaryPayload
-  | TerraformErrorExplanationSummaryPayload {
+  | TerraformErrorExplanationSummaryPayload
+  | TerraformPreviewExplanationSummaryPayload
+  | ArchitecturePatchPreviewSummaryPayload {
   switch (input.target) {
     case "architecture_draft":
-      return createArchitectureDraftSummaryPayload(input.result);
+      return createArchitectureDraftSummaryPayload(input);
     case "design_simulation":
       return createDesignSimulationSummaryPayload(input.result);
     case "pre_deployment_check":
       return createPreDeploymentCheckSummaryPayload(input.result);
     case "terraform_error_explanation":
-      return createTerraformErrorExplanationSummaryPayload(input.result);
+      return createTerraformErrorExplanationSummaryPayload(input);
+    case "terraform_preview_explanation":
+      return createTerraformPreviewExplanationSummaryPayload(input.result);
+    case "architecture_patch_preview":
+      return createArchitecturePatchPreviewSummaryPayload(input.result);
   }
 }
 
 // Architecture Draft는 초안 구조와 metadata만 넘기고 Board 전체 상태는 보내지 않습니다.
-function createArchitectureDraftSummaryPayload(result: AiArchitectureDraftResult): ArchitectureDraftSummaryPayload {
+function createArchitectureDraftSummaryPayload(
+  input: Extract<LlmExplanationInput, { readonly target: "architecture_draft" }>
+): ArchitectureDraftSummaryPayload {
+  const result = input.result;
+
   return {
     target: "architecture_draft",
+    requirementPromptText: input.requirementPromptText ?? null,
     title: result.title,
     source: result.metadata.source,
     confidence: result.metadata.confidence,
-    selectedScenario: result.metadata.selectedScenario ?? null,
+    selectedDraftPattern: result.metadata.selectedDraftPattern ?? null,
     nodeTypes: result.architectureJson.nodes.map((node) => node.type),
     edgeCount: result.architectureJson.edges.length,
     assumptions: result.metadata.assumptions,
@@ -120,16 +154,49 @@ function createPreDeploymentCheckSummaryPayload(result: AiPreDeploymentAnalysisR
 
 // Terraform 오류 설명은 원본 전체 대신 rule이 정리한 stage, 원인, 다음 행동만 전달합니다.
 function createTerraformErrorExplanationSummaryPayload(
-  result: AiTerraformErrorExplanationResult
+  input: Extract<LlmExplanationInput, { readonly target: "terraform_error_explanation" }>
 ): TerraformErrorExplanationSummaryPayload {
+  const result = input.result;
+
   return {
     target: "terraform_error_explanation",
     stage: result.stage,
     category: result.category,
     severity: result.severity,
+    rawMessage: result.rawMessage,
     summary: result.summary,
     likelyCause: result.likelyCause,
     nextActions: result.nextActions,
-    relatedResourceId: result.relatedResourceId ?? null
+    diagnosticExplanation: result.diagnosticExplanation ?? null,
+    relatedResourceId: result.relatedResourceId ?? null,
+    terraformCodeContext: input.terraformCodeContext?.trim() ? input.terraformCodeContext : null
+  };
+}
+
+function createTerraformPreviewExplanationSummaryPayload(
+  result: AiTerraformPreviewExplanationResult
+): TerraformPreviewExplanationSummaryPayload {
+  return {
+    target: "terraform_preview_explanation",
+    summary: result.summary,
+    findings: result.findings.map((finding) => `${finding.severity} ${finding.category}: ${finding.title}`),
+    checklist: result.checklist.map((item) => `${item.status}: ${item.label}`),
+    wellArchitectedGuidance: result.wellArchitectedGuidance.map(
+      (guidance) => `${guidance.title}: ${guidance.observation} / ${guidance.recommendation}`
+    ),
+    consensusRecommendation: result.consensusRecommendation
+  };
+}
+
+function createArchitecturePatchPreviewSummaryPayload(
+  result: ArchitecturePatchPreview
+): ArchitecturePatchPreviewSummaryPayload {
+  return {
+    target: "architecture_patch_preview",
+    requestedAction: result.intent.requestedAction,
+    resourceType: result.intent.resourceType ?? null,
+    targetResourceId: result.intent.targetResourceId ?? null,
+    changes: result.changes.map((change) => `${change.action}: ${change.summary}`),
+    requiresUserAcceptance: true
   };
 }

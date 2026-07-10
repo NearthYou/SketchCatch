@@ -5,6 +5,38 @@ import { buildApp } from "../app.js";
 
 process.env.NODE_ENV = "test";
 
+const moneyEstimateSchema = z.object({
+  amount: z.number(),
+  currency: z.literal("USD")
+});
+
+const costEstimateSchema = z.object({
+  totalEstimate: moneyEstimateSchema,
+  totalMonthlyEstimate: moneyEstimateSchema,
+  period: z.enum(["day", "week", "month"]),
+  expectedUserCount: z.number(),
+  region: z.string(),
+  pricingSource: z.enum(["aws_pricing_api", "fallback"]),
+  fallbackUsed: z.boolean(),
+  assumptions: z.array(z.string()),
+  resources: z.array(
+    z.object({
+      resourceId: z.string(),
+      resourceType: z.string(),
+      name: z.string(),
+      monthlyEstimate: moneyEstimateSchema,
+      periodEstimate: moneyEstimateSchema,
+      costDrivers: z.array(z.string()),
+      explanation: z.string(),
+      pricingSource: z.enum(["aws_pricing_api", "fallback"]).optional(),
+      usageAssumptions: z.array(z.object({ label: z.string(), value: z.string() })).optional(),
+      recommendation: z.string().optional()
+    })
+  ),
+  reviewMessages: z.array(z.string()),
+  pricingAssumption: z.string()
+});
+
 const designSimulationResponseSchema = z.object({
   summary: z.string(),
   assumptions: z.array(z.string()),
@@ -34,6 +66,7 @@ const designSimulationResponseSchema = z.object({
     })
   ),
   costPressure: z.array(z.string()),
+  costEstimate: costEstimateSchema,
   recommendations: z.array(z.string())
 });
 
@@ -59,6 +92,9 @@ test("POST /api/ai/design-simulation estimates flow, bottlenecks, failures, and 
     payload: {
       trafficLevel: "normal",
       budgetLevel: "low",
+      period: "month",
+      expectedUserCount: 1000,
+      region: "ap-northeast-2",
       architectureJson: {
         nodes: [
           {
@@ -122,13 +158,101 @@ test("POST /api/ai/design-simulation estimates flow, bottlenecks, failures, and 
   assert.ok(body.failureScenarios.some((item) => item.affectedResourceIds.includes("rds-primary")));
   assert.ok(body.costPressure.some((item) => item.includes("RDS")));
   assert.ok(body.recommendations.some((item) => item.includes("EC2")));
+  assert.equal(body.costEstimate.totalEstimate.amount, 47.3);
+  assert.equal(body.costEstimate.totalMonthlyEstimate.amount, 47.3);
+  assert.equal(body.costEstimate.period, "month");
+  assert.equal(body.costEstimate.expectedUserCount, 1000);
+  assert.equal(body.costEstimate.region, "ap-northeast-2");
+  assert.equal(body.costEstimate.pricingSource, "fallback");
+  assert.equal(body.costEstimate.fallbackUsed, true);
+  assert.ok(
+    body.costEstimate.resources.some(
+      (item) =>
+        item.resourceId === "ec2-backend" &&
+        item.monthlyEstimate.amount === 8.5 &&
+        item.periodEstimate.amount === 8.5
+    )
+  );
+  assert.ok(
+    body.costEstimate.resources.some(
+      (item) =>
+        item.resourceId === "rds-primary" &&
+        item.monthlyEstimate.amount === 38.8 &&
+        item.periodEstimate.amount === 38.8
+    )
+  );
+  assert.ok(
+    body.costEstimate.reviewMessages.some(
+      (item) => item === "현재 상황에서의 총 예상 비용은 $47.30 / month입니다."
+    )
+  );
+  assert.ok(body.costPressure.some((item) => item === "EC2는 인스턴스 크기와 실행 시간이 비용에 직접 영향을 줍니다."));
 
   await app.close();
 });
 
-test("POST /api/ai/design-simulation returns fallback llmExplanation when API key is missing", async () => {
-  const originalApiKey = process.env.OPENAI_API_KEY;
-  delete process.env.OPENAI_API_KEY;
+test("POST /api/ai/design-simulation accepts generated load balancer resource types", async () => {
+  const app = buildApp();
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/ai/design-simulation",
+    payload: {
+      trafficLevel: "normal",
+      budgetLevel: "low",
+      architectureJson: {
+        nodes: [
+          {
+            id: "vpc-main",
+            type: "VPC",
+            label: "Main VPC",
+            positionX: 80,
+            positionY: 120,
+            config: {}
+          },
+          {
+            id: "subnet-public-a",
+            type: "SUBNET",
+            label: "Public Subnet A",
+            positionX: 240,
+            positionY: 120,
+            config: {}
+          },
+          {
+            id: "app-security-group",
+            type: "SECURITY_GROUP",
+            label: "App Security Group",
+            positionX: 400,
+            positionY: 120,
+            config: {}
+          },
+          {
+            id: "app-load-balancer",
+            type: "LOAD_BALANCER",
+            label: "Application Load Balancer",
+            positionX: 560,
+            positionY: 120,
+            config: {
+              loadBalancerType: "application"
+            }
+          }
+        ],
+        edges: []
+      }
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+
+  const body = designSimulationResponseSchema.parse(response.json());
+
+  assert.ok(body.costEstimate.resources.some((item) => item.resourceType === "LOAD_BALANCER"));
+
+  await app.close();
+});
+
+test("POST /api/ai/design-simulation returns fallback llmExplanation when Bedrock credit is not confirmed", async () => {
+  const restoreAiEnv = forceAwsAiCreditBlocked();
 
   const app = buildApp();
 
@@ -162,17 +286,12 @@ test("POST /api/ai/design-simulation returns fallback llmExplanation when API ke
     const body = llmEnhancedDesignSimulationResponseSchema.parse(response.json());
 
     assert.equal(body.llmExplanation.fallbackUsed, true);
-    assert.equal(body.llmExplanation.fallbackReason, "missing_api_key");
+    assert.equal(body.llmExplanation.fallbackReason, "credit_not_confirmed");
     assert.ok(body.llmExplanation.summary.length > 0);
     assert.ok(body.llmExplanation.highlights.length > 0);
     assert.ok(body.llmExplanation.nextActions.length > 0);
   } finally {
-    if (originalApiKey === undefined) {
-      delete process.env.OPENAI_API_KEY;
-    } else {
-      process.env.OPENAI_API_KEY = originalApiKey;
-    }
-
+    restoreAiEnv();
     await app.close();
   }
 });
@@ -274,3 +393,30 @@ test("POST /api/ai/design-simulation explains public exposure as a failure scena
 
   await app.close();
 });
+
+function forceAwsAiCreditBlocked(): () => void {
+  const originalEnv = {
+    AI_BILLING_MODE: process.env.AI_BILLING_MODE,
+    BEDROCK_CREDIT_CONFIRMED: process.env.BEDROCK_CREDIT_CONFIRMED,
+    OPENAI_API_KEY: process.env.OPENAI_API_KEY
+  };
+
+  process.env.AI_BILLING_MODE = "aws_credit_only";
+  process.env.BEDROCK_CREDIT_CONFIRMED = "false";
+  delete process.env.OPENAI_API_KEY;
+
+  return () => {
+    restoreEnvValue("AI_BILLING_MODE", originalEnv.AI_BILLING_MODE);
+    restoreEnvValue("BEDROCK_CREDIT_CONFIRMED", originalEnv.BEDROCK_CREDIT_CONFIRMED);
+    restoreEnvValue("OPENAI_API_KEY", originalEnv.OPENAI_API_KEY);
+  };
+}
+
+function restoreEnvValue(key: string, value: string | undefined): void {
+  if (value === undefined) {
+    delete process.env[key];
+    return;
+  }
+
+  process.env[key] = value;
+}

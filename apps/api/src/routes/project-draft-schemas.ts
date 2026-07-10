@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { DiagramJson, DiagramNodeMetadata } from "@sketchcatch/types";
+import type { DiagramEdgeMetadata, DiagramJson, DiagramNodeMetadata } from "@sketchcatch/types";
 
 const diagramPositionSchema = z.object({
   x: z.number().finite(),
@@ -13,23 +13,18 @@ const diagramSizeSchema = z.object({
 
 const diagramNodeStyleSchema = z.object({
   textColor: z.string().min(1).optional(),
-  borderColor: z.string().min(1).optional()
+  borderColor: z.string().min(1).optional(),
+  borderStyle: z.enum(["solid", "dashed", "dotted"]).optional()
 });
-
-const awsRegionCodeSchema = z.enum([
-  "ap-northeast-2",
-  "ap-northeast-1",
-  "ap-southeast-1",
-  "us-east-1",
-  "us-west-2",
-  "eu-west-1",
-  "eu-central-1"
-]);
 
 const diagramNodeMetadataSchema: z.ZodType<DiagramNodeMetadata> = z.object({
-  awsRegion: awsRegionCodeSchema.optional(),
-  parentAreaNodeId: z.string().min(1).optional()
-});
+  parentAreaNodeId: z.string().min(1).optional(),
+  reverseEngineering: z.object({
+    source: z.literal("aws_scan"),
+    protectedValueKeys: z.array(z.string().min(1)),
+    editableValueKeys: z.array(z.string().min(1))
+  }).optional()
+}).strict();
 
 const diagramNodeParametersSchema = z.object({
   terraformBlockType: z.enum(["resource", "data"]).optional(),
@@ -57,9 +52,15 @@ const diagramNodeSchema = z.object({
 
 const diagramEdgeStyleSchema = z.object({
   color: z.string().min(1).optional(),
+  lineStyle: z.enum(["solid", "dashed", "dotted"]).optional(),
   width: z.enum(["thin", "medium", "thick"]).optional(),
   animated: z.boolean().optional()
 });
+
+const diagramEdgeMetadataSchema: z.ZodType<DiagramEdgeMetadata> = z.object({
+  managedBy: z.literal("parameter-reference"),
+  parameterPath: z.string().min(1)
+}).strict();
 
 const diagramEdgeSchema = z.object({
   id: z.string().min(1),
@@ -69,7 +70,8 @@ const diagramEdgeSchema = z.object({
   targetHandleId: z.string().min(1).optional(),
   label: z.string().min(1).optional(),
   type: z.string().min(1).optional(),
-  style: diagramEdgeStyleSchema.optional()
+  style: diagramEdgeStyleSchema.optional(),
+  metadata: diagramEdgeMetadataSchema.optional()
 });
 
 export const diagramJsonSchema: z.ZodType<DiagramJson> = z.object({
