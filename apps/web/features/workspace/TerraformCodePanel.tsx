@@ -1,15 +1,10 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent, UIEvent } from "react";
 import type { DiagramJson, TerraformDiagnostic, TerraformSourceLocation, TerraformSyncFileInput } from "@sketchcatch/types";
-import {
-  ArrowLeft,
-  ChevronDown,
-  FileCode2,
-  Sparkles,
-  X
-} from "lucide-react";
 import { getApiErrorMessage } from "../../lib/api-client";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
+import { TerraformCodeStatus } from "./TerraformCodeStatus";
+import { TerraformCodeToolbar } from "./TerraformCodeToolbar";
 import {
   generateTerraformCode,
   syncTerraformToDiagram,
@@ -217,6 +212,7 @@ export type TerraformCodePanelHandle = {
   readonly validateCurrentTerraform: () => Promise<TerraformDiagnostic[]>;
 };
 
+// Terraform 생성, 검증, 저장 상태를 관리하고 화면 전용 컴포넌트에 결과만 전달합니다.
 export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
   readonly context: DiagramEditorPanelContext;
   readonly externalDiscardRequestId: number;
@@ -1071,24 +1067,6 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     onOpenIssues();
   }
 
-  function renderTerraformPreviewExplanationButton() {
-    return (
-      <button
-        className={styles.terraformPreviewButton}
-        disabled={
-          !terraformPreviewExplanationScope.code ||
-          requestState === "loading"
-        }
-        onClick={requestTerraformPreviewExplanation}
-        title={terraformPreviewExplanationScope.label}
-        type="button"
-      >
-        <Sparkles size={14} aria-hidden="true" />
-        <span>Preview 설명</span>
-      </button>
-    );
-  }
-
   function selectTerraformFile(fileName: string): void {
     setTerraformFiles((currentFiles) =>
       currentFiles.some((file) => file.fileName === fileName)
@@ -1106,116 +1084,38 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
 
   return (
     <div className={styles.terraformPanel}>
-      {isResourceCodeMode ? (
-        <header className={styles.resourceCodeHeader}>
-          <div className={styles.resourceCodeTitle}>
-            <button
-              aria-label="전체 Terraform 코드로 돌아가기"
-              className={styles.resourceCodeBackButton}
-              onClick={context.closeInspectedNode}
-              type="button"
-            >
-              <ArrowLeft size={18} aria-hidden="true" />
-            </button>
-            <span>{inspectedNode?.label ?? inspectedNode?.parameters?.resourceName ?? "Resource"}</span>
-          </div>
-          <button
-            aria-label="리소스 코드 닫기"
-            className={styles.resourceCodeCloseButton}
-            onClick={context.closeInspectedNode}
-            type="button"
-          >
-            <X size={18} aria-hidden="true" />
-          </button>
-        </header>
-      ) : (
-        <header className={styles.terraformTopBar}>
-          <div className={styles.terraformFilePicker}>
-            <button
-              aria-expanded={isFileMenuOpen}
-              aria-haspopup="listbox"
-              className={styles.terraformFileButton}
-              onClick={() => setIsFileMenuOpen((isOpen) => !isOpen)}
-              type="button"
-            >
-              <FileCode2 size={16} aria-hidden="true" />
-              <span>{activeFileName}</span>
-              <ChevronDown size={15} aria-hidden="true" />
-            </button>
-            {isFileMenuOpen ? (
-              <div className={styles.terraformFileMenu}>
-                <input
-                  aria-label="Terraform 파일 검색"
-                  className={styles.terraformFileSearch}
-                  onChange={(event) => setFileSearchQuery(event.target.value)}
-                  placeholder="Search file"
-                  value={fileSearchQuery}
-                />
-                <div className={styles.terraformFileList} role="listbox">
-                  {filteredTerraformFileOptions.map((fileName) => (
-                    <button
-                      aria-selected={fileName === activeFileName}
-                      className={
-                        fileName === activeFileName
-                          ? styles.terraformFileOptionActive
-                          : styles.terraformFileOption
-                      }
-                      key={fileName}
-                      onClick={() => selectTerraformFile(fileName)}
-                      role="option"
-                      type="button"
-                    >
-                      {fileName}
-                    </button>
-                  ))}
-                  {filteredTerraformFileOptions.length === 0 ? (
-                    <span className={styles.terraformFileEmpty}>No files</span>
-                  ) : null}
-                </div>
-              </div>
-            ) : null}
-          </div>
-          <div className={styles.terraformTopActions}>
-            {renderTerraformPreviewExplanationButton()}
-            <span className={styles.terraformShortcut}>Ctrl+S</span>
-          </div>
-        </header>
-      )}
+      <TerraformCodeToolbar
+        actions={{
+          closeResourceCode: context.closeInspectedNode,
+          requestExplanation: requestTerraformPreviewExplanation,
+          searchFiles: setFileSearchQuery,
+          selectFile: selectTerraformFile,
+          toggleFileMenu: () => setIsFileMenuOpen((isOpen) => !isOpen)
+        }}
+        state={{
+          activeFileName,
+          canRequestExplanation:
+            terraformPreviewExplanationScope.code.length > 0 && requestState !== "loading",
+          explanationLabel: terraformPreviewExplanationScope.label,
+          fileOptions: filteredTerraformFileOptions,
+          fileSearchQuery,
+          inspectedResourceLabel:
+            inspectedNode?.label ?? inspectedNode?.parameters?.resourceName ?? "Resource",
+          isFileMenuOpen,
+          isResourceCodeMode
+        }}
+      />
 
-      {isResourceCodeMode ? (
-        <div className={styles.resourceActionBar}>
-          {renderTerraformPreviewExplanationButton()}
-        </div>
-      ) : null}
-
-      <div className={styles.terraformStatusBar}>
-        <span className={isTerraformPreviewSynced ? styles.terraformStatusSynced : styles.terraformStatusEdited}>
-          {statusMessage}
-        </span>
-        <span>{previewSnapshotSummary}</span>
-      </div>
-
-      {saveBanner ? (
-        <div className={saveBanner.kind === "error" ? styles.terraformSaveBannerError : styles.terraformSaveBanner}>
-          <span>
-            {saveBanner.kind === "error"
-              ? "Terraform 오류가 있습니다. Issues에서 확인하세요."
-              : "저장하지 않은 Terraform 변경이 있습니다. Ctrl+S로 저장하세요."}
-          </span>
-          <button data-terraform-issues-navigation onClick={handleSeeMore} type="button">
-            Issues 보기
-          </button>
-        </div>
-      ) : null}
-
-      {errorDiagnostics.length > 0 ? (
-        <div className={styles.terraformIssueBanner} role="status">
-          <span>Terraform 오류가 있습니다. 자세한 내용은 Issues에서 확인하세요.</span>
-          <button data-terraform-issues-navigation onClick={handleSeeMore} type="button">
-            Issues 보기
-          </button>
-        </div>
-      ) : null}
+      <TerraformCodeStatus
+        onOpenIssues={handleSeeMore}
+        state={{
+          errorCount: errorDiagnostics.length,
+          isSynced: isTerraformPreviewSynced,
+          previewSummary: previewSnapshotSummary,
+          saveBanner,
+          statusMessage
+        }}
+      />
 
       <div className={styles.terraformEditorFrame}>
         <ol ref={lineNumberRef} className={styles.terraformLineNumbers} aria-hidden="true">

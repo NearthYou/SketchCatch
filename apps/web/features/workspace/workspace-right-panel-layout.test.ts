@@ -16,6 +16,8 @@ const resourceWorkspaceStylesSource = readWorkspaceFile("resource-workspace.modu
 const diagramEditorTypesSource = readFeatureFile("../diagram-editor/types.ts");
 const terraformLeaveDialogSource = readWorkspaceFile("TerraformLeaveDialog.tsx");
 const terraformPanelSource = readWorkspaceFile("TerraformCodePanel.tsx");
+const terraformStatusSource = readWorkspaceFile("TerraformCodeStatus.tsx");
+const terraformToolbarSource = readWorkspaceFile("TerraformCodeToolbar.tsx");
 const terraformIssuesPanelSource = readWorkspaceFile("TerraformIssuesPanel.tsx");
 const terraformIssuesStylesSource = readWorkspaceFile("TerraformIssuesPanel.module.css");
 const workspaceRightPanelTypesSource = readWorkspaceFile("workspace-right-panel.types.ts");
@@ -757,8 +759,8 @@ test("terraform view embeds issues below code with a resizable split instead of 
 });
 
 test("terraform issue banner focuses the embedded Issues panel instead of navigating to a tab", () => {
-  assert.match(terraformPanelSource, /Issues 보기/);
-  assert.doesNotMatch(terraformPanelSource, /Issues 탭으로 이동/);
+  assert.match(terraformStatusSource, /Issues 보기/);
+  assert.doesNotMatch(terraformStatusSource, /Issues 탭으로 이동/);
   assert.match(componentSource, /focusTerraformIssuesPane/);
   assert.match(componentSource, /onOpenIssues=\{focusTerraformIssuesPane\}/);
 });
@@ -1339,8 +1341,8 @@ test("terraform errors surface as an issues banner and AI resolution lives in th
   assert.doesNotMatch(terraformPanelSource, /AI 설명/);
   assert.doesNotMatch(terraformPanelSource, /terraformErrorExplanationPanel/);
   assert.doesNotMatch(terraformPanelSource, /terraformErrorExplanationList/);
-  assert.match(terraformPanelSource, /className=\{styles\.terraformIssueBanner\}/);
-  assert.match(terraformPanelSource, /Issues 보기/);
+  assert.match(terraformStatusSource, /className=\{styles\.terraformIssueBanner\}/);
+  assert.match(terraformStatusSource, /Issues 보기/);
   assert.doesNotMatch(terraformPanelSource, /Issues 탭으로 이동/);
   assert.match(componentSource, /readStoredTerraformIssues/);
   assert.match(componentSource, /markTerraformIssuesStale/);
@@ -1558,7 +1560,8 @@ test("terraform preview explanation is triggered from the terraform code panel",
 });
 
 test("terraform resource code mode keeps explanation but omits validation and deployment actions", () => {
-  assert.match(terraformPanelSource, /renderTerraformPreviewExplanationButton\(\)/);
+  assert.match(terraformToolbarSource, /<TerraformExplanationButton actions=\{actions\} state=\{state\} \/>/);
+  assert.match(terraformToolbarSource, /<span>Preview 설명<\/span>/);
   assert.doesNotMatch(terraformPanelSource, /<span>Validate<\/span>/);
   assert.doesNotMatch(terraformPanelSource, />\s*Validate\s*<\/button>/);
   assert.doesNotMatch(terraformPanelSource, /리소스 단위 plan API 연결 예정/);
