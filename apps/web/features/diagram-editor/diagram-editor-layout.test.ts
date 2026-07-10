@@ -136,6 +136,17 @@ test("manual resize relies on node size effects to refresh React Flow internals"
   );
 });
 
+test("parameter updates synchronize reference edges within one diagram update transaction", () => {
+  assert.match(
+    diagramEditorSource,
+    /const nextNodes = updateNodeById\(currentDiagram\.nodes, nodeId, \(node\) =>\s*applyNodeParametersUpdateWithResourceLabel\(node, update\)\s*\);/s
+  );
+  assert.match(
+    diagramEditorSource,
+    /nodes: nextNodes,\s*edges: syncParameterReferenceEdgesForNode\(nextNodes, currentDiagram\.edges, nodeId\)/s
+  );
+});
+
 function getCssBlock(selector: string): string {
   const selectorStart = diagramEditorStyles.indexOf(`${selector} {`);
 

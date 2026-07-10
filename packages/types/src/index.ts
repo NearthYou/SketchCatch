@@ -1970,6 +1970,11 @@ export type DiagramEdgeStyle = {
   animated?: boolean | undefined;
 };
 
+export type DiagramEdgeMetadata = {
+  managedBy: "parameter-reference";
+  parameterPath: string;
+};
+
 export type DiagramEdge = {
   id: string;
   sourceNodeId: string;
@@ -1979,6 +1984,7 @@ export type DiagramEdge = {
   label?: string | undefined;
   type?: string | undefined;
   style?: DiagramEdgeStyle | undefined;
+  metadata?: DiagramEdgeMetadata | undefined;
 };
 
 export type DiagramViewport = {
