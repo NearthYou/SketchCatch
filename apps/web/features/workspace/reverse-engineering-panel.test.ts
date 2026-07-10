@@ -167,7 +167,7 @@ test("Reverse Engineering candidate preview keeps the original board as the comp
 
 test("Reverse Engineering start page keeps the editor initial diagram stable while previewing", () => {
   assert.match(reverseWorkspaceClientSource, /initialDiagram=\{EMPTY_DIAGRAM\}/);
-  assert.match(reverseWorkspaceClientSource, /latestDiagramRef\.current = nextDiagram/);
+  assert.doesNotMatch(reverseWorkspaceClientSource, /onDiagramChange=/);
   assert.doesNotMatch(reverseWorkspaceClientSource, /useState<DiagramJson>/);
   assert.doesNotMatch(reverseWorkspaceClientSource, /setDiagram\(nextDiagram\)/);
 });

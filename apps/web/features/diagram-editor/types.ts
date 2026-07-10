@@ -63,6 +63,7 @@ export type DiagramEditorProps = {
   dashboardHref?: string | undefined;
   projectName?: string | undefined;
   saveStatus?: string | undefined;
+  showSaveAction?: boolean | undefined;
   workspaceUserName?: string | undefined;
 };
 

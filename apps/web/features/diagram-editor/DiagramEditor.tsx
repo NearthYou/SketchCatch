@@ -171,6 +171,7 @@ function DiagramEditorInner({
   projectName = "Project workspace",
   rightPanel,
   saveStatus = "편집 중",
+  showSaveAction = true,
   workspaceUserName = "Personal workspace"
 }: DiagramEditorProps) {
   const reactFlow = useReactFlow<DiagramFlowNode, DiagramFlowEdge>();
@@ -2151,6 +2152,7 @@ function DiagramEditorInner({
           dashboardHref,
           projectName,
           saveStatus,
+          showSaveAction,
           userName: workspaceUserName
         }}
       />

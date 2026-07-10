@@ -30,6 +30,7 @@ type WorkspaceProjectBarProps = {
     readonly dashboardHref: string;
     readonly projectName: string;
     readonly saveStatus: string;
+    readonly showSaveAction: boolean;
     readonly userName: string;
   };
 };
@@ -87,16 +88,18 @@ export function WorkspaceProjectBar({
           <span>{workspace.saveStatus}</span>
         </div>
 
-        <button
-          aria-label="지금 저장"
-          className={styles.projectBarIconButton}
-          disabled={!actions.onSave || isSaving}
-          onClick={handleSave}
-          title="지금 저장"
-          type="button"
-        >
-          <Save aria-hidden="true" size={17} />
-        </button>
+        {workspace.showSaveAction ? (
+          <button
+            aria-label="지금 저장"
+            className={styles.projectBarIconButton}
+            disabled={!actions.onSave || isSaving}
+            onClick={handleSave}
+            title="지금 저장"
+            type="button"
+          >
+            <Save aria-hidden="true" size={17} />
+          </button>
+        ) : null}
 
         <span aria-hidden="true" className={styles.projectBarDivider} />
 

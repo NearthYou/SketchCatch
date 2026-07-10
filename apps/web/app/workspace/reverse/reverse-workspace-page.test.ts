@@ -28,11 +28,12 @@ test("reverse workspace has a dedicated neutral layout instead of global class n
   assert.match(stylesSource, /\.rightPanel\s*\{/);
   assert.match(stylesSource, /--reverse-accent:\s*#000000/);
   assert.doesNotMatch(stylesSource, /#6f4cf6|#5f3de8|rgba\(111,\s*76,\s*246/i);
-  assert.match(stylesSource, /\.startBackButton\s*\{[^}]*margin-bottom:\s*24px/s);
+  assert.match(stylesSource, /\.startBackButton\s*\{[^}]*margin-top:\s*0/s);
+  assert.doesNotMatch(stylesSource, /\.startBackButton\s*\{[^}]*margin-top:\s*auto/s);
 });
 
 test("reverse empty states keep mobile guidance short", () => {
-  assert.match(clientSource, /가져온 구조가 여기에 표시됩니다\./);
+  assert.match(clientSource, /가져온 AWS 구조가 여기에 표시됩니다\./);
   assert.doesNotMatch(clientSource, /자동 감지 결과가 표시됩니다/);
 });
 
@@ -48,6 +49,8 @@ test("reverse preview lets users inspect provider values without editing them", 
 test("reverse workspace route starts from an empty preview board and creates the project only on apply", () => {
   assert.match(clientSource, /EMPTY_DIAGRAM/);
   assert.match(clientSource, /emptyBoardDescription="기존 AWS를 가져오면 복원한 구조가 여기에 표시됩니다\."/);
+  assert.match(clientSource, /showSaveAction=\{false\}/);
+  assert.doesNotMatch(clientSource, /onDiagramSaveRequest=/);
   assert.match(clientSource, /REVERSE_PREVIEW_PROJECT_ID = "reverse-preview-project"/);
   assert.match(clientSource, /projectId=\{REVERSE_PREVIEW_PROJECT_ID\}/);
   assert.match(clientSource, /createProjectOnApply/);

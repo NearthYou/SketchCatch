@@ -167,6 +167,12 @@ test("a dedicated workflow can replace the default empty board guidance", () => 
   assert.match(diagramEditorSource, /<span>\{emptyBoardDescription\}<\/span>/);
 });
 
+test("a preview-only workflow can hide the project save action", () => {
+  assert.match(diagramEditorSource, /showSaveAction = true/);
+  assert.match(diagramEditorSource, /showSaveAction,\s*userName:/s);
+  assert.match(workspaceProjectBarSource, /\{workspace\.showSaveAction \? \(/);
+});
+
 test("collapsed right panel does not leave the mobile fixed rail shell visible", () => {
   const collapsedMobileRightRailRule = getCssRuleContaining(".editorShellRightCollapsed .rightRail");
 

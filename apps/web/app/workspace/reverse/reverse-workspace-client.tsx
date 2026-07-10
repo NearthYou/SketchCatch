@@ -2,8 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { ArrowLeft, CheckCircle2, ChevronLeft } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
-import type { DiagramJson, DiagramNode } from "../../../../../packages/types/src";
+import { useCallback, useState } from "react";
+import type { DiagramNode } from "../../../../../packages/types/src";
 import { useAuth } from "../../../components/auth/auth-provider";
 import { DiagramEditor, type DiagramEditorPanelContext } from "../../../features/diagram-editor";
 import { EMPTY_DIAGRAM } from "../../../features/diagram-editor/constants";
@@ -29,21 +29,10 @@ const EMPTY_CANDIDATE_PANEL_STATE: ReverseEngineeringCandidatePanelState = {
 export function ReverseWorkspaceClient({ projectName }: ReverseWorkspaceClientProps) {
   const router = useRouter();
   const { user } = useAuth();
-  const latestDiagramRef = useRef<DiagramJson>(EMPTY_DIAGRAM);
   const [candidatePanelState, setCandidatePanelState] =
     useState<ReverseEngineeringCandidatePanelState>(EMPTY_CANDIDATE_PANEL_STATE);
   const workspaceUserName =
     user?.nickname?.trim() || user?.username?.trim() || user?.email?.trim() || "Personal workspace";
-
-  // DiagramEditor의 initialDiagram을 다시 바꾸면 preview가 초기화되므로 저장용 ref만 갱신합니다.
-  const handleDiagramChange = useCallback((nextDiagram: DiagramJson): void => {
-    latestDiagramRef.current = nextDiagram;
-  }, []);
-
-  // Reverse 시작 화면에서는 아직 저장할 프로젝트가 없어서 저장 버튼을 눌러도 서버에는 쓰지 않습니다.
-  const keepPreviewOnly = useCallback(async (): Promise<DiagramJson> => {
-    return latestDiagramRef.current;
-  }, []);
 
   const chooseAnotherStartMode = useCallback((): void => {
     router.push("/workspace/new");
@@ -60,8 +49,6 @@ export function ReverseWorkspaceClient({ projectName }: ReverseWorkspaceClientPr
           state={candidatePanelState}
         />
       }
-      onDiagramChange={handleDiagramChange}
-      onDiagramSaveRequest={keepPreviewOnly}
       projectName={projectName}
       rightPanel={(context) => (
         <ReverseDockedPanel
@@ -71,6 +58,7 @@ export function ReverseWorkspaceClient({ projectName }: ReverseWorkspaceClientPr
         />
       )}
       saveStatus="미리보기"
+      showSaveAction={false}
       workspaceUserName={workspaceUserName}
     />
   );
@@ -137,7 +125,7 @@ function ReverseBoardCandidateSelectionPanel({
       ) : (
         <div className={styles.emptyState}>
           <strong>아직 감지된 구조가 없습니다</strong>
-          <span>기존 AWS를 가져오면 가져온 구조가 여기에 표시됩니다.</span>
+          <span>가져온 AWS 구조가 여기에 표시됩니다.</span>
         </div>
       )}
 
