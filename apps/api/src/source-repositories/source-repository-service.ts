@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
 import type {
+  AnalyzeSourceRepositoryResponse,
   GitHubInstalledRepositoryCandidate,
   GitHubRepositoryCandidate
 } from "@sketchcatch/types";
@@ -8,7 +9,11 @@ import type { Database } from "../db/client.js";
 import { projects, sourceRepositories, touchUpdatedAt } from "../db/schema.js";
 import type { ProjectAccessContext } from "../git-cicd/git-cicd-handoff-service.js";
 import { createGitHubAppState, verifyGitHubAppState } from "./github-app-state.js";
-import type { GitHubAppClient } from "./github-app-client.js";
+import type {
+  GitHubAppClient,
+  GitHubRepositoryEvidenceReader
+} from "./github-app-client.js";
+import { analyzeRepositoryEvidence } from "./repository-analysis.js";
 
 export type SourceRepositoryRecord = typeof sourceRepositories.$inferSelect;
 export type SourceRepositoryProjectRecord = typeof projects.$inferSelect;
@@ -94,6 +99,12 @@ export type ConnectGitHubSourceRepositoryInput = {
   state: string;
   accessContext: ProjectAccessContext;
   stateSecret: string;
+};
+
+export type AnalyzeSourceRepositoryInput = {
+  readonly projectId: string;
+  readonly sourceRepositoryId: string;
+  readonly accessContext: ProjectAccessContext;
 };
 
 export class SourceRepositoryNotFoundError extends Error {
@@ -387,6 +398,52 @@ export async function listSourceRepositories(
   );
 
   return repository.listProjectSourceRepositories(input.projectId);
+}
+
+// active GitHub Source Repository를 요청 시 읽고 결과를 저장하지 않은 채 반환한다.
+export async function analyzeSourceRepository(
+  input: AnalyzeSourceRepositoryInput,
+  repository: SourceRepositoryRepository,
+  evidenceReader: GitHubRepositoryEvidenceReader
+): Promise<AnalyzeSourceRepositoryResponse> {
+  await requireAccessibleProject(
+    input.projectId,
+    input.accessContext,
+    repository,
+    "Project not found"
+  );
+  const sourceRepository = await repository.findProjectSourceRepository(
+    input.projectId,
+    input.sourceRepositoryId
+  );
+
+  if (!sourceRepository) {
+    throw new SourceRepositoryNotFoundError("Source repository not found");
+  }
+
+  if (
+    sourceRepository.status !== "active" ||
+    sourceRepository.provider !== "github" ||
+    !sourceRepository.githubInstallationId ||
+    sourceRepository.archived
+  ) {
+    throw new SourceRepositoryConflictError(
+      "Only an active GitHub source repository can be analyzed"
+    );
+  }
+
+  const snapshot = await evidenceReader.readRepositoryEvidence({
+    installationId: sourceRepository.githubInstallationId,
+    owner: sourceRepository.owner,
+    name: sourceRepository.name,
+    ref: sourceRepository.defaultBranch
+  });
+
+  return {
+    sourceRepositoryId: sourceRepository.id,
+    repositoryRevision: snapshot.revision,
+    aiHandoff: analyzeRepositoryEvidence(snapshot)
+  };
 }
 
 async function verifyAndAuthorizeState(

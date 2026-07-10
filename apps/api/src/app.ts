@@ -65,7 +65,11 @@ export type BuildAppOptions = {
   projectDeletionStorage?: ProjectDeletionStorage;
   sourceRepositoryRoutes?: Pick<
     SourceRepositoryRouteOptions,
-    "createSourceRepositoryRepository" | "githubAppClient" | "githubAppSlug" | "githubAppStateSecret"
+    | "createSourceRepositoryRepository"
+    | "githubAppClient"
+    | "githubAppSlug"
+    | "githubAppStateSecret"
+    | "githubRepositoryEvidenceReader"
   >;
   runtimeCache?: RuntimeCache;
   validateTerraformPreviewCode?: TerraformRouteOptions["validateTerraformPreviewCode"];
