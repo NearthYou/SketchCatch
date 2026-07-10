@@ -156,7 +156,7 @@ test("finalizeDraggedNodes assigns children dropped inside an ASG area", () => {
   assert.equal(instance?.metadata?.parentAreaNodeId, "asg-1");
 });
 
-test("finalizeDraggedNodes expands assigned parent areas for moved icon resources", () => {
+test("finalizeDraggedNodes tracks a parent moved by top-left expansion for an assigned icon", () => {
   const nodes = [
     makeResourceNode({
       id: "vpc-1",
@@ -164,8 +164,8 @@ test("finalizeDraggedNodes expands assigned parent areas for moved icon resource
       resourceType: "aws_vpc",
       width: 80,
       height: 60,
-      x: 0,
-      y: 0
+      x: 100,
+      y: 100
     }),
     makeResourceNode({
       id: "instance-1",
@@ -173,8 +173,8 @@ test("finalizeDraggedNodes expands assigned parent areas for moved icon resource
       resourceType: "aws_instance",
       width: 20,
       height: 20,
-      x: 120,
-      y: 20
+      x: 220,
+      y: 200
     })
   ];
 
@@ -183,7 +183,7 @@ test("finalizeDraggedNodes expands assigned parent areas for moved icon resource
     catalog: terraformParameterCatalog,
     currentNodes: nodes,
     directlyMovedNodeIds: new Set(["instance-1"]),
-    positionByNodeId: new Map([["instance-1", { x: 65, y: 20 }]]),
+    positionByNodeId: new Map([["instance-1", { x: 95, y: 95 }]]),
     snapGridSize: 1,
     snapshotNodes: nodes
   });
@@ -191,7 +191,9 @@ test("finalizeDraggedNodes expands assigned parent areas for moved icon resource
   const vpc = result.nodes.find((node) => node.id === "vpc-1");
   const instance = result.nodes.find((node) => node.id === "instance-1");
   assert.equal(instance?.metadata?.parentAreaNodeId, "vpc-1");
-  assert.deepEqual(vpc?.size, { width: 95, height: 60 });
+  assert.deepEqual(vpc?.position, { x: 85, y: 85 });
+  assert.deepEqual(vpc?.size, { width: 95, height: 75 });
+  assert.deepEqual(result.movedNodeIds, new Set(["vpc-1", "instance-1"]));
 });
 
 function makeResourceNode({
