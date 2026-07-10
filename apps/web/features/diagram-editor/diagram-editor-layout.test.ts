@@ -11,6 +11,10 @@ const diagramEditorStyles = readFileSync(
   fileURLToPath(new URL("./diagram-editor.module.css", import.meta.url)),
   "utf8"
 );
+const dragTransactionSource = readFileSync(
+  fileURLToPath(new URL("./drag-transaction.ts", import.meta.url)),
+  "utf8"
+);
 const diagramNodeViewSource = readFileSync(
   fileURLToPath(new URL("./DiagramNodeView.tsx", import.meta.url)),
   "utf8"
@@ -150,8 +154,13 @@ test("parameter updates synchronize all reference edges within one diagram updat
 test("new resource drops expand assigned parent areas before applying reference targets", () => {
   assert.match(
     diagramEditorSource,
-    /const nodesWithAssignedParents = applyAreaNodeParentAssignments\(\s*nodesWithNextNode,\s*new Set\(\[nextNode\.id\]\)\s*\);\s*const nodesWithExpandedParents =\s*expandParentAreaNodesForChildren\(nodesWithAssignedParents,\s*new Set\(\[nextNode\.id\]\)\);\s*return \{\s*\.\.\.currentDiagram,\s*nodes: applyContainingReferenceDropTargets\(\s*nodesWithExpandedParents,/s
+    /const nodesWithAssignedParents = applyAreaNodeParentAssignments\(\s*nodesWithNextNode,\s*new Set\(\[nextNode\.id\]\)\s*\);\s*const nodesWithExpandedParents =\s*expandParentAreaNodesForNewChild\(nodesWithAssignedParents,\s*nextNode\.id\);\s*return \{\s*\.\.\.currentDiagram,\s*nodes: applyContainingReferenceDropTargets\(\s*nodesWithExpandedParents,/s
   );
+  assert.match(
+    diagramEditorSource,
+    /expandParentAreaNodesForNewChild\(nodesWithAssignedParents,\s*nextNode\.id\)/s
+  );
+  assert.doesNotMatch(dragTransactionSource, /expandParentAreaNodesForNewChild/);
   assert.doesNotMatch(
     diagramEditorSource,
     /nodes: applyContainingReferenceDropTargets\(\s*nodesWithAssignedParents,\s*new Set\(\[nextNode\.id\]\)/s

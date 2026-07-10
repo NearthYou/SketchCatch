@@ -156,7 +156,7 @@ test("finalizeDraggedNodes assigns children dropped inside an ASG area", () => {
   assert.equal(instance?.metadata?.parentAreaNodeId, "asg-1");
 });
 
-test("finalizeDraggedNodes tracks a parent moved by top-left expansion for an assigned icon", () => {
+test("finalizeDraggedNodes never expands a parent when an existing icon moves inside it", () => {
   const nodes = [
     makeResourceNode({
       id: "vpc-1",
@@ -164,8 +164,8 @@ test("finalizeDraggedNodes tracks a parent moved by top-left expansion for an as
       resourceType: "aws_vpc",
       width: 80,
       height: 60,
-      x: 100,
-      y: 100
+      x: 0,
+      y: 0
     }),
     makeResourceNode({
       id: "instance-1",
@@ -173,8 +173,8 @@ test("finalizeDraggedNodes tracks a parent moved by top-left expansion for an as
       resourceType: "aws_instance",
       width: 20,
       height: 20,
-      x: 220,
-      y: 200
+      x: 120,
+      y: 20
     })
   ];
 
@@ -183,17 +183,16 @@ test("finalizeDraggedNodes tracks a parent moved by top-left expansion for an as
     catalog: terraformParameterCatalog,
     currentNodes: nodes,
     directlyMovedNodeIds: new Set(["instance-1"]),
-    positionByNodeId: new Map([["instance-1", { x: 95, y: 95 }]]),
+    positionByNodeId: new Map([["instance-1", { x: 5, y: 5 }]]),
     snapGridSize: 1,
     snapshotNodes: nodes
   });
 
-  const vpc = result.nodes.find((node) => node.id === "vpc-1");
-  const instance = result.nodes.find((node) => node.id === "instance-1");
-  assert.equal(instance?.metadata?.parentAreaNodeId, "vpc-1");
-  assert.deepEqual(vpc?.position, { x: 85, y: 85 });
-  assert.deepEqual(vpc?.size, { width: 95, height: 75 });
-  assert.deepEqual(result.movedNodeIds, new Set(["vpc-1", "instance-1"]));
+  const vpcAfter = result.nodes.find((node) => node.id === "vpc-1");
+  const instanceAfter = result.nodes.find((node) => node.id === "instance-1");
+  assert.equal(instanceAfter?.metadata?.parentAreaNodeId, "vpc-1");
+  assert.deepEqual(vpcAfter?.position, { x: 0, y: 0 });
+  assert.deepEqual(vpcAfter?.size, { width: 80, height: 60 });
 });
 
 function makeResourceNode({

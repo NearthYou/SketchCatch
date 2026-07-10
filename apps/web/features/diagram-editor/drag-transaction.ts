@@ -5,7 +5,6 @@ import {
   applyAreaNodeParentAssignments,
   getDirectlyMovedNodeIdsFromPositionMap
 } from "./area-node-movement";
-import { expandParentAreaNodesForChildren } from "./area-node-expansion";
 import { applyContainingReferenceDropTargets } from "./reference-drop-targets";
 
 type DraggedNodesInput = {
@@ -99,13 +98,12 @@ export function finalizeDraggedNodes({
   });
   const nodesWithMovedAreaChildren = applyAreaNodeMovement(snapshotNodes, positionedNodes, movedNodeIds);
   const nodesWithAssignedParents = applyAreaNodeParentAssignments(nodesWithMovedAreaChildren, movedNodeIds);
-  const nodesWithExpandedParents = expandParentAreaNodesForChildren(nodesWithAssignedParents, movedNodeIds);
-  const allMovedNodeIds = getMovedNodeIdsFromNodes(snapshotNodes, nodesWithExpandedParents);
+  const allMovedNodeIds = getMovedNodeIdsFromNodes(snapshotNodes, nodesWithAssignedParents);
 
   return {
     directlyMovedNodeIds: movedNodeIds,
     movedNodeIds: allMovedNodeIds,
-    nodes: applyContainingReferenceDropTargets(nodesWithExpandedParents, allMovedNodeIds, catalog)
+    nodes: applyContainingReferenceDropTargets(nodesWithAssignedParents, allMovedNodeIds, catalog)
   };
 }
 
