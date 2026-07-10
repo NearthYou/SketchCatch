@@ -2228,8 +2228,70 @@ test("convertArchitectureJsonToDiagramJson lays out generated EC2 drafts inside 
   assertContainsNode(nodeById.get("vpc-main"), nodeById.get("server-storage-az"));
   assertContainsNode(nodeById.get("server-storage-az"), nodeById.get("public-subnet"));
   assertContainsNode(nodeById.get("vpc-main"), nodeById.get("app-security-group"));
-  assertContainsNode(nodeById.get("vpc-main"), nodeById.get("internet-gateway"));
+  assertStraddlesTopBoundary(nodeById.get("vpc-main"), nodeById.get("internet-gateway"));
   assertContainsNode(nodeById.get("public-subnet"), nodeById.get("app-server"));
+});
+
+test("convertArchitectureJsonToDiagramJson places Internet Gateway across the VPC boundary", () => {
+  const diagramJson = convertArchitectureJsonToDiagramJson({
+    nodes: [
+      {
+        id: "vpc-main",
+        type: "VPC",
+        label: "Main VPC",
+        positionX: 200,
+        positionY: 300,
+        config: { cidrBlock: "10.0.0.0/16" }
+      },
+      {
+        id: "public-subnet-a",
+        type: "SUBNET",
+        label: "Public Subnet A",
+        positionX: 320,
+        positionY: 440,
+        config: { cidrBlock: "10.0.1.0/24", vpcId: "aws_vpc.vpc_main.id" }
+      },
+      {
+        id: "internet-gateway",
+        type: "INTERNET_GATEWAY",
+        label: "Internet Gateway",
+        positionX: 360,
+        positionY: 520,
+        config: { vpcId: "aws_vpc.vpc_main.id" }
+      },
+      {
+        id: "nat-gateway",
+        type: "NAT_GATEWAY",
+        label: "NAT Gateway",
+        positionX: 380,
+        positionY: 480,
+        config: { subnetId: "aws_subnet.public_subnet_a.id" }
+      }
+    ],
+    edges: []
+  });
+  const nodeById = new Map(diagramJson.nodes.map((node) => [node.id, node]));
+  const vpcNode = nodeById.get("vpc-main")!;
+  const subnetNode = nodeById.get("public-subnet-a")!;
+  const internetGatewayNode = nodeById.get("internet-gateway")!;
+  const natGatewayNode = nodeById.get("nat-gateway")!;
+
+  assert.equal(internetGatewayNode.metadata?.parentAreaNodeId, vpcNode.id);
+  assertStraddlesTopBoundary(vpcNode, internetGatewayNode);
+  assert.equal(natGatewayNode.metadata?.parentAreaNodeId, subnetNode.id);
+  assertContainsNode(subnetNode, natGatewayNode);
+
+  const normalizedDiagramJson = normalizeDiagramJsonConventions(diagramJson);
+  const normalizedNodeById = new Map(normalizedDiagramJson.nodes.map((node) => [node.id, node]));
+
+  assertStraddlesTopBoundary(
+    normalizedNodeById.get("vpc-main"),
+    normalizedNodeById.get("internet-gateway")
+  );
+  assertContainsNode(
+    normalizedNodeById.get("public-subnet-a"),
+    normalizedNodeById.get("nat-gateway")
+  );
 });
 
 test("convertArchitectureJsonToDiagramJson keeps route table associations out of subnet child layout", () => {
@@ -2782,6 +2844,21 @@ function assertContainsNode(parent: DiagramNode | undefined, child: DiagramNode 
   );
 }
 
+function assertStraddlesTopBoundary(parent: DiagramNode | undefined, child: DiagramNode | undefined): void {
+  assert.ok(parent, "Expected parent node to exist");
+  assert.ok(child, "Expected child node to exist");
+  assert.equal(
+    child.position.x + child.size.width / 2,
+    parent.position.x + parent.size.width / 2,
+    `${child.id} should be centered on ${parent.id}`
+  );
+  assert.ok(child.position.y < parent.position.y, `${child.id} should extend above ${parent.id}`);
+  assert.ok(
+    child.position.y + child.size.height > parent.position.y,
+    `${child.id} should extend inside ${parent.id}`
+  );
+}
+
 function assertNoNodeOverlap(left: DiagramNode | undefined, right: DiagramNode | undefined): void {
   assert.ok(left, "Expected left node to exist");
   assert.ok(right, "Expected right node to exist");
@@ -2829,7 +2906,12 @@ function assertResourceChildrenInsetFromAreaBoundaries(diagramJson: DiagramJson)
   for (const node of diagramJson.nodes) {
     const parentAreaNodeId = node.metadata?.parentAreaNodeId;
 
-    if (!parentAreaNodeId || node.kind !== "resource" || isAreaNode(node)) {
+    if (
+      !parentAreaNodeId ||
+      node.kind !== "resource" ||
+      isAreaNode(node) ||
+      node.parameters?.resourceType === "aws_internet_gateway"
+    ) {
       continue;
     }
 

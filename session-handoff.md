@@ -22,6 +22,7 @@ Use this file only for compact continuation context. Write it in English.
 - AI previews represent Region, VPC, Availability Zone, and Subnet only through parent containment; those area nodes cannot be edge endpoints.
 - AI-generated Auto Scaling Groups and Security Groups render as regular resource icons, preserving their operational arrows without empty area boxes.
 - Public AI architectures add board-only User / Client and Internet nodes and show one representative external request path; internal-only ALBs do not.
+- Internet Gateway is centered across the VPC top boundary after layout; NAT Gateway remains inside its public subnet and API Gateway remains outside VPC containment.
 
 ## Changes This Session
 
@@ -43,6 +44,7 @@ Use this file only for compact continuation context. Write it in English.
 - Exact Q DiagramJson previews now preserve Q coordinates while reapplying parent metadata and the area-only containment invariant.
 - A live Q regeneration produced 43 resources and removed `binds`, `hosts ALB`, and `member` area arrows while retaining meaningful resource edges.
 - A later live Q regeneration preserved the 43 deployable resources and added User / Client, Internet, `requests`, and `public traffic` presentation flow without Terraform impact.
+- Live gateway verification measured the VPC at `y=400` and the centered IGW icon at `y=344..402`, while NAT Gateway A remained inside the VPC.
 
 ## Broken Or Unverified
 

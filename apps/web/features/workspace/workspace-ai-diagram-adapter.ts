@@ -97,6 +97,7 @@ const AI_RESOURCE_RENDER_TYPES = new Set(["aws_autoscaling_group", "aws_security
 const AI_RESOURCE_NODE_SIZE: DiagramNode["size"] = { width: 124, height: 96 };
 const EXTERNAL_FLOW_NODE_SIZE: DiagramNode["size"] = { width: 124, height: 96 };
 const EXTERNAL_FLOW_HORIZONTAL_GAP = 48;
+const VPC_BOUNDARY_NODE_OVERHANG_RATIO = 2 / 3;
 const EXTERNAL_ENTRY_RESOURCE_TYPES = new Set([
   "aws_api_gateway_rest_api",
   "aws_apigatewayv2_api",
@@ -216,8 +217,10 @@ export function convertArchitectureJsonToDiagramJson(architectureJson: Architect
     sourceEdges
   );
   const nodes = applyDiagramLayerOrder(
-    fitAreaNodesToChildren(
-      resolveSiblingNodeCollisions(fitAreaNodesToChildren(preparedNodes))
+    placeVpcBoundaryResources(
+      fitAreaNodesToChildren(
+        resolveSiblingNodeCollisions(fitAreaNodesToChildren(preparedNodes))
+      )
     )
   );
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
@@ -662,9 +665,11 @@ export function normalizeDiagramJsonConventions(diagramJson: DiagramJson): Diagr
     }))
   );
   const nodes = applyDiagramLayerOrder(
-    fitAreaNodesToChildren(
-      resolveSiblingNodeCollisions(
-        fitAreaNodesToChildren(preparedNodes)
+    placeVpcBoundaryResources(
+      fitAreaNodesToChildren(
+        resolveSiblingNodeCollisions(
+          fitAreaNodesToChildren(preparedNodes)
+        )
       )
     )
   );
@@ -858,6 +863,31 @@ function applyAiResourceRenderOverrides(nodes: readonly DiagramNode[]): DiagramN
         }
       },
       size: { ...AI_RESOURCE_NODE_SIZE }
+    };
+  });
+}
+
+function placeVpcBoundaryResources(nodes: readonly DiagramNode[]): DiagramNode[] {
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+
+  return nodes.map((node) => {
+    if (getDiagramNodeResourceType(node) !== "aws_internet_gateway") {
+      return node;
+    }
+
+    const parentAreaNodeId = node.metadata?.parentAreaNodeId;
+    const parentNode = parentAreaNodeId ? nodeById.get(parentAreaNodeId) : undefined;
+
+    if (!parentNode || getDiagramNodeResourceType(parentNode) !== "aws_vpc") {
+      return node;
+    }
+
+    return {
+      ...node,
+      position: {
+        x: parentNode.position.x + (parentNode.size.width - node.size.width) / 2,
+        y: parentNode.position.y - Math.round(node.size.height * VPC_BOUNDARY_NODE_OVERHANG_RATIO)
+      }
     };
   });
 }

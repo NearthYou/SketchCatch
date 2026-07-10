@@ -177,3 +177,16 @@ Short English-only working log for the current agent context. Older records are 
   - Live Chrome regeneration returned a Q-backed 43-resource preview with separate User / Client and Internet icons plus `requests` and `public traffic` edges; presentation nodes were excluded from the resource count.
 - Risk:
   - The external journey intentionally targets one representative public entry instead of drawing fan-out lines to every public endpoint.
+
+### 2026-07-11 - Place VPC boundary gateways semantically
+
+- Goal: Stop gateway resources from floating at misleading positions inside or outside their network containers.
+- Completed:
+  - Positioned Internet Gateway at the horizontal center of the VPC top boundary after all area sizing and collision corrections are complete.
+  - Kept NAT Gateway inside its configured public subnet and left API Gateway outside VPC containment.
+  - Applied the same boundary correction to ArchitectureJson conversion and exact Q DiagramJson normalization.
+- Verification:
+  - Web adapter and area tests (51) passed, including IGW boundary and NAT containment regressions.
+  - Live Q regeneration placed the IGW across the VPC top boundary (`VPC y=400`, IGW icon `y=344..402`) and kept NAT Gateway A inside the VPC.
+- Risk:
+  - Only `aws_internet_gateway` receives boundary placement because it is the only currently supported gateway resource whose AWS diagram semantics require crossing the VPC boundary.
