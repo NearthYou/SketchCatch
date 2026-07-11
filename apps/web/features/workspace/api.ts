@@ -26,6 +26,7 @@ import type {
   CreateDeploymentRequest,
   CreateGitCicdHandoffRequest,
   ConfirmProjectAssetUploadResponse,
+  CreateLiveObservationResponse,
   CreateArchitecturePatchPreviewRequest,
   CreateDesignSimulationRequest,
   CreateProjectAssetUploadRequest,
@@ -57,6 +58,8 @@ import type {
   ListGitHubInstalledRepositoriesResponse,
   ListGitHubInstallationRepositoriesRequest,
   ListGitHubInstallationRepositoriesResponse,
+  LiveObservationSnapshot,
+  LiveObservationSnapshotResponse,
   Project,
   ProjectAssetUploadResponse,
   ProjectDetailsResponse,
@@ -69,6 +72,7 @@ import type {
   SourceRepository,
   SourceRepositoryListResponse,
   SourceRepositoryResponse,
+  StopLiveObservationResponse,
   ConnectGitHubSourceRepositoryRequest,
   ReverseEngineeringScan,
   ReverseEngineeringScanListResponse,
@@ -783,6 +787,131 @@ export async function listDeployments(projectId: string): Promise<Deployment[]> 
   return response.deployments;
 }
 
+export async function createLiveObservation(
+  deploymentId: string
+): Promise<CreateLiveObservationResponse> {
+  return apiFetch<CreateLiveObservationResponse>(
+    `/deployments/${encodeURIComponent(deploymentId)}/live-observations`,
+    { auth: true, method: "POST" }
+  );
+}
+
+export async function getLiveObservationSnapshot(
+  deploymentId: string,
+  observationId: string,
+  signal?: AbortSignal
+): Promise<LiveObservationSnapshot> {
+  const response = await apiFetch<LiveObservationSnapshotResponse>(
+    `/deployments/${encodeURIComponent(deploymentId)}/live-observations/${encodeURIComponent(observationId)}`,
+    { auth: true, ...(signal ? { signal } : {}) }
+  );
+
+  return response.snapshot;
+}
+
+export async function stopLiveObservation(
+  deploymentId: string,
+  observationId: string
+): Promise<LiveObservationSnapshot> {
+  const response = await apiFetch<StopLiveObservationResponse>(
+    `/deployments/${encodeURIComponent(deploymentId)}/live-observations/${encodeURIComponent(observationId)}/stop`,
+    { auth: true, method: "POST" }
+  );
+
+  return response.snapshot;
+}
+
+export type LiveObservationStreamFailure = Readonly<{
+  error: unknown;
+  retryCount: number;
+  source: "stream" | "snapshot-poll";
+}>;
+
+export async function streamLiveObservationSnapshots(input: {
+  readonly deploymentId: string;
+  readonly observationId: string;
+  readonly signal: AbortSignal;
+  readonly onError?: ((failure: LiveObservationStreamFailure) => void) | undefined;
+  readonly onSnapshot: (snapshot: LiveObservationSnapshot) => void;
+  readonly retryBaseDelayMs?: number | undefined;
+}): Promise<void> {
+  let retryCount = 0;
+
+  while (!input.signal.aborted) {
+    try {
+      const finalStatus = await readLiveObservationSnapshotStream(input);
+      if (finalStatus && finalStatus !== "active") {
+        return;
+      }
+    } catch (error) {
+      if (input.signal.aborted) {
+        return;
+      }
+      input.onError?.({ error, retryCount, source: "stream" });
+    }
+
+    try {
+      const snapshot = await getLiveObservationSnapshot(
+        input.deploymentId,
+        input.observationId,
+        input.signal
+      );
+      input.onSnapshot(snapshot);
+      if (snapshot.status !== "active") {
+        return;
+      }
+    } catch (error) {
+      if (input.signal.aborted) {
+        return;
+      }
+      input.onError?.({ error, retryCount, source: "snapshot-poll" });
+    }
+
+    const baseDelay = input.retryBaseDelayMs ?? 1_000;
+    const delayMs = Math.min(baseDelay * 2 ** retryCount, 8_000);
+    retryCount += 1;
+    await waitForRetry(delayMs, input.signal);
+  }
+}
+
+async function readLiveObservationSnapshotStream(input: {
+  readonly deploymentId: string;
+  readonly observationId: string;
+  readonly signal: AbortSignal;
+  readonly onSnapshot: (snapshot: LiveObservationSnapshot) => void;
+}): Promise<LiveObservationSnapshot["status"] | null> {
+  const session = readStoredAuthSession();
+  const headers = new Headers({ Accept: "text/event-stream" });
+  if (session) {
+    headers.set("Authorization", `Bearer ${session.accessToken}`);
+  }
+
+  const response = await fetch(
+    buildApiUrl(
+      `/deployments/${encodeURIComponent(input.deploymentId)}/live-observations/${encodeURIComponent(input.observationId)}/stream`
+    ),
+    {
+      credentials: "include",
+      headers,
+      signal: input.signal
+    }
+  );
+
+  if (!response.ok || !response.body) {
+    throw new Error("Live Observation stream request failed");
+  }
+
+  let finalStatus: LiveObservationSnapshot["status"] | null = null;
+  await readSseStream(response.body, (rawEvent) => {
+    const snapshot = parseLiveObservationSnapshotEvent(rawEvent);
+    if (snapshot) {
+      finalStatus = snapshot.status;
+      input.onSnapshot(snapshot);
+    }
+  });
+  return finalStatus;
+}
+
 export async function listGitCicdHandoffs(projectId: string): Promise<GitCicdHandoff[]> {
   const response = await apiFetch<GitCicdHandoffListResponse>(
     `/projects/${encodeURIComponent(projectId)}/git-cicd-handoffs`,
@@ -1215,6 +1344,77 @@ async function readDeploymentLogStream(
 
   buffer += decoder.decode();
   drainSseBuffer(`${buffer}\n\n`, onLog);
+}
+
+async function readSseStream(
+  body: ReadableStream<Uint8Array>,
+  onEvent: (rawEvent: string) => void
+): Promise<void> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, "\n");
+    buffer = drainRawSseEvents(buffer, onEvent);
+  }
+
+  buffer += decoder.decode();
+  drainRawSseEvents(`${buffer}\n\n`, onEvent);
+}
+
+function drainRawSseEvents(buffer: string, onEvent: (rawEvent: string) => void): string {
+  let nextBuffer = buffer;
+  let separatorIndex = nextBuffer.indexOf("\n\n");
+
+  while (separatorIndex >= 0) {
+    onEvent(nextBuffer.slice(0, separatorIndex));
+    nextBuffer = nextBuffer.slice(separatorIndex + 2);
+    separatorIndex = nextBuffer.indexOf("\n\n");
+  }
+
+  return nextBuffer;
+}
+
+function parseLiveObservationSnapshotEvent(rawEvent: string): LiveObservationSnapshot | null {
+  let eventName = "message";
+  const dataLines: string[] = [];
+
+  for (const line of rawEvent.split("\n")) {
+    if (line.startsWith("event:")) {
+      eventName = line.slice("event:".length).trim();
+    } else if (line.startsWith("data:")) {
+      dataLines.push(line.slice("data:".length).trimStart());
+    }
+  }
+
+  if (eventName !== "snapshot" || dataLines.length === 0) {
+    return null;
+  }
+
+  return JSON.parse(dataLines.join("\n")) as LiveObservationSnapshot;
+}
+
+async function waitForRetry(delayMs: number, signal: AbortSignal): Promise<void> {
+  if (delayMs <= 0 || signal.aborted) {
+    return;
+  }
+
+  await new Promise<void>((resolve) => {
+    const timeout = globalThis.setTimeout(resolve, delayMs);
+    signal.addEventListener(
+      "abort",
+      () => {
+        globalThis.clearTimeout(timeout);
+        resolve();
+      },
+      { once: true }
+    );
+  });
 }
 
 function drainSseBuffer(buffer: string, onLog: (log: DeploymentLog) => void): string {

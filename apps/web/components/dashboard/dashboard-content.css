@@ -1,0 +1,1061 @@
+.dashboardRouteStack,
+.dashboardOverview {
+  display: grid;
+  gap: 32px;
+}
+
+.dashboardPageHeader {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 32px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid #dcdee0;
+}
+
+.dashboardPageHeader > div:first-child {
+  min-width: 0;
+}
+
+.dashboardEyebrow,
+.dashboardPanelKicker,
+.dashboardSectionHeader > div > p,
+.dashboardConnectionBand > div:first-child > p {
+  margin: 0;
+  color: #777b84;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.5;
+  text-transform: uppercase;
+}
+
+.dashboardPageHeader h1 {
+  margin: 8px 0 0;
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+.dashboardPageHeader > div:first-child > p:last-child:not(:first-child) {
+  max-width: 680px;
+  margin: 10px 0 0;
+  color: #55585f;
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.dashboardPageHeaderWithControl {
+  align-items: end;
+}
+
+.dashboardSearchField {
+  display: grid;
+  width: min(320px, 100%);
+  height: 42px;
+  align-items: center;
+  border: 0;
+  border-radius: 8px;
+  padding: 0 12px;
+  background: #ffffff;
+  color: #777b84;
+  box-shadow: var(--shadow-ring);
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+}
+
+.dashboardSearchField:focus-within {
+  border: 2px solid #171717;
+  padding: 0 11px;
+}
+
+.dashboardSearchField input {
+  width: 100%;
+  height: 38px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: #171717;
+  font-size: 13px;
+  outline: 0;
+}
+
+.dashboardVisuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  clip: rect(0 0 0 0);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.dashboardPartialWarning,
+.dashboardInformationBand,
+.dashboardMessage,
+.costErrorMessage {
+  margin: 0;
+  border: 1px solid #f5d7a1;
+  border-radius: 8px;
+  padding: 13px 14px;
+  background: #fff8eb;
+  color: #8a4b08;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.dashboardPartialWarning strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.dashboardPartialWarning ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.dashboardInformationBand {
+  border-color: #cce2ff;
+  background: #f4f9ff;
+  color: #245b95;
+}
+
+.dashboardMetricStrip {
+  display: grid;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: var(--shadow-card);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  overflow: hidden;
+}
+
+.dashboardMetric {
+  display: grid;
+  min-width: 0;
+  min-height: 132px;
+  align-content: center;
+  gap: 8px;
+  padding: 22px 24px;
+  border-right: 1px solid #f0f0f3;
+}
+
+.dashboardMetric:last-child {
+  border-right: 0;
+}
+
+.dashboardMetric > span {
+  color: #777b84;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.dashboardMetricValue {
+  overflow: hidden;
+  font-size: 22px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboardMetricValuesuccess {
+  color: #067647;
+}
+
+.dashboardMetricValueerror {
+  color: #b42318;
+}
+
+.dashboardMetricValueprogress {
+  color: #8a4b08;
+}
+
+.dashboardMetric p {
+  margin: 0;
+  color: #777b84;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.dashboardOverviewGrid,
+.dashboardTwoColumn {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 32px;
+}
+
+.dashboardSection,
+.dashboardPanel {
+  min-width: 0;
+  padding: 0;
+  background: transparent;
+}
+
+.dashboardSection {
+  border-radius: 12px;
+  padding: 20px;
+  background: #ffffff;
+  box-shadow: var(--shadow-card);
+}
+
+.dashboardSectionHeader,
+.dashboardPanelHeader {
+  display: flex;
+  min-height: 50px;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #dcdee0;
+}
+
+.dashboardSectionHeader h2,
+.dashboardPanelHeader h2,
+.integrationHeader h2 {
+  margin: 4px 0 0;
+  font-size: 17px;
+  line-height: 1.4;
+}
+
+.dashboardSectionHeader > a {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #0d74ce;
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.dashboardCompactList {
+  display: grid;
+}
+
+.dashboardProjectRow,
+.dashboardActivityRow {
+  display: grid;
+  min-width: 0;
+  min-height: 68px;
+  align-items: center;
+  border-bottom: 1px solid #f0f0f3;
+  color: #171717;
+  text-decoration: none;
+}
+
+.dashboardProjectRow {
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 20px;
+}
+
+.dashboardActivityRow {
+  grid-template-columns: 10px minmax(0, 1fr) auto;
+  gap: 12px;
+}
+
+a.dashboardProjectRow:hover,
+a.dashboardActivityRow:hover {
+  background: #f7f8fa;
+}
+
+.dashboardProjectRow > div,
+.dashboardActivityRow > div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.dashboardProjectRow strong,
+.dashboardActivityRow strong {
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboardProjectRow span,
+.dashboardProjectRow time,
+.dashboardActivityRow span {
+  overflow: hidden;
+  color: #777b84;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboardActivityMeta {
+  justify-items: end;
+}
+
+.dashboardStatusDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #9a9da4;
+}
+
+.dashboardStatusDotsuccess {
+  background: #12b76a;
+}
+
+.dashboardStatusDoterror {
+  background: #f04438;
+}
+
+.dashboardStatusDotprogress {
+  background: #f79009;
+}
+
+.dashboardInlineEmpty,
+.workspaceStateText,
+.projectListEmpty {
+  margin: 0;
+  padding: 28px 0;
+  color: #777b84;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.dashboardConnectionBand {
+  display: grid;
+  align-items: center;
+  border-radius: 12px;
+  padding: 20px;
+  background: #ffffff;
+  box-shadow: var(--shadow-card);
+  grid-template-columns: 180px repeat(2, minmax(0, 1fr));
+}
+
+.dashboardConnectionBand h2 {
+  margin: 4px 0 0;
+  font-size: 17px;
+}
+
+.dashboardConnectionItem {
+  display: grid;
+  min-width: 0;
+  align-items: center;
+  padding: 4px 24px;
+  border-left: 1px solid #f0f0f3;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+}
+
+.dashboardConnectionItem > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.dashboardConnectionItem strong {
+  font-size: 13px;
+}
+
+.dashboardConnectionItem span {
+  overflow: hidden;
+  color: #777b84;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboardConnectionItem > a,
+.dashboardBackLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #0d74ce;
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.dashboardEmptyState,
+.dashboardStateBand {
+  display: grid;
+  min-height: 300px;
+  place-content: center;
+  justify-items: center;
+  gap: 12px;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: var(--shadow-card);
+  text-align: center;
+}
+
+.dashboardEmptyState h2,
+.dashboardStateBand strong {
+  margin: 0;
+  font-size: 20px;
+}
+
+.dashboardEmptyState p,
+.dashboardStateBand p {
+  max-width: 560px;
+  margin: 0 0 6px;
+  color: #55585f;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.dashboardSkeleton {
+  position: relative;
+  border-radius: 8px;
+  background: #f0f0f3;
+  overflow: hidden;
+}
+
+.dashboardSkeleton::after {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.8), transparent);
+  content: "";
+  transform: translateX(-100%);
+  animation: dashboardSkeletonSweep 1.4s infinite;
+}
+
+.dashboardSkeletonTitle {
+  width: 280px;
+  height: 72px;
+}
+
+.dashboardSkeletonMetric {
+  min-height: 130px;
+  border-right: 1px solid #ffffff;
+  border-radius: 0;
+}
+
+@keyframes dashboardSkeletonSweep {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+.dashboardHeaderActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.dashboardFactStrip {
+  display: grid;
+  margin: 0;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: var(--shadow-card);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  overflow: hidden;
+}
+
+.dashboardFactStrip > div {
+  display: grid;
+  gap: 6px;
+  padding: 20px 24px;
+  border-right: 1px solid #f0f0f3;
+}
+
+.dashboardFactStrip > div:last-child {
+  border-right: 0;
+}
+
+.dashboardFactStrip dt {
+  color: #777b84;
+  font-size: 11px;
+}
+
+.dashboardFactStrip dd {
+  margin: 0;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.projectListControls {
+  display: flex;
+  align-items: end;
+  gap: 12px;
+  padding: 18px 0;
+  border-bottom: 1px solid #f0f0f3;
+}
+
+.settingsField,
+.costField {
+  display: grid;
+  min-width: 0;
+  gap: 7px;
+  color: #55585f;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.dashboardCardGrid {
+  display: grid;
+  margin-top: 20px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.projectCard {
+  display: grid;
+  min-width: 0;
+  border: 0;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #171717;
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+  text-decoration: none;
+  transition:
+    box-shadow var(--motion-fast),
+    transform var(--motion-fast);
+}
+
+.projectCard:hover {
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.1),
+    0 18px 38px -24px rgba(23, 23, 23, 0.32);
+  transform: translateY(-2px);
+}
+
+.projectCardWide {
+  grid-template-columns: minmax(140px, 42%) minmax(0, 1fr);
+}
+
+.projectCardContentLink {
+  display: grid;
+  min-width: 0;
+  color: inherit;
+  grid-template-columns: minmax(120px, 40%) minmax(0, 1fr);
+  text-decoration: none;
+}
+
+.projectCardBody {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 10px;
+  padding: 18px;
+}
+
+.projectCardTitle {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+}
+
+.projectCardTitle h3 {
+  margin: 0;
+  overflow: hidden;
+  font-size: 15px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.projectCardBody > p {
+  display: -webkit-box;
+  margin: 0;
+  color: #55585f;
+  font-size: 12px;
+  line-height: 1.6;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.projectStatusBadge,
+.dashboardCountBadge,
+.costStatus {
+  width: fit-content;
+  border: 1px solid #dcdee0;
+  border-radius: 999px;
+  padding: 4px 7px;
+  color: #55585f;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.projectCardMeta {
+  margin-top: auto;
+  color: #777b84;
+  font-size: 11px;
+}
+
+.projectCardMeta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.projectCardWithActions {
+  position: relative;
+}
+
+.projectCardActions {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+}
+
+.projectCardMenuButton {
+  display: inline-grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid #dcdee0;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #55585f;
+}
+
+.projectCardActionMenuWrap {
+  position: relative;
+}
+
+.projectCardActionMenu {
+  position: absolute;
+  z-index: 20;
+  top: 40px;
+  right: 0;
+  display: grid;
+  width: 190px;
+  border: 1px solid #dcdee0;
+  border-radius: 8px;
+  padding: 6px;
+  background: #ffffff;
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.1);
+}
+
+.projectCardActionMenuItem,
+.projectCardActionMenuStatus {
+  display: flex;
+  min-height: 38px;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 6px;
+  padding: 0 10px;
+  background: transparent;
+  color: #171717;
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.projectCardActionMenuItem:hover {
+  background: #f7f8fa;
+}
+
+.projectCardActionMenuItemDanger {
+  color: #b42318;
+}
+
+.projectDeleteDialogOverlay {
+  position: fixed;
+  z-index: 80;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.42);
+}
+
+.projectDeleteDialog {
+  width: min(560px, 100%);
+  border: 1px solid #dcdee0;
+  border-radius: 12px;
+  padding: 24px;
+  background: #ffffff;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.14);
+}
+
+.projectDeleteDialogHeader,
+.projectDeleteDialogActions {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.projectDeleteDialogHeader h3 {
+  margin: 4px 0 0;
+  font-size: 20px;
+}
+
+.projectDeleteDialogText {
+  color: #55585f;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.projectDeleteDialogFacts {
+  display: grid;
+  margin: 16px 0;
+  border-top: 1px solid #f0f0f3;
+  border-bottom: 1px solid #f0f0f3;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.projectDeleteDialogFacts > div {
+  padding: 14px;
+}
+
+.projectDeleteDialogFacts dt {
+  color: #777b84;
+  font-size: 11px;
+}
+
+.projectDeleteDialogFacts dd {
+  margin: 5px 0 0;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.projectDeleteDialogActions {
+  justify-content: flex-end;
+  margin-top: 24px;
+}
+
+.integrationPanel > p {
+  color: #55585f;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.integrationPanel {
+  border-radius: 12px;
+  padding: 24px;
+  background: #ffffff;
+  box-shadow: var(--shadow-card);
+}
+
+.integrationHeader {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid #dcdee0;
+}
+
+.integrationIcon,
+.dashboardTemplateIcon {
+  display: inline-grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border: 1px solid #dcdee0;
+  border-radius: 8px;
+  background: #f7f8fa;
+  color: #171717;
+}
+
+.settingsTabs,
+.costTabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid #dcdee0;
+}
+
+.settingsTab,
+.costTabButton {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  padding: 0 14px;
+  background: transparent;
+  color: #777b84;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.settingsTabActive,
+.settingsTab[aria-selected="true"],
+.costTabButton[aria-selected="true"] {
+  border-bottom-color: #171717;
+  color: #171717;
+}
+
+.settingsGrid,
+.settingsInfoGrid {
+  display: grid;
+  margin-top: 20px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.settingsInfoGrid article {
+  display: grid;
+  min-width: 0;
+  gap: 7px;
+  border: 1px solid #dcdee0;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.settingsInfoGrid span {
+  color: #777b84;
+  font-size: 11px;
+}
+
+.settingsInfoGrid strong {
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settingsActionRow,
+.templateRowActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.settingsCodeArea,
+.settingsCodeBlock {
+  border-radius: 12px;
+  padding: 16px;
+  background: #171717;
+  color: #f7f8fa;
+  font-family: "Geist Mono", "SFMono-Regular", Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  overflow: auto;
+}
+
+.dashboardTemplateGrid,
+.templateGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.dashboardTemplateCard,
+.templateCard {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 18px;
+  border: 0;
+  border-radius: 12px;
+  padding: 20px;
+  background: #ffffff;
+  box-shadow: var(--shadow-card);
+}
+
+.dashboardTemplateCard > div:nth-child(2) > p,
+.templateCardHeader span {
+  margin: 0;
+  color: #777b84;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.dashboardTemplateCard h2,
+.templateCard h3 {
+  margin: 5px 0 0;
+  font-size: 17px;
+  line-height: 1.4;
+}
+
+.dashboardTemplateCard > div:nth-child(2) > span,
+.templateCard > p {
+  display: block;
+  margin-top: 8px;
+  color: #55585f;
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.dashboardTemplateCard dl {
+  display: grid;
+  margin: 0;
+  border-top: 1px solid #f0f0f3;
+  border-bottom: 1px solid #f0f0f3;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.dashboardTemplateCard dl > div {
+  padding: 12px 0;
+}
+
+.dashboardTemplateCard dt {
+  color: #777b84;
+  font-size: 10px;
+}
+
+.dashboardTemplateCard dd {
+  margin: 4px 0 0;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.dashboardTemplateCard > a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #0d74ce;
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+@media (max-width: 1100px) {
+  .dashboardMetricStrip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dashboardMetric:nth-child(2) {
+    border-right: 0;
+  }
+
+  .dashboardMetric:nth-child(-n + 2) {
+    border-bottom: 1px solid #f0f0f3;
+  }
+
+  .dashboardCardGrid,
+  .dashboardTemplateGrid,
+  .templateGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dashboardConnectionBand {
+    grid-template-columns: 150px minmax(0, 1fr);
+  }
+
+  .dashboardConnectionItem:last-child {
+    grid-column: 2;
+    border-top: 1px solid #f0f0f3;
+    padding-top: 16px;
+    margin-top: 12px;
+  }
+}
+
+@media (max-width: 760px) {
+  .dashboardPageHeader,
+  .dashboardPageHeaderWithControl,
+  .dashboardProjectDetailHeader {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .dashboardSearchField {
+    width: 100%;
+  }
+
+  .dashboardOverviewGrid,
+  .dashboardTwoColumn {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboardConnectionBand {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboardConnectionBand > div:first-child {
+    padding-bottom: 16px;
+  }
+
+  .dashboardConnectionItem,
+  .dashboardConnectionItem:last-child {
+    grid-column: auto;
+    border-top: 1px solid #f0f0f3;
+    border-left: 0;
+    margin: 0;
+    padding: 16px 0;
+  }
+
+  .dashboardCardGrid,
+  .dashboardTemplateGrid,
+  .templateGrid,
+  .settingsGrid,
+  .settingsInfoGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .projectCardWide,
+  .projectCardContentLink {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboardFactStrip {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboardFactStrip > div {
+    border-right: 0;
+    border-bottom: 1px solid #f0f0f3;
+  }
+
+  .dashboardFactStrip > div:last-child {
+    border-bottom: 0;
+  }
+}
+
+@media (max-width: 520px) {
+  .dashboardPageHeader h1 {
+    font-size: 28px;
+  }
+
+  .dashboardMetricStrip {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboardMetric,
+  .dashboardMetric:nth-child(2) {
+    min-height: 108px;
+    border-right: 0;
+    border-bottom: 1px solid #f0f0f3;
+    padding: 18px 20px;
+  }
+
+  .dashboardMetric:last-child {
+    border-bottom: 0;
+  }
+
+  .dashboardProjectRow,
+  .dashboardActivityRow {
+    align-items: start;
+    padding: 14px 0;
+  }
+
+  .dashboardProjectRow {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .dashboardProjectRow time {
+    justify-self: start;
+  }
+
+  .dashboardActivityRow {
+    grid-template-columns: 8px minmax(0, 1fr);
+  }
+
+  .dashboardActivityMeta {
+    grid-column: 2;
+    justify-items: start;
+  }
+
+  .projectListControls {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .dashboardHeaderActions {
+    width: 100%;
+  }
+
+  .dashboardHeaderActions > a {
+    width: 100%;
+  }
+}

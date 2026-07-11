@@ -2,8 +2,6 @@ locals {
   name_prefix = "${var.project_name}-${var.environment}"
 
   ecs_service_subnet_ids = length(var.ecs_service_subnet_ids) == 0 ? var.public_subnet_ids : var.ecs_service_subnet_ids
-  legacy_target_weight   = var.ecs_cutover_stage == "split" ? 0 : 100
-  split_target_weight    = var.ecs_cutover_stage == "split" ? 100 : 0
   worker_container_name  = "worker"
   worker_command         = ["node", "dist/deployment-worker.cjs"]
 
@@ -20,7 +18,7 @@ locals {
 
   api_path_patterns = ["/api", "/api/*", "/health", "/health/db"]
 
-  # The nginx repository and log group remain for the explicit ECS/EC2 rollback window.
+  # The last verified nginx image remains available for the cold rollback artifact.
   ecr_repositories = {
     api   = "${local.name_prefix}-api"
     web   = "${local.name_prefix}-web"
@@ -36,7 +34,7 @@ locals {
 
   ecs_error_filter_patterns = {
     api    = "{ $.level = 50 }"
-    web    = "?ERROR ?Error ?error"
+    web    = "?ERROR ?Error ?error -\"Failed to find Server Action\""
     worker = "\"Deployment worker failed\""
   }
 
@@ -78,6 +76,7 @@ locals {
   api_environment = merge(
     local.api_base_environment,
     {
+      LIVE_OBSERVATION_ENABLED             = tostring(var.live_observation_enabled)
       SKETCHCATCH_AWS_CALLER_PRINCIPAL_ARN = var.enable_ecs_worker_dispatch ? aws_iam_role.ecs_worker_task.arn : aws_iam_role.ecs_task.arn
     },
     var.enable_ecs_worker_dispatch ? {

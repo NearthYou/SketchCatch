@@ -1,6 +1,6 @@
 import type { WorkspaceCloudPlatform } from "../../../features/workspace/project-draft-persistence";
 
-export type WorkspaceStartKind = "ai" | "reverse" | "blank";
+export type WorkspaceStartKind = "ai" | "reverse" | "template" | "github" | "blank";
 export type WorkspaceStartPriority = "primary" | "secondary";
 
 export type WorkspaceStartOption = {
@@ -21,7 +21,11 @@ export type ResolveWorkspaceStartActionInput = {
 export type WorkspaceStartAction =
   | {
       readonly kind: "createProject";
-      readonly openMode: "ai" | "blank";
+      readonly openMode: "template" | "github" | "blank";
+    }
+  | {
+      readonly kind: "openAiDraft";
+      readonly href: "/workspace/ai";
     }
   | {
       readonly kind: "openReversePreview";
@@ -33,11 +37,7 @@ export type WorkspaceStartAction =
     };
 
 // 새 프로젝트 첫 화면에서 어떤 시작 방식을 크게 보여줄지 정합니다.
-export function createWorkspaceStartOptions(): readonly [
-  WorkspaceStartOption,
-  WorkspaceStartOption,
-  WorkspaceStartOption
-] {
+export function createWorkspaceStartOptions(): readonly WorkspaceStartOption[] {
   return [
     {
       kind: "ai",
@@ -52,6 +52,20 @@ export function createWorkspaceStartOptions(): readonly [
       title: "Reverse Engineering으로 시작",
       description: "이미 AWS에 있는 리소스를 읽어서 보드 후보를 만듭니다.",
       actionLabel: "기존 AWS 가져오기"
+    },
+    {
+      kind: "template",
+      priority: "primary",
+      title: "Template으로 시작",
+      description: "검증된 구조를 고른 뒤 바로 Architecture Board를 엽니다.",
+      actionLabel: "Template 고르기"
+    },
+    {
+      kind: "github",
+      priority: "primary",
+      title: "GitHub Repo로 시작",
+      description: "프로젝트를 만든 뒤 Source Repository 연결을 시작합니다.",
+      actionLabel: "GitHub 연결하기"
     },
     {
       kind: "blank",
@@ -70,6 +84,13 @@ export function resolveWorkspaceStartAction({
   projectName,
   startKind
 }: ResolveWorkspaceStartActionInput): WorkspaceStartAction {
+  if (startKind === "ai") {
+    return {
+      kind: "openAiDraft",
+      href: "/workspace/ai"
+    };
+  }
+
   if (startKind === "reverse") {
     if (!hasVerifiedAwsConnection) {
       return {

@@ -1150,6 +1150,93 @@ Runtime Cache는 사용자 Practice Architecture Resource가 아니므로 `Resou
 
 API runtime은 `REDIS_URL`이 있고 `NODE_ENV !== "test"`일 때 Redis adapter를 사용한다. `REDIS_URL`이 없거나 테스트 환경이면 in-memory fallback을 사용한다. Redis 연결이나 명령이 실패해도 API workflow의 원천 기록은 RDS/S3 기준으로 유지되어야 하며, Runtime Cache adapter는 같은 process 안에서 가능한 fallback cache를 사용해 요청을 실패시키지 않는다.
 
+단, Production Live Observation의 원자 집계는 여러 API process가 공유하는 Redis가 진실의 원천이므로 예외다. `LIVE_OBSERVATION_ENABLED=true`인 Production에서 Redis readiness가 실패하면 세션 생성을 `503 LIVE_OBSERVATION_CACHE_UNAVAILABLE`로 차단한다.
+
+## Live Observation Session
+
+`LiveObservationSession`은 성공한 `demo_web_service` Deployment의 실제 요청과 AWS 상태를 최대 15분 동안 관측하는 Runtime Cache 기반 세션이다. RDS row나 migration을 만들지 않으며, Deployment와 Terraform output은 기존 RDS 원천 기록을 읽기만 한다.
+
+```ts
+type LiveObservationStatus = "active" | "stopped" | "expired";
+
+type LiveObservationPressureLevel =
+  | "normal"
+  | "warning"
+  | "high"
+  | "critical";
+
+type LiveObservationAwsState = "available" | "delayed" | "unavailable";
+
+type LiveObservationSession = {
+  id: string;
+  deploymentId: string;
+  status: LiveObservationStatus;
+  audienceUrl: string;
+  trafficApiUrl: string;
+  createdAt: IsoDateTimeString;
+  expiresAt: IsoDateTimeString;
+};
+```
+
+public token은 256-bit base64url로 만들고 SHA-256 lookup key만 Runtime Cache key에 사용한다. token 원문은 독립 response 필드, RDS, 로그, `localStorage`에 저장하지 않고 `audienceUrl` query 안에서만 전달한다.
+
+`LiveObservationSnapshot`은 즉시 수집한 `live`, 지연된 CloudWatch 실측 `cloudWatch`, ASG/EC2 실제 상태 `capacity`를 분리한다.
+
+```ts
+type LiveObservationSnapshot = {
+  observationId: string;
+  status: LiveObservationStatus;
+  live: {
+    acceptedEventCount: number;
+    rollingRequestsPerSecond: number;
+    projectedRequestsPerMinute: number;
+    pressurePercent: number;
+    pressureLevel: LiveObservationPressureLevel;
+    observedAt: IsoDateTimeString;
+  };
+  cloudWatch: {
+    state: LiveObservationAwsState;
+    requestCountPerTarget: number | null;
+    periodSeconds: 60;
+    observedAt: IsoDateTimeString | null;
+    delayedBySeconds: number | null;
+    errorCode: string | null;
+  };
+  capacity: {
+    state: LiveObservationAwsState;
+    desiredCapacity: number | null;
+    currentInstanceCount: number | null;
+    inServiceInstanceCount: number | null;
+    maxCapacity: number | null;
+    instances: Array<{
+      instanceId: string;
+      lifecycleState: string;
+      healthStatus: string;
+    }>;
+    latestActivity: {
+      statusCode: string;
+      description: string;
+      startedAt: IsoDateTimeString;
+      endedAt: IsoDateTimeString | null;
+    } | null;
+    observedAt: IsoDateTimeString | null;
+    errorCode: string | null;
+  };
+};
+```
+
+API 계약:
+
+- `POST /api/deployments/:deploymentId/live-observations`: active 세션 생성 또는 재사용
+- `GET /api/deployments/:deploymentId/live-observations/:observationId`: 최신 snapshot
+- `GET /api/deployments/:deploymentId/live-observations/:observationId/stream`: snapshot SSE
+- `POST /api/deployments/:deploymentId/live-observations/:observationId/stop`: 관측 세션만 종료
+- `POST /api/live-observations/public/:token/events`: 성공 Traffic receipt 수집
+
+public collector body는 `{ eventId: string }`만 받는다. count나 target URL을 받지 않는다. 최초 수락은 `202`, 중복은 `200`과 `accepted: false`, 만료·중지는 `410`, rate limit은 `429`를 사용한다.
+
+SSE는 연결 직후 전체 snapshot을 보내고 live count는 최대 1초, AWS 상태는 최대 10초 간격으로 갱신한다. 15초 heartbeat를 보내며 재연결 시 최신 전체 snapshot을 다시 보낸다. 인증된 GET snapshot은 SSE fallback이다.
+
 ## AI 결과 DTO
 
 AI는 원천 진실이 아니라 설명과 제안 계층이다. 배포 가능한 artifact는 deterministic graph, generator, validation, Terraform CLI 결과를 거쳐야 한다.

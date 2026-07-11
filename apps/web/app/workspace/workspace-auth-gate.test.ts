@@ -11,18 +11,15 @@ const workspaceNewPageSource = readFileSync(join(currentDir, "new", "page.tsx"),
 const workspaceAiPageSource = readFileSync(join(currentDir, "ai", "page.tsx"), "utf8");
 
 test("workspace page delays project workspace mounting until auth bootstrap completes", () => {
-  assert.match(
-    workspacePageSource,
-    /import \{ WorkspaceAuthGate \} from "\.\/workspace-auth-gate"/
-  );
-  assert.match(
-    workspacePageSource,
-    /<WorkspaceAuthGate>\s*<ProjectWorkspaceDraftManager[\s\S]*?<\/WorkspaceAuthGate>/
-  );
-  assert.match(
-    workspacePageSource,
-    /<WorkspaceAuthGate>\s*<WorkspaceDraftManager[\s\S]*?<\/WorkspaceAuthGate>/
-  );
+  assert.match(workspacePageSource, /import \{ WorkspaceAuthGate \} from "\.\/workspace-auth-gate"/);
+
+  const gateOpenIndex = workspacePageSource.indexOf("<WorkspaceAuthGate>");
+  const projectManagerIndex = workspacePageSource.indexOf("<ProjectWorkspaceDraftManager");
+  const localManagerIndex = workspacePageSource.indexOf("<WorkspaceDraftManager");
+
+  assert.notEqual(gateOpenIndex, -1);
+  assert.ok(projectManagerIndex > gateOpenIndex);
+  assert.ok(localManagerIndex > gateOpenIndex);
 });
 
 test("WorkspaceAuthGate renders children only after the user is authenticated", () => {

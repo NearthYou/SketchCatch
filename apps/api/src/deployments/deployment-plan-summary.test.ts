@@ -194,6 +194,20 @@ test("findUnsupportedLiveApplyResourceTypesFromTerraformShowJson allows demo web
       },
       {
         mode: "managed",
+        type: "aws_autoscaling_policy",
+        change: {
+          actions: ["create"]
+        }
+      },
+      {
+        mode: "managed",
+        type: "aws_cloudwatch_metric_alarm",
+        change: {
+          actions: ["create"]
+        }
+      },
+      {
+        mode: "managed",
         type: "aws_db_instance",
         change: {
           actions: ["create"]
@@ -204,7 +218,13 @@ test("findUnsupportedLiveApplyResourceTypesFromTerraformShowJson allows demo web
 
   assert.deepEqual(
     findUnsupportedLiveApplyResourceTypesFromTerraformShowJson(terraformShowJson),
-    ["aws_autoscaling_group", "aws_db_instance", "aws_lb"]
+    [
+      "aws_autoscaling_group",
+      "aws_autoscaling_policy",
+      "aws_cloudwatch_metric_alarm",
+      "aws_db_instance",
+      "aws_lb"
+    ]
   );
   assert.deepEqual(
     findUnsupportedLiveApplyResourceTypesFromTerraformShowJson(

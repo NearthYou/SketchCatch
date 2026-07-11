@@ -1,30 +1,26 @@
 # Session Handoff
 
-Use this file only for compact continuation context.
+Use this file only for compact continuation context. Write it in English.
 
 ## Currently Verified
 
-- Current branch: `feat/ck/287-ai-diagram`; local `dev` and `origin/dev` are at `61313fc4`.
-- Architecture Draft enforces HTTPS, SSE/WebSocket/polling, ECS/EC2 burst scaling, high-availability topology, voice transcription storage/IAM/flows, and private-subnet visual placement.
-- Chat routing accepts colloquial attachment commands as patches and colloquial new-service requests as drafts; NAT patching creates an EIP-backed public-subnet bundle.
-- Architecture diagrams show User -> Internet -> public entry, include public ALB and private workload placement markers, reject pseudo-region values, and clarify unsupported multi-region Terraform execution before generation.
-- Generation errors are classified as 422 requirement quality, 502 malformed provider output, 503 provider unavailable, or 500 internal assembly failure.
-- No cloud deployment or Terraform mutation was run.
+- Issue #322 PR #324 is merged into `dev`; release PR #325 is open.
+- Production ECS is healthy at API/web desired 1 with autoscaling min 1/max 2.
+- Legacy ECS, EC2, old ALB, and the old CloudFormation ALB stack are retired.
+- Route53, HTTP smoke, RDS protections, alarms, SNS delivery, worker image SHA, and final Terraform no-change plan are verified.
 
 ## Changes This Session
 
-- Added operational requirement policy/validation and typed generation error boundaries.
-- Relaxed draft/patch intent routing and added deployable NAT Gateway patch bundling.
-- Fixed S3 quantity parsing and purpose-specific backend topology.
-- Architecture Draft service: 39/39 passed.
-- Full AI routes: 53/53 passed.
-- Operational/quantity: 7/7 passed; web stream: 8/8 passed.
-- Lint, typecheck, catalog check, build, and harness passed.
+- Added autoscaling, alarms, migration safety, least-privilege deploy IAM, and disabled cold rollback Terraform.
+- Removed warm rollback workflows and infrastructure definitions.
+- Applied the approved runtime plan and synchronized GitHub production variables and tfvars.
 
 ## Broken Or Unverified
 
-- Full API suite exceeded the 10-minute command limit before producing its buffered summary.
+- External customer role trust migration is not globally observable from this AWS account.
+- Cold rollback has not been restored end to end after AMI sanitization.
+- PR #325 is temporarily conflicting because the prior v2.0.0 squash commit is not an ancestor of `dev`.
 
 ## Best Next Action
 
-- Regenerate chat, voice, burst, and 99.99% scenarios in Chrome, inspect the visible topology and Terraform preview, then address any remaining visual or IaC mismatch.
+- Merge the ancestry-sync branch into `dev` with a merge commit, then recheck and merge PR #325 with a merge commit.

@@ -1,10 +1,5 @@
-import { DesignDashboardPage } from "../../../features/dashboard/design-dashboard";
-import { DesignProjectsView } from "../../../features/projects/design-projects-view";
+import { DashboardProjectsRoute } from "../../../features/dashboard/dashboard-projects-route";
 
-export default function ProjectsPage() {
-  return (
-    <DesignDashboardPage view="projects">
-      <DesignProjectsView />
-    </DesignDashboardPage>
-  );
+export default function DashboardProjectsPage() {
+  return <DashboardProjectsRoute />;
 }

@@ -152,6 +152,7 @@
   color: #7a4d00;
 }
 
+/* DESIGN.md workspace internal panel pass */
 .rightPanelShell {
   background: var(--workspace-surface, #ffffff);
   color: var(--workspace-text, #171717);
@@ -559,7 +560,7 @@
 .resourceListServiceIcon {
   align-items: center;
   border-radius: 5px 0 0 5px;
-  color: var(--bp-blue);
+  color: var(--workspace-accent, #000000);
   display: inline-flex;
   height: 28px;
   justify-content: center;
@@ -631,8 +632,8 @@
 
 .resourceListConfigToggle:hover,
 .resourceListConfigToggle:focus-visible {
-  background: var(--bp-blue-tint);
-  color: var(--bp-blue);
+  background: var(--workspace-accent-soft, #f0f0f3);
+  color: var(--workspace-accent, #000000);
   outline: none;
 }
 
@@ -884,8 +885,8 @@
 }
 
 .terraformFileSearch:focus {
-  border-color: #6f4cf6;
-  box-shadow: 0 0 0 3px rgba(111, 76, 246, 0.14);
+  border-color: var(--workspace-accent, #000000);
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.12);
   outline: none;
 }
 
@@ -910,8 +911,8 @@
 }
 
 .terraformFileOptionActive {
-  background: #f0edff;
-  color: #5f3de8;
+  background: var(--workspace-accent-soft, #f0f0f3);
+  color: var(--workspace-accent, #000000);
   font-weight: 850;
 }
 
@@ -919,7 +920,7 @@
 .terraformFileOption:focus-visible,
 .terraformFileOptionActive:hover,
 .terraformFileOptionActive:focus-visible {
-  background: #f6f3ff;
+  background: var(--workspace-surface-muted, #fafafa);
   outline: none;
 }
 
@@ -986,9 +987,9 @@
 .resourceCodeBackButton:focus-visible,
 .resourceCodeCloseButton:hover,
 .resourceCodeCloseButton:focus-visible {
-  background: var(--bp-blue-tint);
-  border-color: color-mix(in srgb, var(--bp-blue) 34%, var(--bp-line));
-  color: var(--bp-blue);
+  background: var(--workspace-accent-soft, #f0f0f3);
+  border-color: color-mix(in srgb, var(--workspace-accent, #000000) 34%, var(--workspace-line, #f0f0f3));
+  color: var(--workspace-accent, #000000);
   outline: none;
 }
 
@@ -1007,9 +1008,9 @@
 .resourceActionSecondary {
   align-items: center;
   background: #ffffff;
-  border: 1px solid var(--bp-line-strong);
+  border: 1px solid var(--workspace-line-strong, #dcdee0);
   border-radius: 6px;
-  color: var(--bp-blue);
+  color: var(--workspace-accent, #000000);
   cursor: pointer;
   display: inline-flex;
   font: inherit;
@@ -1028,16 +1029,16 @@
 
 .resourceActionSecondary:not(:disabled):hover,
 .resourceActionSecondary:not(:disabled):focus-visible {
-  background: var(--bp-blue-tint);
+  background: var(--workspace-accent-soft, #f0f0f3);
   outline: none;
 }
 
 .terraformPreviewButton {
   align-items: center;
   background: #ffffff;
-  border: 1px solid var(--bp-line-strong);
+  border: 1px solid var(--workspace-line-strong, #dcdee0);
   border-radius: 6px;
-  color: var(--bp-blue);
+  color: var(--workspace-accent, #000000);
   cursor: pointer;
   display: inline-flex;
   font: inherit;
@@ -1058,7 +1059,7 @@
 
 .terraformPreviewButton:not(:disabled):hover,
 .terraformPreviewButton:not(:disabled):focus-visible {
-  background: var(--bp-blue-tint);
+  background: var(--workspace-accent-soft, #f0f0f3);
   outline: none;
 }
 
@@ -1230,7 +1231,7 @@
 }
 
 .terraformTextarea:focus {
-  box-shadow: inset 0 0 0 2px rgba(111, 76, 246, 0.62);
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--workspace-accent, #000000) 62%, transparent);
 }
 
 .terraformPreviewExplanationPanel {
@@ -1425,7 +1426,7 @@
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.44);
   border-radius: 4px;
-  box-shadow: inset 0 0 0 1px rgba(111, 76, 246, 0.22);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--workspace-accent, #000000) 22%, transparent);
   left: 50px;
   pointer-events: none;
   position: absolute;
@@ -1533,6 +1534,7 @@
   border: 1px solid #bbf7d0;
   border-left: 8px solid #22c55e;
   border-radius: 10px;
+  box-sizing: border-box;
   box-shadow: 0 24px 64px rgba(21, 128, 61, 0.26);
   color: #166534;
   font-size: 25px;
@@ -1723,8 +1725,8 @@
 
 .terraformDiagnosticAiButton {
   align-items: center;
-  background: var(--bp-blue);
-  border: 1px solid var(--bp-blue);
+  background: var(--workspace-accent, #000000);
+  border: 1px solid var(--workspace-accent, #000000);
   border-radius: 6px;
   color: #ffffff;
   cursor: pointer;
@@ -1740,8 +1742,8 @@
 
 .terraformDiagnosticAiButton:hover,
 .terraformDiagnosticAiButton:focus-visible {
-  background: color-mix(in srgb, var(--bp-blue) 88%, #000000);
-  border-color: color-mix(in srgb, var(--bp-blue) 88%, #000000);
+  background: color-mix(in srgb, var(--workspace-accent, #000000) 88%, #000000);
+  border-color: color-mix(in srgb, var(--workspace-accent, #000000) 88%, #000000);
   outline: none;
 }
 
@@ -1835,14 +1837,14 @@
 }
 
 .terraformDialogSecondaryButton {
-  background: var(--bp-blue-tint);
-  border: 1px solid var(--bp-line-strong);
-  color: var(--bp-blue);
+  background: var(--workspace-accent-soft, #f0f0f3);
+  border: 1px solid var(--workspace-line-strong, #dcdee0);
+  color: var(--workspace-accent, #000000);
 }
 
 .terraformDialogPrimaryButton {
-  background: var(--bp-blue);
-  border: 1px solid var(--bp-blue);
+  background: var(--workspace-accent, #000000);
+  border: 1px solid var(--workspace-accent, #000000);
   color: #ffffff;
 }
 
@@ -1855,14 +1857,14 @@
 
 .terraformDialogSecondaryButton:hover,
 .terraformDialogSecondaryButton:focus-visible {
-  background: color-mix(in srgb, var(--bp-blue-tint) 74%, var(--bp-blue));
+  background: color-mix(in srgb, var(--workspace-accent-soft, #f0f0f3) 74%, var(--workspace-accent, #000000));
   outline: none;
 }
 
 .terraformDialogPrimaryButton:hover,
 .terraformDialogPrimaryButton:focus-visible {
-  background: color-mix(in srgb, var(--bp-blue) 88%, #000000);
-  border-color: color-mix(in srgb, var(--bp-blue) 88%, #000000);
+  background: color-mix(in srgb, var(--workspace-accent, #000000) 88%, #000000);
+  border-color: color-mix(in srgb, var(--workspace-accent, #000000) 88%, #000000);
   outline: none;
 }
 
@@ -1897,7 +1899,7 @@
 }
 
 .aiPanelHeader span {
-  color: #6f4cf6;
+  color: var(--workspace-accent, #000000);
   font-size: 11px;
   font-weight: 950;
   letter-spacing: 0;
@@ -1996,15 +1998,15 @@
 }
 
 .aiPrimaryButton {
-  background: var(--bp-blue);
-  border: 1px solid var(--bp-blue);
+  background: var(--workspace-accent, #000000);
+  border: 1px solid var(--workspace-accent, #000000);
   color: #ffffff;
 }
 
 .aiSecondaryButton {
   background: #ffffff;
-  border: 1px solid var(--bp-line-strong);
-  color: var(--bp-blue);
+  border: 1px solid var(--workspace-line-strong, #dcdee0);
+  color: var(--workspace-accent, #000000);
 }
 
 .aiPrimaryButton:disabled,
@@ -2015,14 +2017,14 @@
 
 .aiPrimaryButton:not(:disabled):hover,
 .aiPrimaryButton:not(:disabled):focus-visible {
-  background: color-mix(in srgb, var(--bp-blue) 88%, #000000);
-  border-color: color-mix(in srgb, var(--bp-blue) 88%, #000000);
+  background: color-mix(in srgb, var(--workspace-accent, #000000) 88%, #000000);
+  border-color: color-mix(in srgb, var(--workspace-accent, #000000) 88%, #000000);
   outline: none;
 }
 
 .aiSecondaryButton:not(:disabled):hover,
 .aiSecondaryButton:not(:disabled):focus-visible {
-  background: var(--bp-blue-tint);
+  background: var(--workspace-accent-soft, #f0f0f3);
   outline: none;
 }
 
@@ -2052,9 +2054,9 @@
 
 .aiResultHeader span,
 .aiExplanationHeader span {
-  background: var(--bp-blue-tint);
+  background: var(--workspace-accent-soft, #f0f0f3);
   border-radius: 999px;
-  color: var(--bp-blue);
+  color: var(--workspace-accent, #000000);
   font-size: 10.5px;
   font-weight: 900;
   padding: 4px 7px;
@@ -2678,8 +2680,8 @@
 
 .aiSimulationCard {
   background: #ffffff;
-  border: 1px solid var(--bp-line);
-  border-radius: var(--bp-r);
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  border-radius: 8px;
   box-shadow: 0 8px 20px rgba(31, 61, 88, 0.06);
   display: grid;
   gap: 8px;
@@ -2687,7 +2689,7 @@
 }
 
 .aiSimulationCard > strong {
-  color: var(--bp-blue);
+  color: var(--workspace-accent, #000000);
   font-size: 11.5px;
   font-weight: 950;
 }
@@ -2713,8 +2715,8 @@
 }
 
 .aiSimulationCard li span {
-  color: var(--bp-ink);
-  font-family: var(--bp-mono);
+  color: var(--workspace-text, #171717);
+  font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, Consolas, monospace;
   font-size: 11px;
   font-weight: 900;
 }
@@ -2737,7 +2739,7 @@
   background: #eef6ff;
   border: 1px solid #c9ddf3;
   border-radius: 999px;
-  color: var(--bp-blue);
+  color: var(--workspace-accent, #000000);
   font-size: 11px;
   font-weight: 900;
   padding: 4px 7px;
@@ -2745,11 +2747,11 @@
 
 .aiChatLauncher {
   align-items: center;
-  background: var(--bp-blue);
-  border: 1px solid var(--bp-blue);
+  background: var(--workspace-accent, #000000);
+  border: 1px solid var(--workspace-accent, #000000);
   border-radius: 999px;
   bottom: 24px;
-  box-shadow: 0 18px 44px color-mix(in srgb, var(--bp-blue) 24%, transparent);
+  box-shadow: 0 18px 44px color-mix(in srgb, var(--workspace-accent, #000000) 24%, transparent);
   color: #ffffff;
   cursor: pointer;
   display: inline-flex;
@@ -2770,8 +2772,8 @@
 
 .aiChatLauncher:hover,
 .aiChatLauncher:focus-visible {
-  background: color-mix(in srgb, var(--bp-blue) 88%, #000000);
-  box-shadow: 0 22px 54px color-mix(in srgb, var(--bp-blue) 30%, transparent);
+  background: color-mix(in srgb, var(--workspace-accent, #000000) 88%, #000000);
+  box-shadow: 0 22px 54px color-mix(in srgb, var(--workspace-accent, #000000) 30%, transparent);
   outline: none;
   transform: translateY(-1px);
 }
@@ -2784,8 +2786,8 @@
 
 .aiChatDock {
   background: #ffffff;
-  border: 1px solid var(--bp-line);
-  border-radius: var(--bp-r);
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  border-radius: 8px;
   bottom: 24px;
   box-shadow: 0 24px 70px rgba(15, 23, 42, 0.24);
   color: #172033;
@@ -2822,7 +2824,7 @@
 }
 
 .aiChatHeader span {
-  color: var(--bp-blue);
+  color: var(--workspace-accent, #000000);
   font-size: 11px;
   font-weight: 950;
   letter-spacing: 0;
@@ -2852,9 +2854,9 @@
 
 .aiChatCloseButton:hover,
 .aiChatCloseButton:focus-visible {
-  background: var(--bp-blue-tint);
-  border-color: color-mix(in srgb, var(--bp-blue) 35%, var(--bp-line));
-  color: var(--bp-blue);
+  background: var(--workspace-accent-soft, #f0f0f3);
+  border-color: color-mix(in srgb, var(--workspace-accent, #000000) 35%, var(--workspace-line, #f0f0f3));
+  color: var(--workspace-accent, #000000);
   outline: none;
 }
 
@@ -2869,8 +2871,8 @@
 }
 
 .aiChatTabs {
-  background: var(--bp-paper-2);
-  border: 1px solid var(--bp-line);
+  background: var(--workspace-surface-muted, #fafafa);
+  border: 1px solid var(--workspace-line, #f0f0f3);
   border-radius: 7px;
   display: inline-flex;
   gap: 3px;
@@ -2881,7 +2883,7 @@
   background: transparent;
   border: 0;
   border-radius: 5px;
-  color: var(--bp-muted);
+  color: var(--workspace-muted, #60646c);
   cursor: pointer;
   font: inherit;
   font-size: 12px;
@@ -2893,15 +2895,15 @@
 .aiChatTabButton[aria-selected="true"] {
   background: #ffffff;
   box-shadow: 0 1px 4px rgba(23, 32, 51, 0.14);
-  color: var(--bp-blue);
+  color: var(--workspace-accent, #000000);
 }
 
 .aiChatClearButton {
   align-items: center;
   background: #ffffff;
-  border: 1px solid var(--bp-line);
+  border: 1px solid var(--workspace-line, #f0f0f3);
   border-radius: 6px;
-  color: var(--bp-muted);
+  color: var(--workspace-muted, #60646c);
   cursor: pointer;
   display: inline-flex;
   font: inherit;
@@ -2928,7 +2930,7 @@
 
 .aiChatControls {
   align-items: end;
-  background: var(--bp-paper-2);
+  background: var(--workspace-surface-muted, #fafafa);
   border-bottom: 1px solid #e3e9f2;
   display: none;
   gap: 8px;
@@ -2943,7 +2945,7 @@
 
 .aiChatTranscript {
   align-content: start;
-  background: linear-gradient(180deg, #f7fbff 0%, var(--bp-paper-2) 100%);
+  background: var(--workspace-surface-muted, #fafafa);
   display: grid;
   gap: 16px;
   min-height: 0;
@@ -2955,8 +2957,8 @@
 .aiChatSimulationIntro {
   align-items: center;
   background: #ffffff;
-  border: 1px solid var(--bp-line);
-  border-radius: var(--bp-r);
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  border-radius: 8px;
   box-shadow: 0 10px 24px rgba(31, 61, 88, 0.08);
   display: flex;
   gap: 12px;
@@ -2965,7 +2967,7 @@
 }
 
 .aiChatSimulationIntro strong {
-  color: var(--bp-ink);
+  color: var(--workspace-text, #171717);
   font-size: 13px;
   line-height: 1.45;
 }
@@ -3005,8 +3007,8 @@
 
 .aiChatAssistantMessage p,
 .aiChatUserMessage p {
-  border: 1px solid var(--bp-line);
-  border-radius: var(--bp-r);
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  border-radius: 8px;
   font-size: 13px;
   line-height: 1.62;
   margin: 0;
@@ -3022,9 +3024,9 @@
 }
 
 .aiChatAssistantMessage[data-kind="question"] p {
-  background: color-mix(in srgb, var(--bp-blue-tint) 46%, #ffffff);
-  border-color: color-mix(in srgb, var(--bp-blue) 36%, var(--bp-line));
-  box-shadow: inset 4px 0 0 var(--bp-blue);
+  background: color-mix(in srgb, var(--workspace-accent-soft, #f0f0f3) 46%, #ffffff);
+  border-color: color-mix(in srgb, var(--workspace-accent, #000000) 36%, var(--workspace-line, #f0f0f3));
+  box-shadow: inset 4px 0 0 var(--workspace-accent, #000000);
 }
 
 .aiChatAssistantMessage[data-kind="error"] p {
@@ -3034,8 +3036,8 @@
 }
 
 .aiChatUserMessage p {
-  background: var(--bp-blue);
-  border-color: var(--bp-blue);
+  background: var(--workspace-accent, #000000);
+  border-color: var(--workspace-accent, #000000);
   color: #ffffff;
 }
 
@@ -3048,9 +3050,9 @@
 
 .aiChatSuggestionButton {
   background: #ffffff;
-  border: 1px solid var(--bp-line);
+  border: 1px solid var(--workspace-line, #f0f0f3);
   border-radius: 6px;
-  color: var(--bp-blue);
+  color: var(--workspace-accent, #000000);
   cursor: pointer;
   font: inherit;
   font-size: 12.5px;
@@ -3065,15 +3067,15 @@
 
 .aiChatSuggestionButton:hover,
 .aiChatSuggestionButton:focus-visible {
-  background: var(--bp-blue-tint);
-  border-color: color-mix(in srgb, var(--bp-blue) 44%, var(--bp-line));
+  background: var(--workspace-accent-soft, #f0f0f3);
+  border-color: color-mix(in srgb, var(--workspace-accent, #000000) 44%, var(--workspace-line, #f0f0f3));
   outline: none;
 }
 
 .aiChatSuggestionButtonSelected {
-  background: color-mix(in srgb, var(--bp-blue-tint) 72%, #ffffff);
-  border-color: var(--bp-blue);
-  color: var(--bp-blue);
+  background: color-mix(in srgb, var(--workspace-accent-soft, #f0f0f3) 72%, #ffffff);
+  border-color: var(--workspace-accent, #000000);
+  color: var(--workspace-accent, #000000);
 }
 
 .aiChatSuggestionButton:disabled {
@@ -3082,9 +3084,9 @@
 }
 
 .aiChatSelectionSubmitButton {
-  background: var(--bp-blue);
-  border: 1px solid var(--bp-blue);
-  border-radius: var(--bp-r);
+  background: var(--workspace-accent, #000000);
+  border: 1px solid var(--workspace-accent, #000000);
+  border-radius: 8px;
   color: #ffffff;
   cursor: pointer;
   font: inherit;
@@ -3097,7 +3099,7 @@
 
 .aiChatSelectionSubmitButton:hover,
 .aiChatSelectionSubmitButton:focus-visible {
-  background: color-mix(in srgb, var(--bp-blue) 88%, #000000);
+  background: color-mix(in srgb, var(--workspace-accent, #000000) 88%, #000000);
   outline: none;
 }
 
@@ -3182,7 +3184,7 @@
   align-self: end;
   background: #ffffff;
   border: 1px solid #cbd5e1;
-  border-radius: var(--bp-r);
+  border-radius: 8px;
   color: #1d4f86;
   cursor: pointer;
   display: inline-flex;
@@ -3214,9 +3216,9 @@
 .aiChatSendButton {
   align-items: center;
   align-self: end;
-  background: var(--bp-blue);
-  border: 1px solid var(--bp-blue);
-  border-radius: var(--bp-r);
+  background: var(--workspace-accent, #000000);
+  border: 1px solid var(--workspace-accent, #000000);
+  border-radius: 8px;
   color: #ffffff;
   cursor: pointer;
   display: inline-flex;
@@ -3237,8 +3239,8 @@
 
 .aiChatSendButton:not(:disabled):hover,
 .aiChatSendButton:not(:disabled):focus-visible {
-  background: color-mix(in srgb, var(--bp-blue) 88%, #000000);
-  border-color: color-mix(in srgb, var(--bp-blue) 88%, #000000);
+  background: color-mix(in srgb, var(--workspace-accent, #000000) 88%, #000000);
+  border-color: color-mix(in srgb, var(--workspace-accent, #000000) 88%, #000000);
   outline: none;
 }
 
@@ -3789,8 +3791,8 @@
 }
 
 .deploymentPrimaryButton {
-  background: #1f6feb;
-  border: 1px solid #1f6feb;
+  background: var(--workspace-accent, #000000);
+  border: 1px solid var(--workspace-accent, #000000);
   color: #ffffff;
 }
 
@@ -4190,8 +4192,8 @@
 
 .reverseCandidateCardSelected {
   background: #eff6ff;
-  border-color: #1f6feb;
-  box-shadow: inset 3px 0 0 #1f6feb;
+  border-color: var(--workspace-accent, #000000);
+  box-shadow: inset 3px 0 0 var(--workspace-accent, #000000);
 }
 
 .reverseCandidateCard strong {
@@ -5037,7 +5039,7 @@
 
   .aiChatLauncher,
   .aiChatLauncher[data-right-panel-open="true"] {
-    bottom: 14px;
+    bottom: 76px;
     right: 14px;
   }
 
@@ -5091,607 +5093,6 @@
   }
 }
 
-/* Legacy workspace panel compatibility layer, overridden by the DESIGN.md pass below. */
-.rightPanelShell,
-.resourceWorkspacePanel,
-.terraformPanel,
-.issuesPanel,
-.aiPanel,
-.deploymentPanel {
-  background: var(--bp-paper);
-  color: var(--bp-ink);
-  font-family: var(--bp-head);
-}
-
-.rightPanelToolbar,
-.rightPanelUtilityBar,
-.rightPanelModeBar,
-.terraformTopBar,
-.terraformDiagnostics,
-.deploymentHeader,
-.aiPanelHeader {
-  background: var(--bp-paper);
-  border-color: var(--bp-line);
-}
-
-.rightPanelToolbar,
-.rightPanelUtilityBar {
-  min-height: 48px;
-  padding: 7px 10px;
-}
-
-.rightPanelModeBar {
-  min-height: 46px;
-  padding: 6px 10px;
-}
-
-.panelModeToggle,
-.rightPanelUtilityGroup,
-.deploymentDisclosure {
-  background: var(--bp-paper-2);
-  border: 1px solid var(--bp-line);
-  border-radius: var(--bp-r);
-  box-shadow: none;
-}
-
-.terraformTopActions {
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-  box-shadow: none;
-  padding: 0;
-}
-
-.panelModeButton,
-.panelModeButtonActive,
-.panelModeTextButton,
-.panelModeTextButtonActive,
-.panelIconButton,
-.panelIconButtonActive,
-.panelCollapseButton,
-.collapsedPanelButton,
-.collapsedPanelButtonActive,
-.resourceSettingsBackButton,
-.terraformFileButton,
-.deploymentExpandButton {
-  border-radius: var(--bp-r);
-  color: var(--bp-text);
-  font-family: var(--bp-head);
-  font-weight: 850;
-}
-
-.panelModeButtonActive,
-.panelModeTextButtonActive,
-.panelIconButtonActive,
-.collapsedPanelButtonActive,
-.resourceSettingsBackButton:hover,
-.resourceSettingsBackButton:focus-visible {
-  background: var(--bp-blue-tint);
-  border-color: color-mix(in srgb, var(--bp-blue) 46%, transparent);
-  box-shadow: none;
-  color: var(--bp-blue);
-}
-
-.panelModeButton:hover,
-.panelModeButton:focus-visible,
-.panelModeTextButton:hover,
-.panelModeTextButton:focus-visible,
-.panelIconButton:hover,
-.panelIconButton:focus-visible,
-.panelCollapseButton:hover,
-.panelCollapseButton:focus-visible,
-.collapsedPanelButton:hover,
-.collapsedPanelButton:focus-visible,
-.terraformFileButton:hover,
-.terraformFileButton:focus-visible,
-.deploymentExpandButton:hover,
-.deploymentExpandButton:focus-visible {
-  background: var(--bp-blue-tint);
-  border-color: var(--bp-blue);
-  color: var(--bp-blue);
-  outline: none;
-}
-
-.resourceWorkspacePanel {
-  padding-top: 0;
-}
-
-.terraformPanel,
-.issuesPanel,
-.aiPanel,
-.deploymentPanel {
-  background: var(--bp-page);
-}
-
-.terraformTopBar,
-.terraformDiagnostics,
-.issuesPanel .terraformDiagnostics,
-.aiPanel,
-.deploymentPanel {
-  border-left: 1px solid var(--bp-line);
-}
-
-.terraformFileButton,
-.terraformFileMenu,
-.terraformFileSearch,
-.terraformEmpty,
-.terraformNotice,
-.terraformError,
-.terraformDiagnosticList li,
-.aiField textarea,
-.aiField input,
-.aiResultCard,
-.aiExplanation,
-.aiWarning,
-.deploymentSection,
-.deploymentPreflightSummary,
-.deploymentSummary,
-.deploymentApplyConfirm,
-.deploymentDestroyConfirm,
-.deploymentField input,
-.deploymentField select,
-.deploymentField textarea {
-  background: var(--bp-paper);
-  border-color: var(--bp-line);
-  border-radius: var(--bp-r);
-  box-shadow: none;
-  color: var(--bp-text);
-}
-
-.terraformFileMenu {
-  box-shadow: 0 16px 34px rgb(7 36 60 / 14%);
-}
-
-.terraformFileSearch:focus,
-.aiField textarea:focus,
-.aiField input:focus,
-.deploymentField input:focus,
-.deploymentField select:focus,
-.deploymentField textarea:focus {
-  border-color: var(--bp-blue);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--bp-blue) 18%, transparent);
-}
-
-.terraformDiagnosticsHeader h3,
-.aiPanelHeader h2,
-.deploymentHeader h2,
-.deploymentSection h3 {
-  color: var(--bp-ink);
-  font-family: var(--bp-head);
-  letter-spacing: 0;
-}
-
-.terraformDiagnosticsHeader,
-.aiPanelHeader span,
-.deploymentHeader span,
-.deploymentHint,
-.terraformDiagnosticList span {
-  color: var(--bp-text);
-}
-
-.terraformIssueCount,
-.panelIssueBadge {
-  background: var(--bp-blue-tint);
-  color: var(--bp-blue);
-}
-
-.terraformIssueCountError,
-.panelIssueBadgeError {
-  background: var(--bp-high-tint);
-  color: var(--bp-high);
-}
-
-.terraformDiagnosticList li,
-.deploymentWarnings li,
-.deploymentPreflightFindings li {
-  background: var(--bp-paper);
-}
-
-.terraformEmpty {
-  background: var(--bp-paper-2);
-  color: var(--bp-muted);
-}
-
-.terraformNotice {
-  background: var(--bp-blue-tint);
-  border-color: color-mix(in srgb, var(--bp-blue) 42%, var(--bp-line));
-  color: var(--bp-blue);
-}
-
-.terraformError,
-.deploymentStaleNotice,
-.aiWarning {
-  background: var(--bp-med-tint);
-  border-color: color-mix(in srgb, var(--bp-med) 54%, var(--bp-line));
-  color: #7a4d00;
-}
-
-.aiPrimaryButton,
-.deploymentPrimaryButton {
-  background: var(--bp-blue);
-  border-color: var(--bp-blue);
-  color: #ffffff;
-}
-
-.aiSecondaryButton,
-.deploymentSecondaryButton {
-  background: var(--bp-paper);
-  border-color: var(--bp-line);
-  color: var(--bp-blue);
-}
-
-.deploymentDangerButton {
-  background: var(--bp-high);
-  border-color: var(--bp-high);
-  color: #ffffff;
-}
-
-.aiPrimaryButton:hover,
-.aiPrimaryButton:focus-visible,
-.deploymentPrimaryButton:not(:disabled):hover,
-.deploymentPrimaryButton:not(:disabled):focus-visible {
-  background: color-mix(in srgb, var(--bp-blue) 86%, #000000);
-  border-color: color-mix(in srgb, var(--bp-blue) 86%, #000000);
-  outline: none;
-}
-
-.aiSecondaryButton:hover,
-.aiSecondaryButton:focus-visible,
-.deploymentSecondaryButton:not(:disabled):hover,
-.deploymentSecondaryButton:not(:disabled):focus-visible {
-  background: var(--bp-blue-tint);
-  border-color: var(--bp-blue);
-  color: var(--bp-blue);
-  outline: none;
-}
-
-.deploymentPrimaryButton:disabled,
-.deploymentSecondaryButton:disabled,
-.deploymentDangerButton:disabled {
-  opacity: 0.76;
-}
-
-.aiPanel,
-.deploymentPanel {
-  gap: 14px;
-  padding: 16px;
-}
-
-.aiPanelHeader,
-.deploymentHeader {
-  background: linear-gradient(135deg, color-mix(in srgb, var(--bp-paper) 92%, #ffffff), var(--bp-paper-2));
-  border: 1.5px solid var(--bp-line);
-  border-radius: var(--bp-r);
-  padding: 14px;
-  position: relative;
-}
-
-.aiPanelHeader::before,
-.aiPanelHeader::after,
-.deploymentHeader::before,
-.deploymentHeader::after,
-.aiSection::before,
-.deploymentSection::before {
-  border: 1.5px solid var(--bp-blue);
-  content: "";
-  height: 10px;
-  pointer-events: none;
-  position: absolute;
-  width: 10px;
-}
-
-.aiPanelHeader::before,
-.deploymentHeader::before,
-.aiSection::before,
-.deploymentSection::before {
-  border-bottom: 0;
-  border-right: 0;
-  left: -1px;
-  top: -1px;
-}
-
-.aiPanelHeader::after,
-.deploymentHeader::after {
-  border-left: 0;
-  border-top: 0;
-  bottom: -1px;
-  right: -1px;
-}
-
-.aiPanelHeader span,
-.deploymentHeader > span,
-.deploymentHeaderTop span {
-  color: var(--bp-blue);
-  font-family: var(--bp-mono);
-  font-size: 10px;
-  font-weight: 850;
-  text-transform: uppercase;
-}
-
-.aiPanelHeader h2,
-.deploymentHeader h2 {
-  font-size: 20px;
-  line-height: 1.1;
-}
-
-.aiSection,
-.deploymentSection {
-  background: color-mix(in srgb, var(--bp-paper) 94%, transparent);
-  border: 1px solid var(--bp-line);
-  border-radius: var(--bp-r);
-  display: grid;
-  gap: 12px;
-  padding: 14px;
-  position: relative;
-}
-
-.aiSection {
-  border-top: 1px solid var(--bp-line);
-}
-
-.aiSection:first-of-type {
-  border-top: 1px solid var(--bp-line);
-}
-
-.aiField {
-  color: var(--bp-blue);
-  font-family: var(--bp-head);
-  font-size: 12px;
-}
-
-.aiField textarea,
-.aiField input,
-.aiField select,
-.deploymentField input,
-.deploymentField select,
-.deploymentField textarea {
-  background: #f8fbfd;
-  border: 1.5px solid var(--bp-line);
-  color: var(--bp-ink);
-  font-size: 13px;
-}
-
-.aiField textarea {
-  min-height: 124px;
-}
-
-.aiInlineFields {
-  gap: 12px;
-}
-
-.aiPrimaryButton,
-.deploymentPrimaryButton,
-.deploymentDangerButton {
-  min-height: 42px;
-}
-
-.aiSecondaryButton,
-.deploymentSecondaryButton,
-.deploymentExpandButton,
-.terraformPreviewButton {
-  border-color: color-mix(in srgb, var(--bp-blue) 38%, var(--bp-line));
-}
-
-.terraformPreviewButton {
-  background: var(--bp-paper);
-  color: var(--bp-blue);
-}
-
-.deploymentPanelContent {
-  gap: 14px;
-  padding-right: 0;
-  scrollbar-gutter: auto;
-}
-
-.deploymentHeader {
-  margin-right: 0;
-}
-
-.deploymentPanel .deploymentSection:first-of-type {
-  background: color-mix(in srgb, var(--bp-blue-tint) 38%, var(--bp-paper));
-}
-
-.deploymentSectionHeader {
-  align-items: center;
-}
-
-.deploymentPreflightSummary,
-.deploymentGateCard {
-  border-radius: var(--bp-r);
-}
-
-.deploymentLogList {
-  background: linear-gradient(rgba(126, 167, 198, 0.08) 1px, transparent 1px), #0e151d;
-  background-size: 100% 28px;
-  border: 1px solid #33495c;
-  padding: 14px;
-}
-
-.deploymentLogPrefix {
-  color: #7ea7c6;
-}
-
-/* Legacy right panel sizing compatibility layer, overridden by the DESIGN.md pass below. */
-.rightPanelShell {
-  --bb-white: #ffffff;
-  --bb-page: #fafafa;
-  --bb-border: #e2e9f3;
-  --bb-border-strong: #d2dce9;
-  --bb-text: #18202a;
-  --bb-muted: #596578;
-  --bb-neutral-chip: #f0f0f0;
-  --bb-neutral-active: #e8e8e8;
-  --bb-accent: #704dff;
-  --bb-accent-hover: #5f3fe6;
-  --bb-accent-soft: #f0f1ff;
-  --bb-danger: #e5484d;
-  --bb-danger-hover: #d83d43;
-  --bb-dark: #212121;
-  --bb-dark-card: #3b3b3b;
-  --bb-dark-border: #303030;
-
-  background: var(--bb-white);
-  color: var(--bb-text);
-  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  font-size: 12px;
-  grid-template-rows: 44px 47px minmax(0, 1fr);
-}
-
-.rightPanelUtilityBar {
-  background: var(--bb-white);
-  border-bottom: 1px solid var(--bb-border);
-  min-height: 44px;
-  padding: 8px 12px;
-}
-
-.rightPanelModeBar {
-  background: var(--bb-white);
-  border-bottom: 1px solid var(--bb-border);
-  min-height: 47px;
-  overflow: visible;
-  padding: 8px 12px;
-}
-
-.rightPanelView {
-  background: var(--bb-page);
-}
-
-.rightPanelUtilityGroup {
-  background: transparent;
-  border: 0;
-  border-radius: 4px;
-  gap: 4px;
-  padding: 0;
-}
-
-.rightPanelUtilityGroup .panelModeButton,
-.rightPanelUtilityGroup .panelModeButtonActive,
-.panelCollapseButton {
-  background: transparent;
-  border-color: transparent;
-  border-radius: 4px;
-  box-shadow: none;
-  color: var(--bb-text);
-  height: 26px;
-  width: 26px;
-}
-
-.panelModeIconGroup .panelModeButton,
-.panelModeIconGroup .panelModeButtonActive {
-  background: transparent;
-  border-color: transparent;
-  border-radius: 4px;
-  box-shadow: none;
-  color: var(--bb-text);
-  height: 24px;
-  width: 24px;
-}
-
-.panelModeIconGroup .panelModeButtonActive {
-  background: var(--bb-neutral-active);
-  color: var(--bb-text);
-}
-
-.panelModeButton:hover,
-.panelModeButton:focus-visible,
-.panelCollapseButton:hover,
-.panelCollapseButton:focus-visible {
-  background: var(--bb-neutral-chip);
-  border-color: transparent;
-  color: var(--bb-text);
-}
-
-.panelModeTextButton,
-.panelModeTextButtonActive {
-  background: transparent;
-  border-color: transparent;
-  border-radius: 4px;
-  box-shadow: none;
-  color: var(--bb-text);
-  font-size: 12px;
-  font-weight: 500;
-  height: 24px;
-  min-width: 56px;
-  padding: 0 8px;
-}
-
-.panelModeTextButton:first-of-type,
-.panelModeTextButtonActive:first-of-type {
-  min-width: 70px;
-}
-
-.panelModeTextButtonActive {
-  background: var(--bb-neutral-active);
-  color: var(--bb-text);
-}
-
-.panelModeTextButton:hover,
-.panelModeTextButton:focus-visible {
-  background: var(--bb-neutral-chip);
-  border-color: transparent;
-  color: var(--bb-text);
-}
-
-.issuesPanel {
-  background: #f8fbff;
-  color: #172033;
-}
-
-.issuesPanel .terraformDiagnostics {
-  background: #f8fbff;
-  border-left: 0;
-  color: #172033;
-}
-
-.issuesPanel .terraformDiagnosticsHeader,
-.issuesPanel .terraformDiagnosticsHeader h3 {
-  color: #172033;
-}
-
-.issuesPanel .terraformDiagnosticList li {
-  background: #ffffff;
-  border-color: #dce3ee;
-  color: #172033;
-}
-
-.issuesPanel .terraformDiagnosticList strong {
-  color: #172033;
-}
-
-.issuesPanel .terraformDiagnosticList span {
-  color: #334155;
-}
-
-.issuesPanel .terraformDiagnosticSeverity {
-  background: #fee2e2;
-  color: #991b1b;
-}
-
-.issuesPanel .terraformDiagnosticMeta span {
-  background: #f8fafc;
-  border-color: #cbd5e1;
-  color: #334155;
-}
-
-.terraformPanel,
-.deploymentPanel {
-  background: var(--bb-page);
-}
-
-.terraformTopBar,
-.terraformDiagnostics,
-.deploymentHeader {
-  background: var(--bb-white);
-  border-color: var(--bb-border);
-}
-
-@media (max-width: 640px) {
-  .deploymentGateFacts {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* DESIGN.md workspace internal panel pass */
 .rightPanelShell {
   background: var(--workspace-surface, #ffffff);
   color: var(--workspace-text, #171717);
@@ -5733,6 +5134,24 @@
   background: var(--workspace-surface-muted, #fafafa);
   color: var(--workspace-text, #171717);
   font-family: var(--workspace-font, "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif);
+}
+
+.issuesPanel .terraformDiagnosticList strong {
+  color: var(--workspace-text, #171717);
+}
+
+.issuesPanel .terraformDiagnosticList span,
+.issuesPanel .terraformDiagnosticMeta span {
+  color: var(--workspace-muted, #60646c);
+}
+
+.issuesPanel .terraformDiagnosticSeverity {
+  color: #b42318;
+}
+
+.issuesPanel .terraformDiagnosticMeta span {
+  background: var(--workspace-surface, #ffffff);
+  border-color: var(--workspace-line-strong, #dcdee0);
 }
 
 .panelModeToggle,
@@ -6176,9 +5595,9 @@
 }
 
 .deploymentStageSummaryNotice {
-  background: #eef6ff;
-  border-color: #bfdbfe;
-  color: #1e3a8a;
+  background: #f5f5f5;
+  border-color: #dcdee0;
+  color: #44474d;
 }
 
 .deploymentStageDot {
@@ -6188,8 +5607,8 @@
 }
 
 .deploymentStageActionCard[data-state="active"] {
-  background: #f8fbff;
-  border-color: #2563eb;
+  background: var(--workspace-surface, #ffffff);
+  border-color: var(--workspace-accent, #000000);
 }
 
 .deploymentStageActionCard[data-state="done"] {
@@ -6202,9 +5621,9 @@
 }
 
 .deploymentStageStep[data-state="active"] .deploymentStageDot {
-  background: #2563eb;
-  border-color: #2563eb;
-  box-shadow: 0 0 0 6px rgba(37, 99, 235, 0.16);
+  background: var(--workspace-accent, #000000);
+  border-color: var(--workspace-accent, #000000);
+  box-shadow: 0 0 0 6px rgba(23, 23, 23, 0.12);
   color: #ffffff;
 }
 
@@ -6267,9 +5686,1021 @@
   font-size: 16px;
 }
 
+.liveObservationOverlay {
+  align-items: center;
+  background: rgba(3, 10, 20, 0.74);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 12px;
+  position: fixed;
+  z-index: 140;
+}
+
+.liveObservationDialog {
+  --live-pressure-color: #16a34a;
+  background: var(--workspace-surface, #ffffff);
+  border: 1px solid rgba(148, 163, 184, 0.38);
+  border-radius: 12px;
+  box-shadow: 0 32px 96px rgba(2, 6, 23, 0.42);
+  color: var(--workspace-text, #171717);
+  display: flex;
+  flex-direction: column;
+  font-family: var(--workspace-font, "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif);
+  height: calc(100dvh - 24px);
+  max-height: 1080px;
+  max-width: 1800px;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+  width: calc(100vw - 24px);
+}
+
+.liveObservationDialog[data-pressure-level="warning"] {
+  --live-pressure-color: #ca8a04;
+}
+
+.liveObservationDialog[data-pressure-level="high"] {
+  --live-pressure-color: #ea580c;
+}
+
+.liveObservationDialog[data-pressure-level="critical"] {
+  --live-pressure-color: #dc2626;
+}
+
+.liveObservationHeader {
+  align-items: center;
+  background: #ffffff;
+  border-bottom: 1px solid var(--workspace-line, #f0f0f3);
+  display: grid;
+  flex: 0 0 auto;
+  gap: 16px;
+  grid-template-columns: minmax(240px, 1fr) auto 36px;
+  min-height: 70px;
+  padding: 9px 16px;
+  position: relative;
+  z-index: 12;
+}
+
+.liveObservationHeader h2,
+.liveObservationHeader p,
+.liveObservationAudienceUtility p,
+.liveObservationIntro p,
+.liveObservationMessage p,
+.liveObservationControlActivity p {
+  margin: 0;
+}
+
+.liveObservationHeaderIdentity {
+  min-width: 0;
+}
+
+.liveObservationHeader h2 {
+  font-size: 17px;
+  line-height: 1.25;
+  margin-top: 2px;
+}
+
+.liveObservationHeader p {
+  color: var(--workspace-muted, #60646c);
+  font-size: 11px;
+  line-height: 1.35;
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.liveObservationEyebrow,
+.liveObservationSectionLabel {
+  color: var(--workspace-muted, #60646c);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+
+.liveObservationCloseButton {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--workspace-text, #171717);
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 36px;
+  justify-content: center;
+  width: 36px;
+}
+
+.liveObservationCloseButton:hover {
+  background: var(--workspace-surface-muted, #fafafa);
+  border-color: var(--workspace-line-strong, #dcdee0);
+}
+
+.liveObservationCloseButton:focus-visible,
+.liveObservationAudienceUtility a:focus-visible,
+.liveObservationPrimaryButton:focus-visible,
+.liveObservationSecondaryButton:focus-visible,
+.liveObservationDangerButton:focus-visible {
+  outline: 2px solid #171717;
+  outline-offset: 2px;
+}
+
+.liveObservationTargetBar {
+  align-items: end;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(236px, 310px) auto auto;
+  min-width: 0;
+}
+
+.liveObservationTargetBar label {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.liveObservationTargetBar label > span {
+  color: var(--workspace-muted, #60646c);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.liveObservationTargetBar select {
+  background: #ffffff;
+  border: 1px solid var(--workspace-line-strong, #dcdee0);
+  border-radius: 8px;
+  color: var(--workspace-text, #171717);
+  font: inherit;
+  font-size: 12px;
+  height: 36px;
+  min-width: 0;
+  padding: 0 32px 0 10px;
+}
+
+.liveObservationTargetBar select:focus-visible {
+  border-color: #171717;
+  outline: 2px solid rgba(23, 23, 23, 0.14);
+}
+
+.liveObservationSessionStatus {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  border-radius: 8px;
+  display: inline-flex;
+  font-size: 11px;
+  gap: 6px;
+  height: 36px;
+  padding: 0 10px;
+  white-space: nowrap;
+}
+
+.liveObservationSessionStatus svg {
+  color: #999999;
+}
+
+.liveObservationSessionStatus[data-status="active"] svg {
+  color: #16a34a;
+}
+
+.liveObservationSessionStatus strong {
+  font-variant-numeric: tabular-nums;
+}
+
+.liveObservationTargetActions {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+}
+
+.liveObservationAudienceUtility {
+  background: #ffffff;
+  border: 1px solid var(--workspace-line-strong, #dcdee0);
+  border-radius: 10px;
+  box-shadow: 0 18px 46px rgba(15, 23, 42, 0.2);
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(0, 1fr) 112px;
+  max-height: calc(100dvh - 112px);
+  overflow: auto;
+  padding: 14px;
+  position: absolute;
+  right: 56px;
+  top: 64px;
+  width: min(460px, calc(100% - 32px));
+  z-index: 20;
+}
+
+.liveObservationAudienceUtility strong {
+  display: block;
+  font-size: 13px;
+  margin-top: 4px;
+}
+
+.liveObservationAudienceUtility p {
+  color: var(--workspace-muted, #60646c);
+  font-size: 11px;
+  line-height: 1.45;
+  margin-top: 3px;
+}
+
+.liveObservationAudienceUtilityActions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.liveObservationAudienceUtilityActions a {
+  align-items: center;
+  color: var(--workspace-link, #0d74ce);
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 700;
+  gap: 4px;
+  text-decoration: none;
+}
+
+.liveObservationAudienceUtilityActions a:hover {
+  text-decoration: underline;
+}
+
+.liveObservationQr {
+  align-items: center;
+  align-self: center;
+  background: #ffffff;
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  border-radius: 8px;
+  display: flex;
+  height: 112px;
+  justify-content: center;
+  width: 112px;
+}
+
+.liveObservationQr img {
+  display: block;
+  height: 104px;
+  width: 104px;
+}
+
+.liveObservationQr span {
+  color: var(--workspace-muted, #60646c);
+  font-size: 11px;
+}
+
+.liveObservationBody {
+  background: #ffffff;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow: auto;
+}
+
+.liveObservationMessage,
+.liveObservationIntro,
+.liveObservationError {
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  border-radius: 10px;
+  flex: 0 0 auto;
+  font-size: 13px;
+  margin: 16px;
+  padding: 16px;
+}
+
+.liveObservationMessage {
+  background: var(--workspace-surface-muted, #fafafa);
+  text-align: center;
+}
+
+.liveObservationMessage p,
+.liveObservationIntro p {
+  color: var(--workspace-muted, #60646c);
+  margin-top: 4px;
+}
+
+.liveObservationError {
+  background: #fff7f7;
+  border-color: #f3b7b8;
+  color: #991b1b;
+  margin-bottom: 0;
+}
+
+.liveObservationIntro {
+  align-items: center;
+  background: #ffffff;
+  display: flex;
+  gap: 12px;
+}
+
+.liveObservationEvidenceRail {
+  background: #ffffff;
+  border-bottom: 1px solid var(--workspace-line, #f0f0f3);
+  display: grid;
+  flex: 0 0 auto;
+  grid-template-columns: 1fr;
+  min-height: 72px;
+  position: relative;
+  z-index: 4;
+}
+
+.liveObservationEvidenceRail > div {
+  align-items: center;
+  display: grid;
+  gap: 2px 14px;
+  grid-template-columns: minmax(132px, 0.75fr) auto minmax(170px, 1.25fr);
+  grid-template-rows: auto auto;
+  min-width: 0;
+  padding: 10px 18px;
+}
+
+.liveObservationEvidenceRail > div + div {
+  border-top: 1px solid var(--workspace-line, #f0f0f3);
+}
+
+.liveObservationEvidenceRail span {
+  color: #334155;
+  font-size: 10px;
+  font-weight: 800;
+  grid-column: 1;
+  grid-row: 1;
+  line-height: 1.3;
+}
+
+.liveObservationEvidenceRail strong {
+  color: #0f172a;
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.liveObservationEvidenceRail p,
+.liveObservationEvidenceRail small {
+  color: var(--workspace-muted, #60646c);
+  font-size: 10px;
+  line-height: 1.35;
+  margin: 0;
+  min-width: 0;
+}
+
+.liveObservationEvidenceRail p {
+  grid-column: 3;
+  grid-row: 1;
+}
+
+.liveObservationEvidenceRail small {
+  grid-column: 3;
+  grid-row: 2;
+}
+
+.liveObservationEvidenceRail [data-source="aws"] small {
+  color: #475569;
+}
+
+.liveObservationPressureTrack {
+  background: var(--workspace-line, #f0f0f3);
+  border-radius: 999px;
+  grid-column: 1;
+  grid-row: 2;
+  height: 5px;
+  overflow: hidden;
+}
+
+.liveObservationPressureTrack i {
+  background: var(--live-pressure-color);
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+  transition: width 240ms ease;
+}
+
+.liveObservationMapStage {
+  background: #04182a;
+  display: flex;
+  flex: 1 0 auto;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.liveObservationMapStage > .liveObservationSectionLabel {
+  background: rgba(3, 18, 33, 0.86);
+  border: 1px solid rgba(103, 232, 249, 0.28);
+  border-radius: 6px;
+  color: #bae6fd;
+  left: 14px;
+  padding: 5px 8px;
+  position: absolute;
+  top: 12px;
+  z-index: 8;
+}
+
+.liveObservationSignalMap {
+  --live-signal-accent: #67e8f9;
+  --live-signal-route: rgba(103, 232, 249, 0.68);
+  aspect-ratio: 5 / 2;
+  background-color: #04182a;
+  background-image:
+    linear-gradient(rgba(125, 211, 252, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(125, 211, 252, 0.06) 1px, transparent 1px),
+    radial-gradient(circle at 51% 48%, rgba(14, 116, 144, 0.13), transparent 48%);
+  background-size: 48px 48px, 48px 48px, auto;
+  border: 0;
+  border-radius: 0;
+  box-shadow: inset 0 1px rgba(226, 232, 240, 0.07);
+  flex: 1 0 auto;
+  isolation: isolate;
+  min-height: 560px;
+  min-width: 0;
+  overflow: hidden;
+  position: relative;
+  width: 100%;
+}
+
+.liveObservationSignalMap::before {
+  background:
+    linear-gradient(90deg, rgba(2, 12, 24, 0.34), transparent 12%, transparent 88%, rgba(2, 12, 24, 0.34)),
+    linear-gradient(180deg, rgba(56, 189, 248, 0.04), transparent 30%, transparent 72%, rgba(2, 12, 24, 0.24));
+  content: "";
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+  z-index: 0;
+}
+
+.liveObservationSignalRouteLayer {
+  height: 100%;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+  position: absolute;
+  width: 100%;
+}
+
+.liveObservationSignalRailLayer {
+  z-index: 1;
+}
+
+.liveObservationSignalPulseLayer {
+  z-index: 3;
+}
+
+.liveObservationSignalRailLayer path {
+  fill: none;
+  stroke: var(--live-signal-route);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.liveObservationSignalRailLayer path[data-rail-kind="connector"],
+.liveObservationSignalRailLayer path[data-rail-kind="ec2-branch"] {
+  stroke: rgba(103, 232, 249, 0.82);
+  stroke-width: 2.25;
+}
+
+.liveObservationSignalPulse {
+  fill: var(--live-signal-accent);
+  filter: drop-shadow(0 0 7px rgba(103, 232, 249, 0.95));
+}
+
+.liveObservationSignalSelectedRoute {
+  fill: none;
+  opacity: 1;
+  stroke: var(--live-signal-accent);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 3;
+  vector-effect: non-scaling-stroke;
+}
+
+.liveObservationSignalArrivalFeedback {
+  animation: liveObservationSignalArrivalFeedback 240ms cubic-bezier(0.25, 1, 0.5, 1) both;
+  fill: none;
+  opacity: 0;
+  stroke: var(--live-signal-accent);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 3;
+  vector-effect: non-scaling-stroke;
+}
+
+.liveObservationSignalOverflow {
+  fill: #e0f2fe;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.liveObservationSignalOverflow[data-signal-variant="mobile"] {
+  font-size: 4px;
+}
+
+.liveObservationSignalNode {
+  --live-node-accent: #67e8f9;
+  align-content: center;
+  background: linear-gradient(145deg, rgba(7, 30, 51, 0.98), rgba(3, 18, 33, 0.98));
+  border: 2px solid var(--live-node-accent);
+  box-shadow:
+    0 14px 30px rgba(2, 6, 23, 0.36),
+    0 0 18px color-mix(in srgb, var(--live-node-accent) 20%, transparent),
+    inset 0 1px rgba(248, 250, 252, 0.08);
+  color: #f8fafc;
+  display: grid;
+  gap: 4px 10px;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  min-width: 0;
+  padding: clamp(10px, 1.1vw, 18px);
+  text-align: left;
+}
+
+.liveObservationSignalNode svg {
+  color: var(--live-node-accent);
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  height: clamp(20px, 2vw, 30px);
+  width: clamp(20px, 2vw, 30px);
+}
+
+.liveObservationSignalNode strong {
+  color: #f8fafc;
+  font-size: clamp(13px, 1.15vw, 19px);
+  grid-column: 2;
+  line-height: 1.15;
+  min-width: 0;
+}
+
+.liveObservationSignalNode span {
+  color: #cbd5e1;
+  font-size: clamp(9px, 0.72vw, 12px);
+  grid-column: 2;
+  line-height: 1.3;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.liveObservationSignalNode[data-node-kind="audience"] {
+  --live-node-accent: #22d3ee;
+}
+
+.liveObservationSignalNode[data-node-kind="s3"] {
+  --live-node-accent: #4ade80;
+}
+
+.liveObservationSignalNode[data-node-kind="alb"] {
+  --live-node-accent: #a78bfa;
+}
+
+.liveObservationSignalNode[data-node-kind="asg"] {
+  --live-node-accent: #f59e0b;
+}
+
+.liveObservationSignalNode[data-node-kind="ec2"] {
+  --live-node-accent: #f59e0b;
+}
+
+.liveObservationSignalInstance[data-instance-state="in-service"] {
+  border-style: solid;
+}
+
+.liveObservationSignalInstance[data-instance-state="launching"] {
+  --live-node-accent: #e879f9;
+  border-style: dashed;
+}
+
+.liveObservationSignalInstance[data-instance-state="transitioning"] {
+  --live-node-accent: #f0abfc;
+  border-style: dashed;
+}
+
+.liveObservationSignalInstance[data-instance-state="launching"] span,
+.liveObservationSignalInstance[data-instance-state="transitioning"] span {
+  color: #f5d0fe;
+}
+
+.liveObservationRequestFlash {
+  animation: liveObservationRequestFlash 240ms cubic-bezier(0.25, 1, 0.5, 1) both;
+  border: 2px solid var(--live-signal-accent);
+  border-radius: inherit;
+  inset: -4px;
+  pointer-events: none;
+  position: absolute;
+}
+
+.liveObservationControlRail {
+  align-items: center;
+  background: #ffffff;
+  border-top: 1px solid var(--workspace-line, #f0f0f3);
+  display: grid;
+  flex: 0 0 auto;
+  gap: 16px;
+  grid-template-columns: minmax(340px, 1fr) auto auto;
+  min-height: 72px;
+  padding: 9px 16px;
+}
+
+.liveObservationControlActivity {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  min-width: 0;
+}
+
+.liveObservationControlActivity > strong {
+  flex: 0 0 auto;
+  font-size: 12px;
+}
+
+.liveObservationControlActivity > div {
+  align-items: center;
+  display: grid;
+  gap: 6px;
+  grid-template-columns: auto auto minmax(80px, 1fr) auto;
+  min-width: 0;
+}
+
+.liveObservationControlActivity > div > i {
+  background: #16a34a;
+  border: 3px solid #dcfce7;
+  border-radius: 999px;
+  height: 11px;
+  width: 11px;
+}
+
+.liveObservationControlActivity > div strong,
+.liveObservationControlActivity > div p,
+.liveObservationControlActivity > div time,
+.liveObservationMuted {
+  font-size: 11px;
+}
+
+.liveObservationControlActivity > div p,
+.liveObservationControlActivity > div time,
+.liveObservationMuted {
+  color: var(--workspace-muted, #60646c);
+}
+
+.liveObservationControlActivity > div p {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.liveObservationControlActivity > div time {
+  white-space: nowrap;
+}
+
+.liveObservationBoostSummary {
+  border-left: 1px solid var(--workspace-line, #f0f0f3);
+  display: grid;
+  min-width: 180px;
+  padding-left: 16px;
+}
+
+.liveObservationBoostSummary strong {
+  font-size: 11px;
+}
+
+.liveObservationBoostSummary span {
+  color: var(--workspace-muted, #60646c);
+  font-size: 10px;
+  margin-top: 2px;
+}
+
+.liveObservationControlActions {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+}
+
+.liveObservationPrimaryButton,
+.liveObservationSecondaryButton,
+.liveObservationDangerButton {
+  align-items: center;
+  border-radius: 8px;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  gap: 5px;
+  height: 36px;
+  justify-content: center;
+  padding: 0 12px;
+  white-space: nowrap;
+}
+
+.liveObservationPrimaryButton {
+  background: #000000;
+  border: 1px solid #000000;
+  color: #ffffff;
+}
+
+.liveObservationSecondaryButton {
+  background: #ffffff;
+  border: 1px solid var(--workspace-line-strong, #dcdee0);
+  color: var(--workspace-text, #171717);
+}
+
+.liveObservationDangerButton {
+  background: #ffffff;
+  border: 1px solid #f3b7b8;
+  color: #991b1b;
+}
+
+.liveObservationPrimaryButton:hover:not(:disabled) {
+  background: #1a1a1a;
+}
+
+.liveObservationSecondaryButton:hover:not(:disabled),
+.liveObservationDangerButton:hover:not(:disabled) {
+  border-color: #171717;
+}
+
+.liveObservationPrimaryButton:disabled,
+.liveObservationSecondaryButton:disabled,
+.liveObservationDangerButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+@keyframes liveObservationRequestFlash {
+  0%,
+  100% {
+    box-shadow: 0 0 0 rgba(103, 232, 249, 0);
+    opacity: 0;
+  }
+
+  18%,
+  58% {
+    box-shadow: 0 0 20px rgba(103, 232, 249, 0.5);
+    opacity: 0.95;
+  }
+}
+
+@keyframes liveObservationSignalArrivalFeedback {
+  0%,
+  100% {
+    opacity: 0;
+  }
+
+  18%,
+  58% {
+    opacity: 0.92;
+  }
+}
+
+@media (max-width: 1199px) {
+  .liveObservationHeader {
+    gap: 8px 12px;
+    grid-template-columns: minmax(0, 1fr) 36px;
+    padding: 8px 14px;
+  }
+
+  .liveObservationTargetBar {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    grid-template-columns: minmax(220px, 1fr) auto auto;
+  }
+
+  .liveObservationCloseButton {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .liveObservationEvidenceRail > div {
+    gap: 2px 8px;
+    grid-template-columns: minmax(100px, 0.8fr) auto minmax(120px, 1.2fr);
+    padding: 9px 12px;
+  }
+
+  .liveObservationSignalMap {
+    min-height: clamp(440px, 62dvh, 560px);
+  }
+
+  .liveObservationSignalNode {
+    gap: 3px 6px;
+    padding: 8px;
+  }
+
+  .liveObservationSignalNode strong {
+    font-size: clamp(11px, 1.4vw, 15px);
+  }
+
+  .liveObservationSignalNode span {
+    font-size: clamp(8px, 1vw, 10px);
+  }
+
+  .liveObservationControlRail {
+    gap: 10px;
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .liveObservationControlActivity {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 759px) {
+  .liveObservationOverlay {
+    padding: 0;
+  }
+
+  .liveObservationDialog {
+    border: 0;
+    border-radius: 0;
+    height: 100dvh;
+    max-height: none;
+    max-width: none;
+    width: 100vw;
+  }
+
+  .liveObservationHeader {
+    grid-template-columns: minmax(0, 1fr) 36px;
+    min-height: 0;
+    padding: 8px 10px;
+  }
+
+  .liveObservationHeader p {
+    display: none;
+  }
+
+  .liveObservationTargetBar {
+    align-items: center;
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .liveObservationTargetBar label {
+    grid-column: 1 / -1;
+  }
+
+  .liveObservationSessionStatus {
+    justify-self: start;
+  }
+
+  .liveObservationTargetActions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .liveObservationAudienceUtility {
+    grid-template-columns: minmax(0, 1fr) 96px;
+    max-height: calc(100dvh - 96px);
+    padding: 12px;
+    right: 10px;
+    top: 58px;
+    width: calc(100% - 20px);
+  }
+
+  .liveObservationQr {
+    height: 96px;
+    width: 96px;
+  }
+
+  .liveObservationQr img {
+    height: 88px;
+    width: 88px;
+  }
+
+  .liveObservationEvidenceRail {
+    grid-template-columns: 1fr;
+  }
+
+  .liveObservationEvidenceRail > div {
+    grid-template-columns: minmax(96px, 0.7fr) auto minmax(110px, 1.3fr);
+    min-height: 62px;
+    padding: 8px 10px;
+  }
+
+  .liveObservationEvidenceRail > div + div {
+    border-left: 0;
+    border-top: 1px solid var(--workspace-line, #f0f0f3);
+  }
+
+  .liveObservationMapStage {
+    flex: 0 0 auto;
+    overflow: hidden;
+  }
+
+  .liveObservationSignalMap {
+    aspect-ratio: auto;
+    min-height: 920px;
+  }
+
+  .liveObservationSignalNode {
+    border-radius: var(--live-mobile-node-radius) !important;
+    height: var(--live-mobile-node-height) !important;
+    left: var(--live-mobile-node-left) !important;
+    padding: 12px !important;
+    top: var(--live-mobile-node-top) !important;
+    width: var(--live-mobile-node-width) !important;
+  }
+
+  .liveObservationSignalNode svg {
+    height: 24px;
+    width: 24px;
+  }
+
+  .liveObservationSignalNode strong {
+    font-size: 15px;
+  }
+
+  .liveObservationSignalNode span {
+    font-size: 10px;
+  }
+
+  .liveObservationSignalNode[data-node-kind="ec2"] {
+    padding: 10px !important;
+  }
+
+  .liveObservationControlRail {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+    padding: 10px;
+  }
+
+  .liveObservationControlActivity,
+  .liveObservationControlActions {
+    grid-column: 1;
+  }
+
+  .liveObservationControlActivity {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .liveObservationControlActivity > div {
+    grid-template-columns: auto auto minmax(0, 1fr);
+    width: 100%;
+  }
+
+  .liveObservationControlActivity > div time {
+    grid-column: 3;
+  }
+
+  .liveObservationBoostSummary {
+    border-left: 0;
+    border-top: 1px solid var(--workspace-line, #f0f0f3);
+    padding-left: 0;
+    padding-top: 8px;
+  }
+
+  .liveObservationControlActions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .liveObservationControlActions > :last-child {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .liveObservationSignalSelectedRoute {
+    animation: none;
+    opacity: 1;
+  }
+
+  .liveObservationSignalInstance .liveObservationRequestFlash {
+    animation: none;
+    box-shadow: 0 0 14px rgba(103, 232, 249, 0.38);
+    opacity: 1;
+  }
+
+  .liveObservationPressureTrack i {
+    transition: none;
+  }
+}
+
 @media (max-width: 900px) {
   .collapsedRightPanel {
     right: 10px;
     top: 74px;
+  }
+
+  .serverSaveToast {
+    max-width: calc(100vw - 24px);
+    min-width: 0;
+    padding: 16px 18px;
+    right: 12px;
+    width: calc(100vw - 24px);
+  }
+}
+
+@media (max-width: 640px) {
+  .deploymentGateFacts {
+    grid-template-columns: 1fr;
   }
 }

@@ -1,7 +1,15 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 import type { DiagramNode } from "../../../../packages/types/src";
 import { getNodeResizeBounds } from "./node-resize-bounds";
+import { RESOURCE_NODE_COMPACT_MIN_SIZE } from "./resource-node-geometry";
+
+const nodeResizeBoundsSource = readFileSync(
+  fileURLToPath(new URL("./node-resize-bounds.ts", import.meta.url)),
+  "utf8"
+);
 
 test("getNodeResizeBounds removes area node max limits while keeping minimum sizes", () => {
   const unrestrictedMax = {
@@ -56,10 +64,28 @@ test("getNodeResizeBounds removes area node max limits while keeping minimum siz
   });
 });
 
-test("getNodeResizeBounds keeps regular resource bounds aligned with compact icon defaults", () => {
+test("getNodeResizeBounds lets regular icon resources shrink below their 48px default", () => {
   assert.deepEqual(getNodeResizeBounds(makeResourceNode("aws_instance")), {
-    minWidth: 56,
-    minHeight: 56,
+    minWidth: RESOURCE_NODE_COMPACT_MIN_SIZE.width,
+    minHeight: RESOURCE_NODE_COMPACT_MIN_SIZE.height,
+    maxWidth: 260,
+    maxHeight: 260
+  });
+});
+
+test("regular resize bounds derive their minimum from shared resource geometry", () => {
+  assert.match(
+    nodeResizeBoundsSource,
+    /import \{ RESOURCE_NODE_COMPACT_MIN_SIZE \} from "\.\/resource-node-geometry";/
+  );
+  assert.match(nodeResizeBoundsSource, /minHeight:\s*RESOURCE_NODE_COMPACT_MIN_SIZE\.height/);
+  assert.match(nodeResizeBoundsSource, /minWidth:\s*RESOURCE_NODE_COMPACT_MIN_SIZE\.width/);
+});
+
+test("getNodeResizeBounds applies icon bounds to non-area design icons", () => {
+  assert.deepEqual(getNodeResizeBounds(makeDesignNode("sketchcatch_user_client", "/icons/user.svg")), {
+    minWidth: RESOURCE_NODE_COMPACT_MIN_SIZE.width,
+    minHeight: RESOURCE_NODE_COMPACT_MIN_SIZE.height,
     maxWidth: 260,
     maxHeight: 260
   });
@@ -79,8 +105,12 @@ function makeResourceNode(resourceType: string): Pick<DiagramNode, "kind" | "par
   };
 }
 
-function makeDesignNode(type: string): Pick<DiagramNode, "kind" | "parameters" | "type"> {
+function makeDesignNode(
+  type: string,
+  iconUrl?: string
+): Pick<DiagramNode, "iconUrl" | "kind" | "parameters" | "type"> {
   return {
+    ...(iconUrl ? { iconUrl } : {}),
     kind: "design",
     type
   };

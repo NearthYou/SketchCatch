@@ -40,6 +40,8 @@ export const practiceLiveApplySupportedResourceTypes = new Set([
 const demoWebServiceLiveApplySupportedResourceTypes = new Set([
   ...practiceLiveApplySupportedResourceTypes,
   "aws_autoscaling_group",
+  "aws_autoscaling_policy",
+  "aws_cloudwatch_metric_alarm",
   "aws_launch_template",
   "aws_lb",
   "aws_lb_listener",

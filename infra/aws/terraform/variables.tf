@@ -79,31 +79,53 @@ variable "route53_record_name" {
   default     = ""
 }
 
-variable "ecs_cutover_stage" {
-  description = "ALB routing stage. warmup keeps legacy nginx at weight 100 while API/web targets register; split sends traffic to API/web while retaining legacy at weight 0."
-  type        = string
-  default     = "warmup"
+variable "ecs_desired_count" {
+  description = "Initial desired task count for production API and web ECS services. Application Auto Scaling manages both services after creation."
+  type        = number
+  default     = 1
 
   validation {
-    condition     = contains(["warmup", "split"], var.ecs_cutover_stage)
-    error_message = "ecs_cutover_stage must be warmup or split."
+    condition     = var.ecs_desired_count >= 1
+    error_message = "ecs_desired_count must be at least 1."
   }
 }
 
-variable "ecs_desired_count" {
-  description = "Desired task count for each production API and web ECS service. Cost-bearing: 1 creates two warm tasks after the split."
-  type        = number
-  default     = 1
+variable "enable_ecs_service_autoscaling" {
+  description = "Enable cost-first target tracking for API and web services."
+  type        = bool
+  default     = true
 }
 
-variable "legacy_ecs_desired_count" {
-  description = "Desired count for the retained nginx rollback service. Keep 1 until post-cutover retirement is separately approved."
+variable "ecs_autoscaling_min_capacity" {
+  description = "Minimum API/web task count per service."
   type        = number
   default     = 1
 
   validation {
-    condition     = var.legacy_ecs_desired_count >= 1
-    error_message = "legacy_ecs_desired_count must stay at least 1 while the rollback service is Terraform-protected."
+    condition     = var.ecs_autoscaling_min_capacity >= 1
+    error_message = "ecs_autoscaling_min_capacity must be at least 1."
+  }
+}
+
+variable "ecs_autoscaling_max_capacity" {
+  description = "Maximum API/web task count per service."
+  type        = number
+  default     = 2
+
+  validation {
+    condition     = var.ecs_autoscaling_max_capacity >= 1
+    error_message = "ecs_autoscaling_max_capacity must be at least 1."
+  }
+}
+
+variable "ecs_autoscaling_target_cpu_percent" {
+  description = "Target average CPU percentage for API/web ECS target tracking."
+  type        = number
+  default     = 60
+
+  validation {
+    condition     = var.ecs_autoscaling_target_cpu_percent > 0 && var.ecs_autoscaling_target_cpu_percent <= 100
+    error_message = "ecs_autoscaling_target_cpu_percent must be between 1 and 100."
   }
 }
 
@@ -174,25 +196,25 @@ variable "web_container_memory" {
 }
 
 variable "legacy_api_container_cpu" {
-  description = "API CPU units retained in the nginx rollback task."
+  description = "API CPU units kept only in the disabled cold rollback task definition source."
   type        = number
   default     = 512
 }
 
 variable "legacy_api_container_memory" {
-  description = "API memory MiB retained in the nginx rollback task."
+  description = "API memory MiB kept only in the disabled cold rollback task definition source."
   type        = number
   default     = 1024
 }
 
 variable "legacy_nginx_container_cpu" {
-  description = "Nginx CPU units retained in the rollback task."
+  description = "Nginx CPU units kept only in the disabled cold rollback task definition source."
   type        = number
   default     = 128
 }
 
 variable "legacy_nginx_container_memory" {
-  description = "Nginx memory MiB retained in the rollback task."
+  description = "Nginx memory MiB kept only in the disabled cold rollback task definition source."
   type        = number
   default     = 256
 }
@@ -244,6 +266,12 @@ variable "rds_endpoint" {
   default     = ""
 }
 
+variable "rds_instance_identifier" {
+  description = "Existing production RDS instance identifier used only for low-cost availability alarms."
+  type        = string
+  default     = ""
+}
+
 variable "database_ssl" {
   description = "Whether API runtime should require database SSL."
   type        = bool
@@ -253,6 +281,12 @@ variable "database_ssl" {
 variable "sketchcatch_public_base_url" {
   description = "Public base URL used by the API runtime."
   type        = string
+}
+
+variable "live_observation_enabled" {
+  description = "Enable bounded Live Observation sessions for successful demo web service deployments."
+  type        = bool
+  default     = false
 }
 
 variable "oauth_redirect_base_url" {
@@ -531,4 +565,15 @@ variable "ecs_service_memory_alarm_threshold" {
   description = "Average ECS service memory percentage that triggers after three five-minute periods."
   type        = number
   default     = 80
+}
+
+variable "alb_5xx_alarm_threshold" {
+  description = "Five-minute ALB-generated 5xx count that moves the production alarm to ALARM."
+  type        = number
+  default     = 5
+
+  validation {
+    condition     = var.alb_5xx_alarm_threshold >= 1
+    error_message = "alb_5xx_alarm_threshold must be at least 1."
+  }
 }

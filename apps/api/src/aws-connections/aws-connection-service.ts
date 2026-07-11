@@ -720,6 +720,11 @@ function createTerraformApplyPolicyDocument(): Record<string, unknown> {
         Action: [
           "ce:GetCostAndUsage",
           "ce:GetDimensionValues",
+          "autoscaling:DescribeAutoScalingGroups",
+          "autoscaling:DescribeScalingActivities",
+          "ec2:DescribeInstances",
+          "elasticloadbalancing:DescribeLoadBalancers",
+          "elasticloadbalancing:DescribeTargetGroups",
           "cloudwatch:GetMetricData",
           "cloudwatch:GetMetricStatistics"
         ],
@@ -893,6 +898,11 @@ function createAwsConnectionCloudFormationTemplateBody(input: {
     "            Action:",
     "              - ce:GetCostAndUsage",
     "              - ce:GetDimensionValues",
+    "              - autoscaling:DescribeAutoScalingGroups",
+    "              - autoscaling:DescribeScalingActivities",
+    "              - ec2:DescribeInstances",
+    "              - elasticloadbalancing:DescribeLoadBalancers",
+    "              - elasticloadbalancing:DescribeTargetGroups",
     "              - cloudwatch:GetMetricData",
     "              - cloudwatch:GetMetricStatistics",
     '            Resource: "*"',

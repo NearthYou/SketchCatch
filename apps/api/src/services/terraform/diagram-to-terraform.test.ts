@@ -369,6 +369,51 @@ test("renders CloudWatch Alarm dimensions and Autoscaling Policy action referenc
   );
 });
 
+test("renders Live Observation outputs for the complete demo topology", () => {
+  const graph: InfrastructureGraph = {
+    nodes: [
+      createLiveObservationNode("aws_s3_bucket_website_configuration", "site", {}),
+      createLiveObservationNode("aws_lb", "demo", {}),
+      createLiveObservationNode("aws_lb_target_group", "api", {}),
+      createLiveObservationNode("aws_autoscaling_group", "api", {}),
+      createLiveObservationNode("aws_cloudwatch_metric_alarm", "scale_out", {
+        metricName: "RequestCountPerTarget",
+        threshold: 60
+      })
+    ],
+    edges: []
+  };
+
+  const terraform = renderTerraformFromInfrastructureGraph(graph);
+
+  assert.match(terraform, /output "static_site_url"/);
+  assert.match(terraform, /aws_s3_bucket_website_configuration\.site\.website_endpoint/);
+  assert.match(terraform, /output "api_base_url"/);
+  assert.match(terraform, /aws_lb\.demo\.dns_name/);
+  assert.match(terraform, /output "asg_name"/);
+  assert.match(terraform, /output "alb_arn_suffix"/);
+  assert.match(terraform, /output "target_group_arn_suffix"/);
+  assert.match(terraform, /output "scale_out_threshold"[\s\S]*value = 60/);
+});
+
+test("renders Step Scaling adjustments as nested Terraform blocks", () => {
+  const graph: InfrastructureGraph = {
+    nodes: [
+      createLiveObservationNode("aws_autoscaling_policy", "scale_out", {
+        policyType: "StepScaling",
+        stepAdjustment: [{ metricIntervalLowerBound: 0, scalingAdjustment: 1 }]
+      })
+    ],
+    edges: []
+  };
+
+  const terraform = renderTerraformFromInfrastructureGraph(graph);
+
+  assert.match(terraform, /step_adjustment \{/);
+  assert.match(terraform, /metric_interval_lower_bound = 0/);
+  assert.match(terraform, /scaling_adjustment = 1/);
+});
+
 test("rejects unsafe Terraform identifiers while rendering InfrastructureGraph", () => {
   const graph: InfrastructureGraph = {
     nodes: [
@@ -506,3 +551,22 @@ test("diagram-to-terraform renderer does not import diagram projection concerns"
   assert.equal(source.includes("DiagramJson"), false);
   assert.equal(source.includes("buildInfrastructureGraphFromDiagramJson"), false);
 });
+
+function createLiveObservationNode(
+  resourceType: string,
+  resourceName: string,
+  config: Record<string, unknown>
+): InfrastructureGraph["nodes"][number] {
+  return {
+    id: `${resourceType}-${resourceName}`,
+    label: resourceName,
+    iac: {
+      provider: "aws",
+      terraformBlockType: "resource",
+      resourceType,
+      resourceName,
+      fileName: "live-observation"
+    },
+    config
+  };
+}

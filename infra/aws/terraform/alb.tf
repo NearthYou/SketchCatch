@@ -13,33 +13,6 @@ resource "aws_lb" "ecs" {
   }
 }
 
-resource "aws_lb_target_group" "ecs" {
-  name        = "${local.name_prefix}-ecs"
-  vpc_id      = var.vpc_id
-  port        = 80
-  protocol    = "HTTP"
-  target_type = "ip"
-
-  health_check {
-    enabled             = true
-    path                = "/health"
-    protocol            = "HTTP"
-    matcher             = "200"
-    interval            = 30
-    timeout             = 5
-    healthy_threshold   = 2
-    unhealthy_threshold = 3
-  }
-
-  tags = {
-    Name = "${local.name_prefix}-ecs"
-  }
-
-  lifecycle {
-    prevent_destroy = true
-  }
-}
-
 resource "aws_lb_target_group" "api" {
   name        = "${local.name_prefix}-api"
   vpc_id      = var.vpc_id
@@ -94,19 +67,8 @@ resource "aws_lb_listener" "http_forward" {
   protocol          = "HTTP"
 
   default_action {
-    type = "forward"
-
-    forward {
-      target_group {
-        arn    = aws_lb_target_group.ecs.arn
-        weight = local.legacy_target_weight
-      }
-
-      target_group {
-        arn    = aws_lb_target_group.web.arn
-        weight = local.split_target_weight
-      }
-    }
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.web.arn
   }
 }
 
@@ -117,19 +79,8 @@ resource "aws_lb_listener_rule" "api_http" {
   priority     = 100
 
   action {
-    type = "forward"
-
-    forward {
-      target_group {
-        arn    = aws_lb_target_group.ecs.arn
-        weight = local.legacy_target_weight
-      }
-
-      target_group {
-        arn    = aws_lb_target_group.api.arn
-        weight = local.split_target_weight
-      }
-    }
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.api.arn
   }
 
   condition {
@@ -167,19 +118,8 @@ resource "aws_lb_listener" "https" {
   ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
 
   default_action {
-    type = "forward"
-
-    forward {
-      target_group {
-        arn    = aws_lb_target_group.ecs.arn
-        weight = local.legacy_target_weight
-      }
-
-      target_group {
-        arn    = aws_lb_target_group.web.arn
-        weight = local.split_target_weight
-      }
-    }
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.web.arn
   }
 }
 
@@ -190,19 +130,8 @@ resource "aws_lb_listener_rule" "api_https" {
   priority     = 100
 
   action {
-    type = "forward"
-
-    forward {
-      target_group {
-        arn    = aws_lb_target_group.ecs.arn
-        weight = local.legacy_target_weight
-      }
-
-      target_group {
-        arn    = aws_lb_target_group.api.arn
-        weight = local.split_target_weight
-      }
-    }
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.api.arn
   }
 
   condition {

@@ -71,6 +71,18 @@ test("default S3 bucket names trim separators left at the 63-character boundary"
   assert.match(releaseBucket, /[a-z0-9]$/);
 });
 
+test("default S3 bucket names replace dots for virtual-hosted TLS compatibility", () => {
+  const preview = createRepositorySettingsPreview({
+    projectSlug: "demo-project",
+    repositoryOwner: "owner.with.dots",
+    repositoryName: "repo.with.dots",
+    targetBranch: "main"
+  });
+
+  assert.doesNotMatch(preview.variables.SKETCHCATCH_TF_STATE_BUCKET ?? "", /\./);
+  assert.doesNotMatch(preview.variables.SKETCHCATCH_RELEASE_BUCKET ?? "", /\./);
+});
+
 test("repository settings preview masks secrets and includes required variables", () => {
   const preview = createRepositorySettingsPreview({
     projectSlug: "demo-project",
