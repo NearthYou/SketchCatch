@@ -309,6 +309,12 @@ export function DeploymentPanel({
   const primaryDeploymentStepStatus = getPrimaryDeploymentStepStatus(selectedDeployment);
 
   useEffect(() => {
+    if (shouldShowApplyButton) {
+      setShowApplyConfirmation(true);
+    }
+  }, [shouldShowApplyButton]);
+
+  useEffect(() => {
     setDeploymentWizardStep((currentStep) => {
       if (
         !canOpenDeploymentWizardStep(currentStep, {
@@ -1753,7 +1759,7 @@ export function DeploymentPanel({
         </button>
       ) : null}
 
-      {selectedDeployment && (showApplyConfirmation || shouldShowApplyButton) ? (
+      {selectedDeployment && showApplyConfirmation ? (
         <div className={styles.deploymentApplyConfirm}>
           <h3>Apply 확인</h3>
           <InfoRow
