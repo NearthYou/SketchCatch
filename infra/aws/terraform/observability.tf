@@ -29,7 +29,6 @@ resource "aws_cloudwatch_metric_alarm" "ecs_container_errors" {
   statistic           = "Sum"
   treat_missing_data  = "notBreaching"
   alarm_actions       = var.cloudwatch_alarm_action_arns
-  ok_actions          = var.cloudwatch_alarm_action_arns
 }
 
 resource "aws_cloudwatch_metric_alarm" "ecs_unhealthy_hosts" {
