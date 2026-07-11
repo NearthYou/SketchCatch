@@ -797,6 +797,12 @@ function isFrontendAnswered(prompt: string): boolean {
 }
 
 function isBackendAnswered(prompt: string): boolean {
+  const normalizedPrompt = prompt.normalize("NFKC").toLowerCase();
+
+  if (resolveBackendProfile(normalizedPrompt) !== undefined) {
+    return true;
+  }
+
   return hasPromptTerm(prompt, ["backend", "api", "node.js", "nodejs", "python", "flask", "spring", "django", "microservice", "백엔드", "간단한 api", "복잡한 비즈니스", "마이크로서비스", "諛깆뿏", "媛꾨떒", "蹂듭옟", "留덉씠"]);
 }
 
@@ -1703,6 +1709,7 @@ export function createDeterministicArchitectureIntentPlan(prompt: string): Archi
   const forbidsEc2Runtime = explicitlyForbidsEc2Runtime(normalizedPrompt) || fargateRuntime;
   const fargateServiceCount = resolveFargateServiceCount(normalizedPrompt);
   const lowBudgetDbFreeApi = requiresLowBudgetDbFreeApi(normalizedPrompt);
+  const cloudFrontStaticDeliveryRequired = requiresCloudFrontStaticDelivery(normalizedPrompt);
 
   if (lowBudgetDbFreeApi) {
     patternIds.add("serverless-api");
@@ -1720,6 +1727,10 @@ export function createDeterministicArchitectureIntentPlan(prompt: string): Archi
     patternIds.add("alb-asg-ec2");
     if (requiresSpaFrontend(normalizedPrompt)) {
       patternIds.add("spa-cloudfront-s3");
+      if (cloudFrontStaticDeliveryRequired) {
+        requiredResources.add("CLOUDFRONT");
+        requiredResources.add("S3");
+      }
     }
     if (requiresDatabase(normalizedPrompt)) {
       patternIds.add("multi-az-rds");
@@ -1733,6 +1744,10 @@ export function createDeterministicArchitectureIntentPlan(prompt: string): Archi
     patternIds.add("ecs-fargate");
     if (requiresSpaFrontend(normalizedPrompt)) {
       patternIds.add("spa-cloudfront-s3");
+      if (cloudFrontStaticDeliveryRequired) {
+        requiredResources.add("CLOUDFRONT");
+        requiredResources.add("S3");
+      }
     } else if (ssrFrontend) {
       requiredResources.add("CLOUDFRONT");
       amazonQBrief.push("Use CloudFront as an HTTPS/CDN entry to the ALB for SSR, not as an S3 static-site origin.");
@@ -1805,7 +1820,7 @@ export function createDeterministicArchitectureIntentPlan(prompt: string): Archi
   }
 
   if (quantities.ec2Instances > 1 || requiredResources.has("EC2")) {
-    resourceQuantities.EC2 = quantities.ec2Instances;
+    resourceQuantities.EC2 = Math.max(resourceQuantities.EC2 ?? 0, quantities.ec2Instances);
   }
 
   if (quantities.s3Buckets > 1 && requiredResources.has("S3")) {
@@ -2204,6 +2219,8 @@ function normalizeArchitecturePlanTopologyInvariants(
   }
 
   const hasDatabase = patternIds.has("multi-az-rds");
+  const hasSpaStaticDelivery = patternIds.has("spa-cloudfront-s3");
+  const cloudFrontStaticDeliveryRequired = hasSpaStaticDelivery && requiresCloudFrontStaticDelivery(normalizedPrompt);
   const requiredResources = new Set(plan.requiredResources ?? []);
   const resourceQuantities = { ...(plan.resourceQuantities ?? {}) };
   const fargateServiceCount = usesFargatePattern ? resolveFargateServiceCount(normalizedPrompt) : 1;
@@ -2280,6 +2297,11 @@ function normalizeArchitecturePlanTopologyInvariants(
       requiredResources.add("SECRETS_MANAGER_SECRET");
     }
 
+    if (cloudFrontStaticDeliveryRequired) {
+      requiredResources.add("CLOUDFRONT");
+      requiredResources.add("S3");
+    }
+
     resourceQuantities.SUBNET = Math.max(resourceQuantities.SUBNET ?? 0, hasDatabase ? 6 : 4);
     resourceQuantities.ELASTIC_IP = Math.max(resourceQuantities.ELASTIC_IP ?? 0, 2);
     resourceQuantities.NAT_GATEWAY = Math.max(resourceQuantities.NAT_GATEWAY ?? 0, 2);
@@ -2354,6 +2376,11 @@ function normalizeArchitecturePlanTopologyInvariants(
       requiredResources.add("DB_SUBNET_GROUP");
       requiredResources.add("RDS");
       requiredResources.add("SECRETS_MANAGER_SECRET");
+    }
+
+    if (cloudFrontStaticDeliveryRequired) {
+      requiredResources.add("CLOUDFRONT");
+      requiredResources.add("S3");
     }
 
     resourceQuantities.SUBNET = Math.max(resourceQuantities.SUBNET ?? 0, hasDatabase ? 6 : 4);
@@ -6131,7 +6158,7 @@ function explicitlyForbidsEc2Runtime(normalizedPrompt: string): boolean {
 }
 
 function resolveTrafficProfile(normalizedPrompt: string): ArchitectureAnswerProfile["traffic"] {
-  if (/(bursty|event\s+spike|unpredictable|급변동|이벤트|예측\s*불가)/iu.test(normalizedPrompt)) {
+  if (/(bursty|event\s+(?:spike|burst)|burst\s+spikes?|unpredictable|급변동|이벤트성\s*급증)/iu.test(normalizedPrompt)) {
     return "bursty";
   }
 
@@ -6184,6 +6211,14 @@ function resolveBackendProfile(normalizedPrompt: string): ArchitectureAnswerProf
   }
 
   if (/(simple\s+api|api\s+server|node\.?js|python\s*flask|간단\s*api|api\s*서버)/iu.test(normalizedPrompt)) {
+    return "simple_api";
+  }
+
+  if (requiresInferredComplexBackend(normalizedPrompt)) {
+    return "complex";
+  }
+
+  if (requiresInferredSimpleBackend(normalizedPrompt)) {
     return "simple_api";
   }
 
@@ -6347,7 +6382,7 @@ function resolveBudgetProfile(normalizedPrompt: string): ArchitectureAnswerProfi
     return "normal";
   }
 
-  if (/(50-200만원|high\s+budget|고성능)/iu.test(normalizedPrompt)) {
+  if (/(50\s*-\s*200\s*(?:manwon|만원)|high\s+(?:budget|performance)|고성능)/iu.test(normalizedPrompt)) {
     return "high";
   }
 
@@ -6425,7 +6460,7 @@ function hasBudgetAvailabilityResolution(normalizedPrompt: string): boolean {
 }
 
 function hasGlobalDeploymentDecision(normalizedPrompt: string): boolean {
-  return /(cloudfront[\s\S]{0,30}(global|\uAE00\uB85C\uBC8C)|api\/rds[\s\S]{0,30}(single|\uB2E8\uC77C)|single\s*region|multi[-\s]*region|future\s*multi[-\s]*region|\uB2E8\uC77C\s*\uB9AC\uC804|\uB2E4\uC911\s*\uB9AC\uC804)/iu.test(
+  return /(cloudfront[\s\S]{0,30}(global|\uAE00\uB85C\uBC8C)|api\/rds[\s\S]{0,30}(single|\uB2E8\uC77C)|single\s*(?:primary\s*)?(?:aws\s*)?region|cdn\s+warning|multi[-\s]*region|future\s*multi[-\s]*region|\uB2E8\uC77C\s*\uB9AC\uC804|\uB2E4\uC911\s*\uB9AC\uC804)/iu.test(
     normalizedPrompt
   );
 }
@@ -6564,6 +6599,34 @@ function requiresNoBackend(normalizedPrompt: string): boolean {
   );
 }
 
+function requiresInferredComplexBackend(normalizedPrompt: string): boolean {
+  if (requiresNoBackend(normalizedPrompt)) {
+    return false;
+  }
+
+  const hasBackendWork =
+    requiresDatabase(normalizedPrompt) ||
+    requiresUploadStorage(normalizedPrompt) ||
+    requiresRealtime(normalizedPrompt);
+
+  return (
+    hasBackendWork &&
+    (resolveManagementProfile(normalizedPrompt) === "self_managed" ||
+      resolveRealtimeTransport(normalizedPrompt) === "websocket" ||
+      requiresLargeDatabaseProfile(normalizedPrompt) ||
+      requiresLargeTrafficCapacity(normalizedPrompt))
+  );
+}
+
+function requiresInferredSimpleBackend(normalizedPrompt: string): boolean {
+  if (requiresNoBackend(normalizedPrompt) || requiresInferredComplexBackend(normalizedPrompt)) {
+    return false;
+  }
+
+  return requiresSpaFrontend(normalizedPrompt) &&
+    (requiresDatabase(normalizedPrompt) || requiresUploadStorage(normalizedPrompt) || requiresRealtime(normalizedPrompt));
+}
+
 function requiresSpaFrontend(normalizedPrompt: string): boolean {
   return /(spa|single\s*page|react|vue|angular)/iu.test(normalizedPrompt);
 }
@@ -6586,6 +6649,12 @@ function requiresComplexBackend(normalizedPrompt: string): boolean {
 
 function requiresGlobalOrFastFrontend(normalizedPrompt: string): boolean {
   return /(global|worldwide|united\s+states|europe|\uAE00\uB85C\uBC8C|\uBBF8\uAD6D|\uC720\uB7FD|1\s*second|1\uCD08|https:\s*required|ssl:\s*required|https[\s\S]{0,30}\uD544\uC218|ssl[\s\S]{0,30}\uD544\uC218)/iu.test(
+    normalizedPrompt
+  );
+}
+
+function requiresCloudFrontStaticDelivery(normalizedPrompt: string): boolean {
+  return /(global|worldwide|united\s+states|europe|cdn|cloudfront|edge|single\s*(?:primary\s*)?(?:aws\s*)?region|cdn\s+warning|1\s*second|1\uCD08|\uAE00\uB85C\uBC8C|\uBBF8\uAD6D|\uC720\uB7FD)/iu.test(
     normalizedPrompt
   );
 }

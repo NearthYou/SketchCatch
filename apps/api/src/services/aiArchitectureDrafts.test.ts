@@ -1059,6 +1059,7 @@ test("createAmazonQArchitectureDraftResponse maps the global self-managed SPA qu
     };
     normalizedRequirement?: {
       patternIds?: string[];
+      requiredResources?: string[];
       resourceQuantities?: Record<string, number>;
       runtimeTopology?: {
         autoScaling?: boolean;
@@ -1145,6 +1146,108 @@ test("createAmazonQArchitectureDraftResponse maps the global self-managed SPA qu
         edge.sourceId === webSocketIntegration?.id &&
         edge.targetId === listener?.id &&
         /WebSocket proxy/iu.test(edge.label ?? "")
+    )
+  );
+});
+
+test("createAmazonQArchitectureDraftResponse infers a backend from operational SPA answers", async () => {
+  const requests: Array<Parameters<AiTextProvider["generate"]>[0]> = [];
+  const provider = createFakeAmazonQProvider((request) => {
+    requests.push(request);
+    return createNormalizedRequirementPlan(request);
+  });
+
+  const response = await createAmazonQArchitectureDraftResponse(
+    { prompt: createGlobalSelfManagedSpaWithoutBackendAnswerPrompt() },
+    { provider, creditPolicy: confirmedCreditPolicy }
+  );
+
+  if ("status" in response) {
+    assert.fail(`Expected preview, got clarification: ${response.question}`);
+  }
+
+  const firstPayload = requests[0]?.payload as {
+    architectureDecisionSpace?: {
+      answerProfile?: Record<string, string | undefined>;
+    };
+    normalizedRequirement?: {
+      patternIds?: string[];
+      requiredResources?: string[];
+      resourceQuantities?: Record<string, number>;
+      runtimeTopology?: {
+        autoScaling?: boolean;
+        compute?: string;
+        computeCount?: number;
+        trafficEntry?: string;
+      };
+    };
+  };
+  const answerProfile = firstPayload.architectureDecisionSpace?.answerProfile;
+  assert.equal(answerProfile?.frontend, "spa");
+  assert.equal(answerProfile?.backend, "complex");
+  assert.equal(answerProfile?.management, "self_managed");
+  assert.equal(answerProfile?.traffic, "bursty");
+  assert.equal(answerProfile?.region, "global");
+  assert.equal(answerProfile?.budget, "high");
+  assert.ok(firstPayload.normalizedRequirement?.patternIds?.includes("alb-asg-ec2"));
+  assert.ok(firstPayload.normalizedRequirement?.patternIds?.includes("spa-cloudfront-s3"));
+  assert.ok(firstPayload.normalizedRequirement?.patternIds?.includes("multi-az-rds"));
+  assert.ok(firstPayload.normalizedRequirement?.requiredResources?.includes("CLOUDFRONT"));
+  assert.ok(firstPayload.normalizedRequirement?.requiredResources?.includes("S3"));
+  assert.equal(firstPayload.normalizedRequirement?.runtimeTopology?.trafficEntry, "LOAD_BALANCER");
+  assert.equal(firstPayload.normalizedRequirement?.runtimeTopology?.compute, "EC2");
+  assert.equal(firstPayload.normalizedRequirement?.runtimeTopology?.computeCount, 4);
+  assert.equal(firstPayload.normalizedRequirement?.runtimeTopology?.autoScaling, true);
+  assert.equal(firstPayload.normalizedRequirement?.resourceQuantities?.EC2, 4);
+
+  const nodes = response.architectureJson.nodes;
+  const edges = response.architectureJson.edges;
+  const ec2Nodes = nodes.filter((node) => node.type === "EC2");
+  const loadBalancer = nodes.find((node) => node.type === "LOAD_BALANCER");
+  const listener = nodes.find((node) => node.type === "LOAD_BALANCER_LISTENER");
+  const targetGroup = nodes.find((node) => node.type === "LOAD_BALANCER_TARGET_GROUP");
+  const autoScalingGroup = nodes.find((node) => node.type === "AUTO_SCALING_GROUP");
+  const launchTemplate = nodes.find((node) => node.type === "LAUNCH_TEMPLATE");
+  const database = nodes.find((node) => node.type === "RDS");
+  const cloudFront = nodes.find((node) => node.type === "CLOUDFRONT");
+  const staticBucket = nodes.find(
+    (node) => node.type === "S3" && node.config.bucketPurpose === "static_website_origin"
+  );
+  const uploadBucket = nodes.find(
+    (node) => node.type === "S3" && node.config.bucketPurpose === "user_uploads"
+  );
+  const webSocketApi = nodes.find((node) => node.type === "API_GATEWAY_WEBSOCKET_API");
+  const webSocketIntegration = nodes.find((node) => node.type === "API_GATEWAY_V2_INTEGRATION");
+
+  assert.notEqual(loadBalancer, undefined);
+  assert.notEqual(listener, undefined);
+  assert.notEqual(targetGroup, undefined);
+  assert.equal(cloudFront?.config.originResourceId, "web-assets-bucket");
+  assert.equal(staticBucket?.config.publicAccessBlock, true);
+  assert.equal(ec2Nodes.length, 4);
+  assert.equal(autoScalingGroup?.config.desiredCapacity, 4);
+  assert.equal(autoScalingGroup?.config.maxSize, 12);
+  assert.equal(launchTemplate?.config.instanceType, "m7i.large");
+  assert.equal(database?.config.allocatedStorage, 200);
+  assert.equal(database?.config.instanceClass, "db.r6g.large");
+  assert.equal(database?.config.multiAz, true);
+  assert.equal(uploadBucket?.config.bucketPrefix, "sketchcatch-file-uploads-");
+  assert.equal(webSocketApi?.config.protocolType, "WEBSOCKET");
+  assert.equal(webSocketIntegration?.config.integrationType, "HTTP_PROXY");
+  assert.ok(
+    edges.some(
+      (edge) =>
+        edge.sourceId === listener?.id &&
+        edge.targetId === targetGroup?.id &&
+        /WebSocket upgrade/iu.test(edge.label ?? "")
+    )
+  );
+  assert.ok(
+    edges.some(
+      (edge) =>
+        edge.sourceId === cloudFront?.id &&
+        edge.targetId === staticBucket?.id &&
+        /private origin/iu.test(edge.label ?? "")
     )
   );
 });
@@ -4315,6 +4418,26 @@ function createGlobalSelfManagedSpaQuestionnairePrompt(): string {
     "downtime tolerance: zero downtime 99.99 availability",
     "global scope: CloudFront global with API and RDS single region",
     "realtime transport: WebSocket connection path"
+  ].join("\n");
+}
+
+function createGlobalSelfManagedSpaWithoutBackendAnswerPrompt(): string {
+  return [
+    "website type: SPA Single Page Application React admin dashboard",
+    "traffic: large traffic daily 10000+ concurrent 500+",
+    "database: large data 100GB or more complex queries PostgreSQL database required",
+    "region: global users including US Europe Asia, but accept single primary AWS region with CDN warning",
+    "monthly budget: 50-200 manwon high performance",
+    "SSL HTTPS: required",
+    "file upload: diverse files documents and images under 100MB",
+    "realtime feature: realtime chat",
+    "realtime implementation: WebSocket connection path",
+    "management preference: self-managed direct server operation EC2 Auto Scaling behind ALB",
+    "loading time target: within 1 second",
+    "website size: 100MB-1GB image-heavy",
+    "traffic pattern: event burst spikes",
+    "availability: 99.99 no downtime",
+    "deployment path: Git CI/CD handoff requested"
   ].join("\n");
 }
 

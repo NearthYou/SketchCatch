@@ -120,6 +120,22 @@ Short English-only working log for the current agent context. Older records are 
 - Risk:
   - Existing saved boards keep their old generated resources until the draft is regenerated or replaced.
 
+### 2026-07-11 - Fix inferred global SPA Architecture Draft resources
+
+- Goal: Diagnose a representative questionnaire-generated diagram and fix missing topology/resource/parameter coverage.
+- Completed:
+  - Added backend inference when SPA answers imply backend work through database, upload, realtime, self-managed EC2, large database, or large traffic signals.
+  - Recognized `single primary AWS region` and `CDN warning` as an explicit global deployment scope decision.
+  - Recognized `event burst spikes` as bursty traffic and preserved larger EC2 fleet sizing instead of overwriting it with a default quantity.
+  - Required CloudFront plus S3 static delivery for global/CDN/fast SPA answers and verified CloudFront-to-static-S3 origin edges.
+  - Confirmed the generated diagnostic plan materializes CloudFront, two S3 buckets, ALB HTTPS listener, WebSocket API Gateway path, four `m7i.large` EC2 fleet nodes, ASG max 12, and 200GB `db.r6g.large` Multi-AZ RDS.
+- Verification:
+  - Focused diagnostic generation scripts inspected ArchitectureJson, DiagramJson, key resources, parameters, and edge checks.
+  - Architecture Draft service tests passed 47/47.
+  - `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
+- Risk:
+  - Existing saved boards keep old generated topology until regenerated or replaced.
+
 ## Next Action
 
 - 2026-07-11 update: Removed Security Groups from all board container paths so generated, saved, and manually added security groups render as regular VPC-scoped resource icons. Workload containment now prioritizes `subnetId` or explicit subnet references, while Security Groups remain visible through protection/allow edges and parameter references. Multi-subnet workloads keep placement markers instead of being forced into one subnet. Verification passed with focused flow, area, catalog, movement, workspace adapter, and API prompt tests, full API Architecture Draft tests, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check`.
