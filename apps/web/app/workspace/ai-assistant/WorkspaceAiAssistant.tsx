@@ -37,24 +37,48 @@ export function WorkspaceAiAssistant({
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const shouldFollowMessagesRef = useRef(true);
+  const seenMessageIdRef = useRef<string | null>(null);
   const [hasUnreadResponse, setHasUnreadResponse] = useState(false);
+  const [isOnline, setOnline] = useState(true);
   const lastMessage = assistant.messages.at(-1);
   const isBusy = assistant.requestState !== "idle";
   const hasApproval = assistant.pendingBoardPreview !== null || assistant.pendingTerraformFix !== null;
+  const hasProjectContext = projectId.trim().length > 0;
+
+  // Browser 연결 상태가 바뀌면 AI를 사용할 수 없는 이유를 즉시 갱신합니다.
+  useEffect(() => {
+    function updateOnlineState(): void {
+      setOnline(window.navigator.onLine);
+    }
+    updateOnlineState();
+    window.addEventListener("online", updateOnlineState);
+    window.addEventListener("offline", updateOnlineState);
+    return () => {
+      window.removeEventListener("online", updateOnlineState);
+      window.removeEventListener("offline", updateOnlineState);
+    };
+  }, []);
 
   // 열린 panel은 입력창으로 focus를 옮기고 닫힌 panel은 런처로 focus를 돌려줍니다.
   useEffect(() => {
     if (isOpen) {
       setHasUnreadResponse(false);
+      seenMessageIdRef.current = lastMessage?.id ?? null;
       requestAnimationFrame(() => inputRef.current?.focus());
       return;
     }
     launcherRef.current?.focus();
-  }, [isOpen]);
+  }, [isOpen, lastMessage?.id]);
 
   // panel이 닫힌 동안 실제 assistant 응답이 끝나면 작은 상태점만 표시합니다.
   useEffect(() => {
-    if (!isOpen && lastMessage?.role === "assistant" && lastMessage.state !== "question") {
+    if (
+      !isOpen &&
+      lastMessage?.role === "assistant" &&
+      lastMessage.state !== "question" &&
+      seenMessageIdRef.current !== null &&
+      seenMessageIdRef.current !== lastMessage.id
+    ) {
       setHasUnreadResponse(true);
     }
   }, [isOpen, lastMessage]);
@@ -113,6 +137,7 @@ export function WorkspaceAiAssistant({
           <button
             aria-label="AI 채팅 열기"
             className={styles.launcher}
+            disabled={!hasProjectContext}
             onClick={() => onOpenChange(true)}
             ref={launcherRef}
             type="button"
@@ -120,7 +145,9 @@ export function WorkspaceAiAssistant({
             <Bot aria-hidden="true" size={19} strokeWidth={1.8} />
             {hasUnreadResponse ? <span aria-label="읽지 않은 AI 응답" className={styles.unreadDot} /> : null}
           </button>
-          <span className={styles.tooltip} role="tooltip">AI 채팅 열기</span>
+          <span className={styles.tooltip} role="tooltip">
+            {hasProjectContext ? "AI 채팅 열기" : "프로젝트를 연 뒤 사용할 수 있습니다"}
+          </span>
         </div>
       ) : (
         <aside
@@ -140,9 +167,9 @@ export function WorkspaceAiAssistant({
             </button>
           </header>
 
-          <div aria-live="polite" className={styles.statusBar} data-state={getAssistantState(isBusy, hasApproval, assistant.errorMessage)}>
-            {getAssistantStateIcon(isBusy, hasApproval, assistant.errorMessage)}
-            <span>{getAssistantStateLabel(isBusy, hasApproval, assistant.errorMessage)}</span>
+          <div aria-live="polite" className={styles.statusBar} data-state={getAssistantState(isBusy, hasApproval, assistant.errorMessage, isOnline)}>
+            {getAssistantStateIcon(isBusy, hasApproval, assistant.errorMessage, isOnline)}
+            <span>{getAssistantStateLabel(isBusy, hasApproval, assistant.errorMessage, isOnline)}</span>
           </div>
 
           <div className={styles.quickActions}>
@@ -252,7 +279,8 @@ function getFocusableElements(container: HTMLElement): HTMLElement[] {
 }
 
 // AI 요청과 승인 대기 여부를 한 가지 표시 상태로 합칩니다.
-function getAssistantState(isBusy: boolean, hasApproval: boolean, errorMessage: string): "error" | "generating" | "approval" | "ready" {
+function getAssistantState(isBusy: boolean, hasApproval: boolean, errorMessage: string, isOnline: boolean): "offline" | "error" | "generating" | "approval" | "ready" {
+  if (!isOnline) return "offline";
   if (errorMessage) return "error";
   if (isBusy) return "generating";
   if (hasApproval) return "approval";
@@ -260,16 +288,17 @@ function getAssistantState(isBusy: boolean, hasApproval: boolean, errorMessage: 
 }
 
 // 상태 이름과 함께 보여줄 아이콘을 선택합니다.
-function getAssistantStateIcon(isBusy: boolean, hasApproval: boolean, errorMessage: string) {
-  const state = getAssistantState(isBusy, hasApproval, errorMessage);
-  if (state === "error") return <AlertCircle aria-hidden="true" size={14} />;
+function getAssistantStateIcon(isBusy: boolean, hasApproval: boolean, errorMessage: string, isOnline: boolean) {
+  const state = getAssistantState(isBusy, hasApproval, errorMessage, isOnline);
+  if (state === "error" || state === "offline") return <AlertCircle aria-hidden="true" size={14} />;
   if (state === "generating") return <LoaderCircle aria-hidden="true" className={styles.spinner} size={14} />;
   return <Check aria-hidden="true" size={14} />;
 }
 
 // 내부 상태를 사용자가 바로 이해할 수 있는 짧은 말로 바꿉니다.
-function getAssistantStateLabel(isBusy: boolean, hasApproval: boolean, errorMessage: string): string {
-  const state = getAssistantState(isBusy, hasApproval, errorMessage);
+function getAssistantStateLabel(isBusy: boolean, hasApproval: boolean, errorMessage: string, isOnline: boolean): string {
+  const state = getAssistantState(isBusy, hasApproval, errorMessage, isOnline);
+  if (state === "offline") return "AI 연결을 사용할 수 없음";
   if (state === "error") return "요청 실패";
   if (state === "generating") return "응답 생성 중";
   if (state === "approval") return "사용자 적용 대기";

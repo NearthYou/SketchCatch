@@ -38,6 +38,12 @@
   background: #2a2d31;
 }
 
+.launcher:disabled {
+  background: #9ca3af;
+  border-color: #9ca3af;
+  cursor: not-allowed;
+}
+
 .launcher:active {
   transform: translateY(1px);
 }
@@ -162,6 +168,10 @@
 
 .statusBar[data-state="error"] {
   color: #b42318;
+}
+
+.statusBar[data-state="offline"] {
+  color: #8a5a00;
 }
 
 .statusBar[data-state="approval"] {
