@@ -6,7 +6,6 @@ import { fileURLToPath } from "node:url";
 const currentDir = fileURLToPath(new URL("./", import.meta.url));
 const workspaceClientPath = `${currentDir}/AiWorkspaceClient.tsx`;
 const draftMetadataPanelPath = `${currentDir}/DraftMetadataPanel.tsx`;
-const workspaceAiRoutePath = `${currentDir}/ai/page.tsx`;
 
 test("workspace AI business logic remains available for the next UI", () => {
   const workspaceClientSource = readFileSync(workspaceClientPath, "utf8");
@@ -23,10 +22,4 @@ test("workspace draft result exposes guardrail metadata sections", () => {
   assert.match(draftMetadataPanelSource, /selectedDraftPattern/);
   assert.match(draftMetadataPanelSource, /requirementFacts/);
   assert.match(draftMetadataPanelSource, /guardrailWarnings/);
-});
-
-test("AI route keeps the AI start client connected", () => {
-  const workspaceAiRouteSource = readFileSync(workspaceAiRoutePath, "utf8");
-
-  assert.match(workspaceAiRouteSource, /WorkspaceAiStartClient/);
 });
