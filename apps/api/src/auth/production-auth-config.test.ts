@@ -48,6 +48,13 @@ test("production auth config rejects missing OAuth client IDs during startup", (
   assert.throws(() => validateProductionAuthConfig(), /NAVER_OAUTH_CLIENT_ID is required/);
 });
 
+test("production auth config rejects a missing OAuth redirect base URL during startup", () => {
+  setValidAuthEnv();
+  delete process.env.OAUTH_REDIRECT_BASE_URL;
+
+  assert.throws(() => validateProductionAuthConfig(), /OAUTH_REDIRECT_BASE_URL is required/);
+});
+
 function setValidAuthEnv(): void {
   process.env.AUTH_TOKEN_SECRET = "production-auth-token-secret-with-at-least-32-characters";
   process.env.GIT_OAUTH_CLIENT_ID = "github-client-id";
