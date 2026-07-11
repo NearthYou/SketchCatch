@@ -5,12 +5,34 @@ Short English-only working log for the current agent context. Older records are 
 ## Current Verified State
 
 - Branch: `feat/ck/287-ai-diagram`.
-- Local `dev` and `origin/dev` point to `a1031c4b`; latest Live Observation, UI rebuild, and cost-first ECS operations changes are merged into this branch.
+- Local `dev` and `origin/dev` point to `4d48f3f1`; latest Trivy scanner and production infrastructure check updates are merged into this branch.
 - Architecture Draft uses Amazon Q retrieval evidence, deterministic deployable materialization, NDJSON progress streaming, and containment-aware board layout.
-- The current uncommitted work fixes the Korean SSR mixed-upload questionnaire on top of the latest `dev` merge.
+- The latest `dev` merge into the AI diagram branch is verified and ready to commit.
 - No cloud deployment or Terraform mutation was run during this merge.
 
 ## Session Record
+
+### 2026-07-11 - Remove duplicated Trivy rule IDs from the scanner test
+
+- Updated the Trivy ignore-file test to import `disabledTrivyTerraformRuleIds` from the scanner instead of maintaining a second hard-coded rule list.
+- Verification: focused `trivy-terraform-scan.test.ts`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check` passed.
+- Risk: none; the test now follows the production exclusion list automatically.
+- Next action: review and commit the Trivy exclusion change when ready.
+
+### 2026-07-11 - Disable Trivy ALB and Auto Scaling checks
+
+- Configured each Terraform Trivy scan to generate an ignore file that excludes ALB rules AWS-0047, AWS-0052, AWS-0053, and AWS-0054 plus Auto Scaling launch configuration/template rules AWS-0008, AWS-0009, AWS-0122, AWS-0129, and AWS-0130.
+- Kept all other Terraform Trivy checks enabled; the exclusion applies to the generated scan workspace only and does not change user Terraform source files.
+- Verification: focused Trivy scanner tests, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check` passed.
+- Risk: future Trivy check-bundle rule IDs require an explicit review before they are added to the exclusion list.
+- Next action: add the product-specific ALB and ASG configuration warnings as non-blocking deployment checks when requested.
+
+### 2026-07-11 - Recover production auth runtime configuration
+
+- Traced signup/login failures to a one-character SSM `AUTH_TOKEN_SECRET` and missing OAuth client IDs in the ECS API task definition.
+- Rotated the secret without exposing it, restarted the API service, and verified live signup, login, and account cleanup.
+- Added production startup validation and deployment-time OAuth variable injection so invalid auth configuration fails before serving traffic.
+- Kept container ALARM notifications, removed repetitive OK notifications, and excluded the known stale Server Action web log pattern.
 
 ### 2026-07-11 - Correct external traffic and subnet placement semantics
 
@@ -83,6 +105,7 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Next Action
 
+- 2026-07-11 update: Updated local `dev` to `origin/dev` at `4d48f3f1` and merged it into `feat/ck/287-ai-diagram`. Resolved the only conflict in `agent-progress.md` by preserving both the latest Trivy/production history from `dev` and the AI diagram branch history. Verification passed with `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build`.
 - 2026-07-11 update: Updated local `dev` to `origin/dev` at `a1031c4b` and merged it into `feat/ck/287-ai-diagram` with merge commit `cb5cddc5`. Resolved conflicts by taking the retired workflow/history deletions from `dev`, keeping the latest Workspace start UI from `dev`, combining Live Observation API error codes with architecture generation error codes, and preserving the AI diagram external-flow/subnet-placement adapter behavior. Fixed post-merge typecheck issues in runtime cache test stubs and Terraform nested-block metadata. Verification passed with `pnpm harness:check`, focused API architecture tests, `pnpm lint`, `pnpm typecheck`, and `pnpm build`.
 - 2026-07-11 update: Fixed the Korean SSR dynamic web-app questionnaire path so Seoul semi-managed simple API answers produce ECS Fargate instead of EC2, keep SSR behind an ALB-origin CloudFront entry, use HTTPS/ACM, keep Multi-AZ RDS in `ap-northeast-2`, materialize mixed-file uploads as `sketchcatch-file-uploads-*` instead of image-only buckets, and label SSE notification paths without chat POST semantics. Added regression coverage for the SSR mixed-upload questionnaire and SSE notification validation. Verification passed with focused API tests, `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and final `pnpm harness:check`.
 - 2026-07-11 update: Fixed the Korean SPA questionnaire Architecture Draft path so APAC semi-managed simple API answers produce a consistent ECS Fargate, CloudFront/S3, Multi-AZ RDS, image-upload, HTTP+SSE topology without mixing Seoul regions with Tokyo AZs. Added regression coverage for operational parsing, requirement resolution, and canonical draft materialization. Verification passed with focused API tests, `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and final `pnpm harness:check`.

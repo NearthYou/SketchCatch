@@ -165,7 +165,8 @@ for (const marker of [
   "Review-only Terraform plan",
   "plan_args=(-input=false -no-color -detailed-exitcode -lock-timeout=5m)",
   "use_lockfile=true",
-  "PRODUCTION_INFRA_RUNTIME_TFVARS_JSON"
+  "PRODUCTION_INFRA_RUNTIME_TFVARS_JSON",
+  "runtime tfvars must be a JSON object"
 ]) {
   check(workflow.includes(marker), `plan-only workflow is missing ${marker}`);
 }
