@@ -3,6 +3,7 @@
 import { Code2, GitBranch, History, PanelRightOpen, Rocket, ShieldCheck, X } from "lucide-react";
 import { useState } from "react";
 import type { DiagramEditorPanelContext } from "../../../features/diagram-editor";
+import { WorkspaceAiAssistant } from "../ai-assistant/WorkspaceAiAssistant";
 import { TerraformOperationsPanel } from "./TerraformOperationsPanel";
 import { SafetyOperationsPanel } from "./SafetyOperationsPanel";
 import { DeploymentHistoryPanel } from "./DeploymentHistoryPanel";
@@ -19,13 +20,19 @@ export type WorkspaceOperationTab = "terraform" | "safety" | "deployment" | "git
 // Board 위에서 Terraform, 검사, 배포, 이력을 순서대로 여는 작업 도구입니다.
 export function WorkspaceOperationsDock({
   context,
+  isOpen,
+  onOpenChange,
   projectId
 }: {
   readonly context: DiagramEditorPanelContext;
+  readonly isOpen?: boolean | undefined;
+  readonly onOpenChange?: ((isOpen: boolean) => void) | undefined;
   readonly projectId: string;
 }) {
   const [activeTab, setActiveTab] = useState<WorkspaceOperationTab>("terraform");
-  const [isOpen, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const [isAssistantOpen, setAssistantOpen] = useState(false);
+  const panelOpen = isOpen ?? internalOpen;
   const terraform = useWorkspaceTerraform({
     applyDiagram: context.applyDiagramJson,
     diagram: context.diagram,
@@ -45,6 +52,19 @@ export function WorkspaceOperationsDock({
   });
   const gitCicd = useWorkspaceGitCicd({ deployment: deployment.current, projectId });
 
+  // 제어형과 독립형 사용 모두 같은 열림 상태 변경 경로를 사용합니다.
+  function setOpen(nextOpen: boolean): void {
+    setInternalOpen(nextOpen);
+    onOpenChange?.(nextOpen);
+    if (nextOpen) setAssistantOpen(false);
+  }
+
+  // AI가 열리면 기존 작업 panel을 닫아 Board 오른쪽 도구가 겹치지 않게 합니다.
+  function setAiAssistantOpen(nextOpen: boolean): void {
+    setAssistantOpen(nextOpen);
+    if (nextOpen) setOpen(false);
+  }
+
   // 도구를 고르면 닫힌 패널도 함께 열어 사용자의 행동 결과를 바로 보여줍니다.
   function selectTab(tab: WorkspaceOperationTab): void {
     setActiveTab(tab);
@@ -52,78 +72,79 @@ export function WorkspaceOperationsDock({
   }
 
   return (
-    <aside
+    <>
+      <aside
       aria-label="Workspace 작업 도구"
-      className={`${styles.dock} ${isOpen ? "" : styles.dockCollapsed}`}
+      className={`${styles.dock} ${panelOpen ? "" : styles.dockCollapsed}`}
       data-project-id={projectId}
     >
       <nav aria-label="작업 단계" className={styles.dockToolbar} role="tablist">
         <button
           aria-label="Terraform Preview"
-          aria-selected={isOpen && activeTab === "terraform"}
+          aria-selected={panelOpen && activeTab === "terraform"}
           onClick={() => selectTab("terraform")}
           role="tab"
           title="Terraform Preview"
           type="button"
         >
           <Code2 aria-hidden="true" size={17} />
-          {isOpen ? <span>Terraform</span> : null}
+          {panelOpen ? <span>Terraform</span> : null}
         </button>
         <button
           aria-label="안전과 비용 검사"
-          aria-selected={isOpen && activeTab === "safety"}
+          aria-selected={panelOpen && activeTab === "safety"}
           onClick={() => selectTab("safety")}
           role="tab"
           title="안전과 비용 검사"
           type="button"
         >
           <ShieldCheck aria-hidden="true" size={17} />
-          {isOpen ? <span>검사</span> : null}
+          {panelOpen ? <span>검사</span> : null}
         </button>
         <button
           aria-label="배포"
-          aria-selected={isOpen && activeTab === "deployment"}
+          aria-selected={panelOpen && activeTab === "deployment"}
           onClick={() => selectTab("deployment")}
           role="tab"
           title="배포"
           type="button"
         >
           <Rocket aria-hidden="true" size={17} />
-          {isOpen ? <span>배포</span> : null}
+          {panelOpen ? <span>배포</span> : null}
         </button>
         <button
           aria-label="Git/CI/CD"
-          aria-selected={isOpen && activeTab === "git-cicd"}
+          aria-selected={panelOpen && activeTab === "git-cicd"}
           onClick={() => selectTab("git-cicd")}
           role="tab"
           title="Git/CI/CD"
           type="button"
         >
           <GitBranch aria-hidden="true" size={17} />
-          {isOpen ? <span>Git/CI</span> : null}
+          {panelOpen ? <span>Git/CI</span> : null}
         </button>
         <button
           aria-label="배포 이력"
-          aria-selected={isOpen && activeTab === "history"}
+          aria-selected={panelOpen && activeTab === "history"}
           onClick={() => selectTab("history")}
           role="tab"
           title="배포 이력"
           type="button"
         >
           <History aria-hidden="true" size={17} />
-          {isOpen ? <span>이력</span> : null}
+          {panelOpen ? <span>이력</span> : null}
         </button>
         <button
-          aria-label={isOpen ? "작업 도구 닫기" : "작업 도구 열기"}
-          onClick={() => setOpen((current) => !current)}
-          title={isOpen ? "닫기" : "열기"}
+          aria-label={panelOpen ? "작업 도구 닫기" : "작업 도구 열기"}
+          onClick={() => setOpen(!panelOpen)}
+          title={panelOpen ? "닫기" : "열기"}
           type="button"
         >
-          {isOpen ? <X aria-hidden="true" size={17} /> : <PanelRightOpen aria-hidden="true" size={17} />}
+          {panelOpen ? <X aria-hidden="true" size={17} /> : <PanelRightOpen aria-hidden="true" size={17} />}
         </button>
       </nav>
 
-      {isOpen ? (
+      {panelOpen ? (
         <div role="tabpanel">
           {activeTab === "terraform" ? (
             <TerraformOperationsPanel context={context} terraform={terraform} />
@@ -138,6 +159,14 @@ export function WorkspaceOperationsDock({
           )}
         </div>
       ) : null}
-    </aside>
+      </aside>
+      <WorkspaceAiAssistant
+        context={context}
+        isOpen={isAssistantOpen}
+        onOpenChange={setAiAssistantOpen}
+        projectId={projectId}
+        terraform={terraform}
+      />
+    </>
   );
 }

@@ -26,7 +26,7 @@ export type WorkspaceTerraformState = {
   readonly previewState: ReturnType<typeof getTerraformPreviewState>;
   readonly proposals: readonly TerraformDiagramChangeProposal[];
   readonly requestState: TerraformRequestState;
-  readonly generate: () => Promise<void>;
+  readonly generate: () => Promise<string>;
   readonly setCode: (code: string) => void;
   readonly validate: () => Promise<void>;
   readonly inspectSync: () => Promise<void>;
@@ -55,7 +55,7 @@ export function useWorkspaceTerraform({
   );
 
   // 현재 Board를 Terraform 코드로 다시 만들고 생성 시점의 Board를 함께 기억합니다.
-  const generate = useCallback(async (): Promise<void> => {
+  const generate = useCallback(async (): Promise<string> => {
     setRequestState("generating");
     setErrorMessage("");
 
@@ -65,8 +65,10 @@ export function useWorkspaceTerraform({
       setGeneratedDiagram(diagram);
       setDiagnostics([]);
       setProposals([]);
+      return generatedCode;
     } catch (error) {
       setErrorMessage(toWorkspaceOperationError(error, "Terraform 코드를 만들지 못했습니다."));
+      return "";
     } finally {
       setRequestState("idle");
     }
