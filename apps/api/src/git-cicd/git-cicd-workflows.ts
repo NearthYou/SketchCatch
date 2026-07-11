@@ -437,5 +437,5 @@ function createDefaultBucketName(prefix: string, input: GitCicdWorkflowRenderInp
     .toLowerCase()
     .replace(/[^a-z0-9-]/g, "-")
     .slice(0, 63)
-    .replace(/[-.]+$/, "");
+    .replace(/-+$/, "");
 }
