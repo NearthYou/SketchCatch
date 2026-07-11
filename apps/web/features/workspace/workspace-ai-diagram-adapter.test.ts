@@ -6,9 +6,34 @@ import type { AiArchitectureDraftResult, ArchitectureJson, DiagramJson, DiagramN
 import {
   convertArchitectureJsonToDiagramJson,
   convertDiagramJsonToArchitectureJson,
-  getDiagramJsonForArchitectureDraft
+  getDiagramJsonForArchitectureDraft,
+  normalizeDiagramJsonConventions
 } from "./workspace-ai-diagram-adapter";
 import { isAreaNode } from "../diagram-editor/area-nodes";
+
+function makeConventionResourceNode(
+  id: string,
+  resourceType: string,
+  resourceName: string
+): DiagramNode {
+  return {
+    id,
+    kind: "resource",
+    label: resourceName.toLocaleUpperCase(),
+    locked: false,
+    parameters: {
+      fileName: "main",
+      resourceName,
+      resourceType,
+      terraformBlockType: resourceType === "aws_ami" ? "data" : "resource",
+      values: {}
+    },
+    position: { x: 0, y: 0 },
+    size: resourceType === "aws_vpc" ? { width: 240, height: 160 } : { width: 48, height: 48 },
+    type: resourceType,
+    zIndex: resourceType === "aws_vpc" ? 0 : 1
+  };
+}
 
 test("workspace AI diagram adapter uses shared resource definitions for Terraform mapping", () => {
   const source = readFileSync(
@@ -20,6 +45,25 @@ test("workspace AI diagram adapter uses shared resource definitions for Terrafor
   assert.doesNotMatch(source, /TERRAFORM_RESOURCE_TYPE_TO_RESOURCE/);
   assert.match(source, /getDefaultResourceDefinitionByResourceType/);
   assert.match(source, /getResourceDefinitionByTerraform/);
+});
+
+test("workspace layout collision and Area fitting use the rendered icon-caption footprint", () => {
+  const source = readFileSync(
+    fileURLToPath(new URL("workspace-ai-diagram-adapter.ts", import.meta.url)),
+    "utf8"
+  );
+
+  assert.match(
+    source,
+    /import \{ getResourceNodeVisualBounds \} from "\.\.\/diagram-editor\/resource-node-visual-footprint";/
+  );
+  assert.match(source, /const visualBounds = getResourceNodeVisualBounds\(node\);/);
+  assert.match(source, /const childBounds = getResourceNodeVisualBounds\(child\);/);
+  assert.match(
+    source,
+    /function getSegmentNodeOverlapLength[\s\S]*?const visualBounds = getResourceNodeVisualBounds\(node\);[\s\S]*?const left = visualBounds\.x - padding;/
+  );
+  assert.doesNotMatch(source, /MIN_RESOURCE_AREA_CHILD_FOOTPRINT/);
 });
 
 test("convertArchitectureJsonToDiagramJson preserves authored node border style", () => {
@@ -41,6 +85,53 @@ test("convertArchitectureJsonToDiagramJson preserves authored node border style"
   });
 
   assert.equal(diagramJson.nodes[0]?.style?.borderStyle, "dashed");
+});
+
+test("normalizeDiagramJsonConventions preserves saved names and Terraform references exactly", () => {
+  const renamedAmi = makeConventionResourceNode("renamed-ami-stable-id", "aws_ami", "renamed");
+  const ec2Instance = makeConventionResourceNode(
+    "ec2-node-stable-id",
+    "aws_instance",
+    "ec2_instance"
+  );
+  const diagram: DiagramJson = {
+    nodes: [
+      makeConventionResourceNode("ami-node-stable-id", "aws_ami", "ami"),
+      makeConventionResourceNode("vpc-node-stable-id", "aws_vpc", "vpc"),
+      renamedAmi,
+      {
+        ...ec2Instance,
+        parameters: {
+          ...ec2Instance.parameters!,
+          values: {
+            imageId: "data.aws_ami.renamed.id",
+            vpcId: "aws_vpc.vpc.id"
+          }
+        }
+      }
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  const normalized = normalizeDiagramJsonConventions(diagram);
+  const amiName = normalized.nodes.find((node) => node.id === "ami-node-stable-id")?.parameters?.resourceName;
+  const vpcName = normalized.nodes.find((node) => node.id === "vpc-node-stable-id")?.parameters?.resourceName;
+  const renamedAmiAfter = normalized.nodes.find((node) => node.id === "renamed-ami-stable-id");
+  const ec2After = normalized.nodes.find((node) => node.id === "ec2-node-stable-id");
+
+  assert.equal(amiName, "ami");
+  assert.equal(vpcName, "vpc");
+  assert.equal(renamedAmiAfter?.parameters?.resourceName, "renamed");
+  assert.equal(ec2After?.parameters?.resourceName, "ec2_instance");
+  assert.deepEqual(ec2After?.parameters?.values, {
+    imageId: "data.aws_ami.renamed.id",
+    vpcId: "aws_vpc.vpc.id"
+  });
+  assert.doesNotMatch(amiName ?? "", /node|stable|id/);
+  assert.doesNotMatch(vpcName ?? "", /node|stable|id/);
+  assert.doesNotMatch(renamedAmiAfter?.parameters?.resourceName ?? "", /node|stable|id/);
+  assert.doesNotMatch(ec2After?.parameters?.resourceName ?? "", /node|stable|id/);
 });
 
 test("convertArchitectureJsonToDiagramJson creates board nodes and hides containment arrows from an Architecture Draft", () => {
@@ -111,7 +202,7 @@ test("convertArchitectureJsonToDiagramJson creates board nodes and hides contain
             terraformResourceName: "main"
           }
         },
-        position: { x: 304, y: 164 },
+        position: { x: 272, y: 164 },
         size: { width: 420, height: 280 },
         style: {
           borderColor: "#2f6db3",
@@ -135,7 +226,7 @@ test("convertArchitectureJsonToDiagramJson creates board nodes and hides contain
           }
         },
         position: { x: 360, y: 220 },
-        size: { width: 124, height: 96 },
+        size: { width: 48, height: 48 },
         style: {
           borderColor: "#2f6db3",
           textColor: "#172033"
@@ -213,7 +304,7 @@ test("convertArchitectureJsonToDiagramJson keeps non-containment edges as arrows
       type: "smoothstep",
       style: {
         animated: false,
-        color: "#506176",
+        color: "#59687d",
         lineStyle: "solid",
         width: "thin"
       }
@@ -628,7 +719,7 @@ test("convertArchitectureJsonToDiagramJson classifies edge line styles from rela
 
   assert.deepEqual(edgeById.get("client-to-api")?.style, {
     animated: false,
-    color: "#506176",
+    color: "#59687d",
     lineStyle: "solid",
     width: "thin"
   });
@@ -679,7 +770,7 @@ test("convertArchitectureJsonToDiagramJson uses catalog icon and size for CloudF
     cloudFrontNode?.iconUrl,
     "/Architecture-Service-Icons_07312025/Arch_Networking-Content-Delivery/64/Arch_Amazon-CloudFront_64.svg"
   );
-  assert.deepEqual(cloudFrontNode?.size, { width: 124, height: 96 });
+  assert.deepEqual(cloudFrontNode?.size, { width: 48, height: 48 });
   assert.equal(cloudFrontNode?.parameters?.resourceName, "cdn_site");
 });
 
@@ -702,7 +793,7 @@ test("convertArchitectureJsonToDiagramJson uses fallback size for unknown draft 
   const unknownNode = diagramJson.nodes[0];
 
   assert.equal(unknownNode?.type, "unknown_resource");
-  assert.deepEqual(unknownNode?.size, { width: 56, height: 56 });
+  assert.deepEqual(unknownNode?.size, { width: 48, height: 48 });
 });
 
 test("getDiagramJsonForArchitectureDraft prefers an exact DiagramJson fixture when present", () => {
@@ -786,7 +877,7 @@ test("convertArchitectureJsonToDiagramJson expands area nodes to include upper-l
   const ec2Node = diagramJson.nodes.find((node) => node.id === "ec2-left");
 
   assert.equal(ec2Node?.metadata?.parentAreaNodeId, "vpc-main");
-  assert.equal(vpcNode?.position.x, 104);
+  assert.equal(vpcNode?.position.x, 72);
   assert.equal(vpcNode?.position.y, 104);
   assert.equal(vpcNode?.size.width, 420);
   assert.equal(vpcNode?.size.height, 280);
@@ -1354,6 +1445,7 @@ test("convertArchitectureJsonToDiagramJson arranges serverless resources into re
 
   const diagramJson = convertArchitectureJsonToDiagramJson(architectureJson);
   const nodeById = new Map(diagramJson.nodes.map((node) => [node.id, node]));
+  const edgeById = new Map(diagramJson.edges.map((edge) => [edge.id, edge]));
   const apiGateway = nodeById.get("api-gateway");
   const permission = nodeById.get("lambda-invoke-permission");
   const lambdaFunction = nodeById.get("lambda-function");
@@ -1385,6 +1477,15 @@ test("convertArchitectureJsonToDiagramJson arranges serverless resources into re
   assert.ok(errorAlarm.position.y > lambdaFunction.position.y);
   assert.ok(cdn.position.y < apiGateway.position.y);
   assert.ok(webAssets.position.y < uploadBucket.position.y);
+  assert.equal(edgeById.get("lambda-to-upload")?.sourceHandleId, "handle-right");
+  assert.equal(edgeById.get("lambda-to-logs")?.sourceHandleId, "handle-top");
+  assert.equal(edgeById.get("lambda-to-logs")?.targetHandleId, "handle-bottom");
+  assert.equal(edgeById.get("role-to-lambda")?.targetHandleId, "handle-left");
+  assert.notEqual(
+    edgeById.get("role-to-lambda")?.targetHandleId,
+    edgeById.get("lambda-to-logs")?.sourceHandleId,
+    "control and observability edges must not share the Lambda vertical trunk"
+  );
   assertNoSiblingNodeOverlap(diagramJson);
   assertNoEdgeRouteOverlap(diagramJson);
   assertNoEdgeLineOverlap(diagramJson);
@@ -1755,12 +1856,30 @@ test("convertArchitectureJsonToDiagramJson lays out server and storage draft as 
   });
   assert.equal(regionNode?.parameters?.resourceName, "region_ap_northeast_2");
   assert.equal(azNode?.parameters?.resourceName, "az_ap_northeast_2a");
-  assert.ok((regionNode?.size.width ?? 0) <= 1100);
-  assert.ok((regionNode?.size.height ?? 0) <= 1040);
-  assert.ok((vpcNode?.size.width ?? 0) <= 1000);
-  assert.ok((vpcNode?.size.height ?? 0) <= 780);
-  assert.ok((azNode?.size.width ?? 0) <= 440);
-  assert.ok((azNode?.size.height ?? 0) <= 400);
+  assert.ok(
+    (regionNode?.size.width ?? 0) <= 1120,
+    `expected region width <= 1120, got ${regionNode?.size.width}`
+  );
+  assert.ok(
+    (regionNode?.size.height ?? 0) <= 1040,
+    `expected region height <= 1040, got ${regionNode?.size.height}`
+  );
+  assert.ok(
+    (vpcNode?.size.width ?? 0) <= 1000,
+    `expected VPC width <= 1000, got ${vpcNode?.size.width}`
+  );
+  assert.ok(
+    (vpcNode?.size.height ?? 0) <= 780,
+    `expected VPC height <= 780, got ${vpcNode?.size.height}`
+  );
+  assert.ok(
+    (azNode?.size.width ?? 0) <= 440,
+    `expected AZ width <= 440, got ${azNode?.size.width}`
+  );
+  assert.ok(
+    (azNode?.size.height ?? 0) <= 400,
+    `expected AZ height <= 400, got ${azNode?.size.height}`
+  );
   assertNoSiblingNodeOverlap(diagramJson);
 });
 

@@ -14,6 +14,7 @@ import type {
 } from "@sketchcatch/types";
 import { createPortal } from "react-dom";
 import {
+  Activity,
   Code2,
   GalleryVerticalEnd,
   PanelRightClose,
@@ -34,6 +35,7 @@ import {
 } from "./TerraformCodePanel";
 import { TerraformIssuesPanel } from "./TerraformIssuesPanel";
 import { TerraformLeaveDialog } from "./TerraformLeaveDialog";
+import { LiveObservationModal } from "./LiveObservationModal";
 import { defaultResourceWorkspaceView } from "./resource-workspace-view";
 import { getPreDeploymentFindingTerraformSourceLocation } from "./pre-deployment-finding-source";
 import {
@@ -133,6 +135,7 @@ export function WorkspaceRightPanel({
     initialView === "deployment"
   );
   const [canRenderDeploymentPortal, setCanRenderDeploymentPortal] = useState(false);
+  const [isLiveObservationOpen, setIsLiveObservationOpen] = useState(false);
   const latestTerraformSafeFixApplyRequestIdRef = useRef<number | null>(null);
   const terraformDiagnostics = useMemo(
     () => terraformIssues.map((issue) => issue.diagnostic),
@@ -402,6 +405,10 @@ export function WorkspaceRightPanel({
     setIsDeploymentConsoleOpen(true);
   }, [requestTerraformLeave]);
 
+  const openLiveObservation = useCallback((): void => {
+    setIsLiveObservationOpen(true);
+  }, []);
+
   const applyTerraformLeaveSaveFeedback = useCallback((feedback: TerraformLeaveSaveFeedback): void => {
     setTerraformLeaveSaveState(feedback.state);
     setTerraformLeaveSaveMessage(feedback.message);
@@ -655,6 +662,13 @@ export function WorkspaceRightPanel({
   const deploymentConsole = deploymentConsoleContent
     ? createPortal(deploymentConsoleContent, document.body)
     : null;
+  const liveObservationModal = isLiveObservationOpen ? (
+    <LiveObservationModal
+      onClose={() => setIsLiveObservationOpen(false)}
+      projectId={projectId}
+      projectName={projectName}
+    />
+  ) : null;
   const terraformSplitStyle = {
     "--terraform-code-pane-ratio": `${terraformCodePaneRatio}%`
   } as CSSProperties;
@@ -699,8 +713,17 @@ export function WorkspaceRightPanel({
           >
             <Rocket size={18} aria-hidden="true" />
           </button>
+          <button
+            className={styles.collapsedPanelButton}
+            onClick={openLiveObservation}
+            title="시뮬레이션"
+            type="button"
+          >
+            <Activity size={18} aria-hidden="true" />
+          </button>
         </aside>
         {deploymentConsole}
+        {liveObservationModal}
       </>
     );
   }
@@ -754,6 +777,15 @@ export function WorkspaceRightPanel({
           >
             <Rocket size={14} aria-hidden="true" />
             <span>Deploy</span>
+          </button>
+          <button
+            className={styles.panelModeTextButton}
+            onClick={openLiveObservation}
+            title="실시간 트래픽 및 ASG 관측"
+            type="button"
+          >
+            <Activity size={14} aria-hidden="true" />
+            <span>시뮬레이션</span>
           </button>
         </div>
 
@@ -816,6 +848,7 @@ export function WorkspaceRightPanel({
         ) : null}
       </aside>
       {deploymentConsole}
+      {liveObservationModal}
     </>
   );
 }

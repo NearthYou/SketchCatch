@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   assertNoStaticAwsCredentialsForApiServer,
   getDeploymentWorkerMode,
+  isLiveObservationEnabled,
   getRuntimeEnv,
   requireEcsWorkerDispatcherConfig,
   requireGitHubAppConfig,
@@ -120,6 +121,21 @@ test("getDeploymentWorkerMode rejects unknown modes", () => {
   assert.throws(
     () => getDeploymentWorkerMode({ ...getRuntimeEnv(), deploymentWorkerMode: "sqs" }),
     /DEPLOYMENT_WORKER_MODE must be one of/
+  );
+});
+
+test("isLiveObservationEnabled requires the explicit true flag", () => {
+  assert.equal(
+    isLiveObservationEnabled({ ...getRuntimeEnv(), liveObservationEnabled: "true" }),
+    true
+  );
+  assert.equal(
+    isLiveObservationEnabled({ ...getRuntimeEnv(), liveObservationEnabled: "false" }),
+    false
+  );
+  assert.equal(
+    isLiveObservationEnabled({ ...getRuntimeEnv(), liveObservationEnabled: undefined }),
+    false
   );
 });
 

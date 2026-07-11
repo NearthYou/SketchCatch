@@ -1,6 +1,6 @@
 import type { DiagramNode } from "@sketchcatch/types";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
-import { applyNodeParametersUpdateWithResourceLabel } from "../diagram-editor/diagram-utils";
+import { applyNodeParametersUpdateWithAutoTagSync } from "../diagram-editor/diagram-utils";
 import type { ResourceWorkspaceView } from "./workspace-right-panel.types";
 
 // 목록에서 고른 Resource를 Board 선택 상태와 맞춥니다.
@@ -34,7 +34,7 @@ export function duplicateResourceNode(context: DiagramEditorPanelContext, node: 
     parameters: node.parameters ? structuredClone(node.parameters) : undefined
   };
   const duplicatedNode = node.parameters && nextResourceName
-    ? applyNodeParametersUpdateWithResourceLabel(duplicatedNodeBase, {
+    ? applyNodeParametersUpdateWithAutoTagSync(duplicatedNodeBase, {
         ...structuredClone(node.parameters),
         resourceName: nextResourceName
       })

@@ -15,13 +15,22 @@ export type RedisRuntimeCacheClient = {
     key: string,
     value: string,
     options: {
+      readonly condition?: "NX" | undefined;
       readonly expiration: {
         readonly type: "PX";
         readonly value: number;
       };
     }
-  ): Promise<unknown>;
+  ): Promise<"OK" | null | unknown>;
   del(key: string): Promise<number>;
+  eval(
+    script: string,
+    options: {
+      readonly arguments: readonly string[];
+      readonly keys: readonly string[];
+    }
+  ): Promise<unknown>;
+  ping(): Promise<string>;
   on?(event: "error", listener: (error: unknown) => void): unknown;
 };
 
@@ -37,6 +46,11 @@ export type CreateRedisRuntimeCacheOptions = {
 
 const DEFAULT_REDIS_RUNTIME_CACHE_KEY_PREFIX = "sketchcatch:runtime-cache";
 const DEFAULT_REDIS_CONNECT_COOLDOWN_MS = 10_000;
+const REDIS_ATOMIC_INCREMENT_WITH_TTL_SCRIPT = `
+local nextValue = redis.call('INCRBY', KEYS[1], ARGV[1])
+redis.call('PEXPIRE', KEYS[1], ARGV[2])
+return nextValue
+`;
 
 export function createRedisRuntimeCache(options: CreateRedisRuntimeCacheOptions): RuntimeCache {
   const keyPrefix = options.keyPrefix ?? DEFAULT_REDIS_RUNTIME_CACHE_KEY_PREFIX;
@@ -47,8 +61,26 @@ export function createRedisRuntimeCache(options: CreateRedisRuntimeCacheOptions)
   let client: RedisRuntimeCacheClient | null = null;
   let connectPromise: Promise<RedisRuntimeCacheClient> | null = null;
   let lastConnectErrorAt = Number.NEGATIVE_INFINITY;
+  let degradationCount = 0;
 
   return {
+    backend: "redis",
+
+    getDegradationCount(): number {
+      return degradationCount;
+    },
+
+    async isAvailable(): Promise<boolean> {
+      try {
+        await (await getConnectedClient()).ping();
+        return true;
+      } catch (error) {
+        degradationCount += 1;
+        options.onDegraded?.(error);
+        return false;
+      }
+    },
+
     async get<TValue = RuntimeCacheJsonValue>(
       entryKey: RuntimeCacheEntryKey
     ): Promise<TValue | null> {
@@ -103,6 +135,63 @@ export function createRedisRuntimeCache(options: CreateRedisRuntimeCacheOptions)
         async () => fallbackDeleted,
         options.onDegraded
       );
+    },
+
+    async increment(
+      entryKey: RuntimeCacheEntryKey,
+      delta: number,
+      setOptions: RuntimeCacheSetOptions
+    ): Promise<number> {
+      assertInteger(delta, "RuntimeCache increment delta");
+      assertPositiveFiniteMs(setOptions.ttlMs, "RuntimeCache ttlMs");
+      const fallbackValue = await fallbackCache.increment(entryKey, delta, setOptions);
+
+      return runRedisOperation(
+        async (redisClient) => {
+          const redisKey = createRedisCacheKey(keyPrefix, entryKey);
+          const nextValue = await redisClient.eval(
+            REDIS_ATOMIC_INCREMENT_WITH_TTL_SCRIPT,
+            {
+              arguments: [String(delta), String(setOptions.ttlMs)],
+              keys: [redisKey]
+            }
+          );
+          assertInteger(nextValue, "Redis Runtime Cache increment result");
+          return nextValue;
+        },
+        async () => fallbackValue,
+        options.onDegraded
+      );
+    },
+
+    async setIfAbsent(
+      entryKey: RuntimeCacheEntryKey,
+      value: RuntimeCacheJsonValue,
+      setOptions: RuntimeCacheSetOptions
+    ): Promise<boolean> {
+      assertPositiveFiniteMs(setOptions.ttlMs, "RuntimeCache ttlMs");
+      const valueJson = serializeRuntimeCacheValue(value);
+      const fallbackAccepted = await fallbackCache.setIfAbsent(entryKey, value, setOptions);
+
+      return runRedisOperation(
+        async (redisClient) => {
+          const result = await redisClient.set(
+            createRedisCacheKey(keyPrefix, entryKey),
+            valueJson,
+            {
+              condition: "NX",
+              expiration: {
+                type: "PX",
+                value: setOptions.ttlMs
+              }
+            }
+          );
+
+          return result === "OK";
+        },
+        async () => fallbackAccepted,
+        options.onDegraded
+      );
     }
   };
 
@@ -149,6 +238,7 @@ export function createRedisRuntimeCache(options: CreateRedisRuntimeCacheOptions)
     try {
       return await operation(await getConnectedClient());
     } catch (error) {
+      degradationCount += 1;
       onDegraded?.(error);
       return fallbackOperation();
     }
@@ -189,5 +279,11 @@ function serializeRuntimeCacheValue(value: RuntimeCacheJsonValue): string {
 function assertPositiveFiniteMs(valueMs: number, label: string): void {
   if (!Number.isFinite(valueMs) || valueMs <= 0) {
     throw new RangeError(`${label} must be a positive finite number`);
+  }
+}
+
+function assertInteger(value: unknown, label: string): asserts value is number {
+  if (!Number.isSafeInteger(value)) {
+    throw new TypeError(`${label} must be a safe integer`);
   }
 }

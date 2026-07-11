@@ -1260,6 +1260,10 @@ function createUserRecord(overrides: Partial<UserRecord> = {}): UserRecord {
 
 function createThrowingRuntimeCache(): RuntimeCache {
   return {
+    backend: "memory",
+    async isAvailable() {
+      return false;
+    },
     async get() {
       throw new Error("runtime cache get failed");
     },
@@ -1268,6 +1272,12 @@ function createThrowingRuntimeCache(): RuntimeCache {
     },
     async delete() {
       throw new Error("runtime cache delete failed");
+    },
+    async increment() {
+      throw new Error("runtime cache increment failed");
+    },
+    async setIfAbsent() {
+      throw new Error("runtime cache setIfAbsent failed");
     }
   };
 }
