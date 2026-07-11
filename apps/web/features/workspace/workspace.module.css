@@ -4709,6 +4709,10 @@
   padding: 12px;
 }
 
+.deploymentDisclosure:not([open]) .deploymentDisclosureBody {
+  display: none;
+}
+
 .deploymentDisclosureBody .deploymentSection {
   border-top: 0;
   padding-top: 0;
