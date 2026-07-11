@@ -46,7 +46,8 @@ import {
   uploadProjectAsset,
   validateTerraformCode,
   verifyAwsConnection,
-  verifyAwsConnectionCreatedRole
+  verifyAwsConnectionCreatedRole,
+  type LiveObservationStreamFailure
 } from "./api";
 import type { Project } from "../../../../packages/types/src";
 import { clearStoredAuthSession, writeStoredAuthSession } from "../../lib/auth-storage";
@@ -172,6 +173,7 @@ test("Live Observation stream falls back to authenticated snapshot GET", async (
   const session = createLiveObservationSessionPayload();
   const snapshot = createLiveObservationSnapshotPayload("stopped");
   const received: unknown[] = [];
+  const failures: LiveObservationStreamFailure[] = [];
 
   context.after(() => {
     globalThis.fetch = originalFetch;
@@ -191,6 +193,7 @@ test("Live Observation stream falls back to authenticated snapshot GET", async (
   await streamLiveObservationSnapshots({
     deploymentId: session.deploymentId,
     observationId: session.id,
+    onError: (failure) => failures.push(failure),
     onSnapshot: (value) => received.push(value),
     retryBaseDelayMs: 0,
     signal: new AbortController().signal
@@ -198,6 +201,63 @@ test("Live Observation stream falls back to authenticated snapshot GET", async (
 
   assert.equal(requests.length, 2);
   assert.deepEqual(received, [snapshot]);
+  assert.equal(failures.length, 1);
+  assert.equal(failures[0]?.source, "stream");
+  assert.equal(failures[0]?.retryCount, 0);
+  assert.ok(failures[0]?.error instanceof Error);
+});
+
+test("Live Observation stream does not report an already-aborted signal as an error", async () => {
+  const controller = new AbortController();
+  const failures: LiveObservationStreamFailure[] = [];
+  controller.abort();
+
+  await streamLiveObservationSnapshots({
+    deploymentId: "deployment-1",
+    observationId: "observation-1",
+    onError: (failure) => failures.push(failure),
+    onSnapshot: () => undefined,
+    signal: controller.signal
+  });
+
+  assert.deepEqual(failures, []);
+});
+
+test("Live Observation stream identifies snapshot polling failures while retrying", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const controller = new AbortController();
+  const failures: LiveObservationStreamFailure[] = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+  installAuthSession();
+
+  globalThis.fetch = async () => new Response(null, { status: 503 });
+
+  await streamLiveObservationSnapshots({
+    deploymentId: "deployment-1",
+    observationId: "observation-1",
+    onError: (failure) => {
+      failures.push(failure);
+      if (failure.source === "snapshot-poll") {
+        controller.abort();
+      }
+    },
+    onSnapshot: () => undefined,
+    retryBaseDelayMs: 0,
+    signal: controller.signal
+  });
+
+  assert.deepEqual(
+    failures.map(({ retryCount, source }) => ({ retryCount, source })),
+    [
+      { retryCount: 0, source: "stream" },
+      { retryCount: 0, source: "snapshot-poll" }
+    ]
+  );
 });
 
 test("listGitHubInstalledRepositories fetches GitHub App installation repository candidates", async (context) => {

@@ -46,6 +46,19 @@ test("modal uses compact operational rails around one shared map stage", () => {
   assert.match(modalSource, /liveObservationControlRail/);
 });
 
+test("modal reports recoverable stream delays separately and clears them on recovery", () => {
+  assert.match(modalSource, /streamErrorMessage/);
+  assert.match(modalSource, /onError:\s*\(\)\s*=>\s*\{?[\s\S]{0,160}setStreamErrorMessage/);
+  assert.match(
+    modalSource,
+    /onSnapshot:\s*\(nextSnapshot\)[\s\S]{0,180}setStreamErrorMessage\(""\)/
+  );
+  assert.doesNotMatch(
+    modalSource,
+    /streamLiveObservationSnapshots\(\{[\s\S]{0,900}\}\)\.catch\(/
+  );
+});
+
 test("development mock reuses the primary map instead of rendering a preview map", () => {
   assert.equal(modalSource.match(/<LiveObservationSignalMap\s+asgMeta=/g)?.length, 1);
   assert.doesNotMatch(modalSource, /function MockRequestFlowPreview/);

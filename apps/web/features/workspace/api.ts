@@ -737,10 +737,17 @@ export async function stopLiveObservation(
   return response.snapshot;
 }
 
+export type LiveObservationStreamFailure = Readonly<{
+  error: unknown;
+  retryCount: number;
+  source: "stream" | "snapshot-poll";
+}>;
+
 export async function streamLiveObservationSnapshots(input: {
   readonly deploymentId: string;
   readonly observationId: string;
   readonly signal: AbortSignal;
+  readonly onError?: ((failure: LiveObservationStreamFailure) => void) | undefined;
   readonly onSnapshot: (snapshot: LiveObservationSnapshot) => void;
   readonly retryBaseDelayMs?: number | undefined;
 }): Promise<void> {
@@ -752,10 +759,11 @@ export async function streamLiveObservationSnapshots(input: {
       if (finalStatus && finalStatus !== "active") {
         return;
       }
-    } catch {
+    } catch (error) {
       if (input.signal.aborted) {
         return;
       }
+      input.onError?.({ error, retryCount, source: "stream" });
     }
 
     try {
@@ -768,10 +776,11 @@ export async function streamLiveObservationSnapshots(input: {
       if (snapshot.status !== "active") {
         return;
       }
-    } catch {
+    } catch (error) {
       if (input.signal.aborted) {
         return;
       }
+      input.onError?.({ error, retryCount, source: "snapshot-poll" });
     }
 
     const baseDelay = input.retryBaseDelayMs ?? 1_000;

@@ -16,6 +16,12 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-11 - Harden Live Observation Redis and stream recovery
+
+- Replaced sequential Redis counter increment and TTL commands with one Lua `EVAL` operation while preserving in-memory fallback and degradation reporting.
+- Added typed recoverable stream failure notifications for SSE and snapshot polling without changing retry or abort behavior.
+- Separated transient stream delay UI state from action errors and clear it only after snapshot recovery.
+
 ### 2026-07-11 - Retire warm rollback and complete cost-first ECS operations
 
 - Deployed and released the main SHA, aligned API/web/worker images, and verified the one-off worker migration command.
@@ -34,12 +40,15 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Verification
 
+- Redis Runtime Cache tests passed 10/10; Web API client tests passed 34/34; focused Live Observation tests passed 58/58.
 - Focused Web merge regression tests passed 127/127.
 - Focused API Terraform and warning tests passed 12/12.
 - `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check` passed.
+- Full `pnpm test` remains red on unrelated coverage: Web 848/852 with four project/catalog failures and API with nine deployment lock, AI explanation, and resource-catalog failures.
 
 ## Risk
 
+- Full-suite failures outside the Live Observation change set still block branch integration.
 - A one-task baseline has no steady multi-AZ application redundancy; autoscaling is cost-first and reacts to CPU load, not AZ failure.
 - RDS is Single-AZ. Deletion protection, seven-day backups, pre-migration snapshots, and the restore runbook reduce but do not remove outage risk.
 - External customer execution roles may still need the worker task principal added to their trust policy.
@@ -47,4 +56,4 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Next Action
 
-- Push the resolved merge commit and confirm that PR #328 is mergeable.
+- Review and commit the Live Observation reliability fixes, then update PR #328.

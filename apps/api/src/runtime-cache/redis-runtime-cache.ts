@@ -23,8 +23,13 @@ export type RedisRuntimeCacheClient = {
     }
   ): Promise<"OK" | null | unknown>;
   del(key: string): Promise<number>;
-  incrBy(key: string, delta: number): Promise<number>;
-  pExpire(key: string, ttlMs: number): Promise<boolean>;
+  eval(
+    script: string,
+    options: {
+      readonly arguments: readonly string[];
+      readonly keys: readonly string[];
+    }
+  ): Promise<unknown>;
   ping(): Promise<string>;
   on?(event: "error", listener: (error: unknown) => void): unknown;
 };
@@ -41,6 +46,11 @@ export type CreateRedisRuntimeCacheOptions = {
 
 const DEFAULT_REDIS_RUNTIME_CACHE_KEY_PREFIX = "sketchcatch:runtime-cache";
 const DEFAULT_REDIS_CONNECT_COOLDOWN_MS = 10_000;
+const REDIS_ATOMIC_INCREMENT_WITH_TTL_SCRIPT = `
+local nextValue = redis.call('INCRBY', KEYS[1], ARGV[1])
+redis.call('PEXPIRE', KEYS[1], ARGV[2])
+return nextValue
+`;
 
 export function createRedisRuntimeCache(options: CreateRedisRuntimeCacheOptions): RuntimeCache {
   const keyPrefix = options.keyPrefix ?? DEFAULT_REDIS_RUNTIME_CACHE_KEY_PREFIX;
@@ -139,8 +149,14 @@ export function createRedisRuntimeCache(options: CreateRedisRuntimeCacheOptions)
       return runRedisOperation(
         async (redisClient) => {
           const redisKey = createRedisCacheKey(keyPrefix, entryKey);
-          const nextValue = await redisClient.incrBy(redisKey, delta);
-          await redisClient.pExpire(redisKey, setOptions.ttlMs);
+          const nextValue = await redisClient.eval(
+            REDIS_ATOMIC_INCREMENT_WITH_TTL_SCRIPT,
+            {
+              arguments: [String(delta), String(setOptions.ttlMs)],
+              keys: [redisKey]
+            }
+          );
+          assertInteger(nextValue, "Redis Runtime Cache increment result");
           return nextValue;
         },
         async () => fallbackValue,

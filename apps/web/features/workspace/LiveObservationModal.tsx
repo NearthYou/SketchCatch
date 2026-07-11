@@ -92,6 +92,7 @@ export function LiveObservationModal({
   const [listState, setListState] = useState<"loading" | "ready" | "error">("loading");
   const [requestState, setRequestState] = useState<"idle" | "loading">("idle");
   const [errorMessage, setErrorMessage] = useState("");
+  const [streamErrorMessage, setStreamErrorMessage] = useState("");
   const [session, setSession] = useState<LiveObservationSession | null>(null);
   const [snapshot, setSnapshot] = useState<LiveObservationSnapshot | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState("");
@@ -118,6 +119,7 @@ export function LiveObservationModal({
     : 0;
   const isSessionActive =
     session !== null && snapshot?.status === "active" && remainingSeconds > 0;
+  const visibleErrorMessage = errorMessage || streamErrorMessage;
   const instanceMarkers = useMemo(
     () => getLiveObservationInstanceMarkers(snapshot),
     [snapshot]
@@ -307,19 +309,25 @@ export function LiveObservationModal({
 
   useEffect(() => {
     if (!session) {
+      setStreamErrorMessage("");
       return;
     }
 
+    setStreamErrorMessage("");
     const abortController = new AbortController();
     void streamLiveObservationSnapshots({
       deploymentId: session.deploymentId,
       observationId: session.id,
-      onSnapshot: setSnapshot,
+      onError: () => {
+        setStreamErrorMessage(
+          "실시간 연결이 지연되고 있습니다. 최신 상태를 다시 연결합니다."
+        );
+      },
+      onSnapshot: (nextSnapshot) => {
+        setSnapshot(nextSnapshot);
+        setStreamErrorMessage("");
+      },
       signal: abortController.signal
-    }).catch(() => {
-      if (!abortController.signal.aborted) {
-        setErrorMessage("실시간 연결이 지연되고 있습니다. 최신 상태를 다시 연결합니다.");
-      }
     });
 
     return () => abortController.abort();
@@ -570,8 +578,8 @@ export function LiveObservationModal({
               <p>먼저 `demo_web_service` 프로필로 배포를 성공시킨 뒤 다시 열어주세요.</p>
             </div>
           ) : null}
-          {errorMessage ? (
-            <div className={styles.liveObservationError} role="alert">{errorMessage}</div>
+          {visibleErrorMessage ? (
+            <div className={styles.liveObservationError} role="alert">{visibleErrorMessage}</div>
           ) : null}
 
           {session ? (
