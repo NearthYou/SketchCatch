@@ -8,7 +8,6 @@ import { RESOURCE_NODE_DEFAULT_SIZE } from "../diagram-editor/resource-node-geom
 const size = RESOURCE_NODE_DEFAULT_SIZE;
 const vpcAreaSize = { width: 240, height: 160 };
 const subnetAreaSize = { width: 180, height: 120 };
-const securityGroupAreaSize = subnetAreaSize;
 const autoscalingGroupAreaSize = { width: 200, height: 130 };
 
 const groupIconPath = "/Architecture-Group-Icons_07312025";
@@ -324,7 +323,7 @@ const terraformResourcePresentations = [
     category: "Security",
     iconUrl: `${serviceIconPath}/Arch_Security-Identity-Compliance/64/Arch_AWS-Network-Firewall_64.svg`,
     label: "Security Group",
-    size: securityGroupAreaSize
+    size
   },
   {
     definitionId: "aws-security-group-rule",

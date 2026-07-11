@@ -98,7 +98,7 @@ const COMPACT_AREA_MIN_SIZES: Readonly<Record<string, DiagramNode["size"]>> = {
   aws_subnet: { width: 180, height: 120 },
   aws_vpc: { width: 420, height: 280 }
 };
-const AI_RESOURCE_RENDER_TYPES = new Set(["aws_autoscaling_group", "aws_security_group"]);
+const AI_RESOURCE_RENDER_TYPES = new Set(["aws_autoscaling_group"]);
 const AI_RESOURCE_NODE_SIZE: DiagramNode["size"] = { width: 124, height: 96 };
 const EXTERNAL_FLOW_NODE_SIZE: DiagramNode["size"] = { width: 124, height: 96 };
 const SUBNET_PLACEMENT_NODE_SIZE: DiagramNode["size"] = { width: 112, height: 84 };

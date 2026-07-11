@@ -1111,7 +1111,7 @@ test("createAmazonQArchitectureDraftResponse maps the global self-managed SPA qu
   assert.equal(nodes.some((node) => node.type === "ECS_TASK_DEFINITION"), false);
   assert.equal(ec2Nodes.length, 4);
   assert.equal(autoScalingGroup?.config.desiredCapacity, 4);
-  assert.equal(autoScalingGroup?.config.maxSize, 8);
+  assert.equal(autoScalingGroup?.config.maxSize, 12);
   assert.equal(launchTemplate?.config.instanceType, "m7i.large");
   assert.equal(database?.config.allocatedStorage, 200);
   assert.equal(database?.config.instanceClass, "db.r6g.large");
@@ -1145,6 +1145,106 @@ test("createAmazonQArchitectureDraftResponse maps the global self-managed SPA qu
         edge.sourceId === webSocketIntegration?.id &&
         edge.targetId === listener?.id &&
         /WebSocket proxy/iu.test(edge.label ?? "")
+    )
+  );
+});
+
+test("createAmazonQArchitectureDraftResponse sizes a large self-managed API server for burst polling traffic", async () => {
+  const requests: Array<Parameters<AiTextProvider["generate"]>[0]> = [];
+  const provider = createFakeAmazonQProvider((request) => {
+    requests.push(request);
+    return createNormalizedRequirementPlan(request);
+  });
+
+  const response = await createAmazonQArchitectureDraftResponse(
+    { prompt: createKoreanApiServerPollingQuestionnairePrompt() },
+    { provider, creditPolicy: confirmedCreditPolicy }
+  );
+
+  if ("status" in response) {
+    assert.fail(`Expected preview, got clarification: ${response.question}`);
+  }
+
+  const firstPayload = requests[0]?.payload as {
+    architectureDecisionSpace?: {
+      answerProfile?: Record<string, string | undefined>;
+    };
+    normalizedRequirement?: {
+      patternIds?: string[];
+      region?: string;
+      resourceQuantities?: Record<string, number>;
+      runtimeTopology?: {
+        autoScaling?: boolean;
+        compute?: string;
+        computeCount?: number;
+        placement?: string;
+        spreadAcrossPrivateSubnets?: boolean;
+      };
+    };
+  };
+  const answerProfile = firstPayload.architectureDecisionSpace?.answerProfile;
+  assert.equal(answerProfile?.traffic, "bursty");
+  assert.equal(answerProfile?.frontend, "mobile");
+  assert.equal(answerProfile?.backend, "simple_api");
+  assert.equal(answerProfile?.region, "korea");
+  assert.equal(answerProfile?.upload, "image");
+  assert.equal(answerProfile?.realtime, "notification");
+  assert.equal(answerProfile?.management, "self_managed");
+  assert.equal(answerProfile?.latency, "one_second");
+  assert.equal(answerProfile?.availability, "99.9");
+  assert.equal(answerProfile?.budget, "enterprise");
+  assert.ok(firstPayload.normalizedRequirement?.patternIds?.includes("alb-asg-ec2"));
+  assert.ok(firstPayload.normalizedRequirement?.patternIds?.includes("multi-az-rds"));
+  assert.equal(firstPayload.normalizedRequirement?.region, "ap-northeast-2");
+  assert.equal(firstPayload.normalizedRequirement?.runtimeTopology?.compute, "EC2");
+  assert.equal(firstPayload.normalizedRequirement?.runtimeTopology?.computeCount, 4);
+  assert.equal(firstPayload.normalizedRequirement?.runtimeTopology?.autoScaling, true);
+  assert.equal(firstPayload.normalizedRequirement?.runtimeTopology?.placement, "private_subnets");
+  assert.equal(firstPayload.normalizedRequirement?.runtimeTopology?.spreadAcrossPrivateSubnets, true);
+  assert.equal(firstPayload.normalizedRequirement?.resourceQuantities?.EC2, 4);
+
+  const nodes = response.architectureJson.nodes;
+  const edges = response.architectureJson.edges;
+  const ec2Nodes = nodes.filter((node) => node.type === "EC2");
+  const autoScalingGroup = nodes.find((node) => node.type === "AUTO_SCALING_GROUP");
+  const launchTemplate = nodes.find((node) => node.type === "LAUNCH_TEMPLATE");
+  const scalingPolicy = nodes.find((node) => node.type === "AUTO_SCALING_POLICY");
+  const database = nodes.find((node) => node.type === "RDS");
+  const listener = nodes.find((node) => node.type === "LOAD_BALANCER_LISTENER");
+  const targetGroup = nodes.find((node) => node.type === "LOAD_BALANCER_TARGET_GROUP");
+  const uploadBucket = nodes.find(
+    (node) => node.type === "S3" && node.config.bucketPurpose === "user_uploads"
+  );
+
+  assert.equal(ec2Nodes.length, 4);
+  assert.equal(autoScalingGroup?.config.desiredCapacity, 4);
+  assert.equal(autoScalingGroup?.config.maxSize, 12);
+  assert.equal(launchTemplate?.config.instanceType, "m7i.large");
+  assert.equal(scalingPolicy?.config.policyType, "TargetTrackingScaling");
+  assert.deepEqual(scalingPolicy?.config.targetTrackingConfiguration, {
+    targetValue: 55,
+    disableScaleIn: false,
+    predefinedMetricSpecification: {
+      predefinedMetricType: "ASGAverageCPUUtilization"
+    }
+  });
+  assert.equal(database?.config.allocatedStorage, 50);
+  assert.equal(database?.config.instanceClass, "db.r6g.large");
+  assert.equal(database?.config.multiAz, true);
+  assert.equal(uploadBucket?.config.bucketPrefix, "sketchcatch-image-uploads-");
+  assert.equal(listener?.config.protocol, "HTTPS");
+  assert.equal(listener?.config.port, 443);
+  assert.ok(
+    edges.some(
+      (edge) =>
+        edge.sourceId === listener?.id &&
+        edge.targetId === targetGroup?.id &&
+        /polling API requests \(cost warning\)/iu.test(edge.label ?? "")
+    )
+  );
+  assert.ok(
+    response.metadata.assumptions.some((assumption) =>
+      /polling.*cost.*traffic spikes/iu.test(assumption)
     )
   );
 });
@@ -3475,7 +3575,8 @@ test("createAmazonQArchitectureDraftResponse asks Amazon Q to regenerate preview
   }
 
   assert.equal(requestedPrompts.length, 2);
-  assert.match(requestedPrompts[0] ?? "", /Layout rules: VPC, SUBNET, and SECURITY_GROUP/);
+  assert.match(requestedPrompts[0] ?? "", /Layout rules: VPC and SUBNET nodes are area boxes/);
+  assert.match(requestedPrompts[0] ?? "", /SECURITY_GROUP nodes are regular VPC-scoped resource icons/);
   assert.match(requestedPrompts[1] ?? "", /failed SketchCatch self-validation/);
   assert.match(requestedPrompts[1] ?? "", /fully inside parent area/);
   assert.match(requestedPrompts[1] ?? "", /overlap without full containment/);
@@ -4117,6 +4218,26 @@ function createGlobalSelfManagedSpaQuestionnairePrompt(): string {
     "downtime tolerance: zero downtime 99.99 availability",
     "global scope: CloudFront global with API and RDS single region",
     "realtime transport: WebSocket connection path"
+  ].join("\n");
+}
+
+function createKoreanApiServerPollingQuestionnairePrompt(): string {
+  return [
+    "website type: API server mobile app backend",
+    "traffic: large traffic daily 10000 concurrent 500",
+    "database: simple data user info posts under 10GB",
+    "frontend technology: mobile app native client",
+    "region: Korea only Seoul region ap-northeast-2",
+    "monthly budget: enterprise 200 manwon or more",
+    "SSL HTTPS: required mandatory security important",
+    "file upload: image upload only profile and post images",
+    "realtime feature: realtime data updates stocks games",
+    "management preference: direct management self-managed servers",
+    "loading time target: within 1 second",
+    "website size: 10MB-100MB general website",
+    "traffic pattern: event spike bursty traffic",
+    "downtime tolerance: monthly 1 hour within 99.9 availability",
+    "realtime notification transport: simple polling with cost warning"
   ].join("\n");
 }
 

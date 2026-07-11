@@ -33,7 +33,7 @@ test("connection affordance marks only valid non-duplicate target nodes", () => 
   const source = makeNode({ id: "source-1", resourceType: "aws_instance" });
   const duplicateTarget = makeNode({ id: "duplicate-1", resourceType: "aws_s3_bucket" });
   const validTarget = makeNode({ id: "valid-1", resourceType: "aws_lambda_function" });
-  const lockedTarget = makeNode({ id: "locked-1", locked: true, resourceType: "aws_kms_key" });
+  const lockedTarget = makeNode({ id: "locked-1", locked: true, resourceType: "aws_cloudwatch_log_group" });
   const existingEdge = makeEdge(source.id, duplicateTarget.id);
   const flowNodes = toFlowNodes(
     [source, duplicateTarget, validTarget, lockedTarget],
@@ -66,9 +66,26 @@ test("flow mappers collapse parameter-helper resources from the rendered board",
   const service = makeNode({ id: "ecs-service", resourceType: "aws_ecs_service" });
   const scalingTarget = makeNode({ id: "scaling-target", resourceType: "aws_appautoscaling_target" });
   const dbSubnetGroup = makeNode({ id: "db-subnet-group", resourceType: "aws_db_subnet_group" });
+  const securityGroup = makeNode({ id: "security-group", resourceType: "aws_security_group" });
+  const runtimeRole = makeNode({ id: "runtime-role", resourceType: "aws_iam_role" });
+  const launchTemplate = makeNode({ id: "launch-template", resourceType: "aws_launch_template" });
+  const machineImage = makeNode({ id: "machine-image", resourceType: "aws_ami" });
+  const certificate = makeNode({ id: "certificate", resourceType: "aws_acm_certificate" });
+  const encryptionKey = makeNode({ id: "encryption-key", resourceType: "aws_kms_key" });
   const database = makeNode({ id: "database", resourceType: "aws_db_instance" });
   const flowNodes = toFlowNodes(
-    [service, scalingTarget, dbSubnetGroup, database],
+    [
+      service,
+      scalingTarget,
+      dbSubnetGroup,
+      securityGroup,
+      runtimeRole,
+      launchTemplate,
+      machineImage,
+      certificate,
+      encryptionKey,
+      database
+    ],
     [],
     null,
     false,
@@ -78,19 +95,36 @@ test("flow mappers collapse parameter-helper resources from the rendered board",
     [
       makeEdge(service.id, scalingTarget.id),
       makeEdge(dbSubnetGroup.id, database.id),
+      makeEdge(securityGroup.id, service.id),
+      makeEdge(runtimeRole.id, service.id),
+      makeEdge(launchTemplate.id, service.id),
+      makeEdge(machineImage.id, launchTemplate.id),
+      makeEdge(certificate.id, service.id),
+      makeEdge(encryptionKey.id, database.id),
       makeEdge(service.id, database.id)
     ],
     [],
-    [service, scalingTarget, dbSubnetGroup, database]
+    [
+      service,
+      scalingTarget,
+      dbSubnetGroup,
+      securityGroup,
+      runtimeRole,
+      launchTemplate,
+      machineImage,
+      certificate,
+      encryptionKey,
+      database
+    ]
   );
 
   assert.deepEqual(
     flowNodes.map((node) => node.id),
-    ["ecs-service", "database"]
+    ["ecs-service", "security-group", "database"]
   );
   assert.deepEqual(
     flowEdges.map((edge) => edge.id),
-    ["ecs-service-to-database"]
+    ["security-group-to-ecs-service", "ecs-service-to-database"]
   );
 });
 
@@ -158,14 +192,12 @@ test("toFlowNodes keeps an unselected regular node clickable while another node 
 
 test("toFlowNodes marks area nodes for click-through body hit testing", () => {
   const vpc = makeNode({ id: "vpc-1", resourceType: "aws_vpc" });
-  const securityGroup = makeNode({ id: "security-group-1", resourceType: "aws_security_group" });
   const autoscalingGroup = makeNode({ id: "asg-1", resourceType: "aws_autoscaling_group" });
   const instance = makeNode({ id: "instance-1", resourceType: "aws_instance" });
 
-  const flowNodes = toFlowNodes([vpc, securityGroup, autoscalingGroup, instance], [], null, false, handlers);
+  const flowNodes = toFlowNodes([vpc, autoscalingGroup, instance], [], null, false, handlers);
 
   assert.equal(flowNodes.find((node) => node.id === "vpc-1")?.className, "diagramAreaFlowNode");
-  assert.equal(flowNodes.find((node) => node.id === "security-group-1")?.className, "diagramAreaFlowNode");
   assert.equal(flowNodes.find((node) => node.id === "asg-1")?.className, "diagramAreaFlowNode");
   assert.equal(flowNodes.find((node) => node.id === "instance-1")?.className, undefined);
 });
@@ -183,13 +215,11 @@ test("toFlowNodes keeps selected area nodes pointer-addressable for resize contr
 
 test("toFlowNodes keeps unselected area nodes available for marquee selection", () => {
   const subnet = makeNode({ id: "subnet-1", resourceType: "aws_subnet" });
-  const securityGroup = makeNode({ id: "security-group-1", resourceType: "aws_security_group" });
   const instance = makeNode({ id: "instance-1", resourceType: "aws_instance" });
 
-  const flowNodes = toFlowNodes([subnet, securityGroup, instance], [], null, false, handlers);
+  const flowNodes = toFlowNodes([subnet, instance], [], null, false, handlers);
 
   assert.equal(flowNodes.find((node) => node.id === "subnet-1")?.selectable, true);
-  assert.equal(flowNodes.find((node) => node.id === "security-group-1")?.selectable, true);
   assert.equal(flowNodes.find((node) => node.id === "instance-1")?.selectable, true);
 });
 
@@ -301,22 +331,22 @@ test("toFlowEdges stacks selected area endpoint edges above unselected area endp
     parentAreaNodeId: "region-1",
     resourceType: "aws_instance"
   });
-  const launchTemplate = makeNode({
-    id: "launch-template-1",
+  const loadBalancer = makeNode({
+    id: "load-balancer-1",
     parentAreaNodeId: "region-1",
-    resourceType: "aws_launch_template"
+    resourceType: "aws_lb"
   });
   const autoscalingGroup = makeNode({
     id: "asg-1",
     parentAreaNodeId: "region-1",
     resourceType: "aws_autoscaling_group"
   });
-  const selectedEdge = makeEdge("launch-template-1", "asg-1");
+  const selectedEdge = makeEdge("load-balancer-1", "asg-1");
   const unselectedEdge = makeEdge("instance-1", "asg-1");
   const flowEdges = toFlowEdges(
     [unselectedEdge, selectedEdge],
     [selectedEdge.id],
-    [region, instance, launchTemplate, autoscalingGroup]
+    [region, instance, loadBalancer, autoscalingGroup]
   );
 
   assert.ok(getFlowEdgeZIndex(flowEdges, selectedEdge.id) > getFlowEdgeZIndex(flowEdges, unselectedEdge.id));
@@ -524,9 +554,13 @@ test("stored edge semantics win over conflicting label inference", () => {
 });
 
 test("toFlowEdges renders configuration dependency endpoints as thin solid lines", () => {
-  const key = makeNode({ id: "key-1", resourceType: "aws_kms_key" });
+  const bucket = makeNode({ id: "bucket-1", resourceType: "aws_s3_bucket" });
   const logs = makeNode({ id: "logs-1", resourceType: "aws_cloudwatch_log_group" });
-  const flowEdges = toFlowEdges([{ ...makeEdge("key-1", "logs-1"), id: "key-to-logs", label: "uses" }], [], [key, logs]);
+  const flowEdges = toFlowEdges(
+    [{ ...makeEdge("bucket-1", "logs-1"), id: "bucket-to-logs", label: "depends_on" }],
+    [],
+    [bucket, logs]
+  );
 
   assert.equal(flowEdges[0]?.style?.strokeDasharray, undefined);
   assert.equal(flowEdges[0]?.style?.stroke, "#6b7280");

@@ -21,8 +21,7 @@ const resourceAreaNodeTypes = new Set([
   "aws_availability_zone",
   "aws_autoscaling_group",
   "aws_vpc",
-  "aws_subnet",
-  "aws_security_group"
+  "aws_subnet"
 ]);
 const groupIconPath = "/Architecture-Group-Icons_07312025";
 

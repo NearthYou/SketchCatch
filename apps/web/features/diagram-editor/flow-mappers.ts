@@ -28,16 +28,23 @@ const CONTAINMENT_EDGE_LABELS = new Set(["contains", "hosts"]);
 const EDGE_LABEL_MAX_CHARACTERS = 30;
 const PREVIEW_EDGE_OPACITY = 0.8;
 const COLLAPSED_PARAMETER_RESOURCE_TYPES = new Set([
+  "aws_acm_certificate",
   "aws_acm_certificate_validation",
+  "aws_ami",
   "aws_appautoscaling_policy",
   "aws_appautoscaling_target",
   "aws_db_subnet_group",
   "aws_iam_instance_profile",
   "aws_iam_policy",
+  "aws_iam_role",
+  "aws_key_pair",
+  "aws_kms_key",
   "aws_kms_alias",
   "aws_lambda_permission",
+  "aws_launch_template",
   "aws_lb_target_group_attachment",
-  "aws_route_table_association"
+  "aws_route_table_association",
+  "aws_security_group_rule"
 ]);
 const EDGE_STYLE_LABEL_PATTERNS: ReadonlyArray<{
   readonly patterns: readonly RegExp[];

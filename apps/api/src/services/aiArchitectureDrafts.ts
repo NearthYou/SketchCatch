@@ -73,10 +73,9 @@ const PREVIEW_VISUAL_BOUNDS_HORIZONTAL_MARGIN = 20;
 const PREVIEW_VISUAL_BOUNDS_VERTICAL_MARGIN = 8;
 const PREVIEW_NODE_LAYOUT_SIZES: Partial<Record<ResourceType, LayoutSize>> = {
   VPC: { width: 240, height: 160 },
-  SUBNET: { width: 180, height: 120 },
-  SECURITY_GROUP: { width: 180, height: 120 }
+  SUBNET: { width: 180, height: 120 }
 };
-const PREVIEW_AREA_RESOURCE_TYPES = new Set<ResourceType>(["VPC", "SUBNET", "SECURITY_GROUP"]);
+const PREVIEW_AREA_RESOURCE_TYPES = new Set<ResourceType>(["VPC", "SUBNET"]);
 const PREVIEW_BOUNDARY_RESOURCE_TYPES = new Set<ResourceType>(["INTERNET_GATEWAY"]);
 const PREVIEW_PARENT_EDGE_LABELS = new Set(["contains", "hosts"]);
 const TERRAFORM_REFERENCE_ATTRIBUTE_SUFFIXES = ["id", "arn", "name", "execution_arn"] as const;
@@ -1268,7 +1267,7 @@ function createAmazonQArchitectureDraftInstructions(): string {
     "Use evaluationCriteria and coverageRequirements as capability signals. Do not force a specific resource solely to make diagrams look different.",
     "Use unsupportedSubstitutions when a requested AWS service has no supported ResourceNode.type. Do not invent unsupported ResourceNode.type values.",
     "Do not artificially limit the architecture to one resource per type. If the selected pattern justifies it, use multiple EC2, SUBNET, S3, or other supported resources.",
-    "Layout rules: VPC, SUBNET, and SECURITY_GROUP nodes are area boxes. Nodes related by contains/hosts edges or config references such as vpcId, subnetId, securityGroupIds, or vpcSecurityGroupIds must be fully inside their parent area box.",
+    "Layout rules: VPC and SUBNET nodes are area boxes. SECURITY_GROUP nodes are regular VPC-scoped resource icons, not containers. Nodes related by contains/hosts edges or config references such as vpcId or subnetId must be fully inside their parent area box. Workload placement must prioritize subnetId or explicit subnet references over securityGroupIds or vpcSecurityGroupIds.",
     "Unrelated area boxes must not overlap. If an area belongs inside another area, place it fully inside and include the containment relationship. Boundary resources such as INTERNET_GATEWAY may sit on an area edge, but must not float half-overlapping unrelated areas.",
     "Keep diagram labels readable: non-area nodes must be spaced generously so icons, node labels, and edge labels do not overlap or crowd each other. Prefer at least 240px horizontal spacing or 150px vertical spacing between separate non-area resources.",
     "Layering and edge routing rules: list area/container nodes before their children so containers render behind resources, and do not route visible arrows through unrelated resources or place unrelated resources between connected nodes.",
@@ -2084,7 +2083,10 @@ function createAmazonQPlanDraftResult(
     throw createRequirementsUnsatisfiedError(validationIssues);
   }
 
-  const assumptions = [...(response.assumptions ?? [])];
+  const assumptions = mergeUniqueTextItems(
+    response.assumptions,
+    createDeterministicArchitectureAssumptions(request.prompt)
+  );
   const explanations = [...(response.explanations ?? [])];
 
   return {
@@ -2105,6 +2107,18 @@ function createAmazonQPlanDraftResult(
       providerMetadata
     }
   };
+}
+
+function createDeterministicArchitectureAssumptions(prompt: string): string[] {
+  const normalizedPrompt = prompt.normalize("NFKC").toLowerCase();
+
+  if (resolveRealtimeTransport(normalizedPrompt) !== "polling") {
+    return [];
+  }
+
+  return [
+    "Polling is represented as periodic HTTPS API requests; validate interval, cache headers, and client backoff because polling can increase ALB/EC2/RDS load and cost during traffic spikes."
+  ];
 }
 
 function normalizeArchitecturePlanTopologyInvariants(
@@ -4967,8 +4981,10 @@ function configureCanonicalEc2PatternResources(
   const region = plan?.region ?? "ap-northeast-2";
   const vpcId = "vpc-main";
   const vpcRef = canonicalTerraformReference("aws_vpc", vpcId);
+  const normalizedPrompt = prompt.normalize("NFKC").toLowerCase();
   const computeCount = Math.max(
     2,
+    resolveEc2FleetCapacity(normalizedPrompt),
     plan?.runtimeTopology?.computeCount ?? 0,
     plan?.resourceQuantities?.EC2 ?? 0
   );
@@ -4997,7 +5013,6 @@ function configureCanonicalEc2PatternResources(
     Version: "2012-10-17",
     Statement: [{ Effect: "Allow", Principal: { Service: "ec2.amazonaws.com" }, Action: "sts:AssumeRole" }]
   });
-  const normalizedPrompt = prompt.normalize("NFKC").toLowerCase();
   const uploadProfile = resolveUploadProfile(normalizedPrompt);
   const uploadBucketProfile = uploadProfile === undefined || uploadProfile === "none" ? undefined : uploadProfile;
   const uploadBucketConfig = uploadBucketProfile === undefined ? undefined : resolveUploadBucketConfig(uploadBucketProfile);
@@ -5005,6 +5020,7 @@ function configureCanonicalEc2PatternResources(
   const usesHttps = requiresHttpsTransport(normalizedPrompt);
   const staticWebsiteOriginEnabled = patternIds.has("spa-cloudfront-s3");
   const ec2InstanceType = resolveEc2InstanceType(normalizedPrompt);
+  const ec2ScalingPolicyConfig = resolveEc2AutoScalingPolicyConfig(normalizedPrompt);
   const databaseAllocatedStorage = resolveDatabaseAllocatedStorage(
     normalizedPrompt
   );
@@ -5219,9 +5235,9 @@ function configureCanonicalEc2PatternResources(
       case "LAUNCH_TEMPLATE":
         return { ...node, id: "app-launch-template", label: "EC2 Launch Template", positionX: 620, positionY: 260, config: { namePrefix: "sketchcatch-app-", imageId: canonicalTerraformReference("data.aws_ami", "app-ami"), instanceType: ec2InstanceType, vpcSecurityGroupIds: [canonicalTerraformReference("aws_security_group", "app-security-group")], iamInstanceProfile: { name: canonicalTerraformReference("aws_iam_instance_profile", "app-instance-profile", "name") }, metadataOptions: { httpEndpoint: "enabled", httpTokens: "required" }, monitoring: { enabled: true } } };
       case "AUTO_SCALING_GROUP":
-        return { ...node, id: "app-auto-scaling-group", label: "Application Auto Scaling Group", positionX: 840, positionY: 260, config: { name: "sketchcatch-app", minSize: 2, desiredCapacity: computeCount, maxSize: Math.max(4, computeCount * 2), vpcZoneIdentifier: privateAppSubnetRefs, targetGroupArns: [canonicalTerraformReference("aws_lb_target_group", "app-target-group", "arn")], healthCheckType: "ELB", healthCheckGracePeriod: 120, launchTemplate: { id: canonicalTerraformReference("aws_launch_template", "app-launch-template"), version: "$Latest" } } };
+        return { ...node, id: "app-auto-scaling-group", label: "Application Auto Scaling Group", positionX: 840, positionY: 260, config: { name: "sketchcatch-app", minSize: 2, desiredCapacity: computeCount, maxSize: resolveEc2AutoScalingMaxSize(normalizedPrompt, computeCount), vpcZoneIdentifier: privateAppSubnetRefs, targetGroupArns: [canonicalTerraformReference("aws_lb_target_group", "app-target-group", "arn")], healthCheckType: "ELB", healthCheckGracePeriod: 120, launchTemplate: { id: canonicalTerraformReference("aws_launch_template", "app-launch-template"), version: "$Latest" } } };
       case "AUTO_SCALING_POLICY":
-        return { ...node, id: "app-scaling-policy", label: "CPU Scaling Policy", positionX: 1060, positionY: 260, config: { name: "sketchcatch-cpu-scale-out", autoscalingGroupName: canonicalTerraformReference("aws_autoscaling_group", "app-auto-scaling-group", "name"), policyType: "SimpleScaling", adjustmentType: "ChangeInCapacity", scalingAdjustment: 1, cooldown: 120 } };
+        return { ...node, id: "app-scaling-policy", label: ec2ScalingPolicyConfig.label, positionX: 1060, positionY: 260, config: { name: ec2ScalingPolicyConfig.name, autoscalingGroupName: canonicalTerraformReference("aws_autoscaling_group", "app-auto-scaling-group", "name"), ...ec2ScalingPolicyConfig.config } };
       case "CLOUDFRONT":
         return { ...node, id: "cloudfront-distribution", label: "CloudFront Public Entry", positionX: 80, positionY: 100, config: { ...node.config, originResourceId: "web-assets-bucket", enabled: true, viewerProtocolPolicy: "redirect-to-https" } };
       case "RDS":
@@ -5312,6 +5328,14 @@ function resolveDatabaseAllocatedStorage(normalizedPrompt: string): number {
     return 200;
   }
 
+  if (
+    requiresLargeTrafficCapacity(normalizedPrompt) ||
+    resolveBudgetProfile(normalizedPrompt) === "enterprise" ||
+    resolveLatencyProfile(normalizedPrompt) === "one_second"
+  ) {
+    return 50;
+  }
+
   if (/(10gb\s*[~-]\s*100gb|10gb\s*~\s*100gb|10gb\s+to\s+100gb|중간\s*규모\s*데이터|medium\s+database)/iu.test(normalizedPrompt)) {
     return 50;
   }
@@ -5320,7 +5344,7 @@ function resolveDatabaseAllocatedStorage(normalizedPrompt: string): number {
 }
 
 function resolveDatabaseInstanceClass(normalizedPrompt: string): string {
-  if (requiresLargeDatabaseProfile(normalizedPrompt) || resolveTrafficProfile(normalizedPrompt) === "large") {
+  if (requiresLargeDatabaseProfile(normalizedPrompt) || requiresLargeTrafficCapacity(normalizedPrompt)) {
     return "db.r6g.large";
   }
 
@@ -5334,7 +5358,7 @@ function requiresLargeDatabaseProfile(normalizedPrompt: string): boolean {
 }
 
 function resolveEc2FleetCapacity(normalizedPrompt: string): number {
-  if (resolveTrafficProfile(normalizedPrompt) === "large" || requiresVeryHighAvailability(normalizedPrompt)) {
+  if (requiresLargeTrafficCapacity(normalizedPrompt) || requiresVeryHighAvailability(normalizedPrompt)) {
     return 4;
   }
 
@@ -5342,11 +5366,70 @@ function resolveEc2FleetCapacity(normalizedPrompt: string): number {
 }
 
 function resolveEc2InstanceType(normalizedPrompt: string): string {
-  if (resolveTrafficProfile(normalizedPrompt) === "large" || requiresComplexBackend(normalizedPrompt)) {
+  if (requiresLargeTrafficCapacity(normalizedPrompt) || requiresComplexBackend(normalizedPrompt)) {
     return "m7i.large";
   }
 
   return "t3.small";
+}
+
+function requiresLargeTrafficCapacity(normalizedPrompt: string): boolean {
+  return /(large\s+traffic|10,?000|500\+|concurrent\s+500|daily\s+10000|10000\s+concurrent\s+500)/iu.test(
+    normalizedPrompt
+  );
+}
+
+function requiresAggressiveEc2ScalingProfile(normalizedPrompt: string): boolean {
+  return (
+    requiresLargeTrafficCapacity(normalizedPrompt) &&
+    (resolveTrafficProfile(normalizedPrompt) === "bursty" ||
+      requiresTimeVaryingTraffic(normalizedPrompt) ||
+      resolveLatencyProfile(normalizedPrompt) === "one_second" ||
+      resolveBudgetProfile(normalizedPrompt) === "enterprise")
+  );
+}
+
+function resolveEc2AutoScalingMaxSize(normalizedPrompt: string, computeCount: number): number {
+  if (requiresAggressiveEc2ScalingProfile(normalizedPrompt)) {
+    return Math.max(12, computeCount * 3);
+  }
+
+  return Math.max(4, computeCount * 2);
+}
+
+function resolveEc2AutoScalingPolicyConfig(normalizedPrompt: string): {
+  readonly label: string;
+  readonly name: string;
+  readonly config: Record<string, unknown>;
+} {
+  if (!requiresAggressiveEc2ScalingProfile(normalizedPrompt)) {
+    return {
+      label: "CPU Scaling Policy",
+      name: "sketchcatch-cpu-scale-out",
+      config: {
+        policyType: "SimpleScaling",
+        adjustmentType: "ChangeInCapacity",
+        scalingAdjustment: 1,
+        cooldown: 120
+      }
+    };
+  }
+
+  return {
+    label: "CPU Target Tracking Scaling Policy",
+    name: "sketchcatch-cpu-target-tracking",
+    config: {
+      policyType: "TargetTrackingScaling",
+      targetTrackingConfiguration: {
+        targetValue: 55,
+        disableScaleIn: false,
+        predefinedMetricSpecification: {
+          predefinedMetricType: "ASGAverageCPUUtilization"
+        }
+      },
+      estimatedInstanceWarmup: 120
+    }
+  };
 }
 
 function resolveFargateTaskSizing(normalizedPrompt: string): {
@@ -6259,6 +6342,10 @@ function resolveRealtimeForwardLabel(normalizedPrompt: string): string {
 
   if (realtimeTransport === "websocket") {
     return "WebSocket upgrade";
+  }
+
+  if (realtimeTransport === "polling") {
+    return "polling API requests (cost warning)";
   }
 
   return "forwards";

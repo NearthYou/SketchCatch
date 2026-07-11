@@ -77,13 +77,13 @@ test("isAreaNode matches Region, Availability Zone, Group, and resource area nod
   assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_autoscaling_group" })), true);
   assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_vpc" })), true);
   assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_subnet" })), true);
-  assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_security_group" })), true);
 });
 
 test("isAreaNode excludes regular design and resource nodes", () => {
   assert.equal(isAreaNode(makeDesignNode({ type: "design_note" })), false);
   assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_instance" })), false);
   assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_internet_gateway" })), false);
+  assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_security_group" })), false);
   assert.equal(
     isAreaNode(
       makeResourceNode({
@@ -138,12 +138,6 @@ test("getAreaNodeLabel uses the friendly uppercase board label instead of Terraf
   );
   assert.equal(
     getAreaNodeLabel(
-      makeResourceNode({ label: "Web Security Group", resourceName: "web_sg", resourceType: "aws_security_group" })
-    ),
-    "WEB SECURITY GROUP"
-  );
-  assert.equal(
-    getAreaNodeLabel(
       makeResourceNode({
         label: "Auto Scaling Group",
         resourceName: "auto_scaling_group",
@@ -165,6 +159,12 @@ test("getAreaNodeLabel falls back to node label for design areas and unnamed res
   assert.equal(
     getAreaNodeLabel(makeResourceNode({ label: "VPC", resourceName: "", resourceType: "aws_vpc" })),
     "VPC"
+  );
+  assert.equal(
+    getAreaNodeLabel(
+      makeResourceNode({ label: "Web Security Group", resourceName: "web_sg", resourceType: "aws_security_group" })
+    ),
+    "Web Security Group"
   );
 });
 
