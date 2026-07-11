@@ -80,3 +80,19 @@ test("isWorkspaceAiResultStale only marks existing results stale after board cha
   assert.equal(isWorkspaceAiResultStale(snapshot.fingerprint, snapshot.fingerprint), false);
   assert.equal(isWorkspaceAiResultStale("previous-board", snapshot.fingerprint), true);
 });
+
+test("isWorkspaceAiResultStale rejects an AI result when a resource changes during the request", () => {
+  const requestSnapshot = createWorkspaceAiBoardSnapshot(diagramJson);
+  const changedBoardSnapshot = createWorkspaceAiBoardSnapshot({
+    ...diagramJson,
+    nodes: diagramJson.nodes.map((node) => ({
+      ...node,
+      label: "Changed VPC"
+    }))
+  });
+
+  assert.equal(
+    isWorkspaceAiResultStale(requestSnapshot.fingerprint, changedBoardSnapshot.fingerprint),
+    true
+  );
+});

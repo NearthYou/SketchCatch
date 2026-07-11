@@ -22,6 +22,10 @@ import {
   resolveWorkspaceAiChatMode
 } from "../../../features/workspace/workspace-ai-chat-routing";
 import { createWorkspaceAiPatchPreviewModel } from "../../../features/workspace/workspace-ai-patch-preview";
+import {
+  createWorkspaceAiBoardSnapshot,
+  isWorkspaceAiResultStale
+} from "../../../features/workspace/workspace-ai-panel-state";
 import { applyTerraformCodeReplacement } from "../../../features/workspace/terraform-safe-fixes";
 import { getTerraformFileCode } from "../../../features/workspace/terraform-panel-utils";
 import { createTerraformIssueFixPlan } from "../../../features/workspace/workspace-terraform-ai";
@@ -42,6 +46,7 @@ export type WorkspaceAssistantMessage = {
 };
 
 type PendingBoardPreview = {
+  readonly baseFingerprint: string;
   readonly diagram: DiagramJson;
   readonly summary: string;
 };
@@ -92,9 +97,12 @@ export function useWorkspaceAiAssistant({
   const [pendingTerraformFix, setPendingTerraformFix] = useState<PendingTerraformFix | null>(null);
   const [pendingPatchClarification, setPendingPatchClarification] = useState<{
     readonly baseDiagram: DiagramJson;
+    readonly baseFingerprint: string;
     readonly clarification: ArchitecturePatchClarification;
   } | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const diagramRef = useRef(context.diagram);
+  diagramRef.current = context.diagram;
   const storageKey = useMemo(() => createWorkspaceAiChatStorageKey(projectId), [projectId]);
   const voice = useBrowserVoiceInput({ onChange: setInput, value: input });
 
@@ -113,6 +121,20 @@ export function useWorkspaceAiAssistant({
   const appendMessage = useCallback((message: Omit<WorkspaceAssistantMessage, "id">): void => {
     setMessages((current) => [...current, { ...message, id: crypto.randomUUID() }].slice(-80));
   }, []);
+
+  // AI 요청 이후 Board가 바뀌었으면 오래된 응답과 미리보기를 버립니다.
+  const rejectStaleBoardResult = useCallback((baseFingerprint: string): boolean => {
+    const currentFingerprint = createWorkspaceAiBoardSnapshot(diagramRef.current).fingerprint;
+    if (!isWorkspaceAiResultStale(baseFingerprint, currentFingerprint)) return false;
+
+    const message = "AI 요청 뒤 Architecture Board가 바뀌었습니다. 현재 Board 기준으로 다시 요청해주세요.";
+    context.setPreviewDiagram(null);
+    setPendingBoardPreview(null);
+    setPendingPatchClarification(null);
+    setErrorMessage(message);
+    appendMessage({ content: message, role: "assistant", state: "error" });
+    return true;
+  }, [appendMessage, context]);
 
   // 자연어 요청을 새 Architecture 또는 현재 Board 수정 미리보기로 보냅니다.
   const send = useCallback(async (overridePrompt?: string): Promise<void> => {
@@ -136,16 +158,19 @@ export function useWorkspaceAiAssistant({
     abortControllerRef.current = controller;
     setRequestState("sending");
     setErrorMessage("");
+    const baseDiagram = context.diagram;
+    const boardSnapshot = createWorkspaceAiBoardSnapshot(baseDiagram);
 
     try {
       setRequestState("generating");
       const mode = resolveWorkspaceAiChatMode({
-        boardHasResources: context.diagram.nodes.length > 0,
+        boardHasResources: boardSnapshot.hasResources,
         prompt
       });
 
       if (mode === "draft") {
         const response = await createAiArchitectureDraft({ prompt }, controller.signal);
+        if (rejectStaleBoardResult(boardSnapshot.fingerprint)) return;
         if (isArchitectureDraftClarification(response)) {
           appendMessage({
             content: response.question,
@@ -157,17 +182,26 @@ export function useWorkspaceAiAssistant({
         }
         const diagram = getDiagramJsonForArchitectureDraft(response);
         context.setPreviewDiagram(diagram);
-        setPendingBoardPreview({ diagram, summary: response.title });
+        setPendingBoardPreview({
+          baseFingerprint: boardSnapshot.fingerprint,
+          diagram,
+          summary: response.title
+        });
         appendMessage({ content: `${response.title} 제안을 만들었습니다.`, role: "assistant", state: "preview" });
         return;
       }
 
       const response = await createAiArchitecturePatchPreview({
-        architectureJson: convertDiagramJsonToArchitectureJson(context.diagram),
+        architectureJson: boardSnapshot.architectureJson,
         instruction: prompt
       }, controller.signal);
+      if (rejectStaleBoardResult(boardSnapshot.fingerprint)) return;
       if (isArchitecturePatchClarification(response)) {
-        setPendingPatchClarification({ baseDiagram: context.diagram, clarification: response });
+        setPendingPatchClarification({
+          baseDiagram,
+          baseFingerprint: boardSnapshot.fingerprint,
+          clarification: response
+        });
         appendMessage({
           content: response.question,
           role: "assistant",
@@ -176,9 +210,13 @@ export function useWorkspaceAiAssistant({
         });
         return;
       }
-      const preview = createWorkspaceAiPatchPreviewModel(context.diagram, response);
+      const preview = createWorkspaceAiPatchPreviewModel(baseDiagram, response);
       context.setPreviewDiagram(preview.visualPreviewDiagram, preview.annotations);
-      setPendingBoardPreview({ diagram: preview.proposedDiagram, summary: response.intent.instruction });
+      setPendingBoardPreview({
+        baseFingerprint: boardSnapshot.fingerprint,
+        diagram: preview.proposedDiagram,
+        summary: response.intent.instruction
+      });
       appendMessage({
         content: `${response.changes.length}개 변경 제안을 만들었습니다.`,
         role: "assistant",
@@ -193,7 +231,7 @@ export function useWorkspaceAiAssistant({
       if (!controller.signal.aborted) setRequestState("idle");
       abortControllerRef.current = null;
     }
-  }, [appendMessage, context, input, requestState]);
+  }, [appendMessage, context, input, rejectStaleBoardResult, requestState]);
 
   // 앞선 수정 질문의 선택지는 새 요청으로 분류하지 않고 원래 Resource ID와 함께 이어서 보냅니다.
   const answerSuggestion = useCallback(async (suggestion: string): Promise<void> => {
@@ -201,7 +239,8 @@ export function useWorkspaceAiAssistant({
       await send(suggestion);
       return;
     }
-    const { baseDiagram, clarification } = pendingPatchClarification;
+    const { baseDiagram, baseFingerprint, clarification } = pendingPatchClarification;
+    if (rejectStaleBoardResult(baseFingerprint)) return;
     const candidate = findPatchClarificationCandidate(clarification, suggestion);
     const selectedSuggestion = findPatchClarificationSuggestion(clarification, suggestion);
     setPendingPatchClarification(null);
@@ -221,8 +260,9 @@ export function useWorkspaceAiAssistant({
         ...(candidate && !useAsConnection ? { selectedTargetResourceId: candidate.resourceId } : {}),
         ...(isSkipSuggestion ? { skipConnection: true } : {})
       });
+      if (rejectStaleBoardResult(baseFingerprint)) return;
       if (isArchitecturePatchClarification(response)) {
-        setPendingPatchClarification({ baseDiagram, clarification: response });
+        setPendingPatchClarification({ baseDiagram, baseFingerprint, clarification: response });
         appendMessage({
           content: response.question,
           role: "assistant",
@@ -233,7 +273,11 @@ export function useWorkspaceAiAssistant({
       }
       const preview = createWorkspaceAiPatchPreviewModel(baseDiagram, response);
       context.setPreviewDiagram(preview.visualPreviewDiagram, preview.annotations);
-      setPendingBoardPreview({ diagram: preview.proposedDiagram, summary: response.intent.instruction });
+      setPendingBoardPreview({
+        baseFingerprint,
+        diagram: preview.proposedDiagram,
+        summary: response.intent.instruction
+      });
       appendMessage({ content: `${response.changes.length}개 변경 제안을 만들었습니다.`, role: "assistant", state: "preview" });
     } catch (error) {
       const message = toAssistantError(error);
@@ -242,7 +286,7 @@ export function useWorkspaceAiAssistant({
     } finally {
       setRequestState("idle");
     }
-  }, [appendMessage, context, pendingPatchClarification, send]);
+  }, [appendMessage, context, pendingPatchClarification, rejectStaleBoardResult, send]);
 
   // 현재 Terraform 코드 또는 첫 진단을 쉬운 설명과 안전한 수정 미리보기로 바꿉니다.
   const explainTerraform = useCallback(async (): Promise<void> => {
@@ -331,11 +375,12 @@ export function useWorkspaceAiAssistant({
   // 사용자가 승인한 Architecture 미리보기만 실제 Board에 적용합니다.
   const applyBoardPreview = useCallback((): void => {
     if (!pendingBoardPreview) return;
+    if (rejectStaleBoardResult(pendingBoardPreview.baseFingerprint)) return;
     context.applyDiagramJson(pendingBoardPreview.diagram);
     context.setPreviewDiagram(null);
     appendMessage({ content: `${pendingBoardPreview.summary} 제안을 Board에 적용했습니다.`, role: "assistant", state: "completed" });
     setPendingBoardPreview(null);
-  }, [appendMessage, context, pendingBoardPreview]);
+  }, [appendMessage, context, pendingBoardPreview, rejectStaleBoardResult]);
 
   // 사용자가 승인한 Terraform 수정안만 편집 중인 코드에 적용합니다.
   const applyTerraformFix = useCallback((): void => {
