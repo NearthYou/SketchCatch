@@ -308,6 +308,8 @@ test("architecture provider reads persistent verification cache without connecti
     region: "ap-southeast-2",
     retrievalApplicationId: "retrieval-app",
     runtimeCache: {
+      backend: "memory",
+      isAvailable: async () => true,
       get: async <TValue>() => {
         const documentId = cachedDocumentIds[nextCachedDocumentIndex]!;
         nextCachedDocumentIndex += 1;
@@ -325,7 +327,9 @@ test("architecture provider reads persistent verification cache without connecti
         }
       },
       set: async () => undefined,
-      delete: async () => false
+      delete: async () => false,
+      increment: async () => 1,
+      setIfAbsent: async () => true
     },
     retrievalClient: {
       send: async () => assert.fail("Q retrieval must not run when every citation is cached")
@@ -352,11 +356,15 @@ test("architecture provider keeps verified Q citations in persistent cache for s
     region: "ap-southeast-2",
     retrievalApplicationId: "retrieval-app",
     runtimeCache: {
+      backend: "memory",
+      isAvailable: async () => true,
       get: async () => null,
       set: async (_key, _value, options) => {
         persistedTtlMs = options?.ttlMs ?? 0;
       },
-      delete: async () => false
+      delete: async () => false,
+      increment: async () => 1,
+      setIfAbsent: async () => true
     },
     retrievalClient: {
       send: async (command) => {

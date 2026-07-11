@@ -931,7 +931,96 @@ test("createAmazonQArchitectureDraftResponse maps the Korean SPA questionnaire t
       (edge) =>
         edge.sourceId === listener?.id &&
         edge.targetId === targetGroup?.id &&
-        /POST \/messages \+ SSE \/events/iu.test(edge.label ?? "")
+        /SSE \/events notification stream/iu.test(edge.label ?? "")
+    )
+  );
+});
+
+test("createAmazonQArchitectureDraftResponse maps the Korean SSR mixed-upload questionnaire to Seoul Fargate SSE notifications", async () => {
+  const requests: Array<Parameters<AiTextProvider["generate"]>[0]> = [];
+  const provider = createFakeAmazonQProvider((request) => {
+    requests.push(request);
+    return createNormalizedRequirementPlan(request);
+  });
+
+  const response = await createAmazonQArchitectureDraftResponse(
+    { prompt: createKoreanSsrMixedUploadQuestionnairePrompt() },
+    { provider, creditPolicy: confirmedCreditPolicy }
+  );
+
+  if ("status" in response) {
+    assert.fail(`Expected preview, got clarification: ${response.question}`);
+  }
+
+  const firstPayload = requests[0]?.payload as {
+    architectureDecisionSpace?: {
+      answerProfile?: Record<string, string | undefined>;
+    };
+    normalizedRequirement?: {
+      patternIds?: string[];
+      region?: string;
+      runtimeTopology?: {
+        compute?: string;
+        autoScaling?: boolean;
+      };
+    };
+  };
+  const answerProfile = firstPayload.architectureDecisionSpace?.answerProfile;
+  assert.equal(answerProfile?.traffic, "bursty");
+  assert.equal(answerProfile?.frontend, "ssr");
+  assert.equal(answerProfile?.backend, "simple_api");
+  assert.equal(answerProfile?.region, "korea");
+  assert.equal(answerProfile?.upload, "mixed");
+  assert.equal(answerProfile?.realtime, "notification");
+  assert.equal(answerProfile?.management, "semi_managed");
+  assert.equal(answerProfile?.availability, "99");
+  assert.equal(answerProfile?.budget, "high");
+  assert.equal(firstPayload.normalizedRequirement?.region, "ap-northeast-2");
+  assert.ok(firstPayload.normalizedRequirement?.patternIds?.includes("ecs-fargate"));
+  assert.equal(
+    firstPayload.normalizedRequirement?.patternIds?.includes("spa-cloudfront-s3"),
+    false
+  );
+  assert.ok(firstPayload.normalizedRequirement?.patternIds?.includes("multi-az-rds"));
+  assert.equal(firstPayload.normalizedRequirement?.runtimeTopology?.compute, "ECS_FARGATE");
+  assert.equal(firstPayload.normalizedRequirement?.runtimeTopology?.autoScaling, true);
+
+  const nodes = response.architectureJson.nodes;
+  const edges = response.architectureJson.edges;
+  const subnets = nodes.filter((node) => node.type === "SUBNET");
+  const listener = nodes.find((node) => node.type === "LOAD_BALANCER_LISTENER");
+  const targetGroup = nodes.find((node) => node.type === "LOAD_BALANCER_TARGET_GROUP");
+  const database = nodes.find((node) => node.type === "RDS");
+  const uploadBucket = nodes.find(
+    (node) => node.type === "S3" && node.config.bucketPurpose === "user_uploads"
+  );
+  const cloudFront = nodes.find((node) => node.type === "CLOUDFRONT");
+  const taskDefinition = nodes.find((node) => node.type === "ECS_TASK_DEFINITION");
+
+  assert.ok(nodes.some((node) => node.type === "ECS_SERVICE"));
+  assert.equal(nodes.some((node) => node.type === "EC2"), false);
+  assert.equal(listener?.config.protocol, "HTTPS");
+  assert.equal(listener?.config.port, 443);
+  assert.ok(nodes.some((node) => node.type === "ACM_CERTIFICATE"));
+  assert.ok(nodes.some((node) => node.type === "APPLICATION_AUTO_SCALING_TARGET"));
+  assert.ok(nodes.some((node) => node.type === "APPLICATION_AUTO_SCALING_POLICY"));
+  assert.equal(database?.config.allocatedStorage, 50);
+  assert.equal(database?.config.multiAz, true);
+  assert.ok(
+    subnets.every((node) => String(node.config.availabilityZone ?? "").startsWith("ap-northeast-2"))
+  );
+  assert.ok(uploadBucket);
+  assert.equal(uploadBucket.config.bucketPrefix, "sketchcatch-file-uploads-");
+  assert.match(uploadBucket.label ?? "", /Mixed File/u);
+  assert.doesNotMatch(`${uploadBucket.id} ${uploadBucket.label ?? ""}`, /image/iu);
+  assert.match(String(taskDefinition?.label ?? ""), /SSR/u);
+  assert.equal(cloudFront?.config.originResourceId, "application-load-balancer");
+  assert.ok(
+    edges.some(
+      (edge) =>
+        edge.sourceId === listener?.id &&
+        edge.targetId === targetGroup?.id &&
+        /SSE \/events notification stream/iu.test(edge.label ?? "")
     )
   );
 });
@@ -3750,6 +3839,27 @@ function createKoreanSpaQuestionnairePrompt(): string {
     "월 1시간 이내 (99.9% 가용성)",
     "실시간 채팅 연결은 어떤 방식으로 표현할까요?",
     "HTTP 메시지 전송 + SSE 수신 경로"
+  ].join("\n");
+}
+
+function createKoreanSsrMixedUploadQuestionnairePrompt(): string {
+  return [
+    "website type: dynamic web application shopping mall board member system",
+    "traffic: medium traffic daily 1000 concurrent 50",
+    "traffic pattern: event spike bursty traffic",
+    "database: medium data 10GB to 100GB",
+    "frontend technology: Next.js Nuxt.js SSR server side rendering required",
+    "backend: simple API Node.js Python Flask",
+    "region: Korea only Seoul region ap-northeast-2",
+    "monthly budget: 50-200 manwon high performance high budget",
+    "SSL HTTPS: required mandatory",
+    "file upload: mixed files documents and video included",
+    "realtime feature: realtime notification",
+    "management preference: semi-managed some server management",
+    "loading time target: within 5 seconds",
+    "website size: 10MB-100MB general website",
+    "downtime tolerance: monthly 8 hours within 99% availability",
+    "realtime notification transport: SSE one-way notification path"
   ].join("\n");
 }
 

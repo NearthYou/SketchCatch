@@ -142,11 +142,20 @@ export function validateArchitectureOperationalRequirements(
   }
 
   if (requirements.realtimeTransport === "sse") {
-    const hasSsePath = edges.some(
-      (edge) => /\bsse\b/iu.test(edge.label ?? "") && /post|message|메시지/iu.test(edge.label ?? "")
-    );
-    if (!hasSsePath) {
-      issues.push("HTTP message submission with SSE requires explicit POST and SSE event paths.");
+    if (requirements.realtime === "notification") {
+      const hasSsePath = edges.some(
+        (edge) => /\bsse\b/iu.test(edge.label ?? "") && /(notification|notify|events?|alert|알림)/iu.test(edge.label ?? "")
+      );
+      if (!hasSsePath) {
+        issues.push("SSE notification behavior requires an explicit SSE event notification path.");
+      }
+    } else {
+      const hasSsePath = edges.some(
+        (edge) => /\bsse\b/iu.test(edge.label ?? "") && /post|message|메시지/iu.test(edge.label ?? "")
+      );
+      if (!hasSsePath) {
+        issues.push("HTTP message submission with SSE requires explicit POST and SSE event paths.");
+      }
     }
   }
 
@@ -262,7 +271,9 @@ function applyRealtimeFlow(
 
   const label =
     requirements.realtimeTransport === "sse"
-      ? "POST /messages + SSE /events"
+      ? requirements.realtime === "notification"
+        ? "SSE /events notification stream"
+        : "POST /messages + SSE /events"
       : requirements.realtimeTransport === "websocket"
         ? "WebSocket upgrade"
         : "client polling";

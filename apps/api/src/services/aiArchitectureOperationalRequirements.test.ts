@@ -71,6 +71,29 @@ test("applyArchitectureOperationalPolicy adds a deployable voice transcription p
   assert.deepEqual(validation, { ok: true });
 });
 
+test("applyArchitectureOperationalPolicy labels SSE notification paths without chat message submission", () => {
+  const architectureJson: ArchitectureJson = {
+    nodes: [
+      { id: "listener", type: "LOAD_BALANCER_LISTENER", label: "ALB HTTPS Listener", positionX: 0, positionY: 0, config: {} },
+      { id: "target", type: "LOAD_BALANCER_TARGET_GROUP", label: "App Target Group", positionX: 220, positionY: 0, config: {} },
+      { id: "ecs", type: "ECS_SERVICE", label: "App", positionX: 440, positionY: 0, config: {} }
+    ],
+    edges: []
+  };
+  const requirements = resolveArchitectureOperationalRequirements(
+    "realtime feature: realtime notification\nrealtime notification transport: SSE one-way notification path"
+  );
+  const applied = applyArchitectureOperationalPolicy(architectureJson, requirements);
+  const validation = validateArchitectureOperationalRequirements(requirements, applied);
+
+  assert.equal(requirements.realtime, "notification");
+  assert.equal(requirements.realtimeTransport, "sse");
+  assert.ok(
+    applied.edges.some((edge) => /SSE \/events notification stream/u.test(edge.label ?? ""))
+  );
+  assert.deepEqual(validation, { ok: true });
+});
+
 test("validateArchitectureOperationalRequirements returns typed issues instead of throwing", () => {
   const requirements = resolveArchitectureOperationalRequirements(
     "HTTPS 필수, 실시간 채팅 SSE, 이벤트성 급증, 음성 전사"

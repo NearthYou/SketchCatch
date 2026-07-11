@@ -1397,10 +1397,10 @@ function createAmazonQArchitectureBrief(prompt: string): string {
   if (hasNoFileUploadRequirement(normalizedPrompt)) {
     requirements.push("- ABSOLUTE CONSTRAINT: The user selected no file upload. Do not create upload/media buckets, presigned URL flows, file-processing resources, or upload-specific IAM policies.");
     validation.push("- Any S3 bucket or IAM path named upload, media, image, attachment, presigned, or file upload violates the selected no-upload answer.");
-  } else if (requiresImageUpload(normalizedPrompt)) {
-    requirements.push("- Capability signal needed: upload/media handling with validation, access, lifecycle, and direct-upload assumptions when selected.");
-    flows.push("- Client -> selected upload path -> selected media storage representation.");
-    validation.push("- requirementCoverage must name upload/media handling and the supported node ids or limitation.");
+  } else if (requiresUploadStorage(normalizedPrompt)) {
+    requirements.push("- Capability signal needed: upload/file handling with validation, access, lifecycle, and direct-upload assumptions when selected.");
+    flows.push("- Client -> selected upload path -> selected private object storage representation.");
+    validation.push("- requirementCoverage must name upload/file handling and the supported node ids or limitation.");
   }
 
   if (hasNoRealtimeRequirement(normalizedPrompt)) {
@@ -1527,8 +1527,8 @@ function findRequirementCoverageValidationIssues(
     issues.push("The user selected global users, HTTPS-sensitive delivery, or a 1-second loading goal, but requirementCoverage does not mention global/static delivery or single-region latency warning.");
   }
 
-  if (requiresImageUpload(normalizedPrompt) && !mentionsUploadCoverage(coverageText)) {
-    issues.push("The user selected image upload, but requirementCoverage does not prove upload/media handling or a supported substitute.");
+  if (requiresUploadStorage(normalizedPrompt) && !mentionsUploadCoverage(coverageText)) {
+    issues.push("The user selected file upload, but requirementCoverage does not prove upload/file handling or a supported substitute.");
   }
 
   if (requiresRealtime(normalizedPrompt) && !mentionsRealtimePath(coverageText)) {
@@ -1681,12 +1681,17 @@ export function createDeterministicArchitectureIntentPlan(prompt: string): Archi
   const amazonQBrief: string[] = [];
   const quantities = resolveArchitectureResourceQuantities(prompt);
   const fargateRuntime = requiresFargateArchitecture(normalizedPrompt);
+  const ssrFrontend = requiresSsrFrontend(normalizedPrompt);
+  const uploadStorageRequired = requiresUploadStorage(normalizedPrompt);
   const forbidsEc2Runtime = explicitlyForbidsEc2Runtime(normalizedPrompt) || fargateRuntime;
 
   if (fargateRuntime) {
     patternIds.add("ecs-fargate");
     if (requiresSpaFrontend(normalizedPrompt)) {
       patternIds.add("spa-cloudfront-s3");
+    } else if (ssrFrontend) {
+      requiredResources.add("CLOUDFRONT");
+      amazonQBrief.push("Use CloudFront as an HTTPS/CDN entry to the ALB for SSR, not as an S3 static-site origin.");
     }
     if (requiresDatabase(normalizedPrompt)) {
       patternIds.add("multi-az-rds");
@@ -1700,6 +1705,11 @@ export function createDeterministicArchitectureIntentPlan(prompt: string): Archi
     amazonQBrief.push("Use ECS Fargate tasks in private subnets without EC2 capacity resources.");
   } else if (forbidsEc2Runtime) {
     forbiddenCapabilities.add("ec2_runtime");
+  }
+
+  if (uploadStorageRequired) {
+    requiredResources.add("S3");
+    resourceQuantities.S3 = Math.max(resourceQuantities.S3 ?? 0, requiresSpaFrontend(normalizedPrompt) ? 2 : 1);
   }
 
   if (requiresAlbEc2TrafficPath(normalizedPrompt)) {
@@ -1742,7 +1752,7 @@ export function createDeterministicArchitectureIntentPlan(prompt: string): Archi
   }
 
   if (quantities.s3Buckets > 1 && requiredResources.has("S3")) {
-    resourceQuantities.S3 = quantities.s3Buckets;
+    resourceQuantities.S3 = Math.max(resourceQuantities.S3 ?? 0, quantities.s3Buckets);
   }
 
   if (hasNoFileUploadRequirement(normalizedPrompt)) {
@@ -2131,9 +2141,12 @@ function normalizeArchitecturePlanTopologyInvariants(
       hasDatabase ? 2 : 1
     );
 
-    if (patternIds.has("spa-cloudfront-s3") && requiresImageUpload(normalizedPrompt)) {
+    if (requiresUploadStorage(normalizedPrompt)) {
       requiredResources.add("S3");
-      resourceQuantities.S3 = Math.max(resourceQuantities.S3 ?? 0, 2);
+      resourceQuantities.S3 = Math.max(
+        resourceQuantities.S3 ?? 0,
+        patternIds.has("spa-cloudfront-s3") ? 2 : 1
+      );
     }
 
     if (requiresHttpsTransport(normalizedPrompt)) {
@@ -2199,9 +2212,12 @@ function normalizeArchitecturePlanTopologyInvariants(
       hasDatabase ? 2 : 1
     );
 
-    if (patternIds.has("spa-cloudfront-s3") && requiresImageUpload(normalizedPrompt)) {
+    if (requiresUploadStorage(normalizedPrompt)) {
       requiredResources.add("S3");
-      resourceQuantities.S3 = Math.max(resourceQuantities.S3 ?? 0, 2);
+      resourceQuantities.S3 = Math.max(
+        resourceQuantities.S3 ?? 0,
+        patternIds.has("spa-cloudfront-s3") ? 2 : 1
+      );
     }
   }
 
@@ -2472,7 +2488,7 @@ function findCanonicalPatternMaterializationIssues(
     !Array.isArray(ecsService.config.networkConfiguration.subnets) ||
     ecsService.config.networkConfiguration.subnets.length !== 2 ||
     !isArchitectureConfigRecord(ecsService.config.loadBalancer) ||
-    ecsService.config.loadBalancer.containerName !== "app" ||
+    !["app", "web"].includes(String(ecsService.config.loadBalancer.containerName ?? "")) ||
     ecsService.config.loadBalancer.containerPort !== 8080
   ) {
     issues.push("The Fargate service must run two private tasks without public IPs.");
@@ -2513,6 +2529,10 @@ function findCanonicalPatternMaterializationIssues(
   if (resolveRealtimeTransport(normalizedPrompt) === "sse") {
     const listener = nodes.find((node) => node.type === "LOAD_BALANCER_LISTENER");
     const database = nodes.find((node) => node.type === "RDS");
+    const expectedSsePathPattern =
+      resolveRealtimeProfile(normalizedPrompt) === "notification"
+        ? /sse \/events notification stream/iu
+        : /post \/messages \+ sse \/events/iu;
 
     if (
       listener === undefined ||
@@ -2521,10 +2541,14 @@ function findCanonicalPatternMaterializationIssues(
         (edge) =>
           edge.sourceId === listener.id &&
           edge.targetId === targetGroup.id &&
-          /post \/messages \+ sse \/events/iu.test(edge.label ?? "")
+          expectedSsePathPattern.test(edge.label ?? "")
       )
     ) {
-      issues.push("SSE requires an explicit POST message and listener-to-target event stream path.");
+      issues.push(
+        resolveRealtimeProfile(normalizedPrompt) === "notification"
+          ? "SSE notifications require an explicit listener-to-target event stream path."
+          : "SSE requires an explicit POST message and listener-to-target event stream path."
+      );
     }
 
     if (
@@ -4102,6 +4126,54 @@ type CanonicalNodeSpec = {
   readonly positionY: number;
 };
 
+type UploadBucketProfile = Exclude<ArchitectureAnswerProfile["upload"], undefined | "none">;
+
+function createUploadBucketSpec(
+  uploadProfile: UploadBucketProfile,
+  positionX: number,
+  positionY: number
+): CanonicalNodeSpec {
+  const bucketConfig = resolveUploadBucketConfig(uploadProfile);
+
+  return canonicalNodeSpec(bucketConfig.id, bucketConfig.label, positionX, positionY, {
+    bucketPrefix: bucketConfig.bucketPrefix,
+    bucketPurpose: "user_uploads",
+    publicAccessBlock: true,
+    forceDestroy: false
+  });
+}
+
+function resolveUploadBucketConfig(uploadProfile: UploadBucketProfile): {
+  readonly id: string;
+  readonly label: string;
+  readonly bucketPrefix: string;
+  readonly policyResourceArn: string;
+} {
+  switch (uploadProfile) {
+    case "image":
+      return {
+        id: "image-upload-bucket",
+        label: "Private Image Upload Bucket",
+        bucketPrefix: "sketchcatch-image-uploads-",
+        policyResourceArn: "arn:aws:s3:::sketchcatch-image-uploads-*/*"
+      };
+    case "large":
+      return {
+        id: "large-file-upload-bucket",
+        label: "Private Large File Upload Bucket",
+        bucketPrefix: "sketchcatch-large-file-uploads-",
+        policyResourceArn: "arn:aws:s3:::sketchcatch-large-file-uploads-*/*"
+      };
+    case "mixed":
+      return {
+        id: "mixed-file-upload-bucket",
+        label: "Private Mixed File Upload Bucket",
+        bucketPrefix: "sketchcatch-file-uploads-",
+        policyResourceArn: "arn:aws:s3:::sketchcatch-file-uploads-*/*"
+      };
+  }
+}
+
 function configureCanonicalPatternResources(
   architectureJson: ArchitectureJson,
   plan: ArchitectureIntentPlan | null,
@@ -4127,15 +4199,20 @@ function configureCanonicalPatternResources(
   const hasDatabase = patternIds.has("multi-az-rds");
   const normalizedPrompt = prompt.normalize("NFKC").toLowerCase();
   const realtimeTransport = resolveRealtimeTransport(normalizedPrompt);
+  const frontendProfile = resolveFrontendProfile(normalizedPrompt);
+  const uploadProfile = resolveUploadProfile(normalizedPrompt);
+  const uploadBucketProfile = uploadProfile === undefined || uploadProfile === "none" ? undefined : uploadProfile;
   const usesHttps = requiresHttpsTransport(normalizedPrompt);
   const usesEcsAutoScaling =
     plan?.runtimeTopology?.autoScaling === true || resolveTrafficProfile(normalizedPrompt) === "bursty";
   const hasLoadBalancer = architectureJson.nodes.some(
     (node) => node.type === "LOAD_BALANCER"
   );
+  const staticWebsiteOriginEnabled = patternIds.has("spa-cloudfront-s3") && frontendProfile !== "ssr";
   const region = plan?.region ?? "ap-northeast-2";
   const vpcId = "vpc-main";
   const vpcRef = canonicalTerraformReference("aws_vpc", vpcId);
+  const uploadBucketConfig = uploadBucketProfile === undefined ? undefined : resolveUploadBucketConfig(uploadBucketProfile);
   const subnetSpecs: CanonicalNodeSpec[] = [
     canonicalSubnetSpec("public-subnet-a", "Public Subnet A", "10.0.0.0/24", `${region}a`, "public", true, 180, 480, vpcRef),
     canonicalSubnetSpec("public-subnet-b", "Public Subnet B", "10.0.1.0/24", `${region}b`, "public", true, 420, 480, vpcRef),
@@ -4226,7 +4303,15 @@ function configureCanonicalPatternResources(
       canonicalNodeSpec("ecs-task-role", "ECS Task Role", 1380, 700, { assumeRolePolicy: roleTrustPolicy })
     ]],
     ["IAM_POLICY", [canonicalNodeSpec("ecs-task-policy", "ECS Task Policy", 1380, 840, {
-      policy: JSON.stringify({ Version: "2012-10-17", Statement: [{ Effect: "Allow", Action: ["logs:CreateLogStream", "logs:PutLogEvents", "s3:GetObject", "s3:PutObject"], Resource: "*" }] })
+      policy: JSON.stringify({
+        Version: "2012-10-17",
+        Statement: [
+          { Effect: "Allow", Action: ["logs:CreateLogStream", "logs:PutLogEvents"], Resource: `arn:aws:logs:${region}:*:log-group:/ecs/sketchcatch-app:*` },
+          ...(uploadBucketConfig === undefined
+            ? []
+            : [{ Effect: "Allow", Action: ["s3:GetObject", "s3:PutObject"], Resource: uploadBucketConfig.policyResourceArn }])
+        ]
+      })
     })]],
     ["CLOUDWATCH_LOG_GROUP", [canonicalNodeSpec("ecs-log-group", "ECS Application Logs", 1180, 840, {
       name: "/ecs/sketchcatch-app",
@@ -4278,7 +4363,19 @@ function configureCanonicalPatternResources(
             canonicalTerraformReference("aws_subnet", "private-db-subnet-b")
           ]
         })]] as const]
-      : [])
+      : []),
+    ["S3", [
+      ...(staticWebsiteOriginEnabled
+        ? [canonicalNodeSpec("web-assets-bucket", "Web Assets Bucket", 180, 100, {
+            bucketPurpose: "static_website_origin",
+            publicAccessBlock: true,
+            forceDestroy: false
+          })]
+        : []),
+      ...(uploadBucketProfile === undefined
+        ? []
+        : [createUploadBucketSpec(uploadBucketProfile, staticWebsiteOriginEnabled ? 380 : 180, 100)])
+    ]]
   ]);
   const replacementById = new Map<string, ArchitectureJson["nodes"][number]>();
 
@@ -4325,11 +4422,11 @@ function configureCanonicalPatternResources(
       case "ECS_CLUSTER":
         return { ...node, id: "ecs-cluster", label: "Fargate ECS Cluster", config: { name: "sketchcatch-app" } };
       case "ECS_TASK_DEFINITION":
-        return { ...node, id: "ecs-task-definition", label: "Fargate Task Definition", config: { family: "sketchcatch-app", networkMode: "awsvpc", requiresCompatibilities: ["FARGATE"], cpu: "512", memory: "1024", executionRoleArn: canonicalTerraformReference("aws_iam_role", "ecs-execution-role", "arn"), taskRoleArn: canonicalTerraformReference("aws_iam_role", "ecs-task-role", "arn"), containerDefinitions: JSON.stringify([{ name: "app", image: "public.ecr.aws/docker/library/nginx:1.27-alpine", essential: true, portMappings: [{ containerPort: 8080, protocol: "tcp" }], logConfiguration: { logDriver: "awslogs", options: { "awslogs-group": "/ecs/sketchcatch-app", "awslogs-region": region, "awslogs-stream-prefix": "app" } } }]) } };
+        return { ...node, id: "ecs-task-definition", label: frontendProfile === "ssr" ? "SSR Fargate Task Definition" : "Fargate Task Definition", config: { family: "sketchcatch-app", networkMode: "awsvpc", requiresCompatibilities: ["FARGATE"], cpu: "512", memory: "1024", executionRoleArn: canonicalTerraformReference("aws_iam_role", "ecs-execution-role", "arn"), taskRoleArn: canonicalTerraformReference("aws_iam_role", "ecs-task-role", "arn"), applicationFramework: frontendProfile === "ssr" ? "next_nuxt_ssr" : undefined, containerDefinitions: JSON.stringify([{ name: frontendProfile === "ssr" ? "web" : "app", image: "public.ecr.aws/docker/library/nginx:1.27-alpine", essential: true, portMappings: [{ containerPort: 8080, protocol: "tcp" }], logConfiguration: { logDriver: "awslogs", options: { "awslogs-group": "/ecs/sketchcatch-app", "awslogs-region": region, "awslogs-stream-prefix": "app" } } }]) } };
       case "ECS_SERVICE":
-        return { ...node, id: "ecs-service", label: "Fargate Application Service", config: { name: "sketchcatch-app", cluster: canonicalTerraformReference("aws_ecs_cluster", "ecs-cluster"), taskDefinition: canonicalTerraformReference("aws_ecs_task_definition", "ecs-task-definition", "arn"), desiredCount: 2, launchType: "FARGATE", healthCheckGracePeriodSeconds: 60, deploymentMinimumHealthyPercent: 100, deploymentMaximumPercent: 200, deploymentCircuitBreaker: { enable: true, rollback: true }, networkConfiguration: { assignPublicIp: false, subnets: privateAppSubnetRefs, securityGroups: [canonicalTerraformReference("aws_security_group", "app-security-group")] }, loadBalancer: { targetGroupArn: canonicalTerraformReference("aws_lb_target_group", "app-target-group", "arn"), containerName: "app", containerPort: 8080 } } };
+        return { ...node, id: "ecs-service", label: "Fargate Application Service", config: { name: "sketchcatch-app", cluster: canonicalTerraformReference("aws_ecs_cluster", "ecs-cluster"), taskDefinition: canonicalTerraformReference("aws_ecs_task_definition", "ecs-task-definition", "arn"), desiredCount: 2, launchType: "FARGATE", healthCheckGracePeriodSeconds: 60, deploymentMinimumHealthyPercent: 100, deploymentMaximumPercent: 200, deploymentCircuitBreaker: { enable: true, rollback: true }, networkConfiguration: { assignPublicIp: false, subnets: privateAppSubnetRefs, securityGroups: [canonicalTerraformReference("aws_security_group", "app-security-group")] }, loadBalancer: { targetGroupArn: canonicalTerraformReference("aws_lb_target_group", "app-target-group", "arn"), containerName: frontendProfile === "ssr" ? "web" : "app", containerPort: 8080 } } };
       case "CLOUDFRONT":
-        return { ...node, config: { ...node.config, ...(staticBucket === undefined ? {} : { originResourceId: staticBucket.id }), enabled: true, viewerProtocolPolicy: "redirect-to-https" } };
+        return { ...node, config: { ...node.config, originResourceId: frontendProfile === "ssr" ? "application-load-balancer" : staticBucket?.id, originType: frontendProfile === "ssr" ? "application" : "static", enabled: true, viewerProtocolPolicy: "redirect-to-https" } };
       case "RDS":
         return { ...node, id: "app-database", label: "Multi-AZ Application Database", config: { engine: "postgres", instanceClass: "db.t4g.small", allocatedStorage: 50, multiAz: true, publiclyAccessible: false, storageEncrypted: true, backupRetentionPeriod: 7, deletionProtection: true, skipFinalSnapshot: false, finalSnapshotIdentifier: "sketchcatch-app-final", dbSubnetGroupName: canonicalTerraformReference("aws_db_subnet_group", "db-subnet-group", "name"), vpcSecurityGroupIds: [canonicalTerraformReference("aws_security_group", "db-security-group")] } };
       case "SECRETS_MANAGER_SECRET":
@@ -4478,9 +4575,7 @@ function configureRequiredHttpsTransport(
     `canonical-${listenerId}-to-${targetGroupId}`,
     listenerId,
     targetGroupId,
-    resolveRealtimeTransport(normalizedPrompt) === "sse"
-      ? "POST /messages + SSE /events"
-      : "forwards"
+    resolveRealtimeForwardLabel(normalizedPrompt)
   );
   addArchitectureEdge(
     edges,
@@ -4535,7 +4630,8 @@ function configureCanonicalEc2PatternResources(
   });
   const normalizedPrompt = prompt.normalize("NFKC").toLowerCase();
   const uploadProfile = resolveUploadProfile(normalizedPrompt);
-  const uploadEnabled = uploadProfile !== undefined && uploadProfile !== "none";
+  const uploadBucketProfile = uploadProfile === undefined || uploadProfile === "none" ? undefined : uploadProfile;
+  const uploadBucketConfig = uploadBucketProfile === undefined ? undefined : resolveUploadBucketConfig(uploadBucketProfile);
   const realtimeTransport = resolveRealtimeTransport(normalizedPrompt);
   const usesHttps = requiresHttpsTransport(normalizedPrompt);
   const staticWebsiteOriginEnabled = patternIds.has("spa-cloudfront-s3");
@@ -4624,13 +4720,14 @@ function configureCanonicalEc2PatternResources(
             Action: ["cloudwatch:PutMetricData", "ssm:UpdateInstanceInformation"],
             Resource: "*"
           },
-          ...(uploadEnabled
-            ? [{
+          ...(uploadBucketConfig === undefined
+            ? []
+            : [{
                 Effect: "Allow",
                 Action: ["s3:GetObject", "s3:PutObject"],
-                Resource: "arn:aws:s3:::sketchcatch-image-uploads-*/*"
+                Resource: uploadBucketConfig.policyResourceArn
               }]
-            : [])
+            )
         ]
       })
     })]],
@@ -4675,20 +4772,9 @@ function configureCanonicalEc2PatternResources(
             forceDestroy: false
           })]
         : []),
-      ...(uploadEnabled
-        ? [canonicalNodeSpec(
-            "image-upload-bucket",
-            "Private Image Upload Bucket",
-            staticWebsiteOriginEnabled ? 380 : 180,
-            100,
-            {
-            bucketPrefix: "sketchcatch-image-uploads-",
-            bucketPurpose: "user_uploads",
-            publicAccessBlock: true,
-            forceDestroy: false
-            }
-          )]
-        : [])
+      ...(uploadBucketProfile === undefined
+        ? []
+        : [createUploadBucketSpec(uploadBucketProfile, staticWebsiteOriginEnabled ? 380 : 180, 100)])
     ]],
     ["EC2", Array.from({ length: computeCount }, (_, index) =>
       canonicalNodeSpec(
@@ -5001,12 +5087,7 @@ function connectCanonicalPatternTopologies(
   const canonicalListenerId = requiresHttpsTransport(normalizedPrompt)
     ? "https-listener"
     : "http-listener";
-  const forwardLabel =
-    realtimeTransport === "sse"
-      ? "POST /messages + SSE /events"
-      : realtimeTransport === "websocket"
-        ? "WebSocket upgrade"
-        : "forwards";
+  const forwardLabel = resolveRealtimeForwardLabel(normalizedPrompt);
 
   for (const node of architectureJson.nodes) {
     nodesByType.set(node.type, [...(nodesByType.get(node.type) ?? []), node]);
@@ -5304,14 +5385,17 @@ function requiresFargateArchitecture(normalizedPrompt: string): boolean {
 }
 
 function prefersQuestionnaireFargateArchitecture(normalizedPrompt: string): boolean {
-  return (
-    requiresApacRegion(normalizedPrompt) &&
-    requiresSpaFrontend(normalizedPrompt) &&
+  const trafficProfile = resolveTrafficProfile(normalizedPrompt);
+  const hasFargateFriendlyTraffic = trafficProfile === "bursty" || trafficProfile === "medium";
+  const hasFargateFriendlyBackend =
     resolveBackendProfile(normalizedPrompt) === "simple_api" &&
     resolveManagementProfile(normalizedPrompt) === "semi_managed" &&
     requiresDatabase(normalizedPrompt) &&
-    (resolveTrafficProfile(normalizedPrompt) === "bursty" ||
-      resolveTrafficProfile(normalizedPrompt) === "medium")
+    hasFargateFriendlyTraffic;
+
+  return (
+    (requiresApacRegion(normalizedPrompt) && requiresSpaFrontend(normalizedPrompt) && hasFargateFriendlyBackend) ||
+    (requiresSsrFrontend(normalizedPrompt) && hasFargateFriendlyBackend)
   );
 }
 
@@ -5415,6 +5499,10 @@ function resolveRegionProfile(normalizedPrompt: string): ArchitectureAnswerProfi
 function resolveUploadProfile(normalizedPrompt: string): ArchitectureAnswerProfile["upload"] {
   if (hasNoFileUploadRequirement(normalizedPrompt)) {
     return "none";
+  }
+
+  if (/(mixed\s+files?|documents?|video)/iu.test(normalizedPrompt)) {
+    return "mixed";
   }
 
   if (/(이미지만|이미지\s*업로드|프로필\s*이미지|게시글\s*이미지|images?\s+only|profile\s+image|post\s+image)/iu.test(normalizedPrompt)) {
@@ -5667,6 +5755,22 @@ function resolveRealtimeTransport(normalizedPrompt: string): RealtimeTransport |
   return undefined;
 }
 
+function resolveRealtimeForwardLabel(normalizedPrompt: string): string {
+  const realtimeTransport = resolveRealtimeTransport(normalizedPrompt);
+
+  if (realtimeTransport === "sse") {
+    return resolveRealtimeProfile(normalizedPrompt) === "notification"
+      ? "SSE /events notification stream"
+      : "POST /messages + SSE /events";
+  }
+
+  if (realtimeTransport === "websocket") {
+    return "WebSocket upgrade";
+  }
+
+  return "forwards";
+}
+
 function mentionsAutoScalingGroup(normalizedPrompt: string): boolean {
   return /(auto\s*scaling\s*group|\basg\b|autoscaling\s*group|\uC624\uD1A0\s*\uC2A4\uCF00\uC77C|\uC790\uB3D9\s*\uD655\uC7A5)/iu.test(
     normalizedPrompt
@@ -5715,6 +5819,16 @@ function requiresNoBackend(normalizedPrompt: string): boolean {
 
 function requiresSpaFrontend(normalizedPrompt: string): boolean {
   return /(spa|single\s*page|react|vue|angular)/iu.test(normalizedPrompt);
+}
+
+function requiresSsrFrontend(normalizedPrompt: string): boolean {
+  return resolveFrontendProfile(normalizedPrompt) === "ssr";
+}
+
+function requiresUploadStorage(normalizedPrompt: string): boolean {
+  const uploadProfile = resolveUploadProfile(normalizedPrompt);
+
+  return uploadProfile !== undefined && uploadProfile !== "none";
 }
 
 function requiresComplexBackend(normalizedPrompt: string): boolean {
