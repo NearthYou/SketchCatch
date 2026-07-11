@@ -78,6 +78,70 @@ test("calculateNodeResize moves only the left boundary when resizing from the bo
   });
 });
 
+test("calculateNodeResize changes only the top edge from the top side handle", () => {
+  const result = calculateNodeResize({
+    bounds,
+    delta: { x: 40, y: 20 },
+    handlePosition: "top",
+    startPosition,
+    startSize,
+    zoom: 2
+  });
+
+  assert.deepEqual(result, {
+    position: { x: 100, y: 90 },
+    size: { width: 200, height: 110 }
+  });
+});
+
+test("calculateNodeResize changes only the right edge from the right side handle", () => {
+  const result = calculateNodeResize({
+    bounds,
+    delta: { x: 40, y: 20 },
+    handlePosition: "right",
+    startPosition,
+    startSize,
+    zoom: 2
+  });
+
+  assert.deepEqual(result, {
+    position: { x: 100, y: 80 },
+    size: { width: 220, height: 120 }
+  });
+});
+
+test("calculateNodeResize changes only the bottom edge from the bottom side handle", () => {
+  const result = calculateNodeResize({
+    bounds,
+    delta: { x: 40, y: 20 },
+    handlePosition: "bottom",
+    startPosition,
+    startSize,
+    zoom: 2
+  });
+
+  assert.deepEqual(result, {
+    position: { x: 100, y: 80 },
+    size: { width: 200, height: 130 }
+  });
+});
+
+test("calculateNodeResize changes only the left edge from the left side handle", () => {
+  const result = calculateNodeResize({
+    bounds,
+    delta: { x: 40, y: 20 },
+    handlePosition: "left",
+    startPosition,
+    startSize,
+    zoom: 2
+  });
+
+  assert.deepEqual(result, {
+    position: { x: 120, y: 80 },
+    size: { width: 180, height: 120 }
+  });
+});
+
 test("calculateNodeResize preserves the opposite edge when the top-left handle hits min bounds", () => {
   const result = calculateNodeResize({
     bounds,
@@ -173,5 +237,49 @@ test("calculateNodeResize converts rectangular resource sizes to a square during
   assert.deepEqual(result, {
     position: { x: 100, y: 80 },
     size: { width: 132, height: 132 }
+  });
+});
+
+test("square top-side resizing keeps the bottom edge fixed and horizontal center stable", () => {
+  const result = calculateNodeResize({
+    bounds: {
+      minWidth: 80,
+      minHeight: 80,
+      maxWidth: 260,
+      maxHeight: 260
+    },
+    delta: { x: 0, y: 30 },
+    handlePosition: "top",
+    resizeMode: "square",
+    startPosition: { x: 100, y: 80 },
+    startSize: { width: 120, height: 120 },
+    zoom: 1
+  });
+
+  assert.deepEqual(result, {
+    position: { x: 115, y: 110 },
+    size: { width: 90, height: 90 }
+  });
+});
+
+test("square right-side resizing keeps the left edge fixed and vertical center stable", () => {
+  const result = calculateNodeResize({
+    bounds: {
+      minWidth: 80,
+      minHeight: 80,
+      maxWidth: 260,
+      maxHeight: 260
+    },
+    delta: { x: 30, y: 0 },
+    handlePosition: "right",
+    resizeMode: "square",
+    startPosition: { x: 100, y: 80 },
+    startSize: { width: 120, height: 120 },
+    zoom: 1
+  });
+
+  assert.deepEqual(result, {
+    position: { x: 100, y: 65 },
+    size: { width: 150, height: 150 }
   });
 });

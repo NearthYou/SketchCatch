@@ -74,6 +74,7 @@ locals {
   api_environment = merge(
     local.api_base_environment,
     {
+      LIVE_OBSERVATION_ENABLED             = tostring(var.live_observation_enabled)
       SKETCHCATCH_AWS_CALLER_PRINCIPAL_ARN = var.enable_ecs_worker_dispatch ? aws_iam_role.ecs_worker_task.arn : aws_iam_role.ecs_task.arn
     },
     var.enable_ecs_worker_dispatch ? {

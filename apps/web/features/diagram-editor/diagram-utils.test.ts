@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { DiagramNode, ResourceItem } from "../../../../packages/types/src";
 import {
-  applyNodeParametersUpdateWithResourceLabel,
+  applyNodeParametersUpdateWithAutoTagSync,
   clearActiveResourceDragPayload,
   createDiagramEdge,
   createDiagramNodeFromPayload,
@@ -67,6 +67,7 @@ test("createDiagramEdge creates thin solid connection lines by default", () => {
 
   assert.equal(edge?.style?.width, "thin");
   assert.equal(edge?.style?.lineStyle, "solid");
+  assert.equal(edge?.style?.color, "#59687d");
 });
 
 test("createDiagramNodeFromPayload stores only VPC safety defaults for new nodes", () => {
@@ -311,6 +312,7 @@ test("createPastedNodes deep clones nested parameter values", () => {
 test("createPastedNodes updates only auto-generated tag names after resource name changes", () => {
   const generatedTagNode = makeResourceNode({
     id: "instance-1",
+    label: "EC2 Instance",
     resourceName: "web",
     resourceType: "aws_instance",
     values: {
@@ -321,6 +323,7 @@ test("createPastedNodes updates only auto-generated tag names after resource nam
   });
   const customTagNode = makeResourceNode({
     id: "instance-2",
+    label: "EC2 Instance",
     resourceName: "api",
     resourceType: "aws_instance",
     values: {
@@ -336,14 +339,31 @@ test("createPastedNodes updates only auto-generated tag names after resource nam
   );
 
   assert.equal(generatedTagCopy?.parameters?.resourceName, "web_copy");
+  assert.equal(generatedTagCopy?.label, "EC2 Instance");
   assert.deepEqual(generatedTagCopy?.parameters?.values.tags, { Name: "web_copy" });
   assert.equal(customTagCopy?.parameters?.resourceName, "api_copy");
+  assert.equal(customTagCopy?.label, "EC2 Instance");
   assert.deepEqual(customTagCopy?.parameters?.values.tags, { Name: "Public API" });
 });
 
-test("applyNodeParametersUpdateWithResourceLabel updates the label from a changed resource name", () => {
+test("createPastedNodes preserves an AMI display label while uniquifying its Terraform name", () => {
+  const ami = makeResourceNode({
+    id: "ami-1",
+    label: "AMI",
+    resourceName: "ami",
+    resourceType: "aws_ami"
+  });
+
+  const [copy] = createPastedNodes([ami], [ami]);
+
+  assert.equal(copy?.label, "AMI");
+  assert.equal(copy?.parameters?.resourceName, "ami_copy");
+});
+
+test("applyNodeParametersUpdateWithAutoTagSync preserves the friendly label on resource rename", () => {
   const node = makeResourceNode({
     id: "instance-1",
+    label: "EC2 Instance",
     resourceName: "web",
     resourceType: "aws_instance"
   });
@@ -351,16 +371,16 @@ test("applyNodeParametersUpdateWithResourceLabel updates the label from a change
 
   assert(parameters);
 
-  const result = applyNodeParametersUpdateWithResourceLabel(node, {
+  const result = applyNodeParametersUpdateWithAutoTagSync(node, {
     ...parameters,
     resourceName: "api",
     values: {}
   });
 
-  assert.equal(result.label, "api");
+  assert.equal(result.label, "EC2 Instance");
 });
 
-test("applyNodeParametersUpdateWithResourceLabel updates only auto-generated tag names", () => {
+test("applyNodeParametersUpdateWithAutoTagSync updates only auto-generated tag names", () => {
   const node = makeResourceNode({
     id: "instance-1",
     resourceName: "web",
@@ -375,7 +395,7 @@ test("applyNodeParametersUpdateWithResourceLabel updates only auto-generated tag
 
   assert(parameters);
 
-  const generatedTagResult = applyNodeParametersUpdateWithResourceLabel(node, {
+  const generatedTagResult = applyNodeParametersUpdateWithAutoTagSync(node, {
     ...parameters,
     resourceName: "api",
     values: {
@@ -384,7 +404,7 @@ test("applyNodeParametersUpdateWithResourceLabel updates only auto-generated tag
       }
     }
   });
-  const customTagResult = applyNodeParametersUpdateWithResourceLabel(node, {
+  const customTagResult = applyNodeParametersUpdateWithAutoTagSync(node, {
     ...parameters,
     resourceName: "api",
     values: {
@@ -398,9 +418,10 @@ test("applyNodeParametersUpdateWithResourceLabel updates only auto-generated tag
   assert.deepEqual(customTagResult.parameters?.values.tags, { Name: "Public API" });
 });
 
-test("applyNodeParametersUpdateWithResourceLabel keeps legacy nodes safe without resourceName", () => {
+test("applyNodeParametersUpdateWithAutoTagSync keeps legacy nodes safe without resourceName", () => {
   const node = makeResourceNode({
     id: "legacy-1",
+    label: "EC2 Instance",
     resourceName: "legacy",
     resourceType: "aws_instance"
   });
@@ -409,8 +430,8 @@ test("applyNodeParametersUpdateWithResourceLabel keeps legacy nodes safe without
     resourceName: undefined
   } as unknown as NonNullable<DiagramNode["parameters"]>;
 
-  assert.doesNotThrow(() => applyNodeParametersUpdateWithResourceLabel(node, legacyParameters));
-  assert.equal(applyNodeParametersUpdateWithResourceLabel(node, legacyParameters).label, "legacy");
+  assert.doesNotThrow(() => applyNodeParametersUpdateWithAutoTagSync(node, legacyParameters));
+  assert.equal(applyNodeParametersUpdateWithAutoTagSync(node, legacyParameters).label, "EC2 Instance");
 });
 
 function createFakeDataTransfer(): DataTransfer {
@@ -428,12 +449,14 @@ function createFakeDataTransfer(): DataTransfer {
 
 function makeResourceNode({
   id,
+  label,
   metadata,
   resourceName,
   resourceType,
   values = {}
 }: {
   id: string;
+  label?: string;
   metadata?: DiagramNode["metadata"];
   resourceName: string;
   resourceType: string;
@@ -445,7 +468,7 @@ function makeResourceNode({
     kind: "resource",
     position: { x: 0, y: 0 },
     size: { width: 96, height: 72 },
-    label: resourceName,
+    label: label ?? resourceName,
     locked: false,
     zIndex: 1,
     ...(metadata ? { metadata } : {}),

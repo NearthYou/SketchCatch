@@ -4,7 +4,9 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
+
 - Active branch: `fix/sw/330-production-auth-runtime`, issue #330.
+
 - Release `v2.0.0` uses main SHA `44cdc976da8a03fca2d0aad69a0f3d45d51d4e8a`.
 - Route53 points to the direct-path ECS ALB. Public `/`, `/health`, and `/health/db` return 200; protected `/api/projects` returns 401.
 - API and web are active at desired/running 1 with Application Auto Scaling min 1 and max 2.
@@ -24,6 +26,7 @@ Short English-only working log for the current agent context. Older records are 
 - Verification: focused Trivy scanner tests, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check` passed.
 - Risk: future Trivy check-bundle rule IDs require an explicit review before they are added to the exclusion list.
 - Next action: add the product-specific ALB and ASG configuration warnings as non-blocking deployment checks when requested.
+
 ### 2026-07-11 - Recover production auth runtime configuration
 
 - Traced signup/login failures to a one-character SSM `AUTH_TOKEN_SECRET` and missing OAuth client IDs in the ECS API task definition.
@@ -41,17 +44,19 @@ Short English-only working log for the current agent context. Older records are 
 - Removed retired deployment/HTTPS workflows and reduced the GitHub deploy role to ECR, ECS, worker, scoped snapshot, and SNS permissions.
 - Added a disabled-by-default cold rollback Terraform root with scoped RDS/Redis access and documented restore procedures.
 
+### 2026-07-11 - Integrate latest dev into Live Observation PR
+
+- Merged the latest `origin/dev` UI rebuild and ECS production changes into PR #328 while preserving Live Observation and Board behavior.
+- Kept the ECS deployment workflow and removed the retired EC2 deployment workflow.
+- Reconciled the new Workspace shell, Board viewport behavior, Resource panel extraction, and Live Observation styles.
+
 ## Verification
 
-- Harness, migration compatibility, production infra structure, IAM tests, lint, typecheck, and build passed.
-- Production auth tests passed 41 of 41; Terraform runtime validation passed and tests passed 2 of 2.
-- Runtime and cold rollback Terraform fmt/validate passed; runtime Terraform tests passed 2 of 2.
-- The approved runtime Terraform apply completed and the final normal plan reports no changes.
-- API/web services are stable at 1/1, autoscaling targets are min 1/max 2, and both target groups have healthy serving targets.
-- Route53 alias, RDS protections, worker SHA, IAM attachments, alarms, and SNS subscription were verified live.
+
 
 ## Risk
 
+- Full-suite failures outside the Live Observation change set still block branch integration.
 - A one-task baseline has no steady multi-AZ application redundancy; autoscaling is cost-first and reacts to CPU load, not AZ failure.
 - RDS is Single-AZ. Deletion protection, seven-day backups, pre-migration snapshots, and the restore runbook reduce but do not remove outage risk.
 - External customer execution roles may still need the worker task principal added to their trust policy.
@@ -59,4 +64,4 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Next Action
 
-- Merge the main-history synchronization PR into `dev` with a merge commit, then merge release PR #325 into `main` with a merge commit so future release diffs use the correct ancestry.
+- Review and commit the Live Observation reliability fixes, then update PR #328.

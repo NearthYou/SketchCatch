@@ -1,12 +1,531 @@
-import type { ArchitectureJson, DiagramJson } from "@sketchcatch/types";
+import type { ArchitectureJson, DiagramJson, DiagramNode, ResourceItem } from "@sketchcatch/types";
+import { isAreaNode } from "../diagram-editor/area-nodes";
+import { getResourceNodeVisualBounds } from "../diagram-editor/resource-node-visual-footprint";
+import type { DiagramPreviewAnnotations } from "../diagram-editor/types";
+import { resourceCatalog } from "../resource-settings/catalog";
 import { convertArchitectureJsonToDiagramJson } from "./workspace-ai-diagram-adapter";
 
+export type WorkspaceDiagramFixtureViewState = {
+  readonly selectedNodeIds?: readonly string[];
+  readonly selectedEdgeIds?: readonly string[];
+  readonly referenceDropTargetNodeId?: string;
+  readonly previewDiagram?: DiagramJson;
+  readonly previewAnnotations?: DiagramPreviewAnnotations;
+};
+
 export function getWorkspaceDiagramFixture(name: string | undefined): DiagramJson | undefined {
-  if (process.env.NODE_ENV === "production" || name !== "conventions") {
+  if (process.env.NODE_ENV === "production" || !name) {
     return undefined;
   }
 
-  return convertArchitectureJsonToDiagramJson(conventionArchitectureJson);
+  return workspaceDiagramFixtureFactories[name]?.();
+}
+
+export function getWorkspaceDiagramFixtureViewState(
+  name: string | undefined
+): WorkspaceDiagramFixtureViewState | undefined {
+  if (process.env.NODE_ENV === "production" || !name) {
+    return undefined;
+  }
+
+  return workspaceDiagramFixtureViewStateFactories[name]?.();
+}
+
+const workspaceDiagramFixtureFactories: Readonly<Record<string, () => DiagramJson>> = {
+  "area-matrix": createAreaMatrixFixture,
+  conventions: () => convertArchitectureJsonToDiagramJson(conventionArchitectureJson),
+  "edge-matrix": createEdgeMatrixFixture,
+  "edge-state-matrix": createEdgeStateMatrixFixture,
+  "resource-gallery": createResourceGalleryFixture,
+  "resource-stress-matrix": createResourceStressMatrixFixture,
+  "state-default-matrix": createStateMatrixFixture,
+  "state-matrix": createStateMatrixFixture
+};
+
+const workspaceDiagramFixtureViewStateFactories: Readonly<
+  Record<string, (() => WorkspaceDiagramFixtureViewState) | undefined>
+> = {
+  "edge-matrix": () => ({
+    selectedEdgeIds: ["edge-matrix-1"]
+  }),
+  "edge-state-matrix": () => ({
+    previewDiagram: createEdgeStateMatrixFixture(),
+    previewAnnotations: {
+      nodeStates: {
+        "edge-state-added-target": "added",
+        "edge-state-modified-target": "modified",
+        "edge-state-deleted-target": "deleted"
+      },
+      edgeStates: {
+        "edge-state-added": "added",
+        "edge-state-modified": "modified",
+        "edge-state-deleted": "deleted"
+      }
+    }
+  }),
+  "state-matrix": () => ({
+    selectedNodeIds: ["state-resource-selection-target"],
+    referenceDropTargetNodeId: "state-area-reference-target"
+  })
+};
+
+const RESOURCE_GALLERY_COLUMNS = 8;
+const RESOURCE_GALLERY_AREA_COLUMNS = 3;
+const RESOURCE_GALLERY_COLUMN_GAP = 32;
+const RESOURCE_GALLERY_ROW_GAP = 32;
+const RESOURCE_GALLERY_INSET = 40;
+
+function createResourceGalleryFixture(): DiagramJson {
+  const catalogNodes = resourceCatalog.map((item) =>
+    createCatalogFixtureNode(item, `fixture-resource-${item.id}`)
+  );
+  const resourceNodes = catalogNodes.filter((node) => !isAreaNode(node));
+  const areaNodes = catalogNodes.filter(isAreaNode);
+  const resourceVisualBounds = resourceNodes.map((node) => getResourceNodeVisualBounds(node));
+  const resourceCellWidth =
+    Math.max(...resourceVisualBounds.map((bounds) => bounds.width), 1) +
+    RESOURCE_GALLERY_COLUMN_GAP;
+  const resourceCellHeight =
+    Math.max(...resourceVisualBounds.map((bounds) => bounds.height), 1) +
+    RESOURCE_GALLERY_ROW_GAP;
+  const resourceRows = Math.ceil(resourceNodes.length / RESOURCE_GALLERY_COLUMNS);
+  const areaStartY = RESOURCE_GALLERY_INSET + resourceRows * resourceCellHeight;
+  const areaCellWidth =
+    Math.max(...areaNodes.map((node) => node.size.width), 1) + RESOURCE_GALLERY_COLUMN_GAP;
+  const areaCellHeight =
+    Math.max(...areaNodes.map((node) => node.size.height), 1) + RESOURCE_GALLERY_ROW_GAP;
+  const positionedResourceNodes = resourceNodes
+    .map((node, index) => {
+      const visualBounds = getResourceNodeVisualBounds(node);
+
+      return {
+        ...node,
+        position: {
+          x:
+            RESOURCE_GALLERY_INSET +
+            (index % RESOURCE_GALLERY_COLUMNS) * resourceCellWidth -
+            visualBounds.x,
+          y:
+            RESOURCE_GALLERY_INSET +
+            Math.floor(index / RESOURCE_GALLERY_COLUMNS) * resourceCellHeight -
+            visualBounds.y
+        },
+        zIndex: index
+      };
+    });
+  const positionedAreaNodes = areaNodes.map((node, index) => ({
+    ...node,
+    position: {
+      x: RESOURCE_GALLERY_INSET + (index % RESOURCE_GALLERY_AREA_COLUMNS) * areaCellWidth,
+      y:
+        areaStartY +
+        Math.floor(index / RESOURCE_GALLERY_AREA_COLUMNS) * areaCellHeight
+    },
+    zIndex: positionedResourceNodes.length + index
+  }));
+
+  return {
+    nodes: [...positionedResourceNodes, ...positionedAreaNodes],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+}
+
+function createAreaMatrixFixture(): DiagramJson {
+  const nodes = [
+    createCatalogFixtureNode(getCatalogItem("aws-region"), "area-region", {
+      position: { x: 40, y: 40 },
+      size: { width: 1320, height: 700 },
+      style: { borderColor: "#5269b3", borderStyle: "solid" },
+      zIndex: 0
+    }),
+    createCatalogFixtureNode(getCatalogItem("aws-availability-zone"), "area-availability-zone", {
+      parentAreaNodeId: "area-region",
+      position: { x: 80, y: 100 },
+      size: { width: 1240, height: 600 },
+      style: { borderColor: "#75839a", borderStyle: "dashed" },
+      zIndex: 1
+    }),
+    createCatalogFixtureNode(getCatalogItem("aws-vpc"), "area-vpc", {
+      parentAreaNodeId: "area-availability-zone",
+      position: { x: 120, y: 160 },
+      size: { width: 1160, height: 480 },
+      style: { borderColor: "#2f6db3", borderStyle: "solid" },
+      zIndex: 2
+    }),
+    createCatalogFixtureNode(getCatalogItem("aws-subnet"), "area-subnet", {
+      parentAreaNodeId: "area-vpc",
+      position: { x: 160, y: 220 },
+      size: { width: 1080, height: 360 },
+      style: { borderColor: "#718096", borderStyle: "dotted" },
+      zIndex: 3
+    }),
+    createCatalogFixtureNode(getCatalogItem("aws-security-group"), "area-security-group", {
+      locked: true,
+      parentAreaNodeId: "area-subnet",
+      position: { x: 200, y: 280 },
+      size: { width: 460, height: 300 },
+      style: { borderColor: "#287d3c", borderStyle: "solid" },
+      zIndex: 4
+    }),
+    createCatalogFixtureNode(getCatalogItem("aws-autoscaling-group"), "area-autoscaling-group", {
+      parentAreaNodeId: "area-subnet",
+      position: { x: 720, y: 280 },
+      size: { width: 460, height: 300 },
+      style: { borderColor: "#9a6700", borderStyle: "dashed" },
+      zIndex: 5
+    })
+  ];
+
+  return {
+    nodes,
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+}
+
+function createResourceStressMatrixFixture(): DiagramJson {
+  const s3Item = getCatalogItem("aws-s3-bucket");
+  const stressNodes = [
+    {
+      ...createCatalogFixtureNode(getCatalogItem("aws-cloudfront-distribution"), "stress-service-icon"),
+      label: "SERVERLESS EVENT ROUTER WITH CROSS ACCOUNT FAILOVER"
+    },
+    {
+      ...createCatalogFixtureNode(getCatalogItem("aws-route-table"), "stress-resource-icon"),
+      label: "ULTRALONGUNBROKENRESOURCEIDENTIFIERWITHOUTSPACES",
+      size: { width: 28, height: 28 }
+    },
+    {
+      ...createCatalogFixtureNode(getCatalogItem("design-user-client"), "stress-group-icon"),
+      iconUrl: "/Architecture-Group-Icons_07312025/Auto-Scaling-group_32.svg",
+      label: "GROUP ICON OPTICAL BALANCE"
+    },
+    {
+      ...createCatalogFixtureNode(getCatalogItem("aws-lambda-function"), "stress-fallback-icon"),
+      iconUrl: undefined,
+      label: "PROVIDER NEUTRAL FALLBACK"
+    },
+    ...[
+      "PRIMARY ARCHIVE WITH SHARED ICON",
+      "SECONDARY ARCHIVE WITH SHARED ICON",
+      "AUDIT ARCHIVE WITH SHARED ICON",
+      "REPLICA ARCHIVE WITH SHARED ICON"
+    ].map((label, index) => ({
+      ...createCatalogFixtureNode(s3Item, `stress-duplicate-icon-${index + 1}`),
+      label
+    })),
+    ...[
+      ["aws-api-gateway-rest-api", "GLOBAL CUSTOMER API AUTHORIZATION GATEWAY"],
+      ["aws-rds-read-replica", "CROSS REGION DATABASE READ REPLICA"],
+      ["aws-sqs-queue", "EVENT DRIVEN ORDER PROCESSING QUEUE"],
+      ["aws-sns-topic", "MULTI ACCOUNT AUDIT NOTIFICATION TOPIC"],
+      ["aws-ecs-cluster", "PRIVATE CONTAINER ORCHESTRATION CLUSTER"],
+      ["aws-ecs-service", "ZERO DOWNTIME SERVICE DEPLOYMENT TARGET"],
+      ["aws-ecs-task-definition", "REGULATED WORKLOAD TASK DEFINITION"],
+      ["aws-eks-node-group", "MACHINE LEARNING PLATFORM NODE GROUP"],
+      ["aws-cloudwatch-dashboard", "CENTRALIZED OPERATIONS METRICS DASHBOARD"],
+      ["aws-lambda-event-source-mapping", "LONG LIVED WORKFLOW EVENT SOURCE MAPPING"],
+      ["aws-iam-role-policy-attachment", "SECURITY BOUNDARY ROLE POLICY ATTACHMENT"],
+      ["aws-api-gateway-v2-integration", "CUSTOMER IDENTITY WEBSOCKET INTEGRATION"]
+    ].map(([catalogId, label], index) => ({
+      ...createCatalogFixtureNode(
+        getCatalogItem(catalogId ?? ""),
+        `stress-long-label-${index + 1}`
+      ),
+      label: label ?? ""
+    }))
+  ];
+
+  return {
+    nodes: positionFixtureNodesInVisualGrid(stressNodes, 4),
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+}
+
+function createEdgeMatrixFixture(): DiagramJson {
+  const pathTypes = ["default", "smoothstep", "step", "straight"] as const;
+  const lineStyles = ["solid", "dashed", "dotted"] as const;
+  const widths = ["thin", "medium", "thick"] as const;
+  const combinations = pathTypes.flatMap((pathType) =>
+    lineStyles.flatMap((lineStyle) => widths.map((width) => ({ lineStyle, pathType, width })))
+  );
+  const nodes: DiagramNode[] = [];
+  const edges: DiagramJson["edges"] = [];
+
+  for (const [index, combination] of combinations.entries()) {
+    const matrixColumn = pathTypes.indexOf(combination.pathType);
+    const matrixRow = index % (lineStyles.length * widths.length);
+    const sourceNodeId = `edge-source-${index + 1}`;
+    const targetNodeId = `edge-target-${index + 1}`;
+    const pairX = 40 + matrixColumn * 400;
+    const pairY = 40 + matrixRow * 155;
+
+    nodes.push(
+      createCatalogFixtureNode(getCatalogItem("aws-s3-bucket"), sourceNodeId, {
+        position: { x: pairX, y: pairY },
+        zIndex: index * 2
+      }),
+      createCatalogFixtureNode(getCatalogItem("aws-lambda-function"), targetNodeId, {
+        position: { x: pairX + 300, y: pairY + 48 },
+        zIndex: index * 2 + 1
+      })
+    );
+    edges.push({
+      id: `edge-matrix-${index + 1}`,
+      sourceNodeId,
+      targetNodeId,
+      sourceHandleId: "handle-right",
+      targetHandleId: "handle-left",
+      label: `${combination.pathType} · ${combination.lineStyle} · ${combination.width}`,
+      type: combination.pathType,
+      style: {
+        animated: false,
+        color: "#59687d",
+        lineStyle: combination.lineStyle,
+        width: combination.width
+      }
+    });
+  }
+
+  return {
+    nodes,
+    edges,
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+}
+
+function createEdgeStateMatrixFixture(): DiagramJson {
+  const nodes: DiagramNode[] = [];
+  const edges: DiagramJson["edges"] = [];
+  const states = [
+    {
+      id: "default",
+      label: undefined,
+      style: { animated: false, color: "#59687d", lineStyle: "solid" as const, width: "thin" as const },
+      type: "straight" as const
+    },
+    {
+      id: "added",
+      label: "added edge",
+      style: { animated: false, color: "#287d3c", lineStyle: "solid" as const, width: "medium" as const },
+      type: "smoothstep" as const
+    },
+    {
+      id: "modified",
+      label: "modified relationship with a bounded long label",
+      style: { animated: false, color: "#9a6700", lineStyle: "dashed" as const, width: "medium" as const },
+      type: "step" as const
+    },
+    {
+      id: "deleted",
+      label: "deleted edge",
+      style: { animated: false, color: "#b42318", lineStyle: "dotted" as const, width: "thick" as const },
+      type: "default" as const
+    }
+  ];
+
+  for (const [index, state] of states.entries()) {
+    const sourceNodeId = `edge-state-${state.id}-source`;
+    const targetNodeId = `edge-state-${state.id}-target`;
+    const y = 60 + index * 150;
+
+    nodes.push(
+      createCatalogFixtureNode(getCatalogItem("aws-s3-bucket"), sourceNodeId, {
+        position: { x: 80, y },
+        zIndex: index * 2
+      }),
+      createCatalogFixtureNode(getCatalogItem("aws-lambda-function"), targetNodeId, {
+        position: { x: 440, y },
+        zIndex: index * 2 + 1
+      })
+    );
+    edges.push({
+      id: `edge-state-${state.id}`,
+      sourceNodeId,
+      targetNodeId,
+      sourceHandleId: "handle-right",
+      targetHandleId: "handle-left",
+      ...(state.label ? { label: state.label } : {}),
+      type: state.type,
+      style: state.style
+    });
+  }
+
+  return {
+    nodes,
+    edges,
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+}
+
+function createStateMatrixFixture(): DiagramJson {
+  const nodes = [
+    createCatalogFixtureNode(getCatalogItem("aws-vpc"), "state-area-reference-target", {
+      position: { x: 800, y: 220 },
+      size: { width: 520, height: 360 },
+      style: { borderColor: "#5269b3", borderStyle: "solid" },
+      zIndex: 0
+    }),
+    createCatalogFixtureNode(getCatalogItem("aws-security-group"), "state-area-locked", {
+      locked: true,
+      parentAreaNodeId: "state-area-reference-target",
+      position: { x: 840, y: 280 },
+      size: { width: 440, height: 230 },
+      style: { borderColor: "#718096", borderStyle: "dashed" },
+      zIndex: 1
+    }),
+    createCatalogFixtureNode(getCatalogItem("aws-s3-bucket"), "state-resource-default", {
+      position: { x: 40, y: 60 },
+      zIndex: 10
+    }),
+    createCatalogFixtureNode(
+      getCatalogItem("aws-lambda-function"),
+      "state-resource-selection-target",
+      {
+        position: { x: 320, y: 60 },
+        zIndex: 11
+      }
+    ),
+    createCatalogFixtureNode(
+      getCatalogItem("aws-cloudwatch-log-group"),
+      "state-resource-dimmed-comparison",
+      {
+        position: { x: 600, y: 60 },
+        zIndex: 12
+      }
+    ),
+    createCatalogFixtureNode(getCatalogItem("aws-kms-key"), "state-resource-locked", {
+      locked: true,
+      position: { x: 880, y: 60 },
+      zIndex: 13
+    }),
+    createCatalogFixtureNode(getCatalogItem("aws-ec2-instance"), "state-reference-source", {
+      position: { x: 1160, y: 80 },
+      zIndex: 14
+    })
+  ];
+
+  return {
+    nodes,
+    edges: [
+      {
+        id: "state-edge-default",
+        sourceNodeId: "state-resource-default",
+        targetNodeId: "state-resource-selection-target",
+        type: "straight",
+        style: { animated: false, color: "#59687d", lineStyle: "solid", width: "thin" }
+      },
+      {
+        id: "state-edge-selection-target",
+        sourceNodeId: "state-resource-selection-target",
+        targetNodeId: "state-resource-dimmed-comparison",
+        label: "Select this edge",
+        type: "smoothstep",
+        style: { animated: false, color: "#59687d", lineStyle: "dashed", width: "medium" }
+      },
+      {
+        id: "state-edge-explicit-animation",
+        sourceNodeId: "state-resource-dimmed-comparison",
+        targetNodeId: "state-resource-locked",
+        label: "Explicit animation",
+        type: "step",
+        style: { animated: true, color: "#59687d", lineStyle: "dotted", width: "thick" }
+      }
+    ],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+}
+
+type CatalogFixtureNodeOptions = {
+  readonly locked?: boolean;
+  readonly parentAreaNodeId?: string;
+  readonly position?: DiagramNode["position"];
+  readonly size?: DiagramNode["size"];
+  readonly style?: DiagramNode["style"];
+  readonly zIndex?: number;
+};
+
+function createCatalogFixtureNode(
+  item: ResourceItem,
+  id: string,
+  options: CatalogFixtureNodeOptions = {}
+): DiagramNode {
+  const kind =
+    item.id.startsWith("design-") || item.nodeDefaults.type.startsWith("sketchcatch_")
+      ? "design"
+      : "resource";
+  const defaultStyle =
+    kind === "design"
+      ? { textColor: "#243246", borderColor: "#8b98aa" }
+      : { textColor: "#172033", borderColor: "#2f6db3" };
+  const node: DiagramNode = {
+    id,
+    type: item.nodeDefaults.type,
+    kind,
+    position: options.position ? { ...options.position } : { x: 0, y: 0 },
+    size: options.size ? { ...options.size } : { ...item.nodeDefaults.size },
+    label: item.nodeDefaults.label,
+    iconUrl: item.iconUrl,
+    locked: options.locked ?? false,
+    zIndex: options.zIndex ?? 0,
+    style: { ...defaultStyle, ...options.style },
+    ...(options.parentAreaNodeId
+      ? { metadata: { parentAreaNodeId: options.parentAreaNodeId } }
+      : {})
+  };
+
+  if (kind === "design") {
+    return node;
+  }
+
+  return {
+    ...node,
+    parameters: {
+      ...(item.nodeDefaults.terraformBlockType
+        ? { terraformBlockType: item.nodeDefaults.terraformBlockType }
+        : {}),
+      resourceType: item.nodeDefaults.type,
+      resourceName: id.replace(/-/gu, "_"),
+      fileName: "main",
+      values: {}
+    }
+  };
+}
+
+function positionFixtureNodesInVisualGrid(
+  nodes: readonly DiagramNode[],
+  columns: number
+): DiagramNode[] {
+  const visualBounds = nodes.map((node) => getResourceNodeVisualBounds(node));
+  const cellWidth =
+    Math.max(...visualBounds.map((bounds) => bounds.width), 1) + RESOURCE_GALLERY_COLUMN_GAP;
+  const cellHeight =
+    Math.max(...visualBounds.map((bounds) => bounds.height), 1) + RESOURCE_GALLERY_ROW_GAP;
+
+  return nodes.map((node, index) => {
+    const bounds = getResourceNodeVisualBounds(node);
+
+    return {
+      ...node,
+      position: {
+        x: RESOURCE_GALLERY_INSET + (index % columns) * cellWidth - bounds.x,
+        y: RESOURCE_GALLERY_INSET + Math.floor(index / columns) * cellHeight - bounds.y
+      },
+      zIndex: index
+    };
+  });
+}
+
+function getCatalogItem(id: string): ResourceItem {
+  const item = resourceCatalog.find((candidate) => candidate.id === id);
+
+  if (!item) {
+    throw new Error(`Missing visual fixture catalog item: ${id}`);
+  }
+
+  return item;
 }
 
 const conventionArchitectureJson: ArchitectureJson = {
@@ -101,14 +620,59 @@ const conventionArchitectureJson: ArchitectureJson = {
     }
   ],
   edges: [
-    { id: "cdn-to-assets", sourceId: "cdn-public-entry", targetId: "web-assets-bucket", label: "HTTPS" },
-    { id: "api-to-permission", sourceId: "api-gateway", targetId: "lambda-invoke-permission", label: "allows invoke" },
-    { id: "permission-to-lambda", sourceId: "lambda-invoke-permission", targetId: "lambda-function", label: "invokes" },
-    { id: "role-to-lambda", sourceId: "lambda-execution-role", targetId: "lambda-function", label: "execution role" },
-    { id: "policy-to-role", sourceId: "lambda-execution-policy", targetId: "lambda-execution-role", label: "grants log access" },
-    { id: "lambda-to-upload", sourceId: "lambda-function", targetId: "upload-bucket", label: "stores files" },
-    { id: "kms-to-logs", sourceId: "lambda-log-key", targetId: "lambda-log-group", label: "encrypts logs" },
-    { id: "lambda-to-logs", sourceId: "lambda-function", targetId: "lambda-log-group", label: "writes logs" },
-    { id: "alarm-to-lambda", sourceId: "lambda-error-alarm", targetId: "lambda-function", label: "monitors errors" }
+    {
+      id: "cdn-to-assets",
+      sourceId: "cdn-public-entry",
+      targetId: "web-assets-bucket",
+      label: "HTTPS"
+    },
+    {
+      id: "api-to-permission",
+      sourceId: "api-gateway",
+      targetId: "lambda-invoke-permission",
+      label: "allows invoke"
+    },
+    {
+      id: "permission-to-lambda",
+      sourceId: "lambda-invoke-permission",
+      targetId: "lambda-function",
+      label: "invokes"
+    },
+    {
+      id: "role-to-lambda",
+      sourceId: "lambda-execution-role",
+      targetId: "lambda-function",
+      label: "execution role"
+    },
+    {
+      id: "policy-to-role",
+      sourceId: "lambda-execution-policy",
+      targetId: "lambda-execution-role",
+      label: "grants log access"
+    },
+    {
+      id: "lambda-to-upload",
+      sourceId: "lambda-function",
+      targetId: "upload-bucket",
+      label: "stores files"
+    },
+    {
+      id: "kms-to-logs",
+      sourceId: "lambda-log-key",
+      targetId: "lambda-log-group",
+      label: "encrypts logs"
+    },
+    {
+      id: "lambda-to-logs",
+      sourceId: "lambda-function",
+      targetId: "lambda-log-group",
+      label: "writes logs"
+    },
+    {
+      id: "alarm-to-lambda",
+      sourceId: "lambda-error-alarm",
+      targetId: "lambda-function",
+      label: "monitors errors"
+    }
   ]
 };

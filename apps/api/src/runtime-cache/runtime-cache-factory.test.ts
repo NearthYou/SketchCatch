@@ -96,6 +96,10 @@ function createFakeRuntimeCache(): RuntimeCache {
   const valuesByKey = new Map<string, unknown>();
 
   return {
+    backend: "memory",
+    async isAvailable() {
+      return true;
+    },
     async delete(entryKey) {
       return valuesByKey.delete(createKey(entryKey));
     },
@@ -104,12 +108,32 @@ function createFakeRuntimeCache(): RuntimeCache {
     },
     async set(entryKey, value) {
       valuesByKey.set(createKey(entryKey), value);
+    },
+    async increment(entryKey, delta) {
+      const key = createKey(entryKey);
+      const nextValue = Number(valuesByKey.get(key) ?? 0) + delta;
+      valuesByKey.set(key, nextValue);
+      return nextValue;
+    },
+    async setIfAbsent(entryKey, value) {
+      const key = createKey(entryKey);
+
+      if (valuesByKey.has(key)) {
+        return false;
+      }
+
+      valuesByKey.set(key, value);
+      return true;
     }
   };
 }
 
 function createNeverUsedCache(): RuntimeCache {
   return {
+    backend: "redis",
+    async isAvailable() {
+      throw new Error("Redis cache should not be used");
+    },
     async delete() {
       throw new Error("Redis cache should not be used");
     },
@@ -117,6 +141,12 @@ function createNeverUsedCache(): RuntimeCache {
       throw new Error("Redis cache should not be used");
     },
     async set() {
+      throw new Error("Redis cache should not be used");
+    },
+    async increment() {
+      throw new Error("Redis cache should not be used");
+    },
+    async setIfAbsent() {
       throw new Error("Redis cache should not be used");
     }
   };
