@@ -38,7 +38,10 @@ test("createWorkspaceAiBoardSnapshot returns analysis input and board fingerprin
 
   assert.equal(snapshot.architectureJson.nodes.length, 1);
   assert.equal(snapshot.hasResources, true);
-  assert.equal(snapshot.fingerprint, JSON.stringify(snapshot.architectureJson));
+  assert.equal(
+    snapshot.fingerprint,
+    JSON.stringify({ nodes: diagramJson.nodes, edges: diagramJson.edges })
+  );
 });
 
 test("createWorkspaceAiBoardSnapshot keeps the fingerprint stable when only viewport changes", () => {
@@ -128,6 +131,32 @@ test("applyWorkspaceAiBoardPreview does not call apply after the board changes d
   resolveResponse();
 
   assert.equal(await resultPromise, "stale");
+  assert.equal(appliedDiagram, null);
+});
+
+test("applyWorkspaceAiBoardPreview rejects changed Board presentation fields", () => {
+  const requestSnapshot = createWorkspaceAiBoardSnapshot(diagramJson);
+  const changedDiagram: DiagramJson = {
+    ...diagramJson,
+    nodes: diagramJson.nodes.map((node) => ({
+      ...node,
+      locked: true,
+      size: { width: 320, height: 180 },
+      zIndex: 99
+    }))
+  };
+  let appliedDiagram: DiagramJson | null = null;
+
+  const result = applyWorkspaceAiBoardPreview({
+    applyDiagram: (diagram) => {
+      appliedDiagram = diagram;
+    },
+    baseFingerprint: requestSnapshot.fingerprint,
+    currentDiagram: changedDiagram,
+    previewDiagram: diagramJson
+  });
+
+  assert.equal(result, "stale");
   assert.equal(appliedDiagram, null);
 });
 

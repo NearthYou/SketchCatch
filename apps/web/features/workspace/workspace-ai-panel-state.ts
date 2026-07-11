@@ -13,7 +13,7 @@ export function createWorkspaceAiBoardSnapshot(diagramJson: DiagramJson): Worksp
 
   return {
     architectureJson,
-    fingerprint: createWorkspaceAiArchitectureFingerprint(architectureJson),
+    fingerprint: createWorkspaceAiBoardFingerprint(diagramJson),
     hasResources: architectureJson.nodes.length > 0
   };
 }
@@ -45,7 +45,7 @@ export function applyWorkspaceAiBoardPreview({
   return "applied";
 }
 
-// AI 결과 만료 판단은 화면 이동/확대가 아니라 실제 분석 API 입력만 기준으로 합니다.
-function createWorkspaceAiArchitectureFingerprint(architectureJson: ArchitectureJson): string {
-  return JSON.stringify(architectureJson);
+// AI 적용은 viewport를 제외한 Board 전체가 요청 당시와 같을 때만 허용합니다.
+function createWorkspaceAiBoardFingerprint(diagramJson: DiagramJson): string {
+  return JSON.stringify({ nodes: diagramJson.nodes, edges: diagramJson.edges });
 }
