@@ -1,6 +1,7 @@
 ﻿import { relations, sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   index,
   integer,
   jsonb,
@@ -13,6 +14,7 @@ import {
 } from "drizzle-orm/pg-core";
 import type {
   ArchitectureJson,
+  DeploymentLiveObservationManifestV2,
   DeploymentLiveProfile,
   DeploymentPlanSummary,
   DiagramJson,
@@ -53,6 +55,11 @@ export const deploymentLiveProfileEnum = pgEnum("deployment_live_profile", [
   "demo_web_service",
   "demo_web_service_with_rds"
 ]);
+
+export const deploymentLiveObservationManifestStatusEnum = pgEnum(
+  "deployment_live_observation_manifest_status",
+  ["valid", "manifest_invalid"]
+);
 
 export const gitCicdRepositoryProviderEnum = pgEnum("git_cicd_repository_provider", [
   "internal",
@@ -506,6 +513,27 @@ export const deployments = pgTable(
   ]
 );
 
+export const deploymentLiveObservationManifests = pgTable(
+  "deployment_live_observation_manifests",
+  {
+    deploymentId: varchar("deployment_id", { length: 36 })
+      .primaryKey()
+      .references(() => deployments.id, { onDelete: "cascade" }),
+    schemaVersion: integer("schema_version").notNull(),
+    status: deploymentLiveObservationManifestStatusEnum("status").notNull(),
+    manifest: jsonb("manifest").$type<DeploymentLiveObservationManifestV2>(),
+    invalidReason: text("invalid_reason"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    check(
+      "deployment_live_observation_manifests_schema_version_check",
+      sql`${table.schemaVersion} = 2`
+    )
+  ]
+);
+
 export const deploymentJobs = pgTable(
   "deployment_jobs",
   {
@@ -810,12 +838,23 @@ export const deploymentsRelations = relations(deployments, ({ one, many }) => ({
     fields: [deployments.awsConnectionId],
     references: [awsConnections.id]
   }),
+  liveObservationManifest: one(deploymentLiveObservationManifests),
   logs: many(deploymentLogs),
   jobs: many(deploymentJobs),
   planArtifacts: many(deploymentPlanArtifacts),
   resources: many(deployedResources),
   outputs: many(terraformOutputs)
 }));
+
+export const deploymentLiveObservationManifestsRelations = relations(
+  deploymentLiveObservationManifests,
+  ({ one }) => ({
+    deployment: one(deployments, {
+      fields: [deploymentLiveObservationManifests.deploymentId],
+      references: [deployments.id]
+    })
+  })
+);
 
 export const deploymentJobsRelations = relations(deploymentJobs, ({ one }) => ({
   deployment: one(deployments, {

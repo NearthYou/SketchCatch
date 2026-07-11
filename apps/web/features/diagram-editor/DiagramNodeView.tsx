@@ -19,7 +19,7 @@ import {
   useUpdateNodeInternals
 } from "@xyflow/react";
 import type { NodeProps } from "@xyflow/react";
-import { Fragment, useCallback, useEffect } from "react";
+import { Fragment, memo, useCallback, useEffect } from "react";
 import type {
   CSSProperties,
   KeyboardEvent as ReactKeyboardEvent,
@@ -48,12 +48,6 @@ const CONNECTION_HANDLES = [
   { id: "handle-right", label: "오른쪽", position: Position.Right },
   { id: "handle-bottom", label: "아래쪽", position: Position.Bottom }
 ] as const;
-
-const CONNECTION_SOURCE_POSITIONS: ReadonlySet<Position> = new Set([
-  Position.Top,
-  Position.Right,
-  Position.Bottom
-]);
 
 const AREA_NODE_HIT_EDGES = [
   styles.areaNodeHitEdgeTop,
@@ -121,7 +115,9 @@ const RESIZE_HANDLES: readonly {
   }
 ];
 
-export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps<DiagramFlowNode>) {
+export const DiagramNodeView = memo(function DiagramNodeView(
+  { data, id, isConnectable, selected }: NodeProps<DiagramFlowNode>
+) {
   const reactFlow = useReactFlow();
   const zoomLevel = useStore((state) => getBoardZoomLevel(state.transform[2]));
   const updateNodeInternals = useUpdateNodeInternals();
@@ -403,12 +399,8 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
       ) : null}
 
       {CONNECTION_HANDLES.map((handle) => {
-        const canStartFromHandle =
-          canConnect &&
-          CONNECTION_SOURCE_POSITIONS.has(handle.position) &&
-          !data.isConnectionActive;
-        const canEndAtHandle =
-          data.isValidConnectionTarget && handle.position === Position.Left;
+        const canStartFromHandle = canConnect && !data.isConnectionActive;
+        const canEndAtHandle = data.isValidConnectionTarget;
 
         return (
           <Fragment key={handle.id}>
@@ -456,7 +448,7 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
       })}
     </>
   );
-}
+});
 
 function getKeyboardResizeDelta(key: string, step: number): DiagramFlowNode["position"] | null {
   if (key === "ArrowLeft") {

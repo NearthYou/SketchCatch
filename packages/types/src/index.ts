@@ -3,6 +3,12 @@ import type { TemplateId } from "./template-definitions.ts";
 
 export type IsoDateTimeString = string;
 
+export type JsonPrimitive = string | number | boolean | null;
+export type JsonValue =
+  | JsonPrimitive
+  | JsonValue[]
+  | { [key: string]: JsonValue };
+
 export type ApiErrorCode =
   | "bad_request"
   | "unauthorized"
@@ -1114,6 +1120,46 @@ export type CreateDeploymentRequest = {
 };
 
 export type DeploymentLiveProfile = "practice" | "demo_web_service" | "demo_web_service_with_rds";
+
+export type DeploymentLiveObservationManifestV2 = {
+  schemaVersion: 2;
+  provider: "aws";
+  provenance: {
+    deploymentId: string;
+    terraformArtifactSha256: string;
+    awsConnectionId: string;
+    region: string;
+    verifiedAt: IsoDateTimeString;
+  };
+  endpoints: {
+    audienceBaseUrl: string;
+    trafficUrl: string;
+  };
+  pressure: {
+    metric: "requests_per_target_per_minute";
+    target: 60;
+    windowSeconds: 60;
+  };
+  adapter: {
+    kind: "aws-live-observation";
+    version: 1;
+    payload: JsonValue;
+  };
+};
+
+export type DeploymentLiveObservationManifestStatus =
+  | "valid"
+  | "manifest_invalid";
+
+export type DeploymentLiveObservationManifestRecord = {
+  deploymentId: string;
+  schemaVersion: 2;
+  status: DeploymentLiveObservationManifestStatus;
+  manifest: DeploymentLiveObservationManifestV2 | null;
+  invalidReason: string | null;
+  createdAt: IsoDateTimeString;
+  updatedAt: IsoDateTimeString;
+};
 
 export type LiveObservationStatus = "active" | "stopped" | "expired";
 
@@ -2246,6 +2292,7 @@ export type TerraformGenerateRequest = {
 
 export type TerraformGenerateResponse = {
   terraformCode: string;
+  architectureDiagnostics: ArchitectureDiagnostic[];
 };
 
 export type ResourceArea =
@@ -2330,6 +2377,28 @@ export type TerraformDiagnostic = {
   sourceFileName?: string | undefined;
   resourceAddress?: string | undefined;
   nodeId?: string | undefined;
+};
+
+export type ArchitectureValidationMode = "contextual" | "preview" | "pre_deployment";
+
+export type ArchitectureDiagnosticSeverity = "info" | "warning" | "error";
+
+export type ArchitectureDiagnosticRemediation = {
+  label: string;
+  action: "focus-resource" | "open-parameter" | "open-guidance";
+  parameterPath?: string | undefined;
+};
+
+export type ArchitectureDiagnostic = {
+  source: "architecture-rule";
+  code: string;
+  severity: ArchitectureDiagnosticSeverity;
+  ruleId: string;
+  resourceNodeId: string;
+  relatedNodeIds: readonly string[];
+  summary: string;
+  message: string;
+  remediation: readonly ArchitectureDiagnosticRemediation[];
 };
 
 export type TerraformValidateRequest = {

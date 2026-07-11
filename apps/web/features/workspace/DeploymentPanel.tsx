@@ -1,6 +1,7 @@
 ﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   Dispatch,
+  KeyboardEvent as ReactKeyboardEvent,
   SetStateAction
 } from "react";
 import type {
@@ -74,6 +75,15 @@ import {
 import type { AiRequestState } from "./WorkspaceAiPanelPieces";
 import type { SavedWorkspaceTerraformArtifact } from "./workspace-deployment-artifacts";
 import type { RequestState } from "./workspace-right-panel.types";
+import {
+  canLoadDeploymentData,
+  type DeploymentAvailability
+} from "./deployment-availability";
+import {
+  getDirectDeploymentFlow,
+  type DirectDeploymentPreflightState,
+  type DirectDeploymentStepId
+} from "./deployment-console-state";
 import { getDeploymentDurationLabel } from "./deployment-duration";
 import styles from "./workspace.module.css";
 
@@ -89,8 +99,7 @@ type DeploymentPanelSnapshot = DeploymentRuntimeSnapshot & {
   readonly awsConnections: AwsConnection[];
 };
 
-type DeploymentStageState = "active" | "done" | "error" | "idle";
-type DeploymentWizardStep = "baseline" | "review" | "deploy";
+type DeploymentConsoleTab = "direct" | "git-cicd" | "history";
 
 export type DeploymentPreDeploymentCheckState = {
   readonly analysis: AiPreDeploymentAnalysisResult | null;
@@ -107,6 +116,7 @@ export const initialPreDeploymentCheckState: DeploymentPreDeploymentCheckState =
 
 export function DeploymentPanel({
   currentNodeCount,
+  deploymentAvailability,
   diagramJson,
   fullScreenOnly = false,
   hasUnsavedDeploymentBaseline,
@@ -122,6 +132,7 @@ export function DeploymentPanel({
   projectName
 }: {
   readonly currentNodeCount: number;
+  readonly deploymentAvailability: DeploymentAvailability;
   readonly diagramJson: DiagramJson;
   readonly fullScreenOnly?: boolean | undefined;
   readonly hasUnsavedDeploymentBaseline: boolean;
@@ -163,7 +174,16 @@ export function DeploymentPanel({
   const [failureExplanationState, setFailureExplanationState] = useState<RequestState>("idle");
   const [failureExplanationErrorMessage, setFailureExplanationErrorMessage] = useState("");
   const [isDeploymentExpanded, setIsDeploymentExpanded] = useState(initialExpanded);
+  const [deploymentConsoleTab, setDeploymentConsoleTab] =
+    useState<DeploymentConsoleTab>("direct");
+  const [selectedDirectStepId, setSelectedDirectStepId] =
+    useState<DirectDeploymentStepId>("save");
   const trafficAbortControllerRef = useRef<AbortController | null>(null);
+  const deploymentCloseButtonRef = useRef<HTMLButtonElement | null>(null);
+  const deploymentDialogRef = useRef<HTMLDivElement | null>(null);
+  const deploymentTabRefs = useRef<Partial<Record<DeploymentConsoleTab, HTMLButtonElement>>>({});
+  const deploymentConfirmationOpenRef = useRef(false);
+  deploymentConfirmationOpenRef.current = showApplyConfirmation || showDestroyConfirmation;
   const isDeploymentOverlayOpen = fullScreenOnly || isDeploymentExpanded;
 
   const verifiedAwsConnections = useMemo(
@@ -221,7 +241,6 @@ export function DeploymentPanel({
     () => deployments.find((deployment) => deployment.id === selectedDeploymentId) ?? null,
     [deployments, selectedDeploymentId]
   );
-
   useEffect(() => {
     setDurationNow(Date.now());
 
@@ -233,13 +252,6 @@ export function DeploymentPanel({
 
     return () => window.clearInterval(intervalId);
   }, [selectedDeployment?.id, selectedDeployment?.status]);
-  const suggestedDeploymentWizardStep = getSuggestedDeploymentWizardStep({
-    hasUnsavedDeploymentBaseline,
-    selectedDeployment
-  });
-  const [deploymentWizardStep, setDeploymentWizardStep] = useState<DeploymentWizardStep>(
-    suggestedDeploymentWizardStep
-  );
   const selectedGitCicdHandoff = useMemo(
     () => gitCicdHandoffs.find((handoff) => handoff.id === selectedGitCicdHandoffId) ?? null,
     [gitCicdHandoffs, selectedGitCicdHandoffId]
@@ -274,8 +286,6 @@ export function DeploymentPanel({
   const canRunDestroyPlan = deploymentActions.canRunDestroyPlan;
   const canDestroy = deploymentActions.canDestroy;
   const canCancelDeployment = deploymentActions.canCancelDeployment;
-  const shouldShowPlanButton = deploymentActions.shouldShowApplyPlanButton;
-  const shouldShowApprovePlanButton = deploymentActions.shouldShowApprovePlanButton;
   const shouldShowApplyButton = deploymentActions.shouldShowApplyButton;
   const shouldShowDestroyPlanButton = deploymentActions.shouldShowDestroyPlanButton;
   const shouldShowDestroyButton = deploymentActions.shouldShowDestroyButton;
@@ -298,30 +308,27 @@ export function DeploymentPanel({
   const hasStalePreDeploymentAnalysis =
     preDeploymentAnalysis !== null &&
     isWorkspaceAiResultStale(preDeploymentFingerprint, boardSnapshot.fingerprint);
+  const directPreflightState = getDirectPreflightState({
+    analysis: preDeploymentAnalysis,
+    errorMessage: preDeploymentErrorMessage,
+    hasStaleAnalysis: hasStalePreDeploymentAnalysis,
+    requestState: preDeploymentState
+  });
   const canRunDeploymentReviewStep =
     canStartDeploymentReview &&
     preDeploymentState !== "loading";
-  const canRunPrimaryDeploymentStep =
-    canRunPlan ||
-    canApprovePlan ||
-    canApply ||
-    canRunDestroyPlan ||
-    canDestroy;
-  const primaryDeploymentStepLabel = getPrimaryDeploymentStepLabel({
-    canApply,
-    canApprovePlan,
-    canDestroy,
-    canRunDestroyPlan,
-    canRunPlan,
-    hasCurrentPlan,
-    selectedDeployment,
-    shouldShowApprovePlanButton,
-    shouldShowApplyButton,
-    shouldShowDestroyButton,
-    shouldShowDestroyPlanButton,
-    shouldShowPlanButton
-  });
   const primaryDeploymentStepStatus = getPrimaryDeploymentStepStatus(selectedDeployment);
+  const directDeploymentFlow = getDirectDeploymentFlow({
+    actions: deploymentActions,
+    deployment: selectedDeployment,
+    hasUnsavedBaseline: hasUnsavedDeploymentBaseline,
+    preflightState: directPreflightState,
+    requestState
+  });
+
+  useEffect(() => {
+    setSelectedDirectStepId(directDeploymentFlow.activeStepId);
+  }, [directDeploymentFlow.activeStepId]);
 
   useEffect(() => {
     if (shouldShowApplyButton) {
@@ -330,26 +337,90 @@ export function DeploymentPanel({
   }, [shouldShowApplyButton]);
 
   useEffect(() => {
-    setDeploymentWizardStep((currentStep) => {
-      if (
-        !canOpenDeploymentWizardStep(currentStep, {
-          hasUnsavedDeploymentBaseline,
-          selectedDeployment
-        })
-      ) {
-        return suggestedDeploymentWizardStep;
-      }
+    if (!isDeploymentOverlayOpen) {
+      return;
+    }
 
-      if (
-        getDeploymentWizardStepIndex(suggestedDeploymentWizardStep) >
-        getDeploymentWizardStepIndex(currentStep)
-      ) {
-        return suggestedDeploymentWizardStep;
-      }
-
-      return currentStep;
+    const previousFocus = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+    const previousBodyOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const focusFrame = window.requestAnimationFrame(() => {
+      deploymentCloseButtonRef.current?.focus();
     });
-  }, [hasUnsavedDeploymentBaseline, selectedDeployment, suggestedDeploymentWizardStep]);
+
+    function handleEscape(event: KeyboardEvent): void {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        if (deploymentConfirmationOpenRef.current) {
+          setShowApplyConfirmation(false);
+          setShowDestroyConfirmation(false);
+          return;
+        }
+        closeExpandedDeployment();
+      }
+    }
+
+    function trapDialogFocus(event: KeyboardEvent): void {
+      if (event.key !== "Tab") {
+        return;
+      }
+
+      const focusableElements = Array.from(
+        deploymentDialogRef.current?.querySelectorAll<HTMLElement>(
+          'a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])'
+        ) ?? []
+      );
+      const firstElement = focusableElements[0];
+      const lastElement = focusableElements.at(-1);
+
+      if (!firstElement || !lastElement) {
+        return;
+      }
+
+      if (event.shiftKey && document.activeElement === firstElement) {
+        event.preventDefault();
+        lastElement.focus();
+      } else if (!event.shiftKey && document.activeElement === lastElement) {
+        event.preventDefault();
+        firstElement.focus();
+      }
+    }
+
+    document.addEventListener("keydown", handleEscape);
+    document.addEventListener("keydown", trapDialogFocus);
+
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      document.removeEventListener("keydown", handleEscape);
+      document.removeEventListener("keydown", trapDialogFocus);
+      document.body.style.overflow = previousBodyOverflow;
+      window.requestAnimationFrame(() => {
+        const deploymentTrigger = document.querySelector<HTMLElement>(
+          "[data-deployment-console-trigger]"
+        );
+        (deploymentTrigger ?? previousFocus)?.focus();
+      });
+    };
+  }, [isDeploymentOverlayOpen]);
+
+  function handleDeploymentTabKeyDown(
+    event: ReactKeyboardEvent<HTMLButtonElement>,
+    currentTab: DeploymentConsoleTab
+  ): void {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") {
+      return;
+    }
+
+    event.preventDefault();
+    const tabs: readonly DeploymentConsoleTab[] = ["direct", "git-cicd", "history"];
+    const currentIndex = tabs.indexOf(currentTab);
+    const direction = event.key === "ArrowRight" ? 1 : -1;
+    const nextTab = tabs[(currentIndex + direction + tabs.length) % tabs.length]!;
+    setDeploymentConsoleTab(nextTab);
+    window.requestAnimationFrame(() => deploymentTabRefs.current[nextTab]?.focus());
+  }
   const loadDeploymentRuntimeSnapshot = useCallback(async (): Promise<DeploymentRuntimeSnapshot> => {
     const [
       nextDeployments,
@@ -419,6 +490,12 @@ export function DeploymentPanel({
   }, [applyDeploymentRuntimeSnapshot]);
 
   useEffect(() => {
+    if (!canLoadDeploymentData(deploymentAvailability)) {
+      setErrorMessage("");
+      setRequestState("idle");
+      return;
+    }
+
     let cancelled = false;
 
     async function loadDeploymentData(): Promise<void> {
@@ -448,7 +525,7 @@ export function DeploymentPanel({
     return () => {
       cancelled = true;
     };
-  }, [applyDeploymentPanelSnapshot, loadDeploymentPanelSnapshot]);
+  }, [applyDeploymentPanelSnapshot, deploymentAvailability, loadDeploymentPanelSnapshot]);
 
   useEffect(() => {
     if (deployments.length === 0) {
@@ -798,7 +875,6 @@ export function DeploymentPanel({
 
       applyDeploymentPanelSnapshot(snapshot);
       setSelectedDeploymentId("");
-      setDeploymentWizardStep("review");
 
       const deployment = await createDeployment({
         projectId,
@@ -819,32 +895,6 @@ export function DeploymentPanel({
     }, "배포 검토를 시작하지 못했습니다.");
   }
 
-  function startPrimaryDeploymentStep(): void {
-    if (shouldShowPlanButton) {
-      void startTerraformPlan();
-      return;
-    }
-
-    if (shouldShowApprovePlanButton) {
-      void approveCurrentPlan();
-      return;
-    }
-
-    if (shouldShowApplyButton) {
-      setShowApplyConfirmation(true);
-      return;
-    }
-
-    if (shouldShowDestroyPlanButton) {
-      void startTerraformDestroyPlan();
-      return;
-    }
-
-    if (shouldShowDestroyButton) {
-      setShowDestroyConfirmation(true);
-    }
-  }
-
   async function saveDeploymentBaseline(): Promise<void> {
     if (requestState === "loading") {
       return;
@@ -856,7 +906,6 @@ export function DeploymentPanel({
 
       applyDeploymentPanelSnapshot(snapshot);
       setSelectedDeploymentId("");
-      setDeploymentWizardStep("review");
     }, "배포 기준을 저장하지 못했습니다.");
   }
 
@@ -1149,127 +1198,56 @@ export function DeploymentPanel({
     }, "OAuth로 GitHub 저장소 준비를 적용하지 못했습니다.");
   }
 
-  const renderPreDeploymentCheckSection = () => null;
-
-  function moveToDeploymentWizardStep(nextStep: DeploymentWizardStep): void {
-    if (
-      canOpenDeploymentWizardStep(nextStep, {
-        hasUnsavedDeploymentBaseline,
-        selectedDeployment
-      })
-    ) {
-      setDeploymentWizardStep(nextStep);
-    }
-  }
-
   const renderSetupSection = () => {
-    const baselineStageStatus = hasUnsavedDeploymentBaseline ? "변경사항 저장 필요" : "저장됨";
-    const baselineStageState: DeploymentStageState = hasUnsavedDeploymentBaseline
-      ? "active"
-      : "done";
-    const reviewStageStatus = getDeploymentReviewStepStatus({
-      hasStalePreDeploymentAnalysis,
-      preDeploymentAnalysis,
-      preDeploymentErrorMessage,
-      preDeploymentState,
-      requestState,
-      selectedDeployment
-    });
-    const reviewStageState: DeploymentStageState =
-      preDeploymentState === "error" || requestState === "error"
-        ? "error"
-        : selectedDeployment
-          ? "done"
-          : hasUnsavedDeploymentBaseline
-            ? "idle"
-            : "active";
-    const deployStageState: DeploymentStageState =
-      selectedDeployment?.status === "FAILED"
-        ? "error"
-        : selectedDeployment?.status === "SUCCESS" || selectedDeployment?.status === "DESTROYED"
-          ? "done"
-          : selectedDeployment
-            ? "active"
-            : "idle";
+    const selectedStep =
+      directDeploymentFlow.steps.find((step) => step.id === selectedDirectStepId) ??
+      directDeploymentFlow.steps[0]!;
+    const selectedAwsConnection =
+      verifiedAwsConnections.find((connection) => connection.id === selectedAwsConnectionId) ??
+      null;
+    const requestError =
+      selectedStep.id === "preflight" && preDeploymentState === "error"
+        ? preDeploymentErrorMessage
+        : requestState === "error"
+          ? errorMessage
+          : "";
 
-    function getDeploymentStageDisplayState(
-      stepId: DeploymentWizardStep,
-      stageState: DeploymentStageState
-    ): DeploymentStageState {
-      if (stageState === "error") {
-        return "error";
-      }
-
-      return deploymentWizardStep === stepId ? "active" : stageState;
-    }
-
-    const deploymentStageSteps = [
-      {
-        id: "baseline",
-        label: "저장",
-        number: "1",
-        state: getDeploymentStageDisplayState("baseline", baselineStageState),
-        status: baselineStageStatus,
-        title: "배포 전 저장"
-      },
-      {
-        id: "review",
-        label: "검사",
-        number: "2",
-        state: getDeploymentStageDisplayState("review", reviewStageState),
-        status: reviewStageStatus,
-        title: "배포 전 검사 및 리뷰"
-      },
-      {
-        id: "deploy",
-        label: "배포",
-        number: "3",
-        state: getDeploymentStageDisplayState("deploy", deployStageState),
-        status: primaryDeploymentStepStatus,
-        title: "배포"
-      }
-    ] as const;
-    const activeDeploymentStage =
-      deploymentStageSteps.find((stage) => stage.id === deploymentWizardStep) ??
-      deploymentStageSteps[0];
-
-    function renderDeploymentStageAction(stepId: DeploymentWizardStep) {
-      if (stepId === "baseline") {
+    function renderDirectStepContent(stepId: DirectDeploymentStepId) {
+      if (stepId === "save") {
         return (
-          <article className={styles.deploymentStageActionCard} data-state={baselineStageState}>
-            <div className={styles.deploymentStageBody}>
-              <h3>배포 전 저장</h3>
-              <p className={styles.deploymentStageStatus}>{baselineStageStatus}</p>
+          <>
+            <div className={styles.deploymentStepHeading}>
+              <span>Step 1</span>
+              <h3>변경사항 저장</h3>
+              <p>현재 Board와 Terraform 파일을 하나의 배포 기준으로 동기화합니다.</p>
             </div>
-            <button
-              className={styles.deploymentSecondaryButton}
-              disabled={requestState === "loading"}
-              onClick={saveDeploymentBaseline}
-              type="button"
-            >
-              <DeploymentBaselineIcon size={16} aria-hidden="true" />
-              저장
-            </button>
-            <div className={styles.deploymentStageFooter}>
+            <div className={styles.deploymentStepCallout}>
+              <strong>{hasUnsavedDeploymentBaseline ? "저장되지 않은 변경사항이 있습니다" : "최신 변경사항이 저장돼 있습니다"}</strong>
+              <p>저장된 artifact만 이후 검사와 Plan의 입력으로 사용됩니다.</p>
+            </div>
+            <div className={styles.deploymentStepActionBar}>
+              <p>{hasUnsavedDeploymentBaseline ? "저장 후 배포 전 검사가 열립니다." : "필요하면 현재 상태를 다시 저장할 수 있습니다."}</p>
               <button
-                className={styles.deploymentStageNextButton}
-                disabled={hasUnsavedDeploymentBaseline || requestState === "loading"}
-                onClick={() => moveToDeploymentWizardStep("review")}
+                className={styles.deploymentPrimaryButton}
+                disabled={requestState === "loading"}
+                onClick={saveDeploymentBaseline}
                 type="button"
               >
-                다음: 검사
+                <DeploymentBaselineIcon size={16} aria-hidden="true" />
+                {requestState === "loading" ? "저장 중" : "변경사항 저장"}
               </button>
             </div>
-          </article>
+          </>
         );
       }
 
-      if (stepId === "review") {
+      if (stepId === "preflight") {
         return (
-          <article className={styles.deploymentStageActionCard} data-state={reviewStageState}>
-            <div className={styles.deploymentStageBody}>
-              <h3>배포 전 검사 및 리뷰</h3>
-              <p className={styles.deploymentStageStatus}>{reviewStageStatus}</p>
+          <>
+            <div className={styles.deploymentStepHeading}>
+              <span>Step 2</span>
+              <h3>배포 전 검사</h3>
+              <p>Terraform 진단과 보안·비용 위험을 확인하고 배포 대상을 생성합니다.</p>
             </div>
             <div className={styles.deploymentStageSettings}>
               <SelectMenu
@@ -1290,161 +1268,196 @@ export function DeploymentPanel({
                 value={selectedLiveProfile}
               />
             </div>
-            <button
-              className={styles.deploymentPrimaryButton}
-              disabled={!canRunDeploymentReviewStep}
-              onClick={() => void runDeploymentReviewStep()}
-              type="button"
-            >
-              <ShieldCheck size={16} aria-hidden="true" />
-              {preDeploymentState === "loading" || requestState === "loading"
-                ? "진행 중"
-                : selectedDeployment
-                  ? "다시 리뷰"
-                  : "검사 및 리뷰"}
-            </button>
-            <div className={styles.deploymentStageFooter}>
+            {preDeploymentAnalysis !== null && !hasStalePreDeploymentAnalysis ? (
+              <DeploymentPreDeploymentSummary
+                analysis={preDeploymentAnalysis}
+                onOpenFindingTerraformSource={onOpenFindingTerraformSource}
+              />
+            ) : (
+              <div className={styles.deploymentStepCallout}>
+                <strong>아직 실행된 검사가 없습니다</strong>
+                <p>검사 전 상태는 실패가 아닙니다. AWS 연결을 선택한 뒤 검사를 실행하세요.</p>
+              </div>
+            )}
+            <div className={styles.deploymentStepActionBar}>
+              <p>{selectedStep.disabledReason ?? "검사를 통과하면 Plan 생성 단계로 이동합니다."}</p>
               <button
-                className={styles.deploymentStageNextButton}
-                disabled={!selectedDeployment || requestState === "loading"}
-                onClick={() => moveToDeploymentWizardStep("deploy")}
+                className={styles.deploymentPrimaryButton}
+                disabled={!canRunDeploymentReviewStep}
+                onClick={() => void runDeploymentReviewStep()}
                 type="button"
               >
-                다음: 배포
+                <ShieldCheck size={16} aria-hidden="true" />
+                {preDeploymentState === "loading" || requestState === "loading"
+                  ? "검사 중"
+                  : selectedDeployment
+                    ? "다시 검사"
+                    : "배포 전 검사 실행"}
               </button>
             </div>
-          </article>
+          </>
+        );
+      }
+
+      if (stepId === "plan") {
+        return (
+          <>
+            <div className={styles.deploymentStepHeading}>
+              <span>Step 3</span>
+              <h3>Plan 생성</h3>
+              <p>실제 인프라를 변경하지 않고 create, update, delete 영향을 계산합니다.</p>
+            </div>
+            <div className={styles.deploymentStepSummary}>
+              <InfoRow label="Deployment" value={selectedDeployment?.status ?? "검사 후 생성"} />
+              <InfoRow label="Plan" value={hasCurrentPlan ? "생성됨" : "아직 없음"} />
+              {selectedDeployment?.planSummary ? <PlanSummaryRows deployment={selectedDeployment} /> : null}
+            </div>
+            <div className={styles.deploymentStepActionBar}>
+              <p>{selectedStep.disabledReason ?? "Plan은 AWS 리소스를 변경하지 않습니다."}</p>
+              <button
+                className={styles.deploymentPrimaryButton}
+                disabled={!canRunPlan}
+                onClick={() => void startTerraformPlan()}
+                type="button"
+              >
+                <DashboardIcon name="rocket" />
+                {requestState === "loading" ? "Plan 생성 중" : "Plan 생성"}
+              </button>
+            </div>
+          </>
+        );
+      }
+
+      if (stepId === "approve") {
+        return (
+          <>
+            <div className={styles.deploymentStepHeading}>
+              <span>Step 4</span>
+              <h3>Plan 승인</h3>
+              <p>실행 계정과 region, 변경량, Plan snapshot을 확인하고 명시적으로 승인합니다.</p>
+            </div>
+            <div className={styles.deploymentStepSummary}>
+              <InfoRow label="AWS account" value={selectedDeployment?.approvedAwsAccountId ?? selectedAwsConnection?.accountId ?? "확인 필요"} />
+              <InfoRow label="AWS region" value={selectedDeployment?.approvedAwsRegion ?? selectedAwsConnection?.region ?? "확인 필요"} />
+              <InfoRow label="tfplan hash" value={formatShortHash(selectedDeployment?.approvedTfplanHash ?? null)} />
+              {selectedDeployment?.planSummary ? <PlanSummaryRows deployment={selectedDeployment} /> : null}
+            </div>
+            <div className={styles.deploymentStepActionBar}>
+              <p>{selectedStep.disabledReason ?? "승인 snapshot이 Apply 직전에 다시 검증됩니다."}</p>
+              <button
+                className={styles.deploymentPrimaryButton}
+                disabled={!canApprovePlan}
+                onClick={() => void approveCurrentPlan()}
+                type="button"
+              >
+                <ShieldCheck size={16} aria-hidden="true" />
+                {requestState === "loading" ? "승인 처리 중" : "Plan 승인"}
+              </button>
+            </div>
+          </>
         );
       }
 
       return (
-        <article className={styles.deploymentStageActionCard} data-state={deployStageState}>
-          <div className={styles.deploymentStageBody}>
-            <h3>배포</h3>
-            <p className={styles.deploymentStageStatus}>{primaryDeploymentStepStatus}</p>
+        <>
+          <div className={styles.deploymentStepHeading}>
+            <span>Step 5</span>
+            <h3>Apply 실행</h3>
+            <p>승인된 Plan과 동일한 snapshot만 실제 AWS 리소스에 적용합니다.</p>
           </div>
-          <button
-            className={styles.deploymentPrimaryButton}
-            disabled={!canRunPrimaryDeploymentStep}
-            onClick={startPrimaryDeploymentStep}
-            type="button"
-          >
-            <DashboardIcon name="rocket" />
-            {primaryDeploymentStepLabel}
-          </button>
-        </article>
-      );
-    }
-
-    function renderDeploymentStageSummaryPanel(stepId: DeploymentWizardStep) {
-      const selectedAwsConnection =
-        verifiedAwsConnections.find((connection) => connection.id === selectedAwsConnectionId) ??
-        null;
-      const selectedAwsConnectionSummary = selectedAwsConnection
-        ? `${selectedAwsConnection.accountId ?? "Unknown AWS account"} · ${selectedAwsConnection.region}`
-        : "AWS 연결 필요";
-
-      if (stepId === "baseline") {
-        return (
-          <aside className={styles.deploymentStageSummaryPanel} aria-label="저장 단계 요약">
-            <div>
-              <h3>읽기 전용 요약</h3>
-              <p>현재 단계와 관련된 판단 근거만 보여줍니다.</p>
-            </div>
-            <div className={styles.deploymentStageSummaryRows}>
-              <InfoRow label="저장 상태" value={baselineStageStatus} />
-              <InfoRow label="Terraform artifact" value="저장 후 동기화" />
-              <InfoRow label="다음 단계" value="배포 전 검사" />
-            </div>
-            <p className={styles.deploymentStageSummaryNotice}>
-              저장이 끝나면 AWS 연결과 Pre-Deployment Gate만 확인합니다.
-            </p>
-          </aside>
-        );
-      }
-
-      if (stepId === "review") {
-        return (
-          <aside className={styles.deploymentStageSummaryPanel} aria-label="검사 단계 요약">
-            <div>
-              <h3>읽기 전용 요약</h3>
-              <p>현재 단계와 관련된 판단 근거만 보여줍니다.</p>
-            </div>
-            <div className={styles.deploymentStageSummaryRows}>
-              <InfoRow label="AWS 연결" value={selectedAwsConnectionSummary} />
-              <InfoRow label="검사 상태" value={reviewStageStatus} />
-              <InfoRow label="다음 단계" value={selectedDeployment ? "Plan 실행" : "리뷰 완료 후 이동"} />
-            </div>
-            <p className={styles.deploymentStageSummaryNotice}>
-              Apply 전 사용자 승인과 로그 기록은 계속 필수입니다.
-            </p>
-          </aside>
-        );
-      }
-
-      return (
-        <aside className={styles.deploymentStageSummaryPanel} aria-label="배포 단계 요약">
-          <div>
-            <h3>읽기 전용 요약</h3>
-            <p>현재 단계와 관련된 판단 근거만 보여줍니다.</p>
-          </div>
-          <div className={styles.deploymentStageSummaryRows}>
+          <div className={styles.deploymentStepSummary}>
             <InfoRow label="Deployment 상태" value={selectedDeployment?.status ?? "대기"} />
-            <InfoRow label="현재 액션" value={primaryDeploymentStepLabel} />
-            <InfoRow label="Plan" value={hasCurrentPlan ? "생성됨" : "아직 없음"} />
+            <InfoRow label="승인" value={selectedDeployment ? formatApprovalState(selectedDeployment) : "Plan 필요"} />
+            <InfoRow label="현재 작업" value={primaryDeploymentStepStatus} />
           </div>
-          <p className={styles.deploymentStageSummaryNotice}>
-            실제 Apply와 Cleanup은 승인된 plan과 안전 게이트를 기준으로 실행됩니다.
-          </p>
-        </aside>
+          {showApplyConfirmation && selectedDeployment ? (
+            <div className={styles.deploymentApplyConfirm}>
+              <h3>Apply 최종 확인</h3>
+              <InfoRow label="AWS account" value={selectedDeployment.approvedAwsAccountId ?? "없음"} />
+              <InfoRow label="AWS region" value={selectedDeployment.approvedAwsRegion ?? "없음"} />
+              <InfoRow label="tfplan hash" value={formatShortHash(selectedDeployment.approvedTfplanHash)} />
+              <p>AWS 비용이 발생할 수 있습니다. 승인된 Plan과 대상 계정을 다시 확인하세요.</p>
+              <div className={styles.deploymentApplyActions}>
+                <button className={styles.deploymentSecondaryButton} onClick={() => setShowApplyConfirmation(false)} type="button">취소</button>
+                <button className={styles.deploymentPrimaryButton} disabled={!canApply} onClick={startTerraformApply} type="button">
+                  <DashboardIcon name="rocket" />
+                  AWS 리소스 생성
+                </button>
+              </div>
+            </div>
+          ) : null}
+          <div className={styles.deploymentStepActionBar}>
+            <p>{selectedStep.disabledReason ?? (deploymentActionHint || "Apply 전 서버가 승인 snapshot을 다시 검증합니다.")}</p>
+            {selectedDeployment?.status === "RUNNING" ? (
+              <button className={styles.deploymentSecondaryButton} disabled={!canCancelDeployment} onClick={cancelSelectedDeployment} type="button">실행 취소 요청</button>
+            ) : (
+              <button
+                className={styles.deploymentPrimaryButton}
+                disabled={!canApply}
+                onClick={() => setShowApplyConfirmation(true)}
+                type="button"
+              >
+                <DashboardIcon name="rocket" />
+                Apply 실행 검토
+              </button>
+            )}
+          </div>
+        </>
       );
     }
 
     return (
-      <section className={styles.deploymentStagePanel} aria-label="배포 단계">
-        <ol className={styles.deploymentStageStepper} aria-label="배포 진행 단계">
-          {deploymentStageSteps.map((stage) => (
-            <li
-              aria-current={stage.id === deploymentWizardStep ? "step" : undefined}
-              className={styles.deploymentStageStep}
-              data-state={stage.state}
-              key={stage.number}
-            >
-              <span className={styles.deploymentStageDot}>{stage.number}</span>
-              <span className={styles.deploymentStageLabel}>{stage.label}</span>
-              <span className={styles.deploymentStageStepStatus}>{stage.status}</span>
-            </li>
-          ))}
-        </ol>
+      <section className={styles.deploymentConsoleGrid} aria-label="Direct Deployment">
+        <nav className={styles.deploymentStepNavigation} aria-label="Direct Deployment 단계">
+          <p>Direct Deployment</p>
+          <ol>
+            {directDeploymentFlow.steps.map((step, index) => (
+              <li key={step.id}>
+                <button
+                  aria-current={step.id === directDeploymentFlow.activeStepId ? "step" : undefined}
+                  className={styles.deploymentStepButton}
+                  data-selected={step.id === selectedStep.id}
+                  data-state={step.state}
+                  disabled={step.state === "idle"}
+                  onClick={() => setSelectedDirectStepId(step.id)}
+                  type="button"
+                >
+                  <span className={styles.deploymentStepIndex}>{index + 1}</span>
+                  <span>
+                    <strong>{step.label}</strong>
+                    <small>{step.statusLabel}</small>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ol>
+        </nav>
 
-        <div className={styles.deploymentStageActions}>
-          {renderDeploymentStageAction(activeDeploymentStage.id)}
-          {renderDeploymentStageSummaryPanel(activeDeploymentStage.id)}
-        </div>
+        <article className={styles.deploymentStepWorkspace} data-state={selectedStep.state}>
+          {renderDirectStepContent(selectedStep.id)}
+          {requestError ? <p className={styles.deploymentStageAlert} role="alert">{requestError}</p> : null}
+          {selectedStep.id === "apply" && selectedDeployment?.status === "FAILED" ? (
+            <p className={styles.deploymentStageAlert} role="alert">
+              {selectedDeployment.errorSummary ?? "배포가 실패했습니다. 배포 기록에서 원인을 확인하세요."}
+            </p>
+          ) : null}
+        </article>
 
-        {preDeploymentState === "error" ? (
-          <p className={styles.deploymentStageAlert} role="alert">
-            {preDeploymentErrorMessage}
-          </p>
-        ) : null}
-        {requestState === "error" ? (
-          <p className={styles.deploymentStageAlert} role="alert">
-            {errorMessage}
-          </p>
-        ) : null}
-        {selectedDeployment?.status === "FAILED" ? (
-          <p className={styles.deploymentStageAlert} role="alert">
-            {selectedDeployment.errorSummary ?? "배포가 실패했습니다. 아래 실행 기록에서 원인을 확인하세요."}
-          </p>
-        ) : null}
-        {deploymentWizardStep === "review" &&
-        preDeploymentAnalysis !== null &&
-        !hasStalePreDeploymentAnalysis ? (
-          <DeploymentPreDeploymentSummary
-            analysis={preDeploymentAnalysis}
-            onOpenFindingTerraformSource={onOpenFindingTerraformSource}
-          />
-        ) : null}
+        <aside className={styles.deploymentContextPanel} aria-label="배포 컨텍스트">
+          <div>
+            <span>Deployment context</span>
+            <h3>실행 대상</h3>
+          </div>
+          <dl>
+            <div><dt>AWS account</dt><dd>{selectedAwsConnection?.accountId ?? "연결 필요"}</dd></div>
+            <div><dt>Region</dt><dd>{selectedAwsConnection?.region ?? "선택 전"}</dd></div>
+            <div><dt>Connection</dt><dd>{selectedAwsConnection ? "Verified" : "연결 필요"}</dd></div>
+            <div><dt>Terraform artifact</dt><dd>{selectedDeployment ? formatShortHash(selectedDeployment.terraformArtifactId) : "저장 후 생성"}</dd></div>
+            <div><dt>Architecture</dt><dd>{currentNodeCount} resources</dd></div>
+            <div><dt>저장 상태</dt><dd>{hasUnsavedDeploymentBaseline ? "변경사항 있음" : "저장됨"}</dd></div>
+          </dl>
+          <p>Apply와 Destroy는 승인 snapshot, 대상 계정, artifact가 모두 일치할 때만 실행됩니다.</p>
+        </aside>
       </section>
     );
   };
@@ -1775,6 +1788,30 @@ export function DeploymentPanel({
         </button>
       ) : null}
 
+      {selectedDeployment && shouldShowDestroyPlanButton ? (
+        <button
+          className={styles.deploymentSecondaryButton}
+          disabled={!canRunDestroyPlan}
+          onClick={() => void startTerraformDestroyPlan()}
+          type="button"
+        >
+          <Trash2 size={16} aria-hidden="true" />
+          Destroy Plan 생성
+        </button>
+      ) : null}
+
+      {selectedDeployment && shouldShowDestroyButton ? (
+        <button
+          className={styles.deploymentDangerButton}
+          disabled={!canDestroy}
+          onClick={() => setShowDestroyConfirmation(true)}
+          type="button"
+        >
+          <Trash2 size={16} aria-hidden="true" />
+          Destroy 실행 검토
+        </button>
+      ) : null}
+
       {selectedDeployment && showApplyConfirmation ? (
         <div className={styles.deploymentApplyConfirm}>
           <h3>Apply 확인</h3>
@@ -1935,62 +1972,98 @@ export function DeploymentPanel({
     </section>
   );
 
-  const renderSecondarySections = () => (
-    <section className={styles.deploymentSecondaryPanel} aria-label="보조 배포 정보">
-      <details
-        className={styles.deploymentDisclosure}
-        open={
-          showApplyConfirmation ||
-          shouldShowApplyButton ||
-          showDestroyConfirmation ||
-          shouldShowDestroyButton
-        }
-      >
-        <summary>
-          <span>실행 기록과 결과</span>
-          <small>{deployments.length} records</small>
-        </summary>
-        <div className={styles.deploymentDisclosureBody}>
-          {renderRecordsSection()}
-          {renderResultsSection()}
-        </div>
-      </details>
-      <details className={styles.deploymentDisclosure}>
-        <summary>
-          <span>Git/CI/CD handoff</span>
-          <small>{gitCicdHandoffs.length} handoffs</small>
-        </summary>
-        <div className={styles.deploymentDisclosureBody}>
-          {renderGitCicdHandoffSection()}
-        </div>
-      </details>
-      <details className={styles.deploymentDisclosure}>
-        <summary>
-          <span>Logs</span>
-          <small>{deploymentLogs.length} lines</small>
-        </summary>
-        <div className={styles.deploymentDisclosureBody}>
-          {renderLogsSection()}
-        </div>
-      </details>
-    </section>
-  );
-
-  const renderStatusMessages = () => (
-    <>
-      {requestState === "loading" ? <p className={styles.deploymentNotice}>요청을 처리하는 중입니다.</p> : null}
-      {requestState === "error" ? (
-        <p className={styles.deploymentError} role="alert">
-          {errorMessage}
-        </p>
-      ) : null}
-    </>
+  const renderHistoryView = () => (
+    <div className={styles.deploymentHistoryGrid}>
+      <div className={styles.deploymentHistoryPrimary}>{renderRecordsSection()}</div>
+      <div className={styles.deploymentHistorySecondary}>
+        <details className={styles.deploymentDisclosure} open>
+          <summary>
+            <span>리소스와 Output</span>
+            <small>{deploymentResources.length + terraformOutputs.length} items</small>
+          </summary>
+          <div className={styles.deploymentDisclosureBody}>{renderResultsSection()}</div>
+        </details>
+        <details className={styles.deploymentDisclosure}>
+          <summary>
+            <span>전체 로그</span>
+            <small>{deploymentLogs.length} lines</small>
+          </summary>
+          <div className={styles.deploymentDisclosureBody}>{renderLogsSection()}</div>
+        </details>
+      </div>
+    </div>
   );
 
   function closeExpandedDeployment(): void {
     setIsDeploymentExpanded(false);
     onExpandedClose?.();
   }
+
+  const deploymentContent = canLoadDeploymentData(deploymentAvailability) ? (
+    <div className={styles.deploymentConsoleContent}>
+      <div className={styles.deploymentConsoleTabs} role="tablist" aria-label="배포 콘솔 보기">
+        {([
+          ["direct", "Direct Deployment"],
+          ["git-cicd", "Git / CI·CD"],
+          ["history", `배포 기록 ${deployments.length}`]
+        ] as const).map(([tab, label]) => (
+          <button
+            aria-controls="deployment-console-view"
+            aria-selected={deploymentConsoleTab === tab}
+            className={styles.deploymentConsoleTab}
+            id={`deployment-console-tab-${tab}`}
+            key={tab}
+            onClick={() => setDeploymentConsoleTab(tab)}
+            onKeyDown={(event) => handleDeploymentTabKeyDown(event, tab)}
+            ref={(element) => {
+              if (element) {
+                deploymentTabRefs.current[tab] = element;
+              } else {
+                delete deploymentTabRefs.current[tab];
+              }
+            }}
+            role="tab"
+            tabIndex={deploymentConsoleTab === tab ? 0 : -1}
+            type="button"
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <div
+        aria-labelledby={`deployment-console-tab-${deploymentConsoleTab}`}
+        className={styles.deploymentConsoleView}
+        id="deployment-console-view"
+        role="tabpanel"
+      >
+        {deploymentConsoleTab === "direct" ? renderSetupSection() : null}
+        {deploymentConsoleTab === "git-cicd" ? renderGitCicdHandoffSection() : null}
+        {deploymentConsoleTab === "history" ? renderHistoryView() : null}
+        {deploymentConsoleTab !== "direct" && requestState === "error" ? (
+          <p className={styles.deploymentError} role="alert">{errorMessage}</p>
+        ) : null}
+      </div>
+    </div>
+  ) : (
+    <div className={styles.deploymentConsoleContent}>
+      <div className={styles.deploymentConsoleTabs} role="tablist" aria-label="배포 콘솔 보기">
+        <button aria-selected="true" className={styles.deploymentConsoleTab} role="tab" type="button">
+          Direct Deployment
+        </button>
+      </div>
+      <section className={styles.deploymentProjectGate} role="status">
+        <span>Project required</span>
+        <h3>프로젝트로 저장 후 배포할 수 있습니다</h3>
+        <p>
+          Local workspace에서는 AWS 연결과 Deployment 기록을 만들지 않습니다. 프로젝트를 만든 뒤
+          저장된 Terraform artifact를 기준으로 배포를 시작하세요.
+        </p>
+        <a className={styles.deploymentPrimaryButton} href="/workspace/new">
+          프로젝트로 저장
+        </a>
+      </section>
+    </div>
+  );
 
   return (
     <div className={fullScreenOnly ? styles.deploymentPanelFullscreenHost : styles.deploymentPanel}>
@@ -2016,10 +2089,7 @@ export function DeploymentPanel({
 
       {!fullScreenOnly ? (
         <div className={styles.deploymentPanelContent}>
-          {renderPreDeploymentCheckSection()}
-          {renderSetupSection()}
-          {renderStatusMessages()}
-          {renderSecondarySections()}
+          {deploymentContent}
         </div>
       ) : null}
 
@@ -2035,23 +2105,25 @@ export function DeploymentPanel({
           }}
           role="dialog"
         >
-          <div className={styles.deploymentExpandedShell}>
+          <div className={styles.deploymentExpandedShell} ref={deploymentDialogRef}>
             <button
               aria-label="Deployment 패널 닫기"
               className={styles.deploymentExpandedCloseButton}
               onClick={closeExpandedDeployment}
+              ref={deploymentCloseButtonRef}
               type="button"
             >
               <X size={18} aria-hidden="true" />
             </button>
             <div className={styles.deploymentExpandedBody}>
               <div className={styles.deploymentExpandedTitleRow}>
-                <h2 className={styles.deploymentExpandedTitle}>배포 콘솔</h2>
+                <div>
+                  <p className={styles.projectEyebrow}>Deployment</p>
+                  <h2 className={styles.deploymentExpandedTitle}>배포 콘솔</h2>
+                  <span>{projectName} · {verifiedAwsConnections.find((connection) => connection.id === selectedAwsConnectionId)?.region ?? "AWS region 선택 전"}</span>
+                </div>
               </div>
-              {renderPreDeploymentCheckSection()}
-              {renderSetupSection()}
-              {renderStatusMessages()}
-              {renderSecondarySections()}
+              {deploymentContent}
             </div>
           </div>
         </div>
@@ -2219,68 +2291,6 @@ function DeploymentGateCard({ deployment }: { readonly deployment: Deployment })
       </dl>
     </div>
     )
-}
-
-function getSuggestedDeploymentWizardStep({
-  hasUnsavedDeploymentBaseline,
-  selectedDeployment
-}: {
-  readonly hasUnsavedDeploymentBaseline: boolean;
-  readonly selectedDeployment: Deployment | null;
-}): DeploymentWizardStep {
-  if (hasUnsavedDeploymentBaseline) {
-    return "baseline";
-  }
-
-  if (
-    selectedDeployment?.status === "DESTROYED" ||
-    selectedDeployment?.status === "FAILED"
-  ) {
-    return "review";
-  }
-
-  if (selectedDeployment) {
-    return "deploy";
-  }
-
-  return "review";
-}
-
-function canOpenDeploymentWizardStep(
-  step: DeploymentWizardStep,
-  {
-    hasUnsavedDeploymentBaseline,
-    selectedDeployment
-  }: {
-    readonly hasUnsavedDeploymentBaseline: boolean;
-    readonly selectedDeployment: Deployment | null;
-  }
-): boolean {
-  if (step === "baseline") {
-    return true;
-  }
-
-  if (hasUnsavedDeploymentBaseline) {
-    return false;
-  }
-
-  if (step === "review") {
-    return true;
-  }
-
-  return selectedDeployment !== null;
-}
-
-function getDeploymentWizardStepIndex(step: DeploymentWizardStep): number {
-  if (step === "baseline") {
-    return 0;
-  }
-
-  if (step === "review") {
-    return 1;
-  }
-
-  return 2;
 }
 
 function DeploymentFailureExplanationCard({
@@ -2481,119 +2491,44 @@ function formatApprovalState(deployment: Deployment): string {
   return "승인 필요 없음";
 }
 
-function getDeploymentReviewStepStatus({
-  hasStalePreDeploymentAnalysis,
-  preDeploymentAnalysis,
-  preDeploymentErrorMessage,
-  preDeploymentState,
-  requestState,
-  selectedDeployment
+function getDirectPreflightState({
+  analysis,
+  errorMessage,
+  hasStaleAnalysis,
+  requestState
 }: {
-  readonly hasStalePreDeploymentAnalysis: boolean;
-  readonly preDeploymentAnalysis: AiPreDeploymentAnalysisResult | null;
-  readonly preDeploymentErrorMessage: string;
-  readonly preDeploymentState: AiRequestState;
-  readonly requestState: RequestState;
-  readonly selectedDeployment: Deployment | null;
-}): string {
-  if (preDeploymentState === "loading" || requestState === "loading") {
-    return "진행 중";
+  readonly analysis: AiPreDeploymentAnalysisResult | null;
+  readonly errorMessage: string;
+  readonly hasStaleAnalysis: boolean;
+  readonly requestState: AiRequestState;
+}): DirectDeploymentPreflightState {
+  if (requestState === "loading") {
+    return "loading";
   }
 
-  if (preDeploymentState === "error") {
-    return preDeploymentErrorMessage || "검사를 시작하지 못했습니다.";
+  if (requestState === "error" || errorMessage) {
+    return "error";
   }
 
-  if (selectedDeployment) {
-    return "리뷰 생성됨";
+  if (!analysis || hasStaleAnalysis) {
+    return "idle";
   }
 
-  if (hasStalePreDeploymentAnalysis) {
-    return "보드 변경됨";
+  if (
+    analysis.findings.some((finding) => finding.severity === "high") ||
+    countChecklistItems(analysis, "fail") > 0
+  ) {
+    return "blocked";
   }
 
-  if (preDeploymentAnalysis) {
-    const highCount = preDeploymentAnalysis.findings.filter(
-      (finding) => finding.severity === "high"
-    ).length;
-    const mediumCount = preDeploymentAnalysis.findings.filter(
-      (finding) => finding.severity === "medium"
-    ).length;
-
-    if (highCount > 0 || mediumCount > 0) {
-      return `검사 완료 · high ${highCount}, medium ${mediumCount}`;
-    }
-
-    return "검사 완료";
+  if (
+    analysis.findings.some((finding) => finding.severity === "medium") ||
+    countChecklistItems(analysis, "warning") > 0
+  ) {
+    return "warning";
   }
 
-  return "AWS 연결 선택 후 실행";
-}
-
-function getPrimaryDeploymentStepLabel({
-  canApply,
-  canApprovePlan,
-  canDestroy,
-  canRunDestroyPlan,
-  canRunPlan,
-  hasCurrentPlan,
-  selectedDeployment,
-  shouldShowApprovePlanButton,
-  shouldShowApplyButton,
-  shouldShowDestroyButton,
-  shouldShowDestroyPlanButton,
-  shouldShowPlanButton
-}: {
-  readonly canApply: boolean;
-  readonly canApprovePlan: boolean;
-  readonly canDestroy: boolean;
-  readonly canRunDestroyPlan: boolean;
-  readonly canRunPlan: boolean;
-  readonly hasCurrentPlan: boolean;
-  readonly selectedDeployment: Deployment | null;
-  readonly shouldShowApprovePlanButton: boolean;
-  readonly shouldShowApplyButton: boolean;
-  readonly shouldShowDestroyButton: boolean;
-  readonly shouldShowDestroyPlanButton: boolean;
-  readonly shouldShowPlanButton: boolean;
-}): string {
-  if (!selectedDeployment) {
-    return "리뷰 후 가능";
-  }
-
-  if (selectedDeployment.status === "RUNNING") {
-    return "진행 중";
-  }
-
-  if (shouldShowPlanButton) {
-    return hasCurrentPlan && canRunPlan ? "Plan 다시 실행" : "Plan 실행";
-  }
-
-  if (shouldShowApprovePlanButton) {
-    return canApprovePlan ? "Plan 승인" : "승인 대기";
-  }
-
-  if (shouldShowApplyButton) {
-    return canApply ? "배포 실행" : "배포 대기";
-  }
-
-  if (shouldShowDestroyPlanButton) {
-    return canRunDestroyPlan ? "Cleanup Plan" : "Cleanup 대기";
-  }
-
-  if (shouldShowDestroyButton) {
-    return canDestroy ? "Cleanup 실행" : "Cleanup 대기";
-  }
-
-  if (selectedDeployment.status === "SUCCESS") {
-    return "완료";
-  }
-
-  if (selectedDeployment.status === "FAILED") {
-    return "실패 확인";
-  }
-
-  return "준비 중";
+  return "passed";
 }
 
 function getPrimaryDeploymentStepStatus(deployment: Deployment | null): string {

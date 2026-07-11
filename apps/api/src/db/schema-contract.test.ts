@@ -1,11 +1,18 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import {
+  createTableRelationsHelpers,
+  extractTablesRelationalConfig
+} from "drizzle-orm";
 import { getTableConfig } from "drizzle-orm/pg-core";
+import * as databaseSchema from "./schema.js";
 import {
   architectures,
   awsConnectionStatusEnum,
   awsConnections,
   deploymentFailureStageEnum,
+  deploymentLiveObservationManifests,
+  deploymentLiveObservationManifestStatusEnum,
   deploymentLiveProfileEnum,
   deploymentLogs,
   deploymentPlanArtifacts,
@@ -115,6 +122,86 @@ test("deployments store the explicit live deployment profile", () => {
     "demo_web_service_with_rds"
   ]);
   assert(findColumn(config.columns, "live_profile"));
+});
+
+test("deployment Live Observation manifests are one-to-one schema v2 records without secrets", () => {
+  const config = getTableConfig(deploymentLiveObservationManifests);
+  const deploymentId = config.columns.find((column) => column.name === "deployment_id");
+  const schemaVersion = config.columns.find((column) => column.name === "schema_version");
+  const status = config.columns.find((column) => column.name === "status");
+  const manifest = config.columns.find((column) => column.name === "manifest");
+  const invalidReason = config.columns.find((column) => column.name === "invalid_reason");
+  const createdAt = config.columns.find((column) => column.name === "created_at");
+  const updatedAt = config.columns.find((column) => column.name === "updated_at");
+
+  assert.equal(
+    deploymentLiveObservationManifestStatusEnum.enumName,
+    "deployment_live_observation_manifest_status"
+  );
+  assert.deepEqual(deploymentLiveObservationManifestStatusEnum.enumValues, [
+    "valid",
+    "manifest_invalid"
+  ]);
+  assert.deepEqual(
+    config.columns.map((column) => column.name),
+    [
+      "deployment_id",
+      "schema_version",
+      "status",
+      "manifest",
+      "invalid_reason",
+      "created_at",
+      "updated_at"
+    ]
+  );
+  assert.equal(deploymentId?.primary, true);
+  assert.equal(deploymentId?.notNull, true);
+  assert.equal(schemaVersion?.columnType, "PgInteger");
+  assert.equal(schemaVersion?.notNull, true);
+  assert.equal(status?.notNull, true);
+  assert.equal(manifest?.columnType, "PgJsonb");
+  assert.equal(manifest?.notNull, false);
+  assert.equal(invalidReason?.notNull, false);
+  assert.equal(createdAt?.notNull, true);
+  assert.equal(updatedAt?.notNull, true);
+  assert.equal((createdAt as { withTimezone?: boolean } | undefined)?.withTimezone, true);
+  assert.equal((updatedAt as { withTimezone?: boolean } | undefined)?.withTimezone, true);
+  assert(
+    config.checks.some(
+      (constraint) =>
+        constraint.name ===
+        "deployment_live_observation_manifests_schema_version_check"
+    )
+  );
+
+  const deploymentForeignKey = config.foreignKeys.find((foreignKey) => {
+    const reference = foreignKey.reference();
+
+    return (
+      reference.columns.some((column) => column.name === "deployment_id") &&
+      reference.foreignTable === deployments &&
+      reference.foreignColumns.some((column) => column.name === "id")
+    );
+  });
+  assert.ok(deploymentForeignKey);
+  assert.equal(deploymentForeignKey.onDelete, "cascade");
+});
+
+test("deployments and Live Observation manifests expose inverse one-to-one relations", () => {
+  const relationalConfig = extractTablesRelationalConfig(
+    databaseSchema,
+    createTableRelationsHelpers
+  ).tables;
+
+  assert.equal(
+    relationalConfig.deployments?.relations.liveObservationManifest?.referencedTableName,
+    "deployment_live_observation_manifests"
+  );
+  assert.equal(
+    relationalConfig.deploymentLiveObservationManifests?.relations.deployment
+      ?.referencedTableName,
+    "deployments"
+  );
 });
 
 test("AWS connections store generated external ids without raw credentials", () => {

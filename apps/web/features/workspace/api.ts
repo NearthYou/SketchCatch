@@ -286,16 +286,14 @@ export async function uploadProjectAsset(
   }
 }
 
-export async function generateTerraformCode(diagramJson: DiagramJson): Promise<string> {
-  const response = await apiFetch<TerraformGenerateResponse>("/terraform/generate", {
+export async function generateTerraformCode(diagramJson: DiagramJson): Promise<TerraformGenerateResponse> {
+  return apiFetch<TerraformGenerateResponse>("/terraform/generate", {
     auth: true,
     method: "POST",
     body: {
       diagramJson
     }
   });
-
-  return response.terraformCode;
 }
 
 export async function validateTerraformCode(

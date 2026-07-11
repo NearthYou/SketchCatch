@@ -13,6 +13,10 @@
     "./resource-definitions": {
       "types": "./src/resource-definitions.ts",
       "default": "./src/resource-definitions.ts"
+    },
+    "./architecture-dependency-rules": {
+      "types": "./src/architecture-dependency-rules.ts",
+      "default": "./src/architecture-dependency-rules.ts"
     }
   },
   "scripts": {

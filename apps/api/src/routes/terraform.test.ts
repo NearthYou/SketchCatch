@@ -41,9 +41,6 @@ test("POST /api/terraform/generate returns Terraform code for an active user", a
             type: "aws_vpc",
             kind: "resource",
             label: "main_vpc",
-            metadata: {
-              parentAreaNodeId: "area-1"
-            },
             parameters: {
               resourceType: "aws_vpc",
               resourceName: "main",
@@ -68,7 +65,8 @@ test("POST /api/terraform/generate returns Terraform code for an active user", a
   assert.deepEqual(response.json() as TerraformGenerateResponse, {
     terraformCode: `resource "aws_vpc" "main" {
   cidr_block = "10.0.0.0/16"
-}`
+}`,
+    architectureDiagnostics: []
   });
 
   await app.close();
@@ -212,7 +210,8 @@ test("POST /api/terraform/generate accepts Region and AZ area resource parameter
 
   assert.equal(response.statusCode, 200);
   assert.deepEqual(response.json() as TerraformGenerateResponse, {
-    terraformCode: ""
+    terraformCode: "",
+    architectureDiagnostics: []
   });
 
   await app.close();
