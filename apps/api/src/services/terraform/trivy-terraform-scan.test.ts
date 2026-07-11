@@ -1,6 +1,19 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { parseTrivyTerraformFindings } from "./trivy-terraform-scan.js";
+import {
+  createTrivyIgnoreFileContents,
+  disabledTrivyTerraformRuleIds,
+  parseTrivyTerraformFindings
+} from "./trivy-terraform-scan.js";
+
+test("disables ALB and Auto Scaling Trivy rules through the generated ignore file", () => {
+  const ignoreFileContents = createTrivyIgnoreFileContents();
+
+  for (const ruleId of disabledTrivyTerraformRuleIds) {
+    assert.match(ignoreFileContents, new RegExp(`^${ruleId}$`, "m"));
+    assert.match(ignoreFileContents, new RegExp(`^AVD-${ruleId}$`, "m"));
+  }
+});
 
 test("parseTrivyTerraformFindings maps failed Terraform misconfigurations to source locations", () => {
   const findings = parseTrivyTerraformFindings(
