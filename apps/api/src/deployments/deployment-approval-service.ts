@@ -7,6 +7,7 @@ import type {
 } from "@sketchcatch/types";
 import {
   createTerraformArtifactCanonicalContent,
+  createTerraformArtifactSafetyContent,
   defaultTerraformArtifactMaxBytes,
   downloadTerraformArtifactFromS3
 } from "./terraform-workspace.js";
@@ -129,9 +130,19 @@ export async function approveDeploymentPlan(
     downloadedTerraformArtifact
   );
 
-  assertTerraformArtifactIsSafe(terraformArtifactContent, {
-    liveProfile: deployment.liveProfile
-  });
+  assertTerraformArtifactIsSafe(
+    createTerraformArtifactSafetyContent(
+      {
+        objectKey: terraformArtifact.objectKey,
+        fileName: terraformArtifact.fileName,
+        contentType: terraformArtifact.contentType
+      },
+      downloadedTerraformArtifact
+    ),
+    {
+      liveProfile: deployment.liveProfile
+    }
+  );
 
   const terraformArtifactHash = createSha256(terraformArtifactContent);
   const plannedTerraformArtifactSha256 = currentPlanArtifact.terraformArtifactSha256;

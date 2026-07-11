@@ -92,6 +92,33 @@ export function createTerraformArtifactCanonicalContent(
   );
 }
 
+// Hash용 JSON과 분리해 실제 Terraform 코드만 안전 검사에 전달합니다.
+export function createTerraformArtifactSafetyContent(
+  input: PrepareTerraformWorkspaceInput,
+  content: Buffer | Uint8Array | string
+): string {
+  const buffer = toBuffer(content);
+
+  if (!isTerraformArtifactBundle(input)) {
+    return buffer.toString("utf8");
+  }
+
+  return createTerraformFilesSafetyContent(
+    parseTerraformArtifactBundle(buffer.toString("utf8")).files,
+    ""
+  );
+}
+
+// 여러 파일의 원문을 모두 이어 안전 검사에서 빠지는 파일이 없게 합니다.
+export function createTerraformFilesSafetyContent(
+  files: TerraformArtifactBundle["files"],
+  fallbackContent: Buffer | Uint8Array | string
+): string {
+  return files.length > 0
+    ? files.map((file) => file.terraformCode).join("\n")
+    : toBuffer(fallbackContent).toString("utf8");
+}
+
 // 여러 Terraform 파일 artifact인지 content type과 저장 파일명으로 판별합니다.
 function isTerraformArtifactBundle(input: PrepareTerraformWorkspaceInput): boolean {
   return (

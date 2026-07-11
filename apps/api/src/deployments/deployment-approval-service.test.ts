@@ -27,6 +27,7 @@ import {
   createTerraformArtifactCanonicalContent,
   prepareTerraformWorkspace
 } from "./terraform-workspace.js";
+import { TerraformArtifactSafetyError } from "./terraform-artifact-safety.js";
 
 const projectId = "11111111-1111-4111-8111-111111111111";
 const architectureId = "22222222-2222-4222-8222-222222222222";
@@ -393,6 +394,50 @@ test("approveDeploymentPlan accepts the same multi-file artifact used by plan", 
     await workspace.cleanup();
     await rm(rootDir, { recursive: true, force: true });
   }
+});
+
+test("approveDeploymentPlan rejects unsafe Terraform inside a multi-file artifact", async () => {
+  const repository = new FakeDeploymentRepository();
+  const artifactInput = {
+    objectKey: "projects/project-id/assets/terraform_file/terraform-files.json",
+    fileName: "terraform-files.json",
+    contentType: "application/vnd.sketchcatch.terraform-files+json"
+  };
+  const unsafeBundle = JSON.stringify({
+    schemaVersion: 1,
+    files: [
+      { fileName: "providers.tf", terraformCode: "terraform {}\n" },
+      {
+        fileName: "main.tf",
+        terraformCode: 'module "untrusted" { source = "https://example.invalid/module.zip" }\n'
+      }
+    ]
+  });
+  repository.terraformArtifact = createTerraformArtifactRecord({
+    fileName: artifactInput.fileName,
+    contentType: artifactInput.contentType
+  });
+  repository.planArtifact = createPlanArtifactRecord({
+    terraformArtifactSha256: createSha256(
+      createTerraformArtifactCanonicalContent(artifactInput, unsafeBundle).toString("utf8")
+    )
+  });
+
+  await assert.rejects(
+    () =>
+      approveDeploymentPlan(
+        {
+          deploymentId,
+          accessContext: createAccessContext()
+        },
+        repository,
+        {
+          downloadTerraformArtifact: async () => unsafeBundle,
+          now: () => fixedNow
+        }
+      ),
+    TerraformArtifactSafetyError
+  );
 });
 
 test("approveDeploymentPlan rejects drift inside a multi-file artifact", async () => {

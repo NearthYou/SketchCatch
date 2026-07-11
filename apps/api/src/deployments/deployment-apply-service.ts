@@ -50,6 +50,7 @@ import {
   containsArchiveFileDataSource
 } from "./terraform-artifact-safety.js";
 import {
+  createTerraformFilesSafetyContent,
   prepareTerraformWorkspace as defaultPrepareTerraformWorkspace,
   type PreparedTerraformWorkspace
 } from "./terraform-workspace.js";
@@ -167,9 +168,13 @@ export async function runDeploymentApply(
     workspace = preparedWorkspace;
 
     const currentTerraformArtifactContent = await readTerraformArtifactFile(workspace.mainFilePath);
-    assertTerraformArtifactIsSafe(currentTerraformArtifactContent, {
-      liveProfile: deployment.liveProfile
-    });
+    assertTerraformArtifactIsSafe(
+      createTerraformFilesSafetyContent(
+        workspace.terraformFiles,
+        currentTerraformArtifactContent
+      ),
+      { liveProfile: deployment.liveProfile }
+    );
     const currentTerraformArtifactHash = createSha256(currentTerraformArtifactContent);
     const currentTfplanHash = createSha256(planBuffer);
 

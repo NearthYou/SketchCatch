@@ -18,6 +18,7 @@ import {
 } from "../aws-connections/aws-connection-test-service.js";
 import type { AwsConnection, DeploymentStatus } from "@sketchcatch/types";
 import {
+  createTerraformFilesSafetyContent,
   prepareTerraformWorkspace as defaultPrepareTerraformWorkspace,
   type PreparedTerraformWorkspace
 } from "./terraform-workspace.js";
@@ -123,9 +124,11 @@ export async function runDeploymentInit(
       fileName: artifact.fileName,
       contentType: artifact.contentType
     });
-    assertTerraformArtifactIsSafe(await readTerraformArtifactFile(workspace.mainFilePath), {
-      liveProfile: deployment.liveProfile
-    });
+    const terraformArtifactContent = await readTerraformArtifactFile(workspace.mainFilePath);
+    assertTerraformArtifactIsSafe(
+      createTerraformFilesSafetyContent(workspace.terraformFiles, terraformArtifactContent),
+      { liveProfile: deployment.liveProfile }
+    );
 
     const awsCredentials = await prepareAwsCredentialsForInit({
       deploymentId: deployment.id,

@@ -43,6 +43,7 @@ import {
   type ProjectAccessContext
 } from "./deployment-service.js";
 import {
+  createTerraformFilesSafetyContent,
   prepareTerraformWorkspace as defaultPrepareTerraformWorkspace,
   type PreparedTerraformWorkspace
 } from "./terraform-workspace.js";
@@ -172,9 +173,10 @@ export async function runDeploymentPlan(
     }
 
     const terraformArtifactContent = await readTerraformArtifactFile(workspace.mainFilePath);
-    assertTerraformArtifactIsSafe(terraformArtifactContent, {
-      liveProfile: deployment.liveProfile
-    });
+    assertTerraformArtifactIsSafe(
+      createTerraformFilesSafetyContent(workspace.terraformFiles, terraformArtifactContent),
+      { liveProfile: deployment.liveProfile }
+    );
     const terraformArtifactSha256 = createSha256(terraformArtifactContent);
     const preDeploymentAnalysis = await analyzePreDeployment({
       architectureJson: architecture.architectureJson,
