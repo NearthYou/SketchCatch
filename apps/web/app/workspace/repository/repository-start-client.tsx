@@ -14,7 +14,7 @@ import type {
 import { TemplateGallery } from "../../../components/templates/TemplateGallery";
 import { AiDraftBoardPreview } from "../ai/ai-draft-board-preview";
 import {
-  analyzeSourceRepository,
+  analyzePublicSourceRepository,
   createGitHubArchitectureDraft,
   getProject,
   saveProjectDraft
@@ -65,7 +65,7 @@ export function RepositoryStartClient({
       try {
         const [projectResult, analysisResult] = await Promise.all([
           getProject(projectId),
-          analyzeSourceRepository({ defaultBranch, repositoryUrl })
+          analyzePublicSourceRepository({ defaultBranch, repositoryUrl })
         ]);
 
         if (cancelled) return;

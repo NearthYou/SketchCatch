@@ -46,6 +46,7 @@ const TERRAFORM_NESTED_BLOCK_ATTRIBUTES: Record<string, ReadonlySet<string>> = {
   aws_dynamodb_table: new Set(["attribute"]),
   aws_eks_cluster: new Set(["vpcConfig"]),
   aws_eks_node_group: new Set(["scalingConfig"]),
+  aws_ecs_service: new Set(["loadBalancer", "networkConfiguration"]),
   aws_instance: new Set(["rootBlockDevice"]),
   aws_lambda_function: new Set(["environment"]),
   aws_lb_listener: new Set(["defaultAction", "forward"]),
@@ -58,8 +59,25 @@ const TERRAFORM_NESTED_BLOCK_ATTRIBUTES: Record<string, ReadonlySet<string>> = {
   aws_s3_bucket_versioning: new Set(["versioningConfiguration"]),
   aws_scheduler_schedule: new Set(["flexibleTimeWindow", "target"]),
   aws_security_group: new Set(["egress", "ingress"]),
-  aws_wafv2_web_acl: new Set(["defaultAction", "visibilityConfig"])
+  aws_wafv2_web_acl: new Set(["defaultAction", "visibilityConfig"]),
+  kubernetes_namespace: new Set(["metadata"]),
+  kubernetes_deployment: new Set(["metadata", "spec"]),
+  kubernetes_service: new Set(["metadata", "spec"])
 };
+
+const GENERIC_TERRAFORM_NESTED_BLOCKS = new Set([
+  "container",
+  "cookies",
+  "forwardedValues",
+  "geoRestriction",
+  "loadBalancer",
+  "metadata",
+  "networkConfiguration",
+  "port",
+  "selector",
+  "spec",
+  "template"
+]);
 
 export function getTerraformNestedBlockAttributes(
   resourceType: string
@@ -72,6 +90,10 @@ export function isTerraformNestedBlockAttribute(
   attributeName: string
 ): boolean {
   return getTerraformNestedBlockAttributes(resourceType)?.has(toCamelCase(attributeName)) === true;
+}
+
+export function isGenericTerraformNestedBlock(attributeName: string): boolean {
+  return GENERIC_TERRAFORM_NESTED_BLOCKS.has(toCamelCase(attributeName));
 }
 
 function toCamelCase(value: string): string {

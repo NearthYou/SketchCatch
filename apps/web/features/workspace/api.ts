@@ -71,6 +71,7 @@ import type {
   RecentSuccessfulDeploymentProject,
   RecentSuccessfulDeploymentProjectListResponse,
   SourceRepository,
+  AnalyzeSourceRepositoryResponse,
   SourceRepositoryAnalysisResult,
   SourceRepositoryListResponse,
   SourceRepositoryResponse,
@@ -348,7 +349,7 @@ export async function createAiArchitectureDraft(
   });
 }
 
-export async function analyzeSourceRepository(
+export async function analyzePublicSourceRepository(
   input: AnalyzeSourceRepositoryRequest
 ): Promise<SourceRepositoryAnalysisResult> {
   return postPublicAiJson<SourceRepositoryAnalysisResult>("/ai/source-repository-analysis", input);
@@ -423,11 +424,19 @@ async function postPublicAiJson<ResponseBody>(
   path: string,
   body: Record<string, unknown>
 ): Promise<ResponseBody> {
+  const headers = new Headers({
+    "Content-Type": "application/json"
+  });
+  const session = readStoredAuthSession();
+
+  if (session) {
+    headers.set("Authorization", `Bearer ${session.accessToken}`);
+  }
+
   const response = await fetch(`${AI_API_BASE_URL}${path}`, {
     body: JSON.stringify(body),
-    headers: {
-      "Content-Type": "application/json"
-    },
+    credentials: "include",
+    headers,
     method: "POST"
   });
 
@@ -936,6 +945,20 @@ export async function listSourceRepositories(projectId: string): Promise<SourceR
   );
 
   return response.repositories;
+}
+
+// 연결된 Source Repository의 최신 정적 분석을 실행하고 저장된 AI Handoff를 반환합니다.
+export async function analyzeSourceRepository(
+  projectId: string,
+  sourceRepositoryId: string
+): Promise<AnalyzeSourceRepositoryResponse> {
+  return apiFetch<AnalyzeSourceRepositoryResponse>(
+    `/projects/${encodeURIComponent(projectId)}/source-repositories/${encodeURIComponent(sourceRepositoryId)}/analyze`,
+    {
+      auth: true,
+      method: "POST"
+    }
+  );
 }
 
 export async function createGitHubSourceRepositoryInstallUrl(

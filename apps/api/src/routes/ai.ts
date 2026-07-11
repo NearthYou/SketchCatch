@@ -23,7 +23,7 @@ import type {
   TranscribeConfirmation,
   VoiceRequirementInput
 } from "@sketchcatch/types";
-import { RESOURCE_TYPES } from "@sketchcatch/types";
+import { RESOURCE_TYPES, TEMPLATE_IDS } from "@sketchcatch/types";
 import {
   createConfiguredAmazonQArchitectureDraftResponse,
   type CreateArchitectureDraftResponseFactory,
@@ -58,6 +58,14 @@ import { createConfiguredAwsPricingRateProvider } from "../services/awsPricingRa
 import type { CostPricingRateProvider } from "../services/cost-analysis.js";
 import type { RuntimeCache, RuntimeCacheJsonValue } from "../runtime-cache/index.js";
 import { createConfiguredTerraformSecurityScanner } from "../services/terraform/trivy-terraform-scan.js";
+import { requireActiveUserId } from "../auth/current-user.js";
+import { getDatabaseClient, type DatabaseClient } from "../db/client.js";
+import {
+  createPostgresSourceRepositoryRepository,
+  RepositoryAnalysisTemplateSelectionError,
+  requireRepositoryAnalysisTemplateId,
+  type SourceRepositoryRepository
+} from "../source-repositories/source-repository-service.js";
 import {
   analyzeRepositoryEvidence,
   type RepositoryEvidenceFile
@@ -96,7 +104,14 @@ const architectureJsonSchema: z.ZodType<ArchitectureJson> = z.object({
 });
 
 const architectureDraftBodySchema: z.ZodType<CreateArchitectureDraftRequest> = z.object({
-  prompt: z.string().trim().min(1)
+  prompt: z.string().trim().min(1),
+  templateId: z.enum(TEMPLATE_IDS).optional(),
+  repositoryAnalysis: z
+    .object({
+      projectId: z.uuid(),
+      sourceRepositoryId: z.uuid()
+    })
+    .optional()
 });
 
 const repositoryTemplateIdSchema = z.enum([
@@ -229,6 +244,8 @@ export type AiRouteOptions = {
   readonly runtimeCache?: RuntimeCache;
   readonly safetyExplanationTimeoutMs?: number | undefined;
   readonly transcribeRequirementService?: TranscribeRequirementService;
+  readonly getDatabaseClient?: (() => DatabaseClient) | undefined;
+  readonly createSourceRepositoryRepository?: ((db: DatabaseClient["db"]) => SourceRepositoryRepository) | undefined;
 };
 
 // AI MVP API의 입구입니다. 요청 모양은 여기서 확인하고, 실제 판단은 service 함수에 맡깁니다.
@@ -258,9 +275,35 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
   const transcribeRequirementService =
     options.transcribeRequirementService ?? createConfiguredTranscribeRequirementService();
   const pricingRateProvider = options.pricingRateProvider ?? createConfiguredAwsPricingRateProvider();
+  const getAiDatabaseClient = options.getDatabaseClient ?? getDatabaseClient;
+  const createSourceRepositoryRepository =
+    options.createSourceRepositoryRepository ?? createPostgresSourceRepositoryRepository;
 
   app.post("/ai/architecture-draft", async (request): Promise<CreateArchitectureDraftResponse> => {
     const body = architectureDraftBodySchema.parse(request.body);
+
+    if (body.repositoryAnalysis) {
+      const userId = await requireActiveUserId(request, getAiDatabaseClient);
+      const selectedTemplateId = await requireRepositoryAnalysisTemplateId(
+        {
+          projectId: body.repositoryAnalysis.projectId,
+          sourceRepositoryId: body.repositoryAnalysis.sourceRepositoryId,
+          accessContext: { kind: "user", userId }
+        },
+        createSourceRepositoryRepository(getAiDatabaseClient().db)
+      );
+
+      if (body.templateId && body.templateId !== selectedTemplateId) {
+        throw new RepositoryAnalysisTemplateSelectionError(
+          "REPOSITORY_ANALYSIS_TEMPLATE_MISMATCH"
+        );
+      }
+
+      return createArchitectureDraftResponse({
+        ...body,
+        templateId: selectedTemplateId
+      });
+    }
 
     return createArchitectureDraftResponse(body);
   });

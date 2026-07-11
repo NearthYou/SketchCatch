@@ -1,4 +1,6 @@
 // allow: SIZE_OK - shared package root contract; splitting needs a separate repo-wide migration.
+import type { TemplateId } from "./template-definitions.ts";
+
 export type IsoDateTimeString = string;
 
 export type ApiErrorCode =
@@ -79,6 +81,7 @@ export const RESOURCE_TYPES = [
   "ACM_CERTIFICATE_VALIDATION",
   "COGNITO_USER_POOL",
   "COGNITO_USER_POOL_CLIENT",
+  "AMPLIFY_APP",
   "DB_SUBNET_GROUP",
   "SECRETS_MANAGER_SECRET",
   "VPC_ENDPOINT",
@@ -91,6 +94,7 @@ export const RESOURCE_TYPES = [
   "XRAY_GROUP",
   "XRAY_SAMPLING_RULE",
   "API_GATEWAY_REST_API",
+  "API_GATEWAY_AUTHORIZER",
   "API_GATEWAY_WEBSOCKET_API",
   "API_GATEWAY_RESOURCE",
   "API_GATEWAY_METHOD",
@@ -118,6 +122,9 @@ export const RESOURCE_TYPES = [
   "EKS_CLUSTER",
   "EKS_NODE_GROUP",
   "EKS_ADDON",
+  "KUBERNETES_NAMESPACE",
+  "KUBERNETES_DEPLOYMENT",
+  "KUBERNETES_SERVICE",
   "CONFIG_CONFIGURATION_RECORDER",
   "CONFIG_DELIVERY_CHANNEL",
   "CONFIG_RULE",
@@ -130,7 +137,7 @@ export type ResourceType = (typeof RESOURCE_TYPES)[number];
 
 export type ReverseEngineeringResourceSelection = "ALL" | ResourceType;
 
-export type CloudProvider = "aws";
+export type CloudProvider = "aws" | "kubernetes";
 
 export type TerraformBlockType = "resource" | "data";
 
@@ -458,6 +465,7 @@ export type SourceRepository = {
   repositoryUrl: string | null;
   visibility: "public" | "private" | "internal" | null;
   archived: boolean;
+  analysis: SourceRepositoryAnalysis | null;
   disconnectedAt: IsoDateTimeString | null;
   createdAt: IsoDateTimeString;
   updatedAt: IsoDateTimeString;
@@ -551,6 +559,64 @@ export type ConnectGitHubSourceRepositoryRequest = {
 export type SourceRepositoryResponse = {
   repository: SourceRepository;
 };
+
+export const REPOSITORY_EVIDENCE_KINDS = [
+  "repository_tree",
+  "package_json",
+  "lockfile",
+  "dockerfile",
+  "framework_config",
+  "readme"
+] as const;
+
+export type RepositoryEvidenceKind = (typeof REPOSITORY_EVIDENCE_KINDS)[number];
+
+export type RepositoryApplicationUnitKind = "frontend" | "backend" | "fullstack" | "unknown";
+
+export type RepositoryAnalysisEvidence = {
+  readonly kind: RepositoryEvidenceKind;
+  readonly path: string;
+  readonly applicationUnitId: string | null;
+  readonly signals: readonly string[];
+};
+
+export type RepositoryApplicationUnit = {
+  readonly id: string;
+  readonly rootPath: string;
+  readonly kind: RepositoryApplicationUnitKind;
+  readonly frameworks: readonly string[];
+  readonly evidencePaths: readonly string[];
+};
+
+type RepositoryAnalysisAiHandoffBase = {
+  readonly applicationUnits: readonly RepositoryApplicationUnit[];
+  readonly evidence: readonly RepositoryAnalysisEvidence[];
+  readonly missingEvidence: readonly RepositoryEvidenceKind[];
+};
+
+export type RepositoryAnalysisAiHandoff =
+  | (RepositoryAnalysisAiHandoffBase & {
+      readonly status: "template_selected";
+      readonly templateId: TemplateId;
+      readonly selectionReasons: readonly string[];
+    })
+  | (RepositoryAnalysisAiHandoffBase & {
+      readonly status: "template_selection_failed";
+      readonly templateId: null;
+      readonly mismatchReasons: readonly string[];
+    });
+
+export type AnalyzeSourceRepositoryResponse = {
+  readonly sourceRepositoryId: string;
+  readonly repositoryRevision: string;
+  readonly analyzedAt: IsoDateTimeString;
+  readonly aiHandoff: RepositoryAnalysisAiHandoff;
+};
+
+export type SourceRepositoryAnalysis = Omit<
+  AnalyzeSourceRepositoryResponse,
+  "sourceRepositoryId"
+>;
 
 export type GitCicdHandoffStatus =
   | "draft"
@@ -871,6 +937,24 @@ export type DeploymentPlanArtifact = {
 export type AwsConnectionListResponse = {
   awsConnections: AwsConnection[];
 };
+
+export {
+  buildTemplateDiagramJson,
+  getTemplateDefinitionById,
+  TEMPLATE_IDS,
+  templateDefinitions
+} from "./template-definitions.ts";
+export type {
+  BuildTemplateDiagramInput,
+  TemplateDefinition,
+  TemplateId,
+  TemplateParameterDefinition,
+  TemplateProvider,
+  TemplateRelationship,
+  TemplateResourceDefinition
+} from "./template-definitions.ts";
+
+export { createTerraformProviderFiles } from "./terraform-provider-files.ts";
 
 export type ReverseEngineeringScanStatus =
   | "queued"
@@ -1672,6 +1756,11 @@ export type CreateArchitecturePatchPreviewRequest = {
 
 export type CreateArchitectureDraftRequest = {
   prompt: string;
+  templateId?: TemplateId | undefined;
+  repositoryAnalysis?: {
+    projectId: string;
+    sourceRepositoryId: string;
+  } | undefined;
 };
 
 export type AiArchitectureDraftResult = {

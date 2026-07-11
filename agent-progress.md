@@ -19,6 +19,13 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-11 - Resolve and integrate PR #317 and PR #343 review feedback
+
+- Confirmed the missing `SourceRepositoryConflictError` import reported on PR #317 was already present, documented the resolution, and merged the green PR into `dev`.
+- Fixed PR #343 so the Apply confirmation opens when apply becomes available but can still be dismissed, with a focused regression test.
+- Reconciled PR #343 with the merged template work from PR #317 while preserving archive parser hardening, generated Lambda/EKS support, and direct-deployment evidence.
+- Verification: focused deployment apply, Terraform artifact safety, and Apply confirmation tests passed; required repository checks were run before integration.
+
 ### 2026-07-11 - Remove duplicated Trivy rule IDs from the scanner test
 
 - Updated the Trivy ignore-file test to import `disabledTrivyTerraformRuleIds` from the scanner instead of maintaining a second hard-coded rule list.
