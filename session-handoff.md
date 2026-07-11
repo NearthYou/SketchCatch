@@ -4,7 +4,7 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Currently Verified
 
-- Branch `fix/sw/322-ecs-production-ha-release-deploy`, issue #322, is ready for PR publication.
+- Issue #322 PR #324 is merged into `dev`; release PR #325 is open.
 - Production ECS is healthy at API/web desired 1 with autoscaling min 1/max 2.
 - Legacy ECS, EC2, old ALB, and the old CloudFormation ALB stack are retired.
 - Route53, HTTP smoke, RDS protections, alarms, SNS delivery, worker image SHA, and final Terraform no-change plan are verified.
@@ -19,8 +19,8 @@ Use this file only for compact continuation context. Write it in English.
 
 - External customer role trust migration is not globally observable from this AWS account.
 - Cold rollback has not been restored end to end after AMI sanitization.
-- The branch is not yet committed, pushed, reviewed, or merged.
+- PR #325 is temporarily conflicting because the prior v2.0.0 squash commit is not an ancestor of `dev`.
 
 ## Best Next Action
 
-- Commit and push issue #322, open a Korean PR to `dev`, address review feedback, and merge after checks pass.
+- Merge the ancestry-sync branch into `dev` with a merge commit, then recheck and merge PR #325 with a merge commit.

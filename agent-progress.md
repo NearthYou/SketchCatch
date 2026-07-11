@@ -43,4 +43,4 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Next Action
 
-- Publish issue #322 as a PR to `dev`, resolve review feedback, merge it, then promote the workflow changes to `main` before the next production deploy or migration.
+- Merge the main-history synchronization PR into `dev` with a merge commit, then merge release PR #325 into `main` with a merge commit so future release diffs use the correct ancestry.
