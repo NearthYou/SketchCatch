@@ -85,7 +85,7 @@ Board 또는 Terraform이 바뀌면 이전 Safety 검사 결과를 더는 최신
 - Plan: 승인자와 승인 시각 표시
 - 배포 이력: 검색, 상태 필터, 실행자, 산출물, log 표시
 - Cleanup: 삭제할 Resource 범위를 적용 전에 표시
-- Live Observation: 요청량, 처리 여유, instance 상태, CloudWatch 지연 표시
+- Live Observation: 요청량, 처리 여유, instance 상태, CloudWatch 상태 표시
 - Git/CI/CD: 서버에서 받은 실제 Plan 산출물 ID와 사용자 확인이 모두 있어야 생성 가능
 - AWS Role 변경: 사용자가 적용 버튼을 누른 시점에 명시적 승인 기록
 
