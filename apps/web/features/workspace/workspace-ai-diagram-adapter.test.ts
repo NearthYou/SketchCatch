@@ -906,11 +906,45 @@ test("normalizeDiagramJsonConventions adds one reusable external flow to exact Q
     twice.nodes
       .filter((node) => node.kind === "design")
       .map((node) => ({ id: node.id, type: node.type })),
-    [{ id: "flow-user-client", type: "sketchcatch_user_client" }]
+    [
+      { id: "flow-user-client", type: "sketchcatch_user_client" },
+      { id: "flow-internet", type: "sketchcatch_internet" }
+    ]
   );
   assert.deepEqual(
     twice.edges.map((edge) => ({ sourceNodeId: edge.sourceNodeId, targetNodeId: edge.targetNodeId })),
-    [{ sourceNodeId: "flow-user-client", targetNodeId: "public-api" }]
+    [
+      { sourceNodeId: "flow-user-client", targetNodeId: "flow-internet" },
+      { sourceNodeId: "flow-internet", targetNodeId: "public-api" }
+    ]
+  );
+});
+
+test("normalizeDiagramJsonConventions upgrades stored subnet placement labels", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      makeDiagramNode({
+        id: "placement-ecs-a",
+        kind: "design",
+        label: "Fargate task 1",
+        type: "sketchcatch_subnet_placement"
+      }),
+      makeDiagramNode({
+        id: "placement-db-a",
+        kind: "design",
+        label: "RDS primary",
+        type: "sketchcatch_subnet_placement"
+      })
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  const normalized = normalizeDiagramJsonConventions(diagramJson);
+
+  assert.deepEqual(
+    normalized.nodes.map((node) => node.label),
+    ["Fargate task placement A", "RDS primary (Multi-AZ)"]
   );
 });
 
@@ -2529,7 +2563,8 @@ test("convertArchitectureJsonToDiagramJson represents areas only through contain
     [
       "alb-forwards-instance",
       "asg-manages-instance",
-      "flow-user-to-application-alb",
+      "flow-internet-to-application-alb",
+      "flow-user-to-internet",
       "sg-protects-instance"
     ]
   );
@@ -2576,7 +2611,8 @@ test("convertArchitectureJsonToDiagramJson adds external actors for public entry
     userNode?.iconUrl,
     "/Resource-Icons_07312025/Res_General-Icons/Res_48_Light/Res_Client_48_Light.svg"
   );
-  assert.equal(internetNode, undefined);
+  assert.equal(internetNode?.kind, "design");
+  assert.equal(internetNode?.type, "sketchcatch_internet");
   assert.deepEqual(
     diagramJson.edges.map((edge) => ({
       label: edge.label,
@@ -2585,10 +2621,15 @@ test("convertArchitectureJsonToDiagramJson adds external actors for public entry
     })),
     [
       {
-        label: "HTTPS requests",
+        label: "internet access",
         sourceNodeId: "flow-user-client",
-        targetNodeId: "public-cdn"
+        targetNodeId: "flow-internet"
       },
+      {
+        label: "HTTPS requests",
+        sourceNodeId: "flow-internet",
+        targetNodeId: "public-cdn"
+      }
     ]
   );
 });
@@ -2605,6 +2646,8 @@ test("convertArchitectureJsonToDiagramJson shows Fargate and RDS placements insi
         config: { cidrBlock: "10.0.0.0/16" }
       },
       ...[
+        ["public-a", "10.0.0.0/24", "public"],
+        ["public-b", "10.0.1.0/24", "public"],
         ["private-app-a", "10.0.10.0/24", "private_app"],
         ["private-app-b", "10.0.11.0/24", "private_app"],
         ["private-db-a", "10.0.20.0/24", "private_db"],
@@ -2621,6 +2664,17 @@ test("convertArchitectureJsonToDiagramJson shows Fargate and RDS placements insi
           vpcId: "aws_vpc.vpc_main.id"
         }
       })),
+      {
+        id: "application-alb",
+        type: "LOAD_BALANCER",
+        label: "Application Load Balancer",
+        positionX: 900,
+        positionY: 360,
+        config: {
+          internal: false,
+          subnets: ["aws_subnet.public_a.id", "aws_subnet.public_b.id"]
+        }
+      },
       {
         id: "ecs-service",
         type: "ECS_SERVICE",
@@ -2667,10 +2721,21 @@ test("convertArchitectureJsonToDiagramJson shows Fargate and RDS placements insi
     placementNodes.map((node) => node.metadata?.parentAreaNodeId)
   );
 
-  assert.equal(placementNodes.length, 4);
+  assert.equal(placementNodes.length, 6);
   assert.deepEqual(
     placementParents,
-    new Set(["private-app-a", "private-app-b", "private-db-a", "private-db-b"])
+    new Set(["public-a", "public-b", "private-app-a", "private-app-b", "private-db-a", "private-db-b"])
+  );
+  assert.deepEqual(
+    placementNodes.map((node) => node.label).sort(),
+    [
+      "ALB node A",
+      "ALB node B",
+      "Fargate task placement A",
+      "Fargate task placement B",
+      "RDS primary (Multi-AZ)",
+      "RDS standby (Multi-AZ)"
+    ].sort()
   );
 
   const nodeById = new Map(diagramJson.nodes.map((node) => [node.id, node]));

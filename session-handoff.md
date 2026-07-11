@@ -6,12 +6,15 @@ Use this file only for compact continuation context.
 
 - Current branch: `feat/ck/287-ai-diagram`; local `dev` and `origin/dev` are at `61313fc4`.
 - Architecture Draft enforces HTTPS, SSE/WebSocket/polling, ECS/EC2 burst scaling, high-availability topology, voice transcription storage/IAM/flows, and private-subnet visual placement.
+- Chat routing accepts colloquial attachment commands as patches and colloquial new-service requests as drafts; NAT patching creates an EIP-backed public-subnet bundle.
+- Architecture diagrams show User -> Internet -> public entry, include public ALB and private workload placement markers, reject pseudo-region values, and clarify unsupported multi-region Terraform execution before generation.
 - Generation errors are classified as 422 requirement quality, 502 malformed provider output, 503 provider unavailable, or 500 internal assembly failure.
 - No cloud deployment or Terraform mutation was run.
 
 ## Changes This Session
 
 - Added operational requirement policy/validation and typed generation error boundaries.
+- Relaxed draft/patch intent routing and added deployable NAT Gateway patch bundling.
 - Fixed S3 quantity parsing and purpose-specific backend topology.
 - Architecture Draft service: 39/39 passed.
 - Full AI routes: 53/53 passed.

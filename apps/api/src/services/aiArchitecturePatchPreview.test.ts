@@ -144,6 +144,59 @@ test("createArchitecturePatchPreview recognizes broad natural-language add reque
   }
 });
 
+test("createArchitecturePatchPreview treats colloquial NAT attachment as a connected patch", () => {
+  const response = createArchitecturePatchPreview({
+    architectureJson: {
+      nodes: [
+        makeNode({
+          id: "vpc-main",
+          type: "VPC",
+          label: "Main VPC",
+          config: { cidrBlock: "10.0.0.0/16" }
+        }),
+        makeNode({
+          id: "public-subnet-a",
+          type: "SUBNET",
+          label: "Public Subnet A",
+          config: { mapPublicIpOnLaunch: true, tier: "public" }
+        }),
+        makeNode({
+          id: "private-subnet-a",
+          type: "SUBNET",
+          label: "Private Subnet A",
+          config: { mapPublicIpOnLaunch: false, tier: "private_app" }
+        })
+      ],
+      edges: []
+    },
+    instruction: "NAT 게이트웨이 여기에 붙이렴"
+  });
+
+  assert.equal(response.status, "preview");
+  assert.equal(response.intent.requestedAction, "add_resource");
+  assert.equal(response.intent.resourceType, "NAT_GATEWAY");
+  if (response.status !== "preview") {
+    return;
+  }
+
+  const eip = response.proposedArchitectureJson.nodes.find((node) => node.type === "ELASTIC_IP");
+  const nat = response.proposedArchitectureJson.nodes.find((node) => node.type === "NAT_GATEWAY");
+  assert.ok(eip);
+  assert.ok(nat);
+  assert.equal(nat.config.subnetId, "aws_subnet.public_subnet_a.id");
+  assert.equal(nat.config.allocationId, `aws_eip.${eip.id.replaceAll("-", "_")}.id`);
+  assert.ok(
+    response.proposedArchitectureJson.edges.some(
+      (edge) => edge.sourceId === "public-subnet-a" && edge.targetId === nat.id
+    )
+  );
+  assert.ok(
+    response.proposedArchitectureJson.edges.some(
+      (edge) => edge.sourceId === eip.id && edge.targetId === nat.id
+    )
+  );
+});
+
 test("createArchitecturePatchPreview recognizes catalog-backed resource panel add requests", () => {
   const addCases: readonly {
     readonly instruction: string;

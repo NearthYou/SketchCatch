@@ -3476,6 +3476,45 @@ test("createAmazonQArchitectureDraftResponse asks the global deployment scope qu
   ]);
 });
 
+test("createAmazonQArchitectureDraftResponse does not fake unsupported multi-region Terraform topology", async () => {
+  let callCount = 0;
+  const provider = createFakeAmazonQProvider(() => {
+    callCount += 1;
+    return "{}";
+  });
+  const response = await createAmazonQArchitectureDraftResponse(
+    {
+      prompt: [
+        "website type: static website blog portfolio",
+        "traffic: medium daily traffic 1000 concurrent users 50",
+        "database: simple user and post data under 10GB",
+        "frontend: React Vue Angular SPA",
+        "backend: simple API Node.js Flask",
+        "region: global users in US and Europe",
+        "budget: under KRW 100000 per month minimum cost",
+        "SSL HTTPS: optional HTTP acceptable",
+        "file upload: documents and video mixed files",
+        "realtime: real-time chat",
+        "management: semi-managed",
+        "loading time: 3 seconds",
+        "website size: 10MB-100MB",
+        "traffic pattern: event spikes",
+        "availability: 99%",
+        "global deployment: 다중 리전 API까지 포함",
+        "realtime implementation: HTTP 메시지 전송 + SSE 수신 경로"
+      ].join("\n")
+    },
+    { provider, creditPolicy: confirmedCreditPolicy }
+  );
+
+  assert.equal(callCount, 0);
+  if (!("status" in response)) {
+    assert.fail("Expected an execution-boundary clarification response");
+  }
+  assert.match(response.question, /단일 AWS 리전/);
+  assert.ok(response.suggestions.some((suggestion) => /CloudFront.*단일 리전/u.test(suggestion)));
+});
+
 test("createAmazonQArchitectureDraftResponse asks the realtime implementation question with readable Korean text", async () => {
   let callCount = 0;
   const provider = createFakeAmazonQProvider(() => {

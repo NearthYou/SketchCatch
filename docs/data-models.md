@@ -1439,6 +1439,12 @@ v1에서 rule-first 자동 적용 후보가 될 수 있는 진단은 `terraform.
 
 자연어 Architecture 수정 요청은 `ArchitecturePatchPreview`로만 반환한다. 이 preview는 `proposedArchitectureJson`과 diff 성격의 `changes`를 보여줄 뿐이며, `requiresUserAcceptance: true`와 `userAcceptedChange: null` 상태로 내려간다. 실제 Architecture Board 반영은 별도 적용 버튼에서 `UserAcceptedChange`를 기록한 뒤에만 가능하다.
 
+채팅 라우팅은 리소스명과 자연스러운 명령형(`붙여`, `달아`, `연결`, `넣어`, `지워`)이 함께 있으면 기존 보드의 patch 요청으로 우선 해석한다. 반대로 `서비스 하나`, `구조 짜줘`, `웹앱 해보자`처럼 새 서비스 의도가 드러나면 기존 보드가 있어도 새 draft 요청으로 해석한다. 리소스명만 있는 입력은 여전히 clarification 대상이다. NAT Gateway 추가 patch는 빈 노드가 아니라 public subnet과 Elastic IP를 찾아 `subnetId`, `allocationId`, 연결 edge가 포함된 deployable bundle을 제안한다.
+
+외부 트래픽 표시는 `User / Client -> Internet -> public entry` 순서를 사용한다. ALB, ECS Service, RDS처럼 여러 subnet을 참조하는 단일 Terraform 리소스는 subnet마다 별도 리소스를 복제하지 않고 `ALB node A/B`, `Fargate task placement A/B`, `RDS primary/standby (Multi-AZ)` 배치 마커로 Availability Zone 위치를 표시한다. 배치 마커는 Terraform 리소스가 아니다.
+
+Architecture Intent Plan의 `region`에는 실제 AWS region code만 허용한다. `global`, `multi-region-global` 같은 설명용 값은 Terraform의 Availability Zone 또는 runtime 설정으로 전달하지 않는다. 현재 Terraform Preview와 Direct Deployment는 단일 AWS provider region만 지원하므로 multi-region API/RDS 요청은 단일 region 지원 범위 또는 별도 multi-region 설계 작업을 먼저 확인해야 한다.
+
 ```ts
 type ArchitecturePatchIntent = {
   instruction: string;

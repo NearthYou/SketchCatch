@@ -2,8 +2,18 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   createArchitectureRequirementNormalizerInstructions,
-  createOpenAiRequirementNormalizerProvider
+  createOpenAiRequirementNormalizerProvider,
+  parseArchitectureIntentPlan
 } from "./aiArchitectureRequirementNormalizer.js";
+
+test("parseArchitectureIntentPlan drops descriptive pseudo-region values", () => {
+  const plan = parseArchitectureIntentPlan({
+    intent: "global_dynamic_application",
+    region: "multi-region-global"
+  });
+
+  assert.deepEqual(plan, { intent: "global_dynamic_application" });
+});
 
 test("OpenAI requirement normalizer uses a Structured Outputs compatible wire schema", async () => {
   let capturedFormat: unknown;

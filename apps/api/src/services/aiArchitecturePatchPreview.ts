@@ -34,6 +34,11 @@ const MANUAL_RESOURCE_KEYWORDS: readonly {
     label: "서브넷"
   },
   {
+    resourceType: "NAT_GATEWAY",
+    keywords: ["nat gateway", "nat gw", "nat 게이트웨이", "내트 게이트웨이"],
+    label: "NAT Gateway"
+  },
+  {
     resourceType: "INTERNET_GATEWAY",
     keywords: ["internet gateway", "igw", "internet gw", "인터넷 게이트웨이", "인터넷 gateway"],
     label: "인터넷 게이트웨이"
@@ -205,6 +210,8 @@ const ADD_ACTION_KEYWORDS = [
   "add",
   "create",
   "attach",
+  "connect",
+  "link",
   "include",
   "provision",
   "deploy",
@@ -212,7 +219,10 @@ const ADD_ACTION_KEYWORDS = [
   "추가",
   "생성",
   "만들",
-  "붙여",
+  "붙",
+  "달아",
+  "연결",
+  "꽂",
   "넣",
   "구성",
   "배치",
@@ -1348,6 +1358,21 @@ function resolveTarget(
 
   if (
     intent.requestedAction === "add_resource" &&
+    intent.resourceType === "NAT_GATEWAY" &&
+    intent.connectionTargetResourceId === undefined &&
+    findPublicSubnet(architectureJson.nodes) === undefined
+  ) {
+    return {
+      status: "needs_clarification",
+      candidates: architectureJson.nodes
+        .filter((node) => node.type === "SUBNET")
+        .map(toClarificationCandidate),
+      suggestions: ["NAT Gateway를 배치할 퍼블릭 서브넷을 선택해줘"]
+    };
+  }
+
+  if (
+    intent.requestedAction === "add_resource" &&
     intent.resourceType !== undefined &&
     intent.connectionTargetResourceId !== undefined &&
     !architectureJson.nodes.some((node) => node.id === intent.connectionTargetResourceId)
@@ -1472,6 +1497,20 @@ function hasAddResourcePurpose(intent: ArchitecturePatchIntent): boolean {
     return true;
   }
 
+  if (
+    intent.resourceType === "NAT_GATEWAY" &&
+    includesAnyPhrase(normalizeSearchText(intent.instruction), [
+      "붙",
+      "달아",
+      "연결",
+      "배치",
+      "attach",
+      "connect"
+    ])
+  ) {
+    return true;
+  }
+
   const normalizedInstruction = normalizeSearchText(intent.instruction);
 
   if (
@@ -1549,6 +1588,9 @@ function createClarificationQuestion(
   }
 
   if (intent.requestedAction === "add_resource" && intent.resourceType !== undefined) {
+    if (intent.resourceType === "NAT_GATEWAY" && candidates.length > 0) {
+      return "NAT Gateway를 어느 퍼블릭 서브넷에 배치할까요?";
+    }
     return `새 ${formatPatchResourceType(intent.resourceType)}을 어떤 용도로 쓸까요? 용도를 알려주면 제가 어울리는 연결까지 잡겠습니다.`;
   }
 
@@ -1761,6 +1803,10 @@ function addResource(
     return addEc2RuntimeBundle(architectureJson, intent);
   }
 
+  if (resourceType === "NAT_GATEWAY") {
+    return addNatGatewayBundle(architectureJson, intent);
+  }
+
   const nextNodes = [...architectureJson.nodes];
   const newNode: ResourceNode = {
     id: createUniqueResourceId(resourceType, nextNodes),
@@ -1776,6 +1822,60 @@ function addResource(
     nodes: nextNodes,
     edges: addConnectionEdge(architectureJson.edges, architectureJson.nodes, newNode, intent)
   };
+}
+
+function addNatGatewayBundle(
+  architectureJson: ArchitectureJson,
+  intent: ArchitecturePatchIntent
+): ArchitectureJson {
+  const selectedSubnet = intent.connectionTargetResourceId
+    ? architectureJson.nodes.find(
+        (node) => node.id === intent.connectionTargetResourceId && node.type === "SUBNET"
+      )
+    : undefined;
+  const publicSubnet = selectedSubnet ?? findPublicSubnet(architectureJson.nodes);
+
+  if (publicSubnet === undefined) {
+    return architectureJson;
+  }
+
+  const nextNodes = architectureJson.nodes.map((node) => ({
+    ...node,
+    config: { ...node.config }
+  }));
+  const eipNode = createBundleNode("ELASTIC_IP", nextNodes, {
+    label: "NAT Elastic IP",
+    positionX: publicSubnet.positionX + 180,
+    positionY: publicSubnet.positionY - 120,
+    config: { domain: "vpc" }
+  });
+  nextNodes.push(eipNode);
+  const natNode = createBundleNode("NAT_GATEWAY", nextNodes, {
+    label: "NAT Gateway",
+    positionX: publicSubnet.positionX + 180,
+    positionY: publicSubnet.positionY,
+    config: {
+      allocationId: createTerraformReference(eipNode, "aws_eip"),
+      subnetId: createTerraformReference(publicSubnet, "aws_subnet")
+    }
+  });
+  nextNodes.push(natNode);
+
+  let nextEdges = architectureJson.edges.map((edge) => ({ ...edge }));
+  nextEdges = addSpecificConnectionEdge(nextEdges, eipNode, natNode, "allocates");
+  nextEdges = addSpecificConnectionEdge(nextEdges, publicSubnet, natNode, "hosts NAT gateway");
+
+  return { nodes: nextNodes, edges: nextEdges };
+}
+
+function findPublicSubnet(nodes: readonly ResourceNode[]): ResourceNode | undefined {
+  return nodes.find(
+    (node) =>
+      node.type === "SUBNET" &&
+      (node.config.tier === "public" ||
+        node.config.mapPublicIpOnLaunch === true ||
+        /(^|[-_\s])public($|[-_\s])/iu.test(`${node.id} ${node.label ?? ""}`))
+  );
 }
 
 function addEc2RuntimeBundle(

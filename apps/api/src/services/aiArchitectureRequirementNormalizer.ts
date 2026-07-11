@@ -247,9 +247,10 @@ export function parseArchitectureIntentPlan(value: unknown): ArchitectureIntentP
   const forbiddenCapabilities = normalizeTextItems(parsed.data.forbiddenCapabilities);
   const amazonQBrief = normalizeTextItems(parsed.data.amazonQBrief);
   const runtimeTopology = normalizeRuntimeTopology(parsed.data.runtimeTopology);
+  const region = normalizeAwsRegion(parsed.data.region);
   const plan: ArchitectureIntentPlan = {
     ...(normalizeText(parsed.data.intent) === undefined ? {} : { intent: normalizeText(parsed.data.intent) }),
-    ...(normalizeText(parsed.data.region) === undefined ? {} : { region: normalizeText(parsed.data.region) }),
+    ...(region === undefined ? {} : { region }),
     ...(patternIds.length === 0 ? {} : { patternIds }),
     ...(requiredResources.length === 0 ? {} : { requiredResources }),
     ...(Object.keys(resourceQuantities).length === 0 ? {} : { resourceQuantities }),
@@ -261,6 +262,15 @@ export function parseArchitectureIntentPlan(value: unknown): ArchitectureIntentP
   };
 
   return Object.keys(plan).length === 0 ? null : plan;
+}
+
+function normalizeAwsRegion(value: string | undefined): string | undefined {
+  const normalized = normalizeText(value)?.toLowerCase();
+
+  return normalized !== undefined &&
+    /^(?:af|ap|ca|cn|eu|il|me|mx|sa|us|us-gov)-[a-z]+(?:-[a-z]+)*-\d$/u.test(normalized)
+    ? normalized
+    : undefined;
 }
 
 function normalizePatternIds(values: readonly string[] | undefined): ArchitecturePatternId[] {

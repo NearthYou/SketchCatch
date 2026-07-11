@@ -888,6 +888,22 @@ function findConditionalArchitectureQuestion(prompt: string): RequiredArchitectu
     };
   }
 
+  if (
+    hasUnsupportedMultiRegionExecutionRequest(normalizedPrompt) &&
+    !hasMultiRegionExecutionBoundaryResolution(normalizedPrompt)
+  ) {
+    return {
+      id: "multi_region_execution_boundary",
+      question: "현재 Terraform Preview와 배포 실행은 단일 AWS 리전만 지원합니다. 어떤 지원 범위로 생성할까요?",
+      suggestions: [
+        "지원 범위: CloudFront 글로벌 + API/RDS 단일 리전으로 생성",
+        "지원 범위: 단일 리전 MVP + 다중 리전 확장 경고 표시",
+        "지원 범위: 다중 리전은 별도 설계 작업으로 전환"
+      ],
+      isAnswered: () => true
+    };
+  }
+
   if (requiresRealtime(normalizedPrompt) && !hasRealtimeImplementationDecision(normalizedPrompt)) {
     const realtimeProfile = resolveRealtimeProfile(normalizedPrompt);
 
@@ -5539,6 +5555,18 @@ function hasBudgetAvailabilityResolution(normalizedPrompt: string): boolean {
 
 function hasGlobalDeploymentDecision(normalizedPrompt: string): boolean {
   return /(cloudfront[\s\S]{0,30}(global|\uAE00\uB85C\uBC8C)|api\/rds[\s\S]{0,30}(single|\uB2E8\uC77C)|single\s*region|multi[-\s]*region|future\s*multi[-\s]*region|\uB2E8\uC77C\s*\uB9AC\uC804|\uB2E4\uC911\s*\uB9AC\uC804)/iu.test(
+    normalizedPrompt
+  );
+}
+
+function hasUnsupportedMultiRegionExecutionRequest(normalizedPrompt: string): boolean {
+  return /(multi[-\s]*region|다중\s*리전|멀티\s*리전)[\s\S]{0,30}(api|rds|terraform|배포)|(?:api|rds)[\s\S]{0,30}(multi[-\s]*region|다중\s*리전|멀티\s*리전)/iu.test(
+    normalizedPrompt
+  );
+}
+
+function hasMultiRegionExecutionBoundaryResolution(normalizedPrompt: string): boolean {
+  return /(지원\s*범위|supported\s*scope)[\s\S]{0,80}(단일\s*리전|single\s*region|별도\s*설계)/iu.test(
     normalizedPrompt
   );
 }

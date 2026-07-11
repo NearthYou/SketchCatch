@@ -12,6 +12,33 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-11 - Correct external traffic and subnet placement semantics
+
+- Goal: Prevent global questionnaire drafts from showing a fake region and unclear one-item subnet contents.
+- Completed:
+  - Restored the `User / Client -> Internet -> public entry` visual flow and migrated saved diagrams on reload.
+  - Added ALB placement markers to public subnets and clarified Fargate and RDS placement labels in private subnets.
+  - Rejected descriptive pseudo-region values before they can become Availability Zones or runtime regions.
+  - Added a clarification boundary for multi-region API/RDS requests because Terraform Preview and direct deployment currently use one AWS provider region.
+- Verification:
+  - Workspace diagram adapter tests passed 42/42.
+  - Architecture Draft and requirement normalizer tests passed 42/42.
+  - Chrome reload showed Internet, ALB A/B, Fargate A/B, and RDS Multi-AZ placement labels on the saved board.
+  - `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
+
+### 2026-07-11 - Relax draft and patch intent routing
+
+- Goal: Treat colloquial resource attachment commands as diagram edits without making bare resource names unsafe.
+- Completed:
+  - Expanded architecture chat verbs for attach/connect/move and colloquial Korean creation requests.
+  - Kept existing-board NAT/RDS/security-group attachment requests on patch while routing new service/structure requests to draft.
+  - Added Korean NAT Gateway aliases and generated a connected Elastic IP plus public-subnet NAT bundle with Terraform references.
+- Verification:
+  - Workspace AI routing tests passed 11/11 and Architecture Patch Preview tests passed 28/28.
+  - `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
+- Risk:
+  - The pre-existing `.workspaceStartForm .textInput:focus` source-contract test still fails independently of this routing change.
+
 ### 2026-07-11 - Merge latest dev into AI diagram branch
 
 - Goal: Update `dev` and integrate it into `feat/ck/287-ai-diagram` without losing local AI diagram work.
