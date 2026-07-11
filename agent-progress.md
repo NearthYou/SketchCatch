@@ -19,6 +19,13 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-11 - Remove duplicated Trivy rule IDs from the scanner test
+
+- Updated the Trivy ignore-file test to import `disabledTrivyTerraformRuleIds` from the scanner instead of maintaining a second hard-coded rule list.
+- Verification: focused `trivy-terraform-scan.test.ts`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check` passed.
+- Risk: none; the test now follows the production exclusion list automatically.
+- Next action: review and commit the Trivy exclusion change when ready.
+
 ### 2026-07-11 - Disable Trivy ALB and Auto Scaling checks
 
 - Configured each Terraform Trivy scan to generate an ignore file that excludes ALB rules AWS-0047, AWS-0052, AWS-0053, and AWS-0054 plus Auto Scaling launch configuration/template rules AWS-0008, AWS-0009, AWS-0122, AWS-0129, and AWS-0130.
