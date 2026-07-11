@@ -1,6 +1,5 @@
-import Image from "next/image";
-import Link from "next/link";
 import type { ReactNode } from "react";
+import { ProductBrand } from "../ui/ProductBrand";
 
 type AuthShellProps = {
   readonly children: ReactNode;
@@ -11,6 +10,7 @@ type AuthShellProps = {
   readonly wide?: boolean;
 };
 
+// 로그인과 가입 화면이 같은 제품 frame과 제목 구조를 사용하게 합니다.
 export function AuthShell({
   children,
   description,
@@ -24,10 +24,7 @@ export function AuthShell({
   return (
     <main className={wide ? "authPage authPageWide" : "authPage"}>
       <header className="authTopbar">
-        <Link className="authBrand" href="/" aria-label="SketchCatch 홈">
-          <Image alt="" height={24} priority src="/sketchcatch-logo.png" width={16} />
-          <span>SketchCatch</span>
-        </Link>
+        <ProductBrand href="/" />
       </header>
 
       <div className="authLayout">

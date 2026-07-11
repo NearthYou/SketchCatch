@@ -10,10 +10,12 @@ import {
 } from "react";
 import type { LoginRequest } from "@sketchcatch/types";
 import { useAuth } from "../../components/auth/auth-provider";
+import { ProductState } from "../../components/ui/ProductState";
 import { getCapsLockWarningMessage, isCapsLockActive } from "../../features/auth/caps-lock";
 import { getSafeReturnPath } from "../../features/auth/return-path";
 import { getApiErrorMessage } from "../../lib/api-client";
 
+// 일반 로그인과 소셜 로그인 상태를 한 form 안에서 안전하게 연결합니다.
 export function LoginForm() {
   const router = useRouter();
   const { login, status } = useAuth();
@@ -73,9 +75,16 @@ export function LoginForm() {
 
   if (status !== "unauthenticated") {
     return (
-      <div className="authStatus" aria-live="polite">
-        {status === "loading" ? "세션을 확인하고 있습니다." : "Dashboard로 이동합니다."}
-      </div>
+      <ProductState
+        compact
+        description={
+          status === "loading"
+            ? "저장된 로그인 정보를 확인하고 있습니다."
+            : "로그인이 확인되어 Dashboard로 이동합니다."
+        }
+        kind={status === "loading" ? "loading" : "waiting"}
+        title={status === "loading" ? "세션 확인 중" : "이동 중"}
+      />
     );
   }
 
@@ -158,9 +167,17 @@ export function LoginForm() {
         <Link href="/password-reset">비밀번호를 잊으셨나요?</Link>
       </div>
       {errorMessage ? (
-        <p className="authMessage authMessageError" role="alert">
-          {errorMessage}
-        </p>
+        <ProductState
+          action={
+            <Link className="authInlineAction" href="/dashboard">
+              Dashboard
+            </Link>
+          }
+          compact
+          description={errorMessage}
+          kind="error"
+          title="로그인하지 못했습니다"
+        />
       ) : null}
       <button aria-busy={isSubmitting} className="authSubmit" disabled={isSubmitting} type="submit">
         {isSubmitting ? "로그인 중" : "로그인"}
