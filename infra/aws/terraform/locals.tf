@@ -34,7 +34,7 @@ locals {
 
   ecs_error_filter_patterns = {
     api    = "{ $.level = 50 }"
-    web    = "?ERROR ?Error ?error"
+    web    = "?ERROR ?Error ?error -\"Failed to find Server Action\""
     worker = "\"Deployment worker failed\""
   }
 

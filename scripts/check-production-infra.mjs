@@ -274,10 +274,30 @@ for (const marker of [
   "ECS_WORKER_CONTAINER_NAME",
   "Register worker task definition",
   "task-definition-arn: ${{ steps.register-worker.outputs.task-definition-arn }}",
-  "ECS_WORKER_TASK_DEFINITION=${{ needs.register-worker.outputs.task-definition-arn }}"
+  "ECS_WORKER_TASK_DEFINITION=${{ needs.register-worker.outputs.task-definition-arn }}",
+  "GIT_OAUTH_CLIENT_ID=${{ env.GIT_OAUTH_CLIENT_ID }}",
+  "KAKAO_OAUTH_CLIENT_ID=${{ env.KAKAO_OAUTH_CLIENT_ID }}",
+  "NAVER_OAUTH_CLIENT_ID=${{ env.NAVER_OAUTH_CLIENT_ID }}",
+  "OAUTH_REDIRECT_BASE_URL=${{ env.OAUTH_REDIRECT_BASE_URL }}",
+  "SKETCHCATCH_PUBLIC_BASE_URL=${{ env.SKETCHCATCH_PUBLIC_BASE_URL }}"
 ]) {
   check(deployWorkflow.includes(marker), `ECS deploy workflow is missing ${marker}`);
 }
+
+const runtimeLocals = read("infra/aws/terraform/locals.tf");
+const runtimeObservability = read("infra/aws/terraform/observability.tf");
+check(
+  runtimeLocals.includes('?ERROR ?Error ?error -\\"Failed to find Server Action\\"'),
+  "web error metrics must exclude stale Next.js Server Action requests"
+);
+const containerErrorAlarm =
+  runtimeObservability.match(
+    /resource "aws_cloudwatch_metric_alarm" "ecs_container_errors" \{([\s\S]*?)\n\}/
+  )?.[1] ?? "";
+check(
+  !containerErrorAlarm.includes("ok_actions"),
+  "container log error alarms must not send repetitive OK notifications"
+);
 
 const migrationWorkflow = fs.readFileSync(migrationWorkflowPath, "utf8");
 for (const marker of [
