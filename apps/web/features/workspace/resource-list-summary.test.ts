@@ -10,6 +10,7 @@ const catalog: ParameterCatalog = {
   generatedAt: "2026-06-29T00:00:00.000Z",
   source: "resource-list-summary-test",
   resources: {
+    aws_api_gateway_rest_api: [makeDefinition({ name: "name", label: "Name", optional: true })],
     aws_instance: [
       makeDefinition({ name: "subnetId", label: "Subnet", referenceTargetTypes: ["aws_subnet"], required: true }),
       makeDefinition({ name: "instanceType", label: "Instance type", optional: true })
@@ -28,6 +29,8 @@ test("buildResourceListItems includes Terraform resources and design area nodes"
     [
       makeResourceNode({ id: "subnet-1", resourceType: "aws_subnet" }),
       makeResourceNode({ id: "region-1", label: "Region", resourceType: "aws_region" }),
+      makeResourceNode({ id: "api-gateway", resourceType: "aws_api_gateway_rest_api" }),
+      makeResourceNode({ id: "api-method", resourceType: "aws_api_gateway_method" }),
       makeDesignNode({ id: "note-1", label: "Note", type: "sketchcatch_note" })
     ],
     catalog
@@ -35,11 +38,12 @@ test("buildResourceListItems includes Terraform resources and design area nodes"
 
   assert.deepEqual(
     items.map((item) => item.nodeId),
-    ["subnet-1", "region-1"]
+    ["subnet-1", "region-1", "api-gateway"]
   );
   assert.equal(items[0]?.typeLabel, "aws_subnet");
   assert.equal(items[1]?.typeLabel, "Area / Region");
   assert.equal(items[1]?.terraformAddress, undefined);
+  assert.equal(items[2]?.typeLabel, "aws_api_gateway_rest_api");
 });
 
 test("buildResourceListItems orders reference rows before required and active optional values", () => {

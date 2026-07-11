@@ -1249,6 +1249,103 @@ test("createAmazonQArchitectureDraftResponse sizes a large self-managed API serv
   );
 });
 
+test("createAmazonQArchitectureDraftResponse lets low-budget DB-free API answers override earlier data sizing", async () => {
+  const requests: Array<Parameters<AiTextProvider["generate"]>[0]> = [];
+  const provider = createFakeAmazonQProvider((request) => {
+    requests.push(request);
+    return createNormalizedRequirementPlan(request);
+  });
+
+  const response = await createAmazonQArchitectureDraftResponse(
+    { prompt: createKoreanLowBudgetDbFreeApiQuestionnairePrompt() },
+    { provider, creditPolicy: confirmedCreditPolicy }
+  );
+
+  if ("status" in response) {
+    assert.fail(`Expected preview, got clarification: ${response.question}`);
+  }
+
+  const firstPayload = requests[0]?.payload as {
+    architectureDecisionSpace?: {
+      answerProfile?: Record<string, string | undefined>;
+    };
+    normalizedRequirement?: {
+      database?: string;
+      forbiddenCapabilities?: string[];
+      patternIds?: string[];
+      region?: string;
+      runtimeTopology?: {
+        compute?: string;
+        trafficEntry?: string;
+      };
+    };
+  };
+  const answerProfile = firstPayload.architectureDecisionSpace?.answerProfile;
+  const nodes = response.architectureJson.nodes;
+  const edges = response.architectureJson.edges;
+  const nodeTypes = new Set(nodes.map((node) => node.type));
+  const uploadBucket = nodes.find(
+    (node) => node.type === "S3" && node.config.bucketPurpose === "user_uploads"
+  );
+
+  assert.equal(answerProfile?.traffic, "small");
+  assert.equal(answerProfile?.frontend, "mobile");
+  assert.equal(answerProfile?.backend, "simple_api");
+  assert.equal(answerProfile?.region, "apac");
+  assert.equal(answerProfile?.upload, "image");
+  assert.equal(answerProfile?.realtime, "notification");
+  assert.equal(answerProfile?.management, "semi_managed");
+  assert.equal(answerProfile?.latency, "five_seconds");
+  assert.equal(answerProfile?.availability, "99");
+  assert.equal(answerProfile?.budget, "low");
+  assert.equal(firstPayload.normalizedRequirement?.database, "none");
+  assert.ok(firstPayload.normalizedRequirement?.forbiddenCapabilities?.includes("database"));
+  assert.equal(firstPayload.normalizedRequirement?.region, "ap-northeast-1");
+  assert.equal(firstPayload.normalizedRequirement?.runtimeTopology?.trafficEntry, "API_GATEWAY_REST_API");
+  assert.equal(firstPayload.normalizedRequirement?.runtimeTopology?.compute, "LAMBDA");
+  assert.equal(firstPayload.normalizedRequirement?.patternIds?.includes("multi-az-rds"), false);
+
+  for (const forbiddenType of [
+    "RDS",
+    "DB_SUBNET_GROUP",
+    "VPC",
+    "SUBNET",
+    "SECURITY_GROUP",
+    "SECRETS_MANAGER_SECRET",
+    "API_GATEWAY_RESOURCE",
+    "API_GATEWAY_METHOD",
+    "API_GATEWAY_INTEGRATION",
+    "API_GATEWAY_DEPLOYMENT",
+    "API_GATEWAY_STAGE"
+  ] as const) {
+    assert.equal(nodeTypes.has(forbiddenType), false, `Expected no ${forbiddenType}`);
+  }
+
+  assert.equal(nodeTypes.has("API_GATEWAY_REST_API"), true);
+  assert.equal(nodeTypes.has("LAMBDA"), true);
+  assert.equal(nodeTypes.has("S3"), true);
+  assert.equal(nodeTypes.has("CLOUDWATCH_LOG_GROUP"), true);
+  assert.equal(nodeTypes.has("CLOUDWATCH_METRIC_ALARM"), true);
+  assert.equal(uploadBucket?.config.bucketPrefix, "sketchcatch-image-uploads-");
+  assert.equal(uploadBucket?.config.bucketPurpose, "user_uploads");
+  assert.ok(
+    edges.some((edge) => /polling.*cost warning/iu.test(edge.label ?? "")),
+    "Expected a polling cost-warning edge"
+  );
+  assert.ok(
+    response.metadata.assumptions.some((assumption) =>
+      /database.*excluded|db.*excluded|no database|db-free/iu.test(assumption)
+    ),
+    "Expected DB-free assumption coverage"
+  );
+  assert.ok(
+    response.metadata.assumptions.some((assumption) =>
+      /polling.*cost/iu.test(assumption)
+    ),
+    "Expected polling cost assumption coverage"
+  );
+});
+
 test("createAmazonQArchitectureDraftResponse maps the Korean SSR mixed-upload questionnaire to Seoul Fargate SSE notifications", async () => {
   const requests: Array<Parameters<AiTextProvider["generate"]>[0]> = [];
   const provider = createFakeAmazonQProvider((request) => {
@@ -4238,6 +4335,27 @@ function createKoreanApiServerPollingQuestionnairePrompt(): string {
     "traffic pattern: event spike bursty traffic",
     "downtime tolerance: monthly 1 hour within 99.9 availability",
     "realtime notification transport: simple polling with cost warning"
+  ].join("\n");
+}
+
+function createKoreanLowBudgetDbFreeApiQuestionnairePrompt(): string {
+  return [
+    "website type: API server mobile app backend",
+    "traffic: small traffic under daily 100 users concurrent 10",
+    "database question answer: medium data 10GB-100GB",
+    "frontend technology: mobile app native client",
+    "region: Asia Pacific APAC Tokyo and Singapore included",
+    "monthly budget: under 10 manwon minimum cost",
+    "SSL HTTPS: optional HTTP acceptable",
+    "file upload: image upload only profile and post images",
+    "realtime feature: realtime notification",
+    "management preference: semi-managed some server management",
+    "loading time target: within 5 seconds",
+    "website size: 10MB-100MB general website",
+    "traffic pattern: time-of-day daytime peak",
+    "downtime tolerance: monthly 8 hours within 99 availability; availability: 99%",
+    "realtime notification transport: simple polling with cost warning",
+    "final database budget decision: DB 없이 만들기"
   ].join("\n");
 }
 

@@ -73,6 +73,13 @@ test("flow mappers collapse parameter-helper resources from the rendered board",
   const certificate = makeNode({ id: "certificate", resourceType: "aws_acm_certificate" });
   const encryptionKey = makeNode({ id: "encryption-key", resourceType: "aws_kms_key" });
   const database = makeNode({ id: "database", resourceType: "aws_db_instance" });
+  const apiGateway = makeNode({ id: "api-gateway", resourceType: "aws_api_gateway_rest_api" });
+  const apiResource = makeNode({ id: "api-resource", resourceType: "aws_api_gateway_resource" });
+  const apiMethod = makeNode({ id: "api-method", resourceType: "aws_api_gateway_method" });
+  const apiIntegration = makeNode({ id: "api-integration", resourceType: "aws_api_gateway_integration" });
+  const apiDeployment = makeNode({ id: "api-deployment", resourceType: "aws_api_gateway_deployment" });
+  const apiStage = makeNode({ id: "api-stage", resourceType: "aws_api_gateway_stage" });
+  const lambda = makeNode({ id: "lambda", resourceType: "aws_lambda_function" });
   const flowNodes = toFlowNodes(
     [
       service,
@@ -84,7 +91,14 @@ test("flow mappers collapse parameter-helper resources from the rendered board",
       machineImage,
       certificate,
       encryptionKey,
-      database
+      database,
+      apiGateway,
+      apiResource,
+      apiMethod,
+      apiIntegration,
+      apiDeployment,
+      apiStage,
+      lambda
     ],
     [],
     null,
@@ -101,7 +115,13 @@ test("flow mappers collapse parameter-helper resources from the rendered board",
       makeEdge(machineImage.id, launchTemplate.id),
       makeEdge(certificate.id, service.id),
       makeEdge(encryptionKey.id, database.id),
-      makeEdge(service.id, database.id)
+      makeEdge(service.id, database.id),
+      makeEdge(apiGateway.id, apiResource.id),
+      makeEdge(apiResource.id, apiMethod.id),
+      makeEdge(apiMethod.id, apiIntegration.id),
+      makeEdge(apiIntegration.id, lambda.id),
+      makeEdge(apiDeployment.id, apiStage.id),
+      makeEdge(apiGateway.id, lambda.id)
     ],
     [],
     [
@@ -114,17 +134,24 @@ test("flow mappers collapse parameter-helper resources from the rendered board",
       machineImage,
       certificate,
       encryptionKey,
-      database
+      database,
+      apiGateway,
+      apiResource,
+      apiMethod,
+      apiIntegration,
+      apiDeployment,
+      apiStage,
+      lambda
     ]
   );
 
   assert.deepEqual(
     flowNodes.map((node) => node.id),
-    ["ecs-service", "security-group", "database"]
+    ["ecs-service", "security-group", "database", "api-gateway", "lambda"]
   );
   assert.deepEqual(
     flowEdges.map((edge) => edge.id),
-    ["security-group-to-ecs-service", "ecs-service-to-database"]
+    ["security-group-to-ecs-service", "ecs-service-to-database", "api-gateway-to-lambda"]
   );
 });
 

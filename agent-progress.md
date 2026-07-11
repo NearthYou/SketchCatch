@@ -103,6 +103,23 @@ Short English-only working log for the current agent context. Older records are 
   - The pre-existing full web suite has one unrelated CSS contract failure for the missing `.workspaceStartForm .textInput:focus` selector.
   - Existing saved resource configurations remain unchanged until the user accepts a regenerated Architecture Draft.
 
+### 2026-07-11 - Fix DB-free mobile API diagram generation
+
+- Goal: Make the low-budget Korean mobile API questionnaire produce a readable DB-free Architecture Draft instead of a noisy VPC/RDS/Terraform-helper diagram.
+- Completed:
+  - Treated the final `DB without` decision as authoritative over earlier data-size answers.
+  - Forced low-budget DB-free API answers into an API Gateway plus Lambda serverless topology with image-upload S3 and CloudWatch observability.
+  - Removed RDS, DB subnet groups, database security groups, database Secrets Manager credentials, and database labels when the user excludes the database.
+  - Added polling cost-warning assumptions and edge labels for simple polling notification answers.
+  - Hid API Gateway method/resource/integration/deployment/stage Terraform helper nodes from the rendered board and right resource list while preserving the REST API and Lambda resources.
+- Verification:
+  - Focused Architecture Draft service tests passed 46/46.
+  - Focused web flow-mapper tests passed 30/30.
+  - Focused resource-list summary tests passed 8/8.
+  - `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
+- Risk:
+  - Existing saved boards keep their old generated resources until the draft is regenerated or replaced.
+
 ## Next Action
 
 - 2026-07-11 update: Removed Security Groups from all board container paths so generated, saved, and manually added security groups render as regular VPC-scoped resource icons. Workload containment now prioritizes `subnetId` or explicit subnet references, while Security Groups remain visible through protection/allow edges and parameter references. Multi-subnet workloads keep placement markers instead of being forced into one subnet. Verification passed with focused flow, area, catalog, movement, workspace adapter, and API prompt tests, full API Architecture Draft tests, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check`.

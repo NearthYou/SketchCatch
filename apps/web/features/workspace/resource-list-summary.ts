@@ -1,5 +1,6 @@
 import type { DiagramNode } from "@sketchcatch/types";
 import { isDesignAreaNode } from "../diagram-editor/area-nodes";
+import { isRenderableDiagramNode } from "../diagram-editor/diagram-node-visibility";
 import { getAwsAvailabilityZoneLabel } from "../parameter-input/aws-availability-zone-options";
 import {
   getActiveOptionalDefinitions,
@@ -233,7 +234,7 @@ function getAreaTypeLabel(node: DiagramNode): string {
 }
 
 function isResourceListNode(node: DiagramNode): boolean {
-  return node.kind === "resource" || isDesignAreaNode(node);
+  return (node.kind === "resource" || isDesignAreaNode(node)) && isRenderableDiagramNode(node);
 }
 
 function toSummaryLabel(key: string): string {

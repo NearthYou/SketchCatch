@@ -1702,8 +1702,21 @@ export function createDeterministicArchitectureIntentPlan(prompt: string): Archi
   const uploadStorageRequired = requiresUploadStorage(normalizedPrompt);
   const forbidsEc2Runtime = explicitlyForbidsEc2Runtime(normalizedPrompt) || fargateRuntime;
   const fargateServiceCount = resolveFargateServiceCount(normalizedPrompt);
+  const lowBudgetDbFreeApi = requiresLowBudgetDbFreeApi(normalizedPrompt);
 
-  if (selfManagedRuntime) {
+  if (lowBudgetDbFreeApi) {
+    patternIds.add("serverless-api");
+    requiredResources.add("API_GATEWAY_REST_API");
+    requiredResources.add("LAMBDA");
+    requiredResources.add("LAMBDA_PERMISSION");
+    requiredResources.add("IAM_ROLE");
+    requiredResources.add("IAM_POLICY");
+    requiredResources.add("CLOUDWATCH_LOG_GROUP");
+    requiredResources.add("CLOUDWATCH_METRIC_ALARM");
+    forbiddenCapabilities.add("ec2_runtime");
+    forbiddenCapabilities.add("load_balancer");
+    amazonQBrief.push("Use a low-cost API Gateway plus Lambda API path because the final budget decision excludes the database.");
+  } else if (selfManagedRuntime) {
     patternIds.add("alb-asg-ec2");
     if (requiresSpaFrontend(normalizedPrompt)) {
       patternIds.add("spa-cloudfront-s3");
@@ -1809,6 +1822,23 @@ export function createDeterministicArchitectureIntentPlan(prompt: string): Archi
     amazonQBrief.push("Do not include realtime, notification, WebSocket, or SSE-specific resources when realtime is excluded.");
   }
 
+  if (requiresNoDatabase(normalizedPrompt)) {
+    forbiddenCapabilities.add("database");
+    amazonQBrief.push("The final answer excludes the database. Do not include RDS, DB subnet groups, database subnets, database security groups, Secrets Manager database credentials, or database-specific labels.");
+  }
+
+  if (forbiddenCapabilities.has("database")) {
+    patternIds.delete("multi-az-rds");
+    for (const resourceType of [
+      "RDS",
+      "DB_SUBNET_GROUP",
+      "SECRETS_MANAGER_SECRET"
+    ] as const) {
+      requiredResources.delete(resourceType);
+      delete resourceQuantities[resourceType];
+    }
+  }
+
   const runtimeTopology = createDeterministicRuntimeTopology(normalizedPrompt, quantities.ec2Instances);
   const plan: ArchitectureIntentPlan = {
     ...(patternIds.size === 0 ? {} : { patternIds: [...patternIds] }),
@@ -1834,6 +1864,13 @@ function createDeterministicRuntimeTopology(
   ec2Count: number
 ): ArchitectureIntentPlan["runtimeTopology"] {
   const topology: NonNullable<ArchitectureIntentPlan["runtimeTopology"]> = {};
+
+  if (requiresLowBudgetDbFreeApi(normalizedPrompt)) {
+    return {
+      trafficEntry: "API_GATEWAY_REST_API",
+      compute: "LAMBDA"
+    };
+  }
 
   if (requiresSelfManagedEc2Architecture(normalizedPrompt)) {
     return {
@@ -2111,14 +2148,17 @@ function createAmazonQPlanDraftResult(
 
 function createDeterministicArchitectureAssumptions(prompt: string): string[] {
   const normalizedPrompt = prompt.normalize("NFKC").toLowerCase();
+  const assumptions: string[] = [];
 
-  if (resolveRealtimeTransport(normalizedPrompt) !== "polling") {
-    return [];
+  if (requiresNoDatabase(normalizedPrompt)) {
+    assumptions.push("Database is excluded by the final DB-free answer; use API/storage assumptions until the user accepts a database-backed design.");
   }
 
-  return [
-    "Polling is represented as periodic HTTPS API requests; validate interval, cache headers, and client backoff because polling can increase ALB/EC2/RDS load and cost during traffic spikes."
-  ];
+  if (resolveRealtimeTransport(normalizedPrompt) === "polling") {
+    assumptions.push("Polling is represented as periodic HTTPS API requests; validate interval, cache headers, and client backoff because polling can increase API Gateway, Lambda, or backend cost during traffic spikes.");
+  }
+
+  return assumptions;
 }
 
 function normalizeArchitecturePlanTopologyInvariants(
@@ -2506,6 +2546,10 @@ function applyArchitecturePlanExclusions(
     }
 
     if (forbiddenCapabilities.has("realtime") && isForbiddenRealtimeArchitectureNode(node)) {
+      return false;
+    }
+
+    if (forbiddenCapabilities.has("database") && isForbiddenDatabaseArchitectureNode(node)) {
       return false;
     }
 
@@ -3143,7 +3187,12 @@ function addArchitectureEdge(
   targetId: string,
   label: string
 ): void {
-  if (edges.some((edge) => edge.sourceId === sourceId && edge.targetId === targetId)) {
+  const existingEdge = edges.find((edge) => edge.sourceId === sourceId && edge.targetId === targetId);
+
+  if (existingEdge !== undefined) {
+    if (/cost warning/iu.test(label) && !/cost warning/iu.test(existingEdge.label ?? "")) {
+      existingEdge.label = label;
+    }
     return;
   }
 
@@ -4066,15 +4115,17 @@ function findRequirementCoverageNodeValidationIssues(preview: AmazonQArchitectur
 }
 
 function hasForbiddenDatabaseResource(architectureJson: ArchitectureJson): boolean {
-  return architectureJson.nodes.some((node) => {
-    if (hasAnyNodeType(new Set([node.type]), ["RDS", "DB_SUBNET_GROUP"])) {
-      return true;
-    }
+  return architectureJson.nodes.some(isForbiddenDatabaseArchitectureNode);
+}
 
-    return /(database|\bdb\b|rds|postgres|postgresql|mysql|db\s*subnet|\uB370\uC774\uD130\uBCA0\uC774\uC2A4)/iu.test(
-      createNodeSearchText(node)
-    );
-  });
+function isForbiddenDatabaseArchitectureNode(node: ArchitectureJson["nodes"][number]): boolean {
+  if (hasAnyNodeType(new Set([node.type]), ["RDS", "DB_SUBNET_GROUP", "SECRETS_MANAGER_SECRET"])) {
+    return true;
+  }
+
+  return /(database|\bdb\b|rds|postgres|postgresql|mysql|db\s*subnet|secretsmanager.*credential|\uB370\uC774\uD130\uBCA0\uC774\uC2A4)/iu.test(
+    createNodeSearchText(node)
+  );
 }
 
 function hasForbiddenUploadResource(architectureJson: ArchitectureJson): boolean {
@@ -4511,6 +4562,10 @@ function configureCanonicalPatternResources(
     return configureCanonicalEc2PatternResources(architectureJson, plan, prompt);
   }
 
+  if (patternIds.has("serverless-api")) {
+    return configureCanonicalServerlessApiResources(architectureJson, prompt);
+  }
+
   if (!patternIds.has("ecs-fargate") || patternIds.has("serverless-api") || !hasEcsRuntime) {
     return architectureJson;
   }
@@ -4814,6 +4869,95 @@ function configureCanonicalPatternResources(
         return { ...node, id: "app-database", label: "Multi-AZ Application Database", config: { engine: "postgres", instanceClass: databaseInstanceClass, allocatedStorage: databaseAllocatedStorage, multiAz: true, publiclyAccessible: false, storageEncrypted: true, backupRetentionPeriod: 7, deletionProtection: true, skipFinalSnapshot: false, finalSnapshotIdentifier: "sketchcatch-app-final", dbSubnetGroupName: canonicalTerraformReference("aws_db_subnet_group", "db-subnet-group", "name"), vpcSecurityGroupIds: [canonicalTerraformReference("aws_security_group", "db-security-group")] } };
       case "SECRETS_MANAGER_SECRET":
         return { ...node, id: "database-secret", label: "Database Credentials Secret", config: { name: "sketchcatch/database/credentials", recoveryWindowInDays: 7 } };
+      default:
+        return node;
+    }
+  });
+
+  return { nodes, edges: architectureJson.edges };
+}
+
+function configureCanonicalServerlessApiResources(
+  architectureJson: ArchitectureJson,
+  prompt: string
+): ArchitectureJson {
+  const normalizedPrompt = prompt.normalize("NFKC").toLowerCase();
+  const uploadProfile = resolveUploadProfile(normalizedPrompt);
+  const uploadBucketProfile = uploadProfile === undefined || uploadProfile === "none" ? undefined : uploadProfile;
+  const uploadBucketConfig = uploadBucketProfile === undefined ? undefined : resolveUploadBucketConfig(uploadBucketProfile);
+  let s3Index = 0;
+
+  const nodes = architectureJson.nodes.map((node) => {
+    switch (node.type) {
+      case "API_GATEWAY_REST_API":
+        return {
+          ...node,
+          id: "api-gateway",
+          label: "Practice REST API",
+          config: {
+            ...node.config,
+            name: "practice-api",
+            description: "Low-cost API entry point for the mobile backend Lambda function"
+          }
+        };
+      case "LAMBDA":
+        return {
+          ...node,
+          id: "lambda-function",
+          label: "Lambda Function",
+          config: {
+            ...node.config,
+            functionName: "practice-function",
+            handler: "index.handler",
+            runtime: "nodejs20.x",
+            timeout: 20,
+            memorySize: 128
+          }
+        };
+      case "S3":
+        s3Index += 1;
+        if (uploadBucketConfig === undefined || s3Index > 1) {
+          return node;
+        }
+
+        return {
+          ...node,
+          id: uploadBucketConfig.id,
+          label: uploadBucketConfig.label,
+          config: {
+            ...node.config,
+            bucketPrefix: uploadBucketConfig.bucketPrefix,
+            bucketPurpose: "user_uploads",
+            publicAccessBlock: true,
+            forceDestroy: false,
+            servicePurpose: "file_upload_service"
+          }
+        };
+      case "CLOUDWATCH_LOG_GROUP":
+        return {
+          ...node,
+          id: "lambda-log-group",
+          label: "Lambda Logs",
+          config: {
+            ...node.config,
+            name: "/aws/lambda/practice-function",
+            retentionInDays: 30
+          }
+        };
+      case "CLOUDWATCH_METRIC_ALARM":
+        return {
+          ...node,
+          id: "lambda-error-alarm",
+          label: "Lambda Error Alarm",
+          config: {
+            ...node.config,
+            alarmName: "practice-lambda-errors",
+            namespace: "AWS/Lambda",
+            metricName: "Errors",
+            comparisonOperator: "GreaterThanThreshold",
+            threshold: 0
+          }
+        };
       default:
         return node;
     }
@@ -5550,6 +5694,13 @@ function isResourceTypeForbiddenByPlan(
     return true;
   }
 
+  if (
+    forbiddenCapabilities.has("database") &&
+    ["RDS", "DB_SUBNET_GROUP", "SECRETS_MANAGER_SECRET"].includes(resourceType)
+  ) {
+    return true;
+  }
+
   return (
     forbiddenCapabilities.has("ec2_runtime") &&
     [
@@ -5758,6 +5909,13 @@ function connectCanonicalPatternTopologies(
   }
 
   if (patternIds.includes("serverless-api")) {
+    connect(
+      "API_GATEWAY_REST_API",
+      "LAMBDA",
+      resolveRealtimeTransport(normalizedPrompt) === "polling"
+        ? "polling API requests (cost warning)"
+        : "invokes"
+    );
     connect("API_GATEWAY_REST_API", "API_GATEWAY_RESOURCE", "contains");
     connect("API_GATEWAY_RESOURCE", "API_GATEWAY_METHOD", "exposes");
     connect("API_GATEWAY_METHOD", "API_GATEWAY_INTEGRATION", "integrates");
@@ -5766,6 +5924,7 @@ function connectCanonicalPatternTopologies(
     connect("API_GATEWAY_DEPLOYMENT", "API_GATEWAY_STAGE", "publishes");
     connect("IAM_ROLE", "LAMBDA", "authorizes");
     connect("LAMBDA", "CLOUDWATCH_LOG_GROUP", "logs");
+    connect("LAMBDA", "S3", "image upload objects");
   }
 
   if (patternIds.includes("spa-cloudfront-s3")) {
@@ -6376,8 +6535,16 @@ function dedupeNonEmptyLines(lines: readonly string[]): string[] {
 }
 
 function requiresNoDatabase(normalizedPrompt: string): boolean {
-  return /(database:\s*(none|no)|no\s+database|database\s+not\s+required|\uB370\uC774\uD130\uBCA0\uC774\uC2A4[\s\S]{0,60}\uD544\uC694\s*\uC5C6\uC74C|\uD544\uC694\s*\uC5C6\uC74C[\s\S]{0,60}\uB370\uC774\uD130\uBCA0\uC774\uC2A4|\uC815\uC801\s*\uCF58\uD150\uCE20\uB9CC)/iu.test(
+  return /(database:\s*(none|no)|no\s+database|database\s+not\s+required|db\s*(without|free|none|no)|without\s+db|without\s+database|\bdb\s*없이|db\s*없이\s*만들기|\uB370\uC774\uD130\uBCA0\uC774\uC2A4[\s\S]{0,60}\uD544\uC694\s*\uC5C6\uC74C|\uD544\uC694\s*\uC5C6\uC74C[\s\S]{0,60}\uB370\uC774\uD130\uBCA0\uC774\uC2A4|\uB370\uC774\uD130\uBCA0\uC774\uC2A4\s*\uC5C6\uC774|\uB370\uC774\uD130\uBCA0\uC774\uC2A4\s*\uC81C\uC678|\uC815\uC801\s*\uCF58\uD150\uCE20\uB9CC)/iu.test(
     normalizedPrompt
+  );
+}
+
+function requiresLowBudgetDbFreeApi(normalizedPrompt: string): boolean {
+  return (
+    requiresNoDatabase(normalizedPrompt) &&
+    resolveBudgetProfile(normalizedPrompt) === "low" &&
+    /api\s+server|mobile\s+app\s+backend|api\s*서버|모바일\s*앱\s*백엔드/iu.test(normalizedPrompt)
   );
 }
 
