@@ -1,6 +1,6 @@
 import type { WorkspaceCloudPlatform } from "../../../features/workspace/project-draft-persistence";
 
-export type WorkspaceStartKind = "ai" | "reverse" | "template" | "blank";
+export type WorkspaceStartKind = "ai" | "reverse" | "template" | "repository" | "blank";
 export type WorkspaceStartPriority = "primary" | "secondary";
 
 export type WorkspaceStartOption = {
@@ -21,7 +21,7 @@ export type ResolveWorkspaceStartActionInput = {
 export type WorkspaceStartAction =
   | {
       readonly kind: "createProject";
-      readonly openMode: "template" | "blank";
+      readonly openMode: "template" | "repository" | "blank";
     }
   | {
       readonly kind: "openAiDraft";
@@ -59,6 +59,13 @@ export function createWorkspaceStartOptions(): readonly WorkspaceStartOption[] {
       title: "Template으로 시작",
       description: "검증된 구조를 고른 뒤 바로 Architecture Board를 엽니다.",
       actionLabel: "Template 고르기"
+    },
+    {
+      kind: "repository",
+      priority: "primary",
+      title: "GitHub Repository로 시작",
+      description: "Repository를 분석해 맞는 Architecture Template을 찾습니다.",
+      actionLabel: "Repository 연결하기"
     },
     {
       kind: "blank",

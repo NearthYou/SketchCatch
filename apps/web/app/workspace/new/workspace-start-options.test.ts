@@ -13,7 +13,7 @@ const startClientSource = readFileSync(
 );
 const startPageSource = readFileSync(fileURLToPath(new URL("page.tsx", import.meta.url)), "utf8");
 
-test("createWorkspaceStartOptions exposes three guided starts and keeps blank board small", () => {
+test("createWorkspaceStartOptions exposes four guided starts and keeps blank board small", () => {
   const options = createWorkspaceStartOptions();
 
   assert.deepEqual(
@@ -22,6 +22,7 @@ test("createWorkspaceStartOptions exposes three guided starts and keeps blank bo
       ["ai", "primary"],
       ["reverse", "primary"],
       ["template", "primary"],
+      ["repository", "primary"],
       ["blank", "secondary"]
     ]
   );
@@ -36,10 +37,10 @@ test("WorkspaceStartClient uses the rebuilt start shell without a placeholder", 
   assert.match(startClientSource, /blankStartOption/);
 });
 
-test("WorkspaceStartClient keeps Template as a real start path", () => {
+test("WorkspaceStartClient keeps Template and GitHub Repository as real start paths", () => {
   assert.match(startClientSource, /saveProjectDraft/);
   assert.match(startClientSource, /selectedTemplate\.diagramJson/);
-  assert.doesNotMatch(startClientSource, /createGitHubSourceRepositoryInstallUrl/);
+  assert.match(startClientSource, /workspace\/repository/);
 });
 
 test("WorkspaceStartClient hydrates a stored form before persisting changes", () => {
@@ -87,8 +88,8 @@ test("resolveWorkspaceStartAction opens AI before project creation", () => {
   assert.deepEqual(aiAction, { kind: "openAiDraft", href: "/workspace/ai" });
 });
 
-test("resolveWorkspaceStartAction creates projects for blank and Template starts", () => {
-  const starts = ["blank", "template"] as const;
+test("resolveWorkspaceStartAction creates projects for blank, Template, and Repository starts", () => {
+  const starts = ["blank", "template", "repository"] as const;
   const actions = starts.map((startKind) =>
     resolveWorkspaceStartAction({
       cloudPlatform: "aws",

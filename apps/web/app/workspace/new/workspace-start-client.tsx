@@ -1,19 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   Bot,
   Boxes,
   CloudDownload,
+  GitBranch,
   LayoutPanelTop,
   LoaderCircle,
   type LucideIcon
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { TemplateGallery } from "../../../components/templates/TemplateGallery";
+import { ProductBrand } from "../../../components/ui/ProductBrand";
 import {
   createProject,
   deleteProject,
@@ -38,6 +39,7 @@ const DEFAULT_REVERSE_CLOUD_PLATFORM = "aws";
 const START_MODE_ICONS: Record<WorkspaceStartKind, LucideIcon> = {
   ai: Bot,
   blank: LayoutPanelTop,
+  repository: GitBranch,
   reverse: CloudDownload,
   template: Boxes
 };
@@ -51,6 +53,7 @@ type WorkspaceStartDraft = {
 type WorkspaceStartForm = {
   readonly projectName: string;
   readonly selectedKind: WorkspaceStartKind;
+  readonly selectedTemplateId: string | null;
 };
 
 const startModeOptions = createWorkspaceStartOptions();
@@ -96,6 +99,7 @@ export function WorkspaceStartClient({
     if (storedForm) {
       setTitle(storedForm.projectName);
       setSelectedKind(storedForm.selectedKind);
+      setSelectedTemplateId(storedForm.selectedTemplateId);
     } else {
       const aiDraft = readAiStartDraft();
       if (aiDraft?.projectName) {
@@ -111,8 +115,8 @@ export function WorkspaceStartClient({
       return;
     }
 
-    writeWorkspaceStartForm({ projectName: title, selectedKind });
-  }, [isStartFormHydrated, selectedKind, title]);
+    writeWorkspaceStartForm({ projectName: title, selectedKind, selectedTemplateId });
+  }, [isStartFormHydrated, selectedKind, selectedTemplateId, title]);
 
   async function handleContinue(): Promise<void> {
     const projectName = title.trim();
@@ -166,7 +170,11 @@ export function WorkspaceStartClient({
           projectId: project.id,
           projectName: project.name
         });
-        router.push(`/workspace?${params.toString()}`);
+        router.push(
+          action.openMode === "repository"
+            ? `/workspace/repository?${params.toString()}`
+            : `/workspace?${params.toString()}`
+        );
       } catch (error) {
         // 시작용으로 방금 만든 빈 프로젝트만 정리해 실패한 시작 흔적을 남기지 않습니다.
         if (createdProjectId) {
@@ -188,10 +196,7 @@ export function WorkspaceStartClient({
   return (
     <main className={styles.page}>
       <header className={styles.topbar}>
-        <Link className={styles.brand} href="/dashboard" aria-label="SketchCatch Dashboard">
-          <Image alt="" height={24} priority src="/sketchcatch-logo.png" width={16} />
-          <span>SketchCatch</span>
-        </Link>
+        <ProductBrand />
         <strong>새 프로젝트</strong>
         <Link className={styles.backLink} href="/dashboard">
           <ArrowLeft aria-hidden="true" size={17} />
@@ -294,6 +299,7 @@ export function WorkspaceStartClient({
   );
 }
 
+// Reverse만 AWS 연결을 확인하고 나머지는 선택값만으로 다음 단계를 정합니다.
 async function resolveStartAction({
   projectName,
   selectedKind
@@ -345,10 +351,12 @@ function TemplatePicker({
   );
 }
 
+// 선택한 시작 방식에 맞는 한 개의 주 행동 문구를 반환합니다.
 function getContinueLabel(kind: WorkspaceStartKind): string {
   const labels: Record<WorkspaceStartKind, string> = {
     ai: "AI로 계속",
     blank: "빈 보드 열기",
+    repository: "Repository 연결하기",
     reverse: "기존 AWS 가져오기",
     template: "Template으로 시작"
   };
@@ -356,6 +364,7 @@ function getContinueLabel(kind: WorkspaceStartKind): string {
   return labels[kind];
 }
 
+// 뒤로 돌아왔을 때 사용자가 고른 이름, 방식, Template을 복원합니다.
 function readWorkspaceStartForm(): WorkspaceStartForm | null {
   if (typeof window === "undefined") return null;
 
@@ -365,14 +374,21 @@ function readWorkspaceStartForm(): WorkspaceStartForm | null {
 
     if (!value || typeof value !== "object") return null;
     const candidate = value as Partial<WorkspaceStartForm>;
-    return typeof candidate.projectName === "string" && isWorkspaceStartKind(candidate.selectedKind)
-      ? { projectName: candidate.projectName, selectedKind: candidate.selectedKind }
+    return typeof candidate.projectName === "string" &&
+      isWorkspaceStartKind(candidate.selectedKind) &&
+      (candidate.selectedTemplateId === null || typeof candidate.selectedTemplateId === "string")
+      ? {
+          projectName: candidate.projectName,
+          selectedKind: candidate.selectedKind,
+          selectedTemplateId: candidate.selectedTemplateId
+        }
       : null;
   } catch {
     return null;
   }
 }
 
+// 새 프로젝트 입력 중인 값을 현재 browser 탭에만 임시 저장합니다.
 function writeWorkspaceStartForm(form: WorkspaceStartForm): void {
   if (typeof window === "undefined") return;
 
@@ -383,11 +399,13 @@ function writeWorkspaceStartForm(form: WorkspaceStartForm): void {
   }
 }
 
+// 프로젝트 생성이 끝난 뒤 임시 입력값을 지웁니다.
 function clearWorkspaceStartForm(): void {
   if (typeof window === "undefined") return;
   window.sessionStorage.removeItem(START_FORM_STORAGE_KEY);
 }
 
+// AI 시작 화면에서 이어 쓸 프로젝트 이름을 복원합니다.
 function readAiStartDraft(): WorkspaceStartDraft | null {
   if (typeof window === "undefined") return null;
 
@@ -400,6 +418,7 @@ function readAiStartDraft(): WorkspaceStartDraft | null {
   }
 }
 
+// AI 시작 화면으로 이동하기 전에 프로젝트 이름을 임시 저장합니다.
 function writeAiStartDraft(draft: WorkspaceStartDraft): void {
   if (typeof window === "undefined") return;
 
@@ -410,6 +429,7 @@ function writeAiStartDraft(draft: WorkspaceStartDraft): void {
   }
 }
 
+// browser 저장값이 AI 시작 입력으로 안전한 모양인지 확인합니다.
 function isWorkspaceStartDraft(value: unknown): value is WorkspaceStartDraft {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<WorkspaceStartDraft>;
@@ -422,11 +442,13 @@ function isWorkspaceStartDraft(value: unknown): value is WorkspaceStartDraft {
   );
 }
 
+// browser 저장값을 지원하는 다섯 시작 방식으로 제한합니다.
 function isWorkspaceStartKind(value: unknown): value is WorkspaceStartKind {
   return (
     value === "ai" ||
     value === "reverse" ||
     value === "template" ||
+    value === "repository" ||
     value === "blank"
   );
 }
