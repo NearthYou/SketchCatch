@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   AiPreDeploymentAnalysisResult,
   ArchitectureDiagnostic,
@@ -42,16 +42,20 @@ export function useWorkspaceSafety({
   const [analysis, setAnalysis] = useState<AiPreDeploymentAnalysisResult | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
   const [requestState, setRequestState] = useState<SafetyRequestState>("idle");
+  const inputGenerationRef = useRef(0);
   const gate = useMemo(() => getSafetyGateState(analysis), [analysis]);
 
   // Board나 Terraform 입력이 바뀌면 이전 검사 결과를 폐기해 오래된 통과 상태로 배포하지 못하게 합니다.
   useEffect(() => {
+    inputGenerationRef.current += 1;
     setAnalysis(null);
     setErrorMessage("");
+    setRequestState("idle");
   }, [architectureDiagnostics, diagram, terraformCode, terraformDiagnostics]);
 
   // Terraform 오류는 즉시 막고, 그 외에는 Architecture 전체를 AI 검사 API에 전달합니다.
   const run = useCallback(async (): Promise<void> => {
+    const inputGeneration = inputGenerationRef.current;
     setRequestState("analyzing");
     setErrorMessage("");
 
@@ -89,6 +93,7 @@ export function useWorkspaceSafety({
           ? { terraformFiles: [{ fileName: "main.tf", terraformCode }] }
           : {})
       });
+      if (inputGenerationRef.current !== inputGeneration) return;
       setAnalysis(
         addArchitectureDiagnosticsToPreDeploymentAnalysis(
           addTerraformDiagnosticsToPreDeploymentAnalysis(result, terraformDiagnostics),
@@ -96,13 +101,16 @@ export function useWorkspaceSafety({
         )
       );
     } catch (error) {
+      if (inputGenerationRef.current !== inputGeneration) return;
       setErrorMessage(
         error instanceof Error && error.message.trim()
           ? error.message
           : "배포 전 검사를 실행하지 못했습니다."
       );
     } finally {
-      setRequestState("idle");
+      if (inputGenerationRef.current === inputGeneration) {
+        setRequestState("idle");
+      }
     }
   }, [architectureDiagnostics, diagram, terraformCode, terraformDiagnostics]);
 

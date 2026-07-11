@@ -13,6 +13,7 @@ import type {
 import type { Database } from "../db/client.js";
 import {
   architectures,
+  deployments,
   gitCicdHandoffs,
   projectAssets,
   projects,
@@ -55,6 +56,18 @@ export type GitCicdHandoffSourceRepositoryRecord = Pick<
   | "name"
   | "defaultBranch"
   | "repositoryUrl"
+>;
+export type GitCicdHandoffApprovedDeploymentRecord = Pick<
+  typeof deployments.$inferSelect,
+  | "id"
+  | "projectId"
+  | "architectureId"
+  | "terraformArtifactId"
+  | "planSummary"
+  | "approvedAt"
+  | "approvedByUserId"
+  | "approvedTerraformArtifactId"
+  | "approvedPlanArtifactId"
 >;
 
 export type CreateGitCicdHandoffInput = {
@@ -277,6 +290,10 @@ export type GitCicdHandoffRepository = {
     sourceRepositoryId: string,
     projectId: string
   ): Promise<GitCicdHandoffSourceRepositoryRecord | undefined>;
+  findApprovedDeploymentForHandoff(
+    deploymentId: string,
+    projectId: string
+  ): Promise<GitCicdHandoffApprovedDeploymentRecord | undefined>;
   findSourceRepositoryById(
     sourceRepositoryId: string,
     projectId: string
@@ -677,6 +694,26 @@ export function createPostgresGitCicdHandoffRepository(
       return sourceRepository;
     },
 
+    // Git handoff가 실제 승인된 Plan을 기반으로 하는지 서버 DB에서 확인합니다.
+    async findApprovedDeploymentForHandoff(deploymentId, projectId) {
+      const [deployment] = await db
+        .select({
+          id: deployments.id,
+          projectId: deployments.projectId,
+          architectureId: deployments.architectureId,
+          terraformArtifactId: deployments.terraformArtifactId,
+          planSummary: deployments.planSummary,
+          approvedAt: deployments.approvedAt,
+          approvedByUserId: deployments.approvedByUserId,
+          approvedTerraformArtifactId: deployments.approvedTerraformArtifactId,
+          approvedPlanArtifactId: deployments.approvedPlanArtifactId
+        })
+        .from(deployments)
+        .where(and(eq(deployments.id, deploymentId), eq(deployments.projectId, projectId)));
+
+      return deployment;
+    },
+
     async findSourceRepositoryById(sourceRepositoryId, projectId) {
       const [sourceRepository] = await db
         .select({
@@ -881,6 +918,25 @@ export async function createGitCicdHandoff(
     );
   }
 
+  const approvedDeployment = input.sourceDeploymentId
+    ? await repository.findApprovedDeploymentForHandoff(input.sourceDeploymentId, input.projectId)
+    : undefined;
+
+  // 브라우저가 보낸 승인 문자열 대신 서버에 기록된 Plan 승인과 artifact를 모두 대조합니다.
+  if (
+    !approvedDeployment ||
+    approvedDeployment.architectureId !== input.architectureId ||
+    approvedDeployment.terraformArtifactId !== input.terraformArtifactId ||
+    approvedDeployment.approvedTerraformArtifactId !== input.terraformArtifactId ||
+    approvedDeployment.approvedPlanArtifactId !== input.userAcceptedChangeId ||
+    approvedDeployment.approvedAt === null ||
+    approvedDeployment.approvedByUserId !== input.accessContext.userId
+  ) {
+    throw new GitCicdHandoffProviderConflictError(
+      "Git/CI/CD handoff requires the current user's approved deployment plan"
+    );
+  }
+
   const sourceRepository = await repository.findActiveSourceRepository(
     input.sourceRepositoryId,
     input.projectId
@@ -941,7 +997,7 @@ export async function createGitCicdHandoff(
     repositoryName: sourceRepository.name,
     terraformArtifact,
     handoffKind,
-    planSummary: input.planSummary ?? null,
+    planSummary: approvedDeployment.planSummary ?? null,
     title: input.pullRequestTitle ?? null
   });
   const pullRequestTitle = input.pullRequestTitle ?? pullRequestDraft.title;
@@ -997,7 +1053,7 @@ export async function createGitCicdHandoff(
     architectureId: input.architectureId,
     terraformArtifactId: input.terraformArtifactId,
     handoffKind,
-    sourceDeploymentId: input.sourceDeploymentId ?? null,
+    sourceDeploymentId: approvedDeployment.id,
     deploymentMode,
     requiresEnvironmentApproval: true,
     sourceRepositoryId: input.sourceRepositoryId,

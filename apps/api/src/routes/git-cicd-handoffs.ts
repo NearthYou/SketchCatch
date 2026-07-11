@@ -158,7 +158,7 @@ const createGitCicdHandoffBodySchema = z
     architectureId: z.uuid(),
     terraformArtifactId: z.uuid(),
     handoffKind: z.enum(["terraform_iac", "static_site"]).default("terraform_iac"),
-    sourceDeploymentId: z.uuid().nullable().optional(),
+    sourceDeploymentId: z.uuid(),
     deploymentMode: gitCicdDeploymentModeSchema.default("infra_and_app"),
     sourceRepositoryId: z.string().trim().min(1).max(128),
     targetBranch: branchSchema.optional(),
