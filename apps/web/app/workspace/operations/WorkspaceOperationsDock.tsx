@@ -1,18 +1,20 @@
 "use client";
 
-import { Code2, History, PanelRightOpen, Rocket, ShieldCheck, X } from "lucide-react";
+import { Code2, GitBranch, History, PanelRightOpen, Rocket, ShieldCheck, X } from "lucide-react";
 import { useState } from "react";
 import type { DiagramEditorPanelContext } from "../../../features/diagram-editor";
 import { TerraformOperationsPanel } from "./TerraformOperationsPanel";
 import { SafetyOperationsPanel } from "./SafetyOperationsPanel";
 import { DeploymentHistoryPanel } from "./DeploymentHistoryPanel";
 import { DeploymentOperationsPanel } from "./DeploymentOperationsPanel";
+import { GitCicdOperationsPanel } from "./GitCicdOperationsPanel";
 import { useWorkspaceSafety } from "./use-workspace-safety";
 import { useWorkspaceDeployment } from "./use-workspace-deployment";
 import { useWorkspaceTerraform } from "./use-workspace-terraform";
+import { useWorkspaceGitCicd } from "./use-workspace-git-cicd";
 import styles from "./workspace-operations.module.css";
 
-export type WorkspaceOperationTab = "terraform" | "safety" | "deployment" | "history";
+export type WorkspaceOperationTab = "terraform" | "safety" | "deployment" | "git-cicd" | "history";
 
 // Board 위에서 Terraform, 검사, 배포, 이력을 순서대로 여는 작업 도구입니다.
 export function WorkspaceOperationsDock({
@@ -41,6 +43,7 @@ export function WorkspaceOperationsDock({
     saveDiagram: context.saveDiagramNow,
     terraform
   });
+  const gitCicd = useWorkspaceGitCicd({ deployment: deployment.current, projectId });
 
   // 도구를 고르면 닫힌 패널도 함께 열어 사용자의 행동 결과를 바로 보여줍니다.
   function selectTab(tab: WorkspaceOperationTab): void {
@@ -55,6 +58,17 @@ export function WorkspaceOperationsDock({
       data-project-id={projectId}
     >
       <nav aria-label="작업 단계" className={styles.dockToolbar} role="tablist">
+        <button
+          aria-label="Git/CI/CD"
+          aria-selected={isOpen && activeTab === "git-cicd"}
+          onClick={() => selectTab("git-cicd")}
+          role="tab"
+          title="Git/CI/CD"
+          type="button"
+        >
+          <GitBranch aria-hidden="true" size={17} />
+          {isOpen ? <span>Git/CI</span> : null}
+        </button>
         <button
           aria-label="Terraform Preview"
           aria-selected={isOpen && activeTab === "terraform"}
@@ -117,6 +131,8 @@ export function WorkspaceOperationsDock({
             <SafetyOperationsPanel context={context} safety={safety} />
           ) : activeTab === "deployment" ? (
             <DeploymentOperationsPanel deployment={deployment} safety={safety} />
+          ) : activeTab === "git-cicd" ? (
+            <GitCicdOperationsPanel deployment={deployment} gitCicd={gitCicd} projectId={projectId} />
           ) : (
             <DeploymentHistoryPanel deployment={deployment} />
           )}

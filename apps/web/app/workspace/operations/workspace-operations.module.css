@@ -476,6 +476,104 @@
 .cleanupConfirmation button { min-height: 38px; border: 1px solid var(--color-error); border-radius: var(--radius-control); background: var(--color-error); color: var(--color-on-primary); font-weight: 700; }
 .cleanupConfirmation button:disabled { cursor: not-allowed; opacity: 0.45; }
 
+.gitSetup,
+.gitHandoffDetails,
+.handoffSelect {
+  display: grid;
+  gap: 10px;
+}
+
+.gitSetup label,
+.handoffSelect {
+  color: var(--color-body);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.gitSetup label > span,
+.handoffSelect > span {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.gitSetup select,
+.handoffSelect select {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--radius-control);
+  padding: 0 10px;
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font: inherit;
+}
+
+.handoffSelect { margin-top: 16px; }
+
+.gitHandoffDetails {
+  margin-top: 16px;
+  border-top: 1px solid var(--color-hairline);
+  padding-top: 16px;
+}
+
+.gitHandoffDetails .sectionTitleRow button {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-control);
+  background: var(--color-canvas);
+  color: var(--color-body);
+  cursor: pointer;
+}
+
+.handoffFacts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-card);
+  background: var(--color-hairline);
+}
+
+.handoffFacts > div {
+  min-width: 0;
+  padding: 10px;
+  background: var(--color-canvas);
+}
+
+.handoffFacts dt { color: var(--color-muted); font-size: 11px; }
+.handoffFacts dd { margin: 3px 0 0; overflow-wrap: anywhere; color: var(--color-ink); font-size: 13px; font-weight: 700; }
+
+.gitDetails {
+  border-top: 1px solid var(--color-hairline);
+  padding: 12px 0;
+}
+
+.gitDetails summary { cursor: pointer; color: var(--color-ink); font-size: 13px; font-weight: 700; }
+.gitDetails p { color: var(--color-body); font-size: 12px; line-height: 1.5; }
+
+.gitLinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+}
+
+.gitLinks a,
+.inlineLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--color-text-link);
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.inlineLink { margin-top: 10px; }
+
 @media (max-width: 900px) {
   .dock {
     top: 68px;
