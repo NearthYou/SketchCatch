@@ -41,13 +41,16 @@ test("createArchitecturePatchPlan returns strict JSON for EC2 relative size edit
         value: null
       }
     ],
+    candidateResourceIds: [],
     preserve: [
       "position",
       "edges",
       "config.subnetId",
+      "config.subnetIds",
       "config.vpcId",
       "config.vpcSecurityGroupIds",
-      "config.securityGroupIds"
+      "config.securityGroupIds",
+      "metadata.parentAreaNodeId"
     ],
     clarificationQuestion: null,
     confidence: 0.92
@@ -67,12 +70,13 @@ test("createArchitecturePatchPlan refuses to choose a target when multiple resou
   });
 
   assert.equal(plan.status, "needs_clarification");
-  assert.equal(plan.action, "needs_clarification");
+  assert.equal(plan.action, null);
   assert.deepEqual(plan.target, {
     resourceType: "S3",
     resourceId: null,
     label: null
   });
+  assert.deepEqual(plan.candidateResourceIds, ["assets-bucket", "logs-bucket"]);
   assert.deepEqual(plan.operations, []);
   assert.match(plan.clarificationQuestion ?? "", /Multiple matching resources/);
 });
@@ -111,6 +115,7 @@ test("createArchitecturePatchPlan maps DB storage edits to an RDS set_value oper
       value: 200
     }
   ]);
+  assert.deepEqual(plan.candidateResourceIds, []);
 });
 
 test("createArchitecturePatchPlan treats explicit same-kind replacement as unsupported", () => {
@@ -123,8 +128,34 @@ test("createArchitecturePatchPlan treats explicit same-kind replacement as unsup
   });
 
   assert.equal(plan.status, "unsupported");
-  assert.equal(plan.action, "needs_clarification");
+  assert.equal(plan.action, null);
+  assert.deepEqual(plan.candidateResourceIds, []);
   assert.deepEqual(plan.operations, []);
+});
+
+test("createArchitecturePatchPlan keeps security group port edits within the allowed operation schema", () => {
+  const plan = createArchitecturePatchPlan({
+    architectureJson: {
+      nodes: [makeNode({ id: "web-sg", type: "SECURITY_GROUP", label: "Web Security Group" })],
+      edges: []
+    },
+    instruction: "open port 443 on the security group"
+  });
+
+  assert.equal(plan.status, "planned");
+  assert.equal(plan.action, "modify_resource");
+  assert.deepEqual(plan.target, {
+    resourceType: "SECURITY_GROUP",
+    resourceId: "web-sg",
+    label: "Web Security Group"
+  });
+  assert.deepEqual(plan.operations, [
+    {
+      op: "set_value",
+      path: "config.ingress",
+      value: 443
+    }
+  ]);
 });
 
 test("createArchitecturePatchPreview asks for a target when multiple resources match", () => {

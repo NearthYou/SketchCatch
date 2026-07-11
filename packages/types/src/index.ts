@@ -1626,8 +1626,7 @@ export type ArchitecturePatchPreviewChange = {
 export type ArchitecturePatchPlanAction =
   | "modify_resource"
   | "remove_resource"
-  | "add_resource"
-  | "needs_clarification";
+  | "add_resource";
 
 export type ArchitecturePatchPlanOperationType =
   | "set_value"
@@ -1642,17 +1641,18 @@ export type ArchitecturePatchPlanStatus = "planned" | "needs_clarification" | "u
 export type ArchitecturePatchPlanOperation = {
   op: ArchitecturePatchPlanOperationType;
   path: string;
-  value: JsonValue | null;
+  value: string | number | boolean | null;
 };
 
 export type ArchitecturePatchPlan = {
   status: ArchitecturePatchPlanStatus;
-  action: ArchitecturePatchPlanAction;
+  action: ArchitecturePatchPlanAction | null;
   target: {
     resourceType: ResourceType | null;
     resourceId: string | null;
     label: string | null;
   };
+  candidateResourceIds: string[];
   operations: ArchitecturePatchPlanOperation[];
   preserve: string[];
   clarificationQuestion: string | null;

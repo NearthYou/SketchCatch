@@ -521,9 +521,11 @@ const PATCH_PLAN_PRESERVE_PATHS = [
   "position",
   "edges",
   "config.subnetId",
+  "config.subnetIds",
   "config.vpcId",
   "config.vpcSecurityGroupIds",
-  "config.securityGroupIds"
+  "config.securityGroupIds",
+  "metadata.parentAreaNodeId"
 ] as const;
 
 export function createArchitecturePatchPlan(
@@ -563,6 +565,7 @@ export function createArchitecturePatchPlan(
         resourceId: null,
         label: null
       },
+      candidateResourceIds: [],
       operations: [],
       preserve: [...PATCH_PLAN_PRESERVE_PATHS],
       clarificationQuestion: null,
@@ -578,7 +581,8 @@ export function createArchitecturePatchPlan(
   if (targetResolution.status === "needs_clarification") {
     return createNeedsClarificationPatchPlan(
       resourceType ?? null,
-      targetResolution.question
+      targetResolution.question,
+      targetResolution.candidateResourceIds
     );
   }
 
@@ -587,6 +591,7 @@ export function createArchitecturePatchPlan(
       status: "planned",
       action: "remove_resource",
       target: createPatchPlanTarget(targetResolution.targetNode),
+      candidateResourceIds: [],
       operations: [],
       preserve: [...PATCH_PLAN_PRESERVE_PATHS],
       clarificationQuestion: null,
@@ -609,6 +614,7 @@ export function createArchitecturePatchPlan(
     status: "planned",
     action: "modify_resource",
     target: createPatchPlanTarget(targetResolution.targetNode),
+    candidateResourceIds: [],
     operations,
     preserve: [...PATCH_PLAN_PRESERVE_PATHS],
     clarificationQuestion: null,
@@ -742,16 +748,18 @@ function createPatchPlanTarget(
 
 function createNeedsClarificationPatchPlan(
   resourceType: ResourceType | null,
-  question: string
+  question: string,
+  candidateResourceIds: readonly string[] = []
 ): ArchitecturePatchPlan {
   return {
     status: "needs_clarification",
-    action: "needs_clarification",
+    action: null,
     target: {
       resourceType,
       resourceId: null,
       label: null
     },
+    candidateResourceIds: [...candidateResourceIds],
     operations: [],
     preserve: [...PATCH_PLAN_PRESERVE_PATHS],
     clarificationQuestion: question,
@@ -762,12 +770,13 @@ function createNeedsClarificationPatchPlan(
 function createUnsupportedPatchPlan(reason: string): ArchitecturePatchPlan {
   return {
     status: "unsupported",
-    action: "needs_clarification",
+    action: null,
     target: {
       resourceType: null,
       resourceId: null,
       label: null
     },
+    candidateResourceIds: [],
     operations: [],
     preserve: [...PATCH_PLAN_PRESERVE_PATHS],
     clarificationQuestion: reason,
@@ -783,7 +792,11 @@ function resolvePatchPlanTarget(
   }
 ):
   | { readonly status: "planned"; readonly targetNode: ResourceNode }
-  | { readonly status: "needs_clarification"; readonly question: string } {
+  | {
+      readonly status: "needs_clarification";
+      readonly question: string;
+      readonly candidateResourceIds: readonly string[];
+    } {
   if (input.selectedTargetResourceId !== undefined) {
     const selectedNode = architectureJson.nodes.find(
       (node) => node.id === input.selectedTargetResourceId
@@ -792,14 +805,16 @@ function resolvePatchPlanTarget(
     if (selectedNode === undefined) {
       return {
         status: "needs_clarification",
-        question: "The selected resource no longer exists. Which resource should be changed?"
+        question: "The selected resource no longer exists. Which resource should be changed?",
+        candidateResourceIds: []
       };
     }
 
     if (input.resourceType !== undefined && selectedNode.type !== input.resourceType) {
       return {
         status: "needs_clarification",
-        question: "The selected resource does not match the requested resource type."
+        question: "The selected resource does not match the requested resource type.",
+        candidateResourceIds: []
       };
     }
 
@@ -812,7 +827,8 @@ function resolvePatchPlanTarget(
   if (input.resourceType === undefined) {
     return {
       status: "needs_clarification",
-      question: "Which resource should be changed?"
+      question: "Which resource should be changed?",
+      candidateResourceIds: []
     };
   }
 
@@ -824,7 +840,8 @@ function resolvePatchPlanTarget(
       question:
         candidates.length === 0
           ? "No matching resource exists. Which resource should be changed?"
-          : "Multiple matching resources exist. Which one should be changed?"
+          : "Multiple matching resources exist. Which one should be changed?",
+      candidateResourceIds: candidates.map((candidate) => candidate.id)
     };
   }
 
@@ -876,6 +893,13 @@ function createPatchPlanOperations(
     const allocatedStorage = findStorageGb(normalizedInstruction);
     const instanceClass = findRdsInstanceClass(normalizedInstruction);
     const engine = findDatabaseEngine(normalizedInstruction);
+    const multiAz = findBooleanPreference(normalizedInstruction, [
+      "multi-az",
+      "multi az",
+      "multiple availability zones",
+      "다중 az",
+      "멀티 az"
+    ]);
     const operations: ArchitecturePatchPlanOperation[] = [];
 
     if (allocatedStorage !== undefined) {
@@ -899,6 +923,14 @@ function createPatchPlanOperations(
         op: "set_value",
         path: "config.engine",
         value: engine
+      });
+    }
+
+    if (targetNode.type === "RDS" && multiAz !== undefined) {
+      operations.push({
+        op: multiAz ? "enable" : "disable",
+        path: "config.multiAz",
+        value: null
       });
     }
 
@@ -933,6 +965,12 @@ function createPatchPlanOperations(
       "버전 관리",
       "버전"
     ]);
+    const encryption = findBooleanPreference(normalizedInstruction, [
+      "encryption",
+      "encrypt",
+      "암호화"
+    ]);
+    const bucketName = findBucketName(normalizedInstruction);
 
     if (versioning === true) {
       return [{ op: "enable", path: "config.versioning", value: null }];
@@ -941,6 +979,99 @@ function createPatchPlanOperations(
     if (versioning === false) {
       return [{ op: "disable", path: "config.versioning", value: null }];
     }
+
+    if (encryption === true) {
+      return [{ op: "enable", path: "config.encryption", value: null }];
+    }
+
+    if (encryption === false) {
+      return [{ op: "disable", path: "config.encryption", value: null }];
+    }
+
+    if (bucketName !== undefined) {
+      return [{ op: "rename", path: "config.bucketName", value: bucketName }];
+    }
+  }
+
+  if (targetNode.type === "SECURITY_GROUP") {
+    const port = findPort(normalizedInstruction);
+
+    if (port !== undefined) {
+      return [{ op: "set_value", path: "config.ingress", value: port }];
+    }
+  }
+
+  if (targetNode.type === "LOAD_BALANCER") {
+    const internalPreference = findBooleanPreference(normalizedInstruction, [
+      "internal",
+      "private",
+      "내부",
+      "프라이빗"
+    ]);
+    const publicPreference = findBooleanPreference(normalizedInstruction, [
+      "internet-facing",
+      "public",
+      "external",
+      "공개",
+      "퍼블릭",
+      "외부"
+    ]);
+
+    if (internalPreference !== undefined) {
+      return [
+        {
+          op: internalPreference ? "enable" : "disable",
+          path: "config.internal",
+          value: null
+        }
+      ];
+    }
+
+    if (publicPreference !== undefined) {
+      return [
+        {
+          op: publicPreference ? "disable" : "enable",
+          path: "config.internal",
+          value: null
+        }
+      ];
+    }
+  }
+
+  if (targetNode.type === "AUTO_SCALING_GROUP") {
+    const desiredCapacity = findCapacityValue(normalizedInstruction, [
+      "desired",
+      "desired capacity"
+    ]);
+    const minSize = findCapacityValue(normalizedInstruction, ["min", "minimum"]);
+    const maxSize = findCapacityValue(normalizedInstruction, ["max", "maximum"]);
+    const operations: ArchitecturePatchPlanOperation[] = [];
+
+    if (desiredCapacity !== undefined) {
+      operations.push({
+        op: "set_value",
+        path: "config.desiredCapacity",
+        value: desiredCapacity
+      });
+    }
+
+    if (minSize !== undefined) {
+      operations.push({
+        op: "set_value",
+        path: "config.minSize",
+        value: minSize
+      });
+    }
+
+    if (maxSize !== undefined) {
+      operations.push({
+        op: "set_value",
+        path: "config.maxSize",
+        value: maxSize
+      });
+    }
+
+    return operations;
   }
 
   return [];
@@ -2897,6 +3028,17 @@ function findEc2InstanceType(normalizedInstruction: string): string | undefined 
     normalizedInstruction.match(
       /\b(?:instance\s*type|instancetype|type|인스턴스\s*타입|타입)\s*(?:to|=|:|을|를|은|는)?\s*((?:[a-z][0-9][a-z]?\.[a-z0-9]+))/i
     )?.[1] ?? normalizedInstruction.match(/\b(?:[a-z][0-9][a-z]?\.[a-z0-9]+)\b/i)?.[0]
+  );
+}
+
+function findBucketName(normalizedInstruction: string): string | undefined {
+  return (
+    normalizedInstruction.match(
+      /\b(?:bucket\s*name|bucketname|name)\s*(?:to|=|:)\s*([a-z0-9][a-z0-9.-]{1,61}[a-z0-9])\b/i
+    )?.[1] ??
+    normalizedInstruction.match(
+      /(?:버킷\s*이름|버킷명|이름).*?([a-z0-9][a-z0-9.-]{1,61}[a-z0-9])/iu
+    )?.[1]
   );
 }
 

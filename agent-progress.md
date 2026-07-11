@@ -20,13 +20,14 @@ Short English-only working log for the current agent context. Older records are 
   - Added `createArchitecturePatchPlan` as a pure planner that does not mutate ArchitectureJson or invent resource IDs.
   - Enforced conservative target resolution: multiple matching resources return `needs_clarification` instead of choosing one.
   - Planned EC2 relative sizing as `increase_one_step`, DB storage edits as `set_value config.allocatedStorage`, and explicit replacement wording as `unsupported`.
+  - Aligned the PatchPlan JSON shape with the compiler objective: `action: null` for clarification/unsupported states, `candidateResourceIds`, scalar operation values, and full placement/relationship preserve paths.
   - Attached `patchPlan` to patch preview and clarification responses for auditability while preserving the existing user-accepted preview flow.
   - Updated `docs/data-models.md` to document the PatchPlan DTO.
 - Verification:
-  - Full API patch preview tests passed 35/35.
+  - Full API patch preview tests passed 36/36.
+  - Focused PatchPlan compiler tests passed 5/5.
+  - Direct JSON checks verified the exact field shape for EC2 upsize and ambiguous S3 delete requests.
   - `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
-- Risk:
-  - Existing preview generation still supports legacy add-resource bundles; the new strict planner is exposed alongside the preview path and can be used to tighten future application semantics.
 
 ### 2026-07-11 - Fix EC2 instance-type patch replacement
 

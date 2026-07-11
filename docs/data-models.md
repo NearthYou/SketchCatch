@@ -1544,16 +1544,17 @@ type ArchitecturePatchIntent = {
 
 type ArchitecturePatchPlan = {
   status: "planned" | "needs_clarification" | "unsupported";
-  action: "modify_resource" | "remove_resource" | "add_resource" | "needs_clarification";
+  action: "modify_resource" | "remove_resource" | "add_resource" | null;
   target: {
     resourceType: ResourceType | null;
     resourceId: string | null;
     label: string | null;
   };
+  candidateResourceIds: string[];
   operations: {
     op: "set_value" | "increase_one_step" | "decrease_one_step" | "enable" | "disable" | "rename";
     path: string;
-    value: JsonValue | null;
+    value: string | number | boolean | null;
   }[];
   preserve: string[];
   clarificationQuestion: string | null;
