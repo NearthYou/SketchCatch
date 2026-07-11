@@ -5,12 +5,15 @@ import { fileURLToPath } from "node:url";
 
 const viewSource = readLocalFile("design-projects-view.tsx");
 const routeSource = readLocalFile("../../app/dashboard/projects/page.tsx");
+const routeViewSource = readLocalFile("../dashboard/dashboard-projects-route.tsx");
+const projectsClientSource = readLocalFile("../../app/projects/projects-client.tsx");
 const globalStyles = readLocalFile("../../app/globals.css");
 
 test("dashboard projects route loads projects owned by the authenticated user", () => {
-  assert.match(routeSource, /DesignProjectsView/);
-  assert.match(routeSource, /<DesignDashboardPage view="projects">/);
-  assert.match(viewSource, /listProjects\(\)/);
+  assert.match(routeSource, /DashboardProjectsRoute/);
+  assert.match(routeViewSource, /ProjectsClient/);
+  assert.match(projectsClientSource, /listProjects\(\)/);
+  assert.match(routeViewSource, /searchQuery/);
   assert.match(viewSource, /filterProjectsByName/);
   assert.match(viewSource, /sortProjectsByMode/);
   assert.match(viewSource, /getWorkspaceHref\(project\)/);

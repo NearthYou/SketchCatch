@@ -4,21 +4,13 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const deploymentPanelSource = readFileSync(
-  fileURLToPath(new URL("DeploymentPanel.tsx", import.meta.url)),
+  fileURLToPath(new URL("../../app/workspace/operations/DeploymentOperationsPanel.tsx", import.meta.url)),
   "utf8"
 );
 
-test("apply confirmation can be dismissed after it opens for an approved plan", () => {
-  assert.match(
-    deploymentPanelSource,
-    /useEffect\(\(\) => \{\s*if \(shouldShowApplyButton\) \{\s*setShowApplyConfirmation\(true\);\s*\}\s*\}, \[shouldShowApplyButton\]\);/
-  );
-  assert.match(
-    deploymentPanelSource,
-    /\{selectedDeployment && showApplyConfirmation \? \(/
-  );
-  assert.doesNotMatch(
-    deploymentPanelSource,
-    /showApplyConfirmation \|\| shouldShowApplyButton/
-  );
+test("deployment keeps Plan, approval, and Apply as separate explicit actions", () => {
+  assert.match(deploymentPanelSource, /Plan 실행/);
+  assert.match(deploymentPanelSource, /approvePlan/);
+  assert.match(deploymentPanelSource, /Apply 실행/);
+  assert.doesNotMatch(deploymentPanelSource, /showApplyConfirmation/);
 });
