@@ -207,6 +207,15 @@
   width: 100%;
 }
 
+.terraformFileTree button + button {
+  margin-top: 4px;
+}
+
+.terraformFileTree button[aria-current="page"] {
+  border-color: var(--color-primary);
+  box-shadow: inset 2px 0 0 var(--color-primary);
+}
+
 .terraformEditor .codeField {
   border-radius: 0 var(--radius-card) var(--radius-card) 0;
 }

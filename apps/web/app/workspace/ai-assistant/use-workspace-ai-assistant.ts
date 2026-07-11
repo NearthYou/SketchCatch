@@ -22,6 +22,9 @@ import {
   resolveWorkspaceAiChatMode
 } from "../../../features/workspace/workspace-ai-chat-routing";
 import { createWorkspaceAiPatchPreviewModel } from "../../../features/workspace/workspace-ai-patch-preview";
+import { applyTerraformCodeReplacement } from "../../../features/workspace/terraform-safe-fixes";
+import { getTerraformFileCode } from "../../../features/workspace/terraform-panel-utils";
+import { createTerraformIssueFixPlan } from "../../../features/workspace/workspace-terraform-ai";
 import type { WorkspaceTerraformState } from "../operations/use-workspace-terraform";
 import {
   isArchitectureDraftClarification,
@@ -46,6 +49,7 @@ type PendingBoardPreview = {
 type PendingTerraformFix = {
   readonly code: string;
   readonly currentCode: string;
+  readonly fileName: string;
   readonly summary: string;
 };
 
@@ -252,22 +256,36 @@ export function useWorkspaceAiAssistant({
       }
       const diagnostic = terraform.diagnostics[0];
       if (diagnostic) {
+        const fileName = diagnostic.sourceFileName ?? "main.tf";
+        const currentFileCode = getTerraformFileCode(terraform.files, fileName) || code;
         const result = await runAiTerraformErrorExplanation({
           diagnostic,
           rawMessage: diagnostic.message,
           relatedResourceId: diagnostic.nodeId,
           stage: "validate",
-          terraformCodeContext: code
+          terraformCodeContext: currentFileCode
         });
-        const fixedCode = result.safeFix?.applicable ? result.safeFix.code : undefined;
-        if (fixedCode) {
+        const fixPlan = createTerraformIssueFixPlan({
+          diagnostic,
+          explanation: result,
+          terraformCode: currentFileCode
+        });
+        const replacement = fixPlan.codePreview
+          ? applyTerraformCodeReplacement({ code: currentFileCode, preview: fixPlan.codePreview })
+          : null;
+        if (replacement?.applied) {
           setPendingTerraformFix({
-            code: fixedCode,
-            currentCode: code,
+            code: replacement.code,
+            currentCode: currentFileCode,
+            fileName,
             summary: result.summary
           });
         }
-        appendMessage({ content: `${result.summary}\n${result.likelyCause}`, role: "assistant", state: fixedCode ? "preview" : "completed" });
+        appendMessage({
+          content: `${result.summary}\n${result.likelyCause}`,
+          role: "assistant",
+          state: replacement?.applied ? "preview" : "completed"
+        });
         return;
       }
       const result = await runAiTerraformPreviewExplanation(code);
@@ -322,7 +340,7 @@ export function useWorkspaceAiAssistant({
   // 사용자가 승인한 Terraform 수정안만 편집 중인 코드에 적용합니다.
   const applyTerraformFix = useCallback((): void => {
     if (!pendingTerraformFix) return;
-    terraform.setCode(pendingTerraformFix.code);
+    terraform.setFileCode(pendingTerraformFix.fileName, pendingTerraformFix.code);
     appendMessage({ content: `${pendingTerraformFix.summary} 수정안을 Terraform 코드에 적용했습니다.`, role: "assistant", state: "completed" });
     setPendingTerraformFix(null);
   }, [appendMessage, pendingTerraformFix, terraform]);

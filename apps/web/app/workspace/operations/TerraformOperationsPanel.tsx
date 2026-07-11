@@ -3,7 +3,10 @@
 import { AlertCircle, CheckCircle2, GitCompareArrows, RefreshCw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { DiagramEditorPanelContext } from "../../../features/diagram-editor";
-import { getTerraformLineStartOffset } from "../../../features/workspace/terraform-panel-utils";
+import {
+  getTerraformFileCode,
+  getTerraformLineStartOffset
+} from "../../../features/workspace/terraform-panel-utils";
 import type { WorkspaceTerraformState } from "./use-workspace-terraform";
 import styles from "./workspace-operations.module.css";
 
@@ -20,7 +23,15 @@ export function TerraformOperationsPanel({
     (diagnostic) => diagnostic.severity === "error"
   ).length;
   const codeEditorRef = useRef<HTMLTextAreaElement | null>(null);
+  const [selectedFileName, setSelectedFileName] = useState("main.tf");
   const [selectedProposalIndexes, setSelectedProposalIndexes] = useState<readonly number[]>([]);
+  const selectedFileCode = getTerraformFileCode(terraform.files, selectedFileName);
+
+  // 생성된 파일 목록이 바뀌면 현재 존재하는 파일을 유지하고 없으면 첫 파일을 선택합니다.
+  useEffect(() => {
+    if (terraform.files.some((file) => file.fileName === selectedFileName)) return;
+    setSelectedFileName(terraform.files[0]?.fileName ?? "main.tf");
+  }, [selectedFileName, terraform.files]);
 
   // 새 동기화 결과가 나오면 이전 결과에서 고른 항목을 이어받지 않습니다.
   useEffect(() => {
@@ -31,9 +42,14 @@ export function TerraformOperationsPanel({
   function focusDiagnostic(diagnostic: WorkspaceTerraformState["diagnostics"][number]): void {
     if (diagnostic.nodeId) context.focusResourceNode(diagnostic.nodeId);
     if (!diagnostic.line) return;
-    const offset = getTerraformLineStartOffset(terraform.code, diagnostic.line);
-    codeEditorRef.current?.focus();
-    codeEditorRef.current?.setSelectionRange(offset, offset);
+    const targetFileName = diagnostic.sourceFileName ?? "main.tf";
+    const targetCode = getTerraformFileCode(terraform.files, targetFileName);
+    setSelectedFileName(targetFileName);
+    const offset = getTerraformLineStartOffset(targetCode, diagnostic.line);
+    requestAnimationFrame(() => {
+      codeEditorRef.current?.focus();
+      codeEditorRef.current?.setSelectionRange(offset, offset);
+    });
   }
 
   // 사용자가 Board에 반영할 변경 제안을 하나씩 선택하거나 해제합니다.
@@ -130,17 +146,26 @@ export function TerraformOperationsPanel({
       <div className={styles.terraformEditor}>
         <nav aria-label="Terraform 파일" className={styles.terraformFileTree}>
           <span>Files</span>
-          <button aria-current="page" type="button">main.tf</button>
+          {terraform.files.length > 0 ? terraform.files.map((file) => (
+            <button
+              aria-current={file.fileName === selectedFileName ? "page" : undefined}
+              key={file.fileName}
+              onClick={() => setSelectedFileName(file.fileName)}
+              type="button"
+            >
+              {file.fileName}
+            </button>
+          )) : <button aria-current="page" type="button">main.tf</button>}
         </nav>
         <label className={styles.codeField}>
-          <span>main.tf {terraform.isCodeDirty ? "· 수정됨" : ""}</span>
+          <span>{selectedFileName} {terraform.isCodeDirty ? "· 수정됨" : ""}</span>
           <textarea
             aria-label="Terraform 코드"
-            onChange={(event) => terraform.setCode(event.target.value)}
+            onChange={(event) => terraform.setFileCode(selectedFileName, event.target.value)}
             placeholder="Board에서 Terraform 코드를 생성하세요."
             ref={codeEditorRef}
             spellCheck={false}
-            value={terraform.code}
+            value={selectedFileCode}
           />
         </label>
       </div>

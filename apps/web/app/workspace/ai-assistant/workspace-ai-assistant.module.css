@@ -352,6 +352,13 @@
   min-width: 0;
 }
 
+.comparisonFileName {
+  color: #6f4600;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 10px;
+  font-weight: 700;
+}
+
 .terraformComparison span {
   display: block;
   font-weight: 650;

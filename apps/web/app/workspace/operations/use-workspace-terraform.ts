@@ -17,6 +17,11 @@ import {
   applyTerraformSyncProposals,
   getTerraformSyncProposalId
 } from "../../../features/workspace/terraform-sync-proposals";
+import {
+  combineTerraformFiles,
+  createTerraformFilesFromGeneratedCode,
+  type TerraformVirtualFile
+} from "../../../features/workspace/terraform-panel-utils";
 import { getTerraformPreviewState } from "../../../features/workspace/workspace-operations-state";
 
 type TerraformRequestState = "idle" | "generating" | "validating" | "syncing";
@@ -26,12 +31,14 @@ export type WorkspaceTerraformState = {
   readonly code: string;
   readonly diagnostics: readonly TerraformDiagnostic[];
   readonly errorMessage: string;
+  readonly files: readonly TerraformVirtualFile[];
   readonly isCodeDirty: boolean;
   readonly previewState: ReturnType<typeof getTerraformPreviewState>;
   readonly proposals: readonly TerraformDiagramChangeProposal[];
   readonly requestState: TerraformRequestState;
   readonly generate: () => Promise<string>;
   readonly setCode: (code: string) => void;
+  readonly setFileCode: (fileName: string, code: string) => void;
   readonly validate: () => Promise<void>;
   readonly inspectSync: () => Promise<void>;
   readonly applyProposals: (proposalIndexes: readonly number[]) => void;
@@ -48,6 +55,7 @@ export function useWorkspaceTerraform({
   readonly refreshRequestId: number;
 }): WorkspaceTerraformState {
   const [code, setCode] = useState("");
+  const [files, setFiles] = useState<readonly TerraformVirtualFile[]>([]);
   const [generatedCode, setGeneratedCode] = useState("");
   const [generatedArchitectureDiagnostics, setGeneratedArchitectureDiagnostics] = useState<
     readonly ArchitectureDiagnostic[]
@@ -78,8 +86,11 @@ export function useWorkspaceTerraform({
 
     try {
       const result = await generateTerraformCode(diagram);
-      setCode(result.terraformCode);
-      setGeneratedCode(result.terraformCode);
+      const nextFiles = createTerraformFilesFromGeneratedCode(diagram, result.terraformCode);
+      const combinedCode = combineTerraformFiles(nextFiles);
+      setFiles(nextFiles);
+      setCode(combinedCode);
+      setGeneratedCode(combinedCode);
       setGeneratedDiagram(diagram);
       setGeneratedArchitectureDiagnostics(result.architectureDiagnostics);
       setDiagnostics([]);
@@ -92,6 +103,23 @@ export function useWorkspaceTerraform({
       setRequestState("idle");
     }
   }, [diagram]);
+
+  // AI 수정처럼 전체 코드를 바꾸는 동작은 main.tf 한 파일로 다시 시작합니다.
+  const replaceCode = useCallback((nextCode: string): void => {
+    setFiles([{ code: nextCode, fileName: "main.tf" }]);
+    setCode(nextCode);
+  }, []);
+
+  // 선택한 Terraform 파일만 바꾸고 API와 배포에는 모든 파일을 합친 코드를 전달합니다.
+  const setFileCode = useCallback((fileName: string, nextCode: string): void => {
+    setFiles((currentFiles) => {
+      const nextFiles = currentFiles.map((file) =>
+        file.fileName === fileName ? { ...file, code: nextCode } : file
+      );
+      setCode(combineTerraformFiles(nextFiles));
+      return nextFiles;
+    });
+  }, []);
 
   // 수정한 Terraform 코드가 남아 있으면 browser 이탈 전에 기본 확인창을 띄웁니다.
   useEffect(() => {
@@ -112,14 +140,20 @@ export function useWorkspaceTerraform({
     setErrorMessage("");
 
     try {
-      const result = await validateTerraformCode(code);
+      const result = await validateTerraformCode({
+        terraformCode: code,
+        terraformFiles: files.map((file) => ({
+          fileName: file.fileName,
+          terraformCode: file.code
+        }))
+      });
       setDiagnostics(result.diagnostics);
     } catch (error) {
       setErrorMessage(toWorkspaceOperationError(error, "Terraform 코드를 검사하지 못했습니다."));
     } finally {
       setRequestState("idle");
     }
-  }, [code]);
+  }, [code, files]);
 
   // 코드 변경을 Board에 바로 덮지 않고 먼저 변경 제안 목록으로 가져옵니다.
   const inspectSync = useCallback(async (): Promise<void> => {
@@ -128,7 +162,14 @@ export function useWorkspaceTerraform({
     setErrorMessage("");
 
     try {
-      const result = await syncTerraformToDiagram({ diagramJson: diagram, terraformCode: code });
+      const result = await syncTerraformToDiagram({
+        diagramJson: diagram,
+        terraformCode: code,
+        terraformFiles: files.map((file) => ({
+          fileName: file.fileName,
+          terraformCode: file.code
+        }))
+      });
       setDiagnostics(result.diagnostics);
       setProposals(result.proposals ?? []);
     } catch (error) {
@@ -136,7 +177,7 @@ export function useWorkspaceTerraform({
     } finally {
       setRequestState("idle");
     }
-  }, [code, diagram]);
+  }, [code, diagram, files]);
 
   // 사용자가 고른 변경 제안만 현재 Board에 반영합니다.
   const applyProposals = useCallback((proposalIndexes: readonly number[]): void => {
@@ -159,12 +200,14 @@ export function useWorkspaceTerraform({
     code,
     diagnostics,
     errorMessage,
+    files,
     isCodeDirty,
     previewState,
     proposals,
     requestState,
     generate,
-    setCode,
+    setCode: replaceCode,
+    setFileCode,
     validate,
     inspectSync,
     applyProposals

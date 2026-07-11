@@ -228,6 +228,7 @@ export function WorkspaceAiAssistant({
               {assistant.pendingTerraformFix ? (
                 <>
                   <div className={styles.terraformComparison}>
+                    <span className={styles.comparisonFileName}>{assistant.pendingTerraformFix.fileName}</span>
                     <div>
                       <span>현재 코드</span>
                       <pre>{assistant.pendingTerraformFix.currentCode}</pre>
