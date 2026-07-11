@@ -23,11 +23,13 @@ export function LoginForm() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isPasswordCapsLockOn, setIsPasswordCapsLockOn] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
+  const [returnPath, setReturnPath] = useState("/dashboard");
   const passwordCapsLockWarning = getCapsLockWarningMessage(isPasswordCapsLockOn);
 
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search);
     const oauthError = searchParams.get("oauthError");
+    setReturnPath(getSafeReturnPath(searchParams.get("returnTo")));
 
     if (status === "authenticated") {
       router.replace(getSafeReturnPath(searchParams.get("returnTo")));
@@ -93,7 +95,7 @@ export function LoginForm() {
       <div className="authSocialStack" aria-label="소셜 로그인">
         <a
           className="authSocialButton authSocialButtonNaver"
-          href={getOAuthStartHref("naver", rememberMe)}
+          href={getOAuthStartHref("naver", rememberMe, returnPath)}
         >
           <span className="authSocialMark" aria-hidden="true">
             N
@@ -102,7 +104,7 @@ export function LoginForm() {
         </a>
         <a
           className="authSocialButton authSocialButtonKakao"
-          href={getOAuthStartHref("kakao", rememberMe)}
+          href={getOAuthStartHref("kakao", rememberMe, returnPath)}
         >
           <span className="authSocialMark authSocialMarkKakao" aria-hidden="true">
             K
@@ -111,7 +113,7 @@ export function LoginForm() {
         </a>
         <a
           className="authSocialButton authSocialButtonGithub"
-          href={getOAuthStartHref("github", rememberMe)}
+          href={getOAuthStartHref("github", rememberMe, returnPath)}
         >
           <span className="authSocialMark authSocialMarkGithub" aria-hidden="true">
             G
@@ -186,10 +188,16 @@ export function LoginForm() {
   );
 }
 
-function getOAuthStartHref(provider: "naver" | "kakao" | "github", rememberMe: boolean): string {
-  const baseHref = `/api/auth/oauth/${provider}/start`;
-
-  return rememberMe ? `${baseHref}?rememberMe=true` : baseHref;
+// 소셜 로그인 시작 주소에 로그인 전 내부 route와 유지 여부를 함께 담습니다.
+function getOAuthStartHref(
+  provider: "naver" | "kakao" | "github",
+  rememberMe: boolean,
+  returnTo: string
+): string {
+  return `/api/auth/oauth/${provider}/start?${new URLSearchParams({
+    ...(rememberMe ? { rememberMe: "true" } : {}),
+    returnTo
+  }).toString()}`;
 }
 
 function getOAuthErrorMessage(oauthError: string): string {
