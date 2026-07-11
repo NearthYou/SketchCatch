@@ -1,6 +1,6 @@
 "use client";
 
-import { Activity, CircleStop, LoaderCircle, Play } from "lucide-react";
+import { Activity, CircleStop, ExternalLink, LoaderCircle, Play, Zap } from "lucide-react";
 import {
   getLiveObservationInstanceMarkers,
   getLiveObservationPressureLabel
@@ -74,6 +74,46 @@ export function LiveObservationOperationsPanel({
 
       {snapshot ? (
         <>
+          {liveObservation.session ? (
+            <section className={styles.resultSection}>
+              <div className={styles.sectionTitleRow}>
+                <h3>시연 요청</h3>
+                <a
+                  className={styles.inlineLink}
+                  href={liveObservation.session.audienceUrl}
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  Audience 열기 <ExternalLink aria-hidden="true" size={13} />
+                </a>
+              </div>
+              <dl className={styles.handoffFacts}>
+                <div><dt>세션 만료</dt><dd>{formatObservedDeploymentTime(liveObservation.session.expiresAt)}</dd></div>
+                <div><dt>수집 성공</dt><dd>{liveObservation.trafficProgress.acceptedReceipts}회</dd></div>
+                <div><dt>요청 시도</dt><dd>{liveObservation.trafficProgress.attemptedRequests}회</dd></div>
+                <div>
+                  <dt>실패</dt>
+                  <dd>{liveObservation.trafficProgress.trafficFailures + liveObservation.trafficProgress.receiptFailures}회</dd>
+                </div>
+              </dl>
+              <div className={styles.actionRow}>
+                <button
+                  className={styles.primaryButton}
+                  disabled={!isActive || liveObservation.trafficProgress.running}
+                  onClick={liveObservation.startTraffic}
+                  type="button"
+                >
+                  <Zap aria-hidden="true" size={15} /> 제한형 요청 시작
+                </button>
+                {liveObservation.trafficProgress.running ? (
+                  <button className={styles.secondaryButton} onClick={liveObservation.stopTraffic} type="button">
+                    <CircleStop aria-hidden="true" size={15} /> 요청 중지
+                  </button>
+                ) : null}
+              </div>
+              <p className={styles.emptyText}>초당 최대 5회, 최대 90초 동안만 요청합니다.</p>
+            </section>
+          ) : null}
           <div className={styles.metricGrid}>
             <article>
               <Activity aria-hidden="true" size={18} />
