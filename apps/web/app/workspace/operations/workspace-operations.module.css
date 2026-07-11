@@ -644,6 +644,21 @@
   font-weight: 700;
 }
 
+.handoffConfirmation {
+  align-items: flex-start;
+  display: flex !important;
+  gap: 8px;
+  line-height: 1.5;
+}
+
+.handoffConfirmation input {
+  accent-color: var(--color-primary);
+  flex: none;
+  height: 16px;
+  margin: 1px 0 0;
+  width: 16px;
+}
+
 .gitSetup label > span,
 .handoffSelect > span {
   display: block;

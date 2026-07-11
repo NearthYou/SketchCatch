@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
   AiPreDeploymentAnalysisResult,
   ArchitectureDiagnostic,
@@ -43,6 +43,12 @@ export function useWorkspaceSafety({
   const [errorMessage, setErrorMessage] = useState("");
   const [requestState, setRequestState] = useState<SafetyRequestState>("idle");
   const gate = useMemo(() => getSafetyGateState(analysis), [analysis]);
+
+  // Board나 Terraform 입력이 바뀌면 이전 검사 결과를 폐기해 오래된 통과 상태로 배포하지 못하게 합니다.
+  useEffect(() => {
+    setAnalysis(null);
+    setErrorMessage("");
+  }, [architectureDiagnostics, diagram, terraformCode, terraformDiagnostics]);
 
   // Terraform 오류는 즉시 막고, 그 외에는 Architecture 전체를 AI 검사 API에 전달합니다.
   const run = useCallback(async (): Promise<void> => {

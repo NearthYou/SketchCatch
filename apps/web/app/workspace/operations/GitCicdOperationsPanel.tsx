@@ -1,6 +1,7 @@
 "use client";
 
 import { ExternalLink, GitBranch, LoaderCircle, RefreshCw, Settings2, ShieldCheck } from "lucide-react";
+import { useEffect, useState } from "react";
 import type { WorkspaceDeploymentState } from "./use-workspace-deployment";
 import type { WorkspaceGitCicdState } from "./use-workspace-git-cicd";
 import styles from "./workspace-operations.module.css";
@@ -17,6 +18,13 @@ export function GitCicdOperationsPanel({
 }) {
   const current = gitCicd.current;
   const isBusy = gitCicd.requestState === "loading";
+  const acceptedChangeId = deployment.current?.approvedPlanArtifactId ?? "";
+  const [isHandoffReviewed, setHandoffReviewed] = useState(false);
+
+  // 배포 Plan이나 Repository 선택이 바뀌면 이전 확인 상태를 다시 사용하지 않습니다.
+  useEffect(() => {
+    setHandoffReviewed(false);
+  }, [acceptedChangeId, gitCicd.selectedRepositoryId]);
 
   return (
     <div className={styles.panelBody}>
@@ -60,8 +68,8 @@ export function GitCicdOperationsPanel({
           </label>
           <button
             className={styles.primaryButton}
-            disabled={isBusy || !deployment.current}
-            onClick={() => void gitCicd.create()}
+            disabled={isBusy || !acceptedChangeId || !isHandoffReviewed}
+            onClick={() => void gitCicd.create(acceptedChangeId)}
             type="button"
           >
             {isBusy ? <LoaderCircle aria-hidden="true" size={15} /> : <GitBranch aria-hidden="true" size={15} />}
@@ -69,6 +77,19 @@ export function GitCicdOperationsPanel({
           </button>
           {!deployment.current ? (
             <p className={styles.inlineNotice}>Direct Deployment에서 배포 기준을 먼저 저장해야 합니다.</p>
+          ) : null}
+          {deployment.current && !acceptedChangeId ? (
+            <p className={styles.inlineNotice}>Plan을 실행하고 승인한 뒤 Repository 변경을 준비할 수 있습니다.</p>
+          ) : null}
+          {acceptedChangeId ? (
+            <label className={styles.handoffConfirmation}>
+              <input
+                checked={isHandoffReviewed}
+                onChange={(event) => setHandoffReviewed(event.target.checked)}
+                type="checkbox"
+              />
+              <span>승인한 Plan과 선택한 Repository로 PR을 만드는 변경을 확인했습니다.</span>
+            </label>
           ) : null}
         </section>
       )}

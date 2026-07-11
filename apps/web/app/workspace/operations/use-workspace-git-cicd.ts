@@ -29,7 +29,7 @@ export type WorkspaceGitCicdState = {
   readonly requestState: GitCicdRequestState;
   readonly selectedRepositoryId: string;
   readonly setSelectedRepositoryId: (repositoryId: string) => void;
-  readonly create: () => Promise<void>;
+  readonly create: (userAcceptedChangeId: string) => Promise<void>;
   readonly applyRepositorySettings: () => Promise<void>;
   readonly startGitHubOAuth: () => Promise<void>;
   readonly applyRepositorySettingsWithOAuth: () => Promise<void>;
@@ -90,8 +90,8 @@ export function useWorkspaceGitCicd({
   }, []);
 
   // 현재 Plan 기준 artifact와 선택한 Repository로 새 handoff를 만듭니다.
-  const create = useCallback(async (): Promise<void> => {
-    if (!deployment || !selectedRepositoryId) return;
+  const create = useCallback(async (userAcceptedChangeId: string): Promise<void> => {
+    if (!deployment || !selectedRepositoryId || !userAcceptedChangeId) return;
     await runAction(async () => {
       const created = await createGitCicdHandoff({
         projectId,
@@ -108,7 +108,7 @@ export function useWorkspaceGitCicd({
         planSummary: deployment.planSummary ?? undefined,
         pullRequestTitle: "SketchCatch infrastructure update",
         commitMessage: "Apply SketchCatch infrastructure changes",
-        userAcceptedChangeId: `git-cicd-${deployment.id}`
+        userAcceptedChangeId
       });
       setSelectedHandoffId(created.id);
       await refresh();

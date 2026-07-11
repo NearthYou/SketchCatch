@@ -7,6 +7,7 @@ const assistantSource = readWorkspaceFile("ai-assistant/WorkspaceAiAssistant.tsx
 const assistantHookSource = readWorkspaceFile("ai-assistant/use-workspace-ai-assistant.ts");
 const assistantStyles = readWorkspaceFile("ai-assistant/workspace-ai-assistant.module.css");
 const gitCicdHookSource = readWorkspaceFile("operations/use-workspace-git-cicd.ts");
+const gitCicdPanelSource = readWorkspaceFile("operations/GitCicdOperationsPanel.tsx");
 
 test("AI 런처와 panel은 keyboard 접근성 계약을 제공한다", () => {
   assert.match(assistantSource, /aria-label="AI 채팅 열기"/);
@@ -46,6 +47,9 @@ test("Terraform 수정안은 현재 코드와 제안 코드를 비교한 뒤에�
 test("Git/CI/CD 준비는 AWS Role 변경을 미리 승인하지 않는다", () => {
   assert.match(gitCicdHookSource, /approveAwsRoleDiff: false/);
   assert.doesNotMatch(gitCicdHookSource, /approveAwsRoleDiff: true/);
+  assert.doesNotMatch(gitCicdHookSource, /userAcceptedChangeId: `git-cicd-/);
+  assert.match(gitCicdPanelSource, /approvedPlanArtifactId/);
+  assert.match(gitCicdPanelSource, /Plan과 선택한 Repository로 PR을 만드는 변경을 확인했습니다/);
 });
 
 test("AI 런처와 panel은 desktop과 mobile 크기를 따로 가진다", () => {
