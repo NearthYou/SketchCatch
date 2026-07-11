@@ -1,141 +1,131 @@
 # UI 재구축 검증 결과
 
-## 1. 먼저 알아둘 것
+## 한 줄 결론
 
-이번 작업은 기존 기능 연결을 살리면서 화면을 새로 만든 작업이다.
+기존 UI를 걷어낸 뒤, 문서의 마일스톤 0~12에 적힌 화면과 실제 기능 연결을 새 UI로 다시 만들었다.
 
-실제 API, `DiagramJson`, Architecture Board, Terraform Preview, 배포 흐름은 그대로 연결했다. 화면에만 있는 가짜 성공 결과는 만들지 않았다.
+화면에만 있는 가짜 성공 결과는 넣지 않았다. 실제 AWS Apply처럼 외부 계정 상태가 필요한 검증은 UI 완료와 따로 적는다.
 
-## 2. 마일스톤 결과
+## 마일스톤 결과
 
-| 마일스톤 | 결과 | 확인 내용 |
+| 마일스톤 | 결과 | 실제로 연결된 내용 |
 | --- | --- | --- |
-| 0. 현재 구조 분석 | 완료 | route, feature, API 연결 위치를 문서로 정리 |
-| 1. Landing / Root | 완료 | Landing, 로그인, 회원가입 화면 재구축 |
-| 2. Dashboard Shell | 완료 | Overview, Projects, Cost, Templates, Settings 연결 |
-| 3. 새 프로젝트 시작 | 완료 | AI, Reverse Engineering, Template, GitHub Repo, 빈 Board 진입 유지 |
-| 4. Workspace / Board Shell | 완료 | Board, 좌우 panel, 저장, Terraform, Deploy 연결 유지 |
-| 5. AI 시작 화면 | 일부 완료 | Workspace 안 AI dock은 연결됨. `/workspace/ai`는 오래된 화면이라 건드리지 말라는 지시에 따라 그대로 둠 |
-| 6. Reverse Engineering | 완료 | 전용 시작 화면, 후보 선택, 미리보기, Resource 확인 흐름 연결 |
-| 7. Right Panel / Deploy Console | 화면과 계약 완료 | Resource Inspector, Terraform Preview, Issues, Deploy Console을 재구축. 실제 AWS Plan/Apply는 검증된 AWS 연결이 있어야 최종 E2E 가능 |
-| 8. Template Gallery | 완료 | Dashboard, 새 프로젝트, 현재 Board가 같은 Template 목록과 Gallery 사용 |
-| 9. E2E Visual QA | 가능한 범위 완료 | 실제 Chrome에서 로그인, Template 검색, 시작 화면 전달, Terraform, Deploy Console 확인. 실제 AWS 배포 E2E는 미실행 |
+| 0. 구조와 계약 | 완료 | route, API, `DiagramJson`, Board, Terraform, Deployment 계약 보존 |
+| 1. Landing / Auth | 완료 | Landing, 로그인, 회원가입, 비밀번호 재설정 |
+| 2. Dashboard | 완료 | 작업 현황, 프로젝트, 비용, Template, 환경설정 |
+| 3. 새 프로젝트 | 완료 | AI, Reverse Engineering, Template, GitHub Repository, 빈 Board |
+| 4. Workspace / Board | 완료 | 실제 Board, 저장, local/server 충돌 선택, 좌우 panel |
+| 5. AI 시작 | 완료 | 대화, 음성 입력, 초안 생성, PREVIEW, 사용자 적용 |
+| 6. Reverse Engineering | 완료 | AWS 스캔, 후보, 미리보기, UNKNOWN, 프로젝트 생성 |
+| 7. Terraform Preview | 완료 | 코드 생성, Validate, 설계 진단, Board 변경 제안 |
+| 8. Safety / Cost | 완료 | 비용·보안 검사, Architecture 오류 차단, checklist |
+| 9. Deployment Console | 완료 | 저장, 검사, Plan, 승인, Apply, 실시간 log |
+| 10. History / Cleanup | 완료 | 배포 이력, 결과 Resource, output, 실패 설명, Cleanup 승인 |
+| 11. Template / GitHub | 완료 | Template 탐색·적용, Repository 연결·분석·PREVIEW |
+| 12. E2E Visual QA | 완료 | 375px, 768px, 1280px 실제 브라우저 확인 |
 
-## 3. 현재 route 상태
+## 이번 최종 점검에서 고친 문제
 
-| route | 현재 상태 |
-| --- | --- |
-| `/` | 새 Landing |
-| `/login`, `/signup` | 새 인증 화면과 실제 인증 연결 |
-| `/dashboard` | 실제 프로젝트와 배포 상태를 읽는 Overview |
-| `/dashboard/projects` | 실제 프로젝트 목록 |
-| `/dashboard/costs` | 실제 AWS 비용과 분리된 상태 표시 |
-| `/dashboard/templates` | 검색, Tag, 정렬, Architecture 미리보기 제공 |
-| `/dashboard/settings` | AWS Role과 GitHub 설정 진입 |
-| `/workspace/new` | 다섯 가지 시작 방식과 Template Gallery 제공 |
-| `/workspace` | Architecture Board, Resource, Terraform, Issues, Deploy 연결 |
-| `/workspace/reverse` | Reverse Engineering 전용 흐름 |
-| `/workspace/ai` | 오래된 화면이며 이번 작업에서 수정하지 않음 |
+### Architecture 오류가 배포 검사에 빠져 있던 문제
 
-## 4. 이번에 실제로 확인한 흐름
+`dev`에서 설계 진단 기능이 추가됐지만 새 UI가 아직 결과를 받지 않고 있었다.
+
+이제 동작은 다음과 같다.
 
 ```text
-로그인
-→ Dashboard Template Gallery
-→ CloudFront 검색
-→ Template 1개로 필터됨
-→ 이 Template으로 시작
-→ 새 프로젝트 화면에서 Template 방식과 해당 Template이 선택됨
+Board 설계 진단
+→ Terraform 화면에 오류와 경고 표시
+→ 항목을 누르면 해당 Resource로 이동
+→ 오류가 있으면 Safety Gate에서 Apply 차단
+→ 경고는 비용·보안 finding과 함께 표시
+```
+
+### GitHub callback이 빈 화면이던 문제
+
+GitHub App에서 돌아오는 `/integrations/github/callback`이 아무것도 그리지 않고 있었다.
+
+이제 Repository 목록, 로딩, 오류, 권한 없음, 연결 중 상태를 보여준다. 사용자가 하나를 고른 뒤에만 프로젝트에 연결하고 Repository 분석 화면으로 이동한다.
+
+### 배포 단계가 실제 상태와 다르던 문제
+
+새 배포 화면이 저장, 검사, Plan, 승인, Apply 단계를 자체적으로 단순 계산하고 있었다.
+
+이제 공용 배포 상태 계산기 하나만 사용한다. Terraform이 현재 Board보다 오래됐으면 재생성부터 안내하고, 검사를 하지 않았으면 배포 기준 저장을 막는다. Cleanup은 배포 이력 화면에서만 진행한다.
+
+## 실제 브라우저 E2E
+
+직접 실행한 흐름:
+
+```text
+새 프로젝트
+→ AI로 시작
+→ 자연어 요구사항 입력
+→ Architecture Draft PREVIEW 생성
+→ 사용자가 Board에 적용
+→ 실제 Workspace route 이동
 ```
 
 ```text
-로그인
-→ 테스트 프로젝트 생성
-→ Workspace 열기
-→ Terraform 버튼
-→ Terraform Preview와 Issues 영역 표시
-→ Deploy 버튼
-→ 저장 → 검사 → 배포 단계 표시
+Workspace
+→ AI 채팅 열기
+→ 기존 대화 유지 확인
+→ AI 닫기
+→ 배포 panel 열기
+→ Terraform 재생성부터 시작하는 5단계 확인
 ```
-
-확인한 화면 크기:
-
-- Desktop: 1440 x 1000
-- Tablet: 768 x 1024
-- Mobile: 375 x 812
-
-세 크기에서 가로 넘침이 없었다.
-
-## 5. QA 중 고친 문제
-
-### 빈 Terraform Preview
-
-빈 Board인데 VPC 예시 코드가 실제 생성 결과처럼 보였다.
-
-이제 아래 문구가 placeholder로 보인다.
 
 ```text
-# Board에 Resource를 추가하면 Terraform Preview가 여기에 표시됩니다.
+GitHub callback 직접 진입
+→ callback 값이 없다는 오류와 다음 행동 표시
+→ 빈 화면이 아닌지 확인
 ```
 
-실제 textarea 값이 빈 문자열인 것도 확인했다.
+화면 크기:
 
-### Deploy Console 파란색
+- 375 x 812
+- 768 x 1024
+- 1280 x 720
 
-현재 배포 단계와 안내 상자에 파란색이 남아 있었다.
+확인 결과:
 
-현재 단계는 검정, 안내 상자는 중립 회색으로 바꿨다. 완료와 실패의 초록색, 빨간색은 상태를 구분하기 위해 유지했다.
+- 가로 넘침 없음
+- Board가 비어 보이지 않음
+- AI panel은 모바일에서 전체 화면으로 열림
+- AI panel을 닫아도 대화 유지
+- 배포 panel과 AI panel이 동시에 Board를 가리지 않음
+- 긴 AI 설명이 panel 안에서 줄바꿈됨
+- browser console의 새 error와 warning 없음
 
-## 6. Template 연결
-
-세 화면이 모두 `listBoardTemplates()`를 사용한다.
-
-- Dashboard Template Gallery
-- 새 프로젝트의 Template 선택
-- 현재 Board의 Template 큰 모달
-
-지원하는 탐색 기능:
-
-- 이름, 설명, Tag 검색
-- Tag 필터
-- 추천순, 이름순, Resource 많은 순 정렬
-- 실제 `DiagramJson` node와 edge를 이용한 미리보기
-
-현재 Board에 Template을 적용할 때는 기존 Board를 먼저 `localStorage`에 백업한다.
-
-## 7. 아직 실제 기능처럼 보이면 안 되는 부분
-
-- 사용자 Template 저장은 아직 연결되지 않았다.
-- GitHub Repo 연결은 있지만 Repository Analysis와 Template Selection은 아직 연결 중이다.
-- `/workspace/ai`는 오래된 화면이다.
-- AWS 연결이 없는 상태에서는 실제 Plan, Apply, Cleanup 성공까지 검증할 수 없다.
-- 전체 웹 테스트 중 다른 담당 문서 `docs/jh/000_AWS리소스목록_JH.md`가 없어서 1개가 실패한다. gg 파일은 수정하지 않았다.
-
-## 8. 검증 결과
+## 자동 검증
 
 통과:
 
 ```text
-web typecheck
-web lint
-web build
-Terraform / Workspace 관련 test 102개
-Template 관련 test 13개
+pnpm harness:check
+pnpm lint
+pnpm typecheck
+pnpm build
+web test 전체
+PR CI
 ```
 
-전체 web test:
+관련 집중 테스트:
 
-```text
-669개 중 668개 통과
-1개 실패: docs/jh/000_AWS리소스목록_JH.md 파일 없음
-```
+- Architecture 진단과 Safety Gate: 6개 통과
+- 배포 5단계와 명시적 승인: 10개 통과
+- GitHub callback 화면 계약: 1개 통과
+- Terraform route: 19개 통과
 
-이 실패는 이번 UI 변경과 관계없고 다른 담당 문서라 수정하지 않았다.
+로컬 전체 `pnpm test`에서는 UI와 관계없는 API 테스트가 남아 있다. 현재 로컬 Node 26에서 Windows 경로 구분자, Terraform 참조 문자열, AI 테스트 환경값 차이로 실패한다. 같은 커밋의 GitHub PR CI는 통과했다.
 
-## 9. 다음 작업에서 먼저 볼 것
+## 실제 AWS에서만 남는 확인
 
-1. `/workspace/ai`를 새 AI 시작 화면으로 교체할지 결정
-2. Repository Analysis와 Template Selection 실제 API 연결
-3. 검증된 AWS Role로 Safety, Plan, Apply, History, Cleanup 전체 E2E
-4. 실제 High Risk, Medium, Low finding 상태별 화면 확인
-5. 실제 긴 Deployment log와 sensitive output masking 확인
+다음은 UI 미구현이 아니라 외부 실행 조건이 필요한 항목이다.
+
+- 검증된 AWS Role로 실제 Plan 생성
+- 사용자가 Plan을 승인한 뒤 실제 Apply
+- 실제 실패 log의 AI 설명
+- 실제 배포 Resource Cleanup
+- GitHub App이 설치된 계정의 실제 callback 성공
+
+이 동작의 버튼, API 연결, 상태 화면은 구현돼 있다. 실제 계정 변경은 사용자 승인 없이 실행하지 않는다.
