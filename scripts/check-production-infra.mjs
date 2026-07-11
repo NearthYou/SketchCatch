@@ -299,8 +299,8 @@ check(
   "container log error alarms must not send repetitive OK notifications"
 );
 check(
-  containerErrorAlarm.includes("evaluation_periods  = 2") &&
-    containerErrorAlarm.includes("datapoints_to_alarm = 2"),
+  /evaluation_periods\s*=\s*2/.test(containerErrorAlarm) &&
+    /datapoints_to_alarm\s*=\s*2/.test(containerErrorAlarm),
   "container log error alarms must require two consecutive error periods"
 );
 
