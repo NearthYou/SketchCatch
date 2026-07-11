@@ -92,7 +92,6 @@ export type CreateGitCicdHandoffInput = {
   staticSiteUrl?: string | null | undefined;
   apiBaseUrl?: string | null | undefined;
   approveAwsRoleDiff?: boolean | undefined;
-  planSummary?: DeploymentPlanSummary | undefined;
   userAcceptedChangeId: string;
 };
 

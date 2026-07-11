@@ -459,8 +459,7 @@ test("POST /api/projects/:projectId/git-cicd-handoffs creates GitHub PR handoff 
     headers: await authHeaders(),
     payload: {
       ...createHandoffBody(),
-      sourceBranch: undefined,
-      planSummary: createPlanSummary()
+      sourceBranch: undefined
     }
   });
 
