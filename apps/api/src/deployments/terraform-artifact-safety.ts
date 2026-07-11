@@ -826,6 +826,7 @@ function stripHclComments(source: string): string {
     }
 
     if (char === "/" && nextChar === "*") {
+      result += " ";
       index = skipBlockComment(source, index, 1).index;
       continue;
     }

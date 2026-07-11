@@ -543,8 +543,7 @@ test("runDeploymentApply applies the approved tfplan and stores state resources 
 
 test("runDeploymentApply materializes archive data files before applying an approved plan", async () => {
   const archiveTerraformArtifact = `
-    data /* materialized before approved apply */ "archive_file"
-      "handler" {
+    data/* materialized before approved apply */"archive_file"/* label */"handler"{
       type = "zip"
       source_content = "exports.handler = async () => ({ statusCode: 200 })"
       source_content_filename = "index.js"

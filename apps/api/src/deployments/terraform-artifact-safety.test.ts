@@ -150,9 +150,7 @@ test("assertTerraformArtifactIsSafe rejects archive source files with comments i
   assert.throws(
     () =>
       assertTerraformArtifactIsSafe(`
-        data /* keep header readable */ "archive_file"
-          # resource label follows
-          "env" {
+        data/* keep header readable */"archive_file"/* resource label follows */"env"{
           type        = "zip"
           output_path = "./env.zip"
           source_file = "../.env"
