@@ -8,8 +8,10 @@ import {
   requireEcsWorkerDispatcherConfig,
   requireGitHubAppConfig,
   requireGitHubAppStateSecret,
+  requireLiveObservationCapabilityKeyring,
   requireSketchCatchAwsCallerPrincipalArn
 } from "./env.js";
+import type { RuntimeEnv } from "./env.js";
 
 process.env.NODE_ENV = "test";
 
@@ -139,6 +141,163 @@ test("isLiveObservationEnabled requires the explicit true flag", () => {
   );
 });
 
+test("getRuntimeEnv reads Live Observation capability keyring variables without requiring them", () => {
+  const keys = [
+    "LIVE_OBSERVATION_CAPABILITY_CURRENT_KID",
+    "LIVE_OBSERVATION_CAPABILITY_CURRENT_SECRET",
+    "LIVE_OBSERVATION_CAPABILITY_PREVIOUS_KID",
+    "LIVE_OBSERVATION_CAPABILITY_PREVIOUS_SECRET",
+    "LIVE_OBSERVATION_CAPABILITY_PREVIOUS_STOPPED_ISSUING_AT"
+  ];
+  const originalValues = saveEnvValues(keys);
+
+  try {
+    process.env.LIVE_OBSERVATION_CAPABILITY_CURRENT_KID = "current-key";
+    process.env.LIVE_OBSERVATION_CAPABILITY_CURRENT_SECRET = CAPABILITY_CURRENT_SECRET;
+    process.env.LIVE_OBSERVATION_CAPABILITY_PREVIOUS_KID = "previous-key";
+    process.env.LIVE_OBSERVATION_CAPABILITY_PREVIOUS_SECRET = CAPABILITY_PREVIOUS_SECRET;
+    process.env.LIVE_OBSERVATION_CAPABILITY_PREVIOUS_STOPPED_ISSUING_AT =
+      "2026-07-10T00:00:00.000Z";
+
+    const env = getRuntimeEnv();
+
+    assert.equal(env.liveObservationCapabilityCurrentKid, "current-key");
+    assert.equal(env.liveObservationCapabilityCurrentSecret, CAPABILITY_CURRENT_SECRET);
+    assert.equal(env.liveObservationCapabilityPreviousKid, "previous-key");
+    assert.equal(env.liveObservationCapabilityPreviousSecret, CAPABILITY_PREVIOUS_SECRET);
+    assert.equal(
+      env.liveObservationCapabilityPreviousStoppedIssuingAt,
+      "2026-07-10T00:00:00.000Z"
+    );
+  } finally {
+    restoreEnvValues(originalValues);
+  }
+});
+
+test("requireLiveObservationCapabilityKeyring returns a validated current key", () => {
+  const keyring = requireLiveObservationCapabilityKeyring(capabilityEnv());
+
+  assert.deepEqual(keyring, {
+    current: {
+      kid: "current-key",
+      secret: CAPABILITY_CURRENT_SECRET
+    }
+  });
+});
+
+test("requireLiveObservationCapabilityKeyring accepts a complete previous-key triple", () => {
+  const keyring = requireLiveObservationCapabilityKeyring(
+    capabilityEnv({
+      liveObservationCapabilityPreviousKid: "previous-key",
+      liveObservationCapabilityPreviousSecret: CAPABILITY_PREVIOUS_SECRET,
+      liveObservationCapabilityPreviousStoppedIssuingAt: "2026-07-10T00:00:00.000Z"
+    })
+  );
+
+  assert.deepEqual(keyring, {
+    current: {
+      kid: "current-key",
+      secret: CAPABILITY_CURRENT_SECRET
+    },
+    previous: {
+      kid: "previous-key",
+      secret: CAPABILITY_PREVIOUS_SECRET,
+      stoppedIssuingAt: "2026-07-10T00:00:00.000Z"
+    }
+  });
+});
+
+test("requireLiveObservationCapabilityKeyring requires current kid and secret", () => {
+  const invalidEnvironments = [
+    capabilityEnv({ liveObservationCapabilityCurrentKid: undefined }),
+    capabilityEnv({ liveObservationCapabilityCurrentSecret: undefined }),
+    capabilityEnv({ liveObservationCapabilityCurrentKid: "" }),
+    capabilityEnv({ liveObservationCapabilityCurrentSecret: "" })
+  ];
+
+  for (const env of invalidEnvironments) {
+    assert.throws(
+      () => requireLiveObservationCapabilityKeyring(env),
+      /invalid live observation capability/i
+    );
+  }
+});
+
+test("requireLiveObservationCapabilityKeyring requires the previous values all-or-none", () => {
+  const invalidEnvironments = [
+    capabilityEnv({ liveObservationCapabilityPreviousKid: "previous-key" }),
+    capabilityEnv({ liveObservationCapabilityPreviousSecret: CAPABILITY_PREVIOUS_SECRET }),
+    capabilityEnv({
+      liveObservationCapabilityPreviousStoppedIssuingAt: "2026-07-10T00:00:00.000Z"
+    }),
+    capabilityEnv({
+      liveObservationCapabilityPreviousKid: "previous-key",
+      liveObservationCapabilityPreviousSecret: CAPABILITY_PREVIOUS_SECRET
+    }),
+    capabilityEnv({
+      liveObservationCapabilityPreviousKid: "previous-key",
+      liveObservationCapabilityPreviousStoppedIssuingAt: "2026-07-10T00:00:00.000Z"
+    }),
+    capabilityEnv({
+      liveObservationCapabilityPreviousSecret: CAPABILITY_PREVIOUS_SECRET,
+      liveObservationCapabilityPreviousStoppedIssuingAt: "2026-07-10T00:00:00.000Z"
+    })
+  ];
+
+  for (const env of invalidEnvironments) {
+    assert.throws(
+      () => requireLiveObservationCapabilityKeyring(env),
+      /invalid live observation capability/i
+    );
+  }
+});
+
+test("requireLiveObservationCapabilityKeyring reuses strict capability validation", () => {
+  const invalidSecret = `${CAPABILITY_CURRENT_SECRET}=`;
+  const invalidEnvironments = [
+    capabilityEnv({ liveObservationCapabilityCurrentKid: "bad kid" }),
+    capabilityEnv({ liveObservationCapabilityCurrentSecret: invalidSecret }),
+    capabilityEnv({
+      liveObservationCapabilityPreviousKid: "current-key",
+      liveObservationCapabilityPreviousSecret: CAPABILITY_PREVIOUS_SECRET,
+      liveObservationCapabilityPreviousStoppedIssuingAt: "2026-07-10T00:00:00.000Z"
+    }),
+    capabilityEnv({
+      liveObservationCapabilityPreviousKid: "previous-key",
+      liveObservationCapabilityPreviousSecret: CAPABILITY_CURRENT_SECRET,
+      liveObservationCapabilityPreviousStoppedIssuingAt: "2026-07-10T00:00:00.000Z"
+    }),
+    capabilityEnv({
+      liveObservationCapabilityPreviousKid: "previous-key",
+      liveObservationCapabilityPreviousSecret: CAPABILITY_PREVIOUS_SECRET,
+      liveObservationCapabilityPreviousStoppedIssuingAt: "2999-01-01T00:00:00.000Z"
+    })
+  ];
+
+  for (const env of invalidEnvironments) {
+    const message = captureErrorMessage(() => requireLiveObservationCapabilityKeyring(env));
+    assert.match(message, /invalid live observation capability/i);
+    assert.equal(message.includes(invalidSecret), false);
+    assert.equal(message.includes(CAPABILITY_CURRENT_SECRET), false);
+    assert.equal(message.includes(CAPABILITY_PREVIOUS_SECRET), false);
+  }
+});
+
+test("requireLiveObservationCapabilityKeyring returns fresh keyring objects", () => {
+  const env = capabilityEnv();
+  const first = requireLiveObservationCapabilityKeyring(env);
+
+  first.current.kid = "mutated-key";
+  first.current.secret = CAPABILITY_PREVIOUS_SECRET;
+
+  assert.deepEqual(requireLiveObservationCapabilityKeyring(env), {
+    current: {
+      kid: "current-key",
+      secret: CAPABILITY_CURRENT_SECRET
+    }
+  });
+});
+
 test("requireEcsWorkerDispatcherConfig validates ECS worker dispatch settings", () => {
   const config = requireEcsWorkerDispatcherConfig({
     ...getRuntimeEnv(),
@@ -195,4 +354,30 @@ function restoreEnvValues(values: Map<string, string | undefined>): void {
   for (const [key, value] of values) {
     restoreEnvValue(key, value);
   }
+}
+
+const CAPABILITY_CURRENT_SECRET = Buffer.alloc(32, 0x51).toString("base64url");
+const CAPABILITY_PREVIOUS_SECRET = Buffer.alloc(32, 0x52).toString("base64url");
+
+function capabilityEnv(overrides: Partial<RuntimeEnv> = {}): RuntimeEnv {
+  return {
+    ...getRuntimeEnv(),
+    liveObservationCapabilityCurrentKid: "current-key",
+    liveObservationCapabilityCurrentSecret: CAPABILITY_CURRENT_SECRET,
+    liveObservationCapabilityPreviousKid: undefined,
+    liveObservationCapabilityPreviousSecret: undefined,
+    liveObservationCapabilityPreviousStoppedIssuingAt: undefined,
+    ...overrides
+  };
+}
+
+function captureErrorMessage(callback: () => unknown): string {
+  try {
+    callback();
+  } catch (error) {
+    assert.ok(error instanceof Error);
+    return error.message;
+  }
+
+  assert.fail("Expected callback to throw");
 }

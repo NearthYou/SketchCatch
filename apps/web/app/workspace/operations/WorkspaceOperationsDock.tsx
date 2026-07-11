@@ -39,6 +39,7 @@ export function WorkspaceOperationsDock({
     refreshRequestId: context.terraformRefreshRequestId
   });
   const safety = useWorkspaceSafety({
+    architectureDiagnostics: terraform.architectureDiagnostics,
     diagram: context.diagram,
     terraformCode: terraform.code,
     terraformDiagnostics: terraform.diagnostics

@@ -214,6 +214,23 @@
         "notes": "Production Route53 targets the direct-path ECS ALB; API/web run at autoscaling min 1 and max 2, worker RunTask is active, auth runtime preflight covers token and OAuth configuration, and container log alarms require two consecutive error periods without repetitive OK notifications."
       },
       "notes": "Warm EC2/ALB/nginx and the legacy ECS service/target group are retired. Cold rollback retains a sanitized encrypted AMI, verified Docker archive, disabled Terraform root, and runbook."
+    },
+    {
+      "id": "LIVE-OBSERVATION-V2-001",
+      "priority": 1,
+      "area": "live-observation",
+      "title": "Server-verified Live Observation v2",
+      "user_visible_behavior": "검증된 Deployment를 선택해 15분 관측 세션을 시작하고, 실제 요청·CloudWatch·capacity 증거와 scale-out 진행을 안전한 시네마틱 화면에서 확인한다.",
+      "status": "in_progress",
+      "verification": [
+        "v2 manifest, capability, Store, collector, IAM, CloudFront, AWS adapter 계약이 provider-neutral core seam 뒤에서 연결된다.",
+        "기능 flag는 Redis/Chromium/approved AWS sandbox gate가 모두 통과할 때까지 false다.",
+        "credential 원문·hash·URL이 RDS, S3, Redis, 로그, localStorage, sessionStorage에 남지 않는다.",
+        "in-memory와 Redis Store adapter가 같은 원자 동작 contract suite를 통과한다.",
+        "desktop/mobile/reduced-motion 브라우저 흐름이 실제 snapshot 값과 lifecycle cleanup을 검증한다.",
+        "실제 AWS apply/destroy는 별도 명시 승인이 있을 때만 수행한다."
+      ],
+      "notes": "Task 1 manifest persistence와 Task 2 HMAC capability/logger redaction은 완료됐다. 현재 Task 3 dedicated Store contract와 in-memory adapter를 구현한다."
     }
   ]
 }

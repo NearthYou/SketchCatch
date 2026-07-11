@@ -3,12 +3,15 @@
 import { useCallback, useMemo, useState } from "react";
 import type {
   AiPreDeploymentAnalysisResult,
+  ArchitectureDiagnostic,
   DiagramJson,
   TerraformDiagnostic
 } from "@sketchcatch/types";
 import { runAiPreDeploymentCheck } from "../../../features/workspace/api";
 import {
+  addArchitectureDiagnosticsToPreDeploymentAnalysis,
   addTerraformDiagnosticsToPreDeploymentAnalysis,
+  createPreDeploymentAnalysisFromArchitectureDiagnostics,
   createPreDeploymentAnalysisFromTerraformDiagnostics
 } from "../../../features/workspace/pre-deployment-diagnostics";
 import { convertDiagramJsonToArchitectureJson } from "../../../features/workspace/workspace-ai-diagram-adapter";
@@ -26,10 +29,12 @@ export type WorkspaceSafetyState = {
 
 // 현재 Board와 Terraform 진단을 합쳐 배포 전 안전·비용 검사 상태를 관리합니다.
 export function useWorkspaceSafety({
+  architectureDiagnostics,
   diagram,
   terraformCode,
   terraformDiagnostics
 }: {
+  readonly architectureDiagnostics: readonly ArchitectureDiagnostic[];
   readonly diagram: DiagramJson;
   readonly terraformCode: string;
   readonly terraformDiagnostics: readonly TerraformDiagnostic[];
@@ -48,9 +53,27 @@ export function useWorkspaceSafety({
       const errorDiagnostics = terraformDiagnostics.filter(
         (diagnostic) => diagnostic.severity === "error"
       );
+      const architectureErrors = architectureDiagnostics.filter(
+        (diagnostic) => diagnostic.severity === "error"
+      );
+
+      if (architectureErrors.length > 0) {
+        setAnalysis(
+          addTerraformDiagnosticsToPreDeploymentAnalysis(
+            createPreDeploymentAnalysisFromArchitectureDiagnostics(architectureDiagnostics),
+            terraformDiagnostics
+          )
+        );
+        return;
+      }
 
       if (errorDiagnostics.length > 0) {
-        setAnalysis(createPreDeploymentAnalysisFromTerraformDiagnostics(errorDiagnostics));
+        setAnalysis(
+          addArchitectureDiagnosticsToPreDeploymentAnalysis(
+            createPreDeploymentAnalysisFromTerraformDiagnostics(errorDiagnostics),
+            architectureDiagnostics
+          )
+        );
         return;
       }
 
@@ -60,7 +83,12 @@ export function useWorkspaceSafety({
           ? { terraformFiles: [{ fileName: "main.tf", terraformCode }] }
           : {})
       });
-      setAnalysis(addTerraformDiagnosticsToPreDeploymentAnalysis(result, terraformDiagnostics));
+      setAnalysis(
+        addArchitectureDiagnosticsToPreDeploymentAnalysis(
+          addTerraformDiagnosticsToPreDeploymentAnalysis(result, terraformDiagnostics),
+          architectureDiagnostics
+        )
+      );
     } catch (error) {
       setErrorMessage(
         error instanceof Error && error.message.trim()
@@ -70,7 +98,7 @@ export function useWorkspaceSafety({
     } finally {
       setRequestState("idle");
     }
-  }, [diagram, terraformCode, terraformDiagnostics]);
+  }, [architectureDiagnostics, diagram, terraformCode, terraformDiagnostics]);
 
   return { analysis, errorMessage, gate, requestState, run };
 }

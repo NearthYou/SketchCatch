@@ -19,6 +19,7 @@ import {
 import { generateTerraformFromDiagramJson } from "../services/terraform/terraform-preview.js";
 import { syncTerraformToDiagramJson } from "../services/terraform/terraform-to-diagram.js";
 import { createTerraformValidationDiagnostics } from "../services/terraform/terraform-diagnostics.js";
+import { evaluateArchitectureDependencies } from "@sketchcatch/types/architecture-dependency-rules";
 
 const terraformValidationMaxCharacters = 1024 * 1024;
 const terraformValidationMaxFileCount = 64;
@@ -157,7 +158,8 @@ export async function registerTerraformRoutes(
 
     try {
       return {
-        terraformCode: generateTerraformFromDiagramJson(body.diagramJson)
+        terraformCode: generateTerraformFromDiagramJson(body.diagramJson),
+        architectureDiagnostics: evaluateArchitectureDependencies(body.diagramJson, "preview")
       };
     } catch (error) {
       if (error instanceof TerraformDiagramValidationError) {

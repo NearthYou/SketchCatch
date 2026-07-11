@@ -2,10 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
+  ArchitectureDiagnostic,
   DiagramJson,
   TerraformDiagnostic,
   TerraformDiagramChangeProposal
 } from "@sketchcatch/types";
+import { evaluateArchitectureDependencies } from "@sketchcatch/types/architecture-dependency-rules";
 import {
   generateTerraformCode,
   syncTerraformToDiagram,
@@ -20,6 +22,7 @@ import { getTerraformPreviewState } from "../../../features/workspace/workspace-
 type TerraformRequestState = "idle" | "generating" | "validating" | "syncing";
 
 export type WorkspaceTerraformState = {
+  readonly architectureDiagnostics: readonly ArchitectureDiagnostic[];
   readonly code: string;
   readonly diagnostics: readonly TerraformDiagnostic[];
   readonly errorMessage: string;
@@ -44,6 +47,9 @@ export function useWorkspaceTerraform({
   readonly refreshRequestId: number;
 }): WorkspaceTerraformState {
   const [code, setCode] = useState("");
+  const [generatedArchitectureDiagnostics, setGeneratedArchitectureDiagnostics] = useState<
+    readonly ArchitectureDiagnostic[]
+  >([]);
   const [diagnostics, setDiagnostics] = useState<readonly TerraformDiagnostic[]>([]);
   const [errorMessage, setErrorMessage] = useState("");
   const [generatedDiagram, setGeneratedDiagram] = useState<DiagramJson | null>(null);
@@ -53,6 +59,14 @@ export function useWorkspaceTerraform({
     () => getTerraformPreviewState({ currentDiagram: diagram, generatedDiagram, terraformCode: code }),
     [code, diagram, generatedDiagram]
   );
+  const contextualArchitectureDiagnostics = useMemo(
+    () => evaluateArchitectureDependencies(diagram, "contextual"),
+    [diagram]
+  );
+  const architectureDiagnostics =
+    previewState === "current"
+      ? generatedArchitectureDiagnostics
+      : contextualArchitectureDiagnostics;
 
   // 현재 Board를 Terraform 코드로 다시 만들고 생성 시점의 Board를 함께 기억합니다.
   const generate = useCallback(async (): Promise<string> => {
@@ -60,12 +74,13 @@ export function useWorkspaceTerraform({
     setErrorMessage("");
 
     try {
-      const generatedCode = await generateTerraformCode(diagram);
-      setCode(generatedCode);
+      const result = await generateTerraformCode(diagram);
+      setCode(result.terraformCode);
       setGeneratedDiagram(diagram);
+      setGeneratedArchitectureDiagnostics(result.architectureDiagnostics);
       setDiagnostics([]);
       setProposals([]);
-      return generatedCode;
+      return result.terraformCode;
     } catch (error) {
       setErrorMessage(toWorkspaceOperationError(error, "Terraform 코드를 만들지 못했습니다."));
       return "";
@@ -124,6 +139,7 @@ export function useWorkspaceTerraform({
   }, [generate, refreshRequestId]);
 
   return {
+    architectureDiagnostics,
     code,
     diagnostics,
     errorMessage,

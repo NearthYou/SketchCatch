@@ -12,19 +12,38 @@ const diagramEditorCssSource = readFileSync(
   "utf8"
 );
 
+test("diagram node view is a memoized custom node renderer", () => {
+  assert.match(diagramNodeViewSource, /import \{[^}]*memo[^}]*\} from "react"/);
+  assert.match(diagramNodeViewSource, /export const DiagramNodeView = memo\(/);
+});
+
+test("diagram node view uses React's default memo comparison and retains its zoom subscription", () => {
+  const rendererStart = diagramNodeViewSource.indexOf("export const DiagramNodeView = memo(function DiagramNodeView(");
+  const rendererEnd = diagramNodeViewSource.indexOf("\nfunction getKeyboardResizeDelta", rendererStart);
+
+  assert.notEqual(rendererStart, -1);
+  assert.notEqual(rendererEnd, -1);
+
+  const rendererSource = diagramNodeViewSource.slice(rendererStart, rendererEnd);
+
+  assert.match(rendererSource, /useStore\(\(state\) => getBoardZoomLevel\(state\.transform\[2\]\)\)/);
+  assert.match(rendererSource, /\n\}\);\s*$/);
+});
+
 test("diagram node view renders source and target handles matching edge mapper ids", () => {
   assert.match(diagramNodeViewSource, /id=\{`source-\$\{handle\.id\}`\}/);
   assert.match(diagramNodeViewSource, /type="source"/);
   assert.match(diagramNodeViewSource, /id=\{`target-\$\{handle\.id\}`\}/);
   assert.match(diagramNodeViewSource, /type="target"/);
+  assert.doesNotMatch(diagramNodeViewSource, /CONNECTION_SOURCE_POSITIONS/);
   assert.match(
     diagramNodeViewSource,
-    /const CONNECTION_SOURCE_POSITIONS: ReadonlySet<Position> = new Set\(\[\s*Position\.Top,\s*Position\.Right,\s*Position\.Bottom\s*\]\);/s
+    /const canStartFromHandle =\s*canConnect &&\s*!data\.isConnectionActive;/
   );
-  assert.match(diagramNodeViewSource, /const canStartFromHandle =\s*canConnect &&/);
-  assert.match(diagramNodeViewSource, /CONNECTION_SOURCE_POSITIONS\.has\(handle\.position\)/);
-  assert.match(diagramNodeViewSource, /const canEndAtHandle =\s*data\.isValidConnectionTarget &&/);
-  assert.match(diagramNodeViewSource, /handle\.position === Position\.Left/);
+  assert.match(
+    diagramNodeViewSource,
+    /const canEndAtHandle =\s*data\.isValidConnectionTarget;/
+  );
 });
 
 test("ports stay quiet by default but expose a stable, forgiving connection target", () => {
@@ -287,6 +306,10 @@ test("manual resize handles expose corners and the full four sides", () => {
   assert.match(
     diagramEditorCssSource,
     /\.nodeShellSelected ~ \.connectionHandleSource:global\(\.react-flow__handle-bottom\)\s*\{[^}]*bottom:\s*calc\(-18px \* var\(--board-control-scale\)\);/s
+  );
+  assert.match(
+    diagramEditorCssSource,
+    /\.nodeShellSelected ~ \.connectionHandleSource:global\(\.react-flow__handle-left\)\s*\{[^}]*left:\s*calc\(-18px \* var\(--board-control-scale\)\);/s
   );
 });
 

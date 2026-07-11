@@ -1,4 +1,8 @@
-import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
+import Fastify, {
+  type FastifyInstance,
+  type FastifyReply,
+  type FastifyRequest
+} from "fastify";
 import { ZodError } from "zod";
 import type { ApiErrorCode } from "@sketchcatch/types";
 import { startRefreshTokenCleanupJob } from "./auth/cleanup.js";
@@ -48,6 +52,40 @@ import {
 const allowedCorsOrigins = new Set(["http://localhost:3000", "http://127.0.0.1:3000"]);
 const corsAllowedMethods = "GET,POST,PUT,DELETE,OPTIONS";
 const fallbackCorsAllowedHeaders = "content-type,authorization";
+const sensitiveHeaderRedactionPaths = [
+  "headers.authorization",
+  "headers.cookie",
+  "headers[\"set-cookie\"]",
+  "req.headers.authorization",
+  "req.headers.cookie",
+  "req.headers[\"set-cookie\"]",
+  "request.headers.authorization",
+  "request.headers.cookie",
+  "request.headers[\"set-cookie\"]",
+  "res.headers.authorization",
+  "res.headers.cookie",
+  "res.headers[\"set-cookie\"]",
+  "response.headers.authorization",
+  "response.headers.cookie",
+  "response.headers[\"set-cookie\"]"
+];
+
+export function createApiLoggerOptions(options: {
+  nodeEnv?: string | undefined;
+  stream?: { write(message: string): void } | undefined;
+} = {}) {
+  if ((options.nodeEnv ?? process.env.NODE_ENV) === "test") {
+    return false;
+  }
+
+  return {
+    redact: {
+      censor: "[REDACTED]",
+      paths: [...sensitiveHeaderRedactionPaths]
+    },
+    ...(options.stream === undefined ? {} : { stream: options.stream })
+  };
+}
 
 export type BuildAppOptions = {
   getDatabaseClient?: () => DatabaseClient;
@@ -106,7 +144,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
       windowMs: 60 * 60 * 1000
     });
   const app = Fastify({
-    logger: process.env.NODE_ENV !== "test",
+    logger: createApiLoggerOptions(),
     trustProxy: true
   });
   const runtimeCache =

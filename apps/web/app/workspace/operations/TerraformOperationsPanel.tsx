@@ -70,6 +70,36 @@ export function TerraformOperationsPanel({
         <p className={styles.inlineNotice} data-tone="error">{terraform.errorMessage}</p>
       ) : null}
 
+      <section className={styles.resultSection}>
+        <div className={styles.sectionTitleRow}>
+          <h3>Architecture 설계 진단</h3>
+          <span>{terraform.architectureDiagnostics.length}개</span>
+        </div>
+        {terraform.architectureDiagnostics.length === 0 ? (
+          <p className={styles.emptyText}>현재 Board에서 발견한 설계 문제가 없습니다.</p>
+        ) : (
+          <ul className={styles.issueList}>
+            {terraform.architectureDiagnostics.map((diagnostic) => (
+              <li
+                data-severity={diagnostic.severity}
+                key={`${diagnostic.ruleId}-${diagnostic.resourceNodeId}`}
+              >
+                <button
+                  onClick={() => context.focusResourceNode(diagnostic.resourceNodeId)}
+                  type="button"
+                >
+                  <AlertCircle aria-hidden="true" size={15} />
+                  <span>
+                    <strong>{diagnostic.summary}</strong>
+                    {diagnostic.message}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
       <label className={styles.codeField}>
         <span>main.tf</span>
         <textarea
