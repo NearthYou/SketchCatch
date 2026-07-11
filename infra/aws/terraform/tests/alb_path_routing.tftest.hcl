@@ -15,7 +15,7 @@ mock_provider "aws" {
   }
 }
 
-run "warmup_keeps_legacy_routing" {
+run "routes_directly_to_cost_scaled_services" {
   command = plan
 
   variables {
@@ -33,15 +33,6 @@ run "warmup_keeps_legacy_routing" {
     values = {
       arn  = "arn:aws:ecs:ap-northeast-2:111122223333:cluster/sketchcatch-test-cluster"
       name = "sketchcatch-test-cluster"
-    }
-    override_during = plan
-  }
-
-  override_resource {
-    target = aws_lb_target_group.ecs
-    values = {
-      arn        = "arn:aws:elasticloadbalancing:ap-northeast-2:111122223333:targetgroup/legacy/1234567890"
-      arn_suffix = "targetgroup/legacy/1234567890"
     }
     override_during = plan
   }
@@ -133,99 +124,44 @@ run "warmup_keeps_legacy_routing" {
   }
 
   assert {
-    condition     = local.api_path_patterns == ["/api", "/api/*", "/health", "/health/db"]
-    error_message = "API listener rules must own /api and both health paths."
+    condition = (
+      local.api_path_patterns == ["/api", "/api/*", "/health", "/health/db"] &&
+      aws_lb_listener.http_forward[0].default_action[0].target_group_arn == aws_lb_target_group.web.arn &&
+      aws_lb_listener_rule.api_http[0].action[0].target_group_arn == aws_lb_target_group.api.arn
+    )
+    error_message = "HTTP routing must send API/health paths to API and default traffic directly to web."
   }
 
   assert {
     condition = (
-      {
-        for target in aws_lb_listener.http_forward[0].default_action[0].forward[0].target_group :
-        target.arn => target.weight
-      }[aws_lb_target_group.ecs.arn] == 100 &&
-      {
-        for target in aws_lb_listener.http_forward[0].default_action[0].forward[0].target_group :
-        target.arn => target.weight
-      }[aws_lb_target_group.web.arn] == 0 &&
-      {
-        for target in aws_lb_listener_rule.api_http[0].action[0].forward[0].target_group :
-        target.arn => target.weight
-      }[aws_lb_target_group.ecs.arn] == 100 &&
-      {
-        for target in aws_lb_listener_rule.api_http[0].action[0].forward[0].target_group :
-        target.arn => target.weight
-      }[aws_lb_target_group.api.arn] == 0
+      length(aws_ecs_task_definition.app) == 0 &&
+      aws_ecs_service.api.desired_count == 1 &&
+      aws_ecs_service.web.desired_count == 1 &&
+      aws_ecs_service.api.deployment_minimum_healthy_percent == 100 &&
+      aws_ecs_service.api.deployment_maximum_percent == 200 &&
+      aws_ecs_service.web.deployment_minimum_healthy_percent == 100 &&
+      aws_ecs_service.web.deployment_maximum_percent == 200 &&
+      aws_ecs_service.api.deployment_circuit_breaker[0].enable &&
+      aws_ecs_service.api.deployment_circuit_breaker[0].rollback &&
+      aws_ecs_service.web.deployment_circuit_breaker[0].enable &&
+      aws_ecs_service.web.deployment_circuit_breaker[0].rollback
     )
-    error_message = "Warmup must keep all traffic on legacy nginx while associating API/web targets at weight zero."
+    error_message = "Legacy ECS must stay absent while API/web retain safe deployment settings."
   }
 
   assert {
     condition = (
-      one(aws_ecs_service.app.load_balancer).container_name == "nginx" &&
-      one(aws_ecs_service.api.load_balancer).container_name == "api" &&
-      one(aws_ecs_service.web.load_balancer).container_name == "web" &&
-      aws_ecs_service.app.desired_count == 1
+      aws_appautoscaling_target.ecs_service["api"].min_capacity == 1 &&
+      aws_appautoscaling_target.ecs_service["api"].max_capacity == 2 &&
+      aws_appautoscaling_target.ecs_service["web"].min_capacity == 1 &&
+      aws_appautoscaling_target.ecs_service["web"].max_capacity == 2
     )
-    error_message = "Legacy rollback and split services must coexist during warmup."
-  }
-
-  assert {
-    condition = (
-      [for container in jsondecode(aws_ecs_task_definition.api.container_definitions) : container.name] == ["api"] &&
-      [for container in jsondecode(aws_ecs_task_definition.web.container_definitions) : container.name] == ["web"]
-    )
-    error_message = "Split task definitions must contain only their API or web container."
+    error_message = "API and web autoscaling must keep the cost-first min=1, max=2 range."
   }
 }
 
-run "split_routes_and_enables_worker_dispatch" {
+run "https_routes_and_enables_worker_dispatch" {
   command = plan
-
-  variables {
-    environment                  = "test"
-    vpc_id                       = "vpc-0123456789abcdef0"
-    public_subnet_ids            = ["subnet-11111111111111111", "subnet-22222222222222222"]
-    artifact_bucket_name         = "sketchcatch-test-artifacts"
-    sketchcatch_public_base_url  = "https://sketchcatch.example"
-    oauth_redirect_base_url      = "https://sketchcatch.example"
-    certificate_arn              = "arn:aws:acm:ap-northeast-2:111122223333:certificate/11111111-2222-3333-4444-555555555555"
-    ecs_cutover_stage            = "split"
-    enable_ecs_worker_dispatch   = true
-    worker_rds_security_group_id = "sg-0fedcba9876543210"
-  }
-
-  override_resource {
-    target = aws_ecs_cluster.main
-    values = {
-      arn  = "arn:aws:ecs:ap-northeast-2:111122223333:cluster/sketchcatch-test-cluster"
-      name = "sketchcatch-test-cluster"
-    }
-    override_during = plan
-  }
-
-  override_resource {
-    target = aws_lb_target_group.ecs
-    values = {
-      arn = "arn:aws:elasticloadbalancing:ap-northeast-2:111122223333:targetgroup/legacy/1234567890"
-    }
-    override_during = plan
-  }
-
-  override_resource {
-    target = aws_lb_target_group.api
-    values = {
-      arn = "arn:aws:elasticloadbalancing:ap-northeast-2:111122223333:targetgroup/api/1234567890"
-    }
-    override_during = plan
-  }
-
-  override_resource {
-    target = aws_lb_target_group.web
-    values = {
-      arn = "arn:aws:elasticloadbalancing:ap-northeast-2:111122223333:targetgroup/web/1234567890"
-    }
-    override_during = plan
-  }
 
   override_resource {
     target = aws_ecr_repository.service["api"]
@@ -247,6 +183,45 @@ run "split_routes_and_enables_worker_dispatch" {
     target = aws_ecr_repository.service["nginx"]
     values = {
       repository_url = "111122223333.dkr.ecr.ap-northeast-2.amazonaws.com/sketchcatch-test-nginx"
+    }
+    override_during = plan
+  }
+
+  variables {
+    environment                  = "test"
+    vpc_id                       = "vpc-0123456789abcdef0"
+    public_subnet_ids            = ["subnet-11111111111111111", "subnet-22222222222222222"]
+    artifact_bucket_name         = "sketchcatch-test-artifacts"
+    sketchcatch_public_base_url  = "https://sketchcatch.example"
+    oauth_redirect_base_url      = "https://sketchcatch.example"
+    certificate_arn              = "arn:aws:acm:ap-northeast-2:111122223333:certificate/11111111-2222-3333-4444-555555555555"
+    enable_ecs_worker_dispatch   = true
+    worker_rds_security_group_id = "sg-0fedcba9876543210"
+  }
+
+  override_resource {
+    target = aws_ecs_cluster.main
+    values = {
+      arn  = "arn:aws:ecs:ap-northeast-2:111122223333:cluster/sketchcatch-test-cluster"
+      name = "sketchcatch-test-cluster"
+    }
+    override_during = plan
+  }
+
+  override_resource {
+    target = aws_lb_target_group.api
+    values = {
+      arn        = "arn:aws:elasticloadbalancing:ap-northeast-2:111122223333:targetgroup/api/1234567890"
+      arn_suffix = "targetgroup/api/1234567890"
+    }
+    override_during = plan
+  }
+
+  override_resource {
+    target = aws_lb_target_group.web
+    values = {
+      arn        = "arn:aws:elasticloadbalancing:ap-northeast-2:111122223333:targetgroup/web/1234567890"
+      arn_suffix = "targetgroup/web/1234567890"
     }
     override_during = plan
   }
@@ -287,25 +262,11 @@ run "split_routes_and_enables_worker_dispatch" {
 
   assert {
     condition = (
-      {
-        for target in aws_lb_listener.https[0].default_action[0].forward[0].target_group :
-        target.arn => target.weight
-      }[aws_lb_target_group.ecs.arn] == 0 &&
-      {
-        for target in aws_lb_listener.https[0].default_action[0].forward[0].target_group :
-        target.arn => target.weight
-      }[aws_lb_target_group.web.arn] == 100 &&
-      {
-        for target in aws_lb_listener_rule.api_https[0].action[0].forward[0].target_group :
-        target.arn => target.weight
-      }[aws_lb_target_group.ecs.arn] == 0 &&
-      {
-        for target in aws_lb_listener_rule.api_https[0].action[0].forward[0].target_group :
-        target.arn => target.weight
-      }[aws_lb_target_group.api.arn] == 100 &&
+      aws_lb_listener.https[0].default_action[0].target_group_arn == aws_lb_target_group.web.arn &&
+      aws_lb_listener_rule.api_https[0].action[0].target_group_arn == aws_lb_target_group.api.arn &&
       aws_lb_listener.http_redirect[0].default_action[0].type == "redirect"
     )
-    error_message = "Split must route default traffic to web, API paths to API, and retain legacy at weight zero."
+    error_message = "HTTPS routing must send API paths to API and default traffic directly to web."
   }
 
   assert {

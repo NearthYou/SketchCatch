@@ -30,15 +30,6 @@ resource "aws_vpc_security_group_ingress_rule" "ecs_alb_https" {
   cidr_ipv4         = each.value
 }
 
-resource "aws_vpc_security_group_egress_rule" "ecs_alb_to_service" {
-  security_group_id            = aws_security_group.ecs_alb.id
-  description                  = "Forward ALB traffic only to ECS tasks"
-  ip_protocol                  = "tcp"
-  from_port                    = 80
-  to_port                      = 80
-  referenced_security_group_id = aws_security_group.ecs_service.id
-}
-
 resource "aws_vpc_security_group_egress_rule" "ecs_alb_to_api" {
   security_group_id            = aws_security_group.ecs_alb.id
   description                  = "Forward API and health paths only to the API container port"
@@ -58,22 +49,15 @@ resource "aws_vpc_security_group_egress_rule" "ecs_alb_to_web" {
 }
 
 resource "aws_security_group" "ecs_service" {
-  name        = "${local.name_prefix}-ecs-service"
+  name = "${local.name_prefix}-ecs-service"
+  # Keep the original AWS description because changing it replaces the security
+  # group and would churn the production RDS allowlist.
   description = "SketchCatch ECS service tasks; nginx receives traffic only from the parallel ECS ALB."
   vpc_id      = var.vpc_id
 
   tags = {
     Name = "${local.name_prefix}-ecs-service"
   }
-}
-
-resource "aws_vpc_security_group_ingress_rule" "ecs_service_from_alb" {
-  security_group_id            = aws_security_group.ecs_service.id
-  description                  = "Allow nginx port from the parallel ECS ALB"
-  ip_protocol                  = "tcp"
-  from_port                    = 80
-  to_port                      = 80
-  referenced_security_group_id = aws_security_group.ecs_alb.id
 }
 
 resource "aws_vpc_security_group_ingress_rule" "ecs_service_api_from_alb" {

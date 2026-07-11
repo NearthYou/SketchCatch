@@ -8,6 +8,8 @@ resource "aws_ecs_cluster" "main" {
 }
 
 resource "aws_ecs_task_definition" "app" {
+  count = 0
+
   family                   = "${local.name_prefix}-app"
   requires_compatibilities = ["FARGATE"]
   network_mode             = "awsvpc"
@@ -326,47 +328,6 @@ resource "aws_ecs_task_definition" "web" {
   ])
 }
 
-resource "aws_ecs_service" "app" {
-  name                               = "${local.name_prefix}-app"
-  cluster                            = aws_ecs_cluster.main.id
-  task_definition                    = aws_ecs_task_definition.app.arn
-  desired_count                      = var.legacy_ecs_desired_count
-  launch_type                        = "FARGATE"
-  deployment_minimum_healthy_percent = 100
-  deployment_maximum_percent         = 200
-  health_check_grace_period_seconds  = 60
-  wait_for_steady_state              = true
-
-  deployment_circuit_breaker {
-    enable   = true
-    rollback = true
-  }
-
-  network_configuration {
-    subnets          = local.ecs_service_subnet_ids
-    security_groups  = [aws_security_group.ecs_service.id]
-    assign_public_ip = var.assign_public_ip
-  }
-
-  load_balancer {
-    target_group_arn = aws_lb_target_group.ecs.arn
-    container_name   = "nginx"
-    container_port   = 80
-  }
-
-  depends_on = [
-    aws_lb_listener.http_forward,
-    aws_lb_listener.http_redirect,
-    aws_lb_listener.https,
-    aws_iam_role_policy.ecs_execution,
-    aws_iam_role_policy.ecs_task
-  ]
-
-  lifecycle {
-    prevent_destroy = true
-  }
-}
-
 resource "aws_ecs_service" "api" {
   name                               = "${local.name_prefix}-api"
   cluster                            = aws_ecs_cluster.main.id
@@ -401,6 +362,10 @@ resource "aws_ecs_service" "api" {
     aws_iam_role_policy.ecs_execution,
     aws_iam_role_policy.ecs_task
   ]
+
+  lifecycle {
+    ignore_changes = [desired_count, task_definition]
+  }
 }
 
 resource "aws_ecs_service" "web" {
@@ -438,4 +403,8 @@ resource "aws_ecs_service" "web" {
     aws_iam_role_policy.ecs_execution,
     aws_iam_role_policy.ecs_task
   ]
+
+  lifecycle {
+    ignore_changes = [desired_count, task_definition]
+  }
 }
