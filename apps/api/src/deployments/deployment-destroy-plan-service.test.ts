@@ -398,6 +398,7 @@ function createDestroyPlanOptions(runnerStages: string[]): RunDeploymentDestroyP
     prepareTerraformWorkspace: async () => ({
       workdir: "C:/tmp/sketchcatch-terraform-destroy-plan",
       mainFilePath: "C:/tmp/sketchcatch-terraform-destroy-plan/main.tf",
+      terraformFiles: [],
       cleanup: async () => undefined
     }),
     prepareTerraformAwsCredentialEnv: async () => createPreparedCredentials(),

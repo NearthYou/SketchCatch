@@ -178,12 +178,7 @@ export async function runDeploymentPlan(
     const terraformArtifactSha256 = createSha256(terraformArtifactContent);
     const preDeploymentAnalysis = await analyzePreDeployment({
       architectureJson: architecture.architectureJson,
-      terraformFiles: [
-        {
-          fileName: artifact.fileName,
-          terraformCode: toTerraformCodeString(terraformArtifactContent)
-        }
-      ]
+      terraformFiles: preparedWorkspace.terraformFiles
     });
 
     const [awsCredentials] = await Promise.all([
@@ -787,8 +782,4 @@ function summarizeUnexpectedPlanFailure(error: unknown): string {
 
 function createSha256(value: Buffer | Uint8Array | string): string {
   return createHash("sha256").update(Buffer.from(value)).digest("hex");
-}
-
-function toTerraformCodeString(value: Buffer | Uint8Array | string): string {
-  return typeof value === "string" ? value : Buffer.from(value).toString("utf8");
 }

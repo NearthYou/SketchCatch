@@ -393,6 +393,7 @@ test("runDeploymentApply applies the approved tfplan and stores state resources 
       prepareTerraformWorkspace: async () => ({
         workdir: "C:/tmp/sketchcatch-terraform-apply",
         mainFilePath: "C:/tmp/sketchcatch-terraform-apply/main.tf",
+        terraformFiles: [],
         cleanup: async () => {
           cleanupCalled = true;
         }
@@ -576,6 +577,7 @@ test("runDeploymentApply materializes archive data files before applying an appr
       prepareTerraformWorkspace: async () => ({
         workdir: "C:/tmp/sketchcatch-terraform-archive-apply",
         mainFilePath: "C:/tmp/sketchcatch-terraform-archive-apply/main.tf",
+        terraformFiles: [],
         cleanup: async () => undefined
       }),
       prepareTerraformAwsCredentialEnv: async () => createPreparedCredentials(),
@@ -633,6 +635,7 @@ test("runDeploymentApply rejects unsafe Terraform before preparing AWS credentia
           prepareTerraformWorkspace: async () => ({
             workdir: "C:/tmp/sketchcatch-terraform-unsafe-apply",
             mainFilePath: "C:/tmp/sketchcatch-terraform-unsafe-apply/main.tf",
+            terraformFiles: [],
             cleanup: async () => {
               cleanupCalled = true;
             }
@@ -723,6 +726,7 @@ test("runDeploymentApply rejects approval snapshot drift before credentials or T
             prepareTerraformWorkspace: async () => ({
               workdir: "C:/tmp/sketchcatch-terraform-drift-apply",
               mainFilePath: "C:/tmp/sketchcatch-terraform-drift-apply/main.tf",
+              terraformFiles: [],
               cleanup: async () => {
                 cleanupCalled = true;
               }
@@ -781,6 +785,7 @@ test("runDeploymentApply marks apply failures failed and masks secret output", a
       prepareTerraformWorkspace: async () => ({
         workdir: "C:/tmp/sketchcatch-terraform-apply",
         mainFilePath: "C:/tmp/sketchcatch-terraform-apply/main.tf",
+        terraformFiles: [],
         cleanup: async () => undefined
       }),
       prepareTerraformAwsCredentialEnv: async () => createPreparedCredentials(),
@@ -847,6 +852,7 @@ test("runDeploymentApply reports apply timeouts with a partial resource warning"
       prepareTerraformWorkspace: async () => ({
         workdir: "C:/tmp/sketchcatch-terraform-apply",
         mainFilePath: "C:/tmp/sketchcatch-terraform-apply/main.tf",
+        terraformFiles: [],
         cleanup: async () => undefined
       }),
       prepareTerraformAwsCredentialEnv: async () => createPreparedCredentials(),
@@ -886,6 +892,7 @@ test("runDeploymentApply keeps successful apply as success when post-apply parsi
       prepareTerraformWorkspace: async () => ({
         workdir: "C:/tmp/sketchcatch-terraform-apply",
         mainFilePath: "C:/tmp/sketchcatch-terraform-apply/main.tf",
+        terraformFiles: [],
         cleanup: async () => undefined
       }),
       prepareTerraformAwsCredentialEnv: async () => createPreparedCredentials(),

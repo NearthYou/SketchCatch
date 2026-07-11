@@ -312,6 +312,7 @@ test("runDeploymentDestroy applies the approved destroy plan and clears deployme
       prepareTerraformWorkspace: async () => ({
         workdir: "C:/tmp/sketchcatch-terraform-destroy",
         mainFilePath: "C:/tmp/sketchcatch-terraform-destroy/main.tf",
+        terraformFiles: [],
         cleanup: async () => undefined
       }),
       prepareTerraformAwsCredentialEnv: async () => createPreparedCredentials(),
@@ -382,6 +383,7 @@ test("runDeploymentDestroy reports Terraform apply timeouts without marking dura
       prepareTerraformWorkspace: async () => ({
         workdir: "C:/tmp/sketchcatch-terraform-destroy",
         mainFilePath: "C:/tmp/sketchcatch-terraform-destroy/main.tf",
+        terraformFiles: [],
         cleanup: async () => undefined
       }),
       prepareTerraformAwsCredentialEnv: async () => createPreparedCredentials(),

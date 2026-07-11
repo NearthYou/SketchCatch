@@ -15,6 +15,7 @@ import {
   createPreDeploymentAnalysisFromTerraformDiagnostics
 } from "../../../features/workspace/pre-deployment-diagnostics";
 import { convertDiagramJsonToArchitectureJson } from "../../../features/workspace/workspace-ai-diagram-adapter";
+import type { TerraformVirtualFile } from "../../../features/workspace/terraform-panel-utils";
 import { getSafetyGateState } from "../../../features/workspace/workspace-operations-state";
 
 type SafetyRequestState = "idle" | "analyzing";
@@ -32,12 +33,14 @@ export function useWorkspaceSafety({
   architectureDiagnostics,
   diagram,
   terraformCode,
-  terraformDiagnostics
+  terraformDiagnostics,
+  terraformFiles
 }: {
   readonly architectureDiagnostics: readonly ArchitectureDiagnostic[];
   readonly diagram: DiagramJson;
   readonly terraformCode: string;
   readonly terraformDiagnostics: readonly TerraformDiagnostic[];
+  readonly terraformFiles: readonly TerraformVirtualFile[];
 }): WorkspaceSafetyState {
   const [analysis, setAnalysis] = useState<AiPreDeploymentAnalysisResult | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
@@ -87,10 +90,16 @@ export function useWorkspaceSafety({
         return;
       }
 
+      const populatedTerraformFiles = terraformFiles
+        .filter((file) => file.code.trim())
+        .map((file) => ({
+          fileName: file.fileName,
+          terraformCode: file.code
+        }));
       const result = await runAiPreDeploymentCheck({
         architectureJson: convertDiagramJsonToArchitectureJson(diagram),
-        ...(terraformCode.trim()
-          ? { terraformFiles: [{ fileName: "main.tf", terraformCode }] }
+        ...(populatedTerraformFiles.length > 0
+          ? { terraformFiles: populatedTerraformFiles }
           : {})
       });
       if (inputGenerationRef.current !== inputGeneration) return;
@@ -112,7 +121,7 @@ export function useWorkspaceSafety({
         setRequestState("idle");
       }
     }
-  }, [architectureDiagnostics, diagram, terraformCode, terraformDiagnostics]);
+  }, [architectureDiagnostics, diagram, terraformDiagnostics, terraformFiles]);
 
   return { analysis, errorMessage, gate, requestState, run };
 }

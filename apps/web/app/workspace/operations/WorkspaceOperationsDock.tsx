@@ -44,7 +44,8 @@ export function WorkspaceOperationsDock({
     architectureDiagnostics: terraform.architectureDiagnostics,
     diagram: context.diagram,
     terraformCode: terraform.code,
-    terraformDiagnostics: terraform.diagnostics
+    terraformDiagnostics: terraform.diagnostics,
+    terraformFiles: terraform.files
   });
   const deployment = useWorkspaceDeployment({
     diagram: context.diagram,

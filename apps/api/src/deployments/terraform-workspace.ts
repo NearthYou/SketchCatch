@@ -24,6 +24,7 @@ export type PrepareTerraformWorkspaceOptions = {
 export type PreparedTerraformWorkspace = {
   workdir: string;
   mainFilePath: string;
+  terraformFiles: TerraformArtifactBundle["files"];
   cleanup: () => Promise<void>;
 };
 
@@ -34,6 +35,7 @@ export async function prepareTerraformWorkspace(
   const workdir = await mkdtemp(join(options.rootDir ?? tmpdir(), "sketchcatch-terraform-"));
   const fileName = toSafeTerraformFileName(input.fileName);
   let mainFilePath = join(workdir, fileName);
+  let terraformFiles: TerraformArtifactBundle["files"];
 
   try {
     const maxTerraformArtifactBytes =
@@ -51,18 +53,21 @@ export async function prepareTerraformWorkspace(
     assertBufferSize(buffer, maxTerraformArtifactBytes);
     if (isTerraformArtifactBundle(input)) {
       const bundle = parseTerraformArtifactBundle(buffer.toString("utf8"));
+      terraformFiles = bundle.files;
       await Promise.all(
         bundle.files.map((file) => writeFile(join(workdir, file.fileName), file.terraformCode))
       );
       mainFilePath = join(workdir, ".sketchcatch-artifact.txt");
       await writeFile(mainFilePath, createTerraformBundleCanonicalContent(bundle));
     } else {
+      terraformFiles = [{ fileName, terraformCode: buffer.toString("utf8") }];
       await writeFile(mainFilePath, buffer);
     }
 
     return {
       workdir,
       mainFilePath,
+      terraformFiles,
       cleanup: () => rm(workdir, { recursive: true, force: true })
     };
   } catch (error) {

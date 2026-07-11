@@ -21,6 +21,12 @@ test("prepareTerraformWorkspace writes safe Terraform files into an isolated tem
   try {
     assert.equal(workspace.mainFilePath.endsWith("main.tf"), true);
     assert.equal(await readFile(workspace.mainFilePath, "utf8"), "terraform { required_version = \">= 1.6.0\" }\n");
+    assert.deepEqual(workspace.terraformFiles, [
+      {
+        fileName: "main.tf",
+        terraformCode: "terraform { required_version = \">= 1.6.0\" }\n"
+      }
+    ]);
   } finally {
     await workspace.cleanup();
     await rm(rootDir, { recursive: true, force: true });
@@ -77,6 +83,16 @@ test("prepareTerraformWorkspace expands a multi-file Terraform bundle", async ()
     assert.match(await readFile(join(workspace.workdir, "providers.tf"), "utf8"), /required_version/);
     assert.match(await readFile(join(workspace.workdir, "main.tf"), "utf8"), /aws_s3_bucket/);
     assert.match(await readFile(workspace.mainFilePath, "utf8"), /SketchCatch file: providers.tf/);
+    assert.deepEqual(workspace.terraformFiles, [
+      {
+        fileName: "providers.tf",
+        terraformCode: 'terraform { required_version = ">= 1.6.0" }\n'
+      },
+      {
+        fileName: "main.tf",
+        terraformCode: 'resource "aws_s3_bucket" "assets" {}\n'
+      }
+    ]);
   } finally {
     await workspace.cleanup();
     await rm(rootDir, { recursive: true, force: true });
