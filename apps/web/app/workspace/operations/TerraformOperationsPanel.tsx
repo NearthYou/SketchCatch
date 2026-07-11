@@ -1,7 +1,9 @@
 "use client";
 
 import { AlertCircle, CheckCircle2, GitCompareArrows, RefreshCw } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import type { DiagramEditorPanelContext } from "../../../features/diagram-editor";
+import { getTerraformLineStartOffset } from "../../../features/workspace/terraform-panel-utils";
 import type { WorkspaceTerraformState } from "./use-workspace-terraform";
 import styles from "./workspace-operations.module.css";
 
@@ -17,6 +19,31 @@ export function TerraformOperationsPanel({
   const errorCount = terraform.diagnostics.filter(
     (diagnostic) => diagnostic.severity === "error"
   ).length;
+  const codeEditorRef = useRef<HTMLTextAreaElement | null>(null);
+  const [selectedProposalIndexes, setSelectedProposalIndexes] = useState<readonly number[]>([]);
+
+  // 새 동기화 결과가 나오면 이전 결과에서 고른 항목을 이어받지 않습니다.
+  useEffect(() => {
+    setSelectedProposalIndexes([]);
+  }, [terraform.proposals]);
+
+  // 진단을 누르면 main.tf의 해당 줄로 이동하고 Resource 연결 정보가 있으면 Board도 함께 찾습니다.
+  function focusDiagnostic(diagnostic: WorkspaceTerraformState["diagnostics"][number]): void {
+    if (diagnostic.nodeId) context.focusResourceNode(diagnostic.nodeId);
+    if (!diagnostic.line) return;
+    const offset = getTerraformLineStartOffset(terraform.code, diagnostic.line);
+    codeEditorRef.current?.focus();
+    codeEditorRef.current?.setSelectionRange(offset, offset);
+  }
+
+  // 사용자가 Board에 반영할 변경 제안을 하나씩 선택하거나 해제합니다.
+  function toggleProposal(index: number): void {
+    setSelectedProposalIndexes((current) =>
+      current.includes(index)
+        ? current.filter((candidate) => candidate !== index)
+        : [...current, index]
+    );
+  }
 
   return (
     <div className={styles.panelBody}>
@@ -100,16 +127,23 @@ export function TerraformOperationsPanel({
         )}
       </section>
 
-      <label className={styles.codeField}>
-        <span>main.tf</span>
-        <textarea
-          aria-label="Terraform 코드"
-          onChange={(event) => terraform.setCode(event.target.value)}
-          placeholder="Board에서 Terraform 코드를 생성하세요."
-          spellCheck={false}
-          value={terraform.code}
-        />
-      </label>
+      <div className={styles.terraformEditor}>
+        <nav aria-label="Terraform 파일" className={styles.terraformFileTree}>
+          <span>Files</span>
+          <button aria-current="page" type="button">main.tf</button>
+        </nav>
+        <label className={styles.codeField}>
+          <span>main.tf {terraform.isCodeDirty ? "· 수정됨" : ""}</span>
+          <textarea
+            aria-label="Terraform 코드"
+            onChange={(event) => terraform.setCode(event.target.value)}
+            placeholder="Board에서 Terraform 코드를 생성하세요."
+            ref={codeEditorRef}
+            spellCheck={false}
+            value={terraform.code}
+          />
+        </label>
+      </div>
 
       <section className={styles.resultSection}>
         <div className={styles.sectionTitleRow}>
@@ -123,8 +157,8 @@ export function TerraformOperationsPanel({
             {terraform.diagnostics.map((diagnostic, index) => (
               <li data-severity={diagnostic.severity} key={`${diagnostic.message}-${index}`}>
                 <button
-                  disabled={!diagnostic.nodeId}
-                  onClick={() => diagnostic.nodeId && context.focusResourceNode(diagnostic.nodeId)}
+                  disabled={!diagnostic.nodeId && !diagnostic.line}
+                  onClick={() => focusDiagnostic(diagnostic)}
                   type="button"
                 >
                   <AlertCircle aria-hidden="true" size={15} />
@@ -152,15 +186,28 @@ export function TerraformOperationsPanel({
           </div>
           <ul className={styles.proposalList}>
             {terraform.proposals.map((proposal, index) => (
-              <li key={`${proposal.kind}-${index}`}>{getProposalLabel(proposal.kind)}</li>
+              <li key={`${proposal.kind}-${index}`}>
+                <label>
+                  <input
+                    checked={selectedProposalIndexes.includes(index)}
+                    onChange={() => toggleProposal(index)}
+                    type="checkbox"
+                  />
+                  <span>
+                    <strong>{getProposalLabel(proposal.kind)}</strong>
+                    {getProposalDetail(proposal)}
+                  </span>
+                </label>
+              </li>
             ))}
           </ul>
           <button
             className={styles.primaryButton}
-            onClick={() => terraform.applyProposals(terraform.proposals.map((_, index) => index))}
+            disabled={selectedProposalIndexes.length === 0}
+            onClick={() => terraform.applyProposals(selectedProposalIndexes)}
             type="button"
           >
-            제안 모두 반영
+            선택한 제안 반영
           </button>
         </section>
       ) : null}
@@ -188,4 +235,14 @@ function getProposalLabel(kind: WorkspaceTerraformState["proposals"][number]["ki
   if (kind === "create_candidate") return "코드의 Resource를 Board에 추가";
   if (kind === "delete_candidate") return "Board의 Resource 삭제 검토";
   return "Resource 이름 변경";
+}
+
+// 변경 제안이 어느 Terraform Resource를 어떻게 바꾸는지 비교 문구로 보여줍니다.
+function getProposalDetail(proposal: WorkspaceTerraformState["proposals"][number]): string {
+  if (proposal.kind === "rename_candidate") {
+    return `${proposal.from.resourceName} → ${proposal.to.resourceName}`;
+  }
+  if (proposal.kind === "delete_candidate") return proposal.resourceAddress;
+  const prefix = proposal.identity.terraformBlockType === "data" ? "data." : "";
+  return `${prefix}${proposal.identity.resourceType}.${proposal.identity.resourceName}`;
 }

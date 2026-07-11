@@ -54,23 +54,42 @@ export function WorkspaceOperationsDock({
   const gitCicd = useWorkspaceGitCicd({ deployment: deployment.current, projectId });
 
   // 제어형과 독립형 사용 모두 같은 열림 상태 변경 경로를 사용합니다.
-  function setOpen(nextOpen: boolean): void {
+  function setOpen(nextOpen: boolean): boolean {
+    if (
+      !nextOpen &&
+      panelOpen &&
+      activeTab === "terraform" &&
+      terraform.isCodeDirty &&
+      !window.confirm("저장하지 않은 Terraform 코드 변경을 버리고 닫을까요?")
+    ) {
+      return false;
+    }
     setInternalOpen(nextOpen);
     onOpenChange?.(nextOpen);
     if (nextOpen) setAssistantOpen(false);
+    return true;
   }
 
   // AI가 열리면 기존 작업 panel을 닫아 Board 오른쪽 도구가 겹치지 않게 합니다.
   function setAiAssistantOpen(nextOpen: boolean): void {
-    setAssistantOpen(nextOpen);
     if (nextOpen) {
-      setOpen(false);
+      if (!setOpen(false)) return;
       context.setRightPanelOpen(false);
     }
+    setAssistantOpen(nextOpen);
   }
 
   // 도구를 고르면 닫힌 패널도 함께 열어 사용자의 행동 결과를 바로 보여줍니다.
   function selectTab(tab: WorkspaceOperationTab): void {
+    if (
+      panelOpen &&
+      activeTab === "terraform" &&
+      tab !== "terraform" &&
+      terraform.isCodeDirty &&
+      !window.confirm("저장하지 않은 Terraform 코드 변경을 버리고 다른 작업으로 이동할까요?")
+    ) {
+      return;
+    }
     setActiveTab(tab);
     setOpen(true);
   }

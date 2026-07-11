@@ -26,6 +26,7 @@ export type WorkspaceTerraformState = {
   readonly code: string;
   readonly diagnostics: readonly TerraformDiagnostic[];
   readonly errorMessage: string;
+  readonly isCodeDirty: boolean;
   readonly previewState: ReturnType<typeof getTerraformPreviewState>;
   readonly proposals: readonly TerraformDiagramChangeProposal[];
   readonly requestState: TerraformRequestState;
@@ -47,6 +48,7 @@ export function useWorkspaceTerraform({
   readonly refreshRequestId: number;
 }): WorkspaceTerraformState {
   const [code, setCode] = useState("");
+  const [generatedCode, setGeneratedCode] = useState("");
   const [generatedArchitectureDiagnostics, setGeneratedArchitectureDiagnostics] = useState<
     readonly ArchitectureDiagnostic[]
   >([]);
@@ -59,6 +61,7 @@ export function useWorkspaceTerraform({
     () => getTerraformPreviewState({ currentDiagram: diagram, generatedDiagram, terraformCode: code }),
     [code, diagram, generatedDiagram]
   );
+  const isCodeDirty = code !== generatedCode;
   const contextualArchitectureDiagnostics = useMemo(
     () => evaluateArchitectureDependencies(diagram, "contextual"),
     [diagram]
@@ -76,6 +79,7 @@ export function useWorkspaceTerraform({
     try {
       const result = await generateTerraformCode(diagram);
       setCode(result.terraformCode);
+      setGeneratedCode(result.terraformCode);
       setGeneratedDiagram(diagram);
       setGeneratedArchitectureDiagnostics(result.architectureDiagnostics);
       setDiagnostics([]);
@@ -88,6 +92,18 @@ export function useWorkspaceTerraform({
       setRequestState("idle");
     }
   }, [diagram]);
+
+  // 수정한 Terraform 코드가 남아 있으면 browser 이탈 전에 기본 확인창을 띄웁니다.
+  useEffect(() => {
+    if (!isCodeDirty) return;
+
+    function handleBeforeUnload(event: BeforeUnloadEvent): void {
+      event.preventDefault();
+    }
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [isCodeDirty]);
 
   // 편집 중인 Terraform 코드만 검사하고 실제 AWS Plan은 실행하지 않습니다.
   const validate = useCallback(async (): Promise<void> => {
@@ -143,6 +159,7 @@ export function useWorkspaceTerraform({
     code,
     diagnostics,
     errorMessage,
+    isCodeDirty,
     previewState,
     proposals,
     requestState,

@@ -2,6 +2,7 @@
 
 import { AlertTriangle, CheckCircle2, CircleDollarSign, ShieldAlert } from "lucide-react";
 import type { DiagramEditorPanelContext } from "../../../features/diagram-editor";
+import { createResourceCostView } from "../../../features/workspace/safety-cost-view";
 import type { WorkspaceSafetyState } from "./use-workspace-safety";
 import styles from "./workspace-operations.module.css";
 
@@ -17,6 +18,7 @@ export function SafetyOperationsPanel({
   const hasUnknownCost = analysis?.resourceCostEstimates.some(
     (estimate) => estimate.supportLevel === "not_estimated"
   ) ?? false;
+  const resourceCosts = createResourceCostView(analysis?.resourceCostEstimates ?? []);
 
   return (
     <div className={styles.panelBody}>
@@ -70,6 +72,44 @@ export function SafetyOperationsPanel({
               <small>{analysis.summary}</small>
             </article>
           </div>
+
+          <section className={styles.resultSection}>
+            <div className={styles.sectionTitleRow}>
+              <h3>Resource별 예상 비용</h3>
+              <span>{analysis.resourceCostEstimates.length}개</span>
+            </div>
+            {resourceCosts.estimated.length === 0 ? (
+              <p className={styles.emptyText}>계산된 Resource 비용이 없습니다.</p>
+            ) : (
+              <ul className={styles.resourceCostList}>
+                {resourceCosts.estimated.map((estimate) => (
+                  <li key={estimate.resourceId}>
+                    <button onClick={() => context.focusResourceNode(estimate.resourceId)} type="button">
+                      <strong>{estimate.name}</strong>
+                      <b>{formatMoney(estimate.monthlyEstimate)} / 월</b>
+                      <span>{estimate.resourceType} · {estimate.supportReason}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {resourceCosts.unavailable.length > 0 ? (
+              <details className={styles.gitDetails}>
+                <summary>계산 못 한 Resource {resourceCosts.unavailable.length}개</summary>
+                <ul className={styles.resourceCostList}>
+                  {resourceCosts.unavailable.map((estimate) => (
+                    <li key={estimate.resourceId}>
+                      <button onClick={() => context.focusResourceNode(estimate.resourceId)} type="button">
+                        <strong>{estimate.name}</strong>
+                        <b>계산 못 함</b>
+                        <small>{estimate.supportReason}</small>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            ) : null}
+          </section>
 
           <section className={styles.resultSection}>
             <div className={styles.sectionTitleRow}>
