@@ -81,6 +81,7 @@ export function assertTerraformArtifactIsSafe(
   validateProviderSourceAttributes(tokens);
   validateDisallowedTerraformFunctionCalls(tokens);
   validateDisallowedStringInterpolations(tokens);
+  validateArchiveDataSourceAttributes(code);
   const liveProfile = options.liveProfile ?? "practice";
   const supportedResourceTypes = getLiveApplySupportedResourceTypes(liveProfile);
 
@@ -339,6 +340,36 @@ function validateDisallowedStringInterpolations(tokens: HclToken[]): void {
   }
 }
 
+function validateArchiveDataSourceAttributes(source: string): void {
+  for (const dataSource of extractDataSourceBlocks(source)) {
+    if (dataSource.type !== "archive_file") {
+      continue;
+    }
+
+    const body = stripHclComments(dataSource.body);
+    const outputPath = findLiteralStringAttribute(body, "output_path");
+    const sourceContentFilename = findLiteralStringAttribute(
+      body,
+      "source_content_filename"
+    );
+    const usesInlineContent = /\bsource_content\s*=\s*"/.test(body);
+    const usesFileSystemSource =
+      /\b(?:source_file|source_dir)\s*=/.test(body) || /\bsource\s*\{/.test(body);
+
+    if (!usesInlineContent || usesFileSystemSource || !sourceContentFilename) {
+      throw new TerraformArtifactSafetyError(
+        `Terraform archive_file must use inline source_content before live deployment at line ${dataSource.line}`
+      );
+    }
+
+    if (!outputPath || !isSafeArchiveOutputPath(outputPath)) {
+      throw new TerraformArtifactSafetyError(
+        `Terraform archive_file output_path must stay in the Terraform workspace before live deployment at line ${dataSource.line}`
+      );
+    }
+  }
+}
+
 type TerraformResourceBlock = {
   type: string;
   name: string;
@@ -509,6 +540,18 @@ function hasLiteralStringAttribute(
   return pattern.test(body);
 }
 
+function findLiteralStringAttribute(body: string, attributeName: string): string | null {
+  const pattern = new RegExp(`\\b${escapeRegExp(attributeName)}\\s*=\\s*"([^"]*)"`);
+  return pattern.exec(body)?.[1] ?? null;
+}
+
+function isSafeArchiveOutputPath(outputPath: string): boolean {
+  return (
+    (outputPath.startsWith("./") || outputPath.startsWith("${path.module}/")) &&
+    !outputPath.split("/").includes("..")
+  );
+}
+
 function hasReferenceAttribute(
   body: string,
   attributeName: string,
@@ -658,6 +701,31 @@ function extractResourceBlocks(source: string): TerraformResourceBlock[] {
   }
 
   return resources;
+}
+
+function extractDataSourceBlocks(source: string): TerraformResourceBlock[] {
+  const dataSources: TerraformResourceBlock[] = [];
+  const headerPattern = /\bdata\s+"([^"]+)"\s+"([^"]+)"\s*\{/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = headerPattern.exec(source)) !== null) {
+    const openBraceIndex = match.index + match[0].length - 1;
+    const closeBraceIndex = findMatchingCloseBrace(source, openBraceIndex);
+
+    if (closeBraceIndex === -1) {
+      continue;
+    }
+
+    dataSources.push({
+      type: match[1]!,
+      name: match[2]!,
+      body: source.slice(openBraceIndex + 1, closeBraceIndex),
+      line: countLineAtOffset(source, match.index)
+    });
+    headerPattern.lastIndex = closeBraceIndex + 1;
+  }
+
+  return dataSources;
 }
 
 function extractNamedBlocks(source: string, blockName: string): Array<{ body: string }> {

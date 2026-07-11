@@ -132,6 +132,49 @@ test("assertTerraformArtifactIsSafe accepts inline archive data for Lambda artif
   );
 });
 
+test("assertTerraformArtifactIsSafe rejects archive source files before live deployment", () => {
+  assert.throws(
+    () =>
+      assertTerraformArtifactIsSafe(`
+        data "archive_file" "env" {
+          type        = "zip"
+          output_path = "./env.zip"
+          source_file = "../.env"
+        }
+      `),
+    /archive_file must use inline source_content/
+  );
+});
+
+test("assertTerraformArtifactIsSafe rejects archive source directories before live deployment", () => {
+  assert.throws(
+    () =>
+      assertTerraformArtifactIsSafe(`
+        data "archive_file" "workspace" {
+          type       = "zip"
+          output_path = "./workspace.zip"
+          source_dir = "../"
+        }
+      `),
+    /archive_file must use inline source_content/
+  );
+});
+
+test("assertTerraformArtifactIsSafe rejects archive output paths outside the workspace", () => {
+  assert.throws(
+    () =>
+      assertTerraformArtifactIsSafe(`
+        data "archive_file" "handler" {
+          type                    = "zip"
+          output_path             = "../handler.zip"
+          source_content          = "exports.handler = async () => ({ statusCode: 200 })"
+          source_content_filename = "index.js"
+        }
+      `),
+    /archive_file output_path must stay in the Terraform workspace/
+  );
+});
+
 test("assertTerraformArtifactIsSafe rejects unsupported data sources before live deployment", () => {
   assert.throws(
     () =>
