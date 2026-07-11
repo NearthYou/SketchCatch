@@ -71,6 +71,16 @@ test("getApiErrorMessage explains Repository Analysis GitHub connection failures
         "현재 GitHub 계정이 소유한 GitHub App 설치가 아닙니다. 올바른 계정으로 다시 연결해주세요."
     },
     {
+      message: "REPOSITORY_ANALYSIS_TEMPLATE_MISMATCH",
+      expected:
+        "Repository Analysis가 선택한 Template과 요청한 Template이 다릅니다. 분석 결과 화면에서 다시 시작해주세요."
+    },
+    {
+      message: "REPOSITORY_ANALYSIS_TEMPLATE_UNAVAILABLE",
+      expected:
+        "저장된 Repository Analysis Template을 확인할 수 없습니다. repository를 다시 분석해주세요."
+    },
+    {
       message: "GIT_APP_REPOSITORY_FILE_ENCODING_UNSUPPORTED",
       expected: "분석 파일의 문자 인코딩을 읽을 수 없어 Repository Analysis를 중단했습니다."
     },
@@ -93,4 +103,14 @@ test("getApiErrorMessage explains Repository Analysis GitHub connection failures
       testCase.expected
     );
   }
+});
+
+test("getApiErrorMessage translates a local Repository Analysis handoff guard", () => {
+  assert.equal(
+    getApiErrorMessage(
+      new Error("REPOSITORY_ANALYSIS_TEMPLATE_MISMATCH"),
+      "프로젝트 draft를 불러오지 못했습니다."
+    ),
+    "Repository Analysis가 선택한 Template과 요청한 Template이 다릅니다. 분석 결과 화면에서 다시 시작해주세요."
+  );
 });

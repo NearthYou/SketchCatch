@@ -7,6 +7,8 @@ import {
   createGitHubInstallUrl,
   listGitHubInstalledRepositories,
   listGitHubInstallationRepositories,
+  requireRepositoryAnalysisTemplateId,
+  RepositoryAnalysisTemplateSelectionError,
   SourceRepositoryNotFoundError,
   SourceRepositoryConflictError,
   SourceRepositoryStateError,
@@ -410,6 +412,60 @@ test("GitHub App state cannot be exchanged for an inaccessible project", async (
         github
       ),
     SourceRepositoryStateError
+  );
+});
+
+test("AI handoff resolves only the Template selected by the stored Repository Analysis", async () => {
+  const repository = createInMemorySourceRepositoryRepository([
+    createSourceRepositoryRecord({
+      analysisResult: {
+        status: "template_selected",
+        templateId: "static-web-hosting",
+        applicationUnits: [],
+        evidence: [],
+        missingEvidence: [],
+        selectionReasons: ["static frontend"]
+      }
+    })
+  ]);
+
+  const templateId = await requireRepositoryAnalysisTemplateId(
+    {
+      projectId,
+      sourceRepositoryId: "source-repository-id",
+      accessContext: createAccessContext(userId)
+    },
+    repository
+  );
+
+  assert.equal(templateId, "static-web-hosting");
+});
+
+test("AI handoff rejects a repository without a successful Template Selection", async () => {
+  const repository = createInMemorySourceRepositoryRepository([
+    createSourceRepositoryRecord({
+      analysisResult: {
+        status: "template_selection_failed",
+        templateId: null,
+        applicationUnits: [],
+        evidence: [],
+        missingEvidence: ["package_json"],
+        mismatchReasons: ["unsupported"]
+      }
+    })
+  ]);
+
+  await assert.rejects(
+    () =>
+      requireRepositoryAnalysisTemplateId(
+        {
+          projectId,
+          sourceRepositoryId: "source-repository-id",
+          accessContext: createAccessContext(userId)
+        },
+        repository
+      ),
+    RepositoryAnalysisTemplateSelectionError
   );
 });
 

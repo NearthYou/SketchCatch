@@ -404,11 +404,19 @@ async function postPublicAiJson<ResponseBody>(
   path: string,
   body: Record<string, unknown>
 ): Promise<ResponseBody> {
+  const headers = new Headers({
+    "Content-Type": "application/json"
+  });
+  const session = readStoredAuthSession();
+
+  if (session) {
+    headers.set("Authorization", `Bearer ${session.accessToken}`);
+  }
+
   const response = await fetch(`${AI_API_BASE_URL}${path}`, {
     body: JSON.stringify(body),
-    headers: {
-      "Content-Type": "application/json"
-    },
+    credentials: "include",
+    headers,
     method: "POST"
   });
 

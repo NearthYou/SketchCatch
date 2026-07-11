@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { templateDefinitions } from "@sketchcatch/types";
+import type { TemplateId } from "@sketchcatch/types";
 import type {
   AiArchitectureDraftResult,
   AiTerraformErrorExplanationResult,
@@ -77,6 +78,8 @@ export type WorkspaceAiChatDockProps = {
   readonly context: DiagramEditorPanelContext;
   readonly onApplyTerraformIssueFix: (request: TerraformSafeFixApplyRequest) => void;
   readonly projectId: string;
+  readonly repositoryAnalysisSourceRepositoryId?: string | undefined;
+  readonly repositoryTemplateId?: TemplateId | undefined;
   readonly terraformIssueRequest: TerraformIssueAiRequest | null;
   readonly terraformPreviewRequest: TerraformPreviewAiRequest | null;
   readonly terraformSafeFixApplyResult: TerraformSafeFixApplyResult | null;
@@ -188,6 +191,8 @@ export function WorkspaceAiChatDock({
   context,
   onApplyTerraformIssueFix,
   projectId,
+  repositoryAnalysisSourceRepositoryId,
+  repositoryTemplateId,
   terraformIssueRequest,
   terraformPreviewRequest,
   terraformSafeFixApplyResult
@@ -232,8 +237,12 @@ export function WorkspaceAiChatDock({
   const [draftErrorMessage, setDraftErrorMessage] = useState("");
   const [simulationErrorMessage, setSimulationErrorMessage] = useState("");
   const [simulationFingerprint, setSimulationFingerprint] = useState<string | null>(null);
-  const [repositoryTemplate, setRepositoryTemplate] = useState(() =>
-    readRepositoryTemplateFromLocation()
+  const repositoryTemplate = useMemo(
+    () =>
+      repositoryTemplateId
+        ? templateDefinitions.find((template) => template.id === repositoryTemplateId) ?? null
+        : null,
+    [repositoryTemplateId]
   );
   const composerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const transcriptRef = useRef<HTMLDivElement | null>(null);
@@ -258,9 +267,6 @@ export function WorkspaceAiChatDock({
     [boardSnapshot.hasResources, draft]
   );
 
-  useEffect(() => {
-    setRepositoryTemplate(readRepositoryTemplateFromLocation());
-  }, [projectId]);
   const visibleMessages = useMemo(
     () => messages.filter((message) => getChatMessageScope(message) === activeChatTab),
     [activeChatTab, messages]
@@ -885,9 +891,21 @@ export function WorkspaceAiChatDock({
     const normalizedDraftRequest: CreateArchitectureDraftRequest = {
       ...draftRequest,
       prompt,
-      ...(draftRequest.templateId ?? repositoryTemplate?.id
-        ? { templateId: draftRequest.templateId ?? repositoryTemplate?.id }
-        : {})
+      ...(repositoryTemplate
+        ? {
+            templateId: repositoryTemplate.id,
+            ...(repositoryAnalysisSourceRepositoryId
+              ? {
+                  repositoryAnalysis: {
+                    projectId,
+                    sourceRepositoryId: repositoryAnalysisSourceRepositoryId
+                  }
+                }
+              : {})
+          }
+        : draftRequest.templateId
+          ? { templateId: draftRequest.templateId }
+          : {})
     };
 
     setDraftState("loading");
@@ -2036,23 +2054,6 @@ function createChatMessageId(): string {
   }
 
   return `chat-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
-
-// Repository Analysis에서 온 경우에만 URL의 TemplateDefinition을 AI Handoff 입력으로 복원합니다.
-function readRepositoryTemplateFromLocation() {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  const params = new URLSearchParams(window.location.search);
-
-  if (!params.get("sourceRepositoryId")) {
-    return null;
-  }
-
-  const templateId = params.get("templateId");
-
-  return templateDefinitions.find((template) => template.id === templateId) ?? null;
 }
 
 function trimChatMessages(messages: readonly WorkspaceAiChatMessage[]): WorkspaceAiChatMessage[] {

@@ -165,7 +165,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   });
 
   app.register(registerHealthRoutes);
-  app.register(registerAiRoutes, createAiRouteOptions(options, runtimeCache));
+  app.register(registerAiRoutes, createAiRouteOptions(options, runtimeCache, getAppDatabaseClient));
   app.register(registerAuthRoutes, {
     prefix: "/api",
     getDatabaseClient: getAppDatabaseClient,
@@ -224,22 +224,16 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
 // AI route 옵션은 undefined 필드를 넘기지 않게 분리해 exact optional 타입을 지킵니다.
 function createAiRouteOptions(
   options: BuildAppOptions,
-  runtimeCache: RuntimeCache
+  runtimeCache: RuntimeCache,
+  getDatabaseClient: () => DatabaseClient
 ): AiRouteOptions & { readonly prefix: "/api" } {
-  if (
-    options.analyzePreDeploymentCheck === undefined &&
-    options.createArchitectureDraftResponse === undefined &&
-    options.createLlmExplanation === undefined &&
-    options.createSafetyFindingExplanation === undefined &&
-    options.safetyExplanationTimeoutMs === undefined &&
-    options.pricingRateProvider === undefined
-  ) {
-    return { prefix: "/api", runtimeCache };
-  }
-
   return {
     prefix: "/api",
     runtimeCache,
+    getDatabaseClient,
+    ...(options.sourceRepositoryRoutes?.createSourceRepositoryRepository
+      ? { createSourceRepositoryRepository: options.sourceRepositoryRoutes.createSourceRepositoryRepository }
+      : {}),
     ...(options.analyzePreDeploymentCheck !== undefined
       ? { analyzePreDeploymentCheck: options.analyzePreDeploymentCheck }
       : {}),

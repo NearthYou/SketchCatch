@@ -6,6 +6,7 @@ import type {
   GitHubRepositoryCandidate,
   RepositoryAnalysisAiHandoff
 } from "@sketchcatch/types";
+import type { TemplateId } from "@sketchcatch/types";
 import type { Database } from "../db/client.js";
 import { oauthAccounts, projects, sourceRepositories, touchUpdatedAt } from "../db/schema.js";
 import type { ProjectAccessContext } from "../git-cicd/git-cicd-handoff-service.js";
@@ -138,6 +139,16 @@ export class SourceRepositoryConflictError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "SourceRepositoryConflictError";
+  }
+}
+
+export class RepositoryAnalysisTemplateSelectionError extends Error {
+  readonly statusCode = 409;
+  readonly errorCode = "conflict" as const;
+
+  constructor(message: string) {
+    super(message);
+    this.name = "RepositoryAnalysisTemplateSelectionError";
   }
 }
 
@@ -452,6 +463,41 @@ export async function listSourceRepositories(
   );
 
   return repository.listProjectSourceRepositories(input.projectId);
+}
+
+export async function requireRepositoryAnalysisTemplateId(
+  input: {
+    readonly projectId: string;
+    readonly sourceRepositoryId: string;
+    readonly accessContext: ProjectAccessContext;
+  },
+  repository: SourceRepositoryRepository
+): Promise<TemplateId> {
+  await requireAccessibleProject(
+    input.projectId,
+    input.accessContext,
+    repository,
+    "Project not found"
+  );
+  const sourceRepository = await repository.findProjectSourceRepository(
+    input.projectId,
+    input.sourceRepositoryId
+  );
+  const analysis = sourceRepository?.analysisResult;
+
+  if (
+    !sourceRepository ||
+    sourceRepository.provider !== "github" ||
+    sourceRepository.status !== "active" ||
+    !analysis ||
+    analysis.status !== "template_selected"
+  ) {
+    throw new RepositoryAnalysisTemplateSelectionError(
+      "REPOSITORY_ANALYSIS_TEMPLATE_UNAVAILABLE"
+    );
+  }
+
+  return analysis.templateId;
 }
 
 // active GitHub Source Repository를 정적으로 읽고 구조화된 분석 요약만 저장한다.

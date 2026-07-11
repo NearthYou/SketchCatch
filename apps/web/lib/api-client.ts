@@ -46,6 +46,10 @@ const API_MESSAGE_TRANSLATIONS: Partial<Record<string, string>> = {
     "연결 당시와 다른 GitHub repository가 감지되었습니다. repository를 다시 연결한 뒤 분석해주세요.",
   "GIT_APP_REPOSITORY_TREE_TRUNCATED":
     "GitHub가 repository tree 일부만 반환해 안전하게 분석할 수 없습니다.",
+  "REPOSITORY_ANALYSIS_TEMPLATE_MISMATCH":
+    "Repository Analysis가 선택한 Template과 요청한 Template이 다릅니다. 분석 결과 화면에서 다시 시작해주세요.",
+  "REPOSITORY_ANALYSIS_TEMPLATE_UNAVAILABLE":
+    "저장된 Repository Analysis Template을 확인할 수 없습니다. repository를 다시 분석해주세요.",
   "AWS account ID must be 12 digits": "AWS Account ID는 12자리 숫자여야 합니다.",
   "AWS account is already connected": "이미 연결된 AWS Account입니다.",
   "AWS connection is used by a deployment":
@@ -180,7 +184,9 @@ export async function apiFetch<T>(path: string, options: ApiRequestOptions = {})
 
 export function getApiErrorMessage(error: unknown, fallbackMessage: string): string {
   if (!(error instanceof ApiClientError)) {
-    return fallbackMessage;
+    return error instanceof Error
+      ? API_MESSAGE_TRANSLATIONS[error.message] ?? fallbackMessage
+      : fallbackMessage;
   }
 
   if (error.status === 0) {

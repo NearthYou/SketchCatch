@@ -1640,6 +1640,10 @@ export type CreateArchitecturePatchPreviewRequest = {
 export type CreateArchitectureDraftRequest = {
   prompt: string;
   templateId?: TemplateId | undefined;
+  repositoryAnalysis?: {
+    projectId: string;
+    sourceRepositoryId: string;
+  } | undefined;
 };
 
 export type AiArchitectureDraftResult = {

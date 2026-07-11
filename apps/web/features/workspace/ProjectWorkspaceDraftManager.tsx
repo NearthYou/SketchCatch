@@ -1,11 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { DiagramJson } from "../../../../packages/types/src";
+import type { DiagramJson, TemplateId } from "../../../../packages/types/src";
 import { useAuth } from "../../components/auth/auth-provider";
+import { getApiErrorMessage } from "../../lib/api-client";
 import { DiagramEditor } from "../diagram-editor";
 import { EMPTY_DIAGRAM } from "../diagram-editor/constants";
 import { WorkspaceAiChatDock } from "./WorkspaceAiChatDock";
+import { listSourceRepositories } from "./api";
+import { buildBoardTemplateDiagram } from "../resource-settings/template-library";
+import {
+  resolveRepositoryAnalysisTemplate,
+  type RepositoryAnalysisHandoffLocation
+} from "./repository-template-handoff";
 import { WorkspaceRightPanel } from "./WorkspaceRightPanel";
 import { normalizeDiagramJsonConventions } from "./workspace-ai-diagram-adapter";
 import type {
@@ -64,6 +71,7 @@ export type ProjectWorkspaceDraftManagerProps = {
   projectId: string;
   projectName?: string | undefined;
   repository?: ProjectDraftRepository | undefined;
+  repositoryAnalysisHandoff?: RepositoryAnalysisHandoffLocation | undefined;
   serverCheckpointIntervalMs?: number | undefined;
   workspaceId?: string | undefined;
 };
@@ -76,12 +84,14 @@ export function ProjectWorkspaceDraftManager({
   projectId,
   projectName = "Project workspace",
   repository = defaultProjectDraftRepository,
+  repositoryAnalysisHandoff,
   serverCheckpointIntervalMs = SERVER_CHECKPOINT_INTERVAL_MS,
   workspaceId
 }: ProjectWorkspaceDraftManagerProps) {
   const { user } = useAuth();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [initialDiagram, setInitialDiagram] = useState<DiagramJson | null>(null);
+  const [repositoryTemplateId, setRepositoryTemplateId] = useState<TemplateId | null>(null);
   const [localSaveState, setLocalSaveState] = useState<ProjectLocalSaveState>("idle");
   const [serverSaveState, setServerSaveState] = useState<ProjectServerSaveState>("server-idle");
   const [serverSaveToastVisible, setServerSaveToastVisible] = useState(false);
@@ -307,11 +317,33 @@ export function ProjectWorkspaceDraftManager({
 
     async function loadWorkspace() {
       try {
+        let fallbackDiagram = EMPTY_DIAGRAM;
+        let verifiedRepositoryTemplateId: TemplateId | null = null;
+
+        if (repositoryAnalysisHandoff) {
+          const sourceRepositories = await listSourceRepositories(projectId);
+          const template = resolveRepositoryAnalysisTemplate(
+            sourceRepositories,
+            repositoryAnalysisHandoff
+          );
+          const templateDiagram = buildBoardTemplateDiagram(template.id, {
+            projectSlug: projectName,
+            shortId: "workspace"
+          });
+
+          if (!templateDiagram) {
+            throw new Error("REPOSITORY_ANALYSIS_TEMPLATE_UNAVAILABLE");
+          }
+
+          fallbackDiagram = templateDiagram;
+          verifiedRepositoryTemplateId = template.id;
+        }
+
         const loadedDraft = await repository.load({
           workspaceId,
           localCacheWorkspaceId,
           projectId,
-          fallbackDiagram: EMPTY_DIAGRAM
+          fallbackDiagram
         });
 
         if (cancelled) {
@@ -324,17 +356,20 @@ export function ProjectWorkspaceDraftManager({
         serverDirtyRef.current = loadedDraft.source === "local";
         draftChangeVersionRef.current = 0;
         setInitialDiagram(nextDiagram);
+        setRepositoryTemplateId(verifiedRepositoryTemplateId);
         setCurrentLocalDraft(loadedDraft.localDraft);
         setLocalSaveState(loadedDraft.localDraft ? "local-saved" : "idle");
         setServerSaveState(sourceServerSaveState[loadedDraft.source]);
         draftReadyRef.current = true;
         setLoadState("ready");
-      } catch {
+      } catch (error) {
         if (cancelled) {
           return;
         }
 
-        setErrorMessage("프로젝트 draft를 DB에서 불러오지 못했습니다.");
+        setErrorMessage(
+          getApiErrorMessage(error, "프로젝트 draft를 DB에서 불러오지 못했습니다.")
+        );
         setLoadState("error");
       }
     }
@@ -346,7 +381,16 @@ export function ProjectWorkspaceDraftManager({
       draftReadyRef.current = false;
       clearLocalSaveTimer();
     };
-  }, [clearLocalSaveTimer, localCacheWorkspaceId, projectId, repository, setCurrentLocalDraft, workspaceId]);
+  }, [
+    clearLocalSaveTimer,
+    localCacheWorkspaceId,
+    projectId,
+    projectName,
+    repository,
+    repositoryAnalysisHandoff,
+    setCurrentLocalDraft,
+    workspaceId
+  ]);
 
   useEffect(() => {
     function handleVisibilityChange() {
@@ -438,6 +482,8 @@ export function ProjectWorkspaceDraftManager({
             context={context}
             onApplyTerraformIssueFix={requestTerraformSafeFixApply}
             projectId={projectId}
+            repositoryAnalysisSourceRepositoryId={repositoryAnalysisHandoff?.sourceRepositoryId}
+            repositoryTemplateId={repositoryTemplateId ?? undefined}
             terraformIssueRequest={terraformIssueAiRequest}
             terraformPreviewRequest={terraformPreviewAiRequest}
             terraformSafeFixApplyResult={terraformSafeFixApplyResult}

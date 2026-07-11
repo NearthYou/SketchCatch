@@ -1118,7 +1118,7 @@ function createFixedTemplateSelectionPrompt(selection: FixedTemplateSelection | 
   ].join("\n");
 }
 
-// fallback 결과에도 어떤 Template을 기본 결정으로 받은 것인지 사용자 설명으로 남깁니다.
+// Repository Analysis Template은 초안 자체로 고정하고 추가 요구는 이후 Patch 흐름에서 보완합니다.
 function applyFixedTemplateSelection(
   draft: AiArchitectureDraftResult,
   templateId: TemplateId | undefined
@@ -1153,7 +1153,6 @@ function applyFixedTemplateSelection(
       }
     };
   });
-  const fixedNodeIds = new Set(fixedNodes.map((node) => node.id));
   const fixedEdges = definition.relationships.map((relationship) => ({
     id: `fixed-template-${definition.id}-${relationship.id}`,
     sourceId: `fixed-template-${definition.id}-${relationship.sourceResourceId}`,
@@ -1164,16 +1163,8 @@ function applyFixedTemplateSelection(
   return {
     ...draft,
     architectureJson: {
-      nodes: [
-        ...fixedNodes,
-        ...draft.architectureJson.nodes.filter((node) => !fixedNodeIds.has(node.id))
-      ],
-      edges: [
-        ...fixedEdges,
-        ...draft.architectureJson.edges.filter(
-          (edge) => !fixedEdges.some((fixedEdge) => fixedEdge.id === edge.id)
-        )
-      ]
+      nodes: fixedNodes,
+      edges: fixedEdges
     },
     metadata: {
       ...draft.metadata,

@@ -281,6 +281,11 @@ test("POST /api/ai/architecture-draft keeps the Repository Analysis Template sel
       "aws_s3_bucket_policy"
     ]
   );
+  assert.equal(body.architectureJson.nodes.length, 6);
+  assert.equal(
+    body.architectureJson.nodes.some((node) => node.type === "EC2" || node.type === "RDS"),
+    false
+  );
 
   await app.close();
 });

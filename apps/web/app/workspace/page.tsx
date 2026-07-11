@@ -12,6 +12,7 @@ type WorkspacePageProps = {
     readonly projectId?: string | string[] | undefined;
     readonly projectName?: string | string[] | undefined;
     readonly startMode?: string | string[] | undefined;
+    readonly sourceRepositoryId?: string | string[] | undefined;
     readonly templateId?: string | string[] | undefined;
   }>;
 };
@@ -20,6 +21,8 @@ type WorkspacePageProps = {
 export default async function WorkspacePage({ searchParams }: WorkspacePageProps) {
   const params = await searchParams;
   const projectId = getSingleSearchParam(params?.projectId)?.trim();
+  const sourceRepositoryId = getSingleSearchParam(params?.sourceRepositoryId)?.trim();
+  const requestedTemplateId = getSingleSearchParam(params?.templateId)?.trim();
   const initialRightPanelView = resolveInitialWorkspaceRightPanelView(
     getSingleSearchParam(params?.startMode)
   );
@@ -35,6 +38,14 @@ export default async function WorkspacePage({ searchParams }: WorkspacePageProps
           initialRightPanelView={initialRightPanelView}
           projectId={projectId}
           projectName={projectName || "Project workspace"}
+          repositoryAnalysisHandoff={
+            sourceRepositoryId
+              ? {
+                  sourceRepositoryId,
+                  ...(requestedTemplateId ? { requestedTemplateId } : {})
+                }
+              : undefined
+          }
         />
       </WorkspaceAuthGate>
     );
