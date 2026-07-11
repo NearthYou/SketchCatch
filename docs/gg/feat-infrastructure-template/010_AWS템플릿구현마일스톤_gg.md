@@ -20,7 +20,7 @@
 | M5a | AWS 실행 Role 등록과 verified connection 복구 | Chrome AWS 콘솔 Role 확인, STS AssumeRole, SketchCatch 연결 검증 | `Test: AWS Template 배포 연결 검증` | 완료 |
 | M5b | Template Board를 기존 Resource 카탈로그 노드로 전환 | 6개 Template icon/label/style, fallback 0개, Chrome 시각 QA | `Fix: AWS Template 카탈로그 Resource 노드 재사용` | 완료 |
 | M5c | 실제 apply/destroy와 검증 기록 | 여섯 패턴 live QA, console/API check, cleanup 확인 | `Test: AWS Template 실제 배포 검증 기록` | 완료 |
-| M6 | PR 제출 | full checks, review-work, PR body and linked issue | `gh-create-pr` workflow | 진행 중 |
+| M6 | PR 제출 | full checks, review-work, PR body and linked issue | `gh-create-pr` workflow | 완료 |
 
 ## 커밋 규칙
 
@@ -105,5 +105,8 @@
 - 실행 중 발견한 archive bundle 전달 결함은 TDD로 고쳤다. encrypted RDS는 KMS와 RDS master secret 최소권한을 Role에 추가해 암호화를 유지한 채 통과했다.
 
 ### M6
+
+- 완료: PR #343 `Fix: AWS Template Chrome 직접 배포 흐름 복구`
+- Chrome 직접 apply/destroy 시간과 최종 cleanup 증거를 PR 본문과 `011_AWS템플릿배포검증기록_gg.md`에 반영했다.
 
 - 시작 전
