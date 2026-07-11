@@ -7,10 +7,33 @@ Short English-only working log for the current agent context. Older records are 
 - Branch: `feat/gg/0-github-template`.
 - Active workstream: AWS Template and request-time GitHub Repository Analysis.
 - PR: #317, targeting `dev`.
-- Latest `dev` is merged and the PR is mergeable with green CI checks.
+- Repository Analysis implementation is complete locally; PR #317 needs the latest commits pushed and checks refreshed.
 - No repository code, live AWS, Terraform apply, destroy, import, or remote state command ran for Repository Analysis.
 
 ## Session Record
+
+### 2026-07-11 - Complete Repository Analysis screen E2E
+
+- Goal: Finish the user-visible GitHub repository analysis flow and prove it against actual GitHub repositories.
+- Completed:
+  - Persisted the latest structured analysis, revision, and timestamp with migration 0029.
+  - Wired Project Settings to connect repositories, run analysis with a disabled loading state, render success/failure details, and restore results after reload.
+  - Preserved the selected Template ID through the Workspace AI banner and the real Architecture Draft request.
+  - Restricted GitHub App installation listing, callback exchange, and repository connection to the signed-in GitHub OAuth account ID.
+  - Materialized the selected TemplateDefinition as the fixed six-resource Workspace baseline; replacement requests now require clarification instead of silently switching templates.
+  - Fixed configured-origin credential CORS, auth-recovery request races, metadata contrast, and 44px action targets.
+- Manual QA:
+  - Failure: `NearthYou/sketchcatch-iac-handoff-test` revision `8b5d394aa5035c8ebc91e37751d5c8cccc3c6ddd`.
+  - Success: `NearthYou/mini-react` revision `dd1b8764fcd324c19f604c521eee2d60476136b5`, selected `static-web-hosting`.
+  - Chrome desktop/mobile reload and AI handoff passed with zero console, failed-request, or HTTP error responses in the final run.
+  - The final Workspace run kept all six Static Web Hosting resources and returned `needs_clarification` when asked to replace them with a three-tier design.
+- Verification:
+  - Final focused Repository Analysis, GitHub authorization, AI handoff, and Web state tests passed 116/116.
+  - `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
+  - Two independent visual reviews passed after contrast and touch-target corrections.
+- Risk:
+  - The TypeScript LSP is not installed because installation was previously declined; `tsc` is clean.
+  - A fixture PR exists in the dedicated private QA repository but was not merged.
 
 ### 2026-07-10 - Complete GitHub Repository Analysis and Template Selection
 
@@ -55,4 +78,4 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Next Action
 
-- Review and merge PR #317 after the required team approval; address any new review thread before merge.
+- Push the latest Repository Analysis commits to PR #317, refresh checks, and address any review thread before merge.
