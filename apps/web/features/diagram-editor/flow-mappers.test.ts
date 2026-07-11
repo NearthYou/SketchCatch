@@ -62,6 +62,38 @@ test("connection affordance marks only valid non-duplicate target nodes", () => 
   );
 });
 
+test("flow mappers collapse parameter-helper resources from the rendered board", () => {
+  const service = makeNode({ id: "ecs-service", resourceType: "aws_ecs_service" });
+  const scalingTarget = makeNode({ id: "scaling-target", resourceType: "aws_appautoscaling_target" });
+  const dbSubnetGroup = makeNode({ id: "db-subnet-group", resourceType: "aws_db_subnet_group" });
+  const database = makeNode({ id: "database", resourceType: "aws_db_instance" });
+  const flowNodes = toFlowNodes(
+    [service, scalingTarget, dbSubnetGroup, database],
+    [],
+    null,
+    false,
+    handlers
+  );
+  const flowEdges = toFlowEdges(
+    [
+      makeEdge(service.id, scalingTarget.id),
+      makeEdge(dbSubnetGroup.id, database.id),
+      makeEdge(service.id, database.id)
+    ],
+    [],
+    [service, scalingTarget, dbSubnetGroup, database]
+  );
+
+  assert.deepEqual(
+    flowNodes.map((node) => node.id),
+    ["ecs-service", "database"]
+  );
+  assert.deepEqual(
+    flowEdges.map((edge) => edge.id),
+    ["ecs-service-to-database"]
+  );
+});
+
 test("toFlowNodes keeps dimmed nodes interactive when another node is selected", () => {
   const vpc = makeNode({ id: "vpc-1", resourceType: "aws_vpc" });
   const instance = makeNode({ id: "instance-1", resourceType: "aws_instance" });

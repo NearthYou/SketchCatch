@@ -27,6 +27,18 @@ type FlowMapperOptions = {
 const CONTAINMENT_EDGE_LABELS = new Set(["contains", "hosts"]);
 const EDGE_LABEL_MAX_CHARACTERS = 30;
 const PREVIEW_EDGE_OPACITY = 0.8;
+const COLLAPSED_PARAMETER_RESOURCE_TYPES = new Set([
+  "aws_acm_certificate_validation",
+  "aws_appautoscaling_policy",
+  "aws_appautoscaling_target",
+  "aws_db_subnet_group",
+  "aws_iam_instance_profile",
+  "aws_iam_policy",
+  "aws_kms_alias",
+  "aws_lambda_permission",
+  "aws_lb_target_group_attachment",
+  "aws_route_table_association"
+]);
 const EDGE_STYLE_LABEL_PATTERNS: ReadonlyArray<{
   readonly patterns: readonly RegExp[];
   readonly style: NonNullable<DiagramEdge["style"]>;
@@ -64,9 +76,10 @@ export function toFlowNodes(
   const shouldDimUnselectedNodes = selectedNodeIds.length > 0;
   const isPreview = options.isPreview === true;
   const previewAnnotations = options.previewAnnotations;
-  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const renderableNodes = nodes.filter(isRenderableDiagramNode);
+  const nodeById = new Map(renderableNodes.map((node) => [node.id, node]));
 
-  return nodes.map((node) => {
+  return renderableNodes.map((node) => {
     const selected = !isPreview && selectedNodeIdSet.has(node.id);
     const isArea = isAreaNode(node);
     const areaClassName = selected ? "diagramAreaFlowNode diagramAreaFlowNodeInteractive" : "diagramAreaFlowNode";
@@ -141,9 +154,15 @@ export function toFlowEdges(
   const selectedEdgeIdSet = new Set(selectedEdgeIds);
   const isPreview = options.isPreview === true;
   const previewAnnotations = options.previewAnnotations;
-  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const renderableNodes = nodes.filter(isRenderableDiagramNode);
+  const nodeById = new Map(renderableNodes.map((node) => [node.id, node]));
+  const shouldFilterMissingEndpoints = nodes.length > 0;
 
-  return edges.filter((edge) => !isContainmentEdge(edge)).map((edge) => {
+  return edges.filter(
+    (edge) =>
+      !isContainmentEdge(edge) &&
+      (!shouldFilterMissingEndpoints || hasRenderableEndpoints(edge, nodeById))
+  ).map((edge) => {
     const selected = !isPreview && selectedEdgeIdSet.has(edge.id);
     const edgeStyle = getResolvedDiagramEdgeStyle(edge, nodeById);
     const color = edgeStyle.color ?? BOARD_DEFAULT_EDGE_COLOR;
@@ -196,6 +215,17 @@ export function toFlowEdges(
 
     return flowEdge;
   });
+}
+
+function isRenderableDiagramNode(node: DiagramNode): boolean {
+  return !COLLAPSED_PARAMETER_RESOURCE_TYPES.has(getNodeResourceType(node));
+}
+
+function hasRenderableEndpoints(
+  edge: DiagramEdge,
+  nodeById: ReadonlyMap<string, DiagramNode>
+): boolean {
+  return nodeById.has(edge.sourceNodeId) && nodeById.has(edge.targetNodeId);
 }
 
 function isValidConnectionTargetNode(

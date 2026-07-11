@@ -1024,8 +1024,8 @@ function createArchitectureHardConstraints(answerProfile: ArchitectureAnswerProf
     constraints.push("Korea-only scope: forbid multi-region API/RDS wording or topology; CloudFront may be used only for static or CDN acceleration assumptions.");
   }
 
-  if (answerProfile.budget === "low" && answerProfile.availability === "99.99") {
-    constraints.push("Low budget and 99.99% availability conflict: do not claim both are satisfied without explicit cost-warning coverage.");
+  if (hasCostSensitiveAvailabilityConflict(normalizedPrompt)) {
+    constraints.push("Cost-sensitive budget and high-availability or microservices conflict: do not claim both are satisfied without explicit cost-warning coverage.");
   }
 
   return constraints;
@@ -1055,7 +1055,14 @@ function createPreferredArchitecturePatterns(
     });
   }
 
-  if (answerProfile.backend === "complex" || answerProfile.backend === "microservices") {
+  if (answerProfile.backend === "microservices" && (answerProfile.management === "fully_managed" || answerProfile.management === "semi_managed")) {
+    patterns.push({
+      id: "ecs_fargate_microservices",
+      when: "Use when microservices need separated deployable services with managed container operations.",
+      typicalNodeTypes: ["VPC", "SUBNET", "SECURITY_GROUP", "LOAD_BALANCER", "LOAD_BALANCER_LISTENER", "LOAD_BALANCER_TARGET_GROUP", "ECS_CLUSTER", "ECS_SERVICE", "ECS_TASK_DEFINITION", "ECR_REPOSITORY", "APPLICATION_AUTO_SCALING_TARGET", "APPLICATION_AUTO_SCALING_POLICY"],
+      tradeoffs: ["Separates service ownership and scaling without EC2 capacity management.", "Multiple services, target groups, and scaling policies raise cost and diagram complexity."]
+    });
+  } else if (answerProfile.backend === "complex" || answerProfile.backend === "microservices") {
     patterns.push({
       id: "load_balanced_app_tier",
       when: "Use when backend logic, traffic, or availability makes an explicit app entry and runtime tier useful.",
@@ -1237,8 +1244,8 @@ function createArchitectureCoverageRequirements(
     requirements.push("High-availability coverage must mention redundancy, Multi-AZ, failover, or another explicit availability trade-off.");
   }
 
-  if (answerProfile.budget === "low" && answerProfile.availability === "99.99") {
-    requirements.push("Cost-warning coverage must mention the budget versus 99.99% availability conflict.");
+  if (hasCostSensitiveAvailabilityConflict(normalizedPrompt)) {
+    requirements.push("Cost-warning coverage must mention the budget versus high-availability, Multi-AZ, or microservices cost risk.");
   }
 
   return requirements;
@@ -1429,6 +1436,8 @@ function createAmazonQArchitectureBrief(prompt: string): string {
 
   if (hasBudgetAvailabilityConflict(normalizedPrompt)) {
     tradeoffs.push("- Monthly $100 budget conflicts with 99.99% availability, ALB, redundant compute, and RDS Multi-AZ. Keep the selected design target and add explicit cost-warning assumptions unless the user chose to relax availability.");
+  } else if (hasCostSensitiveAvailabilityConflict(normalizedPrompt)) {
+    tradeoffs.push("- The selected budget is cost-sensitive for 99.99% availability, ALB, redundant Fargate services, autoscaling, and RDS Multi-AZ. Keep the selected design target and add explicit cost-warning assumptions unless the user chose to relax availability or split the rollout.");
   }
 
   if (mentionsAutoScalingGroup(normalizedPrompt)) {
@@ -1541,8 +1550,8 @@ function findRequirementCoverageValidationIssues(
     }
   }
 
-  if (hasBudgetAvailabilityConflict(normalizedPrompt) && !mentionsCostWarningCoverage(coverageText)) {
-    issues.push("The user selected a low budget and 99.99% availability, but requirementCoverage does not include a cost warning or budget-risk trade-off.");
+  if (hasCostSensitiveAvailabilityConflict(normalizedPrompt) && !mentionsCostWarningCoverage(coverageText)) {
+    issues.push("The user selected a cost-sensitive budget with high-availability or microservices requirements, but requirementCoverage does not include a cost warning or budget-risk trade-off.");
   }
 
   if (requiresKoreaOnlyRegion(normalizedPrompt) && mentionsForbiddenMultiRegionScope(coverageText)) {
@@ -1684,6 +1693,7 @@ export function createDeterministicArchitectureIntentPlan(prompt: string): Archi
   const ssrFrontend = requiresSsrFrontend(normalizedPrompt);
   const uploadStorageRequired = requiresUploadStorage(normalizedPrompt);
   const forbidsEc2Runtime = explicitlyForbidsEc2Runtime(normalizedPrompt) || fargateRuntime;
+  const fargateServiceCount = resolveFargateServiceCount(normalizedPrompt);
 
   if (fargateRuntime) {
     patternIds.add("ecs-fargate");
@@ -1701,8 +1711,21 @@ export function createDeterministicArchitectureIntentPlan(prompt: string): Archi
     requiredResources.add("ECS_TASK_DEFINITION");
     requiredResources.add("ECR_REPOSITORY");
     requiredResources.add("LOAD_BALANCER");
+    requiredResources.add("LOAD_BALANCER_TARGET_GROUP");
     forbiddenCapabilities.add("ec2_runtime");
     amazonQBrief.push("Use ECS Fargate tasks in private subnets without EC2 capacity resources.");
+
+    if (fargateServiceCount > 1) {
+      requiredResources.add("APPLICATION_AUTO_SCALING_TARGET");
+      requiredResources.add("APPLICATION_AUTO_SCALING_POLICY");
+      resourceQuantities.ECS_SERVICE = fargateServiceCount;
+      resourceQuantities.ECS_TASK_DEFINITION = fargateServiceCount;
+      resourceQuantities.LOAD_BALANCER_TARGET_GROUP = fargateServiceCount;
+      resourceQuantities.APPLICATION_AUTO_SCALING_TARGET = fargateServiceCount;
+      resourceQuantities.APPLICATION_AUTO_SCALING_POLICY = fargateServiceCount;
+      resourceQuantities.CLOUDWATCH_LOG_GROUP = fargateServiceCount;
+      amazonQBrief.push("Represent microservices as separate Fargate services, task definitions, target groups, and autoscaling policies.");
+    }
   } else if (forbidsEc2Runtime) {
     forbiddenCapabilities.add("ec2_runtime");
   }
@@ -2082,6 +2105,7 @@ function normalizeArchitecturePlanTopologyInvariants(
   const normalizedPrompt = prompt.normalize("NFKC").toLowerCase();
   const requiredResources = new Set(plan.requiredResources ?? []);
   const resourceQuantities = { ...(plan.resourceQuantities ?? {}) };
+  const fargateServiceCount = usesFargatePattern ? resolveFargateServiceCount(normalizedPrompt) : 1;
 
   if (operationalRequirements.voiceTranscription) {
     requiredResources.add("S3");
@@ -2155,6 +2179,12 @@ function normalizeArchitecturePlanTopologyInvariants(
   }
 
   if (usesFargatePattern) {
+    const usesEcsAutoScaling =
+      topology?.autoScaling === true ||
+      resolveTrafficProfile(normalizedPrompt) === "bursty" ||
+      requiresTimeVaryingTraffic(normalizedPrompt) ||
+      fargateServiceCount > 1;
+
     for (const resourceType of [
       "VPC",
       "SUBNET",
@@ -2179,7 +2209,7 @@ function normalizeArchitecturePlanTopologyInvariants(
       requiredResources.add(resourceType);
     }
 
-    if (topology?.autoScaling === true || resolveTrafficProfile(normalizedPrompt) === "bursty") {
+    if (usesEcsAutoScaling) {
       requiredResources.add("APPLICATION_AUTO_SCALING_TARGET");
       requiredResources.add("APPLICATION_AUTO_SCALING_POLICY");
     }
@@ -2211,6 +2241,32 @@ function normalizeArchitecturePlanTopologyInvariants(
       resourceQuantities.CLOUDWATCH_METRIC_ALARM ?? 0,
       hasDatabase ? 2 : 1
     );
+
+    resourceQuantities.ECS_SERVICE = Math.max(resourceQuantities.ECS_SERVICE ?? 0, fargateServiceCount);
+    resourceQuantities.ECS_TASK_DEFINITION = Math.max(resourceQuantities.ECS_TASK_DEFINITION ?? 0, fargateServiceCount);
+    resourceQuantities.LOAD_BALANCER_TARGET_GROUP = Math.max(
+      resourceQuantities.LOAD_BALANCER_TARGET_GROUP ?? 0,
+      fargateServiceCount
+    );
+    resourceQuantities.CLOUDWATCH_LOG_GROUP = Math.max(
+      resourceQuantities.CLOUDWATCH_LOG_GROUP ?? 0,
+      fargateServiceCount
+    );
+    resourceQuantities.CLOUDWATCH_METRIC_ALARM = Math.max(
+      resourceQuantities.CLOUDWATCH_METRIC_ALARM ?? 0,
+      fargateServiceCount + (hasDatabase ? 1 : 0)
+    );
+
+    if (usesEcsAutoScaling) {
+      resourceQuantities.APPLICATION_AUTO_SCALING_TARGET = Math.max(
+        resourceQuantities.APPLICATION_AUTO_SCALING_TARGET ?? 0,
+        fargateServiceCount
+      );
+      resourceQuantities.APPLICATION_AUTO_SCALING_POLICY = Math.max(
+        resourceQuantities.APPLICATION_AUTO_SCALING_POLICY ?? 0,
+        fargateServiceCount
+      );
+    }
 
     if (requiresUploadStorage(normalizedPrompt)) {
       requiredResources.add("S3");
@@ -2244,7 +2300,11 @@ function normalizeArchitecturePlanTopologyInvariants(
               trafficEntry: "LOAD_BALANCER",
               compute: "ECS_FARGATE",
               placement: "private_subnets",
-              autoScaling: topology?.autoScaling === true || resolveTrafficProfile(normalizedPrompt) === "bursty"
+              autoScaling:
+                topology?.autoScaling === true ||
+                resolveTrafficProfile(normalizedPrompt) === "bursty" ||
+                requiresTimeVaryingTraffic(normalizedPrompt) ||
+                fargateServiceCount > 1
             }
           : {}),
       ...(usesEc2Pattern || requiresEc2Spread ? { computeCount } : {})
@@ -2453,9 +2513,12 @@ function findCanonicalPatternMaterializationIssues(
   const publicSubnets = subnets.filter((node) => node.config.tier === "public");
   const privateAppSubnets = subnets.filter((node) => node.config.tier === "private_app");
   const privateDbSubnets = subnets.filter((node) => node.config.tier === "private_db");
-  const ecsService = nodes.find((node) => node.type === "ECS_SERVICE");
-  const ecsTaskDefinition = nodes.find((node) => node.type === "ECS_TASK_DEFINITION");
-  const targetGroup = nodes.find((node) => node.type === "LOAD_BALANCER_TARGET_GROUP");
+  const serviceProfiles = resolveFargateServiceProfiles(normalizedPrompt, resolveFrontendProfile(normalizedPrompt));
+  const ecsServices = nodes.filter((node) => node.type === "ECS_SERVICE");
+  const ecsTaskDefinitions = nodes.filter((node) => node.type === "ECS_TASK_DEFINITION");
+  const targetGroups = nodes.filter((node) => node.type === "LOAD_BALANCER_TARGET_GROUP");
+  const ecsService = nodes.find((node) => node.id === serviceProfiles[0]?.serviceId) ?? ecsServices[0];
+  const targetGroup = nodes.find((node) => node.id === serviceProfiles[0]?.targetGroupId) ?? targetGroups[0];
   const hasLoadBalancer = nodes.some((node) => node.type === "LOAD_BALANCER");
   const ecsRoles = nodes.filter(
     (node) =>
@@ -2478,27 +2541,44 @@ function findCanonicalPatternMaterializationIssues(
   ) {
     issues.push("The Fargate service requires two private application subnets.");
   }
-  if (hasLoadBalancer && targetGroup?.config.targetType !== "ip") {
-    issues.push("The Fargate target group must use targetType ip.");
+  if (hasLoadBalancer && targetGroups.some((node) => node.config.targetType !== "ip")) {
+    issues.push("Every Fargate target group must use targetType ip.");
   }
   if (
-    ecsService?.config.desiredCount !== 2 ||
-    !isArchitectureConfigRecord(ecsService.config.networkConfiguration) ||
-    ecsService.config.networkConfiguration.assignPublicIp !== false ||
-    !Array.isArray(ecsService.config.networkConfiguration.subnets) ||
-    ecsService.config.networkConfiguration.subnets.length !== 2 ||
-    !isArchitectureConfigRecord(ecsService.config.loadBalancer) ||
-    !["app", "web"].includes(String(ecsService.config.loadBalancer.containerName ?? "")) ||
-    ecsService.config.loadBalancer.containerPort !== 8080
+    ecsServices.length < serviceProfiles.length ||
+    ecsTaskDefinitions.length < serviceProfiles.length ||
+    targetGroups.length < serviceProfiles.length
   ) {
-    issues.push("The Fargate service must run two private tasks without public IPs.");
+    issues.push("The Fargate plan must materialize each required service with its own service, task definition, and target group.");
   }
-  if (
-    ecsTaskDefinition?.config.networkMode !== "awsvpc" ||
-    !Array.isArray(ecsTaskDefinition.config.requiresCompatibilities) ||
-    !ecsTaskDefinition.config.requiresCompatibilities.includes("FARGATE")
-  ) {
-    issues.push("The task definition is not configured for Fargate awsvpc mode.");
+
+  for (const profile of serviceProfiles) {
+    const service = nodes.find((node) => node.id === profile.serviceId && node.type === "ECS_SERVICE");
+    const taskDefinition = nodes.find((node) => node.id === profile.taskDefinitionId && node.type === "ECS_TASK_DEFINITION");
+    const serviceLoadBalancer = isArchitectureConfigRecord(service?.config.loadBalancer)
+      ? service.config.loadBalancer
+      : undefined;
+
+    if (
+      service?.config.desiredCount !== 2 ||
+      !isArchitectureConfigRecord(service.config.networkConfiguration) ||
+      service.config.networkConfiguration.assignPublicIp !== false ||
+      !Array.isArray(service.config.networkConfiguration.subnets) ||
+      service.config.networkConfiguration.subnets.length !== 2 ||
+      serviceLoadBalancer === undefined ||
+      serviceLoadBalancer.containerName !== profile.containerName ||
+      serviceLoadBalancer.containerPort !== 8080
+    ) {
+      issues.push(`The Fargate service ${profile.serviceId} must run two private tasks without public IPs.`);
+    }
+
+    if (
+      taskDefinition?.config.networkMode !== "awsvpc" ||
+      !Array.isArray(taskDefinition.config.requiresCompatibilities) ||
+      !taskDefinition.config.requiresCompatibilities.includes("FARGATE")
+    ) {
+      issues.push(`The task definition ${profile.taskDefinitionId} is not configured for Fargate awsvpc mode.`);
+    }
   }
   if (ecsRoles.length < 2) {
     issues.push("The Fargate plan requires separate execution and task IAM roles.");
@@ -2506,23 +2586,27 @@ function findCanonicalPatternMaterializationIssues(
 
   if (
     plan?.runtimeTopology?.autoScaling === true ||
-    resolveTrafficProfile(normalizedPrompt) === "bursty"
+    resolveTrafficProfile(normalizedPrompt) === "bursty" ||
+    requiresTimeVaryingTraffic(normalizedPrompt) ||
+    serviceProfiles.length > 1
   ) {
-    const scalingTarget = nodes.find(
-      (node) => node.type === "APPLICATION_AUTO_SCALING_TARGET"
-    );
-    const scalingPolicy = nodes.find(
-      (node) => node.type === "APPLICATION_AUTO_SCALING_POLICY"
-    );
+    for (const profile of serviceProfiles) {
+      const scalingTarget = nodes.find(
+        (node) => node.id === profile.scalingTargetId && node.type === "APPLICATION_AUTO_SCALING_TARGET"
+      );
+      const scalingPolicy = nodes.find(
+        (node) => node.id === profile.scalingPolicyId && node.type === "APPLICATION_AUTO_SCALING_POLICY"
+      );
 
-    if (
-      scalingTarget?.config.serviceNamespace !== "ecs" ||
-      scalingTarget?.config.scalableDimension !== "ecs:service:DesiredCount" ||
-      scalingTarget?.config.minCapacity !== 2 ||
-      typeof scalingTarget?.config.maxCapacity !== "number" ||
-      scalingPolicy?.config.policyType !== "TargetTrackingScaling"
-    ) {
-      issues.push("The Fargate service requires deployable ECS target-tracking auto scaling.");
+      if (
+        scalingTarget?.config.serviceNamespace !== "ecs" ||
+        scalingTarget?.config.scalableDimension !== "ecs:service:DesiredCount" ||
+        scalingTarget?.config.minCapacity !== 2 ||
+        typeof scalingTarget?.config.maxCapacity !== "number" ||
+        scalingPolicy?.config.policyType !== "TargetTrackingScaling"
+      ) {
+        issues.push(`The Fargate service ${profile.serviceId} requires deployable ECS target-tracking auto scaling.`);
+      }
     }
   }
 
@@ -4128,6 +4212,122 @@ type CanonicalNodeSpec = {
 
 type UploadBucketProfile = Exclude<ArchitectureAnswerProfile["upload"], undefined | "none">;
 
+type FargateServiceProfile = {
+  readonly serviceId: string;
+  readonly serviceLabel: string;
+  readonly serviceName: string;
+  readonly taskDefinitionId: string;
+  readonly taskDefinitionLabel: string;
+  readonly taskFamily: string;
+  readonly containerName: string;
+  readonly targetGroupId: string;
+  readonly targetGroupLabel: string;
+  readonly targetGroupName: string;
+  readonly listenerLabel: string;
+  readonly logGroupId: string;
+  readonly logGroupName: string;
+  readonly scalingTargetId: string;
+  readonly scalingPolicyId: string;
+  readonly cpuAlarmId: string;
+  readonly positionY: number;
+};
+
+function resolveFargateServiceCount(normalizedPrompt: string): number {
+  return resolveBackendProfile(normalizedPrompt) === "microservices" ? 3 : 1;
+}
+
+function resolveFargateServiceProfiles(
+  normalizedPrompt: string,
+  frontendProfile: ArchitectureAnswerProfile["frontend"]
+): readonly FargateServiceProfile[] {
+  const containerName = frontendProfile === "ssr" ? "web" : "app";
+  const taskDefinitionLabel = frontendProfile === "ssr"
+    ? "SSR Fargate Task Definition"
+    : "Fargate Task Definition";
+
+  if (resolveBackendProfile(normalizedPrompt) !== "microservices") {
+    return [{
+      serviceId: "ecs-service",
+      serviceLabel: "Fargate Application Service",
+      serviceName: "sketchcatch-app",
+      taskDefinitionId: "ecs-task-definition",
+      taskDefinitionLabel,
+      taskFamily: "sketchcatch-app",
+      containerName,
+      targetGroupId: "app-target-group",
+      targetGroupLabel: "Fargate Target Group",
+      targetGroupName: "sketchcatch-app",
+      listenerLabel: resolveRealtimeForwardLabel(normalizedPrompt),
+      logGroupId: "ecs-log-group",
+      logGroupName: "/ecs/sketchcatch-app",
+      scalingTargetId: "ecs-scaling-target",
+      scalingPolicyId: "ecs-scaling-policy",
+      cpuAlarmId: "app-cpu-alarm",
+      positionY: 700
+    }];
+  }
+
+  return [
+    {
+      serviceId: "auth-member-service",
+      serviceLabel: "Fargate Auth / Member Service",
+      serviceName: "sketchcatch-auth-member",
+      taskDefinitionId: "auth-member-task-definition",
+      taskDefinitionLabel: "Auth / Member Task Definition",
+      taskFamily: "sketchcatch-auth-member",
+      containerName: "auth-member",
+      targetGroupId: "auth-member-target-group",
+      targetGroupLabel: "Auth / Member Target Group",
+      targetGroupName: "sc-auth-member",
+      listenerLabel: "/members/* + /auth/*",
+      logGroupId: "auth-member-log-group",
+      logGroupName: "/ecs/sketchcatch-auth-member",
+      scalingTargetId: "auth-member-scaling-target",
+      scalingPolicyId: "auth-member-scaling-policy",
+      cpuAlarmId: "auth-member-cpu-alarm",
+      positionY: 620
+    },
+    {
+      serviceId: "commerce-board-service",
+      serviceLabel: "Fargate Commerce / Board Service",
+      serviceName: "sketchcatch-commerce-board",
+      taskDefinitionId: "commerce-board-task-definition",
+      taskDefinitionLabel: "Commerce / Board Task Definition",
+      taskFamily: "sketchcatch-commerce-board",
+      containerName: "commerce-board",
+      targetGroupId: "commerce-board-target-group",
+      targetGroupLabel: "Commerce / Board Target Group",
+      targetGroupName: "sc-commerce-board",
+      listenerLabel: "/commerce/* + /board/*",
+      logGroupId: "commerce-board-log-group",
+      logGroupName: "/ecs/sketchcatch-commerce-board",
+      scalingTargetId: "commerce-board-scaling-target",
+      scalingPolicyId: "commerce-board-scaling-policy",
+      cpuAlarmId: "commerce-board-cpu-alarm",
+      positionY: 760
+    },
+    {
+      serviceId: "upload-service",
+      serviceLabel: "Fargate Upload Service",
+      serviceName: "sketchcatch-upload-api",
+      taskDefinitionId: "upload-task-definition",
+      taskDefinitionLabel: "Upload API Task Definition",
+      taskFamily: "sketchcatch-upload-api",
+      containerName: "upload-api",
+      targetGroupId: "upload-target-group",
+      targetGroupLabel: "Upload API Target Group",
+      targetGroupName: "sc-upload-api",
+      listenerLabel: "/uploads/*",
+      logGroupId: "upload-log-group",
+      logGroupName: "/ecs/sketchcatch-upload-api",
+      scalingTargetId: "upload-scaling-target",
+      scalingPolicyId: "upload-scaling-policy",
+      cpuAlarmId: "upload-cpu-alarm",
+      positionY: 900
+    }
+  ];
+}
+
 function createUploadBucketSpec(
   uploadProfile: UploadBucketProfile,
   positionX: number,
@@ -4203,8 +4403,13 @@ function configureCanonicalPatternResources(
   const uploadProfile = resolveUploadProfile(normalizedPrompt);
   const uploadBucketProfile = uploadProfile === undefined || uploadProfile === "none" ? undefined : uploadProfile;
   const usesHttps = requiresHttpsTransport(normalizedPrompt);
+  const serviceProfiles = resolveFargateServiceProfiles(normalizedPrompt, frontendProfile);
+  const primaryServiceProfile = serviceProfiles[0]!;
   const usesEcsAutoScaling =
-    plan?.runtimeTopology?.autoScaling === true || resolveTrafficProfile(normalizedPrompt) === "bursty";
+    plan?.runtimeTopology?.autoScaling === true ||
+    resolveTrafficProfile(normalizedPrompt) === "bursty" ||
+    requiresTimeVaryingTraffic(normalizedPrompt) ||
+    serviceProfiles.length > 1;
   const hasLoadBalancer = architectureJson.nodes.some(
     (node) => node.type === "LOAD_BALANCER"
   );
@@ -4279,6 +4484,12 @@ function configureCanonicalPatternResources(
     Version: "2012-10-17",
     Statement: [{ Effect: "Allow", Principal: { Service: "ecs-tasks.amazonaws.com" }, Action: "sts:AssumeRole" }]
   });
+  const publicSubnetRefs = ["public-subnet-a", "public-subnet-b"].map((id) =>
+    canonicalTerraformReference("aws_subnet", id)
+  );
+  const privateAppSubnetRefs = ["private-app-subnet-a", "private-app-subnet-b"].map((id) =>
+    canonicalTerraformReference("aws_subnet", id)
+  );
   const specsByType = new Map<ResourceType, readonly CanonicalNodeSpec[]>([
     ["SUBNET", subnetSpecs],
     ["ELASTIC_IP", [
@@ -4306,17 +4517,17 @@ function configureCanonicalPatternResources(
       policy: JSON.stringify({
         Version: "2012-10-17",
         Statement: [
-          { Effect: "Allow", Action: ["logs:CreateLogStream", "logs:PutLogEvents"], Resource: `arn:aws:logs:${region}:*:log-group:/ecs/sketchcatch-app:*` },
+          { Effect: "Allow", Action: ["logs:CreateLogStream", "logs:PutLogEvents"], Resource: `arn:aws:logs:${region}:*:log-group:/ecs/sketchcatch-*:*` },
           ...(uploadBucketConfig === undefined
             ? []
             : [{ Effect: "Allow", Action: ["s3:GetObject", "s3:PutObject"], Resource: uploadBucketConfig.policyResourceArn }])
         ]
       })
     })]],
-    ["CLOUDWATCH_LOG_GROUP", [canonicalNodeSpec("ecs-log-group", "ECS Application Logs", 1180, 840, {
-      name: "/ecs/sketchcatch-app",
+    ["CLOUDWATCH_LOG_GROUP", serviceProfiles.map((profile, index) => canonicalNodeSpec(profile.logGroupId, `${profile.serviceLabel} Logs`, 1180, profile.positionY + 80 + index * 20, {
+      name: profile.logGroupName,
       retentionInDays: 30
-    })]],
+    }))],
     ...(usesHttps
       ? [["ACM_CERTIFICATE", [canonicalNodeSpec("application-certificate", "Application TLS Certificate", 1180, 560, {
           domainName: "app.example.com",
@@ -4325,19 +4536,19 @@ function configureCanonicalPatternResources(
       : []),
     ...(usesEcsAutoScaling
       ? [
-          ["APPLICATION_AUTO_SCALING_TARGET", [canonicalNodeSpec("ecs-scaling-target", "ECS Service Scaling Target", 1580, 700, {
+          ["APPLICATION_AUTO_SCALING_TARGET", serviceProfiles.map((profile) => canonicalNodeSpec(profile.scalingTargetId, `${profile.serviceLabel} Scaling Target`, 1780, profile.positionY, {
             minCapacity: 2,
             maxCapacity: 10,
-            resourceId: "service/${aws_ecs_cluster.ecs_cluster.name}/${aws_ecs_service.ecs_service.name}",
+            resourceId: `service/${canonicalTerraformReference("aws_ecs_cluster", "ecs-cluster", "name")}/${canonicalTerraformReference("aws_ecs_service", profile.serviceId, "name")}`,
             scalableDimension: "ecs:service:DesiredCount",
             serviceNamespace: "ecs"
-          })]] as const,
-          ["APPLICATION_AUTO_SCALING_POLICY", [canonicalNodeSpec("ecs-scaling-policy", "ECS CPU Target Tracking", 1580, 840, {
-            name: "sketchcatch-ecs-cpu-target",
+          }))] as const,
+          ["APPLICATION_AUTO_SCALING_POLICY", serviceProfiles.map((profile) => canonicalNodeSpec(profile.scalingPolicyId, `${profile.serviceLabel} CPU Target Tracking`, 1980, profile.positionY, {
+            name: `${profile.serviceName}-cpu-target`,
             policyType: "TargetTrackingScaling",
-            resourceId: canonicalTerraformReference("aws_appautoscaling_target", "ecs-scaling-target", "resource_id"),
-            scalableDimension: canonicalTerraformReference("aws_appautoscaling_target", "ecs-scaling-target", "scalable_dimension"),
-            serviceNamespace: canonicalTerraformReference("aws_appautoscaling_target", "ecs-scaling-target", "service_namespace"),
+            resourceId: canonicalTerraformReference("aws_appautoscaling_target", profile.scalingTargetId, "resource_id"),
+            scalableDimension: canonicalTerraformReference("aws_appautoscaling_target", profile.scalingTargetId, "scalable_dimension"),
+            serviceNamespace: canonicalTerraformReference("aws_appautoscaling_target", profile.scalingTargetId, "service_namespace"),
             targetTrackingScalingPolicyConfiguration: {
               targetValue: 60,
               scaleInCooldown: 60,
@@ -4346,15 +4557,49 @@ function configureCanonicalPatternResources(
                 predefinedMetricType: "ECSServiceAverageCPUUtilization"
               }]
             }
-          })]] as const
+          }))] as const
         ]
       : []),
     ["CLOUDWATCH_METRIC_ALARM", [
-      canonicalNodeSpec("app-cpu-alarm", "ECS Service CPU Alarm", 1180, 980, createCanonicalMetricAlarmConfig("sketchcatch-ecs-cpu", "AWS/ECS", "CPUUtilization", { ClusterName: canonicalTerraformReference("aws_ecs_cluster", "ecs-cluster", "name"), ServiceName: canonicalTerraformReference("aws_ecs_service", "ecs-service", "name") })),
+      ...serviceProfiles.map((profile) =>
+        canonicalNodeSpec(profile.cpuAlarmId, `${profile.serviceLabel} CPU Alarm`, 1180, profile.positionY + 240, createCanonicalMetricAlarmConfig(`${profile.serviceName}-cpu`, "AWS/ECS", "CPUUtilization", { ClusterName: canonicalTerraformReference("aws_ecs_cluster", "ecs-cluster", "name"), ServiceName: canonicalTerraformReference("aws_ecs_service", profile.serviceId, "name") }))
+      ),
       ...(hasDatabase
         ? [canonicalNodeSpec("db-cpu-alarm", "Database CPU Alarm", 1380, 980, createCanonicalMetricAlarmConfig("sketchcatch-rds-cpu", "AWS/RDS", "CPUUtilization", { DBInstanceIdentifier: canonicalTerraformReference("aws_db_instance", "app-database", "id") }))]
         : [])
     ]],
+    ["LOAD_BALANCER_TARGET_GROUP", serviceProfiles.map((profile) => canonicalNodeSpec(profile.targetGroupId, profile.targetGroupLabel, 1580, profile.positionY, {
+      name: profile.targetGroupName,
+      port: 8080,
+      protocol: "HTTP",
+      targetType: "ip",
+      vpcId: vpcRef,
+      healthCheck: { path: "/health", matcher: "200-399" }
+    }))],
+    ["ECS_TASK_DEFINITION", serviceProfiles.map((profile) => canonicalNodeSpec(profile.taskDefinitionId, profile.taskDefinitionLabel, 1180, profile.positionY, {
+      family: profile.taskFamily,
+      networkMode: "awsvpc",
+      requiresCompatibilities: ["FARGATE"],
+      cpu: "512",
+      memory: "1024",
+      executionRoleArn: canonicalTerraformReference("aws_iam_role", "ecs-execution-role", "arn"),
+      taskRoleArn: canonicalTerraformReference("aws_iam_role", "ecs-task-role", "arn"),
+      applicationFramework: frontendProfile === "ssr" ? "next_nuxt_ssr" : undefined,
+      containerDefinitions: JSON.stringify([{ name: profile.containerName, image: "public.ecr.aws/docker/library/nginx:1.27-alpine", essential: true, portMappings: [{ containerPort: 8080, protocol: "tcp" }], logConfiguration: { logDriver: "awslogs", options: { "awslogs-group": profile.logGroupName, "awslogs-region": region, "awslogs-stream-prefix": profile.containerName } } }])
+    }))],
+    ["ECS_SERVICE", serviceProfiles.map((profile) => canonicalNodeSpec(profile.serviceId, profile.serviceLabel, 1380, profile.positionY, {
+      name: profile.serviceName,
+      cluster: canonicalTerraformReference("aws_ecs_cluster", "ecs-cluster"),
+      taskDefinition: canonicalTerraformReference("aws_ecs_task_definition", profile.taskDefinitionId, "arn"),
+      desiredCount: 2,
+      launchType: "FARGATE",
+      healthCheckGracePeriodSeconds: 60,
+      deploymentMinimumHealthyPercent: 100,
+      deploymentMaximumPercent: 200,
+      deploymentCircuitBreaker: { enable: true, rollback: true },
+      networkConfiguration: { assignPublicIp: false, subnets: privateAppSubnetRefs, securityGroups: [canonicalTerraformReference("aws_security_group", "app-security-group")] },
+      loadBalancer: { targetGroupArn: canonicalTerraformReference("aws_lb_target_group", profile.targetGroupId, "arn"), containerName: profile.containerName, containerPort: 8080 }
+    }))],
     ...(hasDatabase
       ? [["DB_SUBNET_GROUP", [canonicalNodeSpec("db-subnet-group", "DB Subnet Group", 680, 920, {
           name: "sketchcatch-db-subnets",
@@ -4389,12 +4634,6 @@ function configureCanonicalPatternResources(
     });
   }
 
-  const publicSubnetRefs = ["public-subnet-a", "public-subnet-b"].map((id) =>
-    canonicalTerraformReference("aws_subnet", id)
-  );
-  const privateAppSubnetRefs = ["private-app-subnet-a", "private-app-subnet-b"].map((id) =>
-    canonicalTerraformReference("aws_subnet", id)
-  );
   const staticBucket = architectureJson.nodes.find(
     (node) => node.type === "S3" && node.config.bucketPurpose === "static_website_origin"
   ) ?? architectureJson.nodes.find((node) => node.type === "S3");
@@ -4412,19 +4651,19 @@ function configureCanonicalPatternResources(
       case "LOAD_BALANCER":
         return { ...node, id: "application-load-balancer", label: "Application Load Balancer", config: { name: "sketchcatch-app", internal: false, idleTimeout: realtimeTransport === "sse" ? 120 : 60, loadBalancerType: "application", subnets: publicSubnetRefs, securityGroups: [canonicalTerraformReference("aws_security_group", "alb-security-group")] } };
       case "LOAD_BALANCER_TARGET_GROUP":
-        return { ...node, id: "app-target-group", label: "Fargate Target Group", config: { name: "sketchcatch-app", port: 8080, protocol: "HTTP", targetType: "ip", vpcId: vpcRef, healthCheck: { path: "/health", matcher: "200-399" } } };
+        return { ...node, id: primaryServiceProfile.targetGroupId, label: primaryServiceProfile.targetGroupLabel, config: { name: primaryServiceProfile.targetGroupName, port: 8080, protocol: "HTTP", targetType: "ip", vpcId: vpcRef, healthCheck: { path: "/health", matcher: "200-399" } } };
       case "LOAD_BALANCER_LISTENER":
         return usesHttps
-          ? { ...node, id: "https-listener", label: "ALB HTTPS Listener", config: { loadBalancerArn: canonicalTerraformReference("aws_lb", "application-load-balancer", "arn"), port: 443, protocol: "HTTPS", sslPolicy: "ELBSecurityPolicy-TLS13-1-2-2021-06", certificateArn: canonicalTerraformReference("aws_acm_certificate", "application-certificate", "arn"), defaultAction: { type: "forward", targetGroupArn: canonicalTerraformReference("aws_lb_target_group", "app-target-group", "arn") } } }
-          : { ...node, id: "http-listener", label: "ALB HTTP Listener", config: { loadBalancerArn: canonicalTerraformReference("aws_lb", "application-load-balancer", "arn"), port: 80, protocol: "HTTP", defaultAction: { type: "forward", targetGroupArn: canonicalTerraformReference("aws_lb_target_group", "app-target-group", "arn") } } };
+          ? { ...node, id: "https-listener", label: "ALB HTTPS Listener", config: { loadBalancerArn: canonicalTerraformReference("aws_lb", "application-load-balancer", "arn"), port: 443, protocol: "HTTPS", sslPolicy: "ELBSecurityPolicy-TLS13-1-2-2021-06", certificateArn: canonicalTerraformReference("aws_acm_certificate", "application-certificate", "arn"), defaultAction: { type: "forward", targetGroupArn: canonicalTerraformReference("aws_lb_target_group", primaryServiceProfile.targetGroupId, "arn") } } }
+          : { ...node, id: "http-listener", label: "ALB HTTP Listener", config: { loadBalancerArn: canonicalTerraformReference("aws_lb", "application-load-balancer", "arn"), port: 80, protocol: "HTTP", defaultAction: { type: "forward", targetGroupArn: canonicalTerraformReference("aws_lb_target_group", primaryServiceProfile.targetGroupId, "arn") } } };
       case "ECR_REPOSITORY":
         return { ...node, id: "app-repository", label: "Application ECR Repository", config: { name: "sketchcatch-app", imageTagMutability: "IMMUTABLE", imageScanningConfiguration: { scanOnPush: true } } };
       case "ECS_CLUSTER":
         return { ...node, id: "ecs-cluster", label: "Fargate ECS Cluster", config: { name: "sketchcatch-app" } };
       case "ECS_TASK_DEFINITION":
-        return { ...node, id: "ecs-task-definition", label: frontendProfile === "ssr" ? "SSR Fargate Task Definition" : "Fargate Task Definition", config: { family: "sketchcatch-app", networkMode: "awsvpc", requiresCompatibilities: ["FARGATE"], cpu: "512", memory: "1024", executionRoleArn: canonicalTerraformReference("aws_iam_role", "ecs-execution-role", "arn"), taskRoleArn: canonicalTerraformReference("aws_iam_role", "ecs-task-role", "arn"), applicationFramework: frontendProfile === "ssr" ? "next_nuxt_ssr" : undefined, containerDefinitions: JSON.stringify([{ name: frontendProfile === "ssr" ? "web" : "app", image: "public.ecr.aws/docker/library/nginx:1.27-alpine", essential: true, portMappings: [{ containerPort: 8080, protocol: "tcp" }], logConfiguration: { logDriver: "awslogs", options: { "awslogs-group": "/ecs/sketchcatch-app", "awslogs-region": region, "awslogs-stream-prefix": "app" } } }]) } };
+        return { ...node, id: primaryServiceProfile.taskDefinitionId, label: primaryServiceProfile.taskDefinitionLabel, config: { family: primaryServiceProfile.taskFamily, networkMode: "awsvpc", requiresCompatibilities: ["FARGATE"], cpu: "512", memory: "1024", executionRoleArn: canonicalTerraformReference("aws_iam_role", "ecs-execution-role", "arn"), taskRoleArn: canonicalTerraformReference("aws_iam_role", "ecs-task-role", "arn"), applicationFramework: frontendProfile === "ssr" ? "next_nuxt_ssr" : undefined, containerDefinitions: JSON.stringify([{ name: primaryServiceProfile.containerName, image: "public.ecr.aws/docker/library/nginx:1.27-alpine", essential: true, portMappings: [{ containerPort: 8080, protocol: "tcp" }], logConfiguration: { logDriver: "awslogs", options: { "awslogs-group": primaryServiceProfile.logGroupName, "awslogs-region": region, "awslogs-stream-prefix": primaryServiceProfile.containerName } } }]) } };
       case "ECS_SERVICE":
-        return { ...node, id: "ecs-service", label: "Fargate Application Service", config: { name: "sketchcatch-app", cluster: canonicalTerraformReference("aws_ecs_cluster", "ecs-cluster"), taskDefinition: canonicalTerraformReference("aws_ecs_task_definition", "ecs-task-definition", "arn"), desiredCount: 2, launchType: "FARGATE", healthCheckGracePeriodSeconds: 60, deploymentMinimumHealthyPercent: 100, deploymentMaximumPercent: 200, deploymentCircuitBreaker: { enable: true, rollback: true }, networkConfiguration: { assignPublicIp: false, subnets: privateAppSubnetRefs, securityGroups: [canonicalTerraformReference("aws_security_group", "app-security-group")] }, loadBalancer: { targetGroupArn: canonicalTerraformReference("aws_lb_target_group", "app-target-group", "arn"), containerName: frontendProfile === "ssr" ? "web" : "app", containerPort: 8080 } } };
+        return { ...node, id: primaryServiceProfile.serviceId, label: primaryServiceProfile.serviceLabel, config: { name: primaryServiceProfile.serviceName, cluster: canonicalTerraformReference("aws_ecs_cluster", "ecs-cluster"), taskDefinition: canonicalTerraformReference("aws_ecs_task_definition", primaryServiceProfile.taskDefinitionId, "arn"), desiredCount: 2, launchType: "FARGATE", healthCheckGracePeriodSeconds: 60, deploymentMinimumHealthyPercent: 100, deploymentMaximumPercent: 200, deploymentCircuitBreaker: { enable: true, rollback: true }, networkConfiguration: { assignPublicIp: false, subnets: privateAppSubnetRefs, securityGroups: [canonicalTerraformReference("aws_security_group", "app-security-group")] }, loadBalancer: { targetGroupArn: canonicalTerraformReference("aws_lb_target_group", primaryServiceProfile.targetGroupId, "arn"), containerName: primaryServiceProfile.containerName, containerPort: 8080 } } };
       case "CLOUDFRONT":
         return { ...node, config: { ...node.config, originResourceId: frontendProfile === "ssr" ? "application-load-balancer" : staticBucket?.id, originType: frontendProfile === "ssr" ? "application" : "static", enabled: true, viewerProtocolPolicy: "redirect-to-https" } };
       case "RDS":
@@ -5084,6 +5323,8 @@ function connectCanonicalPatternTopologies(
   const normalizedPrompt = prompt.normalize("NFKC").toLowerCase();
   const realtimeTransport = resolveRealtimeTransport(normalizedPrompt);
   const realtimeProfile = resolveRealtimeProfile(normalizedPrompt);
+  const frontendProfile = resolveFrontendProfile(normalizedPrompt);
+  const serviceProfiles = resolveFargateServiceProfiles(normalizedPrompt, frontendProfile);
   const canonicalListenerId = requiresHttpsTransport(normalizedPrompt)
     ? "https-listener"
     : "http-listener";
@@ -5259,31 +5500,40 @@ function connectCanonicalPatternTopologies(
 
   if (patternIds.includes("ecs-fargate")) {
     if (usesRoleAwareEcs) {
-      connectIds("app-repository", "ecs-task-definition", "image");
-      connectIds("ecs-cluster", "ecs-service", "runs");
-      connectIds("ecs-task-definition", "ecs-service", "defines");
       connectIds("application-load-balancer", canonicalListenerId, "listens");
-      connectIds(canonicalListenerId, "app-target-group", forwardLabel);
-      connectIds("app-target-group", "ecs-service", "targets ip");
       connectIds("alb-security-group", "application-load-balancer", "protects");
-      connectIds("app-security-group", "ecs-service", "protects");
-      connectIds("ecs-execution-role", "ecs-task-definition", "pulls image and logs");
-      connectIds("ecs-task-role", "ecs-task-definition", "application permissions");
       connectIds("ecs-task-policy", "ecs-task-role", "least privilege");
-      connectIds("ecs-task-definition", "ecs-log-group", "logs");
-      connectIds("ecs-service", "app-cpu-alarm", "monitors");
-      connectIds("ecs-service", "ecs-scaling-target", "scales desired count");
-      connectIds("ecs-scaling-target", "ecs-scaling-policy", "target tracking");
       connectIds("application-certificate", canonicalListenerId, "TLS certificate");
-      connectIds("private-app-subnet-a", "ecs-service", "places tasks");
-      connectIds("private-app-subnet-b", "ecs-service", "places tasks");
+      for (const [index, profile] of serviceProfiles.entries()) {
+        connectIds("app-repository", profile.taskDefinitionId, "image");
+        connectIds("ecs-cluster", profile.serviceId, "runs");
+        connectIds(profile.taskDefinitionId, profile.serviceId, "defines");
+        connectIds(
+          canonicalListenerId,
+          profile.targetGroupId,
+          index === 0 && serviceProfiles.length === 1 ? forwardLabel : profile.listenerLabel
+        );
+        connectIds(profile.targetGroupId, profile.serviceId, "targets ip");
+        connectIds("app-security-group", profile.serviceId, "protects");
+        connectIds("ecs-execution-role", profile.taskDefinitionId, "pulls image and logs");
+        connectIds("ecs-task-role", profile.taskDefinitionId, "application permissions");
+        connectIds(profile.taskDefinitionId, profile.logGroupId, "logs");
+        connectIds(profile.serviceId, profile.cpuAlarmId, "monitors");
+        connectIds(profile.serviceId, profile.scalingTargetId, "scales desired count");
+        connectIds(profile.scalingTargetId, profile.scalingPolicyId, "target tracking");
+        connectIds("private-app-subnet-a", profile.serviceId, "places tasks");
+        connectIds("private-app-subnet-b", profile.serviceId, "places tasks");
+      }
       for (const bucket of nodesByType.get("S3") ?? []) {
         if (bucket.config.bucketPurpose !== "static_website_origin") {
-          connectIds("ecs-service", bucket.id, "stores uploads");
+          const uploadService = serviceProfiles.find((profile) => /upload/iu.test(profile.serviceId)) ?? serviceProfiles[0];
+          if (uploadService !== undefined) {
+            connectIds(uploadService.serviceId, bucket.id, "stores uploads");
+          }
         }
       }
       if (realtimeTransport === "sse" && realtimeProfile === "chat") {
-        connectIds("ecs-service", "app-database", "messages + PostgreSQL LISTEN/NOTIFY");
+        connectIds(serviceProfiles[0]!.serviceId, "app-database", "messages + PostgreSQL LISTEN/NOTIFY");
       }
     } else {
       connect("ECR_REPOSITORY", "ECS_TASK_DEFINITION", "image");
@@ -5386,12 +5636,23 @@ function requiresFargateArchitecture(normalizedPrompt: string): boolean {
 
 function prefersQuestionnaireFargateArchitecture(normalizedPrompt: string): boolean {
   const trafficProfile = resolveTrafficProfile(normalizedPrompt);
-  const hasFargateFriendlyTraffic = trafficProfile === "bursty" || trafficProfile === "medium";
-  const hasFargateFriendlyBackend =
-    resolveBackendProfile(normalizedPrompt) === "simple_api" &&
-    resolveManagementProfile(normalizedPrompt) === "semi_managed" &&
+  const backendProfile = resolveBackendProfile(normalizedPrompt);
+  const managementProfile = resolveManagementProfile(normalizedPrompt);
+  const hasFargateFriendlyTraffic =
+    trafficProfile === "bursty" ||
+    trafficProfile === "medium" ||
+    requiresTimeVaryingTraffic(normalizedPrompt);
+  const hasSimpleApiFargateBackend =
+    backendProfile === "simple_api" &&
+    managementProfile === "semi_managed" &&
     requiresDatabase(normalizedPrompt) &&
     hasFargateFriendlyTraffic;
+  const hasManagedMicroservicesBackend =
+    backendProfile === "microservices" &&
+    (managementProfile === "fully_managed" || managementProfile === "semi_managed") &&
+    requiresDatabase(normalizedPrompt) &&
+    hasFargateFriendlyTraffic;
+  const hasFargateFriendlyBackend = hasSimpleApiFargateBackend || hasManagedMicroservicesBackend;
 
   return (
     (requiresApacRegion(normalizedPrompt) && requiresSpaFrontend(normalizedPrompt) && hasFargateFriendlyBackend) ||
@@ -5677,8 +5938,25 @@ function hasBudgetAvailabilityConflict(normalizedPrompt: string): boolean {
   return hasLowMonthlyBudget(normalizedPrompt) && requiresVeryHighAvailability(normalizedPrompt);
 }
 
+function hasCostSensitiveAvailabilityConflict(normalizedPrompt: string): boolean {
+  const budgetProfile = resolveBudgetProfile(normalizedPrompt);
+
+  return (
+    (hasBudgetAvailabilityConflict(normalizedPrompt) ||
+      ((budgetProfile === "low" || budgetProfile === "normal") &&
+        requiresDatabase(normalizedPrompt) &&
+        (requiresVeryHighAvailability(normalizedPrompt) || resolveBackendProfile(normalizedPrompt) === "microservices")))
+  );
+}
+
 function hasLowMonthlyBudget(normalizedPrompt: string): boolean {
   return /(\$\s*100|100\s*(usd|dollars?|monthly)|monthly\s*100|budget\s*cost:\s*100|\uC6D4\s*\$?\s*100|\uC608\uC0B0[\s\S]{0,20}100)/iu.test(
+    normalizedPrompt
+  );
+}
+
+function requiresTimeVaryingTraffic(normalizedPrompt: string): boolean {
+  return /(time[-\s]*of[-\s]*day|daytime\s+peak|daytime|business\s+hours|traffic\s+pattern:\s*time|\uC2DC\uAC04\uB300\uBCC4|\uB0AE\uC5D0\s*\uB9CE\uC74C|\uC8FC간\s*\uD53C\uD06C)/iu.test(
     normalizedPrompt
   );
 }

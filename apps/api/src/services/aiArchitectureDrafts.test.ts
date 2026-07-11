@@ -936,6 +936,107 @@ test("createAmazonQArchitectureDraftResponse maps the Korean SPA questionnaire t
   );
 });
 
+test("createAmazonQArchitectureDraftResponse maps the SPA microservices questionnaire to APAC Fargate services", async () => {
+  const requests: Array<Parameters<AiTextProvider["generate"]>[0]> = [];
+  const provider = createFakeAmazonQProvider((request) => {
+    requests.push(request);
+    return createNormalizedRequirementPlan(request);
+  });
+
+  const response = await createAmazonQArchitectureDraftResponse(
+    { prompt: createSpaMicroservicesQuestionnairePrompt() },
+    { provider, creditPolicy: confirmedCreditPolicy }
+  );
+
+  if ("status" in response) {
+    assert.fail(`Expected preview, got clarification: ${response.question}`);
+  }
+
+  const firstPayload = requests[0]?.payload as {
+    architectureDecisionSpace?: {
+      answerProfile?: Record<string, string | undefined>;
+      preferredPatterns?: Array<{ id?: string }>;
+      coverageRequirements?: string[];
+    };
+    normalizedRequirement?: {
+      patternIds?: string[];
+      region?: string;
+      resourceQuantities?: Record<string, number>;
+      runtimeTopology?: {
+        compute?: string;
+        autoScaling?: boolean;
+      };
+    };
+  };
+  const answerProfile = firstPayload.architectureDecisionSpace?.answerProfile;
+  assert.equal(answerProfile?.traffic, "medium");
+  assert.equal(answerProfile?.frontend, "spa");
+  assert.equal(answerProfile?.backend, "microservices");
+  assert.equal(answerProfile?.region, "apac");
+  assert.equal(answerProfile?.upload, "mixed");
+  assert.equal(answerProfile?.realtime, "none");
+  assert.equal(answerProfile?.management, "fully_managed");
+  assert.equal(answerProfile?.latency, "three_seconds");
+  assert.equal(answerProfile?.availability, "99.99");
+  assert.equal(answerProfile?.budget, "normal");
+  assert.ok(firstPayload.architectureDecisionSpace?.preferredPatterns?.some((pattern) => pattern.id === "ecs_fargate_microservices"));
+  assert.ok(
+    firstPayload.architectureDecisionSpace?.coverageRequirements?.some((requirement) =>
+      /cost-warning/i.test(requirement)
+    )
+  );
+  assert.equal(firstPayload.normalizedRequirement?.region, "ap-northeast-1");
+  assert.ok(firstPayload.normalizedRequirement?.patternIds?.includes("ecs-fargate"));
+  assert.ok(firstPayload.normalizedRequirement?.patternIds?.includes("spa-cloudfront-s3"));
+  assert.ok(firstPayload.normalizedRequirement?.patternIds?.includes("multi-az-rds"));
+  assert.equal(firstPayload.normalizedRequirement?.runtimeTopology?.compute, "ECS_FARGATE");
+  assert.equal(firstPayload.normalizedRequirement?.runtimeTopology?.autoScaling, true);
+  assert.equal(firstPayload.normalizedRequirement?.resourceQuantities?.ECS_SERVICE, 3);
+  assert.equal(firstPayload.normalizedRequirement?.resourceQuantities?.ECS_TASK_DEFINITION, 3);
+  assert.equal(firstPayload.normalizedRequirement?.resourceQuantities?.LOAD_BALANCER_TARGET_GROUP, 3);
+  assert.equal(firstPayload.normalizedRequirement?.resourceQuantities?.APPLICATION_AUTO_SCALING_TARGET, 3);
+  assert.equal(firstPayload.normalizedRequirement?.resourceQuantities?.APPLICATION_AUTO_SCALING_POLICY, 3);
+
+  const nodes = response.architectureJson.nodes;
+  const edges = response.architectureJson.edges;
+  const serviceNodes = nodes.filter((node) => node.type === "ECS_SERVICE");
+  const taskDefinitions = nodes.filter((node) => node.type === "ECS_TASK_DEFINITION");
+  const targetGroups = nodes.filter((node) => node.type === "LOAD_BALANCER_TARGET_GROUP");
+  const scalingTargets = nodes.filter((node) => node.type === "APPLICATION_AUTO_SCALING_TARGET");
+  const scalingPolicies = nodes.filter((node) => node.type === "APPLICATION_AUTO_SCALING_POLICY");
+  const uploadBucket = nodes.find(
+    (node) => node.type === "S3" && node.config.bucketPurpose === "user_uploads"
+  );
+
+  assert.equal(serviceNodes.length, 3);
+  assert.equal(taskDefinitions.length, 3);
+  assert.equal(targetGroups.length, 3);
+  assert.equal(scalingTargets.length, 3);
+  assert.equal(scalingPolicies.length, 3);
+  assert.equal(nodes.some((node) => node.type === "EC2"), false);
+  assert.equal(nodes.some((node) => node.type === "API_GATEWAY_WEBSOCKET_API"), false);
+  assert.match(serviceNodes.map((node) => node.label ?? "").join("\n"), /Auth \/ Member/u);
+  assert.match(serviceNodes.map((node) => node.label ?? "").join("\n"), /Commerce \/ Board/u);
+  assert.match(serviceNodes.map((node) => node.label ?? "").join("\n"), /Upload/u);
+  assert.equal(uploadBucket?.config.bucketPrefix, "sketchcatch-file-uploads-");
+  assert.ok(
+    serviceNodes.every((node) => {
+      const networkConfiguration = node.config.networkConfiguration;
+
+      return (
+        typeof networkConfiguration === "object" &&
+        networkConfiguration !== null &&
+        "assignPublicIp" in networkConfiguration &&
+        networkConfiguration.assignPublicIp === false
+      );
+    })
+  );
+  assert.equal(
+    edges.some((edge) => /sse|websocket|notification|realtime/i.test(edge.label ?? "")),
+    false
+  );
+});
+
 test("createAmazonQArchitectureDraftResponse maps the Korean SSR mixed-upload questionnaire to Seoul Fargate SSE notifications", async () => {
   const requests: Array<Parameters<AiTextProvider["generate"]>[0]> = [];
   const provider = createFakeAmazonQProvider((request) => {
@@ -3860,6 +3961,25 @@ function createKoreanSsrMixedUploadQuestionnairePrompt(): string {
     "website size: 10MB-100MB general website",
     "downtime tolerance: monthly 8 hours within 99% availability",
     "realtime notification transport: SSE one-way notification path"
+  ].join("\n");
+}
+
+function createSpaMicroservicesQuestionnairePrompt(): string {
+  return [
+    "website type: SPA Single Page Application React Vue",
+    "traffic: medium traffic daily 1000 concurrent 50",
+    "database: medium data 10GB to 100GB",
+    "backend: microservices multiple separated services",
+    "region: Asia Pacific APAC Tokyo Singapore ap-northeast-1",
+    "monthly budget: 10-50 manwon normal moderate performance",
+    "SSL HTTPS: optional HTTP acceptable",
+    "file upload: mixed files documents and video included",
+    "realtime: none no realtime features",
+    "management preference: fully managed serverless minimal operations",
+    "loading time target: within 3 seconds",
+    "website size: 10MB-100MB general website",
+    "traffic pattern: time-of-day daytime peak",
+    "downtime tolerance: zero downtime 99.99 availability"
   ].join("\n");
 }
 
