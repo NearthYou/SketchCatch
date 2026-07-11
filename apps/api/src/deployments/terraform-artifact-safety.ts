@@ -59,6 +59,20 @@ export class TerraformArtifactSafetyError extends Error {
   }
 }
 
+export function containsArchiveFileDataSource(
+  terraformCode: Buffer | Uint8Array | string
+): boolean {
+  const source = Buffer.isBuffer(terraformCode)
+    ? terraformCode.toString("utf8")
+    : terraformCode instanceof Uint8Array
+      ? Buffer.from(terraformCode).toString("utf8")
+      : terraformCode;
+
+  return extractDataSourceBlocks(stripHclComments(source)).some(
+    (dataSource) => dataSource.type === "archive_file"
+  );
+}
+
 export const managedDemoUserDataMarker = "sketchcatch-demo-managed-user-data:v1";
 export const managedDemoUserDataHashPrefix =
   "sketchcatch-demo-managed-user-data-sha256:";
@@ -341,7 +355,7 @@ function validateDisallowedStringInterpolations(tokens: HclToken[]): void {
 }
 
 function validateArchiveDataSourceAttributes(source: string): void {
-  for (const dataSource of extractDataSourceBlocks(source)) {
+  for (const dataSource of extractDataSourceBlocks(stripHclComments(source))) {
     if (dataSource.type !== "archive_file") {
       continue;
     }

@@ -146,6 +146,22 @@ test("assertTerraformArtifactIsSafe rejects archive source files before live dep
   );
 });
 
+test("assertTerraformArtifactIsSafe rejects archive source files with comments in the header", () => {
+  assert.throws(
+    () =>
+      assertTerraformArtifactIsSafe(`
+        data /* keep header readable */ "archive_file"
+          # resource label follows
+          "env" {
+          type        = "zip"
+          output_path = "./env.zip"
+          source_file = "../.env"
+        }
+      `),
+    /archive_file must use inline source_content/
+  );
+});
+
 test("assertTerraformArtifactIsSafe rejects archive source directories before live deployment", () => {
   assert.throws(
     () =>
