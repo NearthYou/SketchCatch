@@ -181,7 +181,7 @@ Board 위에 떠 있는 AI 버튼과 채팅 패널을 새로 만들되, **AI가 
 - 44px 검정 rounded-square 런처를 실제 `/workspace`에 연결함
 - desktop AI panel 폭을 360~420px로 제한함
 - 768px 이하에서 전체 폭 assistant로 전환함
-- Inspector가 열리면 그 왼쪽으로 이동함
+- AI를 열면 Inspector와 작업 panel을 접어 Board 폭을 확보함
 - Terraform·검사·배포 panel과 AI panel이 동시에 펼쳐지지 않게 함
 - 자연어 Architecture 생성과 현재 Board 수정 미리보기를 연결함
 - 추가 질문의 일반 선택지와 Resource ID 선택을 구분함
@@ -218,7 +218,7 @@ AI panel 열기
 - `Escape`로 닫은 뒤 focus가 AI 런처로 돌아옴
 - AI panel을 열면 Terraform 작업 panel이 닫힘
 - Terraform 작업 panel을 열면 AI panel이 닫힘
-- Inspector가 열린 Resource 많은 Board에서 panel이 다른 도구를 가리지 않음
+- Inspector와 작업 panel이 열린 상태에서 AI를 열면 두 panel이 접히고 Board 폭이 확보됨
 - 새 browser console error 없음
 
 자동 검증:

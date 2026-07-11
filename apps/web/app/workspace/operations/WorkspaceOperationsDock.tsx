@@ -62,7 +62,10 @@ export function WorkspaceOperationsDock({
   // AI가 열리면 기존 작업 panel을 닫아 Board 오른쪽 도구가 겹치지 않게 합니다.
   function setAiAssistantOpen(nextOpen: boolean): void {
     setAssistantOpen(nextOpen);
-    if (nextOpen) setOpen(false);
+    if (nextOpen) {
+      setOpen(false);
+      context.setRightPanelOpen(false);
+    }
   }
 
   // 도구를 고르면 닫힌 패널도 함께 열어 사용자의 행동 결과를 바로 보여줍니다.

@@ -12,6 +12,10 @@
   right: calc(var(--right-panel-width, 440px) + 24px);
 }
 
+.assistantLayer[data-open="true"] {
+  bottom: 78px;
+}
+
 .launcherWrap {
   bottom: 0;
   pointer-events: auto;
@@ -429,7 +433,8 @@
 
 @media (max-width: 768px) {
   .assistantLayer,
-  .assistantLayer[data-inspector-open="true"] {
+  .assistantLayer[data-inspector-open="true"],
+  .assistantLayer[data-open="true"] {
     bottom: 0;
     right: 0;
     top: 64px;
