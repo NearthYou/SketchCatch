@@ -190,6 +190,46 @@
   padding: 16px 20px 20px;
 }
 
+.voiceConfirmation {
+  align-items: center;
+  border: 1px solid var(--ai-line-strong);
+  border-radius: 8px;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  padding: 10px 12px;
+}
+
+.voiceConfirmation div {
+  display: grid;
+  gap: 2px;
+}
+
+.voiceConfirmation strong {
+  font-size: 13px;
+}
+
+.voiceConfirmation span {
+  color: var(--ai-body);
+  font-size: 11px;
+  word-break: keep-all;
+}
+
+.voiceConfirmation button {
+  align-items: center;
+  background: #000000;
+  border-radius: 8px;
+  color: #ffffff;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 700;
+  gap: 6px;
+  height: 36px;
+  padding: 0 12px;
+}
+
 .composer {
   border: 1px solid var(--ai-line-strong);
   border-radius: 12px;
@@ -471,6 +511,39 @@
   max-width: min(480px, 48vw);
 }
 
+.draftEvidence {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  min-width: 0;
+}
+
+.draftSource {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  gap: 6px;
+}
+
+.draftSource span,
+.draftSource strong,
+.draftSource em {
+  border: 1px solid var(--ai-line-strong);
+  border-radius: 999px;
+  font-size: 10px;
+  font-style: normal;
+  line-height: 24px;
+  padding: 0 8px;
+}
+
+.draftSource strong {
+  border-color: #171717;
+}
+
+.draftSource em {
+  color: #8a4b08;
+}
+
 .metadataDisclosure summary {
   align-items: center;
   cursor: pointer;
@@ -616,6 +689,11 @@
 
   .metadataDisclosure {
     max-width: none;
+  }
+
+  .draftEvidence {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .previewActions > button {

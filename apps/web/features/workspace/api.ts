@@ -1,9 +1,11 @@
 import type {
+  AiArchitectureDraftResult,
   AiPreDeploymentAnalysisResult,
   AiPreDeploymentCheckRequest,
   AiTerraformErrorExplanationResult,
   AiTerraformPreviewExplanationResult,
   AiTerraformStage,
+  AnalyzeSourceRepositoryRequest,
   ApiErrorCode,
   ApiErrorResponse,
   ArchitecturePatchPreviewResponse,
@@ -19,6 +21,7 @@ import type {
   CreateArchitectureSnapshotRequest,
   CreateArchitectureDraftRequest,
   CreateArchitectureDraftResponse,
+  CreateGitHubArchitectureDraftRequest,
   CreateAwsConnectionRequest,
   CreateAwsConnectionResponse,
   CreateDeploymentRequest,
@@ -68,6 +71,7 @@ import type {
   RecentSuccessfulDeploymentProject,
   RecentSuccessfulDeploymentProjectListResponse,
   SourceRepository,
+  SourceRepositoryAnalysisResult,
   SourceRepositoryListResponse,
   SourceRepositoryResponse,
   StopLiveObservationResponse,
@@ -342,6 +346,18 @@ export async function createAiArchitectureDraft(
     ...input,
     prompt
   });
+}
+
+export async function analyzeSourceRepository(
+  input: AnalyzeSourceRepositoryRequest
+): Promise<SourceRepositoryAnalysisResult> {
+  return postPublicAiJson<SourceRepositoryAnalysisResult>("/ai/source-repository-analysis", input);
+}
+
+export async function createGitHubArchitectureDraft(
+  input: CreateGitHubArchitectureDraftRequest
+): Promise<AiArchitectureDraftResult> {
+  return postPublicAiJson<AiArchitectureDraftResult>("/ai/github-architecture-draft", input);
 }
 
 export async function createAiArchitecturePatchPreview(
