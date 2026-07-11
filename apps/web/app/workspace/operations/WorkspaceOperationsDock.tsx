@@ -155,7 +155,7 @@ export function WorkspaceOperationsDock({
           ) : activeTab === "safety" ? (
             <SafetyOperationsPanel context={context} safety={safety} />
           ) : activeTab === "deployment" ? (
-            <DeploymentOperationsPanel deployment={deployment} safety={safety} />
+            <DeploymentOperationsPanel deployment={deployment} safety={safety} terraform={terraform} />
           ) : activeTab === "git-cicd" ? (
             <GitCicdOperationsPanel deployment={deployment} gitCicd={gitCicd} projectId={projectId} />
           ) : (

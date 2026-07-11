@@ -14,3 +14,8 @@ test("deployment keeps Plan, approval, and Apply as separate explicit actions", 
   assert.match(deploymentPanelSource, /Apply 실행/);
   assert.doesNotMatch(deploymentPanelSource, /showApplyConfirmation/);
 });
+
+test("deployment panel uses the shared five-step flow instead of a local approximation", () => {
+  assert.match(deploymentPanelSource, /getDirectDeploymentFlow/);
+  assert.doesNotMatch(deploymentPanelSource, /function getDeploymentSteps/);
+});

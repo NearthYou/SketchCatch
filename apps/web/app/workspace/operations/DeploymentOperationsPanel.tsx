@@ -4,22 +4,38 @@ import { Ban, Check, CirclePlay, FileCheck2, LoaderCircle, Save, XCircle } from 
 import type { DeploymentStatus } from "@sketchcatch/types";
 import type { WorkspaceDeploymentState } from "./use-workspace-deployment";
 import type { WorkspaceSafetyState } from "./use-workspace-safety";
+import type { WorkspaceTerraformState } from "./use-workspace-terraform";
+import {
+  getDirectDeploymentFlow,
+  type DirectDeploymentPreflightState
+} from "../../../features/workspace/deployment-console-state";
 import styles from "./workspace-operations.module.css";
 
 // 저장부터 Apply까지 현재 한 단계만 강조하고 서로 다른 버튼으로 실행합니다.
 export function DeploymentOperationsPanel({
   deployment,
-  safety
+  safety,
+  terraform
 }: {
   readonly deployment: WorkspaceDeploymentState;
   readonly safety: WorkspaceSafetyState;
+  readonly terraform: WorkspaceTerraformState;
 }) {
   const current = deployment.current;
   const isBusy = deployment.requestState === "loading" || current?.status === "RUNNING";
-  const blockedReason = current?.blockedReason ??
+  const flow = getDirectDeploymentFlow({
+    actions: deployment.actionState,
+    deployment: current,
+    hasUnsavedBaseline: terraform.previewState !== "current",
+    preflightState: getPreflightState(safety),
+    requestState: deployment.requestState
+  });
+  const activeStep = flow.steps.find((step) => step.id === flow.activeStepId);
+  const blockedReason = current?.blockedReason ?? activeStep?.disabledReason ??
     (safety.gate.kind === "blocked" || safety.gate.kind === "not-checked"
       ? safety.gate.reason
       : "");
+  const isCleanupPlan = current?.currentPlanOperation === "destroy";
 
   return (
     <div className={styles.panelBody}>
@@ -34,10 +50,11 @@ export function DeploymentOperationsPanel({
       </header>
 
       <ol className={styles.deploymentSteps}>
-        {getDeploymentSteps(current).map((step) => (
-          <li data-state={step.state} key={step.label}>
-            <span>{step.state === "done" ? <Check aria-hidden="true" size={13} /> : step.index}</span>
-            {step.label}
+        {flow.steps.map((step, index) => (
+          <li data-state={step.state} key={step.id} title={step.description}>
+            <span>{step.state === "done" ? <Check aria-hidden="true" size={13} /> : index + 1}</span>
+            <strong>{step.label}</strong>
+            <small>{step.statusLabel}</small>
           </li>
         ))}
       </ol>
@@ -78,22 +95,32 @@ export function DeploymentOperationsPanel({
       ) : null}
 
       <div className={styles.deploymentActions}>
-        {!current ? (
-          <button className={styles.primaryButton} disabled={isBusy} onClick={() => void deployment.prepare()} type="button">
+        {flow.activeStepId === "save" ? (
+          <button className={styles.primaryButton} disabled={isBusy} onClick={() => void terraform.generate()} type="button">
+            <Save aria-hidden="true" size={15} /> Terraform 다시 생성
+          </button>
+        ) : null}
+        {!current && flow.activeStepId !== "save" ? (
+          <button
+            className={styles.primaryButton}
+            disabled={isBusy || safety.gate.kind === "not-checked" || safety.gate.kind === "blocked"}
+            onClick={() => void deployment.prepare()}
+            type="button"
+          >
             <Save aria-hidden="true" size={15} /> 배포 기준 저장
           </button>
         ) : null}
-        {deployment.actionState.shouldShowApplyPlanButton ? (
+        {deployment.actionState.shouldShowApplyPlanButton && !isCleanupPlan ? (
           <button className={styles.primaryButton} disabled={!deployment.actionState.canRunApplyPlan} onClick={() => void deployment.runPlan()} type="button">
             <FileCheck2 aria-hidden="true" size={15} /> Plan 실행
           </button>
         ) : null}
-        {deployment.actionState.shouldShowApprovePlanButton ? (
+        {deployment.actionState.shouldShowApprovePlanButton && !isCleanupPlan ? (
           <button className={styles.primaryButton} disabled={!deployment.actionState.canApprovePlan} onClick={() => void deployment.approvePlan()} type="button">
             <Check aria-hidden="true" size={15} /> {deployment.actionState.approvePlanLabel}
           </button>
         ) : null}
-        {deployment.actionState.shouldShowApplyButton ? (
+        {deployment.actionState.shouldShowApplyButton && !isCleanupPlan ? (
           <button className={styles.primaryButton} disabled={!deployment.actionState.canApply || safety.gate.kind === "blocked"} onClick={() => void deployment.apply()} type="button">
             <CirclePlay aria-hidden="true" size={15} /> Apply 실행
           </button>
@@ -118,6 +145,16 @@ export function DeploymentOperationsPanel({
   );
 }
 
+// Safety 검사 상태를 배포 5단계 계산기가 사용하는 상태로 바꿉니다.
+function getPreflightState(safety: WorkspaceSafetyState): DirectDeploymentPreflightState {
+  if (safety.requestState === "analyzing") return "loading";
+  if (safety.errorMessage) return "error";
+  if (safety.gate.kind === "blocked") return "blocked";
+  if (safety.gate.kind === "warning") return "warning";
+  if (safety.gate.kind === "ready") return "passed";
+  return "idle";
+}
+
 // 배포 상태를 사용자에게 익숙한 실행 상태 문구로 바꿉니다.
 function getDeploymentStatusLabel(status: DeploymentStatus | undefined): string {
   if (status === "RUNNING") return "실행 중";
@@ -126,22 +163,4 @@ function getDeploymentStatusLabel(status: DeploymentStatus | undefined): string 
   if (status === "CANCELLED") return "취소";
   if (status === "DESTROYED") return "정리 완료";
   return "준비 전";
-}
-
-// Deployment 필드로 저장, 검사, Plan, 승인, Apply 단계의 진행 상태를 계산합니다.
-function getDeploymentSteps(current: WorkspaceDeploymentState["current"]): readonly {
-  readonly index: number;
-  readonly label: string;
-  readonly state: "waiting" | "current" | "done";
-}[] {
-  const planReady = Boolean(current?.currentPlanArtifactId);
-  const approved = Boolean(current?.approvedAt);
-  const applied = current?.status === "SUCCESS" || current?.status === "DESTROYED";
-  return [
-    { index: 1, label: "저장", state: current ? "done" : "current" },
-    { index: 2, label: "검사", state: current ? "done" : "waiting" },
-    { index: 3, label: "Plan", state: planReady ? "done" : current ? "current" : "waiting" },
-    { index: 4, label: "승인", state: approved ? "done" : planReady ? "current" : "waiting" },
-    { index: 5, label: "Apply", state: applied ? "done" : approved ? "current" : "waiting" }
-  ];
 }
