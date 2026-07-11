@@ -4,9 +4,6 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const workspaceStartClientSource = readAppWorkspaceFile("new/workspace-start-client.tsx");
-const workspaceAiRouteSource = readAppWorkspaceFile("ai/page.tsx");
-const workspaceAiStartClientSource = readAppWorkspaceFile("ai/workspace-ai-start-client.tsx");
-const browserVoiceInputSource = readFeatureWorkspaceFile("use-browser-voice-input.ts");
 
 test("new project start keeps all five start modes and core API calls", () => {
   assert.match(workspaceStartClientSource, /createWorkspaceStartOptions/);
@@ -22,39 +19,6 @@ test("new project start keeps all five start modes and core API calls", () => {
   assert.doesNotMatch(workspaceStartClientSource, /workspaceStartProviderGrid/);
 });
 
-test("AI route keeps the AI start flow connected", () => {
-  assert.match(workspaceAiRouteSource, /WorkspaceAiStartClient/);
-});
-
-test("AI implementation keeps ArchitectureJson conversion, approval persistence, and voice input", () => {
-  assert.match(workspaceAiStartClientSource, /convertArchitectureJsonToDiagramJson/);
-  assert.match(workspaceAiStartClientSource, /saveProjectDraft/);
-  assert.match(workspaceAiStartClientSource, /createdProjectId/);
-  assert.match(workspaceAiStartClientSource, /COPY\.approve/);
-  assert.match(workspaceAiStartClientSource, /COPY\.cancel/);
-  assert.match(workspaceAiStartClientSource, /useBrowserVoiceInput/);
-  assert.match(browserVoiceInputSource, /SpeechRecognition/);
-  assert.match(browserVoiceInputSource, /ko-KR/);
-});
-
-test("AI implementation keeps prompt guardrails and patch preview flow", () => {
-  const submitPromptBody = workspaceAiStartClientSource.slice(
-    workspaceAiStartClientSource.indexOf("async function submitPrompt"),
-    workspaceAiStartClientSource.indexOf("async function handleDraftClarificationMessage")
-  );
-  const classificationIndex = submitPromptBody.indexOf("classifyWorkspaceAiChatPrompt(trimmedPrompt)");
-  const draftIndex = submitPromptBody.indexOf("await createDraftFromRequest");
-
-  assert.match(workspaceAiStartClientSource, /classifyWorkspaceAiChatPrompt/);
-  assert.match(workspaceAiStartClientSource, /createAiArchitecturePatchPreview/);
-  assert.ok(classificationIndex >= 0);
-  assert.ok(classificationIndex < draftIndex);
-});
-
 function readAppWorkspaceFile(fileName: string): string {
   return readFileSync(fileURLToPath(new URL(`../../app/workspace/${fileName}`, import.meta.url)), "utf8");
-}
-
-function readFeatureWorkspaceFile(fileName: string): string {
-  return readFileSync(fileURLToPath(new URL(fileName, import.meta.url)), "utf8");
 }

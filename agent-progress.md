@@ -4,7 +4,9 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- Active branch: `Refactor/jh/300-ui-개선`, PR #328.
+
+- Active branch: `fix/sw/330-production-auth-runtime`, issue #330.
+
 - Release `v2.0.0` uses main SHA `44cdc976da8a03fca2d0aad69a0f3d45d51d4e8a`.
 - Route53 points to the direct-path ECS ALB. Public `/`, `/health`, and `/health/db` return 200; protected `/api/projects` returns 401.
 - API and web are active at desired/running 1 with Application Auto Scaling min 1 and max 2.
@@ -12,15 +14,11 @@ Short English-only working log for the current agent context. Older records are 
 - The old EC2 instance, old ALB, and legacy CloudFormation ALB stack are deleted.
 - Cold rollback retains encrypted AMI `ami-0a65f0b7656bf2221`, encrypted snapshot `snap-04862810b1ed8a101`, and the verified SHA-pinned S3 Docker archive.
 - RDS is encrypted and available with deletion protection and seven-day backups; it remains Single-AZ for cost control.
-- Production alarms are OK and the SNS email subscription is confirmed.
+- Production username/password signup and login are healthy after rotating the invalid one-character auth token secret; OAuth client ID injection is pending this hotfix deployment.
+- Container log alarms keep ALARM notifications while suppressing repetitive OK notifications, and the web filter excludes stale Next.js Server Action requests.
 
 ## Session Record
 
-### 2026-07-11 - Harden Live Observation Redis and stream recovery
-
-- Replaced sequential Redis counter increment and TTL commands with one Lua `EVAL` operation while preserving in-memory fallback and degradation reporting.
-- Added typed recoverable stream failure notifications for SSE and snapshot polling without changing retry or abort behavior.
-- Separated transient stream delay UI state from action errors and clear it only after snapshot recovery.
 
 ### 2026-07-11 - Retire warm rollback and complete cost-first ECS operations
 
@@ -40,11 +38,7 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Verification
 
-- Redis Runtime Cache tests passed 10/10; Web API client tests passed 34/34; focused Live Observation tests passed 58/58.
-- Focused Web merge regression tests passed 127/127.
-- Focused API Terraform and warning tests passed 12/12.
-- `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check` passed.
-- Full `pnpm test` remains red on unrelated coverage: Web 848/852 with four project/catalog failures and API with nine deployment lock, AI explanation, and resource-catalog failures.
+
 
 ## Risk
 
