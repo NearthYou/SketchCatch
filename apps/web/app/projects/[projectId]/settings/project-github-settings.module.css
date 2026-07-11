@@ -1,0 +1,14 @@
+.title.title {
+  color: #122033;
+  overflow-wrap: anywhere;
+}
+
+.scope :global(.settingsInfoGrid span) {
+  color: #526174;
+}
+
+.scope :global(.dashboardTopbarAction),
+.scope :global(.dashboardSecondaryButton),
+.scope :global(.designDashboardPrimaryAction) {
+  min-height: 44px;
+}

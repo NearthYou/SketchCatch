@@ -82,6 +82,12 @@ export function getAreaNodeLabel(node: DiagramNode): string {
     return isResourceAreaNode(node) ? diagramAreaLabel.toLocaleUpperCase() : diagramAreaLabel;
   }
 
+  const diagramLabel = readDiagramTextValue(node, "diagramLabel");
+
+  if (diagramLabel) {
+    return diagramLabel;
+  }
+
   if (isResourceAreaNode(node)) {
     return getResourceNodeDisplayLabel(node);
   }

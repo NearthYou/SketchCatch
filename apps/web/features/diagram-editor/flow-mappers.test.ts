@@ -16,6 +16,180 @@ const handlers: DiagramFlowNodeHandlers = {
   onResizeEnd: () => {}
 };
 
+test("toFlowNodes reuses the cached node when its model and display state are unchanged", () => {
+  const instance = makeNode({ id: "instance-1", resourceType: "aws_instance" });
+  const first = toFlowNodes([instance], [], null, false, handlers);
+  const second = toFlowNodes([instance], [], null, false, handlers, {
+    cachedNodesById: new Map(first.map((node) => [node.id, node]))
+  });
+
+  assert.equal(second[0], first[0]);
+});
+
+test("toFlowNodes replaces only the moved node when cached siblings are unchanged", () => {
+  const instance = makeNode({ id: "instance-1", resourceType: "aws_instance" });
+  const bucket = makeNode({ id: "bucket-1", resourceType: "aws_s3_bucket" });
+  const first = toFlowNodes([instance, bucket], [], null, false, handlers);
+  const moved = { ...instance, position: { x: 120, y: 48 } };
+  const second = toFlowNodes([moved, bucket], [], null, false, handlers, {
+    cachedNodesById: new Map(first.map((node) => [node.id, node]))
+  });
+
+  assert.notEqual(second[0], first[0]);
+  assert.equal(second[1], first[1]);
+});
+
+test("toFlowNodes replaces cached nodes when selection or dimming changes", () => {
+  const previouslySelected = makeNode({ id: "previously-selected", resourceType: "aws_instance" });
+  const newlySelected = makeNode({ id: "newly-selected", resourceType: "aws_s3_bucket" });
+  const consistentlyDimmed = makeNode({ id: "consistently-dimmed", resourceType: "aws_sqs_queue" });
+  const nodes = [previouslySelected, newlySelected, consistentlyDimmed];
+  const first = toFlowNodes(nodes, [previouslySelected.id], null, false, handlers);
+  const second = toFlowNodes(nodes, [newlySelected.id], null, false, handlers, {
+    cachedNodesById: new Map(first.map((node) => [node.id, node]))
+  });
+
+  assert.notEqual(second[0], first[0]);
+  assert.notEqual(second[1], first[1]);
+  assert.equal(second[2], first[2]);
+  assert.equal(second[0]?.data.isDimmed, true);
+  assert.equal(second[1]?.selected, true);
+});
+
+test("toFlowNodes replaces cached nodes for connection activity and target-validity transitions", () => {
+  const source = makeNode({ id: "source-1", resourceType: "aws_volume_attachment" });
+  const duplicateTarget = makeNode({ id: "duplicate-1", resourceType: "aws_instance" });
+  const validTarget = makeNode({ id: "valid-1", resourceType: "aws_instance" });
+  const nodes = [source, duplicateTarget, validTarget];
+  const inactive = toFlowNodes(nodes, [], null, false, handlers);
+  const active = toFlowNodes(nodes, [], null, true, handlers, {
+    activeConnectionSourceNodeId: source.id,
+    cachedNodesById: new Map(inactive.map((node) => [node.id, node])),
+    edges: []
+  });
+  const validityChanged = toFlowNodes(nodes, [], null, true, handlers, {
+    activeConnectionSourceNodeId: source.id,
+    cachedNodesById: new Map(active.map((node) => [node.id, node])),
+    edges: [makeEdge(source.id, duplicateTarget.id)]
+  });
+
+  assert.notEqual(active[0], inactive[0]);
+  assert.notEqual(active[1], inactive[1]);
+  assert.notEqual(active[2], inactive[2]);
+  assert.equal(active[1]?.data.isValidConnectionTarget, true);
+  assert.notEqual(validityChanged[1], active[1]);
+  assert.equal(validityChanged[2], active[2]);
+  assert.equal(validityChanged[1]?.data.isValidConnectionTarget, false);
+});
+
+test("toFlowNodes replaces cached preview nodes when preview mode or annotations change", () => {
+  const instance = makeNode({ id: "instance-1", resourceType: "aws_instance" });
+  const bucket = makeNode({ id: "bucket-1", resourceType: "aws_s3_bucket" });
+  const nodes = [instance, bucket];
+  const live = toFlowNodes(nodes, [], null, false, handlers);
+  const modifiedPreview = toFlowNodes(nodes, [], null, false, handlers, {
+    cachedNodesById: new Map(live.map((node) => [node.id, node])),
+    isPreview: true,
+    previewAnnotations: {
+      edgeStates: {},
+      nodeStates: { [instance.id]: "modified" }
+    }
+  });
+  const deletedPreview = toFlowNodes(nodes, [], null, false, handlers, {
+    cachedNodesById: new Map(modifiedPreview.map((node) => [node.id, node])),
+    isPreview: true,
+    previewAnnotations: {
+      edgeStates: {},
+      nodeStates: { [instance.id]: "deleted" }
+    }
+  });
+
+  assert.notEqual(modifiedPreview[0], live[0]);
+  assert.notEqual(modifiedPreview[1], live[1]);
+  assert.notEqual(deletedPreview[0], modifiedPreview[0]);
+  assert.equal(deletedPreview[1], modifiedPreview[1]);
+  assert.equal(deletedPreview[0]?.data.previewState, "deleted");
+});
+
+test("toFlowNodes replaces cached descendants when an ancestor changes their z-index", () => {
+  const account = makeDesignAreaNode({ id: "account-1", type: "sketchcatch_group" });
+  const region = makeDesignAreaNode({ id: "region-1", type: "sketchcatch_region" });
+  const availabilityZone = makeDesignAreaNode({
+    id: "az-1",
+    parentAreaNodeId: region.id,
+    type: "sketchcatch_az"
+  });
+  const instance = makeNode({
+    id: "instance-1",
+    parentAreaNodeId: availabilityZone.id,
+    resourceType: "aws_instance"
+  });
+  const rootBucket = makeNode({ id: "bucket-1", resourceType: "aws_s3_bucket" });
+  const first = toFlowNodes([account, region, availabilityZone, instance, rootBucket], [], null, false, handlers);
+  const nestedRegion = { ...region, metadata: { parentAreaNodeId: account.id } };
+  const second = toFlowNodes(
+    [account, nestedRegion, availabilityZone, instance, rootBucket],
+    [],
+    null,
+    false,
+    handlers,
+    { cachedNodesById: new Map(first.map((node) => [node.id, node])) }
+  );
+
+  assert.equal(second[0], first[0]);
+  assert.notEqual(second[2], first[2]);
+  assert.notEqual(second[3], first[3]);
+  assert.equal(second[4], first[4]);
+  assert.ok((second[3]?.zIndex ?? 0) > (first[3]?.zIndex ?? 0));
+});
+
+test("toFlowNodes replaces the cached node for every changed handler", () => {
+  const instance = makeNode({ id: "instance-1", resourceType: "aws_instance" });
+  const handlerNames = [
+    "onBringForward",
+    "onSendBackward",
+    "onTextColorChange",
+    "onBorderColorChange",
+    "onToggleLock",
+    "onResizeStart",
+    "onResize",
+    "onResizeEnd"
+  ] as const;
+
+  for (const handlerName of handlerNames) {
+    const first = toFlowNodes([instance], [], null, false, handlers);
+    const replacementHandlers: DiagramFlowNodeHandlers = {
+      ...handlers,
+      [handlerName]: () => {}
+    };
+    const second = toFlowNodes([instance], [], null, false, replacementHandlers, {
+      cachedNodesById: new Map(first.map((node) => [node.id, node]))
+    });
+
+    assert.notEqual(second[0], first[0], `${handlerName} must invalidate the cached Flow node`);
+  }
+});
+
+test("toFlowNodes replaces only previous and current Area drop targets from the cache", () => {
+  const vpc = makeNode({ id: "vpc-1", resourceType: "aws_vpc" });
+  const subnet = makeNode({ id: "subnet-1", resourceType: "aws_subnet" });
+  const instance = makeNode({ id: "instance-1", resourceType: "aws_instance" });
+  const first = toFlowNodes([vpc, subnet, instance], [], vpc.id, false, handlers);
+  const firstById = new Map(first.map((node) => [node.id, node]));
+  const second = toFlowNodes([vpc, subnet, instance], [], subnet.id, false, handlers, {
+    cachedNodesById: firstById
+  });
+  const secondById = new Map(second.map((node) => [node.id, node]));
+
+  assert.equal(firstById.get(vpc.id)?.data.isAreaDropTarget, true);
+  assert.equal(secondById.get(vpc.id)?.data.isAreaDropTarget, false);
+  assert.equal(firstById.get(subnet.id)?.data.isAreaDropTarget, false);
+  assert.equal(secondById.get(subnet.id)?.data.isAreaDropTarget, true);
+  assert.notEqual(secondById.get(vpc.id), firstById.get(vpc.id));
+  assert.notEqual(secondById.get(subnet.id), firstById.get(subnet.id));
+  assert.equal(secondById.get(instance.id), firstById.get(instance.id));
+});
+
 test("toFlowNodes marks only the active Area placement target in node data and accessibility", () => {
   const vpc = makeNode({ id: "vpc-1", resourceType: "aws_vpc" });
   const subnet = makeNode({ id: "subnet-1", resourceType: "aws_subnet" });
@@ -30,13 +204,14 @@ test("toFlowNodes marks only the active Area placement target in node data and a
 });
 
 test("connection affordance marks only valid non-duplicate target nodes", () => {
-  const source = makeNode({ id: "source-1", resourceType: "aws_instance" });
-  const duplicateTarget = makeNode({ id: "duplicate-1", resourceType: "aws_s3_bucket" });
-  const validTarget = makeNode({ id: "valid-1", resourceType: "aws_lambda_function" });
+  const source = makeNode({ id: "source-1", resourceType: "aws_volume_attachment" });
+  const duplicateTarget = makeNode({ id: "duplicate-1", resourceType: "aws_ebs_volume" });
+  const validTarget = makeNode({ id: "valid-1", resourceType: "aws_instance" });
+  const invalidTarget = makeNode({ id: "invalid-1", resourceType: "aws_s3_bucket" });
   const lockedTarget = makeNode({ id: "locked-1", locked: true, resourceType: "aws_kms_key" });
   const existingEdge = makeEdge(source.id, duplicateTarget.id);
   const flowNodes = toFlowNodes(
-    [source, duplicateTarget, validTarget, lockedTarget],
+    [source, duplicateTarget, validTarget, invalidTarget, lockedTarget],
     [],
     null,
     true,
@@ -55,6 +230,10 @@ test("connection affordance marks only valid non-duplicate target nodes", () => 
   assert.equal(
     flowNodes.find((node) => node.id === validTarget.id)?.data.isValidConnectionTarget,
     true
+  );
+  assert.equal(
+    flowNodes.find((node) => node.id === invalidTarget.id)?.data.isValidConnectionTarget,
+    false
   );
   assert.equal(
     flowNodes.find((node) => node.id === lockedTarget.id)?.data.isValidConnectionTarget,

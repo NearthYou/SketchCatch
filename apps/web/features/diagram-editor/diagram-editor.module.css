@@ -2018,6 +2018,10 @@
   pointer-events: none;
 }
 
+.nodeShellSelected ~ .connectionHandleSource:global(.react-flow__handle-left) {
+  left: calc(-18px * var(--board-control-scale));
+}
+
 .nodeShellSelected ~ .connectionHandleSource:global(.react-flow__handle-top) {
   top: calc(-18px * var(--board-control-scale));
 }

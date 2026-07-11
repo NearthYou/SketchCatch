@@ -1,7 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { once } from "node:events";
+import { Writable } from "node:stream";
+import Fastify from "fastify";
 import type { ApiErrorResponse } from "@sketchcatch/types";
-import { buildApp } from "./app.js";
+import { buildApp, createApiLoggerOptions } from "./app.js";
 
 process.env.NODE_ENV = "test";
 process.env.AUTH_TOKEN_SECRET = "test-auth-token-secret-with-at-least-32-characters";
@@ -123,6 +126,31 @@ test("OPTIONS preflight allows project draft PUT requests", async () => {
   await app.close();
 });
 
+test("OPTIONS preflight allows the configured public web origin", async () => {
+  const previousPublicBaseUrl = process.env.SKETCHCATCH_PUBLIC_BASE_URL;
+  process.env.SKETCHCATCH_PUBLIC_BASE_URL = "http://127.0.0.1:3002";
+  const app = buildApp();
+
+  try {
+    const response = await app.inject({
+      headers: {
+        "access-control-request-headers": "content-type,authorization",
+        "access-control-request-method": "POST",
+        origin: "http://127.0.0.1:3002"
+      },
+      method: "OPTIONS",
+      url: "/api/projects/11111111-1111-4111-8111-111111111111/source-repositories"
+    });
+
+    assert.equal(response.statusCode, 204);
+    assert.equal(response.headers["access-control-allow-origin"], "http://127.0.0.1:3002");
+    assert.equal(response.headers["access-control-allow-credentials"], "true");
+  } finally {
+    process.env.SKETCHCATCH_PUBLIC_BASE_URL = previousPublicBaseUrl;
+    await app.close();
+  }
+});
+
 test("production 500 responses do not expose internal error messages", async () => {
   const previousNodeEnv = process.env.NODE_ENV;
   process.env.NODE_ENV = "production";
@@ -147,6 +175,91 @@ test("production 500 responses do not expose internal error messages", async () 
     process.env.NODE_ENV = previousNodeEnv;
     await app.close();
   }
+});
+
+test("API logger options stay disabled in tests", () => {
+  assert.equal(createApiLoggerOptions({ nodeEnv: "test" }), false);
+});
+
+test("API logger redaction explicitly covers root and request/response header wrappers", () => {
+  const loggerOptions = createApiLoggerOptions({ nodeEnv: "production" });
+
+  assert.notEqual(loggerOptions, false);
+  if (loggerOptions === false) {
+    assert.fail("Expected production logger options");
+  }
+
+  const redact = loggerOptions.redact;
+  assert.ok(redact && !Array.isArray(redact));
+  const paths = redact.paths;
+
+  for (const wrapper of ["", "req.", "request.", "res.", "response."]) {
+    assert.ok(paths.includes(`${wrapper}headers.authorization`));
+    assert.ok(paths.includes(`${wrapper}headers.cookie`));
+    assert.ok(paths.includes(`${wrapper}headers["set-cookie"]`));
+  }
+});
+
+test("API logger censors sensitive headers in actual serialized Fastify output", async () => {
+  let output = "";
+  const stream = new Writable({
+    write(chunk, _encoding, callback) {
+      output += chunk.toString();
+      callback();
+    }
+  });
+  const loggerOptions = createApiLoggerOptions({
+    nodeEnv: "production",
+    stream
+  });
+  const app = Fastify({ logger: loggerOptions });
+  const probes = {
+    rootAuthorization: "Bearer root-authorization-probe",
+    rootCookie: "root-cookie-probe=secret",
+    rootSetCookie: "root-set-cookie-probe=secret",
+    requestAuthorization: "Bearer request-authorization-probe",
+    requestCookie: "request-cookie-probe=secret",
+    requestSetCookie: "request-set-cookie-probe=secret",
+    responseAuthorization: "Bearer response-authorization-probe",
+    responseCookie: "response-cookie-probe=secret",
+    responseSetCookie: "response-set-cookie-probe=secret"
+  };
+
+  app.log.info({
+    headers: {
+      authorization: probes.rootAuthorization,
+      cookie: probes.rootCookie,
+      "set-cookie": probes.rootSetCookie,
+      "x-visible-root": "visible-root-probe"
+    },
+    request: {
+      headers: {
+        authorization: probes.requestAuthorization,
+        cookie: probes.requestCookie,
+        "set-cookie": probes.requestSetCookie,
+        "x-visible-request": "visible-request-probe"
+      }
+    },
+    response: {
+      headers: {
+        authorization: probes.responseAuthorization,
+        cookie: probes.responseCookie,
+        "set-cookie": probes.responseSetCookie,
+        "x-visible-response": "visible-response-probe"
+      }
+    }
+  });
+
+  await app.close();
+  stream.end();
+  await once(stream, "finish");
+
+  for (const probe of Object.values(probes)) {
+    assert.equal(output.includes(probe), false);
+  }
+  assert.match(output, /visible-root-probe/);
+  assert.match(output, /visible-request-probe/);
+  assert.match(output, /visible-response-probe/);
 });
 
 function assertErrorResponse(

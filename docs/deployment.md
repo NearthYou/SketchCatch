@@ -421,11 +421,30 @@ pnpm --filter @sketchcatch/api test -- runtime-cache
 Live Observation은 성공한 `demo_web_service` Deployment의 실제 Traffic API, CloudWatch 측정값, Auto Scaling 상태를 15분 동안 관측하는 opt-in 기능입니다. 운영 API runtime에는 다음 비민감 환경 변수를 주입합니다.
 
 ```text
-LIVE_OBSERVATION_ENABLED=true
+LIVE_OBSERVATION_ENABLED=false
 SKETCHCATCH_PUBLIC_BASE_URL=https://sketchcatch.net
 ```
 
 `SKETCHCATCH_PUBLIC_BASE_URL`은 audience page가 public receipt collector를 호출할 기준 origin입니다. Nginx/ALB는 이 origin의 `/api/live-observations/...` 요청을 API로 전달해야 합니다. audience S3 website origin과 SketchCatch Web origin만 collector CORS 응답을 받을 수 있습니다.
+
+현재 v1 collector는 token을 URL path에 포함한다. API의 Pino 설정은 structured object의 lowercase `authorization`, `cookie`, `set-cookie` header field를 redaction하지만 URL path/query string, interpolated string, `Error.message`까지 sanitize하지는 않는다. 따라서 collector v2 migration이 완료될 때까지 production `LIVE_OBSERVATION_ENABLED`는 반드시 `false`로 유지한다.
+
+v2 capability 경로를 연결할 때 사용할 환경 변수는 다음과 같다. 이 Task에서는 v2 runtime을 연결하거나 feature flag를 활성화하지 않으므로, 아래 값은 아직 application startup 필수값이 아니며 GitHub/ECS enforcement 대상에도 추가하지 않는다.
+
+```text
+LIVE_OBSERVATION_CAPABILITY_CURRENT_KID=<1-32 character safe kid>
+LIVE_OBSERVATION_CAPABILITY_CURRENT_SECRET=<32-byte unpadded base64url>
+LIVE_OBSERVATION_CAPABILITY_PREVIOUS_KID=
+LIVE_OBSERVATION_CAPABILITY_PREVIOUS_SECRET=
+LIVE_OBSERVATION_CAPABILITY_PREVIOUS_STOPPED_ISSUING_AT=
+```
+
+`CURRENT_KID`와 `CURRENT_SECRET`은 capability require 함수를 호출할 때 필수다. previous 3개 값은 rotation 동안에만 all-or-none으로 설정한다. secret은 승인된 secret manager의 cryptographic generator로 정확히 32-byte를 생성해 직접 주입하며 terminal/log에 출력하거나 저장소·평문 ECS environment에 기록하지 않는다.
+
+안전한 two-phase rotation runbook:
+
+1. Cutover phase: v2 issuance를 중지하고 모든 old process가 previous secret으로 더 이상 발급하지 않는지 확인한다. 마지막 old issuer가 멈춘 뒤 그 absolute UTC instant를 `stoppedIssuingAt`으로 한 번 기록한다. 새 process에는 새 key를 current로, old key를 previous로, 기록한 동일 시각을 `LIVE_OBSERVATION_CAPABILITY_PREVIOUS_STOPPED_ISSUING_AT`으로 배포한다. future timestamp는 사용하지 않는다.
+2. Cleanup phase: `stoppedIssuingAt + 15분`이 지난 뒤 previous 3개 값을 함께 제거한다. 정확한 경계부터 previous key는 거부되며, overlap 중에도 Store의 trusted `createdAt`이 `stoppedIssuingAt`보다 늦은 session은 previous key로 검증하거나 재생성하지 않는다. Store create/read는 claims와 같은 `Redis TIME` 또는 injected Store clock에서 canonical `evaluatedAt`을 반환하고 capability operation에 함께 전달한다. API process clock, client timestamp, 별도 clock sample로 대체하지 않는다. process restart나 재배포가 `stoppedIssuingAt`을 현재 시각으로 다시 쓰거나 overlap을 연장해서는 안 된다.
 
 Production에서 `LIVE_OBSERVATION_ENABLED=true`이면 `REDIS_URL`이 실제 Redis/ElastiCache에 연결되고 `PING`, `INCRBY`, `PEXPIRE`, `SET NX PX`를 수행할 수 있어야 합니다. Redis가 없거나 readiness가 실패하면 세션 생성은 `503 LIVE_OBSERVATION_CACHE_UNAVAILABLE`로 차단됩니다. in-memory fallback은 test와 로컬 단일 API 검증에서만 허용합니다.
 

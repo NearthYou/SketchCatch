@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type {
+  AnalyzeSourceRepositoryResponse,
   GitHubAppExistingInstallationCallbackUrlResponse,
   GitHubAppInstallUrlResponse,
   ListGitHubInstalledRepositoriesResponse,
@@ -15,8 +16,14 @@ import {
   requireGitHubAppConfig,
   requireGitHubAppStateSecret
 } from "../config/env.js";
-import { createGitHubAppClient, type GitHubAppClient } from "../source-repositories/github-app-client.js";
 import {
+  createGitHubAppClient,
+  GitHubApiRequestError,
+  type GitHubAppClient,
+  type GitHubRepositoryEvidenceReader
+} from "../source-repositories/github-app-client.js";
+import {
+  analyzeSourceRepository,
   connectGitHubSourceRepository,
   createGitHubExistingInstallationCallbackUrl,
   createGitHubInstallUrl,
@@ -31,6 +38,10 @@ import {
   SourceRepositoryStateError
 } from "../source-repositories/source-repository-service.js";
 import type { ProjectAccessContext } from "../git-cicd/git-cicd-handoff-service.js";
+import {
+  createInMemoryRateLimiter,
+  type RateLimiter
+} from "../rate-limit/in-memory-rate-limiter.js";
 
 const projectParamsSchema = z.object({
   projectId: z.uuid()
@@ -61,9 +72,11 @@ export type SourceRepositoryRouteOptions = {
     db: DatabaseClient["db"]
   ) => SourceRepositoryRepository;
   githubAppClient?: GitHubAppClient;
+  githubRepositoryEvidenceReader?: GitHubRepositoryEvidenceReader;
   githubAppSlug?: string;
   githubAppStateSecret?: string;
   githubAppCallbackUrl?: string;
+  sourceRepositoryAnalysisRateLimiter?: RateLimiter;
 };
 
 type SourceRepositoryRequestContext = {
@@ -76,10 +89,16 @@ type GitHubAppRouteRuntime = {
   callbackUrl: string;
   stateSecret: string;
   githubAppClient: GitHubAppClient;
+  githubRepositoryEvidenceReader: GitHubRepositoryEvidenceReader | null;
 };
 
 let cachedDefaultGitHubAppRouteRuntime: GitHubAppRouteRuntime | null = null;
+const defaultSourceRepositoryAnalysisRateLimiter = createInMemoryRateLimiter({
+  limit: 10,
+  windowMs: 60_000
+});
 
+// Source Repository 연결과 마지막 Repository Analysis 조회/실행 계약을 등록한다.
 export async function registerSourceRepositoryRoutes(
   app: FastifyInstance,
   options?: SourceRepositoryRouteOptions
@@ -111,6 +130,53 @@ export async function registerSourceRepositoryRoutes(
       return handleSourceRepositoryError(error, reply);
     }
   });
+
+  app.post(
+    "/projects/:projectId/source-repositories/:sourceRepositoryId/analyze",
+    async (request, reply) => {
+      const params = projectSourceRepositoryParamsSchema.parse(request.params);
+      const { accessContext, repository } = await getSourceRepositoryRequestContext(
+        request,
+        options,
+        getSourceRepositoryDatabaseClient
+      );
+      const rateLimitResult = (
+        options?.sourceRepositoryAnalysisRateLimiter ??
+        defaultSourceRepositoryAnalysisRateLimiter
+      ).consume(`source-repository-analysis:${accessContext.userId}:${params.projectId}`);
+
+      if (!rateLimitResult.allowed) {
+        return reply
+          .status(429)
+          .header("Retry-After", String(rateLimitResult.retryAfterSeconds))
+          .send({
+            error: "too_many_requests",
+            message: "Too many repository analysis requests"
+          });
+      }
+
+      try {
+        const runtime = getGitHubAppRouteRuntime(options);
+        const response: AnalyzeSourceRepositoryResponse = await analyzeSourceRepository(
+          {
+            projectId: params.projectId,
+            sourceRepositoryId: params.sourceRepositoryId,
+            accessContext
+          },
+          repository,
+          requireGitHubRepositoryEvidenceReader(runtime)
+        );
+
+        return reply.status(200).send(response);
+      } catch (error) {
+        if (error instanceof Error) {
+          return handleSourceRepositoryError(error, reply);
+        }
+
+        throw error;
+      }
+    }
+  );
 
   app.post("/projects/:projectId/source-repositories/github/install-url", async (request, reply) => {
     const params = projectParamsSchema.parse(request.params);
@@ -306,6 +372,7 @@ export async function registerSourceRepositoryRoutes(
   });
 }
 
+// route별 GitHub App 의존성을 한 runtime으로 묶고 기본 client를 재사용한다.
 function getGitHubAppRouteRuntime(
   options: SourceRepositoryRouteOptions | undefined
 ): GitHubAppRouteRuntime {
@@ -319,21 +386,24 @@ function getGitHubAppRouteRuntime(
       appSlug: options.githubAppSlug,
       callbackUrl: options.githubAppCallbackUrl,
       stateSecret: options.githubAppStateSecret,
-      githubAppClient: options.githubAppClient
+      githubAppClient: options.githubAppClient,
+      githubRepositoryEvidenceReader: options.githubRepositoryEvidenceReader ?? null
     };
   }
 
   if (!cachedDefaultGitHubAppRouteRuntime) {
     const config = requireGitHubAppConfig();
+    const githubAppClient = createGitHubAppClient({
+      appId: config.appId,
+      privateKey: config.privateKey
+    });
 
     cachedDefaultGitHubAppRouteRuntime = {
       appSlug: config.appSlug,
       callbackUrl: config.callbackUrl,
       stateSecret: requireGitHubAppStateSecret(),
-      githubAppClient: createGitHubAppClient({
-        appId: config.appId,
-        privateKey: config.privateKey
-      })
+      githubAppClient,
+      githubRepositoryEvidenceReader: githubAppClient
     };
   }
 
@@ -343,8 +413,22 @@ function getGitHubAppRouteRuntime(
     stateSecret:
       options?.githubAppStateSecret ?? cachedDefaultGitHubAppRouteRuntime.stateSecret,
     githubAppClient:
-      options?.githubAppClient ?? cachedDefaultGitHubAppRouteRuntime.githubAppClient
+      options?.githubAppClient ?? cachedDefaultGitHubAppRouteRuntime.githubAppClient,
+    githubRepositoryEvidenceReader:
+      options?.githubRepositoryEvidenceReader ??
+      cachedDefaultGitHubAppRouteRuntime.githubRepositoryEvidenceReader
   };
+}
+
+// 분석 route에 정적 evidence reader가 없으면 설정 충돌로 명확히 중단한다.
+function requireGitHubRepositoryEvidenceReader(
+  runtime: GitHubAppRouteRuntime
+): GitHubRepositoryEvidenceReader {
+  if (!runtime.githubRepositoryEvidenceReader) {
+    throw new SourceRepositoryConflictError("GitHub repository analysis is not configured");
+  }
+
+  return runtime.githubRepositoryEvidenceReader;
 }
 
 async function getSourceRepositoryRequestContext(
@@ -366,6 +450,7 @@ async function getSourceRepositoryRequestContext(
   };
 }
 
+// RDS에 저장된 마지막 Repository Analysis를 SourceRepository 조회 응답에 복원합니다.
 function toSourceRepository(row: SourceRepositoryRecord): SourceRepository {
   return {
     id: row.id,
@@ -380,6 +465,14 @@ function toSourceRepository(row: SourceRepositoryRecord): SourceRepository {
     repositoryUrl: row.repositoryUrl,
     visibility: toSourceRepositoryVisibility(row.visibility),
     archived: row.archived,
+    analysis:
+      row.analysisResult && row.analysisRevision && row.analyzedAt
+        ? {
+            repositoryRevision: row.analysisRevision,
+            analyzedAt: row.analyzedAt.toISOString(),
+            aiHandoff: row.analysisResult
+          }
+        : null,
     disconnectedAt: row.disconnectedAt ? row.disconnectedAt.toISOString() : null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString()
@@ -396,6 +489,7 @@ function toSourceRepositoryVisibility(
   return null;
 }
 
+// GitHub App와 Source Repository 내부 오류를 안정적인 사용자 응답 코드로 바꿉니다.
 function handleSourceRepositoryError(error: unknown, reply: FastifyReply) {
   if (error instanceof SourceRepositoryNotFoundError) {
     return reply.status(404).send({
@@ -415,6 +509,18 @@ function handleSourceRepositoryError(error: unknown, reply: FastifyReply) {
     return reply.status(409).send({
       error: "conflict",
       message: error.message
+    });
+  }
+
+  if (error instanceof GitHubApiRequestError) {
+    const message =
+      error.statusCode === 401 || error.statusCode === 403
+        ? "GIT_APP_AUTHENTICATION_FAILED"
+        : "GIT_APP_REPOSITORY_ACCESS_UNAVAILABLE";
+
+    return reply.status(409).send({
+      error: "conflict",
+      message
     });
   }
 

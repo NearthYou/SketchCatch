@@ -8,6 +8,20 @@ import type { CheckFinding, TerraformSyncFileInput } from "@sketchcatch/types";
 const execFileAsync = promisify(execFile);
 const TRIVY_SCAN_TIMEOUT_MS = 30_000;
 const TRIVY_SCAN_MAX_BUFFER_BYTES = 20 * 1024 * 1024;
+const TRIVY_IGNORE_FILE_NAME = ".sketchcatch-trivyignore";
+
+// Product policy keeps these AWS ALB and Auto Scaling checks out of the Trivy result.
+export const disabledTrivyTerraformRuleIds = [
+  "AWS-0047",
+  "AWS-0009",
+  "AWS-0052",
+  "AWS-0053",
+  "AWS-0054",
+  "AWS-0008",
+  "AWS-0122",
+  "AWS-0129",
+  "AWS-0130"
+] as const;
 
 export type TerraformSecurityScannerInput = {
   readonly terraformFiles: readonly TerraformSyncFileInput[];
@@ -95,7 +109,8 @@ export async function scanTerraformWithTrivy(
 
   try {
     const writtenFiles = await writeTerraformFiles(tempDirectory, terraformFiles);
-    const trivyOutput = await runTrivyConfigScan(tempDirectory, options);
+    const ignoreFilePath = await writeTrivyIgnoreFile(tempDirectory);
+    const trivyOutput = await runTrivyConfigScan(tempDirectory, ignoreFilePath, options);
 
     return parseTrivyTerraformFindings(trivyOutput, {
       tempDirectory,
@@ -155,8 +170,22 @@ async function writeTerraformFiles(
   return writtenFiles;
 }
 
+async function writeTrivyIgnoreFile(tempDirectory: string): Promise<string> {
+  const ignoreFilePath = path.join(tempDirectory, TRIVY_IGNORE_FILE_NAME);
+  await writeFile(ignoreFilePath, createTrivyIgnoreFileContents(), "utf8");
+  return ignoreFilePath;
+}
+
+export function createTrivyIgnoreFileContents(): string {
+  return [
+    ...disabledTrivyTerraformRuleIds,
+    ...disabledTrivyTerraformRuleIds.map((ruleId) => `AVD-${ruleId}`)
+  ].join("\n");
+}
+
 async function runTrivyConfigScan(
   tempDirectory: string,
+  ignoreFilePath: string,
   options: TrivyTerraformScanOptions
 ): Promise<string> {
   const cacheDir = options.cacheDir ?? process.env.TRIVY_CACHE_DIR;
@@ -170,6 +199,8 @@ async function runTrivyConfigScan(
     "0",
     "--misconfig-scanners",
     "terraform",
+    "--ignorefile",
+    ignoreFilePath,
     "--severity",
     "MEDIUM,HIGH,CRITICAL",
     "."

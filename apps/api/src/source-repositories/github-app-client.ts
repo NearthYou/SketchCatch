@@ -5,9 +5,18 @@ import type {
   GitCicdPipelineDetailStatus,
   GitHubRepositoryCandidate
 } from "@sketchcatch/types";
+import {
+  isIgnoredRepositoryEvidencePath,
+  isRepositoryEvidenceContentPath
+} from "./repository-evidence-path.js";
 
 const githubApiBaseUrl = "https://api.github.com";
 const githubJwtTtlSeconds = 9 * 60;
+const githubRequestTimeoutMs = 15_000;
+const maxRepositoryTreeEntries = 20_000;
+const maxRepositoryEvidenceFiles = 64;
+const maxRepositoryEvidenceFileBytes = 256 * 1024;
+const maxRepositoryEvidenceTotalBytes = 2 * 1024 * 1024;
 
 export type GitHubAppClientOptions = {
   appId: string;
@@ -68,11 +77,98 @@ export type GitHubActionsPipelineStatus = {
 
 export type GitHubAppInstallation = {
   installationId: string;
+  accountId: string;
   accountLogin: string;
   accountType: string | null;
   repositorySelection: "all" | "selected" | null;
   htmlUrl: string | null;
 };
+
+export type GitHubReadRepositoryEvidenceInput = {
+  readonly installationId: string;
+  readonly expectedRepositoryId: string;
+  readonly owner: string;
+  readonly name: string;
+};
+
+export type GitHubRepositoryEvidenceFile = {
+  readonly path: string;
+  readonly content: string;
+};
+
+export type GitHubRepositoryEvidenceSnapshot = {
+  readonly revision: string;
+  readonly treePaths: readonly string[];
+  readonly files: readonly GitHubRepositoryEvidenceFile[];
+};
+
+export type GitHubRepositoryEvidenceReader = {
+  readRepositoryEvidence(
+    input: GitHubReadRepositoryEvidenceInput
+  ): Promise<GitHubRepositoryEvidenceSnapshot>;
+};
+
+export class GitHubApiRequestError extends Error {
+  readonly name = "GitHubApiRequestError";
+
+  // GitHub 오류 상태를 route 계층이 기존 방식으로 매핑할 수 있게 보존한다.
+  constructor(
+    readonly statusCode: number,
+    readonly responseBody: string
+  ) {
+    super(`GitHub API request failed: ${statusCode}`);
+  }
+}
+
+export class GitHubRepositoryTreeTruncatedError extends Error {
+  readonly name = "GitHubRepositoryTreeTruncatedError";
+
+  // 일부 tree만으로 잘못된 Template을 고르지 않도록 분석을 중단한다.
+  constructor() {
+    super("GIT_APP_REPOSITORY_TREE_TRUNCATED");
+  }
+}
+
+export class GitHubRepositoryFileEncodingError extends Error {
+  readonly name = "GitHubRepositoryFileEncodingError";
+
+  // 해석할 수 없는 파일을 근거로 쓰지 않도록 문제 경로를 함께 남긴다.
+  constructor(readonly path: string) {
+    super("GIT_APP_REPOSITORY_FILE_ENCODING_UNSUPPORTED");
+  }
+}
+
+export class GitHubRepositoryArchivedError extends Error {
+  readonly name = "GitHubRepositoryArchivedError";
+
+  // 연결 뒤 archived로 바뀐 Repository를 현재 분석에서 차단한다.
+  constructor() {
+    super("GIT_APP_REPOSITORY_ARCHIVED");
+  }
+}
+
+export class GitHubRepositoryIdentityMismatchError extends Error {
+  readonly name = "GitHubRepositoryIdentityMismatchError";
+
+  // 같은 owner/name 경로가 다른 Repository로 재사용된 경우 연결된 대상을 보호한다.
+  constructor() {
+    super("GIT_APP_REPOSITORY_IDENTITY_MISMATCH");
+  }
+}
+
+export class GitHubRepositoryEvidenceLimitError extends Error {
+  readonly name = "GitHubRepositoryEvidenceLimitError";
+
+  // 분석 상한 초과 원인을 보존해 호출 수와 메모리 고갈을 구분한다.
+  constructor(
+    readonly reason: "tree_entries" | "file_count" | "file_size" | "total_size",
+    readonly limit: number,
+    readonly actual: number,
+    readonly path: string | null = null
+  ) {
+    super("GIT_APP_REPOSITORY_EVIDENCE_LIMIT_EXCEEDED");
+  }
+}
 
 export type GitHubAppClient = {
   listInstallations(): Promise<GitHubAppInstallation[]>;
@@ -122,6 +218,7 @@ type GitHubInstallationApiResponse = {
   readonly repository_selection?: unknown;
   readonly html_url?: unknown;
   readonly account?: {
+    readonly id?: unknown;
     readonly login?: unknown;
     readonly type?: unknown;
   };
@@ -135,6 +232,15 @@ type GitHubRefResponse = {
 
 type GitHubTreeResponse = {
   readonly sha?: unknown;
+};
+
+type GitHubRecursiveTreeResponse = {
+  readonly sha?: unknown;
+  readonly truncated?: unknown;
+  readonly tree?: Array<{
+    readonly path?: unknown;
+    readonly type?: unknown;
+  }>;
 };
 
 type GitHubCommitResponse = {
@@ -180,7 +286,10 @@ type GitHubWorkflowRunApiResponse = {
   readonly updated_at?: unknown;
 };
 
-export function createGitHubAppClient(options: GitHubAppClientOptions): GitHubAppClient {
+// GitHub App 인증을 재사용해 repository 연결과 정적 evidence 조회 기능을 제공한다.
+export function createGitHubAppClient(
+  options: GitHubAppClientOptions
+): GitHubAppClient & GitHubRepositoryEvidenceReader {
   const fetchImpl = options.fetch ?? fetch;
   const now = options.now ?? (() => new Date());
   const keyPromise = importPKCS8(toPkcs8PrivateKey(options.privateKey), "RS256");
@@ -271,6 +380,118 @@ export function createGitHubAppClient(options: GitHubAppClientOptions): GitHubAp
       }
 
       return repositories.sort((left, right) => left.fullName.localeCompare(right.fullName));
+    },
+
+    // branch를 commit SHA로 고정한 뒤 tree와 허용된 텍스트 설정 파일만 읽는다.
+    async readRepositoryEvidence(input) {
+      const installationToken = await createInstallationToken(input.installationId);
+
+      // 한 분석 안에서는 installation token을 재사용해 GitHub rate budget을 보호한다.
+      const requestWithEvidenceToken = <T>(
+        _installationId: string,
+        path: string,
+        init: Omit<GitHubRequestInit, "token" | "authScheme"> = {}
+      ): Promise<T> =>
+        requestGitHub<T>(fetchImpl, path, {
+          ...init,
+          token: installationToken,
+          authScheme: "token"
+        });
+      const repository = await requestWithEvidenceToken<GitHubRepositoryApiResponse>(
+        input.installationId,
+        createRepositoryPath(input, "")
+      );
+      const repositoryId = String(readRequiredNumber(repository.id, "repository id"));
+
+      if (repositoryId !== input.expectedRepositoryId) {
+        throw new GitHubRepositoryIdentityMismatchError();
+      }
+
+      if (repository.archived === true) {
+        throw new GitHubRepositoryArchivedError();
+      }
+
+      const defaultBranch = readRequiredString(
+        repository.default_branch,
+        "repository default branch"
+      );
+      const commit = await requestWithEvidenceToken<GitHubCommitResponse>(
+        input.installationId,
+        createRepositoryPath(input, `/commits/${encodeURIComponent(defaultBranch)}`)
+      );
+      const revision = readRequiredString(commit.sha, "repository commit sha");
+      const tree = await requestWithEvidenceToken<GitHubRecursiveTreeResponse>(
+        input.installationId,
+        createRepositoryPath(
+          input,
+          `/git/trees/${encodeURIComponent(revision)}?recursive=1`
+        )
+      );
+
+      if (tree.truncated === true) {
+        throw new GitHubRepositoryTreeTruncatedError();
+      }
+
+      const treePaths = readRepositoryTreePaths(tree);
+
+      if (treePaths.length > maxRepositoryTreeEntries) {
+        throw new GitHubRepositoryEvidenceLimitError(
+          "tree_entries",
+          maxRepositoryTreeEntries,
+          treePaths.length
+        );
+      }
+
+      const evidencePaths = treePaths.filter(
+        (path) =>
+          !isIgnoredRepositoryEvidencePath(path) && isRepositoryEvidenceContentPath(path)
+      );
+
+      if (evidencePaths.length > maxRepositoryEvidenceFiles) {
+        throw new GitHubRepositoryEvidenceLimitError(
+          "file_count",
+          maxRepositoryEvidenceFiles,
+          evidencePaths.length
+        );
+      }
+
+      const files: GitHubRepositoryEvidenceFile[] = [];
+      let totalBytes = 0;
+
+      for (const path of evidencePaths) {
+        const contents = await getRepositoryContent(
+          input,
+          path,
+          revision,
+          requestWithEvidenceToken
+        );
+
+        if (contents) {
+          const decoded = decodeRepositoryEvidenceFile(path, contents);
+
+          totalBytes += decoded.byteLength;
+
+          if (totalBytes > maxRepositoryEvidenceTotalBytes) {
+            throw new GitHubRepositoryEvidenceLimitError(
+              "total_size",
+              maxRepositoryEvidenceTotalBytes,
+              totalBytes,
+              path
+            );
+          }
+
+          files.push({
+            path,
+            content: decoded.content
+          });
+        }
+      }
+
+      return {
+        revision,
+        treePaths,
+        files
+      };
     },
 
     async createPullRequest(input) {
@@ -477,6 +698,7 @@ type GitHubRequestInit = {
   body?: Record<string, unknown>;
 };
 
+// GitHub HTTP 실패를 상태 코드가 있는 typed error로 통일한다.
 async function requestGitHub<T>(
   fetchImpl: typeof fetch,
   path: string,
@@ -484,6 +706,7 @@ async function requestGitHub<T>(
 ): Promise<T> {
   const requestInit: RequestInit = {
     method: init.method ?? "GET",
+    signal: AbortSignal.timeout(githubRequestTimeoutMs),
     headers: {
       Accept: "application/vnd.github+json",
       "Content-Type": "application/json",
@@ -502,14 +725,7 @@ async function requestGitHub<T>(
 
   if (!response.ok) {
     const body = await response.text().catch(() => "");
-    const error = new Error(`GitHub API request failed: ${response.status}`) as Error & {
-      statusCode?: number;
-      responseBody?: string;
-    };
-
-    error.statusCode = response.status;
-    error.responseBody = body.slice(0, 500);
-    throw error;
+    throw new GitHubApiRequestError(response.status, body.slice(0, 500));
   }
 
   if (response.status === 204) {
@@ -519,6 +735,43 @@ async function requestGitHub<T>(
   return response.json() as Promise<T>;
 }
 
+// recursive tree에서 실제 파일 경로만 골라 항상 같은 순서로 반환한다.
+function readRepositoryTreePaths(tree: GitHubRecursiveTreeResponse): string[] {
+  return (tree.tree ?? [])
+    .flatMap((entry) =>
+      entry.type === "blob" && typeof entry.path === "string" && entry.path
+        ? [entry.path]
+        : []
+    )
+    .sort();
+}
+
+// GitHub content API의 base64 텍스트만 UTF-8 evidence로 변환한다.
+function decodeRepositoryEvidenceFile(
+  path: string,
+  contents: GitHubContentsResponse
+): { content: string; byteLength: number } {
+  if (contents.encoding !== "base64" || typeof contents.content !== "string") {
+    throw new GitHubRepositoryFileEncodingError(path);
+  }
+
+  const contentBuffer = Buffer.from(contents.content.replace(/\s/g, ""), "base64");
+
+  if (contentBuffer.byteLength > maxRepositoryEvidenceFileBytes) {
+    throw new GitHubRepositoryEvidenceLimitError(
+      "file_size",
+      maxRepositoryEvidenceFileBytes,
+      contentBuffer.byteLength,
+      path
+    );
+  }
+
+  return {
+    content: contentBuffer.toString("utf8"),
+    byteLength: contentBuffer.byteLength
+  };
+}
+
 function toGitHubAppInstallation(
   installation: GitHubInstallationApiResponse
 ): GitHubAppInstallation {
@@ -526,6 +779,7 @@ function toGitHubAppInstallation(
 
   return {
     installationId: String(readRequiredNumber(installation.id, "installation id")),
+    accountId: String(readRequiredNumber(installation.account?.id, "installation account id")),
     accountLogin: readRequiredString(installation.account?.login, "installation account login"),
     accountType:
       typeof installation.account?.type === "string" && installation.account.type

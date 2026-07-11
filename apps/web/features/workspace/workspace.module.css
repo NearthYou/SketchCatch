@@ -2743,6 +2743,30 @@
   margin: 0;
 }
 
+.aiChatTemplateContext {
+  background: var(--dashboard-design-canvas-soft);
+  border-bottom: 1px solid var(--dashboard-design-hairline);
+  display: grid;
+  gap: 4px;
+  padding: 12px 18px;
+}
+
+.aiChatTemplateContext span,
+.aiChatTemplateContext code {
+  color: var(--dashboard-design-body);
+  font-size: 0.72rem;
+}
+
+.aiChatTemplateContext strong {
+  font-size: 0.86rem;
+}
+
+.aiChatTemplateContext p {
+  color: var(--dashboard-design-body);
+  font-size: 0.76rem;
+  margin: 0;
+}
+
 .aiChatCloseButton {
   align-items: center;
   background: #ffffff;
@@ -4709,6 +4733,10 @@
   padding: 12px;
 }
 
+.deploymentDisclosure:not([open]) .deploymentDisclosureBody {
+  display: none;
+}
+
 .deploymentDisclosureBody .deploymentSection {
   border-top: 0;
   padding-top: 0;
@@ -6608,4 +6636,559 @@
   .deploymentGateFacts {
     grid-template-columns: 1fr;
   }
+}
+
+/* Direct Deployment console */
+.deploymentConsoleContent {
+  background: var(--workspace-surface, #ffffff);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+  min-width: 0;
+}
+
+.deploymentConsoleTabs {
+  align-items: end;
+  background: var(--workspace-surface, #ffffff);
+  border-bottom: 1px solid var(--workspace-line, #f0f0f3);
+  display: flex;
+  gap: 24px;
+  min-height: 52px;
+  padding: 0 28px;
+}
+
+.deploymentConsoleTab {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--workspace-muted, #60646c);
+  cursor: pointer;
+  display: inline-flex;
+  font-family: var(--workspace-font, "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif);
+  font-size: 13px;
+  font-weight: 750;
+  min-height: 52px;
+  padding: 2px 0 0;
+}
+
+.deploymentConsoleTab[aria-selected="true"] {
+  border-bottom-color: var(--workspace-accent, #000000);
+  color: var(--workspace-text, #171717);
+  font-weight: 900;
+}
+
+.deploymentConsoleTab:hover,
+.deploymentConsoleTab:focus-visible {
+  color: var(--workspace-text, #171717);
+  outline: none;
+}
+
+.deploymentConsoleView {
+  min-height: 0;
+  min-width: 0;
+  overflow: auto;
+}
+
+.deploymentConsoleGrid {
+  background: var(--workspace-surface, #ffffff);
+  display: grid;
+  grid-template-columns: 224px minmax(420px, 1fr) 294px;
+  min-height: 100%;
+  min-width: 0;
+}
+
+.deploymentStepNavigation {
+  background: var(--workspace-surface, #ffffff);
+  border-right: 1px solid var(--workspace-line, #f0f0f3);
+  min-width: 0;
+  padding: 28px 18px;
+}
+
+.deploymentStepNavigation > p {
+  color: var(--workspace-muted, #60646c);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  margin: 0 10px 16px;
+  text-transform: uppercase;
+}
+
+.deploymentStepNavigation ol {
+  display: grid;
+  gap: 4px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.deploymentStepButton {
+  align-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: var(--workspace-text, #171717);
+  cursor: pointer;
+  display: grid;
+  font-family: var(--workspace-font, "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif);
+  gap: 10px;
+  grid-template-columns: 28px minmax(0, 1fr);
+  min-height: 58px;
+  padding: 9px 10px;
+  text-align: left;
+  width: 100%;
+}
+
+.deploymentStepButton[data-selected="true"] {
+  background: #f5f5f5;
+  border-color: var(--workspace-line, #f0f0f3);
+}
+
+.deploymentStepButton:focus-visible {
+  border-color: var(--workspace-accent, #000000);
+  outline: none;
+}
+
+.deploymentStepButton:disabled {
+  cursor: not-allowed;
+}
+
+.deploymentStepButton > span:last-child {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.deploymentStepButton strong {
+  font-size: 12.5px;
+  font-weight: 850;
+  line-height: 1.25;
+}
+
+.deploymentStepButton small {
+  color: var(--workspace-muted, #60646c);
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.deploymentStepIndex {
+  align-items: center;
+  background: var(--workspace-surface, #ffffff);
+  border: 1px solid var(--workspace-line-strong, #dcdee0);
+  border-radius: 999px;
+  color: var(--workspace-muted, #60646c);
+  display: inline-flex;
+  font-size: 11px;
+  font-weight: 900;
+  height: 28px;
+  justify-content: center;
+  width: 28px;
+}
+
+.deploymentStepButton[data-state="active"] .deploymentStepIndex,
+.deploymentStepButton[data-state="running"] .deploymentStepIndex {
+  background: var(--workspace-accent, #000000);
+  border-color: var(--workspace-accent, #000000);
+  color: #ffffff;
+}
+
+.deploymentStepButton[data-state="done"] .deploymentStepIndex {
+  background: #ecfdf3;
+  border-color: #a6dfbd;
+  color: #18794e;
+}
+
+.deploymentStepButton[data-state="warning"] .deploymentStepIndex {
+  background: #fff8e6;
+  border-color: #efd58c;
+  color: #8a5d00;
+}
+
+.deploymentStepButton[data-state="blocked"] .deploymentStepIndex,
+.deploymentStepButton[data-state="error"] .deploymentStepIndex {
+  background: #fff1f0;
+  border-color: #f3b4ae;
+  color: #b42318;
+}
+
+.deploymentStepWorkspace {
+  align-content: start;
+  background: var(--workspace-surface, #ffffff);
+  display: grid;
+  gap: 24px;
+  min-width: 0;
+  padding: 36px clamp(24px, 3.5vw, 52px) 44px;
+}
+
+.deploymentStepHeading {
+  display: grid;
+  gap: 8px;
+  max-width: 700px;
+}
+
+.deploymentStepHeading > span,
+.deploymentProjectGate > span,
+.deploymentContextPanel > div > span {
+  color: var(--workspace-muted, #60646c);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.deploymentStepHeading h3 {
+  color: var(--workspace-text, #171717);
+  font-size: clamp(24px, 2.4vw, 34px);
+  letter-spacing: -0.035em;
+  line-height: 1.15;
+  margin: 0;
+}
+
+.deploymentStepHeading p,
+.deploymentStepCallout p,
+.deploymentStepActionBar p,
+.deploymentProjectGate p {
+  color: var(--workspace-muted, #60646c);
+  font-size: 13px;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.deploymentStepCallout,
+.deploymentStepSummary {
+  background: var(--workspace-surface-muted, #fafafa);
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  border-radius: 12px;
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 18px;
+}
+
+.deploymentStepCallout strong {
+  color: var(--workspace-text, #171717);
+  font-size: 14px;
+}
+
+.deploymentStepSummary > div:not(.deploymentWarnings) {
+  align-items: start;
+  border-bottom: 1px solid var(--workspace-line, #f0f0f3);
+  display: flex;
+  gap: 20px;
+  justify-content: space-between;
+  min-width: 0;
+  padding-bottom: 10px;
+}
+
+.deploymentStepSummary > div:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.deploymentStepSummary span {
+  color: var(--workspace-muted, #60646c);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.deploymentStepSummary strong {
+  color: var(--workspace-text, #171717);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.deploymentStepActionBar {
+  align-items: center;
+  border-top: 1px solid var(--workspace-line, #f0f0f3);
+  display: flex;
+  gap: 20px;
+  justify-content: space-between;
+  margin-top: 4px;
+  padding-top: 20px;
+}
+
+.deploymentStepActionBar p {
+  max-width: 520px;
+}
+
+.deploymentStepActionBar .deploymentPrimaryButton,
+.deploymentStepActionBar .deploymentSecondaryButton {
+  flex: 0 0 auto;
+  min-height: 42px;
+  min-width: 150px;
+}
+
+.deploymentContextPanel {
+  align-content: start;
+  background: var(--workspace-surface-muted, #fafafa);
+  border-left: 1px solid var(--workspace-line, #f0f0f3);
+  display: grid;
+  gap: 22px;
+  min-width: 0;
+  padding: 34px 24px;
+}
+
+.deploymentContextPanel h3 {
+  color: var(--workspace-text, #171717);
+  font-size: 17px;
+  margin: 6px 0 0;
+}
+
+.deploymentContextPanel dl {
+  display: grid;
+  gap: 0;
+  margin: 0;
+}
+
+.deploymentContextPanel dl > div {
+  border-bottom: 1px solid var(--workspace-line, #f0f0f3);
+  display: grid;
+  gap: 5px;
+  padding: 12px 0;
+}
+
+.deploymentContextPanel dt {
+  color: var(--workspace-muted, #60646c);
+  font-size: 10.5px;
+  font-weight: 750;
+}
+
+.deploymentContextPanel dd {
+  color: var(--workspace-text, #171717);
+  font-size: 12px;
+  font-weight: 850;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.deploymentContextPanel > p {
+  background: var(--workspace-surface, #ffffff);
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  border-radius: 10px;
+  color: var(--workspace-muted, #60646c);
+  font-size: 11.5px;
+  line-height: 1.5;
+  margin: 0;
+  padding: 12px;
+}
+
+.deploymentHistoryGrid {
+  display: grid;
+  gap: 24px;
+  grid-template-columns: minmax(320px, 0.8fr) minmax(420px, 1.2fr);
+  padding: 28px;
+}
+
+.deploymentHistoryPrimary,
+.deploymentHistorySecondary {
+  align-content: start;
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.deploymentConsoleView > .deploymentSection {
+  border-top: 0;
+  padding: 28px;
+}
+
+.deploymentProjectGate {
+  align-content: start;
+  background: var(--workspace-surface, #ffffff);
+  display: grid;
+  gap: 14px;
+  justify-items: start;
+  min-height: 420px;
+  padding: clamp(36px, 8vw, 96px);
+}
+
+.deploymentProjectGate h3 {
+  color: var(--workspace-text, #171717);
+  font-size: clamp(24px, 3vw, 36px);
+  letter-spacing: -0.035em;
+  margin: 0;
+}
+
+.deploymentProjectGate p {
+  max-width: 620px;
+}
+
+.deploymentProjectGate .deploymentPrimaryButton {
+  margin-top: 8px;
+  min-height: 42px;
+  padding-inline: 18px;
+}
+
+.deploymentExpandedShell {
+  background: var(--workspace-surface, #ffffff);
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  border-radius: 16px;
+  font-family: var(--workspace-font, "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif);
+}
+
+.deploymentExpandedBody {
+  align-content: stretch;
+  background: var(--workspace-surface-muted, #fafafa);
+  gap: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+  padding: 0;
+}
+
+.deploymentExpandedTitleRow {
+  background: var(--workspace-surface, #ffffff);
+  border-bottom: 1px solid var(--workspace-line, #f0f0f3);
+  min-height: 82px;
+  padding: 18px 76px 18px 28px;
+}
+
+.deploymentExpandedTitleRow > div {
+  display: grid;
+  gap: 3px;
+}
+
+.deploymentExpandedTitleRow span {
+  color: var(--workspace-muted, #60646c);
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.deploymentExpandedCloseButton {
+  right: 24px;
+  top: 23px;
+}
+
+@media (max-width: 1100px) {
+  .deploymentConsoleGrid {
+    grid-template-columns: 200px minmax(0, 1fr);
+  }
+
+  .deploymentContextPanel {
+    border-left: 0;
+    border-top: 1px solid var(--workspace-line, #f0f0f3);
+    grid-column: 1 / -1;
+  }
+
+  .deploymentContextPanel dl {
+    gap: 0 20px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .deploymentHistoryGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 720px) {
+  .deploymentExpandedOverlay {
+    padding: 0;
+  }
+
+  .deploymentExpandedShell {
+    border: 0;
+    border-radius: 0;
+  }
+
+  .deploymentExpandedTitleRow {
+    min-height: 76px;
+    padding: 14px 62px 14px 18px;
+  }
+
+  .deploymentExpandedCloseButton {
+    right: 14px;
+    top: 20px;
+  }
+
+  .deploymentConsoleTabs {
+    gap: 18px;
+    overflow-x: auto;
+    padding: 0 18px;
+  }
+
+  .deploymentConsoleTab {
+    flex: 0 0 auto;
+  }
+
+  .deploymentConsoleGrid {
+    display: block;
+  }
+
+  .deploymentStepNavigation {
+    border-bottom: 1px solid var(--workspace-line, #f0f0f3);
+    border-right: 0;
+    overflow-x: auto;
+    padding: 12px 14px;
+  }
+
+  .deploymentStepNavigation > p {
+    display: none;
+  }
+
+  .deploymentStepNavigation ol {
+    display: flex;
+    width: max-content;
+  }
+
+  .deploymentStepNavigation li {
+    width: 148px;
+  }
+
+  .deploymentStepButton {
+    min-height: 52px;
+  }
+
+  .deploymentStepWorkspace {
+    gap: 20px;
+    padding: 26px 18px 34px;
+  }
+
+  .deploymentStageSettings {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .deploymentStepActionBar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .deploymentStepActionBar .deploymentPrimaryButton,
+  .deploymentStepActionBar .deploymentSecondaryButton {
+    width: 100%;
+  }
+
+  .deploymentContextPanel {
+    padding: 24px 18px;
+  }
+
+  .deploymentContextPanel dl {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .deploymentHistoryGrid,
+  .deploymentConsoleView > .deploymentSection {
+    padding: 20px 18px;
+  }
+
+  .deploymentProjectGate {
+    min-height: 360px;
+    padding: 44px 20px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .deploymentConsoleTab,
+  .deploymentStepButton,
+  .deploymentPrimaryButton,
+  .deploymentSecondaryButton {
+    transition: none;
+  }
+}
+
+.deploymentPrimaryButton {
+  background: var(--workspace-accent, #000000);
+  border-color: var(--workspace-accent, #000000);
+  color: #ffffff;
 }

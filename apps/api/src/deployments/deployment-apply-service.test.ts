@@ -477,7 +477,7 @@ test("runDeploymentApply applies the approved tfplan and stores state resources 
 
   assert.deepEqual(runnerStages, ["init", "apply", "output", "show-state"]);
   assert.equal(cleanupCalled, true);
-  assert.equal(writtenPlanFile?.filePath.endsWith("\\tfplan"), true);
+  assert.match(writtenPlanFile?.filePath ?? "", /[\\/]tfplan$/);
   assert.deepEqual(writtenPlanFile?.content, planBuffer);
   assert.equal(result.deployment.status, "SUCCESS");
   assert.equal(result.deployment.stateObjectKey, applyArtifactStorage.stateObjectKey);
@@ -539,6 +539,71 @@ test("runDeploymentApply applies the approved tfplan and stores state resources 
       log.message.startsWith("[duration] deployment apply result save completed in ")
     )
   );
+});
+
+test("runDeploymentApply materializes archive data files before applying an approved plan", async () => {
+  const archiveTerraformArtifact = `
+    data/* materialized before approved apply */"archive_file"/* label */"handler"{
+      type = "zip"
+      source_content = "exports.handler = async () => ({ statusCode: 200 })"
+      source_content_filename = "index.js"
+      output_path = "./handler.zip"
+    }
+
+    resource "aws_s3_object" "handler" {
+      bucket = "sketchcatch-demo-bucket"
+      key    = "handler.zip"
+      source = data.archive_file.handler.output_path
+    }
+  `;
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createApprovedDeploymentRecord({
+    approvedTerraformArtifactHash: createSha256(archiveTerraformArtifact),
+    liveProfile: "demo_web_service_with_rds"
+  });
+  const runnerStages: string[] = [];
+
+  const result = await runDeploymentApply(
+    {
+      deploymentId,
+      accessContext: createAccessContext()
+    },
+    repository,
+    {
+      applyArtifactStorage: new FakeApplyArtifactStorage(),
+      readTerraformArtifactFile: async () => archiveTerraformArtifact,
+      writePlanFile: async () => undefined,
+      prepareTerraformWorkspace: async () => ({
+        workdir: "C:/tmp/sketchcatch-terraform-archive-apply",
+        mainFilePath: "C:/tmp/sketchcatch-terraform-archive-apply/main.tf",
+        cleanup: async () => undefined
+      }),
+      prepareTerraformAwsCredentialEnv: async () => createPreparedCredentials(),
+      runTerraformInit: async () => {
+        runnerStages.push("init");
+        return createRunnerResult("init");
+      },
+      runTerraformPlan: async (_workdir, options) => {
+        if (!options) {
+          throw new Error("Terraform materialization options are required");
+        }
+
+        assert.equal(options.planFileName, "materialize.tfplan");
+        runnerStages.push("materialize");
+        return createRunnerResult("plan");
+      },
+      runTerraformApply: async () => {
+        runnerStages.push("apply");
+        return createRunnerResult("apply");
+      },
+      runTerraformOutputJson: async () => createRunnerResult("output", { stdout: "{}" }),
+      runTerraformShowStateJson: async () =>
+        createRunnerResult("show", { stdout: JSON.stringify({ values: { root_module: {} } }) })
+    }
+  );
+
+  assert.equal(result.deployment.status, "SUCCESS");
+  assert.deepEqual(runnerStages, ["init", "materialize", "apply"]);
 });
 
 test("runDeploymentApply rejects unsafe Terraform before preparing AWS credentials", async () => {

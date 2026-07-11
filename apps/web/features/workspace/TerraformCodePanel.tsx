@@ -1,6 +1,12 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent, UIEvent } from "react";
-import type { DiagramJson, TerraformDiagnostic, TerraformSourceLocation, TerraformSyncFileInput } from "@sketchcatch/types";
+import type {
+  ArchitectureDiagnostic,
+  DiagramJson,
+  TerraformDiagnostic,
+  TerraformSourceLocation,
+  TerraformSyncFileInput
+} from "@sketchcatch/types";
 import { getApiErrorMessage } from "../../lib/api-client";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
 import { TerraformCodeEditorSurface } from "./TerraformCodeEditorSurface";
@@ -197,6 +203,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
   readonly externalDiscardRequestId: number;
   readonly externalSaveRequestId: number;
   readonly isVisible: boolean;
+  readonly onArchitectureDiagnosticsChange: (diagnostics: ArchitectureDiagnostic[]) => void;
   readonly onDiagnosticsChange: (diagnostics: TerraformDiagnostic[]) => void;
   readonly onDirtyChange: (isDirty: boolean) => void;
   readonly onExternalSaveComplete: (saved: boolean, requestId: number) => void;
@@ -207,6 +214,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
   externalDiscardRequestId,
   externalSaveRequestId,
   isVisible,
+  onArchitectureDiagnosticsChange,
   onDiagnosticsChange,
   onDirtyChange,
   onExternalSaveComplete,
@@ -396,13 +404,14 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
       setRequestState("loading");
 
       try {
-        const generatedCode = await generateTerraformCode(context.diagram);
+        const generated = await generateTerraformCode(context.diagram);
 
         if (requestId !== codeRequestIdRef.current) {
           return;
         }
 
-        const nextFiles = createTerraformFilesFromGeneratedCode(context.diagram, generatedCode);
+        onArchitectureDiagnosticsChange(generated.architectureDiagnostics);
+        const nextFiles = createTerraformFilesFromGeneratedCode(context.diagram, generated.terraformCode);
         codeVersionRef.current += 1;
         setTerraformFiles(nextFiles);
         setActiveFileName((currentFileName) =>
@@ -429,7 +438,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
         setRequestState("error");
       }
     },
-    [context.diagram, onDiagnosticsChange, onDirtyChange]
+    [context.diagram, onArchitectureDiagnosticsChange, onDiagnosticsChange, onDirtyChange]
   );
 
   const runTerraformModuleValidation = useCallback(async (): Promise<TerraformDiagnostic[]> => {

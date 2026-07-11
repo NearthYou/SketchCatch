@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  analyzeSourceRepository,
   approveDeploymentPlan,
   abortProjectAssetUpload,
   applyGitCicdAwsRoleDiff,
@@ -2019,6 +2020,53 @@ test("deployment helpers list records, start plan, approve plan, apply, destroy,
   assert.equal(resources[0]?.resourceId, "i-0123456789abcdef0");
   assert.equal(outputs[0]?.name, "instance_id");
   assert.equal(failureExplanation.cleanupRequired, true);
+});
+
+test("analyzeSourceRepository posts to the connected repository and returns the saved handoff", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+
+  installAuthSession();
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+
+    return new Response(
+      JSON.stringify({
+        sourceRepositoryId: "source-repository-1",
+        repositoryRevision: "abc123",
+        analyzedAt: "2026-07-11T00:00:00.000Z",
+        aiHandoff: {
+          status: "template_selected",
+          templateId: "static-web-hosting",
+          applicationUnits: [],
+          evidence: [],
+          missingEvidence: [],
+          selectionReasons: ["Vite frontend와 정적 배포 evidence를 감지했습니다."]
+        }
+      }),
+      {
+        headers: { "Content-Type": "application/json" },
+        status: 200
+      }
+    );
+  };
+
+  const result = await analyzeSourceRepository(project.id, "source-repository-1");
+
+  assert.equal(
+    String(requests[0]?.input),
+    `/api/projects/${project.id}/source-repositories/source-repository-1/analyze`
+  );
+  assert.equal(requests[0]?.init?.method, "POST");
+  assert.equal(result.repositoryRevision, "abc123");
+  assert.equal(result.aiHandoff.status, "template_selected");
 });
 
 test("Git/CI/CD handoff helpers list handoffs and read pipeline status", async (context) => {
