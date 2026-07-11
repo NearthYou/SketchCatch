@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Trash2 } from "lucide-react";
 import type { WorkspaceDeploymentState } from "./use-workspace-deployment";
 import { useWorkspaceDeploymentDetails } from "./use-workspace-deployment-details";
@@ -15,9 +15,23 @@ export function DeploymentHistoryPanel({
   readonly deployment: WorkspaceDeploymentState;
 }) {
   const [confirmation, setConfirmation] = useState("");
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
   const details = useWorkspaceDeploymentDetails(deployment.current);
   const current = deployment.current;
   const canConfirmCleanup = confirmation === CLEANUP_CONFIRMATION;
+  const filteredDeployments = useMemo(() => {
+    const normalizedQuery = query.trim().toLocaleLowerCase();
+    return deployment.deployments.filter((item) => {
+      const matchesStatus = statusFilter === "all" || item.status === statusFilter;
+      const matchesQuery =
+        !normalizedQuery ||
+        item.id.toLocaleLowerCase().includes(normalizedQuery) ||
+        (item.approvedByUserId ?? "").toLocaleLowerCase().includes(normalizedQuery) ||
+        formatDateTime(item.createdAt).toLocaleLowerCase().includes(normalizedQuery);
+      return matchesStatus && matchesQuery;
+    });
+  }, [deployment.deployments, query, statusFilter]);
 
   return (
     <div className={styles.panelBody}>
@@ -33,13 +47,35 @@ export function DeploymentHistoryPanel({
         <p className={styles.emptyText}>아직 실행한 배포가 없습니다.</p>
       ) : (
         <div className={styles.historyLayout}>
+          <div className={styles.historyFilters}>
+            <label>
+              <span>이력 검색</span>
+              <input
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="실행 ID, 승인자, 날짜"
+                type="search"
+                value={query}
+              />
+            </label>
+            <label>
+              <span>상태</span>
+              <select onChange={(event) => setStatusFilter(event.target.value)} value={statusFilter}>
+                <option value="all">전체</option>
+                <option value="RUNNING">실행 중</option>
+                <option value="SUCCESS">성공</option>
+                <option value="FAILED">실패</option>
+                <option value="CANCELLED">취소</option>
+                <option value="DESTROYED">정리 완료</option>
+              </select>
+            </label>
+          </div>
           <div className={styles.historyTableWrap}>
             <table className={styles.historyTable}>
               <thead>
-                <tr><th>실행 시각</th><th>상태</th><th>단계</th></tr>
+                <tr><th>실행 시각</th><th>상태</th><th>실행자</th><th>단계</th></tr>
               </thead>
               <tbody>
-                {deployment.deployments.map((item) => (
+                {filteredDeployments.map((item) => (
                   <tr data-selected={item.id === current?.id} key={item.id}>
                     <td>
                       <button onClick={() => deployment.select(item)} type="button">
@@ -47,11 +83,15 @@ export function DeploymentHistoryPanel({
                       </button>
                     </td>
                     <td>{getHistoryStatusLabel(item.status)}</td>
+                    <td>{item.approvedByUserId ?? "승인 전"}</td>
                     <td>{item.activeStage ?? item.failureStage ?? "준비"}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            {filteredDeployments.length === 0 ? (
+              <p className={styles.emptyText}>검색 조건에 맞는 배포 이력이 없습니다.</p>
+            ) : null}
           </div>
 
           {current ? (
@@ -60,6 +100,11 @@ export function DeploymentHistoryPanel({
                 <h3>선택한 실행</h3>
                 <span>{current.id.slice(0, 8)}</span>
               </div>
+              <dl className={styles.approvalFacts}>
+                <div><dt>Terraform artifact</dt><dd>{current.terraformArtifactId}</dd></div>
+                <div><dt>승인자</dt><dd>{current.approvedByUserId ?? "승인 전"}</dd></div>
+                <div><dt>승인 시각</dt><dd>{current.approvedAt ? formatDateTime(current.approvedAt) : "승인 전"}</dd></div>
+              </dl>
               {details.errorMessage ? (
                 <p className={styles.inlineNotice} data-tone="error">{details.errorMessage}</p>
               ) : null}
@@ -101,14 +146,36 @@ export function DeploymentHistoryPanel({
                 </dl>
               </details>
 
+              <details>
+                <summary>실행 log {deployment.logs.length}줄</summary>
+                <pre className={styles.historyLog}>{deployment.logs.length > 0
+                  ? deployment.logs.map((log) => `[${log.stage}] ${log.message}`).join("\n")
+                  : "저장된 log가 없습니다."}</pre>
+              </details>
+
               <section className={styles.cleanupSection}>
                 <div>
                   <Trash2 aria-hidden="true" size={17} />
                   <div>
                     <strong>Cleanup</strong>
-                    <p>삭제 예정 Resource를 Plan에서 먼저 확인합니다.</p>
+                    <p>아래 Resource를 삭제할 수 있습니다. 실제 삭제 수는 Cleanup Plan에서 다시 확인합니다.</p>
                   </div>
                 </div>
+                <details open>
+                  <summary>삭제 범위 {details.resources.length}개 Resource</summary>
+                  {details.resources.length > 0 ? (
+                    <ul className={styles.resourceList}>
+                      {details.resources.map((resource) => (
+                        <li key={resource.id}>
+                          <strong>{resource.terraformAddress}</strong>
+                          <span>{resource.resourceId ?? "Provider ID 없음"}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p>저장된 Resource가 없어 Plan 결과에서 삭제 범위를 확인해야 합니다.</p>
+                  )}
+                </details>
                 {deployment.actionState.shouldShowDestroyPlanButton ? (
                   <button className={styles.secondaryButton} disabled={!deployment.actionState.canRunDestroyPlan} onClick={() => void deployment.planCleanup()} type="button">
                     Cleanup Plan 만들기

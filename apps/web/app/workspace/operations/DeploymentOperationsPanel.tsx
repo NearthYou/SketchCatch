@@ -94,6 +94,13 @@ export function DeploymentOperationsPanel({
         </section>
       ) : null}
 
+      {current?.approvedAt ? (
+        <dl className={styles.approvalFacts}>
+          <div><dt>Plan 승인자</dt><dd>{current.approvedByUserId ?? "확인할 수 없음"}</dd></div>
+          <div><dt>승인 시각</dt><dd>{formatApprovalTime(current.approvedAt)}</dd></div>
+        </dl>
+      ) : null}
+
       <div className={styles.deploymentActions}>
         {flow.activeStepId === "save" ? (
           <button className={styles.primaryButton} disabled={isBusy} onClick={() => void terraform.generate()} type="button">
@@ -163,4 +170,11 @@ function getDeploymentStatusLabel(status: DeploymentStatus | undefined): string 
   if (status === "CANCELLED") return "취소";
   if (status === "DESTROYED") return "정리 완료";
   return "준비 전";
+}
+
+// 승인 ISO 시각을 현재 browser 기준 날짜와 시간으로 보여줍니다.
+function formatApprovalTime(value: string): string {
+  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "short", timeStyle: "short" }).format(
+    new Date(value)
+  );
 }
