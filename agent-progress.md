@@ -17,7 +17,6 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
-<<<<<<< HEAD
 ### 2026-07-11 - Disable Trivy ALB and Auto Scaling checks
 
 - Configured each Terraform Trivy scan to generate an ignore file that excludes ALB rules AWS-0047, AWS-0052, AWS-0053, and AWS-0054 plus Auto Scaling launch configuration/template rules AWS-0008, AWS-0009, AWS-0122, AWS-0129, and AWS-0130.
@@ -25,14 +24,12 @@ Short English-only working log for the current agent context. Older records are 
 - Verification: focused Trivy scanner tests, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check` passed.
 - Risk: future Trivy check-bundle rule IDs require an explicit review before they are added to the exclusion list.
 - Next action: add the product-specific ALB and ASG configuration warnings as non-blocking deployment checks when requested.
-=======
 ### 2026-07-11 - Recover production auth runtime configuration
 
 - Traced signup/login failures to a one-character SSM `AUTH_TOKEN_SECRET` and missing OAuth client IDs in the ECS API task definition.
 - Rotated the secret without exposing it, restarted the API service, and verified live signup, login, and account cleanup.
 - Added production startup validation and deployment-time OAuth variable injection so invalid auth configuration fails before serving traffic.
 - Kept container ALARM notifications, removed repetitive OK notifications, and excluded the known stale Server Action web log pattern.
->>>>>>> a4e4095d6f795dcf9a9db2c634db9e5695da8b61
 
 ### 2026-07-11 - Retire warm rollback and complete cost-first ECS operations
 
