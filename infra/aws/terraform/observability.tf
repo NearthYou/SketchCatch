@@ -106,3 +106,74 @@ resource "aws_cloudwatch_metric_alarm" "ecs_service_memory_high" {
     ServiceName = each.value
   }
 }
+
+resource "aws_cloudwatch_metric_alarm" "alb_5xx" {
+  count = var.enable_ecs_observability_alarms ? 1 : 0
+
+  alarm_name          = "${local.name_prefix}-alb-5xx"
+  alarm_description   = "The production ECS ALB generated repeated 5xx responses."
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 1
+  threshold           = var.alb_5xx_alarm_threshold
+  metric_name         = "HTTPCode_ELB_5XX_Count"
+  namespace           = "AWS/ApplicationELB"
+  period              = 300
+  statistic           = "Sum"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = var.cloudwatch_alarm_action_arns
+  ok_actions          = var.cloudwatch_alarm_action_arns
+
+  dimensions = {
+    LoadBalancer = aws_lb.ecs.arn_suffix
+  }
+}
+
+# HealthyHostCount is the low-cost serving-task availability signal. It avoids
+# enabling Container Insights solely for RunningTaskCount.
+resource "aws_cloudwatch_metric_alarm" "ecs_no_healthy_tasks" {
+  for_each = var.enable_ecs_observability_alarms ? {
+    api = aws_lb_target_group.api.arn_suffix
+    web = aws_lb_target_group.web.arn_suffix
+  } : {}
+
+  alarm_name          = "${local.name_prefix}-${each.key}-no-healthy-tasks"
+  alarm_description   = "The ${each.key} target group had zero healthy ECS tasks."
+  comparison_operator = "LessThanThreshold"
+  evaluation_periods  = 2
+  datapoints_to_alarm = 2
+  threshold           = 1
+  metric_name         = "HealthyHostCount"
+  namespace           = "AWS/ApplicationELB"
+  period              = 60
+  statistic           = "Minimum"
+  treat_missing_data  = "breaching"
+  alarm_actions       = var.cloudwatch_alarm_action_arns
+  ok_actions          = var.cloudwatch_alarm_action_arns
+
+  dimensions = {
+    LoadBalancer = aws_lb.ecs.arn_suffix
+    TargetGroup  = each.value
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "rds_status_missing" {
+  count = var.enable_ecs_observability_alarms && var.rds_instance_identifier != "" ? 1 : 0
+
+  alarm_name          = "${local.name_prefix}-rds-metric-missing"
+  alarm_description   = "The production RDS instance stopped publishing its one-minute availability metric."
+  comparison_operator = "LessThanThreshold"
+  evaluation_periods  = 3
+  datapoints_to_alarm = 3
+  threshold           = 0
+  metric_name         = "DatabaseConnections"
+  namespace           = "AWS/RDS"
+  period              = 60
+  statistic           = "Maximum"
+  treat_missing_data  = "breaching"
+  alarm_actions       = var.cloudwatch_alarm_action_arns
+  ok_actions          = var.cloudwatch_alarm_action_arns
+
+  dimensions = {
+    DBInstanceIdentifier = var.rds_instance_identifier
+  }
+}

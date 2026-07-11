@@ -25,8 +25,10 @@ env:
   ECS_WEB_SERVICE_NAME: ${{ vars.ECS_WEB_SERVICE_NAME }}
   ECS_API_TASK_DEFINITION_FAMILY: ${{ vars.ECS_API_TASK_DEFINITION_FAMILY }}
   ECS_WEB_TASK_DEFINITION_FAMILY: ${{ vars.ECS_WEB_TASK_DEFINITION_FAMILY }}
+  ECS_WORKER_TASK_DEFINITION_FAMILY: ${{ vars.ECS_WORKER_TASK_DEFINITION_FAMILY }}
   ECS_API_CONTAINER_NAME: ${{ vars.ECS_API_CONTAINER_NAME }}
   ECS_WEB_CONTAINER_NAME: ${{ vars.ECS_WEB_CONTAINER_NAME }}
+  ECS_WORKER_CONTAINER_NAME: ${{ vars.ECS_WORKER_CONTAINER_NAME }}
 
 jobs:
   build-and-push:
@@ -64,6 +66,9 @@ jobs:
       - name: Build
         run: pnpm build
 
+      - name: Check migration compatibility
+        run: pnpm migration:compatibility:check
+
       - name: Validate ECS deployment variables
         shell: bash
         run: |
@@ -78,8 +83,10 @@ jobs:
             ECS_WEB_SERVICE_NAME
             ECS_API_TASK_DEFINITION_FAMILY
             ECS_WEB_TASK_DEFINITION_FAMILY
+            ECS_WORKER_TASK_DEFINITION_FAMILY
             ECS_API_CONTAINER_NAME
             ECS_WEB_CONTAINER_NAME
+            ECS_WORKER_CONTAINER_NAME
           )
 
           for name in "${required_vars[@]}"; do
@@ -124,8 +131,48 @@ jobs:
             echo "web-image=${web_image}"
           } >> "${GITHUB_OUTPUT}"
 
-  deploy-api:
+  register-worker:
     needs: build-and-push
+    runs-on: ubuntu-latest
+    environment: production
+    outputs:
+      task-definition-arn: ${{ steps.register-worker.outputs.task-definition-arn }}
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Download current worker task definition
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .release
+          aws ecs describe-task-definition \
+            --task-definition "${ECS_WORKER_TASK_DEFINITION_FAMILY}" \
+            --query taskDefinition \
+            --output json > .release/ecs-worker-task-definition.json
+
+      - name: Render worker image
+        id: render-worker
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: .release/ecs-worker-task-definition.json
+          container-name: ${{ env.ECS_WORKER_CONTAINER_NAME }}
+          image: ${{ needs.build-and-push.outputs.api-image }}
+
+      - name: Register worker task definition
+        id: register-worker
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.render-worker.outputs.task-definition }}
+
+  deploy-api:
+    needs:
+      - build-and-push
+      - register-worker
     runs-on: ubuntu-latest
     environment: production
 
@@ -189,6 +236,8 @@ jobs:
           task-definition: .release/ecs-api-task-definition.json
           container-name: ${{ env.ECS_API_CONTAINER_NAME }}
           image: ${{ needs.build-and-push.outputs.api-image }}
+          environment-variables: |
+            ECS_WORKER_TASK_DEFINITION=${{ needs.register-worker.outputs.task-definition-arn }}
 
       - name: Deploy API ECS service
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2
@@ -239,10 +288,11 @@ jobs:
   deployment-summary:
     needs:
       - build-and-push
+      - register-worker
       - deploy-api
       - deploy-web
     runs-on: ubuntu-latest
 
     steps:
       - name: Confirm parallel deployment
-        run: echo "API and web services are stable on image tag ${{ needs.build-and-push.outputs.image-tag }}."
+        run: echo "API, web, and worker use image tag ${{ needs.build-and-push.outputs.image-tag }}; both services are stable."

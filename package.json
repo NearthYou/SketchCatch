@@ -9,6 +9,7 @@
     "catalog:check": "node scripts/generate-terraform-aws-catalog.mjs --check",
     "catalog:generate": "node scripts/generate-terraform-aws-catalog.mjs",
     "harness:check": "node scripts/check-harness.mjs",
+    "migration:compatibility:check": "node scripts/check-db-migration-compatibility.mjs",
     "lint": "turbo lint",
     "typecheck": "turbo typecheck",
     "test": "turbo test",
