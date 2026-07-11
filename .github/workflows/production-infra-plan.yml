@@ -121,8 +121,9 @@ jobs:
             echo "::error::PRODUCTION_INFRA_RUNTIME_TFVARS_JSON is required for runtime plans"
             exit 1
           fi
-          printf '%s' "${RUNTIME_TFVARS_JSON}" > "${RUNNER_TEMP}/runtime.tfvars.json"
-          jq -e 'type == "object"' "${RUNNER_TEMP}/runtime.tfvars.json" > /dev/null
+          printf '%s' "${RUNTIME_TFVARS_JSON}" \
+            | jq -c 'if type == "object" then . else error("runtime tfvars must be a JSON object") end' \
+            > "${RUNNER_TEMP}/runtime.tfvars.json"
 
       - name: Initialize selected remote state
         shell: bash

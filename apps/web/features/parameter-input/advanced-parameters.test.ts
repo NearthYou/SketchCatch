@@ -4,7 +4,8 @@ import type { ParameterCatalogDefinition } from "./catalog";
 import {
   filterAdvancedDefinitions,
   getAdvancedDefinitions,
-  getAdvancedPickerEmptyMessage
+  getAdvancedPickerEmptyMessage,
+  removeAdvancedParameterValue
 } from "./advanced-parameters";
 
 test("getAdvancedDefinitions combines stored and newly added optional definitions", () => {
@@ -69,6 +70,23 @@ test("getAdvancedPickerEmptyMessage explains why no optional choices are availab
   assert.equal(
     getAdvancedPickerEmptyMessage(definitions, [tagsDefinition], ""),
     "추가할 optional 파라미터가 없습니다."
+  );
+});
+
+test("removeAdvancedParameterValue removes only the selected Terraform value", () => {
+  assert.deepEqual(
+    removeAdvancedParameterValue(
+      {
+        cidrBlock: "10.0.0.0/16",
+        enableDnsSupport: true,
+        tags: { Team: "platform" }
+      },
+      "enableDnsSupport"
+    ),
+    {
+      cidrBlock: "10.0.0.0/16",
+      tags: { Team: "platform" }
+    }
   );
 });
 

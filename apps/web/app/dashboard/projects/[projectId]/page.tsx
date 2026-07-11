@@ -1,4 +1,4 @@
-import { DesignDashboardPage } from "../../../../features/dashboard/design-dashboard";
+import { ProjectDetailClient } from "../../../../features/dashboard/project-detail-client";
 
 type ProjectDetailPageProps = {
   readonly params: Promise<{
@@ -9,5 +9,5 @@ type ProjectDetailPageProps = {
 export default async function ProjectDetailPage({ params }: ProjectDetailPageProps) {
   const { projectId } = await params;
 
-  return <DesignDashboardPage projectId={projectId} view="project-detail" />;
+  return <ProjectDetailClient projectId={projectId} />;
 }

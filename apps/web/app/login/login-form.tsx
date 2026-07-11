@@ -11,11 +11,12 @@ import {
 import type { LoginRequest } from "@sketchcatch/types";
 import { useAuth } from "../../components/auth/auth-provider";
 import { getCapsLockWarningMessage, isCapsLockActive } from "../../features/auth/caps-lock";
+import { getSafeReturnPath } from "../../features/auth/return-path";
 import { getApiErrorMessage } from "../../lib/api-client";
 
 export function LoginForm() {
   const router = useRouter();
-  const { login } = useAuth();
+  const { login, status } = useAuth();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isPasswordCapsLockOn, setIsPasswordCapsLockOn] = useState(false);
@@ -23,12 +24,18 @@ export function LoginForm() {
   const passwordCapsLockWarning = getCapsLockWarningMessage(isPasswordCapsLockOn);
 
   useEffect(() => {
-    const oauthError = new URLSearchParams(window.location.search).get("oauthError");
+    const searchParams = new URLSearchParams(window.location.search);
+    const oauthError = searchParams.get("oauthError");
+
+    if (status === "authenticated") {
+      router.replace(getSafeReturnPath(searchParams.get("returnTo")));
+      return;
+    }
 
     if (oauthError) {
       setErrorMessage(getOAuthErrorMessage(oauthError));
     }
-  }, []);
+  }, [router, status]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
@@ -50,7 +57,9 @@ export function LoginForm() {
 
     try {
       await login(payload);
-      router.replace("/dashboard");
+      const searchParams = new URLSearchParams(window.location.search);
+      const returnPath = getSafeReturnPath(searchParams.get("returnTo"));
+      router.replace(returnPath);
     } catch (error) {
       setErrorMessage(getApiErrorMessage(error, "로그인에 실패했습니다."));
     } finally {
@@ -60,6 +69,14 @@ export function LoginForm() {
 
   function handlePasswordKeyEvent(event: ReactKeyboardEvent<HTMLInputElement>): void {
     setIsPasswordCapsLockOn(isCapsLockActive(event));
+  }
+
+  if (status !== "unauthenticated") {
+    return (
+      <div className="authStatus" aria-live="polite">
+        {status === "loading" ? "세션을 확인하고 있습니다." : "Dashboard로 이동합니다."}
+      </div>
+    );
   }
 
   return (

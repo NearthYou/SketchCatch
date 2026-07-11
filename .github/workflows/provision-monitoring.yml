@@ -1,19 +1,19 @@
-name: Provision Monitoring
+name: Subscribe Production Alarm Email
 
 on:
   workflow_dispatch:
     inputs:
       alarm_email:
-        description: Email address that receives CloudWatch alarm notifications
+        description: Email address that receives production alarm notifications
         required: true
-        default: sl990084@gmail.com
+        type: string
 
 permissions:
   contents: read
   id-token: write
 
 jobs:
-  provision:
+  subscribe:
     runs-on: ubuntu-latest
     environment: production
 
@@ -24,85 +24,27 @@ jobs:
           role-to-assume: ${{ vars.AWS_ROLE_TO_ASSUME }}
           aws-region: ${{ vars.AWS_REGION }}
 
-      - name: Create SNS topic and alarms
+      - name: Subscribe to the existing production topic
+        shell: bash
+        env:
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          ALARM_EMAIL: ${{ inputs.alarm_email }}
+          TOPIC_ARN: arn:aws:sns:ap-northeast-2:555980271919:SketchCatchProductionAlerts
         run: |
           set -euo pipefail
 
-          topic_arn="$(aws sns create-topic \
-            --name SketchCatchProductionAlerts \
-            --query "TopicArn" \
-            --output text \
-            --region "${AWS_REGION}")"
-
           existing_subscription="$(aws sns list-subscriptions-by-topic \
-            --topic-arn "${topic_arn}" \
+            --topic-arn "${TOPIC_ARN}" \
             --query "Subscriptions[?Endpoint=='${ALARM_EMAIL}'].SubscriptionArn | [0]" \
             --output text \
             --region "${AWS_REGION}")"
 
           if [ "${existing_subscription}" = "None" ] || [ -z "${existing_subscription}" ]; then
             aws sns subscribe \
-              --topic-arn "${topic_arn}" \
+              --topic-arn "${TOPIC_ARN}" \
               --protocol email \
               --notification-endpoint "${ALARM_EMAIL}" \
               --region "${AWS_REGION}"
           fi
 
-          aws cloudwatch put-metric-alarm \
-            --alarm-name SketchCatch-EC2-StatusCheckFailed \
-            --namespace AWS/EC2 \
-            --metric-name StatusCheckFailed \
-            --dimensions Name=InstanceId,Value="${EC2_INSTANCE_ID}" \
-            --statistic Maximum \
-            --period 60 \
-            --evaluation-periods 2 \
-            --threshold 1 \
-            --comparison-operator GreaterThanOrEqualToThreshold \
-            --alarm-actions "${topic_arn}" \
-            --region "${AWS_REGION}"
-
-          aws cloudwatch put-metric-alarm \
-            --alarm-name SketchCatch-EC2-HighCPU \
-            --namespace AWS/EC2 \
-            --metric-name CPUUtilization \
-            --dimensions Name=InstanceId,Value="${EC2_INSTANCE_ID}" \
-            --statistic Average \
-            --period 300 \
-            --evaluation-periods 2 \
-            --threshold 80 \
-            --comparison-operator GreaterThanOrEqualToThreshold \
-            --alarm-actions "${topic_arn}" \
-            --region "${AWS_REGION}"
-
-          for log_group in /sketchcatch/production/api /sketchcatch/production/nginx; do
-            aws logs create-log-group \
-              --log-group-name "${log_group}" \
-              --region "${AWS_REGION}" || true
-          done
-
-          aws logs put-metric-filter \
-            --log-group-name /sketchcatch/production/api \
-            --filter-name SketchCatchApiErrorLogs \
-            --filter-pattern '"level":50' \
-            --metric-transformations metricName=SketchCatchApiErrorCount,metricNamespace=SketchCatch,metricValue=1 \
-            --region "${AWS_REGION}"
-
-          aws cloudwatch put-metric-alarm \
-            --alarm-name SketchCatch-API-ErrorLogs \
-            --namespace SketchCatch \
-            --metric-name SketchCatchApiErrorCount \
-            --statistic Sum \
-            --period 60 \
-            --evaluation-periods 1 \
-            --threshold 1 \
-            --comparison-operator GreaterThanOrEqualToThreshold \
-            --treat-missing-data notBreaching \
-            --alarm-actions "${topic_arn}" \
-            --region "${AWS_REGION}"
-
-          echo "SNS topic: ${topic_arn}"
-          echo "Confirm the subscription email sent to ${ALARM_EMAIL}."
-        env:
-          AWS_REGION: ${{ vars.AWS_REGION }}
-          EC2_INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID || 'i-02a591d2abee94f02' }}
-          ALARM_EMAIL: ${{ inputs.alarm_email }}
+          echo "Confirm the subscription email before relying on alarm delivery."

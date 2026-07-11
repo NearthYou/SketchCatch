@@ -25,9 +25,58 @@ export class TerraformDiagramValidationError extends Error {
 
 // 기본 Resource block 뒤에 inline Lambda source의 archive companion block을 함께 렌더링한다.
 export function renderTerraformFromInfrastructureGraph(graph: InfrastructureGraph): string {
-  return graph.nodes
-    .flatMap((node) => [renderBlock(node), ...renderCompanionBlocks(node)])
-    .join("\n\n");
+  const resourceBlocks = graph.nodes.flatMap((node) => [
+    renderBlock(node),
+    ...renderCompanionBlocks(node)
+  ]);
+
+  return [...resourceBlocks, ...renderLiveObservationOutputs(graph)].join("\n\n");
+}
+
+function renderLiveObservationOutputs(graph: InfrastructureGraph): string[] {
+  const website = findResourceNode(graph, "aws_s3_bucket_website_configuration");
+  const loadBalancer = findResourceNode(graph, "aws_lb");
+  const targetGroup = findResourceNode(graph, "aws_lb_target_group");
+  const autoScalingGroup = findResourceNode(graph, "aws_autoscaling_group");
+  const alarm = graph.nodes.find(
+    (node) =>
+      node.iac.terraformBlockType === "resource" &&
+      node.iac.resourceType === "aws_cloudwatch_metric_alarm" &&
+      node.config["metricName"] === "RequestCountPerTarget" &&
+      typeof node.config["threshold"] === "number"
+  );
+
+  if (!website || !loadBalancer || !targetGroup || !autoScalingGroup || !alarm) {
+    return [];
+  }
+
+  const websiteAddress = `aws_s3_bucket_website_configuration.${website.iac.resourceName}`;
+  const loadBalancerAddress = `aws_lb.${loadBalancer.iac.resourceName}`;
+  const targetGroupAddress = `aws_lb_target_group.${targetGroup.iac.resourceName}`;
+  const autoScalingGroupAddress = `aws_autoscaling_group.${autoScalingGroup.iac.resourceName}`;
+
+  return [
+    renderOutput("static_site_url", `"http://\${${websiteAddress}.website_endpoint}"`),
+    renderOutput("api_base_url", `"http://\${${loadBalancerAddress}.dns_name}"`),
+    renderOutput("asg_name", `${autoScalingGroupAddress}.name`),
+    renderOutput("alb_arn_suffix", `${loadBalancerAddress}.arn_suffix`),
+    renderOutput("target_group_arn_suffix", `${targetGroupAddress}.arn_suffix`),
+    renderOutput("scale_out_threshold", String(alarm.config["threshold"]))
+  ];
+}
+
+function findResourceNode(
+  graph: InfrastructureGraph,
+  resourceType: string
+): InfrastructureGraphNode | undefined {
+  return graph.nodes.find(
+    (node) =>
+      node.iac.terraformBlockType === "resource" && node.iac.resourceType === resourceType
+  );
+}
+
+function renderOutput(name: string, valueExpression: string): string {
+  return [`output "${name}" {`, `${INDENT_UNIT}value = ${valueExpression}`, "}"].join("\n");
 }
 
 // resource/data block 하나를 만든다. 예: resource "aws_vpc" "main" { ... }

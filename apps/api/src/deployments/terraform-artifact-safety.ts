@@ -358,6 +358,7 @@ function validateDisallowedStringInterpolations(tokens: HclToken[]): void {
 
 type TerraformResourceBlock = {
   type: string;
+  name: string;
   body: string;
   line: number;
 };
@@ -368,6 +369,20 @@ function validateDeploymentResourceAttributes(
 ): void {
   for (const resource of extractResourceBlocks(source)) {
     const body = stripHclComments(resource.body);
+
+    if (liveProfile === "demo_web_service") {
+      if (resource.type === "aws_autoscaling_group") {
+        validateBoundedLiveObservationAutoScalingGroup(resource, body);
+      }
+
+      if (resource.type === "aws_autoscaling_policy") {
+        validateBoundedLiveObservationAutoScalingPolicy(resource, body);
+      }
+
+      if (resource.type === "aws_cloudwatch_metric_alarm") {
+        validateBoundedLiveObservationCloudWatchAlarm(resource, body);
+      }
+    }
 
     if (resource.type === "aws_instance" && /\buser_data\s*=/.test(body)) {
       validateManagedDemoUserData(body, resource.line, liveProfile, "user_data", "EC2");
@@ -421,6 +436,107 @@ function validateDeploymentResourceAttributes(
   }
 }
 
+function validateBoundedLiveObservationAutoScalingGroup(
+  resource: TerraformResourceBlock,
+  body: string
+): void {
+  const valid =
+    resource.name === "api" &&
+    findNumericAttribute(body, "min_size") === 1 &&
+    findNumericAttribute(body, "desired_capacity") === 1 &&
+    findNumericAttribute(body, "max_size") === 2 &&
+    findNumericAttribute(body, "health_check_grace_period") === 120 &&
+    findNumericAttribute(body, "default_instance_warmup") === 60 &&
+    hasLiteralStringAttribute(body, "health_check_type", "ELB") &&
+    /\btarget_group_arns\s*=\s*\[\s*aws_lb_target_group\.api\.arn\s*,?\s*\]/.test(body);
+
+  if (!valid) {
+    throw new TerraformArtifactSafetyError(
+      `Terraform must use the bounded Live Observation Auto Scaling Group at line ${resource.line}`
+    );
+  }
+}
+
+function validateBoundedLiveObservationAutoScalingPolicy(
+  resource: TerraformResourceBlock,
+  body: string
+): void {
+  const stepAdjustments = extractNamedBlocks(body, "step_adjustment");
+  const stepAdjustment = stepAdjustments[0]?.body ?? "";
+  const valid =
+    resource.name === "scale_out" &&
+    hasLiteralStringAttribute(body, "policy_type", "StepScaling") &&
+    hasLiteralStringAttribute(body, "adjustment_type", "ChangeInCapacity") &&
+    hasReferenceAttribute(
+      body,
+      "autoscaling_group_name",
+      "aws_autoscaling_group.api.name"
+    ) &&
+    findNumericAttribute(body, "cooldown") === 180 &&
+    findNumericAttribute(body, "estimated_instance_warmup") === 60 &&
+    stepAdjustments.length === 1 &&
+    findNumericAttribute(stepAdjustment, "metric_interval_lower_bound") === 0 &&
+    findNumericAttribute(stepAdjustment, "scaling_adjustment") === 1;
+
+  if (!valid) {
+    throw new TerraformArtifactSafetyError(
+      `Terraform must use the bounded Live Observation autoscaling policy at line ${resource.line}`
+    );
+  }
+}
+
+function validateBoundedLiveObservationCloudWatchAlarm(
+  resource: TerraformResourceBlock,
+  body: string
+): void {
+  const valid =
+    resource.name === "scale_out" &&
+    hasLiteralStringAttribute(
+      body,
+      "comparison_operator",
+      "GreaterThanOrEqualToThreshold"
+    ) &&
+    findNumericAttribute(body, "evaluation_periods") === 1 &&
+    findNumericAttribute(body, "datapoints_to_alarm") === 1 &&
+    hasLiteralStringAttribute(body, "metric_name", "RequestCountPerTarget") &&
+    hasLiteralStringAttribute(body, "namespace", "AWS/ApplicationELB") &&
+    findNumericAttribute(body, "period") === 60 &&
+    hasLiteralStringAttribute(body, "statistic", "Sum") &&
+    findNumericAttribute(body, "threshold") === 60 &&
+    hasLiteralStringAttribute(body, "treat_missing_data", "notBreaching") &&
+    /\bLoadBalancer\s*=\s*aws_lb\.demo\.arn_suffix\b/.test(body) &&
+    /\bTargetGroup\s*=\s*aws_lb_target_group\.api\.arn_suffix\b/.test(body) &&
+    /\balarm_actions\s*=\s*\[\s*aws_autoscaling_policy\.scale_out\.arn\s*,?\s*\]/.test(body);
+
+  if (!valid) {
+    throw new TerraformArtifactSafetyError(
+      `Terraform must use the bounded Live Observation CloudWatch alarm at line ${resource.line}`
+    );
+  }
+}
+
+function hasLiteralStringAttribute(
+  body: string,
+  attributeName: string,
+  expectedValue: string
+): boolean {
+  const pattern = new RegExp(
+    `\\b${escapeRegExp(attributeName)}\\s*=\\s*"${escapeRegExp(expectedValue)}"`
+  );
+  return pattern.test(body);
+}
+
+function hasReferenceAttribute(
+  body: string,
+  attributeName: string,
+  expectedReference: string
+): boolean {
+  const pattern = new RegExp(
+    `\\b${escapeRegExp(attributeName)}\\s*=\\s*${escapeRegExp(expectedReference)}\\b`
+  );
+  return pattern.test(body);
+}
+
 function validateManagedDemoUserData(
   body: string,
   line: number,
@@ -450,10 +566,11 @@ function validateManagedDemoUserData(
     );
   }
 
+  const canonicalDecoded = decoded.replace(/\r\n/g, "\n");
   const hashMatch = new RegExp(
     `^\\s*#\\s*${escapeRegExp(managedDemoUserDataHashPrefix)}([a-f0-9]{64})\\s*$`,
     "m"
-  ).exec(decoded);
+  ).exec(canonicalDecoded);
 
   if (!hashMatch?.[1]) {
     throw new TerraformArtifactSafetyError(
@@ -461,7 +578,7 @@ function validateManagedDemoUserData(
     );
   }
 
-  const normalized = decoded.replace(hashMatch[0], `# ${managedDemoUserDataHashPrefix}`);
+  const normalized = canonicalDecoded.replace(hashMatch[0], `# ${managedDemoUserDataHashPrefix}`);
   const actualHash = createHash("sha256").update(normalized).digest("hex");
 
   if (hashMatch[1] !== actualHash) {
@@ -537,7 +654,7 @@ function findNumericAttribute(body: string, attributeName: string): number | nul
 
 function extractResourceBlocks(source: string): TerraformResourceBlock[] {
   const resources: TerraformResourceBlock[] = [];
-  const headerPattern = /\bresource\s+"([^"]+)"\s+"[^"]+"\s*\{/g;
+  const headerPattern = /\bresource\s+"([^"]+)"\s+"([^"]+)"\s*\{/g;
   let match: RegExpExecArray | null;
 
   while ((match = headerPattern.exec(source)) !== null) {
@@ -550,6 +667,7 @@ function extractResourceBlocks(source: string): TerraformResourceBlock[] {
 
     resources.push({
       type: match[1]!,
+      name: match[2]!,
       body: source.slice(openBraceIndex + 1, closeBraceIndex),
       line: countLineAtOffset(source, match.index)
     });

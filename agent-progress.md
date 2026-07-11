@@ -1,83 +1,74 @@
 # Agent Progress
 
-Short English-only working log for the current agent context. Older records are archived under `docs/agent-history/`.
+Short English-only working log for the current agent context. Older records are archived under docs/agent-history/.
 
 ## Current Verified State
 
-- Branch: `feat/gg/0-github-template`.
-- Active workstream: AWS Template and request-time GitHub Repository Analysis.
-- PR: #317, targeting `dev`.
-- Repository Analysis implementation is complete locally; PR #317 needs the latest commits pushed and checks refreshed.
-- No repository code, live AWS, Terraform apply, destroy, import, or remote state command ran for Repository Analysis.
+
+- Active branch: `fix/sw/330-container-alarm-debounce`, issue #330.
+
+- Release `v2.0.0` uses main SHA `44cdc976da8a03fca2d0aad69a0f3d45d51d4e8a`.
+- Route53 points to the direct-path ECS ALB. Public `/`, `/health`, and `/health/db` return 200; protected `/api/projects` returns 401.
+- API and web are active at desired/running 1 with Application Auto Scaling min 1 and max 2.
+- The legacy ECS service is absent from `list-services`, its task definition is inactive, and its target group is deleted.
+- The old EC2 instance, old ALB, and legacy CloudFormation ALB stack are deleted.
+- Cold rollback retains encrypted AMI `ami-0a65f0b7656bf2221`, encrypted snapshot `snap-04862810b1ed8a101`, and the verified SHA-pinned S3 Docker archive.
+- RDS is encrypted and available with deletion protection and seven-day backups; it remains Single-AZ for cost control.
+- Production username/password signup and login are healthy after rotating the invalid one-character auth token secret; OAuth client ID injection is pending this hotfix deployment.
+- Container log alarms keep ALARM notifications while suppressing repetitive OK notifications, require two consecutive error periods, and exclude stale Next.js Server Action requests from the web metric.
 
 ## Session Record
 
-### 2026-07-11 - Complete Repository Analysis screen E2E
+### 2026-07-11 - Remove duplicated Trivy rule IDs from the scanner test
 
-- Goal: Finish the user-visible GitHub repository analysis flow and prove it against actual GitHub repositories.
-- Completed:
-  - Persisted the latest structured analysis, revision, and timestamp with migration 0029.
-  - Wired Project Settings to connect repositories, run analysis with a disabled loading state, render success/failure details, and restore results after reload.
-  - Preserved the selected Template ID through the Workspace AI banner and the real Architecture Draft request.
-  - Restricted GitHub App installation listing, callback exchange, and repository connection to the signed-in GitHub OAuth account ID.
-  - Materialized the selected TemplateDefinition as the fixed six-resource Workspace baseline; replacement requests now require clarification instead of silently switching templates.
-  - Bound Workspace and Architecture Draft handoff to the stored project/source Repository Analysis; tampered URL and API Template IDs now fail closed.
-  - Fixed configured-origin credential CORS, auth-recovery request races, metadata contrast, and 44px action targets.
-- Manual QA:
-  - Failure: `NearthYou/sketchcatch-iac-handoff-test` revision `8b5d394aa5035c8ebc91e37751d5c8cccc3c6ddd`.
-  - Success: `NearthYou/mini-react` revision `dd1b8764fcd324c19f604c521eee2d60476136b5`, selected `static-web-hosting`.
-  - Chrome desktop/mobile reload and AI handoff passed with zero console, failed-request, or HTTP error responses in the final run.
-  - The final Workspace run kept all six Static Web Hosting resources and returned `needs_clarification` when asked to replace them with a three-tier design.
-  - A tampered `three-tier-web-app` URL and direct API request were rejected against the stored `static-web-hosting` selection with no console or network errors.
-- Verification:
-  - Final clean-worktree provenance suite passed 77/77; focused Repository Analysis suite passed 116/116 before the provenance hardening.
-  - `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
-  - Two independent visual reviews passed after contrast and touch-target corrections.
-- Risk:
-  - The TypeScript LSP is not installed because installation was previously declined; `tsc` is clean.
-  - A fixture PR exists in the dedicated private QA repository but was not merged.
+- Updated the Trivy ignore-file test to import `disabledTrivyTerraformRuleIds` from the scanner instead of maintaining a second hard-coded rule list.
+- Verification: focused `trivy-terraform-scan.test.ts`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check` passed.
+- Risk: none; the test now follows the production exclusion list automatically.
+- Next action: review and commit the Trivy exclusion change when ready.
 
-### 2026-07-10 - Complete GitHub Repository Analysis and Template Selection
+### 2026-07-11 - Disable Trivy ALB and Auto Scaling checks
 
-- Goal: Analyze an active GitHub Source Repository without execution or persistence, identify monorepo Application Units, and select exactly one supported Template or return Template Selection Failure.
-- Completed:
-  - Added bounded GitHub App evidence reads pinned to the current default-branch commit SHA.
-  - Added immutable GitHub repository ID verification before evidence reads.
-  - Added declared-workspace Application Unit detection and per-unit deployment evidence isolation.
-  - Added one-Template selection, explicit mismatch failure, shared AI handoff types, API route, ADRs, and milestone documentation.
-  - Merged latest `dev` and resolved the Terraform renderer contract by preserving inline Lambda archive blocks without synthesizing S3 resources.
-- Verification:
-  - Repository Analysis, GitHub evidence, service, and route tests passed 53/53.
-  - Focused Terraform merge tests passed 31/31.
-  - `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check` passed.
-  - Independent gate re-review passed with no remaining blocker; GitHub CI checks passed.
-- Risk:
-  - Full `pnpm test` still reports unrelated existing Web/API fixture, environment, Windows-path, and AI contract failures documented in the gg milestone and PR body.
+- Configured each Terraform Trivy scan to generate an ignore file that excludes ALB rules AWS-0047, AWS-0052, AWS-0053, and AWS-0054 plus Auto Scaling launch configuration/template rules AWS-0008, AWS-0009, AWS-0122, AWS-0129, and AWS-0130.
+- Kept all other Terraform Trivy checks enabled; the exclusion applies to the generated scan workspace only and does not change user Terraform source files.
+- Verification: focused Trivy scanner tests, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check` passed.
+- Risk: future Trivy check-bundle rule IDs require an explicit review before they are added to the exclusion list.
+- Next action: add the product-specific ALB and ASG configuration warnings as non-blocking deployment checks when requested.
 
-### 2026-07-10 - Add production infrastructure Terraform management boundaries
+### 2026-07-11 - Recover production auth runtime configuration
 
-- Goal: Introduce safe state, import, and review-only planning structure for SketchCatch's own production infrastructure without mixing it with user Deployment execution.
-- Completed so far:
-  - Preserved the existing runtime root and `production/ecs-foundation/terraform.tfstate` key.
-  - Added separate empty Terraform import gates for edge, persistent data, and legacy rollback groups.
-  - Added S3 backend examples with encryption and native lockfiles for four unique state keys.
-  - Added a machine-readable import inventory covering ECS, ALB, ECR, IAM, CloudWatch, Route53/ACM, S3, RDS, Redis/ElastiCache, EC2/SSM, and CloudFormation ownership.
-  - Added a manual plan-only workflow with group confirmation, Environment approval, complete runtime tfvars, and no binary plan artifact.
-  - Added static guards that reject live operations, duplicate state keys, missing inventory, and premature resource/import blocks in high-risk roots.
-  - Added Route53 `prevent_destroy` protection and documented state-move requirements before edge ownership transfer.
-  - Updated architecture, deployment, docs/sw, runtime Terraform, and harness tracking.
-  - Addressed PR #315 feedback with malformed-manifest guards, missing-directory handling, and tested Terraform operation parsing.
-- Verification:
-  - `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
-  - Runtime, edge, data, and legacy rollback roots passed `terraform init -backend=false -input=false` and `terraform validate` without AWS backend access.
-  - Terraform fmt check passed and runtime Terraform tests passed 2 HTTP/HTTPS routing contracts.
-  - Production infrastructure structure guard, manifest/tracker JSON parsing, workflow Prettier, and `git diff --check` passed.
-- Risk:
-  - Backend bucket Versioning/encryption/public access and plan-role IAM are documented but not live-verified.
-  - Existing runtime state membership has not been audited against AWS.
-  - Edge/data/legacy roots intentionally contain no managed resources until separately approved discovery/import work.
-  - CloudFormation and EC2 rollback ownership remain active and must not be removed or duplicated.
+- Traced signup/login failures to a one-character SSM `AUTH_TOKEN_SECRET` and missing OAuth client IDs in the ECS API task definition.
+- Rotated the secret without exposing it, restarted the API service, and verified live signup, login, and account cleanup.
+- Added production startup validation and deployment-time OAuth variable injection so invalid auth configuration fails before serving traffic.
+- Kept container ALARM notifications, removed repetitive OK notifications, and excluded the known stale Server Action web log pattern.
+
+### 2026-07-11 - Retire warm rollback and complete cost-first ECS operations
+
+- Deployed and released the main SHA, aligned API/web/worker images, and verified the one-off worker migration command.
+- Sanitized the retired EC2 host before creating an encrypted cold rollback AMI; removed the duplicate unencrypted AMI and snapshot.
+- Deleted the EC2 instance, old ALB stack, legacy ECS service/task registration, target group, and port 80 rules.
+- Added API/web autoscaling min 1 and max 2, circuit-breaker-preserving service ownership, low-cost alarms, and confirmed SNS delivery.
+- Replaced EC2 migrations with approved ECS one-off worker migrations, pre-migration snapshots, a compatibility guard, and three-snapshot retention.
+- Removed retired deployment/HTTPS workflows and reduced the GitHub deploy role to ECR, ECS, worker, scoped snapshot, and SNS permissions.
+- Added a disabled-by-default cold rollback Terraform root with scoped RDS/Redis access and documented restore procedures.
+
+### 2026-07-11 - Integrate latest dev into Live Observation PR
+
+- Merged the latest `origin/dev` UI rebuild and ECS production changes into PR #328 while preserving Live Observation and Board behavior.
+- Kept the ECS deployment workflow and removed the retired EC2 deployment workflow.
+- Reconciled the new Workspace shell, Board viewport behavior, Resource panel extraction, and Live Observation styles.
+
+## Verification
+
+
+
+## Risk
+
+- Full-suite failures outside the Live Observation change set still block branch integration.
+- A one-task baseline has no steady multi-AZ application redundancy; autoscaling is cost-first and reacts to CPU load, not AZ failure.
+- RDS is Single-AZ. Deletion protection, seven-day backups, pre-migration snapshots, and the restore runbook reduce but do not remove outage risk.
+- External customer execution roles may still need the worker task principal added to their trust policy.
+- Cold rollback has a longer RTO than the retired warm path and has static validation but no post-sanitization restore drill.
 
 ## Next Action
 
-- Push the latest Repository Analysis commits to PR #317, refresh checks, and address any review thread before merge.
+- Review and commit the Live Observation reliability fixes, then update PR #328.

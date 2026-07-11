@@ -1,5 +1,5 @@
-import { DesignDashboardPage } from "../../../features/dashboard/design-dashboard";
+import { BuiltInTemplateLibrary } from "../../../components/dashboard/built-in-template-library";
 
-export default function TemplatesPage() {
-  return <DesignDashboardPage view="templates" />;
+export default function DashboardTemplatesPage() {
+  return <BuiltInTemplateLibrary />;
 }

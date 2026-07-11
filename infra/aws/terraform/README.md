@@ -1,62 +1,44 @@
-# ECS/Fargate 운영 기반
+# ECS/Fargate production runtime
 
-이 Terraform root는 SketchCatch production의 parallel ECS ALB 경로를 관리합니다. Phase 8 steady state는 nginx 없이 ALB path routing으로 API와 web Fargate service에 직접 전달합니다. 기존 EC2/SSM/docker run 경로와 nginx 자산은 rollback 보존 기간 동안 유지합니다.
-
-이 root는 Phase 9 management group 중 `runtime`이며 기존 backend key `production/ecs-foundation/terraform.tfstate`를 유지합니다. Route53/ACM, S3/RDS/Redis, EC2 rollback의 분리 state와 import 정책은 `infra/aws/production/README.md`를 따릅니다. 이 production state는 사용자 Deployment state와 공유하지 않습니다.
-
-## 최종 ECS layout
+이 Terraform root는 SketchCatch production의 ECS/Fargate runtime을 관리합니다. Route53 production alias는 하나의 ECS ALB를 가리키며, ALB가 nginx 없이 API와 web service로 직접 path routing합니다.
 
 ```text
-Route53 alias (optional, default off)
--> parallel ECS ALB
-   -> /api, /api/*, /health, /health/db
-      -> API target group (ip:4000)
-      -> API ECS service/task
-   -> default /*
-      -> web target group (ip:3000)
-      -> web ECS service/task
+Route53 -> ECS ALB
+  /api, /api/*, /health, /health/db -> API target group -> API service
+  /*                                     -> web target group -> web service
+API -> ECS RunTask one-off worker
 ```
 
-포함 리소스:
+기존 EC2, EC2 ALB, legacy nginx ECS service와 target group은 삭제되었습니다. warm rollback은 없으며 복구는 암호화된 sanitized AMI, 검증된 Docker artifact, `infra/aws/production/legacy-rollback` Terraform root와 `docs/deployment.md` runbook을 사용하는 cold rollback입니다.
 
-- ECR repositories: ECS steady state용 `api`, `web`; EC2 rollback 보존용 `nginx`
-- ECS cluster
-- API와 web의 독립된 Fargate task definition 및 ECS service
-- API/web `ip` target group과 ALB listener rule
-- Task execution role, task role, scoped inline policies
-- API/web CloudWatch log group과 legacy nginx/worker log group
-- Parallel public ALB와 security group
-- 공유 ECS service security group. 기존 RDS allowlist 연속성을 위해 API/web가 함께 사용합니다.
-- 선택적 Route53 alias. `create_route53_alias = false`가 기본값입니다.
+## 관리 리소스
 
-ALB가 `X-Forwarded-For`와 `X-Forwarded-Proto`를 전달하며 API의 Fastify `trustProxy`가 이를 해석합니다. Web client는 same-origin `/api`를 사용합니다.
+- API/web ECR repository와 최근 tagged image 20개 lifecycle
+- ECS cluster, API/web service, API/web/worker task definition
+- API/web/worker execution role, task role, security group
+- API/web `ip` target group, HTTP redirect, HTTPS listener와 API path rule
+- API/web/worker CloudWatch log group, error/CPU/memory/ALB/RDS availability alarm
+- API/web Application Auto Scaling target과 CPU target-tracking policy
+- 선택적 Route53 alias. 기존 production state에서는 현재 ECS alias를 보존합니다.
 
-## 비용이 발생하는 리소스
+nginx repository와 log group은 마지막 검증 image의 cold rollback 추적을 위해 당분간 보존할 수 있지만 running service나 listener target은 아닙니다.
 
-- ALB와 LCU
-- API Fargate task: 기본 `ecs_task_cpu = 1024`, `ecs_task_memory = 2048`
-- web Fargate task: 기본 `web_task_cpu = 256`, `web_task_memory = 512`
-- `ecs_desired_count = 1`은 API와 web 각각에 적용되므로 최소 2개의 steady-state task가 실행됩니다.
-- CloudWatch Logs 저장량. 기본 retention은 14일입니다.
-- ECR image storage. lifecycle policy는 최근 tagged image 20개만 유지합니다.
-- `enable_ecs_observability_alarms = true`일 때 custom metrics와 alarms
+## 비용 기준
 
-기본값은 NAT Gateway를 만들지 않습니다. Fargate task는 public subnet에서 `assign_public_ip = true`로 AWS API/ECR/CloudWatch/S3에 접근합니다. private runtime 전환은 VPC endpoint 또는 NAT 비용과 egress allowlist를 별도 검토해야 합니다.
+- API와 web은 service별 `min=1`, `max=2`입니다. 평소에는 API 1 task와 web 1 task만 실행합니다.
+- 평균 CPU 60%를 목표로 scale out하며, scale-in 300초와 scale-out 60초 cooldown을 사용합니다.
+- ALB, 두 baseline Fargate task, log 보관, ECR 저장, CloudWatch custom metric/alarm 비용이 발생합니다.
+- Container Insights는 비용 때문에 기본 활성화하지 않습니다. serving task 0은 ALB `HealthyHostCount`로 감시합니다.
+- NAT Gateway는 만들지 않습니다. task는 public subnet과 public IP를 사용합니다.
+- worker는 service desired count가 없는 one-off `RunTask`라 실행한 시간만 비용이 발생합니다.
 
-## nginx와 rollback
+## 배포 소유권
 
-ECS task definition, service, target group, deploy workflow에서는 nginx를 사용하지 않습니다. 다음 자산은 EC2/SSM rollback 보존을 위해 의도적으로 남깁니다.
+`Deploy Production ECS`는 API image를 API와 worker task definition에, web image를 web task definition에 등록합니다. worker revision을 먼저 등록한 뒤 API와 web을 병렬 배포합니다. 둘 중 하나가 실패하면 전체 workflow가 실패합니다.
 
-- `docker/nginx.Dockerfile`, `docker/nginx.conf`
-- nginx ECR repository
-- nginx CloudWatch log group
-- `.github/workflows/deploy.yml`과 `deploy/ec2` 경로
+GitHub Actions가 service의 task revision을 관리하고 Application Auto Scaling이 desired count를 관리하므로 Terraform service lifecycle은 `task_definition`과 `desired_count` drift를 무시합니다. Terraform이 base task definition을 변경하면 workflow를 다시 실행해 service에 반영해야 합니다. network, load balancer, deployment circuit breaker, `minimumHealthyPercent=100`, `maximumPercent=200`은 Terraform이 관리합니다.
 
-rollback 보존 종료가 승인되기 전에는 이 자산을 제거하지 않습니다. nginx ECR/log group 정리와 EC2 cleanup은 별도 issue 및 Terraform plan/apply 승인으로 진행합니다.
-
-## 운영 적용 전 필수 입력
-
-실제 plan/apply는 이 phase 범위 밖입니다. 운영자가 적용할 때 최소한 아래 값을 제공해야 합니다.
+## 필수 runtime 입력
 
 ```hcl
 vpc_id                     = "vpc-..."
@@ -65,43 +47,33 @@ artifact_bucket_name        = "sketchcatch-..."
 sketchcatch_public_base_url = "https://sketchcatch.net"
 oauth_redirect_base_url     = "https://sketchcatch.net"
 certificate_arn             = "arn:aws:acm:ap-northeast-2:...:certificate/..."
+
+ecs_desired_count                  = 1
+enable_ecs_service_autoscaling     = true
+ecs_autoscaling_min_capacity       = 1
+ecs_autoscaling_max_capacity       = 2
+ecs_autoscaling_target_cpu_percent = 60
 ```
 
-API container의 민감 값은 secret 원문이 아니라 Secrets Manager 또는 SSM Parameter Store `SecureString` ARN으로 전달합니다.
+API 민감 값은 secret 원문이 아니라 Secrets Manager 또는 SSM Parameter Store ARN으로 전달합니다. `DATABASE_URL`, `AUTH_TOKEN_SECRET`, `CLOUDFORMATION_TEMPLATE_TOKEN_SECRET`, `REDIS_URL`, OAuth secret, GitHub App secret와 `OPENAI_API_KEY`는 `api_secret_arns`에 있어야 합니다. public URL, client ID, bucket name과 region만 일반 environment에 둡니다.
 
-```hcl
-api_secret_arns = {
-  DATABASE_URL                         = "arn:aws:secretsmanager:..."
-  AUTH_TOKEN_SECRET                    = "arn:aws:ssm:..."
-  CLOUDFORMATION_TEMPLATE_TOKEN_SECRET = "arn:aws:ssm:..."
-  REDIS_URL                            = "arn:aws:ssm:..."
-  OPENAI_API_KEY                       = "arn:aws:secretsmanager:..."
-  NAVER_OAUTH_CLIENT_SECRET            = "arn:aws:secretsmanager:..."
-  KAKAO_OAUTH_CLIENT_SECRET            = "arn:aws:secretsmanager:..."
-  GIT_OAUTH_CLIENT_SECRET              = "arn:aws:secretsmanager:..."
-  GIT_APP_PRIVATE_KEY_BASE64           = "arn:aws:secretsmanager:..."
-  GIT_APP_STATE_SECRET                 = "arn:aws:ssm:..."
-}
-```
+## 적용 절차
 
-Terraform validation은 secret 이름을 `api_environment`에 넣는 것을 막고, `api_secret_arns` 값이 Secrets Manager 또는 SSM ARN 형식인지 확인합니다. OAuth client ID, GitHub App ID, public URL, bucket name, region처럼 민감하지 않은 값만 일반 ECS environment에 둡니다.
-
-`secret_kms_key_arns`는 customer managed KMS key로 암호화한 secret에만 설정합니다. AWS managed key를 쓰는 기본 구성에서는 비워 둡니다.
-
-## 배포 주의사항
-
-`Deploy Production ECS` workflow는 API를 먼저 배포하고 안정화를 기다린 뒤 web을 배포합니다. 두 service update는 원자적이지 않으므로 중간 실패 시 각 service task revision과 image SHA를 확인하고 부분 rollback해야 합니다. nginx image는 ECS workflow에서 build/push하지 않습니다.
+1. remote state와 production tfvars를 백업합니다.
+2. `terraform plan`에서 legacy ECS service/target group 삭제, API/web autoscaling과 alarm 생성 외 예상하지 않은 변경이 없는지 확인합니다.
+3. 저장한 plan을 승인 후 apply합니다.
+4. API/web service가 안정화되고 target이 healthy인지 확인합니다.
+5. `/`, `/health`, `/health/db`, 인증이 필요한 `/api/projects`를 smoke합니다.
+6. 최종 refresh-only plan과 task revision, desired/running count, alarm 상태를 기록합니다.
 
 ## 정적 검증
-
-AWS API나 remote state를 사용하지 않는 검증만 실행합니다.
 
 ```powershell
 terraform -chdir=infra/aws/terraform fmt -check -recursive
 terraform -chdir=infra/aws/terraform init -backend=false -input=false
 terraform -chdir=infra/aws/terraform validate
 terraform -chdir=infra/aws/terraform test
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smoke/ecs-ops-preflight.ps1 -PreflightOnly
+node scripts/check-production-infra.mjs
 ```
 
-`terraform plan`, `terraform apply`, live ALB/Route53 확인은 별도 명시 승인 없이는 실행하지 않습니다.
+backend key는 `production/ecs-foundation/terraform.tfstate`이며 사용자 Deployment state와 공유하지 않습니다.

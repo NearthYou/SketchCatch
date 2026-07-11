@@ -1,115 +1,91 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { type FormEvent, type ReactNode, useEffect, useState } from "react";
+import {
+  CircleDollarSign,
+  FolderKanban,
+  LayoutDashboard,
+  LogOut,
+  Menu,
+  Plus,
+  Settings,
+  Shapes,
+  X
+} from "lucide-react";
+import { type ReactNode, useEffect, useState } from "react";
 import { useAuth } from "../auth/auth-provider";
-import { getApiErrorMessage } from "../../lib/api-client";
-import { DashboardIcon, type DashboardIconName } from "./dashboard-icons";
 
-const navItems: ReadonlyArray<{
-  readonly href: string;
-  readonly icon: DashboardIconName;
-  readonly label: string;
-}> = [
-  { href: "/dashboard", icon: "home", label: "대시보드" },
-  { href: "/dashboard/projects", icon: "folder", label: "내 프로젝트" },
-  { href: "/dashboard/templates", icon: "layers", label: "템플릿 허브" },
-  { href: "/dashboard/costs", icon: "billing", label: "비용관리" },
-  { href: "/dashboard/settings", icon: "settings", label: "환경설정" }
-];
+const DASHBOARD_NAV_ITEMS = [
+  { href: "/dashboard", icon: LayoutDashboard, label: "Overview" },
+  { href: "/dashboard/projects", icon: FolderKanban, label: "Projects" },
+  { href: "/dashboard/costs", icon: CircleDollarSign, label: "Cost Analysis" },
+  { href: "/dashboard/templates", icon: Shapes, label: "Templates" },
+  { href: "/dashboard/settings", icon: Settings, label: "Settings" }
+] as const;
 
-const topbarActionHiddenPaths = new Set([
-  "/dashboard/projects",
-  "/dashboard/templates",
-  "/dashboard/costs",
-  "/dashboard/settings"
-]);
-
-type DashboardShellProps = {
-  readonly children: ReactNode;
-  readonly projectSearchQuery?: string | undefined;
-};
-
-export function DashboardShell({ children, projectSearchQuery = "" }: DashboardShellProps) {
+export function DashboardShell({ children }: { readonly children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { logout, status, user } = useAuth();
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [projectSearchInput, setProjectSearchInput] = useState(projectSearchQuery);
-  const isCheckingSession = status === "loading";
-  const canSearchProjects = pathname === "/dashboard/projects";
-  const shouldShowCreateAction = !topbarActionHiddenPaths.has(pathname);
-  const projectSearchPath = "/dashboard/projects";
-  const displayName = user?.nickname ?? user?.username ?? "사용자";
-  const avatarText = displayName.slice(0, 1).toUpperCase();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const pageTitle = getDashboardPageTitle(pathname);
+  const shouldShowCreateAction =
+    pathname === "/dashboard" || pathname === "/dashboard/projects";
+
+  useEffect(() => {
+    setIsMobileMenuOpen(false);
+  }, [pathname]);
 
   useEffect(() => {
     if (status === "unauthenticated") {
-      router.replace("/login");
+      const returnTo = `${window.location.pathname}${window.location.search}`;
+      router.replace(`/login?returnTo=${encodeURIComponent(returnTo)}`);
     }
   }, [router, status]);
 
-  useEffect(() => {
-    setProjectSearchInput(projectSearchQuery);
-  }, [projectSearchQuery]);
-
   async function handleLogout(): Promise<void> {
-    setErrorMessage(null);
-
-    try {
-      await logout();
-      router.replace("/login");
-    } catch (error) {
-      setErrorMessage(getApiErrorMessage(error, "로그아웃에 실패했습니다."));
-    }
+    await logout();
+    router.replace("/login");
   }
 
-  function handleProjectSearchSubmit(event: FormEvent<HTMLFormElement>): void {
-    event.preventDefault();
-
-    const query = projectSearchInput.trim();
-
-    if (!query) {
-      router.push(projectSearchPath);
-      return;
-    }
-
-    const params = new URLSearchParams({
-      q: query
-    });
-
-    router.push(`${projectSearchPath}?${params.toString()}`);
-  }
-
-  if (isCheckingSession) {
+  if (status !== "authenticated") {
     return (
-      <main className="workspaceShell workspaceStateShell">
-        <p className="workspaceStateText">Checking session</p>
-      </main>
-    );
-  }
-
-  if (status === "unauthenticated") {
-    return (
-      <main className="workspaceShell workspaceStateShell">
-        <p className="workspaceStateText">Redirecting to login</p>
+      <main className="dashboardSessionState" aria-live="polite">
+        <Image alt="SketchCatch" height={48} priority src="/sketchcatch-logo.png" width={32} />
+        <strong>SketchCatch</strong>
+        <p>{status === "loading" ? "세션을 확인하고 있습니다." : "로그인 화면으로 이동합니다."}</p>
       </main>
     );
   }
 
   return (
-    <main className="dashboardShell">
-      <aside className="dashboardSidebar" aria-label="SketchCatch dashboard">
-        <Link className="dashboardBrand" href="/dashboard" aria-label="SketchCatch 대시보드">
-          <img className="dashboardBrandLogo" src="/sketchcatch-logo.svg" alt="" />
-          <span>SketchCatch</span>
-        </Link>
+    <div className="dashboardShell">
+      <aside
+        aria-label="Dashboard navigation"
+        className={isMobileMenuOpen ? "dashboardSidebar dashboardSidebarOpen" : "dashboardSidebar"}
+      >
+        <div className="dashboardSidebarHeader">
+          <Link className="dashboardBrand" href="/dashboard" aria-label="SketchCatch Dashboard">
+            <Image alt="" height={24} priority src="/sketchcatch-logo.png" width={16} />
+            <span>SketchCatch</span>
+          </Link>
+          <button
+            aria-label="Dashboard 메뉴 닫기"
+            className="dashboardMobileClose"
+            onClick={() => setIsMobileMenuOpen(false)}
+            title="메뉴 닫기"
+            type="button"
+          >
+            <X aria-hidden="true" size={20} />
+          </button>
+        </div>
 
-        <nav className="dashboardNav" aria-label="주요 메뉴">
-          {navItems.map((item) => {
-            const isActive =
-              pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(`${item.href}/`));
+        <nav className="dashboardNavigation" aria-label="Dashboard 메뉴">
+          {DASHBOARD_NAV_ITEMS.map((item) => {
+            const Icon = item.icon;
+            const isActive = isDashboardNavItemActive(pathname, item.href);
 
             return (
               <Link
@@ -118,61 +94,89 @@ export function DashboardShell({ children, projectSearchQuery = "" }: DashboardS
                 href={item.href}
                 key={item.href}
               >
-                <DashboardIcon name={item.icon} />
+                <Icon aria-hidden="true" size={18} strokeWidth={1.8} />
                 <span>{item.label}</span>
               </Link>
             );
           })}
         </nav>
 
-        <div className="dashboardSidebarSpacer" />
-
-        <div className="dashboardSidebarUser">
-          <span className="dashboardAvatar" aria-hidden="true">
-            {avatarText}
-          </span>
-          <div>
-            <strong>{displayName}</strong>
-            <button className="dashboardLogout" onClick={handleLogout} type="button">
-              로그아웃
-            </button>
+        <div className="dashboardAccount">
+          <div className="dashboardAvatar" aria-hidden="true">
+            {(user?.nickname || user?.username || "S").slice(0, 1).toUpperCase()}
           </div>
+          <div className="dashboardAccountText">
+            <strong>{user?.nickname || user?.username}</strong>
+            <span>{user?.email}</span>
+          </div>
+          <button
+            aria-label="로그아웃"
+            className="dashboardLogoutButton"
+            onClick={() => void handleLogout()}
+            title="로그아웃"
+            type="button"
+          >
+            <LogOut aria-hidden="true" size={18} />
+          </button>
         </div>
       </aside>
 
-      <section className="dashboardMain">
+      {isMobileMenuOpen ? (
+        <button
+          aria-label="Dashboard 메뉴 닫기"
+          className="dashboardSidebarBackdrop"
+          onClick={() => setIsMobileMenuOpen(false)}
+          type="button"
+        />
+      ) : null}
+
+      <div className="dashboardMainColumn">
         <header className="dashboardTopbar">
-          {canSearchProjects ? (
-            <form className="dashboardSearch" aria-label="프로젝트 검색" onSubmit={handleProjectSearchSubmit}>
-              <DashboardIcon name="search" />
-              <input
-                aria-label="내 프로젝트 검색"
-                onChange={(event) => setProjectSearchInput(event.target.value)}
-                placeholder="내 프로젝트에서 검색"
-                type="search"
-                value={projectSearchInput}
-              />
-              <button className="dashboardSearchButton" title="프로젝트 검색" type="submit">
-                <DashboardIcon name="search" />
-              </button>
-            </form>
-          ) : null}
+          <div className="dashboardTopbarTitle">
+            <button
+              aria-label="Dashboard 메뉴 열기"
+              className="dashboardMobileMenuButton"
+              onClick={() => setIsMobileMenuOpen(true)}
+              title="메뉴 열기"
+              type="button"
+            >
+              <Menu aria-hidden="true" size={20} />
+            </button>
+            <div>
+              <span>Dashboard</span>
+              <strong>{pageTitle}</strong>
+            </div>
+          </div>
+
           {shouldShowCreateAction ? (
-            <Link className="dashboardTopbarAction" href="/workspace/new">
-              <DashboardIcon name="plus" />
-              <span>새로 만들기</span>
+            <Link className="dashboardPrimaryAction" href="/workspace/new">
+              <Plus aria-hidden="true" size={17} />
+              <span>새 프로젝트</span>
             </Link>
           ) : null}
         </header>
 
-        {errorMessage ? (
-          <p className="dashboardMessage" role="alert">
-            {errorMessage}
-          </p>
-        ) : null}
+        <main className="dashboardContent">{children}</main>
+      </div>
+    </div>
+  );
+}
 
-        {children}
-      </section>
-    </main>
+function isDashboardNavItemActive(pathname: string, href: string): boolean {
+  if (href === "/dashboard") {
+    return pathname === href;
+  }
+
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+function getDashboardPageTitle(pathname: string): string {
+  if (pathname.startsWith("/dashboard/projects/")) {
+    return pathname.endsWith("/settings") ? "Project Settings" : "Project Detail";
+  }
+
+  return (
+    DASHBOARD_NAV_ITEMS.find((item) => isDashboardNavItemActive(pathname, item.href))?.label ??
+    "Overview"
   );
 }

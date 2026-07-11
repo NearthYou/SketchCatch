@@ -294,6 +294,11 @@ test("createAwsConnection creates a pending connection with server-generated ext
         Action: [
           "ce:GetCostAndUsage",
           "ce:GetDimensionValues",
+          "autoscaling:DescribeAutoScalingGroups",
+          "autoscaling:DescribeScalingActivities",
+          "ec2:DescribeInstances",
+          "elasticloadbalancing:DescribeLoadBalancers",
+          "elasticloadbalancing:DescribeTargetGroups",
           "cloudwatch:GetMetricData",
           "cloudwatch:GetMetricStatistics"
         ],

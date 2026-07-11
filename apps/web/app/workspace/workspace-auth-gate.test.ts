@@ -13,7 +13,7 @@ test("workspace page delays project workspace mounting until auth bootstrap comp
 
   const gateOpenIndex = workspacePageSource.indexOf("<WorkspaceAuthGate>");
   const projectManagerIndex = workspacePageSource.indexOf("<ProjectWorkspaceDraftManager");
-  const localManagerIndex = workspacePageSource.indexOf("<WorkspaceDraftManager />");
+  const localManagerIndex = workspacePageSource.indexOf("<WorkspaceDraftManager");
 
   assert.notEqual(gateOpenIndex, -1);
   assert.ok(projectManagerIndex > gateOpenIndex);
