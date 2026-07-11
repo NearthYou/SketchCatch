@@ -333,9 +333,9 @@ test("runDeploymentDestroy applies the approved destroy plan and clears deployme
   assert.deepEqual(runnerStages, ["init", "destroy"]);
   assert.equal(applyArtifactStorage.downloadedPlanObjectKey, createDestroyPlanArtifactRecord().objectKey);
   assert.equal(applyArtifactStorage.downloadedStateObjectKey, stateObjectKey);
-  assert.equal(writtenState?.filePath.endsWith("\\terraform.tfstate"), true);
+  assert.equal(writtenState?.filePath.endsWith("terraform.tfstate"), true);
   assert.deepEqual(writtenState?.content, Buffer.from('{"version":4}'));
-  assert.equal(writtenPlanFile?.filePath.endsWith("\\tfplan"), true);
+  assert.equal(writtenPlanFile?.filePath.endsWith("tfplan"), true);
   assert.deepEqual(writtenPlanFile?.content, planBuffer);
   assert.equal(result.deployment.status, "DESTROYED");
   assert.equal(result.deployment.stateObjectKey, null);

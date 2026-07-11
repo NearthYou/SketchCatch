@@ -54,11 +54,8 @@ export async function prepareTerraformWorkspace(
       await Promise.all(
         bundle.files.map((file) => writeFile(join(workdir, file.fileName), file.terraformCode))
       );
-      const canonicalCode = bundle.files
-        .map((file) => `# SketchCatch file: ${file.fileName}\n${file.terraformCode.trim()}`)
-        .join("\n\n");
       mainFilePath = join(workdir, ".sketchcatch-artifact.txt");
-      await writeFile(mainFilePath, canonicalCode);
+      await writeFile(mainFilePath, createTerraformBundleCanonicalContent(bundle));
     } else {
       await writeFile(mainFilePath, buffer);
     }
@@ -72,6 +69,22 @@ export async function prepareTerraformWorkspace(
     await rm(workdir, { recursive: true, force: true }).catch(() => undefined);
     throw error;
   }
+}
+
+// Plan과 승인 단계가 같은 artifact를 같은 byte로 비교하도록 정규화합니다.
+export function createTerraformArtifactCanonicalContent(
+  input: PrepareTerraformWorkspaceInput,
+  content: Buffer | Uint8Array | string
+): Buffer {
+  const buffer = toBuffer(content);
+
+  if (!isTerraformArtifactBundle(input)) {
+    return buffer;
+  }
+
+  return createTerraformBundleCanonicalContent(
+    parseTerraformArtifactBundle(buffer.toString("utf8"))
+  );
 }
 
 // 여러 Terraform 파일 artifact인지 content type과 저장 파일명으로 판별합니다.
@@ -120,6 +133,15 @@ export function parseTerraformArtifactBundle(content: string): TerraformArtifact
   });
 
   return { schemaVersion: 1, files };
+}
+
+// 파일 경계와 순서를 포함해 bundle의 hash 기준 문자열을 만듭니다.
+function createTerraformBundleCanonicalContent(bundle: TerraformArtifactBundle): Buffer {
+  return Buffer.from(
+    bundle.files
+      .map((file) => `# SketchCatch file: ${file.fileName}\n${file.terraformCode.trim()}`)
+      .join("\n\n")
+  );
 }
 
 export async function downloadTerraformArtifactFromS3(

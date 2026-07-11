@@ -329,7 +329,7 @@ test("runDeploymentDestroyPlan restores state and stores a destroy plan artifact
   assert.equal(result.deployment.blockedBy, null);
   assert.equal(result.deployment.blockedReason, null);
   assert.equal(applyArtifactStorage.downloadedStateObjectKey, stateObjectKey);
-  assert.equal(writtenState?.filePath.endsWith("\\terraform.tfstate"), true);
+  assert.equal(writtenState?.filePath.endsWith("terraform.tfstate"), true);
   assert.deepEqual(writtenState?.content, Buffer.from('{"version":4}'));
   assert.deepEqual(runnerStages, ["init", "destroy-plan", "show-json"]);
   assert.equal(planArtifactStorage.uploads[0]?.planArtifactId, planArtifactId);

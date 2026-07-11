@@ -6,6 +6,7 @@ import type {
   DeploymentStatus
 } from "@sketchcatch/types";
 import {
+  createTerraformArtifactCanonicalContent,
   defaultTerraformArtifactMaxBytes,
   downloadTerraformArtifactFromS3
 } from "./terraform-workspace.js";
@@ -118,7 +119,15 @@ export async function approveDeploymentPlan(
     throw new DeploymentConflictError("AWS connection changed after plan");
   }
 
-  const terraformArtifactContent = await downloadTerraformArtifact(terraformArtifact.objectKey);
+  const downloadedTerraformArtifact = await downloadTerraformArtifact(terraformArtifact.objectKey);
+  const terraformArtifactContent = createTerraformArtifactCanonicalContent(
+    {
+      objectKey: terraformArtifact.objectKey,
+      fileName: terraformArtifact.fileName,
+      contentType: terraformArtifact.contentType
+    },
+    downloadedTerraformArtifact
+  );
 
   assertTerraformArtifactIsSafe(terraformArtifactContent, {
     liveProfile: deployment.liveProfile

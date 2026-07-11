@@ -661,7 +661,8 @@ test("runDeploymentPlan saves a tfplan artifact, summary, warnings, logs, and cu
       prepareTerraformWorkspace: async (input) => {
         assert.deepEqual(input, {
           objectKey: "projects/project-id/assets/terraform_file/artifact-main.tf",
-          fileName: "main.tf"
+          fileName: "main.tf",
+          contentType: "application/x-terraform"
         });
 
         return {
