@@ -1,4 +1,5 @@
 import type { DiagramNode } from "../../../../packages/types/src";
+import { RESOURCE_NODE_COMPACT_MIN_SIZE } from "./resource-node-geometry";
 
 export type NodeResizeBounds = {
   maxHeight: number;
@@ -22,8 +23,8 @@ const designAreaMinResizeBounds = {
 const resourceNodeResizeBounds: NodeResizeBounds = {
   maxHeight: 260,
   maxWidth: 260,
-  minHeight: 56,
-  minWidth: 56
+  minHeight: RESOURCE_NODE_COMPACT_MIN_SIZE.height,
+  minWidth: RESOURCE_NODE_COMPACT_MIN_SIZE.width
 };
 
 const areaNodeMaxResizeBounds = {
@@ -82,8 +83,14 @@ const resourceAreaResizeBoundsByType: Record<string, NodeResizeBounds> = {
   }
 };
 
-export function getNodeResizeBounds(node: Pick<DiagramNode, "kind" | "parameters" | "type">): NodeResizeBounds {
+export function getNodeResizeBounds(
+  node: Pick<DiagramNode, "iconUrl" | "kind" | "parameters" | "type">
+): NodeResizeBounds {
   if (node.kind === "design") {
+    if (node.iconUrl && !designAreaResizeBoundsByType[node.type]) {
+      return resourceNodeResizeBounds;
+    }
+
     return designAreaResizeBoundsByType[node.type] ?? designNodeResizeBounds;
   }
 

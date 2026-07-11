@@ -2,7 +2,7 @@ const TERRAFORM_NESTED_BLOCK_ATTRIBUTES: Record<string, ReadonlySet<string>> = {
   aws_ami: new Set(["filter"]),
   aws_api_gateway_rest_api: new Set(["endpointConfiguration"]),
   aws_autoscaling_group: new Set(["launchTemplate", "tag"]),
-  aws_autoscaling_policy: new Set(["targetTrackingConfiguration"]),
+  aws_autoscaling_policy: new Set(["stepAdjustment", "targetTrackingConfiguration"]),
   aws_codebuild_project: new Set([
     "artifacts",
     "buildStatusConfig",
@@ -50,6 +50,7 @@ const TERRAFORM_NESTED_BLOCK_ATTRIBUTES: Record<string, ReadonlySet<string>> = {
   aws_lambda_function: new Set(["environment"]),
   aws_lb_listener: new Set(["defaultAction", "forward"]),
   aws_lb_target_group: new Set(["healthCheck", "stickiness"]),
+  aws_launch_template: new Set(["metadataOptions", "tagSpecifications"]),
   aws_route_table: new Set(["route"]),
   aws_s3_bucket_server_side_encryption_configuration: new Set(["rule"]),
   aws_s3_bucket_website_configuration: new Set(["errorDocument", "indexDocument", "routingRule"]),

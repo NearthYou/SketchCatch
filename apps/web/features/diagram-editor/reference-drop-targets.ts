@@ -4,7 +4,6 @@ import {
   getReferenceAttribute,
   mergeNodeParameters
 } from "../parameter-input/validation";
-import { isDesignAreaNode } from "./area-nodes";
 
 export type ReferenceDropTarget = {
   definitions: ParameterCatalogDefinition[];
@@ -109,36 +108,6 @@ export function findContainingReferenceDropTargets(
   }
 
   return groupReferenceTargetCandidates(referenceDefinitions, candidateByDefinitionName);
-}
-
-export function findInnermostVisualDropTarget(
-  childNode: DiagramNode,
-  nodes: readonly DiagramNode[],
-  catalog: ParameterCatalog
-): DiagramNode | null {
-  const childCenter = getNodeCenter(childNode);
-  const candidates: DropTargetCandidate[] = [];
-  const referenceTarget = findInnermostReferenceDropTarget(childNode, nodes, catalog);
-
-  if (referenceTarget) {
-    candidates.push({
-      node: referenceTarget.node,
-      area: getNodeArea(referenceTarget.node)
-    });
-  }
-
-  for (const node of nodes) {
-    if (node.id === childNode.id || !isDesignAreaNode(node) || !containsPoint(node, childCenter)) {
-      continue;
-    }
-
-    candidates.push({
-      node,
-      area: getNodeArea(node)
-    });
-  }
-
-  return candidates.sort(compareDropTargetCandidates)[0]?.node ?? null;
 }
 
 export function applyReferenceDropTarget(
