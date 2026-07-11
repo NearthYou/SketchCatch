@@ -154,7 +154,8 @@ export async function runDeploymentDestroyPlan(
     const [preparedWorkspace, stateBuffer] = await Promise.all([
       prepareTerraformWorkspace({
         objectKey: artifact.objectKey,
-        fileName: artifact.fileName
+        fileName: artifact.fileName,
+        contentType: artifact.contentType
       }),
       applyArtifactStorage.downloadDeploymentState({
         deploymentId: deployment.id,

@@ -137,7 +137,8 @@ export async function runDeploymentDestroy(
       }),
       prepareTerraformWorkspace({
         objectKey: terraformArtifact.objectKey,
-        fileName: terraformArtifact.fileName
+        fileName: terraformArtifact.fileName,
+        contentType: terraformArtifact.contentType
       }),
       applyArtifactStorage.downloadDeploymentState({
         deploymentId: deployment.id,

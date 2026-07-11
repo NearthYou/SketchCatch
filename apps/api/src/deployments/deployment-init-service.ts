@@ -120,7 +120,8 @@ export async function runDeploymentInit(
 
     workspace = await prepareTerraformWorkspace({
       objectKey: artifact.objectKey,
-      fileName: artifact.fileName
+      fileName: artifact.fileName,
+      contentType: artifact.contentType
     });
     assertTerraformArtifactIsSafe(await readTerraformArtifactFile(workspace.mainFilePath), {
       liveProfile: deployment.liveProfile

@@ -161,7 +161,8 @@ export async function runDeploymentPlan(
       repository.findArchitectureInProject(deployment.architectureId, deployment.projectId),
       prepareTerraformWorkspace({
         objectKey: artifact.objectKey,
-        fileName: artifact.fileName
+        fileName: artifact.fileName,
+        contentType: artifact.contentType
       })
     ]);
     workspace = preparedWorkspace;

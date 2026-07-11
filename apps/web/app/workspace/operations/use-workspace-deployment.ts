@@ -128,7 +128,11 @@ export function useWorkspaceDeployment({
       const saved = await saveWorkspaceTerraformArtifact({
         diagramJson: diagram,
         projectId,
-        terraformCode: terraform.code
+        terraformCode: terraform.code,
+        terraformFiles: terraform.files.map((file) => ({
+          fileName: file.fileName,
+          terraformCode: file.code
+        }))
       });
       const created = await createDeployment({
         projectId,
@@ -139,7 +143,7 @@ export function useWorkspaceDeployment({
       });
       return runDeploymentInit(created.id);
     });
-  }, [diagram, projectId, runAction, safety.gate, saveDiagram, terraform.code, terraform.previewState]);
+  }, [diagram, projectId, runAction, safety.gate, saveDiagram, terraform.code, terraform.files, terraform.previewState]);
 
   // 저장과 검사가 끝난 실행에 실제 AWS 변경 계획만 생성합니다.
   const runPlan = useCallback(async (): Promise<void> => {

@@ -1,8 +1,10 @@
 import { requireGitHubAppConfig } from "../config/env.js";
 import {
   defaultTerraformArtifactMaxBytes,
-  downloadTerraformArtifactFromS3
+  downloadTerraformArtifactFromS3,
+  parseTerraformArtifactBundle
 } from "../deployments/terraform-workspace.js";
+import { posix } from "node:path";
 import {
   createGitHubAppClient,
   type GitHubAppClient
@@ -25,12 +27,11 @@ export function createGitHubAppGitProvider(
   return {
     async createPullRequest(input) {
       cachedClient = cachedClient ?? options.githubAppClient ?? createGitHubAppClientFromEnv();
-      const files = await Promise.all(
-        input.files.map(async (file) => ({
-          path: file.path,
-          content: await downloadTerraformArtifactText(file, options.downloadTerraformArtifact)
-        }))
-      );
+      const files = (
+        await Promise.all(
+          input.files.map((file) => expandPullRequestFile(file, options.downloadTerraformArtifact))
+        )
+      ).flat();
       const result = await cachedClient.createPullRequest({
         installationId: input.repository.installationId,
         owner: input.repository.owner,
@@ -52,6 +53,25 @@ export function createGitHubAppGitProvider(
       };
     }
   };
+}
+
+// Terraform bundle은 PR 안에서 사용자가 편집한 원래 파일들로 다시 펼칩니다.
+async function expandPullRequestFile(
+  file: GitProviderCreatePullRequestInput["files"][number],
+  downloadTerraformArtifact:
+    | ((objectKey: string) => Promise<Buffer | Uint8Array | string>)
+    | undefined
+): Promise<Array<{ path: string; content: string }>> {
+  const content = await downloadTerraformArtifactText(file, downloadTerraformArtifact);
+  if (file.contentType !== "application/vnd.sketchcatch.terraform-files+json") {
+    return [{ path: file.path, content }];
+  }
+
+  const directory = posix.dirname(file.path);
+  return parseTerraformArtifactBundle(content).files.map((bundleFile) => ({
+    path: posix.join(directory, bundleFile.fileName),
+    content: bundleFile.terraformCode
+  }));
 }
 
 function createGitHubAppClientFromEnv(): GitHubAppClient {

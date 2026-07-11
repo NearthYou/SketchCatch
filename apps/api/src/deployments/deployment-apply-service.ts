@@ -160,7 +160,8 @@ export async function runDeploymentApply(
       }),
       prepareTerraformWorkspace({
         objectKey: terraformArtifact.objectKey,
-        fileName: terraformArtifact.fileName
+        fileName: terraformArtifact.fileName,
+        contentType: terraformArtifact.contentType
       })
     ]);
     workspace = preparedWorkspace;

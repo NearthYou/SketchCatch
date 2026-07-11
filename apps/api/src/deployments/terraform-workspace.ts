@@ -2,6 +2,7 @@ import { GetObjectCommand, type GetObjectCommandOutput } from "@aws-sdk/client-s
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { TerraformArtifactBundle } from "@sketchcatch/types";
 import { requireS3BucketName } from "../config/env.js";
 import { getS3Client } from "../s3/client.js";
 
@@ -11,6 +12,7 @@ const defaultS3ArtifactDownloadMaxBytes = 20 * 1024 * 1024;
 export type PrepareTerraformWorkspaceInput = {
   objectKey: string;
   fileName?: string | null;
+  contentType?: string | null;
 };
 
 export type PrepareTerraformWorkspaceOptions = {
@@ -31,7 +33,7 @@ export async function prepareTerraformWorkspace(
 ): Promise<PreparedTerraformWorkspace> {
   const workdir = await mkdtemp(join(options.rootDir ?? tmpdir(), "sketchcatch-terraform-"));
   const fileName = toSafeTerraformFileName(input.fileName);
-  const mainFilePath = join(workdir, fileName);
+  let mainFilePath = join(workdir, fileName);
 
   try {
     const maxTerraformArtifactBytes =
@@ -47,8 +49,19 @@ export async function prepareTerraformWorkspace(
     const buffer = toBuffer(content);
 
     assertBufferSize(buffer, maxTerraformArtifactBytes);
-
-    await writeFile(mainFilePath, buffer);
+    if (isTerraformArtifactBundle(input)) {
+      const bundle = parseTerraformArtifactBundle(buffer.toString("utf8"));
+      await Promise.all(
+        bundle.files.map((file) => writeFile(join(workdir, file.fileName), file.terraformCode))
+      );
+      const canonicalCode = bundle.files
+        .map((file) => `# SketchCatch file: ${file.fileName}\n${file.terraformCode.trim()}`)
+        .join("\n\n");
+      mainFilePath = join(workdir, ".sketchcatch-artifact.txt");
+      await writeFile(mainFilePath, canonicalCode);
+    } else {
+      await writeFile(mainFilePath, buffer);
+    }
 
     return {
       workdir,
@@ -59,6 +72,54 @@ export async function prepareTerraformWorkspace(
     await rm(workdir, { recursive: true, force: true }).catch(() => undefined);
     throw error;
   }
+}
+
+// 여러 Terraform 파일 artifact인지 content type과 저장 파일명으로 판별합니다.
+function isTerraformArtifactBundle(input: PrepareTerraformWorkspaceInput): boolean {
+  return (
+    input.contentType === "application/vnd.sketchcatch.terraform-files+json" ||
+    input.fileName === "terraform-files.json"
+  );
+}
+
+// 외부 저장소에서 받은 bundle을 안전한 .tf 파일 목록으로 검증합니다.
+export function parseTerraformArtifactBundle(content: string): TerraformArtifactBundle {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(content);
+  } catch {
+    throw new Error("Terraform artifact bundle is not valid JSON");
+  }
+
+  if (!parsed || typeof parsed !== "object") {
+    throw new Error("Terraform artifact bundle must be an object");
+  }
+  const candidate = parsed as { schemaVersion?: unknown; files?: unknown };
+  if (candidate.schemaVersion !== 1 || !Array.isArray(candidate.files)) {
+    throw new Error("Terraform artifact bundle schema is not supported");
+  }
+  if (candidate.files.length === 0 || candidate.files.length > 100) {
+    throw new Error("Terraform artifact bundle must contain 1 to 100 files");
+  }
+
+  const fileNames = new Set<string>();
+  const files = candidate.files.map((file): TerraformArtifactBundle["files"][number] => {
+    if (!file || typeof file !== "object") {
+      throw new Error("Terraform artifact bundle file is invalid");
+    }
+    const fileCandidate = file as { fileName?: unknown; terraformCode?: unknown };
+    if (typeof fileCandidate.fileName !== "string" || typeof fileCandidate.terraformCode !== "string") {
+      throw new Error("Terraform artifact bundle file fields are invalid");
+    }
+    const safeFileName = toSafeTerraformFileName(fileCandidate.fileName);
+    if (safeFileName !== fileCandidate.fileName || fileNames.has(safeFileName)) {
+      throw new Error("Terraform artifact bundle contains an unsafe or duplicate file name");
+    }
+    fileNames.add(safeFileName);
+    return { fileName: safeFileName, terraformCode: fileCandidate.terraformCode };
+  });
+
+  return { schemaVersion: 1, files };
 }
 
 export async function downloadTerraformArtifactFromS3(
