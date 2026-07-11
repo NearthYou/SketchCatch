@@ -10,6 +10,7 @@
     "catalog:generate": "node scripts/generate-terraform-aws-catalog.mjs",
     "templates:validate": "pnpm --filter @sketchcatch/api exec tsx ../../scripts/validate-aws-template-terraform.ts",
     "harness:check": "node scripts/check-harness.mjs",
+    "migration:compatibility:check": "node scripts/check-db-migration-compatibility.mjs",
     "lint": "turbo lint",
     "typecheck": "turbo typecheck",
     "test": "turbo test",

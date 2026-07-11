@@ -8,10 +8,22 @@ const aiChatDockSource = readWorkspaceFile("WorkspaceAiChatDock.tsx");
 const aiPanelSource = readWorkspaceFile("WorkspaceAiPanel.tsx");
 const deploymentPanelSource = readWorkspaceFile("DeploymentPanel.tsx");
 const diagramEditorSource = readFeatureFile("../diagram-editor/DiagramEditor.tsx");
+const flowMappersSource = readFeatureFile("../diagram-editor/flow-mappers.ts");
 const resourceWorkspaceSource = readWorkspaceFile("ResourceWorkspacePanel.tsx");
+const resourceListSource = readWorkspaceFile("ResourceListPanel.tsx");
+const resourceCardMenuSource = readWorkspaceFile("ResourceCardMenu.tsx");
+const resourceWorkspaceStylesSource = readWorkspaceFile("resource-workspace.module.css");
 const diagramEditorTypesSource = readFeatureFile("../diagram-editor/types.ts");
 const terraformLeaveDialogSource = readWorkspaceFile("TerraformLeaveDialog.tsx");
+const terraformEditorSource = readWorkspaceFile("TerraformCodeEditorSurface.tsx");
+const terraformEditorStylesSource = readWorkspaceFile("TerraformCodeEditorSurface.module.css");
 const terraformPanelSource = readWorkspaceFile("TerraformCodePanel.tsx");
+const terraformStatusSource = readWorkspaceFile("TerraformCodeStatus.tsx");
+const terraformStatusStylesSource = readWorkspaceFile("TerraformCodeStatus.module.css");
+const terraformToolbarSource = readWorkspaceFile("TerraformCodeToolbar.tsx");
+const terraformToolbarStylesSource = readWorkspaceFile("TerraformCodeToolbar.module.css");
+const terraformIssuesPanelSource = readWorkspaceFile("TerraformIssuesPanel.tsx");
+const terraformIssuesStylesSource = readWorkspaceFile("TerraformIssuesPanel.module.css");
 const workspaceRightPanelTypesSource = readWorkspaceFile("workspace-right-panel.types.ts");
 const projectDraftManagerSource = readWorkspaceFile("ProjectWorkspaceDraftManager.tsx");
 const workspaceDraftManagerSource = readWorkspaceFile("WorkspaceDraftManager.tsx");
@@ -91,9 +103,16 @@ test("right panel width stays locked after deployment leaves the panel", () => {
   assert.match(rightPanelViewRule, /\bmax-width:\s*100%;/);
 });
 
-test("workspace rails use the Brainboard panel widths", () => {
+test("workspace managers restore the saved DiagramJson through one identity-preserving boundary", () => {
+  assert.match(projectDraftManagerSource, /restoreSavedDiagram\(loadedDraft\.diagramJson, EMPTY_DIAGRAM\)/);
+  assert.match(
+    workspaceDraftManagerSource,
+    /restoreSavedDiagram\(storedLocalDraft\?\.diagramJson, EMPTY_DIAGRAM\)/
+  );
+});
+
+test("workspace rails keep stable widths while docking beside the canvas", () => {
   const editorShellRule = getCssRule(diagramEditorStylesSource, "editorShell");
-  const leftRailRule = getCssRule(diagramEditorStylesSource, "leftRail");
 
   assert.match(diagramEditorSource, /const DEFAULT_LEFT_PANEL_WIDTH = 346;/);
   assert.match(diagramEditorSource, /const DEFAULT_RIGHT_PANEL_WIDTH = 440;/);
@@ -101,8 +120,18 @@ test("workspace rails use the Brainboard panel widths", () => {
   assert.match(diagramEditorSource, /rightPanelWidth\.brainboardV1/);
   assert.match(editorShellRule, /--left-panel-width:\s*346px;/);
   assert.match(editorShellRule, /--right-panel-width:\s*440px;/);
-  assert.match(leftRailRule, /\bleft:\s*12px;/);
-  assert.match(leftRailRule, /\btop:\s*72px;/);
+  assert.match(
+    diagramEditorStylesSource,
+    /\.leftRail\s*\{[^}]*\bgrid-row:\s*2;[^}]*\bposition:\s*relative;/s
+  );
+  assert.match(
+    diagramEditorStylesSource,
+    /\.rightRail\s*\{[^}]*\bgrid-row:\s*2;[^}]*\bposition:\s*relative;/s
+  );
+  assert.match(
+    diagramEditorStylesSource,
+    /@media \(max-width: 1120px\)\s*\{[\s\S]*?\.leftRail\s*\{[^}]*\bposition:\s*fixed;/s
+  );
 });
 
 test("workspace shell follows DESIGN.md neutral surface and typography tokens", () => {
@@ -110,7 +139,8 @@ test("workspace shell follows DESIGN.md neutral surface and typography tokens", 
   const workspaceRule = getCssRule(diagramEditorStylesSource, "workspace");
   const canvasPanelRule = getCssRule(diagramEditorStylesSource, "canvasPanel");
   const canvasToolbarRule = getCssRule(diagramEditorStylesSource, "canvasToolbar");
-  const toolbarContextLinkRule = getCssRule(diagramEditorStylesSource, "toolbarContextLink");
+  const projectBarRule = getCssRule(diagramEditorStylesSource, "projectBar");
+  const projectBarBrandRule = getCssRule(diagramEditorStylesSource, "projectBarBrand");
   const projectShellRule = getCssRule(stylesSource, "projectShell");
   const primaryButtonRule = getCssRule(stylesSource, "primaryButton");
   const rightPanelShellRule = getCssRule(stylesSource, "rightPanelShell");
@@ -135,16 +165,18 @@ test("workspace shell follows DESIGN.md neutral surface and typography tokens", 
   assert.match(editorShellRule, /--workspace-muted:\s*#60646c;/);
   assert.match(editorShellRule, /--workspace-accent:\s*#000000;/);
   assert.match(editorShellRule, /--workspace-link:\s*#0d74ce;/);
+  assert.match(editorShellRule, /--board-canvas:\s*#f6f8fc;/);
   assert.match(editorShellRule, /\bfont-family:\s*var\(--workspace-font\);/);
 
   assert.match(workspaceRule, /\bbackground:\s*var\(--workspace-page\);/);
   assert.doesNotMatch(workspaceRule, /linear-gradient|#f6f8fc/);
-  assert.match(canvasPanelRule, /\bbackground:\s*var\(--workspace-page\);/);
+  assert.match(canvasPanelRule, /\bbackground:\s*var\(--board-canvas\);/);
   assert.doesNotMatch(canvasPanelRule, /#f8faff/);
   assert.match(canvasToolbarRule, /\bborder:\s*1px solid var\(--workspace-line\);/);
-  assert.match(toolbarContextLinkRule, /\bbackground:\s*var\(--workspace-surface\);/);
-  assert.match(toolbarContextLinkRule, /\bborder:\s*1px solid var\(--workspace-line\);/);
-  assert.match(toolbarContextLinkRule, /\bcolor:\s*var\(--workspace-text\);/);
+  assert.match(projectBarRule, /\bbackground:\s*var\(--workspace-surface\);/);
+  assert.match(projectBarRule, /\bborder-bottom:\s*1px solid var\(--workspace-line\);/);
+  assert.match(projectBarBrandRule, /\bbackground:\s*transparent;/);
+  assert.match(projectBarBrandRule, /\bcolor:\s*var\(--workspace-text\);/);
 
   assert.match(projectShellRule, /\bbackground:\s*#ffffff;/);
   assert.match(projectShellRule, /\bcolor:\s*#171717;/);
@@ -163,11 +195,11 @@ test("workspace shell follows DESIGN.md neutral surface and typography tokens", 
     /#7357ff|#5f3de8|#6f4cf6|#f4f1ff|#d8ceff|#1f6feb|#f6f7fb|#f4f7fb|#fafbfe/i;
 
   for (const shellRule of [
-    editorShellRule,
     workspaceRule,
     canvasPanelRule,
     canvasToolbarRule,
-    toolbarContextLinkRule,
+    projectBarRule,
+    projectBarBrandRule,
     projectShellRule,
     primaryButtonRule,
     rightPanelShellRule,
@@ -179,27 +211,36 @@ test("workspace shell follows DESIGN.md neutral surface and typography tokens", 
   }
 });
 
-test("workspace internal panel polish uses DESIGN.md tokens instead of legacy Blueprint tokens", () => {
-  const legacyBlueprintIndex = stylesSource.indexOf(
-    "/* Legacy workspace panel compatibility layer, overridden by the DESIGN.md pass below. */"
+test("save confirmation stays inside compact workspace viewports", () => {
+  assert.match(stylesSource, /\.serverSaveToast\s*{[\s\S]*?box-sizing:\s*border-box;/);
+  assert.match(
+    stylesSource,
+    /@media\s*\(max-width:\s*900px\)[\s\S]*?\.serverSaveToast\s*{[\s\S]*?max-width:\s*calc\(100vw\s*-\s*24px\);[\s\S]*?right:\s*12px;/
   );
-  const legacyRightPanelIndex = stylesSource.indexOf(
-    "/* Legacy right panel sizing compatibility layer, overridden by the DESIGN.md pass below. */"
+});
+
+test("mobile AI launcher stays above the canvas toolbar", () => {
+  assert.match(
+    stylesSource,
+    /@media\s*\(max-width:\s*640px\)[\s\S]*?\.aiChatLauncher,[\s\S]*?bottom:\s*76px;/
   );
+  assert.match(
+    diagramEditorStylesSource,
+    /@media\s*\(max-width:\s*640px\)[\s\S]*?\.canvasToolbar\s*{[\s\S]*?bottom:\s*10px;/
+  );
+});
+
+test("workspace internal panels keep only the DESIGN.md surface layer", () => {
   const finalPolishIndex = stylesSource.indexOf("/* DESIGN.md workspace internal panel pass */");
 
-  assert.ok(legacyBlueprintIndex > -1, "Expected the legacy workspace compatibility block to exist");
-  assert.ok(
-    legacyRightPanelIndex > legacyBlueprintIndex,
-    "Expected the legacy right panel sizing block to follow the first compatibility block"
-  );
   assert.ok(finalPolishIndex > -1, "Expected the workspace panel polish block to exist");
-  assert.ok(
-    finalPolishIndex > legacyRightPanelIndex,
-    "Expected the DESIGN.md polish block to override the legacy compatibility blocks"
-  );
+  assert.doesNotMatch(stylesSource, /Legacy workspace panel compatibility layer/);
+  assert.doesNotMatch(stylesSource, /Legacy right panel sizing compatibility layer/);
+  assert.doesNotMatch(stylesSource, /var\(--bp-/);
+  assert.doesNotMatch(stylesSource, /var\(--bb-/);
   assert.doesNotMatch(stylesSource, /\/\* Blueprint panel polish pass \*\//);
   assert.doesNotMatch(stylesSource, /\/\* Brainboard right panel reproduction \*\//);
+  assert.doesNotMatch(flowMappersSource, /var\(--bp-head\)/);
 
   const polishedRightPanelShellRule = getLastCssRuleAfter(
     stylesSource,
@@ -207,7 +248,7 @@ test("workspace internal panel polish uses DESIGN.md tokens instead of legacy Bl
     finalPolishIndex
   );
   const polishedTerraformPanelRule = getLastCssRuleAfter(stylesSource, "terraformPanel", finalPolishIndex);
-  const polishedIssuesPanelRule = getLastCssRuleAfter(stylesSource, "issuesPanel", finalPolishIndex);
+  const polishedIssuesPanelRule = getCssRule(terraformIssuesStylesSource, "issuesPanel");
   const polishedPanelModeTextButtonActiveRule = getLastCssRuleAfter(
     stylesSource,
     "panelModeTextButtonActive",
@@ -325,7 +366,9 @@ test("workspace internal panel polish uses DESIGN.md tokens instead of legacy Bl
   assert.match(polishedTextButtonActiveHoverRule, /\bcolor:\s*#ffffff;/);
 
   const legacyPanelTokens =
-    /var\(--bp-|var\(--bb-|#704dff|#5f3fe6|#f0f1ff|#6f4cf6|#5f3de8|#d8ceff|#1f6feb|#f7fbff/i;
+    /var\(--bp-|var\(--bb-|#704dff|#5f3fe6|#f0f1ff|#f0edff|#f6f3ff|#6f4cf6|#5f3de8|#d8ceff|#1f6feb|#f7fbff|rgba\(111,\s*76,\s*246/i;
+
+  assert.doesNotMatch(stylesSource, legacyPanelTokens);
 
   for (const polishedRule of [
     polishedRightPanelShellRule,
@@ -421,6 +464,33 @@ test("right panel exposes resources, terraform, and deploy while Issues live ins
   assert.doesNotMatch(stylesSource, /\.panelDeployButton\s*\{/);
 });
 
+test("simulation opens beside Deploy and remains available in the collapsed shortcut rail", () => {
+  const modeBarIndex = componentSource.indexOf("className={styles.rightPanelModeBar}");
+  const modeBarEndIndex = componentSource.indexOf(
+    "<div className={styles.rightPanelView}",
+    modeBarIndex
+  );
+  const modeBarSource = componentSource.slice(modeBarIndex, modeBarEndIndex);
+  const deployIndex = modeBarSource.indexOf("<span>Deploy</span>");
+  const simulationIndex = modeBarSource.indexOf("<span>시뮬레이션</span>");
+  const collapsedPanelIndex = componentSource.indexOf(
+    '<aside className={styles.collapsedRightPanel}'
+  );
+  const collapsedPanelEndIndex = componentSource.indexOf("</aside>", collapsedPanelIndex);
+  const collapsedPanelSource = componentSource.slice(
+    collapsedPanelIndex,
+    collapsedPanelEndIndex
+  );
+
+  assert.ok(deployIndex > -1);
+  assert.ok(simulationIndex > deployIndex);
+  assert.match(modeBarSource, /onClick=\{openLiveObservation\}/);
+  assert.match(collapsedPanelSource, /title="시뮬레이션"/);
+  assert.match(collapsedPanelSource, /onClick=\{openLiveObservation\}/);
+  assert.match(componentSource, /<LiveObservationModal/);
+  assert.match(componentSource, /projectId=\{projectId\}/);
+});
+
 test("reverse engineering is not reachable from persistent right panel toggles", () => {
   const collapsedPanelIndex = componentSource.indexOf(
     '<aside className={styles.collapsedRightPanel}'
@@ -480,13 +550,13 @@ test("workspace AI opens from a floating chat dock instead of the right panel", 
 });
 
 test("resource workspace omits the decorative list toolbar", () => {
-  const resourceWorkspacePanelRule = getCssRule(stylesSource, "resourceWorkspacePanel");
-  const resourceListPanelRule = getCssRule(stylesSource, "resourceListPanel");
+  const resourceWorkspacePanelRule = getCssRule(resourceWorkspaceStylesSource, "resourceWorkspacePanel");
+  const resourceListPanelRule = getCssRule(resourceWorkspaceStylesSource, "resourceListPanel");
 
-  assert.doesNotMatch(resourceWorkspaceSource, /className=\{styles\.resourceSectionToolbar\}/);
-  assert.doesNotMatch(resourceWorkspaceSource, /aria-label="Resource list"/);
+  assert.doesNotMatch(resourceListSource, /className=\{styles\.resourceSectionToolbar\}/);
+  assert.doesNotMatch(resourceListSource, /aria-label="Resource list"/);
   assert.match(resourceWorkspacePanelRule, /\bgrid-template-rows:\s*minmax\(0,\s*1fr\);/);
-  assert.match(resourceListPanelRule, /\bpadding:\s*24px 12px 12px;/);
+  assert.match(resourceListPanelRule, /\bgrid-template-rows:\s*auto minmax\(0, 1fr\);/);
 });
 
 test("resource detail back action sits inside the detail view", () => {
@@ -496,55 +566,49 @@ test("resource detail back action sits inside the detail view", () => {
     settingsBranchIndex
   );
   const backButtonIndex = resourceWorkspaceSource.indexOf(
-    'aria-label="Back to resource list"',
+    'aria-label="Resource 목록으로 돌아가기"',
     settingsPanelIndex
   );
   const parameterPanelIndex = resourceWorkspaceSource.indexOf("<ParameterInputPanel", settingsPanelIndex);
-  const settingsPanelRule = getCssRule(stylesSource, "resourceSettingsPanel");
-  const settingsHeaderRule = getCssRule(stylesSource, "resourceSettingsHeader");
+  const settingsPanelRule = getCssRule(resourceWorkspaceStylesSource, "resourceSettingsPanel");
+  const settingsHeaderRule = getCssRule(resourceWorkspaceStylesSource, "resourceSettingsHeader");
 
   assert.ok(settingsBranchIndex > -1);
   assert.ok(settingsPanelIndex > settingsBranchIndex);
   assert.ok(backButtonIndex > settingsPanelIndex);
   assert.ok(parameterPanelIndex > backButtonIndex);
   assert.match(settingsPanelRule, /\bgrid-template-rows:\s*auto minmax\(0,\s*1fr\);/);
-  assert.match(settingsHeaderRule, /\bpadding:\s*16px 12px 8px;/);
+  assert.match(settingsHeaderRule, /\bpadding:\s*8px 12px;/);
 });
 
 test("resource list identity starts with the service icon", () => {
-  const serviceIconRule = getCssRule(stylesSource, "resourceListServiceIcon");
+  const serviceIconRule = getCssRule(resourceWorkspaceStylesSource, "resourceListServiceIcon");
 
-  assert.doesNotMatch(resourceWorkspaceSource, /resourceListCubeIcon/);
-  assert.doesNotMatch(stylesSource, /\.resourceListCubeIcon\s*\{/);
+  assert.doesNotMatch(resourceListSource, /resourceListCubeIcon/);
+  assert.doesNotMatch(resourceWorkspaceStylesSource, /\.resourceListCubeIcon\s*\{/);
   assert.doesNotMatch(serviceIconRule, /\bborder-left:/);
-  assert.match(serviceIconRule, /\bwidth:\s*36px;/);
+  assert.match(serviceIconRule, /\bwidth:\s*32px;/);
 });
 
-test("selected resource list card uses a clear blue border only for the active state", () => {
+test("selected resource list card uses the neutral DESIGN.md primary color", () => {
   const activeCardRule = getCssRuleAfter(
-    stylesSource,
+    resourceWorkspaceStylesSource,
     "resourceListItemActive",
-    stylesSource.indexOf(".resourceListItem:hover")
+    resourceWorkspaceStylesSource.indexOf(".resourceListItem:hover")
   );
 
-  assert.match(activeCardRule, /\bborder-color:\s*#2563eb;/);
-  assert.match(activeCardRule, /\bbox-shadow:\s*0 0 0 1px rgba\(37,\s*99,\s*235,\s*0\.18\);/);
+  assert.match(activeCardRule, /\bborder-color:\s*var\(--workspace-accent, #000000\);/);
+  assert.doesNotMatch(activeCardRule, /#2563eb|rgba\(37,\s*99,\s*235/i);
 });
 
 test("resource card menu omits data source switch and maximize actions", () => {
-  const menuStartIndex = resourceWorkspaceSource.indexOf("function ResourceCardMenu");
-  const menuEndIndex = resourceWorkspaceSource.indexOf("function selectNode", menuStartIndex);
-  const menuSource = resourceWorkspaceSource.slice(menuStartIndex, menuEndIndex);
-
-  assert.ok(menuStartIndex > -1);
-  assert.ok(menuEndIndex > menuStartIndex);
-  assert.doesNotMatch(menuSource, /Switch to data source|Switch to resource/);
-  assert.doesNotMatch(menuSource, /switchTerraformBlockType/);
-  assert.doesNotMatch(menuSource, /onToggleSize/);
-  assert.doesNotMatch(menuSource, /Maximize2|Minimize2/);
-  assert.match(menuSource, /Edit config/);
-  assert.match(menuSource, /Duplicate/);
-  assert.match(menuSource, /Delete/);
+  assert.doesNotMatch(resourceCardMenuSource, /Switch to data source|Switch to resource/);
+  assert.doesNotMatch(resourceCardMenuSource, /switchTerraformBlockType/);
+  assert.doesNotMatch(resourceCardMenuSource, /onToggleSize/);
+  assert.doesNotMatch(resourceCardMenuSource, /Maximize2|Minimize2/);
+  assert.match(resourceCardMenuSource, /설정 수정/);
+  assert.match(resourceCardMenuSource, /복제/);
+  assert.match(resourceCardMenuSource, /삭제/);
 });
 
 test("workspace AI has a dedicated error tab for Terraform issue resolution", () => {
@@ -726,21 +790,19 @@ test("terraform view embeds issues below code with a resizable split instead of 
 });
 
 test("terraform issue banner focuses the embedded Issues panel instead of navigating to a tab", () => {
-  assert.match(terraformPanelSource, /Issues 보기/);
-  assert.doesNotMatch(terraformPanelSource, /Issues 탭으로 이동/);
+  assert.match(terraformStatusSource, /Issues 보기/);
+  assert.doesNotMatch(terraformStatusSource, /Issues 탭으로 이동/);
   assert.match(componentSource, /focusTerraformIssuesPane/);
   assert.match(componentSource, /onOpenIssues=\{focusTerraformIssuesPane\}/);
 });
 
 test("terraform issue AI resolution bypasses the leave guard while editing", () => {
-  const issuesPanelSource = readWorkspaceFile("TerraformIssuesPanel.tsx");
-
-  assert.match(issuesPanelSource, /data-terraform-issue-ai-resolution/);
+  assert.match(terraformIssuesPanelSource, /data-terraform-issue-ai-resolution/);
   assert.match(componentSource, /isTerraformIssueAiResolutionTarget/);
   assert.match(componentSource, /isTerraformIssueAiResolutionTarget\(target\)/);
   assert.match(componentSource, /isTerraformLeaveGuardIgnoredTarget/);
   assert.match(aiChatDockSource, /data-terraform-leave-guard-ignore/);
-  assert.match(issuesPanelSource, /onResolveWithAi\(issue\)/);
+  assert.match(terraformIssuesPanelSource, /onResolveWithAi\(issue\)/);
 });
 
 test("terraform code navigation stays reachable after a blocked save", () => {
@@ -817,15 +879,15 @@ test("terraform leave dialog uses Korean copy", () => {
   assert.doesNotMatch(terraformLeaveDialogSource, /Discard Changes/);
 });
 
-test("terraform leave dialog continue action uses the stronger hover tint as its base color", () => {
+test("terraform leave dialog continue action uses the neutral workspace tint", () => {
   const secondaryButtonRule = getCssRule(stylesSource, "terraformDialogSecondaryButton");
 
-  assert.match(secondaryButtonRule, /background:\s*var\(--bp-blue-tint\);/);
+  assert.match(secondaryButtonRule, /background:\s*var\(--workspace-accent-soft, #f0f0f3\);/);
   assert.doesNotMatch(secondaryButtonRule, /background:\s*#ffffff;/);
-  assert.doesNotMatch(secondaryButtonRule, /background:\s*var\(--bp-paper-2\);/);
+  assert.doesNotMatch(secondaryButtonRule, /var\(--bp-/);
   assert.match(
     stylesSource,
-    /\.terraformDialogSecondaryButton:hover,[\s\S]*?background:\s*color-mix\(in srgb, var\(--bp-blue-tint\) 74%, var\(--bp-blue\)\);/
+    /\.terraformDialogSecondaryButton:hover,[\s\S]*?background:\s*color-mix\(in srgb, var\(--workspace-accent-soft, #f0f0f3\) 74%, var\(--workspace-accent, #000000\)\);/
   );
 });
 
@@ -1135,25 +1197,25 @@ test("deployment setup exposes a three-step workflow with one primary path", () 
   assert.match(stageAlertRule, /\bbackground:\s*#fef2f2;/);
   assert.match(stageAlertRule, /\bborder:\s*1px solid #f87171;/);
   assert.match(stageAlertRule, /\bcolor:\s*#991b1b;/);
-  assert.match(finalStageSummaryNoticeRule, /\bbackground:\s*#eef6ff;/);
-  assert.match(finalStageSummaryNoticeRule, /\bborder-color:\s*#bfdbfe;/);
-  assert.match(finalStageSummaryNoticeRule, /\bcolor:\s*#1e3a8a;/);
+  assert.match(finalStageSummaryNoticeRule, /\bbackground:\s*#f5f5f5;/);
+  assert.match(finalStageSummaryNoticeRule, /\bborder-color:\s*#dcdee0;/);
+  assert.match(finalStageSummaryNoticeRule, /\bcolor:\s*#44474d;/);
   assert.match(finalStageAlertRule, /\bbackground:\s*#fef2f2;/);
   assert.match(finalStageAlertRule, /\bborder-color:\s*#f87171;/);
   assert.match(finalStageAlertRule, /\bcolor:\s*#991b1b;/);
-  assert.match(activeStageDotRule, /\bbackground:\s*#2563eb;/);
-  assert.match(activeStageDotRule, /\bborder-color:\s*#2563eb;/);
-  assert.match(activeStageDotRule, /\bbox-shadow:\s*0 0 0 6px rgba\(37,\s*99,\s*235,\s*0\.16\);/);
+  assert.match(activeStageDotRule, /\bbackground:\s*var\(--workspace-accent,\s*#000000\);/);
+  assert.match(activeStageDotRule, /\bborder-color:\s*var\(--workspace-accent,\s*#000000\);/);
+  assert.match(activeStageDotRule, /\bbox-shadow:\s*0 0 0 6px rgba\(23,\s*23,\s*23,\s*0\.12\);/);
   assert.match(doneStageDotRule, /\bbackground:\s*#0f766e;/);
   assert.match(doneStageDotRule, /\bborder-color:\s*#0f766e;/);
-  assert.match(activeStageActionRule, /\bborder-color:\s*#2563eb;/);
+  assert.match(activeStageActionRule, /\bborder-color:\s*var\(--workspace-accent,\s*#000000\);/);
   assert.match(doneStageActionRule, /\bborder-color:\s*#0f766e;/);
   assert.match(errorStageDotRule, /\bbackground:\s*#fee2e2;/);
   assert.match(errorStageDotRule, /\bborder-color:\s*#f87171;/);
   assert.match(errorStageDotRule, /\bcolor:\s*#991b1b;/);
   assert.match(errorStageActionRule, /\bbackground:\s*#fef2f2;/);
   assert.match(errorStageActionRule, /\bborder-color:\s*#f87171;/);
-  assert.doesNotMatch(activeStageDotRule, /var\(--workspace-accent|#171717|#000000/);
+  assert.doesNotMatch(activeStageDotRule, /#2563eb|rgba\(37,\s*99,\s*235/i);
   assert.doesNotMatch(doneStageDotRule, /#16a34a/);
   assert.doesNotMatch(
     [
@@ -1299,10 +1361,10 @@ test("pre-deployment finding fix buttons open the existing terraform source loca
 });
 
 test("terraform errors surface as an issues banner and AI resolution lives in the chat dock", () => {
-  const issueBannerRule = getCssRule(stylesSource, "terraformIssueBanner");
-  const aiButtonRule = getCssRule(stylesSource, "terraformDiagnosticAiButton");
-  const issuesPanelRule = getCssRule(stylesSource, "issuesPanel");
-  const issuesDiagnosticsRule = getCssRule(stylesSource, "issuesPanel .terraformDiagnostics");
+  const issueBannerRule = getCssRule(terraformStatusStylesSource, "terraformIssueBanner");
+  const aiButtonRule = getCssRule(terraformIssuesStylesSource, "terraformDiagnosticAiButton");
+  const issuesPanelRule = getCssRule(terraformIssuesStylesSource, "issuesPanel");
+  const issuesDiagnosticsRule = getCssRule(terraformIssuesStylesSource, "terraformDiagnostics");
 
   assert.doesNotMatch(terraformPanelSource, /runAiTerraformErrorExplanation/);
   assert.doesNotMatch(terraformPanelSource, /terraformErrorExplanationsByKey/);
@@ -1310,8 +1372,8 @@ test("terraform errors surface as an issues banner and AI resolution lives in th
   assert.doesNotMatch(terraformPanelSource, /AI 설명/);
   assert.doesNotMatch(terraformPanelSource, /terraformErrorExplanationPanel/);
   assert.doesNotMatch(terraformPanelSource, /terraformErrorExplanationList/);
-  assert.match(terraformPanelSource, /className=\{styles\.terraformIssueBanner\}/);
-  assert.match(terraformPanelSource, /Issues 보기/);
+  assert.match(terraformStatusSource, /className=\{styles\.terraformIssueBanner\}/);
+  assert.match(terraformStatusSource, /Issues 보기/);
   assert.doesNotMatch(terraformPanelSource, /Issues 탭으로 이동/);
   assert.match(componentSource, /readStoredTerraformIssues/);
   assert.match(componentSource, /markTerraformIssuesStale/);
@@ -1326,7 +1388,7 @@ test("terraform errors surface as an issues banner and AI resolution lives in th
   assert.doesNotMatch(aiChatDockSource, /Well-Architected/);
   assert.match(aiChatDockSource, /onApplyTerraformIssueFix/);
   assert.match(issueBannerRule, /\bbackground:\s*#fff7ed;/);
-  assert.match(aiButtonRule, /\bbackground:\s*var\(--bp-blue\);/);
+  assert.match(aiButtonRule, /\bbackground:\s*var\(--workspace-surface, #ffffff\);/);
   assert.match(issuesPanelRule, /\bheight:\s*100%;/);
   assert.match(issuesPanelRule, /\bmin-height:\s*0;/);
   assert.match(issuesPanelRule, /\boverflow:\s*hidden;/);
@@ -1334,13 +1396,21 @@ test("terraform errors surface as an issues banner and AI resolution lives in th
   assert.match(issuesDiagnosticsRule, /\bmin-height:\s*0;/);
   assert.match(issuesDiagnosticsRule, /\boverflow-y:\s*auto;/);
   assert.match(issuesDiagnosticsRule, /\bscrollbar-gutter:\s*stable;/);
-  assert.doesNotMatch(stylesSource, /\.issuesPanel\s*\{[^}]*background:\s*var\(--bb-dark\);/s);
-  assert.doesNotMatch(stylesSource, /\.issuesPanel \.terraformDiagnostics\s*\{[^}]*background:\s*var\(--bb-dark\);/s);
-  assert.doesNotMatch(stylesSource, /\.panelPlanActionDangerButton[^{}]*\{[^}]*\.issuesPanel/s);
-  assert.match(stylesSource, /\.issuesPanel \.terraformDiagnosticList strong\s*\{[^}]*color:\s*#172033;/s);
-  assert.match(stylesSource, /\.issuesPanel \.terraformDiagnosticList span\s*\{[^}]*color:\s*#334155;/s);
-  assert.match(stylesSource, /\.issuesPanel \.terraformDiagnosticSeverity\s*\{[^}]*color:\s*#991b1b;/s);
-  assert.match(stylesSource, /\.issuesPanel \.terraformDiagnosticMeta span\s*\{[^}]*color:\s*#334155;/s);
+  assert.doesNotMatch(terraformIssuesStylesSource, /var\(--bb-|#2563eb|#3730a3|#1d4ed8/);
+  assert.match(
+    terraformIssuesStylesSource,
+    /\.terraformDiagnosticList strong\s*\{[^}]*color:\s*var\(--workspace-text, #171717\);/s
+  );
+  assert.match(
+    terraformIssuesStylesSource,
+    /\.terraformDiagnosticList > li > span\s*\{[^}]*color:\s*var\(--workspace-muted, #60646c\);/s
+  );
+  assert.match(terraformIssuesStylesSource, /\.terraformDiagnosticSeverity\s*\{[^}]*color:\s*var\(--workspace-text, #171717\);/s);
+  assert.match(
+    terraformIssuesStylesSource,
+    /\.terraformDiagnosticMeta span\s*\{[^}]*background:\s*var\(--workspace-surface-muted, #fafafa\);[^}]*border:\s*1px solid var\(--workspace-line, #f0f0f3\);/s
+  );
+  assert.match(terraformIssuesPanelSource, /AI로 해결/);
 });
 
 test("terraform issue AI resolution shows a fix plan before apply", () => {
@@ -1444,24 +1514,24 @@ test("terraform issue AI resolution can close the chat dock without trapping the
 });
 
 test("terraform editor renders syntax colors and squiggly error underlines", () => {
-  const syntaxHighlightLayerRule = getCssRule(stylesSource, "terraformSyntaxHighlightLayer");
-  const highlightedLineErrorRule = getCssRule(stylesSource, "terraformHighlightedLineError");
-  const lineNumberErrorRule = getCssRule(stylesSource, "terraformLineNumberError");
-  const textareaRule = getCssRule(stylesSource, "terraformTextarea");
-  const keywordRule = getCssRule(stylesSource, "terraformTokenKeyword");
-  const identifierRule = getCssRule(stylesSource, "terraformTokenIdentifier");
-  const referenceRule = getCssRule(stylesSource, "terraformTokenReference");
-  const stringRule = getCssRule(stylesSource, "terraformTokenString");
-  const braceRule = getCssRule(stylesSource, "terraformTokenBrace");
+  const syntaxHighlightLayerRule = getCssRule(terraformEditorStylesSource, "terraformSyntaxHighlightLayer");
+  const highlightedLineErrorRule = getCssRule(terraformEditorStylesSource, "terraformHighlightedLineError");
+  const lineNumberErrorRule = getCssRule(terraformEditorStylesSource, "terraformLineNumberError");
+  const textareaRule = getCssRule(terraformEditorStylesSource, "terraformTextarea");
+  const keywordRule = getCssRule(terraformEditorStylesSource, "terraformTokenKeyword");
+  const identifierRule = getCssRule(terraformEditorStylesSource, "terraformTokenIdentifier");
+  const referenceRule = getCssRule(terraformEditorStylesSource, "terraformTokenReference");
+  const stringRule = getCssRule(terraformEditorStylesSource, "terraformTokenString");
+  const braceRule = getCssRule(terraformEditorStylesSource, "terraformTokenBrace");
 
   assert.match(terraformPanelSource, /createTerraformDiagnosticLineNumbers/);
   assert.match(terraformPanelSource, /createTerraformHighlightedLines/);
   assert.match(terraformPanelSource, /diagnosticLineNumbers/);
-  assert.match(terraformPanelSource, /terraformSyntaxHighlightLayer/);
-  assert.match(terraformPanelSource, /terraformHighlightedLineError/);
-  assert.match(terraformPanelSource, /terraformTokenKeyword/);
-  assert.match(terraformPanelSource, /terraformLineNumberError/);
-  assert.match(terraformPanelSource, /diagnosticLineNumberSet\.has\(lineNumber\)/);
+  assert.match(terraformEditorSource, /terraformSyntaxHighlightLayer/);
+  assert.match(terraformEditorSource, /terraformHighlightedLineError/);
+  assert.match(terraformEditorSource, /terraformTokenKeyword/);
+  assert.match(terraformEditorSource, /terraformLineNumberError/);
+  assert.match(terraformEditorSource, /state\.diagnosticLineNumbers\.has\(lineNumber\)/);
   assert.doesNotMatch(terraformPanelSource, /lineHeight:\s*TERRAFORM_EDITOR_LINE_HEIGHT/);
   assert.doesNotMatch(terraformPanelSource, /verticalPadding:\s*TERRAFORM_EDITOR_VERTICAL_PADDING/);
   assert.doesNotMatch(terraformPanelSource, /terraformDiagnosticLineLayer/);
@@ -1470,7 +1540,7 @@ test("terraform editor renders syntax colors and squiggly error underlines", () 
   assert.match(highlightedLineErrorRule, /\btext-decoration-style:\s*wavy;/);
   assert.match(highlightedLineErrorRule, /\btext-decoration-color:\s*#ef4444;/);
   assert.match(textareaRule, /\bcolor:\s*transparent;/);
-  assert.match(textareaRule, /\bcaret-color:\s*#d7e4f7;/);
+  assert.match(textareaRule, /\bcaret-color:\s*#ffffff;/);
   assert.match(keywordRule, /\bcolor:\s*#f6c85f;/);
   assert.match(identifierRule, /\bcolor:\s*#7fd2ff;/);
   assert.match(referenceRule, /\bcolor:\s*#5fe0c1;/);
@@ -1521,7 +1591,8 @@ test("terraform preview explanation is triggered from the terraform code panel",
 });
 
 test("terraform resource code mode keeps explanation but omits validation and deployment actions", () => {
-  assert.match(terraformPanelSource, /renderTerraformPreviewExplanationButton\(\)/);
+  assert.match(terraformToolbarSource, /<TerraformExplanationButton actions=\{actions\} state=\{state\} \/>/);
+  assert.match(terraformToolbarSource, /<span>Preview 설명<\/span>/);
   assert.doesNotMatch(terraformPanelSource, /<span>Validate<\/span>/);
   assert.doesNotMatch(terraformPanelSource, />\s*Validate\s*<\/button>/);
   assert.doesNotMatch(terraformPanelSource, /리소스 단위 plan API 연결 예정/);
@@ -1554,8 +1625,8 @@ test("terraform artifact preparation marks the terraform panel as loading", () =
 });
 
 test("terraform editor labels inline validation as fast Terraform error checking without progress UI", () => {
-  const topBarRule = getCssRule(stylesSource, "terraformTopBar");
-  const topActionsRule = getCssRule(stylesSource, "terraformTopActions");
+  const topBarRule = getCssRule(terraformToolbarStylesSource, "terraformTopBar");
+  const topActionsRule = getCssRule(terraformToolbarStylesSource, "terraformTopActions");
 
   assert.doesNotMatch(terraformPanelSource, /terraformValidationProgressBar/);
   assert.doesNotMatch(terraformPanelSource, /TerraformValidationProgress/);
@@ -1566,8 +1637,10 @@ test("terraform editor labels inline validation as fast Terraform error checking
   assert.doesNotMatch(stylesSource, /\.terraformValidationProgressWorking\s*\{/);
   assert.doesNotMatch(stylesSource, /\.terraformValidationProgressDone\s*\{/);
   assert.doesNotMatch(stylesSource, /\.terraformValidationProgressError\s*\{/);
-  assert.match(topBarRule, /\bflex-wrap:\s*wrap;/);
-  assert.match(topActionsRule, /\bflex-wrap:\s*wrap;/);
+  assert.match(topBarRule, /\balign-items:\s*center;/);
+  assert.match(topActionsRule, /\bmin-width:\s*0;/);
+  assert.match(terraformToolbarStylesSource, /@media \(max-width:\s*520px\)/);
+  assert.match(terraformToolbarStylesSource, /flex-direction:\s*column;/);
 });
 
 test("terraform panel does not warm provider validation when the panel becomes visible", () => {

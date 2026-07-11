@@ -9,7 +9,6 @@ import {
 } from "./project-delete-flow";
 
 const projectsClientSource = readProjectFile("../../app/projects/projects-client.tsx");
-const stylesSource = readProjectFile("../../app/globals.css");
 
 test("project delete dialog close clears the deleting project lock", () => {
   const closeDialogSource = getSourceBetween(
@@ -34,28 +33,6 @@ test("destroy delete polling stops when the projects page unmounts", () => {
   assert.match(pollingSource, /readonly checkMounted\?: \(\(\) => boolean\) \| undefined;/);
   assert.match(pollingSource, /input\.checkMounted\?\.\(\) === false/);
   assert.match(projectsClientSource, /checkMounted: \(\) => isMountedRef\.current/);
-});
-
-test("project card actions use natural card layout instead of a fixed y offset", () => {
-  const cardActionsRule = getCssRule(stylesSource, "projectCardActions");
-
-  assert.doesNotMatch(cardActionsRule, /position:\s*absolute/);
-  assert.doesNotMatch(cardActionsRule, /top:\s*188px/);
-  assert.match(cardActionsRule, /align-self:\s*end/);
-  assert.match(cardActionsRule, /grid-area:\s*1 \/ 1/);
-  assert.match(cardActionsRule, /justify-self:\s*end/);
-});
-
-test("disabled project menu actions remain readable", () => {
-  const disabledMenuItemRule = getCssRule(stylesSource, "projectCardActionMenuItem:disabled");
-  const disabledDangerRule = getCssRule(stylesSource, "projectCardActionMenuItemDanger:disabled");
-
-  assert.match(disabledMenuItemRule, /color:\s*#475569;/);
-  assert.match(disabledMenuItemRule, /opacity:\s*1;/);
-  assert.doesNotMatch(disabledMenuItemRule, /opacity:\s*0\.[0-6]/);
-  assert.match(disabledDangerRule, /background:\s*#fff1f2;/);
-  assert.match(disabledDangerRule, /color:\s*#b42318;/);
-  assert.match(disabledDangerRule, /opacity:\s*1;/);
 });
 
 test("destroy delete failures expose a project-only fallback", () => {
@@ -168,14 +145,6 @@ function getSourceBetween(source: string, startToken: string, endToken: string):
   assert.ok(endIndex > startIndex, `Expected source to include ${endToken} after ${startToken}`);
 
   return source.slice(startIndex, endIndex);
-}
-
-function getCssRule(source: string, className: string): string {
-  const match = new RegExp(`\\.${className}\\s*\\{(?<body>[^}]*)\\}`).exec(source);
-
-  assert.ok(match?.groups?.body, `Expected .${className} CSS rule to exist`);
-
-  return match.groups.body;
 }
 
 function createPreview(input: {

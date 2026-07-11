@@ -17,17 +17,20 @@ import {
   getResourceDefinitionByTerraform
 } from "@sketchcatch/types/resource-definitions";
 import { isAreaNode } from "../diagram-editor/area-nodes";
+import { BOARD_DEFAULT_EDGE_COLOR } from "../diagram-editor/constants";
 import { createDiagramNodeFromPayload } from "../diagram-editor/diagram-utils";
+import { RESOURCE_NODE_DEFAULT_SIZE } from "../diagram-editor/resource-node-geometry";
+import { getResourceNodeVisualBounds } from "../diagram-editor/resource-node-visual-footprint";
 import { resourceCatalog } from "../resource-settings/catalog";
 import { addServerStorageAreaNodes } from "./server-storage-board-layout";
 
 const DEFAULT_VIEWPORT: DiagramJson["viewport"] = { x: 0, y: 0, zoom: 1 };
-const DEFAULT_NODE_SIZE: DiagramNode["size"] = { width: 56, height: 56 };
+const DEFAULT_NODE_SIZE: DiagramNode["size"] = RESOURCE_NODE_DEFAULT_SIZE;
 const DEFAULT_TERRAFORM_BLOCK_TYPE: TerraformBlockType = "resource";
 const UNKNOWN_TERRAFORM_RESOURCE_TYPE = "unknown_resource";
 const DEFAULT_EDGE_STYLE: NonNullable<DiagramEdge["style"]> = {
   animated: false,
-  color: "#506176",
+  color: BOARD_DEFAULT_EDGE_COLOR,
   lineStyle: "solid",
   width: "thin"
 };
@@ -67,13 +70,12 @@ const EDGE_HANDLE_IDS = {
   top: "handle-top"
 } as const;
 const AREA_CHILD_PADDING = 36;
-const MIN_RESOURCE_AREA_CHILD_FOOTPRINT: DiagramNode["size"] = { width: 112, height: 112 };
 const RESOURCE_COLLISION_GAP = 16;
 const RESOURCE_COLLISION_ROW_WIDTH = 720;
 const MAX_AREA_FIT_PASSES = 8;
 const ROOT_PARENT_AREA_ID = "__root__";
 const READABLE_LAYOUT_MIN_GROUP_SIZE = 4;
-const READABLE_LAYOUT_COLUMN_GAP = 160;
+const READABLE_LAYOUT_COLUMN_GAP = 192;
 const READABLE_LAYOUT_ROW_GAP = 140;
 const READABLE_LAYOUT_STACK_GAP = 104;
 const EDGE_HANDLE_STUB_LENGTH = 20;
@@ -81,8 +83,11 @@ const EDGE_ROUTE_NODE_OVERLAP_PENALTY = 1_000_000;
 const EDGE_ROUTE_SEGMENT_OVERLAP_PENALTY = 200_000;
 const EDGE_ROUTE_SEGMENT_CROWDING_PENALTY = 10_000;
 const EDGE_ROUTE_CROSSING_PENALTY = 5_000_000;
+const EDGE_ROUTE_SHARED_HANDLE_PENALTY = 12_000_000;
+const EDGE_ROUTE_OPPOSING_SHARED_HANDLE_PENALTY = 60_000_000;
 const EDGE_ROUTE_CROWDING_DISTANCE = 28;
 const EDGE_ROUTE_WRONG_DIRECTION_PENALTY = 10_000_000;
+const EDGE_ROUTE_OBSERVABILITY_BRANCH_PENALTY = 30_000_000;
 const RESOURCE_AREA_INSET_PADDING = 56;
 const COMPACT_AREA_MIN_SIZES: Readonly<Record<string, DiagramNode["size"]>> = {
   aws_availability_zone: { width: 320, height: 220 },
@@ -413,7 +418,7 @@ function createDiagramNodeParameters(
 
   return {
     fileName: baseParameters?.fileName ?? "main",
-    resourceName: getArchitectureResourceName(node),
+    resourceName: getArchitectureResourceName(node, terraformResourceType),
     resourceType: terraformResourceType,
     terraformBlockType: baseParameters?.terraformBlockType ?? DEFAULT_TERRAFORM_BLOCK_TYPE,
     values: {
@@ -529,15 +534,15 @@ function getEdgeRoutingPriority(
   const targetType = getDiagramNodeResourceType(nodeById.get(targetNodeId));
 
   if (isObservabilityRoutingType(sourceType) || isObservabilityRoutingType(targetType)) {
-    return 10;
+    return 20;
   }
 
   if (isControlPlaneRoutingType(sourceType) || isControlPlaneRoutingType(targetType)) {
-    return 15;
+    return 30;
   }
 
   if (isRuntimeStorageRoutingType(sourceType) || isRuntimeStorageRoutingType(targetType)) {
-    return 20;
+    return 10;
   }
 
   return 40;
@@ -590,7 +595,7 @@ export function normalizeDiagramJsonConventions(diagramJson: DiagramJson): Diagr
   const nodes = applyDiagramLayerOrder(
     fitAreaNodesToChildren(
       resolveSiblingNodeCollisions(
-        fitAreaNodesToChildren(applyReadableTopologyLayout(applyDiagramResourceNameConventions(diagramJson.nodes)))
+        fitAreaNodesToChildren(applyReadableTopologyLayout(diagramJson.nodes))
       )
     )
   );
@@ -910,6 +915,7 @@ function scoreEdgeRouteOverlap(
     getRouteLength(routeSegments) +
     getHandleDirectionPenalty(sourceNode, targetNode, sourceHandleId, targetHandleId) +
     getControlPlaneRuntimeHandlePenalty(sourceNode, targetNode, sourceHandleId, targetHandleId) +
+    getObservabilityBranchHandlePenalty(sourceNode, targetNode, sourceHandleId, targetHandleId) +
     getEndpointNodeReentryOverlapLength(routeSegments, sourceNode, targetNode) * 10_000;
 
   for (const node of nodes) {
@@ -955,6 +961,36 @@ function getControlPlaneRuntimeHandlePenalty(
   }
 
   return penalty;
+}
+
+function getObservabilityBranchHandlePenalty(
+  sourceNode: DiagramNode,
+  targetNode: DiagramNode,
+  sourceHandleId: string,
+  targetHandleId: string
+): number {
+  const sourceType = getDiagramNodeResourceType(sourceNode);
+  const targetType = getDiagramNodeResourceType(targetNode);
+
+  if (!isRuntimeStorageRoutingType(sourceType) || !isObservabilityRoutingType(targetType)) {
+    return 0;
+  }
+
+  const sourceCenter = getNodeCenter(sourceNode);
+  const targetCenter = getNodeCenter(targetNode);
+  const deltaY = targetCenter.y - sourceCenter.y;
+
+  if (Math.abs(deltaY) < 80) {
+    return 0;
+  }
+
+  const preferredSourceHandleId = deltaY < 0 ? EDGE_HANDLE_IDS.top : EDGE_HANDLE_IDS.bottom;
+  const preferredTargetHandleId = deltaY < 0 ? EDGE_HANDLE_IDS.bottom : EDGE_HANDLE_IDS.top;
+
+  return (
+    (sourceHandleId === preferredSourceHandleId ? 0 : EDGE_ROUTE_OBSERVABILITY_BRANCH_PENALTY) +
+    (targetHandleId === preferredTargetHandleId ? 0 : EDGE_ROUTE_OBSERVABILITY_BRANCH_PENALTY)
+  );
 }
 
 function getEndpointNodeReentryOverlapLength(
@@ -1006,23 +1042,22 @@ function getSharedHandlePenalty(
   targetHandleId: string,
   occupiedRoute: OccupiedRoute
 ): number {
-  const sharedHandlePenalty = 5_000_000;
   let penalty = 0;
 
   if (sourceNode.id === occupiedRoute.sourceNodeId && sourceHandleId === occupiedRoute.sourceHandleId) {
-    penalty += sharedHandlePenalty;
+    penalty += EDGE_ROUTE_SHARED_HANDLE_PENALTY;
   }
 
   if (sourceNode.id === occupiedRoute.targetNodeId && sourceHandleId === occupiedRoute.targetHandleId) {
-    penalty += sharedHandlePenalty;
+    penalty += EDGE_ROUTE_OPPOSING_SHARED_HANDLE_PENALTY;
   }
 
   if (targetNode.id === occupiedRoute.sourceNodeId && targetHandleId === occupiedRoute.sourceHandleId) {
-    penalty += sharedHandlePenalty;
+    penalty += EDGE_ROUTE_OPPOSING_SHARED_HANDLE_PENALTY;
   }
 
   if (targetNode.id === occupiedRoute.targetNodeId && targetHandleId === occupiedRoute.targetHandleId) {
-    penalty += sharedHandlePenalty;
+    penalty += EDGE_ROUTE_SHARED_HANDLE_PENALTY;
   }
 
   return penalty;
@@ -1147,10 +1182,11 @@ function getSegmentNodeOverlapLength(segment: RouteSegment, node: DiagramNode): 
   }
 
   const padding = 18;
-  const left = node.position.x - padding;
-  const right = node.position.x + node.size.width + padding;
-  const top = node.position.y - padding;
-  const bottom = node.position.y + node.size.height + padding;
+  const visualBounds = getResourceNodeVisualBounds(node);
+  const left = visualBounds.x - padding;
+  const right = visualBounds.x + visualBounds.width + padding;
+  const top = visualBounds.y - padding;
+  const bottom = visualBounds.y + visualBounds.height + padding;
 
   if (horizontal) {
     const y = segment.from.y;
@@ -1772,7 +1808,7 @@ function createConventionResourceName(
   const normalizedName = toTerraformName(currentResourceName);
   const tokens = normalizedName.split("_").filter((token) => token.length > 0);
 
-  if (tokens[0] === convention.prefix && tokens.length > 1) {
+  if (tokens[0] === convention.prefix) {
     return normalizedName;
   }
 
@@ -1938,13 +1974,11 @@ function moveNodeUntilClear(
 }
 
 function getNodeCollisionStepSize(node: DiagramNode): DiagramNode["size"] {
-  if (isAreaDiagramNode(node) || node.kind !== "resource") {
-    return node.size;
-  }
+  const visualBounds = getResourceNodeVisualBounds(node);
 
   return {
-    width: Math.max(node.size.width, MIN_RESOURCE_AREA_CHILD_FOOTPRINT.width),
-    height: Math.max(node.size.height, MIN_RESOURCE_AREA_CHILD_FOOTPRINT.height)
+    width: visualBounds.width,
+    height: visualBounds.height
   };
 }
 
@@ -1992,13 +2026,13 @@ function doAreaAndResourceFootprintsConflict(
 }
 
 function getNodeCollisionFootprint(node: DiagramNode): { x: number; y: number; width: number; height: number } {
-  const size = getNodeCollisionStepSize(node);
+  const visualBounds = getResourceNodeVisualBounds(node);
 
   return {
-    x: node.position.x - RESOURCE_COLLISION_GAP / 2,
-    y: node.position.y - RESOURCE_COLLISION_GAP / 2,
-    width: size.width + RESOURCE_COLLISION_GAP,
-    height: size.height + RESOURCE_COLLISION_GAP
+    x: visualBounds.x - RESOURCE_COLLISION_GAP / 2,
+    y: visualBounds.y - RESOURCE_COLLISION_GAP / 2,
+    width: visualBounds.width + RESOURCE_COLLISION_GAP,
+    height: visualBounds.height + RESOURCE_COLLISION_GAP
   };
 }
 
@@ -2090,12 +2124,12 @@ function getRequiredAreaLayout(
   let bottom = shouldCompactArea ? Number.NEGATIVE_INFINITY : node.position.y + node.size.height;
 
   for (const child of children) {
-    const childFitSize = getAreaChildFitSize(child);
+    const childBounds = getResourceNodeVisualBounds(child);
     const childPadding = getAreaChildPadding(child);
-    left = Math.min(left, child.position.x - childPadding);
-    top = Math.min(top, child.position.y - childPadding);
-    right = Math.max(right, child.position.x + childFitSize.width + childPadding);
-    bottom = Math.max(bottom, child.position.y + childFitSize.height + childPadding);
+    left = Math.min(left, childBounds.x - childPadding);
+    top = Math.min(top, childBounds.y - childPadding);
+    right = Math.max(right, childBounds.x + childBounds.width + childPadding);
+    bottom = Math.max(bottom, childBounds.y + childBounds.height + childPadding);
   }
   const minimumSize = getCompactAreaMinimumSize(node);
   const width = Math.max(right - left, minimumSize.width);
@@ -2125,17 +2159,6 @@ function getCompactAreaMinimumSize(node: DiagramNode): DiagramNode["size"] {
 
 function getAreaChildPadding(child: DiagramNode): number {
   return isAreaDiagramNode(child) ? AREA_CHILD_PADDING : RESOURCE_AREA_INSET_PADDING;
-}
-
-function getAreaChildFitSize(child: DiagramNode): DiagramNode["size"] {
-  if (isAreaDiagramNode(child) || child.kind !== "resource") {
-    return child.size;
-  }
-
-  return {
-    width: Math.max(child.size.width, MIN_RESOURCE_AREA_CHILD_FOOTPRINT.width),
-    height: Math.max(child.size.height, MIN_RESOURCE_AREA_CHILD_FOOTPRINT.height)
-  };
 }
 
 function findSecurityBoundaryParentAreaNodeId(
@@ -2478,12 +2501,22 @@ function normalizePort(value: unknown): number | undefined {
 }
 
 // LLM/API 응답에서 config가 비어도 Architecture Board 반영이 멈추지 않게 이름을 복구합니다.
-function getArchitectureResourceName(node: ArchitectureJson["nodes"][number]): string {
+function getArchitectureResourceName(
+  node: ArchitectureJson["nodes"][number],
+  resourceType: string
+): string {
   const configuredName = node.config?.["terraformResourceName"];
 
-  return typeof configuredName === "string" && configuredName.trim().length > 0
-    ? configuredName
-    : toTerraformName(node.id);
+  if (typeof configuredName === "string" && configuredName.trim().length > 0) {
+    return configuredName;
+  }
+
+  const normalizedNodeId = toTerraformName(node.id);
+  const convention = RESOURCE_NAME_CONVENTIONS[resourceType];
+
+  return convention && normalizedNodeId === convention.prefix
+    ? createConventionResourceName(resourceType, node.label ?? node.id, [node.id])
+    : normalizedNodeId;
 }
 
 function isValidPort(port: number): boolean {

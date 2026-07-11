@@ -13,7 +13,7 @@ This folder contains infrastructure configuration, AWS templates, IAM policies, 
 
 ## Architecture Rules
 
-1. Production steady state uses Docker, ECR, ECS/Fargate, ALB, RDS, and GitHub Actions. EC2/SSM/Nginx remain rollback-only until explicitly retired.
+1. Production steady state uses Docker, ECR, ECS/Fargate, ALB, RDS, and GitHub Actions. Warm EC2/SSM/Nginx rollback infrastructure is retired; recovery uses reviewed cold artifacts and an opt-in Terraform runbook.
 2. Production deployment does not use Docker Compose.
 3. Keep RDS for structured project data and S3 for file artifacts.
 4. Prefer templates and policies that are readable by the team over overly clever infrastructure code.

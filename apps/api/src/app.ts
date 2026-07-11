@@ -17,6 +17,7 @@ import {
   type SourceRepositoryRouteOptions
 } from "./routes/source-repositories.js";
 import { registerDeploymentRoutes } from "./routes/deployments.js";
+import { registerLiveObservationRoutes } from "./routes/live-observations.js";
 import { registerGitCicdHandoffRoutes } from "./routes/git-cicd-handoffs.js";
 import { registerCostRoutes } from "./routes/costs.js";
 import {
@@ -160,6 +161,10 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     setCorsHeaders(request, reply);
 
     if (request.method === "OPTIONS") {
+      if (request.url.startsWith("/api/live-observations/public/")) {
+        return;
+      }
+
       return reply.status(204).send();
     }
   });
@@ -190,6 +195,11 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     ...options.sourceRepositoryRoutes
   });
   app.register(registerDeploymentRoutes, {
+    prefix: "/api",
+    getDatabaseClient: getAppDatabaseClient,
+    runtimeCache
+  });
+  app.register(registerLiveObservationRoutes, {
     prefix: "/api",
     getDatabaseClient: getAppDatabaseClient,
     runtimeCache

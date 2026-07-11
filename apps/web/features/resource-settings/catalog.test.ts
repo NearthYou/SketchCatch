@@ -144,12 +144,12 @@ test("resourceCatalog exposes User / Client and Internet as board-only design it
   assert.deepEqual(getCatalogDefaults("design-user-client"), {
     type: "sketchcatch_user_client",
     label: "User / Client",
-    size: { width: 124, height: 96 }
+    size: { width: 48, height: 48 }
   });
   assert.deepEqual(getCatalogDefaults("design-internet"), {
     type: "sketchcatch_internet",
     label: "Internet",
-    size: { width: 124, height: 96 }
+    size: { width: 48, height: 48 }
   });
 
   assert.equal(
@@ -166,15 +166,15 @@ test("resourceCatalog exposes User / Client and Internet as board-only design it
   );
 });
 
-test("resourceCatalog keeps regular network resources at icon node size", () => {
-  assert.deepEqual(getResourceSize("aws_internet_gateway"), { width: 124, height: 96 });
-  assert.deepEqual(getResourceSize("aws_route_table_association"), { width: 124, height: 96 });
-  assert.deepEqual(getResourceSize("aws_cloudfront_distribution"), { width: 124, height: 96 });
-  assert.deepEqual(getResourceSize("aws_s3_bucket"), { width: 124, height: 96 });
-  assert.deepEqual(getResourceSize("aws_db_subnet_group"), { width: 124, height: 96 });
-  assert.deepEqual(getResourceSize("aws_api_gateway_rest_api"), { width: 124, height: 96 });
-  assert.deepEqual(getResourceSize("aws_api_gateway_resource"), { width: 124, height: 96 });
-  assert.deepEqual(getResourceSize("aws_cloudwatch_event_rule"), { width: 124, height: 96 });
+test("resourceCatalog keeps regular resources at the 48px icon size", () => {
+  assert.deepEqual(getResourceSize("aws_internet_gateway"), { width: 48, height: 48 });
+  assert.deepEqual(getResourceSize("aws_route_table_association"), { width: 48, height: 48 });
+  assert.deepEqual(getResourceSize("aws_cloudfront_distribution"), { width: 48, height: 48 });
+  assert.deepEqual(getResourceSize("aws_s3_bucket"), { width: 48, height: 48 });
+  assert.deepEqual(getResourceSize("aws_db_subnet_group"), { width: 48, height: 48 });
+  assert.deepEqual(getResourceSize("aws_api_gateway_rest_api"), { width: 48, height: 48 });
+  assert.deepEqual(getResourceSize("aws_api_gateway_resource"), { width: 48, height: 48 });
+  assert.deepEqual(getResourceSize("aws_cloudwatch_event_rule"), { width: 48, height: 48 });
 });
 
 test("resourceCatalog provides a CloudFront icon for converted drafts and Terraform proposals", () => {

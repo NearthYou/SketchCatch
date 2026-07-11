@@ -1,10 +1,12 @@
 import type { TerraformDiagnostic } from "@sketchcatch/types";
-import { AlertCircle, GitBranch } from "lucide-react";
+import { AlertCircle, GitBranch, Sparkles } from "lucide-react";
+import { formatTerraformDiagnosticSeverity } from "./terraform-diagnostic-presentation";
 import { formatTerraformDiagnosticTitle } from "./terraform-panel-utils";
 import type { TerraformIssueRecord } from "./terraform-issues-state";
 import { getTerraformSafeFix } from "./terraform-safe-fixes";
-import styles from "./workspace.module.css";
+import styles from "./TerraformIssuesPanel.module.css";
 
+// Terraform 검증 결과를 위치, 심각도, 수정 가능 여부와 함께 보여줍니다.
 export function TerraformIssuesPanel({
   issues,
   onResolveWithAi
@@ -25,7 +27,10 @@ export function TerraformIssuesPanel({
           ) : (
             <GitBranch size={15} aria-hidden="true" />
           )}
-          <h3>Issues</h3>
+          <div>
+            <span>Terraform diagnostics</span>
+            <h3>검증 문제</h3>
+          </div>
           <span className={hasErrorDiagnostics ? styles.terraformIssueCountError : styles.terraformIssueCount}>
             {diagnostics.length}
           </span>
@@ -39,7 +44,9 @@ export function TerraformIssuesPanel({
               <li key={`${issue.diagnosticKey}-${index}`} data-severity={issue.diagnostic.severity}>
                 <div className={styles.terraformDiagnosticItemHeader}>
                   <strong>{formatTerraformDiagnosticTitle(issue.diagnostic)}</strong>
-                  <span className={styles.terraformDiagnosticSeverity}>{issue.diagnostic.severity}</span>
+                  <span className={styles.terraformDiagnosticSeverity}>
+                    {formatTerraformDiagnosticSeverity(issue.diagnostic.severity)}
+                  </span>
                 </div>
                 <span>{issue.diagnostic.message}</span>
                 <div className={styles.terraformDiagnosticMeta}>
@@ -55,7 +62,8 @@ export function TerraformIssuesPanel({
                   onClick={() => onResolveWithAi(issue)}
                   type="button"
                 >
-                  AI 해결
+                  <Sparkles aria-hidden="true" size={14} />
+                  AI로 해결
                 </button>
               </li>
             ))}
@@ -66,6 +74,7 @@ export function TerraformIssuesPanel({
   );
 }
 
+// Terraform 진단 위치를 파일명과 줄 번호로 짧게 표시합니다.
 function formatTerraformDiagnosticLocation(diagnostic: TerraformDiagnostic): string {
   const parts = [
     diagnostic.sourceFileName,

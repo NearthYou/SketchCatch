@@ -16,6 +16,9 @@ export type RuntimeCacheSetOptions = {
 };
 
 export type RuntimeCache = {
+  readonly backend: "memory" | "redis";
+  isAvailable(): Promise<boolean>;
+  getDegradationCount?(): number;
   get<TValue = RuntimeCacheJsonValue>(entryKey: RuntimeCacheEntryKey): Promise<TValue | null>;
   set(
     entryKey: RuntimeCacheEntryKey,
@@ -23,4 +26,14 @@ export type RuntimeCache = {
     options: RuntimeCacheSetOptions
   ): Promise<void>;
   delete(entryKey: RuntimeCacheEntryKey): Promise<boolean>;
+  increment(
+    entryKey: RuntimeCacheEntryKey,
+    delta: number,
+    options: RuntimeCacheSetOptions
+  ): Promise<number>;
+  setIfAbsent(
+    entryKey: RuntimeCacheEntryKey,
+    value: RuntimeCacheJsonValue,
+    options: RuntimeCacheSetOptions
+  ): Promise<boolean>;
 };

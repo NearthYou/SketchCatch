@@ -175,20 +175,44 @@ import os
 import time
 
 class Handler(BaseHTTPRequestHandler):
+    def send_json(self, status, payload, cors=False):
+        body = json.dumps(payload).encode("utf-8")
+        self.send_response(status)
+        if cors:
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type")
+            self.send_header("Access-Control-Allow-Methods", "OPTIONS, POST")
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_OPTIONS(self):
+        if self.path.startswith("/api/traffic"):
+            self.send_json(200, {"ok": True}, cors=True)
+            return
+        self.send_response(404)
+        self.end_headers()
+
     def do_GET(self):
         if self.path.startswith("/api/health"):
-            body = json.dumps({
+            self.send_json(200, {
                 "ok": True,
                 "instance": os.uname().nodename,
                 "path": self.path,
                 "time": int(time.time())
-            }).encode("utf-8")
-            self.send_response(200)
-            self.send_header("Access-Control-Allow-Origin", "*")
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
+            })
+            return
+        self.send_response(404)
+        self.end_headers()
+
+    def do_POST(self):
+        if self.path.startswith("/api/traffic"):
+            self.send_json(200, {
+                "ok": True,
+                "instance": os.uname().nodename,
+                "receivedAt": int(time.time() * 1000)
+            }, cors=True)
             return
         self.send_response(404)
         self.end_headers()
@@ -224,6 +248,73 @@ systemctl enable --now sketchcatch-demo-api.service
   [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes("$script`n"))
 }
 
+function New-DemoAudienceHtmlBase64 {
+  $template = @'
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>SketchCatch Live Observation</title>
+  <style>
+    body { max-width: 680px; margin: 0 auto; padding: 56px 24px; font: 16px/1.6 "Pretendard", "Noto Sans KR", Inter, sans-serif; color: #172033; background: #fafafa; }
+    main { padding: 32px; border: 1px solid #dcdee0; border-radius: 16px; background: white; box-shadow: 0 20px 60px rgba(23,32,51,.08); }
+    button { width: 100%; padding: 18px; border: 0; border-radius: 8px; color: white; background: #000000; font-size: 18px; font-weight: 700; cursor: pointer; }
+    button:disabled { cursor: wait; opacity: .65; }
+    #status { min-height: 48px; margin-top: 18px; }
+  </style>
+</head>
+<body>
+  <main>
+    <img src="/logo.svg" width="72" alt="SketchCatch">
+    <h1>실시간 트래픽 보내기</h1>
+    <p>버튼을 누르면 실제 ALB Traffic API로 요청하고, 성공한 요청만 Live Observation에 집계합니다.</p>
+    <button id="send-traffic" type="button">트래픽 1건 보내기</button>
+    <p id="status" role="status" aria-live="polite"></p>
+    <p id="success-count">이 브라우저의 Traffic 성공 0건</p>
+  </main>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const observation = params.get('observation');
+    const collectorParam = params.get('collector');
+    const collector = collectorParam && collectorParam.endsWith('/') ? collectorParam.slice(0, -1) : collectorParam;
+    const trafficUrl = '__TRAFFIC_API_URL__';
+    const button = document.getElementById('send-traffic');
+    const status = document.getElementById('status');
+    const successCountLabel = document.getElementById('success-count');
+    let successCount = 0;
+
+    button.addEventListener('click', async () => {
+      button.disabled = true;
+      status.textContent = '실제 서비스로 요청을 보내는 중입니다.';
+      try {
+        const response = await fetch(trafficUrl, { method: 'POST' });
+        if (!response.ok) throw new Error('Traffic API가 요청을 처리하지 못했습니다.');
+
+        successCount += 1;
+        successCountLabel.textContent = '이 브라우저의 Traffic 성공 ' + successCount + '건';
+        status.textContent = 'Traffic 요청 성공 · 실시간 집계 중';
+        const receipt = await fetch(collector + '/api/live-observations/public/' + encodeURIComponent(observation) + '/events', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ eventId: crypto.randomUUID() })
+        });
+        if (!receipt.ok) throw new Error('Traffic 요청은 성공했지만 실시간 집계에 실패했습니다.');
+        status.textContent = '요청이 성공했고 Live Observation에 반영되었습니다.';
+      } catch (error) {
+        status.textContent = error instanceof Error ? error.message : '요청에 실패했습니다.';
+      } finally {
+        button.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
+'@
+
+  [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($template))
+}
+
 function New-DemoTerraformWithAlbAsg {
   param(
     [string]$Bucket,
@@ -233,6 +324,7 @@ function New-DemoTerraformWithAlbAsg {
   )
 
   $userDataBase64 = New-ManagedDemoUserDataBase64
+  $audienceHtmlBase64 = New-DemoAudienceHtmlBase64
 
 @"
 terraform {
@@ -423,7 +515,7 @@ resource "aws_s3_object" "index" {
   bucket       = aws_s3_bucket.site.id
   key          = "index.html"
   content_type = "text/html"
-  content      = "<!doctype html><html><head><meta charset=\"utf-8\"><title>SketchCatch demo</title></head><body><h1>SketchCatch demo web service</h1><img src=\"/logo.svg\" width=\"120\" alt=\"SketchCatch\"><p id=\"api\">API: http://`${aws_lb.demo.dns_name}/api/health</p><script>fetch('http://`${aws_lb.demo.dns_name}/api/health').then(r=>r.json()).then(d=>document.body.insertAdjacentHTML('beforeend','<pre>'+JSON.stringify(d,null,2)+'</pre>')).catch(e=>document.body.insertAdjacentHTML('beforeend','<pre>'+e+'</pre>'));</script></body></html>"
+  content      = replace(base64decode("$audienceHtmlBase64"), "__TRAFFIC_API_URL__", "http://`${aws_lb.demo.dns_name}/api/traffic")
 }
 
 resource "aws_s3_object" "logo" {
@@ -508,12 +600,14 @@ resource "aws_lb_listener" "http" {
 
 resource "aws_autoscaling_group" "api" {
   name                = "$Prefix-asg"
-  min_size            = 2
-  max_size            = 4
-  desired_capacity    = 2
+  min_size            = 1
+  max_size            = 2
+  desired_capacity    = 1
   vpc_zone_identifier = [aws_subnet.public_a.id, aws_subnet.public_c.id]
   target_group_arns   = [aws_lb_target_group.api.arn]
   health_check_type   = "ELB"
+  health_check_grace_period = 120
+  default_instance_warmup   = 60
 
   launch_template {
     id      = aws_launch_template.api.id
@@ -525,6 +619,40 @@ resource "aws_autoscaling_group" "api" {
     value               = "$Prefix-api"
     propagate_at_launch = true
   }
+}
+
+resource "aws_autoscaling_policy" "scale_out" {
+  name                      = "$Prefix-scale-out"
+  autoscaling_group_name    = aws_autoscaling_group.api.name
+  policy_type               = "StepScaling"
+  adjustment_type           = "ChangeInCapacity"
+  cooldown                  = 180
+  estimated_instance_warmup = 60
+
+  step_adjustment {
+    metric_interval_lower_bound = 0
+    scaling_adjustment          = 1
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "scale_out" {
+  alarm_name          = "$Prefix-scale-out"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 1
+  datapoints_to_alarm = 1
+  metric_name         = "RequestCountPerTarget"
+  namespace           = "AWS/ApplicationELB"
+  period              = 60
+  statistic           = "Sum"
+  threshold           = 60
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    LoadBalancer = aws_lb.demo.arn_suffix
+    TargetGroup  = aws_lb_target_group.api.arn_suffix
+  }
+
+  alarm_actions = [aws_autoscaling_policy.scale_out.arn]
 }
 
 output "static_site_bucket" {
@@ -545,6 +673,18 @@ output "api_base_url" {
 
 output "asg_name" {
   value = aws_autoscaling_group.api.name
+}
+
+output "alb_arn_suffix" {
+  value = aws_lb.demo.arn_suffix
+}
+
+output "target_group_arn_suffix" {
+  value = aws_lb_target_group.api.arn_suffix
+}
+
+output "scale_out_threshold" {
+  value = aws_cloudwatch_metric_alarm.scale_out.threshold
 }
 "@
 }
@@ -862,7 +1002,7 @@ function Approve-DeploymentWarnings {
 
 Get-SmokeAccessToken
 
-$terraformCode = New-DemoTerraform -Bucket $bucketName -Region $AwsRegion -RunId $shortRunId -Prefix $namePrefix
+$terraformCode = New-DemoTerraformWithAlbAsg -Bucket $bucketName -Region $AwsRegion -RunId $shortRunId -Prefix $namePrefix
 $terraformBytes = [System.Text.Encoding]::UTF8.GetBytes($terraformCode)
 
 $projectResponse = Invoke-SketchCatchApi -Method POST -Path "/projects" -Body @{
@@ -930,8 +1070,7 @@ $outputsResponse = Invoke-SketchCatchApi -Method GET -Path "/deployments/$($depl
 $logsResponse = Invoke-SketchCatchApi -Method GET -Path "/deployments/$($deployment.id)/logs"
 $staticSiteUrl = Get-OutputValue -Outputs $outputsResponse.outputs -Name "static_site_url"
 $apiBaseUrl = Get-OutputValue -Outputs $outputsResponse.outputs -Name "api_base_url"
-$apiPublicIpUrl = Get-OutputValue -Outputs $outputsResponse.outputs -Name "api_public_ip_url"
-$apiInstanceId = Get-OutputValue -Outputs $outputsResponse.outputs -Name "api_instance_id"
+$asgName = Get-OutputValue -Outputs $outputsResponse.outputs -Name "asg_name"
 
 if (-not $staticSiteUrl) {
   throw "static_site_url output was not found."
@@ -939,8 +1078,8 @@ if (-not $staticSiteUrl) {
 if (-not $apiBaseUrl) {
   throw "api_base_url output was not found."
 }
-if (-not $apiInstanceId) {
-  throw "api_instance_id output was not found."
+if (-not $asgName) {
+  throw "asg_name output was not found."
 }
 
 $siteResponse = Invoke-WebRequest -UseBasicParsing -Uri $staticSiteUrl -TimeoutSec 30
@@ -948,7 +1087,7 @@ if ($siteResponse.StatusCode -lt 200 -or $siteResponse.StatusCode -ge 300) {
   throw "Static site returned HTTP $($siteResponse.StatusCode)."
 }
 
-$apiHealthResult = Wait-ApiHealth -BaseUrls @($apiBaseUrl, $apiPublicIpUrl)
+$apiHealthResult = Wait-ApiHealth -BaseUrls @($apiBaseUrl)
 $apiBaseUrl = [string]$apiHealthResult.BaseUrl
 
 $destroyStatus = "SKIPPED"
@@ -973,7 +1112,7 @@ $report = [ordered]@{
   deploymentId = $deployment.id
   staticSiteUrl = $staticSiteUrl
   apiBaseUrl = $apiBaseUrl
-  apiInstanceId = $apiInstanceId
+  asgName = $asgName
   resourceCount = $resourcesResponse.resources.Count
   outputCount = $outputsResponse.outputs.Count
   logCount = $logsResponse.logs.Count
@@ -987,6 +1126,6 @@ Set-Content -Path $ReportPath -Value $reportJson -Encoding utf8
 Write-Host "SketchCatch live demo web service smoke completed."
 Write-Host "Static site: $staticSiteUrl"
 Write-Host "API: $apiBaseUrl/api/health"
-Write-Host "EC2 instance: $apiInstanceId"
+Write-Host "Auto Scaling group: $asgName"
 Write-Host "Deployment: $($deployment.id)"
 Write-Host "Report: $ReportPath"

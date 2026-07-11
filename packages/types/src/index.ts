@@ -10,7 +10,13 @@ export type ApiErrorCode =
   | "conflict"
   | "github_oauth_required"
   | "too_many_requests"
-  | "internal_server_error";
+  | "internal_server_error"
+  | "LIVE_OBSERVATION_CACHE_UNAVAILABLE"
+  | "LIVE_OBSERVATION_DEPLOYMENT_NOT_ELIGIBLE"
+  | "LIVE_OBSERVATION_GONE"
+  | "LIVE_OBSERVATION_NOT_FOUND"
+  | "LIVE_OBSERVATION_OUTPUT_INVALID"
+  | "LIVE_OBSERVATION_RATE_LIMITED";
 
 export type ApiErrorResponse = {
   error: ApiErrorCode;
@@ -1080,6 +1086,89 @@ export type CreateDeploymentRequest = {
 };
 
 export type DeploymentLiveProfile = "practice" | "demo_web_service" | "demo_web_service_with_rds";
+
+export type LiveObservationStatus = "active" | "stopped" | "expired";
+
+export type LiveObservationPressureLevel =
+  | "normal"
+  | "warning"
+  | "high"
+  | "critical";
+
+export type LiveObservationAwsState = "available" | "delayed" | "unavailable";
+
+export type LiveObservationSession = {
+  id: string;
+  deploymentId: string;
+  status: LiveObservationStatus;
+  audienceUrl: string;
+  trafficApiUrl: string;
+  createdAt: IsoDateTimeString;
+  expiresAt: IsoDateTimeString;
+};
+
+export type LiveObservationSnapshot = {
+  observationId: string;
+  status: LiveObservationStatus;
+  live: {
+    acceptedEventCount: number;
+    rollingRequestsPerSecond: number;
+    projectedRequestsPerMinute: number;
+    pressurePercent: number;
+    pressureLevel: LiveObservationPressureLevel;
+    observedAt: IsoDateTimeString;
+  };
+  cloudWatch: {
+    state: LiveObservationAwsState;
+    requestCountPerTarget: number | null;
+    periodSeconds: 60;
+    observedAt: IsoDateTimeString | null;
+    delayedBySeconds: number | null;
+    errorCode: string | null;
+  };
+  capacity: {
+    state: LiveObservationAwsState;
+    desiredCapacity: number | null;
+    currentInstanceCount: number | null;
+    inServiceInstanceCount: number | null;
+    maxCapacity: number | null;
+    instances: Array<{
+      instanceId: string;
+      lifecycleState: string;
+      healthStatus: string;
+    }>;
+    latestActivity: {
+      statusCode: string;
+      description: string;
+      startedAt: IsoDateTimeString;
+      endedAt: IsoDateTimeString | null;
+    } | null;
+    observedAt: IsoDateTimeString | null;
+    errorCode: string | null;
+  };
+};
+
+export type CreateLiveObservationResponse = {
+  session: LiveObservationSession;
+  snapshot: LiveObservationSnapshot;
+};
+
+export type LiveObservationSnapshotResponse = {
+  snapshot: LiveObservationSnapshot;
+};
+
+export type StopLiveObservationResponse = {
+  snapshot: LiveObservationSnapshot;
+};
+
+export type CollectLiveObservationEventRequest = {
+  eventId: string;
+};
+
+export type CollectLiveObservationEventResponse = {
+  accepted: boolean;
+  acceptedEventCount: number;
+};
 
 export type DeploymentResponse = {
   deployment: Deployment;

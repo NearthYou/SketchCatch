@@ -3,16 +3,13 @@ import type {
   InfrastructureGraphNode,
   TerraformBlockType
 } from "@sketchcatch/types";
-import {
-  isGenericTerraformNestedBlock,
-  isTerraformNestedBlockAttribute
-} from "./terraform-nested-blocks.js";
+import { isTerraformNestedBlockAttribute } from "./terraform-nested-blocks.js";
 
 const DEFAULT_TERRAFORM_BLOCK_TYPE: TerraformBlockType = "resource";
 const INDENT_UNIT = "  ";
 export const TERRAFORM_IDENTIFIER_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_-]*$/;
 const TERRAFORM_REFERENCE_PATTERN =
-  /^(?:var|local|each|count|path|terraform)\.[a-zA-Z_][a-zA-Z0-9_-]*$|^module\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+(?:\.[a-zA-Z0-9_-]+)*$|^(?:aws|kubernetes|archive)_[a-zA-Z0-9_]+\.[a-zA-Z0-9_-]+(?:\.[a-zA-Z0-9_-]+)*$|^data\.(?:aws|kubernetes|archive)_[a-zA-Z0-9_]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+(?:\.[a-zA-Z0-9_-]+)*$/;
+  /^(?:var|local|each|count|path|terraform)\.[a-zA-Z_][a-zA-Z0-9_]*$|^module\.[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)*$|^aws_[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)*$|^data\.aws_[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)*$/;
 
 export class TerraformDiagramValidationError extends Error {
   readonly reason = "invalid_identifier";
@@ -23,11 +20,94 @@ export class TerraformDiagramValidationError extends Error {
   }
 }
 
-// 기본 Resource block 뒤에 inline Lambda source의 archive companion block을 함께 렌더링한다.
 export function renderTerraformFromInfrastructureGraph(graph: InfrastructureGraph): string {
-  return graph.nodes
-    .flatMap((node) => [renderBlock(node), ...renderCompanionBlocks(node)])
-    .join("\n\n");
+  const resourceBlocks = graph.nodes.flatMap((node) => [
+    renderBlock(node),
+    ...renderCompanionBlocks(node)
+  ]);
+
+  return [...resourceBlocks, ...renderLiveObservationOutputs(graph)].join("\n\n");
+}
+
+function renderCompanionBlocks(node: InfrastructureGraphNode): string[] {
+  return hasInlineLambdaSource(node) ? [renderInlineLambdaArchive(node)] : [];
+}
+
+function createRenderableResourceConfig(node: InfrastructureGraphNode): Record<string, unknown> {
+  const config = { ...node.config };
+  if (!hasInlineLambdaSource(node)) return config;
+
+  delete config["inlineSource"];
+  const archiveAddress = `data.archive_file.${node.iac.resourceName}_bundle`;
+  config["filename"] = `${archiveAddress}.output_path`;
+  config["sourceCodeHash"] = `${archiveAddress}.output_base64sha256`;
+  return config;
+}
+
+function hasInlineLambdaSource(node: InfrastructureGraphNode): boolean {
+  return node.iac.resourceType === "aws_lambda_function" &&
+    typeof node.config["inlineSource"] === "string" &&
+    node.config["inlineSource"].length > 0;
+}
+
+function renderInlineLambdaArchive(node: InfrastructureGraphNode): string {
+  const source = node.config["inlineSource"];
+  if (typeof source !== "string") return "";
+  const archiveName = `${node.iac.resourceName}_bundle`;
+  return [
+    `data "archive_file" "${archiveName}" {`,
+    `${INDENT_UNIT}type = "zip"`,
+    `${INDENT_UNIT}source_content = ${JSON.stringify(source)}`,
+    `${INDENT_UNIT}source_content_filename = "index.mjs"`,
+    `${INDENT_UNIT}output_path = "\${path.module}/${archiveName}.zip"`,
+    "}"
+  ].join("\n");
+}
+
+function renderLiveObservationOutputs(graph: InfrastructureGraph): string[] {
+  const website = findResourceNode(graph, "aws_s3_bucket_website_configuration");
+  const loadBalancer = findResourceNode(graph, "aws_lb");
+  const targetGroup = findResourceNode(graph, "aws_lb_target_group");
+  const autoScalingGroup = findResourceNode(graph, "aws_autoscaling_group");
+  const alarm = graph.nodes.find(
+    (node) =>
+      node.iac.terraformBlockType === "resource" &&
+      node.iac.resourceType === "aws_cloudwatch_metric_alarm" &&
+      node.config["metricName"] === "RequestCountPerTarget" &&
+      typeof node.config["threshold"] === "number"
+  );
+
+  if (!website || !loadBalancer || !targetGroup || !autoScalingGroup || !alarm) {
+    return [];
+  }
+
+  const websiteAddress = `aws_s3_bucket_website_configuration.${website.iac.resourceName}`;
+  const loadBalancerAddress = `aws_lb.${loadBalancer.iac.resourceName}`;
+  const targetGroupAddress = `aws_lb_target_group.${targetGroup.iac.resourceName}`;
+  const autoScalingGroupAddress = `aws_autoscaling_group.${autoScalingGroup.iac.resourceName}`;
+
+  return [
+    renderOutput("static_site_url", `"http://\${${websiteAddress}.website_endpoint}"`),
+    renderOutput("api_base_url", `"http://\${${loadBalancerAddress}.dns_name}"`),
+    renderOutput("asg_name", `${autoScalingGroupAddress}.name`),
+    renderOutput("alb_arn_suffix", `${loadBalancerAddress}.arn_suffix`),
+    renderOutput("target_group_arn_suffix", `${targetGroupAddress}.arn_suffix`),
+    renderOutput("scale_out_threshold", String(alarm.config["threshold"]))
+  ];
+}
+
+function findResourceNode(
+  graph: InfrastructureGraph,
+  resourceType: string
+): InfrastructureGraphNode | undefined {
+  return graph.nodes.find(
+    (node) =>
+      node.iac.terraformBlockType === "resource" && node.iac.resourceType === resourceType
+  );
+}
+
+function renderOutput(name: string, valueExpression: string): string {
+  return [`output "${name}" {`, `${INDENT_UNIT}value = ${valueExpression}`, "}"].join("\n");
 }
 
 // resource/data block 하나를 만든다. 예: resource "aws_vpc" "main" { ... }
@@ -47,51 +127,6 @@ function renderBlock(node: InfrastructureGraphNode): string {
   ].join("\n");
 }
 
-function renderCompanionBlocks(node: InfrastructureGraphNode): string[] {
-  return hasInlineLambdaSource(node) ? [renderInlineLambdaArchive(node)] : [];
-}
-
-function createRenderableResourceConfig(
-  node: InfrastructureGraphNode
-): Record<string, unknown> {
-  const config = { ...node.config };
-
-  if (!hasInlineLambdaSource(node)) {
-    return config;
-  }
-
-  delete config["inlineSource"];
-  const archiveAddress = `data.archive_file.${node.iac.resourceName}_bundle`;
-  config["filename"] = `${archiveAddress}.output_path`;
-  config["sourceCodeHash"] = `${archiveAddress}.output_base64sha256`;
-  return config;
-}
-
-function hasInlineLambdaSource(node: InfrastructureGraphNode): boolean {
-  return node.iac.resourceType === "aws_lambda_function" &&
-    typeof node.config["inlineSource"] === "string" &&
-    node.config["inlineSource"].length > 0;
-}
-
-function renderInlineLambdaArchive(node: InfrastructureGraphNode): string {
-  const source = node.config["inlineSource"];
-
-  if (typeof source !== "string") {
-    return "";
-  }
-
-  const archiveName = `${node.iac.resourceName}_bundle`;
-
-  return [
-    `data "archive_file" "${archiveName}" {`,
-    `${INDENT_UNIT}type = "zip"`,
-    `${INDENT_UNIT}source_content = ${JSON.stringify(source)}`,
-    `${INDENT_UNIT}source_content_filename = "index.mjs"`,
-    `${INDENT_UNIT}output_path = "\${path.module}/${archiveName}.zip"`,
-    "}"
-  ].join("\n");
-}
-
 function renderBodyEntry(
   resourceType: string,
   key: string,
@@ -101,7 +136,7 @@ function renderBodyEntry(
   const normalizedValue = normalizeTopLevelValue(resourceType, key, value);
 
   if (shouldRenderNestedBlocks(resourceType, key, normalizedValue)) {
-    return renderNestedBlocks(resourceType, key, normalizedValue, indentLevel);
+    return renderNestedBlocks(key, normalizedValue, indentLevel);
   }
 
   return [renderAttribute(key, normalizedValue, indentLevel)];
@@ -164,7 +199,6 @@ function shouldRenderNestedBlocks(
 }
 
 function renderNestedBlocks(
-  resourceType: string,
   key: string,
   value: Record<string, unknown> | Record<string, unknown>[],
   indentLevel: number
@@ -178,29 +212,16 @@ function renderNestedBlocks(
     [
       `${indent(indentLevel)}${blockName} {`,
       ...Object.entries(value).flatMap(([nestedKey, nestedValue]) =>
-        renderNestedBlockEntry(resourceType, nestedKey, nestedValue, indentLevel + 1)
+        renderNestedBlockEntry(nestedKey, nestedValue, indentLevel + 1)
       ),
       `${indent(indentLevel)}}`
     ].join("\n")
   );
 }
 
-function renderNestedBlockEntry(
-  resourceType: string,
-  key: string,
-  value: unknown,
-  indentLevel: number
-): string[] {
+function renderNestedBlockEntry(key: string, value: unknown, indentLevel: number): string[] {
   if (Array.isArray(value) && value.every(isRecord)) {
-    return renderNestedBlocks(resourceType, key, value, indentLevel);
-  }
-
-  if (
-    isGenericTerraformNestedBlock(key) &&
-    isRecord(value) &&
-    !(resourceType === "kubernetes_service" && key === "selector")
-  ) {
-    return renderNestedBlocks(resourceType, key, value, indentLevel);
+    return renderNestedBlocks(key, value, indentLevel);
   }
 
   return [renderAttribute(key, value, indentLevel)];

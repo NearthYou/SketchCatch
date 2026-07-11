@@ -150,13 +150,126 @@ test("createRedisCacheKey escapes namespace and key segments", () => {
   );
 });
 
+test("createRedisRuntimeCache atomically increments counters with their TTL", async () => {
+  const redisClient = new FakeRedisClient();
+  const cache = createRedisRuntimeCache({
+    createClient: () => redisClient,
+    keyPrefix: "sketchcatch:test",
+    redisUrl: "redis://localhost:6379"
+  });
+  const counterKey = {
+    key: "observation-1:total",
+    namespace: "live-observation-bucket"
+  };
+  assert.equal(await cache.increment(counterKey, 2, { ttlMs: 1_500 }), 2);
+  assert.equal(await cache.increment(counterKey, 3, { ttlMs: 1_500 }), 5);
+
+  assert.deepEqual(
+    redisClient.evalCalls.map(({ options }) => options),
+    [
+      {
+        arguments: ["2", "1500"],
+        keys: ["sketchcatch:test:live-observation-bucket:observation-1%3Atotal"]
+      },
+      {
+        arguments: ["3", "1500"],
+        keys: ["sketchcatch:test:live-observation-bucket:observation-1%3Atotal"]
+      }
+    ]
+  );
+  assert.ok(
+    redisClient.evalCalls.every(
+      ({ script }) => script.includes("INCRBY") && script.includes("PEXPIRE")
+    )
+  );
+  assert.deepEqual(redisClient.incrementCalls, []);
+  assert.deepEqual(redisClient.expireCalls, []);
+});
+
+test("createRedisRuntimeCache falls back when the atomic increment command fails", async () => {
+  const redisClient = new FakeRedisClient({
+    commandError: new Error("Redis command failed")
+  });
+  const degradedErrors: unknown[] = [];
+  const cache = createRedisRuntimeCache({
+    createClient: () => redisClient,
+    fallbackCache: createInMemoryRuntimeCache({ cleanupIntervalMs: null }),
+    onDegraded: (error) => degradedErrors.push(error),
+    redisUrl: "redis://localhost:6379"
+  });
+  const counterKey = {
+    key: "observation-1:total",
+    namespace: "live-observation-bucket"
+  };
+
+  assert.equal(await cache.increment(counterKey, 2, { ttlMs: 1_500 }), 2);
+  assert.equal(degradedErrors.length, 1);
+});
+
+test("createRedisRuntimeCache uses the Redis set-if-absent command", async () => {
+  const redisClient = new FakeRedisClient();
+  const cache = createRedisRuntimeCache({
+    createClient: () => redisClient,
+    keyPrefix: "sketchcatch:test",
+    redisUrl: "redis://localhost:6379"
+  });
+  const eventKey = {
+    key: "event-1",
+    namespace: "live-observation-event"
+  };
+
+  assert.equal(await cache.setIfAbsent(eventKey, "accepted", { ttlMs: 2_000 }), true);
+  assert.equal(await cache.setIfAbsent(eventKey, "duplicate", { ttlMs: 2_000 }), false);
+
+  assert.deepEqual(redisClient.setCalls, [
+    {
+      key: "sketchcatch:test:live-observation-event:event-1",
+      options: {
+        condition: "NX",
+        expiration: { type: "PX", value: 2_000 }
+      },
+      value: JSON.stringify("accepted")
+    }
+  ]);
+});
+
+test("createRedisRuntimeCache reports Redis readiness without using memory fallback", async () => {
+  const healthyClient = new FakeRedisClient();
+  const healthyCache = createRedisRuntimeCache({
+    createClient: () => healthyClient,
+    redisUrl: "redis://localhost:6379"
+  });
+
+  assert.equal(healthyCache.backend, "redis");
+  assert.equal(await healthyCache.isAvailable(), true);
+  assert.equal(healthyClient.pingCount, 1);
+
+  const unavailableCache = createRedisRuntimeCache({
+    createClient: () => new FakeRedisClient({ commandError: new Error("Redis unavailable") }),
+    redisUrl: "redis://localhost:6379"
+  });
+
+  assert.equal(await unavailableCache.isAvailable(), false);
+});
+
 class FakeRedisClient implements RedisRuntimeCacheClient {
   isOpen = false;
   connectCount = 0;
+  pingCount = 0;
+  readonly incrementCalls: Array<{ key: string; delta: number }> = [];
+  readonly expireCalls: Array<{ key: string; ttlMs: number }> = [];
+  readonly evalCalls: Array<{
+    script: string;
+    options: {
+      readonly arguments: readonly string[];
+      readonly keys: readonly string[];
+    };
+  }> = [];
   readonly setCalls: Array<{
     key: string;
     value: string;
     options: {
+      condition?: "NX";
       expiration: {
         type: "PX";
         value: number;
@@ -192,13 +305,19 @@ class FakeRedisClient implements RedisRuntimeCacheClient {
     key: string,
     value: string,
     options: {
+      condition?: "NX";
       expiration: {
         type: "PX";
         value: number;
       };
     }
-  ): Promise<"OK"> {
+  ): Promise<"OK" | null> {
     this.throwCommandErrorIfNeeded();
+
+    if (options.condition === "NX" && this.valuesByKey.has(key)) {
+      return null;
+    }
+
     this.setCalls.push({ key, options, value });
     this.valuesByKey.set(key, value);
     return "OK";
@@ -207,6 +326,48 @@ class FakeRedisClient implements RedisRuntimeCacheClient {
   async del(key: string): Promise<number> {
     this.throwCommandErrorIfNeeded();
     return this.valuesByKey.delete(key) ? 1 : 0;
+  }
+
+  async eval(
+    script: string,
+    options: {
+      readonly arguments: readonly string[];
+      readonly keys: readonly string[];
+    }
+  ): Promise<number> {
+    this.throwCommandErrorIfNeeded();
+    this.evalCalls.push({ options, script });
+
+    const key = options.keys[0];
+    const delta = Number(options.arguments[0]);
+
+    if (!key || !Number.isSafeInteger(delta)) {
+      throw new TypeError("Invalid atomic increment arguments");
+    }
+
+    const nextValue = Number(this.valuesByKey.get(key) ?? "0") + delta;
+    this.valuesByKey.set(key, String(nextValue));
+    return nextValue;
+  }
+
+  async incrBy(key: string, delta: number): Promise<number> {
+    this.throwCommandErrorIfNeeded();
+    const nextValue = Number(this.valuesByKey.get(key) ?? "0") + delta;
+    this.valuesByKey.set(key, String(nextValue));
+    this.incrementCalls.push({ delta, key });
+    return nextValue;
+  }
+
+  async pExpire(key: string, ttlMs: number): Promise<boolean> {
+    this.throwCommandErrorIfNeeded();
+    this.expireCalls.push({ key, ttlMs });
+    return this.valuesByKey.has(key);
+  }
+
+  async ping(): Promise<string> {
+    this.throwCommandErrorIfNeeded();
+    this.pingCount += 1;
+    return "PONG";
   }
 
   on(): this {

@@ -183,7 +183,7 @@ function toPreDeploymentWarningCode(finding: CheckFinding): DeploymentPlanWarnin
     return "TRIVY_MISCONFIGURATION";
   }
 
-  return "PUBLIC_SSH";
+  return "TRIVY_MISCONFIGURATION";
 }
 
 function createStableWarningId(...parts: readonly string[]): string {

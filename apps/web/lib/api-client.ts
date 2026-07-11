@@ -17,14 +17,23 @@ const CSRF_TOKEN_COOKIE_NAME = "sketchcatch_csrf_token";
 const CSRF_TOKEN_HEADER_NAME = "X-CSRF-Token";
 const API_CONNECTION_ERROR_MESSAGE =
   "API 서버에 연결할 수 없습니다. Docker DB와 API 서버가 켜져 있는지 확인해주세요.";
-const DEFAULT_API_ERROR_MESSAGES = {
+const DEFAULT_API_ERROR_MESSAGES: Partial<Record<ApiErrorCode, string>> = {
   bad_request: "입력값 형식을 확인해주세요.",
   conflict: "이미 사용 중인 정보입니다.",
   internal_server_error: "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.",
+  LIVE_OBSERVATION_CACHE_UNAVAILABLE:
+    "실시간 관측 저장소에 연결할 수 없습니다. 잠시 후 다시 시도해주세요.",
+  LIVE_OBSERVATION_DEPLOYMENT_NOT_ELIGIBLE:
+    "이 배포는 실시간 관측을 시작할 수 있는 상태가 아닙니다.",
+  LIVE_OBSERVATION_GONE: "실시간 관측 세션이 종료되었거나 만료되었습니다.",
+  LIVE_OBSERVATION_NOT_FOUND: "실시간 관측 세션을 찾을 수 없습니다.",
+  LIVE_OBSERVATION_OUTPUT_INVALID:
+    "배포 결과에 실시간 관측에 필요한 Terraform output이 없습니다.",
+  LIVE_OBSERVATION_RATE_LIMITED: "실시간 관측 요청 한도를 초과했습니다.",
   not_found: "요청한 정보를 찾을 수 없습니다.",
   too_many_requests: "요청이 너무 많습니다. 잠시 후 다시 시도해주세요.",
   unauthorized: "인증이 필요합니다."
-} satisfies Partial<Record<ApiErrorCode, string>>;
+};
 const API_MESSAGE_TRANSLATIONS: Partial<Record<string, string>> = {
   "API request failed": "요청 처리 중 오류가 발생했습니다.",
   "Authentication required": "인증이 필요합니다.",

@@ -4,28 +4,23 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Currently Verified
 
-- Current branch: `feat/gg/0-github-template`.
-- PR #317 targets `dev`; the latest Repository Analysis commits still need to be pushed and checks refreshed.
-- GitHub Repository Analysis reads bounded static evidence at a commit-pinned revision and verifies the stored repository ID.
-- Monorepo Application Units honor declared workspace globs and keep deployment evidence scoped to the owning unit.
-- No repository code, live AWS, or Terraform mutation was run for Repository Analysis.
-- Actual Chrome E2E passed for Template Selection Failure and successful `static-web-hosting` selection, reload persistence, and AI handoff.
-- GitHub App installation enumeration and connection are restricted to the signed-in GitHub OAuth account ID.
-- Workspace handoff materializes all six selected TemplateDefinition resources and asks for clarification instead of silently replacing them.
-- Workspace and the Architecture Draft API resolve the Template from the authenticated project/source analysis; URL or request Template tampering returns a Korean guard error and HTTP 409.
+- Issue #322 PR #324 is merged into `dev`; release PR #325 is open.
+- Production ECS is healthy at API/web desired 1 with autoscaling min 1/max 2.
+- Legacy ECS, EC2, old ALB, and the old CloudFormation ALB stack are retired.
+- Route53, HTTP smoke, RDS protections, alarms, SNS delivery, worker image SHA, and final Terraform no-change plan are verified.
 
 ## Changes This Session
 
-- Added Repository Analysis shared contracts, GitHub evidence reading, Template Selection, Source Repository API, ADRs, and milestone records.
-- Added repository identity mismatch rejection and Application Unit evidence isolation after independent review.
-- Merged latest `dev` and kept inline Lambda archive rendering while following the latest explicit-S3-resource contract.
-- Added migration 0029 persistence, the reachable Project Settings UI, AI Template preservation, configured-origin credential CORS, auth hydration gating, responsive result cards, accessibility corrections, and installation ownership authorization.
+- Added autoscaling, alarms, migration safety, least-privilege deploy IAM, and disabled cold rollback Terraform.
+- Removed warm rollback workflows and infrastructure definitions.
+- Applied the approved runtime plan and synchronized GitHub production variables and tfvars.
 
 ## Broken Or Unverified
 
-- TypeScript LSP is unavailable because installation was previously declined; root typecheck is clean.
-- Fixture PR #25 was created in `NearthYou/sketchcatch-iac-handoff-test` but was intentionally not merged into its default branch.
+- External customer role trust migration is not globally observable from this AWS account.
+- Cold rollback has not been restored end to end after AMI sanitization.
+- PR #325 is temporarily conflicting because the prior v2.0.0 squash commit is not an ancestor of `dev`.
 
 ## Best Next Action
 
-- Push through commit `7ada4c84` to PR #317, refresh CI, and resolve any new thread before merge.
+- Merge the ancestry-sync branch into `dev` with a merge commit, then recheck and merge PR #325 with a merge commit.

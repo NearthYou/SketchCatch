@@ -34,7 +34,8 @@
             "aws_ecs_service.api",
             "aws_ecs_service.web",
             "aws_ecs_task_definition.api",
-            "aws_ecs_task_definition.web"
+            "aws_ecs_task_definition.web",
+            "aws_ecs_task_definition.worker"
           ]
         },
         {
@@ -76,14 +77,19 @@
             "aws_iam_role.ecs_execution",
             "aws_iam_role_policy.ecs_execution",
             "aws_iam_role.ecs_task",
-            "aws_iam_role_policy.ecs_task"
+            "aws_iam_role_policy.ecs_task",
+            "aws_iam_role.ecs_web_task",
+            "aws_iam_role.ecs_worker_execution",
+            "aws_iam_role_policy.ecs_worker_execution",
+            "aws_iam_role.ecs_worker_task",
+            "aws_iam_role_policy.ecs_worker_task"
           ]
         },
         {
           "category": "CloudWatch",
           "status": "state-audit-required",
           "items": [
-            "ECS API/web/worker/legacy nginx log groups",
+            "ECS API/web/worker log groups and retained cold image logs",
             "ECS container/target/service alarms",
             "legacy EC2 application log groups and alarms ownership check"
           ],
@@ -93,7 +99,10 @@
             "aws_cloudwatch_metric_alarm.ecs_container_errors",
             "aws_cloudwatch_metric_alarm.ecs_unhealthy_hosts",
             "aws_cloudwatch_metric_alarm.ecs_service_cpu_high",
-            "aws_cloudwatch_metric_alarm.ecs_service_memory_high"
+            "aws_cloudwatch_metric_alarm.ecs_service_memory_high",
+            "aws_cloudwatch_metric_alarm.alb_5xx",
+            "aws_cloudwatch_metric_alarm.ecs_no_healthy_tasks",
+            "aws_cloudwatch_metric_alarm.rds_status_missing"
           ]
         },
         {
@@ -102,13 +111,18 @@
           "addresses": [
             "aws_security_group.ecs_alb",
             "aws_security_group.ecs_service",
+            "aws_security_group.ecs_web",
+            "aws_security_group.ecs_worker",
             "aws_vpc_security_group_ingress_rule.ecs_alb_http",
             "aws_vpc_security_group_ingress_rule.ecs_alb_https",
             "aws_vpc_security_group_egress_rule.ecs_alb_to_api",
             "aws_vpc_security_group_egress_rule.ecs_alb_to_web",
             "aws_vpc_security_group_ingress_rule.ecs_service_api_from_alb",
-            "aws_vpc_security_group_ingress_rule.ecs_service_web_from_alb",
-            "aws_vpc_security_group_egress_rule.ecs_service_all"
+            "aws_vpc_security_group_ingress_rule.ecs_web_from_alb",
+            "aws_vpc_security_group_egress_rule.ecs_service_all",
+            "aws_vpc_security_group_egress_rule.ecs_web_all",
+            "aws_vpc_security_group_egress_rule.ecs_worker_all",
+            "aws_vpc_security_group_ingress_rule.rds_from_ecs_worker"
           ]
         },
         {
@@ -195,24 +209,23 @@
       "backendKey": "production/legacy-rollback/terraform.tfstate",
       "risk": "high",
       "sequence": 4,
-      "policy": "Keep empty until EC2 rollback retirement is approved. Never import resources still owned by CloudFormation.",
+      "policy": "Warm EC2/ALB rollback is retired. Keep the cold rollback root disabled by default and create temporary resources only during an explicitly approved incident.",
       "resources": [
         {
           "category": "EC2/SSM rollback",
-          "status": "retained-not-imported",
+          "status": "retired-cold-artifacts-only",
           "items": [
-            "EC2 instance",
-            "instance profile",
-            "security groups",
-            "SSM deployment path",
-            "legacy ALB/target group/listener"
+            "sanitized retained AMI",
+            "verified Docker release artifact",
+            "disabled-by-default EC2/ALB Terraform restore root",
+            "cold rollback runbook"
           ]
         },
         {
           "category": "CloudFormation",
-          "status": "retain-owner",
-          "items": ["alb-https stack", "runtime-cache-elasticache stack"],
-          "note": "Do not import child resources while the stack remains the owner."
+          "status": "legacy-alb-stack-retired",
+          "items": ["runtime-cache-elasticache stack"],
+          "note": "The legacy alb-https stack is deleted after retaining the active Route53 alias and ACM certificate."
         }
       ]
     }

@@ -6,13 +6,11 @@ import type {
   TerraformDiagramChangeProposal
 } from "../../../../packages/types/src";
 import { cloneParameterValue } from "../diagram-editor/parameter-value-utils";
+import { RESOURCE_NODE_DEFAULT_SIZE } from "../diagram-editor/resource-node-geometry";
 import { resourceCatalog } from "../resource-settings/catalog";
 
 type ApprovedProposalIds = ReadonlySet<string> | readonly string[];
-const DEFAULT_CREATED_NODE_SIZE = {
-  width: 56,
-  height: 56
-} as const;
+const DEFAULT_CREATED_NODE_SIZE = RESOURCE_NODE_DEFAULT_SIZE;
 const AREA_CHILD_MARGIN = 24;
 const AREA_CHILD_HEADER_OFFSET = 40;
 
