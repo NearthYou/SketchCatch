@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { DiagramJson } from "@sketchcatch/types";
+import type { ArchitecturePatchClarification, DiagramJson } from "@sketchcatch/types";
 import type { DiagramEditorPanelContext } from "../../../features/diagram-editor";
 import {
   createAiArchitectureDraft,
@@ -25,7 +25,9 @@ import { createWorkspaceAiPatchPreviewModel } from "../../../features/workspace/
 import type { WorkspaceTerraformState } from "../operations/use-workspace-terraform";
 import {
   isArchitectureDraftClarification,
-  isArchitecturePatchClarification
+  isArchitecturePatchClarification,
+  findPatchClarificationCandidate,
+  findPatchClarificationSuggestion
 } from "../ai/ai-start-model";
 
 export type WorkspaceAssistantMessage = {
@@ -58,6 +60,7 @@ export type WorkspaceAiAssistantState = {
   readonly voice: ReturnType<typeof useBrowserVoiceInput>;
   readonly applyBoardPreview: () => void;
   readonly applyTerraformFix: () => void;
+  readonly answerSuggestion: (suggestion: string) => Promise<void>;
   readonly cancelPreview: () => void;
   readonly cancelRequest: () => void;
   readonly explainTerraform: () => Promise<void>;
@@ -82,6 +85,10 @@ export function useWorkspaceAiAssistant({
   const [errorMessage, setErrorMessage] = useState("");
   const [pendingBoardPreview, setPendingBoardPreview] = useState<PendingBoardPreview | null>(null);
   const [pendingTerraformFix, setPendingTerraformFix] = useState<PendingTerraformFix | null>(null);
+  const [pendingPatchClarification, setPendingPatchClarification] = useState<{
+    readonly baseDiagram: DiagramJson;
+    readonly clarification: ArchitecturePatchClarification;
+  } | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const storageKey = useMemo(() => createWorkspaceAiChatStorageKey(projectId), [projectId]);
   const voice = useBrowserVoiceInput({ onChange: setInput, value: input });
@@ -155,6 +162,7 @@ export function useWorkspaceAiAssistant({
         instruction: prompt
       }, controller.signal);
       if (isArchitecturePatchClarification(response)) {
+        setPendingPatchClarification({ baseDiagram: context.diagram, clarification: response });
         appendMessage({
           content: response.question,
           role: "assistant",
@@ -181,6 +189,55 @@ export function useWorkspaceAiAssistant({
       abortControllerRef.current = null;
     }
   }, [appendMessage, context, input, requestState]);
+
+  // 앞선 수정 질문의 선택지는 새 요청으로 분류하지 않고 원래 Resource ID와 함께 이어서 보냅니다.
+  const answerSuggestion = useCallback(async (suggestion: string): Promise<void> => {
+    if (!pendingPatchClarification) {
+      await send(suggestion);
+      return;
+    }
+    const { baseDiagram, clarification } = pendingPatchClarification;
+    const candidate = findPatchClarificationCandidate(clarification, suggestion);
+    const selectedSuggestion = findPatchClarificationSuggestion(clarification, suggestion);
+    setPendingPatchClarification(null);
+    appendMessage({ content: suggestion, role: "user", state: "completed" });
+    setRequestState("generating");
+    setErrorMessage("");
+    try {
+      const useAsConnection = clarification.intent.requestedAction === "add_resource";
+      const isSkipSuggestion = selectedSuggestion === "연결하지 않기" || selectedSuggestion === "추가 안 함";
+      const continuedInstruction = !candidate && selectedSuggestion && !isSkipSuggestion
+        ? `${clarification.intent.instruction}. 선택한 항목: ${selectedSuggestion}`
+        : clarification.intent.instruction;
+      const response = await createAiArchitecturePatchPreview({
+        architectureJson: convertDiagramJsonToArchitectureJson(baseDiagram),
+        instruction: continuedInstruction,
+        ...(candidate && useAsConnection ? { connectionTargetResourceId: candidate.resourceId } : {}),
+        ...(candidate && !useAsConnection ? { selectedTargetResourceId: candidate.resourceId } : {}),
+        ...(isSkipSuggestion ? { skipConnection: true } : {})
+      });
+      if (isArchitecturePatchClarification(response)) {
+        setPendingPatchClarification({ baseDiagram, clarification: response });
+        appendMessage({
+          content: response.question,
+          role: "assistant",
+          state: "question",
+          suggestions: [...response.candidates.map((item) => item.label), ...(response.suggestions ?? [])]
+        });
+        return;
+      }
+      const preview = createWorkspaceAiPatchPreviewModel(baseDiagram, response);
+      context.setPreviewDiagram(preview.visualPreviewDiagram, preview.annotations);
+      setPendingBoardPreview({ diagram: preview.proposedDiagram, summary: response.intent.instruction });
+      appendMessage({ content: `${response.changes.length}개 변경 제안을 만들었습니다.`, role: "assistant", state: "preview" });
+    } catch (error) {
+      const message = toAssistantError(error);
+      setErrorMessage(message);
+      appendMessage({ content: message, role: "assistant", state: "error" });
+    } finally {
+      setRequestState("idle");
+    }
+  }, [appendMessage, context, pendingPatchClarification, send]);
 
   // 현재 Terraform 코드 또는 첫 진단을 쉬운 설명과 안전한 수정 미리보기로 바꿉니다.
   const explainTerraform = useCallback(async (): Promise<void> => {
@@ -279,6 +336,7 @@ export function useWorkspaceAiAssistant({
   return {
     applyBoardPreview,
     applyTerraformFix,
+    answerSuggestion,
     cancelPreview,
     cancelRequest,
     errorMessage,

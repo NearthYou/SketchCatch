@@ -169,7 +169,7 @@ export function WorkspaceAiAssistant({
                   {message.suggestions?.length ? (
                     <div className={styles.suggestions}>
                       {message.suggestions.map((suggestion) => (
-                        <button disabled={isBusy} key={suggestion} onClick={() => void assistant.send(suggestion)} type="button">
+                        <button disabled={isBusy} key={suggestion} onClick={() => void assistant.answerSuggestion(suggestion)} type="button">
                           {suggestion}
                         </button>
                       ))}
