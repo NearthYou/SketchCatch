@@ -19,6 +19,37 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-11 - Add CloudWatch Agent-backed Live Observation demo path
+
+- Added a local `/live-observation-demo` audience route so QR links resolve in development and send a Traffic API POST before recording a Live Observation receipt.
+- Extended the demo web service Terraform smoke asset with a real CloudWatch Agent install path, StatsD custom metric emission, traffic log collection, a one-day CloudWatch Log Group, EC2 IAM role, CloudWatch Agent policy attachment, and instance profile wiring on the Launch Template.
+- Updated the Live Observation board template and the local `Live Observation Demo` project draft to include CloudWatch Agent Logs, EC2 Agent IAM Role, CloudWatch Agent Policy, Instance Profile, Launch Template, ASG, ALB, Target Group, Listener, and S3 audience site relationships.
+- Verification: focused API/web tests for demo assets, plan summary, template library, and local audience route passed; `http://localhost:3000/live-observation-demo?...` returned 200; `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check` passed.
+- Risk: no AWS resources were created in this step; actual CloudWatch Agent evidence still requires an approved live deployment/apply and cleanup path.
+
+### 2026-07-11 - Add local Traffic API stub for Live Observation demo
+
+- Added a Live Observation `/traffic` POST route so local successful demo deployments can accept the sample service traffic probe at `/api/traffic`.
+- Kept actual Live Observation event counting on the existing public collector route; the new route only verifies that the deployed demo service traffic request succeeded.
+- Verification: focused `live-observations.test.ts`, `curl.exe -X POST http://localhost:4000/api/traffic` returned 204 after restarting the quick local API, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check` passed.
+- Risk: this local stub does not replace the real deployed demo web service Traffic API; production demo deployments still need their own `/api/traffic` backend.
+
+### 2026-07-11 - Simulate CloudWatch Agent-driven Live Observation
+
+- Added an explicit `LIVE_OBSERVATION_SIMULATED_AGENT=true` backend mode that converts accepted Live Observation receipts into CloudWatch/ASG-like observation snapshots.
+- The simulated Agent flow now moves through rising request pressure, scale-out in progress, and two healthy EC2 instances so the existing signal map can animate traffic flow, warning colors, and capacity changes through normal REST polling.
+- In simulated Agent mode, accepted events invalidate the observation cache so the next polling snapshot reacts quickly during the demo.
+- Verification: focused simulated provider, Live Observation service, and route tests passed; local API snapshot after 20 traffic+receipt events reported `pressureLevel=critical`, `cloudWatchState=available`, `requestCountPerTarget=100`, `desiredCapacity=2`, and `inServiceInstanceCount=2`; `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check` passed.
+- Risk: this proves the CloudWatch Agent data path shape and UI reaction locally; real AWS still requires actual CloudWatch Agent metrics or ALB metrics plus ASG API polling.
+
+### 2026-07-11 - Add Live Observation polling prototype
+
+- Added a REST snapshot polling transport for Live Observation while preserving the existing SSE stream path.
+- Extended the development mock animation into a snapshot-driven prototype that cycles traffic pressure, CloudWatch lag, ASG scale-out launch, and two-instance steady state through the primary signal map.
+- Verification: focused workspace API and Live Observation modal tests, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check` passed.
+- Risk: prototype mock is development-only; real ECS/Fargate capacity visualization is still a later provider-adapter step.
+- Next action: run the modal locally with `NEXT_PUBLIC_LIVE_OBSERVATION_TRANSPORT=polling` and validate the demo timing with a presenter script.
+
 ### 2026-07-11 - Remove duplicated Trivy rule IDs from the scanner test
 
 - Updated the Trivy ignore-file test to import `disabledTrivyTerraformRuleIds` from the scanner instead of maintaining a second hard-coded rule list.

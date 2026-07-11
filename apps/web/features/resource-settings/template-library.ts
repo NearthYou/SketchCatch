@@ -411,6 +411,61 @@ const boardTemplates: readonly BoardTemplate[] = [
           }
         }),
         createTerraformTemplateNode({
+          id: "template-live-log-group",
+          label: "CloudWatch Agent Logs",
+          position: { x: 1060, y: 40 },
+          resourceName: "traffic",
+          type: "aws_cloudwatch_log_group",
+          values: {
+            name: "/sketchcatch/demo/sc-lo/traffic",
+            retentionInDays: 1,
+            tags: { SketchCatchDemo: "true" }
+          }
+        }),
+        createTerraformTemplateNode({
+          id: "template-live-agent-role",
+          label: "EC2 Agent IAM Role",
+          position: { x: 1060, y: 140 },
+          resourceName: "api_agent",
+          type: "aws_iam_role",
+          values: {
+            assumeRolePolicy: JSON.stringify({
+              Version: "2012-10-17",
+              Statement: [
+                {
+                  Effect: "Allow",
+                  Principal: { Service: "ec2.amazonaws.com" },
+                  Action: "sts:AssumeRole"
+                }
+              ]
+            }),
+            namePrefix: "sc-lo-api-agent-",
+            tags: { SketchCatchDemo: "true" }
+          }
+        }),
+        createTerraformTemplateNode({
+          id: "template-live-agent-policy",
+          label: "CloudWatch Agent Policy",
+          position: { x: 1240, y: 140 },
+          resourceName: "cloudwatch_agent",
+          type: "aws_iam_role_policy_attachment",
+          values: {
+            policyArn: "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy",
+            role: "aws_iam_role.api_agent.name"
+          }
+        }),
+        createTerraformTemplateNode({
+          id: "template-live-agent-profile",
+          label: "Instance Profile",
+          position: { x: 1240, y: 240 },
+          resourceName: "api_agent",
+          type: "aws_iam_instance_profile",
+          values: {
+            namePrefix: "sc-lo-api-agent-",
+            role: "aws_iam_role.api_agent.name"
+          }
+        }),
+        createTerraformTemplateNode({
           id: "template-live-alb",
           label: "Application Load Balancer",
           position: { x: 620, y: 280 },
@@ -469,6 +524,7 @@ const boardTemplates: readonly BoardTemplate[] = [
           values: {
             imageId: "data.aws_ami.al2023.id",
             instanceType: "t3.micro",
+            iamInstanceProfile: { name: "aws_iam_instance_profile.api_agent.name" },
             metadataOptions: { httpEndpoint: "enabled", httpTokens: "required" },
             namePrefix: "sc-lo-api-",
             tagSpecifications: {
@@ -543,6 +599,10 @@ const boardTemplates: readonly BoardTemplate[] = [
         createTemplateEdge("template-live-site-flow", "template-live-site-config", "template-live-alb", "audience traffic"),
         createTemplateEdge("template-live-alb-target", "template-live-alb", "template-live-target-group", "routes"),
         createTemplateEdge("template-live-target-asg", "template-live-target-group", "template-live-asg", "targets"),
+        createTemplateEdge("template-live-role-policy", "template-live-agent-role", "template-live-agent-policy", "grants"),
+        createTemplateEdge("template-live-role-profile", "template-live-agent-role", "template-live-agent-profile", "assumes"),
+        createTemplateEdge("template-live-profile-launch", "template-live-agent-profile", "template-live-launch-template", "profile"),
+        createTemplateEdge("template-live-agent-logs", "template-live-launch-template", "template-live-log-group", "agent metrics"),
         createTemplateEdge("template-live-launch-asg", "template-live-launch-template", "template-live-asg", "launches"),
         createTemplateEdge("template-live-alarm-policy", "template-live-alarm", "template-live-policy", "triggers"),
         createTemplateEdge("template-live-policy-asg", "template-live-policy", "template-live-asg", "+1 instance")

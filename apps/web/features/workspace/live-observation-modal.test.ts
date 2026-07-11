@@ -59,6 +59,14 @@ test("modal reports recoverable stream delays separately and clears them on reco
   );
 });
 
+test("modal can switch Live Observation snapshots to REST polling for prototype validation", () => {
+  assert.match(modalSource, /pollLiveObservationSnapshots/);
+  assert.match(modalSource, /NEXT_PUBLIC_LIVE_OBSERVATION_TRANSPORT/);
+  assert.match(modalSource, /LIVE_OBSERVATION_TRANSPORT === "polling"/);
+  assert.match(modalSource, /intervalMs:\s*LIVE_OBSERVATION_POLL_INTERVAL_MS/);
+  assert.match(modalSource, /streamLiveObservationSnapshots/);
+});
+
 test("development mock reuses the primary map instead of rendering a preview map", () => {
   assert.equal(modalSource.match(/<LiveObservationSignalMap\s+asgMeta=/g)?.length, 1);
   assert.doesNotMatch(modalSource, /function MockRequestFlowPreview/);
@@ -70,13 +78,13 @@ test("active modal shows audience utility, evidence rail, signal map, and activi
   assert.match(modalSource, /liveObservationEvidenceRail/);
   assert.match(modalSource, /data-source="browser"/);
   assert.match(modalSource, /data-source="aws"/);
-  assert.match(modalSource, /formatCloudWatchValue\(snapshot\)/);
-  assert.match(modalSource, /formatCapacityValue\(snapshot\)/);
+  assert.match(modalSource, /formatCloudWatchValue\(displayedSnapshot\)/);
+  assert.match(modalSource, /formatCapacityValue\(displayedSnapshot\)/);
   assert.match(modalSource, /스케일링 활동/);
-  assert.match(modalSource, /data-pressure-level=\{snapshot\?\.live\.pressureLevel/);
+  assert.match(modalSource, /data-pressure-level=\{displayedSnapshot\?\.live\.pressureLevel/);
   assert.match(
     modalSource,
-    /getLiveObservationPressureLabel\(snapshot\?\.live\.pressureLevel \?\? "normal"\)/
+    /getLiveObservationPressureLabel\(displayedSnapshot\?\.live\.pressureLevel \?\? "normal"\)/
   );
   assert.match(modalSource, /관측 불가/);
 });
@@ -169,6 +177,12 @@ test("development-only mock control replays the real animation path with labeled
   assert.match(modalSource, /function playMockRequestFlow|const playMockRequestFlow/);
   assert.match(modalSource, /setMockRequestFlowState\(replayMockRequestFlow\)/);
   assert.match(mockPreviewSource, /getLiveObservationRequestBurst\(100, 108, true\)/);
+  assert.match(mockPreviewSource, /snapshot:\s*createMockLiveObservationSnapshot\(sequence\)/);
+  assert.match(mockPreviewSource, /pressureLevel:\s*pressure\.level/);
+  assert.match(mockPreviewSource, /i-prototype-b/);
+  assert.match(mockPreviewSource, /statusCode:\s*scaleOutComplete \? "Successful" : "InProgress"/);
+  assert.match(modalSource, /displayedSnapshot/);
+  assert.match(modalSource, /setInterval\(\(\) => \{[\s\S]{0,140}setMockRequestFlowState\(replayMockRequestFlow\)/);
   assert.doesNotMatch(modalSource, /function MockRequestFlowPreview/);
   assert.match(modalSource, /showDevelopmentMockMap/);
   assert.match(

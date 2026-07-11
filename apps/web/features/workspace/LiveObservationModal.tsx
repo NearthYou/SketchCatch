@@ -26,6 +26,7 @@ import {
 import {
   createLiveObservation,
   listDeployments,
+  pollLiveObservationSnapshots,
   stopLiveObservation,
   streamLiveObservationSnapshots
 } from "./api";
@@ -66,6 +67,12 @@ const EMPTY_BOOST_PROGRESS: PresenterTrafficBoostProgress = {
 };
 
 const SHOW_MOCK_ANIMATION_PREVIEW = process.env.NODE_ENV === "development";
+const LIVE_OBSERVATION_TRANSPORT =
+  process.env.NEXT_PUBLIC_LIVE_OBSERVATION_TRANSPORT === "polling"
+    ? "polling"
+    : "stream";
+const LIVE_OBSERVATION_POLL_INTERVAL_MS = 2_000;
+const MOCK_SNAPSHOT_INTERVAL_MS = 2_000;
 
 const MOCK_SIGNAL_MAP_INSTANCES: readonly LiveObservationInstanceMarker[] = [
   { key: "mock-instance-a", label: "Mock InService A", state: "in-service" },
@@ -124,6 +131,10 @@ export function LiveObservationModal({
     () => getLiveObservationInstanceMarkers(snapshot),
     [snapshot]
   );
+  const mockInstanceMarkers = useMemo(
+    () => getLiveObservationInstanceMarkers(mockRequestFlowState.snapshot),
+    [mockRequestFlowState.snapshot]
+  );
   const inServiceInstanceKeys = instanceMarkers
     .filter((instance) => instance.state === "in-service")
     .map((instance) => instance.key)
@@ -137,6 +148,9 @@ export function LiveObservationModal({
     : [];
   const showDevelopmentMockMap =
     SHOW_MOCK_ANIMATION_PREVIEW && mockRequestFlowState.visible && !session;
+  const displayedSnapshot = showDevelopmentMockMap
+    ? mockRequestFlowState.snapshot
+    : snapshot;
   const mockRequestTargetIndexes = showDevelopmentMockMap
     ? getMockRequestFlowTargetIndexes(mockRequestFlowBurst)
     : [];
@@ -144,7 +158,9 @@ export function LiveObservationModal({
     ? mockRequestFlowBurst
     : requestFlowBurst;
   const mapInstances = showDevelopmentMockMap
-    ? MOCK_SIGNAL_MAP_INSTANCES
+    ? mockInstanceMarkers.length > 0
+      ? mockInstanceMarkers
+      : MOCK_SIGNAL_MAP_INSTANCES
     : instanceMarkers;
   const mapRequestTargetIndexes = showDevelopmentMockMap
     ? mockRequestTargetIndexes
@@ -221,6 +237,26 @@ export function LiveObservationModal({
 
     return () => window.clearTimeout(timer);
   }, [mockRequestFlowBurst]);
+
+  useEffect(() => {
+    if (!SHOW_MOCK_ANIMATION_PREVIEW || session || !mockRequestFlowState.visible) {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      setMockRequestFlowState(replayMockRequestFlow);
+    }, MOCK_SNAPSHOT_INTERVAL_MS);
+
+    return () => window.clearInterval(timer);
+  }, [mockRequestFlowState.visible, session]);
+
+  useEffect(() => {
+    if (!SHOW_MOCK_ANIMATION_PREVIEW || session || !mockRequestFlowState.snapshot) {
+      return;
+    }
+
+    setSnapshot(mockRequestFlowState.snapshot);
+  }, [mockRequestFlowState.snapshot, session]);
 
   useEffect(() => {
     setMounted(true);
@@ -315,20 +351,38 @@ export function LiveObservationModal({
 
     setStreamErrorMessage("");
     const abortController = new AbortController();
-    void streamLiveObservationSnapshots({
-      deploymentId: session.deploymentId,
-      observationId: session.id,
-      onError: () => {
-        setStreamErrorMessage(
+    if (LIVE_OBSERVATION_TRANSPORT === "polling") {
+      void pollLiveObservationSnapshots({
+        deploymentId: session.deploymentId,
+        intervalMs: LIVE_OBSERVATION_POLL_INTERVAL_MS,
+        observationId: session.id,
+        onError: () => {
+          setStreamErrorMessage(
+            "?ㅼ떆媛??곌껐??吏?곕릺怨??덉뒿?덈떎. 理쒖떊 ?곹깭瑜??ㅼ떆 ?곌껐?⑸땲??"
+          );
+        },
+        onSnapshot: (nextSnapshot) => {
+          setSnapshot(nextSnapshot);
+          setStreamErrorMessage("");
+        },
+        signal: abortController.signal
+      });
+    } else {
+      void streamLiveObservationSnapshots({
+        deploymentId: session.deploymentId,
+        observationId: session.id,
+        onError: () => {
+          setStreamErrorMessage(
           "실시간 연결이 지연되고 있습니다. 최신 상태를 다시 연결합니다."
-        );
-      },
-      onSnapshot: (nextSnapshot) => {
-        setSnapshot(nextSnapshot);
-        setStreamErrorMessage("");
-      },
-      signal: abortController.signal
-    });
+          );
+        },
+        onSnapshot: (nextSnapshot) => {
+          setSnapshot(nextSnapshot);
+          setStreamErrorMessage("");
+        },
+        signal: abortController.signal
+      });
+    }
 
     return () => abortController.abort();
   }, [session]);
@@ -460,7 +514,7 @@ export function LiveObservationModal({
         aria-labelledby="live-observation-title"
         aria-modal="true"
         className={styles.liveObservationDialog}
-        data-pressure-level={snapshot?.live.pressureLevel ?? "normal"}
+        data-pressure-level={displayedSnapshot?.live.pressureLevel ?? "normal"}
         onKeyDown={handleDialogKeyDown}
         ref={dialogRef}
         role="dialog"
@@ -582,25 +636,25 @@ export function LiveObservationModal({
             <div className={styles.liveObservationError} role="alert">{visibleErrorMessage}</div>
           ) : null}
 
-          {session ? (
+          {session || showDevelopmentMockMap ? (
             <section className={styles.liveObservationEvidenceRail} aria-label="관측 근거">
               <div data-source="browser">
                 <span>빠른 신호 · 브라우저 보고</span>
-                <strong>{snapshot?.live.acceptedEventCount ?? 0}</strong>
+                <strong>{displayedSnapshot?.live.acceptedEventCount ?? 0}</strong>
                 <p>collector가 수락한 성공 receipt</p>
                 <div className={styles.liveObservationPressureTrack} aria-label="scale-out pressure">
-                  <i style={{ width: `${Math.min(snapshot?.live.pressurePercent ?? 0, 100)}%` }} />
+                  <i style={{ width: `${Math.min(displayedSnapshot?.live.pressurePercent ?? 0, 100)}%` }} />
                 </div>
                 <small>
-                  {(snapshot?.live.projectedRequestsPerMinute ?? 0).toFixed(1)} req/min · 압력 {(snapshot?.live.pressurePercent ?? 0).toFixed(0)}% · {getLiveObservationPressureLabel(snapshot?.live.pressureLevel ?? "normal")}
+                  {(displayedSnapshot?.live.projectedRequestsPerMinute ?? 0).toFixed(1)} req/min · 압력 {(displayedSnapshot?.live.pressurePercent ?? 0).toFixed(0)}% · {getLiveObservationPressureLabel(displayedSnapshot?.live.pressureLevel ?? "normal")}
                 </small>
               </div>
               <div data-source="aws">
                 <span>AWS 실측</span>
-                <strong>{formatCloudWatchValue(snapshot)}</strong>
+                <strong>{formatCloudWatchValue(displayedSnapshot)}</strong>
                 <p>완료된 60초 RequestCountPerTarget</p>
                 <small>
-                  {formatCloudWatchDelay(snapshot)} · {formatCapacityValue(snapshot)} InService / desired / max
+                  {formatCloudWatchDelay(displayedSnapshot)} · {formatCapacityValue(displayedSnapshot)} InService / desired / max
                 </small>
               </div>
             </section>
@@ -617,10 +671,10 @@ export function LiveObservationModal({
                 </span>
               ) : null}
               <LiveObservationSignalMap
-                asgMeta={showDevelopmentMockMap ? "2 desired / 2 max" : formatAsgCapacity(snapshot)}
+                asgMeta={formatAsgCapacity(displayedSnapshot)}
                 burst={mapBurst}
                 instances={mapInstances}
-                pressureLevel={showDevelopmentMockMap ? "normal" : snapshot?.live.pressureLevel ?? "normal"}
+                pressureLevel={displayedSnapshot?.live.pressureLevel ?? "normal"}
                 requestTargetIndexes={mapRequestTargetIndexes}
               />
             </section>

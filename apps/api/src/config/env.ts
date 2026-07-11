@@ -35,6 +35,7 @@ export type RuntimeEnv = {
   kakaoOauthClientId: string | undefined;
   kakaoOauthClientSecret: string | undefined;
   liveObservationEnabled?: string | undefined;
+  liveObservationSimulatedAgent?: string | undefined;
   naverOauthClientId: string | undefined;
   naverOauthClientSecret: string | undefined;
   nodeEnv?: string | undefined;
@@ -91,6 +92,7 @@ export function getRuntimeEnv(): RuntimeEnv {
     kakaoOauthClientId: process.env.KAKAO_OAUTH_CLIENT_ID,
     kakaoOauthClientSecret: process.env.KAKAO_OAUTH_CLIENT_SECRET,
     liveObservationEnabled: process.env.LIVE_OBSERVATION_ENABLED,
+    liveObservationSimulatedAgent: process.env.LIVE_OBSERVATION_SIMULATED_AGENT,
     naverOauthClientId: process.env.NAVER_OAUTH_CLIENT_ID,
     naverOauthClientSecret: process.env.NAVER_OAUTH_CLIENT_SECRET,
     nodeEnv: process.env.NODE_ENV,

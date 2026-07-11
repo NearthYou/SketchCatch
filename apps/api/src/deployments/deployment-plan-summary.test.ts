@@ -208,6 +208,34 @@ test("findUnsupportedLiveApplyResourceTypesFromTerraformShowJson allows demo web
       },
       {
         mode: "managed",
+        type: "aws_cloudwatch_log_group",
+        change: {
+          actions: ["create"]
+        }
+      },
+      {
+        mode: "managed",
+        type: "aws_iam_role",
+        change: {
+          actions: ["create"]
+        }
+      },
+      {
+        mode: "managed",
+        type: "aws_iam_role_policy_attachment",
+        change: {
+          actions: ["create"]
+        }
+      },
+      {
+        mode: "managed",
+        type: "aws_iam_instance_profile",
+        change: {
+          actions: ["create"]
+        }
+      },
+      {
+        mode: "managed",
         type: "aws_db_instance",
         change: {
           actions: ["create"]
@@ -221,8 +249,12 @@ test("findUnsupportedLiveApplyResourceTypesFromTerraformShowJson allows demo web
     [
       "aws_autoscaling_group",
       "aws_autoscaling_policy",
+      "aws_cloudwatch_log_group",
       "aws_cloudwatch_metric_alarm",
       "aws_db_instance",
+      "aws_iam_instance_profile",
+      "aws_iam_role",
+      "aws_iam_role_policy_attachment",
       "aws_lb"
     ]
   );

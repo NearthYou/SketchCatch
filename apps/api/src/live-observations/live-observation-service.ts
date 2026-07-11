@@ -56,6 +56,7 @@ export type CreateLiveObservationServiceOptions = {
   readonly runtimeCache: RuntimeCache;
   readonly observabilityProvider: DeploymentObservabilityProvider;
   readonly publicApiBaseUrl: string;
+  readonly invalidateObservationCacheOnEvent?: boolean | undefined;
   readonly requireSharedCache?: boolean | undefined;
   readonly maxAcceptedEvents?: number | undefined;
   readonly now?: (() => number) | undefined;
@@ -340,6 +341,10 @@ export function createLiveObservationService(options: CreateLiveObservationServi
         1,
         { ttlMs: REQUEST_BUCKET_TTL_MS }
       );
+
+      if (options.invalidateObservationCacheOnEvent) {
+        await options.runtimeCache.delete(createAwsObservationKey(storedSession.session.id));
+      }
 
       return {
         accepted: true,
