@@ -8,6 +8,8 @@ const assistantHookSource = readWorkspaceFile("ai-assistant/use-workspace-ai-ass
 const assistantStyles = readWorkspaceFile("ai-assistant/workspace-ai-assistant.module.css");
 const gitCicdHookSource = readWorkspaceFile("operations/use-workspace-git-cicd.ts");
 const gitCicdPanelSource = readWorkspaceFile("operations/GitCicdOperationsPanel.tsx");
+const operationsDockSource = readWorkspaceFile("operations/WorkspaceOperationsDock.tsx");
+const operationsDockStyles = readWorkspaceFile("operations/workspace-operations.module.css");
 
 test("AI 런처와 panel은 keyboard 접근성 계약을 제공한다", () => {
   assert.match(assistantSource, /aria-label="AI 채팅 열기"/);
@@ -62,6 +64,11 @@ test("AI 런처와 panel은 desktop과 mobile 크기를 따로 가진다", () =>
   assert.match(assistantStyles, /width:\s*100vw;/);
   assert.match(assistantStyles, /env\(safe-area-inset-bottom\)/);
   assert.match(assistantStyles, /@media \(prefers-reduced-motion: reduce\)/);
+});
+
+test("AI panel이 열리면 다른 Workspace 작업 도구를 화면에서 숨긴다", () => {
+  assert.match(operationsDockSource, /hidden=\{isAssistantOpen\}/);
+  assert.match(operationsDockStyles, /\.dock\[hidden\]\s*\{[^}]*display:\s*none;/s);
 });
 
 // Workspace app 경로의 새 AI 파일을 test에서 같은 방식으로 읽습니다.

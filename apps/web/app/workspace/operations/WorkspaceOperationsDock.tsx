@@ -100,10 +100,11 @@ export function WorkspaceOperationsDock({
   return (
     <>
       <aside
-      aria-label="Workspace 작업 도구"
-      className={`${styles.dock} ${panelOpen ? "" : styles.dockCollapsed}`}
-      data-project-id={projectId}
-    >
+        aria-label="Workspace 작업 도구"
+        className={`${styles.dock} ${panelOpen ? "" : styles.dockCollapsed}`}
+        data-project-id={projectId}
+        hidden={isAssistantOpen}
+      >
       <nav aria-label="작업 단계" className={styles.dockToolbar} role="tablist">
         <button
           aria-label="Terraform Preview"
