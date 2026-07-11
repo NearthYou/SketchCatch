@@ -17,6 +17,7 @@ import {
 import type { LocalProjectDraft } from "./project-draft-persistence";
 import { WorkspaceAiChatDock } from "./WorkspaceAiChatDock";
 import { WorkspaceRightPanel } from "./WorkspaceRightPanel";
+import { restoreSavedDiagram } from "./workspace-draft-restore";
 import { normalizeDiagramJsonConventions } from "./workspace-ai-diagram-adapter";
 import type { WorkspaceRightPanelView } from "./workspace-right-panel.types";
 import type {
@@ -168,7 +169,7 @@ export function WorkspaceDraftManager({
           return;
         }
 
-        const nextDiagram = normalizeDiagramJsonConventions(storedLocalDraft?.diagramJson ?? EMPTY_DIAGRAM);
+        const nextDiagram = restoreSavedDiagram(storedLocalDraft?.diagramJson, EMPTY_DIAGRAM);
         latestDiagramRef.current = nextDiagram;
         hasUnsavedChangesRef.current = false;
         draftChangeVersionRef.current = 0;

@@ -24,6 +24,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { useMemo, useState, type DragEvent } from "react";
 import type { ResourceArea, ResourceItem } from "../../../../packages/types/src/index";
+import { TemplateGallery } from "../../components/templates/TemplateGallery";
 import { clearActiveResourceDragPayload, writeResourceDragPayload } from "../diagram-editor/diagram-utils";
 import {
   defaultResourceCatalogProvider,
@@ -378,6 +379,7 @@ function TemplatesPanel({
   );
 }
 
+// 현재 Board에 적용할 Template을 공통 Gallery에서 고르게 합니다.
 function TemplateLibraryModal({
   onClose,
   onTemplateApply,
@@ -401,25 +403,14 @@ function TemplateLibraryModal({
           </button>
         </div>
 
-        <div className="templateModalGrid">
-          {templates.map((template) => (
-            <article className="templateModalCard" key={template.id}>
-              <div>
-                <span>{template.tags.join(" · ")}</span>
-                <h3>{template.title}</h3>
-                <p>{template.description}</p>
-              </div>
-              <div className="templateModalPreview" aria-hidden="true">
-                {template.diagramJson.nodes.slice(0, 5).map((node) => (
-                  <i key={node.id} style={{ left: `${Math.min(78, node.position.x / 10)}%`, top: `${Math.min(76, node.position.y / 8)}%` }} />
-                ))}
-              </div>
-              <button className="templateModalApplyButton" onClick={() => onTemplateApply(template)} type="button">
-                이 템플릿 적용
-              </button>
-            </article>
-          ))}
-        </div>
+        <TemplateGallery
+          actionLabel="현재 Board에 적용"
+          onSelect={(templateId) => {
+            const template = templates.find((candidate) => candidate.id === templateId);
+            if (template) onTemplateApply(template);
+          }}
+          templates={templates}
+        />
       </section>
     </div>
   );

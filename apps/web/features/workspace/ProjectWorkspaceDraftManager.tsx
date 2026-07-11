@@ -7,7 +7,7 @@ import { DiagramEditor } from "../diagram-editor";
 import { EMPTY_DIAGRAM } from "../diagram-editor/constants";
 import { WorkspaceAiChatDock } from "./WorkspaceAiChatDock";
 import { WorkspaceRightPanel } from "./WorkspaceRightPanel";
-import { normalizeDiagramJsonConventions } from "./workspace-ai-diagram-adapter";
+import { restoreSavedDiagram } from "./workspace-draft-restore";
 import type {
   TerraformIssueAiRequest,
   TerraformPreviewAiRequest,
@@ -318,7 +318,7 @@ export function ProjectWorkspaceDraftManager({
           return;
         }
 
-        const nextDiagram = normalizeDiagramJsonConventions(loadedDraft.diagramJson);
+        const nextDiagram = restoreSavedDiagram(loadedDraft.diagramJson, EMPTY_DIAGRAM);
         latestDiagramRef.current = nextDiagram;
         hasPendingLocalChangesRef.current = false;
         serverDirtyRef.current = loadedDraft.source === "local";

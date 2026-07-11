@@ -7,9 +7,11 @@ const selectMenuSource = readUiFile("SelectMenu.tsx");
 const selectMenuStylesSource = readUiFile("select-menu.module.css");
 
 test("SelectMenu exposes a workspace tone for DESIGN.md workspace panels", () => {
-  assert.match(selectMenuSource, /export type SelectMenuTone = "default" \| "dashboard" \| "purple" \| "workspace";/);
+  assert.match(selectMenuSource, /export type SelectMenuTone = "default" \| "dashboard" \| "workspace";/);
   assert.match(selectMenuSource, /tone === "workspace"/);
   assert.match(selectMenuSource, /return "workspaceTone";/);
+  assert.doesNotMatch(selectMenuSource, /purpleTone|tone === "purple"/);
+  assert.doesNotMatch(selectMenuStylesSource, /\.purpleTone/);
 });
 
 test("SelectMenu workspace tone uses neutral workspace tokens", () => {

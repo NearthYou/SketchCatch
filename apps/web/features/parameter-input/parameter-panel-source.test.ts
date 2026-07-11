@@ -113,12 +113,12 @@ test("Region and AZ area panels avoid duplicate visible selector labels", () => 
   assert.match(availabilityZoneFieldSource, /showLabel \? \(/);
 });
 
-test("ParameterInputPanel styles apply DESIGN.md tokens after the legacy Blueprint skin", () => {
-  const legacyBlueprintIndex = stylesSource.indexOf("/* Blueprint inspector skin */");
+test("ParameterInputPanel styles use the DESIGN.md surface without a legacy skin", () => {
   const designPassIndex = stylesSource.indexOf("/* DESIGN.md parameter input pass */");
 
-  assert.ok(legacyBlueprintIndex > -1, "Expected the legacy Blueprint inspector skin to exist");
-  assert.ok(designPassIndex > legacyBlueprintIndex, "Expected the DESIGN.md pass to override Blueprint styles");
+  assert.ok(designPassIndex > -1, "Expected the DESIGN.md parameter input pass to exist");
+  assert.doesNotMatch(stylesSource, /\/\* Blueprint inspector skin \*\//);
+  assert.doesNotMatch(stylesSource, /var\(--bp-/);
 
   const panelRule = getLastCssRuleAfter(stylesSource, "panel", designPassIndex);
   const iconRule = getLastCssRuleContainingAfter(stylesSource, "div.resourceIcon", designPassIndex);
@@ -143,6 +143,8 @@ test("ParameterInputPanel styles apply DESIGN.md tokens after the legacy Bluepri
 
   const legacyAccentTokens =
     /var\(--bp-|#6f4cf6|#5f3de8|#f4f1ff|#f1edff|#d6cbff|#8b71ff|#4b2bd6|#ede8ff/i;
+
+  assert.doesNotMatch(stylesSource, legacyAccentTokens);
 
   for (const designRule of [
     panelRule,
