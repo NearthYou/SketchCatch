@@ -246,6 +246,67 @@ test("POST /api/ai/architecture-draft returns a board-ready ArchitectureJson for
   await app.close();
 });
 
+test("POST /api/ai/architecture-draft keeps the Repository Analysis Template selection", async () => {
+  const app = buildApp();
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    payload: {
+      prompt: "EC2와 RDS 기반 3계층 애플리케이션으로 바꿔줘",
+      templateId: "static-web-hosting"
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+
+  const body = architectureDraftResponseSchema.parse(response.json());
+
+  assert.equal(
+    body.metadata.assumptions.some((assumption) =>
+      assumption.includes("Static Web Hosting (static-web-hosting) Template을 기본 결정으로 유지")
+    ),
+    true
+  );
+  assert.deepEqual(
+    body.architectureJson.nodes
+      .filter((node) => node.id.startsWith("fixed-template-static-web-hosting-"))
+      .map((node) => node.config.terraformResourceType),
+    [
+      "aws_s3_bucket",
+      "aws_s3_object",
+      "aws_s3_bucket_public_access_block",
+      "aws_cloudfront_origin_access_control",
+      "aws_cloudfront_distribution",
+      "aws_s3_bucket_policy"
+    ]
+  );
+  assert.equal(body.architectureJson.nodes.length, 6);
+  assert.equal(
+    body.architectureJson.nodes.some((node) => node.type === "EC2" || node.type === "RDS"),
+    false
+  );
+
+  await app.close();
+});
+
+test("POST /api/ai/architecture-draft rejects an unknown Repository Analysis Template", async () => {
+  const app = buildApp();
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    payload: {
+      prompt: "정적 웹사이트를 배포하고 싶어",
+      templateId: "unknown-template"
+    }
+  });
+
+  assert.equal(response.statusCode, 400);
+
+  await app.close();
+});
+
 test("POST /api/ai/architecture-draft selects API server and database backend templates", async () => {
   const app = buildApp();
 

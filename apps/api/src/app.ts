@@ -66,7 +66,12 @@ export type BuildAppOptions = {
   projectDeletionStorage?: ProjectDeletionStorage;
   sourceRepositoryRoutes?: Pick<
     SourceRepositoryRouteOptions,
-    "createSourceRepositoryRepository" | "githubAppClient" | "githubAppSlug" | "githubAppStateSecret"
+    | "createSourceRepositoryRepository"
+    | "githubAppClient"
+    | "githubAppSlug"
+    | "githubAppStateSecret"
+    | "githubRepositoryEvidenceReader"
+    | "sourceRepositoryAnalysisRateLimiter"
   >;
   runtimeCache?: RuntimeCache;
   validateTerraformPreviewCode?: TerraformRouteOptions["validateTerraformPreviewCode"];
@@ -165,7 +170,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   });
 
   app.register(registerHealthRoutes);
-  app.register(registerAiRoutes, createAiRouteOptions(options, runtimeCache));
+  app.register(registerAiRoutes, createAiRouteOptions(options, runtimeCache, getAppDatabaseClient));
   app.register(registerAuthRoutes, {
     prefix: "/api",
     getDatabaseClient: getAppDatabaseClient,
@@ -229,22 +234,16 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
 // AI route 옵션은 undefined 필드를 넘기지 않게 분리해 exact optional 타입을 지킵니다.
 function createAiRouteOptions(
   options: BuildAppOptions,
-  runtimeCache: RuntimeCache
+  runtimeCache: RuntimeCache,
+  getDatabaseClient: () => DatabaseClient
 ): AiRouteOptions & { readonly prefix: "/api" } {
-  if (
-    options.analyzePreDeploymentCheck === undefined &&
-    options.createArchitectureDraftResponse === undefined &&
-    options.createLlmExplanation === undefined &&
-    options.createSafetyFindingExplanation === undefined &&
-    options.safetyExplanationTimeoutMs === undefined &&
-    options.pricingRateProvider === undefined
-  ) {
-    return { prefix: "/api", runtimeCache };
-  }
-
   return {
     prefix: "/api",
     runtimeCache,
+    getDatabaseClient,
+    ...(options.sourceRepositoryRoutes?.createSourceRepositoryRepository
+      ? { createSourceRepositoryRepository: options.sourceRepositoryRoutes.createSourceRepositoryRepository }
+      : {}),
     ...(options.analyzePreDeploymentCheck !== undefined
       ? { analyzePreDeploymentCheck: options.analyzePreDeploymentCheck }
       : {}),
@@ -294,8 +293,16 @@ function createTerraformRouteOptions(
 
 function setCorsHeaders(request: FastifyRequest, reply: FastifyReply): void {
   const origin = firstHeaderValue(request.headers.origin);
+  const configuredPublicBaseUrl = process.env.SKETCHCATCH_PUBLIC_BASE_URL?.trim();
+  const configuredPublicOrigin =
+    configuredPublicBaseUrl && URL.canParse(configuredPublicBaseUrl)
+      ? new URL(configuredPublicBaseUrl).origin
+      : undefined;
 
-  if (origin === undefined || !allowedCorsOrigins.has(origin)) {
+  if (
+    origin === undefined ||
+    (!allowedCorsOrigins.has(origin) && origin !== configuredPublicOrigin)
+  ) {
     return;
   }
 
@@ -304,6 +311,7 @@ function setCorsHeaders(request: FastifyRequest, reply: FastifyReply): void {
     fallbackCorsAllowedHeaders;
 
   reply.header("Access-Control-Allow-Origin", origin);
+  reply.header("Access-Control-Allow-Credentials", "true");
   reply.header("Access-Control-Allow-Methods", corsAllowedMethods);
   reply.header("Access-Control-Allow-Headers", requestedHeaders);
   reply.header("Vary", "Origin");

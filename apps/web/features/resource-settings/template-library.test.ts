@@ -4,12 +4,30 @@ import type { DiagramJson } from "../../../../packages/types/src";
 import { isAreaNode } from "../diagram-editor/area-nodes";
 import {
   applyTemplateToDiagramWithBackup,
+  buildBoardTemplateDiagram,
   filterBoardTemplates,
   listBoardTemplateTags,
   listBoardTemplates,
   readTemplateOverwriteBackups,
   TEMPLATE_OVERWRITE_BACKUP_STORAGE_KEY
 } from "./template-library";
+
+test("buildBoardTemplateDiagram materializes Repository Analysis TemplateDefinition IDs", () => {
+  const diagram = buildBoardTemplateDiagram("static-web-hosting", {
+    projectSlug: "analysis-qa",
+    shortId: "workspace"
+  });
+
+  assert.ok(diagram);
+  assert.equal(diagram.nodes.length, 6);
+  assert.equal(
+    buildBoardTemplateDiagram("unsupported-template", {
+      projectSlug: "analysis-qa",
+      shortId: "workspace"
+    }),
+    undefined
+  );
+});
 
 test("filterBoardTemplates searches title, description, and tags", () => {
   const templates = listBoardTemplates();

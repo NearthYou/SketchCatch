@@ -3,8 +3,19 @@ import type { DeploymentLiveProfile } from "@sketchcatch/types";
 import { getLiveApplySupportedResourceTypes } from "./deployment-plan-summary.js";
 
 const allowedTopLevelBlocks = new Set(["terraform", "provider", "resource", "data", "variable", "output", "locals"]);
-const liveApplySupportedDataSourceTypes = new Set(["aws_ami"]);
-const allowedProviderSources = new Set(["hashicorp/aws", "registry.terraform.io/hashicorp/aws"]);
+const liveApplySupportedDataSourceTypes = new Set([
+  "archive_file",
+  "aws_ami",
+  "aws_eks_cluster_auth"
+]);
+const allowedProviderSources = new Set([
+  "hashicorp/aws",
+  "registry.terraform.io/hashicorp/aws",
+  "hashicorp/archive",
+  "registry.terraform.io/hashicorp/archive",
+  "hashicorp/kubernetes",
+  "registry.terraform.io/hashicorp/kubernetes"
+]);
 const allowedAwsProviderRegion = "ap-northeast-2";
 const allowedAwsProviderAttributes = new Set(["alias", "region"]);
 const disallowedTerraformFunctions = new Set([
@@ -176,7 +187,7 @@ function validateTopLevelBlock(block: HclBlock, supportedResourceTypes: Readonly
     );
   }
 
-  if (block.type === "provider" && block.labels[0] !== "aws") {
+  if (block.type === "provider" && block.labels[0] !== "aws" && block.labels[0] !== "kubernetes") {
     throw new TerraformArtifactSafetyError(
       `Terraform provider "${block.labels[0] ?? ""}" is not allowed before live deployment at line ${block.line}`
     );
@@ -219,7 +230,13 @@ function validateRequiredProviderAssignment(
     return;
   }
 
-  if (providerName.value !== "aws" && providerName.value !== "source" && providerName.value !== "version") {
+  if (
+    providerName.value !== "aws" &&
+    providerName.value !== "archive" &&
+    providerName.value !== "kubernetes" &&
+    providerName.value !== "source" &&
+    providerName.value !== "version"
+  ) {
     throw new TerraformArtifactSafetyError(
       `Terraform required provider "${providerName.value}" is not allowed before live deployment at line ${providerName.line}`
     );

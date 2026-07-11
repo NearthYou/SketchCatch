@@ -7,6 +7,8 @@ import {
   createGitHubInstallUrl,
   listGitHubInstalledRepositories,
   listGitHubInstallationRepositories,
+  requireRepositoryAnalysisTemplateId,
+  RepositoryAnalysisTemplateSelectionError,
   SourceRepositoryNotFoundError,
   SourceRepositoryConflictError,
   SourceRepositoryStateError,
@@ -88,7 +90,7 @@ test("GitHub App installed repositories include repos not yet stored in SketchCa
   const github = createFakeGitHubAppClient([
     createRepositoryCandidate({ githubRepositoryId: "repo-1", name: "connected" }),
     createRepositoryCandidate({ githubRepositoryId: "repo-2", name: "handoff-test" })
-  ]);
+  ], [createInstallation("42", "github-account-1")]);
   const result = await listGitHubInstalledRepositories(
     {
       projectId,
@@ -110,6 +112,87 @@ test("GitHub App installed repositories include repos not yet stored in SketchCa
       { fullName: "owner/connected", installationId: "42", connectedStatus: "active" },
       { fullName: "owner/handoff-test", installationId: "42", connectedStatus: null }
     ]
+  );
+});
+
+test("installed repositories only expose installations owned by the signed-in GitHub identity", async () => {
+  const repository = createInMemorySourceRepositoryRepository([], "github-account-1");
+  const github = createFakeGitHubAppClient(
+    [createRepositoryCandidate({ githubRepositoryId: "repo-1" })],
+    [
+      createInstallation("42", "github-account-1"),
+      createInstallation("99", "another-account")
+    ]
+  );
+
+  const result = await listGitHubInstalledRepositories(
+    {
+      projectId,
+      accessContext: createAccessContext(userId),
+      stateSecret
+    },
+    repository,
+    github
+  );
+
+  assert.deepEqual(result.repositories.map((candidate) => candidate.installationId), ["42"]);
+});
+
+test("installed repositories require a linked GitHub identity", async () => {
+  const repository = createInMemorySourceRepositoryRepository([], null);
+
+  await assert.rejects(
+    () =>
+      listGitHubInstalledRepositories(
+        {
+          projectId,
+          accessContext: createAccessContext(userId),
+          stateSecret
+        },
+        repository,
+        createFakeGitHubAppClient([])
+      ),
+    (error: unknown) =>
+      error instanceof SourceRepositoryConflictError &&
+      error.message === "GIT_APP_GITHUB_IDENTITY_REQUIRED"
+  );
+});
+
+test("connect rejects an installation owned by another GitHub identity", async () => {
+  const repository = createInMemorySourceRepositoryRepository([], "github-account-1");
+  const github = createFakeGitHubAppClient(
+    [createRepositoryCandidate({ githubRepositoryId: "repo-1" })],
+    [createInstallation("99", "another-account")]
+  );
+  const install = await createGitHubInstallUrl(
+    {
+      projectId,
+      accessContext: createAccessContext(userId),
+      appSlug: "sketchcatch-test",
+      stateSecret
+    },
+    repository
+  );
+  const state = new URL(install.installUrl).searchParams.get("state");
+  assert.ok(state);
+
+  await assert.rejects(
+    () =>
+      connectGitHubSourceRepository(
+        {
+          projectId,
+          installationId: "99",
+          githubRepositoryId: "repo-1",
+          state,
+          accessContext: createAccessContext(userId),
+          stateSecret
+        },
+        repository,
+        github
+      ),
+    (error: unknown) =>
+      error instanceof SourceRepositoryConflictError &&
+      error.message === "GIT_APP_INSTALLATION_FORBIDDEN"
   );
 });
 
@@ -332,6 +415,60 @@ test("GitHub App state cannot be exchanged for an inaccessible project", async (
   );
 });
 
+test("AI handoff resolves only the Template selected by the stored Repository Analysis", async () => {
+  const repository = createInMemorySourceRepositoryRepository([
+    createSourceRepositoryRecord({
+      analysisResult: {
+        status: "template_selected",
+        templateId: "static-web-hosting",
+        applicationUnits: [],
+        evidence: [],
+        missingEvidence: [],
+        selectionReasons: ["static frontend"]
+      }
+    })
+  ]);
+
+  const templateId = await requireRepositoryAnalysisTemplateId(
+    {
+      projectId,
+      sourceRepositoryId: "source-repository-id",
+      accessContext: createAccessContext(userId)
+    },
+    repository
+  );
+
+  assert.equal(templateId, "static-web-hosting");
+});
+
+test("AI handoff rejects a repository without a successful Template Selection", async () => {
+  const repository = createInMemorySourceRepositoryRepository([
+    createSourceRepositoryRecord({
+      analysisResult: {
+        status: "template_selection_failed",
+        templateId: null,
+        applicationUnits: [],
+        evidence: [],
+        missingEvidence: ["package_json"],
+        mismatchReasons: ["unsupported"]
+      }
+    })
+  ]);
+
+  await assert.rejects(
+    () =>
+      requireRepositoryAnalysisTemplateId(
+        {
+          projectId,
+          sourceRepositoryId: "source-repository-id",
+          accessContext: createAccessContext(userId)
+        },
+        repository
+      ),
+    RepositoryAnalysisTemplateSelectionError
+  );
+});
+
 function createAccessContext(accessUserId: string): ProjectAccessContext {
   return {
     kind: "user",
@@ -339,18 +476,13 @@ function createAccessContext(accessUserId: string): ProjectAccessContext {
   };
 }
 
-function createFakeGitHubAppClient(repositories: GitHubRepositoryCandidate[]): GitHubAppClient {
+function createFakeGitHubAppClient(
+  repositories: GitHubRepositoryCandidate[],
+  installations = [createInstallation("12345", "github-account-1")]
+): GitHubAppClient {
   return {
     async listInstallations() {
-      return [
-        {
-          installationId: "42",
-          accountLogin: "owner",
-          accountType: "Organization",
-          repositorySelection: "selected",
-          htmlUrl: "https://github.com/settings/installations/42"
-        }
-      ];
+      return installations;
     },
     async listInstallationRepositories() {
       return repositories;
@@ -371,12 +503,16 @@ function createFakeGitHubAppClient(repositories: GitHubRepositoryCandidate[]): G
 }
 
 function createInMemorySourceRepositoryRepository(
-  initialRows: SourceRepositoryRecord[] = []
+  initialRows: SourceRepositoryRecord[] = [],
+  githubProviderUserId: string | null = "github-account-1"
 ): SourceRepositoryRepository & { rows: SourceRepositoryRecord[] } {
   const rows = [...initialRows];
 
   return {
     rows,
+    async findGitHubProviderUserId(requestUserId) {
+      return requestUserId === userId ? githubProviderUserId : null;
+    },
     async findAccessibleProject(requestProjectId, accessContext) {
       if (requestProjectId !== projectId || accessContext.userId !== userId) {
         return undefined;
@@ -421,7 +557,37 @@ function createInMemorySourceRepositoryRepository(
       rows.push(row);
 
       return row;
+    },
+    // 실제 repository와 같은 active-row 조건으로 분석 저장 경쟁을 재현한다.
+    async saveProjectSourceRepositoryAnalysis(input) {
+      const row = rows.find(
+        (candidate) =>
+          candidate.projectId === input.projectId &&
+          candidate.id === input.sourceRepositoryId &&
+          candidate.status === "active"
+      );
+
+      if (!row) {
+        return undefined;
+      }
+
+      row.analysisResult = input.aiHandoff;
+      row.analysisRevision = input.repositoryRevision;
+      row.analyzedAt = input.analyzedAt;
+      row.updatedAt = input.analyzedAt;
+      return row;
     }
+  };
+}
+
+function createInstallation(installationId: string, accountId: string) {
+  return {
+    installationId,
+    accountId,
+    accountLogin: `account-${accountId}`,
+    accountType: "User",
+    repositorySelection: "selected" as const,
+    htmlUrl: `https://github.com/settings/installations/${installationId}`
   };
 }
 
@@ -461,6 +627,9 @@ function createSourceRepositoryRecord(
     repositoryUrl: overrides.repositoryUrl ?? "https://github.com/owner/repo",
     visibility: overrides.visibility ?? "private",
     archived: overrides.archived ?? false,
+    analysisResult: overrides.analysisResult ?? null,
+    analysisRevision: overrides.analysisRevision ?? null,
+    analyzedAt: overrides.analyzedAt ?? null,
     disconnectedAt: overrides.disconnectedAt ?? null,
     createdAt: overrides.createdAt ?? now,
     updatedAt: overrides.updatedAt ?? now

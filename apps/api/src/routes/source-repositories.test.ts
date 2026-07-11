@@ -6,13 +6,22 @@ import type { GitHubRepositoryCandidate } from "@sketchcatch/types";
 import { createAccessToken } from "../auth/tokens.js";
 import type { DatabaseClient } from "../db/client.js";
 import { projects, users } from "../db/schema.js";
-import type { GitHubAppClient } from "../source-repositories/github-app-client.js";
+import type {
+  GitHubAppClient,
+  GitHubRepositoryEvidenceReader
+} from "../source-repositories/github-app-client.js";
+import {
+  GitHubApiRequestError,
+  GitHubRepositoryIdentityMismatchError,
+  GitHubRepositoryTreeTruncatedError
+} from "../source-repositories/github-app-client.js";
 import {
   type CreateActiveGitHubSourceRepositoryInput,
   type SourceRepositoryRecord,
   type SourceRepositoryRepository
 } from "../source-repositories/source-repository-service.js";
 import type { ProjectAccessContext } from "../git-cicd/git-cicd-handoff-service.js";
+import type { RateLimiter } from "../rate-limit/in-memory-rate-limiter.js";
 import { registerSourceRepositoryRoutes } from "./source-repositories.js";
 
 process.env.NODE_ENV = "test";
@@ -20,11 +29,316 @@ process.env.AUTH_TOKEN_SECRET = "test-auth-token-secret-with-at-least-32-charact
 
 const projectId = "11111111-1111-4111-8111-111111111111";
 const userId = "22222222-2222-4222-8222-222222222222";
+const sourceRepositoryId = "33333333-3333-4333-8333-333333333333";
 const stateSecret = "route-github-app-state-secret-for-tests";
 const fixedNow = new Date("2026-07-05T00:00:00.000Z");
 
 type UserRecord = typeof users.$inferSelect;
 type ProjectRecord = typeof projects.$inferSelect;
+
+test("source repository routes store and return the latest active repository analysis", async (t) => {
+  // Given
+  const repository = new FakeSourceRepositoryRepository([
+    createSourceRepositoryRecord({ id: sourceRepositoryId })
+  ]);
+  const readCalls: Array<{
+    installationId: string;
+    expectedRepositoryId: string;
+    owner: string;
+    name: string;
+  }> = [];
+  const githubRepositoryEvidenceReader: GitHubRepositoryEvidenceReader = {
+    // active repository 분석이 GitHub 읽기 경계에 넘기는 값을 기록한다.
+    async readRepositoryEvidence(input) {
+      readCalls.push(input);
+      return {
+        revision: "analysis-revision",
+        treePaths: ["apps/web/package.json", "apps/web/vite.config.ts", "package.json"],
+        files: [
+          {
+            path: "package.json",
+            content: JSON.stringify({ private: true, workspaces: ["apps/*"] })
+          },
+          {
+            path: "apps/web/package.json",
+            content: JSON.stringify({ dependencies: { react: "19.0.0", vite: "7.0.0" } })
+          },
+          { path: "apps/web/vite.config.ts", content: "export default {}" }
+        ]
+      };
+    }
+  };
+  const app = await buildSourceRepositoryRouteApp({
+    repository,
+    githubRepositoryEvidenceReader
+  });
+  t.after(() => app.close());
+
+  // When
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/projects/${projectId}/source-repositories/${sourceRepositoryId}/analyze`,
+    headers: await authHeaders()
+  });
+
+  // Then
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.json().sourceRepositoryId, sourceRepositoryId);
+  assert.equal(response.json().repositoryRevision, "analysis-revision");
+  assert.equal(response.json().aiHandoff.templateId, "static-web-hosting");
+  assert.deepEqual(readCalls, [
+    {
+      installationId: "12345",
+      expectedRepositoryId: "repo-1",
+      owner: "owner",
+      name: "repo"
+    }
+  ]);
+  assert.equal(repository.rows.length, 1);
+  assert.equal(repository.rows[0]?.analysisRevision, "analysis-revision");
+  assert.equal(repository.rows[0]?.analysisResult?.status, "template_selected");
+
+  const listResponse = await app.inject({
+    method: "GET",
+    url: `/api/projects/${projectId}/source-repositories`,
+    headers: await authHeaders()
+  });
+
+  assert.equal(listResponse.statusCode, 200);
+  assert.equal(listResponse.json().repositories[0]?.analysis.repositoryRevision, "analysis-revision");
+  assert.equal(listResponse.json().repositories[0]?.analysis.aiHandoff.templateId, "static-web-hosting");
+});
+
+test("source repository routes return Template Selection Failure as a successful analysis", async (t) => {
+  // Given
+  const repository = new FakeSourceRepositoryRepository([
+    createSourceRepositoryRecord({ id: sourceRepositoryId })
+  ]);
+  const githubRepositoryEvidenceReader: GitHubRepositoryEvidenceReader = {
+    // 지원 Template이 없는 backend snapshot을 반환한다.
+    async readRepositoryEvidence() {
+      return {
+        revision: "unsupported-revision",
+        treePaths: ["package.json", "src/server.ts"],
+        files: [
+          {
+            path: "package.json",
+            content: JSON.stringify({ dependencies: { fastify: "5.0.0" } })
+          }
+        ]
+      };
+    }
+  };
+  const app = await buildSourceRepositoryRouteApp({
+    repository,
+    githubRepositoryEvidenceReader
+  });
+  t.after(() => app.close());
+
+  // When
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/projects/${projectId}/source-repositories/${sourceRepositoryId}/analyze`,
+    headers: await authHeaders()
+  });
+
+  // Then
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.json().aiHandoff.status, "template_selection_failed");
+  assert.equal(response.json().aiHandoff.templateId, null);
+});
+
+test("source repository routes reject inactive repositories before reading GitHub", async (t) => {
+  // Given
+  const repository = new FakeSourceRepositoryRepository([
+    createSourceRepositoryRecord({ id: sourceRepositoryId, status: "inactive" })
+  ]);
+  let readCount = 0;
+  const githubRepositoryEvidenceReader: GitHubRepositoryEvidenceReader = {
+    // 호출 여부를 관찰할 수 있는 빈 snapshot reader다.
+    async readRepositoryEvidence() {
+      readCount += 1;
+      return { revision: "unused", treePaths: [], files: [] };
+    }
+  };
+  const app = await buildSourceRepositoryRouteApp({
+    repository,
+    githubRepositoryEvidenceReader
+  });
+  t.after(() => app.close());
+
+  // When
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/projects/${projectId}/source-repositories/${sourceRepositoryId}/analyze`,
+    headers: await authHeaders()
+  });
+
+  // Then
+  assert.equal(response.statusCode, 409);
+  assert.equal(response.json().error, "conflict");
+  assert.equal(readCount, 0);
+});
+
+test("source repository routes rate limit repeated analysis before reading GitHub", async (t) => {
+  // Given
+  const repository = new FakeSourceRepositoryRepository([
+    createSourceRepositoryRecord({ id: sourceRepositoryId })
+  ]);
+  let readCount = 0;
+  const githubRepositoryEvidenceReader: GitHubRepositoryEvidenceReader = {
+    // rate limit 뒤 GitHub 읽기가 실행되지 않는지 계수한다.
+    async readRepositoryEvidence() {
+      readCount += 1;
+      return { revision: "unused", treePaths: [], files: [] };
+    }
+  };
+  const sourceRepositoryAnalysisRateLimiter: RateLimiter = {
+    // QA 요청을 고정된 재시도 시간으로 차단한다.
+    consume() {
+      return { allowed: false, retryAfterSeconds: 42 };
+    }
+  };
+  const app = await buildSourceRepositoryRouteApp({
+    repository,
+    githubRepositoryEvidenceReader,
+    sourceRepositoryAnalysisRateLimiter
+  });
+  t.after(() => app.close());
+
+  // When
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/projects/${projectId}/source-repositories/${sourceRepositoryId}/analyze`,
+    headers: await authHeaders()
+  });
+
+  // Then
+  assert.equal(response.statusCode, 429);
+  assert.equal(response.headers["retry-after"], "42");
+  assert.equal(response.json().error, "too_many_requests");
+  assert.equal(readCount, 0);
+});
+
+test("source repository routes map incomplete GitHub trees to conflict", async (t) => {
+  // Given
+  const repository = new FakeSourceRepositoryRepository([
+    createSourceRepositoryRecord({ id: sourceRepositoryId })
+  ]);
+  const githubRepositoryEvidenceReader: GitHubRepositoryEvidenceReader = {
+    // GitHub가 일부 tree만 반환한 정적 분석 실패를 재현한다.
+    async readRepositoryEvidence() {
+      throw new GitHubRepositoryTreeTruncatedError();
+    }
+  };
+  const app = await buildSourceRepositoryRouteApp({
+    repository,
+    githubRepositoryEvidenceReader
+  });
+  t.after(() => app.close());
+
+  // When
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/projects/${projectId}/source-repositories/${sourceRepositoryId}/analyze`,
+    headers: await authHeaders()
+  });
+
+  // Then
+  assert.equal(response.statusCode, 409);
+  assert.equal(response.json().error, "conflict");
+  assert.equal(response.json().message, "GIT_APP_REPOSITORY_TREE_TRUNCATED");
+});
+
+test("source repository routes explain an invalid GitHub App authentication", async (t) => {
+  // Given
+  const repository = new FakeSourceRepositoryRepository([
+    createSourceRepositoryRecord({ id: sourceRepositoryId })
+  ]);
+  const githubRepositoryEvidenceReader: GitHubRepositoryEvidenceReader = {
+    // 만료되거나 잘못된 GitHub App 인증으로 evidence를 읽지 못한 상황을 재현한다.
+    async readRepositoryEvidence() {
+      throw new GitHubApiRequestError(401, "bad credentials");
+    }
+  };
+  const app = await buildSourceRepositoryRouteApp({
+    repository,
+    githubRepositoryEvidenceReader
+  });
+  t.after(() => app.close());
+
+  // When
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/projects/${projectId}/source-repositories/${sourceRepositoryId}/analyze`,
+    headers: await authHeaders()
+  });
+
+  // Then
+  assert.equal(response.statusCode, 409);
+  assert.equal(response.json().error, "conflict");
+  assert.equal(response.json().message, "GIT_APP_AUTHENTICATION_FAILED");
+});
+
+test("source repository routes explain a disconnected GitHub repository", async (t) => {
+  // Given
+  const repository = new FakeSourceRepositoryRepository([
+    createSourceRepositoryRecord({ id: sourceRepositoryId })
+  ]);
+  const githubRepositoryEvidenceReader: GitHubRepositoryEvidenceReader = {
+    // GitHub App 설치 해제나 repository 권한 제거로 접근할 수 없는 상황을 재현한다.
+    async readRepositoryEvidence() {
+      throw new GitHubApiRequestError(404, "not found");
+    }
+  };
+  const app = await buildSourceRepositoryRouteApp({
+    repository,
+    githubRepositoryEvidenceReader
+  });
+  t.after(() => app.close());
+
+  // When
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/projects/${projectId}/source-repositories/${sourceRepositoryId}/analyze`,
+    headers: await authHeaders()
+  });
+
+  // Then
+  assert.equal(response.statusCode, 409);
+  assert.equal(response.json().error, "conflict");
+  assert.equal(response.json().message, "GIT_APP_REPOSITORY_ACCESS_UNAVAILABLE");
+});
+
+test("source repository routes reject a reused GitHub repository path", async (t) => {
+  // Given
+  const repository = new FakeSourceRepositoryRepository([
+    createSourceRepositoryRecord({ id: sourceRepositoryId })
+  ]);
+  const githubRepositoryEvidenceReader: GitHubRepositoryEvidenceReader = {
+    // 연결된 repository ID와 현재 경로의 ID가 다른 보안 경계를 재현한다.
+    async readRepositoryEvidence() {
+      throw new GitHubRepositoryIdentityMismatchError();
+    }
+  };
+  const app = await buildSourceRepositoryRouteApp({
+    repository,
+    githubRepositoryEvidenceReader
+  });
+  t.after(() => app.close());
+
+  // When
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/projects/${projectId}/source-repositories/${sourceRepositoryId}/analyze`,
+    headers: await authHeaders()
+  });
+
+  // Then
+  assert.equal(response.statusCode, 409);
+  assert.equal(response.json().error, "conflict");
+  assert.equal(response.json().message, "GIT_APP_REPOSITORY_IDENTITY_MISMATCH");
+});
 
 test("source repository routes issue a GitHub install URL with an API-signed state", async (t) => {
   const repository = new FakeSourceRepositoryRepository();
@@ -231,9 +545,12 @@ test("source repository routes reject archived repository selections and client-
   assert.equal(identityResponse.statusCode, 400);
 });
 
+// route 테스트에 GitHub 읽기 경계를 주입해 실제 외부 호출 없이 HTTP 계약을 확인한다.
 async function buildSourceRepositoryRouteApp(input: {
   repository: FakeSourceRepositoryRepository;
   githubAppClient?: GitHubAppClient;
+  githubRepositoryEvidenceReader?: GitHubRepositoryEvidenceReader;
+  sourceRepositoryAnalysisRateLimiter?: RateLimiter;
 }) {
   const app = Fastify({ logger: false });
   const fakeAuthDb = new SourceRepositoryRouteFakeAuthDb([createUserRecord()]);
@@ -255,6 +572,8 @@ async function buildSourceRepositoryRouteApp(input: {
     getDatabaseClient: () => fakeAuthDb.client,
     createSourceRepositoryRepository: () => input.repository,
     githubAppClient: input.githubAppClient ?? createFakeGitHubAppClient([]),
+    githubRepositoryEvidenceReader: input.githubRepositoryEvidenceReader,
+    sourceRepositoryAnalysisRateLimiter: input.sourceRepositoryAnalysisRateLimiter,
     githubAppSlug: "sketchcatch-test",
     githubAppStateSecret: stateSecret,
     githubAppCallbackUrl: "https://sketchcatch.example/integrations/github/callback"
@@ -289,6 +608,10 @@ class FakeSourceRepositoryRepository implements SourceRepositoryRepository {
   }> = [];
 
   constructor(readonly rows: SourceRepositoryRecord[] = []) {}
+
+  async findGitHubProviderUserId(candidateUserId: string) {
+    return candidateUserId === userId ? "github-account-1" : null;
+  }
 
   async findAccessibleProject(candidateProjectId: string, accessContext: ProjectAccessContext) {
     this.findAccessibleProjectCalls.push({
@@ -343,6 +666,26 @@ class FakeSourceRepositoryRepository implements SourceRepositoryRepository {
 
     return row;
   }
+
+  // 분석 중 연결 상태가 바뀌지 않은 active repository에 마지막 결과를 저장한다.
+  async saveProjectSourceRepositoryAnalysis(input: Parameters<SourceRepositoryRepository["saveProjectSourceRepositoryAnalysis"]>[0]) {
+    const row = this.rows.find(
+      (candidate) =>
+        candidate.projectId === input.projectId &&
+        candidate.id === input.sourceRepositoryId &&
+        candidate.status === "active"
+    );
+
+    if (!row) {
+      return undefined;
+    }
+
+    row.analysisResult = input.aiHandoff;
+    row.analysisRevision = input.repositoryRevision;
+    row.analyzedAt = input.analyzedAt;
+    row.updatedAt = input.analyzedAt;
+    return row;
+  }
 }
 
 class SourceRepositoryRouteFakeAuthDb {
@@ -387,6 +730,7 @@ function createFakeGitHubAppClient(repositories: GitHubRepositoryCandidate[]): G
       return [
         {
           installationId: "12345",
+          accountId: "github-account-1",
           accountLogin: "owner",
           accountType: "Organization",
           repositorySelection: "selected",
@@ -473,6 +817,9 @@ function createSourceRepositoryRecord(
     repositoryUrl: overrides.repositoryUrl ?? "https://github.com/owner/repo",
     visibility: overrides.visibility ?? "private",
     archived: overrides.archived ?? false,
+    analysisResult: overrides.analysisResult ?? null,
+    analysisRevision: overrides.analysisRevision ?? null,
+    analyzedAt: overrides.analyzedAt ?? null,
     disconnectedAt: overrides.disconnectedAt ?? null,
     createdAt: overrides.createdAt ?? fixedNow,
     updatedAt: overrides.updatedAt ?? fixedNow

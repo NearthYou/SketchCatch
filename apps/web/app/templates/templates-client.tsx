@@ -154,7 +154,10 @@ export function TemplatesClient() {
                 ))}
               </div>
               <div className="templateCardActions">
-                <a className="dashboardSecondaryButton" href="/workspace">
+                <a
+                  className="dashboardSecondaryButton"
+                  href={`/workspace?templateId=${encodeURIComponent(template.id)}&projectName=${encodeURIComponent(template.title)}`}
+                >
                   <DashboardIcon name="layers" />
                   <span>보드에서 사용</span>
                 </a>

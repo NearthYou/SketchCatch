@@ -40,6 +40,7 @@ import {
   runTerraformApply as defaultRunTerraformApply,
   runTerraformInit as defaultRunTerraformInit,
   runTerraformOutputJson as defaultRunTerraformOutputJson,
+  runTerraformPlan as defaultRunTerraformPlan,
   runTerraformShowStateJson as defaultRunTerraformShowStateJson,
   terraformMutationTimeoutMs,
   type TerraformRunResult
@@ -55,6 +56,7 @@ import {
 } from "./terraform-lock-file-workspace.js";
 
 const defaultPlanFileName = "tfplan";
+const materializePlanFileName = "materialize.tfplan";
 
 export type RunDeploymentApplyInput = {
   deploymentId: string;
@@ -66,6 +68,7 @@ export type RunDeploymentApplyInput = {
 export type RunDeploymentApplyOptions = {
   prepareTerraformWorkspace?: typeof defaultPrepareTerraformWorkspace;
   runTerraformInit?: typeof defaultRunTerraformInit;
+  runTerraformPlan?: typeof defaultRunTerraformPlan;
   runTerraformApply?: typeof defaultRunTerraformApply;
   runTerraformOutputJson?: typeof defaultRunTerraformOutputJson;
   runTerraformShowStateJson?: typeof defaultRunTerraformShowStateJson;
@@ -97,6 +100,7 @@ export async function runDeploymentApply(
   const prepareTerraformWorkspace =
     options.prepareTerraformWorkspace ?? defaultPrepareTerraformWorkspace;
   const runTerraformInit = options.runTerraformInit ?? defaultRunTerraformInit;
+  const runTerraformPlan = options.runTerraformPlan ?? defaultRunTerraformPlan;
   const runTerraformApply = options.runTerraformApply ?? defaultRunTerraformApply;
   const runTerraformOutputJson = options.runTerraformOutputJson ?? defaultRunTerraformOutputJson;
   const runTerraformShowStateJson =
@@ -249,6 +253,44 @@ export async function runDeploymentApply(
         })
     });
     sequence = lockUpload.sequence;
+
+    if (containsArchiveFileDataSource(currentTerraformArtifactContent)) {
+      const materializeResult = await runTerraformPlan(workspace.workdir, {
+        env: awsCredentials.env,
+        planFileName: materializePlanFileName,
+        timeoutMs: terraformMutationTimeoutMs,
+        signal: input.abortSignal
+      });
+      sequence = await appendTerraformApplyOutput({
+        deploymentId: deployment.id,
+        accessContext: input.accessContext,
+        sequence,
+        label: "terraform plan for local apply files",
+        result: materializeResult,
+        repository
+      });
+
+      if (materializeResult.cancelled) {
+        return cancelDeploymentBeforeApplyRun({
+          deployment,
+          repository,
+          terraform,
+          errorSummary: "Terraform apply was cancelled while preparing local apply files"
+        });
+      }
+
+      if (materializeResult.exitCode !== 0) {
+        return failDeploymentApplyRun({
+          deployment,
+          repository,
+          terraform,
+          errorSummary: summarizeTerraformFailure(
+            "Terraform plan for local apply files",
+            materializeResult
+          )
+        });
+      }
+    }
 
     terraform.apply = await runTerraformApply(workspace.workdir, {
       env: awsCredentials.env,
@@ -454,6 +496,13 @@ export async function runDeploymentApply(
   } finally {
     await workspace?.cleanup();
   }
+}
+
+function containsArchiveFileDataSource(content: Buffer | Uint8Array | string): boolean {
+  const terraformCode =
+    typeof content === "string" ? content : Buffer.from(content).toString("utf8");
+
+  return /data\s+"archive_file"\s+"[^"]+"\s*\{/.test(terraformCode);
 }
 
 async function requireDeploymentTerraformArtifact(

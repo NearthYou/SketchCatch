@@ -77,6 +77,74 @@ test("assertTerraformArtifactIsSafe accepts the MVP AWS resource subset", () => 
   );
 });
 
+test("assertTerraformArtifactIsSafe accepts approved Kubernetes template resources", () => {
+  assert.doesNotThrow(() =>
+    assertTerraformArtifactIsSafe(
+      `terraform {
+        required_providers {
+          aws = {
+            source = "hashicorp/aws"
+            version = "~> 6.0"
+          }
+          kubernetes = {
+            source = "hashicorp/kubernetes"
+            version = "~> 2.0"
+          }
+        }
+      }
+
+      provider "aws" {
+        region = "ap-northeast-2"
+      }
+
+      provider "kubernetes" {}
+
+      resource "kubernetes_namespace" "app" {
+        metadata {
+          name = "app"
+        }
+      }
+      resource "kubernetes_service" "app" {
+        metadata {
+          name = "app"
+        }
+      }`,
+      { liveProfile: "demo_web_service_with_rds" }
+    )
+  );
+});
+
+test("assertTerraformArtifactIsSafe accepts generated Lambda archives and EKS auth data", () => {
+  assert.doesNotThrow(() =>
+    assertTerraformArtifactIsSafe(
+      `terraform {
+        required_providers {
+          aws = {
+            source = "hashicorp/aws"
+            version = "~> 5.0"
+          }
+          archive = {
+            source = "hashicorp/archive"
+            version = "~> 2.0"
+          }
+        }
+      }
+
+      data "archive_file" "handler" {
+        type                    = "zip"
+        source_content          = "export const handler = async () => ({ statusCode: 200 })"
+        source_content_filename = "index.mjs"
+        output_path             = "handler.zip"
+      }
+
+      data "aws_eks_cluster_auth" "sketchcatch" {
+        name = "practice-cluster"
+      }`,
+      { liveProfile: "demo_web_service_with_rds" }
+    )
+  );
+});
+
 test("assertTerraformArtifactIsSafe rejects Terraform module blocks", () => {
   assert.throws(
     () =>
