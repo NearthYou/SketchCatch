@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { ArchitectureJson, ResourceType } from "@sketchcatch/types";
+import type { ArchitectureJson, ArchitecturePatchPlan, ResourceType } from "@sketchcatch/types";
+import type { AiTextProvider, AiTextProviderRequest } from "./aiLlmExplanation.js";
 import {
   createArchitecturePatchPlan,
-  createArchitecturePatchPreview
+  createArchitecturePatchPreview,
+  createArchitecturePatchPreviewWithPatchPlanCompiler
 } from "./aiArchitecturePatchPreview.js";
 
 test("createArchitecturePatchPlan returns strict JSON for EC2 relative size edits", () => {
@@ -55,6 +57,186 @@ test("createArchitecturePatchPlan returns strict JSON for EC2 relative size edit
     clarificationQuestion: null,
     confidence: 0.92
   });
+});
+
+test("createArchitecturePatchPreviewWithPatchPlanCompiler sends the exact Bedrock compiler prompt input", async () => {
+  const calls: AiTextProviderRequest[] = [];
+  const provider = createPatchPlanProvider(calls, {
+    status: "planned",
+    action: "modify_resource",
+    target: {
+      resourceType: "EC2",
+      resourceId: "ec2-1",
+      label: "EC2 Fleet Instance 1"
+    },
+    candidateResourceIds: [],
+    operations: [
+      {
+        op: "increase_one_step",
+        path: "config.instanceType",
+        value: null
+      }
+    ],
+    preserve: [
+      "position",
+      "edges",
+      "config.subnetId",
+      "config.subnetIds",
+      "config.vpcId",
+      "config.vpcSecurityGroupIds",
+      "config.securityGroupIds",
+      "metadata.parentAreaNodeId"
+    ],
+    clarificationQuestion: null,
+    confidence: 0.96
+  });
+
+  const response = await createArchitecturePatchPreviewWithPatchPlanCompiler(
+    {
+      architectureJson: {
+        nodes: [
+          makeNode({
+            id: "ec2-1",
+            type: "EC2",
+            label: "EC2 Fleet Instance 1",
+            config: {
+              instanceType: "t3.small",
+              subnetId: "aws_subnet.private_app_a.id"
+            }
+          }),
+          makeNode({
+            id: "ec2-2",
+            type: "EC2",
+            label: "EC2 Fleet Instance 2",
+            config: {
+              instanceType: "t3.small",
+              subnetId: "aws_subnet.private_app_b.id"
+            }
+          })
+        ],
+        edges: []
+      },
+      instruction: "make the EC2 instance larger",
+      selectedTargetResourceId: "ec2-1"
+    },
+    {
+      bedrockProvider: provider,
+      creditPolicy: {
+        bedrock: true,
+        billingMode: "aws_credit_only"
+      }
+    }
+  );
+
+  assert.equal(calls.length, 1);
+  assert.match(calls[0]!.instructions, /You are SketchCatch PatchPlan Compiler/);
+  assert.match(calls[0]!.instructions, /Output JSON only/);
+  assert.match(calls[0]!.instructions, /PATCH_PLAN_INPUT_JSON/);
+  assert.ok(calls[0]!.prompt.startsWith("Compile this exact PatchPlan input.\n\nPATCH_PLAN_INPUT_JSON:\n"));
+  assert.deepEqual(calls[0]!.payload, {
+    userRequest: "make the EC2 instance larger",
+    selectedTargetResourceId: "ec2-1",
+    resources: [
+      {
+        id: "ec2-1",
+        type: "EC2",
+        label: "EC2 Fleet Instance 1",
+        config: {
+          instanceType: "t3.small",
+          subnetId: "aws_subnet.private_app_a.id"
+        }
+      },
+      {
+        id: "ec2-2",
+        type: "EC2",
+        label: "EC2 Fleet Instance 2",
+        config: {
+          instanceType: "t3.small",
+          subnetId: "aws_subnet.private_app_b.id"
+        }
+      }
+    ]
+  });
+  assert.equal(response.status, "preview");
+  assert.equal(response.patchPlan?.target.resourceId, "ec2-1");
+  assert.equal(response.providerMetadata.provider, "bedrock");
+  assert.equal(response.providerMetadata.routeTarget, "architecture_patch_plan");
+
+  if (response.status !== "preview") {
+    return;
+  }
+
+  const firstEc2 = response.proposedArchitectureJson.nodes.find((node) => node.id === "ec2-1");
+
+  assert.equal(firstEc2?.config.instanceType, "t3.medium");
+  assert.equal(firstEc2?.config.subnetId, "aws_subnet.private_app_a.id");
+});
+
+test("createArchitecturePatchPreviewWithPatchPlanCompiler rejects Bedrock target guesses before selection", async () => {
+  const calls: AiTextProviderRequest[] = [];
+  const provider = createPatchPlanProvider(calls, {
+    status: "planned",
+    action: "modify_resource",
+    target: {
+      resourceType: "EC2",
+      resourceId: "ec2-1",
+      label: "EC2 Fleet Instance 1"
+    },
+    candidateResourceIds: [],
+    operations: [
+      {
+        op: "increase_one_step",
+        path: "config.instanceType",
+        value: null
+      }
+    ],
+    preserve: [
+      "position",
+      "edges",
+      "config.subnetId",
+      "config.subnetIds",
+      "config.vpcId",
+      "config.vpcSecurityGroupIds",
+      "config.securityGroupIds",
+      "metadata.parentAreaNodeId"
+    ],
+    clarificationQuestion: null,
+    confidence: 0.96
+  });
+
+  const response = await createArchitecturePatchPreviewWithPatchPlanCompiler(
+    {
+      architectureJson: {
+        nodes: [
+          makeNode({ id: "ec2-1", type: "EC2", label: "EC2 Fleet Instance 1" }),
+          makeNode({ id: "ec2-2", type: "EC2", label: "EC2 Fleet Instance 2" })
+        ],
+        edges: []
+      },
+      instruction: "make the EC2 instance larger"
+    },
+    {
+      bedrockProvider: provider,
+      creditPolicy: {
+        bedrock: true,
+        billingMode: "aws_credit_only"
+      }
+    }
+  );
+
+  assert.equal(calls.length, 1);
+  assert.equal(response.status, "needs_clarification");
+  assert.equal(response.providerMetadata.provider, "fallback");
+  assert.deepEqual(response.patchPlan?.candidateResourceIds, ["ec2-1", "ec2-2"]);
+
+  if (response.status !== "needs_clarification") {
+    return;
+  }
+
+  assert.deepEqual(
+    response.candidates.map((candidate) => candidate.resourceId),
+    ["ec2-1", "ec2-2"]
+  );
 });
 
 test("createArchitecturePatchPlan refuses to choose a target when multiple resources match", () => {
@@ -1369,6 +1551,24 @@ test("createArchitecturePatchPreview migrates an EC2 runtime path to serverless"
     true
   );
 });
+
+function createPatchPlanProvider(
+  calls: AiTextProviderRequest[],
+  patchPlan: ArchitecturePatchPlan
+): AiTextProvider {
+  return {
+    provider: "bedrock",
+    service: "bedrock_runtime",
+    model: "bedrock-model",
+    generate: async (request) => {
+      calls.push(request);
+
+      return {
+        text: JSON.stringify(patchPlan)
+      };
+    }
+  };
+}
 
 function makeNode(
   node: Partial<ArchitectureJson["nodes"][number]> &

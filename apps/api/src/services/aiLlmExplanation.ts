@@ -397,7 +397,7 @@ function isAmazonQPrimaryTarget(target: LlmExplanationTarget): boolean {
   return target === "terraform_error_explanation" || target === "terraform_preview_explanation";
 }
 
-function createBedrockTextProvider(input: { readonly region: string; readonly modelId: string }): AiTextProvider {
+export function createBedrockTextProvider(input: { readonly region: string; readonly modelId: string }): AiTextProvider {
   const client = new BedrockRuntimeClient({ region: input.region });
 
   return {

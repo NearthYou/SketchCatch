@@ -36,7 +36,10 @@ import {
   createConfiguredAiExplanation,
   type CreateLlmExplanation
 } from "../services/aiLlmExplanation.js";
-import { createArchitecturePatchPreview } from "../services/aiArchitecturePatchPreview.js";
+import {
+  createConfiguredArchitecturePatchPreview,
+  type CreateArchitecturePatchPreviewFactory
+} from "../services/aiArchitecturePatchPreview.js";
 import {
   analyzePreDeploymentCheck,
   type AnalyzePreDeploymentCheck
@@ -209,6 +212,7 @@ const confirmTranscribeBodySchema = z.object({
 export type AiRouteOptions = {
   readonly analyzePreDeploymentCheck?: AnalyzePreDeploymentCheck;
   readonly createArchitectureDraftResponse?: CreateArchitectureDraftResponseFactory;
+  readonly createArchitecturePatchPreview?: CreateArchitecturePatchPreviewFactory;
   readonly createLlmExplanation?: CreateLlmExplanation;
   readonly createSafetyFindingExplanation?: CreateSafetyFindingExplanation;
   readonly pricingRateProvider?: CostPricingRateProvider;
@@ -228,6 +232,8 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
         app.log.warn({ error }, "Amazon Q architecture pattern warm-up failed");
       }
     });
+  const createArchitecturePatchPreview =
+    options.createArchitecturePatchPreview ?? createConfiguredArchitecturePatchPreview();
   const createSafetyFindingExplanation =
     options.createSafetyFindingExplanation ?? createConfiguredOpenAiSafetyFindingExplanation();
   const safetyExplanationTimeoutMs =
@@ -404,7 +410,7 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
 
   app.post("/ai/architecture-patch-preview", async (request): Promise<ArchitecturePatchPreviewResponse> => {
     const body = architecturePatchPreviewBodySchema.parse(request.body);
-    const preview = createArchitecturePatchPreview(body);
+    const preview = await createArchitecturePatchPreview(body);
 
     if (preview.status === "needs_clarification") {
       return preview;
@@ -418,7 +424,10 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
     return {
       ...preview,
       llmExplanation,
-      providerMetadata: llmExplanation.providerMetadata ?? preview.providerMetadata
+      providerMetadata:
+        preview.providerMetadata.provider === "fallback"
+          ? (llmExplanation.providerMetadata ?? preview.providerMetadata)
+          : preview.providerMetadata
     };
   });
 

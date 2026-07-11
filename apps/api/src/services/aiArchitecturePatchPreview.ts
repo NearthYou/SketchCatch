@@ -1,4 +1,7 @@
 import type {
+  AiBillingMode,
+  AiProvider,
+  AiProviderService,
   AiProviderMetadata,
   ArchitectureJson,
   ArchitecturePatchAction,
@@ -17,8 +20,23 @@ import type {
 import { resourceDefinitions } from "@sketchcatch/types/resource-definitions";
 import { createArchitectureResourceDeploymentConfig } from "./aiArchitectureResourceCatalog.js";
 import { createNormalizedAiCacheKey, estimateAiUsage } from "./aiProviderSafety.js";
+import {
+  createBedrockTextProvider,
+  resolveAiProviderRegions,
+  type AiCreditPolicy,
+  type AiTextProvider
+} from "./aiLlmExplanation.js";
 
 export type CreateArchitecturePatchPreviewInput = CreateArchitecturePatchPreviewRequest;
+export type CreateArchitecturePatchPreviewFactory = (
+  input: CreateArchitecturePatchPreviewInput
+) => ArchitecturePatchPreviewResponse | Promise<ArchitecturePatchPreviewResponse>;
+
+export type CreateConfiguredArchitecturePatchPreviewOptions = {
+  readonly bedrockProvider?: AiTextProvider | undefined;
+  readonly creditPolicy?: Pick<AiCreditPolicy, "bedrock" | "billingMode"> | undefined;
+  readonly env?: NodeJS.ProcessEnv | undefined;
+};
 
 const MANUAL_RESOURCE_KEYWORDS: readonly {
   readonly resourceType: ResourceType;
@@ -517,7 +535,7 @@ type ReplacementPatchIntent = {
   readonly replacementResourceType: ResourceType;
 };
 
-const PATCH_PLAN_PRESERVE_PATHS = [
+const PATCH_PLAN_MODIFY_PRESERVE_PATHS = [
   "position",
   "edges",
   "config.subnetId",
@@ -527,6 +545,217 @@ const PATCH_PLAN_PRESERVE_PATHS = [
   "config.securityGroupIds",
   "metadata.parentAreaNodeId"
 ] as const;
+const PATCH_PLAN_REMOVE_PRESERVE_PATHS = ["position", "unrelatedResources", "unrelatedEdges"] as const;
+const PATCH_PLAN_ADD_PRESERVE_PATHS = [
+  "existingResources",
+  "existingEdges",
+  "existingPositions"
+] as const;
+const PATCH_PLAN_EMPTY_PRESERVE_PATHS: readonly string[] = [];
+
+const PATCH_PLAN_COMPILER_SYSTEM_PROMPT = `You are SketchCatch PatchPlan Compiler.
+
+SketchCatch is an IaC architecture editor. Users ask to add, remove, or modify cloud resources in natural language.
+
+Your job is to convert the provided PATCH_PLAN_INPUT_JSON into a STRICT JSON PatchPlan.
+
+You must NOT modify the architecture directly.
+You must NOT generate a new architecture.
+You must NOT generate diagram coordinates.
+You must NOT invent resources, ids, subnets, VPCs, edges, Terraform references, parameters, or labels.
+You must NOT choose a target when multiple resources match.
+You must prefer modifying an existing resource over replacing it when the user asks to change a setting, size, type, storage, runtime, port, name, or boolean option.
+
+Output JSON only. No markdown. No explanation.
+
+The caller will provide:
+{
+  "userRequest": string,
+  "selectedTargetResourceId": string | null,
+  "resources": [
+    {
+      "id": string,
+      "type": string,
+      "label": string,
+      "config": object
+    }
+  ]
+}
+
+If userRequest and resources are present, never ask the caller to provide them.
+Compile the provided userRequest against the provided resources.
+
+Allowed status:
+- planned
+- needs_clarification
+- unsupported
+
+Allowed actions:
+- modify_resource
+- remove_resource
+- add_resource
+
+Allowed operations:
+- set_value
+- increase_one_step
+- decrease_one_step
+- enable
+- disable
+- rename
+
+Allowed modification paths by resource type:
+EC2:
+- config.instanceType
+- config.associatePublicIpAddress
+- config.ami
+
+RDS:
+- config.allocatedStorage
+- config.instanceClass
+- config.engine
+- config.multiAz
+
+RDS_CLUSTER:
+- config.instanceClass
+- config.engine
+
+S3:
+- config.versioning
+- config.bucketName
+- config.encryption
+
+SECURITY_GROUP:
+- config.ingress
+- config.egress
+
+LAMBDA:
+- config.runtime
+- config.memorySize
+- config.timeout
+
+LOAD_BALANCER:
+- config.internal
+
+AUTO_SCALING_GROUP:
+- config.minSize
+- config.maxSize
+- config.desiredCapacity
+
+Rules:
+1. If selectedTargetResourceId is present, use that resource as the target if it exists. Do not ask which resource to modify.
+2. If selectedTargetResourceId is present but does not exist, return needs_clarification.
+3. If exactly one resource matches the request, select it.
+4. If more than one resource matches and no selectedTargetResourceId is present, return needs_clarification with candidateResourceIds.
+5. Never guess among multiple matching resources.
+6. If the user asks to change a parameter, return modify_resource, not remove_resource or add_resource.
+7. Do not use replace/remove+add for parameter changes.
+
+Parameter-change examples:
+- bigger EC2
+- smaller EC2
+- larger server
+- upgrade instance
+- RDS storage 200
+- DB storage 200GB
+- enable S3 versioning
+- disable S3 versioning
+- open port 443
+- Lambda memory 512
+- timeout 30 seconds
+- make load balancer internal
+- rename bucket
+
+EC2 instance type rules:
+- If the user asks to make an EC2/server/instance larger, bigger, upgraded, scaled up, "스펙 올려", "더 크게", "큰 거로", return:
+  op = increase_one_step
+  path = config.instanceType
+  value = null
+- If the user asks to make an EC2/server/instance smaller, cheaper, downgraded, scaled down, "더 작게", return:
+  op = decrease_one_step
+  path = config.instanceType
+  value = null
+- If the user gives an explicit EC2 instance type such as t3.medium, t3.large, m7i.large, return:
+  op = set_value
+  path = config.instanceType
+  value = that exact type as a string
+
+Database rules:
+- If the user asks for DB/database/RDS storage size and at least one RDS exists, use resourceType RDS.
+- Storage values are numeric GB unless another unit is explicitly provided.
+- For "스토리지 200으로", "DB storage 200", "RDS 용량 200GB", return:
+  op = set_value
+  path = config.allocatedStorage
+  value = 200
+
+Delete rules:
+- If the user asks to delete/remove a resource type and multiple resources of that type exist, return needs_clarification with candidateResourceIds.
+- If exactly one resource of that type exists, return planned remove_resource.
+
+Add rules:
+- For add_resource, set target.resourceType to the requested resource type.
+- Do not invent resourceId.
+- resourceId must be null for add_resource.
+- If the requested resource type is unclear, return needs_clarification.
+
+Preservation rules:
+For every modify_resource response, include these preserve fields unless the user explicitly asks to move, reconnect, or change networking:
+- position
+- edges
+- config.subnetId
+- config.subnetIds
+- config.vpcId
+- config.vpcSecurityGroupIds
+- config.securityGroupIds
+- metadata.parentAreaNodeId
+
+For remove_resource, preserve should include:
+- position
+- unrelatedResources
+- unrelatedEdges
+
+For add_resource, preserve should include:
+- existingResources
+- existingEdges
+- existingPositions
+
+Return unsupported if:
+- the request requires an operation outside the allowed schema
+- the request asks for direct deployment/apply/destroy
+- the request asks to mutate real cloud infrastructure
+- the requested parameter path is not allowed for the resource type
+
+Return exactly this JSON shape:
+{
+  "status": "planned" | "needs_clarification" | "unsupported",
+  "action": "modify_resource" | "remove_resource" | "add_resource" | null,
+  "target": {
+    "resourceType": string | null,
+    "resourceId": string | null,
+    "label": string | null
+  },
+  "candidateResourceIds": string[],
+  "operations": [
+    {
+      "op": "set_value" | "increase_one_step" | "decrease_one_step" | "enable" | "disable" | "rename",
+      "path": string,
+      "value": string | number | boolean | null
+    }
+  ],
+  "preserve": string[],
+  "clarificationQuestion": string | null,
+  "confidence": number
+}`;
+
+const PATCH_PLAN_ALLOWED_OPERATION_PATHS: Readonly<Partial<Record<ResourceType, readonly string[]>>> = {
+  EC2: ["config.instanceType", "config.associatePublicIpAddress", "config.ami"],
+  RDS: ["config.allocatedStorage", "config.instanceClass", "config.engine", "config.multiAz"],
+  RDS_CLUSTER: ["config.instanceClass", "config.engine"],
+  S3: ["config.versioning", "config.bucketName", "config.encryption"],
+  SECURITY_GROUP: ["config.ingress", "config.egress"],
+  LAMBDA: ["config.runtime", "config.memorySize", "config.timeout"],
+  LOAD_BALANCER: ["config.internal"],
+  AUTO_SCALING_GROUP: ["config.minSize", "config.maxSize", "config.desiredCapacity"]
+};
 
 export function createArchitecturePatchPlan(
   input: CreateArchitecturePatchPreviewInput
@@ -542,7 +771,9 @@ export function createArchitecturePatchPlan(
     );
   }
 
-  const naturalLanguageAction = resolvePatchActionFromNaturalLanguage(normalizedInstruction);
+  const naturalLanguageAction = isEc2InstanceTypeModificationInstruction(normalizedInstruction)
+    ? "modify_resource"
+    : resolvePatchActionFromNaturalLanguage(normalizedInstruction);
   const resourceType = findResourceType(normalizedInstruction);
 
   if (naturalLanguageAction === "manual_review") {
@@ -567,7 +798,7 @@ export function createArchitecturePatchPlan(
       },
       candidateResourceIds: [],
       operations: [],
-      preserve: [...PATCH_PLAN_PRESERVE_PATHS],
+      preserve: [...PATCH_PLAN_ADD_PRESERVE_PATHS],
       clarificationQuestion: null,
       confidence: 0.78
     };
@@ -593,7 +824,7 @@ export function createArchitecturePatchPlan(
       target: createPatchPlanTarget(targetResolution.targetNode),
       candidateResourceIds: [],
       operations: [],
-      preserve: [...PATCH_PLAN_PRESERVE_PATHS],
+      preserve: [...PATCH_PLAN_REMOVE_PRESERVE_PATHS],
       clarificationQuestion: null,
       confidence: 0.9
     };
@@ -616,10 +847,50 @@ export function createArchitecturePatchPlan(
     target: createPatchPlanTarget(targetResolution.targetNode),
     candidateResourceIds: [],
     operations,
-    preserve: [...PATCH_PLAN_PRESERVE_PATHS],
+    preserve: [...PATCH_PLAN_MODIFY_PRESERVE_PATHS],
     clarificationQuestion: null,
     confidence: 0.92
   };
+}
+
+export function createConfiguredArchitecturePatchPreview(
+  options: CreateConfiguredArchitecturePatchPreviewOptions = {}
+): CreateArchitecturePatchPreviewFactory {
+  const env = options.env ?? process.env;
+  const creditPolicy = options.creditPolicy ?? readPatchPlanCreditPolicy(env);
+  const regions = resolveAiProviderRegions(env);
+  const bedrockProvider =
+    options.bedrockProvider ??
+    (creditPolicy.bedrock
+      ? createBedrockTextProvider({
+          region: regions.bedrockRegion,
+          modelId: env.BEDROCK_MODEL_ID ?? "anthropic.claude-3-5-sonnet-20240620-v1:0"
+        })
+      : undefined);
+
+  return async (input) =>
+    createArchitecturePatchPreviewWithPatchPlanCompiler(input, {
+      bedrockProvider,
+      creditPolicy
+    });
+}
+
+export async function createArchitecturePatchPreviewWithPatchPlanCompiler(
+  input: CreateArchitecturePatchPreviewInput,
+  options: {
+    readonly bedrockProvider?: AiTextProvider | undefined;
+    readonly creditPolicy?: Pick<AiCreditPolicy, "bedrock" | "billingMode"> | undefined;
+  } = {}
+): Promise<ArchitecturePatchPreviewResponse> {
+  const fallbackPlan = createArchitecturePatchPlan(input);
+  const fallbackMetadata = createPatchFallbackMetadata(input.instruction);
+  const providerResult = await createProviderBackedPatchPlan(input, options);
+
+  return createArchitecturePatchPreviewFromPlan(
+    input,
+    providerResult?.patchPlan ?? fallbackPlan,
+    providerResult?.providerMetadata ?? fallbackMetadata
+  );
 }
 
 export function createArchitecturePatchPreview(
@@ -628,34 +899,57 @@ export function createArchitecturePatchPreview(
   const providerMetadata = createPatchFallbackMetadata(input.instruction);
   const patchPlan = createArchitecturePatchPlan(input);
 
-  if (isNoResourceAdditionInstruction(input.instruction)) {
-    return withArchitecturePatchPlan(createNoResourceAdditionPreview(input, providerMetadata), patchPlan);
+  return createArchitecturePatchPreviewFromPlan(input, patchPlan, providerMetadata);
+}
+
+function createArchitecturePatchPreviewFromPlan(
+  input: CreateArchitecturePatchPreviewInput,
+  patchPlan: ArchitecturePatchPlan,
+  providerMetadata: AiProviderMetadata
+): ArchitecturePatchPreviewResponse {
+  if (
+    patchPlan.status === "needs_clarification" &&
+    providerMetadata.routeTarget === "architecture_patch_plan"
+  ) {
+    return withArchitecturePatchPlan(
+      createPatchPlanClarificationResponse(input, patchPlan, providerMetadata),
+      patchPlan
+    );
   }
 
-  const structuralPreview = createStructuralPatchPreview(input, providerMetadata);
+  const effectiveInput = createPatchPlanEffectiveInput(input, patchPlan);
+
+  if (isNoResourceAdditionInstruction(input.instruction)) {
+    return withArchitecturePatchPlan(createNoResourceAdditionPreview(effectiveInput, providerMetadata), patchPlan);
+  }
+
+  const structuralPreview = createStructuralPatchPreview(effectiveInput, providerMetadata);
 
   if (structuralPreview !== undefined) {
-    return withArchitecturePatchPlan(structuralPreview, patchPlan);
+    return withArchitecturePatchPlan(
+      applyPatchPlanToPreviewResponse(structuralPreview, patchPlan),
+      patchPlan
+    );
   }
 
-  const compoundChanges = createCompoundPatchChanges(input);
+  const compoundChanges = createCompoundPatchChanges(effectiveInput);
 
   if (compoundChanges !== undefined) {
     const intent: ArchitecturePatchIntent = {
-      instruction: input.instruction,
+      instruction: effectiveInput.instruction,
       requestedAction: "manual_review",
-      ...(input.skipConnection === true ? { skipConnection: true } : {}),
-      ...(input.connectionTargetResourceId
-        ? { connectionTargetResourceId: input.connectionTargetResourceId }
+      ...(effectiveInput.skipConnection === true ? { skipConnection: true } : {}),
+      ...(effectiveInput.connectionTargetResourceId
+        ? { connectionTargetResourceId: effectiveInput.connectionTargetResourceId }
         : {})
     };
 
-    return {
+    return applyPatchPlanToPreviewResponse({
       status: "preview",
       intent,
-      baseArchitectureJson: input.architectureJson,
+      baseArchitectureJson: effectiveInput.architectureJson,
       proposedArchitectureJson: applyResolvedPreviewChanges(
-        input.architectureJson,
+        effectiveInput.architectureJson,
         compoundChanges,
         intent
       ),
@@ -664,14 +958,14 @@ export function createArchitecturePatchPreview(
       userAcceptedChange: null,
       patchPlan,
       providerMetadata
-    };
+    }, patchPlan);
   }
 
-  const intent = resolvePatchIntent(input);
+  const intent = resolvePatchIntentFromPatchPlan(effectiveInput, patchPlan);
   const selectedTargetNode =
     intent.requestedAction === "add_resource"
       ? undefined
-      : getSelectedTargetNode(input.architectureJson, input.selectedTargetResourceId);
+      : getSelectedTargetNode(effectiveInput.architectureJson, effectiveInput.selectedTargetResourceId);
   const resolvedIntent = selectedTargetNode
     ? {
         ...intent,
@@ -679,7 +973,7 @@ export function createArchitecturePatchPreview(
         targetResourceId: selectedTargetNode.id
       }
     : intent;
-  const targetResolution = resolveTarget(input.architectureJson, resolvedIntent);
+  const targetResolution = resolveTarget(effectiveInput.architectureJson, resolvedIntent);
 
   if (targetResolution.status === "needs_clarification") {
     return withArchitecturePatchPlan(
@@ -694,27 +988,27 @@ export function createArchitecturePatchPreview(
   }
 
   const changes = createResolvedPatchChanges(
-    input.architectureJson,
+    effectiveInput.architectureJson,
     resolvedIntent,
     targetResolution.targetNode
   );
   const proposedArchitectureJson = applyResolvedPreviewChanges(
-    input.architectureJson,
+    effectiveInput.architectureJson,
     changes,
     resolvedIntent
   );
 
-  return {
+  return applyPatchPlanToPreviewResponse({
     status: "preview",
     intent: resolvedIntent,
-    baseArchitectureJson: input.architectureJson,
+    baseArchitectureJson: effectiveInput.architectureJson,
     proposedArchitectureJson,
     changes,
     requiresUserAcceptance: true,
     userAcceptedChange: null,
     patchPlan,
     providerMetadata
-  };
+  }, patchPlan);
 }
 
 function createNoResourceAdditionPreview(
@@ -734,6 +1028,437 @@ function createNoResourceAdditionPreview(
     userAcceptedChange: null,
     providerMetadata
   };
+}
+
+function createPatchPlanClarificationResponse(
+  input: CreateArchitecturePatchPreviewInput,
+  patchPlan: ArchitecturePatchPlan,
+  providerMetadata: AiProviderMetadata
+): ArchitecturePatchClarification {
+  const candidates = patchPlan.candidateResourceIds
+    .map((resourceId) => input.architectureJson.nodes.find((node) => node.id === resourceId))
+    .filter((node): node is ResourceNode => node !== undefined)
+    .map(toClarificationCandidate);
+
+  return {
+    status: "needs_clarification",
+    intent: {
+      instruction: input.instruction,
+      requestedAction: patchPlan.action ?? "manual_review",
+      ...(patchPlan.target.resourceType ? { resourceType: patchPlan.target.resourceType } : {}),
+      ...(input.selectedTargetResourceId ? { targetResourceId: input.selectedTargetResourceId } : {})
+    },
+    question: patchPlan.clarificationQuestion ?? "Which resource should be changed?",
+    candidates,
+    providerMetadata
+  };
+}
+
+function createPatchPlanEffectiveInput(
+  input: CreateArchitecturePatchPreviewInput,
+  patchPlan: ArchitecturePatchPlan
+): CreateArchitecturePatchPreviewInput {
+  if (
+    patchPlan.status !== "planned" ||
+    patchPlan.action === "add_resource" ||
+    patchPlan.target.resourceId === null
+  ) {
+    return input;
+  }
+
+  return {
+    ...input,
+    selectedTargetResourceId: patchPlan.target.resourceId
+  };
+}
+
+function resolvePatchIntentFromPatchPlan(
+  input: CreateArchitecturePatchPreviewInput,
+  patchPlan: ArchitecturePatchPlan
+): ArchitecturePatchIntent {
+  const resolvedIntent = resolvePatchIntent(input);
+
+  if (patchPlan.status !== "planned" || patchPlan.action === null) {
+    return resolvedIntent;
+  }
+
+  return {
+    ...resolvedIntent,
+    requestedAction: patchPlan.action,
+    ...(patchPlan.target.resourceType ? { resourceType: patchPlan.target.resourceType } : {}),
+    ...(patchPlan.target.resourceId ? { targetResourceId: patchPlan.target.resourceId } : {})
+  };
+}
+
+async function createProviderBackedPatchPlan(
+  input: CreateArchitecturePatchPreviewInput,
+  options: {
+    readonly bedrockProvider?: AiTextProvider | undefined;
+    readonly creditPolicy?: Pick<AiCreditPolicy, "bedrock" | "billingMode"> | undefined;
+  }
+): Promise<
+  | {
+      readonly patchPlan: ArchitecturePatchPlan;
+      readonly providerMetadata: AiProviderMetadata;
+    }
+  | null
+> {
+  const creditPolicy = options.creditPolicy ?? readPatchPlanCreditPolicy(process.env);
+
+  if (options.bedrockProvider === undefined || !creditPolicy.bedrock) {
+    return null;
+  }
+
+  const payload = createPatchPlanCompilerPayload(input);
+
+  try {
+    const response = await options.bedrockProvider.generate({
+      target: "architecture_patch_preview",
+      instructions: PATCH_PLAN_COMPILER_SYSTEM_PROMPT,
+      prompt: createPatchPlanCompilerUserMessage(payload),
+      payload
+    });
+    const parsedPlan = parseProviderPatchPlan(response.text);
+    const validation = validateProviderPatchPlan(parsedPlan, input);
+
+    if (!validation.valid) {
+      return null;
+    }
+
+    return {
+      patchPlan: validation.patchPlan,
+      providerMetadata: createPatchProviderMetadata({
+        provider: options.bedrockProvider.provider,
+        service: options.bedrockProvider.service,
+        model: options.bedrockProvider.model,
+        billingMode: creditPolicy.billingMode,
+        payload,
+        outputCharacters: response.outputCharacters ?? response.text.length
+      })
+    };
+  } catch {
+    return null;
+  }
+}
+
+function createPatchPlanCompilerPayload(input: CreateArchitecturePatchPreviewInput): {
+  readonly userRequest: string;
+  readonly selectedTargetResourceId: string | null;
+  readonly resources: readonly {
+    readonly id: string;
+    readonly type: ResourceType;
+    readonly label: string;
+    readonly config: Record<string, unknown>;
+  }[];
+} {
+  return {
+    userRequest: input.instruction,
+    selectedTargetResourceId: input.selectedTargetResourceId ?? null,
+    resources: input.architectureJson.nodes.map((node) => ({
+      id: node.id,
+      type: node.type,
+      label: node.label ?? node.id,
+      config: { ...node.config }
+    }))
+  };
+}
+
+function createPatchPlanCompilerUserMessage(payload: ReturnType<typeof createPatchPlanCompilerPayload>): string {
+  return `Compile this exact PatchPlan input.
+
+PATCH_PLAN_INPUT_JSON:
+${JSON.stringify(payload, null, 2)}`;
+}
+
+function parseProviderPatchPlan(text: string): unknown {
+  const trimmed = text.trim();
+
+  if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+    return JSON.parse(trimmed);
+  }
+
+  const objectMatch = trimmed.match(/\{[\s\S]*\}/);
+
+  if (objectMatch === null) {
+    throw new Error("PatchPlan provider did not return JSON.");
+  }
+
+  return JSON.parse(objectMatch[0]);
+}
+
+function validateProviderPatchPlan(
+  value: unknown,
+  input: CreateArchitecturePatchPreviewInput
+):
+  | { readonly valid: true; readonly patchPlan: ArchitecturePatchPlan }
+  | { readonly valid: false } {
+  if (!isRecord(value)) {
+    return { valid: false };
+  }
+
+  const status = value.status;
+  const action = value.action;
+  const target = value.target;
+  const candidateResourceIds = value.candidateResourceIds;
+  const operations = value.operations;
+  const preserve = value.preserve;
+  const clarificationQuestion = value.clarificationQuestion;
+  const confidence = value.confidence;
+
+  if (!isPatchPlanStatus(status) || !isPatchPlanActionOrNull(action) || !isRecord(target)) {
+    return { valid: false };
+  }
+
+  if (!Array.isArray(candidateResourceIds) || !candidateResourceIds.every((id) => typeof id === "string")) {
+    return { valid: false };
+  }
+
+  if (!Array.isArray(operations) || !Array.isArray(preserve) || !preserve.every((item) => typeof item === "string")) {
+    return { valid: false };
+  }
+
+  if (clarificationQuestion !== null && typeof clarificationQuestion !== "string") {
+    return { valid: false };
+  }
+
+  if (typeof confidence !== "number" || !Number.isFinite(confidence)) {
+    return { valid: false };
+  }
+
+  const resourceIds = new Set(input.architectureJson.nodes.map((node) => node.id));
+  const targetResourceId = target.resourceId;
+  const targetResourceType = target.resourceType;
+  const targetLabel = target.label;
+
+  if (
+    (targetResourceId !== null && typeof targetResourceId !== "string") ||
+    (targetResourceType !== null && !isResourceType(targetResourceType)) ||
+    (targetLabel !== null && typeof targetLabel !== "string")
+  ) {
+    return { valid: false };
+  }
+
+  if (!candidateResourceIds.every((resourceId) => resourceIds.has(resourceId))) {
+    return { valid: false };
+  }
+
+  if (status !== "planned") {
+    if (action !== null || operations.length > 0) {
+      return { valid: false };
+    }
+
+    return {
+      valid: true,
+      patchPlan: {
+        status,
+        action: null,
+        target: {
+          resourceType: targetResourceType,
+          resourceId: null,
+          label: null
+        },
+        candidateResourceIds: [...candidateResourceIds],
+        operations: [],
+        preserve: [],
+        clarificationQuestion,
+        confidence
+      }
+    };
+  }
+
+  if (!isPatchPlanAction(action)) {
+    return { valid: false };
+  }
+
+  if (action === "add_resource") {
+    if (targetResourceId !== null || targetResourceType === null) {
+      return { valid: false };
+    }
+
+    return {
+      valid: true,
+      patchPlan: {
+        status,
+        action,
+        target: {
+          resourceType: targetResourceType,
+          resourceId: null,
+          label: null
+        },
+        candidateResourceIds: [],
+        operations: [],
+        preserve: [...PATCH_PLAN_ADD_PRESERVE_PATHS],
+        clarificationQuestion: null,
+        confidence
+      }
+    };
+  }
+
+  if (targetResourceId === null || !resourceIds.has(targetResourceId)) {
+    return { valid: false };
+  }
+
+  const targetNode = input.architectureJson.nodes.find((node) => node.id === targetResourceId);
+
+  if (targetNode === undefined || targetResourceType !== targetNode.type) {
+    return { valid: false };
+  }
+
+  if (targetLabel !== null && targetLabel !== (targetNode.label ?? targetNode.id)) {
+    return { valid: false };
+  }
+
+  if (
+    input.selectedTargetResourceId === undefined &&
+    input.architectureJson.nodes.filter((node) => node.type === targetNode.type).length > 1
+  ) {
+    return { valid: false };
+  }
+
+  const validatedOperations = validatePatchPlanOperations(operations, targetNode.type);
+
+  if (validatedOperations === null) {
+    return { valid: false };
+  }
+
+  if (action === "remove_resource" && validatedOperations.length > 0) {
+    return { valid: false };
+  }
+
+  if (action === "modify_resource" && validatedOperations.length === 0) {
+    return { valid: false };
+  }
+
+  return {
+    valid: true,
+    patchPlan: {
+      status,
+      action,
+      target: createPatchPlanTarget(targetNode),
+      candidateResourceIds: [],
+      operations: validatedOperations,
+      preserve:
+        action === "modify_resource"
+          ? [...PATCH_PLAN_MODIFY_PRESERVE_PATHS]
+          : [...PATCH_PLAN_REMOVE_PRESERVE_PATHS],
+      clarificationQuestion: null,
+      confidence
+    }
+  };
+}
+
+function validatePatchPlanOperations(
+  operations: readonly unknown[],
+  resourceType: ResourceType
+): ArchitecturePatchPlanOperation[] | null {
+  const allowedPaths = PATCH_PLAN_ALLOWED_OPERATION_PATHS[resourceType] ?? [];
+  const validatedOperations: ArchitecturePatchPlanOperation[] = [];
+
+  for (const operation of operations) {
+    if (!isRecord(operation)) {
+      return null;
+    }
+
+    const op = operation.op;
+    const path = operation.path;
+    const value = operation.value;
+
+    if (!isPatchPlanOperationType(op) || typeof path !== "string" || !allowedPaths.includes(path)) {
+      return null;
+    }
+
+    if (value !== null && typeof value !== "string" && typeof value !== "number" && typeof value !== "boolean") {
+      return null;
+    }
+
+    validatedOperations.push({ op, path, value });
+  }
+
+  return validatedOperations;
+}
+
+function applyPatchPlanToPreviewResponse<TResponse extends ArchitecturePatchPreviewResponse>(
+  response: TResponse,
+  patchPlan: ArchitecturePatchPlan
+): TResponse {
+  if (response.status !== "preview" || patchPlan.status !== "planned" || patchPlan.action !== "modify_resource") {
+    return response;
+  }
+
+  const resourceId = patchPlan.target.resourceId;
+
+  if (resourceId === null) {
+    return response;
+  }
+
+  const baseTargetNode = response.baseArchitectureJson.nodes.find((node) => node.id === resourceId);
+
+  return {
+    ...response,
+    proposedArchitectureJson: {
+      ...response.proposedArchitectureJson,
+      nodes: response.proposedArchitectureJson.nodes.map((node) =>
+        node.id === resourceId
+          ? {
+              ...node,
+              config: applyPatchPlanOperationsToConfig(baseTargetNode ?? node, patchPlan.operations)
+            }
+          : node
+      )
+    }
+  };
+}
+
+function applyPatchPlanOperationsToConfig(
+  node: ResourceNode,
+  operations: readonly ArchitecturePatchPlanOperation[]
+): Record<string, unknown> {
+  const nextConfig: Record<string, unknown> = { ...node.config };
+
+  for (const operation of operations) {
+    const key = operation.path.startsWith("config.") ? operation.path.slice("config.".length) : operation.path;
+
+    if (operation.op === "increase_one_step" && operation.path === "config.instanceType") {
+      const nextInstanceType = findAdjacentEc2InstanceType(node.config.instanceType, "increase");
+
+      if (nextInstanceType !== undefined) {
+        nextConfig.instanceType = nextInstanceType;
+      }
+
+      continue;
+    }
+
+    if (operation.op === "decrease_one_step" && operation.path === "config.instanceType") {
+      const nextInstanceType = findAdjacentEc2InstanceType(node.config.instanceType, "decrease");
+
+      if (nextInstanceType !== undefined) {
+        nextConfig.instanceType = nextInstanceType;
+      }
+
+      continue;
+    }
+
+    if (operation.op === "enable") {
+      nextConfig[key] = true;
+      continue;
+    }
+
+    if (operation.op === "disable") {
+      nextConfig[key] = false;
+      continue;
+    }
+
+    if (operation.path === "config.ingress" && typeof operation.value === "number") {
+      nextConfig.ingress = upsertIngressPort(node.config.ingress, operation.value);
+      continue;
+    }
+
+    if (operation.op === "set_value" || operation.op === "rename") {
+      nextConfig[key] = operation.value;
+    }
+  }
+
+  return nextConfig;
 }
 
 function createPatchPlanTarget(
@@ -761,7 +1486,7 @@ function createNeedsClarificationPatchPlan(
     },
     candidateResourceIds: [...candidateResourceIds],
     operations: [],
-    preserve: [...PATCH_PLAN_PRESERVE_PATHS],
+    preserve: [...PATCH_PLAN_EMPTY_PRESERVE_PATHS],
     clarificationQuestion: question,
     confidence: 0.6
   };
@@ -778,10 +1503,46 @@ function createUnsupportedPatchPlan(reason: string): ArchitecturePatchPlan {
     },
     candidateResourceIds: [],
     operations: [],
-    preserve: [...PATCH_PLAN_PRESERVE_PATHS],
+    preserve: [...PATCH_PLAN_EMPTY_PRESERVE_PATHS],
     clarificationQuestion: reason,
     confidence: 0.3
   };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isResourceType(value: unknown): value is ResourceType {
+  return (
+    typeof value === "string" &&
+    resourceDefinitions.some((definition) => definition.resourceType === value)
+  );
+}
+
+function isPatchPlanStatus(value: unknown): value is ArchitecturePatchPlan["status"] {
+  return value === "planned" || value === "needs_clarification" || value === "unsupported";
+}
+
+function isPatchPlanAction(value: unknown): value is NonNullable<ArchitecturePatchPlan["action"]> {
+  return value === "modify_resource" || value === "remove_resource" || value === "add_resource";
+}
+
+function isPatchPlanActionOrNull(value: unknown): value is ArchitecturePatchPlan["action"] {
+  return value === null || isPatchPlanAction(value);
+}
+
+function isPatchPlanOperationType(
+  value: unknown
+): value is ArchitecturePatchPlanOperation["op"] {
+  return (
+    value === "set_value" ||
+    value === "increase_one_step" ||
+    value === "decrease_one_step" ||
+    value === "enable" ||
+    value === "disable" ||
+    value === "rename"
+  );
 }
 
 function resolvePatchPlanTarget(
@@ -1412,7 +2173,9 @@ function resolvePatchIntent(input: CreateArchitecturePatchPreviewInput): Archite
   const resourceType = replacementIntent
     ? replacementIntent.sourceResourceType
     : (explicitResourceType ?? serviceExpansionResourceType);
-  const naturalLanguageAction = resolvePatchActionFromNaturalLanguage(normalizedInstruction);
+  const naturalLanguageAction = isEc2InstanceTypeModificationInstruction(normalizedInstruction)
+    ? "modify_resource"
+    : resolvePatchActionFromNaturalLanguage(normalizedInstruction);
   const requestedAction = replacementIntent
     ? "modify_resource"
     : naturalLanguageAction === "manual_review" && serviceExpansionResourceType !== undefined
@@ -2967,6 +3730,21 @@ function findRelativeEc2InstanceType(
   normalizedInstruction: string,
   currentInstanceType: unknown
 ): string | undefined {
+  if (isEc2InstanceSizeIncreaseInstruction(normalizedInstruction)) {
+    return findAdjacentEc2InstanceType(currentInstanceType, "increase");
+  }
+
+  if (isEc2InstanceSizeDecreaseInstruction(normalizedInstruction)) {
+    return findAdjacentEc2InstanceType(currentInstanceType, "decrease");
+  }
+
+  return undefined;
+}
+
+function findAdjacentEc2InstanceType(
+  currentInstanceType: unknown,
+  direction: "increase" | "decrease"
+): string | undefined {
   if (typeof currentInstanceType !== "string") {
     return undefined;
   }
@@ -2985,13 +3763,13 @@ function findRelativeEc2InstanceType(
     return undefined;
   }
 
-  if (isEc2InstanceSizeIncreaseInstruction(normalizedInstruction)) {
+  if (direction === "increase") {
     const nextSize = EC2_INSTANCE_SIZE_ORDER[currentSizeIndex + 1];
 
     return nextSize === undefined ? undefined : `${family}.${nextSize}`;
   }
 
-  if (isEc2InstanceSizeDecreaseInstruction(normalizedInstruction)) {
+  if (direction === "decrease") {
     const nextSize = EC2_INSTANCE_SIZE_ORDER[currentSizeIndex - 1];
 
     return nextSize === undefined ? undefined : `${family}.${nextSize}`;
@@ -3403,4 +4181,52 @@ function createPatchFallbackMetadata(instruction: string): AiProviderMetadata {
     billingMode: "disabled",
     generatedAt: new Date().toISOString()
   };
+}
+
+function createPatchProviderMetadata(input: {
+  readonly provider: AiProvider;
+  readonly service: AiProviderService;
+  readonly model?: string | undefined;
+  readonly billingMode: AiBillingMode;
+  readonly payload: unknown;
+  readonly outputCharacters?: number | undefined;
+}): AiProviderMetadata {
+  return {
+    provider: input.provider,
+    service: input.service,
+    model: input.model,
+    routeTarget: "architecture_patch_plan",
+    cacheHit: false,
+    cacheKey: createNormalizedAiCacheKey({
+      provider: input.provider,
+      model: input.model,
+      routeTarget: "architecture_patch_plan",
+      payload: input.payload
+    }),
+    estimatedUsage: estimateAiUsage(input.payload, input.outputCharacters),
+    billingMode: input.billingMode,
+    generatedAt: new Date().toISOString()
+  };
+}
+
+function readPatchPlanCreditPolicy(
+  env: NodeJS.ProcessEnv
+): Pick<AiCreditPolicy, "bedrock" | "billingMode"> {
+  return {
+    bedrock: env.BEDROCK_CREDIT_CONFIRMED === "true",
+    billingMode: readPatchPlanBillingMode(env)
+  };
+}
+
+function readPatchPlanBillingMode(env: NodeJS.ProcessEnv): AiBillingMode {
+  switch (env.AI_BILLING_MODE) {
+    case "aws_credit_only":
+      return "aws_credit_only";
+    case "standard":
+      return "standard";
+    case "disabled":
+      return "disabled";
+    default:
+      return "disabled";
+  }
 }
