@@ -21,7 +21,8 @@ resource "aws_cloudwatch_metric_alarm" "ecs_container_errors" {
   alarm_name          = "${local.name_prefix}-${each.key}-errors"
   alarm_description   = "SketchCatch ${each.key} ECS log errors exceeded the configured threshold."
   comparison_operator = "GreaterThanOrEqualToThreshold"
-  evaluation_periods  = 1
+  evaluation_periods  = 2
+  datapoints_to_alarm = 2
   threshold           = var.ecs_log_error_alarm_threshold
   metric_name         = aws_cloudwatch_log_metric_filter.ecs_error[each.key].metric_transformation[0].name
   namespace           = aws_cloudwatch_log_metric_filter.ecs_error[each.key].metric_transformation[0].namespace

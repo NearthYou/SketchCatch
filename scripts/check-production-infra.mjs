@@ -298,6 +298,11 @@ check(
   !containerErrorAlarm.includes("ok_actions"),
   "container log error alarms must not send repetitive OK notifications"
 );
+check(
+  /evaluation_periods\s*=\s*2/.test(containerErrorAlarm) &&
+    /datapoints_to_alarm\s*=\s*2/.test(containerErrorAlarm),
+  "container log error alarms must require two consecutive error periods"
+);
 
 const migrationWorkflow = fs.readFileSync(migrationWorkflowPath, "utf8");
 for (const marker of [

@@ -5,7 +5,7 @@ Short English-only working log for the current agent context. Older records are 
 ## Current Verified State
 
 
-- Active branch: `fix/sw/330-production-auth-runtime`, issue #330.
+- Active branch: `fix/sw/330-container-alarm-debounce`, issue #330.
 
 - Release `v2.0.0` uses main SHA `44cdc976da8a03fca2d0aad69a0f3d45d51d4e8a`.
 - Route53 points to the direct-path ECS ALB. Public `/`, `/health`, and `/health/db` return 200; protected `/api/projects` returns 401.
@@ -15,7 +15,7 @@ Short English-only working log for the current agent context. Older records are 
 - Cold rollback retains encrypted AMI `ami-0a65f0b7656bf2221`, encrypted snapshot `snap-04862810b1ed8a101`, and the verified SHA-pinned S3 Docker archive.
 - RDS is encrypted and available with deletion protection and seven-day backups; it remains Single-AZ for cost control.
 - Production username/password signup and login are healthy after rotating the invalid one-character auth token secret; OAuth client ID injection is pending this hotfix deployment.
-- Container log alarms keep ALARM notifications while suppressing repetitive OK notifications, and the web filter excludes stale Next.js Server Action requests.
+- Container log alarms keep ALARM notifications while suppressing repetitive OK notifications, require two consecutive error periods, and exclude stale Next.js Server Action requests from the web metric.
 
 ## Session Record
 
