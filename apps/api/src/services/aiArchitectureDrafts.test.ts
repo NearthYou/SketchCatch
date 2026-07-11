@@ -861,6 +861,81 @@ test("createAmazonQArchitectureDraftResponse materializes HTTPS SSE and burst sc
   );
 });
 
+test("createAmazonQArchitectureDraftResponse maps the Korean SPA questionnaire to APAC Fargate SSE topology", async () => {
+  const requests: Array<Parameters<AiTextProvider["generate"]>[0]> = [];
+  const provider = createFakeAmazonQProvider((request) => {
+    requests.push(request);
+    return createNormalizedRequirementPlan(request);
+  });
+
+  const response = await createAmazonQArchitectureDraftResponse(
+    { prompt: createKoreanSpaQuestionnairePrompt() },
+    { provider, creditPolicy: confirmedCreditPolicy }
+  );
+
+  if ("status" in response) {
+    assert.fail(`Expected preview, got clarification: ${response.question}`);
+  }
+
+  const firstPayload = requests[0]?.payload as {
+    architectureDecisionSpace?: {
+      answerProfile?: Record<string, string | undefined>;
+    };
+    normalizedRequirement?: {
+      patternIds?: string[];
+      region?: string;
+      runtimeTopology?: {
+        compute?: string;
+        autoScaling?: boolean;
+      };
+    };
+  };
+  const answerProfile = firstPayload.architectureDecisionSpace?.answerProfile;
+  assert.equal(answerProfile?.traffic, "bursty");
+  assert.equal(answerProfile?.frontend, "spa");
+  assert.equal(answerProfile?.backend, "simple_api");
+  assert.equal(answerProfile?.region, "apac");
+  assert.equal(answerProfile?.upload, "image");
+  assert.equal(answerProfile?.realtime, "notification");
+  assert.equal(answerProfile?.management, "semi_managed");
+  assert.equal(answerProfile?.availability, "99.9");
+  assert.equal(answerProfile?.budget, "enterprise");
+  assert.equal(firstPayload.normalizedRequirement?.region, "ap-northeast-1");
+  assert.ok(firstPayload.normalizedRequirement?.patternIds?.includes("ecs-fargate"));
+  assert.ok(firstPayload.normalizedRequirement?.patternIds?.includes("spa-cloudfront-s3"));
+  assert.ok(firstPayload.normalizedRequirement?.patternIds?.includes("multi-az-rds"));
+  assert.equal(firstPayload.normalizedRequirement?.runtimeTopology?.compute, "ECS_FARGATE");
+  assert.equal(firstPayload.normalizedRequirement?.runtimeTopology?.autoScaling, true);
+
+  const nodes = response.architectureJson.nodes;
+  const edges = response.architectureJson.edges;
+  const subnets = nodes.filter((node) => node.type === "SUBNET");
+  const listener = nodes.find((node) => node.type === "LOAD_BALANCER_LISTENER");
+  const targetGroup = nodes.find((node) => node.type === "LOAD_BALANCER_TARGET_GROUP");
+  const database = nodes.find((node) => node.type === "RDS");
+
+  assert.ok(nodes.some((node) => node.type === "ECS_SERVICE"));
+  assert.equal(nodes.some((node) => node.type === "EC2"), false);
+  assert.equal(listener?.config.protocol, "HTTP");
+  assert.equal(listener?.config.port, 80);
+  assert.equal(nodes.some((node) => node.type === "ACM_CERTIFICATE"), false);
+  assert.ok(nodes.some((node) => node.type === "APPLICATION_AUTO_SCALING_TARGET"));
+  assert.ok(nodes.some((node) => node.type === "APPLICATION_AUTO_SCALING_POLICY"));
+  assert.equal(database?.config.allocatedStorage, 50);
+  assert.equal(database?.config.multiAz, true);
+  assert.ok(
+    subnets.every((node) => String(node.config.availabilityZone ?? "").startsWith("ap-northeast-1"))
+  );
+  assert.ok(
+    edges.some(
+      (edge) =>
+        edge.sourceId === listener?.id &&
+        edge.targetId === targetGroup?.id &&
+        /POST \/messages \+ SSE \/events/iu.test(edge.label ?? "")
+    )
+  );
+});
+
 test("createAmazonQArchitectureDraftResponse rejects when Amazon Q returns an invalid compact plan", async () => {
   const provider = createFakeAmazonQProvider(() =>
     JSON.stringify({
@@ -3640,6 +3715,41 @@ function createDynamicWebDeploymentSelectionPrompt(): string {
     "전체 웹사이트 크기는 10MB-100MB (일반적인 사이트)입니다.",
     "트래픽 패턴은 시간대별 차이 (낮에 많음)입니다.",
     "서비스 중단 허용 시간은 월 1시간 이내 (99.9% 가용성)입니다."
+  ].join("\n");
+}
+
+function createKoreanSpaQuestionnairePrompt(): string {
+  return [
+    "어떤 종류의 웹사이트인가요?",
+    "SPA (Single Page Application) (React/Vue 등)",
+    "예상 트래픽 규모는?",
+    "중간 규모 (일 1,000명, 동시 50명)",
+    "데이터베이스가 필요한가요?",
+    "중간 규모 데이터 (10GB ~ 100GB)",
+    "백엔드가 필요한가요?",
+    "간단한 API (Node.js, Python Flask 등)",
+    "주요 사용자 지역은?",
+    "아시아 태평양 (도쿄, 싱가포르 포함)",
+    "월 예산 범위는?",
+    "200만원 이상 (엔터프라이즈급)",
+    "SSL 인증서(HTTPS)가 필요한가요?",
+    "선택사항 (HTTP도 괜찮음)",
+    "파일 업로드 기능이 있나요? (이미지, 문서 등)",
+    "이미지만 (프로필, 게시글 이미지)",
+    "실시간 기능이 필요한가요? (채팅, 알림 등)",
+    "실시간 알림",
+    "관리 복잡도 선호도는?",
+    "반관리형 (일부 서버 관리)",
+    "페이지 로딩 시간 목표는?",
+    "5초 이내 (느려도 괜찮음)",
+    "전체 웹사이트 크기는?",
+    "10MB-100MB (일반적인 사이트)",
+    "트래픽 패턴은?",
+    "이벤트성 급증 (특정 시기에만)",
+    "서비스 중단 허용 시간은?",
+    "월 1시간 이내 (99.9% 가용성)",
+    "실시간 채팅 연결은 어떤 방식으로 표현할까요?",
+    "HTTP 메시지 전송 + SSE 수신 경로"
   ].join("\n");
 }
 

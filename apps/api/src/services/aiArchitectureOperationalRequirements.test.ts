@@ -26,6 +26,34 @@ test("resolveArchitectureOperationalRequirements distinguishes realtime, burst, 
   });
 });
 
+test("resolveArchitectureOperationalRequirements maps the Korean SPA questionnaire answers", () => {
+  const requirements = resolveArchitectureOperationalRequirements([
+    "어떤 종류의 웹사이트인가요?",
+    "SPA (Single Page Application) (React/Vue 등)",
+    "예상 트래픽 규모는?",
+    "중간 규모 (일 1,000명, 동시 50명)",
+    "SSL 인증서(HTTPS)가 필요한가요?",
+    "선택사항 (HTTP도 괜찮음)",
+    "실시간 기능이 필요한가요? (채팅, 알림 등)",
+    "실시간 알림",
+    "트래픽 패턴은?",
+    "이벤트성 급증 (특정 시기에만)",
+    "서비스 중단 허용 시간은?",
+    "월 1시간 이내 (99.9% 가용성)",
+    "실시간 채팅 연결은 어떤 방식으로 표현할까요?",
+    "HTTP 메시지 전송 + SSE 수신 경로"
+  ].join("\n"));
+
+  assert.deepEqual(requirements, {
+    availability: "99.9",
+    burstTraffic: true,
+    httpsRequired: false,
+    realtime: "notification",
+    realtimeTransport: "sse",
+    voiceTranscription: false
+  });
+});
+
 test("applyArchitectureOperationalPolicy adds a deployable voice transcription path", () => {
   const architectureJson: ArchitectureJson = {
     nodes: [

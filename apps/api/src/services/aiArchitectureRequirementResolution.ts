@@ -580,6 +580,10 @@ function inferPromptServicePurpose(normalizedPrompt: string): ArchitectureServic
     return "reservation_service";
   }
 
+  if (/(파일\s*업로드|이미지만|이미지\s*업로드|profile\s+image|post\s+image|upload|file upload)/iu.test(normalizedPrompt)) {
+    return "file_upload_service";
+  }
+
   if (
     includesAny(normalizedPrompt, ["게시판", "게시글", "댓글", "글쓰기"]) ||
     includesAnyEnglishToken(normalizedPrompt, ["post", "board", "forum", "community"])
@@ -850,6 +854,10 @@ function createOperatingProfile(
 ): ArchitectureDraftOperatingProfile {
   const normalizedPrompt = normalizePrompt(prompt);
   const factSet = new Set(requirementFacts);
+  const hasQuestionnaireGrowthSignal =
+    /(중간\s*규모|일\s*1,?000명?|동시\s*50명?|이벤트성\s*급증|급변동|예측\s*불가|event\s+spike|bursty)/iu.test(
+      normalizedPrompt
+    );
   const explicitNonLowBudgetKeywords = [
     "10-50만원",
     "50-200만원",
@@ -874,7 +882,7 @@ function createOperatingProfile(
 
   return {
     budgetLevel,
-    trafficLevel: growthKeywords.some((keyword) => normalizedPrompt.includes(keyword.toLowerCase()))
+    trafficLevel: growthKeywords.some((keyword) => normalizedPrompt.includes(keyword.toLowerCase())) || hasQuestionnaireGrowthSignal
       ? "normal"
       : "small",
     securityPriority:

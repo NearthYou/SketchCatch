@@ -324,6 +324,10 @@ function applyAvailabilityPolicy(
 }
 
 function resolveRealtimeMode(normalizedPrompt: string): ArchitectureRealtimeMode | undefined {
+  if (/^실시간\s*채팅$/imu.test(normalizedPrompt)) return "chat";
+  if (/^실시간\s*알림$/imu.test(normalizedPrompt)) return "notification";
+  if (/(실시간[\s\S]{0,80}(필요\s*없음|없음)|no\s+real[-\s]*time)/iu.test(normalizedPrompt)) return "none";
+  if (/(notification|notify|알림)/iu.test(normalizedPrompt)) return "notification";
   if (/실시간[\s\S]{0,20}(필요\s*없|없음)|no\s+real[-\s]*time/iu.test(normalizedPrompt)) {
     return "none";
   }

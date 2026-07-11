@@ -1677,12 +1677,20 @@ export function createDeterministicArchitectureIntentPlan(prompt: string): Archi
   const requiredResources = new Set<ResourceType>(findExplicitResourceTypesInPrompt(normalizedPrompt));
   const resourceQuantities: Record<string, number> = {};
   const forbiddenCapabilities = new Set<string>();
+  const patternIds = new Set<string>();
   const amazonQBrief: string[] = [];
   const quantities = resolveArchitectureResourceQuantities(prompt);
   const fargateRuntime = requiresFargateArchitecture(normalizedPrompt);
   const forbidsEc2Runtime = explicitlyForbidsEc2Runtime(normalizedPrompt) || fargateRuntime;
 
   if (fargateRuntime) {
+    patternIds.add("ecs-fargate");
+    if (requiresSpaFrontend(normalizedPrompt)) {
+      patternIds.add("spa-cloudfront-s3");
+    }
+    if (requiresDatabase(normalizedPrompt)) {
+      patternIds.add("multi-az-rds");
+    }
     requiredResources.add("ECS_CLUSTER");
     requiredResources.add("ECS_SERVICE");
     requiredResources.add("ECS_TASK_DEFINITION");
@@ -1749,11 +1757,16 @@ export function createDeterministicArchitectureIntentPlan(prompt: string): Archi
 
   const runtimeTopology = createDeterministicRuntimeTopology(normalizedPrompt, quantities.ec2Instances);
   const plan: ArchitectureIntentPlan = {
+    ...(patternIds.size === 0 ? {} : { patternIds: [...patternIds] }),
     ...(requiredResources.size === 0 ? {} : { requiredResources: [...requiredResources] }),
     ...(Object.keys(resourceQuantities).length === 0 ? {} : { resourceQuantities }),
     ...(forbiddenCapabilities.size === 0 ? {} : { forbiddenCapabilities: [...forbiddenCapabilities] }),
     ...(runtimeTopology === undefined ? {} : { runtimeTopology }),
-    ...(requiresKoreaOnlyRegion(normalizedPrompt) ? { region: "ap-northeast-2" } : {}),
+    ...(requiresKoreaOnlyRegion(normalizedPrompt)
+      ? { region: "ap-northeast-2" }
+      : requiresApacRegion(normalizedPrompt)
+        ? { region: "ap-northeast-1" }
+        : {}),
     ...(requiresNoDatabase(normalizedPrompt) ? { database: "none" } : requiresDatabase(normalizedPrompt) ? { database: "required" } : {}),
     ...(requiresVeryHighAvailability(normalizedPrompt) ? { availability: "99.99" } : {}),
     ...(amazonQBrief.length === 0 ? {} : { amazonQBrief })
@@ -5284,7 +5297,22 @@ function connectCanonicalPatternTopologies(
 }
 
 function requiresFargateArchitecture(normalizedPrompt: string): boolean {
-  return hasPromptTerm(normalizedPrompt, ["ecs fargate", "fargate service", "fargate task", "fargate runtime"]);
+  return (
+    hasPromptTerm(normalizedPrompt, ["ecs fargate", "fargate service", "fargate task", "fargate runtime"]) ||
+    prefersQuestionnaireFargateArchitecture(normalizedPrompt)
+  );
+}
+
+function prefersQuestionnaireFargateArchitecture(normalizedPrompt: string): boolean {
+  return (
+    requiresApacRegion(normalizedPrompt) &&
+    requiresSpaFrontend(normalizedPrompt) &&
+    resolveBackendProfile(normalizedPrompt) === "simple_api" &&
+    resolveManagementProfile(normalizedPrompt) === "semi_managed" &&
+    requiresDatabase(normalizedPrompt) &&
+    (resolveTrafficProfile(normalizedPrompt) === "bursty" ||
+      resolveTrafficProfile(normalizedPrompt) === "medium")
+  );
 }
 
 function explicitlyForbidsEc2Runtime(normalizedPrompt: string): boolean {
@@ -5389,6 +5417,10 @@ function resolveUploadProfile(normalizedPrompt: string): ArchitectureAnswerProfi
     return "none";
   }
 
+  if (/(이미지만|이미지\s*업로드|프로필\s*이미지|게시글\s*이미지|images?\s+only|profile\s+image|post\s+image)/iu.test(normalizedPrompt)) {
+    return "image";
+  }
+
   if (/(large\s+file|100mb|대용량)/iu.test(normalizedPrompt)) {
     return "large";
   }
@@ -5405,6 +5437,22 @@ function resolveUploadProfile(normalizedPrompt: string): ArchitectureAnswerProfi
 }
 
 function resolveRealtimeProfile(normalizedPrompt: string): ArchitectureAnswerProfile["realtime"] {
+  if (/^실시간\s*채팅$/imu.test(normalizedPrompt)) {
+    return "chat";
+  }
+
+  if (/^실시간\s*알림$/imu.test(normalizedPrompt)) {
+    return "notification";
+  }
+
+  if (/(실시간[\s\S]{0,80}(필요\s*없음|없음)|no\s+real[-\s]*time|realtime:\s*(none|no))/iu.test(normalizedPrompt)) {
+    return "none";
+  }
+
+  if (/(notification|notify|알림)/iu.test(normalizedPrompt)) {
+    return "notification";
+  }
+
   if (hasNoRealtimeRequirement(normalizedPrompt)) {
     return "none";
   }
@@ -5590,6 +5638,14 @@ function hasRealtimeImplementationDecision(normalizedPrompt: string): boolean {
 type RealtimeTransport = "polling" | "sse" | "websocket";
 
 function requiresHttpsTransport(normalizedPrompt: string): boolean {
+  if (
+    /(https|ssl|tls)[\s\S]{0,80}(선택\s*사항|http도\s*괜찮음|optional|not\s+required)|(?:선택\s*사항|http도\s*괜찮음|optional|not\s+required)[\s\S]{0,80}(https|ssl|tls)/iu.test(
+      normalizedPrompt
+    )
+  ) {
+    return false;
+  }
+
   return /(?:https|ssl|tls|인증서)[\s\S]{0,40}(?:required|mandatory|필수|중요)|(?:필수|mandatory)[\s\S]{0,40}(?:https|ssl|tls|인증서)/iu.test(
     normalizedPrompt
   );
@@ -5726,6 +5782,15 @@ function requiresEc2PrivateSubnetSplit(normalizedPrompt: string): boolean {
 function requiresKoreaOnlyRegion(normalizedPrompt: string): boolean {
   return /(region:\s*(korea|seoul)|korea\s*only|seoul\s*region|ap-northeast-2|\uD55C\uAD6D\uB9CC|\uC11C\uC6B8\s*\uB9AC\uC804)/iu.test(
     normalizedPrompt
+  );
+}
+
+function requiresApacRegion(normalizedPrompt: string): boolean {
+  return (
+    !requiresKoreaOnlyRegion(normalizedPrompt) &&
+    /(asia\s*pacific|apac|tokyo|singapore|아시아\s*태평양|도쿄|싱가포르|ap-northeast-1|ap-southeast-1)/iu.test(
+      normalizedPrompt
+    )
   );
 }
 
