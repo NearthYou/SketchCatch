@@ -4,7 +4,7 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- Active branch: `fix/sw/322-ecs-production-ha-release-deploy`, issue #322.
+- Active branch: `fix/sw/330-production-auth-runtime`, issue #330.
 - Release `v2.0.0` uses main SHA `44cdc976da8a03fca2d0aad69a0f3d45d51d4e8a`.
 - Route53 points to the direct-path ECS ALB. Public `/`, `/health`, and `/health/db` return 200; protected `/api/projects` returns 401.
 - API and web are active at desired/running 1 with Application Auto Scaling min 1 and max 2.
@@ -12,10 +12,12 @@ Short English-only working log for the current agent context. Older records are 
 - The old EC2 instance, old ALB, and legacy CloudFormation ALB stack are deleted.
 - Cold rollback retains encrypted AMI `ami-0a65f0b7656bf2221`, encrypted snapshot `snap-04862810b1ed8a101`, and the verified SHA-pinned S3 Docker archive.
 - RDS is encrypted and available with deletion protection and seven-day backups; it remains Single-AZ for cost control.
-- Production alarms are OK and the SNS email subscription is confirmed.
+- Production username/password signup and login are healthy after rotating the invalid one-character auth token secret; OAuth client ID injection is pending this hotfix deployment.
+- Container log alarms keep ALARM notifications while suppressing repetitive OK notifications, and the web filter excludes stale Next.js Server Action requests.
 
 ## Session Record
 
+<<<<<<< HEAD
 ### 2026-07-11 - Disable Trivy ALB and Auto Scaling checks
 
 - Configured each Terraform Trivy scan to generate an ignore file that excludes ALB rules AWS-0047, AWS-0052, AWS-0053, and AWS-0054 plus Auto Scaling launch configuration/template rules AWS-0008, AWS-0009, AWS-0122, AWS-0129, and AWS-0130.
@@ -23,6 +25,14 @@ Short English-only working log for the current agent context. Older records are 
 - Verification: focused Trivy scanner tests, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check` passed.
 - Risk: future Trivy check-bundle rule IDs require an explicit review before they are added to the exclusion list.
 - Next action: add the product-specific ALB and ASG configuration warnings as non-blocking deployment checks when requested.
+=======
+### 2026-07-11 - Recover production auth runtime configuration
+
+- Traced signup/login failures to a one-character SSM `AUTH_TOKEN_SECRET` and missing OAuth client IDs in the ECS API task definition.
+- Rotated the secret without exposing it, restarted the API service, and verified live signup, login, and account cleanup.
+- Added production startup validation and deployment-time OAuth variable injection so invalid auth configuration fails before serving traffic.
+- Kept container ALARM notifications, removed repetitive OK notifications, and excluded the known stale Server Action web log pattern.
+>>>>>>> a4e4095d6f795dcf9a9db2c634db9e5695da8b61
 
 ### 2026-07-11 - Retire warm rollback and complete cost-first ECS operations
 
@@ -37,6 +47,7 @@ Short English-only working log for the current agent context. Older records are 
 ## Verification
 
 - Harness, migration compatibility, production infra structure, IAM tests, lint, typecheck, and build passed.
+- Production auth tests passed 41 of 41; Terraform runtime validation passed and tests passed 2 of 2.
 - Runtime and cold rollback Terraform fmt/validate passed; runtime Terraform tests passed 2 of 2.
 - The approved runtime Terraform apply completed and the final normal plan reports no changes.
 - API/web services are stable at 1/1, autoscaling targets are min 1/max 2, and both target groups have healthy serving targets.
