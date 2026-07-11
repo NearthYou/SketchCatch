@@ -9,10 +9,12 @@ const selectMenuStylesSource = readUiFile("select-menu.module.css");
 test("SelectMenu exposes a workspace tone for DESIGN.md workspace panels", () => {
   assert.match(
     selectMenuSource,
-    /export type SelectMenuTone = "board" \| "default" \| "dashboard" \| "purple" \| "workspace";/
+    /export type SelectMenuTone = "board" \| "default" \| "dashboard" \| "workspace";/
   );
   assert.match(selectMenuSource, /tone === "workspace"/);
   assert.match(selectMenuSource, /return "workspaceTone";/);
+  assert.doesNotMatch(selectMenuSource, /purpleTone|tone === "purple"/);
+  assert.doesNotMatch(selectMenuStylesSource, /\.purpleTone/);
 });
 
 test("SelectMenu board tone uses the calm Board tokens", () => {

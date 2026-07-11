@@ -142,6 +142,7 @@
 - API는 job id를 반환하고 ECS RunTask worker가 실행 결과를 기록한다.
 - Terraform 실행 상태가 기존 UI/API 계약으로 조회된다.
 - worker task 실패 후에도 stale lease recovery 대상이 된다.
+- worker task definition, execution/task role, security group이 API/web runtime과 분리된다.
 - cost guardrail 테스트가 통과한다.
 
 ## Phase 6. RunTask recovery/observability/smoke 강화
@@ -189,23 +190,51 @@
 ## Phase 8. nginx 제거와 ALB path routing
 
 - Priority: P2
-- Issue title: `Refactor: ALB path routing 전환과 nginx 제거`
-- Branch: `refactor/sw/{issue}-alb-path-routing`
-- PR title: `Refactor: ALB path routing 전환과 nginx 제거`
-- Depends on: Phase 1, Phase 2
+- Issue title: `Feat: ECS nginx 제거와 ALB path routing 전환`
+- Branch: `feature/sw/{issue}-ecs-alb-path-routing`
+- PR title: `Feat: ECS nginx 제거와 ALB path routing 전환`
+- Depends on: Phase 1, Phase 2, Phase 7 운영 안정성 확인
 
 범위:
 
-- ALB `/api/* -> api`, `/* -> web` path routing으로 전환한다.
-- nginx container, image, config를 제거한다.
-- web/api를 별도 ECS service로 분리할지 최종 결정한다.
-- 기존 nginx 포함 rollback path 종료 시점을 정한다.
+- ALB `/api`, `/api/*`, `/health`, `/health/db`는 API로, 기본 `/*`는 web으로 전달한다.
+- 최초 적용은 legacy target weight 100의 warmup 후 API/web target health를 확인하고 split weight로 전환했다.
+- API와 web을 독립 ECS task definition/service/target group으로 분리한다.
+- nginx container를 ECS steady state와 ECS deploy workflow에서 제거한다.
+- cutover 검증 후 EC2/SSM/nginx warm rollback과 legacy ECS service를 제거하고 cold artifact만 보존한다.
+- Next.js same-origin `/api`, Fastify forwarded headers, split service deploy 순서를 검증한다.
 
 완료 기준:
 
-- ALB path routing이 production smoke를 통과한다.
-- nginx 제거 후 root page와 API가 정상 동작한다.
-- task/service 구조가 장기 운영 구조와 일치한다.
+- Terraform 정적 contract가 listener rule, target group, task/service 분리를 검증한다.
+- nginx 없이 root page와 API/health path가 올바른 target group으로 전달되는 구성이 확인된다.
+- encrypted AMI, 검증 Docker artifact, disabled Terraform/runbook의 cold rollback 범위가 문서화된다.
+- live ALB/Route53 전환과 production smoke는 별도 명시 승인 후 운영 evidence로 남긴다.
+
+## Phase 9. SketchCatch production infra Terraform 전환
+
+- Priority: P1
+- Issue title: `Feat: SketchCatch production infra Terraform 관리 기반 추가`
+- Branch: `feature/sw/{issue}-production-infra-terraform`
+- PR title: `Feat: SketchCatch production infra Terraform 관리 기반 추가`
+- Depends on: Phase 8 merge와 ECS production 안정성 확인
+
+범위:
+
+- 기존 ECS runtime Terraform root와 backend key를 보존한다.
+- Route53/ACM, S3/RDS/Redis, opt-in cold rollback을 별도 state/import gate로 격리한다.
+- S3 backend encryption, Versioning, native lockfile 전략을 기록한다.
+- ECS, ALB, target group/listener, ECR, IAM, CloudWatch, Route53/ACM, S3, RDS, Redis/ElastiCache import inventory와 순서를 만든다.
+- manual plan-only GitHub Actions와 static forbidden-command guard를 추가한다.
+- production infra와 사용자 Terraform Deployment 실행 경계를 문서화한다.
+
+완료 기준:
+
+- AWS credential 없이 모든 Terraform root의 fmt/init-without-backend/validate가 통과한다.
+- plan workflow에 import/apply/destroy 및 binary plan artifact가 없다.
+- high-risk root는 discovery/backup/ownership 승인 전 빈 import gate로 유지된다.
+- high-risk persistent resource와 cold rollback ownership이 분리된다.
+- live import/apply/destroy와 AWS mutation은 실행하지 않는다.
 
 ## 전체 완료 기준
 
@@ -214,4 +243,5 @@
 - optional private runtime 모드가 Terraform 변수로 동작한다.
 - ECS production 안정화 후 Terraform 실행이 ECS RunTask one-off worker, DB lease, RDS/S3/Redis 기록 계약을 통해 수행된다.
 - 비용 guardrail, cleanup, rollback, 로그 보존 기준이 문서와 Terraform에 반영된다.
+- API와 web은 비용 우선 autoscaling `min=1`, `max=2`를 사용하며 legacy ECS service는 존재하지 않는다.
 - SQS FIFO와 always-on worker service는 별도 결정 전까지 scope 밖으로 유지된다.

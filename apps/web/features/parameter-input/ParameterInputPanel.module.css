@@ -39,9 +39,9 @@ img.resourceIcon {
 
 div.resourceIcon,
 .emptyIcon {
-  background: #f1edff;
-  border: 1px solid #d6cbff;
-  color: #5f3de8;
+  background: var(--workspace-accent-soft, #f0f0f3);
+  border: 1px solid var(--workspace-line-strong, #dcdee0);
+  color: var(--workspace-accent, #000000);
 }
 
 .headerText {
@@ -142,8 +142,8 @@ div.resourceIcon,
 }
 
 .input:focus {
-  border-color: #8b71ff;
-  box-shadow: 0 0 0 3px rgba(111, 76, 246, 0.14);
+  border-color: var(--workspace-accent, #000000);
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.12);
   outline: none;
 }
 
@@ -177,7 +177,7 @@ div.resourceIcon,
 
 .checkboxRow input,
 .optionPill input {
-  accent-color: #6f4cf6;
+  accent-color: var(--workspace-accent, #000000);
 }
 
 .checkboxRow span {
@@ -230,8 +230,8 @@ div.resourceIcon,
 
 .addButton {
   align-self: flex-start;
-  background: #f4f1ff;
-  color: #5f3de8;
+  background: var(--workspace-accent-soft, #f0f0f3);
+  color: var(--workspace-accent, #000000);
   font-size: 0.82rem;
   font-weight: 800;
 }
@@ -312,8 +312,8 @@ div.resourceIcon,
 
 .regionControl:focus-visible,
 .regionControlOpen {
-  border-color: #6f4cf6;
-  box-shadow: 0 0 0 3px rgba(111, 76, 246, 0.14);
+  border-color: var(--workspace-accent, #000000);
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.12);
   outline: none;
 }
 
@@ -397,12 +397,12 @@ div.resourceIcon,
 }
 
 .regionOptionSelected {
-  background: #f4f1ff;
-  color: #4b2bd6;
+  background: var(--workspace-accent-soft, #f0f0f3);
+  color: var(--workspace-accent, #000000);
 }
 
 .regionOptionSelected.regionOptionActive {
-  background: #ede8ff;
+  background: var(--workspace-line-strong, #dcdee0);
 }
 
 .regionOptionText {
@@ -429,7 +429,7 @@ div.resourceIcon,
 }
 
 .regionOptionSelected .regionOptionCode {
-  color: #5f3de8;
+  color: var(--workspace-accent, #000000);
 }
 
 .regionEmpty {
@@ -493,89 +493,6 @@ div.resourceIcon,
     grid-column: 1 / -1;
     grid-row: 2;
   }
-}
-
-/* Blueprint inspector skin */
-.panel {
-  background: var(--bp-paper);
-  border-left: 1px solid var(--bp-line);
-  color: var(--bp-text);
-  font-family: var(--bp-body);
-}
-
-.resourceIcon,
-.emptyIcon,
-.input,
-.readonlyValue,
-.optionPill,
-.regionControl,
-.addButton,
-.removeBlockButton,
-.iconButton,
-.nestedBlock {
-  border-radius: var(--bp-r);
-}
-
-div.resourceIcon,
-.emptyIcon {
-  background: var(--bp-blue-tint);
-  border-color: var(--bp-line);
-  color: var(--bp-blue);
-}
-
-.headerText h2,
-.emptyState h2,
-.sectionHeader h3,
-.fieldLabel,
-.regionOptionLabel {
-  color: var(--bp-ink);
-  font-family: var(--bp-head);
-}
-
-.section {
-  border-top-color: var(--bp-line);
-}
-
-.input,
-.readonlyValue,
-.optionPill,
-.regionControl,
-.nestedBlock {
-  background: var(--bp-paper-2);
-  border-color: var(--bp-line);
-  color: var(--bp-text);
-}
-
-.input:focus,
-.regionControl:focus-visible {
-  border-color: var(--bp-blue);
-  box-shadow: 0 0 0 3px var(--bp-blue-tint);
-}
-
-.addButton {
-  background: var(--bp-blue-tint);
-  border-color: var(--bp-line);
-  color: var(--bp-blue);
-}
-
-.removeBlockButton,
-.iconButtonDanger,
-.errorText,
-.requiredMark {
-  color: var(--bp-high);
-}
-
-.removeBlockButton,
-.iconButtonDanger {
-  background: var(--bp-high-tint);
-  border-color: color-mix(in srgb, var(--bp-high) 30%, var(--bp-line));
-}
-
-.inlineEmpty,
-.checkboxRow span,
-.regionOptionCode,
-.emptyState p {
-  color: var(--bp-muted);
 }
 
 /* DESIGN.md parameter input pass */

@@ -1,5 +1,5 @@
-import { DesignDashboardPage } from "../../../features/dashboard/design-dashboard";
+import { SettingsIntegrationsClient } from "../../settings/settings-integrations-client";
 
-export default function SettingsPage() {
-  return <DesignDashboardPage view="settings" />;
+export default function DashboardSettingsPage() {
+  return <SettingsIntegrationsClient />;
 }

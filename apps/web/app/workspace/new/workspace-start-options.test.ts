@@ -11,8 +11,9 @@ const startClientSource = readFileSync(
   fileURLToPath(new URL("workspace-start-client.tsx", import.meta.url)),
   "utf8"
 );
+const startPageSource = readFileSync(fileURLToPath(new URL("page.tsx", import.meta.url)), "utf8");
 
-test("createWorkspaceStartOptions makes AI and Reverse main choices and keeps blank board small", () => {
+test("createWorkspaceStartOptions exposes four guided starts and keeps blank board small", () => {
   const options = createWorkspaceStartOptions();
 
   assert.deepEqual(
@@ -20,23 +21,34 @@ test("createWorkspaceStartOptions makes AI and Reverse main choices and keeps bl
     [
       ["ai", "primary"],
       ["reverse", "primary"],
+      ["template", "primary"],
+      ["github", "primary"],
       ["blank", "secondary"]
     ]
   );
 });
 
-test("WorkspaceStartClient renders the blank board as a small helper label", () => {
-  assert.match(startClientSource, /workspaceStartBlankLabel/);
-  assert.match(startClientSource, /option\.priority === "primary"/);
+test("WorkspaceStartClient uses the rebuilt start shell without a placeholder", () => {
+  assert.match(startPageSource, /WorkspaceAuthGate/);
+  assert.doesNotMatch(startPageSource, /RoutePlaceholder/);
+  assert.doesNotMatch(startPageSource, /designDashboardPage|designDashboardShell/);
+  assert.match(startClientSource, /role="radiogroup"/);
+  assert.match(startClientSource, /TemplatePicker/);
   assert.match(startClientSource, /blankStartOption/);
-  assert.doesNotMatch(startClientSource, /workspaceStartOptionButtonSecondary/);
 });
 
-test("WorkspaceStartClient can connect GitHub immediately after blank project creation", () => {
-  assert.match(startClientSource, /connectGitHubAfterCreate/);
-  assert.match(startClientSource, /workspaceStartCheckbox/);
+test("WorkspaceStartClient keeps Template and GitHub as separate real start paths", () => {
+  assert.match(startClientSource, /saveProjectDraft/);
+  assert.match(startClientSource, /selectedTemplate\.diagramJson/);
   assert.match(startClientSource, /createGitHubSourceRepositoryInstallUrl\(project\.id\)/);
   assert.match(startClientSource, /window\.location\.assign\(installUrl\)/);
+  assert.doesNotMatch(startClientSource, /connectGitHubAfterCreate/);
+});
+
+test("WorkspaceStartClient hydrates a stored form before persisting changes", () => {
+  assert.match(startClientSource, /isStartFormHydrated/);
+  assert.match(startClientSource, /if \(!isStartFormHydrated\) \{\s+return;/);
+  assert.match(startClientSource, /setIsStartFormHydrated\(true\)/);
 });
 
 test("resolveWorkspaceStartAction sends Reverse users without a verified AWS Role to settings", () => {
@@ -67,20 +79,30 @@ test("resolveWorkspaceStartAction starts Reverse without creating a project firs
   });
 });
 
-test("resolveWorkspaceStartAction creates a project for AI and blank starts", () => {
+test("resolveWorkspaceStartAction opens AI before project creation", () => {
   const aiAction = resolveWorkspaceStartAction({
     cloudPlatform: "aws",
     hasVerifiedAwsConnection: true,
     projectName: "AI 설계",
     startKind: "ai"
   });
-  const blankAction = resolveWorkspaceStartAction({
-    cloudPlatform: "aws",
-    hasVerifiedAwsConnection: true,
-    projectName: "빈 보드",
-    startKind: "blank"
-  });
 
-  assert.deepEqual(aiAction, { kind: "createProject", openMode: "ai" });
-  assert.deepEqual(blankAction, { kind: "createProject", openMode: "blank" });
+  assert.deepEqual(aiAction, { kind: "openAiDraft", href: "/workspace/ai" });
+});
+
+test("resolveWorkspaceStartAction creates projects for blank, Template, and GitHub starts", () => {
+  const starts = ["blank", "template", "github"] as const;
+  const actions = starts.map((startKind) =>
+    resolveWorkspaceStartAction({
+      cloudPlatform: "aws",
+      hasVerifiedAwsConnection: true,
+      projectName: startKind,
+      startKind
+    })
+  );
+
+  assert.deepEqual(
+    actions,
+    starts.map((openMode) => ({ kind: "createProject", openMode }))
+  );
 });

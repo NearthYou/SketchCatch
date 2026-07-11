@@ -131,6 +131,7 @@ export function toFlowNodes(
   });
 }
 
+// 보드의 관계 데이터를 React Flow가 그릴 수 있는 연결선으로 바꿉니다.
 export function toFlowEdges(
   edges: readonly DiagramEdge[],
   selectedEdgeIds: readonly string[],

@@ -23,6 +23,10 @@ const diagramEdgeToolbarSource = readFileSync(
   fileURLToPath(new URL("./DiagramEdgeToolbar.tsx", import.meta.url)),
   "utf8"
 );
+const workspaceProjectBarSource = readFileSync(
+  fileURLToPath(new URL("./WorkspaceProjectBar.tsx", import.meta.url)),
+  "utf8"
+);
 
 test("diagram editor uses partial box selection for overlapping area nodes", () => {
   assert.match(diagramEditorSource, /selectionOnDrag=\{interactionMode === "select" && !isPreviewActive\}/);
@@ -105,33 +109,111 @@ test("diagram editor restores the light canvas with a restrained two-level grid"
   );
 });
 
-test("diagram editor shows the workspace context switcher without save status text", () => {
-  const contextLinkBlock = getCssBlock(".toolbarContextLink");
-  const avatarBlock = getCssBlock(".toolbarAvatar");
-  const userNameBlock = getCssBlock(".toolbarUserName");
-  const canvasToolbarBlock = getCssBlock(".canvasToolbar");
+test("diagram editor exposes project, save, and panel controls in one stable top bar", () => {
+  const projectBarBlock = getCssBlock(".projectBar");
+  const brandLinkBlock = getCssBlock(".projectBarBrand");
+  const saveStatusBlock = getCssBlock(".projectBarSaveStatus");
 
   assert.match(diagramEditorSource, /dashboardHref = "\/dashboard"/);
-  assert.match(diagramEditorSource, /href=\{dashboardHref\}/);
   assert.match(diagramEditorSource, /workspaceUserName = "Personal workspace"/);
-  assert.match(diagramEditorSource, /getWorkspaceInitials\(workspaceUserName\)/);
-  assert.match(diagramEditorSource, /className=\{styles\.toolbarContextLink\}/);
-  assert.match(diagramEditorSource, /className=\{styles\.toolbarProjectName\}/);
-  assert.match(diagramEditorSource, /className=\{styles\.toolbarUserName\}/);
-  assert.doesNotMatch(diagramEditorSource, /ChevronDown/);
-  assert.doesNotMatch(diagramEditorSource, /myPageHref/);
-  assert.doesNotMatch(diagramEditorSource, /className=\{styles\.toolbarStatus\}/);
-  assert.doesNotMatch(diagramEditorSource, /<span>\{saveStatus\}<\/span>/);
+  assert.match(diagramEditorSource, /saveStatus = "편집 중"/);
+  assert.match(diagramEditorSource, /<WorkspaceProjectBar/);
+  assert.match(diagramEditorSource, /onSave:\s*onDiagramSaveRequest/);
+  assert.match(diagramEditorSource, /onToggleLeftPanel:\s*toggleLeftPanel/);
+  assert.match(diagramEditorSource, /onToggleRightPanel:\s*toggleRightPanel/);
 
-  assert.match(contextLinkBlock, /grid-template-columns:\s*34px minmax\(0, 1fr\);/);
-  assert.match(contextLinkBlock, /background:\s*var\(--board-surface\);/);
-  assert.doesNotMatch(contextLinkBlock, /backdrop-filter/);
-  assert.match(contextLinkBlock, /border:\s*1px solid var\(--board-border\);/);
-  assert.match(contextLinkBlock, /border-radius:\s*8px;/);
-  assert.match(canvasToolbarBlock, /background:\s*transparent;/);
-  assert.match(canvasToolbarBlock, /border:\s*0;/);
-  assert.match(avatarBlock, /background:\s*var\(--workspace-accent\);/);
-  assert.match(userNameBlock, /color:\s*var\(--workspace-muted\);/);
+  assert.match(workspaceProjectBarSource, /src="\/sketchcatch-logo\.png"/);
+  assert.match(workspaceProjectBarSource, /className=\{styles\.projectBarSaveStatus\}/);
+  assert.match(workspaceProjectBarSource, /aria-label="지금 저장"/);
+  assert.match(workspaceProjectBarSource, /"리소스 패널 열기"/);
+  assert.match(workspaceProjectBarSource, /"Inspector 열기"/);
+
+  assert.match(projectBarBlock, /grid-column:\s*1 \/ -1;/);
+  assert.match(projectBarBlock, /height:\s*64px;/);
+  assert.match(brandLinkBlock, /background:\s*transparent;/);
+  assert.match(saveStatusBlock, /min-width:\s*0;/);
+});
+
+test("workspace shell docks both panels and collapses them on compact screens", () => {
+  const editorShellBlock = getCssBlock(".editorShell");
+  const compactRule = getCssRuleContaining("@media (max-width: 1120px)");
+
+  assert.match(editorShellBlock, /grid-template-rows:\s*64px minmax\(0, 1fr\);/);
+  assert.match(diagramEditorStyles, /\.leftRail\s*\{[^}]*grid-row:\s*2;[^}]*position:\s*relative;/s);
+  assert.match(diagramEditorStyles, /\.rightRail\s*\{[^}]*grid-row:\s*2;[^}]*position:\s*relative;/s);
+  assert.match(compactRule, /grid-template-columns:\s*0 minmax\(0, 1fr\) 0;/);
+  assert.match(diagramEditorSource, /matchMedia\("\(max-width: 1120px\)"\)/);
+});
+
+test("compact workspace refits the board without changing the saved DiagramJson", () => {
+  assert.match(diagramEditorSource, /const fitVisibleDiagram = useCallback/);
+  assert.match(diagramEditorSource, /const runViewportMoveWithoutPersistence = useCallback/);
+  assert.match(
+    diagramEditorSource,
+    /const handleMoveEnd[\s\S]*?persistViewportAfterMove\([\s\S]*?automaticViewportMoveRequestIdRef\.current/
+  );
+  assert.match(
+    diagramEditorSource,
+    /initialAutoFitFrameRef\.current = null;[\s\S]*?fitVisibleDiagram\(false\);/
+  );
+  assert.match(
+    diagramEditorSource,
+    /function refitCompactBoard\(\): void \{[\s\S]*?window\.innerWidth > 1120[\s\S]*?fitVisibleDiagram\(false\)/
+  );
+  assert.match(diagramEditorSource, /new ResizeObserver\(refitCompactBoard\)/);
+  assert.match(
+    diagramEditorSource,
+    /function handleWindowResize\(\): void \{[\s\S]*?requestAnimationFrame\(\(\) => \{[\s\S]*?requestAnimationFrame\(\(\) => \{[\s\S]*?fitVisibleDiagram\(false\)/
+  );
+});
+
+test("fit view uses the unobscured board frame and visual resource bounds", () => {
+  assert.match(
+    diagramEditorSource,
+    /getViewportForBounds\(\s*getDiagramVisualBounds\(currentNodes\),\s*frame\.width,\s*frame\.height/s
+  );
+  assert.match(diagramEditorSource, /offsetBoardViewportToFrame/);
+  assert.doesNotMatch(diagramEditorSource, /const fitViewWidth = editorBounds/);
+});
+
+test("viewport controls use the React Flow instance received from onInit", () => {
+  assert.match(diagramEditorSource, /const fallbackFlowInstanceRef = useRef\(reactFlow\);/);
+  assert.match(diagramEditorSource, /fallbackFlowInstanceRef\.current = reactFlow;/);
+  assert.match(diagramEditorSource, /const getFlowInstance = useCallback/);
+  assert.match(
+    diagramEditorSource,
+    /\(\) => flowInstanceRef\.current \?\? fallbackFlowInstanceRef\.current,\s*\[\]/
+  );
+  assert.match(diagramEditorSource, /const handleZoomIn[\s\S]*?getFlowInstance\(\)\.zoomIn/);
+  assert.match(diagramEditorSource, /const handleZoomOut[\s\S]*?getFlowInstance\(\)\.zoomOut/);
+  assert.match(diagramEditorSource, /const fitVisibleDiagram[\s\S]*?const flowInstance = getFlowInstance\(\)/);
+});
+
+test("a single node click opens the matching resource inspector", () => {
+  assert.match(
+    diagramEditorSource,
+    /const handleFlowNodeClick[\s\S]*?setSelectedNodeIds\(\[node\.id\]\);[\s\S]*?setInspectedNodeId\(node\.id\);[\s\S]*?setRightPanelOpen\(true\);/
+  );
+});
+
+test("reverse preview can opt into read-only resource inspection", () => {
+  assert.match(diagramEditorSource, /allowPreviewInspection = false/);
+  assert.match(diagramEditorSource, /elementsSelectable=\{!isPreviewActive \|\| allowPreviewInspection\}/);
+  assert.match(
+    diagramEditorSource,
+    /!isPreviewActive \|\| allowPreviewInspection\s*\? \{ onNodeClick: handleFlowNodeClick \}/s
+  );
+});
+
+test("a dedicated workflow can replace the default empty board guidance", () => {
+  assert.match(diagramEditorSource, /emptyBoardDescription = "왼쪽 Resource에서 필요한 항목을 끌어오세요\."/);
+  assert.match(diagramEditorSource, /<span>\{emptyBoardDescription\}<\/span>/);
+});
+
+test("a preview-only workflow can hide the project save action", () => {
+  assert.match(diagramEditorSource, /showSaveAction = true/);
+  assert.match(diagramEditorSource, /showSaveAction,\s*userName:/s);
+  assert.match(workspaceProjectBarSource, /\{workspace\.showSaveAction \? \(/);
 });
 
 test("collapsed right panel does not leave the mobile fixed rail shell visible", () => {
@@ -389,6 +471,10 @@ test("diagram editor fits and centers visual footprints inside the unobscured bo
   assert.match(diagramEditorSource, /rebaseBoardViewport\(reactFlow\.getViewport\(\), previousFrame, nextFrame\)/);
   assert.match(
     diagramEditorSource,
+    /<div className=\{styles\.leftRail\} ref=\{leftRailRef\}>/
+  );
+  assert.match(
+    diagramEditorSource,
     /className=\{styles\.collapsedLeftPanel\}[\s\S]*?ref=\{leftRailRef\}/
   );
 });
@@ -405,10 +491,6 @@ test("parameter updates synchronize all reference edges within one diagram updat
 });
 
 test("Area auto expansion is a persistent pressed toolbar preference after canvas pan", () => {
-  assert.match(
-    diagramEditorStyles,
-    /\.canvasToolbar > \.toolbarGroup:nth-of-type\(2\)\s*\{[^}]*left:\s*calc\(50% - 152px\);/s
-  );
   assert.match(
     diagramEditorSource,
     /const \[autoExpandAreasEnabled, setAutoExpandAreasEnabled\] = useState\(\(\) =>\s*readAutoExpandAreasEnabled\(typeof window === "undefined" \? null : window\.localStorage\)\s*\);/s

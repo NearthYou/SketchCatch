@@ -5,16 +5,17 @@ resource "aws_lb" "ecs" {
   security_groups            = [aws_security_group.ecs_alb.id]
   subnets                    = var.public_subnet_ids
   enable_deletion_protection = var.enable_alb_deletion_protection
+  drop_invalid_header_fields = true
 
   tags = {
     Name = "${local.name_prefix}-ecs"
   }
 }
 
-resource "aws_lb_target_group" "ecs" {
-  name        = "${local.name_prefix}-ecs"
+resource "aws_lb_target_group" "api" {
+  name        = "${local.name_prefix}-api"
   vpc_id      = var.vpc_id
-  port        = 80
+  port        = 4000
   protocol    = "HTTP"
   target_type = "ip"
 
@@ -30,7 +31,30 @@ resource "aws_lb_target_group" "ecs" {
   }
 
   tags = {
-    Name = "${local.name_prefix}-ecs"
+    Name = "${local.name_prefix}-api"
+  }
+}
+
+resource "aws_lb_target_group" "web" {
+  name        = "${local.name_prefix}-web"
+  vpc_id      = var.vpc_id
+  port        = 3000
+  protocol    = "HTTP"
+  target_type = "ip"
+
+  health_check {
+    enabled             = true
+    path                = "/"
+    protocol            = "HTTP"
+    matcher             = "200-399"
+    interval            = 30
+    timeout             = 5
+    healthy_threshold   = 2
+    unhealthy_threshold = 3
+  }
+
+  tags = {
+    Name = "${local.name_prefix}-web"
   }
 }
 
@@ -43,7 +67,25 @@ resource "aws_lb_listener" "http_forward" {
 
   default_action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.ecs.arn
+    target_group_arn = aws_lb_target_group.web.arn
+  }
+}
+
+resource "aws_lb_listener_rule" "api_http" {
+  count = var.certificate_arn == "" ? 1 : 0
+
+  listener_arn = aws_lb_listener.http_forward[0].arn
+  priority     = 100
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.api.arn
+  }
+
+  condition {
+    path_pattern {
+      values = local.api_path_patterns
+    }
   }
 }
 
@@ -76,7 +118,25 @@ resource "aws_lb_listener" "https" {
 
   default_action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.ecs.arn
+    target_group_arn = aws_lb_target_group.web.arn
+  }
+}
+
+resource "aws_lb_listener_rule" "api_https" {
+  count = var.certificate_arn == "" ? 0 : 1
+
+  listener_arn = aws_lb_listener.https[0].arn
+  priority     = 100
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.api.arn
+  }
+
+  condition {
+    path_pattern {
+      values = local.api_path_patterns
+    }
   }
 }
 
@@ -94,6 +154,8 @@ resource "aws_route53_record" "ecs_alias" {
   }
 
   lifecycle {
+    prevent_destroy = true
+
     precondition {
       condition     = var.route53_zone_id != "" && var.route53_record_name != ""
       error_message = "route53_zone_id and route53_record_name are required when create_route53_alias is true."

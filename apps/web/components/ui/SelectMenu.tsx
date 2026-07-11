@@ -16,7 +16,7 @@ export type SelectMenuOption = {
 };
 
 export type SelectMenuSize = "compact" | "regular" | "large";
-export type SelectMenuTone = "board" | "default" | "dashboard" | "purple" | "workspace";
+export type SelectMenuTone = "board" | "default" | "dashboard" | "workspace";
 
 type SelectMenuProps = {
   readonly ariaLabel: string;
@@ -248,7 +248,7 @@ function getSizeClassName(size: SelectMenuSize): "compact" | "regular" | "large"
 
 function getToneClassName(
   tone: SelectMenuTone
-): "boardTone" | "defaultTone" | "dashboardTone" | "purpleTone" | "workspaceTone" {
+): "boardTone" | "defaultTone" | "dashboardTone" | "workspaceTone" {
   if (tone === "board") {
     return "boardTone";
   }
@@ -259,10 +259,6 @@ function getToneClassName(
 
   if (tone === "workspace") {
     return "workspaceTone";
-  }
-
-  if (tone === "purple") {
-    return "purpleTone";
   }
 
   return "defaultTone";

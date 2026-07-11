@@ -4,10 +4,41 @@ import type { DiagramJson } from "../../../../packages/types/src";
 import { isAreaNode } from "../diagram-editor/area-nodes";
 import {
   applyTemplateToDiagramWithBackup,
+  filterBoardTemplates,
+  listBoardTemplateTags,
   listBoardTemplates,
   readTemplateOverwriteBackups,
   TEMPLATE_OVERWRITE_BACKUP_STORAGE_KEY
 } from "./template-library";
+
+test("filterBoardTemplates searches title, description, and tags", () => {
+  const templates = listBoardTemplates();
+
+  assert.deepEqual(
+    filterBoardTemplates(templates, { query: "CloudFront", sort: "recommended", tag: "all" }).map(
+      (template) => template.id
+    ),
+    ["template-static-website"]
+  );
+});
+
+test("filterBoardTemplates combines tag filtering and resource sorting", () => {
+  const templates = listBoardTemplates();
+  const filtered = filterBoardTemplates(templates, {
+    query: "",
+    sort: "resources",
+    tag: "RDS"
+  });
+
+  assert.deepEqual(filtered.map((template) => template.id), ["template-3tier", "template-api-db"]);
+});
+
+test("listBoardTemplateTags returns unique sorted tags", () => {
+  const tags = listBoardTemplateTags(listBoardTemplates());
+
+  assert.equal(tags.filter((tag) => tag === "RDS").length, 1);
+  assert.deepEqual(tags, [...tags].sort((left, right) => left.localeCompare(right, "ko-KR")));
+});
 
 test("listBoardTemplates returns templates with DiagramJson so page and board modal can share them", () => {
   const templates = listBoardTemplates();

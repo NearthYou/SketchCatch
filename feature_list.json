@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "lastUpdated": "2026-07-10",
+  "lastUpdated": "2026-07-11",
   "purpose": "Tracks agent-harness hardening work and active cross-session workstreams. Product scope remains in docs/product.md.",
   "statusRules": {
     "allowedStatuses": ["not_started", "in_progress", "blocked", "passing"],
@@ -186,17 +186,34 @@
       "area": "production-infra",
       "title": "ECS migration operating plan and Fargate foundation",
       "user_visible_behavior": "SketchCatch 운영 인프라를 EC2/SSM/docker run에서 ECS/Fargate로 전환하기 위한 phase, 비용 기준, rollback 기준을 팀원이 같은 문서와 tracker에서 확인한다.",
-      "status": "in_progress",
+      "status": "passing",
       "verification": [
         "feature_list.json에 ECS migration workstream이 active 항목으로 존재한다.",
         "동시에 in_progress 상태인 feature/workstream이 1개 이하이다.",
         "docs/sw/spec.md와 docs/sw/plan.md가 parallel ALB cutover, Phase 1 single ECS task, RunTask one-off worker, SQS deferred decision을 기록한다.",
         "infra/aws/terraform이 ECR, ECS/Fargate, task definition, IAM, CloudWatch Logs, security groups, parallel ALB, listener, Fargate ip target group을 정의한다.",
+        "Phase 8 Terraform이 API/web 독립 service와 target group, ALB API/health path rule, web default action을 정의하고 ECS steady state에서 nginx를 제외한다.",
+        "Phase 9가 SketchCatch production infra를 runtime/edge/data/legacy state로 격리하고 backend lock, import inventory, plan-only approval을 기록한다.",
         "DeploymentJob 모델이 Terraform 실행 요청, 상태 전이, ECS task ARN placeholder, 실패 요약을 기록한다.",
         "API route가 ECS worker mode에서 DeploymentJob을 만들고 ECS RunTask dispatcher로 실행을 위임한다.",
         "agent-progress.md와 session-handoff.md가 최신 phase 상태와 다음 phase 기준을 기록한다."
       ],
-      "notes": "Phase 5 is active on issue #295 and branch feature/sw/295-ecs-worker-task-dispatch. Scope is API-side ECS worker RunTask dispatch wiring only. Do not run live AWS commands in this phase."
+      "evidence": {
+        "lastVerified": "2026-07-11",
+        "commands": [
+          "pnpm harness:check",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build",
+          "node scripts/check-production-infra.mjs",
+          "terraform -chdir=infra/aws/terraform validate",
+          "terraform -chdir=infra/aws/terraform test",
+          "terraform -chdir=infra/aws/terraform plan -var-file=<production-runtime-tfvars>",
+          "AWS ECS/ALB/Route53/RDS/CloudWatch read-only verification and HTTPS smoke"
+        ],
+        "notes": "Production Route53 targets the direct-path ECS ALB; API/web run at autoscaling min 1 and max 2, worker RunTask is active, all alarms are OK, and the final runtime Terraform plan reports no changes."
+      },
+      "notes": "Warm EC2/ALB/nginx and the legacy ECS service/target group are retired. Cold rollback retains a sanitized encrypted AMI, verified Docker archive, disabled Terraform root, and runbook."
     }
   ]
 }

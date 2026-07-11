@@ -38,7 +38,6 @@ import {
   Move,
   Redo2,
   Undo2,
-  UserRound,
   ZoomIn,
   ZoomOut
 } from "lucide-react";
@@ -65,7 +64,8 @@ import { DEFAULT_DIAGRAM_VIEWPORT, EDGE_LABEL_MIN_ZOOM, EMPTY_DIAGRAM } from "./
 import {
   applyAreaNodeParentAssignments,
   clearDeletedAreaParentAssignments,
-  clearOutOfBoundsAreaParentAssignments
+  clearOutOfBoundsAreaParentAssignments,
+  placeDroppedNodeInsideArea
 } from "./area-node-movement";
 import { expandParentAreaNodesForEnteredChild } from "./area-node-expansion";
 import {
@@ -90,6 +90,8 @@ import type { BoardViewportFrame } from "./board-viewport";
 import { DiagramEdgeToolbar } from "./DiagramEdgeToolbar";
 import { DiagramEdgeView } from "./DiagramEdgeView";
 import { DiagramNodeView } from "./DiagramNodeView";
+import { WorkspaceProjectBar } from "./WorkspaceProjectBar";
+import { persistViewportAfterMove } from "./viewport-persistence";
 import {
   finalizeDraggedNodes,
   getDraggedPreviewNodes,
@@ -162,22 +164,6 @@ const BOARD_VIEWPORT_BOTTOM_INSET = 72;
 const SNAP_ANIMATION_MS = 110;
 const SNAP_ANIMATION_CLEAR_MS = SNAP_ANIMATION_MS + 30;
 
-function getWorkspaceInitials(workspaceUserName: string): string {
-  const words = workspaceUserName.trim().split(/\s+/u).filter(Boolean);
-
-  if (words.length === 0) {
-    return "SC";
-  }
-
-  const glyphs =
-    words.length > 1
-      ? [words[0], words[1]].map((word) => Array.from(word ?? "")[0]).filter(Boolean)
-      : Array.from(words[0] ?? "").slice(0, 2);
-  const initials = glyphs.join("").toUpperCase();
-
-  return initials || "SC";
-}
-
 function areBoardViewportFramesEqual(
   left: BoardViewportFrame,
   right: BoardViewportFrame
@@ -214,8 +200,10 @@ export function DiagramEditor(props: DiagramEditorProps) {
 }
 
 function DiagramEditorInner({
+  allowPreviewInspection = false,
   dashboardHref = "/dashboard",
   draftStatusPanel,
+  emptyBoardDescription = "왼쪽 Resource에서 필요한 항목을 끌어오세요.",
   floatingPanel,
   initialBoardZoom,
   initialDiagram,
@@ -229,14 +217,17 @@ function DiagramEditorInner({
   onDiagramSaveRequest,
   projectName = "Project workspace",
   rightPanel,
+  saveStatus = "편집 중",
+  showSaveAction = true,
   workspaceUserName = "Personal workspace"
 }: DiagramEditorProps) {
   const reactFlow = useReactFlow<DiagramFlowNode, DiagramFlowEdge>();
+  const fallbackFlowInstanceRef = useRef(reactFlow);
+  fallbackFlowInstanceRef.current = reactFlow;
   const boardZoom = useStore((state) => state.transform[2]);
   const showAllEdgeLabels = boardZoom >= EDGE_LABEL_MIN_ZOOM;
   const boardZoomPresentationScale = getBoardZoomPresentationScale(boardZoom);
   const normalizedInitialBoardZoom = parseBoardZoom(initialBoardZoom);
-  const workspaceInitials = getWorkspaceInitials(workspaceUserName);
   const [diagram, setDiagram] = useState<DiagramJson>(() =>
     normalizeDiagramResourceNodeGeometry(cloneDiagram(initialDiagram ?? EMPTY_DIAGRAM))
   );
@@ -295,6 +286,8 @@ function DiagramEditorInner({
     normalizedInitialBoardZoom !== undefined && (initialDiagram?.nodes.length ?? 0) > 0
   );
   const initialAutoFitFrameRef = useRef<number | null>(null);
+  const automaticViewportMoveRequestIdRef = useRef(0);
+  const automaticViewportReleaseFrameRef = useRef<number | null>(null);
   const isLeftPanelResizingRef = useRef(false);
   const isRightPanelResizingRef = useRef(false);
   const snapAnimationFrameRef = useRef<number | null>(null);
@@ -302,6 +295,21 @@ function DiagramEditorInner({
   const [hoveredAreaBlankNodeId, setHoveredAreaBlankNodeId] = useState<string | null>(null);
   const [isAreaBlankDragging, setAreaBlankDragging] = useState(false);
   const [isSnapAnimating, setSnapAnimating] = useState(false);
+  /** 콜백이 실행되는 순간 실제 Architecture Board의 React Flow 인스턴스를 돌려줍니다. */
+  const getFlowInstance = useCallback(
+    () => flowInstanceRef.current ?? fallbackFlowInstanceRef.current,
+    []
+  );
+
+  /** 왼쪽 Resource palette를 열거나 닫습니다. */
+  const toggleLeftPanel = useCallback(() => {
+    setLeftPanelOpen((isOpen) => !isOpen);
+  }, []);
+
+  /** 오른쪽 Inspector를 열거나 닫습니다. */
+  const toggleRightPanel = useCallback(() => {
+    setRightPanelOpen((isOpen) => !isOpen);
+  }, []);
 
   const selectedNodeId = selectedNodeIds.length === 1 ? selectedNodeIds[0] ?? null : null;
   const hasRightRail = rightPanel !== null;
@@ -766,10 +774,11 @@ function DiagramEditorInner({
       setRightPanelOpen(true);
 
       window.requestAnimationFrame(() => {
+        const flowInstance = getFlowInstance();
         const frame = getCurrentBoardViewportFrame();
 
         if (!frame) {
-          void reactFlow.fitView({
+          void flowInstance.fitView({
             duration: getBoardMotionDuration(180),
             maxZoom: 1.5,
             minZoom: 0.35,
@@ -791,12 +800,12 @@ function DiagramEditorInner({
           frame
         );
 
-        void reactFlow.setViewport(viewport, { duration: getBoardMotionDuration(180) });
+        void flowInstance.setViewport(viewport, { duration: getBoardMotionDuration(180) });
         applyLiveDiagramUpdate((currentDiagram) => updateDiagramViewport(currentDiagram, viewport));
         focusEditorShell();
       });
     },
-    [applyLiveDiagramUpdate, focusEditorShell, getCurrentBoardViewportFrame, reactFlow]
+    [applyLiveDiagramUpdate, focusEditorShell, getCurrentBoardViewportFrame, getFlowInstance]
   );
 
   const selectResourceNode = useCallback<DiagramEditorPanelContext["selectResourceNode"]>((nodeId) => {
@@ -1161,14 +1170,14 @@ function DiagramEditorInner({
 
   const getAreaNodeFromPointerEvent = useCallback(
     (clientX: number, clientY: number) => {
-      const position = reactFlow.screenToFlowPosition({
+      const position = getFlowInstance().screenToFlowPosition({
         x: clientX,
         y: clientY
       });
 
       return findInnermostAreaNodeAtPoint(diagramRef.current.nodes, position);
     },
-    [reactFlow]
+    [getFlowInstance]
   );
 
   const handleAreaBlankDragMove = useCallback(
@@ -1182,7 +1191,7 @@ function DiagramEditorInner({
       event.preventDefault();
       event.stopPropagation();
 
-      const zoom = reactFlow.getZoom() || 1;
+      const zoom = getFlowInstance().getZoom() || 1;
       const nextPosition = {
         x: dragState.startNodePosition.x + (event.clientX - dragState.startClientPosition.x) / zoom,
         y: dragState.startNodePosition.y + (event.clientY - dragState.startClientPosition.y) / zoom
@@ -1215,7 +1224,7 @@ function DiagramEditorInner({
     },
     [
       getAreaDropTargetNodeId,
-      reactFlow,
+      getFlowInstance,
       setDragPreviewNodesForState,
       updateActiveAreaDropTargetNodeId
     ]
@@ -1713,18 +1722,22 @@ function DiagramEditorInner({
       }
 
       const position = snapPositionToDiagramGrid(
-        reactFlow.screenToFlowPosition({
+        getFlowInstance().screenToFlowPosition({
           x: event.clientX,
           y: event.clientY
         }),
         DIAGRAM_SNAP_GRID_SIZE
       );
 
-      const nextNode = createDiagramNodeFromPayload(
-        payload,
-        position,
-        getNextZIndex(diagramRef.current.nodes),
-        diagramRef.current.nodes
+      const nextNode = placeDroppedNodeInsideArea(
+        diagramRef.current.nodes,
+        createDiagramNodeFromPayload(
+          payload,
+          position,
+          getNextZIndex(diagramRef.current.nodes),
+          diagramRef.current.nodes
+        ),
+        position
       );
 
       commitDiagramUpdate((currentDiagram) => {
@@ -1757,7 +1770,7 @@ function DiagramEditorInner({
       cancelSnapAnimation,
       commitDiagramUpdate,
       focusEditorShell,
-      reactFlow,
+      getFlowInstance,
       updateActiveAreaDropTargetNodeId
     ]
   );
@@ -1776,7 +1789,7 @@ function DiagramEditorInner({
 
       event.dataTransfer.dropEffect = "copy";
 
-      const position = reactFlow.screenToFlowPosition({
+      const position = getFlowInstance().screenToFlowPosition({
         x: event.clientX,
         y: event.clientY
       });
@@ -1785,7 +1798,7 @@ function DiagramEditorInner({
 
       updateActiveAreaDropTargetNodeId(getAreaDropTargetNodeId(previewNode, nodesWithPreviewNode));
     },
-    [getAreaDropTargetNodeId, reactFlow, updateActiveAreaDropTargetNodeId]
+    [getAreaDropTargetNodeId, getFlowInstance, updateActiveAreaDropTargetNodeId]
   );
 
   const handleDragLeave = useCallback(() => {
@@ -1795,7 +1808,7 @@ function DiagramEditorInner({
   const handlePaneClick = useCallback(
     (event: ReactMouseEvent) => {
       cancelSnapAnimation();
-      const position = reactFlow.screenToFlowPosition({
+      const position = getFlowInstance().screenToFlowPosition({
         x: event.clientX,
         y: event.clientY
       });
@@ -1806,14 +1819,15 @@ function DiagramEditorInner({
       setInspectedNodeId(null);
       focusEditorShell();
     },
-    [cancelSnapAnimation, focusEditorShell, reactFlow]
+    [cancelSnapAnimation, focusEditorShell, getFlowInstance]
   );
 
   const handleFlowNodeClick = useCallback(
     (_event: ReactMouseEvent, node: DiagramFlowNode) => {
       setSelectedNodeIds([node.id]);
       setSelectedEdgeIds([]);
-      setInspectedNodeId(null);
+      setInspectedNodeId(node.id);
+      setRightPanelOpen(true);
       focusEditorShell();
     },
     [focusEditorShell]
@@ -1918,27 +1932,82 @@ function DiagramEditorInner({
     [commitDiagramUpdate]
   );
 
+  /** 자동 시점 이동이 사용자 팬·줌으로 기록되지 않도록 이동이 끝날 때까지 저장을 막습니다. */
+  const runViewportMoveWithoutPersistence = useCallback((move: () => Promise<boolean>): void => {
+    const requestId = automaticViewportMoveRequestIdRef.current + 1;
+    automaticViewportMoveRequestIdRef.current = requestId;
+
+    if (automaticViewportReleaseFrameRef.current !== null) {
+      window.cancelAnimationFrame(automaticViewportReleaseFrameRef.current);
+      automaticViewportReleaseFrameRef.current = null;
+    }
+
+    /** 가장 최근 자동 이동이 끝난 경우에만 사용자 시점 저장을 다시 켭니다. */
+    const releaseViewportPersistence = (): void => {
+      if (automaticViewportMoveRequestIdRef.current !== requestId) {
+        return;
+      }
+
+      automaticViewportReleaseFrameRef.current = window.requestAnimationFrame(() => {
+        automaticViewportReleaseFrameRef.current = null;
+        if (automaticViewportMoveRequestIdRef.current === requestId) {
+          automaticViewportMoveRequestIdRef.current = 0;
+        }
+      });
+    };
+
+    void move().then(releaseViewportPersistence, releaseViewportPersistence);
+  }, []);
+
+  useEffect(
+    () => () => {
+      automaticViewportMoveRequestIdRef.current += 1;
+      if (automaticViewportReleaseFrameRef.current !== null) {
+        window.cancelAnimationFrame(automaticViewportReleaseFrameRef.current);
+      }
+    },
+    []
+  );
+
   const handleMoveEnd = useCallback<OnMoveEnd>(
     (_event, viewport) => {
-      applyLiveDiagramUpdate((currentDiagram) => updateDiagramViewport(currentDiagram, toDiagramViewport(viewport)));
+      persistViewportAfterMove(
+        automaticViewportMoveRequestIdRef.current,
+        viewport,
+        (nextViewport) => {
+          applyLiveDiagramUpdate((currentDiagram) =>
+            updateDiagramViewport(currentDiagram, toDiagramViewport(nextViewport))
+          );
+        }
+      );
     },
     [applyLiveDiagramUpdate]
   );
 
   const handleZoomIn = useCallback(() => {
-    void reactFlow.zoomIn({ duration: getBoardMotionDuration(140) });
-  }, [reactFlow]);
+    void getFlowInstance().zoomIn({ duration: getBoardMotionDuration(140) });
+  }, [getFlowInstance]);
 
   const handleZoomOut = useCallback(() => {
-    void reactFlow.zoomOut({ duration: getBoardMotionDuration(140) });
-  }, [reactFlow]);
+    void getFlowInstance().zoomOut({ duration: getBoardMotionDuration(140) });
+  }, [getFlowInstance]);
 
-  const handleFitView = useCallback(() => {
+  /** 현재 보드를 화면 크기에 맞추고, 사용자 요청일 때만 시점 변경을 저장합니다. */
+  const fitVisibleDiagram = useCallback((shouldPersistViewport: boolean) => {
+    const flowInstance = getFlowInstance();
     const currentNodes = previewDiagram?.nodes ?? diagramRef.current.nodes;
-    const shouldPersistViewport = previewDiagram === null;
 
     if (currentNodes.length === 0) {
-      void reactFlow.setViewport(DEFAULT_DIAGRAM_VIEWPORT, { duration: getBoardMotionDuration(180) });
+      const moveToDefaultViewport = () =>
+        flowInstance.setViewport(DEFAULT_DIAGRAM_VIEWPORT, {
+          duration: getBoardMotionDuration(180)
+        });
+
+      if (shouldPersistViewport) {
+        void moveToDefaultViewport();
+      } else {
+        runViewportMoveWithoutPersistence(moveToDefaultViewport);
+      }
       if (shouldPersistViewport) {
         applyLiveDiagramUpdate((currentDiagram) => updateDiagramViewport(currentDiagram, DEFAULT_DIAGRAM_VIEWPORT));
       }
@@ -1948,13 +2017,19 @@ function DiagramEditorInner({
     const frame = getCurrentBoardViewportFrame();
 
     if (!frame) {
-      void reactFlow.fitView({
+      const fitOptions = {
         duration: getBoardMotionDuration(180),
         maxZoom: 1.35,
         minZoom: 0.25,
         nodes: currentNodes.map((node) => ({ id: node.id })),
         padding: 0.24
-      });
+      };
+
+      if (shouldPersistViewport) {
+        void flowInstance.fitView(fitOptions);
+      } else {
+        runViewportMoveWithoutPersistence(() => flowInstance.fitView(fitOptions));
+      }
       return;
     }
 
@@ -1970,11 +2045,28 @@ function DiagramEditorInner({
       frame
     );
 
-    void reactFlow.setViewport(viewport, { duration: getBoardMotionDuration(180) });
+    const moveToViewport = () =>
+      flowInstance.setViewport(viewport, { duration: getBoardMotionDuration(180) });
+
+    if (shouldPersistViewport) {
+      void moveToViewport();
+    } else {
+      runViewportMoveWithoutPersistence(moveToViewport);
+    }
     if (shouldPersistViewport) {
       applyLiveDiagramUpdate((currentDiagram) => updateDiagramViewport(currentDiagram, viewport));
     }
-  }, [applyLiveDiagramUpdate, getCurrentBoardViewportFrame, previewDiagram, reactFlow]);
+  }, [
+    applyLiveDiagramUpdate,
+    getCurrentBoardViewportFrame,
+    getFlowInstance,
+    previewDiagram,
+    runViewportMoveWithoutPersistence
+  ]);
+
+  const handleFitView = useCallback(() => {
+    fitVisibleDiagram(previewDiagram === null);
+  }, [fitVisibleDiagram, previewDiagram]);
 
   useEffect(() => {
     if (
@@ -2063,7 +2155,7 @@ function DiagramEditorInner({
       initialAutoFitFrameRef.current = window.requestAnimationFrame(() => {
         initialAutoFitFrameRef.current = null;
         shouldAutoFitInitialDiagramRef.current = false;
-        handleFitView();
+        fitVisibleDiagram(false);
       });
     });
 
@@ -2073,7 +2165,7 @@ function DiagramEditorInner({
         initialAutoFitFrameRef.current = null;
       }
     };
-  }, [diagram.nodes.length, handleFitView, isFlowReady]);
+  }, [diagram.nodes.length, fitVisibleDiagram, isFlowReady]);
 
   useEffect(() => {
     if (
@@ -2086,11 +2178,11 @@ function DiagramEditorInner({
     }
 
     const frame = window.requestAnimationFrame(() => {
-      handleFitView();
+      fitVisibleDiagram(false);
     });
 
     return () => window.cancelAnimationFrame(frame);
-  }, [handleFitView, isFlowReady, normalizedInitialBoardZoom, previewDiagram]);
+  }, [fitVisibleDiagram, isFlowReady, normalizedInitialBoardZoom, previewDiagram]);
 
   useEffect(() => {
     function handleVisibilityChange(): void {
@@ -2190,15 +2282,101 @@ function DiagramEditorInner({
   }, []);
 
   useEffect(() => {
+    const compactViewport = window.matchMedia("(max-width: 1120px)");
+
+    /** 좁은 화면에서는 Board가 먼저 보이도록 양쪽 패널을 접습니다. */
+    function collapsePanelsForCompactViewport(event: MediaQueryListEvent | MediaQueryList): void {
+      if (!event.matches) {
+        return;
+      }
+
+      setLeftPanelOpen(false);
+      setRightPanelOpen(false);
+    }
+
+    collapsePanelsForCompactViewport(compactViewport);
+    compactViewport.addEventListener("change", collapsePanelsForCompactViewport);
+
+    return () => compactViewport.removeEventListener("change", collapsePanelsForCompactViewport);
+  }, []);
+
+  useEffect(() => {
+    const canvasPanel = canvasPanelRef.current;
+
+    if (!isFlowReady || !canvasPanel || typeof ResizeObserver === "undefined") {
+      return undefined;
+    }
+
+    let fitFrame: number | null = null;
+
+    /** 패널이 접힌 뒤 확정된 Board 크기를 기준으로 노드가 모두 보이게 맞춥니다. */
+    function refitCompactBoard(): void {
+      if (window.innerWidth > 1120) {
+        return;
+      }
+
+      if (fitFrame !== null) {
+        window.cancelAnimationFrame(fitFrame);
+      }
+
+      fitFrame = window.requestAnimationFrame(() => {
+        fitFrame = null;
+        fitVisibleDiagram(false);
+      });
+    }
+
+    const canvasResizeObserver = new ResizeObserver(refitCompactBoard);
+    canvasResizeObserver.observe(canvasPanel);
+
+    return () => {
+      canvasResizeObserver.disconnect();
+      if (fitFrame !== null) {
+        window.cancelAnimationFrame(fitFrame);
+      }
+    };
+  }, [fitVisibleDiagram, isFlowReady]);
+
+  useEffect(() => {
+    let resizeFrame: number | null = null;
+    let settledLayoutFrame: number | null = null;
+
+    /** 패널 폭을 보정하고, 좁은 화면은 레이아웃이 확정된 뒤 Board를 다시 맞춥니다. */
     function handleWindowResize(): void {
       updateLeftPanelWidth(leftPanelWidth);
       updateRightPanelWidth(rightPanelWidth);
+
+      if (!isFlowReady || window.innerWidth > 1120) {
+        return;
+      }
+
+      if (resizeFrame !== null) {
+        window.cancelAnimationFrame(resizeFrame);
+      }
+      if (settledLayoutFrame !== null) {
+        window.cancelAnimationFrame(settledLayoutFrame);
+      }
+
+      resizeFrame = window.requestAnimationFrame(() => {
+        resizeFrame = null;
+        settledLayoutFrame = window.requestAnimationFrame(() => {
+          settledLayoutFrame = null;
+          fitVisibleDiagram(false);
+        });
+      });
     }
 
     window.addEventListener("resize", handleWindowResize);
 
-    return () => window.removeEventListener("resize", handleWindowResize);
-  }, [leftPanelWidth, rightPanelWidth, updateLeftPanelWidth, updateRightPanelWidth]);
+    return () => {
+      window.removeEventListener("resize", handleWindowResize);
+      if (resizeFrame !== null) {
+        window.cancelAnimationFrame(resizeFrame);
+      }
+      if (settledLayoutFrame !== null) {
+        window.cancelAnimationFrame(settledLayoutFrame);
+      }
+    };
+  }, [fitVisibleDiagram, isFlowReady, leftPanelWidth, rightPanelWidth, updateLeftPanelWidth, updateRightPanelWidth]);
 
   function handleShellKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
     if (event.key === "Escape") {
@@ -2214,6 +2392,7 @@ function DiagramEditorInner({
   } as CSSProperties;
   const editorShellClassName = [
     styles.editorShell,
+    !isLeftPanelOpen ? styles.editorShellLeftCollapsed : undefined,
     !hasRightRail ? styles.editorShellRightHidden : undefined,
     hasRightRail && !isRightPanelOpen ? styles.editorShellRightCollapsed : undefined
   ]
@@ -2243,6 +2422,26 @@ function DiagramEditorInner({
       style={editorShellStyle}
       tabIndex={0}
     >
+      <WorkspaceProjectBar
+        actions={{
+          onSave: onDiagramSaveRequest,
+          onToggleLeftPanel: toggleLeftPanel,
+          onToggleRightPanel: toggleRightPanel
+        }}
+        panels={{
+          hasRightPanel: hasRightRail,
+          isLeftPanelOpen,
+          isRightPanelOpen: hasRightRail && isRightPanelOpen
+        }}
+        workspace={{
+          dashboardHref,
+          projectName,
+          saveStatus,
+          showSaveAction,
+          userName: workspaceUserName
+        }}
+      />
+
       {isLeftPanelOpen ? (
         <div className={styles.leftRail} ref={leftRailRef}>
           {leftPanel === undefined ? (
@@ -2300,26 +2499,6 @@ function DiagramEditorInner({
 
       <div className={styles.workspace}>
         <header className={styles.canvasToolbar}>
-          <div className={styles.toolbarBrand}>
-            <a
-              aria-label={`Open dashboard for ${workspaceUserName} workspace: ${projectName}`}
-              className={styles.toolbarContextLink}
-              href={dashboardHref}
-              title={`Dashboard / ${workspaceUserName} / ${projectName}`}
-            >
-              <span aria-hidden="true" className={styles.toolbarAvatar}>
-                {workspaceInitials}
-              </span>
-              <span className={styles.toolbarContextText}>
-                <span className={styles.toolbarProjectName}>{projectName}</span>
-                <span className={styles.toolbarUserName}>
-                  <UserRound aria-hidden="true" size={12} />
-                  <span>{workspaceUserName}</span>
-                </span>
-              </span>
-            </a>
-          </div>
-
           <div className={styles.toolbarGroup} aria-label="편집 도구">
             <button
               aria-label="선택 모드"
@@ -2431,8 +2610,8 @@ function DiagramEditorInner({
 
           {visibleDiagram.nodes.length === 0 ? (
             <div className={styles.emptyState} aria-hidden="true">
-              <strong>Empty diagram</strong>
-              <span>Drag resources from the left panel onto the canvas.</span>
+              <strong>빈 보드</strong>
+              <span>{emptyBoardDescription}</span>
             </div>
           ) : null}
 
@@ -2444,7 +2623,7 @@ function DiagramEditorInner({
             deleteKeyCode={null}
             edgeTypes={EDGE_TYPES}
             edges={flowEdges}
-            elementsSelectable={!isPreviewActive}
+            elementsSelectable={!isPreviewActive || allowPreviewInspection}
             maxZoom={2}
             minZoom={0.25}
             multiSelectionKeyCode={["Shift", "Meta", "Control"]}
@@ -2464,6 +2643,9 @@ function DiagramEditorInner({
             snapToGrid={false}
             zoomOnDoubleClick={false}
             zoomActivationKeyCode={["Meta", "Control"]}
+            {...(!isPreviewActive || allowPreviewInspection
+              ? { onNodeClick: handleFlowNodeClick }
+              : {})}
             {...(!isPreviewActive
               ? {
                   onClickConnectEnd: handleConnectEnd,
@@ -2476,7 +2658,6 @@ function DiagramEditorInner({
                   onDrop: handleDrop,
                   onEdgesChange: handleEdgesChange,
                   onMoveEnd: handleMoveEnd,
-                  onNodeClick: handleFlowNodeClick,
                   onNodeDoubleClick: handleFlowNodeDoubleClick,
                   onNodeDrag: handleNodeDrag,
                   onNodeDragStart: handleNodeDragStart,

@@ -1,0 +1,166 @@
+name: Production Infrastructure Plan
+
+on:
+  workflow_dispatch:
+    inputs:
+      management_group:
+        description: "State group to refresh and plan"
+        required: true
+        type: choice
+        options:
+          - runtime
+          - edge
+          - data
+          - legacy-rollback
+      confirmation:
+        description: "Enter <management-group>-review-only"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: production-infra-plan-${{ inputs.management_group }}
+  cancel-in-progress: false
+
+env:
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "0"
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  AWS_ROLE_TO_ASSUME: ${{ vars.AWS_ROLE_TO_ASSUME }}
+  PRODUCTION_INFRA_STATE_BUCKET: ${{ vars.PRODUCTION_INFRA_STATE_BUCKET }}
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    environment: production-infra-plan
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify repository production infrastructure guards
+        run: node scripts/check-production-infra.mjs
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.15.8
+
+      - name: Resolve management group
+        id: group
+        shell: bash
+        env:
+          MANAGEMENT_GROUP: ${{ inputs.management_group }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+
+          expected_confirmation="${MANAGEMENT_GROUP}-review-only"
+          if [ "${CONFIRMATION}" != "${expected_confirmation}" ]; then
+            echo "::error::confirmation must be ${expected_confirmation}"
+            exit 1
+          fi
+
+          case "${MANAGEMENT_GROUP}" in
+            runtime)
+              terraform_root="infra/aws/terraform"
+              backend_key="production/ecs-foundation/terraform.tfstate"
+              ;;
+            edge)
+              terraform_root="infra/aws/production/edge"
+              backend_key="production/edge/terraform.tfstate"
+              ;;
+            data)
+              terraform_root="infra/aws/production/data"
+              backend_key="production/data/terraform.tfstate"
+              ;;
+            legacy-rollback)
+              terraform_root="infra/aws/production/legacy-rollback"
+              backend_key="production/legacy-rollback/terraform.tfstate"
+              ;;
+            *)
+              echo "::error::unsupported management group"
+              exit 1
+              ;;
+          esac
+
+          {
+            echo "terraform-root=${terraform_root}"
+            echo "backend-key=${backend_key}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Validate workflow configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          required_vars=(AWS_REGION AWS_ROLE_TO_ASSUME PRODUCTION_INFRA_STATE_BUCKET)
+          for name in "${required_vars[@]}"; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::${name} is required in the production-infra-plan environment"
+              exit 1
+            fi
+          done
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Prepare complete runtime variables
+        if: inputs.management_group == 'runtime'
+        shell: bash
+        env:
+          RUNTIME_TFVARS_JSON: ${{ secrets.PRODUCTION_INFRA_RUNTIME_TFVARS_JSON }}
+        run: |
+          set -euo pipefail
+          if [ -z "${RUNTIME_TFVARS_JSON:-}" ]; then
+            echo "::error::PRODUCTION_INFRA_RUNTIME_TFVARS_JSON is required for runtime plans"
+            exit 1
+          fi
+          printf '%s' "${RUNTIME_TFVARS_JSON}" > "${RUNNER_TEMP}/runtime.tfvars.json"
+          jq -e 'type == "object"' "${RUNNER_TEMP}/runtime.tfvars.json" > /dev/null
+
+      - name: Initialize selected remote state
+        shell: bash
+        env:
+          TERRAFORM_ROOT: ${{ steps.group.outputs.terraform-root }}
+          BACKEND_KEY: ${{ steps.group.outputs.backend-key }}
+        run: |
+          set -euo pipefail
+          terraform -chdir="${TERRAFORM_ROOT}" init -input=false \
+            -backend-config="bucket=${PRODUCTION_INFRA_STATE_BUCKET}" \
+            -backend-config="key=${BACKEND_KEY}" \
+            -backend-config="region=${AWS_REGION}" \
+            -backend-config="encrypt=true" \
+            -backend-config="use_lockfile=true"
+
+      - name: Review-only Terraform plan
+        shell: bash
+        env:
+          TERRAFORM_ROOT: ${{ steps.group.outputs.terraform-root }}
+          MANAGEMENT_GROUP: ${{ inputs.management_group }}
+        run: |
+          set -euo pipefail
+          plan_args=(-input=false -no-color -detailed-exitcode -lock-timeout=5m)
+          if [ "${MANAGEMENT_GROUP}" = "runtime" ]; then
+            plan_args+=("-var-file=${RUNNER_TEMP}/runtime.tfvars.json")
+          fi
+
+          set +e
+          terraform -chdir="${TERRAFORM_ROOT}" plan "${plan_args[@]}"
+          plan_exit_code=$?
+          set -e
+
+          if [ "${plan_exit_code}" -eq 1 ]; then
+            echo "::error::Terraform plan failed"
+            exit 1
+          fi
+          if [ "${plan_exit_code}" -eq 2 ]; then
+            echo "::notice::Terraform reported infrastructure changes for review"
+          else
+            echo "::notice::Terraform reported no infrastructure changes"
+          fi

@@ -50,6 +50,7 @@ import {
   getVerifiedCostUsageAwsConnections,
   selectPreferredCostUsageAwsConnection
 } from "../../features/costs/cost-usage-aws-connections";
+import { createCostUsageDisplayCopy } from "../../features/costs/cost-usage-copy";
 import { getApiErrorMessage } from "../../lib/api-client";
 import {
   createAwsConnectionSetup,
@@ -919,6 +920,14 @@ function CostUsageAnalysisTab({
   );
   const selectedUsageAmount = selectedUsageProject?.amount ?? usageData?.totalCost.amount ?? 0;
   const selectedUsageLabel = selectedUsageProject?.projectName ?? "전체 프로젝트";
+  const usageCopy = useMemo(
+    () =>
+      createCostUsageDisplayCopy({
+        dataSource: usageData?.dataSource ?? null,
+        hasSelectedProject: selectedUsageProject !== null
+      }),
+    [selectedUsageProject, usageData?.dataSource]
+  );
 
   useEffect(() => {
     setUsageProjectKeyInput((currentKey) =>
@@ -934,7 +943,7 @@ function CostUsageAnalysisTab({
       <section className="dashboardPanel costOverviewPanel costHeroPanel costUsageHeroPanel" aria-labelledby="cost-usage-control-title">
         <div className="costOverviewSettings">
           <div className="costPanelTitle">
-            <p className="dashboardPanelKicker">Actual usage</p>
+            <p className="dashboardPanelKicker">{usageCopy.controlKicker}</p>
             <h2 id="cost-usage-control-title">사용량 분석</h2>
           </div>
           <div className="costControlGrid costUsageControlGrid">
@@ -974,10 +983,8 @@ function CostUsageAnalysisTab({
 
         <div className="costSummaryCard" aria-labelledby="cost-usage-summary-title">
           <div className="costPanelTitle">
-            <p className="dashboardPanelKicker">Actual cost</p>
-            <h2 id="cost-usage-summary-title">
-              {selectedUsageProject === null ? "현재 사용 비용" : "프로젝트 사용 비용"}
-            </h2>
+            <p className="dashboardPanelKicker">{usageCopy.summaryKicker}</p>
+            <h2 id="cost-usage-summary-title">{usageCopy.summaryTitle}</h2>
           </div>
           <div className="costSummaryAmount">
             <span>{selectedUsageLabel}</span>
@@ -993,6 +1000,13 @@ function CostUsageAnalysisTab({
           </div>
         </div>
       </section>
+
+      {usageState === "idle" && usageCopy.sampleNotice !== null ? (
+        <aside className="costDataSourceBanner" aria-label="Sample data 안내" role="status">
+          <strong>Sample data</strong>
+          <p>{usageCopy.sampleNotice}</p>
+        </aside>
+      ) : null}
 
       <CostUsageAwsConnectionPanel
         awsAccountIdInput={awsAccountIdInput}
@@ -1014,7 +1028,7 @@ function CostUsageAnalysisTab({
 
       {usageState === "loading" ? (
         <section className="dashboardPanel costProjectPanel">
-          <CostStatus message="실제 사용량 분석 데이터를 불러오는 중입니다." />
+          <CostStatus message={usageCopy.loadingMessage} />
         </section>
       ) : null}
 
@@ -1049,7 +1063,7 @@ function CostUsageAnalysisTab({
             <div className="costUsageMetricGrid">
               <CostMetricCard
                 icon={<LineChart size={18} aria-hidden="true" />}
-                label={selectedUsageProject === null ? "총 실제 비용" : "프로젝트 실제 비용"}
+                label={usageCopy.metricCostLabel}
                 value={formatUsd(selectedUsageAmount)}
               />
               <CostMetricCard
@@ -1110,7 +1124,7 @@ function CostUsageAnalysisTab({
             <div className="dashboardPanelHeader">
               <div>
                 <p className="dashboardPanelKicker">Project usage</p>
-                <h2 id="cost-usage-project-title">프로젝트별 실제 비용</h2>
+                <h2 id="cost-usage-project-title">{usageCopy.projectCostTitle}</h2>
               </div>
               <span className="dashboardCountBadge">{projectOptions.length}개</span>
             </div>

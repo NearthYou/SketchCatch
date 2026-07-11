@@ -20,6 +20,14 @@ export type TemplateOverwriteBackup = {
   readonly diagramJson: DiagramJson;
 };
 
+export type BoardTemplateSort = "recommended" | "name" | "resources";
+
+export type BoardTemplateFilter = {
+  readonly query: string;
+  readonly sort: BoardTemplateSort;
+  readonly tag: string;
+};
+
 type TemplateStorage = Pick<Storage, "getItem" | "setItem">;
 
 const MAX_TEMPLATE_BACKUPS = 10;
@@ -550,6 +558,41 @@ export function listBoardTemplates(): readonly BoardTemplate[] {
     ...template,
     diagramJson: cloneDiagramJson(template.diagramJson)
   }));
+}
+
+// Template 목록에서 검색어와 tag를 적용하고 사용자가 고른 순서로 정렬합니다.
+export function filterBoardTemplates(
+  templates: readonly BoardTemplate[],
+  filter: BoardTemplateFilter
+): readonly BoardTemplate[] {
+  const query = filter.query.trim().toLocaleLowerCase("ko-KR");
+  const filteredTemplates = templates.filter((template) => {
+    const matchesTag = filter.tag === "all" || template.tags.includes(filter.tag);
+    const searchableText = [template.title, template.description, ...template.tags]
+      .join(" ")
+      .toLocaleLowerCase("ko-KR");
+
+    return matchesTag && (query.length === 0 || searchableText.includes(query));
+  });
+
+  if (filter.sort === "name") {
+    return [...filteredTemplates].sort((left, right) => left.title.localeCompare(right.title, "ko-KR"));
+  }
+
+  if (filter.sort === "resources") {
+    return [...filteredTemplates].sort(
+      (left, right) => right.diagramJson.nodes.length - left.diagramJson.nodes.length
+    );
+  }
+
+  return filteredTemplates;
+}
+
+// Template 필터에 보여줄 tag를 중복 없이 이름순으로 만듭니다.
+export function listBoardTemplateTags(templates: readonly BoardTemplate[]): readonly string[] {
+  return [...new Set(templates.flatMap((template) => template.tags))].sort((left, right) =>
+    left.localeCompare(right, "ko-KR")
+  );
 }
 
 // 템플릿으로 덮어쓰기 직전에 현재 보드를 백업하고, 적용할 템플릿 보드를 돌려줍니다.

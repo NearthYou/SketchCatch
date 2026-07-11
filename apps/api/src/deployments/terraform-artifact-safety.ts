@@ -549,10 +549,11 @@ function validateManagedDemoUserData(
     );
   }
 
+  const canonicalDecoded = decoded.replace(/\r\n/g, "\n");
   const hashMatch = new RegExp(
     `^\\s*#\\s*${escapeRegExp(managedDemoUserDataHashPrefix)}([a-f0-9]{64})\\s*$`,
     "m"
-  ).exec(decoded);
+  ).exec(canonicalDecoded);
 
   if (!hashMatch?.[1]) {
     throw new TerraformArtifactSafetyError(
@@ -560,7 +561,7 @@ function validateManagedDemoUserData(
     );
   }
 
-  const normalized = decoded.replace(hashMatch[0], `# ${managedDemoUserDataHashPrefix}`);
+  const normalized = canonicalDecoded.replace(hashMatch[0], `# ${managedDemoUserDataHashPrefix}`);
   const actualHash = createHash("sha256").update(normalized).digest("hex");
 
   if (hashMatch[1] !== actualHash) {

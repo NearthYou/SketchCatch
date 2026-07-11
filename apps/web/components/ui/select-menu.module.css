@@ -325,30 +325,3 @@
   background: var(--board-primary-soft, rgba(82, 105, 179, 0.16));
   color: var(--board-primary, #5269b3);
 }
-
-.purpleTone .selectMenuTrigger:hover,
-.purpleTone .selectMenuTrigger:focus-visible,
-.purpleTone .selectMenuTriggerOpen {
-  border-color: #8b71ff;
-  box-shadow: 0 0 0 3px rgba(111, 76, 246, 0.14);
-}
-
-.purpleTone .selectMenuOption:hover,
-.purpleTone .selectMenuOption:focus-visible,
-.purpleTone .selectMenuOptionActive {
-  background: #f2efff;
-}
-
-.purpleTone .selectMenuOptionSelected {
-  background: #f4f1ff;
-  color: #5f3de8;
-}
-
-.purpleTone .selectMenuOptionSelected.selectMenuOptionActive {
-  background: #ede8ff;
-}
-
-.purpleTone .selectMenuOptionSelected .selectMenuOptionDetail,
-.purpleTone .selectMenuOptionSelected svg {
-  color: #5f3de8;
-}

@@ -1,30 +1,20 @@
-import { DashboardShell } from "../../../components/dashboard/dashboard-shell";
+import { WorkspaceAuthGate } from "../workspace-auth-gate";
 import { WorkspaceStartClient } from "./workspace-start-client";
 
-const COPY = {
-  newProjectStart: "\uC0C8 \uD504\uB85C\uC81D\uD2B8 \uC2DC\uC791",
-  projectSettings: "\uD504\uB85C\uC81D\uD2B8 \uC124\uC815"
-} as const;
+// Dashboard에서 고른 Template 정보를 새 프로젝트 시작 화면에 전달합니다.
+export default async function NewWorkspacePage({
+  searchParams
+}: {
+  readonly searchParams: Promise<{ readonly mode?: string; readonly templateId?: string }>;
+}) {
+  const params = await searchParams;
 
-export default function NewWorkspacePage() {
   return (
-    <DashboardShell>
-      <div className="dashboardPageHeader">
-        <div>
-          <p className="dashboardEyebrow">New project</p>
-          <h1>{COPY.newProjectStart}</h1>
-        </div>
-      </div>
-
-      <section className="dashboardPanel workspaceStartPanel" aria-labelledby="workspace-start-title">
-        <div className="dashboardPanelHeader">
-          <div>
-            <p className="dashboardPanelKicker">Workspace</p>
-            <h2 id="workspace-start-title">{COPY.projectSettings}</h2>
-          </div>
-        </div>
-        <WorkspaceStartClient />
-      </section>
-    </DashboardShell>
+    <WorkspaceAuthGate>
+      <WorkspaceStartClient
+        initialStartKind={params.mode === "template" ? "template" : undefined}
+        initialTemplateId={params.templateId}
+      />
+    </WorkspaceAuthGate>
   );
 }

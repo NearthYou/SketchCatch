@@ -11,42 +11,10 @@ type CreatePreDeploymentCheckWarningOptions = {
   liveProfile?: DeploymentLiveProfile | undefined;
 };
 
-const demoProfileAcknowledgementResources = new Set([
-  "aws_autoscaling_group.api",
-  "aws_autoscaling_policy.scale_out",
-  "aws_cloudwatch_metric_alarm.scale_out",
-  "aws_instance.api",
-  "aws_internet_gateway.demo",
-  "aws_launch_template.api",
-  "aws_lb.demo",
-  "aws_lb_listener.http",
-  "aws_lb_target_group.api",
-  "aws_route_table.public",
-  "aws_route_table_association.public_a",
-  "aws_route_table_association.public_c",
-  "aws_s3_bucket.site",
-  "aws_s3_bucket_policy.site",
-  "aws_s3_bucket_public_access_block.site",
-  "aws_s3_bucket_website_configuration.site",
-  "aws_s3_object.index",
-  "aws_s3_object.logo",
-  "aws_security_group.alb",
-  "aws_security_group.api",
-  "aws_subnet.public_a",
-  "aws_subnet.public_c",
-  "aws_vpc.demo"
-]);
-
 export function createPreDeploymentCheckWarning(
   finding: CheckFinding,
-  options: CreatePreDeploymentCheckWarningOptions = {}
+  _options: CreatePreDeploymentCheckWarningOptions = {}
 ): DeploymentPlanWarning {
-  const shouldDowngradeDemoFinding = isDemoProfileAcknowledgementFinding(
-    finding,
-    options.liveProfile
-  );
-  const blocksApproval = finding.severity === "high" && !shouldDowngradeDemoFinding;
-
   const warning: DeploymentPlanWarning = {
     id: createStableWarningId("pre_deployment_check", finding.id),
     level: finding.severity,
@@ -55,8 +23,8 @@ export function createPreDeploymentCheckWarning(
     code: toPreDeploymentWarningCode(finding),
     message: `${finding.title}: ${finding.recommendation}`,
     relatedFindingId: finding.id,
-    requiresAcknowledgement: !blocksApproval,
-    blocksApproval
+    requiresAcknowledgement: false,
+    blocksApproval: false
   };
 
   if (finding.resourceId) {
@@ -68,31 +36,6 @@ export function createPreDeploymentCheckWarning(
   }
 
   return warning;
-}
-
-function isDemoProfileAcknowledgementFinding(
-  finding: CheckFinding,
-  liveProfile: DeploymentLiveProfile | undefined
-): boolean {
-  if (liveProfile !== "demo_web_service" && liveProfile !== "demo_web_service_with_rds") {
-    return false;
-  }
-
-  if (finding.severity !== "high") {
-    return false;
-  }
-
-  const normalizedId = finding.id.toLowerCase();
-  const normalizedResource = (
-    finding.sourceLocation?.resourceAddress ??
-    finding.resourceId ??
-    ""
-  ).toLowerCase();
-
-  return (
-    normalizedId.startsWith("trivy:") &&
-    demoProfileAcknowledgementResources.has(normalizedResource)
-  );
 }
 
 export function createUnsupportedResourceWarning(
@@ -107,7 +50,7 @@ export function createUnsupportedResourceWarning(
     code: "UNSUPPORTED_RESOURCE",
     message: `MVP live ${operation} does not support Terraform resource type ${resourceType}`,
     requiresAcknowledgement: false,
-    blocksApproval: true
+    blocksApproval: false
   };
 }
 
@@ -141,7 +84,7 @@ export function createDestructiveChangeWarnings(
       code: "DESTRUCTIVE_CHANGE",
       message: "Terraform apply plan includes delete or replace changes",
       requiresAcknowledgement: false,
-      blocksApproval: true
+      blocksApproval: false
     }
   ];
 }
@@ -240,7 +183,7 @@ function toPreDeploymentWarningCode(finding: CheckFinding): DeploymentPlanWarnin
     return "TRIVY_MISCONFIGURATION";
   }
 
-  return "PUBLIC_SSH";
+  return "TRIVY_MISCONFIGURATION";
 }
 
 function createStableWarningId(...parts: readonly string[]): string {

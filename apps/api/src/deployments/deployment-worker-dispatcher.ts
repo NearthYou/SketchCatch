@@ -24,10 +24,21 @@ export type StopDeploymentWorkerInput = {
 
 export type StopDeploymentWorkerResult = {
   stopped: boolean;
+  errorSummary?: string;
+};
+
+export type InspectDeploymentWorkerInput = {
+  job: DeploymentJobRecord;
+};
+
+export type InspectDeploymentWorkerResult = {
+  state: "ACTIVE" | "STOPPED" | "MISSING";
+  lastStatus: string | null;
 };
 
 export type DeploymentWorkerDispatcher = {
   dispatch(input: DispatchDeploymentWorkerInput): Promise<DispatchDeploymentWorkerResult>;
+  inspect(input: InspectDeploymentWorkerInput): Promise<InspectDeploymentWorkerResult>;
   stop(input: StopDeploymentWorkerInput): Promise<StopDeploymentWorkerResult>;
 };
 
@@ -35,6 +46,9 @@ export function createLocalDeploymentWorkerDispatcher(): DeploymentWorkerDispatc
   return {
     async dispatch() {
       return { taskArn: null };
+    },
+    async inspect() {
+      return { state: "MISSING", lastStatus: null };
     },
     async stop() {
       return { stopped: false };
@@ -100,8 +114,39 @@ export function createEcsDeploymentWorkerDispatcher(input: {
         throw new Error(reason);
       }
 
+      const taskArn = result.tasks?.[0]?.taskArn;
+
+      if (!taskArn) {
+        throw new Error("ECS RunTask did not return a task ARN");
+      }
+
       return {
-        taskArn: result.tasks?.[0]?.taskArn ?? null
+        taskArn
+      };
+    },
+
+    async inspect({ job }) {
+      if (!job.ecsTaskArn) {
+        return { state: "MISSING", lastStatus: null };
+      }
+
+      const result = await ecsClient.send(
+        new DescribeTasksCommand({
+          cluster: config.cluster,
+          tasks: [job.ecsTaskArn]
+        })
+      );
+      const task = result.tasks?.[0];
+
+      if (!task) {
+        return { state: "MISSING", lastStatus: null };
+      }
+
+      const lastStatus = task.lastStatus ?? null;
+
+      return {
+        state: lastStatus === "STOPPED" ? "STOPPED" : "ACTIVE",
+        lastStatus
       };
     },
 
@@ -110,27 +155,34 @@ export function createEcsDeploymentWorkerDispatcher(input: {
         return { stopped: false };
       }
 
-      const activeTask = await ecsClient.send(
-        new DescribeTasksCommand({
-          cluster: config.cluster,
-          tasks: [job.ecsTaskArn]
-        })
-      );
-      const task = activeTask.tasks?.[0];
+      try {
+        const activeTask = await ecsClient.send(
+          new DescribeTasksCommand({
+            cluster: config.cluster,
+            tasks: [job.ecsTaskArn]
+          })
+        );
+        const task = activeTask.tasks?.[0];
 
-      if (!task || task.lastStatus === "STOPPED") {
-        return { stopped: false };
+        if (!task || task.lastStatus === "STOPPED") {
+          return { stopped: false };
+        }
+
+        await ecsClient.send(
+          new StopTaskCommand({
+            cluster: config.cluster,
+            task: job.ecsTaskArn,
+            reason
+          })
+        );
+
+        return { stopped: true };
+      } catch {
+        return {
+          stopped: false,
+          errorSummary: "ECS worker task could not be verified or stopped; retry cancellation."
+        };
       }
-
-      await ecsClient.send(
-        new StopTaskCommand({
-          cluster: config.cluster,
-          task: job.ecsTaskArn,
-          reason
-        })
-      );
-
-      return { stopped: true };
     }
   };
 }

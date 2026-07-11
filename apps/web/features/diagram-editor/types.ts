@@ -51,7 +51,9 @@ export type DiagramEditorPanelContext = {
 };
 
 export type DiagramEditorProps = {
+  allowPreviewInspection?: boolean | undefined;
   draftStatusPanel?: ReactNode | undefined;
+  emptyBoardDescription?: string | undefined;
   floatingPanel?: ((context: DiagramEditorPanelContext) => ReactNode) | undefined;
   initialBoardZoom?: number | undefined;
   initialDiagram?: DiagramJson | undefined;
@@ -67,6 +69,7 @@ export type DiagramEditorProps = {
   dashboardHref?: string | undefined;
   projectName?: string | undefined;
   saveStatus?: string | undefined;
+  showSaveAction?: boolean | undefined;
   workspaceUserName?: string | undefined;
 };
 
