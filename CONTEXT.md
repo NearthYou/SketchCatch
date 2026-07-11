@@ -41,8 +41,16 @@ A state-changing update that only happens after the user explicitly accepts an A
 _Avoid_: Auto apply, silent fix, AI edit
 
 **Source Repository**:
-A code repository used as optional evidence for proposing an Architecture Draft when the user starts from an existing application.
+A code repository connected to a SketchCatch project and analyzed as evidence for Template Selection. The same repository may later receive approved IaC changes through Git Integration.
 _Avoid_: GitHub link, repo URL, codebase
+
+**Repository Analysis**:
+The service capability that inspects Source Repository files and metadata to identify the application structure and produce evidence for Template Selection. It does not supplement missing requirements or generate an Architecture Draft.
+_Avoid_: AI repository analysis, code summary, GitHub scan
+
+**Template Selection**:
+The step that chooses a reusable Template from Repository Analysis evidence and passes the selected Template and its evidence to AI Architecture Recommendation. Missing requirements are supplemented after this boundary by the AI capability.
+_Avoid_: AI template generation, automatic architecture design, draft generation
 
 **Git Integration**:
 The service capability that connects a Practice Architecture and its IaC Preview to a Source Repository so infrastructure changes can be reviewed, versioned, and handed off to the team's normal development workflow.
