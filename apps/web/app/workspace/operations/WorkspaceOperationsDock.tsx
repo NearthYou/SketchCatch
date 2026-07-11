@@ -59,17 +59,6 @@ export function WorkspaceOperationsDock({
     >
       <nav aria-label="작업 단계" className={styles.dockToolbar} role="tablist">
         <button
-          aria-label="Git/CI/CD"
-          aria-selected={isOpen && activeTab === "git-cicd"}
-          onClick={() => selectTab("git-cicd")}
-          role="tab"
-          title="Git/CI/CD"
-          type="button"
-        >
-          <GitBranch aria-hidden="true" size={17} />
-          {isOpen ? <span>Git/CI</span> : null}
-        </button>
-        <button
           aria-label="Terraform Preview"
           aria-selected={isOpen && activeTab === "terraform"}
           onClick={() => selectTab("terraform")}
@@ -101,6 +90,17 @@ export function WorkspaceOperationsDock({
         >
           <Rocket aria-hidden="true" size={17} />
           {isOpen ? <span>배포</span> : null}
+        </button>
+        <button
+          aria-label="Git/CI/CD"
+          aria-selected={isOpen && activeTab === "git-cicd"}
+          onClick={() => selectTab("git-cicd")}
+          role="tab"
+          title="Git/CI/CD"
+          type="button"
+        >
+          <GitBranch aria-hidden="true" size={17} />
+          {isOpen ? <span>Git/CI</span> : null}
         </button>
         <button
           aria-label="배포 이력"
