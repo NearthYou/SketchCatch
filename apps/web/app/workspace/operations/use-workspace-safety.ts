@@ -15,8 +15,9 @@ import {
   createPreDeploymentAnalysisFromTerraformDiagnostics
 } from "../../../features/workspace/pre-deployment-diagnostics";
 import { convertDiagramJsonToArchitectureJson } from "../../../features/workspace/workspace-ai-diagram-adapter";
-import type { TerraformVirtualFile } from "../../../features/workspace/terraform-panel-utils";
 import { getSafetyGateState } from "../../../features/workspace/workspace-operations-state";
+import { createWorkspaceSafetyTerraformFiles } from "../../../features/workspace/workspace-safety-terraform-files";
+import type { TerraformVirtualFile } from "../../../features/workspace/terraform-panel-utils";
 
 type SafetyRequestState = "idle" | "analyzing";
 
@@ -90,12 +91,7 @@ export function useWorkspaceSafety({
         return;
       }
 
-      const populatedTerraformFiles = terraformFiles
-        .filter((file) => file.code.trim())
-        .map((file) => ({
-          fileName: file.fileName,
-          terraformCode: file.code
-        }));
+      const populatedTerraformFiles = createWorkspaceSafetyTerraformFiles(terraformFiles);
       const result = await runAiPreDeploymentCheck({
         architectureJson: convertDiagramJsonToArchitectureJson(diagram),
         ...(populatedTerraformFiles.length > 0

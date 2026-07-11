@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { DiagramJson } from "@sketchcatch/types";
 import {
+  applyWorkspaceAiBoardPreview,
   createWorkspaceAiBoardSnapshot,
   isWorkspaceAiResultStale
 } from "./workspace-ai-panel-state";
@@ -95,4 +96,54 @@ test("isWorkspaceAiResultStale rejects an AI result when a resource changes duri
     isWorkspaceAiResultStale(requestSnapshot.fingerprint, changedBoardSnapshot.fingerprint),
     true
   );
+});
+
+test("applyWorkspaceAiBoardPreview does not call apply after the board changes during an AI request", async () => {
+  const requestSnapshot = createWorkspaceAiBoardSnapshot(diagramJson);
+  let resolveResponse: (() => void) | undefined;
+  const pendingResponse = new Promise<void>((resolve) => {
+    resolveResponse = resolve;
+  });
+  let currentDiagram = diagramJson;
+  let appliedDiagram: DiagramJson | null = null;
+  const applyAfterResponse = async (): Promise<string> => {
+    await pendingResponse;
+
+    return applyWorkspaceAiBoardPreview({
+      applyDiagram: (diagram) => {
+        appliedDiagram = diagram;
+      },
+      baseFingerprint: requestSnapshot.fingerprint,
+      currentDiagram,
+      previewDiagram: diagramJson
+    });
+  };
+  const resultPromise = applyAfterResponse();
+
+  currentDiagram = {
+    ...diagramJson,
+    nodes: diagramJson.nodes.map((node) => ({ ...node, label: "Changed during request" }))
+  };
+  assert.ok(resolveResponse);
+  resolveResponse();
+
+  assert.equal(await resultPromise, "stale");
+  assert.equal(appliedDiagram, null);
+});
+
+test("applyWorkspaceAiBoardPreview applies a preview when the board is unchanged", () => {
+  const requestSnapshot = createWorkspaceAiBoardSnapshot(diagramJson);
+  let appliedDiagram: DiagramJson | null = null;
+
+  const result = applyWorkspaceAiBoardPreview({
+    applyDiagram: (diagram) => {
+      appliedDiagram = diagram;
+    },
+    baseFingerprint: requestSnapshot.fingerprint,
+    currentDiagram: diagramJson,
+    previewDiagram: diagramJson
+  });
+
+  assert.equal(result, "applied");
+  assert.deepEqual(appliedDiagram, diagramJson);
 });

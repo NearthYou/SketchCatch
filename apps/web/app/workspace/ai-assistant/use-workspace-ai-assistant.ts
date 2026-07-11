@@ -23,6 +23,7 @@ import {
 } from "../../../features/workspace/workspace-ai-chat-routing";
 import { createWorkspaceAiPatchPreviewModel } from "../../../features/workspace/workspace-ai-patch-preview";
 import {
+  applyWorkspaceAiBoardPreview,
   createWorkspaceAiBoardSnapshot,
   isWorkspaceAiResultStale
 } from "../../../features/workspace/workspace-ai-panel-state";
@@ -375,8 +376,16 @@ export function useWorkspaceAiAssistant({
   // 사용자가 승인한 Architecture 미리보기만 실제 Board에 적용합니다.
   const applyBoardPreview = useCallback((): void => {
     if (!pendingBoardPreview) return;
-    if (rejectStaleBoardResult(pendingBoardPreview.baseFingerprint)) return;
-    context.applyDiagramJson(pendingBoardPreview.diagram);
+    const applyResult = applyWorkspaceAiBoardPreview({
+      applyDiagram: context.applyDiagramJson,
+      baseFingerprint: pendingBoardPreview.baseFingerprint,
+      currentDiagram: diagramRef.current,
+      previewDiagram: pendingBoardPreview.diagram
+    });
+    if (applyResult === "stale") {
+      rejectStaleBoardResult(pendingBoardPreview.baseFingerprint);
+      return;
+    }
     context.setPreviewDiagram(null);
     appendMessage({ content: `${pendingBoardPreview.summary} 제안을 Board에 적용했습니다.`, role: "assistant", state: "completed" });
     setPendingBoardPreview(null);

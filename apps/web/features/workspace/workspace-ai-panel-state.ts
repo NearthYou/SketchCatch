@@ -26,6 +26,25 @@ export function isWorkspaceAiResultStale(
   return resultFingerprint !== null && resultFingerprint !== currentFingerprint;
 }
 
+// 사용자가 승인한 AI 미리보기가 현재 Board 기준일 때만 실제 적용 함수를 호출합니다.
+export function applyWorkspaceAiBoardPreview({
+  applyDiagram,
+  baseFingerprint,
+  currentDiagram,
+  previewDiagram
+}: {
+  readonly applyDiagram: (diagram: DiagramJson) => void;
+  readonly baseFingerprint: string;
+  readonly currentDiagram: DiagramJson;
+  readonly previewDiagram: DiagramJson;
+}): "applied" | "stale" {
+  const currentFingerprint = createWorkspaceAiBoardSnapshot(currentDiagram).fingerprint;
+  if (isWorkspaceAiResultStale(baseFingerprint, currentFingerprint)) return "stale";
+
+  applyDiagram(previewDiagram);
+  return "applied";
+}
+
 // AI 결과 만료 판단은 화면 이동/확대가 아니라 실제 분석 API 입력만 기준으로 합니다.
 function createWorkspaceAiArchitectureFingerprint(architectureJson: ArchitectureJson): string {
   return JSON.stringify(architectureJson);
