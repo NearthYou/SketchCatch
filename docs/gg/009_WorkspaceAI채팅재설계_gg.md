@@ -227,7 +227,7 @@ AI panel 열기
 자동 검증:
 
 ```text
-web test: 757개 통과
+web test: 758개 통과
 web lint: 통과
 web typecheck: 통과
 web production build: 통과

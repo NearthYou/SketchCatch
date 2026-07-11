@@ -208,7 +208,7 @@ web test 전체
 
 최종 로컬 결과:
 
-- Web test: 757개 통과
+- Web test: 758개 통과
 - Terraform workspace, 배포와 Git/CI/CD API 집중 test: 60개 통과
 - Plan, 승인, Apply, Cleanup 배포 lifecycle 집중 test: 36개 통과
 - `pnpm harness:check`: 통과
