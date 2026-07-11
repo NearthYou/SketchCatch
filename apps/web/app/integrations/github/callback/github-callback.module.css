@@ -1,0 +1,234 @@
+.page {
+  background: #fafafa;
+  color: #171717;
+  font-family: "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif;
+  min-height: 100dvh;
+}
+
+.topbar {
+  align-items: center;
+  background: #ffffff;
+  border-bottom: 1px solid #f0f0f3;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  min-height: 64px;
+  padding: 0 24px;
+}
+
+.topbar > strong {
+  font-size: 14px;
+}
+
+.brand,
+.backLink {
+  align-items: center;
+  color: #171717;
+  display: inline-flex;
+  text-decoration: none;
+}
+
+.brand {
+  font-size: 18px;
+  font-weight: 700;
+  gap: 6px;
+  justify-self: start;
+}
+
+.brand img {
+  height: 24px;
+  object-fit: contain;
+  transform: translateY(-3px);
+  width: 16px;
+}
+
+.backLink {
+  color: #60646c;
+  font-size: 13px;
+  font-weight: 600;
+  gap: 7px;
+  justify-self: end;
+}
+
+.panel {
+  background: #ffffff;
+  border: 1px solid #e7e8eb;
+  border-radius: 12px;
+  margin: 56px auto 80px;
+  max-width: 720px;
+  padding: 32px;
+  width: calc(100% - 40px);
+}
+
+.heading {
+  border-bottom: 1px solid #e7e8eb;
+  margin-bottom: 20px;
+  padding-bottom: 24px;
+}
+
+.heading span {
+  color: #999999;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.heading h1 {
+  font-size: 28px;
+  line-height: 1.2;
+  margin: 6px 0 0;
+}
+
+.instruction {
+  color: #60646c;
+  font-size: 14px;
+  margin: 0 0 16px;
+}
+
+.progress,
+.errorState,
+.emptyState {
+  align-items: center;
+  border: 1px solid #dcdee0;
+  border-radius: 8px;
+  color: #60646c;
+  display: flex;
+  font-size: 14px;
+  gap: 10px;
+  min-height: 64px;
+  padding: 14px 16px;
+}
+
+.progress svg {
+  animation: github-spin 900ms linear infinite;
+}
+
+.errorState {
+  border-color: #eb8e90;
+  color: #9b2c2c;
+}
+
+.repositoryList {
+  display: grid;
+  gap: 8px;
+}
+
+.repositoryButton {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #dcdee0;
+  border-radius: 8px;
+  color: #171717;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  min-height: 68px;
+  padding: 12px 14px;
+  text-align: left;
+  width: 100%;
+}
+
+.repositoryButton:hover:not(:disabled) {
+  border-color: #171717;
+}
+
+.repositoryButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.repositoryIcon {
+  align-items: center;
+  background: #f0f0f3;
+  border-radius: 8px;
+  display: flex;
+  height: 36px;
+  justify-content: center;
+  width: 36px;
+}
+
+.repositoryCopy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.repositoryCopy strong,
+.repositoryCopy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.repositoryCopy strong {
+  font-size: 14px;
+}
+
+.repositoryCopy small {
+  color: #60646c;
+  font-size: 12px;
+}
+
+.selectLabel {
+  color: #60646c;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.actions {
+  border-top: 1px solid #e7e8eb;
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 20px;
+  padding-top: 20px;
+}
+
+.secondaryButton {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #dcdee0;
+  border-radius: 8px;
+  color: #171717;
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 700;
+  gap: 7px;
+  height: 40px;
+  padding: 0 14px;
+}
+
+.secondaryButton:hover {
+  border-color: #171717;
+}
+
+@keyframes github-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 640px) {
+  .topbar {
+    grid-template-columns: 1fr auto;
+    padding-inline: 16px;
+  }
+
+  .topbar > strong {
+    display: none;
+  }
+
+  .panel {
+    border-inline: 0;
+    border-radius: 0;
+    margin-top: 20px;
+    padding: 24px 20px;
+    width: 100%;
+  }
+
+  .repositoryButton {
+    grid-template-columns: 36px minmax(0, 1fr);
+  }
+
+  .selectLabel {
+    display: none;
+  }
+}
