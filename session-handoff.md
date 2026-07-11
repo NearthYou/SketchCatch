@@ -12,6 +12,7 @@ Use this file only for compact continuation context. Write it in English.
 - Actual Chrome E2E passed for Template Selection Failure and successful `static-web-hosting` selection, reload persistence, and AI handoff.
 - GitHub App installation enumeration and connection are restricted to the signed-in GitHub OAuth account ID.
 - Workspace handoff materializes all six selected TemplateDefinition resources and asks for clarification instead of silently replacing them.
+- Workspace and the Architecture Draft API resolve the Template from the authenticated project/source analysis; URL or request Template tampering returns a Korean guard error and HTTP 409.
 
 ## Changes This Session
 
@@ -27,4 +28,4 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Best Next Action
 
-- Push commits `c29da38c`, `20737794`, `0a8cd8ed`, and `de330980` to PR #317, refresh CI, and resolve any new thread before merge.
+- Push through commit `7ada4c84` to PR #317, refresh CI, and resolve any new thread before merge.

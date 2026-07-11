@@ -21,14 +21,16 @@ Short English-only working log for the current agent context. Older records are 
   - Preserved the selected Template ID through the Workspace AI banner and the real Architecture Draft request.
   - Restricted GitHub App installation listing, callback exchange, and repository connection to the signed-in GitHub OAuth account ID.
   - Materialized the selected TemplateDefinition as the fixed six-resource Workspace baseline; replacement requests now require clarification instead of silently switching templates.
+  - Bound Workspace and Architecture Draft handoff to the stored project/source Repository Analysis; tampered URL and API Template IDs now fail closed.
   - Fixed configured-origin credential CORS, auth-recovery request races, metadata contrast, and 44px action targets.
 - Manual QA:
   - Failure: `NearthYou/sketchcatch-iac-handoff-test` revision `8b5d394aa5035c8ebc91e37751d5c8cccc3c6ddd`.
   - Success: `NearthYou/mini-react` revision `dd1b8764fcd324c19f604c521eee2d60476136b5`, selected `static-web-hosting`.
   - Chrome desktop/mobile reload and AI handoff passed with zero console, failed-request, or HTTP error responses in the final run.
   - The final Workspace run kept all six Static Web Hosting resources and returned `needs_clarification` when asked to replace them with a three-tier design.
+  - A tampered `three-tier-web-app` URL and direct API request were rejected against the stored `static-web-hosting` selection with no console or network errors.
 - Verification:
-  - Final focused Repository Analysis, GitHub authorization, AI handoff, and Web state tests passed 116/116.
+  - Final clean-worktree provenance suite passed 77/77; focused Repository Analysis suite passed 116/116 before the provenance hardening.
   - `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
   - Two independent visual reviews passed after contrast and touch-target corrections.
 - Risk:
