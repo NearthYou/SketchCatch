@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import type { AwsConnection } from "@sketchcatch/types";
+import type { AwsConnection, TerraformArtifactBundle } from "@sketchcatch/types";
 import { runDeploymentApply } from "./deployment-apply-service.js";
 import type {
   DeploymentApplyArtifactStorage,
@@ -24,6 +24,7 @@ import type {
   TerraformOutputRecord
 } from "./deployment-service.js";
 import type { TerraformRunResult } from "./terraform-runner.js";
+import { createTerraformArtifactCanonicalContent } from "./terraform-workspace.js";
 
 const projectId = "11111111-1111-4111-8111-111111111111";
 const architectureId = "22222222-2222-4222-8222-222222222222";
@@ -557,9 +558,24 @@ test("runDeploymentApply materializes archive data files before applying an appr
       source = data.archive_file.handler.output_path
     }
   `;
+  const terraformFiles: TerraformArtifactBundle["files"] = [
+    { fileName: "providers.tf", terraformCode: "terraform {}\n" },
+    { fileName: "lambda.tf", terraformCode: archiveTerraformArtifact }
+  ];
+  const artifactInput = {
+    objectKey: "projects/project-id/assets/terraform_file/terraform-files.json",
+    fileName: "terraform-files.json",
+    contentType: "application/vnd.sketchcatch.terraform-files+json"
+  };
+  const bundle = JSON.stringify({ schemaVersion: 1, files: terraformFiles });
+  const canonicalBundle = createTerraformArtifactCanonicalContent(artifactInput, bundle);
   const repository = new FakeDeploymentRepository();
+  repository.terraformArtifact = createTerraformArtifactRecord({
+    fileName: artifactInput.fileName,
+    contentType: artifactInput.contentType
+  });
   repository.deployment = createApprovedDeploymentRecord({
-    approvedTerraformArtifactHash: createSha256(archiveTerraformArtifact),
+    approvedTerraformArtifactHash: createSha256(canonicalBundle),
     liveProfile: "demo_web_service_with_rds"
   });
   const runnerStages: string[] = [];
@@ -572,12 +588,12 @@ test("runDeploymentApply materializes archive data files before applying an appr
     repository,
     {
       applyArtifactStorage: new FakeApplyArtifactStorage(),
-      readTerraformArtifactFile: async () => archiveTerraformArtifact,
+      readTerraformArtifactFile: async () => canonicalBundle,
       writePlanFile: async () => undefined,
       prepareTerraformWorkspace: async () => ({
         workdir: "C:/tmp/sketchcatch-terraform-archive-apply",
         mainFilePath: "C:/tmp/sketchcatch-terraform-archive-apply/main.tf",
-        terraformFiles: [],
+        terraformFiles,
         cleanup: async () => undefined
       }),
       prepareTerraformAwsCredentialEnv: async () => createPreparedCredentials(),

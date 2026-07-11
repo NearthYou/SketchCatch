@@ -168,13 +168,11 @@ export async function runDeploymentApply(
     workspace = preparedWorkspace;
 
     const currentTerraformArtifactContent = await readTerraformArtifactFile(workspace.mainFilePath);
-    assertTerraformArtifactIsSafe(
-      createTerraformFilesSafetyContent(
-        workspace.terraformFiles,
-        currentTerraformArtifactContent
-      ),
-      { liveProfile: deployment.liveProfile }
+    const terraformSafetyContent = createTerraformFilesSafetyContent(
+      workspace.terraformFiles,
+      currentTerraformArtifactContent
     );
+    assertTerraformArtifactIsSafe(terraformSafetyContent, { liveProfile: deployment.liveProfile });
     const currentTerraformArtifactHash = createSha256(currentTerraformArtifactContent);
     const currentTfplanHash = createSha256(planBuffer);
 
@@ -263,7 +261,7 @@ export async function runDeploymentApply(
     });
     sequence = lockUpload.sequence;
 
-    if (containsArchiveFileDataSource(currentTerraformArtifactContent)) {
+    if (containsArchiveFileDataSource(terraformSafetyContent)) {
       const materializeResult = await runTerraformPlan(workspace.workdir, {
         env: awsCredentials.env,
         planFileName: materializePlanFileName,
