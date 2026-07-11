@@ -91,7 +91,6 @@ export type CreateGitCicdHandoffInput = {
   releaseBucket?: string | undefined;
   staticSiteUrl?: string | null | undefined;
   apiBaseUrl?: string | null | undefined;
-  approveAwsRoleDiff?: boolean | undefined;
   userAcceptedChangeId: string;
 };
 
@@ -960,7 +959,6 @@ export async function createGitCicdHandoff(
   const releaseBucket = input.releaseBucket ?? null;
   const staticSiteUrl = input.staticSiteUrl ?? null;
   const apiBaseUrl = input.apiBaseUrl ?? null;
-  const approvedAt = input.approveAwsRoleDiff === true ? new Date().toISOString() : null;
   const repositorySettingsPreview = createRepositorySettingsPreview({
     projectSlug,
     repositoryOwner: sourceRepository.owner,
@@ -988,8 +986,8 @@ export async function createGitCicdHandoff(
     rdsEnabled,
     staticSiteUrl,
     apiBaseUrl,
-    approvedByUserId: input.approveAwsRoleDiff === true ? input.accessContext.userId : null,
-    approvedAt
+    approvedByUserId: null,
+    approvedAt: null
   });
   const pullRequestDraft = createGitCicdPullRequestDraft({
     repositoryOwner: sourceRepository.owner,

@@ -69,9 +69,6 @@ export function ProductEntry() {
           <Link className={`${styles.button} ${styles.buttonSecondary}`} href="/login">
             로그인
           </Link>
-          <Link className={`${styles.button} ${styles.buttonPrimary}`} href="/signup">
-            시작하기
-          </Link>
           <button
             aria-expanded={isMenuOpen}
             aria-label={isMenuOpen ? "메뉴 닫기" : "메뉴 열기"}
@@ -103,10 +100,10 @@ export function ProductEntry() {
               <li>Existing cloud</li>
             </ul>
             <div className={styles.heroActions}>
-              <a className={`${styles.button} ${styles.buttonPrimary}`} href="#workspace">
-                Architecture Board 체험
+              <Link className={`${styles.button} ${styles.buttonPrimary}`} href="/signup">
+                시작하기
                 <span className={styles.buttonIcon} aria-hidden="true">→</span>
-              </a>
+              </Link>
               <a className={`${styles.button} ${styles.buttonSecondary}`} href="#workflow">
                 흐름 먼저 보기
               </a>

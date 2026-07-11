@@ -138,6 +138,7 @@ export function useWorkspaceLiveObservation(
       observationId: session.id,
       signal: controller.signal,
       onSnapshot: (nextSnapshot) => {
+        setErrorMessage("");
         setSnapshot(nextSnapshot);
         if (nextSnapshot.status !== "active") {
           trafficControllerRef.current?.stop();

@@ -1,12 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Trash2 } from "lucide-react";
 import type { WorkspaceDeploymentState } from "./use-workspace-deployment";
 import { useWorkspaceDeploymentDetails } from "./use-workspace-deployment-details";
 import styles from "./workspace-operations.module.css";
 
 const CLEANUP_CONFIRMATION = "정리";
+const HISTORY_PAGE_SIZE = 8;
 
 // 배포 이력과 선택한 실행의 Resource, log, Cleanup 행동을 함께 보여줍니다.
 export function DeploymentHistoryPanel({
@@ -17,6 +18,7 @@ export function DeploymentHistoryPanel({
   const [confirmation, setConfirmation] = useState("");
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [page, setPage] = useState(1);
   const details = useWorkspaceDeploymentDetails(deployment.current);
   const current = deployment.current;
   const canConfirmCleanup = confirmation === CLEANUP_CONFIRMATION;
@@ -32,6 +34,17 @@ export function DeploymentHistoryPanel({
       return matchesStatus && matchesQuery;
     });
   }, [deployment.deployments, query, statusFilter]);
+  const pageCount = Math.max(1, Math.ceil(filteredDeployments.length / HISTORY_PAGE_SIZE));
+  const visibleDeployments = filteredDeployments.slice(
+    (page - 1) * HISTORY_PAGE_SIZE,
+    page * HISTORY_PAGE_SIZE
+  );
+
+  // 검색어나 상태 조건이 바뀌면 결과가 있는 첫 페이지로 돌아갑니다.
+  useEffect(() => setPage(1), [query, statusFilter]);
+
+  // 배포 목록이 줄어 현재 페이지가 사라지면 마지막 유효 페이지를 유지합니다.
+  useEffect(() => setPage((currentPage) => Math.min(currentPage, pageCount)), [pageCount]);
 
   return (
     <div className={styles.panelBody}>
@@ -75,7 +88,7 @@ export function DeploymentHistoryPanel({
                 <tr><th>실행 시각</th><th>상태</th><th>실행자</th><th>단계</th></tr>
               </thead>
               <tbody>
-                {filteredDeployments.map((item) => (
+                {visibleDeployments.map((item) => (
                   <tr data-selected={item.id === current?.id} key={item.id}>
                     <td>
                       <button onClick={() => deployment.select(item)} type="button">
@@ -91,6 +104,27 @@ export function DeploymentHistoryPanel({
             </table>
             {filteredDeployments.length === 0 ? (
               <p className={styles.emptyText}>검색 조건에 맞는 배포 이력이 없습니다.</p>
+            ) : null}
+            {filteredDeployments.length > HISTORY_PAGE_SIZE ? (
+              <div className={styles.actionRow} aria-label="배포 이력 페이지">
+                <button
+                  className={styles.secondaryButton}
+                  disabled={page === 1}
+                  onClick={() => setPage((currentPage) => currentPage - 1)}
+                  type="button"
+                >
+                  이전
+                </button>
+                <span>{page} / {pageCount}</span>
+                <button
+                  className={styles.secondaryButton}
+                  disabled={page === pageCount}
+                  onClick={() => setPage((currentPage) => currentPage + 1)}
+                  type="button"
+                >
+                  다음
+                </button>
+              </div>
             ) : null}
           </div>
 
@@ -176,9 +210,16 @@ export function DeploymentHistoryPanel({
                     <p>저장된 Resource가 없어 Plan 결과에서 삭제 범위를 확인해야 합니다.</p>
                   )}
                 </details>
+                {current.status === "FAILED" && current.failureStage === "destroy" ? (
+                  <p className={styles.inlineNotice} data-tone="warning">
+                    일부 Resource만 삭제됐을 수 있습니다. AWS 상태를 확인한 뒤 Cleanup Plan을 다시 만드세요.
+                  </p>
+                ) : null}
                 {deployment.actionState.shouldShowDestroyPlanButton ? (
                   <button className={styles.secondaryButton} disabled={!deployment.actionState.canRunDestroyPlan} onClick={() => void deployment.planCleanup()} type="button">
-                    Cleanup Plan 만들기
+                    {current.status === "FAILED" && current.failureStage === "destroy"
+                      ? "Cleanup 다시 계획"
+                      : "Cleanup Plan 만들기"}
                   </button>
                 ) : null}
                 {current.currentPlanOperation === "destroy" && deployment.actionState.shouldShowApprovePlanButton ? (

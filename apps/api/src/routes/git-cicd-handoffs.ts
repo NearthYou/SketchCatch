@@ -111,7 +111,6 @@ const createGitCicdHandoffBodySchema = z
     releaseBucket: z.string().trim().min(3).max(63).optional(),
     staticSiteUrl: z.string().url().nullable().optional(),
     apiBaseUrl: z.string().url().nullable().optional(),
-    approveAwsRoleDiff: z.boolean().optional(),
     userAcceptedChangeId: z.string().trim().min(1).max(128)
   })
   .strict();
@@ -195,7 +194,6 @@ export async function registerGitCicdHandoffRoutes(
           releaseBucket: body.releaseBucket,
           staticSiteUrl: body.staticSiteUrl,
           apiBaseUrl: body.apiBaseUrl,
-          approveAwsRoleDiff: body.approveAwsRoleDiff,
           userAcceptedChangeId: body.userAcceptedChangeId
         },
         repository,
