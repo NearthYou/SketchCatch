@@ -3,7 +3,7 @@ import type { DeploymentLiveProfile } from "@sketchcatch/types";
 import { getLiveApplySupportedResourceTypes } from "./deployment-plan-summary.js";
 
 const allowedTopLevelBlocks = new Set(["terraform", "provider", "resource", "data", "variable", "output", "locals"]);
-const liveApplySupportedDataSourceTypes = new Set(["aws_ami"]);
+const liveApplySupportedDataSourceTypes = new Set(["archive_file", "aws_ami"]);
 const allowedProviderSources = new Set(["hashicorp/aws", "registry.terraform.io/hashicorp/aws"]);
 const allowedAwsProviderRegion = "ap-northeast-2";
 const allowedAwsProviderAttributes = new Set(["alias", "region"]);

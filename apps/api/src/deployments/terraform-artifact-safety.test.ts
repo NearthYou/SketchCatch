@@ -119,6 +119,19 @@ test("assertTerraformArtifactIsSafe accepts supported AWS AMI data sources", () 
   );
 });
 
+test("assertTerraformArtifactIsSafe accepts inline archive data for Lambda artifacts", () => {
+  assert.doesNotThrow(() =>
+    assertTerraformArtifactIsSafe(`
+      data "archive_file" "handler" {
+        type                    = "zip"
+        output_path             = "\${path.module}/lambda-handler.zip"
+        source_content          = "exports.handler = async () => ({ statusCode: 200 })"
+        source_content_filename = "index.js"
+      }
+    `)
+  );
+});
+
 test("assertTerraformArtifactIsSafe rejects unsupported data sources before live deployment", () => {
   assert.throws(
     () =>

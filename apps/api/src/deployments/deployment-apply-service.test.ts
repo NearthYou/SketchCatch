@@ -550,8 +550,10 @@ test("runDeploymentApply materializes archive data files before applying an appr
       output_path = "./handler.zip"
     }
 
-    resource "aws_lambda_function" "handler" {
-      filename = data.archive_file.handler.output_path
+    resource "aws_s3_object" "handler" {
+      bucket = "sketchcatch-demo-bucket"
+      key    = "handler.zip"
+      source = data.archive_file.handler.output_path
     }
   `;
   const repository = new FakeDeploymentRepository();
