@@ -4,13 +4,11 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  CircleDollarSign,
   FolderKanban,
   LayoutDashboard,
   LogOut,
   Menu,
   Plus,
-  Settings,
   Shapes,
   X
 } from "lucide-react";
@@ -20,9 +18,7 @@ import { useAuth } from "../auth/auth-provider";
 const DASHBOARD_NAV_ITEMS = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Overview" },
   { href: "/dashboard/projects", icon: FolderKanban, label: "Projects" },
-  { href: "/dashboard/costs", icon: CircleDollarSign, label: "Cost Analysis" },
-  { href: "/dashboard/templates", icon: Shapes, label: "Templates" },
-  { href: "/dashboard/settings", icon: Settings, label: "Settings" }
+  { href: "/dashboard/templates", icon: Shapes, label: "Templates" }
 ] as const;
 
 export function DashboardShell({ children }: { readonly children: ReactNode }) {

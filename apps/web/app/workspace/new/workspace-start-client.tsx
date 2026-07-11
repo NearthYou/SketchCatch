@@ -8,7 +8,6 @@ import {
   Bot,
   Boxes,
   CloudDownload,
-  GitBranch,
   LayoutPanelTop,
   LoaderCircle,
   type LucideIcon
@@ -16,7 +15,6 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { TemplateGallery } from "../../../components/templates/TemplateGallery";
 import {
-  createGitHubSourceRepositoryInstallUrl,
   createProject,
   deleteProject,
   listAwsConnections,
@@ -40,7 +38,6 @@ const DEFAULT_REVERSE_CLOUD_PLATFORM = "aws";
 const START_MODE_ICONS: Record<WorkspaceStartKind, LucideIcon> = {
   ai: Bot,
   blank: LayoutPanelTop,
-  github: GitBranch,
   reverse: CloudDownload,
   template: Boxes
 };
@@ -164,12 +161,6 @@ export function WorkspaceStartClient({
           });
         }
 
-        if (action.openMode === "github") {
-          const { installUrl } = await createGitHubSourceRepositoryInstallUrl(project.id);
-          window.location.assign(installUrl);
-          return;
-        }
-
         clearWorkspaceStartForm();
         const params = new URLSearchParams({
           projectId: project.id,
@@ -252,7 +243,6 @@ export function WorkspaceStartClient({
                     <small>{option.description}</small>
                   </span>
                   {option.kind === "reverse" ? <em>AWS Role 필요</em> : null}
-                  {option.kind === "github" ? <em>연결만 지원</em> : null}
                 </button>
               );
             })}
@@ -264,13 +254,6 @@ export function WorkspaceStartClient({
               selectedTemplateId={selectedTemplateId}
               templates={boardTemplates}
             />
-          ) : null}
-
-          {selectedKind === "github" ? (
-            <p className={styles.boundaryNotice} role="status">
-              Repository 연결은 동작합니다. Repository Analysis와 Template Selection은 아직 연결
-              중입니다.
-            </p>
           ) : null}
 
           <div className={styles.actions}>
@@ -366,7 +349,6 @@ function getContinueLabel(kind: WorkspaceStartKind): string {
   const labels: Record<WorkspaceStartKind, string> = {
     ai: "AI로 계속",
     blank: "빈 보드 열기",
-    github: "GitHub 연결",
     reverse: "기존 AWS 가져오기",
     template: "Template으로 시작"
   };
@@ -445,7 +427,6 @@ function isWorkspaceStartKind(value: unknown): value is WorkspaceStartKind {
     value === "ai" ||
     value === "reverse" ||
     value === "template" ||
-    value === "github" ||
     value === "blank"
   );
 }

@@ -8,6 +8,7 @@ const productEntrySource = readLocalFile("./product-entry.tsx");
 const productSectionsSource = readLocalFile("./landing-product-sections.tsx");
 const workspacePreviewSource = readLocalFile("./landing-workspace-preview.tsx");
 const workflowSource = readLocalFile("./landing-workflow-section.tsx");
+const landingStylesSource = readLocalFile("./product-entry.module.css");
 
 test("root route renders the product entry instead of a temporary placeholder", () => {
   assert.match(pageSource, /ProductEntry/);
@@ -33,6 +34,11 @@ test("landing header keeps a visible login entry next to signup", () => {
   assert.match(productEntrySource, /href="\/login"/);
   assert.match(productEntrySource, />\s*로그인\s*<\/Link>/s);
   assert.match(productEntrySource, /href="\/signup"/);
+});
+
+test("landing preview tabs stay on one line inside the workspace top bar", () => {
+  assert.match(landingStylesSource, /grid-template-columns:\s*180px minmax\(0, 1fr\) max-content/);
+  assert.match(landingStylesSource, /\.modeTab\s*\{[^}]*white-space:\s*nowrap/s);
 });
 
 test("product entry carries every section from the landing reference", () => {

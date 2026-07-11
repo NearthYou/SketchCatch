@@ -13,7 +13,7 @@ const startClientSource = readFileSync(
 );
 const startPageSource = readFileSync(fileURLToPath(new URL("page.tsx", import.meta.url)), "utf8");
 
-test("createWorkspaceStartOptions exposes four guided starts and keeps blank board small", () => {
+test("createWorkspaceStartOptions exposes three guided starts and keeps blank board small", () => {
   const options = createWorkspaceStartOptions();
 
   assert.deepEqual(
@@ -22,7 +22,6 @@ test("createWorkspaceStartOptions exposes four guided starts and keeps blank boa
       ["ai", "primary"],
       ["reverse", "primary"],
       ["template", "primary"],
-      ["github", "primary"],
       ["blank", "secondary"]
     ]
   );
@@ -37,12 +36,10 @@ test("WorkspaceStartClient uses the rebuilt start shell without a placeholder", 
   assert.match(startClientSource, /blankStartOption/);
 });
 
-test("WorkspaceStartClient keeps Template and GitHub as separate real start paths", () => {
+test("WorkspaceStartClient keeps Template as a real start path", () => {
   assert.match(startClientSource, /saveProjectDraft/);
   assert.match(startClientSource, /selectedTemplate\.diagramJson/);
-  assert.match(startClientSource, /createGitHubSourceRepositoryInstallUrl\(project\.id\)/);
-  assert.match(startClientSource, /window\.location\.assign\(installUrl\)/);
-  assert.doesNotMatch(startClientSource, /connectGitHubAfterCreate/);
+  assert.doesNotMatch(startClientSource, /createGitHubSourceRepositoryInstallUrl/);
 });
 
 test("WorkspaceStartClient hydrates a stored form before persisting changes", () => {
@@ -90,8 +87,8 @@ test("resolveWorkspaceStartAction opens AI before project creation", () => {
   assert.deepEqual(aiAction, { kind: "openAiDraft", href: "/workspace/ai" });
 });
 
-test("resolveWorkspaceStartAction creates projects for blank, Template, and GitHub starts", () => {
-  const starts = ["blank", "template", "github"] as const;
+test("resolveWorkspaceStartAction creates projects for blank and Template starts", () => {
+  const starts = ["blank", "template"] as const;
   const actions = starts.map((startKind) =>
     resolveWorkspaceStartAction({
       cloudPlatform: "aws",
