@@ -29,6 +29,11 @@ env:
   ECS_API_CONTAINER_NAME: ${{ vars.ECS_API_CONTAINER_NAME }}
   ECS_WEB_CONTAINER_NAME: ${{ vars.ECS_WEB_CONTAINER_NAME }}
   ECS_WORKER_CONTAINER_NAME: ${{ vars.ECS_WORKER_CONTAINER_NAME }}
+  GIT_OAUTH_CLIENT_ID: ${{ vars.GIT_OAUTH_CLIENT_ID }}
+  KAKAO_OAUTH_CLIENT_ID: ${{ vars.KAKAO_OAUTH_CLIENT_ID }}
+  NAVER_OAUTH_CLIENT_ID: ${{ vars.NAVER_OAUTH_CLIENT_ID }}
+  OAUTH_REDIRECT_BASE_URL: ${{ vars.OAUTH_REDIRECT_BASE_URL }}
+  SKETCHCATCH_PUBLIC_BASE_URL: ${{ vars.SKETCHCATCH_PUBLIC_BASE_URL }}
 
 jobs:
   build-and-push:
@@ -87,6 +92,11 @@ jobs:
             ECS_API_CONTAINER_NAME
             ECS_WEB_CONTAINER_NAME
             ECS_WORKER_CONTAINER_NAME
+            GIT_OAUTH_CLIENT_ID
+            KAKAO_OAUTH_CLIENT_ID
+            NAVER_OAUTH_CLIENT_ID
+            OAUTH_REDIRECT_BASE_URL
+            SKETCHCATCH_PUBLIC_BASE_URL
           )
 
           for name in "${required_vars[@]}"; do
@@ -238,6 +248,11 @@ jobs:
           image: ${{ needs.build-and-push.outputs.api-image }}
           environment-variables: |
             ECS_WORKER_TASK_DEFINITION=${{ needs.register-worker.outputs.task-definition-arn }}
+            GIT_OAUTH_CLIENT_ID=${{ env.GIT_OAUTH_CLIENT_ID }}
+            KAKAO_OAUTH_CLIENT_ID=${{ env.KAKAO_OAUTH_CLIENT_ID }}
+            NAVER_OAUTH_CLIENT_ID=${{ env.NAVER_OAUTH_CLIENT_ID }}
+            OAUTH_REDIRECT_BASE_URL=${{ env.OAUTH_REDIRECT_BASE_URL }}
+            SKETCHCATCH_PUBLIC_BASE_URL=${{ env.SKETCHCATCH_PUBLIC_BASE_URL }}
 
       - name: Deploy API ECS service
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2
