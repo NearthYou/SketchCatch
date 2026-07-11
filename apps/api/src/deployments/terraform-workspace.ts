@@ -142,11 +142,7 @@ export function parseTerraformArtifactBundle(content: string): TerraformArtifact
 
 // 파일 경계와 순서를 포함해 bundle의 hash 기준 문자열을 만듭니다.
 function createTerraformBundleCanonicalContent(bundle: TerraformArtifactBundle): Buffer {
-  return Buffer.from(
-    bundle.files
-      .map((file) => `# SketchCatch file: ${file.fileName}\n${file.terraformCode.trim()}`)
-      .join("\n\n")
-  );
+  return Buffer.from(JSON.stringify(bundle));
 }
 
 export async function downloadTerraformArtifactFromS3(
