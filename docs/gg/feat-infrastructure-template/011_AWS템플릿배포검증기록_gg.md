@@ -82,6 +82,18 @@
 | ECS Fargate Container App | `SUCCESS` | `SUCCESS` | 3분 29.929초 | `DESTROYED` | 8분 6.856초 | 없음 | Deployment `ad461382…` |
 | EKS Container App | `SUCCESS` | `SUCCESS` | 9분 32.693초 | `DESTROYED` | 8분 3.310초 | 없음 | Deployment `8a4057c7…` |
 
+### Static Web Hosting Chrome 행동 로그
+
+| Chrome 관찰 | UTC 시각 | 결과 |
+| --- | --- | --- |
+| `AWS 리소스 생성` 최종 확인 클릭 | `2026-07-11T08:13:24.301Z` | 승인된 Direct Deployment 시작 |
+| Terraform terminal 관찰 | `2026-07-11T08:17:24.100Z` | `SUCCESS`, 클릭 후 3분 59.800초 |
+| `AWS 리소스 삭제` 최종 확인 클릭 | `2026-07-11T08:19:03.390Z` | 같은 Deployment cleanup 시작 |
+| Terraform terminal 관찰 | `2026-07-11T08:22:48.104Z` | `DESTROYED`, 클릭 후 3분 44.716초 |
+| cleanup readback | terminal 직후 | state key `null`, Deployment Resources 0개 |
+
+행동 로그는 Chrome extension session에서 버튼을 직접 누른 시각과 terminal state를 관찰한 시각의 차이다. AWS account ID, bucket 이름, Deployment ID, credential, cookie는 증거에서 제외했다. 배포 artifact는 같은 계정에 이미 있던 bucket을 재사용했으며 새 임시 bucket은 만들지 않았다.
+
 ### 실제 실행에서 수정·복구한 항목
 
 - Chrome 직접 경로에서 기존 artifact bucket이 아닌 이전 계정 bucket을 API runtime이 참조해 `Access Denied`가 발생했다. 현재 계정에 이미 존재하는 artifact bucket으로 runtime을 바로잡았고, 새 bucket은 만들지 않았다. macOS에서 유효하지 않은 Windows Terraform plugin cache path도 임시 macOS cache로 교정했다.
