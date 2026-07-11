@@ -49,11 +49,11 @@ test("product entry carries every section from the landing reference", () => {
   assert.match(productSectionsSource, /Two deployment paths/);
 });
 
-test("rebuilt landing keeps the brand text without rendering a logo image", () => {
+test("rebuilt landing uses the official PNG logo with the brand text", () => {
   const rebuiltLandingSource = [productEntrySource, productSectionsSource, workspacePreviewSource, workflowSource].join("\n");
 
   assert.doesNotMatch(rebuiltLandingSource, /sketchcatch-logo\.svg/);
-  assert.doesNotMatch(rebuiltLandingSource, /sketchcatch-logo\.png/);
+  assert.match(rebuiltLandingSource, /sketchcatch-logo\.png/);
   assert.match(productEntrySource, />SketchCatch<\/span>/);
 });
 

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Menu, X } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -47,6 +48,7 @@ export function ProductEntry() {
 
       <header className={styles.siteHeader} aria-label="주요 메뉴">
         <a className={styles.brand} href="#top" aria-label="SketchCatch 홈">
+          <Image alt="" className={styles.brandMark} height={24} priority src="/sketchcatch-logo.png" width={16} />
           <span>SketchCatch</span>
         </a>
 

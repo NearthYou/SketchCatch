@@ -100,7 +100,7 @@
   display: inline-flex;
   min-width: max-content;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   color: var(--landing-ink);
   font-size: 18px;
   font-weight: 700;
@@ -108,10 +108,11 @@
 }
 
 .brandMark {
-  width: 14px;
-  height: 21px;
+  width: 16px;
+  height: 24px;
   flex: 0 0 auto;
   object-fit: contain;
+  transform: translateY(-4px);
 }
 
 .siteNav {
