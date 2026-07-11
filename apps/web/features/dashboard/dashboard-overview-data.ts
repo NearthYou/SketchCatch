@@ -37,6 +37,8 @@ type RepositoryResult = {
   readonly failedProjectCount: number;
 };
 
+const DASHBOARD_PROJECT_REQUEST_CONCURRENCY = 6;
+
 export async function loadDashboardOverviewData(): Promise<DashboardOverviewData> {
   const projects = await listProjects();
   const [awsResult, costResult, deploymentResult, repositoryResult] = await Promise.all([
@@ -84,12 +86,14 @@ export async function loadDashboardOverviewData(): Promise<DashboardOverviewData
 
 // 일부 프로젝트 조회가 실패해도 성공한 최근 Deployment는 유지합니다.
 async function loadRecentDeployments(projects: readonly Project[]): Promise<DeploymentResult> {
-  const results = await Promise.allSettled(
-    projects.map(async (project) => {
+  const results = await settleRequestsInBatches(
+    projects,
+    DASHBOARD_PROJECT_REQUEST_CONCURRENCY,
+    async (project) => {
       const deployments = await listDeployments(project.id);
 
       return deployments.map((deployment) => ({ deployment, project }));
-    })
+    }
   );
   const items = results.flatMap((result) => (result.status === "fulfilled" ? result.value : []));
 
@@ -100,8 +104,10 @@ async function loadRecentDeployments(projects: readonly Project[]): Promise<Depl
 }
 
 async function loadRepositoryConnections(projects: readonly Project[]): Promise<RepositoryResult> {
-  const results = await Promise.allSettled(
-    projects.map((project) => listSourceRepositories(project.id))
+  const results = await settleRequestsInBatches(
+    projects,
+    DASHBOARD_PROJECT_REQUEST_CONCURRENCY,
+    (project) => listSourceRepositories(project.id)
   );
   const repositories = results.flatMap<SourceRepository>((result) =>
     result.status === "fulfilled" ? result.value : []
@@ -113,11 +119,26 @@ async function loadRepositoryConnections(projects: readonly Project[]): Promise<
   };
 }
 
+export async function settleRequestsInBatches<T, TResult>(
+  items: readonly T[],
+  batchSize: number,
+  request: (item: T) => Promise<TResult>
+): Promise<PromiseSettledResult<TResult>[]> {
+  const results: PromiseSettledResult<TResult>[] = [];
+  const safeBatchSize = Math.max(1, Math.floor(batchSize));
+
+  for (let index = 0; index < items.length; index += safeBatchSize) {
+    const batch = items.slice(index, index + safeBatchSize);
+    results.push(...(await Promise.allSettled(batch.map((item) => request(item)))));
+  }
+
+  return results;
+}
+
 // 보조 API 하나가 실패해도 Dashboard 전체가 사라지지 않게 결과를 감쌉니다.
-async function settleRequest<T>(request: () => Promise<T>): Promise<
-  | { readonly ok: true; readonly value: T }
-  | { readonly ok: false }
-> {
+async function settleRequest<T>(
+  request: () => Promise<T>
+): Promise<{ readonly ok: true; readonly value: T } | { readonly ok: false }> {
   try {
     return { ok: true, value: await request() };
   } catch {

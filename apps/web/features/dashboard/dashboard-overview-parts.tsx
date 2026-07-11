@@ -100,7 +100,8 @@ export function formatDateTime(value: string): string {
 
   return date.toLocaleString("ko-KR", {
     dateStyle: "short",
-    timeStyle: "short"
+    timeStyle: "short",
+    timeZone: "Asia/Seoul"
   });
 }
 

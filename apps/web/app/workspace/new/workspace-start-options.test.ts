@@ -45,6 +45,12 @@ test("WorkspaceStartClient keeps Template and GitHub as separate real start path
   assert.doesNotMatch(startClientSource, /connectGitHubAfterCreate/);
 });
 
+test("WorkspaceStartClient hydrates a stored form before persisting changes", () => {
+  assert.match(startClientSource, /isStartFormHydrated/);
+  assert.match(startClientSource, /if \(!isStartFormHydrated\) \{\s+return;/);
+  assert.match(startClientSource, /setIsStartFormHydrated\(true\)/);
+});
+
 test("resolveWorkspaceStartAction sends Reverse users without a verified AWS Role to settings", () => {
   const action = resolveWorkspaceStartAction({
     cloudPlatform: "aws",
@@ -86,12 +92,17 @@ test("resolveWorkspaceStartAction opens AI before project creation", () => {
 
 test("resolveWorkspaceStartAction creates projects for blank, Template, and GitHub starts", () => {
   const starts = ["blank", "template", "github"] as const;
-  const actions = starts.map((startKind) => resolveWorkspaceStartAction({
-    cloudPlatform: "aws",
-    hasVerifiedAwsConnection: true,
-    projectName: startKind,
-    startKind
-  }));
+  const actions = starts.map((startKind) =>
+    resolveWorkspaceStartAction({
+      cloudPlatform: "aws",
+      hasVerifiedAwsConnection: true,
+      projectName: startKind,
+      startKind
+    })
+  );
 
-  assert.deepEqual(actions, starts.map((openMode) => ({ kind: "createProject", openMode })));
+  assert.deepEqual(
+    actions,
+    starts.map((openMode) => ({ kind: "createProject", openMode }))
+  );
 });

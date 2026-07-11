@@ -72,8 +72,11 @@ export function WorkspaceStartClient({
   const router = useRouter();
   const [title, setTitle] = useState("");
   const [selectedKind, setSelectedKind] = useState<WorkspaceStartKind>(initialStartKind ?? "ai");
+  const [isStartFormHydrated, setIsStartFormHydrated] = useState(initialStartKind !== undefined);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(
-    boardTemplates.some((template) => template.id === initialTemplateId) ? initialTemplateId ?? null : null
+    boardTemplates.some((template) => template.id === initialTemplateId)
+      ? (initialTemplateId ?? null)
+      : null
   );
   const [errorMessage, setErrorMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -96,18 +99,23 @@ export function WorkspaceStartClient({
     if (storedForm) {
       setTitle(storedForm.projectName);
       setSelectedKind(storedForm.selectedKind);
-      return;
+    } else {
+      const aiDraft = readAiStartDraft();
+      if (aiDraft?.projectName) {
+        setTitle(aiDraft.projectName);
+      }
     }
 
-    const aiDraft = readAiStartDraft();
-    if (aiDraft?.projectName) {
-      setTitle(aiDraft.projectName);
-    }
+    setIsStartFormHydrated(true);
   }, [initialStartKind]);
 
   useEffect(() => {
+    if (!isStartFormHydrated) {
+      return;
+    }
+
     writeWorkspaceStartForm({ projectName: title, selectedKind });
-  }, [selectedKind, title]);
+  }, [isStartFormHydrated, selectedKind, title]);
 
   async function handleContinue(): Promise<void> {
     const projectName = title.trim();
@@ -236,7 +244,9 @@ export function WorkspaceStartClient({
                   role="radio"
                   type="button"
                 >
-                  <span className={styles.optionIcon}><Icon aria-hidden="true" size={20} /></span>
+                  <span className={styles.optionIcon}>
+                    <Icon aria-hidden="true" size={20} />
+                  </span>
                   <span className={styles.optionCopy}>
                     <strong>{option.title}</strong>
                     <small>{option.description}</small>
@@ -258,7 +268,8 @@ export function WorkspaceStartClient({
 
           {selectedKind === "github" ? (
             <p className={styles.boundaryNotice} role="status">
-              Repository 연결은 동작합니다. Repository Analysis와 Template Selection은 아직 연결 중입니다.
+              Repository 연결은 동작합니다. Repository Analysis와 Template Selection은 아직 연결
+              중입니다.
             </p>
           ) : null}
 
@@ -269,12 +280,18 @@ export function WorkspaceStartClient({
               onClick={() => void handleContinue()}
               type="button"
             >
-              {isSubmitting ? <LoaderCircle aria-hidden="true" className={styles.spinner} size={17} /> : null}
+              {isSubmitting ? (
+                <LoaderCircle aria-hidden="true" className={styles.spinner} size={17} />
+              ) : null}
               {isSubmitting ? "처리 중" : getContinueLabel(selectedKind)}
             </button>
             {blankStartOption ? (
               <button
-                className={selectedKind === "blank" ? `${styles.blankAction} ${styles.blankActionSelected}` : styles.blankAction}
+                className={
+                  selectedKind === "blank"
+                    ? `${styles.blankAction} ${styles.blankActionSelected}`
+                    : styles.blankAction
+                }
                 onClick={() => selectStartKind("blank")}
                 type="button"
               >
@@ -283,7 +300,11 @@ export function WorkspaceStartClient({
             ) : null}
           </div>
 
-          {errorMessage ? <p className={styles.errorMessage} role="alert">{errorMessage}</p> : null}
+          {errorMessage ? (
+            <p className={styles.errorMessage} role="alert">
+              {errorMessage}
+            </p>
+          ) : null}
         </section>
       </div>
     </main>
@@ -420,5 +441,11 @@ function isWorkspaceStartDraft(value: unknown): value is WorkspaceStartDraft {
 }
 
 function isWorkspaceStartKind(value: unknown): value is WorkspaceStartKind {
-  return value === "ai" || value === "reverse" || value === "template" || value === "github" || value === "blank";
+  return (
+    value === "ai" ||
+    value === "reverse" ||
+    value === "template" ||
+    value === "github" ||
+    value === "blank"
+  );
 }

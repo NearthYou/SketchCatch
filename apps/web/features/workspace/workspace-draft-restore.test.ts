@@ -44,3 +44,11 @@ test("workspace restore uses the fallback only when no saved DiagramJson exists"
   assert.strictEqual(restoreSavedDiagram(undefined, fallbackDiagram), fallbackDiagram);
   assert.strictEqual(restoreSavedDiagram(null, fallbackDiagram), fallbackDiagram);
 });
+
+test("workspace restore repairs incomplete legacy records with required fallback fields", () => {
+  const incompleteDiagram = {
+    nodes: fallbackDiagram.nodes
+  } as unknown as DiagramJson;
+
+  assert.deepEqual(restoreSavedDiagram(incompleteDiagram, fallbackDiagram), fallbackDiagram);
+});

@@ -4,10 +4,7 @@ import type { DiagramEditorPanelContext } from "../diagram-editor";
 import { getResourceCardKeyboardActivation } from "./resource-card-interaction";
 import { ResourceCardMenu } from "./ResourceCardMenu";
 import type { buildResourceListItems } from "./resource-list-summary";
-import {
-  openResourceConfig,
-  selectResourceNode
-} from "./resource-workspace-actions";
+import { openResourceConfig, selectResourceNode } from "./resource-workspace-actions";
 import type { ResourceWorkspaceView } from "./workspace-right-panel.types";
 import styles from "./resource-workspace.module.css";
 
@@ -53,105 +50,105 @@ export function ResourceListPanel({
       </header>
       <div className={styles.resourceListBody}>
         {items.map((item) => {
-        const { node } = item;
-        const summaryRows = item.rows;
-        const isActive = item.nodeId === context.selectedNodeId;
-        const isExpanded = expandedNodeIds.has(item.nodeId);
-        const visibleSummaryRows = isExpanded
-          ? summaryRows
-          : summaryRows.slice(0, RESOURCE_SUMMARY_COLLAPSED_LIMIT);
-        const hasHiddenSummaryRows = summaryRows.length > RESOURCE_SUMMARY_COLLAPSED_LIMIT;
+          const { node } = item;
+          const summaryRows = item.rows;
+          const isActive = item.nodeId === context.selectedNodeId;
+          const isExpanded = expandedNodeIds.has(item.nodeId);
+          const visibleSummaryRows = isExpanded
+            ? summaryRows
+            : summaryRows.slice(0, RESOURCE_SUMMARY_COLLAPSED_LIMIT);
+          const hasHiddenSummaryRows = summaryRows.length > RESOURCE_SUMMARY_COLLAPSED_LIMIT;
 
-        return (
-          <article
-            className={isActive ? styles.resourceListItemActive : styles.resourceListItem}
-            key={item.nodeId}
-            onClick={() => selectResourceNode(context, item.nodeId)}
-            onDoubleClick={() => openResourceConfig(context, item.nodeId, onViewChange)}
-            onKeyDown={(event) =>
-              handleResourceCardKeyDown(event, {
-                context,
-                nodeId: item.nodeId,
-                onViewChange
-              })
-            }
-            tabIndex={0}
-          >
-            <div className={styles.resourceListHeader}>
-              <span className={styles.resourceListIdentity}>
-                <span className={styles.resourceListServiceIcon}>
-                  {item.iconUrl ? (
-                    <img alt="" draggable={false} src={item.iconUrl} />
-                  ) : (
-                    <Box size={15} aria-hidden="true" />
-                  )}
+          return (
+            <article
+              className={isActive ? styles.resourceListItemActive : styles.resourceListItem}
+              key={item.nodeId}
+              onClick={() => selectResourceNode(context, item.nodeId)}
+              onDoubleClick={() => openResourceConfig(context, item.nodeId, onViewChange)}
+              onKeyDown={(event) =>
+                handleResourceCardKeyDown(event, {
+                  context,
+                  nodeId: item.nodeId,
+                  onViewChange
+                })
+              }
+              tabIndex={0}
+            >
+              <div className={styles.resourceListHeader}>
+                <span className={styles.resourceListIdentity}>
+                  <span className={styles.resourceListServiceIcon}>
+                    {item.iconUrl ? (
+                      <img alt="" draggable={false} src={item.iconUrl} />
+                    ) : (
+                      <Box size={15} aria-hidden="true" />
+                    )}
+                  </span>
+                  <strong>{item.displayName}</strong>
                 </span>
-                <strong>{item.displayName}</strong>
-              </span>
-              <button
-                aria-expanded={openMenuNodeId === item.nodeId}
-                aria-haspopup="menu"
-                aria-label={`${item.displayName} 작업`}
-                className={styles.resourceListMoreButton}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  selectResourceNode(context, item.nodeId);
-                  setOpenMenuNodeId((currentNodeId) =>
-                    currentNodeId === item.nodeId ? null : item.nodeId
-                  );
-                }}
-                onDoubleClick={(event) => event.stopPropagation()}
-                type="button"
-              >
-                <MoreHorizontal size={18} aria-hidden="true" />
-              </button>
-              {openMenuNodeId === item.nodeId ? (
-                <ResourceCardMenu
-                  context={context}
-                  node={node}
-                  onClose={() => setOpenMenuNodeId(null)}
-                  onEditConfig={() => {
-                    openResourceConfig(context, item.nodeId, onViewChange);
-                    setOpenMenuNodeId(null);
+                <button
+                  aria-expanded={openMenuNodeId === item.nodeId}
+                  aria-haspopup="menu"
+                  aria-label={`${item.displayName} 작업`}
+                  className={styles.resourceListMoreButton}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    selectResourceNode(context, item.nodeId);
+                    setOpenMenuNodeId((currentNodeId) =>
+                      currentNodeId === item.nodeId ? null : item.nodeId
+                    );
                   }}
-                />
-              ) : null}
-            </div>
-            <div className={styles.resourceListAddress}>
-              {item.terraformAddress ?? item.typeLabel}
-            </div>
-            {summaryRows.length > 0 ? (
-              <div className={styles.resourceListValues}>
-                {visibleSummaryRows.map((row) => (
-                  <div className={styles.resourceListValueRow} key={row.key}>
-                    <span>{row.label}</span>
-                    <strong title={row.value}>{row.value}</strong>
-                  </div>
-                ))}
-                {hasHiddenSummaryRows ? (
-                  <button
-                    className={styles.resourceListConfigToggle}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      setExpandedNodeIds((currentNodeIds) =>
-                        isExpanded
-                          ? removeSetValue(currentNodeIds, item.nodeId)
-                          : addSetValue(currentNodeIds, item.nodeId)
-                      );
+                  onDoubleClick={(event) => event.stopPropagation()}
+                  type="button"
+                >
+                  <MoreHorizontal size={18} aria-hidden="true" />
+                </button>
+                {openMenuNodeId === item.nodeId ? (
+                  <ResourceCardMenu
+                    context={context}
+                    node={node}
+                    onClose={() => setOpenMenuNodeId(null)}
+                    onEditConfig={() => {
+                      openResourceConfig(context, item.nodeId, onViewChange);
+                      setOpenMenuNodeId(null);
                     }}
-                    onDoubleClick={(event) => event.stopPropagation()}
-                    type="button"
-                  >
-                    <span aria-hidden="true">{isExpanded ? "-" : "+"}</span>
-                    {isExpanded ? "상세 접기" : "모두 보기"}
-                  </button>
+                  />
                 ) : null}
               </div>
-            ) : (
-              <div className={styles.resourceListNoValues}>주요 파라미터 없음</div>
-            )}
-          </article>
-        );
+              <div className={styles.resourceListAddress}>
+                {item.terraformAddress ?? item.typeLabel}
+              </div>
+              {summaryRows.length > 0 ? (
+                <div className={styles.resourceListValues}>
+                  {visibleSummaryRows.map((row) => (
+                    <div className={styles.resourceListValueRow} key={row.key}>
+                      <span>{row.label}</span>
+                      <strong title={row.value}>{row.value}</strong>
+                    </div>
+                  ))}
+                  {hasHiddenSummaryRows ? (
+                    <button
+                      className={styles.resourceListConfigToggle}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setExpandedNodeIds((currentNodeIds) =>
+                          isExpanded
+                            ? removeSetValue(currentNodeIds, item.nodeId)
+                            : addSetValue(currentNodeIds, item.nodeId)
+                        );
+                      }}
+                      onDoubleClick={(event) => event.stopPropagation()}
+                      type="button"
+                    >
+                      <span aria-hidden="true">{isExpanded ? "-" : "+"}</span>
+                      {isExpanded ? "상세 접기" : "모두 보기"}
+                    </button>
+                  ) : null}
+                </div>
+              ) : (
+                <div className={styles.resourceListNoValues}>주요 파라미터 없음</div>
+              )}
+            </article>
+          );
         })}
       </div>
     </section>
