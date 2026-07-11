@@ -18,6 +18,8 @@ import {
   applyRepositoryAnalysis,
   findActiveGitHubRepository
 } from "../../projects/[projectId]/settings/project-github-settings-state";
+import { buildBoardTemplateDiagram } from "../../../features/resource-settings/template-library";
+import { AiDraftBoardPreview } from "../ai/ai-draft-board-preview";
 import styles from "./repository-start.module.css";
 
 type RequestState = "idle" | "loading" | "error";
@@ -132,6 +134,7 @@ export function RepositoryStartClient({ projectId, projectName }: RepositoryStar
   }
 
   const boardHref = createRepositoryBoardHref(projectId, projectName, activeRepository);
+  const previewDiagram = createRepositoryPreviewDiagram(projectName, activeRepository);
 
   return (
     <main className={styles.page}>
@@ -191,6 +194,19 @@ export function RepositoryStartClient({ projectId, projectName }: RepositoryStar
               {actionState === "loading" ? <LoaderCircle className={styles.spin} size={16} /> : <Search size={16} />}
               {actionState === "loading" ? "분석 중" : "Repository 분석"}
             </button>
+            {previewDiagram ? (
+              <section className={styles.previewPanel} aria-label="Repository 분석 Architecture 미리보기">
+                <div>
+                  <span>Practice Architecture Preview</span>
+                  <strong>
+                    {activeRepository.analysis?.aiHandoff.status === "template_selected"
+                      ? activeRepository.analysis.aiHandoff.selectionReasons.join(" · ")
+                      : "분석 근거를 확인하지 못했습니다."}
+                  </strong>
+                </div>
+                <AiDraftBoardPreview diagram={previewDiagram} />
+              </section>
+            ) : null}
             {boardHref ? <Link className={styles.boardAction} href={boardHref}>추천 구조로 Board 열기</Link> : null}
           </section>
         ) : null}
@@ -201,6 +217,19 @@ export function RepositoryStartClient({ projectId, projectName }: RepositoryStar
       </section>
     </main>
   );
+}
+
+// Repository 분석에서 확정된 Template만 실제 DiagramJson 미리보기로 바꿉니다.
+function createRepositoryPreviewDiagram(
+  projectName: string,
+  repository: SourceRepository | null
+) {
+  const handoff = repository?.analysis?.aiHandoff;
+  if (!repository || handoff?.status !== "template_selected") return null;
+  return buildBoardTemplateDiagram(handoff.templateId, {
+    projectSlug: projectName,
+    shortId: repository.id.slice(0, 8)
+  }) ?? null;
 }
 
 // 사용 가능한 Repository 목록과 각 연결 행동만 표시합니다.

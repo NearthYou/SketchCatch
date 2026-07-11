@@ -17,10 +17,6 @@ export function BuiltInTemplateLibrary() {
         </div>
       </header>
 
-      <p className="dashboardInformationBand" role="status">
-        사용자 Template 저장은 아직 연결되지 않았습니다. 아래 목록은 코드에 포함된 내장 Template입니다.
-      </p>
-
       <TemplateGallery
         actionHref={(template) => `/workspace/new?mode=template&templateId=${encodeURIComponent(template.id)}`}
         actionLabel="이 Template으로 시작"
