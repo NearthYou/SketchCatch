@@ -1,15 +1,11 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent, UIEvent } from "react";
 import type { DiagramJson, TerraformDiagnostic, TerraformSourceLocation, TerraformSyncFileInput } from "@sketchcatch/types";
-import {
-  ArrowLeft,
-  ChevronDown,
-  FileCode2,
-  Sparkles,
-  X
-} from "lucide-react";
 import { getApiErrorMessage } from "../../lib/api-client";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
+import { TerraformCodeEditorSurface } from "./TerraformCodeEditorSurface";
+import { TerraformCodeStatus } from "./TerraformCodeStatus";
+import { TerraformCodeToolbar } from "./TerraformCodeToolbar";
 import {
   generateTerraformCode,
   syncTerraformToDiagram,
@@ -31,9 +27,7 @@ import {
 } from "./terraform-panel-utils";
 import { createTerraformDiagnosticLineNumbers } from "./terraform-diagnostic-line-highlights";
 import {
-  createTerraformHighlightedLines,
-  type TerraformHighlightedToken,
-  type TerraformTokenKind
+  createTerraformHighlightedLines
 } from "./terraform-code-highlighting";
 import { applyAllTerraformSyncProposals } from "./terraform-sync-proposals";
 import {
@@ -49,18 +43,6 @@ import styles from "./workspace.module.css";
 
 const TERRAFORM_EDITOR_LINE_HEIGHT = 19.2;
 const TERRAFORM_EDITOR_VERTICAL_PADDING = 12;
-
-const TERRAFORM_TOKEN_CLASS_NAMES: Record<TerraformTokenKind, string | undefined> = {
-  brace: styles.terraformTokenBrace,
-  comment: styles.terraformTokenComment,
-  identifier: styles.terraformTokenIdentifier,
-  keyword: styles.terraformTokenKeyword,
-  number: styles.terraformTokenNumber,
-  operator: styles.terraformTokenOperator,
-  plain: styles.terraformTokenPlain,
-  reference: styles.terraformTokenReference,
-  string: styles.terraformTokenString
-};
 
 type TerraformPreviewExplanationScope = {
   readonly code: string;
@@ -192,14 +174,6 @@ function addTerraformDiagnosticSource(
   };
 }
 
-function renderTerraformToken(token: TerraformHighlightedToken, index: number) {
-  return (
-    <span className={TERRAFORM_TOKEN_CLASS_NAMES[token.kind]} key={`${index}-${token.kind}-${token.text}`}>
-      {token.text}
-    </span>
-  );
-}
-
 export type PreparedTerraformArtifactSource = {
   readonly diagramJson: DiagramJson;
   readonly terraformCode: string;
@@ -217,6 +191,7 @@ export type TerraformCodePanelHandle = {
   readonly validateCurrentTerraform: () => Promise<TerraformDiagnostic[]>;
 };
 
+// Terraform 생성, 검증, 저장 상태를 관리하고 화면 전용 컴포넌트에 결과만 전달합니다.
 export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
   readonly context: DiagramEditorPanelContext;
   readonly externalDiscardRequestId: number;
@@ -1071,24 +1046,6 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     onOpenIssues();
   }
 
-  function renderTerraformPreviewExplanationButton() {
-    return (
-      <button
-        className={styles.terraformPreviewButton}
-        disabled={
-          !terraformPreviewExplanationScope.code ||
-          requestState === "loading"
-        }
-        onClick={requestTerraformPreviewExplanation}
-        title={terraformPreviewExplanationScope.label}
-        type="button"
-      >
-        <Sparkles size={14} aria-hidden="true" />
-        <span>Preview 설명</span>
-      </button>
-    );
-  }
-
   function selectTerraformFile(fileName: string): void {
     setTerraformFiles((currentFiles) =>
       currentFiles.some((file) => file.fileName === fileName)
@@ -1106,176 +1063,57 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
 
   return (
     <div className={styles.terraformPanel}>
-      {isResourceCodeMode ? (
-        <header className={styles.resourceCodeHeader}>
-          <div className={styles.resourceCodeTitle}>
-            <button
-              aria-label="전체 Terraform 코드로 돌아가기"
-              className={styles.resourceCodeBackButton}
-              onClick={context.closeInspectedNode}
-              type="button"
-            >
-              <ArrowLeft size={18} aria-hidden="true" />
-            </button>
-            <span>{inspectedNode?.label ?? inspectedNode?.parameters?.resourceName ?? "Resource"}</span>
-          </div>
-          <button
-            aria-label="리소스 코드 닫기"
-            className={styles.resourceCodeCloseButton}
-            onClick={context.closeInspectedNode}
-            type="button"
-          >
-            <X size={18} aria-hidden="true" />
-          </button>
-        </header>
-      ) : (
-        <header className={styles.terraformTopBar}>
-          <div className={styles.terraformFilePicker}>
-            <button
-              aria-expanded={isFileMenuOpen}
-              aria-haspopup="listbox"
-              className={styles.terraformFileButton}
-              onClick={() => setIsFileMenuOpen((isOpen) => !isOpen)}
-              type="button"
-            >
-              <FileCode2 size={16} aria-hidden="true" />
-              <span>{activeFileName}</span>
-              <ChevronDown size={15} aria-hidden="true" />
-            </button>
-            {isFileMenuOpen ? (
-              <div className={styles.terraformFileMenu}>
-                <input
-                  aria-label="Terraform 파일 검색"
-                  className={styles.terraformFileSearch}
-                  onChange={(event) => setFileSearchQuery(event.target.value)}
-                  placeholder="Search file"
-                  value={fileSearchQuery}
-                />
-                <div className={styles.terraformFileList} role="listbox">
-                  {filteredTerraformFileOptions.map((fileName) => (
-                    <button
-                      aria-selected={fileName === activeFileName}
-                      className={
-                        fileName === activeFileName
-                          ? styles.terraformFileOptionActive
-                          : styles.terraformFileOption
-                      }
-                      key={fileName}
-                      onClick={() => selectTerraformFile(fileName)}
-                      role="option"
-                      type="button"
-                    >
-                      {fileName}
-                    </button>
-                  ))}
-                  {filteredTerraformFileOptions.length === 0 ? (
-                    <span className={styles.terraformFileEmpty}>No files</span>
-                  ) : null}
-                </div>
-              </div>
-            ) : null}
-          </div>
-          <div className={styles.terraformTopActions}>
-            {renderTerraformPreviewExplanationButton()}
-            <span className={styles.terraformShortcut}>Ctrl+S</span>
-          </div>
-        </header>
-      )}
+      <TerraformCodeToolbar
+        actions={{
+          closeResourceCode: context.closeInspectedNode,
+          requestExplanation: requestTerraformPreviewExplanation,
+          searchFiles: setFileSearchQuery,
+          selectFile: selectTerraformFile,
+          toggleFileMenu: () => setIsFileMenuOpen((isOpen) => !isOpen)
+        }}
+        state={{
+          activeFileName,
+          canRequestExplanation:
+            terraformPreviewExplanationScope.code.length > 0 && requestState !== "loading",
+          explanationLabel: terraformPreviewExplanationScope.label,
+          fileOptions: filteredTerraformFileOptions,
+          fileSearchQuery,
+          inspectedResourceLabel:
+            inspectedNode?.label ?? inspectedNode?.parameters?.resourceName ?? "Resource",
+          isFileMenuOpen,
+          isResourceCodeMode
+        }}
+      />
 
-      {isResourceCodeMode ? (
-        <div className={styles.resourceActionBar}>
-          {renderTerraformPreviewExplanationButton()}
-        </div>
-      ) : null}
+      <TerraformCodeStatus
+        onOpenIssues={handleSeeMore}
+        state={{
+          errorCount: errorDiagnostics.length,
+          isSynced: isTerraformPreviewSynced,
+          previewSummary: previewSnapshotSummary,
+          saveBanner,
+          statusMessage
+        }}
+      />
 
-      <div className={styles.terraformStatusBar}>
-        <span className={isTerraformPreviewSynced ? styles.terraformStatusSynced : styles.terraformStatusEdited}>
-          {statusMessage}
-        </span>
-        <span>{previewSnapshotSummary}</span>
-      </div>
-
-      {saveBanner ? (
-        <div className={saveBanner.kind === "error" ? styles.terraformSaveBannerError : styles.terraformSaveBanner}>
-          <span>
-            {saveBanner.kind === "error"
-              ? "Terraform 오류가 있습니다. Issues에서 확인하세요."
-              : "저장하지 않은 Terraform 변경이 있습니다. Ctrl+S로 저장하세요."}
-          </span>
-          <button data-terraform-issues-navigation onClick={handleSeeMore} type="button">
-            Issues 보기
-          </button>
-        </div>
-      ) : null}
-
-      {errorDiagnostics.length > 0 ? (
-        <div className={styles.terraformIssueBanner} role="status">
-          <span>Terraform 오류가 있습니다. 자세한 내용은 Issues에서 확인하세요.</span>
-          <button data-terraform-issues-navigation onClick={handleSeeMore} type="button">
-            Issues 보기
-          </button>
-        </div>
-      ) : null}
-
-      <div className={styles.terraformEditorFrame}>
-        <ol ref={lineNumberRef} className={styles.terraformLineNumbers} aria-hidden="true">
-          {lineNumbers.map((lineNumber) => (
-            <li
-              className={diagnosticLineNumberSet.has(lineNumber) ? styles.terraformLineNumberError : undefined}
-              key={lineNumber}
-            >
-              {lineNumber}
-            </li>
-          ))}
-        </ol>
-        <div className={styles.terraformSyntaxHighlightLayer} aria-hidden="true">
-          <pre className={styles.terraformSyntaxHighlightCode} style={terraformSyntaxHighlightStyle}>
-            {highlightedTerraformLines.map((line) => (
-              <span
-                className={
-                  line.hasDiagnostic
-                    ? `${styles.terraformHighlightedLine} ${styles.terraformHighlightedLineError}`
-                    : styles.terraformHighlightedLine
-                }
-                key={line.line}
-              >
-                {line.tokens.map(renderTerraformToken)}
-              </span>
-            ))}
-          </pre>
-        </div>
-        <textarea
-          ref={textareaRef}
-          autoCapitalize="off"
-          autoComplete="off"
-          autoCorrect="off"
-          aria-label="Terraform 코드"
-          className={styles.terraformTextarea}
-          onChange={(event) => handleCodeChange(event.target.value)}
-          onKeyDown={handleCodeKeyDown}
-          onScroll={handleCodeScroll}
-          placeholder={`resource "aws_vpc" "main" {
-  cidr_block = "10.0.0.0/16"
-}`}
-          spellCheck={false}
-          value={displayedTerraformCode}
-          wrap="off"
-        />
-        {sourceLineHighlightStyle ? (
-          <div
-            aria-hidden="true"
-            className={styles.terraformSourceLineHighlight}
-            style={sourceLineHighlightStyle}
-          />
-        ) : null}
-        {highlightedBlock && highlightedBlockStyle ? (
-          <div
-            aria-label={`${highlightedBlock.address} code block`}
-            className={styles.terraformBlockHighlightBox}
-            style={highlightedBlockStyle}
-          />
-        ) : null}
-      </div>
+      <TerraformCodeEditorSurface
+        actions={{
+          changeCode: handleCodeChange,
+          handleKeyDown: handleCodeKeyDown,
+          handleScroll: handleCodeScroll
+        }}
+        refs={{ lineNumbers: lineNumberRef, textarea: textareaRef }}
+        state={{
+          code: displayedTerraformCode,
+          diagnosticLineNumbers: diagnosticLineNumberSet,
+          highlightedBlockAddress: highlightedBlock?.address ?? null,
+          highlightedBlockStyle,
+          highlightedLines: highlightedTerraformLines,
+          lineNumbers,
+          sourceLineHighlightStyle,
+          syntaxHighlightStyle: terraformSyntaxHighlightStyle
+        }}
+      />
 
     </div>
   );

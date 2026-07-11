@@ -54,7 +54,7 @@ export function DiagramEdgeToolbar({
         options={EDGE_TYPES}
         size="compact"
         style={{ minWidth: 96 }}
-        tone="purple"
+        tone="workspace"
         value={(edge.type as DiagramEdgeKind | undefined) ?? "smoothstep"}
         width="content"
       />

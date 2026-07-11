@@ -16,7 +16,7 @@ export type SelectMenuOption = {
 };
 
 export type SelectMenuSize = "compact" | "regular" | "large";
-export type SelectMenuTone = "default" | "dashboard" | "purple" | "workspace";
+export type SelectMenuTone = "default" | "dashboard" | "workspace";
 
 type SelectMenuProps = {
   readonly ariaLabel: string;
@@ -246,17 +246,14 @@ function getSizeClassName(size: SelectMenuSize): "compact" | "regular" | "large"
   return size;
 }
 
-function getToneClassName(tone: SelectMenuTone): "defaultTone" | "dashboardTone" | "purpleTone" | "workspaceTone" {
+// 화면 종류에 맞는 SelectMenu 색상 클래스를 고릅니다.
+function getToneClassName(tone: SelectMenuTone): "defaultTone" | "dashboardTone" | "workspaceTone" {
   if (tone === "dashboard") {
     return "dashboardTone";
   }
 
   if (tone === "workspace") {
     return "workspaceTone";
-  }
-
-  if (tone === "purple") {
-    return "purpleTone";
   }
 
   return "defaultTone";

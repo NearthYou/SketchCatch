@@ -14,7 +14,6 @@ type WorkspacePageProps = {
   }>;
 };
 
-// gg AI 기능을 팀이 직접 눌러볼 수 있게 임시 workspace 화면을 렌더링합니다.
 export default async function WorkspacePage({ searchParams }: WorkspacePageProps) {
   const params = await searchParams;
   const projectId = getSingleSearchParam(params?.projectId)?.trim();
@@ -39,7 +38,9 @@ export default async function WorkspacePage({ searchParams }: WorkspacePageProps
   }
 
   const projectName = getSingleSearchParam(params?.projectName)?.trim();
-  const initialDiagramOverride = getWorkspaceDiagramFixture(getSingleSearchParam(params?.diagramFixture));
+  const initialDiagramOverride = getWorkspaceDiagramFixture(
+    getSingleSearchParam(params?.diagramFixture)
+  );
 
   return (
     <WorkspaceAuthGate>
