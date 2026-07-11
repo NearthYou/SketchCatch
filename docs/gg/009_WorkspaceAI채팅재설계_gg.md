@@ -175,3 +175,59 @@ Board 위에 떠 있는 AI 버튼과 채팅 패널을 새로 만들되, **AI가 
 - shadcn의 Radix dependency
 - 보라색 AI gradient, glow, 큰 원형 버튼
 - 기능이 없는 badge와 가짜 성공 상태
+
+## 14. 구현 결과
+
+- 44px 검정 rounded-square 런처를 실제 `/workspace`에 연결함
+- desktop AI panel 폭을 360~420px로 제한함
+- 768px 이하에서 전체 폭 assistant로 전환함
+- Inspector가 열리면 그 왼쪽으로 이동함
+- Terraform·검사·배포 panel과 AI panel이 동시에 펼쳐지지 않게 함
+- 자연어 Architecture 생성과 현재 Board 수정 미리보기를 연결함
+- 추가 질문의 일반 선택지와 Resource ID 선택을 구분함
+- Terraform Preview와 Terraform 오류 설명을 연결함
+- 안전한 Terraform 수정안은 사용자가 승인해야 적용되게 함
+- 설계 시뮬레이션과 음성 입력을 연결함
+- 대화, 입력, 미리보기는 panel을 닫아도 유지함
+- `Escape` 닫기와 런처 focus 복귀를 연결함
+- online/offline, 생성 중, 오류, 적용 대기 상태를 구분함
+
+## 15. 실제 검증 결과
+
+브라우저에서 실제 로그인 프로젝트로 아래 흐름을 확인했다.
+
+```text
+AI 런처 열기
+→ 자연어 수정 요청
+→ AI 추가 질문
+→ 선택지 답변
+→ Board 변경 미리보기
+→ 취소
+→ 미리보기 Resource가 사라지고 실제 Board는 유지됨
+```
+
+```text
+AI panel 열기
+→ Terraform 설명
+→ 현재 Board에서 Terraform 코드 생성
+→ 실제 설명 응답 표시
+```
+
+추가 확인:
+
+- `Escape`로 닫은 뒤 focus가 AI 런처로 돌아옴
+- AI panel을 열면 Terraform 작업 panel이 닫힘
+- Terraform 작업 panel을 열면 AI panel이 닫힘
+- Inspector가 열린 Resource 많은 Board에서 panel이 다른 도구를 가리지 않음
+- 새 browser console error 없음
+
+자동 검증:
+
+```text
+web test: 703개 통과
+web lint: 통과
+web typecheck: 통과
+web production build: 통과
+```
+
+브라우저의 기존 React Flow resize 경고는 개발 중 route reload 순간에만 기록됐고, 이번 AI panel에서 새로 발생한 오류는 아니다.
