@@ -332,7 +332,8 @@ export async function syncTerraformToDiagram({
 
 // 실제 Workspace AI 패널에서 Requirement Prompt 기반 Architecture Draft를 요청합니다.
 export async function createAiArchitectureDraft(
-  input: CreateArchitectureDraftRequest
+  input: CreateArchitectureDraftRequest,
+  signal?: AbortSignal
 ): Promise<CreateArchitectureDraftResponse> {
   const prompt = input.prompt.trim();
 
@@ -343,10 +344,11 @@ export async function createAiArchitectureDraft(
     });
   }
 
-  return postPublicAiJson<CreateArchitectureDraftResponse>("/ai/architecture-draft", {
-    ...input,
-    prompt
-  });
+  return postPublicAiJson<CreateArchitectureDraftResponse>(
+    "/ai/architecture-draft",
+    { ...input, prompt },
+    signal
+  );
 }
 
 export async function analyzePublicSourceRepository(
@@ -362,19 +364,24 @@ export async function createGitHubArchitectureDraft(
 }
 
 export async function createAiArchitecturePatchPreview(
-  input: CreateArchitecturePatchPreviewRequest
+  input: CreateArchitecturePatchPreviewRequest,
+  signal?: AbortSignal
 ): Promise<ArchitecturePatchPreviewResponse> {
-  return postPublicAiJson<ArchitecturePatchPreviewResponse>("/ai/architecture-patch-preview", {
-    architectureJson: input.architectureJson,
-    instruction: input.instruction,
-    ...(input.selectedTargetResourceId !== undefined
-      ? { selectedTargetResourceId: input.selectedTargetResourceId }
-      : {}),
-    ...(input.connectionTargetResourceId !== undefined
-      ? { connectionTargetResourceId: input.connectionTargetResourceId }
-      : {}),
-    ...(input.skipConnection === true ? { skipConnection: true } : {})
-  });
+  return postPublicAiJson<ArchitecturePatchPreviewResponse>(
+    "/ai/architecture-patch-preview",
+    {
+      architectureJson: input.architectureJson,
+      instruction: input.instruction,
+      ...(input.selectedTargetResourceId !== undefined
+        ? { selectedTargetResourceId: input.selectedTargetResourceId }
+        : {}),
+      ...(input.connectionTargetResourceId !== undefined
+        ? { connectionTargetResourceId: input.connectionTargetResourceId }
+        : {}),
+      ...(input.skipConnection === true ? { skipConnection: true } : {})
+    },
+    signal
+  );
 }
 
 // 현재 Architecture Board를 기준으로 Pre-Deployment Check를 실행합니다.
@@ -422,7 +429,8 @@ export async function runAiTerraformErrorExplanation(
 // 인증 없는 gg AI endpoint는 Next rewrite 실패와 분리해 API 서버로 직접 요청합니다.
 async function postPublicAiJson<ResponseBody>(
   path: string,
-  body: Record<string, unknown>
+  body: Record<string, unknown>,
+  signal?: AbortSignal
 ): Promise<ResponseBody> {
   const headers = new Headers({
     "Content-Type": "application/json"
@@ -437,7 +445,8 @@ async function postPublicAiJson<ResponseBody>(
     body: JSON.stringify(body),
     credentials: "include",
     headers,
-    method: "POST"
+    method: "POST",
+    ...(signal ? { signal } : {})
   });
 
   if (!response.ok) {
