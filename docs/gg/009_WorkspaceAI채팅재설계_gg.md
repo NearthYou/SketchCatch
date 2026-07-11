@@ -4,11 +4,11 @@
 
 Board 위에 떠 있는 AI 버튼과 채팅 패널을 새로 만들되, **AI가 사용자의 확인 없이 Board나 Terraform을 바꾸지 못하게 한다.**
 
-## 2. 지금 상태와 문제
+## 2. 재설계 시작 당시 상태와 문제
 
-예전 `WorkspaceAiChatDock` 화면은 UI 삭제 작업에서 제거됐다. 현재 `/workspace`에는 실제 AI 버튼이나 패널이 없다.
+예전 `WorkspaceAiChatDock` 화면은 UI 삭제 작업에서 제거됐다. 재설계를 시작할 당시 `/workspace`에는 실제 AI 버튼이나 패널이 없었다.
 
-남아 있는 것은 화면이 아니라 기능이다.
+당시 남아 있던 것은 화면이 아니라 기능이었다.
 
 - 자연어로 Architecture 초안 만들기
 - 현재 Board 수정안 미리보기
@@ -18,7 +18,7 @@ Board 위에 떠 있는 AI 버튼과 채팅 패널을 새로 만들되, **AI가 
 - 대화 저장
 - 사용자가 적용을 눌렀을 때만 Board 변경
 
-따라서 예전 JSX와 CSS를 되살리지 않는다. 남아 있는 API와 상태 계산 코드만 새 화면에 연결한다.
+그래서 예전 JSX와 CSS를 되살리지 않고, 남아 있던 API와 상태 계산 코드만 새 화면에 연결하기로 했다.
 
 ## 3. 실제로 조사한 레퍼런스
 
@@ -227,7 +227,7 @@ AI panel 열기
 자동 검증:
 
 ```text
-web test: 703개 통과
+web test: 757개 통과
 web lint: 통과
 web typecheck: 통과
 web production build: 통과
