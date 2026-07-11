@@ -48,6 +48,15 @@ export function getAdvancedPickerEmptyMessage(
   return "추가할 optional 파라미터가 없습니다.";
 }
 
+export function removeAdvancedParameterValue(
+  values: Record<string, unknown>,
+  parameterName: string
+) {
+  const nextValues = { ...values };
+  delete nextValues[parameterName];
+  return nextValues;
+}
+
 function matchesAdvancedDefinitionQuery(
   definition: ParameterCatalogDefinition,
   normalizedQuery: string

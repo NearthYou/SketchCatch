@@ -9,7 +9,7 @@ import {
   Trash2
 } from "lucide-react";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
-import { applyNodeParametersUpdateWithResourceLabel } from "../diagram-editor/diagram-utils";
+import { applyNodeParametersUpdateWithAutoTagSync } from "../diagram-editor/diagram-utils";
 import { ParameterInputPanel, terraformParameterCatalog } from "../parameter-input";
 import { getResourceCardKeyboardActivation } from "./resource-card-interaction";
 import { buildResourceListItems } from "./resource-list-summary";
@@ -288,7 +288,7 @@ function duplicateResourceNode(context: DiagramEditorPanelContext, node: Diagram
     parameters: node.parameters ? structuredClone(node.parameters) : undefined
   };
   const duplicatedNode = node.parameters && nextResourceName
-    ? applyNodeParametersUpdateWithResourceLabel(
+    ? applyNodeParametersUpdateWithAutoTagSync(
         duplicatedNodeBase,
         {
           ...structuredClone(node.parameters),

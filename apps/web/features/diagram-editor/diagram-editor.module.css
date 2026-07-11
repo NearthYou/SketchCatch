@@ -2,17 +2,38 @@
   --left-panel-width: 346px;
   --right-panel-width: 440px;
   --workspace-font: "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif;
-  --workspace-page: #ffffff;
+  --workspace-page: #f6f8fc;
   --workspace-surface: #ffffff;
-  --workspace-surface-muted: #fafafa;
-  --workspace-line: #f0f0f3;
-  --workspace-line-strong: #dcdee0;
-  --workspace-text: #171717;
-  --workspace-muted: #60646c;
-  --workspace-accent: #000000;
-  --workspace-accent-active: #1a1a1a;
-  --workspace-accent-soft: #f0f0f3;
-  --workspace-link: #0d74ce;
+  --workspace-surface-muted: #f5f7fa;
+  --workspace-line: #e2e8f0;
+  --workspace-line-strong: #cbd5e1;
+  --workspace-text: #172033;
+  --workspace-muted: #64748b;
+  --workspace-accent: #172033;
+  --workspace-accent-active: #0f172a;
+  --workspace-accent-soft: #eef2f7;
+  --workspace-link: #1f6feb;
+  --board-canvas: #f6f8fc;
+  --board-canvas-raised: #ffffff;
+  --board-surface: #ffffff;
+  --board-surface-subtle: #f4f6fa;
+  --board-border: #d8e0ec;
+  --board-border-strong: #9aa8ba;
+  --board-ink: #172033;
+  --board-body: #4b5870;
+  --board-muted: #7d889d;
+  --board-primary: #1f6feb;
+  --board-primary-soft: rgba(31, 111, 235, 0.12);
+  --board-success: #287d3c;
+  --board-warning: #b45309;
+  --board-danger: #b42318;
+  --board-edge: #59687d;
+  --board-shadow-object:
+    0 0 0 1px rgba(23, 32, 51, 0.04),
+    0 10px 28px rgba(23, 32, 51, 0.12);
+  --board-shadow-toolbar:
+    0 14px 30px rgba(23, 32, 51, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.72);
 
   background: var(--workspace-page);
   color: var(--workspace-text);
@@ -48,7 +69,7 @@
 .leftRail {
   border: 1px solid var(--workspace-line);
   border-radius: 8px;
-  box-shadow: 0 18px 48px rgba(23, 23, 23, 0.08);
+  box-shadow: 0 18px 48px rgba(23, 32, 51, 0.1);
   grid-column: 1;
   height: calc(100dvh - 84px);
   left: 12px;
@@ -64,7 +85,7 @@
   background: var(--workspace-surface);
   border: 1px solid var(--workspace-line);
   border-radius: 8px;
-  box-shadow: 0 14px 30px rgba(23, 23, 23, 0.1);
+  box-shadow: var(--board-shadow-toolbar);
   display: grid;
   gap: 6px;
   left: 12px;
@@ -192,7 +213,7 @@
 }
 
 .workspace {
-  background: var(--workspace-page);
+  background: var(--board-canvas);
   grid-column: 2;
   min-width: 0;
   overflow: hidden;
@@ -201,17 +222,17 @@
 
 .canvasToolbar {
   align-items: center;
-  background: rgba(255, 255, 255, 0.94);
-  border: 1px solid var(--workspace-line);
+  background: transparent;
+  border: 0;
   border-radius: 8px;
-  box-shadow: 0 16px 42px rgba(23, 23, 23, 0.08);
+  box-shadow: none;
   display: flex;
   flex-wrap: wrap;
   gap: 7px;
   left: 12px;
   max-width: calc(100% - 24px);
-  min-height: 44px;
-  padding: 6px 10px;
+  min-height: 42px;
+  padding: 0;
   position: absolute;
   top: 12px;
   width: fit-content;
@@ -227,8 +248,8 @@
 
 .toolbarContextLink {
   align-items: center;
-  background: var(--workspace-surface);
-  border: 1px solid var(--workspace-line);
+  background: var(--board-surface);
+  border: 1px solid var(--board-border);
   border-radius: 8px;
   color: var(--workspace-text);
   display: grid;
@@ -248,8 +269,8 @@
 .toolbarContextLink:hover,
 .toolbarContextLink:focus-visible {
   background: var(--workspace-surface-muted);
-  border-color: var(--workspace-line-strong);
-  box-shadow: 0 10px 24px rgba(23, 23, 23, 0.08);
+  border-color: var(--board-border-strong);
+  box-shadow: 0 12px 28px rgba(23, 32, 51, 0.1);
   outline: none;
 }
 
@@ -304,9 +325,10 @@
 
 .toolbarGroup {
   align-items: center;
-  background: var(--workspace-surface-muted);
-  border: 1px solid var(--workspace-line);
+  background: var(--board-surface);
+  border: 1px solid var(--board-border);
   border-radius: 6px;
+  box-shadow: 0 8px 20px rgba(23, 32, 51, 0.08);
   display: inline-flex;
   gap: 2px;
   padding: 3px;
@@ -319,7 +341,7 @@
 }
 
 .canvasToolbar > .toolbarGroup:nth-of-type(2) {
-  left: calc(50% - 118px);
+  left: calc(50% - 152px);
 }
 
 .canvasToolbar > .toolbarGroup:nth-of-type(3) {
@@ -340,7 +362,7 @@
 }
 
 .canvasPanel {
-  background: var(--workspace-page);
+  background: var(--board-canvas);
   height: 100%;
   min-height: 0;
   position: relative;
@@ -350,7 +372,7 @@
   --xy-edge-stroke-selected-default: var(--workspace-accent);
   --xy-handle-background-color-default: var(--workspace-accent);
   --xy-handle-border-color-default: #ffffff;
-  background: var(--workspace-page);
+  background: transparent;
   height: 100%;
   width: 100%;
 }
@@ -398,14 +420,6 @@
   position: absolute;
 }
 
-.canvasPanel :global(.react-flow__edges) {
-  z-index: 1;
-}
-
-.canvasPanel :global(.react-flow__nodes) {
-  z-index: 2;
-}
-
 .canvasPanel :global(.react-flow__edges svg) {
   overflow: visible;
   pointer-events: none;
@@ -416,32 +430,130 @@
   pointer-events: visibleStroke;
 }
 
-.canvasPanel :global(.react-flow__edge.animated path) {
-  animation: diagramEdgeDash 0.55s linear infinite;
-  stroke-dasharray: 6;
+.edgeHalo,
+.edgeSemanticPath,
+.edgeMotionPath,
+.edgeInteractionPath {
+  vector-effect: non-scaling-stroke;
 }
 
-.canvasPanel :global(.react-flow__edge.animated path.react-flow__edge-interaction) {
-  animation: none;
-  stroke-dasharray: none;
+.edgeHalo {
+  opacity: 0;
+  pointer-events: none;
+  stroke: var(--board-primary);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: var(--edge-hover-halo-width);
+  transition: opacity 140ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.canvasPanel :global(.react-flow__edge:hover) .edgeHalo {
+  opacity: 0.1;
+}
+
+.canvasPanel :global(.react-flow__edge:focus-visible) .edgeHalo {
+  opacity: 0.7;
+}
+
+.edgeHaloSelected {
+  opacity: 0.2;
+}
+
+.edgeHaloSelected {
+  stroke-width: var(--edge-selected-halo-width);
+}
+
+.edgeSemanticPath {
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.edgeMotionPath {
+  animation: diagramEdgeFlow 1.8s linear infinite;
+  opacity: 0.72;
+  pointer-events: none;
+  stroke-dasharray: 2 10;
+  stroke-linecap: round;
+}
+
+.edgeInteractionPath {
+  pointer-events: stroke;
+}
+
+.edgeLabel {
+  pointer-events: none;
+}
+
+.edgePatchBadge {
+  color: var(--board-body);
+  pointer-events: none;
+}
+
+.edgePatchBadge circle {
+  fill: var(--board-surface);
+  stroke: currentColor;
+  stroke-width: 1.25px;
+}
+
+.edgePatchBadge text {
+  fill: currentColor;
+  font-family: var(--workspace-font);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.edgePatchBadge[data-preview-state="added"] {
+  color: var(--board-success);
+}
+
+.edgePatchBadge[data-preview-state="modified"] {
+  color: var(--board-warning);
+}
+
+.edgePatchBadge[data-preview-state="deleted"] {
+  color: var(--board-danger);
 }
 
 .canvasPanel :global(.react-flow__handle) {
-  background: var(--workspace-accent);
-  border: 2px solid #ffffff;
+  background: transparent;
+  border: 0;
   border-radius: 999px;
-  box-shadow: 0 4px 10px rgba(23, 23, 23, 0.2);
-  height: 11px;
-  min-height: 11px;
-  min-width: 11px;
+  box-shadow: none;
+  height: 6px;
+  min-height: 6px;
+  min-width: 6px;
   position: absolute;
-  width: 11px;
+  touch-action: none;
+  width: 6px;
 }
 
 .canvasPanel :global(.react-flow__handle)::before {
   content: "";
-  inset: -10px;
+  height: calc(28px * var(--board-control-scale));
+  left: 50%;
+  pointer-events: inherit;
   position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: calc(28px * var(--board-control-scale));
+}
+
+.canvasPanel :global(.react-flow__handle)::after {
+  align-items: center;
+  background: var(--board-surface);
+  border: calc(1px * var(--board-control-scale)) solid var(--board-primary);
+  border-radius: 999px;
+  box-sizing: border-box;
+  content: "";
+  display: flex;
+  height: calc(10px * var(--board-control-scale));
+  justify-content: center;
+  left: 50%;
+  pointer-events: none;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: calc(10px * var(--board-control-scale));
 }
 
 .canvasPanel :global(.react-flow__handle-left) {
@@ -469,13 +581,47 @@
 }
 
 .canvasPanel :global(.react-flow__selection) {
-  background: rgba(23, 23, 23, 0.06);
-  border: 1px dotted rgba(23, 23, 23, 0.56);
+  background: rgba(82, 105, 179, 0.08);
+  border: 1px solid var(--board-primary);
 }
 
 .canvasPanel :global(.react-flow__edge-text) {
   letter-spacing: 0;
   paint-order: stroke;
+}
+
+.canvasPanelEdgeLabelsVisible :global(.react-flow__edge-text),
+.canvasPanelEdgeLabelsVisible :global(.react-flow__edge-textbg) {
+  opacity: 1;
+  visibility: visible;
+}
+
+.canvasPanelEdgeLabelsCompact :global(.react-flow__edge-text),
+.canvasPanelEdgeLabelsCompact :global(.react-flow__edge-textbg) {
+  opacity: 0;
+  transition:
+    opacity 120ms cubic-bezier(0.22, 1, 0.36, 1),
+    visibility 120ms;
+  visibility: hidden;
+}
+
+.canvasPanelEdgeLabelsCompact :global(.react-flow__edge-text) {
+  font-size: calc(12px * var(--board-lod-label-scale)) !important;
+}
+
+.canvasPanelEdgeLabelsCompact :global(.react-flow__edge:hover .react-flow__edge-text),
+.canvasPanelEdgeLabelsCompact :global(.react-flow__edge:hover .react-flow__edge-textbg),
+.canvasPanelEdgeLabelsCompact :global(.react-flow__edge.selected .react-flow__edge-text),
+.canvasPanelEdgeLabelsCompact :global(.react-flow__edge.selected .react-flow__edge-textbg),
+.canvasPanelEdgeLabelsCompact :global(.react-flow__edge:focus-visible .react-flow__edge-text),
+.canvasPanelEdgeLabelsCompact :global(.react-flow__edge:focus-visible .react-flow__edge-textbg) {
+  opacity: 1;
+  visibility: visible;
+}
+
+.canvasPanel :global(.react-flow__node:focus-visible) .nodeShell {
+  box-shadow: 0 0 0 2px var(--board-primary-soft), 0 0 0 4px var(--board-primary);
+  outline: none;
 }
 
 .canvasPanelSnapAnimating :global(.react-flow__node) {
@@ -496,12 +642,6 @@
 
 .canvasPanelPreviewing :global(.react-flow__pane) {
   cursor: grab;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .canvasPanelSnapAnimating :global(.react-flow__node) {
-    transition: none;
-  }
 }
 
 .previewNotice {
@@ -662,10 +802,10 @@
 
 .nodeShell {
   align-items: center;
-  background: #ffffff;
-  border: 2px solid #9aa5b8;
+  background: var(--board-surface);
+  border: 1px solid var(--board-border);
   border-radius: 8px;
-  box-shadow: 0 10px 24px rgba(33, 41, 69, 0.1);
+  box-shadow: none;
   display: grid;
   gap: 10px;
   grid-template-columns: 38px minmax(0, 1fr);
@@ -674,87 +814,112 @@
   padding: 12px;
   position: relative;
   transition:
-    background 120ms ease,
-    border-color 120ms ease,
-    box-shadow 120ms ease,
-    opacity 120ms ease;
+    background 140ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 140ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 140ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 140ms cubic-bezier(0.22, 1, 0.36, 1);
   width: 100%;
 }
 
 .nodeShellSelected {
   box-shadow:
-    0 0 0 3px rgba(111, 76, 246, 0.16),
-    0 14px 26px rgba(33, 41, 69, 0.14);
+    0 0 0 2px var(--board-surface),
+    0 0 0 4px var(--board-primary),
+    var(--board-shadow-object);
 }
 
 .nodeShellDimmed {
-  opacity: 0.38;
-}
-
-.nodeShellResource.nodeShellDimmed {
-  opacity: 0.9;
+  opacity: 1;
 }
 
 .nodeShellAiPreview {
-  opacity: 0.52;
+  opacity: 1;
   pointer-events: none;
 }
 
+.nodeShellDimmed .resourceNodeIconFrame,
+.nodeShellDimmed .nodeGlyph {
+  filter: saturate(0.55);
+  opacity: 0.46;
+}
+
+.nodeShellDimmed .nodeContent,
+.nodeShellArea.nodeShellDimmed .areaNodeHeader {
+  opacity: 0.72;
+}
+
+.nodeShellAiPreview .resourceNodeIconFrame,
+.nodeShellAiPreview .nodeGlyph,
+.nodeShellArea.nodeShellAiPreview .areaNodeHeaderIcon {
+  opacity: 0.64;
+}
+
 .nodeShellPatchAdded {
-  border-color: #2f8c55;
-  box-shadow: 0 0 0 3px rgba(47, 140, 85, 0.14);
-  opacity: 0.58;
+  border-color: var(--board-success);
+  box-shadow: 0 0 0 3px rgba(40, 125, 60, 0.14);
 }
 
 .nodeShellPatchModified {
-  border-color: #b7791f;
-  box-shadow: 0 0 0 3px rgba(183, 121, 31, 0.14);
-  opacity: 0.58;
+  border-color: var(--board-warning);
+  box-shadow: 0 0 0 3px rgba(154, 103, 0, 0.14);
 }
 
 .nodeShellPatchDeleted {
-  background: rgba(242, 244, 247, 0.72);
-  border-color: #8b949e;
+  background: var(--board-surface-subtle);
+  border-color: var(--board-danger);
   box-shadow: none;
-  filter: grayscale(1);
-  opacity: 0.36;
+  opacity: 1;
 }
 
-.nodeShellReferenceDropTarget {
-  border-color: #2f8c55;
-  box-shadow:
-    0 0 0 4px rgba(47, 140, 85, 0.16),
-    0 16px 30px rgba(33, 41, 69, 0.14);
+.nodeShellPatchDeleted .resourceNodeIconFrame,
+.nodeShellPatchDeleted .nodeGlyph,
+.nodeShellArea.nodeShellPatchDeleted .areaNodeHeaderIcon {
+  filter: grayscale(0.6);
+  opacity: 0.44;
+}
+
+.nodeShellPatchDeleted .resourceNodeLabel {
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
+.nodeShellPatchDeleted .nodeLabel,
+.nodeShellPatchDeleted .areaNodeHeaderText {
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
 }
 
 .nodeShellDesign {
-  background: rgba(255, 255, 255, 0.78);
-}
-
-.nodeShellDesign.nodeShellReferenceDropTarget {
-  background:
-    linear-gradient(0deg, rgba(47, 140, 85, 0.14), rgba(47, 140, 85, 0.14)),
-    rgba(255, 255, 255, 0.9);
+  background: var(--board-surface);
 }
 
 .nodeShellResource {
   align-items: center;
   background: transparent;
-  border-color: transparent;
+  border-color: var(--resource-node-border-color, var(--board-border));
   border-width: 0;
   box-shadow: none;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  justify-content: center;
+  container-type: size;
+  display: block;
+  gap: 0;
   min-height: 0;
   overflow: visible;
   padding: 0;
   text-align: center;
 }
 
+.nodeShellResource:hover {
+  border-color: var(--board-border-strong);
+  box-shadow: none;
+}
+
+.nodeShellResource:hover .resourceNodeIcon,
+.nodeShellResource:hover .resourceNodeIconFallback {
+  filter: drop-shadow(0 7px 12px rgba(23, 32, 51, 0.24));
+}
+
 .nodeShellLocked {
-  background: #f8f9fd;
+  background: var(--board-surface-subtle);
 }
 
 .nodeShellResource.nodeShellLocked {
@@ -762,72 +927,97 @@
 }
 
 .nodeShellResource.nodeShellSelected {
-  border-color: transparent;
-  box-shadow: none;
+  border-color: var(--resource-node-border-color, var(--board-border));
+  box-shadow:
+    0 0 0 3px var(--board-primary),
+    var(--board-shadow-object);
+}
+
+.nodeShellResource.nodeShellPatchDeleted {
+  background: transparent;
 }
 
 .nodeShellArea {
-  --area-body-background: rgba(255, 255, 255, 0.14);
-  --area-border-color: var(--node-border-color, #cbd5e1);
-  --area-border-width: 2px;
+  --area-body-background: color-mix(in srgb, var(--board-surface) 24%, transparent);
+  --area-border-color: var(--node-border-color, var(--board-border));
+  --area-border-width: 1px;
 
   align-items: flex-start;
   background: var(--area-body-background);
   border-color: var(--area-border-color);
   border-style: var(--area-border-style, solid);
+  border-radius: 10px;
   border-width: var(--area-border-width);
-  box-shadow: 0 10px 24px rgba(33, 41, 69, 0.06);
+  box-shadow: none;
   display: block;
   justify-content: flex-start;
+  min-height: 0;
   overflow: visible;
   padding: 0;
   pointer-events: none;
   text-align: left;
 }
 
-.nodeShellArea.nodeShellSelected {
-  --area-border-color: var(--node-border-color, #6f4cf6);
-
-  border-color: var(--area-border-color);
-  box-shadow:
-    0 0 0 3px rgba(111, 76, 246, 0.14),
-    0 14px 28px rgba(33, 41, 69, 0.08);
+.nodeShellAreaDepth0 {
+  --area-body-background: color-mix(in srgb, var(--board-surface) 24%, transparent);
 }
 
-.nodeShellArea.nodeShellReferenceDropTarget {
-  --area-border-color: #2f8c55;
+.nodeShellAreaDepth1 {
+  --area-body-background: color-mix(in srgb, var(--board-surface) 32%, transparent);
+}
 
-  background: rgba(47, 140, 85, 0.1);
+.nodeShellAreaDepth2 {
+  --area-body-background: color-mix(in srgb, var(--board-surface) 40%, transparent);
+}
+
+.nodeShellAreaDepth3 {
+  --area-body-background: color-mix(in srgb, var(--board-surface) 48%, transparent);
+}
+
+.nodeShellArea.nodeShellSelected {
   border-color: var(--area-border-color);
   box-shadow:
-    inset 0 0 0 999px rgba(47, 140, 85, 0.06),
-    0 0 0 4px rgba(47, 140, 85, 0.16),
-    0 16px 30px rgba(33, 41, 69, 0.1);
+    0 0 0 2px var(--board-surface),
+    0 0 0 4px var(--board-primary);
+}
+
+.nodeShellArea.nodeShellAreaDropTarget {
+  --area-border-color: #6f4cf6;
+
+  background: rgba(111, 76, 246, 0.08);
+  border-color: var(--area-border-color);
+  box-shadow:
+    inset 0 0 0 999px rgba(111, 76, 246, 0.04),
+    0 0 0 4px rgba(111, 76, 246, 0.14);
 }
 
 .nodeShellArea.nodeShellLocked {
-  background: rgba(248, 249, 253, 0.28);
+  background: color-mix(in srgb, var(--board-surface-subtle) 52%, transparent);
 }
 
 .areaNodeHeader {
   align-items: center;
   background: transparent;
   border: 0;
+  border-bottom: 0;
+  border-radius: 9px 9px 0 0;
   box-shadow: none;
-  display: inline-flex;
-  font-size: 0.72rem;
-  font-weight: 850;
+  display: flex;
+  font-size: 14px;
+  font-weight: 650;
   gap: 6px;
-  left: 14px;
-  line-height: 1.15;
-  max-width: calc(100% - 28px);
+  height: 34px;
+  left: 0;
+  line-height: 18px;
+  max-width: 100%;
   min-width: 0;
-  overflow: visible;
-  padding: 0;
+  overflow: hidden;
+  padding: 0 12px;
   pointer-events: all;
   position: absolute;
-  top: 14px;
-  white-space: normal;
+  right: 0;
+  top: 0;
+  white-space: nowrap;
   z-index: 2;
 }
 
@@ -867,44 +1057,44 @@
 }
 
 .areaNodeHeaderIcon {
+  border-radius: 4px;
   display: block;
   flex: 0 0 auto;
-  height: 15px;
+  height: 16px;
   object-fit: contain;
-  width: 15px;
+  width: 16px;
 }
 
 .areaNodeHeaderText {
   min-width: 0;
-  overflow: visible;
-  overflow-wrap: anywhere;
-  text-overflow: clip;
-  white-space: normal;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .areaNodeHeaderMeta {
-  background: color-mix(in srgb, #eaf4ff 68%, #ffffff);
-  border: 1px solid color-mix(in srgb, #2f6db3 28%, transparent);
+  background: var(--board-primary-soft);
+  border: 1px solid color-mix(in srgb, var(--board-primary) 46%, transparent);
   border-radius: 6px;
-  color: #2f6db3;
+  color: var(--board-primary);
   flex: 0 1 auto;
-  font-size: 0.66rem;
-  font-weight: 850;
-  line-height: 1.1;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 14px;
   max-width: 120px;
   min-width: 0;
   overflow: hidden;
-  padding: 2px 5px;
+  padding: 1px 5px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .nodeGlyph {
   align-items: center;
-  background: #f1edff;
-  border: 1px solid #dcd2ff;
+  background: var(--board-surface-subtle);
+  border: 1px solid var(--board-border);
   border-radius: 8px;
-  color: #6f4cf6;
+  color: var(--board-primary);
   display: flex;
   font-size: 0.9rem;
   font-weight: 900;
@@ -927,7 +1117,7 @@
 }
 
 .nodeType {
-  color: #778196;
+  color: var(--board-muted);
   font-size: 0.65rem;
   font-weight: 800;
   text-transform: uppercase;
@@ -939,7 +1129,7 @@
 }
 
 .nodeSubtitle {
-  color: #778196;
+  color: var(--board-muted);
   font-size: 0.68rem;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -948,90 +1138,199 @@
 
 .resourceNodeIconFrame {
   align-items: center;
-  aspect-ratio: 1;
-  background: #ffffff;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-sizing: border-box;
   display: flex;
-  flex: 0 0 auto;
-  height: var(--resource-node-icon-frame-size, 90px);
+  height: 100%;
   justify-content: center;
-  margin: 0 auto;
-  max-height: 100%;
-  max-width: 100%;
-  min-height: 0;
-  min-width: 0;
   pointer-events: none;
-  width: var(--resource-node-icon-frame-size, 90px);
+  width: 100%;
 }
 
 .resourceNodeIcon {
   display: block;
   height: 100%;
+  max-height: 100%;
+  max-width: 100%;
   object-fit: contain;
   width: 100%;
 }
 
 .resourceNodeIconFallback {
   align-items: center;
-  background: #f1edff;
-  border: 1px solid #d6cbff;
-  border-radius: 10px;
-  color: #5f3de8;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  color: var(--board-body);
   display: flex;
-  font-size: 0.72rem;
-  font-weight: 900;
   height: 100%;
   justify-content: center;
   width: 100%;
 }
 
-.nodeShellResource.nodeShellSelected .resourceNodeIconFrame {
-  filter: drop-shadow(0 10px 18px rgba(33, 41, 69, 0.12));
-  outline: 1px solid var(--resource-node-border-color, #d8e0ec);
-  outline-offset: 3px;
+.resourceNodeIconFallback svg {
+  height: 70%;
+  width: 70%;
 }
 
-.nodeShellResource.nodeShellReferenceDropTarget .resourceNodeIconFrame {
-  filter: drop-shadow(0 12px 20px rgba(47, 140, 85, 0.22));
-  outline: 2px solid #2f8c55;
-  outline-offset: 5px;
+.nodeShellResource.nodeShellSelected .resourceNodeIconFrame {
+  filter: none;
+  outline: none;
 }
 
 .resourceNodeLabel {
-  flex: 0 0 auto;
-  font-size: 14px;
-  font-weight: 900;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  background: transparent;
+  border-radius: 3px;
+  box-sizing: border-box;
+  color: var(--board-ink);
+  display: -webkit-box;
+  font-size: 12px;
+  font-weight: 650;
   left: 50%;
-  line-height: 1.15;
-  max-width: max(100%, 220px);
-  min-height: 1.1em;
-  overflow: visible;
-  overflow-wrap: anywhere;
+  line-height: 15px;
+  max-height: 30px;
+  max-width: 112px;
+  opacity: 1;
+  overflow: hidden;
+  overflow-wrap: normal;
+  padding: 0 3px;
   pointer-events: none;
   position: absolute;
   text-align: center;
-  text-overflow: clip;
+  text-overflow: ellipsis;
   top: calc(100% + 4px);
   transform: translateX(-50%);
+  transition:
+    opacity 120ms cubic-bezier(0.22, 1, 0.36, 1),
+    visibility 120ms;
+  visibility: visible;
   white-space: normal;
   width: max-content;
+  z-index: 4;
 }
 
-.resourceNodeType {
-  display: none;
+.nodeShellZoomMedium .resourceNodeLabel,
+.nodeShellZoomFar .resourceNodeLabel,
+.nodeShellZoomMedium .areaNodeHeaderMeta,
+.nodeShellZoomFar .areaNodeHeaderMeta {
+  opacity: 0;
+  visibility: hidden;
+}
+
+.nodeShellZoomMedium .resourceNodeLabel,
+.nodeShellZoomFar .resourceNodeLabel {
+  transform: translateX(-50%) scale(var(--board-lod-label-scale));
+  transform-origin: top center;
+}
+
+.nodeShellZoomMedium:hover .resourceNodeLabel,
+.nodeShellZoomMedium.nodeShellSelected .resourceNodeLabel,
+.nodeShellZoomFar.nodeShellSelected .resourceNodeLabel,
+.canvasPanel :global(.react-flow__node:focus-visible) .nodeShellZoomMedium .resourceNodeLabel,
+.canvasPanel :global(.react-flow__node:focus-visible) .nodeShellZoomFar .resourceNodeLabel {
+  opacity: 1;
+  visibility: visible;
 }
 
 .lockBadge {
   align-items: center;
-  background: #171c2f;
+  background: var(--board-ink);
+  border: 0;
   border-radius: 999px;
   color: #ffffff;
   display: flex;
-  height: 22px;
+  height: 18px;
   justify-content: center;
   position: absolute;
-  right: 7px;
-  top: 7px;
-  width: 22px;
+  bottom: 4px;
+  right: 4px;
+  width: 18px;
+}
+
+.stateBadge {
+  align-items: center;
+  border: 1px solid currentColor;
+  border-radius: 5px;
+  display: flex;
+  font-size: 10px;
+  font-weight: 700;
+  justify-content: center;
+  line-height: 14px;
+  min-height: 18px;
+  min-width: 18px;
+  padding: 1px 4px;
+  position: absolute;
+  z-index: 4;
+}
+
+.stateBadge {
+  right: 4px;
+  top: 4px;
+}
+
+.stateBadgePreview {
+  background: #f4effb;
+  color: #6d3e91;
+}
+
+.stateBadgeSuccess {
+  background: #edf8ef;
+  color: var(--board-success);
+}
+
+.stateBadgeWarning {
+  background: #fff7e6;
+  color: var(--board-warning);
+}
+
+.stateBadgeDanger {
+  background: #fff0ee;
+  color: var(--board-danger);
+}
+
+@container (max-width: 39px) {
+  .lockBadge,
+  .stateBadge {
+    border-radius: 3px;
+    font-size: 8px;
+    height: 12px;
+    line-height: 10px;
+    min-height: 12px;
+    min-width: 12px;
+    padding: 0;
+    width: 12px;
+  }
+
+  .lockBadge {
+    bottom: 1px;
+  }
+
+  .lockBadge,
+  .stateBadge {
+    right: 1px;
+  }
+
+  .stateBadge {
+    top: 1px;
+  }
+
+  .lockBadge svg {
+    height: 8px;
+    width: 8px;
+  }
+
+  .stateBadgePreview {
+    font-size: 0;
+  }
+
+  .stateBadgePreview::after {
+    content: "P";
+    font-size: 8px;
+  }
 }
 
 .connectionHandle {
@@ -1052,9 +1351,9 @@
   pointer-events: none;
 }
 
-.nodeShell:hover ~ .connectionHandleSource,
-.nodeShellSelected ~ .connectionHandleSource,
-.connectionHandleSource.connectionHandleActive,
+.canvasPanel :global(.react-flow__node:hover) .connectionHandleSource:not(.connectionHandleInactive),
+.nodeShellSelected ~ .connectionHandleSource:not(.connectionHandleInactive),
+.connectionHandleSource:hover,
 .connectionHandleTarget.connectionHandleActive {
   opacity: 1;
   pointer-events: all;
@@ -1065,46 +1364,244 @@
   pointer-events: none;
 }
 
+.nodeShellSelected ~ .connectionHandleSource:global(.react-flow__handle-top) {
+  top: calc(-18px * var(--board-control-scale));
+}
+
+.nodeShellSelected ~ .connectionHandleSource:global(.react-flow__handle-right) {
+  right: calc(-18px * var(--board-control-scale));
+}
+
+.nodeShellSelected ~ .connectionHandleSource:global(.react-flow__handle-bottom) {
+  bottom: calc(-18px * var(--board-control-scale));
+}
+
 .connectionHandleTarget.connectionHandleActive {
+  border-color: var(--board-success);
+  cursor: crosshair;
   z-index: 12;
 }
 
-.connectionHandleSource.connectionHandleActive {
-  z-index: 11;
+.connectionHandleTarget.connectionHandleActive::after {
+  border-color: var(--board-success);
+  box-shadow: 0 0 0 calc(4px * var(--board-control-scale)) rgba(40, 125, 60, 0.16);
+  height: calc(12px * var(--board-control-scale));
+  width: calc(12px * var(--board-control-scale));
+}
+
+.connectionHandleSource::after {
+  background: var(--board-primary);
+  border-color: var(--board-primary);
+  color: #ffffff;
+  content: "+";
+  font-size: calc(9px * var(--board-control-scale));
+  font-weight: 700;
+  line-height: 1;
+}
+
+.connectionHandleSource:hover::after,
+.connectionHandleSource:focus-visible::after {
+  box-shadow: 0 0 0 calc(3px * var(--board-control-scale)) var(--board-primary-soft);
+  transform: translate(-50%, -50%) scale(1.12);
+}
+
+.connectionHandleSource:focus-visible {
+  opacity: 1;
+  outline: none;
+  pointer-events: all;
 }
 
 .nodeShell:hover ~ .connectionHandleInactive,
-.nodeShellSelected ~ .connectionHandleInactive {
+.nodeShellSelected ~ .connectionHandleInactive,
+.connectionHandleInactive.connectionHandleActive {
   opacity: 0;
   pointer-events: none;
 }
 
-.nodeToolbar,
-.edgeToolbar {
-  align-items: center;
-  background: #ffffff;
-  border: 1px solid #dfe5f0;
-  border-radius: 7px;
-  box-shadow: 0 16px 34px rgba(33, 41, 69, 0.14);
-  display: flex;
-  gap: 5px;
-  padding: 5px;
-}
-
 .nodeToolbar {
+  align-items: center;
+  background: var(--board-surface);
+  border: 1px solid var(--board-border);
+  border-radius: 7px;
+  box-shadow: var(--board-shadow-toolbar);
+  box-sizing: border-box;
+  display: flex;
+  gap: 2px;
+  max-width: calc(100vw - 24px);
+  min-height: 36px;
+  padding: 1px 3px;
   pointer-events: all;
+  width: max-content;
 }
 
 .nodeToolbarArea {
   margin-top: 8px;
 }
 
-.edgeToolbar {
+.nodeToolbarDisclosure {
+  position: relative;
+}
+
+.nodeToolbarDisclosure > summary {
+  list-style: none;
+  position: relative;
+}
+
+.nodeToolbarDisclosure > summary::-webkit-details-marker {
+  display: none;
+}
+
+.nodeToolbarDisclosure[open] > summary {
+  background: var(--board-surface-subtle);
+  border-color: var(--board-border);
+}
+
+.nodeToolbarPanel {
+  background: var(--board-surface);
+  border: 1px solid var(--board-border);
+  border-radius: 8px;
+  bottom: calc(100% + 6px);
+  box-shadow: var(--board-shadow-toolbar);
+  display: grid;
+  gap: 4px;
   left: 50%;
+  padding: 7px;
+  position: absolute;
+  transform: translateX(-50%);
+  z-index: 2;
+}
+
+.nodeToolbarArea .nodeToolbarPanel {
+  bottom: auto;
+  top: calc(100% + 6px);
+}
+
+.nodeToolbarActionPanel {
+  min-width: 176px;
+}
+
+.nodeToolbarAction {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  color: var(--board-ink);
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 16px 1fr;
+  min-height: 32px;
+  padding: 0 8px;
+  text-align: left;
+}
+
+.nodeToolbarAction:hover,
+.nodeToolbarAction:focus-visible {
+  background: var(--board-surface-subtle);
+  outline: none;
+}
+
+.nodeToolbarPalette {
+  display: grid;
+  gap: 4px;
+  grid-template-columns: repeat(5, 32px);
+}
+
+.nodeToolbarCustomColor {
+  align-items: center;
+  border-top: 1px solid var(--board-border);
+  color: var(--board-body);
+  display: flex;
+  font-size: 12px;
+  font-weight: 600;
+  justify-content: space-between;
+  margin-top: 3px;
+  padding-top: 6px;
+}
+
+.nodeToolbarTriggerColor {
+  border: 1px solid var(--board-surface);
+  border-radius: 999px;
+  bottom: 4px;
+  box-shadow: 0 0 0 1px var(--board-border-strong);
+  height: 3px;
+  position: absolute;
+  right: 4px;
+  width: 8px;
+}
+
+.edgeToolbar {
+  align-items: center;
+  background: var(--board-surface);
+  border: 1px solid var(--board-border);
+  border-radius: 8px;
+  box-shadow: var(--board-shadow-toolbar);
+  box-sizing: border-box;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 2px;
+  height: auto;
+  left: 50%;
+  max-width: calc(100vw - 24px);
+  min-height: 36px;
+  padding: 1px 3px;
+  pointer-events: all;
   position: absolute;
   top: 12px;
   transform: translateX(-50%);
+  width: max-content;
   z-index: 6;
+}
+
+.edgeToolbarPanel {
+  bottom: auto;
+  max-width: calc(100vw - 24px);
+  position: absolute;
+  top: calc(100% + 6px);
+}
+
+.edgeToolbarOptionActive {
+  background: var(--board-surface-subtle);
+  color: var(--board-primary);
+}
+
+.edgeToolbarStrokePanel {
+  min-width: 126px;
+}
+
+.edgeToolbarPanelLabel {
+  color: var(--board-body);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 16px;
+}
+
+.edgeToolbarTriggerStroke {
+  border-top: 1.75px solid var(--board-ink);
+  bottom: 4px;
+  height: 0;
+  position: absolute;
+  right: 4px;
+  width: 9px;
+}
+
+.edgeToolbarTriggerStroke[data-line-style="dashed"] {
+  border-top-style: dashed;
+}
+
+.edgeToolbarTriggerStroke[data-line-style="dotted"] {
+  border-top-style: dotted;
+}
+
+.edgeToolbarTriggerStroke[data-edge-width="thin"] {
+  border-top-width: 1.25px;
+}
+
+.edgeToolbarTriggerStroke[data-edge-width="medium"] {
+  border-top-width: 1.75px;
+}
+
+.edgeToolbarTriggerStroke[data-edge-width="thick"] {
+  border-top-width: 2.25px;
 }
 
 .iconButton,
@@ -1114,13 +1611,13 @@
   background: transparent;
   border: 1px solid transparent;
   border-radius: 5px;
-  color: #272f45;
+  color: var(--board-body);
   cursor: pointer;
   display: inline-flex;
-  height: 30px;
+  height: 32px;
   justify-content: center;
   padding: 0;
-  width: 30px;
+  width: 32px;
 }
 
 .iconButton:hover,
@@ -1128,73 +1625,111 @@
 .iconButtonSelected,
 .iconButtonDanger:hover,
 .iconButtonDanger:focus-visible {
-  background: #f0edff;
-  border-color: #d8ceff;
+  background: var(--board-surface-subtle);
+  border-color: var(--board-border);
   outline: none;
 }
 
 .iconButton:disabled {
-  color: #a6b1c0;
+  color: var(--board-muted);
   cursor: not-allowed;
   opacity: 0.62;
 }
 
 .iconButtonDanger {
-  color: #b42318;
+  color: var(--board-danger);
 }
 
 .iconButtonDanger:hover,
 .iconButtonDanger:focus-visible {
-  background: #fff0ee;
-  border-color: #fac7c1;
-}
-
-.colorMenu,
-.edgeSwatches {
-  align-items: center;
-  display: inline-flex;
-  gap: 5px;
-}
-
-.colorMenu {
-  border-left: 1px solid #e6ecf6;
-  padding-left: 6px;
-}
-
-.colorMenuIcon {
-  align-items: center;
-  color: #727d91;
-  display: flex;
-}
-
-.swatchGroup {
-  display: inline-flex;
-  gap: 3px;
+  background: color-mix(in srgb, var(--board-danger) 12%, transparent);
+  border-color: color-mix(in srgb, var(--board-danger) 46%, transparent);
 }
 
 .swatchButton {
-  border: 1px solid #ffffff;
-  border-radius: 999px;
-  box-shadow: 0 0 0 1px #c2ccdc;
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  box-shadow: none;
   cursor: pointer;
-  height: 18px;
+  display: inline-flex;
+  height: 32px;
+  justify-content: center;
   padding: 0;
+  width: 32px;
+}
+
+.swatchButton:hover,
+.swatchButton:focus-visible {
+  background: var(--board-surface-subtle);
+  outline: none;
+}
+
+.nodeSwatchVisual {
+  border: 1px solid var(--board-surface);
+  border-radius: 999px;
+  box-shadow: 0 0 0 1px var(--board-border-strong);
+  display: block;
+  height: 18px;
   width: 18px;
 }
 
-.swatchButton[aria-pressed="true"] {
+.swatchButton[aria-pressed="true"] .nodeSwatchVisual {
   box-shadow:
-    0 0 0 1px #ffffff,
-    0 0 0 3px #6f4cf6;
+    0 0 0 1px var(--board-surface),
+    0 0 0 3px var(--board-primary);
+}
+
+.edgeSwatchButton {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  height: 32px;
+  justify-content: center;
+  padding: 0;
+  width: 32px;
+}
+
+.edgeSwatchButton:hover,
+.edgeSwatchButton:focus-visible {
+  background: var(--board-surface-subtle);
+  outline: none;
+}
+
+.edgeSwatchVisual {
+  border: 1px solid var(--board-surface);
+  border-radius: 999px;
+  box-shadow: 0 0 0 1px var(--board-border-strong);
+  display: block;
+  height: 18px;
+  width: 18px;
+}
+
+.edgeSwatchButton[aria-pressed="true"] .edgeSwatchVisual {
+  box-shadow:
+    0 0 0 1px var(--board-surface),
+    0 0 0 3px var(--board-primary);
 }
 
 .colorInput {
   background: transparent;
-  border: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
   cursor: pointer;
-  height: 22px;
-  padding: 0;
-  width: 22px;
+  height: 32px;
+  padding: 5px;
+  width: 32px;
+}
+
+.colorInput:hover,
+.colorInput:focus-visible {
+  background: var(--board-surface-subtle);
+  border-color: var(--board-border);
+  outline: none;
 }
 
 .resizeHandle {
@@ -1211,89 +1746,241 @@
 
 .manualResizeHandle {
   background: transparent;
-  border: 1px solid #6f4cf6;
-  border-radius: 1px;
+  border: 1px solid var(--board-primary);
+  border-radius: 2px;
   box-shadow: none;
-  height: 8px;
+  height: 6px;
   padding: 0;
   pointer-events: all;
   position: absolute;
   touch-action: none;
-  width: 8px;
+  width: 6px;
   z-index: 3;
+}
+
+.manualResizeHandle::before {
+  content: "";
+  inset: -7px;
+  position: absolute;
+}
+
+.manualResizeHandleArea {
+  height: 8px;
+  width: 8px;
+}
+
+.manualResizeHandleArea::before {
+  inset: -6px;
+}
+
+.manualResizeHandleSide {
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+}
+
+.manualResizeHandleTop,
+.manualResizeHandleBottom {
+  height: 8px;
+  left: 12px;
+  width: calc(100% - 24px);
+}
+
+.manualResizeHandleLeft,
+.manualResizeHandleRight {
+  height: calc(100% - 24px);
+  top: 12px;
+  width: 8px;
+}
+
+.manualResizeHandleTop {
+  cursor: ns-resize;
+  top: -4px;
+}
+
+.manualResizeHandleRight {
+  cursor: ew-resize;
+  right: -4px;
+}
+
+.manualResizeHandleBottom {
+  bottom: -4px;
+  cursor: ns-resize;
+}
+
+.manualResizeHandleLeft {
+  cursor: ew-resize;
+  left: -4px;
 }
 
 .manualResizeHandleTopLeft {
   cursor: nwse-resize;
-  left: -4px;
-  top: -4px;
+  left: -3px;
+  top: -3px;
 }
 
 .manualResizeHandleTopRight {
   cursor: nesw-resize;
-  right: -4px;
-  top: -4px;
+  right: -3px;
+  top: -3px;
 }
 
 .manualResizeHandleBottomLeft {
-  bottom: -4px;
+  bottom: -3px;
   cursor: nesw-resize;
-  left: -4px;
+  left: -3px;
 }
 
 .manualResizeHandleBottomRight {
-  bottom: -4px;
+  bottom: -3px;
   cursor: nwse-resize;
-  right: -4px;
+  right: -3px;
 }
 
-.manualResizeHandle:hover,
+.manualResizeHandle:not(.manualResizeHandleSide):hover,
 .manualResizeHandle:focus-visible {
-  box-shadow:
-    0 0 0 3px rgba(111, 76, 246, 0.2),
-    0 1px 4px rgba(23, 32, 51, 0.24);
+  box-shadow: 0 0 0 2px var(--board-primary-soft);
   outline: none;
-}
-
-.edgeSelect {
-  min-width: 96px;
 }
 
 .segmentedControl {
   align-items: center;
-  background: #f7f8fd;
-  border: 1px solid #dfe5f0;
+  background: var(--board-surface-subtle);
+  border: 1px solid var(--board-border);
   border-radius: 6px;
   display: inline-flex;
-  padding: 2px;
+  height: 30px;
+  padding: 1px;
 }
 
 .segmentButton {
+  align-items: center;
   background: transparent;
   border: 0;
   border-radius: 4px;
-  color: #727d91;
+  color: var(--board-muted);
   cursor: pointer;
-  font: inherit;
-  font-size: 0.74rem;
-  font-weight: 800;
-  height: 24px;
-  padding: 0 8px;
+  display: inline-flex;
+  height: 26px;
+  justify-content: center;
+  padding: 0 6px;
+  width: 36px;
 }
 
 .segmentButtonActive {
-  background: #ffffff;
-  color: #6f4cf6;
+  background: var(--board-surface);
   box-shadow: 0 1px 3px rgba(23, 32, 51, 0.12);
+  color: var(--board-primary);
 }
 
-@keyframes diagramEdgeDash {
+.iconButton:focus-visible,
+.swatchButton:focus-visible,
+.edgeSwatchButton:focus-visible,
+.segmentButton:focus-visible,
+.colorInput:focus-visible {
+  box-shadow:
+    0 0 0 2px var(--board-surface),
+    0 0 0 4px var(--board-primary);
+  outline: none;
+}
+
+.edgeLinePreview {
+  border-top: 1.75px solid currentColor;
+  display: block;
+  height: 0;
+  width: 22px;
+}
+
+.edgeLinePreview[data-line-style="dashed"] {
+  border-top-style: dashed;
+}
+
+.edgeLinePreview[data-line-style="dotted"] {
+  border-top-style: dotted;
+}
+
+.edgeLinePreview[data-edge-width="thin"] {
+  border-top-width: 1.25px;
+}
+
+.edgeLinePreview[data-edge-width="medium"] {
+  border-top-width: 1.75px;
+}
+
+.edgeLinePreview[data-edge-width="thick"] {
+  border-top-width: 2.25px;
+}
+
+.edgeToolbarDangerGroup {
+  align-items: center;
+  border-left: 1px solid var(--board-border);
+  display: flex;
+  height: 24px;
+  margin-left: 2px;
+  padding-left: 3px;
+}
+
+@keyframes diagramEdgeFlow {
   from {
     stroke-dashoffset: 12;
   }
 
   to {
     stroke-dashoffset: 0;
+  }
+}
+
+@media (pointer: coarse) {
+  .iconButton,
+  .iconButtonDanger,
+  .swatchButton,
+  .edgeSwatchButton,
+  .segmentButton,
+  .colorInput {
+    height: 44px;
+    min-height: 44px;
+    width: 44px;
+  }
+
+  .nodeToolbar,
+  .edgeToolbar,
+  .segmentedControl {
+    height: auto;
+    min-height: 48px;
+  }
+
+  .nodeToolbarAction {
+    min-height: 44px;
+  }
+
+  .nodeToolbarPalette {
+    grid-template-columns: repeat(5, 44px);
+  }
+
+  .edgeToolbarDangerGroup {
+    height: 44px;
+  }
+
+  .canvasPanel :global(.react-flow__handle)::before,
+  .manualResizeHandle::before,
+  .manualResizeHandleArea::before {
+    height: calc(44px * var(--board-control-scale));
+    inset: auto;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: calc(44px * var(--board-control-scale));
+  }
+
+  .nodeShellSelected ~ .connectionHandleSource:not(.connectionHandleInactive) {
+    opacity: 1;
+    pointer-events: all;
+  }
+
+  .connectionHandleSource::after,
+  .connectionHandleTarget.connectionHandleActive::after {
+    height: calc(14px * var(--board-control-scale));
+    width: calc(14px * var(--board-control-scale));
   }
 }
 
@@ -1326,5 +2013,28 @@
     top: 74px;
     width: min(var(--right-panel-width), calc(100vw - 20px));
     z-index: 20;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .canvasPanelSnapAnimating :global(.react-flow__node) {
+    transition: none;
+  }
+
+  .nodeShell,
+  .resourceNodeLabel,
+  .connectionHandle {
+    transition: none;
+  }
+
+  .edgeHalo,
+  .canvasPanelEdgeLabelsCompact :global(.react-flow__edge-text),
+  .canvasPanelEdgeLabelsCompact :global(.react-flow__edge-textbg) {
+    transition: none;
+  }
+
+  .edgeMotionPath {
+    animation: none;
+    display: none;
   }
 }

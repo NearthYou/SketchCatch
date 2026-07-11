@@ -1,11 +1,16 @@
 import { ProjectWorkspaceDraftManager, WorkspaceDraftManager } from "../../features/workspace";
+import { parseBoardZoom } from "../../features/diagram-editor/board-viewport";
 import { isWorkspaceCloudPlatform } from "../../features/workspace/project-draft-persistence";
-import { getWorkspaceDiagramFixture } from "../../features/workspace/workspace-diagram-fixtures";
+import {
+  getWorkspaceDiagramFixture,
+  getWorkspaceDiagramFixtureViewState
+} from "../../features/workspace/workspace-diagram-fixtures";
 import { WorkspaceAuthGate } from "./workspace-auth-gate";
 import { resolveInitialWorkspaceRightPanelView } from "./workspace-start-mode";
 
 type WorkspacePageProps = {
   readonly searchParams?: Promise<{
+    readonly boardZoom?: string | string[] | undefined;
     readonly cloudPlatform?: string | string[] | undefined;
     readonly diagramFixture?: string | string[] | undefined;
     readonly projectId?: string | string[] | undefined;
@@ -39,14 +44,25 @@ export default async function WorkspacePage({ searchParams }: WorkspacePageProps
   }
 
   const projectName = getSingleSearchParam(params?.projectName)?.trim();
-  const initialDiagramOverride = getWorkspaceDiagramFixture(getSingleSearchParam(params?.diagramFixture));
+  const diagramFixtureName = getSingleSearchParam(params?.diagramFixture);
+  const initialDiagramOverride = getWorkspaceDiagramFixture(diagramFixtureName);
+  const initialFixtureViewState = getWorkspaceDiagramFixtureViewState(diagramFixtureName);
+  const initialBoardZoom = initialDiagramOverride
+    ? parseBoardZoom(getSingleSearchParam(params?.boardZoom))
+    : undefined;
 
   return (
     <WorkspaceAuthGate>
       <WorkspaceDraftManager
+        initialBoardZoom={initialBoardZoom}
         initialDiagramOverride={initialDiagramOverride}
+        initialPreviewAnnotations={initialFixtureViewState?.previewAnnotations}
+        initialPreviewDiagram={initialFixtureViewState?.previewDiagram}
         initialProjectName={projectName || undefined}
+        initialReferenceDropTargetNodeId={initialFixtureViewState?.referenceDropTargetNodeId}
         initialRightPanelView={initialRightPanelView}
+        initialSelectedEdgeIds={initialFixtureViewState?.selectedEdgeIds}
+        initialSelectedNodeIds={initialFixtureViewState?.selectedNodeIds}
       />
     </WorkspaceAuthGate>
   );

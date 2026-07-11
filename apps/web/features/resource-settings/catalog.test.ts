@@ -166,7 +166,7 @@ test("resourceCatalog exposes User / Client and Internet as board-only design it
   );
 });
 
-test("resourceCatalog keeps regular network resources at icon node size", () => {
+test("resourceCatalog keeps regular resources at the 48px icon size", () => {
   assert.deepEqual(getResourceSize("aws_internet_gateway"), { width: 48, height: 48 });
   assert.deepEqual(getResourceSize("aws_route_table_association"), { width: 48, height: 48 });
   assert.deepEqual(getResourceSize("aws_cloudfront_distribution"), { width: 48, height: 48 });

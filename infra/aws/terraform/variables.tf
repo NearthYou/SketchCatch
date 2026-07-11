@@ -179,6 +179,12 @@ variable "sketchcatch_public_base_url" {
   type        = string
 }
 
+variable "live_observation_enabled" {
+  description = "Enable bounded Live Observation sessions for successful demo web service deployments."
+  type        = bool
+  default     = false
+}
+
 variable "oauth_redirect_base_url" {
   description = "OAuth redirect base URL used by the API runtime."
   type        = string

@@ -1,7 +1,7 @@
 import type { DiagramNode } from "../../../../packages/types/src";
 import { isAreaNode } from "./area-nodes";
 
-export function expandParentAreaNodesForNewChild(
+export function expandParentAreaNodesForEnteredChild(
   nodes: readonly DiagramNode[],
   childNodeId: string
 ): DiagramNode[] {

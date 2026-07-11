@@ -20,13 +20,15 @@ const baseNode = {
 test("uses an explicit diagram label and uppercases it", () => {
   const node = {
     ...baseNode,
-    parameters: { ...baseNode.parameters, values: { diagramLabel: "latest image" } }
+    parameters: { ...baseNode.parameters, values: { diagramLabel: "Latest image" } }
   };
   assert.equal(getResourceNodeDisplayLabel(node), "LATEST IMAGE");
 });
 
-test("does not expose Terraform uniqueness suffixes", () => {
+test("uppercases friendly labels without exposing Terraform uniqueness suffixes", () => {
   assert.equal(getResourceNodeDisplayLabel(baseNode), "AMI");
+  assert.equal(getResourceNodeDisplayLabel({ ...baseNode, label: "API Gateway" }), "API GATEWAY");
+  assert.equal(getResourceNodeDisplayLabel({ ...baseNode, label: "S3 Bucket" }), "S3 BUCKET");
 });
 
 test("falls back to the node type", () => {

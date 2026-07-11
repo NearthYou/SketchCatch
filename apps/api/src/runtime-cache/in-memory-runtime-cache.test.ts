@@ -191,3 +191,47 @@ test("cached JSON values are serialized copies", async () => {
     status: "running"
   });
 });
+
+test("increment atomically accumulates numeric values and refreshes ttl", async () => {
+  let currentTimeMs = 30_000;
+  const cache = createInMemoryRuntimeCache({
+    cleanupIntervalMs: null,
+    now: () => currentTimeMs
+  });
+  const entryKey = {
+    key: "observation-1:total",
+    namespace: "live-observation-bucket"
+  };
+
+  assert.equal(await cache.increment(entryKey, 2, { ttlMs: 500 }), 2);
+
+  currentTimeMs = 30_400;
+  assert.equal(await cache.increment(entryKey, 3, { ttlMs: 500 }), 5);
+
+  currentTimeMs = 30_899;
+  assert.equal(await cache.get<number>(entryKey), 5);
+
+  currentTimeMs = 30_900;
+  assert.equal(await cache.get<number>(entryKey), null);
+});
+
+test("setIfAbsent keeps the first unexpired value and accepts a new value after expiry", async () => {
+  let currentTimeMs = 40_000;
+  const cache = createInMemoryRuntimeCache({
+    cleanupIntervalMs: null,
+    now: () => currentTimeMs
+  });
+  const entryKey = {
+    key: "event-1",
+    namespace: "live-observation-event"
+  };
+
+  assert.equal(await cache.setIfAbsent(entryKey, "first", { ttlMs: 1_000 }), true);
+  assert.equal(await cache.setIfAbsent(entryKey, "second", { ttlMs: 1_000 }), false);
+  assert.equal(await cache.get<string>(entryKey), "first");
+
+  currentTimeMs = 41_000;
+
+  assert.equal(await cache.setIfAbsent(entryKey, "third", { ttlMs: 1_000 }), true);
+  assert.equal(await cache.get<string>(entryKey), "third");
+});

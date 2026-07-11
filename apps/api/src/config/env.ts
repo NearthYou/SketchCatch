@@ -34,6 +34,7 @@ export type RuntimeEnv = {
   githubAppStateSecret?: string | undefined;
   kakaoOauthClientId: string | undefined;
   kakaoOauthClientSecret: string | undefined;
+  liveObservationEnabled?: string | undefined;
   naverOauthClientId: string | undefined;
   naverOauthClientSecret: string | undefined;
   nodeEnv?: string | undefined;
@@ -89,6 +90,7 @@ export function getRuntimeEnv(): RuntimeEnv {
     githubAppStateSecret: process.env.GIT_APP_STATE_SECRET,
     kakaoOauthClientId: process.env.KAKAO_OAUTH_CLIENT_ID,
     kakaoOauthClientSecret: process.env.KAKAO_OAUTH_CLIENT_SECRET,
+    liveObservationEnabled: process.env.LIVE_OBSERVATION_ENABLED,
     naverOauthClientId: process.env.NAVER_OAUTH_CLIENT_ID,
     naverOauthClientSecret: process.env.NAVER_OAUTH_CLIENT_SECRET,
     nodeEnv: process.env.NODE_ENV,
@@ -104,6 +106,10 @@ export function getRuntimeEnv(): RuntimeEnv {
 }
 
 export type DeploymentWorkerMode = "in_process" | "ecs";
+
+export function isLiveObservationEnabled(env: RuntimeEnv = getRuntimeEnv()): boolean {
+  return env.liveObservationEnabled?.trim().toLowerCase() === "true";
+}
 
 export type EcsWorkerDispatcherConfig = {
   assignPublicIp: "ENABLED" | "DISABLED";

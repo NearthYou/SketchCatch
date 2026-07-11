@@ -38,6 +38,12 @@ export function createInMemoryRuntimeCache(
   }
 
   return {
+    backend: "memory",
+
+    async isAvailable(): Promise<boolean> {
+      return true;
+    },
+
     async get<TValue = RuntimeCacheJsonValue>(
       entryKey: RuntimeCacheEntryKey
     ): Promise<TValue | null> {
@@ -81,6 +87,56 @@ export function createInMemoryRuntimeCache(
       deleteNamespaceIfEmpty(entriesByNamespace, entryKey.namespace);
 
       return deleted;
+    },
+
+    async increment(
+      entryKey: RuntimeCacheEntryKey,
+      delta: number,
+      options: RuntimeCacheSetOptions
+    ): Promise<number> {
+      assertInteger(delta, "RuntimeCache increment delta");
+      assertPositiveFiniteMs(options.ttlMs, "RuntimeCache ttlMs");
+
+      const currentTimeMs = now();
+      deleteExpiredEntries(entriesByNamespace, currentTimeMs);
+      const namespaceEntries = getOrCreateNamespace(entriesByNamespace, entryKey.namespace);
+      const storedValue = namespaceEntries.get(entryKey.key);
+      const currentValue = storedValue ? JSON.parse(storedValue.valueJson) : 0;
+
+      assertInteger(currentValue, "RuntimeCache increment value");
+
+      const nextValue = currentValue + delta;
+      assertInteger(nextValue, "RuntimeCache increment result");
+
+      namespaceEntries.set(entryKey.key, {
+        expiresAtMs: currentTimeMs + options.ttlMs,
+        valueJson: JSON.stringify(nextValue)
+      });
+
+      return nextValue;
+    },
+
+    async setIfAbsent(
+      entryKey: RuntimeCacheEntryKey,
+      value: RuntimeCacheJsonValue,
+      options: RuntimeCacheSetOptions
+    ): Promise<boolean> {
+      assertPositiveFiniteMs(options.ttlMs, "RuntimeCache ttlMs");
+
+      const currentTimeMs = now();
+      deleteExpiredEntries(entriesByNamespace, currentTimeMs);
+      const namespaceEntries = getOrCreateNamespace(entriesByNamespace, entryKey.namespace);
+
+      if (namespaceEntries.has(entryKey.key)) {
+        return false;
+      }
+
+      namespaceEntries.set(entryKey.key, {
+        expiresAtMs: currentTimeMs + options.ttlMs,
+        valueJson: serializeRuntimeCacheValue(value)
+      });
+
+      return true;
     }
   };
 }
@@ -139,5 +195,11 @@ function serializeRuntimeCacheValue(value: RuntimeCacheJsonValue): string {
 function assertPositiveFiniteMs(valueMs: number, label: string): void {
   if (!Number.isFinite(valueMs) || valueMs <= 0) {
     throw new RangeError(`${label} must be a positive finite number`);
+  }
+}
+
+function assertInteger(value: unknown, label: string): asserts value is number {
+  if (!Number.isSafeInteger(value)) {
+    throw new TypeError(`${label} must be a safe integer`);
   }
 }

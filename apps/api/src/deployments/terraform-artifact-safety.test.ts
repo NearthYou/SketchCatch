@@ -342,6 +342,75 @@ test("assertTerraformArtifactIsSafe rejects demo launch template user data outsi
   );
 });
 
+test("assertTerraformArtifactIsSafe accepts only the bounded Live Observation scaling resources", () => {
+  assert.doesNotThrow(() =>
+    assertTerraformArtifactIsSafe(createLiveObservationScalingTerraform(), {
+      liveProfile: "demo_web_service"
+    })
+  );
+});
+
+test("assertTerraformArtifactIsSafe accepts renderer-style trailing commas in bounded reference lists", () => {
+  const rendererStyleTerraform = createLiveObservationScalingTerraform().replace(
+    /\.arn\]/g,
+    ".arn,\n      ]"
+  );
+
+  assert.doesNotThrow(() =>
+    assertTerraformArtifactIsSafe(rendererStyleTerraform, {
+      liveProfile: "demo_web_service"
+    })
+  );
+});
+
+test("assertTerraformArtifactIsSafe rejects scale-in or expanded Live Observation capacity", () => {
+  assert.throws(
+    () =>
+      assertTerraformArtifactIsSafe(
+        createLiveObservationScalingTerraform()
+          .replace('resource "aws_autoscaling_policy" "scale_out"', 'resource "aws_autoscaling_policy" "scale_in"')
+          .replace("scaling_adjustment = 1", "scaling_adjustment = -1"),
+        { liveProfile: "demo_web_service" }
+      ),
+    /bounded Live Observation autoscaling policy/
+  );
+
+  assert.throws(
+    () =>
+      assertTerraformArtifactIsSafe(
+        createLiveObservationScalingTerraform().replace(/max_size\s*=\s*2/, "max_size = 3"),
+        { liveProfile: "demo_web_service" }
+      ),
+    /bounded Live Observation Auto Scaling Group/
+  );
+});
+
+test("assertTerraformArtifactIsSafe rejects a changed Live Observation alarm threshold", () => {
+  assert.throws(
+    () =>
+      assertTerraformArtifactIsSafe(
+        createLiveObservationScalingTerraform().replace(/threshold\s*=\s*60/, "threshold = 600"),
+        { liveProfile: "demo_web_service" }
+      ),
+    /bounded Live Observation CloudWatch alarm/
+  );
+});
+
+test("assertTerraformArtifactIsSafe does not impose Live Observation shape on the RDS demo profile", () => {
+  assert.doesNotThrow(() =>
+    assertTerraformArtifactIsSafe(
+      `
+        resource "aws_autoscaling_group" "rds_demo_api" {
+          min_size         = 1
+          desired_capacity = 2
+          max_size         = 3
+        }
+      `,
+      { liveProfile: "demo_web_service_with_rds" }
+    )
+  );
+});
+
 test("assertTerraformArtifactIsSafe rejects unmarked demo launch template user data", () => {
   assert.throws(
     () =>
@@ -437,4 +506,48 @@ function createManagedDemoUserDataBase64(): string {
   const script = normalized.replace(`# ${hashPrefix}`, `# ${hashPrefix}${hash}`);
 
   return Buffer.from(`${script}\n`, "utf8").toString("base64");
+}
+
+function createLiveObservationScalingTerraform(): string {
+  return `
+    resource "aws_autoscaling_group" "api" {
+      min_size                  = 1
+      desired_capacity         = 1
+      max_size                  = 2
+      health_check_type         = "ELB"
+      health_check_grace_period = 120
+      default_instance_warmup   = 60
+      target_group_arns         = [aws_lb_target_group.api.arn]
+    }
+
+    resource "aws_autoscaling_policy" "scale_out" {
+      autoscaling_group_name    = aws_autoscaling_group.api.name
+      policy_type               = "StepScaling"
+      adjustment_type           = "ChangeInCapacity"
+      cooldown                  = 180
+      estimated_instance_warmup = 60
+
+      step_adjustment {
+        metric_interval_lower_bound = 0
+        scaling_adjustment          = 1
+      }
+    }
+
+    resource "aws_cloudwatch_metric_alarm" "scale_out" {
+      comparison_operator = "GreaterThanOrEqualToThreshold"
+      evaluation_periods  = 1
+      datapoints_to_alarm = 1
+      metric_name         = "RequestCountPerTarget"
+      namespace           = "AWS/ApplicationELB"
+      period              = 60
+      statistic           = "Sum"
+      threshold           = 60
+      treat_missing_data  = "notBreaching"
+      dimensions = {
+        LoadBalancer = aws_lb.demo.arn_suffix
+        TargetGroup  = aws_lb_target_group.api.arn_suffix
+      }
+      alarm_actions = [aws_autoscaling_policy.scale_out.arn]
+    }
+  `;
 }

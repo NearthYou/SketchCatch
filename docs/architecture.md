@@ -44,7 +44,7 @@ flowchart TB
 | DB | RDS PostgreSQL | 프로젝트, 설계, 배포 이력 저장 |
 | ORM | Drizzle ORM | 타입 안전 DB schema와 migration |
 | 파일 저장 | S3 | Terraform, export, image, tfplan, state/output artifact |
-| Runtime Cache | Redis | Deployment, Reverse Engineering, Git/CI/CD 상태 추적과 로그 스트리밍 보조 |
+| Runtime Cache | Redis | Deployment, Reverse Engineering, Git/CI/CD 상태와 15분 Live Observation 세션·집계 보조 |
 | IaC | Terraform | MVP 기준 IaC, 멀티 클라우드 확장 기반 |
 | AI 계층 | Bedrock, Amazon Q, Amazon Transcribe | 추천, 설명, Guardrails, AWS 특화 reasoning, 음성 전사 |
 | 운영 배포 | Docker, EC2, SSM, Nginx | SSH 없는 운영 배포 |
@@ -61,6 +61,8 @@ flowchart TB
 | Provider Adapter와 Reverse Engineering | `apps/api` 또는 future worker | provider별 credential/raw state 프론트 노출 |
 | Git/CI/CD handoff와 상태 추적 | `apps/api` 또는 future worker | 승인 없는 commit/apply, secret 저장 |
 | Runtime Cache 사용 | `apps/api` 또는 future worker | 사용자 Practice Architecture Resource로 노출 |
+| Live Observation UI | `apps/web` | AWS SDK 호출, ASG desired capacity 직접 변경, 사용자 입력 target URL |
+| Live Observation 세션·관측 | `apps/api`의 provider-neutral service + AWS adapter | token 로그/RDS 저장, 실패 시 sample AWS 상태 생성 |
 | 파일 artifact 저장 | S3 + RDS metadata | Terraform 원문 RDS 영구 저장 |
 
 프론트엔드는 버튼과 상태를 보여줄 뿐 실제 클라우드 변경을 직접 수행하지 않는다. 실제 리소스 변경은 backend/worker에서 승인 게이트, 로그 마스킹, cleanup 경로를 갖춘 뒤 실행한다.
@@ -81,9 +83,10 @@ flowchart TB
 | `tfplan`, state, output artifact | S3 |
 | 다이어그램 이미지, export zip, thumbnail | S3 |
 | Redis Runtime Cache 데이터 | Redis, 짧은 TTL |
+| Live Observation session, receipt dedup, 1초 bucket | Redis, 최대 15분 TTL |
 
 RDS는 원천 데이터와 metadata를 저장한다. S3는 파일성 산출물을 저장한다.
-Redis는 Deployment, Reverse Engineering, Git/CI/CD Integration처럼 오래 걸리는 workflow 상태와 streaming-friendly metadata를 보조한다. Redis 데이터는 원천 기록이 아니며, 최종 기록은 RDS/S3에 남긴다.
+Redis는 Deployment, Reverse Engineering, Git/CI/CD Integration처럼 오래 걸리는 workflow 상태와 streaming-friendly metadata를 보조한다. Live Observation은 예외적으로 15분 세션, public token SHA-256 lookup, receipt dedup, 원자 count, 1초 bucket을 Redis에만 저장하며 영구 Deployment 기록으로 승격하지 않는다. Redis 데이터는 원천 기록이 아니며, 최종 기록은 RDS/S3에 남긴다.
 
 ## 핵심 서비스 흐름
 
@@ -104,6 +107,7 @@ flowchart LR
   Direct --> Approval
   Git --> Approval
   Approval --> History["Deployment History\nlogs + outputs + cleanup"]
+  History --> Observe["Live Observation\nlive event + CloudWatch + ASG actual"]
 ```
 
 Representative Use Journey는 위 실제 서비스 흐름을 증명하는 발표/리허설 경로다. 별도 데모 전용 기능을 만들지 않는다.
@@ -117,11 +121,18 @@ Representative Use Journey는 위 실제 서비스 흐름을 증명하는 발표
 - Terraform 생성 API는 `DiagramJson`을 입력으로 받는다.
 - Pre-Deployment Check는 비용/보안/설정 위험을 반환한다.
 - Deployment API는 생성, init, plan, approval, apply, logs, destroy 흐름으로 확장한다.
+- Live Observation API는 성공한 `demo_web_service` Deployment에서만 15분 세션을 만들고 인증 snapshot/SSE와 제한된 public receipt collector를 제공한다.
 - Git/CI/CD Integration API는 Source Repository 연결, Terraform handoff, PR 생성, pipeline 상태 추적 흐름으로 확장한다.
 - Reverse Engineering API는 Provider Adapter를 통해 기존 cloud Resource를 스캔하고 Practice Architecture와 import suggestion을 반환한다.
 - 실제 AWS credential과 Terraform 실행 세부는 프론트에 노출하지 않는다.
 
 API DTO와 모델명은 [데이터 모델](./data-models.md)을 따른다.
+
+## Live Observation 실행 경계
+
+Workspace의 `시뮬레이션` 버튼은 Architecture Board를 변경하지 않는 읽기 전용 모달을 연다. Web은 Deployment output으로 확정된 Traffic API만 직접 호출하며, 성공한 2xx 요청 뒤에만 public receipt를 보낸다. 발표자 boost는 브라우저에서 최대 5 rps, 90초, 450건, concurrency 5로 제한되고 API가 부하를 proxy하지 않는다.
+
+API의 Live Observation service는 session/receipt/snapshot 계산을 소유하고 `DeploymentObservabilityProvider`만 호출한다. AWS adapter는 CloudWatch `RequestCountPerTarget`, ASG lifecycle/capacity/activity를 조회하며 세션별 결과를 10초 cache한다. SSE는 1초 snapshot, 15초 heartbeat를 제공하고 Web은 연결 실패 시 인증 GET snapshot 후 exponential backoff로 재연결한다. CloudWatch와 ASG 오류는 각 상태를 `unavailable`로 만들 뿐 live receipt stream이나 다른 카드를 sample 값으로 대체하지 않는다.
 
 ## 멀티 클라우드 확장 방향
 

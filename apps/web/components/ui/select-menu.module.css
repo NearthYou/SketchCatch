@@ -285,6 +285,47 @@
   color: var(--workspace-muted, #60646c);
 }
 
+.boardTone .selectMenuTrigger {
+  background: var(--board-surface, #ffffff);
+  border-color: var(--board-border, #ccd5e3);
+  color: var(--board-ink, #172033);
+}
+
+.boardTone .selectMenuTrigger:hover,
+.boardTone .selectMenuTrigger:focus-visible,
+.boardTone .selectMenuTriggerOpen {
+  border-color: var(--board-primary, #5269b3);
+  box-shadow:
+    0 0 0 2px var(--board-surface, #ffffff),
+    0 0 0 4px var(--board-primary, #5269b3);
+}
+
+.boardTone .selectMenuTrigger svg {
+  color: var(--board-muted, #718096);
+}
+
+.boardTone .selectMenuDropdown {
+  background: var(--board-surface, #ffffff);
+  border-color: var(--board-border, #ccd5e3);
+}
+
+.boardTone .selectMenuOption {
+  background: var(--board-surface, #ffffff);
+  color: var(--board-ink, #172033);
+}
+
+.boardTone .selectMenuOption:hover,
+.boardTone .selectMenuOption:focus-visible,
+.boardTone .selectMenuOptionActive {
+  background: var(--board-surface-subtle, #f8fafd);
+}
+
+.boardTone .selectMenuOptionSelected,
+.boardTone .selectMenuOptionSelected.selectMenuOptionActive {
+  background: var(--board-primary-soft, rgba(82, 105, 179, 0.16));
+  color: var(--board-primary, #5269b3);
+}
+
 .purpleTone .selectMenuTrigger:hover,
 .purpleTone .selectMenuTrigger:focus-visible,
 .purpleTone .selectMenuTriggerOpen {

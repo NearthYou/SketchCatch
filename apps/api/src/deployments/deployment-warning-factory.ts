@@ -13,6 +13,8 @@ type CreatePreDeploymentCheckWarningOptions = {
 
 const demoProfileAcknowledgementResources = new Set([
   "aws_autoscaling_group.api",
+  "aws_autoscaling_policy.scale_out",
+  "aws_cloudwatch_metric_alarm.scale_out",
   "aws_instance.api",
   "aws_internet_gateway.demo",
   "aws_launch_template.api",

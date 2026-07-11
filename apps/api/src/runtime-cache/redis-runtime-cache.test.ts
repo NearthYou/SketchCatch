@@ -150,13 +150,80 @@ test("createRedisCacheKey escapes namespace and key segments", () => {
   );
 });
 
+test("createRedisRuntimeCache uses Redis atomic increment and set-if-absent commands", async () => {
+  const redisClient = new FakeRedisClient();
+  const cache = createRedisRuntimeCache({
+    createClient: () => redisClient,
+    keyPrefix: "sketchcatch:test",
+    redisUrl: "redis://localhost:6379"
+  });
+  const counterKey = {
+    key: "observation-1:total",
+    namespace: "live-observation-bucket"
+  };
+  const eventKey = {
+    key: "event-1",
+    namespace: "live-observation-event"
+  };
+
+  assert.equal(await cache.increment(counterKey, 2, { ttlMs: 1_500 }), 2);
+  assert.equal(await cache.increment(counterKey, 3, { ttlMs: 1_500 }), 5);
+  assert.equal(await cache.setIfAbsent(eventKey, "accepted", { ttlMs: 2_000 }), true);
+  assert.equal(await cache.setIfAbsent(eventKey, "duplicate", { ttlMs: 2_000 }), false);
+
+  assert.deepEqual(redisClient.incrementCalls, [
+    {
+      delta: 2,
+      key: "sketchcatch:test:live-observation-bucket:observation-1%3Atotal"
+    },
+    {
+      delta: 3,
+      key: "sketchcatch:test:live-observation-bucket:observation-1%3Atotal"
+    }
+  ]);
+  assert.deepEqual(redisClient.expireCalls, [
+    {
+      key: "sketchcatch:test:live-observation-bucket:observation-1%3Atotal",
+      ttlMs: 1_500
+    },
+    {
+      key: "sketchcatch:test:live-observation-bucket:observation-1%3Atotal",
+      ttlMs: 1_500
+    }
+  ]);
+  assert.equal(redisClient.setCalls[0]?.options.condition, "NX");
+});
+
+test("createRedisRuntimeCache reports Redis readiness without using memory fallback", async () => {
+  const healthyClient = new FakeRedisClient();
+  const healthyCache = createRedisRuntimeCache({
+    createClient: () => healthyClient,
+    redisUrl: "redis://localhost:6379"
+  });
+
+  assert.equal(healthyCache.backend, "redis");
+  assert.equal(await healthyCache.isAvailable(), true);
+  assert.equal(healthyClient.pingCount, 1);
+
+  const unavailableCache = createRedisRuntimeCache({
+    createClient: () => new FakeRedisClient({ commandError: new Error("Redis unavailable") }),
+    redisUrl: "redis://localhost:6379"
+  });
+
+  assert.equal(await unavailableCache.isAvailable(), false);
+});
+
 class FakeRedisClient implements RedisRuntimeCacheClient {
   isOpen = false;
   connectCount = 0;
+  pingCount = 0;
+  readonly incrementCalls: Array<{ key: string; delta: number }> = [];
+  readonly expireCalls: Array<{ key: string; ttlMs: number }> = [];
   readonly setCalls: Array<{
     key: string;
     value: string;
     options: {
+      condition?: "NX";
       expiration: {
         type: "PX";
         value: number;
@@ -192,13 +259,19 @@ class FakeRedisClient implements RedisRuntimeCacheClient {
     key: string,
     value: string,
     options: {
+      condition?: "NX";
       expiration: {
         type: "PX";
         value: number;
       };
     }
-  ): Promise<"OK"> {
+  ): Promise<"OK" | null> {
     this.throwCommandErrorIfNeeded();
+
+    if (options.condition === "NX" && this.valuesByKey.has(key)) {
+      return null;
+    }
+
     this.setCalls.push({ key, options, value });
     this.valuesByKey.set(key, value);
     return "OK";
@@ -207,6 +280,26 @@ class FakeRedisClient implements RedisRuntimeCacheClient {
   async del(key: string): Promise<number> {
     this.throwCommandErrorIfNeeded();
     return this.valuesByKey.delete(key) ? 1 : 0;
+  }
+
+  async incrBy(key: string, delta: number): Promise<number> {
+    this.throwCommandErrorIfNeeded();
+    const nextValue = Number(this.valuesByKey.get(key) ?? "0") + delta;
+    this.valuesByKey.set(key, String(nextValue));
+    this.incrementCalls.push({ delta, key });
+    return nextValue;
+  }
+
+  async pExpire(key: string, ttlMs: number): Promise<boolean> {
+    this.throwCommandErrorIfNeeded();
+    this.expireCalls.push({ key, ttlMs });
+    return this.valuesByKey.has(key);
+  }
+
+  async ping(): Promise<string> {
+    this.throwCommandErrorIfNeeded();
+    this.pingCount += 1;
+    return "PONG";
   }
 
   on(): this {

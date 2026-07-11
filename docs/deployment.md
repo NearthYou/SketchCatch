@@ -246,6 +246,7 @@ TF_PLUGIN_CACHE_DIR=/var/cache/sketchcatch/terraform-plugin-cache
 TRIVY_CACHE_DIR=/var/cache/sketchcatch/trivy
 CLOUDWATCH_LOGS_ENABLED=false
 CLOUDWATCH_LOG_GROUP_PREFIX=/sketchcatch/production
+LIVE_OBSERVATION_ENABLED=false
 ```
 
 `TF_PLUGIN_CACHE_DIR`은 Terraform provider plugin cache 위치입니다. 운영 배포 스크립트는 EC2 host의 같은 경로를 API 컨테이너에 volume mount하므로, API 컨테이너가 교체되어도 provider cache를 재사용할 수 있습니다.
@@ -419,6 +420,42 @@ $env:REDIS_URL="redis://localhost:6379"
 pnpm --filter @sketchcatch/api test -- runtime-cache
 ```
 
+## Live Observation 운영 설정
+
+Live Observation은 성공한 `demo_web_service` Deployment의 실제 Traffic API, CloudWatch 측정값, Auto Scaling 상태를 15분 동안 관측하는 opt-in 기능입니다. 운영 API runtime에는 다음 비민감 환경 변수를 주입합니다.
+
+```text
+LIVE_OBSERVATION_ENABLED=true
+SKETCHCATCH_PUBLIC_BASE_URL=https://sketchcatch.net
+```
+
+`SKETCHCATCH_PUBLIC_BASE_URL`은 audience page가 public receipt collector를 호출할 기준 origin입니다. Nginx/ALB는 이 origin의 `/api/live-observations/...` 요청을 API로 전달해야 합니다. audience S3 website origin과 SketchCatch Web origin만 collector CORS 응답을 받을 수 있습니다.
+
+Production에서 `LIVE_OBSERVATION_ENABLED=true`이면 `REDIS_URL`이 실제 Redis/ElastiCache에 연결되고 `PING`, `INCRBY`, `PEXPIRE`, `SET NX PX`를 수행할 수 있어야 합니다. Redis가 없거나 readiness가 실패하면 세션 생성은 `503 LIVE_OBSERVATION_CACHE_UNAVAILABLE`로 차단됩니다. in-memory fallback은 test와 로컬 단일 API 검증에서만 허용합니다.
+
+AWS Connection Quick Create Role에는 기존 demo 배포 권한과 함께 다음 read-only 관측 action이 필요합니다.
+
+```text
+autoscaling:DescribeAutoScalingGroups
+autoscaling:DescribeScalingActivities
+ec2:DescribeInstances
+elasticloadbalancing:DescribeLoadBalancers
+elasticloadbalancing:DescribeTargetGroups
+cloudwatch:GetMetricData
+cloudwatch:GetMetricStatistics
+```
+
+Demo Web Service의 Live Observation output은 `static_site_url`, `api_base_url`, `asg_name`, `alb_arn_suffix`, `target_group_arn_suffix`, `scale_out_threshold`입니다. Terraform Safety Gate는 `1/1/2` ASG, `RequestCountPerTarget` 60건/분, Step Scaling `+1`, cooldown 180초 형태만 허용하며 scale-in은 허용하지 않습니다.
+
+로컬 자동 검증은 AWS 리소스를 만들지 않습니다.
+
+```bash
+pnpm --filter @sketchcatch/api exec tsx --test src/live-observations/*.test.ts src/routes/live-observations.test.ts src/deployments/demo-web-service-assets.test.ts
+pnpm --filter @sketchcatch/web exec tsx --test features/workspace/live-observation.test.ts features/workspace/live-observation-modal.test.ts
+```
+
+실제 `scripts/smoke/live-demo-web-service.ps1` 실행은 AWS 비용 리소스를 생성하므로 명시적 승인과 verified AWS Connection이 있을 때만 수행합니다. smoke 또는 실제 acceptance를 마치면 관측 `stop`이 아니라 기존 Deployment Destroy 흐름으로 ALB, ASG, EC2, S3 리소스를 cleanup하고 결과를 기록해야 합니다.
+
 ## Live S3 Deployment Smoke
 
 실제 AWS apply/destroy smoke는 tracked Terraform fixture를 사용하지 않습니다. runner가 실행 시 고유 bucket 이름과 Terraform 문자열을 생성하고, 기존 project asset upload API로 업로드합니다.
@@ -531,7 +568,7 @@ ECS task definition의 책임은 다음처럼 나눕니다.
 | 구분 | 저장 위치 | 예시 |
 | --- | --- | --- |
 | GitHub Actions vars | 배포 workflow가 image build/push와 service update에 쓰는 비민감 설정 | `AWS_REGION`, `ECR_API_REPOSITORY`, `ECS_CLUSTER_NAME`, `ECS_SERVICE_NAME`, `ECS_TASK_DEFINITION_FAMILY`, `ECS_API_CONTAINER_NAME` |
-| ECS environment | task definition에 평문으로 남아도 되는 비민감 runtime 설정 | `NODE_ENV`, `PORT`, `DATABASE_SSL`, `S3_BUCKET_NAME`, `SKETCHCATCH_PUBLIC_BASE_URL`, `OAUTH_REDIRECT_BASE_URL`, `GIT_APP_ID`, `GIT_APP_SLUG`, OAuth client ID |
+| ECS environment | task definition에 평문으로 남아도 되는 비민감 runtime 설정 | `NODE_ENV`, `PORT`, `DATABASE_SSL`, `S3_BUCKET_NAME`, `SKETCHCATCH_PUBLIC_BASE_URL`, `LIVE_OBSERVATION_ENABLED`, `OAUTH_REDIRECT_BASE_URL`, `GIT_APP_ID`, `GIT_APP_SLUG`, OAuth client ID |
 | Secrets Manager | DB credential 또는 외부 provider secret | `DATABASE_URL`, `GIT_APP_PRIVATE_KEY_BASE64`, `OPENAI_API_KEY`, `NAVER_OAUTH_CLIENT_SECRET`, `KAKAO_OAUTH_CLIENT_SECRET`, `GIT_OAUTH_CLIENT_SECRET` |
 | SSM Parameter Store SecureString | 서명 secret 또는 secure runtime endpoint | `AUTH_TOKEN_SECRET`, `CLOUDFORMATION_TEMPLATE_TOKEN_SECRET`, `GIT_APP_STATE_SECRET`, `REDIS_URL` |
 | GitHub Actions secrets | EC2 rollback workflow가 아직 필요로 하는 legacy secret 값 | 기존 `Deploy Production` EC2/SSM workflow 전용 |

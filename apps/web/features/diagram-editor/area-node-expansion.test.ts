@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { DiagramNode } from "../../../../packages/types/src";
-import { expandParentAreaNodesForNewChild } from "./area-node-expansion";
+import { expandParentAreaNodesForEnteredChild } from "./area-node-expansion";
 
-test("grows every parent by twice the new child size while preserving parent centers", () => {
+test("grows every parent by twice the entered child size while preserving parent centers", () => {
   const region = makeArea("region", undefined, { x: 0, y: 0 }, { width: 300, height: 220 });
   const vpc = makeArea("vpc", region.id, { x: 40, y: 40 }, { width: 180, height: 120 });
   const child = makeIcon("instance", vpc.id, { x: 80, y: 70 }, { width: 48, height: 48 });
 
-  const result = expandParentAreaNodesForNewChild([region, vpc, child], child.id);
+  const result = expandParentAreaNodesForEnteredChild([region, vpc, child], child.id);
 
   assert.deepEqual(getNode(result, vpc.id)?.position, { x: -8, y: -8 });
   assert.deepEqual(getNode(result, vpc.id)?.size, { width: 276, height: 216 });
@@ -22,7 +22,7 @@ test("stops safely for cyclic parents", () => {
   const b = makeArea("b", "a", { x: 0, y: 0 }, { width: 40, height: 40 });
   const child = makeIcon("ami", a.id, { x: 10, y: 10 }, { width: 20, height: 20 });
 
-  assert.doesNotThrow(() => expandParentAreaNodesForNewChild([a, b, child], child.id));
+  assert.doesNotThrow(() => expandParentAreaNodesForEnteredChild([a, b, child], child.id));
 });
 
 test("stops safely for missing and non-area parents", () => {
@@ -37,11 +37,11 @@ test("stops safely for missing and non-area parents", () => {
   const child = makeIcon("child", nonAreaParent.id, { x: 95, y: 95 }, { width: 20, height: 20 });
 
   assert.deepEqual(
-    expandParentAreaNodesForNewChild([missingParentChild], missingParentChild.id),
+    expandParentAreaNodesForEnteredChild([missingParentChild], missingParentChild.id),
     [missingParentChild]
   );
   assert.deepEqual(
-    expandParentAreaNodesForNewChild([region, nonAreaParent, child], child.id),
+    expandParentAreaNodesForEnteredChild([region, nonAreaParent, child], child.id),
     [region, nonAreaParent, child]
   );
 });

@@ -61,6 +61,7 @@ SketchCatch는 단순 다이어그램 도구가 아니다.
 | Terraform 생성 | 다이어그램 기반 설계를 IaC Preview로 변환한다. |
 | Pre-Deployment Check | 비용, 보안, 설정 위험을 설명하고 수정 방향을 제안한다. |
 | Direct Deployment Path | sandbox/practice 실행에서 Plan, 승인, Apply, 로그, Outputs, Auto Cleanup까지 연결한다. |
+| Live Observation | 성공한 Demo Web Service Deployment의 실제 요청, CloudWatch 측정값, ASG/EC2 상태를 15분 세션으로 구분해 관측한다. |
 | Git/CI/CD Integration | IaC Preview를 Source Repository PR과 외부 pipeline 상태로 연결한다. |
 | Reverse Engineering | 기존 클라우드 상태를 Practice Architecture와 IaC Preview/import 제안으로 전환한다. |
 
@@ -68,7 +69,7 @@ SketchCatch는 단순 다이어그램 도구가 아니다.
 
 | 기능 | 기준 |
 | --- | --- |
-| 고도화된 트래픽 시뮬레이터 | 실제 부하 테스트가 아니라 구조 기반 위험 안내로 제한한다. |
+| 고도화된 트래픽 시뮬레이터 | 미래 용량 예측·임의 target·무제한 부하 생성은 지원하지 않는다. 성공 Deployment의 제한된 Live Observation은 실제 서비스 흐름 검증 용도로만 제공한다. |
 | 병목 예측 엔진 | 정밀 예측이 아니라 잠재 병목 가능성 경고로 제한한다. |
 
 ## 강화할 기능
@@ -81,6 +82,7 @@ SketchCatch는 단순 다이어그램 도구가 아니다.
 | 비용 분석 | Practice Architecture, IaC Preview, Deployment Plan, Deployment History 단위의 Cost Risk를 보여준다. |
 | Well-Architected 기반 리뷰 | 보안, 비용, 신뢰성, 성능, 운영 관점으로 아키텍처를 리뷰한다. |
 | Runtime Cache | Redis를 내부 Runtime Cache로 사용해 Deployment, Reverse Engineering, Git/CI/CD 상태 추적과 로그 스트리밍을 보조한다. |
+| Deployment 관측 | Live event, CloudWatch measured, Auto Scaling actual을 서로 다른 근거로 표시하고 AWS 조회 실패 시 sample 값을 만들지 않는다. |
 
 ## AWS-first 실행 범위와 Representative Use Journey
 
@@ -95,6 +97,8 @@ Direct Deployment Path의 안정성을 위해 실제 live apply 기본 경로는
 - S3 Bucket
 
 RDS처럼 생성/삭제 시간과 비용 리스크가 큰 Resource는 기본 live apply 경로에서 제외할 수 있다. 화면, IaC Preview, Cost Analysis, Pre-Deployment Check 대상에는 둘 수 있지만 실제 Direct Deployment 실행은 별도 승인과 cleanup 계획이 있어야 한다.
+
+`demo_web_service` Representative Use Journey는 ALB, Target Group, Launch Template, ASG, CloudWatch Alarm, Step Scaling Policy를 제한된 안전 프로필로 추가한다. 이 프로필은 ASG `min/desired/max=1/1/2`, `RequestCountPerTarget` 60건/분, scale-out `+1`, cooldown 180초만 허용하며 v1에는 scale-in이 없다. Live Observation의 `중지`와 `세션 종료`는 관측만 끝내고, 비용 리소스 정리는 기존 Deployment Destroy/Cleanup에서만 수행한다.
 
 발표나 리허설에서는 별도 데모 전용 기능을 만들지 않는다. `Representative Use Journey`는 실제 서비스 흐름을 증명하는 대표 사용 여정이어야 한다.
 
@@ -140,7 +144,7 @@ MVP에서 하지 않는다.
 - CloudFormation 동시 지원
 - 멀티 클라우드 실제 배포
 - Azure/GCP 실제 Reverse Engineering
-- 고도화된 트래픽 시뮬레이터
+- 미래 용량을 예측하거나 임의 URL에 무제한 부하를 보내는 고도화된 트래픽 시뮬레이터
 - 정교한 병목 예측 엔진
 - 템플릿 마켓플레이스
 - 무제한 자동 배포
@@ -180,6 +184,7 @@ MVP에서 하지 않는다.
 - 팀 운영 배포 경로는 **Git/CI/CD Deployment Path**
 - 기존 클라우드 상태 복원은 **Reverse Engineering**
 - 내부 Redis 기반 상태/cache 계층은 **Runtime Cache**
+- 성공한 Deployment의 제한된 실시간 관측 세션은 **Live Observation**
 - 발표에서 보여주는 대표 서비스 흐름은 **Representative Use Journey**
 
 ## 상세 기획서

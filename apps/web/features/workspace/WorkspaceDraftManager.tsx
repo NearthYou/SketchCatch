@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { DiagramJson } from "../../../../packages/types/src";
 import { useAuth } from "../../components/auth/auth-provider";
-import { DiagramEditor } from "../diagram-editor";
+import { DiagramEditor, type DiagramPreviewAnnotations } from "../diagram-editor";
 import { EMPTY_DIAGRAM } from "../diagram-editor/constants";
+import { cloneDiagram } from "../diagram-editor/diagram-utils";
 import {
   createWorkspaceId,
   createLocalProjectDraft,
@@ -32,9 +33,15 @@ const LOCAL_PROJECT_NAME = "Local workspace";
 const LOCAL_SAVE_DEBOUNCE_MS = 800;
 
 export type WorkspaceDraftManagerProps = {
+  readonly initialBoardZoom?: number | undefined;
   readonly initialDiagramOverride?: DiagramJson | undefined;
+  readonly initialPreviewAnnotations?: DiagramPreviewAnnotations | undefined;
+  readonly initialPreviewDiagram?: DiagramJson | undefined;
   readonly initialProjectName?: string | undefined;
+  readonly initialReferenceDropTargetNodeId?: string | undefined;
   readonly initialRightPanelView?: WorkspaceRightPanelView | undefined;
+  readonly initialSelectedEdgeIds?: readonly string[] | undefined;
+  readonly initialSelectedNodeIds?: readonly string[] | undefined;
 };
 
 type LoadState = "loading" | "ready" | "error";
@@ -48,9 +55,15 @@ const saveStatusLabels: Record<SaveState, string> = {
 };
 
 export function WorkspaceDraftManager({
+  initialBoardZoom,
   initialDiagramOverride,
+  initialPreviewAnnotations,
+  initialPreviewDiagram,
   initialProjectName,
-  initialRightPanelView
+  initialReferenceDropTargetNodeId,
+  initialRightPanelView,
+  initialSelectedEdgeIds,
+  initialSelectedNodeIds
 }: WorkspaceDraftManagerProps) {
   const { user } = useAuth();
   const [loadState, setLoadState] = useState<LoadState>("loading");
@@ -134,7 +147,7 @@ export function WorkspaceDraftManager({
             return;
           }
 
-          const nextDiagram = normalizeDiagramJsonConventions(initialDiagramOverride);
+          const nextDiagram = cloneDiagram(initialDiagramOverride);
           latestDiagramRef.current = nextDiagram;
           hasUnsavedChangesRef.current = false;
           draftChangeVersionRef.current = 0;
@@ -257,6 +270,12 @@ export function WorkspaceDraftManager({
         />
       )}
       initialDiagram={initialDiagram}
+      initialBoardZoom={initialBoardZoom}
+      initialPreviewAnnotations={initialPreviewAnnotations}
+      initialPreviewDiagram={initialPreviewDiagram}
+      initialReferenceDropTargetNodeId={initialReferenceDropTargetNodeId}
+      initialSelectedEdgeIds={initialSelectedEdgeIds}
+      initialSelectedNodeIds={initialSelectedNodeIds}
       onDiagramChange={handleDiagramChange}
       onDiagramSaveRequest={saveCurrentDraftLocally}
       projectName={projectName}

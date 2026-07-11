@@ -36,6 +36,7 @@ locals {
       S3_BUCKET_NAME                       = var.artifact_bucket_name
       SKETCHCATCH_AWS_CALLER_PRINCIPAL_ARN = aws_iam_role.ecs_task.arn
       SKETCHCATCH_PUBLIC_BASE_URL          = var.sketchcatch_public_base_url
+      LIVE_OBSERVATION_ENABLED             = tostring(var.live_observation_enabled)
       OAUTH_REDIRECT_BASE_URL              = var.oauth_redirect_base_url
       AI_BILLING_MODE                      = var.ai_billing_mode
       AI_DAILY_CALL_LIMIT                  = tostring(var.ai_daily_call_limit)

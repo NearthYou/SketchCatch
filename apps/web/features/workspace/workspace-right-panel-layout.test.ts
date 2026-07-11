@@ -135,11 +135,12 @@ test("workspace shell follows DESIGN.md neutral surface and typography tokens", 
   assert.match(editorShellRule, /--workspace-muted:\s*#60646c;/);
   assert.match(editorShellRule, /--workspace-accent:\s*#000000;/);
   assert.match(editorShellRule, /--workspace-link:\s*#0d74ce;/);
+  assert.match(editorShellRule, /--board-canvas:\s*#f6f8fc;/);
   assert.match(editorShellRule, /\bfont-family:\s*var\(--workspace-font\);/);
 
   assert.match(workspaceRule, /\bbackground:\s*var\(--workspace-page\);/);
   assert.doesNotMatch(workspaceRule, /linear-gradient|#f6f8fc/);
-  assert.match(canvasPanelRule, /\bbackground:\s*var\(--workspace-page\);/);
+  assert.match(canvasPanelRule, /\bbackground:\s*var\(--board-canvas\);/);
   assert.doesNotMatch(canvasPanelRule, /#f8faff/);
   assert.match(canvasToolbarRule, /\bborder:\s*1px solid var\(--workspace-line\);/);
   assert.match(toolbarContextLinkRule, /\bbackground:\s*var\(--workspace-surface\);/);
@@ -419,6 +420,33 @@ test("right panel exposes resources, terraform, and deploy while Issues live ins
   assert.doesNotMatch(componentSource, /WorkspaceAiPanel/);
   assert.doesNotMatch(componentSource, /panelDeployButton/);
   assert.doesNotMatch(stylesSource, /\.panelDeployButton\s*\{/);
+});
+
+test("simulation opens beside Deploy and remains available in the collapsed shortcut rail", () => {
+  const modeBarIndex = componentSource.indexOf("className={styles.rightPanelModeBar}");
+  const modeBarEndIndex = componentSource.indexOf(
+    "<div className={styles.rightPanelView}",
+    modeBarIndex
+  );
+  const modeBarSource = componentSource.slice(modeBarIndex, modeBarEndIndex);
+  const deployIndex = modeBarSource.indexOf("<span>Deploy</span>");
+  const simulationIndex = modeBarSource.indexOf("<span>시뮬레이션</span>");
+  const collapsedPanelIndex = componentSource.indexOf(
+    '<aside className={styles.collapsedRightPanel}'
+  );
+  const collapsedPanelEndIndex = componentSource.indexOf("</aside>", collapsedPanelIndex);
+  const collapsedPanelSource = componentSource.slice(
+    collapsedPanelIndex,
+    collapsedPanelEndIndex
+  );
+
+  assert.ok(deployIndex > -1);
+  assert.ok(simulationIndex > deployIndex);
+  assert.match(modeBarSource, /onClick=\{openLiveObservation\}/);
+  assert.match(collapsedPanelSource, /title="시뮬레이션"/);
+  assert.match(collapsedPanelSource, /onClick=\{openLiveObservation\}/);
+  assert.match(componentSource, /<LiveObservationModal/);
+  assert.match(componentSource, /projectId=\{projectId\}/);
 });
 
 test("reverse engineering is not reachable from persistent right panel toggles", () => {

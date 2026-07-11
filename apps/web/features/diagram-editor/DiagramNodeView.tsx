@@ -1,7 +1,9 @@
 "use client";
 
 import {
+  Box,
   BringToFront,
+  Layers2,
   Lock,
   SendToBack,
   Square,
@@ -13,35 +15,45 @@ import {
   NodeToolbar,
   Position,
   useReactFlow,
+  useStore,
   useUpdateNodeInternals
 } from "@xyflow/react";
 import type { NodeProps } from "@xyflow/react";
 import { Fragment, useCallback, useEffect } from "react";
-import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode } from "react";
+import type {
+  CSSProperties,
+  KeyboardEvent as ReactKeyboardEvent,
+  PointerEvent as ReactPointerEvent,
+  ReactNode
+} from "react";
 
+import { getBoardNodeStateBadge, getBoardZoomLevel } from "./board-visual-state";
 import { BORDER_COLOR_SWATCHES, NODE_COLOR_SWATCHES } from "./constants";
 import { getAreaNodeIconUrl, getAreaNodeLabel, getAreaNodeMetaLabel, isAreaNode } from "./area-nodes";
 import { getNodeResizeBounds } from "./node-resize-bounds";
 import { calculateNodeResize } from "./node-resize";
 import type { NodeResizeHandlePosition, NodeResizeUpdate } from "./node-resize";
 import {
-  RESOURCE_NODE_BORDER_COLOR,
   canChangeNodeBorderColor,
   getNodeDisplayBorderColor,
   getNodeDisplayBorderStyle
 } from "./node-style";
-import { getResourceNodeIconFrameSize } from "./resource-node-icon-size";
-import { getResourceNodeDisplayLabel } from "./resource-node-display-label";
-import { getResourceNodeLabelStyle } from "./resource-node-label-style";
+import { getResourceNodePresentation } from "./resource-node-presentation";
 import type { DiagramFlowNode } from "./types";
 import styles from "./diagram-editor.module.css";
 
 const CONNECTION_HANDLES = [
-  { id: "handle-left", position: Position.Left },
-  { id: "handle-top", position: Position.Top },
-  { id: "handle-right", position: Position.Right },
-  { id: "handle-bottom", position: Position.Bottom }
+  { id: "handle-left", label: "왼쪽", position: Position.Left },
+  { id: "handle-top", label: "위쪽", position: Position.Top },
+  { id: "handle-right", label: "오른쪽", position: Position.Right },
+  { id: "handle-bottom", label: "아래쪽", position: Position.Bottom }
 ] as const;
+
+const CONNECTION_SOURCE_POSITIONS: ReadonlySet<Position> = new Set([
+  Position.Top,
+  Position.Right,
+  Position.Bottom
+]);
 
 const AREA_NODE_HIT_EDGES = [
   styles.areaNodeHitEdgeTop,
@@ -50,10 +62,16 @@ const AREA_NODE_HIT_EDGES = [
   styles.areaNodeHitEdgeLeft
 ] as const;
 
-const DEFAULT_RESOURCE_NODE_ICON_FRAME_SIZE = getResourceNodeIconFrameSize({ height: 56, width: 56 });
+const AREA_DEPTH_CLASSES = [
+  styles.nodeShellAreaDepth0,
+  styles.nodeShellAreaDepth1,
+  styles.nodeShellAreaDepth2,
+  styles.nodeShellAreaDepth3
+] as const;
 
 const RESIZE_HANDLES: readonly {
   className: string;
+  isSide?: boolean;
   label: string;
   position: NodeResizeHandlePosition;
 }[] = [
@@ -63,9 +81,32 @@ const RESIZE_HANDLES: readonly {
     position: "top-left"
   },
   {
+    className: styles.manualResizeHandleTop ?? "",
+    isSide: true,
+    label: "위쪽 면에서 노드 크기 조절",
+    position: "top"
+  },
+  {
     className: styles.manualResizeHandleTopRight ?? "",
     label: "우상단에서 노드 크기 조절",
     position: "top-right"
+  },
+  {
+    className: styles.manualResizeHandleRight ?? "",
+    isSide: true,
+    label: "오른쪽 면에서 노드 크기 조절",
+    position: "right"
+  },
+  {
+    className: styles.manualResizeHandleBottomRight ?? "",
+    label: "우하단에서 노드 크기 조절",
+    position: "bottom-right"
+  },
+  {
+    className: styles.manualResizeHandleBottom ?? "",
+    isSide: true,
+    label: "아래쪽 면에서 노드 크기 조절",
+    position: "bottom"
   },
   {
     className: styles.manualResizeHandleBottomLeft ?? "",
@@ -73,14 +114,16 @@ const RESIZE_HANDLES: readonly {
     position: "bottom-left"
   },
   {
-    className: styles.manualResizeHandleBottomRight ?? "",
-    label: "우하단에서 노드 크기 조절",
-    position: "bottom-right"
+    className: styles.manualResizeHandleLeft ?? "",
+    isSide: true,
+    label: "왼쪽 면에서 노드 크기 조절",
+    position: "left"
   }
 ];
 
 export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps<DiagramFlowNode>) {
   const reactFlow = useReactFlow();
+  const zoomLevel = useStore((state) => getBoardZoomLevel(state.transform[2]));
   const updateNodeInternals = useUpdateNodeInternals();
   const node = data.node;
   const toolbarVisible = !data.isPreview && selected && data.selectedNodeCount === 1;
@@ -93,20 +136,21 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
   const borderStyle = getNodeDisplayBorderStyle(node);
   const textColor = node.style?.textColor ?? "#172033";
   const resizeBounds = getNodeResizeBounds(node);
-  const resourceNodeIconFrameSize = usesIconTileLayout ? getResourceNodeIconFrameSize(node.size) : undefined;
+  const resourcePresentation = getResourceNodePresentation(node);
   const nodeShellStyle = getNodeShellStyle(
     isArea,
     usesIconTileLayout,
     borderColor,
-    borderStyle,
-    resourceNodeIconFrameSize
+    borderStyle
   );
   const areaNodeIconUrl = isArea ? getAreaNodeIconUrl(node) : undefined;
   const areaNodeMetaLabel = isArea ? getAreaNodeMetaLabel(node) : undefined;
-  const resourceNodeLabel = isResourceNode
-    ? getResourceNodeDisplayLabel(node)
-    : getAreaNodeLabel(node).toLocaleUpperCase();
-  const resourceNodeLabelStyle = getResourceNodeLabelStyle(resourceNodeLabel, node.size.width, textColor);
+  const resourceNodeLabel = isArea ? getAreaNodeLabel(node) : resourcePresentation.label;
+  const toolbarGroupName = `node-toolbar-${id}`;
+  const stateBadge = getBoardNodeStateBadge(data.previewState);
+  const areaDepthClass = isArea
+    ? AREA_DEPTH_CLASSES[Math.min(Math.max(0, data.areaDepth), AREA_DEPTH_CLASSES.length - 1)]
+    : undefined;
 
   useEffect(() => {
     updateNodeInternals(id);
@@ -161,36 +205,58 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
     [data, id, isArea, node.locked, node.position, node.size, reactFlow, resizeBounds, usesIconTileLayout]
   );
 
+  const handleResizeKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLButtonElement>, handlePosition: NodeResizeHandlePosition) => {
+      const keyboardDelta = getKeyboardResizeDelta(event.key, event.shiftKey ? 1 : 12);
+
+      if (!keyboardDelta || node.locked) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      const zoom = reactFlow.getZoom() || 1;
+      const update = calculateNodeResize({
+        bounds: resizeBounds,
+        delta: {
+          x: keyboardDelta.x * zoom,
+          y: keyboardDelta.y * zoom
+        },
+        handlePosition,
+        resizeMode: usesIconTileLayout && !isArea ? "square" : "free",
+        startPosition: node.position,
+        startSize: node.size,
+        zoom
+      });
+
+      data.onResizeStart();
+      data.onResize(id, update);
+      data.onResizeEnd(id, update);
+    },
+    [data, id, isArea, node.locked, node.position, node.size, reactFlow, resizeBounds, usesIconTileLayout]
+  );
+
   return (
     <>
       <NodeToolbar
         align="center"
+        aria-label={`${resourceNodeLabel} 노드 편집`}
         className={[styles.nodeToolbar, isArea ? styles.nodeToolbarArea : undefined].filter(Boolean).join(" ")}
         isVisible={toolbarVisible}
         nodeId={id}
-        offset={10}
+        offset={34}
         position={isArea ? Position.Bottom : Position.Top}
+        role="toolbar"
       >
-        <button
-          aria-label="앞으로 가져오기"
-          className={styles.iconButton}
-          onClick={() => data.onBringForward(id)}
-          title="앞으로 가져오기"
-          type="button"
-        >
-          <BringToFront aria-hidden="true" size={15} />
-        </button>
-        <button
-          aria-label="뒤로 보내기"
-          className={styles.iconButton}
-          onClick={() => data.onSendBackward(id)}
-          title="뒤로 보내기"
-          type="button"
-        >
-          <SendToBack aria-hidden="true" size={15} />
-        </button>
+        <LayerMenu
+          groupName={toolbarGroupName}
+          onBringForward={() => data.onBringForward(id)}
+          onSendBackward={() => data.onSendBackward(id)}
+        />
         <ColorMenu
           colors={NODE_COLOR_SWATCHES}
+          groupName={toolbarGroupName}
           icon={<Type aria-hidden="true" size={15} />}
           label="텍스트 색상"
           onChange={(color) => data.onTextColorChange(id, color)}
@@ -199,6 +265,7 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
         {canChangeBorderColor ? (
           <ColorMenu
             colors={BORDER_COLOR_SWATCHES}
+            groupName={toolbarGroupName}
             icon={<Square aria-hidden="true" size={15} />}
             label="테두리 색상"
             onChange={(color) => data.onBorderColorChange(id, color)}
@@ -226,14 +293,18 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
           data.previewState === "added" ? styles.nodeShellPatchAdded : undefined,
           data.previewState === "modified" ? styles.nodeShellPatchModified : undefined,
           data.previewState === "deleted" ? styles.nodeShellPatchDeleted : undefined,
-          data.isReferenceDropTarget ? styles.nodeShellReferenceDropTarget : undefined,
+          data.isAreaDropTarget ? styles.nodeShellAreaDropTarget : undefined,
           isArea ? styles.nodeShellArea : undefined,
+          areaDepthClass,
           !isArea ? (usesIconTileLayout ? styles.nodeShellResource : styles.nodeShellDesign) : undefined,
+          zoomLevel === "far" ? styles.nodeShellZoomFar : undefined,
+          zoomLevel === "medium" ? styles.nodeShellZoomMedium : undefined,
           node.locked ? styles.nodeShellLocked : undefined
         ]
           .filter(Boolean)
           .join(" ")}
         style={nodeShellStyle}
+        title={resourceNodeLabel}
       >
         {isArea ? (
           <>
@@ -254,19 +325,18 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
           </>
         ) : usesIconTileLayout ? (
           <>
-            <div className={styles.resourceNodeIconFrame}>
+            <div className={styles.resourceNodeIconFrame} data-icon-family={resourcePresentation.icon.family}>
               {node.iconUrl ? (
                 <img alt="" className={styles.resourceNodeIcon} draggable={false} src={node.iconUrl} />
               ) : (
                 <div className={styles.resourceNodeIconFallback} aria-hidden="true">
-                  AWS
+                  <Box size={18} strokeWidth={1.75} />
                 </div>
               )}
             </div>
-            <div className={styles.resourceNodeLabel} style={resourceNodeLabelStyle}>
+            <div className={styles.resourceNodeLabel} style={{ color: textColor }} title={resourceNodeLabel}>
               {resourceNodeLabel}
             </div>
-            <div className={styles.resourceNodeType}>{node.type}</div>
           </>
         ) : (
           <>
@@ -287,19 +357,43 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
           </>
         )}
         {node.locked ? (
-          <div aria-label="잠김" className={styles.lockBadge} title="잠김">
+          <div
+            aria-label={`잠김: ${resourceNodeLabel}`}
+            className={styles.lockBadge}
+            role="img"
+            title={`잠김: ${resourceNodeLabel}`}
+          >
             <Lock aria-hidden="true" size={12} />
+          </div>
+        ) : null}
+        {stateBadge ? (
+          <div
+            aria-label={`${stateBadge.label}: ${resourceNodeLabel}`}
+            className={`${styles.stateBadge} ${getStateBadgeToneClass(stateBadge.tone)}`}
+            role="img"
+            title={`${stateBadge.label}: ${resourceNodeLabel}`}
+          >
+            {stateBadge.glyph}
           </div>
         ) : null}
       </div>
 
-      {selected && !node.locked && !data.isPreview ? (
+      {selected && !node.locked && !data.isPreview && !data.isConnectionActive ? (
         <>
           {RESIZE_HANDLES.map((handle) => (
             <button
               aria-label={handle.label}
-              className={`${styles.manualResizeHandle} ${handle.className} nodrag`}
+              className={[
+                    styles.manualResizeHandle,
+                    isArea ? styles.manualResizeHandleArea : undefined,
+                    handle.isSide ? styles.manualResizeHandleSide : undefined,
+                    handle.className,
+                "nodrag"
+              ]
+                .filter(Boolean)
+                .join(" ")}
               key={handle.position}
+              onKeyDown={(event) => handleResizeKeyDown(event, handle.position)}
               onPointerDown={(event) => handleResizePointerDown(event, handle.position)}
               title={handle.label}
               type="button"
@@ -308,95 +402,266 @@ export function DiagramNodeView({ data, id, isConnectable, selected }: NodeProps
         </>
       ) : null}
 
-      {CONNECTION_HANDLES.map((handle) => (
-        <Fragment key={handle.id}>
-          <Handle
-            className={[
-              styles.connectionHandle,
-              styles.connectionHandleSource,
-              canConnect ? undefined : styles.connectionHandleInactive,
-              data.isConnectionActive ? styles.connectionHandleActive : undefined
-            ]
-              .filter(Boolean)
-              .join(" ")}
-            id={`source-${handle.id}`}
-            isConnectable={canConnect}
-            position={handle.position}
-            type="source"
-          />
-          <Handle
-            className={[
-              styles.connectionHandle,
-              styles.connectionHandleTarget,
-              canConnect ? undefined : styles.connectionHandleInactive,
-              data.isConnectionActive ? styles.connectionHandleActive : undefined
-            ]
-              .filter(Boolean)
-              .join(" ")}
-            id={`target-${handle.id}`}
-            isConnectable={canConnect}
-            position={handle.position}
-            type="target"
-          />
-        </Fragment>
-      ))}
+      {CONNECTION_HANDLES.map((handle) => {
+        const canStartFromHandle =
+          canConnect &&
+          CONNECTION_SOURCE_POSITIONS.has(handle.position) &&
+          !data.isConnectionActive;
+        const canEndAtHandle =
+          data.isValidConnectionTarget && handle.position === Position.Left;
+
+        return (
+          <Fragment key={handle.id}>
+            <Handle
+              aria-label={`${resourceNodeLabel} ${handle.label} 연결 시작`}
+              className={[
+                styles.connectionHandle,
+                styles.connectionHandleSource,
+                canStartFromHandle ? undefined : styles.connectionHandleInactive
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              id={`source-${handle.id}`}
+              isConnectable={canStartFromHandle}
+              isConnectableEnd={false}
+              isConnectableStart={canStartFromHandle}
+              onKeyDown={handleConnectionHandleKeyDown}
+              position={handle.position}
+              role="button"
+              tabIndex={selected && canStartFromHandle ? 0 : -1}
+              type="source"
+            />
+            <Handle
+              aria-label={`${resourceNodeLabel} ${handle.label} 연결 대상`}
+              className={[
+                styles.connectionHandle,
+                styles.connectionHandleTarget,
+                canEndAtHandle ? styles.connectionHandleActive : styles.connectionHandleInactive
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              id={`target-${handle.id}`}
+              isConnectable={canEndAtHandle}
+              isConnectableEnd={canEndAtHandle}
+              isConnectableStart={false}
+              isValidConnection={() => canEndAtHandle}
+              onKeyDown={handleConnectionHandleKeyDown}
+              position={handle.position}
+              role="button"
+              tabIndex={canEndAtHandle ? 0 : -1}
+              type="target"
+            />
+          </Fragment>
+        );
+      })}
     </>
   );
+}
+
+function getKeyboardResizeDelta(key: string, step: number): DiagramFlowNode["position"] | null {
+  if (key === "ArrowLeft") {
+    return { x: -step, y: 0 };
+  }
+
+  if (key === "ArrowRight") {
+    return { x: step, y: 0 };
+  }
+
+  if (key === "ArrowUp") {
+    return { x: 0, y: -step };
+  }
+
+  if (key === "ArrowDown") {
+    return { x: 0, y: step };
+  }
+
+  return null;
+}
+
+function handleConnectionHandleKeyDown(event: ReactKeyboardEvent<HTMLDivElement>): void {
+  if (event.key !== "Enter" && event.key !== " ") {
+    return;
+  }
+
+  event.preventDefault();
+  event.stopPropagation();
+  event.currentTarget.click();
 }
 
 function getNodeShellStyle(
   isArea: boolean,
   usesIconTileLayout: boolean,
   borderColor: string,
-  borderStyle: string,
-  resourceNodeIconFrameSize: number | undefined
+  borderStyle: string
 ): CSSProperties {
   if (isArea) {
     return { "--node-border-color": borderColor, "--area-border-style": borderStyle } as CSSProperties;
   }
 
   if (usesIconTileLayout) {
-    return {
-      "--resource-node-border-color": RESOURCE_NODE_BORDER_COLOR,
-      "--resource-node-icon-frame-size": `${resourceNodeIconFrameSize ?? DEFAULT_RESOURCE_NODE_ICON_FRAME_SIZE}px`
-    } as CSSProperties;
+    return {};
   }
 
   return { borderColor };
 }
 
+function getStateBadgeToneClass(tone: "danger" | "preview" | "success" | "warning"): string {
+  if (tone === "success") {
+    return styles.stateBadgeSuccess ?? "";
+  }
+
+  if (tone === "warning") {
+    return styles.stateBadgeWarning ?? "";
+  }
+
+  if (tone === "danger") {
+    return styles.stateBadgeDanger ?? "";
+  }
+
+  return styles.stateBadgePreview ?? "";
+}
+
 type ColorMenuProps = {
   colors: readonly string[];
+  groupName: string;
   icon: ReactNode;
   label: string;
   onChange: (color: string) => void;
   value: string;
 };
 
-function ColorMenu({ colors, icon, label, onChange, value }: ColorMenuProps) {
+type LayerMenuProps = {
+  groupName: string;
+  onBringForward: () => void;
+  onSendBackward: () => void;
+};
+
+const COLOR_ACCESSIBLE_NAMES: Readonly<Record<string, string>> = {
+  "#172033": "기본",
+  "#1f6feb": "파랑",
+  "#6f4cf6": "보라",
+  "#287d3c": "초록",
+  "#b45309": "주황",
+  "#b42318": "빨강",
+  "#8b98aa": "회색",
+  "#2f6db3": "파랑",
+  "#2f8c55": "초록",
+  "#d76613": "주황",
+  "#c9473d": "빨강"
+};
+
+function LayerMenu({ groupName, onBringForward, onSendBackward }: LayerMenuProps) {
   return (
-    <div aria-label={label} className={styles.colorMenu} title={label}>
-      <span className={styles.colorMenuIcon}>{icon}</span>
-      <div className={styles.swatchGroup}>
-        {colors.map((color) => (
-          <button
-            aria-label={`${label} ${color}`}
-            aria-pressed={value === color}
-            className={styles.swatchButton}
-            key={color}
-            onClick={() => onChange(color)}
-            style={{ backgroundColor: color }}
-            type="button"
-          />
-        ))}
+    <details
+      className={styles.nodeToolbarDisclosure}
+      name={groupName}
+      onKeyDown={handleDisclosureKeyDown}
+    >
+      <summary aria-label="레이어 순서" className={styles.iconButton} title="레이어 순서">
+        <Layers2 aria-hidden="true" size={15} />
+      </summary>
+      <div
+        aria-label="레이어 순서"
+        className={`${styles.nodeToolbarPanel} ${styles.nodeToolbarActionPanel}`}
+        role="group"
+      >
+        <button
+          className={styles.nodeToolbarAction}
+          onClick={(event) => {
+            onBringForward();
+            closeDisclosure(event.currentTarget);
+          }}
+          type="button"
+        >
+          <BringToFront aria-hidden="true" size={15} />
+          <span>앞으로 가져오기</span>
+        </button>
+        <button
+          className={styles.nodeToolbarAction}
+          onClick={(event) => {
+            onSendBackward();
+            closeDisclosure(event.currentTarget);
+          }}
+          type="button"
+        >
+          <SendToBack aria-hidden="true" size={15} />
+          <span>뒤로 보내기</span>
+        </button>
       </div>
-      <input
-        aria-label={label}
-        className={styles.colorInput}
-        onChange={(event) => onChange(event.target.value)}
-        type="color"
-        value={value}
-      />
-    </div>
+    </details>
   );
+}
+
+function ColorMenu({ colors, groupName, icon, label, onChange, value }: ColorMenuProps) {
+  return (
+    <details
+      className={styles.nodeToolbarDisclosure}
+      name={groupName}
+      onKeyDown={handleDisclosureKeyDown}
+    >
+      <summary
+        aria-label={`${label}, 현재 ${value}`}
+        className={styles.iconButton}
+        title={label}
+      >
+        {icon}
+        <span
+          aria-hidden="true"
+          className={styles.nodeToolbarTriggerColor}
+          style={{ backgroundColor: value }}
+        />
+      </summary>
+      <div aria-label={label} className={styles.nodeToolbarPanel} role="group">
+        <div className={styles.nodeToolbarPalette}>
+          {colors.map((color) => (
+            <button
+              aria-label={`${label} ${COLOR_ACCESSIBLE_NAMES[color] ?? color} (${color})`}
+              aria-pressed={value === color}
+              className={styles.swatchButton}
+              key={color}
+              onClick={(event) => {
+                onChange(color);
+                closeDisclosure(event.currentTarget);
+              }}
+              type="button"
+            >
+              <span
+                aria-hidden="true"
+                className={styles.nodeSwatchVisual}
+                style={{ backgroundColor: color }}
+              />
+            </button>
+          ))}
+        </div>
+        <label className={styles.nodeToolbarCustomColor}>
+          <span>사용자 지정</span>
+          <input
+            aria-label={`${label} 사용자 지정`}
+            className={styles.colorInput}
+            onChange={(event) => onChange(event.target.value)}
+            type="color"
+            value={value}
+          />
+        </label>
+      </div>
+    </details>
+  );
+}
+
+function handleDisclosureKeyDown(event: ReactKeyboardEvent<HTMLDetailsElement>): void {
+  if (event.key !== "Escape") {
+    return;
+  }
+
+  event.preventDefault();
+  event.stopPropagation();
+  event.currentTarget.removeAttribute("open");
+  event.currentTarget.querySelector("summary")?.focus();
+}
+
+function closeDisclosure(target: HTMLElement): void {
+  const details = target.closest("details");
+
+  details?.removeAttribute("open");
+  details?.querySelector("summary")?.focus();
 }

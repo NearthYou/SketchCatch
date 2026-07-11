@@ -7,9 +7,24 @@ const selectMenuSource = readUiFile("SelectMenu.tsx");
 const selectMenuStylesSource = readUiFile("select-menu.module.css");
 
 test("SelectMenu exposes a workspace tone for DESIGN.md workspace panels", () => {
-  assert.match(selectMenuSource, /export type SelectMenuTone = "default" \| "dashboard" \| "purple" \| "workspace";/);
+  assert.match(
+    selectMenuSource,
+    /export type SelectMenuTone = "board" \| "default" \| "dashboard" \| "purple" \| "workspace";/
+  );
   assert.match(selectMenuSource, /tone === "workspace"/);
   assert.match(selectMenuSource, /return "workspaceTone";/);
+});
+
+test("SelectMenu board tone uses the calm Board tokens", () => {
+  const triggerRule = getCssRuleContaining(selectMenuStylesSource, ".boardTone .selectMenuTrigger");
+  const focusRule = getCssRuleContaining(selectMenuStylesSource, ".boardTone .selectMenuTriggerOpen");
+  const selectedRule = getCssRuleContaining(selectMenuStylesSource, ".boardTone .selectMenuOptionSelected");
+
+  assert.match(triggerRule, /background:\s*var\(--board-surface,/);
+  assert.match(triggerRule, /border-color:\s*var\(--board-border,/);
+  assert.match(focusRule, /border-color:\s*var\(--board-primary,/);
+  assert.match(focusRule, /box-shadow:[^}]*var\(--board-primary,/s);
+  assert.match(selectedRule, /background:\s*var\(--board-primary-soft,/);
 });
 
 test("SelectMenu workspace tone uses neutral workspace tokens", () => {
