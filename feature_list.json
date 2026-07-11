@@ -211,7 +211,7 @@
           "terraform -chdir=infra/aws/terraform plan -var-file=<production-runtime-tfvars>",
           "AWS ECS/ALB/Route53/RDS/CloudWatch read-only verification and HTTPS smoke"
         ],
-        "notes": "Production Route53 targets the direct-path ECS ALB; API/web run at autoscaling min 1 and max 2, worker RunTask is active, auth runtime preflight covers token and OAuth configuration, and container log alarms avoid repetitive OK notifications."
+        "notes": "Production Route53 targets the direct-path ECS ALB; API/web run at autoscaling min 1 and max 2, worker RunTask is active, auth runtime preflight covers token and OAuth configuration, and container log alarms require two consecutive error periods without repetitive OK notifications."
       },
       "notes": "Warm EC2/ALB/nginx and the legacy ECS service/target group are retired. Cold rollback retains a sanitized encrypted AMI, verified Docker archive, disabled Terraform root, and runbook."
     }

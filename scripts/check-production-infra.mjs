@@ -165,7 +165,8 @@ for (const marker of [
   "Review-only Terraform plan",
   "plan_args=(-input=false -no-color -detailed-exitcode -lock-timeout=5m)",
   "use_lockfile=true",
-  "PRODUCTION_INFRA_RUNTIME_TFVARS_JSON"
+  "PRODUCTION_INFRA_RUNTIME_TFVARS_JSON",
+  "runtime tfvars must be a JSON object"
 ]) {
   check(workflow.includes(marker), `plan-only workflow is missing ${marker}`);
 }
@@ -297,6 +298,11 @@ const containerErrorAlarm =
 check(
   !containerErrorAlarm.includes("ok_actions"),
   "container log error alarms must not send repetitive OK notifications"
+);
+check(
+  /evaluation_periods\s*=\s*2/.test(containerErrorAlarm) &&
+    /datapoints_to_alarm\s*=\s*2/.test(containerErrorAlarm),
+  "container log error alarms must require two consecutive error periods"
 );
 
 const migrationWorkflow = fs.readFileSync(migrationWorkflowPath, "utf8");
