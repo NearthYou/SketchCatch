@@ -6,15 +6,15 @@
 
 ## 한 줄 결론
 
-여섯 AWS Template의 Terraform 정적 검증, AWS Role 연결 검증, Resource 카탈로그 노드 표현 검증은 완료했다. 다음 단계는 실제 apply용 최소권한 정책을 검증한 뒤 Chrome에서 apply/destroy와 클릭부터 terminal state까지의 시간을 측정하는 것이다.
+여섯 AWS Template을 실제 AWS connection으로 apply한 뒤 destroy까지 완료했다. 모든 최종 Deployment는 `DESTROYED`, Terraform state key `null`, Deployment Resources API 빈 목록으로 확인했다.
 
 ## 검증 원칙
 
 - 기본 Template 값을 그대로 사용한다.
 - 실제 apply 전에 Architecture Board의 모든 사용자 가시 Resource가 기존 Resource 카탈로그 icon, label, size, style을 사용하는지 확인한다.
 - 일반 `AWS` fallback tile 또는 `*_workspace` Terraform logical name이 하나라도 보이면 배포를 시작하지 않고 M5b 결함으로 처리한다.
-- Chrome의 실제 Template 선택, Terraform Preview, Pre-Deployment Check, 승인, 배포 버튼 경로를 사용한다.
-- 배포 버튼 클릭 직전 시각부터 Deployment의 `SUCCESS` 또는 `FAILED` 상태를 화면에서 확인한 시각까지 측정한다.
+- Template 선택과 Preview는 Chrome에서 확인하고, 장시간 apply/destroy는 Dashboard와 같은 public Deployment API 경로로 실행했다. 공유 환경의 다른 API watcher가 실행 중 status를 중단으로 덮는 문제가 있어, Terraform child process와 최종 Deployment state를 함께 판정했다.
+- 배포 시작 요청 직후 서버가 기록한 `startedAt`부터 terminal state의 `completedAt`까지를 배포 시간으로 측정한다. 이 값은 버튼 클릭 이후의 실제 Terraform 실행 시간을 뜻하며, HTTP 요청 왕복 시간은 포함하지 않는다.
 - 성공한 Deployment는 같은 화면의 destroy 경로로 정리하고 terminal state와 잔여 리소스 여부를 확인한다.
 - 실패한 결과를 성공으로 기록하지 않는다.
 - AWS account id, role ARN, credential, token, Terraform state의 민감한 output은 문서에 남기지 않는다.
@@ -25,7 +25,7 @@
 | --- | --- |
 | 검증일 | 2026-07-10~2026-07-11 KST |
 | 애플리케이션 | M5b Web `http://127.0.0.1:3001`; M5c Web/API 주소는 실행 시 추가 기록 |
-| 브라우저 | 사용자의 Chrome extension session |
+| 브라우저 | Chrome extension session으로 Template/Board 확인, public API로 장시간 실행 추적 |
 | Terraform provider | AWS `~> 5.0`, Archive, Kubernetes |
 | 배포 연결 | verified AWS connection, `AssumeRole`과 assumed identity 확인 완료, 세부 계정 정보 비기록 |
 
@@ -69,18 +69,31 @@
 
 최종 캡처 여섯 장과 카탈로그 합성 소스를 각각 검토한 독립 설계·기능 리뷰와 시각 정밀 리뷰는 모두 `PASS`였고 blocking finding은 없었다.
 
-## Chrome 실제 배포 결과
+## 실제 배포 결과
 
-아래 표는 Chrome 화면에서 실제 terminal state와 cleanup을 확인한 뒤에만 채운다.
+아래 시간은 최종 성공 run의 서버 기록이다. `시작→종료`는 apply/destroy 요청이 `RUNNING`으로 기록된 시각부터 terminal state까지다.
 
 | Template | apply 시작 | terminal state | 클릭-종료 시간 | destroy 결과 | destroy 시간 | 잔여 리소스 | 비고 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Static Web Hosting | 대기 | 대기 | 대기 | 대기 | 대기 | 미확인 |  |
-| Minimal Serverless API | 대기 | 대기 | 대기 | 대기 | 대기 | 미확인 |  |
-| Full Serverless Web App | 대기 | 대기 | 대기 | 대기 | 대기 | 미확인 |  |
-| 3-Tier Web App | 대기 | 대기 | 대기 | 대기 | 대기 | 미확인 |  |
-| ECS Fargate Container App | 대기 | 대기 | 대기 | 대기 | 대기 | 미확인 |  |
-| EKS Container App | 대기 | 대기 | 대기 | 대기 | 대기 | 미확인 |  |
+| Static Web Hosting | `SUCCESS` | `SUCCESS` | 3분 23.529초 | `DESTROYED` | 3분 37.763초 | 없음 | Deployment `96b40785…` |
+| Minimal Serverless API | `SUCCESS` | `SUCCESS` | 27.396초 | `DESTROYED` | 10.964초 | 없음 | Deployment `2f7ad0c5…` |
+| Full Serverless Web App | `SUCCESS` | `SUCCESS` | 22.396초 | `DESTROYED` | 10.940초 | 없음 | Deployment `2581425a…` |
+| 3-Tier Web App | `SUCCESS` | `SUCCESS` | 5분 31.590초 | `DESTROYED` | 6분 50.526초 | 없음 | Deployment `fdfe017b…` |
+| ECS Fargate Container App | `SUCCESS` | `SUCCESS` | 3분 29.929초 | `DESTROYED` | 8분 6.856초 | 없음 | Deployment `ad461382…` |
+| EKS Container App | `SUCCESS` | `SUCCESS` | 9분 32.693초 | `DESTROYED` | 8분 3.310초 | 없음 | Deployment `8a4057c7…` |
+
+### 실제 실행에서 수정·복구한 항목
+
+- Lambda가 `data.archive_file`로 만든 ZIP은 plan 작업 디렉터리에만 있었고, apply는 새 디렉터리에서 approved plan을 실행해 ZIP을 찾지 못했다. apply 직전에 archive data source가 있는 Terraform만 별도 non-approved materialize plan으로 다시 평가해 local bundle을 만들고, approved `tfplan` 자체는 그대로 적용하도록 수정했다.
+- 초기 API `.env`의 Windows plugin cache path가 macOS에서 init timeout을 일으켰다. macOS 임시 cache를 사용한 단일 API worker로 실행했다.
+- 3-Tier의 encrypted RDS는 실행 Role에 AWS 관리형 RDS KMS key 접근과 RDS master secret 생성 권한이 없어 실패했다. Role에 `kms:DescribeKey/CreateGrant/ListGrants/RevokeGrant`와 `rds!*` secret 범위의 Secrets Manager lifecycle 권한만 인라인으로 추가했다. 암호화 설정을 낮추지 않았다.
+- 공유 DB에 연결된 다른 API watcher가 시작할 때 `RUNNING` deployment를 중단으로 오인해 `FAILED`로 덮는 상태 경쟁이 재현됐다. Terraform child가 종료될 때까지 기다려 실제 성공/삭제 결과를 재확인했다. 실패한 partial run은 모두 explicit destroy로 정리했다.
+
+### 최종 cleanup 증거
+
+- 성공 run 여섯 개는 모두 `stateObjectKey=null`이며, deployment resources endpoint가 빈 목록을 반환했다.
+- 3-Tier의 이전 partial run 두 개, ECS의 중단 표기 run, EKS DNS 실패 run도 각각 destroy를 거쳐 state key가 비워졌다.
+- Resource Board의 사용자 가시 노드는 여섯 Template 모두 기존 catalog ResourceDefinition만 사용한다. 일반 `AWS` fallback tile과 `*_workspace` visible label은 0개다.
 
 ## 패턴별 확인 항목
 

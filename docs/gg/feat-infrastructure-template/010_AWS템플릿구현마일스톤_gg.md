@@ -19,8 +19,8 @@
 | M4 | 여섯 Template Terraform Preview와 배포 시간 표시 | template preview tests, deployment duration tests, build | `Feat: AWS Template 배포 흐름 연결` | 완료 |
 | M5a | AWS 실행 Role 등록과 verified connection 복구 | Chrome AWS 콘솔 Role 확인, STS AssumeRole, SketchCatch 연결 검증 | `Test: AWS Template 배포 연결 검증` | 완료 |
 | M5b | Template Board를 기존 Resource 카탈로그 노드로 전환 | 6개 Template icon/label/style, fallback 0개, Chrome 시각 QA | `Fix: AWS Template 카탈로그 Resource 노드 재사용` | 완료 |
-| M5c | Chrome 실제 apply/destroy와 검증 기록 | 여섯 패턴 live QA, console check, cleanup 확인 | `Test: AWS Template 실제 배포 검증 기록` | 진행 전 |
-| M6 | PR 제출 | full checks, review-work, PR body and linked issue | `gh-create-pr` workflow | 진행 전 |
+| M5c | 실제 apply/destroy와 검증 기록 | 여섯 패턴 live QA, console/API check, cleanup 확인 | `Test: AWS Template 실제 배포 검증 기록` | 완료 |
+| M6 | PR 제출 | full checks, review-work, PR body and linked issue | `gh-create-pr` workflow | 진행 중 |
 
 ## 커밋 규칙
 
@@ -96,12 +96,13 @@
 
 ### M5c
 
-- M5a와 M5b가 완료된 뒤 실제 apply/destroy를 시작한다.
+- 완료: 2026-07-11 KST
 - Lambda, API Gateway stage/permission, IAM assume policy, 3-Tier launch template/AMI lookup, ECS task/network defaults, EKS node policies를 기본 정의에 반영했다.
 - `demo_web_service_with_rds` live profile에 여섯 Template의 확장 Resource와 Kubernetes workload를 허용하고, Template 보드에는 해당 profile을 자동 추천하도록 연결했다.
 - 실제 Dashboard의 시작 템플릿 화면도 같은 registry를 사용해 여섯 개 카드와 Workspace 선택 URL을 노출한다.
 - 여섯 Template 모두 실제 Terraform CLI `init`과 `validate`를 통과했다.
-- 남은 검증: Chrome live plan/apply/destroy, AWS 연결 상태와 패턴별 배포 시간 기록.
+- 여섯 Template 모두 실제 AWS apply와 destroy를 통과했고, 최종 Deployment state는 `DESTROYED`, state key는 비어 있다. 패턴별 시간과 실패 복구 이력은 `011_AWS템플릿배포검증기록_gg.md`에 기록했다.
+- 실행 중 발견한 archive bundle 전달 결함은 TDD로 고쳤다. encrypted RDS는 KMS와 RDS master secret 최소권한을 Role에 추가해 암호화를 유지한 채 통과했다.
 
 ### M6
 
