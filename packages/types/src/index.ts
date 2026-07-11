@@ -8,6 +8,8 @@ export type ApiErrorCode =
   | "conflict"
   | "github_oauth_required"
   | "too_many_requests"
+  | "unprocessable_entity"
+  | "bad_gateway"
   | "service_unavailable"
   | "internal_server_error";
 
@@ -115,6 +117,8 @@ export const RESOURCE_TYPES = [
   "ECR_LIFECYCLE_POLICY",
   "ECS_CLUSTER",
   "ECS_SERVICE",
+  "APPLICATION_AUTO_SCALING_TARGET",
+  "APPLICATION_AUTO_SCALING_POLICY",
   "ECS_TASK_DEFINITION",
   "ECS_CAPACITY_PROVIDER",
   "EKS_CLUSTER",
@@ -1606,7 +1610,9 @@ export type ArchitectureDraftStreamEvent =
     }
   | {
       type: "error";
-      error: ApiErrorResponse;
+      error: ApiErrorResponse & {
+        statusCode: number;
+      };
     };
 
 export type MoneyEstimate = {

@@ -822,30 +822,44 @@ function addPurposeSpecificResources(context: DraftBuildContext): void {
       });
       return;
     case "reservation_service":
-      if (!context.factSet.has("file_upload")) {
-        return;
-      }
-      addPurposeBucket(context, {
-        id: "reservation-attachments-bucket",
-        label: "Reservation Attachment Bucket",
-        bucketPurpose: "reservation_attachments",
-        edgeLabel: "stores request attachments",
-        positionX: 1110,
-        positionY: 160
+      addPurposeLogGroup(context, {
+        id: "reservation-audit-log-group",
+        label: "Reservation Workflow Audit Logs",
+        name: "/sketchcatch/practice/reservation/audit",
+        positionX: 900,
+        positionY: 680,
+        retentionInDays: 30
       });
+      if (context.factSet.has("file_upload")) {
+        addPurposeBucket(context, {
+          id: "reservation-attachments-bucket",
+          label: "Reservation Attachment Bucket",
+          bucketPurpose: "reservation_attachments",
+          edgeLabel: "stores request attachments",
+          positionX: 1110,
+          positionY: 160
+        });
+      }
       return;
     case "content_board":
-      if (!context.factSet.has("file_upload")) {
-        return;
-      }
-      addPurposeBucket(context, {
-        id: "content-media-bucket",
-        label: "Content Media Bucket",
-        bucketPurpose: "content_media",
-        edgeLabel: "stores post media",
-        positionX: 1110,
-        positionY: 160
+      addPurposeLogGroup(context, {
+        id: "content-activity-log-group",
+        label: "Content Activity Logs",
+        name: "/sketchcatch/practice/content-board/activity",
+        positionX: 900,
+        positionY: 680,
+        retentionInDays: 30
       });
+      if (context.factSet.has("file_upload")) {
+        addPurposeBucket(context, {
+          id: "content-media-bucket",
+          label: "Content Media Bucket",
+          bucketPurpose: "content_media",
+          edgeLabel: "stores post media",
+          positionX: 1110,
+          positionY: 160
+        });
+      }
       return;
     case "api_backend":
     case "data_storage":

@@ -285,13 +285,17 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
       const result = await createArchitectureDraftResponse(body, { onProgress });
       writeEvent({ type: "result", result });
     } catch (error) {
-      app.log.warn(
-        {
-          errorName: error instanceof Error ? error.name : typeof error,
-          errorMessages: readErrorMessageChain(error)
-        },
-        "Architecture Draft stream failed"
-      );
+      const errorContext = {
+        errorKind:
+          error instanceof ArchitectureDraftGenerationError ? error.kind : "unknown",
+        errorName: error instanceof Error ? error.name : typeof error,
+        errorMessages: readErrorMessageChain(error)
+      };
+      if (error instanceof ArchitectureDraftGenerationError && error.statusCode < 500) {
+        app.log.info(errorContext, "Architecture Draft stream could not satisfy requirements");
+      } else {
+        app.log.warn(errorContext, "Architecture Draft stream failed");
+      }
       writeEvent({ type: "error", error: createArchitectureDraftStreamError(error) });
     } finally {
       reply.raw.end();
@@ -661,17 +665,21 @@ function toRuntimeCacheJsonValue(value: AiSafetyExplanation): RuntimeCacheJsonVa
   return JSON.parse(JSON.stringify(value)) as RuntimeCacheJsonValue;
 }
 
-function createArchitectureDraftStreamError(error: unknown): ApiErrorResponse {
+function createArchitectureDraftStreamError(
+  error: unknown
+): ApiErrorResponse & { readonly statusCode: number } {
   if (error instanceof ArchitectureDraftGenerationError) {
     return {
       error: error.errorCode,
-      message: error.message
+      message: error.message,
+      statusCode: error.statusCode
     };
   }
 
   return {
     error: "internal_server_error",
-    message: "아키텍처 초안 생성 중 오류가 발생했습니다."
+    message: "아키텍처 초안 생성 중 오류가 발생했습니다.",
+    statusCode: 500
   };
 }
 

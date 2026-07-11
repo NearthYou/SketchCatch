@@ -799,6 +799,20 @@ export const resourceDefinitions = [
     terraformSync: true
   }),
   createAwsResourceDefinition({
+    id: "aws-appautoscaling-target",
+    resourceType: "APPLICATION_AUTO_SCALING_TARGET",
+    terraformPreview: true,
+    terraformResourceType: "aws_appautoscaling_target",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-appautoscaling-policy",
+    resourceType: "APPLICATION_AUTO_SCALING_POLICY",
+    terraformPreview: true,
+    terraformResourceType: "aws_appautoscaling_policy",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
     id: "aws-ecs-task-definition",
     resourceType: "ECS_TASK_DEFINITION",
     terraformPreview: true,

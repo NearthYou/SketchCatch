@@ -4,22 +4,24 @@ Use this file only for compact continuation context.
 
 ## Currently Verified
 
-- Current branch: `feat/ck/287-ai-diagram`.
-- Latest `origin/dev` includes the production split ECS cutover, one-off worker isolation, and manual-only EC2 rollback workflow.
-- The branch retains Amazon Q-backed Architecture Draft generation, deterministic deployable materialization, streamed progress, external User/Internet presentation nodes, area containment, and semantic gateway placement.
-- No cloud deployment or Terraform mutation was run while integrating `dev`.
+- Current branch: `feat/ck/287-ai-diagram`; local `dev` and `origin/dev` are at `61313fc4`.
+- Architecture Draft enforces HTTPS, SSE/WebSocket/polling, ECS/EC2 burst scaling, high-availability topology, voice transcription storage/IAM/flows, and private-subnet visual placement.
+- Generation errors are classified as 422 requirement quality, 502 malformed provider output, 503 provider unavailable, or 500 internal assembly failure.
+- No cloud deployment or Terraform mutation was run.
 
 ## Changes This Session
 
-- Integrated latest `origin/dev` while preserving independent AI/Q and S3 artifact compatibility changes.
-- Combined the ALB 120-second idle timeout with invalid-header dropping.
-- Mapped AI normalizer and Q retrieval variables into the refactored shared API environment.
+- Added operational requirement policy/validation and typed generation error boundaries.
+- Fixed S3 quantity parsing and purpose-specific backend topology.
+- Architecture Draft service: 39/39 passed.
+- Full AI routes: 53/53 passed.
+- Operational/quantity: 7/7 passed; web stream: 8/8 passed.
+- Lint, typecheck, catalog check, build, and harness passed.
 
 ## Broken Or Unverified
 
-- Post-merge checks and restoration of the pre-merge uncommitted worktree are still pending.
-- External customer execution roles may still need worker-principal trust updates.
+- Full API suite exceeded the 10-minute command limit before producing its buffered summary.
 
 ## Best Next Action
 
-- Restore the stashed AI diagram work, run repository and Terraform checks, then continue visual verification.
+- Regenerate chat, voice, burst, and 99.99% scenarios in Chrome, inspect the visible topology and Terraform preview, then address any remaining visual or IaC mismatch.

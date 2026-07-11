@@ -906,17 +906,11 @@ test("normalizeDiagramJsonConventions adds one reusable external flow to exact Q
     twice.nodes
       .filter((node) => node.kind === "design")
       .map((node) => ({ id: node.id, type: node.type })),
-    [
-      { id: "flow-user-client", type: "sketchcatch_user_client" },
-      { id: "flow-internet", type: "sketchcatch_internet" }
-    ]
+    [{ id: "flow-user-client", type: "sketchcatch_user_client" }]
   );
   assert.deepEqual(
     twice.edges.map((edge) => ({ sourceNodeId: edge.sourceNodeId, targetNodeId: edge.targetNodeId })),
-    [
-      { sourceNodeId: "flow-user-client", targetNodeId: "flow-internet" },
-      { sourceNodeId: "flow-internet", targetNodeId: "public-api" }
-    ]
+    [{ sourceNodeId: "flow-user-client", targetNodeId: "public-api" }]
   );
 });
 
@@ -2535,8 +2529,7 @@ test("convertArchitectureJsonToDiagramJson represents areas only through contain
     [
       "alb-forwards-instance",
       "asg-manages-instance",
-      "flow-internet-to-application-alb",
-      "flow-user-to-internet",
+      "flow-user-to-application-alb",
       "sg-protects-instance"
     ]
   );
@@ -2583,8 +2576,7 @@ test("convertArchitectureJsonToDiagramJson adds external actors for public entry
     userNode?.iconUrl,
     "/Resource-Icons_07312025/Res_General-Icons/Res_48_Light/Res_Client_48_Light.svg"
   );
-  assert.equal(internetNode?.kind, "design");
-  assert.equal(internetNode?.type, "sketchcatch_internet");
+  assert.equal(internetNode, undefined);
   assert.deepEqual(
     diagramJson.edges.map((edge) => ({
       label: edge.label,
@@ -2593,17 +2585,101 @@ test("convertArchitectureJsonToDiagramJson adds external actors for public entry
     })),
     [
       {
-        label: "requests",
+        label: "HTTPS requests",
         sourceNodeId: "flow-user-client",
-        targetNodeId: "flow-internet"
-      },
-      {
-        label: "public traffic",
-        sourceNodeId: "flow-internet",
         targetNodeId: "public-cdn"
       },
     ]
   );
+});
+
+test("convertArchitectureJsonToDiagramJson shows Fargate and RDS placements inside every private subnet", () => {
+  const diagramJson = convertArchitectureJsonToDiagramJson({
+    nodes: [
+      {
+        id: "vpc-main",
+        type: "VPC",
+        label: "Main VPC",
+        positionX: 200,
+        positionY: 300,
+        config: { cidrBlock: "10.0.0.0/16" }
+      },
+      ...[
+        ["private-app-a", "10.0.10.0/24", "private_app"],
+        ["private-app-b", "10.0.11.0/24", "private_app"],
+        ["private-db-a", "10.0.20.0/24", "private_db"],
+        ["private-db-b", "10.0.21.0/24", "private_db"]
+      ].map(([id, cidrBlock, tier], index) => ({
+        id: id!,
+        type: "SUBNET" as const,
+        label: id!,
+        positionX: 320 + (index % 2) * 300,
+        positionY: 480 + Math.floor(index / 2) * 240,
+        config: {
+          cidrBlock,
+          tier,
+          vpcId: "aws_vpc.vpc_main.id"
+        }
+      })),
+      {
+        id: "ecs-service",
+        type: "ECS_SERVICE",
+        label: "Fargate Application Service",
+        positionX: 900,
+        positionY: 520,
+        config: {
+          networkConfiguration: {
+            subnets: [
+              "aws_subnet.private_app_a.id",
+              "aws_subnet.private_app_b.id"
+            ]
+          }
+        }
+      },
+      {
+        id: "db-subnet-group",
+        type: "DB_SUBNET_GROUP",
+        label: "DB Subnet Group",
+        positionX: 900,
+        positionY: 700,
+        config: {
+          subnetIds: ["aws_subnet.private_db_a.id", "aws_subnet.private_db_b.id"]
+        }
+      },
+      {
+        id: "app-database",
+        type: "RDS",
+        label: "Application Database",
+        positionX: 1100,
+        positionY: 700,
+        config: {
+          dbSubnetGroupName: "aws_db_subnet_group.db_subnet_group.name",
+          multiAz: true
+        }
+      }
+    ],
+    edges: []
+  });
+  const placementNodes = diagramJson.nodes.filter(
+    (node) => node.type === "sketchcatch_subnet_placement"
+  );
+  const placementParents = new Set(
+    placementNodes.map((node) => node.metadata?.parentAreaNodeId)
+  );
+
+  assert.equal(placementNodes.length, 4);
+  assert.deepEqual(
+    placementParents,
+    new Set(["private-app-a", "private-app-b", "private-db-a", "private-db-b"])
+  );
+
+  const nodeById = new Map(diagramJson.nodes.map((node) => [node.id, node]));
+  for (const placementNode of placementNodes) {
+    assertContainsNode(
+      nodeById.get(placementNode.metadata?.parentAreaNodeId ?? ""),
+      placementNode
+    );
+  }
 });
 
 test("convertArchitectureJsonToDiagramJson omits external actors for internal-only entry points", () => {

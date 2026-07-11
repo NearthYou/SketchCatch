@@ -4,6 +4,7 @@ import type { ArchitectureJson } from "@sketchcatch/types";
 import { resourceDefinitions } from "@sketchcatch/types/resource-definitions";
 import type { AiTextProvider } from "./aiLlmExplanation.js";
 import {
+  ArchitectureDraftGenerationError,
   createAmazonQArchitectureDraftResponse,
   createArchitectureDraft
 } from "./aiArchitectureDrafts.js";
@@ -750,6 +751,116 @@ test("createAmazonQArchitectureDraftResponse materializes a deployable multi-AZ 
   );
 });
 
+test("createAmazonQArchitectureDraftResponse materializes HTTPS SSE and burst scaling for a managed Fargate web app", async () => {
+  const provider = createFakeAmazonQProvider(() =>
+    JSON.stringify({
+      status: "plan",
+      title: "Managed APAC Fargate Web App",
+      patternIds: ["ecs-fargate", "spa-cloudfront-s3", "multi-az-rds"],
+      requiredResources: [
+        "VPC",
+        "SUBNET",
+        "INTERNET_GATEWAY",
+        "LOAD_BALANCER",
+        "LOAD_BALANCER_LISTENER",
+        "LOAD_BALANCER_TARGET_GROUP",
+        "ECR_REPOSITORY",
+        "ECS_CLUSTER",
+        "ECS_SERVICE",
+        "ECS_TASK_DEFINITION",
+        "CLOUDFRONT",
+        "S3",
+        "RDS"
+      ],
+      resourceQuantities: { S3: 2 },
+      runtimeTopology: {
+        trafficEntry: "LOAD_BALANCER",
+        compute: "ECS_FARGATE",
+        placement: "private_subnets",
+        autoScaling: true
+      },
+      region: "ap-northeast-1",
+      database: "simple",
+      availability: "99"
+    })
+  );
+  const prompt = [
+    "웹사이트 유형: 동적 웹 애플리케이션",
+    "트래픽: 중간 규모 일 1,000명 동시 50명",
+    "데이터베이스: 간단한 데이터 사용자 정보 게시글 10GB 미만",
+    "프론트엔드: React/Vue/Angular SPA 프레임워크",
+    "백엔드: 복잡한 비즈니스 로직 Spring Boot Django",
+    "주요 사용자 지역: 아시아 태평양 도쿄 싱가포르 포함",
+    "예산: 50-200만원 고성능",
+    "SSL 인증서 HTTPS: 필수",
+    "파일 업로드: 이미지만 프로필 게시글 이미지",
+    "실시간 기능: 실시간 채팅",
+    "음성 기능: 사용자가 음성 메시지를 업로드하면 Amazon Transcribe로 전사",
+    "관리: 완전 관리형 서버리스 관리 최소화",
+    "로딩 시간: 3초 이내",
+    "웹사이트 크기: 10MB-100MB",
+    "트래픽 패턴: 이벤트성 급증",
+    "가용성: 99% 월 8시간 이내",
+    "실시간 채팅 연결: HTTP 메시지 전송 + SSE 수신 경로"
+  ].join("\n");
+
+  const response = await createAmazonQArchitectureDraftResponse(
+    { prompt },
+    { provider, creditPolicy: confirmedCreditPolicy }
+  );
+
+  if ("status" in response) {
+    assert.fail(`Expected preview, got clarification: ${response.question}`);
+  }
+
+  const nodes = response.architectureJson.nodes;
+  const edges = response.architectureJson.edges;
+  const httpsListener = nodes.find(
+    (node) =>
+      node.type === "LOAD_BALANCER_LISTENER" &&
+      node.config.port === 443 &&
+      node.config.protocol === "HTTPS"
+  );
+  const targetGroup = nodes.find((node) => node.type === "LOAD_BALANCER_TARGET_GROUP");
+  const ecsService = nodes.find((node) => node.type === "ECS_SERVICE");
+  const database = nodes.find((node) => node.type === "RDS");
+
+  assert.ok(nodes.some((node) => node.type === "ACM_CERTIFICATE"));
+  assert.ok(httpsListener);
+  assert.equal(typeof httpsListener.config.certificateArn, "string");
+  assert.ok(nodes.some((node) => node.type === "APPLICATION_AUTO_SCALING_TARGET"));
+  assert.ok(nodes.some((node) => node.type === "APPLICATION_AUTO_SCALING_POLICY"));
+  assert.ok(
+    nodes.some(
+      (node) => node.type === "S3" && node.config.bucketPurpose === "voice_audio"
+    )
+  );
+  assert.ok(
+    nodes.some(
+      (node) =>
+        node.type === "IAM_POLICY" &&
+        /transcribe:StartTranscriptionJob/u.test(String(node.config.policy ?? ""))
+    )
+  );
+  assert.ok(edges.some((edge) => /Amazon Transcribe API/u.test(edge.label ?? "")));
+  assert.ok(
+    edges.some(
+      (edge) =>
+        edge.sourceId === httpsListener.id &&
+        edge.targetId === targetGroup?.id &&
+        /POST \/messages \+ SSE \/events/i.test(edge.label ?? "")
+    )
+  );
+  assert.ok(
+    edges.some(
+      (edge) =>
+        edge.sourceId === ecsService?.id &&
+        edge.targetId === database?.id &&
+        /LISTEN\/NOTIFY/i.test(edge.label ?? "")
+    )
+  );
+});
+
 test("createAmazonQArchitectureDraftResponse rejects when Amazon Q returns an invalid compact plan", async () => {
   const provider = createFakeAmazonQProvider(() =>
     JSON.stringify({
@@ -769,7 +880,10 @@ test("createAmazonQArchitectureDraftResponse rejects when Amazon Q returns an in
         creditPolicy: confirmedCreditPolicy
       }
     ),
-    { name: "ArchitectureDraftGenerationError" }
+    (error: unknown) =>
+      error instanceof ArchitectureDraftGenerationError &&
+      error.kind === "provider_response_invalid" &&
+      error.statusCode === 502
   );
 });
 
@@ -788,7 +902,10 @@ test("createAmazonQArchitectureDraftResponse rejects when compact plan quantitie
       { prompt: createDynamicWebDeploymentSelectionPrompt() },
       { provider, creditPolicy: confirmedCreditPolicy }
     ),
-    { name: "ArchitectureDraftGenerationError" }
+    (error: unknown) =>
+      error instanceof ArchitectureDraftGenerationError &&
+      error.kind === "requirements_unsatisfied" &&
+      error.statusCode === 422
   );
 });
 
@@ -1655,7 +1772,22 @@ test("createAmazonQArchitectureDraftResponse sends dynamic global website constr
             label: "HTTPS Listener",
             positionX: 600,
             positionY: 320,
-            config: {}
+            config: {
+              certificateArn: "aws_acm_certificate.application_certificate.arn",
+              port: 443,
+              protocol: "HTTPS"
+            }
+          },
+          {
+            id: "application-certificate",
+            type: "ACM_CERTIFICATE",
+            label: "Application TLS Certificate",
+            positionX: 360,
+            positionY: 520,
+            config: {
+              domainName: "app.example.com",
+              validationMethod: "DNS"
+            }
           },
           {
             id: "app-server-a",

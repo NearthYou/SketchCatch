@@ -1,5 +1,4 @@
 import type {
-  ApiErrorCode,
   AiArchitectureDraftResult,
   AiBillingMode,
   AiProviderMetadata,
@@ -27,6 +26,18 @@ import {
 } from "./aiArchitectureResourceCatalog.js";
 import { planPracticeArchitecture } from "./aiArchitectureRequirementDraftBuilder.js";
 import { applyOperatingConditionConfig } from "./aiArchitectureOperatingConditions.js";
+import {
+  ArchitectureDraftGenerationError,
+  createInternalArchitectureGenerationError,
+  createProviderResponseInvalidError,
+  createProviderUnavailableError,
+  createRequirementsUnsatisfiedError
+} from "./aiArchitectureDraftGenerationErrors.js";
+import {
+  applyArchitectureOperationalPolicy,
+  resolveArchitectureOperationalRequirements,
+  validateArchitectureOperationalRequirements
+} from "./aiArchitectureOperationalRequirements.js";
 import { resolveArchitectureResourceQuantities } from "./aiArchitectureResourceQuantities.js";
 import { resolveArchitectureRequirement } from "./aiArchitectureRequirementResolution.js";
 import { createArchitectureDraftFallbackExplanation } from "./aiLlmExplanationFallbacks.js";
@@ -47,16 +58,7 @@ import {
 
 const ARCHITECTURE_DRAFT_TARGET = "architecture_draft";
 
-export class ArchitectureDraftGenerationError extends Error {
-  readonly statusCode = 503;
-  readonly errorCode: ApiErrorCode = "service_unavailable";
-  readonly exposeMessage = true;
-
-  constructor(cause: unknown) {
-    super("Amazon Q 아키텍처 생성에 실패했습니다. 잠시 후 다시 시도해주세요.", { cause });
-    this.name = "ArchitectureDraftGenerationError";
-  }
-}
+export { ArchitectureDraftGenerationError } from "./aiArchitectureDraftGenerationErrors.js";
 
 const SUPPORTED_RESOURCE_TYPES = SUPPORTED_ARCHITECTURE_RESOURCE_TYPES;
 const SUPPORTED_RESOURCE_CATALOG = SUPPORTED_ARCHITECTURE_RESOURCE_CATALOG;
@@ -311,14 +313,17 @@ export async function createAmazonQArchitectureDraftResponse(
     let activePayload = payload;
     let retryUsed = false;
     reportArchitectureDraftProgress(options.onProgress, "querying_amazon_q");
-    let response = await provider.generate({
+    let response = await generateArchitectureDraftProviderResponse(provider, {
       target: ARCHITECTURE_DRAFT_TARGET,
       instructions: createAmazonQArchitectureDraftInstructions(),
       prompt: createAmazonQArchitectureDraftPrompt(request.prompt, architectureDecisionSpace, normalizedRequirement),
       payload: activePayload
     });
     reportArchitectureDraftProgress(options.onProgress, "validating_architecture");
-    let parsedResponse = parseAmazonQArchitectureDraftResponse(response.text);
+    let parsedResponse = applyOperationalPolicyToProviderResponse(
+      parseArchitectureDraftProviderResponse(response.text),
+      request.prompt
+    );
 
     if (parsedResponse.status === "preview") {
       const validationIssues = findAmazonQPreviewValidationIssues(request.prompt, parsedResponse, normalizedRequirement);
@@ -337,7 +342,7 @@ export async function createAmazonQArchitectureDraftResponse(
           supportedResourceCatalog: SUPPORTED_RESOURCE_CATALOG
         });
         reportArchitectureDraftProgress(options.onProgress, "querying_amazon_q");
-        response = await provider.generate({
+        response = await generateArchitectureDraftProviderResponse(provider, {
           target: ARCHITECTURE_DRAFT_TARGET,
           instructions: createAmazonQArchitectureDraftInstructions(),
           prompt: createAmazonQArchitectureDraftRepairPrompt(
@@ -350,7 +355,10 @@ export async function createAmazonQArchitectureDraftResponse(
           payload: activePayload
         });
         reportArchitectureDraftProgress(options.onProgress, "validating_architecture");
-        parsedResponse = parseAmazonQArchitectureDraftResponse(response.text);
+        parsedResponse = applyOperationalPolicyToProviderResponse(
+          parseArchitectureDraftProviderResponse(response.text),
+          request.prompt
+        );
 
         const retryValidationIssues =
           parsedResponse.status === "preview"
@@ -358,7 +366,7 @@ export async function createAmazonQArchitectureDraftResponse(
             : [];
 
         if (parsedResponse.status === "preview" && retryValidationIssues.length > 0) {
-          throw new Error("Amazon Q architecture draft failed self-validation after retry");
+          throw createRequirementsUnsatisfiedError(retryValidationIssues);
         }
       }
     }
@@ -412,7 +420,7 @@ export async function createAmazonQArchitectureDraftResponse(
           supportedResourceCatalog: SUPPORTED_RESOURCE_CATALOG
         });
         reportArchitectureDraftProgress(options.onProgress, "querying_amazon_q");
-        response = await provider.generate({
+        response = await generateArchitectureDraftProviderResponse(provider, {
           target: ARCHITECTURE_DRAFT_TARGET,
           instructions: createAmazonQArchitectureDraftInstructions(),
           prompt: createAmazonQArchitecturePlanRepairPrompt(
@@ -425,12 +433,14 @@ export async function createAmazonQArchitectureDraftResponse(
           payload: activePayload
         });
         reportArchitectureDraftProgress(options.onProgress, "validating_architecture");
-        parsedResponse = parseAmazonQArchitectureDraftResponse(response.text);
+        parsedResponse = parseArchitectureDraftProviderResponse(response.text);
 
         if (parsedResponse.status !== "plan") {
-          throw new Error(
-            "Amazon Q must return a corrected architecture plan after materialization validation fails",
-            { cause: error }
+          throw createProviderResponseInvalidError(
+            new Error(
+              "Amazon Q must return a corrected architecture plan after materialization validation fails",
+              { cause: error }
+            )
           );
         }
 
@@ -454,8 +464,57 @@ export async function createAmazonQArchitectureDraftResponse(
     reportArchitectureDraftProgress(options.onProgress, "building_diagram");
     return createAmazonQDraftResult(parsedResponse, providerMetadata);
   } catch (error) {
-    throw new ArchitectureDraftGenerationError(error);
+    if (error instanceof ArchitectureDraftGenerationError) {
+      throw error;
+    }
+
+    throw createInternalArchitectureGenerationError(error);
   }
+}
+
+async function generateArchitectureDraftProviderResponse(
+  provider: AiTextProvider,
+  input: Parameters<AiTextProvider["generate"]>[0]
+): Promise<Awaited<ReturnType<AiTextProvider["generate"]>>> {
+  try {
+    return await provider.generate(input);
+  } catch (error) {
+    if (error instanceof ArchitectureDraftGenerationError) {
+      throw error;
+    }
+
+    throw createProviderUnavailableError(error);
+  }
+}
+
+function parseArchitectureDraftProviderResponse(text: string): AmazonQArchitectureDraftResponse {
+  try {
+    return parseAmazonQArchitectureDraftResponse(text);
+  } catch (error) {
+    throw createProviderResponseInvalidError(error);
+  }
+}
+
+function applyOperationalPolicyToProviderResponse(
+  response: AmazonQArchitectureDraftResponse,
+  prompt: string
+): AmazonQArchitectureDraftResponse {
+  if (response.status !== "preview") {
+    return response;
+  }
+
+  const securedArchitectureJson = configureRequiredHttpsTransport(
+    response.architectureJson,
+    prompt
+  );
+
+  return {
+    ...response,
+    architectureJson: applyArchitectureOperationalPolicy(
+      securedArchitectureJson,
+      resolveArchitectureOperationalRequirements(prompt)
+    )
+  };
 }
 
 function reportArchitectureDraftProgress(
@@ -1416,6 +1475,7 @@ function findRequirementCoverageValidationIssues(
   issues.push(...findRequestedResourceQuantityValidationIssues(normalizedPrompt, architectureJson));
   issues.push(...findRuntimeTopologyValidationIssues(normalizedPrompt, architectureJson));
   issues.push(...findNormalizedRequirementValidationIssues(normalizedRequirement, architectureJson));
+  issues.push(...findOperationalRequirementTopologyValidationIssues(normalizedPrompt, architectureJson));
 
   if (requiresNoDatabase(normalizedPrompt) && (nodeTypes.has("RDS") || nodeTypes.has("DB_SUBNET_GROUP") || hasForbiddenDatabaseResource(architectureJson))) {
     issues.push("The user selected no database, but the preview includes database resources or database-specific labels/config. Regenerate without database resources.");
@@ -1474,6 +1534,18 @@ function findRequirementCoverageValidationIssues(
   }
 
   return issues;
+}
+
+function findOperationalRequirementTopologyValidationIssues(
+  normalizedPrompt: string,
+  architectureJson: ArchitectureJson
+): string[] {
+  const result = validateArchitectureOperationalRequirements(
+    resolveArchitectureOperationalRequirements(normalizedPrompt),
+    architectureJson
+  );
+
+  return result.ok ? [] : [...result.issues];
 }
 
 function findNormalizedRequirementValidationIssues(
@@ -1890,14 +1962,22 @@ function createAmazonQPlanDraftResult(
     plan,
     request.prompt
   );
-  const connectedCanonicalArchitectureJson = connectCanonicalPatternTopologies(
+  const securedCanonicalArchitectureJson = configureRequiredHttpsTransport(
     canonicalArchitectureJson,
+    request.prompt
+  );
+  const connectedCanonicalArchitectureJson = connectCanonicalPatternTopologies(
+    securedCanonicalArchitectureJson,
     plan?.patternIds ?? [],
     request.prompt
   );
-  const architectureJson = connectArchitecturePlanRuntimeTopology(
+  const topologyConnectedArchitectureJson = connectArchitecturePlanRuntimeTopology(
     connectedCanonicalArchitectureJson,
     plan?.runtimeTopology
+  );
+  const architectureJson = applyArchitectureOperationalPolicy(
+    topologyConnectedArchitectureJson,
+    resolveArchitectureOperationalRequirements(request.prompt)
   );
   const validationIssues = findMaterializedArchitecturePlanValidationIssues(
     request.prompt,
@@ -1906,7 +1986,7 @@ function createAmazonQPlanDraftResult(
   );
 
   if (validationIssues.length > 0) {
-    throw new Error(`Amazon Q architecture plan failed materialization: ${validationIssues.join(" ")}`);
+    throw createRequirementsUnsatisfiedError(validationIssues);
   }
 
   const assumptions = [...(response.assumptions ?? [])];
@@ -1942,12 +2022,20 @@ function normalizeArchitecturePlanTopologyInvariants(
 
   const patternIds = new Set(plan.patternIds ?? []);
   const usesEc2Pattern = patternIds.has("alb-asg-ec2");
+  const usesFargatePattern =
+    patternIds.has("ecs-fargate") && !patternIds.has("serverless-api");
+  const operationalRequirements = resolveArchitectureOperationalRequirements(prompt);
   const topology = plan.runtimeTopology;
   const requiresEc2Spread =
     topology?.compute?.toUpperCase() === "EC2" &&
     topology.spreadAcrossPrivateSubnets === true;
 
-  if (!usesEc2Pattern && !requiresEc2Spread) {
+  if (
+    !usesEc2Pattern &&
+    !usesFargatePattern &&
+    !requiresEc2Spread &&
+    !operationalRequirements.voiceTranscription
+  ) {
     return plan;
   }
 
@@ -1955,6 +2043,12 @@ function normalizeArchitecturePlanTopologyInvariants(
   const normalizedPrompt = prompt.normalize("NFKC").toLowerCase();
   const requiredResources = new Set(plan.requiredResources ?? []);
   const resourceQuantities = { ...(plan.resourceQuantities ?? {}) };
+
+  if (operationalRequirements.voiceTranscription) {
+    requiredResources.add("S3");
+    requiredResources.add("IAM_POLICY");
+    resourceQuantities.S3 = Math.max(resourceQuantities.S3 ?? 0, 1);
+  }
   const computeCount = Math.max(
     2,
     topology?.computeCount ?? 0,
@@ -2012,9 +2106,79 @@ function normalizeArchitecturePlanTopologyInvariants(
       requiredResources.add("S3");
       resourceQuantities.S3 = Math.max(resourceQuantities.S3 ?? 0, 2);
     }
+
+    if (requiresHttpsTransport(normalizedPrompt)) {
+      requiredResources.add("ACM_CERTIFICATE");
+    }
   }
 
-  resourceQuantities.EC2 = computeCount;
+  if (usesFargatePattern) {
+    for (const resourceType of [
+      "VPC",
+      "SUBNET",
+      "INTERNET_GATEWAY",
+      "ELASTIC_IP",
+      "NAT_GATEWAY",
+      "ROUTE_TABLE",
+      "ROUTE_TABLE_ASSOCIATION",
+      "SECURITY_GROUP",
+      "LOAD_BALANCER",
+      "LOAD_BALANCER_LISTENER",
+      "LOAD_BALANCER_TARGET_GROUP",
+      "ECR_REPOSITORY",
+      "ECS_CLUSTER",
+      "ECS_SERVICE",
+      "ECS_TASK_DEFINITION",
+      "IAM_ROLE",
+      "IAM_POLICY",
+      "CLOUDWATCH_LOG_GROUP",
+      "CLOUDWATCH_METRIC_ALARM"
+    ] as const) {
+      requiredResources.add(resourceType);
+    }
+
+    if (topology?.autoScaling === true || resolveTrafficProfile(normalizedPrompt) === "bursty") {
+      requiredResources.add("APPLICATION_AUTO_SCALING_TARGET");
+      requiredResources.add("APPLICATION_AUTO_SCALING_POLICY");
+    }
+
+    if (requiresHttpsTransport(normalizedPrompt)) {
+      requiredResources.add("ACM_CERTIFICATE");
+    }
+
+    if (hasDatabase) {
+      requiredResources.add("DB_SUBNET_GROUP");
+      requiredResources.add("RDS");
+      requiredResources.add("SECRETS_MANAGER_SECRET");
+    }
+
+    resourceQuantities.SUBNET = Math.max(resourceQuantities.SUBNET ?? 0, hasDatabase ? 6 : 4);
+    resourceQuantities.ELASTIC_IP = Math.max(resourceQuantities.ELASTIC_IP ?? 0, 2);
+    resourceQuantities.NAT_GATEWAY = Math.max(resourceQuantities.NAT_GATEWAY ?? 0, 2);
+    resourceQuantities.ROUTE_TABLE = Math.max(resourceQuantities.ROUTE_TABLE ?? 0, 3);
+    resourceQuantities.ROUTE_TABLE_ASSOCIATION = Math.max(
+      resourceQuantities.ROUTE_TABLE_ASSOCIATION ?? 0,
+      hasDatabase ? 6 : 4
+    );
+    resourceQuantities.SECURITY_GROUP = Math.max(
+      resourceQuantities.SECURITY_GROUP ?? 0,
+      hasDatabase ? 3 : 2
+    );
+    resourceQuantities.IAM_ROLE = Math.max(resourceQuantities.IAM_ROLE ?? 0, 2);
+    resourceQuantities.CLOUDWATCH_METRIC_ALARM = Math.max(
+      resourceQuantities.CLOUDWATCH_METRIC_ALARM ?? 0,
+      hasDatabase ? 2 : 1
+    );
+
+    if (patternIds.has("spa-cloudfront-s3") && requiresImageUpload(normalizedPrompt)) {
+      requiredResources.add("S3");
+      resourceQuantities.S3 = Math.max(resourceQuantities.S3 ?? 0, 2);
+    }
+  }
+
+  if (usesEc2Pattern || requiresEc2Spread) {
+    resourceQuantities.EC2 = computeCount;
+  }
 
   return {
     ...plan,
@@ -2030,8 +2194,15 @@ function normalizeArchitecturePlanTopologyInvariants(
             spreadAcrossPrivateSubnets: true,
             autoScaling: true
           }
-        : {}),
-      computeCount
+        : usesFargatePattern
+          ? {
+              trafficEntry: "LOAD_BALANCER",
+              compute: "ECS_FARGATE",
+              placement: "private_subnets",
+              autoScaling: topology?.autoScaling === true || resolveTrafficProfile(normalizedPrompt) === "bursty"
+            }
+          : {}),
+      ...(usesEc2Pattern || requiresEc2Spread ? { computeCount } : {})
     }
   };
 }
@@ -2182,6 +2353,7 @@ function findMaterializedArchitecturePlanValidationIssues(
           validateVisualSpread: false
         })),
     ...findNormalizedRequirementValidationIssues(plan, architectureJson, { validateVisualSpread: false }),
+    ...findOperationalRequirementTopologyValidationIssues(normalizedPrompt, architectureJson),
     ...findCanonicalPatternMaterializationIssues(normalizedPrompt, plan, architectureJson)
   ];
 
@@ -2285,6 +2457,60 @@ function findCanonicalPatternMaterializationIssues(
   }
   if (ecsRoles.length < 2) {
     issues.push("The Fargate plan requires separate execution and task IAM roles.");
+  }
+
+  if (
+    plan?.runtimeTopology?.autoScaling === true ||
+    resolveTrafficProfile(normalizedPrompt) === "bursty"
+  ) {
+    const scalingTarget = nodes.find(
+      (node) => node.type === "APPLICATION_AUTO_SCALING_TARGET"
+    );
+    const scalingPolicy = nodes.find(
+      (node) => node.type === "APPLICATION_AUTO_SCALING_POLICY"
+    );
+
+    if (
+      scalingTarget?.config.serviceNamespace !== "ecs" ||
+      scalingTarget?.config.scalableDimension !== "ecs:service:DesiredCount" ||
+      scalingTarget?.config.minCapacity !== 2 ||
+      typeof scalingTarget?.config.maxCapacity !== "number" ||
+      scalingPolicy?.config.policyType !== "TargetTrackingScaling"
+    ) {
+      issues.push("The Fargate service requires deployable ECS target-tracking auto scaling.");
+    }
+  }
+
+  if (resolveRealtimeTransport(normalizedPrompt) === "sse") {
+    const listener = nodes.find((node) => node.type === "LOAD_BALANCER_LISTENER");
+    const database = nodes.find((node) => node.type === "RDS");
+
+    if (
+      listener === undefined ||
+      targetGroup === undefined ||
+      !architectureJson.edges.some(
+        (edge) =>
+          edge.sourceId === listener.id &&
+          edge.targetId === targetGroup.id &&
+          /post \/messages \+ sse \/events/iu.test(edge.label ?? "")
+      )
+    ) {
+      issues.push("SSE requires an explicit POST message and listener-to-target event stream path.");
+    }
+
+    if (
+      resolveRealtimeProfile(normalizedPrompt) === "chat" &&
+      database !== undefined &&
+      ecsService !== undefined &&
+      !architectureJson.edges.some(
+        (edge) =>
+          edge.sourceId === ecsService.id &&
+          edge.targetId === database.id &&
+          /listen\/notify/iu.test(edge.label ?? "")
+      )
+    ) {
+      issues.push("Multi-task SSE chat requires a shared message and fan-out path.");
+    }
   }
 
   if (patternIds.has("multi-az-rds")) {
@@ -3870,7 +4096,11 @@ function configureCanonicalPatternResources(
   }
 
   const hasDatabase = patternIds.has("multi-az-rds");
-  const realtimeTransport = resolveRealtimeTransport(prompt.normalize("NFKC").toLowerCase());
+  const normalizedPrompt = prompt.normalize("NFKC").toLowerCase();
+  const realtimeTransport = resolveRealtimeTransport(normalizedPrompt);
+  const usesHttps = requiresHttpsTransport(normalizedPrompt);
+  const usesEcsAutoScaling =
+    plan?.runtimeTopology?.autoScaling === true || resolveTrafficProfile(normalizedPrompt) === "bursty";
   const hasLoadBalancer = architectureJson.nodes.some(
     (node) => node.type === "LOAD_BALANCER"
   );
@@ -3908,9 +4138,16 @@ function configureCanonicalPatternResources(
     ...(hasLoadBalancer
       ? [canonicalNodeSpec("alb-security-group", "ALB Security Group", 930, 480, {
           name: "sketchcatch-alb",
-          description: "Public HTTP ingress through CloudFront or clients",
+          description: usesHttps
+            ? "Public HTTPS ingress through CloudFront or clients"
+            : "Public HTTP ingress through CloudFront or clients",
           vpcId: vpcRef,
-          ingress: [{ protocol: "tcp", fromPort: 80, toPort: 80, cidrBlocks: ["0.0.0.0/0"] }]
+          ingress: [{
+            protocol: "tcp",
+            fromPort: usesHttps ? 443 : 80,
+            toPort: usesHttps ? 443 : 80,
+            cidrBlocks: ["0.0.0.0/0"]
+          }]
         })]
       : []),
     canonicalNodeSpec("app-security-group", "Fargate App Security Group", 930, 700, {
@@ -3966,6 +4203,38 @@ function configureCanonicalPatternResources(
       name: "/ecs/sketchcatch-app",
       retentionInDays: 30
     })]],
+    ...(usesHttps
+      ? [["ACM_CERTIFICATE", [canonicalNodeSpec("application-certificate", "Application TLS Certificate", 1180, 560, {
+          domainName: "app.example.com",
+          validationMethod: "DNS"
+        })]] as const]
+      : []),
+    ...(usesEcsAutoScaling
+      ? [
+          ["APPLICATION_AUTO_SCALING_TARGET", [canonicalNodeSpec("ecs-scaling-target", "ECS Service Scaling Target", 1580, 700, {
+            minCapacity: 2,
+            maxCapacity: 10,
+            resourceId: "service/${aws_ecs_cluster.ecs_cluster.name}/${aws_ecs_service.ecs_service.name}",
+            scalableDimension: "ecs:service:DesiredCount",
+            serviceNamespace: "ecs"
+          })]] as const,
+          ["APPLICATION_AUTO_SCALING_POLICY", [canonicalNodeSpec("ecs-scaling-policy", "ECS CPU Target Tracking", 1580, 840, {
+            name: "sketchcatch-ecs-cpu-target",
+            policyType: "TargetTrackingScaling",
+            resourceId: canonicalTerraformReference("aws_appautoscaling_target", "ecs-scaling-target", "resource_id"),
+            scalableDimension: canonicalTerraformReference("aws_appautoscaling_target", "ecs-scaling-target", "scalable_dimension"),
+            serviceNamespace: canonicalTerraformReference("aws_appautoscaling_target", "ecs-scaling-target", "service_namespace"),
+            targetTrackingScalingPolicyConfiguration: {
+              targetValue: 60,
+              scaleInCooldown: 60,
+              scaleOutCooldown: 30,
+              predefinedMetricSpecification: [{
+                predefinedMetricType: "ECSServiceAverageCPUUtilization"
+              }]
+            }
+          })]] as const
+        ]
+      : []),
     ["CLOUDWATCH_METRIC_ALARM", [
       canonicalNodeSpec("app-cpu-alarm", "ECS Service CPU Alarm", 1180, 980, createCanonicalMetricAlarmConfig("sketchcatch-ecs-cpu", "AWS/ECS", "CPUUtilization", { ClusterName: canonicalTerraformReference("aws_ecs_cluster", "ecs-cluster", "name"), ServiceName: canonicalTerraformReference("aws_ecs_service", "ecs-service", "name") })),
       ...(hasDatabase
@@ -4019,7 +4288,9 @@ function configureCanonicalPatternResources(
       case "LOAD_BALANCER_TARGET_GROUP":
         return { ...node, id: "app-target-group", label: "Fargate Target Group", config: { name: "sketchcatch-app", port: 8080, protocol: "HTTP", targetType: "ip", vpcId: vpcRef, healthCheck: { path: "/health", matcher: "200-399" } } };
       case "LOAD_BALANCER_LISTENER":
-        return { ...node, id: "http-listener", label: "ALB HTTP Listener", config: { loadBalancerArn: canonicalTerraformReference("aws_lb", "application-load-balancer", "arn"), port: 80, protocol: "HTTP", defaultAction: { type: "forward", targetGroupArn: canonicalTerraformReference("aws_lb_target_group", "app-target-group", "arn") } } };
+        return usesHttps
+          ? { ...node, id: "https-listener", label: "ALB HTTPS Listener", config: { loadBalancerArn: canonicalTerraformReference("aws_lb", "application-load-balancer", "arn"), port: 443, protocol: "HTTPS", sslPolicy: "ELBSecurityPolicy-TLS13-1-2-2021-06", certificateArn: canonicalTerraformReference("aws_acm_certificate", "application-certificate", "arn"), defaultAction: { type: "forward", targetGroupArn: canonicalTerraformReference("aws_lb_target_group", "app-target-group", "arn") } } }
+          : { ...node, id: "http-listener", label: "ALB HTTP Listener", config: { loadBalancerArn: canonicalTerraformReference("aws_lb", "application-load-balancer", "arn"), port: 80, protocol: "HTTP", defaultAction: { type: "forward", targetGroupArn: canonicalTerraformReference("aws_lb_target_group", "app-target-group", "arn") } } };
       case "ECR_REPOSITORY":
         return { ...node, id: "app-repository", label: "Application ECR Repository", config: { name: "sketchcatch-app", imageTagMutability: "IMMUTABLE", imageScanningConfiguration: { scanOnPush: true } } };
       case "ECS_CLUSTER":
@@ -4040,6 +4311,157 @@ function configureCanonicalPatternResources(
   });
 
   return { nodes, edges: architectureJson.edges };
+}
+
+function configureRequiredHttpsTransport(
+  architectureJson: ArchitectureJson,
+  prompt: string
+): ArchitectureJson {
+  const normalizedPrompt = prompt.normalize("NFKC").toLowerCase();
+  if (!requiresHttpsTransport(normalizedPrompt)) {
+    return architectureJson;
+  }
+
+  const publicLoadBalancer = architectureJson.nodes.find(
+    (node) => node.type === "LOAD_BALANCER" && node.config.internal !== true
+  );
+  const existingListener = architectureJson.nodes.find(
+    (node) => node.type === "LOAD_BALANCER_LISTENER"
+  );
+  if (publicLoadBalancer === undefined) {
+    return architectureJson;
+  }
+
+  const existingTargetGroup = architectureJson.nodes.find(
+    (node) => node.type === "LOAD_BALANCER_TARGET_GROUP"
+  );
+  const listenerId = existingListener?.id ?? createUniqueCanonicalNodeId(
+    architectureJson.nodes,
+    "application-https-listener"
+  );
+  const targetGroupId = existingTargetGroup?.id ?? createUniqueCanonicalNodeId(
+    architectureJson.nodes,
+    "application-target-group"
+  );
+
+  const existingCertificate = architectureJson.nodes.find(
+    (node) => node.type === "ACM_CERTIFICATE"
+  );
+  const certificateId = existingCertificate?.id ?? createUniqueCanonicalNodeId(
+    architectureJson.nodes,
+    "application-certificate"
+  );
+  const certificateNode = existingCertificate ?? {
+    id: certificateId,
+    type: "ACM_CERTIFICATE" as const,
+    label: "Application TLS Certificate",
+    positionX: (existingListener?.positionX ?? publicLoadBalancer.positionX) - 180,
+    positionY: (existingListener?.positionY ?? publicLoadBalancer.positionY) + 180,
+    config: {
+      domainName: "app.example.com",
+      validationMethod: "DNS"
+    }
+  };
+  const targetGroupNode = existingTargetGroup ?? {
+    id: targetGroupId,
+    type: "LOAD_BALANCER_TARGET_GROUP" as const,
+    label: "Application Target Group",
+    positionX: publicLoadBalancer.positionX + 480,
+    positionY:
+      Math.max(...architectureJson.nodes.map((node) => node.positionY)) + 160,
+    config: {
+      name: "sketchcatch-app",
+      port: 8080,
+      protocol: "HTTP",
+      targetType: architectureJson.nodes.some((node) => node.type === "ECS_SERVICE")
+        ? "ip"
+        : "instance",
+      ...(architectureJson.nodes.find((node) => node.type === "VPC") === undefined
+        ? {}
+        : {
+            vpcId: canonicalTerraformReference(
+              "aws_vpc",
+              architectureJson.nodes.find((node) => node.type === "VPC")!.id
+            )
+          })
+    }
+  };
+  const listenerNode = {
+    ...(existingListener ?? {
+      id: listenerId,
+      type: "LOAD_BALANCER_LISTENER" as const,
+      label: "ALB HTTPS Listener",
+      positionX: publicLoadBalancer.positionX,
+      positionY: publicLoadBalancer.positionY + 180,
+      config: {}
+    }),
+    label: "ALB HTTPS Listener",
+    config: {
+      ...(existingListener?.config ?? {}),
+      loadBalancerArn: canonicalTerraformReference("aws_lb", publicLoadBalancer.id, "arn"),
+      port: 443,
+      protocol: "HTTPS",
+      sslPolicy: "ELBSecurityPolicy-TLS13-1-2-2021-06",
+      certificateArn: canonicalTerraformReference(
+        "aws_acm_certificate",
+        certificateId,
+        "arn"
+      ),
+      defaultAction: {
+        type: "forward",
+        targetGroupArn: canonicalTerraformReference(
+          "aws_lb_target_group",
+          targetGroupId,
+          "arn"
+        )
+      }
+    }
+  };
+  const nodes = architectureJson.nodes
+    .map((node) =>
+      node.id === existingListener?.id
+        ? {
+            ...listenerNode
+          }
+        : node
+    );
+
+  if (existingListener === undefined) {
+    nodes.push(listenerNode);
+  }
+  if (existingCertificate === undefined) {
+    nodes.push(certificateNode);
+  }
+  if (existingTargetGroup === undefined) {
+    nodes.push(targetGroupNode);
+  }
+
+  const edges = [...architectureJson.edges];
+  addArchitectureEdge(
+    edges,
+    `canonical-${publicLoadBalancer.id}-to-${listenerId}`,
+    publicLoadBalancer.id,
+    listenerId,
+    "listens"
+  );
+  addArchitectureEdge(
+    edges,
+    `canonical-${listenerId}-to-${targetGroupId}`,
+    listenerId,
+    targetGroupId,
+    resolveRealtimeTransport(normalizedPrompt) === "sse"
+      ? "POST /messages + SSE /events"
+      : "forwards"
+  );
+  addArchitectureEdge(
+    edges,
+    `canonical-${certificateId}-to-${listenerId}`,
+    certificateId,
+    listenerId,
+    "TLS certificate"
+  );
+
+  return { nodes, edges };
 }
 
 function configureCanonicalEc2PatternResources(
@@ -4082,12 +4504,14 @@ function configureCanonicalEc2PatternResources(
     Version: "2012-10-17",
     Statement: [{ Effect: "Allow", Principal: { Service: "ec2.amazonaws.com" }, Action: "sts:AssumeRole" }]
   });
-  const uploadProfile = resolveUploadProfile(prompt.normalize("NFKC").toLowerCase());
+  const normalizedPrompt = prompt.normalize("NFKC").toLowerCase();
+  const uploadProfile = resolveUploadProfile(normalizedPrompt);
   const uploadEnabled = uploadProfile !== undefined && uploadProfile !== "none";
-  const realtimeTransport = resolveRealtimeTransport(prompt.normalize("NFKC").toLowerCase());
+  const realtimeTransport = resolveRealtimeTransport(normalizedPrompt);
+  const usesHttps = requiresHttpsTransport(normalizedPrompt);
   const staticWebsiteOriginEnabled = patternIds.has("spa-cloudfront-s3");
   const databaseAllocatedStorage = resolveDatabaseAllocatedStorage(
-    prompt.normalize("NFKC").toLowerCase()
+    normalizedPrompt
   );
   const specsByType = new Map<ResourceType, readonly CanonicalNodeSpec[]>([
     ["SUBNET", subnetSpecs],
@@ -4123,9 +4547,11 @@ function configureCanonicalEc2PatternResources(
     ["SECURITY_GROUP", [
       canonicalNodeSpec("alb-security-group", "ALB Security Group", 1180, 480, {
         name: "sketchcatch-alb",
-        description: "Public HTTP ingress to the application load balancer",
+        description: usesHttps
+          ? "Public HTTPS ingress to the application load balancer"
+          : "Public HTTP ingress to the application load balancer",
         vpcId: vpcRef,
-        ingress: [{ protocol: "tcp", fromPort: 80, toPort: 80, cidrBlocks: ["0.0.0.0/0"] }],
+        ingress: [{ protocol: "tcp", fromPort: usesHttps ? 443 : 80, toPort: usesHttps ? 443 : 80, cidrBlocks: ["0.0.0.0/0"] }],
         egress: [{ protocol: "-1", fromPort: 0, toPort: 0, cidrBlocks: ["0.0.0.0/0"] }]
       }),
       canonicalNodeSpec("app-security-group", "EC2 App Security Group", 1180, 760, {
@@ -4187,6 +4613,12 @@ function configureCanonicalEc2PatternResources(
       name: "/sketchcatch/ec2/app",
       retentionInDays: 30
     })]],
+    ...(usesHttps
+      ? [["ACM_CERTIFICATE", [canonicalNodeSpec("application-certificate", "Application TLS Certificate", 1620, 260, {
+          domainName: "app.example.com",
+          validationMethod: "DNS"
+        })]] as const]
+      : []),
     ["CLOUDWATCH_METRIC_ALARM", [
       canonicalNodeSpec("app-cpu-alarm", "ASG CPU Alarm", 1620, 100, {
         ...createCanonicalMetricAlarmConfig("sketchcatch-ec2-cpu", "AWS/EC2", "CPUUtilization", {
@@ -4273,7 +4705,9 @@ function configureCanonicalEc2PatternResources(
       case "LOAD_BALANCER_TARGET_GROUP":
         return { ...node, id: "app-target-group", label: "EC2 Target Group", positionX: 570, positionY: 760, config: { name: "sketchcatch-app", port: 8080, protocol: "HTTP", targetType: "instance", vpcId: vpcRef, healthCheck: { path: "/health", matcher: "200-399" } } };
       case "LOAD_BALANCER_LISTENER":
-        return { ...node, id: "http-listener", label: "ALB HTTP Listener", positionX: 570, positionY: 620, config: { loadBalancerArn: canonicalTerraformReference("aws_lb", "application-load-balancer", "arn"), port: 80, protocol: "HTTP", defaultAction: { type: "forward", targetGroupArn: canonicalTerraformReference("aws_lb_target_group", "app-target-group", "arn") } } };
+        return usesHttps
+          ? { ...node, id: "https-listener", label: "ALB HTTPS Listener", positionX: 570, positionY: 620, config: { loadBalancerArn: canonicalTerraformReference("aws_lb", "application-load-balancer", "arn"), port: 443, protocol: "HTTPS", sslPolicy: "ELBSecurityPolicy-TLS13-1-2-2021-06", certificateArn: canonicalTerraformReference("aws_acm_certificate", "application-certificate", "arn"), defaultAction: { type: "forward", targetGroupArn: canonicalTerraformReference("aws_lb_target_group", "app-target-group", "arn") } } }
+          : { ...node, id: "http-listener", label: "ALB HTTP Listener", positionX: 570, positionY: 620, config: { loadBalancerArn: canonicalTerraformReference("aws_lb", "application-load-balancer", "arn"), port: 80, protocol: "HTTP", defaultAction: { type: "forward", targetGroupArn: canonicalTerraformReference("aws_lb_target_group", "app-target-group", "arn") } } };
       case "LAUNCH_TEMPLATE":
         return { ...node, id: "app-launch-template", label: "EC2 Launch Template", positionX: 620, positionY: 260, config: { namePrefix: "sketchcatch-app-", imageId: canonicalTerraformReference("data.aws_ami", "app-ami"), instanceType: "t3.small", vpcSecurityGroupIds: [canonicalTerraformReference("aws_security_group", "app-security-group")], iamInstanceProfile: { name: canonicalTerraformReference("aws_iam_instance_profile", "app-instance-profile", "name") }, metadataOptions: { httpEndpoint: "enabled", httpTokens: "required" }, monitoring: { enabled: true } } };
       case "AUTO_SCALING_GROUP":
@@ -4535,6 +4969,9 @@ function connectCanonicalPatternTopologies(
   const normalizedPrompt = prompt.normalize("NFKC").toLowerCase();
   const realtimeTransport = resolveRealtimeTransport(normalizedPrompt);
   const realtimeProfile = resolveRealtimeProfile(normalizedPrompt);
+  const canonicalListenerId = requiresHttpsTransport(normalizedPrompt)
+    ? "https-listener"
+    : "http-listener";
   const forwardLabel =
     realtimeTransport === "sse"
       ? "POST /messages + SSE /events"
@@ -4645,8 +5082,9 @@ function connectCanonicalPatternTopologies(
     if (usesRoleAwareEc2) {
       connectIds("public-subnet-a", "application-load-balancer", "hosts ALB");
       connectIds("public-subnet-b", "application-load-balancer", "hosts ALB");
-      connectIds("application-load-balancer", "http-listener", "listens");
-      connectIds("http-listener", "app-target-group", forwardLabel);
+      connectIds("application-load-balancer", canonicalListenerId, "listens");
+      connectIds(canonicalListenerId, "app-target-group", forwardLabel);
+      connectIds("application-certificate", canonicalListenerId, "TLS certificate");
       connectIds(
         "app-target-group",
         "app-auto-scaling-group",
@@ -4714,8 +5152,8 @@ function connectCanonicalPatternTopologies(
       connectIds("app-repository", "ecs-task-definition", "image");
       connectIds("ecs-cluster", "ecs-service", "runs");
       connectIds("ecs-task-definition", "ecs-service", "defines");
-      connectIds("application-load-balancer", "http-listener", "listens");
-      connectIds("http-listener", "app-target-group", forwardLabel);
+      connectIds("application-load-balancer", canonicalListenerId, "listens");
+      connectIds(canonicalListenerId, "app-target-group", forwardLabel);
       connectIds("app-target-group", "ecs-service", "targets ip");
       connectIds("alb-security-group", "application-load-balancer", "protects");
       connectIds("app-security-group", "ecs-service", "protects");
@@ -4724,6 +5162,9 @@ function connectCanonicalPatternTopologies(
       connectIds("ecs-task-policy", "ecs-task-role", "least privilege");
       connectIds("ecs-task-definition", "ecs-log-group", "logs");
       connectIds("ecs-service", "app-cpu-alarm", "monitors");
+      connectIds("ecs-service", "ecs-scaling-target", "scales desired count");
+      connectIds("ecs-scaling-target", "ecs-scaling-policy", "target tracking");
+      connectIds("application-certificate", canonicalListenerId, "TLS certificate");
       connectIds("private-app-subnet-a", "ecs-service", "places tasks");
       connectIds("private-app-subnet-b", "ecs-service", "places tasks");
       for (const bucket of nodesByType.get("S3") ?? []) {
@@ -5119,6 +5560,12 @@ function hasRealtimeImplementationDecision(normalizedPrompt: string): boolean {
 }
 
 type RealtimeTransport = "polling" | "sse" | "websocket";
+
+function requiresHttpsTransport(normalizedPrompt: string): boolean {
+  return /(?:https|ssl|tls|인증서)[\s\S]{0,40}(?:required|mandatory|필수|중요)|(?:필수|mandatory)[\s\S]{0,40}(?:https|ssl|tls|인증서)/iu.test(
+    normalizedPrompt
+  );
+}
 
 function resolveRealtimeTransport(normalizedPrompt: string): RealtimeTransport | undefined {
   if (/(\bsse\b|server-sent\s*events|http\s*메시지\s*전송\s*\+\s*sse)/iu.test(normalizedPrompt)) {

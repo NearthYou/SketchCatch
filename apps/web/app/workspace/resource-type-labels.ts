@@ -51,6 +51,8 @@ const resourceTypeLabels: Record<ResourceType, string> = {
   KMS_ALIAS: "KMS Alias",
   ACM_CERTIFICATE: "ACM Certificate",
   ACM_CERTIFICATE_VALIDATION: "ACM Certificate Validation",
+  APPLICATION_AUTO_SCALING_POLICY: "Application Auto Scaling Policy",
+  APPLICATION_AUTO_SCALING_TARGET: "Application Auto Scaling Target",
   COGNITO_USER_POOL: "Cognito User Pool",
   COGNITO_USER_POOL_CLIENT: "Cognito User Pool Client",
   DB_SUBNET_GROUP: "DB Subnet Group",

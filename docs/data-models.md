@@ -1162,6 +1162,10 @@ Amazon Q Business는 Anonymous application의 `RETRIEVAL_MODE`만 사용한다. 
 
 Q의 자유 형식 `requiredResources`, 좌표, edge, Terraform 값은 원천 진실로 사용하지 않는다. citation으로 승인된 패턴은 backend canonical pattern registry가 결정론적 `ArchitectureIntentPlan`과 `ArchitectureJson`으로 조립한다. canonical materializer는 필수 리소스와 수량을 보충하고, 패턴별 연결 순서, EC2 private subnet 분산, 금지 리소스 제거, 중복 singleton 제한, orphan edge 검증을 적용한다. 검증 실패 시 Q 재검색은 최대 한 번만 수행하며 재검증도 실패하면 provider 결과를 폐기하고 안전한 fallback 또는 생성 거부로 처리한다.
 
+실시간 방식, HTTPS, 이벤트성 급증, 가용성, 음성 전사는 `ArchitectureOperationalRequirements`로 별도 해석한다. 운영 정책은 Q preview와 canonical plan 모두에 적용하며, WebSocket/SSE/polling edge, ECS/EC2 scaling 리소스, HTTPS listener/ACM, 다중 실행 계층과 RDS Multi-AZ, 음성 전용 private S3와 Transcribe IAM 권한 및 audio flow를 실제 topology에서 검증한다. 검증 결과는 예외 문자열이 아니라 `{ ok: true } | { ok: false; issues: string[] }` typed result로 반환한다.
+
+Architecture Draft 오류는 원인별 HTTP 계약을 사용한다. 사용자 요구사항을 재생성 후에도 충족하지 못하면 `422 unprocessable_entity`, Q 응답 형식이 유효하지 않으면 `502 bad_gateway`, Q 호출 자체가 불가능하면 `503 service_unavailable`, 백엔드 내부 조립 결함은 `500 internal_server_error`다. NDJSON stream은 header 전송 뒤 HTTP 상태를 바꿀 수 없으므로 terminal error event의 `statusCode`로 같은 분류를 전달한다.
+
 ```ts
 type AiProvider = "bedrock" | "amazon_q" | "amazon_transcribe" | "openai" | "fallback";
 
@@ -1223,7 +1227,7 @@ type ArchitectureDraftProgressStage =
 type ArchitectureDraftStreamEvent =
   | { type: "progress"; stage: ArchitectureDraftProgressStage }
   | { type: "result"; result: CreateArchitectureDraftResponse }
-  | { type: "error"; error: ApiErrorResponse };
+  | { type: "error"; error: ApiErrorResponse & { statusCode: number } };
 
 type ArchitectureRequirementFact =
   | "web_frontend"

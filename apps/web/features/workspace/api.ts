@@ -384,7 +384,7 @@ async function readArchitectureDraftStream(
     }
 
     if (event.type === "error") {
-      throw new ApiClientError(event.error.error === "service_unavailable" ? 503 : 500, event.error);
+      throw new ApiClientError(event.error.statusCode, event.error);
     }
 
     result = event.result;
@@ -537,6 +537,8 @@ function isApiErrorCode(value: unknown): value is ApiErrorCode {
     value === "conflict" ||
     value === "github_oauth_required" ||
     value === "too_many_requests" ||
+    value === "unprocessable_entity" ||
+    value === "bad_gateway" ||
     value === "service_unavailable" ||
     value === "internal_server_error"
   );

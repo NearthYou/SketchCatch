@@ -288,7 +288,7 @@ test("createAiArchitectureDraft preserves a Q error emitted after streaming star
     new Response(
       [
         '{"type":"progress","stage":"querying_amazon_q"}',
-        '{"type":"error","error":{"error":"service_unavailable","message":"Amazon Q 아키텍처 생성에 실패했습니다. 잠시 후 다시 시도해주세요."}}'
+        '{"type":"error","error":{"error":"service_unavailable","message":"Amazon Q 아키텍처 생성 서비스를 일시적으로 사용할 수 없습니다. 잠시 후 다시 시도해주세요.","statusCode":503}}'
       ].join("\n"),
       {
         headers: { "Content-Type": "application/x-ndjson" },
@@ -300,7 +300,7 @@ test("createAiArchitectureDraft preserves a Q error emitted after streaming star
     () => createAiArchitectureDraft({ prompt: "Create an AWS architecture" }),
     (error: unknown) =>
       getApiErrorMessage(error, "Architecture Draft 생성 중 오류가 발생했습니다.") ===
-      "Amazon Q 아키텍처 생성에 실패했습니다. 잠시 후 다시 시도해주세요."
+      "Amazon Q 아키텍처 생성 서비스를 일시적으로 사용할 수 없습니다. 잠시 후 다시 시도해주세요."
   );
 });
 

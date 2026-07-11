@@ -497,6 +497,24 @@ const terraformResourcePresentations = [
     size
   },
   {
+    definitionId: "aws-appautoscaling-target",
+    name: "Application Auto Scaling Target",
+    area: "containers",
+    category: "Containers",
+    iconUrl: `${serviceIconPath}/Arch_Management-Governance/64/Arch_AWS-Auto-Scaling_64.svg`,
+    label: "ECS Scaling Target",
+    size
+  },
+  {
+    definitionId: "aws-appautoscaling-policy",
+    name: "Application Auto Scaling Policy",
+    area: "containers",
+    category: "Containers",
+    iconUrl: `${serviceIconPath}/Arch_Management-Governance/64/Arch_AWS-Auto-Scaling_64.svg`,
+    label: "ECS Scaling Policy",
+    size
+  },
+  {
     definitionId: "aws-lb",
     name: "Application Load Balancer",
     area: "network",

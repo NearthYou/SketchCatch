@@ -63,7 +63,7 @@ function findRequestedResourceCount(normalizedPrompt: string, keywords: readonly
       "u"
     ),
     new RegExp(
-      `(${countPattern})\\s*${unitPattern}?\\s*(?:있는|짜리|의)?\\s*(?:${keywordPattern})`,
+      `(?<![\\p{L}\\p{N}])(${countPattern})\\s*${unitPattern}?\\s*(?:있는|짜리|의)?\\s*(?:${keywordPattern})`,
       "u"
     )
   ];

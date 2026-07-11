@@ -19,11 +19,13 @@ const API_CONNECTION_ERROR_MESSAGE =
   "API 서버에 연결할 수 없습니다. Docker DB와 API 서버가 켜져 있는지 확인해주세요.";
 const DEFAULT_API_ERROR_MESSAGES = {
   bad_request: "입력값 형식을 확인해주세요.",
+  bad_gateway: "AI 응답을 아키텍처로 해석하지 못했습니다. 다시 시도해주세요.",
   conflict: "이미 사용 중인 정보입니다.",
   internal_server_error: "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.",
   not_found: "요청한 정보를 찾을 수 없습니다.",
   service_unavailable: "AI 생성 서비스를 일시적으로 사용할 수 없습니다. 잠시 후 다시 시도해주세요.",
   too_many_requests: "요청이 너무 많습니다. 잠시 후 다시 시도해주세요.",
+  unprocessable_entity: "요구사항을 모두 충족하지 못했습니다. 선택한 조건을 확인해주세요.",
   unauthorized: "인증이 필요합니다."
 } satisfies Partial<Record<ApiErrorCode, string>>;
 const API_MESSAGE_TRANSLATIONS: Partial<Record<string, string>> = {

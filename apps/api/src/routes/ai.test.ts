@@ -639,10 +639,12 @@ test("POST /api/ai/architecture-draft returns requirement facts and unsupported 
       (warning) => warning.code === "unsupported_requirement_substituted"
     )
   );
-  assert.match(substitutionWarning?.message ?? "", /EKS\/Kubernetes/);
-  assert.match(substitutionWarning?.message ?? "", /EC2/);
+  assert.ok(unsupportedBody.architectureJson.nodes.some((node) => node.type === "EKS_CLUSTER"));
+  assert.doesNotMatch(substitutionWarning?.message ?? "", /EKS\/Kubernetes/);
+  assert.match(substitutionWarning?.message ?? "", /멀티 리전/);
+  assert.match(substitutionWarning?.message ?? "", /단일 리전/);
   assert.match(substitutionWarning?.message ?? "", /대체/);
-  assert.ok(unsupportedBody.metadata.requirementFacts?.includes("server_runtime"));
+  assert.equal(unsupportedBody.metadata.requirementFacts?.includes("server_runtime"), false);
 
   const partialResponse = await app.inject({
     method: "POST",
@@ -657,12 +659,13 @@ test("POST /api/ai/architecture-draft returns requirement facts and unsupported 
   const partialBody = architectureDraftResponseSchema.parse(partialResponse.json());
 
   assert.equal(partialBody.metadata.selectedDraftPattern, "api_server");
-  assert.ok(
+  assert.ok(partialBody.architectureJson.nodes.some((node) => node.type === "EKS_CLUSTER"));
+  assert.equal(
     partialBody.metadata.guardrailWarnings?.some(
       (warning) => warning.code === "unsupported_requirement_substituted"
-    )
+    ),
+    false
   );
-  assert.ok(partialBody.metadata.guardrailWarnings?.some((warning) => warning.code === "partial_generation"));
 
   await app.close();
 });
@@ -1743,7 +1746,7 @@ test("POST /api/ai/architecture-draft rejects an empty prompt", async () => {
   await app.close();
 });
 
-test("POST /api/ai/architecture-draft returns 503 when verified generation fails", async () => {
+test("POST /api/ai/architecture-draft returns 503 when Amazon Q is unavailable", async () => {
   const app = buildApp({
     createArchitectureDraftResponse: async () => {
       throw new ArchitectureDraftGenerationError(new Error("Amazon Q request failed"));
@@ -1761,11 +1764,42 @@ test("POST /api/ai/architecture-draft returns 503 when verified generation fails
   assert.equal(response.statusCode, 503);
   assert.deepEqual(response.json(), {
     error: "service_unavailable",
-    message: "Amazon Q 아키텍처 생성에 실패했습니다. 잠시 후 다시 시도해주세요."
+    message: "Amazon Q 아키텍처 생성 서비스를 일시적으로 사용할 수 없습니다. 잠시 후 다시 시도해주세요."
   });
 
   await app.close();
 });
+
+for (const errorCase of [
+  {
+    kind: "requirements_unsatisfied" as const,
+    statusCode: 422,
+    error: "unprocessable_entity"
+  },
+  {
+    kind: "provider_response_invalid" as const,
+    statusCode: 502,
+    error: "bad_gateway"
+  }
+]) {
+  test(`POST /api/ai/architecture-draft maps ${errorCase.kind} to ${errorCase.statusCode}`, async () => {
+    const app = buildApp({
+      createArchitectureDraftResponse: async () => {
+        throw new ArchitectureDraftGenerationError(new Error("generation failed"), errorCase.kind);
+      }
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/ai/architecture-draft",
+      payload: { prompt: "운영 가능한 웹 아키텍처를 만들어줘" }
+    });
+
+    assert.equal(response.statusCode, errorCase.statusCode);
+    assert.equal(response.json().error, errorCase.error);
+    await app.close();
+  });
+}
 
 test("POST /api/ai/architecture-draft/stream emits backend progress and the final Q result", async () => {
   const app = buildApp({
@@ -1847,7 +1881,8 @@ test("POST /api/ai/architecture-draft/stream emits a typed error when Q generati
     type: "error",
     error: {
       error: "service_unavailable",
-      message: "Amazon Q 아키텍처 생성에 실패했습니다. 잠시 후 다시 시도해주세요."
+      message: "Amazon Q 아키텍처 생성 서비스를 일시적으로 사용할 수 없습니다. 잠시 후 다시 시도해주세요.",
+      statusCode: 503
     }
   });
 
