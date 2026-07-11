@@ -192,7 +192,7 @@ web test 전체
 
 최종 로컬 결과:
 
-- Web test: 753개 통과
+- Web test: 754개 통과
 - Terraform workspace와 Git/CI/CD API 집중 test: 26개 통과
 - `pnpm harness:check`: 통과
 - `pnpm lint`: 통과
