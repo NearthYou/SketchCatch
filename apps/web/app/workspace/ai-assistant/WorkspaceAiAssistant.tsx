@@ -40,6 +40,7 @@ export function WorkspaceAiAssistant({
   const seenMessageIdRef = useRef<string | null>(null);
   const [hasUnreadResponse, setHasUnreadResponse] = useState(false);
   const [isOnline, setOnline] = useState(true);
+  const [isTerraformFixReviewed, setTerraformFixReviewed] = useState(false);
   const lastMessage = assistant.messages.at(-1);
   const isBusy = assistant.requestState !== "idle";
   const hasApproval = assistant.pendingBoardPreview !== null || assistant.pendingTerraformFix !== null;
@@ -89,6 +90,11 @@ export function WorkspaceAiAssistant({
     const scrollArea = scrollRef.current;
     if (scrollArea) scrollArea.scrollTo({ top: scrollArea.scrollHeight, behavior: "smooth" });
   }, [assistant.messages, assistant.requestState, isOpen]);
+
+  // 새 Terraform 수정안은 이전 수정안의 비교 확인을 이어받지 않게 합니다.
+  useEffect(() => {
+    setTerraformFixReviewed(false);
+  }, [assistant.pendingTerraformFix?.code]);
 
   // Escape와 모바일 focus 순환을 panel keyboard 계약으로 처리합니다.
   function handlePanelKeyDown(event: React.KeyboardEvent<HTMLElement>): void {
@@ -219,10 +225,33 @@ export function WorkspaceAiAssistant({
                 <strong>적용 대기</strong>
                 <span>확인 전에는 실제 상태가 바뀌지 않습니다.</span>
               </div>
-              <div>
+              {assistant.pendingTerraformFix ? (
+                <>
+                  <div className={styles.terraformComparison}>
+                    <div>
+                      <span>현재 코드</span>
+                      <pre>{assistant.pendingTerraformFix.currentCode}</pre>
+                    </div>
+                    <div>
+                      <span>제안 코드</span>
+                      <pre>{assistant.pendingTerraformFix.code}</pre>
+                    </div>
+                  </div>
+                  <label className={styles.reviewConfirmation}>
+                    <input
+                      checked={isTerraformFixReviewed}
+                      onChange={(event) => setTerraformFixReviewed(event.target.checked)}
+                      type="checkbox"
+                    />
+                    <span>현재 코드와 제안 코드를 비교 확인했습니다.</span>
+                  </label>
+                </>
+              ) : null}
+              <div className={styles.approvalActions}>
                 <button className={styles.secondaryButton} onClick={assistant.cancelPreview} type="button">취소</button>
                 <button
                   className={styles.primaryButton}
+                  disabled={assistant.pendingTerraformFix !== null && !isTerraformFixReviewed}
                   onClick={assistant.pendingBoardPreview ? assistant.applyBoardPreview : assistant.applyTerraformFix}
                   type="button"
                 >

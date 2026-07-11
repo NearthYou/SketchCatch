@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 const assistantSource = readWorkspaceFile("ai-assistant/WorkspaceAiAssistant.tsx");
 const assistantHookSource = readWorkspaceFile("ai-assistant/use-workspace-ai-assistant.ts");
 const assistantStyles = readWorkspaceFile("ai-assistant/workspace-ai-assistant.module.css");
+const gitCicdHookSource = readWorkspaceFile("operations/use-workspace-git-cicd.ts");
 
 test("AI 런처와 panel은 keyboard 접근성 계약을 제공한다", () => {
   assert.match(assistantSource, /aria-label="AI 채팅 열기"/);
@@ -26,6 +27,25 @@ test("AI 제안은 사용자 승인 함수에서만 실제 상태에 적용한�
   assert.match(assistantHookSource.slice(applyBoardStart, applyTerraformStart), /context\.applyDiagramJson/);
   assert.match(assistantHookSource.slice(applyTerraformStart, cancelPreviewStart), /terraform\.setCode/);
   assert.doesNotMatch(assistantHookSource.slice(0, applyBoardStart), /context\.applyDiagramJson/);
+});
+
+test("Terraform 수정안은 현재 코드와 제안 코드를 비교한 뒤에만 적용한다", () => {
+  const explainStart = assistantHookSource.indexOf("const explainTerraform");
+  const simulationStart = assistantHookSource.indexOf("const runSimulation");
+
+  assert.notEqual(explainStart, -1);
+  assert.notEqual(simulationStart, -1);
+  assert.doesNotMatch(assistantHookSource.slice(explainStart, simulationStart), /terraform\.generate\(\)/);
+  assert.match(assistantHookSource, /readonly currentCode: string/);
+  assert.match(assistantSource, /현재 코드/);
+  assert.match(assistantSource, /제안 코드/);
+  assert.match(assistantSource, /비교 확인/);
+  assert.match(assistantSource, /disabled=\{assistant\.pendingTerraformFix !== null && !isTerraformFixReviewed\}/);
+});
+
+test("Git/CI/CD 준비는 AWS Role 변경을 미리 승인하지 않는다", () => {
+  assert.match(gitCicdHookSource, /approveAwsRoleDiff: false/);
+  assert.doesNotMatch(gitCicdHookSource, /approveAwsRoleDiff: true/);
 });
 
 test("AI 런처와 panel은 desktop과 mobile 크기를 따로 가진다", () => {

@@ -45,6 +45,7 @@ type PendingBoardPreview = {
 
 type PendingTerraformFix = {
   readonly code: string;
+  readonly currentCode: string;
   readonly summary: string;
 };
 
@@ -245,8 +246,10 @@ export function useWorkspaceAiAssistant({
     setRequestState("generating");
     setErrorMessage("");
     try {
-      const code = terraform.code.trim() ? terraform.code : await terraform.generate();
-      if (!code.trim()) throw new Error("설명할 Terraform 코드를 만들지 못했습니다.");
+      const code = terraform.code;
+      if (!code.trim()) {
+        throw new Error("Terraform Preview에서 코드를 먼저 생성한 뒤 설명을 요청해주세요.");
+      }
       const diagnostic = terraform.diagnostics[0];
       if (diagnostic) {
         const result = await runAiTerraformErrorExplanation({
@@ -257,7 +260,13 @@ export function useWorkspaceAiAssistant({
           terraformCodeContext: code
         });
         const fixedCode = result.safeFix?.applicable ? result.safeFix.code : undefined;
-        if (fixedCode) setPendingTerraformFix({ code: fixedCode, summary: result.summary });
+        if (fixedCode) {
+          setPendingTerraformFix({
+            code: fixedCode,
+            currentCode: code,
+            summary: result.summary
+          });
+        }
         appendMessage({ content: `${result.summary}\n${result.likelyCause}`, role: "assistant", state: fixedCode ? "preview" : "completed" });
         return;
       }

@@ -1121,7 +1121,7 @@ test("GitHub OAuth callback consumes state before token exchange", async () => {
   await app.close();
 });
 
-test("POST /api/git-cicd-handoffs/:handoffId/aws-role-diff/apply updates approved trust policy", async () => {
+test("POST /api/git-cicd-handoffs/:handoffId/aws-role-diff/apply records explicit approval and updates trust policy", async () => {
   const repository = new FakeGitCicdHandoffRepository();
   const roleArn = "arn:aws:iam::123456789012:role/SketchCatchGitHubDeployRole";
   repository.handoff = createHandoffRecord(handoffId, {
@@ -1137,9 +1137,9 @@ test("POST /api/git-cicd-handoffs/:handoffId/aws-role-diff/apply updates approve
           "repo:sketchcatch/infra-live:environment:sketchcatch-production",
         "sketchcatch:target_branch": "main"
       },
-      approved: true,
-      approvedByUserId: userId,
-      approvedAt: fixedNow.toISOString()
+      approved: false,
+      approvedByUserId: null,
+      approvedAt: null
     }
   });
   const policies: Record<string, unknown>[] = [
@@ -1175,6 +1175,8 @@ test("POST /api/git-cicd-handoffs/:handoffId/aws-role-diff/apply updates approve
   assert.equal(body.roleArn, roleArn);
   assert.equal(body.verified, true);
   assert.equal(repository.handoff?.awsRoleDiff?.applied, true);
+  assert.equal(repository.handoff?.awsRoleDiff?.approved, true);
+  assert.equal(repository.handoff?.awsRoleDiff?.approvedByUserId, userId);
   assert.equal(repository.handoff?.awsRoleDiff?.verified, true);
 
   await app.close();

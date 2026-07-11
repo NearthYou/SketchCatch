@@ -335,11 +335,57 @@
   font-size: 11px;
 }
 
-.approvalBar > div:last-child {
+.approvalActions {
   display: flex;
   gap: 7px;
   justify-content: flex-end;
   margin-top: 10px;
+}
+
+.terraformComparison {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.terraformComparison > div {
+  min-width: 0;
+}
+
+.terraformComparison span {
+  display: block;
+  font-weight: 650;
+  margin-bottom: 4px;
+}
+
+.terraformComparison pre {
+  background: #17191c;
+  border-radius: 7px;
+  color: #f5f7fa;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 10px;
+  line-height: 1.5;
+  margin: 0;
+  max-height: 96px;
+  overflow: auto;
+  padding: 9px 10px;
+  white-space: pre;
+}
+
+.reviewConfirmation {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  gap: 8px;
+  min-height: 34px;
+  padding-top: 8px;
+}
+
+.reviewConfirmation input {
+  accent-color: #17191c;
+  height: 16px;
+  margin: 0;
+  width: 16px;
 }
 
 .primaryButton,
@@ -356,6 +402,11 @@
   background: #17191c;
   border: 1px solid #17191c;
   color: #fff;
+}
+
+.primaryButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 .secondaryButton {

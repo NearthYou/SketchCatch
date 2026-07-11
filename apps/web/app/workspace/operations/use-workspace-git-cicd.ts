@@ -104,7 +104,7 @@ export function useWorkspaceGitCicd({
         environmentName: "sketchcatch-production",
         rdsEnabled: false,
         awsRegion: deployment.approvedAwsRegion ?? "ap-northeast-2",
-        approveAwsRoleDiff: true,
+        approveAwsRoleDiff: false,
         planSummary: deployment.planSummary ?? undefined,
         pullRequestTitle: "SketchCatch infrastructure update",
         commitMessage: "Apply SketchCatch infrastructure changes",
