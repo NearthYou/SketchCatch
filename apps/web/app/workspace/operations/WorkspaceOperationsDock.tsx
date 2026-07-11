@@ -1,6 +1,6 @@
 "use client";
 
-import { Code2, GitBranch, History, PanelRightOpen, Rocket, ShieldCheck, X } from "lucide-react";
+import { Activity, Code2, GitBranch, History, PanelRightOpen, Rocket, ShieldCheck, X } from "lucide-react";
 import { useState } from "react";
 import type { DiagramEditorPanelContext } from "../../../features/diagram-editor";
 import { WorkspaceAiAssistant } from "../ai-assistant/WorkspaceAiAssistant";
@@ -13,9 +13,11 @@ import { useWorkspaceSafety } from "./use-workspace-safety";
 import { useWorkspaceDeployment } from "./use-workspace-deployment";
 import { useWorkspaceTerraform } from "./use-workspace-terraform";
 import { useWorkspaceGitCicd } from "./use-workspace-git-cicd";
+import { useWorkspaceLiveObservation } from "./use-workspace-live-observation";
+import { LiveObservationOperationsPanel } from "./LiveObservationOperationsPanel";
 import styles from "./workspace-operations.module.css";
 
-export type WorkspaceOperationTab = "terraform" | "safety" | "deployment" | "git-cicd" | "history";
+export type WorkspaceOperationTab = "terraform" | "safety" | "deployment" | "git-cicd" | "history" | "live";
 
 // Board 위에서 Terraform, 검사, 배포, 이력을 순서대로 여는 작업 도구입니다.
 export function WorkspaceOperationsDock({
@@ -52,6 +54,7 @@ export function WorkspaceOperationsDock({
     terraform
   });
   const gitCicd = useWorkspaceGitCicd({ deployment: deployment.current, projectId });
+  const liveObservation = useWorkspaceLiveObservation(deployment.deployments);
 
   // 제어형과 독립형 사용 모두 같은 열림 상태 변경 경로를 사용합니다.
   function setOpen(nextOpen: boolean): boolean {
@@ -147,6 +150,17 @@ export function WorkspaceOperationsDock({
           {panelOpen ? <span>Git/CI</span> : null}
         </button>
         <button
+          aria-label="실시간 관찰"
+          aria-selected={panelOpen && activeTab === "live"}
+          onClick={() => selectTab("live")}
+          role="tab"
+          title="실시간 관찰"
+          type="button"
+        >
+          <Activity aria-hidden="true" size={17} />
+          {panelOpen ? <span>관찰</span> : null}
+        </button>
+        <button
           aria-label="배포 이력"
           aria-selected={panelOpen && activeTab === "history"}
           onClick={() => selectTab("history")}
@@ -177,6 +191,8 @@ export function WorkspaceOperationsDock({
             <DeploymentOperationsPanel deployment={deployment} safety={safety} terraform={terraform} />
           ) : activeTab === "git-cicd" ? (
             <GitCicdOperationsPanel deployment={deployment} gitCicd={gitCicd} projectId={projectId} />
+          ) : activeTab === "live" ? (
+            <LiveObservationOperationsPanel liveObservation={liveObservation} />
           ) : (
             <DeploymentHistoryPanel deployment={deployment} />
           )}
