@@ -510,8 +510,8 @@ test("POST /api/projects/:projectId/git-cicd-handoffs creates GitHub PR handoff 
   assert.equal(gitProviderCalls[0]?.targetBranch, "main");
   assert.equal(gitProviderCalls[0]?.files[0]?.path, "sketchcatch/test-project/terraform/main.tf");
   assert.equal(
-    gitProviderCalls[0]?.files[0]?.artifactObjectKey,
-    "projects/project-id/terraform/main.tf"
+    gitProviderCalls[0]?.files[0]?.expectedSha256,
+    "a".repeat(64)
   );
   assert.match(gitProviderCalls[0]?.pullRequest.body ?? "", /Create 2, update 1, delete 0, replace 0/);
   assert.match(gitProviderCalls[0]?.pullRequest.body ?? "", /Pre-Deployment Check/);
@@ -1496,6 +1496,7 @@ function createApprovedPlanArtifactRecord(
     id: "accepted-change-1",
     deploymentId,
     terraformArtifactId,
+    terraformArtifactSha256: "a".repeat(64),
     operation: "apply",
     ...overrides
   };

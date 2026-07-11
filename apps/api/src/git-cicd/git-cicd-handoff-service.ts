@@ -72,7 +72,7 @@ export type GitCicdHandoffApprovedDeploymentRecord = Pick<
 >;
 export type GitCicdHandoffApprovedPlanArtifactRecord = Pick<
   typeof deploymentPlanArtifacts.$inferSelect,
-  "id" | "deploymentId" | "terraformArtifactId" | "operation"
+  "id" | "deploymentId" | "terraformArtifactId" | "terraformArtifactSha256" | "operation"
 >;
 
 export type CreateGitCicdHandoffInput = {
@@ -194,6 +194,7 @@ export type GitCicdProviderCreateInput = {
     objectKey: string;
     fileName: string;
     contentType: string;
+    approvedSha256: string;
   };
   sourceRepository: {
     id: string;
@@ -244,6 +245,7 @@ export type GitProviderPullRequestFile = {
   artifactObjectKey?: string | undefined;
   content?: string | undefined;
   contentType: string;
+  expectedSha256?: string | undefined;
 };
 
 export type GitProviderCreatePullRequestInput = {
@@ -444,7 +446,8 @@ export function createGitHubGitCicdHandoffProvider(
                 fileName: input.terraformArtifact.fileName
               }),
               artifactObjectKey: input.terraformArtifact.objectKey,
-              contentType: input.terraformArtifact.contentType
+              contentType: input.terraformArtifact.contentType,
+              expectedSha256: input.terraformArtifact.approvedSha256
             },
             ...createGitCicdAutomationFiles({
               handoffId: input.handoffId,
@@ -728,6 +731,7 @@ export function createPostgresGitCicdHandoffRepository(
           id: deploymentPlanArtifacts.id,
           deploymentId: deploymentPlanArtifacts.deploymentId,
           terraformArtifactId: deploymentPlanArtifacts.terraformArtifactId,
+          terraformArtifactSha256: deploymentPlanArtifacts.terraformArtifactSha256,
           operation: deploymentPlanArtifacts.operation
         })
         .from(deploymentPlanArtifacts)
@@ -966,6 +970,7 @@ export async function createGitCicdHandoff(
     approvedPlanArtifact.id !== input.userAcceptedChangeId ||
     approvedPlanArtifact.deploymentId !== approvedDeployment.id ||
     approvedPlanArtifact.terraformArtifactId !== input.terraformArtifactId ||
+    !approvedPlanArtifact.terraformArtifactSha256 ||
     approvedPlanArtifact.operation !== "apply" ||
     approvedDeployment.approvedAt === null ||
     approvedDeployment.approvedByUserId !== input.accessContext.userId
@@ -1059,7 +1064,8 @@ export async function createGitCicdHandoff(
       id: terraformArtifact.id,
       objectKey: terraformArtifact.objectKey,
       fileName: terraformArtifact.fileName,
-      contentType: terraformArtifact.contentType
+      contentType: terraformArtifact.contentType,
+      approvedSha256: approvedPlanArtifact.terraformArtifactSha256
     },
     sourceRepository: {
       id: input.sourceRepositoryId,
