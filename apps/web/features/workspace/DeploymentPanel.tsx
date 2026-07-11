@@ -324,6 +324,12 @@ export function DeploymentPanel({
   const primaryDeploymentStepStatus = getPrimaryDeploymentStepStatus(selectedDeployment);
 
   useEffect(() => {
+    if (shouldShowApplyButton) {
+      setShowApplyConfirmation(true);
+    }
+  }, [shouldShowApplyButton]);
+
+  useEffect(() => {
     setDeploymentWizardStep((currentStep) => {
       if (
         !canOpenDeploymentWizardStep(currentStep, {
@@ -791,6 +797,8 @@ export function DeploymentPanel({
       const snapshot = await loadDeploymentPanelSnapshot();
 
       applyDeploymentPanelSnapshot(snapshot);
+      setSelectedDeploymentId("");
+      setDeploymentWizardStep("review");
 
       const deployment = await createDeployment({
         projectId,
@@ -847,6 +855,8 @@ export function DeploymentPanel({
       const snapshot = await loadDeploymentPanelSnapshot();
 
       applyDeploymentPanelSnapshot(snapshot);
+      setSelectedDeploymentId("");
+      setDeploymentWizardStep("review");
     }, "배포 기준을 저장하지 못했습니다.");
   }
 
@@ -1927,7 +1937,15 @@ export function DeploymentPanel({
 
   const renderSecondarySections = () => (
     <section className={styles.deploymentSecondaryPanel} aria-label="보조 배포 정보">
-      <details className={styles.deploymentDisclosure}>
+      <details
+        className={styles.deploymentDisclosure}
+        open={
+          showApplyConfirmation ||
+          shouldShowApplyButton ||
+          showDestroyConfirmation ||
+          shouldShowDestroyButton
+        }
+      >
         <summary>
           <span>실행 기록과 결과</span>
           <small>{deployments.length} records</small>
@@ -2212,6 +2230,13 @@ function getSuggestedDeploymentWizardStep({
 }): DeploymentWizardStep {
   if (hasUnsavedDeploymentBaseline) {
     return "baseline";
+  }
+
+  if (
+    selectedDeployment?.status === "DESTROYED" ||
+    selectedDeployment?.status === "FAILED"
+  ) {
+    return "review";
   }
 
   if (selectedDeployment) {

@@ -134,7 +134,7 @@ test("assertTerraformArtifactIsSafe accepts generated Lambda archives and EKS au
         type                    = "zip"
         source_content          = "export const handler = async () => ({ statusCode: 200 })"
         source_content_filename = "index.mjs"
-        output_path             = "handler.zip"
+        output_path             = "\${path.module}/handler.zip"
       }
 
       data "aws_eks_cluster_auth" "sketchcatch" {
@@ -184,6 +184,76 @@ test("assertTerraformArtifactIsSafe accepts supported AWS AMI data sources", () 
         }
       }
     `)
+  );
+});
+
+test("assertTerraformArtifactIsSafe accepts inline archive data for Lambda artifacts", () => {
+  assert.doesNotThrow(() =>
+    assertTerraformArtifactIsSafe(`
+      data "archive_file" "handler" {
+        type                    = "zip"
+        output_path             = "\${path.module}/lambda-handler.zip"
+        source_content          = "exports.handler = async () => ({ statusCode: 200 })"
+        source_content_filename = "index.js"
+      }
+    `)
+  );
+});
+
+test("assertTerraformArtifactIsSafe rejects archive source files before live deployment", () => {
+  assert.throws(
+    () =>
+      assertTerraformArtifactIsSafe(`
+        data "archive_file" "env" {
+          type        = "zip"
+          output_path = "./env.zip"
+          source_file = "../.env"
+        }
+      `),
+    /archive_file must use inline source_content/
+  );
+});
+
+test("assertTerraformArtifactIsSafe rejects archive source files with comments in the header", () => {
+  assert.throws(
+    () =>
+      assertTerraformArtifactIsSafe(`
+        data/* keep header readable */"archive_file"/* resource label follows */"env"{
+          type        = "zip"
+          output_path = "./env.zip"
+          source_file = "../.env"
+        }
+      `),
+    /archive_file must use inline source_content/
+  );
+});
+
+test("assertTerraformArtifactIsSafe rejects archive source directories before live deployment", () => {
+  assert.throws(
+    () =>
+      assertTerraformArtifactIsSafe(`
+        data "archive_file" "workspace" {
+          type       = "zip"
+          output_path = "./workspace.zip"
+          source_dir = "../"
+        }
+      `),
+    /archive_file must use inline source_content/
+  );
+});
+
+test("assertTerraformArtifactIsSafe rejects archive output paths outside the workspace", () => {
+  assert.throws(
+    () =>
+      assertTerraformArtifactIsSafe(`
+        data "archive_file" "handler" {
+          type                    = "zip"
+          output_path             = "../handler.zip"
+          source_content          = "exports.handler = async () => ({ statusCode: 200 })"
+          source_content_filename = "index.js"
+        }
+      `),
+    /archive_file output_path must stay in the Terraform workspace/
   );
 });
 

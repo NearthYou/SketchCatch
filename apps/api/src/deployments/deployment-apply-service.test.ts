@@ -543,15 +543,17 @@ test("runDeploymentApply applies the approved tfplan and stores state resources 
 
 test("runDeploymentApply materializes archive data files before applying an approved plan", async () => {
   const archiveTerraformArtifact = `
-    data "archive_file" "handler" {
+    data/* materialized before approved apply */"archive_file"/* label */"handler"{
       type = "zip"
       source_content = "exports.handler = async () => ({ statusCode: 200 })"
       source_content_filename = "index.js"
       output_path = "./handler.zip"
     }
 
-    resource "aws_lambda_function" "handler" {
-      filename = data.archive_file.handler.output_path
+    resource "aws_s3_object" "handler" {
+      bucket = "sketchcatch-demo-bucket"
+      key    = "handler.zip"
+      source = data.archive_file.handler.output_path
     }
   `;
   const repository = new FakeDeploymentRepository();

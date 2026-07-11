@@ -534,6 +534,7 @@ export function WorkspaceRightPanel({
 
     const savedArtifacts = await savePreparedTerraformArtifact(preparedSource);
 
+    setHasUnsavedTerraformChanges(false);
     setLastSavedDeploymentBaselineFingerprint(toDeploymentBaselineFingerprint(preparedSource.diagramJson));
     setIsDeploymentBaselineDirty(false);
 

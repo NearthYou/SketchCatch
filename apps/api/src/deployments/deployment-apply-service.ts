@@ -45,7 +45,10 @@ import {
   terraformMutationTimeoutMs,
   type TerraformRunResult
 } from "./terraform-runner.js";
-import { assertTerraformArtifactIsSafe } from "./terraform-artifact-safety.js";
+import {
+  assertTerraformArtifactIsSafe,
+  containsArchiveFileDataSource
+} from "./terraform-artifact-safety.js";
 import {
   prepareTerraformWorkspace as defaultPrepareTerraformWorkspace,
   type PreparedTerraformWorkspace
@@ -496,13 +499,6 @@ export async function runDeploymentApply(
   } finally {
     await workspace?.cleanup();
   }
-}
-
-function containsArchiveFileDataSource(content: Buffer | Uint8Array | string): boolean {
-  const terraformCode =
-    typeof content === "string" ? content : Buffer.from(content).toString("utf8");
-
-  return /data\s+"archive_file"\s+"[^"]+"\s*\{/.test(terraformCode);
 }
 
 async function requireDeploymentTerraformArtifact(
