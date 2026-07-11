@@ -215,6 +215,9 @@ AI panel 열기
 
 추가 확인:
 
+- 375 x 812: 전체 폭 assistant, 입력창과 닫기 버튼 표시, 가로 잘림 없음
+- 768 x 1024: 전체 폭 assistant, 긴 대화 scroll과 하단 입력창 표시
+- 1280px 이상: 오른쪽 dock, Board 하단 확대·축소 도구 표시
 - `Escape`로 닫은 뒤 focus가 AI 런처로 돌아옴
 - AI panel을 열면 Terraform 작업 panel이 닫힘
 - Terraform 작업 panel을 열면 AI panel이 닫힘
