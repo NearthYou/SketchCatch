@@ -94,6 +94,8 @@ Workspace의 여러 .tf 파일
 
 bundle 안의 파일명은 서버에서 다시 검사한다. 작업 폴더 밖으로 나가는 경로나 중복 파일명은 거절한다.
 
+Plan과 승인 단계는 같은 정규화된 byte를 hash한다. 같은 bundle은 정상 승인되고, bundle 안의 파일 하나라도 바뀌면 `Plan 뒤 artifact 변경`으로 승인을 거절한다.
+
 ### AWS Role 변경을 미리 승인할 수 있던 문제
 
 Git handoff 생성 요청에서 AWS Role 변경 승인 값을 받지 않게 바꿨다. handoff를 만드는 것과 AWS Role을 바꾸는 것은 별도 행동이다.
@@ -194,6 +196,7 @@ web test 전체
 
 - Web test: 754개 통과
 - Terraform workspace와 Git/CI/CD API 집중 test: 26개 통과
+- Plan, 승인, Apply, Cleanup 배포 lifecycle 집중 test: 36개 통과
 - `pnpm harness:check`: 통과
 - `pnpm lint`: 통과
 - `pnpm typecheck`: 통과
