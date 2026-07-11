@@ -6,6 +6,7 @@ import type { DiagramJson } from "@sketchcatch/types";
 import { useAuth } from "../../components/auth/auth-provider";
 import { ProductState } from "../../components/ui/ProductState";
 import { DiagramEditor } from "../../features/diagram-editor";
+import type { DiagramEditorPanelContext } from "../../features/diagram-editor";
 import { EMPTY_DIAGRAM } from "../../features/diagram-editor/constants";
 import { buildBoardTemplateDiagram } from "../../features/resource-settings/template-library";
 import { listSourceRepositories } from "../../features/workspace/api";
@@ -15,6 +16,7 @@ import { getProjectSaveStatus } from "../../features/workspace/project-draft-sav
 import { resolveRepositoryAnalysisTemplate } from "../../features/workspace/repository-template-handoff";
 import type { RepositoryAnalysisHandoffLocation } from "../../features/workspace/repository-template-handoff";
 import { restoreSavedDiagram } from "../../features/workspace/workspace-draft-restore";
+import { WorkspaceOperationsDock } from "./operations/WorkspaceOperationsDock";
 import styles from "./workspace-project.module.css";
 
 const LOCAL_SAVE_DELAY_MS = 800;
@@ -52,6 +54,14 @@ export function WorkspaceProjectClient({
   const serverSaveRef = useRef<Promise<void> | null>(null);
   const userName =
     user?.nickname?.trim() || user?.username?.trim() || user?.email?.trim() || "Personal workspace";
+
+  // DiagramEditor의 현재 Board 상태를 Workspace 작업 도구에 전달합니다.
+  const renderOperationsDock = useCallback(
+    (context: DiagramEditorPanelContext) => (
+      <WorkspaceOperationsDock context={context} projectId={projectId} />
+    ),
+    [projectId]
+  );
 
   // 예약된 로컬 저장을 취소해 최신 변경만 저장합니다.
   const clearSaveTimer = useCallback(() => {
@@ -205,6 +215,7 @@ export function WorkspaceProjectClient({
 
   return (
     <DiagramEditor
+      floatingPanel={renderOperationsDock}
       initialDiagram={initialDiagram}
       onDiagramChange={handleDiagramChange}
       onDiagramSaveRequest={saveServerDraft}
