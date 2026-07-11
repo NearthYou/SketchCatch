@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ArrowRight, Cloud, GitBranch } from "lucide-react";
 import { useEffect, useState } from "react";
 import { getWorkspaceHref } from "../../components/dashboard/api-project-card";
+import { ProductState } from "../../components/ui/ProductState";
 import { getApiErrorMessage } from "../../lib/api-client";
 import {
   type DashboardOverviewData,
@@ -25,8 +26,10 @@ type DashboardOverviewState =
   | { readonly message: string; readonly status: "error" }
   | { readonly data: DashboardOverviewData; readonly status: "empty" | "ready" };
 
+// 프로젝트, 비용, 연결, 배포 상태를 한 번에 모아 Dashboard 행동으로 연결합니다.
 export function DashboardOverview() {
   const [state, setState] = useState<DashboardOverviewState>({ status: "loading" });
+  const [reloadCount, setReloadCount] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -56,7 +59,7 @@ export function DashboardOverview() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [reloadCount]);
 
   if (state.status === "loading") {
     return <DashboardOverviewLoading />;
@@ -64,10 +67,20 @@ export function DashboardOverview() {
 
   if (state.status === "error") {
     return (
-      <section className="dashboardStateBand" aria-label="Dashboard 오류">
-        <span>데이터를 불러오지 못했습니다.</span>
-        <p role="alert">{state.message}</p>
-      </section>
+      <ProductState
+        action={
+          <button
+            className="dashboardSecondaryButton"
+            onClick={() => setReloadCount((count) => count + 1)}
+            type="button"
+          >
+            다시 시도
+          </button>
+        }
+        description={state.message}
+        kind="error"
+        title="Dashboard를 불러오지 못했습니다"
+      />
     );
   }
 
@@ -80,7 +93,8 @@ export function DashboardOverview() {
     data.awsConnections?.filter((connection) => connection.status === "verified").length ?? null;
   const fallbackEstimateCount =
     data.costEstimate?.projects.filter((item) => item.costEstimate?.fallbackUsed).length ?? null;
-  const latestDeployment = data.recentDeployments[0]?.deployment ?? null;
+  const latestDeploymentItem = data.recentDeployments[0] ?? null;
+  const latestDeployment = latestDeploymentItem?.deployment ?? null;
 
   return (
     <div className="dashboardOverview">
@@ -104,11 +118,17 @@ export function DashboardOverview() {
       ) : null}
 
       <section className="dashboardMetricStrip" aria-label="Dashboard 핵심 지표">
-        <DashboardMetric label="프로젝트" value={`${data.projects.length}개`} detail="전체 프로젝트" />
+        <DashboardMetric
+          detail="전체 프로젝트"
+          href="/dashboard/projects"
+          label="프로젝트"
+          value={`${data.projects.length}개`}
+        />
         <DashboardMetric
           label="최근 Deployment"
           value={latestDeployment ? getDeploymentStatusLabel(latestDeployment.status) : "없음"}
           detail={latestDeployment ? formatDateTime(latestDeployment.updatedAt) : "실행 기록 없음"}
+          href={latestDeploymentItem ? getWorkspaceHref(latestDeploymentItem.project) : undefined}
           tone={latestDeployment ? getDeploymentTone(latestDeployment.status) : "neutral"}
         />
         <DashboardMetric
@@ -121,6 +141,7 @@ export function DashboardOverview() {
                 ? `fallback 추정 ${fallbackEstimateCount}개 프로젝트`
                 : "지원 가능한 가격 근거 사용"
           }
+          href="/dashboard/costs"
         />
         <DashboardMetric
           label="연결 상태"
@@ -130,6 +151,7 @@ export function DashboardOverview() {
               : `AWS ${verifiedAwsConnectionCount} · Git ${data.connectedRepositoryCount ?? 0}`
           }
           detail="검증된 Role과 활성 Repository"
+          href="/dashboard/settings"
         />
       </section>
 

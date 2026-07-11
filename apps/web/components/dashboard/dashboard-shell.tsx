@@ -8,7 +8,9 @@ import {
   LogOut,
   Menu,
   Plus,
+  Settings,
   Shapes,
+  WalletCards,
   X
 } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
@@ -19,7 +21,9 @@ import { ProductState } from "../ui/ProductState";
 const DASHBOARD_NAV_ITEMS = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Overview" },
   { href: "/dashboard/projects", icon: FolderKanban, label: "Projects" },
-  { href: "/dashboard/templates", icon: Shapes, label: "Templates" }
+  { href: "/dashboard/templates", icon: Shapes, label: "Templates" },
+  { href: "/dashboard/costs", icon: WalletCards, label: "Costs" },
+  { href: "/dashboard/settings", icon: Settings, label: "Settings" }
 ] as const;
 
 // 인증된 Dashboard 화면의 공통 탐색 영역과 세션 상태를 책임집니다.

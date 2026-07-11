@@ -140,6 +140,19 @@
   border-right: 1px solid #f0f0f3;
 }
 
+.dashboardMetricLink {
+  color: inherit;
+  text-decoration: none;
+  transition:
+    background-color var(--motion-fast),
+    transform var(--motion-fast);
+}
+
+.dashboardMetricLink:hover {
+  background: #f7f8fa;
+  transform: translateY(-2px);
+}
+
 .dashboardMetric:last-child {
   border-right: 0;
 }
