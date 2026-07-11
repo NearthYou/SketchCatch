@@ -5,6 +5,8 @@ import process from "node:process";
 const repositoryRoot = process.cwd();
 const manifestPath = path.join(repositoryRoot, "infra/aws/production/import-manifest.json");
 const workflowPath = path.join(repositoryRoot, ".github/workflows/production-infra-plan.yml");
+const deployWorkflowPath = path.join(repositoryRoot, ".github/workflows/deploy-ecs.yml");
+const migrationWorkflowPath = path.join(repositoryRoot, ".github/workflows/migrate.yml");
 
 const failures = [];
 const check = (condition, message) => {
@@ -126,7 +128,7 @@ for (const category of [
   check(categories.has(category), `import inventory is missing ${category}`);
 }
 
-for (const id of ["edge", "data", "legacy-rollback"]) {
+for (const id of ["edge", "data"]) {
   const root = path.join(repositoryRoot, expectedGroups.get(id).root);
   if (!fs.existsSync(root)) {
     failures.push(`${id} directory does not exist: ${root}`);
@@ -210,6 +212,81 @@ for (const forbidden of [
   /\bpush:\s*$/m
 ]) {
   check(!forbidden.test(workflow), `plan-only workflow contains forbidden marker ${forbidden}`);
+}
+
+const coldRollbackVariables = read("infra/aws/production/legacy-rollback/variables.tf");
+const coldRollbackMain = read("infra/aws/production/legacy-rollback/main.tf");
+check(
+  coldRollbackVariables.includes('variable "enable_cold_rollback"') &&
+    coldRollbackVariables.includes("default     = false"),
+  "cold rollback must stay disabled by default"
+);
+for (const marker of [
+  'resource "aws_instance" "app"',
+  'resource "aws_lb" "rollback"',
+  'resource "aws_lb_target_group" "rollback"',
+  "var.enable_cold_rollback ? 1 : 0"
+]) {
+  check(coldRollbackMain.includes(marker), `cold rollback root is missing ${marker}`);
+}
+check(
+  !/resource\s+"aws_route53_record"/.test(coldRollbackMain),
+  "cold rollback must not change Route53 before direct smoke approval"
+);
+for (const marker of [
+  'resource "aws_vpc_security_group_ingress_rule" "rds_from_instance"',
+  'resource "aws_vpc_security_group_ingress_rule" "redis_from_instance"'
+]) {
+  check(coldRollbackMain.includes(marker), `cold rollback data access is missing ${marker}`);
+}
+
+for (const retiredPath of [
+  ".github/workflows/deploy.yml",
+  ".github/workflows/provision-https.yml",
+  "infra/aws/cloudformation/alb-https.yml"
+]) {
+  check(!fs.existsSync(path.join(repositoryRoot, retiredPath)), `${retiredPath} must stay retired`);
+}
+
+const runtimeEcs = read("infra/aws/terraform/ecs.tf");
+const runtimeAlb = read("infra/aws/terraform/alb.tf");
+const runtimeAutoscaling = read("infra/aws/terraform/autoscaling.tf");
+check(
+  !/resource\s+"aws_ecs_service"\s+"app"/.test(runtimeEcs),
+  "legacy ECS service must not exist"
+);
+check(
+  !/resource\s+"aws_lb_target_group"\s+"ecs"/.test(runtimeAlb),
+  "legacy target group must not exist"
+);
+for (const marker of [
+  'resource "aws_appautoscaling_target" "ecs_service"',
+  "ecs_autoscaling_min_capacity",
+  "ecs_autoscaling_max_capacity"
+]) {
+  check(runtimeAutoscaling.includes(marker), `runtime autoscaling is missing ${marker}`);
+}
+
+const deployWorkflow = fs.readFileSync(deployWorkflowPath, "utf8");
+for (const marker of [
+  "register-worker:",
+  "ECS_WORKER_TASK_DEFINITION_FAMILY",
+  "ECS_WORKER_CONTAINER_NAME",
+  "Register worker task definition",
+  "task-definition-arn: ${{ steps.register-worker.outputs.task-definition-arn }}",
+  "ECS_WORKER_TASK_DEFINITION=${{ needs.register-worker.outputs.task-definition-arn }}"
+]) {
+  check(deployWorkflow.includes(marker), `ECS deploy workflow is missing ${marker}`);
+}
+
+const migrationWorkflow = fs.readFileSync(migrationWorkflowPath, "utf8");
+for (const marker of [
+  "Create pre-migration RDS snapshot",
+  "Run migration as one-off ECS task",
+  "ECS_WORKER_TASK_DEFINITION_FAMILY",
+  "pnpm migration:compatibility:check"
+]) {
+  check(migrationWorkflow.includes(marker), `migration workflow is missing ${marker}`);
 }
 
 if (failures.length > 0) {

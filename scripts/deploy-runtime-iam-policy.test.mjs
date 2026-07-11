@@ -2,7 +2,6 @@ import { readFile } from "node:fs/promises";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-const deployWorkflowPath = ".github/workflows/deploy.yml";
 const deployScriptPath = "deploy/ec2/deploy-docker-release.sh";
 const deployPolicyPath = "infra/aws/iam/github-actions-deploy-policy.json";
 const runtimePolicyPath = "infra/aws/iam/ec2-runtime-policy.json";
@@ -12,34 +11,53 @@ function asSortedArray(value) {
   return (Array.isArray(value) ? value : [value]).toSorted();
 }
 
-test("production deploy applies the EC2 runtime IAM policy used by AWS connection verification", async () => {
-  const deployWorkflow = await readFile(deployWorkflowPath, "utf8");
+test("GitHub deployment role excludes retired EC2 and infrastructure provisioning permissions", async () => {
+  const deployPolicy = JSON.parse(await readFile(deployPolicyPath, "utf8"));
+  const statements = deployPolicy.Statement ?? [];
+  const actions = statements.flatMap((statement) => asSortedArray(statement.Action));
 
-  assert.match(deployWorkflow, /aws\s+iam\s+put-role-policy/);
-  assert.match(deployWorkflow, /--role-name\s+"\$\{SKETCHCATCH_RUNTIME_ROLE_NAME\}"/);
-  assert.match(deployWorkflow, /--policy-name\s+"\$\{SKETCHCATCH_RUNTIME_POLICY_NAME\}"/);
-  assert.match(
-    deployWorkflow,
-    /--policy-document\s+file:\/\/infra\/aws\/iam\/ec2-runtime-policy\.json/
+  assert.ok(!actions.some((action) => action.startsWith("ssm:")));
+  assert.ok(!actions.some((action) => action.startsWith("cloudformation:")));
+  assert.ok(!actions.some((action) => action.startsWith("route53:")));
+  assert.ok(!actions.some((action) => action.startsWith("ec2:")));
+});
+
+test("GitHub deployment role can register and run the isolated worker", async () => {
+  const deployPolicy = JSON.parse(await readFile(deployPolicyPath, "utf8"));
+  const statements = deployPolicy.Statement ?? [];
+  const runTask = statements.find((statement) => statement.Sid === "AllowRunMigrationWorker");
+  const passRole = statements.find(
+    (statement) => statement.Sid === "AllowPassSketchCatchEcsTaskRoles"
+  );
+
+  assert.equal(runTask?.Action, "ecs:RunTask");
+  assert.match(runTask?.Resource ?? "", /sketchcatch-production-worker:\*$/);
+  assert.ok(
+    asSortedArray(passRole?.Resource).includes(
+      "arn:aws:iam::555980271919:role/sketchcatch-production-ecs-worker-task"
+    )
+  );
+  assert.equal(
+    passRole?.Condition?.StringEquals?.["iam:PassedToService"],
+    "ecs-tasks.amazonaws.com"
   );
 });
 
-test("GitHub deployment role can update only the SketchCatch EC2 runtime policy", async () => {
+test("GitHub deployment role limits migration snapshot deletion to its prefix", async () => {
   const deployPolicy = JSON.parse(await readFile(deployPolicyPath, "utf8"));
   const statements = deployPolicy.Statement ?? [];
-  const runtimePolicyStatement = statements.find(
-    (statement) => statement.Sid === "AllowSketchCatchRuntimePolicyUpdate"
+  const snapshotManagement = statements.find(
+    (statement) => statement.Sid === "AllowManagePreMigrationSnapshots"
   );
 
-  assert.ok(runtimePolicyStatement);
-  assert.deepEqual(asSortedArray(runtimePolicyStatement.Action), [
-    "iam:GetRole",
-    "iam:GetRolePolicy",
-    "iam:PutRolePolicy"
-  ].toSorted());
-  assert.deepEqual(asSortedArray(runtimePolicyStatement.Resource), [
-    "arn:aws:iam::555980271919:role/SketchCatch-EC2-Role"
+  assert.deepEqual(asSortedArray(snapshotManagement?.Action), [
+    "rds:AddTagsToResource",
+    "rds:DeleteDBSnapshot"
   ]);
+  assert.equal(
+    snapshotManagement?.Resource,
+    "arn:aws:rds:ap-northeast-2:555980271919:snapshot:sketchcatch-production-pre-migration-*"
+  );
 });
 
 test("EC2 runtime policy allows legacy and connection-scoped AWS execution roles", async () => {
@@ -50,28 +68,13 @@ test("EC2 runtime policy allows legacy and connection-scoped AWS execution roles
   );
 
   assert.ok(assumeRoleStatement);
-  assert.deepEqual(asSortedArray(assumeRoleStatement.Resource), [
-    "arn:aws:iam::*:role/SketchCatchTerraformExecutionRole",
-    "arn:aws:iam::*:role/SketchCatchTerraformExecutionRole-*"
-  ].toSorted());
-});
-
-test("production deploy injects AI provider runtime configuration into the API container", async () => {
-  const deployWorkflow = await readFile(deployWorkflowPath, "utf8");
-
-  for (const envKey of [
-    "AI_BILLING_MODE",
-    "BEDROCK_CREDIT_CONFIRMED",
-    "BEDROCK_MODEL_ID",
-    "AMAZON_Q_ENABLED",
-    "AMAZON_Q_REGION",
-    "AMAZON_Q_CREDIT_CONFIRMED",
-    "AMAZON_Q_APPLICATION_ID",
-    "AMAZON_Q_USER_ID"
-  ]) {
-    assert.match(deployWorkflow, new RegExp(`${envKey}=\\$\\{${envKey}`));
-    assert.match(deployWorkflow, new RegExp(`${envKey}: \\$\\{\\{ vars\\.${envKey}`));
-  }
+  assert.deepEqual(
+    asSortedArray(assumeRoleStatement.Resource),
+    [
+      "arn:aws:iam::*:role/SketchCatchTerraformExecutionRole",
+      "arn:aws:iam::*:role/SketchCatchTerraformExecutionRole-*"
+    ].toSorted()
+  );
 });
 
 test("EC2 runtime policy allows Bedrock and Amazon Q Business provider calls", async () => {
@@ -82,10 +85,10 @@ test("EC2 runtime policy allows Bedrock and Amazon Q Business provider calls", a
   );
 
   assert.ok(aiProviderStatement);
-  assert.deepEqual(asSortedArray(aiProviderStatement.Action), [
-    "bedrock:InvokeModel",
-    "qbusiness:ChatSync"
-  ].toSorted());
+  assert.deepEqual(
+    asSortedArray(aiProviderStatement.Action),
+    ["bedrock:InvokeModel", "qbusiness:ChatSync"].toSorted()
+  );
 });
 
 test("API Docker image includes Terraform CLI for Direct Deployment execution", async () => {
@@ -101,7 +104,7 @@ test("API Docker image includes Terraform CLI for Direct Deployment execution", 
   assert.match(apiDockerfile, /RUN\s+terraform\s+-version/);
 });
 
-test("production deploy waits for container readiness and prints diagnostics on failure", async () => {
+test("cold rollback script waits for container readiness and prints diagnostics on failure", async () => {
   const deployScript = await readFile(deployScriptPath, "utf8");
 
   assert.match(deployScript, /HEALTHCHECK_TIMEOUT_SECONDS:-60/);

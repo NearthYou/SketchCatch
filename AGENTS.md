@@ -69,7 +69,7 @@ Before making changes, read this file and the nearest `AGENTS.md`. Read addition
 3. Use environment variables for runtime configuration.
 4. Do not hardcode account-specific secrets or private infrastructure credentials.
 5. If a command fails, report the failure clearly instead of pretending it passed.
-6. Production steady state uses Docker, ECR, ECS/Fargate, ALB, RDS, and GitHub Actions. EC2/SSM/`docker run`/Nginx remain rollback-only until explicitly retired.
+6. Production steady state uses Docker, ECR, ECS/Fargate, ALB, RDS, and GitHub Actions. Warm EC2/SSM/Nginx rollback infrastructure is retired; recovery uses reviewed cold artifacts and an opt-in Terraform runbook.
 7. Production deployment does not use Docker Compose.
 8. SketchCatch production infrastructure Terraform uses operator-approved state and workflows that are separate from user Deployment execution.
 

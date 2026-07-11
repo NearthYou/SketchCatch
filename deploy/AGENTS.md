@@ -4,10 +4,10 @@ This folder contains deployment scripts for the production deployment flow.
 
 ## Deployment Model
 
-1. Production deploys Docker images through EC2, S3 release artifacts, GitHub Actions, SSM Run Command, `docker run`, and Nginx.
+1. Production deploys Docker images from GitHub Actions through ECR to ECS/Fargate API, web, and one-off worker tasks.
 2. Production deployment must not use Docker Compose.
-3. Prefer SSH-free deployment through SSM.
-4. Keep rollback paths simple and documented.
+3. Keep the retired EC2/SSM scripts cold-only; they must not be wired to automatic or routine production deployment.
+4. Keep cold rollback paths explicit, disabled by default, and documented.
 5. Keep production deployment scripts separate from user Direct Deployment Path and Git/CI/CD Deployment Path workflows.
 6. Do not add user cloud resource mutation behavior to production deploy scripts.
 

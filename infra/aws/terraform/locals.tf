@@ -2,8 +2,6 @@ locals {
   name_prefix = "${var.project_name}-${var.environment}"
 
   ecs_service_subnet_ids = length(var.ecs_service_subnet_ids) == 0 ? var.public_subnet_ids : var.ecs_service_subnet_ids
-  legacy_target_weight   = var.ecs_cutover_stage == "split" ? 0 : 100
-  split_target_weight    = var.ecs_cutover_stage == "split" ? 100 : 0
   worker_container_name  = "worker"
   worker_command         = ["node", "dist/deployment-worker.cjs"]
 
@@ -20,7 +18,7 @@ locals {
 
   api_path_patterns = ["/api", "/api/*", "/health", "/health/db"]
 
-  # The nginx repository and log group remain for the explicit ECS/EC2 rollback window.
+  # The last verified nginx image remains available for the cold rollback artifact.
   ecr_repositories = {
     api   = "${local.name_prefix}-api"
     web   = "${local.name_prefix}-web"

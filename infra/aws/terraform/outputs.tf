@@ -11,26 +11,19 @@ output "ecs_cluster_name" {
 }
 
 output "ecs_service_names" {
-  description = "ECS API/web service names plus the protected legacy nginx rollback service."
+  description = "ECS API and web service names."
   value = {
-    api        = aws_ecs_service.api.name
-    web        = aws_ecs_service.web.name
-    legacy_app = aws_ecs_service.app.name
+    api = aws_ecs_service.api.name
+    web = aws_ecs_service.web.name
   }
 }
 
-output "ecs_cutover_stage" {
-  description = "Current ALB routing stage: warmup keeps legacy at weight 100; split sends API/web traffic to the split targets."
-  value       = var.ecs_cutover_stage
-}
-
 output "ecs_task_definition_families" {
-  description = "ECS task definition families for API, web, worker, and the protected legacy app."
+  description = "ECS task definition families for API, web, and worker."
   value = {
-    api        = aws_ecs_task_definition.api.family
-    web        = aws_ecs_task_definition.web.family
-    worker     = aws_ecs_task_definition.worker.family
-    legacy_app = aws_ecs_task_definition.app.family
+    api    = aws_ecs_task_definition.api.family
+    web    = aws_ecs_task_definition.web.family
+    worker = aws_ecs_task_definition.worker.family
   }
 }
 
@@ -84,7 +77,7 @@ output "ecs_worker_security_group_id" {
 }
 
 output "ecs_log_group_names" {
-  description = "CloudWatch log groups for API, web, worker, and the retained legacy nginx rollback logs."
+  description = "CloudWatch log groups for API, web, worker, and retained cold rollback nginx logs."
   value = {
     for name, log_group in aws_cloudwatch_log_group.ecs : name => log_group.name
   }
@@ -105,5 +98,10 @@ output "ecs_observability_alarm_names" {
     service_memory = {
       for name, alarm in aws_cloudwatch_metric_alarm.ecs_service_memory_high : name => alarm.alarm_name
     }
+    alb_5xx = try(aws_cloudwatch_metric_alarm.alb_5xx[0].alarm_name, null)
+    no_healthy_tasks = {
+      for name, alarm in aws_cloudwatch_metric_alarm.ecs_no_healthy_tasks : name => alarm.alarm_name
+    }
+    rds_status = try(aws_cloudwatch_metric_alarm.rds_status_missing[0].alarm_name, null)
   }
 }

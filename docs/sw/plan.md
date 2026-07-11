@@ -198,17 +198,17 @@
 범위:
 
 - ALB `/api`, `/api/*`, `/health`, `/health/db`는 API로, 기본 `/*`는 web으로 전달한다.
-- 최초 적용은 legacy target weight 100의 warmup 후 API/web target health를 확인하고 split weight로 전환한다.
+- 최초 적용은 legacy target weight 100의 warmup 후 API/web target health를 확인하고 split weight로 전환했다.
 - API와 web을 독립 ECS task definition/service/target group으로 분리한다.
 - nginx container를 ECS steady state와 ECS deploy workflow에서 제거한다.
-- EC2/SSM rollback이 유지되는 동안 nginx image/config/ECR/log group은 legacy 자산으로 보존한다.
+- cutover 검증 후 EC2/SSM/nginx warm rollback과 legacy ECS service를 제거하고 cold artifact만 보존한다.
 - Next.js same-origin `/api`, Fastify forwarded headers, split service deploy 순서를 검증한다.
 
 완료 기준:
 
 - Terraform 정적 contract가 listener rule, target group, task/service 분리를 검증한다.
 - nginx 없이 root page와 API/health path가 올바른 target group으로 전달되는 구성이 확인된다.
-- EC2 rollback 자산의 보존 범위와 제거 조건이 문서화된다.
+- encrypted AMI, 검증 Docker artifact, disabled Terraform/runbook의 cold rollback 범위가 문서화된다.
 - live ALB/Route53 전환과 production smoke는 별도 명시 승인 후 운영 evidence로 남긴다.
 
 ## Phase 9. SketchCatch production infra Terraform 전환
@@ -222,7 +222,7 @@
 범위:
 
 - 기존 ECS runtime Terraform root와 backend key를 보존한다.
-- Route53/ACM, S3/RDS/Redis, EC2 rollback을 별도 state/import gate로 격리한다.
+- Route53/ACM, S3/RDS/Redis, opt-in cold rollback을 별도 state/import gate로 격리한다.
 - S3 backend encryption, Versioning, native lockfile 전략을 기록한다.
 - ECS, ALB, target group/listener, ECR, IAM, CloudWatch, Route53/ACM, S3, RDS, Redis/ElastiCache import inventory와 순서를 만든다.
 - manual plan-only GitHub Actions와 static forbidden-command guard를 추가한다.
@@ -233,7 +233,7 @@
 - AWS credential 없이 모든 Terraform root의 fmt/init-without-backend/validate가 통과한다.
 - plan workflow에 import/apply/destroy 및 binary plan artifact가 없다.
 - high-risk root는 discovery/backup/ownership 승인 전 빈 import gate로 유지된다.
-- EC2/SSM/nginx rollback과 CloudFormation ownership이 제거되지 않는다.
+- high-risk persistent resource와 cold rollback ownership이 분리된다.
 - live import/apply/destroy와 AWS mutation은 실행하지 않는다.
 
 ## 전체 완료 기준
@@ -243,4 +243,5 @@
 - optional private runtime 모드가 Terraform 변수로 동작한다.
 - ECS production 안정화 후 Terraform 실행이 ECS RunTask one-off worker, DB lease, RDS/S3/Redis 기록 계약을 통해 수행된다.
 - 비용 guardrail, cleanup, rollback, 로그 보존 기준이 문서와 Terraform에 반영된다.
+- API와 web은 비용 우선 autoscaling `min=1`, `max=2`를 사용하며 legacy ECS service는 존재하지 않는다.
 - SQS FIFO와 always-on worker service는 별도 결정 전까지 scope 밖으로 유지된다.
