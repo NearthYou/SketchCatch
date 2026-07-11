@@ -18,6 +18,7 @@ import {
   type GitProviderCreatePullRequestInput,
   type GitCicdHandoffArchitectureRecord,
   type GitCicdHandoffApprovedDeploymentRecord,
+  type GitCicdHandoffApprovedPlanArtifactRecord,
   type GitCicdHandoffProvider,
   type GitCicdHandoffRecord,
   type GitCicdHandoffRepository,
@@ -80,6 +81,11 @@ type RepositoryCall =
       projectId: string;
     }
   | {
+      name: "findApprovedPlanArtifactForHandoff";
+      planArtifactId: string;
+      deploymentId: string;
+    }
+  | {
       name: "findSourceRepositoryById";
       sourceRepositoryId: string;
       projectId: string;
@@ -121,6 +127,8 @@ class FakeGitCicdHandoffRepository implements GitCicdHandoffRepository {
     createSourceRepositoryRecord();
   approvedDeployment: GitCicdHandoffApprovedDeploymentRecord | undefined =
     createApprovedDeploymentRecord();
+  approvedPlanArtifact: GitCicdHandoffApprovedPlanArtifactRecord | undefined =
+    createApprovedPlanArtifactRecord();
   handoff: GitCicdHandoffRecord | undefined = createHandoffRecord();
   handoffs: GitCicdHandoffRecord[] = [createHandoffRecord()];
 
@@ -226,6 +234,27 @@ class FakeGitCicdHandoffRepository implements GitCicdHandoffRepository {
     }
 
     return this.approvedDeployment;
+  }
+
+  async findApprovedPlanArtifactForHandoff(
+    candidatePlanArtifactId: string,
+    candidateDeploymentId: string
+  ) {
+    this.calls.push({
+      name: "findApprovedPlanArtifactForHandoff",
+      planArtifactId: candidatePlanArtifactId,
+      deploymentId: candidateDeploymentId
+    });
+
+    if (
+      !this.approvedPlanArtifact ||
+      this.approvedPlanArtifact.id !== candidatePlanArtifactId ||
+      this.approvedPlanArtifact.deploymentId !== candidateDeploymentId
+    ) {
+      return undefined;
+    }
+
+    return this.approvedPlanArtifact;
   }
 
   async findSourceRepositoryById(
@@ -693,6 +722,28 @@ test("POST /api/projects/:projectId/git-cicd-handoffs rejects unapproved deploym
     error: "conflict",
     message: "Git/CI/CD handoff requires the current user's approved deployment plan"
   });
+  assert.equal(providerCalls.length, 0);
+  assert.equal(repository.calls.some((call) => call.name === "createHandoff"), false);
+
+  await app.close();
+});
+
+test("POST /api/projects/:projectId/git-cicd-handoffs rejects approved destroy plans", async () => {
+  const repository = new FakeGitCicdHandoffRepository();
+  const providerCalls: GitCicdProviderCreateInput[] = [];
+  repository.approvedPlanArtifact = createApprovedPlanArtifactRecord({ operation: "destroy" });
+  const app = await buildGitCicdHandoffTestApp(repository, {
+    provider: createProviderSpy(providerCalls)
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/projects/${projectId}/git-cicd-handoffs`,
+    headers: await authHeaders(),
+    payload: createHandoffBody()
+  });
+
+  assert.equal(response.statusCode, 409);
   assert.equal(providerCalls.length, 0);
   assert.equal(repository.calls.some((call) => call.name === "createHandoff"), false);
 
@@ -1433,6 +1484,19 @@ function createApprovedDeploymentRecord(
     approvedByUserId: userId,
     approvedTerraformArtifactId: terraformArtifactId,
     approvedPlanArtifactId: "accepted-change-1",
+    ...overrides
+  };
+}
+
+// Git handoff 테스트에서 승인된 apply Plan artifact를 만듭니다.
+function createApprovedPlanArtifactRecord(
+  overrides: Partial<GitCicdHandoffApprovedPlanArtifactRecord> = {}
+): GitCicdHandoffApprovedPlanArtifactRecord {
+  return {
+    id: "accepted-change-1",
+    deploymentId,
+    terraformArtifactId,
+    operation: "apply",
     ...overrides
   };
 }
