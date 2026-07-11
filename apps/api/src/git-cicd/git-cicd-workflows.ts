@@ -435,7 +435,7 @@ function createDefaultReleaseBucket(input: GitCicdWorkflowRenderInput): string {
 function createDefaultBucketName(prefix: string, input: GitCicdWorkflowRenderInput): string {
   return `${prefix}-${input.repositoryOwner}-${input.repositoryName}`
     .toLowerCase()
-    .replace(/[^a-z0-9.-]/g, "-")
+    .replace(/[^a-z0-9-]/g, "-")
     .slice(0, 63)
-    .replace(/[-.]+$/, "");
+    .replace(/-+$/, "");
 }
