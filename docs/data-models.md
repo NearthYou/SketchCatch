@@ -1839,11 +1839,79 @@ type CheckFinding = {
 | `repository_url`         | repository web URL                      |
 | `visibility`             | `public`, `private`, `internal` 중 하나 |
 | `archived`               | archived repository 여부                |
+| `analysis_result`        | 마지막 구조화된 `AI Handoff` 요약       |
+| `analysis_revision`      | 분석한 Git commit SHA                    |
+| `analyzed_at`            | 마지막 분석 완료 시각                    |
 | `disconnected_at`        | soft deactivate 시각                    |
 
 GitHub App installation repository 목록은 DB에 저장하지 않습니다. callback 응답은 임시 선택 화면에만 사용하고, 사용자가 선택한 repository 1개만 active source repository로 저장합니다. 새 GitHub repo를 연결하면 기존 active row는 `inactive`으로 바꾸고 `disconnected_at`을 기록한 뒤 새 active row를 생성합니다.
 
 Git/CI/CD handoff 생성 요청은 `sourceRepositoryId`만 받습니다. repository owner/name/provider/default branch는 DB의 active source repository에서 읽습니다. 이 원칙은 클라이언트가 임의 GitHub repository identity를 body로 보내는 위험을 막기 위한 서비스 계약입니다.
+
+### Repository Analysis와 AI Handoff
+
+Repository Analysis는 active GitHub Source Repository의 최신 default branch를 요청 시점에 정적으로 읽는다. repository tree, `package.json`, lockfile, `Dockerfile`, framework config, `README`만 evidence로 사용하며 Repository 코드를 실행하지 않는다. 새로고침 뒤에도 사용자가 마지막 결과를 확인할 수 있도록 구조화된 `AI Handoff`, 분석 revision, 분석 시각만 `source_repositories`에 저장한다. 원본 파일 내용과 GitHub App installation repository 목록은 RDS/S3에 저장하지 않는다.
+
+```ts
+type RepositoryEvidenceKind =
+  | "repository_tree"
+  | "package_json"
+  | "lockfile"
+  | "dockerfile"
+  | "framework_config"
+  | "readme";
+
+type RepositoryApplicationUnit = {
+  id: string;
+  rootPath: string;
+  kind: "frontend" | "backend" | "fullstack" | "unknown";
+  frameworks: string[];
+  evidencePaths: string[];
+};
+
+type RepositoryAnalysisEvidence = {
+  kind: RepositoryEvidenceKind;
+  path: string;
+  applicationUnitId: string | null;
+  signals: string[];
+};
+
+type RepositoryAnalysisAiHandoff =
+  | {
+      status: "template_selected";
+      templateId: TemplateId;
+      applicationUnits: RepositoryApplicationUnit[];
+      evidence: RepositoryAnalysisEvidence[];
+      missingEvidence: RepositoryEvidenceKind[];
+      selectionReasons: string[];
+    }
+  | {
+      status: "template_selection_failed";
+      templateId: null;
+      applicationUnits: RepositoryApplicationUnit[];
+      evidence: RepositoryAnalysisEvidence[];
+      missingEvidence: RepositoryEvidenceKind[];
+      mismatchReasons: string[];
+    };
+
+type AnalyzeSourceRepositoryResponse = {
+  sourceRepositoryId: string;
+  repositoryRevision: string;
+  analyzedAt: string;
+  aiHandoff: RepositoryAnalysisAiHandoff;
+};
+
+type SourceRepositoryAnalysis = Omit<
+  AnalyzeSourceRepositoryResponse,
+  "sourceRepositoryId"
+>;
+```
+
+`GET /api/projects/:projectId/source-repositories`는 각 Source Repository의 마지막 `analysis`를 함께 반환한다. 세 분석 컬럼 중 하나라도 없는 기존 row는 `analysis: null`로 취급한다. 사용자가 다시 분석하면 최신 revision 기준 결과로 세 값을 한 번에 덮어쓴다.
+
+monorepo는 하나의 Repository Analysis 안에 여러 Application Unit을 둔다. Template Selection은 저장소 전체에 대해 한 번만 수행한다. 성공 응답은 선택한 Template 하나와 근거를 포함하고, 지원 패턴과 맞지 않으면 `templateId: null`과 mismatch 이유를 반환한다. 후보 목록과 confidence 점수는 계약에 포함하지 않는다.
+
+성공한 `templateId`만 `CreateArchitectureDraftRequest.templateId`로 AI 파트에 전달한다. AI 파트는 이 값을 기본 결정으로 유지하고 다른 Template으로 교체하지 않으며, 사용자 요구 중 선택 Template에 부족한 내용만 보완한다. Repository evidence 원문이나 분석 원본 파일은 AI 요청에 다시 싣지 않는다.
 
 ### Git/CI/CD 자동 배포 handoff 확장
 

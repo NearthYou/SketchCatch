@@ -235,10 +235,13 @@ const requestedResourceDefinitions = [
 
 test("AWS resource definitions declare Terraform Preview and Sync explicitly", () => {
   const definitionBlocks = Array.from(
-    resourceDefinitionsSource.matchAll(/createAwsResourceDefinition\(\{(?<body>[\s\S]*?)\n\s*\}\)/g)
+    resourceDefinitionsSource.matchAll(/^\s{2}createAwsResourceDefinition\(\{(?<body>[\s\S]*?)\n\s*\}\)/gm)
   ).map((match) => match.groups?.body ?? "");
 
-  assert.equal(definitionBlocks.length, resourceDefinitions.length);
+  assert.equal(
+    definitionBlocks.length,
+    resourceDefinitions.filter((definition) => definition.provider === "aws").length
+  );
 
   for (const block of definitionBlocks) {
     const resourceId = /id:\s*"(?<id>[^"]+)"/.exec(block)?.groups?.id ?? "unknown";

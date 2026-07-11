@@ -1,4 +1,8 @@
 import type { DiagramJson } from "../../../../packages/types/src";
+import {
+  buildTemplateDiagramJson,
+  templateDefinitions
+} from "../../../../packages/types/src/template-definitions";
 import { isAreaNode } from "../diagram-editor/area-nodes";
 import { RESOURCE_NODE_DEFAULT_SIZE } from "../diagram-editor/resource-node-geometry";
 
@@ -558,6 +562,14 @@ export function listBoardTemplates(): readonly BoardTemplate[] {
     ...template,
     diagramJson: cloneDiagramJson(template.diagramJson)
   }));
+}
+
+export function buildBoardTemplateDiagram(
+  templateId: string | undefined,
+  input: { readonly projectSlug: string; readonly shortId: string }
+): DiagramJson | undefined {
+  const definition = templateDefinitions.find((candidate) => candidate.id === templateId);
+  return definition ? buildTemplateDiagramJson(definition.id, input) : undefined;
 }
 
 // Template 목록에서 검색어와 tag를 적용하고 사용자가 고른 순서로 정렬합니다.
