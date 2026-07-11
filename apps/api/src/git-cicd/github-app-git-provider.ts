@@ -84,5 +84,5 @@ async function downloadTerraformArtifactText(
           maxBytes: defaultTerraformArtifactMaxBytes
         });
 
-  return Buffer.isBuffer(content) ? content.toString("utf8") : Buffer.from(content).toString("utf8");
+  return typeof content === "string" ? content : Buffer.from(content).toString("utf8");
 }

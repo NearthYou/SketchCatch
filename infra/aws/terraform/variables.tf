@@ -79,62 +79,138 @@ variable "route53_record_name" {
   default     = ""
 }
 
+variable "ecs_cutover_stage" {
+  description = "ALB routing stage. warmup keeps legacy nginx at weight 100 while API/web targets register; split sends traffic to API/web while retaining legacy at weight 0."
+  type        = string
+  default     = "warmup"
+
+  validation {
+    condition     = contains(["warmup", "split"], var.ecs_cutover_stage)
+    error_message = "ecs_cutover_stage must be warmup or split."
+  }
+}
+
 variable "ecs_desired_count" {
-  description = "Desired task count for the production ECS service. Cost-bearing: 1 keeps the app warm 24/7."
+  description = "Desired task count for each production API and web ECS service. Cost-bearing: 1 creates two warm tasks after the split."
   type        = number
   default     = 1
 }
 
+variable "legacy_ecs_desired_count" {
+  description = "Desired count for the retained nginx rollback service. Keep 1 until post-cutover retirement is separately approved."
+  type        = number
+  default     = 1
+
+  validation {
+    condition     = var.legacy_ecs_desired_count >= 1
+    error_message = "legacy_ecs_desired_count must stay at least 1 while the rollback service is Terraform-protected."
+  }
+}
+
+variable "enable_ecs_worker_dispatch" {
+  description = "Switch API execution from in-process to the dedicated one-off ECS worker task. Enable only after worker role trust migration and smoke."
+  type        = bool
+  default     = false
+}
+
+variable "worker_rds_security_group_id" {
+  description = "Existing RDS security group that receives a PostgreSQL ingress rule from the dedicated worker SG."
+  type        = string
+  default     = ""
+}
+
+variable "worker_rds_port" {
+  description = "RDS port opened only from the dedicated worker security group."
+  type        = number
+  default     = 5432
+}
+
 variable "ecs_task_cpu" {
-  description = "Fargate task CPU units. Cost-bearing."
+  description = "API Fargate task CPU units, retained from the shared task sizing for migration safety. Cost-bearing."
   type        = number
   default     = 1024
 }
 
 variable "ecs_task_memory" {
-  description = "Fargate task memory MiB. Cost-bearing."
+  description = "API Fargate task memory MiB, retained from the shared task sizing for migration safety. Cost-bearing."
   type        = number
   default     = 2048
 }
 
 variable "api_container_cpu" {
-  description = "API container CPU units within the shared task."
-  type        = number
-  default     = 512
-}
-
-variable "api_container_memory" {
-  description = "API container hard memory limit in MiB."
+  description = "API container CPU units within the single-container API task."
   type        = number
   default     = 1024
 }
 
+variable "api_container_memory" {
+  description = "API container hard memory limit in MiB within the single-container API task."
+  type        = number
+  default     = 2048
+}
+
+variable "web_task_cpu" {
+  description = "Web Fargate task CPU units. Cost-bearing in addition to the API task."
+  type        = number
+  default     = 256
+}
+
+variable "web_task_memory" {
+  description = "Web Fargate task memory MiB. Cost-bearing in addition to the API task."
+  type        = number
+  default     = 512
+}
+
 variable "web_container_cpu" {
-  description = "Web container CPU units within the shared task."
+  description = "Web container CPU units within the web task."
   type        = number
   default     = 256
 }
 
 variable "web_container_memory" {
-  description = "Web container hard memory limit in MiB."
+  description = "Web container hard memory limit in MiB within the web task."
   type        = number
   default     = 512
 }
 
-variable "nginx_container_cpu" {
-  description = "Nginx container CPU units within the shared task."
+variable "legacy_api_container_cpu" {
+  description = "API CPU units retained in the nginx rollback task."
+  type        = number
+  default     = 512
+}
+
+variable "legacy_api_container_memory" {
+  description = "API memory MiB retained in the nginx rollback task."
+  type        = number
+  default     = 1024
+}
+
+variable "legacy_nginx_container_cpu" {
+  description = "Nginx CPU units retained in the rollback task."
   type        = number
   default     = 128
 }
 
-variable "nginx_container_memory" {
-  description = "Nginx container hard memory limit in MiB."
+variable "legacy_nginx_container_memory" {
+  description = "Nginx memory MiB retained in the rollback task."
   type        = number
   default     = 256
 }
 
+variable "worker_task_cpu" {
+  description = "CPU units for each one-off Terraform worker task. Cost-bearing only while a task runs."
+  type        = number
+  default     = 1024
+}
+
+variable "worker_task_memory" {
+  description = "Memory MiB for each one-off Terraform worker task. Cost-bearing only while a task runs."
+  type        = number
+  default     = 2048
+}
+
 variable "image_tag" {
-  description = "Image tag shared by api/web/nginx ECR images. Phase 2 should wire this to the deployed git SHA."
+  description = "Image tag shared by the steady-state API and web ECR images."
   type        = string
   default     = "latest"
 }
@@ -154,7 +230,7 @@ variable "log_retention_days" {
 variable "enable_alb_deletion_protection" {
   description = "Enable deletion protection for the parallel ECS ALB."
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "artifact_bucket_name" {
@@ -420,4 +496,39 @@ variable "tags" {
   description = "Additional tags applied to managed resources."
   type        = map(string)
   default     = {}
+}
+
+variable "enable_ecs_observability_alarms" {
+  description = "Create cost-bearing CloudWatch metric filters and alarms for ECS app and worker operations."
+  type        = bool
+  default     = false
+}
+
+variable "cloudwatch_alarm_action_arns" {
+  description = "SNS topic ARNs notified by ECS CloudWatch alarms. Empty means alarms have no notification action."
+  type        = list(string)
+  default     = []
+}
+
+variable "ecs_log_error_alarm_threshold" {
+  description = "Five-minute container error count that moves a log alarm to ALARM."
+  type        = number
+  default     = 1
+
+  validation {
+    condition     = var.ecs_log_error_alarm_threshold >= 1
+    error_message = "ecs_log_error_alarm_threshold must be at least 1."
+  }
+}
+
+variable "ecs_service_cpu_alarm_threshold" {
+  description = "Average ECS service CPU percentage that triggers after three five-minute periods."
+  type        = number
+  default     = 80
+}
+
+variable "ecs_service_memory_alarm_threshold" {
+  description = "Average ECS service memory percentage that triggers after three five-minute periods."
+  type        = number
+  default     = 80
 }
