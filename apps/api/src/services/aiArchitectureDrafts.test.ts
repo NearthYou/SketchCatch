@@ -1037,6 +1037,118 @@ test("createAmazonQArchitectureDraftResponse maps the SPA microservices question
   );
 });
 
+test("createAmazonQArchitectureDraftResponse maps the global self-managed SPA questionnaire to EC2 ASG and large database sizing", async () => {
+  const requests: Array<Parameters<AiTextProvider["generate"]>[0]> = [];
+  const provider = createFakeAmazonQProvider((request) => {
+    requests.push(request);
+    return createNormalizedRequirementPlan(request);
+  });
+
+  const response = await createAmazonQArchitectureDraftResponse(
+    { prompt: createGlobalSelfManagedSpaQuestionnairePrompt() },
+    { provider, creditPolicy: confirmedCreditPolicy }
+  );
+
+  if ("status" in response) {
+    assert.fail(`Expected preview, got clarification: ${response.question}`);
+  }
+
+  const firstPayload = requests[0]?.payload as {
+    architectureDecisionSpace?: {
+      answerProfile?: Record<string, string | undefined>;
+    };
+    normalizedRequirement?: {
+      patternIds?: string[];
+      resourceQuantities?: Record<string, number>;
+      runtimeTopology?: {
+        autoScaling?: boolean;
+        compute?: string;
+        computeCount?: number;
+        placement?: string;
+        spreadAcrossPrivateSubnets?: boolean;
+      };
+    };
+  };
+  const answerProfile = firstPayload.architectureDecisionSpace?.answerProfile;
+  assert.equal(answerProfile?.traffic, "large");
+  assert.equal(answerProfile?.frontend, "spa");
+  assert.equal(answerProfile?.backend, "complex");
+  assert.equal(answerProfile?.region, "global");
+  assert.equal(answerProfile?.upload, "large");
+  assert.equal(answerProfile?.realtime, "data_updates");
+  assert.equal(answerProfile?.management, "self_managed");
+  assert.equal(answerProfile?.latency, "one_second");
+  assert.equal(answerProfile?.availability, "99.99");
+  assert.equal(answerProfile?.budget, "enterprise");
+  assert.ok(firstPayload.normalizedRequirement?.patternIds?.includes("alb-asg-ec2"));
+  assert.equal(firstPayload.normalizedRequirement?.patternIds?.includes("ecs-fargate"), false);
+  assert.ok(firstPayload.normalizedRequirement?.patternIds?.includes("spa-cloudfront-s3"));
+  assert.ok(firstPayload.normalizedRequirement?.patternIds?.includes("multi-az-rds"));
+  assert.equal(firstPayload.normalizedRequirement?.runtimeTopology?.compute, "EC2");
+  assert.equal(firstPayload.normalizedRequirement?.runtimeTopology?.computeCount, 4);
+  assert.equal(firstPayload.normalizedRequirement?.runtimeTopology?.autoScaling, true);
+  assert.equal(firstPayload.normalizedRequirement?.runtimeTopology?.placement, "private_subnets");
+  assert.equal(firstPayload.normalizedRequirement?.runtimeTopology?.spreadAcrossPrivateSubnets, true);
+  assert.equal(firstPayload.normalizedRequirement?.resourceQuantities?.EC2, 4);
+
+  const nodes = response.architectureJson.nodes;
+  const edges = response.architectureJson.edges;
+  const ec2Nodes = nodes.filter((node) => node.type === "EC2");
+  const autoScalingGroup = nodes.find((node) => node.type === "AUTO_SCALING_GROUP");
+  const launchTemplate = nodes.find((node) => node.type === "LAUNCH_TEMPLATE");
+  const database = nodes.find((node) => node.type === "RDS");
+  const listener = nodes.find((node) => node.type === "LOAD_BALANCER_LISTENER");
+  const targetGroup = nodes.find((node) => node.type === "LOAD_BALANCER_TARGET_GROUP");
+  const uploadBucket = nodes.find(
+    (node) => node.type === "S3" && node.config.bucketPurpose === "user_uploads"
+  );
+  const webSocketApi = nodes.find((node) => node.type === "API_GATEWAY_WEBSOCKET_API");
+  const webSocketRoute = nodes.find((node) => node.type === "API_GATEWAY_V2_ROUTE");
+  const webSocketIntegration = nodes.find((node) => node.type === "API_GATEWAY_V2_INTEGRATION");
+  const webSocketStage = nodes.find((node) => node.type === "API_GATEWAY_V2_STAGE");
+
+  assert.equal(nodes.some((node) => node.type === "ECS_SERVICE"), false);
+  assert.equal(nodes.some((node) => node.type === "ECS_TASK_DEFINITION"), false);
+  assert.equal(ec2Nodes.length, 4);
+  assert.equal(autoScalingGroup?.config.desiredCapacity, 4);
+  assert.equal(autoScalingGroup?.config.maxSize, 8);
+  assert.equal(launchTemplate?.config.instanceType, "m7i.large");
+  assert.equal(database?.config.allocatedStorage, 200);
+  assert.equal(database?.config.instanceClass, "db.r6g.large");
+  assert.equal(database?.config.multiAz, true);
+  assert.equal(uploadBucket?.config.bucketPrefix, "sketchcatch-large-file-uploads-");
+  assert.equal(webSocketApi?.config.protocolType, "WEBSOCKET");
+  assert.equal(webSocketApi?.config.routeSelectionExpression, "$request.body.action");
+  assert.equal(webSocketRoute?.config.routeKey, "$default");
+  assert.equal(webSocketIntegration?.config.integrationType, "HTTP_PROXY");
+  assert.equal(webSocketIntegration?.config.integrationUri, "aws_lb_listener.http_listener.arn");
+  assert.equal(webSocketStage?.config.name, "prod");
+  assert.ok(
+    edges.some(
+      (edge) =>
+        edge.sourceId === listener?.id &&
+        edge.targetId === targetGroup?.id &&
+        /WebSocket upgrade/iu.test(edge.label ?? "")
+    )
+  );
+  assert.ok(
+    edges.some(
+      (edge) =>
+        edge.sourceId === webSocketApi?.id &&
+        edge.targetId === webSocketRoute?.id &&
+        /routes/iu.test(edge.label ?? "")
+    )
+  );
+  assert.ok(
+    edges.some(
+      (edge) =>
+        edge.sourceId === webSocketIntegration?.id &&
+        edge.targetId === listener?.id &&
+        /WebSocket proxy/iu.test(edge.label ?? "")
+    )
+  );
+});
+
 test("createAmazonQArchitectureDraftResponse maps the Korean SSR mixed-upload questionnaire to Seoul Fargate SSE notifications", async () => {
   const requests: Array<Parameters<AiTextProvider["generate"]>[0]> = [];
   const provider = createFakeAmazonQProvider((request) => {
@@ -2979,9 +3091,8 @@ test("createAmazonQArchitectureDraftResponse sends deterministic normalized requ
     return createNormalizedRequirementPlan(request);
   });
 
-  await assert.rejects(
-    createAmazonQArchitectureDraftResponse(
-      {
+  const response = await createAmazonQArchitectureDraftResponse(
+    {
       prompt: [
         "Dynamic web application for GitHub main branch deployment to AWS.",
         "Required resources: CodeStar Connection, CodePipeline, CodeBuild Project, CodeDeploy App, CodeDeploy Deployment Group, IAM Role.",
@@ -3000,14 +3111,16 @@ test("createAmazonQArchitectureDraftResponse sends deterministic normalized requ
         "Traffic pattern: event spike.",
         "Downtime: 1 hour per day, 99.9% availability."
       ].join("\n")
-      },
-      {
-        provider,
-        creditPolicy: confirmedCreditPolicy
-      }
-    ),
-    { name: "ArchitectureDraftGenerationError" }
+    },
+    {
+      provider,
+      creditPolicy: confirmedCreditPolicy
+    }
   );
+
+  if ("status" in response) {
+    assert.fail(`Expected preview, got clarification: ${response.question}`);
+  }
 
   const amazonQPayload = amazonQCalls.at(-1)?.payload as {
     normalizedRequirement?: {
@@ -3036,6 +3149,9 @@ test("createAmazonQArchitectureDraftResponse sends deterministic normalized requ
   assert.equal(amazonQPayload.normalizedRequirement.requiredResources?.includes("EC2"), true);
   assert.equal(amazonQPayload.normalizedRequirement.forbiddenCapabilities?.includes("file_upload"), true);
   assert.equal(amazonQPayload.normalizedRequirement.forbiddenCapabilities?.includes("realtime"), true);
+  assert.ok(response.architectureJson.nodes.some((node) => node.type === "AUTO_SCALING_GROUP"));
+  assert.ok(response.architectureJson.nodes.some((node) => node.type === "LOAD_BALANCER_TARGET_GROUP"));
+  assert.ok(response.architectureJson.nodes.some((node) => node.type === "LAUNCH_TEMPLATE"));
   assert.match(amazonQCalls[0]?.prompt ?? "", /Normalized Architecture Intent Plan/);
 });
 
@@ -3980,6 +4096,27 @@ function createSpaMicroservicesQuestionnairePrompt(): string {
     "website size: 10MB-100MB general website",
     "traffic pattern: time-of-day daytime peak",
     "downtime tolerance: zero downtime 99.99 availability"
+  ].join("\n");
+}
+
+function createGlobalSelfManagedSpaQuestionnairePrompt(): string {
+  return [
+    "website type: SPA Single Page Application React Vue",
+    "traffic: large traffic daily 10000 concurrent 500",
+    "database: 대용량 데이터 100GB 이상 complex queries large database",
+    "backend: complex business logic Spring Boot Django",
+    "region: global users United States Europe included",
+    "monthly budget: enterprise 200 manwon or more",
+    "SSL HTTPS: optional HTTP acceptable",
+    "file upload: large files over 100MB",
+    "realtime feature: realtime data updates stocks games",
+    "management preference: 직접 관리 서버 직접 운영 self-managed",
+    "loading time target: within 1 second",
+    "website size: 10MB-100MB general website",
+    "traffic pattern: time-of-day daytime peak",
+    "downtime tolerance: zero downtime 99.99 availability",
+    "global scope: CloudFront global with API and RDS single region",
+    "realtime transport: WebSocket connection path"
   ].join("\n");
 }
 
