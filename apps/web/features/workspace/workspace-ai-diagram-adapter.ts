@@ -214,9 +214,16 @@ const RESOURCE_NAME_CONVENTIONS: Readonly<Record<string, { readonly prefix: stri
 // AI Draft를 실제 Architecture Board가 받을 수 있는 DiagramJson으로 바꾸는 gg 경계입니다.
 export function convertArchitectureJsonToDiagramJson(architectureJson: ArchitectureJson): DiagramJson {
   const convertedNodes = architectureJson.nodes.map(convertArchitectureNodeToDiagramNode);
-  const placementFlow = createSubnetPlacementFlow(convertedNodes, architectureJson.edges);
-  const nodesWithPlacements = [...convertedNodes, ...placementFlow.nodes];
-  const edgesWithPlacements = [...architectureJson.edges, ...placementFlow.edges];
+  const scaffoldSanitizedInput = removeServerlessOrphanNetworkScaffold(
+    convertedNodes,
+    architectureJson.edges
+  );
+  const placementFlow = createSubnetPlacementFlow(
+    scaffoldSanitizedInput.nodes,
+    scaffoldSanitizedInput.edges
+  );
+  const nodesWithPlacements = [...scaffoldSanitizedInput.nodes, ...placementFlow.nodes];
+  const edgesWithPlacements = [...scaffoldSanitizedInput.edges, ...placementFlow.edges];
   const externalTrafficFlow = createExternalTrafficFlow(nodesWithPlacements, edgesWithPlacements);
   const sourceNodes = [...nodesWithPlacements, ...externalTrafficFlow.nodes].filter(
     (node) => !externalTrafficFlow.removedNodeIds.has(node.id)
@@ -651,21 +658,40 @@ function isConfigurationDependencyRoutingType(resourceType: string): boolean {
 
 export function normalizeDiagramJsonConventions(diagramJson: DiagramJson): DiagramJson {
   const normalizedInputNodes = normalizeStoredSubnetPlacementLabels(diagramJson.nodes);
-  const architectureEdges = diagramJson.edges.map((edge) => ({
+  const normalizedInputNodeIds = new Set(normalizedInputNodes.map((node) => node.id));
+  const normalizedInputEdges = diagramJson.edges.filter(
+    (edge) =>
+      normalizedInputNodeIds.has(edge.sourceNodeId) &&
+      normalizedInputNodeIds.has(edge.targetNodeId)
+  );
+  const architectureEdges = normalizedInputEdges.map((edge) => ({
     id: edge.id,
     label: edge.label,
     sourceId: edge.sourceNodeId,
     targetId: edge.targetNodeId
   }));
-  const placementFlow = createSubnetPlacementFlow(normalizedInputNodes, architectureEdges);
-  const nodesWithPlacements = [...normalizedInputNodes, ...placementFlow.nodes];
-  const architectureEdgesWithPlacements = [...architectureEdges, ...placementFlow.edges];
+  const scaffoldSanitizedInput = removeServerlessOrphanNetworkScaffold(
+    normalizedInputNodes,
+    architectureEdges
+  );
+  const scaffoldSanitizedNodeIds = new Set(scaffoldSanitizedInput.nodes.map((node) => node.id));
+  const scaffoldSanitizedDiagramEdges = normalizedInputEdges.filter(
+    (edge) =>
+      scaffoldSanitizedNodeIds.has(edge.sourceNodeId) &&
+      scaffoldSanitizedNodeIds.has(edge.targetNodeId)
+  );
+  const placementFlow = createSubnetPlacementFlow(
+    scaffoldSanitizedInput.nodes,
+    scaffoldSanitizedInput.edges
+  );
+  const nodesWithPlacements = [...scaffoldSanitizedInput.nodes, ...placementFlow.nodes];
+  const architectureEdgesWithPlacements = [...scaffoldSanitizedInput.edges, ...placementFlow.edges];
   const externalTrafficFlow = createExternalTrafficFlow(
     nodesWithPlacements,
     architectureEdgesWithPlacements
   );
   const sourceEdges: DiagramEdge[] = [
-    ...diagramJson.edges.filter(
+    ...scaffoldSanitizedDiagramEdges.filter(
       (edge) =>
         !externalTrafficFlow.removedNodeIds.has(edge.sourceNodeId) &&
         !externalTrafficFlow.removedNodeIds.has(edge.targetNodeId)
@@ -718,6 +744,98 @@ export function normalizeDiagramJsonConventions(diagramJson: DiagramJson): Diagr
       nodeById
     ),
     nodes
+  };
+}
+
+const SERVERLESS_ENTRY_RESOURCE_TYPES = new Set([
+  "aws_api_gateway_rest_api",
+  "aws_apigatewayv2_api"
+]);
+const SERVERLESS_RUNTIME_RESOURCE_TYPES = new Set(["aws_lambda_function"]);
+const VPC_BOUND_RUNTIME_RESOURCE_TYPES = new Set([
+  "aws_autoscaling_group",
+  "aws_db_instance",
+  "aws_db_subnet_group",
+  "aws_ecs_service",
+  "aws_ecs_task_definition",
+  "aws_eks_cluster",
+  "aws_eks_node_group",
+  "aws_instance",
+  "aws_lb",
+  "aws_lb_listener",
+  "aws_lb_target_group"
+]);
+const ORPHAN_NETWORK_SCAFFOLD_RESOURCE_TYPES = new Set([
+  "aws_eip",
+  "aws_internet_gateway",
+  "aws_nat_gateway",
+  "aws_network_acl",
+  "aws_network_acl_rule",
+  "aws_route_table",
+  "aws_route_table_association",
+  "aws_security_group",
+  "aws_subnet",
+  "aws_vpc",
+  "aws_vpc_endpoint"
+]);
+
+function removeServerlessOrphanNetworkScaffold(
+  nodes: readonly DiagramNode[],
+  edges: readonly ArchitectureJson["edges"][number][]
+): {
+  nodes: DiagramNode[];
+  edges: ArchitectureJson["edges"];
+} {
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const resourceTypes = new Set(nodes.map(getDiagramNodeResourceType));
+  const hasServerlessEntry = [...SERVERLESS_ENTRY_RESOURCE_TYPES].some((resourceType) =>
+    resourceTypes.has(resourceType)
+  );
+  const hasServerlessRuntime = [...SERVERLESS_RUNTIME_RESOURCE_TYPES].some((resourceType) =>
+    resourceTypes.has(resourceType)
+  );
+  const hasVpcBoundRuntime = [...VPC_BOUND_RUNTIME_RESOURCE_TYPES].some((resourceType) =>
+    resourceTypes.has(resourceType)
+  );
+
+  if (!hasServerlessEntry || !hasServerlessRuntime || hasVpcBoundRuntime) {
+    return { nodes: [...nodes], edges: [...edges] };
+  }
+
+  const networkNodeIds = new Set(
+    nodes
+      .filter((node) => ORPHAN_NETWORK_SCAFFOLD_RESOURCE_TYPES.has(getDiagramNodeResourceType(node)))
+      .map((node) => node.id)
+  );
+
+  if (networkNodeIds.size === 0) {
+    return { nodes: [...nodes], edges: [...edges] };
+  }
+
+  const hasRuntimeNetworkConnection = edges.some((edge) => {
+    const sourceIsNetwork = networkNodeIds.has(edge.sourceId);
+    const targetIsNetwork = networkNodeIds.has(edge.targetId);
+
+    if (sourceIsNetwork === targetIsNetwork) {
+      return false;
+    }
+
+    const nonNetworkNode = nodeById.get(sourceIsNetwork ? edge.targetId : edge.sourceId);
+    return nonNetworkNode !== undefined && !isExternalFlowNodeType(getDiagramNodeResourceType(nonNetworkNode));
+  });
+
+  if (hasRuntimeNetworkConnection) {
+    return { nodes: [...nodes], edges: [...edges] };
+  }
+
+  const sanitizedNodes = nodes.filter((node) => !networkNodeIds.has(node.id));
+  const sanitizedNodeIds = new Set(sanitizedNodes.map((node) => node.id));
+
+  return {
+    nodes: sanitizedNodes,
+    edges: edges.filter(
+      (edge) => sanitizedNodeIds.has(edge.sourceId) && sanitizedNodeIds.has(edge.targetId)
+    )
   };
 }
 

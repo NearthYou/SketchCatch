@@ -1,6 +1,14 @@
 // allow: SIZE_OK - shared package root contract; splitting needs a separate repo-wide migration.
 export type IsoDateTimeString = string;
 
+export type JsonValue =
+  | null
+  | boolean
+  | number
+  | string
+  | JsonValue[]
+  | { readonly [key: string]: JsonValue };
+
 export type ApiErrorCode =
   | "bad_request"
   | "unauthorized"
@@ -1615,6 +1623,42 @@ export type ArchitecturePatchPreviewChange = {
   summary: string;
 };
 
+export type ArchitecturePatchPlanAction =
+  | "modify_resource"
+  | "remove_resource"
+  | "add_resource"
+  | "needs_clarification";
+
+export type ArchitecturePatchPlanOperationType =
+  | "set_value"
+  | "increase_one_step"
+  | "decrease_one_step"
+  | "enable"
+  | "disable"
+  | "rename";
+
+export type ArchitecturePatchPlanStatus = "planned" | "needs_clarification" | "unsupported";
+
+export type ArchitecturePatchPlanOperation = {
+  op: ArchitecturePatchPlanOperationType;
+  path: string;
+  value: JsonValue | null;
+};
+
+export type ArchitecturePatchPlan = {
+  status: ArchitecturePatchPlanStatus;
+  action: ArchitecturePatchPlanAction;
+  target: {
+    resourceType: ResourceType | null;
+    resourceId: string | null;
+    label: string | null;
+  };
+  operations: ArchitecturePatchPlanOperation[];
+  preserve: string[];
+  clarificationQuestion: string | null;
+  confidence: number;
+};
+
 export type ArchitecturePatchClarificationCandidate = {
   resourceId: string;
   resourceType: ResourceType;
@@ -1627,6 +1671,7 @@ export type ArchitecturePatchClarification = {
   question: string;
   candidates: ArchitecturePatchClarificationCandidate[];
   suggestions?: string[] | undefined;
+  patchPlan?: ArchitecturePatchPlan | undefined;
   providerMetadata: AiProviderMetadata;
 };
 
@@ -1639,6 +1684,7 @@ export type ArchitecturePatchPreview = {
   requiresUserAcceptance: true;
   userAcceptedChange: UserAcceptedChange | null;
   llmExplanation?: LlmExplanation | undefined;
+  patchPlan?: ArchitecturePatchPlan | undefined;
   providerMetadata: AiProviderMetadata;
 };
 

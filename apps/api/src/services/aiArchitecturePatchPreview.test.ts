@@ -1,7 +1,131 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { ArchitectureJson, ResourceType } from "@sketchcatch/types";
-import { createArchitecturePatchPreview } from "./aiArchitecturePatchPreview.js";
+import {
+  createArchitecturePatchPlan,
+  createArchitecturePatchPreview
+} from "./aiArchitecturePatchPreview.js";
+
+test("createArchitecturePatchPlan returns strict JSON for EC2 relative size edits", () => {
+  const plan = createArchitecturePatchPlan({
+    architectureJson: {
+      nodes: [
+        makeNode({
+          id: "ec2-1",
+          type: "EC2",
+          label: "EC2 Fleet Instance 1",
+          config: {
+            instanceType: "t3.small",
+            subnetId: "aws_subnet.private_app_a.id"
+          }
+        })
+      ],
+      edges: []
+    },
+    instruction: "ec2에서 인스턴스 타입 더 큰거로 바꿔줘",
+    selectedTargetResourceId: "ec2-1"
+  });
+
+  assert.deepEqual(plan, {
+    status: "planned",
+    action: "modify_resource",
+    target: {
+      resourceType: "EC2",
+      resourceId: "ec2-1",
+      label: "EC2 Fleet Instance 1"
+    },
+    operations: [
+      {
+        op: "increase_one_step",
+        path: "config.instanceType",
+        value: null
+      }
+    ],
+    preserve: [
+      "position",
+      "edges",
+      "config.subnetId",
+      "config.vpcId",
+      "config.vpcSecurityGroupIds",
+      "config.securityGroupIds"
+    ],
+    clarificationQuestion: null,
+    confidence: 0.92
+  });
+});
+
+test("createArchitecturePatchPlan refuses to choose a target when multiple resources match", () => {
+  const plan = createArchitecturePatchPlan({
+    architectureJson: {
+      nodes: [
+        makeNode({ id: "assets-bucket", type: "S3", label: "Assets Bucket" }),
+        makeNode({ id: "logs-bucket", type: "S3", label: "Logs Bucket" })
+      ],
+      edges: []
+    },
+    instruction: "s3 삭제해줘"
+  });
+
+  assert.equal(plan.status, "needs_clarification");
+  assert.equal(plan.action, "needs_clarification");
+  assert.deepEqual(plan.target, {
+    resourceType: "S3",
+    resourceId: null,
+    label: null
+  });
+  assert.deepEqual(plan.operations, []);
+  assert.match(plan.clarificationQuestion ?? "", /Multiple matching resources/);
+});
+
+test("createArchitecturePatchPlan maps DB storage edits to an RDS set_value operation", () => {
+  const plan = createArchitecturePatchPlan({
+    architectureJson: {
+      nodes: [
+        makeNode({ id: "web-assets", type: "S3", label: "Upload Web Assets Bucket" }),
+        makeNode({ id: "image-uploads", type: "S3", label: "Private Image Upload Bucket" }),
+        makeNode({
+          id: "rds-database",
+          type: "RDS",
+          label: "RDS Database",
+          config: {
+            allocatedStorage: 20
+          }
+        })
+      ],
+      edges: []
+    },
+    instruction: "db 스토리지 200으로 수정해줘"
+  });
+
+  assert.equal(plan.status, "planned");
+  assert.equal(plan.action, "modify_resource");
+  assert.deepEqual(plan.target, {
+    resourceType: "RDS",
+    resourceId: "rds-database",
+    label: "RDS Database"
+  });
+  assert.deepEqual(plan.operations, [
+    {
+      op: "set_value",
+      path: "config.allocatedStorage",
+      value: 200
+    }
+  ]);
+});
+
+test("createArchitecturePatchPlan treats explicit same-kind replacement as unsupported", () => {
+  const plan = createArchitecturePatchPlan({
+    architectureJson: {
+      nodes: [makeNode({ id: "legacy-uploads", type: "S3", label: "Legacy Uploads" })],
+      edges: []
+    },
+    instruction: "legacy uploads를 rds로 교체해줘"
+  });
+
+  assert.equal(plan.status, "unsupported");
+  assert.equal(plan.action, "needs_clarification");
+  assert.deepEqual(plan.operations, []);
+});
 
 test("createArchitecturePatchPreview asks for a target when multiple resources match", () => {
   const response = createArchitecturePatchPreview({
@@ -97,6 +221,54 @@ test("createArchitecturePatchPreview removes the selected target and connected e
   assert.deepEqual(
     response.proposedArchitectureJson.edges.map((edge) => edge.id),
     ["app-to-logs"]
+  );
+});
+
+test("createArchitecturePatchPreview handles Korean S3 delete requests deterministically", () => {
+  const singleS3Response = createArchitecturePatchPreview({
+    architectureJson: {
+      nodes: [
+        makeNode({ id: "app-server", type: "EC2", label: "App Server" }),
+        makeNode({ id: "assets-bucket", type: "S3", label: "Assets Bucket" })
+      ],
+      edges: [
+        {
+          id: "app-to-assets",
+          sourceId: "app-server",
+          targetId: "assets-bucket",
+          label: "stores uploads"
+        }
+      ]
+    },
+    instruction: "s3 삭제해줘"
+  });
+
+  assert.equal(singleS3Response.status, "preview");
+  assert.equal(singleS3Response.changes[0]?.action, "remove_resource");
+  assert.equal(singleS3Response.changes[0]?.resourceId, "assets-bucket");
+  assert.deepEqual(
+    singleS3Response.proposedArchitectureJson.nodes.map((node) => node.id),
+    ["app-server"]
+  );
+
+  const selectedS3Response = createArchitecturePatchPreview({
+    architectureJson: {
+      nodes: [
+        makeNode({ id: "app-server", type: "EC2", label: "App Server" }),
+        makeNode({ id: "assets-bucket", type: "S3", label: "Assets Bucket" }),
+        makeNode({ id: "logs-bucket", type: "S3", label: "Logs Bucket" })
+      ],
+      edges: []
+    },
+    instruction: "s3 삭제해줘",
+    selectedTargetResourceId: "logs-bucket"
+  });
+
+  assert.equal(selectedS3Response.status, "preview");
+  assert.equal(selectedS3Response.changes[0]?.resourceId, "logs-bucket");
+  assert.deepEqual(
+    selectedS3Response.proposedArchitectureJson.nodes.map((node) => node.id),
+    ["app-server", "assets-bucket"]
   );
 });
 
@@ -942,6 +1114,71 @@ test("createArchitecturePatchPreview updates requested resource attributes witho
   });
 });
 
+test("createArchitecturePatchPreview upsizes the selected EC2 instance in place", () => {
+  const response = createArchitecturePatchPreview({
+    architectureJson: {
+      nodes: [
+        makeNode({
+          id: "ec2-1",
+          type: "EC2",
+          label: "EC2 Fleet Instance 1",
+          config: {
+            instanceType: "t3.small",
+            subnetId: "aws_subnet.private_app_a.id"
+          },
+          positionX: 240,
+          positionY: 180
+        }),
+        makeNode({
+          id: "ec2-2",
+          type: "EC2",
+          label: "EC2 Fleet Instance 2",
+          config: {
+            instanceType: "t3.small",
+            subnetId: "aws_subnet.private_app_b.id"
+          },
+          positionX: 420,
+          positionY: 180
+        })
+      ],
+      edges: []
+    },
+    instruction: "ec2에서 인스턴스 타입 더 큰거로 바꿔줘",
+    selectedTargetResourceId: "ec2-1"
+  });
+
+  assert.equal(response.status, "preview");
+  assert.deepEqual(
+    response.changes.map((change) => ({
+      action: change.action,
+      resourceId: change.resourceId,
+      resourceType: change.resourceType
+    })),
+    [
+      {
+        action: "modify_resource",
+        resourceId: "ec2-1",
+        resourceType: "EC2"
+      }
+    ]
+  );
+  assert.deepEqual(
+    response.proposedArchitectureJson.nodes.map((node) => node.id),
+    ["ec2-1", "ec2-2"]
+  );
+  assert.deepEqual(response.proposedArchitectureJson.nodes[0], {
+    id: "ec2-1",
+    type: "EC2",
+    label: "EC2 Fleet Instance 1",
+    positionX: 240,
+    positionY: 180,
+    config: {
+      instanceType: "t3.medium",
+      subnetId: "aws_subnet.private_app_a.id"
+    }
+  });
+});
+
 test("createArchitecturePatchPreview updates Lambda runtime parameters as deployable config", () => {
   const response = createArchitecturePatchPreview({
     architectureJson: {
@@ -1015,6 +1252,33 @@ test("createArchitecturePatchPreview updates storage and network parameters as d
     { protocol: "tcp", port: 80, cidr: "0.0.0.0/0" },
     { protocol: "tcp", port: 443, cidr: "0.0.0.0/0" }
   ]);
+});
+
+test("createArchitecturePatchPreview treats DB storage edits as RDS storage changes", () => {
+  const response = createArchitecturePatchPreview({
+    architectureJson: {
+      nodes: [
+        makeNode({ id: "web-assets", type: "S3", label: "Upload Web Assets Bucket" }),
+        makeNode({ id: "image-uploads", type: "S3", label: "Private Image Upload Bucket" }),
+        makeNode({
+          id: "rds-database",
+          type: "RDS",
+          label: "RDS Database",
+          config: {
+            allocatedStorage: 20,
+            engine: "postgres"
+          }
+        })
+      ],
+      edges: []
+    },
+    instruction: "db 스토리지 200으로 수정해줘"
+  });
+
+  assert.equal(response.status, "preview");
+  assert.equal(response.intent.resourceType, "RDS");
+  assert.equal(response.changes[0]?.resourceId, "rds-database");
+  assert.equal(response.proposedArchitectureJson.nodes[2]?.config.allocatedStorage, 200);
 });
 
 test("createArchitecturePatchPreview migrates an EC2 runtime path to serverless", () => {

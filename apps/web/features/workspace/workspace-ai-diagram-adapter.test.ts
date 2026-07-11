@@ -1010,6 +1010,168 @@ test("normalizeDiagramJsonConventions adds one reusable external flow to exact Q
   );
 });
 
+test("normalizeDiagramJsonConventions removes orphan network scaffolding from serverless previews", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      makeDiagramNode({
+        id: "cdn",
+        label: "CloudFront Public Entry",
+        position: { x: 120, y: 120 },
+        type: "aws_cloudfront_distribution",
+        parameters: {
+          fileName: "main",
+          resourceName: "cdn",
+          resourceType: "aws_cloudfront_distribution",
+          terraformBlockType: "resource",
+          values: {}
+        }
+      }),
+      makeDiagramNode({
+        id: "api",
+        label: "Practice REST API",
+        position: { x: 360, y: 260 },
+        type: "aws_api_gateway_rest_api",
+        parameters: {
+          fileName: "main",
+          resourceName: "api",
+          resourceType: "aws_api_gateway_rest_api",
+          terraformBlockType: "resource",
+          values: {}
+        }
+      }),
+      makeDiagramNode({
+        id: "lambda",
+        label: "Lambda Function",
+        position: { x: 600, y: 260 },
+        type: "aws_lambda_function",
+        parameters: {
+          fileName: "main",
+          resourceName: "lambda",
+          resourceType: "aws_lambda_function",
+          terraformBlockType: "resource",
+          values: {}
+        }
+      }),
+      makeDiagramNode({
+        id: "assets",
+        label: "Web Assets Bucket",
+        position: { x: 360, y: 120 },
+        type: "aws_s3_bucket",
+        parameters: {
+          fileName: "main",
+          resourceName: "assets",
+          resourceType: "aws_s3_bucket",
+          terraformBlockType: "resource",
+          values: {}
+        }
+      }),
+      makeDiagramNode({
+        id: "vpc",
+        label: "VPC",
+        position: { x: 900, y: 360 },
+        size: { width: 240, height: 160 },
+        type: "aws_vpc",
+        parameters: {
+          fileName: "network",
+          resourceName: "vpc",
+          resourceType: "aws_vpc",
+          terraformBlockType: "resource",
+          values: {}
+        }
+      }),
+      makeDiagramNode({
+        id: "subnet-a",
+        label: "Private Subnet A",
+        position: { x: 1180, y: 360 },
+        size: { width: 180, height: 120 },
+        type: "aws_subnet",
+        parameters: {
+          fileName: "network",
+          resourceName: "subnet_a",
+          resourceType: "aws_subnet",
+          terraformBlockType: "resource",
+          values: {}
+        }
+      }),
+      makeDiagramNode({
+        id: "internet-gateway",
+        label: "Internet Gateway",
+        position: { x: 1400, y: 360 },
+        type: "aws_internet_gateway",
+        parameters: {
+          fileName: "network",
+          resourceName: "igw",
+          resourceType: "aws_internet_gateway",
+          terraformBlockType: "resource",
+          values: {}
+        }
+      }),
+      makeDiagramNode({
+        id: "route-table",
+        label: "Route Table",
+        position: { x: 1400, y: 520 },
+        type: "aws_route_table",
+        parameters: {
+          fileName: "network",
+          resourceName: "rt",
+          resourceType: "aws_route_table",
+          terraformBlockType: "resource",
+          values: {}
+        }
+      }),
+      makeDiagramNode({
+        id: "security-group",
+        label: "Security Group",
+        position: { x: 1180, y: 520 },
+        type: "aws_security_group",
+        parameters: {
+          fileName: "network",
+          resourceName: "sg",
+          resourceType: "aws_security_group",
+          terraformBlockType: "resource",
+          values: {}
+        }
+      })
+    ],
+    edges: [
+      { id: "api-to-lambda", sourceNodeId: "api", targetNodeId: "lambda", label: "SSE /events" },
+      { id: "cdn-to-assets", sourceNodeId: "cdn", targetNodeId: "assets", label: "origin" },
+      { id: "vpc-to-subnet", sourceNodeId: "vpc", targetNodeId: "subnet-a", label: "contains" },
+      { id: "vpc-to-igw", sourceNodeId: "vpc", targetNodeId: "internet-gateway", label: "attaches" },
+      { id: "route-to-igw", sourceNodeId: "route-table", targetNodeId: "internet-gateway", label: "routes" },
+      { id: "sg-to-vpc", sourceNodeId: "security-group", targetNodeId: "vpc", label: "scopes" }
+    ],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  const normalized = normalizeDiagramJsonConventions(diagramJson);
+  const nodeTypes = new Set(normalized.nodes.map((node) => node.parameters?.resourceType ?? node.type));
+  const nodeIds = new Set(normalized.nodes.map((node) => node.id));
+
+  for (const removedType of [
+    "aws_vpc",
+    "aws_subnet",
+    "aws_internet_gateway",
+    "aws_route_table",
+    "aws_security_group"
+  ]) {
+    assert.equal(nodeTypes.has(removedType), false, `Expected no ${removedType}`);
+  }
+
+  assert.equal(nodeTypes.has("aws_cloudfront_distribution"), true);
+  assert.equal(nodeTypes.has("aws_api_gateway_rest_api"), true);
+  assert.equal(nodeTypes.has("aws_lambda_function"), true);
+  assert.equal(nodeTypes.has("aws_s3_bucket"), true);
+  assert.equal(nodeTypes.has("sketchcatch_user_client"), true);
+  assert.equal(nodeTypes.has("sketchcatch_internet"), true);
+  assert.deepEqual(
+    normalized.edges.filter(
+      (edge) => !nodeIds.has(edge.sourceNodeId) || !nodeIds.has(edge.targetNodeId)
+    ),
+    []
+  );
+});
+
 test("normalizeDiagramJsonConventions upgrades stored subnet placement labels", () => {
   const diagramJson: DiagramJson = {
     nodes: [

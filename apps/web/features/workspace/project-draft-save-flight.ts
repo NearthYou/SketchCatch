@@ -2,12 +2,27 @@ export type ProjectDraftServerSaveFlightRef<T> = {
   current: Promise<T> | null;
 };
 
+export type ProjectDraftServerSaveFlightOptions = {
+  readonly shouldRunAgainAfterInFlight?: (() => boolean) | undefined;
+};
+
 export function runProjectDraftServerSaveFlight<T>(
   flightRef: ProjectDraftServerSaveFlightRef<T>,
-  save: () => Promise<T>
+  save: () => Promise<T>,
+  options: ProjectDraftServerSaveFlightOptions = {}
 ): Promise<T> {
   if (flightRef.current) {
-    return flightRef.current;
+    if (options.shouldRunAgainAfterInFlight === undefined) {
+      return flightRef.current;
+    }
+
+    return flightRef.current.then((result) => {
+      if (!options.shouldRunAgainAfterInFlight?.()) {
+        return result;
+      }
+
+      return runProjectDraftServerSaveFlight(flightRef, save, options);
+    });
   }
 
   const savePromise = save().finally(() => {

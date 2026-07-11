@@ -12,54 +12,38 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
-### 2026-07-11 - Remove duplicated Trivy rule IDs from the scanner test
+### 2026-07-11 - Add strict Architecture PatchPlan contract
 
-- Updated the Trivy ignore-file test to import `disabledTrivyTerraformRuleIds` from the scanner instead of maintaining a second hard-coded rule list.
-- Verification: focused `trivy-terraform-scan.test.ts`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check` passed.
-- Risk: none; the test now follows the production exclusion list automatically.
-- Next action: review and commit the Trivy exclusion change when ready.
-
-### 2026-07-11 - Disable Trivy ALB and Auto Scaling checks
-
-- Configured each Terraform Trivy scan to generate an ignore file that excludes ALB rules AWS-0047, AWS-0052, AWS-0053, and AWS-0054 plus Auto Scaling launch configuration/template rules AWS-0008, AWS-0009, AWS-0122, AWS-0129, and AWS-0130.
-- Kept all other Terraform Trivy checks enabled; the exclusion applies to the generated scan workspace only and does not change user Terraform source files.
-- Verification: focused Trivy scanner tests, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check` passed.
-- Risk: future Trivy check-bundle rule IDs require an explicit review before they are added to the exclusion list.
-- Next action: add the product-specific ALB and ASG configuration warnings as non-blocking deployment checks when requested.
-
-### 2026-07-11 - Recover production auth runtime configuration
-
-- Traced signup/login failures to a one-character SSM `AUTH_TOKEN_SECRET` and missing OAuth client IDs in the ECS API task definition.
-- Rotated the secret without exposing it, restarted the API service, and verified live signup, login, and account cleanup.
-- Added production startup validation and deployment-time OAuth variable injection so invalid auth configuration fails before serving traffic.
-- Kept container ALARM notifications, removed repetitive OK notifications, and excluded the known stale Server Action web log pattern.
-
-### 2026-07-11 - Correct external traffic and subnet placement semantics
-
-- Goal: Prevent global questionnaire drafts from showing a fake region and unclear one-item subnet contents.
+- Goal: Convert natural-language edit requests into a strict JSON PatchPlan before any Architecture preview mutation.
 - Completed:
-  - Restored the `User / Client -> Internet -> public entry` visual flow and migrated saved diagrams on reload.
-  - Added ALB placement markers to public subnets and clarified Fargate and RDS placement labels in private subnets.
-  - Rejected descriptive pseudo-region values before they can become Availability Zones or runtime regions.
-  - Added a clarification boundary for multi-region API/RDS requests because Terraform Preview and direct deployment currently use one AWS provider region.
+  - Added shared `ArchitecturePatchPlan` and `JsonValue` types with allowed actions, operations, target, preserve paths, clarification question, and confidence.
+  - Added `createArchitecturePatchPlan` as a pure planner that does not mutate ArchitectureJson or invent resource IDs.
+  - Enforced conservative target resolution: multiple matching resources return `needs_clarification` instead of choosing one.
+  - Planned EC2 relative sizing as `increase_one_step`, DB storage edits as `set_value config.allocatedStorage`, and explicit replacement wording as `unsupported`.
+  - Attached `patchPlan` to patch preview and clarification responses for auditability while preserving the existing user-accepted preview flow.
+  - Updated `docs/data-models.md` to document the PatchPlan DTO.
 - Verification:
-  - Workspace diagram adapter tests passed 42/42.
-  - Architecture Draft and requirement normalizer tests passed 42/42.
-  - Chrome reload showed Internet, ALB A/B, Fargate A/B, and RDS Multi-AZ placement labels on the saved board.
-  - `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
-
-### 2026-07-11 - Relax draft and patch intent routing
-
-- Goal: Treat colloquial resource attachment commands as diagram edits without making bare resource names unsafe.
-- Completed:
-  - Expanded architecture chat verbs for attach/connect/move and colloquial Korean creation requests.
-  - Kept existing-board NAT/RDS/security-group attachment requests on patch while routing new service/structure requests to draft.
-  - Added Korean NAT Gateway aliases and generated a connected Elastic IP plus public-subnet NAT bundle with Terraform references.
-- Verification:
-  - Workspace AI routing tests passed 11/11 and Architecture Patch Preview tests passed 28/28.
+  - Full API patch preview tests passed 35/35.
   - `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
 - Risk:
-  - The pre-existing `.workspaceStartForm .textInput:focus` source-contract test still fails independently of this routing change.
+  - Existing preview generation still supports legacy add-resource bundles; the new strict planner is exposed alongside the preview path and can be used to tighten future application semantics.
+
+### 2026-07-11 - Fix EC2 instance-type patch replacement
+
+- Goal: Stop natural-language EC2 instance-size edits from replacing the selected EC2 node with a new default EC2 bundle.
+- Completed:
+  - Reproduced the Chrome-visible issue: the existing board already contained an old scattered `EC2 INSTANCE` node from a prior bad replacement preview.
+  - Reproduced the backend bug with `ec2에서 인스턴스 타입 더 큰거로 바꿔줘`: the selected `t3.small` EC2 was removed and replaced by a new `t3.micro` EC2 bundle.
+  - Routed EC2 instance-type and relative size wording away from replacement parsing and into in-place parameter modification.
+  - Added deterministic EC2 size stepping so `t3.small` upsizes to `t3.medium` while preserving subnet and coordinates.
+  - Preserved existing DiagramJson geometry, z-index, and parent area metadata when frontend patch previews update existing node parameters.
+- Verification:
+  - Full API patch preview tests passed 31/31.
+  - Full workspace patch preview tests passed 3/3.
+  - Direct backend check for the reported Korean request returned one `modify_resource` change for `ec2-1`, `instanceType: t3.medium`, unchanged subnet, and no new EC2 node.
+  - `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
+- Risk:
+  - Existing saved boards that already accepted the old bad replacement keep the stray EC2 node until manually cleaned or regenerated.
 
 ### 2026-07-11 - Merge latest dev into AI diagram branch
 
@@ -73,35 +57,6 @@ Short English-only working log for the current agent context. Older records are 
   - Deployment plan summary tests (7), restored API tests (50), restored web adapter tests (41), catalog check, `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm harness:check`, Terraform format, initialization, and validation passed.
 - Risk:
   - No cloud mutation was run while integrating the production changes.
-
-### 2026-07-11 - Harden Architecture Draft requirements and error boundaries
-
-- Goal: Catch detailed diagram omissions beyond the happy path and stop reporting every generation failure as a 503.
-- Completed:
-  - Fixed S3 quantity parsing so the `3` in `S3 bucket` is not interpreted as three buckets.
-  - Preserved supported EKS resources and added distinct audit topology for auth, reservation, and content-board services.
-  - Extracted operational requirement policy and validation for HTTPS, SSE/WebSocket/polling, burst scaling, 99.99% redundancy, RDS Multi-AZ, and voice transcription storage/IAM/flows.
-  - Applied deterministic operational repairs to both Q previews and canonical plans before typed validation.
-  - Extracted generation errors and mapped requirement quality to 422, malformed provider output to 502, provider availability to 503, and internal assembly faults to 500; stream terminal errors now include `statusCode`.
-- Verification:
-  - Architecture Draft service tests passed 39/39; full AI route tests passed 53/53; operational/quantity tests passed 7/7; web stream tests passed 8/8.
-  - `pnpm lint`, `pnpm typecheck`, `pnpm catalog:check`, `pnpm build`, and focused harness checks passed.
-- Risk:
-  - The full API suite exceeded the 10-minute command limit before producing its buffered summary; the directly affected suites above completed successfully.
-
-### 2026-07-11 - Enforce questionnaire topology and private-subnet placements
-
-- Goal: Make the dynamic Fargate questionnaire result enforce HTTPS, SSE chat, burst scaling, and readable subnet placement.
-- Completed:
-  - Added deployable ECS Application Auto Scaling target and target-tracking policy resource support.
-  - Required public ALB drafts with mandatory HTTPS to include ACM and a port 443 listener, and required SSE plus burst traffic to appear in actual topology.
-  - Replaced the synthetic `User / Client -> Internet -> entry` chain with a direct user-to-public-entry flow.
-  - Added board-only Fargate task and RDS primary/standby placement markers inside each referenced private subnet without duplicating Terraform resources.
-- Verification:
-  - Architecture Draft tests (39), web adapter tests (41), focused catalog/Terraform tests, lint, typecheck, catalog check, and full build passed before the `dev` merge.
-- Risk:
-  - The pre-existing full web suite has one unrelated CSS contract failure for the missing `.workspaceStartForm .textInput:focus` selector.
-  - Existing saved resource configurations remain unchanged until the user accepts a regenerated Architecture Draft.
 
 ### 2026-07-11 - Fix DB-free mobile API diagram generation
 
@@ -135,6 +90,118 @@ Short English-only working log for the current agent context. Older records are 
   - `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
 - Risk:
   - Existing saved boards keep old generated topology until regenerated or replaced.
+
+### 2026-07-11 - Fix fully managed serverless SPA diagram diagnostics
+
+- Goal: Restart the questionnaire-generation diagnosis with a new representative scenario and fix diagram, resource, and parameter issues found end to end.
+- Completed:
+  - Generated a small fully managed React SPA community-board scenario with simple API, DB included, image uploads, and polling notifications.
+  - Diagnosed the generated ArchitectureJson, DiagramJson, rendered helper visibility, and right-panel resource-list validity.
+  - Mapped fully managed simple API SPA answers to an explicit API Gateway plus Lambda serverless pattern without leaking EC2, ALB, ECS, or RDS.
+  - Used DynamoDB for simple serverless persistence, kept CloudFront plus static S3 for the SPA shell, kept a separate image-upload S3 bucket, and preserved a polling cost-warning edge.
+  - Added CloudFront and DynamoDB Terraform-required parameter defaults and ensured serverless Lambda has a matching IAM role while low-signal helper nodes stay hidden.
+- Verification:
+  - Restart diagnostic script passed with no issues, no visible helper nodes, and zero invalid resource-list items.
+  - Architecture Draft service tests passed 48/48.
+  - `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
+- Risk:
+  - Existing saved boards keep old generated topology until regenerated or replaced.
+
+### 2026-07-11 - Repeat Architecture Draft diagnostics across static, CI/CD, and mobile API paths
+
+- Goal: Run three more questionnaire-generation diagnostic passes, focusing on paths that had not been heavily corrected yet.
+- Completed:
+  - Diagnosed static portfolio, Git/CI/CD EC2 handoff, and APAC mobile API with voice transcription prompts through ArchitectureJson, DiagramJson, and right-panel resource-list validity checks.
+  - Fixed static no-backend answers that previously materialized as an empty architecture by requiring CloudFront plus S3 static delivery.
+  - Fixed Git/CI/CD handoff answers so natural CI/CD wording materializes CodeStar Connection, CodePipeline, CodeBuild, CodeDeploy, S3 artifacts, and the EC2 ASG runtime together.
+  - Fixed APAC semi-managed mobile API answers with DB/upload/bursty traffic so they use ECS Fargate instead of a bare EC2 topology that failed ASG validation.
+  - Filled EC2 fleet instance parameters and converted ALB listener and ASG nested blocks to catalog-valid Terraform shapes.
+- Verification:
+  - Three-scenario diagnostic script passed with zero invalid resource-list items and zero dangling diagram edges.
+  - Architecture Draft service tests passed 51/51.
+  - `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
+- Risk:
+  - Existing saved boards keep old generated topology until regenerated or replaced.
+
+### 2026-07-11 - Fix DB-free serverless preview scaffold cleanup
+
+- Goal: Diagnose the DB-free SSR/serverless questionnaire screenshot where VPC, subnet, NAT, and helper-looking resources were scattered away from the actual API flow.
+- Completed:
+  - Reproduced the issue with an Amazon Q preview response that mixed a valid API Gateway/Lambda/CloudFront/S3 path with unconnected VPC, subnet, and NAT scaffold nodes.
+  - Added provider-preview sanitation that removes orphan VPC networking scaffolds when the accepted requirement excludes databases and the preview is otherwise API Gateway/Lambda serverless with no VPC-bound runtime.
+  - Kept EC2/ALB runtime contradictions in the self-validation path so regeneration prompts still explain hard topology violations instead of silently deleting core runtime nodes.
+  - Filled missing Lambda Terraform parameters without creating an extra visible IAM role node, using `var.lambda_execution_role_arn` for the required role input.
+  - Added regression coverage proving the bad provider preview returns only API Gateway, Lambda, CloudFront, S3, CloudWatch, valid Lambda parameters, and no dangling edges.
+- Verification:
+  - Focused Architecture Draft service tests passed 52/52.
+- Risk:
+  - Existing saved boards keep old scattered preview resources until the Architecture Draft is regenerated.
+
+### 2026-07-11 - Fix workspace preview adapter network scaffold leak
+
+- Goal: Fix the Chrome-visible case where the running API no longer returned VPC resources, but the workspace preview still showed VPC, subnet, internet gateway, route table, and security group scaffold nodes.
+- Completed:
+  - Verified in Chrome that the workspace was still rendering stale preview/network scaffold nodes after the backend fix.
+  - Confirmed the current local `/api/ai/architecture-draft` response has no `VPC`, `SUBNET`, or `NAT_GATEWAY` in `architectureJson` and no server-provided `diagramJson`.
+  - Added frontend adapter sanitation in `convertArchitectureJsonToDiagramJson` and `normalizeDiagramJsonConventions` to remove orphan network scaffold nodes when a diagram is API Gateway plus Lambda serverless and has no VPC-bound runtime.
+  - Kept external user/internet flow nodes while removing VPC, subnet, internet gateway, route table, route table association, NAT, EIP, VPC endpoint, and security group scaffold nodes when they are not connected to a real runtime dependency.
+  - Added a focused workspace adapter regression test for already-created serverless preview diagrams containing orphan network scaffold nodes.
+- Verification:
+  - Focused new workspace adapter regression test passed.
+  - Local `/api/ai/architecture-draft` end-to-end check passed for the reported Korean questionnaire prompt: backend `architectureJson` and frontend-converted `DiagramJson` both contained no VPC, subnet, route table, security group, DB, EC2, or ALB resources and had zero dangling edges.
+  - Next.js Architecture Draft proxy test passed, and workspace apply-path coverage confirmed accepted drafts use `getDiagramJsonForArchitectureDraft(draft)` before `applyDiagramJson`.
+  - `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check` passed.
+- Risk:
+  - The full `workspace-ai-diagram-adapter.test.ts` file still has pre-existing accumulated layout/name expectation failures unrelated to this new scaffold filter; the new targeted regression passes.
+
+### 2026-07-11 - Connect Architecture Patch Preview through the frontend API route
+
+- Goal: Verify that natural-language board edits such as resource additions and parameter changes reach the backend patch service and render as frontend previews.
+- Completed:
+  - Found that the web client posts patch edit requests to `/api/ai/architecture-patch-preview`, but the Next.js API proxy route was missing while the backend Fastify route existed.
+  - Added the Next.js `architecture-patch-preview` proxy route to forward edit requests to backend `/api/ai/architecture-patch-preview`.
+  - Added route coverage that preserves preview and clarification responses from the backend.
+  - Verified the patch flow end to end with add-resource and modify-resource requests: backend `proposedArchitectureJson` added S3 resources and updated Lambda timeout/memory values, while the frontend patch preview model marked nodes as added or modified and carried the changed parameter values into `DiagramJson`.
+  - Verified live `localhost:3000/api/ai/architecture-patch-preview` requests for S3 addition and Lambda parameter changes.
+- Verification:
+  - `pnpm --dir apps/web exec tsx --test app/api/ai/architecture-patch-preview/route.test.ts`
+  - Focused API patch preview service tests for add and modify cases passed.
+  - `pnpm --dir apps/web exec tsx --test features/workspace/workspace-ai-patch-preview.test.ts`
+  - Focused web API client patch preview test passed.
+  - `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check` passed.
+- Risk:
+  - Existing boards need a fresh patch request for the new proxy route to be used.
+
+### 2026-07-11 - Fix DB storage patch intent routing
+
+- Goal: Fix the edit flow where `db storage 200` asked the user to choose between S3 buckets instead of modifying the RDS database storage.
+- Completed:
+  - Reproduced the exact failure with a board containing two S3 buckets and one RDS database.
+  - Added a regression test proving DB/RDS storage wording resolves to the RDS node and updates `allocatedStorage`.
+  - Prioritized `db/database/rds + storage` wording as an RDS patch intent before generic storage/S3 matching.
+  - Expanded RDS storage parsing to handle Korean shorthand such as `스토리지 200으로`, not only `200GB`.
+  - Verified the live frontend proxy path returns `status: preview`, `resourceType: RDS`, no S3 candidates, and `allocatedStorage: 200`.
+- Verification:
+  - Focused DB storage regression test passed.
+  - Full `aiArchitecturePatchPreview.test.ts` passed 29/29.
+  - `aiAwsProviders.test.ts`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check` passed.
+- Risk:
+  - Existing failed clarification prompts in an open chat should be retried with a fresh edit request.
+
+### 2026-07-11 - Stabilize S3 delete patch acceptance saves
+
+- Goal: Diagnose intermittent failures where `s3 delete` sometimes did not persist after accepting the patch preview.
+- Completed:
+  - Verified API patch generation is deterministic: Korean `s3 삭제해줘` returned the same S3 remove preview 5/5 times through the live frontend proxy path.
+  - Added regression coverage for Korean S3 delete requests with a single S3 node and with an explicitly selected S3 target.
+  - Found the intermittent path in project draft persistence: manual save requests during an in-flight server save reused the old save promise and could miss a newly accepted delete patch.
+  - Extended the server save-flight helper so manual saves queued during an in-flight save run one follow-up save when the draft is still dirty after the current save finishes.
+  - Wired `ProjectWorkspaceDraftManager` manual saves to use that follow-up behavior, so accepted AI patch deletes are persisted after an overlapping save completes.
+- Verification:
+  - Full `aiArchitecturePatchPreview.test.ts` passed 30/30.
+  - `project-draft-save-flight.test.ts`, `workspace-ai-patch-preview.test.ts`, focused workspace save source test, live 5-run S3 delete HTTP check, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
+- Risk:
+  - If an existing browser tab already has a failed delete clarification or stale preview, send a fresh delete request after the app reloads.
 
 ## Next Action
 

@@ -1449,6 +1449,347 @@ test("createAmazonQArchitectureDraftResponse lets low-budget DB-free API answers
   );
 });
 
+test("createAmazonQArchitectureDraftResponse maps fully managed SPA API answers to valid serverless resources", async () => {
+  const requests: Array<Parameters<AiTextProvider["generate"]>[0]> = [];
+  const provider = createFakeAmazonQProvider((request) => {
+    requests.push(request);
+    return createNormalizedRequirementPlan(request);
+  });
+
+  const response = await createAmazonQArchitectureDraftResponse(
+    { prompt: createServerlessBoardQuestionnairePrompt() },
+    { provider, creditPolicy: confirmedCreditPolicy }
+  );
+
+  if ("status" in response) {
+    assert.fail(`Expected preview, got clarification: ${response.question}`);
+  }
+
+  const firstPayload = requests[0]?.payload as {
+    architectureDecisionSpace?: {
+      answerProfile?: Record<string, string | undefined>;
+    };
+    normalizedRequirement?: {
+      patternIds?: string[];
+      runtimeTopology?: {
+        compute?: string;
+        trafficEntry?: string;
+      };
+    };
+  };
+  const answerProfile = firstPayload.architectureDecisionSpace?.answerProfile;
+  const nodes = response.architectureJson.nodes;
+  const edges = response.architectureJson.edges;
+  const nodeTypes = new Set(nodes.map((node) => node.type));
+  const api = nodes.find((node) => node.type === "API_GATEWAY_REST_API");
+  const lambda = nodes.find((node) => node.type === "LAMBDA");
+  const cloudFront = nodes.find((node) => node.type === "CLOUDFRONT");
+  const dataTable = nodes.find((node) => node.type === "DYNAMODB_TABLE");
+  const logGroup = nodes.find((node) => node.type === "CLOUDWATCH_LOG_GROUP");
+  const staticBucket = nodes.find(
+    (node) => node.type === "S3" && node.config.bucketPurpose === "static_website_origin"
+  );
+  const uploadBucket = nodes.find(
+    (node) => node.type === "S3" && node.config.bucketPurpose === "user_uploads"
+  );
+
+  assert.equal(answerProfile?.frontend, "spa");
+  assert.equal(answerProfile?.backend, "simple_api");
+  assert.equal(answerProfile?.management, "fully_managed");
+  assert.equal(firstPayload.normalizedRequirement?.patternIds?.includes("serverless-api"), true);
+  assert.equal(firstPayload.normalizedRequirement?.patternIds?.includes("spa-cloudfront-s3"), true);
+  assert.equal(firstPayload.normalizedRequirement?.patternIds?.includes("multi-az-rds"), false);
+  assert.equal(firstPayload.normalizedRequirement?.runtimeTopology?.trafficEntry, "API_GATEWAY_REST_API");
+  assert.equal(firstPayload.normalizedRequirement?.runtimeTopology?.compute, "LAMBDA");
+  assert.equal(nodeTypes.has("EC2"), false);
+  assert.equal(nodeTypes.has("LOAD_BALANCER"), false);
+  assert.ok(api);
+  assert.equal(api.config.name, "practice-api");
+  assert.ok(lambda);
+  assert.equal(lambda.config.runtime, "nodejs20.x");
+  assert.equal(logGroup?.config.kmsKeyId, undefined);
+  assert.ok(staticBucket);
+  assert.equal(staticBucket.config.publicAccessBlock, true);
+  assert.ok(uploadBucket);
+  assert.equal(uploadBucket.config.bucketPrefix, "sketchcatch-image-uploads-");
+  assert.equal(cloudFront?.config.originResourceId, staticBucket.id);
+  assert.deepEqual(cloudFront?.config.origin, {
+    domainName: `${staticBucket.id}.s3.amazonaws.com`,
+    originId: "static-assets"
+  });
+  assert.deepEqual(cloudFront?.config.defaultCacheBehavior, {
+    allowedMethods: ["GET", "HEAD", "OPTIONS"],
+    cachedMethods: ["GET", "HEAD"],
+    targetOriginId: "static-assets",
+    viewerProtocolPolicy: "redirect-to-https"
+  });
+  assert.deepEqual(cloudFront?.config.restrictions, {
+    geoRestriction: [{ restrictionType: "none" }]
+  });
+  assert.deepEqual(cloudFront?.config.viewerCertificate, {
+    cloudfrontDefaultCertificate: true
+  });
+  assert.equal(dataTable?.config.name, "practice-board-data");
+  assert.equal(dataTable?.config.billingMode, "PAY_PER_REQUEST");
+  assert.equal(dataTable?.config.hashKey, "pk");
+  assert.equal(dataTable?.config.rangeKey, "sk");
+  assert.deepEqual(dataTable?.config.attribute, [
+    { name: "pk", type: "S" },
+    { name: "sk", type: "S" }
+  ]);
+  assert.ok(
+    edges.some(
+      (edge) =>
+        edge.sourceId === api?.id &&
+        edge.targetId === lambda?.id &&
+        /polling.*cost warning/iu.test(edge.label ?? "")
+    ),
+    "Expected polling cost warning on the API Gateway to Lambda path"
+  );
+});
+
+test("createAmazonQArchitectureDraftResponse removes orphan VPC scaffolding from DB-free serverless previews", async () => {
+  const provider = createFakeAmazonQProvider(() =>
+    JSON.stringify({
+      status: "preview",
+      title: "Serverless SSR API draft with orphan network scaffold",
+      architectureJson: {
+        nodes: [
+          configuredNode(node("api", "API_GATEWAY_REST_API", "API Gateway", 120, 180), {
+            name: "practice-api"
+          }),
+          node("lambda", "LAMBDA", "API Lambda", 360, 180),
+          node("cdn", "CLOUDFRONT", "CloudFront", 120, 420),
+          configuredNode(node("site-bucket", "S3", "Web Assets", 360, 420), {
+            bucketPurpose: "static_website_origin"
+          }),
+          configuredNode(node("upload-bucket", "S3", "Image Uploads", 600, 180), {
+            bucketPurpose: "user_uploads"
+          }),
+          node("logs", "CLOUDWATCH_LOG_GROUP", "API Logs", 600, 420),
+          node("alarm", "CLOUDWATCH_METRIC_ALARM", "Burst Alarm", 840, 420),
+          configuredNode(node("vpc", "VPC", "VPC", 1300, 120), {
+            cidrBlock: "172.16.0.0/16"
+          }),
+          configuredNode(node("private-a", "SUBNET", "PRIVATE SUBNET A", 1600, 120), {
+            cidrBlock: "172.16.1.0/24"
+          }),
+          node("nat", "NAT_GATEWAY", "NAT Gateway", 1860, 130)
+        ],
+        edges: [
+          { id: "api-lambda", sourceId: "api", targetId: "lambda", label: "SSE one-way updates" },
+          { id: "cdn-site", sourceId: "cdn", targetId: "site-bucket", label: "origin" },
+          { id: "lambda-upload", sourceId: "lambda", targetId: "upload-bucket", label: "image upload" },
+          { id: "lambda-logs", sourceId: "lambda", targetId: "logs", label: "logs" },
+          { id: "alarm-logs", sourceId: "logs", targetId: "alarm", label: "metric alarm" }
+        ]
+      },
+      metadata: {
+        assumptions: [
+          "DB excluded by budget decision",
+          "SSE is represented by API Gateway to Lambda one-way updates."
+        ],
+        recommendations: []
+      },
+      requirementCoverage: [
+        {
+          answer: "selected dynamic SSR/serverless DB-free SSE answers",
+          status: "satisfied",
+          capability:
+            "selectedPattern: serverless-api; rejectedPatterns: VPC/EC2/RDS are excluded by low-budget DB-free fully managed answers; SSE realtime data update path uses API Gateway to Lambda; data persistence is limited to S3 image objects",
+          nodes: ["api", "lambda", "cdn", "site-bucket", "upload-bucket", "logs", "alarm"],
+          assumption:
+            "Selected answers are represented by the listed topology nodes with pattern trade-off rationale."
+        }
+      ]
+    })
+  );
+
+  const response = await createAmazonQArchitectureDraftResponse(
+    { prompt: createDbFreeSsrServerlessQuestionnairePrompt() },
+    { provider, creditPolicy: confirmedCreditPolicy }
+  );
+
+  if ("status" in response) {
+    assert.fail(`Expected preview, got clarification: ${response.question}`);
+  }
+
+  const nodes = response.architectureJson.nodes;
+  const nodeTypes = new Set(nodes.map((node) => node.type));
+  const nodeIds = new Set(nodes.map((node) => node.id));
+  const lambda = nodes.find((node) => node.type === "LAMBDA");
+
+  for (const forbiddenType of [
+    "VPC",
+    "SUBNET",
+    "NAT_GATEWAY",
+    "INTERNET_GATEWAY",
+    "ROUTE_TABLE",
+    "ROUTE_TABLE_ASSOCIATION",
+    "ELASTIC_IP",
+    "SECURITY_GROUP",
+    "IAM_ROLE",
+    "RDS",
+    "DB_SUBNET_GROUP",
+    "EC2",
+    "LOAD_BALANCER"
+  ] as const) {
+    assert.equal(nodeTypes.has(forbiddenType), false, `Expected no ${forbiddenType}`);
+  }
+
+  assert.equal(nodeTypes.has("API_GATEWAY_REST_API"), true);
+  assert.equal(nodeTypes.has("LAMBDA"), true);
+  assert.equal(nodeTypes.has("CLOUDFRONT"), true);
+  assert.equal(nodeTypes.has("S3"), true);
+  assert.equal(lambda?.config.functionName, "practice-api-handler");
+  assert.equal(lambda?.config.role, "var.lambda_execution_role_arn");
+  assert.equal(lambda?.config.handler, "index.handler");
+  assert.equal(lambda?.config.runtime, "nodejs20.x");
+  assert.deepEqual(
+    response.architectureJson.edges.filter(
+      (edge) => !nodeIds.has(edge.sourceId) || !nodeIds.has(edge.targetId)
+    ),
+    []
+  );
+});
+
+test("createAmazonQArchitectureDraftResponse materializes static no-backend answers as CloudFront and S3", async () => {
+  const requests: Array<Parameters<AiTextProvider["generate"]>[0]> = [];
+  const provider = createFakeAmazonQProvider((request) => {
+    requests.push(request);
+    return createNormalizedRequirementPlan(request);
+  });
+
+  const response = await createAmazonQArchitectureDraftResponse(
+    { prompt: createStaticPortfolioQuestionnairePrompt() },
+    { provider, creditPolicy: confirmedCreditPolicy }
+  );
+
+  if ("status" in response) {
+    assert.fail(`Expected preview, got clarification: ${response.question}`);
+  }
+
+  const firstPayload = requests[0]?.payload as {
+    normalizedRequirement?: {
+      patternIds?: string[];
+      requiredResources?: string[];
+      forbiddenCapabilities?: string[];
+    };
+  };
+  const nodeTypes = new Set(response.architectureJson.nodes.map((node) => node.type));
+  const cloudFront = response.architectureJson.nodes.find((node) => node.type === "CLOUDFRONT");
+  const bucket = response.architectureJson.nodes.find((node) => node.type === "S3");
+
+  assert.equal(firstPayload.normalizedRequirement?.patternIds?.includes("spa-cloudfront-s3"), true);
+  assert.equal(firstPayload.normalizedRequirement?.requiredResources?.includes("CLOUDFRONT"), true);
+  assert.equal(firstPayload.normalizedRequirement?.requiredResources?.includes("S3"), true);
+  assert.equal(firstPayload.normalizedRequirement?.forbiddenCapabilities?.includes("database"), true);
+  assert.ok(cloudFront);
+  assert.ok(bucket);
+  assert.equal(cloudFront.config.originResourceId, bucket.id);
+  assert.equal(nodeTypes.has("EC2"), false);
+  assert.equal(nodeTypes.has("LAMBDA"), false);
+  assert.equal(nodeTypes.has("LOAD_BALANCER"), false);
+  assert.equal(nodeTypes.has("RDS"), false);
+});
+
+test("createAmazonQArchitectureDraftResponse expands Git CI/CD EC2 handoff answers into deployable resources", async () => {
+  const requests: Array<Parameters<AiTextProvider["generate"]>[0]> = [];
+  const provider = createFakeAmazonQProvider((request) => {
+    requests.push(request);
+    return createNormalizedRequirementPlan(request);
+  });
+
+  const response = await createAmazonQArchitectureDraftResponse(
+    { prompt: createGitCiCdEc2HandoffQuestionnairePrompt() },
+    { provider, creditPolicy: confirmedCreditPolicy }
+  );
+
+  if ("status" in response) {
+    assert.fail(`Expected preview, got clarification: ${response.question}`);
+  }
+
+  const firstPayload = requests[0]?.payload as {
+    normalizedRequirement?: {
+      patternIds?: string[];
+      requiredResources?: string[];
+      runtimeTopology?: { compute?: string; autoScaling?: boolean };
+    };
+  };
+  const nodes = response.architectureJson.nodes;
+  const nodeTypes = new Set(nodes.map((node) => node.type));
+  const listener = nodes.find((node) => node.type === "LOAD_BALANCER_LISTENER");
+  const asg = nodes.find((node) => node.type === "AUTO_SCALING_GROUP");
+  const ec2 = nodes.find((node) => node.type === "EC2");
+
+  assert.equal(firstPayload.normalizedRequirement?.patternIds?.includes("alb-asg-ec2"), true);
+  assert.equal(firstPayload.normalizedRequirement?.patternIds?.includes("github-cicd-codedeploy"), true);
+  assert.equal(firstPayload.normalizedRequirement?.runtimeTopology?.compute, "EC2");
+  assert.equal(firstPayload.normalizedRequirement?.runtimeTopology?.autoScaling, true);
+  for (const requiredType of [
+    "CODESTAR_CONNECTION",
+    "CODEPIPELINE",
+    "CODEBUILD_PROJECT",
+    "CODEDEPLOY_APP",
+    "CODEDEPLOY_DEPLOYMENT_GROUP",
+    "S3"
+  ] as const) {
+    assert.equal(nodeTypes.has(requiredType), true, `Expected ${requiredType}`);
+    assert.equal(firstPayload.normalizedRequirement?.requiredResources?.includes(requiredType), true);
+  }
+  assert.ok(ec2);
+  assert.equal(typeof ec2.config.ami, "string");
+  assert.equal(typeof ec2.config.instanceType, "string");
+  assert.equal(typeof ec2.config.subnetId, "string");
+  assert.ok(asg);
+  assert.equal(Array.isArray(asg.config.launchTemplate), true);
+  assert.ok(listener);
+  assert.equal(Array.isArray(listener.config.defaultAction), true);
+});
+
+test("createAmazonQArchitectureDraftResponse maps APAC mobile API database answers to Fargate instead of bare EC2", async () => {
+  const requests: Array<Parameters<AiTextProvider["generate"]>[0]> = [];
+  const provider = createFakeAmazonQProvider((request) => {
+    requests.push(request);
+    return createNormalizedRequirementPlan(request);
+  });
+
+  const response = await createAmazonQArchitectureDraftResponse(
+    { prompt: createVoiceTranscriptionApiQuestionnairePrompt() },
+    { provider, creditPolicy: confirmedCreditPolicy }
+  );
+
+  if ("status" in response) {
+    assert.fail(`Expected preview, got clarification: ${response.question}`);
+  }
+
+  const firstPayload = requests[0]?.payload as {
+    architectureDecisionSpace?: { answerProfile?: Record<string, string | undefined> };
+    normalizedRequirement?: {
+      patternIds?: string[];
+      runtimeTopology?: { compute?: string; autoScaling?: boolean };
+    };
+  };
+  const answerProfile = firstPayload.architectureDecisionSpace?.answerProfile;
+  const nodes = response.architectureJson.nodes;
+  const listener = nodes.find((node) => node.type === "LOAD_BALANCER_LISTENER");
+
+  assert.equal(answerProfile?.frontend, "mobile");
+  assert.equal(answerProfile?.backend, "simple_api");
+  assert.equal(answerProfile?.region, "apac");
+  assert.equal(answerProfile?.management, "semi_managed");
+  assert.equal(firstPayload.normalizedRequirement?.patternIds?.includes("ecs-fargate"), true);
+  assert.equal(firstPayload.normalizedRequirement?.patternIds?.includes("multi-az-rds"), true);
+  assert.equal(firstPayload.normalizedRequirement?.runtimeTopology?.compute, "ECS_FARGATE");
+  assert.equal(firstPayload.normalizedRequirement?.runtimeTopology?.autoScaling, true);
+  assert.equal(nodes.some((node) => node.type === "EC2"), false);
+  assert.equal(nodes.some((node) => node.type === "ECS_SERVICE"), true);
+  assert.equal(nodes.some((node) => node.type === "RDS"), true);
+  assert.equal(nodes.some((node) => node.type === "S3"), true);
+  assert.ok(listener);
+  assert.equal(Array.isArray(listener.config.defaultAction), true);
+});
+
 test("createAmazonQArchitectureDraftResponse maps the Korean SSR mixed-upload questionnaire to Seoul Fargate SSE notifications", async () => {
   const requests: Array<Parameters<AiTextProvider["generate"]>[0]> = [];
   const provider = createFakeAmazonQProvider((request) => {
@@ -4479,6 +4820,111 @@ function createKoreanLowBudgetDbFreeApiQuestionnairePrompt(): string {
     "downtime tolerance: monthly 8 hours within 99 availability; availability: 99%",
     "realtime notification transport: simple polling with cost warning",
     "final database budget decision: DB 없이 만들기"
+  ].join("\n");
+}
+
+function createServerlessBoardQuestionnairePrompt(): string {
+  return [
+    "website type: dynamic web application community board",
+    "traffic: small traffic daily under 100 users concurrent under 10",
+    "database: simple data user info and posts under 10GB, DB included proceed",
+    "frontend technology: React SPA",
+    "backend: simple API Node.js",
+    "region: Asia Pacific APAC Tokyo and Singapore included",
+    "monthly budget: 10-50 manwon moderate performance",
+    "SSL HTTPS: required mandatory",
+    "file upload: images only profile and post images",
+    "realtime feature: realtime notifications",
+    "realtime implementation: simple polling with cost warning",
+    "management preference: fully managed serverless minimal operations",
+    "loading time target: within 3 seconds",
+    "website size: 10MB-100MB general website",
+    "traffic pattern: steady traffic",
+    "availability: monthly 1 hour within 99.9 availability"
+  ].join("\n");
+}
+
+function createDbFreeSsrServerlessQuestionnairePrompt(): string {
+  return [
+    "website type: dynamic web application shopping mall board member system",
+    "traffic: bursty event spike normally low but sudden event traffic",
+    "database question answer: simple data user info posts under 10GB",
+    "frontend technology: Next.js Nuxt.js SSR server side rendering required",
+    "backend: simple API Node.js Python Flask",
+    "region: Asia Pacific APAC Tokyo and Singapore included",
+    "monthly budget: under 10 manwon minimum cost",
+    "SSL HTTPS: required mandatory security important",
+    "file upload: image upload only profile and post images",
+    "realtime feature: realtime data updates stocks games",
+    "management preference: fully managed serverless minimal operations",
+    "loading time target: within 5 seconds",
+    "website size: 10MB-100MB general website",
+    "traffic pattern: event spike bursty traffic",
+    "downtime tolerance: no preference none",
+    "realtime implementation: SSE one-way notification path",
+    "final database budget decision: DB 없이 만들기 no database make without DB"
+  ].join("\n");
+}
+
+function createStaticPortfolioQuestionnairePrompt(): string {
+  return [
+    "website type: static website blog portfolio company intro",
+    "traffic: small traffic daily under 100 users concurrent under 10",
+    "database: none no database static content only",
+    "frontend: HTML/CSS/JS only pure web static",
+    "backend: none no backend static site",
+    "region: Korea only Seoul region ap-northeast-2",
+    "monthly budget: under 10 manwon minimum cost",
+    "SSL HTTPS: required mandatory security important",
+    "file upload: none no file upload text only",
+    "realtime: none no realtime features",
+    "management preference: fully managed serverless minimal operations",
+    "loading time: 3 seconds",
+    "website size: under 10MB",
+    "traffic pattern: steady traffic",
+    "downtime tolerance: monthly 8 hours within 99% availability"
+  ].join("\n");
+}
+
+function createGitCiCdEc2HandoffQuestionnairePrompt(): string {
+  return [
+    "website type: dynamic web application admin board member system",
+    "traffic: medium traffic daily 1000 concurrent 50",
+    "database: simple data user info posts under 10GB PostgreSQL database required",
+    "frontend technology: React SPA",
+    "backend: complex business logic Spring Boot Django",
+    "region: Korea only Seoul region ap-northeast-2",
+    "monthly budget: 10-50 manwon moderate performance",
+    "SSL HTTPS: required mandatory",
+    "file upload: none no file upload text only",
+    "realtime: none no realtime features",
+    "management preference: self-managed direct server operation EC2 Auto Scaling behind ALB",
+    "deployment path: Git CI/CD handoff requested AWS CodePipeline CodeBuild CodeDeploy",
+    "loading time target: within 3 seconds",
+    "website size: 10MB-100MB general website",
+    "traffic pattern: time-of-day daytime peak",
+    "downtime tolerance: monthly 1 hour within 99.9 availability"
+  ].join("\n");
+}
+
+function createVoiceTranscriptionApiQuestionnairePrompt(): string {
+  return [
+    "website type: API server mobile app backend",
+    "traffic: small traffic daily under 100 users concurrent under 10",
+    "database: simple data user info posts under 10GB PostgreSQL database required",
+    "frontend technology: mobile app native client",
+    "backend: simple API Node.js Python Flask",
+    "region: Asia Pacific APAC Tokyo and Singapore included",
+    "monthly budget: under 10 manwon minimum cost",
+    "SSL HTTPS: required mandatory security important",
+    "file upload: mixed files documents video images included",
+    "voice requirement input: Transcribe audio to text and show back to user for confirmation before Requirement Prompt",
+    "realtime: none no realtime features",
+    "management preference: semi-managed some server management",
+    "loading time target: within 5 seconds",
+    "website size: 10MB-100MB general website",
+    "traffic pattern: unpredictable",
+    "downtime tolerance: monthly 8 hours within 99% availability"
   ].join("\n");
 }
 

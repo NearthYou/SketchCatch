@@ -1542,6 +1542,24 @@ type ArchitecturePatchIntent = {
   skipConnection?: boolean;
 };
 
+type ArchitecturePatchPlan = {
+  status: "planned" | "needs_clarification" | "unsupported";
+  action: "modify_resource" | "remove_resource" | "add_resource" | "needs_clarification";
+  target: {
+    resourceType: ResourceType | null;
+    resourceId: string | null;
+    label: string | null;
+  };
+  operations: {
+    op: "set_value" | "increase_one_step" | "decrease_one_step" | "enable" | "disable" | "rename";
+    path: string;
+    value: JsonValue | null;
+  }[];
+  preserve: string[];
+  clarificationQuestion: string | null;
+  confidence: number;
+};
+
 type ArchitecturePatchClarification = {
   status: "needs_clarification";
   intent: ArchitecturePatchIntent;
@@ -1552,6 +1570,7 @@ type ArchitecturePatchClarification = {
     label: string;
   }[];
   suggestions?: string[];
+  patchPlan?: ArchitecturePatchPlan;
   providerMetadata: AiProviderMetadata;
 };
 
@@ -1564,6 +1583,7 @@ type ArchitecturePatchPreview = {
   requiresUserAcceptance: true;
   userAcceptedChange: UserAcceptedChange | null;
   llmExplanation?: LlmExplanation;
+  patchPlan?: ArchitecturePatchPlan;
   providerMetadata: AiProviderMetadata;
 };
 

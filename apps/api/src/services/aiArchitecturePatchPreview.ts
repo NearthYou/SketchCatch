@@ -5,6 +5,8 @@ import type {
   ArchitecturePatchClarification,
   ArchitecturePatchClarificationCandidate,
   ArchitecturePatchIntent,
+  ArchitecturePatchPlan,
+  ArchitecturePatchPlanOperation,
   ArchitecturePatchPreview,
   ArchitecturePatchPreviewChange,
   ArchitecturePatchPreviewResponse,
@@ -515,19 +517,119 @@ type ReplacementPatchIntent = {
   readonly replacementResourceType: ResourceType;
 };
 
+const PATCH_PLAN_PRESERVE_PATHS = [
+  "position",
+  "edges",
+  "config.subnetId",
+  "config.vpcId",
+  "config.vpcSecurityGroupIds",
+  "config.securityGroupIds"
+] as const;
+
+export function createArchitecturePatchPlan(
+  input: CreateArchitecturePatchPreviewInput
+): ArchitecturePatchPlan {
+  const normalizedInstruction = normalizeSearchText(input.instruction);
+
+  if (
+    !isEc2InstanceTypeModificationInstruction(normalizedInstruction) &&
+    resolveReplacementPatchIntent(normalizedInstruction) !== undefined
+  ) {
+    return createUnsupportedPatchPlan(
+      "replace_resource is not an allowed PatchPlan action. Ask for an explicit add or remove plan."
+    );
+  }
+
+  const naturalLanguageAction = resolvePatchActionFromNaturalLanguage(normalizedInstruction);
+  const resourceType = findResourceType(normalizedInstruction);
+
+  if (naturalLanguageAction === "manual_review") {
+    return createNeedsClarificationPatchPlan(
+      resourceType ?? null,
+      "Which resource and parameter should be changed?"
+    );
+  }
+
+  if (naturalLanguageAction === "add_resource") {
+    if (resourceType === undefined) {
+      return createNeedsClarificationPatchPlan(null, "Which resource type should be added?");
+    }
+
+    return {
+      status: "planned",
+      action: "add_resource",
+      target: {
+        resourceType,
+        resourceId: null,
+        label: null
+      },
+      operations: [],
+      preserve: [...PATCH_PLAN_PRESERVE_PATHS],
+      clarificationQuestion: null,
+      confidence: 0.78
+    };
+  }
+
+  const targetResolution = resolvePatchPlanTarget(input.architectureJson, {
+    resourceType,
+    selectedTargetResourceId: input.selectedTargetResourceId
+  });
+
+  if (targetResolution.status === "needs_clarification") {
+    return createNeedsClarificationPatchPlan(
+      resourceType ?? null,
+      targetResolution.question
+    );
+  }
+
+  if (naturalLanguageAction === "remove_resource") {
+    return {
+      status: "planned",
+      action: "remove_resource",
+      target: createPatchPlanTarget(targetResolution.targetNode),
+      operations: [],
+      preserve: [...PATCH_PLAN_PRESERVE_PATHS],
+      clarificationQuestion: null,
+      confidence: 0.9
+    };
+  }
+
+  const operations = createPatchPlanOperations(
+    normalizedInstruction,
+    targetResolution.targetNode
+  );
+
+  if (operations.length === 0) {
+    return createUnsupportedPatchPlan(
+      "The request does not map to an allowed PatchPlan operation."
+    );
+  }
+
+  return {
+    status: "planned",
+    action: "modify_resource",
+    target: createPatchPlanTarget(targetResolution.targetNode),
+    operations,
+    preserve: [...PATCH_PLAN_PRESERVE_PATHS],
+    clarificationQuestion: null,
+    confidence: 0.92
+  };
+}
+
 export function createArchitecturePatchPreview(
   input: CreateArchitecturePatchPreviewInput
 ): ArchitecturePatchPreviewResponse {
   const providerMetadata = createPatchFallbackMetadata(input.instruction);
+  const patchPlan = createArchitecturePatchPlan(input);
 
   if (isNoResourceAdditionInstruction(input.instruction)) {
-    return createNoResourceAdditionPreview(input, providerMetadata);
+    return withArchitecturePatchPlan(createNoResourceAdditionPreview(input, providerMetadata), patchPlan);
   }
 
   const structuralPreview = createStructuralPatchPreview(input, providerMetadata);
 
   if (structuralPreview !== undefined) {
-    return structuralPreview;
+    return withArchitecturePatchPlan(structuralPreview, patchPlan);
   }
 
   const compoundChanges = createCompoundPatchChanges(input);
@@ -554,6 +656,7 @@ export function createArchitecturePatchPreview(
       changes: compoundChanges,
       requiresUserAcceptance: true,
       userAcceptedChange: null,
+      patchPlan,
       providerMetadata
     };
   }
@@ -573,12 +676,15 @@ export function createArchitecturePatchPreview(
   const targetResolution = resolveTarget(input.architectureJson, resolvedIntent);
 
   if (targetResolution.status === "needs_clarification") {
-    return createClarificationResponse({
-      candidates: targetResolution.candidates,
-      intent: resolvedIntent,
-      suggestions: targetResolution.suggestions,
-      providerMetadata
-    });
+    return withArchitecturePatchPlan(
+      createClarificationResponse({
+        candidates: targetResolution.candidates,
+        intent: resolvedIntent,
+        suggestions: targetResolution.suggestions,
+        providerMetadata
+      }),
+      patchPlan
+    );
   }
 
   const changes = createResolvedPatchChanges(
@@ -600,6 +706,7 @@ export function createArchitecturePatchPreview(
     changes,
     requiresUserAcceptance: true,
     userAcceptedChange: null,
+    patchPlan,
     providerMetadata
   };
 }
@@ -621,6 +728,222 @@ function createNoResourceAdditionPreview(
     userAcceptedChange: null,
     providerMetadata
   };
+}
+
+function createPatchPlanTarget(
+  node: ResourceNode
+): ArchitecturePatchPlan["target"] {
+  return {
+    resourceType: node.type,
+    resourceId: node.id,
+    label: node.label ?? null
+  };
+}
+
+function createNeedsClarificationPatchPlan(
+  resourceType: ResourceType | null,
+  question: string
+): ArchitecturePatchPlan {
+  return {
+    status: "needs_clarification",
+    action: "needs_clarification",
+    target: {
+      resourceType,
+      resourceId: null,
+      label: null
+    },
+    operations: [],
+    preserve: [...PATCH_PLAN_PRESERVE_PATHS],
+    clarificationQuestion: question,
+    confidence: 0.6
+  };
+}
+
+function createUnsupportedPatchPlan(reason: string): ArchitecturePatchPlan {
+  return {
+    status: "unsupported",
+    action: "needs_clarification",
+    target: {
+      resourceType: null,
+      resourceId: null,
+      label: null
+    },
+    operations: [],
+    preserve: [...PATCH_PLAN_PRESERVE_PATHS],
+    clarificationQuestion: reason,
+    confidence: 0.3
+  };
+}
+
+function resolvePatchPlanTarget(
+  architectureJson: ArchitectureJson,
+  input: {
+    readonly resourceType: ResourceType | undefined;
+    readonly selectedTargetResourceId: string | undefined;
+  }
+):
+  | { readonly status: "planned"; readonly targetNode: ResourceNode }
+  | { readonly status: "needs_clarification"; readonly question: string } {
+  if (input.selectedTargetResourceId !== undefined) {
+    const selectedNode = architectureJson.nodes.find(
+      (node) => node.id === input.selectedTargetResourceId
+    );
+
+    if (selectedNode === undefined) {
+      return {
+        status: "needs_clarification",
+        question: "The selected resource no longer exists. Which resource should be changed?"
+      };
+    }
+
+    if (input.resourceType !== undefined && selectedNode.type !== input.resourceType) {
+      return {
+        status: "needs_clarification",
+        question: "The selected resource does not match the requested resource type."
+      };
+    }
+
+    return {
+      status: "planned",
+      targetNode: selectedNode
+    };
+  }
+
+  if (input.resourceType === undefined) {
+    return {
+      status: "needs_clarification",
+      question: "Which resource should be changed?"
+    };
+  }
+
+  const candidates = architectureJson.nodes.filter((node) => node.type === input.resourceType);
+
+  if (candidates.length !== 1) {
+    return {
+      status: "needs_clarification",
+      question:
+        candidates.length === 0
+          ? "No matching resource exists. Which resource should be changed?"
+          : "Multiple matching resources exist. Which one should be changed?"
+    };
+  }
+
+  return {
+    status: "planned",
+    targetNode: candidates[0]!
+  };
+}
+
+function createPatchPlanOperations(
+  normalizedInstruction: string,
+  targetNode: ResourceNode
+): ArchitecturePatchPlanOperation[] {
+  if (targetNode.type === "EC2") {
+    const explicitInstanceType = findEc2InstanceType(normalizedInstruction);
+
+    if (explicitInstanceType !== undefined) {
+      return [
+        {
+          op: "set_value",
+          path: "config.instanceType",
+          value: explicitInstanceType.toLowerCase()
+        }
+      ];
+    }
+
+    if (isEc2InstanceSizeIncreaseInstruction(normalizedInstruction)) {
+      return [
+        {
+          op: "increase_one_step",
+          path: "config.instanceType",
+          value: null
+        }
+      ];
+    }
+
+    if (isEc2InstanceSizeDecreaseInstruction(normalizedInstruction)) {
+      return [
+        {
+          op: "decrease_one_step",
+          path: "config.instanceType",
+          value: null
+        }
+      ];
+    }
+  }
+
+  if (targetNode.type === "RDS" || targetNode.type === "RDS_CLUSTER") {
+    const allocatedStorage = findStorageGb(normalizedInstruction);
+    const instanceClass = findRdsInstanceClass(normalizedInstruction);
+    const engine = findDatabaseEngine(normalizedInstruction);
+    const operations: ArchitecturePatchPlanOperation[] = [];
+
+    if (allocatedStorage !== undefined) {
+      operations.push({
+        op: "set_value",
+        path: "config.allocatedStorage",
+        value: allocatedStorage
+      });
+    }
+
+    if (instanceClass !== undefined) {
+      operations.push({
+        op: "set_value",
+        path: "config.instanceClass",
+        value: instanceClass
+      });
+    }
+
+    if (engine !== undefined) {
+      operations.push({
+        op: "set_value",
+        path: "config.engine",
+        value: engine
+      });
+    }
+
+    return operations;
+  }
+
+  if (targetNode.type === "LAMBDA") {
+    const memorySize = findMemorySize(normalizedInstruction);
+    const timeout = findTimeoutSeconds(normalizedInstruction);
+    const runtime = findLambdaRuntime(normalizedInstruction);
+    const operations: ArchitecturePatchPlanOperation[] = [];
+
+    if (memorySize !== undefined) {
+      operations.push({ op: "set_value", path: "config.memorySize", value: memorySize });
+    }
+
+    if (timeout !== undefined) {
+      operations.push({ op: "set_value", path: "config.timeout", value: timeout });
+    }
+
+    if (runtime !== undefined) {
+      operations.push({ op: "set_value", path: "config.runtime", value: runtime });
+    }
+
+    return operations;
+  }
+
+  if (targetNode.type === "S3") {
+    const versioning = findBooleanPreference(normalizedInstruction, [
+      "versioning",
+      "bucket version",
+      "버전 관리",
+      "버전"
+    ]);
+
+    if (versioning === true) {
+      return [{ op: "enable", path: "config.versioning", value: null }];
+    }
+
+    if (versioning === false) {
+      return [{ op: "disable", path: "config.versioning", value: null }];
+    }
+  }
+
+  return [];
 }
 
 function createStructuralPatchPreview(
@@ -937,6 +1260,15 @@ export function withArchitecturePatchProviderMetadata(
   };
 }
 
+function withArchitecturePatchPlan<
+  TResponse extends ArchitecturePatchPreviewResponse
+>(response: TResponse, patchPlan: ArchitecturePatchPlan): TResponse {
+  return {
+    ...response,
+    patchPlan
+  };
+}
+
 function resolvePatchIntent(input: CreateArchitecturePatchPreviewInput): ArchitecturePatchIntent {
   const instruction = input.instruction;
   const normalizedInstruction = normalizeSearchText(instruction);
@@ -998,6 +1330,10 @@ function isNoResourceAdditionInstruction(instruction: string): boolean {
 function resolveReplacementPatchIntent(
   normalizedInstruction: string
 ): ReplacementPatchIntent | undefined {
+  if (isEc2InstanceTypeModificationInstruction(normalizedInstruction)) {
+    return undefined;
+  }
+
   const replacementSegments = splitReplacementInstruction(normalizedInstruction);
 
   if (replacementSegments === undefined) {
@@ -1074,6 +1410,10 @@ function splitReplacementInstruction(
 }
 
 function findResourceType(normalizedInstruction: string): ResourceType | undefined {
+  if (isDatabaseStorageModificationInstruction(normalizedInstruction)) {
+    return "RDS";
+  }
+
   return RESOURCE_KEYWORDS.flatMap((item, resourceIndex) =>
     item.keywords
       .filter((keyword) => includesPhrase(normalizedInstruction, keyword))
@@ -1084,6 +1424,13 @@ function findResourceType(normalizedInstruction: string): ResourceType | undefin
       }))
   ).sort((left, right) => right.score - left.score || left.resourceIndex - right.resourceIndex)[0]
     ?.resourceType;
+}
+
+function isDatabaseStorageModificationInstruction(normalizedInstruction: string): boolean {
+  return (
+    includesAnyPhrase(normalizedInstruction, ["rds", "database", "db", "데이터베이스", "디비"]) &&
+    includesAnyPhrase(normalizedInstruction, ["storage", "스토리지", "저장공간", "저장 공간"])
+  );
 }
 
 function findResourceTypes(normalizedInstruction: string): ResourceType[] {
@@ -2297,7 +2644,10 @@ function createModificationConfig(
   const updates: Record<string, unknown> = {};
 
   if (resourceType === "EC2") {
-    const instanceType = findEc2InstanceType(normalizedInstruction);
+    const instanceType = findEc2InstanceTypeForPatch(
+      normalizedInstruction,
+      targetNode.config.instanceType
+    );
 
     if (instanceType) {
       updates.instanceType = instanceType;
@@ -2420,6 +2770,128 @@ function createModificationConfig(
   };
 }
 
+const EC2_INSTANCE_SIZE_ORDER = [
+  "nano",
+  "micro",
+  "small",
+  "medium",
+  "large",
+  "xlarge",
+  "2xlarge",
+  "3xlarge",
+  "4xlarge",
+  "6xlarge",
+  "8xlarge",
+  "9xlarge",
+  "10xlarge",
+  "12xlarge",
+  "16xlarge",
+  "18xlarge",
+  "24xlarge",
+  "32xlarge",
+  "48xlarge"
+] as const;
+
+function isEc2InstanceTypeModificationInstruction(normalizedInstruction: string): boolean {
+  const mentionsEc2Instance =
+    findResourceType(normalizedInstruction) === "EC2" ||
+    includesAnyPhrase(normalizedInstruction, ["instance", "인스턴스"]);
+
+  return (
+    mentionsEc2Instance &&
+    (includesAnyPhrase(normalizedInstruction, [
+      "instance type",
+      "instancetype",
+      "인스턴스 타입",
+      "larger",
+      "bigger",
+      "upsize",
+      "smaller",
+      "downsize",
+      "더 큰",
+      "큰거",
+      "크게",
+      "더 작은",
+      "작은",
+      "작게"
+    ]) ||
+      /\b(?:[a-z][0-9][a-z]?\.[a-z0-9]+)\b/i.test(normalizedInstruction))
+  );
+}
+
+function findEc2InstanceTypeForPatch(
+  normalizedInstruction: string,
+  currentInstanceType: unknown
+): string | undefined {
+  const explicitInstanceType = findEc2InstanceType(normalizedInstruction);
+
+  if (explicitInstanceType !== undefined) {
+    return explicitInstanceType.toLowerCase();
+  }
+
+  return findRelativeEc2InstanceType(normalizedInstruction, currentInstanceType);
+}
+
+function findRelativeEc2InstanceType(
+  normalizedInstruction: string,
+  currentInstanceType: unknown
+): string | undefined {
+  if (typeof currentInstanceType !== "string") {
+    return undefined;
+  }
+
+  const currentMatch = currentInstanceType.match(/^([a-z][0-9][a-z]?)\.([a-z0-9]+)$/i);
+
+  if (currentMatch === null) {
+    return undefined;
+  }
+
+  const family = currentMatch[1]?.toLowerCase();
+  const currentSize = currentMatch[2]?.toLowerCase();
+  const currentSizeIndex = EC2_INSTANCE_SIZE_ORDER.findIndex((size) => size === currentSize);
+
+  if (family === undefined || currentSizeIndex < 0) {
+    return undefined;
+  }
+
+  if (isEc2InstanceSizeIncreaseInstruction(normalizedInstruction)) {
+    const nextSize = EC2_INSTANCE_SIZE_ORDER[currentSizeIndex + 1];
+
+    return nextSize === undefined ? undefined : `${family}.${nextSize}`;
+  }
+
+  if (isEc2InstanceSizeDecreaseInstruction(normalizedInstruction)) {
+    const nextSize = EC2_INSTANCE_SIZE_ORDER[currentSizeIndex - 1];
+
+    return nextSize === undefined ? undefined : `${family}.${nextSize}`;
+  }
+
+  return undefined;
+}
+
+function isEc2InstanceSizeIncreaseInstruction(normalizedInstruction: string): boolean {
+  return includesAnyPhrase(normalizedInstruction, [
+    "larger",
+    "bigger",
+    "upsize",
+    "increase",
+    "더 큰",
+    "큰거",
+    "크게"
+  ]);
+}
+
+function isEc2InstanceSizeDecreaseInstruction(normalizedInstruction: string): boolean {
+  return includesAnyPhrase(normalizedInstruction, [
+    "smaller",
+    "downsize",
+    "decrease",
+    "더 작은",
+    "작은",
+    "작게"
+  ]);
+}
+
 function findEc2InstanceType(normalizedInstruction: string): string | undefined {
   return (
     normalizedInstruction.match(
@@ -2490,7 +2962,8 @@ function findStorageGb(normalizedInstruction: string): number | undefined {
   return parsePositiveInteger(
     normalizedInstruction.match(/\bstorage\b.*?\b(\d{1,5})\s*(?:gb|gib)\b/i)?.[1] ??
       normalizedInstruction.match(/\b(\d{1,5})\s*(?:gb|gib)\b.*?\bstorage\b/i)?.[1] ??
-      normalizedInstruction.match(/(?:스토리지|저장공간).*?(\d{1,5})\s*gb/iu)?.[1]
+      normalizedInstruction.match(/(?:스토리지|저장\s*공간).*?(\d{1,5})\s*(?:gb|gib|기가|로|으로)?/iu)?.[1] ??
+      normalizedInstruction.match(/\bstorage\b.*?\b(\d{1,5})\s*(?:gb|gib|to)?\b/i)?.[1]
   );
 }
 

@@ -321,7 +321,8 @@ export async function createAmazonQArchitectureDraftResponse(
     reportArchitectureDraftProgress(options.onProgress, "validating_architecture");
     let parsedResponse = applyOperationalPolicyToProviderResponse(
       parseArchitectureDraftProviderResponse(response.text),
-      request.prompt
+      request.prompt,
+      normalizedRequirement
     );
 
     if (parsedResponse.status === "preview") {
@@ -356,7 +357,8 @@ export async function createAmazonQArchitectureDraftResponse(
         reportArchitectureDraftProgress(options.onProgress, "validating_architecture");
         parsedResponse = applyOperationalPolicyToProviderResponse(
           parseArchitectureDraftProviderResponse(response.text),
-          request.prompt
+          request.prompt,
+          normalizedRequirement
         );
 
         const retryValidationIssues =
@@ -496,7 +498,8 @@ function parseArchitectureDraftProviderResponse(text: string): AmazonQArchitectu
 
 function applyOperationalPolicyToProviderResponse(
   response: AmazonQArchitectureDraftResponse,
-  prompt: string
+  prompt: string,
+  normalizedRequirement: ArchitectureIntentPlan | null
 ): AmazonQArchitectureDraftResponse {
   if (response.status !== "preview") {
     return response;
@@ -506,13 +509,193 @@ function applyOperationalPolicyToProviderResponse(
     response.architectureJson,
     prompt
   );
+  const requirementSanitizedArchitectureJson = sanitizeArchitecturePreviewForRequirement(
+    securedArchitectureJson,
+    normalizedRequirement
+  );
 
   return {
     ...response,
-    architectureJson: applyArchitectureOperationalPolicy(
-      securedArchitectureJson,
-      resolveArchitectureOperationalRequirements(prompt)
+    architectureJson: applyArchitectureParameterCompletenessDefaults(
+      applyArchitectureOperationalPolicy(
+        requirementSanitizedArchitectureJson,
+        resolveArchitectureOperationalRequirements(prompt)
+      )
     )
+  };
+}
+
+const SERVERLESS_ORPHAN_NETWORK_RESOURCE_TYPES = new Set<ResourceType>([
+  "VPC",
+  "SUBNET",
+  "INTERNET_GATEWAY",
+  "NAT_GATEWAY",
+  "ROUTE_TABLE",
+  "ROUTE_TABLE_ASSOCIATION",
+  "ELASTIC_IP",
+  "SECURITY_GROUP"
+]);
+
+function sanitizeArchitecturePreviewForRequirement(
+  architectureJson: ArchitectureJson,
+  normalizedRequirement: ArchitectureIntentPlan | null
+): ArchitectureJson {
+  if (normalizedRequirement === null) {
+    return architectureJson;
+  }
+
+  const forbiddenCapabilities = new Set(
+    (normalizedRequirement.forbiddenCapabilities ?? []).map((capability) => capability.toLowerCase())
+  );
+  const patternIds = new Set(normalizedRequirement.patternIds ?? []);
+  const requiredResources = new Set(normalizedRequirement.requiredResources ?? []);
+  const previewResourceTypes = new Set(architectureJson.nodes.map((node) => node.type));
+  const hasServerlessRuntimePreview = hasAnyNodeType(previewResourceTypes, [
+    "API_GATEWAY_REST_API",
+    "LAMBDA"
+  ]);
+  const hasVpcBoundRuntimePreview = hasAnyNodeType(previewResourceTypes, [
+    "EC2",
+    "LOAD_BALANCER",
+    "LOAD_BALANCER_LISTENER",
+    "LOAD_BALANCER_TARGET_GROUP",
+    "ECS_CLUSTER",
+    "ECS_SERVICE",
+    "ECS_TASK_DEFINITION",
+    "EKS_CLUSTER",
+    "EKS_NODE_GROUP",
+    "RDS",
+    "DB_SUBNET_GROUP"
+  ]);
+  const serverlessOnly =
+    patternIds.has("serverless-api") ||
+    (forbiddenCapabilities.has("database") && hasServerlessRuntimePreview && !hasVpcBoundRuntimePreview) ||
+    (forbiddenCapabilities.has("ec2_runtime") &&
+      forbiddenCapabilities.has("load_balancer") &&
+      (requiredResources.has("LAMBDA") || requiredResources.has("API_GATEWAY_REST_API")));
+
+  const nodes = architectureJson.nodes.filter((node) => {
+    if (serverlessOnly && SERVERLESS_ORPHAN_NETWORK_RESOURCE_TYPES.has(node.type)) {
+      return false;
+    }
+
+    if (forbiddenCapabilities.has("database") && isForbiddenDatabaseArchitectureNode(node)) {
+      return false;
+    }
+
+    return true;
+  });
+  const nodeIds = new Set(nodes.map((node) => node.id));
+
+  return {
+    nodes,
+    edges: architectureJson.edges.filter((edge) => nodeIds.has(edge.sourceId) && nodeIds.has(edge.targetId))
+  };
+}
+
+function applyArchitectureParameterCompletenessDefaults(
+  architectureJson: ArchitectureJson
+): ArchitectureJson {
+  const staticBucket = architectureJson.nodes.find(
+    (node) => node.type === "S3" && node.config.bucketPurpose === "static_website_origin"
+  ) ?? architectureJson.nodes.find((node) => node.type === "S3");
+  const staticOriginId = staticBucket?.id ?? "web-assets-bucket";
+  const lambdaRole = architectureJson.nodes.find((node) => node.type === "IAM_ROLE");
+  const lambdaRoleArn =
+    lambdaRole === undefined
+      ? "var.lambda_execution_role_arn"
+      : canonicalTerraformReference("aws_iam_role", lambdaRole.id, "arn");
+
+  const nodes = architectureJson.nodes.map((node) => {
+    if (node.type === "LAMBDA") {
+      return {
+        ...node,
+        config: {
+          ...node.config,
+          functionName: node.config.functionName ?? "practice-api-handler",
+          role: node.config.role ?? lambdaRoleArn,
+          handler: node.config.handler ?? "index.handler",
+          runtime: node.config.runtime ?? "nodejs20.x"
+        }
+      };
+    }
+
+    if (node.type === "CLOUDFRONT") {
+      const originResourceId =
+        typeof node.config.originResourceId === "string" && node.config.originResourceId.length > 0
+          ? node.config.originResourceId
+          : staticOriginId;
+
+      return {
+        ...node,
+        config: {
+          ...node.config,
+          enabled: node.config.enabled ?? true,
+          originResourceId,
+          origin: node.config.origin ?? {
+            domainName: `${originResourceId}.s3.amazonaws.com`,
+            originId: "static-assets"
+          },
+          defaultCacheBehavior: node.config.defaultCacheBehavior ?? {
+            allowedMethods: ["GET", "HEAD", "OPTIONS"],
+            cachedMethods: ["GET", "HEAD"],
+            targetOriginId: "static-assets",
+            viewerProtocolPolicy: "redirect-to-https"
+          },
+          restrictions: node.config.restrictions ?? {
+            geoRestriction: [{ restrictionType: "none" }]
+          },
+          viewerCertificate: node.config.viewerCertificate ?? {
+            cloudfrontDefaultCertificate: true
+          }
+        }
+      };
+    }
+
+    if (node.type === "RDS") {
+      return {
+        ...node,
+        config: {
+          ...node.config,
+          allocatedStorage: node.config.allocatedStorage ?? 20,
+          engine: node.config.engine ?? "postgres",
+          instanceClass: node.config.instanceClass ?? "db.t4g.micro",
+          username: node.config.username ?? "admin",
+          password: node.config.password ?? "var.db_password",
+          dbName: node.config.dbName ?? "appdb",
+          publiclyAccessible: node.config.publiclyAccessible ?? false,
+          storageEncrypted: node.config.storageEncrypted ?? true,
+          storageType: node.config.storageType ?? "gp3",
+          backupRetentionPeriod: node.config.backupRetentionPeriod ?? 7,
+          deletionProtection: node.config.deletionProtection ?? true,
+          skipFinalSnapshot: node.config.skipFinalSnapshot ?? false
+        }
+      };
+    }
+
+    if (node.type === "DYNAMODB_TABLE") {
+      return {
+        ...node,
+        config: {
+          ...node.config,
+          name: node.config.name ?? "practice-board-data",
+          billingMode: node.config.billingMode ?? "PAY_PER_REQUEST",
+          hashKey: node.config.hashKey ?? "pk",
+          rangeKey: node.config.rangeKey ?? "sk",
+          attribute: node.config.attribute ?? [
+            { name: "pk", type: "S" },
+            { name: "sk", type: "S" }
+          ]
+        }
+      };
+    }
+
+    return node;
+  });
+
+  return {
+    ...architectureJson,
+    nodes
   };
 }
 
@@ -1710,8 +1893,16 @@ export function createDeterministicArchitectureIntentPlan(prompt: string): Archi
   const fargateServiceCount = resolveFargateServiceCount(normalizedPrompt);
   const lowBudgetDbFreeApi = requiresLowBudgetDbFreeApi(normalizedPrompt);
   const cloudFrontStaticDeliveryRequired = requiresCloudFrontStaticDelivery(normalizedPrompt);
+  const serverlessApiRuntime = requiresServerlessApiArchitecture(normalizedPrompt);
+  const staticDeliveryRequired = requiresStaticDeliveryArchitecture(normalizedPrompt);
+  const gitCiCdHandoffRequired = requiresGitCiCdHandoff(normalizedPrompt);
 
-  if (lowBudgetDbFreeApi) {
+  if (staticDeliveryRequired) {
+    patternIds.add("spa-cloudfront-s3");
+    requiredResources.add("CLOUDFRONT");
+    requiredResources.add("S3");
+    amazonQBrief.push("Use a CloudFront plus S3 static delivery path because the user selected a static site with no backend.");
+  } else if (lowBudgetDbFreeApi) {
     patternIds.add("serverless-api");
     requiredResources.add("API_GATEWAY_REST_API");
     requiredResources.add("LAMBDA");
@@ -1723,6 +1914,24 @@ export function createDeterministicArchitectureIntentPlan(prompt: string): Archi
     forbiddenCapabilities.add("ec2_runtime");
     forbiddenCapabilities.add("load_balancer");
     amazonQBrief.push("Use a low-cost API Gateway plus Lambda API path because the final budget decision excludes the database.");
+  } else if (serverlessApiRuntime) {
+    patternIds.add("serverless-api");
+    requiredResources.add("API_GATEWAY_REST_API");
+    requiredResources.add("LAMBDA");
+    forbiddenCapabilities.add("ec2_runtime");
+    forbiddenCapabilities.add("load_balancer");
+
+    if (requiresSpaFrontend(normalizedPrompt)) {
+      patternIds.add("spa-cloudfront-s3");
+      requiredResources.add("CLOUDFRONT");
+      requiredResources.add("S3");
+    }
+
+    if (requiresDatabase(normalizedPrompt)) {
+      requiredResources.add("DYNAMODB_TABLE");
+    }
+
+    amazonQBrief.push("Use API Gateway plus Lambda for the fully managed simple API runtime.");
   } else if (selfManagedRuntime) {
     patternIds.add("alb-asg-ec2");
     if (requiresSpaFrontend(normalizedPrompt)) {
@@ -1805,6 +2014,18 @@ export function createDeterministicArchitectureIntentPlan(prompt: string): Archi
     amazonQBrief.push("Place EC2 runtime nodes across at least two private subnet boxes, not visually grouped into one subnet.");
   }
 
+  if (gitCiCdHandoffRequired) {
+    patternIds.add("github-cicd-codedeploy");
+    requiredResources.add("CODESTAR_CONNECTION");
+    requiredResources.add("CODEPIPELINE");
+    requiredResources.add("CODEBUILD_PROJECT");
+    requiredResources.add("CODEDEPLOY_APP");
+    requiredResources.add("CODEDEPLOY_DEPLOYMENT_GROUP");
+    requiredResources.add("S3");
+    requiredResources.add("IAM_ROLE");
+    amazonQBrief.push("Include a Git/CI/CD handoff path with CodeStar Connection, CodePipeline, CodeBuild, CodeDeploy, and an S3 artifact bucket.");
+  }
+
   if (forbidsEc2Runtime) {
     for (const resourceType of [
       "EC2",
@@ -1880,7 +2101,7 @@ function createDeterministicRuntimeTopology(
 ): ArchitectureIntentPlan["runtimeTopology"] {
   const topology: NonNullable<ArchitectureIntentPlan["runtimeTopology"]> = {};
 
-  if (requiresLowBudgetDbFreeApi(normalizedPrompt)) {
+  if (requiresLowBudgetDbFreeApi(normalizedPrompt) || requiresServerlessApiArchitecture(normalizedPrompt)) {
     return {
       trafficEntry: "API_GATEWAY_REST_API",
       compute: "LAMBDA"
@@ -2121,10 +2342,10 @@ function createAmazonQPlanDraftResult(
     connectedCanonicalArchitectureJson,
     plan?.runtimeTopology
   );
-  const architectureJson = applyArchitectureOperationalPolicy(
+  const architectureJson = applyArchitectureParameterCompletenessDefaults(applyArchitectureOperationalPolicy(
     topologyConnectedArchitectureJson,
     resolveArchitectureOperationalRequirements(request.prompt)
-  );
+  ));
   const validationIssues = findMaterializedArchitecturePlanValidationIssues(
     request.prompt,
     plan,
@@ -4880,8 +5101,8 @@ function configureCanonicalPatternResources(
         return { ...node, id: primaryServiceProfile.targetGroupId, label: primaryServiceProfile.targetGroupLabel, config: { name: primaryServiceProfile.targetGroupName, port: 8080, protocol: "HTTP", targetType: "ip", vpcId: vpcRef, healthCheck: { path: "/health", matcher: "200-399" } } };
       case "LOAD_BALANCER_LISTENER":
         return usesHttps
-          ? { ...node, id: "https-listener", label: "ALB HTTPS Listener", config: { loadBalancerArn: canonicalTerraformReference("aws_lb", "application-load-balancer", "arn"), port: 443, protocol: "HTTPS", sslPolicy: "ELBSecurityPolicy-TLS13-1-2-2021-06", certificateArn: canonicalTerraformReference("aws_acm_certificate", "application-certificate", "arn"), defaultAction: { type: "forward", targetGroupArn: canonicalTerraformReference("aws_lb_target_group", primaryServiceProfile.targetGroupId, "arn") } } }
-          : { ...node, id: "http-listener", label: "ALB HTTP Listener", config: { loadBalancerArn: canonicalTerraformReference("aws_lb", "application-load-balancer", "arn"), port: 80, protocol: "HTTP", defaultAction: { type: "forward", targetGroupArn: canonicalTerraformReference("aws_lb_target_group", primaryServiceProfile.targetGroupId, "arn") } } };
+          ? { ...node, id: "https-listener", label: "ALB HTTPS Listener", config: { loadBalancerArn: canonicalTerraformReference("aws_lb", "application-load-balancer", "arn"), port: 443, protocol: "HTTPS", sslPolicy: "ELBSecurityPolicy-TLS13-1-2-2021-06", certificateArn: canonicalTerraformReference("aws_acm_certificate", "application-certificate", "arn"), defaultAction: [{ type: "forward", targetGroupArn: canonicalTerraformReference("aws_lb_target_group", primaryServiceProfile.targetGroupId, "arn") }] } }
+          : { ...node, id: "http-listener", label: "ALB HTTP Listener", config: { loadBalancerArn: canonicalTerraformReference("aws_lb", "application-load-balancer", "arn"), port: 80, protocol: "HTTP", defaultAction: [{ type: "forward", targetGroupArn: canonicalTerraformReference("aws_lb_target_group", primaryServiceProfile.targetGroupId, "arn") }] } };
       case "ECR_REPOSITORY":
         return { ...node, id: "app-repository", label: "Application ECR Repository", config: { name: "sketchcatch-app", imageTagMutability: "IMMUTABLE", imageScanningConfiguration: { scanOnPush: true } } };
       case "ECS_CLUSTER":
@@ -4912,7 +5133,14 @@ function configureCanonicalServerlessApiResources(
   const uploadProfile = resolveUploadProfile(normalizedPrompt);
   const uploadBucketProfile = uploadProfile === undefined || uploadProfile === "none" ? undefined : uploadProfile;
   const uploadBucketConfig = uploadBucketProfile === undefined ? undefined : resolveUploadBucketConfig(uploadBucketProfile);
-  let s3Index = 0;
+  const hasCloudFront = architectureJson.nodes.some((node) => node.type === "CLOUDFRONT");
+  const staticBucket = hasCloudFront
+    ? architectureJson.nodes.find(
+        (node) => node.type === "S3" && node.config.bucketPurpose === "static_website_origin"
+      ) ?? architectureJson.nodes.find((node) => node.type === "S3")
+    : undefined;
+  const staticOriginId = staticBucket?.id ?? "web-assets-bucket";
+  let uploadS3Index = 0;
 
   const nodes = architectureJson.nodes.map((node) => {
     switch (node.type) {
@@ -4942,9 +5170,31 @@ function configureCanonicalServerlessApiResources(
           }
         };
       case "S3":
-        s3Index += 1;
-        if (uploadBucketConfig === undefined || s3Index > 1) {
-          return node;
+        if (hasCloudFront && node.config.bucketPurpose === "static_website_origin") {
+          return {
+            ...node,
+            id: staticOriginId,
+            label: node.label ?? "Web Assets Bucket",
+            config: {
+              ...node.config,
+              bucketPurpose: "static_website_origin",
+              publicAccessBlock: true,
+              forceDestroy: false
+            }
+          };
+        }
+
+        uploadS3Index += 1;
+        if (uploadBucketConfig === undefined || uploadS3Index > 1) {
+          return {
+            ...node,
+            config: {
+              ...node.config,
+              ...(node.config.bucketPurpose === undefined ? { bucketPurpose: "user_uploads" } : {}),
+              publicAccessBlock: true,
+              forceDestroy: false
+            }
+          };
         }
 
         return {
@@ -4960,17 +5210,89 @@ function configureCanonicalServerlessApiResources(
             servicePurpose: "file_upload_service"
           }
         };
-      case "CLOUDWATCH_LOG_GROUP":
+      case "CLOUDFRONT":
         return {
           ...node,
-          id: "lambda-log-group",
-          label: "Lambda Logs",
+          id: "cloudfront-distribution",
+          label: "CloudFront Public Entry",
           config: {
             ...node.config,
-            name: "/aws/lambda/practice-function",
-            retentionInDays: 30
+            enabled: true,
+            originResourceId: staticOriginId,
+            origin: {
+              domainName: `${staticOriginId}.s3.amazonaws.com`,
+              originId: "static-assets"
+            },
+            defaultCacheBehavior: {
+              allowedMethods: ["GET", "HEAD", "OPTIONS"],
+              cachedMethods: ["GET", "HEAD"],
+              targetOriginId: "static-assets",
+              viewerProtocolPolicy: "redirect-to-https"
+            },
+            restrictions: {
+              geoRestriction: [{ restrictionType: "none" }]
+            },
+            viewerCertificate: {
+              cloudfrontDefaultCertificate: true
+            },
+            priceClass: "PriceClass_100"
           }
         };
+      case "RDS":
+        return {
+          ...node,
+          id: "app-database",
+          label: "Application Database",
+          config: {
+            ...node.config,
+            identifier: "practice-db",
+            allocatedStorage: node.config.allocatedStorage ?? 20,
+            engine: node.config.engine ?? "postgres",
+            instanceClass: node.config.instanceClass ?? "db.t4g.micro",
+            username: "admin",
+            password: "var.db_password",
+            dbName: "appdb",
+            publiclyAccessible: false,
+            storageEncrypted: true,
+            storageType: node.config.storageType ?? "gp3",
+            backupRetentionPeriod: node.config.backupRetentionPeriod ?? 7,
+            deletionProtection: node.config.deletionProtection ?? true,
+            skipFinalSnapshot: node.config.skipFinalSnapshot ?? false
+          }
+        };
+      case "DYNAMODB_TABLE":
+        return {
+          ...node,
+          id: "app-data-table",
+          label: "Application Data Table",
+          config: {
+            ...node.config,
+            name: "practice-board-data",
+            billingMode: "PAY_PER_REQUEST",
+            hashKey: "pk",
+            rangeKey: "sk",
+            attribute: [
+              { name: "pk", type: "S" },
+              { name: "sk", type: "S" }
+            ]
+          }
+        };
+      case "CLOUDWATCH_LOG_GROUP":
+        {
+          const logGroupConfig = { ...node.config };
+          delete logGroupConfig.kmsKeyId;
+
+          return {
+            ...node,
+            id: "lambda-log-group",
+            label: "Lambda Logs",
+            config: {
+              ...logGroupConfig,
+              name: "/aws/lambda/practice-function",
+              retentionInDays: 30
+            }
+          };
+        }
       case "CLOUDWATCH_METRIC_ALARM":
         return {
           ...node,
@@ -4989,6 +5311,28 @@ function configureCanonicalServerlessApiResources(
         return node;
     }
   });
+
+  if (!nodes.some((node) => node.type === "IAM_ROLE")) {
+    nodes.push({
+      id: "lambda-execution-role",
+      type: "IAM_ROLE",
+      label: "Lambda Execution Role",
+      positionX: 420,
+      positionY: 360,
+      config: {
+        assumeRolePolicy: JSON.stringify({
+          Version: "2012-10-17",
+          Statement: [
+            {
+              Effect: "Allow",
+              Principal: { Service: "lambda.amazonaws.com" },
+              Action: "sts:AssumeRole"
+            }
+          ]
+        })
+      }
+    });
+  }
 
   return { nodes, edges: architectureJson.edges };
 }
@@ -5087,14 +5431,14 @@ function configureRequiredHttpsTransport(
         certificateId,
         "arn"
       ),
-      defaultAction: {
+      defaultAction: [{
         type: "forward",
         targetGroupArn: canonicalTerraformReference(
           "aws_lb_target_group",
           targetGroupId,
           "arn"
         )
-      }
+      }]
     }
   };
   const nodes = architectureJson.nodes
@@ -5363,10 +5707,13 @@ function configureCanonicalEc2PatternResources(
         index % 2 === 0 ? 260 : 930,
         820 + Math.floor(index / 2) * 120,
         {
+          ami: canonicalTerraformReference("data.aws_ami", "app-ami"),
+          iamInstanceProfile: canonicalTerraformReference("aws_iam_instance_profile", "app-instance-profile", "name"),
+          instanceType: ec2InstanceType,
           associatePublicIpAddress: false,
           managedByAutoScalingGroup: "app-auto-scaling-group",
           sketchcatchReferenceTerraform: true,
-          subnetId: privateAppSubnetIds[index % privateAppSubnetIds.length],
+          subnetId: canonicalTerraformReference("aws_subnet", privateAppSubnetIds[index % privateAppSubnetIds.length]!),
           vpcSecurityGroupIds: [canonicalTerraformReference("aws_security_group", "app-security-group")]
         }
       )
@@ -5401,12 +5748,12 @@ function configureCanonicalEc2PatternResources(
         return { ...node, id: "app-target-group", label: "EC2 Target Group", positionX: 570, positionY: 760, config: { name: "sketchcatch-app", port: 8080, protocol: "HTTP", targetType: "instance", vpcId: vpcRef, healthCheck: { path: "/health", matcher: "200-399" } } };
       case "LOAD_BALANCER_LISTENER":
         return usesHttps
-          ? { ...node, id: "https-listener", label: "ALB HTTPS Listener", positionX: 570, positionY: 620, config: { loadBalancerArn: canonicalTerraformReference("aws_lb", "application-load-balancer", "arn"), port: 443, protocol: "HTTPS", sslPolicy: "ELBSecurityPolicy-TLS13-1-2-2021-06", certificateArn: canonicalTerraformReference("aws_acm_certificate", "application-certificate", "arn"), defaultAction: { type: "forward", targetGroupArn: canonicalTerraformReference("aws_lb_target_group", "app-target-group", "arn") } } }
-          : { ...node, id: "http-listener", label: "ALB HTTP Listener", positionX: 570, positionY: 620, config: { loadBalancerArn: canonicalTerraformReference("aws_lb", "application-load-balancer", "arn"), port: 80, protocol: "HTTP", defaultAction: { type: "forward", targetGroupArn: canonicalTerraformReference("aws_lb_target_group", "app-target-group", "arn") } } };
+          ? { ...node, id: "https-listener", label: "ALB HTTPS Listener", positionX: 570, positionY: 620, config: { loadBalancerArn: canonicalTerraformReference("aws_lb", "application-load-balancer", "arn"), port: 443, protocol: "HTTPS", sslPolicy: "ELBSecurityPolicy-TLS13-1-2-2021-06", certificateArn: canonicalTerraformReference("aws_acm_certificate", "application-certificate", "arn"), defaultAction: [{ type: "forward", targetGroupArn: canonicalTerraformReference("aws_lb_target_group", "app-target-group", "arn") }] } }
+          : { ...node, id: "http-listener", label: "ALB HTTP Listener", positionX: 570, positionY: 620, config: { loadBalancerArn: canonicalTerraformReference("aws_lb", "application-load-balancer", "arn"), port: 80, protocol: "HTTP", defaultAction: [{ type: "forward", targetGroupArn: canonicalTerraformReference("aws_lb_target_group", "app-target-group", "arn") }] } };
       case "LAUNCH_TEMPLATE":
         return { ...node, id: "app-launch-template", label: "EC2 Launch Template", positionX: 620, positionY: 260, config: { namePrefix: "sketchcatch-app-", imageId: canonicalTerraformReference("data.aws_ami", "app-ami"), instanceType: ec2InstanceType, vpcSecurityGroupIds: [canonicalTerraformReference("aws_security_group", "app-security-group")], iamInstanceProfile: { name: canonicalTerraformReference("aws_iam_instance_profile", "app-instance-profile", "name") }, metadataOptions: { httpEndpoint: "enabled", httpTokens: "required" }, monitoring: { enabled: true } } };
       case "AUTO_SCALING_GROUP":
-        return { ...node, id: "app-auto-scaling-group", label: "Application Auto Scaling Group", positionX: 840, positionY: 260, config: { name: "sketchcatch-app", minSize: 2, desiredCapacity: computeCount, maxSize: resolveEc2AutoScalingMaxSize(normalizedPrompt, computeCount), vpcZoneIdentifier: privateAppSubnetRefs, targetGroupArns: [canonicalTerraformReference("aws_lb_target_group", "app-target-group", "arn")], healthCheckType: "ELB", healthCheckGracePeriod: 120, launchTemplate: { id: canonicalTerraformReference("aws_launch_template", "app-launch-template"), version: "$Latest" } } };
+        return { ...node, id: "app-auto-scaling-group", label: "Application Auto Scaling Group", positionX: 840, positionY: 260, config: { name: "sketchcatch-app", minSize: 2, desiredCapacity: computeCount, maxSize: resolveEc2AutoScalingMaxSize(normalizedPrompt, computeCount), vpcZoneIdentifier: privateAppSubnetRefs, targetGroupArns: [canonicalTerraformReference("aws_lb_target_group", "app-target-group", "arn")], healthCheckType: "ELB", healthCheckGracePeriod: 120, launchTemplate: [{ id: canonicalTerraformReference("aws_launch_template", "app-launch-template"), version: "$Latest" }] } };
       case "AUTO_SCALING_POLICY":
         return { ...node, id: "app-scaling-policy", label: ec2ScalingPolicyConfig.label, positionX: 1060, positionY: 260, config: { name: ec2ScalingPolicyConfig.name, autoscalingGroupName: canonicalTerraformReference("aws_autoscaling_group", "app-auto-scaling-group", "name"), ...ec2ScalingPolicyConfig.config } };
       case "CLOUDFRONT":
@@ -6102,6 +6449,16 @@ function requiresFargateArchitecture(normalizedPrompt: string): boolean {
   );
 }
 
+function requiresServerlessApiArchitecture(normalizedPrompt: string): boolean {
+  return (
+    resolveManagementProfile(normalizedPrompt) === "fully_managed" &&
+    resolveBackendProfile(normalizedPrompt) === "simple_api" &&
+    resolveFrontendProfile(normalizedPrompt) !== "static" &&
+    !requiresSsrFrontend(normalizedPrompt) &&
+    !hasPromptTerm(normalizedPrompt, ["ecs fargate", "fargate service", "fargate task", "fargate runtime"])
+  );
+}
+
 function requiresSelfManagedEc2Architecture(normalizedPrompt: string): boolean {
   const managementProfile = resolveManagementProfile(normalizedPrompt);
   const backendProfile = resolveBackendProfile(normalizedPrompt);
@@ -6117,6 +6474,7 @@ function requiresSelfManagedEc2Architecture(normalizedPrompt: string): boolean {
 function prefersQuestionnaireFargateArchitecture(normalizedPrompt: string): boolean {
   const trafficProfile = resolveTrafficProfile(normalizedPrompt);
   const backendProfile = resolveBackendProfile(normalizedPrompt);
+  const frontendProfile = resolveFrontendProfile(normalizedPrompt);
   const managementProfile = resolveManagementProfile(normalizedPrompt);
   const hasFargateFriendlyTraffic =
     trafficProfile === "bursty" ||
@@ -6135,8 +6493,25 @@ function prefersQuestionnaireFargateArchitecture(normalizedPrompt: string): bool
   const hasFargateFriendlyBackend = hasSimpleApiFargateBackend || hasManagedMicroservicesBackend;
 
   return (
-    (requiresApacRegion(normalizedPrompt) && requiresSpaFrontend(normalizedPrompt) && hasFargateFriendlyBackend) ||
+    (requiresApacRegion(normalizedPrompt) &&
+      (requiresSpaFrontend(normalizedPrompt) || frontendProfile === "mobile") &&
+      hasFargateFriendlyBackend) ||
     (requiresSsrFrontend(normalizedPrompt) && hasFargateFriendlyBackend)
+  );
+}
+
+function requiresStaticDeliveryArchitecture(normalizedPrompt: string): boolean {
+  return (
+    (resolveFrontendProfile(normalizedPrompt) === "static" || requiresNoBackend(normalizedPrompt)) &&
+    requiresNoDatabase(normalizedPrompt) &&
+    !requiresUploadStorage(normalizedPrompt) &&
+    !requiresRealtime(normalizedPrompt)
+  );
+}
+
+function requiresGitCiCdHandoff(normalizedPrompt: string): boolean {
+  return /(\bgit\b|github|ci\/cd|cicd|codepipeline|code\s*pipeline|codebuild|code\s*build|codedeploy|code\s*deploy|deployment\s+handoff|git\/ci\/cd|배포\s*핸드오프)/iu.test(
+    normalizedPrompt
   );
 }
 

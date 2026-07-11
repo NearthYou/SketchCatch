@@ -53,3 +53,43 @@ test("runProjectDraftServerSaveFlight clears the in-flight save after failure", 
 
   assert.equal(retry, "retry");
 });
+
+test("runProjectDraftServerSaveFlight queues a follow-up save when the in-flight save becomes stale", async () => {
+  const flightRef: { current: Promise<string> | null } = { current: null };
+  let dirty = false;
+  let saveCallCount = 0;
+  let releaseFirstSave: (value: string) => void = () => assert.fail("first save resolver was not captured");
+
+  const firstSave = runProjectDraftServerSaveFlight(flightRef, async () => {
+    saveCallCount += 1;
+
+    if (saveCallCount === 1) {
+      return new Promise<string>((resolve) => {
+        releaseFirstSave = resolve;
+      });
+    }
+
+    dirty = false;
+    return "second";
+  });
+  const queuedSave = runProjectDraftServerSaveFlight(
+    flightRef,
+    async () => {
+      saveCallCount += 1;
+      dirty = false;
+      return "second";
+    },
+    {
+      shouldRunAgainAfterInFlight: () => dirty
+    }
+  );
+
+  dirty = true;
+  releaseFirstSave("first");
+
+  assert.equal(await firstSave, "first");
+  assert.equal(await queuedSave, "second");
+  assert.equal(saveCallCount, 2);
+  assert.equal(dirty, false);
+  assert.equal(flightRef.current, null);
+});

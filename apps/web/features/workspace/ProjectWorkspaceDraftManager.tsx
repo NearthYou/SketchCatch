@@ -166,7 +166,7 @@ export function ProjectWorkspaceDraftManager({
 
   const flushDraftToServer = useCallback(
     (reason: FlushDraftReason = "external"): Promise<FlushDraftToServerResult> => {
-      if (serverSavePromiseRef.current) {
+      if (serverSavePromiseRef.current && reason !== "manual") {
         return serverSavePromiseRef.current;
       }
 
@@ -179,35 +179,87 @@ export function ProjectWorkspaceDraftManager({
         });
       }
 
-      return runProjectDraftServerSaveFlight(serverSavePromiseRef, async () => {
-        serverSavingRef.current = true;
-        setServerSaveState(reason === "checkpoint" ? "server-checkpoint-pending" : "server-saving");
+      return runProjectDraftServerSaveFlight(
+        serverSavePromiseRef,
+        async () => {
+          serverSavingRef.current = true;
+          setServerSaveState(reason === "checkpoint" ? "server-checkpoint-pending" : "server-saving");
 
-        try {
-          clearLocalSaveTimer();
+          try {
+            clearLocalSaveTimer();
 
-          let baseLocalDraft = localDraftRef.current;
-          let serverSaveVersion = draftChangeVersionRef.current;
+            let baseLocalDraft = localDraftRef.current;
+            let serverSaveVersion = draftChangeVersionRef.current;
 
-          if (hasPendingLocalChangesRef.current) {
-            try {
-              const localPersistResult = await persistLocalDraftNow();
-              baseLocalDraft = localPersistResult.localDraft;
-              serverSaveVersion = localPersistResult.changeVersion;
+            if (hasPendingLocalChangesRef.current) {
+              try {
+                const localPersistResult = await persistLocalDraftNow();
+                baseLocalDraft = localPersistResult.localDraft;
+                serverSaveVersion = localPersistResult.changeVersion;
 
-              if (!localPersistResult.current) {
-                serverDirtyRef.current = true;
-                setServerSaveState("server-dirty");
+                if (!localPersistResult.current) {
+                  serverDirtyRef.current = true;
+                  setServerSaveState("server-dirty");
+                  return {
+                    ok: false,
+                    error: new Error("Draft changed while preparing server save."),
+                    localDraft: localDraftRef.current,
+                    serverDraft: null
+                  };
+                }
+              } catch (error) {
+                setLocalSaveState("local-failed");
+                setServerSaveState("server-failed");
                 return {
                   ok: false,
-                  error: new Error("Draft changed while preparing server save."),
+                  error,
                   localDraft: localDraftRef.current,
                   serverDraft: null
                 };
               }
+            }
+
+            try {
+              const result = await repository.saveServer({
+                workspaceId,
+                localCacheWorkspaceId,
+                projectId,
+                diagramJson: latestDiagramRef.current,
+                previousLocalDraft: baseLocalDraft,
+                shouldSyncLocalDraft: () => draftChangeVersionRef.current === serverSaveVersion
+              });
+
+              if (result.ok) {
+                if (draftChangeVersionRef.current === serverSaveVersion) {
+                  setCurrentLocalDraft(result.localDraft);
+                  serverDirtyRef.current = false;
+                  setLocalSaveState("local-saved");
+                  setServerSaveState("server-saved");
+                  showServerSaveToast();
+                  return result;
+                }
+
+                serverDirtyRef.current = true;
+                setServerSaveState("server-dirty");
+                await persistLocalDraftNow().catch(() => setLocalSaveState("local-failed"));
+                return {
+                  ok: false,
+                  error: new Error("Draft changed while server save was in progress."),
+                  localDraft: localDraftRef.current,
+                  serverDraft: null
+                };
+              }
+
+              if (draftChangeVersionRef.current === serverSaveVersion) {
+                setServerSaveState("server-failed");
+                return result;
+              }
+
+              serverDirtyRef.current = true;
+              setServerSaveState("server-dirty");
+              return result;
             } catch (error) {
-              setLocalSaveState("local-failed");
-              setServerSaveState("server-failed");
+              setServerSaveState(draftChangeVersionRef.current === serverSaveVersion ? "server-failed" : "server-dirty");
               return {
                 ok: false,
                 error,
@@ -215,60 +267,16 @@ export function ProjectWorkspaceDraftManager({
                 serverDraft: null
               };
             }
+          } finally {
+            serverSavingRef.current = false;
           }
-
-          try {
-            const result = await repository.saveServer({
-              workspaceId,
-              localCacheWorkspaceId,
-              projectId,
-              diagramJson: latestDiagramRef.current,
-              previousLocalDraft: baseLocalDraft,
-              shouldSyncLocalDraft: () => draftChangeVersionRef.current === serverSaveVersion
-            });
-
-            if (result.ok) {
-              if (draftChangeVersionRef.current === serverSaveVersion) {
-                setCurrentLocalDraft(result.localDraft);
-                serverDirtyRef.current = false;
-                setLocalSaveState("local-saved");
-                setServerSaveState("server-saved");
-                showServerSaveToast();
-                return result;
-              }
-
-              serverDirtyRef.current = true;
-              setServerSaveState("server-dirty");
-              await persistLocalDraftNow().catch(() => setLocalSaveState("local-failed"));
-              return {
-                ok: false,
-                error: new Error("Draft changed while server save was in progress."),
-                localDraft: localDraftRef.current,
-                serverDraft: null
-              };
+        },
+        reason === "manual"
+          ? {
+              shouldRunAgainAfterInFlight: () => serverDirtyRef.current
             }
-
-            if (draftChangeVersionRef.current === serverSaveVersion) {
-              setServerSaveState("server-failed");
-              return result;
-            }
-
-            serverDirtyRef.current = true;
-            setServerSaveState("server-dirty");
-            return result;
-          } catch (error) {
-            setServerSaveState(draftChangeVersionRef.current === serverSaveVersion ? "server-failed" : "server-dirty");
-            return {
-              ok: false,
-              error,
-              localDraft: localDraftRef.current,
-              serverDraft: null
-            };
-          }
-        } finally {
-          serverSavingRef.current = false;
-        }
-      });
+          : undefined
+      );
     },
     [
       clearLocalSaveTimer,

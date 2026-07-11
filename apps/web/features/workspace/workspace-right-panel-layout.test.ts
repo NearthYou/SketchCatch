@@ -629,6 +629,8 @@ test("workspace AI saves accepted generated and patched diagrams immediately", (
   assert.match(workspaceDraftManagerSource, /onDiagramSaveRequest=\{saveCurrentDraftLocally\}/);
   assert.match(diagramEditorSource, /saveDiagramNow:\s*onDiagramSaveRequest/);
   assert.match(aiChatDockSource, /context\.saveDiagramNow\?\.\(\)/);
+  assert.match(projectDraftManagerSource, /reason !== "manual"/);
+  assert.match(projectDraftManagerSource, /shouldRunAgainAfterInFlight:\s*\(\) => serverDirtyRef\.current/);
 });
 
 test("accepted AI drafts apply the current draft instead of a stale preview diagram", () => {
