@@ -482,6 +482,34 @@ export type GitHubRepositoryCandidate = {
   archived: boolean;
 };
 
+export type RepositoryAnalysisTemplateId =
+  | "template-static-website"
+  | "template-api-db"
+  | "template-3tier";
+
+export type RepositoryAnalysisEvidenceFile = {
+  path: string;
+  found: boolean;
+};
+
+export type AnalyzeSourceRepositoryRequest = {
+  repositoryUrl: string;
+  defaultBranch?: string | undefined;
+};
+
+export type SourceRepositoryAnalysisResult = {
+  repositoryUrl: string;
+  defaultBranch: string;
+  evidenceFiles: RepositoryAnalysisEvidenceFile[];
+  detectedSignals: string[];
+  recommendedTemplateId: RepositoryAnalysisTemplateId | null;
+  recommendationReason: string;
+};
+
+export type CreateGitHubArchitectureDraftRequest = AnalyzeSourceRepositoryRequest & {
+  selectedTemplateId: RepositoryAnalysisTemplateId;
+};
+
 export type ListGitHubInstallationRepositoriesRequest = {
   installationId: string;
   state: string;

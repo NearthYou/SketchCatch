@@ -106,7 +106,17 @@ export default function GitHubIntegrationCallbackPage() {
         state: callbackState.state
       });
 
-      router.replace(`/workspace?projectId=${encodeURIComponent(connectedRepository.projectId)}`);
+      if (connectedRepository.repositoryUrl === null) {
+        throw new Error("연결된 Repository URL을 확인하지 못했습니다.");
+      }
+
+      const params = new URLSearchParams({
+        defaultBranch: connectedRepository.defaultBranch,
+        projectId: connectedRepository.projectId,
+        repositoryUrl: connectedRepository.repositoryUrl,
+        sourceRepositoryId: connectedRepository.id
+      });
+      router.replace(`/workspace/repository?${params.toString()}`);
     } catch (error) {
       setCallbackState({
         status: "error",
