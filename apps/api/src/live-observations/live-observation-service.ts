@@ -62,6 +62,7 @@ export type CreateLiveObservationServiceOptions = {
   readonly now?: (() => number) | undefined;
   readonly createObservationId?: (() => string) | undefined;
   readonly createPublicToken?: (() => string) | undefined;
+  readonly onSessionTerminal?: ((observationId: string) => void) | undefined;
 };
 
 export type CreateLiveObservationSessionInput = {
@@ -431,7 +432,7 @@ export function createLiveObservationService(options: CreateLiveObservationServi
       currentTimeMs
     );
 
-    return {
+    const snapshot: LiveObservationSnapshot = {
       observationId,
       status,
       live: {
@@ -447,6 +448,12 @@ export function createLiveObservationService(options: CreateLiveObservationServi
       },
       ...observation
     };
+
+    if (status !== "active") {
+      options.onSessionTerminal?.(observationId);
+    }
+
+    return snapshot;
   }
 }
 

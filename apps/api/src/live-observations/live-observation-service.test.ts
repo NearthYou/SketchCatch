@@ -231,17 +231,37 @@ test("collectEvent keeps the accepted count bounded when the session event cap i
 });
 
 test("stopSession ends observation without changing infrastructure and collector returns gone", async () => {
-  const service = createService();
+  const terminalObservationIds: string[] = [];
+  const service = createService({
+    onSessionTerminal: (observationId) => terminalObservationIds.push(observationId)
+  });
   const created = await service.createSession(createSessionInput());
 
   const stopped = await service.stopSession(created.session.id, created.session.deploymentId);
 
   assert.equal(stopped.status, "stopped");
+  assert.deepEqual(terminalObservationIds, [created.session.id]);
   assert.equal((await service.getSnapshot(created.session.id)).status, "stopped");
   await assert.rejects(
     () => service.collectEvent({ eventId: "after-stop", publicToken: "public-token" }),
     (error: unknown) => hasServiceCode(error, "LIVE_OBSERVATION_GONE")
   );
+});
+
+test("natural session expiry releases provider-owned observation state", async () => {
+  let currentTimeMs = fixedNowMs;
+  const terminalObservationIds: string[] = [];
+  const service = createService({
+    now: () => currentTimeMs,
+    onSessionTerminal: (observationId) => terminalObservationIds.push(observationId)
+  });
+  const created = await service.createSession(createSessionInput());
+
+  currentTimeMs = Date.parse(created.session.expiresAt);
+  const expired = await service.getSnapshot(created.session.id);
+
+  assert.equal(expired.status, "expired");
+  assert.deepEqual(terminalObservationIds, [created.session.id]);
 });
 
 test("createSession requires a healthy Redis backend when shared cache is required", async () => {

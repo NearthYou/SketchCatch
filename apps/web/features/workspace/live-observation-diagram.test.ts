@@ -168,6 +168,36 @@ test("infers ASG capacity from resource types and connectivity without metadata"
   assert.equal(model.capacityUnits[0]?.node.id, "launch-template");
 });
 
+test("keeps inferred capacity scoped to the controller selected for the main path", () => {
+  const diagram = createDiagram(
+    [
+      node("site-a", "aws_s3_object"),
+      node("target-a", "aws_lb_target_group"),
+      node("task-a", "aws_ecs_task_definition"),
+      node("service-a", "aws_ecs_service"),
+      node("site-b", "aws_s3_object"),
+      node("target-b", "aws_lb_target_group"),
+      node("task-b", "aws_ecs_task_definition"),
+      node("service-b", "aws_ecs_service")
+    ],
+    [
+      edge("site-a", "target-a"),
+      edge("target-a", "service-a"),
+      edge("task-a", "service-a"),
+      edge("site-b", "target-b"),
+      edge("target-b", "service-b"),
+      edge("task-b", "service-b")
+    ]
+  );
+
+  const model = createLiveObservationDiagramModel(diagram, snapshot(1, 1, 1));
+
+  assert.equal(model.status, "ready");
+  if (model.status !== "ready") return;
+  assert.equal(model.stages.at(-1)?.node.id, "service-a");
+  assert.deepEqual(model.capacityUnits.map((unit) => unit.node.id), ["task-a"]);
+});
+
 test("prefers explicit observation roles over inferred traffic capabilities", () => {
   const diagram = createDiagram(
     [

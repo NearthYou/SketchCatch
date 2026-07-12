@@ -36,7 +36,8 @@ import {
 } from "../live-observations/live-observation-service.js";
 import {
   createSimulatedCloudWatchAgentObservabilityProvider,
-  recordSimulatedCloudWatchAgentTraffic
+  recordSimulatedCloudWatchAgentTraffic,
+  resetSimulatedCloudWatchAgentTraffic
 } from "../live-observations/simulated-cloudwatch-agent-observability-provider.js";
 import {
   createRuntimeCacheFromEnv,
@@ -95,6 +96,9 @@ export async function registerLiveObservationRoutes(
     createLiveObservationService({
       observabilityProvider: createLiveObservationObservabilityProvider(runtimeEnv),
       invalidateObservationCacheOnEvent: isSimulatedCloudWatchAgentEnabled(runtimeEnv),
+      onSessionTerminal: isSimulatedCloudWatchAgentEnabled(runtimeEnv)
+        ? resetSimulatedCloudWatchAgentTraffic
+        : undefined,
       publicApiBaseUrl,
       requireSharedCache: runtimeEnv.nodeEnv === "production",
       runtimeCache

@@ -86,9 +86,8 @@ export function createLiveObservationDiagramModel(
   const nodeById = new Map(diagram.nodes.map((node) => [node.id, node]));
   const predecessors = createPredecessorMap(diagram);
   const capacityBindings = createCapacityBindings(diagram, nodeById, predecessors);
-  const capacityNodes = capacityBindings.map((binding) => binding.template);
 
-  if (capacityNodes.length === 0) {
+  if (capacityBindings.length === 0) {
     return { status: "unavailable", reason: "capacity-missing" };
   }
 
@@ -106,6 +105,11 @@ export function createLiveObservationDiagramModel(
   if (!selectedPath) {
     return { status: "unavailable", reason: "path-missing" };
   }
+
+  const selectedControllerId = selectedPath.nodeIds[selectedPath.nodeIds.length - 1];
+  const capacityNodes = capacityBindings
+    .filter((binding) => binding.controllerId === selectedControllerId)
+    .map((binding) => binding.template);
 
   const runningCount = snapshot?.capacity.inServiceInstanceCount ?? 0;
   const desiredCount = snapshot?.capacity.desiredCapacity ?? runningCount;
