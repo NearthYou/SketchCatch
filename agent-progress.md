@@ -148,6 +148,14 @@ Short English-only working log for the current agent context. Older records are 
 - Verification: TDD RED reproduced the old 10px geometry; focused tests passed 39/39; `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed. Authenticated browser verification observed four active particles at 16x16px with the expected 6px glow, then stopped boost traffic and ended the observation session. The full web suite passed 864/868 and reproduced the four existing unrelated baseline failures.
 - Risk: burst gating, particle cap, and reduced-motion behavior are unchanged. Existing node-toolbar CSS, dashboard-project route, AWS priority coverage, and stale 126-entry gallery tests still block a fully green repository suite.
 
+### 2026-07-13 - Sequence one particle per accepted request
+
+- Added a pure diagram-particle timing model with 560ms non-overlapping segment windows, 180ms request staggering, and full-path burst lifetime calculation.
+- Enlarged traffic particles to 28px with an 8px glow and handed each logical request across one connector segment at a time instead of visually duplicating it across the path.
+- Added analyzed segment counting so actual and mock bursts remain alive through the final connector and arrival feedback.
+- Verification: Task 1 and Task 2 passed independent spec and quality reviews with no findings; focused tests passed 48/48; `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed. Authenticated browser sampling observed 28x28px particles and a maximum of one active segment per request index, then stopped boost traffic and ended the observation session.
+- Risk: the repository-wide web suite still has the four existing unrelated baseline failures recorded above.
+
 ## Verification
 
 

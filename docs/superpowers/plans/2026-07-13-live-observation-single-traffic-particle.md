@@ -28,7 +28,7 @@
 **Interfaces:**
 - Produces: `LIVE_OBSERVATION_DIAGRAM_SEGMENT_DURATION_MS`, `LIVE_OBSERVATION_DIAGRAM_REQUEST_STAGGER_MS`, `LIVE_OBSERVATION_DIAGRAM_ARRIVAL_DURATION_MS`, `getLiveObservationDiagramParticleDelayMs(segmentIndex, requestIndex)`, and `getLiveObservationDiagramBurstLifetimeMs(segmentCount, particleCount)`.
 
-- [ ] **Step 1: Write failing timing tests**
+- [x] **Step 1: Write failing timing tests**
 
 Create `live-observation-diagram-particles.test.ts`:
 
@@ -67,7 +67,7 @@ test("burst lifetime includes the final segment and final request", () => {
 });
 ```
 
-- [ ] **Step 2: Run the timing tests and verify RED**
+- [x] **Step 2: Run the timing tests and verify RED**
 
 Run:
 
@@ -78,7 +78,7 @@ pnpm exec tsx --test features/workspace/live-observation-diagram-particles.test.
 
 Expected: FAIL because `live-observation-diagram-particles.ts` does not exist.
 
-- [ ] **Step 3: Implement the timing module**
+- [x] **Step 3: Implement the timing module**
 
 Create `live-observation-diagram-particles.ts`:
 
@@ -113,7 +113,7 @@ export function getLiveObservationDiagramBurstLifetimeMs(
 }
 ```
 
-- [ ] **Step 4: Run the timing tests and verify GREEN**
+- [x] **Step 4: Run the timing tests and verify GREEN**
 
 Run the Step 2 command again.
 
@@ -135,7 +135,7 @@ Expected: 3 tests PASS.
 - Consumes: timing exports from Task 1 and `createLiveObservationDiagramModel(diagram, null)`.
 - Produces: `getLiveObservationDiagramSegmentCount(diagram): number`, sequential animation delays, complete burst cleanup timing, and 28px particle geometry.
 
-- [ ] **Step 1: Write failing integration tests**
+- [x] **Step 1: Write failing integration tests**
 
 Import `getLiveObservationDiagramSegmentCount` in `live-observation-diagram.test.ts`. In the existing ECS path test, after its local `diagram` fixture is created, add:
 
@@ -165,7 +165,7 @@ assert.match(stylesSource, /from \{ left:\s*-28px; opacity:\s*0; \}/);
 assert.match(stylesSource, /to \{ left:\s*calc\(100% - 14px\); opacity:\s*0; \}/);
 ```
 
-- [ ] **Step 2: Run focused tests and verify RED**
+- [x] **Step 2: Run focused tests and verify RED**
 
 Run:
 
@@ -176,7 +176,7 @@ pnpm exec tsx --test features/workspace/live-observation-diagram.test.ts feature
 
 Expected: FAIL because segment counting, sequential delays, complete lifetime, and 28px geometry are not implemented.
 
-- [ ] **Step 3: Add the diagram segment-count helper**
+- [x] **Step 3: Add the diagram segment-count helper**
 
 Export from `live-observation-diagram.ts`:
 
@@ -187,7 +187,7 @@ export function getLiveObservationDiagramSegmentCount(diagram: DiagramJson): num
 }
 ```
 
-- [ ] **Step 4: Apply sequential timing in the renderer**
+- [x] **Step 4: Apply sequential timing in the renderer**
 
 Import the Task 1 duration and delay helper in `LiveObservationDiagramMap.tsx`. Replace the inline delay with:
 
@@ -200,7 +200,7 @@ style={{
 
 This keeps duplicate DOM elements hidden outside their non-overlapping segment windows, so one logical request has only one visible circle.
 
-- [ ] **Step 5: Keep each burst alive for the full analyzed path**
+- [x] **Step 5: Keep each burst alive for the full analyzed path**
 
 In `LiveObservationModal.tsx`, memoize:
 
@@ -222,7 +222,7 @@ getLiveObservationDiagramBurstLifetimeMs(
 
 Use `mockRequestFlowBurst.visibleParticleCount` in the mock effect and include `observationDiagramSegmentCount` in both dependency arrays.
 
-- [ ] **Step 6: Apply 28px particle geometry**
+- [x] **Step 6: Apply 28px particle geometry**
 
 Update `workspace.module.css`:
 
@@ -245,7 +245,7 @@ Update `workspace.module.css`:
 }
 ```
 
-- [ ] **Step 7: Run focused tests and repository gates**
+- [x] **Step 7: Run focused tests and repository gates**
 
 Run:
 
@@ -261,11 +261,11 @@ pnpm build
 
 Expected: focused tests and all repository gates PASS.
 
-- [ ] **Step 8: Verify in the authenticated browser and clean up**
+- [x] **Step 8: Verify in the authenticated browser and clean up**
 
 Open Live Observation, start a session, run a short presenter boost, and inspect computed styles. Confirm particle width and height are 28px and that one request index has at most one visible segment particle at a time. Stop the boost and end the observation session immediately after verification.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add apps/web/features/workspace/live-observation-diagram-particles.ts apps/web/features/workspace/live-observation-diagram-particles.test.ts apps/web/features/workspace/live-observation-diagram.ts apps/web/features/workspace/live-observation-diagram.test.ts apps/web/features/workspace/LiveObservationDiagramMap.tsx apps/web/features/workspace/LiveObservationModal.tsx apps/web/features/workspace/live-observation-modal.test.ts apps/web/features/workspace/workspace.module.css agent-progress.md docs/superpowers/plans/2026-07-13-live-observation-single-traffic-particle.md
