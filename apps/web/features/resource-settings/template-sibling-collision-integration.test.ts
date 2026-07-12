@@ -96,5 +96,5 @@ function intersects(left: DiagramNode, right: DiagramNode): boolean {
 }
 
 function createDiagram(nodes: readonly DiagramNode[]): DiagramJson {
-  return { edges: [], nodes, viewport: { x: 0, y: 0, zoom: 1 } };
+  return { edges: [], nodes: [...nodes], viewport: { x: 0, y: 0, zoom: 1 } };
 }
