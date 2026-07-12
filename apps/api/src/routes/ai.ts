@@ -73,6 +73,11 @@ import {
   type SourceRepositoryRepository
 } from "../source-repositories/source-repository-service.js";
 import {
+  getRepositoryEvidenceKind,
+  isIgnoredRepositoryEvidencePath,
+  isRepositoryEvidenceContentPath
+} from "../source-repositories/repository-evidence-path.js";
+import {
   analyzeRepositoryEvidence,
   type RepositoryEvidenceFile
 } from "../services/aiRepositoryAnalysis.js";
@@ -784,7 +789,17 @@ type GitHubRepository = {
   readonly repo: string;
 };
 
-const GITHUB_EVIDENCE_PATHS = ["README.md", "package.json", "Dockerfile", "docker-compose.yml"] as const;
+type PublicGitHubRecursiveTreeResponse = {
+  readonly truncated?: unknown;
+  readonly tree?: Array<{
+    readonly path?: unknown;
+    readonly type?: unknown;
+  }>;
+};
+
+const PUBLIC_GITHUB_API_BASE_URL = "https://api.github.com";
+const MAX_PUBLIC_REPOSITORY_EVIDENCE_FILES = 24;
+const PUBLIC_GITHUB_REQUEST_TIMEOUT_MS = 10_000;
 
 // GitHub URL에서 owner/repo만 뽑습니다. public repository 근거 파일을 읽을 때 이 값이 필요합니다.
 function parseGitHubRepositoryUrl(repositoryUrl: string): GitHubRepository {
@@ -802,12 +817,16 @@ async function fetchRepositoryEvidence(
   repository: GitHubRepository,
   defaultBranch: string
 ): Promise<RepositoryEvidenceFile[]> {
+  const treePaths = await fetchPublicRepositoryTreePaths(repository, defaultBranch);
+  const evidencePaths = selectPublicRepositoryEvidencePaths(treePaths);
   const evidence = await Promise.all(
-    GITHUB_EVIDENCE_PATHS.map(async (path) => {
+    evidencePaths.map(async (path) => {
       const url = `https://raw.githubusercontent.com/${repository.owner}/${repository.repo}/${encodeURIComponent(defaultBranch)}/${path}`;
-      const response = await fetch(url);
+      const response = await fetch(url, {
+        signal: AbortSignal.timeout(PUBLIC_GITHUB_REQUEST_TIMEOUT_MS)
+      }).catch(() => null);
 
-      if (!response.ok) {
+      if (!response?.ok) {
         return null;
       }
 
@@ -816,6 +835,69 @@ async function fetchRepositoryEvidence(
   );
 
   return evidence.flatMap((file) => (file === null ? [] : [file]));
+}
+
+async function fetchPublicRepositoryTreePaths(
+  repository: GitHubRepository,
+  defaultBranch: string
+): Promise<readonly string[]> {
+  const url = `${PUBLIC_GITHUB_API_BASE_URL}/repos/${encodeURIComponent(repository.owner)}/${encodeURIComponent(
+    repository.repo
+  )}/git/trees/${encodeURIComponent(defaultBranch)}?recursive=1`;
+  const response = await fetch(url, {
+    headers: {
+      Accept: "application/vnd.github+json",
+      "User-Agent": "SketchCatch"
+    },
+    signal: AbortSignal.timeout(PUBLIC_GITHUB_REQUEST_TIMEOUT_MS)
+  }).catch(() => null);
+
+  if (!response?.ok) {
+    return [];
+  }
+
+  const tree = (await response.json()) as PublicGitHubRecursiveTreeResponse;
+
+  if (tree.truncated === true) {
+    return [];
+  }
+
+  return (tree.tree ?? [])
+    .flatMap((entry) =>
+      entry.type === "blob" && typeof entry.path === "string" && entry.path
+        ? [entry.path]
+        : []
+    )
+    .sort();
+}
+
+function selectPublicRepositoryEvidencePaths(treePaths: readonly string[]): readonly string[] {
+  return treePaths
+    .filter((path) => !isIgnoredRepositoryEvidencePath(path) && isRepositoryEvidenceContentPath(path))
+    .sort(comparePublicRepositoryEvidencePaths)
+    .slice(0, MAX_PUBLIC_REPOSITORY_EVIDENCE_FILES);
+}
+
+function comparePublicRepositoryEvidencePaths(left: string, right: string): number {
+  const priorityDelta = getPublicRepositoryEvidencePriority(left) - getPublicRepositoryEvidencePriority(right);
+
+  if (priorityDelta !== 0) {
+    return priorityDelta;
+  }
+
+  const depthDelta = left.split("/").length - right.split("/").length;
+
+  return depthDelta !== 0 ? depthDelta : left.localeCompare(right);
+}
+
+function getPublicRepositoryEvidencePriority(path: string): number {
+  const kind = getRepositoryEvidenceKind(path);
+
+  if (kind === "package_json") return 0;
+  if (kind === "dockerfile") return 1;
+  if (kind === "framework_config") return 2;
+  if (kind === "readme") return path.includes("/") ? 4 : 3;
+  return 5;
 }
 
 function getRepositoryTemplateContext(templateId: CreateGitHubArchitectureDraftRequest["selectedTemplateId"]): string {

@@ -16,8 +16,7 @@ test("repository analysis recommends the database template from package evidence
 
   assert.equal(result.recommendedTemplateId, "template-api-db");
   assert.deepEqual(result.detectedSignals, ["Node API", "Database"]);
-  assert.equal(result.evidenceFiles.find((file) => file.path === "package.json")?.found, true);
-  assert.equal(result.evidenceFiles.find((file) => file.path === "Dockerfile")?.found, false);
+  assert.deepEqual(result.evidenceFiles, [{ found: true, path: "package.json" }]);
 });
 
 test("repository analysis does not invent a recommendation without evidence", () => {

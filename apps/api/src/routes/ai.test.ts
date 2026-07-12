@@ -1971,10 +1971,99 @@ test("OPTIONS /api/ai/architecture-draft responds to browser CORS preflight", as
   await app.close();
 });
 
+test("POST /api/ai/source-repository-analysis reads nested public repository evidence", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input) => {
+    const url = String(input);
+
+    if (url.includes("api.github.com/repos/example/fullstack/git/trees/main")) {
+      return Response.json({
+        truncated: false,
+        tree: [
+          { path: "README.md", type: "blob" },
+          { path: "apps/fastapi-api/Dockerfile", type: "blob" },
+          { path: "apps/fastapi-api/requirements.txt", type: "blob" },
+          { path: "apps/nest-api/package.json", type: "blob" },
+          { path: "docker-compose.yml", type: "blob" },
+          { path: "node_modules/ignored/package.json", type: "blob" }
+        ]
+      });
+    }
+
+    if (url.endsWith("/README.md")) {
+      return new Response("React frontend, FastAPI API, and PostgreSQL database", { status: 200 });
+    }
+
+    if (url.endsWith("/apps/fastapi-api/Dockerfile")) {
+      return new Response("FROM python:3.12\nRUN pip install fastapi uvicorn", { status: 200 });
+    }
+
+    if (url.endsWith("/apps/fastapi-api/requirements.txt")) {
+      return new Response("fastapi\nuvicorn\n", { status: 200 });
+    }
+
+    if (url.endsWith("/apps/nest-api/package.json")) {
+      return new Response('{"dependencies":{"@nestjs/core":"latest","typeorm":"latest"}}', { status: 200 });
+    }
+
+    if (url.endsWith("/docker-compose.yml")) {
+      return new Response("services:\n  db:\n    image: postgres:16", { status: 200 });
+    }
+
+    return new Response("", { status: 404 });
+  };
+
+  const app = buildApp();
+
+  try {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/ai/source-repository-analysis",
+      payload: {
+        repositoryUrl: "https://github.com/example/fullstack",
+        defaultBranch: "main"
+      }
+    });
+
+    assert.equal(response.statusCode, 200);
+
+    const body = response.json();
+    const evidencePaths = body.evidenceFiles.map((file: { path: string }) => file.path);
+
+    assert.ok(body.detectedSignals.includes("Python API"));
+    assert.ok(body.detectedSignals.includes("Node API"));
+    assert.ok(body.detectedSignals.includes("Database"));
+    assert.ok(body.detectedSignals.includes("Container"));
+    assert.equal(body.recommendedTemplateId, "template-api-db");
+    assert.ok(evidencePaths.includes("apps/fastapi-api/Dockerfile"));
+    assert.ok(evidencePaths.includes("apps/nest-api/package.json"));
+    assert.ok(evidencePaths.includes("docker-compose.yml"));
+    assert.equal(
+      body.evidenceFiles.some(
+        (file: { found: boolean; path: string }) => file.path === "Dockerfile" && file.found === false
+      ),
+      false
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    await app.close();
+  }
+});
+
 test("POST /api/ai/github-architecture-draft returns an Architecture Draft from public repository evidence", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (input) => {
     const url = String(input);
+
+    if (url.includes("api.github.com/repos/example/backend-api/git/trees/main")) {
+      return Response.json({
+        truncated: false,
+        tree: [
+          { path: "README.md", type: "blob" },
+          { path: "package.json", type: "blob" }
+        ]
+      });
+    }
 
     if (url.endsWith("/README.md")) {
       return new Response("Express API server with PostgreSQL database", { status: 200 });
@@ -1994,7 +2083,8 @@ test("POST /api/ai/github-architecture-draft returns an Architecture Draft from 
       method: "POST",
       url: "/api/ai/github-architecture-draft",
       payload: {
-        repositoryUrl: "https://github.com/example/backend-api"
+        repositoryUrl: "https://github.com/example/backend-api",
+        selectedTemplateId: "template-api-db"
       }
     });
 

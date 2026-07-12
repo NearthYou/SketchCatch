@@ -6,6 +6,9 @@ Short English-only working log for the current agent context. Older records are 
 
 - Branch: `feat/ck/349-repo-analysis`.
 - Issue #349 repository-analysis based template recommendation is implemented and committed locally.
+- New project Repository start now shows the Repository URL analysis panel above the primary `Repository 분석하기` action.
+- Public GitHub URL analysis now reads repository tree evidence, including nested package, Dockerfile, framework config, and README paths.
+- API startup now fails fast before listening when `DATABASE_URL` is not configured, instead of letting DB-backed routes such as `/api/auth/login` return a runtime 500.
 - The latest follow-up fix maps missing `source_repositories` migrations to a stable API/UI message instead of exposing raw SQL.
 - GitHub repository-start and callback screens now route permission expansion to project GitHub settings instead of opening GitHub App installation directly.
 - New project Repository start now opens an inline public GitHub URL analysis panel instead of routing to the separate Repository start page.
@@ -13,6 +16,55 @@ Short English-only working log for the current agent context. Older records are 
 - No cloud deployment, Terraform apply, or infrastructure mutation was run during this work session.
 
 ## Session Record
+
+### 2026-07-12 - Deepen public GitHub URL evidence scan
+
+- Goal: Fix shallow public Repository URL analysis that only checked root `README.md`, root `package.json`, root `Dockerfile`, and root `docker-compose.yml`.
+- Completed:
+  - Reproduced the user-visible issue with `https://github.com/chaekang/Jungle_AI_Board`, which has nested Dockerfiles and app package files under `apps/`.
+  - Changed public URL analysis to read the GitHub recursive tree first, then fetch prioritized evidence paths under nested app roots.
+  - Added request timeouts and per-file failure tolerance for public GitHub evidence fetches.
+  - Reported actual evidence file paths instead of fixed root-level false entries.
+  - Added Python/FastAPI runtime detection for public URL analysis.
+- Verification:
+  - `pnpm --dir apps/api exec tsx --test src/services/aiRepositoryAnalysis.test.ts src/routes/ai.test.ts`
+  - `pnpm --dir apps/api typecheck`
+  - Live route check for `https://github.com/chaekang/Jungle_AI_Board` returned nested Dockerfile/package evidence and `React`, `Node API`, `Python API`, `Database`, `Container` signals.
+- Risk:
+  - Public URL analysis still maps to the nearest supported Template; richer topology generation remains downstream Architecture Draft work.
+
+### 2026-07-12 - Move Repository URL analysis above action button
+
+- Goal: Put the inline Repository URL analysis panel above the `Repository 분석하기` button on the new project start screen.
+- Completed:
+  - Moved `RepositoryUrlStartPanel` before the action button group in the workspace new-project start client.
+  - Added source-order regression coverage so the panel stays above the primary action.
+- Verification:
+  - `pnpm --dir apps/web exec tsx --test app/workspace/new/workspace-start-options.test.ts`
+  - `pnpm --filter @sketchcatch/web typecheck`
+  - `pnpm --filter @sketchcatch/web lint`
+  - `pnpm build`
+  - `pnpm lint` passed with the pre-existing `live-observations` `setNow` warning.
+  - `pnpm typecheck`
+- Risk:
+  - Browser screenshot verification was skipped because Playwright/browser automation is not installed in this worktree. The local page was reachable at `http://localhost:3000/workspace/new`.
+
+### 2026-07-12 - Fail fast when API database URL is missing
+
+- Goal: Diagnose `/api/auth/login` returning 500 with `DATABASE_URL is required`.
+- Completed:
+  - Reproduced the login failure with a minimal POST to `http://localhost:3000/api/auth/login`.
+  - Added a startup regression test proving the API must reject missing `DATABASE_URL` before Terraform warmup, deployment recovery, or listen.
+  - Added the `requireDatabaseUrl()` startup guard after the static AWS credential-source check.
+- Verification:
+  - `pnpm --dir apps/api exec tsx --test src/server-startup.test.ts`
+  - `pnpm --filter @sketchcatch/api typecheck`
+  - `pnpm harness:check`
+  - `pnpm lint` passed with the pre-existing `live-observations` `setNow` warning.
+  - `pnpm typecheck`
+  - `pnpm build`
+- Risk:
+  - The already-running API process still needs to be restarted, and local login still requires a real `DATABASE_URL` configured outside git.
 
 ### 2026-07-12 - Implement issue #349 repository template recommendations
 
@@ -105,6 +157,26 @@ Short English-only working log for the current agent context. Older records are 
 - Risk:
   - Browser visual verification was skipped because Playwright/browser automation dependencies are not installed in this worktree.
 
+### 2026-07-12 - Open board after public Repository template recommendation
+
+- Goal: Ensure a successful public Repository URL recommendation creates the project draft and opens the workspace instead of stopping on a no-template message.
+- Completed:
+  - Confirmed the reported repository analysis returned `template-api-db` with React, Node API, Python API, Database, and Container signals.
+  - Mapped legacy public Repository Analysis template ids such as `template-api-db` to supported board `TemplateDefinition` ids.
+  - Kept the inline new-project Repository URL flow creating and saving the recommended template diagram before routing to the workspace.
+  - Added regression coverage for `template-api-db` producing a board with ALB, ASG, and RDS resources.
+- Verification:
+  - `pnpm --dir apps/web exec tsx --test features/resource-settings/template-library.test.ts app/workspace/new/workspace-start-options.test.ts features/workspace/repository-start-template-recommendation.test.ts`
+  - `pnpm --dir apps/web typecheck`
+  - `pnpm --dir apps/api exec tsx --test src/services/aiRepositoryAnalysis.test.ts src/routes/ai.test.ts`
+  - `pnpm harness:check`
+  - `pnpm lint` passed with the pre-existing `live-observations` `setNow` warning.
+  - `pnpm typecheck`
+  - `pnpm build`
+  - `git diff --check` passed with CRLF conversion warnings only.
+- Risk:
+  - Browser visual verification has not been rerun yet in this worktree.
+
 ## Next Action
 
-- Commit the focused inline Repository URL start follow-up.
+- Retry the new project Repository URL flow against a running local API/database and confirm it opens the workspace with the recommended draft.

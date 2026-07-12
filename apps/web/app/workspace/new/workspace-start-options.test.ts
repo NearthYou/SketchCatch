@@ -46,6 +46,13 @@ test("WorkspaceStartClient keeps Template and GitHub URL analysis as real start 
   assert.doesNotMatch(startClientSource, /workspace\/repository/);
 });
 
+test("WorkspaceStartClient shows Repository URL analysis before the primary action", () => {
+  assert.ok(
+    startClientSource.indexOf("<RepositoryUrlStartPanel") <
+      startClientSource.indexOf(`<div className={styles.actions}>`)
+  );
+});
+
 test("WorkspaceStartClient hydrates a stored form before persisting changes", () => {
   assert.match(startClientSource, /isStartFormHydrated/);
   assert.match(startClientSource, /if \(!isStartFormHydrated\) \{\s+return;/);

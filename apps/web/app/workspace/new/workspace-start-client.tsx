@@ -348,6 +348,25 @@ export function WorkspaceStartClient({
             />
           ) : null}
 
+          {selectedKind === "repository" && repositoryUrlFormVisible ? (
+            <RepositoryUrlStartPanel
+              analysis={repositoryAnalysis}
+              branch={repositoryDefaultBranch}
+              isSubmitting={isSubmitting}
+              onBranchChange={(value) => {
+                setRepositoryDefaultBranch(value);
+                setRepositoryAnalysis(null);
+                setErrorMessage("");
+              }}
+              onRepositoryUrlChange={(value) => {
+                setRepositoryUrl(value);
+                setRepositoryAnalysis(null);
+                setErrorMessage("");
+              }}
+              repositoryUrl={repositoryUrl}
+            />
+          ) : null}
+
           <div className={styles.actions}>
             <button
               className={styles.primaryAction}
@@ -374,25 +393,6 @@ export function WorkspaceStartClient({
               </button>
             ) : null}
           </div>
-
-          {selectedKind === "repository" && repositoryUrlFormVisible ? (
-            <RepositoryUrlStartPanel
-              analysis={repositoryAnalysis}
-              branch={repositoryDefaultBranch}
-              isSubmitting={isSubmitting}
-              onBranchChange={(value) => {
-                setRepositoryDefaultBranch(value);
-                setRepositoryAnalysis(null);
-                setErrorMessage("");
-              }}
-              onRepositoryUrlChange={(value) => {
-                setRepositoryUrl(value);
-                setRepositoryAnalysis(null);
-                setErrorMessage("");
-              }}
-              repositoryUrl={repositoryUrl}
-            />
-          ) : null}
 
           {errorMessage ? (
             <p className={styles.errorMessage} role="alert">
