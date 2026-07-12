@@ -6,7 +6,7 @@ Make every Template use the same ResourceItem definitions that users drag from t
 
 ## Problem
 
-The Template library currently builds DiagramJson nodes from raw Terraform type strings. That bypasses `resourceCatalog`, so nodes lose their AWS icon, palette defaults, and resource-kind semantics. The Workspace falls back to generic cube tiles and the gallery renders tiny label chips that overlap for dense templates.
+Before this change, the Template library built DiagramJson nodes from raw Terraform type strings. That bypassed `resourceCatalog`, so nodes lost their AWS icon, palette defaults, and resource-kind semantics. The Workspace fell back to generic cube tiles and the gallery rendered tiny label chips that overlapped for dense templates.
 
 ## Scope
 
