@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -14,8 +13,9 @@ import {
   type LucideIcon
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { TemplateGallery } from "../../../components/templates/TemplateGallery";
+import { ProductBrand } from "../../../components/ui/ProductBrand";
 import {
-  createGitHubSourceRepositoryInstallUrl,
   createProject,
   deleteProject,
   listAwsConnections,
@@ -39,7 +39,7 @@ const DEFAULT_REVERSE_CLOUD_PLATFORM = "aws";
 const START_MODE_ICONS: Record<WorkspaceStartKind, LucideIcon> = {
   ai: Bot,
   blank: LayoutPanelTop,
-  github: GitBranch,
+  repository: GitBranch,
   reverse: CloudDownload,
   template: Boxes
 };
@@ -53,6 +53,7 @@ type WorkspaceStartDraft = {
 type WorkspaceStartForm = {
   readonly projectName: string;
   readonly selectedKind: WorkspaceStartKind;
+  readonly selectedTemplateId: string | null;
 };
 
 const startModeOptions = createWorkspaceStartOptions();
@@ -60,11 +61,23 @@ const mainStartOptions = startModeOptions.filter((option) => option.kind !== "bl
 const blankStartOption = startModeOptions.find((option) => option.kind === "blank");
 const boardTemplates = listBoardTemplates();
 
-export function WorkspaceStartClient() {
+// 프로젝트 이름과 시작 방식을 받아 알맞은 생성 흐름으로 연결합니다.
+export function WorkspaceStartClient({
+  initialStartKind,
+  initialTemplateId
+}: {
+  readonly initialStartKind?: WorkspaceStartKind | undefined;
+  readonly initialTemplateId?: string | undefined;
+} = {}) {
   const router = useRouter();
   const [title, setTitle] = useState("");
-  const [selectedKind, setSelectedKind] = useState<WorkspaceStartKind>("ai");
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const [selectedKind, setSelectedKind] = useState<WorkspaceStartKind>(initialStartKind ?? "ai");
+  const [isStartFormHydrated, setIsStartFormHydrated] = useState(initialStartKind !== undefined);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(
+    boardTemplates.some((template) => template.id === initialTemplateId)
+      ? (initialTemplateId ?? null)
+      : null
+  );
   const [errorMessage, setErrorMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const selectedTemplate = useMemo(
@@ -77,23 +90,33 @@ export function WorkspaceStartClient() {
     (selectedKind !== "template" || selectedTemplate !== null);
 
   useEffect(() => {
+    if (initialStartKind) {
+      return;
+    }
+
     const storedForm = readWorkspaceStartForm();
 
     if (storedForm) {
       setTitle(storedForm.projectName);
       setSelectedKind(storedForm.selectedKind);
+      setSelectedTemplateId(storedForm.selectedTemplateId);
+    } else {
+      const aiDraft = readAiStartDraft();
+      if (aiDraft?.projectName) {
+        setTitle(aiDraft.projectName);
+      }
+    }
+
+    setIsStartFormHydrated(true);
+  }, [initialStartKind]);
+
+  useEffect(() => {
+    if (!isStartFormHydrated) {
       return;
     }
 
-    const aiDraft = readAiStartDraft();
-    if (aiDraft?.projectName) {
-      setTitle(aiDraft.projectName);
-    }
-  }, []);
-
-  useEffect(() => {
-    writeWorkspaceStartForm({ projectName: title, selectedKind });
-  }, [selectedKind, title]);
+    writeWorkspaceStartForm({ projectName: title, selectedKind, selectedTemplateId });
+  }, [isStartFormHydrated, selectedKind, selectedTemplateId, title]);
 
   async function handleContinue(): Promise<void> {
     const projectName = title.trim();
@@ -142,18 +165,16 @@ export function WorkspaceStartClient() {
           });
         }
 
-        if (action.openMode === "github") {
-          const { installUrl } = await createGitHubSourceRepositoryInstallUrl(project.id);
-          window.location.assign(installUrl);
-          return;
-        }
-
         clearWorkspaceStartForm();
         const params = new URLSearchParams({
           projectId: project.id,
           projectName: project.name
         });
-        router.push(`/workspace?${params.toString()}`);
+        router.push(
+          action.openMode === "repository"
+            ? `/workspace/repository?${params.toString()}`
+            : `/workspace?${params.toString()}`
+        );
       } catch (error) {
         // 시작용으로 방금 만든 빈 프로젝트만 정리해 실패한 시작 흔적을 남기지 않습니다.
         if (createdProjectId) {
@@ -175,10 +196,7 @@ export function WorkspaceStartClient() {
   return (
     <main className={styles.page}>
       <header className={styles.topbar}>
-        <Link className={styles.brand} href="/dashboard" aria-label="SketchCatch Dashboard">
-          <Image alt="" height={24} priority src="/sketchcatch-logo.png" width={16} />
-          <span>SketchCatch</span>
-        </Link>
+        <ProductBrand />
         <strong>새 프로젝트</strong>
         <Link className={styles.backLink} href="/dashboard">
           <ArrowLeft aria-hidden="true" size={17} />
@@ -222,13 +240,14 @@ export function WorkspaceStartClient() {
                   role="radio"
                   type="button"
                 >
-                  <span className={styles.optionIcon}><Icon aria-hidden="true" size={20} /></span>
+                  <span className={styles.optionIcon}>
+                    <Icon aria-hidden="true" size={20} />
+                  </span>
                   <span className={styles.optionCopy}>
                     <strong>{option.title}</strong>
                     <small>{option.description}</small>
                   </span>
                   {option.kind === "reverse" ? <em>AWS Role 필요</em> : null}
-                  {option.kind === "github" ? <em>연결만 지원</em> : null}
                 </button>
               );
             })}
@@ -242,12 +261,6 @@ export function WorkspaceStartClient() {
             />
           ) : null}
 
-          {selectedKind === "github" ? (
-            <p className={styles.boundaryNotice} role="status">
-              Repository 연결은 동작합니다. Repository Analysis와 Template Selection은 아직 연결 중입니다.
-            </p>
-          ) : null}
-
           <div className={styles.actions}>
             <button
               className={styles.primaryAction}
@@ -255,12 +268,18 @@ export function WorkspaceStartClient() {
               onClick={() => void handleContinue()}
               type="button"
             >
-              {isSubmitting ? <LoaderCircle aria-hidden="true" className={styles.spinner} size={17} /> : null}
+              {isSubmitting ? (
+                <LoaderCircle aria-hidden="true" className={styles.spinner} size={17} />
+              ) : null}
               {isSubmitting ? "처리 중" : getContinueLabel(selectedKind)}
             </button>
             {blankStartOption ? (
               <button
-                className={selectedKind === "blank" ? `${styles.blankAction} ${styles.blankActionSelected}` : styles.blankAction}
+                className={
+                  selectedKind === "blank"
+                    ? `${styles.blankAction} ${styles.blankActionSelected}`
+                    : styles.blankAction
+                }
                 onClick={() => selectStartKind("blank")}
                 type="button"
               >
@@ -269,13 +288,18 @@ export function WorkspaceStartClient() {
             ) : null}
           </div>
 
-          {errorMessage ? <p className={styles.errorMessage} role="alert">{errorMessage}</p> : null}
+          {errorMessage ? (
+            <p className={styles.errorMessage} role="alert">
+              {errorMessage}
+            </p>
+          ) : null}
         </section>
       </div>
     </main>
   );
 }
 
+// Reverse만 AWS 연결을 확인하고 나머지는 선택값만으로 다음 단계를 정합니다.
 async function resolveStartAction({
   projectName,
   selectedKind
@@ -301,6 +325,7 @@ async function resolveStartAction({
   });
 }
 
+// 공통 Template Gallery를 새 프로젝트의 선택 단계로 보여줍니다.
 function TemplatePicker({
   onSelect,
   selectedTemplateId,
@@ -316,36 +341,22 @@ function TemplatePicker({
         <h2 id="template-picker-title">Template 선택</h2>
         <span>{templates.length}개</span>
       </div>
-      <div className={styles.templateList}>
-        {templates.map((template) => {
-          const selected = template.id === selectedTemplateId;
-
-          return (
-            <button
-              aria-pressed={selected}
-              className={selected ? `${styles.templateOption} ${styles.templateOptionSelected}` : styles.templateOption}
-              key={template.id}
-              onClick={() => onSelect(template.id)}
-              type="button"
-            >
-              <span>
-                <strong>{template.title}</strong>
-                <small>{template.tags.join(" · ")}</small>
-              </span>
-              <em>{template.diagramJson.nodes.length} Resources · {template.diagramJson.edges.length} relations</em>
-            </button>
-          );
-        })}
-      </div>
+      <TemplateGallery
+        actionLabel="이 Template 선택"
+        onSelect={onSelect}
+        selectedTemplateId={selectedTemplateId}
+        templates={templates}
+      />
     </section>
   );
 }
 
+// 선택한 시작 방식에 맞는 한 개의 주 행동 문구를 반환합니다.
 function getContinueLabel(kind: WorkspaceStartKind): string {
   const labels: Record<WorkspaceStartKind, string> = {
     ai: "AI로 계속",
     blank: "빈 보드 열기",
-    github: "GitHub 연결",
+    repository: "Repository 연결하기",
     reverse: "기존 AWS 가져오기",
     template: "Template으로 시작"
   };
@@ -353,6 +364,7 @@ function getContinueLabel(kind: WorkspaceStartKind): string {
   return labels[kind];
 }
 
+// 뒤로 돌아왔을 때 사용자가 고른 이름, 방식, Template을 복원합니다.
 function readWorkspaceStartForm(): WorkspaceStartForm | null {
   if (typeof window === "undefined") return null;
 
@@ -362,14 +374,21 @@ function readWorkspaceStartForm(): WorkspaceStartForm | null {
 
     if (!value || typeof value !== "object") return null;
     const candidate = value as Partial<WorkspaceStartForm>;
-    return typeof candidate.projectName === "string" && isWorkspaceStartKind(candidate.selectedKind)
-      ? { projectName: candidate.projectName, selectedKind: candidate.selectedKind }
+    return typeof candidate.projectName === "string" &&
+      isWorkspaceStartKind(candidate.selectedKind) &&
+      (candidate.selectedTemplateId === null || typeof candidate.selectedTemplateId === "string")
+      ? {
+          projectName: candidate.projectName,
+          selectedKind: candidate.selectedKind,
+          selectedTemplateId: candidate.selectedTemplateId
+        }
       : null;
   } catch {
     return null;
   }
 }
 
+// 새 프로젝트 입력 중인 값을 현재 browser 탭에만 임시 저장합니다.
 function writeWorkspaceStartForm(form: WorkspaceStartForm): void {
   if (typeof window === "undefined") return;
 
@@ -380,11 +399,13 @@ function writeWorkspaceStartForm(form: WorkspaceStartForm): void {
   }
 }
 
+// 프로젝트 생성이 끝난 뒤 임시 입력값을 지웁니다.
 function clearWorkspaceStartForm(): void {
   if (typeof window === "undefined") return;
   window.sessionStorage.removeItem(START_FORM_STORAGE_KEY);
 }
 
+// AI 시작 화면에서 이어 쓸 프로젝트 이름을 복원합니다.
 function readAiStartDraft(): WorkspaceStartDraft | null {
   if (typeof window === "undefined") return null;
 
@@ -397,6 +418,7 @@ function readAiStartDraft(): WorkspaceStartDraft | null {
   }
 }
 
+// AI 시작 화면으로 이동하기 전에 프로젝트 이름을 임시 저장합니다.
 function writeAiStartDraft(draft: WorkspaceStartDraft): void {
   if (typeof window === "undefined") return;
 
@@ -407,6 +429,7 @@ function writeAiStartDraft(draft: WorkspaceStartDraft): void {
   }
 }
 
+// browser 저장값이 AI 시작 입력으로 안전한 모양인지 확인합니다.
 function isWorkspaceStartDraft(value: unknown): value is WorkspaceStartDraft {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<WorkspaceStartDraft>;
@@ -419,6 +442,13 @@ function isWorkspaceStartDraft(value: unknown): value is WorkspaceStartDraft {
   );
 }
 
+// browser 저장값을 지원하는 다섯 시작 방식으로 제한합니다.
 function isWorkspaceStartKind(value: unknown): value is WorkspaceStartKind {
-  return value === "ai" || value === "reverse" || value === "template" || value === "github" || value === "blank";
+  return (
+    value === "ai" ||
+    value === "reverse" ||
+    value === "template" ||
+    value === "repository" ||
+    value === "blank"
+  );
 }

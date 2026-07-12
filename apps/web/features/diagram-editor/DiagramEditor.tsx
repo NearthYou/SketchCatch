@@ -173,8 +173,10 @@ export function DiagramEditor(props: DiagramEditorProps) {
 }
 
 function DiagramEditorInner({
+  allowPreviewInspection = false,
   dashboardHref = "/dashboard",
   draftStatusPanel,
+  emptyBoardDescription = "Drag resources from the left panel onto the canvas.",
   floatingPanel,
   initialDiagram,
   leftPanel,
@@ -1630,10 +1632,15 @@ function DiagramEditorInner({
     (_event: ReactMouseEvent, node: DiagramFlowNode) => {
       setSelectedNodeIds([node.id]);
       setSelectedEdgeIds([]);
-      setInspectedNodeId(null);
+      if (isPreviewActive && allowPreviewInspection) {
+        setInspectedNodeId(node.id);
+        setRightPanelOpen(true);
+      } else {
+        setInspectedNodeId(null);
+      }
       focusEditorShell();
     },
-    [focusEditorShell]
+    [allowPreviewInspection, focusEditorShell, isPreviewActive]
   );
 
   const handleFlowNodeDoubleClick = useCallback(
@@ -2148,7 +2155,7 @@ function DiagramEditorInner({
           {visibleDiagram.nodes.length === 0 ? (
             <div className={styles.emptyState} aria-hidden="true">
               <strong>Empty diagram</strong>
-              <span>Drag resources from the left panel onto the canvas.</span>
+              <span>{emptyBoardDescription}</span>
             </div>
           ) : null}
 
@@ -2157,7 +2164,7 @@ function DiagramEditorInner({
             defaultViewport={DEFAULT_DIAGRAM_VIEWPORT}
             deleteKeyCode={null}
             edges={flowEdges}
-            elementsSelectable={!isPreviewActive}
+            elementsSelectable={!isPreviewActive || allowPreviewInspection}
             maxZoom={2}
             minZoom={0.25}
             multiSelectionKeyCode={["Shift", "Meta", "Control"]}
@@ -2198,7 +2205,9 @@ function DiagramEditorInner({
                   onPaneClick: handlePaneClick,
                   onSelectionChange: handleSelectionChange
                 }
-              : {})}
+              : allowPreviewInspection
+                ? { onNodeClick: handleFlowNodeClick }
+                : {})}
           >
             <Background bgColor="#ffffff" color="#d8e0ef" gap={24} size={1} variant={BackgroundVariant.Dots} />
           </ReactFlow>
