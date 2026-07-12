@@ -1685,6 +1685,21 @@ test("workspace modernization preserves action ownership", () => {
   assert.match(aiChatDockSource, /applyPatchPreviewToBoard/);
 });
 
+test("AI chat keeps a fixed composer and scroll-only transcript", () => {
+  const dockRule = getLastCssRuleAfter(stylesSource, "aiChatDock", 0);
+  const transcriptRule = getLastCssRuleAfter(stylesSource, "aiChatTranscript", 0);
+  const composerRule = getLastCssRuleAfter(stylesSource, "aiChatComposer", 0);
+
+  assert.match(dockRule, /grid-template-rows:\s*auto auto minmax\(0,\s*1fr\) auto/);
+  assert.match(dockRule, /width:\s*var\(--workspace-panel-width/);
+  assert.match(transcriptRule, /overflow-y:\s*auto/);
+  assert.match(composerRule, /border-top:\s*1px solid var\(--workspace-line/);
+  assert.match(
+    stylesSource,
+    /@media \(max-width:\s*768px\)[\s\S]*?\.aiChatDock[\s\S]*?height:\s*100dvh;[\s\S]*?env\(safe-area-inset-bottom\)/
+  );
+});
+
 test("architecture panel owns only Resource and Terraform", () => {
   assert.match(workspaceRightPanelTypesSource, /"resource" \| "terraform"/);
   assert.doesNotMatch(workspaceRightPanelTypesSource, /"deployment"/);

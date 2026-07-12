@@ -107,6 +107,14 @@ test("workspace AI patch clarification can decline optional resource additions",
   assert.match(workspaceAiChatDockSource, /setPatchPreviewModel\(null\)/);
 });
 
+test("workspace AI keeps explicit preview approval without deployment execution ownership", () => {
+  assert.match(workspaceAiChatDockSource, /applyDraftToBoard/);
+  assert.match(workspaceAiChatDockSource, /applyPatchPreviewToBoard/);
+  assert.doesNotMatch(workspaceAiChatDockSource, /approveCurrentPlan/);
+  assert.doesNotMatch(workspaceAiChatDockSource, /runDeploymentApply/);
+  assert.doesNotMatch(workspaceAiChatDockSource, /createGitCicdHandoff/);
+});
+
 function readWorkspaceFile(fileName: string): string {
   return readFileSync(fileURLToPath(new URL(fileName, import.meta.url)), "utf8");
 }

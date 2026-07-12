@@ -5480,8 +5480,11 @@
 .aiChatLauncher {
   background: var(--workspace-accent, #000000);
   border-color: var(--workspace-accent, #000000);
+  border-radius: var(--workspace-control-radius, 8px);
   box-shadow: 0 18px 44px rgba(23, 23, 23, 0.16);
   color: #ffffff;
+  height: var(--workspace-ai-launcher-size, 44px);
+  width: var(--workspace-ai-launcher-size, 44px);
 }
 
 .aiChatDock {
@@ -5490,10 +5493,21 @@
   border-radius: 8px;
   box-shadow: 0 24px 70px rgba(23, 23, 23, 0.16);
   color: var(--workspace-text, #171717);
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  width: var(--workspace-panel-width, clamp(376px, 30vw, 416px));
 }
 
 .aiChatTranscript {
   background: var(--workspace-surface-muted, #fafafa);
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.aiChatComposer {
+  background: var(--workspace-surface, #ffffff);
+  border-top: 1px solid var(--workspace-line, #f0f0f3);
+  padding: 12px 16px 16px;
 }
 
 .aiChatTabButton[aria-selected="true"] {
@@ -5542,6 +5556,9 @@
   border-color: var(--workspace-line, #f0f0f3);
   border-radius: 8px;
   color: var(--workspace-text, #171717);
+  max-height: calc(1.5em * 6 + 24px);
+  min-height: 44px;
+  resize: none;
 }
 
 .aiChatVoiceButton {
@@ -5549,6 +5566,14 @@
   border-color: var(--workspace-line, #f0f0f3);
   border-radius: 8px;
   color: var(--workspace-text, #171717);
+  min-height: var(--workspace-control-height, 40px);
+}
+
+.aiChatSendButton {
+  background: var(--workspace-accent, #000000);
+  border-color: var(--workspace-accent, #000000);
+  color: #ffffff;
+  min-height: var(--workspace-control-height, 40px);
 }
 
 .aiChatVoiceButton[data-listening="true"] {
@@ -5556,6 +5581,21 @@
   border-color: var(--workspace-accent, #000000);
   box-shadow: 0 0 0 3px rgba(23, 23, 23, 0.1);
   color: var(--workspace-text, #171717);
+}
+
+@media (max-width: 768px) {
+  .aiChatDock,
+  .aiChatDock[data-right-panel-open="true"] {
+    border: 0;
+    border-radius: 0;
+    height: 100dvh;
+    inset: 0;
+    max-height: none;
+    min-height: 0;
+    padding-bottom: env(safe-area-inset-bottom);
+    position: fixed;
+    width: 100vw;
+  }
 }
 
 .deploymentStageStepper {
