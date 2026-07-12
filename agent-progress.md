@@ -5,7 +5,7 @@ Short English-only working log for the current agent context. Older records are 
 ## Current Verified State
 
 - Branch: `feat/ck/349-repo-analysis`.
-- Public Repository recommendation uses supported candidates plus schema-validated OpenAI ranking and Korean reasons/questions, with deterministic fallback.
+- Public Repository recommendation always attempts schema-validated OpenAI ranking when `OPENAI_API_KEY` exists, with Korean deterministic fallback only on failure.
 - Deployment type is hidden when repository evidence is decisive and shown only for ambiguous analysis.
 - CI/CD handoff is a prominent standalone setting; its GitHub App repository panel appears only while enabled.
 - Public Repository setup confirms Template and CI/CD before opening a separate follow-up-question stage.
@@ -28,7 +28,7 @@ Short English-only working log for the current agent context. Older records are 
 - Verification:
   - Focused recommendation tests, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
   - Lint retains only the pre-existing API `setNow` warning.
-  - Browser-verified ECS and serverless Template-specific question sets, transitions, and direct choice selection.
+  - Browser-verified Template-specific choices and live-smoke-tested OpenAI Korean ranking with the configured API key.
 
 ### 2026-07-12 - Fail fast when API database URL is missing
 
@@ -216,4 +216,4 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Next Action
 
-- Run an opt-in live OpenAI smoke test when deployment credentials are available.
+- Await review or the #350 handoff after the hybrid recommendation commit.

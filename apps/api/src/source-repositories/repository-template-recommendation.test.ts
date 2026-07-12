@@ -2,9 +2,16 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { RepositoryTemplateRecommendationInput } from "./repository-template-recommendation.js";
 import {
+  isRepositoryTemplateAiRankingConfigured,
   recommendRepositoryTemplates,
   recommendRepositoryTemplatesWithAi
 } from "./repository-template-recommendation.js";
+
+test("Repository AI ranking is enabled by an OpenAI API key without a provider flag", () => {
+  assert.equal(isRepositoryTemplateAiRankingConfigured({ OPENAI_API_KEY: "test-key" }), true);
+  assert.equal(isRepositoryTemplateAiRankingConfigured({ OPENAI_API_KEY: "  " }), false);
+  assert.equal(isRepositoryTemplateAiRankingConfigured({}), false);
+});
 
 test("AI ranks only supported repository templates and generates template-specific questions", async () => {
   let capturedInput = "";

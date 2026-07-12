@@ -157,10 +157,9 @@ export async function recommendRepositoryTemplatesWithAi(
 }
 
 function createConfiguredRepositoryTemplateRankingClient(): RepositoryTemplateRankingClient | undefined {
-  const provider = process.env.AI_REPOSITORY_TEMPLATE_RANKER ?? process.env.AI_LLM_PROVIDER;
   const apiKey = process.env.OPENAI_API_KEY?.trim();
 
-  if (provider !== "openai" || !apiKey) {
+  if (!isRepositoryTemplateAiRankingConfigured(process.env) || !apiKey) {
     return undefined;
   }
 
@@ -185,6 +184,12 @@ function createConfiguredRepositoryTemplateRankingClient(): RepositoryTemplateRa
       }
     }
   };
+}
+
+export function isRepositoryTemplateAiRankingConfigured(
+  environment: Readonly<Record<string, string | undefined>>
+): boolean {
+  return Boolean(environment.OPENAI_API_KEY?.trim());
 }
 
 function createRepositoryTemplateRankingInstructions(): string {
