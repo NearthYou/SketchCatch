@@ -83,9 +83,7 @@ git commit -m "Feat: 템플릿 형제 리소스 충돌 제거기 추가"
 
 **Files:**
 - Modify: `apps/web/features/resource-settings/template-topology-layout.ts`
-- Modify: `apps/web/features/resource-settings/template-library.test.ts`
-- Modify: `apps/web/features/resource-settings/template-resource-materializer.test.ts`
-- Modify: `apps/web/components/templates/template-preview-model.test.ts`
+- Create: `apps/web/features/resource-settings/template-sibling-collision-integration.test.ts`
 
 **Interfaces:**
 - Consumes: `resolveTemplateSiblingVisualCollisions(diagram, 40)` from Task 1.
@@ -107,7 +105,7 @@ assert.deepEqual(hydratedDraft.nodes[0]?.position, savedDraft.nodes[0]?.position
 Run:
 
 ```bash
-pnpm --dir apps/web exec tsx --test features/resource-settings/template-library.test.ts features/resource-settings/template-resource-materializer.test.ts components/templates/template-preview-model.test.ts
+pnpm --dir apps/web exec tsx --test features/resource-settings/template-sibling-collision-integration.test.ts
 ```
 
 Expected: FAIL and report the seven current Live Observation sibling collisions.
@@ -131,7 +129,7 @@ Move the five root S3 resources into two 120px-separated columns entirely left o
 Run:
 
 ```bash
-pnpm --dir apps/web exec tsx --test features/resource-settings/template-sibling-collision-layout.test.ts features/resource-settings/template-topology-layout.test.ts features/resource-settings/template-resource-materializer.test.ts features/resource-settings/template-library.test.ts components/templates/template-preview-model.test.ts
+pnpm --dir apps/web exec tsx --test features/resource-settings/template-sibling-collision-layout.test.ts features/resource-settings/template-sibling-collision-integration.test.ts features/resource-settings/template-topology-layout.test.ts features/resource-settings/template-resource-materializer.test.ts features/resource-settings/template-library.test.ts components/templates/template-preview-model.test.ts
 ```
 
 Expected: all tests PASS and the built-in collision count is zero.
@@ -143,7 +141,7 @@ Run `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build`. Expec
 - [ ] **Step 6: Commit Task 2**
 
 ```bash
-git add apps/web/features/resource-settings/template-topology-layout.ts apps/web/features/resource-settings/template-library.test.ts apps/web/features/resource-settings/template-resource-materializer.test.ts apps/web/components/templates/template-preview-model.test.ts agent-progress.md
+git add apps/web/features/resource-settings/template-topology-layout.ts apps/web/features/resource-settings/template-sibling-collision-integration.test.ts agent-progress.md
 git commit -m "Fix: 템플릿 리소스 시각 충돌 제거"
 ```
 
