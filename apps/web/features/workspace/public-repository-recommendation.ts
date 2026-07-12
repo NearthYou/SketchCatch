@@ -172,6 +172,17 @@ function createPublicRepositoryTemplateCandidates(input: {
     candidateIds.add("minimal-serverless-api");
   }
 
+  const comparisonCandidates: Readonly<Record<RepositoryDeploymentType, readonly TemplateId[]>> = {
+    container: ["ecs-fargate-container-app", "eks-container-app"],
+    ec2_vm: ["three-tier-web-app", "ecs-fargate-container-app"],
+    serverless: ["full-serverless-web-app", "minimal-serverless-api"]
+  };
+
+  for (const templateId of comparisonCandidates[input.deploymentType]) {
+    if (candidateIds.size >= 2) break;
+    candidateIds.add(templateId);
+  }
+
   return [...candidateIds]
     .map((templateId) => {
       const candidate = createCandidate(templateId, signals, input.deploymentType, input.answers);

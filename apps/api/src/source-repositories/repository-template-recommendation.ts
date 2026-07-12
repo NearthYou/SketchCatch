@@ -245,44 +245,41 @@ function hydrateAiRecommendation(
   parsed: z.infer<typeof aiRecommendationSchema>
 ): RepositoryTemplateRecommendationResult | null {
   const fallbackById = new Map(fallback.candidates.map((candidate) => [candidate.templateId, candidate]));
-  const parsedIds = parsed.candidates.map((candidate) => candidate.templateId);
+  const candidates: RepositoryTemplateRecommendationCandidate[] = [];
+  const acceptedTemplateIds = new Set<TemplateId>();
 
-  if (
-    parsedIds.length !== fallback.candidates.length
-    || new Set(parsedIds).size !== parsedIds.length
-    || parsedIds.some((templateId) => !fallbackById.has(templateId))
-  ) {
-    return null;
-  }
-
-  const candidates = parsed.candidates.map((candidate) => {
+  for (const candidate of parsed.candidates) {
     const fallbackCandidate = fallbackById.get(candidate.templateId);
 
-    if (!fallbackCandidate) {
-      return null;
+    if (!fallbackCandidate || acceptedTemplateIds.has(candidate.templateId)) {
+      continue;
     }
 
-    if ([...candidate.reasons, ...candidate.tradeoffs].some((text) => !containsKorean(text))) {
-      return null;
-    }
+    const canUseAiExplanations = [...candidate.reasons, ...candidate.tradeoffs]
+      .every(containsKorean);
 
     const supportedQuestions = createTemplateSpecificQuestions(input, candidate.templateId);
     const supportedById = new Map(supportedQuestions.map((question) => [question.id, question]));
     const questionIds = candidate.questions.map((question) => question.id);
+    const normalizedPrompts = candidate.questions.map((question) => normalizeQuestionPrompt(question.prompt));
 
     const canUseAiQuestions = questionIds.length === supportedQuestions.length
       && new Set(questionIds).size === questionIds.length
+      && new Set(normalizedPrompts).size === normalizedPrompts.length
       && questionIds.every((questionId) => supportedById.has(questionId))
       && candidate.questions.every(
-        (question) => containsKorean(question.prompt) && containsKorean(question.reason)
+        (question) =>
+          containsKorean(question.prompt)
+          && containsKorean(question.reason)
+          && isQuestionPromptAligned(question.id, question.prompt)
       );
 
-    return {
+    candidates.push({
       templateId: candidate.templateId,
       displayTitle: fallbackCandidate.displayTitle,
       confidence: candidate.confidence,
-      reasons: candidate.reasons,
-      tradeoffs: candidate.tradeoffs,
+      reasons: canUseAiExplanations ? candidate.reasons : fallbackCandidate.reasons,
+      tradeoffs: canUseAiExplanations ? candidate.tradeoffs : fallbackCandidate.tradeoffs,
       questions: canUseAiQuestions
         ? candidate.questions.map((question) => ({
             ...supportedById.get(question.id)!,
@@ -290,23 +287,57 @@ function hydrateAiRecommendation(
             reason: question.reason
           }))
         : supportedQuestions
-    } satisfies RepositoryTemplateRecommendationCandidate;
-  });
+    } satisfies RepositoryTemplateRecommendationCandidate);
+    acceptedTemplateIds.add(candidate.templateId);
+  }
 
-  if (candidates.some((candidate) => candidate === null)) {
+  if (acceptedTemplateIds.size === 0) {
     return null;
+  }
+
+  const includedTemplateIds = new Set(candidates.map((candidate) => candidate.templateId));
+  for (const fallbackCandidate of fallback.candidates) {
+    if (!includedTemplateIds.has(fallbackCandidate.templateId)) {
+      candidates.push(fallbackCandidate);
+    }
   }
 
   return {
     deploymentType: fallback.deploymentType,
     usesCiCd: fallback.usesCiCd,
-    candidates: (candidates as RepositoryTemplateRecommendationCandidate[])
-      .sort((left, right) => right.confidence - left.confidence)
+    candidates: candidates.sort((left, right) => right.confidence - left.confidence)
   };
 }
 
 function containsKorean(value: string): boolean {
   return /[가-힣]/.test(value);
+}
+
+function normalizeQuestionPrompt(value: string): string {
+  return value.toLowerCase().replace(/[\s?.!,]/g, "");
+}
+
+function isQuestionPromptAligned(questionId: string, prompt: string): boolean {
+  if (questionId === "primary_runtime") {
+    return /api|런타임|node|python/i.test(prompt)
+      && /어떤|무엇|선택|중심|포함/i.test(prompt);
+  }
+
+  if (questionId === "include_frontend") {
+    return /프론트|react|웹/i.test(prompt)
+      && /포함|사용|추가|배치/i.test(prompt)
+      && /아키텍처|템플릿|구성/i.test(prompt)
+      && !/데이터베이스|database|db/i.test(prompt);
+  }
+
+  if (questionId === "include_database") {
+    return /데이터|database|db|저장소|postgres|mysql|dynamo|rds/i.test(prompt)
+      && /포함|사용|추가|배치/i.test(prompt)
+      && /아키텍처|템플릿|구성/i.test(prompt)
+      && !/클러스터|pod|파드|컨테이너 내부|컨테이너에/i.test(prompt);
+  }
+
+  return false;
 }
 
 function inferRepositoryDeploymentType(
@@ -444,12 +475,25 @@ function createSupportedCandidateSet(
   const wantsEks = /\beks\b|kubernetes|helm|kustomization/.test(text);
 
   if (input.deploymentType === "ec2_vm") {
+    const alternative = hasFrontend && hasBackend
+      ? candidate("ecs-fargate-container-app", 0.6, [
+          "동일한 웹과 API 구조를 컨테이너 운영 방식으로 전환할 때 비교할 수 있는 대안입니다."
+        ], [
+          "현재 EC2/VM 배포 근거를 직접 반영하려면 이미지 빌드와 컨테이너 배포 흐름을 추가해야 합니다."
+        ])
+      : candidate("minimal-serverless-api", 0.58, [
+          "백엔드 API를 관리형 실행 환경으로 단순화할 때 비교할 수 있는 대안입니다."
+        ], [
+          "현재 EC2/VM 운영 방식과 달라 런타임과 데이터 계층을 서버리스 구조에 맞게 조정해야 합니다."
+        ]);
+
     return [
       candidate("three-tier-web-app", 0.82, [
         "EC2/VM 배포 방식이 ALB, Auto Scaling, RDS로 구성된 지원 템플릿과 잘 맞습니다."
       ], [
         "서버리스나 Fargate 템플릿보다 직접 운영해야 하는 인프라가 많습니다."
-      ])
+      ]),
+      alternative
     ];
   }
 

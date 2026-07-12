@@ -13,6 +13,31 @@ test("Repository AI ranking is enabled by an OpenAI API key without a provider f
   assert.equal(isRepositoryTemplateAiRankingConfigured({}), false);
 });
 
+test("every deployment type returns at least two unique candidates with non-duplicated relevant questions", () => {
+  for (const deploymentType of ["ec2_vm", "container", "serverless"] as const) {
+    const recommendation = recommendRepositoryTemplates({
+      ...createInput(),
+      deploymentType
+    });
+
+    assert.ok(recommendation.candidates.length >= 2, deploymentType);
+    assert.ok(recommendation.candidates.length <= 3, deploymentType);
+    assert.equal(
+      new Set(recommendation.candidates.map((candidate) => candidate.templateId)).size,
+      recommendation.candidates.length,
+      deploymentType
+    );
+
+    for (const candidate of recommendation.candidates) {
+      const questions = candidate.questions ?? [];
+      assert.ok(questions.length <= 5, candidate.templateId);
+      assert.equal(new Set(questions.map((question) => question.id)).size, questions.length);
+      assert.equal(new Set(questions.map((question) => question.prompt)).size, questions.length);
+      assert.ok(questions.every((question) => question.required));
+    }
+  }
+});
+
 test("AI ranks only supported repository templates and generates template-specific questions", async () => {
   let capturedInput = "";
   const input = createInput();
@@ -80,6 +105,45 @@ test("AI ranks only supported repository templates and generates template-specif
   assert.equal(recommendation.candidates[1]?.questions?.[0]?.answerType, "boolean");
 });
 
+test("AI ranking keeps a valid partial ranking and fills omitted candidates deterministically", async () => {
+  const input = createInput();
+  const fallback = recommendRepositoryTemplates(input);
+  const [firstCandidate] = fallback.candidates;
+  assert.ok(firstCandidate);
+
+  const recommendation = await recommendRepositoryTemplatesWithAi(input, {
+    client: {
+      responses: {
+        parse: async () => ({
+          output_parsed: {
+            candidates: [
+              {
+                templateId: firstCandidate.templateId,
+                confidence: 0.91,
+                reasons: ["AI가 Docker와 컨테이너 실행 근거를 다시 평가했습니다."],
+                tradeoffs: ["대체 운영 방식과 이식성을 함께 검토해야 합니다."],
+                questions: (firstCandidate.questions ?? []).map((question) => ({
+                  id: question.id,
+                  prompt: question.prompt,
+                  reason: question.reason
+                }))
+              }
+            ]
+          }
+        })
+      }
+    }
+  });
+
+  assert.equal(recommendation.rankingSource, "ai");
+  assert.equal(recommendation.fallbackReason, undefined);
+  assert.equal(recommendation.candidates.length, fallback.candidates.length);
+  assert.equal(recommendation.candidates[0]?.confidence, 0.91);
+  assert.ok(recommendation.candidates.some(
+    (candidate) => candidate.templateId === fallback.candidates[1]?.templateId
+  ));
+});
+
 test("AI ranking falls back when it returns a template outside the supported candidate set", async () => {
   const input = createInput();
   const fallback = recommendRepositoryTemplates(input);
@@ -128,7 +192,7 @@ test("AI ranking falls back when the provider fails", async () => {
   assert.equal(recommendation.fallbackReason, "provider_error");
 });
 
-test("AI ranking falls back when user-facing explanations are not Korean", async () => {
+test("AI ranking keeps AI scores but replaces non-Korean explanations", async () => {
   const input = createInput();
   const fallback = recommendRepositoryTemplates(input);
   const recommendation = await recommendRepositoryTemplatesWithAi(input, {
@@ -138,7 +202,7 @@ test("AI ranking falls back when user-facing explanations are not Korean", async
           output_parsed: {
             candidates: fallback.candidates.map((candidate) => ({
               templateId: candidate.templateId,
-              confidence: candidate.confidence,
+              confidence: Math.min(candidate.confidence + 0.01, 1),
               reasons: ["English reason"],
               tradeoffs: ["English tradeoff"],
               questions: (candidate.questions ?? []).map((question) => ({
@@ -153,9 +217,11 @@ test("AI ranking falls back when user-facing explanations are not Korean", async
     }
   });
 
-  assert.deepEqual(recommendation.candidates, fallback.candidates);
-  assert.equal(recommendation.rankingSource, "deterministic");
-  assert.equal(recommendation.fallbackReason, "invalid_response");
+  assert.equal(recommendation.rankingSource, "ai");
+  assert.equal(recommendation.fallbackReason, undefined);
+  assert.equal(recommendation.candidates[0]?.confidence, fallback.candidates[0]!.confidence + 0.01);
+  assert.deepEqual(recommendation.candidates[0]?.reasons, fallback.candidates[0]?.reasons);
+  assert.deepEqual(recommendation.candidates[0]?.tradeoffs, fallback.candidates[0]?.tradeoffs);
 });
 
 test("AI ranking keeps valid AI explanations when its question set needs deterministic repair", async () => {
@@ -171,7 +237,13 @@ test("AI ranking keeps valid AI explanations when its question set needs determi
               confidence: candidate.confidence + 0.01,
               reasons: ["저장소의 컨테이너 근거를 AI가 다시 평가했습니다."],
               tradeoffs: ["운영 복잡도를 함께 검토해야 합니다."],
-              questions: []
+              questions: (candidate.questions ?? []).map((question) => ({
+                id: question.id,
+                prompt: question.id === "include_database"
+                  ? "데이터베이스를 Kubernetes 클러스터 구성에 포함할까요?"
+                  : "배포 색상은 무엇으로 할까요?",
+                reason: "질문의 답변 방식이나 의미가 허용된 질문 ID와 맞지 않습니다."
+              }))
             }))
           }
         })

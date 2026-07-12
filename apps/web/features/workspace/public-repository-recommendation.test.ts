@@ -72,6 +72,28 @@ test("repository recommendation uses backend-ranked candidates without synthesiz
   );
 });
 
+test("legacy public analysis fallback still returns at least two comparison candidates", () => {
+  for (const deploymentType of ["ec2_vm", "container", "serverless"] as const) {
+    const recommendation = createPublicRepositoryRecommendation({
+      analysis: {
+        ...createAnalysis(),
+        aiHandoff: undefined,
+        detectedSignals: [],
+        recommendedTemplateId: null
+      },
+      answers: {},
+      deploymentType
+    });
+
+    assert.ok(recommendation.candidates.length >= 2, deploymentType);
+    assert.equal(
+      new Set(recommendation.candidates.map((candidate) => candidate.templateId)).size,
+      recommendation.candidates.length,
+      deploymentType
+    );
+  }
+});
+
 test("deployment type is only requested when repository evidence cannot determine it", () => {
   const ambiguousAnalysis: SourceRepositoryAnalysisResult = {
     ...createAnalysis(),
