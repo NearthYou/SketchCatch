@@ -194,6 +194,7 @@ Short English-only working log for the current agent context. Older records are 
 - Reused the shared Trivy snapshot between the button check and Terraform Plan when artifact content is unchanged.
 - Added an immediate in-process gate for Public S3, open SSH, Public RDS, and IAM wildcard; Trivy now completes in the background and the UI merges its result without delaying Plan creation.
 - Kept high findings visible in the Plan summary without using them as an approval blocker; existing legacy `blocksApproval` metadata is also ignored by the Plan approval UI and API.
+- Updated the canonical product safety policy and documented `blocksApproval` as compatibility metadata that Direct Plan approval does not enforce.
 
 ## Verification
 

@@ -34,7 +34,7 @@ SketchCatch는 단순 다이어그램 도구가 아니다.
 - 음성 요구사항은 Amazon Transcribe 기반 Voice Requirement Input으로 받고, 사용자가 확인한 뒤 Requirement Prompt로 확정한다.
 - 다이어그램과 Terraform이 같은 설계 데이터를 바라보게 한다.
 - AI, Bedrock, Amazon Q Assistance는 Architecture Draft, 설명, 리뷰, 수정 제안을 보강한다.
-- 배포 전 비용, 보안, 설정 위험을 보여주고 High Security Risk는 Deployment Safety Gate에서 차단한다.
+- 배포 전 비용, 보안, 설정 위험을 보여주되 High Security Risk도 사용자 검토 정보로 유지하며 Terraform Plan 승인은 허용한다.
 - 사용자가 승인한 Terraform Plan만 Direct Deployment Path로 실제 클라우드에 반영한다.
 - 팀 운영 배포는 Source Repository와 Git/CI/CD Integration으로 넘긴다.
 - Reverse Engineering은 기존 클라우드 Resource를 Provider Adapter로 스캔해 Practice Architecture와 IaC Preview/import 제안으로 전환한다.
@@ -160,7 +160,7 @@ MVP에서 하지 않는다.
 | 음성 입력 오인식 | 의도와 다른 Requirement Prompt 생성 | Transcribe 결과 확인, 사용자 수정 후 확정 |
 | Terraform 생성 오류 | Plan/Apply 실패 | 정적 diagnostics, `terraform validate`, Golden Path 테스트 |
 | AWS 비용 사고 | 원치 않는 비용 발생 | 리소스 whitelist, 비용 경고, Destroy/Cleanup 필수 |
-| 보안 위험 설정 | 공개 SSH, Public DB 등 | Pre-Deployment Check, High 위험 차단 또는 별도 승인 |
+| 보안 위험 설정 | 공개 SSH, Public DB 등 | Pre-Deployment Check, High 위험 강조 표시, 사용자 Plan 승인 기록 |
 | Git/CI/CD 권한 오남용 | 운영 배포 경로 사고 | PR 기반 handoff, pipeline status tracking, 승인 gate |
 | Reverse Engineering 오해석 | 기존 cloud state와 Practice Architecture 불일치 | Provider Adapter 범위 명시, import suggestion은 사용자 확인 후 적용 |
 | 로그/응답 secret 노출 | credential 유출 | 로그 마스킹, shared type secret 배제 |

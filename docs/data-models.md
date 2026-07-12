@@ -922,6 +922,8 @@ type DeploymentPlanSummary = {
 
 `DeploymentPlanWarning.sourceLocation`은 Safety Gate warning이 Terraform 코드의 어느 파일/라인/리소스 블록에서 나왔는지 가리키는 선택 필드다. `line`과 `column`은 에디터 이동을 위해 1-based 값으로 저장한다. DB 컬럼을 새로 만들지 않고 기존 `DeploymentPlanSummary.warnings` JSON 안에 보존한다.
 
+`DeploymentPlanWarning.blocksApproval`은 저장된 warning 및 다른 삭제/정리 계약과의 호환을 위해 유지한다. Direct Deployment의 Terraform Plan 승인에서는 이 필드를 차단 조건으로 사용하지 않으며, 신규 Pre-Deployment warning은 severity와 관계없이 `false`로 저장한다.
+
 Plan summary는 사용자 승인 화면에 필요한 최소 요약이다. 현재 기본 흐름에서는 `terraform plan -out=tfplan` 이후 `terraform show -json tfplan` 결과의 `resource_changes`를 파싱해 생성한다.
 
 Plan 단계의 Safety Gate는 최종 실행 전 점검 결과를 `warnings`에 보존한다. Plan 저장 자체는 high finding이 있어도 `deployments.isBlocked`를 세우지 않는다. High를 포함한 Pre-Deployment finding은 승인 차단 조건으로 사용하지 않고 검토 정보로 남기며, Plan이 존재하고 artifact/hash 안전 조건이 맞으면 사용자는 항상 승인할 수 있다. 사용자가 승인한 plan과 apply 대상 plan은 같은 artifact/hash 기준이어야 한다.
