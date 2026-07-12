@@ -132,6 +132,8 @@ Brainboard, Figma, Miro, CloudMaker의 문구, HTML, 이미지, 로고는 복사
 
 - AI와 Terraform·검사·배포 panel은 동시에 열리지 않는다.
 - AI를 열면 Inspector를 닫는다.
+- Terraform·검사·배포 panel이 열린 넓은 화면에서는 런처를 그 panel 왼쪽으로 옮긴다.
+- 900px 이하에서는 작업 panel이 화면 대부분을 차지하므로, 작업 panel을 닫을 때까지 AI 런처를 숨긴다.
 - 닫힌 런처는 가운데 하단 React Flow toolbar를 가리지 않는다.
 - 현재 Board에는 MiniMap이 없지만, 나중에 MiniMap이 오른쪽 아래에 추가되면 런처 위치를 MiniMap 왼쪽으로 옮긴다.
 - panel은 React Flow 내부 node가 아니라 Workspace의 fixed utility layer다.
@@ -249,3 +251,70 @@ apps/web/features/workspace/
 - 기능 없는 badge
 - 가짜 streaming
 - 사용자 승인 없는 자동 적용
+
+## 18. 실제 구현과 화면 QA 결과
+
+2026-07-12에 실제 `/workspace`에서 확인했다.
+
+### 자동 검사
+
+- Web 전체 테스트: 760개 통과
+- 새 AI Dock 집중 테스트: 11개 통과
+- lint: 통과
+- typecheck: 통과
+- build: 통과
+- harness 검사: 통과
+
+lint에는 다른 API 작업 파일에 이미 있던 미사용 인자 warning 1개가 남아 있다. 이번 AI Dock 변경에서 생긴 warning은 없다.
+
+### 1280 x 720
+
+- 런처: 44 x 44px
+- 열린 panel: 384 x 656px
+- panel을 열면 입력창으로 focus 이동
+- `Escape`로 닫으면 런처로 focus 복귀
+- 입력과 대화는 닫았다 열어도 유지
+- Terraform 작업 panel이 열렸을 때 작업 panel 왼쪽 685px, 런처 오른쪽 672px으로 실제 겹침 없음
+
+### 768 x 900
+
+- panel: 화면 전체 768 x 900px
+- 입력창 아래쪽: 882px로 화면 안에 유지
+- 본문 가로 폭: 768px, 가로 넘침 없음
+- 마지막 조작 요소에서 `Tab`을 누르면 닫기 버튼으로 focus 순환
+
+### 375 x 812
+
+- 런처: 오른쪽 16px, 아래 16px, 44 x 44px
+- panel: 화면 전체 375 x 812px
+- 입력창 아래쪽: 794px로 화면 안에 유지
+- 본문과 대화 가로 폭: 375px, 가로 넘침 없음
+- 작업 panel이 열리면 런처가 숨겨짐
+- 닫힌 동안 AI 확인 질문이 도착하면 unread 상태점과 `읽지 않은 응답 있음` 이름 표시
+
+### 실제 AI 흐름
+
+1. `현재 API 앞에 ALB를 추가해줘` 요청
+2. AI가 `API 입구` 등 필요한 확인 질문 표시
+3. `API 입구` 선택 뒤 `제안 생성됨`, `적용 대기` 표시
+4. Architecture Board의 Resource 수는 22개에서 미리보기 23개로만 표시
+5. `취소` 뒤 다시 22개로 복원
+6. `실제 상태는 바뀌지 않았습니다` 응답 확인
+
+Terraform Preview 4,012자를 만든 뒤 AI 설명도 실제로 요청했다. 375px 화면에서 긴 설명을 받아도 대화 가로 넘침은 없었다.
+
+API 처리를 잠시 멈춰 생성 중지 버튼도 실제로 확인했다. 요청 중에는 `aria-busy=true`와 `제안 만드는 중`이 표시됐고, 중지 뒤에는 `aria-busy=false`와 `입력 가능`으로 돌아왔다. API는 바로 다시 시작해 health `200`을 확인했다.
+
+### QA 중 발견해서 고친 문제
+
+1. Terraform 작업 panel과 런처가 겹치던 문제
+   - 넓은 화면에서는 런처를 작업 panel 왼쪽으로 옮겼다.
+   - 작은 화면에서는 작업 panel이 열린 동안 런처를 숨겼다.
+2. 닫힌 동안 도착한 AI 확인 질문에 unread 점이 생기지 않던 문제
+   - 일반 답변뿐 아니라 확인 질문도 unread 응답으로 처리했다.
+3. 생성 중지 뒤 이전 AI 응답을 따라 `응답 완료`로 보이던 문제
+   - 마지막 대화가 사용자 요청이면 `입력 가능`으로 표시한다.
+
+### Browser console
+
+새 error는 없었다. 개발 환경의 React DevTools 안내와 HMR 연결 log만 있었다.
