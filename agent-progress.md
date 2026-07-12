@@ -5,7 +5,7 @@ Short English-only working log for the current agent context. Older records are 
 ## Current Verified State
 
 
-- Active branch: `fix/sw/330-container-alarm-debounce`, issue #330.
+- Active branch: `codex/live-observation-deployable-demo`.
 
 - Release `v2.0.0` uses main SHA `44cdc976da8a03fca2d0aad69a0f3d45d51d4e8a`.
 - Route53 points to the direct-path ECS ALB. Public `/`, `/health`, and `/health/db` return 200; protected `/api/projects` returns 401.
@@ -18,6 +18,14 @@ Short English-only working log for the current agent context. Older records are 
 - Container log alarms keep ALARM notifications while suppressing repetitive OK notifications, require two consecutive error periods, and exclude stale Next.js Server Action requests from the web metric.
 
 ## Session Record
+
+### 2026-07-12 - Prepare deployable and observable Live Observation demo project
+
+- Rebuilt the local `Live Observation Demo - CloudWatch Agent` project as a manually positioned Region/VPC/two-AZ diagram with public ALB subnets, private ASG subnets, one NAT Gateway, CloudWatch Agent IAM/logging resources, and ASG-managed EC2 capacity markers.
+- Added a local successful `demo_web_service` deployment with the required Live Observation Terraform outputs, deployment logs, and deployed-resource evidence. No AWS resources were created.
+- Fixed Terraform rendering so Launch Template `iam_instance_profile` uses a nested block and `depends_on` resource addresses are emitted as references instead of deprecated quoted strings.
+- Verification: focused Terraform preview tests passed; generated project Terraform passed `terraform init -backend=false` and `terraform validate`; the live API simulation reached critical pressure, desired/in-service capacity 2, and `RequestCountPerTarget` 100 before stopping cleanly.
+- Risk: the successful deployment record and AWS Connection are local simulation data; real AWS observation still requires an explicitly approved plan/apply and cleanup workflow.
 
 ### 2026-07-11 - Add CloudWatch Agent-backed Live Observation demo path
 

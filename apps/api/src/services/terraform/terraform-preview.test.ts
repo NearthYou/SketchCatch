@@ -939,6 +939,64 @@ test("renders AWS nested block lists as Terraform blocks with snake_case attribu
   assert.doesNotMatch(terraformCode, /cidrBlock|gatewayId|cidrBlocks|fromPort|toPort/);
 });
 
+test("renders Launch Template instance profiles and dependency addresses with Terraform syntax", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      makeNode({
+        id: "launch-template-1",
+        type: "aws_launch_template",
+        kind: "resource",
+        label: "api",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_launch_template",
+          resourceName: "api",
+          fileName: "compute",
+          values: {
+            imageId: "data.aws_ami.al2023.id",
+            instanceType: "t3.micro",
+            iamInstanceProfile: {
+              name: "aws_iam_instance_profile.api_agent.name"
+            }
+          }
+        }
+      }),
+      makeNode({
+        id: "bucket-policy-1",
+        type: "aws_s3_bucket_policy",
+        kind: "resource",
+        label: "site",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_s3_bucket_policy",
+          resourceName: "site",
+          fileName: "site",
+          values: {
+            bucket: "aws_s3_bucket.site.id",
+            dependsOn: ["aws_s3_bucket_public_access_block.site"],
+            policy: "{}"
+          }
+        }
+      })
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  const terraformCode = generateTerraformFromDiagramJson(diagramJson);
+
+  assert.match(
+    terraformCode,
+    /iam_instance_profile \{[\s\S]*name = aws_iam_instance_profile\.api_agent\.name[\s\S]*\}/
+  );
+  assert.doesNotMatch(terraformCode, /iam_instance_profile\s*=/);
+  assert.match(
+    terraformCode,
+    /depends_on = \[[\s\S]*aws_s3_bucket_public_access_block\.site,[\s\S]*\]/
+  );
+  assert.doesNotMatch(terraformCode, /"aws_s3_bucket_public_access_block\.site"/);
+});
+
 test("tracks curated nested block parameters as canonical camelCase keys", () => {
   const expectedNestedBlockAttributes: Record<string, string[]> = {
     aws_ami: ["filter"],
@@ -960,6 +1018,7 @@ test("tracks curated nested block parameters as canonical camelCase keys", () =>
     ],
     aws_config_config_rule: ["source"],
     aws_instance: ["rootBlockDevice"],
+    aws_launch_template: ["iamInstanceProfile", "metadataOptions", "tagSpecifications"],
     aws_eks_cluster: ["vpcConfig"],
     aws_eks_node_group: ["scalingConfig"],
     aws_lambda_function: ["environment"],

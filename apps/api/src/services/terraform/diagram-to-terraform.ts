@@ -10,6 +10,8 @@ const INDENT_UNIT = "  ";
 export const TERRAFORM_IDENTIFIER_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_-]*$/;
 const TERRAFORM_REFERENCE_PATTERN =
   /^(?:var|local|each|count|path|terraform)\.[a-zA-Z_][a-zA-Z0-9_]*$|^module\.[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)*$|^aws_[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)*$|^data\.aws_[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)*$/;
+const TERRAFORM_RESOURCE_ADDRESS_PATTERN =
+  /^(?:aws_[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+|module\.[a-zA-Z0-9_]+)$/;
 
 export class TerraformDiagramValidationError extends Error {
   readonly reason = "invalid_identifier";
@@ -193,7 +195,35 @@ function renderAttribute(key: string, value: unknown, indentLevel: number): stri
   const attributeName = toSnakeCase(key);
   assertTerraformIdentifier(attributeName, "attribute name");
 
-  return `${indent(indentLevel)}${attributeName} = ${renderValue(value, indentLevel)}`;
+  const renderedValue =
+    attributeName === "depends_on"
+      ? renderDependencyList(value, indentLevel)
+      : renderValue(value, indentLevel);
+
+  return `${indent(indentLevel)}${attributeName} = ${renderedValue}`;
+}
+
+function renderDependencyList(value: unknown, indentLevel: number): string {
+  if (!Array.isArray(value)) {
+    return renderValue(value, indentLevel);
+  }
+
+  if (value.length === 0) {
+    return "[]";
+  }
+
+  return [
+    "[",
+    ...value.map((dependency) => {
+      const renderedDependency =
+        typeof dependency === "string" && TERRAFORM_RESOURCE_ADDRESS_PATTERN.test(dependency)
+          ? dependency
+          : renderValue(dependency, indentLevel + 1);
+
+      return `${indent(indentLevel + 1)}${renderedDependency},`;
+    }),
+    `${indent(indentLevel)}]`
+  ].join("\n");
 }
 
 // JavaScript 값을 Terraform HCL 값 표현으로 바꾼다.
