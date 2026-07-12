@@ -160,6 +160,7 @@ export function RepositoryStartClient({
     setPublicAnalysis(null);
     setAnswers({});
     setSelectedPublicTemplateId(null);
+    setUsesCiCd(false);
     setErrorMessage("");
 
     try {
@@ -363,12 +364,12 @@ export function RepositoryStartClient({
           </section>
         ) : null}
 
-        {showUrlAnalysis ? (
+        {showUrlAnalysis && publicAnalysis && usesCiCd ? (
           <section className={styles.connectionPanel}>
             <GitBranch aria-hidden="true" size={24} />
-            <h2>선택 사항: 연결된 GitHub App 저장소 사용</h2>
+            <h2>CI/CD 인계 저장소 연결</h2>
             <p className={styles.inlineHint}>
-              비공개 저장소, PR 생성, CI/CD 인계, 저장소 설정 변경이 필요할 때 사용합니다.
+              GitHub App 권한이 있는 저장소를 선택해 PR과 자동 배포 흐름에 연결합니다.
             </p>
             {loadState === "loading" ? (
               <p className={styles.inlineHint} role="status">연결된 저장소를 확인하는 중입니다.</p>

@@ -36,6 +36,9 @@ test("Repository start screen exposes deployment, CI/CD, and template recommenda
   assert.match(source, /컨테이너 기반/);
   assert.match(source, /서버리스 기반/);
   assert.match(source, /CI\/CD 인계 사용/);
+  assert.match(source, /showUrlAnalysis && publicAnalysis && usesCiCd/);
+  assert.match(source, /CI\/CD 인계 저장소 연결/);
+  assert.match(source, /setUsesCiCd\(false\)/);
   assert.match(source, /템플릿 추천/);
   assert.match(source, /questions\?\.slice\(0, 5\)/);
   assert.match(source, /환경설정에서 권한 관리/);
