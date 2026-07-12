@@ -123,7 +123,7 @@ test("current plan without an operation does not fall back to a Terraform plan r
   assert.equal(state.shouldShowApprovePlanButton, true);
 });
 
-test("current plan with blocking warnings can still be approved", () => {
+test("current plan with blocking warnings keeps approval visible but disabled", () => {
   const state = getDeploymentActionState(
     createDeployment({
       currentPlanArtifactId: "99999999-9999-4999-8999-999999999999",
@@ -152,7 +152,7 @@ test("current plan with blocking warnings can still be approved", () => {
   );
 
   assert.equal(state.shouldShowApprovePlanButton, true);
-  assert.equal(state.canApprovePlan, true);
+  assert.equal(state.canApprovePlan, false);
 });
 
 test("running Terraform work hides stale plan rerun actions", () => {

@@ -1022,7 +1022,7 @@ test("runDeploymentPlan records destructive or high-risk warnings without blocki
       relatedFindingId: "finding-1",
       relatedResourceId: "sg-1",
       requiresAcknowledgement: false,
-      blocksApproval: false
+      blocksApproval: true
     },
     {
       id: "terraform_plan:DESTRUCTIVE_CHANGE:apply",
@@ -1105,7 +1105,7 @@ test("runDeploymentPlan feeds Terraform artifact content into Trivy-backed safet
         resourceAddress: "aws_security_group.open_ssh"
       },
       requiresAcknowledgement: false,
-      blocksApproval: false
+      blocksApproval: true
     }
   ]);
 });

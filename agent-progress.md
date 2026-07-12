@@ -192,7 +192,8 @@ Short English-only working log for the current agent context. Older records are 
 - Removed AI generation from the synchronous check response and added per-finding lazy explanation loading.
 - Added five-minute content/policy/ignore-rule cache, Runtime Cache sharing, startup warmup, and same-key single-flight execution.
 - Reused the shared Trivy snapshot between the button check and Terraform Plan when artifact content is unchanged.
-- Added an immediate in-process gate for Public S3, open SSH, Public RDS, and IAM wildcard; Trivy now completes in the background and the UI merges its result before enabling Plan.
+- Added an immediate in-process gate for Public S3, open SSH, Public RDS, and IAM wildcard; Trivy now completes in the background and the UI merges its result without delaying Plan creation.
+- Moved high-finding enforcement to the approval boundary: Plan remains available and records the warning, while approval and the approval-dependent Apply action stay blocked until the finding is resolved.
 
 ## Verification
 
@@ -200,7 +201,7 @@ Short English-only working log for the current agent context. Older records are 
 - `pnpm lint` passed with one existing unused-argument warning in `live-observation-store-contract.ts`.
 - `pnpm typecheck` passed when run after the Next.js build completed.
 - `pnpm build` passed for all five workspaces.
-- Focused scanner, API, Plan, and Workspace tests passed; the immediate gate route measured about 41 ms in the controlled test.
+- Focused scanner, API, approval, Plan, Apply, Destroy, and Workspace tests passed; the immediate gate route measured about 41 ms in the controlled test.
 - `pnpm test` found four unrelated existing web failures; none of their files differ from `origin/dev`.
 
 ## Risk
@@ -210,4 +211,4 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Next Action
 
-- Review the five staged commits and exercise the Direct Deployment preflight UI against a running local API before PR publication.
+- Exercise the Direct Deployment preflight UI against a running local API before PR publication.

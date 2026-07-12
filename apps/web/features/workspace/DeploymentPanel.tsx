@@ -301,8 +301,6 @@ export function DeploymentPanel({
     shouldAutoRefreshGitCicdHandoff(selectedGitCicdHandoff);
   const canCreateGitCicdHandoff = Boolean(activeGitHubSourceRepository && selectedDeployment);
   const preDeploymentAnalysis = preDeploymentCheckState.analysis;
-  const isPreDeploymentDeepScanRunning =
-    preDeploymentAnalysis?.deepScan?.status === "running";
   const preDeploymentState = preDeploymentCheckState.requestState;
   const preDeploymentErrorMessage = preDeploymentCheckState.errorMessage;
   const preDeploymentFingerprint = preDeploymentCheckState.fingerprint;
@@ -319,12 +317,6 @@ export function DeploymentPanel({
     hasStaleAnalysis: hasStalePreDeploymentAnalysis,
     requestState: preDeploymentState
   });
-  const canRunPlanForCurrentPreflight =
-    canRunPlan &&
-    !isPreDeploymentDeepScanRunning &&
-    directPreflightState !== "blocked" &&
-    directPreflightState !== "error" &&
-    directPreflightState !== "loading";
   const canRunDeploymentReviewStep =
     canStartDeploymentReview &&
     preDeploymentState !== "loading";
@@ -849,7 +841,7 @@ export function DeploymentPanel({
           boardSnapshot.fingerprint
         );
       }
-      return !result.findings.some((finding) => finding.severity === "high");
+      return true;
     } catch (error) {
       updatePreDeploymentCheckState({
         errorMessage: getApiErrorMessage(error, "배포 전 검사 중 오류가 발생했습니다."),
@@ -965,7 +957,7 @@ export function DeploymentPanel({
   }
 
   async function startTerraformPlan(): Promise<void> {
-    if (!selectedDeployment || !canRunPlanForCurrentPreflight) {
+    if (!selectedDeployment || !canRunPlan) {
       return;
     }
 
@@ -1371,7 +1363,7 @@ export function DeploymentPanel({
               <p>{selectedStep.disabledReason ?? "Plan은 AWS 리소스를 변경하지 않습니다."}</p>
               <button
                 className={styles.deploymentPrimaryButton}
-                disabled={!canRunPlanForCurrentPreflight}
+                disabled={!canRunPlan}
                 onClick={() => void startTerraformPlan()}
                 type="button"
               >
@@ -2636,14 +2628,8 @@ function getDirectPreflightState({
   }
 
   if (
-    analysis.findings.some((finding) => finding.severity === "high") ||
-    countChecklistItems(analysis, "fail") > 0
-  ) {
-    return "blocked";
-  }
-
-  if (
-    analysis.findings.some((finding) => finding.severity === "medium") ||
+    analysis.findings.length > 0 ||
+    countChecklistItems(analysis, "fail") > 0 ||
     countChecklistItems(analysis, "warning") > 0
   ) {
     return "warning";

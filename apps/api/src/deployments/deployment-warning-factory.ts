@@ -24,7 +24,7 @@ export function createPreDeploymentCheckWarning(
     message: `${finding.title}: ${finding.recommendation}`,
     relatedFindingId: finding.id,
     requiresAcknowledgement: false,
-    blocksApproval: false
+    blocksApproval: finding.severity === "high"
   };
 
   if (finding.resourceId) {
