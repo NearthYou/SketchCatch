@@ -186,8 +186,9 @@ export function WorkspaceProjectClient({
   function resolveConflict(source: "local" | "server"): void {
     const diagram = conflictDiagrams?.[source];
     if (!diagram) return;
-    latestDiagramRef.current = diagram;
-    setInitialDiagram(diagram);
+    const selectedDiagram = hydrateCatalogResourceNodes(diagram);
+    latestDiagramRef.current = selectedDiagram;
+    setInitialDiagram(selectedDiagram);
     setConflictDiagrams(null);
     setServerSaveState(source === "local" ? "server-dirty" : "server-saved");
     setLoadState("ready");

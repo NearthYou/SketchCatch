@@ -23,4 +23,25 @@ test("WorkspaceProjectClient hydrates a restored draft before setting its initia
     (hydrationMatch.index ?? -1) < workspaceProjectClientSource.indexOf("setInitialDiagram(selectedDiagram)"),
     "The hydrated diagram must be set as the initial diagram."
   );
+
+  const conflictResolutionSource = workspaceProjectClientSource.slice(
+    workspaceProjectClientSource.indexOf('function resolveConflict(source: "local" | "server"): void {'),
+    workspaceProjectClientSource.indexOf("  if (loadState === \"loading\")")
+  );
+  const conflictHydrationMatch = conflictResolutionSource.match(
+    /const selectedDiagram = hydrateCatalogResourceNodes\(diagram\);/
+  );
+
+  assert.ok(
+    conflictHydrationMatch,
+    "The conflict-selected diagram must be hydrated before it reaches workspace state."
+  );
+  assert.ok(
+    (conflictHydrationMatch.index ?? -1) < conflictResolutionSource.indexOf("latestDiagramRef.current = selectedDiagram"),
+    "The hydrated conflict diagram must be assigned to the latest-diagram ref."
+  );
+  assert.ok(
+    (conflictHydrationMatch.index ?? -1) < conflictResolutionSource.indexOf("setInitialDiagram(selectedDiagram)"),
+    "The hydrated conflict diagram must be set as the initial diagram."
+  );
 });
