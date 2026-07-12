@@ -19,6 +19,13 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-12 - Make all embedded Terraform issues reachable
+
+- Moved vertical scrolling to the combined Workspace Issues container so Architecture and Terraform diagnostics share one continuous reachable scroll region.
+- Removed the clipping grid track and nested Terraform wrapper overflow without changing diagnostic state, actions, or the code/issues resize boundary.
+- Added a source-contract regression that failed on the clipped layout and passed after the CSS fix.
+- Verification: focused Workspace layout and diagnostic-state tests, lint, typecheck, build, harness, and diff checks passed. Lint retains one pre-existing API unused-argument warning.
+
 ### 2026-07-12 - Merge origin/dev into the Workspace UI branch
 
 - Resolved the three content conflicts while preserving the redesigned Deployment console and the `dev` duration/apply-confirmation fixes.

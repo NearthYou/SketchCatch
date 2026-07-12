@@ -26,6 +26,7 @@ const terraformIssuesPanelSource = readWorkspaceFile("TerraformIssuesPanel.tsx")
 const terraformIssuesStylesSource = readWorkspaceFile("TerraformIssuesPanel.module.css");
 const architectureIssuesPanelSource = readWorkspaceFile("ArchitectureIssuesPanel.tsx");
 const workspaceIssuesPanelSource = readWorkspaceFile("WorkspaceIssuesPanel.tsx");
+const workspaceIssuesStylesSource = readWorkspaceFile("WorkspaceIssuesPanel.module.css");
 const workspaceRightPanelTypesSource = readWorkspaceFile("workspace-right-panel.types.ts");
 const projectDraftManagerSource = readWorkspaceFile("ProjectWorkspaceDraftManager.tsx");
 const workspaceDraftManagerSource = readWorkspaceFile("WorkspaceDraftManager.tsx");
@@ -821,6 +822,17 @@ test("terraform view embeds issues below code with a resizable split instead of 
   assert.match(getCssRule(stylesSource, "terraformCodePane"), /\bmin-height:\s*0;/);
   assert.match(getCssRule(stylesSource, "terraformSplitResizeHandle"), /\bcursor:\s*row-resize;/);
   assert.match(getCssRule(stylesSource, "terraformIssuesPane"), /\bmin-height:\s*0;/);
+});
+
+test("combined architecture and terraform issues share one reachable vertical scroll", () => {
+  const combinedIssuesRule = getCssRule(workspaceIssuesStylesSource, "issuesPanel");
+  const terraformIssuesRule = getCssRule(workspaceIssuesStylesSource, "terraformIssues");
+
+  assert.match(combinedIssuesRule, /\bgrid-template-rows:\s*auto auto;/);
+  assert.match(combinedIssuesRule, /\boverflow-y:\s*auto;/);
+  assert.match(combinedIssuesRule, /\bscrollbar-gutter:\s*stable;/);
+  assert.doesNotMatch(combinedIssuesRule, /\boverflow:\s*hidden;/);
+  assert.doesNotMatch(terraformIssuesRule, /\boverflow:\s*hidden;/);
 });
 
 test("terraform issue banner focuses the embedded Issues panel instead of navigating to a tab", () => {
