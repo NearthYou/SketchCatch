@@ -123,7 +123,7 @@ test("current plan without an operation does not fall back to a Terraform plan r
   assert.equal(state.shouldShowApprovePlanButton, true);
 });
 
-test("current plan with legacy blocking warnings keeps approval enabled", () => {
+test("current apply plan hides plan regeneration and keeps approval enabled", () => {
   const state = getDeploymentActionState(
     createDeployment({
       currentPlanArtifactId: "99999999-9999-4999-8999-999999999999",
@@ -153,6 +153,8 @@ test("current plan with legacy blocking warnings keeps approval enabled", () => 
 
   assert.equal(state.shouldShowApprovePlanButton, true);
   assert.equal(state.canApprovePlan, true);
+  assert.equal(state.shouldShowApplyPlanButton, false);
+  assert.equal(state.canRunApplyPlan, false);
 });
 
 test("running Terraform work hides stale plan rerun actions", () => {

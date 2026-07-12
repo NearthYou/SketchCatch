@@ -77,7 +77,7 @@ export function getDeploymentActionState(
   const canStartFreshApplyPlan = Boolean(deployment && !hasCurrentPlan && !isDestroyPlan);
   const canShowApplyPlanAction = Boolean(
     deployment &&
-      (isApplyPlan || canStartFreshApplyPlan) &&
+      canStartFreshApplyPlan &&
       deployment.status !== "RUNNING" &&
       deployment.status !== "SUCCESS" &&
       deployment.status !== "DESTROYED" &&
