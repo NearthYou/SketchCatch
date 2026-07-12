@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { GitBranch, LoaderCircle, Search, SquareArrowOutUpRight } from "lucide-react";
+import { GitBranch, LoaderCircle, Search, Settings2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type {
   GitHubInstalledRepositoryCandidate,
@@ -16,7 +16,6 @@ import { getApiErrorMessage } from "../../../lib/api-client";
 import {
   analyzeSourceRepository,
   connectGitHubSourceRepository,
-  createGitHubSourceRepositoryInstallUrl,
   listGitHubInstalledRepositories,
   listSourceRepositories,
   recommendRepositoryTemplate
@@ -56,6 +55,7 @@ export function RepositoryStartClient({ projectId, projectName }: RepositoryStar
   const questions = activeHandoff?.questions?.slice(0, 5) ?? [];
   const activeRecommendation = recommendation ?? activeHandoff?.recommendation ?? null;
   const previewDiagram = createRepositoryPreviewDiagram(projectName, activeRepository);
+  const githubSettingsHref = createProjectGitHubSettingsHref(projectId);
 
   useEffect(() => {
     if (!projectId) {
@@ -99,19 +99,6 @@ export function RepositoryStartClient({ projectId, projectName }: RepositoryStar
     } catch (error) {
       setActionState("error");
       setErrorMessage(getApiErrorMessage(error, "Available repositories could not be loaded."));
-    }
-  }
-
-  async function openGitHubInstallation(): Promise<void> {
-    setActionState("loading");
-    setErrorMessage("");
-
-    try {
-      const { installUrl } = await createGitHubSourceRepositoryInstallUrl(projectId);
-      window.location.assign(installUrl);
-    } catch (error) {
-      setActionState("error");
-      setErrorMessage(getApiErrorMessage(error, "GitHub permission screen could not be opened."));
     }
   }
 
@@ -211,9 +198,9 @@ export function RepositoryStartClient({ projectId, projectName }: RepositoryStar
               <button disabled={actionState === "loading"} onClick={() => void loadCandidates()} type="button">
                 Show available repositories
               </button>
-              <button className={styles.secondaryAction} disabled={actionState === "loading"} onClick={() => void openGitHubInstallation()} type="button">
-                <SquareArrowOutUpRight aria-hidden="true" size={16} /> Add GitHub permission
-              </button>
+              <Link className={styles.secondaryAction} href={githubSettingsHref}>
+                <Settings2 aria-hidden="true" size={16} /> Manage permissions in settings
+              </Link>
             </div>
             <RepositoryCandidates
               actionState={actionState}
@@ -426,4 +413,8 @@ function createRepositoryBoardHref(
     sourceRepositoryId: repository.id,
     templateId
   }).toString()}`;
+}
+
+function createProjectGitHubSettingsHref(projectId: string): string {
+  return `/dashboard/projects/${encodeURIComponent(projectId)}/settings?tab=github`;
 }

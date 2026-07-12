@@ -15,4 +15,7 @@ test("Repository start screen exposes deployment, CI/CD, and template recommenda
   assert.match(source, /Use CI\/CD handoff/);
   assert.match(source, /Recommend templates/);
   assert.match(source, /questions\?\.slice\(0, 5\)/);
+  assert.match(source, /Manage permissions in settings/);
+  assert.match(source, /\/dashboard\/projects\/\$\{encodeURIComponent\(projectId\)\}\/settings\?tab=github/);
+  assert.doesNotMatch(source, /createGitHubSourceRepositoryInstallUrl/);
 });

@@ -7,6 +7,7 @@ Short English-only working log for the current agent context. Older records are 
 - Branch: `feat/ck/349-repo-analysis`.
 - Issue #349 repository-analysis based template recommendation is implemented and committed locally.
 - The latest follow-up fix maps missing `source_repositories` migrations to a stable API/UI message instead of exposing raw SQL.
+- GitHub repository-start and callback screens now route permission expansion to project GitHub settings instead of opening GitHub App installation directly.
 - Local `db:migrate` could not be run in this shell because `DATABASE_URL` is empty.
 - No cloud deployment, Terraform apply, or infrastructure mutation was run during this work session.
 
@@ -52,19 +53,21 @@ Short English-only working log for the current agent context. Older records are 
 - Risk:
   - The actual runtime DB still needs `pnpm --filter @sketchcatch/api db:migrate` from a shell with `DATABASE_URL` configured.
 
-### 2026-07-12 - Merge latest origin/dev into AI diagram branch
+### 2026-07-12 - Move GitHub permission expansion to settings
 
-- Goal: Merge the actual latest `origin/dev` into `feat/ck/287-ai-diagram`.
+- Goal: Keep Repository start focused on selecting/analyzing repositories while managing GitHub App repository permission expansion from project settings.
 - Completed:
-  - First merged local `dev` at `de4cd817`, then found `origin/dev` had advanced to `ca2cbe75`.
-  - Merged `origin/dev` into the AI diagram branch after GitHub still reported PR #347 as conflicting.
-  - Resolved Workspace UI conflicts by taking `origin/dev` for deleted/reworked UI files and the Workspace API client contract.
-  - Kept backend/type safety changes that merged cleanly with the AI diagram branch contracts.
+  - Removed direct GitHub App install URL opening from the Repository start screen.
+  - Replaced the Repository start permission action with a project GitHub settings link.
+  - Changed the GitHub App callback permission action to route to project GitHub settings.
+  - Added source-level regression coverage so start/callback screens no longer import `createGitHubSourceRepositoryInstallUrl`.
 - Verification:
-  - `pnpm harness:check`, `pnpm typecheck`, `pnpm lint`, and `pnpm build` passed after resolving the `origin/dev` conflicts.
-  - The first `pnpm typecheck` run during the second merge exposed an obsolete streaming client test; the test file was restored to the `origin/dev` UI API contract and typecheck then passed.
-- Risk:
-  - `pnpm lint` reported one warning from merged `dev` live observation test support: unused `setNow` in `apps/api/src/live-observations/live-observation-store-contract.ts`.
+  - `pnpm --dir apps/web exec tsx --test features/workspace/repository-start-template-recommendation.test.ts features/workspace/github-callback-route.test.ts`
+  - `pnpm --dir apps/web typecheck`
+  - `pnpm harness:check`
+  - `pnpm lint` passed with the pre-existing `live-observations` `setNow` warning.
+  - `pnpm typecheck`
+  - `pnpm build`
 
 ### 2026-07-12 - Address PR #347 review feedback
 

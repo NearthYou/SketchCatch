@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, FileCode2, LoaderCircle, Plus, TriangleAlert } from "lucide-react";
+import { ArrowLeft, FileCode2, LoaderCircle, Settings2, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -8,7 +8,6 @@ import type { GitHubRepositoryCandidate } from "@sketchcatch/types";
 import { ProductBrand } from "../../../../components/ui/ProductBrand";
 import {
   connectGitHubSourceRepository,
-  createGitHubSourceRepositoryInstallUrl,
   listGitHubInstallationRepositories
 } from "../../../../features/workspace/api";
 import { getApiErrorMessage } from "../../../../lib/api-client";
@@ -106,19 +105,11 @@ export default function GitHubIntegrationCallbackPage() {
     }
   }
 
-  // 현재 프로젝트에 다른 Repository 권한을 추가하도록 GitHub App 설치 화면을 다시 엽니다.
-  async function addRepositoryPermission(): Promise<void> {
+  // Repository access expansion is managed from project settings.
+  async function openProjectGitHubSettings(): Promise<void> {
     if (callbackState.status !== "ready") return;
 
-    try {
-      const result = await createGitHubSourceRepositoryInstallUrl(callbackState.projectId);
-      window.location.assign(result.installUrl);
-    } catch (error) {
-      setCallbackState({
-        status: "error",
-        message: getApiErrorMessage(error, "GitHub 권한 설정 화면을 열지 못했습니다.")
-      });
-    }
+    router.push(createProjectGitHubSettingsHref(callbackState.projectId));
   }
 
   return (
@@ -160,9 +151,9 @@ export default function GitHubIntegrationCallbackPage() {
           <>
             <div className={styles.listHeader}>
               <span>선택 가능 {selectableCount}개</span>
-              <button onClick={() => void addRepositoryPermission()} type="button">
-                <Plus aria-hidden="true" size={15} />
-                권한 추가
+              <button onClick={() => void openProjectGitHubSettings()} type="button">
+                <Settings2 aria-hidden="true" size={15} />
+                Manage permissions in settings
               </button>
             </div>
             <div className={styles.repositoryList}>
@@ -185,7 +176,7 @@ export default function GitHubIntegrationCallbackPage() {
             {selectableCount === 0 ? (
               <div className={styles.emptyState}>
                 <strong>선택 가능한 Repository가 없습니다.</strong>
-                <span>GitHub에서 이 App이 읽을 Repository 권한을 추가하세요.</span>
+                <span>Manage repository access from project settings.</span>
               </div>
             ) : null}
           </>
@@ -193,4 +184,8 @@ export default function GitHubIntegrationCallbackPage() {
       </section>
     </main>
   );
+}
+
+function createProjectGitHubSettingsHref(projectId: string): string {
+  return `/dashboard/projects/${encodeURIComponent(projectId)}/settings?tab=github`;
 }
