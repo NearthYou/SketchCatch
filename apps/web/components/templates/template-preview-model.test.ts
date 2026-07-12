@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import type { DiagramEdge, DiagramJson, DiagramNode } from "../../../../packages/types/src";
 import { resourceCatalog } from "../../features/resource-settings/catalog";
-import { listLegacyBoardTemplates } from "../../features/resource-settings/template-library";
+import { listBoardTemplates, listLegacyBoardTemplates } from "../../features/resource-settings/template-library";
 import { createTemplatePreviewModel } from "./template-preview-model";
 
 test("createTemplatePreviewModel bounds dense diagrams, omits collapsed helpers, and retains catalog icons", () => {
@@ -190,6 +190,43 @@ test("Live Observation preview prioritizes the traffic flow over empty network f
   assertProjectedContainment(vpc, asg);
   assert.equal(alb.y, targetGroup.y);
   assert.ok(policy.y < alarm.y);
+});
+
+test("dense deployable templates retain their primary runtime flow in the preview", () => {
+  const templates = listBoardTemplates();
+  const expectations = [
+    {
+      id: "three-tier-web-app",
+      nodeIds: ["load-balancer", "application-group", "database"],
+      edgeIds: ["alb-asg", "app-db"]
+    },
+    {
+      id: "ecs-fargate-container-app",
+      nodeIds: ["cluster", "service", "task"],
+      edgeIds: ["cluster-service", "service-task"]
+    },
+    {
+      id: "eks-container-app",
+      nodeIds: ["cluster", "node-group", "deployment", "service"],
+      edgeIds: ["cluster-node-group", "deployment-service"]
+    }
+  ] as const;
+
+  for (const expectation of expectations) {
+    const template = templates.find((candidate) => candidate.id === expectation.id);
+    assert.ok(template, `Missing ${expectation.id} template`);
+
+    const model = createTemplatePreviewModel(template.diagramJson);
+    const selectedIds = new Set(model.nodes.map((node) => node.id));
+    const edgeIds = new Set(model.edges.map((edge) => edge.id));
+
+    for (const nodeId of expectation.nodeIds) {
+      assert.ok(selectedIds.has(`template-${expectation.id}-${nodeId}`), `${expectation.id}: ${nodeId}`);
+    }
+    for (const edgeId of expectation.edgeIds) {
+      assert.ok(edgeIds.has(`template-${expectation.id}-${edgeId}`), `${expectation.id}: ${edgeId}`);
+    }
+  }
 });
 
 test("TemplateDiagramPreview keeps the SVG icon path label-free and bounded", () => {

@@ -3,6 +3,7 @@ import { isAreaNode } from "../../features/diagram-editor/area-nodes";
 import { isRenderableDiagramNode } from "../../features/diagram-editor/diagram-node-visibility";
 
 const MAX_VISIBLE_NODES = 8;
+const MAX_VISIBLE_AREA_NODES = 2;
 const VIEWBOX_HEIGHT = 60;
 const VIEWBOX_WIDTH = 100;
 const VIEWBOX_PADDING = 5;
@@ -146,14 +147,25 @@ function selectPreviewNodes(
         hasSpatiallyContainedResource(node, renderableNodes)
       )
   );
-  const selectedAreaNodes = areaNodes.slice(0, MAX_VISIBLE_NODES);
+  const nodeById = new Map(renderableNodes.map((node) => [node.id, node]));
+  const degreeByNodeId = getVisibleEdgeDegreeByNodeId(renderableNodes, diagramJson);
+  const runtimeDegreeByNodeId = getVisibleEdgeDegreeByNodeId(
+    renderableNodes,
+    diagramJson,
+    (edge) => edge.label !== "contains"
+  );
+  const selectedAreaNodes = selectPreviewAreaNodes(
+    areaNodes,
+    nodeById,
+    degreeByNodeId,
+    runtimeDegreeByNodeId
+  );
   const resourceSlots = MAX_VISIBLE_NODES - selectedAreaNodes.length;
 
   if (resourceSlots <= 0) {
     return selectedAreaNodes;
   }
 
-  const degreeByNodeId = getVisibleEdgeDegreeByNodeId(renderableNodes, diagramJson);
   const resourceNodes = renderableNodes
     .map((node, sourceIndex) => ({ node, sourceIndex }))
     .filter(({ node }) => !isAreaNode(node))
@@ -168,6 +180,38 @@ function selectPreviewNodes(
   const selectedNodeIds = new Set([...selectedAreaNodes, ...resourceNodes].map((node) => node.id));
 
   return renderableNodes.filter((node) => selectedNodeIds.has(node.id));
+}
+
+function selectPreviewAreaNodes(
+  areaNodes: readonly DiagramNode[],
+  nodeById: ReadonlyMap<string, DiagramNode>,
+  degreeByNodeId: ReadonlyMap<string, number>,
+  runtimeDegreeByNodeId: ReadonlyMap<string, number>
+): DiagramNode[] {
+  const annotatedAreaNodes = areaNodes.map((node, sourceIndex) => ({
+    node,
+    sourceIndex,
+    depth: getSelectedAreaDepth(node, nodeById),
+    degree: degreeByNodeId.get(node.id) ?? 0,
+    runtimeDegree: runtimeDegreeByNodeId.get(node.id) ?? 0
+  }));
+  const rootAreas = annotatedAreaNodes.filter(({ depth }) => depth === 0);
+  const nestedAreas = annotatedAreaNodes.filter(({ depth }) => depth > 0);
+  const connectedNestedAreas = nestedAreas
+    .filter(({ runtimeDegree }) => runtimeDegree > 0)
+    .sort((left, right) =>
+      right.runtimeDegree - left.runtimeDegree || right.degree - left.degree || left.sourceIndex - right.sourceIndex
+    );
+
+  // Preserve the outer boundary and only the inner frame that carries the visible flow.
+  // If that flow has no area edge (for example a small VPC/Subnet template), retain its
+  // first nested frame so the containment relationship stays legible.
+  return [
+    ...rootAreas,
+    ...(connectedNestedAreas.length > 0 ? connectedNestedAreas : nestedAreas)
+  ]
+    .slice(0, MAX_VISIBLE_AREA_NODES)
+    .map(({ node }) => node);
 }
 
 function getVisibleEdgeNodeIds(
@@ -243,13 +287,18 @@ function hasSpatiallyContainedResource(
 
 function getVisibleEdgeDegreeByNodeId(
   renderableNodes: readonly DiagramNode[],
-  diagramJson: DiagramJson
+  diagramJson: DiagramJson,
+  includeEdge: (edge: DiagramJson["edges"][number]) => boolean = () => true
 ): ReadonlyMap<string, number> {
   const renderableNodeIds = new Set(renderableNodes.map((node) => node.id));
   const degreeByNodeId = new Map(renderableNodes.map((node) => [node.id, 0]));
 
   for (const edge of diagramJson.edges) {
-    if (!renderableNodeIds.has(edge.sourceNodeId) || !renderableNodeIds.has(edge.targetNodeId)) {
+    if (
+      !includeEdge(edge) ||
+      !renderableNodeIds.has(edge.sourceNodeId) ||
+      !renderableNodeIds.has(edge.targetNodeId)
+    ) {
       continue;
     }
 
