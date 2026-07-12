@@ -16,6 +16,10 @@
   right: calc(var(--right-panel-width, 440px) + 20px);
 }
 
+.layer[data-operations-open="true"] .launcherAnchor {
+  right: calc(min(45vw, 680px) + 32px);
+}
+
 .launcher {
   align-items: center;
   background: var(--color-primary);
@@ -596,8 +600,14 @@
 }
 
 @media (max-width: 1120px) {
-  .layer[data-inspector-open="true"] .launcherAnchor {
+  .layer[data-inspector-open="true"]:not([data-operations-open="true"]) .launcherAnchor {
     right: 20px;
+  }
+}
+
+@media (max-width: 900px) {
+  .layer[data-operations-open="true"] .launcherAnchor {
+    display: none;
   }
 }
 

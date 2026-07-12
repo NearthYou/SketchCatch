@@ -47,6 +47,17 @@ test("새 AI Dock은 DESIGN token과 desktop/mobile 규격을 사용한다", () 
   assert.doesNotMatch(dockStyles, /#[0-9a-f]{3,8}\b/i);
 });
 
+test("작업 panel이 열리면 AI 런처가 그 위를 가리지 않는다", () => {
+  assert.match(dockSource, /data-operations-open/);
+  assert.match(dockStyles, /data-operations-open="true"/);
+  assert.match(dockStyles, /min\(45vw, 680px\)/);
+});
+
+test("닫힌 동안 도착한 확인 질문도 unread 응답으로 표시한다", () => {
+  assert.match(dockSource, /lastMessage\?\.role === "assistant"/);
+  assert.doesNotMatch(dockSource, /lastMessage\.state !== "question"/);
+});
+
 test("AI 생성 중지는 모든 network 요청에 signal을 전달한다", () => {
   assert.match(apiSource, /runAiDesignSimulation\([\s\S]*?signal\?: AbortSignal/);
   assert.match(apiSource, /runAiTerraformPreviewExplanation\([\s\S]*?signal\?: AbortSignal/);

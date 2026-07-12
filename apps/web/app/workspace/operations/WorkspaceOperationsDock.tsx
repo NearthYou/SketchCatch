@@ -203,6 +203,7 @@ export function WorkspaceOperationsDock({
       </aside>
       <WorkspaceAiDock
         context={context}
+        hasOperationsPanelOpen={panelOpen}
         isOpen={isAiDockOpen}
         onOpenChange={setWorkspaceAiDockOpen}
         projectId={projectId}

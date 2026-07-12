@@ -16,12 +16,14 @@ import styles from "./workspace-ai-dock.module.css";
 // Workspace의 AI 런처와 panel 전환, unread, focus 복귀를 소유합니다.
 export function WorkspaceAiDock({
   context,
+  hasOperationsPanelOpen,
   isOpen,
   onOpenChange,
   projectId,
   terraform
 }: {
   readonly context: DiagramEditorPanelContext;
+  readonly hasOperationsPanelOpen: boolean;
   readonly isOpen: boolean;
   readonly onOpenChange: (isOpen: boolean) => void;
   readonly projectId: string;
@@ -89,7 +91,6 @@ export function WorkspaceAiDock({
   useEffect(() => {
     const responseCompleted =
       lastMessage?.role === "assistant" &&
-      lastMessage.state !== "question" &&
       seenMessageIdRef.current !== null &&
       seenMessageIdRef.current !== lastMessage.id;
     if (getWorkspaceAiDockUnread({ isOpen, responseCompleted })) setHasUnreadResponse(true);
@@ -154,7 +155,12 @@ export function WorkspaceAiDock({
   }
 
   return (
-    <div className={styles.layer} data-inspector-open={context.isRightPanelOpen} data-open={isOpen}>
+    <div
+      className={styles.layer}
+      data-inspector-open={context.isRightPanelOpen}
+      data-open={isOpen}
+      data-operations-open={hasOperationsPanelOpen}
+    >
       {isOpen ? (
         <WorkspaceAiDockPanel
           assistant={assistant}
