@@ -124,6 +124,7 @@ export const DiagramNodeView = memo(function DiagramNodeView(
   const node = data.node;
   const toolbarVisible = !data.isPreview && selected && data.selectedNodeCount === 1;
   const canConnect = !data.isPreview && Boolean(isConnectable) && !node.locked;
+  const canResize = !node.locked && !data.isPreview && !data.isConnectionActive;
   const isResourceNode = node.kind === "resource";
   const isArea = isAreaNode(node);
   const usesIconTileLayout = isResourceNode || (node.kind === "design" && !isArea && Boolean(node.iconUrl));
@@ -374,16 +375,16 @@ export const DiagramNodeView = memo(function DiagramNodeView(
         ) : null}
       </div>
 
-      {selected && !node.locked && !data.isPreview && !data.isConnectionActive ? (
+      {canResize ? (
         <>
           {RESIZE_HANDLES.map((handle) => (
             <button
               aria-label={handle.label}
               className={[
-                    styles.manualResizeHandle,
-                    isArea ? styles.manualResizeHandleArea : undefined,
-                    handle.isSide ? styles.manualResizeHandleSide : undefined,
-                    handle.className,
+                styles.manualResizeHandle,
+                isArea ? styles.manualResizeHandleArea : undefined,
+                handle.isSide ? styles.manualResizeHandleSide : undefined,
+                handle.className,
                 "nodrag"
               ]
                 .filter(Boolean)
@@ -391,6 +392,7 @@ export const DiagramNodeView = memo(function DiagramNodeView(
               key={handle.position}
               onKeyDown={(event) => handleResizeKeyDown(event, handle.position)}
               onPointerDown={(event) => handleResizePointerDown(event, handle.position)}
+              tabIndex={selected ? 0 : -1}
               title={handle.label}
               type="button"
             />

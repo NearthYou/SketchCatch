@@ -2408,12 +2408,20 @@
   border-radius: 2px;
   box-shadow: none;
   height: 6px;
+  opacity: 0;
   padding: 0;
-  pointer-events: all;
+  pointer-events: none;
   position: absolute;
   touch-action: none;
+  transition: opacity 120ms ease;
   width: 6px;
   z-index: 3;
+}
+
+.canvasPanel :global(.react-flow__node:hover) .manualResizeHandle:not(.manualResizeHandleSide),
+.nodeShellSelected ~ .manualResizeHandle {
+  opacity: 1;
+  pointer-events: all;
 }
 
 .manualResizeHandle::before {
@@ -2452,47 +2460,59 @@
 }
 
 .manualResizeHandleTop {
-  cursor: ns-resize;
   top: -4px;
 }
 
 .manualResizeHandleRight {
-  cursor: ew-resize;
   right: -4px;
 }
 
 .manualResizeHandleBottom {
   bottom: -4px;
-  cursor: ns-resize;
 }
 
 .manualResizeHandleLeft {
-  cursor: ew-resize;
   left: -4px;
 }
 
 .manualResizeHandleTopLeft {
-  cursor: nwse-resize;
   left: -3px;
   top: -3px;
 }
 
 .manualResizeHandleTopRight {
-  cursor: nesw-resize;
   right: -3px;
   top: -3px;
 }
 
 .manualResizeHandleBottomLeft {
   bottom: -3px;
-  cursor: nesw-resize;
   left: -3px;
 }
 
 .manualResizeHandleBottomRight {
   bottom: -3px;
-  cursor: nwse-resize;
   right: -3px;
+}
+
+.manualResizeHandle.manualResizeHandleTop,
+.manualResizeHandle.manualResizeHandleBottom {
+  cursor: ns-resize;
+}
+
+.manualResizeHandle.manualResizeHandleLeft,
+.manualResizeHandle.manualResizeHandleRight {
+  cursor: ew-resize;
+}
+
+.manualResizeHandle.manualResizeHandleTopLeft,
+.manualResizeHandle.manualResizeHandleBottomRight {
+  cursor: nwse-resize;
+}
+
+.manualResizeHandle.manualResizeHandleTopRight,
+.manualResizeHandle.manualResizeHandleBottomLeft {
+  cursor: nesw-resize;
 }
 
 .manualResizeHandle:not(.manualResizeHandleSide):hover,

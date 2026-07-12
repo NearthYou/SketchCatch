@@ -278,10 +278,38 @@ test("manual resize handles expose corners and the full four sides", () => {
     diagramEditorCssSource,
     /\.manualResizeHandleLeft,\s*\.manualResizeHandleRight\s*\{[^}]*height:\s*calc\(100% - 24px\);/s
   );
+  assert.match(
+    diagramEditorCssSource,
+    /\.manualResizeHandle\.manualResizeHandleTop,\s*\.manualResizeHandle\.manualResizeHandleBottom\s*\{[^}]*cursor:\s*ns-resize;/s
+  );
+  assert.match(
+    diagramEditorCssSource,
+    /\.manualResizeHandle\.manualResizeHandleLeft,\s*\.manualResizeHandle\.manualResizeHandleRight\s*\{[^}]*cursor:\s*ew-resize;/s
+  );
+  assert.match(
+    diagramEditorCssSource,
+    /\.manualResizeHandle\.manualResizeHandleTopLeft,\s*\.manualResizeHandle\.manualResizeHandleBottomRight\s*\{[^}]*cursor:\s*nwse-resize;/s
+  );
+  assert.match(
+    diagramEditorCssSource,
+    /\.manualResizeHandle\.manualResizeHandleTopRight,\s*\.manualResizeHandle\.manualResizeHandleBottomLeft\s*\{[^}]*cursor:\s*nesw-resize;/s
+  );
   assert.match(diagramNodeViewSource, /onKeyDown=\{\(event\) => handleResizeKeyDown\(event, handle\.position\)\}/);
   assert.match(
     diagramNodeViewSource,
-    /selected && !node\.locked && !data\.isPreview && !data\.isConnectionActive/
+    /const canResize = !node\.locked && !data\.isPreview && !data\.isConnectionActive;/
+  );
+  assert.match(
+    diagramNodeViewSource,
+    /\{canResize \? \([\s\S]*?tabIndex=\{selected \? 0 : -1\}/
+  );
+  assert.match(
+    diagramEditorCssSource,
+    /\.manualResizeHandle\s*\{[^}]*opacity:\s*0;[^}]*pointer-events:\s*none;/s
+  );
+  assert.match(
+    diagramEditorCssSource,
+    /\.canvasPanel\s+:global\(\.react-flow__node:hover\)\s+\.manualResizeHandle:not\(\.manualResizeHandleSide\),\s*\.nodeShellSelected\s*~\s*\.manualResizeHandle\s*\{[^}]*opacity:\s*1;[^}]*pointer-events:\s*all;/s
   );
   assert.match(
     diagramEditorCssSource,
