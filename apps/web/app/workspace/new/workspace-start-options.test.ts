@@ -37,10 +37,13 @@ test("WorkspaceStartClient uses the rebuilt start shell without a placeholder", 
   assert.match(startClientSource, /blankStartOption/);
 });
 
-test("WorkspaceStartClient keeps Template and GitHub Repository as real start paths", () => {
+test("WorkspaceStartClient keeps Template and GitHub URL analysis as real start paths", () => {
   assert.match(startClientSource, /saveProjectDraft/);
   assert.match(startClientSource, /selectedTemplate\.diagramJson/);
-  assert.match(startClientSource, /workspace\/repository/);
+  assert.match(startClientSource, /RepositoryUrlStartPanel/);
+  assert.match(startClientSource, /analyzePublicSourceRepository/);
+  assert.match(startClientSource, /https:\/\/github\.com\/owner\/repository/);
+  assert.doesNotMatch(startClientSource, /workspace\/repository/);
 });
 
 test("WorkspaceStartClient hydrates a stored form before persisting changes", () => {
@@ -88,8 +91,8 @@ test("resolveWorkspaceStartAction opens AI before project creation", () => {
   assert.deepEqual(aiAction, { kind: "openAiDraft", href: "/workspace/ai" });
 });
 
-test("resolveWorkspaceStartAction creates projects for blank, Template, and Repository starts", () => {
-  const starts = ["blank", "template", "repository"] as const;
+test("resolveWorkspaceStartAction creates projects for blank and Template starts", () => {
+  const starts = ["blank", "template"] as const;
   const actions = starts.map((startKind) =>
     resolveWorkspaceStartAction({
       cloudPlatform: "aws",
@@ -103,4 +106,15 @@ test("resolveWorkspaceStartAction creates projects for blank, Template, and Repo
     actions,
     starts.map((openMode) => ({ kind: "createProject", openMode }))
   );
+});
+
+test("resolveWorkspaceStartAction opens Repository starts as an inline URL form", () => {
+  const action = resolveWorkspaceStartAction({
+    cloudPlatform: "aws",
+    hasVerifiedAwsConnection: true,
+    projectName: "repository",
+    startKind: "repository"
+  });
+
+  assert.deepEqual(action, { kind: "showRepositoryUrlForm" });
 });

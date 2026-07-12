@@ -21,7 +21,7 @@ export type ResolveWorkspaceStartActionInput = {
 export type WorkspaceStartAction =
   | {
       readonly kind: "createProject";
-      readonly openMode: "template" | "repository" | "blank";
+      readonly openMode: "template" | "blank";
     }
   | {
       readonly kind: "openAiDraft";
@@ -34,6 +34,9 @@ export type WorkspaceStartAction =
   | {
       readonly kind: "redirect";
       readonly href: string;
+    }
+  | {
+      readonly kind: "showRepositoryUrlForm";
     };
 
 // 새 프로젝트 첫 화면에서 어떤 시작 방식을 크게 보여줄지 정합니다.
@@ -107,6 +110,12 @@ export function resolveWorkspaceStartAction({
     return {
       kind: "openReversePreview",
       href: `/workspace/reverse?${params.toString()}`
+    };
+  }
+
+  if (startKind === "repository") {
+    return {
+      kind: "showRepositoryUrlForm"
     };
   }
 

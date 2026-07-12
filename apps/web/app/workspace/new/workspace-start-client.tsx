@@ -16,13 +16,17 @@ import { useEffect, useMemo, useState } from "react";
 import { TemplateGallery } from "../../../components/templates/TemplateGallery";
 import { ProductBrand } from "../../../components/ui/ProductBrand";
 import {
+  analyzePublicSourceRepository,
   createProject,
   deleteProject,
   listAwsConnections,
   saveProjectDraft
 } from "../../../features/workspace/api";
+import { getApiErrorMessage } from "../../../lib/api-client";
+import type { SourceRepositoryAnalysisResult } from "@sketchcatch/types";
 import {
   type BoardTemplate,
+  buildBoardTemplateDiagram,
   listBoardTemplates
 } from "../../../features/resource-settings/template-library";
 import {
@@ -80,6 +84,10 @@ export function WorkspaceStartClient({
   );
   const [errorMessage, setErrorMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [repositoryUrlFormVisible, setRepositoryUrlFormVisible] = useState(initialStartKind === "repository");
+  const [repositoryUrl, setRepositoryUrl] = useState("");
+  const [repositoryDefaultBranch, setRepositoryDefaultBranch] = useState("main");
+  const [repositoryAnalysis, setRepositoryAnalysis] = useState<SourceRepositoryAnalysisResult | null>(null);
   const selectedTemplate = useMemo(
     () => boardTemplates.find((template) => template.id === selectedTemplateId) ?? null,
     [selectedTemplateId]
@@ -87,7 +95,10 @@ export function WorkspaceStartClient({
   const canContinue =
     title.trim().length > 0 &&
     !isSubmitting &&
-    (selectedKind !== "template" || selectedTemplate !== null);
+    (selectedKind !== "template" || selectedTemplate !== null) &&
+    (selectedKind !== "repository" ||
+      !repositoryUrlFormVisible ||
+      repositoryUrl.trim().length > 0);
 
   useEffect(() => {
     if (initialStartKind) {
@@ -100,6 +111,7 @@ export function WorkspaceStartClient({
       setTitle(storedForm.projectName);
       setSelectedKind(storedForm.selectedKind);
       setSelectedTemplateId(storedForm.selectedTemplateId);
+      setRepositoryUrlFormVisible(storedForm.selectedKind === "repository");
     } else {
       const aiDraft = readAiStartDraft();
       if (aiDraft?.projectName) {
@@ -132,6 +144,12 @@ export function WorkspaceStartClient({
     }
 
     setErrorMessage("");
+
+    if (selectedKind === "repository" && repositoryUrlFormVisible) {
+      await startFromRepositoryUrl(projectName);
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -149,6 +167,12 @@ export function WorkspaceStartClient({
 
       if (action.kind === "redirect" || action.kind === "openReversePreview") {
         router.push(action.href);
+        return;
+      }
+
+      if (action.kind === "showRepositoryUrlForm") {
+        setRepositoryUrlFormVisible(true);
+        setIsSubmitting(false);
         return;
       }
 
@@ -170,11 +194,7 @@ export function WorkspaceStartClient({
           projectId: project.id,
           projectName: project.name
         });
-        router.push(
-          action.openMode === "repository"
-            ? `/workspace/repository?${params.toString()}`
-            : `/workspace?${params.toString()}`
-        );
+        router.push(`/workspace?${params.toString()}`);
       } catch (error) {
         // 시작용으로 방금 만든 빈 프로젝트만 정리해 실패한 시작 흔적을 남기지 않습니다.
         if (createdProjectId) {
@@ -191,6 +211,73 @@ export function WorkspaceStartClient({
   function selectStartKind(kind: WorkspaceStartKind): void {
     setSelectedKind(kind);
     setErrorMessage("");
+    setRepositoryAnalysis(null);
+
+    if (kind === "repository") {
+      setRepositoryUrlFormVisible(true);
+      return;
+    }
+
+    setRepositoryUrlFormVisible(false);
+  }
+
+  async function startFromRepositoryUrl(projectName: string): Promise<void> {
+    const trimmedRepositoryUrl = repositoryUrl.trim();
+    const trimmedDefaultBranch = repositoryDefaultBranch.trim();
+
+    if (!trimmedRepositoryUrl) {
+      setErrorMessage("Repository URL을 입력해주세요.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setRepositoryAnalysis(null);
+
+    let createdProjectId: string | null = null;
+
+    try {
+      const analysis = await analyzePublicSourceRepository({
+        repositoryUrl: trimmedRepositoryUrl,
+        ...(trimmedDefaultBranch ? { defaultBranch: trimmedDefaultBranch } : {})
+      });
+      setRepositoryAnalysis(analysis);
+
+      const diagram = buildBoardTemplateDiagram(analysis.recommendedTemplateId ?? undefined, {
+        projectSlug: projectName,
+        shortId: "public-repo"
+      });
+
+      if (!diagram) {
+        setIsSubmitting(false);
+        setErrorMessage(
+          "Public repository는 읽었지만 맞는 Template을 찾지 못했습니다. private repository라면 환경설정에서 GitHub 권한을 연결해주세요."
+        );
+        return;
+      }
+
+      const project = await createProject({ name: projectName });
+      createdProjectId = project.id;
+      await saveProjectDraft({ diagramJson: diagram, projectId: project.id });
+      clearWorkspaceStartForm();
+      router.push(
+        `/workspace?${new URLSearchParams({
+          projectId: project.id,
+          projectName: project.name
+        }).toString()}`
+      );
+    } catch (error) {
+      if (createdProjectId) {
+        await deleteProject(createdProjectId).catch(() => undefined);
+      }
+
+      setIsSubmitting(false);
+      setErrorMessage(
+        getApiErrorMessage(
+          error,
+          "Repository URL을 분석하지 못했습니다. private repository라면 환경설정에서 GitHub 권한을 연결해주세요."
+        )
+      );
+    }
   }
 
   return (
@@ -271,7 +358,7 @@ export function WorkspaceStartClient({
               {isSubmitting ? (
                 <LoaderCircle aria-hidden="true" className={styles.spinner} size={17} />
               ) : null}
-              {isSubmitting ? "처리 중" : getContinueLabel(selectedKind)}
+              {isSubmitting ? "처리 중" : getContinueLabel(selectedKind, repositoryUrlFormVisible)}
             </button>
             {blankStartOption ? (
               <button
@@ -287,6 +374,25 @@ export function WorkspaceStartClient({
               </button>
             ) : null}
           </div>
+
+          {selectedKind === "repository" && repositoryUrlFormVisible ? (
+            <RepositoryUrlStartPanel
+              analysis={repositoryAnalysis}
+              branch={repositoryDefaultBranch}
+              isSubmitting={isSubmitting}
+              onBranchChange={(value) => {
+                setRepositoryDefaultBranch(value);
+                setRepositoryAnalysis(null);
+                setErrorMessage("");
+              }}
+              onRepositoryUrlChange={(value) => {
+                setRepositoryUrl(value);
+                setRepositoryAnalysis(null);
+                setErrorMessage("");
+              }}
+              repositoryUrl={repositoryUrl}
+            />
+          ) : null}
 
           {errorMessage ? (
             <p className={styles.errorMessage} role="alert">
@@ -351,12 +457,88 @@ function TemplatePicker({
   );
 }
 
+function RepositoryUrlStartPanel({
+  analysis,
+  branch,
+  isSubmitting,
+  onBranchChange,
+  onRepositoryUrlChange,
+  repositoryUrl
+}: {
+  readonly analysis: SourceRepositoryAnalysisResult | null;
+  readonly branch: string;
+  readonly isSubmitting: boolean;
+  readonly onBranchChange: (value: string) => void;
+  readonly onRepositoryUrlChange: (value: string) => void;
+  readonly repositoryUrl: string;
+}) {
+  const foundEvidenceFiles = analysis?.evidenceFiles.filter((file) => file.found) ?? [];
+
+  return (
+    <section className={styles.repositoryUrlPanel} aria-labelledby="repository-url-title">
+      <div className={styles.repositoryUrlHeader}>
+        <h2 id="repository-url-title">Repository URL 분석</h2>
+        <p>
+          public GitHub repository는 계정 연결 없이 분석합니다. private repository나 권한이 부족한 경우에는
+          환경설정에서 GitHub 권한을 연결해주세요.
+        </p>
+      </div>
+
+      <div className={styles.repositoryUrlForm}>
+        <label htmlFor="repository-url-input">
+          <span>GitHub URL</span>
+          <input
+            disabled={isSubmitting}
+            id="repository-url-input"
+            onChange={(event) => onRepositoryUrlChange(event.target.value)}
+            placeholder="https://github.com/owner/repository"
+            type="url"
+            value={repositoryUrl}
+          />
+        </label>
+        <label htmlFor="repository-branch-input">
+          <span>Branch</span>
+          <input
+            disabled={isSubmitting}
+            id="repository-branch-input"
+            onChange={(event) => onBranchChange(event.target.value)}
+            placeholder="main"
+            type="text"
+            value={branch}
+          />
+        </label>
+      </div>
+
+      {analysis ? (
+        <div className={styles.repositoryAnalysis}>
+          <strong>{formatRepositoryTemplate(analysis.recommendedTemplateId)}</strong>
+          <p>{analysis.recommendationReason}</p>
+          {foundEvidenceFiles.length > 0 ? (
+            <ul className={styles.repositoryEvidenceList} aria-label="읽은 repository evidence">
+              {foundEvidenceFiles.map((file) => (
+                <li key={file.path}>{file.path}</li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function formatRepositoryTemplate(
+  templateId: SourceRepositoryAnalysisResult["recommendedTemplateId"]
+): string {
+  const template = boardTemplates.find((candidate) => candidate.id === templateId);
+  return template ? `추천 Template: ${template.title}` : "추천 Template을 찾는 중";
+}
+
 // 선택한 시작 방식에 맞는 한 개의 주 행동 문구를 반환합니다.
-function getContinueLabel(kind: WorkspaceStartKind): string {
+function getContinueLabel(kind: WorkspaceStartKind, repositoryUrlFormVisible = false): string {
   const labels: Record<WorkspaceStartKind, string> = {
     ai: "AI로 계속",
     blank: "빈 보드 열기",
-    repository: "Repository 연결하기",
+    repository: repositoryUrlFormVisible ? "Repository 분석하기" : "Repository URL 입력하기",
     reverse: "기존 AWS 가져오기",
     template: "Template으로 시작"
   };
