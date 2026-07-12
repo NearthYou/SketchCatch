@@ -57,7 +57,8 @@ const LIVE_OBSERVATION_PRESENTATION_LAYOUT: Readonly<Record<
   "template-live-asg": { position: { x: 1040, y: 240 }, size: { height: 320, width: 200 } },
   "template-live-policy": { position: { x: 1120, y: 320 } },
   "template-live-alarm": { position: { x: 1120, y: 440 } },
-  "template-live-site": { position: { x: 80, y: 360 } }
+  "template-live-site": { position: { x: 80, y: 240 } },
+  "template-live-site-config": { position: { x: 80, y: 360 } }
 };
 
 function applyLiveObservationPresentationLayout(nodeById: Map<string, DiagramNode>): void {

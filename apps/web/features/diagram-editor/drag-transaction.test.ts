@@ -156,6 +156,124 @@ test("finalizeDraggedNodes assigns children dropped inside an ASG area", () => {
   assert.equal(instance?.metadata?.parentAreaNodeId, "asg-1");
 });
 
+test("finalizeDraggedNodes expands a newly entered parent by twice the existing resource size", () => {
+  const nodes = [
+    makeResourceNode({
+      id: "vpc-1",
+      resourceName: "main",
+      resourceType: "aws_vpc",
+      width: 80,
+      height: 60,
+      x: 0,
+      y: 0
+    }),
+    makeResourceNode({
+      id: "instance-1",
+      resourceName: "web",
+      resourceType: "aws_instance",
+      width: 20,
+      height: 20,
+      x: 120,
+      y: 20
+    })
+  ];
+
+  const result = finalizeDraggedNodes({
+    anchorNodeId: "instance-1",
+    catalog: terraformParameterCatalog,
+    currentNodes: nodes,
+    directlyMovedNodeIds: new Set(["instance-1"]),
+    positionByNodeId: new Map([["instance-1", { x: 5, y: 5 }]]),
+    snapGridSize: 1,
+    snapshotNodes: nodes
+  });
+
+  const vpcAfter = result.nodes.find((node) => node.id === "vpc-1");
+  const instanceAfter = result.nodes.find((node) => node.id === "instance-1");
+  assert.equal(instanceAfter?.metadata?.parentAreaNodeId, "vpc-1");
+  assert.deepEqual(vpcAfter?.position, { x: -20, y: -20 });
+  assert.deepEqual(vpcAfter?.size, { width: 120, height: 100 });
+});
+
+test("finalizeDraggedNodes assigns the parent without resizing it when auto expansion is OFF", () => {
+  const nodes = [
+    makeResourceNode({
+      id: "vpc-1",
+      resourceName: "main",
+      resourceType: "aws_vpc",
+      width: 80,
+      height: 60,
+      x: 0,
+      y: 0
+    }),
+    makeResourceNode({
+      id: "instance-1",
+      resourceName: "web",
+      resourceType: "aws_instance",
+      width: 20,
+      height: 20,
+      x: 120,
+      y: 20
+    })
+  ];
+
+  const result = finalizeDraggedNodes({
+    anchorNodeId: "instance-1",
+    autoExpandAreasEnabled: false,
+    catalog: terraformParameterCatalog,
+    currentNodes: nodes,
+    directlyMovedNodeIds: new Set(["instance-1"]),
+    positionByNodeId: new Map([["instance-1", { x: 5, y: 5 }]]),
+    snapGridSize: 1,
+    snapshotNodes: nodes
+  });
+
+  const vpcAfter = result.nodes.find((node) => node.id === "vpc-1");
+  const instanceAfter = result.nodes.find((node) => node.id === "instance-1");
+
+  assert.equal(instanceAfter?.metadata?.parentAreaNodeId, "vpc-1");
+  assert.deepEqual(vpcAfter?.position, { x: 0, y: 0 });
+  assert.deepEqual(vpcAfter?.size, { width: 80, height: 60 });
+});
+
+test("finalizeDraggedNodes does not repeatedly expand the same parent during an internal move", () => {
+  const nodes = [
+    makeResourceNode({
+      id: "vpc-1",
+      resourceName: "main",
+      resourceType: "aws_vpc",
+      width: 80,
+      height: 60,
+      x: 0,
+      y: 0
+    }),
+    makeResourceNode({
+      id: "instance-1",
+      metadata: { parentAreaNodeId: "vpc-1" },
+      resourceName: "web",
+      resourceType: "aws_instance",
+      width: 20,
+      height: 20,
+      x: 10,
+      y: 10
+    })
+  ];
+
+  const result = finalizeDraggedNodes({
+    anchorNodeId: "instance-1",
+    catalog: terraformParameterCatalog,
+    currentNodes: nodes,
+    directlyMovedNodeIds: new Set(["instance-1"]),
+    positionByNodeId: new Map([["instance-1", { x: 25, y: 25 }]]),
+    snapGridSize: 1,
+    snapshotNodes: nodes
+  });
+
+  const vpcAfter = result.nodes.find((node) => node.id === "vpc-1");
+  assert.deepEqual(vpcAfter?.position, { x: 0, y: 0 });
+  assert.deepEqual(vpcAfter?.size, { width: 80, height: 60 });
+});
+
 function makeResourceNode({
   height = 72,
   id,

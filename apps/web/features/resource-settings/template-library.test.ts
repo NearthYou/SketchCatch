@@ -175,14 +175,18 @@ test("Live Observation template carries the same ASG pressure resources as the d
 
   const vpc = template.diagramJson.nodes.find((node) => node.id === "template-live-vpc");
   const audienceSite = template.diagramJson.nodes.find((node) => node.id === "template-live-site");
+  const audienceEndpoint = template.diagramJson.nodes.find(
+    (node) => node.id === "template-live-site-config"
+  );
   const alb = template.diagramJson.nodes.find((node) => node.id === "template-live-alb");
   const audienceEdge = template.diagramJson.edges.find((edge) => edge.id === "template-live-site-flow");
   assert.ok(vpc);
   assert.ok(audienceSite);
+  assert.ok(audienceEndpoint);
   assert.ok(alb);
   assert.ok(targetGroup);
   assert.ok(audienceEdge);
-  assert.equal(audienceEdge.sourceNodeId, "template-live-site");
+  assert.equal(audienceEdge.sourceNodeId, "template-live-site-config");
   assert.equal(template.diagramJson.nodes.length, 22);
   assert.ok(vpc.size.height < 800, "dense VPC resources should form compact columns, not one tall stack");
   assert.ok(audienceSite.position.x < vpc.position.x);
@@ -203,7 +207,8 @@ test("Live Observation template carries the same ASG pressure resources as the d
     "template-live-asg",
     "template-live-policy",
     "template-live-alarm",
-    "template-live-site"
+    "template-live-site",
+    "template-live-site-config"
   ];
   const curatedNodes = curatedNodeIds.map((nodeId) => {
     const node = template.diagramJson.nodes.find((candidate) => candidate.id === nodeId);
@@ -230,7 +235,7 @@ test("Live Observation template carries the same ASG pressure resources as the d
     assert.equal(areaNode.size.height % 40, 0, `${areaNode.id} height must use the 40px grid`);
   }
 
-  assert.equal(audienceSite.position.y, alb.position.y);
+  assert.equal(audienceEndpoint.position.y, alb.position.y);
   assert.equal(alb.position.y, targetGroup.position.y);
   assert.equal(policy.position.x, alarm.position.x);
 });

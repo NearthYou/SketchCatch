@@ -4,6 +4,7 @@ import {
   getRegionNodeAwsRegion,
   isRegionAreaNode
 } from "../parameter-input/region-node-metadata";
+import { getResourceNodeDisplayLabel } from "./resource-node-display-label";
 
 const designAreaNodeTypes = new Set([
   "design_region",
@@ -38,6 +39,23 @@ export function isAreaNode(node: DiagramNode): boolean {
   return isDesignAreaNode(node) || isResourceAreaNode(node);
 }
 
+export function findInnermostAreaDropTarget(
+  childNode: DiagramNode,
+  nodes: readonly DiagramNode[]
+): DiagramNode | null {
+  if (isAreaNode(childNode)) {
+    return null;
+  }
+
+  return findInnermostAreaNodeAtPoint(
+    nodes.filter((node) => node.id !== childNode.id),
+    {
+      x: childNode.position.x + childNode.size.width / 2,
+      y: childNode.position.y + childNode.size.height / 2
+    }
+  );
+}
+
 export function findInnermostAreaNodeAtPoint(
   nodes: readonly DiagramNode[],
   point: DiagramNode["position"]
@@ -61,15 +79,17 @@ export function getAreaNodeLabel(node: DiagramNode): string {
   const diagramAreaLabel = readDiagramTextValue(node, "diagramAreaLabel");
 
   if (diagramAreaLabel) {
-    return diagramAreaLabel;
+    return isResourceAreaNode(node) ? diagramAreaLabel.toLocaleUpperCase() : diagramAreaLabel;
+  }
+
+  const diagramLabel = readDiagramTextValue(node, "diagramLabel");
+
+  if (diagramLabel) {
+    return diagramLabel;
   }
 
   if (isResourceAreaNode(node)) {
-    const resourceName = node.parameters?.resourceName?.trim();
-
-    if (resourceName) {
-      return resourceName;
-    }
+    return getResourceNodeDisplayLabel(node);
   }
 
   return node.label;

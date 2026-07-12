@@ -1,0 +1,218 @@
+.terraformTopBar,
+.resourceCodeHeader,
+.resourceActionBar {
+  background: #ffffff;
+  border-bottom: 1px solid #f0f0f3;
+}
+
+.terraformTopBar {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  min-height: 48px;
+  padding: 8px 12px;
+}
+
+.terraformTopActions {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+
+.terraformFilePicker {
+  min-width: 0;
+  position: relative;
+}
+
+.terraformFileButton,
+.terraformPreviewButton,
+.resourceCodeBackButton,
+.resourceCodeCloseButton {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #dcdee0;
+  border-radius: 8px;
+  color: #171717;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-weight: 700;
+  justify-content: center;
+}
+
+.terraformFileButton {
+  font-size: 12px;
+  gap: 7px;
+  height: 32px;
+  max-width: min(210px, 42vw);
+  padding: 0 10px;
+}
+
+.terraformFileButton span,
+.resourceCodeTitle span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.terraformFileButton:hover,
+.terraformFileButton:focus-visible,
+.terraformPreviewButton:not(:disabled):hover,
+.terraformPreviewButton:not(:disabled):focus-visible,
+.resourceCodeBackButton:hover,
+.resourceCodeBackButton:focus-visible,
+.resourceCodeCloseButton:hover,
+.resourceCodeCloseButton:focus-visible {
+  background: #fafafa;
+  border-color: #b8babc;
+  outline: none;
+}
+
+.terraformFileMenu {
+  background: #ffffff;
+  border: 1px solid #dcdee0;
+  border-radius: 12px;
+  box-shadow: 0 16px 36px rgba(23, 23, 23, 0.14);
+  display: grid;
+  gap: 8px;
+  left: 0;
+  max-width: calc(100vw - 32px);
+  min-width: 250px;
+  padding: 10px;
+  position: absolute;
+  top: calc(100% + 8px);
+  z-index: 8;
+}
+
+.terraformFileSearch {
+  background: #ffffff;
+  border: 1px solid #dcdee0;
+  border-radius: 8px;
+  color: #171717;
+  font: inherit;
+  font-size: 12px;
+  min-height: 36px;
+  min-width: 0;
+  padding: 8px 10px;
+}
+
+.terraformFileSearch:focus {
+  border-color: #171717;
+  box-shadow: 0 0 0 3px rgba(23, 23, 23, 0.1);
+  outline: none;
+}
+
+.terraformFileList {
+  display: grid;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.terraformFileOption,
+.terraformFileOptionActive {
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  color: #171717;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  min-height: 34px;
+  overflow: hidden;
+  padding: 7px 10px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.terraformFileOptionActive {
+  background: #171717;
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.terraformFileOption:not(.terraformFileOptionActive):hover,
+.terraformFileOption:not(.terraformFileOptionActive):focus-visible {
+  background: #f5f5f5;
+  outline: none;
+}
+
+.terraformFileEmpty {
+  color: #60646c;
+  font-size: 12px;
+  padding: 10px;
+}
+
+.terraformPreviewButton {
+  font-size: 12px;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 10px;
+  white-space: nowrap;
+}
+
+.terraformPreviewButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.terraformShortcut {
+  color: #7a7d82;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.resourceCodeHeader {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  min-height: 48px;
+  padding: 8px 10px;
+}
+
+.resourceCodeTitle {
+  align-items: center;
+  color: #171717;
+  display: flex;
+  font-size: 13px;
+  font-weight: 700;
+  gap: 8px;
+  min-width: 0;
+}
+
+.resourceCodeBackButton,
+.resourceCodeCloseButton {
+  flex: 0 0 auto;
+  height: 32px;
+  padding: 0;
+  width: 32px;
+}
+
+.resourceActionBar {
+  align-items: center;
+  display: flex;
+  justify-content: flex-end;
+  min-height: 44px;
+  padding: 6px 10px;
+}
+
+@media (max-width: 520px) {
+  .terraformTopBar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .terraformTopActions {
+    justify-content: space-between;
+  }
+
+  .terraformFileButton {
+    max-width: 100%;
+    width: 100%;
+  }
+}

@@ -171,7 +171,7 @@ test("Live Observation preview prioritizes the traffic flow over empty network f
 
   assert.ok(selectedIds.has("template-live-vpc"));
   assert.ok(selectedIds.has("template-live-asg"));
-  assert.ok(selectedIds.has("template-live-site"));
+  assert.ok(selectedIds.has("template-live-site-config"));
   assert.ok(selectedIds.has("template-live-alb"));
   assert.ok(!selectedIds.has("template-live-subnet-a"));
   assert.ok(!selectedIds.has("template-live-alb-sg"));

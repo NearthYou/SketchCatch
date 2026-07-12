@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "lastUpdated": "2026-07-11",
+  "lastUpdated": "2026-07-12",
   "purpose": "Tracks agent-harness hardening work and active cross-session workstreams. Product scope remains in docs/product.md.",
   "statusRules": {
     "allowedStatuses": ["not_started", "in_progress", "blocked", "passing"],
@@ -214,6 +214,33 @@
         "notes": "Production Route53 targets the direct-path ECS ALB; API/web run at autoscaling min 1 and max 2, worker RunTask is active, auth runtime preflight covers token and OAuth configuration, and container log alarms require two consecutive error periods without repetitive OK notifications."
       },
       "notes": "Warm EC2/ALB/nginx and the legacy ECS service/target group are retired. Cold rollback retains a sanitized encrypted AMI, verified Docker archive, disabled Terraform root, and runbook."
+    },
+    {
+      "id": "DEPLOYMENT-SAFETY-TRIVY-001",
+      "priority": 1,
+      "area": "deployment-safety",
+      "title": "Accurate and responsive Terraform pre-deployment safety gate",
+      "user_visible_behavior": "배포 전 검사는 정확히 그룹화된 Trivy 근거를 표시하고, 핵심 규칙은 즉시 반환하며, 심층검사와 AI 설명은 비동기로 갱신한다.",
+      "status": "passing",
+      "verification": [
+        "S3 finding은 rule ID별 정확한 한국어 설명과 resourceAddress/riskFamily 그룹을 사용한다.",
+        "동일 Terraform 검사는 5분 cache와 single-flight를 사용하고 Plan에서 재사용된다.",
+        "Public S3, 공개 SSH, Public RDS, IAM wildcard는 Trivy 시작 전에 deterministic gate로 검사된다.",
+        "UI가 핵심 검사, 심층검사 진행, 병합 완료 상태를 구분하고 high finding이 있어도 Plan 생성과 승인을 허용하며, 생성된 Plan은 재생성 대신 승인 단계로 진행한다."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-12",
+        "commands": [
+          "pnpm harness:check",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build",
+          "pnpm test",
+          "targeted API, scanner, Plan, and Workspace tests"
+        ],
+        "notes": "Focused deployment-safety, approval, Apply, Destroy, Plan, and Workspace tests pass. High findings remain visible but do not block Plan approval, and an existing unapproved apply Plan advances to approval instead of exposing regeneration. Deployment History keeps Destroy Plan regeneration available beside approval, then beside Destroy execution after approval. Lint, typecheck, and build pass. The full web suite still has four unrelated baseline failures in diagram toolbar CSS, dashboard projects route expectations, a missing personal docs inventory file, and a stale resource catalog count."
+      },
+      "notes": "No cloud apply, destroy, or external deployment mutation was performed."
     },
     {
       "id": "LIVE-OBSERVATION-V2-001",

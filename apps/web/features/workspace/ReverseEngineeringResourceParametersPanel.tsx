@@ -1,5 +1,5 @@
 import type { DiscoveredResource } from "@sketchcatch/types";
-import styles from "./workspace.module.css";
+import styles from "./reverse-engineering.module.css";
 
 export type ReverseEngineeringResourceParametersPanelProps = {
   readonly discoveredResources: DiscoveredResource[];
@@ -14,22 +14,22 @@ export function ReverseEngineeringResourceParametersPanel({
   }
 
   return (
-    <section className={styles.deploymentSection}>
+    <section className={styles.section}>
       <h3>리소스 파라미터</h3>
-      <p className={styles.deploymentHint}>
+      <p className={styles.hint}>
         AWS에서 읽어온 설정값입니다. SketchCatch가 아직 보드에 다 그리지 못하는 값도 여기서 확인합니다.
       </p>
-      <ul className={styles.reverseResultList}>
+      <ul className={styles.resultList}>
         {discoveredResources.map((resource) => (
-          <li key={resource.id} className={styles.reverseResultItem}>
-            <details className={styles.reverseParameterDetails}>
-              <summary className={styles.reverseParameterSummary}>
+          <li key={resource.id} className={styles.resultItem}>
+            <details className={styles.parameterDetails}>
+              <summary className={styles.parameterSummary}>
                 <strong>{resource.displayName}</strong>
                 <span>
                   {resource.resourceType} · {resource.providerResourceId}
                 </span>
               </summary>
-              <pre className={styles.reverseParameterCode}>
+              <pre className={styles.parameterCode}>
                 <code>{formatResourceParameters(resource)}</code>
               </pre>
             </details>

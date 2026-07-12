@@ -549,7 +549,7 @@ test("approveDeploymentPlan preserves failed cleanup state for destroy approvals
   });
 });
 
-test("approveDeploymentPlan allows safety warnings that used to block approval", async () => {
+test("approveDeploymentPlan allows plans with legacy blocking safety warnings", async () => {
   const repository = new FakeDeploymentRepository();
   const warning = createBlockingWarning();
   repository.deployment = createDeploymentRecord(undefined, {
@@ -575,7 +575,8 @@ test("approveDeploymentPlan allows safety warnings that used to block approval",
     }
   );
 
-  assert.equal(deployment.approvedByUserId, userId);
+  assert.equal(repository.approvals.length, 1);
+  assert.equal(deployment.approvedAt, fixedNow);
 });
 
 test("approveDeploymentPlan allows acknowledgement-only warnings without acknowledgement ids", async () => {
@@ -619,13 +620,13 @@ test("approveDeploymentPlan rejects unsafe Terraform artifacts before approval",
         repository,
         {
           downloadTerraformArtifact: async () => `
-            data "aws_caller_identity" "current" {
+            data "aws_region" "current" {
             }
           `,
           now: () => fixedNow
         }
       ),
-    /data source "aws_caller_identity" is not allowed/
+    /data source "aws_region" is not allowed/
   );
 
   assert.equal(repository.approvals.length, 0);

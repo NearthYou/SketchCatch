@@ -20,6 +20,8 @@ import {
   type TerraformArtifactRecord
 } from "./deployment-service.js";
 import { runDeploymentPlan } from "./deployment-plan-service.js";
+import { analyzePreDeploymentCheck } from "../services/aiPreDeploymentCheck.js";
+import { createCachedTerraformSecurityScanner } from "../services/terraform/trivy-terraform-scan.js";
 import type {
   DeploymentPlanArtifactStorage,
   UploadDeploymentPlanArtifactInput,
@@ -791,7 +793,7 @@ test("runDeploymentPlan rejects unsafe Terraform before preparing AWS credential
         {
           planArtifactStorage,
           readTerraformArtifactFile: async () => `
-            data "aws_caller_identity" "current" {
+            data "aws_region" "current" {
             }
           `,
           analyzePreDeployment: () => createAnalysis(),
@@ -813,7 +815,7 @@ test("runDeploymentPlan rejects unsafe Terraform before preparing AWS credential
           }
         }
       ),
-    /data source "aws_caller_identity" is not allowed/
+    /data source "aws_region" is not allowed/
   );
 
   assert.equal(cleanupCalled, true);
@@ -821,7 +823,7 @@ test("runDeploymentPlan rejects unsafe Terraform before preparing AWS credential
   assert.equal(terraformRan, false);
   assert.equal(repository.deployment?.status, "FAILED");
   assert.equal(repository.deployment?.failureStage, "plan");
-  assert.match(repository.deployment?.errorSummary ?? "", /data source "aws_caller_identity" is not allowed/);
+  assert.match(repository.deployment?.errorSummary ?? "", /data source "aws_region" is not allowed/);
   assert.equal(planArtifactStorage.uploads.length, 0);
 });
 
@@ -1125,6 +1127,66 @@ test("runDeploymentPlan feeds Terraform artifact content into Trivy-backed safet
       blocksApproval: false
     }
   ]);
+});
+
+test("runDeploymentPlan reuses the button scan snapshot when the artifact SHA is unchanged", async () => {
+  const repository = new FakeDeploymentRepository();
+  const planArtifactStorage = new FakePlanArtifactStorage();
+  let trivyScanCount = 0;
+  const terraformSecurityScanner = createCachedTerraformSecurityScanner({
+    scan: async () => {
+      trivyScanCount += 1;
+      return [];
+    }
+  });
+  const analyzeWithSharedSnapshot = (input: Parameters<typeof analyzePreDeploymentCheck>[0]) =>
+    analyzePreDeploymentCheck(input, { terraformSecurityScanner });
+
+  await analyzeWithSharedSnapshot({
+    architectureJson: { nodes: [], edges: [] },
+    artifactSha256: terraformArtifactSha256,
+    terraformFiles: [
+      {
+        fileName: "main.tf",
+        terraformCode: terraformArtifactContent
+      }
+    ]
+  });
+
+  await runDeploymentPlan(
+    {
+      deploymentId,
+      accessContext: createAccessContext()
+    },
+    repository,
+    {
+      generatePlanArtifactId: () => planArtifactId,
+      planArtifactStorage,
+      readTerraformArtifactFile: async () => terraformArtifactContent,
+      analyzePreDeployment: analyzeWithSharedSnapshot,
+      prepareTerraformWorkspace: async () => ({
+        workdir: "C:/tmp/sketchcatch-terraform-snapshot-plan",
+        mainFilePath: "C:/tmp/sketchcatch-terraform-snapshot-plan/main.tf",
+        terraformFiles: [
+          {
+            fileName: "main.tf",
+            terraformCode: terraformArtifactContent
+          }
+        ],
+        cleanup: async () => undefined
+      }),
+      prepareTerraformAwsCredentialEnv: async () => createPreparedCredentials(),
+      runTerraformInit: async () => createRunnerResult("init"),
+      runTerraformPlan: async () => createRunnerResult("plan"),
+      runTerraformShowJson: async () =>
+        createRunnerResult("show", {
+          stdout: createPlanJson([])
+        })
+    }
+  );
+
+  assert.equal(createSha256(terraformArtifactContent), terraformArtifactSha256);
+  assert.equal(trivyScanCount, 1);
 });
 
 test("runDeploymentPlan marks plan validation failures failed and masks secret output", async () => {

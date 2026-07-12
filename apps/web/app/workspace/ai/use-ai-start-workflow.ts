@@ -1,7 +1,5 @@
 "use client";
 
-// allow: SIZE_OK — AI 초안, 수정, 추가 질문, 승인 상태 전환을 한 상태 머신에서 순서대로 관리합니다.
-
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type {
@@ -86,7 +84,6 @@ export function useAiStartWorkflow() {
   const [createdProjectId, setCreatedProjectId] = useState<string | null>(null);
   const [requestState, setRequestState] = useState<RequestState>("idle");
   const [errorMessage, setErrorMessage] = useState("");
-  const requestAbortControllerRef = useRef<AbortController | null>(null);
   const [voiceTranscriptNeedsConfirmation, setVoiceTranscriptNeedsConfirmation] = useState(false);
   const voiceInput = useBrowserVoiceInput({
     onChange: handleVoiceTranscriptChange,
@@ -110,8 +107,6 @@ export function useAiStartWorkflow() {
       )
     ]);
   }, [router]);
-
-  useEffect(() => () => requestAbortControllerRef.current?.abort(), []);
 
   async function submitPrompt(value = composerValue): Promise<void> {
     const prompt = value.trim();
@@ -177,15 +172,12 @@ export function useAiStartWorkflow() {
     }
   }
 
-  async function requestDraft(
-    request: CreateArchitectureDraftRequest,
-    preservePreview = false
-  ): Promise<void> {
-    const signal = beginRequest(!preservePreview);
+  async function requestDraft(request: CreateArchitectureDraftRequest): Promise<void> {
+    beginRequest();
     setLastDraftRequest(request);
 
     try {
-      const response = await createAiArchitectureDraft(request, signal);
+      const response = await createAiArchitectureDraft(request);
 
       if (isArchitectureDraftClarification(response)) {
         setDraftClarification({ clarification: response, prompt: request.prompt });
@@ -204,7 +196,6 @@ export function useAiStartWorkflow() {
 
       showDraft(decision.result);
     } catch (error) {
-      if (isAbortedRequest(error)) return;
       failRequest(getApiErrorMessage(error, "Architecture Draft를 만들지 못했습니다."));
     }
   }
@@ -214,17 +205,14 @@ export function useAiStartWorkflow() {
     baseDiagram: DiagramJson,
     options: PatchTargetOptions = {}
   ): Promise<void> {
-    const signal = beginRequest(false);
+    beginRequest(false);
 
     try {
-      const response = await createAiArchitecturePatchPreview(
-        {
-          architectureJson: convertDiagramJsonToArchitectureJson(baseDiagram),
-          instruction,
-          ...options
-        },
-        signal
-      );
+      const response = await createAiArchitecturePatchPreview({
+        architectureJson: convertDiagramJsonToArchitectureJson(baseDiagram),
+        instruction,
+        ...options
+      });
 
       if (isArchitecturePatchClarification(response)) {
         setPatchClarification({ baseDiagram, clarification: response });
@@ -243,7 +231,6 @@ export function useAiStartWorkflow() {
       finishRequest();
       appendAssistantMessage("draft", createPatchSummary(response));
     } catch (error) {
-      if (isAbortedRequest(error)) return;
       failRequest(getApiErrorMessage(error, "수정 PREVIEW를 만들지 못했습니다."));
     }
   }
@@ -283,21 +270,8 @@ export function useAiStartWorkflow() {
 
   async function regenerateDraft(): Promise<void> {
     if (lastDraftRequest !== null) {
-      await requestDraft(lastDraftRequest, true);
+      await requestDraft(lastDraftRequest);
     }
-  }
-
-  // 현재 AI 요청만 중단하고 대화와 기존 PREVIEW는 그대로 유지합니다.
-  function cancelRequest(): void {
-    requestAbortControllerRef.current?.abort();
-    requestAbortControllerRef.current = null;
-    setRequestState("idle");
-    appendAssistantMessage("status", "요청을 중단했습니다. 내용을 고쳐 다시 보낼 수 있습니다.");
-  }
-
-  // 마지막 Draft 요청을 그대로 다시 실행해 입력을 반복하지 않게 합니다.
-  async function retryRequest(): Promise<void> {
-    if (lastDraftRequest) await requestDraft(lastDraftRequest, previewDiagram !== null);
   }
 
   function cancelStart(): void {
@@ -365,10 +339,7 @@ export function useAiStartWorkflow() {
     appendAssistantMessage("draft", `${result.title} PREVIEW가 준비됐습니다.`);
   }
 
-  function beginRequest(clearPreview = true): AbortSignal {
-    requestAbortControllerRef.current?.abort();
-    const controller = new AbortController();
-    requestAbortControllerRef.current = controller;
+  function beginRequest(clearPreview = true): void {
     setRequestState("loading");
     setErrorMessage("");
     setDraftClarification(null);
@@ -378,16 +349,13 @@ export function useAiStartWorkflow() {
       setDraft(null);
       setPreviewDiagram(null);
     }
-    return controller.signal;
   }
 
   function finishRequest(): void {
-    requestAbortControllerRef.current = null;
     setRequestState("idle");
   }
 
   function failRequest(message: string): void {
-    requestAbortControllerRef.current = null;
     setRequestState("error");
     setErrorMessage(message);
     appendAssistantMessage("error", message);
@@ -422,7 +390,6 @@ export function useAiStartWorkflow() {
       requestState !== "loading" &&
       !voiceTranscriptNeedsConfirmation,
     cancelStart,
-    cancelRequest,
     composerValue,
     confirmVoiceTranscript,
     draft,
@@ -431,16 +398,10 @@ export function useAiStartWorkflow() {
     previewDiagram,
     projectDraft,
     regenerateDraft,
-    retryRequest,
     requestState,
     setComposerValue: updateComposerValue,
     submitPrompt,
     voiceInput,
     voiceTranscriptNeedsConfirmation
   };
-}
-
-// AbortController가 취소한 요청은 실패 메시지 대신 중단 상태로 처리합니다.
-function isAbortedRequest(error: unknown): boolean {
-  return error instanceof DOMException && error.name === "AbortError";
 }
