@@ -12,6 +12,19 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-12 - Restore local signup availability QA path
+
+- Goal: Resolve the signup duplicate-check server error and align the paired password inputs during local QA.
+- Completed:
+  - Applied the existing local database migrations; the initial Postgres database had no relations, so availability requests could not query `users`.
+  - Set authentication form fields to start-align their internal grid content so password help text no longer pushes the confirmation input down.
+  - Added focused source-contract coverage for the password field alignment rule.
+- Verification:
+  - `POST /api/auth/signup/availability` returned `200 {"usernameAvailable":true}` after migration.
+  - Focused signup page test passed.
+- Risk:
+  - The pre-existing full web test suite has unrelated failures outside the signup files.
+
 ### 2026-07-12 - Merge latest origin/dev into AI diagram branch
 
 - Goal: Merge the actual latest `origin/dev` into `feat/ck/287-ai-diagram`.
