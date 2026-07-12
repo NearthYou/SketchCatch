@@ -6,7 +6,6 @@ import {
   applyAreaNodeParentAssignments,
   getDirectlyMovedNodeIdsFromPositionMap
 } from "./area-node-movement";
-import { isAreaNode } from "./area-nodes";
 import { applyContainingReferenceDropTargets } from "./reference-drop-targets";
 
 type DraggedNodesInput = {
@@ -102,13 +101,13 @@ export function finalizeDraggedNodes({
   });
   const nodesWithMovedAreaChildren = applyAreaNodeMovement(snapshotNodes, positionedNodes, movedNodeIds);
   const nodesWithAssignedParents = applyAreaNodeParentAssignments(nodesWithMovedAreaChildren, movedNodeIds);
-  const enteredResourceNodeIds = getEnteredResourceNodeIds(
+  const enteredChildNodeIds = getEnteredChildNodeIds(
     snapshotNodes,
     nodesWithAssignedParents,
     movedNodeIds
   );
   const nodesWithExpandedParents = autoExpandAreasEnabled
-    ? enteredResourceNodeIds.reduce(
+    ? enteredChildNodeIds.reduce(
         (nodes, childNodeId) => expandParentAreaNodesForEnteredChild(nodes, childNodeId),
         nodesWithAssignedParents
       )
@@ -122,7 +121,7 @@ export function finalizeDraggedNodes({
   };
 }
 
-function getEnteredResourceNodeIds(
+function getEnteredChildNodeIds(
   previousNodes: readonly DiagramNode[],
   currentNodes: readonly DiagramNode[],
   movedNodeIds: ReadonlySet<string>
@@ -131,7 +130,7 @@ function getEnteredResourceNodeIds(
 
   return currentNodes
     .filter((node) => {
-      if (!movedNodeIds.has(node.id) || isAreaNode(node)) {
+      if (!movedNodeIds.has(node.id)) {
         return false;
       }
 

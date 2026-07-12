@@ -31,6 +31,7 @@ const TERRAFORM_NESTED_BLOCK_ATTRIBUTES: Record<string, ReadonlySet<string>> = {
   aws_cloudfront_cache_policy: new Set(["parametersInCacheKeyAndForwardedToOrigin"]),
   aws_cloudfront_distribution: new Set([
     "defaultCacheBehavior",
+    "orderedCacheBehavior",
     "origin",
     "restrictions",
     "viewerCertificate"
@@ -51,7 +52,11 @@ const TERRAFORM_NESTED_BLOCK_ATTRIBUTES: Record<string, ReadonlySet<string>> = {
   aws_lambda_function: new Set(["environment"]),
   aws_lb_listener: new Set(["defaultAction", "forward"]),
   aws_lb_target_group: new Set(["healthCheck", "stickiness"]),
-  aws_launch_template: new Set(["metadataOptions", "tagSpecifications"]),
+  aws_launch_template: new Set([
+    "metadataOptions",
+    "networkInterfaces",
+    "tagSpecifications"
+  ]),
   aws_route_table: new Set(["route"]),
   aws_s3_bucket_server_side_encryption_configuration: new Set(["rule"]),
   aws_s3_bucket_website_configuration: new Set(["errorDocument", "indexDocument", "routingRule"]),
@@ -63,6 +68,16 @@ const TERRAFORM_NESTED_BLOCK_ATTRIBUTES: Record<string, ReadonlySet<string>> = {
   kubernetes_namespace: new Set(["metadata"]),
   kubernetes_deployment: new Set(["metadata", "spec"]),
   kubernetes_service: new Set(["metadata", "spec"])
+};
+
+const TERRAFORM_NESTED_BLOCK_ATTRIBUTES_BY_PATH: Record<string, ReadonlySet<string>> = {
+  "aws_autoscaling_policy.targetTrackingConfiguration": new Set(["predefinedMetricSpecification"]),
+  "aws_cloudfront_distribution.origin": new Set(["customOriginConfig"]),
+  "aws_cloudfront_distribution.restrictions": new Set(["geoRestriction"])
+};
+
+const TERRAFORM_SINGLE_NESTED_BLOCK_ATTRIBUTES: Record<string, ReadonlySet<string>> = {
+  aws_lb_target_group: new Set(["healthCheck"])
 };
 
 const GENERIC_TERRAFORM_NESTED_BLOCKS = new Set([
@@ -87,9 +102,24 @@ export function getTerraformNestedBlockAttributes(
 
 export function isTerraformNestedBlockAttribute(
   resourceType: string,
+  attributeName: string,
+  parentPath: readonly string[] = []
+): boolean {
+  if (parentPath.length > 0) {
+    const pathKey = `${resourceType}.${parentPath.map(toCamelCase).join(".")}`;
+    if (TERRAFORM_NESTED_BLOCK_ATTRIBUTES_BY_PATH[pathKey]?.has(toCamelCase(attributeName))) {
+      return true;
+    }
+  }
+
+  return getTerraformNestedBlockAttributes(resourceType)?.has(toCamelCase(attributeName)) === true;
+}
+
+export function isTerraformSingleNestedBlockAttribute(
+  resourceType: string,
   attributeName: string
 ): boolean {
-  return getTerraformNestedBlockAttributes(resourceType)?.has(toCamelCase(attributeName)) === true;
+  return TERRAFORM_SINGLE_NESTED_BLOCK_ATTRIBUTES[resourceType]?.has(toCamelCase(attributeName)) === true;
 }
 
 export function isGenericTerraformNestedBlock(attributeName: string): boolean {

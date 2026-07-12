@@ -4,8 +4,7 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-
-- Active branch: `Refactor/jh/338-workspace-uiux-수정`.
+- Active branch: `Feat/jh/346-시뮬레이션-기능-구현-및-테스트`.
 
 - Release `v2.0.0` uses main SHA `44cdc976da8a03fca2d0aad69a0f3d45d51d4e8a`.
 - Route53 points to the direct-path ECS ALB. Public `/`, `/health`, and `/health/db` return 200; protected `/api/projects` returns 401.
@@ -19,11 +18,125 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-12 - Support the S3 and ALB CloudFront distribution shape
+
+- Added the requested CloudFront root object, OAC, custom ALB origin, managed cache policy, ordered API cache behavior, and origin request policy controls.
+- Added path-aware parsing for `origin.custom_origin_config` and `restrictions.geo_restriction`, plus top-level `ordered_cache_behavior` parse/render support.
+- Verified the exact supplied HCL parses without sync diagnostics and preserves all values through Diagram-to-Terraform-to-Diagram round trips.
+- Verification: 50 focused API/Web regressions, lint, typecheck, build, harness, and diff checks pass. One unrelated Kubernetes renderer regression remains in the broader Terraform preview test; lint retains one pre-existing API unused-argument warning.
+
+### 2026-07-12 - Expose Load Balancer Target Group health settings
+
+- Added Parameter panel controls for Target Group `target_type`, `deregistration_delay`, and the supported single `health_check` fields.
+- Normalized Terraform-to-Diagram parsing of the provider's maximum-one Target Group health check block to an editable object while retaining generic repeated nested-block behavior elsewhere.
+- Added exact-HCL Web catalog and API parse/render regressions for the live-observation Target Group configuration.
+- Verification: 34 focused API/Web tests, lint, typecheck, build, harness, and diff checks pass. Lint retains one pre-existing API unused-argument warning.
+
+### 2026-07-12 - Remove hardcoded parameter-reference arrows
+
+- Removed the resource-specific automatic edge generator for Listener, ASG, CloudWatch Alarm, and Auto Scaling Policy references.
+- Parameter changes now preserve only user-created diagram edges; Terraform references remain unchanged.
+- Draft restoration strips legacy `managedBy: parameter-reference` edges while preserving manual edges.
+
+### 2026-07-12 - Keep key-value editor focus stable
+
+- Replaced editable key-derived React row keys with stable per-row identities so typing in tag keys no longer remounts the focused input.
+- Preserved entry order during key renames and explicitly focused the new or nearest key input after add/delete actions.
+- Added a focused source-contract regression for row identity and focus restoration.
+
+### 2026-07-12 - Preserve unsupported Terraform draft source
+
+- Added optional multi-file Terraform working state to local/server ProjectDraft persistence with migration `0031_project_draft_terraform_files`.
+- Changed valid unsupported top-level HCL such as the exact `traffic_api_bundle_url` variable block to a nonblocking warning with zero Board proposals; opaque resource blocks no longer partially mutate DiagramJson.
+- Preserved raw top-level source during generated-code refresh and connected successful Terraform editor saves to project draft checkpoints and deployment virtual files.
+- Fixed the preservation merge regression that retained Diagram-deleted or stale managed Subnet blocks; restored files are now classified before merge, missing managed addresses are pruned, and only opaque, unknown, or Terraform utility addresses remain protected.
+- Added path-aware parsing for `aws_autoscaling_policy.target_tracking_configuration.predefined_metric_specification`, including ALB request metric interpolation round-trip coverage.
+- Verification: 101 existing/new Terraform parser tests, 29 renderer/schema tests, 159/160 focused Workspace tests, lint, and typecheck pass. The one Workspace failure is the pre-existing mobile canvas toolbar CSS contract; lint retains one pre-existing API unused-argument warning.
+- No Terraform Apply/Destroy or AWS mutation was performed.
+
+### 2026-07-12 - Support Launch Template HCL round-trip settings
+
+- Added safe round-trip support for `filebase64("...")` expressions and the `aws_launch_template.network_interfaces` nested block while preserving existing metadata and tag blocks.
+- Added Launch Template parameter controls for default-version updates, IMDS settings, network interfaces, and tag specifications.
+- Added red/green API and Web regressions; the original editor input now produces no sync diagnostics and preserves nested values.
+- Verification: 84 focused tests, lint, typecheck, build, harness, and diff checks pass. Lint retains one pre-existing API unused-argument warning.
+- Remaining sync limitations were probed and recorded for interpolations, most functions, conditionals, indexing, for/heredoc expressions, dynamic/lifecycle blocks, top-level variable/module/output blocks, and uncataloged provider types.
+
+### 2026-07-12 - Support SSM-backed AMI references in Launch Templates
+
+- Extended the shared parameter contract with target-specific reference attributes.
+- Launch Template `image_id` now offers both `data.aws_ami.*.id` and `data.aws_ssm_parameter.*.value` references.
+- Added a red/green regression using the runtime parameter catalog; 42 focused parameter/catalog tests pass.
+- Verification: lint, typecheck, build, harness, and diff checks pass. Lint retains one pre-existing API unused-argument warning.
+- Known tooling issue: `pnpm catalog:generate` remains blocked by the pre-existing CommonJS resolution failure for `resource-node-geometry`; the curated source and generated catalog were updated consistently.
+
+### 2026-07-12 - Fix duplicate-label Terraform block selection
+
+- Reproduced two same-type Security Group nodes sharing the `SECURITY GROUP` label and confirmed the Terraform panel selected the first display-label block instead of the selected node's `resourceName` block.
+- Changed matching to prefer the parameter address when the node and parameter resource types agree, while preserving the visible-identity fallback for legacy type-mismatched nodes.
+- Added a regression for `security_group` and `ec2_security_group` nodes sharing one label.
+- Verification: focused regression test, lint, typecheck, build, and harness pass. Lint retains one pre-existing API unused-argument warning.
+
+### 2026-07-12 - Recognize the EC2 managed prefix list data source
+
+- Registered `data.aws_ec2_managed_prefix_list` in the shared Terraform definition catalog and added its Terraform Data Sources presentation.
+- Added a regression that reproduces the previous unsupported-resource warning; diagnostics now return no warning and Terraform-to-Diagram sync produces a create proposal.
+- Verification: focused API/Web tests, lint, typecheck, build, harness, and diff checks pass. Lint retains one pre-existing API unused-argument warning.
+
+### 2026-07-12 - Auto-expand parent areas for nested areas
+
+- Generalized the existing auto-expansion path so an Area newly assigned to another Area expands its direct parent and ancestor chain by 1.5 times the child Area dimensions.
+- Preserved full-box containment, center-preserving growth, auto-expand OFF behavior, internal-move deduplication, and cycle/missing-parent guards.
+- Added pure and drag-finalization regressions; 45 focused Area movement, expansion, preference, and drag tests pass.
+- Verification: lint, typecheck, build, harness, and diff checks pass; lint retains one pre-existing API unused-argument warning.
+
+### 2026-07-12 - Refine panel resize affordance
+
+- Replaced the full-height black rail with a centered 40px by 3px muted-gray grip on hover, keyboard focus, and active drag while preserving the 14px hit area.
+- Changed the panel separator cursor from `col-resize` to `ew-resize` and raised selector specificity above the global button `pointer` rule after real-browser computed-style inspection found the override.
+- Added geometry, state, and cascade regressions; all 38 Diagram Editor layout tests pass, and the signed-in Workspace reports `ew-resize` for both separators.
+- Verification: lint, typecheck, build, harness, and diff checks pass; signed-in browser inspection confirmed `ew-resize` on both separators.
+
+### 2026-07-12 - Unclip all Resource parameter dropdowns
+
+- Audited required, optional, nested, Region, and Availability Zone parameter selection paths.
+- Traced the shared enum and scalar-reference failure to `parameterFieldList` clipping every absolutely positioned `SelectMenu` dropdown with `overflow: hidden`.
+- Changed the shared field-list boundary to `overflow: visible` without changing SelectMenu focus, keyboard, ARIA, or selection behavior.
+- Added source-contract coverage proving required and advanced field lists, scalar enum/reference controls, and recursive nested controls share the unclipped boundary; Region and AZ paths remain covered separately.
+- Browser verification used the real SelectMenu and ParameterInputPanel CSS for required enum/reference, optional enum, nested select, and AZ cases. Every 108 px menu extended outside its field list, remained hit-test visible, and accepted ArrowDown/Enter selection.
+- Verification: 54 focused parameter, SelectMenu, Region/AZ, and resource-settings tests passed; lint, typecheck, build, harness, and diff checks passed. Lint retains one pre-existing API unused-argument warning.
+
+### 2026-07-12 - Add Terraform editor Tab indentation
+
+- Added two-space `Tab` indentation and `Shift+Tab` outdent behavior while preserving Ctrl/Cmd+S, selections, mixed leading whitespace, and LF/CRLF source through a pure helper.
+- Added 8 passing behavior/wiring tests and Korean design/plan docs under ignored `docs/jh/2026-07-12/`; lint, typecheck, and harness pass.
+- Full `pnpm build` is blocked by concurrent broken imports in `apps/web/app/parameter-dropdown-debug/page.tsx`; the Terraform editor compiles during typecheck.
+
+### 2026-07-12 - Diagnose and fix Terraform rename/save validation mismatch
+
+- Reproduced the exact palette-created Subnet shape and confirmed it contains only `mapPublicIpOnLaunch: false`, so generated HCL omits the required AWS provider argument `vpc_id`.
+- Confirmed the editor fast diagnostics and Terraform-to-Diagram rename sync both accept the generated code, while real Terraform provider validation fails before and after changing the resource name.
+- Refined the rename finding after receiving the real diagnostic: a standalone rename syncs, but renaming a referenced Subnet declaration without updating callers produces the blocking `terraform.undefined_reference` error before sync can run.
+- Removed the noisy `terraform.empty_block` heuristic because empty draft Resources are valid HCL syntax and provider-required arguments belong to deployment validation.
+- Identified a second UX factor: Architecture and Terraform diagnostics are separated in Issues content but combined in the Code-tab issue badge and error color.
+- Downgraded `terraform.undefined_reference` to a non-blocking warning so draft saves are blocked by syntax/structural errors rather than incomplete semantic references.
+- Added deterministic rename-reference rewriting across `.tf` virtual files. The scanner preserves strings, line/block comments, heredocs, partial-name matches, and `.tfvars`.
+- Changed the save flow to detect rename proposals, rewrite references, revalidate, resync, and persist one aligned Terraform/DiagramJson result.
+- Fixed Terraform-to-Diagram sync to ignore generated `terraform { required_providers { ... } }` configuration blocks as execution metadata instead of reporting every providers.tf line as an error.
+- Added a permanent palette-wide regression that runs all 131 enabled items through actual drag defaults, Terraform generation, virtual-file validation, and sync; all 126 code-generating items now produce zero editor/sync diagnostics.
+- Added Korean root-cause, design, and implementation-plan records under `docs/jh/2026-07-12/`; no Terraform Apply/Destroy or cloud mutation was performed.
+- Verification: TDD RED/GREEN for API diagnostics, generated Terraform configuration sync, reference rewriting, save orchestration, and palette-wide defaults; 102 focused API/Web tests passed; direct API/Web lint and typecheck passed; forced uncached five-package build passed; pure end-to-end rename simulation aligned code and DiagramJson; harness passed.
+- Risk: `/terraform/validate` remains a fast static diagnostic service rather than provider-backed `terraform validate`; palette-created Subnet still omits provider-required `vpc_id`, and deployment-time Terraform validation remains responsible for that failure.
+- Next action: manually confirm in the Workspace that generated providers.tf and empty draft Resources no longer create Issues and that Save succeeds after a referenced Subnet rename.
+
 ### 2026-07-12 - Make all embedded Terraform issues reachable
 
-- Moved vertical scrolling to the combined Workspace Issues container so Architecture and Terraform diagnostics share one continuous reachable scroll region.
-- Removed the clipping grid track and nested Terraform wrapper overflow without changing diagnostic state, actions, or the code/issues resize boundary.
+- Placed Terraform validation issues above Architecture design issues so the more urgent validation results appear first.
+- Moved vertical scrolling to the combined Workspace Issues container and removed every child diagnostics scroll owner so both groups share one continuous reachable scroll region.
+- Changed the combined grid tracks from shrinkable `auto` rows to `max-content` rows after browser reproduction showed the Terraform card overlapping the Architecture header by 75 px.
+- Removed the clipping grid track and nested Terraform wrapper constraints without changing diagnostic state, actions, or the code/issues resize boundary.
 - Added a source-contract regression that failed on the clipped layout and passed after the CSS fix.
+- Browser verification: the same constrained fixture changed from 75 px overlap with no scroll overflow to a 14 px gap and a reachable 389 px scroll height inside a 300 px viewport.
 - Verification: focused Workspace layout and diagnostic-state tests, lint, typecheck, build, harness, and diff checks passed. Lint retains one pre-existing API unused-argument warning.
 
 ### 2026-07-12 - Merge origin/dev into the Workspace UI branch
@@ -33,95 +146,6 @@ Short English-only working log for the current agent context. Older records are 
 - Updated the Workspace AI source-contract test for the Repository Analysis template context added by `dev`.
 - Split credential-shaped test literals so GitHub push protection can inspect the branch without false-positive Slack or Stripe secrets; runtime probe values remain unchanged.
 - Verification: migration compatibility, focused Web/API tests, lint, typecheck, build, and harness passed. `drizzle-kit generate` still reports the pre-existing historical snapshot-parent collision.
-
-### 2026-07-11 - Coalesce Architecture Board direct-drag previews
-
-- Applied the documented rAF follow-up on the current branch. `onNodeDrag` now keeps only the latest payload and commits preview nodes plus Area targeting once per animation frame.
-- Preserved final drop behavior by synchronously committing the `onNodeDragStop` payload, flushing a pending payload during visibility finalization, and cancelling a queued frame on unmount.
-- Added the source-contract regression for rAF scheduling, final-payload flush, and cleanup. Independent review found no runtime correctness defect; it noted that the scheduler coverage is source-contract rather than callback-behavior testing.
-- Updated the ignored local `docs/jh/011_아키텍처보드_노드드래그_렌더링최적화_개선안_JH.md` implementation record and measurement caveat.
-
-### 2026-07-11 - Double new palette Area node dimensions
-
-- Doubled width and height only for Area nodes newly dragged from the Resource palette.
-- Kept Catalog, AI, Module, Template, Terraform sync, and existing DiagramJson sizes unchanged.
-- Reused one pure transformer for drag preview and final drop geometry.
-
-### 2026-07-11 - Add resource connection policy and four-direction ports
-
-- Added a provider-neutral default-allow connection evaluator with isolated AWS relationship-resource restrictions for new manual Board edges.
-- Reused the same policy for drag target affordance and the final edge creation guard.
-- Enabled source and target Handles on all four sides while preserving user-directed edge orientation and existing lock, self, and duplicate guards.
-
-### 2026-07-11 - Draft the Resource Dependency Rule Engine design
-
-- Added `docs/jh/010_리소스의존성규칙엔진설계_JH.md`, a Korean AWS-first, provider-neutral design for declarative resource-dependency rule packs and a shared Architecture Graph evaluator.
-- Defined no-toast creation behavior, contextual versus full validation, Architecture/Terraform diagnostic separation, the EC2 AMI/VPC/Subnet scenario, AWS-first initial rule packs, safety boundaries, and acceptance tests.
-- Wrote `docs/superpowers/plans/2026-07-11-resource-dependency-rule-engine.md`, a TDD implementation plan for the shared evaluator, EC2/VPC/Subnet v1 rule pack, Preview API revalidation, derived Board state, Issues UI, and full verification.
-- Implemented v1 on the current branch: shared diagnostic contracts, a deterministic provider-neutral evaluator boundary, and an AWS VPC/Subnet/EC2 rule pack.
-- The Board evaluates contextual diagnostics after a 300 ms debounce without creating a toast or persisting data. Terraform Preview re-evaluates the current diagram and returns diagnostics alongside generated code.
-- The Issues view renders Architecture diagnostics separately from persisted Terraform source diagnostics and can focus the affected Board resource.
-- Added focused evaluator, diagnostics-state, API, and Workspace layout tests. No Terraform apply, deploy, or cloud mutation was performed.
-
-### 2026-07-11 - Create the Korean Operational Excellence study set
-
-- Reworked the 226-page AWS Well-Architected Operational Excellence Pillar into fourteen top-down Korean study documents under `docs/jh/study`.
-- Covered the introduction, eight design principles, all 68 best practices from OPS01-BP01 through OPS11-BP09, the conclusion, glossary, revision history, and source notices.
-- Kept each OPS area as an approximately one-hour learning unit with plain-language explanations, expert implementation detail, SketchCatch examples, retrieval questions, and a master evidence checklist.
-- Replaced the old `docs/jh/study.md` notes with a short entry point to the complete study set.
-
-### 2026-07-11 - Redesign and harden the Workspace Deployment console
-
-- Rebuilt Deploy around the five-step Direct Deployment flow: save, preflight, plan, approval, and apply.
-- Added an explicit Local workspace gate that prevents AWS connection and project Deployment requests until a real project exists.
-- Separated Direct Deployment, Git/CI/CD, and Deployment History; moved Destroy controls to History.
-- Added the approved 224px / flexible / 294px console layout, responsive mobile flow, neutral preflight state, unified active-step errors, and keyboard/focus handling.
-- Preserved the existing server action gates, approval snapshots, polling/SSE, request payloads, and Terraform execution boundaries.
-- Browser acceptance used intercepted Project responses only. No Apply, Destroy, Git handoff, or cloud mutation was executed.
-
-### 2026-07-11 - Resolve and integrate PR #317 and PR #343 review feedback
-
-- Confirmed the missing `SourceRepositoryConflictError` import reported on PR #317 was already present, documented the resolution, and merged the green PR into `dev`.
-- Fixed PR #343 so the Apply confirmation opens when apply becomes available but can still be dismissed, with a focused regression test.
-- Reconciled PR #343 with the merged template work from PR #317 while preserving archive parser hardening, generated Lambda/EKS support, and direct-deployment evidence.
-- Verification: focused deployment apply, Terraform artifact safety, and Apply confirmation tests passed; required repository checks were run before integration.
-
-### 2026-07-11 - Remove duplicated Trivy rule IDs from the scanner test
-
-- Updated the Trivy ignore-file test to import `disabledTrivyTerraformRuleIds` from the scanner instead of maintaining a second hard-coded rule list.
-- Verification: focused `trivy-terraform-scan.test.ts`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check` passed.
-- Risk: none; the test now follows the production exclusion list automatically.
-- Next action: review and commit the Trivy exclusion change when ready.
-
-### 2026-07-11 - Disable Trivy ALB and Auto Scaling checks
-
-- Configured each Terraform Trivy scan to generate an ignore file that excludes ALB rules AWS-0047, AWS-0052, AWS-0053, and AWS-0054 plus Auto Scaling launch configuration/template rules AWS-0008, AWS-0009, AWS-0122, AWS-0129, and AWS-0130.
-- Kept all other Terraform Trivy checks enabled; the exclusion applies to the generated scan workspace only and does not change user Terraform source files.
-- Verification: focused Trivy scanner tests, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check` passed.
-- Risk: future Trivy check-bundle rule IDs require an explicit review before they are added to the exclusion list.
-- Next action: add the product-specific ALB and ASG configuration warnings as non-blocking deployment checks when requested.
-
-### 2026-07-11 - Recover production auth runtime configuration
-
-- Traced signup/login failures to a one-character SSM `AUTH_TOKEN_SECRET` and missing OAuth client IDs in the ECS API task definition.
-- Rotated the secret without exposing it, restarted the API service, and verified live signup, login, and account cleanup.
-- Added production startup validation and deployment-time OAuth variable injection so invalid auth configuration fails before serving traffic.
-- Kept container ALARM notifications, removed repetitive OK notifications, and excluded the known stale Server Action web log pattern.
-### 2026-07-11 - Retire warm rollback and complete cost-first ECS operations
-
-- Deployed and released the main SHA, aligned API/web/worker images, and verified the one-off worker migration command.
-- Sanitized the retired EC2 host before creating an encrypted cold rollback AMI; removed the duplicate unencrypted AMI and snapshot.
-- Deleted the EC2 instance, old ALB stack, legacy ECS service/task registration, target group, and port 80 rules.
-- Added API/web autoscaling min 1 and max 2, circuit-breaker-preserving service ownership, low-cost alarms, and confirmed SNS delivery.
-- Replaced EC2 migrations with approved ECS one-off worker migrations, pre-migration snapshots, a compatibility guard, and three-snapshot retention.
-- Removed retired deployment/HTTPS workflows and reduced the GitHub deploy role to ECR, ECS, worker, scoped snapshot, and SNS permissions.
-- Added a disabled-by-default cold rollback Terraform root with scoped RDS/Redis access and documented restore procedures.
-
-### 2026-07-11 - Integrate latest dev into Live Observation PR
-
-- Merged the latest `origin/dev` UI rebuild and ECS production changes into PR #328 while preserving Live Observation and Board behavior.
-- Kept the ECS deployment workflow and removed the retired EC2 deployment workflow.
-- Reconciled the new Workspace shell, Board viewport behavior, Resource panel extraction, and Live Observation styles.
 
 ## Verification
 

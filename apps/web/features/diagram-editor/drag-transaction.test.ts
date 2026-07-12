@@ -156,7 +156,7 @@ test("finalizeDraggedNodes assigns children dropped inside an ASG area", () => {
   assert.equal(instance?.metadata?.parentAreaNodeId, "asg-1");
 });
 
-test("finalizeDraggedNodes expands a newly entered parent by twice the existing resource size", () => {
+test("finalizeDraggedNodes expands a newly entered parent by 1.5 times the child size", () => {
   const nodes = [
     makeResourceNode({
       id: "vpc-1",
@@ -191,8 +191,49 @@ test("finalizeDraggedNodes expands a newly entered parent by twice the existing 
   const vpcAfter = result.nodes.find((node) => node.id === "vpc-1");
   const instanceAfter = result.nodes.find((node) => node.id === "instance-1");
   assert.equal(instanceAfter?.metadata?.parentAreaNodeId, "vpc-1");
-  assert.deepEqual(vpcAfter?.position, { x: -20, y: -20 });
-  assert.deepEqual(vpcAfter?.size, { width: 120, height: 100 });
+  assert.deepEqual(vpcAfter?.position, { x: -15, y: -15 });
+  assert.deepEqual(vpcAfter?.size, { width: 110, height: 90 });
+});
+
+test("finalizeDraggedNodes expands a newly entered parent when the moved child is an area", () => {
+  const nodes = [
+    makeResourceNode({
+      id: "region-1",
+      resourceName: "seoul",
+      resourceType: "aws_region",
+      width: 300,
+      height: 220,
+      x: 0,
+      y: 0
+    }),
+    makeResourceNode({
+      id: "vpc-1",
+      resourceName: "main",
+      resourceType: "aws_vpc",
+      width: 80,
+      height: 60,
+      x: 400,
+      y: 300
+    })
+  ];
+
+  const result = finalizeDraggedNodes({
+    anchorNodeId: "vpc-1",
+    catalog: terraformParameterCatalog,
+    currentNodes: nodes,
+    directlyMovedNodeIds: new Set(["vpc-1"]),
+    positionByNodeId: new Map([["vpc-1", { x: 100, y: 80 }]]),
+    snapGridSize: 1,
+    snapshotNodes: nodes
+  });
+
+  const regionAfter = result.nodes.find((node) => node.id === "region-1");
+  const vpcAfter = result.nodes.find((node) => node.id === "vpc-1");
+
+  assert.equal(vpcAfter?.metadata?.parentAreaNodeId, "region-1");
+  assert.deepEqual(vpcAfter?.position, { x: 100, y: 80 });
+  assert.deepEqual(regionAfter?.position, { x: -60, y: -45 });
+  assert.deepEqual(regionAfter?.size, { width: 420, height: 310 });
 });
 
 test("finalizeDraggedNodes assigns the parent without resizing it when auto expansion is OFF", () => {

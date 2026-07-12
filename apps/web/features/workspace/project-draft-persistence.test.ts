@@ -53,10 +53,12 @@ test("isWorkspaceCloudPlatform accepts supported start form choices", () => {
 });
 
 test("createLocalProjectDraft marks edits dirty and increments local revision", () => {
+  const terraformFiles = [{ fileName: "main.tf", terraformCode: "variable \"cidr\" {}" }];
   const draft = createLocalProjectDraft({
     workspaceId: "workspace-1",
     projectId: "project-1",
     diagramJson: editedDiagram,
+    terraformFiles,
     previousDraft: {
       key: "workspace-1:project-1",
       workspaceId: "workspace-1",
@@ -75,6 +77,21 @@ test("createLocalProjectDraft marks edits dirty and increments local revision", 
   assert.equal(draft.revision, 5);
   assert.equal(draft.draftSavedAt, "2026-06-24T01:00:00.000Z");
   assert.deepEqual(draft.diagramJson, editedDiagram);
+  assert.deepEqual(draft.terraformFiles, terraformFiles);
+});
+
+test("chooseInitialDiagram keeps Terraform files from the selected newer draft", () => {
+  const localDraft = makeLocalProjectDraft({
+    diagramJson: editedDiagram,
+    draftSavedAt: "2026-06-24T01:01:00.000Z",
+    terraformFiles: [{ fileName: "main.tf", terraformCode: "variable \"cidr\" {}" }]
+  });
+
+  assert.deepEqual(chooseInitialDiagram({
+    serverDraft: makeProjectDraft({ serverSavedAt: "2026-06-24T01:00:00.000Z" }),
+    localDraft,
+    fallbackDiagram: emptyDiagram
+  }).terraformFiles, localDraft.terraformFiles);
 });
 
 test("markDraftServerSaved clears dirty state and mirrors server revision", () => {

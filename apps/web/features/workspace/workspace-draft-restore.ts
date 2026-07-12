@@ -12,14 +12,19 @@ export function restoreSavedDiagram(
   const hasNodes = Array.isArray(savedDiagram.nodes);
   const hasEdges = Array.isArray(savedDiagram.edges);
   const hasViewport = isDiagramViewport(savedDiagram.viewport);
+  const restoredEdges = hasEdges
+    ? savedDiagram.edges.filter((edge) => edge.metadata?.managedBy !== "parameter-reference")
+    : fallbackDiagram.edges;
 
   if (hasNodes && hasEdges && hasViewport) {
-    return savedDiagram;
+    return restoredEdges.length === savedDiagram.edges.length
+      ? savedDiagram
+      : { ...savedDiagram, edges: restoredEdges };
   }
 
   return {
     ...savedDiagram,
-    edges: hasEdges ? savedDiagram.edges : fallbackDiagram.edges,
+    edges: restoredEdges,
     nodes: hasNodes ? savedDiagram.nodes : fallbackDiagram.nodes,
     viewport: hasViewport ? savedDiagram.viewport : fallbackDiagram.viewport
   };

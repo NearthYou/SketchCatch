@@ -8,7 +8,8 @@ import type {
 import {
   applyAllTerraformSyncProposals,
   applyTerraformSyncProposals,
-  getTerraformSyncProposalId
+  getTerraformSyncProposalId,
+  rewriteTerraformReferencesForSyncProposals
 } from "./terraform-sync-proposals";
 import { resourceCatalog } from "../resource-settings/catalog";
 
@@ -382,6 +383,90 @@ test("applyTerraformSyncProposals renames approved nodes", () => {
   assert.equal(result.nodes[0]?.parameters?.fileName, "network.tf");
 });
 
+test("rewriteTerraformReferencesForSyncProposals rewrites expressions across files only", () => {
+  const proposals: TerraformDiagramChangeProposal[] = [
+    makeRenameProposal("resource", "aws_subnet", "subnet", "private", "subnet-1")
+  ];
+  const files = [
+    {
+      fileName: "network.tf",
+      code: `resource "aws_subnet" "private" {
+}`
+    },
+    {
+      fileName: "compute.tf",
+      code: `resource "aws_instance" "web" {
+  subnet_id = aws_subnet.subnet.id
+  literal   = "aws_subnet.subnet.id"
+  other     = aws_subnet.subnet_extra.id
+  # aws_subnet.subnet.id
+  // aws_subnet.subnet.id
+  /* aws_subnet.subnet.id */
+}`
+    },
+    {
+      fileName: "terraform.tfvars",
+      code: `subnet_reference = aws_subnet.subnet.id`
+    }
+  ];
+
+  const rewritten = rewriteTerraformReferencesForSyncProposals(files, proposals);
+
+  assert.equal(rewritten[0], files[0]);
+  assert.notEqual(rewritten[1], files[1]);
+  assert.equal(rewritten[2], files[2]);
+  assert.match(rewritten[1]!.code, /subnet_id = aws_subnet\.private\.id/);
+  assert.match(rewritten[1]!.code, /literal\s+= "aws_subnet\.subnet\.id"/);
+  assert.match(rewritten[1]!.code, /other\s+= aws_subnet\.subnet_extra\.id/);
+  assert.match(rewritten[1]!.code, /# aws_subnet\.subnet\.id/);
+  assert.match(rewritten[1]!.code, /\/\/ aws_subnet\.subnet\.id/);
+  assert.match(rewritten[1]!.code, /\/\* aws_subnet\.subnet\.id \*\//);
+});
+
+test("rewriteTerraformReferencesForSyncProposals preserves heredocs and rewrites data references", () => {
+  const proposals: TerraformDiagramChangeProposal[] = [
+    makeRenameProposal("data", "aws_ami", "selected", "runtime", "ami-1")
+  ];
+  const files = [
+    {
+      fileName: "compute.tf",
+      code: `resource "aws_instance" "web" {
+  ami = data.aws_ami.selected.id
+  user_data = <<-SCRIPT
+    echo data.aws_ami.selected.id
+  SCRIPT
+}`
+    }
+  ];
+
+  const rewritten = rewriteTerraformReferencesForSyncProposals(files, proposals);
+
+  assert.match(rewritten[0]!.code, /ami = data\.aws_ami\.runtime\.id/);
+  assert.match(rewritten[0]!.code, /echo data\.aws_ami\.selected\.id/);
+});
+
+test("rewriteTerraformReferencesForSyncProposals applies multiple renames deterministically", () => {
+  const proposals: TerraformDiagramChangeProposal[] = [
+    makeRenameProposal("resource", "aws_vpc", "main", "network", "vpc-1"),
+    makeRenameProposal("resource", "aws_subnet", "public", "private", "subnet-1")
+  ];
+  const files = [
+    {
+      fileName: "network.tf",
+      code: `vpc_id = aws_vpc.main.id
+subnet_id = aws_subnet.public.id`
+    }
+  ];
+
+  const rewritten = rewriteTerraformReferencesForSyncProposals(files, proposals);
+
+  assert.equal(
+    rewritten[0]!.code,
+    `vpc_id = aws_vpc.network.id
+subnet_id = aws_subnet.private.id`
+  );
+});
+
 test("applyTerraformSyncProposals ignores unapproved proposals", () => {
   const diagramJson = makeDiagramJson();
   const proposals: TerraformDiagramChangeProposal[] = [
@@ -468,6 +553,33 @@ function makeNode(
       fileName: "main",
       values: {}
     }
+  };
+}
+
+function makeRenameProposal(
+  terraformBlockType: "data" | "resource",
+  resourceType: string,
+  fromResourceName: string,
+  toResourceName: string,
+  nodeId: string
+): TerraformDiagramChangeProposal {
+  return {
+    kind: "rename_candidate",
+    from: {
+      terraformBlockType,
+      resourceType,
+      resourceName: fromResourceName
+    },
+    to: {
+      terraformBlockType,
+      resourceType,
+      resourceName: toResourceName
+    },
+    nodeId,
+    resourceAddress:
+      terraformBlockType === "data"
+        ? `data.${resourceType}.${fromResourceName}`
+        : `${resourceType}.${fromResourceName}`
   };
 }
 

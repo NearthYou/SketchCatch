@@ -1006,6 +1006,7 @@ test("tracks curated nested block parameters as canonical camelCase keys", () =>
     aws_cloudfront_cache_policy: ["parametersInCacheKeyAndForwardedToOrigin"],
     aws_cloudfront_distribution: [
       "defaultCacheBehavior",
+      "orderedCacheBehavior",
       "origin",
       "restrictions",
       "viewerCertificate"

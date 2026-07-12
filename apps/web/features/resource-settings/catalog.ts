@@ -467,6 +467,15 @@ const terraformResourcePresentations = [
     size
   },
   {
+    definitionId: "aws-ec2-managed-prefix-list",
+    name: "EC2 Managed Prefix List",
+    area: "network",
+    category: "Terraform Data Sources",
+    iconUrl: `${serviceIconPath}/Arch_Networking-Content-Delivery/64/Arch_Amazon-Virtual-Private-Cloud_64.svg`,
+    label: "Managed Prefix List",
+    size
+  },
+  {
     definitionId: "aws-key-pair",
     name: "Key Pair",
     area: "compute",

@@ -409,6 +409,7 @@ test("saveProjectDraft sends authenticated PUT request with diagram json", async
 
   await saveProjectDraft({
     projectId: project.id,
+    terraformFiles: [{ fileName: "variables.tf", terraformCode: "variable \"cidr\" {}" }],
     diagramJson: {
       nodes: [],
       edges: [],
@@ -424,6 +425,7 @@ test("saveProjectDraft sends authenticated PUT request with diagram json", async
   assert.equal(requests[0]?.init?.method, "PUT");
   assert.equal(new Headers(requests[0]?.init?.headers).get("authorization"), "Bearer access-token");
   assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
+    terraformFiles: [{ fileName: "variables.tf", terraformCode: "variable \"cidr\" {}" }],
     diagramJson: {
       nodes: [],
       edges: [],

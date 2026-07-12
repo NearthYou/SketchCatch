@@ -84,13 +84,18 @@ test("PUT /api/projects/:id/draft upserts the active user's latest diagramJson",
     url: `/api/projects/${ACTIVE_PROJECT_ID}/draft`,
     headers: await authHeaders(ACTIVE_USER_ID),
     payload: {
-      diagramJson: draftDiagram
+      diagramJson: draftDiagram,
+      terraformFiles: [
+        { fileName: "main.tf", terraformCode: "resource \"aws_vpc\" \"vpc\" {}" },
+        { fileName: "variables.tf", terraformCode: "variable \"cidr\" { type = string }" }
+      ]
     }
   });
 
   assert.equal(response.statusCode, 200);
   assert.equal(response.json().draft.revision, 5);
   assert.equal(fakeDb.draftRows[0]?.revision, 5);
+  assert.equal(fakeDb.draftRows[0]?.terraformFiles?.[1]?.fileName, "variables.tf");
   assert.equal(fakeDb.projectUpdated, true);
 
   await app.close();
@@ -168,6 +173,7 @@ function makeProjectDraft(overrides: Partial<ProjectDraftRow> = {}): ProjectDraf
     id: "44444444-4444-4444-8444-444444444444",
     projectId: ACTIVE_PROJECT_ID,
     diagramJson: draftDiagram,
+    terraformFiles: null,
     revision: 1,
     serverSavedAt: new Date("2026-06-24T00:00:00.000Z"),
     createdAt: new Date("2026-06-24T00:00:00.000Z"),

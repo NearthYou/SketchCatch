@@ -177,7 +177,8 @@ export async function getProjectDraft(projectId: string): Promise<ProjectDraftRe
 
 export async function saveProjectDraft({
   projectId,
-  diagramJson
+  diagramJson,
+  terraformFiles
 }: {
   projectId: string;
 } & SaveProjectDraftRequest): Promise<ProjectDraftResponse> {
@@ -185,7 +186,8 @@ export async function saveProjectDraft({
     auth: true,
     method: "PUT",
     body: {
-      diagramJson
+      diagramJson,
+      ...(terraformFiles !== undefined ? { terraformFiles } : {})
     }
   });
 }

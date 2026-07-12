@@ -3,14 +3,63 @@ import { test } from "node:test";
 import type { DiagramJson, DiagramNode } from "@sketchcatch/types";
 import {
   createTerraformFilesFromGeneratedCode,
+  mergeGeneratedTerraformFiles,
   findTerraformBlockForNode,
   getDiagramTerraformAddresses,
+  getTerraformAddressesRemovedFromDiagram,
   getTerraformFileOptions,
   parseTerraformFiles,
   removeTerraformBlocksByAddress,
   toDeploymentBaselineFingerprint,
   toTerraformRefreshFingerprint
 } from "./terraform-panel-utils";
+
+test("mergeGeneratedTerraformFiles preserves an exact top-level variable block", () => {
+  const variableBlock = `variable "traffic_api_bundle_url" {
+  description = "Traffic API 배포 번들의 HTTPS URL"
+  type        = string
+}`;
+  const result = mergeGeneratedTerraformFiles(
+    [{ fileName: "variables.tf", code: variableBlock }],
+    [{ fileName: "main.tf", code: `resource "aws_vpc" "main" {\n  cidr_block = "10.0.0.0/16"\n}` }],
+    new Set()
+  );
+
+  assert.equal(result.find((file) => file.fileName === "variables.tf")?.code, variableBlock);
+  assert.match(result.find((file) => file.fileName === "main.tf")?.code ?? "", /aws_vpc/);
+});
+
+test("mergeGeneratedTerraformFiles removes a managed Subnet absent from generated Diagram code", () => {
+  const result = mergeGeneratedTerraformFiles(
+    [{
+      fileName: "main.tf",
+      code: `resource "aws_subnet" "subnet_A" {\n  cidr_block = "10.0.1.0/24"\n}`
+    }],
+    [{ fileName: "main.tf", code: "" }],
+    new Set()
+  );
+
+  assert.doesNotMatch(result.find((file) => file.fileName === "main.tf")?.code ?? "", /aws_subnet/);
+});
+
+test("mergeGeneratedTerraformFiles keeps an opaque resource absent from generated Diagram code", () => {
+  const opaqueCode = `resource "aws_custom_service" "opaque" {\n  dynamic "rule" {}\n}`;
+  const result = mergeGeneratedTerraformFiles(
+    [{ fileName: "custom.tf", code: opaqueCode }],
+    [{ fileName: "main.tf", code: "" }],
+    new Set(["aws_custom_service.opaque"])
+  );
+
+  assert.equal(result.find((file) => file.fileName === "custom.tf")?.code, opaqueCode);
+});
+
+test("getTerraformAddressesRemovedFromDiagram excludes opaque preserved addresses", () => {
+  assert.deepEqual(getTerraformAddressesRemovedFromDiagram(
+    new Set(["aws_subnet.subnet_A", "aws_custom_service.opaque"]),
+    new Set(),
+    new Set(["aws_custom_service.opaque"])
+  ), ["aws_subnet.subnet_A"]);
+});
 
 test("parseTerraformFiles keeps CRLF offsets aligned with original source slices", () => {
   const code = [
@@ -91,6 +140,28 @@ resource "aws_instance" "ec2_instance" {
   };
 
   assert.equal(findTerraformBlockForNode(blocks, ec2NodeWithStaleParameters)?.address, "aws_instance.ec2_instance");
+});
+
+test("findTerraformBlockForNode uses the resource name when same-type nodes share a label", () => {
+  const blocks = parseTerraformFiles([
+    {
+      fileName: "main.tf",
+      code: `resource "aws_security_group" "security_group" {
+}
+
+resource "aws_security_group" "ec2_security_group" {
+}`
+    }
+  ]);
+  const ec2SecurityGroup: DiagramNode = {
+    ...makeNode("resource", "aws_security_group", "ec2_security_group"),
+    label: "SECURITY GROUP"
+  };
+
+  assert.equal(
+    findTerraformBlockForNode(blocks, ec2SecurityGroup)?.address,
+    "aws_security_group.ec2_security_group"
+  );
 });
 
 test("findTerraformBlockForNode keeps resource and data blocks with the same type and name separate", () => {

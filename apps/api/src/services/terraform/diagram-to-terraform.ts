@@ -3,6 +3,7 @@ import type {
   InfrastructureGraphNode,
   TerraformBlockType
 } from "@sketchcatch/types";
+import { isSupportedTerraformFunctionExpression } from "./terraform-function-expressions.js";
 import { isTerraformNestedBlockAttribute } from "./terraform-nested-blocks.js";
 
 const DEFAULT_TERRAFORM_BLOCK_TYPE: TerraformBlockType = "resource";
@@ -241,7 +242,9 @@ function renderValue(value: unknown, indentLevel: number): string {
   }
 
   if (typeof value === "string") {
-    return isTerraformReference(value) ? value : JSON.stringify(value);
+    return isTerraformReference(value) || isSupportedTerraformFunctionExpression(value)
+      ? value
+      : JSON.stringify(value);
   }
 
   if (typeof value === "number" || typeof value === "boolean") {

@@ -3,18 +3,32 @@ import { test } from "node:test";
 import type { DiagramNode } from "../../../../packages/types/src";
 import { expandParentAreaNodesForEnteredChild } from "./area-node-expansion";
 
-test("grows every parent by twice the entered child size while preserving parent centers", () => {
+test("grows every parent by 1.5 times the entered child size while preserving parent centers", () => {
   const region = makeArea("region", undefined, { x: 0, y: 0 }, { width: 300, height: 220 });
   const vpc = makeArea("vpc", region.id, { x: 40, y: 40 }, { width: 180, height: 120 });
   const child = makeIcon("instance", vpc.id, { x: 80, y: 70 }, { width: 48, height: 48 });
 
   const result = expandParentAreaNodesForEnteredChild([region, vpc, child], child.id);
 
-  assert.deepEqual(getNode(result, vpc.id)?.position, { x: -8, y: -8 });
-  assert.deepEqual(getNode(result, vpc.id)?.size, { width: 276, height: 216 });
-  assert.deepEqual(getNode(result, region.id)?.position, { x: -48, y: -48 });
-  assert.deepEqual(getNode(result, region.id)?.size, { width: 396, height: 316 });
+  assert.deepEqual(getNode(result, vpc.id)?.position, { x: 4, y: 4 });
+  assert.deepEqual(getNode(result, vpc.id)?.size, { width: 252, height: 192 });
+  assert.deepEqual(getNode(result, region.id)?.position, { x: -36, y: -36 });
+  assert.deepEqual(getNode(result, region.id)?.size, { width: 372, height: 292 });
   assert.deepEqual(getNode(result, child.id)?.position, child.position);
+});
+
+test("grows parent and ancestor areas when the entered child is also an area", () => {
+  const account = makeArea("account", undefined, { x: -100, y: -100 }, { width: 500, height: 400 });
+  const region = makeArea("region", account.id, { x: 0, y: 0 }, { width: 300, height: 220 });
+  const vpc = makeArea("vpc", region.id, { x: 80, y: 70 }, { width: 80, height: 60 });
+
+  const result = expandParentAreaNodesForEnteredChild([account, region, vpc], vpc.id);
+
+  assert.deepEqual(getNode(result, region.id)?.position, { x: -60, y: -45 });
+  assert.deepEqual(getNode(result, region.id)?.size, { width: 420, height: 310 });
+  assert.deepEqual(getNode(result, account.id)?.position, { x: -160, y: -145 });
+  assert.deepEqual(getNode(result, account.id)?.size, { width: 620, height: 490 });
+  assert.deepEqual(getNode(result, vpc.id), vpc);
 });
 
 test("stops safely for cyclic parents", () => {

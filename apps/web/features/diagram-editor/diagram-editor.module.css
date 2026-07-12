@@ -905,12 +905,12 @@
   pointer-events: auto;
 }
 
-.leftRailResizeHandle,
-.rightRailResizeHandle {
+button.leftRailResizeHandle,
+button.rightRailResizeHandle {
   background: transparent;
   border: 0;
   bottom: 0;
-  cursor: col-resize;
+  cursor: ew-resize;
   padding: 0;
   position: absolute;
   top: 0;
@@ -931,14 +931,15 @@
 .rightRailResizeHandle::after {
   background: transparent;
   border-radius: 999px;
-  bottom: 10px;
   content: "";
+  height: 40px;
   position: absolute;
-  top: 10px;
+  top: 50%;
+  transform: translateY(-50%);
   transition:
     background 120ms ease,
     box-shadow 120ms ease;
-  width: 2px;
+  width: 3px;
 }
 
 .leftRailResizeHandle::after {
@@ -955,7 +956,7 @@
 .rightRailResizeHandle:hover::after,
 .rightRailResizeHandle:focus-visible::after,
 .rightRailResizeHandle:active::after {
-  background: transparent;
+  background: #8b9098;
   box-shadow: none;
 }
 

@@ -1138,53 +1138,104 @@ function ListEditor({
 function MapEditor({ onChange, value }: { onChange: (value: unknown) => void; value: unknown }) {
   const record = toRecord(value);
   const entries = Object.entries(record);
+  const rowIdPrefix = useId();
+  const nextRowIdRef = useRef(0);
+  const rowIdsRef = useRef<string[]>([]);
+  const keyInputRefs = useRef<Array<HTMLInputElement | null>>([]);
+  const addButtonRef = useRef<HTMLButtonElement | null>(null);
+
+  while (rowIdsRef.current.length < entries.length) {
+    rowIdsRef.current.push(`${rowIdPrefix}-map-row-${nextRowIdRef.current}`);
+    nextRowIdRef.current += 1;
+  }
+
+  if (rowIdsRef.current.length > entries.length) {
+    rowIdsRef.current.length = entries.length;
+  }
+
+  const focusMapEntryAfterChange = (targetIndex: number | null): void => {
+    window.requestAnimationFrame(() => {
+      if (targetIndex === null) {
+        addButtonRef.current?.focus();
+        return;
+      }
+
+      keyInputRefs.current[targetIndex]?.focus();
+    });
+  };
 
   return (
     <div className={styles.mapEditor}>
       {entries.length === 0 ? <p className={styles.inlineEmpty}>key-value 값이 없습니다.</p> : null}
-      {entries.map(([entryKey, entryValue], index) => (
-        <div className={styles.mapRow} key={`${entryKey}-${index}`}>
-          <input
-            className={styles.input}
-            onChange={(event) => {
-              const nextRecord = { ...record };
-              delete nextRecord[entryKey];
-              nextRecord[event.currentTarget.value] = valueToString(entryValue);
-              onChange(nextRecord);
-            }}
-            placeholder="key"
-            value={entryKey}
-          />
-          <input
-            className={styles.input}
-            onChange={(event) =>
-              onChange({
-                ...record,
-                [entryKey]: event.currentTarget.value
-              })
-            }
-            placeholder="value"
-            value={valueToString(entryValue)}
-          />
-          <IconButton
-            label="항목 삭제"
-            onClick={() => {
-              const nextRecord = { ...record };
-              delete nextRecord[entryKey];
-              onChange(nextRecord);
-            }}
-          />
-        </div>
-      ))}
+      {entries.map(([entryKey, entryValue], index) => {
+        const rowId = rowIdsRef.current[index] ?? `${rowIdPrefix}-map-row-${index}`;
+
+        return (
+          <div className={styles.mapRow} key={rowId}>
+            <input
+              className={styles.input}
+              onChange={(event) => {
+                const nextKey = event.currentTarget.value;
+                onChange(Object.fromEntries(
+                  entries.map(([currentKey, currentValue]) =>
+                    currentKey === entryKey
+                      ? [nextKey, valueToString(entryValue)]
+                      : [currentKey, currentValue]
+                  )
+                ));
+              }}
+              placeholder="key"
+              ref={(element) => {
+                keyInputRefs.current[index] = element;
+              }}
+              value={entryKey}
+            />
+            <input
+              className={styles.input}
+              onChange={(event) =>
+                onChange({
+                  ...record,
+                  [entryKey]: event.currentTarget.value
+                })
+              }
+              placeholder="value"
+              value={valueToString(entryValue)}
+            />
+            <IconButton
+              label="항목 삭제"
+              onClick={() => {
+                const nextRecord = { ...record };
+                delete nextRecord[entryKey];
+                rowIdsRef.current.splice(index, 1);
+                keyInputRefs.current.splice(index, 1);
+                onChange(nextRecord);
+                focusMapEntryAfterChange(
+                  entries.length > 1 ? Math.min(index, entries.length - 2) : null
+                );
+              }}
+            />
+          </div>
+        );
+      })}
       <button
         className={styles.addButton}
         onClick={() => {
-          const nextKey = `key${entries.length + 1}`;
+          let nextKeyIndex = entries.length + 1;
+
+          while (Object.hasOwn(record, `key${nextKeyIndex}`)) {
+            nextKeyIndex += 1;
+          }
+
+          const nextKey = `key${nextKeyIndex}`;
+          rowIdsRef.current.push(`${rowIdPrefix}-map-row-${nextRowIdRef.current}`);
+          nextRowIdRef.current += 1;
           onChange({
             ...record,
             [nextKey]: ""
           });
+          focusMapEntryAfterChange(entries.length);
         }}
+        ref={addButtonRef}
         type="button"
       >
         <Plus aria-hidden="true" size={14} />
