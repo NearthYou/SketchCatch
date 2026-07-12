@@ -27,12 +27,18 @@ import {
   type ProjectAccessContext
 } from "../deployments/deployment-service.js";
 import { createAwsDeploymentObservabilityProvider } from "../live-observations/aws-deployment-observability-provider.js";
+import type { DeploymentObservabilityProvider } from "../live-observations/deployment-observability-provider.js";
 import {
   createLiveObservationService,
   LiveObservationServiceError,
   type CreateLiveObservationSessionInput,
   type LiveObservationService
 } from "../live-observations/live-observation-service.js";
+import {
+  createSimulatedCloudWatchAgentObservabilityProvider,
+  recordSimulatedCloudWatchAgentTraffic,
+  resetSimulatedCloudWatchAgentTraffic
+} from "../live-observations/simulated-cloudwatch-agent-observability-provider.js";
 import {
   createRuntimeCacheFromEnv,
   type RuntimeCache
@@ -88,7 +94,11 @@ export async function registerLiveObservationRoutes(
   const liveObservationService =
     options.liveObservationService ??
     createLiveObservationService({
-      observabilityProvider: createAwsDeploymentObservabilityProvider(),
+      observabilityProvider: createLiveObservationObservabilityProvider(runtimeEnv),
+      invalidateObservationCacheOnEvent: isSimulatedCloudWatchAgentEnabled(runtimeEnv),
+      onSessionTerminal: isSimulatedCloudWatchAgentEnabled(runtimeEnv)
+        ? resetSimulatedCloudWatchAgentTraffic
+        : undefined,
       publicApiBaseUrl,
       requireSharedCache: runtimeEnv.nodeEnv === "production",
       runtimeCache
@@ -198,6 +208,14 @@ export async function registerLiveObservationRoutes(
     }
   );
 
+  app.post("/traffic", async (_request, reply) => {
+    if (!enabled) {
+      return sendDisabled(reply);
+    }
+
+    return reply.status(204).send();
+  });
+
   app.options(
     "/live-observations/public/:token/events",
     async (request, reply) => {
@@ -241,12 +259,30 @@ export async function registerLiveObservationRoutes(
             publicToken: params.token
           });
 
+        if (response.accepted && isSimulatedCloudWatchAgentEnabled(runtimeEnv)) {
+          recordSimulatedCloudWatchAgentTraffic(session.id);
+        }
+
         return reply.status(response.accepted ? 202 : 200).send(response);
       } catch (error) {
         return handleLiveObservationError(error, reply);
       }
     }
   );
+}
+
+function createLiveObservationObservabilityProvider(
+  runtimeEnv: RuntimeEnv
+): DeploymentObservabilityProvider {
+  if (isSimulatedCloudWatchAgentEnabled(runtimeEnv)) {
+    return createSimulatedCloudWatchAgentObservabilityProvider();
+  }
+
+  return createAwsDeploymentObservabilityProvider();
+}
+
+function isSimulatedCloudWatchAgentEnabled(runtimeEnv: RuntimeEnv): boolean {
+  return runtimeEnv.liveObservationSimulatedAgent?.trim().toLowerCase() === "true";
 }
 
 function createDefaultDeploymentContextLoader(
@@ -469,6 +505,9 @@ export async function streamLiveObservationSnapshots(input: {
         input.observationId,
         input.deploymentId
       );
+      if (closed) {
+        return;
+      }
       input.reply.raw.write(
         `event: snapshot\ndata: ${JSON.stringify(snapshot)}\n\n`
       );
@@ -487,6 +526,7 @@ export async function streamLiveObservationSnapshots(input: {
     }
   };
 
+  input.request.raw.on("close", close);
   await writeSnapshot();
 
   if (input.once || closed) {
@@ -502,6 +542,4 @@ export async function streamLiveObservationSnapshots(input: {
       input.reply.raw.write(": heartbeat\n\n");
     }
   }, 15_000);
-
-  input.request.raw.on("close", close);
 }

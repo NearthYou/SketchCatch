@@ -788,6 +788,40 @@ export type LiveObservationStreamFailure = Readonly<{
   source: "stream" | "snapshot-poll";
 }>;
 
+export async function pollLiveObservationSnapshots(input: {
+  readonly deploymentId: string;
+  readonly intervalMs?: number | undefined;
+  readonly observationId: string;
+  readonly signal: AbortSignal;
+  readonly onError?: ((failure: LiveObservationStreamFailure) => void) | undefined;
+  readonly onSnapshot: (snapshot: LiveObservationSnapshot) => void;
+}): Promise<void> {
+  let retryCount = 0;
+
+  while (!input.signal.aborted) {
+    try {
+      const snapshot = await getLiveObservationSnapshot(
+        input.deploymentId,
+        input.observationId,
+        input.signal
+      );
+      input.onSnapshot(snapshot);
+      retryCount = 0;
+      if (snapshot.status !== "active") {
+        return;
+      }
+    } catch (error) {
+      if (input.signal.aborted) {
+        return;
+      }
+      input.onError?.({ error, retryCount, source: "snapshot-poll" });
+      retryCount += 1;
+    }
+
+    await waitForRetry(input.intervalMs ?? 2_000, input.signal);
+  }
+}
+
 export async function streamLiveObservationSnapshots(input: {
   readonly deploymentId: string;
   readonly observationId: string;
@@ -1404,15 +1438,17 @@ async function waitForRetry(delayMs: number, signal: AbortSignal): Promise<void>
   }
 
   await new Promise<void>((resolve) => {
-    const timeout = globalThis.setTimeout(resolve, delayMs);
-    signal.addEventListener(
-      "abort",
-      () => {
-        globalThis.clearTimeout(timeout);
-        resolve();
-      },
-      { once: true }
-    );
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      globalThis.clearTimeout(timeout);
+      signal.removeEventListener("abort", finish);
+      resolve();
+    };
+    const timeout = globalThis.setTimeout(finish, delayMs);
+    signal.addEventListener("abort", finish, { once: true });
+    if (signal.aborted) finish();
   });
 }
 

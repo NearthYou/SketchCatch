@@ -4,7 +4,7 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- Branch: `feat/ck/349-repo-analysis`.
+- Branch: `feature/sw/356-live-observation`.
 - Repository recommendation guarantees 2-3 unique candidates and validates question IDs, semantics, and duplicate prompts before display.
 - Deployment type is hidden when repository evidence is decisive and shown only for ambiguous analysis.
 - CI/CD handoff is a prominent standalone setting; its GitHub App repository panel appears only while enabled.
@@ -12,6 +12,15 @@ Short English-only working log for the current agent context. Older records are 
 - Follow-up questions depend on the selected Template, affect diagram creation, and use direct clickable choices.
 
 ## Session Record
+
+### 2026-07-13 - Add and review diagram-based Live Observation for ECS Fargate and ASG
+
+- Added diagram-derived main traffic paths, REST polling-compatible snapshots, CloudWatch Agent/ASG and ECS Fargate observability, and presentation-focused capacity visualization.
+- Moved AI simulation results out of the chat dock and kept bottleneck, cost, and failure analysis in the simulation panel.
+- Represented each accepted request as one 28px particle moving sequentially across analyzed connector segments; observation remains idle until traffic is explicitly started.
+- Final review added metadata-free ECS/ASG capacity inference scoped to the selected controller, five-request bursts, disconnect-safe SSE startup, automatically expiring per-observation simulated traffic, metric-correct request thresholds, real Traffic API audience links with explicit simulation fallback, and polling listener cleanup.
+- Verification: focused Web tests passed 82/82 plus 9 diagram tests, focused API tests passed 38/38 plus 18 service/route tests; harness, lint, typecheck, and build passed. No AWS or Terraform mutation ran.
+- PR review: Kubernetes `depends_on` addresses now render as references and both polling/SSE delay messages use valid Korean text; 21 Terraform and 31 modal tests passed.
 
 ### 2026-07-12 - Repair Repository candidate selection UI
 
@@ -182,38 +191,6 @@ Short English-only working log for the current agent context. Older records are 
 - Risk:
   - Browser visual verification has not been run yet in this worktree.
 
-### 2026-07-12 - Localize Repository analysis page copy
-
-- Goal: Remove English UI copy from the Repository analysis/recommendation page.
-- Completed:
-  - Translated the Repository page heading, URL analysis form, connected repository section, recommendation controls, select placeholders, buttons, empty/error states, and public template display names into Korean.
-  - Kept product/acronym terms such as GitHub, URL, CI/CD, EC2/VM, ECS Fargate, and EKS as product identifiers.
-  - Updated source regression coverage to assert the Korean copy and keep evidence file lists hidden.
-- Verification:
-  - `pnpm --dir apps/web exec tsx --test features/workspace/repository-start-template-recommendation.test.ts`
-  - `pnpm --dir apps/web typecheck`
-- Risk:
-  - Browser visual verification has not been run yet in this worktree.
-
-### 2026-07-12 - Add Repository recommendation candidates and enriched diagrams
-
-- Goal: Make public Repository analysis recommend multiple template candidates, ask meaningful follow-up questions, and generate a repository-aware board instead of dumping the raw Terraform template diagram.
-- Completed:
-  - Added a public Repository recommendation helper that returns ranked template candidates and up to five follow-up questions from repository signals, deployment type, and answers.
-  - Updated the Repository analysis page to show selectable recommendation candidates instead of a single fixed template label.
-  - Changed final board creation to generate a repository-aware `ArchitectureJson` and convert it through the existing diagram adapter, so React/API/DB/container/CI-CD signals add missing resources around the selected template.
-  - Added focused tests covering multiple candidates, follow-up questions, ECS/DB/CloudFront/CI-CD diagram enrichment, and readable node labels.
-- Verification:
-  - `pnpm --dir apps/web exec tsx --test features/workspace/public-repository-recommendation.test.ts features/workspace/repository-start-template-recommendation.test.ts`
-  - `pnpm --dir apps/web typecheck`
-  - `pnpm harness:check`
-  - `pnpm lint` passed with the pre-existing `live-observations` `setNow` warning.
-  - `pnpm typecheck`
-  - `pnpm build`
-  - `git diff --check` passed with CRLF conversion warnings only.
-- Risk:
-  - Browser visual verification has not been run yet in this worktree.
-
 ## Next Action
 
-- Await review or the #350 handoff after the hybrid recommendation commit.
+- Await PR #358 checks and merge into `dev`.

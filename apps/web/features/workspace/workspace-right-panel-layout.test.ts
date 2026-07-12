@@ -518,6 +518,7 @@ test("simulation opens beside Deploy and remains available in the collapsed shor
   assert.match(collapsedPanelSource, /title="시뮬레이션"/);
   assert.match(collapsedPanelSource, /onClick=\{openLiveObservation\}/);
   assert.match(componentSource, /<LiveObservationModal/);
+  assert.match(componentSource, /diagramJson=\{context\.diagram\}/);
   assert.match(componentSource, /projectId=\{projectId\}/);
 });
 
@@ -641,11 +642,18 @@ test("resource card menu omits data source switch and maximize actions", () => {
 });
 
 test("workspace AI has a dedicated error tab for Terraform issue resolution", () => {
-  assert.match(aiChatDockSource, /type WorkspaceAiChatScope = "draft" \| "errors" \| "preview" \| "simulation"/);
+  assert.match(aiChatDockSource, /type WorkspaceAiChatScope = "draft" \| "errors" \| "preview"/);
   assert.match(aiChatDockSource, /setActiveChatTab\("errors"\)/);
   assert.match(aiChatDockSource, /activeChatTab === "errors" && terraformIssueResolution !== null/);
   assert.match(aiChatDockSource, /AI 오류/);
   assert.match(stylesSource, /\.aiChatDock\[data-chat-tab="errors"\] \.aiChatComposer/);
+});
+
+test("workspace AI chat no longer owns design simulation controls or results", () => {
+  assert.doesNotMatch(aiChatDockSource, /runDesignSimulation/);
+  assert.doesNotMatch(aiChatDockSource, /시뮬레이션 실행/);
+  assert.doesNotMatch(aiChatDockSource, /WorkspaceAiDesignSimulationResult/);
+  assert.doesNotMatch(aiChatDockSource, /activeChatTab === "simulation"/);
 });
 
 test("terraform issue fix cards omit procedural apply steps", () => {

@@ -196,11 +196,19 @@ type AwsRegionCode =
 
 type DiagramNodeMetadata = {
   parentAreaNodeId?: string;
+  liveObservationRole?:
+    | "traffic-source"
+    | "traffic-hop"
+    | "capacity-controller"
+    | "capacity-unit"
+    | "support";
 };
 ```
 
-새 기준에서 `node.metadata`에는 보드 편집/복구에 필요한 containment 정보만 저장한다.
+새 기준에서 `node.metadata`에는 보드 편집/복구에 필요한 containment 정보와 관측 화면의 경로 분석 힌트를 저장할 수 있다.
 Region/AZ 선택값처럼 Terraform 동기화와 의미를 공유해야 하는 값은 `node.parameters.values`에 둔다.
+
+`liveObservationRole`은 저장된 edge를 대체하는 고정 토폴로지가 아니다. Live Observation은 먼저 `DiagramJson.edges`로 방향성 그래프를 구성하고, role이 있으면 source, hop, controller, capacity, support 의미를 명확히 하는 경로 선택 힌트로 사용한다. role이 없으면 resource definition과 그래프 연결성으로 메인 경로를 추론한다. 이 metadata는 관측 화면 전용이며 Terraform resource/data block 생성에는 사용하지 않는다.
 
 영역 노드 안에 명시적으로 배치된 node는 `node.metadata.parentAreaNodeId`에 부모 영역 node id를 저장한다.
 이 값은 영역 이동 시 자식 node를 함께 이동시키기 위한 보드 편집 metadata이며, Terraform resource/data block 생성에는 사용하지 않는다.

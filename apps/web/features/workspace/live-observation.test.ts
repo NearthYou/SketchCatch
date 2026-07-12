@@ -182,6 +182,21 @@ test("instance markers distinguish expected, launching, InService, and unavailab
     ["in-service", "in-service"]
   );
 
+  const fargate = createSnapshot({
+    desiredCapacity: 2,
+    instances: [
+      createInstance("task/demo/1", "RUNNING"),
+      createInstance("task/demo/2", "PROVISIONING")
+    ]
+  });
+  assert.deepEqual(
+    getLiveObservationInstanceMarkers(fargate).map((marker) => [marker.state, marker.label]),
+    [
+      ["in-service", "RUNNING"],
+      ["launching", "Launching"]
+    ]
+  );
+
   const terminating = createSnapshot({
     desiredCapacity: 1,
     instances: [
