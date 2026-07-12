@@ -32,6 +32,7 @@ import {
   initialPreDeploymentCheckState,
   type DeploymentPreDeploymentCheckState
 } from "./DeploymentPanel";
+import { DeploymentWizard } from "./DeploymentWizard";
 import { ResourceWorkspacePanel } from "./ResourceWorkspacePanel";
 import {
   TerraformCodePanel,
@@ -52,6 +53,10 @@ import {
   type DeploymentBaseline
 } from "./deployment-baseline";
 import { validateTerraformCode } from "./api";
+import {
+  getDeploymentWizardState,
+  type DeploymentWizardState
+} from "./deployment-wizard-state";
 import {
   createTerraformLeaveSaveStartFeedback,
   resolveTerraformLeaveSaveCompletion,
@@ -98,6 +103,15 @@ const DEFAULT_TERRAFORM_CODE_PANE_RATIO = 62;
 const MIN_TERRAFORM_CODE_PANE_RATIO = 32;
 const MAX_TERRAFORM_CODE_PANE_RATIO = 78;
 const TERRAFORM_SPLIT_KEYBOARD_STEP = 4;
+const INITIAL_DEPLOYMENT_WIZARD_STATE = getDeploymentWizardState({
+  approved: false,
+  directApplyStatus: "not-started",
+  gitCicdHandoffStatus: "not-created",
+  plan: "missing",
+  preparation: "pending",
+  preflight: "idle",
+  route: null
+});
 
 // 오른쪽 패널은 작업 중 필요한 모드만 노출하고, Reverse는 새 프로젝트 시작 흐름에서만 진입하게 둡니다.
 export function WorkspaceRightPanel({
@@ -146,6 +160,9 @@ export function WorkspaceRightPanel({
   const [preDeploymentCheckState, setPreDeploymentCheckState] =
     useState<DeploymentPreDeploymentCheckState>(initialPreDeploymentCheckState);
   const [deploymentBaseline, setDeploymentBaseline] = useState<DeploymentBaseline | null>(null);
+  const [deploymentWizardState, setDeploymentWizardState] = useState<DeploymentWizardState>(
+    INITIAL_DEPLOYMENT_WIZARD_STATE
+  );
   const [isDeploymentConsoleOpen, setIsDeploymentConsoleOpen] = useState(false);
   const [canRenderDeploymentPortal, setCanRenderDeploymentPortal] = useState(false);
   const [isLiveObservationOpen, setIsLiveObservationOpen] = useState(false);
@@ -325,6 +342,7 @@ export function WorkspaceRightPanel({
     });
 
     setDeploymentBaseline(baseline);
+    setDeploymentWizardState(INITIAL_DEPLOYMENT_WIZARD_STATE);
     setIsDeploymentConsoleOpen(true);
   }, [context.diagram, readCurrentTerraformFiles]);
 
@@ -690,29 +708,35 @@ export function WorkspaceRightPanel({
   }, [hasUnsavedTerraformChanges]);
 
   const deploymentConsoleContent = isDeploymentConsoleOpen && canRenderDeploymentPortal && deploymentBaseline ? (
-    <DeploymentPanel
+    <DeploymentWizard
       baseline={deploymentBaseline}
-      deploymentAvailability={deploymentAvailability}
-      fullScreenOnly
-      hasUnsavedDeploymentBaseline={hasUnsavedDeploymentBaseline}
-      initialExpanded
-      onExpandedClose={closeDeploymentConsole}
-      onOpenFindingTerraformSource={(finding) => {
-        const sourceLocation = openPreDeploymentFindingTerraformSource(finding);
-
-        if (sourceLocation) {
-          closeDeploymentConsole();
-        }
-
-        return sourceLocation;
-      }}
-      onPrepareDeploymentArtifacts={prepareDeploymentArtifacts}
-      onPreDeploymentCheckStateChange={setPreDeploymentCheckState}
-      onValidateTerraformDiagnostics={validateTerraformForPreDeployment}
-      preDeploymentCheckState={preDeploymentCheckState}
-      projectId={projectId}
+      onClose={closeDeploymentConsole}
       projectName={projectName}
-    />
+      state={deploymentWizardState}
+    >
+      <DeploymentPanel
+        baseline={deploymentBaseline}
+        deploymentAvailability={deploymentAvailability}
+        embeddedInWizard
+        hasUnsavedDeploymentBaseline={hasUnsavedDeploymentBaseline}
+        onOpenFindingTerraformSource={(finding) => {
+          const sourceLocation = openPreDeploymentFindingTerraformSource(finding);
+
+          if (sourceLocation) {
+            closeDeploymentConsole();
+          }
+
+          return sourceLocation;
+        }}
+        onPrepareDeploymentArtifacts={prepareDeploymentArtifacts}
+        onPreDeploymentCheckStateChange={setPreDeploymentCheckState}
+        onValidateTerraformDiagnostics={validateTerraformForPreDeployment}
+        onWizardStateChange={setDeploymentWizardState}
+        preDeploymentCheckState={preDeploymentCheckState}
+        projectId={projectId}
+        projectName={projectName}
+      />
+    </DeploymentWizard>
   ) : null;
   const deploymentConsole = deploymentConsoleContent
     ? createPortal(deploymentConsoleContent, document.body)

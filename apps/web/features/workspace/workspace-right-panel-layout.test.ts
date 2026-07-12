@@ -7,6 +7,8 @@ const componentSource = readWorkspaceFile("WorkspaceRightPanel.tsx");
 const aiChatDockSource = readWorkspaceFile("WorkspaceAiChatDock.tsx");
 const aiPanelSource = readWorkspaceFile("WorkspaceAiPanel.tsx");
 const deploymentPanelSource = readWorkspaceFile("DeploymentPanel.tsx");
+const deploymentWizardSource = readWorkspaceFile("DeploymentWizard.tsx");
+const deploymentWizardStylesSource = readWorkspaceFile("deployment-wizard.module.css");
 const diagramEditorSource = readFeatureFile("../diagram-editor/DiagramEditor.tsx");
 const flowMappersSource = readFeatureFile("../diagram-editor/flow-mappers.ts");
 const resourceWorkspaceSource = readWorkspaceFile("ResourceWorkspacePanel.tsx");
@@ -56,17 +58,20 @@ test("deploy opens a full-screen console instead of rendering deployment inside 
     componentSource,
     /const \[isDeploymentConsoleOpen, setIsDeploymentConsoleOpen\] = useState\(false\);/
   );
-  assert.match(componentSource, /fullScreenOnly/);
-  assert.match(componentSource, /initialExpanded/);
+  assert.match(componentSource, /<DeploymentWizard/);
+  assert.match(componentSource, /embeddedInWizard/);
   assert.match(componentSource, /import \{ createPortal \} from "react-dom";/);
   assert.match(componentSource, /isDeploymentConsoleOpen && canRenderDeploymentPortal/);
   assert.match(componentSource, /createPortal\(deploymentConsoleContent, document\.body\)/);
-  assert.match(componentSource, /onExpandedClose=\{closeDeploymentConsole\}/);
+  assert.match(componentSource, /onClose=\{closeDeploymentConsole\}/);
   assert.match(componentSource, /openDeploymentConsole/);
   assert.match(componentSource, /setIsDeploymentConsoleOpen\(true\);/);
   assert.match(pendingDeploymentConsoleBranch, /openDeploymentWithBaseline\(\);/);
   assert.doesNotMatch(pendingDeploymentConsoleBranch, /context\.setRightPanelOpen\(false\);/);
-  assert.match(deploymentPanelSource, /const isDeploymentOverlayOpen = fullScreenOnly \|\| isDeploymentExpanded;/);
+  assert.match(
+    deploymentPanelSource,
+    /const isDeploymentOverlayOpen = !embeddedInWizard && \(fullScreenOnly \|\| isDeploymentExpanded\);/
+  );
   assert.match(deploymentPanelSource, /\{isDeploymentOverlayOpen \? \(/);
   assert.match(deploymentPanelSource, /size=\{isDeploymentOverlayOpen \? "large" : "regular"\}/);
   assert.match(fullscreenHostRule, /\bdisplay:\s*contents;/);
@@ -1214,6 +1219,26 @@ test("deployment console reads only the immutable baseline captured on entry", (
   assert.match(deploymentPanelSource, /createWorkspaceAiBoardSnapshot\(baseline\.diagram\)/);
   assert.match(deploymentPanelSource, /terraformFiles:\s*\[\.\.\.baseline\.terraformFiles\]/);
   assert.doesNotMatch(deploymentPanelSource, /onGetTerraformFiles/);
+});
+
+test("Deploy opens one modal wizard outside the Architecture Panel", () => {
+  const rightPanelBodySource = componentSource.slice(
+    componentSource.indexOf("<div className={styles.rightPanelView}"),
+    componentSource.lastIndexOf("{showTerraformLeaveDialog ? (")
+  );
+
+  assert.match(componentSource, /createPortal/);
+  assert.match(componentSource, /<DeploymentWizard/);
+  assert.doesNotMatch(rightPanelBodySource, /<DeploymentPanel/);
+  assert.match(deploymentWizardSource, /aria-label="Deployment Wizard"/);
+  assert.match(deploymentWizardSource, /Architecture로 돌아가기/);
+  assert.match(deploymentWizardStylesSource, /Deployment wizard visual contract/);
+  assert.match(deploymentWizardStylesSource, /grid-template-columns:\s*240px minmax\(0, 1fr\)/);
+  assert.match(deploymentWizardStylesSource, /height:\s*min\(960px, calc\(100dvh - 48px\)\)/);
+  assert.match(
+    deploymentWizardStylesSource,
+    /@media \(max-width:\s*768px\)[\s\S]*?height:\s*100dvh[\s\S]*?env\(safe-area-inset-bottom\)/
+  );
 });
 
 test("pre-deployment check is owned by the deployment tab", () => {

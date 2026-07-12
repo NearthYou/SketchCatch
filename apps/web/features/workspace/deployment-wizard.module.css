@@ -1,0 +1,203 @@
+/* Deployment wizard visual contract */
+.overlay {
+  align-items: center;
+  background: rgba(17, 17, 17, 0.56);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 24px;
+  position: fixed;
+  z-index: 130;
+}
+
+.shell {
+  background: var(--workspace-surface, #ffffff);
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  border-radius: 8px;
+  color: var(--workspace-text, #171717);
+  display: grid;
+  font-family: var(--workspace-font, "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif);
+  grid-template-columns: 240px minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  height: min(960px, calc(100dvh - 48px));
+  max-width: 1440px;
+  overflow: hidden;
+  width: 100%;
+}
+
+.header {
+  align-items: center;
+  background: var(--workspace-surface, #ffffff);
+  border-bottom: 1px solid var(--workspace-line, #f0f0f3);
+  display: grid;
+  gap: 16px;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  min-height: 72px;
+  padding: 12px 16px;
+}
+
+.headerIdentity,
+.headerStatus {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.headerIdentity span,
+.headerStatus span {
+  color: var(--workspace-muted, #60646c);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.headerIdentity strong,
+.headerStatus strong {
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.headerIdentity code {
+  color: var(--workspace-muted, #60646c);
+  font-size: 10px;
+}
+
+.closeButton {
+  background: var(--workspace-surface, #ffffff);
+  border: 1px solid var(--workspace-line-strong, #dcdee0);
+  border-radius: var(--workspace-control-radius, 8px);
+  color: var(--workspace-text, #171717);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  min-height: var(--workspace-control-height, 40px);
+  padding: 0 14px;
+}
+
+.closeButton:focus-visible {
+  outline: 2px solid var(--workspace-accent, #000000);
+  outline-offset: 2px;
+}
+
+.stepRail {
+  background: var(--workspace-surface-muted, #fafafa);
+  border-right: 1px solid var(--workspace-line, #f0f0f3);
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px 12px;
+}
+
+.stepRail ol {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.stepItem {
+  align-items: start;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 12px minmax(0, 1fr);
+  padding: 10px;
+}
+
+.stepItem[aria-current="step"] {
+  background: var(--workspace-surface, #ffffff);
+  border-color: var(--workspace-line-strong, #dcdee0);
+}
+
+.stepMarker {
+  background: var(--workspace-line-strong, #dcdee0);
+  border-radius: 999px;
+  height: 10px;
+  margin-top: 3px;
+  width: 10px;
+}
+
+.stepRail li[data-state="active"] .stepMarker {
+  background: var(--workspace-accent, #000000);
+}
+
+.stepRail li[data-state="complete"] .stepMarker {
+  background: var(--workspace-success, #16a34a);
+}
+
+.stepRail li[data-state="error"] .stepMarker {
+  background: var(--workspace-error, #eb8e90);
+}
+
+.stepCopy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.stepCopy strong {
+  font-size: 12px;
+}
+
+.stepCopy small,
+.stepCopy em {
+  color: var(--workspace-muted, #60646c);
+  font-size: 10px;
+  font-style: normal;
+  line-height: 1.4;
+}
+
+.body {
+  min-height: 0;
+  min-width: 0;
+  overflow: auto;
+}
+
+@media (max-width: 768px) {
+  .overlay {
+    padding: 0;
+  }
+
+  .shell {
+    border: 0;
+    border-radius: 0;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto minmax(0, 1fr);
+    height: 100dvh;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .header {
+    grid-template-columns: minmax(0, 1fr) auto;
+    min-height: 64px;
+  }
+
+  .headerStatus {
+    display: none;
+  }
+
+  .closeButton {
+    max-width: 148px;
+  }
+
+  .stepRail {
+    border-bottom: 1px solid var(--workspace-line, #f0f0f3);
+    border-right: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 8px 12px;
+  }
+
+  .stepRail ol {
+    display: flex;
+    width: max-content;
+  }
+
+  .stepRail li {
+    width: 164px;
+  }
+}

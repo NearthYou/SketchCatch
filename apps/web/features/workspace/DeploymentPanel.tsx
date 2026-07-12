@@ -82,10 +82,16 @@ import {
   type DeploymentAvailability
 } from "./deployment-availability";
 import {
+  getDirectDeploymentWizardCompatibility,
   getDirectDeploymentFlow,
   type DirectDeploymentPreflightState,
   type DirectDeploymentStepId
 } from "./deployment-console-state";
+import {
+  getDeploymentWizardState,
+  type DeploymentGitCicdHandoffStatus,
+  type DeploymentWizardState
+} from "./deployment-wizard-state";
 import { getDeploymentDurationLabel } from "./deployment-duration";
 import styles from "./workspace.module.css";
 
@@ -119,6 +125,7 @@ export const initialPreDeploymentCheckState: DeploymentPreDeploymentCheckState =
 export function DeploymentPanel({
   baseline,
   deploymentAvailability,
+  embeddedInWizard = false,
   fullScreenOnly = false,
   hasUnsavedDeploymentBaseline,
   initialExpanded = false,
@@ -127,12 +134,14 @@ export function DeploymentPanel({
   onPrepareDeploymentArtifacts,
   onPreDeploymentCheckStateChange,
   onValidateTerraformDiagnostics,
+  onWizardStateChange,
   preDeploymentCheckState,
   projectId,
   projectName
 }: {
   readonly baseline: DeploymentBaseline;
   readonly deploymentAvailability: DeploymentAvailability;
+  readonly embeddedInWizard?: boolean | undefined;
   readonly fullScreenOnly?: boolean | undefined;
   readonly hasUnsavedDeploymentBaseline: boolean;
   readonly initialExpanded?: boolean | undefined;
@@ -145,6 +154,7 @@ export function DeploymentPanel({
   readonly onValidateTerraformDiagnostics: (
     baseline: DeploymentBaseline
   ) => Promise<TerraformDiagnostic[]>;
+  readonly onWizardStateChange?: ((state: DeploymentWizardState) => void) | undefined;
   readonly preDeploymentCheckState: DeploymentPreDeploymentCheckState;
   readonly projectId: string;
   readonly projectName: string;
@@ -187,7 +197,7 @@ export function DeploymentPanel({
   const deploymentTabRefs = useRef<Partial<Record<DeploymentConsoleTab, HTMLButtonElement>>>({});
   const deploymentConfirmationOpenRef = useRef(false);
   deploymentConfirmationOpenRef.current = showApplyConfirmation || showDestroyConfirmation;
-  const isDeploymentOverlayOpen = fullScreenOnly || isDeploymentExpanded;
+  const isDeploymentOverlayOpen = !embeddedInWizard && (fullScreenOnly || isDeploymentExpanded);
 
   const verifiedAwsConnections = useMemo(
     () => awsConnections.filter((connection) => connection.status === "verified"),
@@ -322,13 +332,32 @@ export function DeploymentPanel({
     canStartDeploymentReview &&
     preDeploymentState !== "loading";
   const primaryDeploymentStepStatus = getPrimaryDeploymentStepStatus(selectedDeployment);
-  const directDeploymentFlow = getDirectDeploymentFlow({
+  const directDeploymentFlowInput = {
     actions: deploymentActions,
     deployment: selectedDeployment,
     hasUnsavedBaseline: hasUnsavedDeploymentBaseline,
     preflightState: directPreflightState,
     requestState
+  };
+  const directDeploymentFlow = getDirectDeploymentFlow(directDeploymentFlowInput);
+  const directWizardCompatibility = getDirectDeploymentWizardCompatibility(
+    directDeploymentFlowInput
+  );
+  const deploymentWizardState = getDeploymentWizardState({
+    ...directWizardCompatibility,
+    gitCicdHandoffStatus: getWizardGitCicdHandoffStatus(selectedGitCicdHandoff),
+    preflight: directPreflightState,
+    route: deploymentConsoleTab === "git-cicd"
+      ? "git-cicd"
+      : deploymentConsoleTab === "direct"
+        ? "direct"
+        : null
   });
+  const deploymentWizardStateFingerprint = JSON.stringify(deploymentWizardState);
+
+  useEffect(() => {
+    onWizardStateChange?.(deploymentWizardState);
+  }, [deploymentWizardStateFingerprint, onWizardStateChange]);
 
   useEffect(() => {
     setSelectedDirectStepId(directDeploymentFlow.activeStepId);
@@ -2125,6 +2154,14 @@ export function DeploymentPanel({
     </div>
   );
 
+  if (embeddedInWizard) {
+    return (
+      <div className={styles.deploymentPanelFullscreenHost}>
+        {deploymentContent}
+      </div>
+    );
+  }
+
   return (
     <div className={fullScreenOnly ? styles.deploymentPanelFullscreenHost : styles.deploymentPanel}>
       {!fullScreenOnly ? (
@@ -2826,6 +2863,15 @@ function formatShortHash(value: string | null): string {
   }
 
   return `${value.slice(0, 12)}...${value.slice(-4)}`;
+}
+
+function getWizardGitCicdHandoffStatus(
+  handoff: GitCicdHandoff | null
+): DeploymentGitCicdHandoffStatus {
+  if (!handoff) return "not-created";
+  if (handoff.status === "pipeline_success") return "success";
+  if (handoff.status === "pipeline_failed" || handoff.status === "cancelled") return "failed";
+  return "pending";
 }
 
 function formatOutputValue(output: TerraformOutput): string {
