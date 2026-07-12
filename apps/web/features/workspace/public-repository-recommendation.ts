@@ -128,8 +128,9 @@ function createPublicRepositoryTemplateCandidates(input: {
 }): readonly PublicRepositoryTemplateCandidate[] {
   const signals = new Set(input.analysis.detectedSignals);
   const candidateIds = new Set<TemplateId>();
+  const primaryTemplateId = selectPrimaryTemplateId(input);
 
-  candidateIds.add(selectPrimaryTemplateId(input));
+  candidateIds.add(primaryTemplateId);
 
   if (signals.has("Container")) {
     candidateIds.add("ecs-fargate-container-app");
@@ -148,8 +149,38 @@ function createPublicRepositoryTemplateCandidates(input: {
     candidateIds.add("minimal-serverless-api");
   }
 
+  const fallbackCandidates: Readonly<Record<RepositoryDeploymentType, readonly TemplateId[]>> = {
+    container: [
+      "ecs-fargate-container-app",
+      "eks-container-app",
+      "three-tier-web-app",
+      "full-serverless-web-app"
+    ],
+    ec2_vm: [
+      "three-tier-web-app",
+      "ecs-fargate-container-app",
+      "full-serverless-web-app",
+      "minimal-serverless-api"
+    ],
+    serverless: [
+      "full-serverless-web-app",
+      "minimal-serverless-api",
+      "static-web-hosting",
+      "three-tier-web-app"
+    ]
+  };
+
+  for (const templateId of fallbackCandidates[input.deploymentType]) {
+    candidateIds.add(templateId);
+  }
+
   return [...candidateIds]
-    .map((templateId) => createCandidate(templateId, signals, input.deploymentType, input.answers))
+    .map((templateId) => {
+      const candidate = createCandidate(templateId, signals, input.deploymentType, input.answers);
+      return templateId === primaryTemplateId
+        ? { ...candidate, confidence: Math.min(candidate.confidence + 0.08, 0.96) }
+        : candidate;
+    })
     .sort((left, right) => right.confidence - left.confidence)
     .slice(0, 4);
 }

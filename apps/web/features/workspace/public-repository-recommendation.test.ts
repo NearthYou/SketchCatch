@@ -52,6 +52,30 @@ test("follow-up questions change with the selected template", () => {
   assert.ok(serverless.questions.length <= 5);
 });
 
+test("repository recommendation keeps comparison candidates when analysis signals are sparse", () => {
+  const analysis: SourceRepositoryAnalysisResult = {
+    ...createAnalysis(),
+    detectedSignals: ["Container"]
+  };
+  const recommendation = createPublicRepositoryRecommendation({
+    analysis,
+    answers: {},
+    deploymentType: "container"
+  });
+
+  assert.equal(recommendation.candidates.length, 4);
+  assert.equal(recommendation.candidates[0]?.templateId, "ecs-fargate-container-app");
+  assert.deepEqual(
+    new Set(recommendation.candidates.map((candidate) => candidate.templateId)),
+    new Set([
+      "ecs-fargate-container-app",
+      "eks-container-app",
+      "three-tier-web-app",
+      "full-serverless-web-app"
+    ])
+  );
+});
+
 test("deployment type is only requested when repository evidence cannot determine it", () => {
   const ambiguousAnalysis: SourceRepositoryAnalysisResult = {
     ...createAnalysis(),

@@ -5,7 +5,7 @@ Short English-only working log for the current agent context. Older records are 
 ## Current Verified State
 
 - Branch: `feat/ck/349-repo-analysis`.
-- Public Repository recommendation now shows ranked template candidates, asks follow-up questions, and creates an enriched repository-aware diagram only after the user accepts board creation.
+- Public Repository recommendation keeps four ranked comparison candidates even with sparse signals, asks follow-up questions, and creates a repository-aware diagram only after user acceptance.
 - Deployment type is hidden when repository evidence is decisive and shown only for ambiguous analysis.
 - CI/CD handoff is a prominent standalone setting; its GitHub App repository panel appears only while enabled.
 - Public Repository setup confirms Template and CI/CD before opening a separate follow-up-question stage.
