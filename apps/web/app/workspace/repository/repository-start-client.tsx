@@ -1,24 +1,29 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { GitBranch, LoaderCircle, Search, Settings2 } from "lucide-react";
+import type { FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 import type {
   GitHubInstalledRepositoryCandidate,
   RepositoryAnalysisQuestion,
   RepositoryDeploymentType,
   RepositoryTemplateRecommendationResult,
+  SourceRepositoryAnalysisResult,
   SourceRepository
 } from "@sketchcatch/types";
 import { ProductBrand } from "../../../components/ui/ProductBrand";
 import { ProductState } from "../../../components/ui/ProductState";
 import { getApiErrorMessage } from "../../../lib/api-client";
 import {
+  analyzePublicSourceRepository,
   analyzeSourceRepository,
   connectGitHubSourceRepository,
   listGitHubInstalledRepositories,
   listSourceRepositories,
-  recommendRepositoryTemplate
+  recommendRepositoryTemplate,
+  saveProjectDraft
 } from "../../../features/workspace/api";
 import {
   applyRepositoryAnalysis,
@@ -36,11 +41,16 @@ type RepositoryStartClientProps = {
 };
 
 export function RepositoryStartClient({ projectId, projectName }: RepositoryStartClientProps) {
+  const router = useRouter();
   const [repositories, setRepositories] = useState<SourceRepository[]>([]);
   const [candidates, setCandidates] = useState<GitHubInstalledRepositoryCandidate[]>([]);
   const [installationState, setInstallationState] = useState("");
   const [loadState, setLoadState] = useState<RequestState>("loading");
   const [actionState, setActionState] = useState<RequestState>("idle");
+  const [publicAnalysisState, setPublicAnalysisState] = useState<RequestState>("idle");
+  const [repositoryUrl, setRepositoryUrl] = useState("");
+  const [defaultBranch, setDefaultBranch] = useState("main");
+  const [publicAnalysis, setPublicAnalysis] = useState<SourceRepositoryAnalysisResult | null>(null);
   const [recommendationState, setRecommendationState] = useState<RequestState>("idle");
   const [deploymentType, setDeploymentType] = useState<RepositoryDeploymentType>("serverless");
   const [usesCiCd, setUsesCiCd] = useState(false);
@@ -56,6 +66,7 @@ export function RepositoryStartClient({ projectId, projectName }: RepositoryStar
   const activeRecommendation = recommendation ?? activeHandoff?.recommendation ?? null;
   const previewDiagram = createRepositoryPreviewDiagram(projectName, activeRepository);
   const githubSettingsHref = createProjectGitHubSettingsHref(projectId);
+  const isPublicAnalysisBusy = publicAnalysisState === "loading";
 
   useEffect(() => {
     if (!projectId) {
@@ -99,6 +110,59 @@ export function RepositoryStartClient({ projectId, projectName }: RepositoryStar
     } catch (error) {
       setActionState("error");
       setErrorMessage(getApiErrorMessage(error, "Available repositories could not be loaded."));
+    }
+  }
+
+  async function analyzeRepositoryUrl(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    const trimmedRepositoryUrl = repositoryUrl.trim();
+    const trimmedDefaultBranch = defaultBranch.trim();
+
+    if (!trimmedRepositoryUrl || isPublicAnalysisBusy) return;
+
+    setPublicAnalysisState("loading");
+    setPublicAnalysis(null);
+    setErrorMessage("");
+
+    try {
+      const result = await analyzePublicSourceRepository({
+        repositoryUrl: trimmedRepositoryUrl,
+        ...(trimmedDefaultBranch ? { defaultBranch: trimmedDefaultBranch } : {})
+      });
+      setPublicAnalysis(result);
+      setPublicAnalysisState("idle");
+    } catch (error) {
+      setPublicAnalysisState("error");
+      setErrorMessage(getApiErrorMessage(error, "Repository URL could not be analyzed."));
+    }
+  }
+
+  async function openPublicRepositoryBoard(): Promise<void> {
+    if (!publicAnalysis?.recommendedTemplateId || isPublicAnalysisBusy) return;
+    const diagram = buildBoardTemplateDiagram(publicAnalysis.recommendedTemplateId, {
+      projectSlug: projectName,
+      shortId: "public-repo"
+    });
+
+    if (!diagram) {
+      setErrorMessage("Recommended template could not be opened.");
+      return;
+    }
+
+    setPublicAnalysisState("loading");
+    setErrorMessage("");
+
+    try {
+      await saveProjectDraft({ diagramJson: diagram, projectId });
+      router.push(
+        `/workspace?${new URLSearchParams({
+          projectId,
+          projectName
+        }).toString()}`
+      );
+    } catch (error) {
+      setPublicAnalysisState("error");
+      setErrorMessage(getApiErrorMessage(error, "Repository board could not be opened."));
     }
   }
 
@@ -191,9 +255,50 @@ export function RepositoryStartClient({ projectId, projectName }: RepositoryStar
         ) : null}
 
         {loadState === "idle" && !activeRepository ? (
+          <section className={styles.publicUrlPanel}>
+            <GitBranch aria-hidden="true" size={24} />
+            <h2>Analyze a GitHub repository URL</h2>
+            <form className={styles.publicUrlForm} onSubmit={(event) => void analyzeRepositoryUrl(event)}>
+              <label>
+                <span>Repository URL</span>
+                <input
+                  onChange={(event) => setRepositoryUrl(event.target.value)}
+                  placeholder="https://github.com/owner/repository"
+                  type="url"
+                  value={repositoryUrl}
+                />
+              </label>
+              <label>
+                <span>Branch</span>
+                <input
+                  onChange={(event) => setDefaultBranch(event.target.value)}
+                  placeholder="main"
+                  type="text"
+                  value={defaultBranch}
+                />
+              </label>
+              <button disabled={isPublicAnalysisBusy || !repositoryUrl.trim()} type="submit">
+                {isPublicAnalysisBusy ? <LoaderCircle className={styles.spin} size={16} /> : <Search size={16} />}
+                {isPublicAnalysisBusy ? "Analyzing" : "Analyze URL"}
+              </button>
+            </form>
+            <p className={styles.inlineHint}>
+              Public repositories can be analyzed without connecting GitHub. Private repositories still need access in project settings.
+            </p>
+            {publicAnalysis ? (
+              <PublicRepositoryAnalysisResult
+                analysis={publicAnalysis}
+                isBusy={isPublicAnalysisBusy}
+                onOpenBoard={() => void openPublicRepositoryBoard()}
+              />
+            ) : null}
+          </section>
+        ) : null}
+
+        {loadState === "idle" && !activeRepository ? (
           <section className={styles.connectionPanel}>
             <GitBranch aria-hidden="true" size={24} />
-            <h2>Select a repository</h2>
+            <h2>Use a connected GitHub App repository</h2>
             <div className={styles.actions}>
               <button disabled={actionState === "loading"} onClick={() => void loadCandidates()} type="button">
                 Show available repositories
@@ -362,6 +467,54 @@ function RepositoryTemplateCandidates({
       ))}
     </section>
   );
+}
+
+function PublicRepositoryAnalysisResult({
+  analysis,
+  isBusy,
+  onOpenBoard
+}: {
+  readonly analysis: SourceRepositoryAnalysisResult;
+  readonly isBusy: boolean;
+  readonly onOpenBoard: () => void;
+}) {
+  return (
+    <section className={styles.publicAnalysisResult} aria-label="Public repository analysis result">
+      <div>
+        <span>Recommendation</span>
+        <strong>{formatPublicRepositoryTemplate(analysis.recommendedTemplateId)}</strong>
+        <p>{analysis.recommendationReason}</p>
+      </div>
+      <div className={styles.signalList}>
+        <span>Detected signals</span>
+        <strong>{analysis.detectedSignals.length > 0 ? analysis.detectedSignals.join(" / ") : "No strong signal"}</strong>
+      </div>
+      <div className={styles.evidenceList}>
+        {analysis.evidenceFiles.map((file) => (
+          <span key={file.path} data-found={file.found}>
+            {file.found ? "Found" : "Missing"} {file.path}
+          </span>
+        ))}
+      </div>
+      <button
+        disabled={isBusy || !analysis.recommendedTemplateId}
+        onClick={onOpenBoard}
+        type="button"
+      >
+        {isBusy ? <LoaderCircle className={styles.spin} size={16} /> : <Search size={16} />}
+        Open recommended board
+      </button>
+    </section>
+  );
+}
+
+function formatPublicRepositoryTemplate(
+  templateId: SourceRepositoryAnalysisResult["recommendedTemplateId"]
+): string {
+  if (templateId === "template-static-website") return "Static website";
+  if (templateId === "template-api-db") return "API with database";
+  if (templateId === "template-3tier") return "Three-tier web service";
+  return "No template match yet";
 }
 
 function createRepositoryPreviewDiagram(

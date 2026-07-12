@@ -8,6 +8,7 @@ Short English-only working log for the current agent context. Older records are 
 - Issue #349 repository-analysis based template recommendation is implemented and committed locally.
 - The latest follow-up fix maps missing `source_repositories` migrations to a stable API/UI message instead of exposing raw SQL.
 - GitHub repository-start and callback screens now route permission expansion to project GitHub settings instead of opening GitHub App installation directly.
+- Repository start now offers public GitHub URL analysis before any GitHub App connection, saving the recommended template board when opened.
 - Local `db:migrate` could not be run in this shell because `DATABASE_URL` is empty.
 - No cloud deployment, Terraform apply, or infrastructure mutation was run during this work session.
 
@@ -69,20 +70,18 @@ Short English-only working log for the current agent context. Older records are 
   - `pnpm typecheck`
   - `pnpm build`
 
-### 2026-07-12 - Address PR #347 review feedback
+### 2026-07-12 - Add public GitHub URL repository start
 
-- Goal: Fix all actionable review threads on PR #347 and prepare the branch for push.
+- Goal: Let users start Repository Analysis by pasting a public GitHub repository URL without first connecting GitHub in settings.
 - Completed:
-  - Ensured queued project draft follow-up saves still run when the in-flight save rejects.
-  - Relaxed voice transcription detection so Korean particles and compounds such as `음성을` and `녹음파일` are recognized while English words still use word boundaries.
-  - Expanded EC2 instance type parsing to handle compound families such as `m5ad.large` and `c6gn.xlarge`.
-  - Guarded Architecture Draft NDJSON stream decoding so completion chunks without values flush the decoder instead of decoding `undefined` with options.
-  - Added regression coverage for all four review threads.
+  - Added a Repository URL and branch form to the Repository start screen.
+  - Wired the form to the existing public `/ai/source-repository-analysis` client.
+  - Displayed detected signals, evidence files, recommendation reason, and the matched template.
+  - Saved the recommended template board to the project draft before opening the workspace.
 - Verification:
-  - Focused project draft save-flight, operational requirement, patch preview, and web API stream tests passed.
-  - `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
-- Risk:
-  - GitHub review threads still need reply/resolve after the fix commit is pushed.
+  - `pnpm --dir apps/web exec tsx --test features/workspace/repository-start-template-recommendation.test.ts`
+  - `pnpm --dir apps/web typecheck`
+  - `pnpm lint` passed with the pre-existing `live-observations` `setNow` warning; `pnpm typecheck`, `pnpm build`, and `pnpm harness:check` passed.
 
 ### 2026-07-11 - Connect PatchPlan compiler to Bedrock
 

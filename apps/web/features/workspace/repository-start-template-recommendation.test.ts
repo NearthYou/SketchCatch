@@ -9,6 +9,10 @@ test("Repository start screen exposes deployment, CI/CD, and template recommenda
   );
 
   assert.match(source, /recommendRepositoryTemplate/);
+  assert.match(source, /analyzePublicSourceRepository/);
+  assert.match(source, /saveProjectDraft/);
+  assert.match(source, /Analyze a GitHub repository URL/);
+  assert.match(source, /https:\/\/github\.com\/owner\/repository/);
   assert.match(source, /EC2\/VM based/);
   assert.match(source, /Container based/);
   assert.match(source, /Serverless based/);
