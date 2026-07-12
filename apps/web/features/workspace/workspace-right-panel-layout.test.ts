@@ -129,11 +129,13 @@ test("workspace rails keep stable widths while docking beside the canvas", () =>
   const editorShellRule = getCssRule(diagramEditorStylesSource, "editorShell");
 
   assert.match(diagramEditorSource, /const DEFAULT_LEFT_PANEL_WIDTH = 346;/);
-  assert.match(diagramEditorSource, /const DEFAULT_RIGHT_PANEL_WIDTH = 440;/);
+  assert.match(diagramEditorSource, /const DEFAULT_RIGHT_PANEL_WIDTH = 420;/);
+  assert.match(diagramEditorSource, /const MIN_RIGHT_PANEL_WIDTH = 380;/);
+  assert.match(diagramEditorSource, /const MAX_RIGHT_PANEL_WIDTH = 420;/);
   assert.match(diagramEditorSource, /leftPanelWidth\.brainboardV1/);
   assert.match(diagramEditorSource, /rightPanelWidth\.brainboardV1/);
   assert.match(editorShellRule, /--left-panel-width:\s*346px;/);
-  assert.match(editorShellRule, /--right-panel-width:\s*440px;/);
+  assert.match(editorShellRule, /--right-panel-width:\s*420px;/);
   assert.match(
     diagramEditorStylesSource,
     /\.leftRail\s*\{[^}]*\bgrid-row:\s*2;[^}]*\bposition:\s*relative;/s

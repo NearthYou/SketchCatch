@@ -1,7 +1,7 @@
 /* Workspace architecture visual contract */
 .editorShell {
   --left-panel-width: 346px;
-  --right-panel-width: 440px;
+  --right-panel-width: 420px;
   --workspace-panel-width: clamp(376px, 30vw, 416px);
   --workspace-control-height: 40px;
   --workspace-icon-control-size: 40px;
