@@ -135,6 +135,11 @@ Short English-only working log for the current agent context. Older records are 
 - Verification:
   - `pnpm --dir apps/web exec tsx --test features/workspace/repository-start-template-recommendation.test.ts`
   - `pnpm --dir apps/web typecheck`
+  - `pnpm harness:check`
+  - `pnpm lint` passed with the pre-existing `live-observations` `setNow` warning.
+  - `pnpm typecheck`
+  - `pnpm build`
+  - `git diff --check` passed with CRLF conversion warnings only.
   - `pnpm lint` passed with the pre-existing `live-observations` `setNow` warning; `pnpm typecheck`, `pnpm build`, and `pnpm harness:check` passed.
 
 ### 2026-07-12 - Inline public Repository URL start on new project screen
@@ -196,6 +201,19 @@ Short English-only working log for the current agent context. Older records are 
 - Risk:
   - Browser visual verification has not been run yet in this worktree.
 
+### 2026-07-12 - Localize Repository analysis page copy
+
+- Goal: Remove English UI copy from the Repository analysis/recommendation page.
+- Completed:
+  - Translated the Repository page heading, URL analysis form, connected repository section, recommendation controls, select placeholders, buttons, empty/error states, and public template display names into Korean.
+  - Kept product/acronym terms such as GitHub, URL, CI/CD, EC2/VM, ECS Fargate, and EKS as product identifiers.
+  - Updated source regression coverage to assert the Korean copy and keep evidence file lists hidden.
+- Verification:
+  - `pnpm --dir apps/web exec tsx --test features/workspace/repository-start-template-recommendation.test.ts`
+  - `pnpm --dir apps/web typecheck`
+- Risk:
+  - Browser visual verification has not been run yet in this worktree.
+
 ## Next Action
 
-- Manually retry the Repository URL flow in the browser when the local API/database is running.
+- Manually retry the Repository URL analysis page in the browser when the local API/database is running.

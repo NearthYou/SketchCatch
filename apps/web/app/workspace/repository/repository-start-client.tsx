@@ -88,7 +88,7 @@ export function RepositoryStartClient({
   useEffect(() => {
     if (!projectId) {
       setLoadState("error");
-      setErrorMessage("Project information is missing. Please start again from the new project screen.");
+      setErrorMessage("프로젝트 정보가 없습니다. 새 프로젝트 화면에서 다시 시작해주세요.");
       return;
     }
 
@@ -120,7 +120,7 @@ export function RepositoryStartClient({
       setLoadState("idle");
     } catch (error) {
       setLoadState("error");
-      setRepositoryConnectionError(getApiErrorMessage(error, "Repository connection status could not be loaded."));
+      setRepositoryConnectionError(getApiErrorMessage(error, "저장소 연결 상태를 불러오지 못했습니다."));
     }
   }
 
@@ -135,7 +135,7 @@ export function RepositoryStartClient({
       setActionState("idle");
     } catch (error) {
       setActionState("error");
-      setErrorMessage(getApiErrorMessage(error, "Available repositories could not be loaded."));
+      setErrorMessage(getApiErrorMessage(error, "연결 가능한 저장소를 불러오지 못했습니다."));
     }
   }
 
@@ -168,7 +168,7 @@ export function RepositoryStartClient({
       setErrorMessage(
         getApiErrorMessage(
           error,
-          "Repository URL could not be analyzed. Private repositories need GitHub access from project settings."
+          "저장소 URL을 분석하지 못했습니다. 비공개 저장소는 프로젝트 환경설정에서 GitHub 권한 연결이 필요합니다."
         )
       );
     }
@@ -184,7 +184,7 @@ export function RepositoryStartClient({
     });
 
     if (!diagram) {
-      setErrorMessage("Recommended template could not be opened.");
+      setErrorMessage("추천 템플릿으로 보드를 만들 수 없습니다.");
       return;
     }
 
@@ -202,7 +202,7 @@ export function RepositoryStartClient({
       );
     } catch (error) {
       setPublicAnalysisState("error");
-      setErrorMessage(getApiErrorMessage(error, "Repository board could not be created."));
+      setErrorMessage(getApiErrorMessage(error, "저장소 보드를 생성하지 못했습니다."));
     }
   }
 
@@ -223,7 +223,7 @@ export function RepositoryStartClient({
       setActionState("idle");
     } catch (error) {
       setActionState("error");
-      setErrorMessage(getApiErrorMessage(error, "Repository could not be connected."));
+      setErrorMessage(getApiErrorMessage(error, "저장소를 연결하지 못했습니다."));
     }
   }
 
@@ -242,7 +242,7 @@ export function RepositoryStartClient({
       setActionState("idle");
     } catch (error) {
       setActionState("error");
-      setErrorMessage(getApiErrorMessage(error, "Repository analysis failed."));
+      setErrorMessage(getApiErrorMessage(error, "저장소 분석에 실패했습니다."));
     }
   }
 
@@ -263,7 +263,7 @@ export function RepositoryStartClient({
       setRecommendationState("idle");
     } catch (error) {
       setRecommendationState("error");
-      setErrorMessage(getApiErrorMessage(error, "Template candidates could not be recommended."));
+      setErrorMessage(getApiErrorMessage(error, "템플릿 후보를 추천하지 못했습니다."));
     }
   }
 
@@ -271,23 +271,23 @@ export function RepositoryStartClient({
     <main className={styles.page}>
       <header className={styles.topbar}>
         <ProductBrand />
-        <Link href="/workspace/new">Choose another start path</Link>
+        <Link href="/workspace/new">시작 방식 다시 선택</Link>
       </header>
 
       <section className={styles.content} aria-labelledby="repository-start-title">
         <header className={styles.heading}>
-          <span>GitHub Repository</span>
-          <h1 id="repository-start-title">Start from code evidence</h1>
+          <span>GitHub 저장소</span>
+          <h1 id="repository-start-title">코드 근거로 시작하기</h1>
           <p>{projectName}</p>
         </header>
 
         {showUrlAnalysis ? (
           <section className={styles.publicUrlPanel}>
             <GitBranch aria-hidden="true" size={24} />
-            <h2>Analyze a GitHub repository URL</h2>
+            <h2>GitHub 저장소 URL 분석</h2>
             <form className={styles.publicUrlForm} onSubmit={(event) => void analyzeRepositoryUrl(event)}>
               <label>
-                <span>Repository URL</span>
+                <span>저장소 URL</span>
                 <input
                   onChange={(event) => setRepositoryUrl(event.target.value)}
                   placeholder="https://github.com/owner/repository"
@@ -296,7 +296,7 @@ export function RepositoryStartClient({
                 />
               </label>
               <label>
-                <span>Branch</span>
+                <span>브랜치</span>
                 <input
                   onChange={(event) => setDefaultBranch(event.target.value)}
                   placeholder="main"
@@ -306,11 +306,11 @@ export function RepositoryStartClient({
               </label>
               <button disabled={isPublicAnalysisBusy || !repositoryUrl.trim()} type="submit">
                 {isPublicAnalysisBusy ? <LoaderCircle className={styles.spin} size={16} /> : <Search size={16} />}
-                {isPublicAnalysisBusy ? "Analyzing" : "Analyze URL"}
+                {isPublicAnalysisBusy ? "분석 중" : "URL 분석"}
               </button>
             </form>
             <p className={styles.inlineHint}>
-              Public repositories are analyzed without a GitHub account connection. Private repositories and Git handoff need GitHub access from project settings.
+              공개 저장소는 GitHub 계정 연결 없이 분석합니다. 비공개 저장소, PR 생성, CI/CD 인계는 프로젝트 환경설정의 GitHub 권한 연결이 필요합니다.
             </p>
             {publicAnalysis ? (
               <PublicRepositoryRecommendationStep
@@ -333,28 +333,28 @@ export function RepositoryStartClient({
         {showUrlAnalysis ? (
           <section className={styles.connectionPanel}>
             <GitBranch aria-hidden="true" size={24} />
-            <h2>Optional: use a connected GitHub App repository</h2>
+            <h2>선택 사항: 연결된 GitHub App 저장소 사용</h2>
             <p className={styles.inlineHint}>
-              Use this for private repositories, PR creation, CI/CD handoff, or repository settings changes.
+              비공개 저장소, PR 생성, CI/CD 인계, 저장소 설정 변경이 필요할 때 사용합니다.
             </p>
             {loadState === "loading" ? (
-              <p className={styles.inlineHint} role="status">Checking connected repositories.</p>
+              <p className={styles.inlineHint} role="status">연결된 저장소를 확인하는 중입니다.</p>
             ) : null}
             {loadState === "error" ? (
               <ProductState
-                action={<button onClick={() => void loadRepositories()} type="button">Retry</button>}
+                action={<button onClick={() => void loadRepositories()} type="button">다시 시도</button>}
                 compact
                 description={repositoryConnectionError}
                 kind="error"
-                title="Connected repository status unavailable"
+                title="연결된 저장소 상태를 확인할 수 없습니다"
               />
             ) : null}
             <div className={styles.actions}>
               <button disabled={actionState === "loading" || loadState !== "idle"} onClick={() => void loadCandidates()} type="button">
-                Show available repositories
+                연결 가능한 저장소 보기
               </button>
               <Link className={styles.secondaryAction} href={githubSettingsHref}>
-                <Settings2 aria-hidden="true" size={16} /> Manage permissions in settings
+                <Settings2 aria-hidden="true" size={16} /> 환경설정에서 권한 관리
               </Link>
             </div>
             <RepositoryCandidates
@@ -368,28 +368,28 @@ export function RepositoryStartClient({
         {activeRepository ? (
           <section className={styles.analysisPanel}>
             <div>
-              <span>Connected repository</span>
+              <span>연결된 저장소</span>
               <h2>{activeRepository.owner}/{activeRepository.name}</h2>
               <p>{activeRepository.defaultBranch}</p>
             </div>
             <button disabled={actionState === "loading"} onClick={() => void analyzeRepository()} type="button">
               {actionState === "loading" ? <LoaderCircle className={styles.spin} size={16} /> : <Search size={16} />}
-              {actionState === "loading" ? "Analyzing" : "Analyze repository"}
+              {actionState === "loading" ? "분석 중" : "저장소 분석"}
             </button>
 
             {activeHandoff ? (
-              <section className={styles.recommendationForm} aria-label="Template recommendation controls">
+              <section className={styles.recommendationForm} aria-label="템플릿 추천 설정">
                 <label>
-                  <span>Deployment type</span>
+                  <span>배포 방식</span>
                   <select value={deploymentType} onChange={(event) => setDeploymentType(event.target.value as RepositoryDeploymentType)}>
-                    <option value="ec2_vm">EC2/VM based</option>
-                    <option value="container">Container based</option>
-                    <option value="serverless">Serverless based</option>
+                    <option value="ec2_vm">EC2/VM 기반</option>
+                    <option value="container">컨테이너 기반</option>
+                    <option value="serverless">서버리스 기반</option>
                   </select>
                 </label>
                 <label className={styles.checkboxLabel}>
                   <input checked={usesCiCd} onChange={(event) => setUsesCiCd(event.target.checked)} type="checkbox" />
-                  <span>Use CI/CD handoff</span>
+                  <span>CI/CD 인계 사용</span>
                 </label>
                 <RepositoryQuestions
                   answers={answers}
@@ -400,7 +400,7 @@ export function RepositoryStartClient({
                 />
                 <button disabled={recommendationState === "loading"} onClick={() => void submitRecommendation()} type="button">
                   {recommendationState === "loading" ? <LoaderCircle className={styles.spin} size={16} /> : <Search size={16} />}
-                  Recommend templates
+                  템플릿 추천
                 </button>
               </section>
             ) : null}
@@ -415,13 +415,13 @@ export function RepositoryStartClient({
             ) : null}
 
             {previewDiagram ? (
-              <section className={styles.previewPanel} aria-label="Repository analysis architecture preview">
+              <section className={styles.previewPanel} aria-label="저장소 분석 아키텍처 미리보기">
                 <div>
-                  <span>Practice Architecture Preview</span>
+                  <span>아키텍처 미리보기</span>
                   <strong>
                     {activeRepository.analysis?.aiHandoff.status === "template_selected"
                       ? activeRepository.analysis.aiHandoff.selectionReasons.join(" / ")
-                      : "Analysis evidence could not select one template."}
+                      : "분석 근거로 하나의 템플릿을 선택하지 못했습니다."}
                   </strong>
                 </div>
                 <AiDraftBoardPreview diagram={previewDiagram} />
@@ -431,7 +431,7 @@ export function RepositoryStartClient({
         ) : null}
 
         {errorMessage && loadState !== "error" ? (
-          <ProductState compact description={errorMessage} kind="error" title="Action failed" />
+          <ProductState compact description={errorMessage} kind="error" title="작업 실패" />
         ) : null}
       </section>
     </main>
@@ -459,16 +459,16 @@ function RepositoryQuestions({
               value={String(answers[question.id] ?? "")}
               onChange={(event) => onAnswer(question.id, event.target.value === "true")}
             >
-              <option value="">Select</option>
-              <option value="true">Yes</option>
-              <option value="false">No</option>
+              <option value="">선택</option>
+              <option value="true">예</option>
+              <option value="false">아니요</option>
             </select>
           ) : question.answerType === "single_select" ? (
             <select
               value={String(answers[question.id] ?? "")}
               onChange={(event) => onAnswer(question.id, event.target.value)}
             >
-              <option value="">Select</option>
+              <option value="">선택</option>
               {(question.options ?? []).map((option) => (
                 <option key={option.value} value={option.value}>{option.label}</option>
               ))}
@@ -498,11 +498,11 @@ function RepositoryTemplateCandidates({
   readonly repository: SourceRepository;
 }) {
   return (
-    <section className={styles.recommendationPanel} aria-label="Template candidates">
+    <section className={styles.recommendationPanel} aria-label="템플릿 후보">
       {recommendation.candidates.map((candidate) => (
         <article key={candidate.templateId}>
           <div>
-            <span>{Math.round(candidate.confidence * 100)}% match</span>
+            <span>{Math.round(candidate.confidence * 100)}% 일치</span>
             <strong>{candidate.displayTitle}</strong>
             <p>{candidate.reasons.join(" ")}</p>
             <small>{candidate.tradeoffs.join(" ")}</small>
@@ -511,7 +511,7 @@ function RepositoryTemplateCandidates({
             className={styles.boardAction}
             href={createRepositoryBoardHref(projectId, projectName, repository, candidate.templateId)}
           >
-            Open board
+            보드 열기
           </Link>
         </article>
       ))}
@@ -544,25 +544,25 @@ function PublicRepositoryRecommendationStep({
   const templateId = selectPublicRepositoryTemplateId(analysis, deploymentType, answers);
 
   return (
-    <section className={styles.publicAnalysisResult} aria-label="Public repository recommendation">
+    <section className={styles.publicAnalysisResult} aria-label="public 저장소 추천">
       <label>
-        <span>Recommended template</span>
+        <span>추천 템플릿</span>
         <strong>{formatPublicRepositoryTemplate(templateId)}</strong>
       </label>
       <label>
-        <span>Deployment type</span>
+        <span>배포 방식</span>
         <select
           value={deploymentType}
           onChange={(event) => onDeploymentTypeChange(event.target.value as RepositoryDeploymentType)}
         >
-          <option value="ec2_vm">EC2/VM based</option>
-          <option value="container">Container based</option>
-          <option value="serverless">Serverless based</option>
+          <option value="ec2_vm">EC2/VM 기반</option>
+          <option value="container">컨테이너 기반</option>
+          <option value="serverless">서버리스 기반</option>
         </select>
       </label>
       <label className={styles.checkboxLabel}>
         <input checked={usesCiCd} onChange={(event) => onUsesCiCdChange(event.target.checked)} type="checkbox" />
-        <span>Use CI/CD handoff</span>
+        <span>CI/CD 인계 사용</span>
       </label>
       {questions.length > 0 ? (
         <div className={styles.questionList}>
@@ -574,16 +574,16 @@ function PublicRepositoryRecommendationStep({
                   value={String(answers[question.id] ?? "")}
                   onChange={(event) => onAnswer(question.id, event.target.value === "true")}
                 >
-                  <option value="">Select</option>
-                  <option value="true">Yes</option>
-                  <option value="false">No</option>
+                  <option value="">선택</option>
+                  <option value="true">예</option>
+                  <option value="false">아니요</option>
                 </select>
               ) : (
                 <select
                   value={String(answers[question.id] ?? "")}
                   onChange={(event) => onAnswer(question.id, event.target.value)}
                 >
-                  <option value="">Select</option>
+                  <option value="">선택</option>
                   {(question.options ?? []).map((option) => (
                     <option key={option.value} value={option.value}>{option.label}</option>
                   ))}
@@ -595,23 +595,23 @@ function PublicRepositoryRecommendationStep({
       ) : null}
       <button disabled={isBusy || !analysis.recommendedTemplateId} onClick={onCreateBoard} type="button">
         {isBusy ? <LoaderCircle className={styles.spin} size={16} /> : <Search size={16} />}
-        Create board
+        보드 생성
       </button>
     </section>
   );
 }
 
 function formatPublicRepositoryTemplate(templateId: string): string {
-  if (templateId === "static-web-hosting") return "Static website";
-  if (templateId === "three-tier-web-app") return "3-tier web service";
-  if (templateId === "ecs-fargate-container-app") return "ECS Fargate container app";
-  if (templateId === "eks-container-app") return "EKS container app";
-  if (templateId === "minimal-serverless-api") return "Minimal serverless API";
-  if (templateId === "full-serverless-web-app") return "Full serverless web app";
-  if (templateId === "template-static-website") return "Static website";
-  if (templateId === "template-api-db") return "API with database";
-  if (templateId === "template-3tier") return "Three-tier web service";
-  return "No template match yet";
+  if (templateId === "static-web-hosting") return "정적 웹사이트";
+  if (templateId === "three-tier-web-app") return "3계층 웹 서비스";
+  if (templateId === "ecs-fargate-container-app") return "ECS Fargate 컨테이너 앱";
+  if (templateId === "eks-container-app") return "EKS 컨테이너 앱";
+  if (templateId === "minimal-serverless-api") return "최소 서버리스 API";
+  if (templateId === "full-serverless-web-app") return "전체 서버리스 웹 앱";
+  if (templateId === "template-static-website") return "정적 웹사이트";
+  if (templateId === "template-api-db") return "DB 포함 API";
+  if (templateId === "template-3tier") return "3계층 웹 서비스";
+  return "맞는 템플릿 없음";
 }
 
 function createPublicRepositoryQuestions(
@@ -625,7 +625,7 @@ function createPublicRepositoryQuestions(
     questions.push({
       answerType: "boolean",
       id: "include_frontend",
-      prompt: "Frontend까지 같은 Architecture에 포함할까요?"
+      prompt: "프론트엔드까지 같은 아키텍처에 포함할까요?"
     });
   }
 
@@ -633,7 +633,7 @@ function createPublicRepositoryQuestions(
     questions.push({
       answerType: "boolean",
       id: "include_database",
-      prompt: "Database tier를 포함할까요?"
+      prompt: "데이터베이스 계층을 포함할까요?"
     });
   }
 
@@ -645,7 +645,7 @@ function createPublicRepositoryQuestions(
         { label: "ECS Fargate", value: "ecs" },
         { label: "Kubernetes/EKS", value: "eks" }
       ],
-      prompt: "Container runtime을 무엇으로 둘까요?"
+      prompt: "컨테이너 런타임을 무엇으로 둘까요?"
     });
   }
 
@@ -709,7 +709,7 @@ function RepositoryCandidates({
         <article key={`${candidate.installationId}-${candidate.githubRepositoryId}`}>
           <div><strong>{candidate.fullName}</strong><span>{candidate.defaultBranch}</span></div>
           <button disabled={actionState === "loading" || candidate.archived} onClick={() => onConnect(candidate)} type="button">
-            {candidate.archived ? "Archived" : "Connect"}
+            {candidate.archived ? "보관됨" : "연결"}
           </button>
         </article>
       ))}
