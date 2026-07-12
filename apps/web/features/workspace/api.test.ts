@@ -24,6 +24,7 @@ import {
   getAwsConnectionCloudFormationTemplate,
   getDeploymentFailureExplanation,
   getGitCicdHandoffPipelineStatus,
+  getAiPreDeploymentDeepScan,
   getProjectDeletePreview,
   listDeploymentResources,
   listAwsConnections,
@@ -551,6 +552,31 @@ test("runAiPreDeploymentCheck sends Terraform files with the architecture", asyn
       }
     ]
   });
+});
+
+test("getAiPreDeploymentDeepScan polls the background Trivy result", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+    return new Response(JSON.stringify({ status: "running" }), {
+      headers: { "Content-Type": "application/json" },
+      status: 200
+    });
+  };
+
+  const result = await getAiPreDeploymentDeepScan(
+    "11111111-1111-4111-8111-111111111111"
+  );
+
+  assert.equal(
+    String(requests[0]?.input),
+    "/api/ai/pre-deployment-check/11111111-1111-4111-8111-111111111111"
+  );
+  assert.equal(result.status, "running");
 });
 
 test("runAiSafetyFindingExplanation requests one finding on demand", async (context) => {

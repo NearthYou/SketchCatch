@@ -2,6 +2,7 @@ import type {
   AiArchitectureDraftResult,
   AiPreDeploymentAnalysisResult,
   AiPreDeploymentCheckRequest,
+  AiPreDeploymentDeepScanResponse,
   AiSafetyExplanation,
   AiTerraformErrorExplanationResult,
   AiTerraformPreviewExplanationResult,
@@ -385,6 +386,14 @@ export async function runAiPreDeploymentCheck(
     architectureJson: input.architectureJson,
     ...(input.terraformFiles !== undefined ? { terraformFiles: input.terraformFiles } : {})
   });
+}
+
+export async function getAiPreDeploymentDeepScan(
+  scanId: string
+): Promise<AiPreDeploymentDeepScanResponse> {
+  return apiFetch<AiPreDeploymentDeepScanResponse>(
+    `/ai/pre-deployment-check/${encodeURIComponent(scanId)}`
+  );
 }
 
 export async function runAiSafetyFindingExplanation(

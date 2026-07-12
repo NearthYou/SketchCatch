@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type {
@@ -6,6 +6,7 @@ import type {
   AiPreDeploymentCheckRequest,
   AiPreDeploymentCheckFromDiagramRequest,
   AiPreDeploymentAnalysisResult,
+  AiPreDeploymentDeepScanResponse,
   AiSafetyExplanation,
   AiTerraformErrorExplanationResult,
   AiTerraformPreviewExplanationResult,
@@ -36,6 +37,7 @@ import {
 } from "../services/aiLlmExplanation.js";
 import { createArchitecturePatchPreview } from "../services/aiArchitecturePatchPreview.js";
 import {
+  analyzeImmediatePreDeploymentCheck,
   analyzePreDeploymentCheck,
   type AnalyzePreDeploymentCheck
 } from "../services/aiPreDeploymentCheck.js";
@@ -76,6 +78,8 @@ const MAX_PRE_DEPLOYMENT_TERRAFORM_FILE_CHARS = 1024 * 1024;
 const SAFETY_EXPLANATION_CACHE_NAMESPACE = "ai:safety-finding-explanation:v1";
 const SAFETY_EXPLANATION_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const DEFAULT_SAFETY_EXPLANATION_TIMEOUT_MS = 2_500;
+const PRE_DEPLOYMENT_DEEP_SCAN_CACHE_NAMESPACE = "pre-deployment-deep-scan:v1";
+const PRE_DEPLOYMENT_DEEP_SCAN_TTL_MS = 5 * 60 * 1000;
 
 const resourceTypeSchema = z.enum(RESOURCE_TYPES);
 
@@ -249,6 +253,7 @@ export type AiRouteOptions = {
 
 // AI MVP API의 입구입니다. 요청 모양은 여기서 확인하고, 실제 판단은 service 함수에 맡깁니다.
 export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOptions = {}): Promise<void> {
+  const deepScans = new Map<string, AiPreDeploymentDeepScanResponse>();
   const createLlmExplanation = options.createLlmExplanation ?? createConfiguredAiExplanation();
   const createArchitectureDraftResponse =
     options.createArchitectureDraftResponse ?? createConfiguredAmazonQArchitectureDraftResponse();
@@ -325,13 +330,67 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
 
   app.post("/ai/pre-deployment-check", async (request): Promise<AiPreDeploymentAnalysisResult> => {
     const body = preDeploymentCheckBodySchema.parse(request.body);
-    const result = await analyzePreDeploymentForCheck({
+    const input = {
       architectureJson: body.architectureJson,
       ...(body.terraformFiles !== undefined ? { terraformFiles: body.terraformFiles } : {})
-    });
+    };
+    const immediateResult = analyzeImmediatePreDeploymentCheck(input);
 
-    return result;
+    if (!body.terraformFiles?.some((file) => file.terraformCode.trim().length > 0)) {
+      return { ...immediateResult, deepScan: { status: "not_required" } };
+    }
+
+    const scanId = randomUUID();
+    void writeDeepScanResult(
+      options.runtimeCache,
+      deepScans,
+      scanId,
+      { status: "running" },
+      true
+    );
+    void analyzePreDeploymentForCheck(input)
+      .then((analysis) =>
+        writeDeepScanResult(options.runtimeCache, deepScans, scanId, {
+          status: "complete",
+          analysis: { ...analysis, deepScan: { status: "complete", scanId } }
+        })
+      )
+      .catch((error) => {
+        app.log.warn(
+          { errorName: error instanceof Error ? error.name : typeof error, scanId },
+          "Background Trivy scan failed"
+        );
+        return writeDeepScanResult(options.runtimeCache, deepScans, scanId, {
+          status: "failed",
+          message: "Trivy 심층 검사를 완료하지 못했습니다. 다시 검사해 주세요."
+        });
+      });
+
+    return { ...immediateResult, deepScan: { status: "running", scanId } };
   });
+
+  app.get(
+    "/ai/pre-deployment-check/:scanId",
+    async (request): Promise<AiPreDeploymentDeepScanResponse> => {
+      const { scanId } = z.object({ scanId: z.uuid() }).parse(request.params);
+      const localResult = deepScans.get(scanId);
+      if (localResult) return localResult;
+
+      if (options.runtimeCache) {
+        try {
+          const cached = await options.runtimeCache.get<AiPreDeploymentDeepScanResponse>({
+            namespace: PRE_DEPLOYMENT_DEEP_SCAN_CACHE_NAMESPACE,
+            key: scanId
+          });
+          if (cached) return cached;
+        } catch {
+          // Runtime Cache is an optimization; report a stable missing result below.
+        }
+      }
+
+      return { status: "failed", message: "심층 검사 결과가 만료되었거나 존재하지 않습니다." };
+    }
+  );
 
   app.post("/ai/design-simulation", async (request): Promise<DesignSimulationResult> => {
     const body = designSimulationBodySchema.parse(request.body);
@@ -600,6 +659,33 @@ function isAiSafetyExplanation(value: unknown): value is AiSafetyExplanation {
 
 function toRuntimeCacheJsonValue(value: AiSafetyExplanation): RuntimeCacheJsonValue {
   return JSON.parse(JSON.stringify(value)) as RuntimeCacheJsonValue;
+}
+
+async function writeDeepScanResult(
+  runtimeCache: RuntimeCache | undefined,
+  localResults: Map<string, AiPreDeploymentDeepScanResponse>,
+  scanId: string,
+  value: AiPreDeploymentDeepScanResponse,
+  onlyIfAbsent = false
+): Promise<void> {
+  localResults.set(scanId, value);
+  if (!runtimeCache) return;
+
+  try {
+    const entryKey = { namespace: PRE_DEPLOYMENT_DEEP_SCAN_CACHE_NAMESPACE, key: scanId };
+    const cacheValue = JSON.parse(JSON.stringify(value)) as RuntimeCacheJsonValue;
+    if (onlyIfAbsent) {
+      await runtimeCache.setIfAbsent(entryKey, cacheValue, {
+        ttlMs: PRE_DEPLOYMENT_DEEP_SCAN_TTL_MS
+      });
+    } else {
+      await runtimeCache.set(entryKey, cacheValue, {
+        ttlMs: PRE_DEPLOYMENT_DEEP_SCAN_TTL_MS
+      });
+    }
+  } catch {
+    // The process-local result remains available when Runtime Cache is degraded.
+  }
 }
 
 type GitHubRepository = {

@@ -37,6 +37,7 @@ import {
   createDeployment,
   createGitCicdHandoff,
   getGitCicdHandoffPipelineStatus,
+  getAiPreDeploymentDeepScan,
   getDeploymentFailureExplanation,
   listAwsConnections,
   listDeploymentResources,
@@ -300,6 +301,8 @@ export function DeploymentPanel({
     shouldAutoRefreshGitCicdHandoff(selectedGitCicdHandoff);
   const canCreateGitCicdHandoff = Boolean(activeGitHubSourceRepository && selectedDeployment);
   const preDeploymentAnalysis = preDeploymentCheckState.analysis;
+  const isPreDeploymentDeepScanRunning =
+    preDeploymentAnalysis?.deepScan?.status === "running";
   const preDeploymentState = preDeploymentCheckState.requestState;
   const preDeploymentErrorMessage = preDeploymentCheckState.errorMessage;
   const preDeploymentFingerprint = preDeploymentCheckState.fingerprint;
@@ -316,6 +319,12 @@ export function DeploymentPanel({
     hasStaleAnalysis: hasStalePreDeploymentAnalysis,
     requestState: preDeploymentState
   });
+  const canRunPlanForCurrentPreflight =
+    canRunPlan &&
+    !isPreDeploymentDeepScanRunning &&
+    directPreflightState !== "blocked" &&
+    directPreflightState !== "error" &&
+    directPreflightState !== "loading";
   const canRunDeploymentReviewStep =
     canStartDeploymentReview &&
     preDeploymentState !== "loading";
@@ -833,13 +842,57 @@ export function DeploymentPanel({
         fingerprint: boardSnapshot.fingerprint,
         requestState: "idle"
       });
-      return true;
+      if (result.deepScan?.status === "running" && result.deepScan.scanId) {
+        void pollPreDeploymentDeepScan(
+          result.deepScan.scanId,
+          currentTerraformDiagnostics,
+          boardSnapshot.fingerprint
+        );
+      }
+      return !result.findings.some((finding) => finding.severity === "high");
     } catch (error) {
       updatePreDeploymentCheckState({
         errorMessage: getApiErrorMessage(error, "배포 전 검사 중 오류가 발생했습니다."),
         requestState: "error"
       });
       return false;
+    }
+  }
+
+  async function pollPreDeploymentDeepScan(
+    scanId: string,
+    terraformDiagnostics: readonly TerraformDiagnostic[],
+    fingerprint: string
+  ): Promise<void> {
+    for (let attempt = 0; attempt < 60; attempt += 1) {
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 500));
+      try {
+        const deepScan = await getAiPreDeploymentDeepScan(scanId);
+        if (deepScan.status === "running") continue;
+
+        if (deepScan.status === "complete" && deepScan.analysis) {
+          updatePreDeploymentCheckState({
+            analysis: addTerraformDiagnosticsToPreDeploymentAnalysis(
+              deepScan.analysis,
+              terraformDiagnostics
+            ),
+            fingerprint,
+            requestState: "idle"
+          });
+          return;
+        }
+
+        updatePreDeploymentCheckState({
+          errorMessage: deepScan.message ?? "Trivy 심층 검사를 완료하지 못했습니다. 다시 검사해 주세요."
+        });
+        return;
+      } catch (error) {
+        if (attempt === 59) {
+          updatePreDeploymentCheckState({
+            errorMessage: getApiErrorMessage(error, "Trivy 심층 검사 결과를 불러오지 못했습니다.")
+          });
+        }
+      }
     }
   }
 
@@ -912,7 +965,7 @@ export function DeploymentPanel({
   }
 
   async function startTerraformPlan(): Promise<void> {
-    if (!selectedDeployment || !canRunPlan) {
+    if (!selectedDeployment || !canRunPlanForCurrentPreflight) {
       return;
     }
 
@@ -1318,7 +1371,7 @@ export function DeploymentPanel({
               <p>{selectedStep.disabledReason ?? "Plan은 AWS 리소스를 변경하지 않습니다."}</p>
               <button
                 className={styles.deploymentPrimaryButton}
-                disabled={!canRunPlan}
+                disabled={!canRunPlanForCurrentPreflight}
                 onClick={() => void startTerraformPlan()}
                 type="button"
               >
@@ -2153,6 +2206,17 @@ function DeploymentPreDeploymentSummary({
         <strong>Pre-Deployment Gate</strong>
       </div>
       <p>{analysis.summary}</p>
+      {analysis.deepScan ? (
+        <p className={styles.deploymentHint} data-testid="pre-deployment-deep-scan-status">
+          {analysis.deepScan.status === "running"
+            ? "핵심 안전검사 완료 · Trivy 심층검사 진행 중"
+            : analysis.deepScan.status === "complete"
+              ? "핵심 안전검사 및 Trivy 심층검사 완료 · 결과 병합됨"
+              : analysis.deepScan.status === "failed"
+                ? analysis.deepScan.message ?? "Trivy 심층검사를 완료하지 못했습니다."
+                : "핵심 안전검사 완료"}
+        </p>
+      ) : null}
       <div className={styles.deploymentPreflightStats} aria-label="배포 전 검사 요약">
         <span>
           <strong>{analysis.findings.length}</strong>

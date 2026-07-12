@@ -1274,6 +1274,14 @@ test("pre-deployment check loads per-finding explanations only when a card is ex
   assert.doesNotMatch(aiChatDockSource, /preDeploymentAnalysis/);
 });
 
+test("pre-deployment check shows and polls the background Trivy state before Plan", () => {
+  assert.match(deploymentPanelSource, /getAiPreDeploymentDeepScan/);
+  assert.match(deploymentPanelSource, /핵심 안전검사 완료 · Trivy 심층검사 진행 중/);
+  assert.match(deploymentPanelSource, /핵심 안전검사 및 Trivy 심층검사 완료 · 결과 병합됨/);
+  assert.match(deploymentPanelSource, /canRunPlanForCurrentPreflight/);
+  assert.match(deploymentPanelSource, /directPreflightState !== "blocked"/);
+});
+
 test("pre-deployment finding fix buttons open the existing terraform source location handler", () => {
   assert.match(deploymentPanelSource, /onOpenFindingTerraformSource/);
   assert.match(deploymentPanelSource, /className=\{styles\.deploymentFindingFixButton\}/);

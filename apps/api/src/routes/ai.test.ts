@@ -2044,15 +2044,70 @@ test("POST /api/ai/pre-deployment-check forwards Terraform files to the Trivy-ba
   });
 
   assert.equal(response.statusCode, 200);
-  assert.equal(receivedTerraformFileName, "security.tf");
-
   const body = response.json();
+  assert.equal(body.deepScan?.status, "running");
+  assert.equal(typeof body.deepScan?.scanId, "string");
+  assert.equal(body.findings.length, 0);
+  await new Promise((resolve) => setImmediate(resolve));
 
-  assert.equal(body.findings[0]?.sourceLocation?.fileName, "security.tf");
-  assert.equal(body.findings[0]?.sourceLocation?.line, 13);
-  assert.equal(body.findings[0]?.aiSafetyExplanation, undefined);
+  const deepScanResponse = await app.inject({
+    method: "GET",
+    url: `/api/ai/pre-deployment-check/${body.deepScan.scanId}`
+  });
+  const deepScan = deepScanResponse.json();
+
+  assert.equal(deepScan.status, "complete");
+  assert.equal(receivedTerraformFileName, "security.tf");
+  assert.equal(deepScan.analysis.findings[0]?.sourceLocation?.fileName, "security.tf");
+  assert.equal(deepScan.analysis.findings[0]?.sourceLocation?.line, 13);
+  assert.equal(deepScan.analysis.findings[0]?.aiSafetyExplanation, undefined);
   assert.equal(explanationCalls, 0);
 
+  await app.close();
+});
+
+test("POST /api/ai/pre-deployment-check returns the deterministic gate before deep scan completes", async () => {
+  let releaseDeepScan: (() => void) | undefined;
+  const app = buildApp({
+    analyzePreDeploymentCheck: async () => {
+      await new Promise<void>((resolve) => {
+        releaseDeepScan = resolve;
+      });
+      return {
+        summary: "deep scan complete",
+        totalMonthlyEstimate: { amount: 0, currency: "USD", pricingAssumption: "test" },
+        resourceCostEstimates: [],
+        findings: [],
+        checklist: [],
+        suggestions: []
+      };
+    }
+  });
+  const startedAt = performance.now();
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/ai/pre-deployment-check",
+    payload: {
+      architectureJson: { nodes: [], edges: [] },
+      terraformFiles: [
+        {
+          fileName: "main.tf",
+          terraformCode:
+            'resource "aws_db_instance" "db" { publicly_accessible = true }'
+        }
+      ]
+    }
+  });
+  const elapsedMs = performance.now() - startedAt;
+  const body = response.json();
+
+  assert.equal(response.statusCode, 200);
+  assert.ok(elapsedMs < 1_000, `immediate gate took ${elapsedMs.toFixed(1)}ms`);
+  assert.equal(body.deepScan.status, "running");
+  assert.equal(body.findings[0]?.riskFamily, "PUBLIC_RDS");
+
+  releaseDeepScan?.();
+  await new Promise((resolve) => setImmediate(resolve));
   await app.close();
 });
 

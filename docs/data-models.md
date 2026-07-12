@@ -1965,6 +1965,8 @@ type CheckFinding = {
 
 `CheckFinding.aiSafetyExplanation`은 finding별 사용자 설명 계층이다. Pre-Deployment Check 응답은 deterministic finding을 먼저 반환하며 AI 설명을 기다리지 않는다. 사용자가 finding 카드를 펼치면 `/ai/safety-finding-explanation`으로 한 건을 지연 조회한다. AI는 `riskSummary`, `whyDangerous`, `recommendedFix`, `terraformHint`, `verificationSteps`만 생성할 수 있고, `severity`, `blocked`, `blocksApproval`, `requiresAcknowledgement` 같은 Safety Gate 판정은 변경할 수 없다. OpenAI GPT 호출이 실패하거나 API key가 없으면 `fallbackUsed: true`인 rule fallback 설명을 사용한다.
 
+Terraform 파일이 있는 `POST /api/ai/pre-deployment-check`는 Public S3, 공개 SSH, Public RDS, IAM wildcard를 in-process deterministic gate로 먼저 검사하고 `deepScan.status: "running"`과 `scanId`를 즉시 반환한다. Trivy는 백그라운드에서 실행하며 `GET /api/ai/pre-deployment-check/:scanId`가 `running | complete | failed` 상태와 완료된 병합 결과를 반환한다. UI는 핵심 안전검사 완료, Trivy 심층검사 진행 중, 결과 병합 완료를 구분하며 심층검사 진행 중이거나 high finding이 있으면 Plan 진입을 허용하지 않는다.
+
 ## 팀 작업 규칙
 
 - 정현: Architecture Board는 `DiagramJson` 계약을 따른다.

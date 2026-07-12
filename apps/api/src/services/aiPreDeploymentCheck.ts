@@ -1,6 +1,7 @@
 import type {
   AiPreDeploymentAnalysisResult,
   ArchitectureJson,
+  CheckFinding,
   TerraformSyncFileInput
 } from "@sketchcatch/types";
 import {
@@ -12,6 +13,7 @@ import {
   type TerraformSecurityScanner
 } from "./terraform/trivy-terraform-scan.js";
 import { createRuntimeCacheFromEnv } from "../runtime-cache/index.js";
+import { scanTerraformWithDeterministicGate } from "./terraform/deterministic-terraform-gate.js";
 
 export type AnalyzePreDeploymentCheckInput = {
   readonly architectureJson: ArchitectureJson;
@@ -51,7 +53,63 @@ export async function analyzePreDeploymentCheck(
     terraformSecurityScanner({ terraformFiles })
   ]);
 
-  return mergePreDeploymentAnalysisFindings(policyAnalysis, terraformSecurityFindings);
+  const deterministicFindings = scanTerraformWithDeterministicGate(terraformFiles);
+  const deepFindings = [
+    ...terraformSecurityFindings,
+    ...deterministicFindings.filter(
+      (deterministicFinding) =>
+        !terraformSecurityFindings.some(
+          (trivyFinding) =>
+            trivyFinding.resourceId === deterministicFinding.resourceId &&
+            inferFindingRiskFamily(trivyFinding) === deterministicFinding.riskFamily
+        )
+    )
+  ];
+  return mergePreDeploymentAnalysisFindings(policyAnalysis, deepFindings);
+}
+
+function inferFindingRiskFamily(finding: CheckFinding): string | undefined {
+  if (finding.riskFamily) return finding.riskFamily;
+
+  const haystack = [
+    finding.resourceId,
+    finding.title,
+    finding.description,
+    finding.recommendation,
+    ...(finding.trivyRuleIds ?? [])
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  if (haystack.includes("aws_security_group") && /ssh|rdp|0\.0\.0\.0\/0|::\/0/.test(haystack)) {
+    return "PUBLIC_SSH";
+  }
+  if (haystack.includes("aws_db_instance") && /public|publicly_accessible/.test(haystack)) {
+    return "PUBLIC_RDS";
+  }
+  if (haystack.includes("aws_iam_") && /wildcard|\baction\b.*\*/.test(haystack)) {
+    return "IAM_WILDCARD";
+  }
+  return undefined;
+}
+
+export function analyzeImmediatePreDeploymentCheck(
+  input: AnalyzePreDeploymentCheckInput
+): AiPreDeploymentAnalysisResult {
+  const terraformFiles = getNonEmptyTerraformFiles(input.terraformFiles ?? []);
+
+  if (terraformFiles.length === 0) {
+    return analyzePreDeployment(input.architectureJson);
+  }
+
+  const policyAnalysis = analyzePreDeployment(input.architectureJson, {
+    includeArchitectureSecurityFindings: false
+  });
+  return mergePreDeploymentAnalysisFindings(
+    policyAnalysis,
+    scanTerraformWithDeterministicGate(terraformFiles)
+  );
 }
 
 function getNonEmptyTerraformFiles(

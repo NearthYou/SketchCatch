@@ -276,6 +276,8 @@ API startup은 listen 전에 작은 Terraform 구성을 한 번 검사해 Trivy 
 
 동일 Terraform 파일 집합의 Trivy finding은 SHA-256 key로 process-local cache와 Redis Runtime Cache에 5분간 보관합니다. 같은 API process의 동일 key 검사는 진행 중인 scan 하나를 공유합니다. Key에는 Trivy version, checks bundle digest와 제외 rule 정책도 포함하며, cache read/write가 실패하면 cache를 우회해 실제 검사를 계속합니다.
 
+첫 요청의 응답 시간은 Trivy CLI 시작 시간과 분리합니다. Public S3, 공개 SSH, Public RDS, IAM wildcard 핵심 규칙은 API process 안에서 즉시 검사하고, Trivy 심층검사는 Runtime Cache에 상태를 기록하는 백그라운드 작업으로 실행합니다. 심층검사가 완료되기 전에는 Plan을 시작하지 않습니다.
+
 ## GitHub 비밀값
 
 ```text

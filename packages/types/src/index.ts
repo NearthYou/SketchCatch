@@ -2001,7 +2001,18 @@ export type AiPreDeploymentAnalysisResult = {
   findings: CheckFinding[];
   checklist: ChecklistItem[];
   suggestions: ArchitectureSuggestion[];
+  deepScan?: {
+    status: "not_required" | "running" | "complete" | "failed";
+    scanId?: string | undefined;
+    message?: string | undefined;
+  } | undefined;
   llmExplanation?: LlmExplanation | undefined;
+};
+
+export type AiPreDeploymentDeepScanResponse = {
+  status: "running" | "complete" | "failed";
+  analysis?: AiPreDeploymentAnalysisResult | undefined;
+  message?: string | undefined;
 };
 
 export type AiPreDeploymentCheckRequest = {
