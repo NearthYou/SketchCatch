@@ -70,6 +70,8 @@ test("AI ranks only supported repository templates and generates template-specif
     recommendation.candidates.map((candidate) => candidate.templateId),
     ["eks-container-app", "ecs-fargate-container-app"]
   );
+  assert.equal(recommendation.rankingSource, "ai");
+  assert.equal(recommendation.fallbackReason, undefined);
   assert.equal(recommendation.candidates[0]?.displayTitle, "EKS 컨테이너 앱");
   assert.deepEqual(
     recommendation.candidates[1]?.questions?.map((question) => question.id),
@@ -103,7 +105,9 @@ test("AI ranking falls back when it returns a template outside the supported can
     }
   });
 
-  assert.deepEqual(recommendation, fallback);
+  assert.deepEqual(recommendation.candidates, fallback.candidates);
+  assert.equal(recommendation.rankingSource, "deterministic");
+  assert.equal(recommendation.fallbackReason, "invalid_response");
 });
 
 test("AI ranking falls back when the provider fails", async () => {
@@ -119,7 +123,9 @@ test("AI ranking falls back when the provider fails", async () => {
     }
   });
 
-  assert.deepEqual(recommendation, fallback);
+  assert.deepEqual(recommendation.candidates, fallback.candidates);
+  assert.equal(recommendation.rankingSource, "deterministic");
+  assert.equal(recommendation.fallbackReason, "provider_error");
 });
 
 test("AI ranking falls back when user-facing explanations are not Korean", async () => {
@@ -147,7 +153,38 @@ test("AI ranking falls back when user-facing explanations are not Korean", async
     }
   });
 
-  assert.deepEqual(recommendation, fallback);
+  assert.deepEqual(recommendation.candidates, fallback.candidates);
+  assert.equal(recommendation.rankingSource, "deterministic");
+  assert.equal(recommendation.fallbackReason, "invalid_response");
+});
+
+test("AI ranking keeps valid AI explanations when its question set needs deterministic repair", async () => {
+  const input = createInput();
+  const fallback = recommendRepositoryTemplates(input);
+  const recommendation = await recommendRepositoryTemplatesWithAi(input, {
+    client: {
+      responses: {
+        parse: async () => ({
+          output_parsed: {
+            candidates: fallback.candidates.map((candidate) => ({
+              templateId: candidate.templateId,
+              confidence: candidate.confidence + 0.01,
+              reasons: ["저장소의 컨테이너 근거를 AI가 다시 평가했습니다."],
+              tradeoffs: ["운영 복잡도를 함께 검토해야 합니다."],
+              questions: []
+            }))
+          }
+        })
+      }
+    }
+  });
+
+  assert.equal(recommendation.rankingSource, "ai");
+  assert.equal(recommendation.fallbackReason, undefined);
+  assert.deepEqual(
+    recommendation.candidates.map((candidate) => candidate.questions),
+    fallback.candidates.map((candidate) => candidate.questions)
+  );
 });
 
 function createInput(): RepositoryTemplateRecommendationInput {

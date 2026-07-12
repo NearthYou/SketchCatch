@@ -655,6 +655,8 @@ export type RepositoryTemplateRecommendationResult = {
   readonly deploymentType: RepositoryDeploymentType;
   readonly usesCiCd: boolean;
   readonly candidates: readonly RepositoryTemplateRecommendationCandidate[];
+  readonly rankingSource?: "ai" | "deterministic" | undefined;
+  readonly fallbackReason?: "not_configured" | "provider_error" | "invalid_response" | undefined;
 };
 
 export type RecommendRepositoryTemplateRequest = {

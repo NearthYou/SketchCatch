@@ -1973,7 +1973,9 @@ test("OPTIONS /api/ai/architecture-draft responds to browser CORS preflight", as
 
 test("POST /api/ai/source-repository-analysis reads nested public repository evidence", async () => {
   const originalFetch = globalThis.fetch;
+  let fetchCallCount = 0;
   globalThis.fetch = async (input) => {
+    fetchCallCount += 1;
     const url = String(input);
 
     if (url.includes("api.github.com/repos/example/fullstack/git/trees/main")) {
@@ -2047,6 +2049,20 @@ test("POST /api/ai/source-repository-analysis reads nested public repository evi
       ),
       false
     );
+
+    const firstRequestFetchCount = fetchCallCount;
+    const cachedResponse = await app.inject({
+      method: "POST",
+      url: "/api/ai/source-repository-analysis",
+      payload: {
+        repositoryUrl: "https://github.com/example/fullstack",
+        defaultBranch: "main"
+      }
+    });
+
+    assert.equal(cachedResponse.statusCode, 200);
+    assert.deepEqual(cachedResponse.json(), body);
+    assert.equal(fetchCallCount, firstRequestFetchCount);
   } finally {
     globalThis.fetch = originalFetch;
     await app.close();

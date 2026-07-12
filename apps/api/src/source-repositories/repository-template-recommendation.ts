@@ -49,6 +49,7 @@ type RepositoryTemplateRankingClient = {
         readonly format: ReturnType<typeof zodTextFormat>;
         readonly verbosity: "low" | "medium" | "high";
       };
+      readonly reasoning: { readonly effort: "minimal" };
       readonly store: false;
     }) => Promise<{ readonly output_parsed: unknown }>;
   };
@@ -59,7 +60,7 @@ export type RepositoryTemplateAiRankingOptions = {
   readonly model?: string | undefined;
 };
 
-const DEFAULT_REPOSITORY_TEMPLATE_RANKING_MODEL = "gpt-5.5";
+const DEFAULT_REPOSITORY_TEMPLATE_RANKING_MODEL = "gpt-5-nano";
 const REPOSITORY_TEMPLATE_RANKING_TIMEOUT_MS = 15_000;
 const REPOSITORY_TEMPLATE_RANKING_MAX_RETRIES = 0;
 
@@ -121,7 +122,8 @@ export function recommendRepositoryTemplates(
   return {
     deploymentType: input.deploymentType,
     usesCiCd: input.usesCiCd,
-    candidates: rankedCandidates
+    candidates: rankedCandidates,
+    rankingSource: "deterministic"
   };
 }
 
@@ -133,26 +135,31 @@ export async function recommendRepositoryTemplatesWithAi(
   const client = options.client ?? createConfiguredRepositoryTemplateRankingClient();
 
   if (!client) {
-    return fallback;
+    return { ...fallback, fallbackReason: "not_configured" };
   }
 
   try {
     const response = await client.responses.parse({
-      model: options.model ?? process.env.OPENAI_MODEL ?? DEFAULT_REPOSITORY_TEMPLATE_RANKING_MODEL,
+      model: options.model
+        ?? process.env.OPENAI_REPOSITORY_TEMPLATE_MODEL
+        ?? DEFAULT_REPOSITORY_TEMPLATE_RANKING_MODEL,
       instructions: createRepositoryTemplateRankingInstructions(),
       input: createRepositoryTemplateRankingInput(input, fallback.candidates),
       text: {
         format: zodTextFormat(aiRecommendationSchema, "repository_template_recommendation"),
         verbosity: "low"
       },
+      reasoning: { effort: "minimal" },
       store: false
     });
     const parsed = aiRecommendationSchema.parse(response.output_parsed);
     const hydrated = hydrateAiRecommendation(input, fallback, parsed);
 
-    return hydrated ?? fallback;
+    return hydrated
+      ? { ...hydrated, rankingSource: "ai" }
+      : { ...fallback, fallbackReason: "invalid_response" };
   } catch {
-    return fallback;
+    return { ...fallback, fallbackReason: "provider_error" };
   }
 }
 
@@ -177,6 +184,7 @@ function createConfiguredRepositoryTemplateRankingClient(): RepositoryTemplateRa
           instructions: request.instructions,
           input: request.input,
           text: request.text,
+          reasoning: request.reasoning,
           store: request.store
         });
 
@@ -207,14 +215,18 @@ function createRepositoryTemplateRankingInput(
   candidates: readonly RepositoryTemplateRecommendationCandidate[]
 ): string {
   const evidence = input.snapshot.files
-    .slice(0, 16)
-    .map((file) => ({ path: file.path, content: file.content.slice(0, 1_500) }));
+    .slice(0, 10)
+    .map((file) => ({ path: file.path, content: file.content.slice(0, 600) }));
 
   return JSON.stringify({
     deploymentType: input.deploymentType,
     usesCiCd: input.usesCiCd,
-    applicationUnits: input.applicationUnits,
-    treePaths: input.snapshot.treePaths.slice(0, 200),
+    applicationUnits: input.applicationUnits.slice(0, 20).map((unit) => ({
+      rootPath: unit.rootPath,
+      kind: unit.kind,
+      frameworks: unit.frameworks
+    })),
+    treePaths: input.snapshot.treePaths.slice(0, 100),
     evidence,
     answers: input.answers,
     candidates: candidates.map((candidate) => ({
@@ -258,16 +270,12 @@ function hydrateAiRecommendation(
     const supportedById = new Map(supportedQuestions.map((question) => [question.id, question]));
     const questionIds = candidate.questions.map((question) => question.id);
 
-    if (
-      questionIds.length !== supportedQuestions.length
-      || new Set(questionIds).size !== questionIds.length
-      || questionIds.some((questionId) => !supportedById.has(questionId))
-      || candidate.questions.some(
-        (question) => !containsKorean(question.prompt) || !containsKorean(question.reason)
-      )
-    ) {
-      return null;
-    }
+    const canUseAiQuestions = questionIds.length === supportedQuestions.length
+      && new Set(questionIds).size === questionIds.length
+      && questionIds.every((questionId) => supportedById.has(questionId))
+      && candidate.questions.every(
+        (question) => containsKorean(question.prompt) && containsKorean(question.reason)
+      );
 
     return {
       templateId: candidate.templateId,
@@ -275,11 +283,13 @@ function hydrateAiRecommendation(
       confidence: candidate.confidence,
       reasons: candidate.reasons,
       tradeoffs: candidate.tradeoffs,
-      questions: candidate.questions.map((question) => ({
-        ...supportedById.get(question.id)!,
-        prompt: question.prompt,
-        reason: question.reason
-      }))
+      questions: canUseAiQuestions
+        ? candidate.questions.map((question) => ({
+            ...supportedById.get(question.id)!,
+            prompt: question.prompt,
+            reason: question.reason
+          }))
+        : supportedQuestions
     } satisfies RepositoryTemplateRecommendationCandidate;
   });
 

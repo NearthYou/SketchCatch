@@ -378,6 +378,15 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
       const body = sourceRepositoryAnalysisBodySchema.parse(request.body);
       const repository = parseGitHubRepositoryUrl(body.repositoryUrl);
       const defaultBranch = body.defaultBranch ?? "main";
+      const cacheKey = createPublicRepositoryAnalysisCacheKey(body.repositoryUrl, defaultBranch);
+      const cachedAnalysis = await options.runtimeCache
+        ?.get<SourceRepositoryAnalysisResult>(cacheKey)
+        .catch(() => null);
+
+      if (cachedAnalysis) {
+        return cachedAnalysis;
+      }
+
       const snapshot = await fetchRepositoryEvidence(repository, defaultBranch);
       const legacyAnalysis = analyzeLegacyRepositoryEvidence({
         defaultBranch,
@@ -406,10 +415,20 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
           })
         : aiHandoff.recommendation;
 
-      return {
+      const result: SourceRepositoryAnalysisResult = {
         ...legacyAnalysis,
         aiHandoff: recommendation ? { ...aiHandoff, recommendation } : aiHandoff
       };
+
+      await options.runtimeCache
+        ?.set(
+          cacheKey,
+          JSON.parse(JSON.stringify(result)) as RuntimeCacheJsonValue,
+          { ttlMs: PUBLIC_REPOSITORY_ANALYSIS_CACHE_TTL_MS }
+        )
+        .catch(() => undefined);
+
+      return result;
     }
   );
 
@@ -827,6 +846,8 @@ type PublicGitHubRecursiveTreeResponse = {
 const PUBLIC_GITHUB_API_BASE_URL = "https://api.github.com";
 const MAX_PUBLIC_REPOSITORY_EVIDENCE_FILES = 24;
 const PUBLIC_GITHUB_REQUEST_TIMEOUT_MS = 10_000;
+const PUBLIC_REPOSITORY_ANALYSIS_CACHE_NAMESPACE = "ai:public-repository-analysis:v1";
+const PUBLIC_REPOSITORY_ANALYSIS_CACHE_TTL_MS = 5 * 60 * 1_000;
 
 // GitHub URL에서 owner/repo만 뽑습니다. public repository 근거 파일을 읽을 때 이 값이 필요합니다.
 function parseGitHubRepositoryUrl(repositoryUrl: string): GitHubRepository {
@@ -836,6 +857,15 @@ function parseGitHubRepositoryUrl(repositoryUrl: string): GitHubRepository {
   return {
     owner: owner ?? "",
     repo: repo ?? ""
+  };
+}
+
+function createPublicRepositoryAnalysisCacheKey(repositoryUrl: string, defaultBranch: string) {
+  return {
+    namespace: PUBLIC_REPOSITORY_ANALYSIS_CACHE_NAMESPACE,
+    key: createHash("sha256")
+      .update(`${repositoryUrl.trim().toLowerCase()}\0${defaultBranch.trim()}`)
+      .digest("hex")
   };
 }
 

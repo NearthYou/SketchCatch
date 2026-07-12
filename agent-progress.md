@@ -5,7 +5,7 @@ Short English-only working log for the current agent context. Older records are 
 ## Current Verified State
 
 - Branch: `feat/ck/349-repo-analysis`.
-- Public Repository recommendation always attempts schema-validated OpenAI ranking when `OPENAI_API_KEY` exists, with Korean deterministic fallback only on failure.
+- Public Repository recommendation uses low-latency `gpt-5-nano`, compact evidence, observable fallback metadata, and a five-minute public analysis cache.
 - Deployment type is hidden when repository evidence is decisive and shown only for ambiguous analysis.
 - CI/CD handoff is a prominent standalone setting; its GitHub App repository panel appears only while enabled.
 - Public Repository setup confirms Template and CI/CD before opening a separate follow-up-question stage.
@@ -28,7 +28,7 @@ Short English-only working log for the current agent context. Older records are 
 - Verification:
   - Focused recommendation tests, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
   - Lint retains only the pre-existing API `setNow` warning.
-  - Browser-verified Template-specific choices and live-smoke-tested OpenAI Korean ranking with the configured API key.
+  - Browser-verified choices; live OpenAI nano ranking completed in 6.8s, and repeated public analysis is cache-covered.
 
 ### 2026-07-12 - Fail fast when API database URL is missing
 
