@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import type { DiagramEdge, DiagramJson, DiagramNode } from "../../../../packages/types/src";
 import { resourceCatalog } from "../../features/resource-settings/catalog";
+import { listBoardTemplates } from "../../features/resource-settings/template-library";
 import { createTemplatePreviewModel } from "./template-preview-model";
 
 test("createTemplatePreviewModel bounds dense diagrams, omits collapsed helpers, and retains catalog icons", () => {
@@ -144,6 +145,21 @@ test("createTemplatePreviewModel projects a large VPC as an in-bounds non-zero a
   assert.equal("label" in area, false);
 });
 
+test("createTemplatePreviewModel keeps compact Template resources inside their projected area frames", () => {
+  const template = listBoardTemplates().find((candidate) => candidate.id === "template-api-db");
+  assert.ok(template);
+
+  const model = createTemplatePreviewModel(template.diagramJson);
+  const vpc = requirePreviewNode(model, "template-api-vpc");
+  const subnet = requirePreviewNode(model, "template-api-subnet");
+  const ec2 = requirePreviewNode(model, "template-api-ec2");
+  const rds = requirePreviewNode(model, "template-api-rds");
+
+  assertProjectedContainment(vpc, subnet);
+  assertProjectedContainment(subnet, ec2);
+  assertProjectedContainment(subnet, rds);
+});
+
 test("TemplateDiagramPreview keeps the SVG icon path label-free and bounded", () => {
   const source = readFileSync(new URL("./TemplateGallery.tsx", import.meta.url), "utf8");
   const previewSource = source.slice(source.indexOf("function TemplateDiagramPreview"));
@@ -214,4 +230,23 @@ function catalogIconUrl(resourceType: string): string {
 
   assert.ok(item, `Missing catalog resource item: ${resourceType}`);
   return item.iconUrl;
+}
+
+function requirePreviewNode(
+  model: ReturnType<typeof createTemplatePreviewModel>,
+  id: string
+) {
+  const node = model.nodes.find((candidate) => candidate.id === id);
+  assert.ok(node, `Expected ${id} in the Template preview`);
+  return node;
+}
+
+function assertProjectedContainment(
+  parent: ReturnType<typeof requirePreviewNode>,
+  child: ReturnType<typeof requirePreviewNode>
+): void {
+  assert.ok(child.x >= parent.x, `${child.id} must remain inside ${parent.id} on x`);
+  assert.ok(child.y >= parent.y, `${child.id} must remain inside ${parent.id} on y`);
+  assert.ok(child.x + child.width <= parent.x + parent.width, `${child.id} must remain inside ${parent.id} width`);
+  assert.ok(child.y + child.height <= parent.y + parent.height, `${child.id} must remain inside ${parent.id} height`);
 }

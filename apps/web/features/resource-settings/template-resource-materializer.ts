@@ -8,9 +8,10 @@ import { isAreaNode } from "../diagram-editor/area-nodes";
 import { createDiagramNodeFromPayload } from "../diagram-editor/diagram-utils";
 import { cloneParameterValue } from "../diagram-editor/parameter-value-utils";
 import { resourceCatalog } from "./catalog";
+import { arrangeTemplateTopology } from "./template-topology-layout";
 
 export function materializeTemplateDiagram(diagram: DiagramJson): DiagramJson {
-  return materializeCatalogResourceNodes(diagram, "strict");
+  return arrangeTemplateTopology(materializeCatalogResourceNodes(diagram, "strict"));
 }
 
 export function hydrateCatalogResourceNodes(diagram: DiagramJson): DiagramJson {

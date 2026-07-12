@@ -58,6 +58,8 @@ test("materializeTemplateDiagram retains explicit template identity, Terraform v
     ...sourceNode,
     iconUrl: requireCatalogItem("aws_vpc").iconUrl,
     kind: "resource",
+    position: { x: 120, y: 120 },
+    zIndex: 2,
     parameters: {
       ...sourceNode.parameters,
       values: {
@@ -117,6 +119,17 @@ test("template-library entry points return strict catalog-materialized diagrams"
   );
 });
 
+test("strict Template materialization compacts every built-in Template while draft hydration preserves coordinates", () => {
+  for (const template of listBoardTemplates()) {
+    assertCompactContainedAreas(template.diagramJson);
+  }
+
+  const savedDraft = createDiagram([createTemplateNode("aws_s3_bucket")]);
+  const hydratedDraft = hydrateCatalogResourceNodes(savedDraft);
+
+  assert.deepEqual(hydratedDraft.nodes[0]?.position, savedDraft.nodes[0]?.position);
+});
+
 function createDiagram(nodes: DiagramNode[]): DiagramJson {
   return {
     nodes,
@@ -149,4 +162,29 @@ function requireCatalogItem(resourceType: string) {
 
   assert.ok(catalogItem, `Missing resource catalog item: ${resourceType}`);
   return catalogItem;
+}
+
+function assertCompactContainedAreas(diagram: DiagramJson): void {
+  const nodeById = new Map(diagram.nodes.map((node) => [node.id, node]));
+
+  for (const node of diagram.nodes) {
+    const parentAreaNodeId = node.metadata?.parentAreaNodeId;
+
+    if (!parentAreaNodeId) {
+      continue;
+    }
+
+    const parent = nodeById.get(parentAreaNodeId);
+    assert.ok(parent, `${node.id} must have a real parent area`);
+    assert.ok(node.position.x >= parent.position.x, `${node.id} must remain inside ${parent.id} on x`);
+    assert.ok(node.position.y >= parent.position.y, `${node.id} must remain inside ${parent.id} on y`);
+    assert.ok(
+      node.position.x + node.size.width <= parent.position.x + parent.size.width,
+      `${node.id} must remain inside ${parent.id} width`
+    );
+    assert.ok(
+      node.position.y + node.size.height <= parent.position.y + parent.size.height,
+      `${node.id} must remain inside ${parent.id} height`
+    );
+  }
 }
