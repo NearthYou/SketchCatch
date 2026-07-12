@@ -13,7 +13,9 @@ const successfulWarmupResult: TerraformRunResult = {
   timedOut: false
 };
 
-test("startApiServer warms the Terraform plugin cache before listening", async () => {
+const successfulTrivyWarmup = async (): Promise<void> => {};
+
+test("startApiServer warms Terraform and Trivy before listening", async () => {
   const events: string[] = [];
 
   await startApiServer({
@@ -30,8 +32,11 @@ test("startApiServer warms the Terraform plugin cache before listening", async (
     port: 4000,
     validateAwsCredentialSource: () => {},
     warmTerraformPluginCache: async () => {
-      events.push("warmup");
+      events.push("terraform-warmup");
       return successfulWarmupResult;
+    },
+    warmTrivyCheckBundle: async () => {
+      events.push("trivy-warmup");
     },
     recoverInterruptedDeployments: async () => {
       events.push("recover");
@@ -39,7 +44,7 @@ test("startApiServer warms the Terraform plugin cache before listening", async (
     }
   });
 
-  assert.deepEqual(events, ["warmup", "recover", "listen"]);
+  assert.deepEqual(events, ["terraform-warmup", "trivy-warmup", "recover", "listen"]);
 });
 
 test("startApiServer keeps listening when Terraform plugin cache warmup fails", async () => {
@@ -67,6 +72,7 @@ test("startApiServer keeps listening when Terraform plugin cache warmup fails", 
       stderr: "provider registry unavailable",
       timedOut: false
     }),
+    warmTrivyCheckBundle: successfulTrivyWarmup,
     recoverInterruptedDeployments: async () => {
       events.push("recover");
       return [];
@@ -96,6 +102,38 @@ test("startApiServer keeps listening when Terraform plugin cache warmup throws",
     validateAwsCredentialSource: () => {},
     warmTerraformPluginCache: async () => {
       throw new Error("terraform is unavailable");
+    },
+    warmTrivyCheckBundle: successfulTrivyWarmup,
+    recoverInterruptedDeployments: async () => {
+      events.push("recover");
+      return [];
+    }
+  });
+
+  assert.deepEqual(events, ["warn", "recover", "listen"]);
+});
+
+test("startApiServer keeps listening when Trivy warmup throws", async () => {
+  const events: string[] = [];
+
+  await startApiServer({
+    app: {
+      listen: async () => {
+        events.push("listen");
+      },
+      log: {
+        info: () => {},
+        warn: () => {
+          events.push("warn");
+        }
+      }
+    },
+    host: "127.0.0.1",
+    port: 4000,
+    validateAwsCredentialSource: () => {},
+    warmTerraformPluginCache: async () => successfulWarmupResult,
+    warmTrivyCheckBundle: async () => {
+      throw new Error("trivy is unavailable");
     },
     recoverInterruptedDeployments: async () => {
       events.push("recover");
@@ -131,6 +169,7 @@ test("startApiServer validates the AWS credential source before Terraform warmup
           events.push("warmup");
           return successfulWarmupResult;
         },
+        warmTrivyCheckBundle: successfulTrivyWarmup,
         recoverInterruptedDeployments: async () => {
           events.push("recover");
           return [];
@@ -207,6 +246,7 @@ test("startApiServer rejects static AWS credentials with the default startup gua
             events.push("warmup");
             return successfulWarmupResult;
           },
+          warmTrivyCheckBundle: successfulTrivyWarmup,
           recoverInterruptedDeployments: async () => {
             events.push("recover");
             return [];
@@ -250,6 +290,7 @@ test("startApiServer reports preserved ECS workers and deferred task inspections
     port: 4000,
     validateAwsCredentialSource: () => {},
     warmTerraformPluginCache: async () => successfulWarmupResult,
+    warmTrivyCheckBundle: successfulTrivyWarmup,
     recoverInterruptedDeployments: async () => ({
       activeDeploymentCount: 2,
       deferredInspectionCount: 1,
@@ -291,6 +332,7 @@ test("startApiServer passes the application logger to deployment recovery", asyn
     port: 4000,
     validateAwsCredentialSource: () => {},
     warmTerraformPluginCache: async () => successfulWarmupResult,
+    warmTrivyCheckBundle: successfulTrivyWarmup,
     recoverInterruptedDeployments: async (candidateLogger) => {
       recoveryLogger = candidateLogger;
       return [];
@@ -320,6 +362,7 @@ test("startApiServer schedules one reconciliation retry for retryable ECS recove
     port: 4000,
     validateAwsCredentialSource: () => {},
     warmTerraformPluginCache: async () => successfulWarmupResult,
+    warmTrivyCheckBundle: successfulTrivyWarmup,
     recoverInterruptedDeployments: async () => {
       recoverCalls += 1;
       return {
@@ -368,6 +411,7 @@ test("startApiServer retries after startup reconciliation throws", async () => {
     port: 4000,
     validateAwsCredentialSource: () => {},
     warmTerraformPluginCache: async () => successfulWarmupResult,
+    warmTrivyCheckBundle: successfulTrivyWarmup,
     recoverInterruptedDeployments: async () => {
       recoverCalls += 1;
 

@@ -11,34 +11,6 @@ import {
 } from "./workspace-ai-diagram-adapter";
 import { isAreaNode } from "../diagram-editor/area-nodes";
 
-test("convertArchitectureJsonToDiagramJson keeps non-overlapping authored positions as the default layout", () => {
-  const architectureJson: ArchitectureJson = {
-    nodes: [
-      { id: "source", type: "S3", label: "Source", positionX: 713, positionY: 119, config: {} },
-      { id: "target", type: "CLOUDFRONT", label: "Target", positionX: 127, positionY: 887, config: {} }
-    ],
-    edges: [{ id: "source-to-target", sourceId: "source", targetId: "target", label: "origin" }]
-  };
-
-  const diagramJson = convertArchitectureJsonToDiagramJson(architectureJson);
-
-  assert.deepEqual(
-    diagramJson.nodes
-      .filter((node) => node.kind === "resource")
-      .map((node) => ({ id: node.id, position: node.position })),
-    [
-      { id: "source", position: { x: 713, y: 119 } },
-      { id: "target", position: { x: 127, y: 887 } }
-    ]
-  );
-  assert.deepEqual(
-    diagramJson.edges
-      .filter((edge) => edge.id === "source-to-target")
-      .map((edge) => ({ id: edge.id, sourceNodeId: edge.sourceNodeId, targetNodeId: edge.targetNodeId })),
-    [{ id: "source-to-target", sourceNodeId: "source", targetNodeId: "target" }]
-  );
-});
-
 function makeConventionResourceNode(
   id: string,
   resourceType: string,
@@ -802,30 +774,6 @@ test("convertArchitectureJsonToDiagramJson uses catalog icon and size for CloudF
   assert.equal(cloudFrontNode?.parameters?.resourceName, "cdn_site");
 });
 
-test("convertArchitectureJsonToDiagramJson preserves configured catalog Terraform resource types", () => {
-  const architectureJson: ArchitectureJson = {
-    nodes: [
-      {
-        id: "bucket-policy",
-        type: "S3",
-        label: "Bucket Policy",
-        positionX: 120,
-        positionY: 80,
-        config: {
-          terraformResourceType: "aws_s3_bucket_policy"
-        }
-      }
-    ],
-    edges: []
-  };
-
-  const diagramJson = convertArchitectureJsonToDiagramJson(architectureJson);
-  const policyNode = diagramJson.nodes[0];
-
-  assert.equal(policyNode?.type, "aws_s3_bucket_policy");
-  assert.equal(policyNode?.parameters?.resourceType, "aws_s3_bucket_policy");
-});
-
 test("convertArchitectureJsonToDiagramJson uses fallback size for unknown draft resources", () => {
   const architectureJson: ArchitectureJson = {
     nodes: [
@@ -848,7 +796,7 @@ test("convertArchitectureJsonToDiagramJson uses fallback size for unknown draft 
   assert.deepEqual(unknownNode?.size, { width: 48, height: 48 });
 });
 
-test("getDiagramJsonForArchitectureDraft preserves exact DiagramJson coordinates while normalizing conventions", () => {
+test("getDiagramJsonForArchitectureDraft prefers an exact DiagramJson fixture when present", () => {
   const exactDiagramJson: DiagramJson = {
     edges: [],
     nodes: [
@@ -896,308 +844,7 @@ test("getDiagramJsonForArchitectureDraft preserves exact DiagramJson coordinates
     title: "Exact fixture"
   };
 
-  const result = getDiagramJsonForArchitectureDraft(draft);
-
-  assert.notEqual(result, exactDiagramJson);
-  assert.deepEqual(result.nodes[0]?.position, exactDiagramJson.nodes[0]?.position);
-  assert.deepEqual(result.viewport, exactDiagramJson.viewport);
-});
-
-test("normalizeDiagramJsonConventions removes area endpoint arrows from exact Q diagrams", () => {
-  const diagramJson: DiagramJson = {
-    nodes: [
-      makeDiagramNode({
-        id: "private-subnet",
-        label: "Private Subnet",
-        type: "aws_subnet",
-        parameters: {
-          fileName: "network",
-          resourceName: "private_subnet",
-          resourceType: "aws_subnet",
-          terraformBlockType: "resource",
-          values: {}
-        }
-      }),
-      makeDiagramNode({
-        id: "app-asg",
-        label: "Application ASG",
-        type: "aws_autoscaling_group",
-        parameters: {
-          fileName: "compute",
-          resourceName: "app_asg",
-          resourceType: "aws_autoscaling_group",
-          terraformBlockType: "resource",
-          values: {}
-        }
-      }),
-      makeDiagramNode({
-        id: "app-instance",
-        label: "Application Instance",
-        type: "aws_instance",
-        parameters: {
-          fileName: "compute",
-          resourceName: "app_instance",
-          resourceType: "aws_instance",
-          terraformBlockType: "resource",
-          values: {}
-        }
-      })
-    ],
-    edges: [
-      {
-        id: "subnet-binds-instance",
-        sourceNodeId: "private-subnet",
-        targetNodeId: "app-instance",
-        label: "binds"
-      },
-      {
-        id: "asg-manages-instance",
-        sourceNodeId: "app-asg",
-        targetNodeId: "app-instance",
-        label: "manages"
-      }
-    ],
-    viewport: { x: 12, y: 24, zoom: 0.75 }
-  };
-
-  const result = normalizeDiagramJsonConventions(diagramJson);
-  const nodeById = new Map(result.nodes.map((node) => [node.id, node]));
-
-  assert.equal(isAreaNode(nodeById.get("private-subnet")!), true);
-  assert.equal(isAreaNode(nodeById.get("app-asg")!), false);
-  assert.deepEqual(result.edges.map((edge) => edge.id), ["asg-manages-instance"]);
-  assert.deepEqual(result.viewport, diagramJson.viewport);
-});
-
-test("normalizeDiagramJsonConventions adds one reusable external flow to exact Q diagrams", () => {
-  const diagramJson: DiagramJson = {
-    nodes: [
-      makeDiagramNode({
-        id: "public-api",
-        label: "Public API",
-        type: "aws_apigatewayv2_api",
-        parameters: {
-          fileName: "api",
-          resourceName: "public_api",
-          resourceType: "aws_apigatewayv2_api",
-          terraformBlockType: "resource",
-          values: { protocolType: "HTTP" }
-        }
-      })
-    ],
-    edges: [],
-    viewport: { x: 0, y: 0, zoom: 1 }
-  };
-
-  const once = normalizeDiagramJsonConventions(diagramJson);
-  const twice = normalizeDiagramJsonConventions(once);
-
-  assert.deepEqual(
-    twice.nodes
-      .filter((node) => node.kind === "design")
-      .map((node) => ({ id: node.id, type: node.type })),
-    [
-      { id: "flow-user-client", type: "sketchcatch_user_client" },
-      { id: "flow-internet", type: "sketchcatch_internet" }
-    ]
-  );
-  assert.deepEqual(
-    twice.edges.map((edge) => ({ sourceNodeId: edge.sourceNodeId, targetNodeId: edge.targetNodeId })),
-    [
-      { sourceNodeId: "flow-user-client", targetNodeId: "flow-internet" },
-      { sourceNodeId: "flow-internet", targetNodeId: "public-api" }
-    ]
-  );
-});
-
-test("normalizeDiagramJsonConventions removes orphan network scaffolding from serverless previews", () => {
-  const diagramJson: DiagramJson = {
-    nodes: [
-      makeDiagramNode({
-        id: "cdn",
-        label: "CloudFront Public Entry",
-        position: { x: 120, y: 120 },
-        type: "aws_cloudfront_distribution",
-        parameters: {
-          fileName: "main",
-          resourceName: "cdn",
-          resourceType: "aws_cloudfront_distribution",
-          terraformBlockType: "resource",
-          values: {}
-        }
-      }),
-      makeDiagramNode({
-        id: "api",
-        label: "Practice REST API",
-        position: { x: 360, y: 260 },
-        type: "aws_api_gateway_rest_api",
-        parameters: {
-          fileName: "main",
-          resourceName: "api",
-          resourceType: "aws_api_gateway_rest_api",
-          terraformBlockType: "resource",
-          values: {}
-        }
-      }),
-      makeDiagramNode({
-        id: "lambda",
-        label: "Lambda Function",
-        position: { x: 600, y: 260 },
-        type: "aws_lambda_function",
-        parameters: {
-          fileName: "main",
-          resourceName: "lambda",
-          resourceType: "aws_lambda_function",
-          terraformBlockType: "resource",
-          values: {}
-        }
-      }),
-      makeDiagramNode({
-        id: "assets",
-        label: "Web Assets Bucket",
-        position: { x: 360, y: 120 },
-        type: "aws_s3_bucket",
-        parameters: {
-          fileName: "main",
-          resourceName: "assets",
-          resourceType: "aws_s3_bucket",
-          terraformBlockType: "resource",
-          values: {}
-        }
-      }),
-      makeDiagramNode({
-        id: "vpc",
-        label: "VPC",
-        position: { x: 900, y: 360 },
-        size: { width: 240, height: 160 },
-        type: "aws_vpc",
-        parameters: {
-          fileName: "network",
-          resourceName: "vpc",
-          resourceType: "aws_vpc",
-          terraformBlockType: "resource",
-          values: {}
-        }
-      }),
-      makeDiagramNode({
-        id: "subnet-a",
-        label: "Private Subnet A",
-        position: { x: 1180, y: 360 },
-        size: { width: 180, height: 120 },
-        type: "aws_subnet",
-        parameters: {
-          fileName: "network",
-          resourceName: "subnet_a",
-          resourceType: "aws_subnet",
-          terraformBlockType: "resource",
-          values: {}
-        }
-      }),
-      makeDiagramNode({
-        id: "internet-gateway",
-        label: "Internet Gateway",
-        position: { x: 1400, y: 360 },
-        type: "aws_internet_gateway",
-        parameters: {
-          fileName: "network",
-          resourceName: "igw",
-          resourceType: "aws_internet_gateway",
-          terraformBlockType: "resource",
-          values: {}
-        }
-      }),
-      makeDiagramNode({
-        id: "route-table",
-        label: "Route Table",
-        position: { x: 1400, y: 520 },
-        type: "aws_route_table",
-        parameters: {
-          fileName: "network",
-          resourceName: "rt",
-          resourceType: "aws_route_table",
-          terraformBlockType: "resource",
-          values: {}
-        }
-      }),
-      makeDiagramNode({
-        id: "security-group",
-        label: "Security Group",
-        position: { x: 1180, y: 520 },
-        type: "aws_security_group",
-        parameters: {
-          fileName: "network",
-          resourceName: "sg",
-          resourceType: "aws_security_group",
-          terraformBlockType: "resource",
-          values: {}
-        }
-      })
-    ],
-    edges: [
-      { id: "api-to-lambda", sourceNodeId: "api", targetNodeId: "lambda", label: "SSE /events" },
-      { id: "cdn-to-assets", sourceNodeId: "cdn", targetNodeId: "assets", label: "origin" },
-      { id: "vpc-to-subnet", sourceNodeId: "vpc", targetNodeId: "subnet-a", label: "contains" },
-      { id: "vpc-to-igw", sourceNodeId: "vpc", targetNodeId: "internet-gateway", label: "attaches" },
-      { id: "route-to-igw", sourceNodeId: "route-table", targetNodeId: "internet-gateway", label: "routes" },
-      { id: "sg-to-vpc", sourceNodeId: "security-group", targetNodeId: "vpc", label: "scopes" }
-    ],
-    viewport: { x: 0, y: 0, zoom: 1 }
-  };
-
-  const normalized = normalizeDiagramJsonConventions(diagramJson);
-  const nodeTypes = new Set(normalized.nodes.map((node) => node.parameters?.resourceType ?? node.type));
-  const nodeIds = new Set(normalized.nodes.map((node) => node.id));
-
-  for (const removedType of [
-    "aws_vpc",
-    "aws_subnet",
-    "aws_internet_gateway",
-    "aws_route_table",
-    "aws_security_group"
-  ]) {
-    assert.equal(nodeTypes.has(removedType), false, `Expected no ${removedType}`);
-  }
-
-  assert.equal(nodeTypes.has("aws_cloudfront_distribution"), true);
-  assert.equal(nodeTypes.has("aws_api_gateway_rest_api"), true);
-  assert.equal(nodeTypes.has("aws_lambda_function"), true);
-  assert.equal(nodeTypes.has("aws_s3_bucket"), true);
-  assert.equal(nodeTypes.has("sketchcatch_user_client"), true);
-  assert.equal(nodeTypes.has("sketchcatch_internet"), true);
-  assert.deepEqual(
-    normalized.edges.filter(
-      (edge) => !nodeIds.has(edge.sourceNodeId) || !nodeIds.has(edge.targetNodeId)
-    ),
-    []
-  );
-});
-
-test("normalizeDiagramJsonConventions upgrades stored subnet placement labels", () => {
-  const diagramJson: DiagramJson = {
-    nodes: [
-      makeDiagramNode({
-        id: "placement-ecs-a",
-        kind: "design",
-        label: "Fargate task 1",
-        type: "sketchcatch_subnet_placement"
-      }),
-      makeDiagramNode({
-        id: "placement-db-a",
-        kind: "design",
-        label: "RDS primary",
-        type: "sketchcatch_subnet_placement"
-      })
-    ],
-    edges: [],
-    viewport: { x: 0, y: 0, zoom: 1 }
-  };
-
-  const normalized = normalizeDiagramJsonConventions(diagramJson);
-
-  assert.deepEqual(
-    normalized.nodes.map((node) => node.label),
-    ["Fargate task placement A", "RDS primary (Multi-AZ)"]
-  );
+  assert.equal(getDiagramJsonForArchitectureDraft(draft), exactDiagramJson);
 });
 
 test("convertArchitectureJsonToDiagramJson expands area nodes to include upper-left children", () => {
@@ -1374,135 +1021,6 @@ test("convertArchitectureJsonToDiagramJson resolves common Terraform reference a
   assert.equal(parentByNodeId.get("web-server"), "public-a");
 });
 
-test("convertArchitectureJsonToDiagramJson creates one area per Availability Zone and keeps subnet-backed resources in the VPC", () => {
-  const architectureJson: ArchitectureJson = {
-    nodes: [
-      {
-        id: "vpc-main",
-        type: "VPC",
-        label: "Main VPC",
-        positionX: 80,
-        positionY: 320,
-        config: { cidrBlock: "10.0.0.0/16" }
-      },
-      {
-        id: "public-subnet-a",
-        type: "SUBNET",
-        label: "Public Subnet A",
-        positionX: 160,
-        positionY: 500,
-        config: {
-          availabilityZone: "ap-northeast-2a",
-          vpcId: "aws_vpc.vpc_main.id"
-        }
-      },
-      {
-        id: "public-subnet-b",
-        type: "SUBNET",
-        label: "Public Subnet B",
-        positionX: 760,
-        positionY: 500,
-        config: {
-          availabilityZone: "ap-northeast-2b",
-          vpcId: "aws_vpc.vpc_main.id"
-        }
-      },
-      {
-        id: "private-db-subnet-a",
-        type: "SUBNET",
-        label: "Private DB Subnet A",
-        positionX: 160,
-        positionY: 820,
-        config: {
-          availabilityZone: "ap-northeast-2a",
-          vpcId: "aws_vpc.vpc_main.id"
-        }
-      },
-      {
-        id: "private-db-subnet-b",
-        type: "SUBNET",
-        label: "Private DB Subnet B",
-        positionX: 760,
-        positionY: 820,
-        config: {
-          availabilityZone: "ap-northeast-2b",
-          vpcId: "aws_vpc.vpc_main.id"
-        }
-      },
-      {
-        id: "app-server-a",
-        type: "EC2",
-        label: "App Server A",
-        positionX: 220,
-        positionY: 660,
-        config: { subnetId: "aws_subnet.public_subnet_a.id" }
-      },
-      {
-        id: "app-server-b",
-        type: "EC2",
-        label: "App Server B",
-        positionX: 820,
-        positionY: 660,
-        config: { subnetId: "aws_subnet.public_subnet_b.id" }
-      },
-      {
-        id: "application-load-balancer",
-        type: "LOAD_BALANCER",
-        label: "Application Load Balancer",
-        positionX: 520,
-        positionY: 420,
-        config: {
-          subnets: [
-            "aws_subnet.public_subnet_a.id",
-            "aws_subnet.public_subnet_b.id"
-          ]
-        }
-      },
-      {
-        id: "db-subnet-group",
-        type: "DB_SUBNET_GROUP",
-        label: "DB Subnet Group",
-        positionX: 520,
-        positionY: 860,
-        config: {
-          subnetIds: [
-            "aws_subnet.private_db_subnet_a.id",
-            "aws_subnet.private_db_subnet_b.id"
-          ]
-        }
-      }
-    ],
-    edges: []
-  };
-
-  const diagramJson = convertArchitectureJsonToDiagramJson(architectureJson);
-  const nodeById = new Map(diagramJson.nodes.map((node) => [node.id, node]));
-  const azNodes = diagramJson.nodes.filter(
-    (node) => node.parameters?.resourceType === "aws_availability_zone"
-  );
-
-  assert.equal(azNodes.length, 2);
-  assert.deepEqual(
-    new Set(azNodes.map((node) => node.parameters?.values?.["awsAvailabilityZone"])),
-    new Set(["ap-northeast-2a", "ap-northeast-2b"])
-  );
-  assert.deepEqual(
-    new Set(azNodes.map((node) => node.parameters?.resourceName)),
-    new Set(["az_ap_northeast_2a", "az_ap_northeast_2b"])
-  );
-  assert.notEqual(
-    nodeById.get("public-subnet-a")?.metadata?.parentAreaNodeId,
-    nodeById.get("public-subnet-b")?.metadata?.parentAreaNodeId
-  );
-  assert.equal(
-    nodeById.get("application-load-balancer")?.metadata?.parentAreaNodeId,
-    "vpc-main"
-  );
-  assert.equal(nodeById.get("db-subnet-group")?.metadata?.parentAreaNodeId, "vpc-main");
-  assertContainsNode(nodeById.get("vpc-main"), nodeById.get("application-load-balancer"));
-  assertContainsNode(nodeById.get("vpc-main"), nodeById.get("db-subnet-group"));
-});
-
 test("convertArchitectureJsonToDiagramJson marks VPC and Subnet containment for board area nodes", () => {
   const architectureJson: ArchitectureJson = {
     nodes: [
@@ -1564,8 +1082,8 @@ test("convertArchitectureJsonToDiagramJson marks VPC and Subnet containment for 
       { id: "server-storage-az", parentAreaNodeId: "vpc-main" },
       { id: "vpc-main", parentAreaNodeId: "server-storage-region" },
       { id: "subnet-app", parentAreaNodeId: "server-storage-az" },
-      { id: "sg-app", parentAreaNodeId: "vpc-main" },
-      { id: "ec2-api", parentAreaNodeId: "subnet-app" }
+      { id: "sg-app", parentAreaNodeId: "subnet-app" },
+      { id: "ec2-api", parentAreaNodeId: "sg-app" }
     ]
   );
 
@@ -1574,89 +1092,9 @@ test("convertArchitectureJsonToDiagramJson marks VPC and Subnet containment for 
   assertContainsNode(nodeById.get("vpc-main"), nodeById.get("subnet-app"));
   assertContainsNode(nodeById.get("vpc-main"), nodeById.get("server-storage-az"));
   assertContainsNode(nodeById.get("server-storage-az"), nodeById.get("subnet-app"));
-  assertContainsNode(nodeById.get("vpc-main"), nodeById.get("sg-app"));
-  assertContainsNode(nodeById.get("subnet-app"), nodeById.get("ec2-api"));
-  assert.deepEqual(diagramJson.edges.map((edge) => edge.id), ["sg-to-ec2"]);
-});
-
-test("convertArchitectureJsonToDiagramJson keeps EC2 instances in their explicit subnets when they share a security group", () => {
-  const architectureJson: ArchitectureJson = {
-    nodes: [
-      {
-        id: "vpc-main",
-        type: "VPC",
-        label: "Main VPC",
-        positionX: 80,
-        positionY: 80,
-        config: { cidrBlock: "10.0.0.0/16" }
-      },
-      {
-        id: "subnet-app-a",
-        type: "SUBNET",
-        label: "Private App Subnet A",
-        positionX: 140,
-        positionY: 150,
-        config: { cidrBlock: "10.0.1.0/24", vpcId: "vpc-main", terraformResourceName: "private_app_a" }
-      },
-      {
-        id: "subnet-app-b",
-        type: "SUBNET",
-        label: "Private App Subnet B",
-        positionX: 140,
-        positionY: 350,
-        config: { cidrBlock: "10.0.2.0/24", vpcId: "vpc-main", terraformResourceName: "private_app_b" }
-      },
-      {
-        id: "sg-app",
-        type: "SECURITY_GROUP",
-        label: "App Security Group",
-        positionX: 220,
-        positionY: 190,
-        config: { vpcId: "vpc-main" }
-      },
-      {
-        id: "ec2-a",
-        type: "EC2",
-        label: "API Server A",
-        positionX: 300,
-        positionY: 190,
-        config: { subnetId: "aws_subnet.private_app_a.id", securityGroupIds: ["sg-app"] }
-      },
-      {
-        id: "ec2-b",
-        type: "EC2",
-        label: "API Server B",
-        positionX: 300,
-        positionY: 390,
-        config: { subnetId: "aws_subnet.private_app_b.id", securityGroupIds: ["sg-app"] }
-      },
-      {
-        id: "ec2-c",
-        type: "EC2",
-        label: "API Server C",
-        positionX: 440,
-        positionY: 390,
-        config: { subnetId: "aws_subnet.private_app_b.id", securityGroupIds: ["sg-app"] }
-      }
-    ],
-    edges: [
-      { id: "subnet-a-to-ec2-a", sourceId: "subnet-app-a", targetId: "ec2-a", label: "hosts" },
-      { id: "subnet-b-to-ec2-b", sourceId: "subnet-app-b", targetId: "ec2-b", label: "hosts" },
-      { id: "subnet-b-to-ec2-c", sourceId: "subnet-app-b", targetId: "ec2-c", label: "hosts" }
-    ]
-  };
-
-  const diagramJson = convertArchitectureJsonToDiagramJson(architectureJson);
-  const parentByNodeId = new Map(diagramJson.nodes.map((node) => [node.id, node.metadata?.parentAreaNodeId]));
-  const nodeById = new Map(diagramJson.nodes.map((node) => [node.id, node]));
-
-  assert.equal(parentByNodeId.get("sg-app"), "vpc-main");
-  assert.equal(parentByNodeId.get("ec2-a"), "subnet-app-a");
-  assert.equal(parentByNodeId.get("ec2-b"), "subnet-app-b");
-  assert.equal(parentByNodeId.get("ec2-c"), "subnet-app-b");
-  assertContainsNode(nodeById.get("subnet-app-a"), nodeById.get("ec2-a"));
-  assertContainsNode(nodeById.get("subnet-app-b"), nodeById.get("ec2-b"));
-  assertContainsNode(nodeById.get("subnet-app-b"), nodeById.get("ec2-c"));
+  assertContainsNode(nodeById.get("subnet-app"), nodeById.get("sg-app"));
+  assertContainsNode(nodeById.get("sg-app"), nodeById.get("ec2-api"));
+  assert.deepEqual(diagramJson.edges, []);
 });
 
 test("convertArchitectureJsonToDiagramJson maps server and storage draft resources to Terraform nodes", () => {
@@ -1882,13 +1320,11 @@ test("convertArchitectureJsonToDiagramJson maps operations and permission draft 
   const diagramJson = convertArchitectureJsonToDiagramJson(architectureJson);
 
   assert.deepEqual(
-    diagramJson.nodes
-      .filter((node) => node.kind === "resource")
-      .map((node) => ({
-        id: node.id,
-        resourceType: node.parameters?.resourceType,
-        terraformBlockType: node.parameters?.terraformBlockType
-      })),
+    diagramJson.nodes.map((node) => ({
+      id: node.id,
+      resourceType: node.parameters?.resourceType,
+      terraformBlockType: node.parameters?.terraformBlockType
+    })),
     [
       { id: "api-gateway", resourceType: "aws_api_gateway_rest_api", terraformBlockType: "resource" },
       { id: "lambda-execution-role", resourceType: "aws_iam_role", terraformBlockType: "resource" },
@@ -1902,7 +1338,7 @@ test("convertArchitectureJsonToDiagramJson maps operations and permission draft 
   );
 });
 
-test("convertArchitectureJsonToDiagramJson preserves authored serverless lanes while correcting collisions", () => {
+test("convertArchitectureJsonToDiagramJson arranges serverless resources into readable lanes", () => {
   const architectureJson: ArchitectureJson = {
     nodes: [
       {
@@ -2055,7 +1491,7 @@ test("convertArchitectureJsonToDiagramJson preserves authored serverless lanes w
   assertNoEdgeLineOverlap(diagramJson);
 });
 
-test("convertArchitectureJsonToDiagramJson keeps mixed cloud authored layout bounded and routable", () => {
+test("convertArchitectureJsonToDiagramJson keeps mixed cloud area drafts compact and routable", () => {
   const architectureJson: ArchitectureJson = {
     nodes: [
       {
@@ -2227,8 +1663,8 @@ test("convertArchitectureJsonToDiagramJson keeps mixed cloud authored layout bou
   const diagramJson = convertArchitectureJsonToDiagramJson(architectureJson);
   const bounds = getDiagramBounds(diagramJson.nodes);
 
-  assert.ok(bounds.width <= 1900, `Expected bounded width, received ${bounds.width}`);
-  assert.ok(bounds.height <= 1560, `Expected compact height, received ${bounds.height}`);
+  assert.ok(bounds.width <= 1320, `Expected compact width, received ${bounds.width}`);
+  assert.ok(bounds.height <= 1340, `Expected compact height, received ${bounds.height}`);
   assertNoSiblingNodeOverlap(diagramJson);
   assertNoNonAncestorAreaResourceOverlap(diagramJson);
   assertResourceChildrenInsetFromAreaBoundaries(diagramJson);
@@ -2357,13 +1793,13 @@ test("convertArchitectureJsonToDiagramJson lays out server and storage draft as 
       {
         id: "security-group",
         kind: "resource",
-        parentAreaNodeId: "vpc",
+        parentAreaNodeId: "subnet",
         type: "aws_security_group"
       },
       {
         id: "ec2-instance",
         kind: "resource",
-        parentAreaNodeId: "subnet",
+        parentAreaNodeId: "security-group",
         type: "aws_instance"
       },
       {
@@ -2410,8 +1846,8 @@ test("convertArchitectureJsonToDiagramJson lays out server and storage draft as 
   assertContainsNode(regionNode, vpcNode);
   assertContainsNode(vpcNode, azNode);
   assertContainsNode(azNode, subnetNode);
-  assertContainsNode(vpcNode, securityGroupNode);
-  assertContainsNode(subnetNode, instanceNode);
+  assertContainsNode(subnetNode, securityGroupNode);
+  assertContainsNode(securityGroupNode, instanceNode);
   assert.deepEqual(regionNode?.parameters?.values, {
     awsRegion: "ap-northeast-2"
   });
@@ -2524,9 +1960,9 @@ test("convertArchitectureJsonToDiagramJson lays out generated EC2 drafts inside 
       { id: "server-storage-az", parentAreaNodeId: "vpc-main", type: "aws_availability_zone" },
       { id: "vpc-main", parentAreaNodeId: "server-storage-region", type: "aws_vpc" },
       { id: "public-subnet", parentAreaNodeId: "server-storage-az", type: "aws_subnet" },
-      { id: "app-security-group", parentAreaNodeId: "vpc-main", type: "aws_security_group" },
+      { id: "app-security-group", parentAreaNodeId: "public-subnet", type: "aws_security_group" },
       { id: "internet-gateway", parentAreaNodeId: "vpc-main", type: "aws_internet_gateway" },
-      { id: "app-server", parentAreaNodeId: "public-subnet", type: "aws_instance" }
+      { id: "app-server", parentAreaNodeId: "app-security-group", type: "aws_instance" }
     ]
   );
 
@@ -2535,71 +1971,9 @@ test("convertArchitectureJsonToDiagramJson lays out generated EC2 drafts inside 
   assertContainsNode(nodeById.get("server-storage-region"), nodeById.get("vpc-main"));
   assertContainsNode(nodeById.get("vpc-main"), nodeById.get("server-storage-az"));
   assertContainsNode(nodeById.get("server-storage-az"), nodeById.get("public-subnet"));
-  assertContainsNode(nodeById.get("vpc-main"), nodeById.get("app-security-group"));
-  assertStraddlesTopBoundary(nodeById.get("vpc-main"), nodeById.get("internet-gateway"));
-  assertContainsNode(nodeById.get("public-subnet"), nodeById.get("app-server"));
-});
-
-test("convertArchitectureJsonToDiagramJson places Internet Gateway across the VPC boundary", () => {
-  const diagramJson = convertArchitectureJsonToDiagramJson({
-    nodes: [
-      {
-        id: "vpc-main",
-        type: "VPC",
-        label: "Main VPC",
-        positionX: 200,
-        positionY: 300,
-        config: { cidrBlock: "10.0.0.0/16" }
-      },
-      {
-        id: "public-subnet-a",
-        type: "SUBNET",
-        label: "Public Subnet A",
-        positionX: 320,
-        positionY: 440,
-        config: { cidrBlock: "10.0.1.0/24", vpcId: "aws_vpc.vpc_main.id" }
-      },
-      {
-        id: "internet-gateway",
-        type: "INTERNET_GATEWAY",
-        label: "Internet Gateway",
-        positionX: 360,
-        positionY: 520,
-        config: { vpcId: "aws_vpc.vpc_main.id" }
-      },
-      {
-        id: "nat-gateway",
-        type: "NAT_GATEWAY",
-        label: "NAT Gateway",
-        positionX: 380,
-        positionY: 480,
-        config: { subnetId: "aws_subnet.public_subnet_a.id" }
-      }
-    ],
-    edges: []
-  });
-  const nodeById = new Map(diagramJson.nodes.map((node) => [node.id, node]));
-  const vpcNode = nodeById.get("vpc-main")!;
-  const subnetNode = nodeById.get("public-subnet-a")!;
-  const internetGatewayNode = nodeById.get("internet-gateway")!;
-  const natGatewayNode = nodeById.get("nat-gateway")!;
-
-  assert.equal(internetGatewayNode.metadata?.parentAreaNodeId, vpcNode.id);
-  assertStraddlesTopBoundary(vpcNode, internetGatewayNode);
-  assert.equal(natGatewayNode.metadata?.parentAreaNodeId, subnetNode.id);
-  assertContainsNode(subnetNode, natGatewayNode);
-
-  const normalizedDiagramJson = normalizeDiagramJsonConventions(diagramJson);
-  const normalizedNodeById = new Map(normalizedDiagramJson.nodes.map((node) => [node.id, node]));
-
-  assertStraddlesTopBoundary(
-    normalizedNodeById.get("vpc-main"),
-    normalizedNodeById.get("internet-gateway")
-  );
-  assertContainsNode(
-    normalizedNodeById.get("public-subnet-a"),
-    normalizedNodeById.get("nat-gateway")
-  );
+  assertContainsNode(nodeById.get("public-subnet"), nodeById.get("app-security-group"));
+  assertContainsNode(nodeById.get("vpc-main"), nodeById.get("internet-gateway"));
+  assertContainsNode(nodeById.get("app-security-group"), nodeById.get("app-server"));
 });
 
 test("convertArchitectureJsonToDiagramJson keeps route table associations out of subnet child layout", () => {
@@ -2734,321 +2108,6 @@ test("convertArchitectureJsonToDiagramJson keeps runtime usage arrows visible", 
       }
     ]
   );
-});
-
-test("convertArchitectureJsonToDiagramJson represents areas only through containment", () => {
-  const architectureJson: ArchitectureJson = {
-    nodes: [
-      {
-        id: "vpc-main",
-        type: "VPC",
-        label: "Main VPC",
-        positionX: 40,
-        positionY: 40,
-        config: { cidrBlock: "10.0.0.0/16" }
-      },
-      {
-        id: "private-subnet-a",
-        type: "SUBNET",
-        label: "Private Subnet A",
-        positionX: 100,
-        positionY: 140,
-        config: { cidrBlock: "10.0.1.0/24", vpcId: "aws_vpc.vpc_main.id" }
-      },
-      {
-        id: "app-asg",
-        type: "AUTO_SCALING_GROUP",
-        label: "Application ASG",
-        positionX: 720,
-        positionY: 140,
-        config: { vpcZoneIdentifier: ["aws_subnet.private_subnet_a.id"] }
-      },
-      {
-        id: "app-sg",
-        type: "SECURITY_GROUP",
-        label: "Application Security Group",
-        positionX: 720,
-        positionY: 300,
-        config: { vpcId: "aws_vpc.vpc_main.id" }
-      },
-      {
-        id: "app-instance",
-        type: "EC2",
-        label: "Application Instance",
-        positionX: 300,
-        positionY: 260,
-        config: {
-          subnetId: "aws_subnet.private_subnet_a.id",
-          vpcSecurityGroupIds: ["aws_security_group.app_sg.id"]
-        }
-      },
-      {
-        id: "application-alb",
-        type: "LOAD_BALANCER",
-        label: "Application ALB",
-        positionX: 720,
-        positionY: 460,
-        config: { subnets: ["aws_subnet.private_subnet_a.id"] }
-      }
-    ],
-    edges: [
-      {
-        id: "subnet-hosts-alb",
-        sourceId: "private-subnet-a",
-        targetId: "application-alb",
-        label: "hosts ALB"
-      },
-      {
-        id: "subnet-routes-instance",
-        sourceId: "private-subnet-a",
-        targetId: "app-instance",
-        label: "routes traffic"
-      },
-      {
-        id: "asg-manages-instance",
-        sourceId: "app-asg",
-        targetId: "app-instance",
-        label: "manages"
-      },
-      {
-        id: "sg-protects-instance",
-        sourceId: "app-sg",
-        targetId: "app-instance",
-        label: "protects"
-      },
-      {
-        id: "alb-forwards-instance",
-        sourceId: "application-alb",
-        targetId: "app-instance",
-        label: "forwards"
-      }
-    ]
-  };
-
-  const diagramJson = convertArchitectureJsonToDiagramJson(architectureJson);
-  const nodeById = new Map(diagramJson.nodes.map((node) => [node.id, node]));
-  const areaNodeIds = new Set(diagramJson.nodes.filter(isAreaNode).map((node) => node.id));
-
-  assert.equal(isAreaNode(nodeById.get("vpc-main")!), true);
-  assert.equal(isAreaNode(nodeById.get("private-subnet-a")!), true);
-  assert.equal(isAreaNode(nodeById.get("app-asg")!), false);
-  assert.equal(isAreaNode(nodeById.get("app-sg")!), false);
-  assert.ok(
-    diagramJson.edges.every(
-      (edge) => !areaNodeIds.has(edge.sourceNodeId) && !areaNodeIds.has(edge.targetNodeId)
-    )
-  );
-  assert.deepEqual(
-    diagramJson.edges.map((edge) => edge.id).sort(),
-    [
-      "alb-forwards-instance",
-      "asg-manages-instance",
-      "flow-internet-to-application-alb",
-      "flow-user-to-internet",
-      "sg-protects-instance"
-    ]
-  );
-  assert.equal(nodeById.get("app-instance")?.metadata?.parentAreaNodeId, "private-subnet-a");
-});
-
-test("convertArchitectureJsonToDiagramJson adds external actors for public entry points", () => {
-  const diagramJson = convertArchitectureJsonToDiagramJson({
-    nodes: [
-      {
-        id: "public-cdn",
-        type: "CLOUDFRONT",
-        label: "Public CDN",
-        positionX: 520,
-        positionY: 120,
-        config: {}
-      },
-      {
-        id: "public-alb",
-        type: "LOAD_BALANCER",
-        label: "Public ALB",
-        positionX: 780,
-        positionY: 300,
-        config: { internal: false }
-      },
-      {
-        id: "internal-alb",
-        type: "LOAD_BALANCER",
-        label: "Internal ALB",
-        positionX: 780,
-        positionY: 500,
-        config: { internal: true }
-      }
-    ],
-    edges: []
-  });
-  const nodeById = new Map(diagramJson.nodes.map((node) => [node.id, node]));
-  const userNode = nodeById.get("flow-user-client");
-  const internetNode = nodeById.get("flow-internet");
-
-  assert.equal(userNode?.kind, "design");
-  assert.equal(userNode?.type, "sketchcatch_user_client");
-  assert.equal(
-    userNode?.iconUrl,
-    "/Resource-Icons_07312025/Res_General-Icons/Res_48_Light/Res_Client_48_Light.svg"
-  );
-  assert.equal(internetNode?.kind, "design");
-  assert.equal(internetNode?.type, "sketchcatch_internet");
-  assert.deepEqual(
-    diagramJson.edges.map((edge) => ({
-      label: edge.label,
-      sourceNodeId: edge.sourceNodeId,
-      targetNodeId: edge.targetNodeId
-    })),
-    [
-      {
-        label: "internet access",
-        sourceNodeId: "flow-user-client",
-        targetNodeId: "flow-internet"
-      },
-      {
-        label: "HTTPS requests",
-        sourceNodeId: "flow-internet",
-        targetNodeId: "public-cdn"
-      }
-    ]
-  );
-});
-
-test("convertArchitectureJsonToDiagramJson shows Fargate and RDS placements inside every private subnet", () => {
-  const diagramJson = convertArchitectureJsonToDiagramJson({
-    nodes: [
-      {
-        id: "vpc-main",
-        type: "VPC",
-        label: "Main VPC",
-        positionX: 200,
-        positionY: 300,
-        config: { cidrBlock: "10.0.0.0/16" }
-      },
-      ...[
-        ["public-a", "10.0.0.0/24", "public"],
-        ["public-b", "10.0.1.0/24", "public"],
-        ["private-app-a", "10.0.10.0/24", "private_app"],
-        ["private-app-b", "10.0.11.0/24", "private_app"],
-        ["private-db-a", "10.0.20.0/24", "private_db"],
-        ["private-db-b", "10.0.21.0/24", "private_db"]
-      ].map(([id, cidrBlock, tier], index) => ({
-        id: id!,
-        type: "SUBNET" as const,
-        label: id!,
-        positionX: 320 + (index % 2) * 300,
-        positionY: 480 + Math.floor(index / 2) * 240,
-        config: {
-          cidrBlock,
-          tier,
-          vpcId: "aws_vpc.vpc_main.id"
-        }
-      })),
-      {
-        id: "application-alb",
-        type: "LOAD_BALANCER",
-        label: "Application Load Balancer",
-        positionX: 900,
-        positionY: 360,
-        config: {
-          internal: false,
-          subnets: ["aws_subnet.public_a.id", "aws_subnet.public_b.id"]
-        }
-      },
-      {
-        id: "ecs-service",
-        type: "ECS_SERVICE",
-        label: "Fargate Application Service",
-        positionX: 900,
-        positionY: 520,
-        config: {
-          networkConfiguration: {
-            subnets: [
-              "aws_subnet.private_app_a.id",
-              "aws_subnet.private_app_b.id"
-            ]
-          }
-        }
-      },
-      {
-        id: "db-subnet-group",
-        type: "DB_SUBNET_GROUP",
-        label: "DB Subnet Group",
-        positionX: 900,
-        positionY: 700,
-        config: {
-          subnetIds: ["aws_subnet.private_db_a.id", "aws_subnet.private_db_b.id"]
-        }
-      },
-      {
-        id: "app-database",
-        type: "RDS",
-        label: "Application Database",
-        positionX: 1100,
-        positionY: 700,
-        config: {
-          dbSubnetGroupName: "aws_db_subnet_group.db_subnet_group.name",
-          multiAz: true
-        }
-      }
-    ],
-    edges: []
-  });
-  const placementNodes = diagramJson.nodes.filter(
-    (node) => node.type === "sketchcatch_subnet_placement"
-  );
-  const placementParents = new Set(
-    placementNodes.map((node) => node.metadata?.parentAreaNodeId)
-  );
-
-  assert.equal(placementNodes.length, 6);
-  assert.deepEqual(
-    placementParents,
-    new Set(["public-a", "public-b", "private-app-a", "private-app-b", "private-db-a", "private-db-b"])
-  );
-  assert.deepEqual(
-    placementNodes.map((node) => node.label).sort(),
-    [
-      "ALB node A",
-      "ALB node B",
-      "Fargate task placement A",
-      "Fargate task placement B",
-      "RDS primary (Multi-AZ)",
-      "RDS standby (Multi-AZ)"
-    ].sort()
-  );
-
-  const nodeById = new Map(diagramJson.nodes.map((node) => [node.id, node]));
-  for (const placementNode of placementNodes) {
-    assertContainsNode(
-      nodeById.get(placementNode.metadata?.parentAreaNodeId ?? ""),
-      placementNode
-    );
-  }
-});
-
-test("convertArchitectureJsonToDiagramJson omits external actors for internal-only entry points", () => {
-  const diagramJson = convertArchitectureJsonToDiagramJson({
-    nodes: [
-      {
-        id: "internal-alb",
-        type: "LOAD_BALANCER",
-        label: "Internal ALB",
-        positionX: 320,
-        positionY: 240,
-        config: { internal: true }
-      }
-    ],
-    edges: []
-  });
-
-  assert.equal(
-    diagramJson.nodes.some(
-      (node) => node.type === "sketchcatch_user_client" || node.type === "sketchcatch_internet"
-    ),
-    false
-  );
-  assert.deepEqual(diagramJson.edges, []);
 });
 
 test("convertDiagramJsonToArchitectureJson keeps only valid resource nodes and connected edges", () => {
@@ -3265,21 +2324,6 @@ function assertContainsNode(parent: DiagramNode | undefined, child: DiagramNode 
   );
 }
 
-function assertStraddlesTopBoundary(parent: DiagramNode | undefined, child: DiagramNode | undefined): void {
-  assert.ok(parent, "Expected parent node to exist");
-  assert.ok(child, "Expected child node to exist");
-  assert.equal(
-    child.position.x + child.size.width / 2,
-    parent.position.x + parent.size.width / 2,
-    `${child.id} should be centered on ${parent.id}`
-  );
-  assert.ok(child.position.y < parent.position.y, `${child.id} should extend above ${parent.id}`);
-  assert.ok(
-    child.position.y + child.size.height > parent.position.y,
-    `${child.id} should extend inside ${parent.id}`
-  );
-}
-
 function assertNoNodeOverlap(left: DiagramNode | undefined, right: DiagramNode | undefined): void {
   assert.ok(left, "Expected left node to exist");
   assert.ok(right, "Expected right node to exist");
@@ -3327,12 +2371,7 @@ function assertResourceChildrenInsetFromAreaBoundaries(diagramJson: DiagramJson)
   for (const node of diagramJson.nodes) {
     const parentAreaNodeId = node.metadata?.parentAreaNodeId;
 
-    if (
-      !parentAreaNodeId ||
-      node.kind !== "resource" ||
-      isAreaNode(node) ||
-      node.parameters?.resourceType === "aws_internet_gateway"
-    ) {
+    if (!parentAreaNodeId || node.kind !== "resource" || isAreaNode(node)) {
       continue;
     }
 

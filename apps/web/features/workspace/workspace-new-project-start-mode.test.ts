@@ -5,13 +5,13 @@ import { fileURLToPath } from "node:url";
 
 const workspaceStartClientSource = readAppWorkspaceFile("new/workspace-start-client.tsx");
 
-test("new project start keeps the remaining start modes and core API calls", () => {
+test("new project start keeps all five start modes and core API calls", () => {
   assert.match(workspaceStartClientSource, /createWorkspaceStartOptions/);
   assert.match(workspaceStartClientSource, /ai: Bot/);
   assert.match(workspaceStartClientSource, /reverse: CloudDownload/);
   assert.match(workspaceStartClientSource, /template: Boxes/);
+  assert.match(workspaceStartClientSource, /github: GitBranch/);
   assert.match(workspaceStartClientSource, /blank: LayoutPanelTop/);
-  assert.doesNotMatch(workspaceStartClientSource, /github: GitBranch/);
   assert.match(workspaceStartClientSource, /listAwsConnections/);
   assert.match(workspaceStartClientSource, /resolveWorkspaceStartAction/);
   assert.match(workspaceStartClientSource, /createProject/);

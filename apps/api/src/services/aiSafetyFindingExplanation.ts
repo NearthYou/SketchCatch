@@ -101,6 +101,35 @@ const SAFETY_FINDING_TEMPLATES: readonly SafetyFindingTemplate[] = [
     ]
   },
   {
+    keywords: ["s3_versioning", "aws-0090", "버전 관리", "versioning"],
+    riskSummary: "S3 버킷 버전 관리가 활성화되어 있지 않습니다.",
+    whyDangerous:
+      "버전 관리가 없으면 객체를 실수로 덮어쓰거나 삭제했을 때 이전 버전을 복구하기 어렵습니다.",
+    recommendedFix:
+      "`aws_s3_bucket_versioning` 리소스에서 `versioning_configuration.status = \"Enabled\"`를 설정하세요.",
+    terraformHint:
+      "S3 버킷을 참조하는 `aws_s3_bucket_versioning` 리소스와 `versioning_configuration` 블록을 추가하세요.",
+    verificationSteps: [
+      "버킷의 Versioning 상태가 Enabled인지 확인합니다.",
+      "배포 전 검사를 다시 실행해 AWS-0090 finding이 사라졌는지 확인합니다."
+    ]
+  },
+  {
+    keywords: ["s3_kms_encryption", "aws-0132", "고객 관리형 kms", "customer managed key"],
+    riskSummary: "S3 버킷 암호화에 고객 관리형 KMS 키가 사용되지 않습니다.",
+    whyDangerous:
+      "고객 관리형 KMS 키가 없으면 키 정책, 접근 제어, 감사와 키 수명주기를 조직 요구사항에 맞게 직접 관리하기 어렵습니다.",
+    recommendedFix:
+      "`aws_s3_bucket_server_side_encryption_configuration`에서 SSE-KMS와 고객 관리형 KMS 키를 설정하세요.",
+    terraformHint:
+      "`sse_algorithm = \"aws:kms\"`와 `kms_master_key_id`를 명시하세요.",
+    verificationSteps: [
+      "S3 기본 암호화가 SSE-KMS를 사용하는지 확인합니다.",
+      "고객 관리형 KMS key ARN이 연결되어 있는지 확인합니다.",
+      "배포 전 검사를 다시 실행해 AWS-0132 finding이 사라졌는지 확인합니다."
+    ]
+  },
+  {
     keywords: ["public_ssh", "open-ssh", "ssh", "0.0.0.0/0", "::/0"],
     riskSummary: "SSH 접근이 전체 인터넷에 노출되어 있습니다.",
     whyDangerous:
@@ -161,7 +190,17 @@ const SAFETY_FINDING_TEMPLATES: readonly SafetyFindingTemplate[] = [
     ]
   },
   {
-    keywords: ["public_s3", "public-s3", "s3", "bucket policy", "acl"],
+    keywords: [
+      "s3_public_access",
+      "aws-0086",
+      "aws-0087",
+      "aws-0091",
+      "aws-0093",
+      "public_s3",
+      "public-s3",
+      "bucket policy",
+      "public acl"
+    ],
     riskSummary: "S3 버킷 객체가 공개될 수 있습니다.",
     whyDangerous:
       "공개 ACL이나 과도한 bucket policy는 업로드 파일, Terraform 산출물, 사용자 데이터를 익명 사용자에게 노출할 수 있습니다.",
@@ -334,6 +373,8 @@ function createSafetyFindingPayload(finding: CheckFinding) {
     category: finding.category,
     severity: finding.severity,
     resourceId: finding.resourceId ?? null,
+    riskFamily: finding.riskFamily ?? null,
+    trivyRuleIds: finding.trivyRuleIds ?? [],
     title: finding.title,
     description: finding.description,
     recommendation: finding.recommendation,
@@ -395,6 +436,8 @@ function selectSafetyFindingTemplate(finding: CheckFinding): SafetyFindingTempla
     finding.category,
     finding.severity,
     finding.resourceId ?? "",
+    finding.riskFamily ?? "",
+    ...(finding.trivyRuleIds ?? []),
     finding.title,
     finding.description,
     finding.recommendation

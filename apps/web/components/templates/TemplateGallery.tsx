@@ -10,6 +10,7 @@ import {
   type BoardTemplateSort
 } from "../../features/resource-settings/template-library";
 import styles from "./TemplateGallery.module.css";
+import { createTemplatePreviewModel } from "./template-preview-model";
 
 export type TemplateGalleryProps = {
   readonly actionHref?: ((template: BoardTemplate) => string) | undefined;
@@ -122,58 +123,73 @@ export function TemplateGallery({
   );
 }
 
-// Template의 실제 node 위치를 간단한 Architecture 미리보기로 축소해 보여줍니다.
+// Template의 실제 node 배치를 아이콘 중심 SVG 미리보기로 축소해 보여줍니다.
 function TemplateDiagramPreview({ template }: { readonly template: BoardTemplate }) {
-  const bounds = getTemplateBounds(template);
+  const model = createTemplatePreviewModel(template.diagramJson);
+  const nodesById = new Map(model.nodes.map((node) => [node.id, node]));
 
   return (
     <div className={styles.preview} aria-label={`${template.title} Architecture 미리보기`}>
       <svg aria-hidden="true" viewBox="0 0 100 60">
-        {template.diagramJson.edges.map((edge) => {
-          const source = template.diagramJson.nodes.find((node) => node.id === edge.sourceNodeId);
-          const target = template.diagramJson.nodes.find((node) => node.id === edge.targetNodeId);
+        {model.edges.map((edge) => {
+          const source = nodesById.get(edge.sourceNodeId);
+          const target = nodesById.get(edge.targetNodeId);
+
           if (!source || !target) return null;
-          const sourcePoint = toPreviewPoint(source.position, bounds);
-          const targetPoint = toPreviewPoint(target.position, bounds);
-          return <line key={edge.id} x1={sourcePoint.x} y1={sourcePoint.y} x2={targetPoint.x} y2={targetPoint.y} />;
+
+          return (
+            <line
+              className={styles.previewEdge}
+              key={edge.id}
+              x1={source.x + source.width / 2}
+              x2={target.x + target.width / 2}
+              y1={source.y + source.height / 2}
+              y2={target.y + target.height / 2}
+            />
+          );
         })}
-      </svg>
-      {template.diagramJson.nodes.map((node) => {
-        const point = toPreviewPoint(node.position, bounds);
-        return (
-          <span
-            className={node.kind === "design" ? styles.previewArea : styles.previewNode}
+        {model.nodes.filter((node) => node.isArea).map((node) => (
+          <rect
+            className={styles.previewAreaFrame}
+            height={node.height}
             key={node.id}
-            style={{ left: `${point.x}%`, top: `${point.y / 0.6}%` }}
-            title={node.label}
-          >
-            {node.label}
-          </span>
-        );
-      })}
+            width={node.width}
+            x={node.x}
+            y={node.y}
+          />
+        ))}
+        {model.nodes.filter((node) => !node.isArea).map((node) => (
+          <g className={styles.previewResource} key={node.id}>
+            <rect
+              className={styles.previewResourceTile}
+              height={node.height}
+              rx="1.5"
+              width={node.width}
+              x={node.x}
+              y={node.y}
+            />
+            {node.iconUrl ? (
+              <image
+                className={styles.previewResourceIcon}
+                height={node.height - 2}
+                href={node.iconUrl}
+                preserveAspectRatio="xMidYMid meet"
+                width={node.width - 2}
+                x={node.x + 1}
+                y={node.y + 1}
+              />
+            ) : null}
+          </g>
+        ))}
+      </svg>
+      {model.omittedNodeCount > 0 ? (
+        <span
+          aria-label={`${model.omittedNodeCount}개 노드 생략됨`}
+          className={styles.previewOmittedBadge}
+        >
+          +{model.omittedNodeCount}
+        </span>
+      ) : null}
     </div>
   );
-}
-
-type TemplateBounds = { readonly minX: number; readonly minY: number; readonly width: number; readonly height: number };
-
-// node 좌표를 미리보기 안의 0~100 범위로 바꾸기 위한 전체 경계를 계산합니다.
-function getTemplateBounds(template: BoardTemplate): TemplateBounds {
-  const positions = template.diagramJson.nodes.map((node) => node.position);
-  const minX = Math.min(...positions.map((position) => position.x));
-  const minY = Math.min(...positions.map((position) => position.y));
-  const maxX = Math.max(...positions.map((position) => position.x));
-  const maxY = Math.max(...positions.map((position) => position.y));
-  return { minX, minY, width: Math.max(1, maxX - minX), height: Math.max(1, maxY - minY) };
-}
-
-// Board 좌표 하나를 미리보기 여백 안의 위치로 바꿉니다.
-function toPreviewPoint(
-  position: { readonly x: number; readonly y: number },
-  bounds: TemplateBounds
-): { readonly x: number; readonly y: number } {
-  return {
-    x: 12 + ((position.x - bounds.minX) / bounds.width) * 76,
-    y: 10 + ((position.y - bounds.minY) / bounds.height) * 40
-  };
 }

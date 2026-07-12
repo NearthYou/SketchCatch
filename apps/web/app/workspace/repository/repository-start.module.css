@@ -1,35 +1,36 @@
 .page {
-  min-height: 100vh;
-  padding: 16px;
-  background: var(--color-surface-soft);
-  color: var(--color-ink);
+  --repo-ink: #171717;
+  --repo-body: #60646c;
+  --repo-muted: #999999;
+  --repo-line: #e7e8eb;
+  min-height: 100dvh;
+  background: #ffffff;
+  color: var(--repo-ink);
+  font-family: "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif;
 }
 
 .topbar {
   display: flex;
-  width: min(100%, 1200px);
   min-height: 64px;
   align-items: center;
   justify-content: space-between;
-  margin: 0 auto;
-  border-radius: var(--radius-frame);
+  border-bottom: 1px solid var(--repo-line);
   padding: 0 20px;
-  background: var(--color-canvas);
-  box-shadow: var(--shadow-card);
+  background: #ffffff;
 }
 
 .topbar > a:last-child {
-  color: var(--color-text-link);
+  color: #0d74ce;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
   text-decoration: none;
 }
 
 .content {
   display: grid;
-  width: min(100%, 880px);
+  width: min(100%, 1080px);
   margin: 0 auto;
-  padding: 72px 0 96px;
+  padding: 40px 28px 72px;
   gap: 24px;
 }
 
@@ -40,10 +41,10 @@
 
 .heading span,
 .analysisPanel span {
-  color: var(--color-muted);
-  font-size: 11px;
+  color: var(--repo-muted);
+  font-size: 10px;
   font-weight: 700;
-  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .heading h1,
@@ -56,13 +57,13 @@
 }
 
 .heading h1 {
-  font-size: 36px;
+  font-size: 24px;
   line-height: 1.2;
 }
 
 .heading p,
 .analysisPanel p {
-  color: var(--color-body);
+  color: var(--repo-body);
   font-size: 13px;
 }
 
@@ -70,10 +71,10 @@
 .publicUrlPanel,
 .analysisPanel {
   display: grid;
-  border: 1px solid var(--color-hairline-strong);
-  border-radius: var(--radius-card);
-  padding: 24px;
-  background: var(--color-canvas);
+  border: 1px solid var(--repo-line);
+  border-radius: 8px;
+  padding: 28px;
+  background: #ffffff;
   gap: 18px;
 }
 

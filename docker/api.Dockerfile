@@ -1,3 +1,5 @@
+ARG TRIVY_VERSION=0.72.0
+
 FROM node:24-alpine AS base
 WORKDIR /repo
 RUN corepack enable
@@ -20,7 +22,7 @@ RUN apk add --no-cache ca-certificates curl unzip \
   && terraform -version
 
 FROM alpine:3.22 AS trivy
-ARG TRIVY_VERSION=0.72.0
+ARG TRIVY_VERSION
 ARG TRIVY_ARCH=64bit
 RUN apk add --no-cache ca-certificates curl tar \
   && curl --fail --show-error --silent --location \
@@ -31,9 +33,12 @@ RUN apk add --no-cache ca-certificates curl tar \
   && trivy --version
 
 FROM node:24-alpine AS runner
+ARG TRIVY_VERSION
 WORKDIR /app
 ENV NODE_ENV=production
 ENV TRIVY_CACHE_DIR=/var/cache/sketchcatch/trivy
+ENV TRIVY_SKIP_CHECK_UPDATE=true
+ENV TRIVY_VERSION=${TRIVY_VERSION}
 COPY --from=terraform /usr/local/bin/terraform /usr/local/bin/terraform
 COPY --from=trivy /usr/local/bin/trivy /usr/local/bin/trivy
 COPY --from=build /repo/apps/api/dist ./dist

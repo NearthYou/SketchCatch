@@ -161,19 +161,6 @@ export function getTerraformFileCode(files: readonly TerraformVirtualFile[], fil
   return files.find((file) => file.fileName === fileName)?.code ?? "";
 }
 
-// Terraform 진단의 1부터 시작하는 줄 번호를 textarea 선택 위치로 바꿉니다.
-export function getTerraformLineStartOffset(terraformCode: string, line: number): number {
-  if (line <= 1) return 0;
-  const lines = terraformCode.split("\n");
-  let offset = 0;
-
-  for (let index = 0; index < Math.min(line - 1, lines.length); index += 1) {
-    offset += (lines[index]?.length ?? 0) + 1;
-  }
-
-  return Math.min(offset, terraformCode.length);
-}
-
 export function combineTerraformFiles(files: readonly TerraformVirtualFile[]): string {
   return files
     .map((file) => file.code.trim())

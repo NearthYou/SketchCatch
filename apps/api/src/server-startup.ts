@@ -13,6 +13,7 @@ import {
 import { createConfiguredDeploymentWorkerDispatcher } from "./deployments/deployment-worker-dispatcher.js";
 import { warmTerraformPluginCache as defaultWarmTerraformPluginCache } from "./deployments/terraform-plugin-cache-warmup.js";
 import type { TerraformRunResult } from "./deployments/terraform-runner.js";
+import { warmTrivyCheckBundle as defaultWarmTrivyCheckBundle } from "./services/terraform/trivy-terraform-scan.js";
 
 const deploymentDispatchGracePeriodMs = 5 * 60 * 1000;
 
@@ -32,6 +33,7 @@ export type StartApiServerOptions = {
   port: number;
   validateAwsCredentialSource?: () => void;
   warmTerraformPluginCache?: () => Promise<TerraformRunResult>;
+  warmTrivyCheckBundle?: () => Promise<void>;
   recoverInterruptedDeployments?: (
     logger?: StartupLogger
   ) => Promise<DeploymentStartupReconciliationResult | unknown[]>;
@@ -43,12 +45,14 @@ export async function startApiServer(options: StartApiServerOptions): Promise<vo
     options.validateAwsCredentialSource ?? assertNoStaticAwsCredentialsForApiServer;
   const warmTerraformPluginCache =
     options.warmTerraformPluginCache ?? defaultWarmTerraformPluginCache;
+  const warmTrivyCheckBundle = options.warmTrivyCheckBundle ?? defaultWarmTrivyCheckBundle;
   const recoverInterruptedDeployments =
     options.recoverInterruptedDeployments ?? defaultRecoverInterruptedDeployments;
 
   validateAwsCredentialSource();
   requireDatabaseUrl();
   await warmTerraformCacheBeforeListen(options.app, warmTerraformPluginCache);
+  await warmTrivyCacheBeforeListen(options.app, warmTrivyCheckBundle);
   const recoveryResult = await recoverInterruptedDeploymentsBeforeListen(
     options.app,
     recoverInterruptedDeployments
@@ -72,6 +76,18 @@ export async function startApiServer(options: StartApiServerOptions): Promise<vo
 
   if (recoveryResult.recoveryRetryCount > 0) {
     scheduleNextRecovery();
+  }
+}
+
+async function warmTrivyCacheBeforeListen(
+  app: StartupApp,
+  warmTrivyCheckBundle: () => Promise<void>
+): Promise<void> {
+  try {
+    await warmTrivyCheckBundle();
+    app.log.info("Trivy checks cache warm-up completed");
+  } catch (error) {
+    app.log.warn({ error }, "Trivy checks cache warm-up failed; continuing API startup");
   }
 }
 

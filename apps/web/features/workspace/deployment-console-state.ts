@@ -1,6 +1,5 @@
 import type { Deployment } from "@sketchcatch/types";
-
-type RequestState = "idle" | "loading" | "error";
+import type { RequestState } from "./workspace-right-panel.types";
 
 export type DirectDeploymentStepId = "save" | "preflight" | "plan" | "approve" | "apply";
 export type DirectDeploymentStepState =

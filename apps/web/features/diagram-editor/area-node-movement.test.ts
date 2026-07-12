@@ -457,29 +457,29 @@ test("applyAreaNodeParentAssignments does not assign overlapping areas moved tog
     size: { width: 500, height: 360 },
     zIndex: 1
   });
-  const autoscalingGroupApp = makeResourceNode({
-    id: "asg-app-1",
-    resourceType: "aws_autoscaling_group",
+  const securityGroupApp = makeResourceNode({
+    id: "sg-app-1",
+    resourceType: "aws_security_group",
     position: { x: 120, y: 80 },
     size: { width: 260, height: 220 },
     zIndex: 2
   });
-  const autoscalingGroupDb = makeResourceNode({
-    id: "asg-db-1",
-    resourceType: "aws_autoscaling_group",
+  const securityGroupDb = makeResourceNode({
+    id: "sg-db-1",
+    resourceType: "aws_security_group",
     position: { x: 170, y: 120 },
     size: { width: 160, height: 140 },
     zIndex: 3
   });
 
   const result = applyAreaNodeParentAssignments(
-    [subnet, autoscalingGroupApp, autoscalingGroupDb],
-    new Set([subnet.id, autoscalingGroupApp.id, autoscalingGroupDb.id])
+    [subnet, securityGroupApp, securityGroupDb],
+    new Set([subnet.id, securityGroupApp.id, securityGroupDb.id])
   );
 
   assert.equal(getNodeById(result, subnet.id)?.metadata?.parentAreaNodeId, undefined);
-  assert.equal(getNodeById(result, autoscalingGroupApp.id)?.metadata?.parentAreaNodeId, undefined);
-  assert.equal(getNodeById(result, autoscalingGroupDb.id)?.metadata?.parentAreaNodeId, undefined);
+  assert.equal(getNodeById(result, securityGroupApp.id)?.metadata?.parentAreaNodeId, undefined);
+  assert.equal(getNodeById(result, securityGroupDb.id)?.metadata?.parentAreaNodeId, undefined);
 });
 
 test("applyAreaNodeParentAssignments keeps existing area ancestry when nested areas move together", () => {
@@ -597,17 +597,17 @@ test("clearOutOfBoundsAreaParentAssignments requires full containment for area c
     position: { x: 0, y: 0 },
     size: { width: 200, height: 160 }
   });
-  const subnet = makeResourceNode({
-    id: "subnet-1",
+  const securityGroup = makeResourceNode({
+    id: "sg-1",
     parentAreaNodeId: region.id,
-    resourceType: "aws_subnet",
+    resourceType: "aws_security_group",
     position: { x: 120, y: 40 },
     size: { width: 120, height: 100 }
   });
 
-  const result = clearOutOfBoundsAreaParentAssignments([region, subnet], new Set([region.id]));
+  const result = clearOutOfBoundsAreaParentAssignments([region, securityGroup], new Set([region.id]));
 
-  assert.equal(getNodeById(result, subnet.id)?.metadata?.parentAreaNodeId, undefined);
+  assert.equal(getNodeById(result, securityGroup.id)?.metadata?.parentAreaNodeId, undefined);
 });
 
 test("clearOutOfBoundsAreaParentAssignments keeps regular resources on center-point containment", () => {
