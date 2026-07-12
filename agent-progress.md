@@ -18,6 +18,14 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-12 - Eliminate Template sibling visual collisions
+
+- Added a deterministic post-layout pass that separates renderable siblings using their real icon-and-caption bounds while moving Area subtrees together.
+- Kept collapsed Terraform helpers inside their inferred parent Areas without allowing them to enlarge visible layouts.
+- Applied the same materialized layout to all six deployable Templates and legacy Live Observation fixtures; saved user-authored Board coordinates remain untouched.
+- Verification: 33 focused Template tests, harness, lint, and typecheck passed; Chrome confirmed the six-card Gallery preview is visually separated.
+- Full build remains blocked by the pre-existing missing `apps/web/.codegraph` path.
+
 ### 2026-07-12 - Merge latest dev into template QA branch
 
 - Fast-forwarded local `dev` to `origin/dev` at `f5908be3` and merged it into `fix/gg/qa-followup`.
@@ -101,22 +109,6 @@ Short English-only working log for the current agent context. Older records are 
 - Fixed PR #343 so the Apply confirmation opens when apply becomes available but can still be dismissed, with a focused regression test.
 - Reconciled PR #343 with the merged template work from PR #317 while preserving archive parser hardening, generated Lambda/EKS support, and direct-deployment evidence.
 - Verification: focused deployment apply, Terraform artifact safety, and Apply confirmation tests passed; required repository checks were run before integration.
-
-### 2026-07-11 - Retire warm rollback and complete cost-first ECS operations
-
-- Deployed and released the main SHA, aligned API/web/worker images, and verified the one-off worker migration command.
-- Sanitized the retired EC2 host before creating an encrypted cold rollback AMI; removed the duplicate unencrypted AMI and snapshot.
-- Deleted the EC2 instance, old ALB stack, legacy ECS service/task registration, target group, and port 80 rules.
-- Added API/web autoscaling min 1 and max 2, circuit-breaker-preserving service ownership, low-cost alarms, and confirmed SNS delivery.
-- Replaced EC2 migrations with approved ECS one-off worker migrations, pre-migration snapshots, a compatibility guard, and three-snapshot retention.
-- Removed retired deployment/HTTPS workflows and reduced the GitHub deploy role to ECR, ECS, worker, scoped snapshot, and SNS permissions.
-- Added a disabled-by-default cold rollback Terraform root with scoped RDS/Redis access and documented restore procedures.
-
-### 2026-07-11 - Integrate latest dev into Live Observation PR
-
-- Merged the latest `origin/dev` UI rebuild and ECS production changes into PR #328 while preserving Live Observation and Board behavior.
-- Kept the ECS deployment workflow and removed the retired EC2 deployment workflow.
-- Reconciled the new Workspace shell, Board viewport behavior, Resource panel extraction, and Live Observation styles.
 
 ## Verification
 
