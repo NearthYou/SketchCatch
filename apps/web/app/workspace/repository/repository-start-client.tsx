@@ -51,6 +51,7 @@ export function RepositoryStartClient({ projectId, projectName }: RepositoryStar
   const [repositoryUrl, setRepositoryUrl] = useState("");
   const [defaultBranch, setDefaultBranch] = useState("main");
   const [publicAnalysis, setPublicAnalysis] = useState<SourceRepositoryAnalysisResult | null>(null);
+  const [repositoryConnectionError, setRepositoryConnectionError] = useState("");
   const [recommendationState, setRecommendationState] = useState<RequestState>("idle");
   const [deploymentType, setDeploymentType] = useState<RepositoryDeploymentType>("serverless");
   const [usesCiCd, setUsesCiCd] = useState(false);
@@ -67,6 +68,7 @@ export function RepositoryStartClient({ projectId, projectName }: RepositoryStar
   const previewDiagram = createRepositoryPreviewDiagram(projectName, activeRepository);
   const githubSettingsHref = createProjectGitHubSettingsHref(projectId);
   const isPublicAnalysisBusy = publicAnalysisState === "loading";
+  const showUrlAnalysis = Boolean(projectId && !activeRepository);
 
   useEffect(() => {
     if (!projectId) {
@@ -80,7 +82,7 @@ export function RepositoryStartClient({ projectId, projectName }: RepositoryStar
 
   async function loadRepositories(): Promise<void> {
     setLoadState("loading");
-    setErrorMessage("");
+    setRepositoryConnectionError("");
 
     try {
       const loadedRepositories = await listSourceRepositories(projectId);
@@ -94,7 +96,7 @@ export function RepositoryStartClient({ projectId, projectName }: RepositoryStar
       setLoadState("idle");
     } catch (error) {
       setLoadState("error");
-      setErrorMessage(getApiErrorMessage(error, "Repository connection status could not be loaded."));
+      setRepositoryConnectionError(getApiErrorMessage(error, "Repository connection status could not be loaded."));
     }
   }
 
@@ -241,20 +243,7 @@ export function RepositoryStartClient({ projectId, projectName }: RepositoryStar
           <p>{projectName}</p>
         </header>
 
-        {loadState === "loading" ? (
-          <ProductState description="Checking repository connection state." kind="loading" title="Loading" />
-        ) : null}
-
-        {loadState === "error" ? (
-          <ProductState
-            action={<button onClick={() => void loadRepositories()} type="button">Retry</button>}
-            description={errorMessage}
-            kind="error"
-            title="Repository status unavailable"
-          />
-        ) : null}
-
-        {loadState === "idle" && !activeRepository ? (
+        {showUrlAnalysis ? (
           <section className={styles.publicUrlPanel}>
             <GitBranch aria-hidden="true" size={24} />
             <h2>Analyze a GitHub repository URL</h2>
@@ -283,11 +272,12 @@ export function RepositoryStartClient({ projectId, projectName }: RepositoryStar
               </button>
             </form>
             <p className={styles.inlineHint}>
-              Public repositories can be analyzed without connecting GitHub. Private repositories still need access in project settings.
+              Public repositories are analyzed without a GitHub account connection. Private repositories and Git handoff need GitHub access from project settings.
             </p>
             {publicAnalysis ? (
               <PublicRepositoryAnalysisResult
                 analysis={publicAnalysis}
+                githubSettingsHref={githubSettingsHref}
                 isBusy={isPublicAnalysisBusy}
                 onOpenBoard={() => void openPublicRepositoryBoard()}
               />
@@ -295,12 +285,27 @@ export function RepositoryStartClient({ projectId, projectName }: RepositoryStar
           </section>
         ) : null}
 
-        {loadState === "idle" && !activeRepository ? (
+        {showUrlAnalysis ? (
           <section className={styles.connectionPanel}>
             <GitBranch aria-hidden="true" size={24} />
-            <h2>Use a connected GitHub App repository</h2>
+            <h2>Optional: use a connected GitHub App repository</h2>
+            <p className={styles.inlineHint}>
+              Use this for private repositories, PR creation, CI/CD handoff, or repository settings changes.
+            </p>
+            {loadState === "loading" ? (
+              <p className={styles.inlineHint} role="status">Checking connected repositories.</p>
+            ) : null}
+            {loadState === "error" ? (
+              <ProductState
+                action={<button onClick={() => void loadRepositories()} type="button">Retry</button>}
+                compact
+                description={repositoryConnectionError}
+                kind="error"
+                title="Connected repository status unavailable"
+              />
+            ) : null}
             <div className={styles.actions}>
-              <button disabled={actionState === "loading"} onClick={() => void loadCandidates()} type="button">
+              <button disabled={actionState === "loading" || loadState !== "idle"} onClick={() => void loadCandidates()} type="button">
                 Show available repositories
               </button>
               <Link className={styles.secondaryAction} href={githubSettingsHref}>
@@ -471,13 +476,17 @@ function RepositoryTemplateCandidates({
 
 function PublicRepositoryAnalysisResult({
   analysis,
+  githubSettingsHref,
   isBusy,
   onOpenBoard
 }: {
   readonly analysis: SourceRepositoryAnalysisResult;
+  readonly githubSettingsHref: string;
   readonly isBusy: boolean;
   readonly onOpenBoard: () => void;
 }) {
+  const hasPublicEvidence = analysis.evidenceFiles.some((file) => file.found);
+
   return (
     <section className={styles.publicAnalysisResult} aria-label="Public repository analysis result">
       <div>
@@ -496,6 +505,15 @@ function PublicRepositoryAnalysisResult({
           </span>
         ))}
       </div>
+      {!hasPublicEvidence ? (
+        <div className={styles.accessHint}>
+          <strong>Could not read public repository evidence.</strong>
+          <p>
+            If this repository is private, restricted, or uses another branch, connect GitHub access in project settings.
+          </p>
+          <Link href={githubSettingsHref}>Connect GitHub in settings</Link>
+        </div>
+      ) : null}
       <button
         disabled={isBusy || !analysis.recommendedTemplateId}
         onClick={onOpenBoard}

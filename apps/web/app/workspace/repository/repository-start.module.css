@@ -198,6 +198,20 @@
   color: var(--color-primary);
 }
 
+.accessHint {
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--radius-control);
+  padding: 12px;
+  background: var(--color-surface-soft);
+}
+
+.accessHint a {
+  color: var(--color-text-link);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
 .candidateList {
   display: grid;
   border-top: 1px solid var(--color-hairline);

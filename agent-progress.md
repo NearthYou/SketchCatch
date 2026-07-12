@@ -78,6 +78,8 @@ Short English-only working log for the current agent context. Older records are 
   - Wired the form to the existing public `/ai/source-repository-analysis` client.
   - Displayed detected signals, evidence files, recommendation reason, and the matched template.
   - Saved the recommended template board to the project draft before opening the workspace.
+  - Kept URL analysis visible even if connected GitHub repository status cannot be loaded.
+  - Added a project settings handoff when public evidence cannot be read, covering private/restricted repositories and branch mismatches.
 - Verification:
   - `pnpm --dir apps/web exec tsx --test features/workspace/repository-start-template-recommendation.test.ts`
   - `pnpm --dir apps/web typecheck`
