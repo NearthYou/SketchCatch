@@ -994,6 +994,19 @@ git commit -m "Refactor: Workspace와 Deployment Wizard 고도화 마감" -m "De
 - Web lint: `pnpm --filter @sketchcatch/web lint` PASS.
 - harness: `pnpm harness:check` PASS.
 
+#### PR 후속 검증 기록 — 2026-07-13
+
+- 깨끗한 PR commit worktree에서 `pnpm --filter @sketchcatch/web build`를 실행해 Next.js production build와 19개 static page 생성을 확인했다.
+- 로그인된 Chrome의 기존 `test01` 프로젝트로 실제 Workspace를 열어 `1280 × 720`, `768 × 1024`, `375 × 812` viewport를 점검했다.
+- Desktop Architecture Panel 실측 폭이 기존 `356px`로 계약보다 좁은 것을 발견했고, 외곽 rail을 `380~420px`로 제한해 내부 panel 실측 폭을 `376~416px`로 보정했다.
+- `768 × 1024`에서 Architecture Panel과 AI Chat이 전체 화면으로 열리고, `375 × 812`에서 AI header·transcript·composer와 Wizard header·현재 action이 함께 보이는 것을 확인했다.
+- `1280 × 720`에서 Deployment Wizard의 `24px` inset, step rail, current body가 동시에 표시되는 것을 확인했다.
+- 계획서 집중 test는 `170 passed / 0 failed`, Web typecheck·lint·harness는 PASS했다.
+- Web 전체 test는 `957`개 중 `954`개가 통과했다. 실패 3개는 깨끗한 `origin/dev`에서도 재현되는 기존 기준선 문제로, PR 변경 파일과 무관하다.
+  - 추적되지 않은 `docs/jh/000_AWS리소스목록_JH.md`를 요구하는 coverage test
+  - `aws-appautoscaling-target` catalog presentation 누락
+  - resource gallery의 고정 기대값 `126`과 실제 catalog `131` 불일치
+
 ---
 
 ## 2. Milestone과 PR 분리
