@@ -139,7 +139,7 @@ function createAnalysis(): SourceRepositoryAnalysisResult {
     detectedSignals: ["React", "Node API", "Python API", "Database", "Container"],
     evidenceFiles: [],
     recommendationReason: "React, Node API, Python API, Database, Container 신호가 있습니다.",
-    recommendedTemplateId: "template-api-db",
+    recommendedTemplateId: "three-tier-web-app",
     repositoryUrl: "https://github.com/example/fullstack",
     aiHandoff: {
       status: "template_selection_failed",

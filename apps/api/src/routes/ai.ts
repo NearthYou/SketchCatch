@@ -133,11 +133,7 @@ const architectureDraftBodySchema: z.ZodType<CreateArchitectureDraftRequest> = z
     .optional()
 });
 
-const repositoryTemplateIdSchema = z.enum([
-  "template-static-website",
-  "template-api-db",
-  "template-3tier"
-]);
+const repositoryTemplateIdSchema = z.enum(TEMPLATE_IDS);
 
 const sourceRepositoryAnalysisBodySchema = z.object({
   repositoryUrl: z
@@ -989,9 +985,12 @@ function getPublicRepositoryEvidencePriority(path: string): number {
 
 function getRepositoryTemplateContext(templateId: CreateGitHubArchitectureDraftRequest["selectedTemplateId"]): string {
   const contexts = {
-    "template-3tier": "Selected Template: ALB, Auto Scaling Group, EC2, and RDS three-tier architecture.",
-    "template-api-db": "Selected Template: VPC, EC2 API server, and RDS backend architecture.",
-    "template-static-website": "Selected Template: S3 and CloudFront static website architecture."
+    "ecs-fargate-container-app": "Selected Template: ECS Fargate service behind an Application Load Balancer.",
+    "eks-container-app": "Selected Template: EKS managed node group with a Kubernetes workload.",
+    "full-serverless-web-app": "Selected Template: Cognito-authenticated serverless web application.",
+    "minimal-serverless-api": "Selected Template: API Gateway, Lambda, and DynamoDB serverless API.",
+    "static-web-hosting": "Selected Template: S3 and CloudFront static website architecture.",
+    "three-tier-web-app": "Selected Template: ALB, Auto Scaling Group, EC2, and RDS three-tier architecture."
   } as const;
 
   return contexts[templateId];

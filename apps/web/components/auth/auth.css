@@ -103,6 +103,7 @@
 .authForm > label,
 .authField {
   display: grid;
+  align-content: start;
   min-width: 0;
   gap: 8px;
   color: #303238;

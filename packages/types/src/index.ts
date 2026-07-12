@@ -523,9 +523,12 @@ export type GitHubRepositoryCandidate = {
 };
 
 export type RepositoryAnalysisTemplateId =
-  | "template-static-website"
-  | "template-api-db"
-  | "template-3tier";
+  | "static-web-hosting"
+  | "minimal-serverless-api"
+  | "full-serverless-web-app"
+  | "three-tier-web-app"
+  | "ecs-fargate-container-app"
+  | "eks-container-app";
 
 export type RepositoryAnalysisEvidenceFile = {
   path: string;

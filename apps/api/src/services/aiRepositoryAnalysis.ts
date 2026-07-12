@@ -53,15 +53,19 @@ function selectRepositoryTemplate(
   signals: readonly string[]
 ): RepositoryAnalysisTemplateId | null {
   if (signals.includes("Auto Scaling")) {
-    return "template-3tier";
+    return "three-tier-web-app";
   }
 
   if (signals.includes("Database") || signals.includes("Node API") || signals.includes("Python API")) {
-    return "template-api-db";
+    return "three-tier-web-app";
+  }
+
+  if (signals.includes("Container")) {
+    return "ecs-fargate-container-app";
   }
 
   if (signals.includes("React")) {
-    return "template-static-website";
+    return "static-web-hosting";
   }
 
   return null;

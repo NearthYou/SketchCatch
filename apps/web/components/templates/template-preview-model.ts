@@ -3,10 +3,12 @@ import { isAreaNode } from "../../features/diagram-editor/area-nodes";
 import { isRenderableDiagramNode } from "../../features/diagram-editor/diagram-node-visibility";
 
 const MAX_VISIBLE_NODES = 8;
+const MAX_VISIBLE_AREA_NODES = 2;
 const VIEWBOX_HEIGHT = 60;
 const VIEWBOX_WIDTH = 100;
 const VIEWBOX_PADDING = 5;
 const RESOURCE_TILE_SIZE = 8;
+const PREVIEW_AREA_PADDING = 28;
 
 export type TemplatePreviewNode = {
   readonly id: string;
@@ -41,7 +43,9 @@ type DiagramBounds = {
 // while retaining the placement and catalog icon data of the nodes that remain visible.
 export function createTemplatePreviewModel(diagramJson: DiagramJson): TemplatePreviewModel {
   const renderableNodes = diagramJson.nodes.filter(isRenderableDiagramNode);
-  const selectedNodes = selectPreviewNodes(renderableNodes, diagramJson);
+  const selectedNodes = compactSelectedAreaFrames(
+    selectPreviewNodes(renderableNodes, diagramJson)
+  );
   const selectedNodeIds = new Set(selectedNodes.map((node) => node.id));
   const bounds = getDiagramBounds(selectedNodes);
 
@@ -56,19 +60,112 @@ export function createTemplatePreviewModel(diagramJson: DiagramJson): TemplatePr
   };
 }
 
+function compactSelectedAreaFrames(nodes: readonly DiagramNode[]): DiagramNode[] {
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const areaNodes = nodes
+    .filter(isAreaNode)
+    .sort((left, right) => getSelectedAreaDepth(right, nodeById) - getSelectedAreaDepth(left, nodeById));
+
+  for (const areaNode of areaNodes) {
+    const descendants = [...nodeById.values()].filter(
+      (candidate) => candidate.id !== areaNode.id && hasSelectedAreaAncestor(candidate, areaNode.id, nodeById)
+    );
+
+    if (descendants.length === 0) {
+      continue;
+    }
+
+    const minX = Math.min(...descendants.map((node) => node.position.x));
+    const minY = Math.min(...descendants.map((node) => node.position.y));
+    const maxX = Math.max(...descendants.map((node) => node.position.x + nodeWidth(node)));
+    const maxY = Math.max(...descendants.map((node) => node.position.y + nodeHeight(node)));
+
+    nodeById.set(areaNode.id, {
+      ...areaNode,
+      position: {
+        x: minX - PREVIEW_AREA_PADDING,
+        y: minY - PREVIEW_AREA_PADDING
+      },
+      size: {
+        width: maxX - minX + PREVIEW_AREA_PADDING * 2,
+        height: maxY - minY + PREVIEW_AREA_PADDING * 2
+      }
+    });
+  }
+
+  return nodes.map((node) => nodeById.get(node.id) ?? node);
+}
+
+function getSelectedAreaDepth(
+  node: DiagramNode,
+  nodeById: ReadonlyMap<string, DiagramNode>
+): number {
+  let depth = 0;
+  let parentAreaNodeId = node.metadata?.parentAreaNodeId;
+  const visitedIds = new Set<string>();
+
+  while (parentAreaNodeId && !visitedIds.has(parentAreaNodeId)) {
+    visitedIds.add(parentAreaNodeId);
+    depth += 1;
+    parentAreaNodeId = nodeById.get(parentAreaNodeId)?.metadata?.parentAreaNodeId;
+  }
+
+  return depth;
+}
+
+function hasSelectedAreaAncestor(
+  node: DiagramNode,
+  ancestorAreaNodeId: string,
+  nodeById: ReadonlyMap<string, DiagramNode>
+): boolean {
+  let parentAreaNodeId = node.metadata?.parentAreaNodeId;
+  const visitedIds = new Set<string>();
+
+  while (parentAreaNodeId && !visitedIds.has(parentAreaNodeId)) {
+    if (parentAreaNodeId === ancestorAreaNodeId) {
+      return true;
+    }
+
+    visitedIds.add(parentAreaNodeId);
+    parentAreaNodeId = nodeById.get(parentAreaNodeId)?.metadata?.parentAreaNodeId;
+  }
+
+  return false;
+}
+
 function selectPreviewNodes(
   renderableNodes: readonly DiagramNode[],
   diagramJson: DiagramJson
 ): DiagramNode[] {
-  const areaNodes = renderableNodes.filter(isAreaNode);
-  const selectedAreaNodes = areaNodes.slice(0, MAX_VISIBLE_NODES);
+  const visibleEdgeNodeIds = getVisibleEdgeNodeIds(renderableNodes, diagramJson);
+  const areaNodes = renderableNodes.filter(
+    (node) =>
+      isAreaNode(node) &&
+      (
+        visibleEdgeNodeIds.has(node.id) ||
+        hasRenderableDescendant(node, renderableNodes) ||
+        hasSpatiallyContainedResource(node, renderableNodes)
+      )
+  );
+  const nodeById = new Map(renderableNodes.map((node) => [node.id, node]));
+  const degreeByNodeId = getVisibleEdgeDegreeByNodeId(renderableNodes, diagramJson);
+  const runtimeDegreeByNodeId = getVisibleEdgeDegreeByNodeId(
+    renderableNodes,
+    diagramJson,
+    (edge) => edge.label !== "contains"
+  );
+  const selectedAreaNodes = selectPreviewAreaNodes(
+    areaNodes,
+    nodeById,
+    degreeByNodeId,
+    runtimeDegreeByNodeId
+  );
   const resourceSlots = MAX_VISIBLE_NODES - selectedAreaNodes.length;
 
   if (resourceSlots <= 0) {
     return selectedAreaNodes;
   }
 
-  const degreeByNodeId = getVisibleEdgeDegreeByNodeId(renderableNodes, diagramJson);
   const resourceNodes = renderableNodes
     .map((node, sourceIndex) => ({ node, sourceIndex }))
     .filter(({ node }) => !isAreaNode(node))
@@ -85,15 +182,123 @@ function selectPreviewNodes(
   return renderableNodes.filter((node) => selectedNodeIds.has(node.id));
 }
 
-function getVisibleEdgeDegreeByNodeId(
+function selectPreviewAreaNodes(
+  areaNodes: readonly DiagramNode[],
+  nodeById: ReadonlyMap<string, DiagramNode>,
+  degreeByNodeId: ReadonlyMap<string, number>,
+  runtimeDegreeByNodeId: ReadonlyMap<string, number>
+): DiagramNode[] {
+  const annotatedAreaNodes = areaNodes.map((node, sourceIndex) => ({
+    node,
+    sourceIndex,
+    depth: getSelectedAreaDepth(node, nodeById),
+    degree: degreeByNodeId.get(node.id) ?? 0,
+    runtimeDegree: runtimeDegreeByNodeId.get(node.id) ?? 0
+  }));
+  const rootAreas = annotatedAreaNodes.filter(({ depth }) => depth === 0);
+  const nestedAreas = annotatedAreaNodes.filter(({ depth }) => depth > 0);
+  const connectedNestedAreas = nestedAreas
+    .filter(({ runtimeDegree }) => runtimeDegree > 0)
+    .sort((left, right) =>
+      right.runtimeDegree - left.runtimeDegree || right.degree - left.degree || left.sourceIndex - right.sourceIndex
+    );
+
+  // Preserve the outer boundary and only the inner frame that carries the visible flow.
+  // If that flow has no area edge (for example a small VPC/Subnet template), retain its
+  // first nested frame so the containment relationship stays legible.
+  return [
+    ...rootAreas,
+    ...(connectedNestedAreas.length > 0 ? connectedNestedAreas : nestedAreas)
+  ]
+    .slice(0, MAX_VISIBLE_AREA_NODES)
+    .map(({ node }) => node);
+}
+
+function getVisibleEdgeNodeIds(
   renderableNodes: readonly DiagramNode[],
   diagramJson: DiagramJson
+): ReadonlySet<string> {
+  const renderableNodeIds = new Set(renderableNodes.map((node) => node.id));
+  const visibleEdgeNodeIds = new Set<string>();
+
+  for (const edge of diagramJson.edges) {
+    if (!renderableNodeIds.has(edge.sourceNodeId) || !renderableNodeIds.has(edge.targetNodeId)) {
+      continue;
+    }
+
+    visibleEdgeNodeIds.add(edge.sourceNodeId);
+    visibleEdgeNodeIds.add(edge.targetNodeId);
+  }
+
+  return visibleEdgeNodeIds;
+}
+
+function hasRenderableDescendant(
+  areaNode: DiagramNode,
+  renderableNodes: readonly DiagramNode[]
+): boolean {
+  const nodeById = new Map(renderableNodes.map((node) => [node.id, node]));
+
+  return renderableNodes.some((candidate) => {
+    if (candidate.id === areaNode.id || isAreaNode(candidate) && candidate.metadata?.parentAreaNodeId == null) {
+      return false;
+    }
+
+    let parentAreaNodeId = candidate.metadata?.parentAreaNodeId;
+    const visitedIds = new Set<string>();
+
+    while (parentAreaNodeId && !visitedIds.has(parentAreaNodeId)) {
+      if (parentAreaNodeId === areaNode.id) {
+        return true;
+      }
+
+      visitedIds.add(parentAreaNodeId);
+      parentAreaNodeId = nodeById.get(parentAreaNodeId)?.metadata?.parentAreaNodeId;
+    }
+
+    return false;
+  });
+}
+
+function hasSpatiallyContainedResource(
+  areaNode: DiagramNode,
+  renderableNodes: readonly DiagramNode[]
+): boolean {
+  return renderableNodes.some((candidate) => {
+    if (
+      candidate.id === areaNode.id ||
+      isAreaNode(candidate) ||
+      candidate.metadata?.parentAreaNodeId
+    ) {
+      return false;
+    }
+
+    const centerX = candidate.position.x + candidate.size.width / 2;
+    const centerY = candidate.position.y + candidate.size.height / 2;
+
+    return (
+      centerX >= areaNode.position.x &&
+      centerX <= areaNode.position.x + areaNode.size.width &&
+      centerY >= areaNode.position.y &&
+      centerY <= areaNode.position.y + areaNode.size.height
+    );
+  });
+}
+
+function getVisibleEdgeDegreeByNodeId(
+  renderableNodes: readonly DiagramNode[],
+  diagramJson: DiagramJson,
+  includeEdge: (edge: DiagramJson["edges"][number]) => boolean = () => true
 ): ReadonlyMap<string, number> {
   const renderableNodeIds = new Set(renderableNodes.map((node) => node.id));
   const degreeByNodeId = new Map(renderableNodes.map((node) => [node.id, 0]));
 
   for (const edge of diagramJson.edges) {
-    if (!renderableNodeIds.has(edge.sourceNodeId) || !renderableNodeIds.has(edge.targetNodeId)) {
+    if (
+      !includeEdge(edge) ||
+      !renderableNodeIds.has(edge.sourceNodeId) ||
+      !renderableNodeIds.has(edge.targetNodeId)
+    ) {
       continue;
     }
 

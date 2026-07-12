@@ -103,7 +103,7 @@ export function shouldAskPublicRepositoryDeploymentType(
   const signals = new Set(analysis.detectedSignals);
   const hasExplicitDeploymentSignal = ["Container", "Serverless", "Lambda", "EC2", "VM"]
     .some((signal) => signals.has(signal));
-  const isStaticFrontend = analysis.recommendedTemplateId === "template-static-website"
+  const isStaticFrontend = analysis.recommendedTemplateId === "static-web-hosting"
     && signals.has("React")
     && !signals.has("Node API")
     && !signals.has("Python API");
@@ -248,7 +248,7 @@ function selectPrimaryTemplateId(input: {
   readonly answers: Record<string, string | boolean>;
   readonly deploymentType: RepositoryDeploymentType;
 }): TemplateId {
-  if (input.analysis.recommendedTemplateId === "template-static-website") {
+  if (input.analysis.recommendedTemplateId === "static-web-hosting") {
     return "static-web-hosting";
   }
 

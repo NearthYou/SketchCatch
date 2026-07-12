@@ -19,6 +19,23 @@ test("resource settings logic does not bring back the removed Brainboard entry",
   assert.doesNotMatch(panelSource, /brainboardTile|kind: "brainboard"|id: "brainboard"/);
 });
 
+test("workspace Template panel renders the complete catalog inside its scrollable panel", () => {
+  assert.match(panelSource, /<div className="templateCatalogPanel">/);
+  assert.match(panelSource, /\{templates\.map\(\(template\) => \(/);
+  assert.doesNotMatch(panelSource, /templates\.slice\(0,\s*3\)/);
+});
+
+test("workspace Template cards apply their own template while the library control opens the modal", () => {
+  assert.match(
+    panelSource,
+    /templateCatalogCardWide" onClick=\{\(\) => setModalOpen\(true\)\}/
+  );
+  assert.match(
+    panelSource,
+    /templateCatalogCard" key=\{template\.id\} onClick=\{\(\) => onTemplateApply\?\.\(template\)\}/
+  );
+});
+
 test("resource catalog keeps category grouping and flat search results", () => {
   assert.match(panelSource, /resourceCategoryOrderByArea/);
   assert.match(panelSource, /getResourceCategoryGroups\(section\.id,\s*items\)/);

@@ -2103,7 +2103,7 @@ test("POST /api/ai/github-architecture-draft returns an Architecture Draft from 
       url: "/api/ai/github-architecture-draft",
       payload: {
         repositoryUrl: "https://github.com/example/backend-api",
-        selectedTemplateId: "template-api-db"
+        selectedTemplateId: "three-tier-web-app"
       }
     });
 

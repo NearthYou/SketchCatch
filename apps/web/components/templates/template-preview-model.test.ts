@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import type { DiagramEdge, DiagramJson, DiagramNode } from "../../../../packages/types/src";
 import { resourceCatalog } from "../../features/resource-settings/catalog";
-import { listBoardTemplates } from "../../features/resource-settings/template-library";
+import { listBoardTemplates, listLegacyBoardTemplates } from "../../features/resource-settings/template-library";
 import { createTemplatePreviewModel } from "./template-preview-model";
 
 test("createTemplatePreviewModel bounds dense diagrams, omits collapsed helpers, and retains catalog icons", () => {
@@ -146,7 +146,7 @@ test("createTemplatePreviewModel projects a large VPC as an in-bounds non-zero a
 });
 
 test("createTemplatePreviewModel keeps compact Template resources inside their projected area frames", () => {
-  const template = listBoardTemplates().find((candidate) => candidate.id === "template-api-db");
+  const template = listLegacyBoardTemplates().find((candidate) => candidate.id === "template-api-db");
   assert.ok(template);
 
   const model = createTemplatePreviewModel(template.diagramJson);
@@ -158,6 +158,75 @@ test("createTemplatePreviewModel keeps compact Template resources inside their p
   assertProjectedContainment(vpc, subnet);
   assertProjectedContainment(subnet, ec2);
   assertProjectedContainment(subnet, rds);
+});
+
+test("Live Observation preview prioritizes the traffic flow over empty network frames", () => {
+  const template = listLegacyBoardTemplates().find(
+    (candidate) => candidate.id === "template-live-observation"
+  );
+  assert.ok(template);
+
+  const model = createTemplatePreviewModel(template.diagramJson);
+  const selectedIds = new Set(model.nodes.map((node) => node.id));
+
+  assert.ok(selectedIds.has("template-live-vpc"));
+  assert.ok(selectedIds.has("template-live-asg"));
+  assert.ok(selectedIds.has("template-live-site-config"));
+  assert.ok(selectedIds.has("template-live-alb"));
+  assert.ok(!selectedIds.has("template-live-subnet-a"));
+  assert.ok(!selectedIds.has("template-live-alb-sg"));
+
+  const vpc = requirePreviewNode(model, "template-live-vpc");
+  const igw = requirePreviewNode(model, "template-live-igw");
+  const alb = requirePreviewNode(model, "template-live-alb");
+  const targetGroup = requirePreviewNode(model, "template-live-target-group");
+  const asg = requirePreviewNode(model, "template-live-asg");
+  const policy = requirePreviewNode(model, "template-live-policy");
+  const alarm = requirePreviewNode(model, "template-live-alarm");
+
+  assertProjectedContainment(vpc, igw);
+  assertProjectedContainment(vpc, alb);
+  assertProjectedContainment(vpc, targetGroup);
+  assertProjectedContainment(vpc, asg);
+  assert.equal(alb.y, targetGroup.y);
+  assert.ok(policy.y < alarm.y);
+});
+
+test("dense deployable templates retain their primary runtime flow in the preview", () => {
+  const templates = listBoardTemplates();
+  const expectations = [
+    {
+      id: "three-tier-web-app",
+      nodeIds: ["load-balancer", "application-group", "database"],
+      edgeIds: ["alb-asg", "app-db"]
+    },
+    {
+      id: "ecs-fargate-container-app",
+      nodeIds: ["cluster", "service", "task"],
+      edgeIds: ["cluster-service", "service-task"]
+    },
+    {
+      id: "eks-container-app",
+      nodeIds: ["cluster", "node-group", "deployment", "service"],
+      edgeIds: ["cluster-node-group", "deployment-service"]
+    }
+  ] as const;
+
+  for (const expectation of expectations) {
+    const template = templates.find((candidate) => candidate.id === expectation.id);
+    assert.ok(template, `Missing ${expectation.id} template`);
+
+    const model = createTemplatePreviewModel(template.diagramJson);
+    const selectedIds = new Set(model.nodes.map((node) => node.id));
+    const edgeIds = new Set(model.edges.map((edge) => edge.id));
+
+    for (const nodeId of expectation.nodeIds) {
+      assert.ok(selectedIds.has(`template-${expectation.id}-${nodeId}`), `${expectation.id}: ${nodeId}`);
+    }
+    for (const edgeId of expectation.edgeIds) {
+      assert.ok(edgeIds.has(`template-${expectation.id}-${edgeId}`), `${expectation.id}: ${edgeId}`);
+    }
+  }
 });
 
 test("TemplateDiagramPreview keeps the SVG icon path label-free and bounded", () => {
