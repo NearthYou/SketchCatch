@@ -79,7 +79,41 @@ export function getPublicRepositoryDeploymentDefault(
 ): RepositoryDeploymentType {
   const signals = new Set(analysis.detectedSignals);
   if (signals.has("Container")) return "container";
+  if (signals.has("Serverless") || signals.has("Lambda")) return "serverless";
+  if (signals.has("EC2") || signals.has("VM")) return "ec2_vm";
   if (signals.has("React") && !signals.has("Node API") && !signals.has("Python API")) return "serverless";
+  return "ec2_vm";
+}
+
+export function shouldAskPublicRepositoryDeploymentType(
+  analysis: SourceRepositoryAnalysisResult
+): boolean {
+  const signals = new Set(analysis.detectedSignals);
+  const hasExplicitDeploymentSignal = ["Container", "Serverless", "Lambda", "EC2", "VM"]
+    .some((signal) => signals.has(signal));
+  const isStaticFrontend = analysis.recommendedTemplateId === "template-static-website"
+    && signals.has("React")
+    && !signals.has("Node API")
+    && !signals.has("Python API");
+
+  return !hasExplicitDeploymentSignal && !isStaticFrontend;
+}
+
+export function getPublicRepositoryTemplateDeploymentType(
+  templateId: TemplateId
+): RepositoryDeploymentType {
+  if (templateId === "ecs-fargate-container-app" || templateId === "eks-container-app") {
+    return "container";
+  }
+
+  if (
+    templateId === "full-serverless-web-app"
+    || templateId === "minimal-serverless-api"
+    || templateId === "static-web-hosting"
+  ) {
+    return "serverless";
+  }
+
   return "ec2_vm";
 }
 

@@ -7,12 +7,11 @@ Short English-only working log for the current agent context. Older records are 
 - Branch: `feat/ck/349-repo-analysis`.
 - New project Repository start now shows the Repository URL analysis panel above the primary `Repository 분석하기` action.
 - Public GitHub URL analysis now reads repository tree evidence, including nested package, Dockerfile, framework config, and README paths.
-- API startup now fails fast before listening when `DATABASE_URL` is not configured, instead of letting DB-backed routes such as `/api/auth/login` return a runtime 500.
-- The latest follow-up fix maps missing `source_repositories` migrations to a stable API/UI message instead of exposing raw SQL.
 - GitHub repository-start and callback screens now route permission expansion to project GitHub settings instead of opening GitHub App installation directly.
 - New project Repository start now opens an inline public GitHub URL analysis panel instead of routing to the separate Repository start page.
 - Public Repository recommendation now shows ranked template candidates, asks follow-up questions, and creates an enriched repository-aware diagram only after the user accepts board creation.
 - Repository template candidates now use readable light selection rows with scoped button styles, explicit reasons/tradeoffs, and responsive layouts.
+- Deployment type is hidden when repository evidence is decisive and shown only for ambiguous analysis.
 - Local `db:migrate` could not be run in this shell because `DATABASE_URL` is empty.
 - No cloud deployment, Terraform apply, or infrastructure mutation was run during this work session.
 
@@ -25,10 +24,11 @@ Short English-only working log for the current agent context. Older records are 
   - Removed the broad result-panel button selector that overrode candidate styles.
   - Split candidate content into rank, title, fit, reasons, tradeoffs, and selected state.
   - Added responsive one-column candidate details and preserved source title casing.
+  - Removed the duplicate deployment selector for repositories with decisive deployment evidence.
 - Verification:
-  - Focused source regression test, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
+  - Focused recommendation tests, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
   - Lint retains only the pre-existing API `setNow` warning.
-  - Browser-verified desktop and 390px layouts with no candidate horizontal overflow.
+  - Browser-verified candidate readability, 390px layout, and conditional deployment-question removal.
 
 ### 2026-07-12 - Fail fast when API database URL is missing
 

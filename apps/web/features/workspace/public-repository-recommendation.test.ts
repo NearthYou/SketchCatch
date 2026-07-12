@@ -4,7 +4,9 @@ import type { SourceRepositoryAnalysisResult } from "@sketchcatch/types";
 import {
   createPublicRepositoryDiagram,
   createPublicRepositoryRecommendation,
-  getPublicRepositoryDeploymentDefault
+  getPublicRepositoryDeploymentDefault,
+  getPublicRepositoryTemplateDeploymentType,
+  shouldAskPublicRepositoryDeploymentType
 } from "./public-repository-recommendation";
 
 test("public repository recommendation returns multiple candidates and follow-up questions", () => {
@@ -17,11 +19,24 @@ test("public repository recommendation returns multiple candidates and follow-up
   });
 
   assert.equal(deploymentType, "container");
+  assert.equal(shouldAskPublicRepositoryDeploymentType(analysis), false);
   assert.ok(recommendation.candidates.length >= 3);
   assert.equal(recommendation.candidates[0]?.templateId, "ecs-fargate-container-app");
   assert.ok(recommendation.questions.length >= 5);
   assert.ok(recommendation.questions.some((question) => question.id === "primary_runtime"));
   assert.ok(recommendation.questions.some((question) => question.id === "container_runtime"));
+});
+
+test("deployment type is only requested when repository evidence cannot determine it", () => {
+  const ambiguousAnalysis: SourceRepositoryAnalysisResult = {
+    ...createAnalysis(),
+    detectedSignals: ["Node API", "Database"]
+  };
+
+  assert.equal(shouldAskPublicRepositoryDeploymentType(ambiguousAnalysis), true);
+  assert.equal(getPublicRepositoryTemplateDeploymentType("ecs-fargate-container-app"), "container");
+  assert.equal(getPublicRepositoryTemplateDeploymentType("full-serverless-web-app"), "serverless");
+  assert.equal(getPublicRepositoryTemplateDeploymentType("three-tier-web-app"), "ec2_vm");
 });
 
 test("public repository diagram enriches the selected template with repository signals", () => {

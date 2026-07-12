@@ -34,6 +34,8 @@ import {
   createPublicRepositoryDiagram,
   createPublicRepositoryRecommendation,
   getPublicRepositoryDeploymentDefault,
+  getPublicRepositoryTemplateDeploymentType,
+  shouldAskPublicRepositoryDeploymentType,
   type PublicRepositoryTemplateId
 } from "../../../features/workspace/public-repository-recommendation";
 import { AiDraftBoardPreview } from "../ai/ai-draft-board-preview";
@@ -198,10 +200,13 @@ export function RepositoryStartClient({
       return;
     }
 
+    const effectiveDeploymentType = shouldAskPublicRepositoryDeploymentType(publicAnalysis)
+      ? deploymentType
+      : getPublicRepositoryTemplateDeploymentType(templateId);
     const diagram = createPublicRepositoryDiagram({
       analysis: publicAnalysis,
       answers,
-      deploymentType,
+      deploymentType: effectiveDeploymentType,
       projectName,
       templateId,
       usesCiCd
@@ -569,6 +574,7 @@ function PublicRepositoryRecommendationStep({
   readonly usesCiCd: boolean;
 }) {
   const recommendation = createPublicRepositoryRecommendation({ analysis, answers, deploymentType });
+  const shouldAskDeploymentType = shouldAskPublicRepositoryDeploymentType(analysis);
   const selectedCandidate = recommendation.candidates.find(
     (candidate) => candidate.templateId === selectedTemplateId
   ) ?? recommendation.candidates[0];
@@ -621,17 +627,19 @@ function PublicRepositoryRecommendationStep({
           })}
         </div>
       ) : null}
-      <label>
-        <span>배포 방식</span>
-        <select
-          value={deploymentType}
-          onChange={(event) => onDeploymentTypeChange(event.target.value as RepositoryDeploymentType)}
-        >
-          <option value="ec2_vm">EC2/VM 기반</option>
-          <option value="container">컨테이너 기반</option>
-          <option value="serverless">서버리스 기반</option>
-        </select>
-      </label>
+      {shouldAskDeploymentType ? (
+        <label>
+          <span>원하는 배포 방식</span>
+          <select
+            value={deploymentType}
+            onChange={(event) => onDeploymentTypeChange(event.target.value as RepositoryDeploymentType)}
+          >
+            <option value="ec2_vm">EC2/VM 기반</option>
+            <option value="container">컨테이너 기반</option>
+            <option value="serverless">서버리스 기반</option>
+          </select>
+        </label>
+      ) : null}
       <label className={styles.checkboxLabel}>
         <input checked={usesCiCd} onChange={(event) => onUsesCiCdChange(event.target.checked)} type="checkbox" />
         <span>CI/CD 인계 사용</span>
