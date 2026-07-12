@@ -36,7 +36,7 @@ const diagramEditorStylesSource = readFeatureFile(
 
 test("deploy opens a full-screen console instead of rendering deployment inside the right panel", () => {
   const deploymentConsoleIndex = componentSource.indexOf(
-    "const deploymentConsoleContent = isDeploymentConsoleOpen && canRenderDeploymentPortal ? ("
+    "const deploymentConsoleContent = isDeploymentConsoleOpen && canRenderDeploymentPortal && deploymentBaseline ? ("
   );
   const deploymentPanelIndex = componentSource.indexOf("<DeploymentPanel", deploymentConsoleIndex);
   const nextRightPanelViewIndex = componentSource.indexOf(
@@ -61,10 +61,10 @@ test("deploy opens a full-screen console instead of rendering deployment inside 
   assert.match(componentSource, /import \{ createPortal \} from "react-dom";/);
   assert.match(componentSource, /isDeploymentConsoleOpen && canRenderDeploymentPortal/);
   assert.match(componentSource, /createPortal\(deploymentConsoleContent, document\.body\)/);
-  assert.match(componentSource, /onExpandedClose=\{\(\) => setIsDeploymentConsoleOpen\(false\)\}/);
+  assert.match(componentSource, /onExpandedClose=\{closeDeploymentConsole\}/);
   assert.match(componentSource, /openDeploymentConsole/);
   assert.match(componentSource, /setIsDeploymentConsoleOpen\(true\);/);
-  assert.match(pendingDeploymentConsoleBranch, /setIsDeploymentConsoleOpen\(true\);/);
+  assert.match(pendingDeploymentConsoleBranch, /openDeploymentWithBaseline\(\);/);
   assert.doesNotMatch(pendingDeploymentConsoleBranch, /context\.setRightPanelOpen\(false\);/);
   assert.match(deploymentPanelSource, /const isDeploymentOverlayOpen = fullScreenOnly \|\| isDeploymentExpanded;/);
   assert.match(deploymentPanelSource, /\{isDeploymentOverlayOpen \? \(/);
@@ -1069,7 +1069,7 @@ test("deployment results render as compact rows instead of cards", () => {
 
 test("deployment creation prepares fresh snapshot and terraform artifact before creating the deployment", () => {
   const prepareIndex = deploymentPanelSource.indexOf(
-    "const savedArtifacts = await onPrepareDeploymentArtifacts();"
+    "const savedArtifacts = await onPrepareDeploymentArtifacts(baseline);"
   );
   const createDeploymentIndex = deploymentPanelSource.indexOf(
     "const deployment = await createDeployment",
@@ -1198,12 +1198,22 @@ test("deployment baseline save button shows pending and saved icons", () => {
   assert.match(deploymentPanelSource, /<DeploymentBaselineIcon size=\{16\} aria-hidden="true" \/>/);
   assert.match(componentSource, /lastSavedDeploymentBaselineFingerprint/);
   assert.match(componentSource, /isDeploymentBaselineDirty/);
-  assert.match(componentSource, /toDeploymentBaselineFingerprint\(preparedSource\.diagramJson\)/);
+  assert.match(componentSource, /setLastSavedDeploymentBaselineFingerprint\(baseline\.fingerprint\)/);
   assert.match(componentSource, /setIsDeploymentBaselineDirty\(false\)/);
   assert.match(
     componentSource,
     /hasUnsavedDeploymentBaseline=\{hasUnsavedDeploymentBaseline\}/
   );
+});
+
+test("deployment console reads only the immutable baseline captured on entry", () => {
+  assert.match(componentSource, /createDeploymentBaseline/);
+  assert.match(componentSource, /const \[deploymentBaseline, setDeploymentBaseline\]/);
+  assert.match(componentSource, /baseline=\{deploymentBaseline\}/);
+  assert.match(deploymentPanelSource, /readonly baseline:\s*DeploymentBaseline/);
+  assert.match(deploymentPanelSource, /createWorkspaceAiBoardSnapshot\(baseline\.diagram\)/);
+  assert.match(deploymentPanelSource, /terraformFiles:\s*\[\.\.\.baseline\.terraformFiles\]/);
+  assert.doesNotMatch(deploymentPanelSource, /onGetTerraformFiles/);
 });
 
 test("pre-deployment check is owned by the deployment tab", () => {
@@ -1214,19 +1224,17 @@ test("pre-deployment check is owned by the deployment tab", () => {
   assert.match(deploymentPanelSource, /addTerraformDiagnosticsToPreDeploymentAnalysis/);
   assert.match(deploymentPanelSource, /createPreDeploymentAnalysisFromTerraformDiagnostics/);
   assert.match(deploymentPanelSource, /onValidateTerraformDiagnostics/);
-  assert.match(deploymentPanelSource, /onGetTerraformFiles/);
-  assert.match(deploymentPanelSource, /await onValidateTerraformDiagnostics\(\)/);
+  assert.doesNotMatch(deploymentPanelSource, /onGetTerraformFiles/);
+  assert.match(deploymentPanelSource, /await onValidateTerraformDiagnostics\(baseline\)/);
   assert.match(deploymentPanelSource, /currentTerraformDiagnostics/);
   assert.match(deploymentPanelSource, /diagnostic\.severity === "error"/);
-  assert.match(deploymentPanelSource, /terraformFiles:\s*\[\.\.\.onGetTerraformFiles\(\)\]/);
+  assert.match(deploymentPanelSource, /terraformFiles:\s*\[\.\.\.baseline\.terraformFiles\]/);
   assert.match(deploymentPanelSource, /createWorkspaceAiBoardSnapshot/);
-  assert.match(componentSource, /diagramJson=\{context\.diagram\}/);
+  assert.match(componentSource, /baseline=\{deploymentBaseline\}/);
   assert.match(componentSource, /validateTerraformForPreDeployment/);
-  assert.match(componentSource, /getTerraformFilesForPreDeployment/);
-  assert.match(componentSource, /onGetTerraformFiles=\{getTerraformFilesForPreDeployment\}/);
+  assert.match(componentSource, /terraformFiles:\s*\[\.\.\.baseline\.terraformFiles\]/);
   assert.match(componentSource, /preDeploymentCheckState=\{preDeploymentCheckState\}/);
   assert.match(componentSource, /onPreDeploymentCheckStateChange=\{setPreDeploymentCheckState\}/);
-  assert.match(componentSource, /validateCurrentTerraform/);
   assert.match(terraformPanelSource, /validateCurrentTerraform/);
   assert.doesNotMatch(aiChatDockSource, /runAiPreDeploymentCheck/);
   assert.doesNotMatch(aiChatDockSource, /WorkspaceAiPreDeploymentResult/);

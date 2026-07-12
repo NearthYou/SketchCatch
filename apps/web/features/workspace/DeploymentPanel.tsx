@@ -13,14 +13,12 @@ import type {
   Deployment,
   DeploymentFailureExplanation,
   DeploymentLiveProfile,
-  DiagramJson,
   DeploymentLog,
   GitCicdHandoff,
   GitCicdHandoffPipelineStatus,
   SourceRepository,
   TerraformDiagnostic,
   TerraformSourceLocation,
-  TerraformSyncFileInput,
   TerraformOutput
 } from "@sketchcatch/types";
 import { Clipboard, ClipboardCheck, Code2, GitBranch, Maximize2, ShieldCheck, Trash2, X } from "lucide-react";
@@ -77,6 +75,7 @@ import {
 } from "./pre-deployment-diagnostics";
 import type { AiRequestState } from "./WorkspaceAiPanelPieces";
 import type { SavedWorkspaceTerraformArtifact } from "./workspace-deployment-artifacts";
+import type { DeploymentBaseline } from "./deployment-baseline";
 import type { RequestState } from "./workspace-right-panel.types";
 import {
   canLoadDeploymentData,
@@ -118,14 +117,12 @@ export const initialPreDeploymentCheckState: DeploymentPreDeploymentCheckState =
 };
 
 export function DeploymentPanel({
-  currentNodeCount,
+  baseline,
   deploymentAvailability,
-  diagramJson,
   fullScreenOnly = false,
   hasUnsavedDeploymentBaseline,
   initialExpanded = false,
   onExpandedClose,
-  onGetTerraformFiles,
   onOpenFindingTerraformSource,
   onPrepareDeploymentArtifacts,
   onPreDeploymentCheckStateChange,
@@ -134,22 +131,25 @@ export function DeploymentPanel({
   projectId,
   projectName
 }: {
-  readonly currentNodeCount: number;
+  readonly baseline: DeploymentBaseline;
   readonly deploymentAvailability: DeploymentAvailability;
-  readonly diagramJson: DiagramJson;
   readonly fullScreenOnly?: boolean | undefined;
   readonly hasUnsavedDeploymentBaseline: boolean;
   readonly initialExpanded?: boolean | undefined;
   readonly onExpandedClose?: (() => void) | undefined;
-  readonly onGetTerraformFiles: () => readonly TerraformSyncFileInput[];
   readonly onOpenFindingTerraformSource: (finding: CheckFinding) => TerraformSourceLocation | null;
-  readonly onPrepareDeploymentArtifacts: () => Promise<SavedWorkspaceTerraformArtifact>;
+  readonly onPrepareDeploymentArtifacts: (
+    baseline: DeploymentBaseline
+  ) => Promise<SavedWorkspaceTerraformArtifact>;
   readonly onPreDeploymentCheckStateChange: Dispatch<SetStateAction<DeploymentPreDeploymentCheckState>>;
-  readonly onValidateTerraformDiagnostics: () => Promise<TerraformDiagnostic[]>;
+  readonly onValidateTerraformDiagnostics: (
+    baseline: DeploymentBaseline
+  ) => Promise<TerraformDiagnostic[]>;
   readonly preDeploymentCheckState: DeploymentPreDeploymentCheckState;
   readonly projectId: string;
   readonly projectName: string;
 }) {
+  const currentNodeCount = baseline.diagram.nodes.length;
   const [awsConnections, setAwsConnections] = useState<AwsConnection[]>([]);
   const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [gitCicdHandoffs, setGitCicdHandoffs] = useState<GitCicdHandoff[]>([]);
@@ -159,7 +159,7 @@ export function DeploymentPanel({
   const [terraformOutputs, setTerraformOutputs] = useState<TerraformOutput[]>([]);
   const [selectedAwsConnectionId, setSelectedAwsConnectionId] = useState("");
   const [selectedLiveProfile, setSelectedLiveProfile] =
-    useState<DeploymentLiveProfile>(() => getRecommendedDeploymentLiveProfile(diagramJson));
+    useState<DeploymentLiveProfile>(() => getRecommendedDeploymentLiveProfile(baseline.diagram));
   const [trafficSimulatorState, setTrafficSimulatorState] =
     useState<RequestState>("idle");
   const [trafficSimulatorSummary, setTrafficSimulatorSummary] = useState("");
@@ -306,8 +306,8 @@ export function DeploymentPanel({
   const preDeploymentErrorMessage = preDeploymentCheckState.errorMessage;
   const preDeploymentFingerprint = preDeploymentCheckState.fingerprint;
   const boardSnapshot = useMemo(
-    () => createWorkspaceAiBoardSnapshot(diagramJson),
-    [diagramJson]
+    () => createWorkspaceAiBoardSnapshot(baseline.diagram),
+    [baseline]
   );
   const hasStalePreDeploymentAnalysis =
     preDeploymentAnalysis !== null &&
@@ -809,7 +809,7 @@ export function DeploymentPanel({
     });
 
     try {
-      const currentTerraformDiagnostics = await onValidateTerraformDiagnostics();
+      const currentTerraformDiagnostics = await onValidateTerraformDiagnostics(baseline);
       const hasTerraformDiagnosticError = currentTerraformDiagnostics.some(
         (diagnostic) => diagnostic.severity === "error"
       );
@@ -826,7 +826,7 @@ export function DeploymentPanel({
       const result = addTerraformDiagnosticsToPreDeploymentAnalysis(
         await runAiPreDeploymentCheck({
           architectureJson: boardSnapshot.architectureJson,
-          terraformFiles: [...onGetTerraformFiles()]
+          terraformFiles: [...baseline.terraformFiles]
         }),
         currentTerraformDiagnostics
       );
@@ -918,7 +918,7 @@ export function DeploymentPanel({
     }
 
     await runRequest(async () => {
-      const savedArtifacts = await onPrepareDeploymentArtifacts();
+      const savedArtifacts = await onPrepareDeploymentArtifacts(baseline);
       const snapshot = await loadDeploymentPanelSnapshot();
 
       applyDeploymentPanelSnapshot(snapshot);
@@ -949,7 +949,7 @@ export function DeploymentPanel({
     }
 
     await runRequest(async () => {
-      await onPrepareDeploymentArtifacts();
+      await onPrepareDeploymentArtifacts(baseline);
       const snapshot = await loadDeploymentPanelSnapshot();
 
       applyDeploymentPanelSnapshot(snapshot);

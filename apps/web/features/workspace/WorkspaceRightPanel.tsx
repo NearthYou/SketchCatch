@@ -35,7 +35,6 @@ import {
 import { ResourceWorkspacePanel } from "./ResourceWorkspacePanel";
 import {
   TerraformCodePanel,
-  type PreparedTerraformArtifactSource,
   type TerraformCodePanelHandle
 } from "./TerraformCodePanel";
 import { WorkspaceIssuesPanel } from "./WorkspaceIssuesPanel";
@@ -48,12 +47,17 @@ import {
   type SavedWorkspaceTerraformArtifact
 } from "./workspace-deployment-artifacts";
 import {
+  combineDeploymentBaselineTerraformFiles,
+  createDeploymentBaseline,
+  type DeploymentBaseline
+} from "./deployment-baseline";
+import { validateTerraformCode } from "./api";
+import {
   createTerraformLeaveSaveStartFeedback,
   resolveTerraformLeaveSaveCompletion,
   type TerraformLeaveSaveFeedback,
   type TerraformLeaveSaveState
 } from "./terraform-leave-save-state";
-import { toDeploymentBaselineFingerprint } from "./terraform-panel-utils";
 import {
   markTerraformIssuesStale,
   mergeTerraformValidationDiagnostics,
@@ -141,6 +145,7 @@ export function WorkspaceRightPanel({
     useState<TerraformSourceLocation | null>(null);
   const [preDeploymentCheckState, setPreDeploymentCheckState] =
     useState<DeploymentPreDeploymentCheckState>(initialPreDeploymentCheckState);
+  const [deploymentBaseline, setDeploymentBaseline] = useState<DeploymentBaseline | null>(null);
   const [isDeploymentConsoleOpen, setIsDeploymentConsoleOpen] = useState(false);
   const [canRenderDeploymentPortal, setCanRenderDeploymentPortal] = useState(false);
   const [isLiveObservationOpen, setIsLiveObservationOpen] = useState(false);
@@ -158,13 +163,9 @@ export function WorkspaceRightPanel({
     terraformDiagnostics.some((diagnostic) => diagnostic.severity === "error") ||
     architectureDiagnostics.some((diagnostic) => diagnostic.severity === "error");
   const issueCount = terraformDiagnostics.length + architectureDiagnostics.length;
-  const currentDeploymentBaselineFingerprint = useMemo(
-    () => toDeploymentBaselineFingerprint(context.diagram),
-    [context.diagram]
-  );
-  const hasUnsavedDeploymentBaseline =
+  const hasUnsavedDeploymentBaseline = deploymentBaseline === null ||
     isDeploymentBaselineDirty ||
-    lastSavedDeploymentBaselineFingerprint !== currentDeploymentBaselineFingerprint;
+    lastSavedDeploymentBaselineFingerprint !== deploymentBaseline.fingerprint;
 
   useEffect(() => {
     setCanRenderDeploymentPortal(true);
@@ -309,6 +310,24 @@ export function WorkspaceRightPanel({
     return false;
   }, [hasUnsavedTerraformChanges]);
 
+  const readCurrentTerraformFiles = useCallback((): readonly TerraformSyncFileInput[] => {
+    return (terraformPanelRef.current?.getTerraformFiles() ?? []).map((file) => ({
+      fileName: file.fileName,
+      terraformCode: file.code
+    }));
+  }, []);
+
+  const openDeploymentWithBaseline = useCallback((): void => {
+    const baseline = createDeploymentBaseline({
+      diagram: context.diagram,
+      terraformFiles: readCurrentTerraformFiles(),
+      hasUnsavedTerraformChanges: false
+    });
+
+    setDeploymentBaseline(baseline);
+    setIsDeploymentConsoleOpen(true);
+  }, [context.diagram, readCurrentTerraformFiles]);
+
   const runPendingTerraformLeaveAction = useCallback((): void => {
     const pendingAction = pendingTerraformLeaveActionRef.current;
     pendingTerraformLeaveActionRef.current = null;
@@ -326,7 +345,7 @@ export function WorkspaceRightPanel({
       }
 
       if (pendingAction.kind === "deployment-console") {
-        setIsDeploymentConsoleOpen(true);
+        openDeploymentWithBaseline();
         return;
       }
 
@@ -341,7 +360,7 @@ export function WorkspaceRightPanel({
         skipTerraformLeaveGuardRef.current = false;
       }, 0);
     }
-  }, [context]);
+  }, [context, openDeploymentWithBaseline]);
 
   const requestView = useCallback((nextView: WorkspaceRightPanelView): void => {
     if (nextView === activeView) {
@@ -440,8 +459,13 @@ export function WorkspaceRightPanel({
       return;
     }
 
-    setIsDeploymentConsoleOpen(true);
-  }, [requestTerraformLeave]);
+    openDeploymentWithBaseline();
+  }, [openDeploymentWithBaseline, requestTerraformLeave]);
+
+  const closeDeploymentConsole = useCallback((): void => {
+    setIsDeploymentConsoleOpen(false);
+    setDeploymentBaseline(null);
+  }, []);
 
   const openLiveObservation = useCallback((): void => {
     setIsLiveObservationOpen(true);
@@ -546,44 +570,42 @@ export function WorkspaceRightPanel({
   }
 
   const savePreparedTerraformArtifact = useCallback(
-    async (source: PreparedTerraformArtifactSource): Promise<SavedWorkspaceTerraformArtifact> => {
+    async (baseline: DeploymentBaseline): Promise<SavedWorkspaceTerraformArtifact> => {
       return saveWorkspaceTerraformArtifact({
-        diagramJson: source.diagramJson,
+        diagramJson: baseline.diagram,
         projectId,
         skipValidation: true,
         source: "manual",
-        terraformCode: source.terraformCode
+        terraformCode: combineDeploymentBaselineTerraformFiles(baseline.terraformFiles)
       });
     },
     [projectId]
   );
 
-  const prepareDeploymentArtifacts = useCallback(async (): Promise<SavedWorkspaceTerraformArtifact> => {
-    const preparedSource = await terraformPanelRef.current?.prepareTerraformArtifact();
-
-    if (!preparedSource) {
-      throw new Error("Terraform 패널을 준비하지 못했습니다.");
-    }
-
-    const savedArtifacts = await savePreparedTerraformArtifact(preparedSource);
+  const prepareDeploymentArtifacts = useCallback(async (
+    baseline: DeploymentBaseline
+  ): Promise<SavedWorkspaceTerraformArtifact> => {
+    const savedArtifacts = await savePreparedTerraformArtifact(baseline);
 
     setHasUnsavedTerraformChanges(false);
-    setLastSavedDeploymentBaselineFingerprint(toDeploymentBaselineFingerprint(preparedSource.diagramJson));
+    setLastSavedDeploymentBaselineFingerprint(baseline.fingerprint);
     setIsDeploymentBaselineDirty(false);
 
     return savedArtifacts;
   }, [savePreparedTerraformArtifact]);
 
-  const validateTerraformForPreDeployment = useCallback(async (): Promise<TerraformDiagnostic[]> => {
-    return terraformPanelRef.current?.validateCurrentTerraform() ?? terraformDiagnostics;
-  }, [terraformDiagnostics]);
-
-  const getTerraformFilesForPreDeployment = useCallback((): readonly TerraformSyncFileInput[] => {
-    return (terraformPanelRef.current?.getTerraformFiles() ?? []).map((file) => ({
-      fileName: file.fileName,
-      terraformCode: file.code
-    }));
-  }, []);
+  const validateTerraformForPreDeployment = useCallback(async (
+    baseline: DeploymentBaseline
+  ): Promise<TerraformDiagnostic[]> => {
+    const result = await validateTerraformCode({
+      terraformCode: baseline.terraformFiles.length > 0
+        ? ""
+        : combineDeploymentBaselineTerraformFiles(baseline.terraformFiles),
+      terraformFiles: [...baseline.terraformFiles]
+    });
+    handleTerraformDiagnosticsChange(result.diagnostics);
+    return result.diagnostics;
+  }, [handleTerraformDiagnosticsChange]);
 
   const openPreDeploymentFindingTerraformSource = useCallback((finding: CheckFinding): TerraformSourceLocation | null => {
     const sourceLocation = getPreDeploymentFindingTerraformSourceLocation({
@@ -667,21 +689,19 @@ export function WorkspaceRightPanel({
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [hasUnsavedTerraformChanges]);
 
-  const deploymentConsoleContent = isDeploymentConsoleOpen && canRenderDeploymentPortal ? (
+  const deploymentConsoleContent = isDeploymentConsoleOpen && canRenderDeploymentPortal && deploymentBaseline ? (
     <DeploymentPanel
-      currentNodeCount={context.nodes.length}
+      baseline={deploymentBaseline}
       deploymentAvailability={deploymentAvailability}
-      diagramJson={context.diagram}
       fullScreenOnly
       hasUnsavedDeploymentBaseline={hasUnsavedDeploymentBaseline}
       initialExpanded
-      onExpandedClose={() => setIsDeploymentConsoleOpen(false)}
-      onGetTerraformFiles={getTerraformFilesForPreDeployment}
+      onExpandedClose={closeDeploymentConsole}
       onOpenFindingTerraformSource={(finding) => {
         const sourceLocation = openPreDeploymentFindingTerraformSource(finding);
 
         if (sourceLocation) {
-          setIsDeploymentConsoleOpen(false);
+          closeDeploymentConsole();
         }
 
         return sourceLocation;
