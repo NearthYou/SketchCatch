@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type {
@@ -6,6 +6,7 @@ import type {
   AiPreDeploymentCheckRequest,
   AiPreDeploymentCheckFromDiagramRequest,
   AiPreDeploymentAnalysisResult,
+  AiPreDeploymentDeepScanResponse,
   AiSafetyExplanation,
   AiTerraformErrorExplanationResult,
   AiTerraformPreviewExplanationResult,
@@ -43,6 +44,7 @@ import {
   type CreateArchitecturePatchPreviewFactory
 } from "../services/aiArchitecturePatchPreview.js";
 import {
+  analyzeImmediatePreDeploymentCheck,
   analyzePreDeploymentCheck,
   type AnalyzePreDeploymentCheck
 } from "../services/aiPreDeploymentCheck.js";
@@ -64,7 +66,6 @@ import { diagramJsonSchema } from "./project-draft-schemas.js";
 import { createConfiguredAwsPricingRateProvider } from "../services/awsPricingRateProvider.js";
 import type { CostPricingRateProvider } from "../services/cost-analysis.js";
 import type { RuntimeCache, RuntimeCacheJsonValue } from "../runtime-cache/index.js";
-import { createConfiguredTerraformSecurityScanner } from "../services/terraform/trivy-terraform-scan.js";
 import { requireActiveUserId } from "../auth/current-user.js";
 import { getDatabaseClient, type DatabaseClient } from "../db/client.js";
 import {
@@ -83,9 +84,14 @@ const MAX_PRE_DEPLOYMENT_TERRAFORM_FILE_NAME_LENGTH = 180;
 const MAX_PRE_DEPLOYMENT_TERRAFORM_FILE_CHARS = 1024 * 1024;
 const SAFETY_EXPLANATION_CACHE_NAMESPACE = "ai:safety-finding-explanation:v1";
 const SAFETY_EXPLANATION_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-const MAX_SAFETY_EXPLANATION_GENERATION_COUNT = 8;
-const SAFETY_EXPLANATION_GENERATION_CONCURRENCY = 2;
 const DEFAULT_SAFETY_EXPLANATION_TIMEOUT_MS = 2_500;
+const PRE_DEPLOYMENT_DEEP_SCAN_CACHE_NAMESPACE = "pre-deployment-deep-scan:v1";
+const PRE_DEPLOYMENT_DEEP_SCAN_TTL_MS = 5 * 60 * 1000;
+const PRE_DEPLOYMENT_DEEP_SCAN_MAX_LOCAL_ENTRIES = 100;
+type LocalDeepScanEntry = {
+  readonly expiresAt: number;
+  readonly value: AiPreDeploymentDeepScanResponse;
+};
 
 const resourceTypeSchema = z.enum(RESOURCE_TYPES);
 
@@ -209,6 +215,8 @@ const checkFindingSchema: z.ZodType<CheckFinding> = z.object({
   severity: z.enum(["low", "medium", "high"]),
   resourceId: z.string().trim().min(1).optional(),
   sourceLocation: terraformSourceLocationSchema.optional(),
+  riskFamily: z.string().trim().min(1).optional(),
+  trivyRuleIds: z.array(z.string().trim().min(1)).optional(),
   title: z.string().trim().min(1),
   description: z.string().trim().min(1),
   recommendation: z.string().trim().min(1)
@@ -258,6 +266,7 @@ export type AiRouteOptions = {
 
 // AI MVP API의 입구입니다. 요청 모양은 여기서 확인하고, 실제 판단은 service 함수에 맡깁니다.
 export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOptions = {}): Promise<void> {
+  const deepScans = new Map<string, LocalDeepScanEntry>();
   const createLlmExplanation = options.createLlmExplanation ?? createConfiguredAiExplanation();
   const createArchitectureDraftResponse =
     options.createArchitectureDraftResponse ??
@@ -274,20 +283,7 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
   const safetyExplanationTimeoutMs =
     options.safetyExplanationTimeoutMs ?? DEFAULT_SAFETY_EXPLANATION_TIMEOUT_MS;
   const analyzePreDeploymentForCheck =
-    options.analyzePreDeploymentCheck ??
-    ((input) =>
-      analyzePreDeploymentCheck(input, {
-        terraformSecurityScanner: createConfiguredTerraformSecurityScanner({
-          onScanError: (error) => {
-            app.log.warn(
-              {
-                errorName: error instanceof Error ? error.name : typeof error
-              },
-              "Trivy Terraform scan failed; continuing without Trivy findings"
-            );
-          }
-        })
-      }));
+    options.analyzePreDeploymentCheck ?? analyzePreDeploymentCheck;
   const transcribeRequirementService =
     options.transcribeRequirementService ?? createConfiguredTranscribeRequirementService();
   const pricingRateProvider = options.pricingRateProvider ?? createConfiguredAwsPricingRateProvider();
@@ -402,18 +398,70 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
 
   app.post("/ai/pre-deployment-check", async (request): Promise<AiPreDeploymentAnalysisResult> => {
     const body = preDeploymentCheckBodySchema.parse(request.body);
-    const result = await analyzePreDeploymentForCheck({
+    const artifactSha256 = createSingleTerraformArtifactSha256(body.terraformFiles ?? []);
+    const input = {
       architectureJson: body.architectureJson,
+      ...(artifactSha256 ? { artifactSha256 } : {}),
       ...(body.terraformFiles !== undefined ? { terraformFiles: body.terraformFiles } : {})
-    });
+    };
+    const immediateResult = analyzeImmediatePreDeploymentCheck(input);
 
-    return addSafetyFindingExplanations(
-      result,
-      createSafetyFindingExplanation,
+    if (!body.terraformFiles?.some((file) => file.terraformCode.trim().length > 0)) {
+      return { ...immediateResult, deepScan: { status: "not_required" } };
+    }
+
+    const scanId = randomUUID();
+    void writeDeepScanResult(
       options.runtimeCache,
-      safetyExplanationTimeoutMs
+      deepScans,
+      scanId,
+      { status: "running" },
+      true
     );
+    void analyzePreDeploymentForCheck(input)
+      .then((analysis) =>
+        writeDeepScanResult(options.runtimeCache, deepScans, scanId, {
+          status: "complete",
+          analysis: { ...analysis, deepScan: { status: "complete", scanId } }
+        })
+      )
+      .catch((error) => {
+        app.log.warn(
+          { errorName: error instanceof Error ? error.name : typeof error, scanId },
+          "Background Trivy scan failed"
+        );
+        return writeDeepScanResult(options.runtimeCache, deepScans, scanId, {
+          status: "failed",
+          message: "Trivy 심층 검사를 완료하지 못했습니다. 다시 검사해 주세요."
+        });
+      });
+
+    return { ...immediateResult, deepScan: { status: "running", scanId } };
   });
+
+  app.get(
+    "/ai/pre-deployment-check/:scanId",
+    async (request): Promise<AiPreDeploymentDeepScanResponse> => {
+      const { scanId } = z.object({ scanId: z.uuid() }).parse(request.params);
+      const localResult = deepScans.get(scanId);
+      if (localResult && localResult.expiresAt > Date.now()) return localResult.value;
+      if (localResult) deepScans.delete(scanId);
+
+      if (options.runtimeCache) {
+        try {
+          const cached = await options.runtimeCache.get<AiPreDeploymentDeepScanResponse>({
+            namespace: PRE_DEPLOYMENT_DEEP_SCAN_CACHE_NAMESPACE,
+            key: scanId
+          });
+          if (cached) return cached;
+        } catch {
+          // Runtime Cache is an optimization; report a stable missing result below.
+        }
+      }
+
+      return { status: "failed", message: "심층 검사 결과가 만료되었거나 존재하지 않습니다." };
+    }
+  );
 
   app.post("/ai/design-simulation", async (request): Promise<DesignSimulationResult> => {
     const body = designSimulationBodySchema.parse(request.body);
@@ -432,12 +480,7 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
     const body = preDeploymentCheckFromDiagramBodySchema.parse(request.body);
     const architectureJson = convertDiagramJsonToArchitectureJson(body.diagramJson);
 
-    return addSafetyFindingExplanations(
-      analyzePreDeployment(architectureJson),
-      createSafetyFindingExplanation,
-      options.runtimeCache,
-      safetyExplanationTimeoutMs
-    );
+    return analyzePreDeployment(architectureJson);
   });
 
   app.post(
@@ -485,7 +528,12 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
     async (request): Promise<AiSafetyExplanation> => {
       const body = safetyFindingExplanationBodySchema.parse(request.body);
 
-      return createSafetyFindingExplanation(body.finding);
+      return resolveSafetyFindingExplanation(
+        body.finding,
+        createSafetyFindingExplanation,
+        options.runtimeCache,
+        safetyExplanationTimeoutMs
+      );
     }
   );
 
@@ -547,80 +595,34 @@ async function addArchitectureDraftLlmExplanation(
   };
 }
 
-async function addSafetyFindingExplanations(
-  result: AiPreDeploymentAnalysisResult,
+async function resolveSafetyFindingExplanation(
+  finding: CheckFinding,
   createSafetyFindingExplanation: CreateSafetyFindingExplanation,
   runtimeCache: RuntimeCache | undefined,
   safetyExplanationTimeoutMs: number
-): Promise<AiPreDeploymentAnalysisResult> {
-  if (result.findings.length === 0) {
-    return result;
+): Promise<AiSafetyExplanation> {
+  if (finding.aiSafetyExplanation) {
+    return finding.aiSafetyExplanation;
   }
 
-  const explanationByCacheKey = new Map<string, AiSafetyExplanation>();
-  const missingFindingsByCacheKey = new Map<string, CheckFinding>();
+  const cacheKey = createSafetyExplanationCacheKey(finding);
+  const cachedExplanation = await readCachedSafetyExplanation(runtimeCache, cacheKey);
 
-  await Promise.all(
-    result.findings.map(async (finding) => {
-      if (finding.aiSafetyExplanation !== undefined) {
-        return;
-      }
-
-      const cacheKey = createSafetyExplanationCacheKey(finding);
-      const cachedExplanation = await readCachedSafetyExplanation(runtimeCache, cacheKey);
-
-      if (cachedExplanation) {
-        explanationByCacheKey.set(cacheKey, cachedExplanation);
-        return;
-      }
-
-      if (!missingFindingsByCacheKey.has(cacheKey)) {
-        missingFindingsByCacheKey.set(cacheKey, finding);
-      }
-    })
-  );
-
-  const missingEntries = [...missingFindingsByCacheKey.entries()];
-  const generatedEntries = missingEntries.slice(0, MAX_SAFETY_EXPLANATION_GENERATION_COUNT);
-  const fallbackEntries = missingEntries.slice(MAX_SAFETY_EXPLANATION_GENERATION_COUNT);
-
-  await mapWithConcurrency(
-    generatedEntries,
-    SAFETY_EXPLANATION_GENERATION_CONCURRENCY,
-    async ([cacheKey, finding]) => {
-      const explanation = await createSafetyFindingExplanationWithinBudget(
-        finding,
-        createSafetyFindingExplanation,
-        safetyExplanationTimeoutMs
-      );
-
-      explanationByCacheKey.set(cacheKey, explanation);
-
-      if (!explanation.fallbackUsed) {
-        await writeCachedSafetyExplanation(runtimeCache, cacheKey, explanation);
-      }
-    }
-  );
-
-  for (const [cacheKey, finding] of fallbackEntries) {
-    explanationByCacheKey.set(
-      cacheKey,
-      createFallbackSafetyFindingExplanation(finding, "rate_limited")
-    );
+  if (cachedExplanation) {
+    return cachedExplanation;
   }
 
-  return {
-    ...result,
-    findings: result.findings.map((finding) => {
-      const cacheKey = createSafetyExplanationCacheKey(finding);
+  const explanation = await createSafetyFindingExplanationWithinBudget(
+    finding,
+    createSafetyFindingExplanation,
+    safetyExplanationTimeoutMs
+  );
 
-      return {
-        ...finding,
-        aiSafetyExplanation:
-          finding.aiSafetyExplanation ?? explanationByCacheKey.get(cacheKey)
-      };
-    })
-  };
+  if (!explanation.fallbackUsed) {
+    await writeCachedSafetyExplanation(runtimeCache, cacheKey, explanation);
+  }
+
+  return explanation;
 }
 
 async function createSafetyFindingExplanationWithinBudget(
@@ -650,28 +652,6 @@ async function createSafetyFindingExplanationWithinBudget(
       clearTimeout(timeout);
     }
   }
-}
-
-async function mapWithConcurrency<TValue>(
-  values: readonly TValue[],
-  concurrency: number,
-  mapper: (value: TValue) => Promise<void>
-): Promise<void> {
-  let nextIndex = 0;
-  const workerCount = Math.min(concurrency, values.length);
-
-  await Promise.all(
-    Array.from({ length: workerCount }, async () => {
-      while (nextIndex < values.length) {
-        const value = values[nextIndex];
-        nextIndex += 1;
-
-        if (value !== undefined) {
-          await mapper(value);
-        }
-      }
-    })
-  );
 }
 
 function createSafetyExplanationCacheKey(finding: CheckFinding): string {
@@ -753,6 +733,50 @@ function isAiSafetyExplanation(value: unknown): value is AiSafetyExplanation {
 
 function toRuntimeCacheJsonValue(value: AiSafetyExplanation): RuntimeCacheJsonValue {
   return JSON.parse(JSON.stringify(value)) as RuntimeCacheJsonValue;
+}
+
+function createSingleTerraformArtifactSha256(
+  terraformFiles: readonly { readonly terraformCode: string }[]
+): string | undefined {
+  const nonEmptyFiles = terraformFiles.filter((file) => file.terraformCode.trim().length > 0);
+  return nonEmptyFiles.length === 1
+    ? createHash("sha256").update(nonEmptyFiles[0]!.terraformCode, "utf8").digest("hex")
+    : undefined;
+}
+
+async function writeDeepScanResult(
+  runtimeCache: RuntimeCache | undefined,
+  localResults: Map<string, LocalDeepScanEntry>,
+  scanId: string,
+  value: AiPreDeploymentDeepScanResponse,
+  onlyIfAbsent = false
+): Promise<void> {
+  localResults.set(scanId, {
+    expiresAt: Date.now() + PRE_DEPLOYMENT_DEEP_SCAN_TTL_MS,
+    value
+  });
+  while (localResults.size > PRE_DEPLOYMENT_DEEP_SCAN_MAX_LOCAL_ENTRIES) {
+    const oldestKey = localResults.keys().next().value as string | undefined;
+    if (!oldestKey) break;
+    localResults.delete(oldestKey);
+  }
+  if (!runtimeCache) return;
+
+  try {
+    const entryKey = { namespace: PRE_DEPLOYMENT_DEEP_SCAN_CACHE_NAMESPACE, key: scanId };
+    const cacheValue = JSON.parse(JSON.stringify(value)) as RuntimeCacheJsonValue;
+    if (onlyIfAbsent) {
+      await runtimeCache.setIfAbsent(entryKey, cacheValue, {
+        ttlMs: PRE_DEPLOYMENT_DEEP_SCAN_TTL_MS
+      });
+    } else {
+      await runtimeCache.set(entryKey, cacheValue, {
+        ttlMs: PRE_DEPLOYMENT_DEEP_SCAN_TTL_MS
+      });
+    }
+  } catch {
+    // The process-local result remains available when Runtime Cache is degraded.
+  }
 }
 
 function createArchitectureDraftStreamError(

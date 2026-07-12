@@ -46,7 +46,7 @@ import { ReverseEngineeringScanHistoryPanel } from "./ReverseEngineeringScanHist
 import { useReverseEngineeringOptions } from "./useReverseEngineeringOptions";
 import { useReverseEngineeringScanHistory } from "./useReverseEngineeringScanHistory";
 import { convertDiagramJsonToArchitectureJson } from "./workspace-ai-diagram-adapter";
-import styles from "./workspace.module.css";
+import styles from "./reverse-engineering.module.css";
 
 export type ReverseEngineeringPanelProps = {
   readonly context: DiagramEditorPanelContext;
@@ -429,12 +429,12 @@ export function ReverseEngineeringPanel({
   }
 
   return (
-    <section className={styles.deploymentPanel} aria-label="Reverse Engineering">
-      <div className={styles.deploymentPanelContent}>
-      <ReverseEngineeringScanCriteriaForm
-        awsConnections={verifiedAwsConnections}
-        canStartScan={canStartScan}
-        createProjectOnApply={createProjectOnApply}
+    <section className={styles.panel} aria-label="Reverse Engineering">
+      <div className={styles.panelContent}>
+        <ReverseEngineeringScanCriteriaForm
+          awsConnections={verifiedAwsConnections}
+          canStartScan={canStartScan}
+          createProjectOnApply={createProjectOnApply}
           isLoadingOptions={loadState === "loading"}
           isScanning={scanState === "loading"}
           onRefresh={() => void loadOptions()}
@@ -449,9 +449,9 @@ export function ReverseEngineeringPanel({
           selectedProjectId={selectedProjectId}
           selectedResourceTypes={selectedResourceTypes}
         />
-        {errorMessage ? <p className={styles.deploymentError}>{errorMessage}</p> : null}
+        {errorMessage ? <p className={styles.error}>{errorMessage}</p> : null}
         {hasDeletedSourceScan ? (
-          <p className={styles.deploymentNotice}>
+          <p className={styles.warning}>
             이 보드는 Reverse Engineering scan에서 시작됐습니다. 하지만 원본 scan 기록은 삭제됐습니다.
           </p>
         ) : null}
@@ -486,10 +486,10 @@ export function ReverseEngineeringPanel({
             selectedCandidateId={selectedCandidate.id}
           />
         ) : (
-          <section className={styles.deploymentSection}>
+          <section className={styles.section}>
             <h3>결과</h3>
-            <p className={styles.deploymentHint}>
-              스캔을 실행하면 발견한 리소스, 생성된 설계 후보, 가져오기 제안이 여기에 표시됩니다.
+            <p className={styles.sectionDescription}>
+              스캔이 끝나면 Resource 개수와 적용 구조를 확인할 수 있습니다.
             </p>
           </section>
         )}

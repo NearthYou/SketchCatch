@@ -34,4 +34,3 @@ test("resolveArchitectureResourceQuantities keeps equivalent upload requests at 
     );
   }
 });
-

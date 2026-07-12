@@ -1,10 +1,12 @@
 import type { DiagramNode } from "../../../../packages/types/src";
 import type { ParameterCatalog } from "../parameter-input/catalog";
+import { expandParentAreaNodesForEnteredChild } from "./area-node-expansion";
 import {
   applyAreaNodeMovement,
   applyAreaNodeParentAssignments,
   getDirectlyMovedNodeIdsFromPositionMap
 } from "./area-node-movement";
+import { isAreaNode } from "./area-nodes";
 import { applyContainingReferenceDropTargets } from "./reference-drop-targets";
 
 type DraggedNodesInput = {
@@ -16,6 +18,7 @@ type DraggedNodesInput = {
 
 type FinalizeDraggedNodesInput = DraggedNodesInput & {
   readonly anchorNodeId: string;
+  readonly autoExpandAreasEnabled?: boolean;
   readonly catalog: ParameterCatalog;
   readonly snapGridSize: number;
 };
@@ -57,6 +60,7 @@ export function getDraggedPreviewNodes({
 
 export function finalizeDraggedNodes({
   anchorNodeId,
+  autoExpandAreasEnabled = true,
   catalog,
   currentNodes,
   directlyMovedNodeIds,
@@ -98,13 +102,45 @@ export function finalizeDraggedNodes({
   });
   const nodesWithMovedAreaChildren = applyAreaNodeMovement(snapshotNodes, positionedNodes, movedNodeIds);
   const nodesWithAssignedParents = applyAreaNodeParentAssignments(nodesWithMovedAreaChildren, movedNodeIds);
-  const allMovedNodeIds = getMovedNodeIdsFromNodes(snapshotNodes, nodesWithAssignedParents);
+  const enteredResourceNodeIds = getEnteredResourceNodeIds(
+    snapshotNodes,
+    nodesWithAssignedParents,
+    movedNodeIds
+  );
+  const nodesWithExpandedParents = autoExpandAreasEnabled
+    ? enteredResourceNodeIds.reduce(
+        (nodes, childNodeId) => expandParentAreaNodesForEnteredChild(nodes, childNodeId),
+        nodesWithAssignedParents
+      )
+    : nodesWithAssignedParents;
+  const allMovedNodeIds = getMovedNodeIdsFromNodes(snapshotNodes, nodesWithExpandedParents);
 
   return {
     directlyMovedNodeIds: movedNodeIds,
     movedNodeIds: allMovedNodeIds,
-    nodes: applyContainingReferenceDropTargets(nodesWithAssignedParents, allMovedNodeIds, catalog)
+    nodes: applyContainingReferenceDropTargets(nodesWithExpandedParents, allMovedNodeIds, catalog)
   };
+}
+
+function getEnteredResourceNodeIds(
+  previousNodes: readonly DiagramNode[],
+  currentNodes: readonly DiagramNode[],
+  movedNodeIds: ReadonlySet<string>
+): string[] {
+  const previousNodeById = new Map(previousNodes.map((node) => [node.id, node]));
+
+  return currentNodes
+    .filter((node) => {
+      if (!movedNodeIds.has(node.id) || isAreaNode(node)) {
+        return false;
+      }
+
+      const parentAreaNodeId = node.metadata?.parentAreaNodeId;
+      const previousParentAreaNodeId = previousNodeById.get(node.id)?.metadata?.parentAreaNodeId;
+
+      return Boolean(parentAreaNodeId && parentAreaNodeId !== previousParentAreaNodeId);
+    })
+    .map((node) => node.id);
 }
 
 export function getMovedNodeIdsFromNodes(

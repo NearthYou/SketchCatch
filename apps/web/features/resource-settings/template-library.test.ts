@@ -65,7 +65,7 @@ test("listBoardTemplates returns templates with DiagramJson so page and board mo
   assert.ok(templates.every((template) => template.diagramJson.nodes.length > 0));
 });
 
-test("board templates use 48px geometry and compact Area bounds around direct children", () => {
+test("board templates use 48px geometry for ordinary icons while preserving Area sizes", () => {
   const templates = listBoardTemplates();
   const ordinaryNodes = templates.flatMap((template) =>
     template.diagramJson.nodes.filter((node) => node.kind === "resource" && !isAreaNode(node))
@@ -80,14 +80,8 @@ test("board templates use 48px geometry and compact Area bounds around direct ch
   const apiVPC = apiTemplate?.diagramJson.nodes.find((node) => node.id === "template-api-vpc");
   const apiSubnet = apiTemplate?.diagramJson.nodes.find((node) => node.id === "template-api-subnet");
 
-  assert.ok(apiVPC);
-  assert.ok(apiSubnet);
-  assert.ok(apiVPC.size.width <= 680 && apiVPC.size.height <= 420);
-  assert.ok(apiSubnet.size.width <= 520 && apiSubnet.size.height <= 240);
-  assert.ok(apiSubnet.position.x >= apiVPC.position.x);
-  assert.ok(apiSubnet.position.y >= apiVPC.position.y);
-  assert.ok(apiSubnet.position.x + apiSubnet.size.width <= apiVPC.position.x + apiVPC.size.width);
-  assert.ok(apiSubnet.position.y + apiSubnet.size.height <= apiVPC.position.y + apiVPC.size.height);
+  assert.deepEqual(apiVPC?.size, { width: 680, height: 420 });
+  assert.deepEqual(apiSubnet?.size, { width: 520, height: 240 });
 });
 
 test("Live Observation template carries the same ASG pressure resources as the demo deployment", () => {
@@ -172,10 +166,6 @@ test("Live Observation template carries the same ASG pressure resources as the d
   assert.equal(policy.parameters?.values.policyType, "StepScaling");
   assert.equal(alarm.parameters?.values.metricName, "RequestCountPerTarget");
   assert.equal(alarm.parameters?.values.threshold, 60);
-
-  const vpc = template.diagramJson.nodes.find((node) => node.id === "template-live-vpc");
-  assert.ok(vpc);
-  assert.ok(vpc.size.height < 800, "dense VPC resources should form compact columns, not one tall stack");
 });
 
 test("applyTemplateToDiagramWithBackup backs up the current board and returns the template board", () => {

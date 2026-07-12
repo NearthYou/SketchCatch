@@ -92,7 +92,7 @@ test("evaluateDeploymentSafetyGate preserves generic Trivy warning codes", () =>
   assert.equal(summary.warnings[0]?.blocksApproval, false);
 });
 
-test("evaluateDeploymentSafetyGate makes demo web service warnings non-blocking", () => {
+test("evaluateDeploymentSafetyGate keeps demo high findings approvable", () => {
   const demoFindings = [
     ["trivy:aws-0178:main.tf:aws_vpc.demo:20", "aws_vpc.demo", 20],
     ["trivy:aws-0164:main.tf:aws_subnet.public_a:41", "aws_subnet.public_a", 41],
@@ -127,7 +127,7 @@ test("evaluateDeploymentSafetyGate makes demo web service warnings non-blocking"
   assert.equal(summary.warnings.every((warning) => !warning.blocksApproval), true);
 });
 
-test("evaluateDeploymentSafetyGate keeps high findings outside managed demo resources approvable", () => {
+test("evaluateDeploymentSafetyGate keeps all high pre-deployment findings approvable", () => {
   const summary = evaluateDeploymentSafetyGate({
     operation: "apply",
     liveProfile: "demo_web_service",

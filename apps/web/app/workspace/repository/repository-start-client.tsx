@@ -1,276 +1,279 @@
 "use client";
 
 import Link from "next/link";
-import { GitBranch, LoaderCircle, Search, SquareArrowOutUpRight } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Check, FileSearch, LoaderCircle, TriangleAlert } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import type { GitHubInstalledRepositoryCandidate, SourceRepository } from "@sketchcatch/types";
-import { ProductBrand } from "../../../components/ui/ProductBrand";
-import { ProductState } from "../../../components/ui/ProductState";
-import { getApiErrorMessage } from "../../../lib/api-client";
+import type {
+  AiArchitectureDraftResult,
+  DiagramJson,
+  Project,
+  RepositoryAnalysisTemplateId,
+  SourceRepositoryAnalysisResult
+} from "@sketchcatch/types";
+import { TemplateGallery } from "../../../components/templates/TemplateGallery";
+import { AiDraftBoardPreview } from "../ai/ai-draft-board-preview";
 import {
-  analyzeSourceRepository,
-  connectGitHubSourceRepository,
-  createGitHubSourceRepositoryInstallUrl,
-  listGitHubInstalledRepositories,
-  listSourceRepositories
+  analyzePublicSourceRepository,
+  createGitHubArchitectureDraft,
+  getProject,
+  saveProjectDraft
 } from "../../../features/workspace/api";
 import {
-  applyRepositoryAnalysis,
-  findActiveGitHubRepository
-} from "../../projects/[projectId]/settings/project-github-settings-state";
-import { buildBoardTemplateDiagram } from "../../../features/resource-settings/template-library";
-import { AiDraftBoardPreview } from "../ai/ai-draft-board-preview";
+  listBoardTemplates,
+  type BoardTemplate
+} from "../../../features/resource-settings/template-library";
+import {
+  convertDiagramJsonToArchitectureJson,
+  getDiagramJsonForArchitectureDraft
+} from "../../../features/workspace/workspace-ai-diagram-adapter";
+import { getApiErrorMessage } from "../../../lib/api-client";
 import styles from "./repository-start.module.css";
 
 type RequestState = "idle" | "loading" | "error";
 
-type RepositoryStartClientProps = {
+export function RepositoryStartClient({
+  defaultBranch,
+  projectId,
+  repositoryUrl
+}: {
+  readonly defaultBranch: string;
   readonly projectId: string;
-  readonly projectName: string;
-};
-
-// Repository 연결부터 분석 결과 확인과 Board 이동까지 한 흐름으로 제공합니다.
-export function RepositoryStartClient({ projectId, projectName }: RepositoryStartClientProps) {
-  const [repositories, setRepositories] = useState<SourceRepository[]>([]);
-  const [candidates, setCandidates] = useState<GitHubInstalledRepositoryCandidate[]>([]);
-  const [installationState, setInstallationState] = useState("");
-  const [loadState, setLoadState] = useState<RequestState>("loading");
-  const [actionState, setActionState] = useState<RequestState>("idle");
+  readonly repositoryUrl: string;
+}) {
+  const router = useRouter();
+  const templates = useMemo(() => listBoardTemplates(), []);
+  const [project, setProject] = useState<Project | null>(null);
+  const [analysis, setAnalysis] = useState<SourceRepositoryAnalysisResult | null>(null);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const [draft, setDraft] = useState<AiArchitectureDraftResult | null>(null);
+  const [previewDiagram, setPreviewDiagram] = useState<DiagramJson | null>(null);
+  const [requestState, setRequestState] = useState<RequestState>("loading");
   const [errorMessage, setErrorMessage] = useState("");
-  const activeRepository = useMemo(
-    () => findActiveGitHubRepository(repositories),
-    [repositories]
-  );
+  const selectedTemplate = templates.find((template) => template.id === selectedTemplateId) ?? null;
 
   useEffect(() => {
-    if (!projectId) {
-      setLoadState("error");
-      setErrorMessage("프로젝트 정보가 없습니다. 새 프로젝트 화면에서 다시 시작해주세요.");
-      return;
+    let cancelled = false;
+
+    async function loadAnalysis(): Promise<void> {
+      if (!projectId || !repositoryUrl) {
+        setRequestState("error");
+        setErrorMessage("프로젝트 또는 Repository 정보가 없습니다.");
+        return;
+      }
+
+      try {
+        const [projectResult, analysisResult] = await Promise.all([
+          getProject(projectId),
+          analyzePublicSourceRepository({ defaultBranch, repositoryUrl })
+        ]);
+
+        if (cancelled) return;
+        setProject(projectResult);
+        setAnalysis(analysisResult);
+        setSelectedTemplateId(analysisResult.recommendedTemplateId);
+        setRequestState("idle");
+      } catch (error) {
+        if (cancelled) return;
+        setRequestState("error");
+        setErrorMessage(getApiErrorMessage(error, "Repository를 분석하지 못했습니다."));
+      }
     }
 
-    void loadRepositories();
-  }, [projectId]);
+    void loadAnalysis();
+    return () => {
+      cancelled = true;
+    };
+  }, [defaultBranch, projectId, repositoryUrl]);
 
-  // 이미 연결된 Repository를 복원해 callback 뒤에도 같은 단계에서 이어갑니다.
-  async function loadRepositories(): Promise<void> {
-    setLoadState("loading");
+  async function createDraft(): Promise<void> {
+    if (selectedTemplate === null || !isRepositoryTemplateId(selectedTemplate.id)) return;
+    setRequestState("loading");
     setErrorMessage("");
 
     try {
-      setRepositories(await listSourceRepositories(projectId));
-      setLoadState("idle");
-    } catch (error) {
-      setLoadState("error");
-      setErrorMessage(getApiErrorMessage(error, "Repository 연결 상태를 불러오지 못했습니다."));
-    }
-  }
-
-  // 현재 GitHub App 권한으로 선택할 수 있는 Repository만 불러옵니다.
-  async function loadCandidates(): Promise<void> {
-    setActionState("loading");
-    setErrorMessage("");
-
-    try {
-      const result = await listGitHubInstalledRepositories(projectId);
-      setCandidates(result.repositories);
-      setInstallationState(result.state);
-      setActionState("idle");
-    } catch (error) {
-      setActionState("error");
-      setErrorMessage(getApiErrorMessage(error, "연결 가능한 Repository를 불러오지 못했습니다."));
-    }
-  }
-
-  // 권한이 없는 경우 GitHub App 설치 화면으로 이동합니다.
-  async function openGitHubInstallation(): Promise<void> {
-    setActionState("loading");
-    setErrorMessage("");
-
-    try {
-      const { installUrl } = await createGitHubSourceRepositoryInstallUrl(projectId);
-      window.location.assign(installUrl);
-    } catch (error) {
-      setActionState("error");
-      setErrorMessage(getApiErrorMessage(error, "GitHub 연결 화면을 열지 못했습니다."));
-    }
-  }
-
-  // 사용자가 고른 Repository 하나만 현재 프로젝트에 연결합니다.
-  async function connectRepository(candidate: GitHubInstalledRepositoryCandidate): Promise<void> {
-    if (!installationState || candidate.archived) return;
-    setActionState("loading");
-    setErrorMessage("");
-
-    try {
-      const connected = await connectGitHubSourceRepository({
-        githubRepositoryId: candidate.githubRepositoryId,
-        installationId: candidate.installationId,
-        projectId,
-        state: installationState
+      const result = await createGitHubArchitectureDraft({
+        defaultBranch,
+        repositoryUrl,
+        selectedTemplateId: selectedTemplate.id
       });
-      setRepositories([connected]);
-      setActionState("idle");
+      const templateDraft = createTemplateBasedRepositoryDraft(selectedTemplate, result);
+      setDraft(templateDraft);
+      setPreviewDiagram(getDiagramJsonForArchitectureDraft(templateDraft));
+      setRequestState("idle");
     } catch (error) {
-      setActionState("error");
-      setErrorMessage(getApiErrorMessage(error, "Repository를 연결하지 못했습니다."));
+      setRequestState("error");
+      setErrorMessage(getApiErrorMessage(error, "Architecture Draft를 만들지 못했습니다."));
     }
   }
 
-  // 연결된 Repository의 근거 파일을 분석해 적합한 Template을 찾습니다.
-  async function analyzeRepository(): Promise<void> {
-    if (!activeRepository || actionState === "loading") return;
-    setActionState("loading");
-    setErrorMessage("");
+  async function applyDraft(): Promise<void> {
+    if (project === null || previewDiagram === null) return;
+    setRequestState("loading");
 
     try {
-      const result = await analyzeSourceRepository(projectId, activeRepository.id);
-      setRepositories((current) => applyRepositoryAnalysis(current, result));
-      setActionState("idle");
+      await saveProjectDraft({ diagramJson: previewDiagram, projectId: project.id });
+      router.push(
+        `/workspace?${new URLSearchParams({ projectId: project.id, projectName: project.name }).toString()}`
+      );
     } catch (error) {
-      setActionState("error");
-      setErrorMessage(getApiErrorMessage(error, "Repository를 분석하지 못했습니다."));
+      setRequestState("error");
+      setErrorMessage(getApiErrorMessage(error, "Architecture Draft를 저장하지 못했습니다."));
     }
   }
-
-  const boardHref = createRepositoryBoardHref(projectId, projectName, activeRepository);
-  const previewDiagram = createRepositoryPreviewDiagram(projectName, activeRepository);
 
   return (
     <main className={styles.page}>
       <header className={styles.topbar}>
-        <ProductBrand />
+        <div>
+          <span>SOURCE REPOSITORY</span>
+          <strong>{project?.name ?? "Repository Analysis"}</strong>
+        </div>
         <Link href="/workspace/new">시작 방식 다시 선택</Link>
       </header>
 
-      <section className={styles.content} aria-labelledby="repository-start-title">
-        <header className={styles.heading}>
-          <span>GitHub Repository</span>
-          <h1 id="repository-start-title">코드를 기준으로 시작하기</h1>
-          <p>{projectName}</p>
-        </header>
+      <div className={styles.layout}>
+        <aside className={styles.analysisPanel}>
+          <header>
+            <span>REPOSITORY ANALYSIS</span>
+            <h1>근거 확인</h1>
+          </header>
 
-        {loadState === "loading" ? (
-          <ProductState description="연결 정보를 확인하고 있습니다." kind="loading" title="불러오는 중" />
-        ) : null}
-
-        {loadState === "error" ? (
-          <ProductState
-            action={<button onClick={() => void loadRepositories()} type="button">다시 시도</button>}
-            description={errorMessage}
-            kind="error"
-            title="연결 상태를 불러오지 못했습니다"
-          />
-        ) : null}
-
-        {loadState === "idle" && !activeRepository ? (
-          <section className={styles.connectionPanel}>
-            <GitBranch aria-hidden="true" size={24} />
-            <h2>Repository를 선택하세요</h2>
-            <div className={styles.actions}>
-              <button disabled={actionState === "loading"} onClick={() => void loadCandidates()} type="button">
-                연결 가능한 Repository 보기
-              </button>
-              <button className={styles.secondaryAction} disabled={actionState === "loading"} onClick={() => void openGitHubInstallation()} type="button">
-                <SquareArrowOutUpRight aria-hidden="true" size={16} /> GitHub 권한 추가
-              </button>
+          {requestState === "loading" && analysis === null ? (
+            <div className={styles.status} role="status">
+              <LoaderCircle aria-hidden="true" size={17} />
+              Repository를 읽는 중입니다.
             </div>
-            <RepositoryCandidates
-              actionState={actionState}
-              candidates={candidates}
-              onConnect={(candidate) => void connectRepository(candidate)}
-            />
-          </section>
-        ) : null}
+          ) : null}
 
-        {activeRepository ? (
-          <section className={styles.analysisPanel}>
-            <div>
-              <span>연결된 Repository</span>
-              <h2>{activeRepository.owner}/{activeRepository.name}</h2>
-              <p>{activeRepository.defaultBranch}</p>
+          {errorMessage ? (
+            <div className={styles.error} role="alert">
+              <TriangleAlert aria-hidden="true" size={17} />
+              {errorMessage}
             </div>
-            <button disabled={actionState === "loading"} onClick={() => void analyzeRepository()} type="button">
-              {actionState === "loading" ? <LoaderCircle className={styles.spin} size={16} /> : <Search size={16} />}
-              {actionState === "loading" ? "분석 중" : "Repository 분석"}
-            </button>
-            {previewDiagram ? (
-              <section className={styles.previewPanel} aria-label="Repository 분석 Architecture 미리보기">
-                <div>
-                  <span>Practice Architecture Preview</span>
-                  <strong>
-                    {activeRepository.analysis?.aiHandoff.status === "template_selected"
-                      ? activeRepository.analysis.aiHandoff.selectionReasons.join(" · ")
-                      : "분석 근거를 확인하지 못했습니다."}
-                  </strong>
-                </div>
-                <AiDraftBoardPreview diagram={previewDiagram} />
+          ) : null}
+
+          {analysis ? (
+            <>
+              <section className={styles.evidenceSection}>
+                <h2>읽은 파일</h2>
+                <ul>
+                  {analysis.evidenceFiles.map((file) => (
+                    <li data-found={file.found} key={file.path}>
+                      <FileSearch aria-hidden="true" size={14} />
+                      {file.path}
+                      <span>{file.found ? "확인" : "없음"}</span>
+                    </li>
+                  ))}
+                </ul>
               </section>
-            ) : null}
-            {boardHref ? <Link className={styles.boardAction} href={boardHref}>추천 구조로 Board 열기</Link> : null}
-          </section>
-        ) : null}
 
-        {errorMessage && loadState !== "error" ? (
-          <ProductState compact description={errorMessage} kind="error" title="작업을 완료하지 못했습니다" />
-        ) : null}
-      </section>
+              <section className={styles.evidenceSection}>
+                <h2>찾은 근거</h2>
+                <div className={styles.signals}>
+                  {analysis.detectedSignals.length > 0
+                    ? analysis.detectedSignals.map((signal) => <span key={signal}>{signal}</span>)
+                    : "판단할 근거가 부족합니다."}
+                </div>
+                <p>{analysis.recommendationReason}</p>
+              </section>
+
+              <TemplateSelection
+                onSelect={(templateId) => {
+                  setSelectedTemplateId(templateId);
+                  setDraft(null);
+                  setPreviewDiagram(null);
+                }}
+                selectedTemplateId={selectedTemplateId}
+                templates={templates}
+              />
+
+              <button
+                className={styles.primaryButton}
+                disabled={selectedTemplate === null || requestState === "loading"}
+                onClick={() => void createDraft()}
+                type="button"
+              >
+                {requestState === "loading" ? <LoaderCircle aria-hidden="true" size={16} /> : null}
+                Architecture Draft 만들기
+              </button>
+            </>
+          ) : null}
+        </aside>
+
+        <section className={styles.preview} aria-label="Repository Architecture Draft PREVIEW">
+          {previewDiagram && draft ? (
+            <>
+              <header className={styles.previewHeader}>
+                <span>ARCHITECTURE DRAFT</span>
+                <h2>{draft.title}</h2>
+              </header>
+              <AiDraftBoardPreview diagram={previewDiagram} />
+              <footer className={styles.previewFooter}>
+                <span>적용하기 전에는 프로젝트 Board가 바뀌지 않습니다.</span>
+                <button
+                  disabled={requestState === "loading"}
+                  onClick={() => void applyDraft()}
+                  type="button"
+                >
+                  <Check aria-hidden="true" size={16} />
+                  Board에 적용
+                </button>
+              </footer>
+            </>
+          ) : (
+            <div className={styles.emptyPreview}>
+              <span>PREVIEW</span>
+              <strong>Template을 확인한 뒤 Draft를 만드세요.</strong>
+            </div>
+          )}
+        </section>
+      </div>
     </main>
   );
 }
 
-// Repository 분석에서 확정된 Template만 실제 DiagramJson 미리보기로 바꿉니다.
-function createRepositoryPreviewDiagram(
-  projectName: string,
-  repository: SourceRepository | null
-) {
-  const handoff = repository?.analysis?.aiHandoff;
-  if (!repository || handoff?.status !== "template_selected") return null;
-  return buildBoardTemplateDiagram(handoff.templateId, {
-    projectSlug: projectName,
-    shortId: repository.id.slice(0, 8)
-  }) ?? null;
-}
-
-// 사용 가능한 Repository 목록과 각 연결 행동만 표시합니다.
-function RepositoryCandidates({
-  actionState,
-  candidates,
-  onConnect
+function TemplateSelection({
+  onSelect,
+  selectedTemplateId,
+  templates
 }: {
-  readonly actionState: RequestState;
-  readonly candidates: readonly GitHubInstalledRepositoryCandidate[];
-  readonly onConnect: (candidate: GitHubInstalledRepositoryCandidate) => void;
+  readonly onSelect: (templateId: string) => void;
+  readonly selectedTemplateId: string | null;
+  readonly templates: readonly BoardTemplate[];
 }) {
-  if (candidates.length === 0) return null;
-
   return (
-    <div className={styles.candidateList}>
-      {candidates.map((candidate) => (
-        <article key={`${candidate.installationId}-${candidate.githubRepositoryId}`}>
-          <div><strong>{candidate.fullName}</strong><span>{candidate.defaultBranch}</span></div>
-          <button disabled={actionState === "loading" || candidate.archived} onClick={() => onConnect(candidate)} type="button">
-            {candidate.archived ? "Archived" : "연결"}
-          </button>
-        </article>
-      ))}
-    </div>
+    <section className={styles.templateSection}>
+      <h2>Template Selection</h2>
+      <TemplateGallery
+        actionLabel="이 Template 선택"
+        onSelect={onSelect}
+        selectedTemplateId={selectedTemplateId}
+        templates={templates}
+      />
+    </section>
   );
 }
 
-// 분석에서 Template이 확정된 경우에만 변조하기 어려운 Board 이동 주소를 만듭니다.
-function createRepositoryBoardHref(
-  projectId: string,
-  projectName: string,
-  repository: SourceRepository | null
-): string | null {
-  const handoff = repository?.analysis?.aiHandoff;
-  if (!repository || handoff?.status !== "template_selected") return null;
+function isRepositoryTemplateId(value: string): value is RepositoryAnalysisTemplateId {
+  return ["template-static-website", "template-api-db", "template-3tier"].includes(value);
+}
 
-  return `/workspace?${new URLSearchParams({
-    projectId,
-    projectName,
-    sourceRepositoryId: repository.id,
-    templateId: handoff.templateId
-  }).toString()}`;
+function createTemplateBasedRepositoryDraft(
+  template: BoardTemplate,
+  recommendation: AiArchitectureDraftResult
+): AiArchitectureDraftResult {
+  return {
+    ...recommendation,
+    architectureJson: convertDiagramJsonToArchitectureJson(template.diagramJson),
+    diagramJson: template.diagramJson,
+    title: `${template.title} Architecture Draft`,
+    metadata: {
+      ...recommendation.metadata,
+      assumptions: [
+        `사용자가 선택한 ${template.title} Template을 기준 구조로 유지했습니다.`,
+        ...recommendation.metadata.assumptions
+      ]
+    }
+  };
 }

@@ -5,7 +5,6 @@ import {
 } from "../../../../packages/types/src/template-definitions";
 import { isAreaNode } from "../diagram-editor/area-nodes";
 import { RESOURCE_NODE_DEFAULT_SIZE } from "../diagram-editor/resource-node-geometry";
-import { materializeTemplateDiagram } from "./template-resource-materializer";
 
 export const TEMPLATE_OVERWRITE_BACKUP_STORAGE_KEY = "sketchcatch.templateOverwriteBackups";
 
@@ -561,7 +560,7 @@ const boardTemplates: readonly BoardTemplate[] = [
 export function listBoardTemplates(): readonly BoardTemplate[] {
   return boardTemplates.map((template) => ({
     ...template,
-    diagramJson: materializeTemplateDiagram(cloneDiagramJson(template.diagramJson))
+    diagramJson: cloneDiagramJson(template.diagramJson)
   }));
 }
 
@@ -570,7 +569,7 @@ export function buildBoardTemplateDiagram(
   input: { readonly projectSlug: string; readonly shortId: string }
 ): DiagramJson | undefined {
   const definition = templateDefinitions.find((candidate) => candidate.id === templateId);
-  return definition ? materializeTemplateDiagram(buildTemplateDiagramJson(definition.id, input)) : undefined;
+  return definition ? buildTemplateDiagramJson(definition.id, input) : undefined;
 }
 
 // Template 목록에서 검색어와 tag를 적용하고 사용자가 고른 순서로 정렬합니다.

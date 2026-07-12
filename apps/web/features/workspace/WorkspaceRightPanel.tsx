@@ -7,13 +7,19 @@ import type {
   PointerEvent as ReactPointerEvent
 } from "react";
 import type {
+  ArchitectureDiagnostic,
   CheckFinding,
   TerraformDiagnostic,
   TerraformSourceLocation,
   TerraformSyncFileInput
 } from "@sketchcatch/types";
+import {
+  createArchitectureRuleInputFingerprint,
+  evaluateArchitectureDependencies
+} from "@sketchcatch/types/architecture-dependency-rules";
 import { createPortal } from "react-dom";
 import {
+  Activity,
   Code2,
   GalleryVerticalEnd,
   PanelRightClose,
@@ -32,8 +38,9 @@ import {
   type PreparedTerraformArtifactSource,
   type TerraformCodePanelHandle
 } from "./TerraformCodePanel";
-import { TerraformIssuesPanel } from "./TerraformIssuesPanel";
+import { WorkspaceIssuesPanel } from "./WorkspaceIssuesPanel";
 import { TerraformLeaveDialog } from "./TerraformLeaveDialog";
+import { LiveObservationModal } from "./LiveObservationModal";
 import { defaultResourceWorkspaceView } from "./resource-workspace-view";
 import { getPreDeploymentFindingTerraformSourceLocation } from "./pre-deployment-finding-source";
 import {
@@ -54,6 +61,7 @@ import {
   storeTerraformIssues,
   type TerraformIssueRecord
 } from "./terraform-issues-state";
+import { replaceArchitectureDiagnostics } from "./architecture-diagnostics-state";
 import type {
   TerraformIssueAiRequest,
   TerraformPreviewAiRequest,
@@ -61,10 +69,12 @@ import type {
   TerraformSafeFixApplyResult
 } from "./workspace-terraform-ai";
 import type { ResourceWorkspaceView, WorkspaceRightPanelView } from "./workspace-right-panel.types";
+import type { DeploymentAvailability } from "./deployment-availability";
 import styles from "./workspace.module.css";
 
 export type WorkspaceRightPanelProps = {
   readonly context: DiagramEditorPanelContext;
+  readonly deploymentAvailability: DeploymentAvailability;
   readonly initialView?: WorkspaceRightPanelView | undefined;
   readonly onTerraformIssueAiRequest: (request: TerraformIssueAiRequest) => void;
   readonly onTerraformPreviewAiRequest: (request: TerraformPreviewAiRequest) => void;
@@ -88,6 +98,7 @@ const TERRAFORM_SPLIT_KEYBOARD_STEP = 4;
 // 오른쪽 패널은 작업 중 필요한 모드만 노출하고, Reverse는 새 프로젝트 시작 흐름에서만 진입하게 둡니다.
 export function WorkspaceRightPanel({
   context,
+  deploymentAvailability,
   initialView,
   onTerraformIssueAiRequest,
   onTerraformPreviewAiRequest,
@@ -124,6 +135,7 @@ export function WorkspaceRightPanel({
     DEFAULT_TERRAFORM_CODE_PANE_RATIO
   );
   const [terraformIssues, setTerraformIssues] = useState<TerraformIssueRecord[]>([]);
+  const [architectureDiagnostics, setArchitectureDiagnostics] = useState<ArchitectureDiagnostic[]>([]);
   const [loadedTerraformIssuesProjectId, setLoadedTerraformIssuesProjectId] = useState<string | null>(null);
   const [pendingTerraformIssueFixSourceLocation, setPendingTerraformIssueFixSourceLocation] =
     useState<TerraformSourceLocation | null>(null);
@@ -133,12 +145,21 @@ export function WorkspaceRightPanel({
     initialView === "deployment"
   );
   const [canRenderDeploymentPortal, setCanRenderDeploymentPortal] = useState(false);
+  const [isLiveObservationOpen, setIsLiveObservationOpen] = useState(false);
   const latestTerraformSafeFixApplyRequestIdRef = useRef<number | null>(null);
   const terraformDiagnostics = useMemo(
     () => terraformIssues.map((issue) => issue.diagnostic),
     [terraformIssues]
   );
-  const hasTerraformIssueErrors = terraformDiagnostics.some((diagnostic) => diagnostic.severity === "error");
+  const architectureInputFingerprint = useMemo(
+    () => createArchitectureRuleInputFingerprint(context.diagram),
+    [context.diagram]
+  );
+  const contextualArchitectureDiagram = useMemo(() => context.diagram, [architectureInputFingerprint]);
+  const hasIssueErrors =
+    terraformDiagnostics.some((diagnostic) => diagnostic.severity === "error") ||
+    architectureDiagnostics.some((diagnostic) => diagnostic.severity === "error");
+  const issueCount = terraformDiagnostics.length + architectureDiagnostics.length;
   const currentDeploymentBaselineFingerprint = useMemo(
     () => toDeploymentBaselineFingerprint(context.diagram),
     [context.diagram]
@@ -203,6 +224,28 @@ export function WorkspaceRightPanel({
   useEffect(() => {
     setPreDeploymentCheckState(initialPreDeploymentCheckState);
   }, [projectId]);
+
+  useEffect(() => {
+    const timerId = window.setTimeout(() => {
+      setArchitectureDiagnostics((currentDiagnostics) =>
+        replaceArchitectureDiagnostics(
+          currentDiagnostics,
+          evaluateArchitectureDependencies(contextualArchitectureDiagram, "contextual")
+        )
+      );
+    }, 300);
+
+    return () => window.clearTimeout(timerId);
+  }, [architectureInputFingerprint, contextualArchitectureDiagram]);
+
+  const handleArchitectureDiagnosticsChange = useCallback(
+    (diagnostics: ArchitectureDiagnostic[]): void => {
+      setArchitectureDiagnostics((currentDiagnostics) =>
+        replaceArchitectureDiagnostics(currentDiagnostics, diagnostics)
+      );
+    },
+    []
+  );
 
   useEffect(() => {
     if (loadedTerraformIssuesProjectId !== projectId || typeof window === "undefined") {
@@ -402,6 +445,10 @@ export function WorkspaceRightPanel({
     setIsDeploymentConsoleOpen(true);
   }, [requestTerraformLeave]);
 
+  const openLiveObservation = useCallback((): void => {
+    setIsLiveObservationOpen(true);
+  }, []);
+
   const applyTerraformLeaveSaveFeedback = useCallback((feedback: TerraformLeaveSaveFeedback): void => {
     setTerraformLeaveSaveState(feedback.state);
     setTerraformLeaveSaveMessage(feedback.message);
@@ -527,6 +574,7 @@ export function WorkspaceRightPanel({
 
     const savedArtifacts = await savePreparedTerraformArtifact(preparedSource);
 
+    setHasUnsavedTerraformChanges(false);
     setLastSavedDeploymentBaselineFingerprint(toDeploymentBaselineFingerprint(preparedSource.diagramJson));
     setIsDeploymentBaselineDirty(false);
 
@@ -629,6 +677,7 @@ export function WorkspaceRightPanel({
   const deploymentConsoleContent = isDeploymentConsoleOpen && canRenderDeploymentPortal ? (
     <DeploymentPanel
       currentNodeCount={context.nodes.length}
+      deploymentAvailability={deploymentAvailability}
       diagramJson={context.diagram}
       fullScreenOnly
       hasUnsavedDeploymentBaseline={hasUnsavedDeploymentBaseline}
@@ -655,6 +704,13 @@ export function WorkspaceRightPanel({
   const deploymentConsole = deploymentConsoleContent
     ? createPortal(deploymentConsoleContent, document.body)
     : null;
+  const liveObservationModal = isLiveObservationOpen ? (
+    <LiveObservationModal
+      onClose={() => setIsLiveObservationOpen(false)}
+      projectId={projectId}
+      projectName={projectName}
+    />
+  ) : null;
   const terraformSplitStyle = {
     "--terraform-code-pane-ratio": `${terraformCodePaneRatio}%`
   } as CSSProperties;
@@ -687,20 +743,30 @@ export function WorkspaceRightPanel({
             type="button"
           >
             <Code2 size={18} aria-hidden="true" />
-            <span className={hasTerraformIssueErrors ? styles.panelIssueBadgeError : styles.panelIssueBadge}>
-              {terraformDiagnostics.length}
+            <span className={hasIssueErrors ? styles.panelIssueBadgeError : styles.panelIssueBadge}>
+              {issueCount}
             </span>
           </button>
           <button
             className={styles.collapsedPanelButton}
+            data-deployment-console-trigger
             onClick={openDeploymentConsole}
             title="Deploy"
             type="button"
           >
             <Rocket size={18} aria-hidden="true" />
           </button>
+          <button
+            className={styles.collapsedPanelButton}
+            onClick={openLiveObservation}
+            title="시뮬레이션"
+            type="button"
+          >
+            <Activity size={18} aria-hidden="true" />
+          </button>
         </aside>
         {deploymentConsole}
+        {liveObservationModal}
       </>
     );
   }
@@ -739,21 +805,31 @@ export function WorkspaceRightPanel({
             >
               <Code2 size={16} aria-hidden="true" />
               <span
-                className={hasTerraformIssueErrors ? styles.panelIssueBadgeError : styles.panelIssueBadge}
-                aria-label={`${terraformDiagnostics.length} issues`}
+                className={hasIssueErrors ? styles.panelIssueBadgeError : styles.panelIssueBadge}
+                aria-label={`${issueCount} issues`}
               >
-                {terraformDiagnostics.length}
+                {issueCount}
               </span>
             </button>
           </div>
           <button
             className={styles.panelModeTextButton}
+            data-deployment-console-trigger
             onClick={openDeploymentConsole}
             title="Open deployment console"
             type="button"
           >
             <Rocket size={14} aria-hidden="true" />
             <span>Deploy</span>
+          </button>
+          <button
+            className={styles.panelModeTextButton}
+            onClick={openLiveObservation}
+            title="실시간 트래픽 및 ASG 관측"
+            type="button"
+          >
+            <Activity size={14} aria-hidden="true" />
+            <span>시뮬레이션</span>
           </button>
         </div>
 
@@ -777,6 +853,7 @@ export function WorkspaceRightPanel({
                 externalDiscardRequestId={terraformDiscardRequestId}
                 externalSaveRequestId={terraformSaveRequestId}
                 isVisible={activeView === "terraform"}
+                onArchitectureDiagnosticsChange={handleArchitectureDiagnosticsChange}
                 onDiagnosticsChange={handleTerraformDiagnosticsChange}
                 onDirtyChange={handleTerraformDirtyChange}
                 onExternalSaveComplete={handleTerraformExternalSaveComplete}
@@ -801,7 +878,15 @@ export function WorkspaceRightPanel({
               ref={terraformIssuesPaneRef}
               tabIndex={-1}
             >
-              <TerraformIssuesPanel issues={terraformIssues} onResolveWithAi={handleTerraformIssueAiClick} />
+              <WorkspaceIssuesPanel
+                architectureDiagnostics={architectureDiagnostics}
+                onFocusArchitectureResource={(diagnostic) => {
+                  context.selectResourceNode(diagnostic.resourceNodeId);
+                  setActiveView("resource");
+                }}
+                onResolveTerraformIssueWithAi={handleTerraformIssueAiClick}
+                terraformIssues={terraformIssues}
+              />
             </div>
           </div>
         </div>
@@ -816,6 +901,7 @@ export function WorkspaceRightPanel({
         ) : null}
       </aside>
       {deploymentConsole}
+      {liveObservationModal}
     </>
   );
 }

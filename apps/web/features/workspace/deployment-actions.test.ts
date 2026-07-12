@@ -1,17 +1,39 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { Deployment, GitCicdHandoff } from "@sketchcatch/types";
+import type { Deployment, DiagramJson, GitCicdHandoff } from "@sketchcatch/types";
 import {
   getGitCicdHandoffStatusLabel,
   getDefaultDeploymentPanelMode,
   getDeploymentActionState,
   getDeploymentLogMessageTokens,
   getDeploymentLogTone,
+  getRecommendedDeploymentLiveProfile,
   hasCompleteDeploymentApprovalSnapshot,
   shouldAutoRefreshDeployment,
   shouldAutoRefreshGitCicdHandoff,
   shouldShowDeploymentInfoValue
 } from "./deployment-actions";
+
+test("template resource graphs recommend the extended live deployment profile", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      {
+        id: "cloudfront",
+        kind: "resource",
+        label: "CloudFront",
+        locked: false,
+        position: { x: 0, y: 0 },
+        size: { width: 124, height: 96 },
+        type: "aws_cloudfront_distribution",
+        zIndex: 1
+      }
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  assert.equal(getRecommendedDeploymentLiveProfile(diagramJson), "demo_web_service_with_rds");
+});
 
 test("successful apply deployment offers cleanup planning but not direct destroy", () => {
   const state = getDeploymentActionState(
@@ -64,6 +86,7 @@ test("destroy plan waits for approval before showing destroy execution", () => {
   assert.equal(state.canApprovePlan, true);
   assert.equal(state.approvePlanLabel, "Destroy Plan 승인");
   assert.equal(state.shouldShowApplyPlanButton, false);
+  assert.equal(state.shouldShowDestroyPlanButton, true);
   assert.equal(state.shouldShowDestroyButton, false);
 });
 
@@ -101,7 +124,7 @@ test("current plan without an operation does not fall back to a Terraform plan r
   assert.equal(state.shouldShowApprovePlanButton, true);
 });
 
-test("current plan with blocking warnings cannot be approved", () => {
+test("current apply plan hides plan regeneration and keeps approval enabled", () => {
   const state = getDeploymentActionState(
     createDeployment({
       currentPlanArtifactId: "99999999-9999-4999-8999-999999999999",
@@ -130,7 +153,9 @@ test("current plan with blocking warnings cannot be approved", () => {
   );
 
   assert.equal(state.shouldShowApprovePlanButton, true);
-  assert.equal(state.canApprovePlan, false);
+  assert.equal(state.canApprovePlan, true);
+  assert.equal(state.shouldShowApplyPlanButton, false);
+  assert.equal(state.canRunApplyPlan, false);
 });
 
 test("running Terraform work hides stale plan rerun actions", () => {
@@ -162,6 +187,8 @@ test("approved destroy plan enables destroy and keeps apply hidden", () => {
 
   assert.equal(state.shouldShowApplyButton, false);
   assert.equal(state.canApply, false);
+  assert.equal(state.shouldShowDestroyPlanButton, true);
+  assert.equal(state.canRunDestroyPlan, true);
   assert.equal(state.shouldShowDestroyButton, true);
   assert.equal(state.canDestroy, true);
 });

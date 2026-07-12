@@ -138,10 +138,36 @@ resource "aws_subnet" "public" {
 
   assert.deepEqual(
     files.map((file) => file.fileName),
-    ["main.tf", "network.tf", "subnets.tf"]
+    ["providers.tf", "main.tf", "network.tf", "subnets.tf"]
+  );
+  assert.match(
+    files.find((file) => file.fileName === "providers.tf")?.code ?? "",
+    /source\s*= "hashicorp\/aws"/
   );
   assert.equal(files.find((file) => file.fileName === "network.tf")?.code.includes("aws_vpc"), true);
   assert.equal(files.find((file) => file.fileName === "subnets.tf")?.code.includes("aws_subnet"), true);
+});
+
+test("createTerraformFilesFromGeneratedCode configures Kubernetes from the EKS cluster", () => {
+  const diagram: DiagramJson = {
+    nodes: [
+      makeNode("resource", "aws_eks_cluster", "practice_cluster"),
+      makeNode("resource", "kubernetes_namespace", "practice")
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  const files = createTerraformFilesFromGeneratedCode(diagram, [
+    'resource "aws_eks_cluster" "practice_cluster" {}',
+    'resource "kubernetes_namespace" "practice" {}'
+  ].join("\n\n"));
+  const providerCode = files.find((file) => file.fileName === "providers.tf")?.code ?? "";
+
+  assert.match(providerCode, /source\s*= "hashicorp\/kubernetes"/);
+  assert.match(providerCode, /data "aws_eks_cluster_auth" "sketchcatch"/);
+  assert.match(providerCode, /host\s*= aws_eks_cluster\.practice_cluster\.endpoint/);
+  assert.match(providerCode, /token\s*= data\.aws_eks_cluster_auth\.sketchcatch\.token/);
 });
 
 test("createTerraformFilesFromGeneratedCode clears terraform code when the diagram has no resources", () => {

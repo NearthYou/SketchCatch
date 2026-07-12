@@ -642,7 +642,7 @@ test("runDeploymentApply rejects unsafe Terraform before preparing AWS credentia
         {
           applyArtifactStorage: new FakeApplyArtifactStorage(),
           readTerraformArtifactFile: async () => `
-            data "aws_caller_identity" "current" {
+            data "aws_region" "current" {
             }
           `,
           writePlanFile: async () => {
@@ -666,7 +666,7 @@ test("runDeploymentApply rejects unsafe Terraform before preparing AWS credentia
           }
         }
       ),
-    /data source "aws_caller_identity" is not allowed/
+    /data source "aws_region" is not allowed/
   );
 
   assert.equal(cleanupCalled, true);
@@ -675,7 +675,7 @@ test("runDeploymentApply rejects unsafe Terraform before preparing AWS credentia
   assert.equal(planWritten, false);
   assert.equal(repository.deployment?.status, "FAILED");
   assert.equal(repository.failedInput?.failureStage, "apply");
-  assert.match(repository.failedInput?.errorSummary ?? "", /data source "aws_caller_identity" is not allowed/);
+  assert.match(repository.failedInput?.errorSummary ?? "", /data source "aws_region" is not allowed/);
 });
 
 test("runDeploymentApply rejects approval snapshot drift before credentials or Terraform", async () => {

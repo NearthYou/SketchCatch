@@ -6,9 +6,59 @@ import {
   clearOutOfBoundsAreaParentAssignments,
   applyAreaNodeMovement,
   applyAreaNodeParentAssignments,
-  getDirectlyMovedNodeIdsFromPositionMap
+  getDirectlyMovedNodeIdsFromPositionMap,
+  placeDroppedNodeInsideArea
 } from "./area-node-movement";
 import { calculateNodeResize } from "./node-resize";
+
+test("placeDroppedNodeInsideArea keeps a dropped Subnet fully inside its VPC", () => {
+  const vpc = makeResourceNode({
+    id: "vpc-1",
+    position: { x: 600, y: 504 },
+    resourceType: "aws_vpc",
+    size: { width: 240, height: 160 }
+  });
+  const subnet = makeResourceNode({
+    id: "subnet-1",
+    position: { x: 720, y: 588 },
+    resourceType: "aws_subnet",
+    size: { width: 180, height: 120 }
+  });
+
+  const placedSubnet = placeDroppedNodeInsideArea([vpc], subnet, { x: 720, y: 588 });
+
+  assert.deepEqual(placedSubnet.position, { x: 648, y: 532 });
+  assert.ok(placedSubnet.position.x + placedSubnet.size.width <= vpc.position.x + vpc.size.width);
+  assert.ok(placedSubnet.position.y + placedSubnet.size.height <= vpc.position.y + vpc.size.height);
+});
+
+test("placeDroppedNodeInsideArea leaves a Resource unchanged when no Area contains the drop", () => {
+  const instance = makeResourceNode({
+    id: "instance-1",
+    position: { x: 420, y: 340 },
+    resourceType: "aws_instance",
+    size: { width: 56, height: 56 }
+  });
+
+  assert.strictEqual(placeDroppedNodeInsideArea([], instance, instance.position), instance);
+});
+
+test("placeDroppedNodeInsideArea does not force a child into an Area that is too small", () => {
+  const subnet = makeResourceNode({
+    id: "subnet-1",
+    position: { x: 100, y: 100 },
+    resourceType: "aws_subnet",
+    size: { width: 180, height: 120 }
+  });
+  const vpc = makeResourceNode({
+    id: "vpc-1",
+    position: { x: 120, y: 120 },
+    resourceType: "aws_vpc",
+    size: { width: 240, height: 160 }
+  });
+
+  assert.strictEqual(placeDroppedNodeInsideArea([subnet], vpc, { x: 140, y: 140 }), vpc);
+});
 
 test("applyAreaNodeMovement moves nodes contained in a moved area by the same delta", () => {
   const region = makeDesignNode({
