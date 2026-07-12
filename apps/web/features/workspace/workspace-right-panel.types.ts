@@ -1,3 +1,4 @@
-export type WorkspaceRightPanelView = "resource" | "terraform" | "deployment";
+export type WorkspaceArchitecturePanelView = "resource" | "terraform";
+export type WorkspaceRightPanelView = WorkspaceArchitecturePanelView;
 export type ResourceWorkspaceView = "settings" | "list";
 export type RequestState = "idle" | "loading" | "error";

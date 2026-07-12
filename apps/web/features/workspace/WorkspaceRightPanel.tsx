@@ -116,7 +116,7 @@ export function WorkspaceRightPanel({
   const latestTerraformDiagnosticsRef = useRef<TerraformDiagnostic[]>([]);
   const latestTerraformSaveRequestIdRef = useRef(0);
   const [activeView, setActiveView] = useState<WorkspaceRightPanelView>(
-    initialView === "deployment" ? "resource" : initialView ?? "resource"
+    initialView ?? "resource"
   );
   const [resourceWorkspaceView, setResourceWorkspaceView] = useState<ResourceWorkspaceView>(
     defaultResourceWorkspaceView
@@ -141,9 +141,7 @@ export function WorkspaceRightPanel({
     useState<TerraformSourceLocation | null>(null);
   const [preDeploymentCheckState, setPreDeploymentCheckState] =
     useState<DeploymentPreDeploymentCheckState>(initialPreDeploymentCheckState);
-  const [isDeploymentConsoleOpen, setIsDeploymentConsoleOpen] = useState(
-    initialView === "deployment"
-  );
+  const [isDeploymentConsoleOpen, setIsDeploymentConsoleOpen] = useState(false);
   const [canRenderDeploymentPortal, setCanRenderDeploymentPortal] = useState(false);
   const [isLiveObservationOpen, setIsLiveObservationOpen] = useState(false);
   const latestTerraformSafeFixApplyRequestIdRef = useRef<number | null>(null);
@@ -525,11 +523,6 @@ export function WorkspaceRightPanel({
   }
 
   function openCollapsedView(nextView: WorkspaceRightPanelView): void {
-    if (nextView === "deployment") {
-      openDeploymentConsole();
-      return;
-    }
-
     if (nextView === "terraform") {
       context.setRightPanelOpen(true);
       setActiveView("terraform");

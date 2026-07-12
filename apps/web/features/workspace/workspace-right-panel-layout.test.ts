@@ -54,7 +54,7 @@ test("deploy opens a full-screen console instead of rendering deployment inside 
   assert.ok(deploymentPanelIndex < nextRightPanelViewIndex);
   assert.match(
     componentSource,
-    /const \[isDeploymentConsoleOpen, setIsDeploymentConsoleOpen\] = useState\(\s*initialView === "deployment"\s*\);/
+    /const \[isDeploymentConsoleOpen, setIsDeploymentConsoleOpen\] = useState\(false\);/
   );
   assert.match(componentSource, /fullScreenOnly/);
   assert.match(componentSource, /initialExpanded/);
@@ -1683,6 +1683,17 @@ test("workspace modernization preserves action ownership", () => {
   assert.match(deploymentPanelSource, /runDeploymentApply/);
   assert.match(aiChatDockSource, /applyDraftToBoard/);
   assert.match(aiChatDockSource, /applyPatchPreviewToBoard/);
+});
+
+test("architecture panel owns only Resource and Terraform", () => {
+  assert.match(workspaceRightPanelTypesSource, /"resource" \| "terraform"/);
+  assert.doesNotMatch(workspaceRightPanelTypesSource, /"deployment"/);
+  assert.match(componentSource, /openDeploymentConsole/);
+  assert.match(
+    componentSource,
+    /requestTerraformLeave\(\{ kind: "deployment-console" \}\)/
+  );
+  assert.match(componentSource, /setIsDeploymentConsoleOpen\(true\)/);
 });
 
 test("workspace modernization exposes one architecture surface and full-screen wizard", () => {
