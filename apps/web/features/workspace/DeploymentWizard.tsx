@@ -1,4 +1,6 @@
-import type { ReactNode } from "react";
+"use client";
+
+import { useState, type ReactNode } from "react";
 import type { DeploymentBaseline } from "./deployment-baseline";
 import type { DeploymentWizardState } from "./deployment-wizard-state";
 import styles from "./deployment-wizard.module.css";
@@ -18,8 +20,30 @@ export function DeploymentWizard({
   projectName,
   state
 }: DeploymentWizardProps) {
+  const [closeNotice, setCloseNotice] = useState("");
+
+  function requestWizardClose(): void {
+    if (state.executionPhase === "running") {
+      setCloseNotice(
+        "배포 실행이 진행 중입니다. 결과 단계에서 상태를 확인하거나 명시적으로 실행 취소를 요청하세요."
+      );
+      return;
+    }
+
+    setCloseNotice("");
+    onClose();
+  }
+
   return (
-    <div aria-label="Deployment Wizard" aria-modal="true" className={styles.overlay} role="dialog">
+    <div
+      aria-label="Deployment Wizard"
+      aria-modal="true"
+      className={styles.overlay}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) requestWizardClose();
+      }}
+      role="dialog"
+    >
       <section className={styles.shell}>
         <header className={styles.header}>
           <div className={styles.headerIdentity}>
@@ -31,9 +55,14 @@ export function DeploymentWizard({
             <span>현재 단계</span>
             <strong>{state.steps.find((step) => step.id === state.activeStepId)?.label}</strong>
           </div>
-          <button className={styles.closeButton} onClick={onClose} type="button">
+          <button className={styles.closeButton} onClick={requestWizardClose} type="button">
             Architecture로 돌아가기
           </button>
+          {closeNotice ? (
+            <p className={styles.closeNotice} role="alert">
+              {closeNotice}
+            </p>
+          ) : null}
         </header>
 
         <nav aria-label="Deployment 단계" className={styles.stepRail}>

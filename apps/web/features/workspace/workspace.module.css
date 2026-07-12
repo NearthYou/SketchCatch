@@ -2744,6 +2744,13 @@
   margin: 0;
 }
 
+.aiChatContextLabel {
+  color: var(--workspace-muted, #60646c);
+  font-size: 11px;
+  line-height: 1.4;
+  margin: 0;
+}
+
 .aiChatTemplateContext {
   background: var(--dashboard-design-canvas-soft);
   border-bottom: 1px solid var(--dashboard-design-hairline);

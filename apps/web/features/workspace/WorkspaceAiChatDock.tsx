@@ -1265,6 +1265,9 @@ export function WorkspaceAiChatDock({
         <div>
           <span>자연어 다이어그램</span>
           <h2>AI 채팅</h2>
+          <p className={styles.aiChatContextLabel}>
+            Architecture 편집 · Preview 확인 뒤에만 Board와 Terraform에 반영됩니다.
+          </p>
         </div>
         <button
           aria-label="AI 채팅 닫기"

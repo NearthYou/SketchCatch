@@ -110,6 +110,8 @@ test("workspace AI patch clarification can decline optional resource additions",
 test("workspace AI keeps explicit preview approval without deployment execution ownership", () => {
   assert.match(workspaceAiChatDockSource, /applyDraftToBoard/);
   assert.match(workspaceAiChatDockSource, /applyPatchPreviewToBoard/);
+  assert.match(workspaceAiChatDockSource, /Architecture 편집/);
+  assert.match(workspaceAiChatDockSource, /Preview 확인 뒤에만/);
   assert.doesNotMatch(workspaceAiChatDockSource, /approveCurrentPlan/);
   assert.doesNotMatch(workspaceAiChatDockSource, /runDeploymentApply/);
   assert.doesNotMatch(workspaceAiChatDockSource, /createGitCicdHandoff/);

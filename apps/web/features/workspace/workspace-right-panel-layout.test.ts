@@ -1269,6 +1269,14 @@ test("Deploy opens one modal wizard outside the Architecture Panel", () => {
   );
 });
 
+test("wizard does not silently discard a running deployment", () => {
+  assert.match(deploymentWizardSource, /requestWizardClose/);
+  assert.match(deploymentWizardSource, /state\.executionPhase === "running"/);
+  assert.match(deploymentWizardSource, /명시적으로 실행 취소를 요청/);
+  assert.match(deploymentWizardSource, /Architecture로 돌아가기/);
+  assert.match(deploymentWizardSource, /role="alert"/);
+});
+
 test("pre-deployment check is owned by the deployment tab", () => {
   const preflightSummaryRule = getCssRule(stylesSource, "deploymentPreflightSummary");
   const preflightFindingsRule = getCssRule(stylesSource, "deploymentPreflightFindings");

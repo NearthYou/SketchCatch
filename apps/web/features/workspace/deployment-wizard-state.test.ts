@@ -73,3 +73,29 @@ test("approved Plan can choose Git CI/CD without a Direct Apply result", () => {
 
   assert.equal(state.canCreateGitCicdHandoff, true);
 });
+
+test("wizard distinguishes a running execution from a finished result", () => {
+  const running = getDeploymentWizardState(
+    createInput({
+      approved: true,
+      directApplyStatus: "running",
+      plan: "ready",
+      preparation: "ready",
+      preflight: "passed",
+      route: "direct"
+    })
+  );
+  const finished = getDeploymentWizardState(
+    createInput({
+      approved: true,
+      directApplyStatus: "success",
+      plan: "ready",
+      preparation: "ready",
+      preflight: "passed",
+      route: "direct"
+    })
+  );
+
+  assert.equal(running.executionPhase, "running");
+  assert.equal(finished.executionPhase, "finished");
+});

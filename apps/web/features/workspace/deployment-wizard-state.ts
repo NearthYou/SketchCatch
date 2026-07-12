@@ -46,6 +46,7 @@ export type DeploymentWizardState = {
   readonly canChooseRoute: boolean;
   readonly canCreateGitCicdHandoff: boolean;
   readonly canRunDirectApply: boolean;
+  readonly executionPhase: "not-started" | "running" | "finished";
   readonly steps: readonly DeploymentWizardStep[];
 };
 
@@ -69,6 +70,12 @@ export function getDeploymentWizardState(
     approved && input.route === "direct" && input.directApplyStatus === "not-started";
   const canCreateGitCicdHandoff =
     approved && input.route === "git-cicd" && input.gitCicdHandoffStatus === "not-created";
+  const actions = {
+    canChooseRoute,
+    canCreateGitCicdHandoff,
+    canRunDirectApply,
+    executionPhase: getExecutionPhase(input)
+  } as const;
 
   if (!isPreflightComplete(input.preflight)) {
     const preflightState = input.preflight === "blocked" || input.preflight === "error"
@@ -81,7 +88,7 @@ export function getDeploymentWizardState(
       approve: locked("approve", "Plan을 먼저 생성하세요."),
       route: locked("route", "Plan 승인이 필요합니다."),
       result: locked("result", "실행 방식을 먼저 선택하세요.")
-    }, { canChooseRoute, canCreateGitCicdHandoff, canRunDirectApply });
+    }, actions);
   }
 
   const preflightStep = step("preflight", "complete");
@@ -93,7 +100,7 @@ export function getDeploymentWizardState(
       approve: locked("approve", "Plan을 먼저 생성하세요."),
       route: locked("route", "Plan 승인이 필요합니다."),
       result: locked("result", "실행 방식을 먼저 선택하세요.")
-    }, { canChooseRoute, canCreateGitCicdHandoff, canRunDirectApply });
+    }, actions);
   }
 
   const prepareStep = step("prepare", "complete");
@@ -105,7 +112,7 @@ export function getDeploymentWizardState(
       approve: locked("approve", "Plan을 먼저 생성하세요."),
       route: locked("route", "Plan 승인이 필요합니다."),
       result: locked("result", "실행 방식을 먼저 선택하세요.")
-    }, { canChooseRoute, canCreateGitCicdHandoff, canRunDirectApply });
+    }, actions);
   }
 
   const planStep = step("plan", "complete");
@@ -117,7 +124,7 @@ export function getDeploymentWizardState(
       approve: step("approve", "active"),
       route: locked("route", "Plan 승인이 필요합니다."),
       result: locked("result", "실행 방식을 먼저 선택하세요.")
-    }, { canChooseRoute, canCreateGitCicdHandoff, canRunDirectApply });
+    }, actions);
   }
 
   const approveStep = step("approve", "complete");
@@ -129,7 +136,7 @@ export function getDeploymentWizardState(
       approve: approveStep,
       route: step("route", "active"),
       result: locked("result", "실행 방식을 선택하고 명시적으로 시작하세요.")
-    }, { canChooseRoute, canCreateGitCicdHandoff, canRunDirectApply });
+    }, actions);
   }
 
   return state("result", {
@@ -139,7 +146,7 @@ export function getDeploymentWizardState(
     approve: approveStep,
     route: step("route", "complete"),
     result: step("result", getResultState(input))
-  }, { canChooseRoute, canCreateGitCicdHandoff, canRunDirectApply });
+  }, actions);
 }
 
 function isPreflightComplete(preflight: DirectDeploymentPreflightState): boolean {
@@ -168,12 +175,27 @@ function getResultState(input: DeploymentWizardStateInput): DeploymentWizardStep
   return "active";
 }
 
+function getExecutionPhase(
+  input: DeploymentWizardStateInput
+): DeploymentWizardState["executionPhase"] {
+  if (!hasExecutionStarted(input)) return "not-started";
+
+  const status = input.route === "direct"
+    ? input.directApplyStatus
+    : input.gitCicdHandoffStatus;
+
+  return status === "running" || status === "pending" ? "running" : "finished";
+}
+
 function state(
   activeStepId: DeploymentWizardStepId,
   steps: Readonly<Record<DeploymentWizardStepId, DeploymentWizardStep>>,
   actions: Pick<
     DeploymentWizardState,
-    "canChooseRoute" | "canCreateGitCicdHandoff" | "canRunDirectApply"
+    | "canChooseRoute"
+    | "canCreateGitCicdHandoff"
+    | "canRunDirectApply"
+    | "executionPhase"
   >
 ): DeploymentWizardState {
   return {

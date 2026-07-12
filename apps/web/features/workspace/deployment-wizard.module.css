@@ -82,6 +82,17 @@
   outline-offset: 2px;
 }
 
+.closeNotice {
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 8px;
+  color: #9a3412;
+  font-size: 12px;
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 8px 10px;
+}
+
 .stepRail {
   background: var(--workspace-surface-muted, #fafafa);
   border-right: 1px solid var(--workspace-line, #f0f0f3);
