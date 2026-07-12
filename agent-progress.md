@@ -12,42 +12,11 @@ Short English-only working log for the current agent context. Older records are 
 - The latest follow-up fix maps missing `source_repositories` migrations to a stable API/UI message instead of exposing raw SQL.
 - GitHub repository-start and callback screens now route permission expansion to project GitHub settings instead of opening GitHub App installation directly.
 - New project Repository start now opens an inline public GitHub URL analysis panel instead of routing to the separate Repository start page.
+- Public Repository recommendation now shows ranked template candidates, asks follow-up questions, and creates an enriched repository-aware diagram only after the user accepts board creation.
 - Local `db:migrate` could not be run in this shell because `DATABASE_URL` is empty.
 - No cloud deployment, Terraform apply, or infrastructure mutation was run during this work session.
 
 ## Session Record
-
-### 2026-07-12 - Deepen public GitHub URL evidence scan
-
-- Goal: Fix shallow public Repository URL analysis that only checked root `README.md`, root `package.json`, root `Dockerfile`, and root `docker-compose.yml`.
-- Completed:
-  - Reproduced the user-visible issue with `https://github.com/chaekang/Jungle_AI_Board`, which has nested Dockerfiles and app package files under `apps/`.
-  - Changed public URL analysis to read the GitHub recursive tree first, then fetch prioritized evidence paths under nested app roots.
-  - Added request timeouts and per-file failure tolerance for public GitHub evidence fetches.
-  - Reported actual evidence file paths instead of fixed root-level false entries.
-  - Added Python/FastAPI runtime detection for public URL analysis.
-- Verification:
-  - `pnpm --dir apps/api exec tsx --test src/services/aiRepositoryAnalysis.test.ts src/routes/ai.test.ts`
-  - `pnpm --dir apps/api typecheck`
-  - Live route check for `https://github.com/chaekang/Jungle_AI_Board` returned nested Dockerfile/package evidence and `React`, `Node API`, `Python API`, `Database`, `Container` signals.
-- Risk:
-  - Public URL analysis still maps to the nearest supported Template; richer topology generation remains downstream Architecture Draft work.
-
-### 2026-07-12 - Move Repository URL analysis above action button
-
-- Goal: Put the inline Repository URL analysis panel above the `Repository 분석하기` button on the new project start screen.
-- Completed:
-  - Moved `RepositoryUrlStartPanel` before the action button group in the workspace new-project start client.
-  - Added source-order regression coverage so the panel stays above the primary action.
-- Verification:
-  - `pnpm --dir apps/web exec tsx --test app/workspace/new/workspace-start-options.test.ts`
-  - `pnpm --filter @sketchcatch/web typecheck`
-  - `pnpm --filter @sketchcatch/web lint`
-  - `pnpm build`
-  - `pnpm lint` passed with the pre-existing `live-observations` `setNow` warning.
-  - `pnpm typecheck`
-- Risk:
-  - Browser screenshot verification was skipped because Playwright/browser automation is not installed in this worktree. The local page was reachable at `http://localhost:3000/workspace/new`.
 
 ### 2026-07-12 - Fail fast when API database URL is missing
 
@@ -214,6 +183,25 @@ Short English-only working log for the current agent context. Older records are 
 - Risk:
   - Browser visual verification has not been run yet in this worktree.
 
+### 2026-07-12 - Add Repository recommendation candidates and enriched diagrams
+
+- Goal: Make public Repository analysis recommend multiple template candidates, ask meaningful follow-up questions, and generate a repository-aware board instead of dumping the raw Terraform template diagram.
+- Completed:
+  - Added a public Repository recommendation helper that returns ranked template candidates and up to five follow-up questions from repository signals, deployment type, and answers.
+  - Updated the Repository analysis page to show selectable recommendation candidates instead of a single fixed template label.
+  - Changed final board creation to generate a repository-aware `ArchitectureJson` and convert it through the existing diagram adapter, so React/API/DB/container/CI-CD signals add missing resources around the selected template.
+  - Added focused tests covering multiple candidates, follow-up questions, ECS/DB/CloudFront/CI-CD diagram enrichment, and readable node labels.
+- Verification:
+  - `pnpm --dir apps/web exec tsx --test features/workspace/public-repository-recommendation.test.ts features/workspace/repository-start-template-recommendation.test.ts`
+  - `pnpm --dir apps/web typecheck`
+  - `pnpm harness:check`
+  - `pnpm lint` passed with the pre-existing `live-observations` `setNow` warning.
+  - `pnpm typecheck`
+  - `pnpm build`
+  - `git diff --check` passed with CRLF conversion warnings only.
+- Risk:
+  - Browser visual verification has not been run yet in this worktree.
+
 ## Next Action
 
-- Manually retry the Repository URL analysis page in the browser when the local API/database is running.
+- Commit the public Repository recommendation candidate and diagram enrichment update.

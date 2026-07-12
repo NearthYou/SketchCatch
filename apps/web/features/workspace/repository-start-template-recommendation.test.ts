@@ -16,9 +16,12 @@ test("Repository start screen exposes deployment, CI/CD, and template recommenda
   assert.match(source, /showUrlAnalysis/);
   assert.match(source, /PublicRepositoryRecommendationStep/);
   assert.match(source, /추천 템플릿/);
+  assert.match(source, /추천 템플릿 후보/);
+  assert.match(source, /publicCandidateList/);
+  assert.match(source, /role="radiogroup"/);
   assert.match(source, /보드 생성/);
-  assert.match(source, /createPublicRepositoryQuestions/);
-  assert.match(source, /selectPublicRepositoryTemplateId/);
+  assert.match(source, /createPublicRepositoryRecommendation/);
+  assert.match(source, /createPublicRepositoryDiagram/);
   assert.doesNotMatch(source, /evidenceFiles\.map/);
   assert.match(source, /PR 생성, CI\/CD 인계/);
   assert.match(source, /EC2\/VM 기반/);

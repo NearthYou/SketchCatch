@@ -30,6 +30,13 @@ import {
   findActiveGitHubRepository
 } from "../../projects/[projectId]/settings/project-github-settings-state";
 import { buildBoardTemplateDiagram } from "../../../features/resource-settings/template-library";
+import {
+  createPublicRepositoryDiagram,
+  createPublicRepositoryRecommendation,
+  formatPublicRepositoryTemplate,
+  getPublicRepositoryDeploymentDefault,
+  type PublicRepositoryTemplateId
+} from "../../../features/workspace/public-repository-recommendation";
 import { AiDraftBoardPreview } from "../ai/ai-draft-board-preview";
 import styles from "./repository-start.module.css";
 
@@ -40,13 +47,6 @@ type RepositoryStartClientProps = {
   readonly initialRepositoryUrl?: string;
   readonly projectId: string;
   readonly projectName: string;
-};
-
-type PublicRepositoryQuestion = {
-  readonly id: string;
-  readonly prompt: string;
-  readonly answerType: "boolean" | "single_select";
-  readonly options?: readonly { readonly value: string; readonly label: string }[];
 };
 
 export function RepositoryStartClient({
@@ -71,6 +71,7 @@ export function RepositoryStartClient({
   const [deploymentType, setDeploymentType] = useState<RepositoryDeploymentType>("serverless");
   const [usesCiCd, setUsesCiCd] = useState(false);
   const [answers, setAnswers] = useState<Record<string, string | boolean>>({});
+  const [selectedPublicTemplateId, setSelectedPublicTemplateId] = useState<PublicRepositoryTemplateId | null>(null);
   const [recommendation, setRecommendation] = useState<RepositoryTemplateRecommendationResult | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
   const activeRepository = useMemo(
@@ -153,6 +154,7 @@ export function RepositoryStartClient({
     setPublicAnalysisState("loading");
     setPublicAnalysis(null);
     setAnswers({});
+    setSelectedPublicTemplateId(null);
     setErrorMessage("");
 
     try {
@@ -161,7 +163,15 @@ export function RepositoryStartClient({
         ...(trimmedDefaultBranch ? { defaultBranch: trimmedDefaultBranch } : {})
       });
       setPublicAnalysis(result);
-      setDeploymentType(getPublicRepositoryDeploymentDefault(result));
+      const nextDeploymentType = getPublicRepositoryDeploymentDefault(result);
+      setDeploymentType(nextDeploymentType);
+      setSelectedPublicTemplateId(
+        createPublicRepositoryRecommendation({
+          analysis: result,
+          answers: {},
+          deploymentType: nextDeploymentType
+        }).candidates[0]?.templateId ?? null
+      );
       setPublicAnalysisState("idle");
     } catch (error) {
       setPublicAnalysisState("error");
@@ -177,16 +187,26 @@ export function RepositoryStartClient({
   async function createPublicRepositoryBoard(): Promise<void> {
     if (!publicAnalysis || isPublicAnalysisBusy) return;
 
-    const templateId = selectPublicRepositoryTemplateId(publicAnalysis, deploymentType, answers);
-    const diagram = buildBoardTemplateDiagram(templateId, {
-      projectSlug: projectName,
-      shortId: "public-repo"
+    const recommendation = createPublicRepositoryRecommendation({
+      analysis: publicAnalysis,
+      answers,
+      deploymentType
     });
+    const templateId = selectedPublicTemplateId ?? recommendation.candidates[0]?.templateId;
 
-    if (!diagram) {
+    if (!templateId) {
       setErrorMessage("추천 템플릿으로 보드를 만들 수 없습니다.");
       return;
     }
+
+    const diagram = createPublicRepositoryDiagram({
+      analysis: publicAnalysis,
+      answers,
+      deploymentType,
+      projectName,
+      templateId,
+      usesCiCd
+    });
 
     setPublicAnalysisState("loading");
     setErrorMessage("");
@@ -322,8 +342,13 @@ export function RepositoryStartClient({
                   setAnswers((current) => ({ ...current, [questionId]: value }))
                 }
                 onCreateBoard={() => void createPublicRepositoryBoard()}
-                onDeploymentTypeChange={setDeploymentType}
+                onDeploymentTypeChange={(nextDeploymentType) => {
+                  setDeploymentType(nextDeploymentType);
+                  setSelectedPublicTemplateId(null);
+                }}
+                onSelectTemplate={setSelectedPublicTemplateId}
                 onUsesCiCdChange={setUsesCiCd}
+                selectedTemplateId={selectedPublicTemplateId}
                 usesCiCd={usesCiCd}
               />
             ) : null}
@@ -527,7 +552,9 @@ function PublicRepositoryRecommendationStep({
   onAnswer,
   onCreateBoard,
   onDeploymentTypeChange,
+  onSelectTemplate,
   onUsesCiCdChange,
+  selectedTemplateId,
   usesCiCd
 }: {
   readonly answers: Record<string, string | boolean>;
@@ -537,18 +564,45 @@ function PublicRepositoryRecommendationStep({
   readonly onAnswer: (questionId: string, value: string | boolean) => void;
   readonly onCreateBoard: () => void;
   readonly onDeploymentTypeChange: (deploymentType: RepositoryDeploymentType) => void;
+  readonly onSelectTemplate: (templateId: PublicRepositoryTemplateId) => void;
   readonly onUsesCiCdChange: (usesCiCd: boolean) => void;
+  readonly selectedTemplateId: PublicRepositoryTemplateId | null;
   readonly usesCiCd: boolean;
 }) {
-  const questions = createPublicRepositoryQuestions(analysis, deploymentType);
-  const templateId = selectPublicRepositoryTemplateId(analysis, deploymentType, answers);
+  const recommendation = createPublicRepositoryRecommendation({ analysis, answers, deploymentType });
+  const selectedCandidate = recommendation.candidates.find(
+    (candidate) => candidate.templateId === selectedTemplateId
+  ) ?? recommendation.candidates[0];
 
   return (
     <section className={styles.publicAnalysisResult} aria-label="public 저장소 추천">
-      <label>
-        <span>추천 템플릿</span>
-        <strong>{formatPublicRepositoryTemplate(templateId)}</strong>
-      </label>
+      <div>
+        <span>추천 템플릿 후보</span>
+        <strong>{selectedCandidate ? formatPublicRepositoryTemplate(selectedCandidate.templateId) : "맞는 템플릿 없음"}</strong>
+      </div>
+      {recommendation.candidates.length > 0 ? (
+        <div className={styles.publicCandidateList} role="radiogroup" aria-label="추천 템플릿 후보">
+          {recommendation.candidates.map((candidate) => {
+            const selected = selectedCandidate?.templateId === candidate.templateId;
+
+            return (
+              <button
+                aria-checked={selected}
+                className={selected ? `${styles.publicCandidate} ${styles.publicCandidateSelected}` : styles.publicCandidate}
+                key={candidate.templateId}
+                onClick={() => onSelectTemplate(candidate.templateId)}
+                role="radio"
+                type="button"
+              >
+                <span>{Math.round(candidate.confidence * 100)}% 일치</span>
+                <strong>{candidate.displayTitle}</strong>
+                <p>{candidate.reasons.join(" ")}</p>
+                <small>{candidate.tradeoffs.join(" ")}</small>
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
       <label>
         <span>배포 방식</span>
         <select
@@ -564,9 +618,9 @@ function PublicRepositoryRecommendationStep({
         <input checked={usesCiCd} onChange={(event) => onUsesCiCdChange(event.target.checked)} type="checkbox" />
         <span>CI/CD 인계 사용</span>
       </label>
-      {questions.length > 0 ? (
+      {recommendation.questions.length > 0 ? (
         <div className={styles.questionList}>
-          {questions.map((question) => (
+          {recommendation.questions.map((question) => (
             <label key={question.id}>
               <span>{question.prompt}</span>
               {question.answerType === "boolean" ? (
@@ -599,85 +653,6 @@ function PublicRepositoryRecommendationStep({
       </button>
     </section>
   );
-}
-
-function formatPublicRepositoryTemplate(templateId: string): string {
-  if (templateId === "static-web-hosting") return "정적 웹사이트";
-  if (templateId === "three-tier-web-app") return "3계층 웹 서비스";
-  if (templateId === "ecs-fargate-container-app") return "ECS Fargate 컨테이너 앱";
-  if (templateId === "eks-container-app") return "EKS 컨테이너 앱";
-  if (templateId === "minimal-serverless-api") return "최소 서버리스 API";
-  if (templateId === "full-serverless-web-app") return "전체 서버리스 웹 앱";
-  if (templateId === "template-static-website") return "정적 웹사이트";
-  if (templateId === "template-api-db") return "DB 포함 API";
-  if (templateId === "template-3tier") return "3계층 웹 서비스";
-  return "맞는 템플릿 없음";
-}
-
-function createPublicRepositoryQuestions(
-  analysis: SourceRepositoryAnalysisResult,
-  deploymentType: RepositoryDeploymentType
-): readonly PublicRepositoryQuestion[] {
-  const signals = new Set(analysis.detectedSignals);
-  const questions: PublicRepositoryQuestion[] = [];
-
-  if (signals.has("React") && (signals.has("Node API") || signals.has("Python API"))) {
-    questions.push({
-      answerType: "boolean",
-      id: "include_frontend",
-      prompt: "프론트엔드까지 같은 아키텍처에 포함할까요?"
-    });
-  }
-
-  if (signals.has("Database")) {
-    questions.push({
-      answerType: "boolean",
-      id: "include_database",
-      prompt: "데이터베이스 계층을 포함할까요?"
-    });
-  }
-
-  if (signals.has("Container") && deploymentType === "container") {
-    questions.push({
-      answerType: "single_select",
-      id: "container_runtime",
-      options: [
-        { label: "ECS Fargate", value: "ecs" },
-        { label: "Kubernetes/EKS", value: "eks" }
-      ],
-      prompt: "컨테이너 런타임을 무엇으로 둘까요?"
-    });
-  }
-
-  return questions.slice(0, 5);
-}
-
-function getPublicRepositoryDeploymentDefault(
-  analysis: SourceRepositoryAnalysisResult
-): RepositoryDeploymentType {
-  return analysis.detectedSignals.includes("Container") ? "container" : "serverless";
-}
-
-function selectPublicRepositoryTemplateId(
-  analysis: SourceRepositoryAnalysisResult,
-  deploymentType: RepositoryDeploymentType,
-  answers: Record<string, string | boolean>
-): string {
-  if (analysis.recommendedTemplateId === "template-static-website") {
-    return "static-web-hosting";
-  }
-
-  if (deploymentType === "container") {
-    return answers.container_runtime === "eks" ? "eks-container-app" : "ecs-fargate-container-app";
-  }
-
-  if (deploymentType === "serverless") {
-    return answers.include_frontend === false || answers.include_database === false
-      ? "minimal-serverless-api"
-      : "full-serverless-web-app";
-  }
-
-  return "three-tier-web-app";
 }
 
 function createRepositoryPreviewDiagram(
