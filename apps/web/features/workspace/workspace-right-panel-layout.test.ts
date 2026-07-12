@@ -827,12 +827,22 @@ test("terraform view embeds issues below code with a resizable split instead of 
 test("combined architecture and terraform issues share one reachable vertical scroll", () => {
   const combinedIssuesRule = getCssRule(workspaceIssuesStylesSource, "issuesPanel");
   const terraformIssuesRule = getCssRule(workspaceIssuesStylesSource, "terraformIssues");
+  const nestedIssuesRule = getCssRule(terraformIssuesStylesSource, "issuesPanel");
+  const nestedDiagnosticsRule = getCssRule(terraformIssuesStylesSource, "terraformDiagnostics");
+  const terraformPanelIndex = workspaceIssuesPanelSource.indexOf("<TerraformIssuesPanel");
+  const architecturePanelIndex = workspaceIssuesPanelSource.indexOf("<ArchitectureIssuesPanel");
 
+  assert.ok(terraformPanelIndex > -1);
+  assert.ok(architecturePanelIndex > terraformPanelIndex);
   assert.match(combinedIssuesRule, /\bgrid-template-rows:\s*auto auto;/);
   assert.match(combinedIssuesRule, /\boverflow-y:\s*auto;/);
   assert.match(combinedIssuesRule, /\bscrollbar-gutter:\s*stable;/);
   assert.doesNotMatch(combinedIssuesRule, /\boverflow:\s*hidden;/);
   assert.doesNotMatch(terraformIssuesRule, /\boverflow:\s*hidden;/);
+  assert.doesNotMatch(nestedIssuesRule, /\bheight:\s*100%;/);
+  assert.doesNotMatch(nestedIssuesRule, /\boverflow:\s*hidden;/);
+  assert.doesNotMatch(nestedDiagnosticsRule, /\boverflow-y:\s*auto;/);
+  assert.doesNotMatch(nestedDiagnosticsRule, /\bscrollbar-gutter:\s*stable;/);
 });
 
 test("terraform issue banner focuses the embedded Issues panel instead of navigating to a tab", () => {
@@ -1325,13 +1335,13 @@ test("terraform errors surface as an issues banner and AI resolution lives in th
   assert.match(aiChatDockSource, /onApplyTerraformIssueFix/);
   assert.match(issueBannerRule, /\bbackground:\s*#fff7ed;/);
   assert.match(aiButtonRule, /\bbackground:\s*var\(--workspace-surface, #ffffff\);/);
-  assert.match(issuesPanelRule, /\bheight:\s*100%;/);
   assert.match(issuesPanelRule, /\bmin-height:\s*0;/);
-  assert.match(issuesPanelRule, /\boverflow:\s*hidden;/);
-  assert.match(issuesPanelRule, /\bgrid-template-rows:\s*minmax\(0,\s*1fr\);/);
+  assert.match(issuesPanelRule, /\bgrid-template-rows:\s*auto;/);
+  assert.doesNotMatch(issuesPanelRule, /\bheight:\s*100%;/);
+  assert.doesNotMatch(issuesPanelRule, /\boverflow:\s*hidden;/);
   assert.match(issuesDiagnosticsRule, /\bmin-height:\s*0;/);
-  assert.match(issuesDiagnosticsRule, /\boverflow-y:\s*auto;/);
-  assert.match(issuesDiagnosticsRule, /\bscrollbar-gutter:\s*stable;/);
+  assert.doesNotMatch(issuesDiagnosticsRule, /\boverflow-y:\s*auto;/);
+  assert.doesNotMatch(issuesDiagnosticsRule, /\bscrollbar-gutter:\s*stable;/);
   assert.doesNotMatch(terraformIssuesStylesSource, /var\(--bb-|#2563eb|#3730a3|#1d4ed8/);
   assert.match(
     terraformIssuesStylesSource,
