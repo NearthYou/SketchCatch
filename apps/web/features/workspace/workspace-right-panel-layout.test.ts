@@ -834,7 +834,7 @@ test("combined architecture and terraform issues share one reachable vertical sc
 
   assert.ok(terraformPanelIndex > -1);
   assert.ok(architecturePanelIndex > terraformPanelIndex);
-  assert.match(combinedIssuesRule, /\bgrid-template-rows:\s*auto auto;/);
+  assert.match(combinedIssuesRule, /\bgrid-template-rows:\s*max-content max-content;/);
   assert.match(combinedIssuesRule, /\boverflow-y:\s*auto;/);
   assert.match(combinedIssuesRule, /\bscrollbar-gutter:\s*stable;/);
   assert.doesNotMatch(combinedIssuesRule, /\boverflow:\s*hidden;/);

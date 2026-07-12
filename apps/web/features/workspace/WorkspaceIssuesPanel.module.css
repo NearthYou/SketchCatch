@@ -1,7 +1,7 @@
 .issuesPanel {
   align-content: start;
   display: grid;
-  grid-template-rows: auto auto;
+  grid-template-rows: max-content max-content;
   height: 100%;
   min-height: 0;
   overflow-y: auto;
