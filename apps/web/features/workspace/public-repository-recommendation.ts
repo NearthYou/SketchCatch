@@ -43,11 +43,15 @@ export function createPublicRepositoryRecommendation(input: {
   readonly analysis: SourceRepositoryAnalysisResult;
   readonly answers: Record<string, string | boolean>;
   readonly deploymentType: RepositoryDeploymentType;
+  readonly selectedTemplateId?: TemplateId | null;
 }): PublicRepositoryRecommendation {
-  const questions = createPublicRepositoryQuestions(input.analysis, input.deploymentType);
+  const candidates = createPublicRepositoryTemplateCandidates(input);
+  const selectedTemplateId = input.selectedTemplateId ?? candidates[0]?.templateId;
   return {
-    candidates: createPublicRepositoryTemplateCandidates(input),
-    questions
+    candidates,
+    questions: selectedTemplateId
+      ? createPublicRepositoryQuestions(input.analysis, selectedTemplateId)
+      : []
   };
 }
 
@@ -152,11 +156,23 @@ function createPublicRepositoryTemplateCandidates(input: {
 
 function createPublicRepositoryQuestions(
   analysis: SourceRepositoryAnalysisResult,
-  deploymentType: RepositoryDeploymentType
+  templateId: TemplateId
 ): readonly PublicRepositoryQuestion[] {
   const signals = new Set(analysis.detectedSignals);
-  const questions: PublicRepositoryQuestion[] = [
-    {
+  const questions: PublicRepositoryQuestion[] = [];
+  const supportsRuntimeChoice = [
+    "three-tier-web-app",
+    "full-serverless-web-app",
+    "minimal-serverless-api"
+  ].includes(templateId);
+  const supportsFrontendChoice = [
+    "ecs-fargate-container-app",
+    "three-tier-web-app"
+  ].includes(templateId);
+  const supportsDatabaseChoice = templateId !== "static-web-hosting";
+
+  if (supportsRuntimeChoice && signals.has("Node API") && signals.has("Python API")) {
+    questions.push({
       answerType: "single_select",
       id: "primary_runtime",
       options: [
@@ -165,44 +181,22 @@ function createPublicRepositoryQuestions(
         { label: "둘 다 포함", value: "both" }
       ],
       prompt: "어떤 API 런타임을 아키텍처에 포함할까요?"
-    },
-    {
-      answerType: "single_select",
-      id: "traffic_profile",
-      options: [
-        { label: "작은 트래픽", value: "small" },
-        { label: "일반 서비스 트래픽", value: "normal" },
-        { label: "확장 대비", value: "scale" }
-      ],
-      prompt: "예상 트래픽 규모는 어느 쪽에 가깝나요?"
-    }
-  ];
+    });
+  }
 
-  if (signals.has("React")) {
+  if (supportsFrontendChoice && signals.has("React")) {
     questions.push({
       answerType: "boolean",
       id: "include_frontend",
-      prompt: "프론트엔드까지 같은 아키텍처에 포함할까요?"
+      prompt: "감지된 React 프론트엔드를 이 템플릿에 포함할까요?"
     });
   }
 
-  if (signals.has("Database")) {
+  if (supportsDatabaseChoice && signals.has("Database")) {
     questions.push({
       answerType: "boolean",
       id: "include_database",
-      prompt: "데이터베이스 계층을 포함할까요?"
-    });
-  }
-
-  if (signals.has("Container") || deploymentType === "container") {
-    questions.push({
-      answerType: "single_select",
-      id: "container_runtime",
-      options: [
-        { label: "ECS Fargate", value: "ecs" },
-        { label: "Kubernetes/EKS", value: "eks" }
-      ],
-      prompt: "컨테이너 런타임을 무엇으로 둘까요?"
+      prompt: "감지된 데이터베이스 계층을 이 템플릿에 포함할까요?"
     });
   }
 

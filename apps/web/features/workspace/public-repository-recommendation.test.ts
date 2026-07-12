@@ -15,16 +15,41 @@ test("public repository recommendation returns multiple candidates and follow-up
   const recommendation = createPublicRepositoryRecommendation({
     analysis,
     answers: {},
-    deploymentType
+    deploymentType,
+    selectedTemplateId: "ecs-fargate-container-app"
   });
 
   assert.equal(deploymentType, "container");
   assert.equal(shouldAskPublicRepositoryDeploymentType(analysis), false);
   assert.ok(recommendation.candidates.length >= 3);
   assert.equal(recommendation.candidates[0]?.templateId, "ecs-fargate-container-app");
-  assert.ok(recommendation.questions.length >= 5);
-  assert.ok(recommendation.questions.some((question) => question.id === "primary_runtime"));
-  assert.ok(recommendation.questions.some((question) => question.id === "container_runtime"));
+  assert.deepEqual(
+    recommendation.questions.map((question) => question.id),
+    ["include_frontend", "include_database"]
+  );
+});
+
+test("follow-up questions change with the selected template", () => {
+  const analysis = createAnalysis();
+  const serverless = createPublicRepositoryRecommendation({
+    analysis,
+    answers: {},
+    deploymentType: "serverless",
+    selectedTemplateId: "full-serverless-web-app"
+  });
+  const staticSite = createPublicRepositoryRecommendation({
+    analysis,
+    answers: {},
+    deploymentType: "serverless",
+    selectedTemplateId: "static-web-hosting"
+  });
+
+  assert.deepEqual(
+    serverless.questions.map((question) => question.id),
+    ["primary_runtime", "include_database"]
+  );
+  assert.deepEqual(staticSite.questions, []);
+  assert.ok(serverless.questions.length <= 5);
 });
 
 test("deployment type is only requested when repository evidence cannot determine it", () => {

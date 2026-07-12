@@ -199,8 +199,13 @@ export function RepositoryStartClient({
     const recommendation = createPublicRepositoryRecommendation({
       analysis: publicAnalysis,
       answers,
-      deploymentType
+      deploymentType,
+      selectedTemplateId: selectedPublicTemplateId
     });
+    if (!recommendation.questions.every((question) => hasRepositoryQuestionAnswer(answers[question.id]))) {
+      setErrorMessage("모든 추가 질문에 답한 뒤 보드를 생성해주세요.");
+      return;
+    }
     const templateId = selectedPublicTemplateId ?? recommendation.candidates[0]?.templateId;
 
     if (!templateId) {
@@ -354,17 +359,22 @@ export function RepositoryStartClient({
                 analysis={publicAnalysis}
                 deploymentType={deploymentType}
                 isBusy={isPublicAnalysisBusy}
-                onAnswer={(questionId, value) =>
-                  setAnswers((current) => ({ ...current, [questionId]: value }))
-                }
+                onAnswer={(questionId, value) => {
+                  setAnswers((current) => ({ ...current, [questionId]: value }));
+                  setErrorMessage("");
+                }}
                 onCreateBoard={() => void createPublicRepositoryBoard()}
                 onConfirmConfiguration={() => setPublicRecommendationStage("questions")}
                 onDeploymentTypeChange={(nextDeploymentType) => {
                   setDeploymentType(nextDeploymentType);
                   setSelectedPublicTemplateId(null);
+                  setAnswers({});
                 }}
                 onEditConfiguration={() => setPublicRecommendationStage("configuration")}
-                onSelectTemplate={setSelectedPublicTemplateId}
+                onSelectTemplate={(templateId) => {
+                  setSelectedPublicTemplateId(templateId);
+                  setAnswers({});
+                }}
                 onUsesCiCdChange={setUsesCiCd}
                 selectedTemplateId={selectedPublicTemplateId}
                 stage={publicRecommendationStage}
@@ -502,39 +512,55 @@ function RepositoryQuestions({
       </div>
       <div className={styles.questionList}>
         {questions.map((question) => (
-          <label key={question.id}>
-            <span>{question.prompt}</span>
-            {question.answerType === "boolean" ? (
-              <select
-                value={String(answers[question.id] ?? "")}
-                onChange={(event) => onAnswer(question.id, event.target.value === "true")}
-              >
-                <option value="">선택</option>
-                <option value="true">예</option>
-                <option value="false">아니요</option>
-              </select>
-            ) : question.answerType === "single_select" ? (
-              <select
-                value={String(answers[question.id] ?? "")}
-                onChange={(event) => onAnswer(question.id, event.target.value)}
-              >
-                <option value="">선택</option>
-                {(question.options ?? []).map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </select>
+          <fieldset className={styles.questionField} key={question.id}>
+            <legend>{question.prompt}</legend>
+            {question.answerType === "boolean" || question.answerType === "single_select" ? (
+              <span className={styles.questionChoices} role="radiogroup" aria-label={question.prompt}>
+                {(question.answerType === "boolean"
+                  ? [
+                      { label: "예", value: "true" },
+                      { label: "아니요", value: "false" }
+                    ]
+                  : question.options ?? []
+                ).map((option) => {
+                  const selected = String(answers[question.id] ?? "") === option.value;
+
+                  return (
+                    <button
+                      aria-checked={selected}
+                      className={selected
+                        ? `${styles.questionChoice} ${styles.questionChoiceSelected}`
+                        : styles.questionChoice}
+                      key={option.value}
+                      onClick={() => onAnswer(
+                        question.id,
+                        question.answerType === "boolean" ? option.value === "true" : option.value
+                      )}
+                      role="radio"
+                      type="button"
+                    >
+                      <span>{option.label}</span>
+                    </button>
+                  );
+                })}
+              </span>
             ) : (
               <input
+                aria-label={question.prompt}
                 value={String(answers[question.id] ?? "")}
                 onChange={(event) => onAnswer(question.id, event.target.value)}
                 type="text"
               />
             )}
-          </label>
+          </fieldset>
         ))}
       </div>
     </section>
   );
+}
+
+function hasRepositoryQuestionAnswer(value: string | boolean | undefined): boolean {
+  return typeof value === "boolean" || (typeof value === "string" && value.trim().length > 0);
 }
 
 function CiCdHandoffOption({
@@ -621,7 +647,12 @@ function PublicRepositoryRecommendationStep({
   readonly stage: PublicRecommendationStage;
   readonly usesCiCd: boolean;
 }) {
-  const recommendation = createPublicRepositoryRecommendation({ analysis, answers, deploymentType });
+  const recommendation = createPublicRepositoryRecommendation({
+    analysis,
+    answers,
+    deploymentType,
+    selectedTemplateId
+  });
   const shouldAskDeploymentType = shouldAskPublicRepositoryDeploymentType(analysis);
   const selectedCandidate = recommendation.candidates.find(
     (candidate) => candidate.templateId === selectedTemplateId

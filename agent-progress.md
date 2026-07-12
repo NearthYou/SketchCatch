@@ -5,12 +5,11 @@ Short English-only working log for the current agent context. Older records are 
 ## Current Verified State
 
 - Branch: `feat/ck/349-repo-analysis`.
-- Public GitHub URL analysis now reads repository tree evidence, including nested package, Dockerfile, framework config, and README paths.
 - Public Repository recommendation now shows ranked template candidates, asks follow-up questions, and creates an enriched repository-aware diagram only after the user accepts board creation.
-- Repository template candidates now use readable light selection rows with scoped button styles, explicit reasons/tradeoffs, and responsive layouts.
 - Deployment type is hidden when repository evidence is decisive and shown only for ambiguous analysis.
 - CI/CD handoff is a prominent standalone setting; its GitHub App repository panel appears only while enabled.
 - Public Repository setup confirms Template and CI/CD before opening a separate follow-up-question stage.
+- Follow-up questions depend on the selected Template, affect diagram creation, and use direct clickable choices.
 
 ## Session Record
 
@@ -25,10 +24,11 @@ Short English-only working log for the current agent context. Older records are 
   - Shared the separated CI/CD handoff and follow-up question sections across public and connected Repository flows.
   - Made the public-flow GitHub App repository panel conditional on CI/CD handoff and reset it for each new URL analysis.
   - Split public Repository configuration and follow-up questions into separate confirmed steps.
+  - Recomputed questions per selected Template, removed redundant/unused questions, reset stale answers, rendered full-box choices, and required every answer before board creation.
 - Verification:
   - Focused recommendation tests, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
   - Lint retains only the pre-existing API `setNow` warning.
-  - Browser-verified configuration/question transitions, hidden URL form, and conditional GitHub connection states.
+  - Browser-verified ECS and serverless Template-specific question sets, transitions, and direct choice selection.
 
 ### 2026-07-12 - Fail fast when API database URL is missing
 

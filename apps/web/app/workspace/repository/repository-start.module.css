@@ -488,12 +488,24 @@
 }
 
 .recommendationForm label,
-.questionList label {
+.questionField {
   display: grid;
   gap: 6px;
   color: var(--color-body);
   font-size: 13px;
   font-weight: 700;
+}
+
+.questionField {
+  min-width: 0;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+.questionField legend {
+  margin-bottom: 6px;
+  padding: 0;
 }
 
 .recommendationForm select,
@@ -577,6 +589,42 @@
 .questionList {
   display: grid;
   gap: 12px;
+}
+
+.questionChoices {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 8px;
+  text-transform: none;
+}
+
+.questionChoice {
+  display: grid;
+  min-width: 0;
+  min-height: 42px;
+  align-items: center;
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--radius-control);
+  padding: 8px 10px 8px 13px;
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.questionChoice:hover {
+  background: var(--color-surface-soft);
+}
+
+.questionChoiceSelected {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  box-shadow: inset 0 0 0 1px var(--color-primary);
 }
 
 .recommendationPanel {

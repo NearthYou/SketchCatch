@@ -47,6 +47,15 @@ test("Repository start screen exposes deployment, CI/CD, and template recommenda
   assert.match(source, /onConfirmConfiguration/);
   assert.match(source, /선택한 템플릿/);
   assert.match(source, /확인 <ArrowRight/);
+  assert.match(source, /selectedTemplateId/);
+  assert.match(source, /setAnswers\(\{\}\)/);
+  assert.match(source, /questionChoices/);
+  assert.match(source, /questionChoiceSelected/);
+  assert.doesNotMatch(source, /questionChoiceCheck/);
+  assert.match(source, /aria-checked=\{selected\}/);
+  assert.match(source, /hasRepositoryQuestionAnswer/);
+  assert.doesNotMatch(source, /allQuestionsAnswered/);
+  assert.match(source, /모든 추가 질문에 답한 뒤 보드를 생성해주세요/);
   assert.match(source, /템플릿 추천/);
   assert.match(source, /questions\?\.slice\(0, 5\)/);
   assert.match(source, /환경설정에서 권한 관리/);
