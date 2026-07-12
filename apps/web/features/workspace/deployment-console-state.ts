@@ -1,5 +1,10 @@
 import type { Deployment } from "@sketchcatch/types";
 import type { RequestState } from "./workspace-right-panel.types";
+import type {
+  DeploymentDirectApplyStatus,
+  DeploymentPlanState,
+  DeploymentPreparationState
+} from "./deployment-wizard-state";
 
 export type DirectDeploymentStepId = "save" | "preflight" | "plan" | "approve" | "apply";
 export type DirectDeploymentStepState =
@@ -52,6 +57,13 @@ export type DirectDeploymentStep = {
 export type DirectDeploymentFlow = {
   readonly activeStepId: DirectDeploymentStepId;
   readonly steps: readonly DirectDeploymentStep[];
+};
+
+export type DirectDeploymentWizardCompatibility = {
+  readonly approved: boolean;
+  readonly directApplyStatus: DeploymentDirectApplyStatus;
+  readonly plan: DeploymentPlanState;
+  readonly preparation: DeploymentPreparationState;
 };
 
 const STEP_META: Readonly<Record<DirectDeploymentStepId, Pick<DirectDeploymentStep, "description" | "label">>> = {
@@ -153,6 +165,20 @@ export function getDirectDeploymentFlow(input: DirectDeploymentFlowInput): Direc
   });
 }
 
+export function getDirectDeploymentWizardCompatibility(
+  input: DirectDeploymentFlowInput
+): DirectDeploymentWizardCompatibility {
+  const hasPlan = Boolean(input.deployment?.currentPlanArtifactId);
+  const approved = Boolean(input.deployment?.approvedAt && hasPlan);
+
+  return {
+    approved,
+    directApplyStatus: getDirectApplyStatus(input.deployment),
+    plan: approved ? "approved" : hasPlan ? "ready" : "missing",
+    preparation: !input.hasUnsavedBaseline && input.deployment ? "ready" : "pending"
+  };
+}
+
 function createFlow(
   activeStepId: DirectDeploymentStepId,
   steps: Readonly<Record<DirectDeploymentStepId, DirectDeploymentStep>>
@@ -206,4 +232,13 @@ function getApplyStatusLabel(status: DirectDeploymentSummary["status"]): string 
   if (status === "SUCCESS") return "Apply 완료";
   if (status === "DESTROYED") return "정리 완료";
   return "Apply 실행 가능";
+}
+
+function getDirectApplyStatus(
+  deployment: DirectDeploymentSummary | null
+): DeploymentDirectApplyStatus {
+  if (deployment?.status === "RUNNING") return "running";
+  if (deployment?.status === "SUCCESS") return "success";
+  if (deployment?.status === "FAILED" || deployment?.status === "CANCELLED") return "failed";
+  return "not-started";
 }

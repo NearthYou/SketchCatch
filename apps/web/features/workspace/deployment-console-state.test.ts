@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  getDirectDeploymentWizardCompatibility,
   getDirectDeploymentFlow,
   type DirectDeploymentFlowInput
 } from "./deployment-console-state";
@@ -159,4 +160,23 @@ test("destroy plans never produce the Direct Apply action", () => {
   assert.equal(flow.activeStepId, "plan");
   assert.equal(flow.steps[2]?.state, "blocked");
   assert.match(flow.steps[2]?.statusLabel ?? "", /배포 기록/);
+});
+
+test("legacy Direct state maps into the six-step Wizard without approving a Plan implicitly", () => {
+  const compatibility = getDirectDeploymentWizardCompatibility(
+    createInput({
+      deployment: {
+        approvedAt: null,
+        currentPlanArtifactId: "plan-1",
+        currentPlanOperation: "apply",
+        status: "PENDING"
+      },
+      preflightState: "passed"
+    })
+  );
+
+  assert.equal(compatibility.preparation, "ready");
+  assert.equal(compatibility.plan, "ready");
+  assert.equal(compatibility.approved, false);
+  assert.equal(compatibility.directApplyStatus, "not-started");
 });
