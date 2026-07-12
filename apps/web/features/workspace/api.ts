@@ -2,6 +2,7 @@ import type {
   AiArchitectureDraftResult,
   AiPreDeploymentAnalysisResult,
   AiPreDeploymentCheckRequest,
+  AiSafetyExplanation,
   AiTerraformErrorExplanationResult,
   AiTerraformPreviewExplanationResult,
   AiTerraformStage,
@@ -18,6 +19,7 @@ import type {
   CostProjectEstimateListResponse,
   CostUsageAnalysisRange,
   CostUsageAnalysisResponse,
+  CheckFinding,
   CreateArchitectureSnapshotRequest,
   CreateArchitectureDraftRequest,
   CreateArchitectureDraftResponse,
@@ -383,6 +385,12 @@ export async function runAiPreDeploymentCheck(
     architectureJson: input.architectureJson,
     ...(input.terraformFiles !== undefined ? { terraformFiles: input.terraformFiles } : {})
   });
+}
+
+export async function runAiSafetyFindingExplanation(
+  finding: CheckFinding
+): Promise<AiSafetyExplanation> {
+  return postPublicAiJson<AiSafetyExplanation>("/ai/safety-finding-explanation", { finding });
 }
 
 // 현재 Architecture Board와 운영 조건을 기준으로 Design Simulation을 실행합니다.

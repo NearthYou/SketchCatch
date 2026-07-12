@@ -1258,7 +1258,7 @@ test("pre-deployment check result is preserved above the deployment tab", () => 
   );
 });
 
-test("pre-deployment check renders per-finding explanations without the blue summary block", () => {
+test("pre-deployment check loads per-finding explanations only when a card is expanded", () => {
   assert.doesNotMatch(deploymentPanelSource, /DeploymentPreDeploymentAiExplanation/);
   assert.doesNotMatch(deploymentPanelSource, /deploymentPreflightAiExplanation/);
   assert.doesNotMatch(stylesSource, /\.deploymentPreflightAiExplanation\s*\{/);
@@ -1267,7 +1267,10 @@ test("pre-deployment check renders per-finding explanations without the blue sum
   assert.match(deploymentPanelSource, /className=\{styles\.deploymentFindingAiExplanation\}/);
   assert.match(deploymentPanelSource, /finding\.trivyRuleIds/);
   assert.match(deploymentPanelSource, /Trivy rules · \{finding\.trivyRuleIds\.join\(", "\)\}/);
-  assert.doesNotMatch(deploymentPanelSource, /deploymentFindingAiButton/);
+  assert.match(deploymentPanelSource, /deploymentFindingAiButton/);
+  assert.match(deploymentPanelSource, /runAiSafetyFindingExplanation/);
+  assert.match(deploymentPanelSource, /설명 접기/);
+  assert.match(deploymentPanelSource, /설명 보기/);
   assert.doesNotMatch(aiChatDockSource, /preDeploymentAnalysis/);
 });
 

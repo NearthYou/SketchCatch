@@ -1959,7 +1959,7 @@ type CheckFinding = {
 
 `CheckFinding.riskFamily`은 같은 Resource에서 발생한 scanner rule을 사용자 의미 단위로 그룹화하는 안정적인 키다. `trivyRuleIds`는 그룹에 포함된 원본 Trivy rule ID를 보존하며 UI는 이를 하위 근거로 표시한다. 그룹 severity는 포함 rule 중 가장 높은 값을 사용한다.
 
-`CheckFinding.aiSafetyExplanation`은 finding별 사용자 설명 계층이다. AI는 `riskSummary`, `whyDangerous`, `recommendedFix`, `terraformHint`, `verificationSteps`만 생성할 수 있고, `severity`, `blocked`, `blocksApproval`, `requiresAcknowledgement` 같은 Safety Gate 판정은 변경할 수 없다. OpenAI GPT 호출이 실패하거나 API key가 없으면 `fallbackUsed: true`인 rule fallback 설명을 사용한다.
+`CheckFinding.aiSafetyExplanation`은 finding별 사용자 설명 계층이다. Pre-Deployment Check 응답은 deterministic finding을 먼저 반환하며 AI 설명을 기다리지 않는다. 사용자가 finding 카드를 펼치면 `/ai/safety-finding-explanation`으로 한 건을 지연 조회한다. AI는 `riskSummary`, `whyDangerous`, `recommendedFix`, `terraformHint`, `verificationSteps`만 생성할 수 있고, `severity`, `blocked`, `blocksApproval`, `requiresAcknowledgement` 같은 Safety Gate 판정은 변경할 수 없다. OpenAI GPT 호출이 실패하거나 API key가 없으면 `fallbackUsed: true`인 rule fallback 설명을 사용한다.
 
 ## 팀 작업 규칙
 

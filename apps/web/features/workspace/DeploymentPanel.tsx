@@ -6,6 +6,7 @@ import type {
 } from "react";
 import type {
   AiPreDeploymentAnalysisResult,
+  AiSafetyExplanation,
   AwsConnection,
   CheckFinding,
   DeployedResource,
@@ -50,6 +51,7 @@ import {
   runDeploymentDestroyPlan,
   runDeploymentPlan,
   runAiPreDeploymentCheck,
+  runAiSafetyFindingExplanation,
   streamDeploymentLogs
 } from "./api";
 import {
@@ -2215,33 +2217,85 @@ function DeploymentPreDeploymentFindingItem({
 }
 
 function DeploymentFindingAiExplanation({ finding }: { readonly finding: CheckFinding }) {
-  const explanation = finding.aiSafetyExplanation;
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [explanation, setExplanation] = useState<AiSafetyExplanation | null>(
+    finding.aiSafetyExplanation ?? null
+  );
+  const [explanationState, setExplanationState] = useState<RequestState>("idle");
+  const [explanationError, setExplanationError] = useState("");
 
-  if (!explanation) {
-    return null;
+  async function toggleExplanation(): Promise<void> {
+    if (isExpanded) {
+      setIsExpanded(false);
+      return;
+    }
+
+    setIsExpanded(true);
+
+    if (explanation || explanationState === "loading") {
+      return;
+    }
+
+    setExplanationState("loading");
+    setExplanationError("");
+
+    try {
+      setExplanation(await runAiSafetyFindingExplanation(finding));
+      setExplanationState("idle");
+    } catch (error) {
+      setExplanationState("error");
+      setExplanationError(getApiErrorMessage(error, "AI 상세 설명을 불러오지 못했습니다."));
+    }
   }
 
   return (
-    <div className={styles.deploymentFindingAiExplanation}>
-      <p>{explanation.riskSummary}</p>
-      <dl>
-        <div>
-          <dt>왜 위험한가</dt>
-          <dd>{explanation.whyDangerous}</dd>
+    <>
+      <button
+        aria-expanded={isExpanded}
+        className={styles.deploymentFindingAiButton}
+        onClick={() => void toggleExplanation()}
+        type="button"
+      >
+        {isExpanded ? "설명 접기" : "설명 보기"}
+      </button>
+      {isExpanded ? (
+        <div className={styles.deploymentFindingAiExplanation}>
+          <p>{finding.description}</p>
+          <dl>
+            <div>
+              <dt>기본 권장 수정</dt>
+              <dd>{finding.recommendation}</dd>
+            </div>
+          </dl>
+          {explanationState === "loading" ? <p>AI 상세 설명을 생성하는 중입니다.</p> : null}
+          {explanationState === "error" ? <p role="alert">{explanationError}</p> : null}
+          {explanation ? (
+            <dl>
+              <div>
+                <dt>왜 위험한가</dt>
+                <dd>{explanation.whyDangerous}</dd>
+              </div>
+              <div>
+                <dt>AI 권장 수정</dt>
+                <dd>{explanation.recommendedFix}</dd>
+              </div>
+              {explanation.terraformHint ? (
+                <div>
+                  <dt>Terraform 힌트</dt>
+                  <dd>{explanation.terraformHint}</dd>
+                </div>
+              ) : null}
+            </dl>
+          ) : null}
+          {explanation ? (
+            <DeploymentPreDeploymentTextList
+              items={explanation.verificationSteps}
+              title="확인 방법"
+            />
+          ) : null}
         </div>
-        <div>
-          <dt>권장 수정</dt>
-          <dd>{explanation.recommendedFix}</dd>
-        </div>
-        {explanation.terraformHint ? (
-          <div>
-            <dt>Terraform 힌트</dt>
-            <dd>{explanation.terraformHint}</dd>
-          </div>
-        ) : null}
-      </dl>
-      <DeploymentPreDeploymentTextList items={explanation.verificationSteps} title="확인 방법" />
-    </div>
+      ) : null}
+    </>
   );
 }
 

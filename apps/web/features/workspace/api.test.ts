@@ -38,6 +38,7 @@ import {
   runDeploymentDestroy,
   runDeploymentDestroyPlan,
   runAiPreDeploymentCheck,
+  runAiSafetyFindingExplanation,
   runDeploymentPlan,
   runDeploymentApply,
   stopLiveObservation,
@@ -549,6 +550,54 @@ test("runAiPreDeploymentCheck sends Terraform files with the architecture", asyn
         terraformCode: "resource \"aws_security_group\" \"open_ssh\" {}"
       }
     ]
+  });
+});
+
+test("runAiSafetyFindingExplanation requests one finding on demand", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+    return new Response(
+      JSON.stringify({
+        riskSummary: "summary",
+        whyDangerous: "why",
+        recommendedFix: "fix",
+        verificationSteps: [],
+        fallbackUsed: false
+      }),
+      { headers: { "Content-Type": "application/json" }, status: 200 }
+    );
+  };
+
+  await runAiSafetyFindingExplanation({
+    id: "trivy:s3-versioning:main.tf:aws_s3_bucket.assets:1",
+    category: "availability",
+    severity: "medium",
+    riskFamily: "S3_VERSIONING",
+    trivyRuleIds: ["AWS-0090"],
+    title: "S3 versioning",
+    description: "Versioning is disabled",
+    recommendation: "Enable versioning"
+  });
+
+  assert.equal(String(requests[0]?.input), "/api/ai/safety-finding-explanation");
+  assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
+    finding: {
+      id: "trivy:s3-versioning:main.tf:aws_s3_bucket.assets:1",
+      category: "availability",
+      severity: "medium",
+      riskFamily: "S3_VERSIONING",
+      trivyRuleIds: ["AWS-0090"],
+      title: "S3 versioning",
+      description: "Versioning is disabled",
+      recommendation: "Enable versioning"
+    }
   });
 });
 

@@ -76,8 +76,6 @@ const MAX_PRE_DEPLOYMENT_TERRAFORM_FILE_NAME_LENGTH = 180;
 const MAX_PRE_DEPLOYMENT_TERRAFORM_FILE_CHARS = 1024 * 1024;
 const SAFETY_EXPLANATION_CACHE_NAMESPACE = "ai:safety-finding-explanation:v1";
 const SAFETY_EXPLANATION_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-const MAX_SAFETY_EXPLANATION_GENERATION_COUNT = 8;
-const SAFETY_EXPLANATION_GENERATION_CONCURRENCY = 2;
 const DEFAULT_SAFETY_EXPLANATION_TIMEOUT_MS = 2_500;
 
 const resourceTypeSchema = z.enum(RESOURCE_TYPES);
@@ -202,6 +200,8 @@ const checkFindingSchema: z.ZodType<CheckFinding> = z.object({
   severity: z.enum(["low", "medium", "high"]),
   resourceId: z.string().trim().min(1).optional(),
   sourceLocation: terraformSourceLocationSchema.optional(),
+  riskFamily: z.string().trim().min(1).optional(),
+  trivyRuleIds: z.array(z.string().trim().min(1)).optional(),
   title: z.string().trim().min(1),
   description: z.string().trim().min(1),
   recommendation: z.string().trim().min(1)
@@ -344,12 +344,7 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
       ...(body.terraformFiles !== undefined ? { terraformFiles: body.terraformFiles } : {})
     });
 
-    return addSafetyFindingExplanations(
-      result,
-      createSafetyFindingExplanation,
-      options.runtimeCache,
-      safetyExplanationTimeoutMs
-    );
+    return result;
   });
 
   app.post("/ai/design-simulation", async (request): Promise<DesignSimulationResult> => {
@@ -369,12 +364,7 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
     const body = preDeploymentCheckFromDiagramBodySchema.parse(request.body);
     const architectureJson = convertDiagramJsonToArchitectureJson(body.diagramJson);
 
-    return addSafetyFindingExplanations(
-      analyzePreDeployment(architectureJson),
-      createSafetyFindingExplanation,
-      options.runtimeCache,
-      safetyExplanationTimeoutMs
-    );
+    return analyzePreDeployment(architectureJson);
   });
 
   app.post(
@@ -422,7 +412,12 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
     async (request): Promise<AiSafetyExplanation> => {
       const body = safetyFindingExplanationBodySchema.parse(request.body);
 
-      return createSafetyFindingExplanation(body.finding);
+      return resolveSafetyFindingExplanation(
+        body.finding,
+        createSafetyFindingExplanation,
+        options.runtimeCache,
+        safetyExplanationTimeoutMs
+      );
     }
   );
 
@@ -481,80 +476,34 @@ async function addArchitectureDraftLlmExplanation(
   };
 }
 
-async function addSafetyFindingExplanations(
-  result: AiPreDeploymentAnalysisResult,
+async function resolveSafetyFindingExplanation(
+  finding: CheckFinding,
   createSafetyFindingExplanation: CreateSafetyFindingExplanation,
   runtimeCache: RuntimeCache | undefined,
   safetyExplanationTimeoutMs: number
-): Promise<AiPreDeploymentAnalysisResult> {
-  if (result.findings.length === 0) {
-    return result;
+): Promise<AiSafetyExplanation> {
+  if (finding.aiSafetyExplanation) {
+    return finding.aiSafetyExplanation;
   }
 
-  const explanationByCacheKey = new Map<string, AiSafetyExplanation>();
-  const missingFindingsByCacheKey = new Map<string, CheckFinding>();
+  const cacheKey = createSafetyExplanationCacheKey(finding);
+  const cachedExplanation = await readCachedSafetyExplanation(runtimeCache, cacheKey);
 
-  await Promise.all(
-    result.findings.map(async (finding) => {
-      if (finding.aiSafetyExplanation !== undefined) {
-        return;
-      }
-
-      const cacheKey = createSafetyExplanationCacheKey(finding);
-      const cachedExplanation = await readCachedSafetyExplanation(runtimeCache, cacheKey);
-
-      if (cachedExplanation) {
-        explanationByCacheKey.set(cacheKey, cachedExplanation);
-        return;
-      }
-
-      if (!missingFindingsByCacheKey.has(cacheKey)) {
-        missingFindingsByCacheKey.set(cacheKey, finding);
-      }
-    })
-  );
-
-  const missingEntries = [...missingFindingsByCacheKey.entries()];
-  const generatedEntries = missingEntries.slice(0, MAX_SAFETY_EXPLANATION_GENERATION_COUNT);
-  const fallbackEntries = missingEntries.slice(MAX_SAFETY_EXPLANATION_GENERATION_COUNT);
-
-  await mapWithConcurrency(
-    generatedEntries,
-    SAFETY_EXPLANATION_GENERATION_CONCURRENCY,
-    async ([cacheKey, finding]) => {
-      const explanation = await createSafetyFindingExplanationWithinBudget(
-        finding,
-        createSafetyFindingExplanation,
-        safetyExplanationTimeoutMs
-      );
-
-      explanationByCacheKey.set(cacheKey, explanation);
-
-      if (!explanation.fallbackUsed) {
-        await writeCachedSafetyExplanation(runtimeCache, cacheKey, explanation);
-      }
-    }
-  );
-
-  for (const [cacheKey, finding] of fallbackEntries) {
-    explanationByCacheKey.set(
-      cacheKey,
-      createFallbackSafetyFindingExplanation(finding, "rate_limited")
-    );
+  if (cachedExplanation) {
+    return cachedExplanation;
   }
 
-  return {
-    ...result,
-    findings: result.findings.map((finding) => {
-      const cacheKey = createSafetyExplanationCacheKey(finding);
+  const explanation = await createSafetyFindingExplanationWithinBudget(
+    finding,
+    createSafetyFindingExplanation,
+    safetyExplanationTimeoutMs
+  );
 
-      return {
-        ...finding,
-        aiSafetyExplanation:
-          finding.aiSafetyExplanation ?? explanationByCacheKey.get(cacheKey)
-      };
-    })
-  };
+  if (!explanation.fallbackUsed) {
+    await writeCachedSafetyExplanation(runtimeCache, cacheKey, explanation);
+  }
+
+  return explanation;
 }
 
 async function createSafetyFindingExplanationWithinBudget(
@@ -584,28 +533,6 @@ async function createSafetyFindingExplanationWithinBudget(
       clearTimeout(timeout);
     }
   }
-}
-
-async function mapWithConcurrency<TValue>(
-  values: readonly TValue[],
-  concurrency: number,
-  mapper: (value: TValue) => Promise<void>
-): Promise<void> {
-  let nextIndex = 0;
-  const workerCount = Math.min(concurrency, values.length);
-
-  await Promise.all(
-    Array.from({ length: workerCount }, async () => {
-      while (nextIndex < values.length) {
-        const value = values[nextIndex];
-        nextIndex += 1;
-
-        if (value !== undefined) {
-          await mapper(value);
-        }
-      }
-    })
-  );
 }
 
 function createSafetyExplanationCacheKey(finding: CheckFinding): string {
