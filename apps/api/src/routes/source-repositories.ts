@@ -538,6 +538,13 @@ function toSourceRepositoryVisibility(
 
 // GitHub App와 Source Repository 내부 오류를 안정적인 사용자 응답 코드로 바꿉니다.
 function handleSourceRepositoryError(error: unknown, reply: FastifyReply) {
+  if (isSourceRepositorySchemaMismatchError(error)) {
+    return reply.status(503).send({
+      error: "service_unavailable",
+      message: "DATABASE_MIGRATION_REQUIRED"
+    });
+  }
+
   if (error instanceof SourceRepositoryNotFoundError) {
     return reply.status(404).send({
       error: "not_found",
@@ -579,4 +586,41 @@ function handleSourceRepositoryError(error: unknown, reply: FastifyReply) {
   }
 
   throw error;
+}
+
+function isSourceRepositorySchemaMismatchError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const code = getPostgresErrorCode(error);
+
+  return (
+    (code === "42P01" || code === "42703") &&
+    error.message.startsWith("Failed query:") &&
+    error.message.includes('"source_repositories"')
+  );
+}
+
+function getPostgresErrorCode(error: Error): string | null {
+  const cause = error.cause;
+
+  if (hasPostgresErrorCode(cause)) {
+    return cause.code;
+  }
+
+  if (hasPostgresErrorCode(error)) {
+    return error.code;
+  }
+
+  return null;
+}
+
+function hasPostgresErrorCode(value: unknown): value is { readonly code: string } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "code" in value &&
+    typeof (value as { readonly code?: unknown }).code === "string"
+  );
 }

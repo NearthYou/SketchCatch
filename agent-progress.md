@@ -4,11 +4,11 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- Branch: `feat/ck/287-ai-diagram`.
-- `origin/dev` points to `ca2cbe75`; the latest UI/UX rework, repository analysis, template, live observation, and workspace operations updates are being merged into this branch.
-- Architecture Draft uses Amazon Q retrieval evidence, deterministic deployable materialization, NDJSON progress streaming, and containment-aware board layout.
-- PR #347 review feedback has been addressed, pushed, and resolved.
-- No cloud deployment or Terraform mutation was run during this merge session.
+- Branch: `feat/ck/349-repo-analysis`.
+- Issue #349 repository-analysis based template recommendation is implemented and committed locally.
+- The latest follow-up fix maps missing `source_repositories` migrations to a stable API/UI message instead of exposing raw SQL.
+- Local `db:migrate` could not be run in this shell because `DATABASE_URL` is empty.
+- No cloud deployment, Terraform apply, or infrastructure mutation was run during this work session.
 
 ## Session Record
 
@@ -34,7 +34,23 @@ Short English-only working log for the current agent context. Older records are 
   - `pnpm build`
   - `git diff --check` passed with CRLF conversion warnings only.
 - Risk:
-  - No GitHub PR, commit, cloud deployment, Terraform apply, or infrastructure mutation was run.
+  - No GitHub PR, cloud deployment, Terraform apply, or infrastructure mutation was run.
+
+### 2026-07-12 - Handle missing Source Repository DB migrations
+
+- Goal: Diagnose the raw SQL internal error shown when starting from a GitHub repository with an unmigrated API database.
+- Completed:
+  - Confirmed the failing query targets `source_repositories` columns added by existing migrations, especially the repository analysis columns.
+  - Added route-level detection for PostgreSQL undefined table/column errors on `source_repositories`.
+  - Returned a stable `service_unavailable` / `DATABASE_MIGRATION_REQUIRED` response instead of leaking the Drizzle query and params.
+  - Added the web API error translation so Repository start screens show an actionable migration message.
+- Verification:
+  - `pnpm --dir apps/api exec tsx --test src/routes/source-repositories.test.ts`
+  - `pnpm --dir apps/web exec tsx --test features/workspace/api-client-error-message.test.ts`
+  - `pnpm --dir apps/api typecheck`
+  - `pnpm --dir apps/web typecheck`
+- Risk:
+  - The actual runtime DB still needs `pnpm --filter @sketchcatch/api db:migrate` from a shell with `DATABASE_URL` configured.
 
 ### 2026-07-12 - Merge latest origin/dev into AI diagram branch
 
@@ -196,13 +212,4 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Next Action
 
-- 2026-07-11 update: Removed Security Groups from all board container paths so generated, saved, and manually added security groups render as regular VPC-scoped resource icons. Workload containment now prioritizes `subnetId` or explicit subnet references, while Security Groups remain visible through protection/allow edges and parameter references. Multi-subnet workloads keep placement markers instead of being forced into one subnet. Verification passed with focused flow, area, catalog, movement, workspace adapter, and API prompt tests, full API Architecture Draft tests, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check`.
-- 2026-07-11 update: Updated local `dev` to `origin/dev` at `4d48f3f1` and merged it into `feat/ck/287-ai-diagram`. Resolved the only conflict in `agent-progress.md` by preserving both the latest Trivy/production history from `dev` and the AI diagram branch history. Verification passed with `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build`.
-- 2026-07-11 update: Updated local `dev` to `origin/dev` at `a1031c4b` and merged it into `feat/ck/287-ai-diagram` with merge commit `cb5cddc5`. Resolved conflicts by taking the retired workflow/history deletions from `dev`, keeping the latest Workspace start UI from `dev`, combining Live Observation API error codes with architecture generation error codes, and preserving the AI diagram external-flow/subnet-placement adapter behavior. Fixed post-merge typecheck issues in runtime cache test stubs and Terraform nested-block metadata. Verification passed with `pnpm harness:check`, focused API architecture tests, `pnpm lint`, `pnpm typecheck`, and `pnpm build`.
-- 2026-07-11 update: Fixed the Korean SSR dynamic web-app questionnaire path so Seoul semi-managed simple API answers produce ECS Fargate instead of EC2, keep SSR behind an ALB-origin CloudFront entry, use HTTPS/ACM, keep Multi-AZ RDS in `ap-northeast-2`, materialize mixed-file uploads as `sketchcatch-file-uploads-*` instead of image-only buckets, and label SSE notification paths without chat POST semantics. Added regression coverage for the SSR mixed-upload questionnaire and SSE notification validation. Verification passed with focused API tests, `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and final `pnpm harness:check`.
-- 2026-07-11 update: Fixed the Korean SPA questionnaire Architecture Draft path so APAC semi-managed simple API answers produce a consistent ECS Fargate, CloudFront/S3, Multi-AZ RDS, image-upload, HTTP+SSE topology without mixing Seoul regions with Tokyo AZs. Added regression coverage for operational parsing, requirement resolution, and canonical draft materialization. Verification passed with focused API tests, `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and final `pnpm harness:check`.
-- 2026-07-11 update: Fixed the SPA APAC microservices questionnaire path so fully managed/serverless, time-of-day traffic, mixed uploads, no realtime, and 99.99% availability produce separated ECS Fargate services, task definitions, target groups, and per-service autoscaling instead of one generic ECS service. Added cost-sensitive budget warnings for 10-50 manwon microservices/HA designs while preserving the existing $100 low-budget warning contract. Regression coverage now verifies answer-profile parsing, normalized resource quantities, service separation, upload bucket selection, no realtime edges, and APAC region placement. Verification passed with focused API tests, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check`.
-- 2026-07-11 update: Collapsed low-signal parameter/helper resources from the rendered Architecture Board while preserving them in `DiagramJson` for Terraform and parameter workflows. App Auto Scaling target/policy, route table association, DB subnet group, ACM validation, IAM policy/profile, KMS alias, Lambda permission, and target group attachment nodes no longer render as separate board icons, and edges to those collapsed helpers are hidden from React Flow. Verification passed with focused web flow-mapper tests, focused API architecture tests, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check`.
-- 2026-07-11 update: Fixed the global self-managed SPA questionnaire path so direct server operation selects the ALB + EC2 Auto Scaling pattern instead of Fargate, large traffic materializes four EC2 nodes with larger launch-template sizing, large/complex databases use 200GB `db.r6g.large` Multi-AZ RDS, and WebSocket API Gateway resources receive route, integration, and stage parameters. Regression coverage now verifies the global/large/self-managed/WebSocket questionnaire and updated deterministic canonical materialization. Verification passed with focused API architecture tests, operational requirement tests, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check`.
-- 2026-07-11 update: Fixed the large self-managed API-server questionnaire path so burst/polling traffic no longer materializes as `t3.small` with ASG max 4 and `db.t4g.small`. The canonical EC2 plan now keeps four EC2 nodes, uses `m7i.large`, raises aggressive ASG max capacity to 12, switches bursty enterprise scaling to target tracking, sizes simple-but-large-traffic RDS to 50GB `db.r6g.large` Multi-AZ, and labels polling edges with a cost warning assumption. Regression coverage now verifies the API-server polling questionnaire and the updated global self-managed max capacity. Verification passed with focused API architecture tests, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check`.
-- Regenerate representative chat, voice, burst, and high-availability diagrams in Chrome and review their Terraform previews before user acceptance.
+- Run `pnpm --filter @sketchcatch/api db:migrate` in the API runtime shell with `DATABASE_URL` configured, then retry GitHub Repository start.

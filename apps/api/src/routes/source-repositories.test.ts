@@ -203,6 +203,22 @@ test("source repository routes recommend supported templates from answers", asyn
   assert.ok(response.json().recommendation.candidates.length <= 3);
 });
 
+test("source repository routes report a migration hint for missing source repository columns", async (t) => {
+  const repository = new SourceRepositorySchemaMismatchRepository();
+  const app = await buildSourceRepositoryRouteApp({ repository });
+  t.after(() => app.close());
+
+  const response = await app.inject({
+    method: "GET",
+    url: `/api/projects/${projectId}/source-repositories`,
+    headers: await authHeaders()
+  });
+
+  assert.equal(response.statusCode, 503);
+  assert.equal(response.json().error, "service_unavailable");
+  assert.equal(response.json().message, "DATABASE_MIGRATION_REQUIRED");
+});
+
 test("source repository routes reject inactive repositories before reading GitHub", async (t) => {
   // Given
   const repository = new FakeSourceRepositoryRepository([
@@ -740,6 +756,17 @@ class FakeSourceRepositoryRepository implements SourceRepositoryRepository {
     row.analyzedAt = input.analyzedAt;
     row.updatedAt = input.analyzedAt;
     return row;
+  }
+}
+
+class SourceRepositorySchemaMismatchRepository extends FakeSourceRepositoryRepository {
+  async listProjectSourceRepositories(): Promise<SourceRepositoryRecord[]> {
+    throw Object.assign(
+      new Error(
+        'Failed query: select "analysis_result" from "source_repositories" where "source_repositories"."project_id" = $1'
+      ),
+      { cause: { code: "42703" } }
+    );
   }
 }
 
