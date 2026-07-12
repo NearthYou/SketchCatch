@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { DiagramJson, DiagramNode, LiveObservationSnapshot } from "@sketchcatch/types";
-import { createLiveObservationDiagramModel } from "./live-observation-diagram";
+import {
+  createLiveObservationDiagramModel,
+  getLiveObservationDiagramSegmentCount
+} from "./live-observation-diagram";
 
 test("selects the ECS traffic path and excludes support paths", () => {
   const diagram = createDiagram(
@@ -34,6 +37,8 @@ test("selects the ECS traffic path and excludes support paths", () => {
     ]
   );
 
+  assert.equal(getLiveObservationDiagramSegmentCount(diagram), 5);
+
   const model = createLiveObservationDiagramModel(diagram, snapshot(2, 1));
 
   assert.equal(model.status, "ready");
@@ -56,6 +61,13 @@ test("selects the ECS traffic path and excludes support paths", () => {
     ["task-a", "active"],
     ["task-b", "launching"]
   ]);
+});
+
+test("returns zero segments for an empty diagram", () => {
+  assert.equal(
+    getLiveObservationDiagramSegmentCount(createDiagram([], [])),
+    0
+  );
 });
 
 test("derives a different main path for an ASG diagram", () => {

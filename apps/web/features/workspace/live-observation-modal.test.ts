@@ -188,8 +188,8 @@ test("presentation particles stay inside connectors and the stage hugs its conte
   assert.match(mapRule, /height:\s*clamp\(300px,\s*42vh,\s*430px\)/);
   assert.match(particleRule, /box-sizing:\s*border-box/);
   assert.match(surfaceRule, /min-height:\s*210px/);
-  assert.match(stylesSource, /from \{ left:\s*-16px; opacity:\s*0; \}/);
-  assert.match(stylesSource, /to \{ left:\s*calc\(100% - 8px\); opacity:\s*0; \}/);
+  assert.match(stylesSource, /from \{ left:\s*-28px; opacity:\s*0; \}/);
+  assert.match(stylesSource, /to \{ left:\s*calc\(100% - 14px\); opacity:\s*0; \}/);
   assert.doesNotMatch(surfaceRule, /height:\s*100%/);
 });
 
@@ -207,6 +207,12 @@ test("traffic bursts alone activate visible circular flow particles", () => {
 
   assert.match(diagramMapSource, /Math\.min\(4, burst\?\.visibleParticleCount/);
   assert.match(diagramMapSource, /data-flowing=\{burst !== null\}/);
+  assert.match(
+    diagramMapSource,
+    /getLiveObservationDiagramParticleDelayMs\(index, particleIndex\)/
+  );
+  assert.match(diagramMapSource, /LIVE_OBSERVATION_DIAGRAM_SEGMENT_DURATION_MS/);
+  assert.doesNotMatch(diagramMapSource, /index \* 90 \+ particleIndex \* 180/);
   assert.match(stylesSource, /@keyframes liveObservationPresentationSegmentParticle/);
   assert.match(
     stylesSource,
@@ -218,7 +224,7 @@ test("traffic bursts alone activate visible circular flow particles", () => {
   );
   assert.match(
     getCssRule(stylesSource, "liveObservationPresentationSegmentParticle"),
-    /border:\s*3px solid #3974e8[\s\S]*border-radius:\s*50%[\s\S]*box-shadow:\s*0 0 0 6px[\s\S]*height:\s*16px[\s\S]*top:\s*-8px[\s\S]*width:\s*16px/
+    /border:\s*3px solid #3974e8[\s\S]*border-radius:\s*50%[\s\S]*box-shadow:\s*0 0 0 8px[\s\S]*height:\s*28px[\s\S]*top:\s*-14px[\s\S]*width:\s*28px/
   );
   assert.match(stylesSource, /@keyframes liveObservationCapacityLaunch/);
   assert.match(stylesSource, /@keyframes liveObservationCapacityActivated/);
@@ -367,14 +373,14 @@ test("paired perimeter pulses share logical-request timing", () => {
 });
 
 test("burst cleanup waits through the last staggered arrival", () => {
-  assert.match(modalSource, /getLiveObservationSignalBurstLifetimeMs/);
+  assert.match(modalSource, /getLiveObservationDiagramBurstLifetimeMs/);
   assert.match(
     modalSource,
-    /getLiveObservationSignalBurstLifetimeMs\(\s*requestFlowBurst\.visibleParticleCount\s*\)/
+    /getLiveObservationDiagramBurstLifetimeMs\(\s*observationDiagramSegmentCount,\s*requestFlowBurst\.visibleParticleCount\s*\)/
   );
   assert.match(
     modalSource,
-    /getLiveObservationSignalBurstLifetimeMs\(\s*mockRequestFlowBurst\.visibleParticleCount\s*\)/
+    /getLiveObservationDiagramBurstLifetimeMs\(\s*observationDiagramSegmentCount,\s*mockRequestFlowBurst\.visibleParticleCount\s*\)/
   );
   assert.doesNotMatch(modalSource, /\}, 1_050\)/);
 });

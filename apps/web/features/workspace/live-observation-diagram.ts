@@ -143,6 +143,11 @@ export function createLiveObservationDiagramModel(
   };
 }
 
+export function getLiveObservationDiagramSegmentCount(diagram: DiagramJson): number {
+  const model = createLiveObservationDiagramModel(diagram, null);
+  return model.status === "ready" ? model.stages.length : 0;
+}
+
 function createCapacitySlotNode(template: DiagramNode, index: number): DiagramNode {
   return {
     ...template,

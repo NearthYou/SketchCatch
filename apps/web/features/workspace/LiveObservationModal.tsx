@@ -39,7 +39,10 @@ import {
   createInitialMockRequestFlowState,
   replayMockRequestFlow
 } from "./live-observation-mock-preview";
-import { getLiveObservationSignalBurstLifetimeMs } from "./live-observation-signal-map";
+import {
+  getLiveObservationDiagramBurstLifetimeMs
+} from "./live-observation-diagram-particles";
+import { getLiveObservationDiagramSegmentCount } from "./live-observation-diagram";
 import {
   createPresenterTrafficBoost,
   getEligibleLiveObservationDeployments,
@@ -125,6 +128,10 @@ export function LiveObservationModal({
     () => createWorkspaceAiBoardSnapshot(diagramJson),
     [diagramJson]
   );
+  const observationDiagramSegmentCount = useMemo(
+    () => getLiveObservationDiagramSegmentCount(diagramJson),
+    [diagramJson]
+  );
 
   const eligibleDeployments = useMemo(
     () => getEligibleLiveObservationDeployments(deployments),
@@ -198,7 +205,8 @@ export function LiveObservationModal({
     }
 
     const sequence = requestFlowBurst.sequence;
-    const burstLifetimeMs = getLiveObservationSignalBurstLifetimeMs(
+    const burstLifetimeMs = getLiveObservationDiagramBurstLifetimeMs(
+      observationDiagramSegmentCount,
       requestFlowBurst.visibleParticleCount
     );
     const timer = window.setTimeout(() => {
@@ -208,7 +216,7 @@ export function LiveObservationModal({
     }, burstLifetimeMs);
 
     return () => window.clearTimeout(timer);
-  }, [requestFlowBurst]);
+  }, [observationDiagramSegmentCount, requestFlowBurst]);
 
   useEffect(() => {
     if (!mockRequestFlowBurst) {
@@ -216,7 +224,8 @@ export function LiveObservationModal({
     }
 
     const sequence = mockRequestFlowBurst.sequence;
-    const burstLifetimeMs = getLiveObservationSignalBurstLifetimeMs(
+    const burstLifetimeMs = getLiveObservationDiagramBurstLifetimeMs(
+      observationDiagramSegmentCount,
       mockRequestFlowBurst.visibleParticleCount
     );
     const timer = window.setTimeout(() => {
@@ -226,7 +235,7 @@ export function LiveObservationModal({
     }, burstLifetimeMs);
 
     return () => window.clearTimeout(timer);
-  }, [mockRequestFlowBurst]);
+  }, [mockRequestFlowBurst, observationDiagramSegmentCount]);
 
   useEffect(() => {
     if (!SHOW_MOCK_ANIMATION_PREVIEW || session || !mockRequestFlowState.snapshot) {

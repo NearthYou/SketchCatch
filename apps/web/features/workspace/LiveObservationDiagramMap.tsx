@@ -7,6 +7,10 @@ import {
   type LiveObservationDiagramNodeState,
   type LiveObservationPresentationRole
 } from "./live-observation-diagram";
+import {
+  getLiveObservationDiagramParticleDelayMs,
+  LIVE_OBSERVATION_DIAGRAM_SEGMENT_DURATION_MS
+} from "./live-observation-diagram-particles";
 import styles from "./workspace.module.css";
 
 export function LiveObservationDiagramMap({
@@ -92,7 +96,10 @@ export function LiveObservationDiagramMap({
                     <i
                       className={styles.liveObservationPresentationSegmentParticle}
                       key={`${burst.sequence}-${stage.node.id}-segment-${particleIndex}`}
-                      style={{ animationDelay: `${index * 90 + particleIndex * 180}ms` }}
+                      style={{
+                        animationDelay: `${getLiveObservationDiagramParticleDelayMs(index, particleIndex)}ms`,
+                        animationDuration: `${LIVE_OBSERVATION_DIAGRAM_SEGMENT_DURATION_MS}ms`
+                      }}
                     />
                   )) : null}
                 </i>
