@@ -3,7 +3,6 @@
 import { Activity, Code2, GitBranch, History, PanelRightOpen, Rocket, ShieldCheck, X } from "lucide-react";
 import { useState } from "react";
 import type { DiagramEditorPanelContext } from "../../../features/diagram-editor";
-import { WorkspaceAiAssistant } from "../ai-assistant/WorkspaceAiAssistant";
 import { TerraformOperationsPanel } from "./TerraformOperationsPanel";
 import { SafetyOperationsPanel } from "./SafetyOperationsPanel";
 import { DeploymentHistoryPanel } from "./DeploymentHistoryPanel";
@@ -33,7 +32,6 @@ export function WorkspaceOperationsDock({
 }) {
   const [activeTab, setActiveTab] = useState<WorkspaceOperationTab>("terraform");
   const [internalOpen, setInternalOpen] = useState(false);
-  const [isAssistantOpen, setAssistantOpen] = useState(false);
   const panelOpen = isOpen ?? internalOpen;
   const terraform = useWorkspaceTerraform({
     applyDiagram: context.applyDiagramJson,
@@ -70,17 +68,7 @@ export function WorkspaceOperationsDock({
     }
     setInternalOpen(nextOpen);
     onOpenChange?.(nextOpen);
-    if (nextOpen) setAssistantOpen(false);
     return true;
-  }
-
-  // AI가 열리면 기존 작업 panel을 닫아 Board 오른쪽 도구가 겹치지 않게 합니다.
-  function setAiAssistantOpen(nextOpen: boolean): void {
-    if (nextOpen) {
-      if (!setOpen(false)) return;
-      context.setRightPanelOpen(false);
-    }
-    setAssistantOpen(nextOpen);
   }
 
   // 도구를 고르면 닫힌 패널도 함께 열어 사용자의 행동 결과를 바로 보여줍니다.
@@ -99,13 +87,11 @@ export function WorkspaceOperationsDock({
   }
 
   return (
-    <>
-      <aside
-        aria-label="Workspace 작업 도구"
-        className={`${styles.dock} ${panelOpen ? "" : styles.dockCollapsed}`}
-        data-project-id={projectId}
-        hidden={isAssistantOpen}
-      >
+    <aside
+      aria-label="Workspace 작업 도구"
+      className={`${styles.dock} ${panelOpen ? "" : styles.dockCollapsed}`}
+      data-project-id={projectId}
+    >
       <nav aria-label="작업 단계" className={styles.dockToolbar} role="tablist">
         <button
           aria-label="Terraform Preview"
@@ -200,14 +186,6 @@ export function WorkspaceOperationsDock({
           )}
         </div>
       ) : null}
-      </aside>
-      <WorkspaceAiAssistant
-        context={context}
-        isOpen={isAssistantOpen}
-        onOpenChange={setAiAssistantOpen}
-        projectId={projectId}
-        terraform={terraform}
-      />
-    </>
+    </aside>
   );
 }

@@ -13,10 +13,6 @@
   box-shadow: var(--shadow-card);
 }
 
-.dock[hidden] {
-  display: none;
-}
-
 .dockCollapsed {
   width: auto;
   border-radius: var(--radius-control);
