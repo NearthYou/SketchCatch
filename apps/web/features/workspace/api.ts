@@ -396,7 +396,11 @@ async function readArchitectureDraftStream(
 
   while (true) {
     const chunk = await reader.read();
-    buffer += decoder.decode(chunk.value, { stream: !chunk.done });
+    if (chunk.value !== undefined) {
+      buffer += decoder.decode(chunk.value, { stream: !chunk.done });
+    } else if (chunk.done) {
+      buffer += decoder.decode();
+    }
     const lines = buffer.split("\n");
     buffer = lines.pop() ?? "";
 

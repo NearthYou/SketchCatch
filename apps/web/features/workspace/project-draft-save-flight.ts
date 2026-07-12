@@ -16,13 +16,22 @@ export function runProjectDraftServerSaveFlight<T>(
       return flightRef.current;
     }
 
-    return flightRef.current.then((result) => {
-      if (!options.shouldRunAgainAfterInFlight?.()) {
-        return result;
-      }
+    return flightRef.current.then(
+      (result) => {
+        if (!options.shouldRunAgainAfterInFlight?.()) {
+          return result;
+        }
 
-      return runProjectDraftServerSaveFlight(flightRef, save, options);
-    });
+        return runProjectDraftServerSaveFlight(flightRef, save, options);
+      },
+      (error: unknown) => {
+        if (!options.shouldRunAgainAfterInFlight?.()) {
+          throw error;
+        }
+
+        return runProjectDraftServerSaveFlight(flightRef, save, options);
+      }
+    );
   }
 
   const savePromise = save().finally(() => {

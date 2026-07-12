@@ -35,7 +35,7 @@ export function resolveArchitectureOperationalRequirements(
       ),
     realtime: resolveRealtimeMode(normalizedPrompt),
     realtimeTransport: resolveRealtimeTransport(normalizedPrompt),
-    voiceTranscription: /(^|[\s:])(voice|speech|audio|음성|녹음|전사)([\s:,.]|$)/iu.test(
+    voiceTranscription: /(\b(voice|speech|audio)\b|음성|녹음|전사)/iu.test(
       normalizedPrompt
     )
   };

@@ -26,6 +26,21 @@ test("resolveArchitectureOperationalRequirements distinguishes realtime, burst, 
   });
 });
 
+test("resolveArchitectureOperationalRequirements detects Korean voice keywords with particles and compounds", () => {
+  assert.equal(
+    resolveArchitectureOperationalRequirements("사용자가 음성을 업로드하면 전사 결과를 보여줘").voiceTranscription,
+    true
+  );
+  assert.equal(
+    resolveArchitectureOperationalRequirements("녹음파일을 Amazon Transcribe로 처리해줘").voiceTranscription,
+    true
+  );
+  assert.equal(
+    resolveArchitectureOperationalRequirements("invoice 파일을 업로드해줘").voiceTranscription,
+    false
+  );
+});
+
 test("resolveArchitectureOperationalRequirements maps the Korean SPA questionnaire answers", () => {
   const requirements = resolveArchitectureOperationalRequirements([
     "어떤 종류의 웹사이트인가요?",

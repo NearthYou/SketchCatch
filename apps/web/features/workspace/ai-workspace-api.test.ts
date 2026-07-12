@@ -277,6 +277,51 @@ test("createAiArchitectureDraft streams real backend progress before returning t
   assert.equal("title" in result ? result.title : undefined, "Q Architecture Draft");
 });
 
+test("createAiArchitectureDraft does not decode undefined completion chunks", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const OriginalTextDecoder = globalThis.TextDecoder;
+  const encoder = new TextEncoder();
+
+  class GuardedTextDecoder extends OriginalTextDecoder {
+    override decode(input?: BufferSource, options?: TextDecodeOptions): string {
+      if (input === undefined) {
+        assert.equal(options, undefined, "completion chunks without values should flush without decode options");
+      }
+      return super.decode(input, options);
+    }
+  }
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    globalThis.TextDecoder = OriginalTextDecoder;
+  });
+
+  globalThis.TextDecoder = GuardedTextDecoder;
+  globalThis.fetch = async () =>
+    new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(
+            encoder.encode(
+              '{"type":"result","result":{"architectureJson":{"nodes":[],"edges":[]},"title":"Q Architecture Draft","metadata":{"source":"amazon_q","confidence":"medium","assumptions":[],"explanations":[]}}}\n'
+            )
+          );
+          controller.close();
+        }
+      }),
+      {
+        headers: { "Content-Type": "application/x-ndjson" },
+        status: 200
+      }
+    );
+
+  const result = await createAiArchitectureDraft({
+    prompt: "Create a serverless API architecture"
+  });
+
+  assert.equal("title" in result ? result.title : undefined, "Q Architecture Draft");
+});
+
 test("createAiArchitectureDraft preserves a Q error emitted after streaming starts", async (context) => {
   const originalFetch = globalThis.fetch;
 

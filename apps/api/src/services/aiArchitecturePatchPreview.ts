@@ -3709,7 +3709,7 @@ function isEc2InstanceTypeModificationInstruction(normalizedInstruction: string)
       "작은",
       "작게"
     ]) ||
-      /\b(?:[a-z][0-9][a-z]?\.[a-z0-9]+)\b/i.test(normalizedInstruction))
+      /\b(?:[a-z0-9-]+\.[a-z0-9]+)\b/i.test(normalizedInstruction))
   );
 }
 
@@ -3749,7 +3749,7 @@ function findAdjacentEc2InstanceType(
     return undefined;
   }
 
-  const currentMatch = currentInstanceType.match(/^([a-z][0-9][a-z]?)\.([a-z0-9]+)$/i);
+  const currentMatch = currentInstanceType.match(/^([a-z0-9-]+)\.([a-z0-9]+)$/i);
 
   if (currentMatch === null) {
     return undefined;
@@ -3804,8 +3804,8 @@ function isEc2InstanceSizeDecreaseInstruction(normalizedInstruction: string): bo
 function findEc2InstanceType(normalizedInstruction: string): string | undefined {
   return (
     normalizedInstruction.match(
-      /\b(?:instance\s*type|instancetype|type|인스턴스\s*타입|타입)\s*(?:to|=|:|을|를|은|는)?\s*((?:[a-z][0-9][a-z]?\.[a-z0-9]+))/i
-    )?.[1] ?? normalizedInstruction.match(/\b(?:[a-z][0-9][a-z]?\.[a-z0-9]+)\b/i)?.[0]
+      /\b(?:instance\s*type|instancetype|type|인스턴스\s*타입|타입)\s*(?:to|=|:|을|를|은|는)?\s*((?:[a-z0-9-]+\.[a-z0-9]+))/i
+    )?.[1] ?? normalizedInstruction.match(/\b(?:[a-z0-9-]+\.[a-z0-9]+)\b/i)?.[0]
   );
 }
 

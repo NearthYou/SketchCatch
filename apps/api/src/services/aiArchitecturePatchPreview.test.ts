@@ -1392,6 +1392,49 @@ test("createArchitecturePatchPreview upsizes the selected EC2 instance in place"
   });
 });
 
+test("createArchitecturePatchPreview handles compound EC2 instance families", () => {
+  const relativeResponse = createArchitecturePatchPreview({
+    architectureJson: {
+      nodes: [
+        makeNode({
+          id: "app-server",
+          type: "EC2",
+          label: "App Server",
+          config: {
+            instanceType: "m5ad.large"
+          }
+        })
+      ],
+      edges: []
+    },
+    instruction: "make the EC2 instance larger",
+    selectedTargetResourceId: "app-server"
+  });
+
+  assert.equal(relativeResponse.status, "preview");
+  assert.equal(relativeResponse.proposedArchitectureJson.nodes[0]?.config.instanceType, "m5ad.xlarge");
+
+  const explicitResponse = createArchitecturePatchPreview({
+    architectureJson: {
+      nodes: [
+        makeNode({
+          id: "app-server",
+          type: "EC2",
+          label: "App Server",
+          config: {
+            instanceType: "t3.micro"
+          }
+        })
+      ],
+      edges: []
+    },
+    instruction: "change the EC2 instance type to c6gn.xlarge"
+  });
+
+  assert.equal(explicitResponse.status, "preview");
+  assert.equal(explicitResponse.proposedArchitectureJson.nodes[0]?.config.instanceType, "c6gn.xlarge");
+});
+
 test("createArchitecturePatchPreview updates Lambda runtime parameters as deployable config", () => {
   const response = createArchitecturePatchPreview({
     architectureJson: {

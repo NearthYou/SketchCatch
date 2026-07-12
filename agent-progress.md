@@ -7,10 +7,25 @@ Short English-only working log for the current agent context. Older records are 
 - Branch: `feat/ck/287-ai-diagram`.
 - Local `dev` and `origin/dev` point to `4d48f3f1`; latest Trivy scanner and production infrastructure check updates are merged into this branch.
 - Architecture Draft uses Amazon Q retrieval evidence, deterministic deployable materialization, NDJSON progress streaming, and containment-aware board layout.
-- The current uncommitted work connects Architecture Patch Preview to the Bedrock PatchPlan compiler with deterministic validation and fallback, and is verified.
-- No cloud deployment or Terraform mutation was run during this merge.
+- PR #347 review feedback has been addressed locally with focused regression coverage and full validation.
+- No cloud deployment or Terraform mutation was run during this review fix session.
 
 ## Session Record
+
+### 2026-07-12 - Address PR #347 review feedback
+
+- Goal: Fix all actionable review threads on PR #347 and prepare the branch for push.
+- Completed:
+  - Ensured queued project draft follow-up saves still run when the in-flight save rejects.
+  - Relaxed voice transcription detection so Korean particles and compounds such as `음성을` and `녹음파일` are recognized while English words still use word boundaries.
+  - Expanded EC2 instance type parsing to handle compound families such as `m5ad.large` and `c6gn.xlarge`.
+  - Guarded Architecture Draft NDJSON stream decoding so completion chunks without values flush the decoder instead of decoding `undefined` with options.
+  - Added regression coverage for all four review threads.
+- Verification:
+  - Focused project draft save-flight, operational requirement, patch preview, and web API stream tests passed.
+  - `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
+- Risk:
+  - GitHub review threads still need reply/resolve after the fix commit is pushed.
 
 ### 2026-07-11 - Connect PatchPlan compiler to Bedrock
 

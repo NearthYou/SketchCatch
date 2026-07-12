@@ -93,3 +93,38 @@ test("runProjectDraftServerSaveFlight queues a follow-up save when the in-flight
   assert.equal(dirty, false);
   assert.equal(flightRef.current, null);
 });
+
+test("runProjectDraftServerSaveFlight runs a queued follow-up after an in-flight failure", async () => {
+  const flightRef: { current: Promise<string> | null } = { current: null };
+  const failure = new Error("first save failed");
+  let dirty = false;
+  let saveCallCount = 0;
+  let rejectFirstSave: (reason: Error) => void = () => assert.fail("first save rejecter was not captured");
+
+  const firstSave = runProjectDraftServerSaveFlight(flightRef, async () => {
+    saveCallCount += 1;
+    return new Promise<string>((_resolve, reject) => {
+      rejectFirstSave = reject;
+    });
+  });
+  const queuedSave = runProjectDraftServerSaveFlight(
+    flightRef,
+    async () => {
+      saveCallCount += 1;
+      dirty = false;
+      return "second";
+    },
+    {
+      shouldRunAgainAfterInFlight: () => dirty
+    }
+  );
+
+  dirty = true;
+  rejectFirstSave(failure);
+
+  await assert.rejects(firstSave, failure);
+  assert.equal(await queuedSave, "second");
+  assert.equal(saveCallCount, 2);
+  assert.equal(dirty, false);
+  assert.equal(flightRef.current, null);
+});
