@@ -1167,7 +1167,12 @@ test("deployment setup exposes a five-step Direct Deployment console", () => {
     stylesSource,
     /@media \(max-width: 720px\)[\s\S]*?\.deploymentStepNavigation ol\s*\{[\s\S]*?display:\s*flex;/
   );
-  assert.doesNotMatch(deploymentPanelSource, /DeploymentWizardStep/);
+  assert.match(deploymentPanelSource, /DeploymentWizardStepId/);
+  assert.match(deploymentPanelSource, /data-deployment-wizard-step/);
+  assert.match(deploymentPanelSource, /data-wizard-step="preflight"/);
+  assert.match(deploymentPanelSource, /data-wizard-step="prepare"/);
+  assert.match(deploymentPanelSource, /data-wizard-step="route"/);
+  assert.match(deploymentPanelSource, /data-wizard-step="result"/);
   assert.doesNotMatch(deploymentPanelSource, /startPrimaryDeploymentStep/);
 });
 test("Git CI/CD handoff actions use user-facing labels and helper text", () => {

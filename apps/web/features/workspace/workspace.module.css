@@ -5465,6 +5465,77 @@
   color: #ffffff;
 }
 
+.deploymentRouteChoices {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.deploymentRouteButton {
+  align-content: start;
+  background: var(--workspace-surface, #ffffff);
+  border: 1px solid var(--workspace-line-strong, #dcdee0);
+  border-radius: var(--workspace-control-radius, 8px);
+  color: var(--workspace-text, #171717);
+  cursor: pointer;
+  display: grid;
+  font: inherit;
+  gap: 8px;
+  min-height: 132px;
+  padding: 16px;
+  text-align: left;
+}
+
+.deploymentRouteButton[aria-pressed="true"] {
+  border-color: var(--workspace-accent, #000000);
+  box-shadow: inset 0 0 0 1px var(--workspace-accent, #000000);
+}
+
+.deploymentRouteButton:focus-visible {
+  outline: 2px solid var(--workspace-accent, #000000);
+  outline-offset: 2px;
+}
+
+.deploymentRouteButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.deploymentRouteButton strong {
+  font-size: 14px;
+}
+
+.deploymentRouteButton span {
+  color: var(--workspace-muted, #60646c);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.deploymentWizardResult {
+  align-content: start;
+  display: grid;
+  gap: 16px;
+  padding: 28px;
+}
+
+.deploymentResultActions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+@media (max-width: 768px) {
+  .deploymentRouteChoices {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .deploymentWizardResult {
+    padding: 20px 16px;
+  }
+}
+
 .aiSecondaryButton:not(:disabled):hover,
 .aiSecondaryButton:not(:disabled):focus-visible,
 .deploymentSecondaryButton:not(:disabled):hover,

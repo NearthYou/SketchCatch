@@ -719,6 +719,7 @@ export function WorkspaceRightPanel({
         deploymentAvailability={deploymentAvailability}
         embeddedInWizard
         hasUnsavedDeploymentBaseline={hasUnsavedDeploymentBaseline}
+        onOpenLiveObservation={openLiveObservation}
         onOpenFindingTerraformSource={(finding) => {
           const sourceLocation = openPreDeploymentFindingTerraformSource(finding);
 

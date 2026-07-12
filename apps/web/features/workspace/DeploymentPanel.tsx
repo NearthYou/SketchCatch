@@ -89,7 +89,9 @@ import {
 } from "./deployment-console-state";
 import {
   getDeploymentWizardState,
+  type DeploymentExecutionRoute,
   type DeploymentGitCicdHandoffStatus,
+  type DeploymentWizardStepId,
   type DeploymentWizardState
 } from "./deployment-wizard-state";
 import { getDeploymentDurationLabel } from "./deployment-duration";
@@ -130,6 +132,7 @@ export function DeploymentPanel({
   hasUnsavedDeploymentBaseline,
   initialExpanded = false,
   onExpandedClose,
+  onOpenLiveObservation,
   onOpenFindingTerraformSource,
   onPrepareDeploymentArtifacts,
   onPreDeploymentCheckStateChange,
@@ -146,6 +149,7 @@ export function DeploymentPanel({
   readonly hasUnsavedDeploymentBaseline: boolean;
   readonly initialExpanded?: boolean | undefined;
   readonly onExpandedClose?: (() => void) | undefined;
+  readonly onOpenLiveObservation?: (() => void) | undefined;
   readonly onOpenFindingTerraformSource: (finding: CheckFinding) => TerraformSourceLocation | null;
   readonly onPrepareDeploymentArtifacts: (
     baseline: DeploymentBaseline
@@ -189,6 +193,9 @@ export function DeploymentPanel({
   const [isDeploymentExpanded, setIsDeploymentExpanded] = useState(initialExpanded);
   const [deploymentConsoleTab, setDeploymentConsoleTab] =
     useState<DeploymentConsoleTab>("direct");
+  const [selectedExecutionRoute, setSelectedExecutionRoute] =
+    useState<DeploymentExecutionRoute | null>(null);
+  const [isWizardHistoryVisible, setIsWizardHistoryVisible] = useState(false);
   const [selectedDirectStepId, setSelectedDirectStepId] =
     useState<DirectDeploymentStepId>("save");
   const trafficAbortControllerRef = useRef<AbortController | null>(null);
@@ -310,7 +317,7 @@ export function DeploymentPanel({
   const shouldAutoRefreshSelectedDeployment = shouldAutoRefreshDeployment(selectedDeployment);
   const shouldAutoRefreshSelectedGitCicdHandoff =
     shouldAutoRefreshGitCicdHandoff(selectedGitCicdHandoff);
-  const canCreateGitCicdHandoff = Boolean(activeGitHubSourceRepository && selectedDeployment);
+  const hasGitCicdHandoffPrerequisites = Boolean(activeGitHubSourceRepository && selectedDeployment);
   const preDeploymentAnalysis = preDeploymentCheckState.analysis;
   const preDeploymentState = preDeploymentCheckState.requestState;
   const preDeploymentErrorMessage = preDeploymentCheckState.errorMessage;
@@ -329,7 +336,7 @@ export function DeploymentPanel({
     requestState: preDeploymentState
   });
   const canRunDeploymentReviewStep =
-    canStartDeploymentReview &&
+    requestState !== "loading" &&
     preDeploymentState !== "loading";
   const primaryDeploymentStepStatus = getPrimaryDeploymentStepStatus(selectedDeployment);
   const directDeploymentFlowInput = {
@@ -347,12 +354,10 @@ export function DeploymentPanel({
     ...directWizardCompatibility,
     gitCicdHandoffStatus: getWizardGitCicdHandoffStatus(selectedGitCicdHandoff),
     preflight: directPreflightState,
-    route: deploymentConsoleTab === "git-cicd"
-      ? "git-cicd"
-      : deploymentConsoleTab === "direct"
-        ? "direct"
-        : null
+    route: selectedExecutionRoute
   });
+  const canCreateGitCicdHandoff =
+    deploymentWizardState.canCreateGitCicdHandoff && hasGitCicdHandoffPrerequisites;
   const deploymentWizardStateFingerprint = JSON.stringify(deploymentWizardState);
 
   useEffect(() => {
@@ -937,8 +942,6 @@ export function DeploymentPanel({
     if (!checkPassed) {
       return;
     }
-
-    await startDeploymentReview();
   }
 
   async function startDeploymentReview(): Promise<void> {
@@ -2083,12 +2086,328 @@ export function DeploymentPanel({
     </div>
   );
 
+  function renderWizardStepContent(stepId: DeploymentWizardStepId) {
+    const selectedAwsConnection =
+      verifiedAwsConnections.find((connection) => connection.id === selectedAwsConnectionId) ?? null;
+    const requestError =
+      stepId === "preflight" && preDeploymentState === "error"
+        ? preDeploymentErrorMessage
+        : requestState === "error"
+          ? errorMessage
+          : "";
+
+    if (stepId === "preflight") {
+      return (
+        <section className={styles.deploymentStepWorkspace} data-wizard-step="preflight">
+          <div className={styles.deploymentStepHeading}>
+            <span>Step 1</span>
+            <h3>배포 전 검사</h3>
+            <p>고정된 Board와 Terraform을 대상으로 보안·비용·구성 위험을 확인합니다.</p>
+          </div>
+          {preDeploymentAnalysis !== null && !hasStalePreDeploymentAnalysis ? (
+            <DeploymentPreDeploymentSummary
+              analysis={preDeploymentAnalysis}
+              onOpenFindingTerraformSource={onOpenFindingTerraformSource}
+            />
+          ) : (
+            <div className={styles.deploymentStepCallout}>
+              <strong>아직 실행된 검사가 없습니다</strong>
+              <p>검사 전 상태는 실패가 아닙니다. 검사를 완료해야 다음 단계가 열립니다.</p>
+            </div>
+          )}
+          <div className={styles.deploymentStepActionBar}>
+            <p>차단 항목이 있으면 이후 단계는 잠긴 상태로 유지됩니다.</p>
+            <button
+              className={styles.deploymentPrimaryButton}
+              disabled={!canRunDeploymentReviewStep}
+              onClick={() => void runDeploymentReviewStep()}
+              type="button"
+            >
+              <ShieldCheck size={16} aria-hidden="true" />
+              {preDeploymentState === "loading" ? "검사 중" : "배포 전 검사 실행"}
+            </button>
+          </div>
+          {requestError ? <p className={styles.deploymentStageAlert} role="alert">{requestError}</p> : null}
+        </section>
+      );
+    }
+
+    if (stepId === "prepare") {
+      return (
+        <section className={styles.deploymentStepWorkspace} data-wizard-step="prepare">
+          <div className={styles.deploymentStepHeading}>
+            <span>Step 2</span>
+            <h3>배포 기준과 대상</h3>
+            <p>배포 시작 순간에 고정한 Baseline과 실제 실행할 AWS 연결을 확인합니다.</p>
+          </div>
+          <div className={styles.deploymentStepSummary}>
+            <InfoRow label="Baseline" value={baseline.fingerprint.slice(0, 16)} />
+            <InfoRow label="Created" value={formatDate(baseline.createdAt)} />
+            <InfoRow label="Architecture" value={`${baseline.diagram.nodes.length} resources`} />
+            <InfoRow label="Terraform files" value={`${baseline.terraformFiles.length} files`} />
+          </div>
+          <div className={styles.deploymentStageSettings}>
+            <SelectMenu
+              ariaLabel="AWS 연결 선택"
+              disabled={awsConnectionOptions.length === 0 || requestState === "loading"}
+              emptyLabel="AWS 연결 없음"
+              onChange={setSelectedAwsConnectionId}
+              options={awsConnectionOptions}
+              size="large"
+              value={selectedAwsConnectionId}
+            />
+            <SelectMenu
+              ariaLabel="Live deployment profile"
+              emptyLabel="Live profile 없음"
+              onChange={(value) => setSelectedLiveProfile(value as DeploymentLiveProfile)}
+              options={liveProfileOptions}
+              size="large"
+              value={selectedLiveProfile}
+            />
+          </div>
+          <div className={styles.deploymentStepActionBar}>
+            <p>
+              {selectedAwsConnection
+                ? `${selectedAwsConnection.accountId ?? "AWS account"} · ${selectedAwsConnection.region}`
+                : "검증된 AWS 연결을 선택하세요."}
+            </p>
+            <button
+              className={styles.deploymentPrimaryButton}
+              disabled={!canStartDeploymentReview}
+              onClick={() => void startDeploymentReview()}
+              type="button"
+            >
+              <DeploymentBaselineIcon size={16} aria-hidden="true" />
+              {requestState === "loading" ? "준비 중" : "배포 기준과 대상 확정"}
+            </button>
+          </div>
+          {requestError ? <p className={styles.deploymentStageAlert} role="alert">{requestError}</p> : null}
+        </section>
+      );
+    }
+
+    if (stepId === "plan") {
+      return (
+        <section className={styles.deploymentStepWorkspace} data-wizard-step="plan">
+          <div className={styles.deploymentStepHeading}>
+            <span>Step 3</span>
+            <h3>Plan 생성</h3>
+            <p>실제 인프라를 변경하지 않고 create, update, delete 영향을 계산합니다.</p>
+          </div>
+          <div className={styles.deploymentStepSummary}>
+            <InfoRow label="Deployment" value={selectedDeployment?.status ?? "준비 필요"} />
+            <InfoRow label="Plan" value={hasCurrentPlan ? "생성됨" : "아직 없음"} />
+            {selectedDeployment?.planSummary ? <PlanSummaryRows deployment={selectedDeployment} /> : null}
+          </div>
+          <div className={styles.deploymentStepActionBar}>
+            <p>Plan은 AWS 리소스를 변경하지 않습니다.</p>
+            <button
+              className={styles.deploymentPrimaryButton}
+              disabled={!canRunPlan}
+              onClick={() => void startTerraformPlan()}
+              type="button"
+            >
+              <DashboardIcon name="rocket" />
+              {requestState === "loading" ? "Plan 생성 중" : "Plan 생성"}
+            </button>
+          </div>
+          {requestError ? <p className={styles.deploymentStageAlert} role="alert">{requestError}</p> : null}
+        </section>
+      );
+    }
+
+    if (stepId === "approve") {
+      return (
+        <section className={styles.deploymentStepWorkspace} data-wizard-step="approve">
+          <div className={styles.deploymentStepHeading}>
+            <span>Step 4</span>
+            <h3>Plan 승인</h3>
+            <p>실행 계정, region, 변경량과 정확한 Plan snapshot을 명시적으로 승인합니다.</p>
+          </div>
+          <div className={styles.deploymentStepSummary}>
+            <InfoRow label="AWS account" value={selectedDeployment?.approvedAwsAccountId ?? selectedAwsConnection?.accountId ?? "확인 필요"} />
+            <InfoRow label="AWS region" value={selectedDeployment?.approvedAwsRegion ?? selectedAwsConnection?.region ?? "확인 필요"} />
+            <InfoRow label="tfplan hash" value={formatShortHash(selectedDeployment?.approvedTfplanHash ?? null)} />
+            {selectedDeployment?.planSummary ? <PlanSummaryRows deployment={selectedDeployment} /> : null}
+          </div>
+          <div className={styles.deploymentStepActionBar}>
+            <p>승인 snapshot은 실행 직전에 서버에서 다시 검증됩니다.</p>
+            <button
+              className={styles.deploymentPrimaryButton}
+              disabled={!canApprovePlan}
+              onClick={() => void approveCurrentPlan()}
+              type="button"
+            >
+              <ShieldCheck size={16} aria-hidden="true" />
+              {requestState === "loading" ? "승인 처리 중" : "Plan 승인"}
+            </button>
+          </div>
+          {requestError ? <p className={styles.deploymentStageAlert} role="alert">{requestError}</p> : null}
+        </section>
+      );
+    }
+
+    if (stepId === "route") {
+      return (
+        <section className={styles.deploymentStepWorkspace} data-wizard-step="route">
+          <div className={styles.deploymentStepHeading}>
+            <span>Step 5</span>
+            <h3>실행 방식</h3>
+            <p>같은 승인된 Plan에서 Direct 또는 Git/CI/CD 경로를 선택합니다.</p>
+          </div>
+          <div className={styles.deploymentRouteChoices} role="group" aria-label="실행 방식 선택">
+            <button
+              aria-pressed={selectedExecutionRoute === "direct"}
+              className={styles.deploymentRouteButton}
+              disabled={!deploymentWizardState.canChooseRoute}
+              onClick={() => {
+                setSelectedExecutionRoute("direct");
+                setDeploymentConsoleTab("direct");
+              }}
+              type="button"
+            >
+              <DashboardIcon name="rocket" />
+              <strong>Direct Deployment</strong>
+              <span>승인된 Plan을 SketchCatch에서 직접 Apply합니다.</span>
+            </button>
+            <button
+              aria-pressed={selectedExecutionRoute === "git-cicd"}
+              className={styles.deploymentRouteButton}
+              disabled={!deploymentWizardState.canChooseRoute}
+              onClick={() => {
+                setSelectedExecutionRoute("git-cicd");
+                setDeploymentConsoleTab("git-cicd");
+              }}
+              type="button"
+            >
+              <GitBranch size={18} aria-hidden="true" />
+              <strong>Git / CI·CD</strong>
+              <span>승인된 artifact로 PR과 Pipeline handoff를 만듭니다.</span>
+            </button>
+          </div>
+
+          {selectedExecutionRoute === "direct" ? (
+            <>
+              <div className={styles.deploymentStepSummary}>
+                <InfoRow label="Deployment 상태" value={selectedDeployment?.status ?? "대기"} />
+                <InfoRow label="승인" value={selectedDeployment ? formatApprovalState(selectedDeployment) : "Plan 필요"} />
+                <InfoRow label="현재 작업" value={primaryDeploymentStepStatus} />
+              </div>
+              {showApplyConfirmation && selectedDeployment ? (
+                <div className={styles.deploymentApplyConfirm}>
+                  <h3>Apply 최종 확인</h3>
+                  <InfoRow label="AWS account" value={selectedDeployment.approvedAwsAccountId ?? "없음"} />
+                  <InfoRow label="AWS region" value={selectedDeployment.approvedAwsRegion ?? "없음"} />
+                  <InfoRow label="tfplan hash" value={formatShortHash(selectedDeployment.approvedTfplanHash)} />
+                  <p>AWS 비용이 발생할 수 있습니다. 승인된 Plan과 대상 계정을 다시 확인하세요.</p>
+                  <div className={styles.deploymentApplyActions}>
+                    <button className={styles.deploymentSecondaryButton} onClick={() => setShowApplyConfirmation(false)} type="button">취소</button>
+                    <button className={styles.deploymentPrimaryButton} disabled={!canApply} onClick={startTerraformApply} type="button">
+                      <DashboardIcon name="rocket" />
+                      AWS 리소스 생성
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className={styles.deploymentStepActionBar}>
+                  <p>{deploymentActionHint || "Apply 전 서버가 승인 snapshot을 다시 검증합니다."}</p>
+                  <button
+                    className={styles.deploymentPrimaryButton}
+                    disabled={!deploymentWizardState.canRunDirectApply || !canApply}
+                    onClick={() => setShowApplyConfirmation(true)}
+                    type="button"
+                  >
+                    <DashboardIcon name="rocket" />
+                    Apply 실행 검토
+                  </button>
+                </div>
+              )}
+            </>
+          ) : null}
+
+          {selectedExecutionRoute === "git-cicd" ? (
+            <div className={styles.deploymentStepActionBar}>
+              <p>
+                {activeGitHubSourceRepository
+                  ? `${activeGitHubSourceRepository.owner}/${activeGitHubSourceRepository.name}`
+                  : "Repository 연결은 Project Settings에서 준비하세요."}
+              </p>
+              <button
+                className={styles.deploymentPrimaryButton}
+                disabled={!canCreateGitCicdHandoff || requestState === "loading"}
+                onClick={() => void createGitCicdAutoDeployHandoff()}
+                type="button"
+              >
+                <GitBranch size={16} aria-hidden="true" />
+                Git/CI/CD handoff 생성
+              </button>
+            </div>
+          ) : null}
+          {requestError ? <p className={styles.deploymentStageAlert} role="alert">{requestError}</p> : null}
+        </section>
+      );
+    }
+
+    if (isWizardHistoryVisible) {
+      return (
+        <section className={styles.deploymentWizardResult} data-wizard-step="history">
+          <button className={styles.deploymentSecondaryButton} onClick={() => setIsWizardHistoryVisible(false)} type="button">
+            결과로 돌아가기
+          </button>
+          {renderHistoryView()}
+        </section>
+      );
+    }
+
+    return (
+      <section className={styles.deploymentWizardResult} data-wizard-step="result">
+        <div className={styles.deploymentStepHeading}>
+          <span>Step 6</span>
+          <h3>실행 결과</h3>
+          <p>{selectedExecutionRoute === "git-cicd" ? "Git handoff와 Pipeline 상태를 확인합니다." : "Apply 상태, 로그, 리소스와 Output을 확인합니다."}</p>
+        </div>
+        <div className={styles.deploymentResultActions}>
+          <button className={styles.deploymentSecondaryButton} onClick={refreshDeploymentPanel} type="button">새로고침</button>
+          <button className={styles.deploymentSecondaryButton} onClick={() => setIsWizardHistoryVisible(true)} type="button">Deployment History</button>
+          {selectedExecutionRoute === "direct" && selectedDeployment?.status === "SUCCESS" ? (
+            <button className={styles.deploymentPrimaryButton} onClick={onOpenLiveObservation} type="button">Live Observation</button>
+          ) : null}
+        </div>
+        {selectedExecutionRoute === "git-cicd" ? renderGitCicdHandoffSection() : (
+          <>
+            <div className={styles.deploymentStepSummary}>
+              <InfoRow label="Apply status" value={selectedDeployment?.status ?? "대기"} />
+              <InfoRow label="Approval" value={selectedDeployment ? formatApprovalState(selectedDeployment) : "없음"} />
+            </div>
+            {selectedDeployment?.status === "FAILED" ? (
+              <DeploymentFailureExplanationCard
+                errorMessage={failureExplanationErrorMessage}
+                explanation={failureExplanation}
+                state={failureExplanationState}
+              />
+            ) : null}
+            {selectedDeployment?.status === "RUNNING" ? (
+              <button className={styles.deploymentSecondaryButton} disabled={!canCancelDeployment} onClick={cancelSelectedDeployment} type="button">실행 취소 요청</button>
+            ) : null}
+            {renderResultsSection()}
+            {renderLogsSection()}
+          </>
+        )}
+        {requestError ? <p className={styles.deploymentStageAlert} role="alert">{requestError}</p> : null}
+      </section>
+    );
+  }
+
   function closeExpandedDeployment(): void {
     setIsDeploymentExpanded(false);
     onExpandedClose?.();
   }
 
-  const deploymentContent = canLoadDeploymentData(deploymentAvailability) ? (
+  const deploymentContent = canLoadDeploymentData(deploymentAvailability) && embeddedInWizard ? (
+    <div className={styles.deploymentConsoleContent} data-deployment-wizard-step={deploymentWizardState.activeStepId}>
+      {renderWizardStepContent(deploymentWizardState.activeStepId)}
+    </div>
+  ) : canLoadDeploymentData(deploymentAvailability) ? (
     <div className={styles.deploymentConsoleContent}>
       <div className={styles.deploymentConsoleTabs} role="tablist" aria-label="배포 콘솔 보기">
         {([
