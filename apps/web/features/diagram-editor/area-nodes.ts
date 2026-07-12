@@ -4,7 +4,6 @@ import {
   getRegionNodeAwsRegion,
   isRegionAreaNode
 } from "../parameter-input/region-node-metadata";
-import { getResourceNodeDisplayLabel } from "./resource-node-display-label";
 
 const designAreaNodeTypes = new Set([
   "design_region",
@@ -21,7 +20,8 @@ const resourceAreaNodeTypes = new Set([
   "aws_availability_zone",
   "aws_autoscaling_group",
   "aws_vpc",
-  "aws_subnet"
+  "aws_subnet",
+  "aws_security_group"
 ]);
 const groupIconPath = "/Architecture-Group-Icons_07312025";
 
@@ -36,23 +36,6 @@ const designAreaNodeIconByType: Record<string, string> = {
 
 export function isAreaNode(node: DiagramNode): boolean {
   return isDesignAreaNode(node) || isResourceAreaNode(node);
-}
-
-export function findInnermostAreaDropTarget(
-  childNode: DiagramNode,
-  nodes: readonly DiagramNode[]
-): DiagramNode | null {
-  if (isAreaNode(childNode)) {
-    return null;
-  }
-
-  return findInnermostAreaNodeAtPoint(
-    nodes.filter((node) => node.id !== childNode.id),
-    {
-      x: childNode.position.x + childNode.size.width / 2,
-      y: childNode.position.y + childNode.size.height / 2
-    }
-  );
 }
 
 export function findInnermostAreaNodeAtPoint(
@@ -78,17 +61,15 @@ export function getAreaNodeLabel(node: DiagramNode): string {
   const diagramAreaLabel = readDiagramTextValue(node, "diagramAreaLabel");
 
   if (diagramAreaLabel) {
-    return isResourceAreaNode(node) ? diagramAreaLabel.toLocaleUpperCase() : diagramAreaLabel;
-  }
-
-  const diagramLabel = readDiagramTextValue(node, "diagramLabel");
-
-  if (diagramLabel) {
-    return diagramLabel;
+    return diagramAreaLabel;
   }
 
   if (isResourceAreaNode(node)) {
-    return getResourceNodeDisplayLabel(node);
+    const resourceName = node.parameters?.resourceName?.trim();
+
+    if (resourceName) {
+      return resourceName;
+    }
   }
 
   return node.label;
@@ -121,11 +102,7 @@ export function isDesignAreaNode(node: DiagramNode): boolean {
 }
 
 export function isResourceAreaNode(node: DiagramNode): boolean {
-  return (
-    node.kind === "resource" &&
-    node.parameters?.values?.["diagramRenderAsResource"] !== true &&
-    resourceAreaNodeTypes.has(getResourceNodeType(node))
-  );
+  return node.kind === "resource" && resourceAreaNodeTypes.has(getResourceNodeType(node));
 }
 
 function getResourceNodeType(node: DiagramNode): string {

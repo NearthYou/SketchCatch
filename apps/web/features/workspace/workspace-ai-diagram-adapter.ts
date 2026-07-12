@@ -17,20 +17,17 @@ import {
   getResourceDefinitionByTerraform
 } from "@sketchcatch/types/resource-definitions";
 import { isAreaNode } from "../diagram-editor/area-nodes";
-import { BOARD_DEFAULT_EDGE_COLOR } from "../diagram-editor/constants";
 import { createDiagramNodeFromPayload } from "../diagram-editor/diagram-utils";
-import { RESOURCE_NODE_DEFAULT_SIZE } from "../diagram-editor/resource-node-geometry";
-import { getResourceNodeVisualBounds } from "../diagram-editor/resource-node-visual-footprint";
 import { resourceCatalog } from "../resource-settings/catalog";
 import { addServerStorageAreaNodes } from "./server-storage-board-layout";
 
 const DEFAULT_VIEWPORT: DiagramJson["viewport"] = { x: 0, y: 0, zoom: 1 };
-const DEFAULT_NODE_SIZE: DiagramNode["size"] = RESOURCE_NODE_DEFAULT_SIZE;
+const DEFAULT_NODE_SIZE: DiagramNode["size"] = { width: 56, height: 56 };
 const DEFAULT_TERRAFORM_BLOCK_TYPE: TerraformBlockType = "resource";
 const UNKNOWN_TERRAFORM_RESOURCE_TYPE = "unknown_resource";
 const DEFAULT_EDGE_STYLE: NonNullable<DiagramEdge["style"]> = {
   animated: false,
-  color: BOARD_DEFAULT_EDGE_COLOR,
+  color: "#506176",
   lineStyle: "solid",
   width: "thin"
 };
@@ -48,9 +45,7 @@ const OPERATION_EDGE_STYLE: NonNullable<DiagramEdge["style"]> = {
 };
 
 export function getDiagramJsonForArchitectureDraft(draft: AiArchitectureDraftResult): DiagramJson {
-  return draft.diagramJson
-    ? normalizeDiagramJsonConventions(draft.diagramJson)
-    : convertArchitectureJsonToDiagramJson(draft.architectureJson);
+  return draft.diagramJson ?? convertArchitectureJsonToDiagramJson(draft.architectureJson);
 }
 
 const DEPENDENCY_EDGE_STYLE: NonNullable<DiagramEdge["style"]> = {
@@ -72,12 +67,13 @@ const EDGE_HANDLE_IDS = {
   top: "handle-top"
 } as const;
 const AREA_CHILD_PADDING = 36;
+const MIN_RESOURCE_AREA_CHILD_FOOTPRINT: DiagramNode["size"] = { width: 112, height: 112 };
 const RESOURCE_COLLISION_GAP = 16;
 const RESOURCE_COLLISION_ROW_WIDTH = 720;
 const MAX_AREA_FIT_PASSES = 8;
 const ROOT_PARENT_AREA_ID = "__root__";
 const READABLE_LAYOUT_MIN_GROUP_SIZE = 4;
-const READABLE_LAYOUT_COLUMN_GAP = 192;
+const READABLE_LAYOUT_COLUMN_GAP = 160;
 const READABLE_LAYOUT_ROW_GAP = 140;
 const READABLE_LAYOUT_STACK_GAP = 104;
 const EDGE_HANDLE_STUB_LENGTH = 20;
@@ -85,11 +81,8 @@ const EDGE_ROUTE_NODE_OVERLAP_PENALTY = 1_000_000;
 const EDGE_ROUTE_SEGMENT_OVERLAP_PENALTY = 200_000;
 const EDGE_ROUTE_SEGMENT_CROWDING_PENALTY = 10_000;
 const EDGE_ROUTE_CROSSING_PENALTY = 5_000_000;
-const EDGE_ROUTE_SHARED_HANDLE_PENALTY = 12_000_000;
-const EDGE_ROUTE_OPPOSING_SHARED_HANDLE_PENALTY = 60_000_000;
 const EDGE_ROUTE_CROWDING_DISTANCE = 28;
 const EDGE_ROUTE_WRONG_DIRECTION_PENALTY = 10_000_000;
-const EDGE_ROUTE_OBSERVABILITY_BRANCH_PENALTY = 30_000_000;
 const RESOURCE_AREA_INSET_PADDING = 56;
 const COMPACT_AREA_MIN_SIZES: Readonly<Record<string, DiagramNode["size"]>> = {
   aws_availability_zone: { width: 320, height: 220 },
@@ -98,33 +91,9 @@ const COMPACT_AREA_MIN_SIZES: Readonly<Record<string, DiagramNode["size"]>> = {
   aws_subnet: { width: 180, height: 120 },
   aws_vpc: { width: 420, height: 280 }
 };
-const AI_RESOURCE_RENDER_TYPES = new Set(["aws_autoscaling_group"]);
-const AI_RESOURCE_NODE_SIZE: DiagramNode["size"] = { width: 124, height: 96 };
-const EXTERNAL_FLOW_NODE_SIZE: DiagramNode["size"] = { width: 124, height: 96 };
-const SUBNET_PLACEMENT_NODE_SIZE: DiagramNode["size"] = { width: 112, height: 84 };
-const EXTERNAL_FLOW_HORIZONTAL_GAP = 48;
-const VPC_BOUNDARY_NODE_OVERHANG_RATIO = 2 / 3;
-const EXTERNAL_ENTRY_RESOURCE_TYPES = new Set([
-  "aws_api_gateway_rest_api",
-  "aws_apigatewayv2_api",
-  "aws_cloudfront_distribution",
-  "aws_lb",
-  "aws_route53_record"
-]);
-const USER_CLIENT_ICON_URL =
-  "/Resource-Icons_07312025/Res_General-Icons/Res_48_Light/Res_Client_48_Light.svg";
-const INTERNET_ICON_URL =
-  "/Resource-Icons_07312025/Res_General-Icons/Res_48_Light/Res_Internet_48_Light.svg";
 const AREA_PARENT_EDGE_LABELS = new Set(["contains", "hosts"]);
 const TERRAFORM_REFERENCE_ATTRIBUTE_SUFFIXES = ["id", "arn", "name", "execution_arn"] as const;
 const SECURITY_GROUP_REFERENCE_KEYS = ["securityGroupIds", "vpcSecurityGroupIds", "securityGroupId"] as const;
-const SECURITY_GROUP_MEMBER_RESOURCE_TYPES = new Set([
-  "aws_db_instance",
-  "aws_ecs_service",
-  "aws_instance",
-  "aws_lambda_function",
-  "aws_lb"
-]);
 const RESOURCE_ITEMS_BY_DEFINITION_ID = new Map(resourceCatalog.map((resourceItem) => [resourceItem.id, resourceItem]));
 const RESOURCE_ITEMS_BY_TERRAFORM_TYPE = createResourceItemsByTerraformType(resourceCatalog);
 const EDGE_STYLE_LABEL_PATTERNS: ReadonlyArray<{
@@ -213,43 +182,22 @@ const RESOURCE_NAME_CONVENTIONS: Readonly<Record<string, { readonly prefix: stri
 
 // AI Draft를 실제 Architecture Board가 받을 수 있는 DiagramJson으로 바꾸는 gg 경계입니다.
 export function convertArchitectureJsonToDiagramJson(architectureJson: ArchitectureJson): DiagramJson {
+  const nodeIds = new Set(architectureJson.nodes.map((node) => node.id));
   const convertedNodes = architectureJson.nodes.map(convertArchitectureNodeToDiagramNode);
-  const scaffoldSanitizedInput = removeServerlessOrphanNetworkScaffold(
-    convertedNodes,
+  const preparedNodes = applyAreaParentMetadata(
+    applyDiagramResourceNameConventions(addServerStorageAreaNodes(convertedNodes)),
     architectureJson.edges
   );
-  const placementFlow = createSubnetPlacementFlow(
-    scaffoldSanitizedInput.nodes,
-    scaffoldSanitizedInput.edges
-  );
-  const nodesWithPlacements = [...scaffoldSanitizedInput.nodes, ...placementFlow.nodes];
-  const edgesWithPlacements = [...scaffoldSanitizedInput.edges, ...placementFlow.edges];
-  const externalTrafficFlow = createExternalTrafficFlow(nodesWithPlacements, edgesWithPlacements);
-  const sourceNodes = [...nodesWithPlacements, ...externalTrafficFlow.nodes].filter(
-    (node) => !externalTrafficFlow.removedNodeIds.has(node.id)
-  );
-  const sourceEdges = [...edgesWithPlacements, ...externalTrafficFlow.edges].filter(
-    (edge) =>
-      !externalTrafficFlow.removedNodeIds.has(edge.sourceId) &&
-      !externalTrafficFlow.removedNodeIds.has(edge.targetId)
-  );
-  const nodeIds = new Set(sourceNodes.map((node) => node.id));
-  const preparedNodes = applyAreaParentMetadata(
-    applyDiagramResourceNameConventions(addServerStorageAreaNodes(sourceNodes)),
-    sourceEdges
-  );
   const nodes = applyDiagramLayerOrder(
-    placeVpcBoundaryResources(
-      fitAreaNodesToChildren(
-        resolveSiblingNodeCollisions(fitAreaNodesToChildren(preparedNodes))
-      )
+    fitAreaNodesToChildren(
+      resolveSiblingNodeCollisions(fitAreaNodesToChildren(applyReadableTopologyLayout(preparedNodes)))
     )
   );
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
 
   return {
     edges: convertArchitectureEdgesToDiagramEdges(
-      sourceEdges.filter((edge) => shouldRenderArchitectureEdge(edge, nodeIds, nodeById)),
+      architectureJson.edges.filter((edge) => shouldRenderArchitectureEdge(edge, nodeIds, nodeById)),
       nodeById
     ),
     nodes,
@@ -298,15 +246,13 @@ function convertArchitectureNodeToDiagramNode(node: ArchitectureJson["nodes"][nu
   }
 
   const config = node.config ?? {};
-  const terraformResourceType = resolveArchitectureTerraformResourceType(node);
+  const terraformResourceType = mapResourceTypeToTerraform(node.type);
   const position = {
     x: node.positionX,
     y: node.positionY
   };
   const zIndex = index + 1;
   const baseNode = createResourceCatalogDiagramNode(node.type, terraformResourceType, position, zIndex);
-  const renderAsResource = AI_RESOURCE_RENDER_TYPES.has(terraformResourceType);
-  const parameters = createDiagramNodeParameters(node, terraformResourceType, baseNode.parameters);
 
   return {
     ...baseNode,
@@ -314,17 +260,9 @@ function convertArchitectureNodeToDiagramNode(node: ArchitectureJson["nodes"][nu
     label: node.label ?? baseNode.label,
     locked: false,
     metadata: readDiagramNodeMetadata(config) ?? baseNode.metadata,
-    parameters: renderAsResource
-      ? {
-          ...parameters,
-          values: {
-            ...parameters.values,
-            diagramRenderAsResource: true
-          }
-        }
-      : parameters,
+    parameters: createDiagramNodeParameters(node, terraformResourceType, baseNode.parameters),
     position,
-    size: readDiagramNodeSize(config) ?? (renderAsResource ? AI_RESOURCE_NODE_SIZE : baseNode.size),
+    size: readDiagramNodeSize(config) ?? baseNode.size,
     style: mergeDiagramNodeStyle(baseNode.style, readDiagramNodeStyle(config)),
     type: terraformResourceType,
     zIndex
@@ -475,7 +413,7 @@ function createDiagramNodeParameters(
 
   return {
     fileName: baseParameters?.fileName ?? "main",
-    resourceName: getArchitectureResourceName(node, terraformResourceType),
+    resourceName: getArchitectureResourceName(node),
     resourceType: terraformResourceType,
     terraformBlockType: baseParameters?.terraformBlockType ?? DEFAULT_TERRAFORM_BLOCK_TYPE,
     values: {
@@ -590,27 +528,19 @@ function getEdgeRoutingPriority(
   const sourceType = getDiagramNodeResourceType(nodeById.get(sourceNodeId));
   const targetType = getDiagramNodeResourceType(nodeById.get(targetNodeId));
 
-  if (isExternalFlowNodeType(sourceType) || isExternalFlowNodeType(targetType)) {
-    return 100;
-  }
-
   if (isObservabilityRoutingType(sourceType) || isObservabilityRoutingType(targetType)) {
-    return 20;
-  }
-
-  if (isControlPlaneRoutingType(sourceType) || isControlPlaneRoutingType(targetType)) {
-    return 30;
-  }
-
-  if (isRuntimeStorageRoutingType(sourceType) || isRuntimeStorageRoutingType(targetType)) {
     return 10;
   }
 
-  return 40;
-}
+  if (isControlPlaneRoutingType(sourceType) || isControlPlaneRoutingType(targetType)) {
+    return 15;
+  }
 
-function isExternalFlowNodeType(nodeType: string): boolean {
-  return nodeType === "sketchcatch_user_client" || nodeType === "sketchcatch_internet";
+  if (isRuntimeStorageRoutingType(sourceType) || isRuntimeStorageRoutingType(targetType)) {
+    return 20;
+  }
+
+  return 40;
 }
 
 function isObservabilityRoutingType(resourceType: string): boolean {
@@ -657,81 +587,10 @@ function isConfigurationDependencyRoutingType(resourceType: string): boolean {
 }
 
 export function normalizeDiagramJsonConventions(diagramJson: DiagramJson): DiagramJson {
-  const normalizedInputNodes = normalizeStoredSubnetPlacementLabels(diagramJson.nodes);
-  const normalizedInputNodeIds = new Set(normalizedInputNodes.map((node) => node.id));
-  const normalizedInputEdges = diagramJson.edges.filter(
-    (edge) =>
-      normalizedInputNodeIds.has(edge.sourceNodeId) &&
-      normalizedInputNodeIds.has(edge.targetNodeId)
-  );
-  const architectureEdges = normalizedInputEdges.map((edge) => ({
-    id: edge.id,
-    label: edge.label,
-    sourceId: edge.sourceNodeId,
-    targetId: edge.targetNodeId
-  }));
-  const scaffoldSanitizedInput = removeServerlessOrphanNetworkScaffold(
-    normalizedInputNodes,
-    architectureEdges
-  );
-  const scaffoldSanitizedNodeIds = new Set(scaffoldSanitizedInput.nodes.map((node) => node.id));
-  const scaffoldSanitizedDiagramEdges = normalizedInputEdges.filter(
-    (edge) =>
-      scaffoldSanitizedNodeIds.has(edge.sourceNodeId) &&
-      scaffoldSanitizedNodeIds.has(edge.targetNodeId)
-  );
-  const placementFlow = createSubnetPlacementFlow(
-    scaffoldSanitizedInput.nodes,
-    scaffoldSanitizedInput.edges
-  );
-  const nodesWithPlacements = [...scaffoldSanitizedInput.nodes, ...placementFlow.nodes];
-  const architectureEdgesWithPlacements = [...scaffoldSanitizedInput.edges, ...placementFlow.edges];
-  const externalTrafficFlow = createExternalTrafficFlow(
-    nodesWithPlacements,
-    architectureEdgesWithPlacements
-  );
-  const sourceEdges: DiagramEdge[] = [
-    ...scaffoldSanitizedDiagramEdges.filter(
-      (edge) =>
-        !externalTrafficFlow.removedNodeIds.has(edge.sourceNodeId) &&
-        !externalTrafficFlow.removedNodeIds.has(edge.targetNodeId)
-    ),
-    ...placementFlow.edges.map((edge) => ({
-      id: edge.id,
-      label: edge.label,
-      sourceNodeId: edge.sourceId,
-      targetNodeId: edge.targetId
-    })),
-    ...externalTrafficFlow.edges.map((edge) => ({
-      id: edge.id,
-      label: edge.label,
-      sourceNodeId: edge.sourceId,
-      targetNodeId: edge.targetId
-    }))
-  ];
-  const preparedNodes = applyAreaParentMetadata(
-    applyAiResourceRenderOverrides(
-      applyReadableTopologyLayout(
-        applyDiagramResourceNameConventions(
-          [...nodesWithPlacements, ...externalTrafficFlow.nodes].filter(
-            (node) => !externalTrafficFlow.removedNodeIds.has(node.id)
-          )
-        )
-      )
-    ),
-    sourceEdges.map((edge) => ({
-      id: edge.id,
-      label: edge.label,
-      sourceId: edge.sourceNodeId,
-      targetId: edge.targetNodeId
-    }))
-  );
   const nodes = applyDiagramLayerOrder(
-    placeVpcBoundaryResources(
-      fitAreaNodesToChildren(
-        resolveSiblingNodeCollisions(
-          fitAreaNodesToChildren(preparedNodes)
-        )
+    fitAreaNodesToChildren(
+      resolveSiblingNodeCollisions(
+        fitAreaNodesToChildren(applyReadableTopologyLayout(applyDiagramResourceNameConventions(diagramJson.nodes)))
       )
     )
   );
@@ -740,473 +599,11 @@ export function normalizeDiagramJsonConventions(diagramJson: DiagramJson): Diagr
   return {
     ...diagramJson,
     edges: normalizeDiagramEdges(
-      sourceEdges.filter((edge) => shouldRenderDiagramEdge(edge, nodeById)),
+      diagramJson.edges.filter((edge) => shouldRenderDiagramEdge(edge, nodeById)),
       nodeById
     ),
     nodes
   };
-}
-
-const SERVERLESS_ENTRY_RESOURCE_TYPES = new Set([
-  "aws_api_gateway_rest_api",
-  "aws_apigatewayv2_api"
-]);
-const SERVERLESS_RUNTIME_RESOURCE_TYPES = new Set(["aws_lambda_function"]);
-const VPC_BOUND_RUNTIME_RESOURCE_TYPES = new Set([
-  "aws_autoscaling_group",
-  "aws_db_instance",
-  "aws_db_subnet_group",
-  "aws_ecs_service",
-  "aws_ecs_task_definition",
-  "aws_eks_cluster",
-  "aws_eks_node_group",
-  "aws_instance",
-  "aws_lb",
-  "aws_lb_listener",
-  "aws_lb_target_group"
-]);
-const ORPHAN_NETWORK_SCAFFOLD_RESOURCE_TYPES = new Set([
-  "aws_eip",
-  "aws_internet_gateway",
-  "aws_nat_gateway",
-  "aws_network_acl",
-  "aws_network_acl_rule",
-  "aws_route_table",
-  "aws_route_table_association",
-  "aws_security_group",
-  "aws_subnet",
-  "aws_vpc",
-  "aws_vpc_endpoint"
-]);
-
-function removeServerlessOrphanNetworkScaffold(
-  nodes: readonly DiagramNode[],
-  edges: readonly ArchitectureJson["edges"][number][]
-): {
-  nodes: DiagramNode[];
-  edges: ArchitectureJson["edges"];
-} {
-  const nodeById = new Map(nodes.map((node) => [node.id, node]));
-  const resourceTypes = new Set(nodes.map(getDiagramNodeResourceType));
-  const hasServerlessEntry = [...SERVERLESS_ENTRY_RESOURCE_TYPES].some((resourceType) =>
-    resourceTypes.has(resourceType)
-  );
-  const hasServerlessRuntime = [...SERVERLESS_RUNTIME_RESOURCE_TYPES].some((resourceType) =>
-    resourceTypes.has(resourceType)
-  );
-  const hasVpcBoundRuntime = [...VPC_BOUND_RUNTIME_RESOURCE_TYPES].some((resourceType) =>
-    resourceTypes.has(resourceType)
-  );
-
-  if (!hasServerlessEntry || !hasServerlessRuntime || hasVpcBoundRuntime) {
-    return { nodes: [...nodes], edges: [...edges] };
-  }
-
-  const networkNodeIds = new Set(
-    nodes
-      .filter((node) => ORPHAN_NETWORK_SCAFFOLD_RESOURCE_TYPES.has(getDiagramNodeResourceType(node)))
-      .map((node) => node.id)
-  );
-
-  if (networkNodeIds.size === 0) {
-    return { nodes: [...nodes], edges: [...edges] };
-  }
-
-  const hasRuntimeNetworkConnection = edges.some((edge) => {
-    const sourceIsNetwork = networkNodeIds.has(edge.sourceId);
-    const targetIsNetwork = networkNodeIds.has(edge.targetId);
-
-    if (sourceIsNetwork === targetIsNetwork) {
-      return false;
-    }
-
-    const nonNetworkNode = nodeById.get(sourceIsNetwork ? edge.targetId : edge.sourceId);
-    return nonNetworkNode !== undefined && !isExternalFlowNodeType(getDiagramNodeResourceType(nonNetworkNode));
-  });
-
-  if (hasRuntimeNetworkConnection) {
-    return { nodes: [...nodes], edges: [...edges] };
-  }
-
-  const sanitizedNodes = nodes.filter((node) => !networkNodeIds.has(node.id));
-  const sanitizedNodeIds = new Set(sanitizedNodes.map((node) => node.id));
-
-  return {
-    nodes: sanitizedNodes,
-    edges: edges.filter(
-      (edge) => sanitizedNodeIds.has(edge.sourceId) && sanitizedNodeIds.has(edge.targetId)
-    )
-  };
-}
-
-function createExternalTrafficFlow(
-  nodes: readonly DiagramNode[],
-  edges: readonly ArchitectureJson["edges"][number][]
-): {
-  nodes: DiagramNode[];
-  edges: ArchitectureJson["edges"];
-  removedNodeIds: ReadonlySet<string>;
-} {
-  const removedNodeIds = new Set<string>();
-  const entryNodes = nodes
-    .filter(isPublicExternalEntryNode)
-    .sort((left, right) => left.position.x - right.position.x || left.position.y - right.position.y)
-    .slice(0, 1);
-
-  if (entryNodes.length === 0) {
-    return { nodes: [], edges: [], removedNodeIds };
-  }
-
-  const existingNodeIds = new Set(nodes.map((node) => node.id));
-  const activeEdges = edges.filter(
-    (edge) => !removedNodeIds.has(edge.sourceId) && !removedNodeIds.has(edge.targetId)
-  );
-  const existingEdgeIds = new Set(activeEdges.map((edge) => edge.id));
-  const existingPairs = new Set(activeEdges.map((edge) => `${edge.sourceId}->${edge.targetId}`));
-  const primaryEntryNode = entryNodes[0]!;
-  const primaryEntryX = primaryEntryNode.position.x;
-  const flowY = primaryEntryNode.position.y;
-  const userNode = nodes.find((node) => node.kind === "design" && node.type === "sketchcatch_user_client");
-  const internetNode = nodes.find((node) => node.kind === "design" && node.type === "sketchcatch_internet");
-  const userNodeId = userNode?.id ?? createUniqueId("flow-user-client", existingNodeIds);
-  existingNodeIds.add(userNodeId);
-  const internetNodeId = internetNode?.id ?? createUniqueId("flow-internet", existingNodeIds);
-  existingNodeIds.add(internetNodeId);
-  const addedNodes: DiagramNode[] = [];
-  const highestZIndex = nodes.reduce((maximum, node) => Math.max(maximum, node.zIndex), 0);
-
-  if (!userNode) {
-    addedNodes.push(
-      createExternalFlowNode({
-        id: userNodeId,
-        iconUrl: USER_CLIENT_ICON_URL,
-        label: "User / Client",
-        position: {
-          x:
-            primaryEntryX -
-            EXTERNAL_FLOW_NODE_SIZE.width * 2 -
-            EXTERNAL_FLOW_HORIZONTAL_GAP * 2,
-          y: flowY
-        },
-        type: "sketchcatch_user_client",
-        zIndex: highestZIndex + 1
-      })
-    );
-  }
-
-  if (!internetNode) {
-    addedNodes.push(
-      createExternalFlowNode({
-        id: internetNodeId,
-        iconUrl: INTERNET_ICON_URL,
-        label: "Internet",
-        position: {
-          x:
-            primaryEntryX -
-            EXTERNAL_FLOW_NODE_SIZE.width -
-            EXTERNAL_FLOW_HORIZONTAL_GAP,
-          y: flowY
-        },
-        type: "sketchcatch_internet",
-        zIndex: highestZIndex + 1
-      })
-    );
-  }
-
-  const addedEdges: ArchitectureJson["edges"] = [];
-
-  addExternalFlowEdge({
-    addedEdges,
-    existingEdgeIds,
-    existingPairs,
-    id: "flow-user-to-internet",
-    label: "internet access",
-    sourceId: userNodeId,
-    targetId: internetNodeId,
-    sourceHandleId: EDGE_HANDLE_IDS.right,
-    targetHandleId: EDGE_HANDLE_IDS.left
-  });
-
-  for (const entryNode of entryNodes) {
-    const resourceType = getDiagramNodeResourceType(entryNode);
-    addExternalFlowEdge({
-      addedEdges,
-      existingEdgeIds,
-      existingPairs,
-      id: `flow-internet-to-${entryNode.id}`,
-      label: resourceType === "aws_cloudfront_distribution" ? "HTTPS requests" : "public requests",
-      sourceId: internetNodeId,
-      targetId: entryNode.id
-    });
-  }
-
-  return { nodes: addedNodes, edges: addedEdges, removedNodeIds };
-}
-
-function createSubnetPlacementFlow(
-  nodes: readonly DiagramNode[],
-  edges: readonly ArchitectureJson["edges"][number][]
-): {
-  nodes: DiagramNode[];
-  edges: ArchitectureJson["edges"];
-} {
-  const nodeById = new Map(nodes.map((node) => [node.id, node]));
-  const existingNodeIds = new Set(nodeById.keys());
-  const existingEdgeIds = new Set(edges.map((edge) => edge.id));
-  const addedNodes: DiagramNode[] = [];
-  const addedEdges: ArchitectureJson["edges"] = [];
-
-  for (const workloadNode of nodes) {
-    const resourceType = getDiagramNodeResourceType(workloadNode);
-    if (
-      resourceType !== "aws_lb" &&
-      resourceType !== "aws_ecs_service" &&
-      resourceType !== "aws_db_instance"
-    ) {
-      continue;
-    }
-
-    const subnetNodes = resolveWorkloadSubnetNodes(workloadNode, nodeById);
-    if (subnetNodes.length < 2) {
-      continue;
-    }
-
-    subnetNodes.forEach((subnetNode, index) => {
-      const placementNodeId = `placement-${workloadNode.id}-${subnetNode.id}`;
-      if (!existingNodeIds.has(placementNodeId)) {
-        const isDatabase = resourceType === "aws_db_instance";
-        const isLoadBalancer = resourceType === "aws_lb";
-        const zoneLabel = String.fromCharCode(65 + index);
-        addedNodes.push({
-          id: placementNodeId,
-          iconUrl: workloadNode.iconUrl,
-          kind: "design",
-          label: isLoadBalancer
-            ? `ALB node ${zoneLabel}`
-            : isDatabase
-            ? index === 0
-              ? "RDS primary (Multi-AZ)"
-              : "RDS standby (Multi-AZ)"
-            : `Fargate task placement ${zoneLabel}`,
-          locked: false,
-          metadata: { parentAreaNodeId: subnetNode.id },
-          position: {
-            x: subnetNode.position.x + 34,
-            y: subnetNode.position.y + 52
-          },
-          size: { ...SUBNET_PLACEMENT_NODE_SIZE },
-          type: "sketchcatch_subnet_placement",
-          zIndex: Math.max(workloadNode.zIndex, subnetNode.zIndex) + 1
-        });
-        existingNodeIds.add(placementNodeId);
-      }
-
-      const placementEdgeId = `placement-${workloadNode.id}-to-${subnetNode.id}`;
-      if (!existingEdgeIds.has(placementEdgeId)) {
-        addedEdges.push({
-          id: placementEdgeId,
-          label: isDatabaseResourceType(resourceType)
-            ? "Multi-AZ placement"
-            : resourceType === "aws_lb"
-              ? "ALB node placement"
-              : "task placement",
-          sourceId: workloadNode.id,
-          targetId: placementNodeId
-        });
-        existingEdgeIds.add(placementEdgeId);
-      }
-    });
-  }
-
-  return { nodes: addedNodes, edges: addedEdges };
-}
-
-function resolveWorkloadSubnetNodes(
-  workloadNode: DiagramNode,
-  nodeById: ReadonlyMap<string, DiagramNode>
-): DiagramNode[] {
-  const resourceType = getDiagramNodeResourceType(workloadNode);
-  let subnetReferences: string[] = [];
-
-  if (resourceType === "aws_ecs_service") {
-    const networkConfiguration = workloadNode.parameters?.values["networkConfiguration"];
-    if (isRecord(networkConfiguration) && Array.isArray(networkConfiguration["subnets"])) {
-      subnetReferences = networkConfiguration["subnets"].filter(isString);
-    }
-  } else if (resourceType === "aws_lb") {
-    subnetReferences = getStringParameterValues(workloadNode, "subnets");
-  } else if (isDatabaseResourceType(resourceType)) {
-    const subnetGroupReference = getStringParameterValues(workloadNode, "dbSubnetGroupName")[0];
-    const subnetGroupNode = subnetGroupReference
-      ? findReferencedNode(subnetGroupReference, nodeById)
-      : undefined;
-
-    if (subnetGroupNode) {
-      subnetReferences = getStringParameterValues(subnetGroupNode, "subnetIds");
-    }
-  }
-
-  const resolvedSubnets = subnetReferences
-    .map((reference) => findReferencedNode(reference, nodeById))
-    .filter(
-      (node): node is DiagramNode =>
-        node !== undefined && getDiagramNodeResourceType(node) === "aws_subnet"
-    );
-
-  return [...new Map(resolvedSubnets.map((node) => [node.id, node])).values()];
-}
-
-function isDatabaseResourceType(resourceType: string): boolean {
-  return resourceType === "aws_db_instance";
-}
-
-function isPublicExternalEntryNode(node: DiagramNode): boolean {
-  const resourceType = getDiagramNodeResourceType(node);
-
-  if (node.kind !== "resource" || !EXTERNAL_ENTRY_RESOURCE_TYPES.has(resourceType)) {
-    return false;
-  }
-
-  return resourceType !== "aws_lb" || node.parameters?.values["internal"] !== true;
-}
-
-function createExternalFlowNode(input: {
-  id: string;
-  iconUrl: string;
-  label: string;
-  position: DiagramNode["position"];
-  type: string;
-  zIndex: number;
-}): DiagramNode {
-  return {
-    id: input.id,
-    iconUrl: input.iconUrl,
-    kind: "design",
-    label: input.label,
-    locked: false,
-    position: input.position,
-    size: { ...EXTERNAL_FLOW_NODE_SIZE },
-    type: input.type,
-    zIndex: input.zIndex
-  };
-}
-
-function addExternalFlowEdge(input: {
-  addedEdges: ArchitectureJson["edges"];
-  existingEdgeIds: Set<string>;
-  existingPairs: Set<string>;
-  id: string;
-  label: string;
-  sourceId: string;
-  sourceHandleId?: string;
-  targetId: string;
-  targetHandleId?: string;
-}): void {
-  const pair = `${input.sourceId}->${input.targetId}`;
-
-  if (input.existingPairs.has(pair)) {
-    return;
-  }
-
-  const id = createUniqueId(input.id, input.existingEdgeIds);
-  input.existingEdgeIds.add(id);
-  input.existingPairs.add(pair);
-  input.addedEdges.push({
-    id,
-    label: input.label,
-    sourceId: input.sourceId,
-    targetId: input.targetId,
-    ...(input.sourceHandleId === undefined
-      ? {}
-      : { diagramSourceHandleId: input.sourceHandleId }),
-    ...(input.targetHandleId === undefined
-      ? {}
-      : { diagramTargetHandleId: input.targetHandleId })
-  } as AuthoredArchitectureEdge);
-}
-
-function normalizeStoredSubnetPlacementLabels(
-  nodes: readonly DiagramNode[]
-): DiagramNode[] {
-  return nodes.map((node) => {
-    if (node.type !== "sketchcatch_subnet_placement") {
-      return node;
-    }
-
-    const label =
-      node.label === "RDS primary"
-        ? "RDS primary (Multi-AZ)"
-        : node.label === "RDS standby"
-          ? "RDS standby (Multi-AZ)"
-          : node.label === "Fargate task 1"
-            ? "Fargate task placement A"
-            : node.label === "Fargate task 2"
-              ? "Fargate task placement B"
-              : node.label;
-
-    return label === node.label ? node : { ...node, label };
-  });
-}
-
-function createUniqueId(baseId: string, existingIds: ReadonlySet<string>): string {
-  if (!existingIds.has(baseId)) {
-    return baseId;
-  }
-
-  let suffix = 2;
-
-  while (existingIds.has(`${baseId}-${suffix}`)) {
-    suffix += 1;
-  }
-
-  return `${baseId}-${suffix}`;
-}
-
-function applyAiResourceRenderOverrides(nodes: readonly DiagramNode[]): DiagramNode[] {
-  return nodes.map((node) => {
-    const resourceType = getDiagramNodeResourceType(node);
-
-    if (node.kind !== "resource" || !AI_RESOURCE_RENDER_TYPES.has(resourceType) || !node.parameters) {
-      return node;
-    }
-
-    return {
-      ...node,
-      parameters: {
-        ...node.parameters,
-        values: {
-          ...node.parameters.values,
-          diagramRenderAsResource: true
-        }
-      },
-      size: { ...AI_RESOURCE_NODE_SIZE }
-    };
-  });
-}
-
-function placeVpcBoundaryResources(nodes: readonly DiagramNode[]): DiagramNode[] {
-  const nodeById = new Map(nodes.map((node) => [node.id, node]));
-
-  return nodes.map((node) => {
-    if (getDiagramNodeResourceType(node) !== "aws_internet_gateway") {
-      return node;
-    }
-
-    const parentAreaNodeId = node.metadata?.parentAreaNodeId;
-    const parentNode = parentAreaNodeId ? nodeById.get(parentAreaNodeId) : undefined;
-
-    if (!parentNode || getDiagramNodeResourceType(parentNode) !== "aws_vpc") {
-      return node;
-    }
-
-    return {
-      ...node,
-      position: {
-        x: parentNode.position.x + (parentNode.size.width - node.size.width) / 2,
-        y: parentNode.position.y - Math.round(node.size.height * VPC_BOUNDARY_NODE_OVERHANG_RATIO)
-      }
-    };
-  });
 }
 
 function normalizeDiagramEdges(
@@ -1289,12 +686,7 @@ function shouldRenderDiagramEdge(
     targetId: edge.targetNodeId
   };
 
-  return (
-    !isAreaDiagramNode(sourceNode) &&
-    !isAreaDiagramNode(targetNode) &&
-    !isAreaContainmentEdgeLabel(edge.label) &&
-    !isAreaContainmentRenderEdge(architectureEdge, sourceNode, targetNode, nodeById)
-  );
+  return !isAreaContainmentEdgeLabel(edge.label) && !isAreaContainmentRenderEdge(architectureEdge, sourceNode, targetNode, nodeById);
 }
 
 function getDiagramEdgeStyleForExistingEdge(
@@ -1371,11 +763,7 @@ function shouldRenderArchitectureEdge(
     return false;
   }
 
-  return (
-    !isAreaDiagramNode(sourceNode) &&
-    !isAreaDiagramNode(targetNode) &&
-    !isAreaContainmentRenderEdge(edge, sourceNode, targetNode, nodeById)
-  );
+  return !isAreaContainmentRenderEdge(edge, sourceNode, targetNode, nodeById);
 }
 
 function isAreaContainmentRenderEdge(
@@ -1471,9 +859,6 @@ function getLowestOverlapEdgeHandles(
   nodes: readonly DiagramNode[],
   occupiedRoutes: readonly OccupiedRoute[]
 ): Pick<DiagramEdge, "sourceHandleId" | "targetHandleId"> | undefined {
-  const routingObstacleNodes = nodes.filter(
-    (node) => !isExternalFlowNodeType(node.type)
-  );
   const sourceHandles = Object.values(EDGE_HANDLE_IDS);
   const targetHandles = Object.values(EDGE_HANDLE_IDS);
   let bestHandles: Pick<DiagramEdge, "sourceHandleId" | "targetHandleId"> | undefined;
@@ -1481,14 +866,7 @@ function getLowestOverlapEdgeHandles(
 
   for (const sourceHandleId of sourceHandles) {
     for (const targetHandleId of targetHandles) {
-      const score = scoreEdgeRouteOverlap(
-        sourceNode,
-        targetNode,
-        sourceHandleId,
-        targetHandleId,
-        routingObstacleNodes,
-        occupiedRoutes
-      );
+      const score = scoreEdgeRouteOverlap(sourceNode, targetNode, sourceHandleId, targetHandleId, nodes, occupiedRoutes);
 
       if (score < bestScore) {
         bestScore = score;
@@ -1532,7 +910,6 @@ function scoreEdgeRouteOverlap(
     getRouteLength(routeSegments) +
     getHandleDirectionPenalty(sourceNode, targetNode, sourceHandleId, targetHandleId) +
     getControlPlaneRuntimeHandlePenalty(sourceNode, targetNode, sourceHandleId, targetHandleId) +
-    getObservabilityBranchHandlePenalty(sourceNode, targetNode, sourceHandleId, targetHandleId) +
     getEndpointNodeReentryOverlapLength(routeSegments, sourceNode, targetNode) * 10_000;
 
   for (const node of nodes) {
@@ -1578,36 +955,6 @@ function getControlPlaneRuntimeHandlePenalty(
   }
 
   return penalty;
-}
-
-function getObservabilityBranchHandlePenalty(
-  sourceNode: DiagramNode,
-  targetNode: DiagramNode,
-  sourceHandleId: string,
-  targetHandleId: string
-): number {
-  const sourceType = getDiagramNodeResourceType(sourceNode);
-  const targetType = getDiagramNodeResourceType(targetNode);
-
-  if (!isRuntimeStorageRoutingType(sourceType) || !isObservabilityRoutingType(targetType)) {
-    return 0;
-  }
-
-  const sourceCenter = getNodeCenter(sourceNode);
-  const targetCenter = getNodeCenter(targetNode);
-  const deltaY = targetCenter.y - sourceCenter.y;
-
-  if (Math.abs(deltaY) < 80) {
-    return 0;
-  }
-
-  const preferredSourceHandleId = deltaY < 0 ? EDGE_HANDLE_IDS.top : EDGE_HANDLE_IDS.bottom;
-  const preferredTargetHandleId = deltaY < 0 ? EDGE_HANDLE_IDS.bottom : EDGE_HANDLE_IDS.top;
-
-  return (
-    (sourceHandleId === preferredSourceHandleId ? 0 : EDGE_ROUTE_OBSERVABILITY_BRANCH_PENALTY) +
-    (targetHandleId === preferredTargetHandleId ? 0 : EDGE_ROUTE_OBSERVABILITY_BRANCH_PENALTY)
-  );
 }
 
 function getEndpointNodeReentryOverlapLength(
@@ -1659,22 +1006,23 @@ function getSharedHandlePenalty(
   targetHandleId: string,
   occupiedRoute: OccupiedRoute
 ): number {
+  const sharedHandlePenalty = 5_000_000;
   let penalty = 0;
 
   if (sourceNode.id === occupiedRoute.sourceNodeId && sourceHandleId === occupiedRoute.sourceHandleId) {
-    penalty += EDGE_ROUTE_SHARED_HANDLE_PENALTY;
+    penalty += sharedHandlePenalty;
   }
 
   if (sourceNode.id === occupiedRoute.targetNodeId && sourceHandleId === occupiedRoute.targetHandleId) {
-    penalty += EDGE_ROUTE_OPPOSING_SHARED_HANDLE_PENALTY;
+    penalty += sharedHandlePenalty;
   }
 
   if (targetNode.id === occupiedRoute.sourceNodeId && targetHandleId === occupiedRoute.sourceHandleId) {
-    penalty += EDGE_ROUTE_OPPOSING_SHARED_HANDLE_PENALTY;
+    penalty += sharedHandlePenalty;
   }
 
   if (targetNode.id === occupiedRoute.targetNodeId && targetHandleId === occupiedRoute.targetHandleId) {
-    penalty += EDGE_ROUTE_SHARED_HANDLE_PENALTY;
+    penalty += sharedHandlePenalty;
   }
 
   return penalty;
@@ -1799,11 +1147,10 @@ function getSegmentNodeOverlapLength(segment: RouteSegment, node: DiagramNode): 
   }
 
   const padding = 18;
-  const visualBounds = getResourceNodeVisualBounds(node);
-  const left = visualBounds.x - padding;
-  const right = visualBounds.x + visualBounds.width + padding;
-  const top = visualBounds.y - padding;
-  const bottom = visualBounds.y + visualBounds.height + padding;
+  const left = node.position.x - padding;
+  const right = node.position.x + node.size.width + padding;
+  const top = node.position.y - padding;
+  const bottom = node.position.y + node.size.height + padding;
 
   if (horizontal) {
     const y = segment.from.y;
@@ -1966,62 +1313,31 @@ function applyAreaParentMetadata(
   nodes: readonly DiagramNode[],
   edges: readonly ArchitectureJson["edges"][number][]
 ): DiagramNode[] {
-  let currentNodes = [...nodes];
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
 
-  for (let pass = 0; pass < 3; pass += 1) {
-    const nodeById = new Map(currentNodes.map((node) => [node.id, node]));
-    currentNodes = currentNodes.map((node) => {
-      const parentAreaNodeId =
-        node.metadata?.parentAreaNodeId ??
-        findSubnetAwareSecurityBoundaryParentAreaNodeId(node, nodeById) ??
-        findConfigParentAreaNodeId(node, nodeById) ??
-        findReferencedResourceParentAreaNodeId(node, nodeById) ??
-        findEdgeParentAreaNodeId(node, nodeById, edges) ??
-        findDefaultRegionParentAreaNodeId(node, nodeById);
+  return nodes.map((node) => {
+    const parentAreaNodeId =
+      findSecurityBoundaryParentAreaNodeId(node, nodeById) ??
+      node.metadata?.parentAreaNodeId ??
+      findConfigParentAreaNodeId(node, nodeById) ??
+      findEdgeParentAreaNodeId(node, nodeById, edges) ??
+      findDefaultRegionParentAreaNodeId(node, nodeById);
 
-      if (!parentAreaNodeId) {
-        return node;
+    if (!parentAreaNodeId) {
+      return node;
+    }
+
+    return {
+      ...node,
+      metadata: {
+        ...node.metadata,
+        parentAreaNodeId
       }
-
-      return {
-        ...node,
-        metadata: {
-          ...node.metadata,
-          parentAreaNodeId
-        }
-      };
-    });
-  }
-
-  return currentNodes;
+    };
+  });
 }
 
 // 자식이 밖으로 튀어나오지 않도록 VPC/Subnet 박스 크기를 필요한 만큼 키웁니다.
-function findSubnetAwareSecurityBoundaryParentAreaNodeId(
-  node: DiagramNode,
-  nodeById: ReadonlyMap<string, DiagramNode>
-): string | undefined {
-  const securityParentAreaNodeId = findSecurityBoundaryParentAreaNodeId(node, nodeById);
-  const subnetNode = findConfigAreaNodeByParameter(node, "subnetId", nodeById);
-  const explicitSubnetParentAreaNodeId = subnetNode && subnetNode.id !== node.id ? subnetNode.id : undefined;
-
-  if (!securityParentAreaNodeId || !explicitSubnetParentAreaNodeId) {
-    return securityParentAreaNodeId;
-  }
-
-  const securityParentNode = nodeById.get(securityParentAreaNodeId);
-
-  if (!securityParentNode || !isSecurityGroupAreaNode(securityParentNode)) {
-    return securityParentAreaNodeId;
-  }
-
-  const protectedSubnetAreaNodeId = findProtectedSubnetAreaNodeId(securityParentNode, nodeById);
-
-  return protectedSubnetAreaNodeId === explicitSubnetParentAreaNodeId
-    ? securityParentAreaNodeId
-    : explicitSubnetParentAreaNodeId;
-}
-
 function fitAreaNodesToChildren(nodes: readonly DiagramNode[]): DiagramNode[] {
   let currentNodes = [...nodes];
 
@@ -2056,10 +1372,7 @@ function findDefaultRegionParentAreaNodeId(
   node: DiagramNode,
   nodeById: ReadonlyMap<string, DiagramNode>
 ): string | undefined {
-  if (
-    node.kind !== "resource" ||
-    getDiagramNodeResourceType(node) === "aws_region"
-  ) {
+  if (node.kind !== "resource" || isAreaDiagramNode(node)) {
     return undefined;
   }
 
@@ -2140,12 +1453,14 @@ function createTerraformReferenceRewrites(
     );
 
     for (const referenceName of referenceNames) {
-      const from = `${parameters.resourceType}.${referenceName}`;
-      const to = `${parameters.resourceType}.${resourceName}`;
-      rewriteByReference.set(from, to);
+      for (const suffix of TERRAFORM_REFERENCE_ATTRIBUTE_SUFFIXES) {
+        const from = `${parameters.resourceType}.${referenceName}.${suffix}`;
+        const to = `${parameters.resourceType}.${resourceName}.${suffix}`;
+        rewriteByReference.set(from, to);
 
-      if (parameters.terraformBlockType === "data") {
-        rewriteByReference.set(`data.${from}`, `data.${to}`);
+        if (parameters.terraformBlockType === "data") {
+          rewriteByReference.set(`data.${from}`, `data.${to}`);
+        }
       }
     }
   }
@@ -2190,18 +1505,16 @@ function rewriteTerraformReferenceString(
   value: string,
   referenceRewrites: readonly TerraformReferenceRewrite[]
 ): string {
-  let rewrittenValue = value;
+  const trimmedValue = value.trim();
+  const interpolationMatch = /^\$\{(.+)\}$/u.exec(trimmedValue);
+  const referenceValue = interpolationMatch?.[1]?.trim() ?? trimmedValue;
+  const rewrite = referenceRewrites.find((candidate) => candidate.from === referenceValue);
 
-  for (const rewrite of referenceRewrites) {
-    if (rewrittenValue === rewrite.from) {
-      rewrittenValue = rewrite.to;
-      continue;
-    }
-
-    rewrittenValue = rewrittenValue.replaceAll(`${rewrite.from}.`, `${rewrite.to}.`);
+  if (!rewrite) {
+    return value;
   }
 
-  return rewrittenValue;
+  return interpolationMatch ? `\${${rewrite.to}}` : rewrite.to;
 }
 
 type ReadableLayoutSlot = {
@@ -2459,7 +1772,7 @@ function createConventionResourceName(
   const normalizedName = toTerraformName(currentResourceName);
   const tokens = normalizedName.split("_").filter((token) => token.length > 0);
 
-  if (tokens[0] === convention.prefix) {
+  if (tokens[0] === convention.prefix && tokens.length > 1) {
     return normalizedName;
   }
 
@@ -2625,11 +1938,13 @@ function moveNodeUntilClear(
 }
 
 function getNodeCollisionStepSize(node: DiagramNode): DiagramNode["size"] {
-  const visualBounds = getResourceNodeVisualBounds(node);
+  if (isAreaDiagramNode(node) || node.kind !== "resource") {
+    return node.size;
+  }
 
   return {
-    width: visualBounds.width,
-    height: visualBounds.height
+    width: Math.max(node.size.width, MIN_RESOURCE_AREA_CHILD_FOOTPRINT.width),
+    height: Math.max(node.size.height, MIN_RESOURCE_AREA_CHILD_FOOTPRINT.height)
   };
 }
 
@@ -2677,13 +1992,13 @@ function doAreaAndResourceFootprintsConflict(
 }
 
 function getNodeCollisionFootprint(node: DiagramNode): { x: number; y: number; width: number; height: number } {
-  const visualBounds = getResourceNodeVisualBounds(node);
+  const size = getNodeCollisionStepSize(node);
 
   return {
-    x: visualBounds.x - RESOURCE_COLLISION_GAP / 2,
-    y: visualBounds.y - RESOURCE_COLLISION_GAP / 2,
-    width: visualBounds.width + RESOURCE_COLLISION_GAP,
-    height: visualBounds.height + RESOURCE_COLLISION_GAP
+    x: node.position.x - RESOURCE_COLLISION_GAP / 2,
+    y: node.position.y - RESOURCE_COLLISION_GAP / 2,
+    width: size.width + RESOURCE_COLLISION_GAP,
+    height: size.height + RESOURCE_COLLISION_GAP
   };
 }
 
@@ -2775,12 +2090,12 @@ function getRequiredAreaLayout(
   let bottom = shouldCompactArea ? Number.NEGATIVE_INFINITY : node.position.y + node.size.height;
 
   for (const child of children) {
-    const childBounds = getResourceNodeVisualBounds(child);
+    const childFitSize = getAreaChildFitSize(child);
     const childPadding = getAreaChildPadding(child);
-    left = Math.min(left, childBounds.x - childPadding);
-    top = Math.min(top, childBounds.y - childPadding);
-    right = Math.max(right, childBounds.x + childBounds.width + childPadding);
-    bottom = Math.max(bottom, childBounds.y + childBounds.height + childPadding);
+    left = Math.min(left, child.position.x - childPadding);
+    top = Math.min(top, child.position.y - childPadding);
+    right = Math.max(right, child.position.x + childFitSize.width + childPadding);
+    bottom = Math.max(bottom, child.position.y + childFitSize.height + childPadding);
   }
   const minimumSize = getCompactAreaMinimumSize(node);
   const width = Math.max(right - left, minimumSize.width);
@@ -2812,19 +2127,23 @@ function getAreaChildPadding(child: DiagramNode): number {
   return isAreaDiagramNode(child) ? AREA_CHILD_PADDING : RESOURCE_AREA_INSET_PADDING;
 }
 
+function getAreaChildFitSize(child: DiagramNode): DiagramNode["size"] {
+  if (isAreaDiagramNode(child) || child.kind !== "resource") {
+    return child.size;
+  }
+
+  return {
+    width: Math.max(child.size.width, MIN_RESOURCE_AREA_CHILD_FOOTPRINT.width),
+    height: Math.max(child.size.height, MIN_RESOURCE_AREA_CHILD_FOOTPRINT.height)
+  };
+}
+
 function findSecurityBoundaryParentAreaNodeId(
   node: DiagramNode,
   nodeById: ReadonlyMap<string, DiagramNode>
 ): string | undefined {
   if (isSecurityGroupAreaNode(node)) {
     return findProtectedSubnetAreaNodeId(node, nodeById);
-  }
-
-  if (
-    !SECURITY_GROUP_MEMBER_RESOURCE_TYPES.has(getDiagramNodeResourceType(node)) ||
-    getStringParameterValues(node, "subnets").length > 1
-  ) {
-    return undefined;
   }
 
   const securityGroupNode = findReferencedSecurityGroupAreaNodes(node, nodeById)[0];
@@ -2836,8 +2155,6 @@ function findProtectedSubnetAreaNodeId(
   securityGroupNode: DiagramNode,
   nodeById: ReadonlyMap<string, DiagramNode>
 ): string | undefined {
-  const referencedSubnetIds = new Set<string>();
-
   for (const node of nodeById.values()) {
     if (node.id === securityGroupNode.id || !referencesSecurityGroup(node, securityGroupNode, nodeById)) {
       continue;
@@ -2846,23 +2163,7 @@ function findProtectedSubnetAreaNodeId(
     const subnetNode = findConfigAreaNodeByParameter(node, "subnetId", nodeById);
 
     if (subnetNode && subnetNode.id !== securityGroupNode.id) {
-      referencedSubnetIds.add(subnetNode.id);
-    }
-  }
-
-  return referencedSubnetIds.size === 1 ? [...referencedSubnetIds][0] : undefined;
-}
-
-function findReferencedResourceParentAreaNodeId(
-  node: DiagramNode,
-  nodeById: ReadonlyMap<string, DiagramNode>
-): string | undefined {
-  for (const parameterName of ["loadBalancerArn"] as const) {
-    const referencedNode = findConfigNodeByParameter(node, parameterName, nodeById);
-    const parentAreaNodeId = referencedNode?.metadata?.parentAreaNodeId;
-
-    if (parentAreaNodeId && parentAreaNodeId !== node.id) {
-      return parentAreaNodeId;
+      return subnetNode.id;
     }
   }
 
@@ -2910,61 +2211,7 @@ function findConfigParentAreaNodeId(
 
   const vpcNode = findConfigAreaNodeByParameter(node, "vpcId", nodeById);
 
-  if (vpcNode && vpcNode.id !== node.id) {
-    return vpcNode.id;
-  }
-
-  return findCommonVpcParentFromSubnetReferences(node, nodeById);
-}
-
-function findCommonVpcParentFromSubnetReferences(
-  node: DiagramNode,
-  nodeById: ReadonlyMap<string, DiagramNode>
-): string | undefined {
-  const subnetReferences = ["subnets", "subnetIds"].flatMap((parameterName) =>
-    getStringParameterValues(node, parameterName)
-  );
-
-  if (subnetReferences.length === 0) {
-    return undefined;
-  }
-
-  const vpcIds = subnetReferences
-    .map((referenceValue) => findReferencedNode(referenceValue, nodeById))
-    .map((subnetNode) =>
-      subnetNode ? findAncestorAreaNodeIdByResourceType(subnetNode, "aws_vpc", nodeById) : undefined
-    );
-  const distinctVpcIds = new Set(vpcIds.filter((vpcId): vpcId is string => vpcId !== undefined));
-
-  return vpcIds.length === subnetReferences.length && distinctVpcIds.size === 1
-    ? [...distinctVpcIds][0]
-    : undefined;
-}
-
-function findAncestorAreaNodeIdByResourceType(
-  node: DiagramNode,
-  resourceType: string,
-  nodeById: ReadonlyMap<string, DiagramNode>
-): string | undefined {
-  let parentAreaNodeId = node.metadata?.parentAreaNodeId;
-  const visitedNodeIds = new Set<string>();
-
-  while (parentAreaNodeId && !visitedNodeIds.has(parentAreaNodeId)) {
-    visitedNodeIds.add(parentAreaNodeId);
-    const parentNode = nodeById.get(parentAreaNodeId);
-
-    if (!parentNode) {
-      return undefined;
-    }
-
-    if (getDiagramNodeResourceType(parentNode) === resourceType) {
-      return parentNode.id;
-    }
-
-    parentAreaNodeId = parentNode.metadata?.parentAreaNodeId;
-  }
-
-  return undefined;
+  return vpcNode && vpcNode.id !== node.id ? vpcNode.id : undefined;
 }
 
 function findRouteTableAssociationParentAreaNodeId(
@@ -3100,7 +2347,7 @@ function isAreaDiagramNode(node: DiagramNode): boolean {
 }
 
 function isSecurityGroupAreaNode(node: DiagramNode): boolean {
-  return isAreaDiagramNode(node) && getDiagramNodeResourceType(node) === "aws_security_group";
+  return node.kind === "resource" && (node.parameters?.resourceType ?? node.type) === "aws_security_group";
 }
 
 function getDiagramNodeResourceType(node: DiagramNode | undefined): string {
@@ -3231,44 +2478,16 @@ function normalizePort(value: unknown): number | undefined {
 }
 
 // LLM/API 응답에서 config가 비어도 Architecture Board 반영이 멈추지 않게 이름을 복구합니다.
-function getArchitectureResourceName(
-  node: ArchitectureJson["nodes"][number],
-  resourceType: string
-): string {
+function getArchitectureResourceName(node: ArchitectureJson["nodes"][number]): string {
   const configuredName = node.config?.["terraformResourceName"];
 
-  if (typeof configuredName === "string" && configuredName.trim().length > 0) {
-    return configuredName;
-  }
-
-  const normalizedNodeId = toTerraformName(node.id);
-  const convention = RESOURCE_NAME_CONVENTIONS[resourceType];
-
-  return convention && normalizedNodeId === convention.prefix
-    ? createConventionResourceName(resourceType, node.label ?? node.id, [node.id])
-    : normalizedNodeId;
+  return typeof configuredName === "string" && configuredName.trim().length > 0
+    ? configuredName
+    : toTerraformName(node.id);
 }
 
 function isValidPort(port: number): boolean {
   return Number.isInteger(port) && port >= 0 && port <= 65_535;
-}
-
-function resolveArchitectureTerraformResourceType(node: ArchitectureJson["nodes"][number]): string {
-  const configuredTerraformResourceType = node.config?.["terraformResourceType"];
-  const terraformBlockType = node.config?.["terraformBlockType"] === "data" ? "data" : DEFAULT_TERRAFORM_BLOCK_TYPE;
-
-  if (typeof configuredTerraformResourceType === "string" && configuredTerraformResourceType.trim().length > 0) {
-    const resourceDefinition = getResourceDefinitionByTerraform(
-      terraformBlockType,
-      configuredTerraformResourceType.trim()
-    );
-
-    if (resourceDefinition?.resourceType === node.type) {
-      return resourceDefinition.terraform.resourceType;
-    }
-  }
-
-  return mapResourceTypeToTerraform(node.type);
 }
 
 function mapResourceTypeToTerraform(resourceType: ResourceType): string {

@@ -2,8 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   createLatestUserRequirementPrompt,
-  createLatestUserRequirementPromptExcluding,
-  shouldPersistWorkspaceAiChatMessages
+  createLatestUserRequirementPromptExcluding
 } from "./workspace-ai-chat-history";
 
 test("createLatestUserRequirementPrompt uses only the newest user command", () => {
@@ -29,23 +28,4 @@ test("createLatestUserRequirementPromptExcluding skips no-addition answers", () 
   );
 
   assert.equal(prompt, "데이터베이스랑 s3만 있는 다이어그램 그려줘");
-});
-
-test("shouldPersistWorkspaceAiChatMessages waits until the active project history is restored", () => {
-  assert.equal(
-    shouldPersistWorkspaceAiChatMessages({
-      loadedStorageKey: "sketchcatch.workspaceAiChat.previous-project",
-      messageCount: 1,
-      storageKey: "sketchcatch.workspaceAiChat.next-project"
-    }),
-    false
-  );
-  assert.equal(
-    shouldPersistWorkspaceAiChatMessages({
-      loadedStorageKey: "sketchcatch.workspaceAiChat.next-project",
-      messageCount: 1,
-      storageKey: "sketchcatch.workspaceAiChat.next-project"
-    }),
-    true
-  );
 });

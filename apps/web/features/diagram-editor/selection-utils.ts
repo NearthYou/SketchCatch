@@ -32,18 +32,3 @@ export function normalizeSelectedNodeIds(
 export function canStartAreaBlankDrag(areaNodeId: string, selectedNodeIds: readonly string[]): boolean {
   return selectedNodeIds.length === 1 && selectedNodeIds[0] === areaNodeId;
 }
-
-export function stabilizeSelectedIds(
-  currentIds: string[],
-  nextIds: readonly string[]
-): string[] {
-  if (currentIds.length === nextIds.length) {
-    const currentIdSet = new Set(currentIds);
-
-    if (nextIds.every((nextId) => currentIdSet.has(nextId))) {
-      return currentIds;
-    }
-  }
-
-  return [...nextIds];
-}

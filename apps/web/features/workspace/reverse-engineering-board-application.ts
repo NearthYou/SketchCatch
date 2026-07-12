@@ -1,4 +1,5 @@
 import type {
+  ArchitectureJson,
   DiagramEdge,
   DiagramJson,
   DiagramNode,
@@ -85,11 +86,25 @@ export function createReverseEngineeringBoardComparison(
   return compareDiagrams(input.currentDiagram, createReverseEngineeringPreviewDiagram(input.result));
 }
 
-// 정식 변환 전 Resource도 숨기지 않고 확인 필요 노드로 Board에 남깁니다.
+// 오래된 scan 기록에 UNKNOWN 노드가 남아 있어도 보드 중앙에는 올리지 않습니다.
 function createReverseEngineeringPreviewDiagram(result: ReverseEngineeringScanResult): DiagramJson {
-  return markReverseEngineeringDiagram(
-    convertArchitectureJsonToDiagramJson(result.architectureJson)
+  return markReverseEngineeringDiagram(convertArchitectureJsonToDiagramJson(removeUnsupportedNodes(result.architectureJson)));
+}
+
+// 지원하지 않는 리소스는 오른쪽 확인 목록에서 보게 하고 Architecture Board에서는 제외합니다.
+function removeUnsupportedNodes(architectureJson: ArchitectureJson): ArchitectureJson {
+  const supportedNodeIds = new Set(
+    architectureJson.nodes
+      .filter((node) => node.type !== "UNKNOWN" && node.config?.["analysisExcluded"] !== true)
+      .map((node) => node.id)
   );
+
+  return {
+    nodes: architectureJson.nodes.filter((node) => supportedNodeIds.has(node.id)),
+    edges: architectureJson.edges.filter(
+      (edge) => supportedNodeIds.has(edge.sourceId) && supportedNodeIds.has(edge.targetId)
+    )
+  };
 }
 
 // AWS에서 가져온 노드에 보호해야 하는 원본 값 목록을 남깁니다.

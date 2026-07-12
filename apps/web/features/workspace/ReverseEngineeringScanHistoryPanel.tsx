@@ -1,5 +1,5 @@
 import type { ReverseEngineeringScan } from "@sketchcatch/types";
-import styles from "./reverse-engineering.module.css";
+import styles from "./workspace.module.css";
 
 export type ReverseEngineeringScanHistoryPanelProps = {
   readonly activeScanId: string | null;
@@ -26,15 +26,15 @@ export function ReverseEngineeringScanHistoryPanel({
   scans
 }: ReverseEngineeringScanHistoryPanelProps) {
   return (
-    <section className={styles.section}>
+    <section className={styles.deploymentSection}>
       <h3>스캔 기록</h3>
       {isStaleResult ? (
-        <p className={styles.warning}>
+        <p className={styles.deploymentNotice}>
           이전 스캔 결과입니다. 지금 AWS 상태와 다를 수 있으니 필요하면 다시 스캔하세요.
         </p>
       ) : null}
       <button
-        className={styles.secondaryButton}
+        className={styles.deploymentSecondaryButton}
         disabled={!canRescan}
         onClick={onRescan}
         type="button"
@@ -42,18 +42,18 @@ export function ReverseEngineeringScanHistoryPanel({
         다시 스캔
       </button>
       {scans.length === 0 ? (
-        <p className={styles.hint}>아직 저장된 스캔 기록이 없습니다.</p>
+        <p className={styles.deploymentHint}>아직 저장된 스캔 기록이 없습니다.</p>
       ) : (
-        <ul className={styles.resultList}>
+        <ul className={styles.reverseResultList}>
           {scans.slice(0, 5).map((scan) => (
-            <li key={scan.id} className={styles.resultItem}>
+            <li key={scan.id} className={styles.reverseResultItem}>
               <strong>{formatScanLabel(scan)}</strong>
               <span>
                 {scan.status} · {scan.region} · {scan.resourceTypes.join(", ")}
               </span>
               {scan.status === "running" ? (
                 <button
-                  className={styles.secondaryButton}
+                  className={styles.deploymentSecondaryButton}
                   disabled={isLoading}
                   onClick={() => onCancelScan(scan.id)}
                   type="button"
@@ -62,7 +62,7 @@ export function ReverseEngineeringScanHistoryPanel({
                 </button>
               ) : null}
               <button
-                className={styles.secondaryButton}
+                className={styles.deploymentSecondaryButton}
                 disabled={isLoading || activeScanId === scan.id}
                 onClick={() => onOpenScan(scan.id)}
                 type="button"
@@ -70,7 +70,7 @@ export function ReverseEngineeringScanHistoryPanel({
                 열기
               </button>
               <button
-                className={styles.secondaryButton}
+                className={styles.deploymentSecondaryButton}
                 disabled={isLoading}
                 onClick={() => onDeleteScan(scan.id)}
                 type="button"

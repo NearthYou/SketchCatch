@@ -1,5 +1,4 @@
 import type { DiagramNode } from "../../../../packages/types/src";
-import { RESOURCE_NODE_COMPACT_MIN_SIZE } from "./resource-node-geometry";
 
 export type NodeResizeBounds = {
   maxHeight: number;
@@ -23,8 +22,8 @@ const designAreaMinResizeBounds = {
 const resourceNodeResizeBounds: NodeResizeBounds = {
   maxHeight: 260,
   maxWidth: 260,
-  minHeight: RESOURCE_NODE_COMPACT_MIN_SIZE.height,
-  minWidth: RESOURCE_NODE_COMPACT_MIN_SIZE.width
+  minHeight: 56,
+  minWidth: 56
 };
 
 const areaNodeMaxResizeBounds = {
@@ -71,6 +70,11 @@ const resourceAreaResizeBoundsByType: Record<string, NodeResizeBounds> = {
     minHeight: 56,
     minWidth: 72
   },
+  aws_security_group: {
+    ...areaNodeMaxResizeBounds,
+    minHeight: 56,
+    minWidth: 72
+  },
   aws_autoscaling_group: {
     ...areaNodeMaxResizeBounds,
     minHeight: 65,
@@ -78,14 +82,8 @@ const resourceAreaResizeBoundsByType: Record<string, NodeResizeBounds> = {
   }
 };
 
-export function getNodeResizeBounds(
-  node: Pick<DiagramNode, "iconUrl" | "kind" | "parameters" | "type">
-): NodeResizeBounds {
+export function getNodeResizeBounds(node: Pick<DiagramNode, "kind" | "parameters" | "type">): NodeResizeBounds {
   if (node.kind === "design") {
-    if (node.iconUrl && !designAreaResizeBoundsByType[node.type]) {
-      return resourceNodeResizeBounds;
-    }
-
     return designAreaResizeBoundsByType[node.type] ?? designNodeResizeBounds;
   }
 

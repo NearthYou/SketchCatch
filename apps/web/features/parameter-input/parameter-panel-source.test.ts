@@ -6,24 +6,19 @@ import { fileURLToPath } from "node:url";
 const panelSource = readParameterInputFile("ParameterInputPanel.tsx");
 const stylesSource = readParameterInputFile("ParameterInputPanel.module.css");
 
-test("ParameterInputPanel separates required inputs from optional additional settings", () => {
-  assert.match(panelSource, /getRequiredDefinitions/);
-  assert.match(panelSource, /getOptionalDefinitions/);
-  assert.match(panelSource, /getActiveOptionalDefinitions/);
-  assert.match(panelSource, /getAdvancedDefinitions/);
-  assert.match(panelSource, /advancedParameterQuery/);
-  assert.match(panelSource, /addedOptionalParameterNamesByNodeId/);
-  assert.match(panelSource, /removeAdvancedParameter/);
-  assert.match(panelSource, />필수 파라미터</);
-  assert.match(panelSource, />추가 설정</);
+test("ParameterInputPanel does not expose Advanced Parameters UI", () => {
+  assert.doesNotMatch(panelSource, /Advanced Parameters/);
+  assert.doesNotMatch(panelSource, /advanced-parameters/);
+  assert.doesNotMatch(panelSource, /advancedParameterQuery/);
+  assert.doesNotMatch(panelSource, /addedOptionalParameterNames/);
+  assert.doesNotMatch(panelSource, /removeAdvancedParameter/);
 });
 
-test("ParameterInputPanel styles provide an inline optional-parameter picker", () => {
-  assert.match(stylesSource, /\.advancedPicker\b/);
-  assert.match(stylesSource, /\.advancedOptionList\b/);
-  assert.match(stylesSource, /\.advancedOptionButton\b/);
-  assert.match(stylesSource, /\.advancedSearch\b/);
-  assert.match(stylesSource, /\.advancedToggle\b/);
+test("ParameterInputPanel styles do not keep advanced picker rules", () => {
+  assert.doesNotMatch(stylesSource, /\.advancedPicker\b/);
+  assert.doesNotMatch(stylesSource, /\.advancedOptionList\b/);
+  assert.doesNotMatch(stylesSource, /\.advancedOptionButton\b/);
+  assert.doesNotMatch(stylesSource, /\.advancedSearch\b/);
 });
 
 test("ParameterInputPanel treats list and set nested blocks as repeatable blocks", () => {
@@ -35,36 +30,22 @@ test("ParameterInputPanel select menus use the neutral DESIGN.md tone", () => {
   assert.match(panelSource, /tone="workspace"/);
 });
 
-test("ParameterInputPanel counts only required definition errors in the required summary", () => {
+test("ParameterInputPanel counts only main definition errors in the Main parameters summary", () => {
   assert.match(
     panelSource,
-    /const requiredParameterNames = new Set\(\s*requiredDefinitions\.map\(\(definition\) => definition\.name\)\s*\);/s
+    /const mainParameterNames = new Set\(mainDefinitions\.map\(\(definition\) => definition\.name\)\);/
   );
   assert.match(
     panelSource,
-    /Object\.keys\(validation\.parameterErrors\)\.filter\(\s*\(parameterName\) =>\s*requiredParameterNames\.has\(parameterName\)\s*\)\.length/s
+    /Object\.keys\(validation\.parameterErrors\)\.filter\(\s*\(parameterName\) =>\s*mainParameterNames\.has\(parameterName\)\s*\)\.length/s
+  );
+  assert.doesNotMatch(
+    panelSource,
+    /const mainParameterIssueCount = Object\.keys\(validation\.parameterErrors\)\.length;/
   );
 });
 
-test("resource identity edits do not overwrite the friendly diagram label", () => {
-  const updateMetadataFieldSource = getSourceSlice(
-    panelSource,
-    "const updateMetadataField",
-    "const updateParameterValue"
-  );
-
-  assert.match(updateMetadataFieldSource, /commitParameters\(nextParameters\)/);
-  assert.doesNotMatch(updateMetadataFieldSource, /updateNodeMetadata/);
-});
-
-test("Area display-name editors still update diagram metadata labels", () => {
-  assert.match(
-    panelSource,
-    /<DesignAreaNameSection[\s\S]*?onChange=\{\(label\) => updateNodeMetadata\(selectedNode\.id, \{ label \}\)\}/
-  );
-});
-
-test("ParameterInputPanel lays out metadata, required inputs, and additional settings for dense scanning", () => {
+test("ParameterInputPanel lays out metadata and main parameters for dense scanning", () => {
   const resourceDetailSource = getSourceSlice(
     panelSource,
     "<PanelHeader node={selectedNode} parameters={parameters} />",
@@ -73,8 +54,7 @@ test("ParameterInputPanel lays out metadata, required inputs, and additional set
   const designPassIndex = stylesSource.indexOf("/* DESIGN.md parameter input pass */");
 
   assert.match(resourceDetailSource, /className=\{`\$\{styles\.section\} \$\{styles\.metadataSection\}`\}/);
-  assert.match(resourceDetailSource, /styles\.requiredParametersSection/);
-  assert.match(resourceDetailSource, /styles\.advancedParametersSection/);
+  assert.match(resourceDetailSource, /className=\{`\$\{styles\.section\} \$\{styles\.mainParametersSection\}`\}/);
   assert.match(resourceDetailSource, /styles\.metadataGrid/);
   assert.match(resourceDetailSource, /ParameterSummaryBar/);
   assert.match(resourceDetailSource, /styles\.parameterFieldList/);
@@ -133,12 +113,12 @@ test("Region and AZ area panels avoid duplicate visible selector labels", () => 
   assert.match(availabilityZoneFieldSource, /showLabel \? \(/);
 });
 
-test("ParameterInputPanel styles use the DESIGN.md surface without a legacy skin", () => {
+test("ParameterInputPanel styles apply DESIGN.md tokens after the legacy Blueprint skin", () => {
+  const legacyBlueprintIndex = stylesSource.indexOf("/* Blueprint inspector skin */");
   const designPassIndex = stylesSource.indexOf("/* DESIGN.md parameter input pass */");
 
-  assert.ok(designPassIndex > -1, "Expected the DESIGN.md parameter input pass to exist");
-  assert.doesNotMatch(stylesSource, /\/\* Blueprint inspector skin \*\//);
-  assert.doesNotMatch(stylesSource, /var\(--bp-/);
+  assert.ok(legacyBlueprintIndex > -1, "Expected the legacy Blueprint inspector skin to exist");
+  assert.ok(designPassIndex > legacyBlueprintIndex, "Expected the DESIGN.md pass to override Blueprint styles");
 
   const panelRule = getLastCssRuleAfter(stylesSource, "panel", designPassIndex);
   const iconRule = getLastCssRuleContainingAfter(stylesSource, "div.resourceIcon", designPassIndex);
@@ -163,8 +143,6 @@ test("ParameterInputPanel styles use the DESIGN.md surface without a legacy skin
 
   const legacyAccentTokens =
     /var\(--bp-|#6f4cf6|#5f3de8|#f4f1ff|#f1edff|#d6cbff|#8b71ff|#4b2bd6|#ede8ff/i;
-
-  assert.doesNotMatch(stylesSource, legacyAccentTokens);
 
   for (const designRule of [
     panelRule,

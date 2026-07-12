@@ -9,7 +9,8 @@ import {
   applyInnermostReferenceDropTargets,
   applyReferenceDropTarget,
   findContainingReferenceDropTargets,
-  findInnermostReferenceDropTarget
+  findInnermostReferenceDropTarget,
+  findInnermostVisualDropTarget
 } from "./reference-drop-targets";
 
 const catalog: ParameterCatalog = {
@@ -177,6 +178,78 @@ test("findInnermostReferenceDropTarget treats missing zIndex as zero when areas 
   const target = findInnermostReferenceDropTarget(subnet, [legacyVpc, frontVpc, subnet], catalog);
 
   assert.equal(target?.node.id, "vpc-front");
+});
+
+test("findInnermostVisualDropTarget includes Region, AZ, and Group design areas", () => {
+  const region = makeDesignNode({
+    id: "region-1",
+    type: "design_region",
+    position: { x: 0, y: 0 },
+    size: { width: 500, height: 400 },
+    zIndex: 1
+  });
+  const availabilityZone = makeDesignNode({
+    id: "az-1",
+    type: "design_az",
+    position: { x: 60, y: 60 },
+    size: { width: 360, height: 280 },
+    zIndex: 2
+  });
+  const group = makeDesignNode({
+    id: "group-1",
+    type: "design_group",
+    position: { x: 120, y: 120 },
+    size: { width: 220, height: 160 },
+    zIndex: 3
+  });
+  const bucket = makeResourceNode({
+    id: "bucket-1",
+    resourceType: "aws_s3_bucket",
+    position: { x: 160, y: 150 },
+    size: { width: 96, height: 72 }
+  });
+
+  const target = findInnermostVisualDropTarget(bucket, [region, availabilityZone, group, bucket], catalog);
+
+  assert.equal(target?.id, "group-1");
+});
+
+test("findInnermostVisualDropTarget supports legacy sketchcatch area node types", () => {
+  const region = makeDesignNode({
+    id: "region-1",
+    type: "sketchcatch_region",
+    position: { x: 0, y: 0 },
+    size: { width: 500, height: 400 },
+    zIndex: 1
+  });
+  const availabilityZone = makeDesignNode({
+    id: "az-1",
+    type: "sketchcatch_az",
+    position: { x: 60, y: 60 },
+    size: { width: 360, height: 280 },
+    zIndex: 2
+  });
+  const group = makeDesignNode({
+    id: "group-1",
+    type: "sketchcatch_group",
+    position: { x: 120, y: 120 },
+    size: { width: 220, height: 160 },
+    zIndex: 3
+  });
+  const internetGateway = makeResourceNode({
+    id: "igw-1",
+    resourceType: "aws_internet_gateway",
+    position: { x: 160, y: 150 },
+    size: { width: 96, height: 72 }
+  });
+
+  const target = findInnermostVisualDropTarget(
+    internetGateway,
+    [region, availabilityZone, group, internetGateway],
+    catalog
+  );
+
+  assert.equal(target?.id, "group-1");
 });
 
 test("applyReferenceDropTarget sets empty child reference values from the parent resource", () => {
@@ -562,4 +635,29 @@ function omitNodeZIndex(node: DiagramNode): DiagramNode {
   const serializedNode = JSON.parse(JSON.stringify(node)) as Record<string, unknown>;
   delete serializedNode.zIndex;
   return serializedNode as DiagramNode;
+}
+
+function makeDesignNode({
+  id,
+  position,
+  size,
+  type,
+  zIndex
+}: {
+  id: string;
+  position: DiagramNode["position"];
+  size: DiagramNode["size"];
+  type: string;
+  zIndex: number;
+}): DiagramNode {
+  return {
+    id,
+    type,
+    kind: "design",
+    position,
+    size,
+    label: id,
+    locked: false,
+    zIndex
+  };
 }

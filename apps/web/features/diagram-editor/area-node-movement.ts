@@ -1,52 +1,10 @@
 import type { DiagramNode } from "../../../../packages/types/src";
-import { findInnermostAreaNodeAtPoint, isAreaNode } from "./area-nodes";
-
-const AREA_CHILD_HORIZONTAL_PADDING = 12;
-const AREA_CHILD_TOP_PADDING = 28;
-const AREA_CHILD_BOTTOM_PADDING = 12;
+import { isAreaNode } from "./area-nodes";
 
 type AreaMovement = {
   delta: DiagramNode["position"];
   node: DiagramNode;
 };
-
-/** Area 안에 놓은 Resource가 경계 밖으로 튀어나가지 않도록 드롭 위치를 안쪽으로 맞춥니다. */
-export function placeDroppedNodeInsideArea(
-  currentNodes: readonly DiagramNode[],
-  droppedNode: DiagramNode,
-  dropPoint: DiagramNode["position"]
-): DiagramNode {
-  const parentArea = findInnermostAreaNodeAtPoint(currentNodes, dropPoint);
-
-  if (!parentArea) {
-    return droppedNode;
-  }
-
-  const minX = parentArea.position.x + AREA_CHILD_HORIZONTAL_PADDING;
-  const maxX =
-    parentArea.position.x +
-    parentArea.size.width -
-    droppedNode.size.width -
-    AREA_CHILD_HORIZONTAL_PADDING;
-  const minY = parentArea.position.y + AREA_CHILD_TOP_PADDING;
-  const maxY =
-    parentArea.position.y +
-    parentArea.size.height -
-    droppedNode.size.height -
-    AREA_CHILD_BOTTOM_PADDING;
-
-  if (maxX < minX || maxY < minY) {
-    return droppedNode;
-  }
-
-  return {
-    ...droppedNode,
-    position: {
-      x: Math.min(Math.max(droppedNode.position.x, minX), maxX),
-      y: Math.min(Math.max(droppedNode.position.y, minY), maxY)
-    }
-  };
-}
 
 export function applyAreaNodeMovement(
   snapshotNodes: readonly DiagramNode[],

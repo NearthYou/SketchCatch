@@ -6,21 +6,11 @@ import {
   findTerraformBlockForNode,
   getDiagramTerraformAddresses,
   getTerraformFileOptions,
-  getTerraformLineStartOffset,
   parseTerraformFiles,
   removeTerraformBlocksByAddress,
   toDeploymentBaselineFingerprint,
   toTerraformRefreshFingerprint
 } from "./terraform-panel-utils";
-
-test("getTerraformLineStartOffset returns the first character offset for a requested line", () => {
-  const code = "first\nsecond line\nthird";
-
-  assert.equal(getTerraformLineStartOffset(code, 1), 0);
-  assert.equal(getTerraformLineStartOffset(code, 2), 6);
-  assert.equal(getTerraformLineStartOffset(code, 3), 18);
-  assert.equal(getTerraformLineStartOffset(code, 99), code.length);
-});
 
 test("parseTerraformFiles keeps CRLF offsets aligned with original source slices", () => {
   const code = [
@@ -148,36 +138,10 @@ resource "aws_subnet" "public" {
 
   assert.deepEqual(
     files.map((file) => file.fileName),
-    ["providers.tf", "main.tf", "network.tf", "subnets.tf"]
-  );
-  assert.match(
-    files.find((file) => file.fileName === "providers.tf")?.code ?? "",
-    /source\s*= "hashicorp\/aws"/
+    ["main.tf", "network.tf", "subnets.tf"]
   );
   assert.equal(files.find((file) => file.fileName === "network.tf")?.code.includes("aws_vpc"), true);
   assert.equal(files.find((file) => file.fileName === "subnets.tf")?.code.includes("aws_subnet"), true);
-});
-
-test("createTerraformFilesFromGeneratedCode configures Kubernetes from the EKS cluster", () => {
-  const diagram: DiagramJson = {
-    nodes: [
-      makeNode("resource", "aws_eks_cluster", "practice_cluster"),
-      makeNode("resource", "kubernetes_namespace", "practice")
-    ],
-    edges: [],
-    viewport: { x: 0, y: 0, zoom: 1 }
-  };
-
-  const files = createTerraformFilesFromGeneratedCode(diagram, [
-    'resource "aws_eks_cluster" "practice_cluster" {}',
-    'resource "kubernetes_namespace" "practice" {}'
-  ].join("\n\n"));
-  const providerCode = files.find((file) => file.fileName === "providers.tf")?.code ?? "";
-
-  assert.match(providerCode, /source\s*= "hashicorp\/kubernetes"/);
-  assert.match(providerCode, /data "aws_eks_cluster_auth" "sketchcatch"/);
-  assert.match(providerCode, /host\s*= aws_eks_cluster\.practice_cluster\.endpoint/);
-  assert.match(providerCode, /token\s*= data\.aws_eks_cluster_auth\.sketchcatch\.token/);
 });
 
 test("createTerraformFilesFromGeneratedCode clears terraform code when the diagram has no resources", () => {

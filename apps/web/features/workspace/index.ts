@@ -1,3 +1,11 @@
+export { ProjectWorkspaceDraftManager } from "./ProjectWorkspaceDraftManager";
+export type {
+  FlushDraftReason,
+  FlushDraftToServerResult,
+  ProjectDraftPersistenceController,
+  ProjectWorkspaceDraftManagerProps
+} from "./ProjectWorkspaceDraftManager";
+export { WorkspaceDraftManager } from "./WorkspaceDraftManager";
 export {
   createProjectDraftRepository,
   defaultProjectDraftRepository

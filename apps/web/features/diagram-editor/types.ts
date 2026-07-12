@@ -55,13 +55,7 @@ export type DiagramEditorProps = {
   draftStatusPanel?: ReactNode | undefined;
   emptyBoardDescription?: string | undefined;
   floatingPanel?: ((context: DiagramEditorPanelContext) => ReactNode) | undefined;
-  initialBoardZoom?: number | undefined;
   initialDiagram?: DiagramJson | undefined;
-  initialPreviewAnnotations?: DiagramPreviewAnnotations | undefined;
-  initialPreviewDiagram?: DiagramJson | undefined;
-  initialReferenceDropTargetNodeId?: string | undefined;
-  initialSelectedEdgeIds?: readonly string[] | undefined;
-  initialSelectedNodeIds?: readonly string[] | undefined;
   leftPanel?: ReactNode;
   onDiagramChange?: ((diagram: DiagramJson) => void) | undefined;
   onDiagramSaveRequest?: (() => Promise<unknown>) | undefined;
@@ -87,26 +81,22 @@ export type DiagramFlowNodeHandlers = {
 };
 
 export type DiagramFlowNodeData = Record<string, unknown> & {
-  areaDepth: number;
   node: DiagramNode;
   selectedNodeCount: number;
   isDimmed: boolean;
   isConnectionActive: boolean;
-  isValidConnectionTarget: boolean;
   isPreview: boolean;
   previewState?: DiagramPreviewState | undefined;
-  isAreaDropTarget: boolean;
+  isReferenceDropTarget: boolean;
 } & DiagramFlowNodeHandlers;
 
 export type DiagramFlowEdgeData = Record<string, unknown> & {
   edge: DiagramEdge;
-  isAnimated: boolean;
-  pathKind: DiagramEdgeKind;
   previewState?: DiagramPreviewState | undefined;
 };
 
 export type DiagramFlowNode = Node<DiagramFlowNodeData, "diagramNode">;
-export type DiagramFlowEdge = Edge<DiagramFlowEdgeData, "diagramEdge">;
+export type DiagramFlowEdge = Edge<DiagramFlowEdgeData, DiagramEdgeKind>;
 
 export type DiagramHistoryState = {
   past: DiagramJson[];
