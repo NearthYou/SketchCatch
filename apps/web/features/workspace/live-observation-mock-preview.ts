@@ -25,6 +25,10 @@ export function createInitialMockRequestFlowState(): MockRequestFlowState {
   };
 }
 
+export function createAutoStartedMockRequestFlowState(): MockRequestFlowState {
+  return replayMockRequestFlow(createInitialMockRequestFlowState());
+}
+
 export function replayMockRequestFlow(
   state: MockRequestFlowState
 ): MockRequestFlowState {

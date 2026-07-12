@@ -4,6 +4,7 @@ import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   Deployment,
+  DesignSimulationResult,
   DiagramJson,
   LiveObservationSession,
   LiveObservationSnapshot
@@ -22,17 +23,18 @@ import QRCode from "qrcode";
 import { getApiErrorMessage } from "../../lib/api-client";
 import type { LiveObservationSignalMapBurst } from "./LiveObservationSignalMap";
 import { LiveObservationDiagramMap } from "./LiveObservationDiagramMap";
+import { WorkspaceAiDesignSimulationResult } from "./WorkspaceAiPanelPieces";
 import {
   createLiveObservation,
-  getProjectDraft,
   listDeployments,
   pollLiveObservationSnapshots,
+  runAiDesignSimulation,
   stopLiveObservation,
   streamLiveObservationSnapshots
 } from "./api";
 import {
   clearMockRequestFlowBurst,
-  createInitialMockRequestFlowState,
+  createAutoStartedMockRequestFlowState,
   replayMockRequestFlow
 } from "./live-observation-mock-preview";
 import { getLiveObservationSignalBurstLifetimeMs } from "./live-observation-signal-map";
@@ -45,9 +47,11 @@ import {
   type PresenterTrafficBoostController,
   type PresenterTrafficBoostProgress
 } from "./live-observation";
+import { createWorkspaceAiBoardSnapshot } from "./workspace-ai-panel-state";
 import styles from "./workspace.module.css";
 
 export type LiveObservationModalProps = {
+  readonly diagramJson: DiagramJson;
   readonly onClose: () => void;
   readonly projectId: string;
   readonly projectName: string;
@@ -70,8 +74,16 @@ const LIVE_OBSERVATION_TRANSPORT =
     : "stream";
 const LIVE_OBSERVATION_POLL_INTERVAL_MS = 2_000;
 const MOCK_SNAPSHOT_INTERVAL_MS = 2_000;
+const DESIGN_SIMULATION_DEFAULTS = {
+  budgetLevel: "normal",
+  expectedUserCount: 1000,
+  period: "month",
+  region: "ap-northeast-2",
+  trafficLevel: "normal"
+} as const;
 
 export function LiveObservationModal({
+  diagramJson,
   onClose,
   projectId,
   projectName
@@ -87,7 +99,10 @@ export function LiveObservationModal({
   const requestBurstSequenceRef = useRef(0);
   const [mounted, setMounted] = useState(false);
   const [deployments, setDeployments] = useState<Deployment[]>([]);
-  const [projectDiagram, setProjectDiagram] = useState<DiagramJson | null>(null);
+  const [designSimulation, setDesignSimulation] = useState<DesignSimulationResult | null>(null);
+  const [designSimulationState, setDesignSimulationState] =
+    useState<"loading" | "ready" | "error">("loading");
+  const [designSimulationError, setDesignSimulationError] = useState("");
   const [selectedDeploymentId, setSelectedDeploymentId] = useState("");
   const [listState, setListState] = useState<"loading" | "ready" | "error">("loading");
   const [requestState, setRequestState] = useState<"idle" | "loading">("idle");
@@ -102,10 +117,16 @@ export function LiveObservationModal({
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [boostProgress, setBoostProgress] = useState(EMPTY_BOOST_PROGRESS);
   const [requestFlowBurst, setRequestFlowBurst] = useState<LiveObservationSignalMapBurst | null>(null);
-  const [mockRequestFlowState, setMockRequestFlowState] = useState(
-    createInitialMockRequestFlowState
+  const [mockRequestFlowState, setMockRequestFlowState] = useState(() =>
+    SHOW_MOCK_ANIMATION_PREVIEW
+      ? createAutoStartedMockRequestFlowState()
+      : { burst: null, sequence: 0, snapshot: null, visible: false }
   );
   const mockRequestFlowBurst = mockRequestFlowState.burst;
+  const boardSnapshot = useMemo(
+    () => createWorkspaceAiBoardSnapshot(diagramJson),
+    [diagramJson]
+  );
 
   const eligibleDeployments = useMemo(
     () => getEligibleLiveObservationDeployments(deployments),
@@ -249,14 +270,13 @@ export function LiveObservationModal({
     setListState("loading");
     setErrorMessage("");
 
-    void Promise.all([listDeployments(projectId), getProjectDraft(projectId)])
-      .then(([items, draftResponse]) => {
+    void listDeployments(projectId)
+      .then((items) => {
         if (cancelled) {
           return;
         }
         const eligible = getEligibleLiveObservationDeployments(items);
         setDeployments(items);
-        setProjectDiagram(draftResponse.draft?.diagramJson ?? null);
         setSelectedDeploymentId((current) =>
           eligible.some((deployment) => deployment.id === current)
             ? current
@@ -275,6 +295,42 @@ export function LiveObservationModal({
       cancelled = true;
     };
   }, [projectId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setDesignSimulation(null);
+    setDesignSimulationError("");
+
+    if (!boardSnapshot.hasResources) {
+      setDesignSimulationState("error");
+      setDesignSimulationError("현재 보드에 시뮬레이션할 리소스가 없습니다.");
+      return undefined;
+    }
+
+    setDesignSimulationState("loading");
+    void runAiDesignSimulation({
+      architectureJson: boardSnapshot.architectureJson,
+      ...DESIGN_SIMULATION_DEFAULTS
+    })
+      .then((result) => {
+        if (!cancelled) {
+          setDesignSimulation(result);
+          setDesignSimulationState("ready");
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setDesignSimulationState("error");
+          setDesignSimulationError(
+            getApiErrorMessage(error, "설계 시뮬레이션 결과를 불러오지 못했습니다.")
+          );
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [boardSnapshot]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNowMs(Date.now()), 1_000);
@@ -465,10 +521,6 @@ export function LiveObservationModal({
     }
   }
 
-  function playMockRequestFlow(): void {
-    setMockRequestFlowState(replayMockRequestFlow);
-  }
-
   if (!mounted) {
     return null;
   }
@@ -522,13 +574,6 @@ export function LiveObservationModal({
               {session ? <strong>{formatRemainingTime(remainingSeconds)}</strong> : null}
             </div>
             <div className={styles.liveObservationTargetActions}>
-              {SHOW_MOCK_ANIMATION_PREVIEW ? (
-                <button
-                  className={styles.liveObservationSecondaryButton}
-                  onClick={playMockRequestFlow}
-                  type="button"
-                >목업 애니메이션 재생</button>
-              ) : null}
               <button
                 className={styles.liveObservationPrimaryButton}
                 disabled={!selectedDeployment || requestState === "loading" || isSessionActive}
@@ -642,17 +687,11 @@ export function LiveObservationModal({
                   목업 데이터 · 개발 확인용
                 </span>
               ) : null}
-              {projectDiagram ? (
-                <LiveObservationDiagramMap
-                  burst={mapBurst}
-                  diagram={projectDiagram}
-                  snapshot={displayedSnapshot}
-                />
-              ) : (
-                <div className={styles.liveObservationMessage}>
-                  저장된 프로젝트 다이어그램을 불러올 수 없습니다.
-                </div>
-              )}
+              <LiveObservationDiagramMap
+                burst={mapBurst}
+                diagram={diagramJson}
+                snapshot={displayedSnapshot}
+              />
             </section>
           ) : listState === "ready" && eligibleDeployments.length > 0 ? (
             <div className={styles.liveObservationIntro}>
@@ -663,6 +702,29 @@ export function LiveObservationModal({
               </div>
             </div>
           ) : null}
+
+          <section
+            aria-label="AI 설계 시뮬레이션 결과"
+            className={styles.liveObservationDesignSimulation}
+          >
+            <header>
+              <strong>AI 설계 시뮬레이션</strong>
+              <span>현재 보드 기준 · 자동 실행</span>
+            </header>
+            {designSimulationState === "loading" ? (
+              <div className={styles.liveObservationMessage}>
+                설계 시뮬레이션을 계산하고 있습니다.
+              </div>
+            ) : null}
+            {designSimulationState === "error" ? (
+              <div className={styles.liveObservationError} role="alert">
+                {designSimulationError}
+              </div>
+            ) : null}
+            {designSimulationState === "ready" && designSimulation ? (
+              <WorkspaceAiDesignSimulationResult simulation={designSimulation} />
+            ) : null}
+          </section>
         </main>
 
         {session ? (

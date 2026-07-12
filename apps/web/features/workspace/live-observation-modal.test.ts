@@ -69,7 +69,8 @@ test("modal can switch Live Observation snapshots to REST polling for prototype 
 
 test("development mock reuses the project diagram map instead of rendering a preview map", () => {
   assert.equal(modalSource.match(/<LiveObservationDiagramMap/g)?.length, 1);
-  assert.match(modalSource, /getProjectDraft\(projectId\)/);
+  assert.match(modalSource, /diagram=\{diagramJson\}/);
+  assert.doesNotMatch(modalSource, /getProjectDraft\(projectId\)/);
   assert.doesNotMatch(modalSource, /function MockRequestFlowPreview/);
 });
 
@@ -130,9 +131,9 @@ test("signal-map visual material uses the approved perimeter-rail operations sur
   const signalMapRule = getCssRule(stylesSource, "liveObservationSignalMap");
 
   assert.match(dialogRule, /width:\s*calc\(100vw - 24px\)/);
-  assert.match(dialogRule, /height:\s*calc\(100dvh - 24px\)/);
+  assert.match(dialogRule, /height:\s*auto/);
   assert.match(dialogRule, /max-width:\s*1800px/);
-  assert.match(dialogRule, /max-height:\s*1080px/);
+  assert.match(dialogRule, /max-height:\s*min\(1080px,\s*calc\(100dvh - 24px\)\)/);
   assert.match(signalMapRule, /aspect-ratio:\s*5\s*\/\s*2/);
   assert.match(signalMapRule, /min-height:\s*560px/);
   assert.match(stylesSource, /\.liveObservationEvidenceRail/);
@@ -174,10 +175,27 @@ test("accepted event deltas render a bounded one-shot path only toward actual In
   assert.doesNotMatch(modalSource, /setInterval\([^)]*FlowParticles/);
 });
 
-test("development-only mock control replays the real animation path with labeled local data", () => {
+test("presentation particles stay inside connectors and the stage hugs its content", () => {
+  const diagramMapSource = readWorkspaceFile("LiveObservationDiagramMap.tsx");
+  const mapRule = getCssRule(stylesSource, "liveObservationDiagramMap");
+  const particleRule = getCssRule(stylesSource, "liveObservationPresentationSegmentParticle");
+  const surfaceRule = getCssRule(stylesSource, "liveObservationPresentationSurface");
+
+  assert.match(diagramMapSource, /liveObservationPresentationSegmentParticle/);
+  assert.doesNotMatch(diagramMapSource, /liveObservationPresentationParticle/);
+  assert.match(diagramMapSource, /model\.stages\.map\(\(stage, index\)/);
+  assert.match(mapRule, /height:\s*clamp\(300px,\s*42vh,\s*430px\)/);
+  assert.match(particleRule, /box-sizing:\s*border-box/);
+  assert.match(surfaceRule, /min-height:\s*210px/);
+  assert.match(stylesSource, /from \{ left:\s*-3px; opacity:\s*0; \}/);
+  assert.match(stylesSource, /to \{ left:\s*calc\(100% - 4px\); opacity:\s*0; \}/);
+  assert.doesNotMatch(surfaceRule, /height:\s*100%/);
+});
+
+test("development mock automatically replays the real animation path with labeled local data", () => {
   assert.match(modalSource, /process\.env\.NODE_ENV === "development"/);
-  assert.match(modalSource, /목업 애니메이션 재생/);
-  assert.match(modalSource, /function playMockRequestFlow|const playMockRequestFlow/);
+  assert.doesNotMatch(modalSource, /목업 애니메이션 재생/);
+  assert.match(modalSource, /createAutoStartedMockRequestFlowState/);
   assert.match(modalSource, /setMockRequestFlowState\(replayMockRequestFlow\)/);
   assert.match(mockPreviewSource, /getLiveObservationRequestBurst\(100, 108, true\)/);
   assert.match(mockPreviewSource, /snapshot:\s*createMockLiveObservationSnapshot\(sequence\)/);
@@ -193,17 +211,21 @@ test("development-only mock control replays the real animation path with labeled
     /SHOW_MOCK_ANIMATION_PREVIEW\s*&&\s*mockRequestFlowState\.visible\s*&&\s*!session/
   );
   assert.match(modalSource, /LiveObservationDiagramMap/);
-  assert.match(modalSource, /projectDiagram/);
+  assert.match(modalSource, /diagram=\{diagramJson\}/);
   assert.match(modalSource, /목업 데이터 · 개발 확인용/);
   assert.doesNotMatch(modalSource, /liveObservationMockPreview/);
-  assert.doesNotMatch(
-    modalSource,
-    /playMockRequestFlow[\s\S]{0,800}(?:createLiveObservation|fetch\(|startBoost)/
-  );
   assert.doesNotMatch(
     mockPreviewSource,
     /createLiveObservation|fetch\(|startBoost/
   );
+});
+
+test("opening the observation modal automatically runs the board design simulation", () => {
+  assert.match(modalSource, /readonly diagramJson: DiagramJson/);
+  assert.match(modalSource, /createWorkspaceAiBoardSnapshot\(diagramJson\)/);
+  assert.match(modalSource, /runAiDesignSimulation\(\{/);
+  assert.match(modalSource, /<WorkspaceAiDesignSimulationResult/);
+  assert.match(modalSource, /설계 시뮬레이션을 계산하고 있습니다/);
 });
 
 test("signal map mounts only the active responsive geometry and animation variant", () => {
@@ -318,9 +340,9 @@ test("reduced motion omits circles and SMIL while preserving only selected feedb
   const pulseRule = getCssRule(stylesSource, "liveObservationSignalPulse");
 
   assert.match(dialogRule, /width:\s*calc\(100vw - 24px\)/);
-  assert.match(dialogRule, /height:\s*calc\(100dvh - 24px\)/);
+  assert.match(dialogRule, /height:\s*auto/);
   assert.match(dialogRule, /max-width:\s*1800px/);
-  assert.match(dialogRule, /max-height:\s*1080px/);
+  assert.match(dialogRule, /max-height:\s*min\(1080px,\s*calc\(100dvh - 24px\)\)/);
   assert.match(signalMapRule, /overflow:\s*hidden/);
   assert.match(signalMapRule, /min-height:\s*560px/);
   assert.match(routeLayerRule, /position:\s*absolute/);

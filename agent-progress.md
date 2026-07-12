@@ -114,6 +114,15 @@ Short English-only working log for the current agent context. Older records are 
 - Verification: focused web tests passed 36/36; `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
 - Risk: path inference depends on directed diagram edges and resource capabilities. Ambiguous diagrams should add explicit `liveObservationRole` metadata rather than rely on visual position.
 
+### 2026-07-12 - Move design simulation into Live Observation
+
+- Removed the design-simulation tab, execution state, and result rendering from the floating AI chat dock.
+- Passed the current Board `DiagramJson` into Live Observation and automatically started both the development traffic sequence and the existing AI design-simulation request when the modal opens.
+- Reused the existing design-simulation result component inside the observation modal so request flow, bottlenecks, failure scenarios, cost review, and AI explanation retain their established contract.
+- Constrained traffic particles to each connector, aligned their real border-box geometry with connector endpoints, stopped them at capacity, and compacted the modal to its content height.
+- Verification: focused Live Observation and workspace layout tests passed 109/109; `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
+- Risk: the in-app browser authentication session expired during the final rebuild, so the post-integration screenshot requires login. The preceding compact-map browser check passed; the new ownership and endpoint behavior are covered by focused tests.
+
 ## Verification
 
 

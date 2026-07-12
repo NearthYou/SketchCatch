@@ -2859,30 +2859,6 @@
   scrollbar-gutter: stable;
 }
 
-.aiChatSimulationIntro {
-  align-items: center;
-  background: #ffffff;
-  border: 1px solid var(--workspace-line, #f0f0f3);
-  border-radius: 8px;
-  box-shadow: 0 10px 24px rgba(31, 61, 88, 0.08);
-  display: flex;
-  gap: 12px;
-  justify-content: space-between;
-  padding: 12px;
-}
-
-.aiChatSimulationIntro strong {
-  color: var(--workspace-text, #171717);
-  font-size: 13px;
-  line-height: 1.45;
-}
-
-.aiChatSimulationIntro .aiPrimaryButton {
-  flex: 0 0 auto;
-  min-width: 132px;
-  white-space: nowrap;
-}
-
 .aiChatAssistantMessage,
 .aiChatUserMessage {
   display: grid;
@@ -4973,16 +4949,6 @@
     grid-column: 1 / -1;
   }
 
-  .aiChatSimulationIntro {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .aiChatSimulationIntro .aiPrimaryButton {
-    min-width: 0;
-    width: 100%;
-  }
-
   .aiChatAssistantMessage,
   .aiChatUserMessage {
     max-width: 100%;
@@ -5163,7 +5129,6 @@
 .aiTerraformPreviewAgentCard,
 .aiSafetyFindingCard,
 .aiSimulationCard,
-.aiChatSimulationIntro,
 .aiChatAssistantMessage p,
 .aiChatDraftCard,
 .aiSafetyNotice,
@@ -5612,8 +5577,8 @@
   display: flex;
   flex-direction: column;
   font-family: var(--workspace-font, "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif);
-  height: calc(100dvh - 24px);
-  max-height: 1080px;
+  height: auto;
+  max-height: min(1080px, calc(100dvh - 24px));
   max-width: 1800px;
   min-height: 0;
   overflow: hidden;
@@ -5861,7 +5826,7 @@
 .liveObservationBody {
   background: #ffffff;
   display: flex;
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   flex-direction: column;
   min-height: 0;
   overflow: auto;
@@ -5990,7 +5955,7 @@
 .liveObservationMapStage {
   background: var(--workspace-surface, #ffffff);
   display: flex;
-  flex: 1 0 auto;
+  flex: 0 0 auto;
   min-height: 0;
   overflow: hidden;
   position: relative;
@@ -6008,12 +5973,37 @@
   z-index: 8;
 }
 
+.liveObservationDesignSimulation {
+  background: var(--workspace-surface, #ffffff);
+  border-top: 1px solid var(--workspace-line, #f0f0f3);
+  display: grid;
+  flex: 0 0 auto;
+  gap: 12px;
+  padding: 16px 18px 20px;
+}
+
+.liveObservationDesignSimulation > header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.liveObservationDesignSimulation > header > strong {
+  color: var(--workspace-text, #171717);
+  font-size: 13px;
+}
+
+.liveObservationDesignSimulation > header > span {
+  color: var(--workspace-muted, #60646c);
+  font-size: 11px;
+}
+
 .liveObservationDiagramMap {
   background: var(--workspace-surface, #ffffff);
   border: 1px solid var(--workspace-line, #f0f0f3);
   display: flex;
   flex-direction: column;
-  height: clamp(430px, 58vh, 680px);
+  height: clamp(300px, 42vh, 430px);
   overflow: hidden;
   width: 100%;
 }
@@ -6047,15 +6037,14 @@
   min-height: 0;
   overflow-x: auto;
   overflow-y: hidden;
-  padding: 34px 28px 28px;
+  padding: 24px 28px 20px;
 }
 
 .liveObservationPresentationSurface {
   border: 1px dashed color-mix(in srgb, #7657d6 38%, transparent);
   box-sizing: border-box;
-  height: 100%;
-  min-height: 300px;
-  padding: 58px 28px 34px;
+  min-height: 210px;
+  padding: 44px 28px 20px;
   position: relative;
 }
 
@@ -6076,7 +6065,7 @@
   display: grid;
   list-style: none;
   margin: 0;
-  min-height: 176px;
+  min-height: 145px;
   padding: 0;
   position: relative;
 }
@@ -6156,6 +6145,21 @@
   content: "";
   inset: -1px 0;
   position: absolute;
+}
+
+.liveObservationPresentationSegmentParticle {
+  animation: liveObservationPresentationSegmentParticle 760ms ease-in-out both;
+  background: #ffffff;
+  border: 2px solid #3974e8;
+  border-radius: 50%;
+  box-sizing: border-box;
+  box-shadow: 0 0 0 4px rgba(57, 116, 232, 0.1);
+  height: 7px;
+  left: 0;
+  position: absolute;
+  top: -4px;
+  width: 7px;
+  z-index: 2;
 }
 
 .liveObservationDiagramMap[data-pressure-level="high"] .liveObservationPresentationStage[data-pressure-zone="true"] .liveObservationPresentationConnector::after {
@@ -6248,20 +6252,6 @@
   visibility: hidden;
 }
 
-.liveObservationPresentationParticle {
-  animation: liveObservationPresentationParticle 1.65s ease-in-out both;
-  background: #ffffff;
-  border: 2px solid #3974e8;
-  border-radius: 50%;
-  box-shadow: 0 0 0 5px rgba(57, 116, 232, 0.1);
-  height: 7px;
-  left: 5%;
-  position: absolute;
-  top: 87px;
-  width: 7px;
-  z-index: 7;
-}
-
 .liveObservationPresentationEmpty {
   align-items: center;
   color: var(--workspace-muted, #60646c);
@@ -6287,11 +6277,11 @@
   to { background-position: 72px 0; }
 }
 
-@keyframes liveObservationPresentationParticle {
-  from { left: 5%; opacity: 0; }
+@keyframes liveObservationPresentationSegmentParticle {
+  from { left: -3px; opacity: 0; }
   8% { opacity: 1; }
   90% { opacity: 1; }
-  to { left: 94%; opacity: 0; }
+  to { left: calc(100% - 4px); opacity: 0; }
 }
 
 @keyframes liveObservationPresentationRing {
@@ -6875,7 +6865,7 @@
     animation: none;
   }
 
-  .liveObservationPresentationParticle {
+  .liveObservationPresentationSegmentParticle {
     display: none;
   }
 

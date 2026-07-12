@@ -38,7 +38,7 @@ export function LiveObservationDiagramMap({
     );
   }
 
-  const visibleParticleCount = Math.min(4, burst?.visibleParticleCount ?? 0);
+  const visibleParticleCount = Math.min(2, burst?.visibleParticleCount ?? 0);
   const minimumWidth = Math.max(
     760,
     model.stages.length * 144 + Math.max(2, model.capacityUnits.length) * 94 + 80
@@ -82,9 +82,15 @@ export function LiveObservationDiagramMap({
                 </div>
                 <strong title={stage.node.label}>{stage.node.label}</strong>
                 <span>{getRoleLabel(stage.role)}</span>
-                {index < model.stages.length - 1 ? (
-                  <i aria-hidden="true" className={styles.liveObservationPresentationConnector} />
-                ) : null}
+                <i aria-hidden="true" className={styles.liveObservationPresentationConnector}>
+                  {burst ? Array.from({ length: visibleParticleCount }, (_, particleIndex) => (
+                    <i
+                      className={styles.liveObservationPresentationSegmentParticle}
+                      key={`${burst.sequence}-${stage.node.id}-segment-${particleIndex}`}
+                      style={{ animationDelay: `${index * 90 + particleIndex * 180}ms` }}
+                    />
+                  )) : null}
+                </i>
               </li>
             ))}
             <li className={styles.liveObservationCapacityStage}>
@@ -99,6 +105,14 @@ export function LiveObservationDiagramMap({
                   >
                     <div className={styles.liveObservationPresentationNode}>
                       <ResourceIcon node={unit.node} />
+                      {burst && unit.observationState !== "inactive" ? (
+                        <i
+                          aria-hidden="true"
+                          className={styles.liveObservationPresentationNodePulse}
+                          key={`${burst.sequence}-${unit.node.id}-arrival`}
+                          style={{ animationDelay: `${model.stages.length * 100 + index * 100}ms` }}
+                        />
+                      ) : null}
                     </div>
                     <strong title={unit.node.label}>{getCapacityDisplayLabel(unit.node.label, index)}</strong>
                     <span>{getCapacityStateLabel(unit.observationState)}</span>
@@ -107,14 +121,6 @@ export function LiveObservationDiagramMap({
               </div>
             </li>
           </ol>
-          {burst ? Array.from({ length: visibleParticleCount }, (_, index) => (
-            <i
-              aria-hidden="true"
-              className={styles.liveObservationPresentationParticle}
-              key={`${burst.sequence}-presentation-particle-${index}`}
-              style={{ animationDelay: `${index * 180}ms` }}
-            />
-          )) : null}
         </div>
       </div>
     </section>
