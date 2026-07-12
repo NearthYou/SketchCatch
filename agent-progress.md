@@ -5,25 +5,24 @@ Short English-only working log for the current agent context. Older records are 
 ## Current Verified State
 
 - Branch: `feat/ck/287-ai-diagram`.
-- Local `dev` and `origin/dev` point to `de4cd817`; latest repository analysis, template, live observation, and workspace UI updates are being merged into this branch.
+- `origin/dev` points to `ca2cbe75`; the latest UI/UX rework, repository analysis, template, live observation, and workspace operations updates are being merged into this branch.
 - Architecture Draft uses Amazon Q retrieval evidence, deterministic deployable materialization, NDJSON progress streaming, and containment-aware board layout.
 - PR #347 review feedback has been addressed, pushed, and resolved.
 - No cloud deployment or Terraform mutation was run during this merge session.
 
 ## Session Record
 
-### 2026-07-12 - Merge latest dev into AI diagram branch
+### 2026-07-12 - Merge latest origin/dev into AI diagram branch
 
-- Goal: Fast-forward local `dev` to `origin/dev` and merge it into `feat/ck/287-ai-diagram`.
+- Goal: Merge the actual latest `origin/dev` into `feat/ck/287-ai-diagram`.
 - Completed:
-  - Fast-forwarded `dev` from `4d48f3f1` to `de4cd817`.
-  - Began merging the latest repository analysis, AWS Template, live observation, and workspace UI work into the AI diagram branch.
-  - Resolved merge conflicts by taking `dev` for UI conflict files and combining backend/type safety changes with the AI diagram branch contracts.
+  - First merged local `dev` at `de4cd817`, then found `origin/dev` had advanced to `ca2cbe75`.
+  - Merged `origin/dev` into the AI diagram branch after GitHub still reported PR #347 as conflicting.
+  - Resolved Workspace UI conflicts by taking `origin/dev` for deleted/reworked UI files and the Workspace API client contract.
+  - Kept backend/type safety changes that merged cleanly with the AI diagram branch contracts.
 - Verification:
-  - Pre-merge and post-conflict `pnpm harness:check` passed.
-  - API and web focused `tsc --noEmit` checks passed during conflict resolution.
-  - `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
-  - The first `pnpm typecheck` run failed because `.next/types` files were missing before `next build`; after successful `pnpm build`, rerunning `pnpm typecheck` passed.
+  - `pnpm harness:check`, `pnpm typecheck`, `pnpm lint`, and `pnpm build` passed after resolving the `origin/dev` conflicts.
+  - The first `pnpm typecheck` run during the second merge exposed an obsolete streaming client test; the test file was restored to the `origin/dev` UI API contract and typecheck then passed.
 - Risk:
   - `pnpm lint` reported one warning from merged `dev` live observation test support: unused `setNow` in `apps/api/src/live-observations/live-observation-store-contract.ts`.
 

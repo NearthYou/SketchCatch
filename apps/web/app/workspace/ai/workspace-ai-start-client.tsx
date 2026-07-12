@@ -16,6 +16,7 @@ import type {
   LlmExplanationFallbackReason
 } from "@sketchcatch/types";
 import { AiDraftBoardPreview } from "./ai-draft-board-preview";
+import { ProductState } from "../../../components/ui/ProductState";
 import type { AiStartMessage } from "./ai-start-model";
 import { useAiStartWorkflow } from "./use-ai-start-workflow";
 import styles from "./workspace-ai-start.module.css";
@@ -78,11 +79,21 @@ export function WorkspaceAiStartClient() {
               <div className={styles.thinking} role="status">
                 <LoaderCircle aria-hidden="true" size={16} />
                 구조를 계산하는 중
+                <button onClick={workflow.cancelRequest} type="button">중단</button>
               </div>
             ) : null}
           </div>
 
           <div className={styles.composerDock}>
+            {workflow.requestState === "error" ? (
+              <ProductState
+                action={<button onClick={() => void workflow.retryRequest()} type="button">다시 시도</button>}
+                compact
+                description={workflow.errorMessage}
+                kind="error"
+                title="Architecture Draft를 만들지 못했습니다"
+              />
+            ) : null}
             {workflow.voiceInput.statusMessage ? (
               <p className={styles.voiceStatus} role="status">
                 {workflow.voiceInput.statusMessage}

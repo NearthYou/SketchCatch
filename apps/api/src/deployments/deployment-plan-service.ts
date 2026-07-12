@@ -43,6 +43,7 @@ import {
   type ProjectAccessContext
 } from "./deployment-service.js";
 import {
+  createTerraformFilesSafetyContent,
   prepareTerraformWorkspace as defaultPrepareTerraformWorkspace,
   type PreparedTerraformWorkspace
 } from "./terraform-workspace.js";
@@ -161,7 +162,8 @@ export async function runDeploymentPlan(
       repository.findArchitectureInProject(deployment.architectureId, deployment.projectId),
       prepareTerraformWorkspace({
         objectKey: artifact.objectKey,
-        fileName: artifact.fileName
+        fileName: artifact.fileName,
+        contentType: artifact.contentType
       })
     ]);
     workspace = preparedWorkspace;
@@ -171,18 +173,14 @@ export async function runDeploymentPlan(
     }
 
     const terraformArtifactContent = await readTerraformArtifactFile(workspace.mainFilePath);
-    assertTerraformArtifactIsSafe(terraformArtifactContent, {
-      liveProfile: deployment.liveProfile
-    });
+    assertTerraformArtifactIsSafe(
+      createTerraformFilesSafetyContent(workspace.terraformFiles, terraformArtifactContent),
+      { liveProfile: deployment.liveProfile }
+    );
     const terraformArtifactSha256 = createSha256(terraformArtifactContent);
     const preDeploymentAnalysis = await analyzePreDeployment({
       architectureJson: architecture.architectureJson,
-      terraformFiles: [
-        {
-          fileName: artifact.fileName,
-          terraformCode: toTerraformCodeString(terraformArtifactContent)
-        }
-      ]
+      terraformFiles: preparedWorkspace.terraformFiles
     });
 
     const [awsCredentials] = await Promise.all([
@@ -786,8 +784,4 @@ function summarizeUnexpectedPlanFailure(error: unknown): string {
 
 function createSha256(value: Buffer | Uint8Array | string): string {
   return createHash("sha256").update(Buffer.from(value)).digest("hex");
-}
-
-function toTerraformCodeString(value: Buffer | Uint8Array | string): string {
-  return typeof value === "string" ? value : Buffer.from(value).toString("utf8");
 }

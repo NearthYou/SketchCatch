@@ -466,6 +466,14 @@ export type TerraformArtifact = ProjectAsset & {
   uploadStatus: "uploaded";
 };
 
+export type TerraformArtifactBundle = {
+  schemaVersion: 1;
+  files: Array<{
+    fileName: string;
+    terraformCode: string;
+  }>;
+};
+
 export type SourceRepositoryProvider = "internal" | "github";
 
 export type SourceRepositoryStatus = "active" | "inactive";
@@ -724,7 +732,7 @@ export type CreateGitCicdHandoffRequest = {
   architectureId: string;
   terraformArtifactId: string;
   handoffKind?: GitCicdHandoffKind | undefined;
-  sourceDeploymentId?: string | null | undefined;
+  sourceDeploymentId: string;
   deploymentMode?: GitCicdDeploymentMode | undefined;
   sourceRepositoryId: string;
   targetBranch?: string | undefined;
@@ -739,8 +747,6 @@ export type CreateGitCicdHandoffRequest = {
   releaseBucket?: string | undefined;
   staticSiteUrl?: string | null | undefined;
   apiBaseUrl?: string | null | undefined;
-  approveAwsRoleDiff?: boolean | undefined;
-  planSummary?: DeploymentPlanSummary | undefined;
   userAcceptedChangeId: string;
 };
 

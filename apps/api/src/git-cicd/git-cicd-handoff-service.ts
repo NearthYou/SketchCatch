@@ -13,6 +13,8 @@ import type {
 import type { Database } from "../db/client.js";
 import {
   architectures,
+  deploymentPlanArtifacts,
+  deployments,
   gitCicdHandoffs,
   projectAssets,
   projects,
@@ -56,6 +58,22 @@ export type GitCicdHandoffSourceRepositoryRecord = Pick<
   | "defaultBranch"
   | "repositoryUrl"
 >;
+export type GitCicdHandoffApprovedDeploymentRecord = Pick<
+  typeof deployments.$inferSelect,
+  | "id"
+  | "projectId"
+  | "architectureId"
+  | "terraformArtifactId"
+  | "planSummary"
+  | "approvedAt"
+  | "approvedByUserId"
+  | "approvedTerraformArtifactId"
+  | "approvedPlanArtifactId"
+>;
+export type GitCicdHandoffApprovedPlanArtifactRecord = Pick<
+  typeof deploymentPlanArtifacts.$inferSelect,
+  "id" | "deploymentId" | "terraformArtifactId" | "terraformArtifactSha256" | "operation"
+>;
 
 export type CreateGitCicdHandoffInput = {
   projectId: string;
@@ -78,8 +96,6 @@ export type CreateGitCicdHandoffInput = {
   releaseBucket?: string | undefined;
   staticSiteUrl?: string | null | undefined;
   apiBaseUrl?: string | null | undefined;
-  approveAwsRoleDiff?: boolean | undefined;
-  planSummary?: DeploymentPlanSummary | undefined;
   userAcceptedChangeId: string;
 };
 
@@ -178,6 +194,7 @@ export type GitCicdProviderCreateInput = {
     objectKey: string;
     fileName: string;
     contentType: string;
+    approvedSha256: string;
   };
   sourceRepository: {
     id: string;
@@ -228,6 +245,7 @@ export type GitProviderPullRequestFile = {
   artifactObjectKey?: string | undefined;
   content?: string | undefined;
   contentType: string;
+  expectedSha256?: string | undefined;
 };
 
 export type GitProviderCreatePullRequestInput = {
@@ -277,6 +295,14 @@ export type GitCicdHandoffRepository = {
     sourceRepositoryId: string,
     projectId: string
   ): Promise<GitCicdHandoffSourceRepositoryRecord | undefined>;
+  findApprovedDeploymentForHandoff(
+    deploymentId: string,
+    projectId: string
+  ): Promise<GitCicdHandoffApprovedDeploymentRecord | undefined>;
+  findApprovedPlanArtifactForHandoff(
+    planArtifactId: string,
+    deploymentId: string
+  ): Promise<GitCicdHandoffApprovedPlanArtifactRecord | undefined>;
   findSourceRepositoryById(
     sourceRepositoryId: string,
     projectId: string
@@ -420,7 +446,8 @@ export function createGitHubGitCicdHandoffProvider(
                 fileName: input.terraformArtifact.fileName
               }),
               artifactObjectKey: input.terraformArtifact.objectKey,
-              contentType: input.terraformArtifact.contentType
+              contentType: input.terraformArtifact.contentType,
+              expectedSha256: input.terraformArtifact.approvedSha256
             },
             ...createGitCicdAutomationFiles({
               handoffId: input.handoffId,
@@ -677,6 +704,47 @@ export function createPostgresGitCicdHandoffRepository(
       return sourceRepository;
     },
 
+    // Git handoff가 실제 승인된 Plan을 기반으로 하는지 서버 DB에서 확인합니다.
+    async findApprovedDeploymentForHandoff(deploymentId, projectId) {
+      const [deployment] = await db
+        .select({
+          id: deployments.id,
+          projectId: deployments.projectId,
+          architectureId: deployments.architectureId,
+          terraformArtifactId: deployments.terraformArtifactId,
+          planSummary: deployments.planSummary,
+          approvedAt: deployments.approvedAt,
+          approvedByUserId: deployments.approvedByUserId,
+          approvedTerraformArtifactId: deployments.approvedTerraformArtifactId,
+          approvedPlanArtifactId: deployments.approvedPlanArtifactId
+        })
+        .from(deployments)
+        .where(and(eq(deployments.id, deploymentId), eq(deployments.projectId, projectId)));
+
+      return deployment;
+    },
+
+    // 승인 ID가 가리키는 실제 Plan 종류와 artifact 연결을 조회합니다.
+    async findApprovedPlanArtifactForHandoff(planArtifactId, deploymentId) {
+      const [planArtifact] = await db
+        .select({
+          id: deploymentPlanArtifacts.id,
+          deploymentId: deploymentPlanArtifacts.deploymentId,
+          terraformArtifactId: deploymentPlanArtifacts.terraformArtifactId,
+          terraformArtifactSha256: deploymentPlanArtifacts.terraformArtifactSha256,
+          operation: deploymentPlanArtifacts.operation
+        })
+        .from(deploymentPlanArtifacts)
+        .where(
+          and(
+            eq(deploymentPlanArtifacts.id, planArtifactId),
+            eq(deploymentPlanArtifacts.deploymentId, deploymentId)
+          )
+        );
+
+      return planArtifact;
+    },
+
     async findSourceRepositoryById(sourceRepositoryId, projectId) {
       const [sourceRepository] = await db
         .select({
@@ -881,6 +949,37 @@ export async function createGitCicdHandoff(
     );
   }
 
+  const approvedDeployment = input.sourceDeploymentId
+    ? await repository.findApprovedDeploymentForHandoff(input.sourceDeploymentId, input.projectId)
+    : undefined;
+  const approvedPlanArtifact = approvedDeployment?.approvedPlanArtifactId
+    ? await repository.findApprovedPlanArtifactForHandoff(
+        approvedDeployment.approvedPlanArtifactId,
+        approvedDeployment.id
+      )
+    : undefined;
+
+  // 브라우저가 보낸 승인 문자열 대신 서버에 기록된 Plan 승인과 artifact를 모두 대조합니다.
+  if (
+    !approvedDeployment ||
+    approvedDeployment.architectureId !== input.architectureId ||
+    approvedDeployment.terraformArtifactId !== input.terraformArtifactId ||
+    approvedDeployment.approvedTerraformArtifactId !== input.terraformArtifactId ||
+    approvedDeployment.approvedPlanArtifactId !== input.userAcceptedChangeId ||
+    !approvedPlanArtifact ||
+    approvedPlanArtifact.id !== input.userAcceptedChangeId ||
+    approvedPlanArtifact.deploymentId !== approvedDeployment.id ||
+    approvedPlanArtifact.terraformArtifactId !== input.terraformArtifactId ||
+    !approvedPlanArtifact.terraformArtifactSha256 ||
+    approvedPlanArtifact.operation !== "apply" ||
+    approvedDeployment.approvedAt === null ||
+    approvedDeployment.approvedByUserId !== input.accessContext.userId
+  ) {
+    throw new GitCicdHandoffProviderConflictError(
+      "Git/CI/CD handoff requires the current user's approved deployment plan"
+    );
+  }
+
   const sourceRepository = await repository.findActiveSourceRepository(
     input.sourceRepositoryId,
     input.projectId
@@ -905,7 +1004,6 @@ export async function createGitCicdHandoff(
   const releaseBucket = input.releaseBucket ?? null;
   const staticSiteUrl = input.staticSiteUrl ?? null;
   const apiBaseUrl = input.apiBaseUrl ?? null;
-  const approvedAt = input.approveAwsRoleDiff === true ? new Date().toISOString() : null;
   const repositorySettingsPreview = createRepositorySettingsPreview({
     projectSlug,
     repositoryOwner: sourceRepository.owner,
@@ -933,15 +1031,15 @@ export async function createGitCicdHandoff(
     rdsEnabled,
     staticSiteUrl,
     apiBaseUrl,
-    approvedByUserId: input.approveAwsRoleDiff === true ? input.accessContext.userId : null,
-    approvedAt
+    approvedByUserId: null,
+    approvedAt: null
   });
   const pullRequestDraft = createGitCicdPullRequestDraft({
     repositoryOwner: sourceRepository.owner,
     repositoryName: sourceRepository.name,
     terraformArtifact,
     handoffKind,
-    planSummary: input.planSummary ?? null,
+    planSummary: approvedDeployment.planSummary ?? null,
     title: input.pullRequestTitle ?? null
   });
   const pullRequestTitle = input.pullRequestTitle ?? pullRequestDraft.title;
@@ -966,7 +1064,8 @@ export async function createGitCicdHandoff(
       id: terraformArtifact.id,
       objectKey: terraformArtifact.objectKey,
       fileName: terraformArtifact.fileName,
-      contentType: terraformArtifact.contentType
+      contentType: terraformArtifact.contentType,
+      approvedSha256: approvedPlanArtifact.terraformArtifactSha256
     },
     sourceRepository: {
       id: input.sourceRepositoryId,
@@ -997,7 +1096,7 @@ export async function createGitCicdHandoff(
     architectureId: input.architectureId,
     terraformArtifactId: input.terraformArtifactId,
     handoffKind,
-    sourceDeploymentId: input.sourceDeploymentId ?? null,
+    sourceDeploymentId: approvedDeployment.id,
     deploymentMode,
     requiresEnvironmentApproval: true,
     sourceRepositoryId: input.sourceRepositoryId,

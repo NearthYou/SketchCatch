@@ -53,7 +53,7 @@ A state-changing update that only happens after the user explicitly accepts an A
 _Avoid_: Auto apply, silent fix, AI edit
 
 **Source Repository**:
-A code repository used as optional evidence for proposing an Architecture Draft when the user starts from an existing application.
+A code repository connected to a SketchCatch project and analyzed as evidence for Template Selection. The same repository may later receive approved IaC changes through Git Integration.
 _Avoid_: GitHub link, repo URL, codebase
 
 **Repository Analysis**:

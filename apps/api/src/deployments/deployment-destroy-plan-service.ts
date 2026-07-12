@@ -44,6 +44,7 @@ import {
 } from "./deployment-service.js";
 import { assertTerraformArtifactIsSafe } from "./terraform-artifact-safety.js";
 import {
+  createTerraformFilesSafetyContent,
   prepareTerraformWorkspace as defaultPrepareTerraformWorkspace,
   type PreparedTerraformWorkspace
 } from "./terraform-workspace.js";
@@ -154,7 +155,8 @@ export async function runDeploymentDestroyPlan(
     const [preparedWorkspace, stateBuffer] = await Promise.all([
       prepareTerraformWorkspace({
         objectKey: artifact.objectKey,
-        fileName: artifact.fileName
+        fileName: artifact.fileName,
+        contentType: artifact.contentType
       }),
       applyArtifactStorage.downloadDeploymentState({
         deploymentId: deployment.id,
@@ -164,9 +166,10 @@ export async function runDeploymentDestroyPlan(
     workspace = preparedWorkspace;
 
     const terraformArtifactContent = await readTerraformArtifactFile(workspace.mainFilePath);
-    assertTerraformArtifactIsSafe(terraformArtifactContent, {
-      liveProfile: deployment.liveProfile
-    });
+    assertTerraformArtifactIsSafe(
+      createTerraformFilesSafetyContent(workspace.terraformFiles, terraformArtifactContent),
+      { liveProfile: deployment.liveProfile }
+    );
     const terraformArtifactSha256 = createSha256(terraformArtifactContent);
 
     assertDestroyCleanupArtifactHasNotDrifted({

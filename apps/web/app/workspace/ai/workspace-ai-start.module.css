@@ -184,10 +184,31 @@
   animation: ai-spin 900ms linear infinite;
 }
 
+.thinking button,
+.composerDock > section button {
+  min-height: 32px;
+  border: 1px solid var(--ai-line-strong);
+  border-radius: 8px;
+  padding: 0 10px;
+  background: #ffffff;
+  color: var(--ai-ink);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.thinking button {
+  margin-left: auto;
+}
+
 .composerDock {
   background: #ffffff;
   border-top: 1px solid var(--ai-line);
   padding: 16px 20px 20px;
+}
+
+.composerDock > section {
+  margin-bottom: 10px;
 }
 
 .voiceConfirmation {

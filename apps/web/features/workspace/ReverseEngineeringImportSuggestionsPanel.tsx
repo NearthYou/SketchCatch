@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import type { ReverseEngineeringImportSuggestion } from "@sketchcatch/types";
-import styles from "./workspace.module.css";
+import styles from "./reverse-engineering.module.css";
 
 export type ReverseEngineeringImportSuggestionsPanelProps = {
   readonly importSuggestions: ReverseEngineeringImportSuggestion[];
@@ -17,9 +17,9 @@ export function ReverseEngineeringImportSuggestionsPanel({
   const handoffReadyCount = importSuggestions.filter((suggestion) => suggestion.handoffReady).length;
 
   return (
-    <section className={styles.deploymentSection}>
+    <section className={styles.reverseImportSection}>
       <h3>Terraform import 제안</h3>
-      <div className={styles.deploymentPreflightStats}>
+      <div className={styles.reverseImportStats}>
         <span>
           Git/CI/CD handoff 준비
           <strong>{handoffReadyCount}</strong>
@@ -30,10 +30,10 @@ export function ReverseEngineeringImportSuggestionsPanel({
         </span>
       </div>
 
-      <div className={styles.deploymentApplyActions} role="tablist" aria-label="Import suggestion 보기">
+      <div className={styles.reverseImportActions} role="tablist" aria-label="Import suggestion 보기">
         <button
           aria-selected={activeView === "cards"}
-          className={styles.deploymentSecondaryButton}
+          className={styles.reverseImportButton}
           onClick={() => setActiveView("cards")}
           role="tab"
           type="button"
@@ -42,7 +42,7 @@ export function ReverseEngineeringImportSuggestionsPanel({
         </button>
         <button
           aria-selected={activeView === "bulk"}
-          className={styles.deploymentSecondaryButton}
+          className={styles.reverseImportButton}
           onClick={() => setActiveView("bulk")}
           role="tab"
           type="button"
@@ -54,7 +54,7 @@ export function ReverseEngineeringImportSuggestionsPanel({
       {activeView === "cards" ? (
         <ImportSuggestionCards importSuggestions={importSuggestions} />
       ) : (
-        <label className={styles.deploymentField}>
+        <label className={styles.reverseImportField}>
           전체 복사
           <textarea readOnly rows={10} value={bulkText} />
         </label>
@@ -68,7 +68,7 @@ function ImportSuggestionCards({
   importSuggestions
 }: ReverseEngineeringImportSuggestionsPanelProps) {
   if (importSuggestions.length === 0) {
-    return <p className={styles.deploymentHint}>가져오기 제안이 없습니다.</p>;
+    return <p className={styles.reverseImportHint}>가져오기 제안이 없습니다.</p>;
   }
 
   return (

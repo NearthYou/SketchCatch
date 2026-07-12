@@ -58,6 +58,23 @@ test("readOAuthStateCookie parses a valid state cookie", () => {
   });
 });
 
+test("readOAuthStateCookie keeps a safe return route in the signed state", () => {
+  const reply = createFakeReply();
+
+  setOAuthStateCookie(reply, {
+    provider: "github",
+    returnTo: "/workspace/new?mode=repository",
+    state: "state-token"
+  });
+
+  assert.deepEqual(readOAuthStateCookie(createRequestWithCookie(reply.getSetCookieHeader())), {
+    persistent: false,
+    provider: "github",
+    returnTo: "/workspace/new?mode=repository",
+    state: "state-token"
+  });
+});
+
 test("readOAuthStateCookie treats legacy cookies without persistence as session login", () => {
   const cookieValue = signOAuthStateCookieValue({
     provider: "naver",

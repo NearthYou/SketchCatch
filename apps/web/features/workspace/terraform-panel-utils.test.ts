@@ -6,11 +6,21 @@ import {
   findTerraformBlockForNode,
   getDiagramTerraformAddresses,
   getTerraformFileOptions,
+  getTerraformLineStartOffset,
   parseTerraformFiles,
   removeTerraformBlocksByAddress,
   toDeploymentBaselineFingerprint,
   toTerraformRefreshFingerprint
 } from "./terraform-panel-utils";
+
+test("getTerraformLineStartOffset returns the first character offset for a requested line", () => {
+  const code = "first\nsecond line\nthird";
+
+  assert.equal(getTerraformLineStartOffset(code, 1), 0);
+  assert.equal(getTerraformLineStartOffset(code, 2), 6);
+  assert.equal(getTerraformLineStartOffset(code, 3), 18);
+  assert.equal(getTerraformLineStartOffset(code, 99), code.length);
+});
 
 test("parseTerraformFiles keeps CRLF offsets aligned with original source slices", () => {
   const code = [

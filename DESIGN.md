@@ -142,7 +142,22 @@ spacing:
   xxl: 48px
   section: 96px
 
+shadows:
+  ring: "0 0 0 1px rgba(0, 0, 0, 0.08)"
+  card: "0 0 0 1px rgba(0, 0, 0, 0.08), 0 2px 2px rgba(0, 0, 0, 0.04), 0 16px 40px -24px rgba(23, 23, 23, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.84)"
+  product-frame: "0 0 0 1px rgba(0, 0, 0, 0.10), 0 32px 80px -32px rgba(23, 23, 23, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.92)"
+
 components:
+  product-frame:
+    backgroundColor: "{colors.surface-card}"
+    textColor: "{colors.ink}"
+    rounded: "{rounded.xl}"
+    shadow: "{shadows.product-frame}"
+  app-shell-surface:
+    backgroundColor: "{colors.surface-card}"
+    textColor: "{colors.ink}"
+    rounded: "{rounded.xl}"
+    shadow: "{shadows.card}"
   top-nav:
     backgroundColor: "{colors.canvas}"
     textColor: "{colors.ink}"
@@ -264,6 +279,29 @@ components:
     typography: "{typography.body-sm}"
 ---
 
+## 0. SketchCatch Reference Contract
+
+이번 UI 재구축의 직접적인 시각 기준은 저장소 루트의 `landing-preview.html`입니다. Landing은 이 파일을 요약해서 참고하는 것이 아니라, 섹션 순서와 제품 미리보기 구성을 React 화면으로 그대로 옮깁니다.
+
+- 흰색 화면 위에 텍스트만 두지 않습니다. 실제 Architecture Board, IaC Preview, Check Finding처럼 제품이 하는 일을 첫 화면에서 바로 보여줍니다.
+- 옅은 하늘빛과 흐려지는 48px 그리드는 Landing Hero 안에서만 사용합니다. 인증 화면과 Dashboard의 바깥 배경은 흰색 또는 `#fafafa`이며, 화면 전체에 격자를 깔지 않습니다. 24px 그리드는 Architecture Board의 실제 canvas 안에서만 사용합니다.
+- 공식 브랜드 심볼은 `apps/web/public/sketchcatch-logo.png`만 사용합니다. 검은 기하학 심볼을 `SketchCatch` 글자 앞에 배치하고, 이전 파란 SVG 로고나 별도 변형은 사용하지 않습니다.
+- 상단 바, Dashboard sidebar, 설정 panel, 제품 미리보기는 흰색 표면과 `{shadows.card}` 또는 `{shadows.product-frame}`로 바닥에서 분리합니다.
+- 가장 바깥 제품 프레임은 16px, 일반 card는 12px, button과 input은 8px를 사용합니다. 글자가 들어간 CTA를 pill로 만들지 않습니다.
+- Hover는 실제로 누르거나 선택할 수 있는 요소에만 적용합니다. 이동은 2~4px 이내로 제한하고 `transform`, `opacity`만 움직입니다.
+- Dark surface는 Terraform, log, code, Check 결과의 집중 영역에만 사용합니다. Dashboard 전체와 일반 card를 검게 만들지 않습니다.
+- Landing의 제품 미리보기에서 보이는 기능은 실제 제품 route와 같은 용어를 사용합니다. 없는 API나 배포 결과를 실제 상태처럼 표시하지 않습니다.
+
+### Signature Composition
+
+1. 떠 있는 흰색 navigation 또는 application frame
+2. Landing Hero 안에서만 보이는 하늘빛과 흐려지는 기술 그리드
+3. 다층 그림자로 분리된 실제 제품 surface
+4. 검정 primary CTA 한 개
+5. Architecture Resource icon과 실제 상태를 이용한 시각적 초점
+
+이 다섯 가지가 빠져 흰 바탕과 hairline만 남으면 `landing-preview.html`의 스타일을 따른 것으로 보지 않습니다.
+
 ## Overview
 
 Expo's marketing site reads like a quietly-confident React-Native developer platform. The base canvas is **pure white** (`{colors.canvas}` — #ffffff) with a soft **sky-blue gradient atmospheric wash** behind the hero band. Near-black ink `{colors.ink}` (#171717) carries body and display alike. The single brand voltage is **pure black** (`{colors.primary}` — #000000) for primary CTAs — minimal and editorial-feeling. A small blue text-link accent (`{colors.text-link}` — #0d74ce) is reserved for inline body links, never as a CTA.
@@ -281,6 +319,8 @@ The brand's strongest visual signature is the **device-mockup hero** — a cente
 - Inter or Geist may support English/technical snippets, but only as the second family.
 - Device-mockup hero with real Expo product surfaces is the brand chrome.
 - Hairline + soft drop depth; no atmospheric brand decoration outside the hero.
+- Floating product frames use the multi-layer `{shadows.card}` and `{shadows.product-frame}` recipes from `landing-preview.html`.
+- Dashboard and Workspace use a plain white or `#fafafa` outer canvas. The 24px technical grid is reserved for the Architecture Board canvas itself.
 - 96px section rhythm.
 
 ## Colors
@@ -394,13 +434,16 @@ Generous editorial pacing. The white canvas does not compete with the hero's gra
 | Flat (canvas) | `{colors.canvas}` (#ffffff) | Body bands, footer |
 | Card | `{colors.surface-card}` (#ffffff) | Content cards |
 | Hairline border | 1px `{colors.hairline}` | Card outlines |
-| Soft drop | `0 4px 12px rgba(0, 0, 0, 0.04)` | Hovered cards (single shadow tier) |
+| Ring | `{shadows.ring}` | Compact control and selected tab |
+| Card | `{shadows.card}` | Navigation, Dashboard panel, resource node |
+| Product frame | `{shadows.product-frame}` | Landing preview and major application frame |
 | Atmospheric gradient | Sky-blue radial wash | Hero backdrop only |
 | Dark inversion | `{colors.surface-dark}` (#171717) | Dark feature cards, code blocks, featured pricing |
 
 ### Decorative Depth
 - **Sky-blue gradient backdrop** in the hero only — atmospheric depth without claiming to be a brand color.
 - **Device mockup composite** as page chrome — MacBook + iPhone showing real Expo dev surfaces.
+- **SketchCatch product frame** replaces generic device chrome when the page explains this product: show the actual Board, IaC Preview, or Check surface inside the elevated frame.
 
 ## Shapes
 

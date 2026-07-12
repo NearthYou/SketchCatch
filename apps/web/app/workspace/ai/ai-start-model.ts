@@ -6,8 +6,8 @@ import type {
   ArchitecturePatchPreview,
   DiagramJson
 } from "@sketchcatch/types";
-import { createWorkspaceAiChatStorageKey } from "../../../features/workspace/WorkspaceAiChatDock";
 import { getDiagramJsonForArchitectureDraft } from "../../../features/workspace/workspace-ai-diagram-adapter";
+import { createWorkspaceAiChatStorageKey } from "../../../features/workspace/workspace-ai-chat-history";
 
 const AI_START_DRAFT_STORAGE_KEY = "sketchcatch.newProjectDraft";
 const MAX_CHAT_MESSAGES = 80;

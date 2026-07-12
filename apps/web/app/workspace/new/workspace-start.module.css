@@ -93,7 +93,7 @@
 
 .nameField input {
   width: 100%;
-  height: 48px;
+  height: 44px;
   border: 1px solid #dcdee0;
   border-radius: 8px;
   padding: 0 16px;
@@ -176,11 +176,15 @@
 }
 
 .optionCopy small {
+  display: -webkit-box;
+  overflow: hidden;
   color: #60646c;
   font-size: 12px;
   font-weight: 400;
   line-height: 1.55;
   word-break: keep-all;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .option em {
@@ -321,6 +325,8 @@
   .option:nth-child(2n),
   .option:nth-last-child(-n + 2) { border-right: 0; border-bottom: 1px solid #f0f0f3; }
   .option:last-child { border-bottom: 0; }
+  .option { grid-template-columns: 36px minmax(0, 1fr); }
+  .option em { display: none; }
   .actions { align-items: stretch; flex-direction: column; }
   .primaryAction { width: 100%; }
   .blankAction { align-self: center; }
