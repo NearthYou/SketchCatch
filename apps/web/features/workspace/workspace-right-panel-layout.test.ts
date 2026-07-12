@@ -876,14 +876,29 @@ test("terraform code navigation stays reachable after a blocked save", () => {
   assert.match(componentSource, /isTerraformEditorNavigationTarget/);
 });
 
-test("discarding terraform edits resets the terraform code panel dirty state", () => {
+test("discarding terraform edits waits for regenerated files before resuming deployment", () => {
   assert.match(componentSource, /terraformDiscardRequestId/);
-  assert.match(componentSource, /setTerraformDiscardRequestId\(\(requestId\) => requestId \+ 1\)/);
+  assert.match(componentSource, /setTerraformDiscardRequestId\(\(requestId\) => \{/);
+  assert.match(componentSource, /latestTerraformDiscardRequestIdRef\.current = nextRequestId/);
   assert.match(componentSource, /externalDiscardRequestId=\{terraformDiscardRequestId\}/);
+  assert.match(componentSource, /onExternalDiscardComplete=\{handleTerraformExternalDiscardComplete\}/);
+  assert.match(componentSource, /function handleTerraformExternalDiscardComplete/);
   assert.match(terraformPanelSource, /externalDiscardRequestId/);
   assert.match(terraformPanelSource, /latestExternalDiscardRequestIdRef/);
   assert.match(terraformPanelSource, /latestExternalDiscardRequestIdRef\.current === externalDiscardRequestId/);
-  assert.match(terraformPanelSource, /void refreshTerraformCode\(currentDiagramFingerprint\)/);
+  assert.match(terraformPanelSource, /onExternalDiscardComplete/);
+  assert.match(terraformPanelSource, /refreshTerraformCode\(currentDiagramFingerprint\)\.then/);
+
+  const discardStartIndex = componentSource.indexOf("function discardTerraformChanges");
+  const discardEndIndex = componentSource.indexOf(
+    "function handleTerraformExternalDiscardComplete",
+    discardStartIndex
+  );
+  const discardHandler = componentSource.slice(discardStartIndex, discardEndIndex);
+
+  assert.ok(discardStartIndex > -1);
+  assert.ok(discardEndIndex > discardStartIndex);
+  assert.doesNotMatch(discardHandler, /runPendingTerraformLeaveAction\(\)/);
 });
 
 test("terraform preview refreshes when the last diagram icon is deleted", () => {

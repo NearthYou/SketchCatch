@@ -132,6 +132,7 @@ export function WorkspaceRightPanel({
   const pendingTerraformLeaveActionRef = useRef<PendingTerraformLeaveAction | null>(null);
   const skipTerraformLeaveGuardRef = useRef(false);
   const latestTerraformDiagnosticsRef = useRef<TerraformDiagnostic[]>([]);
+  const latestTerraformDiscardRequestIdRef = useRef(0);
   const latestTerraformSaveRequestIdRef = useRef(0);
   const [activeView, setActiveView] = useState<WorkspaceRightPanelView>(
     initialView ?? "resource"
@@ -512,10 +513,30 @@ export function WorkspaceRightPanel({
 
   function discardTerraformChanges(): void {
     invalidatePendingTerraformSaveCompletion();
-    setTerraformDiscardRequestId((requestId) => requestId + 1);
+    setTerraformDiscardRequestId((requestId) => {
+      const nextRequestId = requestId + 1;
+      latestTerraformDiscardRequestIdRef.current = nextRequestId;
+      return nextRequestId;
+    });
+    setTerraformLeaveSaveState("saving");
+    setTerraformLeaveSaveMessage("Terraform 기준으로 복구하는 중입니다.");
+    setShowTerraformLeaveDialog(false);
+  }
+
+  function handleTerraformExternalDiscardComplete(discarded: boolean, requestId: number): void {
+    if (requestId !== latestTerraformDiscardRequestIdRef.current) {
+      return;
+    }
+
+    if (!discarded) {
+      setTerraformLeaveSaveState("blocked");
+      setTerraformLeaveSaveMessage("Terraform 변경을 버리지 못했습니다. 다시 시도해 주세요.");
+      setShowTerraformLeaveDialog(true);
+      return;
+    }
+
     setHasUnsavedTerraformChanges(false);
     resetTerraformLeaveSaveFeedback();
-    setShowTerraformLeaveDialog(false);
     runPendingTerraformLeaveAction();
   }
 
@@ -894,6 +915,7 @@ export function WorkspaceRightPanel({
                 onArchitectureDiagnosticsChange={handleArchitectureDiagnosticsChange}
                 onDiagnosticsChange={handleTerraformDiagnosticsChange}
                 onDirtyChange={handleTerraformDirtyChange}
+                onExternalDiscardComplete={handleTerraformExternalDiscardComplete}
                 onExternalSaveComplete={handleTerraformExternalSaveComplete}
                 onOpenIssues={focusTerraformIssuesPane}
                 onTerraformPreviewAiRequest={onTerraformPreviewAiRequest}

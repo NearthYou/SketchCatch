@@ -206,6 +206,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
   readonly onArchitectureDiagnosticsChange: (diagnostics: ArchitectureDiagnostic[]) => void;
   readonly onDiagnosticsChange: (diagnostics: TerraformDiagnostic[]) => void;
   readonly onDirtyChange: (isDirty: boolean) => void;
+  readonly onExternalDiscardComplete: (discarded: boolean, requestId: number) => void;
   readonly onExternalSaveComplete: (saved: boolean, requestId: number) => void;
   readonly onOpenIssues: () => void;
   readonly onTerraformPreviewAiRequest: (request: TerraformPreviewAiRequest) => void;
@@ -217,6 +218,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
   onArchitectureDiagnosticsChange,
   onDiagnosticsChange,
   onDirtyChange,
+  onExternalDiscardComplete,
   onExternalSaveComplete,
   onOpenIssues,
   onTerraformPreviewAiRequest
@@ -407,7 +409,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
         const generated = await generateTerraformCode(context.diagram);
 
         if (requestId !== codeRequestIdRef.current) {
-          return;
+          return false;
         }
 
         onArchitectureDiagnosticsChange(generated.architectureDiagnostics);
@@ -427,15 +429,17 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
         latestDiagramFingerprintRef.current = diagramFingerprint;
         setRequestState("idle");
         onDirtyChange(false);
+        return true;
       } catch {
         if (requestId !== codeRequestIdRef.current) {
-          return;
+          return false;
         }
 
         setIsTerraformPreviewStale(true);
         setStatusMessage("Terraform Preview 생성 실패: 이전 Preview 표시 중");
         latestDiagramFingerprintRef.current = "";
         setRequestState("error");
+        return false;
       }
     },
     [context.diagram, onArchitectureDiagnosticsChange, onDiagnosticsChange, onDirtyChange]
@@ -805,8 +809,15 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     }
 
     latestExternalDiscardRequestIdRef.current = externalDiscardRequestId;
-    void refreshTerraformCode(currentDiagramFingerprint);
-  }, [currentDiagramFingerprint, externalDiscardRequestId, refreshTerraformCode]);
+    void refreshTerraformCode(currentDiagramFingerprint).then((discarded) => {
+      onExternalDiscardComplete(discarded, externalDiscardRequestId);
+    });
+  }, [
+    currentDiagramFingerprint,
+    externalDiscardRequestId,
+    onExternalDiscardComplete,
+    refreshTerraformCode
+  ]);
 
   useEffect(() => {
     if (latestTerraformRefreshRequestIdRef.current === context.terraformRefreshRequestId) {
