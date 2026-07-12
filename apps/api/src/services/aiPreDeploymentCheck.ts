@@ -11,6 +11,7 @@ import {
   createConfiguredTerraformSecurityScanner,
   type TerraformSecurityScanner
 } from "./terraform/trivy-terraform-scan.js";
+import { createRuntimeCacheFromEnv } from "../runtime-cache/index.js";
 
 export type AnalyzePreDeploymentCheckInput = {
   readonly architectureJson: ArchitectureJson;
@@ -25,7 +26,9 @@ export type AnalyzePreDeploymentCheckOptions = {
   readonly terraformSecurityScanner?: TerraformSecurityScanner | undefined;
 };
 
-const defaultTerraformSecurityScanner = createConfiguredTerraformSecurityScanner();
+const defaultTerraformSecurityScanner = createConfiguredTerraformSecurityScanner({
+  runtimeCache: createRuntimeCacheFromEnv()
+});
 
 export async function analyzePreDeploymentCheck(
   input: AnalyzePreDeploymentCheckInput,

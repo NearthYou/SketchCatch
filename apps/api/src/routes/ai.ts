@@ -57,7 +57,6 @@ import { diagramJsonSchema } from "./project-draft-schemas.js";
 import { createConfiguredAwsPricingRateProvider } from "../services/awsPricingRateProvider.js";
 import type { CostPricingRateProvider } from "../services/cost-analysis.js";
 import type { RuntimeCache, RuntimeCacheJsonValue } from "../runtime-cache/index.js";
-import { createConfiguredTerraformSecurityScanner } from "../services/terraform/trivy-terraform-scan.js";
 import { requireActiveUserId } from "../auth/current-user.js";
 import { getDatabaseClient, type DatabaseClient } from "../db/client.js";
 import {
@@ -258,21 +257,7 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
   const safetyExplanationTimeoutMs =
     options.safetyExplanationTimeoutMs ?? DEFAULT_SAFETY_EXPLANATION_TIMEOUT_MS;
   const analyzePreDeploymentForCheck =
-    options.analyzePreDeploymentCheck ??
-    ((input) =>
-      analyzePreDeploymentCheck(input, {
-        terraformSecurityScanner: createConfiguredTerraformSecurityScanner({
-          runtimeCache: options.runtimeCache,
-          onScanError: (error) => {
-            app.log.warn(
-              {
-                errorName: error instanceof Error ? error.name : typeof error
-              },
-              "Trivy Terraform scan failed; continuing without Trivy findings"
-            );
-          }
-        })
-      }));
+    options.analyzePreDeploymentCheck ?? analyzePreDeploymentCheck;
   const transcribeRequirementService =
     options.transcribeRequirementService ?? createConfiguredTranscribeRequirementService();
   const pricingRateProvider = options.pricingRateProvider ?? createConfiguredAwsPricingRateProvider();

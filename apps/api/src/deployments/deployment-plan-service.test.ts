@@ -20,6 +20,8 @@ import {
   type TerraformArtifactRecord
 } from "./deployment-service.js";
 import { runDeploymentPlan } from "./deployment-plan-service.js";
+import { analyzePreDeploymentCheck } from "../services/aiPreDeploymentCheck.js";
+import { createCachedTerraformSecurityScanner } from "../services/terraform/trivy-terraform-scan.js";
 import type {
   DeploymentPlanArtifactStorage,
   UploadDeploymentPlanArtifactInput,
@@ -1106,6 +1108,59 @@ test("runDeploymentPlan feeds Terraform artifact content into Trivy-backed safet
       blocksApproval: false
     }
   ]);
+});
+
+test("runDeploymentPlan reuses the button scan snapshot when the artifact SHA is unchanged", async () => {
+  const repository = new FakeDeploymentRepository();
+  const planArtifactStorage = new FakePlanArtifactStorage();
+  let trivyScanCount = 0;
+  const terraformSecurityScanner = createCachedTerraformSecurityScanner({
+    scan: async () => {
+      trivyScanCount += 1;
+      return [];
+    }
+  });
+  const analyzeWithSharedSnapshot = (input: Parameters<typeof analyzePreDeploymentCheck>[0]) =>
+    analyzePreDeploymentCheck(input, { terraformSecurityScanner });
+
+  await analyzeWithSharedSnapshot({
+    architectureJson: { nodes: [], edges: [] },
+    terraformFiles: [
+      {
+        fileName: "main.tf",
+        terraformCode: terraformArtifactContent
+      }
+    ]
+  });
+
+  await runDeploymentPlan(
+    {
+      deploymentId,
+      accessContext: createAccessContext()
+    },
+    repository,
+    {
+      generatePlanArtifactId: () => planArtifactId,
+      planArtifactStorage,
+      readTerraformArtifactFile: async () => terraformArtifactContent,
+      analyzePreDeployment: analyzeWithSharedSnapshot,
+      prepareTerraformWorkspace: async () => ({
+        workdir: "C:/tmp/sketchcatch-terraform-snapshot-plan",
+        mainFilePath: "C:/tmp/sketchcatch-terraform-snapshot-plan/main.tf",
+        cleanup: async () => undefined
+      }),
+      prepareTerraformAwsCredentialEnv: async () => createPreparedCredentials(),
+      runTerraformInit: async () => createRunnerResult("init"),
+      runTerraformPlan: async () => createRunnerResult("plan"),
+      runTerraformShowJson: async () =>
+        createRunnerResult("show", {
+          stdout: createPlanJson([])
+        })
+    }
+  );
+
+  assert.equal(createSha256(terraformArtifactContent), terraformArtifactSha256);
+  assert.equal(trivyScanCount, 1);
 });
 
 test("runDeploymentPlan marks plan validation failures failed and masks secret output", async () => {
