@@ -1199,6 +1199,29 @@ test("Git CI/CD handoff actions use user-facing labels and helper text", () => {
   assert.match(actionItemRule, /\bdisplay:\s*grid;/);
 });
 
+test("Wizard routes the approved Plan to Direct or Git CI/CD and keeps Cleanup in History", () => {
+  const wizardStepStart = deploymentPanelSource.indexOf("function renderWizardStepContent");
+  const wizardStepEnd = deploymentPanelSource.indexOf(
+    "function closeExpandedDeployment",
+    wizardStepStart
+  );
+  const wizardStepSource = deploymentPanelSource.slice(wizardStepStart, wizardStepEnd);
+
+  assert.ok(wizardStepStart > -1);
+  assert.ok(wizardStepEnd > wizardStepStart);
+
+  assert.match(wizardStepSource, /setSelectedExecutionRoute\("direct"\)/);
+  assert.match(wizardStepSource, /setSelectedExecutionRoute\("git-cicd"\)/);
+  assert.match(wizardStepSource, /deploymentWizardState\.canRunDirectApply/);
+  assert.match(wizardStepSource, /canCreateGitCicdHandoff/);
+  assert.match(wizardStepSource, /renderResultsSection\(\)/);
+  assert.match(wizardStepSource, /renderLogsSection\(\)/);
+  assert.match(wizardStepSource, /Deployment History/);
+  assert.match(wizardStepSource, /renderHistoryView\(\)/);
+  assert.doesNotMatch(wizardStepSource, /startTerraformDestroyPlan/);
+  assert.doesNotMatch(wizardStepSource, /startTerraformDestroy\(\)/);
+});
+
 test("deployment baseline save button shows pending and saved icons", () => {
   assert.match(deploymentPanelSource, /import \{ Clipboard, ClipboardCheck,/);
   assert.match(

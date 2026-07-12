@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Deployment, DiagramJson, GitCicdHandoff } from "@sketchcatch/types";
+import { getDeploymentWizardState } from "./deployment-wizard-state";
 import {
   getGitCicdHandoffStatusLabel,
   getDefaultDeploymentPanelMode,
@@ -266,6 +267,21 @@ test("labels Git/CI/CD handoff status separately from Direct Deployment status",
     "Pipeline running"
   );
   assert.equal(getGitCicdHandoffStatusLabel(null), "No Git/CI/CD handoff");
+});
+
+test("an approved Plan can enter Git CI/CD before any Direct Apply", () => {
+  const state = getDeploymentWizardState({
+    approved: true,
+    directApplyStatus: "not-started",
+    gitCicdHandoffStatus: "not-created",
+    plan: "ready",
+    preparation: "ready",
+    preflight: "passed",
+    route: "git-cicd"
+  });
+
+  assert.equal(state.canCreateGitCicdHandoff, true);
+  assert.equal(state.canRunDirectApply, false);
 });
 
 test("hides empty deployment info values from the detail list", () => {
