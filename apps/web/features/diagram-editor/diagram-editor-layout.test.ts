@@ -608,6 +608,25 @@ test("Area auto expansion is a persistent pressed toolbar preference after canva
   assert.match(diagramEditorSource, /<Expand aria-hidden="true" size=\{16\} \/>/);
 });
 
+test("canvas tools dock vertically along the left center", () => {
+  const canvasToolbarRule = getCssBlock(".canvasToolbar");
+  const toolbarGroupRule = getCssBlock(".toolbarGroup");
+
+  assert.match(canvasToolbarRule, /display:\s*flex;/);
+  assert.match(canvasToolbarRule, /flex-direction:\s*column;/);
+  assert.match(canvasToolbarRule, /left:\s*16px;/);
+  assert.match(canvasToolbarRule, /top:\s*50%;/);
+  assert.match(canvasToolbarRule, /transform:\s*translateY\(-50%\);/);
+  assert.doesNotMatch(canvasToolbarRule, /bottom:/);
+  assert.doesNotMatch(canvasToolbarRule, /translateX/);
+  assert.match(toolbarGroupRule, /display:\s*inline-flex;/);
+  assert.match(toolbarGroupRule, /flex-direction:\s*column;/);
+  assert.match(
+    diagramEditorStyles,
+    /@media \(max-width:\s*640px\)[\s\S]*?\.canvasToolbar\s*\{[^}]*left:\s*10px;[^}]*max-height:\s*calc\(100% - 20px\);/s
+  );
+});
+
 test("new and existing resources expand newly assigned parent areas before applying reference targets", () => {
   assert.match(
     diagramEditorSource,
