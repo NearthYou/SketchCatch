@@ -500,11 +500,13 @@ div.resourceIcon,
   --workspace-surface-strong: var(--workspace-accent-soft, #f0f0f3);
   --parameter-input-error: #eb8e90;
 
-  background: var(--workspace-surface-muted, #fafafa);
+  background: var(--workspace-surface, #ffffff);
   border-left: 0;
   color: var(--workspace-text, #171717);
   container-type: inline-size;
   font-family: var(--workspace-font, "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif);
+  gap: 0;
+  padding: var(--workspace-space-2, 16px);
 }
 
 div.resourceIcon,
@@ -525,17 +527,18 @@ div.resourceIcon,
 }
 
 .section {
-  background: var(--workspace-surface, #ffffff);
-  border: 1px solid var(--workspace-line, #f0f0f3);
-  border-radius: 8px;
-  box-shadow: 0 1px 2px rgba(23, 23, 23, 0.03);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  border-top: 1px solid var(--workspace-line, #f0f0f3);
+  box-shadow: none;
   gap: 14px;
-  padding: 14px;
+  padding: var(--workspace-space-2, 16px) 0;
 }
 
 .sectionHeader {
-  border-bottom: 1px solid var(--workspace-line, #f0f0f3);
-  padding-bottom: 10px;
+  border-bottom: 0;
+  padding-bottom: var(--workspace-space-1, 8px);
 }
 
 .metadataSection,
@@ -545,9 +548,7 @@ div.resourceIcon,
 }
 
 .requiredParametersSection {
-  box-shadow:
-    0 1px 2px rgba(23, 23, 23, 0.03),
-    0 0 0 1px color-mix(in srgb, var(--workspace-accent, #000000) 5%, transparent);
+  box-shadow: none;
 }
 
 .sectionTitleStack {
@@ -715,8 +716,8 @@ div.resourceIcon,
 
 .metadataGrid {
   display: grid;
-  gap: 10px;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .parameterSummaryBar {
@@ -771,7 +772,7 @@ div.resourceIcon,
   display: grid;
   gap: 12px;
   grid-template-columns: minmax(0, 1fr);
-  padding: 13px;
+  padding: 14px 0;
 }
 
 .parameterField + .parameterField {

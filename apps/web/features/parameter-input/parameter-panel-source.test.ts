@@ -89,13 +89,13 @@ test("ParameterInputPanel lays out metadata, required inputs, and additional set
   const parameterFieldListRule = getLastCssRuleAfter(stylesSource, "parameterFieldList", designPassIndex);
   const parameterFieldRule = getFirstCssRuleContainingAfter(stylesSource, ".parameterField {", designPassIndex);
 
-  assert.match(sectionRule, /\bbackground:\s*var\(--workspace-surface,/);
-  assert.match(sectionRule, /\bborder:\s*1px solid var\(--workspace-line,/);
-  assert.match(sectionRule, /\bborder-radius:\s*8px;/);
-  assert.match(sectionRule, /\bpadding:\s*14px;/);
-  assert.match(sectionHeaderRule, /\bborder-bottom:\s*1px solid var\(--workspace-line,/);
-  assert.match(sectionHeaderRule, /\bpadding-bottom:\s*10px;/);
-  assert.match(metadataGridRule, /\bgrid-template-columns:\s*repeat\(auto-fit, minmax\(160px, 1fr\)\);/);
+  assert.match(sectionRule, /\bbackground:\s*transparent;/);
+  assert.match(sectionRule, /\bborder-top:\s*1px solid var\(--workspace-line,/);
+  assert.match(sectionRule, /\bborder-radius:\s*0;/);
+  assert.match(sectionRule, /\bpadding:\s*var\(--workspace-space-2, 16px\) 0;/);
+  assert.match(sectionHeaderRule, /\bborder-bottom:\s*0;/);
+  assert.match(sectionHeaderRule, /\bpadding-bottom:\s*var\(--workspace-space-1, 8px\);/);
+  assert.match(metadataGridRule, /\bgrid-template-columns:\s*minmax\(0, 1fr\);/);
   assert.match(parameterSummaryRule, /\bgrid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\);/);
   assert.match(parameterFieldListRule, /\boverflow:\s*hidden;/);
   assert.match(parameterFieldRule, /\bgrid-template-columns:\s*minmax\(0, 1fr\);/);
@@ -147,7 +147,7 @@ test("ParameterInputPanel styles use the DESIGN.md surface without a legacy skin
   const addButtonRule = getLastCssRuleContainingAfter(stylesSource, ".addButton {", designPassIndex);
   const selectedRegionRule = getLastCssRuleAfter(stylesSource, "regionOptionSelected", designPassIndex);
 
-  assert.match(panelRule, /\bbackground:\s*var\(--workspace-surface-muted,/);
+  assert.match(panelRule, /\bbackground:\s*var\(--workspace-surface,/);
   assert.match(panelRule, /\bcolor:\s*var\(--workspace-text,/);
   assert.match(panelRule, /\bfont-family:\s*var\(--workspace-font,/);
   assert.match(iconRule, /\bbackground:\s*var\(--workspace-surface-strong,/);
@@ -180,11 +180,11 @@ test("ParameterInputPanel styles use the DESIGN.md surface without a legacy skin
 
 test("ParameterInputPanel uses one inspector surface without nested section cards", () => {
   const designPassIndex = stylesSource.indexOf("/* DESIGN.md parameter input pass */");
-  const sectionRule = getLastCssRuleAfter(stylesSource, "section", designPassIndex);
+  const sectionRule = getLastCssRuleContainingAfter(stylesSource, ".section {", designPassIndex);
 
   assert.match(sectionRule, /background:\s*transparent/);
   assert.match(sectionRule, /border-top:\s*1px solid var\(--workspace-line/);
-  assert.doesNotMatch(sectionRule, /box-shadow/);
+  assert.match(sectionRule, /box-shadow:\s*none/);
 });
 
 function readParameterInputFile(fileName: string): string {
