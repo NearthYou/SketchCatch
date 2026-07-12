@@ -6,7 +6,12 @@ import type {
   ArchitectureServicePurpose,
   ResourceType
 } from "@sketchcatch/types";
-import type { ArchitectureRequirementResolution } from "./aiArchitectureRequirementResolution.js";
+import { getDefaultResourceDefinitionByResourceType } from "@sketchcatch/types/resource-definitions";
+import { createArchitectureResourceDeploymentConfig } from "./aiArchitectureResourceCatalog.js";
+import type {
+  ArchitectureRequirementResolution,
+  ExplicitResourceDefinition
+} from "./aiArchitectureRequirementResolution.js";
 import type { ArchitectureResourceQuantities } from "./aiArchitectureResourceQuantities.js";
 import { DEFAULT_ARCHITECTURE_RESOURCE_QUANTITIES } from "./aiArchitectureResourceQuantities.js";
 
@@ -21,6 +26,7 @@ export function planPracticeArchitecture(
   const context: DraftBuildContext = {
     edges,
     factSet,
+    explicitResourceDefinitions: resolution.explicitResourceDefinitions,
     nodes,
     explicitResourceTypes: resolution.explicitResourceTypes,
     operatingProfile: resolution.operatingProfile,
@@ -81,6 +87,7 @@ export function createDraftFromRequirementFacts(
 
 type DraftBuildContext = {
   readonly edges: ArchitectureJson["edges"];
+  readonly explicitResourceDefinitions: readonly ExplicitResourceDefinition[];
   readonly explicitResourceTypes: readonly ResourceType[];
   readonly factSet: ReadonlySet<ArchitectureRequirementFact>;
   readonly nodes: ArchitectureJson["nodes"];
@@ -815,24 +822,44 @@ function addPurposeSpecificResources(context: DraftBuildContext): void {
       });
       return;
     case "reservation_service":
-      addPurposeBucket(context, {
-        id: "reservation-attachments-bucket",
-        label: "Reservation Attachment Bucket",
-        bucketPurpose: "reservation_attachments",
-        edgeLabel: "stores request attachments",
-        positionX: 1110,
-        positionY: 160
+      addPurposeLogGroup(context, {
+        id: "reservation-audit-log-group",
+        label: "Reservation Workflow Audit Logs",
+        name: "/sketchcatch/practice/reservation/audit",
+        positionX: 900,
+        positionY: 680,
+        retentionInDays: 30
       });
+      if (context.factSet.has("file_upload")) {
+        addPurposeBucket(context, {
+          id: "reservation-attachments-bucket",
+          label: "Reservation Attachment Bucket",
+          bucketPurpose: "reservation_attachments",
+          edgeLabel: "stores request attachments",
+          positionX: 1110,
+          positionY: 160
+        });
+      }
       return;
     case "content_board":
-      addPurposeBucket(context, {
-        id: "content-media-bucket",
-        label: "Content Media Bucket",
-        bucketPurpose: "content_media",
-        edgeLabel: "stores post media",
-        positionX: 1110,
-        positionY: 160
+      addPurposeLogGroup(context, {
+        id: "content-activity-log-group",
+        label: "Content Activity Logs",
+        name: "/sketchcatch/practice/content-board/activity",
+        positionX: 900,
+        positionY: 680,
+        retentionInDays: 30
       });
+      if (context.factSet.has("file_upload")) {
+        addPurposeBucket(context, {
+          id: "content-media-bucket",
+          label: "Content Media Bucket",
+          bucketPurpose: "content_media",
+          edgeLabel: "stores post media",
+          positionX: 1110,
+          positionY: 160
+        });
+      }
       return;
     case "api_backend":
     case "data_storage":
@@ -1051,11 +1078,11 @@ function addCrossResourceEdges(context: DraftBuildContext): void {
 }
 
 function addExplicitResourceNodes(context: DraftBuildContext): void {
-  const missingResourceTypes = context.explicitResourceTypes.filter(
-    (resourceType) => resourceType !== "UNKNOWN" && !hasNodeType(context, resourceType)
+  const missingResourceDefinitions = context.explicitResourceDefinitions.filter(
+    (definition) => !hasExplicitResourceDefinition(context, definition)
   );
 
-  missingResourceTypes.forEach((resourceType, index) => {
+  missingResourceDefinitions.forEach((definition, index) => {
     const position = getRepeatedNodePosition(index, {
       columns: 4,
       startX: 1040,
@@ -1065,14 +1092,45 @@ function addExplicitResourceNodes(context: DraftBuildContext): void {
     });
 
     addNode(context, {
-      id: createExplicitResourceNodeId(context, resourceType),
-      type: resourceType,
-      label: formatResourceTypeLabel(resourceType),
+      id: createExplicitResourceNodeId(context, definition.resourceType),
+      type: definition.resourceType,
+      label: formatExplicitResourceDefinitionLabel(definition),
       positionX: position.x,
       positionY: position.y,
-      config: {}
+      config: createExplicitResourceConfig(definition)
     });
   });
+}
+
+function hasExplicitResourceDefinition(
+  context: DraftBuildContext,
+  definition: ExplicitResourceDefinition
+): boolean {
+  const defaultDefinition = getDefaultResourceDefinitionByResourceType(definition.resourceType);
+
+  return context.nodes.some((node) => {
+    if (node.type !== definition.resourceType) {
+      return false;
+    }
+
+    const configuredTerraformResourceType = node.config["terraformResourceType"];
+
+    if (typeof configuredTerraformResourceType === "string" && configuredTerraformResourceType.trim().length > 0) {
+      return configuredTerraformResourceType.trim() === definition.terraformResourceType;
+    }
+
+    return defaultDefinition?.terraform.resourceType === definition.terraformResourceType;
+  });
+}
+
+function createExplicitResourceConfig(
+  definition: ExplicitResourceDefinition
+): ArchitectureJson["nodes"][number]["config"] {
+  return {
+    ...createArchitectureResourceDeploymentConfig(definition.terraformResourceType),
+    ...(definition.terraformBlockType === "data" ? { terraformBlockType: "data" } : {}),
+    terraformResourceType: definition.terraformResourceType
+  };
 }
 
 function createExplicitResourceNodeId(
@@ -1097,6 +1155,16 @@ function formatResourceTypeLabel(resourceType: ResourceType): string {
     .split("_")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+function formatExplicitResourceDefinitionLabel(definition: ExplicitResourceDefinition): string {
+  const label = definition.id
+    .replace(/^aws-/, "")
+    .split("-")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+
+  return label.length > 0 ? label : formatResourceTypeLabel(definition.resourceType);
 }
 
 function needsUploadBucket(factSet: ReadonlySet<ArchitectureRequirementFact>): boolean {
@@ -1230,10 +1298,6 @@ function addEdge(
 
 function hasNode(context: DraftBuildContext, nodeId: string): boolean {
   return context.nodes.some((node) => node.id === nodeId);
-}
-
-function hasNodeType(context: DraftBuildContext, resourceType: ResourceType): boolean {
-  return context.nodes.some((node) => node.type === resourceType);
 }
 
 function createNumberedIds(baseId: string, count: number): string[] {

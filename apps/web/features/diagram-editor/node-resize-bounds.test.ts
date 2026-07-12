@@ -52,11 +52,6 @@ test("getNodeResizeBounds removes area node max limits while keeping minimum siz
     minHeight: 56,
     ...unrestrictedMax
   });
-  assert.deepEqual(getNodeResizeBounds(makeResourceNode("aws_security_group")), {
-    minWidth: 72,
-    minHeight: 56,
-    ...unrestrictedMax
-  });
   assert.deepEqual(getNodeResizeBounds(makeResourceNode("aws_autoscaling_group")), {
     minWidth: 100,
     minHeight: 65,
@@ -66,6 +61,12 @@ test("getNodeResizeBounds removes area node max limits while keeping minimum siz
 
 test("getNodeResizeBounds lets regular icon resources shrink below their 48px default", () => {
   assert.deepEqual(getNodeResizeBounds(makeResourceNode("aws_instance")), {
+    minWidth: RESOURCE_NODE_COMPACT_MIN_SIZE.width,
+    minHeight: RESOURCE_NODE_COMPACT_MIN_SIZE.height,
+    maxWidth: 260,
+    maxHeight: 260
+  });
+  assert.deepEqual(getNodeResizeBounds(makeResourceNode("aws_security_group")), {
     minWidth: RESOURCE_NODE_COMPACT_MIN_SIZE.width,
     minHeight: RESOURCE_NODE_COMPACT_MIN_SIZE.height,
     maxWidth: 260,

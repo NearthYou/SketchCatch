@@ -28,7 +28,13 @@ export const practiceLiveApplySupportedResourceTypes = new Set([
   "aws_security_group_rule",
   "aws_instance",
   "aws_s3_bucket",
-  "aws_s3_bucket_public_access_block"
+  "aws_s3_bucket_public_access_block",
+  "aws_codebuild_project",
+  "aws_codedeploy_app",
+  "aws_codedeploy_deployment_group",
+  "aws_codepipeline",
+  "aws_codestarconnections_connection",
+  "aws_iam_role"
 ]);
 
 const demoWebServiceLiveApplySupportedResourceTypes = new Set([

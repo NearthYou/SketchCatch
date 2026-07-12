@@ -18,7 +18,13 @@ export function createWorkspaceAiPatchPreviewModel(
   baseDiagram: DiagramJson,
   preview: ArchitecturePatchPreview
 ): WorkspaceAiPatchPreviewModel {
-  const proposedDiagram = convertArchitectureJsonToDiagramJson(preview.proposedArchitectureJson);
+  const convertedProposedDiagram = convertArchitectureJsonToDiagramJson(
+    preview.proposedArchitectureJson
+  );
+  const proposedDiagram = mergeProposedDiagramWithBaseGeometry(
+    baseDiagram,
+    convertedProposedDiagram
+  );
   const proposedNodeIds = new Set(proposedDiagram.nodes.map((node) => node.id));
   const proposedEdgeIds = new Set(proposedDiagram.edges.map((edge) => edge.id));
   const visualNodes = [...proposedDiagram.nodes];
@@ -73,6 +79,37 @@ export function createWorkspaceAiPatchPreviewModel(
       nodeStates,
       edgeStates
     }
+  };
+}
+
+function mergeProposedDiagramWithBaseGeometry(
+  baseDiagram: DiagramJson,
+  proposedDiagram: DiagramJson
+): DiagramJson {
+  const baseNodeById = new Map(baseDiagram.nodes.map((node) => [node.id, node]));
+  const baseEdgeById = new Map(baseDiagram.edges.map((edge) => [edge.id, edge]));
+
+  return {
+    nodes: proposedDiagram.nodes.map((proposedNode) => {
+      const baseNode = baseNodeById.get(proposedNode.id);
+
+      if (!baseNode) {
+        return proposedNode;
+      }
+
+      return {
+        ...proposedNode,
+        locked: baseNode.locked,
+        metadata: baseNode.metadata ?? proposedNode.metadata,
+        position: { ...baseNode.position },
+        size: { ...baseNode.size },
+        zIndex: baseNode.zIndex
+      };
+    }),
+    edges: proposedDiagram.edges.map(
+      (proposedEdge) => baseEdgeById.get(proposedEdge.id) ?? proposedEdge
+    ),
+    viewport: { ...baseDiagram.viewport }
   };
 }
 

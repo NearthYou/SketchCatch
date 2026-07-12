@@ -21,8 +21,7 @@ const resourceAreaNodeTypes = new Set([
   "aws_availability_zone",
   "aws_autoscaling_group",
   "aws_vpc",
-  "aws_subnet",
-  "aws_security_group"
+  "aws_subnet"
 ]);
 const groupIconPath = "/Architecture-Group-Icons_07312025";
 
@@ -122,7 +121,11 @@ export function isDesignAreaNode(node: DiagramNode): boolean {
 }
 
 export function isResourceAreaNode(node: DiagramNode): boolean {
-  return node.kind === "resource" && resourceAreaNodeTypes.has(getResourceNodeType(node));
+  return (
+    node.kind === "resource" &&
+    node.parameters?.values?.["diagramRenderAsResource"] !== true &&
+    resourceAreaNodeTypes.has(getResourceNodeType(node))
+  );
 }
 
 function getResourceNodeType(node: DiagramNode): string {

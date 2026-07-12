@@ -8,7 +8,6 @@ import { RESOURCE_NODE_DEFAULT_SIZE } from "../diagram-editor/resource-node-geom
 const size = RESOURCE_NODE_DEFAULT_SIZE;
 const vpcAreaSize = { width: 240, height: 160 };
 const subnetAreaSize = { width: 180, height: 120 };
-const securityGroupAreaSize = subnetAreaSize;
 const autoscalingGroupAreaSize = { width: 200, height: 130 };
 
 const groupIconPath = "/Architecture-Group-Icons_07312025";
@@ -329,7 +328,7 @@ const terraformResourcePresentations = [
     category: "Security",
     iconUrl: `${serviceIconPath}/Arch_Security-Identity-Compliance/64/Arch_AWS-Network-Firewall_64.svg`,
     label: "Security Group",
-    size: securityGroupAreaSize
+    size
   },
   {
     definitionId: "aws-security-group-rule",
@@ -509,6 +508,24 @@ const terraformResourcePresentations = [
     category: "Compute",
     iconUrl: `${resourceIconPath}/Res_Compute/Res_Amazon-EC2_Auto-Scaling_48.svg`,
     label: "Autoscaling Policy",
+    size
+  },
+  {
+    definitionId: "aws-appautoscaling-target",
+    name: "Application Auto Scaling Target",
+    area: "containers",
+    category: "Containers",
+    iconUrl: `${serviceIconPath}/Arch_Management-Governance/64/Arch_AWS-Auto-Scaling_64.svg`,
+    label: "ECS Scaling Target",
+    size
+  },
+  {
+    definitionId: "aws-appautoscaling-policy",
+    name: "Application Auto Scaling Policy",
+    area: "containers",
+    category: "Containers",
+    iconUrl: `${serviceIconPath}/Arch_Management-Governance/64/Arch_AWS-Auto-Scaling_64.svg`,
+    label: "ECS Scaling Policy",
     size
   },
   {

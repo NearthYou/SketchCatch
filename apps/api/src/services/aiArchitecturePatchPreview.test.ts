@@ -1,7 +1,344 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { ArchitectureJson, ResourceType } from "@sketchcatch/types";
-import { createArchitecturePatchPreview } from "./aiArchitecturePatchPreview.js";
+import type { ArchitectureJson, ArchitecturePatchPlan, ResourceType } from "@sketchcatch/types";
+import type { AiTextProvider, AiTextProviderRequest } from "./aiLlmExplanation.js";
+import {
+  createArchitecturePatchPlan,
+  createArchitecturePatchPreview,
+  createArchitecturePatchPreviewWithPatchPlanCompiler
+} from "./aiArchitecturePatchPreview.js";
+
+test("createArchitecturePatchPlan returns strict JSON for EC2 relative size edits", () => {
+  const plan = createArchitecturePatchPlan({
+    architectureJson: {
+      nodes: [
+        makeNode({
+          id: "ec2-1",
+          type: "EC2",
+          label: "EC2 Fleet Instance 1",
+          config: {
+            instanceType: "t3.small",
+            subnetId: "aws_subnet.private_app_a.id"
+          }
+        })
+      ],
+      edges: []
+    },
+    instruction: "ec2에서 인스턴스 타입 더 큰거로 바꿔줘",
+    selectedTargetResourceId: "ec2-1"
+  });
+
+  assert.deepEqual(plan, {
+    status: "planned",
+    action: "modify_resource",
+    target: {
+      resourceType: "EC2",
+      resourceId: "ec2-1",
+      label: "EC2 Fleet Instance 1"
+    },
+    operations: [
+      {
+        op: "increase_one_step",
+        path: "config.instanceType",
+        value: null
+      }
+    ],
+    candidateResourceIds: [],
+    preserve: [
+      "position",
+      "edges",
+      "config.subnetId",
+      "config.subnetIds",
+      "config.vpcId",
+      "config.vpcSecurityGroupIds",
+      "config.securityGroupIds",
+      "metadata.parentAreaNodeId"
+    ],
+    clarificationQuestion: null,
+    confidence: 0.92
+  });
+});
+
+test("createArchitecturePatchPreviewWithPatchPlanCompiler sends the exact Bedrock compiler prompt input", async () => {
+  const calls: AiTextProviderRequest[] = [];
+  const provider = createPatchPlanProvider(calls, {
+    status: "planned",
+    action: "modify_resource",
+    target: {
+      resourceType: "EC2",
+      resourceId: "ec2-1",
+      label: "EC2 Fleet Instance 1"
+    },
+    candidateResourceIds: [],
+    operations: [
+      {
+        op: "increase_one_step",
+        path: "config.instanceType",
+        value: null
+      }
+    ],
+    preserve: [
+      "position",
+      "edges",
+      "config.subnetId",
+      "config.subnetIds",
+      "config.vpcId",
+      "config.vpcSecurityGroupIds",
+      "config.securityGroupIds",
+      "metadata.parentAreaNodeId"
+    ],
+    clarificationQuestion: null,
+    confidence: 0.96
+  });
+
+  const response = await createArchitecturePatchPreviewWithPatchPlanCompiler(
+    {
+      architectureJson: {
+        nodes: [
+          makeNode({
+            id: "ec2-1",
+            type: "EC2",
+            label: "EC2 Fleet Instance 1",
+            config: {
+              instanceType: "t3.small",
+              subnetId: "aws_subnet.private_app_a.id"
+            }
+          }),
+          makeNode({
+            id: "ec2-2",
+            type: "EC2",
+            label: "EC2 Fleet Instance 2",
+            config: {
+              instanceType: "t3.small",
+              subnetId: "aws_subnet.private_app_b.id"
+            }
+          })
+        ],
+        edges: []
+      },
+      instruction: "make the EC2 instance larger",
+      selectedTargetResourceId: "ec2-1"
+    },
+    {
+      bedrockProvider: provider,
+      creditPolicy: {
+        bedrock: true,
+        billingMode: "aws_credit_only"
+      }
+    }
+  );
+
+  assert.equal(calls.length, 1);
+  assert.match(calls[0]!.instructions, /You are SketchCatch PatchPlan Compiler/);
+  assert.match(calls[0]!.instructions, /Output JSON only/);
+  assert.match(calls[0]!.instructions, /PATCH_PLAN_INPUT_JSON/);
+  assert.ok(calls[0]!.prompt.startsWith("Compile this exact PatchPlan input.\n\nPATCH_PLAN_INPUT_JSON:\n"));
+  assert.deepEqual(calls[0]!.payload, {
+    userRequest: "make the EC2 instance larger",
+    selectedTargetResourceId: "ec2-1",
+    resources: [
+      {
+        id: "ec2-1",
+        type: "EC2",
+        label: "EC2 Fleet Instance 1",
+        config: {
+          instanceType: "t3.small",
+          subnetId: "aws_subnet.private_app_a.id"
+        }
+      },
+      {
+        id: "ec2-2",
+        type: "EC2",
+        label: "EC2 Fleet Instance 2",
+        config: {
+          instanceType: "t3.small",
+          subnetId: "aws_subnet.private_app_b.id"
+        }
+      }
+    ]
+  });
+  assert.equal(response.status, "preview");
+  assert.equal(response.patchPlan?.target.resourceId, "ec2-1");
+  assert.equal(response.providerMetadata.provider, "bedrock");
+  assert.equal(response.providerMetadata.routeTarget, "architecture_patch_plan");
+
+  if (response.status !== "preview") {
+    return;
+  }
+
+  const firstEc2 = response.proposedArchitectureJson.nodes.find((node) => node.id === "ec2-1");
+
+  assert.equal(firstEc2?.config.instanceType, "t3.medium");
+  assert.equal(firstEc2?.config.subnetId, "aws_subnet.private_app_a.id");
+});
+
+test("createArchitecturePatchPreviewWithPatchPlanCompiler rejects Bedrock target guesses before selection", async () => {
+  const calls: AiTextProviderRequest[] = [];
+  const provider = createPatchPlanProvider(calls, {
+    status: "planned",
+    action: "modify_resource",
+    target: {
+      resourceType: "EC2",
+      resourceId: "ec2-1",
+      label: "EC2 Fleet Instance 1"
+    },
+    candidateResourceIds: [],
+    operations: [
+      {
+        op: "increase_one_step",
+        path: "config.instanceType",
+        value: null
+      }
+    ],
+    preserve: [
+      "position",
+      "edges",
+      "config.subnetId",
+      "config.subnetIds",
+      "config.vpcId",
+      "config.vpcSecurityGroupIds",
+      "config.securityGroupIds",
+      "metadata.parentAreaNodeId"
+    ],
+    clarificationQuestion: null,
+    confidence: 0.96
+  });
+
+  const response = await createArchitecturePatchPreviewWithPatchPlanCompiler(
+    {
+      architectureJson: {
+        nodes: [
+          makeNode({ id: "ec2-1", type: "EC2", label: "EC2 Fleet Instance 1" }),
+          makeNode({ id: "ec2-2", type: "EC2", label: "EC2 Fleet Instance 2" })
+        ],
+        edges: []
+      },
+      instruction: "make the EC2 instance larger"
+    },
+    {
+      bedrockProvider: provider,
+      creditPolicy: {
+        bedrock: true,
+        billingMode: "aws_credit_only"
+      }
+    }
+  );
+
+  assert.equal(calls.length, 1);
+  assert.equal(response.status, "needs_clarification");
+  assert.equal(response.providerMetadata.provider, "fallback");
+  assert.deepEqual(response.patchPlan?.candidateResourceIds, ["ec2-1", "ec2-2"]);
+
+  if (response.status !== "needs_clarification") {
+    return;
+  }
+
+  assert.deepEqual(
+    response.candidates.map((candidate) => candidate.resourceId),
+    ["ec2-1", "ec2-2"]
+  );
+});
+
+test("createArchitecturePatchPlan refuses to choose a target when multiple resources match", () => {
+  const plan = createArchitecturePatchPlan({
+    architectureJson: {
+      nodes: [
+        makeNode({ id: "assets-bucket", type: "S3", label: "Assets Bucket" }),
+        makeNode({ id: "logs-bucket", type: "S3", label: "Logs Bucket" })
+      ],
+      edges: []
+    },
+    instruction: "s3 삭제해줘"
+  });
+
+  assert.equal(plan.status, "needs_clarification");
+  assert.equal(plan.action, null);
+  assert.deepEqual(plan.target, {
+    resourceType: "S3",
+    resourceId: null,
+    label: null
+  });
+  assert.deepEqual(plan.candidateResourceIds, ["assets-bucket", "logs-bucket"]);
+  assert.deepEqual(plan.operations, []);
+  assert.match(plan.clarificationQuestion ?? "", /Multiple matching resources/);
+});
+
+test("createArchitecturePatchPlan maps DB storage edits to an RDS set_value operation", () => {
+  const plan = createArchitecturePatchPlan({
+    architectureJson: {
+      nodes: [
+        makeNode({ id: "web-assets", type: "S3", label: "Upload Web Assets Bucket" }),
+        makeNode({ id: "image-uploads", type: "S3", label: "Private Image Upload Bucket" }),
+        makeNode({
+          id: "rds-database",
+          type: "RDS",
+          label: "RDS Database",
+          config: {
+            allocatedStorage: 20
+          }
+        })
+      ],
+      edges: []
+    },
+    instruction: "db 스토리지 200으로 수정해줘"
+  });
+
+  assert.equal(plan.status, "planned");
+  assert.equal(plan.action, "modify_resource");
+  assert.deepEqual(plan.target, {
+    resourceType: "RDS",
+    resourceId: "rds-database",
+    label: "RDS Database"
+  });
+  assert.deepEqual(plan.operations, [
+    {
+      op: "set_value",
+      path: "config.allocatedStorage",
+      value: 200
+    }
+  ]);
+  assert.deepEqual(plan.candidateResourceIds, []);
+});
+
+test("createArchitecturePatchPlan treats explicit same-kind replacement as unsupported", () => {
+  const plan = createArchitecturePatchPlan({
+    architectureJson: {
+      nodes: [makeNode({ id: "legacy-uploads", type: "S3", label: "Legacy Uploads" })],
+      edges: []
+    },
+    instruction: "legacy uploads를 rds로 교체해줘"
+  });
+
+  assert.equal(plan.status, "unsupported");
+  assert.equal(plan.action, null);
+  assert.deepEqual(plan.candidateResourceIds, []);
+  assert.deepEqual(plan.operations, []);
+});
+
+test("createArchitecturePatchPlan keeps security group port edits within the allowed operation schema", () => {
+  const plan = createArchitecturePatchPlan({
+    architectureJson: {
+      nodes: [makeNode({ id: "web-sg", type: "SECURITY_GROUP", label: "Web Security Group" })],
+      edges: []
+    },
+    instruction: "open port 443 on the security group"
+  });
+
+  assert.equal(plan.status, "planned");
+  assert.equal(plan.action, "modify_resource");
+  assert.deepEqual(plan.target, {
+    resourceType: "SECURITY_GROUP",
+    resourceId: "web-sg",
+    label: "Web Security Group"
+  });
+  assert.deepEqual(plan.operations, [
+    {
+      op: "set_value",
+      path: "config.ingress",
+      value: 443
+    }
+  ]);
+});
 
 test("createArchitecturePatchPreview asks for a target when multiple resources match", () => {
   const response = createArchitecturePatchPreview({
@@ -100,6 +437,54 @@ test("createArchitecturePatchPreview removes the selected target and connected e
   );
 });
 
+test("createArchitecturePatchPreview handles Korean S3 delete requests deterministically", () => {
+  const singleS3Response = createArchitecturePatchPreview({
+    architectureJson: {
+      nodes: [
+        makeNode({ id: "app-server", type: "EC2", label: "App Server" }),
+        makeNode({ id: "assets-bucket", type: "S3", label: "Assets Bucket" })
+      ],
+      edges: [
+        {
+          id: "app-to-assets",
+          sourceId: "app-server",
+          targetId: "assets-bucket",
+          label: "stores uploads"
+        }
+      ]
+    },
+    instruction: "s3 삭제해줘"
+  });
+
+  assert.equal(singleS3Response.status, "preview");
+  assert.equal(singleS3Response.changes[0]?.action, "remove_resource");
+  assert.equal(singleS3Response.changes[0]?.resourceId, "assets-bucket");
+  assert.deepEqual(
+    singleS3Response.proposedArchitectureJson.nodes.map((node) => node.id),
+    ["app-server"]
+  );
+
+  const selectedS3Response = createArchitecturePatchPreview({
+    architectureJson: {
+      nodes: [
+        makeNode({ id: "app-server", type: "EC2", label: "App Server" }),
+        makeNode({ id: "assets-bucket", type: "S3", label: "Assets Bucket" }),
+        makeNode({ id: "logs-bucket", type: "S3", label: "Logs Bucket" })
+      ],
+      edges: []
+    },
+    instruction: "s3 삭제해줘",
+    selectedTargetResourceId: "logs-bucket"
+  });
+
+  assert.equal(selectedS3Response.status, "preview");
+  assert.equal(selectedS3Response.changes[0]?.resourceId, "logs-bucket");
+  assert.deepEqual(
+    selectedS3Response.proposedArchitectureJson.nodes.map((node) => node.id),
+    ["app-server", "assets-bucket"]
+  );
+});
+
 test("createArchitecturePatchPreview recognizes broad natural-language add requests", () => {
   const addCases: readonly { readonly instruction: string; readonly resourceType: ResourceType }[] = [
     { instruction: "네트워크 하나 추가해줘", resourceType: "VPC" },
@@ -141,6 +526,118 @@ test("createArchitecturePatchPreview recognizes broad natural-language add reque
     assert.equal(response.changes[0]?.action, "add_resource", addCase.instruction);
     assert.equal(response.changes[0]?.resourceType, addCase.resourceType, addCase.instruction);
     assert.equal(response.proposedArchitectureJson.nodes.at(-1)?.type, addCase.resourceType, addCase.instruction);
+  }
+});
+
+test("createArchitecturePatchPreview treats colloquial NAT attachment as a connected patch", () => {
+  const response = createArchitecturePatchPreview({
+    architectureJson: {
+      nodes: [
+        makeNode({
+          id: "vpc-main",
+          type: "VPC",
+          label: "Main VPC",
+          config: { cidrBlock: "10.0.0.0/16" }
+        }),
+        makeNode({
+          id: "public-subnet-a",
+          type: "SUBNET",
+          label: "Public Subnet A",
+          config: { mapPublicIpOnLaunch: true, tier: "public" }
+        }),
+        makeNode({
+          id: "private-subnet-a",
+          type: "SUBNET",
+          label: "Private Subnet A",
+          config: { mapPublicIpOnLaunch: false, tier: "private_app" }
+        })
+      ],
+      edges: []
+    },
+    instruction: "NAT 게이트웨이 여기에 붙이렴"
+  });
+
+  assert.equal(response.status, "preview");
+  assert.equal(response.intent.requestedAction, "add_resource");
+  assert.equal(response.intent.resourceType, "NAT_GATEWAY");
+  if (response.status !== "preview") {
+    return;
+  }
+
+  const eip = response.proposedArchitectureJson.nodes.find((node) => node.type === "ELASTIC_IP");
+  const nat = response.proposedArchitectureJson.nodes.find((node) => node.type === "NAT_GATEWAY");
+  assert.ok(eip);
+  assert.ok(nat);
+  assert.equal(nat.config.subnetId, "aws_subnet.public_subnet_a.id");
+  assert.equal(nat.config.allocationId, `aws_eip.${eip.id.replaceAll("-", "_")}.id`);
+  assert.ok(
+    response.proposedArchitectureJson.edges.some(
+      (edge) => edge.sourceId === "public-subnet-a" && edge.targetId === nat.id
+    )
+  );
+  assert.ok(
+    response.proposedArchitectureJson.edges.some(
+      (edge) => edge.sourceId === eip.id && edge.targetId === nat.id
+    )
+  );
+});
+
+test("createArchitecturePatchPreview recognizes catalog-backed resource panel add requests", () => {
+  const addCases: readonly {
+    readonly instruction: string;
+    readonly resourceType: ResourceType;
+    readonly terraformBlockType?: "data";
+    readonly terraformResourceType: string;
+  }[] = [
+    {
+      instruction: "ECS Service 추가해줘",
+      resourceType: "ECS_SERVICE",
+      terraformResourceType: "aws_ecs_service"
+    },
+    {
+      instruction: "CodeBuild Project 추가해줘",
+      resourceType: "CODEBUILD_PROJECT",
+      terraformResourceType: "aws_codebuild_project"
+    },
+    {
+      instruction: "SSM Parameter 추가해줘",
+      resourceType: "SSM_PARAMETER",
+      terraformBlockType: "data",
+      terraformResourceType: "aws_ssm_parameter"
+    },
+    {
+      instruction: "S3 Bucket Policy 추가해줘",
+      resourceType: "S3",
+      terraformResourceType: "aws_s3_bucket_policy"
+    }
+  ];
+
+  for (const addCase of addCases) {
+    const response = createArchitecturePatchPreview({
+      architectureJson: {
+        nodes: [makeNode({ id: "app-server", type: "EC2", label: "App Server" })],
+        edges: []
+      },
+      instruction: addCase.instruction,
+      skipConnection: true
+    });
+
+    assert.equal(response.status, "preview", addCase.instruction);
+    assert.equal(response.changes[0]?.resourceType, addCase.resourceType, addCase.instruction);
+    assert.equal(response.proposedArchitectureJson.nodes.at(-1)?.type, addCase.resourceType, addCase.instruction);
+    assert.equal(
+      response.proposedArchitectureJson.nodes.at(-1)?.config["terraformResourceType"],
+      addCase.terraformResourceType,
+      addCase.instruction
+    );
+
+    if (addCase.terraformBlockType) {
+      assert.equal(
+        response.proposedArchitectureJson.nodes.at(-1)?.config["terraformBlockType"],
+        addCase.terraformBlockType,
+        addCase.instruction
+      );
+    }
   }
 });
 
@@ -829,6 +1326,292 @@ test("createArchitecturePatchPreview updates requested resource attributes witho
     }
   });
 });
+
+test("createArchitecturePatchPreview upsizes the selected EC2 instance in place", () => {
+  const response = createArchitecturePatchPreview({
+    architectureJson: {
+      nodes: [
+        makeNode({
+          id: "ec2-1",
+          type: "EC2",
+          label: "EC2 Fleet Instance 1",
+          config: {
+            instanceType: "t3.small",
+            subnetId: "aws_subnet.private_app_a.id"
+          },
+          positionX: 240,
+          positionY: 180
+        }),
+        makeNode({
+          id: "ec2-2",
+          type: "EC2",
+          label: "EC2 Fleet Instance 2",
+          config: {
+            instanceType: "t3.small",
+            subnetId: "aws_subnet.private_app_b.id"
+          },
+          positionX: 420,
+          positionY: 180
+        })
+      ],
+      edges: []
+    },
+    instruction: "ec2에서 인스턴스 타입 더 큰거로 바꿔줘",
+    selectedTargetResourceId: "ec2-1"
+  });
+
+  assert.equal(response.status, "preview");
+  assert.deepEqual(
+    response.changes.map((change) => ({
+      action: change.action,
+      resourceId: change.resourceId,
+      resourceType: change.resourceType
+    })),
+    [
+      {
+        action: "modify_resource",
+        resourceId: "ec2-1",
+        resourceType: "EC2"
+      }
+    ]
+  );
+  assert.deepEqual(
+    response.proposedArchitectureJson.nodes.map((node) => node.id),
+    ["ec2-1", "ec2-2"]
+  );
+  assert.deepEqual(response.proposedArchitectureJson.nodes[0], {
+    id: "ec2-1",
+    type: "EC2",
+    label: "EC2 Fleet Instance 1",
+    positionX: 240,
+    positionY: 180,
+    config: {
+      instanceType: "t3.medium",
+      subnetId: "aws_subnet.private_app_a.id"
+    }
+  });
+});
+
+test("createArchitecturePatchPreview handles compound EC2 instance families", () => {
+  const relativeResponse = createArchitecturePatchPreview({
+    architectureJson: {
+      nodes: [
+        makeNode({
+          id: "app-server",
+          type: "EC2",
+          label: "App Server",
+          config: {
+            instanceType: "m5ad.large"
+          }
+        })
+      ],
+      edges: []
+    },
+    instruction: "make the EC2 instance larger",
+    selectedTargetResourceId: "app-server"
+  });
+
+  assert.equal(relativeResponse.status, "preview");
+  assert.equal(relativeResponse.proposedArchitectureJson.nodes[0]?.config.instanceType, "m5ad.xlarge");
+
+  const explicitResponse = createArchitecturePatchPreview({
+    architectureJson: {
+      nodes: [
+        makeNode({
+          id: "app-server",
+          type: "EC2",
+          label: "App Server",
+          config: {
+            instanceType: "t3.micro"
+          }
+        })
+      ],
+      edges: []
+    },
+    instruction: "change the EC2 instance type to c6gn.xlarge"
+  });
+
+  assert.equal(explicitResponse.status, "preview");
+  assert.equal(explicitResponse.proposedArchitectureJson.nodes[0]?.config.instanceType, "c6gn.xlarge");
+});
+
+test("createArchitecturePatchPreview updates Lambda runtime parameters as deployable config", () => {
+  const response = createArchitecturePatchPreview({
+    architectureJson: {
+      nodes: [
+        makeNode({
+          id: "worker",
+          type: "LAMBDA",
+          label: "Worker Lambda",
+          config: {
+            memorySize: 128,
+            timeout: 10,
+            runtime: "nodejs18.x"
+          }
+        })
+      ],
+      edges: []
+    },
+    instruction: "change Lambda timeout to 30 seconds and memory to 512 MB"
+  });
+
+  assert.equal(response.status, "preview");
+  assert.equal(response.changes[0]?.action, "modify_resource");
+  assert.equal(response.changes[0]?.resourceId, "worker");
+  assert.deepEqual(response.proposedArchitectureJson.nodes[0]?.config, {
+    memorySize: 512,
+    timeout: 30,
+    runtime: "nodejs18.x"
+  });
+});
+
+test("createArchitecturePatchPreview updates storage and network parameters as deployable config", () => {
+  const s3Response = createArchitecturePatchPreview({
+    architectureJson: {
+      nodes: [
+        makeNode({
+          id: "assets",
+          type: "S3",
+          label: "Assets Bucket",
+          config: {
+            versioning: false
+          }
+        })
+      ],
+      edges: []
+    },
+    instruction: "enable versioning on the S3 bucket"
+  });
+
+  assert.equal(s3Response.status, "preview");
+  assert.equal(s3Response.proposedArchitectureJson.nodes[0]?.config.versioning, true);
+
+  const securityGroupResponse = createArchitecturePatchPreview({
+    architectureJson: {
+      nodes: [
+        makeNode({
+          id: "web-sg",
+          type: "SECURITY_GROUP",
+          label: "Web Security Group",
+          config: {
+            ingress: [{ protocol: "tcp", port: 80, cidr: "0.0.0.0/0" }]
+          }
+        })
+      ],
+      edges: []
+    },
+    instruction: "open port 443 on the security group"
+  });
+
+  assert.equal(securityGroupResponse.status, "preview");
+  assert.deepEqual(securityGroupResponse.proposedArchitectureJson.nodes[0]?.config.ingress, [
+    { protocol: "tcp", port: 80, cidr: "0.0.0.0/0" },
+    { protocol: "tcp", port: 443, cidr: "0.0.0.0/0" }
+  ]);
+});
+
+test("createArchitecturePatchPreview treats DB storage edits as RDS storage changes", () => {
+  const response = createArchitecturePatchPreview({
+    architectureJson: {
+      nodes: [
+        makeNode({ id: "web-assets", type: "S3", label: "Upload Web Assets Bucket" }),
+        makeNode({ id: "image-uploads", type: "S3", label: "Private Image Upload Bucket" }),
+        makeNode({
+          id: "rds-database",
+          type: "RDS",
+          label: "RDS Database",
+          config: {
+            allocatedStorage: 20,
+            engine: "postgres"
+          }
+        })
+      ],
+      edges: []
+    },
+    instruction: "db 스토리지 200으로 수정해줘"
+  });
+
+  assert.equal(response.status, "preview");
+  assert.equal(response.intent.resourceType, "RDS");
+  assert.equal(response.changes[0]?.resourceId, "rds-database");
+  assert.equal(response.proposedArchitectureJson.nodes[2]?.config.allocatedStorage, 200);
+});
+
+test("createArchitecturePatchPreview migrates an EC2 runtime path to serverless", () => {
+  const response = createArchitecturePatchPreview({
+    architectureJson: {
+      nodes: [
+        makeNode({ id: "alb", type: "LOAD_BALANCER", label: "Application Load Balancer" }),
+        makeNode({ id: "asg", type: "AUTO_SCALING_GROUP", label: "Auto Scaling Group" }),
+        makeNode({ id: "ami", type: "AMI", label: "Amazon Linux AMI" }),
+        makeNode({ id: "app-server", type: "EC2", label: "App Server", positionX: 320 }),
+        makeNode({ id: "db", type: "RDS", label: "App Database" }),
+        makeNode({ id: "assets", type: "S3", label: "Assets Bucket" })
+      ],
+      edges: [
+        { id: "alb-to-app", sourceId: "alb", targetId: "app-server", label: "routes traffic" },
+        { id: "asg-to-app", sourceId: "asg", targetId: "app-server", label: "scales" },
+        { id: "ami-to-app", sourceId: "ami", targetId: "app-server", label: "launch image" },
+        { id: "app-to-db", sourceId: "app-server", targetId: "db", label: "uses database" },
+        { id: "app-to-assets", sourceId: "app-server", targetId: "assets", label: "uses bucket" }
+      ]
+    },
+    instruction: "convert the EC2 environment to serverless with API Gateway and Lambda"
+  });
+
+  assert.equal(response.status, "preview");
+
+  const nodeTypes = response.proposedArchitectureJson.nodes.map((node) => node.type);
+  assert.equal(nodeTypes.includes("EC2"), false);
+  assert.equal(nodeTypes.includes("LOAD_BALANCER"), false);
+  assert.equal(nodeTypes.includes("AUTO_SCALING_GROUP"), false);
+  assert.equal(nodeTypes.includes("AMI"), false);
+  assert.equal(nodeTypes.includes("API_GATEWAY_REST_API"), true);
+  assert.equal(nodeTypes.includes("LAMBDA"), true);
+
+  const lambdaNode = response.proposedArchitectureJson.nodes.find((node) => node.type === "LAMBDA");
+  const apiNode = response.proposedArchitectureJson.nodes.find(
+    (node) => node.type === "API_GATEWAY_REST_API"
+  );
+  assert.ok(lambdaNode);
+  assert.ok(apiNode);
+  assert.equal(
+    response.proposedArchitectureJson.edges.some(
+      (edge) => edge.sourceId === apiNode.id && edge.targetId === lambdaNode.id
+    ),
+    true
+  );
+  assert.equal(
+    response.proposedArchitectureJson.edges.some(
+      (edge) => edge.sourceId === lambdaNode.id && edge.targetId === "db"
+    ),
+    true
+  );
+  assert.equal(
+    response.proposedArchitectureJson.edges.some(
+      (edge) => edge.sourceId === lambdaNode.id && edge.targetId === "assets"
+    ),
+    true
+  );
+});
+
+function createPatchPlanProvider(
+  calls: AiTextProviderRequest[],
+  patchPlan: ArchitecturePatchPlan
+): AiTextProvider {
+  return {
+    provider: "bedrock",
+    service: "bedrock_runtime",
+    model: "bedrock-model",
+    generate: async (request) => {
+      calls.push(request);
+
+      return {
+        text: JSON.stringify(patchPlan)
+      };
+    }
+  };
+}
 
 function makeNode(
   node: Partial<ArchitectureJson["nodes"][number]> &

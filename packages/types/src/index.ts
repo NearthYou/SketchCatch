@@ -7,7 +7,7 @@ export type JsonPrimitive = string | number | boolean | null;
 export type JsonValue =
   | JsonPrimitive
   | JsonValue[]
-  | { [key: string]: JsonValue };
+  | { readonly [key: string]: JsonValue };
 
 export type ApiErrorCode =
   | "bad_request"
@@ -16,6 +16,9 @@ export type ApiErrorCode =
   | "conflict"
   | "github_oauth_required"
   | "too_many_requests"
+  | "unprocessable_entity"
+  | "bad_gateway"
+  | "service_unavailable"
   | "internal_server_error"
   | "LIVE_OBSERVATION_CACHE_UNAVAILABLE"
   | "LIVE_OBSERVATION_DEPLOYMENT_NOT_ELIGIBLE"
@@ -99,6 +102,8 @@ export const RESOURCE_TYPES = [
   "CLOUDTRAIL",
   "XRAY_GROUP",
   "XRAY_SAMPLING_RULE",
+  "AWS_CALLER_IDENTITY",
+  "SSM_PARAMETER",
   "API_GATEWAY_REST_API",
   "API_GATEWAY_AUTHORIZER",
   "API_GATEWAY_WEBSOCKET_API",
@@ -119,10 +124,17 @@ export const RESOURCE_TYPES = [
   "EVENTBRIDGE_PERMISSION",
   "SCHEDULER_SCHEDULE",
   "STEP_FUNCTIONS_STATE_MACHINE",
+  "CODEBUILD_PROJECT",
+  "CODEDEPLOY_APP",
+  "CODEDEPLOY_DEPLOYMENT_GROUP",
+  "CODEPIPELINE",
+  "CODESTAR_CONNECTION",
   "ECR_REPOSITORY",
   "ECR_LIFECYCLE_POLICY",
   "ECS_CLUSTER",
   "ECS_SERVICE",
+  "APPLICATION_AUTO_SCALING_TARGET",
+  "APPLICATION_AUTO_SCALING_POLICY",
   "ECS_TASK_DEFINITION",
   "ECS_CAPACITY_PROVIDER",
   "EKS_CLUSTER",
@@ -1767,6 +1779,42 @@ export type ArchitecturePatchPreviewChange = {
   summary: string;
 };
 
+export type ArchitecturePatchPlanAction =
+  | "modify_resource"
+  | "remove_resource"
+  | "add_resource";
+
+export type ArchitecturePatchPlanOperationType =
+  | "set_value"
+  | "increase_one_step"
+  | "decrease_one_step"
+  | "enable"
+  | "disable"
+  | "rename";
+
+export type ArchitecturePatchPlanStatus = "planned" | "needs_clarification" | "unsupported";
+
+export type ArchitecturePatchPlanOperation = {
+  op: ArchitecturePatchPlanOperationType;
+  path: string;
+  value: string | number | boolean | null;
+};
+
+export type ArchitecturePatchPlan = {
+  status: ArchitecturePatchPlanStatus;
+  action: ArchitecturePatchPlanAction | null;
+  target: {
+    resourceType: ResourceType | null;
+    resourceId: string | null;
+    label: string | null;
+  };
+  candidateResourceIds: string[];
+  operations: ArchitecturePatchPlanOperation[];
+  preserve: string[];
+  clarificationQuestion: string | null;
+  confidence: number;
+};
+
 export type ArchitecturePatchClarificationCandidate = {
   resourceId: string;
   resourceType: ResourceType;
@@ -1779,6 +1827,7 @@ export type ArchitecturePatchClarification = {
   question: string;
   candidates: ArchitecturePatchClarificationCandidate[];
   suggestions?: string[] | undefined;
+  patchPlan?: ArchitecturePatchPlan | undefined;
   providerMetadata: AiProviderMetadata;
 };
 
@@ -1791,6 +1840,7 @@ export type ArchitecturePatchPreview = {
   requiresUserAcceptance: true;
   userAcceptedChange: UserAcceptedChange | null;
   llmExplanation?: LlmExplanation | undefined;
+  patchPlan?: ArchitecturePatchPlan | undefined;
   providerMetadata: AiProviderMetadata;
 };
 
@@ -1815,6 +1865,17 @@ export type CreateArchitectureDraftRequest = {
   } | undefined;
 };
 
+export const ARCHITECTURE_DRAFT_PROGRESS_STAGES = [
+  "preparing_requirements",
+  "normalizing_requirements",
+  "querying_amazon_q",
+  "validating_architecture",
+  "building_diagram"
+] as const;
+
+export type ArchitectureDraftProgressStage =
+  (typeof ARCHITECTURE_DRAFT_PROGRESS_STAGES)[number];
+
 export type AiArchitectureDraftResult = {
   architectureJson: ArchitectureJson;
   diagramJson?: DiagramJson | undefined;
@@ -1833,6 +1894,22 @@ export type ArchitectureDraftClarification = {
 export type CreateArchitectureDraftResponse =
   | AiArchitectureDraftResult
   | ArchitectureDraftClarification;
+
+export type ArchitectureDraftStreamEvent =
+  | {
+      type: "progress";
+      stage: ArchitectureDraftProgressStage;
+    }
+  | {
+      type: "result";
+      result: CreateArchitectureDraftResponse;
+    }
+  | {
+      type: "error";
+      error: ApiErrorResponse & {
+        statusCode: number;
+      };
+    };
 
 export type MoneyEstimate = {
   amount: number;

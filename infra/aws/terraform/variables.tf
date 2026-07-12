@@ -442,6 +442,18 @@ variable "amazon_q_application_id" {
   default     = ""
 }
 
+variable "amazon_q_retrieval_application_id" {
+  description = "Anonymous Amazon Q application ID used to retrieve verified architecture patterns."
+  type        = string
+  default     = ""
+}
+
+variable "ai_architecture_requirement_normalizer" {
+  description = "Optional Architecture Draft requirement normalizer provider."
+  type        = string
+  default     = "openai"
+}
+
 variable "amazon_q_user_id" {
   description = "Amazon Q user ID runtime config."
   type        = string

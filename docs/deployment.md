@@ -28,6 +28,18 @@ Requirement Input
 → Auto Cleanup
 ```
 
+Architecture Draft에서 Anonymous Amazon Q 패턴 검색을 활성화할 때는 다음 runtime 설정을 사용합니다.
+
+```text
+AI_ARCHITECTURE_REQUIREMENT_NORMALIZER=openai
+AMAZON_Q_ENABLED=true
+AMAZON_Q_REGION=ap-southeast-2
+AMAZON_Q_CREDIT_CONFIRMED=true
+AMAZON_Q_RETRIEVAL_APPLICATION_ID=<anonymous-q-application-id>
+```
+
+`AMAZON_Q_RETRIEVAL_APPLICATION_ID`가 비어 있으면 기존 `AMAZON_Q_APPLICATION_ID`를 사용합니다. Architecture Draft는 Creator mode application ID나 Q Business 사용자 구독을 요구하지 않습니다. 선택된 패턴마다 `RETRIEVAL_MODE`를 한 번 호출하므로 API rate/cost limit과 provider metadata를 유지해야 합니다.
+
 Direct Deployment Path의 실제 live apply 리소스는 안정성을 위해 아래로 제한합니다.
 
 - VPC

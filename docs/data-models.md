@@ -1393,9 +1393,15 @@ AI는 원천 진실이 아니라 설명과 제안 계층이다. 배포 가능한
 
 AI provider 응답에는 호출 출처와 비용 추적을 위한 metadata를 함께 둔다. Bedrock, Amazon Q Business, Amazon Transcribe는 `AI_BILLING_MODE=aws_credit_only`와 provider별 credit confirmation flag가 모두 충족될 때만 실제 호출한다. 조건이 맞지 않으면 provider 호출 없이 fallback 설명이나 실패 상태를 반환한다.
 
-Amazon Q 기반 Architecture Draft 요청은 원문 레퍼런스 문서를 매번 통째로 보내지 않는다. API는 AWS Solutions, `aws-samples` Terraform 예제, AWS Terraform Best Practices 샘플 저장소, AWS Prescriptive Guidance의 Terraform AWS provider 모범 사례에서 추린 짧은 `referenceKnowledge` payload를 함께 보낸다. 이 payload는 버전, 출처 URL, compact guidance만 포함하며, Amazon Q는 이를 사용자 요구사항보다 우선하는 지시가 아니라 반복 가능한 설계 선례와 Terraform-first 품질 기준으로 사용한다.
+Architecture Draft는 사용자 최초 질의와 질문 답변을 `ArchitectureIntentPlan`으로 정규화한다. OpenAI normalizer는 이 단계에서만 선택적으로 사용하며 `patternIds`, 필수 리소스, 수량, 금지 capability, runtime topology, 리전과 가용성을 반환한다. OpenAI 결과는 deterministic normalizer 결과와 병합되고, `no EC2`, Fargate, 파일 업로드 없음과 같은 명시적 금지 조건이 우선한다.
 
-Amazon Q 기반 Architecture Draft에서 API는 사용자 답변을 `answerProfile`로 정규화하고 `ArchitectureDecisionSpace`를 생성해 payload와 prompt에 함께 보낸다. 이 decision space는 `hardConstraints`, `preferredPatterns`, `discouragedPatterns`, `evaluationCriteria`, `unsupportedSubstitutions`, `coverageRequirements`를 포함한다. `hardConstraints`는 DB 없음, 파일 업로드 없음, 실시간 없음, Korea-only와 같은 명시적 부정/모순에만 사용하고, `preferredPatterns`는 Amazon Q가 선택·변형·조합할 후보 설계 공간으로 취급한다. self-validation은 특정 정답 리소스 조합을 강제하지 않고 forbidden resource/type/label, 선택지 모순, 지원 불가 type, requirement coverage/capability signal 누락만 재생성 사유로 삼는다.
+Amazon Q Business는 Anonymous application의 `RETRIEVAL_MODE`만 사용한다. API는 선택된 각 `patternId`를 `pattern_id` equals filter로 따로 검색하고, 기대한 인덱스 문서의 `documentId`가 citation에 포함된 경우에만 해당 패턴을 승인한다. 여러 패턴을 하나의 OR 검색으로 가져오지 않으며 Creator mode나 Q 사용자 구독을 Architecture Draft 경로에 사용하지 않는다.
+
+Q의 자유 형식 `requiredResources`, 좌표, edge, Terraform 값은 원천 진실로 사용하지 않는다. citation으로 승인된 패턴은 backend canonical pattern registry가 결정론적 `ArchitectureIntentPlan`과 `ArchitectureJson`으로 조립한다. canonical materializer는 필수 리소스와 수량을 보충하고, 패턴별 연결 순서, EC2 private subnet 분산, 금지 리소스 제거, 중복 singleton 제한, orphan edge 검증을 적용한다. 검증 실패 시 Q 재검색은 최대 한 번만 수행하며 재검증도 실패하면 provider 결과를 폐기하고 안전한 fallback 또는 생성 거부로 처리한다.
+
+실시간 방식, HTTPS, 이벤트성 급증, 가용성, 음성 전사는 `ArchitectureOperationalRequirements`로 별도 해석한다. 운영 정책은 Q preview와 canonical plan 모두에 적용하며, WebSocket/SSE/polling edge, ECS/EC2 scaling 리소스, HTTPS listener/ACM, 다중 실행 계층과 RDS Multi-AZ, 음성 전용 private S3와 Transcribe IAM 권한 및 audio flow를 실제 topology에서 검증한다. 검증 결과는 예외 문자열이 아니라 `{ ok: true } | { ok: false; issues: string[] }` typed result로 반환한다.
+
+Architecture Draft 오류는 원인별 HTTP 계약을 사용한다. 사용자 요구사항을 재생성 후에도 충족하지 못하면 `422 unprocessable_entity`, Q 응답 형식이 유효하지 않으면 `502 bad_gateway`, Q 호출 자체가 불가능하면 `503 service_unavailable`, 백엔드 내부 조립 결함은 `500 internal_server_error`다. NDJSON stream은 header 전송 뒤 HTTP 상태를 바꿀 수 없으므로 terminal error event의 `statusCode`로 같은 분류를 전달한다.
 
 ```ts
 type AiProvider = "bedrock" | "amazon_q" | "amazon_transcribe" | "openai" | "fallback";
@@ -1447,6 +1453,18 @@ type ArchitectureDraftClarification = {
 };
 
 type CreateArchitectureDraftResponse = AiArchitectureDraftResult | ArchitectureDraftClarification;
+
+type ArchitectureDraftProgressStage =
+  | "preparing_requirements"
+  | "normalizing_requirements"
+  | "querying_amazon_q"
+  | "validating_architecture"
+  | "building_diagram";
+
+type ArchitectureDraftStreamEvent =
+  | { type: "progress"; stage: ArchitectureDraftProgressStage }
+  | { type: "result"; result: CreateArchitectureDraftResponse }
+  | { type: "error"; error: ApiErrorResponse & { statusCode: number } };
 
 type ArchitectureRequirementFact =
   | "web_frontend"
@@ -1502,6 +1520,8 @@ type ArchitectureIntent = {
   missingQuestions: string[];
 };
 ```
+
+`POST /api/ai/architecture-draft/stream`은 newline-delimited JSON으로 실제 처리 단계와 최종 `CreateArchitectureDraftResponse`를 전달한다. 스트림이 시작된 뒤 발생한 오류도 `error` event의 표준 `ApiErrorResponse`로 전달한다. 기존 `POST /api/ai/architecture-draft` JSON 계약은 비스트리밍 호출 호환을 위해 유지한다.
 
 `ArchitectureIntent`는 자유 형식 Requirement Prompt를 표준 설계 의도로 해석한 중간 결과다. 자동 생성 흐름은 `prompt -> interpretRequirement(prompt) -> ArchitectureIntent -> planPracticeArchitecture(intent/resolution) -> ArchitectureJson` 순서로 다룬다. LLM이나 rule fallback은 intent 추출과 설명 보조에 사용할 수 있지만, 실제 보드 리소스 조립은 지원 가능한 `ResourceType`만 사용하는 deterministic planner가 담당한다.
 
@@ -1656,6 +1676,12 @@ v1에서 rule-first 자동 적용 후보가 될 수 있는 진단은 `terraform.
 
 자연어 Architecture 수정 요청은 `ArchitecturePatchPreview`로만 반환한다. 이 preview는 `proposedArchitectureJson`과 diff 성격의 `changes`를 보여줄 뿐이며, `requiresUserAcceptance: true`와 `userAcceptedChange: null` 상태로 내려간다. 실제 Architecture Board 반영은 별도 적용 버튼에서 `UserAcceptedChange`를 기록한 뒤에만 가능하다.
 
+채팅 라우팅은 리소스명과 자연스러운 명령형(`붙여`, `달아`, `연결`, `넣어`, `지워`)이 함께 있으면 기존 보드의 patch 요청으로 우선 해석한다. 반대로 `서비스 하나`, `구조 짜줘`, `웹앱 해보자`처럼 새 서비스 의도가 드러나면 기존 보드가 있어도 새 draft 요청으로 해석한다. 리소스명만 있는 입력은 여전히 clarification 대상이다. NAT Gateway 추가 patch는 빈 노드가 아니라 public subnet과 Elastic IP를 찾아 `subnetId`, `allocationId`, 연결 edge가 포함된 deployable bundle을 제안한다.
+
+외부 트래픽 표시는 `User / Client -> Internet -> public entry` 순서를 사용한다. ALB, ECS Service, RDS처럼 여러 subnet을 참조하는 단일 Terraform 리소스는 subnet마다 별도 리소스를 복제하지 않고 `ALB node A/B`, `Fargate task placement A/B`, `RDS primary/standby (Multi-AZ)` 배치 마커로 Availability Zone 위치를 표시한다. 배치 마커는 Terraform 리소스가 아니다.
+
+Architecture Intent Plan의 `region`에는 실제 AWS region code만 허용한다. `global`, `multi-region-global` 같은 설명용 값은 Terraform의 Availability Zone 또는 runtime 설정으로 전달하지 않는다. 현재 Terraform Preview와 Direct Deployment는 단일 AWS provider region만 지원하므로 multi-region API/RDS 요청은 단일 region 지원 범위 또는 별도 multi-region 설계 작업을 먼저 확인해야 한다.
+
 ```ts
 type ArchitecturePatchIntent = {
   instruction: string;
@@ -1664,6 +1690,25 @@ type ArchitecturePatchIntent = {
   resourceType?: ResourceType;
   connectionTargetResourceId?: string;
   skipConnection?: boolean;
+};
+
+type ArchitecturePatchPlan = {
+  status: "planned" | "needs_clarification" | "unsupported";
+  action: "modify_resource" | "remove_resource" | "add_resource" | null;
+  target: {
+    resourceType: ResourceType | null;
+    resourceId: string | null;
+    label: string | null;
+  };
+  candidateResourceIds: string[];
+  operations: {
+    op: "set_value" | "increase_one_step" | "decrease_one_step" | "enable" | "disable" | "rename";
+    path: string;
+    value: string | number | boolean | null;
+  }[];
+  preserve: string[];
+  clarificationQuestion: string | null;
+  confidence: number;
 };
 
 type ArchitecturePatchClarification = {
@@ -1676,6 +1721,7 @@ type ArchitecturePatchClarification = {
     label: string;
   }[];
   suggestions?: string[];
+  patchPlan?: ArchitecturePatchPlan;
   providerMetadata: AiProviderMetadata;
 };
 
@@ -1688,6 +1734,7 @@ type ArchitecturePatchPreview = {
   requiresUserAcceptance: true;
   userAcceptedChange: UserAcceptedChange | null;
   llmExplanation?: LlmExplanation;
+  patchPlan?: ArchitecturePatchPlan;
   providerMetadata: AiProviderMetadata;
 };
 
