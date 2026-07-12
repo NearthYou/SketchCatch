@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { GitBranch, LoaderCircle, Search, Settings2 } from "lucide-react";
 import type { FormEvent } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   GitHubInstalledRepositoryCandidate,
   RepositoryAnalysisQuestion,
@@ -36,20 +36,35 @@ import styles from "./repository-start.module.css";
 type RequestState = "idle" | "loading" | "error";
 
 type RepositoryStartClientProps = {
+  readonly initialDefaultBranch?: string;
+  readonly initialRepositoryUrl?: string;
   readonly projectId: string;
   readonly projectName: string;
 };
 
-export function RepositoryStartClient({ projectId, projectName }: RepositoryStartClientProps) {
+type PublicRepositoryQuestion = {
+  readonly id: string;
+  readonly prompt: string;
+  readonly answerType: "boolean" | "single_select";
+  readonly options?: readonly { readonly value: string; readonly label: string }[];
+};
+
+export function RepositoryStartClient({
+  initialDefaultBranch = "main",
+  initialRepositoryUrl = "",
+  projectId,
+  projectName
+}: RepositoryStartClientProps) {
   const router = useRouter();
+  const hasAutoAnalyzedPublicUrl = useRef(false);
   const [repositories, setRepositories] = useState<SourceRepository[]>([]);
   const [candidates, setCandidates] = useState<GitHubInstalledRepositoryCandidate[]>([]);
   const [installationState, setInstallationState] = useState("");
   const [loadState, setLoadState] = useState<RequestState>("loading");
   const [actionState, setActionState] = useState<RequestState>("idle");
   const [publicAnalysisState, setPublicAnalysisState] = useState<RequestState>("idle");
-  const [repositoryUrl, setRepositoryUrl] = useState("");
-  const [defaultBranch, setDefaultBranch] = useState("main");
+  const [repositoryUrl, setRepositoryUrl] = useState(initialRepositoryUrl);
+  const [defaultBranch, setDefaultBranch] = useState(initialDefaultBranch);
   const [publicAnalysis, setPublicAnalysis] = useState<SourceRepositoryAnalysisResult | null>(null);
   const [repositoryConnectionError, setRepositoryConnectionError] = useState("");
   const [recommendationState, setRecommendationState] = useState<RequestState>("idle");
@@ -79,6 +94,15 @@ export function RepositoryStartClient({ projectId, projectName }: RepositoryStar
 
     void loadRepositories();
   }, [projectId]);
+
+  useEffect(() => {
+    if (!projectId || !initialRepositoryUrl.trim() || hasAutoAnalyzedPublicUrl.current) {
+      return;
+    }
+
+    hasAutoAnalyzedPublicUrl.current = true;
+    void analyzePublicRepositoryUrl(initialRepositoryUrl, initialDefaultBranch);
+  }, [initialDefaultBranch, initialRepositoryUrl, projectId]);
 
   async function loadRepositories(): Promise<void> {
     setLoadState("loading");
@@ -117,13 +141,18 @@ export function RepositoryStartClient({ projectId, projectName }: RepositoryStar
 
   async function analyzeRepositoryUrl(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
-    const trimmedRepositoryUrl = repositoryUrl.trim();
-    const trimmedDefaultBranch = defaultBranch.trim();
+    await analyzePublicRepositoryUrl(repositoryUrl, defaultBranch);
+  }
+
+  async function analyzePublicRepositoryUrl(nextRepositoryUrl: string, nextDefaultBranch: string): Promise<void> {
+    const trimmedRepositoryUrl = nextRepositoryUrl.trim();
+    const trimmedDefaultBranch = nextDefaultBranch.trim();
 
     if (!trimmedRepositoryUrl || isPublicAnalysisBusy) return;
 
     setPublicAnalysisState("loading");
     setPublicAnalysis(null);
+    setAnswers({});
     setErrorMessage("");
 
     try {
@@ -132,16 +161,24 @@ export function RepositoryStartClient({ projectId, projectName }: RepositoryStar
         ...(trimmedDefaultBranch ? { defaultBranch: trimmedDefaultBranch } : {})
       });
       setPublicAnalysis(result);
+      setDeploymentType(getPublicRepositoryDeploymentDefault(result));
       setPublicAnalysisState("idle");
     } catch (error) {
       setPublicAnalysisState("error");
-      setErrorMessage(getApiErrorMessage(error, "Repository URL could not be analyzed."));
+      setErrorMessage(
+        getApiErrorMessage(
+          error,
+          "Repository URL could not be analyzed. Private repositories need GitHub access from project settings."
+        )
+      );
     }
   }
 
-  async function openPublicRepositoryBoard(): Promise<void> {
-    if (!publicAnalysis?.recommendedTemplateId || isPublicAnalysisBusy) return;
-    const diagram = buildBoardTemplateDiagram(publicAnalysis.recommendedTemplateId, {
+  async function createPublicRepositoryBoard(): Promise<void> {
+    if (!publicAnalysis || isPublicAnalysisBusy) return;
+
+    const templateId = selectPublicRepositoryTemplateId(publicAnalysis, deploymentType, answers);
+    const diagram = buildBoardTemplateDiagram(templateId, {
       projectSlug: projectName,
       shortId: "public-repo"
     });
@@ -156,6 +193,7 @@ export function RepositoryStartClient({ projectId, projectName }: RepositoryStar
 
     try {
       await saveProjectDraft({ diagramJson: diagram, projectId });
+      setPublicAnalysisState("idle");
       router.push(
         `/workspace?${new URLSearchParams({
           projectId,
@@ -164,7 +202,7 @@ export function RepositoryStartClient({ projectId, projectName }: RepositoryStar
       );
     } catch (error) {
       setPublicAnalysisState("error");
-      setErrorMessage(getApiErrorMessage(error, "Repository board could not be opened."));
+      setErrorMessage(getApiErrorMessage(error, "Repository board could not be created."));
     }
   }
 
@@ -275,11 +313,18 @@ export function RepositoryStartClient({ projectId, projectName }: RepositoryStar
               Public repositories are analyzed without a GitHub account connection. Private repositories and Git handoff need GitHub access from project settings.
             </p>
             {publicAnalysis ? (
-              <PublicRepositoryAnalysisResult
+              <PublicRepositoryRecommendationStep
+                answers={answers}
                 analysis={publicAnalysis}
-                githubSettingsHref={githubSettingsHref}
+                deploymentType={deploymentType}
                 isBusy={isPublicAnalysisBusy}
-                onOpenBoard={() => void openPublicRepositoryBoard()}
+                onAnswer={(questionId, value) =>
+                  setAnswers((current) => ({ ...current, [questionId]: value }))
+                }
+                onCreateBoard={() => void createPublicRepositoryBoard()}
+                onDeploymentTypeChange={setDeploymentType}
+                onUsesCiCdChange={setUsesCiCd}
+                usesCiCd={usesCiCd}
               />
             ) : null}
           </section>
@@ -474,65 +519,165 @@ function RepositoryTemplateCandidates({
   );
 }
 
-function PublicRepositoryAnalysisResult({
+function PublicRepositoryRecommendationStep({
+  answers,
   analysis,
-  githubSettingsHref,
+  deploymentType,
   isBusy,
-  onOpenBoard
+  onAnswer,
+  onCreateBoard,
+  onDeploymentTypeChange,
+  onUsesCiCdChange,
+  usesCiCd
 }: {
+  readonly answers: Record<string, string | boolean>;
   readonly analysis: SourceRepositoryAnalysisResult;
-  readonly githubSettingsHref: string;
+  readonly deploymentType: RepositoryDeploymentType;
   readonly isBusy: boolean;
-  readonly onOpenBoard: () => void;
+  readonly onAnswer: (questionId: string, value: string | boolean) => void;
+  readonly onCreateBoard: () => void;
+  readonly onDeploymentTypeChange: (deploymentType: RepositoryDeploymentType) => void;
+  readonly onUsesCiCdChange: (usesCiCd: boolean) => void;
+  readonly usesCiCd: boolean;
 }) {
-  const hasPublicEvidence = analysis.evidenceFiles.some((file) => file.found);
+  const questions = createPublicRepositoryQuestions(analysis, deploymentType);
+  const templateId = selectPublicRepositoryTemplateId(analysis, deploymentType, answers);
 
   return (
-    <section className={styles.publicAnalysisResult} aria-label="Public repository analysis result">
-      <div>
-        <span>Recommendation</span>
-        <strong>{formatPublicRepositoryTemplate(analysis.recommendedTemplateId)}</strong>
-        <p>{analysis.recommendationReason}</p>
-      </div>
-      <div className={styles.signalList}>
-        <span>Detected signals</span>
-        <strong>{analysis.detectedSignals.length > 0 ? analysis.detectedSignals.join(" / ") : "No strong signal"}</strong>
-      </div>
-      <div className={styles.evidenceList}>
-        {analysis.evidenceFiles.map((file) => (
-          <span key={file.path} data-found={file.found}>
-            {file.found ? "Found" : "Missing"} {file.path}
-          </span>
-        ))}
-      </div>
-      {!hasPublicEvidence ? (
-        <div className={styles.accessHint}>
-          <strong>Could not read public repository evidence.</strong>
-          <p>
-            If this repository is private, restricted, or uses another branch, connect GitHub access in project settings.
-          </p>
-          <Link href={githubSettingsHref}>Connect GitHub in settings</Link>
+    <section className={styles.publicAnalysisResult} aria-label="Public repository recommendation">
+      <label>
+        <span>Recommended template</span>
+        <strong>{formatPublicRepositoryTemplate(templateId)}</strong>
+      </label>
+      <label>
+        <span>Deployment type</span>
+        <select
+          value={deploymentType}
+          onChange={(event) => onDeploymentTypeChange(event.target.value as RepositoryDeploymentType)}
+        >
+          <option value="ec2_vm">EC2/VM based</option>
+          <option value="container">Container based</option>
+          <option value="serverless">Serverless based</option>
+        </select>
+      </label>
+      <label className={styles.checkboxLabel}>
+        <input checked={usesCiCd} onChange={(event) => onUsesCiCdChange(event.target.checked)} type="checkbox" />
+        <span>Use CI/CD handoff</span>
+      </label>
+      {questions.length > 0 ? (
+        <div className={styles.questionList}>
+          {questions.map((question) => (
+            <label key={question.id}>
+              <span>{question.prompt}</span>
+              {question.answerType === "boolean" ? (
+                <select
+                  value={String(answers[question.id] ?? "")}
+                  onChange={(event) => onAnswer(question.id, event.target.value === "true")}
+                >
+                  <option value="">Select</option>
+                  <option value="true">Yes</option>
+                  <option value="false">No</option>
+                </select>
+              ) : (
+                <select
+                  value={String(answers[question.id] ?? "")}
+                  onChange={(event) => onAnswer(question.id, event.target.value)}
+                >
+                  <option value="">Select</option>
+                  {(question.options ?? []).map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              )}
+            </label>
+          ))}
         </div>
       ) : null}
-      <button
-        disabled={isBusy || !analysis.recommendedTemplateId}
-        onClick={onOpenBoard}
-        type="button"
-      >
+      <button disabled={isBusy || !analysis.recommendedTemplateId} onClick={onCreateBoard} type="button">
         {isBusy ? <LoaderCircle className={styles.spin} size={16} /> : <Search size={16} />}
-        Open recommended board
+        Create board
       </button>
     </section>
   );
 }
 
-function formatPublicRepositoryTemplate(
-  templateId: SourceRepositoryAnalysisResult["recommendedTemplateId"]
-): string {
+function formatPublicRepositoryTemplate(templateId: string): string {
+  if (templateId === "static-web-hosting") return "Static website";
+  if (templateId === "three-tier-web-app") return "3-tier web service";
+  if (templateId === "ecs-fargate-container-app") return "ECS Fargate container app";
+  if (templateId === "eks-container-app") return "EKS container app";
+  if (templateId === "minimal-serverless-api") return "Minimal serverless API";
+  if (templateId === "full-serverless-web-app") return "Full serverless web app";
   if (templateId === "template-static-website") return "Static website";
   if (templateId === "template-api-db") return "API with database";
   if (templateId === "template-3tier") return "Three-tier web service";
   return "No template match yet";
+}
+
+function createPublicRepositoryQuestions(
+  analysis: SourceRepositoryAnalysisResult,
+  deploymentType: RepositoryDeploymentType
+): readonly PublicRepositoryQuestion[] {
+  const signals = new Set(analysis.detectedSignals);
+  const questions: PublicRepositoryQuestion[] = [];
+
+  if (signals.has("React") && (signals.has("Node API") || signals.has("Python API"))) {
+    questions.push({
+      answerType: "boolean",
+      id: "include_frontend",
+      prompt: "Frontend까지 같은 Architecture에 포함할까요?"
+    });
+  }
+
+  if (signals.has("Database")) {
+    questions.push({
+      answerType: "boolean",
+      id: "include_database",
+      prompt: "Database tier를 포함할까요?"
+    });
+  }
+
+  if (signals.has("Container") && deploymentType === "container") {
+    questions.push({
+      answerType: "single_select",
+      id: "container_runtime",
+      options: [
+        { label: "ECS Fargate", value: "ecs" },
+        { label: "Kubernetes/EKS", value: "eks" }
+      ],
+      prompt: "Container runtime을 무엇으로 둘까요?"
+    });
+  }
+
+  return questions.slice(0, 5);
+}
+
+function getPublicRepositoryDeploymentDefault(
+  analysis: SourceRepositoryAnalysisResult
+): RepositoryDeploymentType {
+  return analysis.detectedSignals.includes("Container") ? "container" : "serverless";
+}
+
+function selectPublicRepositoryTemplateId(
+  analysis: SourceRepositoryAnalysisResult,
+  deploymentType: RepositoryDeploymentType,
+  answers: Record<string, string | boolean>
+): string {
+  if (analysis.recommendedTemplateId === "template-static-website") {
+    return "static-web-hosting";
+  }
+
+  if (deploymentType === "container") {
+    return answers.container_runtime === "eks" ? "eks-container-app" : "ecs-fargate-container-app";
+  }
+
+  if (deploymentType === "serverless") {
+    return answers.include_frontend === false || answers.include_database === false
+      ? "minimal-serverless-api"
+      : "full-serverless-web-app";
+  }
+
+  return "three-tier-web-app";
 }
 
 function createRepositoryPreviewDiagram(

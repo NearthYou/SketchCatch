@@ -152,6 +152,11 @@ Short English-only working log for the current agent context. Older records are 
   - `pnpm harness:check`
   - `pnpm lint` passed with the pre-existing `live-observations` `setNow` warning.
   - `pnpm typecheck`
+  - `pnpm build` passed; Next/Turbopack emitted a non-fatal `.next/dev/cache/turbopack` symlink metadata warning.
+  - `git diff --check` passed with CRLF conversion warnings only.
+  - `pnpm harness:check`
+  - `pnpm lint` passed with the pre-existing `live-observations` `setNow` warning.
+  - `pnpm typecheck`
   - `pnpm build`
   - `git diff --check` passed with CRLF conversion warnings only.
 - Risk:
@@ -177,6 +182,20 @@ Short English-only working log for the current agent context. Older records are 
 - Risk:
   - Browser visual verification has not been rerun yet in this worktree.
 
+### 2026-07-12 - Split public Repository analysis from board creation
+
+- Goal: Keep the new-project Repository URL flow from showing raw analysis details or opening the board before the user accepts the recommendation.
+- Completed:
+  - Changed the new project Repository URL action to create a project and route to the Repository analysis step instead of calling analysis or saving a board draft inline.
+  - Passed Repository URL and branch into `/workspace/repository` so that page owns analysis, template recommendation, deployment type, CI/CD, and follow-up questions.
+  - Replaced the public Repository analysis detail card with a recommendation/question step that does not render evidence files or detected file lists.
+  - Moved board draft saving and `/workspace` navigation behind the final `Create board` action.
+- Verification:
+  - `pnpm --dir apps/web exec tsx --test app/workspace/new/workspace-start-options.test.ts features/workspace/repository-start-template-recommendation.test.ts`
+  - `pnpm --dir apps/web typecheck`
+- Risk:
+  - Browser visual verification has not been run yet in this worktree.
+
 ## Next Action
 
-- Retry the new project Repository URL flow against a running local API/database and confirm it opens the workspace with the recommended draft.
+- Manually retry the Repository URL flow in the browser when the local API/database is running.

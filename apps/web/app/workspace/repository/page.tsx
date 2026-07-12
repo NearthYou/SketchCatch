@@ -5,6 +5,8 @@ type RepositoryStartPageProps = {
   readonly searchParams: Promise<{
     readonly projectId?: string | undefined;
     readonly projectName?: string | undefined;
+    readonly repositoryUrl?: string | undefined;
+    readonly defaultBranch?: string | undefined;
   }>;
 };
 
@@ -15,6 +17,8 @@ export default async function RepositoryStartPage({ searchParams }: RepositorySt
   return (
     <WorkspaceAuthGate>
       <RepositoryStartClient
+        initialDefaultBranch={params.defaultBranch ?? "main"}
+        initialRepositoryUrl={params.repositoryUrl ?? ""}
         projectId={params.projectId ?? ""}
         projectName={params.projectName ?? "새 프로젝트"}
       />

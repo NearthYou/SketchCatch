@@ -37,13 +37,13 @@ test("WorkspaceStartClient uses the rebuilt start shell without a placeholder", 
   assert.match(startClientSource, /blankStartOption/);
 });
 
-test("WorkspaceStartClient keeps Template and GitHub URL analysis as real start paths", () => {
+test("WorkspaceStartClient keeps Template and GitHub URL as real start paths", () => {
   assert.match(startClientSource, /saveProjectDraft/);
   assert.match(startClientSource, /selectedTemplate\.diagramJson/);
   assert.match(startClientSource, /RepositoryUrlStartPanel/);
-  assert.match(startClientSource, /analyzePublicSourceRepository/);
   assert.match(startClientSource, /https:\/\/github\.com\/owner\/repository/);
-  assert.doesNotMatch(startClientSource, /workspace\/repository/);
+  assert.match(startClientSource, /workspace\/repository/);
+  assert.doesNotMatch(startClientSource, /analyzePublicSourceRepository/);
 });
 
 test("WorkspaceStartClient shows Repository URL analysis before the primary action", () => {

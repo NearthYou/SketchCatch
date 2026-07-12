@@ -292,43 +292,6 @@
   color: #999999;
 }
 
-.repositoryAnalysis {
-  display: grid;
-  gap: 8px;
-  border-top: 1px solid #f0f0f3;
-  padding-top: 14px;
-}
-
-.repositoryAnalysis strong {
-  font-size: 13px;
-}
-
-.repositoryAnalysis p {
-  margin: 0;
-  color: #60646c;
-  font-size: 12px;
-  line-height: 1.6;
-}
-
-.repositoryEvidenceList {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.repositoryEvidenceList li {
-  border-radius: 999px;
-  padding: 4px 8px;
-  background: #f0f0f3;
-  color: #60646c;
-  font-size: 11px;
-  font-weight: 700;
-}
-
-
 .boundaryNotice,
 .errorMessage {
   margin: 0;

@@ -14,8 +14,12 @@ test("Repository start screen exposes deployment, CI/CD, and template recommenda
   assert.match(source, /Analyze a GitHub repository URL/);
   assert.match(source, /https:\/\/github\.com\/owner\/repository/);
   assert.match(source, /showUrlAnalysis/);
-  assert.match(source, /Could not read public repository evidence/);
-  assert.match(source, /Connect GitHub in settings/);
+  assert.match(source, /PublicRepositoryRecommendationStep/);
+  assert.match(source, /Recommended template/);
+  assert.match(source, /Create board/);
+  assert.match(source, /createPublicRepositoryQuestions/);
+  assert.match(source, /selectPublicRepositoryTemplateId/);
+  assert.doesNotMatch(source, /evidenceFiles\.map/);
   assert.match(source, /PR creation, CI\/CD handoff/);
   assert.match(source, /EC2\/VM based/);
   assert.match(source, /Container based/);

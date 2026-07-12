@@ -16,17 +16,13 @@ import { useEffect, useMemo, useState } from "react";
 import { TemplateGallery } from "../../../components/templates/TemplateGallery";
 import { ProductBrand } from "../../../components/ui/ProductBrand";
 import {
-  analyzePublicSourceRepository,
   createProject,
   deleteProject,
   listAwsConnections,
   saveProjectDraft
 } from "../../../features/workspace/api";
-import { getApiErrorMessage } from "../../../lib/api-client";
-import type { SourceRepositoryAnalysisResult } from "@sketchcatch/types";
 import {
   type BoardTemplate,
-  buildBoardTemplateDiagram,
   listBoardTemplates
 } from "../../../features/resource-settings/template-library";
 import {
@@ -87,7 +83,6 @@ export function WorkspaceStartClient({
   const [repositoryUrlFormVisible, setRepositoryUrlFormVisible] = useState(initialStartKind === "repository");
   const [repositoryUrl, setRepositoryUrl] = useState("");
   const [repositoryDefaultBranch, setRepositoryDefaultBranch] = useState("main");
-  const [repositoryAnalysis, setRepositoryAnalysis] = useState<SourceRepositoryAnalysisResult | null>(null);
   const selectedTemplate = useMemo(
     () => boardTemplates.find((template) => template.id === selectedTemplateId) ?? null,
     [selectedTemplateId]
@@ -211,7 +206,6 @@ export function WorkspaceStartClient({
   function selectStartKind(kind: WorkspaceStartKind): void {
     setSelectedKind(kind);
     setErrorMessage("");
-    setRepositoryAnalysis(null);
 
     if (kind === "repository") {
       setRepositoryUrlFormVisible(true);
@@ -231,52 +225,28 @@ export function WorkspaceStartClient({
     }
 
     setIsSubmitting(true);
-    setRepositoryAnalysis(null);
 
     let createdProjectId: string | null = null;
 
     try {
-      const analysis = await analyzePublicSourceRepository({
-        repositoryUrl: trimmedRepositoryUrl,
-        ...(trimmedDefaultBranch ? { defaultBranch: trimmedDefaultBranch } : {})
-      });
-      setRepositoryAnalysis(analysis);
-
-      const diagram = buildBoardTemplateDiagram(analysis.recommendedTemplateId ?? undefined, {
-        projectSlug: projectName,
-        shortId: "public-repo"
-      });
-
-      if (!diagram) {
-        setIsSubmitting(false);
-        setErrorMessage(
-          "Public repository는 읽었지만 맞는 Template을 찾지 못했습니다. private repository라면 환경설정에서 GitHub 권한을 연결해주세요."
-        );
-        return;
-      }
-
       const project = await createProject({ name: projectName });
       createdProjectId = project.id;
-      await saveProjectDraft({ diagramJson: diagram, projectId: project.id });
       clearWorkspaceStartForm();
-      router.push(
-        `/workspace?${new URLSearchParams({
-          projectId: project.id,
-          projectName: project.name
-        }).toString()}`
-      );
-    } catch (error) {
+      const params = new URLSearchParams({
+        defaultBranch: trimmedDefaultBranch || "main",
+        projectId: project.id,
+        projectName: project.name,
+        repositoryUrl: trimmedRepositoryUrl
+      });
+
+      router.push(`/workspace/repository?${params.toString()}`);
+    } catch {
       if (createdProjectId) {
         await deleteProject(createdProjectId).catch(() => undefined);
       }
 
       setIsSubmitting(false);
-      setErrorMessage(
-        getApiErrorMessage(
-          error,
-          "Repository URL을 분석하지 못했습니다. private repository라면 환경설정에서 GitHub 권한을 연결해주세요."
-        )
-      );
+      setErrorMessage("Repository 분석 페이지를 준비하지 못했습니다.");
     }
   }
 
@@ -350,17 +320,14 @@ export function WorkspaceStartClient({
 
           {selectedKind === "repository" && repositoryUrlFormVisible ? (
             <RepositoryUrlStartPanel
-              analysis={repositoryAnalysis}
               branch={repositoryDefaultBranch}
               isSubmitting={isSubmitting}
               onBranchChange={(value) => {
                 setRepositoryDefaultBranch(value);
-                setRepositoryAnalysis(null);
                 setErrorMessage("");
               }}
               onRepositoryUrlChange={(value) => {
                 setRepositoryUrl(value);
-                setRepositoryAnalysis(null);
                 setErrorMessage("");
               }}
               repositoryUrl={repositoryUrl}
@@ -458,22 +425,18 @@ function TemplatePicker({
 }
 
 function RepositoryUrlStartPanel({
-  analysis,
   branch,
   isSubmitting,
   onBranchChange,
   onRepositoryUrlChange,
   repositoryUrl
 }: {
-  readonly analysis: SourceRepositoryAnalysisResult | null;
   readonly branch: string;
   readonly isSubmitting: boolean;
   readonly onBranchChange: (value: string) => void;
   readonly onRepositoryUrlChange: (value: string) => void;
   readonly repositoryUrl: string;
 }) {
-  const foundEvidenceFiles = analysis?.evidenceFiles.filter((file) => file.found) ?? [];
-
   return (
     <section className={styles.repositoryUrlPanel} aria-labelledby="repository-url-title">
       <div className={styles.repositoryUrlHeader}>
@@ -509,28 +472,8 @@ function RepositoryUrlStartPanel({
         </label>
       </div>
 
-      {analysis ? (
-        <div className={styles.repositoryAnalysis}>
-          <strong>{formatRepositoryTemplate(analysis.recommendedTemplateId)}</strong>
-          <p>{analysis.recommendationReason}</p>
-          {foundEvidenceFiles.length > 0 ? (
-            <ul className={styles.repositoryEvidenceList} aria-label="읽은 repository evidence">
-              {foundEvidenceFiles.map((file) => (
-                <li key={file.path}>{file.path}</li>
-              ))}
-            </ul>
-          ) : null}
-        </div>
-      ) : null}
     </section>
   );
-}
-
-function formatRepositoryTemplate(
-  templateId: SourceRepositoryAnalysisResult["recommendedTemplateId"]
-): string {
-  const template = boardTemplates.find((candidate) => candidate.id === templateId);
-  return template ? `추천 Template: ${template.title}` : "추천 Template을 찾는 중";
 }
 
 // 선택한 시작 방식에 맞는 한 개의 주 행동 문구를 반환합니다.
