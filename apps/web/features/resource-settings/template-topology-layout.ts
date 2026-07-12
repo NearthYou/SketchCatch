@@ -1,6 +1,7 @@
 import type { DiagramEdge, DiagramJson, DiagramNode } from "../../../../packages/types/src";
 import { isAreaNode } from "../diagram-editor/area-nodes";
 import { isRenderableDiagramNode } from "../diagram-editor/diagram-node-visibility";
+import { resolveTemplateSiblingVisualCollisions } from "./template-sibling-collision-layout";
 
 const ROOT_PARENT_ID = "__template_root__";
 const ROOT_ORIGIN = { x: 120, y: 120 };
@@ -31,10 +32,10 @@ export function arrangeTemplateTopology(diagram: DiagramJson): DiagramJson {
   layout.arrange();
   applyLiveObservationPresentationLayout(nodeById);
 
-  return {
+  return resolveTemplateSiblingVisualCollisions({
     ...diagram,
     nodes: nodes.map((node) => layout.getNode(node.id) ?? node)
-  };
+  });
 }
 
 const LIVE_OBSERVATION_PRESENTATION_LAYOUT: Readonly<Record<
@@ -46,18 +47,21 @@ const LIVE_OBSERVATION_PRESENTATION_LAYOUT: Readonly<Record<
   "template-live-route-table": { position: { x: 520, y: 200 } },
   "template-live-route-a": { position: { x: 480, y: 320 } },
   "template-live-route-c": { position: { x: 480, y: 480 } },
-  "template-live-subnet-a": { position: { x: 400, y: 280 }, size: { height: 120, width: 200 } },
+  "template-live-subnet-a": { position: { x: 400, y: 320 }, size: { height: 120, width: 200 } },
   "template-live-subnet-c": { position: { x: 400, y: 480 }, size: { height: 120, width: 200 } },
-  "template-live-alb-sg": { position: { x: 680, y: 160 }, size: { height: 120, width: 200 } },
+  "template-live-alb-sg": { position: { x: 680, y: 120 }, size: { height: 120, width: 200 } },
   "template-live-api-sg": { position: { x: 680, y: 480 }, size: { height: 120, width: 200 } },
   "template-live-launch-template": { position: { x: 760, y: 520 } },
-  "template-live-listener": { position: { x: 800, y: 280 } },
+  "template-live-listener": { position: { x: 800, y: 240 } },
   "template-live-alb": { position: { x: 800, y: 360 } },
   "template-live-target-group": { position: { x: 920, y: 360 } },
   "template-live-asg": { position: { x: 1040, y: 240 }, size: { height: 320, width: 200 } },
   "template-live-policy": { position: { x: 1120, y: 320 } },
   "template-live-alarm": { position: { x: 1120, y: 440 } },
-  "template-live-site": { position: { x: 80, y: 240 } },
+  "template-live-site": { position: { x: 80, y: 120 } },
+  "template-live-site-access": { position: { x: 200, y: 120 } },
+  "template-live-site-policy": { position: { x: 80, y: 240 } },
+  "template-live-site-index": { position: { x: 200, y: 240 } },
   "template-live-site-config": { position: { x: 80, y: 360 } }
 };
 

@@ -58,6 +58,33 @@ test("resolveTemplateSiblingVisualCollisions expands a parent to contain a child
   assert.equal(resolvedVpc.size.height % 40, 0);
 });
 
+test("resolveTemplateSiblingVisualCollisions keeps a collapsed helper inside its parent without expanding it", () => {
+  const securityGroup = areaNode("security-group", { x: 80, y: 80 });
+  const launchTemplate = hiddenLaunchTemplateNode(
+    "launch-template",
+    { x: 400, y: 400 },
+    "security-group"
+  );
+
+  const resolved = resolveTemplateSiblingVisualCollisions(
+    createDiagram([securityGroup, launchTemplate])
+  );
+  const resolvedParent = requireNode(resolved, "security-group");
+  const resolvedHelper = requireNode(resolved, "launch-template");
+
+  assert.deepEqual(resolvedParent.size, securityGroup.size);
+  assert.ok(resolvedHelper.position.x >= resolvedParent.position.x);
+  assert.ok(resolvedHelper.position.y >= resolvedParent.position.y);
+  assert.ok(
+    resolvedHelper.position.x + resolvedHelper.size.width <=
+      resolvedParent.position.x + resolvedParent.size.width
+  );
+  assert.ok(
+    resolvedHelper.position.y + resolvedHelper.size.height <=
+      resolvedParent.position.y + resolvedParent.size.height
+  );
+});
+
 function createDiagram(nodes: readonly DiagramNode[]): DiagramJson {
   return { edges: [], nodes, viewport: { x: 0, y: 0, zoom: 1 } };
 }
@@ -97,6 +124,24 @@ function resourceNode(
     size: { height: 48, width: 48 },
     type: "aws_instance",
     zIndex: 100
+  };
+}
+
+function hiddenLaunchTemplateNode(
+  id: string,
+  position: DiagramNode["position"],
+  parentAreaNodeId: string
+): DiagramNode {
+  return {
+    ...resourceNode(id, position, parentAreaNodeId),
+    parameters: {
+      fileName: "main",
+      resourceName: id,
+      resourceType: "aws_launch_template",
+      terraformBlockType: "resource",
+      values: {}
+    },
+    type: "aws_launch_template"
   };
 }
 

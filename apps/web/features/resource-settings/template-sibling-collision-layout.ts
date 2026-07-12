@@ -29,6 +29,7 @@ export function resolveTemplateSiblingVisualCollisions(
       }
     ])
   );
+  centerCollapsedHelpersInsideParents(nodeById);
   const childrenByParentId = createRenderableChildrenByParentId(nodeById);
   const parentIds = [...childrenByParentId.keys()].sort(
     (left, right) => getParentDepth(right, nodeById) - getParentDepth(left, nodeById)
@@ -43,6 +44,31 @@ export function resolveTemplateSiblingVisualCollisions(
     ...diagram,
     nodes: diagram.nodes.map((node) => nodeById.get(node.id) ?? node)
   };
+}
+
+function centerCollapsedHelpersInsideParents(nodeById: Map<string, DiagramNode>): void {
+  for (const node of [...nodeById.values()]) {
+    if (isRenderableDiagramNode(node)) {
+      continue;
+    }
+
+    const parentAreaNodeId = node.metadata?.parentAreaNodeId;
+    const parent = parentAreaNodeId ? nodeById.get(parentAreaNodeId) : undefined;
+
+    if (!parent || !isAreaNode(parent)) {
+      continue;
+    }
+
+    const position = {
+      x: parent.position.x + Math.max(0, (parent.size.width - node.size.width) / 2),
+      y: parent.position.y + Math.max(0, (parent.size.height - node.size.height) / 2)
+    };
+
+    moveSubtree(nodeById, node.id, {
+      x: position.x - node.position.x,
+      y: position.y - node.position.y
+    });
+  }
 }
 
 function createRenderableChildrenByParentId(
