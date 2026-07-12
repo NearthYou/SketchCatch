@@ -12,6 +12,7 @@ const readyInput = {
   hasApproval: false,
   hasProjectContext: true,
   isOnline: true,
+  lastMessageRole: "assistant",
   lastMessageState: null,
   messageCount: 1,
   requestState: "idle"
@@ -57,4 +58,15 @@ test("AI Dock은 프로젝트와 network가 없을 때 실행 불가 이유를 �
 test("새 완료 응답은 닫힌 런처에만 unread 상태를 남긴다", () => {
   assert.equal(getWorkspaceAiDockUnread({ isOpen: false, responseCompleted: true }), true);
   assert.equal(getWorkspaceAiDockUnread({ isOpen: true, responseCompleted: true }), false);
+});
+
+test("중지된 요청처럼 마지막 message가 사용자 요청이면 완료로 표시하지 않는다", () => {
+  assert.equal(
+    resolveWorkspaceAiDockPhase({
+      ...readyInput,
+      lastMessageRole: "user",
+      lastMessageState: "completed"
+    }),
+    "ready"
+  );
 });

@@ -85,6 +85,7 @@ export function resolveWorkspaceAiDockPhase({
   hasApproval,
   hasProjectContext,
   isOnline,
+  lastMessageRole,
   lastMessageState,
   messageCount,
   requestState
@@ -93,18 +94,19 @@ export function resolveWorkspaceAiDockPhase({
   readonly hasApproval: boolean;
   readonly hasProjectContext: boolean;
   readonly isOnline: boolean;
+  readonly lastMessageRole: "assistant" | "user" | null;
   readonly lastMessageState: "completed" | "error" | "preview" | "question" | null;
   readonly messageCount: number;
   readonly requestState: "generating" | "idle" | "sending";
 }): WorkspaceAiDockPhase {
   if (!hasProjectContext) return "disabled";
   if (!isOnline) return "offline";
-  if (errorMessage || lastMessageState === "error") return "error";
+  if (errorMessage || (lastMessageRole === "assistant" && lastMessageState === "error")) return "error";
   if (requestState === "sending") return "sending";
   if (requestState === "generating") return "generating";
   if (hasApproval) return "approval";
-  if (lastMessageState === "preview") return "preview";
-  if (lastMessageState === "completed") return "completed";
+  if (lastMessageRole === "assistant" && lastMessageState === "preview") return "preview";
+  if (lastMessageRole === "assistant" && lastMessageState === "completed") return "completed";
   if (messageCount === 0) return "empty";
   return "ready";
 }

@@ -49,6 +49,7 @@ export function WorkspaceAiDock({
     hasApproval,
     hasProjectContext,
     isOnline,
+    lastMessageRole: lastMessage?.role ?? null,
     lastMessageState: lastMessage?.state ?? null,
     messageCount: assistant.messages.length,
     requestState: assistant.requestState
