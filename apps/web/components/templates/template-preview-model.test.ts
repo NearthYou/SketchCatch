@@ -160,6 +160,38 @@ test("createTemplatePreviewModel keeps compact Template resources inside their p
   assertProjectedContainment(subnet, rds);
 });
 
+test("Live Observation preview prioritizes the traffic flow over empty network frames", () => {
+  const template = listBoardTemplates().find(
+    (candidate) => candidate.id === "template-live-observation"
+  );
+  assert.ok(template);
+
+  const model = createTemplatePreviewModel(template.diagramJson);
+  const selectedIds = new Set(model.nodes.map((node) => node.id));
+
+  assert.ok(selectedIds.has("template-live-vpc"));
+  assert.ok(selectedIds.has("template-live-asg"));
+  assert.ok(selectedIds.has("template-live-site"));
+  assert.ok(selectedIds.has("template-live-alb"));
+  assert.ok(!selectedIds.has("template-live-subnet-a"));
+  assert.ok(!selectedIds.has("template-live-alb-sg"));
+
+  const vpc = requirePreviewNode(model, "template-live-vpc");
+  const igw = requirePreviewNode(model, "template-live-igw");
+  const alb = requirePreviewNode(model, "template-live-alb");
+  const targetGroup = requirePreviewNode(model, "template-live-target-group");
+  const asg = requirePreviewNode(model, "template-live-asg");
+  const policy = requirePreviewNode(model, "template-live-policy");
+  const alarm = requirePreviewNode(model, "template-live-alarm");
+
+  assertProjectedContainment(vpc, igw);
+  assertProjectedContainment(vpc, alb);
+  assertProjectedContainment(vpc, targetGroup);
+  assertProjectedContainment(vpc, asg);
+  assert.equal(alb.y, targetGroup.y);
+  assert.ok(policy.y < alarm.y);
+});
+
 test("TemplateDiagramPreview keeps the SVG icon path label-free and bounded", () => {
   const source = readFileSync(new URL("./TemplateGallery.tsx", import.meta.url), "utf8");
   const previewSource = source.slice(source.indexOf("function TemplateDiagramPreview"));

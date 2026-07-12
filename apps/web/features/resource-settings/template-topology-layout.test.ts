@@ -44,6 +44,22 @@ test("arrangeTemplateTopology keeps a node with a missing explicit parent in the
   assert.equal(requireNode(arranged, "orphan").position.y, 120);
 });
 
+test("arrangeTemplateTopology does not enlarge an area for a collapsed helper", () => {
+  const vpc = areaNode("vpc", "aws_vpc", "network");
+  const instance: DiagramNode = {
+    ...resourceNode("instance", "aws_instance", {}),
+    metadata: { parentAreaNodeId: "vpc" }
+  };
+  const launchTemplates: DiagramNode[] = Array.from({ length: 7 }, (_, index) => ({
+    ...resourceNode(`launch-template-${index}`, "aws_launch_template", {}),
+    metadata: { parentAreaNodeId: "vpc" }
+  }));
+  const withoutHelper = arrangeTemplateTopology(createDiagram([vpc, instance]));
+  const withHelper = arrangeTemplateTopology(createDiagram([vpc, instance, ...launchTemplates]));
+
+  assert.deepEqual(requireNode(withHelper, "vpc").size, requireNode(withoutHelper, "vpc").size);
+});
+
 function createVpcApiDiagram(): DiagramJson {
   return createDiagram([
     areaNode("vpc", "aws_vpc", "network"),

@@ -1,5 +1,6 @@
 import type { DiagramEdge, DiagramJson, DiagramNode } from "../../../../packages/types/src";
 import { isAreaNode } from "../diagram-editor/area-nodes";
+import { isRenderableDiagramNode } from "../diagram-editor/diagram-node-visibility";
 
 const ROOT_PARENT_ID = "__template_root__";
 const ROOT_ORIGIN = { x: 120, y: 120 };
@@ -13,6 +14,10 @@ const AREA_MIN_SIZE_BY_RESOURCE_TYPE: Readonly<Record<string, DiagramNode["size"
   aws_subnet: { height: 204, width: 272 },
   aws_vpc: { height: 280, width: 420 }
 };
+const EMPTY_AREA_SIZE_BY_RESOURCE_TYPE: Readonly<Record<string, DiagramNode["size"]>> = {
+  aws_security_group: { height: 104, width: 184 },
+  aws_subnet: { height: 104, width: 184 }
+};
 const TERRAFORM_REFERENCE_SUFFIXES = ["id", "arn", "name"] as const;
 
 // Template source coordinates are authoring hints. This pass turns catalog-backed nodes into a compact,
@@ -24,11 +29,55 @@ export function arrangeTemplateTopology(diagram: DiagramJson): DiagramJson {
   const layout = createTopologyLayout(nodeById, childrenByParentId, diagram.edges);
 
   layout.arrange();
+  applyLiveObservationPresentationLayout(nodeById);
 
   return {
     ...diagram,
     nodes: nodes.map((node) => layout.getNode(node.id) ?? node)
   };
+}
+
+const LIVE_OBSERVATION_PRESENTATION_LAYOUT: Readonly<Record<
+  string,
+  { readonly position: DiagramNode["position"]; readonly size?: DiagramNode["size"] }
+>> = {
+  "template-live-vpc": { position: { x: 300, y: 120 }, size: { height: 560, width: 980 } },
+  "template-live-igw": { position: { x: 360, y: 180 } },
+  "template-live-route-table": { position: { x: 500, y: 180 } },
+  "template-live-route-a": { position: { x: 500, y: 320 } },
+  "template-live-route-c": { position: { x: 500, y: 500 } },
+  "template-live-subnet-a": { position: { x: 420, y: 300 }, size: { height: 104, width: 184 } },
+  "template-live-subnet-c": { position: { x: 420, y: 480 }, size: { height: 104, width: 184 } },
+  "template-live-alb-sg": { position: { x: 680, y: 160 }, size: { height: 104, width: 184 } },
+  "template-live-api-sg": { position: { x: 680, y: 500 }, size: { height: 104, width: 184 } },
+  "template-live-launch-template": { position: { x: 748, y: 528 } },
+  "template-live-listener": { position: { x: 770, y: 220 } },
+  "template-live-alb": { position: { x: 760, y: 330 } },
+  "template-live-target-group": { position: { x: 900, y: 330 } },
+  "template-live-asg": { position: { x: 1040, y: 220 }, size: { height: 340, width: 200 } },
+  "template-live-policy": { position: { x: 1110, y: 320 } },
+  "template-live-alarm": { position: { x: 1110, y: 440 } },
+  "template-live-site": { position: { x: 80, y: 330 } }
+};
+
+function applyLiveObservationPresentationLayout(nodeById: Map<string, DiagramNode>): void {
+  if (!nodeById.has("template-live-vpc") || !nodeById.has("template-live-site")) {
+    return;
+  }
+
+  for (const [nodeId, presentation] of Object.entries(LIVE_OBSERVATION_PRESENTATION_LAYOUT)) {
+    const node = nodeById.get(nodeId);
+
+    if (!node) {
+      continue;
+    }
+
+    nodeById.set(nodeId, {
+      ...node,
+      position: { ...presentation.position },
+      ...(presentation.size ? { size: { ...presentation.size } } : {})
+    });
+  }
 }
 
 function inferResolvableAreaParents(nodes: readonly DiagramNode[]): DiagramNode[] {
@@ -125,7 +174,10 @@ function findCommonReferenceArea(
     ...flattenStringValues(values.securityGroupIds),
     ...flattenStringValues(values.vpcSecurityGroupIds),
     ...flattenStringValues(values.targetGroupArns),
-    ...flattenStringValues(values.launchTemplate)
+    ...flattenStringValues(values.launchTemplate),
+    ...flattenStringValues(values.loadBalancerArn),
+    ...flattenStringValues(values.targetGroupArn),
+    ...flattenStringValues(values.alarmActions)
   ]
     .map((reference) => findReferencedNode(reference, nodeById))
     .filter((candidate): candidate is DiagramNode => candidate !== undefined && candidate.id !== node.id);
@@ -286,12 +338,21 @@ function createTopologyLayout(
 
   function arrangeGroup(parentId: string, origin: DiagramNode["position"], fitParent: boolean): void {
     const childIds = childrenByParentId.get(parentId) ?? [];
+    const layoutChildIds = childIds.filter((id) => isRenderableDiagramNode(getRequiredNode(id)));
 
-    if (childIds.length === 0) {
+    if (layoutChildIds.length === 0) {
+      if (fitParent) {
+        const parent = getRequiredNode(parentId);
+        const emptySize = EMPTY_AREA_SIZE_BY_RESOURCE_TYPE[getResourceType(parent)];
+
+        if (emptySize) {
+          nodeById.set(parent.id, { ...parent, size: { ...emptySize } });
+        }
+      }
       return;
     }
 
-    const rankedChildren = createRankedChildren(childIds, parentId);
+    const rankedChildren = createRankedChildren(layoutChildIds, parentId);
     let nextX = origin.x;
     let requiredBottom = origin.y;
 

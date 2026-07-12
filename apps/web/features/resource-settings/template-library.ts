@@ -545,7 +545,7 @@ const boardTemplates: readonly BoardTemplate[] = [
         })
       ],
       edges: [
-        createTemplateEdge("template-live-site-flow", "template-live-site-config", "template-live-alb", "audience traffic"),
+        createTemplateEdge("template-live-site-flow", "template-live-site", "template-live-alb", "audience traffic"),
         createTemplateEdge("template-live-alb-target", "template-live-alb", "template-live-target-group", "routes"),
         createTemplateEdge("template-live-target-asg", "template-live-target-group", "template-live-asg", "targets"),
         createTemplateEdge("template-live-launch-asg", "template-live-launch-template", "template-live-asg", "launches"),

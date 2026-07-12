@@ -174,8 +174,20 @@ test("Live Observation template carries the same ASG pressure resources as the d
   assert.equal(alarm.parameters?.values.threshold, 60);
 
   const vpc = template.diagramJson.nodes.find((node) => node.id === "template-live-vpc");
+  const audienceSite = template.diagramJson.nodes.find((node) => node.id === "template-live-site");
+  const alb = template.diagramJson.nodes.find((node) => node.id === "template-live-alb");
+  const audienceEdge = template.diagramJson.edges.find((edge) => edge.id === "template-live-site-flow");
   assert.ok(vpc);
+  assert.ok(audienceSite);
+  assert.ok(alb);
+  assert.ok(targetGroup);
+  assert.ok(audienceEdge);
+  assert.equal(audienceEdge.sourceNodeId, "template-live-site");
+  assert.equal(template.diagramJson.nodes.length, 22);
   assert.ok(vpc.size.height < 800, "dense VPC resources should form compact columns, not one tall stack");
+  assert.ok(audienceSite.position.x < vpc.position.x);
+  assert.ok(alb.position.x < targetGroup.position.x);
+  assert.ok(targetGroup.position.x < asg.position.x);
 });
 
 test("applyTemplateToDiagramWithBackup backs up the current board and returns the template board", () => {
