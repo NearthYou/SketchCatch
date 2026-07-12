@@ -185,3 +185,29 @@ Short English-only working log for the current agent context. Older records are 
 - Expand the Resource Dependency Rule Engine with evidence-backed rule packs beyond the implemented VPC/Subnet/EC2 v1 scope.
 - Begin with `docs/jh/study/000_운영우수성_학습가이드_JH.md` and use the OPS documents as one-hour study units.
 - Review the Deployment console changes on the current Workspace UI/UX branch and commit them when the user requests Git publication.
+
+### 2026-07-12 - Trivy deployment-safety accuracy and latency
+
+- Added exact S3 rule mappings, `{resourceAddress, riskFamily}` grouping, highest-severity selection, and preserved `trivyRuleIds` evidence.
+- Removed AI generation from the synchronous check response and added per-finding lazy explanation loading.
+- Added five-minute content/policy/ignore-rule cache, Runtime Cache sharing, startup warmup, and same-key single-flight execution.
+- Reused the shared Trivy snapshot between the button check and Terraform Plan when artifact content is unchanged.
+- Added an immediate in-process gate for Public S3, open SSH, Public RDS, and IAM wildcard; Trivy now completes in the background and the UI merges its result before enabling Plan.
+
+## Verification
+
+- `pnpm harness:check` passed.
+- `pnpm lint` passed with one existing unused-argument warning in `live-observation-store-contract.ts`.
+- `pnpm typecheck` passed when run after the Next.js build completed.
+- `pnpm build` passed for all five workspaces.
+- Focused scanner, API, Plan, and Workspace tests passed; the immediate gate route measured about 41 ms in the controlled test.
+- `pnpm test` found four unrelated existing web failures; none of their files differ from `origin/dev`.
+
+## Risk
+
+- The deterministic Terraform gate is intentionally limited to four high-value risk families and is not a full HCL evaluator; Trivy remains the deep scanner.
+- The full web suite baseline failures remain in diagram toolbar CSS expectations, dashboard projects route expectations, a missing ignored personal docs inventory, and a stale resource catalog count.
+
+## Next Action
+
+- Review the five staged commits and exercise the Direct Deployment preflight UI against a running local API before PR publication.

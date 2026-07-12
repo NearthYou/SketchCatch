@@ -80,6 +80,11 @@ const SAFETY_EXPLANATION_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const DEFAULT_SAFETY_EXPLANATION_TIMEOUT_MS = 2_500;
 const PRE_DEPLOYMENT_DEEP_SCAN_CACHE_NAMESPACE = "pre-deployment-deep-scan:v1";
 const PRE_DEPLOYMENT_DEEP_SCAN_TTL_MS = 5 * 60 * 1000;
+const PRE_DEPLOYMENT_DEEP_SCAN_MAX_LOCAL_ENTRIES = 100;
+type LocalDeepScanEntry = {
+  readonly expiresAt: number;
+  readonly value: AiPreDeploymentDeepScanResponse;
+};
 
 const resourceTypeSchema = z.enum(RESOURCE_TYPES);
 
@@ -253,7 +258,7 @@ export type AiRouteOptions = {
 
 // AI MVP API의 입구입니다. 요청 모양은 여기서 확인하고, 실제 판단은 service 함수에 맡깁니다.
 export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOptions = {}): Promise<void> {
-  const deepScans = new Map<string, AiPreDeploymentDeepScanResponse>();
+  const deepScans = new Map<string, LocalDeepScanEntry>();
   const createLlmExplanation = options.createLlmExplanation ?? createConfiguredAiExplanation();
   const createArchitectureDraftResponse =
     options.createArchitectureDraftResponse ?? createConfiguredAmazonQArchitectureDraftResponse();
@@ -330,8 +335,10 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
 
   app.post("/ai/pre-deployment-check", async (request): Promise<AiPreDeploymentAnalysisResult> => {
     const body = preDeploymentCheckBodySchema.parse(request.body);
+    const artifactSha256 = createSingleTerraformArtifactSha256(body.terraformFiles ?? []);
     const input = {
       architectureJson: body.architectureJson,
+      ...(artifactSha256 ? { artifactSha256 } : {}),
       ...(body.terraformFiles !== undefined ? { terraformFiles: body.terraformFiles } : {})
     };
     const immediateResult = analyzeImmediatePreDeploymentCheck(input);
@@ -374,7 +381,8 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
     async (request): Promise<AiPreDeploymentDeepScanResponse> => {
       const { scanId } = z.object({ scanId: z.uuid() }).parse(request.params);
       const localResult = deepScans.get(scanId);
-      if (localResult) return localResult;
+      if (localResult && localResult.expiresAt > Date.now()) return localResult.value;
+      if (localResult) deepScans.delete(scanId);
 
       if (options.runtimeCache) {
         try {
@@ -661,14 +669,31 @@ function toRuntimeCacheJsonValue(value: AiSafetyExplanation): RuntimeCacheJsonVa
   return JSON.parse(JSON.stringify(value)) as RuntimeCacheJsonValue;
 }
 
+function createSingleTerraformArtifactSha256(
+  terraformFiles: readonly { readonly terraformCode: string }[]
+): string | undefined {
+  const nonEmptyFiles = terraformFiles.filter((file) => file.terraformCode.trim().length > 0);
+  return nonEmptyFiles.length === 1
+    ? createHash("sha256").update(nonEmptyFiles[0]!.terraformCode, "utf8").digest("hex")
+    : undefined;
+}
+
 async function writeDeepScanResult(
   runtimeCache: RuntimeCache | undefined,
-  localResults: Map<string, AiPreDeploymentDeepScanResponse>,
+  localResults: Map<string, LocalDeepScanEntry>,
   scanId: string,
   value: AiPreDeploymentDeepScanResponse,
   onlyIfAbsent = false
 ): Promise<void> {
-  localResults.set(scanId, value);
+  localResults.set(scanId, {
+    expiresAt: Date.now() + PRE_DEPLOYMENT_DEEP_SCAN_TTL_MS,
+    value
+  });
+  while (localResults.size > PRE_DEPLOYMENT_DEEP_SCAN_MAX_LOCAL_ENTRIES) {
+    const oldestKey = localResults.keys().next().value as string | undefined;
+    if (!oldestKey) break;
+    localResults.delete(oldestKey);
+  }
   if (!runtimeCache) return;
 
   try {

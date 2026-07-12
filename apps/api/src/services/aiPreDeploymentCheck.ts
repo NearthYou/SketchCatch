@@ -17,6 +17,7 @@ import { scanTerraformWithDeterministicGate } from "./terraform/deterministic-te
 
 export type AnalyzePreDeploymentCheckInput = {
   readonly architectureJson: ArchitectureJson;
+  readonly artifactSha256?: string | undefined;
   readonly terraformFiles?: readonly TerraformSyncFileInput[] | undefined;
 };
 
@@ -50,7 +51,10 @@ export async function analyzePreDeploymentCheck(
         includeArchitectureSecurityFindings: false
       })
     ),
-    terraformSecurityScanner({ terraformFiles })
+    terraformSecurityScanner({
+      terraformFiles,
+      ...(input.artifactSha256 ? { artifactSha256: input.artifactSha256 } : {})
+    })
   ]);
 
   const deterministicFindings = scanTerraformWithDeterministicGate(terraformFiles);

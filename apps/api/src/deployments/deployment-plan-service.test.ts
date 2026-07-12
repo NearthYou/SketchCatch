@@ -1125,6 +1125,7 @@ test("runDeploymentPlan reuses the button scan snapshot when the artifact SHA is
 
   await analyzeWithSharedSnapshot({
     architectureJson: { nodes: [], edges: [] },
+    artifactSha256: terraformArtifactSha256,
     terraformFiles: [
       {
         fileName: "main.tf",

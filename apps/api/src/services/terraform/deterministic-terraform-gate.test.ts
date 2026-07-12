@@ -59,3 +59,22 @@ resource "aws_iam_policy" "admin" {
   assert.deepEqual(findings.map((finding) => finding.riskFamily), ["IAM_WILDCARD"]);
   assert.equal(findings[0]?.resourceId, "aws_iam_policy.admin");
 });
+
+test("deterministic Terraform gate detects the current VPC ingress rule resource", () => {
+  const findings = scanTerraformWithDeterministicGate([
+    {
+      fileName: "network.tf",
+      terraformCode: `
+resource "aws_vpc_security_group_ingress_rule" "ssh" {
+  from_port = 22
+  to_port   = 22
+  ip_protocol = "tcp"
+  cidr_ipv4 = "0.0.0.0/0"
+}
+`
+    }
+  ]);
+
+  assert.equal(findings[0]?.riskFamily, "PUBLIC_SSH");
+  assert.equal(findings[0]?.resourceId, "aws_vpc_security_group_ingress_rule.ssh");
+});

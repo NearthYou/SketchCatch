@@ -177,6 +177,7 @@ export async function runDeploymentPlan(
     const terraformArtifactSha256 = createSha256(terraformArtifactContent);
     const preDeploymentAnalysis = await analyzePreDeployment({
       architectureJson: architecture.architectureJson,
+      artifactSha256: terraformArtifactSha256,
       terraformFiles: [
         {
           fileName: artifact.fileName,

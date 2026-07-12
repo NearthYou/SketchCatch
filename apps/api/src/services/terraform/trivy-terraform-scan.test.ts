@@ -32,6 +32,28 @@ test("cached Terraform scanner reuses findings for identical content", async () 
   assert.equal(scanCount, 1);
 });
 
+test("cached Terraform scanner reuses an explicit artifact SHA across file names", async () => {
+  let scanCount = 0;
+  const scanner = createCachedTerraformSecurityScanner({
+    scan: async () => {
+      scanCount += 1;
+      return [];
+    }
+  });
+  const artifactSha256 = "a".repeat(64);
+
+  await scanner({
+    artifactSha256,
+    terraformFiles: [{ fileName: "editor.tf", terraformCode: 'resource "aws_s3_bucket" "assets" {}' }]
+  });
+  await scanner({
+    artifactSha256,
+    terraformFiles: [{ fileName: "main.tf", terraformCode: 'resource "aws_s3_bucket" "assets" {}' }]
+  });
+
+  assert.equal(scanCount, 1);
+});
+
 test("cached Terraform scanner expires findings after five-minute TTL", async () => {
   let now = 0;
   let scanCount = 0;
@@ -300,30 +322,32 @@ test("groups S3 Trivy rules by risk family while preserving rule evidence", () =
     findings.map((finding) => ({
       riskFamily: finding.riskFamily,
       severity: finding.severity,
-      title: finding.title,
       trivyRuleIds: finding.trivyRuleIds
     })),
     [
       {
         riskFamily: "S3_PUBLIC_ACCESS",
         severity: "high",
-        title: "S3 Block Public Access의 모든 보호 설정을 활성화해야 합니다.",
         trivyRuleIds: ["AWS-0086", "AWS-0087", "AWS-0091", "AWS-0093"]
       },
       {
         riskFamily: "S3_VERSIONING",
         severity: "medium",
-        title: "S3 버킷 버전 관리를 활성화해야 합니다.",
         trivyRuleIds: ["AWS-0090"]
       },
       {
         riskFamily: "S3_KMS_ENCRYPTION",
         severity: "high",
-        title: "S3 버킷 암호화에 고객 관리형 KMS 키를 사용해야 합니다.",
         trivyRuleIds: ["AWS-0132"]
       }
     ]
   );
+  const publicAccessFinding = findings[0];
+  assert.match(publicAccessFinding?.title ?? "", /AWS-0086[\s\S]*AWS-0087[\s\S]*AWS-0091[\s\S]*AWS-0093/);
+  assert.match(publicAccessFinding?.recommendation ?? "", /block_public_acls/);
+  assert.match(publicAccessFinding?.recommendation ?? "", /block_public_policy/);
+  assert.match(publicAccessFinding?.recommendation ?? "", /ignore_public_acls/);
+  assert.match(publicAccessFinding?.recommendation ?? "", /restrict_public_buckets/);
 });
 
 test("parseTrivyTerraformFindings falls back to the Trivy result target when cause file path is missing", () => {

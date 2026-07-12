@@ -32,7 +32,7 @@ const deterministicRules: readonly DeterministicRule[] = [
     riskFamily: "PUBLIC_SSH",
     category: "network",
     severity: "high",
-    resourceTypePattern: /aws_security_group(?:_rule)?/,
+    resourceTypePattern: /aws_(?:security_group(?:_rule)?|vpc_security_group_ingress_rule)/,
     matches: (code) =>
       /(?:from_port|port)\s*=\s*22\b/i.test(code) &&
       /(?:0\.0\.0\.0\/0|::\/0)/.test(code),

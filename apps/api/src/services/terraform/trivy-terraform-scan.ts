@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -15,6 +15,7 @@ const TRIVY_IGNORE_FILE_NAME = ".sketchcatch-trivyignore";
 const DEFAULT_TRIVY_RESULT_CACHE_TTL_MS = 5 * 60 * 1000;
 const DEFAULT_TRIVY_RESULT_CACHE_MAX_ENTRIES = 100;
 const TRIVY_PROCESS_CACHE_IDENTITY = randomUUID();
+const detectedTrivyVersions = new Map<string, string>();
 
 // Product policy keeps these AWS ALB and Auto Scaling checks out of the Trivy result.
 export const disabledTrivyTerraformRuleIds = [
@@ -30,6 +31,7 @@ export const disabledTrivyTerraformRuleIds = [
 ] as const;
 
 export type TerraformSecurityScannerInput = {
+  readonly artifactSha256?: string | undefined;
   readonly terraformFiles: readonly TerraformSyncFileInput[];
 };
 
@@ -256,6 +258,12 @@ function createTerraformSecurityScanCacheKey(
   hash.update("sketchcatch-trivy-terraform-scan:v1\0");
   hash.update(cacheKeySalt);
 
+  if (input.artifactSha256) {
+    hash.update("\0artifact-sha256\0");
+    hash.update(input.artifactSha256);
+    return hash.digest("hex");
+  }
+
   const normalizedFiles = [...input.terraformFiles].sort((left, right) =>
     left.fileName.localeCompare(right.fileName)
   );
@@ -275,15 +283,38 @@ function createTerraformSecurityScanCacheKey(
 
 function createConfiguredScannerCacheKeySalt(options: TrivyTerraformScanOptions): string {
   const cacheDir = options.cacheDir ?? process.env.TRIVY_CACHE_DIR ?? "";
+  const trivyBinaryPath = options.trivyBinaryPath ?? process.env.TRIVY_BIN ?? "trivy";
 
   return JSON.stringify({
     cacheDir,
     disabledRuleIds: disabledTrivyTerraformRuleIds,
     policyDigest: readTrivyPolicyDigest(cacheDir),
-    trivyBinaryPath: options.trivyBinaryPath ?? process.env.TRIVY_BIN ?? "trivy",
-    trivyVersion:
-      process.env.TRIVY_VERSION ?? `process:${TRIVY_PROCESS_CACHE_IDENTITY}`
+    trivyBinaryPath,
+    trivyVersion: resolveTrivyVersion(trivyBinaryPath)
   });
+}
+
+function resolveTrivyVersion(trivyBinaryPath: string): string {
+  if (process.env.TRIVY_VERSION) return process.env.TRIVY_VERSION;
+  const cached = detectedTrivyVersions.get(trivyBinaryPath);
+  if (cached) return cached;
+
+  try {
+    const output = execFileSync(trivyBinaryPath, ["--version"], {
+      encoding: "utf8",
+      timeout: 2_000,
+      windowsHide: true
+    });
+    const version = output.match(/(?:Version:\s*)?v?(\d+\.\d+\.\d+)/i)?.[1];
+    if (version) {
+      detectedTrivyVersions.set(trivyBinaryPath, version);
+      return version;
+    }
+  } catch {
+    // An unavailable binary cannot safely share a cross-process result cache.
+  }
+
+  return `process:${TRIVY_PROCESS_CACHE_IDENTITY}`;
 }
 
 function readTrivyPolicyDigest(cacheDir: string): string {
@@ -492,17 +523,8 @@ function createKoreanTrivyFindingText(
   const haystack = createTrivyMisconfigurationHaystack(ruleId, misconfiguration);
   const normalizedRuleId = ruleId.toUpperCase().replace(/^AVD-/, "");
 
-  if (["AWS-0086", "AWS-0087", "AWS-0091", "AWS-0093"].includes(normalizedRuleId)) {
-    return {
-      category: "security",
-      riskFamily: "S3_PUBLIC_ACCESS",
-      title: "S3 Block Public Access의 모든 보호 설정을 활성화해야 합니다.",
-      description:
-        "S3 Block Public Access의 일부 보호 설정이 빠지면 공개 ACL이나 공개 bucket policy가 적용될 수 있습니다.",
-      recommendation:
-        "`aws_s3_bucket_public_access_block`에서 `block_public_acls`, `block_public_policy`, `ignore_public_acls`, `restrict_public_buckets`를 모두 `true`로 설정하세요."
-    };
-  }
+  const s3PublicAccessText = getS3PublicAccessRuleText(normalizedRuleId);
+  if (s3PublicAccessText) return s3PublicAccessText;
 
   if (normalizedRuleId === "AWS-0090") {
     return {
@@ -578,16 +600,6 @@ function createKoreanTrivyFindingText(
     };
   }
 
-  if (hasAny(haystack, ["bucket policy", "public acl", "public access"])) {
-    return {
-      title: "S3 버킷은 공개 접근을 허용하면 안 됩니다.",
-      description:
-        "공개 ACL이나 과도한 bucket policy는 업로드 파일, Terraform 산출물, 사용자 데이터를 익명 사용자에게 노출할 수 있습니다.",
-      recommendation:
-        "공개 ACL과 Principal \"*\" 허용 정책을 제거하고 S3 Block Public Access를 활성화하세요."
-    };
-  }
-
   if (hasAny(haystack, ["iam", "wildcard", "privilege", "permission"])) {
     return {
       title: "IAM 권한 범위가 과도하게 넓을 수 있습니다.",
@@ -634,6 +646,9 @@ function groupTrivyFindings(findings: readonly CheckFinding[]): CheckFinding[] {
 
     grouped.set(key, {
       ...existing,
+      title: joinUniqueFindingText(existing.title, finding.title),
+      description: joinUniqueFindingText(existing.description, finding.description),
+      recommendation: joinUniqueFindingText(existing.recommendation, finding.recommendation),
       severity: maxRiskSeverity(existing.severity, finding.severity),
       trivyRuleIds: Array.from(
         new Set([...(existing.trivyRuleIds ?? []), ...(finding.trivyRuleIds ?? [])])
@@ -642,6 +657,37 @@ function groupTrivyFindings(findings: readonly CheckFinding[]): CheckFinding[] {
   }
 
   return [...grouped.values()];
+}
+
+function getS3PublicAccessRuleText(ruleId: string): TrivyFindingText | undefined {
+  const rules: Record<string, Omit<TrivyFindingText, "category" | "riskFamily">> = {
+    "AWS-0086": {
+      title: "S3 공개 ACL 업로드를 차단해야 합니다. (AWS-0086)",
+      description: "block_public_acls가 꺼져 있으면 공개 ACL이 지정된 PUT 요청을 허용할 수 있습니다.",
+      recommendation: "aws_s3_bucket_public_access_block의 block_public_acls를 true로 설정하세요."
+    },
+    "AWS-0087": {
+      title: "S3 공개 bucket policy 생성을 차단해야 합니다. (AWS-0087)",
+      description: "block_public_policy가 꺼져 있으면 공개 bucket policy가 새로 적용될 수 있습니다.",
+      recommendation: "aws_s3_bucket_public_access_block의 block_public_policy를 true로 설정하세요."
+    },
+    "AWS-0091": {
+      title: "S3 공개 ACL을 무시하도록 설정해야 합니다. (AWS-0091)",
+      description: "ignore_public_acls가 꺼져 있으면 기존 공개 ACL이 접근 권한에 반영될 수 있습니다.",
+      recommendation: "aws_s3_bucket_public_access_block의 ignore_public_acls를 true로 설정하세요."
+    },
+    "AWS-0093": {
+      title: "S3 공개 bucket policy의 접근 범위를 제한해야 합니다. (AWS-0093)",
+      description: "restrict_public_buckets가 꺼져 있으면 공개 policy가 있는 bucket에 광범위한 접근이 가능할 수 있습니다.",
+      recommendation: "aws_s3_bucket_public_access_block의 restrict_public_buckets를 true로 설정하세요."
+    }
+  };
+  const text = rules[ruleId];
+  return text ? { ...text, category: "security", riskFamily: "S3_PUBLIC_ACCESS" } : undefined;
+}
+
+function joinUniqueFindingText(left: string, right: string): string {
+  return left === right ? left : `${left}\n${right}`;
 }
 
 function maxRiskSeverity(
