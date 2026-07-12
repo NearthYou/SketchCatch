@@ -358,7 +358,7 @@ function TemplatesPanel({
           <strong>큰 모달로 열기</strong>
         </button>
         {templates.map((template) => (
-          <button className="templateCatalogCard" key={template.id} onClick={() => setModalOpen(true)} type="button">
+          <button className="templateCatalogCard" key={template.id} onClick={() => onTemplateApply?.(template)} type="button">
             <span>{template.tags.slice(0, 2).join(" · ")}</span>
             <strong>{template.title}</strong>
           </button>
