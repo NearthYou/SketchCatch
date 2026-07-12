@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { generateKeyPairSync } from "node:crypto";
 import test from "node:test";
-import { createGitHubAppClient } from "./github-app-client.js";
+import {
+  createGitHubAppClient,
+  GitHubRepositoryIdentityMismatchError,
+  GitHubRepositoryArchivedError,
+  GitHubRepositoryFileEncodingError,
+  GitHubRepositoryEvidenceLimitError,
+  GitHubRepositoryTreeTruncatedError
+} from "./github-app-client.js";
 
 const privateKey = generateKeyPairSync("rsa", {
   modulusLength: 2048,
@@ -86,6 +93,7 @@ test("listInstallations returns GitHub App installation account metadata", async
             repository_selection: "selected",
             html_url: "https://github.com/settings/installations/42",
             account: {
+              id: 987654,
               login: "NearthYou",
               type: "Organization"
             }
@@ -100,12 +108,387 @@ test("listInstallations returns GitHub App installation account metadata", async
   assert.deepEqual(await client.listInstallations(), [
     {
       installationId: "42",
+      accountId: "987654",
       accountLogin: "NearthYou",
       accountType: "Organization",
       repositorySelection: "selected",
       htmlUrl: "https://github.com/settings/installations/42"
     }
   ]);
+});
+
+test("readRepositoryEvidence reads the recursive tree and only allowed static evidence files", async () => {
+  const calls: GitHubApiCall[] = [];
+  const fileContents = new Map([
+    ["package.json", '{"workspaces":["apps/*"]}'],
+    ["apps/web/package.json", '{"dependencies":{"next":"16.2.9"}}'],
+    ["apps/web/next.config.mjs", "export default {}"],
+    ["docker/api.Dockerfile", "FROM node:24-alpine"],
+    ["README.md", "# Monorepo"]
+  ]);
+  const client = createGitHubAppClient({
+    appId: "12345",
+    privateKey,
+    fetch: createGitHubFetchStub(calls, ({ pathname, search }) => {
+      if (pathname === "/app/installations/42/access_tokens") {
+        return jsonResponse({ token: "installation-token" });
+      }
+
+      if (pathname === "/repos/owner/repo") {
+        return jsonResponse({ id: 1001, default_branch: "trunk" });
+      }
+
+      if (pathname === "/repos/owner/repo/commits/trunk") {
+        return jsonResponse({ sha: "commit-sha" });
+      }
+
+      if (
+        pathname === "/repos/owner/repo/git/trees/commit-sha" &&
+        search === "?recursive=1"
+      ) {
+        return jsonResponse({
+          sha: "tree-sha",
+          truncated: false,
+          tree: [
+            { path: "package.json", type: "blob" },
+            { path: "apps/web/package.json", type: "blob" },
+            { path: "apps/web/next.config.mjs", type: "blob" },
+            { path: "docker/api.Dockerfile", type: "blob" },
+            { path: "pnpm-lock.yaml", type: "blob" },
+            { path: "README.md", type: "blob" },
+            { path: "apps/web/src/page.tsx", type: "blob" }
+          ]
+        });
+      }
+
+      const contentsPrefix = "/repos/owner/repo/contents/";
+      if (pathname.startsWith(contentsPrefix)) {
+        const path = decodeURIComponent(pathname.slice(contentsPrefix.length));
+        const content = fileContents.get(path);
+
+        return content
+          ? jsonResponse({ encoding: "base64", content: Buffer.from(content).toString("base64") })
+          : jsonResponse({ message: "not found" }, 404);
+      }
+
+      return jsonResponse({ message: "not found" }, 404);
+    })
+  });
+
+  const snapshot = await client.readRepositoryEvidence({
+    installationId: "42",
+    expectedRepositoryId: "1001",
+    owner: "owner",
+    name: "repo"
+  });
+
+  assert.equal(snapshot.revision, "commit-sha");
+  assert.deepEqual(snapshot.treePaths, [
+    "README.md",
+    "apps/web/next.config.mjs",
+    "apps/web/package.json",
+    "apps/web/src/page.tsx",
+    "docker/api.Dockerfile",
+    "package.json",
+    "pnpm-lock.yaml"
+  ]);
+  assert.deepEqual(
+    snapshot.files.map((file) => file.path),
+    [
+      "README.md",
+      "apps/web/next.config.mjs",
+      "apps/web/package.json",
+      "docker/api.Dockerfile",
+      "package.json"
+    ]
+  );
+  assert.equal(
+    calls.some((call) => call.pathname.endsWith("/apps/web/src/page.tsx")),
+    false
+  );
+  assert.equal(
+    calls.some((call) => call.pathname.endsWith("/pnpm-lock.yaml")),
+    false
+  );
+  assert.equal(
+    calls
+      .filter((call) => call.pathname.includes("/contents/"))
+      .every((call) => call.search === "?ref=commit-sha"),
+    true
+  );
+  assert.equal(
+    calls.filter((call) => call.pathname === "/app/installations/42/access_tokens").length,
+    1
+  );
+});
+
+test("readRepositoryEvidence rejects a reused repository path with a different id", async () => {
+  const client = createGitHubAppClient({
+    appId: "12345",
+    privateKey,
+    fetch: createGitHubFetchStub([], ({ pathname }) => {
+      if (pathname === "/app/installations/42/access_tokens") {
+        return jsonResponse({ token: "installation-token" });
+      }
+
+      if (pathname === "/repos/owner/repo") {
+        return jsonResponse({ id: 2002, default_branch: "main" });
+      }
+
+      return jsonResponse({ message: "not found" }, 404);
+    })
+  });
+
+  await assert.rejects(
+    client.readRepositoryEvidence({
+      installationId: "42",
+      expectedRepositoryId: "1001",
+      owner: "owner",
+      name: "repo"
+    }),
+    GitHubRepositoryIdentityMismatchError
+  );
+});
+
+test("readRepositoryEvidence rejects truncated recursive trees", async () => {
+  const client = createGitHubAppClient({
+    appId: "12345",
+    privateKey,
+    fetch: createGitHubFetchStub([], ({ pathname }) => {
+      if (pathname === "/app/installations/42/access_tokens") {
+        return jsonResponse({ token: "installation-token" });
+      }
+
+      if (pathname === "/repos/owner/repo") {
+        return jsonResponse({ id: 1001, default_branch: "main" });
+      }
+
+      if (pathname === "/repos/owner/repo/commits/main") {
+        return jsonResponse({ sha: "commit-sha" });
+      }
+
+      return jsonResponse({
+        sha: "tree-sha",
+        truncated: true,
+        tree: []
+      });
+    })
+  });
+
+  await assert.rejects(
+    client.readRepositoryEvidence({
+      installationId: "42",
+      expectedRepositoryId: "1001",
+      owner: "owner",
+      name: "repo"
+    }),
+    GitHubRepositoryTreeTruncatedError
+  );
+});
+
+test("readRepositoryEvidence rejects a repository archived after connection", async () => {
+  const client = createGitHubAppClient({
+    appId: "12345",
+    privateKey,
+    fetch: createGitHubFetchStub([], ({ pathname }) => {
+      if (pathname === "/app/installations/42/access_tokens") {
+        return jsonResponse({ token: "installation-token" });
+      }
+
+      if (pathname === "/repos/owner/repo") {
+        return jsonResponse({ id: 1001, default_branch: "main", archived: true });
+      }
+
+      return jsonResponse({ message: "not found" }, 404);
+    })
+  });
+
+  await assert.rejects(
+    client.readRepositoryEvidence({
+      installationId: "42",
+      expectedRepositoryId: "1001",
+      owner: "owner",
+      name: "repo"
+    }),
+    GitHubRepositoryArchivedError
+  );
+});
+
+test("readRepositoryEvidence rejects unsupported file encoding", async () => {
+  const client = createGitHubAppClient({
+    appId: "12345",
+    privateKey,
+    fetch: createGitHubFetchStub([], ({ pathname }) => {
+      if (pathname === "/app/installations/42/access_tokens") {
+        return jsonResponse({ token: "installation-token" });
+      }
+
+      if (pathname === "/repos/owner/repo") {
+        return jsonResponse({ id: 1001, default_branch: "main" });
+      }
+
+      if (pathname === "/repos/owner/repo/commits/main") {
+        return jsonResponse({ sha: "commit-sha" });
+      }
+
+      if (pathname === "/repos/owner/repo/git/trees/commit-sha") {
+        return jsonResponse({
+          sha: "tree-sha",
+          truncated: false,
+          tree: [{ path: "package.json", type: "blob" }]
+        });
+      }
+
+      return jsonResponse({ encoding: "utf-8", content: "{}" });
+    })
+  });
+
+  await assert.rejects(
+    client.readRepositoryEvidence({
+      installationId: "42",
+      expectedRepositoryId: "1001",
+      owner: "owner",
+      name: "repo"
+    }),
+    GitHubRepositoryFileEncodingError
+  );
+});
+
+test("readRepositoryEvidence rejects repositories with too many evidence files", async () => {
+  const client = createGitHubAppClient({
+    appId: "12345",
+    privateKey,
+    fetch: createGitHubFetchStub([], ({ pathname }) => {
+      if (pathname === "/app/installations/42/access_tokens") {
+        return jsonResponse({ token: "installation-token" });
+      }
+
+      if (pathname === "/repos/owner/repo") {
+        return jsonResponse({ id: 1001, default_branch: "main" });
+      }
+
+      if (pathname === "/repos/owner/repo/commits/main") {
+        return jsonResponse({ sha: "commit-sha" });
+      }
+
+      if (pathname === "/repos/owner/repo/git/trees/commit-sha") {
+        return jsonResponse({
+          sha: "tree-sha",
+          truncated: false,
+          tree: Array.from({ length: 129 }, (_, index) => ({
+            path: `packages/package-${index}/package.json`,
+            type: "blob"
+          }))
+        });
+      }
+
+      return jsonResponse({ message: "not found" }, 404);
+    })
+  });
+
+  await assert.rejects(
+    client.readRepositoryEvidence({
+      installationId: "42",
+      expectedRepositoryId: "1001",
+      owner: "owner",
+      name: "repo"
+    }),
+    (error: unknown) =>
+      error instanceof GitHubRepositoryEvidenceLimitError && error.reason === "file_count"
+  );
+});
+
+test("readRepositoryEvidence rejects oversized evidence content", async () => {
+  const oversizedContent = "a".repeat(300 * 1024);
+  const client = createGitHubAppClient({
+    appId: "12345",
+    privateKey,
+    fetch: createGitHubFetchStub([], ({ pathname }) => {
+      if (pathname === "/app/installations/42/access_tokens") {
+        return jsonResponse({ token: "installation-token" });
+      }
+
+      if (pathname === "/repos/owner/repo") {
+        return jsonResponse({ id: 1001, default_branch: "main" });
+      }
+
+      if (pathname === "/repos/owner/repo/commits/main") {
+        return jsonResponse({ sha: "commit-sha" });
+      }
+
+      if (pathname === "/repos/owner/repo/git/trees/commit-sha") {
+        return jsonResponse({
+          sha: "tree-sha",
+          truncated: false,
+          tree: [{ path: "README.md", type: "blob" }]
+        });
+      }
+
+      return jsonResponse({
+        encoding: "base64",
+        content: Buffer.from(oversizedContent).toString("base64")
+      });
+    })
+  });
+
+  await assert.rejects(
+    client.readRepositoryEvidence({
+      installationId: "42",
+      expectedRepositoryId: "1001",
+      owner: "owner",
+      name: "repo"
+    }),
+    (error: unknown) =>
+      error instanceof GitHubRepositoryEvidenceLimitError && error.reason === "file_size"
+  );
+});
+
+test("readRepositoryEvidence rejects evidence beyond the total byte budget", async () => {
+  const fileContent = "a".repeat(240 * 1024);
+  const client = createGitHubAppClient({
+    appId: "12345",
+    privateKey,
+    fetch: createGitHubFetchStub([], ({ pathname }) => {
+      if (pathname === "/app/installations/42/access_tokens") {
+        return jsonResponse({ token: "installation-token" });
+      }
+
+      if (pathname === "/repos/owner/repo") {
+        return jsonResponse({ id: 1001, default_branch: "main" });
+      }
+
+      if (pathname === "/repos/owner/repo/commits/main") {
+        return jsonResponse({ sha: "commit-sha" });
+      }
+
+      if (pathname === "/repos/owner/repo/git/trees/commit-sha") {
+        return jsonResponse({
+          sha: "tree-sha",
+          truncated: false,
+          tree: Array.from({ length: 9 }, (_, index) => ({
+            path: `packages/package-${index}/README.md`,
+            type: "blob"
+          }))
+        });
+      }
+
+      return jsonResponse({
+        encoding: "base64",
+        content: Buffer.from(fileContent).toString("base64")
+      });
+    })
+  });
+
+  await assert.rejects(
+    client.readRepositoryEvidence({
+      installationId: "42",
+      expectedRepositoryId: "1001",
+      owner: "owner",
+      name: "repo"
+    }),
+    (error: unknown) =>
+      error instanceof GitHubRepositoryEvidenceLimitError && error.reason === "total_size"
+  );
 });
 
 test("createPullRequest updates a generated file even when the target branch already contains the SketchCatch path", async () => {

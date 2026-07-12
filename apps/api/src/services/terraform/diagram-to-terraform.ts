@@ -21,9 +21,47 @@ export class TerraformDiagramValidationError extends Error {
 }
 
 export function renderTerraformFromInfrastructureGraph(graph: InfrastructureGraph): string {
-  const resourceBlocks = graph.nodes.map((node) => renderBlock(node));
+  const resourceBlocks = graph.nodes.flatMap((node) => [
+    renderBlock(node),
+    ...renderCompanionBlocks(node)
+  ]);
 
   return [...resourceBlocks, ...renderLiveObservationOutputs(graph)].join("\n\n");
+}
+
+function renderCompanionBlocks(node: InfrastructureGraphNode): string[] {
+  return hasInlineLambdaSource(node) ? [renderInlineLambdaArchive(node)] : [];
+}
+
+function createRenderableResourceConfig(node: InfrastructureGraphNode): Record<string, unknown> {
+  const config = { ...node.config };
+  if (!hasInlineLambdaSource(node)) return config;
+
+  delete config["inlineSource"];
+  const archiveAddress = `data.archive_file.${node.iac.resourceName}_bundle`;
+  config["filename"] = `${archiveAddress}.output_path`;
+  config["sourceCodeHash"] = `${archiveAddress}.output_base64sha256`;
+  return config;
+}
+
+function hasInlineLambdaSource(node: InfrastructureGraphNode): boolean {
+  return node.iac.resourceType === "aws_lambda_function" &&
+    typeof node.config["inlineSource"] === "string" &&
+    node.config["inlineSource"].length > 0;
+}
+
+function renderInlineLambdaArchive(node: InfrastructureGraphNode): string {
+  const source = node.config["inlineSource"];
+  if (typeof source !== "string") return "";
+  const archiveName = `${node.iac.resourceName}_bundle`;
+  return [
+    `data "archive_file" "${archiveName}" {`,
+    `${INDENT_UNIT}type = "zip"`,
+    `${INDENT_UNIT}source_content = ${JSON.stringify(source)}`,
+    `${INDENT_UNIT}source_content_filename = "index.mjs"`,
+    `${INDENT_UNIT}output_path = "\${path.module}/${archiveName}.zip"`,
+    "}"
+  ].join("\n");
 }
 
 function renderLiveObservationOutputs(graph: InfrastructureGraph): string[] {
@@ -78,7 +116,7 @@ function renderBlock(node: InfrastructureGraphNode): string {
   assertTerraformIdentifier(node.iac.resourceType, "resource type");
   assertTerraformIdentifier(node.iac.resourceName, "resource name");
 
-  const body = Object.entries(node.config).flatMap(([key, value]) =>
+  const body = Object.entries(createRenderableResourceConfig(node)).flatMap(([key, value]) =>
     renderBodyEntry(node.iac.resourceType, key, value, 1)
   );
 

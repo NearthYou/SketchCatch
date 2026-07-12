@@ -61,6 +61,91 @@ test("controlled React Flow selection reuses state when selection membership is 
   );
 });
 
+test("diagram editor commits the Flow-node cache after mapping rather than during render", () => {
+  const flowNodesStart = diagramEditorSource.indexOf("  const flowNodes = useMemo(");
+  const flowNodeCacheEffectStart = diagramEditorSource.indexOf("  useEffect(() => {", flowNodesStart);
+  const flowEdgesStart = diagramEditorSource.indexOf("  const flowEdges = useMemo(", flowNodesStart);
+
+  assert.notEqual(flowNodesStart, -1);
+  assert.notEqual(flowNodeCacheEffectStart, -1);
+  assert.notEqual(flowEdgesStart, -1);
+
+  const flowNodeMappingSource = diagramEditorSource.slice(flowNodesStart, flowNodeCacheEffectStart);
+  const flowNodeCacheEffectSource = diagramEditorSource.slice(flowNodeCacheEffectStart, flowEdgesStart);
+
+  assert.match(
+    diagramEditorSource,
+    /const flowNodeCacheRef = useRef<ReadonlyMap<string, DiagramFlowNode>>\(new Map\(\)\);/
+  );
+  assert.match(flowNodeMappingSource, /cachedNodesById:\s*flowNodeCacheRef\.current/);
+  assert.doesNotMatch(flowNodeMappingSource, /flowNodeCacheRef\.current\s*=/);
+  assert.match(
+    flowNodeCacheEffectSource,
+    /useEffect\(\(\) => \{\s*flowNodeCacheRef\.current = new Map\(flowNodes\.map\(\(node\) => \[node\.id, node\]\)\);\s*\}, \[flowNodes\]\);/
+  );
+});
+
+test("direct node drags leave preview position updates to onNodeDrag", () => {
+  const handleNodesChangeSource = getSourceBlock(
+    diagramEditorSource,
+    "const handleNodesChange = useCallback<OnNodesChange<DiagramFlowNode>>(",
+    "const handleEdgesChange = useCallback<OnEdgesChange<DiagramFlowEdge>>("
+  );
+  const selectionChangesIndex = handleNodesChangeSource.indexOf(
+    "const nextSelectedNodeIds = applySelectionChanges(selectedNodeIds, changes);"
+  );
+  const selectionStateUpdateIndex = handleNodesChangeSource.indexOf(
+    "setSelectedNodeIds((currentIds) =>"
+  );
+  const directDragReturnIndex = handleNodesChangeSource.indexOf(
+    "if (dragSnapshot && directNodeDragIds) {"
+  );
+  const liveDiagramUpdateIndex = handleNodesChangeSource.indexOf(
+    "applyLiveDiagramUpdate((currentDiagram) =>"
+  );
+
+  assert.match(handleNodesChangeSource, /if \(dragSnapshot && directNodeDragIds\) \{\s*return;\s*\}/);
+  assert.notEqual(selectionChangesIndex, -1);
+  assert.notEqual(selectionStateUpdateIndex, -1);
+  assert.notEqual(directDragReturnIndex, -1);
+  assert.notEqual(liveDiagramUpdateIndex, -1);
+  assert.ok(selectionChangesIndex < selectionStateUpdateIndex);
+  assert.ok(selectionStateUpdateIndex < directDragReturnIndex);
+  assert.ok(directDragReturnIndex < liveDiagramUpdateIndex);
+});
+
+test("direct node drag coalesces preview work to animation frames and flushes the final payload", () => {
+  const queueNodeDragPreviewSource = getSourceBlock(
+    diagramEditorSource,
+    "const queueNodeDragPreview = useCallback(",
+    "const handleNodeDragStart = useCallback("
+  );
+  const handleNodeDragStopSource = getSourceBlock(
+    diagramEditorSource,
+    "const handleNodeDragStop = useCallback(",
+    "const clearConnectionActivityOnRelease = useCallback("
+  );
+
+  assert.match(
+    diagramEditorSource,
+    /const nodeDragPreviewFrameRef = useRef<number \| null>\(null\);/
+  );
+  assert.match(queueNodeDragPreviewSource, /pendingNodeDragPreviewRef\.current = \{ draggedNodeId, nodes \};/);
+  assert.match(
+    queueNodeDragPreviewSource,
+    /if \(nodeDragPreviewFrameRef\.current !== null\) \{\s*return;\s*\}/
+  );
+  assert.match(
+    queueNodeDragPreviewSource,
+    /nodeDragPreviewFrameRef\.current = window\.requestAnimationFrame\(\(\) => \{[\s\S]*?nodeDragPreviewFrameRef\.current = null;[\s\S]*?pendingNodeDragPreviewRef\.current = null;[\s\S]*?commitNodeDragPreview\(/
+  );
+  assert.match(handleNodeDragStopSource, /const previewNodes = flushNodeDragPreview\(node\.id, nodes\);/);
+  assert.match(
+    diagramEditorSource,
+    /useEffect\(\(\) => \(\) => cancelQueuedNodeDragPreview\(\), \[cancelQueuedNodeDragPreview\]\);/
+  );
+});
+
 test("diagram editor restores select mode after temporary middle-button pan", () => {
   assert.match(diagramEditorSource, /getTemporaryPanReleaseMode/);
   assert.match(diagramEditorSource, /window\.addEventListener\("pointerup",\s*restoreTemporaryPanMode\)/);
@@ -81,6 +166,19 @@ test("diagram editor makes click-to-connect and nearby target acquisition explic
   assert.match(
     diagramEditorSource,
     /connectionRadius=\{28 \* boardZoomPresentationScale\.controlScale\}/
+  );
+});
+
+test("palette drag preview and drop use the same Area size transformer", () => {
+  assert.match(
+    diagramEditorSource,
+    /import \{ scalePaletteAreaNodeSize \} from "\.\/palette-area-node-size";/
+  );
+  assert.equal(
+    diagramEditorSource.match(
+      /scalePaletteAreaNodeSize\(\s*createDiagramNodeFromPayload\(/g
+    )?.length,
+    2
   );
 });
 
@@ -560,4 +658,14 @@ function getCssRuleContaining(selector: string): string {
   assert.notEqual(blockEnd, -1);
 
   return diagramEditorStyles.slice(selectorStart, blockEnd + 1);
+}
+
+function getSourceBlock(source: string, startMarker: string, endMarker: string): string {
+  const start = source.indexOf(startMarker);
+  const end = source.indexOf(endMarker, start);
+
+  assert.notEqual(start, -1);
+  assert.notEqual(end, -1);
+
+  return source.slice(start, end);
 }

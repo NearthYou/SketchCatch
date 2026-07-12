@@ -940,6 +940,63 @@ test("renders AWS nested block lists as Terraform blocks with snake_case attribu
   assert.doesNotMatch(terraformCode, /cidrBlock|gatewayId|cidrBlocks|fromPort|toPort/);
 });
 
+test("renders Kubernetes workload nested blocks and provider references", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      makeNode({
+        id: "namespace-1",
+        type: "kubernetes_namespace",
+        kind: "resource",
+        label: "sketchcatch",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "kubernetes_namespace",
+          resourceName: "sketchcatch",
+          fileName: "workload",
+          values: { metadata: { name: "sketchcatch" } }
+        }
+      }),
+      makeNode({
+        id: "deployment-1",
+        type: "kubernetes_deployment",
+        kind: "resource",
+        label: "web",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "kubernetes_deployment",
+          resourceName: "web",
+          fileName: "workload",
+          values: {
+            metadata: { name: "web", namespace: "kubernetes_namespace.sketchcatch.id" },
+            spec: {
+              replicas: 1,
+              selector: { matchLabels: { app: "web" } },
+              template: {
+                metadata: { labels: { app: "web" } },
+                spec: {
+                  container: [{ name: "web", image: "nginx:stable", port: [{ containerPort: 80 }] }]
+                }
+              }
+            }
+          }
+        }
+      })
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  const terraformCode = generateTerraformFromDiagramJson(diagramJson);
+
+  assert.match(terraformCode, /resource "kubernetes_namespace" "sketchcatch"/);
+  assert.match(terraformCode, /resource "kubernetes_deployment" "web"/);
+  assert.match(terraformCode, /namespace = kubernetes_namespace\.sketchcatch\.id/);
+  assert.match(terraformCode, /selector \{/);
+  assert.match(terraformCode, /template \{/);
+  assert.match(terraformCode, /container \{/);
+  assert.match(terraformCode, /container_port = 80/);
+});
+
 test("tracks curated nested block parameters as canonical camelCase keys", () => {
   const expectedNestedBlockAttributes: Record<string, string[]> = {
     aws_ami: ["filter"],

@@ -283,6 +283,7 @@ export function WorkspaceDraftManager({
       rightPanel={(context) => (
         <WorkspaceRightPanel
           context={context}
+          deploymentAvailability="project_required"
           initialView={initialRightPanelView}
           onTerraformIssueAiRequest={setTerraformIssueAiRequest}
           onTerraformPreviewAiRequest={setTerraformPreviewAiRequest}

@@ -77,6 +77,74 @@ test("assertTerraformArtifactIsSafe accepts the MVP AWS resource subset", () => 
   );
 });
 
+test("assertTerraformArtifactIsSafe accepts approved Kubernetes template resources", () => {
+  assert.doesNotThrow(() =>
+    assertTerraformArtifactIsSafe(
+      `terraform {
+        required_providers {
+          aws = {
+            source = "hashicorp/aws"
+            version = "~> 6.0"
+          }
+          kubernetes = {
+            source = "hashicorp/kubernetes"
+            version = "~> 2.0"
+          }
+        }
+      }
+
+      provider "aws" {
+        region = "ap-northeast-2"
+      }
+
+      provider "kubernetes" {}
+
+      resource "kubernetes_namespace" "app" {
+        metadata {
+          name = "app"
+        }
+      }
+      resource "kubernetes_service" "app" {
+        metadata {
+          name = "app"
+        }
+      }`,
+      { liveProfile: "demo_web_service_with_rds" }
+    )
+  );
+});
+
+test("assertTerraformArtifactIsSafe accepts generated Lambda archives and EKS auth data", () => {
+  assert.doesNotThrow(() =>
+    assertTerraformArtifactIsSafe(
+      `terraform {
+        required_providers {
+          aws = {
+            source = "hashicorp/aws"
+            version = "~> 5.0"
+          }
+          archive = {
+            source = "hashicorp/archive"
+            version = "~> 2.0"
+          }
+        }
+      }
+
+      data "archive_file" "handler" {
+        type                    = "zip"
+        source_content          = "export const handler = async () => ({ statusCode: 200 })"
+        source_content_filename = "index.mjs"
+        output_path             = "\${path.module}/handler.zip"
+      }
+
+      data "aws_eks_cluster_auth" "sketchcatch" {
+        name = "practice-cluster"
+      }`,
+      { liveProfile: "demo_web_service_with_rds" }
+    )
+  );
+});
+
 test("assertTerraformArtifactIsSafe rejects Terraform module blocks", () => {
   assert.throws(
     () =>
@@ -261,6 +329,76 @@ test("assertTerraformArtifactIsSafe accepts AI-generated CI/CD resource types", 
         name = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
       }
     `)
+  );
+});
+
+test("assertTerraformArtifactIsSafe accepts inline archive data for Lambda artifacts", () => {
+  assert.doesNotThrow(() =>
+    assertTerraformArtifactIsSafe(`
+      data "archive_file" "handler" {
+        type                    = "zip"
+        output_path             = "\${path.module}/lambda-handler.zip"
+        source_content          = "exports.handler = async () => ({ statusCode: 200 })"
+        source_content_filename = "index.js"
+      }
+    `)
+  );
+});
+
+test("assertTerraformArtifactIsSafe rejects archive source files before live deployment", () => {
+  assert.throws(
+    () =>
+      assertTerraformArtifactIsSafe(`
+        data "archive_file" "env" {
+          type        = "zip"
+          output_path = "./env.zip"
+          source_file = "../.env"
+        }
+      `),
+    /archive_file must use inline source_content/
+  );
+});
+
+test("assertTerraformArtifactIsSafe rejects archive source files with comments in the header", () => {
+  assert.throws(
+    () =>
+      assertTerraformArtifactIsSafe(`
+        data/* keep header readable */"archive_file"/* resource label follows */"env"{
+          type        = "zip"
+          output_path = "./env.zip"
+          source_file = "../.env"
+        }
+      `),
+    /archive_file must use inline source_content/
+  );
+});
+
+test("assertTerraformArtifactIsSafe rejects archive source directories before live deployment", () => {
+  assert.throws(
+    () =>
+      assertTerraformArtifactIsSafe(`
+        data "archive_file" "workspace" {
+          type       = "zip"
+          output_path = "./workspace.zip"
+          source_dir = "../"
+        }
+      `),
+    /archive_file must use inline source_content/
+  );
+});
+
+test("assertTerraformArtifactIsSafe rejects archive output paths outside the workspace", () => {
+  assert.throws(
+    () =>
+      assertTerraformArtifactIsSafe(`
+        data "archive_file" "handler" {
+          type                    = "zip"
+          output_path             = "../handler.zip"
+          source_content          = "exports.handler = async () => ({ statusCode: 200 })"
+          source_content_filename = "index.js"
+        }
+      `),
+    /archive_file output_path must stay in the Terraform workspace/
   );
 });
 

@@ -1,19 +1,27 @@
 import { randomUUID } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
 import type {
+  AnalyzeSourceRepositoryResponse,
   GitHubInstalledRepositoryCandidate,
-  GitHubRepositoryCandidate
+  GitHubRepositoryCandidate,
+  RepositoryAnalysisAiHandoff
 } from "@sketchcatch/types";
+import type { TemplateId } from "@sketchcatch/types";
 import type { Database } from "../db/client.js";
-import { projects, sourceRepositories, touchUpdatedAt } from "../db/schema.js";
+import { oauthAccounts, projects, sourceRepositories, touchUpdatedAt } from "../db/schema.js";
 import type { ProjectAccessContext } from "../git-cicd/git-cicd-handoff-service.js";
 import { createGitHubAppState, verifyGitHubAppState } from "./github-app-state.js";
-import type { GitHubAppClient } from "./github-app-client.js";
+import type {
+  GitHubAppClient,
+  GitHubRepositoryEvidenceReader
+} from "./github-app-client.js";
+import { analyzeRepositoryEvidence } from "./repository-analysis.js";
 
 export type SourceRepositoryRecord = typeof sourceRepositories.$inferSelect;
 export type SourceRepositoryProjectRecord = typeof projects.$inferSelect;
 
 export type SourceRepositoryRepository = {
+  findGitHubProviderUserId(userId: string): Promise<string | null>;
   findAccessibleProject(
     projectId: string,
     accessContext: ProjectAccessContext
@@ -24,6 +32,9 @@ export type SourceRepositoryRepository = {
     sourceRepositoryId: string
   ): Promise<SourceRepositoryRecord | undefined>;
   createActiveGitHubSourceRepository(input: CreateActiveGitHubSourceRepositoryInput): Promise<SourceRepositoryRecord>;
+  saveProjectSourceRepositoryAnalysis(
+    input: SaveProjectSourceRepositoryAnalysisInput
+  ): Promise<SourceRepositoryRecord | undefined>;
 };
 
 export type CreateActiveGitHubSourceRepositoryInput = {
@@ -96,6 +107,20 @@ export type ConnectGitHubSourceRepositoryInput = {
   stateSecret: string;
 };
 
+export type AnalyzeSourceRepositoryInput = {
+  readonly projectId: string;
+  readonly sourceRepositoryId: string;
+  readonly accessContext: ProjectAccessContext;
+};
+
+export type SaveProjectSourceRepositoryAnalysisInput = {
+  readonly projectId: string;
+  readonly sourceRepositoryId: string;
+  readonly repositoryRevision: string;
+  readonly analyzedAt: Date;
+  readonly aiHandoff: RepositoryAnalysisAiHandoff;
+};
+
 export class SourceRepositoryNotFoundError extends Error {
   constructor(message: string) {
     super(message);
@@ -117,10 +142,29 @@ export class SourceRepositoryConflictError extends Error {
   }
 }
 
+export class RepositoryAnalysisTemplateSelectionError extends Error {
+  readonly statusCode = 409;
+  readonly errorCode = "conflict" as const;
+
+  constructor(message: string) {
+    super(message);
+    this.name = "RepositoryAnalysisTemplateSelectionError";
+  }
+}
+
+// Source Repository 연결과 마지막 분석 결과를 같은 RDS row에서 관리합니다.
 export function createPostgresSourceRepositoryRepository(
   db: Database
 ): SourceRepositoryRepository {
   return {
+    async findGitHubProviderUserId(userId) {
+      const [account] = await db
+        .select({ providerUserId: oauthAccounts.providerUserId })
+        .from(oauthAccounts)
+        .where(and(eq(oauthAccounts.userId, userId), eq(oauthAccounts.provider, "github")));
+
+      return account?.providerUserId ?? null;
+    },
     async findAccessibleProject(projectId, accessContext) {
       const [project] = await db
         .select()
@@ -194,6 +238,27 @@ export function createPostgresSourceRepositoryRepository(
 
         return repository;
       });
+    },
+
+    async saveProjectSourceRepositoryAnalysis(input) {
+      const [repository] = await db
+        .update(sourceRepositories)
+        .set({
+          analysisResult: input.aiHandoff,
+          analysisRevision: input.repositoryRevision,
+          analyzedAt: input.analyzedAt,
+          ...touchUpdatedAt
+        })
+        .where(
+          and(
+            eq(sourceRepositories.projectId, input.projectId),
+            eq(sourceRepositories.id, input.sourceRepositoryId),
+            eq(sourceRepositories.status, "active")
+          )
+        )
+        .returning();
+
+      return repository;
     }
   };
 }
@@ -275,6 +340,7 @@ export async function listGitHubInstallationRepositories(
   githubAppClient: GitHubAppClient
 ): Promise<ListGitHubInstallationRepositoriesResult> {
   const state = await verifyAndAuthorizeState(input, repository);
+  await requireOwnedGitHubInstallation(state.userId, input.installationId, repository, githubAppClient);
   const repositories = await githubAppClient.listInstallationRepositories(input.installationId);
 
   return {
@@ -303,7 +369,11 @@ export async function listGitHubInstalledRepositories(
   };
   const { state, expiresAt } = await createGitHubAppState(stateInput);
   const knownRepositories = await repository.listProjectSourceRepositories(input.projectId);
-  const installations = await githubAppClient.listInstallations();
+  const installations = await listOwnedGitHubInstallations(
+    input.accessContext.userId,
+    repository,
+    githubAppClient
+  );
   const repositories: GitHubInstalledRepositoryCandidate[] = [];
 
   for (const installation of installations) {
@@ -351,7 +421,13 @@ export async function connectGitHubSourceRepository(
   githubAppClient: GitHubAppClient,
   generateId: () => string = randomUUID
 ): Promise<SourceRepositoryRecord> {
-  await verifyAndAuthorizeState(input, repository);
+  const state = await verifyAndAuthorizeState(input, repository);
+  await requireOwnedGitHubInstallation(
+    state.userId,
+    input.installationId,
+    repository,
+    githubAppClient
+  );
 
   const repositories = await githubAppClient.listInstallationRepositories(input.installationId);
   const selectedRepository = repositories.find(
@@ -387,6 +463,104 @@ export async function listSourceRepositories(
   );
 
   return repository.listProjectSourceRepositories(input.projectId);
+}
+
+export async function requireRepositoryAnalysisTemplateId(
+  input: {
+    readonly projectId: string;
+    readonly sourceRepositoryId: string;
+    readonly accessContext: ProjectAccessContext;
+  },
+  repository: SourceRepositoryRepository
+): Promise<TemplateId> {
+  await requireAccessibleProject(
+    input.projectId,
+    input.accessContext,
+    repository,
+    "Project not found"
+  );
+  const sourceRepository = await repository.findProjectSourceRepository(
+    input.projectId,
+    input.sourceRepositoryId
+  );
+  const analysis = sourceRepository?.analysisResult;
+
+  if (
+    !sourceRepository ||
+    sourceRepository.provider !== "github" ||
+    sourceRepository.status !== "active" ||
+    !analysis ||
+    analysis.status !== "template_selected"
+  ) {
+    throw new RepositoryAnalysisTemplateSelectionError(
+      "REPOSITORY_ANALYSIS_TEMPLATE_UNAVAILABLE"
+    );
+  }
+
+  return analysis.templateId;
+}
+
+// active GitHub Source Repository를 정적으로 읽고 구조화된 분석 요약만 저장한다.
+// 저장소 코드를 실행하지 않고 고정 revision의 evidence만 분석해 마지막 AI Handoff를 저장합니다.
+export async function analyzeSourceRepository(
+  input: AnalyzeSourceRepositoryInput,
+  repository: SourceRepositoryRepository,
+  evidenceReader: GitHubRepositoryEvidenceReader
+): Promise<AnalyzeSourceRepositoryResponse> {
+  await requireAccessibleProject(
+    input.projectId,
+    input.accessContext,
+    repository,
+    "Project not found"
+  );
+  const sourceRepository = await repository.findProjectSourceRepository(
+    input.projectId,
+    input.sourceRepositoryId
+  );
+
+  if (!sourceRepository) {
+    throw new SourceRepositoryNotFoundError("Source repository not found");
+  }
+
+  if (
+    sourceRepository.status !== "active" ||
+    sourceRepository.provider !== "github" ||
+    !sourceRepository.githubInstallationId ||
+    !sourceRepository.githubRepositoryId ||
+    sourceRepository.archived
+  ) {
+    throw new SourceRepositoryConflictError(
+      "Only an active GitHub source repository can be analyzed"
+    );
+  }
+
+  const snapshot = await evidenceReader.readRepositoryEvidence({
+    installationId: sourceRepository.githubInstallationId,
+    expectedRepositoryId: sourceRepository.githubRepositoryId,
+    owner: sourceRepository.owner,
+    name: sourceRepository.name
+  });
+
+  const aiHandoff = analyzeRepositoryEvidence(snapshot);
+  const analyzedAt = new Date();
+  const savedRepository = await repository.saveProjectSourceRepositoryAnalysis({
+    projectId: input.projectId,
+    sourceRepositoryId: sourceRepository.id,
+    repositoryRevision: snapshot.revision,
+    analyzedAt,
+    aiHandoff
+  });
+
+  if (!savedRepository) {
+    throw new SourceRepositoryConflictError("Source repository changed during analysis");
+  }
+
+  return {
+    sourceRepositoryId: sourceRepository.id,
+    repositoryRevision: snapshot.revision,
+    analyzedAt: analyzedAt.toISOString(),
+    aiHandoff
+  };
 }
 
 async function verifyAndAuthorizeState(
@@ -430,6 +604,39 @@ async function verifyAndAuthorizeState(
     userId: state.userId,
     projectId: state.projectId
   };
+}
+
+async function listOwnedGitHubInstallations(
+  userId: string,
+  repository: SourceRepositoryRepository,
+  githubAppClient: GitHubAppClient
+) {
+  const providerUserId = await repository.findGitHubProviderUserId(userId);
+
+  if (!providerUserId) {
+    throw new SourceRepositoryConflictError("GIT_APP_GITHUB_IDENTITY_REQUIRED");
+  }
+
+  const installations = await githubAppClient.listInstallations();
+  return installations.filter((installation) => installation.accountId === providerUserId);
+}
+
+async function requireOwnedGitHubInstallation(
+  userId: string,
+  installationId: string,
+  repository: SourceRepositoryRepository,
+  githubAppClient: GitHubAppClient
+) {
+  const installations = await listOwnedGitHubInstallations(userId, repository, githubAppClient);
+  const installation = installations.find(
+    (candidate) => candidate.installationId === installationId
+  );
+
+  if (!installation) {
+    throw new SourceRepositoryConflictError("GIT_APP_INSTALLATION_FORBIDDEN");
+  }
+
+  return installation;
 }
 
 async function requireAccessibleProject(

@@ -5,12 +5,27 @@ Short English-only working log for the current agent context. Older records are 
 ## Current Verified State
 
 - Branch: `feat/ck/287-ai-diagram`.
-- Local `dev` and `origin/dev` point to `4d48f3f1`; latest Trivy scanner and production infrastructure check updates are merged into this branch.
+- Local `dev` and `origin/dev` point to `de4cd817`; latest repository analysis, template, live observation, and workspace UI updates are being merged into this branch.
 - Architecture Draft uses Amazon Q retrieval evidence, deterministic deployable materialization, NDJSON progress streaming, and containment-aware board layout.
-- PR #347 review feedback has been addressed locally with focused regression coverage and full validation.
-- No cloud deployment or Terraform mutation was run during this review fix session.
+- PR #347 review feedback has been addressed, pushed, and resolved.
+- No cloud deployment or Terraform mutation was run during this merge session.
 
 ## Session Record
+
+### 2026-07-12 - Merge latest dev into AI diagram branch
+
+- Goal: Fast-forward local `dev` to `origin/dev` and merge it into `feat/ck/287-ai-diagram`.
+- Completed:
+  - Fast-forwarded `dev` from `4d48f3f1` to `de4cd817`.
+  - Began merging the latest repository analysis, AWS Template, live observation, and workspace UI work into the AI diagram branch.
+  - Resolved merge conflicts by taking `dev` for UI conflict files and combining backend/type safety changes with the AI diagram branch contracts.
+- Verification:
+  - Pre-merge and post-conflict `pnpm harness:check` passed.
+  - API and web focused `tsc --noEmit` checks passed during conflict resolution.
+  - `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
+  - The first `pnpm typecheck` run failed because `.next/types` files were missing before `next build`; after successful `pnpm build`, rerunning `pnpm typecheck` passed.
+- Risk:
+  - `pnpm lint` reported one warning from merged `dev` live observation test support: unused `setNow` in `apps/api/src/live-observations/live-observation-store-contract.ts`.
 
 ### 2026-07-12 - Address PR #347 review feedback
 

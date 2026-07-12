@@ -84,7 +84,11 @@ export function useAiStartWorkflow() {
   const [createdProjectId, setCreatedProjectId] = useState<string | null>(null);
   const [requestState, setRequestState] = useState<RequestState>("idle");
   const [errorMessage, setErrorMessage] = useState("");
-  const voiceInput = useBrowserVoiceInput({ onChange: setComposerValue, value: composerValue });
+  const [voiceTranscriptNeedsConfirmation, setVoiceTranscriptNeedsConfirmation] = useState(false);
+  const voiceInput = useBrowserVoiceInput({
+    onChange: handleVoiceTranscriptChange,
+    value: composerValue
+  });
 
   useEffect(() => {
     const storedDraft = readAiStartProjectDraft();
@@ -107,12 +111,17 @@ export function useAiStartWorkflow() {
   async function submitPrompt(value = composerValue): Promise<void> {
     const prompt = value.trim();
 
-    if (prompt.length === 0 || requestState === "loading") {
+    if (
+      prompt.length === 0 ||
+      requestState === "loading" ||
+      voiceTranscriptNeedsConfirmation
+    ) {
       return;
     }
 
     appendMessage(createAiStartMessage("user", "status", prompt));
     setComposerValue("");
+    setVoiceTranscriptNeedsConfirmation(false);
 
     if (patchClarification !== null) {
       await answerPatchClarification(prompt, patchClarification);
@@ -143,6 +152,24 @@ export function useAiStartWorkflow() {
     }
 
     await requestDraft({ prompt });
+  }
+
+  function handleVoiceTranscriptChange(transcript: string): void {
+    setComposerValue(transcript);
+    setVoiceTranscriptNeedsConfirmation(transcript.trim().length > 0);
+  }
+
+  function confirmVoiceTranscript(): void {
+    if (composerValue.trim().length > 0) {
+      setVoiceTranscriptNeedsConfirmation(false);
+    }
+  }
+
+  function updateComposerValue(value: string): void {
+    setComposerValue(value);
+    if (value.trim().length === 0) {
+      setVoiceTranscriptNeedsConfirmation(false);
+    }
   }
 
   async function requestDraft(request: CreateArchitectureDraftRequest): Promise<void> {
@@ -358,9 +385,13 @@ export function useAiStartWorkflow() {
   return {
     approveDraft,
     canApprove: draft !== null && previewDiagram !== null && requestState !== "loading",
-    canSubmit: composerValue.trim().length > 0 && requestState !== "loading",
+    canSubmit:
+      composerValue.trim().length > 0 &&
+      requestState !== "loading" &&
+      !voiceTranscriptNeedsConfirmation,
     cancelStart,
     composerValue,
+    confirmVoiceTranscript,
     draft,
     errorMessage,
     messages,
@@ -368,8 +399,9 @@ export function useAiStartWorkflow() {
     projectDraft,
     regenerateDraft,
     requestState,
-    setComposerValue,
+    setComposerValue: updateComposerValue,
     submitPrompt,
-    voiceInput
+    voiceInput,
+    voiceTranscriptNeedsConfirmation
   };
 }

@@ -4,11 +4,20 @@ import { getLiveApplySupportedResourceTypes } from "./deployment-plan-summary.js
 
 const allowedTopLevelBlocks = new Set(["terraform", "provider", "resource", "data", "variable", "output", "locals"]);
 const liveApplySupportedDataSourceTypes = new Set([
+  "archive_file",
   "aws_ami",
+  "aws_eks_cluster_auth",
   "aws_caller_identity",
   "aws_ssm_parameter"
 ]);
-const allowedProviderSources = new Set(["hashicorp/aws", "registry.terraform.io/hashicorp/aws"]);
+const allowedProviderSources = new Set([
+  "hashicorp/aws",
+  "registry.terraform.io/hashicorp/aws",
+  "hashicorp/archive",
+  "registry.terraform.io/hashicorp/archive",
+  "hashicorp/kubernetes",
+  "registry.terraform.io/hashicorp/kubernetes"
+]);
 const allowedAwsProviderRegion = "ap-northeast-2";
 const allowedAwsProviderAttributes = new Set(["alias", "region"]);
 const disallowedTerraformFunctions = new Set([
@@ -63,6 +72,20 @@ export class TerraformArtifactSafetyError extends Error {
   }
 }
 
+export function containsArchiveFileDataSource(
+  terraformCode: Buffer | Uint8Array | string
+): boolean {
+  const source = Buffer.isBuffer(terraformCode)
+    ? terraformCode.toString("utf8")
+    : terraformCode instanceof Uint8Array
+      ? Buffer.from(terraformCode).toString("utf8")
+      : terraformCode;
+
+  return extractDataSourceBlocks(stripHclComments(source)).some(
+    (dataSource) => dataSource.type === "archive_file"
+  );
+}
+
 export const managedDemoUserDataMarker = "sketchcatch-demo-managed-user-data:v1";
 export const managedDemoUserDataHashPrefix =
   "sketchcatch-demo-managed-user-data-sha256:";
@@ -85,6 +108,7 @@ export function assertTerraformArtifactIsSafe(
   validateProviderSourceAttributes(tokens);
   validateDisallowedTerraformFunctionCalls(tokens);
   validateDisallowedStringInterpolations(tokens);
+  validateArchiveDataSourceAttributes(code);
   const liveProfile = options.liveProfile ?? "practice";
   const supportedResourceTypes = getLiveApplySupportedResourceTypes(liveProfile);
 
@@ -180,7 +204,7 @@ function validateTopLevelBlock(block: HclBlock, supportedResourceTypes: Readonly
     );
   }
 
-  if (block.type === "provider" && block.labels[0] !== "aws") {
+  if (block.type === "provider" && block.labels[0] !== "aws" && block.labels[0] !== "kubernetes") {
     throw new TerraformArtifactSafetyError(
       `Terraform provider "${block.labels[0] ?? ""}" is not allowed before live deployment at line ${block.line}`
     );
@@ -223,7 +247,13 @@ function validateRequiredProviderAssignment(
     return;
   }
 
-  if (providerName.value !== "aws" && providerName.value !== "source" && providerName.value !== "version") {
+  if (
+    providerName.value !== "aws" &&
+    providerName.value !== "archive" &&
+    providerName.value !== "kubernetes" &&
+    providerName.value !== "source" &&
+    providerName.value !== "version"
+  ) {
     throw new TerraformArtifactSafetyError(
       `Terraform required provider "${providerName.value}" is not allowed before live deployment at line ${providerName.line}`
     );
@@ -339,6 +369,36 @@ function validateDisallowedStringInterpolations(tokens: HclToken[]): void {
           `Terraform function "${functionName}" is not allowed before live deployment at line ${token.line}`
         );
       }
+    }
+  }
+}
+
+function validateArchiveDataSourceAttributes(source: string): void {
+  for (const dataSource of extractDataSourceBlocks(stripHclComments(source))) {
+    if (dataSource.type !== "archive_file") {
+      continue;
+    }
+
+    const body = stripHclComments(dataSource.body);
+    const outputPath = findLiteralStringAttribute(body, "output_path");
+    const sourceContentFilename = findLiteralStringAttribute(
+      body,
+      "source_content_filename"
+    );
+    const usesInlineContent = /\bsource_content\s*=\s*"/.test(body);
+    const usesFileSystemSource =
+      /\b(?:source_file|source_dir)\s*=/.test(body) || /\bsource\s*\{/.test(body);
+
+    if (!usesInlineContent || usesFileSystemSource || !sourceContentFilename) {
+      throw new TerraformArtifactSafetyError(
+        `Terraform archive_file must use inline source_content before live deployment at line ${dataSource.line}`
+      );
+    }
+
+    if (!outputPath || !isSafeArchiveOutputPath(outputPath)) {
+      throw new TerraformArtifactSafetyError(
+        `Terraform archive_file output_path must stay in the Terraform workspace before live deployment at line ${dataSource.line}`
+      );
     }
   }
 }
@@ -513,6 +573,18 @@ function hasLiteralStringAttribute(
   return pattern.test(body);
 }
 
+function findLiteralStringAttribute(body: string, attributeName: string): string | null {
+  const pattern = new RegExp(`\\b${escapeRegExp(attributeName)}\\s*=\\s*"([^"]*)"`);
+  return pattern.exec(body)?.[1] ?? null;
+}
+
+function isSafeArchiveOutputPath(outputPath: string): boolean {
+  return (
+    (outputPath.startsWith("./") || outputPath.startsWith("${path.module}/")) &&
+    !outputPath.split("/").includes("..")
+  );
+}
+
 function hasReferenceAttribute(
   body: string,
   attributeName: string,
@@ -664,6 +736,31 @@ function extractResourceBlocks(source: string): TerraformResourceBlock[] {
   return resources;
 }
 
+function extractDataSourceBlocks(source: string): TerraformResourceBlock[] {
+  const dataSources: TerraformResourceBlock[] = [];
+  const headerPattern = /\bdata\s+"([^"]+)"\s+"([^"]+)"\s*\{/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = headerPattern.exec(source)) !== null) {
+    const openBraceIndex = match.index + match[0].length - 1;
+    const closeBraceIndex = findMatchingCloseBrace(source, openBraceIndex);
+
+    if (closeBraceIndex === -1) {
+      continue;
+    }
+
+    dataSources.push({
+      type: match[1]!,
+      name: match[2]!,
+      body: source.slice(openBraceIndex + 1, closeBraceIndex),
+      line: countLineAtOffset(source, match.index)
+    });
+    headerPattern.lastIndex = closeBraceIndex + 1;
+  }
+
+  return dataSources;
+}
+
 function extractNamedBlocks(source: string, blockName: string): Array<{ body: string }> {
   const blocks: Array<{ body: string }> = [];
   const headerPattern = new RegExp(`\\b${blockName}\\s*\\{`, "g");
@@ -748,6 +845,7 @@ function stripHclComments(source: string): string {
     }
 
     if (char === "/" && nextChar === "*") {
+      result += " ";
       index = skipBlockComment(source, index, 1).index;
       continue;
     }

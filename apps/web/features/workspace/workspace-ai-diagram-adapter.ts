@@ -2140,14 +2140,12 @@ function createTerraformReferenceRewrites(
     );
 
     for (const referenceName of referenceNames) {
-      for (const suffix of TERRAFORM_REFERENCE_ATTRIBUTE_SUFFIXES) {
-        const from = `${parameters.resourceType}.${referenceName}.${suffix}`;
-        const to = `${parameters.resourceType}.${resourceName}.${suffix}`;
-        rewriteByReference.set(from, to);
+      const from = `${parameters.resourceType}.${referenceName}`;
+      const to = `${parameters.resourceType}.${resourceName}`;
+      rewriteByReference.set(from, to);
 
-        if (parameters.terraformBlockType === "data") {
-          rewriteByReference.set(`data.${from}`, `data.${to}`);
-        }
+      if (parameters.terraformBlockType === "data") {
+        rewriteByReference.set(`data.${from}`, `data.${to}`);
       }
     }
   }
@@ -2192,16 +2190,18 @@ function rewriteTerraformReferenceString(
   value: string,
   referenceRewrites: readonly TerraformReferenceRewrite[]
 ): string {
-  const trimmedValue = value.trim();
-  const interpolationMatch = /^\$\{(.+)\}$/u.exec(trimmedValue);
-  const referenceValue = interpolationMatch?.[1]?.trim() ?? trimmedValue;
-  const rewrite = referenceRewrites.find((candidate) => candidate.from === referenceValue);
+  let rewrittenValue = value;
 
-  if (!rewrite) {
-    return value;
+  for (const rewrite of referenceRewrites) {
+    if (rewrittenValue === rewrite.from) {
+      rewrittenValue = rewrite.to;
+      continue;
+    }
+
+    rewrittenValue = rewrittenValue.replaceAll(`${rewrite.from}.`, `${rewrite.to}.`);
   }
 
-  return interpolationMatch ? `\${${rewrite.to}}` : rewrite.to;
+  return rewrittenValue;
 }
 
 type ReadableLayoutSlot = {

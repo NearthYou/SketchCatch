@@ -10,6 +10,11 @@ import {
   TriangleAlert
 } from "lucide-react";
 import { useEffect, useRef, type KeyboardEvent } from "react";
+import type {
+  AiArchitectureDraftResult,
+  AiResultSource,
+  LlmExplanationFallbackReason
+} from "@sketchcatch/types";
 import { AiDraftBoardPreview } from "./ai-draft-board-preview";
 import type { AiStartMessage } from "./ai-start-model";
 import { useAiStartWorkflow } from "./use-ai-start-workflow";
@@ -82,6 +87,18 @@ export function WorkspaceAiStartClient() {
               <p className={styles.voiceStatus} role="status">
                 {workflow.voiceInput.statusMessage}
               </p>
+            ) : null}
+            {workflow.voiceTranscriptNeedsConfirmation ? (
+              <div className={styles.voiceConfirmation} role="status">
+                <div>
+                  <strong>전사문을 확인해주세요</strong>
+                  <span>문장을 고친 뒤 확인해야 AI에 보낼 수 있습니다.</span>
+                </div>
+                <button onClick={workflow.confirmVoiceTranscript} type="button">
+                  <Check aria-hidden="true" size={15} />
+                  전사문 확인
+                </button>
+              </div>
             ) : null}
             <div className={styles.composer}>
               <textarea
@@ -207,28 +224,102 @@ function ConversationMessage({
   );
 }
 
-function DraftMetadata({ draft }: { readonly draft: NonNullable<ReturnType<typeof useAiStartWorkflow>["draft"]> }) {
+function DraftMetadata({ draft }: { readonly draft: AiArchitectureDraftResult }) {
   const warnings = draft.metadata.guardrailWarnings ?? [];
   const assumptions = draft.metadata.assumptions;
-
-  if (warnings.length === 0 && assumptions.length === 0) {
-    return <span className={styles.cleanState}>검토할 추가 조건 없음</span>;
-  }
+  const explanations = draft.metadata.explanations;
+  const llmExplanation = draft.llmExplanation;
+  const detailCount =
+    warnings.length +
+    assumptions.length +
+    explanations.length +
+    (llmExplanation?.highlights.length ?? 0) +
+    (llmExplanation?.nextActions.length ?? 0);
 
   return (
-    <details className={styles.metadataDisclosure}>
+    <div className={styles.draftEvidence}>
+      <div className={styles.draftSource}>
+        <span>{getDraftSourceLabel(draft.metadata.source)}</span>
+        <strong>{getDraftProviderLabel(draft)}</strong>
+        {llmExplanation?.fallbackUsed ? <em>fallback</em> : null}
+      </div>
+      {detailCount === 0 ? (
+        <span className={styles.cleanState}>검토할 추가 조건 없음</span>
+      ) : (
+        <details className={styles.metadataDisclosure}>
       <summary>
         {warnings.length > 0 ? <TriangleAlert aria-hidden="true" size={15} /> : null}
-        조건 및 주의사항 {warnings.length + assumptions.length}
+            근거 및 주의사항 {detailCount}
       </summary>
       <ul>
-        {warnings.map((warning) => (
-          <li key={`${warning.code}-${warning.message}`}>{warning.message}</li>
+        {warnings.map((warning, index) => (
+          <li key={`warning-${warning.code}-${index}`}>{warning.message}</li>
         ))}
-        {assumptions.map((assumption) => (
-          <li key={assumption}>{assumption}</li>
+        {assumptions.map((assumption, index) => (
+          <li key={`assumption-${index}`}>{assumption}</li>
         ))}
+            {explanations.map((explanation, index) => (
+              <li key={`explanation-${index}`}>{explanation}</li>
+            ))}
+            {llmExplanation?.highlights.map((highlight, index) => (
+              <li key={`highlight-${index}`}>{highlight}</li>
+            ))}
+            {llmExplanation?.nextActions.map((nextAction, index) => (
+              <li key={`next-action-${index}`}>{nextAction}</li>
+            ))}
+            {llmExplanation?.fallbackReason ? (
+              <li>fallback 이유: {getFallbackReasonLabel(llmExplanation.fallbackReason)}</li>
+            ) : null}
       </ul>
     </details>
+      )}
+    </div>
   );
+}
+
+function getDraftSourceLabel(source: AiResultSource): string {
+  const labels = {
+    amazon_q: "Amazon Q 추천",
+    github: "Source Repository 근거",
+    llm_fallback: "LLM fallback",
+    prompt: "Requirement Prompt",
+    template_fallback: "Template fallback"
+  } as const;
+
+  return labels[source];
+}
+
+function getDraftProviderLabel(draft: AiArchitectureDraftResult): string {
+  const providerMetadata = draft.llmExplanation?.providerMetadata;
+
+  if (providerMetadata === undefined) {
+    return "결정형 생성";
+  }
+
+  const providerLabels = {
+    amazon_q_business: "Amazon Q",
+    amazon_transcribe: "Amazon Transcribe",
+    bedrock_runtime: "Amazon Bedrock",
+    openai_responses: "OpenAI",
+    rule_fallback: "Rule fallback"
+  } as const;
+
+  return providerLabels[providerMetadata.service];
+}
+
+function getFallbackReasonLabel(reason: LlmExplanationFallbackReason): string {
+  const labels = {
+    auth_error: "인증 오류",
+    credit_not_confirmed: "AI 사용 승인이 확인되지 않음",
+    daily_limit_exceeded: "일일 사용 한도 초과",
+    invalid_request: "요청 형식 오류",
+    invalid_response: "응답 형식 오류",
+    missing_api_key: "API Key 없음",
+    provider_error: "AI provider 오류",
+    provider_not_configured: "AI provider 미설정",
+    rate_limited: "요청 제한",
+    timeout: "응답 시간 초과"
+  } as const;
+
+  return labels[reason];
 }

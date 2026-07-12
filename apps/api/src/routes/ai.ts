@@ -16,15 +16,17 @@ import type {
   ArchitectureJson,
   CheckFinding,
   ConfirmTranscribeResponse,
+  CreateGitHubArchitectureDraftRequest,
   CreateArchitectureDraftRequest,
   CreateArchitectureDraftResponse,
   CreateArchitecturePatchPreviewRequest,
   CreateDesignSimulationRequest,
   DesignSimulationResult,
+  SourceRepositoryAnalysisResult,
   TranscribeConfirmation,
   VoiceRequirementInput
 } from "@sketchcatch/types";
-import { RESOURCE_TYPES } from "@sketchcatch/types";
+import { RESOURCE_TYPES, TEMPLATE_IDS } from "@sketchcatch/types";
 import {
   ArchitectureDraftGenerationError,
   createConfiguredAmazonQArchitectureDraftResponse,
@@ -63,6 +65,18 @@ import { createConfiguredAwsPricingRateProvider } from "../services/awsPricingRa
 import type { CostPricingRateProvider } from "../services/cost-analysis.js";
 import type { RuntimeCache, RuntimeCacheJsonValue } from "../runtime-cache/index.js";
 import { createConfiguredTerraformSecurityScanner } from "../services/terraform/trivy-terraform-scan.js";
+import { requireActiveUserId } from "../auth/current-user.js";
+import { getDatabaseClient, type DatabaseClient } from "../db/client.js";
+import {
+  createPostgresSourceRepositoryRepository,
+  RepositoryAnalysisTemplateSelectionError,
+  requireRepositoryAnalysisTemplateId,
+  type SourceRepositoryRepository
+} from "../source-repositories/source-repository-service.js";
+import {
+  analyzeRepositoryEvidence,
+  type RepositoryEvidenceFile
+} from "../services/aiRepositoryAnalysis.js";
 
 const MAX_PRE_DEPLOYMENT_TERRAFORM_FILE_COUNT = 64;
 const MAX_PRE_DEPLOYMENT_TERRAFORM_FILE_NAME_LENGTH = 180;
@@ -97,17 +111,36 @@ const architectureJsonSchema: z.ZodType<ArchitectureJson> = z.object({
 });
 
 const architectureDraftBodySchema: z.ZodType<CreateArchitectureDraftRequest> = z.object({
-  prompt: z.string().trim().min(1)
+  prompt: z.string().trim().min(1),
+  templateId: z.enum(TEMPLATE_IDS).optional(),
+  repositoryAnalysis: z
+    .object({
+      projectId: z.uuid(),
+      sourceRepositoryId: z.uuid()
+    })
+    .optional()
 });
 
-const githubArchitectureDraftBodySchema = z.object({
+const repositoryTemplateIdSchema = z.enum([
+  "template-static-website",
+  "template-api-db",
+  "template-3tier"
+]);
+
+const sourceRepositoryAnalysisBodySchema = z.object({
   repositoryUrl: z
     .string()
     .url()
     .refine((repositoryUrl) => isGitHubRepositoryUrl(repositoryUrl), {
       message: "Public GitHub repository URL is required"
-    })
+    }),
+  defaultBranch: z.string().trim().min(1).max(255).optional()
 });
+
+const githubArchitectureDraftBodySchema: z.ZodType<CreateGitHubArchitectureDraftRequest> =
+  sourceRepositoryAnalysisBodySchema.extend({
+    selectedTemplateId: repositoryTemplateIdSchema
+  });
 
 const terraformScanFileInputSchema = z.object({
   fileName: z
@@ -219,6 +252,8 @@ export type AiRouteOptions = {
   readonly runtimeCache?: RuntimeCache;
   readonly safetyExplanationTimeoutMs?: number | undefined;
   readonly transcribeRequirementService?: TranscribeRequirementService;
+  readonly getDatabaseClient?: (() => DatabaseClient) | undefined;
+  readonly createSourceRepositoryRepository?: ((db: DatabaseClient["db"]) => SourceRepositoryRepository) | undefined;
 };
 
 // AI MVP API의 입구입니다. 요청 모양은 여기서 확인하고, 실제 판단은 service 함수에 맡깁니다.
@@ -256,9 +291,35 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
   const transcribeRequirementService =
     options.transcribeRequirementService ?? createConfiguredTranscribeRequirementService();
   const pricingRateProvider = options.pricingRateProvider ?? createConfiguredAwsPricingRateProvider();
+  const getAiDatabaseClient = options.getDatabaseClient ?? getDatabaseClient;
+  const createSourceRepositoryRepository =
+    options.createSourceRepositoryRepository ?? createPostgresSourceRepositoryRepository;
 
   app.post("/ai/architecture-draft", async (request): Promise<CreateArchitectureDraftResponse> => {
     const body = architectureDraftBodySchema.parse(request.body);
+
+    if (body.repositoryAnalysis) {
+      const userId = await requireActiveUserId(request, getAiDatabaseClient);
+      const selectedTemplateId = await requireRepositoryAnalysisTemplateId(
+        {
+          projectId: body.repositoryAnalysis.projectId,
+          sourceRepositoryId: body.repositoryAnalysis.sourceRepositoryId,
+          accessContext: { kind: "user", userId }
+        },
+        createSourceRepositoryRepository(getAiDatabaseClient().db)
+      );
+
+      if (body.templateId && body.templateId !== selectedTemplateId) {
+        throw new RepositoryAnalysisTemplateSelectionError(
+          "REPOSITORY_ANALYSIS_TEMPLATE_MISMATCH"
+        );
+      }
+
+      return createArchitectureDraftResponse({
+        ...body,
+        templateId: selectedTemplateId
+      });
+    }
 
     return createArchitectureDraftResponse(body);
   });
@@ -310,11 +371,31 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
     return reply;
   });
 
+  app.post(
+    "/ai/source-repository-analysis",
+    async (request): Promise<SourceRepositoryAnalysisResult> => {
+      const body = sourceRepositoryAnalysisBodySchema.parse(request.body);
+      const repository = parseGitHubRepositoryUrl(body.repositoryUrl);
+      const defaultBranch = body.defaultBranch ?? "main";
+      const evidence = await fetchRepositoryEvidence(repository, defaultBranch);
+
+      return analyzeRepositoryEvidence({
+        defaultBranch,
+        evidence,
+        repositoryUrl: body.repositoryUrl
+      });
+    }
+  );
+
   app.post("/ai/github-architecture-draft", async (request): Promise<AiArchitectureDraftResult> => {
     const body = githubArchitectureDraftBodySchema.parse(request.body);
     const repository = parseGitHubRepositoryUrl(body.repositoryUrl);
-    const evidence = await fetchRepositoryEvidence(repository);
-    const result = createArchitectureDraftFromRepositoryEvidence(body.repositoryUrl, evidence);
+    const evidence = await fetchRepositoryEvidence(repository, body.defaultBranch ?? "main");
+    const templateContext = getRepositoryTemplateContext(body.selectedTemplateId);
+    const result = createArchitectureDraftFromRepositoryEvidence(body.repositoryUrl, [
+      ...evidence.map((file) => file.content),
+      templateContext
+    ]);
 
     return addArchitectureDraftLlmExplanation(result, createLlmExplanation);
   });
@@ -723,21 +804,34 @@ function parseGitHubRepositoryUrl(repositoryUrl: string): GitHubRepository {
 }
 
 // GitHub 전체 코드를 분석하지 않고, README/package/Docker 관련 파일만 가볍게 읽습니다.
-async function fetchRepositoryEvidence(repository: GitHubRepository): Promise<string[]> {
+async function fetchRepositoryEvidence(
+  repository: GitHubRepository,
+  defaultBranch: string
+): Promise<RepositoryEvidenceFile[]> {
   const evidence = await Promise.all(
     GITHUB_EVIDENCE_PATHS.map(async (path) => {
-      const url = `https://raw.githubusercontent.com/${repository.owner}/${repository.repo}/main/${path}`;
+      const url = `https://raw.githubusercontent.com/${repository.owner}/${repository.repo}/${encodeURIComponent(defaultBranch)}/${path}`;
       const response = await fetch(url);
 
       if (!response.ok) {
-        return "";
+        return null;
       }
 
-      return response.text();
+      return { content: await response.text(), path };
     })
   );
 
-  return evidence.filter((content) => content.trim().length > 0);
+  return evidence.flatMap((file) => (file === null ? [] : [file]));
+}
+
+function getRepositoryTemplateContext(templateId: CreateGitHubArchitectureDraftRequest["selectedTemplateId"]): string {
+  const contexts = {
+    "template-3tier": "Selected Template: ALB, Auto Scaling Group, EC2, and RDS three-tier architecture.",
+    "template-api-db": "Selected Template: VPC, EC2 API server, and RDS backend architecture.",
+    "template-static-website": "Selected Template: S3 and CloudFront static website architecture."
+  } as const;
+
+  return contexts[templateId];
 }
 
 // GitHub repository URL인지 먼저 막아주는 guardrail입니다.

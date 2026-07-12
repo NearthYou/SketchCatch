@@ -9,8 +9,12 @@ import type {
   CreateArchitectureDraftResponse,
   LlmExplanation,
   LlmExplanationFallbackReason,
-  ResourceType
+  ResourceType,
+  TemplateDefinition,
+  TemplateId
 } from "@sketchcatch/types";
+import { getTemplateDefinitionById } from "@sketchcatch/types";
+import { resourceDefinitions } from "@sketchcatch/types/resource-definitions";
 import type { RuntimeCache } from "../runtime-cache/index.js";
 import { applyGuardrailMetadata } from "./aiArchitectureDraftMetadata.js";
 import {
@@ -62,6 +66,7 @@ export { ArchitectureDraftGenerationError } from "./aiArchitectureDraftGeneratio
 
 const SUPPORTED_RESOURCE_TYPES = SUPPORTED_ARCHITECTURE_RESOURCE_TYPES;
 const SUPPORTED_RESOURCE_CATALOG = SUPPORTED_ARCHITECTURE_RESOURCE_CATALOG;
+type FixedTemplateSelection = TemplateDefinition;
 
 const SUPPORTED_RESOURCE_TYPE_SET = new Set<ResourceType>(SUPPORTED_RESOURCE_TYPES);
 const DEFAULT_PREVIEW_NODE_SIZE = { width: 124, height: 96 } as const;
@@ -202,7 +207,10 @@ export function createArchitectureDraft(input: string | CreateArchitectureDraftR
   const draft = planPracticeArchitecture(resolution, resourceQuantities);
   const configuredDraft = applyOperatingConditionConfig(draft, resolution.operatingProfile);
 
-  return applyGuardrailMetadata(configuredDraft, request, resolution);
+  return applyFixedTemplateSelection(
+    applyGuardrailMetadata(configuredDraft, request, resolution),
+    request.templateId
+  );
 }
 
 // GitHub 링크 요청도 결국 가벼운 텍스트 근거를 모아 자연어 초안 생성 흐름을 재사용합니다.
@@ -256,6 +264,7 @@ export function createConfiguredAmazonQArchitectureDraftResponse(input: {
     });
 }
 
+// 선택된 Template이 있으면 Amazon Q payload와 prompt에 고정 결정으로 함께 전달합니다.
 export async function createAmazonQArchitectureDraftResponse(
   input: string | CreateArchitectureDraftRequest,
   options: CreateAmazonQArchitectureDraftResponseOptions = {}
@@ -297,11 +306,13 @@ export async function createAmazonQArchitectureDraftResponse(
     createDeterministicArchitectureIntentPlan(request.prompt)
   );
   const architectureBrief = createAmazonQArchitectureBrief(request.prompt);
+  const fixedTemplateSelection = createFixedTemplateSelection(request.templateId);
   const referenceKnowledge = createAwsArchitectureReferenceKnowledgePayload();
   const payload = maskSecretsForAi({
     architectureBrief,
     architectureDecisionSpace,
     ...(normalizedRequirement === null ? {} : { normalizedRequirement }),
+    fixedTemplateSelection,
     prompt: request.prompt,
     referenceKnowledge,
     supportedResourceTypes: SUPPORTED_RESOURCE_TYPES,
@@ -315,7 +326,12 @@ export async function createAmazonQArchitectureDraftResponse(
     let response = await generateArchitectureDraftProviderResponse(provider, {
       target: ARCHITECTURE_DRAFT_TARGET,
       instructions: createAmazonQArchitectureDraftInstructions(),
-      prompt: createAmazonQArchitectureDraftPrompt(request.prompt, architectureDecisionSpace, normalizedRequirement),
+      prompt: createAmazonQArchitectureDraftPrompt(
+        request.prompt,
+        architectureDecisionSpace,
+        normalizedRequirement,
+        fixedTemplateSelection
+      ),
       payload: activePayload
     });
     reportArchitectureDraftProgress(options.onProgress, "validating_architecture");
@@ -334,6 +350,7 @@ export async function createAmazonQArchitectureDraftResponse(
           architectureBrief,
           architectureDecisionSpace,
           ...(normalizedRequirement === null ? {} : { normalizedRequirement }),
+          fixedTemplateSelection,
           prompt: request.prompt,
           referenceKnowledge,
           validationIssues,
@@ -349,6 +366,7 @@ export async function createAmazonQArchitectureDraftResponse(
             request.prompt,
             architectureDecisionSpace,
             normalizedRequirement,
+            fixedTemplateSelection,
             validationIssues,
             parsedResponse.architectureJson
           ),
@@ -391,11 +409,14 @@ export async function createAmazonQArchitectureDraftResponse(
     if (parsedResponse.status === "plan") {
       try {
         reportArchitectureDraftProgress(options.onProgress, "building_diagram");
-        return createAmazonQPlanDraftResult(
-          parsedResponse,
-          request,
-          normalizedRequirement,
-          providerMetadata
+        return applyFixedTemplateSelection(
+          createAmazonQPlanDraftResult(
+            parsedResponse,
+            request,
+            normalizedRequirement,
+            providerMetadata
+          ),
+          request.templateId
         );
       } catch (error) {
         if (retryUsed) {
@@ -413,6 +434,7 @@ export async function createAmazonQArchitectureDraftResponse(
           architectureBrief,
           architectureDecisionSpace,
           ...(normalizedRequirement === null ? {} : { normalizedRequirement }),
+          fixedTemplateSelection,
           prompt: request.prompt,
           referenceKnowledge,
           validationIssues,
@@ -428,6 +450,7 @@ export async function createAmazonQArchitectureDraftResponse(
             request.prompt,
             architectureDecisionSpace,
             normalizedRequirement,
+            fixedTemplateSelection,
             validationIssues,
             previousPlan
           ),
@@ -453,17 +476,23 @@ export async function createAmazonQArchitectureDraftResponse(
         });
 
         reportArchitectureDraftProgress(options.onProgress, "building_diagram");
-        return createAmazonQPlanDraftResult(
-          parsedResponse,
-          request,
-          normalizedRequirement,
-          providerMetadata
+        return applyFixedTemplateSelection(
+          createAmazonQPlanDraftResult(
+            parsedResponse,
+            request,
+            normalizedRequirement,
+            providerMetadata
+          ),
+          request.templateId
         );
       }
     }
 
     reportArchitectureDraftProgress(options.onProgress, "building_diagram");
-    return createAmazonQDraftResult(parsedResponse, providerMetadata);
+    return applyFixedTemplateSelection(
+      createAmazonQDraftResult(parsedResponse, providerMetadata),
+      request.templateId
+    );
   } catch (error) {
     if (error instanceof ArchitectureDraftGenerationError) {
       throw error;
@@ -1472,10 +1501,12 @@ function createAmazonQArchitectureDraftInstructions(): string {
   ].join("\n");
 }
 
+// 최초 Architecture Draft 요청에 고정 Template과 사용자 요구를 함께 구성합니다.
 function createAmazonQArchitectureDraftPrompt(
   prompt: string,
   architectureDecisionSpace: ArchitectureDecisionSpace,
-  normalizedRequirement: ArchitectureIntentPlan | null
+  normalizedRequirement: ArchitectureIntentPlan | null,
+  fixedTemplateSelection: FixedTemplateSelection | null
 ): string {
   return [
     createAmazonQArchitectureDraftInstructions(),
@@ -1486,15 +1517,18 @@ function createAmazonQArchitectureDraftPrompt(
     JSON.stringify(SUPPORTED_RESOURCE_CATALOG, null, 2),
     "ArchitectureDecisionSpace:",
     JSON.stringify(architectureDecisionSpace, null, 2),
+    createFixedTemplateSelectionPrompt(fixedTemplateSelection),
     "User requirement prompt:",
     prompt
   ].join("\n\n");
 }
 
+// 재생성 요청에서도 고정 Template 경계가 사라지지 않도록 같은 선택을 반복합니다.
 function createAmazonQArchitectureDraftRepairPrompt(
   prompt: string,
   architectureDecisionSpace: ArchitectureDecisionSpace,
   normalizedRequirement: ArchitectureIntentPlan | null,
+  fixedTemplateSelection: FixedTemplateSelection | null,
   validationIssues: readonly string[],
   previousArchitectureJson: ArchitectureJson
 ): string {
@@ -1509,6 +1543,7 @@ function createAmazonQArchitectureDraftRepairPrompt(
     createNormalizedArchitectureIntentPlanPromptSection(normalizedRequirement),
     "ArchitectureDecisionSpace:",
     JSON.stringify(architectureDecisionSpace, null, 2),
+    createFixedTemplateSelectionPrompt(fixedTemplateSelection),
     "Validation issues:",
     ...validationIssues.map((issue) => `- ${issue}`),
     "Original user requirement prompt:",
@@ -1522,6 +1557,7 @@ function createAmazonQArchitecturePlanRepairPrompt(
   prompt: string,
   architectureDecisionSpace: ArchitectureDecisionSpace,
   normalizedRequirement: ArchitectureIntentPlan | null,
+  fixedTemplateSelection: FixedTemplateSelection | null,
   validationIssues: readonly string[],
   previousPlan: Record<string, unknown>
 ): string {
@@ -1533,6 +1569,7 @@ function createAmazonQArchitecturePlanRepairPrompt(
     createNormalizedArchitectureIntentPlanPromptSection(normalizedRequirement),
     "ArchitectureDecisionSpace:",
     JSON.stringify(architectureDecisionSpace, null, 2),
+    createFixedTemplateSelectionPrompt(fixedTemplateSelection),
     "Validation issues:",
     ...validationIssues.map((issue) => `- ${issue}`),
     "Previous invalid plan:",
@@ -1556,6 +1593,87 @@ function createNormalizedArchitectureIntentPlanPromptSection(
     JSON.stringify(normalizedRequirement, null, 2),
     ...(briefLines.length === 0 ? [] : ["Normalizer-to-Amazon-Q imperative brief:", ...briefLines])
   ].join("\n");
+}
+
+// gg가 고른 Template ID와 기본 resource를 AI가 교체하지 못하는 고정 입력으로 만듭니다.
+function createFixedTemplateSelection(templateId: TemplateId | undefined): FixedTemplateSelection | null {
+  if (templateId === undefined) {
+    return null;
+  }
+
+  return getTemplateDefinitionById(templateId);
+}
+
+// AI prompt에 선택 Template을 기본 결정으로 유지하고 부족한 요구만 보완하라고 명시합니다.
+function createFixedTemplateSelectionPrompt(selection: FixedTemplateSelection | null): string {
+  if (selection === null) {
+    return "Fixed Template Selection: none";
+  }
+
+  return [
+    "Fixed Template Selection:",
+    JSON.stringify(selection, null, 2),
+    "Keep this Template as the base decision. Do not replace it with another Template.",
+    "Only add requirements that the fixed Template does not already cover."
+  ].join("\n");
+}
+
+// Repository Analysis Template은 초안 자체로 고정하고 추가 요구는 이후 Patch 흐름에서 보완합니다.
+function applyFixedTemplateSelection(
+  draft: AiArchitectureDraftResult,
+  templateId: TemplateId | undefined
+): AiArchitectureDraftResult {
+  if (templateId === undefined) {
+    return draft;
+  }
+
+  const definition = getTemplateDefinitionById(templateId);
+  const fixedNodes = definition.resources.map((resource) => {
+    const resourceDefinition = resourceDefinitions.find(
+      (candidate) => candidate.terraform.resourceType === resource.terraformResourceType
+    );
+
+    if (!resourceDefinition || resourceDefinition.resourceType === "UNKNOWN") {
+      throw new Error(
+        `Template resource is not supported by Architecture Draft: ${resource.terraformResourceType}`
+      );
+    }
+
+    return {
+      id: `fixed-template-${definition.id}-${resource.id}`,
+      type: resourceDefinition.resourceType,
+      label: resource.label,
+      positionX: resource.position.x,
+      positionY: resource.position.y,
+      config: {
+        templateResourceId: resource.id,
+        terraformBlockType: resource.terraformBlockType,
+        terraformResourceType: resource.terraformResourceType,
+        values: resource.values
+      }
+    };
+  });
+  const fixedEdges = definition.relationships.map((relationship) => ({
+    id: `fixed-template-${definition.id}-${relationship.id}`,
+    sourceId: `fixed-template-${definition.id}-${relationship.sourceResourceId}`,
+    targetId: `fixed-template-${definition.id}-${relationship.targetResourceId}`,
+    label: relationship.label
+  }));
+
+  return {
+    ...draft,
+    architectureJson: {
+      nodes: fixedNodes,
+      edges: fixedEdges
+    },
+    metadata: {
+      ...draft.metadata,
+      assumptions: [
+        ...draft.metadata.assumptions,
+        `Repository Analysis가 선택한 ${definition.title} (${definition.id}) Template을 기본 결정으로 유지했습니다.`
+      ]
+    }
+  };
 }
 
 function createAmazonQArchitectureBrief(prompt: string): string {

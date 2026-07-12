@@ -1,11 +1,11 @@
 // allow: SIZE_OK - shared package root contract; splitting needs a separate repo-wide migration.
+import type { TemplateId } from "./template-definitions.ts";
+
 export type IsoDateTimeString = string;
 
+export type JsonPrimitive = string | number | boolean | null;
 export type JsonValue =
-  | null
-  | boolean
-  | number
-  | string
+  | JsonPrimitive
   | JsonValue[]
   | { readonly [key: string]: JsonValue };
 
@@ -90,6 +90,7 @@ export const RESOURCE_TYPES = [
   "ACM_CERTIFICATE_VALIDATION",
   "COGNITO_USER_POOL",
   "COGNITO_USER_POOL_CLIENT",
+  "AMPLIFY_APP",
   "DB_SUBNET_GROUP",
   "SECRETS_MANAGER_SECRET",
   "VPC_ENDPOINT",
@@ -104,6 +105,7 @@ export const RESOURCE_TYPES = [
   "AWS_CALLER_IDENTITY",
   "SSM_PARAMETER",
   "API_GATEWAY_REST_API",
+  "API_GATEWAY_AUTHORIZER",
   "API_GATEWAY_WEBSOCKET_API",
   "API_GATEWAY_RESOURCE",
   "API_GATEWAY_METHOD",
@@ -138,6 +140,9 @@ export const RESOURCE_TYPES = [
   "EKS_CLUSTER",
   "EKS_NODE_GROUP",
   "EKS_ADDON",
+  "KUBERNETES_NAMESPACE",
+  "KUBERNETES_DEPLOYMENT",
+  "KUBERNETES_SERVICE",
   "CONFIG_CONFIGURATION_RECORDER",
   "CONFIG_DELIVERY_CHANNEL",
   "CONFIG_RULE",
@@ -150,7 +155,7 @@ export type ResourceType = (typeof RESOURCE_TYPES)[number];
 
 export type ReverseEngineeringResourceSelection = "ALL" | ResourceType;
 
-export type CloudProvider = "aws";
+export type CloudProvider = "aws" | "kubernetes";
 
 export type TerraformBlockType = "resource" | "data";
 
@@ -478,6 +483,7 @@ export type SourceRepository = {
   repositoryUrl: string | null;
   visibility: "public" | "private" | "internal" | null;
   archived: boolean;
+  analysis: SourceRepositoryAnalysis | null;
   disconnectedAt: IsoDateTimeString | null;
   createdAt: IsoDateTimeString;
   updatedAt: IsoDateTimeString;
@@ -506,6 +512,34 @@ export type GitHubRepositoryCandidate = {
   repositoryUrl: string | null;
   visibility: "public" | "private" | "internal";
   archived: boolean;
+};
+
+export type RepositoryAnalysisTemplateId =
+  | "template-static-website"
+  | "template-api-db"
+  | "template-3tier";
+
+export type RepositoryAnalysisEvidenceFile = {
+  path: string;
+  found: boolean;
+};
+
+export type AnalyzeSourceRepositoryRequest = {
+  repositoryUrl: string;
+  defaultBranch?: string | undefined;
+};
+
+export type SourceRepositoryAnalysisResult = {
+  repositoryUrl: string;
+  defaultBranch: string;
+  evidenceFiles: RepositoryAnalysisEvidenceFile[];
+  detectedSignals: string[];
+  recommendedTemplateId: RepositoryAnalysisTemplateId | null;
+  recommendationReason: string;
+};
+
+export type CreateGitHubArchitectureDraftRequest = AnalyzeSourceRepositoryRequest & {
+  selectedTemplateId: RepositoryAnalysisTemplateId;
 };
 
 export type ListGitHubInstallationRepositoriesRequest = {
@@ -543,6 +577,64 @@ export type ConnectGitHubSourceRepositoryRequest = {
 export type SourceRepositoryResponse = {
   repository: SourceRepository;
 };
+
+export const REPOSITORY_EVIDENCE_KINDS = [
+  "repository_tree",
+  "package_json",
+  "lockfile",
+  "dockerfile",
+  "framework_config",
+  "readme"
+] as const;
+
+export type RepositoryEvidenceKind = (typeof REPOSITORY_EVIDENCE_KINDS)[number];
+
+export type RepositoryApplicationUnitKind = "frontend" | "backend" | "fullstack" | "unknown";
+
+export type RepositoryAnalysisEvidence = {
+  readonly kind: RepositoryEvidenceKind;
+  readonly path: string;
+  readonly applicationUnitId: string | null;
+  readonly signals: readonly string[];
+};
+
+export type RepositoryApplicationUnit = {
+  readonly id: string;
+  readonly rootPath: string;
+  readonly kind: RepositoryApplicationUnitKind;
+  readonly frameworks: readonly string[];
+  readonly evidencePaths: readonly string[];
+};
+
+type RepositoryAnalysisAiHandoffBase = {
+  readonly applicationUnits: readonly RepositoryApplicationUnit[];
+  readonly evidence: readonly RepositoryAnalysisEvidence[];
+  readonly missingEvidence: readonly RepositoryEvidenceKind[];
+};
+
+export type RepositoryAnalysisAiHandoff =
+  | (RepositoryAnalysisAiHandoffBase & {
+      readonly status: "template_selected";
+      readonly templateId: TemplateId;
+      readonly selectionReasons: readonly string[];
+    })
+  | (RepositoryAnalysisAiHandoffBase & {
+      readonly status: "template_selection_failed";
+      readonly templateId: null;
+      readonly mismatchReasons: readonly string[];
+    });
+
+export type AnalyzeSourceRepositoryResponse = {
+  readonly sourceRepositoryId: string;
+  readonly repositoryRevision: string;
+  readonly analyzedAt: IsoDateTimeString;
+  readonly aiHandoff: RepositoryAnalysisAiHandoff;
+};
+
+export type SourceRepositoryAnalysis = Omit<
+  AnalyzeSourceRepositoryResponse,
+  "sourceRepositoryId"
+>;
 
 export type GitCicdHandoffStatus =
   | "draft"
@@ -864,6 +956,24 @@ export type AwsConnectionListResponse = {
   awsConnections: AwsConnection[];
 };
 
+export {
+  buildTemplateDiagramJson,
+  getTemplateDefinitionById,
+  TEMPLATE_IDS,
+  templateDefinitions
+} from "./template-definitions.ts";
+export type {
+  BuildTemplateDiagramInput,
+  TemplateDefinition,
+  TemplateId,
+  TemplateParameterDefinition,
+  TemplateProvider,
+  TemplateRelationship,
+  TemplateResourceDefinition
+} from "./template-definitions.ts";
+
+export { createTerraformProviderFiles } from "./terraform-provider-files.ts";
+
 export type ReverseEngineeringScanStatus =
   | "queued"
   | "running"
@@ -1022,6 +1132,46 @@ export type CreateDeploymentRequest = {
 };
 
 export type DeploymentLiveProfile = "practice" | "demo_web_service" | "demo_web_service_with_rds";
+
+export type DeploymentLiveObservationManifestV2 = {
+  schemaVersion: 2;
+  provider: "aws";
+  provenance: {
+    deploymentId: string;
+    terraformArtifactSha256: string;
+    awsConnectionId: string;
+    region: string;
+    verifiedAt: IsoDateTimeString;
+  };
+  endpoints: {
+    audienceBaseUrl: string;
+    trafficUrl: string;
+  };
+  pressure: {
+    metric: "requests_per_target_per_minute";
+    target: 60;
+    windowSeconds: 60;
+  };
+  adapter: {
+    kind: "aws-live-observation";
+    version: 1;
+    payload: JsonValue;
+  };
+};
+
+export type DeploymentLiveObservationManifestStatus =
+  | "valid"
+  | "manifest_invalid";
+
+export type DeploymentLiveObservationManifestRecord = {
+  deploymentId: string;
+  schemaVersion: 2;
+  status: DeploymentLiveObservationManifestStatus;
+  manifest: DeploymentLiveObservationManifestV2 | null;
+  invalidReason: string | null;
+  createdAt: IsoDateTimeString;
+  updatedAt: IsoDateTimeString;
+};
 
 export type LiveObservationStatus = "active" | "stopped" | "expired";
 
@@ -1702,6 +1852,11 @@ export type CreateArchitecturePatchPreviewRequest = {
 
 export type CreateArchitectureDraftRequest = {
   prompt: string;
+  templateId?: TemplateId | undefined;
+  repositoryAnalysis?: {
+    projectId: string;
+    sourceRepositoryId: string;
+  } | undefined;
 };
 
 export const ARCHITECTURE_DRAFT_PROGRESS_STAGES = [
@@ -2214,6 +2369,7 @@ export type TerraformGenerateRequest = {
 
 export type TerraformGenerateResponse = {
   terraformCode: string;
+  architectureDiagnostics: ArchitectureDiagnostic[];
 };
 
 export type ResourceArea =
@@ -2298,6 +2454,28 @@ export type TerraformDiagnostic = {
   sourceFileName?: string | undefined;
   resourceAddress?: string | undefined;
   nodeId?: string | undefined;
+};
+
+export type ArchitectureValidationMode = "contextual" | "preview" | "pre_deployment";
+
+export type ArchitectureDiagnosticSeverity = "info" | "warning" | "error";
+
+export type ArchitectureDiagnosticRemediation = {
+  label: string;
+  action: "focus-resource" | "open-parameter" | "open-guidance";
+  parameterPath?: string | undefined;
+};
+
+export type ArchitectureDiagnostic = {
+  source: "architecture-rule";
+  code: string;
+  severity: ArchitectureDiagnosticSeverity;
+  ruleId: string;
+  resourceNodeId: string;
+  relatedNodeIds: readonly string[];
+  summary: string;
+  message: string;
+  remediation: readonly ArchitectureDiagnosticRemediation[];
 };
 
 export type TerraformValidateRequest = {

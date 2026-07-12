@@ -28,6 +28,18 @@ _Avoid_: User Redis, cache resource, cloud cache node
 A reusable starter Practice Architecture that a user can choose instead of starting from a blank prompt.
 _Avoid_: Preset, sample, example
 
+**TemplateDefinition**:
+The internal definition of a Template's Resources, relationships, IaC identities, default parameters, and deployment conditions. It is the shared source used to produce the Architecture Board shape and deployable IaC path.
+_Avoid_: UI-only template data, diagram preset
+
+**Template Selection**:
+The gg-owned decision that chooses exactly one repository-level Template from Repository Analysis, or explicitly returns that no Template was selected when the repository does not match a supported Template. The AI handoff receives the selected Template rather than a list of competing Template candidates.
+_Avoid_: Template recommendation list, AI template choice
+
+**AI Handoff**:
+The handoff from gg to the AI part containing one selected Template and the Repository Analysis evidence that supports the selection, or a Template Selection Failure with no selected Template and its mismatch details. It does not include competing Template candidates, a fallback Template, or a confidence score.
+_Avoid_: Template candidate list, AI-owned Template selection
+
 **Architecture Draft**:
 A proposed Practice Architecture that has not yet been accepted, corrected, or saved by the user.
 _Avoid_: AI result, generated diagram, draft infrastructure
@@ -43,6 +55,18 @@ _Avoid_: Auto apply, silent fix, AI edit
 **Source Repository**:
 A code repository used as optional evidence for proposing an Architecture Draft when the user starts from an existing application.
 _Avoid_: GitHub link, repo URL, codebase
+
+**Repository Analysis**:
+The gg-owned static analysis of one Source Repository used to identify its deployable shape and select one repository-level Template. It can contain multiple Application Units, such as frontend and backend parts, and examines the repository tree, `package.json`, lockfile, `Dockerfile`, framework configuration, and `README` without executing repository code.
+_Avoid_: Repository execution, arbitrary deployment, codebase scan
+
+**Application Unit**:
+An independently identifiable application part inside a Source Repository, such as a frontend or backend directory, with its own path and runtime evidence.
+_Avoid_: Repository, infrastructure Resource, arbitrary service
+
+**Template Selection Failure**:
+A valid Repository Analysis result stating that no supported Template represents the repository's Application Units, together with the mismatch reasons and missing evidence.
+_Avoid_: Closest Template fallback, partial Template selection, automatic redesign
 
 **Git Integration**:
 The service capability that connects a Practice Architecture and its IaC Preview to a Source Repository so infrastructure changes can be reviewed, versioned, and handed off to the team's normal development workflow.

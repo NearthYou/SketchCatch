@@ -8,6 +8,14 @@
 | --- | --- | --- |
 | [0001-ai-assists-deterministic-architecture-flow.md](./0001-ai-assists-deterministic-architecture-flow.md) | AI는 설계를 보조하고 deterministic architecture flow와 사용자 수락을 기준으로 상태를 바꾼다 | AI 추천, Architecture Draft, User-Accepted Change 경계를 바꿀 때 |
 | [0002-service-execution-paths-and-provider-boundary.md](./0002-service-execution-paths-and-provider-boundary.md) | Direct Deployment Path와 Git/CI/CD Deployment Path를 함께 두고 Provider Adapter 경계를 유지한다 | Deployment, Git/CI/CD handoff, Reverse Engineering, provider 확장을 다룰 때 |
+| [0003-gg-template-selection-ai-handoff.md](./0003-gg-template-selection-ai-handoff.md) | gg는 선택한 Template 하나와 분석 근거를 AI 파트에 전달하고 후보 목록은 전달하지 않는다 | Repository Analysis, Template Selection, AI Handoff 계약을 다룰 때 |
+| [0004-gg-repository-analysis-evidence-boundary.md](./0004-gg-repository-analysis-evidence-boundary.md) | gg는 제한된 evidence를 정적으로 분석하고 Repository를 실행하지 않는다 | Repository Analysis 범위와 안전 경계를 다룰 때 |
+| [0005-monorepo-analysis-and-template-selection.md](./0005-monorepo-analysis-and-template-selection.md) | monorepo는 하나의 Repository Analysis와 여러 Application Unit으로 표현하고 Template은 저장소 전체에 하나를 선택한다 | monorepo 분석 결과와 Template Selection 구조를 다룰 때 |
+| [0006-template-selection-failure-on-repository-mismatch.md](./0006-template-selection-failure-on-repository-mismatch.md) | 지원 Template과 맞지 않으면 Template을 고르지 않고 불일치 이유를 반환한다 | Template과 맞지 않는 Repository Analysis 결과를 다룰 때 |
+| [0007-template-selection-failure-ai-handoff.md](./0007-template-selection-failure-ai-handoff.md) | Template Selection Failure도 fallback 없이 AI Handoff로 전달한다 | Template 선택 실패와 AI 파트 연결을 다룰 때 |
+| [0008-non-persistent-repository-analysis.md](./0008-non-persistent-repository-analysis.md) | Repository Analysis 결과를 저장하지 않고 요청마다 새로 정적 분석한다 | 분석 결과 저장과 재분석 조건을 다룰 때 |
+| [0009-persist-latest-repository-analysis-summary.md](./0009-persist-latest-repository-analysis-summary.md) | 원본 source 없이 마지막 Repository Analysis 요약과 revision을 저장하며 0008을 대체한다 | 분석 결과 조회, 새로고침 복원, 재분석 조건을 다룰 때 |
+| [0010-ai-preserves-gg-template-selection.md](./0010-ai-preserves-gg-template-selection.md) | AI는 gg가 선택한 Template을 교체하지 않고 부족한 요구사항만 보완한다 | AI Handoff와 Architecture Draft 책임 경계를 다룰 때 |
 
 ## 추가 규칙
 

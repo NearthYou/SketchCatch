@@ -16,6 +16,180 @@ const handlers: DiagramFlowNodeHandlers = {
   onResizeEnd: () => {}
 };
 
+test("toFlowNodes reuses the cached node when its model and display state are unchanged", () => {
+  const instance = makeNode({ id: "instance-1", resourceType: "aws_instance" });
+  const first = toFlowNodes([instance], [], null, false, handlers);
+  const second = toFlowNodes([instance], [], null, false, handlers, {
+    cachedNodesById: new Map(first.map((node) => [node.id, node]))
+  });
+
+  assert.equal(second[0], first[0]);
+});
+
+test("toFlowNodes replaces only the moved node when cached siblings are unchanged", () => {
+  const instance = makeNode({ id: "instance-1", resourceType: "aws_instance" });
+  const bucket = makeNode({ id: "bucket-1", resourceType: "aws_s3_bucket" });
+  const first = toFlowNodes([instance, bucket], [], null, false, handlers);
+  const moved = { ...instance, position: { x: 120, y: 48 } };
+  const second = toFlowNodes([moved, bucket], [], null, false, handlers, {
+    cachedNodesById: new Map(first.map((node) => [node.id, node]))
+  });
+
+  assert.notEqual(second[0], first[0]);
+  assert.equal(second[1], first[1]);
+});
+
+test("toFlowNodes replaces cached nodes when selection or dimming changes", () => {
+  const previouslySelected = makeNode({ id: "previously-selected", resourceType: "aws_instance" });
+  const newlySelected = makeNode({ id: "newly-selected", resourceType: "aws_s3_bucket" });
+  const consistentlyDimmed = makeNode({ id: "consistently-dimmed", resourceType: "aws_sqs_queue" });
+  const nodes = [previouslySelected, newlySelected, consistentlyDimmed];
+  const first = toFlowNodes(nodes, [previouslySelected.id], null, false, handlers);
+  const second = toFlowNodes(nodes, [newlySelected.id], null, false, handlers, {
+    cachedNodesById: new Map(first.map((node) => [node.id, node]))
+  });
+
+  assert.notEqual(second[0], first[0]);
+  assert.notEqual(second[1], first[1]);
+  assert.equal(second[2], first[2]);
+  assert.equal(second[0]?.data.isDimmed, true);
+  assert.equal(second[1]?.selected, true);
+});
+
+test("toFlowNodes replaces cached nodes for connection activity and target-validity transitions", () => {
+  const source = makeNode({ id: "source-1", resourceType: "aws_volume_attachment" });
+  const duplicateTarget = makeNode({ id: "duplicate-1", resourceType: "aws_instance" });
+  const validTarget = makeNode({ id: "valid-1", resourceType: "aws_instance" });
+  const nodes = [source, duplicateTarget, validTarget];
+  const inactive = toFlowNodes(nodes, [], null, false, handlers);
+  const active = toFlowNodes(nodes, [], null, true, handlers, {
+    activeConnectionSourceNodeId: source.id,
+    cachedNodesById: new Map(inactive.map((node) => [node.id, node])),
+    edges: []
+  });
+  const validityChanged = toFlowNodes(nodes, [], null, true, handlers, {
+    activeConnectionSourceNodeId: source.id,
+    cachedNodesById: new Map(active.map((node) => [node.id, node])),
+    edges: [makeEdge(source.id, duplicateTarget.id)]
+  });
+
+  assert.notEqual(active[0], inactive[0]);
+  assert.notEqual(active[1], inactive[1]);
+  assert.notEqual(active[2], inactive[2]);
+  assert.equal(active[1]?.data.isValidConnectionTarget, true);
+  assert.notEqual(validityChanged[1], active[1]);
+  assert.equal(validityChanged[2], active[2]);
+  assert.equal(validityChanged[1]?.data.isValidConnectionTarget, false);
+});
+
+test("toFlowNodes replaces cached preview nodes when preview mode or annotations change", () => {
+  const instance = makeNode({ id: "instance-1", resourceType: "aws_instance" });
+  const bucket = makeNode({ id: "bucket-1", resourceType: "aws_s3_bucket" });
+  const nodes = [instance, bucket];
+  const live = toFlowNodes(nodes, [], null, false, handlers);
+  const modifiedPreview = toFlowNodes(nodes, [], null, false, handlers, {
+    cachedNodesById: new Map(live.map((node) => [node.id, node])),
+    isPreview: true,
+    previewAnnotations: {
+      edgeStates: {},
+      nodeStates: { [instance.id]: "modified" }
+    }
+  });
+  const deletedPreview = toFlowNodes(nodes, [], null, false, handlers, {
+    cachedNodesById: new Map(modifiedPreview.map((node) => [node.id, node])),
+    isPreview: true,
+    previewAnnotations: {
+      edgeStates: {},
+      nodeStates: { [instance.id]: "deleted" }
+    }
+  });
+
+  assert.notEqual(modifiedPreview[0], live[0]);
+  assert.notEqual(modifiedPreview[1], live[1]);
+  assert.notEqual(deletedPreview[0], modifiedPreview[0]);
+  assert.equal(deletedPreview[1], modifiedPreview[1]);
+  assert.equal(deletedPreview[0]?.data.previewState, "deleted");
+});
+
+test("toFlowNodes replaces cached descendants when an ancestor changes their z-index", () => {
+  const account = makeDesignAreaNode({ id: "account-1", type: "sketchcatch_group" });
+  const region = makeDesignAreaNode({ id: "region-1", type: "sketchcatch_region" });
+  const availabilityZone = makeDesignAreaNode({
+    id: "az-1",
+    parentAreaNodeId: region.id,
+    type: "sketchcatch_az"
+  });
+  const instance = makeNode({
+    id: "instance-1",
+    parentAreaNodeId: availabilityZone.id,
+    resourceType: "aws_instance"
+  });
+  const rootBucket = makeNode({ id: "bucket-1", resourceType: "aws_s3_bucket" });
+  const first = toFlowNodes([account, region, availabilityZone, instance, rootBucket], [], null, false, handlers);
+  const nestedRegion = { ...region, metadata: { parentAreaNodeId: account.id } };
+  const second = toFlowNodes(
+    [account, nestedRegion, availabilityZone, instance, rootBucket],
+    [],
+    null,
+    false,
+    handlers,
+    { cachedNodesById: new Map(first.map((node) => [node.id, node])) }
+  );
+
+  assert.equal(second[0], first[0]);
+  assert.notEqual(second[2], first[2]);
+  assert.notEqual(second[3], first[3]);
+  assert.equal(second[4], first[4]);
+  assert.ok((second[3]?.zIndex ?? 0) > (first[3]?.zIndex ?? 0));
+});
+
+test("toFlowNodes replaces the cached node for every changed handler", () => {
+  const instance = makeNode({ id: "instance-1", resourceType: "aws_instance" });
+  const handlerNames = [
+    "onBringForward",
+    "onSendBackward",
+    "onTextColorChange",
+    "onBorderColorChange",
+    "onToggleLock",
+    "onResizeStart",
+    "onResize",
+    "onResizeEnd"
+  ] as const;
+
+  for (const handlerName of handlerNames) {
+    const first = toFlowNodes([instance], [], null, false, handlers);
+    const replacementHandlers: DiagramFlowNodeHandlers = {
+      ...handlers,
+      [handlerName]: () => {}
+    };
+    const second = toFlowNodes([instance], [], null, false, replacementHandlers, {
+      cachedNodesById: new Map(first.map((node) => [node.id, node]))
+    });
+
+    assert.notEqual(second[0], first[0], `${handlerName} must invalidate the cached Flow node`);
+  }
+});
+
+test("toFlowNodes replaces only previous and current Area drop targets from the cache", () => {
+  const vpc = makeNode({ id: "vpc-1", resourceType: "aws_vpc" });
+  const subnet = makeNode({ id: "subnet-1", resourceType: "aws_subnet" });
+  const instance = makeNode({ id: "instance-1", resourceType: "aws_instance" });
+  const first = toFlowNodes([vpc, subnet, instance], [], vpc.id, false, handlers);
+  const firstById = new Map(first.map((node) => [node.id, node]));
+  const second = toFlowNodes([vpc, subnet, instance], [], subnet.id, false, handlers, {
+    cachedNodesById: firstById
+  });
+  const secondById = new Map(second.map((node) => [node.id, node]));
+
+  assert.equal(firstById.get(vpc.id)?.data.isAreaDropTarget, true);
+  assert.equal(secondById.get(vpc.id)?.data.isAreaDropTarget, false);
+  assert.equal(firstById.get(subnet.id)?.data.isAreaDropTarget, false);
+  assert.equal(secondById.get(subnet.id)?.data.isAreaDropTarget, true);
+  assert.notEqual(secondById.get(vpc.id), firstById.get(vpc.id));
+  assert.notEqual(secondById.get(subnet.id), firstById.get(subnet.id));
+  assert.equal(secondById.get(instance.id), firstById.get(instance.id));
+});
+
 test("toFlowNodes marks only the active Area placement target in node data and accessibility", () => {
   const vpc = makeNode({ id: "vpc-1", resourceType: "aws_vpc" });
   const subnet = makeNode({ id: "subnet-1", resourceType: "aws_subnet" });
@@ -30,13 +204,14 @@ test("toFlowNodes marks only the active Area placement target in node data and a
 });
 
 test("connection affordance marks only valid non-duplicate target nodes", () => {
-  const source = makeNode({ id: "source-1", resourceType: "aws_instance" });
-  const duplicateTarget = makeNode({ id: "duplicate-1", resourceType: "aws_s3_bucket" });
-  const validTarget = makeNode({ id: "valid-1", resourceType: "aws_lambda_function" });
-  const lockedTarget = makeNode({ id: "locked-1", locked: true, resourceType: "aws_cloudwatch_log_group" });
+  const source = makeNode({ id: "source-1", resourceType: "aws_volume_attachment" });
+  const duplicateTarget = makeNode({ id: "duplicate-1", resourceType: "aws_ebs_volume" });
+  const validTarget = makeNode({ id: "valid-1", resourceType: "aws_instance" });
+  const invalidTarget = makeNode({ id: "invalid-1", resourceType: "aws_s3_bucket" });
+  const lockedTarget = makeNode({ id: "locked-1", locked: true, resourceType: "aws_kms_key" });
   const existingEdge = makeEdge(source.id, duplicateTarget.id);
   const flowNodes = toFlowNodes(
-    [source, duplicateTarget, validTarget, lockedTarget],
+    [source, duplicateTarget, validTarget, invalidTarget, lockedTarget],
     [],
     null,
     true,
@@ -57,101 +232,12 @@ test("connection affordance marks only valid non-duplicate target nodes", () => 
     true
   );
   assert.equal(
-    flowNodes.find((node) => node.id === lockedTarget.id)?.data.isValidConnectionTarget,
+    flowNodes.find((node) => node.id === invalidTarget.id)?.data.isValidConnectionTarget,
     false
   );
-});
-
-test("flow mappers collapse parameter-helper resources from the rendered board", () => {
-  const service = makeNode({ id: "ecs-service", resourceType: "aws_ecs_service" });
-  const scalingTarget = makeNode({ id: "scaling-target", resourceType: "aws_appautoscaling_target" });
-  const dbSubnetGroup = makeNode({ id: "db-subnet-group", resourceType: "aws_db_subnet_group" });
-  const securityGroup = makeNode({ id: "security-group", resourceType: "aws_security_group" });
-  const runtimeRole = makeNode({ id: "runtime-role", resourceType: "aws_iam_role" });
-  const launchTemplate = makeNode({ id: "launch-template", resourceType: "aws_launch_template" });
-  const machineImage = makeNode({ id: "machine-image", resourceType: "aws_ami" });
-  const certificate = makeNode({ id: "certificate", resourceType: "aws_acm_certificate" });
-  const encryptionKey = makeNode({ id: "encryption-key", resourceType: "aws_kms_key" });
-  const database = makeNode({ id: "database", resourceType: "aws_db_instance" });
-  const apiGateway = makeNode({ id: "api-gateway", resourceType: "aws_api_gateway_rest_api" });
-  const apiResource = makeNode({ id: "api-resource", resourceType: "aws_api_gateway_resource" });
-  const apiMethod = makeNode({ id: "api-method", resourceType: "aws_api_gateway_method" });
-  const apiIntegration = makeNode({ id: "api-integration", resourceType: "aws_api_gateway_integration" });
-  const apiDeployment = makeNode({ id: "api-deployment", resourceType: "aws_api_gateway_deployment" });
-  const apiStage = makeNode({ id: "api-stage", resourceType: "aws_api_gateway_stage" });
-  const lambda = makeNode({ id: "lambda", resourceType: "aws_lambda_function" });
-  const flowNodes = toFlowNodes(
-    [
-      service,
-      scalingTarget,
-      dbSubnetGroup,
-      securityGroup,
-      runtimeRole,
-      launchTemplate,
-      machineImage,
-      certificate,
-      encryptionKey,
-      database,
-      apiGateway,
-      apiResource,
-      apiMethod,
-      apiIntegration,
-      apiDeployment,
-      apiStage,
-      lambda
-    ],
-    [],
-    null,
-    false,
-    handlers
-  );
-  const flowEdges = toFlowEdges(
-    [
-      makeEdge(service.id, scalingTarget.id),
-      makeEdge(dbSubnetGroup.id, database.id),
-      makeEdge(securityGroup.id, service.id),
-      makeEdge(runtimeRole.id, service.id),
-      makeEdge(launchTemplate.id, service.id),
-      makeEdge(machineImage.id, launchTemplate.id),
-      makeEdge(certificate.id, service.id),
-      makeEdge(encryptionKey.id, database.id),
-      makeEdge(service.id, database.id),
-      makeEdge(apiGateway.id, apiResource.id),
-      makeEdge(apiResource.id, apiMethod.id),
-      makeEdge(apiMethod.id, apiIntegration.id),
-      makeEdge(apiIntegration.id, lambda.id),
-      makeEdge(apiDeployment.id, apiStage.id),
-      makeEdge(apiGateway.id, lambda.id)
-    ],
-    [],
-    [
-      service,
-      scalingTarget,
-      dbSubnetGroup,
-      securityGroup,
-      runtimeRole,
-      launchTemplate,
-      machineImage,
-      certificate,
-      encryptionKey,
-      database,
-      apiGateway,
-      apiResource,
-      apiMethod,
-      apiIntegration,
-      apiDeployment,
-      apiStage,
-      lambda
-    ]
-  );
-
-  assert.deepEqual(
-    flowNodes.map((node) => node.id),
-    ["ecs-service", "security-group", "database", "api-gateway", "lambda"]
-  );
-  assert.deepEqual(
-    flowEdges.map((edge) => edge.id),
-    ["security-group-to-ecs-service", "ecs-service-to-database", "api-gateway-to-lambda"]
+  assert.equal(
+    flowNodes.find((node) => node.id === lockedTarget.id)?.data.isValidConnectionTarget,
+    false
   );
 });
 
@@ -219,12 +305,14 @@ test("toFlowNodes keeps an unselected regular node clickable while another node 
 
 test("toFlowNodes marks area nodes for click-through body hit testing", () => {
   const vpc = makeNode({ id: "vpc-1", resourceType: "aws_vpc" });
+  const securityGroup = makeNode({ id: "security-group-1", resourceType: "aws_security_group" });
   const autoscalingGroup = makeNode({ id: "asg-1", resourceType: "aws_autoscaling_group" });
   const instance = makeNode({ id: "instance-1", resourceType: "aws_instance" });
 
-  const flowNodes = toFlowNodes([vpc, autoscalingGroup, instance], [], null, false, handlers);
+  const flowNodes = toFlowNodes([vpc, securityGroup, autoscalingGroup, instance], [], null, false, handlers);
 
   assert.equal(flowNodes.find((node) => node.id === "vpc-1")?.className, "diagramAreaFlowNode");
+  assert.equal(flowNodes.find((node) => node.id === "security-group-1")?.className, "diagramAreaFlowNode");
   assert.equal(flowNodes.find((node) => node.id === "asg-1")?.className, "diagramAreaFlowNode");
   assert.equal(flowNodes.find((node) => node.id === "instance-1")?.className, undefined);
 });
@@ -242,11 +330,13 @@ test("toFlowNodes keeps selected area nodes pointer-addressable for resize contr
 
 test("toFlowNodes keeps unselected area nodes available for marquee selection", () => {
   const subnet = makeNode({ id: "subnet-1", resourceType: "aws_subnet" });
+  const securityGroup = makeNode({ id: "security-group-1", resourceType: "aws_security_group" });
   const instance = makeNode({ id: "instance-1", resourceType: "aws_instance" });
 
-  const flowNodes = toFlowNodes([subnet, instance], [], null, false, handlers);
+  const flowNodes = toFlowNodes([subnet, securityGroup, instance], [], null, false, handlers);
 
   assert.equal(flowNodes.find((node) => node.id === "subnet-1")?.selectable, true);
+  assert.equal(flowNodes.find((node) => node.id === "security-group-1")?.selectable, true);
   assert.equal(flowNodes.find((node) => node.id === "instance-1")?.selectable, true);
 });
 
@@ -358,22 +448,22 @@ test("toFlowEdges stacks selected area endpoint edges above unselected area endp
     parentAreaNodeId: "region-1",
     resourceType: "aws_instance"
   });
-  const loadBalancer = makeNode({
-    id: "load-balancer-1",
+  const launchTemplate = makeNode({
+    id: "launch-template-1",
     parentAreaNodeId: "region-1",
-    resourceType: "aws_lb"
+    resourceType: "aws_launch_template"
   });
   const autoscalingGroup = makeNode({
     id: "asg-1",
     parentAreaNodeId: "region-1",
     resourceType: "aws_autoscaling_group"
   });
-  const selectedEdge = makeEdge("load-balancer-1", "asg-1");
+  const selectedEdge = makeEdge("launch-template-1", "asg-1");
   const unselectedEdge = makeEdge("instance-1", "asg-1");
   const flowEdges = toFlowEdges(
     [unselectedEdge, selectedEdge],
     [selectedEdge.id],
-    [region, instance, loadBalancer, autoscalingGroup]
+    [region, instance, launchTemplate, autoscalingGroup]
   );
 
   assert.ok(getFlowEdgeZIndex(flowEdges, selectedEdge.id) > getFlowEdgeZIndex(flowEdges, unselectedEdge.id));
@@ -581,13 +671,9 @@ test("stored edge semantics win over conflicting label inference", () => {
 });
 
 test("toFlowEdges renders configuration dependency endpoints as thin solid lines", () => {
-  const bucket = makeNode({ id: "bucket-1", resourceType: "aws_s3_bucket" });
+  const key = makeNode({ id: "key-1", resourceType: "aws_kms_key" });
   const logs = makeNode({ id: "logs-1", resourceType: "aws_cloudwatch_log_group" });
-  const flowEdges = toFlowEdges(
-    [{ ...makeEdge("bucket-1", "logs-1"), id: "bucket-to-logs", label: "depends_on" }],
-    [],
-    [bucket, logs]
-  );
+  const flowEdges = toFlowEdges([{ ...makeEdge("key-1", "logs-1"), id: "key-to-logs", label: "uses" }], [], [key, logs]);
 
   assert.equal(flowEdges[0]?.style?.strokeDasharray, undefined);
   assert.equal(flowEdges[0]?.style?.stroke, "#6b7280");

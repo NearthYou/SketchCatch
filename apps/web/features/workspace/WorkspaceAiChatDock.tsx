@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { templateDefinitions } from "@sketchcatch/types";
+import type { TemplateId } from "@sketchcatch/types";
 import type {
   AiArchitectureDraftResult,
   AiTerraformErrorExplanationResult,
@@ -77,6 +79,8 @@ export type WorkspaceAiChatDockProps = {
   readonly context: DiagramEditorPanelContext;
   readonly onApplyTerraformIssueFix: (request: TerraformSafeFixApplyRequest) => void;
   readonly projectId: string;
+  readonly repositoryAnalysisSourceRepositoryId?: string | undefined;
+  readonly repositoryTemplateId?: TemplateId | undefined;
   readonly terraformIssueRequest: TerraformIssueAiRequest | null;
   readonly terraformPreviewRequest: TerraformPreviewAiRequest | null;
   readonly terraformSafeFixApplyResult: TerraformSafeFixApplyResult | null;
@@ -183,10 +187,13 @@ type SpeechRecognitionWindow = Window & {
   readonly webkitSpeechRecognition?: BrowserSpeechRecognitionConstructor;
 };
 
+// Repository Analysis에서 넘긴 Template을 표시하고 이후 AI Draft 요청에 유지합니다.
 export function WorkspaceAiChatDock({
   context,
   onApplyTerraformIssueFix,
   projectId,
+  repositoryAnalysisSourceRepositoryId,
+  repositoryTemplateId,
   terraformIssueRequest,
   terraformPreviewRequest,
   terraformSafeFixApplyResult
@@ -233,6 +240,13 @@ export function WorkspaceAiChatDock({
   const [draftErrorMessage, setDraftErrorMessage] = useState("");
   const [simulationErrorMessage, setSimulationErrorMessage] = useState("");
   const [simulationFingerprint, setSimulationFingerprint] = useState<string | null>(null);
+  const repositoryTemplate = useMemo(
+    () =>
+      repositoryTemplateId
+        ? templateDefinitions.find((template) => template.id === repositoryTemplateId) ?? null
+        : null,
+    [repositoryTemplateId]
+  );
   const composerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const transcriptRef = useRef<HTMLDivElement | null>(null);
   const transcriptScrollFrameRef = useRef<number | null>(null);
@@ -255,6 +269,7 @@ export function WorkspaceAiChatDock({
     () => createDraftSafetyWarnings(draft, boardSnapshot.hasResources),
     [boardSnapshot.hasResources, draft]
   );
+
   const visibleMessages = useMemo(
     () => messages.filter((message) => getChatMessageScope(message) === activeChatTab),
     [activeChatTab, messages]
@@ -882,7 +897,22 @@ export function WorkspaceAiChatDock({
 
     const normalizedDraftRequest: CreateArchitectureDraftRequest = {
       ...draftRequest,
-      prompt
+      prompt,
+      ...(repositoryTemplate
+        ? {
+            templateId: repositoryTemplate.id,
+            ...(repositoryAnalysisSourceRepositoryId
+              ? {
+                  repositoryAnalysis: {
+                    projectId,
+                    sourceRepositoryId: repositoryAnalysisSourceRepositoryId
+                  }
+                }
+              : {})
+          }
+        : draftRequest.templateId
+          ? { templateId: draftRequest.templateId }
+          : {})
     };
 
     setDraftState("loading");
@@ -1263,6 +1293,15 @@ export function WorkspaceAiChatDock({
           <X size={18} aria-hidden="true" />
         </button>
       </header>
+
+      {repositoryTemplate ? (
+        <div className={styles.aiChatTemplateContext} role="status">
+          <span>Repository Analysis Template</span>
+          <strong>{repositoryTemplate.title}</strong>
+          <code>{repositoryTemplate.id}</code>
+          <p>AI는 이 Template을 바꾸지 않고 부족한 요구사항만 보완합니다.</p>
+        </div>
+      ) : null}
 
       <div className={styles.aiChatTabBar} aria-label="AI 채팅 기능">
         <div className={styles.aiChatTabs} role="tablist" aria-label="AI 기능">

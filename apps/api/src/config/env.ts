@@ -1,4 +1,8 @@
 ﻿import "./load-env.js";
+import {
+  createLiveObservationCapability,
+  type LiveObservationCapabilityKeyring
+} from "../live-observations/live-observation-capability.js";
 
 export type RuntimeEnv = {
   aiArchitectureRequirementNormalizer?: string | undefined;
@@ -36,6 +40,11 @@ export type RuntimeEnv = {
   githubAppStateSecret?: string | undefined;
   kakaoOauthClientId: string | undefined;
   kakaoOauthClientSecret: string | undefined;
+  liveObservationCapabilityCurrentKid?: string | undefined;
+  liveObservationCapabilityCurrentSecret?: string | undefined;
+  liveObservationCapabilityPreviousKid?: string | undefined;
+  liveObservationCapabilityPreviousSecret?: string | undefined;
+  liveObservationCapabilityPreviousStoppedIssuingAt?: string | undefined;
   liveObservationEnabled?: string | undefined;
   naverOauthClientId: string | undefined;
   naverOauthClientSecret: string | undefined;
@@ -94,6 +103,16 @@ export function getRuntimeEnv(): RuntimeEnv {
     githubAppStateSecret: process.env.GIT_APP_STATE_SECRET,
     kakaoOauthClientId: process.env.KAKAO_OAUTH_CLIENT_ID,
     kakaoOauthClientSecret: process.env.KAKAO_OAUTH_CLIENT_SECRET,
+    liveObservationCapabilityCurrentKid:
+      process.env.LIVE_OBSERVATION_CAPABILITY_CURRENT_KID,
+    liveObservationCapabilityCurrentSecret:
+      process.env.LIVE_OBSERVATION_CAPABILITY_CURRENT_SECRET,
+    liveObservationCapabilityPreviousKid:
+      process.env.LIVE_OBSERVATION_CAPABILITY_PREVIOUS_KID,
+    liveObservationCapabilityPreviousSecret:
+      process.env.LIVE_OBSERVATION_CAPABILITY_PREVIOUS_SECRET,
+    liveObservationCapabilityPreviousStoppedIssuingAt:
+      process.env.LIVE_OBSERVATION_CAPABILITY_PREVIOUS_STOPPED_ISSUING_AT,
     liveObservationEnabled: process.env.LIVE_OBSERVATION_ENABLED,
     naverOauthClientId: process.env.NAVER_OAUTH_CLIENT_ID,
     naverOauthClientSecret: process.env.NAVER_OAUTH_CLIENT_SECRET,
@@ -113,6 +132,49 @@ export type DeploymentWorkerMode = "in_process" | "ecs";
 
 export function isLiveObservationEnabled(env: RuntimeEnv = getRuntimeEnv()): boolean {
   return env.liveObservationEnabled?.trim().toLowerCase() === "true";
+}
+
+export function requireLiveObservationCapabilityKeyring(
+  env: RuntimeEnv = getRuntimeEnv()
+): LiveObservationCapabilityKeyring {
+  try {
+    const currentKid = requireCapabilityValue(env.liveObservationCapabilityCurrentKid);
+    const currentSecret = requireCapabilityValue(env.liveObservationCapabilityCurrentSecret);
+    const previousValues = [
+      env.liveObservationCapabilityPreviousKid,
+      env.liveObservationCapabilityPreviousSecret,
+      env.liveObservationCapabilityPreviousStoppedIssuingAt
+    ];
+    const configuredPreviousValues = previousValues.map(isConfiguredCapabilityValue);
+    const hasPrevious = configuredPreviousValues.some(Boolean);
+
+    if (hasPrevious && !configuredPreviousValues.every(Boolean)) {
+      throw capabilityConfigurationError();
+    }
+
+    const keyring: LiveObservationCapabilityKeyring = {
+      current: {
+        kid: currentKid,
+        secret: currentSecret
+      },
+      ...(hasPrevious
+        ? {
+            previous: {
+              kid: requireCapabilityValue(env.liveObservationCapabilityPreviousKid),
+              secret: requireCapabilityValue(env.liveObservationCapabilityPreviousSecret),
+              stoppedIssuingAt: requireCapabilityValue(
+                env.liveObservationCapabilityPreviousStoppedIssuingAt
+              )
+            }
+          }
+        : {})
+    };
+
+    createLiveObservationCapability({ keyring });
+    return keyring;
+  } catch {
+    throw capabilityConfigurationError();
+  }
 }
 
 export type EcsWorkerDispatcherConfig = {
@@ -301,6 +363,22 @@ function requireNonEmptyEnv(value: string | undefined, name: string): string {
   }
 
   return trimmedValue;
+}
+
+function isConfiguredCapabilityValue(value: string | undefined): value is string {
+  return value !== undefined && value.length > 0;
+}
+
+function requireCapabilityValue(value: string | undefined): string {
+  if (!isConfiguredCapabilityValue(value)) {
+    throw capabilityConfigurationError();
+  }
+
+  return value;
+}
+
+function capabilityConfigurationError(): Error {
+  return new Error("Invalid Live Observation capability configuration");
 }
 
 function parseCommaSeparatedEnv(value: string | undefined, name: string): string[] {

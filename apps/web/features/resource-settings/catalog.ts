@@ -29,6 +29,7 @@ const resourceCategoryOverrides: Record<string, string> = {
   "aws-acm-certificate": "Certificates",
   "aws-acm-certificate-validation": "Certificates",
   "aws-api-gateway-deployment": "API Gateway REST",
+  "aws-api-gateway-authorizer": "API Gateway REST",
   "aws-api-gateway-integration": "API Gateway REST",
   "aws-api-gateway-method": "API Gateway REST",
   "aws-api-gateway-resource": "API Gateway REST",
@@ -80,6 +81,10 @@ const resourceCategoryOverrides: Record<string, string> = {
   "aws-eks-addon": "EKS",
   "aws-eks-cluster": "EKS",
   "aws-eks-node-group": "EKS",
+  "aws-amplify-app": "Frontend / Web Mobile",
+  "kubernetes-namespace": "Kubernetes",
+  "kubernetes-deployment": "Kubernetes",
+  "kubernetes-service": "Kubernetes",
   "aws-elasticache-parameter-group": "ElastiCache",
   "aws-elasticache-redis": "ElastiCache",
   "aws-elasticache-subnet-group": "ElastiCache",
@@ -413,6 +418,15 @@ const terraformResourcePresentations = [
     category: "Security",
     iconUrl: `${serviceIconPath}/Arch_Security-Identity-Compliance/64/Arch_Amazon-Cognito_64.svg`,
     label: "Pool Client",
+    size
+  },
+  {
+    definitionId: "aws-amplify-app",
+    name: "Amplify App",
+    area: "application",
+    category: "Frontend / Web Mobile",
+    iconUrl: `${serviceIconPath}/Arch_Front-End-Web-Mobile/64/Arch_AWS-Amplify_64.svg`,
+    label: "Amplify App",
     size
   },
   {
@@ -755,6 +769,15 @@ const terraformResourcePresentations = [
     category: "Serverless / Application",
     iconUrl: `${serviceIconPath}/Arch_Networking-Content-Delivery/64/Arch_Amazon-API-Gateway_64.svg`,
     label: "REST API",
+    size
+  },
+  {
+    definitionId: "aws-api-gateway-authorizer",
+    name: "API Gateway Authorizer",
+    area: "application",
+    category: "Serverless / Application",
+    iconUrl: `${serviceIconPath}/Arch_Networking-Content-Delivery/64/Arch_Amazon-API-Gateway_64.svg`,
+    label: "API Authorizer",
     size
   },
   {
@@ -1241,6 +1264,33 @@ const terraformResourcePresentations = [
     category: "Containers",
     iconUrl: `${serviceIconPath}/Arch_Containers/64/Arch_Amazon-Elastic-Kubernetes-Service_64.svg`,
     label: "EKS Add-on",
+    size
+  },
+  {
+    definitionId: "kubernetes-namespace",
+    name: "Kubernetes Namespace",
+    area: "containers",
+    category: "Containers",
+    iconUrl: `${serviceIconPath}/Arch_Containers/64/Arch_Amazon-Elastic-Kubernetes-Service_64.svg`,
+    label: "Namespace",
+    size
+  },
+  {
+    definitionId: "kubernetes-deployment",
+    name: "Kubernetes Deployment",
+    area: "containers",
+    category: "Containers",
+    iconUrl: `${serviceIconPath}/Arch_Containers/64/Arch_Amazon-Elastic-Kubernetes-Service_64.svg`,
+    label: "Deployment",
+    size
+  },
+  {
+    definitionId: "kubernetes-service",
+    name: "Kubernetes Service",
+    area: "containers",
+    category: "Containers",
+    iconUrl: `${serviceIconPath}/Arch_Containers/64/Arch_Amazon-Elastic-Kubernetes-Service_64.svg`,
+    label: "Service",
     size
   },
   {
