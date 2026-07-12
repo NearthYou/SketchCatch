@@ -116,7 +116,7 @@ export function createLiveObservationDiagramModel(
     MAX_VISIBLE_CAPACITY_UNITS,
     requestedCapacityCount
   );
-  const capacityTemplate = orderedCapacityNodes[0];
+  const capacityTemplate = orderedCapacityNodes[0]!;
   const presentationCapacityNodes = Array.from(
     { length: visibleCapacityCount },
     (_, index) => orderedCapacityNodes[index] ?? createCapacitySlotNode(capacityTemplate, index)

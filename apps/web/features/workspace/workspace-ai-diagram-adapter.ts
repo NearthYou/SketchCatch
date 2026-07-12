@@ -830,11 +830,15 @@ function getDefaultEdgeHandles(
 
   const routedHandles = getLowestOverlapEdgeHandles(sourceNode, targetNode, nodes, occupiedRoutes);
 
-  if (
-    routedHandles &&
-    !doesOrthogonalRouteCrossResource(sourceNode, targetNode, routedHandles, nodes)
-  ) {
-    return routedHandles;
+  if (routedHandles?.sourceHandleId && routedHandles.targetHandleId) {
+    const completeRoutedHandles = {
+      sourceHandleId: routedHandles.sourceHandleId,
+      targetHandleId: routedHandles.targetHandleId
+    };
+
+    if (!doesOrthogonalRouteCrossResource(sourceNode, targetNode, completeRoutedHandles, nodes)) {
+      return completeRoutedHandles;
+    }
   }
 
   const obstacleSafeHandles = getObstacleSafeEdgeHandles(sourceNode, targetNode, nodes);

@@ -194,7 +194,7 @@ export function WorkspaceAiPreDeploymentResult({
   );
 }
 
-// Design Simulation 결과를 흐름, 병목, 장애, 비용 검토 순서로 묶어 표시합니다.
+// AI Simulation 결과를 요약, 병목, 장애, 비용 검토 순서로 묶어 표시합니다.
 export function WorkspaceAiDesignSimulationResult({
   simulation
 }: {
@@ -209,17 +209,6 @@ export function WorkspaceAiDesignSimulationResult({
     <div className={`${styles.aiResultStack} ${styles.aiSimulationResult}`}>
       <p className={styles.aiResultSummary}>{simulation.summary}</p>
       <div className={styles.aiSimulationGrid}>
-        <section className={styles.aiSimulationCard}>
-          <strong>요청 흐름</strong>
-          <ul>
-            {simulation.requestFlow.map((step, index) => (
-              <li key={`flow-${index}-${step.fromResourceId}-${step.toResourceId}`}>
-                <span>{step.fromResourceId} -&gt; {step.toResourceId}</span>
-                <p>{step.description}</p>
-              </li>
-            ))}
-          </ul>
-        </section>
         <section className={styles.aiSimulationCard}>
           <strong>병목 후보</strong>
           <ul>

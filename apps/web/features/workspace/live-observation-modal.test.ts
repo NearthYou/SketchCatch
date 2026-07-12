@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 const modalSource = readWorkspaceFile("LiveObservationModal.tsx");
 const mockPreviewSource = readWorkspaceFile("live-observation-mock-preview.ts");
+const panelPiecesSource = readWorkspaceFile("WorkspaceAiPanelPieces.tsx");
 const signalMapSource = readWorkspaceFile("LiveObservationSignalMap.tsx");
 const stylesSource = readWorkspaceFile("workspace.module.css");
 
@@ -201,6 +202,22 @@ test("capacity presentation expands with visible units and summarizes overflow",
   assert.match(diagramMapSource, /\+\{model\.hiddenCapacityCount\}/);
 });
 
+test("traffic bursts and capacity activation use emphatic bounded animation", () => {
+  const diagramMapSource = readWorkspaceFile("LiveObservationDiagramMap.tsx");
+
+  assert.match(diagramMapSource, /Math\.min\(4, burst\?\.visibleParticleCount/);
+  assert.match(stylesSource, /@keyframes liveObservationCapacityLaunch/);
+  assert.match(stylesSource, /@keyframes liveObservationCapacityActivated/);
+  assert.match(
+    stylesSource,
+    /liveObservationCapacityUnit\[data-observation-state="launching"\][\s\S]{0,180}liveObservationCapacityLaunch/
+  );
+  assert.match(
+    stylesSource,
+    /liveObservationCapacityUnit\[data-observation-state="active"\][\s\S]{0,220}liveObservationCapacityActivated/
+  );
+});
+
 test("development mock automatically replays the real animation path with labeled local data", () => {
   assert.match(modalSource, /process\.env\.NODE_ENV === "development"/);
   assert.doesNotMatch(modalSource, /목업 애니메이션 재생/);
@@ -234,7 +251,33 @@ test("opening the observation modal automatically runs the board design simulati
   assert.match(modalSource, /createWorkspaceAiBoardSnapshot\(diagramJson\)/);
   assert.match(modalSource, /runAiDesignSimulation\(\{/);
   assert.match(modalSource, /<WorkspaceAiDesignSimulationResult/);
-  assert.match(modalSource, /설계 시뮬레이션을 계산하고 있습니다/);
+  assert.match(modalSource, /AI 시뮬레이션을 계산하고 있습니다/);
+});
+
+test("observation header keeps only the product eyebrow and concise title", () => {
+  assert.match(modalSource, />Live Observation<\/span>/);
+  assert.match(modalSource, />실시간 트래픽 관측<\/h2>/);
+  assert.doesNotMatch(modalSource, /오토 스케일링 관측/);
+  assert.doesNotMatch(modalSource, /실제 배포 근거를 15분/);
+  assert.doesNotMatch(modalSource, /\{projectName\}/);
+});
+
+test("AI simulation is on by default, retains state while collapsed, and omits request flow", () => {
+  assert.match(modalSource, /\[isAiSimulationVisible, setAiSimulationVisible\] = useState\(true\)/);
+  assert.match(modalSource, /aria-pressed=\{isAiSimulationVisible\}/);
+  assert.match(modalSource, /isAiSimulationVisible \? \(/);
+  assert.doesNotMatch(modalSource, /setDesignSimulation\(null\)[\s\S]{0,300}setAiSimulationVisible/);
+  assert.match(panelPiecesSource, /aiResultSummary[\s\S]*병목 후보[\s\S]*장애 대응[\s\S]*비용·다음 검토/);
+  assert.doesNotMatch(panelPiecesSource, />요청 흐름</);
+  assert.doesNotMatch(panelPiecesSource, /simulation\.requestFlow\.map/);
+});
+
+test("traffic load controls stay outside the scroll body and also drive the development mock", () => {
+  assert.doesNotMatch(modalSource, /\{session \? \(\s*<footer/);
+  assert.match(modalSource, /function startTrafficLoad/);
+  assert.match(modalSource, /showDevelopmentMockMap[\s\S]{0,240}setMockRequestFlowState\(replayMockRequestFlow\)/);
+  assert.match(modalSource, /onClick=\{startTrafficLoad\}/);
+  assert.match(modalSource, /disabled=\{\(!isSessionActive && !showDevelopmentMockMap\) \|\| boostProgress\.running\}/);
 });
 
 test("signal map mounts only the active responsive geometry and animation variant", () => {
@@ -389,7 +432,8 @@ test("reduced motion omits circles and SMIL while preserving only selected feedb
 
 test("boost and session controls stop work on cleanup without destroying infrastructure", () => {
   assert.match(modalSource, /createPresenterTrafficBoost/);
-  assert.match(modalSource, />\+90초 부하</);
+  assert.match(modalSource, /"\+90초 부하"/);
+  assert.match(modalSource, /"부하 단계 올리기"/);
   assert.match(modalSource, />중지</);
   assert.match(modalSource, />세션 종료</);
   assert.match(modalSource, /boostControllerRef\.current\?\.stop\(\)/);

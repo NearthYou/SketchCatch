@@ -16,6 +16,8 @@ import {
   Radio,
   Square,
   Timer,
+  ToggleLeft,
+  ToggleRight,
   X
 } from "lucide-react";
 import { createPortal } from "react-dom";
@@ -54,7 +56,6 @@ export type LiveObservationModalProps = {
   readonly diagramJson: DiagramJson;
   readonly onClose: () => void;
   readonly projectId: string;
-  readonly projectName: string;
 };
 
 const EMPTY_BOOST_PROGRESS: PresenterTrafficBoostProgress = {
@@ -85,8 +86,7 @@ const DESIGN_SIMULATION_DEFAULTS = {
 export function LiveObservationModal({
   diagramJson,
   onClose,
-  projectId,
-  projectName
+  projectId
 }: LiveObservationModalProps) {
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -103,6 +103,7 @@ export function LiveObservationModal({
   const [designSimulationState, setDesignSimulationState] =
     useState<"loading" | "ready" | "error">("loading");
   const [designSimulationError, setDesignSimulationError] = useState("");
+  const [isAiSimulationVisible, setAiSimulationVisible] = useState(true);
   const [selectedDeploymentId, setSelectedDeploymentId] = useState("");
   const [listState, setListState] = useState<"loading" | "ready" | "error">("loading");
   const [requestState, setRequestState] = useState<"idle" | "loading">("idle");
@@ -485,6 +486,15 @@ export function LiveObservationModal({
     controller.start();
   }
 
+  function startTrafficLoad(): void {
+    if (showDevelopmentMockMap && !session) {
+      setMockRequestFlowState(replayMockRequestFlow);
+      return;
+    }
+
+    startBoost();
+  }
+
   function stopBoost(): void {
     boostControllerRef.current?.stop();
   }
@@ -546,8 +556,7 @@ export function LiveObservationModal({
         <header className={styles.liveObservationHeader}>
           <div className={styles.liveObservationHeaderIdentity}>
             <span className={styles.liveObservationEyebrow}>Live Observation</span>
-            <h2 id="live-observation-title">실시간 트래픽 · 오토 스케일링 관측</h2>
-            <p>{projectName} · 실제 배포 근거를 15분 동안 읽기 전용으로 관측</p>
+            <h2 id="live-observation-title">실시간 트래픽 관측</h2>
           </div>
 
           <div className={styles.liveObservationTargetBar}>
@@ -704,40 +713,56 @@ export function LiveObservationModal({
           ) : null}
 
           <section
-            aria-label="AI 설계 시뮬레이션 결과"
+            aria-label="AI 시뮬레이션 결과"
             className={styles.liveObservationDesignSimulation}
           >
             <header>
-              <strong>AI 설계 시뮬레이션</strong>
-              <span>현재 보드 기준 · 자동 실행</span>
+              <strong>AI 시뮬레이션</strong>
+              <button
+                aria-label={isAiSimulationVisible ? "AI 시뮬레이션 접기" : "AI 시뮬레이션 펼치기"}
+                aria-pressed={isAiSimulationVisible}
+                className={styles.liveObservationSimulationToggle}
+                onClick={() => setAiSimulationVisible((visible) => !visible)}
+                title={isAiSimulationVisible ? "AI 시뮬레이션 접기" : "AI 시뮬레이션 펼치기"}
+                type="button"
+              >
+                {isAiSimulationVisible ? (
+                  <ToggleRight aria-hidden="true" size={20} />
+                ) : (
+                  <ToggleLeft aria-hidden="true" size={20} />
+                )}
+              </button>
             </header>
-            {designSimulationState === "loading" ? (
-              <div className={styles.liveObservationMessage}>
-                설계 시뮬레이션을 계산하고 있습니다.
-              </div>
-            ) : null}
-            {designSimulationState === "error" ? (
-              <div className={styles.liveObservationError} role="alert">
-                {designSimulationError}
-              </div>
-            ) : null}
-            {designSimulationState === "ready" && designSimulation ? (
-              <WorkspaceAiDesignSimulationResult simulation={designSimulation} />
+            {isAiSimulationVisible ? (
+              <>
+                {designSimulationState === "loading" ? (
+                  <div className={styles.liveObservationMessage}>
+                    AI 시뮬레이션을 계산하고 있습니다.
+                  </div>
+                ) : null}
+                {designSimulationState === "error" ? (
+                  <div className={styles.liveObservationError} role="alert">
+                    {designSimulationError}
+                  </div>
+                ) : null}
+                {designSimulationState === "ready" && designSimulation ? (
+                  <WorkspaceAiDesignSimulationResult simulation={designSimulation} />
+                ) : null}
+              </>
             ) : null}
           </section>
         </main>
 
-        {session ? (
-          <footer className={styles.liveObservationControlRail}>
+        <footer className={styles.liveObservationControlRail}>
             <div className={styles.liveObservationControlActivity}>
               <span className={styles.liveObservationSectionLabel}>스케일링 활동</span>
               <strong>최근 Scaling 활동</strong>
-              {snapshot?.capacity.latestActivity ? (
+              {displayedSnapshot?.capacity.latestActivity ? (
                 <div>
                   <i aria-hidden="true" />
-                  <strong>{snapshot.capacity.latestActivity.statusCode}</strong>
-                  <p>{snapshot.capacity.latestActivity.description}</p>
-                  <time>{formatTimestamp(snapshot.capacity.latestActivity.startedAt)}</time>
+                  <strong>{displayedSnapshot.capacity.latestActivity.statusCode}</strong>
+                  <p>{displayedSnapshot.capacity.latestActivity.description}</p>
+                  <time>{formatTimestamp(displayedSnapshot.capacity.latestActivity.startedAt)}</time>
                 </div>
               ) : (
                 <span className={styles.liveObservationMuted}>아직 확인된 스케일링 활동이 없습니다.</span>
@@ -746,31 +771,34 @@ export function LiveObservationModal({
             <div className={styles.liveObservationBoostSummary}>
               <strong>발표자 트래픽 증가</strong>
               <span>
-                {boostProgress.successfulTrafficRequests} traffic 성공 · {boostProgress.acceptedReceipts} 집계
+                {showDevelopmentMockMap
+                  ? `${displayedSnapshot?.live.acceptedEventCount ?? 0} mock events`
+                  : `${boostProgress.successfulTrafficRequests} traffic 성공 · ${boostProgress.acceptedReceipts} 집계`}
               </span>
             </div>
             <div className={styles.liveObservationControlActions}>
               <button
                 className={styles.liveObservationPrimaryButton}
-                disabled={!isSessionActive || boostProgress.running}
-                onClick={startBoost}
+                disabled={(!isSessionActive && !showDevelopmentMockMap) || boostProgress.running}
+                onClick={startTrafficLoad}
                 type="button"
-              >+90초 부하</button>
+              >{showDevelopmentMockMap ? "부하 단계 올리기" : "+90초 부하"}</button>
               <button
                 className={styles.liveObservationSecondaryButton}
                 disabled={!boostProgress.running}
                 onClick={stopBoost}
                 type="button"
               ><Square size={14} aria-hidden="true" />중지</button>
-              <button
-                className={styles.liveObservationDangerButton}
-                disabled={!isSessionActive || requestState === "loading"}
-                onClick={() => void endSession()}
-                type="button"
-              >세션 종료</button>
+              {session ? (
+                <button
+                  className={styles.liveObservationDangerButton}
+                  disabled={!isSessionActive || requestState === "loading"}
+                  onClick={() => void endSession()}
+                  type="button"
+                >세션 종료</button>
+              ) : null}
             </div>
           </footer>
-        ) : null}
       </div>
     </div>,
     document.body
