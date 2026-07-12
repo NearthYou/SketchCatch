@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { DiagramJson, DiagramNode } from "../../../../packages/types/src";
+import { isRenderableDiagramNode } from "../diagram-editor/diagram-node-visibility";
 import { resourceCatalog } from "./catalog";
 import {
   hydrateCatalogResourceNodes,
@@ -102,7 +103,7 @@ test("hydrateCatalogResourceNodes retains unknown legacy nodes and adds a catalo
 
 test("template-library entry points return strict catalog-materialized diagrams", () => {
   const staticBoardTemplate = listBoardTemplates().find(
-    (template) => template.id === "template-static-website"
+    (template) => template.id === "static-web-hosting"
   );
   const repositoryTemplate = buildBoardTemplateDiagram("static-web-hosting", {
     projectSlug: "materializer-qa",
@@ -168,6 +169,10 @@ function assertCompactContainedAreas(diagram: DiagramJson): void {
   const nodeById = new Map(diagram.nodes.map((node) => [node.id, node]));
 
   for (const node of diagram.nodes) {
+    if (!isRenderableDiagramNode(node)) {
+      continue;
+    }
+
     const parentAreaNodeId = node.metadata?.parentAreaNodeId;
 
     if (!parentAreaNodeId) {

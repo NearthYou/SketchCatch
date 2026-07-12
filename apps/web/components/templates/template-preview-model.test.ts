@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import type { DiagramEdge, DiagramJson, DiagramNode } from "../../../../packages/types/src";
 import { resourceCatalog } from "../../features/resource-settings/catalog";
-import { listBoardTemplates } from "../../features/resource-settings/template-library";
+import { listLegacyBoardTemplates } from "../../features/resource-settings/template-library";
 import { createTemplatePreviewModel } from "./template-preview-model";
 
 test("createTemplatePreviewModel bounds dense diagrams, omits collapsed helpers, and retains catalog icons", () => {
@@ -146,7 +146,7 @@ test("createTemplatePreviewModel projects a large VPC as an in-bounds non-zero a
 });
 
 test("createTemplatePreviewModel keeps compact Template resources inside their projected area frames", () => {
-  const template = listBoardTemplates().find((candidate) => candidate.id === "template-api-db");
+  const template = listLegacyBoardTemplates().find((candidate) => candidate.id === "template-api-db");
   assert.ok(template);
 
   const model = createTemplatePreviewModel(template.diagramJson);
@@ -161,7 +161,7 @@ test("createTemplatePreviewModel keeps compact Template resources inside their p
 });
 
 test("Live Observation preview prioritizes the traffic flow over empty network frames", () => {
-  const template = listBoardTemplates().find(
+  const template = listLegacyBoardTemplates().find(
     (candidate) => candidate.id === "template-live-observation"
   );
   assert.ok(template);

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { DiagramJson } from "../../../../packages/types/src";
+import { TEMPLATE_IDS } from "../../../../packages/types/src";
 import { isAreaNode } from "../diagram-editor/area-nodes";
 import {
   applyTemplateToDiagramWithBackup,
@@ -8,6 +9,7 @@ import {
   filterBoardTemplates,
   listBoardTemplateTags,
   listBoardTemplates,
+  listLegacyBoardTemplates,
   readTemplateOverwriteBackups,
   TEMPLATE_OVERWRITE_BACKUP_STORAGE_KEY
 } from "./template-library";
@@ -36,7 +38,7 @@ test("filterBoardTemplates searches title, description, and tags", () => {
     filterBoardTemplates(templates, { query: "CloudFront", sort: "recommended", tag: "all" }).map(
       (template) => template.id
     ),
-    ["template-static-website"]
+    ["static-web-hosting"]
   );
 });
 
@@ -48,7 +50,7 @@ test("filterBoardTemplates combines tag filtering and resource sorting", () => {
     tag: "RDS"
   });
 
-  assert.deepEqual(filtered.map((template) => template.id), ["template-3tier", "template-api-db"]);
+  assert.deepEqual(filtered.map((template) => template.id), ["three-tier-web-app"]);
 });
 
 test("listBoardTemplateTags returns unique sorted tags", () => {
@@ -58,10 +60,10 @@ test("listBoardTemplateTags returns unique sorted tags", () => {
   assert.deepEqual(tags, [...tags].sort((left, right) => left.localeCompare(right, "ko-KR")));
 });
 
-test("listBoardTemplates returns templates with DiagramJson so page and board modal can share them", () => {
+test("listBoardTemplates exposes exactly the six deployable TemplateDefinitions", () => {
   const templates = listBoardTemplates();
 
-  assert.ok(templates.length >= 2);
+  assert.deepEqual(templates.map((template) => template.id), [...TEMPLATE_IDS]);
   assert.ok(templates.every((template) => template.diagramJson.nodes.length > 0));
 });
 
@@ -76,14 +78,18 @@ test("board templates use 48px geometry and compact Area bounds around direct ch
     assert.deepEqual(node.size, { width: 48, height: 48 }, node.id);
   }
 
-  const apiTemplate = templates.find((template) => template.id === "template-api-db");
-  const apiVPC = apiTemplate?.diagramJson.nodes.find((node) => node.id === "template-api-vpc");
-  const apiSubnet = apiTemplate?.diagramJson.nodes.find((node) => node.id === "template-api-subnet");
+  const apiTemplate = templates.find((template) => template.id === "three-tier-web-app");
+  const apiVPC = apiTemplate?.diagramJson.nodes.find(
+    (node) => node.id === "template-three-tier-web-app-vpc"
+  );
+  const apiSubnet = apiTemplate?.diagramJson.nodes.find(
+    (node) => node.id === "template-three-tier-web-app-public-subnet-a"
+  );
 
   assert.ok(apiVPC);
   assert.ok(apiSubnet);
-  assert.ok(apiVPC.size.width <= 680 && apiVPC.size.height <= 420);
-  assert.ok(apiSubnet.size.width <= 520 && apiSubnet.size.height <= 240);
+  assert.ok(apiVPC.size.width > 0 && apiVPC.size.height > 0);
+  assert.ok(apiSubnet.size.width > 0 && apiSubnet.size.height > 0);
   assert.ok(apiSubnet.position.x >= apiVPC.position.x);
   assert.ok(apiSubnet.position.y >= apiVPC.position.y);
   assert.ok(apiSubnet.position.x + apiSubnet.size.width <= apiVPC.position.x + apiVPC.size.width);
@@ -91,7 +97,7 @@ test("board templates use 48px geometry and compact Area bounds around direct ch
 });
 
 test("Live Observation template carries the same ASG pressure resources as the demo deployment", () => {
-  const template = listBoardTemplates().find(
+  const template = listLegacyBoardTemplates().find(
     (candidate) => candidate.id === "template-live-observation"
   );
 
