@@ -188,6 +188,51 @@ test("Live Observation template carries the same ASG pressure resources as the d
   assert.ok(audienceSite.position.x < vpc.position.x);
   assert.ok(alb.position.x < targetGroup.position.x);
   assert.ok(targetGroup.position.x < asg.position.x);
+
+  const curatedNodeIds = [
+    "template-live-vpc",
+    "template-live-igw",
+    "template-live-route-table",
+    "template-live-subnet-a",
+    "template-live-subnet-c",
+    "template-live-alb-sg",
+    "template-live-api-sg",
+    "template-live-listener",
+    "template-live-alb",
+    "template-live-target-group",
+    "template-live-asg",
+    "template-live-policy",
+    "template-live-alarm",
+    "template-live-site"
+  ];
+  const curatedNodes = curatedNodeIds.map((nodeId) => {
+    const node = template.diagramJson.nodes.find((candidate) => candidate.id === nodeId);
+    assert.ok(node, `${nodeId} is missing`);
+    return node;
+  });
+
+  for (const node of curatedNodes) {
+    assert.equal(node.position.x % 40, 0, `${node.id} x must use the 40px grid`);
+    assert.equal(node.position.y % 40, 0, `${node.id} y must use the 40px grid`);
+  }
+
+  for (const areaNodeId of [
+    "template-live-vpc",
+    "template-live-subnet-a",
+    "template-live-subnet-c",
+    "template-live-alb-sg",
+    "template-live-api-sg",
+    "template-live-asg"
+  ]) {
+    const areaNode = curatedNodes.find((node) => node.id === areaNodeId);
+    assert.ok(areaNode);
+    assert.equal(areaNode.size.width % 40, 0, `${areaNode.id} width must use the 40px grid`);
+    assert.equal(areaNode.size.height % 40, 0, `${areaNode.id} height must use the 40px grid`);
+  }
+
+  assert.equal(audienceSite.position.y, alb.position.y);
+  assert.equal(alb.position.y, targetGroup.position.y);
+  assert.equal(policy.position.x, alarm.position.x);
 });
 
 test("applyTemplateToDiagramWithBackup backs up the current board and returns the template board", () => {

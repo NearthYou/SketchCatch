@@ -41,23 +41,23 @@ const LIVE_OBSERVATION_PRESENTATION_LAYOUT: Readonly<Record<
   string,
   { readonly position: DiagramNode["position"]; readonly size?: DiagramNode["size"] }
 >> = {
-  "template-live-vpc": { position: { x: 300, y: 120 }, size: { height: 560, width: 980 } },
-  "template-live-igw": { position: { x: 360, y: 180 } },
-  "template-live-route-table": { position: { x: 500, y: 180 } },
-  "template-live-route-a": { position: { x: 500, y: 320 } },
-  "template-live-route-c": { position: { x: 500, y: 500 } },
-  "template-live-subnet-a": { position: { x: 420, y: 300 }, size: { height: 104, width: 184 } },
-  "template-live-subnet-c": { position: { x: 420, y: 480 }, size: { height: 104, width: 184 } },
-  "template-live-alb-sg": { position: { x: 680, y: 160 }, size: { height: 104, width: 184 } },
-  "template-live-api-sg": { position: { x: 680, y: 500 }, size: { height: 104, width: 184 } },
-  "template-live-launch-template": { position: { x: 748, y: 528 } },
-  "template-live-listener": { position: { x: 770, y: 220 } },
-  "template-live-alb": { position: { x: 760, y: 330 } },
-  "template-live-target-group": { position: { x: 900, y: 330 } },
-  "template-live-asg": { position: { x: 1040, y: 220 }, size: { height: 340, width: 200 } },
-  "template-live-policy": { position: { x: 1110, y: 320 } },
-  "template-live-alarm": { position: { x: 1110, y: 440 } },
-  "template-live-site": { position: { x: 80, y: 330 } }
+  "template-live-vpc": { position: { x: 280, y: 120 }, size: { height: 520, width: 1000 } },
+  "template-live-igw": { position: { x: 360, y: 200 } },
+  "template-live-route-table": { position: { x: 520, y: 200 } },
+  "template-live-route-a": { position: { x: 480, y: 320 } },
+  "template-live-route-c": { position: { x: 480, y: 480 } },
+  "template-live-subnet-a": { position: { x: 400, y: 280 }, size: { height: 120, width: 200 } },
+  "template-live-subnet-c": { position: { x: 400, y: 480 }, size: { height: 120, width: 200 } },
+  "template-live-alb-sg": { position: { x: 680, y: 160 }, size: { height: 120, width: 200 } },
+  "template-live-api-sg": { position: { x: 680, y: 480 }, size: { height: 120, width: 200 } },
+  "template-live-launch-template": { position: { x: 760, y: 520 } },
+  "template-live-listener": { position: { x: 800, y: 280 } },
+  "template-live-alb": { position: { x: 800, y: 360 } },
+  "template-live-target-group": { position: { x: 920, y: 360 } },
+  "template-live-asg": { position: { x: 1040, y: 240 }, size: { height: 320, width: 200 } },
+  "template-live-policy": { position: { x: 1120, y: 320 } },
+  "template-live-alarm": { position: { x: 1120, y: 440 } },
+  "template-live-site": { position: { x: 80, y: 360 } }
 };
 
 function applyLiveObservationPresentationLayout(nodeById: Map<string, DiagramNode>): void {
