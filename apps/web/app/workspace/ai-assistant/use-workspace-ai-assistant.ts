@@ -123,6 +123,26 @@ export function useWorkspaceAiAssistant({
     setMessages((current) => [...current, { ...message, id: crypto.randomUUID() }].slice(-80));
   }, []);
 
+  // 한 번에 하나의 AI 요청만 유지하고 생성 중지 대상을 정확히 기억합니다.
+  const beginRequest = useCallback((state: Exclude<WorkspaceAssistantRequestState, "idle">): AbortController => {
+    abortControllerRef.current?.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    setErrorMessage("");
+    setRequestState(state);
+    return controller;
+  }, []);
+
+  // 끝난 요청이 더 최신 요청의 상태를 덮어쓰지 못하게 같은 controller만 정리합니다.
+  const finishRequest = useCallback((controller: AbortController): void => {
+    if (abortControllerRef.current !== controller) return;
+    abortControllerRef.current = null;
+    setRequestState("idle");
+  }, []);
+
+  // Panel이 사라질 때 진행 중인 network 요청도 함께 중단합니다.
+  useEffect(() => () => abortControllerRef.current?.abort(), []);
+
   // AI 요청 이후 Board가 바뀌었으면 오래된 응답과 미리보기를 버립니다.
   const rejectStaleBoardResult = useCallback((baseFingerprint: string): boolean => {
     const currentFingerprint = createWorkspaceAiBoardSnapshot(diagramRef.current).fingerprint;
@@ -154,11 +174,7 @@ export function useWorkspaceAiAssistant({
       return;
     }
 
-    const controller = new AbortController();
-    abortControllerRef.current?.abort();
-    abortControllerRef.current = controller;
-    setRequestState("sending");
-    setErrorMessage("");
+    const controller = beginRequest("sending");
     const baseDiagram = context.diagram;
     const boardSnapshot = createWorkspaceAiBoardSnapshot(baseDiagram);
 
@@ -229,10 +245,9 @@ export function useWorkspaceAiAssistant({
       setErrorMessage(message);
       appendMessage({ content: message, role: "assistant", state: "error" });
     } finally {
-      if (!controller.signal.aborted) setRequestState("idle");
-      abortControllerRef.current = null;
+      finishRequest(controller);
     }
-  }, [appendMessage, context, input, rejectStaleBoardResult, requestState]);
+  }, [appendMessage, beginRequest, context, finishRequest, input, rejectStaleBoardResult, requestState]);
 
   // 앞선 수정 질문의 선택지는 새 요청으로 분류하지 않고 원래 Resource ID와 함께 이어서 보냅니다.
   const answerSuggestion = useCallback(async (suggestion: string): Promise<void> => {
@@ -246,21 +261,23 @@ export function useWorkspaceAiAssistant({
     const selectedSuggestion = findPatchClarificationSuggestion(clarification, suggestion);
     setPendingPatchClarification(null);
     appendMessage({ content: suggestion, role: "user", state: "completed" });
-    setRequestState("generating");
-    setErrorMessage("");
+    const controller = beginRequest("generating");
     try {
       const useAsConnection = clarification.intent.requestedAction === "add_resource";
       const isSkipSuggestion = selectedSuggestion === "연결하지 않기" || selectedSuggestion === "추가 안 함";
       const continuedInstruction = !candidate && selectedSuggestion && !isSkipSuggestion
         ? `${clarification.intent.instruction}. 선택한 항목: ${selectedSuggestion}`
         : clarification.intent.instruction;
-      const response = await createAiArchitecturePatchPreview({
-        architectureJson: convertDiagramJsonToArchitectureJson(baseDiagram),
-        instruction: continuedInstruction,
-        ...(candidate && useAsConnection ? { connectionTargetResourceId: candidate.resourceId } : {}),
-        ...(candidate && !useAsConnection ? { selectedTargetResourceId: candidate.resourceId } : {}),
-        ...(isSkipSuggestion ? { skipConnection: true } : {})
-      });
+      const response = await createAiArchitecturePatchPreview(
+        {
+          architectureJson: convertDiagramJsonToArchitectureJson(baseDiagram),
+          instruction: continuedInstruction,
+          ...(candidate && useAsConnection ? { connectionTargetResourceId: candidate.resourceId } : {}),
+          ...(candidate && !useAsConnection ? { selectedTargetResourceId: candidate.resourceId } : {}),
+          ...(isSkipSuggestion ? { skipConnection: true } : {})
+        },
+        controller.signal
+      );
       if (rejectStaleBoardResult(baseFingerprint)) return;
       if (isArchitecturePatchClarification(response)) {
         setPendingPatchClarification({ baseDiagram, baseFingerprint, clarification: response });
@@ -281,19 +298,19 @@ export function useWorkspaceAiAssistant({
       });
       appendMessage({ content: `${response.changes.length}개 변경 제안을 만들었습니다.`, role: "assistant", state: "preview" });
     } catch (error) {
+      if (controller.signal.aborted) return;
       const message = toAssistantError(error);
       setErrorMessage(message);
       appendMessage({ content: message, role: "assistant", state: "error" });
     } finally {
-      setRequestState("idle");
+      finishRequest(controller);
     }
-  }, [appendMessage, context, pendingPatchClarification, rejectStaleBoardResult, send]);
+  }, [appendMessage, beginRequest, context, finishRequest, pendingPatchClarification, rejectStaleBoardResult, send]);
 
   // 현재 Terraform 코드 또는 첫 진단을 쉬운 설명과 안전한 수정 미리보기로 바꿉니다.
   const explainTerraform = useCallback(async (): Promise<void> => {
     if (requestState !== "idle") return;
-    setRequestState("generating");
-    setErrorMessage("");
+    const controller = beginRequest("generating");
     try {
       const code = terraform.code;
       if (!code.trim()) {
@@ -303,13 +320,16 @@ export function useWorkspaceAiAssistant({
       if (diagnostic) {
         const fileName = diagnostic.sourceFileName ?? "main.tf";
         const currentFileCode = getTerraformFileCode(terraform.files, fileName) || code;
-        const result = await runAiTerraformErrorExplanation({
-          diagnostic,
-          rawMessage: diagnostic.message,
-          relatedResourceId: diagnostic.nodeId,
-          stage: "validate",
-          terraformCodeContext: currentFileCode
-        });
+        const result = await runAiTerraformErrorExplanation(
+          {
+            diagnostic,
+            rawMessage: diagnostic.message,
+            relatedResourceId: diagnostic.nodeId,
+            stage: "validate",
+            terraformCodeContext: currentFileCode
+          },
+          controller.signal
+        );
         const fixPlan = createTerraformIssueFixPlan({
           diagnostic,
           explanation: result,
@@ -333,45 +353,49 @@ export function useWorkspaceAiAssistant({
         });
         return;
       }
-      const result = await runAiTerraformPreviewExplanation(code);
+      const result = await runAiTerraformPreviewExplanation(code, controller.signal);
       appendMessage({
         content: `${result.summary}\n${result.consensusRecommendation}`,
         role: "assistant",
         state: "completed"
       });
     } catch (error) {
+      if (controller.signal.aborted) return;
       const message = toAssistantError(error);
       setErrorMessage(message);
       appendMessage({ content: message, role: "assistant", state: "error" });
     } finally {
-      setRequestState("idle");
+      finishRequest(controller);
     }
-  }, [appendMessage, requestState, terraform]);
+  }, [appendMessage, beginRequest, finishRequest, requestState, terraform]);
 
   // 현재 Board를 보통 트래픽과 보통 예산 조건으로 시뮬레이션합니다.
   const runSimulation = useCallback(async (): Promise<void> => {
     if (requestState !== "idle" || context.diagram.nodes.length === 0) return;
-    setRequestState("generating");
-    setErrorMessage("");
+    const controller = beginRequest("generating");
     try {
-      const result = await runAiDesignSimulation({
-        architectureJson: convertDiagramJsonToArchitectureJson(context.diagram),
-        budgetLevel: "normal",
-        trafficLevel: "normal"
-      });
+      const result = await runAiDesignSimulation(
+        {
+          architectureJson: convertDiagramJsonToArchitectureJson(context.diagram),
+          budgetLevel: "normal",
+          trafficLevel: "normal"
+        },
+        controller.signal
+      );
       appendMessage({
         content: `${result.summary}\n${result.recommendations.slice(0, 3).join("\n")}`,
         role: "assistant",
         state: "completed"
       });
     } catch (error) {
+      if (controller.signal.aborted) return;
       const message = toAssistantError(error);
       setErrorMessage(message);
       appendMessage({ content: message, role: "assistant", state: "error" });
     } finally {
-      setRequestState("idle");
+      finishRequest(controller);
     }
-  }, [appendMessage, context.diagram, requestState]);
+  }, [appendMessage, beginRequest, context.diagram, finishRequest, requestState]);
 
   // 사용자가 승인한 Architecture 미리보기만 실제 Board에 적용합니다.
   const applyBoardPreview = useCallback((): void => {
@@ -417,8 +441,9 @@ export function useWorkspaceAiAssistant({
 
   // 현재 네트워크 요청만 중단하고 이전 대화와 미리보기는 유지합니다.
   const cancelRequest = useCallback((): void => {
-    abortControllerRef.current?.abort();
+    const controller = abortControllerRef.current;
     abortControllerRef.current = null;
+    controller?.abort();
     setRequestState("idle");
   }, []);
 

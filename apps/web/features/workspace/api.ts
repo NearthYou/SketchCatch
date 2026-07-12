@@ -394,26 +394,30 @@ export async function runAiPreDeploymentCheck(
 
 // 현재 Architecture Board와 운영 조건을 기준으로 Design Simulation을 실행합니다.
 export async function runAiDesignSimulation(
-  input: CreateDesignSimulationRequest
+  input: CreateDesignSimulationRequest,
+  signal?: AbortSignal
 ): Promise<DesignSimulationResult> {
-  return postPublicAiJson<DesignSimulationResult>("/ai/design-simulation", input);
+  return postPublicAiJson<DesignSimulationResult>("/ai/design-simulation", input, signal);
 }
 
 // Terraform Preview 설명은 실제 Terraform 실행 없이 코드 텍스트만 분석합니다.
 export async function runAiTerraformPreviewExplanation(
-  terraformCode: string
+  terraformCode: string,
+  signal?: AbortSignal
 ): Promise<AiTerraformPreviewExplanationResult> {
   return postPublicAiJson<AiTerraformPreviewExplanationResult>(
     "/ai/terraform-preview-explanation",
     {
       terraformCode
-    }
+    },
+    signal
   );
 }
 
 // Terraform 오류 설명은 Preview 분석과 다른 endpoint로 보내 stage와 원인을 분리합니다.
 export async function runAiTerraformErrorExplanation(
-  input: AiTerraformErrorExplanationRequest
+  input: AiTerraformErrorExplanationRequest,
+  signal?: AbortSignal
 ): Promise<AiTerraformErrorExplanationResult> {
   return postPublicAiJson<AiTerraformErrorExplanationResult>("/ai/terraform-error-explanation", {
     diagnostic: input.diagnostic,
@@ -421,7 +425,7 @@ export async function runAiTerraformErrorExplanation(
     relatedResourceId: input.relatedResourceId,
     stage: input.stage,
     terraformCodeContext: input.terraformCodeContext
-  });
+  }, signal);
 }
 
 // 인증 없는 gg AI endpoint는 Next rewrite 실패와 분리해 API 서버로 직접 요청합니다.
