@@ -1,87 +1,216 @@
 import type { DiagramJson, DiagramNode, LiveObservationSnapshot } from "@sketchcatch/types";
 
-const TRAFFIC_RESOURCE_TYPES = new Set([
+const TRAFFIC_SOURCE_TYPES = new Set([
+  "aws_apigatewayv2_api",
+  "aws_api_gateway_rest_api",
+  "aws_cloudfront_distribution",
+  "aws_route53_record",
   "aws_s3_object",
-  "aws_lb",
-  "aws_lb_listener",
-  "aws_lb_target_group",
-  "aws_ecs_service"
+  "sketchcatch_internet",
+  "sketchcatch_user"
 ]);
 
-export type LiveObservationDiagramNodeState = "active" | "inactive" | "launching" | "context";
+const TRAFFIC_HOP_TYPES = new Set([
+  "aws_api_gateway_deployment",
+  "aws_api_gateway_integration",
+  "aws_api_gateway_stage",
+  "aws_apigatewayv2_integration",
+  "aws_apigatewayv2_route",
+  "aws_apigatewayv2_stage",
+  "aws_autoscaling_group",
+  "aws_ecs_service",
+  "aws_instance",
+  "aws_lambda_function",
+  "aws_lb",
+  "aws_lb_listener",
+  "aws_lb_target_group"
+]);
 
-export type LiveObservationDiagramNode = DiagramNode & {
+const SUPPORT_TYPE_PREFIXES = [
+  "aws_appautoscaling_",
+  "aws_cloudwatch_",
+  "aws_iam_"
+];
+
+const SUPPORT_TYPES = new Set([
+  "aws_ecs_cluster",
+  "aws_ecs_task_definition",
+  "aws_security_group",
+  "aws_subnet",
+  "aws_vpc"
+]);
+const MAX_PATH_CANDIDATES = 256;
+const MAX_PATH_DEPTH = 64;
+
+export type LiveObservationDiagramNodeState = "active" | "inactive" | "launching";
+export type LiveObservationPresentationRole = "source" | "hop" | "controller";
+
+export type LiveObservationPresentationStage = {
+  readonly node: DiagramNode;
+  readonly role: LiveObservationPresentationRole;
+};
+
+export type LiveObservationCapacityUnit = {
+  readonly node: DiagramNode;
   readonly observationState: LiveObservationDiagramNodeState;
 };
 
-export type LiveObservationDiagramModel = {
-  readonly nodes: readonly LiveObservationDiagramNode[];
-  readonly activeEdgeIds: ReadonlySet<string>;
-  readonly bounds: { readonly x: number; readonly y: number; readonly width: number; readonly height: number };
+export type LiveObservationDiagramModel =
+  | {
+      readonly status: "ready";
+      readonly stages: readonly LiveObservationPresentationStage[];
+      readonly capacityUnits: readonly LiveObservationCapacityUnit[];
+      readonly pressureLevel: LiveObservationSnapshot["live"]["pressureLevel"];
+    }
+  | {
+      readonly status: "unavailable";
+      readonly reason: "capacity-missing" | "path-missing";
+    };
+
+type PathCandidate = {
+  readonly nodeIds: readonly string[];
+  readonly score: number;
 };
 
 export function createLiveObservationDiagramModel(
   diagram: DiagramJson,
   snapshot: LiveObservationSnapshot | null
 ): LiveObservationDiagramModel {
-  const capacityNodes = diagram.nodes
-    .filter((node) => node.metadata?.liveObservationRole === "capacity-unit")
-    .sort((left, right) => left.position.x - right.position.x || left.position.y - right.position.y);
-  const runningCount = snapshot?.capacity.inServiceInstanceCount ?? 0;
-  const desiredCount = snapshot?.capacity.desiredCapacity ?? runningCount;
-  const capacityStateById = new Map(
-    capacityNodes.map((node, index) => [
-      node.id,
-      index < runningCount ? "active" : index < desiredCount ? "launching" : "inactive"
-    ] as const)
-  );
-  const trafficNodeIds = new Set(
-    diagram.nodes
-      .filter(
-        (node) =>
-          isTrafficNode(node) ||
-          (node.metadata?.liveObservationRole === "capacity-unit" &&
-            capacityStateById.get(node.id) !== "inactive")
-      )
-      .map((node) => node.id)
-  );
-  const activeEdgeIds = new Set(
-    diagram.edges
-      .filter((edge) => trafficNodeIds.has(edge.sourceNodeId) && trafficNodeIds.has(edge.targetNodeId))
-      .map((edge) => edge.id)
+  const capacityNodes = diagram.nodes.filter(
+    (node) => node.metadata?.liveObservationRole === "capacity-unit"
   );
 
-  return {
-    nodes: diagram.nodes.map((node) => ({
-      ...node,
-      observationState:
-        capacityStateById.get(node.id) ?? (isTrafficNode(node) ? "active" : "context")
-    })),
-    activeEdgeIds,
-    bounds: getDiagramBounds(diagram.nodes)
-  };
-}
-
-function isTrafficNode(node: DiagramNode): boolean {
-  const resourceType = node.parameters?.resourceType ?? node.type;
-  return TRAFFIC_RESOURCE_TYPES.has(resourceType);
-}
-
-function getDiagramBounds(nodes: readonly DiagramNode[]) {
-  if (nodes.length === 0) {
-    return { x: 0, y: 0, width: 1, height: 1 };
+  if (capacityNodes.length === 0) {
+    return { status: "unavailable", reason: "capacity-missing" };
   }
 
-  const minX = Math.min(...nodes.map((node) => node.position.x));
-  const minY = Math.min(...nodes.map((node) => node.position.y));
-  const maxX = Math.max(...nodes.map((node) => node.position.x + node.size.width));
-  const maxY = Math.max(...nodes.map((node) => node.position.y + node.size.height));
-  const padding = 24;
+  const nodeById = new Map(diagram.nodes.map((node) => [node.id, node]));
+  const predecessors = createPredecessorMap(diagram);
+  const controllerIds = [...new Set(
+    capacityNodes.flatMap((node) => predecessors.get(node.id) ?? [])
+  )].sort();
+  const pathCandidates = controllerIds.flatMap((controllerId) =>
+    findSourcePaths(controllerId, predecessors, nodeById).map((nodeIds) => ({
+      nodeIds,
+      score: scorePath(nodeIds, nodeById)
+    }))
+  );
+  const selectedPath = pathCandidates.sort(comparePathCandidates)[0];
+
+  if (!selectedPath) {
+    return { status: "unavailable", reason: "path-missing" };
+  }
+
+  const runningCount = snapshot?.capacity.inServiceInstanceCount ?? 0;
+  const desiredCount = snapshot?.capacity.desiredCapacity ?? runningCount;
+  const orderedCapacityNodes = [...capacityNodes].sort(compareCapacityNodes);
 
   return {
-    x: minX - padding,
-    y: minY - padding,
-    width: Math.max(1, maxX - minX + padding * 2),
-    height: Math.max(1, maxY - minY + padding * 2)
+    status: "ready",
+    stages: selectedPath.nodeIds.flatMap((nodeId, index, nodeIds) => {
+      const node = nodeById.get(nodeId);
+      if (!node) return [];
+
+      return [{
+        node,
+        role: index === 0 ? "source" : index === nodeIds.length - 1 ? "controller" : "hop"
+      } satisfies LiveObservationPresentationStage];
+    }),
+    capacityUnits: orderedCapacityNodes.map((node, index) => ({
+      node,
+      observationState:
+        index < runningCount ? "active" : index < desiredCount ? "launching" : "inactive"
+    })),
+    pressureLevel: snapshot?.live.pressureLevel ?? "normal"
   };
+}
+
+function createPredecessorMap(diagram: DiagramJson): ReadonlyMap<string, readonly string[]> {
+  const predecessors = new Map<string, string[]>();
+
+  for (const edge of diagram.edges) {
+    const current = predecessors.get(edge.targetNodeId) ?? [];
+    current.push(edge.sourceNodeId);
+    predecessors.set(edge.targetNodeId, current);
+  }
+
+  for (const values of predecessors.values()) {
+    values.sort();
+  }
+
+  return predecessors;
+}
+
+function findSourcePaths(
+  controllerId: string,
+  predecessors: ReadonlyMap<string, readonly string[]>,
+  nodeById: ReadonlyMap<string, DiagramNode>
+): readonly (readonly string[])[] {
+  const paths: string[][] = [];
+
+  function visit(nodeId: string, reversedPath: readonly string[], visited: ReadonlySet<string>) {
+    if (
+      visited.has(nodeId) ||
+      paths.length >= MAX_PATH_CANDIDATES ||
+      reversedPath.length >= MAX_PATH_DEPTH
+    ) return;
+    const node = nodeById.get(nodeId);
+    if (!node) return;
+
+    const nextPath = [...reversedPath, nodeId];
+    if (nextPath.length > 1 && isTrafficSource(node)) {
+      paths.push([...nextPath].reverse());
+      return;
+    }
+
+    const nextVisited = new Set(visited).add(nodeId);
+    for (const predecessorId of predecessors.get(nodeId) ?? []) {
+      visit(predecessorId, nextPath, nextVisited);
+    }
+  }
+
+  visit(controllerId, [], new Set());
+  return paths;
+}
+
+function scorePath(nodeIds: readonly string[], nodeById: ReadonlyMap<string, DiagramNode>): number {
+  return nodeIds.reduce((score, nodeId, index) => {
+    const node = nodeById.get(nodeId);
+    if (!node) return score;
+    const role = node.metadata?.liveObservationRole;
+    const resourceType = getResourceType(node);
+
+    if (role === "traffic-source") return score + (index === 0 ? 1_000 : 300);
+    if (role === "traffic-hop") return score + 160;
+    if (role === "capacity-controller") return score + 180;
+    if (role === "support") return score - 500;
+    if (TRAFFIC_SOURCE_TYPES.has(resourceType)) return score + (index === 0 ? 220 : 40);
+    if (TRAFFIC_HOP_TYPES.has(resourceType)) return score + 80;
+    if (isSupportType(resourceType)) return score - 90;
+    return score - 10;
+  }, nodeIds.length);
+}
+
+function comparePathCandidates(left: PathCandidate, right: PathCandidate): number {
+  if (left.score !== right.score) return right.score - left.score;
+  if (left.nodeIds.length !== right.nodeIds.length) return right.nodeIds.length - left.nodeIds.length;
+  return left.nodeIds.join("\u0000").localeCompare(right.nodeIds.join("\u0000"));
+}
+
+function compareCapacityNodes(left: DiagramNode, right: DiagramNode): number {
+  return left.position.x - right.position.x || left.position.y - right.position.y || left.id.localeCompare(right.id);
+}
+
+function isTrafficSource(node: DiagramNode): boolean {
+  return node.metadata?.liveObservationRole === "traffic-source" ||
+    TRAFFIC_SOURCE_TYPES.has(getResourceType(node));
+}
+
+function isSupportType(resourceType: string): boolean {
+  return SUPPORT_TYPES.has(resourceType) ||
+    SUPPORT_TYPE_PREFIXES.some((prefix) => resourceType.startsWith(prefix));
+}
+
+function getResourceType(node: DiagramNode): string {
+  return node.parameters?.resourceType ?? node.type;
 }

@@ -162,9 +162,14 @@ test("accepted event deltas render a bounded one-shot path only toward actual In
   assert.match(modalSource, /acceptedEventCountRef/);
   assert.match(modalSource, /inServiceInstanceKeys\.length > 0/);
   assert.doesNotMatch(modalSource, /function FlowParticles/);
-  assert.match(diagramMapSource, /burst\.visibleParticleCount/);
+  assert.match(diagramMapSource, /burst\?\.visibleParticleCount/);
   assert.match(diagramMapSource, /createLiveObservationDiagramModel/);
-  assert.match(diagramMapSource, /edge\.active && burst/);
+  assert.match(diagramMapSource, /model\.stages\.map/);
+  assert.match(diagramMapSource, /model\.capacityUnits\.map/);
+  assert.match(diagramMapSource, /model\.status === "unavailable"/);
+  assert.doesNotMatch(diagramMapSource, /model\.nodes/);
+  assert.doesNotMatch(diagramMapSource, /isAreaNode/);
+  assert.doesNotMatch(diagramMapSource, /createEdgePath/);
   assert.match(diagramMapSource, /aria-hidden="true"/);
   assert.doesNotMatch(modalSource, /setInterval\([^)]*FlowParticles/);
 });

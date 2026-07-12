@@ -5988,7 +5988,7 @@
 }
 
 .liveObservationMapStage {
-  background: #04182a;
+  background: var(--workspace-surface, #ffffff);
   display: flex;
   flex: 1 0 auto;
   min-height: 0;
@@ -5997,10 +5997,10 @@
 }
 
 .liveObservationMapStage > .liveObservationSectionLabel {
-  background: rgba(3, 18, 33, 0.86);
-  border: 1px solid rgba(103, 232, 249, 0.28);
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid var(--workspace-line-strong, #dcdee0);
   border-radius: 6px;
-  color: #bae6fd;
+  color: var(--workspace-muted, #60646c);
   left: 14px;
   padding: 5px 8px;
   position: absolute;
@@ -6009,123 +6009,299 @@
 }
 
 .liveObservationDiagramMap {
-  background: #f7f8fa;
-  border: 1px solid #d9dde5;
-  height: clamp(430px, 58vh, 680px);
-  overflow: hidden;
-  position: relative;
-  width: 100%;
-}
-
-.liveObservationDiagramEdges {
-  height: 100%;
-  inset: 0;
-  overflow: visible;
-  pointer-events: none;
-  position: absolute;
-  width: 100%;
-  z-index: 20;
-}
-
-.liveObservationDiagramEdge,
-.liveObservationDiagramEdgeActive {
-  fill: none;
-  vector-effect: non-scaling-stroke;
-}
-
-.liveObservationDiagramEdge {
-  stroke: #aeb6c4;
-  stroke-width: 1;
-}
-
-.liveObservationDiagramEdgeActive {
-  stroke: #4968d4;
-  stroke-width: 2.5;
-}
-
-.liveObservationDiagramPulse {
-  fill: #2f65f5;
-  filter: drop-shadow(0 0 5px rgba(47, 101, 245, 0.6));
-}
-
-.liveObservationDiagramNode,
-.liveObservationDiagramArea {
-  box-sizing: border-box;
-  position: absolute;
-}
-
-.liveObservationDiagramArea {
-  background: rgba(255, 255, 255, 0.34);
-  border: 1px dashed #9099aa;
-  color: #4c5565;
-  padding: 8px 10px;
-}
-
-.liveObservationDiagramArea strong {
-  display: block;
-  font-size: 10px;
-  line-height: 1.2;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.liveObservationDiagramNode {
-  align-items: center;
-  background: #ffffff;
-  border: 1px solid #c9cfda;
+  background: var(--workspace-surface, #ffffff);
+  border: 1px solid var(--workspace-line, #f0f0f3);
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  justify-content: center;
-  min-height: 28px;
-  padding: 5px;
+  height: clamp(430px, 58vh, 680px);
+  overflow: hidden;
+  width: 100%;
+}
+
+.liveObservationPresentationHeader {
+  align-items: center;
+  background: var(--workspace-surface-muted, #fafafa);
+  border-bottom: 1px solid var(--workspace-line, #f0f0f3);
+  color: var(--workspace-muted, #60646c);
+  display: flex;
+  flex: 0 0 42px;
+  justify-content: space-between;
+  padding: 0 18px;
+}
+
+.liveObservationMapStage:has(> .liveObservationSectionLabel) .liveObservationPresentationHeader {
+  padding-left: 188px;
+}
+
+.liveObservationPresentationHeader strong,
+.liveObservationPresentationHeader span {
+  font-size: 10px;
+  letter-spacing: 0;
+}
+
+.liveObservationPresentationViewport {
+  background-color: #fcfcfd;
+  background-image: radial-gradient(#dedee5 0.7px, transparent 0.7px);
+  background-size: 16px 16px;
+  flex: 1;
+  min-height: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 34px 28px 28px;
+}
+
+.liveObservationPresentationSurface {
+  border: 1px dashed color-mix(in srgb, #7657d6 38%, transparent);
+  box-sizing: border-box;
+  height: 100%;
+  min-height: 300px;
+  padding: 58px 28px 34px;
+  position: relative;
+}
+
+.liveObservationPresentationSurface::before {
+  background: #fcfcfd;
+  color: #7657d6;
+  content: "LIVE TRAFFIC PATH";
+  font-size: 9px;
+  font-weight: 700;
+  left: 14px;
+  padding: 0 7px;
+  position: absolute;
+  top: -6px;
+}
+
+.liveObservationPresentationPath {
+  align-items: start;
+  display: grid;
+  list-style: none;
+  margin: 0;
+  min-height: 176px;
+  padding: 0;
+  position: relative;
+}
+
+.liveObservationPresentationStage {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  position: relative;
   text-align: center;
 }
 
-.liveObservationDiagramNode img {
-  height: min(42%, 30px);
-  object-fit: contain;
-  width: min(42%, 30px);
+.liveObservationPresentationNode {
+  align-items: center;
+  background: var(--workspace-surface, #ffffff);
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  box-sizing: border-box;
+  color: var(--workspace-muted, #60646c);
+  display: flex;
+  height: 64px;
+  justify-content: center;
+  position: relative;
+  width: 64px;
+  z-index: 3;
 }
 
-.liveObservationDiagramNode strong {
-  font-size: clamp(8px, 0.72vw, 11px);
-  line-height: 1.15;
-  max-width: 100%;
+.liveObservationPresentationNode img {
+  height: 46px;
+  object-fit: contain;
+  width: 46px;
+}
+
+.liveObservationPresentationStage > strong,
+.liveObservationCapacityUnit > strong {
+  color: var(--workspace-text, #171717);
+  font-size: 11px;
+  line-height: 1.25;
+  margin-top: 11px;
+  max-width: calc(100% - 12px);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.liveObservationDiagramNode[data-observation-state="active"] {
-  border-color: #2f65f5;
-  box-shadow: 0 0 0 2px rgba(47, 101, 245, 0.14);
+.liveObservationCapacityUnit > strong {
+  display: -webkit-box;
+  line-height: 1.2;
+  min-height: 27px;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
-.liveObservationDiagramNode[data-observation-state="launching"] {
+.liveObservationPresentationStage > span,
+.liveObservationCapacityUnit > span {
+  color: var(--workspace-muted, #60646c);
+  font-size: 9px;
+  margin-top: 4px;
+}
+
+.liveObservationPresentationConnector {
+  background: var(--workspace-line-strong, #dcdee0);
+  height: 1px;
+  left: calc(50% + 32px);
+  overflow: hidden;
+  position: absolute;
+  top: 32px;
+  width: calc(100% - 64px);
+  z-index: 1;
+}
+
+.liveObservationPresentationConnector::after {
+  animation: liveObservationConnectorFlow 1.15s linear infinite;
+  background: linear-gradient(90deg, transparent 0 18%, #3974e8 18% 44%, transparent 44% 64%, #80c8ef 64% 82%, transparent 82%);
+  background-size: 72px 100%;
+  content: "";
+  inset: -1px 0;
+  position: absolute;
+}
+
+.liveObservationDiagramMap[data-pressure-level="high"] .liveObservationPresentationStage[data-pressure-zone="true"] .liveObservationPresentationConnector::after {
+  background-image: linear-gradient(90deg, transparent 0 18%, #d97706 18% 44%, transparent 44% 64%, #f2b45f 64% 82%, transparent 82%);
+}
+
+.liveObservationDiagramMap[data-pressure-level="critical"] .liveObservationPresentationStage[data-pressure-zone="true"] .liveObservationPresentationConnector::after {
+  background-image: linear-gradient(90deg, transparent 0 18%, #e5484d 18% 44%, transparent 44% 64%, #ff8b8f 64% 82%, transparent 82%);
+}
+
+.liveObservationPresentationNodePulse {
+  animation: liveObservationPresentationRing 900ms ease-out both;
+  border: 1px solid rgba(57, 116, 232, 0.58);
+  border-radius: 50%;
+  inset: -5px;
+  position: absolute;
+}
+
+.liveObservationCapacityStage {
+  align-items: center;
+  display: flex;
+  min-width: 0;
+  padding-left: 22px;
+  position: relative;
+}
+
+.liveObservationCapacityStage::before {
+  background: var(--workspace-line-strong, #dcdee0);
+  content: "";
+  height: 1px;
+  left: 0;
+  position: absolute;
+  top: 32px;
+  width: 22px;
+}
+
+.liveObservationCapacityLabel {
+  background: var(--workspace-surface, #ffffff);
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  color: var(--workspace-muted, #60646c);
+  font-size: 8px;
+  left: 28px;
+  padding: 3px 5px;
+  position: absolute;
+  top: -27px;
+}
+
+.liveObservationCapacityUnits {
+  display: grid;
+  gap: 12px;
+  grid-auto-columns: 82px;
+  grid-auto-flow: column;
+  justify-content: center;
+  min-width: 100%;
+}
+
+.liveObservationCapacityUnit {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  text-align: center;
+}
+
+.liveObservationCapacityUnit[data-observation-state="active"] .liveObservationPresentationNode {
+  border-color: #98d4bb;
+  box-shadow: 0 0 0 3px rgba(31, 157, 112, 0.08);
+}
+
+.liveObservationCapacityUnit[data-observation-state="active"] > span {
+  color: #16865c;
+}
+
+.liveObservationCapacityUnit[data-observation-state="launching"] {
   animation: liveObservationTaskLaunching 1s ease-in-out infinite alternate;
+}
+
+.liveObservationCapacityUnit[data-observation-state="launching"] .liveObservationPresentationNode {
   border-color: #e58b20;
-  box-shadow: 0 0 0 2px rgba(229, 139, 32, 0.16);
+  box-shadow: 0 0 0 3px rgba(229, 139, 32, 0.1);
 }
 
-.liveObservationDiagramNode[data-observation-state="inactive"] {
-  filter: grayscale(1);
-  opacity: 0.42;
+.liveObservationCapacityUnit[data-observation-state="launching"] > span {
+  color: #a45c09;
 }
 
-.liveObservationDiagramMap[data-pressure-level="high"] .liveObservationDiagramEdgeActive,
-.liveObservationDiagramMap[data-pressure-level="critical"] .liveObservationDiagramEdgeActive {
-  stroke: #db3b30;
+.liveObservationCapacityUnit[data-observation-state="inactive"] {
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
 }
 
-.liveObservationDiagramMap[data-pressure-level="critical"] .liveObservationDiagramPulse {
-  fill: #db3b30;
+.liveObservationPresentationParticle {
+  animation: liveObservationPresentationParticle 1.65s ease-in-out both;
+  background: #ffffff;
+  border: 2px solid #3974e8;
+  border-radius: 50%;
+  box-shadow: 0 0 0 5px rgba(57, 116, 232, 0.1);
+  height: 7px;
+  left: 5%;
+  position: absolute;
+  top: 87px;
+  width: 7px;
+  z-index: 7;
+}
+
+.liveObservationPresentationEmpty {
+  align-items: center;
+  color: var(--workspace-muted, #60646c);
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  justify-content: center;
+  padding: 40px;
+  text-align: center;
+}
+
+.liveObservationPresentationEmpty strong {
+  color: var(--workspace-text, #171717);
+  font-size: 13px;
+}
+
+.liveObservationPresentationEmpty span {
+  font-size: 11px;
+}
+
+@keyframes liveObservationConnectorFlow {
+  to { background-position: 72px 0; }
+}
+
+@keyframes liveObservationPresentationParticle {
+  from { left: 5%; opacity: 0; }
+  8% { opacity: 1; }
+  90% { opacity: 1; }
+  to { left: 94%; opacity: 0; }
+}
+
+@keyframes liveObservationPresentationRing {
+  from { opacity: 0.8; transform: scale(0.72); }
+  to { opacity: 0; transform: scale(1.28); }
 }
 
 @keyframes liveObservationTaskLaunching {
-  from { opacity: 0.58; }
-  to { opacity: 1; }
+  from { opacity: 0.58; transform: scale(0.92); }
+  to { opacity: 1; transform: scale(1); }
 }
 
 .liveObservationSignalMap {
@@ -6693,6 +6869,16 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .liveObservationPresentationConnector::after,
+  .liveObservationPresentationNodePulse,
+  .liveObservationCapacityUnit[data-observation-state="launching"] {
+    animation: none;
+  }
+
+  .liveObservationPresentationParticle {
+    display: none;
+  }
+
   .liveObservationSignalSelectedRoute {
     animation: none;
     opacity: 1;

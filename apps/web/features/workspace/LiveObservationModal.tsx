@@ -494,7 +494,7 @@ export function LiveObservationModal({
         <header className={styles.liveObservationHeader}>
           <div className={styles.liveObservationHeaderIdentity}>
             <span className={styles.liveObservationEyebrow}>Live Observation</span>
-            <h2 id="live-observation-title">실시간 트래픽 · ASG 관측</h2>
+            <h2 id="live-observation-title">실시간 트래픽 · 오토 스케일링 관측</h2>
             <p>{projectName} · 실제 배포 근거를 15분 동안 읽기 전용으로 관측</p>
           </div>
 

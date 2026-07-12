@@ -3,57 +3,175 @@ import { test } from "node:test";
 import type { DiagramJson, DiagramNode, LiveObservationSnapshot } from "@sketchcatch/types";
 import { createLiveObservationDiagramModel } from "./live-observation-diagram";
 
-test("diagram observation model preserves board coordinates and activates Fargate tasks from capacity", () => {
-  const diagram: DiagramJson = {
-    nodes: [
-      node("site", "aws_s3_object", 20, 20),
-      node("alb", "aws_lb", 220, 20),
-      node("service", "aws_ecs_service", 420, 20),
-      capacityNode("task-a", 620, 0),
-      capacityNode("task-b", 620, 100)
+test("selects the ECS traffic path and excludes support paths", () => {
+  const diagram = createDiagram(
+    [
+      node("site", "aws_s3_object"),
+      node("alb", "aws_lb"),
+      node("listener", "aws_lb_listener"),
+      node("target-group", "aws_lb_target_group"),
+      node("service", "aws_ecs_service"),
+      node("role", "aws_iam_role"),
+      node("task-definition", "aws_ecs_task_definition"),
+      node("logs", "aws_cloudwatch_log_group"),
+      node("scaling-policy", "aws_appautoscaling_policy"),
+      node("scaling-target", "aws_appautoscaling_target"),
+      capacityNode("task-a"),
+      capacityNode("task-b")
     ],
-    edges: [
-      { id: "site-alb", sourceNodeId: "site", targetNodeId: "alb" },
-      { id: "alb-service", sourceNodeId: "alb", targetNodeId: "service" },
-      { id: "service-task-a", sourceNodeId: "service", targetNodeId: "task-a" },
-      { id: "service-task-b", sourceNodeId: "service", targetNodeId: "task-b" }
-    ],
-    viewport: { x: 0, y: 0, zoom: 1 }
-  };
+    [
+      edge("site", "alb"),
+      edge("alb", "listener"),
+      edge("listener", "target-group"),
+      edge("target-group", "service"),
+      edge("service", "task-a"),
+      edge("service", "task-b"),
+      edge("role", "task-definition"),
+      edge("logs", "task-definition"),
+      edge("task-definition", "service"),
+      edge("scaling-policy", "scaling-target"),
+      edge("scaling-target", "service")
+    ]
+  );
+
   const model = createLiveObservationDiagramModel(diagram, snapshot(2, 1));
 
-  assert.equal(model.nodes.find((candidate) => candidate.id === "alb")?.position.x, 220);
-  assert.equal(model.nodes.find((candidate) => candidate.id === "task-a")?.observationState, "active");
-  assert.equal(model.nodes.find((candidate) => candidate.id === "task-b")?.observationState, "launching");
-  assert.deepEqual([...model.activeEdgeIds], ["site-alb", "alb-service", "service-task-a", "service-task-b"]);
-
-  const beforeScaleOut = createLiveObservationDiagramModel(diagram, snapshot(1, 1));
-  assert.equal(beforeScaleOut.nodes.find((candidate) => candidate.id === "task-b")?.observationState, "inactive");
-  assert.equal(beforeScaleOut.activeEdgeIds.has("service-task-b"), false);
+  assert.equal(model.status, "ready");
+  if (model.status !== "ready") return;
+  assert.deepEqual(model.stages.map((stage) => stage.node.id), [
+    "site",
+    "alb",
+    "listener",
+    "target-group",
+    "service"
+  ]);
+  assert.deepEqual(model.stages.map((stage) => stage.role), [
+    "source",
+    "hop",
+    "hop",
+    "hop",
+    "controller"
+  ]);
+  assert.deepEqual(model.capacityUnits.map((unit) => [unit.node.id, unit.observationState]), [
+    ["task-a", "active"],
+    ["task-b", "launching"]
+  ]);
 });
 
-function node(id: string, resourceType: string, x: number, y: number): DiagramNode {
+test("derives a different main path for an ASG diagram", () => {
+  const diagram = createDiagram(
+    [
+      designNode("internet", "sketchcatch_internet"),
+      node("alb", "aws_lb"),
+      node("target-group", "aws_lb_target_group"),
+      node("asg", "aws_autoscaling_group"),
+      capacityNode("instance-a", "aws_instance"),
+      capacityNode("instance-b", "aws_instance")
+    ],
+    [
+      edge("internet", "alb"),
+      edge("alb", "target-group"),
+      edge("target-group", "asg"),
+      edge("asg", "instance-a"),
+      edge("asg", "instance-b")
+    ]
+  );
+
+  const model = createLiveObservationDiagramModel(diagram, snapshot(1, 1));
+
+  assert.equal(model.status, "ready");
+  if (model.status !== "ready") return;
+  assert.deepEqual(model.stages.map((stage) => stage.node.id), [
+    "internet",
+    "alb",
+    "target-group",
+    "asg"
+  ]);
+  assert.deepEqual(model.capacityUnits.map((unit) => unit.observationState), ["active", "inactive"]);
+});
+
+test("prefers explicit observation roles over inferred traffic capabilities", () => {
+  const diagram = createDiagram(
+    [
+      node("inferred-source", "aws_s3_object"),
+      roleNode("explicit-source", "custom_client", "traffic-source"),
+      roleNode("explicit-hop", "custom_proxy", "traffic-hop"),
+      roleNode("controller", "custom_runtime", "capacity-controller"),
+      capacityNode("unit", "custom_unit")
+    ],
+    [
+      edge("inferred-source", "controller"),
+      edge("explicit-source", "explicit-hop"),
+      edge("explicit-hop", "controller"),
+      edge("controller", "unit")
+    ]
+  );
+
+  const model = createLiveObservationDiagramModel(diagram, snapshot(1, 1));
+
+  assert.equal(model.status, "ready");
+  if (model.status !== "ready") return;
+  assert.deepEqual(model.stages.map((stage) => stage.node.id), [
+    "explicit-source",
+    "explicit-hop",
+    "controller"
+  ]);
+});
+
+test("returns an unavailable model when capacity or a source path is missing", () => {
+  const withoutCapacity = createLiveObservationDiagramModel(
+    createDiagram([node("site", "aws_s3_object")], []),
+    snapshot(1, 1)
+  );
+  assert.deepEqual(withoutCapacity, { status: "unavailable", reason: "capacity-missing" });
+
+  const disconnectedCapacity = createLiveObservationDiagramModel(
+    createDiagram([node("service", "aws_ecs_service"), capacityNode("task")], [edge("service", "task")]),
+    snapshot(1, 1)
+  );
+  assert.deepEqual(disconnectedCapacity, { status: "unavailable", reason: "path-missing" });
+});
+
+function createDiagram(nodes: DiagramNode[], edges: DiagramJson["edges"]): DiagramJson {
+  return { nodes, edges, viewport: { x: 0, y: 0, zoom: 1 } };
+}
+
+function node(id: string, resourceType: string): DiagramNode {
   return {
     id,
     kind: "resource",
     label: id,
     locked: false,
-    position: { x, y },
-    size: { width: 120, height: 70 },
+    position: { x: 0, y: 0 },
+    size: { width: 48, height: 48 },
     type: resourceType,
     zIndex: 1,
     parameters: { fileName: "main", resourceName: id, resourceType, values: {} }
   };
 }
 
-function capacityNode(id: string, x: number, y: number): DiagramNode {
+function designNode(id: string, type: string): DiagramNode {
+  return { ...node(id, type), kind: "design", parameters: undefined };
+}
+
+function roleNode(
+  id: string,
+  resourceType: string,
+  liveObservationRole: NonNullable<DiagramNode["metadata"]>["liveObservationRole"]
+): DiagramNode {
+  return { ...node(id, resourceType), metadata: { liveObservationRole } };
+}
+
+function capacityNode(id: string, resourceType = "aws_ecs_task_definition"): DiagramNode {
   return {
-    ...node(id, "aws_ecs_task_definition", x, y),
-    kind: "design",
-    label: "Fargate Task",
-    metadata: { liveObservationRole: "capacity-unit" },
-    parameters: undefined
+    ...designNode(id, resourceType),
+    label: resourceType === "aws_instance" ? "EC2 Instance" : "Capacity Unit",
+    metadata: { liveObservationRole: "capacity-unit" }
   };
+}
+
+function edge(sourceNodeId: string, targetNodeId: string): DiagramJson["edges"][number] {
+  return { id: `${sourceNodeId}-${targetNodeId}`, sourceNodeId, targetNodeId };
 }
 
 function snapshot(desiredCapacity: number, runningCount: number): LiveObservationSnapshot {

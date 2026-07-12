@@ -105,6 +105,15 @@ Short English-only working log for the current agent context. Older records are 
 - Verification: focused API tests passed 40/40; focused web observation and catalog tests passed 50/50; generated demo Terraform passed `terraform validate`; `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
 - Risk: no AWS apply was performed. The local simulated provider proves the observation contract and animation path; real task scaling still requires an explicitly approved AWS deployment and cleanup workflow.
 
+### 2026-07-12 - Focus Live Observation on the analyzed traffic path
+
+- Replaced the full-board observation projection with deterministic graph analysis that selects the main traffic path from the saved DiagramJson and excludes IAM, logs, task-definition, and scaling-configuration support chains.
+- Added explicit provider-neutral observation roles while retaining resource-capability inference for diagrams without role metadata; ECS/Fargate and ASG/EC2 fixtures produce different paths.
+- Rebuilt the observation stage as a Board-native horizontal presentation with real resource icons, marching connectors, burst particles, pressure colors, stable capacity slots, and launching capacity animation.
+- Verified the local ECS project resolves `S3 object -> ALB -> Listener -> Target Group -> ECS Service -> Fargate tasks`; desktop and 390px browser checks passed with horizontal mobile scrolling and no browser console warnings or errors.
+- Verification: focused web tests passed 36/36; `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
+- Risk: path inference depends on directed diagram edges and resource capabilities. Ambiguous diagrams should add explicit `liveObservationRole` metadata rather than rely on visual position.
+
 ## Verification
 
 

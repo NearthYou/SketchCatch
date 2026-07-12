@@ -1,9 +1,12 @@
-import type { CSSProperties } from "react";
+import { Box } from "lucide-react";
 import { useMemo } from "react";
 import type { DiagramJson, DiagramNode, LiveObservationSnapshot } from "@sketchcatch/types";
-import { isAreaNode } from "../diagram-editor/area-nodes";
 import type { LiveObservationSignalMapBurst } from "./LiveObservationSignalMap";
-import { createLiveObservationDiagramModel } from "./live-observation-diagram";
+import {
+  createLiveObservationDiagramModel,
+  type LiveObservationDiagramNodeState,
+  type LiveObservationPresentationRole
+} from "./live-observation-diagram";
 import styles from "./workspace.module.css";
 
 export function LiveObservationDiagramMap({
@@ -19,90 +22,128 @@ export function LiveObservationDiagramMap({
     () => createLiveObservationDiagramModel(diagram, snapshot),
     [diagram, snapshot]
   );
-  const nodeById = new Map(model.nodes.map((node) => [node.id, node]));
-  const edgePaths = diagram.edges.flatMap((edge) => {
-    const source = nodeById.get(edge.sourceNodeId);
-    const target = nodeById.get(edge.targetNodeId);
 
-    if (!source || !target) {
-      return [];
-    }
+  if (model.status === "unavailable") {
+    return (
+      <section
+        aria-label="프로젝트 다이어그램 기반 실시간 관측"
+        className={styles.liveObservationDiagramMap}
+      >
+        <div className={styles.liveObservationPresentationEmpty} role="status">
+          <Box aria-hidden="true" size={22} />
+          <strong>메인 트래픽 경로를 분석할 수 없습니다.</strong>
+          <span>다이어그램의 트래픽 source와 capacity 연결을 확인해주세요.</span>
+        </div>
+      </section>
+    );
+  }
 
-    return [{
-      ...edge,
-      active: model.activeEdgeIds.has(edge.id),
-      path: createEdgePath(source, target)
-    }];
-  });
+  const visibleParticleCount = Math.min(4, burst?.visibleParticleCount ?? 0);
+  const minimumWidth = Math.max(
+    760,
+    model.stages.length * 144 + Math.max(2, model.capacityUnits.length) * 94 + 80
+  );
 
   return (
     <section
-      aria-label="프로젝트 다이어그램 기반 실시간 관측"
+      aria-label="프로젝트 다이어그램에서 분석한 메인 트래픽 경로"
       className={styles.liveObservationDiagramMap}
-      data-pressure-level={snapshot?.live.pressureLevel ?? "normal"}
+      data-pressure-level={model.pressureLevel}
     >
-      <svg
-        aria-hidden="true"
-        className={styles.liveObservationDiagramEdges}
-        preserveAspectRatio="none"
-        viewBox={`${model.bounds.x} ${model.bounds.y} ${model.bounds.width} ${model.bounds.height}`}
-      >
-        {edgePaths.map((edge) => (
-          <g key={edge.id}>
-            <path
-              className={edge.active ? styles.liveObservationDiagramEdgeActive : styles.liveObservationDiagramEdge}
-              d={edge.path}
+      <header className={styles.liveObservationPresentationHeader}>
+        <strong>PROJECT DIAGRAM · FOCUSED DATA FLOW</strong>
+        <span>{model.stages.length} stages · {model.capacityUnits.length} capacity units</span>
+      </header>
+      <div className={styles.liveObservationPresentationViewport}>
+        <div className={styles.liveObservationPresentationSurface} style={{ minWidth: `${minimumWidth}px` }}>
+          <ol
+            className={styles.liveObservationPresentationPath}
+            style={{
+              gridTemplateColumns: `repeat(${model.stages.length}, minmax(118px, 1fr)) minmax(190px, 1.35fr)`
+            }}
+          >
+            {model.stages.map((stage, index) => (
+              <li
+                className={styles.liveObservationPresentationStage}
+                data-pressure-zone={index >= Math.max(1, model.stages.length - 2)}
+                data-role={stage.role}
+                key={stage.node.id}
+              >
+                <div className={styles.liveObservationPresentationNode}>
+                  <ResourceIcon node={stage.node} />
+                  {burst ? (
+                    <i
+                      aria-hidden="true"
+                      className={styles.liveObservationPresentationNodePulse}
+                      key={`${burst.sequence}-${stage.node.id}`}
+                      style={{ animationDelay: `${index * 100}ms` }}
+                    />
+                  ) : null}
+                </div>
+                <strong title={stage.node.label}>{stage.node.label}</strong>
+                <span>{getRoleLabel(stage.role)}</span>
+                {index < model.stages.length - 1 ? (
+                  <i aria-hidden="true" className={styles.liveObservationPresentationConnector} />
+                ) : null}
+              </li>
+            ))}
+            <li className={styles.liveObservationCapacityStage}>
+              <span className={styles.liveObservationCapacityLabel}>CAPACITY</span>
+              <div className={styles.liveObservationCapacityUnits}>
+                {model.capacityUnits.map((unit, index) => (
+                  <article
+                    aria-label={`${unit.node.label}: ${getCapacityStateLabel(unit.observationState)}`}
+                    className={styles.liveObservationCapacityUnit}
+                    data-observation-state={unit.observationState}
+                    key={unit.node.id}
+                  >
+                    <div className={styles.liveObservationPresentationNode}>
+                      <ResourceIcon node={unit.node} />
+                    </div>
+                    <strong title={unit.node.label}>{getCapacityDisplayLabel(unit.node.label, index)}</strong>
+                    <span>{getCapacityStateLabel(unit.observationState)}</span>
+                  </article>
+                ))}
+              </div>
+            </li>
+          </ol>
+          {burst ? Array.from({ length: visibleParticleCount }, (_, index) => (
+            <i
+              aria-hidden="true"
+              className={styles.liveObservationPresentationParticle}
+              key={`${burst.sequence}-presentation-particle-${index}`}
+              style={{ animationDelay: `${index * 180}ms` }}
             />
-            {edge.active && burst ? Array.from({ length: Math.min(2, burst.visibleParticleCount) }, (_, index) => (
-              <circle className={styles.liveObservationDiagramPulse} key={`${burst.sequence}-${edge.id}-${index}`} r="6">
-                <animateMotion
-                  begin={`${index * 0.18}s`}
-                  dur="1.25s"
-                  fill="freeze"
-                  path={edge.path}
-                />
-                <animate attributeName="opacity" dur="1.25s" values="0;1;1;0" />
-              </circle>
-            )) : null}
-          </g>
-        ))}
-      </svg>
-
-      {model.nodes.map((node) => (
-        <article
-          className={isAreaNode(node) ? styles.liveObservationDiagramArea : styles.liveObservationDiagramNode}
-          data-observation-state={node.observationState}
-          key={node.id}
-          style={getNodeStyle(node, model.bounds)}
-          title={node.label}
-        >
-          {node.iconUrl && !isAreaNode(node) ? <img alt="" src={node.iconUrl} /> : null}
-          <strong>{node.label}</strong>
-        </article>
-      ))}
+          )) : null}
+        </div>
+      </div>
     </section>
   );
 }
 
-function createEdgePath(source: DiagramNode, target: DiagramNode): string {
-  const sourceX = source.position.x + source.size.width / 2;
-  const sourceY = source.position.y + source.size.height / 2;
-  const targetX = target.position.x + target.size.width / 2;
-  const targetY = target.position.y + target.size.height / 2;
-  const controlOffset = Math.max(50, Math.abs(targetX - sourceX) * 0.45);
-
-  return `M ${sourceX} ${sourceY} C ${sourceX + controlOffset} ${sourceY}, ${targetX - controlOffset} ${targetY}, ${targetX} ${targetY}`;
+function ResourceIcon({ node }: { readonly node: DiagramNode }) {
+  return node.iconUrl ? (
+    <img alt="" draggable={false} src={node.iconUrl} />
+  ) : (
+    <Box aria-hidden="true" size={26} strokeWidth={1.5} />
+  );
 }
 
-function getNodeStyle(
-  node: DiagramNode,
-  bounds: { readonly x: number; readonly y: number; readonly width: number; readonly height: number }
-): CSSProperties {
-  return {
-    height: `${(node.size.height / bounds.height) * 100}%`,
-    left: `${((node.position.x - bounds.x) / bounds.width) * 100}%`,
-    top: `${((node.position.y - bounds.y) / bounds.height) * 100}%`,
-    width: `${(node.size.width / bounds.width) * 100}%`,
-    zIndex: node.zIndex ?? 1
-  };
+function getRoleLabel(role: LiveObservationPresentationRole): string {
+  if (role === "source") return "Traffic source";
+  if (role === "controller") return "Capacity controller";
+  return "Traffic hop";
+}
+
+function getCapacityStateLabel(state: LiveObservationDiagramNodeState): string {
+  if (state === "active") return "RUNNING";
+  if (state === "launching") return "STARTING";
+  return "INACTIVE";
+}
+
+function getCapacityDisplayLabel(label: string, index: number): string {
+  const baseLabel = label
+    .replace(/\s*[-·]\s*(?:RUNNING|SCALE-OUT|STARTING|IN\s*SERVICE).*$/i, "")
+    .trim();
+  return `${baseLabel || "Capacity"} ${index + 1}`;
 }
