@@ -137,7 +137,7 @@ test("createReverseEngineeringBoardApplication appends only providerResourceId-s
   assert.deepEqual(application.diagram.viewport, currentDiagram.viewport);
 });
 
-test("createReverseEngineeringBoardApplication keeps unsupported resources visible for manual review", () => {
+test("createReverseEngineeringBoardApplication separates unsupported unknown resources from board nodes", () => {
   const application = createReverseEngineeringBoardApplication({
     currentDiagram: createDiagram(),
     mode: "replace",
@@ -159,18 +159,8 @@ test("createReverseEngineeringBoardApplication keeps unsupported resources visib
     })
   });
 
-  assert.equal(application.diagram.nodes.length, 1);
-  assert.equal(application.diagram.nodes[0]?.parameters?.resourceType, "unknown_resource");
-  assert.match(application.diagram.nodes[0]?.label ?? "", /^확인 필요/);
-  assert.equal(
-    application.diagram.nodes[0]?.parameters?.values["providerResourceId"],
-    "arn:aws:elasticloadbalancing:ap-northeast-2:1234:loadbalancer/app/demo"
-  );
-  assert.equal(
-    application.diagram.nodes[0]?.parameters?.values["providerResourceType"],
-    "AWS::ElasticLoadBalancingV2::LoadBalancer"
-  );
-  assert.equal(application.comparison.additions.length, 1);
+  assert.deepEqual(application.diagram.nodes, []);
+  assert.deepEqual(application.comparison.additions, []);
 });
 
 function createScanResult(

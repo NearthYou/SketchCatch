@@ -4,8 +4,7 @@ import type { DiagramEdge, DiagramNode } from "../../../../packages/types/src";
 import {
   canStartAreaBlankDrag,
   getSingleSelectedEdgeForToolbar,
-  normalizeSelectedNodeIds,
-  stabilizeSelectedIds
+  normalizeSelectedNodeIds
 } from "./selection-utils";
 
 const originEdge: DiagramEdge = {
@@ -106,19 +105,4 @@ test("canStartAreaBlankDrag only allows dragging the single selected area", () =
   assert.equal(canStartAreaBlankDrag("sg-app", ["sg-db"]), false);
   assert.equal(canStartAreaBlankDrag("sg-app", ["sg-app", "sg-db"]), false);
   assert.equal(canStartAreaBlankDrag("sg-app", ["sg-app"]), true);
-});
-
-test("stabilizeSelectedIds reuses controlled selection state when the selected set is unchanged", () => {
-  const currentIds = ["node-a", "node-b"];
-
-  assert.equal(stabilizeSelectedIds(currentIds, ["node-a", "node-b"]), currentIds);
-  assert.equal(stabilizeSelectedIds(currentIds, ["node-b", "node-a"]), currentIds);
-});
-
-test("stabilizeSelectedIds creates state only when the selected set changes", () => {
-  const currentIds = ["node-a"];
-  const nextIds = stabilizeSelectedIds(currentIds, ["node-b"]);
-
-  assert.notEqual(nextIds, currentIds);
-  assert.deepEqual(nextIds, ["node-b"]);
 });

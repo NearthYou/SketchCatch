@@ -6,24 +6,19 @@ import { fileURLToPath } from "node:url";
 const panelSource = readParameterInputFile("ParameterInputPanel.tsx");
 const stylesSource = readParameterInputFile("ParameterInputPanel.module.css");
 
-test("ParameterInputPanel separates required inputs from optional additional settings", () => {
-  assert.match(panelSource, /getRequiredDefinitions/);
-  assert.match(panelSource, /getOptionalDefinitions/);
-  assert.match(panelSource, /getActiveOptionalDefinitions/);
-  assert.match(panelSource, /getAdvancedDefinitions/);
-  assert.match(panelSource, /advancedParameterQuery/);
-  assert.match(panelSource, /addedOptionalParameterNamesByNodeId/);
-  assert.match(panelSource, /removeAdvancedParameter/);
-  assert.match(panelSource, />필수 파라미터</);
-  assert.match(panelSource, />추가 설정</);
+test("ParameterInputPanel does not expose Advanced Parameters UI", () => {
+  assert.doesNotMatch(panelSource, /Advanced Parameters/);
+  assert.doesNotMatch(panelSource, /advanced-parameters/);
+  assert.doesNotMatch(panelSource, /advancedParameterQuery/);
+  assert.doesNotMatch(panelSource, /addedOptionalParameterNames/);
+  assert.doesNotMatch(panelSource, /removeAdvancedParameter/);
 });
 
-test("ParameterInputPanel styles provide an inline optional-parameter picker", () => {
-  assert.match(stylesSource, /\.advancedPicker\b/);
-  assert.match(stylesSource, /\.advancedOptionList\b/);
-  assert.match(stylesSource, /\.advancedOptionButton\b/);
-  assert.match(stylesSource, /\.advancedSearch\b/);
-  assert.match(stylesSource, /\.advancedToggle\b/);
+test("ParameterInputPanel styles do not keep advanced picker rules", () => {
+  assert.doesNotMatch(stylesSource, /\.advancedPicker\b/);
+  assert.doesNotMatch(stylesSource, /\.advancedOptionList\b/);
+  assert.doesNotMatch(stylesSource, /\.advancedOptionButton\b/);
+  assert.doesNotMatch(stylesSource, /\.advancedSearch\b/);
 });
 
 test("ParameterInputPanel treats list and set nested blocks as repeatable blocks", () => {
@@ -35,46 +30,31 @@ test("ParameterInputPanel select menus use the neutral DESIGN.md tone", () => {
   assert.match(panelSource, /tone="workspace"/);
 });
 
-test("ParameterInputPanel counts only required definition errors in the required summary", () => {
+test("ParameterInputPanel counts only main definition errors in the Main parameters summary", () => {
   assert.match(
     panelSource,
-    /const requiredParameterNames = new Set\(\s*requiredDefinitions\.map\(\(definition\) => definition\.name\)\s*\);/s
+    /const mainParameterNames = new Set\(mainDefinitions\.map\(\(definition\) => definition\.name\)\);/
   );
   assert.match(
     panelSource,
-    /Object\.keys\(validation\.parameterErrors\)\.filter\(\s*\(parameterName\) =>\s*requiredParameterNames\.has\(parameterName\)\s*\)\.length/s
+    /Object\.keys\(validation\.parameterErrors\)\.filter\(\s*\(parameterName\) =>\s*mainParameterNames\.has\(parameterName\)\s*\)\.length/s
+  );
+  assert.doesNotMatch(
+    panelSource,
+    /const mainParameterIssueCount = Object\.keys\(validation\.parameterErrors\)\.length;/
   );
 });
 
-test("resource identity edits do not overwrite the friendly diagram label", () => {
-  const updateMetadataFieldSource = getSourceSlice(
-    panelSource,
-    "const updateMetadataField",
-    "const updateParameterValue"
-  );
-
-  assert.match(updateMetadataFieldSource, /commitParameters\(nextParameters\)/);
-  assert.doesNotMatch(updateMetadataFieldSource, /updateNodeMetadata/);
-});
-
-test("Area display-name editors still update diagram metadata labels", () => {
-  assert.match(
-    panelSource,
-    /<DesignAreaNameSection[\s\S]*?onChange=\{\(label\) => updateNodeMetadata\(selectedNode\.id, \{ label \}\)\}/
-  );
-});
-
-test("ParameterInputPanel keeps resource settings in one continuous inspector", () => {
+test("ParameterInputPanel lays out metadata and main parameters for dense scanning", () => {
   const resourceDetailSource = getSourceSlice(
     panelSource,
     "<PanelHeader node={selectedNode} parameters={parameters} />",
     "</aside>"
   );
-  const restoredLayoutIndex = stylesSource.indexOf("/* Restored inspector layout */");
+  const designPassIndex = stylesSource.indexOf("/* DESIGN.md parameter input pass */");
 
   assert.match(resourceDetailSource, /className=\{`\$\{styles\.section\} \$\{styles\.metadataSection\}`\}/);
-  assert.match(resourceDetailSource, /styles\.requiredParametersSection/);
-  assert.match(resourceDetailSource, /styles\.advancedParametersSection/);
+  assert.match(resourceDetailSource, /className=\{`\$\{styles\.section\} \$\{styles\.mainParametersSection\}`\}/);
   assert.match(resourceDetailSource, /styles\.metadataGrid/);
   assert.match(resourceDetailSource, /ParameterSummaryBar/);
   assert.match(resourceDetailSource, /styles\.parameterFieldList/);
@@ -82,30 +62,29 @@ test("ParameterInputPanel keeps resource settings in one continuous inspector", 
   assert.match(panelSource, /styles\.parameterToken/);
   assert.match(panelSource, /styles\.parameterBadge/);
 
-  const sectionRule = getLastCssRuleContainingAfter(stylesSource, ".section {", restoredLayoutIndex);
-  const sectionHeaderRule = getLastCssRuleAfter(stylesSource, "sectionHeader", restoredLayoutIndex);
-  const metadataGridRule = getLastCssRuleAfter(stylesSource, "metadataGrid", restoredLayoutIndex);
-  const parameterSummaryRule = getFirstCssRuleAfter(stylesSource, "parameterSummaryBar", restoredLayoutIndex);
-  const parameterFieldListRule = getLastCssRuleAfter(stylesSource, "parameterFieldList", restoredLayoutIndex);
-  const parameterFieldRule = getFirstCssRuleContainingAfter(stylesSource, ".parameterField {", restoredLayoutIndex);
+  const sectionRule = getLastCssRuleContainingAfter(stylesSource, ".section {", designPassIndex);
+  const sectionHeaderRule = getLastCssRuleAfter(stylesSource, "sectionHeader", designPassIndex);
+  const metadataGridRule = getLastCssRuleAfter(stylesSource, "metadataGrid", designPassIndex);
+  const parameterSummaryRule = getFirstCssRuleAfter(stylesSource, "parameterSummaryBar", designPassIndex);
+  const parameterFieldListRule = getLastCssRuleAfter(stylesSource, "parameterFieldList", designPassIndex);
+  const parameterFieldRule = getFirstCssRuleContainingAfter(stylesSource, ".parameterField {", designPassIndex);
 
-  assert.ok(restoredLayoutIndex > -1, "Expected the restored inspector layout to exist");
-  assert.match(sectionRule, /\bborder-top:\s*1px solid var\(--workspace-line,/);
-  assert.match(sectionRule, /\bbackground:\s*transparent;/);
-  assert.match(sectionRule, /\bborder-radius:\s*0;/);
-  assert.match(sectionRule, /\bpadding:\s*16px 0 0;/);
-  assert.match(sectionHeaderRule, /\bborder-bottom:\s*0;/);
-  assert.match(sectionHeaderRule, /\bpadding-bottom:\s*0;/);
+  assert.match(sectionRule, /\bbackground:\s*var\(--workspace-surface,/);
+  assert.match(sectionRule, /\bborder:\s*1px solid var\(--workspace-line,/);
+  assert.match(sectionRule, /\bborder-radius:\s*8px;/);
+  assert.match(sectionRule, /\bpadding:\s*14px;/);
+  assert.match(sectionHeaderRule, /\bborder-bottom:\s*1px solid var\(--workspace-line,/);
+  assert.match(sectionHeaderRule, /\bpadding-bottom:\s*10px;/);
   assert.match(metadataGridRule, /\bgrid-template-columns:\s*repeat\(auto-fit, minmax\(160px, 1fr\)\);/);
   assert.match(parameterSummaryRule, /\bgrid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\);/);
-  assert.match(parameterFieldListRule, /\boverflow:\s*visible;/);
+  assert.match(parameterFieldListRule, /\boverflow:\s*hidden;/);
   assert.match(parameterFieldRule, /\bgrid-template-columns:\s*minmax\(0, 1fr\);/);
-  assert.match(stylesSource.slice(restoredLayoutIndex), /@container \(min-width: 560px\)/);
+  assert.match(stylesSource.slice(designPassIndex), /@container \(min-width: 560px\)/);
   assert.match(
-    stylesSource.slice(restoredLayoutIndex),
+    stylesSource.slice(designPassIndex),
     /\bgrid-template-columns:\s*minmax\(0, 0.86fr\) minmax\(220px, 1.14fr\);/
   );
-  assert.doesNotMatch(stylesSource.slice(restoredLayoutIndex), /\bborder-left:\s*[2-9]px/);
+  assert.doesNotMatch(stylesSource.slice(designPassIndex), /\bborder-left:\s*[2-9]px/);
 });
 
 test("Region and AZ area panels avoid duplicate visible selector labels", () => {
@@ -134,22 +113,21 @@ test("Region and AZ area panels avoid duplicate visible selector labels", () => 
   assert.match(availabilityZoneFieldSource, /showLabel \? \(/);
 });
 
-test("ParameterInputPanel removes the nested-card DESIGN pass without restoring the legacy skin", () => {
-  const restoredLayoutIndex = stylesSource.indexOf("/* Restored inspector layout */");
+test("ParameterInputPanel styles apply DESIGN.md tokens after the legacy Blueprint skin", () => {
+  const legacyBlueprintIndex = stylesSource.indexOf("/* Blueprint inspector skin */");
+  const designPassIndex = stylesSource.indexOf("/* DESIGN.md parameter input pass */");
 
-  assert.ok(restoredLayoutIndex > -1, "Expected the restored inspector layout to exist");
-  assert.doesNotMatch(stylesSource, /\/\* DESIGN\.md parameter input pass \*\//);
-  assert.doesNotMatch(stylesSource, /\/\* Blueprint inspector skin \*\//);
-  assert.doesNotMatch(stylesSource, /var\(--bp-/);
+  assert.ok(legacyBlueprintIndex > -1, "Expected the legacy Blueprint inspector skin to exist");
+  assert.ok(designPassIndex > legacyBlueprintIndex, "Expected the DESIGN.md pass to override Blueprint styles");
 
-  const panelRule = getLastCssRuleAfter(stylesSource, "panel", restoredLayoutIndex);
-  const iconRule = getLastCssRuleContainingAfter(stylesSource, "div.resourceIcon", restoredLayoutIndex);
-  const inputRule = getLastCssRuleContainingAfter(stylesSource, ".input,", restoredLayoutIndex);
-  const focusRule = getLastCssRuleContainingAfter(stylesSource, ".input:focus", restoredLayoutIndex);
-  const addButtonRule = getLastCssRuleContainingAfter(stylesSource, ".addButton {", restoredLayoutIndex);
-  const selectedRegionRule = getLastCssRuleAfter(stylesSource, "regionOptionSelected", restoredLayoutIndex);
+  const panelRule = getLastCssRuleAfter(stylesSource, "panel", designPassIndex);
+  const iconRule = getLastCssRuleContainingAfter(stylesSource, "div.resourceIcon", designPassIndex);
+  const inputRule = getLastCssRuleContainingAfter(stylesSource, ".input,", designPassIndex);
+  const focusRule = getLastCssRuleContainingAfter(stylesSource, ".input:focus", designPassIndex);
+  const addButtonRule = getLastCssRuleContainingAfter(stylesSource, ".addButton {", designPassIndex);
+  const selectedRegionRule = getLastCssRuleAfter(stylesSource, "regionOptionSelected", designPassIndex);
 
-  assert.match(panelRule, /\bbackground:\s*var\(--workspace-surface,/);
+  assert.match(panelRule, /\bbackground:\s*var\(--workspace-surface-muted,/);
   assert.match(panelRule, /\bcolor:\s*var\(--workspace-text,/);
   assert.match(panelRule, /\bfont-family:\s*var\(--workspace-font,/);
   assert.match(iconRule, /\bbackground:\s*var\(--workspace-surface-strong,/);
@@ -158,15 +136,13 @@ test("ParameterInputPanel removes the nested-card DESIGN pass without restoring 
   assert.match(inputRule, /\bborder-color:\s*var\(--workspace-line,/);
   assert.match(inputRule, /\bcolor:\s*var\(--workspace-text,/);
   assert.match(focusRule, /\bborder-color:\s*var\(--workspace-accent,/);
-  assert.match(addButtonRule, /\bbackground:\s*var\(--workspace-accent-soft,/);
-  assert.match(addButtonRule, /\bcolor:\s*var\(--workspace-accent,/);
+  assert.match(addButtonRule, /\bbackground:\s*var\(--workspace-accent,/);
+  assert.match(addButtonRule, /\bcolor:\s*#ffffff;/);
   assert.match(selectedRegionRule, /\bbackground:\s*var\(--workspace-surface-strong,/);
   assert.match(selectedRegionRule, /\bcolor:\s*var\(--workspace-text,/);
 
   const legacyAccentTokens =
     /var\(--bp-|#6f4cf6|#5f3de8|#f4f1ff|#f1edff|#d6cbff|#8b71ff|#4b2bd6|#ede8ff/i;
-
-  assert.doesNotMatch(stylesSource, legacyAccentTokens);
 
   for (const designRule of [
     panelRule,

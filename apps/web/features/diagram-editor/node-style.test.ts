@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { DiagramNode } from "../../../../packages/types/src";
 
-import { BORDER_COLOR_SWATCHES } from "./constants";
 import {
   AREA_NODE_DEFAULT_BORDER_COLOR,
   RESOURCE_NODE_BORDER_COLOR,
@@ -12,24 +11,11 @@ import {
 } from "./node-style";
 
 test("getNodeDisplayBorderColor keeps area border colors independent from resource borders", () => {
-  assert.equal(AREA_NODE_DEFAULT_BORDER_COLOR, "#6f4cf6");
-  assert.equal(getNodeDisplayBorderColor(makeResourceNode("aws_vpc")), "#6f4cf6");
-  assert.equal(getNodeDisplayBorderColor(makeDesignNode("design_region")), "#6f4cf6");
-  assert.equal(getNodeDisplayBorderColor(makeResourceNode("aws_vpc", "#8b98aa")), "#6f4cf6");
-  assert.equal(getNodeDisplayBorderColor(makeResourceNode("aws_vpc", "#2f6db3")), "#6f4cf6");
+  assert.equal(AREA_NODE_DEFAULT_BORDER_COLOR, "#cbd5e1");
+  assert.equal(getNodeDisplayBorderColor(makeResourceNode("aws_vpc")), "#cbd5e1");
+  assert.equal(getNodeDisplayBorderColor(makeDesignNode("design_region")), "#cbd5e1");
   assert.equal(getNodeDisplayBorderColor(makeResourceNode("aws_vpc", "#2f8c55")), "#2f8c55");
   assert.equal(getNodeDisplayBorderColor(makeResourceNode("aws_instance", "#c9473d")), RESOURCE_NODE_BORDER_COLOR);
-});
-
-test("area border palette starts with the purple default and avoids legacy defaults", () => {
-  assert.deepEqual(BORDER_COLOR_SWATCHES, [
-    "#6f4cf6",
-    "#1f6feb",
-    "#2f8c55",
-    "#d76613",
-    "#c9473d"
-  ]);
-  assert.equal(BORDER_COLOR_SWATCHES[0], AREA_NODE_DEFAULT_BORDER_COLOR);
 });
 
 test("canChangeNodeBorderColor allows border color changes only for area nodes", () => {

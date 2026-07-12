@@ -21,8 +21,6 @@ test("resolveWorkspaceAiChatAction no longer routes new service requests to pre-
   const prompts = [
     "build a website",
     "create a login service",
-    "웹페이지 하나 만들고 싶어",
-    "웹페이지 하나 배포하고 싶어 다시 만들어봐",
     "웹사이트 하나 배포하고 싶어",
     "로그인 있는 작은 웹서비스가 필요해"
   ];
@@ -45,10 +43,7 @@ test("resolveWorkspaceAiChatAction keeps existing-board edit prompts on patch", 
     "add a database",
     "remove existing server",
     "여기에 로그인 기능 추가해줘",
-    "스토리지 버킷도 넣어줘",
-    "NAT 게이트웨이 붙이렴",
-    "RDS 하나 달아줘",
-    "보안 그룹 연결해"
+    "스토리지 버킷도 넣어줘"
   ];
 
   for (const prompt of prompts) {
@@ -84,34 +79,11 @@ test("resolveWorkspaceAiChatMode lets explicit fresh-start requests replace an e
   );
 });
 
-test("resolveWorkspaceAiChatMode infers colloquial new-service requests as drafts", () => {
-  const prompts = [
-    "로그인 서비스 하나 부탁해",
-    "채팅 되는 쇼핑몰 구조 짜줘",
-    "이미지 올리는 웹앱 해보자"
-  ];
-
-  for (const prompt of prompts) {
-    assert.equal(
-      resolveWorkspaceAiChatMode({ boardHasResources: true, prompt }),
-      "draft",
-      prompt
-    );
-  }
-});
-
 test("resolvePendingPreviewChatAction keeps new prompts as fresh drafts while refinements patch the preview", () => {
   assert.equal(
     resolvePendingPreviewChatAction({
       needsDraftClarification: true,
       prompt: "create a file upload website"
-    }),
-    "draft"
-  );
-  assert.equal(
-    resolvePendingPreviewChatAction({
-      needsDraftClarification: true,
-      prompt: "웹페이지 하나 배포하고 싶어 다시 만들어봐"
     }),
     "draft"
   );
@@ -130,22 +102,10 @@ test("classifyWorkspaceAiChatPrompt accepts diagram generation and edit requests
     "upload images and serve them from a web app",
     "add an S3 bucket for uploads",
     "remove the existing database",
-    "create a webpage",
-    "deploy a web page",
-    "웹페이지 하나 만들고 싶어",
-    "웹 페이지 하나 배포하고 싶어",
-    "웹페이지 하나 배포하고 싶어 다시 만들어봐",
     "정적 웹사이트 다이어그램 만들어줘",
     "로그인 있는 작은 웹서비스가 필요해",
     "구글 플레이스토어에 올릴 앱 하나 만들고 싶어",
     "여기에 데이터베이스 하나 추가해줘",
-    "NAT 게이트웨이 붙이렴",
-    "NAT 게이트웨이 여기에 붙여줘",
-    "기존 서버에 보안 그룹 연결해",
-    "RDS 하나 달아줘",
-    "채팅 되는 쇼핑몰 구조 짜줘",
-    "로그인 서비스 하나 부탁해",
-    "이미지 올리는 웹앱 해보자",
     "db 지우고 싶어",
     "여기에서 db는 지워도 될거같아"
   ];

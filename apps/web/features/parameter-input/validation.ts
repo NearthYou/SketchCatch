@@ -194,8 +194,8 @@ export function mergeNodeParameters(
     terraformBlockType: node.parameters.terraformBlockType ?? defaults.terraformBlockType,
     resourceType:
       normalizeResourceType(node.parameters.resourceType, catalog) ?? defaults.resourceType,
-    resourceName: node.parameters.resourceName ?? defaults.resourceName,
-    fileName: node.parameters.fileName ?? defaults.fileName,
+    resourceName: node.parameters.resourceName || defaults.resourceName,
+    fileName: node.parameters.fileName || defaults.fileName,
     values: node.parameters.values ?? defaults.values
   };
 }

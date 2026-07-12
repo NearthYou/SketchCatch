@@ -109,27 +109,6 @@ test("mergeNodeParameters preserves values outside the UI parameter catalog", ()
   });
 });
 
-test("mergeNodeParameters preserves blank editable metadata while the user types", () => {
-  const node = makeResourceNode({
-    label: "main",
-    parameters: {
-      terraformBlockType: "resource",
-      resourceType: "aws_vpc",
-      resourceName: "",
-      fileName: "",
-      values: {}
-    }
-  });
-
-  const merged = mergeNodeParameters(node, makeCatalog());
-  const validation = validateParameters(merged, [], [node], node.id, makeCatalog());
-
-  assert.equal(merged.resourceName, "");
-  assert.equal(merged.fileName, "");
-  assert.equal(validation.metadataErrors.resourceName, "Resource name은 필수입니다.");
-  assert.equal(validation.metadataErrors.fileName, "File name은 필수입니다.");
-});
-
 test("getValidationDefinitions ignores uncataloged raw editor values", () => {
   const definitions = [
     makeDefinition({ name: "cidrBlock", required: true }),

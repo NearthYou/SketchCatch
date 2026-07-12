@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { DiagramNode } from "../../../../packages/types/src";
 import {
-  findInnermostAreaDropTarget,
   findInnermostAreaNodeAtPoint,
   getAreaNodeIconUrl,
   getAreaNodeLabel,
@@ -11,59 +10,6 @@ import {
   isDesignAreaNode,
   isResourceAreaNode
 } from "./area-nodes";
-
-test("findInnermostAreaDropTarget selects the innermost Area without Terraform reference rules", () => {
-  const region = makeDesignNode({
-    id: "region-1",
-    type: "design_region",
-    position: { x: 0, y: 0 },
-    size: { width: 600, height: 420 },
-    zIndex: 1
-  });
-  const vpc = makeResourceNode({
-    id: "vpc-1",
-    resourceType: "aws_vpc",
-    position: { x: 60, y: 60 },
-    size: { width: 460, height: 320 },
-    zIndex: 2
-  });
-  const autoscalingGroup = makeResourceNode({
-    id: "asg-1",
-    resourceType: "aws_autoscaling_group",
-    position: { x: 140, y: 120 },
-    size: { width: 240, height: 180 },
-    zIndex: 3
-  });
-  const bucket = makeResourceNode({
-    id: "bucket-1",
-    resourceType: "aws_s3_bucket",
-    position: { x: 200, y: 170 },
-    size: { width: 48, height: 48 },
-    zIndex: 4
-  });
-
-  assert.equal(
-    findInnermostAreaDropTarget(bucket, [region, vpc, autoscalingGroup, bucket])?.id,
-    "asg-1"
-  );
-});
-
-test("findInnermostAreaDropTarget excludes Area nodes from Resource placement feedback", () => {
-  const region = makeDesignNode({
-    id: "region-1",
-    type: "design_region",
-    position: { x: 0, y: 0 },
-    size: { width: 600, height: 420 }
-  });
-  const autoscalingGroup = makeResourceNode({
-    id: "asg-1",
-    resourceType: "aws_autoscaling_group",
-    position: { x: 140, y: 120 },
-    size: { width: 240, height: 180 }
-  });
-
-  assert.equal(findInnermostAreaDropTarget(autoscalingGroup, [region, autoscalingGroup]), null);
-});
 
 test("isAreaNode matches Region, Availability Zone, Group, and resource area nodes", () => {
   assert.equal(isAreaNode(makeDesignNode({ type: "design_region" })), true);
@@ -77,31 +23,13 @@ test("isAreaNode matches Region, Availability Zone, Group, and resource area nod
   assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_autoscaling_group" })), true);
   assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_vpc" })), true);
   assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_subnet" })), true);
+  assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_security_group" })), true);
 });
 
 test("isAreaNode excludes regular design and resource nodes", () => {
   assert.equal(isAreaNode(makeDesignNode({ type: "design_note" })), false);
   assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_instance" })), false);
   assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_internet_gateway" })), false);
-  assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_security_group" })), false);
-  assert.equal(
-    isAreaNode(
-      makeResourceNode({
-        resourceType: "aws_autoscaling_group",
-        values: { diagramRenderAsResource: true }
-      })
-    ),
-    false
-  );
-  assert.equal(
-    isAreaNode(
-      makeResourceNode({
-        resourceType: "aws_security_group",
-        values: { diagramRenderAsResource: true }
-      })
-    ),
-    false
-  );
 });
 
 test("area node helpers distinguish design containers from resource containers", () => {
@@ -123,47 +51,28 @@ test("area node helpers distinguish design containers from resource containers",
   assert.equal(isResourceAreaNode(vpc), true);
 });
 
-test("getAreaNodeLabel uses the friendly uppercase board label instead of Terraform resource names", () => {
+test("getAreaNodeLabel uses resource name for resource area nodes", () => {
   assert.equal(
-    getAreaNodeLabel(
-      makeResourceNode({ label: "Main VPC", resourceName: "main_vpc", resourceType: "aws_vpc" })
-    ),
-    "MAIN VPC"
+    getAreaNodeLabel(makeResourceNode({ resourceName: "main_vpc", resourceType: "aws_vpc" })),
+    "main_vpc"
+  );
+  assert.equal(
+    getAreaNodeLabel(makeResourceNode({ resourceName: "public_subnet", resourceType: "aws_subnet" })),
+    "public_subnet"
+  );
+  assert.equal(
+    getAreaNodeLabel(makeResourceNode({ resourceName: "web_sg", resourceType: "aws_security_group" })),
+    "web_sg"
   );
   assert.equal(
     getAreaNodeLabel(
-      makeResourceNode({ label: "Public Subnet", resourceName: "public_subnet", resourceType: "aws_subnet" })
+      makeResourceNode({ resourceName: "auto_scaling_group", resourceType: "aws_autoscaling_group" })
     ),
-    "PUBLIC SUBNET"
+    "auto_scaling_group"
   );
   assert.equal(
-    getAreaNodeLabel(
-      makeResourceNode({
-        label: "Auto Scaling Group",
-        resourceName: "auto_scaling_group",
-        resourceType: "aws_autoscaling_group"
-      })
-    ),
-    "AUTO SCALING GROUP"
-  );
-  assert.equal(
-    getAreaNodeLabel(
-      makeResourceNode({ label: "Seoul Region", resourceName: "ap_northeast_2", resourceType: "aws_region" })
-    ),
-    "SEOUL REGION"
-  );
-});
-
-test("getAreaNodeLabel uses the catalog diagram label before the Terraform resource name", () => {
-  assert.equal(
-    getAreaNodeLabel(
-      makeResourceNode({
-        resourceName: "vpc_three_tier_web_app_workspace",
-        resourceType: "aws_vpc",
-        values: { diagramLabel: "vpc" }
-      })
-    ),
-    "vpc"
+    getAreaNodeLabel(makeResourceNode({ resourceName: "ap_northeast_2", resourceType: "aws_region" })),
+    "ap_northeast_2"
   );
 });
 
@@ -172,12 +81,6 @@ test("getAreaNodeLabel falls back to node label for design areas and unnamed res
   assert.equal(
     getAreaNodeLabel(makeResourceNode({ label: "VPC", resourceName: "", resourceType: "aws_vpc" })),
     "VPC"
-  );
-  assert.equal(
-    getAreaNodeLabel(
-      makeResourceNode({ label: "Web Security Group", resourceName: "web_sg", resourceType: "aws_security_group" })
-    ),
-    "Web Security Group"
   );
 });
 

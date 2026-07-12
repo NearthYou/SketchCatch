@@ -342,28 +342,147 @@ Terraform 보기와 Resource 보기는 같은 panel shell, 같은 여백, 같은
 - 단일 커밋 revert나 파일 전체 restore로 처리하면 안 된다.
 - 내부 디자인 기준점은 `8f1c1d7a^`, 바깥 rail 배치 기준점은 `a2fbf8b4^`다.
 - `72595d44`는 옛 스타일 제거 내역을 확인하는 참고점이지 전체 롤백 대상이 아니다.
-- 선택 롤백은 아래 적용 기록처럼 현재 기능을 유지하는 범위에서만 진행한다.
+- 실제 롤백 전까지 현재 코드에는 손대지 않는다.
 
-## 10. 2026-07-12 선택 롤백 적용 기록
+## 10. AI 패널 디자인 참고
 
-이 문서의 기준으로 실제 UI를 선택 롤백했다.
+AI 패널도 오른쪽 Inspector와 같은 Workspace 보조 도구다.
+나중에 AI 기능을 다시 UI로 구성할 때, 아래 두 구현을 기능 코드가 아니라 **화면 참고 자료**로 사용한다.
 
-### 적용한 것
+### 10.1 새 AI Dock 구현
 
-- `rightRail`을 Board Shell의 붙박이 3열에서 다시 floating card로 바꿨다.
-- 상단 프로젝트 바는 현재 작업으로 남겼으므로, 과거의 `top: 12px` 대신 그 아래인 `top: 76px`에서 시작한다.
-- Canvas가 오른쪽 rail 너비를 미리 비워 두지 않도록 오른쪽 Grid 열을 `0`으로 바꿨다.
-- Inspector의 회색 바탕과 흰 카드 중첩을 제거하고, section divider를 쓰는 연속 Inspector 형태로 바꿨다.
-- 필수/추가 파라미터, picker, summary, Region/AZ, validation은 그대로 유지했다.
-- 배포 탭은 현재 `DeploymentOperationsPanel`을 본문으로 쓰는 독립 `Deployment console` 모달을 연다.
-- 모달을 열면 Inspector와 다른 Workspace 도구를 닫아 Board 위에 도구가 겹치지 않게 했다.
+대상 파일:
 
-### 의도적으로 복원하지 않은 것
+- `apps/web/app/workspace/ai-dock/WorkspaceAiDock.tsx`
+- `apps/web/app/workspace/ai-dock/WorkspaceAiDockPanel.tsx`
+- `apps/web/app/workspace/ai-dock/workspace-ai-dock.module.css`
 
-- 삭제된 과거 `DeploymentPanel.tsx` 전체
-- 과거 `WorkspaceRightPanel.tsx` 전체
-- 과거 Terraform, AI, Git/CI/CD, Live Observation 화면 전체
-- `a72d371d`, `a2fbf8b4`, `8f1c1d7a`, `72595d44` 커밋 전체 revert
+구성:
 
-위 파일과 커밋은 현행 API 계약과 안전 처리보다 이전 구조에 묶여 있다.
-따라서 이번에는 현재의 안전 검사, 승인, Plan, Apply, Git/CI/CD, 관찰 기능을 유지한 채 화면 표면과 진입 방식만 복원했다.
+```text
+닫힘
+└─ 우측 하단 Sparkles launcher
+   └─ unread 응답이 있으면 작은 상태점
+
+열림
+└─ 독립 AI Dock panel
+   ├─ 현재 phase / 상태
+   ├─ 대화 transcript
+   ├─ Board 변경 미리보기 또는 Terraform 수정안 승인
+   └─ textarea composer
+```
+
+새 Dock의 좋은 점:
+
+- 닫힌 상태에서 작은 launcher만 보여 Board를 가리지 않는다.
+- unread, online, request phase를 분리해 사용자에게 현재 AI 상태를 알려 준다.
+- Escape, launcher focus 복귀, mobile Tab 순환을 명시한다.
+- Board 수정 제안과 Terraform 수정 제안을 승인 전 상태로 유지한다.
+
+새 Dock의 주의점:
+
+- Inspector, 작업 도구, AI Dock이 동시에 존재하면 Board 오른쪽이 여러 도구로 분할된다.
+- AI가 Architecture 편집을 돕는지 Deployment 판단을 돕는지 상위 레벨 소속이 화면에서 약하다.
+- launcher와 panel은 독립적으로 보기 좋지만, Architecture 패널 안에서 AI 도움을 받을 때는 맥락 전환이 생긴다.
+
+### 10.2 이전 Workspace AI Chat Dock
+
+대상 파일:
+
+- `apps/web/features/workspace/WorkspaceAiChatDock.tsx`
+- `apps/web/features/workspace/WorkspaceAiPanel.tsx`
+- `apps/web/features/workspace/WorkspaceAiPanelPieces.tsx`
+- `apps/web/features/workspace/workspace.module.css`
+
+구성:
+
+```text
+닫힘
+└─ AI chat launcher
+
+열림
+└─ 오른쪽 floating chat dock
+   ├─ Draft / Errors / Preview / Simulation 범위 탭
+   ├─ 대화 메시지와 suggestion 선택
+   ├─ 결과 카드와 안전 경고
+   ├─ 음성 입력
+   └─ 전송 composer
+```
+
+이전 Dock은 AI가 다루는 범위를 탭으로 직접 드러낸다.
+Architecture Draft, Terraform 오류, Terraform Preview, Design Simulation의 결과가 각기 다른 카드와 안내를 갖는다.
+
+좋은 점:
+
+- 사용자가 AI에게 무엇을 요청할 수 있는지 한 화면에서 찾기 쉽다.
+- 음성 입력, suggestion 선택, 결과 카드가 한 흐름에 있다.
+- 결과가 Board나 Terraform에 적용되기 전 사용자 확인 단계를 표현하기 쉽다.
+
+주의점:
+
+- 오른쪽 Inspector와 함께 열리면 두 개의 독립 패널이 되어 Board를 좁힌다.
+- 범위 탭이 AI 기능 기준이라 Architecture와 Deployment 레벨 구분을 흐릴 수 있다.
+- 결과 카드가 많아지면 채팅보다 대시보드처럼 느껴질 수 있다.
+
+### 10.3 이후 재디자인 기준
+
+```text
+Architecture 레벨의 AI
+→ Board 변경, Resource 설명, Terraform 생성·수정 도움
+
+Deployment 레벨의 AI
+→ 검사 결과 설명, Plan 위험 요약, 실패 원인 설명
+```
+
+- AI는 세 번째 독립 작업 영역이 아니라 현재 레벨에 소속된 보조 도구로 보여야 한다.
+- Architecture AI는 오른쪽 Architecture 패널 안에서 열거나 해당 패널과 한 쌍으로 보여 준다.
+- Deployment AI는 Deployment Wizard의 현재 단계 결과를 설명하는 형태로 제한한다.
+- 둘 다 실제 Board 변경, Terraform 변경, 배포 실행은 명시적 사용자 승인을 거쳐야 한다.
+- launcher, unread, keyboard focus, 음성 입력 같은 상호작용 규칙은 새 AI Dock 구현을 참고한다.
+- Draft, 오류, Preview, Simulation 결과 카드와 suggestion 흐름은 이전 Chat Dock 구현을 참고한다.
+
+### 10.4 이번 전체 UI 롤백과의 관계
+
+이번에는 현재 Workspace UI를 유지하지 않고 이전 Workspace 화면 스냅샷을 다시 사용한다.
+따라서 실제 `/workspace` 경로에서는 이전 `WorkspaceAiChatDock`이 다시 연결된다.
+새 AI Dock 파일은 나중에 디자인과 상호작용을 참고할 수 있도록 소스에만 남겨 두며, 현재 Workspace route에서 렌더링하지 않는다.
+
+## 11. 실제 적용: 전체 Workspace UI 스냅샷 롤백
+
+사용자 지시에 따라, 선택적으로 현재 UI를 다듬는 방식은 폐기했다.
+실제 `/workspace` 화면은 다음 Git 스냅샷으로 되돌렸다.
+
+```text
+기준 커밋: bc3b5ea6
+기준 시점: a2fbf8b4 (UI: Workspace Board Shell 재구축) 직전
+```
+
+실행 경로에서 복원한 화면:
+
+```text
+/workspace
+├─ 이전 Workspace page와 Auth Gate
+├─ ProjectWorkspaceDraftManager / WorkspaceDraftManager
+├─ WorkspaceRightPanel
+│  ├─ Resource Workspace
+│  ├─ Terraform Code / Issues
+│  └─ DeploymentPanel
+├─ Deployment full-screen console / 모달
+└─ WorkspaceAiChatDock
+```
+
+이전 화면에 없던 현재 Workspace UI는 실제 route에서 사용하지 않는다.
+
+- `WorkspaceOperationsDock`
+- 새 `WorkspaceAiDock`
+- 새 Deployment Wizard shell
+- Board Shell 재구성 뒤에 추가된 Inspector 표현
+
+다만 현재 Dashboard, Settings, Template 코드가 쓰는 공용 API와 순수 helper는 화면이 아니라 공용 계약이므로 유지했다.
+과거 UI가 현재 API 응답과 맞물리는 부분은 다음 최소 호환만 적용했다.
+
+- 현재 Terraform 생성 응답의 `terraformCode`를 이전 Terraform panel에 전달
+- 현재 Git handoff API에서 제거된 요청 필드 제외
+- 현재 `SelectMenu` tone 계약에 맞게 이전 edge toolbar tone 변경
+
+이 항목들은 과거 화면의 정보 구조나 디자인을 바꾸지 않는다.

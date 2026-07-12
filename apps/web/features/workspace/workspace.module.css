@@ -1,0 +1,6180 @@
+.projectShell {
+  align-items: center;
+  background: #ffffff;
+  color: #171717;
+  display: flex;
+  font-family: var(--workspace-font, "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif);
+  min-height: 100vh;
+  padding: 32px;
+}
+
+.projectForm,
+.noticePanel {
+  background: #ffffff;
+  border: 1px solid #f0f0f3;
+  border-radius: 8px;
+  box-shadow: 0 18px 48px rgb(23 23 23 / 8%);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin: 0 auto;
+  max-width: 520px;
+  padding: 28px;
+  width: min(100%, 520px);
+}
+
+.projectHeader {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.projectHeader h1 {
+  font-size: 24px;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.projectEyebrow {
+  color: #60646c;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.field span {
+  color: #171717;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.field input,
+.field textarea {
+  background: #ffffff;
+  border: 1px solid #dcdee0;
+  border-radius: 8px;
+  color: #171717;
+  font: inherit;
+  min-width: 0;
+  padding: 10px 12px;
+  resize: vertical;
+}
+
+.field input:focus,
+.field textarea:focus {
+  border-color: #171717;
+  box-shadow: 0 0 0 3px rgb(23 23 23 / 10%);
+  outline: none;
+}
+
+.primaryButton {
+  align-items: center;
+  background: #000000;
+  border: 1px solid #000000;
+  border-radius: 8px;
+  color: #ffffff;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-weight: 700;
+  justify-content: center;
+  min-height: 42px;
+  padding: 0 16px;
+}
+
+.primaryButton:disabled {
+  background: #a1a1aa;
+  border-color: #a1a1aa;
+  cursor: not-allowed;
+}
+
+.errorText {
+  color: #b42318;
+  font-size: 13px;
+  margin: 0;
+}
+
+.draftStatusPanel {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid #f0f0f3;
+  border-radius: 8px;
+  box-shadow: 0 10px 24px rgba(23, 23, 23, 0.06);
+  color: #60646c;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: 34px;
+  padding: 6px 10px;
+  width: max-content;
+  max-width: 100%;
+}
+
+.draftStatusLabel {
+  color: #60646c;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.draftStatusItem {
+  background: #fafafa;
+  border: 1px solid #f0f0f3;
+  border-radius: 6px;
+  color: #171717;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.2;
+  padding: 5px 8px;
+}
+
+.draftStatusItem[data-state="local-failed"],
+.draftStatusItem[data-state="server-failed"] {
+  background: #fff1f0;
+  border-color: #ffd1cc;
+  color: #9f2a1d;
+}
+
+.draftStatusItem[data-state="server-dirty"],
+.draftStatusItem[data-state="server-checkpoint-pending"],
+.draftStatusItem[data-state="server-saving"],
+.draftStatusItem[data-state="local-pending"] {
+  background: #fff8e6;
+  border-color: #f6dda4;
+  color: #7a4d00;
+}
+
+.rightPanelShell {
+  background: var(--workspace-surface, #ffffff);
+  color: var(--workspace-text, #171717);
+  display: grid;
+  font-family: var(--workspace-font, "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif);
+  font-size: 12px;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  height: 100%;
+  max-width: 100%;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  position: relative;
+  width: 100%;
+}
+
+.collapsedRightPanel {
+  align-items: center;
+  background: var(--workspace-surface, #ffffff);
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  border-radius: 8px;
+  box-shadow: 0 14px 32px rgba(23, 23, 23, 0.1);
+  display: flex;
+  flex-direction: row;
+  font-size: 13px;
+  gap: 6px;
+  height: auto;
+  padding: 6px;
+  pointer-events: auto;
+  position: fixed;
+  right: 12px;
+  top: 12px;
+  z-index: 30;
+}
+
+.collapsedRightPanel > button:first-child {
+  margin-right: 8px;
+}
+
+.collapsedRightPanel > button:first-child::after {
+  background: var(--workspace-line, #f0f0f3);
+  content: "";
+  height: 22px;
+  pointer-events: none;
+  position: absolute;
+  right: -8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 1px;
+}
+
+.rightPanelToolbar,
+.rightPanelUtilityBar {
+  align-items: center;
+  background: var(--workspace-surface, #ffffff);
+  border-bottom: 1px solid var(--workspace-line, #f0f0f3);
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  max-width: 100%;
+  min-height: 44px;
+  min-width: 0;
+  padding: 8px 12px;
+  position: sticky;
+  top: 0;
+  z-index: 4;
+}
+
+.rightPanelUtilityGroup {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  display: inline-flex;
+  gap: 4px;
+  margin-left: auto;
+  padding: 0;
+}
+
+.rightPanelModeBar {
+  align-items: center;
+  background: var(--workspace-surface, #ffffff);
+  border-bottom: 1px solid var(--workspace-line, #f0f0f3);
+  display: flex;
+  gap: 8px;
+  max-width: 100%;
+  min-height: 47px;
+  min-width: 0;
+  overflow: visible;
+  padding: 8px 12px;
+  position: relative;
+  z-index: 3;
+}
+
+.rightPanelView {
+  background: var(--workspace-surface-muted, #fafafa);
+  display: grid;
+  height: 100%;
+  max-width: 100%;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  width: 100%;
+}
+
+.rightPanelView[hidden] {
+  display: none;
+}
+
+.panelModeToggle {
+  align-items: center;
+  background: var(--workspace-surface-muted, #fafafa);
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  border-radius: 8px;
+  display: inline-flex;
+  gap: 3px;
+  padding: 3px;
+}
+
+.panelModeIconGroup {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 4px;
+  min-width: 0;
+}
+
+.panelModeTextButton,
+.panelModeTextButtonActive {
+  align-items: center;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  gap: 5px;
+  height: 24px;
+  justify-content: center;
+  letter-spacing: 0;
+  min-width: 56px;
+  overflow: hidden;
+  padding: 0 8px;
+  position: relative;
+  white-space: nowrap;
+}
+
+.panelModeTextButton {
+  background: var(--workspace-surface, #ffffff);
+  border-color: var(--workspace-line, #f0f0f3);
+  color: var(--workspace-muted, #60646c);
+}
+
+.panelModeTextButtonActive {
+  background: var(--workspace-accent, #000000);
+  border-color: var(--workspace-accent, #000000);
+  color: #ffffff;
+}
+
+.panelModeButton,
+.panelModeButtonActive,
+.panelIconButton,
+.panelIconButtonActive,
+.panelCollapseButton,
+.collapsedPanelButton,
+.collapsedPanelButtonActive {
+  align-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--workspace-muted, #60646c);
+  cursor: pointer;
+  display: inline-flex;
+  height: 30px;
+  justify-content: center;
+  padding: 0;
+  width: 30px;
+  position: relative;
+}
+
+.panelModeButtonActive,
+.panelIconButtonActive,
+.collapsedPanelButtonActive {
+  background: var(--workspace-accent, #000000);
+  border-color: var(--workspace-accent, #000000);
+  box-shadow: 0 1px 4px rgba(23, 23, 23, 0.12);
+  color: #ffffff;
+}
+
+.panelIconButton,
+.panelIconButtonActive {
+  background: var(--workspace-surface, #ffffff);
+  border-color: var(--workspace-line, #f0f0f3);
+}
+
+.panelCollapseButton {
+  background: var(--workspace-surface-muted, #fafafa);
+  border-color: var(--workspace-line, #f0f0f3);
+  color: var(--workspace-text, #171717);
+  flex: 0 0 auto;
+}
+
+.collapsedPanelButton,
+.collapsedPanelButtonActive {
+  background: var(--workspace-surface, #ffffff);
+  border-color: transparent;
+}
+
+.panelModeButton:hover,
+.panelModeButton:focus-visible,
+.panelModeTextButton:hover,
+.panelModeTextButton:focus-visible,
+.panelIconButton:hover,
+.panelIconButton:focus-visible,
+.panelCollapseButton:hover,
+.panelCollapseButton:focus-visible,
+.collapsedPanelButton:hover,
+.collapsedPanelButton:focus-visible {
+  background: var(--workspace-surface-muted, #fafafa);
+  border-color: var(--workspace-line-strong, #dcdee0);
+  color: var(--workspace-text, #171717);
+  outline: none;
+}
+
+.panelIssueBadge,
+.panelIssueBadgeError {
+  align-items: center;
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 10px;
+  font-weight: 900;
+  height: 16px;
+  justify-content: center;
+  min-width: 16px;
+  padding: 0 4px;
+  position: absolute;
+  right: -5px;
+  top: -5px;
+}
+
+.panelIssueBadge {
+  background: var(--workspace-accent-soft, #f0f0f3);
+  color: var(--workspace-text, #171717);
+}
+
+.panelIssueBadgeError {
+  background: #fef2f2;
+  color: #b42318;
+}
+
+.panelModeTextButton .panelIssueBadge,
+.panelModeTextButton .panelIssueBadgeError,
+.panelModeTextButtonActive .panelIssueBadge,
+.panelModeTextButtonActive .panelIssueBadgeError {
+  position: static;
+}
+
+.resourceWorkspacePanel {
+  background: var(--workspace-surface-muted, #fafafa);
+  color: var(--workspace-text, #171717);
+  display: grid;
+  font-size: 12px;
+  grid-template-rows: minmax(0, 1fr);
+  min-height: 0;
+  padding-top: 4px;
+}
+
+.resourceSettingsPanel {
+  background: var(--workspace-surface, #ffffff);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.resourceSettingsHeader {
+  align-items: center;
+  background: var(--workspace-surface-muted, #fafafa);
+  border-bottom: 1px solid var(--workspace-line, #f0f0f3);
+  display: flex;
+  justify-content: flex-start;
+  min-height: 48px;
+  padding: 16px 12px 8px;
+}
+
+.resourceSettingsBackButton {
+  align-items: center;
+  background: var(--workspace-surface, #ffffff);
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  border-radius: 8px;
+  color: var(--workspace-text, #171717);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  gap: 7px;
+  min-height: 32px;
+  padding: 0 10px;
+}
+
+.resourceSettingsBackButton:hover,
+.resourceSettingsBackButton:focus-visible {
+  background: var(--workspace-surface-muted, #fafafa);
+  border-color: var(--workspace-line-strong, #dcdee0);
+  color: var(--workspace-text, #171717);
+  outline: none;
+}
+
+.resourceListPanel {
+  align-content: start;
+  align-items: start;
+  display: grid;
+  gap: 12px;
+  grid-auto-rows: max-content;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+  justify-content: stretch;
+  min-height: 0;
+  overflow: auto;
+  padding: 24px 12px 12px;
+}
+
+.resourceListItem,
+.resourceListItemActive {
+  background: var(--workspace-surface, #ffffff);
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  border-radius: 8px;
+  color: var(--workspace-text, #171717);
+  cursor: pointer;
+  display: grid;
+  gap: 9px;
+  height: auto;
+  min-height: 0;
+  overflow: visible;
+  padding: 12px 13px 13px;
+  position: relative;
+  text-align: left;
+}
+
+.resourceListItem:hover,
+.resourceListItem:focus-visible,
+.resourceListItemActive:focus-visible {
+  border-color: var(--workspace-line-strong, #dcdee0);
+  box-shadow: 0 8px 20px rgba(23, 23, 23, 0.08);
+  outline: none;
+}
+
+.resourceListItemActive {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.18);
+}
+
+.resourceListHeader {
+  align-items: flex-start;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.resourceListMoreButton {
+  align-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--workspace-text, #171717);
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 28px;
+  justify-content: center;
+  padding: 0;
+  width: 28px;
+}
+
+.resourceListMoreButton:hover,
+.resourceListMoreButton:focus-visible {
+  background: var(--workspace-surface-muted, #fafafa);
+  border-color: var(--workspace-line-strong, #dcdee0);
+  color: var(--workspace-text, #171717);
+  outline: none;
+}
+
+.resourceListIdentity {
+  align-items: center;
+  background: #eef0f2;
+  border-radius: 5px;
+  color: #5d6b80;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 850;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.resourceListIdentity strong {
+  overflow: hidden;
+  padding: 0 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resourceListServiceIcon {
+  align-items: center;
+  border-radius: 5px 0 0 5px;
+  color: var(--bp-blue);
+  display: inline-flex;
+  height: 28px;
+  justify-content: center;
+  width: 36px;
+}
+
+.resourceListServiceIcon img {
+  display: block;
+  height: 18px;
+  object-fit: contain;
+  width: 18px;
+}
+
+.resourceListAddress {
+  color: #64748b;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 10.5px;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.resourceListValues {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.resourceListValueRow {
+  align-items: start;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(104px, 0.58fr) minmax(0, 1.42fr);
+  min-width: 0;
+}
+
+.resourceListValueRow span {
+  color: #243044;
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.resourceListValueRow strong {
+  color: #516178;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.resourceListConfigToggle {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: #243044;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 750;
+  gap: 8px;
+  justify-self: start;
+  margin-top: 3px;
+  padding: 6px 7px;
+}
+
+.resourceListConfigToggle:hover,
+.resourceListConfigToggle:focus-visible {
+  background: var(--bp-blue-tint);
+  color: var(--bp-blue);
+  outline: none;
+}
+
+.resourceListConfigToggle span {
+  color: inherit;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.resourceCardMenu {
+  background: #ffffff;
+  border: 1px solid #dce3ee;
+  border-radius: 8px;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.18);
+  display: grid;
+  min-width: 220px;
+  overflow: hidden;
+  position: absolute;
+  right: 12px;
+  top: 48px;
+  z-index: 20;
+}
+
+.resourceCardMenuItem {
+  align-items: center;
+  background: #ffffff;
+  border: 0;
+  border-bottom: 1px solid #e4e9f1;
+  color: #172033;
+  cursor: pointer;
+  display: grid;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 720;
+  gap: 10px;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  min-height: 40px;
+  padding: 0 12px;
+  text-align: left;
+}
+
+.resourceCardMenuItem:last-child {
+  border-bottom: 0;
+}
+
+.resourceCardMenuItem:hover,
+.resourceCardMenuItem:focus-visible {
+  background: #f8fafc;
+  outline: none;
+}
+
+.resourceCardMenuItem:disabled {
+  color: #a8b3c4;
+  cursor: not-allowed;
+}
+
+.resourceCardMenuItem:disabled:hover {
+  background: #ffffff;
+}
+
+.resourceCardMenuChevron {
+  color: #94a3b8;
+}
+
+.resourceCardMenuDanger {
+  color: #ef4444;
+}
+
+.resourceListNoValues {
+  background: #f8fafc;
+  border-radius: 6px;
+  color: #64748b;
+  font-size: 11px;
+  padding: 9px 10px;
+}
+
+.resourceListEmpty {
+  align-content: center;
+  color: #64748b;
+  display: grid;
+  gap: 5px;
+  min-height: 180px;
+  padding: 18px;
+  text-align: center;
+}
+
+.resourceListEmpty strong {
+  color: #172033;
+  font-size: 12px;
+}
+
+.resourceListEmpty span {
+  font-size: 11px;
+}
+
+.terraformPanel {
+  background: #f7f9fd;
+  color: #172033;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.terraformSplitLayout {
+  --terraform-code-pane-ratio: 62%;
+
+  background: #f7f9fd;
+  display: grid;
+  grid-template-rows: var(--terraform-code-pane-ratio) 10px minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.terraformCodePane {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.terraformIssuesPane {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.terraformIssuesPane:focus {
+  outline: none;
+}
+
+.terraformSplitResizeHandle {
+  background: #ffffff;
+  border-bottom: 1px solid #dce3ee;
+  border-top: 1px solid #dce3ee;
+  cursor: row-resize;
+  min-height: 10px;
+  position: relative;
+}
+
+.terraformSplitResizeHandle::before {
+  background: #9ca3af;
+  border-radius: 999px;
+  content: "";
+  height: 2px;
+  left: 50%;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 36px;
+}
+
+.terraformSplitResizeHandle:hover,
+.terraformSplitResizeHandle:focus-visible {
+  background: #f8fafc;
+  outline: none;
+}
+
+.terraformSplitResizeHandle:hover::before,
+.terraformSplitResizeHandle:focus-visible::before {
+  background: #64748b;
+}
+
+.terraformTopBar {
+  align-items: flex-start;
+  background: #ffffff;
+  border-bottom: 1px solid #dce3ee;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  justify-content: space-between;
+  min-height: 42px;
+  padding: 6px 8px;
+}
+
+.terraformTopActions {
+  align-items: center;
+  display: inline-flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.terraformFilePicker {
+  flex: 1 1 120px;
+  min-width: 0;
+  position: relative;
+}
+
+.terraformFileButton {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  color: #172033;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 850;
+  gap: 5px;
+  height: 30px;
+  max-width: 132px;
+  min-width: 88px;
+  padding: 0 7px;
+}
+
+.terraformFileButton span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.terraformFileButton:hover,
+.terraformFileButton:focus-visible {
+  background: #f8fafc;
+  border-color: #9fb2cc;
+  outline: none;
+}
+
+.terraformFileMenu {
+  background: #ffffff;
+  border: 1px solid #d7dee9;
+  border-radius: 6px;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.18);
+  display: grid;
+  gap: 6px;
+  left: 0;
+  max-width: calc(100vw - 40px);
+  min-width: 240px;
+  padding: 8px;
+  position: absolute;
+  top: calc(100% + 8px);
+  z-index: 8;
+}
+
+.terraformFileSearch {
+  background: #ffffff;
+  border: 1px solid #d3dce8;
+  border-radius: 5px;
+  color: #172033;
+  font: inherit;
+  font-size: 12px;
+  min-height: 34px;
+  min-width: 0;
+  padding: 7px 9px;
+}
+
+.terraformFileSearch:focus {
+  border-color: #6f4cf6;
+  box-shadow: 0 0 0 3px rgba(111, 76, 246, 0.14);
+  outline: none;
+}
+
+.terraformFileList {
+  display: grid;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.terraformFileOption,
+.terraformFileOptionActive {
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  color: #111827;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  min-height: 32px;
+  padding: 6px 10px;
+  text-align: left;
+}
+
+.terraformFileOptionActive {
+  background: #f0edff;
+  color: #5f3de8;
+  font-weight: 850;
+}
+
+.terraformFileOption:hover,
+.terraformFileOption:focus-visible,
+.terraformFileOptionActive:hover,
+.terraformFileOptionActive:focus-visible {
+  background: #f6f3ff;
+  outline: none;
+}
+
+.terraformFileEmpty {
+  color: #64748b;
+  font-size: 12px;
+  padding: 8px 12px;
+}
+
+.terraformShortcut {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 900;
+  padding: 5px 8px;
+  white-space: nowrap;
+}
+
+.resourceCodeHeader {
+  align-items: center;
+  background: #ffffff;
+  border-bottom: 1px solid #dce3ee;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  min-height: 44px;
+  padding: 6px 8px;
+}
+
+.resourceCodeTitle {
+  align-items: center;
+  color: #172033;
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 900;
+  gap: 7px;
+  min-width: 0;
+}
+
+.resourceCodeTitle span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resourceCodeBackButton,
+.resourceCodeCloseButton {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: #243044;
+  cursor: pointer;
+  display: inline-flex;
+  height: 28px;
+  justify-content: center;
+  padding: 0;
+  width: 28px;
+}
+
+.resourceCodeBackButton:hover,
+.resourceCodeBackButton:focus-visible,
+.resourceCodeCloseButton:hover,
+.resourceCodeCloseButton:focus-visible {
+  background: var(--bp-blue-tint);
+  border-color: color-mix(in srgb, var(--bp-blue) 34%, var(--bp-line));
+  color: var(--bp-blue);
+  outline: none;
+}
+
+.resourceActionBar {
+  align-items: center;
+  background: #ffffff;
+  border-bottom: 1px solid #dce3ee;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  justify-content: flex-end;
+  min-height: 44px;
+  padding: 6px 8px;
+}
+
+.resourceActionSecondary {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid var(--bp-line-strong);
+  border-radius: 6px;
+  color: var(--bp-blue);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 850;
+  gap: 5px;
+  min-height: 31px;
+  padding: 0 9px;
+  white-space: nowrap;
+}
+
+.resourceActionSecondary:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.resourceActionSecondary:not(:disabled):hover,
+.resourceActionSecondary:not(:disabled):focus-visible {
+  background: var(--bp-blue-tint);
+  outline: none;
+}
+
+.terraformPreviewButton {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid var(--bp-line-strong);
+  border-radius: 6px;
+  color: var(--bp-blue);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 900;
+  gap: 5px;
+  justify-content: center;
+  line-height: 1.2;
+  min-height: 28px;
+  padding: 0 8px;
+  white-space: nowrap;
+}
+
+.terraformPreviewButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.terraformPreviewButton:not(:disabled):hover,
+.terraformPreviewButton:not(:disabled):focus-visible {
+  background: var(--bp-blue-tint);
+  outline: none;
+}
+
+.terraformStatusBar {
+  align-items: center;
+  background: #ffffff;
+  border-bottom: 1px solid #dce3ee;
+  color: #64748b;
+  display: flex;
+  font-size: 11px;
+  font-weight: 800;
+  gap: 10px;
+  justify-content: space-between;
+  min-height: 30px;
+  padding: 6px 10px;
+}
+
+.terraformStatusEdited,
+.terraformStatusSynced {
+  border-radius: 999px;
+  padding: 3px 8px;
+}
+
+.terraformStatusEdited {
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+.terraformStatusSynced {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.terraformEditorFrame {
+  background: #1c1c1c;
+  border-bottom: 1px solid #101214;
+  display: grid;
+  flex: 1 1 0;
+  grid-template-columns: 42px minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.terraformLineNumbers {
+  background: #191919;
+  border-right: 1px solid #3a3a3a;
+  box-sizing: border-box;
+  color: #9aa4b2;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  height: 100%;
+  line-height: 1.6;
+  list-style: none;
+  margin: 0;
+  max-height: 100%;
+  overflow: hidden;
+  padding: 12px 8px 12px 0;
+  text-align: right;
+}
+
+.terraformLineNumberError {
+  color: #fca5a5;
+  font-weight: 900;
+}
+
+.terraformSyntaxHighlightLayer {
+  bottom: 0;
+  left: 42px;
+  overflow: hidden;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+  top: 0;
+  z-index: 1;
+}
+
+.terraformSyntaxHighlightCode {
+  box-sizing: border-box;
+  color: #d7e4f7;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  left: 0;
+  line-height: 1.6;
+  margin: 0;
+  min-width: max-content;
+  padding: 12px 10px;
+  position: absolute;
+  tab-size: 2;
+  top: 0;
+  white-space: pre;
+}
+
+.terraformHighlightedLine {
+  display: block;
+  min-height: 1.6em;
+  text-decoration-skip-ink: none;
+}
+
+.terraformHighlightedLineError {
+  text-decoration-color: #ef4444;
+  text-decoration-line: underline;
+  text-decoration-style: wavy;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+}
+
+.terraformTokenKeyword {
+  color: #f6c85f;
+}
+
+.terraformTokenIdentifier {
+  color: #7fd2ff;
+}
+
+.terraformTokenReference {
+  color: #5fe0c1;
+}
+
+.terraformTokenString {
+  color: #f0a77d;
+}
+
+.terraformTokenBrace {
+  color: #9bd7ff;
+}
+
+.terraformTokenOperator,
+.terraformTokenPlain {
+  color: #d6e3ee;
+}
+
+.terraformTokenNumber {
+  color: #ff8ec7;
+}
+
+.terraformTokenComment {
+  color: #73879a;
+}
+
+.terraformTextarea {
+  background: transparent;
+  border: 0;
+  box-sizing: border-box;
+  caret-color: #d7e4f7;
+  color: transparent;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  height: 100%;
+  line-height: 1.6;
+  max-height: 100%;
+  min-height: 0;
+  min-width: 0;
+  outline: none;
+  overflow: auto;
+  overflow-wrap: normal;
+  padding: 12px 10px;
+  resize: none;
+  scrollbar-gutter: stable;
+  tab-size: 2;
+  word-break: normal;
+  white-space: pre;
+  z-index: 2;
+}
+
+.terraformTextarea::placeholder {
+  color: #6d7788;
+}
+
+.terraformTextarea:focus {
+  box-shadow: inset 0 0 0 2px rgba(111, 76, 246, 0.62);
+}
+
+.terraformPreviewExplanationPanel {
+  background: #f8fafc;
+  border-top: 1px solid #dce3ee;
+  color: #172033;
+  display: grid;
+  flex: 0 0 auto;
+  gap: 7px;
+  max-height: 180px;
+  overflow: auto;
+  padding: 9px 10px;
+}
+
+.terraformPreviewExplanationHeader {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.terraformPreviewExplanationHeader > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.terraformPreviewExplanationHeader strong {
+  color: #243044;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.terraformPreviewExplanationHeader span {
+  color: #64748b;
+  font-size: 10.5px;
+  font-weight: 850;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.terraformPreviewExplanationActions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 6px;
+}
+
+.terraformPreviewExplanationHeader button {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  color: #243044;
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 900;
+  gap: 5px;
+  min-height: 28px;
+  padding: 0 8px;
+}
+
+.terraformPreviewExplanationHeader .terraformPreviewExplanationCloseButton {
+  justify-content: center;
+  min-width: 28px;
+  padding: 0;
+}
+
+.terraformPreviewExplanationHeader button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.terraformPreviewExplanationHeader button:not(:disabled):hover,
+.terraformPreviewExplanationHeader button:not(:disabled):focus-visible {
+  background: #eef2ff;
+  border-color: #c7d2fe;
+  outline: none;
+}
+
+.terraformPreviewExplanationNotice,
+.terraformPreviewExplanationError,
+.terraformPreviewExplanationResult p {
+  font-size: 11.5px;
+  line-height: 1.45;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.terraformPreviewExplanationNotice {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  color: #1d4ed8;
+  font-weight: 800;
+  padding: 7px 8px;
+}
+
+.terraformPreviewExplanationError {
+  background: #fff1f0;
+  border: 1px solid #ffd1cc;
+  border-radius: 6px;
+  color: #9f2a1d;
+  font-weight: 800;
+  padding: 7px 8px;
+}
+
+.terraformPreviewExplanationResult {
+  background: #ffffff;
+  border: 1px solid #dce3ee;
+  border-radius: 6px;
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  padding: 8px;
+}
+
+.terraformPreviewExplanationResult p {
+  color: #172033;
+  font-weight: 800;
+}
+
+.terraformPreviewExplanationResult ul {
+  display: grid;
+  gap: 5px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.terraformPreviewExplanationResult li {
+  align-items: start;
+  border-top: 1px solid #edf1f7;
+  display: grid;
+  gap: 6px;
+  grid-template-columns: minmax(108px, 0.72fr) minmax(0, 1.28fr);
+  min-width: 0;
+  padding-top: 5px;
+}
+
+.terraformPreviewExplanationResult li:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.terraformPreviewExplanationResult li strong {
+  color: #243044;
+  font-size: 11px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.terraformPreviewExplanationResult li span {
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.terraformPreviewExplanationStats {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.terraformPreviewExplanationStats span {
+  background: #eef2ff;
+  border-radius: 999px;
+  color: #3730a3;
+  font-size: 10.5px;
+  font-weight: 900;
+  padding: 4px 7px;
+}
+
+.terraformSourceLineHighlight {
+  background: rgba(59, 130, 246, 0.22);
+  border-bottom: 1px solid rgba(147, 197, 253, 0.78);
+  border-top: 1px solid rgba(147, 197, 253, 0.78);
+  left: 42px;
+  pointer-events: none;
+  position: absolute;
+  right: 10px;
+  z-index: 3;
+}
+
+.terraformBlockHighlightBox {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.44);
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px rgba(111, 76, 246, 0.22);
+  left: 50px;
+  pointer-events: none;
+  position: absolute;
+  right: 10px;
+  z-index: 4;
+}
+
+.terraformSaveBanner,
+.terraformSaveBannerError {
+  align-items: center;
+  display: flex;
+  font-size: 10.5px;
+  font-weight: 750;
+  gap: 6px;
+  justify-content: space-between;
+  line-height: 1.2;
+  min-height: 26px;
+  padding: 5px 8px;
+}
+
+.terraformSaveBanner span,
+.terraformSaveBannerError span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.terraformSaveBanner {
+  background: #2c2c2c;
+  color: #b7bec8;
+}
+
+.terraformSaveBannerError {
+  background: #f1434a;
+  color: #ffffff;
+}
+
+.terraformSaveBanner button,
+.terraformSaveBannerError button {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 900;
+  flex: 0 0 auto;
+  padding: 0;
+  text-decoration: underline;
+  white-space: nowrap;
+}
+
+.terraformSaveBanner button:focus-visible,
+.terraformSaveBannerError button:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+}
+
+.terraformIssueBanner {
+  align-items: center;
+  background: #fff7ed;
+  border-top: 1px solid #fed7aa;
+  color: #9a3412;
+  display: flex;
+  font-size: 11px;
+  font-weight: 850;
+  gap: 8px;
+  justify-content: space-between;
+  line-height: 1.25;
+  min-height: 32px;
+  padding: 7px 10px;
+}
+
+.terraformIssueBanner span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.terraformIssueBanner button {
+  background: #ffffff;
+  border: 1px solid #fdba74;
+  border-radius: 6px;
+  color: #9a3412;
+  cursor: pointer;
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 900;
+  min-height: 26px;
+  padding: 0 8px;
+}
+
+.terraformIssueBanner button:hover,
+.terraformIssueBanner button:focus-visible {
+  background: #ffedd5;
+  outline: none;
+}
+
+.serverSaveToast {
+  animation: serverSaveToastIn 180ms ease-out;
+  background: #ecfdf5;
+  border: 1px solid #bbf7d0;
+  border-left: 8px solid #22c55e;
+  border-radius: 10px;
+  box-shadow: 0 24px 64px rgba(21, 128, 61, 0.26);
+  color: #166534;
+  font-size: 25px;
+  font-weight: 900;
+  line-height: 1.3;
+  min-width: 380px;
+  max-width: min(520px, calc(100vw - 32px));
+  padding: 22px 30px;
+  pointer-events: none;
+  position: fixed;
+  right: 24px;
+  top: 56px;
+  z-index: 80;
+}
+
+.terraformDiagnostics {
+  background: #ffffff;
+  border-top: 1px solid #dce3ee;
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.issuesPanel {
+  background: #f8fbff;
+  color: #172033;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.issuesPanel .terraformDiagnostics {
+  align-content: start;
+  background: #f8fbff;
+  border-top: 0;
+  color: #172033;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px;
+  scrollbar-gutter: stable;
+}
+
+.terraformDiagnosticsHeader {
+  align-items: center;
+  color: #243044;
+  display: flex;
+  gap: 7px;
+}
+
+.terraformDiagnosticsHeader h3 {
+  font-size: 13px;
+  margin: 0;
+}
+
+.terraformIssueCount,
+.terraformIssueCountError {
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 900;
+  margin-left: auto;
+  min-width: 24px;
+  padding: 3px 7px;
+  text-align: center;
+}
+
+.terraformIssueCount {
+  background: #eef2ff;
+  color: #3730a3;
+}
+
+.terraformIssueCountError {
+  background: #fef2f2;
+  color: #b42318;
+}
+
+.terraformEmpty,
+.terraformNotice,
+.terraformError {
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 0;
+  padding: 9px 10px;
+}
+
+.terraformEmpty {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  color: #64748b;
+}
+
+.terraformNotice {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1d4ed8;
+  font-weight: 800;
+}
+
+.terraformError {
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  color: #9a3412;
+  font-weight: 800;
+}
+
+.terraformDiagnosticList {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.terraformDiagnosticList li {
+  background: #ffffff;
+  border: 1px solid #dce3ee;
+  border-left: 4px solid #64748b;
+  border-radius: 6px;
+  display: grid;
+  gap: 7px;
+  padding: 9px 10px;
+}
+
+.terraformDiagnosticList li[data-severity="error"] {
+  background: #fff7ed;
+  border-color: #fed7aa;
+  border-left-color: #dc2626;
+}
+
+.terraformDiagnosticList li[data-severity="warning"] {
+  background: #fffbeb;
+  border-color: #fde68a;
+  border-left-color: #f59e0b;
+}
+
+.terraformDiagnosticList strong {
+  color: #172033;
+  font-size: 11px;
+}
+
+.terraformDiagnosticList span {
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.terraformDiagnosticItemHeader {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.terraformDiagnosticSeverity,
+.terraformDiagnosticStale,
+.terraformDiagnosticMeta span {
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 900;
+  padding: 3px 6px;
+  white-space: nowrap;
+}
+
+.terraformDiagnosticSeverity {
+  background: #eef2ff;
+  color: #3730a3;
+}
+
+.terraformDiagnosticStale {
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.terraformDiagnosticMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.terraformDiagnosticMeta span {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  color: #475569;
+}
+
+.terraformDiagnosticAiButton {
+  align-items: center;
+  background: var(--bp-blue);
+  border: 1px solid var(--bp-blue);
+  border-radius: 6px;
+  color: #ffffff;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 900;
+  justify-content: center;
+  justify-self: start;
+  min-height: 28px;
+  padding: 0 9px;
+}
+
+.terraformDiagnosticAiButton:hover,
+.terraformDiagnosticAiButton:focus-visible {
+  background: color-mix(in srgb, var(--bp-blue) 88%, #000000);
+  border-color: color-mix(in srgb, var(--bp-blue) 88%, #000000);
+  outline: none;
+}
+
+.terraformDialogBackdrop {
+  align-items: center;
+  backdrop-filter: blur(6px);
+  background: rgba(15, 23, 42, 0.38);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 24px;
+  position: fixed;
+  z-index: 40;
+}
+
+.terraformDialog {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 22px 64px rgba(15, 23, 42, 0.28);
+  color: #111827;
+  display: grid;
+  gap: 14px;
+  max-width: 520px;
+  padding: 28px 34px;
+  width: min(100%, 520px);
+}
+
+.terraformDialog h2 {
+  font-size: 18px;
+  line-height: 1.25;
+  margin: 0;
+}
+
+.terraformDialog p {
+  color: #1f2937;
+  font-size: 15px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.terraformDialogStatus,
+.terraformDialogError {
+  border-radius: 7px;
+  font-size: 13px;
+  padding: 10px 12px;
+}
+
+.terraformDialogStatus {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1d4ed8;
+}
+
+.terraformDialogError {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+}
+
+.terraformDialogActions {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 8px;
+}
+
+.terraformDialogDangerButton,
+.terraformDialogSecondaryButton,
+.terraformDialogPrimaryButton {
+  border-radius: 7px;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 850;
+  font-size: 12px;
+  min-height: 34px;
+  padding: 0 12px;
+}
+
+.terraformDialogDangerButton:disabled,
+.terraformDialogSecondaryButton:disabled,
+.terraformDialogPrimaryButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.terraformDialogDangerButton {
+  background: #ef4444;
+  border: 1px solid #ef4444;
+  color: #ffffff;
+}
+
+.terraformDialogSecondaryButton {
+  background: var(--bp-blue-tint);
+  border: 1px solid var(--bp-line-strong);
+  color: var(--bp-blue);
+}
+
+.terraformDialogPrimaryButton {
+  background: var(--bp-blue);
+  border: 1px solid var(--bp-blue);
+  color: #ffffff;
+}
+
+.terraformDialogDangerButton:hover,
+.terraformDialogDangerButton:focus-visible {
+  background: #dc2626;
+  border-color: #dc2626;
+  outline: none;
+}
+
+.terraformDialogSecondaryButton:hover,
+.terraformDialogSecondaryButton:focus-visible {
+  background: color-mix(in srgb, var(--bp-blue-tint) 74%, var(--bp-blue));
+  outline: none;
+}
+
+.terraformDialogPrimaryButton:hover,
+.terraformDialogPrimaryButton:focus-visible {
+  background: color-mix(in srgb, var(--bp-blue) 88%, #000000);
+  border-color: color-mix(in srgb, var(--bp-blue) 88%, #000000);
+  outline: none;
+}
+
+@keyframes serverSaveToastIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.aiPanel {
+  align-content: start;
+  background: #ffffff;
+  color: #172033;
+  display: grid;
+  gap: 14px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.aiPanelHeader {
+  border-bottom: 1px solid #e3e9f2;
+  display: grid;
+  gap: 4px;
+  padding-bottom: 14px;
+}
+
+.aiPanelHeader span {
+  color: #6f4cf6;
+  font-size: 11px;
+  font-weight: 950;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.aiPanelHeader h2 {
+  color: #172033;
+  font-size: 18px;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.aiSection,
+.aiResultCard,
+.aiExplanation,
+.aiResultStack {
+  display: grid;
+  gap: 10px;
+}
+
+.aiSection {
+  border-top: 1px solid #e3e9f2;
+  padding-top: 14px;
+}
+
+.aiSection:first-of-type {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.aiField {
+  color: #334155;
+  display: grid;
+  font-size: 12px;
+  font-weight: 850;
+  gap: 6px;
+}
+
+.aiField textarea,
+.aiField input {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  color: #172033;
+  font: inherit;
+  min-width: 0;
+  padding: 8px 10px;
+  width: 100%;
+}
+
+.aiField textarea {
+  line-height: 1.45;
+  resize: vertical;
+}
+
+.aiField textarea:focus,
+.aiField input:focus {
+  border-color: #2f6db3;
+  box-shadow: 0 0 0 3px rgb(47 109 179 / 16%);
+  outline: none;
+}
+
+.aiInlineFields {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.aiPrimaryButton,
+.aiSecondaryButton {
+  align-items: center;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 850;
+  gap: 6px;
+  justify-content: center;
+  min-height: 34px;
+  padding: 0 10px;
+}
+
+.aiActionRow {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.aiActionRow .aiPrimaryButton,
+.aiActionRow .aiSecondaryButton {
+  min-width: 0;
+  padding: 7px 8px;
+  white-space: normal;
+}
+
+.aiPrimaryButton {
+  background: var(--bp-blue);
+  border: 1px solid var(--bp-blue);
+  color: #ffffff;
+}
+
+.aiSecondaryButton {
+  background: #ffffff;
+  border: 1px solid var(--bp-line-strong);
+  color: var(--bp-blue);
+}
+
+.aiPrimaryButton:disabled,
+.aiSecondaryButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.aiPrimaryButton:not(:disabled):hover,
+.aiPrimaryButton:not(:disabled):focus-visible {
+  background: color-mix(in srgb, var(--bp-blue) 88%, #000000);
+  border-color: color-mix(in srgb, var(--bp-blue) 88%, #000000);
+  outline: none;
+}
+
+.aiSecondaryButton:not(:disabled):hover,
+.aiSecondaryButton:not(:disabled):focus-visible {
+  background: var(--bp-blue-tint);
+  outline: none;
+}
+
+.aiResultCard {
+  background: #f8fafc;
+  border: 1px solid #dce3ee;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.aiResultHeader,
+.aiActionHeader,
+.aiExplanationHeader {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.aiResultHeader h3,
+.aiActionHeader h3 {
+  color: #172033;
+  font-size: 13px;
+  line-height: 1.25;
+  margin: 0;
+}
+
+.aiResultHeader span,
+.aiExplanationHeader span {
+  background: var(--bp-blue-tint);
+  border-radius: 999px;
+  color: var(--bp-blue);
+  font-size: 10.5px;
+  font-weight: 900;
+  padding: 4px 7px;
+  white-space: nowrap;
+}
+
+.aiExplanation {
+  background: #f4f7fb;
+  border: 1px solid #dfe7f4;
+  border-radius: 7px;
+  padding: 10px;
+}
+
+.aiWarning {
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 7px;
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+}
+
+.aiExplanationHeader strong,
+.aiWarning strong,
+.aiListBlock strong {
+  color: #172033;
+  font-size: 11.5px;
+  font-weight: 950;
+}
+
+.aiExplanation p,
+.aiResultSummary,
+.aiHint,
+.aiNotice,
+.aiError,
+.aiStaleNotice {
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.aiExplanation p,
+.aiResultSummary {
+  color: #334155;
+}
+
+.aiTerraformPreviewAssessment {
+  gap: 14px;
+}
+
+.aiTerraformPreviewAssessment .aiResultSummary {
+  color: #172033;
+  font-size: 15px;
+  font-weight: 850;
+  line-height: 1.55;
+}
+
+.aiTerraformPreviewConclusion {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  display: grid;
+  gap: 7px;
+  padding: 13px 14px;
+}
+
+.aiTerraformPreviewConclusion strong {
+  color: #1d4ed8;
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.aiTerraformPreviewConclusion p {
+  color: #172033;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.aiTerraformPreviewAgentGrid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.aiTerraformPreviewAgentCard {
+  background: #ffffff;
+  border: 1px solid #d7e3f3;
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px;
+}
+
+.aiTerraformPreviewAgentCard span {
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.aiTerraformPreviewAgentCard strong {
+  color: #172033;
+  font-size: 14px;
+  font-weight: 950;
+}
+
+.aiTerraformPreviewAgentCard p {
+  color: #334155;
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.aiTerraformPreviewAgentCard p:last-child {
+  color: #475569;
+}
+
+.terraformIssueGuidanceList {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+}
+
+.terraformIssueFixPlan {
+  background: #f8fbff;
+  border: 1px solid #cfe0f4;
+  border-radius: 6px;
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+}
+
+.terraformIssueFixPlanHeader {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.terraformIssueFixPlanHeader strong {
+  color: #172033;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.terraformIssueFixPlanHeader span {
+  color: #1f4f82;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.terraformIssueFixPlan p,
+.terraformIssueFixPlan li {
+  color: #334155;
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.terraformIssueFixPlan .terraformIssueFixPlanNotice {
+  color: #9a3412;
+  font-weight: 850;
+}
+
+.terraformIssueCodePreview {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.terraformIssueCodeFrame {
+  background: #ffffff;
+  border: 1px solid #d7e3f3;
+  border-radius: 6px;
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 8px;
+}
+
+.terraformIssueCodeFrame strong {
+  color: #172033;
+  font-size: 11px;
+  font-weight: 950;
+}
+
+.terraformIssueCodeFrame pre {
+  background: #0f172a;
+  border-radius: 4px;
+  color: #e2e8f0;
+  font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  margin: 0;
+  min-width: 0;
+  overflow-x: auto;
+  padding: 8px;
+  white-space: pre;
+}
+
+.terraformIssueCodePreview section {
+  background: #ffffff;
+  border: 1px solid #d7e3f3;
+  border-radius: 6px;
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 8px;
+}
+
+.terraformIssueCodePreview strong {
+  color: #172033;
+  font-size: 11px;
+  font-weight: 950;
+}
+
+.terraformIssueCodePreview pre {
+  background: #0f172a;
+  border-radius: 4px;
+  color: #e2e8f0;
+  font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  margin: 0;
+  min-width: 0;
+  overflow-x: auto;
+  padding: 8px;
+  white-space: pre;
+}
+
+@media (max-width: 720px) {
+  .terraformIssueCodePreview {
+    grid-template-columns: 1fr;
+  }
+
+  .aiTerraformPreviewAgentGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.terraformIssueFixPlan ol {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.terraformIssueRawMessage {
+  color: rgba(30, 41, 59, 0.78);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.terraformIssueGuidanceList div {
+  display: grid;
+  gap: 2px;
+}
+
+.terraformIssueGuidanceList dt {
+  color: #172033;
+  font-size: 11px;
+  font-weight: 950;
+}
+
+.terraformIssueGuidanceList dd {
+  color: #334155;
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.terraformIssuePillars {
+  display: grid;
+  gap: 7px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.terraformIssuePillars section {
+  background: #ffffff;
+  border: 1px solid #dfe7f4;
+  border-radius: 6px;
+  display: grid;
+  gap: 4px;
+  padding: 8px;
+}
+
+.terraformIssuePillars strong {
+  color: #172033;
+  font-size: 11px;
+  font-weight: 950;
+}
+
+.terraformIssuePillars p,
+.terraformIssuePillars span,
+.terraformIssueActions li {
+  color: #475569;
+  font-size: 11px;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.terraformIssuePillars span {
+  color: #1f4f82;
+  font-weight: 850;
+}
+
+.terraformIssueActions {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 16px;
+}
+
+.aiHint {
+  color: #64748b;
+}
+
+.aiNotice,
+.aiStaleNotice {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  color: #1d4ed8;
+  font-weight: 800;
+  padding: 9px 10px;
+}
+
+.aiStaleNotice {
+  background: #fff7ed;
+  border-color: #fed7aa;
+  color: #9a3412;
+}
+
+.aiError {
+  background: #fff1f0;
+  border: 1px solid #ffd1cc;
+  border-radius: 6px;
+  color: #9f2a1d;
+  font-weight: 800;
+  padding: 9px 10px;
+}
+
+.aiWarning ul {
+  display: grid;
+  gap: 7px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.aiWarning li {
+  border-top: 1px solid #fed7aa;
+  display: grid;
+  gap: 3px;
+  padding-top: 7px;
+}
+
+.aiWarning li:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.aiWarning span {
+  color: #9a3412;
+  font-size: 11px;
+  font-weight: 950;
+}
+
+.aiWarning p {
+  color: #7c2d12;
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.aiSafetyFindingCard {
+  background: #ffffff;
+  border: 1px solid #e3e9f2;
+  border-left: 4px solid #f59e0b;
+  border-radius: 7px;
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 11px;
+}
+
+.aiSafetyFindingCard[data-severity="high"] {
+  border-left-color: #dc2626;
+}
+
+.aiSafetyFindingCard[data-severity="medium"] {
+  border-left-color: #f59e0b;
+}
+
+.aiSafetyFindingCard[data-severity="low"] {
+  border-left-color: #16a34a;
+}
+
+.aiSafetyFindingHeader {
+  align-items: start;
+  display: grid;
+  gap: 5px;
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.aiSafetyFindingHeader span {
+  color: #9a3412;
+  font-size: 10px;
+  font-weight: 950;
+  line-height: 1.4;
+}
+
+.aiSafetyFindingCard[data-severity="high"] .aiSafetyFindingHeader span {
+  color: #b91c1c;
+}
+
+.aiSafetyFindingCard[data-severity="medium"] .aiSafetyFindingHeader span {
+  color: #9a3412;
+}
+
+.aiSafetyFindingCard[data-severity="low"] .aiSafetyFindingHeader span {
+  color: #15803d;
+}
+
+.aiSafetyFindingHeader h3 {
+  color: #172033;
+  font-size: 13px;
+  line-height: 1.35;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.aiSafetyFindingMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.aiSafetyFindingMeta span {
+  background: #f4f7fb;
+  border: 1px solid #dce3ee;
+  border-radius: 999px;
+  color: #526174;
+  font-size: 10.5px;
+  font-weight: 850;
+  padding: 4px 7px;
+}
+
+.aiSafetyFindingDetails {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.aiSafetyFindingDetails div {
+  display: grid;
+  gap: 3px;
+}
+
+.aiSafetyFindingDetails dt {
+  color: #475569;
+  font-size: 10px;
+  font-weight: 950;
+}
+
+.aiSafetyFindingDetails dd {
+  color: #172033;
+  font-size: 11.5px;
+  line-height: 1.45;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.aiSafetyFindingSteps {
+  display: grid;
+  gap: 4px;
+  list-style: disc;
+  margin: 0;
+  padding-left: 16px;
+}
+
+.aiSafetyFindingSteps li {
+  color: #475569;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.aiListBlock {
+  display: grid;
+  gap: 5px;
+}
+
+.aiListBlock ul {
+  display: grid;
+  gap: 5px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.aiListBlock li {
+  border-top: 1px solid #dce3ee;
+  color: #475569;
+  font-size: 11.5px;
+  line-height: 1.45;
+  padding-top: 5px;
+}
+
+.aiListBlock li:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.aiSimulationResult {
+  gap: 12px;
+}
+
+.aiSimulationGrid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.aiSimulationCard {
+  background: #ffffff;
+  border: 1px solid var(--bp-line);
+  border-radius: var(--bp-r);
+  box-shadow: 0 8px 20px rgba(31, 61, 88, 0.06);
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+}
+
+.aiSimulationCard > strong {
+  color: var(--bp-blue);
+  font-size: 11.5px;
+  font-weight: 950;
+}
+
+.aiSimulationCard ul {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.aiSimulationCard li {
+  border-top: 1px solid #e3e9f2;
+  display: grid;
+  gap: 3px;
+  padding-top: 8px;
+}
+
+.aiSimulationCard li:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.aiSimulationCard li span {
+  color: var(--bp-ink);
+  font-family: var(--bp-mono);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.aiSimulationCard li p {
+  color: #4a5d72;
+  font-size: 12px;
+  line-height: 1.48;
+  margin: 0;
+}
+
+.aiSimulationCostMeta {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.aiSimulationCostMeta span {
+  background: #eef6ff;
+  border: 1px solid #c9ddf3;
+  border-radius: 999px;
+  color: var(--bp-blue);
+  font-size: 11px;
+  font-weight: 900;
+  padding: 4px 7px;
+}
+
+.aiChatLauncher {
+  align-items: center;
+  background: var(--bp-blue);
+  border: 1px solid var(--bp-blue);
+  border-radius: 999px;
+  bottom: 24px;
+  box-shadow: 0 18px 44px color-mix(in srgb, var(--bp-blue) 24%, transparent);
+  color: #ffffff;
+  cursor: pointer;
+  display: inline-flex;
+  height: 56px;
+  justify-content: center;
+  position: fixed;
+  right: 24px;
+  transition:
+    background 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.15s ease;
+  width: 56px;
+}
+
+.aiChatLauncher[data-right-panel-open="true"] {
+  right: calc(var(--right-panel-width) + 24px);
+}
+
+.aiChatLauncher:hover,
+.aiChatLauncher:focus-visible {
+  background: color-mix(in srgb, var(--bp-blue) 88%, #000000);
+  box-shadow: 0 22px 54px color-mix(in srgb, var(--bp-blue) 30%, transparent);
+  outline: none;
+  transform: translateY(-1px);
+}
+
+.aiChatOverlay {
+  inset: 0;
+  pointer-events: auto;
+  position: fixed;
+}
+
+.aiChatDock {
+  background: #ffffff;
+  border: 1px solid var(--bp-line);
+  border-radius: var(--bp-r);
+  bottom: 24px;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.24);
+  color: #172033;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  max-height: min(82vh, 760px);
+  min-height: min(590px, calc(100vh - 48px));
+  min-width: 0;
+  overflow: hidden;
+  position: fixed;
+  right: 24px;
+  width: min(860px, calc(100vw - 48px));
+}
+
+.aiChatDock[data-right-panel-open="true"] {
+  right: calc(var(--right-panel-width) + 24px);
+  width: min(920px, calc(100vw - var(--right-panel-width) - 48px));
+}
+
+.aiChatHeader {
+  align-items: center;
+  border-bottom: 1px solid #e3e9f2;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  min-height: 58px;
+  padding: 12px 14px;
+}
+
+.aiChatHeader > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.aiChatHeader span {
+  color: var(--bp-blue);
+  font-size: 11px;
+  font-weight: 950;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.aiChatHeader h2 {
+  color: #172033;
+  font-size: 17px;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.aiChatCloseButton {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  color: #243044;
+  cursor: pointer;
+  display: inline-flex;
+  height: 32px;
+  justify-content: center;
+  padding: 0;
+  width: 32px;
+}
+
+.aiChatCloseButton:hover,
+.aiChatCloseButton:focus-visible {
+  background: var(--bp-blue-tint);
+  border-color: color-mix(in srgb, var(--bp-blue) 35%, var(--bp-line));
+  color: var(--bp-blue);
+  outline: none;
+}
+
+.aiChatTabBar {
+  align-items: center;
+  background: #ffffff;
+  border-bottom: 1px solid #e3e9f2;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 10px 14px;
+}
+
+.aiChatTabs {
+  background: var(--bp-paper-2);
+  border: 1px solid var(--bp-line);
+  border-radius: 7px;
+  display: inline-flex;
+  gap: 3px;
+  padding: 3px;
+}
+
+.aiChatTabButton {
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  color: var(--bp-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 900;
+  min-height: 30px;
+  padding: 0 12px;
+}
+
+.aiChatTabButton[aria-selected="true"] {
+  background: #ffffff;
+  box-shadow: 0 1px 4px rgba(23, 32, 51, 0.14);
+  color: var(--bp-blue);
+}
+
+.aiChatClearButton {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid var(--bp-line);
+  border-radius: 6px;
+  color: var(--bp-muted);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 850;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 10px;
+  white-space: nowrap;
+}
+
+.aiChatClearButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.aiChatClearButton:not(:disabled):hover,
+.aiChatClearButton:not(:disabled):focus-visible {
+  background: #fff7f5;
+  border-color: #f2b7ad;
+  color: #a83225;
+  outline: none;
+}
+
+.aiChatControls {
+  align-items: end;
+  background: var(--bp-paper-2);
+  border-bottom: 1px solid #e3e9f2;
+  display: none;
+  gap: 8px;
+  justify-content: flex-start;
+  min-width: 0;
+  padding: 10px 14px;
+}
+
+.aiChatControls .aiField {
+  gap: 5px;
+}
+
+.aiChatTranscript {
+  align-content: start;
+  background: linear-gradient(180deg, #f7fbff 0%, var(--bp-paper-2) 100%);
+  display: grid;
+  gap: 16px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 18px;
+  scrollbar-gutter: stable;
+}
+
+.aiChatSimulationIntro {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid var(--bp-line);
+  border-radius: var(--bp-r);
+  box-shadow: 0 10px 24px rgba(31, 61, 88, 0.08);
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 12px;
+}
+
+.aiChatSimulationIntro strong {
+  color: var(--bp-ink);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.aiChatSimulationIntro .aiPrimaryButton {
+  flex: 0 0 auto;
+  min-width: 132px;
+  white-space: nowrap;
+}
+
+.aiChatAssistantMessage,
+.aiChatUserMessage {
+  display: grid;
+  gap: 8px;
+  max-width: min(78%, 760px);
+  min-width: 0;
+}
+
+.aiChatAssistantMessage {
+  justify-self: start;
+}
+
+.aiChatUserMessage {
+  justify-self: end;
+}
+
+.aiChatAssistantMessage span,
+.aiChatUserMessage span {
+  color: #64748b;
+  font-size: 10.5px;
+  font-weight: 900;
+}
+
+.aiChatUserMessage span {
+  justify-self: end;
+}
+
+.aiChatAssistantMessage p,
+.aiChatUserMessage p {
+  border: 1px solid var(--bp-line);
+  border-radius: var(--bp-r);
+  font-size: 13px;
+  line-height: 1.62;
+  margin: 0;
+  overflow-wrap: anywhere;
+  padding: 14px 16px;
+  white-space: pre-line;
+}
+
+.aiChatAssistantMessage p {
+  background: #ffffff;
+  color: #263549;
+  box-shadow: 0 10px 24px rgba(31, 61, 88, 0.08);
+}
+
+.aiChatAssistantMessage[data-kind="question"] p {
+  background: color-mix(in srgb, var(--bp-blue-tint) 46%, #ffffff);
+  border-color: color-mix(in srgb, var(--bp-blue) 36%, var(--bp-line));
+  box-shadow: inset 4px 0 0 var(--bp-blue);
+}
+
+.aiChatAssistantMessage[data-kind="error"] p {
+  background: #fff1f0;
+  border-color: #ffd1cc;
+  color: #9f2a1d;
+}
+
+.aiChatUserMessage p {
+  background: var(--bp-blue);
+  border-color: var(--bp-blue);
+  color: #ffffff;
+}
+
+.aiChatSuggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  justify-content: flex-start;
+}
+
+.aiChatSuggestionButton {
+  background: #ffffff;
+  border: 1px solid var(--bp-line);
+  border-radius: 6px;
+  color: var(--bp-blue);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 850;
+  line-height: 1.35;
+  max-width: 100%;
+  min-height: 34px;
+  overflow-wrap: anywhere;
+  padding: 7px 10px;
+  text-align: left;
+}
+
+.aiChatSuggestionButton:hover,
+.aiChatSuggestionButton:focus-visible {
+  background: var(--bp-blue-tint);
+  border-color: color-mix(in srgb, var(--bp-blue) 44%, var(--bp-line));
+  outline: none;
+}
+
+.aiChatSuggestionButtonSelected {
+  background: color-mix(in srgb, var(--bp-blue-tint) 72%, #ffffff);
+  border-color: var(--bp-blue);
+  color: var(--bp-blue);
+}
+
+.aiChatSuggestionButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.aiChatSelectionSubmitButton {
+  background: var(--bp-blue);
+  border: 1px solid var(--bp-blue);
+  border-radius: var(--bp-r);
+  color: #ffffff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 850;
+  line-height: 1.35;
+  min-height: 36px;
+  padding: 8px 13px;
+}
+
+.aiChatSelectionSubmitButton:hover,
+.aiChatSelectionSubmitButton:focus-visible {
+  background: color-mix(in srgb, var(--bp-blue) 88%, #000000);
+  outline: none;
+}
+
+.aiChatSelectionSubmitButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.aiChatDraftCard {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  justify-self: stretch;
+  padding: 12px;
+}
+
+.aiSafetyNotice {
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 7px;
+  display: grid;
+  gap: 6px;
+  padding: 9px 10px;
+}
+
+.aiSafetyNotice p {
+  color: #7c2d12;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.aiChatComposer {
+  background: #ffffff;
+  border-top: 1px solid #e3e9f2;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  padding: 12px 16px 16px;
+}
+
+.aiChatDock[data-chat-tab="errors"] .aiChatComposer,
+.aiChatDock[data-chat-tab="simulation"] .aiChatComposer {
+  display: none;
+}
+
+.aiChatInput {
+  color: #334155;
+  display: grid;
+  font-size: 12px;
+  font-weight: 850;
+  gap: 6px;
+  min-width: 0;
+}
+
+.aiChatInput textarea {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+  color: #172033;
+  font: inherit;
+  line-height: 1.45;
+  max-height: 132px;
+  min-height: 68px;
+  min-width: 0;
+  padding: 9px 10px;
+  resize: vertical;
+  width: 100%;
+}
+
+.aiChatInput textarea:focus {
+  border-color: #2f6db3;
+  box-shadow: 0 0 0 3px rgb(47 109 179 / 16%);
+  outline: none;
+}
+
+.aiChatVoiceButton {
+  align-items: center;
+  align-self: end;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: var(--bp-r);
+  color: #1d4f86;
+  cursor: pointer;
+  display: inline-flex;
+  justify-content: center;
+  min-height: 68px;
+  min-width: 48px;
+  padding: 0 12px;
+}
+
+.aiChatVoiceButton[data-listening="true"] {
+  background: #eaf2fc;
+  border-color: #2f6db3;
+  box-shadow: 0 0 0 3px rgb(47 109 179 / 14%);
+  color: #1d4f86;
+}
+
+.aiChatVoiceButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.aiChatVoiceButton:not(:disabled):hover,
+.aiChatVoiceButton:not(:disabled):focus-visible {
+  background: #f2f7fd;
+  border-color: #2f6db3;
+  outline: none;
+}
+
+.aiChatSendButton {
+  align-items: center;
+  align-self: end;
+  background: var(--bp-blue);
+  border: 1px solid var(--bp-blue);
+  border-radius: var(--bp-r);
+  color: #ffffff;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 900;
+  gap: 6px;
+  justify-content: center;
+  min-height: 68px;
+  padding: 0 14px;
+  white-space: nowrap;
+}
+
+.aiChatSendButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.aiChatSendButton:not(:disabled):hover,
+.aiChatSendButton:not(:disabled):focus-visible {
+  background: color-mix(in srgb, var(--bp-blue) 88%, #000000);
+  border-color: color-mix(in srgb, var(--bp-blue) 88%, #000000);
+  outline: none;
+}
+
+.aiChatVoiceStatus {
+  color: #475569;
+  font-size: 11.5px;
+  font-weight: 800;
+  grid-column: 1 / -1;
+  line-height: 1.35;
+  margin: -2px 0 0;
+}
+
+.deploymentPanel {
+  display: grid;
+  gap: 16px;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
+  max-width: 100%;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  padding: 16px;
+  width: 100%;
+}
+
+.deploymentPanelFullscreenHost {
+  display: contents;
+}
+
+.deploymentPanelContent {
+  align-content: start;
+  display: grid;
+  gap: 16px;
+  max-width: 100%;
+  min-height: 0;
+  min-width: 0;
+  overflow-y: auto;
+  padding-right: 2px;
+  scrollbar-gutter: stable;
+  width: 100%;
+}
+
+.deploymentHeader {
+  border-bottom: 1px solid #e3e9f2;
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding-bottom: 14px;
+}
+
+.deploymentHeaderTop {
+  align-items: flex-start;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.deploymentHeaderTop > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.deploymentHeader h2 {
+  color: #172033;
+  font-size: 18px;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.deploymentHeader span {
+  color: #68758b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.deploymentExpandButton {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  color: #243044;
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 34px;
+  justify-content: center;
+  width: 34px;
+}
+
+.deploymentExpandButton:hover,
+.deploymentExpandButton:focus-visible {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  outline: none;
+}
+
+.deploymentSection {
+  border-top: 1px solid #e3e9f2;
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding-top: 14px;
+}
+
+.deploymentSection h3 {
+  color: #172033;
+  font-size: 14px;
+  margin: 0;
+}
+
+.deploymentSectionHeader {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.deploymentHeaderActions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.deploymentActionGroup {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  min-width: 0;
+}
+
+.deploymentActionItem {
+  align-content: start;
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.deploymentActionItem .deploymentSecondaryButton {
+  justify-self: start;
+}
+
+.deploymentActionItem p {
+  color: #52657f;
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.deploymentStagePanel {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+
+.deploymentStageStepper {
+  background: #ffffff;
+  border: 1px solid #d8e1ee;
+  border-radius: 12px;
+  display: grid;
+  gap: 0;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  list-style: none;
+  margin: 0;
+  min-height: 150px;
+  min-width: 0;
+  padding: 24px;
+}
+
+.deploymentStageStep {
+  align-content: start;
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  min-width: 0;
+  position: relative;
+  text-align: center;
+}
+
+.deploymentStageStep + .deploymentStageStep::before {
+  background: #d8e1ee;
+  content: "";
+  height: 4px;
+  left: calc(-50% + 48px);
+  position: absolute;
+  top: 30px;
+  width: calc(100% - 96px);
+}
+
+.deploymentStageDot {
+  align-items: center;
+  background: #eef2f7;
+  border: 1px solid #d8e1ee;
+  border-radius: 999px;
+  color: #172033;
+  display: inline-flex;
+  font-size: 22px;
+  font-weight: 900;
+  height: 64px;
+  justify-content: center;
+  position: relative;
+  width: 64px;
+  z-index: 1;
+}
+
+.deploymentStageLabel {
+  color: #172033;
+  font-size: 16px;
+  font-weight: 900;
+  line-height: 1.25;
+  min-width: 0;
+}
+
+.deploymentStageStepStatus {
+  color: #526174;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.35;
+  min-height: 15px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.deploymentStageStep[data-state="active"] .deploymentStageDot {
+  background: #2563eb;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 6px rgba(37, 99, 235, 0.16);
+  color: #ffffff;
+}
+
+.deploymentStageStep[data-state="done"] .deploymentStageDot {
+  background: #0f766e;
+  border-color: #0f766e;
+  color: #ffffff;
+}
+
+.deploymentStageStep[data-state="error"] .deploymentStageDot {
+  background: #fee2e2;
+  border-color: #f87171;
+  color: #991b1b;
+}
+
+.deploymentStageStep[data-state="idle"] .deploymentStageDot {
+  background: #ffffff;
+  border-color: #dcdee0;
+  color: #64748b;
+}
+
+.deploymentStageActions {
+  display: grid;
+  gap: 32px;
+  grid-template-columns: minmax(0, 1fr) 352px;
+  min-width: 0;
+}
+
+.deploymentStageActionCard {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #d8e1ee;
+  border-radius: 8px;
+  display: grid;
+  gap: 20px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 238px;
+  min-width: 0;
+  padding: 26px;
+}
+
+.deploymentStageActionCard[data-state="active"] {
+  background: #f8fbff;
+  border-color: #2563eb;
+}
+
+.deploymentStageActionCard[data-state="done"] {
+  background: #f0fdfa;
+  border-color: #0f766e;
+}
+
+.deploymentStageActionCard[data-state="error"] {
+  background: #fef2f2;
+  border-color: #f87171;
+}
+
+.deploymentStageActionCard[data-state="idle"] {
+  background: #f8fafc;
+}
+
+.deploymentStageBody {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.deploymentStageBody h3 {
+  color: #172033;
+  font-size: 24px;
+  font-weight: 900;
+  line-height: 1.18;
+  margin: 0;
+}
+
+.deploymentStageStatus {
+  color: #526174;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.35;
+  margin: 0;
+  min-height: 0;
+  overflow-wrap: anywhere;
+}
+
+.deploymentStageSettings {
+  display: grid;
+  gap: 8px;
+  grid-column: 1 / 3;
+  grid-row: 2;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-width: 0;
+}
+
+.deploymentStageSummaryPanel {
+  align-content: start;
+  background: #fafafa;
+  border: 1px solid #f0f0f3;
+  border-radius: 12px;
+  color: #171717;
+  display: grid;
+  gap: 20px;
+  min-height: 238px;
+  min-width: 0;
+  padding: 26px;
+}
+
+.deploymentStageSummaryPanel h3 {
+  color: #171717;
+  font-size: 18px;
+  font-weight: 900;
+  line-height: 1.25;
+  margin: 0 0 8px;
+}
+
+.deploymentStageSummaryPanel p {
+  color: #60646c;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.deploymentStageSummaryRows {
+  border-top: 1px solid #dcdee0;
+  display: grid;
+  gap: 16px;
+  padding-top: 18px;
+}
+
+.deploymentStageSummaryRows > div {
+  align-items: start;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.deploymentStageSummaryRows span {
+  color: #60646c;
+  font-size: 12px;
+  font-weight: 750;
+  min-width: 0;
+}
+
+.deploymentStageSummaryRows strong {
+  color: #171717;
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1.35;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.deploymentStageSummaryNotice {
+  background: #eef6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 10px;
+  color: #1e3a8a;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.45;
+  padding: 12px 14px;
+}
+
+.deploymentStageActionCard > .deploymentPrimaryButton,
+.deploymentStageActionCard > .deploymentSecondaryButton {
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: end;
+  min-width: 118px;
+  white-space: nowrap;
+}
+
+.deploymentStageFooter {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  grid-column: 1 / 3;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.deploymentStageNextButton {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #d8e1ee;
+  border-radius: 8px;
+  color: #172033;
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 900;
+  justify-content: center;
+  min-height: 38px;
+  min-width: 118px;
+  padding: 0 14px;
+  white-space: nowrap;
+}
+
+.deploymentStageNextButton:not(:disabled):hover,
+.deploymentStageNextButton:not(:disabled):focus-visible {
+  background: #f8fafc;
+  border-color: #94a3b8;
+  outline: none;
+}
+
+.deploymentStageNextButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.deploymentStageAlert {
+  background: #fef2f2;
+  border: 1px solid #f87171;
+  border-radius: 8px;
+  color: #991b1b;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.45;
+  margin: 0;
+  min-height: 38px;
+  overflow-wrap: anywhere;
+  padding: 10px 12px;
+}
+
+@media (max-width: 760px) {
+  .deploymentStageStepper {
+    min-height: 132px;
+    padding: 18px 12px;
+  }
+
+  .deploymentStageDot {
+    font-size: 18px;
+    height: 52px;
+    width: 52px;
+  }
+
+  .deploymentStageStep + .deploymentStageStep::before {
+    left: calc(-50% + 40px);
+    top: 25px;
+    width: calc(100% - 80px);
+  }
+
+  .deploymentStageStepStatus {
+    display: none;
+  }
+
+  .deploymentStageActions {
+    gap: 12px;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .deploymentStageActionCard {
+    align-items: stretch;
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 0;
+    padding: 18px;
+  }
+
+  .deploymentStageSummaryPanel {
+    min-height: 0;
+    padding: 18px;
+  }
+
+  .deploymentStageActionCard > .deploymentPrimaryButton,
+  .deploymentStageActionCard > .deploymentSecondaryButton {
+    grid-column: 1 / -1;
+    grid-row: auto;
+    justify-self: stretch;
+    min-height: 42px;
+    min-width: 0;
+  }
+
+  .deploymentStageSettings {
+    grid-column: 1 / -1;
+    grid-row: auto;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .deploymentStageFooter {
+    grid-column: 1 / -1;
+  }
+
+  .deploymentStageNextButton {
+    min-width: 0;
+    width: 100%;
+  }
+}
+
+.deploymentField {
+  color: #334155;
+  display: grid;
+  font-size: 12px;
+  font-weight: 850;
+  gap: 6px;
+}
+
+.deploymentPrimaryButton,
+.deploymentSecondaryButton,
+.deploymentDangerButton {
+  align-items: center;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 850;
+  gap: 5px;
+  justify-content: center;
+  line-height: 1.25;
+  min-height: 34px;
+  padding: 0 10px;
+  text-align: center;
+  white-space: normal;
+}
+
+.deploymentPrimaryButton {
+  background: #1f6feb;
+  border: 1px solid #1f6feb;
+  color: #ffffff;
+}
+
+.deploymentSecondaryButton {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: #243044;
+}
+
+.deploymentDangerButton {
+  background: #dc2626;
+  border: 1px solid #dc2626;
+  color: #ffffff;
+}
+
+.deploymentPrimaryButton:disabled,
+.deploymentSecondaryButton:disabled,
+.deploymentDangerButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.76;
+}
+
+.deploymentDangerButton:not(:disabled):hover,
+.deploymentDangerButton:not(:disabled):focus-visible {
+  background: #b91c1c;
+  border-color: #b91c1c;
+  outline: none;
+}
+
+.deploymentPrimaryButton svg,
+.deploymentSecondaryButton svg,
+.deploymentDangerButton svg {
+  flex: 0 0 auto;
+}
+
+.deploymentButtonText {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.deploymentPrimaryButton .deploymentButtonText,
+.deploymentDangerButton .deploymentButtonText {
+  color: #ffffff;
+}
+
+.deploymentPrimaryButton svg,
+.deploymentDangerButton svg {
+  color: #ffffff;
+}
+
+.deploymentHint {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.deploymentStaleNotice {
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 6px;
+  color: #9a3412;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.45;
+  margin: 0;
+  padding: 8px 10px;
+}
+
+.deploymentPreflightSummary {
+  background: #f8fafc;
+  border: 1px solid #dce3ee;
+  border-radius: 6px;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px;
+}
+
+.deploymentPreflightSummary p {
+  color: #334155;
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.deploymentPreflightStats {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  min-width: 0;
+}
+
+.deploymentPreflightStats span {
+  background: #ffffff;
+  border: 1px solid #dce3ee;
+  border-radius: 5px;
+  color: #64748b;
+  display: grid;
+  font-size: 10.5px;
+  font-weight: 850;
+  gap: 2px;
+  min-width: 0;
+  padding: 6px 7px;
+}
+
+.deploymentPreflightStats strong {
+  color: #172033;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.deploymentPreflightFindings {
+  display: grid;
+  gap: 6px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.deploymentPreflightFindings > li {
+  align-items: start;
+  background: #ffffff;
+  border: 1px solid #e3e9f2;
+  border-left: 4px solid #f59e0b;
+  border-radius: 6px;
+  display: grid;
+  gap: 5px;
+  grid-template-columns: auto minmax(0, 1fr);
+  min-width: 0;
+  padding: 7px 8px;
+}
+
+.deploymentPreflightFindings > li[data-severity="high"] {
+  border-left-color: #dc2626;
+}
+
+.deploymentPreflightFindings > li[data-severity="medium"] {
+  border-left-color: #f59e0b;
+}
+
+.deploymentPreflightFindings > li[data-severity="low"] {
+  border-left-color: #16a34a;
+}
+
+.deploymentPreflightFindings > li > span {
+  color: #9a3412;
+  font-size: 10px;
+  font-weight: 950;
+  line-height: 1.4;
+}
+
+.deploymentPreflightFindings > li[data-severity="high"] > span {
+  color: #b91c1c;
+}
+
+.deploymentPreflightFindings > li[data-severity="medium"] > span {
+  color: #9a3412;
+}
+
+.deploymentPreflightFindings > li[data-severity="low"] > span {
+  color: #15803d;
+}
+
+.deploymentPreflightFindings > li > strong {
+  color: #172033;
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.deploymentPreflightFindings > li > em {
+  color: #64748b;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 10.5px;
+  font-style: normal;
+  grid-column: 2;
+  overflow-wrap: anywhere;
+}
+
+.deploymentPreflightAiList {
+  display: grid;
+  gap: 4px;
+}
+
+.deploymentPreflightAiList ul {
+  display: grid;
+  gap: 4px;
+  list-style: disc;
+  margin: 0;
+  padding-left: 16px;
+}
+
+.deploymentPreflightAiList li {
+  color: #475569;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.deploymentFindingAiExplanation {
+  background: #f8fafc;
+  border: 1px solid #dce3ee;
+  border-radius: 5px;
+  display: grid;
+  gap: 7px;
+  grid-column: 1 / -1;
+  padding: 8px;
+}
+
+.deploymentFindingAiExplanation p {
+  color: #334155;
+  font-size: 11.5px;
+  font-weight: 750;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.deploymentFindingAiExplanation dl {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.deploymentFindingAiExplanation dl div {
+  display: grid;
+  gap: 2px;
+}
+
+.deploymentFindingAiExplanation dt {
+  color: #475569;
+  font-size: 10px;
+  font-weight: 950;
+}
+
+.deploymentFindingAiExplanation dd {
+  color: #172033;
+  font-size: 11.5px;
+  line-height: 1.45;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.deploymentFindingAiExplanation ul {
+  display: grid;
+  gap: 4px;
+  list-style: disc;
+  margin: 0;
+  padding-left: 16px;
+}
+
+.deploymentFindingAiExplanation li {
+  color: #475569;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.deploymentFindingFixButton {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 5px;
+  color: #243044;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 850;
+  gap: 4px;
+  grid-column: 2;
+  justify-self: start;
+  min-height: 26px;
+  padding: 0 8px;
+}
+
+.deploymentFindingFixButton:hover,
+.deploymentFindingFixButton:focus-visible {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+  outline: none;
+}
+
+.reverseAdvancedSettings {
+  border: 1px solid #dce3ee;
+  border-radius: 6px;
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 8px 10px 10px;
+}
+
+.reverseAdvancedSummary {
+  color: #334155;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.3;
+}
+
+.reverseAdvancedSettings[open] .reverseAdvancedSummary {
+  margin-bottom: 8px;
+}
+
+.reverseResourceGrid {
+  display: grid;
+  gap: 7px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-width: 0;
+}
+
+.reverseResourceToggle {
+  align-items: center;
+  background: #f8fafc;
+  border: 1px solid #dce3ee;
+  border-radius: 6px;
+  color: #243044;
+  display: inline-flex;
+  font-size: 11px;
+  font-weight: 900;
+  gap: 7px;
+  min-height: 34px;
+  min-width: 0;
+  padding: 0 9px;
+}
+
+.reverseResourceToggle input {
+  flex: 0 0 auto;
+}
+
+.reverseResourceToggle span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.reverseResultList,
+.reverseLogList {
+  display: grid;
+  gap: 7px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.reverseResultItem,
+.reverseLogList li {
+  background: #ffffff;
+  border: 1px solid #e3e9f2;
+  border-radius: 6px;
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 8px 9px;
+}
+
+.reverseResultItem strong,
+.reverseLogList strong {
+  color: #172033;
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.reverseResultItem span,
+.reverseLogList span {
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.reverseCandidateGrid {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.reverseCandidateCard {
+  background: #ffffff;
+  border: 1px solid #dce3ee;
+  border-radius: 8px;
+  color: #243044;
+  cursor: pointer;
+  display: grid;
+  font: inherit;
+  gap: 5px;
+  min-width: 0;
+  padding: 10px 11px;
+  text-align: left;
+}
+
+.reverseCandidateCard:hover,
+.reverseCandidateCard:focus-visible {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  outline: none;
+}
+
+.reverseCandidateCardSelected {
+  background: #eff6ff;
+  border-color: #1f6feb;
+  box-shadow: inset 3px 0 0 #1f6feb;
+}
+
+.reverseCandidateCard strong {
+  color: #172033;
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.reverseCandidateCard span {
+  color: #475569;
+  font-size: 11.5px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.reverseCandidateCard small {
+  color: #64748b;
+  font-size: 10.5px;
+  font-weight: 850;
+  line-height: 1.35;
+}
+
+.reverseResultDetails {
+  background: #ffffff;
+  border: 1px solid #dce3ee;
+  border-radius: 8px;
+  color: #243044;
+  display: grid;
+  min-width: 0;
+}
+
+.reverseResultDetails summary {
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.35;
+  list-style: none;
+  padding: 12px;
+}
+
+.reverseResultDetails summary::-webkit-details-marker {
+  display: none;
+}
+
+.reverseResultDetails summary::after {
+  color: #64748b;
+  content: "펼치기";
+  float: right;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.reverseResultDetails[open] summary {
+  border-bottom: 1px solid #e5ebf4;
+}
+
+.reverseResultDetails[open] summary::after {
+  content: "접기";
+}
+
+.reverseResultDetailsBody {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+}
+
+.reverseParameterDetails {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.reverseParameterSummary {
+  cursor: pointer;
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.reverseParameterSummary::marker {
+  color: #64748b;
+}
+
+.reverseParameterCode {
+  background: #0f172a;
+  border: 1px solid #263449;
+  border-radius: 6px;
+  color: #e2e8f0;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 10.5px;
+  line-height: 1.5;
+  margin: 0;
+  max-height: 260px;
+  min-width: 0;
+  overflow: auto;
+  padding: 10px;
+  white-space: pre;
+}
+
+.reverseLogList li[data-level="WARN"] {
+  border-left: 4px solid #f59e0b;
+}
+
+.reverseLogList li[data-level="ERROR"] {
+  border-left: 4px solid #dc2626;
+}
+
+.deploymentSummary {
+  background: #f8fafc;
+  border: 1px solid #dce3ee;
+  border-radius: 6px;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px;
+}
+
+.deploymentSummary div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.deploymentSummary span {
+  color: #68758b;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.deploymentSummary strong {
+  color: #172033;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.deploymentWarnings {
+  border-top: 1px solid #dce3ee;
+  padding-top: 8px;
+}
+
+.deploymentSafetyBlock {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  display: grid;
+  gap: 4px;
+  padding: 8px;
+}
+
+.deploymentSafetyBlock strong {
+  color: #991b1b;
+  font-size: 12px;
+}
+
+.deploymentSafetyBlock p {
+  color: #7f1d1d;
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.deploymentSafetyBlock ul {
+  display: grid;
+  gap: 4px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.deploymentSafetyBlock li {
+  background: #ffffff;
+  border: 1px solid #fecaca;
+  border-radius: 5px;
+  color: #991b1b;
+  font-size: 11px;
+  font-weight: 850;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  padding: 6px 8px;
+}
+
+.deploymentWarnings ul {
+  display: grid;
+  gap: 6px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.deploymentWarnings li {
+  display: grid;
+  gap: 3px;
+}
+
+.deploymentWarnings li[data-level="high"] strong {
+  color: #991b1b;
+}
+
+.deploymentWarnings li[data-level="medium"] strong {
+  color: #92400e;
+}
+
+.deploymentWarnings em {
+  color: #991b1b;
+  font-size: 11px;
+  font-style: normal;
+}
+
+.deploymentWarnings p {
+  color: #334155;
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.deploymentWarningAcknowledgement {
+  align-items: center;
+  color: #334155;
+  display: flex;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.deploymentWarningAcknowledgement input {
+  height: 14px;
+  margin: 0;
+  width: 14px;
+}
+
+.deploymentFailureExplanation {
+  background: #fff7ed;
+  border: 1px solid #fdba74;
+  border-radius: 6px;
+  display: grid;
+  gap: 9px;
+  min-width: 0;
+  padding: 10px;
+}
+
+.deploymentFailureExplanation > p {
+  color: #334155;
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.deploymentFailureHeader {
+  align-items: center;
+  display: flex;
+  gap: 7px;
+  min-width: 0;
+}
+
+.deploymentFailureHeader span {
+  background: #9a3412;
+  border-radius: 4px;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 950;
+  line-height: 1;
+  padding: 4px 5px;
+}
+
+.deploymentFailureHeader strong {
+  color: #172033;
+  font-size: 13px;
+}
+
+.deploymentFailureMeta {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+  min-width: 0;
+}
+
+.deploymentFailureMeta div {
+  background: #ffffff;
+  border: 1px solid #fed7aa;
+  border-radius: 5px;
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 6px 7px;
+}
+
+.deploymentFailureMeta span,
+.deploymentFailureBody strong {
+  color: #9a3412;
+  font-size: 10.5px;
+  font-weight: 900;
+}
+
+.deploymentFailureMeta strong {
+  color: #172033;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.deploymentFailureBody {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.deploymentFailureBody p,
+.deploymentFailureBody li {
+  color: #334155;
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.deploymentFailureBody code {
+  background: #ffffff;
+  border: 1px solid #fed7aa;
+  border-radius: 5px;
+  color: #172033;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  padding: 7px;
+  white-space: pre-wrap;
+}
+
+.deploymentFailureBody ul {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+}
+
+.deploymentApplyConfirm,
+.deploymentDestroyConfirm {
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+}
+
+.deploymentDestroyConfirm {
+  background: #fff7ed;
+  border-color: #fdba74;
+}
+
+.deploymentApplyConfirm h3,
+.deploymentDestroyConfirm h3 {
+  font-size: 13px;
+  margin: 0;
+}
+
+.deploymentApplyConfirm div,
+.deploymentDestroyConfirm div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.deploymentApplyConfirm span,
+.deploymentDestroyConfirm span {
+  color: #68758b;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.deploymentApplyConfirm strong,
+.deploymentDestroyConfirm strong {
+  color: #172033;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.deploymentApplyConfirm p,
+.deploymentDestroyConfirm p {
+  color: #334155;
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.deploymentApplyActions {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(76px, 0.85fr) minmax(0, 1.15fr);
+}
+
+.deploymentApplyActions .deploymentPrimaryButton,
+.deploymentApplyActions .deploymentSecondaryButton,
+.deploymentApplyActions .deploymentDangerButton {
+  min-height: 44px;
+  padding: 8px 12px;
+}
+
+.deploymentResultRows {
+  border: 1px solid #dce3ee;
+  border-radius: 6px;
+  display: grid;
+  gap: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.deploymentResultRow {
+  align-items: center;
+  background: #ffffff;
+  border-top: 1px solid #e6edf5;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1.15fr) minmax(88px, 0.45fr) minmax(0, 1fr);
+  min-height: 32px;
+  min-width: 0;
+  padding: 6px 10px;
+}
+
+.deploymentResultRow:first-child {
+  border-top: 0;
+}
+
+.deploymentResultRow strong {
+  color: #172033;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.deploymentResultMeta,
+.deploymentResultValue {
+  color: #526174;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.deploymentResultMeta {
+  color: #64748b;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 11px;
+}
+
+.deploymentExpandedOverlay {
+  background: rgb(15 23 42 / 38%);
+  inset: 0;
+  padding: 18px;
+  pointer-events: auto;
+  position: fixed;
+  z-index: 120;
+}
+
+.deploymentExpandedShell {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  box-shadow: 0 24px 60px rgb(15 23 42 / 28%);
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.deploymentExpandedCloseButton {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #d8e1ee;
+  border-radius: 8px;
+  color: #334155;
+  cursor: pointer;
+  display: inline-flex;
+  height: 36px;
+  justify-content: center;
+  position: absolute;
+  right: 18px;
+  top: 18px;
+  transition:
+    background 0.16s ease,
+    border-color 0.16s ease,
+    color 0.16s ease;
+  width: 36px;
+  z-index: 2;
+}
+
+.deploymentExpandedCloseButton:hover,
+.deploymentExpandedCloseButton:focus-visible {
+  background: #f8fafc;
+  border-color: #94a3b8;
+  color: #0f172a;
+  outline: none;
+}
+
+.deploymentExpandedBody {
+  align-content: start;
+  display: grid;
+  gap: 16px;
+  max-width: 100%;
+  min-height: 0;
+  min-width: 0;
+  overflow: auto;
+  padding: 18px 16px 16px;
+}
+
+.deploymentExpandedTitleRow {
+  align-items: center;
+  display: flex;
+  min-height: 36px;
+  min-width: 0;
+  padding-right: 56px;
+}
+
+.deploymentExpandedTitle {
+  color: #172033;
+  font-size: 18px;
+  font-weight: 900;
+  line-height: 1.25;
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.deploymentExpandedBody .deploymentSection h3 {
+  font-size: 15px;
+}
+
+.deploymentExpandedBody .deploymentField {
+  font-size: 13px;
+  gap: 7px;
+}
+
+.deploymentExpandedBody .deploymentPrimaryButton,
+.deploymentExpandedBody .deploymentSecondaryButton,
+.deploymentExpandedBody .deploymentDangerButton {
+  font-size: 14px;
+  gap: 7px;
+  min-height: 40px;
+  padding: 8px 12px;
+}
+
+.deploymentExpandedBody .deploymentRefreshButton {
+  font-size: 12px;
+}
+
+.deploymentExpandedBody .deploymentSummary {
+  gap: 10px;
+  padding: 12px;
+}
+
+.deploymentExpandedBody .deploymentSummary span {
+  font-size: 12px;
+}
+
+.deploymentExpandedBody .deploymentSummary strong {
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.deploymentSecondaryPanel {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.deploymentDisclosure {
+  background: #ffffff;
+  border: 1px solid #dce3ee;
+  border-radius: 8px;
+  min-width: 0;
+}
+
+.deploymentDisclosure summary {
+  align-items: center;
+  color: #243044;
+  cursor: pointer;
+  display: flex;
+  font-size: 13px;
+  font-weight: 900;
+  gap: 10px;
+  justify-content: space-between;
+  line-height: 1.35;
+  min-height: 42px;
+  padding: 10px 12px;
+}
+
+.deploymentDisclosure summary::marker {
+  color: #64748b;
+}
+
+.deploymentDisclosure small {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.deploymentDisclosure[open] summary {
+  border-bottom: 1px solid #e3e9f2;
+}
+
+.deploymentDisclosureBody {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding: 12px;
+}
+
+.deploymentDisclosureBody .deploymentSection {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.deploymentModalOverlay {
+  align-items: center;
+  background: rgb(15 23 42 / 42%);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 18px;
+  position: fixed;
+  z-index: 115;
+}
+
+.deploymentModal {
+  background: #ffffff;
+  border: 1px solid #d9e2ef;
+  border-radius: 8px;
+  box-shadow: 0 24px 56px rgb(15 23 42 / 24%);
+  display: grid;
+  gap: 16px;
+  max-height: min(680px, calc(100vh - 36px));
+  max-width: 620px;
+  overflow: auto;
+  padding: 18px;
+  width: min(100%, 620px);
+}
+
+.deploymentModalHeader {
+  align-items: flex-start;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.deploymentModalHeader h3 {
+  color: #172033;
+  font-size: 20px;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.deploymentModalText {
+  color: #526071;
+  font-size: 13px;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.githubRepositoryChoiceList {
+  display: grid;
+  gap: 8px;
+}
+
+.githubRepositoryChoice {
+  align-items: flex-start;
+  background: #f8fafc;
+  border: 1px solid #d9e2ef;
+  border-radius: 6px;
+  color: #172033;
+  cursor: pointer;
+  display: grid;
+  gap: 4px;
+  min-height: 58px;
+  padding: 12px;
+  text-align: left;
+  width: 100%;
+}
+
+.githubRepositoryChoice:hover,
+.githubRepositoryChoice:focus-visible {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  outline: none;
+}
+
+.githubRepositoryChoice:disabled {
+  cursor: not-allowed;
+  opacity: 0.56;
+}
+
+.githubRepositoryChoice span {
+  font-size: 14px;
+  font-weight: 850;
+  overflow-wrap: anywhere;
+}
+
+.githubRepositoryChoice strong {
+  color: #64748b;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.deploymentModalActions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.deploymentLogList {
+  background: #111827;
+  border: 1px solid #243247;
+  border-radius: 6px;
+  color: #d9e4f5;
+  display: block;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  list-style: none;
+  margin: 0;
+  max-width: 100%;
+  min-height: 0;
+  min-width: 0;
+  overflow: visible;
+  padding: 12px;
+  tab-size: 2;
+}
+
+.deploymentLogList li {
+  color: inherit;
+  min-width: 0;
+  padding: 1px 0;
+  white-space: pre-wrap;
+}
+
+.deploymentLogList li[data-tone="warning"] {
+  color: #fbbf24;
+}
+
+.deploymentLogList li[data-tone="error"] {
+  color: #f87171;
+}
+
+.deploymentLogPrefix {
+  color: #94a3b8;
+}
+
+.deploymentLogList p {
+  color: inherit;
+  display: inline;
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.deploymentLogTokenPlain {
+  color: inherit;
+}
+
+.deploymentLogTokenResource {
+  color: #67e8f9;
+}
+
+.deploymentLogTokenString {
+  color: #86efac;
+}
+
+.deploymentLogTokenMetadata {
+  color: #fbbf24;
+}
+
+.deploymentLogTokenOperation {
+  color: #93c5fd;
+}
+
+.deploymentLogTokenOutput {
+  color: #c4b5fd;
+}
+
+.deploymentNotice,
+.deploymentError {
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.45;
+  margin: 0;
+  padding: 10px;
+}
+
+.deploymentNotice {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1d4ed8;
+  display: grid;
+  gap: 8px;
+}
+
+.deploymentNotice .deploymentSecondaryButton {
+  justify-self: start;
+}
+
+.deploymentError {
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  color: #9a3412;
+}
+
+.noticePanel p {
+  color: #2b3a4f;
+  margin: 0;
+}
+
+@media (max-width: 640px) {
+  .projectShell {
+    padding: 16px;
+  }
+
+  .projectForm,
+  .noticePanel {
+    padding: 20px;
+  }
+
+  .deploymentExpandedOverlay {
+    padding: 0;
+  }
+
+  .deploymentExpandedShell {
+    border-radius: 0;
+  }
+
+  .deploymentExpandedCloseButton {
+    right: 14px;
+    top: 14px;
+  }
+
+  .deploymentExpandedBody {
+    padding: 14px;
+  }
+
+  .aiChatLauncher,
+  .aiChatLauncher[data-right-panel-open="true"] {
+    bottom: 14px;
+    right: 14px;
+  }
+
+  .aiChatDock,
+  .aiChatDock[data-right-panel-open="true"] {
+    border-radius: 8px 8px 0 0;
+    bottom: 0;
+    left: 0;
+    max-height: 86vh;
+    min-height: min(640px, 86vh);
+    right: 0;
+    width: 100%;
+  }
+
+  .aiChatControls,
+  .aiChatComposer {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .aiChatVoiceButton {
+    justify-self: end;
+  }
+
+  .aiChatInput,
+  .aiChatVoiceStatus {
+    grid-column: 1 / -1;
+  }
+
+  .aiChatSimulationIntro {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .aiChatSimulationIntro .aiPrimaryButton {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .aiChatAssistantMessage,
+  .aiChatUserMessage {
+    max-width: 100%;
+  }
+
+  .deploymentResultRow {
+    align-items: start;
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .deploymentResultValue {
+    grid-column: 1 / -1;
+  }
+}
+
+/* Legacy workspace panel compatibility layer, overridden by the DESIGN.md pass below. */
+.rightPanelShell,
+.resourceWorkspacePanel,
+.terraformPanel,
+.issuesPanel,
+.aiPanel,
+.deploymentPanel {
+  background: var(--bp-paper);
+  color: var(--bp-ink);
+  font-family: var(--bp-head);
+}
+
+.rightPanelToolbar,
+.rightPanelUtilityBar,
+.rightPanelModeBar,
+.terraformTopBar,
+.terraformDiagnostics,
+.deploymentHeader,
+.aiPanelHeader {
+  background: var(--bp-paper);
+  border-color: var(--bp-line);
+}
+
+.rightPanelToolbar,
+.rightPanelUtilityBar {
+  min-height: 48px;
+  padding: 7px 10px;
+}
+
+.rightPanelModeBar {
+  min-height: 46px;
+  padding: 6px 10px;
+}
+
+.panelModeToggle,
+.rightPanelUtilityGroup,
+.deploymentDisclosure {
+  background: var(--bp-paper-2);
+  border: 1px solid var(--bp-line);
+  border-radius: var(--bp-r);
+  box-shadow: none;
+}
+
+.terraformTopActions {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
+}
+
+.panelModeButton,
+.panelModeButtonActive,
+.panelModeTextButton,
+.panelModeTextButtonActive,
+.panelIconButton,
+.panelIconButtonActive,
+.panelCollapseButton,
+.collapsedPanelButton,
+.collapsedPanelButtonActive,
+.resourceSettingsBackButton,
+.terraformFileButton,
+.deploymentExpandButton {
+  border-radius: var(--bp-r);
+  color: var(--bp-text);
+  font-family: var(--bp-head);
+  font-weight: 850;
+}
+
+.panelModeButtonActive,
+.panelModeTextButtonActive,
+.panelIconButtonActive,
+.collapsedPanelButtonActive,
+.resourceSettingsBackButton:hover,
+.resourceSettingsBackButton:focus-visible {
+  background: var(--bp-blue-tint);
+  border-color: color-mix(in srgb, var(--bp-blue) 46%, transparent);
+  box-shadow: none;
+  color: var(--bp-blue);
+}
+
+.panelModeButton:hover,
+.panelModeButton:focus-visible,
+.panelModeTextButton:hover,
+.panelModeTextButton:focus-visible,
+.panelIconButton:hover,
+.panelIconButton:focus-visible,
+.panelCollapseButton:hover,
+.panelCollapseButton:focus-visible,
+.collapsedPanelButton:hover,
+.collapsedPanelButton:focus-visible,
+.terraformFileButton:hover,
+.terraformFileButton:focus-visible,
+.deploymentExpandButton:hover,
+.deploymentExpandButton:focus-visible {
+  background: var(--bp-blue-tint);
+  border-color: var(--bp-blue);
+  color: var(--bp-blue);
+  outline: none;
+}
+
+.resourceWorkspacePanel {
+  padding-top: 0;
+}
+
+.terraformPanel,
+.issuesPanel,
+.aiPanel,
+.deploymentPanel {
+  background: var(--bp-page);
+}
+
+.terraformTopBar,
+.terraformDiagnostics,
+.issuesPanel .terraformDiagnostics,
+.aiPanel,
+.deploymentPanel {
+  border-left: 1px solid var(--bp-line);
+}
+
+.terraformFileButton,
+.terraformFileMenu,
+.terraformFileSearch,
+.terraformEmpty,
+.terraformNotice,
+.terraformError,
+.terraformDiagnosticList li,
+.aiField textarea,
+.aiField input,
+.aiResultCard,
+.aiExplanation,
+.aiWarning,
+.deploymentSection,
+.deploymentPreflightSummary,
+.deploymentSummary,
+.deploymentApplyConfirm,
+.deploymentDestroyConfirm,
+.deploymentField input,
+.deploymentField select,
+.deploymentField textarea {
+  background: var(--bp-paper);
+  border-color: var(--bp-line);
+  border-radius: var(--bp-r);
+  box-shadow: none;
+  color: var(--bp-text);
+}
+
+.terraformFileMenu {
+  box-shadow: 0 16px 34px rgb(7 36 60 / 14%);
+}
+
+.terraformFileSearch:focus,
+.aiField textarea:focus,
+.aiField input:focus,
+.deploymentField input:focus,
+.deploymentField select:focus,
+.deploymentField textarea:focus {
+  border-color: var(--bp-blue);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--bp-blue) 18%, transparent);
+}
+
+.terraformDiagnosticsHeader h3,
+.aiPanelHeader h2,
+.deploymentHeader h2,
+.deploymentSection h3 {
+  color: var(--bp-ink);
+  font-family: var(--bp-head);
+  letter-spacing: 0;
+}
+
+.terraformDiagnosticsHeader,
+.aiPanelHeader span,
+.deploymentHeader span,
+.deploymentHint,
+.terraformDiagnosticList span {
+  color: var(--bp-text);
+}
+
+.terraformIssueCount,
+.panelIssueBadge {
+  background: var(--bp-blue-tint);
+  color: var(--bp-blue);
+}
+
+.terraformIssueCountError,
+.panelIssueBadgeError {
+  background: var(--bp-high-tint);
+  color: var(--bp-high);
+}
+
+.terraformDiagnosticList li,
+.deploymentWarnings li,
+.deploymentPreflightFindings li {
+  background: var(--bp-paper);
+}
+
+.terraformEmpty {
+  background: var(--bp-paper-2);
+  color: var(--bp-muted);
+}
+
+.terraformNotice {
+  background: var(--bp-blue-tint);
+  border-color: color-mix(in srgb, var(--bp-blue) 42%, var(--bp-line));
+  color: var(--bp-blue);
+}
+
+.terraformError,
+.deploymentStaleNotice,
+.aiWarning {
+  background: var(--bp-med-tint);
+  border-color: color-mix(in srgb, var(--bp-med) 54%, var(--bp-line));
+  color: #7a4d00;
+}
+
+.aiPrimaryButton,
+.deploymentPrimaryButton {
+  background: var(--bp-blue);
+  border-color: var(--bp-blue);
+  color: #ffffff;
+}
+
+.aiSecondaryButton,
+.deploymentSecondaryButton {
+  background: var(--bp-paper);
+  border-color: var(--bp-line);
+  color: var(--bp-blue);
+}
+
+.deploymentDangerButton {
+  background: var(--bp-high);
+  border-color: var(--bp-high);
+  color: #ffffff;
+}
+
+.aiPrimaryButton:hover,
+.aiPrimaryButton:focus-visible,
+.deploymentPrimaryButton:not(:disabled):hover,
+.deploymentPrimaryButton:not(:disabled):focus-visible {
+  background: color-mix(in srgb, var(--bp-blue) 86%, #000000);
+  border-color: color-mix(in srgb, var(--bp-blue) 86%, #000000);
+  outline: none;
+}
+
+.aiSecondaryButton:hover,
+.aiSecondaryButton:focus-visible,
+.deploymentSecondaryButton:not(:disabled):hover,
+.deploymentSecondaryButton:not(:disabled):focus-visible {
+  background: var(--bp-blue-tint);
+  border-color: var(--bp-blue);
+  color: var(--bp-blue);
+  outline: none;
+}
+
+.deploymentPrimaryButton:disabled,
+.deploymentSecondaryButton:disabled,
+.deploymentDangerButton:disabled {
+  opacity: 0.76;
+}
+
+.aiPanel,
+.deploymentPanel {
+  gap: 14px;
+  padding: 16px;
+}
+
+.aiPanelHeader,
+.deploymentHeader {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--bp-paper) 92%, #ffffff), var(--bp-paper-2));
+  border: 1.5px solid var(--bp-line);
+  border-radius: var(--bp-r);
+  padding: 14px;
+  position: relative;
+}
+
+.aiPanelHeader::before,
+.aiPanelHeader::after,
+.deploymentHeader::before,
+.deploymentHeader::after,
+.aiSection::before,
+.deploymentSection::before {
+  border: 1.5px solid var(--bp-blue);
+  content: "";
+  height: 10px;
+  pointer-events: none;
+  position: absolute;
+  width: 10px;
+}
+
+.aiPanelHeader::before,
+.deploymentHeader::before,
+.aiSection::before,
+.deploymentSection::before {
+  border-bottom: 0;
+  border-right: 0;
+  left: -1px;
+  top: -1px;
+}
+
+.aiPanelHeader::after,
+.deploymentHeader::after {
+  border-left: 0;
+  border-top: 0;
+  bottom: -1px;
+  right: -1px;
+}
+
+.aiPanelHeader span,
+.deploymentHeader > span,
+.deploymentHeaderTop span {
+  color: var(--bp-blue);
+  font-family: var(--bp-mono);
+  font-size: 10px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.aiPanelHeader h2,
+.deploymentHeader h2 {
+  font-size: 20px;
+  line-height: 1.1;
+}
+
+.aiSection,
+.deploymentSection {
+  background: color-mix(in srgb, var(--bp-paper) 94%, transparent);
+  border: 1px solid var(--bp-line);
+  border-radius: var(--bp-r);
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  position: relative;
+}
+
+.aiSection {
+  border-top: 1px solid var(--bp-line);
+}
+
+.aiSection:first-of-type {
+  border-top: 1px solid var(--bp-line);
+}
+
+.aiField {
+  color: var(--bp-blue);
+  font-family: var(--bp-head);
+  font-size: 12px;
+}
+
+.aiField textarea,
+.aiField input,
+.aiField select,
+.deploymentField input,
+.deploymentField select,
+.deploymentField textarea {
+  background: #f8fbfd;
+  border: 1.5px solid var(--bp-line);
+  color: var(--bp-ink);
+  font-size: 13px;
+}
+
+.aiField textarea {
+  min-height: 124px;
+}
+
+.aiInlineFields {
+  gap: 12px;
+}
+
+.aiPrimaryButton,
+.deploymentPrimaryButton,
+.deploymentDangerButton {
+  min-height: 42px;
+}
+
+.aiSecondaryButton,
+.deploymentSecondaryButton,
+.deploymentExpandButton,
+.terraformPreviewButton {
+  border-color: color-mix(in srgb, var(--bp-blue) 38%, var(--bp-line));
+}
+
+.terraformPreviewButton {
+  background: var(--bp-paper);
+  color: var(--bp-blue);
+}
+
+.deploymentPanelContent {
+  gap: 14px;
+  padding-right: 0;
+  scrollbar-gutter: auto;
+}
+
+.deploymentHeader {
+  margin-right: 0;
+}
+
+.deploymentPanel .deploymentSection:first-of-type {
+  background: color-mix(in srgb, var(--bp-blue-tint) 38%, var(--bp-paper));
+}
+
+.deploymentSectionHeader {
+  align-items: center;
+}
+
+.deploymentPreflightSummary,
+.deploymentGateCard {
+  border-radius: var(--bp-r);
+}
+
+.deploymentLogList {
+  background: linear-gradient(rgba(126, 167, 198, 0.08) 1px, transparent 1px), #0e151d;
+  background-size: 100% 28px;
+  border: 1px solid #33495c;
+  padding: 14px;
+}
+
+.deploymentLogPrefix {
+  color: #7ea7c6;
+}
+
+/* Legacy right panel sizing compatibility layer, overridden by the DESIGN.md pass below. */
+.rightPanelShell {
+  --bb-white: #ffffff;
+  --bb-page: #fafafa;
+  --bb-border: #e2e9f3;
+  --bb-border-strong: #d2dce9;
+  --bb-text: #18202a;
+  --bb-muted: #596578;
+  --bb-neutral-chip: #f0f0f0;
+  --bb-neutral-active: #e8e8e8;
+  --bb-accent: #704dff;
+  --bb-accent-hover: #5f3fe6;
+  --bb-accent-soft: #f0f1ff;
+  --bb-danger: #e5484d;
+  --bb-danger-hover: #d83d43;
+  --bb-dark: #212121;
+  --bb-dark-card: #3b3b3b;
+  --bb-dark-border: #303030;
+
+  background: var(--bb-white);
+  color: var(--bb-text);
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 12px;
+  grid-template-rows: 44px 47px minmax(0, 1fr);
+}
+
+.rightPanelUtilityBar {
+  background: var(--bb-white);
+  border-bottom: 1px solid var(--bb-border);
+  min-height: 44px;
+  padding: 8px 12px;
+}
+
+.rightPanelModeBar {
+  background: var(--bb-white);
+  border-bottom: 1px solid var(--bb-border);
+  min-height: 47px;
+  overflow: visible;
+  padding: 8px 12px;
+}
+
+.rightPanelView {
+  background: var(--bb-page);
+}
+
+.rightPanelUtilityGroup {
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  gap: 4px;
+  padding: 0;
+}
+
+.rightPanelUtilityGroup .panelModeButton,
+.rightPanelUtilityGroup .panelModeButtonActive,
+.panelCollapseButton {
+  background: transparent;
+  border-color: transparent;
+  border-radius: 4px;
+  box-shadow: none;
+  color: var(--bb-text);
+  height: 26px;
+  width: 26px;
+}
+
+.panelModeIconGroup .panelModeButton,
+.panelModeIconGroup .panelModeButtonActive {
+  background: transparent;
+  border-color: transparent;
+  border-radius: 4px;
+  box-shadow: none;
+  color: var(--bb-text);
+  height: 24px;
+  width: 24px;
+}
+
+.panelModeIconGroup .panelModeButtonActive {
+  background: var(--bb-neutral-active);
+  color: var(--bb-text);
+}
+
+.panelModeButton:hover,
+.panelModeButton:focus-visible,
+.panelCollapseButton:hover,
+.panelCollapseButton:focus-visible {
+  background: var(--bb-neutral-chip);
+  border-color: transparent;
+  color: var(--bb-text);
+}
+
+.panelModeTextButton,
+.panelModeTextButtonActive {
+  background: transparent;
+  border-color: transparent;
+  border-radius: 4px;
+  box-shadow: none;
+  color: var(--bb-text);
+  font-size: 12px;
+  font-weight: 500;
+  height: 24px;
+  min-width: 56px;
+  padding: 0 8px;
+}
+
+.panelModeTextButton:first-of-type,
+.panelModeTextButtonActive:first-of-type {
+  min-width: 70px;
+}
+
+.panelModeTextButtonActive {
+  background: var(--bb-neutral-active);
+  color: var(--bb-text);
+}
+
+.panelModeTextButton:hover,
+.panelModeTextButton:focus-visible {
+  background: var(--bb-neutral-chip);
+  border-color: transparent;
+  color: var(--bb-text);
+}
+
+.issuesPanel {
+  background: #f8fbff;
+  color: #172033;
+}
+
+.issuesPanel .terraformDiagnostics {
+  background: #f8fbff;
+  border-left: 0;
+  color: #172033;
+}
+
+.issuesPanel .terraformDiagnosticsHeader,
+.issuesPanel .terraformDiagnosticsHeader h3 {
+  color: #172033;
+}
+
+.issuesPanel .terraformDiagnosticList li {
+  background: #ffffff;
+  border-color: #dce3ee;
+  color: #172033;
+}
+
+.issuesPanel .terraformDiagnosticList strong {
+  color: #172033;
+}
+
+.issuesPanel .terraformDiagnosticList span {
+  color: #334155;
+}
+
+.issuesPanel .terraformDiagnosticSeverity {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.issuesPanel .terraformDiagnosticMeta span {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  color: #334155;
+}
+
+.terraformPanel,
+.deploymentPanel {
+  background: var(--bb-page);
+}
+
+.terraformTopBar,
+.terraformDiagnostics,
+.deploymentHeader {
+  background: var(--bb-white);
+  border-color: var(--bb-border);
+}
+
+@media (max-width: 640px) {
+  .deploymentGateFacts {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* DESIGN.md workspace internal panel pass */
+.rightPanelShell {
+  background: var(--workspace-surface, #ffffff);
+  color: var(--workspace-text, #171717);
+  font-family: var(--workspace-font, "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif);
+}
+
+.rightPanelToolbar,
+.rightPanelUtilityBar,
+.rightPanelModeBar,
+.terraformTopBar,
+.resourceActionBar,
+.resourceCodeHeader,
+.terraformDiagnostics,
+.aiChatHeader,
+.aiChatTabBar,
+.aiChatComposer {
+  background: var(--workspace-surface, #ffffff);
+  border-color: var(--workspace-line, #f0f0f3);
+}
+
+.rightPanelView,
+.resourceWorkspacePanel,
+.terraformPanel,
+.issuesPanel,
+.aiPanel,
+.deploymentPanel {
+  background: var(--workspace-surface-muted, #fafafa);
+  color: var(--workspace-text, #171717);
+  font-family: var(--workspace-font, "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif);
+}
+
+.terraformPanel {
+  background: var(--workspace-surface-muted, #fafafa);
+  color: var(--workspace-text, #171717);
+  font-family: var(--workspace-font, "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif);
+}
+
+.issuesPanel {
+  background: var(--workspace-surface-muted, #fafafa);
+  color: var(--workspace-text, #171717);
+  font-family: var(--workspace-font, "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif);
+}
+
+.panelModeToggle,
+.rightPanelUtilityGroup,
+.aiChatTabs,
+.deploymentDisclosure {
+  background: var(--workspace-surface-muted, #fafafa);
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+.panelModeButton,
+.panelModeButtonActive,
+.panelModeTextButton,
+.panelModeTextButtonActive,
+.panelIconButton,
+.panelIconButtonActive,
+.panelCollapseButton,
+.collapsedPanelButton,
+.collapsedPanelButtonActive,
+.resourceSettingsBackButton,
+.resourceActionSecondary,
+.terraformFileButton,
+.terraformPreviewButton,
+.deploymentExpandButton,
+.deploymentStageNextButton,
+.aiChatCloseButton,
+.aiChatClearButton,
+.aiChatSuggestionButton {
+  border-radius: 8px;
+  color: var(--workspace-text, #171717);
+  font-family: var(--workspace-font, "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif);
+  font-weight: 700;
+}
+
+.panelModeButtonActive,
+.panelModeTextButtonActive,
+.panelIconButtonActive,
+.collapsedPanelButtonActive {
+  background: var(--workspace-accent, #000000);
+  border-color: var(--workspace-accent, #000000);
+  box-shadow: none;
+  color: #ffffff;
+}
+
+.panelModeTextButtonActive {
+  background: var(--workspace-accent, #000000);
+  border-color: var(--workspace-accent, #000000);
+  color: #ffffff;
+}
+
+.panelModeButton:hover,
+.panelModeButton:focus-visible,
+.panelModeTextButton:hover,
+.panelModeTextButton:focus-visible,
+.panelIconButton:hover,
+.panelIconButton:focus-visible,
+.panelCollapseButton:hover,
+.panelCollapseButton:focus-visible,
+.collapsedPanelButton:hover,
+.collapsedPanelButton:focus-visible,
+.resourceSettingsBackButton:hover,
+.resourceSettingsBackButton:focus-visible,
+.resourceActionSecondary:not(:disabled):hover,
+.resourceActionSecondary:not(:disabled):focus-visible,
+.terraformFileButton:hover,
+.terraformFileButton:focus-visible,
+.terraformPreviewButton:not(:disabled):hover,
+.terraformPreviewButton:not(:disabled):focus-visible,
+.deploymentExpandButton:hover,
+.deploymentExpandButton:focus-visible,
+.deploymentStageNextButton:not(:disabled):hover,
+.deploymentStageNextButton:not(:disabled):focus-visible,
+.aiChatCloseButton:hover,
+.aiChatCloseButton:focus-visible,
+.aiChatSuggestionButton:hover,
+.aiChatSuggestionButton:focus-visible {
+  background: var(--workspace-surface-muted, #fafafa);
+  border-color: var(--workspace-line-strong, #dcdee0);
+  color: var(--workspace-text, #171717);
+  outline: none;
+}
+
+.terraformFileButton,
+.terraformFileMenu,
+.terraformFileSearch,
+.terraformEmpty,
+.terraformNotice,
+.terraformError,
+.terraformDiagnosticList li,
+.terraformPreviewExplanationPanel,
+.terraformPreviewExplanationResult,
+.terraformIssueFixPlan,
+.terraformIssueCodeFrame,
+.terraformIssueCodePreview section,
+.aiField textarea,
+.aiField input,
+.aiField select,
+.aiResultCard,
+.aiExplanation,
+.aiWarning,
+.aiTerraformPreviewConclusion,
+.aiTerraformPreviewAgentCard,
+.aiSafetyFindingCard,
+.aiSimulationCard,
+.aiChatSimulationIntro,
+.aiChatAssistantMessage p,
+.aiChatDraftCard,
+.aiSafetyNotice,
+.deploymentSection,
+.deploymentStageStepper,
+.deploymentStageActionCard,
+.deploymentStageSummaryPanel,
+.deploymentPreflightSummary,
+.deploymentFindingAiExplanation,
+.deploymentSummary,
+.deploymentApplyConfirm,
+.deploymentDestroyConfirm,
+.deploymentField input,
+.deploymentField select,
+.deploymentField textarea,
+.reverseAdvancedSettings,
+.reverseResourceToggle,
+.reverseResultItem,
+.reverseLogList li,
+.reverseCandidateCard,
+.reverseResultDetails {
+  background: var(--workspace-surface, #ffffff);
+  border-color: var(--workspace-line, #f0f0f3);
+  border-radius: 8px;
+  box-shadow: none;
+  color: var(--workspace-text, #171717);
+}
+
+.terraformFileSearch:focus,
+.aiField textarea:focus,
+.aiField input:focus,
+.deploymentField input:focus,
+.deploymentField select:focus,
+.deploymentField textarea:focus,
+.aiChatInput textarea:focus {
+  border-color: var(--workspace-accent, #000000);
+  box-shadow: 0 0 0 3px rgba(23, 23, 23, 0.1);
+  outline: none;
+}
+
+.aiPanelHeader,
+.deploymentHeader {
+  background: var(--workspace-surface, #ffffff);
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  border-radius: 8px;
+  padding: 14px;
+  position: relative;
+}
+
+.aiPanelHeader {
+  background: var(--workspace-surface, #ffffff);
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  border-radius: 8px;
+}
+
+.deploymentHeader {
+  background: var(--workspace-surface, #ffffff);
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  border-radius: 8px;
+}
+
+.aiPanelHeader::before,
+.aiPanelHeader::after,
+.deploymentHeader::before,
+.deploymentHeader::after,
+.aiSection::before,
+.deploymentSection::before {
+  content: none;
+}
+
+.aiPanelHeader span,
+.deploymentHeader > span,
+.deploymentHeaderTop span,
+.aiChatHeader span {
+  color: var(--workspace-muted, #60646c);
+  font-family: var(--workspace-font, "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.terraformDiagnosticsHeader h3,
+.aiPanelHeader h2,
+.deploymentHeader h2,
+.deploymentSection h3,
+.aiChatHeader h2 {
+  color: var(--workspace-text, #171717);
+  font-family: var(--workspace-font, "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif);
+  letter-spacing: 0;
+}
+
+.terraformDiagnosticsHeader,
+.aiField,
+.deploymentField,
+.deploymentHint,
+.terraformDiagnosticList span,
+.aiHint,
+.aiNotice,
+.aiStaleNotice,
+.aiError,
+.aiExplanation p,
+.aiResultSummary,
+.aiSafetyFindingDetails dt,
+.aiSafetyFindingSteps li,
+.aiListBlock li,
+.deploymentActionItem p,
+.deploymentStageStatus,
+.deploymentStageStepStatus,
+.deploymentPreflightSummary p,
+.deploymentFindingAiExplanation p,
+.reverseResultItem span,
+.reverseLogList span,
+.reverseCandidateCard span {
+  color: var(--workspace-muted, #60646c);
+}
+
+.terraformIssueCount,
+.panelIssueBadge,
+.terraformDiagnosticSeverity,
+.terraformPreviewExplanationStats span,
+.aiResultHeader span,
+.aiExplanationHeader span,
+.aiSafetyFindingMeta span,
+.aiSimulationCostMeta span {
+  background: var(--workspace-accent-soft, #f0f0f3);
+  color: var(--workspace-text, #171717);
+}
+
+.terraformIssueCountError,
+.panelIssueBadgeError {
+  background: #fef2f2;
+  color: #b42318;
+}
+
+.terraformNotice,
+.terraformPreviewExplanationNotice,
+.aiNotice {
+  background: var(--workspace-accent-soft, #f0f0f3);
+  border-color: var(--workspace-line-strong, #dcdee0);
+  color: var(--workspace-text, #171717);
+}
+
+.terraformError,
+.deploymentStaleNotice,
+.aiWarning,
+.aiStaleNotice {
+  background: #fff7ed;
+  border-color: #fed7aa;
+  color: #9a3412;
+}
+
+.deploymentStageAlert {
+  background: #fef2f2;
+  border-color: #f87171;
+  color: #991b1b;
+}
+
+.aiPrimaryButton,
+.deploymentPrimaryButton,
+.aiChatLauncher,
+.aiChatSendButton,
+.aiChatSelectionSubmitButton,
+.terraformDiagnosticAiButton {
+  background: var(--workspace-accent, #000000);
+  border-color: var(--workspace-accent, #000000);
+  color: #ffffff;
+}
+
+.aiPrimaryButton:not(:disabled):hover,
+.aiPrimaryButton:not(:disabled):focus-visible,
+.deploymentPrimaryButton:not(:disabled):hover,
+.deploymentPrimaryButton:not(:disabled):focus-visible,
+.aiChatLauncher:hover,
+.aiChatLauncher:focus-visible,
+.aiChatSendButton:not(:disabled):hover,
+.aiChatSendButton:not(:disabled):focus-visible,
+.aiChatSelectionSubmitButton:hover,
+.aiChatSelectionSubmitButton:focus-visible,
+.terraformDiagnosticAiButton:hover,
+.terraformDiagnosticAiButton:focus-visible {
+  background: var(--workspace-accent-active, #1a1a1a);
+  border-color: var(--workspace-accent-active, #1a1a1a);
+  box-shadow: 0 18px 44px rgba(23, 23, 23, 0.16);
+  color: #ffffff;
+  outline: none;
+}
+
+.aiChatSendButton {
+  background: var(--workspace-accent, #000000);
+  border-color: var(--workspace-accent, #000000);
+  color: #ffffff;
+}
+
+.aiSecondaryButton,
+.deploymentSecondaryButton,
+.deploymentStageNextButton,
+.resourceActionSecondary,
+.terraformPreviewButton {
+  background: var(--workspace-surface, #ffffff);
+  border-color: var(--workspace-line, #f0f0f3);
+  color: var(--workspace-text, #171717);
+}
+
+.terraformPreviewButton {
+  background: var(--workspace-surface, #ffffff);
+  border-color: var(--workspace-line, #f0f0f3);
+  color: var(--workspace-text, #171717);
+}
+
+.aiPrimaryButton {
+  background: var(--workspace-accent, #000000);
+  border-color: var(--workspace-accent, #000000);
+  color: #ffffff;
+}
+
+.deploymentPrimaryButton {
+  background: var(--workspace-accent, #000000);
+  border-color: var(--workspace-accent, #000000);
+  color: #ffffff;
+}
+
+.aiSecondaryButton:not(:disabled):hover,
+.aiSecondaryButton:not(:disabled):focus-visible,
+.deploymentSecondaryButton:not(:disabled):hover,
+.deploymentSecondaryButton:not(:disabled):focus-visible,
+.deploymentStageNextButton:not(:disabled):hover,
+.deploymentStageNextButton:not(:disabled):focus-visible {
+  background: var(--workspace-surface-muted, #fafafa);
+  border-color: var(--workspace-line-strong, #dcdee0);
+  color: var(--workspace-text, #171717);
+  outline: none;
+}
+
+.aiChatLauncher {
+  background: var(--workspace-accent, #000000);
+  border-color: var(--workspace-accent, #000000);
+  box-shadow: 0 18px 44px rgba(23, 23, 23, 0.16);
+  color: #ffffff;
+}
+
+.aiChatDock {
+  background: var(--workspace-surface, #ffffff);
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  border-radius: 8px;
+  box-shadow: 0 24px 70px rgba(23, 23, 23, 0.16);
+  color: var(--workspace-text, #171717);
+}
+
+.aiChatTranscript {
+  background: var(--workspace-surface-muted, #fafafa);
+}
+
+.aiChatTabButton[aria-selected="true"] {
+  background: var(--workspace-accent, #000000);
+  box-shadow: none;
+  color: #ffffff;
+}
+
+.aiChatUserMessage p {
+  background: var(--workspace-accent, #000000);
+  border-color: var(--workspace-accent, #000000);
+  color: #ffffff;
+}
+
+.aiChatAssistantMessage[data-kind="question"] p {
+  background: var(--workspace-surface, #ffffff);
+  border-color: var(--workspace-line-strong, #dcdee0);
+  box-shadow: inset 3px 0 0 var(--workspace-accent, #000000);
+}
+
+.aiChatSuggestionButtonSelected {
+  background: var(--workspace-accent, #000000);
+  border-color: var(--workspace-accent, #000000);
+  color: #ffffff;
+}
+
+.panelModeIconGroup .panelModeButtonActive,
+.panelModeIconGroup .panelModeButtonActive:hover,
+.panelModeIconGroup .panelModeButtonActive:focus-visible,
+.rightPanelUtilityGroup .panelModeButtonActive,
+.rightPanelUtilityGroup .panelModeButtonActive:hover,
+.rightPanelUtilityGroup .panelModeButtonActive:focus-visible,
+.panelModeTextButtonActive,
+.panelModeTextButtonActive:hover,
+.panelModeTextButtonActive:focus-visible {
+  background: var(--workspace-accent, #000000);
+  border-color: var(--workspace-accent, #000000);
+  border-radius: 8px;
+  box-shadow: none;
+  color: #ffffff;
+  outline: none;
+}
+
+.aiChatInput textarea {
+  background: var(--workspace-surface, #ffffff);
+  border-color: var(--workspace-line, #f0f0f3);
+  border-radius: 8px;
+  color: var(--workspace-text, #171717);
+}
+
+.aiChatVoiceButton {
+  background: var(--workspace-surface, #ffffff);
+  border-color: var(--workspace-line, #f0f0f3);
+  border-radius: 8px;
+  color: var(--workspace-text, #171717);
+}
+
+.aiChatVoiceButton[data-listening="true"] {
+  background: var(--workspace-accent-soft, #f0f0f3);
+  border-color: var(--workspace-accent, #000000);
+  box-shadow: 0 0 0 3px rgba(23, 23, 23, 0.1);
+  color: var(--workspace-text, #171717);
+}
+
+.deploymentStageStepper {
+  background: var(--workspace-surface, #ffffff);
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  border-radius: 12px;
+}
+
+.deploymentStageActionCard {
+  background: var(--workspace-surface, #ffffff);
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  border-radius: 12px;
+  color: var(--workspace-text, #171717);
+}
+
+.deploymentStageSummaryPanel {
+  background: var(--workspace-surface-muted, #fafafa);
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  border-radius: 12px;
+  color: var(--workspace-text, #171717);
+}
+
+.deploymentStageSummaryNotice {
+  background: #eef6ff;
+  border-color: #bfdbfe;
+  color: #1e3a8a;
+}
+
+.deploymentStageDot {
+  background: var(--workspace-surface, #ffffff);
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  color: var(--workspace-text, #171717);
+}
+
+.deploymentStageActionCard[data-state="active"] {
+  background: #f8fbff;
+  border-color: #2563eb;
+}
+
+.deploymentStageActionCard[data-state="done"] {
+  background: #f0fdfa;
+  border-color: #0f766e;
+}
+
+.deploymentStageActionCard[data-state="idle"] {
+  background: var(--workspace-surface-muted, #fafafa);
+}
+
+.deploymentStageStep[data-state="active"] .deploymentStageDot {
+  background: #2563eb;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 6px rgba(37, 99, 235, 0.16);
+  color: #ffffff;
+}
+
+.deploymentStageStep[data-state="done"] .deploymentStageDot {
+  background: #0f766e;
+  border-color: #0f766e;
+  color: #ffffff;
+}
+
+.deploymentStageStep[data-state="idle"] .deploymentStageDot {
+  background: var(--workspace-surface, #ffffff);
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  color: var(--workspace-muted, #60646c);
+}
+
+.deploymentLogList {
+  background: #171717;
+  background-size: auto;
+  border: 1px solid #303030;
+  border-radius: 8px;
+}
+
+.deploymentLogPrefix {
+  color: #b0b4ba;
+}
+
+.deploymentExpandedOverlay {
+  background: rgba(23, 23, 23, 0.32);
+}
+
+.deploymentExpandedShell {
+  background: var(--workspace-surface, #ffffff);
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  border-radius: 8px;
+  box-shadow: 0 24px 70px rgba(23, 23, 23, 0.16);
+  color: var(--workspace-text, #171717);
+  font-family: var(--workspace-font, "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif);
+}
+
+.deploymentExpandedCloseButton {
+  background: var(--workspace-surface, #ffffff);
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  color: var(--workspace-text, #171717);
+  font-family: var(--workspace-font, "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif);
+}
+
+.deploymentExpandedCloseButton:hover,
+.deploymentExpandedCloseButton:focus-visible {
+  background: var(--workspace-surface-muted, #fafafa);
+  border-color: var(--workspace-hairline-strong, #dcdee0);
+}
+
+.deploymentExpandedBody {
+  background: var(--workspace-surface-muted, #fafafa);
+}
+
+.serverSaveToast {
+  border-left-width: 1px;
+  border-radius: 8px;
+  font-size: 16px;
+}
+
+@media (max-width: 900px) {
+  .collapsedRightPanel {
+    right: 10px;
+    top: 74px;
+  }
+}

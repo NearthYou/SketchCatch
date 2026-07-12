@@ -98,60 +98,6 @@ test("createReverseEngineeringBoardCandidates keeps one automatic structure even
   );
 });
 
-test("createReverseEngineeringBoardCandidates offers a conservative structure only for conflicting parents", () => {
-  const result = createScanResult();
-  const conflictingParentNode = {
-    id: "resource-vpc-admin",
-    type: "VPC" as const,
-    label: "admin-vpc",
-    positionX: 0,
-    positionY: 320,
-    config: {
-      providerResourceId: "vpc-admin",
-      providerResourceType: "AWS::EC2::VPC"
-    }
-  };
-  const conflictingEdge = {
-    id: "edge-admin-vpc-subnet",
-    sourceId: "resource-vpc-admin",
-    targetId: "resource-subnet-shop",
-    label: "contains"
-  };
-  const candidates = createReverseEngineeringBoardCandidates({
-    ...result,
-    architectureJson: {
-      nodes: [...result.architectureJson.nodes, conflictingParentNode],
-      edges: [...result.architectureJson.edges, conflictingEdge]
-    }
-  });
-
-  assert.deepEqual(
-    candidates.map((candidate) => candidate.id),
-    ["candidate-structure-auto", "candidate-structure-conservative"]
-  );
-  assert.deepEqual(
-    candidates.map((candidate) => candidate.architectureJson.nodes.map((node) => node.id)),
-    [
-      [
-        "resource-vpc-shop",
-        "resource-subnet-shop",
-        "resource-ec2-shop",
-        "resource-s3-assets",
-        "resource-vpc-admin"
-      ],
-      [
-        "resource-vpc-shop",
-        "resource-subnet-shop",
-        "resource-ec2-shop",
-        "resource-s3-assets",
-        "resource-vpc-admin"
-      ]
-    ]
-  );
-  assert.equal(candidates[0]?.architectureJson.edges.length, 3);
-  assert.equal(candidates[1]?.architectureJson.edges.length, 1);
-});
-
 function createScanResult(
   input: Partial<Pick<ReverseEngineeringScanResult, "architectureJson" | "discoveredResources">> = {}
 ): ReverseEngineeringScanResult {

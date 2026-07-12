@@ -1,14 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type {
-  AiPreDeploymentAnalysisResult,
-  ArchitectureDiagnostic,
-  TerraformDiagnostic
-} from "@sketchcatch/types";
+import type { AiPreDeploymentAnalysisResult, TerraformDiagnostic } from "@sketchcatch/types";
 import {
-  addArchitectureDiagnosticsToPreDeploymentAnalysis,
   addTerraformDiagnosticsToPreDeploymentAnalysis,
-  createPreDeploymentAnalysisFromArchitectureDiagnostics,
   createPreDeploymentAnalysisFromTerraformDiagnostics
 } from "./pre-deployment-diagnostics";
 
@@ -91,28 +85,6 @@ test("createPreDeploymentAnalysisFromTerraformDiagnostics creates diagnostics-on
   assert.equal(result.checklist[0]?.status, "fail");
 });
 
-test("architecture errors block pre-deployment check before remote analysis", () => {
-  const result = createPreDeploymentAnalysisFromArchitectureDiagnostics([
-    createArchitectureDiagnostic("error")
-  ]);
-
-  assert.match(result.summary, /설계 오류 1개/);
-  assert.equal(result.findings[0]?.resourceId, "ec2-web");
-  assert.equal(result.findings[0]?.severity, "high");
-  assert.equal(result.checklist[0]?.status, "fail");
-});
-
-test("architecture warnings stay visible beside existing safety findings", () => {
-  const result = addArchitectureDiagnosticsToPreDeploymentAnalysis(createAnalysis(), [
-    createArchitectureDiagnostic("warning")
-  ]);
-
-  assert.equal(result.findings.length, 1);
-  assert.equal(result.findings[0]?.severity, "medium");
-  assert.equal(result.checklist[0]?.status, "warning");
-  assert.match(result.findings[0]?.recommendation ?? "", /Subnet/);
-});
-
 function createAnalysis(): AiPreDeploymentAnalysisResult {
   return {
     summary: "배포 전 검사에서 문제가 발견되지 않았습니다.",
@@ -125,22 +97,5 @@ function createAnalysis(): AiPreDeploymentAnalysisResult {
     findings: [],
     checklist: [],
     suggestions: []
-  };
-}
-
-// Architecture rule 결과를 Safety Gate 테스트에서 재사용할 최소 형태로 만듭니다.
-function createArchitectureDiagnostic(
-  severity: ArchitectureDiagnostic["severity"]
-): ArchitectureDiagnostic {
-  return {
-    code: "architecture.aws.ec2.subnet_context_missing",
-    message: "EC2는 Subnet 안에 있어야 합니다.",
-    relatedNodeIds: [],
-    remediation: [{ action: "focus-resource", label: "Subnet 안으로 이동" }],
-    resourceNodeId: "ec2-web",
-    ruleId: "aws.ec2.subnet-context",
-    severity,
-    source: "architecture-rule",
-    summary: "EC2 Subnet 배치 필요"
   };
 }

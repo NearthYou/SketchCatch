@@ -1,6 +1,6 @@
-import { LoaderCircle, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import type { AwsConnection, Project, ReverseEngineeringResourceSelection } from "@sketchcatch/types";
-import styles from "./reverse-engineering.module.css";
+import styles from "./workspace.module.css";
 
 type ReverseEngineeringScanCriteriaFormProps = {
   readonly awsConnections: AwsConnection[];
@@ -47,75 +47,69 @@ export function ReverseEngineeringScanCriteriaForm({
 
   return (
     <>
-      <header className={styles.panelHeader}>
-        <div className={styles.panelHeaderTop}>
-          <div className={styles.panelHeaderTitle}>
-            <span className={styles.eyebrow}>Reverse Engineering</span>
+      <header className={styles.deploymentHeader}>
+        <div className={styles.deploymentHeaderTop}>
+          <div>
+            <span>Reverse Engineering</span>
             <h2>기존 AWS 가져오기</h2>
           </div>
           <button
-            aria-label="AWS 연결 새로고침"
-            className={styles.iconButton}
+            className={styles.deploymentSecondaryButton}
             disabled={isLoadingOptions}
             onClick={onRefresh}
-            title="AWS 연결 새로고침"
             type="button"
           >
             <RefreshCw size={14} aria-hidden="true" />
+            <span className={styles.deploymentButtonText}>새로고침</span>
           </button>
         </div>
-        <p>
-          검증된 AWS Role로 기존 Resource와 관계를 읽습니다.
+        <p className={styles.deploymentHint}>
+          검증된 AWS 연결을 기준으로 전체 리소스를 읽고, 보드에 적용하기 전 미리보기를 만듭니다.
         </p>
       </header>
 
-      <section className={styles.section}>
+      <section className={styles.deploymentSection}>
         <h3>전체 스캔</h3>
-        <p className={styles.sectionDescription}>
+        <p className={styles.deploymentHint}>
           {createProjectOnApply
-            ? "프로젝트는 후보를 적용할 때 생성됩니다."
-            : "결과를 바로 반영하지 않고 먼저 미리보기로 보여줍니다."}
+            ? "프로젝트는 후보를 적용할 때 생성됩니다. 지금은 AWS를 먼저 읽고 보드 후보만 보여줍니다."
+            : "기본값은 현재 프로젝트, 선택된 AWS 연결, 전체 리소스입니다. 스캔 후 바로 반영하지 않고 먼저 확인 화면을 보여줍니다."}
         </p>
 
         <button
-          className={styles.primaryButton}
+          className={styles.deploymentPrimaryButton}
           disabled={!canStartScan}
           onClick={onScanStart}
           type="button"
         >
-          {isScanning ? <LoaderCircle className={styles.spinner} aria-hidden="true" size={16} /> : null}
-          <span>{isScanning ? "AWS를 읽는 중" : "기존 AWS 가져오기"}</span>
+          <span className={styles.deploymentButtonText}>{isScanning ? "가져오는 중" : "기존 AWS 가져오기"}</span>
         </button>
-        {isScanning && !createProjectOnApply ? (
+        {isScanning ? (
           <button
-            className={styles.secondaryButton}
+            className={styles.deploymentSecondaryButton}
             onClick={onScanCancel}
             type="button"
           >
             취소
           </button>
         ) : null}
-        {isScanning && createProjectOnApply ? (
-          <p className={styles.loadingRow} role="status">
-            AWS 응답을 기다리고 있습니다. 이 단계에서는 프로젝트가 만들어지지 않습니다.
-          </p>
-        ) : null}
         {awsConnections.length === 0 ? (
-          <div className={styles.notice}>
+          <div className={styles.deploymentNotice}>
             <p>환경설정에서 AWS Role을 먼저 연결해 주세요.</p>
-            <a href="/dashboard/settings?tab=aws&next=reverse">
+            <a className={styles.deploymentSecondaryButton} href="/dashboard/settings?tab=aws&next=reverse">
               환경설정으로 이동
             </a>
           </div>
         ) : null}
-      </section>
 
-      <details className={styles.advanced}>
-        <summary className={styles.advancedSummary}>고급 설정</summary>
-        <div className={styles.advancedBody}>
-          {createProjectOnApply ? null : (
-            <label className={styles.field}>
-              <span className={styles.fieldLabel}>프로젝트</span>
+        <details className={styles.reverseAdvancedSettings}>
+          <summary className={styles.reverseAdvancedSummary}>고급 설정</summary>
+
+          {createProjectOnApply ? (
+            <p className={styles.deploymentHint}>프로젝트는 후보를 적용할 때 생성됩니다.</p>
+          ) : (
+            <label className={styles.deploymentField}>
+              프로젝트
               <select
                 disabled={isLoadingOptions}
                 onChange={(event) => onSelectedProjectChange(event.currentTarget.value)}
@@ -130,8 +124,8 @@ export function ReverseEngineeringScanCriteriaForm({
             </label>
           )}
 
-          <label className={styles.field}>
-            <span className={styles.fieldLabel}>AWS 연결</span>
+          <label className={styles.deploymentField}>
+            AWS 연결
             <select
               disabled={isLoadingOptions || awsConnections.length === 0}
               onChange={(event) => onSelectedAwsConnectionChange(event.currentTarget.value)}
@@ -146,13 +140,13 @@ export function ReverseEngineeringScanCriteriaForm({
             </select>
           </label>
 
-          <p className={styles.hint}>현재 리전: {selectedAwsConnectionRegion}</p>
+          <p className={styles.deploymentHint}>현재 리전: {selectedAwsConnectionRegion}</p>
 
-          <div className={styles.field}>
-            <span className={styles.fieldLabel}>가져올 Resource</span>
-            <div className={styles.resourceGrid}>
+          <div className={styles.deploymentField}>
+            가져올 리소스
+            <div className={styles.reverseResourceGrid}>
               {resourceTypes.map((resourceType) => (
-                <label key={resourceType} className={styles.resourceToggle}>
+                <label key={resourceType} className={styles.reverseResourceToggle}>
                   <input
                     checked={selectedResourceTypes.includes(resourceType)}
                     onChange={() => onResourceTypeToggle(resourceType)}
@@ -163,8 +157,8 @@ export function ReverseEngineeringScanCriteriaForm({
               ))}
             </div>
           </div>
-        </div>
-      </details>
+        </details>
+      </section>
     </>
   );
 }

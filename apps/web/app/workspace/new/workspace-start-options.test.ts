@@ -22,7 +22,7 @@ test("createWorkspaceStartOptions exposes four guided starts and keeps blank boa
       ["ai", "primary"],
       ["reverse", "primary"],
       ["template", "primary"],
-      ["repository", "primary"],
+      ["github", "primary"],
       ["blank", "secondary"]
     ]
   );
@@ -37,16 +37,12 @@ test("WorkspaceStartClient uses the rebuilt start shell without a placeholder", 
   assert.match(startClientSource, /blankStartOption/);
 });
 
-test("WorkspaceStartClient keeps Template and GitHub Repository as real start paths", () => {
+test("WorkspaceStartClient keeps Template and GitHub as separate real start paths", () => {
   assert.match(startClientSource, /saveProjectDraft/);
   assert.match(startClientSource, /selectedTemplate\.diagramJson/);
-  assert.match(startClientSource, /workspace\/repository/);
-});
-
-test("WorkspaceStartClient hydrates a stored form before persisting changes", () => {
-  assert.match(startClientSource, /isStartFormHydrated/);
-  assert.match(startClientSource, /if \(!isStartFormHydrated\) \{\s+return;/);
-  assert.match(startClientSource, /setIsStartFormHydrated\(true\)/);
+  assert.match(startClientSource, /createGitHubSourceRepositoryInstallUrl\(project\.id\)/);
+  assert.match(startClientSource, /window\.location\.assign\(installUrl\)/);
+  assert.doesNotMatch(startClientSource, /connectGitHubAfterCreate/);
 });
 
 test("resolveWorkspaceStartAction sends Reverse users without a verified AWS Role to settings", () => {
@@ -88,19 +84,14 @@ test("resolveWorkspaceStartAction opens AI before project creation", () => {
   assert.deepEqual(aiAction, { kind: "openAiDraft", href: "/workspace/ai" });
 });
 
-test("resolveWorkspaceStartAction creates projects for blank, Template, and Repository starts", () => {
-  const starts = ["blank", "template", "repository"] as const;
-  const actions = starts.map((startKind) =>
-    resolveWorkspaceStartAction({
-      cloudPlatform: "aws",
-      hasVerifiedAwsConnection: true,
-      projectName: startKind,
-      startKind
-    })
-  );
+test("resolveWorkspaceStartAction creates projects for blank, Template, and GitHub starts", () => {
+  const starts = ["blank", "template", "github"] as const;
+  const actions = starts.map((startKind) => resolveWorkspaceStartAction({
+    cloudPlatform: "aws",
+    hasVerifiedAwsConnection: true,
+    projectName: startKind,
+    startKind
+  }));
 
-  assert.deepEqual(
-    actions,
-    starts.map((openMode) => ({ kind: "createProject", openMode }))
-  );
+  assert.deepEqual(actions, starts.map((openMode) => ({ kind: "createProject", openMode })));
 });

@@ -3,8 +3,7 @@ import type {
   ArchitectureSource,
   DiagramJson,
   ProjectAssetUploadResponse,
-  TerraformArtifact,
-  TerraformArtifactBundle
+  TerraformArtifact
 } from "@sketchcatch/types";
 import {
   abortProjectAssetUpload,
@@ -17,9 +16,7 @@ import {
 import { convertDiagramJsonToArchitectureJson } from "./workspace-ai-diagram-adapter";
 
 const TERRAFORM_ARTIFACT_CONTENT_TYPE = "text/plain";
-const TERRAFORM_BUNDLE_CONTENT_TYPE = "application/vnd.sketchcatch.terraform-files+json";
 const DEFAULT_TERRAFORM_ARTIFACT_FILE_NAME = "main.tf";
-const TERRAFORM_BUNDLE_FILE_NAME = "terraform-files.json";
 
 export type SavedWorkspaceArchitectureSnapshot = {
   readonly architecture: ArchitectureSnapshot;
@@ -54,8 +51,7 @@ export async function saveWorkspaceTerraformArtifact({
   projectId,
   skipValidation = false,
   source = "manual",
-  terraformCode,
-  terraformFiles
+  terraformCode
 }: {
   readonly diagramJson: DiagramJson;
   readonly fileName?: string;
@@ -63,10 +59,6 @@ export async function saveWorkspaceTerraformArtifact({
   readonly skipValidation?: boolean;
   readonly source?: ArchitectureSource | string;
   readonly terraformCode: string;
-  readonly terraformFiles?: readonly {
-    readonly fileName: string;
-    readonly terraformCode: string;
-  }[];
 }): Promise<SavedWorkspaceTerraformArtifact> {
   if (!terraformCode.trim()) {
     throw new Error("저장할 Terraform 코드가 없습니다.");
@@ -74,8 +66,7 @@ export async function saveWorkspaceTerraformArtifact({
 
   if (!skipValidation) {
     const validationResult = await validateTerraformCode({
-      terraformCode,
-      ...(terraformFiles ? { terraformFiles: [...terraformFiles] } : {})
+      terraformCode
     });
     const validationError = validationResult.diagnostics.find(
       (diagnostic) => diagnostic.severity === "error"
@@ -92,19 +83,7 @@ export async function saveWorkspaceTerraformArtifact({
     projectId,
     source
   });
-  const bundle: TerraformArtifactBundle | null = terraformFiles && terraformFiles.length > 1
-    ? {
-        schemaVersion: 1,
-        files: terraformFiles.map((file) => ({
-          fileName: file.fileName,
-          terraformCode: file.terraformCode
-        }))
-      }
-    : null;
-  const artifactContent = bundle ? JSON.stringify(bundle) : terraformCode;
-  const artifactFileName = bundle ? TERRAFORM_BUNDLE_FILE_NAME : fileName;
-  const artifactContentType = bundle ? TERRAFORM_BUNDLE_CONTENT_TYPE : TERRAFORM_ARTIFACT_CONTENT_TYPE;
-  const byteSize = new TextEncoder().encode(artifactContent).byteLength;
+  const byteSize = new TextEncoder().encode(terraformCode).byteLength;
   let uploadResponse: ProjectAssetUploadResponse | undefined;
 
   try {
@@ -112,12 +91,12 @@ export async function saveWorkspaceTerraformArtifact({
       projectId,
       architectureId: architecture.id,
       assetType: "terraform_file",
-      fileName: artifactFileName,
-      contentType: artifactContentType,
+      fileName,
+      contentType: TERRAFORM_ARTIFACT_CONTENT_TYPE,
       byteSize
     });
 
-    await uploadProjectAsset(uploadResponse.upload, artifactContent);
+    await uploadProjectAsset(uploadResponse.upload, terraformCode);
 
     const confirmedAsset = await confirmProjectAssetUpload({
       projectId,

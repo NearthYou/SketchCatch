@@ -2,7 +2,7 @@ import type { DiagramNode, DiagramNodeBorderStyle } from "../../../../packages/t
 
 import { isAreaNode } from "./area-nodes";
 
-export const AREA_NODE_DEFAULT_BORDER_COLOR = "#6f4cf6";
+export const AREA_NODE_DEFAULT_BORDER_COLOR = "#cbd5e1";
 export const RESOURCE_NODE_BORDER_COLOR = "#d8e0ec";
 
 const LEGACY_DEFAULT_BORDER_COLORS = new Set(["#8b98aa", "#2f6db3"]);

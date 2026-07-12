@@ -1,33 +1,58 @@
+import { ProjectWorkspaceDraftManager, WorkspaceDraftManager } from "../../features/workspace";
+import { isWorkspaceCloudPlatform } from "../../features/workspace/project-draft-persistence";
+import { getWorkspaceDiagramFixture } from "../../features/workspace/workspace-diagram-fixtures";
 import { WorkspaceAuthGate } from "./workspace-auth-gate";
-import { WorkspaceProjectClient } from "./workspace-project-client";
+import { resolveInitialWorkspaceRightPanelView } from "./workspace-start-mode";
 
 type WorkspacePageProps = {
-  readonly searchParams: Promise<{
-    readonly projectId?: string | undefined;
-    readonly projectName?: string | undefined;
-    readonly sourceRepositoryId?: string | undefined;
-    readonly templateId?: string | undefined;
+  readonly searchParams?: Promise<{
+    readonly cloudPlatform?: string | string[] | undefined;
+    readonly diagramFixture?: string | string[] | undefined;
+    readonly projectId?: string | string[] | undefined;
+    readonly projectName?: string | string[] | undefined;
+    readonly startMode?: string | string[] | undefined;
   }>;
 };
 
-// Workspace query를 Board 저장 흐름과 Repository 분석 handoff로 연결합니다.
 export default async function WorkspacePage({ searchParams }: WorkspacePageProps) {
   const params = await searchParams;
+  const projectId = getSingleSearchParam(params?.projectId)?.trim();
+  const initialRightPanelView = resolveInitialWorkspaceRightPanelView(
+    getSingleSearchParam(params?.startMode)
+  );
+
+  if (projectId) {
+    const projectName = getSingleSearchParam(params?.projectName)?.trim();
+    const cloudPlatform = getSingleSearchParam(params?.cloudPlatform);
+
+    return (
+      <WorkspaceAuthGate>
+        <ProjectWorkspaceDraftManager
+          cloudPlatform={isWorkspaceCloudPlatform(cloudPlatform) ? cloudPlatform : undefined}
+          initialRightPanelView={initialRightPanelView}
+          projectId={projectId}
+          projectName={projectName || "Project workspace"}
+        />
+      </WorkspaceAuthGate>
+    );
+  }
+
+  const projectName = getSingleSearchParam(params?.projectName)?.trim();
+  const initialDiagramOverride = getWorkspaceDiagramFixture(
+    getSingleSearchParam(params?.diagramFixture)
+  );
 
   return (
     <WorkspaceAuthGate>
-      <WorkspaceProjectClient
-        projectId={params.projectId ?? ""}
-        projectName={params.projectName ?? "Project workspace"}
-        repositoryHandoff={
-          params.sourceRepositoryId
-            ? {
-                requestedTemplateId: params.templateId,
-                sourceRepositoryId: params.sourceRepositoryId
-              }
-            : undefined
-        }
+      <WorkspaceDraftManager
+        initialDiagramOverride={initialDiagramOverride}
+        initialProjectName={projectName || undefined}
+        initialRightPanelView={initialRightPanelView}
       />
     </WorkspaceAuthGate>
   );
+}
+
+function getSingleSearchParam(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
 }

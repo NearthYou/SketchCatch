@@ -31,28 +31,6 @@ const commonTags = field({
 });
 
 const priorityResourceFallbacks: Record<string, readonly ParameterCatalogDefinition[]> = {
-  aws_amplify_app: [
-    required("name", "name", "App name"),
-    core("description", "description", "Description"),
-    core("repository", "repository", "Repository URL")
-  ],
-  kubernetes_namespace: [
-    nestedBlock("metadata", "metadata", "Metadata", [
-      required("name", "name", "Name")
-    ], true)
-  ],
-  kubernetes_deployment: [
-    nestedBlock("metadata", "metadata", "Metadata", [
-      required("name", "name", "Name")
-    ], true),
-    nestedBlock("spec", "spec", "Deployment spec", [], true)
-  ],
-  kubernetes_service: [
-    nestedBlock("metadata", "metadata", "Metadata", [
-      required("name", "name", "Name")
-    ], true),
-    nestedBlock("spec", "spec", "Service spec", [], true)
-  ],
   aws_route: [
     ref("routeTableId", "route_table_id", "Route table", ["aws_route_table"]),
     core("destinationCidrBlock", "destination_cidr_block", "Destination CIDR", "0.0.0.0/0"),

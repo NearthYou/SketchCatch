@@ -16,12 +16,6 @@ import {
   awsAvailabilityZoneOptions
 } from "./aws-availability-zone-options";
 import {
-  filterAdvancedDefinitions,
-  getAdvancedDefinitions,
-  getAdvancedPickerEmptyMessage,
-  removeAdvancedParameterValue
-} from "./advanced-parameters";
-import {
   filterAwsRegionOptions,
   getAwsRegionLabel,
   getNextAwsRegionOptionIndex
@@ -39,9 +33,7 @@ import {
 import { buildResourceMetadataRows } from "./resource-metadata-rows";
 import {
   buildReferenceOptions,
-  getActiveOptionalDefinitions,
-  getOptionalDefinitions,
-  getRequiredDefinitions,
+  getMainDefinitions,
   getValidationDefinitions,
   isEmptyParameterValue,
   mergeNodeParameters,
@@ -65,11 +57,6 @@ export function ParameterInputPanel({
   updateNodeMetadata,
   updateNodeParameters
 }: ParameterInputPanelProps) {
-  const [advancedParameterQuery, setAdvancedParameterQuery] = useState("");
-  const [advancedPickerNodeId, setAdvancedPickerNodeId] = useState<string | null>(null);
-  const [addedOptionalParameterNamesByNodeId, setAddedOptionalParameterNamesByNodeId] = useState<
-    Record<string, string[]>
-  >({});
   const selectedNode = useMemo(
     () => nodes.find((node) => node.id === selectedNodeId) ?? null,
     [nodes, selectedNodeId]
@@ -80,7 +67,7 @@ export function ParameterInputPanel({
       <aside className={styles.panel} aria-label="파라미터 입력 패널">
         <EmptyPanel
           title="선택된 리소스 없음"
-          description="캔버스에서 AWS 리소스 노드를 선택하면 Terraform metadata, 필수 파라미터와 추가 설정을 입력할 수 있습니다."
+          description="캔버스에서 AWS 리소스 노드를 선택하면 Terraform metadata와 main parameters를 입력할 수 있습니다."
         />
       </aside>
     );
@@ -164,27 +151,8 @@ export function ParameterInputPanel({
 
   const parameters = mergeNodeParameters(selectedNode, parameterCatalog);
   const catalogDefinitions = parameterCatalog.resources[parameters.resourceType] ?? [];
-  const requiredDefinitions = getRequiredDefinitions(catalogDefinitions);
-  const optionalDefinitions = getOptionalDefinitions(catalogDefinitions);
-  const activeOptionalDefinitions = getActiveOptionalDefinitions(
-    catalogDefinitions,
-    parameters.values
-  );
-  const addedOptionalParameterNames = addedOptionalParameterNamesByNodeId[selectedNode.id] ?? [];
-  const advancedDefinitions = getAdvancedDefinitions(
-    activeOptionalDefinitions,
-    optionalDefinitions,
-    addedOptionalParameterNames
-  );
-  const filteredAdvancedDefinitions = filterAdvancedDefinitions(
-    optionalDefinitions,
-    advancedDefinitions,
-    advancedParameterQuery
-  );
-  const isAdvancedPickerOpen = advancedPickerNodeId === selectedNode.id;
-  const requiredParameterNames = new Set(
-    requiredDefinitions.map((definition) => definition.name)
-  );
+  const mainDefinitions = getMainDefinitions(catalogDefinitions);
+  const mainParameterNames = new Set(mainDefinitions.map((definition) => definition.name));
   const validationDefinitions = getValidationDefinitions(catalogDefinitions, parameters.values);
   const metadataRows = buildResourceMetadataRows(parameters);
   const validation = validateParameters(
@@ -221,6 +189,12 @@ export function ParameterInputPanel({
     };
 
     commitParameters(nextParameters);
+
+    if (field === "resourceName" && value.trim().length > 0) {
+      updateNodeMetadata(selectedNode.id, {
+        label: value
+      });
+    }
   };
 
   const updateParameterValue = (definition: ParameterCatalogDefinition, value: unknown) => {
@@ -231,37 +205,14 @@ export function ParameterInputPanel({
       values: nextValues
     });
   };
-
-  const addAdvancedParameter = (definition: ParameterCatalogDefinition) => {
-    setAddedOptionalParameterNamesByNodeId((currentNamesByNodeId) => ({
-      ...currentNamesByNodeId,
-      [selectedNode.id]: Array.from(
-        new Set([...(currentNamesByNodeId[selectedNode.id] ?? []), definition.name])
-      )
-    }));
-    setAdvancedParameterQuery("");
-    setAdvancedPickerNodeId(null);
-  };
-
-  const removeAdvancedParameter = (definition: ParameterCatalogDefinition) => {
-    setAddedOptionalParameterNamesByNodeId((currentNamesByNodeId) => ({
-      ...currentNamesByNodeId,
-      [selectedNode.id]: (currentNamesByNodeId[selectedNode.id] ?? []).filter(
-        (parameterName) => parameterName !== definition.name
-      )
-    }));
-
-    commitParameters({
-      ...parameters,
-      values: removeAdvancedParameterValue(parameters.values, definition.name)
-    });
-  };
-
-  const configuredRequiredParameterCount = requiredDefinitions.filter(
+  const configuredMainParameterCount = mainDefinitions.filter(
     (definition) => !isEmptyParameterValue(parameters.values[definition.name])
   ).length;
-  const requiredParameterIssueCount = Object.keys(validation.parameterErrors).filter(
-    (parameterName) => requiredParameterNames.has(parameterName)
+  const mainParameterIssueCount = Object.keys(validation.parameterErrors).filter((parameterName) =>
+    mainParameterNames.has(parameterName)
+  ).length;
+  const requiredMainParameterCount = mainDefinitions.filter(
+    (definition) => definition.required
   ).length;
 
   return (
@@ -290,21 +241,21 @@ export function ParameterInputPanel({
       </section>
 
       <section
-        className={`${styles.section} ${styles.requiredParametersSection}`}
-        aria-label="Required parameters"
+        className={`${styles.section} ${styles.mainParametersSection}`}
+        aria-label="Main parameters"
       >
         <div className={styles.sectionHeader}>
-          <h3>필수 파라미터</h3>
+          <h3>Main parameters</h3>
         </div>
-        {requiredDefinitions.length > 0 ? (
+        {mainDefinitions.length > 0 ? (
           <>
             <ParameterSummaryBar
-              configuredCount={configuredRequiredParameterCount}
-              issueCount={requiredParameterIssueCount}
-              requiredCount={requiredDefinitions.length}
+              configuredCount={configuredMainParameterCount}
+              issueCount={mainParameterIssueCount}
+              requiredCount={requiredMainParameterCount}
             />
             <div className={`${styles.fieldGroup} ${styles.parameterFieldList}`}>
-              {requiredDefinitions.map((definition) => (
+              {mainDefinitions.map((definition) => (
                 <ParameterField
                   catalog={parameterCatalog}
                   currentNodeId={selectedNode.id}
@@ -327,107 +278,6 @@ export function ParameterInputPanel({
           </p>
         )}
       </section>
-
-      <section
-        className={`${styles.section} ${styles.advancedParametersSection}`}
-        aria-label="Optional parameters"
-      >
-        <div className={styles.sectionHeader}>
-          <span className={styles.sectionTitleStack}>
-            <h3>추가 설정</h3>
-            <span className={styles.sectionCount}>{advancedDefinitions.length}</span>
-          </span>
-          <button
-            aria-expanded={isAdvancedPickerOpen}
-            className={styles.advancedToggle}
-            disabled={optionalDefinitions.length === 0}
-            onClick={() => {
-              setAdvancedParameterQuery("");
-              setAdvancedPickerNodeId(isAdvancedPickerOpen ? null : selectedNode.id);
-            }}
-            type="button"
-          >
-            <Plus aria-hidden="true" size={14} />
-            파라미터 추가
-            <ChevronDown
-              aria-hidden="true"
-              className={isAdvancedPickerOpen ? styles.advancedToggleIconOpen : undefined}
-              size={14}
-            />
-          </button>
-        </div>
-
-        <p className={styles.sectionHint}>
-          필요한 선택 파라미터만 추가합니다. 입력하지 않은 값은 Terraform AWS Provider의 기본
-          동작을 따릅니다.
-        </p>
-
-        {isAdvancedPickerOpen ? (
-          <div className={styles.advancedPicker}>
-            <label className={styles.advancedSearch}>
-              <Search aria-hidden="true" size={16} />
-              <input
-                autoFocus
-                onChange={(event) => setAdvancedParameterQuery(event.currentTarget.value)}
-                placeholder="이름 또는 Terraform argument 검색"
-                type="search"
-                value={advancedParameterQuery}
-              />
-            </label>
-            <div className={styles.advancedOptionList} aria-label="추가 가능한 선택 파라미터">
-              {filteredAdvancedDefinitions.length > 0 ? (
-                filteredAdvancedDefinitions.map((definition) => (
-                  <button
-                    className={styles.advancedOptionButton}
-                    key={definition.name}
-                    onClick={() => addAdvancedParameter(definition)}
-                    type="button"
-                  >
-                    <span className={styles.advancedOptionText}>
-                      <strong>{definition.label}</strong>
-                      <span>{definition.terraformName}</span>
-                    </span>
-                    <Plus aria-hidden="true" size={15} />
-                  </button>
-                ))
-              ) : (
-                <p className={styles.advancedEmpty}>
-                  {getAdvancedPickerEmptyMessage(
-                    optionalDefinitions,
-                    advancedDefinitions,
-                    advancedParameterQuery
-                  )}
-                </p>
-              )}
-            </div>
-          </div>
-        ) : null}
-
-        {advancedDefinitions.length > 0 ? (
-          <div className={`${styles.fieldGroup} ${styles.parameterFieldList}`}>
-            {advancedDefinitions.map((definition) => (
-              <ParameterField
-                catalog={parameterCatalog}
-                currentNodeId={selectedNode.id}
-                definition={definition}
-                errors={validation.parameterErrors}
-                key={definition.name}
-                nodes={nodes}
-                onChange={(value) => updateParameterValue(definition, value)}
-                onRemove={() => removeAdvancedParameter(definition)}
-                path={definition.name}
-                value={parameters.values[definition.name]}
-              />
-            ))}
-          </div>
-        ) : (
-          <p className={styles.inlineEmpty}>
-            {optionalDefinitions.length > 0
-              ? "아직 추가한 선택 파라미터가 없습니다."
-              : "이 리소스에는 추가할 선택 파라미터가 없습니다."}
-          </p>
-        )}
-      </section>
     </aside>
   );
 }
@@ -442,17 +292,17 @@ function ParameterSummaryBar({
   requiredCount: number;
 }) {
   return (
-    <dl className={styles.parameterSummaryBar} aria-label="Required parameter summary">
+    <dl className={styles.parameterSummaryBar} aria-label="Main parameter summary">
       <div className={styles.parameterSummaryItem}>
-        <dt>필수</dt>
+        <dt>Required</dt>
         <dd>{requiredCount}</dd>
       </div>
       <div className={styles.parameterSummaryItem}>
-        <dt>입력됨</dt>
+        <dt>Configured</dt>
         <dd>{configuredCount}</dd>
       </div>
       <div className={styles.parameterSummaryItem}>
-        <dt>문제</dt>
+        <dt>Issues</dt>
         <dd>{issueCount}</dd>
       </div>
     </dl>

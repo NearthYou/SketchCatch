@@ -1,9 +1,4 @@
-import {
-  createTerraformProviderFiles,
-  type DiagramJson,
-  type DiagramNode,
-  type TerraformDiagnostic
-} from "@sketchcatch/types";
+import type { DiagramJson, DiagramNode, TerraformDiagnostic } from "@sketchcatch/types";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
 
 export type TerraformSaveBanner =
@@ -22,7 +17,6 @@ export type TerraformVirtualFile = {
 };
 
 const TERRAFORM_STANDARD_FILE_NAMES = ["main.tf"] as const;
-const TERRAFORM_FILE_SORT_ORDER = ["providers.tf", "main.tf"] as const;
 
 export function toDiagramFingerprint(value: unknown): string {
   return JSON.stringify(value);
@@ -49,9 +43,6 @@ export function createTerraformFilesFromGeneratedCode(
 ): TerraformVirtualFile[] {
   const fileNames = getTerraformFileOptions(diagramJson, []);
   const codeByFileName = new Map(fileNames.map((fileName) => [fileName, ""]));
-  for (const providerFile of createTerraformProviderFiles(diagramJson)) {
-    codeByFileName.set(providerFile.fileName, providerFile.terraformCode.trim());
-  }
   const nodeFileByAddress = new Map(
     diagramJson.nodes
       .map((node) => [toNodeTerraformAddress(node), normalizeTerraformFileName(node.parameters?.fileName)] as const)
@@ -69,14 +60,10 @@ export function createTerraformFilesFromGeneratedCode(
     codeByFileName.set("main.tf", generatedCode.trim());
   }
 
-  return Array.from(codeByFileName.entries())
-    .sort(([leftFileName], [rightFileName]) =>
-      compareTerraformFileNames(leftFileName, rightFileName)
-    )
-    .map(([fileName, code]) => ({
-      code,
-      fileName
-    }));
+  return Array.from(codeByFileName.entries()).map(([fileName, code]) => ({
+    code,
+    fileName
+  }));
 }
 
 export function getDiagramTerraformAddresses(diagramJson: DiagramEditorPanelContext["diagram"]): Set<string> {
@@ -111,8 +98,8 @@ export function getTerraformFileOptions(
 }
 
 export function compareTerraformFileNames(left: string, right: string): number {
-  const leftStandardIndex = TERRAFORM_FILE_SORT_ORDER.indexOf(left as (typeof TERRAFORM_FILE_SORT_ORDER)[number]);
-  const rightStandardIndex = TERRAFORM_FILE_SORT_ORDER.indexOf(right as (typeof TERRAFORM_FILE_SORT_ORDER)[number]);
+  const leftStandardIndex = TERRAFORM_STANDARD_FILE_NAMES.indexOf(left as (typeof TERRAFORM_STANDARD_FILE_NAMES)[number]);
+  const rightStandardIndex = TERRAFORM_STANDARD_FILE_NAMES.indexOf(right as (typeof TERRAFORM_STANDARD_FILE_NAMES)[number]);
 
   if (leftStandardIndex !== -1 || rightStandardIndex !== -1) {
     if (leftStandardIndex === -1) {
@@ -159,19 +146,6 @@ function normalizeTerraformCodeAfterBlockRemoval(terraformCode: string): string 
 
 export function getTerraformFileCode(files: readonly TerraformVirtualFile[], fileName: string): string {
   return files.find((file) => file.fileName === fileName)?.code ?? "";
-}
-
-// Terraform 진단의 1부터 시작하는 줄 번호를 textarea 선택 위치로 바꿉니다.
-export function getTerraformLineStartOffset(terraformCode: string, line: number): number {
-  if (line <= 1) return 0;
-  const lines = terraformCode.split("\n");
-  let offset = 0;
-
-  for (let index = 0; index < Math.min(line - 1, lines.length); index += 1) {
-    offset += (lines[index]?.length ?? 0) + 1;
-  }
-
-  return Math.min(offset, terraformCode.length);
 }
 
 export function combineTerraformFiles(files: readonly TerraformVirtualFile[]): string {

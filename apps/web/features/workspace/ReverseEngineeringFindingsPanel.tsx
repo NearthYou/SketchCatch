@@ -2,14 +2,13 @@ import type {
   CheckFinding,
   ReverseEngineeringAnalysisExclusion
 } from "@sketchcatch/types";
-import styles from "./reverse-engineering.module.css";
+import styles from "./workspace.module.css";
 
 export type ReverseEngineeringFindingsPanelProps = {
   readonly analysisExclusions: ReverseEngineeringAnalysisExclusion[];
   readonly findings: CheckFinding[];
 };
 
-// 스캔 결과에서 찾은 위험과 비용 정보를 읽기 전용 목록으로 보여줍니다.
 export function ReverseEngineeringFindingsPanel({
   analysisExclusions,
   findings
@@ -17,9 +16,9 @@ export function ReverseEngineeringFindingsPanel({
   const highRiskCount = findings.filter((finding) => finding.severity === "high").length;
 
   return (
-    <section className={styles.section}>
+    <section className={styles.deploymentSection}>
       <h3>위험/비용 finding</h3>
-      <div className={styles.stats}>
+      <div className={styles.deploymentPreflightStats}>
         <span>
           High Risk
           <strong>{highRiskCount}</strong>
@@ -35,11 +34,11 @@ export function ReverseEngineeringFindingsPanel({
       </div>
 
       {findings.length === 0 ? (
-        <p className={styles.hint}>현재 스캔 결과에서 표시할 위험/비용 finding이 없습니다.</p>
+        <p className={styles.deploymentHint}>현재 스캔 결과에서 표시할 위험/비용 finding이 없습니다.</p>
       ) : (
-        <ul className={styles.resultList}>
+        <ul className={styles.reverseResultList}>
           {findings.map((finding) => (
-            <li key={finding.id} className={styles.resultItem}>
+            <li key={finding.id} className={styles.reverseResultItem}>
               <strong>{finding.title}</strong>
               <span>
                 {finding.severity} · {finding.category}
@@ -53,11 +52,11 @@ export function ReverseEngineeringFindingsPanel({
       )}
 
       {analysisExclusions.length > 0 ? (
-        <div className={styles.warning}>
+        <div className={styles.deploymentNotice}>
           <strong>지원 제외 리소스</strong>
-          <ul className={styles.resultList}>
+          <ul className={styles.reverseResultList}>
             {analysisExclusions.map((exclusion) => (
-              <li key={exclusion.id} className={styles.resultItem}>
+              <li key={exclusion.id} className={styles.reverseResultItem}>
                 <strong>{exclusion.resourceId}</strong>
                 <span>{exclusion.message}</span>
               </li>

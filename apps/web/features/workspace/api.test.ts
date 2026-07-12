@@ -1,7 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  analyzeSourceRepository,
   approveDeploymentPlan,
   abortProjectAssetUpload,
   applyGitCicdAwsRoleDiff,
@@ -12,7 +11,6 @@ import {
   createArchitectureSnapshot,
   createAwsConnectionSetup,
   createDeployment,
-  createLiveObservation,
   createGitCicdGitHubOAuthStartUrl,
   createProjectAssetUpload,
   cancelReverseEngineeringScan,
@@ -40,15 +38,12 @@ import {
   runAiPreDeploymentCheck,
   runDeploymentPlan,
   runDeploymentApply,
-  stopLiveObservation,
-  streamLiveObservationSnapshots,
   saveProjectDraft,
   testAwsConnection,
   uploadProjectAsset,
   validateTerraformCode,
   verifyAwsConnection,
-  verifyAwsConnectionCreatedRole,
-  type LiveObservationStreamFailure
+  verifyAwsConnectionCreatedRole
 } from "./api";
 import type { Project } from "../../../../packages/types/src";
 import { clearStoredAuthSession, writeStoredAuthSession } from "../../lib/auth-storage";
@@ -91,174 +86,6 @@ test("listProjects fetches projects for the authenticated user", async (context)
   assert.equal(requests[0]?.init?.method, undefined);
   assert.equal(new Headers(requests[0]?.init?.headers).get("authorization"), "Bearer access-token");
   assert.deepEqual(projects, [project]);
-});
-
-test("Live Observation JSON client uses authenticated deployment-scoped paths", async (context) => {
-  const originalFetch = globalThis.fetch;
-  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
-  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
-  const session = createLiveObservationSessionPayload();
-  const snapshot = createLiveObservationSnapshotPayload("active");
-
-  context.after(() => {
-    globalThis.fetch = originalFetch;
-    restoreWindow(originalWindowDescriptor);
-  });
-  installAuthSession();
-
-  globalThis.fetch = async (input, init) => {
-    requests.push({ input, init });
-    const body = String(input).endsWith("/stop") ? { snapshot } : { session, snapshot };
-    return Response.json(body, { status: 200 });
-  };
-
-  const created = await createLiveObservation(session.deploymentId);
-  const stopped = await stopLiveObservation(session.deploymentId, session.id);
-
-  assert.equal(
-    String(requests[0]?.input),
-    `/api/deployments/${session.deploymentId}/live-observations`
-  );
-  assert.equal(requests[0]?.init?.method, "POST");
-  assert.equal(
-    String(requests[1]?.input),
-    `/api/deployments/${session.deploymentId}/live-observations/${session.id}/stop`
-  );
-  assert.equal(new Headers(requests[0]?.init?.headers).get("authorization"), "Bearer access-token");
-  assert.equal(created.session.id, session.id);
-  assert.equal(stopped.observationId, snapshot.observationId);
-});
-
-test("Live Observation stream parses authenticated snapshot SSE", async (context) => {
-  const originalFetch = globalThis.fetch;
-  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
-  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
-  const session = createLiveObservationSessionPayload();
-  const snapshot = createLiveObservationSnapshotPayload("stopped");
-  const received: unknown[] = [];
-
-  context.after(() => {
-    globalThis.fetch = originalFetch;
-    restoreWindow(originalWindowDescriptor);
-  });
-  installAuthSession();
-
-  globalThis.fetch = async (input, init) => {
-    requests.push({ input, init });
-    const payload = `event: snapshot\ndata: ${JSON.stringify(snapshot)}\n\n`;
-    return new Response(payload, {
-      headers: { "Content-Type": "text/event-stream" },
-      status: 200
-    });
-  };
-
-  await streamLiveObservationSnapshots({
-    deploymentId: session.deploymentId,
-    observationId: session.id,
-    onSnapshot: (value) => received.push(value),
-    signal: new AbortController().signal
-  });
-
-  assert.equal(
-    String(requests[0]?.input),
-    `/api/deployments/${session.deploymentId}/live-observations/${session.id}/stream`
-  );
-  assert.equal(new Headers(requests[0]?.init?.headers).get("authorization"), "Bearer access-token");
-  assert.deepEqual(received, [snapshot]);
-});
-
-test("Live Observation stream falls back to authenticated snapshot GET", async (context) => {
-  const originalFetch = globalThis.fetch;
-  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
-  const requests: string[] = [];
-  const session = createLiveObservationSessionPayload();
-  const snapshot = createLiveObservationSnapshotPayload("stopped");
-  const received: unknown[] = [];
-  const failures: LiveObservationStreamFailure[] = [];
-
-  context.after(() => {
-    globalThis.fetch = originalFetch;
-    restoreWindow(originalWindowDescriptor);
-  });
-  installAuthSession();
-
-  globalThis.fetch = async (input) => {
-    const url = String(input);
-    requests.push(url);
-    if (url.endsWith("/stream")) {
-      return new Response(null, { status: 503 });
-    }
-    return Response.json({ snapshot }, { status: 200 });
-  };
-
-  await streamLiveObservationSnapshots({
-    deploymentId: session.deploymentId,
-    observationId: session.id,
-    onError: (failure) => failures.push(failure),
-    onSnapshot: (value) => received.push(value),
-    retryBaseDelayMs: 0,
-    signal: new AbortController().signal
-  });
-
-  assert.equal(requests.length, 2);
-  assert.deepEqual(received, [snapshot]);
-  assert.equal(failures.length, 1);
-  assert.equal(failures[0]?.source, "stream");
-  assert.equal(failures[0]?.retryCount, 0);
-  assert.ok(failures[0]?.error instanceof Error);
-});
-
-test("Live Observation stream does not report an already-aborted signal as an error", async () => {
-  const controller = new AbortController();
-  const failures: LiveObservationStreamFailure[] = [];
-  controller.abort();
-
-  await streamLiveObservationSnapshots({
-    deploymentId: "deployment-1",
-    observationId: "observation-1",
-    onError: (failure) => failures.push(failure),
-    onSnapshot: () => undefined,
-    signal: controller.signal
-  });
-
-  assert.deepEqual(failures, []);
-});
-
-test("Live Observation stream identifies snapshot polling failures while retrying", async (context) => {
-  const originalFetch = globalThis.fetch;
-  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
-  const controller = new AbortController();
-  const failures: LiveObservationStreamFailure[] = [];
-
-  context.after(() => {
-    globalThis.fetch = originalFetch;
-    restoreWindow(originalWindowDescriptor);
-  });
-  installAuthSession();
-
-  globalThis.fetch = async () => new Response(null, { status: 503 });
-
-  await streamLiveObservationSnapshots({
-    deploymentId: "deployment-1",
-    observationId: "observation-1",
-    onError: (failure) => {
-      failures.push(failure);
-      if (failure.source === "snapshot-poll") {
-        controller.abort();
-      }
-    },
-    onSnapshot: () => undefined,
-    retryBaseDelayMs: 0,
-    signal: controller.signal
-  });
-
-  assert.deepEqual(
-    failures.map(({ retryCount, source }) => ({ retryCount, source })),
-    [
-      { retryCount: 0, source: "stream" },
-      { retryCount: 0, source: "snapshot-poll" }
-    ]
-  );
 });
 
 test("listGitHubInstalledRepositories fetches GitHub App installation repository candidates", async (context) => {
@@ -2022,53 +1849,6 @@ test("deployment helpers list records, start plan, approve plan, apply, destroy,
   assert.equal(failureExplanation.cleanupRequired, true);
 });
 
-test("analyzeSourceRepository posts to the connected repository and returns the saved handoff", async (context) => {
-  const originalFetch = globalThis.fetch;
-  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
-  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
-
-  context.after(() => {
-    globalThis.fetch = originalFetch;
-    restoreWindow(originalWindowDescriptor);
-  });
-
-  installAuthSession();
-
-  globalThis.fetch = async (input, init) => {
-    requests.push({ input, init });
-
-    return new Response(
-      JSON.stringify({
-        sourceRepositoryId: "source-repository-1",
-        repositoryRevision: "abc123",
-        analyzedAt: "2026-07-11T00:00:00.000Z",
-        aiHandoff: {
-          status: "template_selected",
-          templateId: "static-web-hosting",
-          applicationUnits: [],
-          evidence: [],
-          missingEvidence: [],
-          selectionReasons: ["Vite frontend와 정적 배포 evidence를 감지했습니다."]
-        }
-      }),
-      {
-        headers: { "Content-Type": "application/json" },
-        status: 200
-      }
-    );
-  };
-
-  const result = await analyzeSourceRepository(project.id, "source-repository-1");
-
-  assert.equal(
-    String(requests[0]?.input),
-    `/api/projects/${project.id}/source-repositories/source-repository-1/analyze`
-  );
-  assert.equal(requests[0]?.init?.method, "POST");
-  assert.equal(result.repositoryRevision, "abc123");
-  assert.equal(result.aiHandoff.status, "template_selected");
-});
-
 test("Git/CI/CD handoff helpers list handoffs and read pipeline status", async (context) => {
   const originalFetch = globalThis.fetch;
   const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
@@ -2357,55 +2137,6 @@ function createGitCicdHandoffPayload(input: { id: string; projectId: string }) {
     createdByUserId: "22222222-2222-4222-8222-222222222222",
     createdAt: "2026-06-26T00:00:00.000Z",
     updatedAt: "2026-06-26T00:00:00.000Z"
-  };
-}
-
-function createLiveObservationSessionPayload() {
-  return {
-    audienceUrl:
-      "https://audience.example.com/?observation=public-token&collector=https%3A%2F%2Fapp.example.com",
-    createdAt: "2026-07-10T00:00:00.000Z",
-    deploymentId: "11111111-1111-4111-8111-111111111111",
-    expiresAt: "2026-07-10T00:15:00.000Z",
-    id: "22222222-2222-4222-8222-222222222222",
-    status: "active",
-    trafficApiUrl: "https://traffic.example.com/api/traffic"
-  };
-}
-
-function createLiveObservationSnapshotPayload(status: "active" | "stopped") {
-  return {
-    capacity: {
-      currentInstanceCount: 1,
-      desiredCapacity: 1,
-      errorCode: null,
-      inServiceInstanceCount: 1,
-      instances: [
-        { healthStatus: "Healthy", instanceId: "i-demo", lifecycleState: "InService" }
-      ],
-      latestActivity: null,
-      maxCapacity: 2,
-      observedAt: "2026-07-10T00:00:01.000Z",
-      state: "available"
-    },
-    cloudWatch: {
-      delayedBySeconds: 1,
-      errorCode: null,
-      observedAt: "2026-07-10T00:00:00.000Z",
-      periodSeconds: 60,
-      requestCountPerTarget: 12,
-      state: "available"
-    },
-    live: {
-      acceptedEventCount: 12,
-      observedAt: "2026-07-10T00:00:01.000Z",
-      pressureLevel: "normal",
-      pressurePercent: 20,
-      projectedRequestsPerMinute: 12,
-      rollingRequestsPerSecond: 0.2
-    },
-    observationId: "22222222-2222-4222-8222-222222222222",
-    status
   };
 }
 
