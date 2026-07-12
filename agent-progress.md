@@ -123,6 +123,16 @@ Short English-only working log for the current agent context. Older records are 
 - Verification: focused Live Observation and workspace layout tests passed 109/109; `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
 - Risk: the in-app browser authentication session expired during the final rebuild, so the post-integration screenshot requires login. The preceding compact-map browser check passed; the new ownership and endpoint behavior are covered by focused tests.
 
+### 2026-07-12 - Harden diagram routing and Live Observation presentation
+
+- Added obstacle-aware orthogonal routing for generated diagrams so an edge keeps authored handles when safe and selects alternate handles when its path would cross an unrelated resource node.
+- Simplified the Live Observation header to the product eyebrow and `실시간 트래픽 관측`, renamed the embedded section to `AI 시뮬레이션`, and made its result-preserving visibility toggle default to on.
+- Kept the AI summary first, retained only bottleneck, failure, and cost details, and removed the duplicated request-flow result.
+- Restored an always-visible traffic-load action for both real observation sessions and the development mock, with bounded connector particles and stronger scale-out activation states.
+- Made Capacity units derive from authored, current, desired, and maximum capacity; render up to eight individual units; and summarize overflow as `+N` with responsive horizontal sizing.
+- Verification: focused Live Observation and workspace tests passed 127/127; web and repository typechecks passed; `pnpm harness:check`, `pnpm lint`, and `pnpm build` passed. The full web suite passed 864/868 and reproduced four pre-existing failures in the node-toolbar CSS contract, dashboard-project route expectation, AWS priority coverage, and the stale 126-entry gallery count.
+- Risk: the in-app browser session still redirects the protected workspace to login, so a final authenticated modal screenshot remains pending. The four existing full-suite failures remain outside this change set; static UI contracts, animation bounds, responsive layout, and data-state behavior for this work are covered by focused tests.
+
 ## Verification
 
 
