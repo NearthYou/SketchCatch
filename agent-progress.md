@@ -18,6 +18,34 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-12 - Eliminate Template sibling visual collisions
+
+- Added a deterministic post-layout pass that separates renderable siblings using their real icon-and-caption bounds while moving Area subtrees together.
+- Kept collapsed Terraform helpers inside their inferred parent Areas without allowing them to enlarge visible layouts.
+- Applied the same materialized layout to all six deployable Templates and legacy Live Observation fixtures; saved user-authored Board coordinates remain untouched.
+- Verification: 33 focused Template tests, harness, lint, and typecheck passed; Chrome confirmed the six-card Gallery preview is visually separated.
+- Full build remains blocked by the pre-existing missing `apps/web/.codegraph` path.
+
+### 2026-07-12 - Merge latest dev into template QA branch
+
+- Fast-forwarded local `dev` to `origin/dev` at `f5908be3` and merged it into `fix/gg/qa-followup`.
+- Preserved catalog-backed Template materialization, containment layout, and the Live Observation 40px grid while adopting the S3 Website traffic endpoint from `dev`.
+- Verification: 27 focused Template tests, harness, lint, and typecheck passed; lint retained one existing unused-argument warning.
+- Full build remains blocked by the pre-existing missing `apps/web/.codegraph` path.
+
+### 2026-07-12 - Restore local signup availability QA path
+
+- Goal: Resolve the signup duplicate-check server error and align the paired password inputs during local QA.
+- Completed:
+  - Applied the existing local database migrations; the initial Postgres database had no relations, so availability requests could not query `users`.
+  - Set authentication form fields to start-align their internal grid content so password help text no longer pushes the confirmation input down.
+  - Added focused source-contract coverage for the password field alignment rule.
+- Verification:
+  - `POST /api/auth/signup/availability` returned `200 {"usernameAvailable":true}` after migration.
+  - Focused signup page test passed.
+- Risk:
+  - The pre-existing full web test suite has unrelated failures outside the signup files.
+
 ### 2026-07-12 - Restore Destroy Plan follow-up actions
 
 - History keeps `Destroy Plan 생성` before planning, shows regeneration plus approval after planning, and shows regeneration plus Destroy execution after approval; explicit API approval snapshot checks remain intact. Focused action tests passed 22/22, and lint, typecheck, build, diff check, and harness passed; browser visual verification was unavailable after the local tab interruption.
@@ -81,43 +109,6 @@ Short English-only working log for the current agent context. Older records are 
 - Fixed PR #343 so the Apply confirmation opens when apply becomes available but can still be dismissed, with a focused regression test.
 - Reconciled PR #343 with the merged template work from PR #317 while preserving archive parser hardening, generated Lambda/EKS support, and direct-deployment evidence.
 - Verification: focused deployment apply, Terraform artifact safety, and Apply confirmation tests passed; required repository checks were run before integration.
-
-### 2026-07-11 - Remove duplicated Trivy rule IDs from the scanner test
-
-- Updated the Trivy ignore-file test to import `disabledTrivyTerraformRuleIds` from the scanner instead of maintaining a second hard-coded rule list.
-- Verification: focused `trivy-terraform-scan.test.ts`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check` passed.
-- Risk: none; the test now follows the production exclusion list automatically.
-- Next action: review and commit the Trivy exclusion change when ready.
-
-### 2026-07-11 - Disable Trivy ALB and Auto Scaling checks
-
-- Configured each Terraform Trivy scan to generate an ignore file that excludes ALB rules AWS-0047, AWS-0052, AWS-0053, and AWS-0054 plus Auto Scaling launch configuration/template rules AWS-0008, AWS-0009, AWS-0122, AWS-0129, and AWS-0130.
-- Kept all other Terraform Trivy checks enabled; the exclusion applies to the generated scan workspace only and does not change user Terraform source files.
-- Verification: focused Trivy scanner tests, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check` passed.
-- Risk: future Trivy check-bundle rule IDs require an explicit review before they are added to the exclusion list.
-- Next action: add the product-specific ALB and ASG configuration warnings as non-blocking deployment checks when requested.
-
-### 2026-07-11 - Recover production auth runtime configuration
-
-- Traced signup/login failures to a one-character SSM `AUTH_TOKEN_SECRET` and missing OAuth client IDs in the ECS API task definition.
-- Rotated the secret without exposing it, restarted the API service, and verified live signup, login, and account cleanup.
-- Added production startup validation and deployment-time OAuth variable injection so invalid auth configuration fails before serving traffic.
-- Kept container ALARM notifications, removed repetitive OK notifications, and excluded the known stale Server Action web log pattern.
-### 2026-07-11 - Retire warm rollback and complete cost-first ECS operations
-
-- Deployed and released the main SHA, aligned API/web/worker images, and verified the one-off worker migration command.
-- Sanitized the retired EC2 host before creating an encrypted cold rollback AMI; removed the duplicate unencrypted AMI and snapshot.
-- Deleted the EC2 instance, old ALB stack, legacy ECS service/task registration, target group, and port 80 rules.
-- Added API/web autoscaling min 1 and max 2, circuit-breaker-preserving service ownership, low-cost alarms, and confirmed SNS delivery.
-- Replaced EC2 migrations with approved ECS one-off worker migrations, pre-migration snapshots, a compatibility guard, and three-snapshot retention.
-- Removed retired deployment/HTTPS workflows and reduced the GitHub deploy role to ECR, ECS, worker, scoped snapshot, and SNS permissions.
-- Added a disabled-by-default cold rollback Terraform root with scoped RDS/Redis access and documented restore procedures.
-
-### 2026-07-11 - Integrate latest dev into Live Observation PR
-
-- Merged the latest `origin/dev` UI rebuild and ECS production changes into PR #328 while preserving Live Observation and Board behavior.
-- Kept the ECS deployment workflow and removed the retired EC2 deployment workflow.
-- Reconciled the new Workspace shell, Board viewport behavior, Resource panel extraction, and Live Observation styles.
 
 ## Verification
 

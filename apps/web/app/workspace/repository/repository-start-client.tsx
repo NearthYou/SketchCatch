@@ -11,6 +11,7 @@ import type {
   RepositoryAnalysisTemplateId,
   SourceRepositoryAnalysisResult
 } from "@sketchcatch/types";
+import { TEMPLATE_IDS } from "@sketchcatch/types";
 import { TemplateGallery } from "../../../components/templates/TemplateGallery";
 import { AiDraftBoardPreview } from "../ai/ai-draft-board-preview";
 import {
@@ -256,7 +257,7 @@ function TemplateSelection({
 }
 
 function isRepositoryTemplateId(value: string): value is RepositoryAnalysisTemplateId {
-  return ["template-static-website", "template-api-db", "template-3tier"].includes(value);
+  return (TEMPLATE_IDS as readonly string[]).includes(value);
 }
 
 function createTemplateBasedRepositoryDraft(

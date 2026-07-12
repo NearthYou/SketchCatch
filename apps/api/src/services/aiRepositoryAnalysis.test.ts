@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { analyzeRepositoryEvidence } from "./aiRepositoryAnalysis.js";
 
-test("repository analysis recommends the database template from package evidence", () => {
+test("repository analysis recommends the deployable three-tier template from database evidence", () => {
   const result = analyzeRepositoryEvidence({
     defaultBranch: "main",
     evidence: [
@@ -14,7 +14,7 @@ test("repository analysis recommends the database template from package evidence
     repositoryUrl: "https://github.com/example/api"
   });
 
-  assert.equal(result.recommendedTemplateId, "template-api-db");
+  assert.equal(result.recommendedTemplateId, "three-tier-web-app");
   assert.deepEqual(result.detectedSignals, ["Node API", "Database"]);
   assert.equal(result.evidenceFiles.find((file) => file.path === "package.json")?.found, true);
   assert.equal(result.evidenceFiles.find((file) => file.path === "Dockerfile")?.found, false);

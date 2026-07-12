@@ -5,6 +5,7 @@ import {
 } from "../../../../packages/types/src/template-definitions";
 import { isAreaNode } from "../diagram-editor/area-nodes";
 import { RESOURCE_NODE_DEFAULT_SIZE } from "../diagram-editor/resource-node-geometry";
+import { materializeTemplateDiagram } from "./template-resource-materializer";
 
 export const TEMPLATE_OVERWRITE_BACKUP_STORAGE_KEY = "sketchcatch.templateOverwriteBackups";
 
@@ -63,7 +64,7 @@ const LIVE_OBSERVATION_BUCKET_POLICY = JSON.stringify({
   Version: "2012-10-17"
 });
 
-const boardTemplates: readonly BoardTemplate[] = [
+const legacyBoardTemplates: readonly BoardTemplate[] = [
   {
     id: "template-static-website",
     title: "S3 정적 웹사이트",
@@ -556,11 +557,30 @@ const boardTemplates: readonly BoardTemplate[] = [
   }
 ];
 
+const boardTemplates: readonly BoardTemplate[] = templateDefinitions.map((definition) => ({
+  id: definition.id,
+  title: definition.title,
+  description: definition.description,
+  tags: definition.tags,
+  diagramJson: buildTemplateDiagramJson(definition.id, {
+    projectSlug: "sketchcatch",
+    shortId: definition.id
+  })
+}));
+
 // 페이지와 보드 모달이 같은 템플릿 목록을 쓰도록 한 곳에서 목록을 제공합니다.
 export function listBoardTemplates(): readonly BoardTemplate[] {
   return boardTemplates.map((template) => ({
     ...template,
-    diagramJson: cloneDiagramJson(template.diagramJson)
+    diagramJson: materializeTemplateDiagram(cloneDiagramJson(template.diagramJson))
+  }));
+}
+
+// Live Observation과 기존 저장 Draft 검증은 배포 Template 카탈로그와 분리된 레거시 fixture를 사용합니다.
+export function listLegacyBoardTemplates(): readonly BoardTemplate[] {
+  return legacyBoardTemplates.map((template) => ({
+    ...template,
+    diagramJson: materializeTemplateDiagram(cloneDiagramJson(template.diagramJson))
   }));
 }
 
@@ -569,7 +589,7 @@ export function buildBoardTemplateDiagram(
   input: { readonly projectSlug: string; readonly shortId: string }
 ): DiagramJson | undefined {
   const definition = templateDefinitions.find((candidate) => candidate.id === templateId);
-  return definition ? buildTemplateDiagramJson(definition.id, input) : undefined;
+  return definition ? materializeTemplateDiagram(buildTemplateDiagramJson(definition.id, input)) : undefined;
 }
 
 // Template 목록에서 검색어와 tag를 적용하고 사용자가 고른 순서로 정렬합니다.
