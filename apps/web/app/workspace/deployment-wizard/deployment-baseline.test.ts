@@ -10,17 +10,20 @@ const diagram: DiagramJson = {
       id: "vpc-1",
       kind: "resource",
       label: "VPC",
-      nodeType: "AWS_VPC",
+      type: "AWS_VPC",
       parameters: {
         fileName: "main.tf",
         resourceName: "main",
         resourceType: "aws_vpc",
         values: { cidrBlock: "10.0.0.0/16" }
       },
-      position: { x: 0, y: 0 }
+      position: { x: 0, y: 0 },
+      size: { height: 160, width: 240 },
+      locked: false,
+      zIndex: 0
     }
   ],
-  version: "1.0"
+  viewport: { x: 0, y: 0, zoom: 1 }
 };
 
 test("stale Terraform cannot become a deployment baseline", () => {

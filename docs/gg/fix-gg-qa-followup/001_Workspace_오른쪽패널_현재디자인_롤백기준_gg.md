@@ -342,5 +342,28 @@ Terraform 보기와 Resource 보기는 같은 panel shell, 같은 여백, 같은
 - 단일 커밋 revert나 파일 전체 restore로 처리하면 안 된다.
 - 내부 디자인 기준점은 `8f1c1d7a^`, 바깥 rail 배치 기준점은 `a2fbf8b4^`다.
 - `72595d44`는 옛 스타일 제거 내역을 확인하는 참고점이지 전체 롤백 대상이 아니다.
-- 실제 롤백 전까지 현재 코드에는 손대지 않는다.
+- 선택 롤백은 아래 적용 기록처럼 현재 기능을 유지하는 범위에서만 진행한다.
 
+## 10. 2026-07-12 선택 롤백 적용 기록
+
+이 문서의 기준으로 실제 UI를 선택 롤백했다.
+
+### 적용한 것
+
+- `rightRail`을 Board Shell의 붙박이 3열에서 다시 floating card로 바꿨다.
+- 상단 프로젝트 바는 현재 작업으로 남겼으므로, 과거의 `top: 12px` 대신 그 아래인 `top: 76px`에서 시작한다.
+- Canvas가 오른쪽 rail 너비를 미리 비워 두지 않도록 오른쪽 Grid 열을 `0`으로 바꿨다.
+- Inspector의 회색 바탕과 흰 카드 중첩을 제거하고, section divider를 쓰는 연속 Inspector 형태로 바꿨다.
+- 필수/추가 파라미터, picker, summary, Region/AZ, validation은 그대로 유지했다.
+- 배포 탭은 현재 `DeploymentOperationsPanel`을 본문으로 쓰는 독립 `Deployment console` 모달을 연다.
+- 모달을 열면 Inspector와 다른 Workspace 도구를 닫아 Board 위에 도구가 겹치지 않게 했다.
+
+### 의도적으로 복원하지 않은 것
+
+- 삭제된 과거 `DeploymentPanel.tsx` 전체
+- 과거 `WorkspaceRightPanel.tsx` 전체
+- 과거 Terraform, AI, Git/CI/CD, Live Observation 화면 전체
+- `a72d371d`, `a2fbf8b4`, `8f1c1d7a`, `72595d44` 커밋 전체 revert
+
+위 파일과 커밋은 현행 API 계약과 안전 처리보다 이전 구조에 묶여 있다.
+따라서 이번에는 현재의 안전 검사, 승인, Plan, Apply, Git/CI/CD, 관찰 기능을 유지한 채 화면 표면과 진입 방식만 복원했다.

@@ -42,7 +42,7 @@
   color: var(--workspace-text);
   display: grid;
   font-family: var(--workspace-font);
-  grid-template-columns: var(--left-panel-width) minmax(0, 1fr) var(--right-panel-width);
+  grid-template-columns: var(--left-panel-width) minmax(0, 1fr) 0;
   grid-template-rows: 64px minmax(0, 1fr);
   height: 100dvh;
   min-height: 0;
@@ -53,7 +53,7 @@
 }
 
 .editorShellLeftCollapsed {
-  grid-template-columns: 48px minmax(0, 1fr) var(--right-panel-width);
+  grid-template-columns: 48px minmax(0, 1fr) 0;
 }
 
 .editorShellRightCollapsed {
@@ -868,18 +868,20 @@
 
 .rightRail {
   background: var(--workspace-surface);
-  border: 0;
-  border-left: 1px solid var(--workspace-line);
+  border: 1px solid var(--workspace-line);
+  border-radius: 8px;
+  box-shadow: 0 18px 48px rgba(23, 23, 23, 0.08);
   grid-column: 3;
-  grid-row: 2;
+  height: calc(100dvh - 88px);
+  overflow: hidden;
+  position: fixed;
+  right: 12px;
+  top: 76px;
+  width: min(var(--right-panel-width), calc(100vw - 24px));
+  z-index: 21;
   max-width: 100%;
   min-height: 0;
   min-width: 0;
-  height: auto;
-  overflow: hidden;
-  position: relative;
-  width: 100%;
-  z-index: 21;
 }
 
 .editorShellRightCollapsed .rightRail {

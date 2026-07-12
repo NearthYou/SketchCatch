@@ -232,15 +232,17 @@ test("diagram editor exposes project, save, and panel controls in one stable top
   assert.match(saveStatusBlock, /min-width:\s*0;/);
 });
 
-test("workspace shell docks both panels and collapses them on compact screens", () => {
+test("workspace shell keeps the resource panel floating over the Board", () => {
   const editorShellBlock = getCssBlock(".editorShell");
-  const compactRule = getCssRuleContaining("@media (max-width: 1120px)");
 
   assert.match(editorShellBlock, /grid-template-rows:\s*64px minmax\(0, 1fr\);/);
-  assert.match(diagramEditorStyles, /\.leftRail\s*\{[^}]*grid-row:\s*2;[^}]*position:\s*relative;/s);
-  assert.match(diagramEditorStyles, /\.rightRail\s*\{[^}]*grid-row:\s*2;[^}]*position:\s*relative;/s);
-  assert.match(compactRule, /grid-template-columns:\s*0 minmax\(0, 1fr\) 0;/);
-  assert.match(diagramEditorSource, /matchMedia\("\(max-width: 1120px\)"\)/);
+  assert.match(editorShellBlock, /grid-template-columns:\s*var\(--left-panel-width\) minmax\(0, 1fr\) 0;/);
+  assert.match(
+    diagramEditorStyles,
+    /\.rightRail\s*\{[^}]*height:\s*calc\(100dvh - 88px\);[^}]*position:\s*fixed;[^}]*right:\s*12px;[^}]*top:\s*76px;/s
+  );
+  assert.match(diagramEditorStyles, /\.rightRail\s*\{[^}]*border-radius:\s*8px;[^}]*box-shadow:/s);
+  assert.doesNotMatch(diagramEditorStyles, /\.rightRail\s*\{[^}]*grid-row:\s*2;[^}]*position:\s*relative;/s);
 });
 
 test("compact workspace refits the board without changing the saved DiagramJson", () => {
