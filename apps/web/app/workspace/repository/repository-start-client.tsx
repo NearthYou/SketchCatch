@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { GitBranch, LoaderCircle, Search, Settings2 } from "lucide-react";
+import { Check, GitBranch, LoaderCircle, Search, Settings2 } from "lucide-react";
 import type { FormEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
@@ -33,7 +33,6 @@ import { buildBoardTemplateDiagram } from "../../../features/resource-settings/t
 import {
   createPublicRepositoryDiagram,
   createPublicRepositoryRecommendation,
-  formatPublicRepositoryTemplate,
   getPublicRepositoryDeploymentDefault,
   type PublicRepositoryTemplateId
 } from "../../../features/workspace/public-repository-recommendation";
@@ -576,13 +575,16 @@ function PublicRepositoryRecommendationStep({
 
   return (
     <section className={styles.publicAnalysisResult} aria-label="public 저장소 추천">
-      <div>
-        <span>추천 템플릿 후보</span>
-        <strong>{selectedCandidate ? formatPublicRepositoryTemplate(selectedCandidate.templateId) : "맞는 템플릿 없음"}</strong>
+      <div className={styles.publicRecommendationHeader}>
+        <div>
+          <span>추천 템플릿 후보</span>
+          <strong>저장소 구조와 운영 조건에 가까운 순서입니다.</strong>
+        </div>
+        <p>{recommendation.candidates.length}개 후보 중 하나를 선택하세요.</p>
       </div>
       {recommendation.candidates.length > 0 ? (
         <div className={styles.publicCandidateList} role="radiogroup" aria-label="추천 템플릿 후보">
-          {recommendation.candidates.map((candidate) => {
+          {recommendation.candidates.map((candidate, index) => {
             const selected = selectedCandidate?.templateId === candidate.templateId;
 
             return (
@@ -594,10 +596,26 @@ function PublicRepositoryRecommendationStep({
                 role="radio"
                 type="button"
               >
-                <span>{Math.round(candidate.confidence * 100)}% 일치</span>
-                <strong>{candidate.displayTitle}</strong>
-                <p>{candidate.reasons.join(" ")}</p>
-                <small>{candidate.tradeoffs.join(" ")}</small>
+                <span className={styles.publicCandidateRank}>{index + 1}</span>
+                <span className={styles.publicCandidateBody}>
+                  <span className={styles.publicCandidateHeading}>
+                    <strong>{candidate.displayTitle}</strong>
+                    <span>{Math.round(candidate.confidence * 100)}% 적합</span>
+                  </span>
+                  <span className={styles.publicCandidateDetail}>
+                    <span>
+                      <b>추천 이유</b>
+                      <span>{candidate.reasons.join(" ")}</span>
+                    </span>
+                    <span>
+                      <b>고려할 점</b>
+                      <span>{candidate.tradeoffs.join(" ")}</span>
+                    </span>
+                  </span>
+                </span>
+                <span className={styles.publicCandidateCheck} aria-hidden="true">
+                  {selected ? <Check size={16} strokeWidth={2.5} /> : null}
+                </span>
               </button>
             );
           })}
@@ -647,7 +665,12 @@ function PublicRepositoryRecommendationStep({
           ))}
         </div>
       ) : null}
-      <button disabled={isBusy || !analysis.recommendedTemplateId} onClick={onCreateBoard} type="button">
+      <button
+        className={styles.publicBoardAction}
+        disabled={isBusy || !analysis.recommendedTemplateId}
+        onClick={onCreateBoard}
+        type="button"
+      >
         {isBusy ? <LoaderCircle className={styles.spin} size={16} /> : <Search size={16} />}
         보드 생성
       </button>

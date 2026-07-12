@@ -86,7 +86,6 @@
 .actions button,
 .actions a,
 .publicUrlForm button,
-.publicAnalysisResult button,
 .analysisPanel > button,
 .recommendationForm button,
 .candidateList button,
@@ -191,20 +190,29 @@
 
 .publicCandidateList {
   display: grid;
-  gap: 10px;
+  overflow: hidden;
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--radius-card);
+  background: var(--color-hairline);
+  gap: 1px;
 }
 
 .publicCandidate {
   display: grid;
-  gap: 6px;
-  border: 1px solid var(--color-hairline-strong);
-  border-radius: var(--radius-control);
-  padding: 12px;
+  width: 100%;
+  min-width: 0;
+  align-items: start;
+  border: 0;
+  border-radius: 0;
+  padding: 18px;
   background: var(--color-canvas);
   color: var(--color-ink);
   cursor: pointer;
   font: inherit;
   text-align: left;
+  grid-template-columns: 28px minmax(0, 1fr) 24px;
+  gap: 14px;
+  transition: background-color 140ms ease, box-shadow 140ms ease;
 }
 
 .publicCandidate:hover {
@@ -212,20 +220,147 @@
 }
 
 .publicCandidateSelected {
+  position: relative;
+  z-index: 1;
+  background: var(--color-surface-soft);
+  box-shadow: inset 3px 0 0 var(--color-primary), inset 0 0 0 1px var(--color-primary);
+}
+
+.publicCandidateRank {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--color-surface-strong);
+  color: var(--color-body);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.publicCandidateSelected .publicCandidateRank {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+.publicCandidateBody {
+  display: grid;
+  min-width: 0;
+  gap: 10px;
+  text-transform: none;
+}
+
+.publicCandidate span {
+  text-transform: none;
+}
+
+.publicCandidateHeading {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.publicCandidateHeading strong {
+  color: var(--color-ink);
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.publicCandidateHeading > span {
+  flex: 0 0 auto;
+  color: var(--color-body);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: none;
+}
+
+.publicCandidateDetail {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.publicCandidateDetail > span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.publicCandidateDetail b {
+  color: var(--color-muted);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.publicCandidateDetail span span {
+  color: var(--color-body);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.55;
+  text-transform: none;
+  word-break: keep-all;
+}
+
+.publicCandidateCheck {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: 50%;
+  background: var(--color-canvas);
+  color: var(--color-on-primary);
+}
+
+.publicCandidateSelected .publicCandidateCheck {
   border-color: var(--color-primary);
-  box-shadow: inset 0 0 0 1px var(--color-primary);
+  background: var(--color-primary);
 }
 
-.publicCandidate strong,
-.publicCandidate p,
-.publicCandidate small {
-  margin: 0;
+.publicRecommendationHeader {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
 }
 
-.publicCandidate small {
+.publicRecommendationHeader > div {
+  display: grid;
+  gap: 5px;
+}
+
+.publicRecommendationHeader strong {
+  font-size: 15px;
+}
+
+.publicRecommendationHeader > p {
   color: var(--color-muted);
   font-size: 12px;
-  line-height: 1.45;
+  white-space: nowrap;
+}
+
+.publicBoardAction {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-control);
+  padding: 0 14px;
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.publicBoardAction:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
 }
 
 .accessHint {
@@ -408,7 +543,13 @@
   .publicUrlForm { grid-template-columns: 1fr; }
   .analysisPanel { grid-template-columns: 1fr; }
   .recommendationPanel article { grid-template-columns: 1fr; }
+  .publicRecommendationHeader { align-items: start; flex-direction: column; gap: 6px; }
+  .publicCandidate { grid-template-columns: 24px minmax(0, 1fr) 22px; padding: 15px 12px; gap: 10px; }
+  .publicCandidateRank { width: 24px; height: 24px; }
+  .publicCandidateHeading { align-items: start; flex-direction: column; gap: 2px; }
+  .publicCandidateDetail { grid-template-columns: 1fr; gap: 9px; }
   .publicUrlForm button,
   .analysisPanel > button,
-  .boardAction { width: 100%; }
+  .boardAction,
+  .publicBoardAction { width: 100%; }
 }

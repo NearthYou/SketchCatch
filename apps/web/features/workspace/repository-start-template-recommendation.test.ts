@@ -18,6 +18,8 @@ test("Repository start screen exposes deployment, CI/CD, and template recommenda
   assert.match(source, /추천 템플릿/);
   assert.match(source, /추천 템플릿 후보/);
   assert.match(source, /publicCandidateList/);
+  assert.match(source, /publicCandidateDetail/);
+  assert.match(source, /publicBoardAction/);
   assert.match(source, /role="radiogroup"/);
   assert.match(source, /보드 생성/);
   assert.match(source, /createPublicRepositoryRecommendation/);
