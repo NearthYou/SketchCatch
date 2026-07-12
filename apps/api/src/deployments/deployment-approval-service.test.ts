@@ -395,7 +395,7 @@ test("approveDeploymentPlan preserves failed cleanup state for destroy approvals
   });
 });
 
-test("approveDeploymentPlan rejects plans with blocking safety warnings", async () => {
+test("approveDeploymentPlan allows plans with legacy blocking safety warnings", async () => {
   const repository = new FakeDeploymentRepository();
   const warning = createBlockingWarning();
   repository.deployment = createDeploymentRecord(undefined, {
@@ -409,22 +409,20 @@ test("approveDeploymentPlan rejects plans with blocking safety warnings", async 
     }
   });
 
-  await assert.rejects(
-    () =>
-      approveDeploymentPlan(
-        {
-          deploymentId,
-          accessContext: createAccessContext()
-        },
-        repository,
-        {
-          downloadTerraformArtifact: async () => artifactContent,
-          now: () => fixedNow
-        }
-      ),
-    /blocking safety findings/i
+  const deployment = await approveDeploymentPlan(
+    {
+      deploymentId,
+      accessContext: createAccessContext()
+    },
+    repository,
+    {
+      downloadTerraformArtifact: async () => artifactContent,
+      now: () => fixedNow
+    }
   );
-  assert.equal(repository.approvals.length, 0);
+
+  assert.equal(repository.approvals.length, 1);
+  assert.equal(deployment.approvedAt, fixedNow);
 });
 
 test("approveDeploymentPlan allows acknowledgement-only warnings without acknowledgement ids", async () => {

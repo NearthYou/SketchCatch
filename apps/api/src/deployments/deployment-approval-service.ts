@@ -307,12 +307,6 @@ function assertDeploymentCanBeApproved(
   if (!deployment.currentPlanArtifactId || !deployment.planSummary) {
     throw new DeploymentConflictError("Terraform Plan must be completed before approval");
   }
-
-  if (deployment.planSummary.warnings.some((warning) => warning.blocksApproval)) {
-    throw new DeploymentConflictError(
-      "Terraform Plan has blocking safety findings that must be resolved before approval"
-    );
-  }
 }
 
 function getApprovedDeploymentStatus(

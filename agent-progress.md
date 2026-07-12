@@ -193,7 +193,7 @@ Short English-only working log for the current agent context. Older records are 
 - Added five-minute content/policy/ignore-rule cache, Runtime Cache sharing, startup warmup, and same-key single-flight execution.
 - Reused the shared Trivy snapshot between the button check and Terraform Plan when artifact content is unchanged.
 - Added an immediate in-process gate for Public S3, open SSH, Public RDS, and IAM wildcard; Trivy now completes in the background and the UI merges its result without delaying Plan creation.
-- Moved high-finding enforcement to the approval boundary: Plan remains available and records the warning, while approval and the approval-dependent Apply action stay blocked until the finding is resolved.
+- Kept high findings visible in the Plan summary without using them as an approval blocker; existing legacy `blocksApproval` metadata is also ignored by the Plan approval UI and API.
 
 ## Verification
 

@@ -924,9 +924,9 @@ type DeploymentPlanSummary = {
 
 Plan summary는 사용자 승인 화면에 필요한 최소 요약이다. 현재 기본 흐름에서는 `terraform plan -out=tfplan` 이후 `terraform show -json tfplan` 결과의 `resource_changes`를 파싱해 생성한다.
 
-Plan 단계의 Safety Gate는 최종 실행 전 점검 결과를 `warnings`에 보존한다. Plan 저장 자체는 high finding이 있어도 `deployments.isBlocked`를 세우지 않는다. 단, high Pre-Deployment finding은 `blocksApproval: true`로 저장하여 Plan 승인과 이후 Apply를 막고, medium/low finding은 검토 정보로 남긴다. 사용자가 승인한 plan과 apply 대상 plan은 같은 artifact/hash 기준이어야 한다.
+Plan 단계의 Safety Gate는 최종 실행 전 점검 결과를 `warnings`에 보존한다. Plan 저장 자체는 high finding이 있어도 `deployments.isBlocked`를 세우지 않는다. High를 포함한 Pre-Deployment finding은 승인 차단 조건으로 사용하지 않고 검토 정보로 남기며, Plan이 존재하고 artifact/hash 안전 조건이 맞으면 사용자는 항상 승인할 수 있다. 사용자가 승인한 plan과 apply 대상 plan은 같은 artifact/hash 기준이어야 한다.
 
-Pre-Deployment Check의 보안 finding은 Terraform 파일이 제공되면 Trivy `config` misconfiguration scan 결과를 우선 사용한다. Trivy rule이 기존 `PUBLIC_SSH`, `PUBLIC_RDS`, `PUBLIC_S3`, `IAM_WILDCARD` 코드로 안전하게 분류되지 않으면 `TRIVY_MISCONFIGURATION`으로 보존한다. Trivy 기반 high finding은 Plan 생성 결과에 warning으로 보존하되 승인은 차단한다. Trivy 실패는 Safety Gate를 대체하지 않고 해당 scan 결과만 생략하며, deterministic cost/config/product policy finding은 계속 반환한다.
+Pre-Deployment Check의 보안 finding은 Terraform 파일이 제공되면 Trivy `config` misconfiguration scan 결과를 우선 사용한다. Trivy rule이 기존 `PUBLIC_SSH`, `PUBLIC_RDS`, `PUBLIC_S3`, `IAM_WILDCARD` 코드로 안전하게 분류되지 않으면 `TRIVY_MISCONFIGURATION`으로 보존한다. Trivy 기반 high finding은 Plan 생성 결과에 warning으로 보존하되 승인을 차단하지 않는다. Trivy 실패는 Safety Gate를 대체하지 않고 해당 scan 결과만 생략하며, deterministic cost/config/product policy finding은 계속 반환한다.
 
 MVP Direct Deployment Path live apply는 아래 Terraform resource type을 우선 지원 범위로 둔다.
 이외 resource type이 변경 대상에 포함되면 warning metadata로 남겨 승인 화면과 수정 안내에서 high-risk로 표시하지만, 승인/배포 자체는 차단하지 않는다.
@@ -1965,7 +1965,7 @@ type CheckFinding = {
 
 `CheckFinding.aiSafetyExplanation`은 finding별 사용자 설명 계층이다. Pre-Deployment Check 응답은 deterministic finding을 먼저 반환하며 AI 설명을 기다리지 않는다. 사용자가 finding 카드를 펼치면 `/ai/safety-finding-explanation`으로 한 건을 지연 조회한다. AI는 `riskSummary`, `whyDangerous`, `recommendedFix`, `terraformHint`, `verificationSteps`만 생성할 수 있고, `severity`, `blocked`, `blocksApproval`, `requiresAcknowledgement` 같은 Safety Gate 판정은 변경할 수 없다. OpenAI GPT 호출이 실패하거나 API key가 없으면 `fallbackUsed: true`인 rule fallback 설명을 사용한다.
 
-Terraform 파일이 있는 `POST /api/ai/pre-deployment-check`는 Public S3, 공개 SSH, Public RDS, IAM wildcard를 in-process deterministic gate로 먼저 검사하고 `deepScan.status: "running"`과 `scanId`를 즉시 반환한다. Trivy는 백그라운드에서 실행하며 `GET /api/ai/pre-deployment-check/:scanId`가 `running | complete | failed` 상태와 완료된 병합 결과를 반환한다. UI는 핵심 안전검사 완료, Trivy 심층검사 진행 중, 결과 병합 완료를 구분한다. High finding과 심층검사 진행 상태는 Plan 생성을 막지 않지만, 최종 Plan warning의 `blocksApproval` 판정은 승인과 Apply 진입을 막는다.
+Terraform 파일이 있는 `POST /api/ai/pre-deployment-check`는 Public S3, 공개 SSH, Public RDS, IAM wildcard를 in-process deterministic gate로 먼저 검사하고 `deepScan.status: "running"`과 `scanId`를 즉시 반환한다. Trivy는 백그라운드에서 실행하며 `GET /api/ai/pre-deployment-check/:scanId`가 `running | complete | failed` 상태와 완료된 병합 결과를 반환한다. UI는 핵심 안전검사 완료, Trivy 심층검사 진행 중, 결과 병합 완료를 구분한다. High finding과 심층검사 진행 상태는 Plan 생성이나 승인을 막지 않으며, finding은 승인 전 검토 정보로 계속 표시한다.
 
 ## 팀 작업 규칙
 

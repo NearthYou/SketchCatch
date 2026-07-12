@@ -35,7 +35,7 @@ test("evaluateDeploymentSafetyGate records high risk findings without blocking p
     ]
   );
   assert.equal(summary.warnings[0]?.requiresAcknowledgement, false);
-  assert.equal(summary.warnings[0]?.blocksApproval, true);
+  assert.equal(summary.warnings[0]?.blocksApproval, false);
   assert.deepEqual(summary.warnings[0]?.sourceLocation, {
     fileName: "main.tf",
     line: 15,
@@ -92,7 +92,7 @@ test("evaluateDeploymentSafetyGate preserves generic Trivy warning codes", () =>
   assert.equal(summary.warnings[0]?.blocksApproval, false);
 });
 
-test("evaluateDeploymentSafetyGate keeps demo high findings in Plan but blocks approval", () => {
+test("evaluateDeploymentSafetyGate keeps demo high findings approvable", () => {
   const demoFindings = [
     ["trivy:aws-0178:main.tf:aws_vpc.demo:20", "aws_vpc.demo", 20],
     ["trivy:aws-0164:main.tf:aws_subnet.public_a:41", "aws_subnet.public_a", 41],
@@ -124,10 +124,10 @@ test("evaluateDeploymentSafetyGate keeps demo high findings in Plan but blocks a
 
   assert.equal(summary.warnings.length, demoFindings.length);
   assert.equal(summary.warnings.every((warning) => !warning.requiresAcknowledgement), true);
-  assert.equal(summary.warnings.every((warning) => warning.blocksApproval), true);
+  assert.equal(summary.warnings.every((warning) => !warning.blocksApproval), true);
 });
 
-test("evaluateDeploymentSafetyGate blocks approval for all high pre-deployment findings", () => {
+test("evaluateDeploymentSafetyGate keeps all high pre-deployment findings approvable", () => {
   const summary = evaluateDeploymentSafetyGate({
     operation: "apply",
     liveProfile: "demo_web_service",
@@ -157,9 +157,9 @@ test("evaluateDeploymentSafetyGate blocks approval for all high pre-deployment f
   });
 
   assert.equal(summary.warnings[0]?.requiresAcknowledgement, false);
-  assert.equal(summary.warnings[0]?.blocksApproval, true);
+  assert.equal(summary.warnings[0]?.blocksApproval, false);
   assert.equal(summary.warnings[1]?.requiresAcknowledgement, false);
-  assert.equal(summary.warnings[1]?.blocksApproval, true);
+  assert.equal(summary.warnings[1]?.blocksApproval, false);
 });
 
 test("evaluateDeploymentSafetyGate creates stable ids for unsupported resource warnings", () => {

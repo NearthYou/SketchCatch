@@ -120,7 +120,7 @@ Repository settings와 IAM role 변경은 preview JSON으로 PR에 남깁니다.
 - Plan 실패 시 Apply 단계로 넘어가지 않습니다.
 - 승인 전 계정, region, 생성/수정/삭제 리소스, 비용/위험 요약을 표시합니다.
 - Plan 승인 화면의 최소 요약은 현재 `terraform show -json tfplan` 결과에서 생성합니다.
-- Pre-Deployment Check와 Safety Gate warning은 Plan 결과에 보존하되 Plan record 자체를 blocked로 만들지 않습니다. High Pre-Deployment warning은 `blocksApproval: true`로 저장되어 해결 전까지 Plan 승인과 Apply를 막습니다.
+- Pre-Deployment Check와 Safety Gate warning은 Plan 결과에 보존하되 Plan record 자체나 Plan 승인을 blocked로 만들지 않습니다. High warning이 있어도 사용자는 Plan을 승인할 수 있으며, finding은 승인 전 검토 정보로 계속 표시합니다.
 - Apply 성공 후 사용자가 확인할 수 있는 output을 표시합니다.
 - Apply 실패 시 Deployment를 `FAILED`와 `failureStage: "apply"`로 남깁니다.
 - AWS 연결 또는 STS credential 준비 실패는 `failureStage: "aws_connection"`으로 남깁니다.
