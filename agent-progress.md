@@ -145,8 +145,8 @@ Short English-only working log for the current agent context. Older records are 
 
 - Increased accepted-event traffic particles from 10px to 16px with a 3px border and 6px translucent glow for presentation visibility.
 - Recentered particles at `top: -8px` and updated their start and endpoint offsets so the larger circle remains bounded to each connector.
-- Verification: TDD RED reproduced the old 10px geometry; focused tests passed 39/39; `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed. Authenticated browser verification observed four active particles at 16x16px with the expected 6px glow, then stopped boost traffic and ended the observation session.
-- Risk: none identified; burst gating, particle cap, and reduced-motion behavior are unchanged.
+- Verification: TDD RED reproduced the old 10px geometry; focused tests passed 39/39; `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed. Authenticated browser verification observed four active particles at 16x16px with the expected 6px glow, then stopped boost traffic and ended the observation session. The full web suite passed 864/868 and reproduced the four existing unrelated baseline failures.
+- Risk: burst gating, particle cap, and reduced-motion behavior are unchanged. Existing node-toolbar CSS, dashboard-project route, AWS priority coverage, and stale 126-entry gallery tests still block a fully green repository suite.
 
 ## Verification
 
