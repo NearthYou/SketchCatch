@@ -1769,6 +1769,20 @@ test("AI chat keeps a fixed composer and scroll-only transcript", () => {
   );
 });
 
+test("workspace panels switch to full-screen sheets at 768px", () => {
+  assert.match(diagramEditorStylesSource, /@media \(max-width:\s*768px\)/);
+  assert.match(
+    diagramEditorStylesSource,
+    /@media \(max-width:\s*768px\)[\s\S]*?\.rightRail\s*\{[\s\S]*?height:\s*100dvh[\s\S]*?env\(safe-area-inset-bottom\)/
+  );
+  assert.match(stylesSource, /@media \(max-width:\s*768px\)/);
+  assert.match(stylesSource, /height:\s*100dvh/);
+  assert.match(stylesSource, /env\(safe-area-inset-bottom\)/);
+  assert.match(deploymentWizardStylesSource, /@media \(max-width:\s*768px\)/);
+  assert.match(deploymentWizardStylesSource, /height:\s*100dvh/);
+  assert.match(deploymentWizardStylesSource, /env\(safe-area-inset-bottom\)/);
+});
+
 test("architecture panel owns only Resource and Terraform", () => {
   assert.match(workspaceRightPanelTypesSource, /"resource" \| "terraform"/);
   assert.doesNotMatch(workspaceRightPanelTypesSource, /"deployment"/);

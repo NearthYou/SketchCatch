@@ -2713,6 +2713,17 @@
   }
 }
 
+@media (max-width: 768px) {
+  .rightRail {
+    border: 0;
+    height: 100dvh;
+    inset: 0;
+    padding-bottom: env(safe-area-inset-bottom);
+    width: 100vw;
+    z-index: 80;
+  }
+}
+
 @media (max-width: 640px) {
   .projectBar {
     gap: 8px;

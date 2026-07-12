@@ -70,7 +70,7 @@ test("ParameterInputPanel lays out metadata, required inputs, and additional set
     "<PanelHeader node={selectedNode} parameters={parameters} />",
     "</aside>"
   );
-  const designPassIndex = stylesSource.indexOf("/* DESIGN.md parameter input pass */");
+  const designPassIndex = 0;
 
   assert.match(resourceDetailSource, /className=\{`\$\{styles\.section\} \$\{styles\.metadataSection\}`\}/);
   assert.match(resourceDetailSource, /styles\.requiredParametersSection/);
@@ -133,14 +133,14 @@ test("Region and AZ area panels avoid duplicate visible selector labels", () => 
   assert.match(availabilityZoneFieldSource, /showLabel \? \(/);
 });
 
-test("ParameterInputPanel styles use the DESIGN.md surface without a legacy skin", () => {
-  const designPassIndex = stylesSource.indexOf("/* DESIGN.md parameter input pass */");
+test("ParameterInputPanel styles use one DESIGN.md surface without a legacy skin", () => {
+  const designPassIndex = 0;
 
-  assert.ok(designPassIndex > -1, "Expected the DESIGN.md parameter input pass to exist");
+  assert.equal(stylesSource.match(/^\.panel\s*\{/gm)?.length, 1);
   assert.doesNotMatch(stylesSource, /\/\* Blueprint inspector skin \*\//);
   assert.doesNotMatch(stylesSource, /var\(--bp-/);
 
-  const panelRule = getLastCssRuleAfter(stylesSource, "panel", designPassIndex);
+  const panelRule = getFirstCssRuleAfter(stylesSource, "panel", designPassIndex);
   const iconRule = getLastCssRuleContainingAfter(stylesSource, "div.resourceIcon", designPassIndex);
   const inputRule = getLastCssRuleContainingAfter(stylesSource, ".input,", designPassIndex);
   const focusRule = getLastCssRuleContainingAfter(stylesSource, ".input:focus", designPassIndex);
@@ -179,7 +179,7 @@ test("ParameterInputPanel styles use the DESIGN.md surface without a legacy skin
 });
 
 test("ParameterInputPanel uses one inspector surface without nested section cards", () => {
-  const designPassIndex = stylesSource.indexOf("/* DESIGN.md parameter input pass */");
+  const designPassIndex = 0;
   const sectionRule = getLastCssRuleContainingAfter(stylesSource, ".section {", designPassIndex);
 
   assert.match(sectionRule, /background:\s*transparent/);
