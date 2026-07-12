@@ -1,6 +1,15 @@
+/* Workspace architecture visual contract */
 .editorShell {
   --left-panel-width: 346px;
   --right-panel-width: 440px;
+  --workspace-panel-width: clamp(376px, 30vw, 416px);
+  --workspace-control-height: 40px;
+  --workspace-icon-control-size: 40px;
+  --workspace-ai-launcher-size: 44px;
+  --workspace-control-radius: 8px;
+  --workspace-space-1: 8px;
+  --workspace-space-2: 16px;
+  --workspace-space-3: 24px;
   --workspace-font: "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif;
   --workspace-page: #ffffff;
   --workspace-surface: #ffffff;
@@ -868,7 +877,6 @@
 
 .rightRail {
   background: var(--workspace-surface);
-  border: 0;
   border-left: 1px solid var(--workspace-line);
   grid-column: 3;
   grid-row: 2;

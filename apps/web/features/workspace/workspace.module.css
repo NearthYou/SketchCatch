@@ -153,6 +153,7 @@
 }
 
 /* DESIGN.md workspace internal panel pass */
+/* Deployment wizard visual contract */
 .rightPanelShell {
   background: var(--workspace-surface, #ffffff);
   color: var(--workspace-text, #171717);
@@ -5050,7 +5051,11 @@
 .rightPanelShell {
   background: var(--workspace-surface, #ffffff);
   color: var(--workspace-text, #171717);
+  display: grid;
   font-family: var(--workspace-font, "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif);
+  grid-template-rows: auto auto minmax(0, 1fr);
+  min-height: 0;
+  overflow: hidden;
 }
 
 .rightPanelToolbar,
@@ -5136,10 +5141,35 @@
 .aiChatCloseButton,
 .aiChatClearButton,
 .aiChatSuggestionButton {
-  border-radius: 8px;
+  border-radius: var(--workspace-control-radius, 8px);
   color: var(--workspace-text, #171717);
   font-family: var(--workspace-font, "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif);
   font-weight: 700;
+}
+
+.panelModeButton,
+.panelModeButtonActive,
+.panelCollapseButton,
+.deploymentPrimaryButton,
+.deploymentSecondaryButton,
+.aiPrimaryButton,
+.aiSecondaryButton {
+  border-radius: var(--workspace-control-radius, 8px);
+  min-height: var(--workspace-control-height, 40px);
+}
+
+.panelModeButton,
+.panelModeButtonActive,
+.panelCollapseButton {
+  width: var(--workspace-icon-control-size, 40px);
+}
+
+.panelModeButton:focus-visible,
+.panelCollapseButton:focus-visible,
+.deploymentPrimaryButton:focus-visible,
+.aiPrimaryButton:focus-visible {
+  outline: 2px solid var(--workspace-accent, #000000);
+  outline-offset: 2px;
 }
 
 .panelModeButtonActive,
