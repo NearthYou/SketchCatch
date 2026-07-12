@@ -100,7 +100,7 @@
   display: inline-flex;
   min-width: max-content;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   color: var(--landing-ink);
   font-size: 18px;
   font-weight: 700;
@@ -108,10 +108,11 @@
 }
 
 .brandMark {
-  width: 14px;
-  height: 21px;
+  width: 16px;
+  height: 24px;
   flex: 0 0 auto;
   object-fit: contain;
+  transform: translateY(-4px);
 }
 
 .siteNav {
@@ -340,7 +341,7 @@
   padding: 0 12px 0 16px;
   background: rgba(255, 255, 255, 0.96);
   box-shadow: 0 1px 0 var(--landing-hairline);
-  grid-template-columns: 180px 1fr 330px;
+  grid-template-columns: 180px minmax(0, 1fr) max-content;
 }
 
 .workspaceBrand {
@@ -387,6 +388,7 @@
   cursor: pointer;
   font-size: 12px;
   font-weight: 700;
+  white-space: nowrap;
 }
 
 .modeTab[aria-selected="true"] {
@@ -1455,7 +1457,7 @@
 
 @media (max-width: 1040px) {
   .siteNav { gap: 20px; }
-  .workspaceTopbar { grid-template-columns: 150px 1fr 288px; }
+  .workspaceTopbar { grid-template-columns: 150px minmax(0, 1fr) max-content; }
   .workspaceBody { grid-template-columns: 132px minmax(0, 1fr) 196px; }
   .resourceNode { width: 72px; }
   .workflowLayout { gap: 32px; }

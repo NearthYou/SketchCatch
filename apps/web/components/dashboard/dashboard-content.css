@@ -94,8 +94,7 @@
 
 .dashboardPartialWarning,
 .dashboardInformationBand,
-.dashboardMessage,
-.costErrorMessage {
+.dashboardMessage {
   margin: 0;
   border: 1px solid #f5d7a1;
   border-radius: 8px;
@@ -139,6 +138,19 @@
   gap: 8px;
   padding: 22px 24px;
   border-right: 1px solid #f0f0f3;
+}
+
+.dashboardMetricLink {
+  color: inherit;
+  text-decoration: none;
+  transition:
+    background-color var(--motion-fast),
+    transform var(--motion-fast);
+}
+
+.dashboardMetricLink:hover {
+  background: #f7f8fa;
+  transform: translateY(-2px);
 }
 
 .dashboardMetric:last-child {
@@ -212,8 +224,7 @@
 }
 
 .dashboardSectionHeader h2,
-.dashboardPanelHeader h2,
-.integrationHeader h2 {
+.dashboardPanelHeader h2 {
   margin: 4px 0 0;
   font-size: 17px;
   line-height: 1.4;
@@ -483,8 +494,7 @@ a.dashboardActivityRow:hover {
   border-bottom: 1px solid #f0f0f3;
 }
 
-.settingsField,
-.costField {
+.settingsField {
   display: grid;
   min-width: 0;
   gap: 7px;
@@ -569,8 +579,7 @@ a.dashboardActivityRow:hover {
 }
 
 .projectStatusBadge,
-.dashboardCountBadge,
-.costStatus {
+.dashboardCountBadge {
   width: fit-content;
   border: 1px solid #dcdee0;
   border-radius: 999px;
@@ -753,36 +762,6 @@ a.dashboardActivityRow:hover {
   color: #171717;
 }
 
-.settingsTabs,
-.costTabs {
-  display: flex;
-  gap: 4px;
-  border-bottom: 1px solid #dcdee0;
-}
-
-.settingsTab,
-.costTabButton {
-  display: inline-flex;
-  min-height: 40px;
-  align-items: center;
-  gap: 8px;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  padding: 0 14px;
-  background: transparent;
-  color: #777b84;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.settingsTabActive,
-.settingsTab[aria-selected="true"],
-.costTabButton[aria-selected="true"] {
-  border-bottom-color: #171717;
-  color: #171717;
-}
-
-.settingsGrid,
 .settingsInfoGrid {
   display: grid;
   margin-top: 20px;
@@ -977,7 +956,6 @@ a.dashboardActivityRow:hover {
   .dashboardCardGrid,
   .dashboardTemplateGrid,
   .templateGrid,
-  .settingsGrid,
   .settingsInfoGrid {
     grid-template-columns: 1fr;
   }

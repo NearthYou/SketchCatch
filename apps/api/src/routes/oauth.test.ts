@@ -92,6 +92,44 @@ test("GET /api/auth/oauth/naver/start stores persistent state when rememberMe is
   }
 });
 
+test("GET /api/auth/oauth/github/start stores the requested internal return route", async () => {
+  const restoreEnv = setOAuthEnv();
+  const app = buildApp();
+
+  try {
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/auth/oauth/github/start?returnTo=%2Fworkspace%2Fnew%3Fmode%3Drepository"
+    });
+    const cookie = getSetCookieHeader(response, OAUTH_STATE_COOKIE_NAME);
+
+    assert.equal(response.statusCode, 302);
+    assert.equal(readOAuthStateFromSetCookie(cookie).returnTo, "/workspace/new?mode=repository");
+  } finally {
+    restoreEnv();
+    await app.close();
+  }
+});
+
+test("GET /api/auth/oauth/github/start rejects a backslash-normalized external return route", async () => {
+  const restoreEnv = setOAuthEnv();
+  const app = buildApp();
+
+  try {
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/auth/oauth/github/start?returnTo=${encodeURIComponent("/\\google.com")}`
+    });
+    const cookie = getSetCookieHeader(response, OAUTH_STATE_COOKIE_NAME);
+
+    assert.equal(response.statusCode, 302);
+    assert.equal(readOAuthStateFromSetCookie(cookie).returnTo, undefined);
+  } finally {
+    restoreEnv();
+    await app.close();
+  }
+});
+
 test("GET /api/auth/oauth/kakao/start redirects to Kakao authorize URL with a state cookie", async () => {
   const restoreEnv = setOAuthEnv();
   const app = buildApp();
@@ -210,7 +248,7 @@ test("GET /api/auth/oauth/unsupported/start rejects unknown providers", async ()
   }
 });
 
-test("GET /api/auth/oauth/naver/callback completes login and redirects to mypage", async () => {
+test("GET /api/auth/oauth/naver/callback completes login and redirects to the requested route", async () => {
   const restoreEnv = setOAuthEnv();
   const fakeDb = new OAuthRouteFakeDb({
     selectResults: [[], []]
@@ -235,14 +273,14 @@ test("GET /api/auth/oauth/naver/callback completes login and redirects to mypage
   try {
     const response = await app.inject({
       headers: {
-        cookie: oauthStateCookie("state-token")
+        cookie: oauthStateCookie("state-token", "naver", false, "/workspace/new?mode=repository")
       },
       method: "GET",
       url: "/api/auth/oauth/naver/callback?code=authorization-code&state=state-token"
     });
 
     assert.equal(response.statusCode, 302);
-    assert.equal(getHeaderValue(response, "location"), "/mypage");
+    assert.equal(getHeaderValue(response, "location"), "/workspace/new?mode=repository");
     assert.equal(requests.length, 2);
 
     const tokenRequestBody = new URLSearchParams(String(requests[0]?.init?.body));
@@ -316,7 +354,7 @@ test("GET /api/auth/oauth/naver/callback keeps refresh cookie persistent when OA
     });
 
     assert.equal(response.statusCode, 302);
-    assert.equal(getHeaderValue(response, "location"), "/mypage");
+    assert.equal(getHeaderValue(response, "location"), "/dashboard");
     assert.equal(fakeDb.refreshTokenRows.length, 1);
     assertPersistentRefreshTokenCookie(response.headers["set-cookie"]);
     assertClearedOAuthStateCookie(response.headers["set-cookie"]);
@@ -359,7 +397,7 @@ test("GET /api/auth/oauth/kakao/callback completes login without an email scope"
     });
 
     assert.equal(response.statusCode, 302);
-    assert.equal(getHeaderValue(response, "location"), "/mypage");
+    assert.equal(getHeaderValue(response, "location"), "/dashboard");
     assert.equal(requests.length, 2);
     assert.equal(String(requests[0]?.input), "https://kauth.kakao.com/oauth/token");
     assert.equal(String(requests[1]?.input), "https://kapi.kakao.com/v2/user/me");
@@ -416,7 +454,7 @@ test("GET /api/auth/oauth/naver/callback links existing users by verified email"
     });
 
     assert.equal(response.statusCode, 302);
-    assert.equal(getHeaderValue(response, "location"), "/mypage");
+    assert.equal(getHeaderValue(response, "location"), "/dashboard");
     assert.equal(requests.length, 2);
     assert.equal(fakeDb.userRows.length, 0);
     assert.equal(fakeDb.oauthAccountRows.length, 1);
@@ -503,7 +541,7 @@ test("GET /api/auth/oauth/github/callback completes login with verified email fa
     });
 
     assert.equal(response.statusCode, 302);
-    assert.equal(getHeaderValue(response, "location"), "/mypage");
+    assert.equal(getHeaderValue(response, "location"), "/dashboard");
     assert.equal(requests.length, 3);
     assert.equal(String(requests[0]?.input), "https://github.com/login/oauth/access_token");
     assert.equal(String(requests[1]?.input), "https://api.github.com/user");
@@ -865,7 +903,8 @@ function getCookieHeader(cookies: string[], cookieName: string): string {
 function oauthStateCookie(
   state: string,
   provider: OAuthProvider = "naver",
-  persistent = false
+  persistent = false,
+  returnTo?: string
 ): string {
   let setCookieHeader: string | undefined;
   const reply = {
@@ -878,6 +917,7 @@ function oauthStateCookie(
 
   setOAuthStateCookie(reply, {
     provider,
+    returnTo,
     state,
     persistent
   });

@@ -12,18 +12,21 @@ export type OAuthStateCookie = {
   provider: OAuthProvider;
   state: string;
   persistent: boolean;
+  returnTo?: string | undefined;
 };
 
 type OAuthStateCookieInput = {
   provider: OAuthProvider;
   state: string;
   persistent?: boolean;
+  returnTo?: string | undefined;
 };
 
 export function createOAuthState(): string {
   return randomBytes(32).toString("base64url");
 }
 
+// OAuth callback 뒤 복귀 정보까지 서명해 browser가 값을 바꿀 수 없게 저장합니다.
 export function setOAuthStateCookie(reply: FastifyReply, value: OAuthStateCookieInput): void {
   appendSetCookieHeader(
     reply,
@@ -31,6 +34,7 @@ export function setOAuthStateCookie(reply: FastifyReply, value: OAuthStateCookie
       OAUTH_STATE_COOKIE_NAME,
       signOAuthStateCookieValue({
         provider: value.provider,
+        ...(value.returnTo ? { returnTo: value.returnTo } : {}),
         state: value.state,
         persistent: value.persistent === true
       }),
@@ -43,6 +47,7 @@ export function setOAuthStateCookie(reply: FastifyReply, value: OAuthStateCookie
   );
 }
 
+// 서명과 필드 모양이 모두 올바른 OAuth 임시 상태만 callback에 전달합니다.
 export function readOAuthStateCookie(request: FastifyRequest): OAuthStateCookie | null {
   const rawValue = getCookie(request, OAUTH_STATE_COOKIE_NAME);
 
@@ -56,13 +61,15 @@ export function readOAuthStateCookie(request: FastifyRequest): OAuthStateCookie 
     if (
       !isOAuthProvider(parsedValue.provider) ||
       typeof parsedValue.state !== "string" ||
-      (parsedValue.persistent !== undefined && typeof parsedValue.persistent !== "boolean")
+      (parsedValue.persistent !== undefined && typeof parsedValue.persistent !== "boolean") ||
+      (parsedValue.returnTo !== undefined && typeof parsedValue.returnTo !== "string")
     ) {
       return null;
     }
 
     return {
       provider: parsedValue.provider,
+      ...(parsedValue.returnTo ? { returnTo: parsedValue.returnTo } : {}),
       state: parsedValue.state,
       persistent: parsedValue.persistent ?? false
     };

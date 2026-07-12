@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { DiagramJson } from "@sketchcatch/types";
 import {
+  applyWorkspaceAiBoardPreview,
   createWorkspaceAiBoardSnapshot,
   isWorkspaceAiResultStale
 } from "./workspace-ai-panel-state";
@@ -37,7 +38,10 @@ test("createWorkspaceAiBoardSnapshot returns analysis input and board fingerprin
 
   assert.equal(snapshot.architectureJson.nodes.length, 1);
   assert.equal(snapshot.hasResources, true);
-  assert.equal(snapshot.fingerprint, JSON.stringify(snapshot.architectureJson));
+  assert.equal(
+    snapshot.fingerprint,
+    JSON.stringify({ nodes: diagramJson.nodes, edges: diagramJson.edges })
+  );
 });
 
 test("createWorkspaceAiBoardSnapshot keeps the fingerprint stable when only viewport changes", () => {
@@ -79,4 +83,96 @@ test("isWorkspaceAiResultStale only marks existing results stale after board cha
   assert.equal(isWorkspaceAiResultStale(null, snapshot.fingerprint), false);
   assert.equal(isWorkspaceAiResultStale(snapshot.fingerprint, snapshot.fingerprint), false);
   assert.equal(isWorkspaceAiResultStale("previous-board", snapshot.fingerprint), true);
+});
+
+test("isWorkspaceAiResultStale rejects an AI result when a resource changes during the request", () => {
+  const requestSnapshot = createWorkspaceAiBoardSnapshot(diagramJson);
+  const changedBoardSnapshot = createWorkspaceAiBoardSnapshot({
+    ...diagramJson,
+    nodes: diagramJson.nodes.map((node) => ({
+      ...node,
+      label: "Changed VPC"
+    }))
+  });
+
+  assert.equal(
+    isWorkspaceAiResultStale(requestSnapshot.fingerprint, changedBoardSnapshot.fingerprint),
+    true
+  );
+});
+
+test("applyWorkspaceAiBoardPreview does not call apply after the board changes during an AI request", async () => {
+  const requestSnapshot = createWorkspaceAiBoardSnapshot(diagramJson);
+  let resolveResponse: (() => void) | undefined;
+  const pendingResponse = new Promise<void>((resolve) => {
+    resolveResponse = resolve;
+  });
+  let currentDiagram = diagramJson;
+  let appliedDiagram: DiagramJson | null = null;
+  const applyAfterResponse = async (): Promise<string> => {
+    await pendingResponse;
+
+    return applyWorkspaceAiBoardPreview({
+      applyDiagram: (diagram) => {
+        appliedDiagram = diagram;
+      },
+      baseFingerprint: requestSnapshot.fingerprint,
+      currentDiagram,
+      previewDiagram: diagramJson
+    });
+  };
+  const resultPromise = applyAfterResponse();
+
+  currentDiagram = {
+    ...diagramJson,
+    nodes: diagramJson.nodes.map((node) => ({ ...node, label: "Changed during request" }))
+  };
+  assert.ok(resolveResponse);
+  resolveResponse();
+
+  assert.equal(await resultPromise, "stale");
+  assert.equal(appliedDiagram, null);
+});
+
+test("applyWorkspaceAiBoardPreview rejects changed Board presentation fields", () => {
+  const requestSnapshot = createWorkspaceAiBoardSnapshot(diagramJson);
+  const changedDiagram: DiagramJson = {
+    ...diagramJson,
+    nodes: diagramJson.nodes.map((node) => ({
+      ...node,
+      locked: true,
+      size: { width: 320, height: 180 },
+      zIndex: 99
+    }))
+  };
+  let appliedDiagram: DiagramJson | null = null;
+
+  const result = applyWorkspaceAiBoardPreview({
+    applyDiagram: (diagram) => {
+      appliedDiagram = diagram;
+    },
+    baseFingerprint: requestSnapshot.fingerprint,
+    currentDiagram: changedDiagram,
+    previewDiagram: diagramJson
+  });
+
+  assert.equal(result, "stale");
+  assert.equal(appliedDiagram, null);
+});
+
+test("applyWorkspaceAiBoardPreview applies a preview when the board is unchanged", () => {
+  const requestSnapshot = createWorkspaceAiBoardSnapshot(diagramJson);
+  let appliedDiagram: DiagramJson | null = null;
+
+  const result = applyWorkspaceAiBoardPreview({
+    applyDiagram: (diagram) => {
+      appliedDiagram = diagram;
+    },
+    baseFingerprint: requestSnapshot.fingerprint,
+    currentDiagram: diagramJson,
+    previewDiagram: diagramJson
+  });
+
+  assert.equal(result, "applied");
+  assert.deepEqual(appliedDiagram, diagramJson);
 });

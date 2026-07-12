@@ -330,7 +330,8 @@ export async function syncTerraformToDiagram({
 
 // 실제 Workspace AI 패널에서 Requirement Prompt 기반 Architecture Draft를 요청합니다.
 export async function createAiArchitectureDraft(
-  input: CreateArchitectureDraftRequest
+  input: CreateArchitectureDraftRequest,
+  signal?: AbortSignal
 ): Promise<CreateArchitectureDraftResponse> {
   const prompt = input.prompt.trim();
 
@@ -341,10 +342,11 @@ export async function createAiArchitectureDraft(
     });
   }
 
-  return postPublicAiJson<CreateArchitectureDraftResponse>("/ai/architecture-draft", {
-    ...input,
-    prompt
-  });
+  return postPublicAiJson<CreateArchitectureDraftResponse>(
+    "/ai/architecture-draft",
+    { ...input, prompt },
+    signal
+  );
 }
 
 export async function analyzePublicSourceRepository(
@@ -360,19 +362,24 @@ export async function createGitHubArchitectureDraft(
 }
 
 export async function createAiArchitecturePatchPreview(
-  input: CreateArchitecturePatchPreviewRequest
+  input: CreateArchitecturePatchPreviewRequest,
+  signal?: AbortSignal
 ): Promise<ArchitecturePatchPreviewResponse> {
-  return postPublicAiJson<ArchitecturePatchPreviewResponse>("/ai/architecture-patch-preview", {
-    architectureJson: input.architectureJson,
-    instruction: input.instruction,
-    ...(input.selectedTargetResourceId !== undefined
-      ? { selectedTargetResourceId: input.selectedTargetResourceId }
-      : {}),
-    ...(input.connectionTargetResourceId !== undefined
-      ? { connectionTargetResourceId: input.connectionTargetResourceId }
-      : {}),
-    ...(input.skipConnection === true ? { skipConnection: true } : {})
-  });
+  return postPublicAiJson<ArchitecturePatchPreviewResponse>(
+    "/ai/architecture-patch-preview",
+    {
+      architectureJson: input.architectureJson,
+      instruction: input.instruction,
+      ...(input.selectedTargetResourceId !== undefined
+        ? { selectedTargetResourceId: input.selectedTargetResourceId }
+        : {}),
+      ...(input.connectionTargetResourceId !== undefined
+        ? { connectionTargetResourceId: input.connectionTargetResourceId }
+        : {}),
+      ...(input.skipConnection === true ? { skipConnection: true } : {})
+    },
+    signal
+  );
 }
 
 // 현재 Architecture Board를 기준으로 Pre-Deployment Check를 실행합니다.
@@ -387,26 +394,30 @@ export async function runAiPreDeploymentCheck(
 
 // 현재 Architecture Board와 운영 조건을 기준으로 Design Simulation을 실행합니다.
 export async function runAiDesignSimulation(
-  input: CreateDesignSimulationRequest
+  input: CreateDesignSimulationRequest,
+  signal?: AbortSignal
 ): Promise<DesignSimulationResult> {
-  return postPublicAiJson<DesignSimulationResult>("/ai/design-simulation", input);
+  return postPublicAiJson<DesignSimulationResult>("/ai/design-simulation", input, signal);
 }
 
 // Terraform Preview 설명은 실제 Terraform 실행 없이 코드 텍스트만 분석합니다.
 export async function runAiTerraformPreviewExplanation(
-  terraformCode: string
+  terraformCode: string,
+  signal?: AbortSignal
 ): Promise<AiTerraformPreviewExplanationResult> {
   return postPublicAiJson<AiTerraformPreviewExplanationResult>(
     "/ai/terraform-preview-explanation",
     {
       terraformCode
-    }
+    },
+    signal
   );
 }
 
 // Terraform 오류 설명은 Preview 분석과 다른 endpoint로 보내 stage와 원인을 분리합니다.
 export async function runAiTerraformErrorExplanation(
-  input: AiTerraformErrorExplanationRequest
+  input: AiTerraformErrorExplanationRequest,
+  signal?: AbortSignal
 ): Promise<AiTerraformErrorExplanationResult> {
   return postPublicAiJson<AiTerraformErrorExplanationResult>("/ai/terraform-error-explanation", {
     diagnostic: input.diagnostic,
@@ -414,13 +425,14 @@ export async function runAiTerraformErrorExplanation(
     relatedResourceId: input.relatedResourceId,
     stage: input.stage,
     terraformCodeContext: input.terraformCodeContext
-  });
+  }, signal);
 }
 
 // 인증 없는 gg AI endpoint는 Next rewrite 실패와 분리해 API 서버로 직접 요청합니다.
 async function postPublicAiJson<ResponseBody>(
   path: string,
-  body: Record<string, unknown>
+  body: Record<string, unknown>,
+  signal?: AbortSignal
 ): Promise<ResponseBody> {
   const headers = new Headers({
     "Content-Type": "application/json"
@@ -435,7 +447,8 @@ async function postPublicAiJson<ResponseBody>(
     body: JSON.stringify(body),
     credentials: "include",
     headers,
-    method: "POST"
+    method: "POST",
+    ...(signal ? { signal } : {})
   });
 
   if (!response.ok) {
@@ -499,9 +512,13 @@ export async function createAwsConnectionSetup({
   });
 }
 
-export async function listAwsConnections(): Promise<AwsConnection[]> {
+// 요청 취소 신호를 받아 화면 전환 뒤의 AWS 연결 응답을 중단합니다.
+export async function listAwsConnections(
+  options: { readonly signal?: AbortSignal | undefined } = {}
+): Promise<AwsConnection[]> {
   const response = await apiFetch<AwsConnectionListResponse>("/aws/connections", {
-    auth: true
+    auth: true,
+    ...(options.signal ? { signal: options.signal } : {})
   });
 
   return response.awsConnections;
@@ -1077,11 +1094,15 @@ export async function listCostProjectEstimates(input: {
   });
 }
 
-export async function listCostUsageAnalysis(input: {
-  awsConnectionId?: string | undefined;
-  projectId?: string | undefined;
-  range: CostUsageAnalysisRange;
-}): Promise<CostUsageAnalysisResponse> {
+// 요청 취소 신호를 받아 최신 비용 조회만 화면 상태를 갱신하게 합니다.
+export async function listCostUsageAnalysis(
+  input: {
+    awsConnectionId?: string | undefined;
+    projectId?: string | undefined;
+    range: CostUsageAnalysisRange;
+  },
+  options: { readonly signal?: AbortSignal | undefined } = {}
+): Promise<CostUsageAnalysisResponse> {
   const params = new URLSearchParams({
     range: input.range
   });
@@ -1095,7 +1116,8 @@ export async function listCostUsageAnalysis(input: {
   }
 
   return apiFetch<CostUsageAnalysisResponse>(`/costs/usage?${params.toString()}`, {
-    auth: true
+    auth: true,
+    ...(options.signal ? { signal: options.signal } : {})
   });
 }
 

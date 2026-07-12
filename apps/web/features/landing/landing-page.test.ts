@@ -8,6 +8,7 @@ const productEntrySource = readLocalFile("./product-entry.tsx");
 const productSectionsSource = readLocalFile("./landing-product-sections.tsx");
 const workspacePreviewSource = readLocalFile("./landing-workspace-preview.tsx");
 const workflowSource = readLocalFile("./landing-workflow-section.tsx");
+const landingStylesSource = readLocalFile("./product-entry.module.css");
 
 test("root route renders the product entry instead of a temporary placeholder", () => {
   assert.match(pageSource, /ProductEntry/);
@@ -35,6 +36,11 @@ test("landing header keeps a visible login entry next to signup", () => {
   assert.match(productEntrySource, /href="\/signup"/);
 });
 
+test("landing preview tabs stay on one line inside the workspace top bar", () => {
+  assert.match(landingStylesSource, /grid-template-columns:\s*180px minmax\(0, 1fr\) max-content/);
+  assert.match(landingStylesSource, /\.modeTab\s*\{[^}]*white-space:\s*nowrap/s);
+});
+
 test("product entry carries every section from the landing reference", () => {
   assert.match(productEntrySource, /LandingWorkflowSection/);
   assert.match(productEntrySource, /LandingProductSections/);
@@ -43,11 +49,11 @@ test("product entry carries every section from the landing reference", () => {
   assert.match(productSectionsSource, /Two deployment paths/);
 });
 
-test("rebuilt landing keeps the brand text without rendering a logo image", () => {
+test("rebuilt landing uses the official PNG logo with the brand text", () => {
   const rebuiltLandingSource = [productEntrySource, productSectionsSource, workspacePreviewSource, workflowSource].join("\n");
 
   assert.doesNotMatch(rebuiltLandingSource, /sketchcatch-logo\.svg/);
-  assert.doesNotMatch(rebuiltLandingSource, /sketchcatch-logo\.png/);
+  assert.match(rebuiltLandingSource, /sketchcatch-logo\.png/);
   assert.match(productEntrySource, />SketchCatch<\/span>/);
 });
 

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import Fastify from "fastify";
 import { ZodError } from "zod";
 import type {
+  DeploymentPlanSummary,
   GitCicdHandoffListResponse,
   GitCicdHandoffResponse,
   GitCicdHandoffStatus
@@ -16,6 +17,8 @@ import {
   type CreateGitCicdHandoffRecordInput,
   type GitProviderCreatePullRequestInput,
   type GitCicdHandoffArchitectureRecord,
+  type GitCicdHandoffApprovedDeploymentRecord,
+  type GitCicdHandoffApprovedPlanArtifactRecord,
   type GitCicdHandoffProvider,
   type GitCicdHandoffRecord,
   type GitCicdHandoffRepository,
@@ -42,6 +45,7 @@ process.env.OAUTH_REDIRECT_BASE_URL = "http://localhost:3000";
 const projectId = "11111111-1111-4111-8111-111111111111";
 const architectureId = "22222222-2222-4222-8222-222222222222";
 const terraformArtifactId = "33333333-3333-4333-8333-333333333333";
+const deploymentId = "66666666-6666-4666-8666-666666666666";
 const handoffId = "44444444-4444-4444-8444-444444444444";
 const userId = "55555555-5555-4555-8555-555555555555";
 const sourceRepositoryId = "repo-1";
@@ -70,6 +74,16 @@ type RepositoryCall =
       name: "findActiveSourceRepository";
       sourceRepositoryId: string;
       projectId: string;
+    }
+  | {
+      name: "findApprovedDeploymentForHandoff";
+      deploymentId: string;
+      projectId: string;
+    }
+  | {
+      name: "findApprovedPlanArtifactForHandoff";
+      planArtifactId: string;
+      deploymentId: string;
     }
   | {
       name: "findSourceRepositoryById";
@@ -111,6 +125,10 @@ class FakeGitCicdHandoffRepository implements GitCicdHandoffRepository {
     createTerraformArtifactRecord();
   sourceRepository: GitCicdHandoffSourceRepositoryRecord | undefined =
     createSourceRepositoryRecord();
+  approvedDeployment: GitCicdHandoffApprovedDeploymentRecord | undefined =
+    createApprovedDeploymentRecord();
+  approvedPlanArtifact: GitCicdHandoffApprovedPlanArtifactRecord | undefined =
+    createApprovedPlanArtifactRecord();
   handoff: GitCicdHandoffRecord | undefined = createHandoffRecord();
   handoffs: GitCicdHandoffRecord[] = [createHandoffRecord()];
 
@@ -194,6 +212,49 @@ class FakeGitCicdHandoffRepository implements GitCicdHandoffRepository {
     }
 
     return this.sourceRepository;
+  }
+
+  // 테스트 요청도 실제 서버와 같은 승인 Deployment 조회 경계를 통과시킵니다.
+  async findApprovedDeploymentForHandoff(
+    candidateDeploymentId: string,
+    candidateProjectId: string
+  ) {
+    this.calls.push({
+      name: "findApprovedDeploymentForHandoff",
+      deploymentId: candidateDeploymentId,
+      projectId: candidateProjectId
+    });
+
+    if (
+      !this.approvedDeployment ||
+      this.approvedDeployment.id !== candidateDeploymentId ||
+      this.approvedDeployment.projectId !== candidateProjectId
+    ) {
+      return undefined;
+    }
+
+    return this.approvedDeployment;
+  }
+
+  async findApprovedPlanArtifactForHandoff(
+    candidatePlanArtifactId: string,
+    candidateDeploymentId: string
+  ) {
+    this.calls.push({
+      name: "findApprovedPlanArtifactForHandoff",
+      planArtifactId: candidatePlanArtifactId,
+      deploymentId: candidateDeploymentId
+    });
+
+    if (
+      !this.approvedPlanArtifact ||
+      this.approvedPlanArtifact.id !== candidatePlanArtifactId ||
+      this.approvedPlanArtifact.deploymentId !== candidateDeploymentId
+    ) {
+      return undefined;
+    }
+
+    return this.approvedPlanArtifact;
   }
 
   async findSourceRepositoryById(
@@ -427,8 +488,7 @@ test("POST /api/projects/:projectId/git-cicd-handoffs creates GitHub PR handoff 
     headers: await authHeaders(),
     payload: {
       ...createHandoffBody(),
-      sourceBranch: undefined,
-      planSummary: createPlanSummary()
+      sourceBranch: undefined
     }
   });
 
@@ -450,8 +510,8 @@ test("POST /api/projects/:projectId/git-cicd-handoffs creates GitHub PR handoff 
   assert.equal(gitProviderCalls[0]?.targetBranch, "main");
   assert.equal(gitProviderCalls[0]?.files[0]?.path, "sketchcatch/test-project/terraform/main.tf");
   assert.equal(
-    gitProviderCalls[0]?.files[0]?.artifactObjectKey,
-    "projects/project-id/terraform/main.tf"
+    gitProviderCalls[0]?.files[0]?.expectedSha256,
+    "a".repeat(64)
   );
   assert.match(gitProviderCalls[0]?.pullRequest.body ?? "", /Create 2, update 1, delete 0, replace 0/);
   assert.match(gitProviderCalls[0]?.pullRequest.body ?? "", /Pre-Deployment Check/);
@@ -636,6 +696,56 @@ test("POST /api/projects/:projectId/git-cicd-handoffs requires matching Terrafor
     message: "Terraform artifact not found for project architecture"
   });
   assert.equal(providerCalls.length, 0);
+
+  await app.close();
+});
+
+test("POST /api/projects/:projectId/git-cicd-handoffs rejects unapproved deployment plan ids", async () => {
+  const repository = new FakeGitCicdHandoffRepository();
+  const providerCalls: GitCicdProviderCreateInput[] = [];
+  repository.approvedDeployment = createApprovedDeploymentRecord({
+    approvedPlanArtifactId: "different-approved-plan"
+  });
+  const app = await buildGitCicdHandoffTestApp(repository, {
+    provider: createProviderSpy(providerCalls)
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/projects/${projectId}/git-cicd-handoffs`,
+    headers: await authHeaders(),
+    payload: createHandoffBody()
+  });
+
+  assert.equal(response.statusCode, 409);
+  assert.deepEqual(response.json(), {
+    error: "conflict",
+    message: "Git/CI/CD handoff requires the current user's approved deployment plan"
+  });
+  assert.equal(providerCalls.length, 0);
+  assert.equal(repository.calls.some((call) => call.name === "createHandoff"), false);
+
+  await app.close();
+});
+
+test("POST /api/projects/:projectId/git-cicd-handoffs rejects approved destroy plans", async () => {
+  const repository = new FakeGitCicdHandoffRepository();
+  const providerCalls: GitCicdProviderCreateInput[] = [];
+  repository.approvedPlanArtifact = createApprovedPlanArtifactRecord({ operation: "destroy" });
+  const app = await buildGitCicdHandoffTestApp(repository, {
+    provider: createProviderSpy(providerCalls)
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/projects/${projectId}/git-cicd-handoffs`,
+    headers: await authHeaders(),
+    payload: createHandoffBody()
+  });
+
+  assert.equal(response.statusCode, 409);
+  assert.equal(providerCalls.length, 0);
+  assert.equal(repository.calls.some((call) => call.name === "createHandoff"), false);
 
   await app.close();
 });
@@ -1121,7 +1231,7 @@ test("GitHub OAuth callback consumes state before token exchange", async () => {
   await app.close();
 });
 
-test("POST /api/git-cicd-handoffs/:handoffId/aws-role-diff/apply updates approved trust policy", async () => {
+test("POST /api/git-cicd-handoffs/:handoffId/aws-role-diff/apply records explicit approval and updates trust policy", async () => {
   const repository = new FakeGitCicdHandoffRepository();
   const roleArn = "arn:aws:iam::123456789012:role/SketchCatchGitHubDeployRole";
   repository.handoff = createHandoffRecord(handoffId, {
@@ -1137,9 +1247,9 @@ test("POST /api/git-cicd-handoffs/:handoffId/aws-role-diff/apply updates approve
           "repo:sketchcatch/infra-live:environment:sketchcatch-production",
         "sketchcatch:target_branch": "main"
       },
-      approved: true,
-      approvedByUserId: userId,
-      approvedAt: fixedNow.toISOString()
+      approved: false,
+      approvedByUserId: null,
+      approvedAt: null
     }
   });
   const policies: Record<string, unknown>[] = [
@@ -1175,6 +1285,8 @@ test("POST /api/git-cicd-handoffs/:handoffId/aws-role-diff/apply updates approve
   assert.equal(body.roleArn, roleArn);
   assert.equal(body.verified, true);
   assert.equal(repository.handoff?.awsRoleDiff?.applied, true);
+  assert.equal(repository.handoff?.awsRoleDiff?.approved, true);
+  assert.equal(repository.handoff?.awsRoleDiff?.approvedByUserId, userId);
   assert.equal(repository.handoff?.awsRoleDiff?.verified, true);
 
   await app.close();
@@ -1358,6 +1470,38 @@ function createTerraformArtifactRecord(
   };
 }
 
+// Git handoff 테스트에서 사용할 서버 승인 완료 Deployment를 만듭니다.
+function createApprovedDeploymentRecord(
+  overrides: Partial<GitCicdHandoffApprovedDeploymentRecord> = {}
+): GitCicdHandoffApprovedDeploymentRecord {
+  return {
+    id: deploymentId,
+    projectId,
+    architectureId,
+    terraformArtifactId,
+    planSummary: createPlanSummary(),
+    approvedAt: fixedNow,
+    approvedByUserId: userId,
+    approvedTerraformArtifactId: terraformArtifactId,
+    approvedPlanArtifactId: "accepted-change-1",
+    ...overrides
+  };
+}
+
+// Git handoff 테스트에서 승인된 apply Plan artifact를 만듭니다.
+function createApprovedPlanArtifactRecord(
+  overrides: Partial<GitCicdHandoffApprovedPlanArtifactRecord> = {}
+): GitCicdHandoffApprovedPlanArtifactRecord {
+  return {
+    id: "accepted-change-1",
+    deploymentId,
+    terraformArtifactId,
+    terraformArtifactSha256: "a".repeat(64),
+    operation: "apply",
+    ...overrides
+  };
+}
+
 function createSourceRepositoryRecord(
   overrides: Partial<GitCicdHandoffSourceRepositoryRecord> = {}
 ): GitCicdHandoffSourceRepositoryRecord {
@@ -1380,6 +1524,7 @@ function createHandoffBody() {
   return {
     architectureId,
     terraformArtifactId,
+    sourceDeploymentId: deploymentId,
     sourceRepositoryId,
     targetBranch: "main",
     sourceBranch: "sketchcatch/iac-preview",
@@ -1389,7 +1534,7 @@ function createHandoffBody() {
   };
 }
 
-function createPlanSummary() {
+function createPlanSummary(): DeploymentPlanSummary {
   return {
     createCount: 2,
     updateCount: 1,

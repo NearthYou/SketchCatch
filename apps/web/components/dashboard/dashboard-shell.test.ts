@@ -11,8 +11,8 @@ test("dashboard topbar hides global actions on the requested dashboard pages", (
   assert.match(dashboardShellSource, /shouldShowCreateAction/);
   assert.match(dashboardShellSource, /"\/dashboard\/projects"/);
   assert.match(dashboardShellSource, /"\/dashboard\/templates"/);
-  assert.match(dashboardShellSource, /"\/dashboard\/costs"/);
-  assert.match(dashboardShellSource, /"\/dashboard\/settings"/);
+  assert.doesNotMatch(dashboardShellSource, /"\/dashboard\/costs"/);
+  assert.doesNotMatch(dashboardShellSource, /"\/dashboard\/settings"/);
   assert.match(dashboardShellSource, /shouldShowCreateAction\s*\?\s*\(/);
 });
 
