@@ -1180,6 +1180,8 @@ Redis 기반 Runtime Cache는 Deployment, Reverse Engineering, Git/CI/CD Integra
 
 Runtime Cache는 사용자 Practice Architecture Resource가 아니므로 `ResourceType`에 Redis를 추가하지 않는다. AI 결과 캐싱은 2순위이며, 캐시된 결과가 deterministic validation이나 Deployment Safety Gate를 대체할 수 없다.
 
+Terraform 기반 Pre-Deployment Check는 정규화한 파일 이름·내용, Trivy version, checks bundle digest, SketchCatch 제외 rule 목록으로 SHA-256 cache key를 만든다. Trivy finding 결과는 process-local LRU와 Runtime Cache에 5분 동안 저장하며, 같은 API process에서 동일 key 검사가 동시에 요청되면 하나의 in-flight scan을 공유한다. Cache miss 또는 cache 장애 시 실제 Trivy 검사를 실행한다. Cached finding은 검사 재사용 결과일 뿐 severity나 Safety Gate 정책을 변경하지 않는다.
+
 API runtime은 `REDIS_URL`이 있고 `NODE_ENV !== "test"`일 때 Redis adapter를 사용한다. `REDIS_URL`이 없거나 테스트 환경이면 in-memory fallback을 사용한다. Redis 연결이나 명령이 실패해도 API workflow의 원천 기록은 RDS/S3 기준으로 유지되어야 하며, Runtime Cache adapter는 같은 process 안에서 가능한 fallback cache를 사용해 요청을 실패시키지 않는다.
 
 단, Production Live Observation의 원자 집계는 여러 API process가 공유하는 Redis가 진실의 원천이므로 예외다. `LIVE_OBSERVATION_ENABLED=true`인 Production에서 Redis readiness가 실패하면 세션 생성을 `503 LIVE_OBSERVATION_CACHE_UNAVAILABLE`로 차단한다.

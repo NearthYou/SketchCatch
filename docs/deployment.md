@@ -272,6 +272,10 @@ LIVE_OBSERVATION_ENABLED=false
 
 `TF_PLUGIN_CACHE_DIR`과 `TRIVY_CACHE_DIR`은 ECS task의 ephemeral 경로입니다. worker는 one-off task이며 host volume cache에 의존하지 않습니다.
 
+API startup은 listen 전에 작은 Terraform 구성을 한 번 검사해 Trivy process와 policy loading을 미리 수행합니다. Warm-up이 실패하면 warning을 기록하고 API startup과 deterministic fallback 검사는 계속합니다.
+
+동일 Terraform 파일 집합의 Trivy finding은 SHA-256 key로 process-local cache와 Redis Runtime Cache에 5분간 보관합니다. 같은 API process의 동일 key 검사는 진행 중인 scan 하나를 공유합니다. Key에는 Trivy version, checks bundle digest와 제외 rule 정책도 포함하며, cache read/write가 실패하면 cache를 우회해 실제 검사를 계속합니다.
+
 ## GitHub 비밀값
 
 ```text

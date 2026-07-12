@@ -1,14 +1,20 @@
 import { execFile } from "node:child_process";
+import { createHash, randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import type { CheckFinding, TerraformSyncFileInput } from "@sketchcatch/types";
+import type { RuntimeCache, RuntimeCacheJsonValue } from "../../runtime-cache/index.js";
 
 const execFileAsync = promisify(execFile);
 const TRIVY_SCAN_TIMEOUT_MS = 30_000;
 const TRIVY_SCAN_MAX_BUFFER_BYTES = 20 * 1024 * 1024;
 const TRIVY_IGNORE_FILE_NAME = ".sketchcatch-trivyignore";
+const DEFAULT_TRIVY_RESULT_CACHE_TTL_MS = 5 * 60 * 1000;
+const DEFAULT_TRIVY_RESULT_CACHE_MAX_ENTRIES = 100;
+const TRIVY_PROCESS_CACHE_IDENTITY = randomUUID();
 
 // Product policy keeps these AWS ALB and Auto Scaling checks out of the Trivy result.
 export const disabledTrivyTerraformRuleIds = [
@@ -31,9 +37,26 @@ export type TerraformSecurityScanner = (
   input: TerraformSecurityScannerInput
 ) => Promise<CheckFinding[]>;
 
+export type CreateCachedTerraformSecurityScannerOptions = {
+  readonly scan: TerraformSecurityScanner;
+  readonly cacheKeySalt?: string | (() => string) | undefined;
+  readonly cacheTtlMs?: number | undefined;
+  readonly maxCachedResults?: number | undefined;
+  readonly now?: (() => number) | undefined;
+  readonly runtimeCache?: RuntimeCache | undefined;
+};
+
+type CachedTerraformSecurityFindings = {
+  readonly expiresAt: number;
+  readonly findings: CheckFinding[];
+};
+
+const TRIVY_WARMUP_TERRAFORM = 'terraform { required_version = ">= 1.0" }\n';
+
 export type TrivyTerraformScanOptions = {
   readonly cacheDir?: string | undefined;
   readonly onScanError?: ((error: unknown) => void) | undefined;
+  readonly runtimeCache?: RuntimeCache | undefined;
   readonly trivyBinaryPath?: string | undefined;
 };
 
@@ -87,14 +110,211 @@ type TrivyFindingText = {
 export function createConfiguredTerraformSecurityScanner(
   options: TrivyTerraformScanOptions = {}
 ): TerraformSecurityScanner {
+  const cachedScan = createCachedTerraformSecurityScanner({
+    scan: (input) => scanTerraformWithTrivy(input, options),
+    cacheKeySalt: () => createConfiguredScannerCacheKeySalt(options),
+    runtimeCache: options.runtimeCache
+  });
+
   return async (input) => {
     try {
-      return await scanTerraformWithTrivy(input, options);
+      return await cachedScan(input);
     } catch (error) {
       options.onScanError?.(error);
       return [];
     }
   };
+}
+
+export function createCachedTerraformSecurityScanner(
+  options: CreateCachedTerraformSecurityScannerOptions
+): TerraformSecurityScanner {
+  const cacheTtlMs = options.cacheTtlMs ?? DEFAULT_TRIVY_RESULT_CACHE_TTL_MS;
+  const maxCachedResults =
+    options.maxCachedResults ?? DEFAULT_TRIVY_RESULT_CACHE_MAX_ENTRIES;
+  const now = options.now ?? Date.now;
+  const cachedResults = new Map<string, CachedTerraformSecurityFindings>();
+  const scansInFlight = new Map<string, Promise<CheckFinding[]>>();
+
+  return async (input) => {
+    const cacheKeySalt =
+      typeof options.cacheKeySalt === "function"
+        ? options.cacheKeySalt()
+        : options.cacheKeySalt;
+    const cacheKey = createTerraformSecurityScanCacheKey(input, cacheKeySalt);
+    const cachedResult = cachedResults.get(cacheKey);
+
+    if (cachedResult && cachedResult.expiresAt > now()) {
+      cachedResults.delete(cacheKey);
+      cachedResults.set(cacheKey, cachedResult);
+      return structuredClone(cachedResult.findings);
+    }
+
+    cachedResults.delete(cacheKey);
+    const existingScan = scansInFlight.get(cacheKey);
+    if (existingScan) {
+      return structuredClone(await existingScan);
+    }
+
+    const scan = loadAndCacheFindings(input, cacheKey);
+    scansInFlight.set(cacheKey, scan);
+    try {
+      return structuredClone(await scan);
+    } finally {
+      if (scansInFlight.get(cacheKey) === scan) {
+        scansInFlight.delete(cacheKey);
+      }
+    }
+  };
+
+  async function loadAndCacheFindings(
+    input: TerraformSecurityScannerInput,
+    cacheKey: string
+  ): Promise<CheckFinding[]> {
+    const runtimeCachedFindings = await readRuntimeCachedFindings(
+      options.runtimeCache,
+      cacheKey
+    );
+
+    if (runtimeCachedFindings) {
+      cacheFindings(cacheKey, runtimeCachedFindings);
+      return runtimeCachedFindings;
+    }
+
+    const findings = await options.scan(input);
+    cacheFindings(cacheKey, findings);
+    await writeRuntimeCachedFindings(options.runtimeCache, cacheKey, findings, cacheTtlMs);
+    return findings;
+  }
+
+  function cacheFindings(cacheKey: string, findings: readonly CheckFinding[]): void {
+    cachedResults.set(cacheKey, {
+      expiresAt: now() + cacheTtlMs,
+      findings: structuredClone([...findings])
+    });
+
+    while (cachedResults.size > maxCachedResults) {
+      const oldestCacheKey = cachedResults.keys().next().value as string | undefined;
+      if (oldestCacheKey === undefined) break;
+      cachedResults.delete(oldestCacheKey);
+    }
+  }
+}
+
+async function readRuntimeCachedFindings(
+  runtimeCache: RuntimeCache | undefined,
+  cacheKey: string
+): Promise<CheckFinding[] | null> {
+  if (!runtimeCache) {
+    return null;
+  }
+
+  try {
+    const value = await runtimeCache.get<{ findings?: unknown }>({
+      namespace: "trivy-terraform-scan",
+      key: cacheKey
+    });
+
+    return value && Array.isArray(value.findings)
+      ? structuredClone(value.findings as CheckFinding[])
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+async function writeRuntimeCachedFindings(
+  runtimeCache: RuntimeCache | undefined,
+  cacheKey: string,
+  findings: readonly CheckFinding[],
+  ttlMs: number
+): Promise<void> {
+  if (!runtimeCache) {
+    return;
+  }
+
+  try {
+    const value = JSON.parse(JSON.stringify({ findings })) as RuntimeCacheJsonValue;
+    await runtimeCache.set(
+      {
+        namespace: "trivy-terraform-scan",
+        key: cacheKey
+      },
+      value,
+      { ttlMs }
+    );
+  } catch {
+    // Runtime Cache is an optimization; Trivy findings remain the source result.
+  }
+}
+
+function createTerraformSecurityScanCacheKey(
+  input: TerraformSecurityScannerInput,
+  cacheKeySalt = ""
+): string {
+  const hash = createHash("sha256");
+  hash.update("sketchcatch-trivy-terraform-scan:v1\0");
+  hash.update(cacheKeySalt);
+
+  const normalizedFiles = [...input.terraformFiles].sort((left, right) =>
+    left.fileName.localeCompare(right.fileName)
+  );
+  for (const file of normalizedFiles) {
+    if (file.terraformCode.trim().length === 0) {
+      continue;
+    }
+
+    hash.update("\0file\0");
+    hash.update(file.fileName);
+    hash.update("\0content\0");
+    hash.update(file.terraformCode);
+  }
+
+  return hash.digest("hex");
+}
+
+function createConfiguredScannerCacheKeySalt(options: TrivyTerraformScanOptions): string {
+  const cacheDir = options.cacheDir ?? process.env.TRIVY_CACHE_DIR ?? "";
+
+  return JSON.stringify({
+    cacheDir,
+    disabledRuleIds: disabledTrivyTerraformRuleIds,
+    policyDigest: readTrivyPolicyDigest(cacheDir),
+    trivyBinaryPath: options.trivyBinaryPath ?? process.env.TRIVY_BIN ?? "trivy",
+    trivyVersion:
+      process.env.TRIVY_VERSION ?? `process:${TRIVY_PROCESS_CACHE_IDENTITY}`
+  });
+}
+
+function readTrivyPolicyDigest(cacheDir: string): string {
+  if (cacheDir.trim().length === 0) {
+    return process.env.TRIVY_CHECKS_BUNDLE_DIGEST ?? "unknown";
+  }
+
+  try {
+    const metadata = JSON.parse(
+      readFileSync(path.join(cacheDir, "policy", "metadata.json"), "utf8")
+    ) as { Digest?: unknown };
+
+    return typeof metadata.Digest === "string" && metadata.Digest.length > 0
+      ? metadata.Digest
+      : "unknown";
+  } catch {
+    return process.env.TRIVY_CHECKS_BUNDLE_DIGEST ?? "unknown";
+  }
+}
+
+export async function warmTrivyCheckBundle(
+  scan: TerraformSecurityScanner = (input) => scanTerraformWithTrivy(input)
+): Promise<void> {
+  await scan({
+    terraformFiles: [
+      {
+        fileName: "trivy-warmup.tf",
+        terraformCode: TRIVY_WARMUP_TERRAFORM
+      }
+    ]
+  });
 }
 
 export async function scanTerraformWithTrivy(

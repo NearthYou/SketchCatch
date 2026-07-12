@@ -1,10 +1,142 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { createInMemoryRuntimeCache } from "../../runtime-cache/index.js";
 import {
+  createCachedTerraformSecurityScanner,
   createTrivyIgnoreFileContents,
   disabledTrivyTerraformRuleIds,
-  parseTrivyTerraformFindings
+  parseTrivyTerraformFindings,
+  warmTrivyCheckBundle
 } from "./trivy-terraform-scan.js";
+
+test("cached Terraform scanner reuses findings for identical content", async () => {
+  let scanCount = 0;
+  const scanner = createCachedTerraformSecurityScanner({
+    scan: async () => {
+      scanCount += 1;
+      return [];
+    }
+  });
+  const input = {
+    terraformFiles: [
+      {
+        fileName: "main.tf",
+        terraformCode: 'resource "aws_vpc" "main" {}'
+      }
+    ]
+  };
+
+  await scanner(input);
+  await scanner(input);
+
+  assert.equal(scanCount, 1);
+});
+
+test("cached Terraform scanner expires findings after five-minute TTL", async () => {
+  let now = 0;
+  let scanCount = 0;
+  const scanner = createCachedTerraformSecurityScanner({
+    now: () => now,
+    scan: async () => {
+      scanCount += 1;
+      return [];
+    }
+  });
+  const input = {
+    terraformFiles: [{ fileName: "main.tf", terraformCode: 'resource "aws_s3_bucket" "assets" {}' }]
+  };
+
+  await scanner(input);
+  now = 5 * 60 * 1000 - 1;
+  await scanner(input);
+  now = 5 * 60 * 1000;
+  await scanner(input);
+
+  assert.equal(scanCount, 2);
+});
+
+test("cached Terraform scanner invalidates results when policy identity changes", async () => {
+  let policyIdentity = "policy-v1";
+  let scanCount = 0;
+  const scanner = createCachedTerraformSecurityScanner({
+    cacheKeySalt: () => policyIdentity,
+    scan: async () => {
+      scanCount += 1;
+      return [];
+    }
+  });
+  const input = {
+    terraformFiles: [{ fileName: "main.tf", terraformCode: 'resource "aws_vpc" "main" {}' }]
+  };
+
+  await scanner(input);
+  policyIdentity = "policy-v2";
+  await scanner(input);
+
+  assert.equal(scanCount, 2);
+});
+
+test("cached Terraform scanner coalesces concurrent scans for identical content", async () => {
+  let releaseScan: (() => void) | undefined;
+  let scanCount = 0;
+  const scanner = createCachedTerraformSecurityScanner({
+    scan: async () => {
+      scanCount += 1;
+      await new Promise<void>((resolve) => {
+        releaseScan = resolve;
+      });
+      return [];
+    }
+  });
+  const input = {
+    terraformFiles: [{ fileName: "main.tf", terraformCode: 'resource "aws_iam_role" "app" {}' }]
+  };
+
+  const firstScan = scanner(input);
+  const secondScan = scanner(input);
+  await new Promise((resolve) => setImmediate(resolve));
+  releaseScan?.();
+  await Promise.all([firstScan, secondScan]);
+
+  assert.equal(scanCount, 1);
+});
+
+test("cached Terraform scanners share findings through Runtime Cache", async () => {
+  let scanCount = 0;
+  const runtimeCache = createInMemoryRuntimeCache();
+  const createScanner = () =>
+    createCachedTerraformSecurityScanner({
+      runtimeCache,
+      scan: async () => {
+        scanCount += 1;
+        return [];
+      }
+    });
+  const input = {
+    terraformFiles: [
+      {
+        fileName: "main.tf",
+        terraformCode: 'resource "aws_subnet" "public" {}'
+      }
+    ]
+  };
+
+  await createScanner()(input);
+  await createScanner()(input);
+
+  assert.equal(scanCount, 1);
+});
+
+test("warmTrivyCheckBundle runs a minimal Terraform scan", async () => {
+  const scannedFiles: string[] = [];
+
+  await warmTrivyCheckBundle(async ({ terraformFiles }) => {
+    scannedFiles.push(...terraformFiles.map((file) => file.fileName));
+    return [];
+  });
+
+  assert.deepEqual(scannedFiles, ["trivy-warmup.tf"]);
+});
 
 test("disables ALB and Auto Scaling Trivy rules through the generated ignore file", () => {
   const ignoreFileContents = createTrivyIgnoreFileContents();

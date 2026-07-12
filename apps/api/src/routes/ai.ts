@@ -262,6 +262,7 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
     ((input) =>
       analyzePreDeploymentCheck(input, {
         terraformSecurityScanner: createConfiguredTerraformSecurityScanner({
+          runtimeCache: options.runtimeCache,
           onScanError: (error) => {
             app.log.warn(
               {

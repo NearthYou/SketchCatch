@@ -25,6 +25,8 @@ export type AnalyzePreDeploymentCheckOptions = {
   readonly terraformSecurityScanner?: TerraformSecurityScanner | undefined;
 };
 
+const defaultTerraformSecurityScanner = createConfiguredTerraformSecurityScanner();
+
 export async function analyzePreDeploymentCheck(
   input: AnalyzePreDeploymentCheckInput,
   options: AnalyzePreDeploymentCheckOptions = {}
@@ -36,7 +38,7 @@ export async function analyzePreDeploymentCheck(
   }
 
   const terraformSecurityScanner =
-    options.terraformSecurityScanner ?? createConfiguredTerraformSecurityScanner();
+    options.terraformSecurityScanner ?? defaultTerraformSecurityScanner;
   const [policyAnalysis, terraformSecurityFindings] = await Promise.all([
     Promise.resolve(
       analyzePreDeployment(input.architectureJson, {
