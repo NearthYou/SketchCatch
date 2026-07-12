@@ -188,8 +188,8 @@ test("presentation particles stay inside connectors and the stage hugs its conte
   assert.match(mapRule, /height:\s*clamp\(300px,\s*42vh,\s*430px\)/);
   assert.match(particleRule, /box-sizing:\s*border-box/);
   assert.match(surfaceRule, /min-height:\s*210px/);
-  assert.match(stylesSource, /from \{ left:\s*-10px; opacity:\s*0; \}/);
-  assert.match(stylesSource, /to \{ left:\s*calc\(100% - 5px\); opacity:\s*0; \}/);
+  assert.match(stylesSource, /from \{ left:\s*-16px; opacity:\s*0; \}/);
+  assert.match(stylesSource, /to \{ left:\s*calc\(100% - 8px\); opacity:\s*0; \}/);
   assert.doesNotMatch(surfaceRule, /height:\s*100%/);
 });
 
@@ -218,7 +218,7 @@ test("traffic bursts alone activate visible circular flow particles", () => {
   );
   assert.match(
     getCssRule(stylesSource, "liveObservationPresentationSegmentParticle"),
-    /border-radius:\s*50%[\s\S]*height:\s*10px[\s\S]*width:\s*10px/
+    /border:\s*3px solid #3974e8[\s\S]*border-radius:\s*50%[\s\S]*box-shadow:\s*0 0 0 6px[\s\S]*height:\s*16px[\s\S]*top:\s*-8px[\s\S]*width:\s*16px/
   );
   assert.match(stylesSource, /@keyframes liveObservationCapacityLaunch/);
   assert.match(stylesSource, /@keyframes liveObservationCapacityActivated/);

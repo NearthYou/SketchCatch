@@ -28,7 +28,7 @@
 - Consumes: `.liveObservationPresentationSegmentParticle` and `@keyframes liveObservationPresentationSegmentParticle`.
 - Produces: a 16px circular particle that follows the existing `burst`-driven rendering path.
 
-- [ ] **Step 1: Write the failing presentation contract test**
+- [x] **Step 1: Write the failing presentation contract test**
 
 Change the particle assertion in `live-observation-modal.test.ts` to require the approved geometry:
 
@@ -41,7 +41,7 @@ assert.match(stylesSource, /from \{ left:\s*-16px; opacity:\s*0; \}/);
 assert.match(stylesSource, /to \{ left:\s*calc\(100% - 8px\); opacity:\s*0; \}/);
 ```
 
-- [ ] **Step 2: Run the test and verify RED**
+- [x] **Step 2: Run the test and verify RED**
 
 Run:
 
@@ -52,7 +52,7 @@ pnpm exec tsx --test features/workspace/live-observation-modal.test.ts
 
 Expected: FAIL because the current particle is 10px with a 5px glow and 10px start offset.
 
-- [ ] **Step 3: Implement the approved 16px geometry**
+- [x] **Step 3: Implement the approved 16px geometry**
 
 Update `workspace.module.css`:
 
@@ -80,7 +80,7 @@ Update `workspace.module.css`:
 }
 ```
 
-- [ ] **Step 4: Verify focused behavior**
+- [x] **Step 4: Verify focused behavior**
 
 Run:
 
@@ -91,7 +91,7 @@ pnpm exec tsx --test features/workspace/live-observation-modal.test.ts features/
 
 Expected: all focused tests PASS, including burst-only activation and reduced-motion assertions.
 
-- [ ] **Step 5: Run repository gates**
+- [x] **Step 5: Run repository gates**
 
 Run:
 
@@ -104,7 +104,7 @@ pnpm build
 
 Expected: all commands exit 0.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add apps/web/features/workspace/live-observation-modal.test.ts apps/web/features/workspace/workspace.module.css agent-progress.md
