@@ -9,6 +9,11 @@ import {
 import { BOARD_DEFAULT_EDGE_COLOR } from "./constants";
 import { getAreaNodeLabel, isAreaNode } from "./area-nodes";
 import { getResourceNodeDisplayLabel } from "./resource-node-display-label";
+import {
+  doesOrthogonalRouteCrossResource,
+  getObstacleSafeEdgeHandles,
+  type ObstacleSafeEdgeHandles
+} from "./obstacle-safe-edge-routing";
 import type {
   DiagramFlowEdge,
   DiagramFlowNode,
@@ -151,13 +156,26 @@ export function toFlowEdges(
     const visibleLabel = getVisibleEdgeLabel(fullLabel);
     const previewState = previewAnnotations?.edgeStates[edge.id];
     const markerColor = getFlowEdgeMarkerColor(color, isPreview);
+    const sourceNode = nodeById.get(edge.sourceNodeId);
+    const targetNode = nodeById.get(edge.targetNodeId);
+    const storedHandles = getStoredLogicalHandles(edge);
+    const renderedHandles =
+      sourceNode && targetNode && (
+        !storedHandles || doesOrthogonalRouteCrossResource(sourceNode, targetNode, storedHandles, nodes)
+      )
+        ? getObstacleSafeEdgeHandles(sourceNode, targetNode, nodes)
+        : storedHandles;
     const flowEdge: DiagramFlowEdge = {
       id: edge.id,
       ariaLabel: getFlowEdgeAriaLabel(edge, fullLabel, selected, isPreview, previewState),
       source: edge.sourceNodeId,
       target: edge.targetNodeId,
-      ...(edge.sourceHandleId ? { sourceHandle: toReactFlowHandleId(edge.sourceHandleId, "source") } : {}),
-      ...(edge.targetHandleId ? { targetHandle: toReactFlowHandleId(edge.targetHandleId, "target") } : {}),
+      ...(renderedHandles?.sourceHandleId
+        ? { sourceHandle: toReactFlowHandleId(renderedHandles.sourceHandleId, "source") }
+        : {}),
+      ...(renderedHandles?.targetHandleId
+        ? { targetHandle: toReactFlowHandleId(renderedHandles.targetHandleId, "target") }
+        : {}),
       type: "diagramEdge",
       data: {
         edge,
@@ -196,6 +214,22 @@ export function toFlowEdges(
 
     return flowEdge;
   });
+}
+
+function getStoredLogicalHandles(edge: DiagramEdge): ObstacleSafeEdgeHandles | undefined {
+  if (!edge.sourceHandleId || !edge.targetHandleId) {
+    return undefined;
+  }
+
+  return {
+    sourceHandleId: toLogicalHandleId(edge.sourceHandleId),
+    targetHandleId: toLogicalHandleId(edge.targetHandleId)
+  };
+}
+
+function toLogicalHandleId(handleId: string): string {
+  const side = handleId.match(/(?:source-|target-|handle-)?(left|top|right|bottom)$/u)?.[1];
+  return side ? `handle-${side}` : handleId;
 }
 
 function isValidConnectionTargetNode(
