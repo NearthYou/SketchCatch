@@ -10,24 +10,65 @@ const AGENT_DELAY_SECONDS = 8;
 const MAX_TRAFFIC_EVENTS = 1_000;
 
 const trafficEventTimesByObservationId = new Map<string, number[]>();
+const trafficExpiryByObservationId = new Map<
+  string,
+  { readonly handle: unknown; readonly scheduler: SimulatedTrafficExpiryScheduler }
+>();
+
+export type SimulatedTrafficExpiryScheduler = {
+  setTimeout(callback: () => void, delayMs: number): unknown;
+  clearTimeout(handle: unknown): void;
+};
+
+const simulatedTrafficExpiryScheduler: SimulatedTrafficExpiryScheduler = {
+  clearTimeout(handle) {
+    clearTimeout(handle as NodeJS.Timeout);
+  },
+  setTimeout(callback, delayMs) {
+    const handle = setTimeout(callback, delayMs);
+    handle.unref();
+    return handle;
+  }
+};
 
 export function recordSimulatedCloudWatchAgentTraffic(
   observationId: string,
-  observedAtMs = Date.now()
+  observedAtMs = Date.now(),
+  scheduler: SimulatedTrafficExpiryScheduler = simulatedTrafficExpiryScheduler
 ): void {
   const trafficEventTimesMs = trafficEventTimesByObservationId.get(observationId) ?? [];
   trafficEventTimesByObservationId.set(observationId, [...trafficEventTimesMs, observedAtMs].slice(
     -MAX_TRAFFIC_EVENTS
   ));
+
+  const existingExpiry = trafficExpiryByObservationId.get(observationId);
+  if (existingExpiry) {
+    existingExpiry.scheduler.clearTimeout(existingExpiry.handle);
+  }
+
+  const handle = scheduler.setTimeout(() => {
+    trafficEventTimesByObservationId.delete(observationId);
+    trafficExpiryByObservationId.delete(observationId);
+  }, RECENT_TRAFFIC_WINDOW_MS);
+  trafficExpiryByObservationId.set(observationId, { handle, scheduler });
 }
 
 export function resetSimulatedCloudWatchAgentTraffic(observationId?: string): void {
   if (observationId) {
+    const expiry = trafficExpiryByObservationId.get(observationId);
+    if (expiry) {
+      expiry.scheduler.clearTimeout(expiry.handle);
+    }
     trafficEventTimesByObservationId.delete(observationId);
+    trafficExpiryByObservationId.delete(observationId);
     return;
   }
 
+  for (const expiry of trafficExpiryByObservationId.values()) {
+    expiry.scheduler.clearTimeout(expiry.handle);
+  }
   trafficEventTimesByObservationId.clear();
+  trafficExpiryByObservationId.clear();
 }
 
 export function createSimulatedCloudWatchAgentObservabilityProvider(options: {

@@ -81,6 +81,28 @@ test("simulated provider isolates traffic between observation sessions", async (
   assert.equal(second.capacity.desiredCapacity, 1);
 });
 
+test("simulated traffic expires without requiring a later session snapshot", async () => {
+  const nowMs = Date.parse("2026-07-11T12:00:00.000Z");
+  const scheduledCallbacks: Array<() => void> = [];
+  const provider = createSimulatedCloudWatchAgentObservabilityProvider({ now: () => nowMs });
+
+  resetSimulatedCloudWatchAgentTraffic();
+  recordSimulatedCloudWatchAgentTraffic("observation-expiring", nowMs, {
+    clearTimeout() {},
+    setTimeout(callback) {
+      scheduledCallbacks.push(callback);
+      return callback;
+    }
+  });
+
+  assert.equal(scheduledCallbacks.length, 1);
+  scheduledCallbacks[0]?.();
+
+  const expired = await provider.observe(createTarget(), "observation-expiring");
+  assert.equal(expired.cloudWatch.state, "delayed");
+  assert.equal(expired.capacity.desiredCapacity, 1);
+});
+
 function createTarget() {
   return {
     albArnSuffix: "app/demo/123",
