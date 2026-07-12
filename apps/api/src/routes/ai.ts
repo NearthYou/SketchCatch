@@ -10,6 +10,9 @@ import type {
   AiSafetyExplanation,
   AiTerraformErrorExplanationResult,
   AiTerraformPreviewExplanationResult,
+  ApiErrorResponse,
+  ArchitectureDraftProgressStage,
+  ArchitectureDraftStreamEvent,
   ArchitecturePatchPreviewResponse,
   ArchitectureJson,
   CheckFinding,
@@ -26,6 +29,7 @@ import type {
 } from "@sketchcatch/types";
 import { RESOURCE_TYPES, TEMPLATE_IDS } from "@sketchcatch/types";
 import {
+  ArchitectureDraftGenerationError,
   createConfiguredAmazonQArchitectureDraftResponse,
   type CreateArchitectureDraftResponseFactory,
   createArchitectureDraftFromRepositoryEvidence
@@ -35,7 +39,10 @@ import {
   createConfiguredAiExplanation,
   type CreateLlmExplanation
 } from "../services/aiLlmExplanation.js";
-import { createArchitecturePatchPreview } from "../services/aiArchitecturePatchPreview.js";
+import {
+  createConfiguredArchitecturePatchPreview,
+  type CreateArchitecturePatchPreviewFactory
+} from "../services/aiArchitecturePatchPreview.js";
 import {
   analyzeImmediatePreDeploymentCheck,
   analyzePreDeploymentCheck,
@@ -246,6 +253,7 @@ const confirmTranscribeBodySchema = z.object({
 export type AiRouteOptions = {
   readonly analyzePreDeploymentCheck?: AnalyzePreDeploymentCheck;
   readonly createArchitectureDraftResponse?: CreateArchitectureDraftResponseFactory;
+  readonly createArchitecturePatchPreview?: CreateArchitecturePatchPreviewFactory;
   readonly createLlmExplanation?: CreateLlmExplanation;
   readonly createSafetyFindingExplanation?: CreateSafetyFindingExplanation;
   readonly pricingRateProvider?: CostPricingRateProvider;
@@ -261,7 +269,15 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
   const deepScans = new Map<string, LocalDeepScanEntry>();
   const createLlmExplanation = options.createLlmExplanation ?? createConfiguredAiExplanation();
   const createArchitectureDraftResponse =
-    options.createArchitectureDraftResponse ?? createConfiguredAmazonQArchitectureDraftResponse();
+    options.createArchitectureDraftResponse ??
+    createConfiguredAmazonQArchitectureDraftResponse({
+      runtimeCache: options.runtimeCache,
+      onWarmupError: (error) => {
+        app.log.warn({ error }, "Amazon Q architecture pattern warm-up failed");
+      }
+    });
+  const createArchitecturePatchPreview =
+    options.createArchitecturePatchPreview ?? createConfiguredArchitecturePatchPreview();
   const createSafetyFindingExplanation =
     options.createSafetyFindingExplanation ?? createConfiguredOpenAiSafetyFindingExplanation();
   const safetyExplanationTimeoutMs =
@@ -302,6 +318,53 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
     }
 
     return createArchitectureDraftResponse(body);
+  });
+
+  app.post("/ai/architecture-draft/stream", async (request, reply) => {
+    const body = architectureDraftBodySchema.parse(request.body);
+
+    reply.hijack();
+    for (const [name, value] of Object.entries(reply.getHeaders())) {
+      if (value !== undefined) {
+        reply.raw.setHeader(name, value);
+      }
+    }
+    reply.raw.statusCode = 200;
+    reply.raw.setHeader("cache-control", "no-cache, no-transform");
+    reply.raw.setHeader("content-type", "application/x-ndjson; charset=utf-8");
+    reply.raw.setHeader("x-accel-buffering", "no");
+    reply.raw.flushHeaders();
+
+    const writeEvent = (event: ArchitectureDraftStreamEvent): void => {
+      if (!reply.raw.destroyed && !reply.raw.writableEnded) {
+        reply.raw.write(`${JSON.stringify(event)}\n`);
+      }
+    };
+    const onProgress = (stage: ArchitectureDraftProgressStage): void => {
+      writeEvent({ type: "progress", stage });
+    };
+
+    try {
+      const result = await createArchitectureDraftResponse(body, { onProgress });
+      writeEvent({ type: "result", result });
+    } catch (error) {
+      const errorContext = {
+        errorKind:
+          error instanceof ArchitectureDraftGenerationError ? error.kind : "unknown",
+        errorName: error instanceof Error ? error.name : typeof error,
+        errorMessages: readErrorMessageChain(error)
+      };
+      if (error instanceof ArchitectureDraftGenerationError && error.statusCode < 500) {
+        app.log.info(errorContext, "Architecture Draft stream could not satisfy requirements");
+      } else {
+        app.log.warn(errorContext, "Architecture Draft stream failed");
+      }
+      writeEvent({ type: "error", error: createArchitectureDraftStreamError(error) });
+    } finally {
+      reply.raw.end();
+    }
+
+    return reply;
   });
 
   app.post(
@@ -476,7 +539,7 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
 
   app.post("/ai/architecture-patch-preview", async (request): Promise<ArchitecturePatchPreviewResponse> => {
     const body = architecturePatchPreviewBodySchema.parse(request.body);
-    const preview = createArchitecturePatchPreview(body);
+    const preview = await createArchitecturePatchPreview(body);
 
     if (preview.status === "needs_clarification") {
       return preview;
@@ -490,7 +553,10 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
     return {
       ...preview,
       llmExplanation,
-      providerMetadata: llmExplanation.providerMetadata ?? preview.providerMetadata
+      providerMetadata:
+        preview.providerMetadata.provider === "fallback"
+          ? (llmExplanation.providerMetadata ?? preview.providerMetadata)
+          : preview.providerMetadata
     };
   });
 
@@ -711,6 +777,36 @@ async function writeDeepScanResult(
   } catch {
     // The process-local result remains available when Runtime Cache is degraded.
   }
+}
+
+function createArchitectureDraftStreamError(
+  error: unknown
+): ApiErrorResponse & { readonly statusCode: number } {
+  if (error instanceof ArchitectureDraftGenerationError) {
+    return {
+      error: error.errorCode,
+      message: error.message,
+      statusCode: error.statusCode
+    };
+  }
+
+  return {
+    error: "internal_server_error",
+    message: "아키텍처 초안 생성 중 오류가 발생했습니다.",
+    statusCode: 500
+  };
+}
+
+function readErrorMessageChain(error: unknown): string[] {
+  const messages: string[] = [];
+  let current = error;
+
+  while (current instanceof Error && messages.length < 6) {
+    messages.push(`${current.name}: ${current.message}`);
+    current = current.cause;
+  }
+
+  return messages;
 }
 
 type GitHubRepository = {

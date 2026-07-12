@@ -516,9 +516,12 @@ export async function createAwsConnectionSetup({
   });
 }
 
-export async function listAwsConnections(): Promise<AwsConnection[]> {
+export async function listAwsConnections(
+  options: { readonly signal?: AbortSignal | undefined } = {}
+): Promise<AwsConnection[]> {
   const response = await apiFetch<AwsConnectionListResponse>("/aws/connections", {
-    auth: true
+    auth: true,
+    ...(options.signal ? { signal: options.signal } : {})
   });
 
   return response.awsConnections;
@@ -1094,11 +1097,14 @@ export async function listCostProjectEstimates(input: {
   });
 }
 
-export async function listCostUsageAnalysis(input: {
-  awsConnectionId?: string | undefined;
-  projectId?: string | undefined;
-  range: CostUsageAnalysisRange;
-}): Promise<CostUsageAnalysisResponse> {
+export async function listCostUsageAnalysis(
+  input: {
+    awsConnectionId?: string | undefined;
+    projectId?: string | undefined;
+    range: CostUsageAnalysisRange;
+  },
+  options: { readonly signal?: AbortSignal | undefined } = {}
+): Promise<CostUsageAnalysisResponse> {
   const params = new URLSearchParams({
     range: input.range
   });
@@ -1112,7 +1118,8 @@ export async function listCostUsageAnalysis(input: {
   }
 
   return apiFetch<CostUsageAnalysisResponse>(`/costs/usage?${params.toString()}`, {
-    auth: true
+    auth: true,
+    ...(options.signal ? { signal: options.signal } : {})
   });
 }
 

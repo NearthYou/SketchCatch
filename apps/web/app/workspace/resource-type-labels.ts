@@ -51,6 +51,8 @@ const resourceTypeLabels: Record<ResourceType, string> = {
   KMS_ALIAS: "KMS Alias",
   ACM_CERTIFICATE: "ACM Certificate",
   ACM_CERTIFICATE_VALIDATION: "ACM Certificate Validation",
+  APPLICATION_AUTO_SCALING_POLICY: "Application Auto Scaling Policy",
+  APPLICATION_AUTO_SCALING_TARGET: "Application Auto Scaling Target",
   COGNITO_USER_POOL: "Cognito User Pool",
   COGNITO_USER_POOL_CLIENT: "Cognito User Pool Client",
   AMPLIFY_APP: "Amplify App",
@@ -102,6 +104,13 @@ const resourceTypeLabels: Record<ResourceType, string> = {
   CONFIG_RULE: "AWS Config Rule",
   SHIELD_PROTECTION: "Shield Protection",
   GUARDDUTY_DETECTOR: "GuardDuty Detector",
+  AWS_CALLER_IDENTITY: "AWS Caller Identity",
+  SSM_PARAMETER: "SSM Parameter",
+  CODEBUILD_PROJECT: "CodeBuild Project",
+  CODEDEPLOY_APP: "CodeDeploy App",
+  CODEDEPLOY_DEPLOYMENT_GROUP: "CodeDeploy Deployment Group",
+  CODEPIPELINE: "CodePipeline",
+  CODESTAR_CONNECTION: "CodeStar Connection",
   UNKNOWN: "Unknown"
 };
 

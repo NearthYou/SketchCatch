@@ -24,11 +24,11 @@ Short English-only working log for the current agent context. Older records are 
 
 ### 2026-07-12 - Merge origin/dev into the Workspace UI branch
 
-- Resolved the three content conflicts while preserving the redesigned Deployment console and the `dev` duration/apply-confirmation fixes.
-- Kept the released source-repository migration at `0029` and moved the Live Observation manifest migration and combined snapshot to `0030`.
-- Updated the Workspace AI source-contract test for the Repository Analysis template context added by `dev`.
-- Split credential-shaped test literals so GitHub push protection can inspect the branch without false-positive Slack or Stripe secrets; runtime probe values remain unchanged.
-- Verification: migration compatibility, focused Web/API tests, lint, typecheck, build, and harness passed. `drizzle-kit generate` still reports the pre-existing historical snapshot-parent collision.
+- Fetched `origin/dev` at `53ca1c04` and merged it into `fix/ys/348-trivy-로직-수정`.
+- Restored the current Workspace screen, diagram editor, parameter/resource panels, and Deployment console from `60890f31`; accepted `dev` changes outside that protected UI scope.
+- Combined multi-file Terraform Plan inputs with the existing artifact-SHA Trivy snapshot cache, and adopted the server-owned Git/CI/CD approval request contract without changing the visible Deployment flow.
+- Added only cross-boundary compatibility for new resource labels, template preview visibility, cancellable cost requests, and updated safe/unsafe deployment fixtures.
+- Verification: focused Web tests passed 155/155, focused Deployment/API tests passed 108/108, and lint, typecheck, build, diff check, and harness passed; no cloud apply or destroy ran.
 
 ### 2026-07-11 - Coalesce Architecture Board direct-drag previews
 

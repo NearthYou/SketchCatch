@@ -1,11 +1,11 @@
 "use client";
 
-import Image from "next/image";
-import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-import type { GitHubRepositoryCandidate } from "@sketchcatch/types";
 import { ArrowLeft, FileCode2, LoaderCircle, Plus, TriangleAlert } from "lucide-react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import type { GitHubRepositoryCandidate } from "@sketchcatch/types";
+import { ProductBrand } from "../../../../components/ui/ProductBrand";
 import {
   connectGitHubSourceRepository,
   createGitHubSourceRepositoryInstallUrl,
@@ -15,28 +15,30 @@ import { getApiErrorMessage } from "../../../../lib/api-client";
 import styles from "./github-callback.module.css";
 
 type CallbackState =
-  | { status: "loading" }
-  | { status: "error"; message: string }
+  | { readonly status: "loading" }
+  | { readonly message: string; readonly status: "error" }
   | {
-      status: "ready";
-      installationId: string;
-      state: string;
-      projectId: string;
-      repositories: GitHubRepositoryCandidate[];
+      readonly installationId: string;
+      readonly projectId: string;
+      readonly repositories: readonly GitHubRepositoryCandidate[];
+      readonly state: string;
+      readonly status: "ready";
     }
-  | { status: "saving"; projectId: string };
+  | { readonly status: "saving" };
 
+// GitHub App에서 돌아온 사용자가 Repository 하나를 골라 프로젝트 시작 흐름을 이어가게 합니다.
 export default function GitHubIntegrationCallbackPage() {
   const router = useRouter();
   const [callbackState, setCallbackState] = useState<CallbackState>({ status: "loading" });
-  const selectableRepositories = useMemo(
+  const selectableCount = useMemo(
     () =>
       callbackState.status === "ready"
-        ? callbackState.repositories.filter((repository) => !repository.archived)
-        : [],
+        ? callbackState.repositories.filter((repository) => !repository.archived).length
+        : 0,
     [callbackState]
   );
 
+  // URL의 GitHub callback 값을 서버에 보내 선택 가능한 Repository를 불러옵니다.
   useEffect(() => {
     let cancelled = false;
 
@@ -48,98 +50,73 @@ export default function GitHubIntegrationCallbackPage() {
       if (!installationId || !state) {
         setCallbackState({
           status: "error",
-          message:
-            "GitHub 연결 정보가 없습니다. SketchCatch의 GitHub 연결 버튼에서 다시 시작해주세요."
+          message: "GitHub 연결 정보가 없습니다. Repository 시작 화면에서 다시 연결해주세요."
         });
         return;
       }
 
       try {
-        const result = await listGitHubInstallationRepositories({
-          installationId,
-          state
-        });
-
-        if (cancelled) {
-          return;
-        }
-
+        const result = await listGitHubInstallationRepositories({ installationId, state });
+        if (cancelled) return;
         setCallbackState({
-          status: "ready",
           installationId,
-          state,
           projectId: result.projectId,
-          repositories: result.repositories
+          repositories: result.repositories,
+          state,
+          status: "ready"
         });
       } catch (error) {
-        if (!cancelled) {
-          setCallbackState({
-            status: "error",
-            message: getApiErrorMessage(error, "GitHub repository 목록을 불러오지 못했습니다.")
-          });
-        }
+        if (cancelled) return;
+        setCallbackState({
+          status: "error",
+          message: getApiErrorMessage(error, "Repository 목록을 불러오지 못했습니다.")
+        });
       }
     }
 
     void loadRepositories();
-
     return () => {
       cancelled = true;
     };
   }, []);
 
+  // 사용자가 고른 Repository만 프로젝트에 연결하고 분석 시작 화면으로 돌아갑니다.
   async function selectRepository(repository: GitHubRepositoryCandidate): Promise<void> {
-    if (callbackState.status !== "ready") {
-      return;
-    }
-
-    setCallbackState({
-      status: "saving",
-      projectId: callbackState.projectId
-    });
+    if (callbackState.status !== "ready" || repository.archived) return;
+    setCallbackState({ status: "saving" });
 
     try {
-      const connectedRepository = await connectGitHubSourceRepository({
-        projectId: callbackState.projectId,
-        installationId: callbackState.installationId,
+      const connected = await connectGitHubSourceRepository({
         githubRepositoryId: repository.githubRepositoryId,
+        installationId: callbackState.installationId,
+        projectId: callbackState.projectId,
         state: callbackState.state
       });
-
-      if (connectedRepository.repositoryUrl === null) {
-        throw new Error("연결된 Repository URL을 확인하지 못했습니다.");
-      }
-
       const params = new URLSearchParams({
-        defaultBranch: connectedRepository.defaultBranch,
-        projectId: connectedRepository.projectId,
-        repositoryUrl: connectedRepository.repositoryUrl,
-        sourceRepositoryId: connectedRepository.id
+        projectId: connected.projectId,
+        projectName: connected.name,
+        sourceRepositoryId: connected.id
       });
       router.replace(`/workspace/repository?${params.toString()}`);
     } catch (error) {
       setCallbackState({
         status: "error",
-        message: getApiErrorMessage(error, "GitHub repository를 프로젝트에 연결하지 못했습니다.")
+        message: getApiErrorMessage(error, "Repository를 연결하지 못했습니다.")
       });
     }
   }
 
-  async function startGitHubInstallationFromCallback(): Promise<void> {
-    if (callbackState.status !== "ready") {
-      return;
-    }
+  // 현재 프로젝트에 다른 Repository 권한을 추가하도록 GitHub App 설치 화면을 다시 엽니다.
+  async function addRepositoryPermission(): Promise<void> {
+    if (callbackState.status !== "ready") return;
 
     try {
-      const { installUrl } = await createGitHubSourceRepositoryInstallUrl(
-        callbackState.projectId
-      );
-
-      window.location.assign(installUrl);
+      const result = await createGitHubSourceRepositoryInstallUrl(callbackState.projectId);
+      window.location.assign(result.installUrl);
     } catch (error) {
       setCallbackState({
         status: "error",
-        message: getApiErrorMessage(error, "GitHub App 설치 화면을 열지 못했습니다.")
+        message: getApiErrorMessage(error, "GitHub 권한 설정 화면을 열지 못했습니다.")
       });
     }
   }
@@ -147,83 +124,70 @@ export default function GitHubIntegrationCallbackPage() {
   return (
     <main className={styles.page}>
       <header className={styles.topbar}>
-        <Link className={styles.brand} href="/dashboard" aria-label="SketchCatch Dashboard">
-          <Image alt="" height={24} priority src="/sketchcatch-logo.png" width={16} />
-          <span>SketchCatch</span>
-        </Link>
-        <strong>Source Repository</strong>
-        <Link className={styles.backLink} href="/workspace/new">
+        <ProductBrand />
+        <Link href="/workspace/new">
           <ArrowLeft aria-hidden="true" size={16} />
           새 프로젝트
         </Link>
       </header>
 
-      <section className={styles.panel} aria-labelledby="repository-connect-title">
+      <section aria-labelledby="github-callback-title" className={styles.content}>
         <header className={styles.heading}>
-          <span>GITHUB APP</span>
-          <h1 id="repository-connect-title">Repository 선택</h1>
+          <span>GitHub App</span>
+          <h1 id="github-callback-title">Repository 선택</h1>
+          <p>Architecture 초안을 만들 코드 저장소 하나를 고르세요.</p>
         </header>
 
-        {callbackState.status === "loading" ? (
-          <div className={styles.progress} role="status">
+        {callbackState.status === "loading" || callbackState.status === "saving" ? (
+          <div aria-live="polite" className={styles.progress} role="status">
             <LoaderCircle aria-hidden="true" size={18} />
-            Repository 목록을 불러오는 중입니다.
-          </div>
-        ) : null}
-
-        {callbackState.status === "saving" ? (
-          <div className={styles.progress} role="status">
-            <LoaderCircle aria-hidden="true" size={18} />
-            선택한 Repository를 연결하는 중입니다.
+            <div>
+              <strong>{callbackState.status === "loading" ? "목록을 불러오는 중" : "Repository 연결 중"}</strong>
+              <span>이 화면을 닫지 마세요.</span>
+            </div>
           </div>
         ) : null}
 
         {callbackState.status === "error" ? (
           <div className={styles.errorState} role="alert">
             <TriangleAlert aria-hidden="true" size={18} />
-            <span>{callbackState.message}</span>
+            <div><strong>연결을 완료하지 못했습니다</strong><span>{callbackState.message}</span></div>
+            <Link href="/workspace/new">시작 방식 다시 선택</Link>
           </div>
         ) : null}
 
         {callbackState.status === "ready" ? (
           <>
-            <p className={styles.instruction}>연결할 Repository 하나를 선택하세요.</p>
+            <div className={styles.listHeader}>
+              <span>선택 가능 {selectableCount}개</span>
+              <button onClick={() => void addRepositoryPermission()} type="button">
+                <Plus aria-hidden="true" size={15} />
+                권한 추가
+              </button>
+            </div>
             <div className={styles.repositoryList}>
               {callbackState.repositories.map((repository) => (
                 <button
-                  className={styles.repositoryButton}
                   disabled={repository.archived}
                   key={repository.githubRepositoryId}
                   onClick={() => void selectRepository(repository)}
                   type="button"
                 >
-                  <span className={styles.repositoryIcon}>
-                    <FileCode2 aria-hidden="true" size={18} />
-                  </span>
-                  <span className={styles.repositoryCopy}>
+                  <FileCode2 aria-hidden="true" size={18} />
+                  <span>
                     <strong>{repository.fullName}</strong>
-                    <small>
-                      {repository.defaultBranch} · {repository.visibility}
-                      {repository.archived ? " · archived" : ""}
-                    </small>
+                    <small>{repository.defaultBranch} · {repository.visibility}</small>
                   </span>
-                  <span className={styles.selectLabel}>선택</span>
+                  <b>{repository.archived ? "Archived" : "선택"}</b>
                 </button>
               ))}
             </div>
-            {selectableRepositories.length === 0 ? (
-              <div className={styles.emptyState}>선택 가능한 Repository가 없습니다.</div>
+            {selectableCount === 0 ? (
+              <div className={styles.emptyState}>
+                <strong>선택 가능한 Repository가 없습니다.</strong>
+                <span>GitHub에서 이 App이 읽을 Repository 권한을 추가하세요.</span>
+              </div>
             ) : null}
-            <footer className={styles.actions}>
-              <button
-                className={styles.secondaryButton}
-                onClick={() => void startGitHubInstallationFromCallback()}
-                type="button"
-              >
-                <Plus aria-hidden="true" size={16} />
-                Repository 권한 추가
-              </button>
-            </footer>
           </>
         ) : null}
       </section>

@@ -1180,8 +1180,6 @@ export function DeploymentPanel({
         awsRegion: selectedDeployment.approvedAwsRegion ?? "ap-northeast-2",
         staticSiteUrl: staticSiteUrl && staticSiteUrl !== "[sensitive]" ? staticSiteUrl : null,
         apiBaseUrl: apiBaseUrl && apiBaseUrl !== "[sensitive]" ? apiBaseUrl : null,
-        approveAwsRoleDiff: true,
-        planSummary: selectedDeployment.planSummary ?? undefined,
         pullRequestTitle: "SketchCatch Git/CI/CD auto deploy",
         commitMessage: "Add SketchCatch Git/CI/CD auto deploy artifacts",
         userAcceptedChangeId: `git-cicd-auto-deploy-${selectedDeployment.id}`

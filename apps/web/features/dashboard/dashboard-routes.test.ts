@@ -26,17 +26,17 @@ test("dashboard routes use the rebuilt shell without temporary placeholders", ()
   }
 });
 
-test("dashboard route entry points connect the real feature clients", () => {
+test("dashboard route entry points keep every rebuilt product surface active", () => {
   assert.match(readAppFile("dashboard/page.tsx"), /DashboardOverview/);
   assert.match(readAppFile("dashboard/projects/page.tsx"), /DashboardProjectsRoute/);
-  assert.match(readAppFile("dashboard/costs/page.tsx"), /CostsClient/);
   assert.match(readAppFile("dashboard/templates/page.tsx"), /BuiltInTemplateLibrary/);
-  assert.match(readAppFile("dashboard/settings/page.tsx"), /SettingsIntegrationsClient/);
   assert.match(readAppFile("dashboard/projects/[projectId]/page.tsx"), /ProjectDetailClient/);
   assert.match(
     readAppFile("dashboard/projects/[projectId]/settings/page.tsx"),
     /ProjectGitHubSettingsClient/
   );
+  assert.match(readAppFile("dashboard/costs/page.tsx"), /CostDashboardClient/);
+  assert.match(readAppFile("dashboard/settings/page.tsx"), /SettingsDashboardClient/);
 });
 
 function readAppFile(path: string): string {

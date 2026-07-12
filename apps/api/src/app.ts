@@ -388,11 +388,24 @@ function getErrorMessage(error: unknown): string {
 }
 
 function getResponseErrorMessage(statusCode: number, error: unknown): string {
+  if (hasExposedMessage(error)) {
+    return getErrorMessage(error);
+  }
+
   if (statusCode >= 500 && process.env.NODE_ENV === "production") {
     return "Internal server error";
   }
 
   return getErrorMessage(error);
+}
+
+function hasExposedMessage(error: unknown): error is { readonly exposeMessage: true } {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "exposeMessage" in error &&
+    error.exposeMessage === true
+  );
 }
 
 function hasStatusCode(error: unknown): error is { readonly statusCode: number } {

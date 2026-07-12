@@ -6,7 +6,9 @@ const allowedTopLevelBlocks = new Set(["terraform", "provider", "resource", "dat
 const liveApplySupportedDataSourceTypes = new Set([
   "archive_file",
   "aws_ami",
-  "aws_eks_cluster_auth"
+  "aws_eks_cluster_auth",
+  "aws_caller_identity",
+  "aws_ssm_parameter"
 ]);
 const allowedProviderSources = new Set([
   "hashicorp/aws",

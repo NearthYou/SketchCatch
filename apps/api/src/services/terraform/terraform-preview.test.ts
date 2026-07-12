@@ -6,6 +6,7 @@ import {
   getTerraformNestedBlockAttributes,
   isTerraformNestedBlockAttribute
 } from "./terraform-nested-blocks.js";
+import { createTerraformDiagnostics } from "./terraform-diagnostics.js";
 import { generateTerraformFromDiagramJson } from "./terraform-preview.js";
 
 test("generates Terraform code from resource nodes", () => {
@@ -1020,6 +1021,7 @@ test("tracks curated nested block parameters as canonical camelCase keys", () =>
     aws_eks_cluster: ["vpcConfig"],
     aws_eks_node_group: ["scalingConfig"],
     aws_lambda_function: ["environment"],
+    aws_launch_template: ["iamInstanceProfile", "metadataOptions", "monitoring"],
     aws_route_table: ["route"],
     aws_s3_bucket_server_side_encryption_configuration: ["rule"],
     aws_s3_bucket_lifecycle_configuration: ["rule"],
@@ -1179,6 +1181,282 @@ test("renders route table association references with Terraform snake_case attri
   assert.match(terraformCode, /subnet_id = aws_subnet\.public\.id/);
   assert.match(terraformCode, /route_table_id = aws_route_table\.public\.id/);
   assert.doesNotMatch(terraformCode, /subnetId|routeTableId/);
+});
+
+test("renders deployable Terraform defaults for AI-generated CI/CD resources", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      makeNode({
+        id: "codebuild-role",
+        type: "aws_iam_role",
+        kind: "resource",
+        label: "CodeBuild Role",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_iam_role",
+          resourceName: "codebuild_service_role",
+          fileName: "cicd",
+          values: {
+            name: "sketchcatch-codebuild-service-role",
+            assumeRolePolicy: JSON.stringify({
+              Version: "2012-10-17",
+              Statement: [
+                {
+                  Effect: "Allow",
+                  Principal: { Service: "codebuild.amazonaws.com" },
+                  Action: "sts:AssumeRole"
+                }
+              ]
+            })
+          }
+        }
+      }),
+      makeNode({
+        id: "codebuild",
+        type: "aws_codebuild_project",
+        kind: "resource",
+        label: "CodeBuild Project",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_codebuild_project",
+          resourceName: "build",
+          fileName: "cicd",
+          values: {
+            name: "sketchcatch-build",
+            serviceRole: "aws_iam_role.codebuild_service_role.arn",
+            artifacts: { type: "NO_ARTIFACTS" },
+            environment: {
+              computeType: "BUILD_GENERAL1_SMALL",
+              image: "aws/codebuild/standard:7.0",
+              type: "LINUX_CONTAINER"
+            },
+            source: {
+              type: "NO_SOURCE",
+              buildspec: "version: 0.2\nphases:\n  build:\n    commands:\n      - echo \"SketchCatch build placeholder\""
+            }
+          }
+        }
+      }),
+      makeNode({
+        id: "codestar",
+        type: "aws_codestarconnections_connection",
+        kind: "resource",
+        label: "CodeStar Connection",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_codestarconnections_connection",
+          resourceName: "github",
+          fileName: "cicd",
+          values: {
+            name: "sketchcatch-github",
+            providerType: "GitHub"
+          }
+        }
+      }),
+      makeNode({
+        id: "artifact-bucket",
+        type: "aws_s3_bucket",
+        kind: "resource",
+        label: "Pipeline Artifacts",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_s3_bucket",
+          resourceName: "codepipeline_artifacts",
+          fileName: "cicd",
+          values: {
+            bucket: "sketchcatch-pipeline-artifacts-example"
+          }
+        }
+      }),
+      makeNode({
+        id: "pipeline-role",
+        type: "aws_iam_role",
+        kind: "resource",
+        label: "CodePipeline Role",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_iam_role",
+          resourceName: "codepipeline_service_role",
+          fileName: "cicd",
+          values: {
+            name: "sketchcatch-codepipeline-service-role",
+            assumeRolePolicy: JSON.stringify({
+              Version: "2012-10-17",
+              Statement: [
+                {
+                  Effect: "Allow",
+                  Principal: { Service: "codepipeline.amazonaws.com" },
+                  Action: "sts:AssumeRole"
+                }
+              ]
+            })
+          }
+        }
+      }),
+      makeNode({
+        id: "pipeline",
+        type: "aws_codepipeline",
+        kind: "resource",
+        label: "CodePipeline",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_codepipeline",
+          resourceName: "pipeline",
+          fileName: "cicd",
+          values: {
+            name: "sketchcatch-pipeline",
+            roleArn: "aws_iam_role.codepipeline_service_role.arn",
+            artifactStore: {
+              location: "aws_s3_bucket.codepipeline_artifacts.bucket",
+              type: "S3"
+            },
+            stage: [
+              {
+                name: "Source",
+                action: [
+                  {
+                    category: "Source",
+                    configuration: {
+                      BranchName: "main",
+                      ConnectionArn: "aws_codestarconnections_connection.github.arn",
+                      FullRepositoryId: "example-org/example-repo"
+                    },
+                    name: "Source",
+                    outputArtifacts: ["source_output"],
+                    owner: "AWS",
+                    provider: "CodeStarSourceConnection",
+                    version: "1"
+                  }
+                ]
+              },
+              {
+                name: "Build",
+                action: [
+                  {
+                    category: "Build",
+                    configuration: {
+                      ProjectName: "aws_codebuild_project.build.name"
+                    },
+                    inputArtifacts: ["source_output"],
+                    name: "Build",
+                    outputArtifacts: ["build_output"],
+                    owner: "AWS",
+                    provider: "CodeBuild",
+                    version: "1"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }),
+      makeNode({
+        id: "codedeploy-role",
+        type: "aws_iam_role",
+        kind: "resource",
+        label: "CodeDeploy Role",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_iam_role",
+          resourceName: "codedeploy_service_role",
+          fileName: "cicd",
+          values: {
+            name: "sketchcatch-codedeploy-service-role",
+            assumeRolePolicy: JSON.stringify({
+              Version: "2012-10-17",
+              Statement: [
+                {
+                  Effect: "Allow",
+                  Principal: { Service: "codedeploy.amazonaws.com" },
+                  Action: "sts:AssumeRole"
+                }
+              ]
+            })
+          }
+        }
+      }),
+      makeNode({
+        id: "codedeploy-app",
+        type: "aws_codedeploy_app",
+        kind: "resource",
+        label: "CodeDeploy App",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_codedeploy_app",
+          resourceName: "codedeploy_app",
+          fileName: "cicd",
+          values: {
+            name: "sketchcatch-app",
+            computePlatform: "Server"
+          }
+        }
+      }),
+      makeNode({
+        id: "codedeploy-group",
+        type: "aws_codedeploy_deployment_group",
+        kind: "resource",
+        label: "CodeDeploy Deployment Group",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_codedeploy_deployment_group",
+          resourceName: "codedeploy_group",
+          fileName: "cicd",
+          values: {
+            appName: "aws_codedeploy_app.codedeploy_app.name",
+            deploymentGroupName: "sketchcatch-deployment-group",
+            serviceRoleArn: "aws_iam_role.codedeploy_service_role.arn",
+            deploymentStyle: {
+              deploymentOption: "WITHOUT_TRAFFIC_CONTROL",
+              deploymentType: "IN_PLACE"
+            }
+          }
+        }
+      }),
+      makeNode({
+        id: "caller",
+        type: "aws_caller_identity",
+        kind: "resource",
+        label: "Caller",
+        parameters: {
+          terraformBlockType: "data",
+          resourceType: "aws_caller_identity",
+          resourceName: "current",
+          fileName: "cicd",
+          values: {}
+        }
+      }),
+      makeNode({
+        id: "ssm",
+        type: "aws_ssm_parameter",
+        kind: "resource",
+        label: "SSM Parameter",
+        parameters: {
+          terraformBlockType: "data",
+          resourceType: "aws_ssm_parameter",
+          resourceName: "ami",
+          fileName: "cicd",
+          values: {
+            name: "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
+          }
+        }
+      })
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  const terraformCode = generateTerraformFromDiagramJson(diagramJson);
+
+  assert.match(terraformCode, /resource "aws_codebuild_project" "build" \{/);
+  assert.match(terraformCode, /resource "aws_codepipeline" "pipeline" \{/);
+  assert.match(terraformCode, /resource "aws_codedeploy_deployment_group" "codedeploy_group" \{/);
+  assert.match(terraformCode, /resource "aws_codestarconnections_connection" "github" \{/);
+  assert.match(terraformCode, /data "aws_caller_identity" "current" \{/);
+  assert.match(terraformCode, /data "aws_ssm_parameter" "ami" \{/);
+  assert.equal(
+    createTerraformDiagnostics(terraformCode).filter((diagnostic) => diagnostic.severity === "error").length,
+    0
+  );
 });
 
 function makeNode(

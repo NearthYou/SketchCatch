@@ -19,7 +19,8 @@ test("buildInfrastructureGraphFromDiagramJson projects renderable resource nodes
           resourceName: "main",
           fileName: "network",
           values: {
-            cidrBlock: "10.0.0.0/16"
+            cidrBlock: "10.0.0.0/16",
+            diagramRenderAsResource: true
           }
         }
       })
@@ -72,6 +73,48 @@ test("buildInfrastructureGraphFromDiagramJson keeps provider-specific Terraform 
   assert.equal(graph.nodes[0]?.iac.terraformBlockType, "resource");
   assert.equal(graph.nodes[0]?.iac.resourceType, "aws_instance");
   assert.ok(!("type" in (graph.nodes[0] ?? {})));
+});
+
+test("buildInfrastructureGraphFromDiagramJson omits ASG fleet visualization instances", () => {
+  const graph = buildInfrastructureGraphFromDiagramJson({
+    nodes: [
+      makeNode({
+        id: "asg-1",
+        type: "aws_autoscaling_group",
+        kind: "resource",
+        label: "app fleet",
+        parameters: {
+          resourceType: "aws_autoscaling_group",
+          resourceName: "app",
+          fileName: "compute",
+          values: {
+            minSize: 2,
+            desiredCapacity: 2,
+            maxSize: 4
+          }
+        }
+      }),
+      makeNode({
+        id: "instance-1",
+        type: "aws_instance",
+        kind: "resource",
+        label: "fleet instance 1",
+        parameters: {
+          resourceType: "aws_instance",
+          resourceName: "fleet_instance_1",
+          fileName: "compute",
+          values: {
+            managedByAutoScalingGroup: "asg-1",
+            sketchcatchReferenceTerraform: true
+          }
+        }
+      })
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  });
+
+  assert.deepEqual(graph.nodes.map((node) => node.iac.resourceType), ["aws_autoscaling_group"]);
 });
 
 test("buildInfrastructureGraphFromDiagramJson keeps invalid nodes for preview skeleton stability", () => {

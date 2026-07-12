@@ -638,6 +638,7 @@ test("runDeploymentInit restores the artifact, runs Terraform init, logs output,
         return {
           workdir: "C:/tmp/sketchcatch-terraform-success",
           mainFilePath: "C:/tmp/sketchcatch-terraform-success/main.tf",
+          terraformFiles: [],
           cleanup: async () => {
             cleanupCalled = true;
           }
@@ -778,6 +779,7 @@ test("runDeploymentInit rejects unsafe Terraform before preparing AWS credential
           prepareTerraformWorkspace: async () => ({
             workdir: "C:/tmp/sketchcatch-terraform-unsafe-init",
             mainFilePath: "C:/tmp/sketchcatch-terraform-unsafe-init/main.tf",
+            terraformFiles: [],
             cleanup: async () => {
               cleanupCalled = true;
             }
@@ -821,6 +823,7 @@ test("runDeploymentInit records failed init output, marks the deployment failed,
       prepareTerraformWorkspace: async () => ({
         workdir: "C:/tmp/sketchcatch-terraform-failure",
         mainFilePath: "C:/tmp/sketchcatch-terraform-failure/main.tf",
+        terraformFiles: [],
         cleanup: async () => {
           cleanupCalled = true;
         }
@@ -896,6 +899,7 @@ test("runDeploymentInit masks secret values in terraform failure summaries", asy
       prepareTerraformWorkspace: async () => ({
         workdir: "C:/tmp/sketchcatch-terraform-secret-summary",
         mainFilePath: "C:/tmp/sketchcatch-terraform-secret-summary/main.tf",
+        terraformFiles: [],
         cleanup: async () => undefined
       }),
       readTerraformArtifactFile: async () => terraformArtifactContent,

@@ -176,27 +176,27 @@ const requestedResourceDefinitions = [
   },
   {
     id: "aws-codebuild-project",
-    resourceType: "UNKNOWN",
+    resourceType: "CODEBUILD_PROJECT",
     terraformResourceType: "aws_codebuild_project"
   },
   {
     id: "aws-codedeploy-app",
-    resourceType: "UNKNOWN",
+    resourceType: "CODEDEPLOY_APP",
     terraformResourceType: "aws_codedeploy_app"
   },
   {
     id: "aws-codedeploy-deployment-group",
-    resourceType: "UNKNOWN",
+    resourceType: "CODEDEPLOY_DEPLOYMENT_GROUP",
     terraformResourceType: "aws_codedeploy_deployment_group"
   },
   {
     id: "aws-codepipeline",
-    resourceType: "UNKNOWN",
+    resourceType: "CODEPIPELINE",
     terraformResourceType: "aws_codepipeline"
   },
   {
     id: "aws-codestarconnections-connection",
-    resourceType: "UNKNOWN",
+    resourceType: "CODESTAR_CONNECTION",
     terraformResourceType: "aws_codestarconnections_connection"
   },
   {
@@ -221,13 +221,13 @@ const requestedResourceDefinitions = [
   },
   {
     id: "aws-caller-identity",
-    resourceType: "UNKNOWN",
+    resourceType: "AWS_CALLER_IDENTITY",
     terraformBlockType: "data",
     terraformResourceType: "aws_caller_identity"
   },
   {
     id: "aws-ssm-parameter",
-    resourceType: "UNKNOWN",
+    resourceType: "SSM_PARAMETER",
     terraformBlockType: "data",
     terraformResourceType: "aws_ssm_parameter"
   }

@@ -19,6 +19,7 @@ const API_CONNECTION_ERROR_MESSAGE =
   "API 서버에 연결할 수 없습니다. Docker DB와 API 서버가 켜져 있는지 확인해주세요.";
 const DEFAULT_API_ERROR_MESSAGES: Partial<Record<ApiErrorCode, string>> = {
   bad_request: "입력값 형식을 확인해주세요.",
+  bad_gateway: "AI 응답을 아키텍처로 해석하지 못했습니다. 다시 시도해주세요.",
   conflict: "이미 사용 중인 정보입니다.",
   internal_server_error: "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.",
   LIVE_OBSERVATION_CACHE_UNAVAILABLE:
@@ -31,7 +32,9 @@ const DEFAULT_API_ERROR_MESSAGES: Partial<Record<ApiErrorCode, string>> = {
     "배포 결과에 실시간 관측에 필요한 Terraform output이 없습니다.",
   LIVE_OBSERVATION_RATE_LIMITED: "실시간 관측 요청 한도를 초과했습니다.",
   not_found: "요청한 정보를 찾을 수 없습니다.",
+  service_unavailable: "AI 생성 서비스를 일시적으로 사용할 수 없습니다. 잠시 후 다시 시도해주세요.",
   too_many_requests: "요청이 너무 많습니다. 잠시 후 다시 시도해주세요.",
+  unprocessable_entity: "요구사항을 모두 충족하지 못했습니다. 선택한 조건을 확인해주세요.",
   unauthorized: "인증이 필요합니다."
 };
 const API_MESSAGE_TRANSLATIONS: Partial<Record<string, string>> = {

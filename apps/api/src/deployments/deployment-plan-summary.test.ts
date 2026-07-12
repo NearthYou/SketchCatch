@@ -241,3 +241,44 @@ test("findUnsupportedLiveApplyResourceTypesFromTerraformShowJson allows demo web
     []
   );
 });
+
+test("findUnsupportedLiveApplyResourceTypesFromTerraformShowJson allows AI-generated CI/CD resources", () => {
+  const unsupportedTypes = findUnsupportedLiveApplyResourceTypesFromTerraformShowJson(
+    JSON.stringify({
+      resource_changes: [
+        {
+          mode: "managed",
+          type: "aws_codebuild_project",
+          change: { actions: ["create"] }
+        },
+        {
+          mode: "managed",
+          type: "aws_codedeploy_app",
+          change: { actions: ["create"] }
+        },
+        {
+          mode: "managed",
+          type: "aws_codedeploy_deployment_group",
+          change: { actions: ["create"] }
+        },
+        {
+          mode: "managed",
+          type: "aws_codepipeline",
+          change: { actions: ["create"] }
+        },
+        {
+          mode: "managed",
+          type: "aws_codestarconnections_connection",
+          change: { actions: ["create"] }
+        },
+        {
+          mode: "managed",
+          type: "aws_iam_role",
+          change: { actions: ["create"] }
+        }
+      ]
+    })
+  );
+
+  assert.deepEqual(unsupportedTypes, []);
+});

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Menu, X } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -47,6 +48,7 @@ export function ProductEntry() {
 
       <header className={styles.siteHeader} aria-label="주요 메뉴">
         <a className={styles.brand} href="#top" aria-label="SketchCatch 홈">
+          <Image alt="" className={styles.brandMark} height={24} priority src="/sketchcatch-logo.png" width={16} />
           <span>SketchCatch</span>
         </a>
 
@@ -66,9 +68,6 @@ export function ProductEntry() {
           </a>
           <Link className={`${styles.button} ${styles.buttonSecondary}`} href="/login">
             로그인
-          </Link>
-          <Link className={`${styles.button} ${styles.buttonPrimary}`} href="/signup">
-            시작하기
           </Link>
           <button
             aria-expanded={isMenuOpen}
@@ -101,10 +100,10 @@ export function ProductEntry() {
               <li>Existing cloud</li>
             </ul>
             <div className={styles.heroActions}>
-              <a className={`${styles.button} ${styles.buttonPrimary}`} href="#workspace">
-                Architecture Board 체험
+              <Link className={`${styles.button} ${styles.buttonPrimary}`} href="/signup">
+                시작하기
                 <span className={styles.buttonIcon} aria-hidden="true">→</span>
-              </a>
+              </Link>
               <a className={`${styles.button} ${styles.buttonSecondary}`} href="#workflow">
                 흐름 먼저 보기
               </a>
