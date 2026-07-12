@@ -512,9 +512,13 @@ export async function createAwsConnectionSetup({
   });
 }
 
-export async function listAwsConnections(): Promise<AwsConnection[]> {
+// 요청 취소 신호를 받아 화면 전환 뒤의 AWS 연결 응답을 중단합니다.
+export async function listAwsConnections(
+  options: { readonly signal?: AbortSignal | undefined } = {}
+): Promise<AwsConnection[]> {
   const response = await apiFetch<AwsConnectionListResponse>("/aws/connections", {
-    auth: true
+    auth: true,
+    ...(options.signal ? { signal: options.signal } : {})
   });
 
   return response.awsConnections;
@@ -1090,11 +1094,15 @@ export async function listCostProjectEstimates(input: {
   });
 }
 
-export async function listCostUsageAnalysis(input: {
-  awsConnectionId?: string | undefined;
-  projectId?: string | undefined;
-  range: CostUsageAnalysisRange;
-}): Promise<CostUsageAnalysisResponse> {
+// 요청 취소 신호를 받아 최신 비용 조회만 화면 상태를 갱신하게 합니다.
+export async function listCostUsageAnalysis(
+  input: {
+    awsConnectionId?: string | undefined;
+    projectId?: string | undefined;
+    range: CostUsageAnalysisRange;
+  },
+  options: { readonly signal?: AbortSignal | undefined } = {}
+): Promise<CostUsageAnalysisResponse> {
   const params = new URLSearchParams({
     range: input.range
   });
@@ -1108,7 +1116,8 @@ export async function listCostUsageAnalysis(input: {
   }
 
   return apiFetch<CostUsageAnalysisResponse>(`/costs/usage?${params.toString()}`, {
-    auth: true
+    auth: true,
+    ...(options.signal ? { signal: options.signal } : {})
   });
 }
 

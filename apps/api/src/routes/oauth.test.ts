@@ -111,6 +111,25 @@ test("GET /api/auth/oauth/github/start stores the requested internal return rout
   }
 });
 
+test("GET /api/auth/oauth/github/start rejects a backslash-normalized external return route", async () => {
+  const restoreEnv = setOAuthEnv();
+  const app = buildApp();
+
+  try {
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/auth/oauth/github/start?returnTo=${encodeURIComponent("/\\google.com")}`
+    });
+    const cookie = getSetCookieHeader(response, OAUTH_STATE_COOKIE_NAME);
+
+    assert.equal(response.statusCode, 302);
+    assert.equal(readOAuthStateFromSetCookie(cookie).returnTo, undefined);
+  } finally {
+    restoreEnv();
+    await app.close();
+  }
+});
+
 test("GET /api/auth/oauth/kakao/start redirects to Kakao authorize URL with a state cookie", async () => {
   const restoreEnv = setOAuthEnv();
   const app = buildApp();

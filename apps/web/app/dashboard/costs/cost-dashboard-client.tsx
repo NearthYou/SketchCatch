@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertTriangle, RefreshCw, TrendingUp, WalletCards } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { CostUsageAnalysisRange, CostUsageAnalysisResponse } from "@sketchcatch/types";
 import { ProductState } from "../../../components/ui/ProductState";
 import {
@@ -13,6 +13,7 @@ import {
   formatCostUsageAwsConnectionLabel,
   getVerifiedCostUsageAwsConnections
 } from "../../../features/costs/cost-usage-aws-connections";
+import { createCostRequestCoordinator } from "../../../features/costs/cost-request-coordinator";
 import { listAwsConnections, listCostUsageAnalysis } from "../../../features/workspace/api";
 import type { AwsConnection } from "@sketchcatch/types";
 import styles from "../dashboard-tools.module.css";
@@ -27,6 +28,7 @@ export function CostDashboardClient() {
   const [data, setData] = useState<CostUsageAnalysisResponse | null>(null);
   const [loadState, setLoadState] = useState<CostLoadState>("loading");
   const [errorMessage, setErrorMessage] = useState("");
+  const requestCoordinatorRef = useRef(createCostRequestCoordinator());
   const chart = useMemo(() => createCostUsageLineChart(data?.dailyTrend ?? []), [data]);
   const serviceBars = useMemo(() => createServiceCostBars(data?.serviceCosts ?? []), [data]);
   const savings = useMemo(
@@ -34,28 +36,37 @@ export function CostDashboardClient() {
     [data]
   );
 
-  // 연결 목록과 비용 데이터를 함께 새로 읽고 기존 선택은 가능한 한 유지합니다.
+  // 새 조회가 시작되면 이전 요청을 취소하고 가장 최신 응답만 화면에 반영합니다.
   async function loadCosts(nextRange = range, connectionId = selectedConnectionId): Promise<void> {
+    const request = requestCoordinatorRef.current.begin();
     setLoadState("loading");
     setErrorMessage("");
     try {
-      const loadedConnections = getVerifiedCostUsageAwsConnections(await listAwsConnections());
+      const loadedConnections = getVerifiedCostUsageAwsConnections(
+        await listAwsConnections({ signal: request.signal })
+      );
+      if (!request.isCurrent()) return;
       const selectedId = loadedConnections.some((connection) => connection.id === connectionId)
         ? connectionId
         : loadedConnections[0]?.id ?? "";
       const result = await listCostUsageAnalysis({
         range: nextRange,
         ...(selectedId ? { awsConnectionId: selectedId } : {})
-      });
+      }, { signal: request.signal });
+      if (!request.isCurrent()) return;
       setConnections(loadedConnections);
       setSelectedConnectionId(selectedId);
       setData(result);
       setLoadState("ready");
     } catch (error) {
+      if (request.signal.aborted || !request.isCurrent()) return;
       setErrorMessage(error instanceof Error ? error.message : "비용 데이터를 불러오지 못했습니다.");
       setLoadState("error");
     }
   }
+
+  // 화면을 떠날 때 아직 끝나지 않은 비용 요청을 중단합니다.
+  useEffect(() => () => requestCoordinatorRef.current.dispose(), []);
 
   // 화면 진입 시 기본 30일 비용을 한 번 불러옵니다.
   useEffect(() => {

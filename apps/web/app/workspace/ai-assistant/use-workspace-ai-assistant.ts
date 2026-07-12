@@ -15,7 +15,10 @@ import {
   convertDiagramJsonToArchitectureJson,
   getDiagramJsonForArchitectureDraft
 } from "../../../features/workspace/workspace-ai-diagram-adapter";
-import { createWorkspaceAiChatStorageKey } from "../../../features/workspace/workspace-ai-chat-history";
+import {
+  createWorkspaceAiChatStorageKey,
+  shouldPersistWorkspaceAiChatMessages
+} from "../../../features/workspace/workspace-ai-chat-history";
 import {
   classifyWorkspaceAiChatPrompt,
   createWorkspaceAiPromptGateMessage,
@@ -92,6 +95,7 @@ export function useWorkspaceAiAssistant({
 }): WorkspaceAiAssistantState {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<readonly WorkspaceAssistantMessage[]>([]);
+  const [loadedStorageKey, setLoadedStorageKey] = useState("");
   const [requestState, setRequestState] = useState<WorkspaceAssistantRequestState>("idle");
   const [errorMessage, setErrorMessage] = useState("");
   const [pendingBoardPreview, setPendingBoardPreview] = useState<PendingBoardPreview | null>(null);
@@ -110,13 +114,18 @@ export function useWorkspaceAiAssistant({
   // 프로젝트별로 저장한 대화를 처음 열 때 복원합니다.
   useEffect(() => {
     setMessages(readStoredMessages(storageKey));
+    setLoadedStorageKey(storageKey);
   }, [storageKey]);
 
-  // 새 메시지가 생길 때만 현재 프로젝트의 대화를 저장합니다.
+  // 현재 프로젝트 대화가 복원된 뒤에만 같은 storage key에 저장합니다.
   useEffect(() => {
-    if (messages.length === 0) return;
+    if (!shouldPersistWorkspaceAiChatMessages({
+      loadedStorageKey,
+      messageCount: messages.length,
+      storageKey
+    })) return;
     window.localStorage.setItem(storageKey, JSON.stringify(messages.slice(-80)));
-  }, [messages, storageKey]);
+  }, [loadedStorageKey, messages, storageKey]);
 
   // 한 메시지 추가 규칙을 모아 상태별 화면이 같은 형식을 사용하게 합니다.
   const appendMessage = useCallback((message: Omit<WorkspaceAssistantMessage, "id">): void => {
