@@ -136,6 +136,64 @@ test("parseTrivyTerraformFindings localizes common Trivy rule text to Korean", (
   assert.doesNotMatch(findings.map((finding) => finding.title).join("\n"), /should|enabled|retention/i);
 });
 
+test("groups S3 Trivy rules by risk family while preserving rule evidence", () => {
+  const findings = parseTrivyTerraformFindings(
+    JSON.stringify({
+      Results: [
+        {
+          Target: "main.tf",
+          Misconfigurations: [
+            createS3Misconfiguration("AWS-0086", "HIGH", "S3 Access block should block public ACL"),
+            createS3Misconfiguration("AWS-0087", "HIGH", "S3 Access block should block public policy"),
+            createS3Misconfiguration("AWS-0090", "MEDIUM", "S3 Data should be versioned"),
+            createS3Misconfiguration("AWS-0091", "HIGH", "S3 Access Block should Ignore Public ACL"),
+            createS3Misconfiguration(
+              "AWS-0093",
+              "HIGH",
+              "S3 Access block should restrict public bucket to limit access"
+            ),
+            createS3Misconfiguration(
+              "AWS-0132",
+              "HIGH",
+              "S3 encryption should use Customer Managed Keys"
+            )
+          ]
+        }
+      ]
+    })
+  );
+
+  assert.equal(findings.length, 3);
+  assert.deepEqual(
+    findings.map((finding) => ({
+      riskFamily: finding.riskFamily,
+      severity: finding.severity,
+      title: finding.title,
+      trivyRuleIds: finding.trivyRuleIds
+    })),
+    [
+      {
+        riskFamily: "S3_PUBLIC_ACCESS",
+        severity: "high",
+        title: "S3 Block Public Access의 모든 보호 설정을 활성화해야 합니다.",
+        trivyRuleIds: ["AWS-0086", "AWS-0087", "AWS-0091", "AWS-0093"]
+      },
+      {
+        riskFamily: "S3_VERSIONING",
+        severity: "medium",
+        title: "S3 버킷 버전 관리를 활성화해야 합니다.",
+        trivyRuleIds: ["AWS-0090"]
+      },
+      {
+        riskFamily: "S3_KMS_ENCRYPTION",
+        severity: "high",
+        title: "S3 버킷 암호화에 고객 관리형 KMS 키를 사용해야 합니다.",
+        trivyRuleIds: ["AWS-0132"]
+      }
+    ]
+  );
+});
+
 test("parseTrivyTerraformFindings falls back to the Trivy result target when cause file path is missing", () => {
   const findings = parseTrivyTerraformFindings(
     JSON.stringify({
@@ -195,3 +253,17 @@ test("parseTrivyTerraformFindings skips passing misconfigurations", () => {
 
   assert.deepEqual(findings, []);
 });
+
+function createS3Misconfiguration(ID: string, Severity: string, Title: string) {
+  return {
+    ID,
+    Title,
+    Severity,
+    Status: "FAIL",
+    CauseMetadata: {
+      FilePath: "main.tf",
+      Resource: "aws_s3_bucket.s3_bucket",
+      StartLine: 1
+    }
+  };
+}

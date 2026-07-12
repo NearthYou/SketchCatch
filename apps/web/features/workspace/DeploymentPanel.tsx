@@ -2198,6 +2198,9 @@ function DeploymentPreDeploymentFindingItem({
       <span>{finding.severity.toUpperCase()}</span>
       <strong>{finding.title}</strong>
       {finding.resourceId ? <em>{finding.resourceId}</em> : null}
+      {finding.trivyRuleIds && finding.trivyRuleIds.length > 0 ? (
+        <em>Trivy rules · {finding.trivyRuleIds.join(", ")}</em>
+      ) : null}
       <button
         className={styles.deploymentFindingFixButton}
         onClick={openTerraformSource}

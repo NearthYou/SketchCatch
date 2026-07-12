@@ -77,6 +77,8 @@ type TrivyMisconfiguration = {
 };
 
 type TrivyFindingText = {
+  readonly category?: CheckFinding["category"] | undefined;
+  readonly riskFamily?: string | undefined;
   readonly title: string;
   readonly description: string;
   readonly recommendation: string;
@@ -141,7 +143,7 @@ export function parseTrivyTerraformFindings(
     }
   }
 
-  return findings;
+  return groupTrivyFindings(findings);
 }
 
 async function writeTerraformFiles(
@@ -239,7 +241,7 @@ function createFindingFromTrivyMisconfiguration(
     id: sanitizeFindingId(
       `trivy:${ruleId}:${originalFileName ?? targetPath ?? "terraform"}:${resourceAddress ?? "resource"}:${line ?? "line"}`
     ),
-    category: inferTrivyFindingCategory(misconfiguration),
+    category: text.category ?? inferTrivyFindingCategory(misconfiguration),
     severity: toRiskSeverity(misconfiguration.Severity),
     ...(resourceAddress ? { resourceId: resourceAddress } : {}),
     ...(originalFileName && line
@@ -249,6 +251,12 @@ function createFindingFromTrivyMisconfiguration(
             line,
             ...(resourceAddress ? { resourceAddress } : {})
           }
+        }
+      : {}),
+    ...(text.riskFamily
+      ? {
+          riskFamily: text.riskFamily,
+          trivyRuleIds: [ruleId]
         }
       : {}),
     title: text.title,
@@ -262,6 +270,43 @@ function createKoreanTrivyFindingText(
   misconfiguration: TrivyMisconfiguration
 ): TrivyFindingText {
   const haystack = createTrivyMisconfigurationHaystack(ruleId, misconfiguration);
+  const normalizedRuleId = ruleId.toUpperCase().replace(/^AVD-/, "");
+
+  if (["AWS-0086", "AWS-0087", "AWS-0091", "AWS-0093"].includes(normalizedRuleId)) {
+    return {
+      category: "security",
+      riskFamily: "S3_PUBLIC_ACCESS",
+      title: "S3 Block Public Access의 모든 보호 설정을 활성화해야 합니다.",
+      description:
+        "S3 Block Public Access의 일부 보호 설정이 빠지면 공개 ACL이나 공개 bucket policy가 적용될 수 있습니다.",
+      recommendation:
+        "`aws_s3_bucket_public_access_block`에서 `block_public_acls`, `block_public_policy`, `ignore_public_acls`, `restrict_public_buckets`를 모두 `true`로 설정하세요."
+    };
+  }
+
+  if (normalizedRuleId === "AWS-0090") {
+    return {
+      category: "availability",
+      riskFamily: "S3_VERSIONING",
+      title: "S3 버킷 버전 관리를 활성화해야 합니다.",
+      description:
+        "버전 관리가 없으면 객체를 실수로 덮어쓰거나 삭제했을 때 이전 데이터를 복구하기 어렵습니다.",
+      recommendation:
+        "`aws_s3_bucket_versioning` 리소스에서 `versioning_configuration.status = \"Enabled\"`를 설정하세요."
+    };
+  }
+
+  if (normalizedRuleId === "AWS-0132") {
+    return {
+      category: "security",
+      riskFamily: "S3_KMS_ENCRYPTION",
+      title: "S3 버킷 암호화에 고객 관리형 KMS 키를 사용해야 합니다.",
+      description:
+        "고객 관리형 KMS 키를 사용하면 키 정책, 접근 제어, 감사와 키 수명주기를 직접 관리할 수 있습니다.",
+      recommendation:
+        "`aws_s3_bucket_server_side_encryption_configuration`에서 SSE-KMS와 고객 관리형 `kms_master_key_id`를 설정하세요."
+    };
+  }
 
   if (hasAny(haystack, ["metadata service", "imds", "http_tokens", "session token"])) {
     return {
@@ -313,7 +358,7 @@ function createKoreanTrivyFindingText(
     };
   }
 
-  if (hasAny(haystack, ["s3", "bucket policy", "acl", "public access"])) {
+  if (hasAny(haystack, ["bucket policy", "public acl", "public access"])) {
     return {
       title: "S3 버킷은 공개 접근을 허용하면 안 됩니다.",
       description:
@@ -340,6 +385,56 @@ function createKoreanTrivyFindingText(
     recommendation:
       "해당 Terraform 리소스의 설정을 검토하고 Trivy 권장 사항에 맞게 수정한 뒤 배포 전 검사를 다시 실행하세요."
   };
+}
+
+function groupTrivyFindings(findings: readonly CheckFinding[]): CheckFinding[] {
+  const grouped = new Map<string, CheckFinding>();
+
+  for (const finding of findings) {
+    if (!finding.riskFamily) {
+      grouped.set(finding.id, finding);
+      continue;
+    }
+
+    const resourceAddress =
+      finding.sourceLocation?.resourceAddress ?? finding.resourceId ?? "global";
+    const key = `${resourceAddress}|${finding.riskFamily}`;
+    const existing = grouped.get(key);
+
+    if (!existing) {
+      grouped.set(key, {
+        ...finding,
+        id: sanitizeFindingId(
+          `trivy:${finding.riskFamily}:${finding.sourceLocation?.fileName ?? "terraform"}:${resourceAddress}:${finding.sourceLocation?.line ?? "line"}`
+        ),
+        trivyRuleIds: [...(finding.trivyRuleIds ?? [])]
+      });
+      continue;
+    }
+
+    grouped.set(key, {
+      ...existing,
+      severity: maxRiskSeverity(existing.severity, finding.severity),
+      trivyRuleIds: Array.from(
+        new Set([...(existing.trivyRuleIds ?? []), ...(finding.trivyRuleIds ?? [])])
+      )
+    });
+  }
+
+  return [...grouped.values()];
+}
+
+function maxRiskSeverity(
+  left: CheckFinding["severity"],
+  right: CheckFinding["severity"]
+): CheckFinding["severity"] {
+  const rank: Record<CheckFinding["severity"], number> = {
+    low: 0,
+    medium: 1,
+    high: 2
+  };
+
+  return rank[right] > rank[left] ? right : left;
 }
 
 function createTrivyMisconfigurationHaystack(

@@ -1265,6 +1265,8 @@ test("pre-deployment check renders per-finding explanations without the blue sum
   assert.match(deploymentPanelSource, /DeploymentFindingAiExplanation/);
   assert.match(deploymentPanelSource, /finding\.aiSafetyExplanation/);
   assert.match(deploymentPanelSource, /className=\{styles\.deploymentFindingAiExplanation\}/);
+  assert.match(deploymentPanelSource, /finding\.trivyRuleIds/);
+  assert.match(deploymentPanelSource, /Trivy rules · \{finding\.trivyRuleIds\.join\(", "\)\}/);
   assert.doesNotMatch(deploymentPanelSource, /deploymentFindingAiButton/);
   assert.doesNotMatch(aiChatDockSource, /preDeploymentAnalysis/);
 });

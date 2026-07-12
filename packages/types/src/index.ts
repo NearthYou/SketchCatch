@@ -1911,6 +1911,8 @@ export type CheckFinding = {
   severity: RiskLevel;
   resourceId?: string | undefined;
   sourceLocation?: TerraformSourceLocation | undefined;
+  riskFamily?: string | undefined;
+  trivyRuleIds?: string[] | undefined;
   aiSafetyExplanation?: AiSafetyExplanation | undefined;
   title: string;
   description: string;
