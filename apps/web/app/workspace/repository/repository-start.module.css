@@ -83,6 +83,7 @@
 
 .actions button,
 .analysisPanel > button,
+.recommendationForm button,
 .candidateList button,
 .boardAction,
 .connectionPanel button {
@@ -177,6 +178,89 @@
   border-radius: var(--radius-card);
 }
 
+.recommendationForm {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 14px;
+  border-top: 1px solid var(--color-hairline);
+  padding-top: 16px;
+}
+
+.recommendationForm label,
+.questionList label {
+  display: grid;
+  gap: 6px;
+  color: var(--color-body);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.recommendationForm select,
+.questionList select,
+.questionList input {
+  min-height: 40px;
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--radius-control);
+  padding: 0 10px;
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font: inherit;
+}
+
+.checkboxLabel {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  justify-content: start;
+}
+
+.checkboxLabel input {
+  width: 18px;
+  height: 18px;
+}
+
+.questionList {
+  display: grid;
+  gap: 12px;
+}
+
+.recommendationPanel {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 12px;
+}
+
+.recommendationPanel article {
+  display: grid;
+  align-items: start;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-card);
+  padding: 16px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+}
+
+.recommendationPanel article > div {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.recommendationPanel strong,
+.recommendationPanel p,
+.recommendationPanel small {
+  margin: 0;
+}
+
+.recommendationPanel p {
+  color: var(--color-body);
+  font-size: 13px;
+}
+
+.recommendationPanel small {
+  color: var(--color-muted);
+  font-size: 12px;
+}
+
 .spin {
   animation: spin 850ms linear infinite;
 }
@@ -190,6 +274,7 @@
   .content { padding: 48px 8px 72px; }
   .heading h1 { font-size: 30px; }
   .analysisPanel { grid-template-columns: 1fr; }
+  .recommendationPanel article { grid-template-columns: 1fr; }
   .analysisPanel > button,
   .boardAction { width: 100%; }
 }

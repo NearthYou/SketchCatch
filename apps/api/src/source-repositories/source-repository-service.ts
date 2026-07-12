@@ -4,9 +4,11 @@ import type {
   AnalyzeSourceRepositoryResponse,
   GitHubInstalledRepositoryCandidate,
   GitHubRepositoryCandidate,
+  RecommendRepositoryTemplateResponse,
+  RepositoryAnalysisAnswer,
   RepositoryAnalysisAiHandoff
 } from "@sketchcatch/types";
-import type { TemplateId } from "@sketchcatch/types";
+import type { RepositoryDeploymentType, TemplateId } from "@sketchcatch/types";
 import type { Database } from "../db/client.js";
 import { oauthAccounts, projects, sourceRepositories, touchUpdatedAt } from "../db/schema.js";
 import type { ProjectAccessContext } from "../git-cicd/git-cicd-handoff-service.js";
@@ -16,6 +18,7 @@ import type {
   GitHubRepositoryEvidenceReader
 } from "./github-app-client.js";
 import { analyzeRepositoryEvidence } from "./repository-analysis.js";
+import { recommendRepositoryTemplates } from "./repository-template-recommendation.js";
 
 export type SourceRepositoryRecord = typeof sourceRepositories.$inferSelect;
 export type SourceRepositoryProjectRecord = typeof projects.$inferSelect;
@@ -111,6 +114,15 @@ export type AnalyzeSourceRepositoryInput = {
   readonly projectId: string;
   readonly sourceRepositoryId: string;
   readonly accessContext: ProjectAccessContext;
+};
+
+export type RecommendSourceRepositoryTemplateInput = {
+  readonly projectId: string;
+  readonly sourceRepositoryId: string;
+  readonly accessContext: ProjectAccessContext;
+  readonly deploymentType: RepositoryDeploymentType;
+  readonly usesCiCd: boolean;
+  readonly answers: readonly RepositoryAnalysisAnswer[];
 };
 
 export type SaveProjectSourceRepositoryAnalysisInput = {
@@ -469,6 +481,7 @@ export async function requireRepositoryAnalysisTemplateId(
   input: {
     readonly projectId: string;
     readonly sourceRepositoryId: string;
+    readonly requestedTemplateId?: TemplateId | undefined;
     readonly accessContext: ProjectAccessContext;
   },
   repository: SourceRepositoryRepository
@@ -497,7 +510,22 @@ export async function requireRepositoryAnalysisTemplateId(
     );
   }
 
-  return analysis.templateId;
+  if (!input.requestedTemplateId) {
+    return analysis.templateId;
+  }
+
+  const supportedTemplateIds = new Set<TemplateId>([
+    analysis.templateId,
+    ...(analysis.recommendation?.candidates.map((candidate) => candidate.templateId) ?? [])
+  ]);
+
+  if (!supportedTemplateIds.has(input.requestedTemplateId)) {
+    throw new RepositoryAnalysisTemplateSelectionError(
+      "REPOSITORY_ANALYSIS_TEMPLATE_MISMATCH"
+    );
+  }
+
+  return input.requestedTemplateId;
 }
 
 // active GitHub Source Repository를 정적으로 읽고 구조화된 분석 요약만 저장한다.
@@ -560,6 +588,58 @@ export async function analyzeSourceRepository(
     repositoryRevision: snapshot.revision,
     analyzedAt: analyzedAt.toISOString(),
     aiHandoff
+  };
+}
+
+export async function recommendSourceRepositoryTemplate(
+  input: RecommendSourceRepositoryTemplateInput,
+  repository: SourceRepositoryRepository
+): Promise<RecommendRepositoryTemplateResponse> {
+  await requireAccessibleProject(
+    input.projectId,
+    input.accessContext,
+    repository,
+    "Project not found"
+  );
+  const sourceRepository = await repository.findProjectSourceRepository(
+    input.projectId,
+    input.sourceRepositoryId
+  );
+  const analysis = sourceRepository?.analysisResult;
+
+  if (
+    !sourceRepository ||
+    sourceRepository.provider !== "github" ||
+    sourceRepository.status !== "active" ||
+    !analysis ||
+    !sourceRepository.analysisRevision
+  ) {
+    throw new RepositoryAnalysisTemplateSelectionError(
+      "REPOSITORY_ANALYSIS_TEMPLATE_UNAVAILABLE"
+    );
+  }
+
+  const recommendation = recommendRepositoryTemplates({
+    snapshot: {
+      revision: sourceRepository.analysisRevision,
+      treePaths: analysis.evidence.map((item) => item.path),
+      files: analysis.evidence.map((item) => ({
+        path: item.path,
+        content: item.signals.join("\n")
+      }))
+    },
+    applicationUnits: analysis.applicationUnits,
+    evidence: analysis.evidence,
+    missingEvidence: analysis.missingEvidence,
+    deploymentType: input.deploymentType,
+    usesCiCd: input.usesCiCd,
+    answers: input.answers
+  });
+
+  return {
+    sourceRepositoryId: sourceRepository.id,
+    repositoryRevision: sourceRepository.analysisRevision,
+    recommendation
   };
 }
 

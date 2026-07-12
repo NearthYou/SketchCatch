@@ -3,7 +3,13 @@
 import Link from "next/link";
 import { GitBranch, LoaderCircle, Search, SquareArrowOutUpRight } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import type { GitHubInstalledRepositoryCandidate, SourceRepository } from "@sketchcatch/types";
+import type {
+  GitHubInstalledRepositoryCandidate,
+  RepositoryAnalysisQuestion,
+  RepositoryDeploymentType,
+  RepositoryTemplateRecommendationResult,
+  SourceRepository
+} from "@sketchcatch/types";
 import { ProductBrand } from "../../../components/ui/ProductBrand";
 import { ProductState } from "../../../components/ui/ProductState";
 import { getApiErrorMessage } from "../../../lib/api-client";
@@ -12,7 +18,8 @@ import {
   connectGitHubSourceRepository,
   createGitHubSourceRepositoryInstallUrl,
   listGitHubInstalledRepositories,
-  listSourceRepositories
+  listSourceRepositories,
+  recommendRepositoryTemplate
 } from "../../../features/workspace/api";
 import {
   applyRepositoryAnalysis,
@@ -29,44 +36,57 @@ type RepositoryStartClientProps = {
   readonly projectName: string;
 };
 
-// Repository 연결부터 분석 결과 확인과 Board 이동까지 한 흐름으로 제공합니다.
 export function RepositoryStartClient({ projectId, projectName }: RepositoryStartClientProps) {
   const [repositories, setRepositories] = useState<SourceRepository[]>([]);
   const [candidates, setCandidates] = useState<GitHubInstalledRepositoryCandidate[]>([]);
   const [installationState, setInstallationState] = useState("");
   const [loadState, setLoadState] = useState<RequestState>("loading");
   const [actionState, setActionState] = useState<RequestState>("idle");
+  const [recommendationState, setRecommendationState] = useState<RequestState>("idle");
+  const [deploymentType, setDeploymentType] = useState<RepositoryDeploymentType>("serverless");
+  const [usesCiCd, setUsesCiCd] = useState(false);
+  const [answers, setAnswers] = useState<Record<string, string | boolean>>({});
+  const [recommendation, setRecommendation] = useState<RepositoryTemplateRecommendationResult | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
   const activeRepository = useMemo(
     () => findActiveGitHubRepository(repositories),
     [repositories]
   );
+  const activeHandoff = activeRepository?.analysis?.aiHandoff;
+  const questions = activeHandoff?.questions?.slice(0, 5) ?? [];
+  const activeRecommendation = recommendation ?? activeHandoff?.recommendation ?? null;
+  const previewDiagram = createRepositoryPreviewDiagram(projectName, activeRepository);
 
   useEffect(() => {
     if (!projectId) {
       setLoadState("error");
-      setErrorMessage("프로젝트 정보가 없습니다. 새 프로젝트 화면에서 다시 시작해주세요.");
+      setErrorMessage("Project information is missing. Please start again from the new project screen.");
       return;
     }
 
     void loadRepositories();
   }, [projectId]);
 
-  // 이미 연결된 Repository를 복원해 callback 뒤에도 같은 단계에서 이어갑니다.
   async function loadRepositories(): Promise<void> {
     setLoadState("loading");
     setErrorMessage("");
 
     try {
-      setRepositories(await listSourceRepositories(projectId));
+      const loadedRepositories = await listSourceRepositories(projectId);
+      const active = findActiveGitHubRepository(loadedRepositories);
+      const handoff = active?.analysis?.aiHandoff;
+
+      setRepositories(loadedRepositories);
+      setRecommendation(handoff?.recommendation ?? null);
+      setDeploymentType(handoff?.deploymentTypeDefault ?? "serverless");
+      setUsesCiCd(handoff?.usesCiCdDefault ?? false);
       setLoadState("idle");
     } catch (error) {
       setLoadState("error");
-      setErrorMessage(getApiErrorMessage(error, "Repository 연결 상태를 불러오지 못했습니다."));
+      setErrorMessage(getApiErrorMessage(error, "Repository connection status could not be loaded."));
     }
   }
 
-  // 현재 GitHub App 권한으로 선택할 수 있는 Repository만 불러옵니다.
   async function loadCandidates(): Promise<void> {
     setActionState("loading");
     setErrorMessage("");
@@ -78,11 +98,10 @@ export function RepositoryStartClient({ projectId, projectName }: RepositoryStar
       setActionState("idle");
     } catch (error) {
       setActionState("error");
-      setErrorMessage(getApiErrorMessage(error, "연결 가능한 Repository를 불러오지 못했습니다."));
+      setErrorMessage(getApiErrorMessage(error, "Available repositories could not be loaded."));
     }
   }
 
-  // 권한이 없는 경우 GitHub App 설치 화면으로 이동합니다.
   async function openGitHubInstallation(): Promise<void> {
     setActionState("loading");
     setErrorMessage("");
@@ -92,11 +111,10 @@ export function RepositoryStartClient({ projectId, projectName }: RepositoryStar
       window.location.assign(installUrl);
     } catch (error) {
       setActionState("error");
-      setErrorMessage(getApiErrorMessage(error, "GitHub 연결 화면을 열지 못했습니다."));
+      setErrorMessage(getApiErrorMessage(error, "GitHub permission screen could not be opened."));
     }
   }
 
-  // 사용자가 고른 Repository 하나만 현재 프로젝트에 연결합니다.
   async function connectRepository(candidate: GitHubInstalledRepositoryCandidate): Promise<void> {
     if (!installationState || candidate.archived) return;
     setActionState("loading");
@@ -110,14 +128,14 @@ export function RepositoryStartClient({ projectId, projectName }: RepositoryStar
         state: installationState
       });
       setRepositories([connected]);
+      setRecommendation(null);
       setActionState("idle");
     } catch (error) {
       setActionState("error");
-      setErrorMessage(getApiErrorMessage(error, "Repository를 연결하지 못했습니다."));
+      setErrorMessage(getApiErrorMessage(error, "Repository could not be connected."));
     }
   }
 
-  // 연결된 Repository의 근거 파일을 분석해 적합한 Template을 찾습니다.
   async function analyzeRepository(): Promise<void> {
     if (!activeRepository || actionState === "loading") return;
     setActionState("loading");
@@ -126,53 +144,75 @@ export function RepositoryStartClient({ projectId, projectName }: RepositoryStar
     try {
       const result = await analyzeSourceRepository(projectId, activeRepository.id);
       setRepositories((current) => applyRepositoryAnalysis(current, result));
+      setRecommendation(result.aiHandoff.recommendation ?? null);
+      setDeploymentType(result.aiHandoff.deploymentTypeDefault ?? "serverless");
+      setUsesCiCd(result.aiHandoff.usesCiCdDefault ?? false);
+      setAnswers({});
       setActionState("idle");
     } catch (error) {
       setActionState("error");
-      setErrorMessage(getApiErrorMessage(error, "Repository를 분석하지 못했습니다."));
+      setErrorMessage(getApiErrorMessage(error, "Repository analysis failed."));
     }
   }
 
-  const boardHref = createRepositoryBoardHref(projectId, projectName, activeRepository);
-  const previewDiagram = createRepositoryPreviewDiagram(projectName, activeRepository);
+  async function submitRecommendation(): Promise<void> {
+    if (!activeRepository || recommendationState === "loading") return;
+    setRecommendationState("loading");
+    setErrorMessage("");
+
+    try {
+      const result = await recommendRepositoryTemplate({
+        projectId,
+        sourceRepositoryId: activeRepository.id,
+        deploymentType,
+        usesCiCd,
+        answers: Object.entries(answers).map(([questionId, value]) => ({ questionId, value }))
+      });
+      setRecommendation(result.recommendation);
+      setRecommendationState("idle");
+    } catch (error) {
+      setRecommendationState("error");
+      setErrorMessage(getApiErrorMessage(error, "Template candidates could not be recommended."));
+    }
+  }
 
   return (
     <main className={styles.page}>
       <header className={styles.topbar}>
         <ProductBrand />
-        <Link href="/workspace/new">시작 방식 다시 선택</Link>
+        <Link href="/workspace/new">Choose another start path</Link>
       </header>
 
       <section className={styles.content} aria-labelledby="repository-start-title">
         <header className={styles.heading}>
           <span>GitHub Repository</span>
-          <h1 id="repository-start-title">코드를 기준으로 시작하기</h1>
+          <h1 id="repository-start-title">Start from code evidence</h1>
           <p>{projectName}</p>
         </header>
 
         {loadState === "loading" ? (
-          <ProductState description="연결 정보를 확인하고 있습니다." kind="loading" title="불러오는 중" />
+          <ProductState description="Checking repository connection state." kind="loading" title="Loading" />
         ) : null}
 
         {loadState === "error" ? (
           <ProductState
-            action={<button onClick={() => void loadRepositories()} type="button">다시 시도</button>}
+            action={<button onClick={() => void loadRepositories()} type="button">Retry</button>}
             description={errorMessage}
             kind="error"
-            title="연결 상태를 불러오지 못했습니다"
+            title="Repository status unavailable"
           />
         ) : null}
 
         {loadState === "idle" && !activeRepository ? (
           <section className={styles.connectionPanel}>
             <GitBranch aria-hidden="true" size={24} />
-            <h2>Repository를 선택하세요</h2>
+            <h2>Select a repository</h2>
             <div className={styles.actions}>
               <button disabled={actionState === "loading"} onClick={() => void loadCandidates()} type="button">
-                연결 가능한 Repository 보기
+                Show available repositories
               </button>
               <button className={styles.secondaryAction} disabled={actionState === "loading"} onClick={() => void openGitHubInstallation()} type="button">
-                <SquareArrowOutUpRight aria-hidden="true" size={16} /> GitHub 권한 추가
+                <SquareArrowOutUpRight aria-hidden="true" size={16} /> Add GitHub permission
               </button>
             </div>
             <RepositoryCandidates
@@ -186,40 +226,157 @@ export function RepositoryStartClient({ projectId, projectName }: RepositoryStar
         {activeRepository ? (
           <section className={styles.analysisPanel}>
             <div>
-              <span>연결된 Repository</span>
+              <span>Connected repository</span>
               <h2>{activeRepository.owner}/{activeRepository.name}</h2>
               <p>{activeRepository.defaultBranch}</p>
             </div>
             <button disabled={actionState === "loading"} onClick={() => void analyzeRepository()} type="button">
               {actionState === "loading" ? <LoaderCircle className={styles.spin} size={16} /> : <Search size={16} />}
-              {actionState === "loading" ? "분석 중" : "Repository 분석"}
+              {actionState === "loading" ? "Analyzing" : "Analyze repository"}
             </button>
+
+            {activeHandoff ? (
+              <section className={styles.recommendationForm} aria-label="Template recommendation controls">
+                <label>
+                  <span>Deployment type</span>
+                  <select value={deploymentType} onChange={(event) => setDeploymentType(event.target.value as RepositoryDeploymentType)}>
+                    <option value="ec2_vm">EC2/VM based</option>
+                    <option value="container">Container based</option>
+                    <option value="serverless">Serverless based</option>
+                  </select>
+                </label>
+                <label className={styles.checkboxLabel}>
+                  <input checked={usesCiCd} onChange={(event) => setUsesCiCd(event.target.checked)} type="checkbox" />
+                  <span>Use CI/CD handoff</span>
+                </label>
+                <RepositoryQuestions
+                  answers={answers}
+                  onAnswer={(questionId, value) =>
+                    setAnswers((current) => ({ ...current, [questionId]: value }))
+                  }
+                  questions={questions}
+                />
+                <button disabled={recommendationState === "loading"} onClick={() => void submitRecommendation()} type="button">
+                  {recommendationState === "loading" ? <LoaderCircle className={styles.spin} size={16} /> : <Search size={16} />}
+                  Recommend templates
+                </button>
+              </section>
+            ) : null}
+
+            {activeRecommendation ? (
+              <RepositoryTemplateCandidates
+                projectId={projectId}
+                projectName={projectName}
+                recommendation={activeRecommendation}
+                repository={activeRepository}
+              />
+            ) : null}
+
             {previewDiagram ? (
-              <section className={styles.previewPanel} aria-label="Repository 분석 Architecture 미리보기">
+              <section className={styles.previewPanel} aria-label="Repository analysis architecture preview">
                 <div>
                   <span>Practice Architecture Preview</span>
                   <strong>
                     {activeRepository.analysis?.aiHandoff.status === "template_selected"
-                      ? activeRepository.analysis.aiHandoff.selectionReasons.join(" · ")
-                      : "분석 근거를 확인하지 못했습니다."}
+                      ? activeRepository.analysis.aiHandoff.selectionReasons.join(" / ")
+                      : "Analysis evidence could not select one template."}
                   </strong>
                 </div>
                 <AiDraftBoardPreview diagram={previewDiagram} />
               </section>
             ) : null}
-            {boardHref ? <Link className={styles.boardAction} href={boardHref}>추천 구조로 Board 열기</Link> : null}
           </section>
         ) : null}
 
         {errorMessage && loadState !== "error" ? (
-          <ProductState compact description={errorMessage} kind="error" title="작업을 완료하지 못했습니다" />
+          <ProductState compact description={errorMessage} kind="error" title="Action failed" />
         ) : null}
       </section>
     </main>
   );
 }
 
-// Repository 분석에서 확정된 Template만 실제 DiagramJson 미리보기로 바꿉니다.
+function RepositoryQuestions({
+  answers,
+  onAnswer,
+  questions
+}: {
+  readonly answers: Record<string, string | boolean>;
+  readonly onAnswer: (questionId: string, value: string | boolean) => void;
+  readonly questions: readonly RepositoryAnalysisQuestion[];
+}) {
+  if (questions.length === 0) return null;
+
+  return (
+    <div className={styles.questionList}>
+      {questions.map((question) => (
+        <label key={question.id}>
+          <span>{question.prompt}</span>
+          {question.answerType === "boolean" ? (
+            <select
+              value={String(answers[question.id] ?? "")}
+              onChange={(event) => onAnswer(question.id, event.target.value === "true")}
+            >
+              <option value="">Select</option>
+              <option value="true">Yes</option>
+              <option value="false">No</option>
+            </select>
+          ) : question.answerType === "single_select" ? (
+            <select
+              value={String(answers[question.id] ?? "")}
+              onChange={(event) => onAnswer(question.id, event.target.value)}
+            >
+              <option value="">Select</option>
+              {(question.options ?? []).map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          ) : (
+            <input
+              value={String(answers[question.id] ?? "")}
+              onChange={(event) => onAnswer(question.id, event.target.value)}
+              type="text"
+            />
+          )}
+        </label>
+      ))}
+    </div>
+  );
+}
+
+function RepositoryTemplateCandidates({
+  projectId,
+  projectName,
+  recommendation,
+  repository
+}: {
+  readonly projectId: string;
+  readonly projectName: string;
+  readonly recommendation: RepositoryTemplateRecommendationResult;
+  readonly repository: SourceRepository;
+}) {
+  return (
+    <section className={styles.recommendationPanel} aria-label="Template candidates">
+      {recommendation.candidates.map((candidate) => (
+        <article key={candidate.templateId}>
+          <div>
+            <span>{Math.round(candidate.confidence * 100)}% match</span>
+            <strong>{candidate.displayTitle}</strong>
+            <p>{candidate.reasons.join(" ")}</p>
+            <small>{candidate.tradeoffs.join(" ")}</small>
+          </div>
+          <Link
+            className={styles.boardAction}
+            href={createRepositoryBoardHref(projectId, projectName, repository, candidate.templateId)}
+          >
+            Open board
+          </Link>
+        </article>
+      ))}
+    </section>
+  );
+}
+
 function createRepositoryPreviewDiagram(
   projectName: string,
   repository: SourceRepository | null
@@ -232,7 +389,6 @@ function createRepositoryPreviewDiagram(
   }) ?? null;
 }
 
-// 사용 가능한 Repository 목록과 각 연결 행동만 표시합니다.
 function RepositoryCandidates({
   actionState,
   candidates,
@@ -250,7 +406,7 @@ function RepositoryCandidates({
         <article key={`${candidate.installationId}-${candidate.githubRepositoryId}`}>
           <div><strong>{candidate.fullName}</strong><span>{candidate.defaultBranch}</span></div>
           <button disabled={actionState === "loading" || candidate.archived} onClick={() => onConnect(candidate)} type="button">
-            {candidate.archived ? "Archived" : "연결"}
+            {candidate.archived ? "Archived" : "Connect"}
           </button>
         </article>
       ))}
@@ -258,19 +414,16 @@ function RepositoryCandidates({
   );
 }
 
-// 분석에서 Template이 확정된 경우에만 변조하기 어려운 Board 이동 주소를 만듭니다.
 function createRepositoryBoardHref(
   projectId: string,
   projectName: string,
-  repository: SourceRepository | null
-): string | null {
-  const handoff = repository?.analysis?.aiHandoff;
-  if (!repository || handoff?.status !== "template_selected") return null;
-
+  repository: SourceRepository,
+  templateId: string
+): string {
   return `/workspace?${new URLSearchParams({
     projectId,
     projectName,
     sourceRepositoryId: repository.id,
-    templateId: handoff.templateId
+    templateId
   }).toString()}`;
 }

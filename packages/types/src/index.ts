@@ -614,10 +614,67 @@ export type RepositoryApplicationUnit = {
   readonly evidencePaths: readonly string[];
 };
 
+export const REPOSITORY_DEPLOYMENT_TYPES = [
+  "ec2_vm",
+  "container",
+  "serverless"
+] as const;
+
+export type RepositoryDeploymentType = (typeof REPOSITORY_DEPLOYMENT_TYPES)[number];
+
+export type RepositoryAnalysisQuestionOption = {
+  readonly value: string;
+  readonly label: string;
+};
+
+export type RepositoryAnalysisQuestion = {
+  readonly id: string;
+  readonly prompt: string;
+  readonly answerType: "single_select" | "boolean" | "free_text";
+  readonly options?: readonly RepositoryAnalysisQuestionOption[] | undefined;
+  readonly required: boolean;
+  readonly reason: string;
+};
+
+export type RepositoryAnalysisAnswer = {
+  readonly questionId: string;
+  readonly value: string | boolean;
+};
+
+export type RepositoryTemplateRecommendationCandidate = {
+  readonly templateId: TemplateId;
+  readonly displayTitle: string;
+  readonly confidence: number;
+  readonly reasons: readonly string[];
+  readonly tradeoffs: readonly string[];
+};
+
+export type RepositoryTemplateRecommendationResult = {
+  readonly deploymentType: RepositoryDeploymentType;
+  readonly usesCiCd: boolean;
+  readonly candidates: readonly RepositoryTemplateRecommendationCandidate[];
+};
+
+export type RecommendRepositoryTemplateRequest = {
+  readonly deploymentType: RepositoryDeploymentType;
+  readonly usesCiCd: boolean;
+  readonly answers: readonly RepositoryAnalysisAnswer[];
+};
+
+export type RecommendRepositoryTemplateResponse = {
+  readonly sourceRepositoryId: string;
+  readonly repositoryRevision: string;
+  readonly recommendation: RepositoryTemplateRecommendationResult;
+};
+
 type RepositoryAnalysisAiHandoffBase = {
   readonly applicationUnits: readonly RepositoryApplicationUnit[];
   readonly evidence: readonly RepositoryAnalysisEvidence[];
   readonly missingEvidence: readonly RepositoryEvidenceKind[];
+  readonly deploymentTypeDefault?: RepositoryDeploymentType | null | undefined;
+  readonly usesCiCdDefault?: boolean | null | undefined;
+  readonly questions?: readonly RepositoryAnalysisQuestion[] | undefined;
+  readonly recommendation?: RepositoryTemplateRecommendationResult | undefined;
 };
 
 export type RepositoryAnalysisAiHandoff =

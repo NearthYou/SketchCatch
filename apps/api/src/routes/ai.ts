@@ -69,7 +69,6 @@ import { requireActiveUserId } from "../auth/current-user.js";
 import { getDatabaseClient, type DatabaseClient } from "../db/client.js";
 import {
   createPostgresSourceRepositoryRepository,
-  RepositoryAnalysisTemplateSelectionError,
   requireRepositoryAnalysisTemplateId,
   type SourceRepositoryRepository
 } from "../source-repositories/source-repository-service.js";
@@ -304,16 +303,11 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
         {
           projectId: body.repositoryAnalysis.projectId,
           sourceRepositoryId: body.repositoryAnalysis.sourceRepositoryId,
+          requestedTemplateId: body.templateId,
           accessContext: { kind: "user", userId }
         },
         createSourceRepositoryRepository(getAiDatabaseClient().db)
       );
-
-      if (body.templateId && body.templateId !== selectedTemplateId) {
-        throw new RepositoryAnalysisTemplateSelectionError(
-          "REPOSITORY_ANALYSIS_TEMPLATE_MISMATCH"
-        );
-      }
 
       return createArchitectureDraftResponse({
         ...body,

@@ -33,6 +33,7 @@ import {
   listTerraformOutputs,
   listCostUsageAnalysis,
   listProjects,
+  recommendRepositoryTemplate,
   listReverseEngineeringScanLogs,
   listReverseEngineeringScans,
   runDeploymentDestroy,
@@ -2067,6 +2068,61 @@ test("analyzeSourceRepository posts to the connected repository and returns the 
   assert.equal(requests[0]?.init?.method, "POST");
   assert.equal(result.repositoryRevision, "abc123");
   assert.equal(result.aiHandoff.status, "template_selected");
+});
+
+test("recommendRepositoryTemplate posts deployment choices and answers to the connected repository", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+
+  installAuthSession();
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+
+    return Response.json({
+      sourceRepositoryId: "source-repository-1",
+      repositoryRevision: "abc123",
+      recommendation: {
+        deploymentType: "container",
+        usesCiCd: true,
+        candidates: [
+          {
+            templateId: "ecs-fargate-container-app",
+            displayTitle: "ECS Fargate Container App",
+            confidence: 0.87,
+            reasons: ["Docker evidence"],
+            tradeoffs: ["Review runtime sizing"]
+          }
+        ]
+      }
+    });
+  };
+
+  const result = await recommendRepositoryTemplate({
+    projectId: project.id,
+    sourceRepositoryId: "source-repository-1",
+    deploymentType: "container",
+    usesCiCd: true,
+    answers: [{ questionId: "operations-preference", value: "container" }]
+  });
+
+  assert.equal(
+    String(requests[0]?.input),
+    `/api/projects/${project.id}/source-repositories/source-repository-1/template-recommendation`
+  );
+  assert.equal(requests[0]?.init?.method, "POST");
+  assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
+    deploymentType: "container",
+    usesCiCd: true,
+    answers: [{ questionId: "operations-preference", value: "container" }]
+  });
+  assert.equal(result.recommendation.candidates[0]?.templateId, "ecs-fargate-container-app");
 });
 
 test("Git/CI/CD handoff helpers list handoffs and read pipeline status", async (context) => {

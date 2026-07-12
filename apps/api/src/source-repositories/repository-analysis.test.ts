@@ -49,6 +49,10 @@ test("selects static web hosting for a Vite frontend in a monorepo", () => {
       evidencePaths: ["apps/web/package.json", "apps/web/vite.config.ts"]
     }
   ]);
+  assert.equal(result.deploymentTypeDefault, "serverless");
+  assert.equal(result.usesCiCdDefault, null);
+  assert.ok((result.questions ?? []).length <= 5);
+  assert.equal(result.recommendation?.candidates[0]?.templateId, "static-web-hosting");
 });
 
 test("selects minimal serverless API for a backend with Lambda and API Gateway evidence", () => {
@@ -197,6 +201,8 @@ test("selects ECS Fargate container app with Docker ECS and Fargate evidence", (
   // Then
   assert.equal(result.status, "template_selected");
   assert.equal(result.templateId, "ecs-fargate-container-app");
+  assert.equal(result.deploymentTypeDefault, "container");
+  assert.equal(result.recommendation?.candidates[0]?.templateId, "ecs-fargate-container-app");
 });
 
 test("selects EKS container app with Docker Kubernetes and EKS evidence", () => {

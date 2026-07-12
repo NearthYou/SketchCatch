@@ -68,6 +68,8 @@ import type {
   ProjectDeletePreviewResponse,
   ProjectListResponse,
   ProjectResponse,
+  RecommendRepositoryTemplateRequest,
+  RecommendRepositoryTemplateResponse,
   RecentSuccessfulDeploymentProject,
   RecentSuccessfulDeploymentProjectListResponse,
   SourceRepository,
@@ -972,6 +974,26 @@ export async function analyzeSourceRepository(
     {
       auth: true,
       method: "POST"
+    }
+  );
+}
+
+export async function recommendRepositoryTemplate({
+  projectId,
+  sourceRepositoryId,
+  ...input
+}: {
+  projectId: string;
+  sourceRepositoryId: string;
+} & RecommendRepositoryTemplateRequest): Promise<RecommendRepositoryTemplateResponse> {
+  return apiFetch<RecommendRepositoryTemplateResponse>(
+    `/projects/${encodeURIComponent(projectId)}/source-repositories/${encodeURIComponent(
+      sourceRepositoryId
+    )}/template-recommendation`,
+    {
+      auth: true,
+      method: "POST",
+      body: input
     }
   );
 }
