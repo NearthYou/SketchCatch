@@ -238,7 +238,7 @@
           "pnpm test",
           "targeted API, scanner, Plan, and Workspace tests"
         ],
-        "notes": "Focused deployment-safety, approval, Apply, Destroy, Plan, and Workspace tests pass. High findings remain visible but do not block Plan approval, and an existing unapproved apply Plan advances to approval instead of exposing regeneration. Lint, typecheck, and build pass. The full web suite still has four unrelated baseline failures in diagram toolbar CSS, dashboard projects route expectations, a missing personal docs inventory file, and a stale resource catalog count."
+        "notes": "Focused deployment-safety, approval, Apply, Destroy, Plan, and Workspace tests pass. High findings remain visible but do not block Plan approval, and an existing unapproved apply Plan advances to approval instead of exposing regeneration. Deployment History keeps Destroy Plan regeneration available beside approval, then beside Destroy execution after approval. Lint, typecheck, and build pass. The full web suite still has four unrelated baseline failures in diagram toolbar CSS, dashboard projects route expectations, a missing personal docs inventory file, and a stale resource catalog count."
       },
       "notes": "No cloud apply, destroy, or external deployment mutation was performed."
     },

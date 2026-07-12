@@ -290,6 +290,7 @@ export function DeploymentPanel({
   const canDestroy = deploymentActions.canDestroy;
   const canCancelDeployment = deploymentActions.canCancelDeployment;
   const shouldShowApplyButton = deploymentActions.shouldShowApplyButton;
+  const shouldShowApprovePlanButton = deploymentActions.shouldShowApprovePlanButton;
   const shouldShowDestroyPlanButton = deploymentActions.shouldShowDestroyPlanButton;
   const shouldShowDestroyButton = deploymentActions.shouldShowDestroyButton;
   const deploymentActionHint = selectedDeployment
@@ -1843,7 +1844,21 @@ export function DeploymentPanel({
           type="button"
         >
           <Trash2 size={16} aria-hidden="true" />
-          Destroy Plan 생성
+          {selectedDeployment.currentPlanOperation === "destroy"
+            ? "Destroy Plan 재생성"
+            : "Destroy Plan 생성"}
+        </button>
+      ) : null}
+
+      {selectedDeployment && shouldShowApprovePlanButton ? (
+        <button
+          className={styles.deploymentPrimaryButton}
+          disabled={!canApprovePlan}
+          onClick={() => void approveCurrentPlan()}
+          type="button"
+        >
+          <ShieldCheck size={16} aria-hidden="true" />
+          {requestState === "loading" ? "승인 처리 중" : deploymentActions.approvePlanLabel}
         </button>
       ) : null}
 

@@ -4,8 +4,7 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-
-- Active branch: `Refactor/jh/338-workspace-uiux-수정`.
+- Active branch: `fix/ys/348-trivy-로직-수정`.
 
 - Release `v2.0.0` uses main SHA `44cdc976da8a03fca2d0aad69a0f3d45d51d4e8a`.
 - Route53 points to the direct-path ECS ALB. Public `/`, `/health`, and `/health/db` return 200; protected `/api/projects` returns 401.
@@ -18,6 +17,10 @@ Short English-only working log for the current agent context. Older records are 
 - Container log alarms keep ALARM notifications while suppressing repetitive OK notifications, require two consecutive error periods, and exclude stale Next.js Server Action requests from the web metric.
 
 ## Session Record
+
+### 2026-07-12 - Restore Destroy Plan follow-up actions
+
+- History keeps `Destroy Plan 생성` before planning, shows regeneration plus approval after planning, and shows regeneration plus Destroy execution after approval; explicit API approval snapshot checks remain intact. Focused action tests passed 22/22, and lint, typecheck, build, diff check, and harness passed; browser visual verification was unavailable after the local tab interruption.
 
 ### 2026-07-12 - Merge origin/dev into the Workspace UI branch
 
