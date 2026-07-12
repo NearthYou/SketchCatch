@@ -2580,7 +2580,7 @@
 .aiSimulationGrid {
   display: grid;
   gap: 10px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .aiSimulationCard {
@@ -2881,30 +2881,6 @@
   overflow-y: auto;
   padding: 18px;
   scrollbar-gutter: stable;
-}
-
-.aiChatSimulationIntro {
-  align-items: center;
-  background: #ffffff;
-  border: 1px solid var(--workspace-line, #f0f0f3);
-  border-radius: 8px;
-  box-shadow: 0 10px 24px rgba(31, 61, 88, 0.08);
-  display: flex;
-  gap: 12px;
-  justify-content: space-between;
-  padding: 12px;
-}
-
-.aiChatSimulationIntro strong {
-  color: var(--workspace-text, #171717);
-  font-size: 13px;
-  line-height: 1.45;
-}
-
-.aiChatSimulationIntro .aiPrimaryButton {
-  flex: 0 0 auto;
-  min-width: 132px;
-  white-space: nowrap;
 }
 
 .aiChatAssistantMessage,
@@ -5022,16 +4998,6 @@
     grid-column: 1 / -1;
   }
 
-  .aiChatSimulationIntro {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .aiChatSimulationIntro .aiPrimaryButton {
-    min-width: 0;
-    width: 100%;
-  }
-
   .aiChatAssistantMessage,
   .aiChatUserMessage {
     max-width: 100%;
@@ -5212,7 +5178,6 @@
 .aiTerraformPreviewAgentCard,
 .aiSafetyFindingCard,
 .aiSimulationCard,
-.aiChatSimulationIntro,
 .aiChatAssistantMessage p,
 .aiChatDraftCard,
 .aiSafetyNotice,
@@ -5661,8 +5626,8 @@
   display: flex;
   flex-direction: column;
   font-family: var(--workspace-font, "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif);
-  height: calc(100dvh - 24px);
-  max-height: 1080px;
+  height: auto;
+  max-height: min(1080px, calc(100dvh - 24px));
   max-width: 1800px;
   min-height: 0;
   overflow: hidden;
@@ -5910,7 +5875,7 @@
 .liveObservationBody {
   background: #ffffff;
   display: flex;
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   flex-direction: column;
   min-height: 0;
   overflow: auto;
@@ -6037,24 +6002,397 @@
 }
 
 .liveObservationMapStage {
-  background: #04182a;
+  background: var(--workspace-surface, #ffffff);
   display: flex;
-  flex: 1 0 auto;
+  flex: 0 0 auto;
   min-height: 0;
   overflow: hidden;
   position: relative;
 }
 
 .liveObservationMapStage > .liveObservationSectionLabel {
-  background: rgba(3, 18, 33, 0.86);
-  border: 1px solid rgba(103, 232, 249, 0.28);
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid var(--workspace-line-strong, #dcdee0);
   border-radius: 6px;
-  color: #bae6fd;
+  color: var(--workspace-muted, #60646c);
   left: 14px;
   padding: 5px 8px;
   position: absolute;
   top: 12px;
   z-index: 8;
+}
+
+.liveObservationDesignSimulation {
+  background: var(--workspace-surface, #ffffff);
+  border-top: 1px solid var(--workspace-line, #f0f0f3);
+  display: grid;
+  flex: 0 0 auto;
+  gap: 12px;
+  padding: 16px 18px 20px;
+}
+
+.liveObservationDesignSimulation > header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.liveObservationDesignSimulation > header > strong {
+  color: var(--workspace-text, #171717);
+  font-size: 13px;
+}
+
+.liveObservationDesignSimulation > header > span {
+  color: var(--workspace-muted, #60646c);
+  font-size: 11px;
+}
+
+.liveObservationSimulationToggle {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--workspace-text, #171717);
+  cursor: pointer;
+  display: inline-flex;
+  height: 28px;
+  justify-content: center;
+  padding: 0;
+  width: 28px;
+}
+
+.liveObservationSimulationToggle:focus-visible {
+  outline: 2px solid var(--workspace-focus, #3974e8);
+  outline-offset: 2px;
+}
+
+.liveObservationDiagramMap {
+  background: var(--workspace-surface, #ffffff);
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  display: flex;
+  flex-direction: column;
+  height: clamp(300px, 42vh, 430px);
+  overflow: hidden;
+  width: 100%;
+}
+
+.liveObservationPresentationHeader {
+  align-items: center;
+  background: var(--workspace-surface-muted, #fafafa);
+  border-bottom: 1px solid var(--workspace-line, #f0f0f3);
+  color: var(--workspace-muted, #60646c);
+  display: flex;
+  flex: 0 0 42px;
+  justify-content: space-between;
+  padding: 0 18px;
+}
+
+.liveObservationMapStage:has(> .liveObservationSectionLabel) .liveObservationPresentationHeader {
+  padding-left: 188px;
+}
+
+.liveObservationPresentationHeader strong,
+.liveObservationPresentationHeader span {
+  font-size: 10px;
+  letter-spacing: 0;
+}
+
+.liveObservationPresentationViewport {
+  background-color: #fcfcfd;
+  background-image: radial-gradient(#dedee5 0.7px, transparent 0.7px);
+  background-size: 16px 16px;
+  flex: 1;
+  min-height: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 24px 28px 20px;
+}
+
+.liveObservationPresentationSurface {
+  border: 1px dashed color-mix(in srgb, #7657d6 38%, transparent);
+  box-sizing: border-box;
+  min-height: 210px;
+  padding: 44px 28px 20px;
+  position: relative;
+}
+
+.liveObservationPresentationSurface::before {
+  background: #fcfcfd;
+  color: #7657d6;
+  content: "LIVE TRAFFIC PATH";
+  font-size: 9px;
+  font-weight: 700;
+  left: 14px;
+  padding: 0 7px;
+  position: absolute;
+  top: -6px;
+}
+
+.liveObservationPresentationPath {
+  align-items: start;
+  display: grid;
+  list-style: none;
+  margin: 0;
+  min-height: 145px;
+  padding: 0;
+  position: relative;
+}
+
+.liveObservationPresentationStage {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  position: relative;
+  text-align: center;
+}
+
+.liveObservationPresentationNode {
+  align-items: center;
+  background: var(--workspace-surface, #ffffff);
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  box-sizing: border-box;
+  color: var(--workspace-muted, #60646c);
+  display: flex;
+  height: 64px;
+  justify-content: center;
+  position: relative;
+  width: 64px;
+  z-index: 3;
+}
+
+.liveObservationPresentationNode img {
+  height: 46px;
+  object-fit: contain;
+  width: 46px;
+}
+
+.liveObservationPresentationStage > strong,
+.liveObservationCapacityUnit > strong {
+  color: var(--workspace-text, #171717);
+  font-size: 11px;
+  line-height: 1.25;
+  margin-top: 11px;
+  max-width: calc(100% - 12px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.liveObservationCapacityUnit > strong {
+  display: -webkit-box;
+  line-height: 1.2;
+  min-height: 27px;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.liveObservationPresentationStage > span,
+.liveObservationCapacityUnit > span {
+  color: var(--workspace-muted, #60646c);
+  font-size: 9px;
+  margin-top: 4px;
+}
+
+.liveObservationPresentationConnector {
+  background: var(--workspace-line-strong, #dcdee0);
+  height: 1px;
+  left: calc(50% + 32px);
+  overflow: hidden;
+  position: absolute;
+  top: 32px;
+  width: calc(100% - 64px);
+  z-index: 1;
+}
+
+.liveObservationPresentationConnector::after {
+  background: linear-gradient(90deg, transparent 0 18%, #3974e8 18% 44%, transparent 44% 64%, #80c8ef 64% 82%, transparent 82%);
+  background-size: 72px 100%;
+  content: "";
+  inset: -1px 0;
+  opacity: 0.45;
+  position: absolute;
+}
+
+.liveObservationDiagramMap[data-flowing="true"] .liveObservationPresentationConnector::after {
+  animation: liveObservationConnectorFlow 1.15s linear infinite;
+  opacity: 1;
+}
+
+.liveObservationPresentationSegmentParticle {
+  animation: liveObservationPresentationSegmentParticle 920ms ease-in-out both;
+  background: #ffffff;
+  border: 3px solid #3974e8;
+  border-radius: 50%;
+  box-sizing: border-box;
+  box-shadow: 0 0 0 8px rgba(57, 116, 232, 0.14);
+  height: 28px;
+  left: 0;
+  position: absolute;
+  top: -14px;
+  width: 28px;
+  z-index: 4;
+}
+
+.liveObservationDiagramMap[data-pressure-level="high"] .liveObservationPresentationStage[data-pressure-zone="true"] .liveObservationPresentationConnector::after {
+  background-image: linear-gradient(90deg, transparent 0 18%, #d97706 18% 44%, transparent 44% 64%, #f2b45f 64% 82%, transparent 82%);
+}
+
+.liveObservationDiagramMap[data-pressure-level="critical"] .liveObservationPresentationStage[data-pressure-zone="true"] .liveObservationPresentationConnector::after {
+  background-image: linear-gradient(90deg, transparent 0 18%, #e5484d 18% 44%, transparent 44% 64%, #ff8b8f 64% 82%, transparent 82%);
+}
+
+.liveObservationPresentationNodePulse {
+  animation: liveObservationPresentationRing 900ms ease-out both;
+  border: 1px solid rgba(57, 116, 232, 0.58);
+  border-radius: 50%;
+  inset: -5px;
+  position: absolute;
+}
+
+.liveObservationCapacityStage {
+  align-items: center;
+  display: flex;
+  min-width: 0;
+  padding-left: 22px;
+  position: relative;
+}
+
+.liveObservationCapacityStage::before {
+  background: var(--workspace-line-strong, #dcdee0);
+  content: "";
+  height: 1px;
+  left: 0;
+  position: absolute;
+  top: 32px;
+  width: 22px;
+}
+
+.liveObservationCapacityLabel {
+  background: var(--workspace-surface, #ffffff);
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  color: var(--workspace-muted, #60646c);
+  font-size: 8px;
+  left: 28px;
+  padding: 3px 5px;
+  position: absolute;
+  top: -27px;
+}
+
+.liveObservationCapacityUnits {
+  display: grid;
+  gap: 12px;
+  grid-auto-columns: 82px;
+  grid-auto-flow: column;
+  justify-content: center;
+  min-width: 100%;
+}
+
+.liveObservationCapacityUnit {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  text-align: center;
+}
+
+.liveObservationCapacityUnit[data-observation-state="active"] .liveObservationPresentationNode {
+  border-color: #98d4bb;
+  box-shadow: 0 0 0 3px rgba(31, 157, 112, 0.08);
+}
+
+.liveObservationCapacityUnit[data-observation-state="active"] {
+  animation: liveObservationCapacityActivated 900ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  transform-origin: center 32px;
+}
+
+.liveObservationCapacityUnit[data-observation-state="active"] > span {
+  color: #16865c;
+}
+
+.liveObservationCapacityUnit[data-observation-state="launching"] {
+  animation: liveObservationCapacityLaunch 720ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  transform-origin: center 32px;
+}
+
+.liveObservationCapacityUnit[data-observation-state="launching"] .liveObservationPresentationNode {
+  border-color: #e58b20;
+  box-shadow: 0 0 0 3px rgba(229, 139, 32, 0.1);
+}
+
+.liveObservationCapacityUnit[data-observation-state="launching"] > span {
+  color: #a45c09;
+}
+
+.liveObservationCapacityUnit[data-observation-state="inactive"] {
+  opacity: 0.38;
+}
+
+.liveObservationCapacityUnit[data-observation-state="inactive"] > span {
+  color: var(--workspace-muted, #60646c);
+}
+
+.liveObservationCapacityOverflow {
+  align-items: center;
+  align-self: start;
+  background: var(--workspace-surface-muted, #fafafa);
+  border: 1px dashed var(--workspace-line-strong, #dcdee0);
+  color: var(--workspace-muted, #60646c);
+  display: flex;
+  font-size: 13px;
+  font-weight: 800;
+  height: 64px;
+  justify-content: center;
+  width: 52px;
+}
+
+.liveObservationPresentationEmpty {
+  align-items: center;
+  color: var(--workspace-muted, #60646c);
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  justify-content: center;
+  padding: 40px;
+  text-align: center;
+}
+
+.liveObservationPresentationEmpty strong {
+  color: var(--workspace-text, #171717);
+  font-size: 13px;
+}
+
+.liveObservationPresentationEmpty span {
+  font-size: 11px;
+}
+
+@keyframes liveObservationConnectorFlow {
+  to { background-position: 72px 0; }
+}
+
+@keyframes liveObservationPresentationSegmentParticle {
+  from { left: -28px; opacity: 0; }
+  8% { opacity: 1; }
+  90% { opacity: 1; }
+  to { left: calc(100% - 14px); opacity: 0; }
+}
+
+@keyframes liveObservationPresentationRing {
+  from { opacity: 0.8; transform: scale(0.72); }
+  to { opacity: 0; transform: scale(1.28); }
+}
+
+@keyframes liveObservationCapacityLaunch {
+  0% { opacity: 0.12; transform: translateY(14px) scale(0.42); }
+  64% { opacity: 1; transform: translateY(-3px) scale(1.08); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes liveObservationCapacityActivated {
+  0% { filter: saturate(1.8); transform: scale(0.82); }
+  48% { filter: saturate(1.35); transform: scale(1.12); }
+  100% { filter: saturate(1); transform: scale(1); }
 }
 
 .liveObservationSignalMap {
@@ -6467,6 +6805,10 @@
 }
 
 @media (max-width: 759px) {
+  .aiSimulationGrid {
+    grid-template-columns: 1fr;
+  }
+
   .liveObservationOverlay {
     padding: 0;
   }
@@ -6622,6 +6964,17 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .liveObservationPresentationConnector::after,
+  .liveObservationPresentationNodePulse,
+  .liveObservationCapacityUnit[data-observation-state="launching"],
+  .liveObservationCapacityUnit[data-observation-state="active"] {
+    animation: none;
+  }
+
+  .liveObservationPresentationSegmentParticle {
+    display: none;
+  }
+
   .liveObservationSignalSelectedRoute {
     animation: none;
     opacity: 1;

@@ -4,6 +4,8 @@ import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   Deployment,
+  DesignSimulationResult,
+  DiagramJson,
   LiveObservationSession,
   LiveObservationSnapshot
 } from "@sketchcatch/types";
@@ -14,45 +16,49 @@ import {
   Radio,
   Square,
   Timer,
+  ToggleLeft,
+  ToggleRight,
   X
 } from "lucide-react";
 import { createPortal } from "react-dom";
 import QRCode from "qrcode";
 import { getApiErrorMessage } from "../../lib/api-client";
-import {
-  LiveObservationSignalMap,
-  type LiveObservationSignalMapBurst
-} from "./LiveObservationSignalMap";
+import type { LiveObservationSignalMapBurst } from "./LiveObservationSignalMap";
+import { LiveObservationDiagramMap } from "./LiveObservationDiagramMap";
+import { WorkspaceAiDesignSimulationResult } from "./WorkspaceAiPanelPieces";
 import {
   createLiveObservation,
   listDeployments,
+  pollLiveObservationSnapshots,
+  runAiDesignSimulation,
   stopLiveObservation,
   streamLiveObservationSnapshots
 } from "./api";
 import {
   clearMockRequestFlowBurst,
   createInitialMockRequestFlowState,
-  getMockRequestFlowTargetIndexes,
   replayMockRequestFlow
 } from "./live-observation-mock-preview";
-import { getLiveObservationSignalBurstLifetimeMs } from "./live-observation-signal-map";
+import {
+  getLiveObservationDiagramBurstLifetimeMs
+} from "./live-observation-diagram-particles";
+import { getLiveObservationDiagramSegmentCount } from "./live-observation-diagram";
 import {
   createPresenterTrafficBoost,
   getEligibleLiveObservationDeployments,
   getLiveObservationInstanceMarkers,
   getLiveObservationPressureLabel,
   getLiveObservationRequestBurst,
-  getLiveObservationRequestTargetIndexes,
-  type LiveObservationInstanceMarker,
   type PresenterTrafficBoostController,
   type PresenterTrafficBoostProgress
 } from "./live-observation";
+import { createWorkspaceAiBoardSnapshot } from "./workspace-ai-panel-state";
 import styles from "./workspace.module.css";
 
 export type LiveObservationModalProps = {
+  readonly diagramJson: DiagramJson;
   readonly onClose: () => void;
   readonly projectId: string;
-  readonly projectName: string;
 };
 
 const EMPTY_BOOST_PROGRESS: PresenterTrafficBoostProgress = {
@@ -66,16 +72,23 @@ const EMPTY_BOOST_PROGRESS: PresenterTrafficBoostProgress = {
 };
 
 const SHOW_MOCK_ANIMATION_PREVIEW = process.env.NODE_ENV === "development";
-
-const MOCK_SIGNAL_MAP_INSTANCES: readonly LiveObservationInstanceMarker[] = [
-  { key: "mock-instance-a", label: "Mock InService A", state: "in-service" },
-  { key: "mock-instance-b", label: "Mock InService B", state: "in-service" }
-];
+const LIVE_OBSERVATION_TRANSPORT =
+  process.env.NEXT_PUBLIC_LIVE_OBSERVATION_TRANSPORT === "polling"
+    ? "polling"
+    : "stream";
+const LIVE_OBSERVATION_POLL_INTERVAL_MS = 2_000;
+const DESIGN_SIMULATION_DEFAULTS = {
+  budgetLevel: "normal",
+  expectedUserCount: 1000,
+  period: "month",
+  region: "ap-northeast-2",
+  trafficLevel: "normal"
+} as const;
 
 export function LiveObservationModal({
+  diagramJson,
   onClose,
-  projectId,
-  projectName
+  projectId
 }: LiveObservationModalProps) {
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -88,6 +101,11 @@ export function LiveObservationModal({
   const requestBurstSequenceRef = useRef(0);
   const [mounted, setMounted] = useState(false);
   const [deployments, setDeployments] = useState<Deployment[]>([]);
+  const [designSimulation, setDesignSimulation] = useState<DesignSimulationResult | null>(null);
+  const [designSimulationState, setDesignSimulationState] =
+    useState<"loading" | "ready" | "error">("loading");
+  const [designSimulationError, setDesignSimulationError] = useState("");
+  const [isAiSimulationVisible, setAiSimulationVisible] = useState(true);
   const [selectedDeploymentId, setSelectedDeploymentId] = useState("");
   const [listState, setListState] = useState<"loading" | "ready" | "error">("loading");
   const [requestState, setRequestState] = useState<"idle" | "loading">("idle");
@@ -106,6 +124,14 @@ export function LiveObservationModal({
     createInitialMockRequestFlowState
   );
   const mockRequestFlowBurst = mockRequestFlowState.burst;
+  const boardSnapshot = useMemo(
+    () => createWorkspaceAiBoardSnapshot(diagramJson),
+    [diagramJson]
+  );
+  const observationDiagramSegmentCount = useMemo(
+    () => getLiveObservationDiagramSegmentCount(diagramJson),
+    [diagramJson]
+  );
 
   const eligibleDeployments = useMemo(
     () => getEligibleLiveObservationDeployments(deployments),
@@ -128,27 +154,14 @@ export function LiveObservationModal({
     .filter((instance) => instance.state === "in-service")
     .map((instance) => instance.key)
     .slice(0, 2);
-  const requestTargetIndexes = requestFlowBurst
-    ? getLiveObservationRequestTargetIndexes(
-        requestFlowBurst.visibleParticleCount,
-        inServiceInstanceKeys.length,
-        requestFlowBurst.sequence
-      )
-    : [];
   const showDevelopmentMockMap =
     SHOW_MOCK_ANIMATION_PREVIEW && mockRequestFlowState.visible && !session;
-  const mockRequestTargetIndexes = showDevelopmentMockMap
-    ? getMockRequestFlowTargetIndexes(mockRequestFlowBurst)
-    : [];
+  const displayedSnapshot = showDevelopmentMockMap
+    ? mockRequestFlowState.snapshot
+    : snapshot;
   const mapBurst = showDevelopmentMockMap
     ? mockRequestFlowBurst
     : requestFlowBurst;
-  const mapInstances = showDevelopmentMockMap
-    ? MOCK_SIGNAL_MAP_INSTANCES
-    : instanceMarkers;
-  const mapRequestTargetIndexes = showDevelopmentMockMap
-    ? mockRequestTargetIndexes
-    : requestTargetIndexes;
 
   useEffect(() => {
     if (!snapshot) {
@@ -192,7 +205,8 @@ export function LiveObservationModal({
     }
 
     const sequence = requestFlowBurst.sequence;
-    const burstLifetimeMs = getLiveObservationSignalBurstLifetimeMs(
+    const burstLifetimeMs = getLiveObservationDiagramBurstLifetimeMs(
+      observationDiagramSegmentCount,
       requestFlowBurst.visibleParticleCount
     );
     const timer = window.setTimeout(() => {
@@ -202,7 +216,7 @@ export function LiveObservationModal({
     }, burstLifetimeMs);
 
     return () => window.clearTimeout(timer);
-  }, [requestFlowBurst]);
+  }, [observationDiagramSegmentCount, requestFlowBurst]);
 
   useEffect(() => {
     if (!mockRequestFlowBurst) {
@@ -210,7 +224,8 @@ export function LiveObservationModal({
     }
 
     const sequence = mockRequestFlowBurst.sequence;
-    const burstLifetimeMs = getLiveObservationSignalBurstLifetimeMs(
+    const burstLifetimeMs = getLiveObservationDiagramBurstLifetimeMs(
+      observationDiagramSegmentCount,
       mockRequestFlowBurst.visibleParticleCount
     );
     const timer = window.setTimeout(() => {
@@ -220,7 +235,15 @@ export function LiveObservationModal({
     }, burstLifetimeMs);
 
     return () => window.clearTimeout(timer);
-  }, [mockRequestFlowBurst]);
+  }, [mockRequestFlowBurst, observationDiagramSegmentCount]);
+
+  useEffect(() => {
+    if (!SHOW_MOCK_ANIMATION_PREVIEW || session || !mockRequestFlowState.snapshot) {
+      return;
+    }
+
+    setSnapshot(mockRequestFlowState.snapshot);
+  }, [mockRequestFlowState.snapshot, session]);
 
   useEffect(() => {
     setMounted(true);
@@ -269,6 +292,42 @@ export function LiveObservationModal({
   }, [projectId]);
 
   useEffect(() => {
+    let cancelled = false;
+    setDesignSimulation(null);
+    setDesignSimulationError("");
+
+    if (!boardSnapshot.hasResources) {
+      setDesignSimulationState("error");
+      setDesignSimulationError("현재 보드에 시뮬레이션할 리소스가 없습니다.");
+      return undefined;
+    }
+
+    setDesignSimulationState("loading");
+    void runAiDesignSimulation({
+      architectureJson: boardSnapshot.architectureJson,
+      ...DESIGN_SIMULATION_DEFAULTS
+    })
+      .then((result) => {
+        if (!cancelled) {
+          setDesignSimulation(result);
+          setDesignSimulationState("ready");
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setDesignSimulationState("error");
+          setDesignSimulationError(
+            getApiErrorMessage(error, "설계 시뮬레이션 결과를 불러오지 못했습니다.")
+          );
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [boardSnapshot]);
+
+  useEffect(() => {
     const timer = window.setInterval(() => setNowMs(Date.now()), 1_000);
     return () => window.clearInterval(timer);
   }, []);
@@ -315,20 +374,38 @@ export function LiveObservationModal({
 
     setStreamErrorMessage("");
     const abortController = new AbortController();
-    void streamLiveObservationSnapshots({
-      deploymentId: session.deploymentId,
-      observationId: session.id,
-      onError: () => {
-        setStreamErrorMessage(
+    if (LIVE_OBSERVATION_TRANSPORT === "polling") {
+      void pollLiveObservationSnapshots({
+        deploymentId: session.deploymentId,
+        intervalMs: LIVE_OBSERVATION_POLL_INTERVAL_MS,
+        observationId: session.id,
+        onError: () => {
+          setStreamErrorMessage(
+            "?ㅼ떆媛??곌껐??吏?곕릺怨??덉뒿?덈떎. 理쒖떊 ?곹깭瑜??ㅼ떆 ?곌껐?⑸땲??"
+          );
+        },
+        onSnapshot: (nextSnapshot) => {
+          setSnapshot(nextSnapshot);
+          setStreamErrorMessage("");
+        },
+        signal: abortController.signal
+      });
+    } else {
+      void streamLiveObservationSnapshots({
+        deploymentId: session.deploymentId,
+        observationId: session.id,
+        onError: () => {
+          setStreamErrorMessage(
           "실시간 연결이 지연되고 있습니다. 최신 상태를 다시 연결합니다."
-        );
-      },
-      onSnapshot: (nextSnapshot) => {
-        setSnapshot(nextSnapshot);
-        setStreamErrorMessage("");
-      },
-      signal: abortController.signal
-    });
+          );
+        },
+        onSnapshot: (nextSnapshot) => {
+          setSnapshot(nextSnapshot);
+          setStreamErrorMessage("");
+        },
+        signal: abortController.signal
+      });
+    }
 
     return () => abortController.abort();
   }, [session]);
@@ -403,6 +480,15 @@ export function LiveObservationModal({
     controller.start();
   }
 
+  function startTrafficLoad(): void {
+    if (showDevelopmentMockMap && !session) {
+      setMockRequestFlowState(replayMockRequestFlow);
+      return;
+    }
+
+    startBoost();
+  }
+
   function stopBoost(): void {
     boostControllerRef.current?.stop();
   }
@@ -439,10 +525,6 @@ export function LiveObservationModal({
     }
   }
 
-  function playMockRequestFlow(): void {
-    setMockRequestFlowState(replayMockRequestFlow);
-  }
-
   if (!mounted) {
     return null;
   }
@@ -460,7 +542,7 @@ export function LiveObservationModal({
         aria-labelledby="live-observation-title"
         aria-modal="true"
         className={styles.liveObservationDialog}
-        data-pressure-level={snapshot?.live.pressureLevel ?? "normal"}
+        data-pressure-level={displayedSnapshot?.live.pressureLevel ?? "normal"}
         onKeyDown={handleDialogKeyDown}
         ref={dialogRef}
         role="dialog"
@@ -468,8 +550,7 @@ export function LiveObservationModal({
         <header className={styles.liveObservationHeader}>
           <div className={styles.liveObservationHeaderIdentity}>
             <span className={styles.liveObservationEyebrow}>Live Observation</span>
-            <h2 id="live-observation-title">실시간 트래픽 · ASG 관측</h2>
-            <p>{projectName} · 실제 배포 근거를 15분 동안 읽기 전용으로 관측</p>
+            <h2 id="live-observation-title">실시간 트래픽 관측</h2>
           </div>
 
           <div className={styles.liveObservationTargetBar}>
@@ -496,13 +577,6 @@ export function LiveObservationModal({
               {session ? <strong>{formatRemainingTime(remainingSeconds)}</strong> : null}
             </div>
             <div className={styles.liveObservationTargetActions}>
-              {SHOW_MOCK_ANIMATION_PREVIEW ? (
-                <button
-                  className={styles.liveObservationSecondaryButton}
-                  onClick={playMockRequestFlow}
-                  type="button"
-                >목업 애니메이션 재생</button>
-              ) : null}
               <button
                 className={styles.liveObservationPrimaryButton}
                 disabled={!selectedDeployment || requestState === "loading" || isSessionActive}
@@ -582,25 +656,25 @@ export function LiveObservationModal({
             <div className={styles.liveObservationError} role="alert">{visibleErrorMessage}</div>
           ) : null}
 
-          {session ? (
+          {session || showDevelopmentMockMap ? (
             <section className={styles.liveObservationEvidenceRail} aria-label="관측 근거">
               <div data-source="browser">
                 <span>빠른 신호 · 브라우저 보고</span>
-                <strong>{snapshot?.live.acceptedEventCount ?? 0}</strong>
+                <strong>{displayedSnapshot?.live.acceptedEventCount ?? 0}</strong>
                 <p>collector가 수락한 성공 receipt</p>
                 <div className={styles.liveObservationPressureTrack} aria-label="scale-out pressure">
-                  <i style={{ width: `${Math.min(snapshot?.live.pressurePercent ?? 0, 100)}%` }} />
+                  <i style={{ width: `${Math.min(displayedSnapshot?.live.pressurePercent ?? 0, 100)}%` }} />
                 </div>
                 <small>
-                  {(snapshot?.live.projectedRequestsPerMinute ?? 0).toFixed(1)} req/min · 압력 {(snapshot?.live.pressurePercent ?? 0).toFixed(0)}% · {getLiveObservationPressureLabel(snapshot?.live.pressureLevel ?? "normal")}
+                  {(displayedSnapshot?.live.projectedRequestsPerMinute ?? 0).toFixed(1)} req/min · 압력 {(displayedSnapshot?.live.pressurePercent ?? 0).toFixed(0)}% · {getLiveObservationPressureLabel(displayedSnapshot?.live.pressureLevel ?? "normal")}
                 </small>
               </div>
               <div data-source="aws">
                 <span>AWS 실측</span>
-                <strong>{formatCloudWatchValue(snapshot)}</strong>
+                <strong>{formatCloudWatchValue(displayedSnapshot)}</strong>
                 <p>완료된 60초 RequestCountPerTarget</p>
                 <small>
-                  {formatCloudWatchDelay(snapshot)} · {formatCapacityValue(snapshot)} InService / desired / max
+                  {formatCloudWatchDelay(displayedSnapshot)} · {formatCapacityValue(displayedSnapshot)} active / desired / max
                 </small>
               </div>
             </section>
@@ -616,12 +690,10 @@ export function LiveObservationModal({
                   목업 데이터 · 개발 확인용
                 </span>
               ) : null}
-              <LiveObservationSignalMap
-                asgMeta={showDevelopmentMockMap ? "2 desired / 2 max" : formatAsgCapacity(snapshot)}
+              <LiveObservationDiagramMap
                 burst={mapBurst}
-                instances={mapInstances}
-                pressureLevel={showDevelopmentMockMap ? "normal" : snapshot?.live.pressureLevel ?? "normal"}
-                requestTargetIndexes={mapRequestTargetIndexes}
+                diagram={diagramJson}
+                snapshot={displayedSnapshot}
               />
             </section>
           ) : listState === "ready" && eligibleDeployments.length > 0 ? (
@@ -633,19 +705,58 @@ export function LiveObservationModal({
               </div>
             </div>
           ) : null}
+
+          <section
+            aria-label="AI 시뮬레이션 결과"
+            className={styles.liveObservationDesignSimulation}
+          >
+            <header>
+              <strong>AI 시뮬레이션</strong>
+              <button
+                aria-label={isAiSimulationVisible ? "AI 시뮬레이션 접기" : "AI 시뮬레이션 펼치기"}
+                aria-pressed={isAiSimulationVisible}
+                className={styles.liveObservationSimulationToggle}
+                onClick={() => setAiSimulationVisible((visible) => !visible)}
+                title={isAiSimulationVisible ? "AI 시뮬레이션 접기" : "AI 시뮬레이션 펼치기"}
+                type="button"
+              >
+                {isAiSimulationVisible ? (
+                  <ToggleRight aria-hidden="true" size={20} />
+                ) : (
+                  <ToggleLeft aria-hidden="true" size={20} />
+                )}
+              </button>
+            </header>
+            {isAiSimulationVisible ? (
+              <>
+                {designSimulationState === "loading" ? (
+                  <div className={styles.liveObservationMessage}>
+                    AI 시뮬레이션을 계산하고 있습니다.
+                  </div>
+                ) : null}
+                {designSimulationState === "error" ? (
+                  <div className={styles.liveObservationError} role="alert">
+                    {designSimulationError}
+                  </div>
+                ) : null}
+                {designSimulationState === "ready" && designSimulation ? (
+                  <WorkspaceAiDesignSimulationResult simulation={designSimulation} />
+                ) : null}
+              </>
+            ) : null}
+          </section>
         </main>
 
-        {session ? (
-          <footer className={styles.liveObservationControlRail}>
+        <footer className={styles.liveObservationControlRail}>
             <div className={styles.liveObservationControlActivity}>
               <span className={styles.liveObservationSectionLabel}>스케일링 활동</span>
-              <strong>최근 Auto Scaling 활동</strong>
-              {snapshot?.capacity.latestActivity ? (
+              <strong>최근 Scaling 활동</strong>
+              {displayedSnapshot?.capacity.latestActivity ? (
                 <div>
                   <i aria-hidden="true" />
-                  <strong>{snapshot.capacity.latestActivity.statusCode}</strong>
-                  <p>{snapshot.capacity.latestActivity.description}</p>
-                  <time>{formatTimestamp(snapshot.capacity.latestActivity.startedAt)}</time>
+                  <strong>{displayedSnapshot.capacity.latestActivity.statusCode}</strong>
+                  <p>{displayedSnapshot.capacity.latestActivity.description}</p>
+                  <time>{formatTimestamp(displayedSnapshot.capacity.latestActivity.startedAt)}</time>
                 </div>
               ) : (
                 <span className={styles.liveObservationMuted}>아직 확인된 스케일링 활동이 없습니다.</span>
@@ -654,31 +765,34 @@ export function LiveObservationModal({
             <div className={styles.liveObservationBoostSummary}>
               <strong>발표자 트래픽 증가</strong>
               <span>
-                {boostProgress.successfulTrafficRequests} traffic 성공 · {boostProgress.acceptedReceipts} 집계
+                {showDevelopmentMockMap
+                  ? `${displayedSnapshot?.live.acceptedEventCount ?? 0} mock events`
+                  : `${boostProgress.successfulTrafficRequests} traffic 성공 · ${boostProgress.acceptedReceipts} 집계`}
               </span>
             </div>
             <div className={styles.liveObservationControlActions}>
               <button
                 className={styles.liveObservationPrimaryButton}
-                disabled={!isSessionActive || boostProgress.running}
-                onClick={startBoost}
+                disabled={(!isSessionActive && !showDevelopmentMockMap) || boostProgress.running}
+                onClick={startTrafficLoad}
                 type="button"
-              >+90초 부하</button>
+              >{showDevelopmentMockMap ? "부하 단계 올리기" : "+90초 부하"}</button>
               <button
                 className={styles.liveObservationSecondaryButton}
                 disabled={!boostProgress.running}
                 onClick={stopBoost}
                 type="button"
               ><Square size={14} aria-hidden="true" />중지</button>
-              <button
-                className={styles.liveObservationDangerButton}
-                disabled={!isSessionActive || requestState === "loading"}
-                onClick={() => void endSession()}
-                type="button"
-              >세션 종료</button>
+              {session ? (
+                <button
+                  className={styles.liveObservationDangerButton}
+                  disabled={!isSessionActive || requestState === "loading"}
+                  onClick={() => void endSession()}
+                  type="button"
+                >세션 종료</button>
+              ) : null}
             </div>
           </footer>
-        ) : null}
       </div>
     </div>,
     document.body
@@ -727,13 +841,6 @@ function formatRemainingTime(seconds: number): string {
   const minutes = Math.floor(seconds / 60);
   const remainder = seconds % 60;
   return `${String(minutes).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`;
-}
-
-function formatAsgCapacity(snapshot: LiveObservationSnapshot | null): string {
-  if (snapshot?.capacity.state !== "available") {
-    return "실제 상태 대기";
-  }
-  return `${snapshot.capacity.desiredCapacity ?? "–"} desired / ${snapshot.capacity.maxCapacity ?? "–"} max`;
 }
 
 function formatCloudWatchValue(snapshot: LiveObservationSnapshot | null): string {

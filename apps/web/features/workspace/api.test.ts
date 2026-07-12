@@ -36,6 +36,7 @@ import {
   listProjects,
   listReverseEngineeringScanLogs,
   listReverseEngineeringScans,
+  pollLiveObservationSnapshots,
   runDeploymentDestroy,
   runDeploymentDestroyPlan,
   runAiPreDeploymentCheck,
@@ -224,6 +225,106 @@ test("Live Observation stream does not report an already-aborted signal as an er
   });
 
   assert.deepEqual(failures, []);
+});
+
+test("Live Observation polling reads authenticated snapshots until a terminal status", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const session = createLiveObservationSessionPayload();
+  const activeSnapshot = createLiveObservationSnapshotPayload("active");
+  const stoppedSnapshot = createLiveObservationSnapshotPayload("stopped");
+  const requests: string[] = [];
+  const received: unknown[] = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+  installAuthSession();
+
+  globalThis.fetch = async (input) => {
+    requests.push(String(input));
+    return Response.json(
+      { snapshot: requests.length === 1 ? activeSnapshot : stoppedSnapshot },
+      { status: 200 }
+    );
+  };
+
+  await pollLiveObservationSnapshots({
+    deploymentId: session.deploymentId,
+    intervalMs: 0,
+    observationId: session.id,
+    onSnapshot: (value) => received.push(value),
+    signal: new AbortController().signal
+  });
+
+  assert.deepEqual(requests, [
+    `/api/deployments/${session.deploymentId}/live-observations/${session.id}`,
+    `/api/deployments/${session.deploymentId}/live-observations/${session.id}`
+  ]);
+  assert.deepEqual(received, [activeSnapshot, stoppedSnapshot]);
+});
+
+test("Live Observation polling stops cleanly when aborted from a snapshot callback", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const controller = new AbortController();
+  const snapshot = createLiveObservationSnapshotPayload("active");
+  let requestCount = 0;
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+  installAuthSession();
+
+  globalThis.fetch = async () => {
+    requestCount += 1;
+    return Response.json({ snapshot }, { status: 200 });
+  };
+
+  await pollLiveObservationSnapshots({
+    deploymentId: "deployment-1",
+    intervalMs: 0,
+    observationId: "observation-1",
+    onSnapshot: () => controller.abort(),
+    signal: controller.signal
+  });
+
+  assert.equal(requestCount, 1);
+});
+
+test("Live Observation polling reports snapshot polling failures", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const controller = new AbortController();
+  const failures: LiveObservationStreamFailure[] = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+  installAuthSession();
+
+  globalThis.fetch = async () => new Response(null, { status: 503 });
+
+  await pollLiveObservationSnapshots({
+    deploymentId: "deployment-1",
+    intervalMs: 0,
+    observationId: "observation-1",
+    onError: (failure) => {
+      failures.push(failure);
+      controller.abort();
+    },
+    onSnapshot: () => undefined,
+    signal: controller.signal
+  });
+
+  assert.deepEqual(
+    failures.map(({ retryCount, source }) => ({ retryCount, source })),
+    [{ retryCount: 0, source: "snapshot-poll" }]
+  );
+  assert.ok(failures[0]?.error instanceof Error);
 });
 
 test("Live Observation stream identifies snapshot polling failures while retrying", async (context) => {

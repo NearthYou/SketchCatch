@@ -26,6 +26,13 @@ test("demo web service smoke uses the bounded 1/1/2 ALB ASG scaling structure", 
   assert.match(smokeSource, /scaling_adjustment\s*=\s*1/);
   assert.match(smokeSource, /cooldown\s*=\s*180/);
   assert.match(smokeSource, /resource "aws_cloudwatch_metric_alarm" "scale_out"/);
+  assert.match(smokeSource, /resource "aws_cloudwatch_log_group" "traffic"/);
+  assert.match(smokeSource, /resource "aws_iam_role" "api_agent"/);
+  assert.match(smokeSource, /resource "aws_iam_role_policy_attachment" "cloudwatch_agent"/);
+  assert.match(smokeSource, /resource "aws_iam_instance_profile" "api_agent"/);
+  assert.match(smokeSource, /iam_instance_profile\s*\{\s*name = aws_iam_instance_profile\.api_agent\.name\s*\}/);
+  assert.match(smokeSource, /amazon-cloudwatch-agent/);
+  assert.match(smokeSource, /CloudWatchAgentServerPolicy/);
   assert.match(smokeSource, /metric_name\s*=\s*"RequestCountPerTarget"/);
   assert.match(smokeSource, /statistic\s*=\s*"Sum"/);
   assert.match(smokeSource, /period\s*=\s*60/);
@@ -43,7 +50,9 @@ test("demo web service exposes all Live Observation outputs", () => {
     "asg_name",
     "alb_arn_suffix",
     "target_group_arn_suffix",
-    "scale_out_threshold"
+    "scale_out_threshold",
+    "cloudwatch_agent_log_group_name",
+    "cloudwatch_agent_metric_namespace"
   ]) {
     assert.match(smokeSource, new RegExp(`output "${outputName}"`));
   }
@@ -88,6 +97,9 @@ test("embedded Python Traffic API compiles and exposes OPTIONS, traffic, and hea
     assert.equal(result.status, 0, result.stderr);
     assert.match(pythonSource, /def do_OPTIONS\(self\):/);
     assert.match(pythonSource, /def do_POST\(self\):/);
+    assert.match(pythonSource, /STATSD_ADDRESS = \("127\.0\.0\.1", 8125\)/);
+    assert.match(pythonSource, /traffic\.requests:1\|c/);
+    assert.match(pythonSource, /TRAFFIC_LOG_PATH = "\/var\/log\/sketchcatch-demo-api\/traffic\.log"/);
     assert.match(pythonSource, /\/api\/traffic/);
     assert.match(pythonSource, /\/api\/health/);
     assert.doesNotMatch(pythonSource, /sleep\(|cpu|burn/i);
@@ -104,15 +116,26 @@ function extractEmbeddedPython(source: string): string {
 }
 
 function extractGeneratedTerraformFixture(source: string): string {
-  const terraformMatch = /function New-DemoTerraformWithAlbAsg \{[\s\S]*?\n@"\n([\s\S]*?)\n"@\n\}/.exec(source);
-  const userDataMatch = /function New-ManagedDemoUserDataBase64 \{[\s\S]*?\$template = @'\n([\s\S]*?)\n'@\n {2}\$normalized/.exec(source);
-  const audienceMatch = /function New-DemoAudienceHtmlBase64 \{[\s\S]*?\$template = @'\n([\s\S]*?)\n'@\n\n {2}\[Convert\]/.exec(source);
+  const terraformMatch =
+    /function New-DemoTerraformWithAlbAsg \{[\s\S]*?\r?\n@"\r?\n([\s\S]*?)\r?\n"@\r?\n\}/.exec(
+      source
+    );
+  const userDataMatch =
+    /function New-ManagedDemoUserDataBase64 \{[\s\S]*?\$template = @'\r?\n([\s\S]*?)\r?\n'@\r?\n\s+\$template = \$template\.Replace[\s\S]*?\r?\n\s+\$normalized/.exec(
+      source
+    );
+  const audienceMatch =
+    /function New-DemoAudienceHtmlBase64 \{[\s\S]*?\$template = @'\r?\n([\s\S]*?)\r?\n'@\r?\n\r?\n\s+\[Convert\]/.exec(
+      source
+    );
 
   assert.ok(terraformMatch?.[1], "embedded ALB/ASG Terraform was not found");
   assert.ok(userDataMatch?.[1], "managed user data template was not found");
   assert.ok(audienceMatch?.[1], "audience HTML template was not found");
 
-  const normalizedUserData = `${userDataMatch[1].replace(/\r\n?/g, "\n")}\n`;
+  const normalizedUserData = `${userDataMatch[1]
+    .replaceAll("__TRAFFIC_LOG_GROUP__", "/sketchcatch/demo/sc-demo-test/traffic")
+    .replace(/\r\n?/g, "\n")}\n`;
   const hash = createHash("sha256").update(normalizedUserData).digest("hex");
   const userData = normalizedUserData.replace(
     "# sketchcatch-demo-managed-user-data-sha256:",
@@ -124,6 +147,7 @@ function extractGeneratedTerraformFixture(source: string): string {
     ["$Prefix", "sc-demo-test"],
     ["$Bucket", "sketchcatch-demo-test-bucket"],
     ["$RunId", "test-run"],
+    ["$logGroupName", "/sketchcatch/demo/sc-demo-test/traffic"],
     ["$userDataBase64", Buffer.from(userData, "utf8").toString("base64")],
     ["$audienceHtmlBase64", Buffer.from(audienceMatch[1], "utf8").toString("base64")]
   ]);

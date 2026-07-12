@@ -56,6 +56,7 @@ export type CreateLiveObservationServiceOptions = {
   readonly runtimeCache: RuntimeCache;
   readonly observabilityProvider: DeploymentObservabilityProvider;
   readonly publicApiBaseUrl: string;
+  readonly invalidateObservationCacheOnEvent?: boolean | undefined;
   readonly requireSharedCache?: boolean | undefined;
   readonly maxAcceptedEvents?: number | undefined;
   readonly now?: (() => number) | undefined;
@@ -68,9 +69,9 @@ export type CreateLiveObservationSessionInput = {
   readonly status: DeploymentStatus;
   readonly liveProfile: DeploymentLiveProfile;
   readonly outputs: Readonly<Record<string, unknown>>;
-  readonly observationTarget: Omit<
+  readonly observationTarget: Pick<
     DeploymentObservabilityTarget,
-    "asgName" | "albArnSuffix" | "targetGroupArnSuffix"
+    "awsConnectionId" | "roleArn" | "externalId" | "region"
   >;
 };
 
@@ -84,10 +85,10 @@ type StoredLiveObservationSession = {
 type RequiredDeploymentOutputs = {
   readonly staticSiteUrl: string;
   readonly apiBaseUrl: string;
-  readonly asgName: string;
   readonly albArnSuffix: string;
   readonly targetGroupArnSuffix: string;
   readonly scaleOutThreshold: number;
+  readonly capacityTarget: DeploymentObservabilityTarget["capacityTarget"];
 };
 
 export type LiveObservationService = ReturnType<typeof createLiveObservationService>;
@@ -153,7 +154,7 @@ export function createLiveObservationService(options: CreateLiveObservationServi
         scaleOutThreshold: requiredOutputs.scaleOutThreshold,
         observationTarget: {
           ...input.observationTarget,
-          asgName: requiredOutputs.asgName,
+          capacityTarget: requiredOutputs.capacityTarget,
           albArnSuffix: requiredOutputs.albArnSuffix,
           targetGroupArnSuffix: requiredOutputs.targetGroupArnSuffix
         }
@@ -341,6 +342,10 @@ export function createLiveObservationService(options: CreateLiveObservationServi
         { ttlMs: REQUEST_BUCKET_TTL_MS }
       );
 
+      if (options.invalidateObservationCacheOnEvent) {
+        await options.runtimeCache.delete(createAwsObservationKey(storedSession.session.id));
+      }
+
       return {
         accepted: true,
         acceptedEventCount
@@ -496,7 +501,7 @@ function parseRequiredOutputs(
   return {
     staticSiteUrl: readRequiredUrlOutput(outputs, "static_site_url"),
     apiBaseUrl: readRequiredUrlOutput(outputs, "api_base_url"),
-    asgName: readRequiredStringOutput(outputs, "asg_name"),
+    capacityTarget: parseCapacityTarget(outputs),
     albArnSuffix: readRequiredStringOutput(outputs, "alb_arn_suffix"),
     targetGroupArnSuffix: readRequiredStringOutput(
       outputs,
@@ -507,6 +512,40 @@ function parseRequiredOutputs(
       "scale_out_threshold"
     )
   };
+}
+
+function parseCapacityTarget(
+  outputs: Readonly<Record<string, unknown>>
+): DeploymentObservabilityTarget["capacityTarget"] {
+  const ecsClusterName = readOptionalStringOutput(outputs, "ecs_cluster_name");
+  const ecsServiceName = readOptionalStringOutput(outputs, "ecs_service_name");
+
+  if (ecsClusterName || ecsServiceName) {
+    if (!ecsClusterName || !ecsServiceName) {
+      throw invalidOutput(ecsClusterName ? "ecs_service_name" : "ecs_cluster_name");
+    }
+
+    return {
+      clusterName: ecsClusterName,
+      kind: "ecs_service",
+      maxCapacity: readRequiredPositiveNumberOutput(outputs, "max_capacity"),
+      serviceName: ecsServiceName
+    };
+  }
+
+  return {
+    asgName: readRequiredStringOutput(outputs, "asg_name"),
+    kind: "asg"
+  };
+}
+
+function readOptionalStringOutput(
+  outputs: Readonly<Record<string, unknown>>,
+  name: string
+): string | null {
+  const value = outputs[name];
+
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
 
 function readRequiredUrlOutput(

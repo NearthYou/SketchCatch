@@ -1,0 +1,117 @@
+.page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  background:
+    linear-gradient(135deg, rgba(23, 32, 51, 0.08), rgba(61, 129, 250, 0.08)),
+    #f8fafc;
+  color: #172033;
+}
+
+.panel {
+  width: min(100%, 560px);
+  padding: 32px;
+  border: 1px solid #dde3ea;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 18px 48px rgba(23, 32, 51, 0.1);
+}
+
+.kicker {
+  margin: 0 0 8px;
+  color: #3d81fa;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.panel h1 {
+  margin: 0;
+  font-size: 30px;
+  line-height: 1.2;
+}
+
+.copy {
+  margin: 14px 0 24px;
+  color: #566274;
+  line-height: 1.65;
+}
+
+.button {
+  width: 100%;
+  min-height: 56px;
+  border: 0;
+  border-radius: 8px;
+  background: #172033;
+  color: #ffffff;
+  font-size: 17px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.button:disabled {
+  cursor: wait;
+  opacity: 0.68;
+}
+
+.status {
+  min-height: 48px;
+  margin: 18px 0 0;
+  color: #566274;
+}
+
+.success {
+  color: #0f8a4b;
+}
+
+.error {
+  color: #c53232;
+}
+
+.sending {
+  color: #a15c00;
+}
+
+.metrics {
+  display: grid;
+  gap: 12px;
+  margin: 20px 0 0;
+}
+
+.metrics div {
+  display: grid;
+  grid-template-columns: 128px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  padding-top: 12px;
+  border-top: 1px solid #edf1f5;
+}
+
+.metrics dt {
+  color: #6d7684;
+  font-size: 13px;
+}
+
+.metrics dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-weight: 700;
+}
+
+@media (max-width: 520px) {
+  .page {
+    padding: 18px;
+  }
+
+  .panel {
+    padding: 24px;
+  }
+
+  .metrics div {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+}

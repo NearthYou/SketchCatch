@@ -75,6 +75,13 @@ test("Live Observation routes create, snapshot, stream, collect, and stop one se
     "https://audience.example.com"
   );
 
+  const traffic = await app.inject({
+    method: "POST",
+    url: "/traffic"
+  });
+
+  assert.equal(traffic.statusCode, 204);
+
   const duplicate = await app.inject({
     method: "POST",
     url: `/live-observations/public/${publicToken}/events`,

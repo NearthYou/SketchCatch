@@ -4,7 +4,7 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- Active branch: `fix/ys/348-trivy-로직-수정`.
+- Active branch: `feature/sw/356-live-observation`.
 
 - Release `v2.0.0` uses main SHA `44cdc976da8a03fca2d0aad69a0f3d45d51d4e8a`.
 - Route53 points to the direct-path ECS ALB. Public `/`, `/health`, and `/health/db` return 200; protected `/api/projects` returns 401.
@@ -17,6 +17,14 @@ Short English-only working log for the current agent context. Older records are 
 - Container log alarms keep ALARM notifications while suppressing repetitive OK notifications, require two consecutive error periods, and exclude stale Next.js Server Action requests from the web metric.
 
 ## Session Record
+
+### 2026-07-13 - Add diagram-based Live Observation for ECS Fargate and ASG
+
+- Added diagram-derived main traffic paths, REST polling-compatible snapshots, CloudWatch Agent/ASG and ECS Fargate observability, and presentation-focused capacity visualization.
+- Moved AI simulation results out of the chat dock and kept bottleneck, cost, and failure analysis in the simulation panel.
+- Represented each accepted request as one 28px particle moving sequentially across analyzed connector segments; observation remains idle until traffic is explicitly started.
+- Verification: focused Live Observation tests passed 40/40; browser inspection confirmed 28x28 particles and at most one active segment per request; harness, lint, typecheck, and build passed.
+- Known baseline: the full web suite passes 868/872 with four unrelated existing failures in DiagramNodeView toolbar CSS, dashboard project route expectations, AWS priority coverage, and the resource gallery count.
 
 ### 2026-07-12 - Eliminate Template sibling visual collisions
 

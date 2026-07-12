@@ -120,6 +120,10 @@ test("Live Observation template carries the same ASG pressure resources as the d
     "aws_s3_bucket_website_configuration",
     "aws_s3_object",
     "aws_ami",
+    "aws_cloudwatch_log_group",
+    "aws_iam_role",
+    "aws_iam_role_policy_attachment",
+    "aws_iam_instance_profile",
     "aws_launch_template",
     "aws_lb",
     "aws_lb_listener",
@@ -132,6 +136,10 @@ test("Live Observation template carries the same ASG pressure resources as the d
   }
 
   const launchTemplate = nodesByType.get("aws_launch_template");
+  const agentRole = nodesByType.get("aws_iam_role");
+  const agentPolicy = nodesByType.get("aws_iam_role_policy_attachment");
+  const agentProfile = nodesByType.get("aws_iam_instance_profile");
+  const logGroup = nodesByType.get("aws_cloudwatch_log_group");
   const targetGroup = nodesByType.get("aws_lb_target_group");
   const listener = nodesByType.get("aws_lb_listener");
   const audienceObject = template.diagramJson.nodes.find(
@@ -142,6 +150,10 @@ test("Live Observation template carries the same ASG pressure resources as the d
   assert.ok(policy);
   assert.ok(alarm);
   assert.ok(launchTemplate);
+  assert.ok(agentRole);
+  assert.ok(agentPolicy);
+  assert.ok(agentProfile);
+  assert.ok(logGroup);
   assert.ok(targetGroup);
   assert.ok(listener);
   assert.ok(audienceObject);
@@ -169,6 +181,16 @@ test("Live Observation template carries the same ASG pressure resources as the d
     type: "forward"
   });
   assert.equal(launchTemplate.parameters?.values.imageId, "data.aws_ami.al2023.id");
+  assert.deepEqual(launchTemplate.parameters?.values.iamInstanceProfile, {
+    name: "aws_iam_instance_profile.api_agent.name"
+  });
+  assert.equal(agentPolicy.parameters?.values.role, "aws_iam_role.api_agent.name");
+  assert.equal(
+    agentPolicy.parameters?.values.policyArn,
+    "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
+  );
+  assert.equal(agentProfile.parameters?.values.role, "aws_iam_role.api_agent.name");
+  assert.equal(logGroup.parameters?.values.retentionInDays, 1);
   assert.match(
     Buffer.from(String(launchTemplate.parameters?.values.userData), "base64").toString("utf8"),
     /sketchcatch-demo-managed-user-data-sha256:[a-f0-9]{64}/

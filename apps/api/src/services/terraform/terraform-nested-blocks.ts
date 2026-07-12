@@ -47,6 +47,7 @@ const TERRAFORM_NESTED_BLOCK_ATTRIBUTES: Record<string, ReadonlySet<string>> = {
   aws_dynamodb_table: new Set(["attribute"]),
   aws_eks_cluster: new Set(["vpcConfig"]),
   aws_eks_node_group: new Set(["scalingConfig"]),
+  aws_ecs_cluster: new Set(["setting"]),
   aws_ecs_service: new Set([
     "deploymentCircuitBreaker",
     "loadBalancer",

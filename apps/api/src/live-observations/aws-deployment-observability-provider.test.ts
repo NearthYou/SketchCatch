@@ -3,7 +3,8 @@ import { test } from "node:test";
 import {
   createAwsDeploymentObservabilityProvider,
   type AutoScalingObservabilityClient,
-  type CloudWatchObservabilityClient
+  type CloudWatchObservabilityClient,
+  type EcsObservabilityClient
 } from "./aws-deployment-observability-provider.js";
 import type { DeploymentObservabilityTarget } from "./deployment-observability-provider.js";
 
@@ -165,11 +166,96 @@ test("AWS observability adapter returns unavailable cards without sample values"
   });
 });
 
+test("AWS observability adapter reads ECS Fargate service task capacity", async () => {
+  const ecsInputs: Array<{ clusterName: string; serviceName: string }> = [];
+  const ecsClient: EcsObservabilityClient = {
+    async describeService(clusterName, serviceName) {
+      ecsInputs.push({ clusterName, serviceName });
+      return {
+        service: {
+          desiredCount: 2,
+          events: [
+            {
+              createdAt: new Date("2026-07-10T09:05:10.000Z"),
+              message: "service reached a steady state"
+            }
+          ],
+          pendingCount: 1,
+          runningCount: 1
+        }
+      };
+    }
+  };
+  const provider = createAwsDeploymentObservabilityProvider({
+    autoScalingClientFactory: () => ({
+      async describeAutoScalingGroup() { return { autoScalingGroups: [] }; },
+      async describeScalingActivities() { return { activities: [] }; }
+    }),
+    cloudWatchClientFactory: () => ({
+      async getMetricData() {
+        return {
+          metricDataResults: [{
+            timestamps: [new Date("2026-07-10T09:04:00.000Z")],
+            values: [80]
+          }]
+        };
+      }
+    }),
+    ecsClientFactory: () => ecsClient,
+    now: () => nowMs,
+    prepareCredentials: async () => ({
+      accessKeyId: "temporary-access-key",
+      secretAccessKey: "temporary-secret-key",
+      sessionToken: "temporary-session-token"
+    })
+  });
+
+  const result = await provider.observe(createEcsTarget());
+
+  assert.deepEqual(ecsInputs, [{ clusterName: "demo-cluster", serviceName: "demo-service" }]);
+  assert.deepEqual(result.capacity, {
+    currentInstanceCount: 2,
+    desiredCapacity: 2,
+    errorCode: null,
+    inServiceInstanceCount: 1,
+    instances: [
+      { healthStatus: "Healthy", instanceId: "task/demo-service/1", lifecycleState: "RUNNING" },
+      { healthStatus: "Pending", instanceId: "task/demo-service/pending-1", lifecycleState: "PROVISIONING" }
+    ],
+    latestActivity: {
+      description: "service reached a steady state",
+      endedAt: null,
+      startedAt: "2026-07-10T09:05:10.000Z",
+      statusCode: "InProgress"
+    },
+    maxCapacity: 2,
+    observedAt: "2026-07-10T09:05:30.000Z",
+    state: "available"
+  });
+});
+
 function createTarget(): DeploymentObservabilityTarget {
   return {
     albArnSuffix: "app/demo/123",
-    asgName: "demo-asg",
     awsConnectionId: "connection-1",
+    capacityTarget: { kind: "asg", asgName: "demo-asg" },
+    externalId: "external-id",
+    region: "ap-northeast-2",
+    roleArn: "arn:aws:iam::123456789012:role/SketchCatchTerraformExecutionRole-demo",
+    targetGroupArnSuffix: "targetgroup/demo/456"
+  };
+}
+
+function createEcsTarget(): DeploymentObservabilityTarget {
+  return {
+    albArnSuffix: "app/demo/123",
+    awsConnectionId: "connection-1",
+    capacityTarget: {
+      clusterName: "demo-cluster",
+      kind: "ecs_service",
+      maxCapacity: 2,
+      serviceName: "demo-service"
+    },
     externalId: "external-id",
     region: "ap-northeast-2",
     roleArn: "arn:aws:iam::123456789012:role/SketchCatchTerraformExecutionRole-demo",
