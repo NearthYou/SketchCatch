@@ -91,3 +91,36 @@ const previewAreaNodes = areaNodes.filter((area) =>
 
 - [ ] Run the preview and full focused Template test suites.
 - [ ] Run `pnpm harness:check`, web lint, and web typecheck.
+
+### Task 4: Snap the curated Live layout to a strict grid
+
+**Files:**
+- Modify: `apps/web/features/resource-settings/template-topology-layout.ts`
+- Modify: `apps/web/features/resource-settings/template-library.test.ts`
+- Modify: `apps/web/components/templates/template-preview-model.test.ts`
+
+- [ ] Write a failing grid-contract test.
+
+```ts
+for (const node of curatedNodes) {
+  assert.equal(node.position.x % 40, 0, `${node.id} x`);
+  assert.equal(node.position.y % 40, 0, `${node.id} y`);
+}
+assert.equal(audienceSite.position.y, alb.position.y);
+assert.equal(alb.position.y, targetGroup.position.y);
+assert.equal(policy.position.x, alarm.position.x);
+```
+
+- [ ] Run `pnpm --dir apps/web exec tsx --test features/resource-settings/template-library.test.ts` and expect the old free-form coordinates to fail.
+- [ ] Replace `LIVE_OBSERVATION_PRESENTATION_LAYOUT` values with 40px-grid positions and sizes.
+
+```ts
+"template-live-site": { position: { x: 80, y: 360 } },
+"template-live-alb": { position: { x: 800, y: 360 } },
+"template-live-target-group": { position: { x: 920, y: 360 } },
+"template-live-policy": { position: { x: 1120, y: 320 } },
+"template-live-alarm": { position: { x: 1120, y: 440 } }
+```
+
+- [ ] Verify the Gallery projects the main row horizontally and the ASG controls vertically.
+- [ ] Run the full focused Template suite, harness, lint, and typecheck.

@@ -12,6 +12,8 @@
 - Audience traffic edge의 시작점을 숨겨진 S3 Website helper가 아니라 보이는 Audience S3 Bucket으로 바꾼다.
 - Listener가 ALB를 참조하고 Alarm이 ASG/Policy를 참조하는 실제 Terraform 관계를 containment 계산에 사용한다.
 - Gallery에서는 보이는 자손이 없는 빈 area frame을 생략하고, VPC·ASG와 핵심 흐름 아이콘에 슬롯을 우선 배정한다.
+- curated Workspace 좌표는 40px 고정 그리드에 맞춘다. 모든 area position/size와 resource position은 40의 배수이며, Audience S3·ALB·Target Group은 같은 Y축에 둔다.
+- 네트워크 보조 리소스는 상단 rail, 두 Subnet과 Security Group은 좌우 대칭 row, Scale-out Policy와 CloudWatch Alarm은 ASG 내부 같은 X축에 둔다.
 
 ## 보존 규칙
 
@@ -24,4 +26,5 @@
 - Live Observation의 Workspace layout 높이와 폭이 helper 개수에 따라 늘어나지 않는다.
 - 보이는 핵심 edge는 Audience S3 → ALB → Target Group → ASG 순서로 이어진다.
 - Gallery preview에는 빈 Subnet/Security Group frame이 핵심 아이콘 슬롯을 차지하지 않는다.
+- curated node의 x/y와 area width/height는 모두 40px grid를 지키며, 핵심 트래픽 row와 ASG 내부 관측 column이 정확히 정렬된다.
 - 모든 기존 Template, materializer, preview 테스트가 통과한다.
