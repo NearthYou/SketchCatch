@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, GitBranch, LoaderCircle, Search, Settings2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, GitBranch, LoaderCircle, Search, Settings2 } from "lucide-react";
 import type { FormEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
@@ -42,6 +42,7 @@ import { AiDraftBoardPreview } from "../ai/ai-draft-board-preview";
 import styles from "./repository-start.module.css";
 
 type RequestState = "idle" | "loading" | "error";
+type PublicRecommendationStage = "configuration" | "questions";
 type RepositoryQuestionView = Pick<
   RepositoryAnalysisQuestion,
   "answerType" | "id" | "options" | "prompt"
@@ -77,6 +78,7 @@ export function RepositoryStartClient({
   const [usesCiCd, setUsesCiCd] = useState(false);
   const [answers, setAnswers] = useState<Record<string, string | boolean>>({});
   const [selectedPublicTemplateId, setSelectedPublicTemplateId] = useState<PublicRepositoryTemplateId | null>(null);
+  const [publicRecommendationStage, setPublicRecommendationStage] = useState<PublicRecommendationStage>("configuration");
   const [recommendation, setRecommendation] = useState<RepositoryTemplateRecommendationResult | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
   const activeRepository = useMemo(
@@ -160,6 +162,7 @@ export function RepositoryStartClient({
     setPublicAnalysis(null);
     setAnswers({});
     setSelectedPublicTemplateId(null);
+    setPublicRecommendationStage("configuration");
     setUsesCiCd(false);
     setErrorMessage("");
 
@@ -312,35 +315,39 @@ export function RepositoryStartClient({
 
         {showUrlAnalysis ? (
           <section className={styles.publicUrlPanel}>
-            <GitBranch aria-hidden="true" size={24} />
-            <h2>GitHub 저장소 URL 분석</h2>
-            <form className={styles.publicUrlForm} onSubmit={(event) => void analyzeRepositoryUrl(event)}>
-              <label>
-                <span>저장소 URL</span>
-                <input
-                  onChange={(event) => setRepositoryUrl(event.target.value)}
-                  placeholder="https://github.com/owner/repository"
-                  type="url"
-                  value={repositoryUrl}
-                />
-              </label>
-              <label>
-                <span>브랜치</span>
-                <input
-                  onChange={(event) => setDefaultBranch(event.target.value)}
-                  placeholder="main"
-                  type="text"
-                  value={defaultBranch}
-                />
-              </label>
-              <button disabled={isPublicAnalysisBusy || !repositoryUrl.trim()} type="submit">
-                {isPublicAnalysisBusy ? <LoaderCircle className={styles.spin} size={16} /> : <Search size={16} />}
-                {isPublicAnalysisBusy ? "분석 중" : "URL 분석"}
-              </button>
-            </form>
-            <p className={styles.inlineHint}>
-              공개 저장소는 GitHub 계정 연결 없이 분석합니다. 비공개 저장소, PR 생성, CI/CD 인계는 프로젝트 환경설정의 GitHub 권한 연결이 필요합니다.
-            </p>
+            {publicRecommendationStage === "configuration" ? (
+              <>
+                <GitBranch aria-hidden="true" size={24} />
+                <h2>GitHub 저장소 URL 분석</h2>
+                <form className={styles.publicUrlForm} onSubmit={(event) => void analyzeRepositoryUrl(event)}>
+                  <label>
+                    <span>저장소 URL</span>
+                    <input
+                      onChange={(event) => setRepositoryUrl(event.target.value)}
+                      placeholder="https://github.com/owner/repository"
+                      type="url"
+                      value={repositoryUrl}
+                    />
+                  </label>
+                  <label>
+                    <span>브랜치</span>
+                    <input
+                      onChange={(event) => setDefaultBranch(event.target.value)}
+                      placeholder="main"
+                      type="text"
+                      value={defaultBranch}
+                    />
+                  </label>
+                  <button disabled={isPublicAnalysisBusy || !repositoryUrl.trim()} type="submit">
+                    {isPublicAnalysisBusy ? <LoaderCircle className={styles.spin} size={16} /> : <Search size={16} />}
+                    {isPublicAnalysisBusy ? "분석 중" : "URL 분석"}
+                  </button>
+                </form>
+                <p className={styles.inlineHint}>
+                  공개 저장소는 GitHub 계정 연결 없이 분석합니다. 비공개 저장소, PR 생성, CI/CD 인계는 프로젝트 환경설정의 GitHub 권한 연결이 필요합니다.
+                </p>
+              </>
+            ) : null}
             {publicAnalysis ? (
               <PublicRepositoryRecommendationStep
                 answers={answers}
@@ -351,20 +358,27 @@ export function RepositoryStartClient({
                   setAnswers((current) => ({ ...current, [questionId]: value }))
                 }
                 onCreateBoard={() => void createPublicRepositoryBoard()}
+                onConfirmConfiguration={() => setPublicRecommendationStage("questions")}
                 onDeploymentTypeChange={(nextDeploymentType) => {
                   setDeploymentType(nextDeploymentType);
                   setSelectedPublicTemplateId(null);
                 }}
+                onEditConfiguration={() => setPublicRecommendationStage("configuration")}
                 onSelectTemplate={setSelectedPublicTemplateId}
                 onUsesCiCdChange={setUsesCiCd}
                 selectedTemplateId={selectedPublicTemplateId}
+                stage={publicRecommendationStage}
                 usesCiCd={usesCiCd}
               />
             ) : null}
           </section>
         ) : null}
 
-        {showUrlAnalysis && publicAnalysis && usesCiCd ? (
+        {showUrlAnalysis
+        && publicAnalysis
+        && publicRecommendationStage === "questions"
+        && usesCiCd
+        && !activeRepository ? (
           <section className={styles.connectionPanel}>
             <GitBranch aria-hidden="true" size={24} />
             <h2>CI/CD 인계 저장소 연결</h2>
@@ -582,11 +596,14 @@ function PublicRepositoryRecommendationStep({
   deploymentType,
   isBusy,
   onAnswer,
+  onConfirmConfiguration,
   onCreateBoard,
   onDeploymentTypeChange,
+  onEditConfiguration,
   onSelectTemplate,
   onUsesCiCdChange,
   selectedTemplateId,
+  stage,
   usesCiCd
 }: {
   readonly answers: Record<string, string | boolean>;
@@ -594,11 +611,14 @@ function PublicRepositoryRecommendationStep({
   readonly deploymentType: RepositoryDeploymentType;
   readonly isBusy: boolean;
   readonly onAnswer: (questionId: string, value: string | boolean) => void;
+  readonly onConfirmConfiguration: () => void;
   readonly onCreateBoard: () => void;
   readonly onDeploymentTypeChange: (deploymentType: RepositoryDeploymentType) => void;
+  readonly onEditConfiguration: () => void;
   readonly onSelectTemplate: (templateId: PublicRepositoryTemplateId) => void;
   readonly onUsesCiCdChange: (usesCiCd: boolean) => void;
   readonly selectedTemplateId: PublicRepositoryTemplateId | null;
+  readonly stage: PublicRecommendationStage;
   readonly usesCiCd: boolean;
 }) {
   const recommendation = createPublicRepositoryRecommendation({ analysis, answers, deploymentType });
@@ -606,6 +626,32 @@ function PublicRepositoryRecommendationStep({
   const selectedCandidate = recommendation.candidates.find(
     (candidate) => candidate.templateId === selectedTemplateId
   ) ?? recommendation.candidates[0];
+
+  if (stage === "questions") {
+    return (
+      <section className={styles.publicAnalysisResult} aria-label="public 저장소 추가 질문">
+        <div className={styles.publicQuestionSummary}>
+          <div>
+            <span>선택한 템플릿</span>
+            <strong>{selectedCandidate?.displayTitle ?? "추천 템플릿"}</strong>
+          </div>
+          <button className={styles.publicBackAction} onClick={onEditConfiguration} type="button">
+            <ArrowLeft aria-hidden="true" size={16} /> 이전
+          </button>
+        </div>
+        <RepositoryQuestions answers={answers} onAnswer={onAnswer} questions={recommendation.questions} />
+        <button
+          className={styles.publicBoardAction}
+          disabled={isBusy || !analysis.recommendedTemplateId}
+          onClick={onCreateBoard}
+          type="button"
+        >
+          {isBusy ? <LoaderCircle className={styles.spin} size={16} /> : <Search size={16} />}
+          보드 생성
+        </button>
+      </section>
+    );
+  }
 
   return (
     <section className={styles.publicAnalysisResult} aria-label="public 저장소 추천">
@@ -669,15 +715,13 @@ function PublicRepositoryRecommendationStep({
         </label>
       ) : null}
       <CiCdHandoffOption checked={usesCiCd} onChange={onUsesCiCdChange} />
-      <RepositoryQuestions answers={answers} onAnswer={onAnswer} questions={recommendation.questions} />
       <button
         className={styles.publicBoardAction}
-        disabled={isBusy || !analysis.recommendedTemplateId}
-        onClick={onCreateBoard}
+        disabled={!selectedCandidate}
+        onClick={onConfirmConfiguration}
         type="button"
       >
-        {isBusy ? <LoaderCircle className={styles.spin} size={16} /> : <Search size={16} />}
-        보드 생성
+        확인 <ArrowRight aria-hidden="true" size={16} />
       </button>
     </section>
   );

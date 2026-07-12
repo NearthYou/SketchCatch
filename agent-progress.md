@@ -6,12 +6,11 @@ Short English-only working log for the current agent context. Older records are 
 
 - Branch: `feat/ck/349-repo-analysis`.
 - Public GitHub URL analysis now reads repository tree evidence, including nested package, Dockerfile, framework config, and README paths.
-- GitHub repository-start and callback screens now route permission expansion to project GitHub settings instead of opening GitHub App installation directly.
-- New project Repository start now opens an inline public GitHub URL analysis panel instead of routing to the separate Repository start page.
 - Public Repository recommendation now shows ranked template candidates, asks follow-up questions, and creates an enriched repository-aware diagram only after the user accepts board creation.
 - Repository template candidates now use readable light selection rows with scoped button styles, explicit reasons/tradeoffs, and responsive layouts.
 - Deployment type is hidden when repository evidence is decisive and shown only for ambiguous analysis.
 - CI/CD handoff is a prominent standalone setting; its GitHub App repository panel appears only while enabled.
+- Public Repository setup confirms Template and CI/CD before opening a separate follow-up-question stage.
 
 ## Session Record
 
@@ -25,10 +24,11 @@ Short English-only working log for the current agent context. Older records are 
   - Removed the duplicate deployment selector for repositories with decisive deployment evidence.
   - Shared the separated CI/CD handoff and follow-up question sections across public and connected Repository flows.
   - Made the public-flow GitHub App repository panel conditional on CI/CD handoff and reset it for each new URL analysis.
+  - Split public Repository configuration and follow-up questions into separate confirmed steps.
 - Verification:
   - Focused recommendation tests, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
   - Lint retains only the pre-existing API `setNow` warning.
-  - Browser-verified candidate readability, conditional questions, CI/CD hierarchy, and unchecked/checked repository-panel states.
+  - Browser-verified configuration/question transitions, hidden URL form, and conditional GitHub connection states.
 
 ### 2026-07-12 - Fail fast when API database URL is missing
 
