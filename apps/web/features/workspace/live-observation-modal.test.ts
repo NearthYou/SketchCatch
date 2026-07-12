@@ -270,6 +270,10 @@ test("AI simulation is on by default, retains state while collapsed, and omits r
   assert.match(panelPiecesSource, /aiResultSummary[\s\S]*병목 후보[\s\S]*장애 대응[\s\S]*비용·다음 검토/);
   assert.doesNotMatch(panelPiecesSource, />요청 흐름</);
   assert.doesNotMatch(panelPiecesSource, /simulation\.requestFlow\.map/);
+  assert.match(
+    stylesSource,
+    /@media \(max-width: 759px\)[\s\S]*?\.aiSimulationGrid\s*\{[^}]*grid-template-columns:\s*1fr/
+  );
 });
 
 test("traffic load controls stay outside the scroll body and also drive the development mock", () => {

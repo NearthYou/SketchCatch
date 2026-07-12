@@ -6751,6 +6751,10 @@
 }
 
 @media (max-width: 759px) {
+  .aiSimulationGrid {
+    grid-template-columns: 1fr;
+  }
+
   .liveObservationOverlay {
     padding: 0;
   }
