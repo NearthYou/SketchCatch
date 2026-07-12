@@ -1283,6 +1283,12 @@ test("pre-deployment check shows background Trivy state without blocking Plan cr
   assert.doesNotMatch(deploymentPanelSource, /canRunPlanForCurrentPreflight/);
 });
 
+test("pre-deployment check only downgrades checklist failures backed exclusively by high findings", () => {
+  assert.match(deploymentPanelSource, /const highFindingIds = new Set/);
+  assert.match(deploymentPanelSource, /const hasIndependentChecklistFailure = analysis\.checklist\.some/);
+  assert.match(deploymentPanelSource, /return "blocked"/);
+});
+
 test("pre-deployment finding fix buttons open the existing terraform source location handler", () => {
   assert.match(deploymentPanelSource, /onOpenFindingTerraformSource/);
   assert.match(deploymentPanelSource, /className=\{styles\.deploymentFindingFixButton\}/);

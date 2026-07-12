@@ -2627,6 +2627,22 @@ function getDirectPreflightState({
     return "idle";
   }
 
+  const highFindingIds = new Set(
+    analysis.findings
+      .filter((finding) => finding.severity === "high")
+      .map((finding) => finding.id)
+  );
+  const hasIndependentChecklistFailure = analysis.checklist.some(
+    (item) =>
+      item.status === "fail" &&
+      (item.relatedFindingIds.length === 0 ||
+        item.relatedFindingIds.some((findingId) => !highFindingIds.has(findingId)))
+  );
+
+  if (hasIndependentChecklistFailure) {
+    return "blocked";
+  }
+
   if (
     analysis.findings.length > 0 ||
     countChecklistItems(analysis, "fail") > 0 ||
