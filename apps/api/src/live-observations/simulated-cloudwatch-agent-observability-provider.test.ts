@@ -13,7 +13,7 @@ test("simulated CloudWatch Agent provider turns traffic into scaling snapshots",
   });
 
   resetSimulatedCloudWatchAgentTraffic();
-  const idle = await provider.observe(createTarget());
+  const idle = await provider.observe(createTarget(), "observation-1");
 
   assert.equal(idle.cloudWatch.state, "delayed");
   assert.equal(idle.capacity.desiredCapacity, 1);
@@ -21,10 +21,10 @@ test("simulated CloudWatch Agent provider turns traffic into scaling snapshots",
   assert.equal(idle.capacity.latestActivity, null);
 
   for (let index = 0; index < 10; index += 1) {
-    recordSimulatedCloudWatchAgentTraffic(nowMs - index * 100);
+    recordSimulatedCloudWatchAgentTraffic("observation-1", nowMs - index * 100);
   }
 
-  const scaling = await provider.observe(createTarget());
+  const scaling = await provider.observe(createTarget(), "observation-1");
 
   assert.equal(scaling.cloudWatch.state, "available");
   assert.equal(scaling.capacity.desiredCapacity, 2);
@@ -33,10 +33,10 @@ test("simulated CloudWatch Agent provider turns traffic into scaling snapshots",
   assert.equal(scaling.capacity.latestActivity?.statusCode, "InProgress");
 
   for (let index = 10; index < 18; index += 1) {
-    recordSimulatedCloudWatchAgentTraffic(nowMs - index * 100);
+    recordSimulatedCloudWatchAgentTraffic("observation-1", nowMs - index * 100);
   }
 
-  const scaled = await provider.observe(createTarget());
+  const scaled = await provider.observe(createTarget(), "observation-1");
 
   assert.equal(scaled.capacity.desiredCapacity, 2);
   assert.equal(scaled.capacity.inServiceInstanceCount, 2);
@@ -51,10 +51,10 @@ test("simulated provider represents ECS Fargate capacity as running and pending 
 
   resetSimulatedCloudWatchAgentTraffic();
   for (let index = 0; index < 10; index += 1) {
-    recordSimulatedCloudWatchAgentTraffic(nowMs - index * 100);
+    recordSimulatedCloudWatchAgentTraffic("observation-1", nowMs - index * 100);
   }
 
-  const scaling = await provider.observe(target);
+  const scaling = await provider.observe(target, "observation-1");
 
   assert.equal(scaling.capacity.desiredCapacity, 2);
   assert.equal(scaling.capacity.inServiceInstanceCount, 1);
@@ -62,6 +62,23 @@ test("simulated provider represents ECS Fargate capacity as running and pending 
   assert.equal(scaling.capacity.instances[1]?.lifecycleState, "PROVISIONING");
   assert.match(scaling.capacity.instances[0]?.instanceId ?? "", /^task\//);
   assert.match(scaling.capacity.latestActivity?.description ?? "", /Fargate task/);
+});
+
+test("simulated provider isolates traffic between observation sessions", async () => {
+  const nowMs = Date.parse("2026-07-11T12:00:00.000Z");
+  const provider = createSimulatedCloudWatchAgentObservabilityProvider({ now: () => nowMs });
+
+  resetSimulatedCloudWatchAgentTraffic();
+  for (let index = 0; index < 10; index += 1) {
+    recordSimulatedCloudWatchAgentTraffic("observation-a", nowMs - index * 100);
+  }
+
+  const first = await provider.observe(createTarget(), "observation-a");
+  const second = await provider.observe(createTarget(), "observation-b");
+
+  assert.equal(first.capacity.desiredCapacity, 2);
+  assert.equal(second.cloudWatch.state, "delayed");
+  assert.equal(second.capacity.desiredCapacity, 1);
 });
 
 function createTarget() {

@@ -18,12 +18,13 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
-### 2026-07-13 - Add diagram-based Live Observation for ECS Fargate and ASG
+### 2026-07-13 - Add and review diagram-based Live Observation for ECS Fargate and ASG
 
 - Added diagram-derived main traffic paths, REST polling-compatible snapshots, CloudWatch Agent/ASG and ECS Fargate observability, and presentation-focused capacity visualization.
 - Moved AI simulation results out of the chat dock and kept bottleneck, cost, and failure analysis in the simulation panel.
 - Represented each accepted request as one 28px particle moving sequentially across analyzed connector segments; observation remains idle until traffic is explicitly started.
-- Verification: focused Live Observation tests passed 40/40; browser inspection confirmed 28x28 particles and at most one active segment per request; harness, lint, typecheck, and build passed.
+- Final review added metadata-free ECS/ASG capacity inference, five-request bursts, disconnect-safe SSE startup, per-observation simulated traffic, metric-correct request thresholds, real Traffic API audience links with explicit simulation fallback, and polling listener cleanup.
+- Verification: focused Web tests passed 82/82, focused API tests passed 38/38, lint and typecheck passed; the final build rerun was interrupted before completion. No AWS or Terraform mutation ran.
 - Known baseline: the full web suite passes 868/872 with four unrelated existing failures in DiagramNodeView toolbar CSS, dashboard project route expectations, AWS priority coverage, and the resource gallery count.
 
 ### 2026-07-12 - Eliminate Template sibling visual collisions

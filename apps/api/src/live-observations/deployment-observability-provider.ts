@@ -31,7 +31,10 @@ export type DeploymentObservation = Pick<
 >;
 
 export type DeploymentObservabilityProvider = {
-  observe(target: DeploymentObservabilityTarget): Promise<DeploymentObservation>;
+  observe(
+    target: DeploymentObservabilityTarget,
+    observationId: string
+  ): Promise<DeploymentObservation>;
 };
 
 export function createUnavailableDeploymentObservation(

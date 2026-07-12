@@ -8,7 +8,7 @@ type SendState = "idle" | "sending" | "success" | "error";
 export function LiveObservationDemoClient() {
   const [sendState, setSendState] = useState<SendState>("idle");
   const [successCount, setSuccessCount] = useState(0);
-  const [message, setMessage] = useState("버튼을 누르면 데모 서비스로 실제 traffic 요청을 보냅니다.");
+  const [message, setMessage] = useState<string | null>(null);
 
   const config = useMemo(() => {
     if (typeof window === "undefined") {
@@ -17,7 +17,7 @@ export function LiveObservationDemoClient() {
 
     const params = new URLSearchParams(window.location.search);
     const collector = normalizeUrl(params.get("collector"));
-    const trafficUrl = normalizeUrl(params.get("traffic")) || (collector ? `${collector}/api/traffic` : "");
+    const trafficUrl = normalizeUrl(params.get("traffic"));
 
     return {
       collector,
@@ -26,7 +26,11 @@ export function LiveObservationDemoClient() {
     };
   }, []);
 
-  const ready = Boolean(config.collector && config.observation && config.trafficUrl);
+  const ready = Boolean(config.collector && config.observation);
+  const isSimulation = !config.trafficUrl;
+  const statusMessage = message ?? (isSimulation
+    ? "실제 Traffic API가 없어 Live Observation 이벤트만 시뮬레이션합니다."
+    : "버튼을 누르면 데모 서비스로 실제 traffic 요청을 보냅니다.");
 
   async function sendTraffic() {
     if (!ready) {
@@ -36,12 +40,16 @@ export function LiveObservationDemoClient() {
     }
 
     setSendState("sending");
-    setMessage("데모 Traffic API로 요청을 보내는 중입니다.");
+    setMessage(isSimulation
+      ? "Live Observation 이벤트를 시뮬레이션하는 중입니다."
+      : "데모 Traffic API로 요청을 보내는 중입니다.");
 
     try {
-      const trafficResponse = await fetch(config.trafficUrl, { method: "POST" });
-      if (!trafficResponse.ok) {
-        throw new Error("Traffic API가 요청을 처리하지 못했습니다.");
+      if (config.trafficUrl) {
+        const trafficResponse = await fetch(config.trafficUrl, { method: "POST" });
+        if (!trafficResponse.ok) {
+          throw new Error("Traffic API가 요청을 처리하지 못했습니다.");
+        }
       }
 
       const receiptResponse = await fetch(
@@ -53,12 +61,16 @@ export function LiveObservationDemoClient() {
         }
       );
       if (!receiptResponse.ok) {
-        throw new Error("Traffic 요청은 성공했지만 Live Observation 집계에 실패했습니다.");
+        throw new Error(isSimulation
+          ? "Live Observation 이벤트 시뮬레이션에 실패했습니다."
+          : "Traffic 요청은 성공했지만 Live Observation 집계에 실패했습니다.");
       }
 
       setSuccessCount((count) => count + 1);
       setSendState("success");
-      setMessage("요청이 성공했고 Live Observation에 반영되었습니다.");
+      setMessage(isSimulation
+        ? "시뮬레이션 이벤트가 Live Observation에 반영되었습니다."
+        : "요청이 성공했고 Live Observation에 반영되었습니다.");
     } catch (error) {
       setSendState("error");
       setMessage(error instanceof Error ? error.message : "요청에 실패했습니다.");
@@ -71,8 +83,9 @@ export function LiveObservationDemoClient() {
         <p className={styles.kicker}>SketchCatch Live Observation</p>
         <h1>관객 트래픽 보내기</h1>
         <p className={styles.copy}>
-          이 화면은 QR로 들어온 브라우저에서 데모 서비스에 traffic을 만들고, 성공한 요청만
-          관측 화면으로 집계합니다.
+          {isSimulation
+            ? "이 링크에는 실제 Traffic API가 없어 관측 이벤트를 시뮬레이션합니다."
+            : "이 화면은 데모 서비스에 실제 traffic을 만들고, 성공한 요청만 관측 화면으로 집계합니다."}
         </p>
         <button
           className={styles.button}
@@ -80,10 +93,12 @@ export function LiveObservationDemoClient() {
           onClick={() => void sendTraffic()}
           type="button"
         >
-          {sendState === "sending" ? "보내는 중" : "트래픽 1건 보내기"}
+          {sendState === "sending"
+            ? "보내는 중"
+            : isSimulation ? "이벤트 1건 시뮬레이션" : "트래픽 1건 보내기"}
         </button>
         <p className={`${styles.status} ${styles[sendState]}`} role="status" aria-live="polite">
-          {message}
+          {statusMessage}
         </p>
         <dl className={styles.metrics}>
           <div>

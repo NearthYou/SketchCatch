@@ -11,9 +11,16 @@ const clientSource = readFileSync(
 test("local Live Observation demo page sends real traffic before recording a receipt", () => {
   assert.match(clientSource, /params\.get\("collector"\)/);
   assert.match(clientSource, /params\.get\("observation"\)/);
-  assert.match(clientSource, /\$\{collector\}\/api\/traffic/);
+  assert.match(clientSource, /params\.get\("traffic"\)/);
+  assert.doesNotMatch(clientSource, /\$\{collector\}\/api\/traffic/);
   assert.match(clientSource, /fetch\(config\.trafficUrl,\s*\{\s*method: "POST"\s*\}\)/);
   assert.match(clientSource, /if \(!trafficResponse\.ok\)/);
   assert.match(clientSource, /\/api\/live-observations\/public\//);
   assert.match(clientSource, /crypto\.randomUUID\(\)/);
+});
+
+test("local Live Observation demo labels receipt-only fallback as simulation", () => {
+  assert.match(clientSource, /const isSimulation = !config\.trafficUrl/);
+  assert.match(clientSource, /시뮬레이션/);
+  assert.match(clientSource, /if \(config\.trafficUrl\)/);
 });

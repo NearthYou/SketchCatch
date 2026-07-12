@@ -1416,15 +1416,17 @@ async function waitForRetry(delayMs: number, signal: AbortSignal): Promise<void>
   }
 
   await new Promise<void>((resolve) => {
-    const timeout = globalThis.setTimeout(resolve, delayMs);
-    signal.addEventListener(
-      "abort",
-      () => {
-        globalThis.clearTimeout(timeout);
-        resolve();
-      },
-      { once: true }
-    );
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      globalThis.clearTimeout(timeout);
+      signal.removeEventListener("abort", finish);
+      resolve();
+    };
+    const timeout = globalThis.setTimeout(finish, delayMs);
+    signal.addEventListener("abort", finish, { once: true });
+    if (signal.aborted) finish();
   });
 }
 

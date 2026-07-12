@@ -256,7 +256,7 @@ export async function registerLiveObservationRoutes(
           });
 
         if (response.accepted && isSimulatedCloudWatchAgentEnabled(runtimeEnv)) {
-          recordSimulatedCloudWatchAgentTraffic();
+          recordSimulatedCloudWatchAgentTraffic(session.id);
         }
 
         return reply.status(response.accepted ? 202 : 200).send(response);
@@ -501,6 +501,9 @@ export async function streamLiveObservationSnapshots(input: {
         input.observationId,
         input.deploymentId
       );
+      if (closed) {
+        return;
+      }
       input.reply.raw.write(
         `event: snapshot\ndata: ${JSON.stringify(snapshot)}\n\n`
       );
@@ -519,6 +522,7 @@ export async function streamLiveObservationSnapshots(input: {
     }
   };
 
+  input.request.raw.on("close", close);
   await writeSnapshot();
 
   if (input.once || closed) {
@@ -534,6 +538,4 @@ export async function streamLiveObservationSnapshots(input: {
       input.reply.raw.write(": heartbeat\n\n");
     }
   }, 15_000);
-
-  input.request.raw.on("close", close);
 }

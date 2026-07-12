@@ -74,22 +74,26 @@ type PathCandidate = {
   readonly score: number;
 };
 
+type CapacityBinding = {
+  readonly controllerId: string;
+  readonly template: DiagramNode;
+};
+
 export function createLiveObservationDiagramModel(
   diagram: DiagramJson,
   snapshot: LiveObservationSnapshot | null
 ): LiveObservationDiagramModel {
-  const capacityNodes = diagram.nodes.filter(
-    (node) => node.metadata?.liveObservationRole === "capacity-unit"
-  );
+  const nodeById = new Map(diagram.nodes.map((node) => [node.id, node]));
+  const predecessors = createPredecessorMap(diagram);
+  const capacityBindings = createCapacityBindings(diagram, nodeById, predecessors);
+  const capacityNodes = capacityBindings.map((binding) => binding.template);
 
   if (capacityNodes.length === 0) {
     return { status: "unavailable", reason: "capacity-missing" };
   }
 
-  const nodeById = new Map(diagram.nodes.map((node) => [node.id, node]));
-  const predecessors = createPredecessorMap(diagram);
   const controllerIds = [...new Set(
-    capacityNodes.flatMap((node) => predecessors.get(node.id) ?? [])
+    capacityBindings.map((binding) => binding.controllerId)
   )].sort();
   const pathCandidates = controllerIds.flatMap((controllerId) =>
     findSourcePaths(controllerId, predecessors, nodeById).map((nodeIds) => ({
@@ -141,6 +145,42 @@ export function createLiveObservationDiagramModel(
     hiddenCapacityCount: Math.max(0, requestedCapacityCount - visibleCapacityCount),
     pressureLevel: snapshot?.live.pressureLevel ?? "normal"
   };
+}
+
+function createCapacityBindings(
+  diagram: DiagramJson,
+  nodeById: ReadonlyMap<string, DiagramNode>,
+  predecessors: ReadonlyMap<string, readonly string[]>
+): readonly CapacityBinding[] {
+  const explicit = diagram.nodes.flatMap((node) => {
+    if (node.metadata?.liveObservationRole !== "capacity-unit") return [];
+
+    return (predecessors.get(node.id) ?? []).map((controllerId) => ({
+      controllerId,
+      template: node
+    }));
+  });
+
+  if (explicit.length > 0) return explicit;
+
+  return diagram.nodes.flatMap((controller) => {
+    const resourceType = getResourceType(controller);
+    const templateType = resourceType === "aws_ecs_service"
+      ? "aws_ecs_task_definition"
+      : resourceType === "aws_autoscaling_group"
+        ? "aws_launch_template"
+        : null;
+    if (!templateType) return [];
+
+    const connectedTemplate = (predecessors.get(controller.id) ?? [])
+      .map((nodeId) => nodeById.get(nodeId))
+      .find((node) => node && getResourceType(node) === templateType);
+
+    return [{
+      controllerId: controller.id,
+      template: connectedTemplate ?? controller
+    }];
+  });
 }
 
 export function getLiveObservationDiagramSegmentCount(diagram: DiagramJson): number {

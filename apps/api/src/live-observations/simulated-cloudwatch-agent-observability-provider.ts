@@ -9,18 +9,25 @@ const RECENT_TRAFFIC_WINDOW_MS = 12_000;
 const AGENT_DELAY_SECONDS = 8;
 const MAX_TRAFFIC_EVENTS = 1_000;
 
-let trafficEventTimesMs: number[] = [];
+const trafficEventTimesByObservationId = new Map<string, number[]>();
 
 export function recordSimulatedCloudWatchAgentTraffic(
+  observationId: string,
   observedAtMs = Date.now()
 ): void {
-  trafficEventTimesMs = [...trafficEventTimesMs, observedAtMs].slice(
+  const trafficEventTimesMs = trafficEventTimesByObservationId.get(observationId) ?? [];
+  trafficEventTimesByObservationId.set(observationId, [...trafficEventTimesMs, observedAtMs].slice(
     -MAX_TRAFFIC_EVENTS
-  );
+  ));
 }
 
-export function resetSimulatedCloudWatchAgentTraffic(): void {
-  trafficEventTimesMs = [];
+export function resetSimulatedCloudWatchAgentTraffic(observationId?: string): void {
+  if (observationId) {
+    trafficEventTimesByObservationId.delete(observationId);
+    return;
+  }
+
+  trafficEventTimesByObservationId.clear();
 }
 
 export function createSimulatedCloudWatchAgentObservabilityProvider(options: {
@@ -29,8 +36,9 @@ export function createSimulatedCloudWatchAgentObservabilityProvider(options: {
   const now = options.now ?? Date.now;
 
   return {
-    async observe(target): Promise<DeploymentObservation> {
+    async observe(target, observationId): Promise<DeploymentObservation> {
       const currentTimeMs = now();
+      const trafficEventTimesMs = trafficEventTimesByObservationId.get(observationId) ?? [];
       const recentTrafficCount = trafficEventTimesMs.filter(
         (eventTimeMs) => currentTimeMs - eventTimeMs <= RECENT_TRAFFIC_WINDOW_MS
       ).length;

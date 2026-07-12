@@ -77,7 +77,6 @@ function renderLiveObservationOutputs(graph: InfrastructureGraph): string[] {
   const ecsCluster = findResourceNode(graph, "aws_ecs_cluster");
   const ecsService = findResourceNode(graph, "aws_ecs_service");
   const applicationScalingTarget = findResourceNode(graph, "aws_appautoscaling_target");
-  const applicationScalingPolicy = findResourceNode(graph, "aws_appautoscaling_policy");
   const alarm = graph.nodes.find(
     (node) =>
       node.iac.terraformBlockType === "resource" &&
@@ -110,18 +109,12 @@ function renderLiveObservationOutputs(graph: InfrastructureGraph): string[] {
     ];
   }
 
-  const targetTrackingConfig = applicationScalingPolicy?.config[
-    "targetTrackingScalingPolicyConfiguration"
-  ];
-  const targetValue = isRecord(targetTrackingConfig) ? targetTrackingConfig["targetValue"] : null;
   const maxCapacity = applicationScalingTarget?.config["maxCapacity"];
 
   if (
     !ecsCluster ||
     !ecsService ||
     !applicationScalingTarget ||
-    !applicationScalingPolicy ||
-    typeof targetValue !== "number" ||
     typeof maxCapacity !== "number"
   ) {
     return [];
@@ -130,13 +123,58 @@ function renderLiveObservationOutputs(graph: InfrastructureGraph): string[] {
   const ecsClusterAddress = `aws_ecs_cluster.${ecsCluster.iac.resourceName}`;
   const ecsServiceAddress = `aws_ecs_service.${ecsService.iac.resourceName}`;
 
+  const requestThreshold = findAlbRequestCountTargetValue(
+    graph,
+    loadBalancerAddress,
+    targetGroupAddress
+  );
+
   return [
     ...commonOutputs,
     renderOutput("ecs_cluster_name", `${ecsClusterAddress}.name`),
     renderOutput("ecs_service_name", `${ecsServiceAddress}.name`),
     renderOutput("max_capacity", String(maxCapacity)),
-    renderOutput("scale_out_threshold", String(targetValue))
+    ...(requestThreshold === null
+      ? []
+      : [renderOutput("scale_out_threshold", String(requestThreshold))])
   ];
+}
+
+function findAlbRequestCountTargetValue(
+  graph: InfrastructureGraph,
+  loadBalancerAddress: string,
+  targetGroupAddress: string
+): number | null {
+  for (const policy of graph.nodes) {
+    if (
+      policy.iac.terraformBlockType !== "resource" ||
+      policy.iac.resourceType !== "aws_appautoscaling_policy"
+    ) continue;
+
+    const configuration = policy.config["targetTrackingScalingPolicyConfiguration"];
+    if (!isRecord(configuration) || typeof configuration["targetValue"] !== "number") continue;
+
+    const specificationValue = configuration["predefinedMetricSpecification"];
+    const specification = Array.isArray(specificationValue)
+      ? specificationValue.find(isRecord)
+      : isRecord(specificationValue)
+        ? specificationValue
+        : undefined;
+    if (
+      specification?.["predefinedMetricType"] !== "ALBRequestCountPerTarget" ||
+      typeof specification["resourceLabel"] !== "string"
+    ) continue;
+
+    const resourceLabel = specification["resourceLabel"];
+    if (
+      resourceLabel.includes(`${loadBalancerAddress}.arn_suffix`) &&
+      resourceLabel.includes(`${targetGroupAddress}.arn_suffix`)
+    ) {
+      return configuration["targetValue"];
+    }
+  }
+
+  return null;
 }
 
 function findResourceNode(

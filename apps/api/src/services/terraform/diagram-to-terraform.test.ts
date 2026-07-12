@@ -363,6 +363,33 @@ test("renders ECS Fargate Live Observation outputs and Application Auto Scaling 
   assert.doesNotMatch(terraform, /output "asg_name"/);
 });
 
+test("does not emit an ECS request threshold from a CPU target tracking policy", () => {
+  const graph: InfrastructureGraph = {
+    nodes: [
+      createLiveObservationNode("aws_s3_bucket_website_configuration", "site", {}),
+      createLiveObservationNode("aws_lb", "demo", {}),
+      createLiveObservationNode("aws_lb_target_group", "api", {}),
+      createLiveObservationNode("aws_ecs_cluster", "demo", {}),
+      createLiveObservationNode("aws_ecs_service", "api", {}),
+      createLiveObservationNode("aws_appautoscaling_target", "api", { maxCapacity: 2 }),
+      createLiveObservationNode("aws_appautoscaling_policy", "api_cpu", {
+        targetTrackingScalingPolicyConfiguration: {
+          targetValue: 60,
+          predefinedMetricSpecification: [{
+            predefinedMetricType: "ECSServiceAverageCPUUtilization"
+          }]
+        }
+      })
+    ],
+    edges: []
+  };
+
+  const terraform = renderTerraformFromInfrastructureGraph(graph);
+
+  assert.match(terraform, /output "ecs_service_name"/);
+  assert.doesNotMatch(terraform, /output "scale_out_threshold"/);
+});
+
 test("renders CloudWatch Alarm dimensions and Autoscaling Policy action reference", () => {
   const graph: InfrastructureGraph = {
     nodes: [

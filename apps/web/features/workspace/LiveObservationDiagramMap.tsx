@@ -42,7 +42,7 @@ export function LiveObservationDiagramMap({
     );
   }
 
-  const visibleParticleCount = Math.min(4, burst?.visibleParticleCount ?? 0);
+  const visibleParticleCount = burst?.visibleParticleCount ?? 0;
   const minimumWidth = Math.max(
     760,
     model.stages.length * 144 +

@@ -85,6 +85,7 @@ const GENERIC_TERRAFORM_NESTED_BLOCKS = new Set([
   "metadata",
   "networkConfiguration",
   "port",
+  "predefinedMetricSpecification",
   "selector",
   "spec",
   "template"

@@ -135,6 +135,7 @@ export function createLiveObservationService(options: CreateLiveObservationServi
       const observationId = createObservationId();
       const publicToken = createPublicToken();
       const publicTokenHash = hashPublicToken(publicToken);
+      const trafficApiUrl = createTrafficApiUrl(requiredOutputs.apiBaseUrl);
       const session: LiveObservationSession = {
         id: observationId,
         deploymentId: input.deploymentId,
@@ -142,9 +143,10 @@ export function createLiveObservationService(options: CreateLiveObservationServi
         audienceUrl: createAudienceUrl(
           requiredOutputs.staticSiteUrl,
           publicToken,
-          publicApiBaseUrl
+          publicApiBaseUrl,
+          trafficApiUrl
         ),
-        trafficApiUrl: createTrafficApiUrl(requiredOutputs.apiBaseUrl),
+        trafficApiUrl,
         createdAt: new Date(createdAtMs).toISOString(),
         expiresAt: new Date(createdAtMs + SESSION_TTL_MS).toISOString()
       };
@@ -613,11 +615,13 @@ function normalizeHttpUrl(value: string, label: string): string {
 function createAudienceUrl(
   staticSiteUrl: string,
   publicToken: string,
-  publicApiBaseUrl: string
+  publicApiBaseUrl: string,
+  trafficApiUrl: string
 ): string {
   const audienceUrl = new URL(staticSiteUrl);
   audienceUrl.searchParams.set("observation", publicToken);
   audienceUrl.searchParams.set("collector", publicApiBaseUrl);
+  audienceUrl.searchParams.set("traffic", trafficApiUrl);
   return audienceUrl.toString();
 }
 
@@ -741,7 +745,10 @@ async function readDeploymentObservation(
   let observation: DeploymentObservation;
 
   try {
-    observation = await provider.observe(storedSession.observationTarget);
+    observation = await provider.observe(
+      storedSession.observationTarget,
+      storedSession.session.id
+    );
   } catch {
     observation = createUnavailableDeploymentObservation();
   }

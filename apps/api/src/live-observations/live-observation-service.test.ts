@@ -37,6 +37,7 @@ test("createSession validates deployment eligibility and reuses one active sessi
   assert.match(first.session.audienceUrl, /^https:\/\/audience\.example\.com\//);
   assert.match(first.session.audienceUrl, /observation=token-1/);
   assert.match(first.session.audienceUrl, /collector=https%3A%2F%2Fapp\.example\.com/);
+  assert.match(first.session.audienceUrl, /traffic=https%3A%2F%2Ftraffic\.example\.com%2Fapi%2Ftraffic/);
   assert.equal(first.session.createdAt, "2026-07-10T09:00:00.000Z");
   assert.equal(first.session.expiresAt, "2026-07-10T09:15:00.000Z");
 
@@ -66,9 +67,9 @@ test("createSession accepts ECS Fargate outputs and builds an ECS service observ
   let observedTarget: unknown;
   const service = createService({
     observabilityProvider: {
-      async observe(target) {
+      async observe(target, observationId) {
         observedTarget = target;
-        return createObservabilityProvider().observe(target);
+        return createObservabilityProvider().observe(target, observationId);
       }
     }
   });

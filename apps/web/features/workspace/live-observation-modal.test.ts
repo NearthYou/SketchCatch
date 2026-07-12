@@ -205,7 +205,8 @@ test("capacity presentation expands with visible units and summarizes overflow",
 test("traffic bursts alone activate visible circular flow particles", () => {
   const diagramMapSource = readWorkspaceFile("LiveObservationDiagramMap.tsx");
 
-  assert.match(diagramMapSource, /Math\.min\(4, burst\?\.visibleParticleCount/);
+  assert.match(diagramMapSource, /visibleParticleCount = burst\?\.visibleParticleCount \?\? 0/);
+  assert.doesNotMatch(diagramMapSource, /Math\.min\(4, burst\?\.visibleParticleCount/);
   assert.match(diagramMapSource, /data-flowing=\{burst !== null\}/);
   assert.match(
     diagramMapSource,

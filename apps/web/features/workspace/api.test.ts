@@ -294,6 +294,52 @@ test("Live Observation polling stops cleanly when aborted from a snapshot callba
   assert.equal(requestCount, 1);
 });
 
+test("Live Observation polling removes abort listeners after normal retry delays", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const controller = new AbortController();
+  const activeSnapshot = createLiveObservationSnapshotPayload("active");
+  const stoppedSnapshot = createLiveObservationSnapshotPayload("stopped");
+  const signal = controller.signal;
+  const originalAdd = signal.addEventListener.bind(signal);
+  const originalRemove = signal.removeEventListener.bind(signal);
+  let added = 0;
+  let removed = 0;
+  let requestCount = 0;
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+  installAuthSession();
+  signal.addEventListener = ((...args: Parameters<AbortSignal["addEventListener"]>) => {
+    added += 1;
+    return originalAdd(...args);
+  }) as AbortSignal["addEventListener"];
+  signal.removeEventListener = ((...args: Parameters<AbortSignal["removeEventListener"]>) => {
+    removed += 1;
+    return originalRemove(...args);
+  }) as AbortSignal["removeEventListener"];
+  globalThis.fetch = async () => {
+    requestCount += 1;
+    return Response.json(
+      { snapshot: requestCount === 1 ? activeSnapshot : stoppedSnapshot },
+      { status: 200 }
+    );
+  };
+
+  await pollLiveObservationSnapshots({
+    deploymentId: "deployment-1",
+    intervalMs: 1,
+    observationId: "observation-1",
+    onSnapshot: () => undefined,
+    signal
+  });
+
+  assert.equal(added, 1);
+  assert.equal(removed, 1);
+});
+
 test("Live Observation polling reports snapshot polling failures", async (context) => {
   const originalFetch = globalThis.fetch;
   const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");

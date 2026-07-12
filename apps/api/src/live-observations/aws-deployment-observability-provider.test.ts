@@ -79,7 +79,7 @@ test("AWS observability adapter uses the newest completed metric point and actua
     })
   });
 
-  const result = await provider.observe(createTarget());
+  const result = await provider.observe(createTarget(), "observation-1");
 
   assert.equal(cloudWatchInputs.length, 1);
   assert.deepEqual(autoScalingGroupNames, ["demo-asg", "demo-asg"]);
@@ -143,7 +143,7 @@ test("AWS observability adapter returns unavailable cards without sample values"
     })
   });
 
-  const result = await provider.observe(createTarget());
+  const result = await provider.observe(createTarget(), "observation-1");
 
   assert.deepEqual(result.cloudWatch, {
     delayedBySeconds: null,
@@ -210,7 +210,7 @@ test("AWS observability adapter reads ECS Fargate service task capacity", async 
     })
   });
 
-  const result = await provider.observe(createEcsTarget());
+  const result = await provider.observe(createEcsTarget(), "observation-1");
 
   assert.deepEqual(ecsInputs, [{ clusterName: "demo-cluster", serviceName: "demo-service" }]);
   assert.deepEqual(result.capacity, {

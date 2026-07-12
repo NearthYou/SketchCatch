@@ -102,6 +102,72 @@ test("derives a different main path for an ASG diagram", () => {
   assert.deepEqual(model.capacityUnits.map((unit) => unit.observationState), ["active", "inactive"]);
 });
 
+test("infers ECS Fargate capacity from resource types and connectivity without metadata", () => {
+  const diagram = createDiagram(
+    [
+      node("site", "aws_s3_object"),
+      node("alb", "aws_lb"),
+      node("target-group", "aws_lb_target_group"),
+      node("task-definition", "aws_ecs_task_definition"),
+      node("service", "aws_ecs_service")
+    ],
+    [
+      edge("site", "alb"),
+      edge("alb", "target-group"),
+      edge("target-group", "service"),
+      edge("task-definition", "service")
+    ]
+  );
+
+  const model = createLiveObservationDiagramModel(diagram, snapshot(2, 1));
+
+  assert.equal(model.status, "ready");
+  if (model.status !== "ready") return;
+  assert.deepEqual(model.stages.map((stage) => stage.node.id), [
+    "site",
+    "alb",
+    "target-group",
+    "service"
+  ]);
+  assert.equal(model.capacityUnits.length, 2);
+  assert.deepEqual(model.capacityUnits.map((unit) => unit.observationState), [
+    "active",
+    "launching"
+  ]);
+  assert.equal(model.capacityUnits[0]?.node.id, "task-definition");
+});
+
+test("infers ASG capacity from resource types and connectivity without metadata", () => {
+  const diagram = createDiagram(
+    [
+      designNode("internet", "sketchcatch_internet"),
+      node("alb", "aws_lb"),
+      node("target-group", "aws_lb_target_group"),
+      node("launch-template", "aws_launch_template"),
+      node("asg", "aws_autoscaling_group")
+    ],
+    [
+      edge("internet", "alb"),
+      edge("alb", "target-group"),
+      edge("target-group", "asg"),
+      edge("launch-template", "asg")
+    ]
+  );
+
+  const model = createLiveObservationDiagramModel(diagram, snapshot(2, 1));
+
+  assert.equal(model.status, "ready");
+  if (model.status !== "ready") return;
+  assert.deepEqual(model.stages.map((stage) => stage.node.id), [
+    "internet",
+    "alb",
+    "target-group",
+    "asg"
+  ]);
+  assert.equal(model.capacityUnits.length, 2);
+  assert.equal(model.capacityUnits[0]?.node.id, "launch-template");
+});
+
 test("prefers explicit observation roles over inferred traffic capabilities", () => {
   const diagram = createDiagram(
     [
