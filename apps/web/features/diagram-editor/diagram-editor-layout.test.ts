@@ -626,6 +626,20 @@ test("new and existing resources expand newly assigned parent areas before apply
   );
 });
 
+test("workspace architecture shell publishes shared panel and control sizing tokens", () => {
+  const editorShellBlock = getCssBlock(".editorShell");
+
+  assert.match(diagramEditorStyles, /Workspace architecture visual contract/);
+  assert.match(
+    editorShellBlock,
+    /--workspace-panel-width:\s*clamp\(376px,\s*30vw,\s*416px\)/
+  );
+  assert.match(editorShellBlock, /--workspace-control-height:\s*40px/);
+  assert.match(editorShellBlock, /--workspace-icon-control-size:\s*40px/);
+  assert.match(editorShellBlock, /--workspace-ai-launcher-size:\s*44px/);
+  assert.match(editorShellBlock, /--workspace-control-radius:\s*8px/);
+});
+
 function getCssBlock(selector: string): string {
   const selectorMarker = `${selector} {`;
   const lineStart = diagramEditorStyles.indexOf(`\n${selectorMarker}`);

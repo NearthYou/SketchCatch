@@ -178,6 +178,15 @@ test("ParameterInputPanel styles use the DESIGN.md surface without a legacy skin
   }
 });
 
+test("ParameterInputPanel uses one inspector surface without nested section cards", () => {
+  const designPassIndex = stylesSource.indexOf("/* DESIGN.md parameter input pass */");
+  const sectionRule = getLastCssRuleAfter(stylesSource, "section", designPassIndex);
+
+  assert.match(sectionRule, /background:\s*transparent/);
+  assert.match(sectionRule, /border-top:\s*1px solid var\(--workspace-line/);
+  assert.doesNotMatch(sectionRule, /box-shadow/);
+});
+
 function readParameterInputFile(fileName: string): string {
   return readFileSync(fileURLToPath(new URL(fileName, import.meta.url)), "utf8");
 }

@@ -1675,6 +1675,29 @@ test("terraform Issues compose Board dependency diagnostics without storing them
   assert.doesNotMatch(componentSource, /storeTerraformIssues\([^\n]*architecture/);
 });
 
+test("workspace modernization preserves action ownership", () => {
+  assert.match(componentSource, /onClick=\{\(\) => requestView\("resource"\)\}/);
+  assert.match(componentSource, /onClick=\{\(\) => requestView\("terraform"\)\}/);
+  assert.match(componentSource, /openDeploymentConsole/);
+  assert.match(deploymentPanelSource, /approveCurrentPlan/);
+  assert.match(deploymentPanelSource, /runDeploymentApply/);
+  assert.match(aiChatDockSource, /applyDraftToBoard/);
+  assert.match(aiChatDockSource, /applyPatchPreviewToBoard/);
+});
+
+test("workspace modernization exposes one architecture surface and full-screen wizard", () => {
+  const visualContractSource = `${diagramEditorStylesSource}\n${stylesSource}`;
+
+  assert.match(visualContractSource, /Workspace architecture visual contract/);
+  assert.match(
+    visualContractSource,
+    /--workspace-panel-width:\s*clamp\(376px,\s*30vw,\s*416px\)/
+  );
+  assert.match(visualContractSource, /--workspace-control-height:\s*40px/);
+  assert.match(visualContractSource, /--workspace-ai-launcher-size:\s*44px/);
+  assert.match(visualContractSource, /Deployment wizard visual contract/);
+});
+
 function readWorkspaceFile(fileName: string): string {
   return readFileSync(fileURLToPath(new URL(fileName, import.meta.url)), "utf8");
 }
