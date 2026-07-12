@@ -381,7 +381,7 @@ export function LiveObservationModal({
         observationId: session.id,
         onError: () => {
           setStreamErrorMessage(
-            "?ㅼ떆媛??곌껐??吏?곕릺怨??덉뒿?덈떎. 理쒖떊 ?곹깭瑜??ㅼ떆 ?곌껐?⑸땲??"
+            "실시간 연결이 지연되고 있습니다. 최신 상태를 다시 연결합니다."
           );
         },
         onSnapshot: (nextSnapshot) => {
@@ -396,7 +396,7 @@ export function LiveObservationModal({
         observationId: session.id,
         onError: () => {
           setStreamErrorMessage(
-          "실시간 연결이 지연되고 있습니다. 최신 상태를 다시 연결합니다."
+            "실시간 연결이 지연되고 있습니다. 최신 상태를 다시 연결합니다."
           );
         },
         onSnapshot: (nextSnapshot) => {

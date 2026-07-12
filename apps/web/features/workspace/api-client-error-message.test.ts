@@ -105,6 +105,18 @@ test("getApiErrorMessage explains Repository Analysis GitHub connection failures
   }
 });
 
+test("getApiErrorMessage explains missing database migrations for Repository start", () => {
+  const error = new ApiClientError(503, {
+    error: "service_unavailable",
+    message: "DATABASE_MIGRATION_REQUIRED"
+  });
+
+  assert.equal(
+    getApiErrorMessage(error, "Repository connection status could not be loaded."),
+    "API 데이터베이스 마이그레이션이 필요합니다. 서버에서 pnpm --filter @sketchcatch/api db:migrate를 실행한 뒤 다시 시도해주세요."
+  );
+});
+
 test("getApiErrorMessage translates a local Repository Analysis handoff guard", () => {
   assert.equal(
     getApiErrorMessage(

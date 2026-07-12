@@ -219,6 +219,74 @@
   font-size: 12px;
 }
 
+.repositoryUrlPanel {
+  display: grid;
+  gap: 16px;
+  border: 1px solid #dcdee0;
+  border-radius: 12px;
+  padding: 18px;
+  background: #ffffff;
+}
+
+.repositoryUrlHeader {
+  display: grid;
+  gap: 6px;
+}
+
+.repositoryUrlHeader h2,
+.repositoryUrlHeader p {
+  margin: 0;
+}
+
+.repositoryUrlHeader h2 {
+  font-size: 16px;
+}
+
+.repositoryUrlHeader p {
+  color: #60646c;
+  font-size: 12px;
+  line-height: 1.6;
+  word-break: keep-all;
+}
+
+.repositoryUrlForm {
+  display: grid;
+  align-items: end;
+  grid-template-columns: minmax(0, 1fr) minmax(128px, 168px);
+  gap: 12px;
+}
+
+.repositoryUrlForm label {
+  display: grid;
+  gap: 8px;
+  color: #171717;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.repositoryUrlForm input {
+  width: 100%;
+  height: 42px;
+  border: 1px solid #dcdee0;
+  border-radius: 8px;
+  padding: 0 13px;
+  background: #ffffff;
+  color: #171717;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 400;
+  outline: 0;
+}
+
+.repositoryUrlForm input:focus {
+  border: 2px solid #171717;
+  padding: 0 12px;
+}
+
+.repositoryUrlForm input:disabled {
+  background: #f7f7f8;
+  color: #999999;
+}
 
 .boundaryNotice,
 .errorMessage {
@@ -324,4 +392,6 @@
   .actions { align-items: stretch; flex-direction: column; }
   .primaryAction { width: 100%; }
   .blankAction { align-self: center; }
+  .repositoryUrlPanel { padding: 16px; }
+  .repositoryUrlForm { grid-template-columns: 1fr; }
 }

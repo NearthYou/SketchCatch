@@ -31,6 +31,18 @@ test("buildBoardTemplateDiagram materializes Repository Analysis TemplateDefinit
   );
 });
 
+test("buildBoardTemplateDiagram maps public Repository Analysis template IDs to board templates", () => {
+  const diagram = buildBoardTemplateDiagram("template-api-db", {
+    projectSlug: "analysis-qa",
+    shortId: "repository"
+  });
+
+  assert.ok(diagram);
+  assert.equal(diagram.nodes.some((node) => node.type === "aws_db_instance"), true);
+  assert.equal(diagram.nodes.some((node) => node.type === "aws_lb"), true);
+  assert.equal(diagram.nodes.some((node) => node.type === "aws_autoscaling_group"), true);
+});
+
 test("filterBoardTemplates searches title, description, and tags", () => {
   const templates = listBoardTemplates();
 

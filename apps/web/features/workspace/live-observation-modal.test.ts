@@ -64,6 +64,10 @@ test("modal can switch Live Observation snapshots to REST polling for prototype 
   assert.match(modalSource, /pollLiveObservationSnapshots/);
   assert.match(modalSource, /NEXT_PUBLIC_LIVE_OBSERVATION_TRANSPORT/);
   assert.match(modalSource, /LIVE_OBSERVATION_TRANSPORT === "polling"/);
+  assert.equal(
+    modalSource.match(/실시간 연결이 지연되고 있습니다\. 최신 상태를 다시 연결합니다\./g)?.length,
+    2
+  );
   assert.match(modalSource, /intervalMs:\s*LIVE_OBSERVATION_POLL_INTERVAL_MS/);
   assert.match(modalSource, /streamLiveObservationSnapshots/);
 });

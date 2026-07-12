@@ -5,15 +5,17 @@ type RepositoryStartPageProps = {
   readonly searchParams?: Promise<Record<string, string | string[] | undefined>>;
 };
 
+// 새 프로젝트에서 만든 project 정보를 GitHub Repository 시작 화면에 전달합니다.
 export default async function RepositoryStartPage({ searchParams }: RepositoryStartPageProps) {
   const params = await searchParams;
 
   return (
     <WorkspaceAuthGate>
       <RepositoryStartClient
-        defaultBranch={getSingleValue(params?.defaultBranch) ?? "main"}
+        initialDefaultBranch={getSingleValue(params?.defaultBranch) ?? "main"}
+        initialRepositoryUrl={getSingleValue(params?.repositoryUrl) ?? ""}
         projectId={getSingleValue(params?.projectId) ?? ""}
-        repositoryUrl={getSingleValue(params?.repositoryUrl) ?? ""}
+        projectName={getSingleValue(params?.projectName) ?? "새 프로젝트"}
       />
     </WorkspaceAuthGate>
   );

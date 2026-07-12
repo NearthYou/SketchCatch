@@ -86,6 +86,19 @@ test("Workspace handoff resolves the stored Template and rejects a tampered URL 
         applicationUnits: [],
         evidence: [],
         missingEvidence: [],
+        recommendation: {
+          deploymentType: "container",
+          usesCiCd: true,
+          candidates: [
+            {
+              templateId: "ecs-fargate-container-app",
+              displayTitle: "ECS Fargate Container App",
+              confidence: 0.78,
+              reasons: ["Docker answer"],
+              tradeoffs: ["Review container image"]
+            }
+          ]
+        },
         selectionReasons: ["정적 frontend evidence"]
       }
     }
@@ -104,6 +117,13 @@ test("Workspace handoff resolves the stored Template and rejects a tampered URL 
         requestedTemplateId: "three-tier-web-app"
       }),
     /REPOSITORY_ANALYSIS_TEMPLATE_MISMATCH/
+  );
+  assert.equal(
+    resolveRepositoryAnalysisTemplate([repository], {
+      sourceRepositoryId: repository.id,
+      requestedTemplateId: "ecs-fargate-container-app"
+    }).id,
+    "ecs-fargate-container-app"
   );
 });
 

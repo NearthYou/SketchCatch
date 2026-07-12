@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -15,8 +14,8 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { TemplateGallery } from "../../../components/templates/TemplateGallery";
+import { ProductBrand } from "../../../components/ui/ProductBrand";
 import {
-  createGitHubSourceRepositoryInstallUrl,
   createProject,
   deleteProject,
   listAwsConnections,
@@ -40,7 +39,7 @@ const DEFAULT_REVERSE_CLOUD_PLATFORM = "aws";
 const START_MODE_ICONS: Record<WorkspaceStartKind, LucideIcon> = {
   ai: Bot,
   blank: LayoutPanelTop,
-  github: GitBranch,
+  repository: GitBranch,
   reverse: CloudDownload,
   template: Boxes
 };
@@ -54,6 +53,7 @@ type WorkspaceStartDraft = {
 type WorkspaceStartForm = {
   readonly projectName: string;
   readonly selectedKind: WorkspaceStartKind;
+  readonly selectedTemplateId: string | null;
 };
 
 const startModeOptions = createWorkspaceStartOptions();
@@ -80,6 +80,9 @@ export function WorkspaceStartClient({
   );
   const [errorMessage, setErrorMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [repositoryUrlFormVisible, setRepositoryUrlFormVisible] = useState(initialStartKind === "repository");
+  const [repositoryUrl, setRepositoryUrl] = useState("");
+  const [repositoryDefaultBranch, setRepositoryDefaultBranch] = useState("main");
   const selectedTemplate = useMemo(
     () => boardTemplates.find((template) => template.id === selectedTemplateId) ?? null,
     [selectedTemplateId]
@@ -87,7 +90,10 @@ export function WorkspaceStartClient({
   const canContinue =
     title.trim().length > 0 &&
     !isSubmitting &&
-    (selectedKind !== "template" || selectedTemplate !== null);
+    (selectedKind !== "template" || selectedTemplate !== null) &&
+    (selectedKind !== "repository" ||
+      !repositoryUrlFormVisible ||
+      repositoryUrl.trim().length > 0);
 
   useEffect(() => {
     if (initialStartKind) {
@@ -99,6 +105,8 @@ export function WorkspaceStartClient({
     if (storedForm) {
       setTitle(storedForm.projectName);
       setSelectedKind(storedForm.selectedKind);
+      setSelectedTemplateId(storedForm.selectedTemplateId);
+      setRepositoryUrlFormVisible(storedForm.selectedKind === "repository");
     } else {
       const aiDraft = readAiStartDraft();
       if (aiDraft?.projectName) {
@@ -114,8 +122,8 @@ export function WorkspaceStartClient({
       return;
     }
 
-    writeWorkspaceStartForm({ projectName: title, selectedKind });
-  }, [isStartFormHydrated, selectedKind, title]);
+    writeWorkspaceStartForm({ projectName: title, selectedKind, selectedTemplateId });
+  }, [isStartFormHydrated, selectedKind, selectedTemplateId, title]);
 
   async function handleContinue(): Promise<void> {
     const projectName = title.trim();
@@ -131,6 +139,12 @@ export function WorkspaceStartClient({
     }
 
     setErrorMessage("");
+
+    if (selectedKind === "repository" && repositoryUrlFormVisible) {
+      await startFromRepositoryUrl(projectName);
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -151,6 +165,12 @@ export function WorkspaceStartClient({
         return;
       }
 
+      if (action.kind === "showRepositoryUrlForm") {
+        setRepositoryUrlFormVisible(true);
+        setIsSubmitting(false);
+        return;
+      }
+
       let createdProjectId: string | null = null;
 
       try {
@@ -162,12 +182,6 @@ export function WorkspaceStartClient({
             diagramJson: selectedTemplate.diagramJson,
             projectId: project.id
           });
-        }
-
-        if (action.openMode === "github") {
-          const { installUrl } = await createGitHubSourceRepositoryInstallUrl(project.id);
-          window.location.assign(installUrl);
-          return;
         }
 
         clearWorkspaceStartForm();
@@ -192,15 +206,54 @@ export function WorkspaceStartClient({
   function selectStartKind(kind: WorkspaceStartKind): void {
     setSelectedKind(kind);
     setErrorMessage("");
+
+    if (kind === "repository") {
+      setRepositoryUrlFormVisible(true);
+      return;
+    }
+
+    setRepositoryUrlFormVisible(false);
+  }
+
+  async function startFromRepositoryUrl(projectName: string): Promise<void> {
+    const trimmedRepositoryUrl = repositoryUrl.trim();
+    const trimmedDefaultBranch = repositoryDefaultBranch.trim();
+
+    if (!trimmedRepositoryUrl) {
+      setErrorMessage("Repository URL을 입력해주세요.");
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    let createdProjectId: string | null = null;
+
+    try {
+      const project = await createProject({ name: projectName });
+      createdProjectId = project.id;
+      clearWorkspaceStartForm();
+      const params = new URLSearchParams({
+        defaultBranch: trimmedDefaultBranch || "main",
+        projectId: project.id,
+        projectName: project.name,
+        repositoryUrl: trimmedRepositoryUrl
+      });
+
+      router.push(`/workspace/repository?${params.toString()}`);
+    } catch {
+      if (createdProjectId) {
+        await deleteProject(createdProjectId).catch(() => undefined);
+      }
+
+      setIsSubmitting(false);
+      setErrorMessage("Repository 분석 페이지를 준비하지 못했습니다.");
+    }
   }
 
   return (
     <main className={styles.page}>
       <header className={styles.topbar}>
-        <Link className={styles.brand} href="/dashboard" aria-label="SketchCatch Dashboard">
-          <Image alt="" height={24} priority src="/sketchcatch-logo.png" width={16} />
-          <span>SketchCatch</span>
-        </Link>
+        <ProductBrand />
         <strong>새 프로젝트</strong>
         <Link className={styles.backLink} href="/dashboard">
           <ArrowLeft aria-hidden="true" size={17} />
@@ -252,7 +305,6 @@ export function WorkspaceStartClient({
                     <small>{option.description}</small>
                   </span>
                   {option.kind === "reverse" ? <em>AWS Role 필요</em> : null}
-                  {option.kind === "github" ? <em>연결만 지원</em> : null}
                 </button>
               );
             })}
@@ -266,11 +318,20 @@ export function WorkspaceStartClient({
             />
           ) : null}
 
-          {selectedKind === "github" ? (
-            <p className={styles.boundaryNotice} role="status">
-              Repository 연결은 동작합니다. Repository Analysis와 Template Selection은 아직 연결
-              중입니다.
-            </p>
+          {selectedKind === "repository" && repositoryUrlFormVisible ? (
+            <RepositoryUrlStartPanel
+              branch={repositoryDefaultBranch}
+              isSubmitting={isSubmitting}
+              onBranchChange={(value) => {
+                setRepositoryDefaultBranch(value);
+                setErrorMessage("");
+              }}
+              onRepositoryUrlChange={(value) => {
+                setRepositoryUrl(value);
+                setErrorMessage("");
+              }}
+              repositoryUrl={repositoryUrl}
+            />
           ) : null}
 
           <div className={styles.actions}>
@@ -283,7 +344,7 @@ export function WorkspaceStartClient({
               {isSubmitting ? (
                 <LoaderCircle aria-hidden="true" className={styles.spinner} size={17} />
               ) : null}
-              {isSubmitting ? "처리 중" : getContinueLabel(selectedKind)}
+              {isSubmitting ? "처리 중" : getContinueLabel(selectedKind, repositoryUrlFormVisible)}
             </button>
             {blankStartOption ? (
               <button
@@ -311,6 +372,7 @@ export function WorkspaceStartClient({
   );
 }
 
+// Reverse만 AWS 연결을 확인하고 나머지는 선택값만으로 다음 단계를 정합니다.
 async function resolveStartAction({
   projectName,
   selectedKind
@@ -362,11 +424,64 @@ function TemplatePicker({
   );
 }
 
-function getContinueLabel(kind: WorkspaceStartKind): string {
+function RepositoryUrlStartPanel({
+  branch,
+  isSubmitting,
+  onBranchChange,
+  onRepositoryUrlChange,
+  repositoryUrl
+}: {
+  readonly branch: string;
+  readonly isSubmitting: boolean;
+  readonly onBranchChange: (value: string) => void;
+  readonly onRepositoryUrlChange: (value: string) => void;
+  readonly repositoryUrl: string;
+}) {
+  return (
+    <section className={styles.repositoryUrlPanel} aria-labelledby="repository-url-title">
+      <div className={styles.repositoryUrlHeader}>
+        <h2 id="repository-url-title">Repository URL 분석</h2>
+        <p>
+          public GitHub repository는 계정 연결 없이 분석합니다. private repository나 권한이 부족한 경우에는
+          환경설정에서 GitHub 권한을 연결해주세요.
+        </p>
+      </div>
+
+      <div className={styles.repositoryUrlForm}>
+        <label htmlFor="repository-url-input">
+          <span>GitHub URL</span>
+          <input
+            disabled={isSubmitting}
+            id="repository-url-input"
+            onChange={(event) => onRepositoryUrlChange(event.target.value)}
+            placeholder="https://github.com/owner/repository"
+            type="url"
+            value={repositoryUrl}
+          />
+        </label>
+        <label htmlFor="repository-branch-input">
+          <span>Branch</span>
+          <input
+            disabled={isSubmitting}
+            id="repository-branch-input"
+            onChange={(event) => onBranchChange(event.target.value)}
+            placeholder="main"
+            type="text"
+            value={branch}
+          />
+        </label>
+      </div>
+
+    </section>
+  );
+}
+
+// 선택한 시작 방식에 맞는 한 개의 주 행동 문구를 반환합니다.
+function getContinueLabel(kind: WorkspaceStartKind, repositoryUrlFormVisible = false): string {
   const labels: Record<WorkspaceStartKind, string> = {
     ai: "AI로 계속",
     blank: "빈 보드 열기",
-    github: "GitHub 연결",
+    repository: repositoryUrlFormVisible ? "Repository 분석하기" : "Repository URL 입력하기",
     reverse: "기존 AWS 가져오기",
     template: "Template으로 시작"
   };
@@ -374,6 +489,7 @@ function getContinueLabel(kind: WorkspaceStartKind): string {
   return labels[kind];
 }
 
+// 뒤로 돌아왔을 때 사용자가 고른 이름, 방식, Template을 복원합니다.
 function readWorkspaceStartForm(): WorkspaceStartForm | null {
   if (typeof window === "undefined") return null;
 
@@ -383,14 +499,21 @@ function readWorkspaceStartForm(): WorkspaceStartForm | null {
 
     if (!value || typeof value !== "object") return null;
     const candidate = value as Partial<WorkspaceStartForm>;
-    return typeof candidate.projectName === "string" && isWorkspaceStartKind(candidate.selectedKind)
-      ? { projectName: candidate.projectName, selectedKind: candidate.selectedKind }
+    return typeof candidate.projectName === "string" &&
+      isWorkspaceStartKind(candidate.selectedKind) &&
+      (candidate.selectedTemplateId === null || typeof candidate.selectedTemplateId === "string")
+      ? {
+          projectName: candidate.projectName,
+          selectedKind: candidate.selectedKind,
+          selectedTemplateId: candidate.selectedTemplateId
+        }
       : null;
   } catch {
     return null;
   }
 }
 
+// 새 프로젝트 입력 중인 값을 현재 browser 탭에만 임시 저장합니다.
 function writeWorkspaceStartForm(form: WorkspaceStartForm): void {
   if (typeof window === "undefined") return;
 
@@ -401,11 +524,13 @@ function writeWorkspaceStartForm(form: WorkspaceStartForm): void {
   }
 }
 
+// 프로젝트 생성이 끝난 뒤 임시 입력값을 지웁니다.
 function clearWorkspaceStartForm(): void {
   if (typeof window === "undefined") return;
   window.sessionStorage.removeItem(START_FORM_STORAGE_KEY);
 }
 
+// AI 시작 화면에서 이어 쓸 프로젝트 이름을 복원합니다.
 function readAiStartDraft(): WorkspaceStartDraft | null {
   if (typeof window === "undefined") return null;
 
@@ -418,6 +543,7 @@ function readAiStartDraft(): WorkspaceStartDraft | null {
   }
 }
 
+// AI 시작 화면으로 이동하기 전에 프로젝트 이름을 임시 저장합니다.
 function writeAiStartDraft(draft: WorkspaceStartDraft): void {
   if (typeof window === "undefined") return;
 
@@ -428,6 +554,7 @@ function writeAiStartDraft(draft: WorkspaceStartDraft): void {
   }
 }
 
+// browser 저장값이 AI 시작 입력으로 안전한 모양인지 확인합니다.
 function isWorkspaceStartDraft(value: unknown): value is WorkspaceStartDraft {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<WorkspaceStartDraft>;
@@ -440,12 +567,13 @@ function isWorkspaceStartDraft(value: unknown): value is WorkspaceStartDraft {
   );
 }
 
+// browser 저장값을 지원하는 다섯 시작 방식으로 제한합니다.
 function isWorkspaceStartKind(value: unknown): value is WorkspaceStartKind {
   return (
     value === "ai" ||
     value === "reverse" ||
     value === "template" ||
-    value === "github" ||
+    value === "repository" ||
     value === "blank"
   );
 }

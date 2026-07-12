@@ -1031,7 +1031,10 @@ test("renders Launch Template instance profiles and dependency addresses with Te
           fileName: "site",
           values: {
             bucket: "aws_s3_bucket.site.id",
-            dependsOn: ["aws_s3_bucket_public_access_block.site"],
+            dependsOn: [
+              "aws_s3_bucket_public_access_block.site",
+              "kubernetes_namespace.sketchcatch"
+            ],
             policy: "{}"
           }
         }
@@ -1053,6 +1056,8 @@ test("renders Launch Template instance profiles and dependency addresses with Te
     /depends_on = \[[\s\S]*aws_s3_bucket_public_access_block\.site,[\s\S]*\]/
   );
   assert.doesNotMatch(terraformCode, /"aws_s3_bucket_public_access_block\.site"/);
+  assert.match(terraformCode, /kubernetes_namespace\.sketchcatch,/);
+  assert.doesNotMatch(terraformCode, /"kubernetes_namespace\.sketchcatch"/);
 });
 
 test("tracks curated nested block parameters as canonical camelCase keys", () => {
