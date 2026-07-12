@@ -1,5 +1,5 @@
 import { templateDefinitions } from "@sketchcatch/types";
-import type { SourceRepository, TemplateDefinition } from "@sketchcatch/types";
+import type { RepositoryAnalysisAiHandoff, SourceRepository, TemplateDefinition } from "@sketchcatch/types";
 
 export type RepositoryAnalysisHandoffLocation = {
   readonly sourceRepositoryId: string;
@@ -19,13 +19,14 @@ export function resolveRepositoryAnalysisTemplate(
 
   if (
     handoff.requestedTemplateId &&
-    handoff.requestedTemplateId !== analysis.aiHandoff.templateId
+    !getAllowedRepositoryAnalysisTemplateIds(analysis.aiHandoff).has(handoff.requestedTemplateId)
   ) {
     throw new Error("REPOSITORY_ANALYSIS_TEMPLATE_MISMATCH");
   }
 
+  const templateId = handoff.requestedTemplateId ?? analysis.aiHandoff.templateId;
   const definition = templateDefinitions.find(
-    (candidate) => candidate.id === analysis.aiHandoff.templateId
+    (candidate) => candidate.id === templateId
   );
 
   if (!definition) {
@@ -33,4 +34,11 @@ export function resolveRepositoryAnalysisTemplate(
   }
 
   return definition;
+}
+
+function getAllowedRepositoryAnalysisTemplateIds(handoff: RepositoryAnalysisAiHandoff): Set<string> {
+  return new Set([
+    ...(handoff.templateId ? [handoff.templateId] : []),
+    ...(handoff.recommendation?.candidates.map((candidate) => candidate.templateId) ?? [])
+  ]);
 }

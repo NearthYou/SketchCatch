@@ -16,6 +16,7 @@ import {
   isRepositoryFrameworkConfigPath
 } from "./repository-evidence-path.js";
 import { selectRepositoryTemplate } from "./repository-template-selection.js";
+import { createRepositoryTemplateRecommendationProfile } from "./repository-template-recommendation.js";
 
 const dependencyRecordSchema = z.record(z.string(), z.string());
 const packageJsonSchema = z.object({
@@ -66,12 +67,22 @@ export function analyzeRepositoryEvidence(
     (kind) => !evidence.some((item) => item.kind === kind)
   );
 
-  return selectRepositoryTemplate({
+  const selectionInput = {
     snapshot: analysisSnapshot,
     applicationUnits,
     evidence,
     missingEvidence
-  });
+  };
+  const handoff = selectRepositoryTemplate(selectionInput);
+  const profile = createRepositoryTemplateRecommendationProfile(selectionInput);
+
+  return {
+    ...handoff,
+    deploymentTypeDefault: profile.deploymentTypeDefault,
+    usesCiCdDefault: profile.usesCiCdDefault,
+    questions: profile.questions,
+    ...(profile.recommendation ? { recommendation: profile.recommendation } : {})
+  };
 }
 
 // package.json evidence를 신뢰 경계에서 파싱하고 잘못된 JSON은 분석 대상에서 제외한다.

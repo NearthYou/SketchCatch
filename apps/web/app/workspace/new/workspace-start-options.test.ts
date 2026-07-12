@@ -22,7 +22,7 @@ test("createWorkspaceStartOptions exposes four guided starts and keeps blank boa
       ["ai", "primary"],
       ["reverse", "primary"],
       ["template", "primary"],
-      ["github", "primary"],
+      ["repository", "primary"],
       ["blank", "secondary"]
     ]
   );
@@ -37,12 +37,20 @@ test("WorkspaceStartClient uses the rebuilt start shell without a placeholder", 
   assert.match(startClientSource, /blankStartOption/);
 });
 
-test("WorkspaceStartClient keeps Template and GitHub as separate real start paths", () => {
+test("WorkspaceStartClient keeps Template and GitHub URL as real start paths", () => {
   assert.match(startClientSource, /saveProjectDraft/);
   assert.match(startClientSource, /selectedTemplate\.diagramJson/);
-  assert.match(startClientSource, /createGitHubSourceRepositoryInstallUrl\(project\.id\)/);
-  assert.match(startClientSource, /window\.location\.assign\(installUrl\)/);
-  assert.doesNotMatch(startClientSource, /connectGitHubAfterCreate/);
+  assert.match(startClientSource, /RepositoryUrlStartPanel/);
+  assert.match(startClientSource, /https:\/\/github\.com\/owner\/repository/);
+  assert.match(startClientSource, /workspace\/repository/);
+  assert.doesNotMatch(startClientSource, /analyzePublicSourceRepository/);
+});
+
+test("WorkspaceStartClient shows Repository URL analysis before the primary action", () => {
+  assert.ok(
+    startClientSource.indexOf("<RepositoryUrlStartPanel") <
+      startClientSource.indexOf(`<div className={styles.actions}>`)
+  );
 });
 
 test("WorkspaceStartClient hydrates a stored form before persisting changes", () => {
@@ -90,8 +98,8 @@ test("resolveWorkspaceStartAction opens AI before project creation", () => {
   assert.deepEqual(aiAction, { kind: "openAiDraft", href: "/workspace/ai" });
 });
 
-test("resolveWorkspaceStartAction creates projects for blank, Template, and GitHub starts", () => {
-  const starts = ["blank", "template", "github"] as const;
+test("resolveWorkspaceStartAction creates projects for blank and Template starts", () => {
+  const starts = ["blank", "template"] as const;
   const actions = starts.map((startKind) =>
     resolveWorkspaceStartAction({
       cloudPlatform: "aws",
@@ -105,4 +113,15 @@ test("resolveWorkspaceStartAction creates projects for blank, Template, and GitH
     actions,
     starts.map((openMode) => ({ kind: "createProject", openMode }))
   );
+});
+
+test("resolveWorkspaceStartAction opens Repository starts as an inline URL form", () => {
+  const action = resolveWorkspaceStartAction({
+    cloudPlatform: "aws",
+    hasVerifiedAwsConnection: true,
+    projectName: "repository",
+    startKind: "repository"
+  });
+
+  assert.deepEqual(action, { kind: "showRepositoryUrlForm" });
 });

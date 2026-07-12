@@ -1,7 +1,8 @@
 import type { DiagramJson } from "../../../../packages/types/src";
 import {
   buildTemplateDiagramJson,
-  templateDefinitions
+  templateDefinitions,
+  type TemplateId
 } from "../../../../packages/types/src/template-definitions";
 import { isAreaNode } from "../diagram-editor/area-nodes";
 import { RESOURCE_NODE_DEFAULT_SIZE } from "../diagram-editor/resource-node-geometry";
@@ -37,6 +38,11 @@ type TemplateStorage = Pick<Storage, "getItem" | "setItem">;
 
 const MAX_TEMPLATE_BACKUPS = 10;
 const TEMPLATE_AREA_DEFAULT_SIZE = { height: 112, width: 112 } as const;
+const REPOSITORY_ANALYSIS_TEMPLATE_DEFINITION_IDS = new Map<string, TemplateId>([
+  ["template-static-website", "static-web-hosting"],
+  ["template-api-db", "three-tier-web-app"],
+  ["template-3tier", "three-tier-web-app"]
+]);
 
 const LIVE_OBSERVATION_MANAGED_USER_DATA_BASE64 =
   "IyEvYmluL2Jhc2gKIyBza2V0Y2hjYXRjaC1kZW1vLW1hbmFnZWQtdXNlci1kYXRhOnYxCiMgc2tldGNoY2F0Y2gtZGVtby1tYW5hZ2VkLXVzZXItZGF0YS1zaGEyNTY6NTMzYmZhNTUzZDgwN2FlYzdkYzYwOTQxNTg1ZmIxMTU3NzkzYjMxYmY3ZmEwY2FiZTQ2N2MxYmMwMDk5YWQ0NApzZXQgLWV1byBwaXBlZmFpbApkbmYgaW5zdGFsbCAteSBweXRob24zCmNhdCA+L29wdC9za2V0Y2hjYXRjaC1kZW1vLWFwaS5weSA8PCdQWScKZnJvbSBodHRwLnNlcnZlciBpbXBvcnQgQmFzZUhUVFBSZXF1ZXN0SGFuZGxlciwgVGhyZWFkaW5nSFRUUFNlcnZlcgppbXBvcnQganNvbgppbXBvcnQgb3MKaW1wb3J0IHRpbWUKCmNsYXNzIEhhbmRsZXIoQmFzZUhUVFBSZXF1ZXN0SGFuZGxlcik6CiAgICBkZWYgc2VuZF9qc29uKHNlbGYsIHN0YXR1cywgcGF5bG9hZCwgY29ycz1GYWxzZSk6CiAgICAgICAgYm9keSA9IGpzb24uZHVtcHMocGF5bG9hZCkuZW5jb2RlKCJ1dGYtOCIpCiAgICAgICAgc2VsZi5zZW5kX3Jlc3BvbnNlKHN0YXR1cykKICAgICAgICBpZiBjb3JzOgogICAgICAgICAgICBzZWxmLnNlbmRfaGVhZGVyKCJBY2Nlc3MtQ29udHJvbC1BbGxvdy1PcmlnaW4iLCAiKiIpCiAgICAgICAgICAgIHNlbGYuc2VuZF9oZWFkZXIoIkFjY2Vzcy1Db250cm9sLUFsbG93LUhlYWRlcnMiLCAiQ29udGVudC1UeXBlIikKICAgICAgICAgICAgc2VsZi5zZW5kX2hlYWRlcigiQWNjZXNzLUNvbnRyb2wtQWxsb3ctTWV0aG9kcyIsICJPUFRJT05TLCBQT1NUIikKICAgICAgICBzZWxmLnNlbmRfaGVhZGVyKCJDb250ZW50LVR5cGUiLCAiYXBwbGljYXRpb24vanNvbiIpCiAgICAgICAgc2VsZi5zZW5kX2hlYWRlcigiQ29udGVudC1MZW5ndGgiLCBzdHIobGVuKGJvZHkpKSkKICAgICAgICBzZWxmLmVuZF9oZWFkZXJzKCkKICAgICAgICBzZWxmLndmaWxlLndyaXRlKGJvZHkpCgogICAgZGVmIGRvX09QVElPTlMoc2VsZik6CiAgICAgICAgaWYgc2VsZi5wYXRoLnN0YXJ0c3dpdGgoIi9hcGkvdHJhZmZpYyIpOgogICAgICAgICAgICBzZWxmLnNlbmRfanNvbigyMDAsIHsib2siOiBUcnVlfSwgY29ycz1UcnVlKQogICAgICAgICAgICByZXR1cm4KICAgICAgICBzZWxmLnNlbmRfcmVzcG9uc2UoNDA0KQogICAgICAgIHNlbGYuZW5kX2hlYWRlcnMoKQoKICAgIGRlZiBkb19HRVQoc2VsZik6CiAgICAgICAgaWYgc2VsZi5wYXRoLnN0YXJ0c3dpdGgoIi9hcGkvaGVhbHRoIik6CiAgICAgICAgICAgIHNlbGYuc2VuZF9qc29uKDIwMCwgewogICAgICAgICAgICAgICAgIm9rIjogVHJ1ZSwKICAgICAgICAgICAgICAgICJpbnN0YW5jZSI6IG9zLnVuYW1lKCkubm9kZW5hbWUsCiAgICAgICAgICAgICAgICAicGF0aCI6IHNlbGYucGF0aCwKICAgICAgICAgICAgICAgICJ0aW1lIjogaW50KHRpbWUudGltZSgpKQogICAgICAgICAgICB9KQogICAgICAgICAgICByZXR1cm4KICAgICAgICBzZWxmLnNlbmRfcmVzcG9uc2UoNDA0KQogICAgICAgIHNlbGYuZW5kX2hlYWRlcnMoKQoKICAgIGRlZiBkb19QT1NUKHNlbGYpOgogICAgICAgIGlmIHNlbGYucGF0aC5zdGFydHN3aXRoKCIvYXBpL3RyYWZmaWMiKToKICAgICAgICAgICAgc2VsZi5zZW5kX2pzb24oMjAwLCB7CiAgICAgICAgICAgICAgICAib2siOiBUcnVlLAogICAgICAgICAgICAgICAgImluc3RhbmNlIjogb3MudW5hbWUoKS5ub2RlbmFtZSwKICAgICAgICAgICAgICAgICJyZWNlaXZlZEF0IjogaW50KHRpbWUudGltZSgpICogMTAwMCkKICAgICAgICAgICAgfSwgY29ycz1UcnVlKQogICAgICAgICAgICByZXR1cm4KICAgICAgICBzZWxmLnNlbmRfcmVzcG9uc2UoNDA0KQogICAgICAgIHNlbGYuZW5kX2hlYWRlcnMoKQoKVGhyZWFkaW5nSFRUUFNlcnZlcigoIjAuMC4wLjAiLCA4MDgwKSwgSGFuZGxlcikuc2VydmVfZm9yZXZlcigpClBZCmNhdCA+L2V0Yy9zeXN0ZW1kL3N5c3RlbS9za2V0Y2hjYXRjaC1kZW1vLWFwaS5zZXJ2aWNlIDw8J1VOSVQnCltVbml0XQpEZXNjcmlwdGlvbj1Ta2V0Y2hDYXRjaCBkZW1vIEFQSQpBZnRlcj1uZXR3b3JrLW9ubGluZS50YXJnZXQKCltTZXJ2aWNlXQpFeGVjU3RhcnQ9L3Vzci9iaW4vcHl0aG9uMyAvb3B0L3NrZXRjaGNhdGNoLWRlbW8tYXBpLnB5ClJlc3RhcnQ9YWx3YXlzClVzZXI9cm9vdAoKW0luc3RhbGxdCldhbnRlZEJ5PW11bHRpLXVzZXIudGFyZ2V0ClVOSVQKc3lzdGVtY3RsIGRhZW1vbi1yZWxvYWQKc3lzdGVtY3RsIGVuYWJsZSAtLW5vdyBza2V0Y2hjYXRjaC1kZW1vLWFwaS5zZXJ2aWNlCg==";
@@ -588,8 +594,20 @@ export function buildBoardTemplateDiagram(
   templateId: string | undefined,
   input: { readonly projectSlug: string; readonly shortId: string }
 ): DiagramJson | undefined {
-  const definition = templateDefinitions.find((candidate) => candidate.id === templateId);
+  const definitionId = resolveTemplateDefinitionId(templateId);
+  const definition = templateDefinitions.find((candidate) => candidate.id === definitionId);
   return definition ? materializeTemplateDiagram(buildTemplateDiagramJson(definition.id, input)) : undefined;
+}
+
+function resolveTemplateDefinitionId(templateId: string | undefined): TemplateId | undefined {
+  if (!templateId) {
+    return undefined;
+  }
+
+  return (
+    REPOSITORY_ANALYSIS_TEMPLATE_DEFINITION_IDS.get(templateId) ??
+    templateDefinitions.find((candidate) => candidate.id === templateId)?.id
+  );
 }
 
 // Template 목록에서 검색어와 tag를 적용하고 사용자가 고른 순서로 정렬합니다.

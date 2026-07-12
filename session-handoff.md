@@ -4,23 +4,27 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Currently Verified
 
-- Issue #322 PR #324 is merged into `dev`; release PR #325 is open.
-- Production ECS is healthy at API/web desired 1 with autoscaling min 1/max 2.
-- Legacy ECS, EC2, old ALB, and the old CloudFormation ALB stack are retired.
-- Route53, HTTP smoke, RDS protections, alarms, SNS delivery, worker image SHA, and final Terraform no-change plan are verified.
+- Branch `feat/ck/349-repo-analysis` has issue #349 Repository Analysis template recommendation work plus a focused API startup guard.
+- New project Repository start shows the Repository URL analysis panel above the primary `Repository 분석하기` action.
+- API startup now requires `DATABASE_URL` before Terraform warmup, deployment recovery, or listening.
+- The focused startup regression test, API typecheck, harness check, lint, typecheck, and build passed.
 
 ## Changes This Session
 
-- Added autoscaling, alarms, migration safety, least-privilege deploy IAM, and disabled cold rollback Terraform.
-- Removed warm rollback workflows and infrastructure definitions.
-- Applied the approved runtime plan and synchronized GitHub production variables and tfvars.
+- Reproduced `/api/auth/login` returning 500 when the running API has no `DATABASE_URL`.
+- Added a regression test in `apps/api/src/server-startup.test.ts`.
+- Added `requireDatabaseUrl()` to `apps/api/src/server-startup.ts`.
+- Moved `RepositoryUrlStartPanel` above the action button group in `apps/web/app/workspace/new/workspace-start-client.tsx`.
+- Added source-order coverage in `apps/web/app/workspace/new/workspace-start-options.test.ts`.
+- Updated `agent-progress.md`.
 
 ## Broken Or Unverified
 
-- External customer role trust migration is not globally observable from this AWS account.
-- Cold rollback has not been restored end to end after AMI sanitization.
-- PR #325 is temporarily conflicting because the prior v2.0.0 squash commit is not an ancestor of `dev`.
+- The already-running API process may still be old code and must be restarted.
+- Local login still needs a real `DATABASE_URL` configured outside git, then migrations run if the database is fresh or stale.
+- Browser screenshot verification for the Repository URL panel move was skipped because browser automation is not installed in this worktree.
+- `apps/web/next-env.d.ts` was already modified before this fix and was not touched.
 
 ## Best Next Action
 
-- Merge the ancestry-sync branch into `dev` with a merge commit, then recheck and merge PR #325 with a merge commit.
+- Configure local `DATABASE_URL`, restart the API, and retry login. If the database is new or behind, run `pnpm --filter @sketchcatch/api db:migrate`.

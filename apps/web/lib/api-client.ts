@@ -40,6 +40,8 @@ const DEFAULT_API_ERROR_MESSAGES: Partial<Record<ApiErrorCode, string>> = {
 const API_MESSAGE_TRANSLATIONS: Partial<Record<string, string>> = {
   "API request failed": "요청 처리 중 오류가 발생했습니다.",
   "Authentication required": "인증이 필요합니다.",
+  "DATABASE_MIGRATION_REQUIRED":
+    "API 데이터베이스 마이그레이션이 필요합니다. 서버에서 pnpm --filter @sketchcatch/api db:migrate를 실행한 뒤 다시 시도해주세요.",
   "GIT_APP_AUTHENTICATION_FAILED":
     "GitHub App 인증에 실패했습니다. GitHub App 설치와 서버 설정을 확인해주세요.",
   "GIT_APP_GITHUB_IDENTITY_REQUIRED":

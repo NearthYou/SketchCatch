@@ -1,5 +1,9 @@
 import { getDatabaseClient } from "./db/client.js";
-import { assertNoStaticAwsCredentialsForApiServer, getDeploymentWorkerMode } from "./config/env.js";
+import {
+  assertNoStaticAwsCredentialsForApiServer,
+  getDeploymentWorkerMode,
+  requireDatabaseUrl
+} from "./config/env.js";
 import { createPostgresDeploymentJobRepository } from "./deployments/deployment-job-service.js";
 import { createPostgresDeploymentRepository } from "./deployments/deployment-service.js";
 import {
@@ -46,6 +50,7 @@ export async function startApiServer(options: StartApiServerOptions): Promise<vo
     options.recoverInterruptedDeployments ?? defaultRecoverInterruptedDeployments;
 
   validateAwsCredentialSource();
+  requireDatabaseUrl();
   await warmTerraformCacheBeforeListen(options.app, warmTerraformPluginCache);
   await warmTrivyCacheBeforeListen(options.app, warmTrivyCheckBundle);
   const recoveryResult = await recoverInterruptedDeploymentsBeforeListen(

@@ -16,6 +16,7 @@ type RepositorySignalRule = {
 const SIGNAL_RULES: readonly RepositorySignalRule[] = [
   { label: "React", patterns: ["react", "vite", "next"] },
   { label: "Node API", patterns: ["express", "fastify", "nestjs", "@nestjs"] },
+  { label: "Python API", patterns: ["fastapi", "uvicorn", "django", "flask"] },
   { label: "Database", patterns: ["prisma", "typeorm", "sequelize", "postgres", "mysql"] },
   { label: "Container", patterns: ["dockerfile", "docker-compose", "services:"] },
   { label: "Auto Scaling", patterns: ["autoscaling", "auto scaling", "load balancer", "alb"] }
@@ -39,9 +40,9 @@ export function analyzeRepositoryEvidence({
   return {
     defaultBranch,
     detectedSignals,
-    evidenceFiles: ["README.md", "package.json", "Dockerfile", "docker-compose.yml"].map(
-      (path) => ({ found: evidence.some((file) => file.path === path), path })
-    ),
+    evidenceFiles: evidence
+      .map((file) => ({ found: true, path: file.path }))
+      .sort((left, right) => left.path.localeCompare(right.path)),
     recommendationReason: getRecommendationReason(recommendedTemplateId, detectedSignals),
     recommendedTemplateId,
     repositoryUrl
@@ -55,7 +56,7 @@ function selectRepositoryTemplate(
     return "three-tier-web-app";
   }
 
-  if (signals.includes("Database") || signals.includes("Node API")) {
+  if (signals.includes("Database") || signals.includes("Node API") || signals.includes("Python API")) {
     return "three-tier-web-app";
   }
 

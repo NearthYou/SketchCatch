@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { startApiServer } from "./server-startup.js";
 import type { TerraformRunResult } from "./deployments/terraform-runner.js";
 
+process.env.DATABASE_URL = "postgresql://example";
+
 const successfulWarmupResult: TerraformRunResult = {
   command: ["terraform", "init"],
   exitCode: 0,
@@ -177,6 +179,47 @@ test("startApiServer validates the AWS credential source before Terraform warmup
   );
 
   assert.deepEqual(events, ["validate"]);
+});
+
+test("startApiServer requires DATABASE_URL before Terraform warmup", async () => {
+  const originalDatabaseUrl = process.env.DATABASE_URL;
+  const events: string[] = [];
+  delete process.env.DATABASE_URL;
+
+  try {
+    await assert.rejects(
+      () =>
+        startApiServer({
+          app: {
+            listen: async () => {
+              events.push("listen");
+            },
+            log: {
+              info: () => {},
+              warn: () => {}
+            }
+          },
+          host: "127.0.0.1",
+          port: 4000,
+          validateAwsCredentialSource: () => {
+            events.push("validate-aws");
+          },
+          warmTerraformPluginCache: async () => {
+            events.push("warmup");
+            return successfulWarmupResult;
+          },
+          recoverInterruptedDeployments: async () => {
+            events.push("recover");
+            return [];
+          }
+        }),
+      /DATABASE_URL is required/
+    );
+
+    assert.deepEqual(events, ["validate-aws"]);
+  } finally {
+    restoreEnvValue("DATABASE_URL", originalDatabaseUrl);
+  }
 });
 
 test("startApiServer rejects static AWS credentials with the default startup guard", async () => {
