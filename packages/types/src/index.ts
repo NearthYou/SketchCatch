@@ -544,6 +544,7 @@ export type SourceRepositoryAnalysisResult = {
   detectedSignals: string[];
   recommendedTemplateId: RepositoryAnalysisTemplateId | null;
   recommendationReason: string;
+  aiHandoff?: RepositoryAnalysisAiHandoff | undefined;
 };
 
 export type CreateGitHubArchitectureDraftRequest = AnalyzeSourceRepositoryRequest & {

@@ -2035,6 +2035,9 @@ test("POST /api/ai/source-repository-analysis reads nested public repository evi
     assert.ok(body.detectedSignals.includes("Database"));
     assert.ok(body.detectedSignals.includes("Container"));
     assert.equal(body.recommendedTemplateId, "template-api-db");
+    assert.equal(body.aiHandoff.deploymentTypeDefault, "container");
+    assert.ok(body.aiHandoff.recommendation.candidates.length >= 2);
+    assert.equal(body.aiHandoff.recommendation.candidates[0].templateId, "ecs-fargate-container-app");
     assert.ok(evidencePaths.includes("apps/fastapi-api/Dockerfile"));
     assert.ok(evidencePaths.includes("apps/nest-api/package.json"));
     assert.ok(evidencePaths.includes("docker-compose.yml"));

@@ -81,6 +81,10 @@ export function formatPublicRepositoryTemplate(templateId: string): string {
 export function getPublicRepositoryDeploymentDefault(
   analysis: SourceRepositoryAnalysisResult
 ): RepositoryDeploymentType {
+  if (analysis.aiHandoff?.deploymentTypeDefault) {
+    return analysis.aiHandoff.deploymentTypeDefault;
+  }
+
   const signals = new Set(analysis.detectedSignals);
   if (signals.has("Container")) return "container";
   if (signals.has("Serverless") || signals.has("Lambda")) return "serverless";
@@ -126,6 +130,12 @@ function createPublicRepositoryTemplateCandidates(input: {
   readonly answers: Record<string, string | boolean>;
   readonly deploymentType: RepositoryDeploymentType;
 }): readonly PublicRepositoryTemplateCandidate[] {
+  const backendCandidates = input.analysis.aiHandoff?.recommendation?.candidates;
+
+  if (backendCandidates && backendCandidates.length > 0) {
+    return backendCandidates;
+  }
+
   const signals = new Set(input.analysis.detectedSignals);
   const candidateIds = new Set<TemplateId>();
   const primaryTemplateId = selectPrimaryTemplateId(input);
@@ -147,31 +157,6 @@ function createPublicRepositoryTemplateCandidates(input: {
 
   if (signals.has("Node API") || signals.has("Python API")) {
     candidateIds.add("minimal-serverless-api");
-  }
-
-  const fallbackCandidates: Readonly<Record<RepositoryDeploymentType, readonly TemplateId[]>> = {
-    container: [
-      "ecs-fargate-container-app",
-      "eks-container-app",
-      "three-tier-web-app",
-      "full-serverless-web-app"
-    ],
-    ec2_vm: [
-      "three-tier-web-app",
-      "ecs-fargate-container-app",
-      "full-serverless-web-app",
-      "minimal-serverless-api"
-    ],
-    serverless: [
-      "full-serverless-web-app",
-      "minimal-serverless-api",
-      "static-web-hosting",
-      "three-tier-web-app"
-    ]
-  };
-
-  for (const templateId of fallbackCandidates[input.deploymentType]) {
-    candidateIds.add(templateId);
   }
 
   return [...candidateIds]

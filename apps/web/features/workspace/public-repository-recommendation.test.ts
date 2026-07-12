@@ -21,7 +21,7 @@ test("public repository recommendation returns multiple candidates and follow-up
 
   assert.equal(deploymentType, "container");
   assert.equal(shouldAskPublicRepositoryDeploymentType(analysis), false);
-  assert.ok(recommendation.candidates.length >= 3);
+  assert.equal(recommendation.candidates.length, 2);
   assert.equal(recommendation.candidates[0]?.templateId, "ecs-fargate-container-app");
   assert.deepEqual(
     recommendation.questions.map((question) => question.id),
@@ -52,7 +52,7 @@ test("follow-up questions change with the selected template", () => {
   assert.ok(serverless.questions.length <= 5);
 });
 
-test("repository recommendation keeps comparison candidates when analysis signals are sparse", () => {
+test("repository recommendation uses backend-ranked candidates without synthesizing extras", () => {
   const analysis: SourceRepositoryAnalysisResult = {
     ...createAnalysis(),
     detectedSignals: ["Container"]
@@ -63,16 +63,11 @@ test("repository recommendation keeps comparison candidates when analysis signal
     deploymentType: "container"
   });
 
-  assert.equal(recommendation.candidates.length, 4);
+  assert.equal(recommendation.candidates.length, 2);
   assert.equal(recommendation.candidates[0]?.templateId, "ecs-fargate-container-app");
   assert.deepEqual(
     new Set(recommendation.candidates.map((candidate) => candidate.templateId)),
-    new Set([
-      "ecs-fargate-container-app",
-      "eks-container-app",
-      "three-tier-web-app",
-      "full-serverless-web-app"
-    ])
+    new Set(["ecs-fargate-container-app", "eks-container-app"])
   );
 });
 
@@ -122,6 +117,37 @@ function createAnalysis(): SourceRepositoryAnalysisResult {
     evidenceFiles: [],
     recommendationReason: "React, Node API, Python API, Database, Container 신호가 있습니다.",
     recommendedTemplateId: "template-api-db",
-    repositoryUrl: "https://github.com/example/fullstack"
+    repositoryUrl: "https://github.com/example/fullstack",
+    aiHandoff: {
+      status: "template_selection_failed",
+      templateId: null,
+      applicationUnits: [],
+      evidence: [],
+      missingEvidence: [],
+      mismatchReasons: ["비교 후보 선택이 필요합니다."],
+      deploymentTypeDefault: "container",
+      usesCiCdDefault: false,
+      questions: [],
+      recommendation: {
+        deploymentType: "container",
+        usesCiCd: false,
+        candidates: [
+          {
+            templateId: "ecs-fargate-container-app",
+            displayTitle: "ECS Fargate 컨테이너 앱",
+            confidence: 0.84,
+            reasons: ["컨테이너 근거가 ECS Fargate와 맞습니다."],
+            tradeoffs: ["Kubernetes 이식성은 EKS보다 낮습니다."]
+          },
+          {
+            templateId: "eks-container-app",
+            displayTitle: "EKS 컨테이너 앱",
+            confidence: 0.64,
+            reasons: ["Kubernetes 운영 대안입니다."],
+            tradeoffs: ["클러스터 운영 복잡도가 높습니다."]
+          }
+        ]
+      }
+    }
   };
 }

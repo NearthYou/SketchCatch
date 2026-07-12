@@ -78,9 +78,10 @@ import {
   isRepositoryEvidenceContentPath
 } from "../source-repositories/repository-evidence-path.js";
 import {
-  analyzeRepositoryEvidence,
+  analyzeRepositoryEvidence as analyzeLegacyRepositoryEvidence,
   type RepositoryEvidenceFile
 } from "../services/aiRepositoryAnalysis.js";
+import { analyzeRepositoryEvidence as analyzeSourceRepositorySnapshot } from "../source-repositories/repository-analysis.js";
 
 const MAX_PRE_DEPLOYMENT_TERRAFORM_FILE_COUNT = 64;
 const MAX_PRE_DEPLOYMENT_TERRAFORM_FILE_NAME_LENGTH = 180;
@@ -376,23 +377,31 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
       const body = sourceRepositoryAnalysisBodySchema.parse(request.body);
       const repository = parseGitHubRepositoryUrl(body.repositoryUrl);
       const defaultBranch = body.defaultBranch ?? "main";
-      const evidence = await fetchRepositoryEvidence(repository, defaultBranch);
-
-      return analyzeRepositoryEvidence({
+      const snapshot = await fetchRepositoryEvidence(repository, defaultBranch);
+      const legacyAnalysis = analyzeLegacyRepositoryEvidence({
         defaultBranch,
-        evidence,
+        evidence: snapshot.files,
         repositoryUrl: body.repositoryUrl
       });
+
+      return {
+        ...legacyAnalysis,
+        aiHandoff: analyzeSourceRepositorySnapshot({
+          revision: defaultBranch,
+          treePaths: snapshot.treePaths,
+          files: snapshot.files
+        })
+      };
     }
   );
 
   app.post("/ai/github-architecture-draft", async (request): Promise<AiArchitectureDraftResult> => {
     const body = githubArchitectureDraftBodySchema.parse(request.body);
     const repository = parseGitHubRepositoryUrl(body.repositoryUrl);
-    const evidence = await fetchRepositoryEvidence(repository, body.defaultBranch ?? "main");
+    const snapshot = await fetchRepositoryEvidence(repository, body.defaultBranch ?? "main");
     const templateContext = getRepositoryTemplateContext(body.selectedTemplateId);
     const result = createArchitectureDraftFromRepositoryEvidence(body.repositoryUrl, [
-      ...evidence.map((file) => file.content),
+      ...snapshot.files.map((file) => file.content),
       templateContext
     ]);
 
@@ -816,7 +825,10 @@ function parseGitHubRepositoryUrl(repositoryUrl: string): GitHubRepository {
 async function fetchRepositoryEvidence(
   repository: GitHubRepository,
   defaultBranch: string
-): Promise<RepositoryEvidenceFile[]> {
+): Promise<{
+  readonly treePaths: readonly string[];
+  readonly files: readonly RepositoryEvidenceFile[];
+}> {
   const treePaths = await fetchPublicRepositoryTreePaths(repository, defaultBranch);
   const evidencePaths = selectPublicRepositoryEvidencePaths(treePaths);
   const evidence = await Promise.all(
@@ -834,7 +846,10 @@ async function fetchRepositoryEvidence(
     })
   );
 
-  return evidence.flatMap((file) => (file === null ? [] : [file]));
+  return {
+    treePaths,
+    files: evidence.flatMap((file) => (file === null ? [] : [file]))
+  };
 }
 
 async function fetchPublicRepositoryTreePaths(
