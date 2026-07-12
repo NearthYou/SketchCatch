@@ -5,7 +5,7 @@ Short English-only working log for the current agent context. Older records are 
 ## Current Verified State
 
 - Branch: `feat/ck/349-repo-analysis`.
-- Public Repository recommendation consumes backend-ranked supported candidates from the full public evidence snapshot, asks follow-up questions, and creates a repository-aware diagram only after user acceptance.
+- Public Repository recommendation uses supported candidates plus schema-validated OpenAI ranking and Korean reasons/questions, with deterministic fallback.
 - Deployment type is hidden when repository evidence is decisive and shown only for ambiguous analysis.
 - CI/CD handoff is a prominent standalone setting; its GitHub App repository panel appears only while enabled.
 - Public Repository setup confirms Template and CI/CD before opening a separate follow-up-question stage.
@@ -216,4 +216,4 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Next Action
 
-- Commit the public Repository recommendation candidate and diagram enrichment update.
+- Run an opt-in live OpenAI smoke test when deployment credentials are available.

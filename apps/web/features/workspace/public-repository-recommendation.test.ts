@@ -27,6 +27,7 @@ test("public repository recommendation returns multiple candidates and follow-up
     recommendation.questions.map((question) => question.id),
     ["include_frontend", "include_database"]
   );
+  assert.equal(recommendation.questions[0]?.prompt, "AI가 생성한 프론트엔드 확인 질문");
 });
 
 test("follow-up questions change with the selected template", () => {
@@ -137,7 +138,23 @@ function createAnalysis(): SourceRepositoryAnalysisResult {
             displayTitle: "ECS Fargate 컨테이너 앱",
             confidence: 0.84,
             reasons: ["컨테이너 근거가 ECS Fargate와 맞습니다."],
-            tradeoffs: ["Kubernetes 이식성은 EKS보다 낮습니다."]
+            tradeoffs: ["Kubernetes 이식성은 EKS보다 낮습니다."],
+            questions: [
+              {
+                id: "include_frontend",
+                prompt: "AI가 생성한 프론트엔드 확인 질문",
+                answerType: "boolean",
+                required: true,
+                reason: "React가 감지되었습니다."
+              },
+              {
+                id: "include_database",
+                prompt: "AI가 생성한 데이터베이스 확인 질문",
+                answerType: "boolean",
+                required: true,
+                reason: "Database가 감지되었습니다."
+              }
+            ]
           },
           {
             templateId: "eks-container-app",

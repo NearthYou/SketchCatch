@@ -18,7 +18,7 @@ import type {
   GitHubRepositoryEvidenceReader
 } from "./github-app-client.js";
 import { analyzeRepositoryEvidence } from "./repository-analysis.js";
-import { recommendRepositoryTemplates } from "./repository-template-recommendation.js";
+import { recommendRepositoryTemplatesWithAi } from "./repository-template-recommendation.js";
 
 export type SourceRepositoryRecord = typeof sourceRepositories.$inferSelect;
 export type SourceRepositoryProjectRecord = typeof projects.$inferSelect;
@@ -619,7 +619,7 @@ export async function recommendSourceRepositoryTemplate(
     );
   }
 
-  const recommendation = recommendRepositoryTemplates({
+  const recommendation = await recommendRepositoryTemplatesWithAi({
     snapshot: {
       revision: sourceRepository.analysisRevision,
       treePaths: analysis.evidence.map((item) => item.path),

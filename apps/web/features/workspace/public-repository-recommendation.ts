@@ -13,8 +13,8 @@ export type PublicRepositoryTemplateId = TemplateId;
 export type PublicRepositoryQuestion = {
   readonly id: string;
   readonly prompt: string;
-  readonly answerType: "boolean" | "single_select";
-  readonly options?: readonly { readonly value: string; readonly label: string }[];
+  readonly answerType: "boolean" | "single_select" | "free_text";
+  readonly options?: readonly { readonly value: string; readonly label: string }[] | undefined;
 };
 
 export type PublicRepositoryTemplateCandidate = {
@@ -23,6 +23,7 @@ export type PublicRepositoryTemplateCandidate = {
   readonly confidence: number;
   readonly reasons: readonly string[];
   readonly tradeoffs: readonly string[];
+  readonly questions?: readonly PublicRepositoryQuestion[] | undefined;
 };
 
 export type PublicRepositoryRecommendation = {
@@ -47,11 +48,14 @@ export function createPublicRepositoryRecommendation(input: {
 }): PublicRepositoryRecommendation {
   const candidates = createPublicRepositoryTemplateCandidates(input);
   const selectedTemplateId = input.selectedTemplateId ?? candidates[0]?.templateId;
+  const selectedCandidate = candidates.find((candidate) => candidate.templateId === selectedTemplateId);
   return {
     candidates,
-    questions: selectedTemplateId
-      ? createPublicRepositoryQuestions(input.analysis, selectedTemplateId)
-      : []
+    questions: selectedCandidate?.questions !== undefined
+      ? selectedCandidate.questions.slice(0, 5)
+      : selectedTemplateId
+        ? createPublicRepositoryQuestions(input.analysis, selectedTemplateId)
+        : []
   };
 }
 
@@ -133,7 +137,16 @@ function createPublicRepositoryTemplateCandidates(input: {
   const backendCandidates = input.analysis.aiHandoff?.recommendation?.candidates;
 
   if (backendCandidates && backendCandidates.length > 0) {
-    return backendCandidates;
+    return backendCandidates.map((candidate) => ({
+      ...candidate,
+      displayTitle: formatPublicRepositoryTemplate(candidate.templateId),
+      questions: candidate.questions?.map((question) => ({
+        id: question.id,
+        prompt: question.prompt,
+        answerType: question.answerType,
+        ...(question.options ? { options: question.options } : {})
+      }))
+    }));
   }
 
   const signals = new Set(input.analysis.detectedSignals);

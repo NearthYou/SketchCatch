@@ -82,6 +82,7 @@ import {
   type RepositoryEvidenceFile
 } from "../services/aiRepositoryAnalysis.js";
 import { analyzeRepositoryEvidence as analyzeSourceRepositorySnapshot } from "../source-repositories/repository-analysis.js";
+import { recommendRepositoryTemplatesWithAi } from "../source-repositories/repository-template-recommendation.js";
 
 const MAX_PRE_DEPLOYMENT_TERRAFORM_FILE_COUNT = 64;
 const MAX_PRE_DEPLOYMENT_TERRAFORM_FILE_NAME_LENGTH = 180;
@@ -384,13 +385,30 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
         repositoryUrl: body.repositoryUrl
       });
 
+      const aiHandoff = analyzeSourceRepositorySnapshot({
+        revision: defaultBranch,
+        treePaths: snapshot.treePaths,
+        files: snapshot.files
+      });
+      const recommendation = aiHandoff.deploymentTypeDefault
+        ? await recommendRepositoryTemplatesWithAi({
+            snapshot: {
+              revision: defaultBranch,
+              treePaths: snapshot.treePaths,
+              files: snapshot.files
+            },
+            applicationUnits: aiHandoff.applicationUnits,
+            evidence: aiHandoff.evidence,
+            missingEvidence: aiHandoff.missingEvidence,
+            deploymentType: aiHandoff.deploymentTypeDefault,
+            usesCiCd: aiHandoff.usesCiCdDefault ?? false,
+            answers: []
+          })
+        : aiHandoff.recommendation;
+
       return {
         ...legacyAnalysis,
-        aiHandoff: analyzeSourceRepositorySnapshot({
-          revision: defaultBranch,
-          treePaths: snapshot.treePaths,
-          files: snapshot.files
-        })
+        aiHandoff: recommendation ? { ...aiHandoff, recommendation } : aiHandoff
       };
     }
   );

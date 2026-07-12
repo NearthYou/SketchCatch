@@ -648,6 +648,7 @@ export type RepositoryTemplateRecommendationCandidate = {
   readonly confidence: number;
   readonly reasons: readonly string[];
   readonly tradeoffs: readonly string[];
+  readonly questions?: readonly RepositoryAnalysisQuestion[] | undefined;
 };
 
 export type RepositoryTemplateRecommendationResult = {
