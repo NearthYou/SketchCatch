@@ -9,6 +9,7 @@ import { DiagramEditor } from "../../features/diagram-editor";
 import type { DiagramEditorPanelContext } from "../../features/diagram-editor";
 import { EMPTY_DIAGRAM } from "../../features/diagram-editor/constants";
 import { buildBoardTemplateDiagram } from "../../features/resource-settings/template-library";
+import { hydrateCatalogResourceNodes } from "../../features/resource-settings/template-resource-materializer";
 import { listSourceRepositories } from "../../features/workspace/api";
 import type { LocalProjectDraft } from "../../features/workspace/project-draft-persistence";
 import { defaultProjectDraftRepository } from "../../features/workspace/project-draft-repository";
@@ -103,7 +104,9 @@ export function WorkspaceProjectClient({
         const loaded = await defaultProjectDraftRepository.load({ fallbackDiagram, projectId });
         if (cancelled) return;
 
-        const selectedDiagram = restoreSavedDiagram(loaded.diagramJson, fallbackDiagram);
+        const selectedDiagram = hydrateCatalogResourceNodes(
+          restoreSavedDiagram(loaded.diagramJson, fallbackDiagram)
+        );
         latestDiagramRef.current = selectedDiagram;
         localDraftRef.current = loaded.localDraft;
         setInitialDiagram(selectedDiagram);
