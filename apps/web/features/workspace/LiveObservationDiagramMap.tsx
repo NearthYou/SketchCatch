@@ -41,8 +41,12 @@ export function LiveObservationDiagramMap({
   const visibleParticleCount = Math.min(2, burst?.visibleParticleCount ?? 0);
   const minimumWidth = Math.max(
     760,
-    model.stages.length * 144 + Math.max(2, model.capacityUnits.length) * 94 + 80
+    model.stages.length * 144 +
+      model.capacityUnits.length * 94 +
+      (model.hiddenCapacityCount > 0 ? 64 : 0) +
+      80
   );
+  const totalCapacityCount = model.capacityUnits.length + model.hiddenCapacityCount;
 
   return (
     <section
@@ -52,7 +56,7 @@ export function LiveObservationDiagramMap({
     >
       <header className={styles.liveObservationPresentationHeader}>
         <strong>PROJECT DIAGRAM · FOCUSED DATA FLOW</strong>
-        <span>{model.stages.length} stages · {model.capacityUnits.length} capacity units</span>
+        <span>{model.stages.length} stages · {totalCapacityCount} capacity units</span>
       </header>
       <div className={styles.liveObservationPresentationViewport}>
         <div className={styles.liveObservationPresentationSurface} style={{ minWidth: `${minimumWidth}px` }}>
@@ -118,6 +122,14 @@ export function LiveObservationDiagramMap({
                     <span>{getCapacityStateLabel(unit.observationState)}</span>
                   </article>
                 ))}
+                {model.hiddenCapacityCount > 0 ? (
+                  <div
+                    aria-label={`${model.hiddenCapacityCount} additional capacity units`}
+                    className={styles.liveObservationCapacityOverflow}
+                  >
+                    +{model.hiddenCapacityCount}
+                  </div>
+                ) : null}
               </div>
             </li>
           </ol>
@@ -144,7 +156,7 @@ function getRoleLabel(role: LiveObservationPresentationRole): string {
 function getCapacityStateLabel(state: LiveObservationDiagramNodeState): string {
   if (state === "active") return "RUNNING";
   if (state === "launching") return "STARTING";
-  return "INACTIVE";
+  return "EXPECTED";
 }
 
 function getCapacityDisplayLabel(label: string, index: number): string {

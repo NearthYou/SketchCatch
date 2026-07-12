@@ -192,6 +192,15 @@ test("presentation particles stay inside connectors and the stage hugs its conte
   assert.doesNotMatch(surfaceRule, /height:\s*100%/);
 });
 
+test("capacity presentation expands with visible units and summarizes overflow", () => {
+  const diagramMapSource = readWorkspaceFile("LiveObservationDiagramMap.tsx");
+
+  assert.match(diagramMapSource, /model\.hiddenCapacityCount/);
+  assert.match(diagramMapSource, /liveObservationCapacityOverflow/);
+  assert.match(diagramMapSource, /model\.capacityUnits\.length \* 94/);
+  assert.match(diagramMapSource, /\+\{model\.hiddenCapacityCount\}/);
+});
+
 test("development mock automatically replays the real animation path with labeled local data", () => {
   assert.match(modalSource, /process\.env\.NODE_ENV === "development"/);
   assert.doesNotMatch(modalSource, /목업 애니메이션 재생/);

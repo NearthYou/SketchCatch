@@ -132,6 +132,38 @@ test("returns an unavailable model when capacity or a source path is missing", (
   assert.deepEqual(disconnectedCapacity, { status: "unavailable", reason: "path-missing" });
 });
 
+test("expands capacity slots from max capacity and caps individual units at eight", () => {
+  const diagram = createDiagram(
+    [
+      node("site", "aws_s3_object"),
+      node("service", "aws_ecs_service"),
+      capacityNode("task-template")
+    ],
+    [edge("site", "service"), edge("service", "task-template")]
+  );
+
+  const two = createLiveObservationDiagramModel(diagram, snapshot(1, 1, 2));
+  const eight = createLiveObservationDiagramModel(diagram, snapshot(2, 1, 8));
+  const twelve = createLiveObservationDiagramModel(diagram, snapshot(2, 1, 12));
+
+  assert.equal(two.status, "ready");
+  assert.equal(eight.status, "ready");
+  assert.equal(twelve.status, "ready");
+  if (two.status !== "ready" || eight.status !== "ready" || twelve.status !== "ready") return;
+
+  assert.equal(two.capacityUnits.length, 2);
+  assert.equal(two.hiddenCapacityCount, 0);
+  assert.equal(eight.capacityUnits.length, 8);
+  assert.equal(eight.hiddenCapacityCount, 0);
+  assert.equal(twelve.capacityUnits.length, 8);
+  assert.equal(twelve.hiddenCapacityCount, 4);
+  assert.deepEqual(
+    twelve.capacityUnits.slice(0, 3).map((unit) => unit.observationState),
+    ["active", "launching", "inactive"]
+  );
+  assert.equal(new Set(twelve.capacityUnits.map((unit) => unit.node.id)).size, 8);
+});
+
 function createDiagram(nodes: DiagramNode[], edges: DiagramJson["edges"]): DiagramJson {
   return { nodes, edges, viewport: { x: 0, y: 0, zoom: 1 } };
 }
@@ -174,12 +206,16 @@ function edge(sourceNodeId: string, targetNodeId: string): DiagramJson["edges"][
   return { id: `${sourceNodeId}-${targetNodeId}`, sourceNodeId, targetNodeId };
 }
 
-function snapshot(desiredCapacity: number, runningCount: number): LiveObservationSnapshot {
+function snapshot(
+  desiredCapacity: number,
+  runningCount: number,
+  maxCapacity = 2
+): LiveObservationSnapshot {
   return {
     observationId: "observation-1",
     status: "active",
     live: { acceptedEventCount: 1, rollingRequestsPerSecond: 1, projectedRequestsPerMinute: 60, pressurePercent: 100, pressureLevel: "critical", observedAt: "2026-07-12T00:00:00.000Z" },
     cloudWatch: { state: "available", requestCountPerTarget: 60, periodSeconds: 60, observedAt: "2026-07-12T00:00:00.000Z", delayedBySeconds: 0, errorCode: null },
-    capacity: { state: "available", desiredCapacity, currentInstanceCount: desiredCapacity, inServiceInstanceCount: runningCount, maxCapacity: 2, instances: [], latestActivity: null, observedAt: "2026-07-12T00:00:00.000Z", errorCode: null }
+    capacity: { state: "available", desiredCapacity, currentInstanceCount: desiredCapacity, inServiceInstanceCount: runningCount, maxCapacity, instances: [], latestActivity: null, observedAt: "2026-07-12T00:00:00.000Z", errorCode: null }
   };
 }

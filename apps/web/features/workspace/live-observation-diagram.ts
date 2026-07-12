@@ -41,6 +41,7 @@ const SUPPORT_TYPES = new Set([
 ]);
 const MAX_PATH_CANDIDATES = 256;
 const MAX_PATH_DEPTH = 64;
+export const MAX_VISIBLE_CAPACITY_UNITS = 8;
 
 export type LiveObservationDiagramNodeState = "active" | "inactive" | "launching";
 export type LiveObservationPresentationRole = "source" | "hop" | "controller";
@@ -60,6 +61,7 @@ export type LiveObservationDiagramModel =
       readonly status: "ready";
       readonly stages: readonly LiveObservationPresentationStage[];
       readonly capacityUnits: readonly LiveObservationCapacityUnit[];
+      readonly hiddenCapacityCount: number;
       readonly pressureLevel: LiveObservationSnapshot["live"]["pressureLevel"];
     }
   | {
@@ -104,6 +106,21 @@ export function createLiveObservationDiagramModel(
   const runningCount = snapshot?.capacity.inServiceInstanceCount ?? 0;
   const desiredCount = snapshot?.capacity.desiredCapacity ?? runningCount;
   const orderedCapacityNodes = [...capacityNodes].sort(compareCapacityNodes);
+  const requestedCapacityCount = Math.max(
+    orderedCapacityNodes.length,
+    snapshot?.capacity.currentInstanceCount ?? 0,
+    desiredCount,
+    snapshot?.capacity.maxCapacity ?? 0
+  );
+  const visibleCapacityCount = Math.min(
+    MAX_VISIBLE_CAPACITY_UNITS,
+    requestedCapacityCount
+  );
+  const capacityTemplate = orderedCapacityNodes[0];
+  const presentationCapacityNodes = Array.from(
+    { length: visibleCapacityCount },
+    (_, index) => orderedCapacityNodes[index] ?? createCapacitySlotNode(capacityTemplate, index)
+  );
 
   return {
     status: "ready",
@@ -116,12 +133,24 @@ export function createLiveObservationDiagramModel(
         role: index === 0 ? "source" : index === nodeIds.length - 1 ? "controller" : "hop"
       } satisfies LiveObservationPresentationStage];
     }),
-    capacityUnits: orderedCapacityNodes.map((node, index) => ({
+    capacityUnits: presentationCapacityNodes.map((node, index) => ({
       node,
       observationState:
         index < runningCount ? "active" : index < desiredCount ? "launching" : "inactive"
     })),
+    hiddenCapacityCount: Math.max(0, requestedCapacityCount - visibleCapacityCount),
     pressureLevel: snapshot?.live.pressureLevel ?? "normal"
+  };
+}
+
+function createCapacitySlotNode(template: DiagramNode, index: number): DiagramNode {
+  return {
+    ...template,
+    id: `${template.id}--capacity-slot-${index + 1}`,
+    label: `${template.label} ${index + 1}`,
+    metadata: template.metadata ? { ...template.metadata } : undefined,
+    position: { ...template.position },
+    size: { ...template.size }
   };
 }
 
