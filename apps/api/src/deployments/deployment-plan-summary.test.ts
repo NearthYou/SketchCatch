@@ -66,6 +66,29 @@ test("createDeploymentPlanSummaryFromTerraformShowJson counts create update dele
   });
 });
 
+test("demo web service live apply allows ECS Fargate and Application Auto Scaling resources", () => {
+  const terraformShowJson = JSON.stringify({
+    resource_changes: [
+      "aws_ecs_cluster",
+      "aws_ecs_task_definition",
+      "aws_ecs_service",
+      "aws_appautoscaling_target",
+      "aws_appautoscaling_policy",
+      "aws_ecr_repository",
+      "aws_eip",
+      "aws_nat_gateway"
+    ].map((type) => ({ mode: "managed", type, change: { actions: ["create"] } }))
+  });
+
+  assert.deepEqual(
+    findUnsupportedLiveApplyResourceTypesFromTerraformShowJson(
+      terraformShowJson,
+      "demo_web_service"
+    ),
+    []
+  );
+});
+
 test("createDeploymentPlanSummaryFromTerraformShowJson records unsupported action warnings", () => {
   const summary = createDeploymentPlanSummaryFromTerraformShowJson(
     JSON.stringify({

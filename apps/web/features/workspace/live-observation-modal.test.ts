@@ -67,8 +67,9 @@ test("modal can switch Live Observation snapshots to REST polling for prototype 
   assert.match(modalSource, /streamLiveObservationSnapshots/);
 });
 
-test("development mock reuses the primary map instead of rendering a preview map", () => {
-  assert.equal(modalSource.match(/<LiveObservationSignalMap\s+asgMeta=/g)?.length, 1);
+test("development mock reuses the project diagram map instead of rendering a preview map", () => {
+  assert.equal(modalSource.match(/<LiveObservationDiagramMap/g)?.length, 1);
+  assert.match(modalSource, /getProjectDraft\(projectId\)/);
   assert.doesNotMatch(modalSource, /function MockRequestFlowPreview/);
 });
 
@@ -155,19 +156,16 @@ test("active and mock layouts share the signal map with browser and AWS evidence
 });
 
 test("accepted event deltas render a bounded one-shot path only toward actual InService capacity", () => {
-  const signalMapSource = readWorkspaceFile("LiveObservationSignalMap.tsx");
+  const diagramMapSource = readWorkspaceFile("LiveObservationDiagramMap.tsx");
 
   assert.match(modalSource, /getLiveObservationRequestBurst/);
-  assert.match(modalSource, /getLiveObservationRequestTargetIndexes/);
   assert.match(modalSource, /acceptedEventCountRef/);
   assert.match(modalSource, /inServiceInstanceKeys\.length > 0/);
   assert.doesNotMatch(modalSource, /function FlowParticles/);
-  assert.match(signalMapSource, /visibleParticleCount/);
-  assert.match(signalMapSource, /overflowCount/);
-  assert.match(modalSource, /requestTargetIndexes/);
-  assert.match(signalMapSource, /aria-hidden="true"/);
-  assert.match(signalMapSource, /S3 Page/);
-  assert.doesNotMatch(signalMapSource, /requestTargetIndexes\[index\] \?\? 0/);
+  assert.match(diagramMapSource, /burst\.visibleParticleCount/);
+  assert.match(diagramMapSource, /createLiveObservationDiagramModel/);
+  assert.match(diagramMapSource, /edge\.active && burst/);
+  assert.match(diagramMapSource, /aria-hidden="true"/);
   assert.doesNotMatch(modalSource, /setInterval\([^)]*FlowParticles/);
 });
 
@@ -189,7 +187,8 @@ test("development-only mock control replays the real animation path with labeled
     modalSource,
     /SHOW_MOCK_ANIMATION_PREVIEW\s*&&\s*mockRequestFlowState\.visible\s*&&\s*!session/
   );
-  assert.match(modalSource, /getMockRequestFlowTargetIndexes/);
+  assert.match(modalSource, /LiveObservationDiagramMap/);
+  assert.match(modalSource, /projectDiagram/);
   assert.match(modalSource, /목업 데이터 · 개발 확인용/);
   assert.doesNotMatch(modalSource, /liveObservationMockPreview/);
   assert.doesNotMatch(

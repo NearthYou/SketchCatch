@@ -62,6 +62,45 @@ test("createSession validates deployment eligibility and reuses one active sessi
   );
 });
 
+test("createSession accepts ECS Fargate outputs and builds an ECS service observation target", async () => {
+  let observedTarget: unknown;
+  const service = createService({
+    observabilityProvider: {
+      async observe(target) {
+        observedTarget = target;
+        return createObservabilityProvider().observe(target);
+      }
+    }
+  });
+
+  await service.createSession(
+    createSessionInput({
+      outputs: {
+        ...createRequiredOutputs(),
+        asg_name: undefined,
+        ecs_cluster_name: "demo-cluster",
+        ecs_service_name: "demo-service",
+        max_capacity: 2
+      }
+    })
+  );
+
+  assert.deepEqual(observedTarget, {
+    albArnSuffix: "app/demo/123",
+    awsConnectionId: "connection-1",
+    capacityTarget: {
+      clusterName: "demo-cluster",
+      kind: "ecs_service",
+      maxCapacity: 2,
+      serviceName: "demo-service"
+    },
+    externalId: "external-id",
+    region: "ap-northeast-2",
+    roleArn: "arn:aws:iam::123456789012:role/SketchCatchTerraformExecutionRole-demo",
+    targetGroupArnSuffix: "targetgroup/demo/456"
+  });
+});
+
 test("collectEvent deduplicates receipts and computes rolling pressure from accepted events", async () => {
   const service = createService();
   const created = await service.createSession(createSessionInput());

@@ -2012,6 +2012,7 @@ export type AwsRegionCode =
 
 export type DiagramNodeMetadata = {
   parentAreaNodeId?: string | undefined;
+  liveObservationRole?: "capacity-unit" | undefined;
   moduleSource?:
     | {
         moduleId: string;

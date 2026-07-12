@@ -4,6 +4,7 @@ import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   Deployment,
+  DiagramJson,
   LiveObservationSession,
   LiveObservationSnapshot
 } from "@sketchcatch/types";
@@ -19,12 +20,11 @@ import {
 import { createPortal } from "react-dom";
 import QRCode from "qrcode";
 import { getApiErrorMessage } from "../../lib/api-client";
-import {
-  LiveObservationSignalMap,
-  type LiveObservationSignalMapBurst
-} from "./LiveObservationSignalMap";
+import type { LiveObservationSignalMapBurst } from "./LiveObservationSignalMap";
+import { LiveObservationDiagramMap } from "./LiveObservationDiagramMap";
 import {
   createLiveObservation,
+  getProjectDraft,
   listDeployments,
   pollLiveObservationSnapshots,
   stopLiveObservation,
@@ -33,7 +33,6 @@ import {
 import {
   clearMockRequestFlowBurst,
   createInitialMockRequestFlowState,
-  getMockRequestFlowTargetIndexes,
   replayMockRequestFlow
 } from "./live-observation-mock-preview";
 import { getLiveObservationSignalBurstLifetimeMs } from "./live-observation-signal-map";
@@ -43,8 +42,6 @@ import {
   getLiveObservationInstanceMarkers,
   getLiveObservationPressureLabel,
   getLiveObservationRequestBurst,
-  getLiveObservationRequestTargetIndexes,
-  type LiveObservationInstanceMarker,
   type PresenterTrafficBoostController,
   type PresenterTrafficBoostProgress
 } from "./live-observation";
@@ -74,11 +71,6 @@ const LIVE_OBSERVATION_TRANSPORT =
 const LIVE_OBSERVATION_POLL_INTERVAL_MS = 2_000;
 const MOCK_SNAPSHOT_INTERVAL_MS = 2_000;
 
-const MOCK_SIGNAL_MAP_INSTANCES: readonly LiveObservationInstanceMarker[] = [
-  { key: "mock-instance-a", label: "Mock InService A", state: "in-service" },
-  { key: "mock-instance-b", label: "Mock InService B", state: "in-service" }
-];
-
 export function LiveObservationModal({
   onClose,
   projectId,
@@ -95,6 +87,7 @@ export function LiveObservationModal({
   const requestBurstSequenceRef = useRef(0);
   const [mounted, setMounted] = useState(false);
   const [deployments, setDeployments] = useState<Deployment[]>([]);
+  const [projectDiagram, setProjectDiagram] = useState<DiagramJson | null>(null);
   const [selectedDeploymentId, setSelectedDeploymentId] = useState("");
   const [listState, setListState] = useState<"loading" | "ready" | "error">("loading");
   const [requestState, setRequestState] = useState<"idle" | "loading">("idle");
@@ -131,40 +124,18 @@ export function LiveObservationModal({
     () => getLiveObservationInstanceMarkers(snapshot),
     [snapshot]
   );
-  const mockInstanceMarkers = useMemo(
-    () => getLiveObservationInstanceMarkers(mockRequestFlowState.snapshot),
-    [mockRequestFlowState.snapshot]
-  );
   const inServiceInstanceKeys = instanceMarkers
     .filter((instance) => instance.state === "in-service")
     .map((instance) => instance.key)
     .slice(0, 2);
-  const requestTargetIndexes = requestFlowBurst
-    ? getLiveObservationRequestTargetIndexes(
-        requestFlowBurst.visibleParticleCount,
-        inServiceInstanceKeys.length,
-        requestFlowBurst.sequence
-      )
-    : [];
   const showDevelopmentMockMap =
     SHOW_MOCK_ANIMATION_PREVIEW && mockRequestFlowState.visible && !session;
   const displayedSnapshot = showDevelopmentMockMap
     ? mockRequestFlowState.snapshot
     : snapshot;
-  const mockRequestTargetIndexes = showDevelopmentMockMap
-    ? getMockRequestFlowTargetIndexes(mockRequestFlowBurst)
-    : [];
   const mapBurst = showDevelopmentMockMap
     ? mockRequestFlowBurst
     : requestFlowBurst;
-  const mapInstances = showDevelopmentMockMap
-    ? mockInstanceMarkers.length > 0
-      ? mockInstanceMarkers
-      : MOCK_SIGNAL_MAP_INSTANCES
-    : instanceMarkers;
-  const mapRequestTargetIndexes = showDevelopmentMockMap
-    ? mockRequestTargetIndexes
-    : requestTargetIndexes;
 
   useEffect(() => {
     if (!snapshot) {
@@ -278,13 +249,14 @@ export function LiveObservationModal({
     setListState("loading");
     setErrorMessage("");
 
-    void listDeployments(projectId)
-      .then((items) => {
+    void Promise.all([listDeployments(projectId), getProjectDraft(projectId)])
+      .then(([items, draftResponse]) => {
         if (cancelled) {
           return;
         }
         const eligible = getEligibleLiveObservationDeployments(items);
         setDeployments(items);
+        setProjectDiagram(draftResponse.draft?.diagramJson ?? null);
         setSelectedDeploymentId((current) =>
           eligible.some((deployment) => deployment.id === current)
             ? current
@@ -654,7 +626,7 @@ export function LiveObservationModal({
                 <strong>{formatCloudWatchValue(displayedSnapshot)}</strong>
                 <p>완료된 60초 RequestCountPerTarget</p>
                 <small>
-                  {formatCloudWatchDelay(displayedSnapshot)} · {formatCapacityValue(displayedSnapshot)} InService / desired / max
+                  {formatCloudWatchDelay(displayedSnapshot)} · {formatCapacityValue(displayedSnapshot)} active / desired / max
                 </small>
               </div>
             </section>
@@ -670,13 +642,17 @@ export function LiveObservationModal({
                   목업 데이터 · 개발 확인용
                 </span>
               ) : null}
-              <LiveObservationSignalMap
-                asgMeta={formatAsgCapacity(displayedSnapshot)}
-                burst={mapBurst}
-                instances={mapInstances}
-                pressureLevel={displayedSnapshot?.live.pressureLevel ?? "normal"}
-                requestTargetIndexes={mapRequestTargetIndexes}
-              />
+              {projectDiagram ? (
+                <LiveObservationDiagramMap
+                  burst={mapBurst}
+                  diagram={projectDiagram}
+                  snapshot={displayedSnapshot}
+                />
+              ) : (
+                <div className={styles.liveObservationMessage}>
+                  저장된 프로젝트 다이어그램을 불러올 수 없습니다.
+                </div>
+              )}
             </section>
           ) : listState === "ready" && eligibleDeployments.length > 0 ? (
             <div className={styles.liveObservationIntro}>
@@ -693,7 +669,7 @@ export function LiveObservationModal({
           <footer className={styles.liveObservationControlRail}>
             <div className={styles.liveObservationControlActivity}>
               <span className={styles.liveObservationSectionLabel}>스케일링 활동</span>
-              <strong>최근 Auto Scaling 활동</strong>
+              <strong>최근 Scaling 활동</strong>
               {snapshot?.capacity.latestActivity ? (
                 <div>
                   <i aria-hidden="true" />
@@ -781,13 +757,6 @@ function formatRemainingTime(seconds: number): string {
   const minutes = Math.floor(seconds / 60);
   const remainder = seconds % 60;
   return `${String(minutes).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`;
-}
-
-function formatAsgCapacity(snapshot: LiveObservationSnapshot | null): string {
-  if (snapshot?.capacity.state !== "available") {
-    return "실제 상태 대기";
-  }
-  return `${snapshot.capacity.desiredCapacity ?? "–"} desired / ${snapshot.capacity.maxCapacity ?? "–"} max`;
 }
 
 function formatCloudWatchValue(snapshot: LiveObservationSnapshot | null): string {

@@ -137,11 +137,11 @@ export function getLiveObservationInstanceMarkers(
   }
 
   const markers: LiveObservationInstanceMarker[] = snapshot.capacity.instances.map((instance) => {
-    if (instance.lifecycleState === "InService") {
-      return { key: instance.instanceId, label: "InService", state: "in-service" };
+    if (instance.lifecycleState === "InService" || instance.lifecycleState === "RUNNING") {
+      return { key: instance.instanceId, label: instance.lifecycleState, state: "in-service" };
     }
 
-    if (/^(?:Warmed:)?Pending/.test(instance.lifecycleState)) {
+    if (/^(?:(?:Warmed:)?Pending|PROVISIONING|PENDING)$/.test(instance.lifecycleState)) {
       return { key: instance.instanceId, label: "Launching", state: "launching" };
     }
 

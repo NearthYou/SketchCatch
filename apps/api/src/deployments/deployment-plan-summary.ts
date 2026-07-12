@@ -33,10 +33,17 @@ export const practiceLiveApplySupportedResourceTypes = new Set([
 
 const demoWebServiceLiveApplySupportedResourceTypes = new Set([
   ...practiceLiveApplySupportedResourceTypes,
+  "aws_appautoscaling_policy",
+  "aws_appautoscaling_target",
   "aws_autoscaling_group",
   "aws_autoscaling_policy",
   "aws_cloudwatch_metric_alarm",
   "aws_cloudwatch_log_group",
+  "aws_ecr_repository",
+  "aws_ecs_cluster",
+  "aws_ecs_service",
+  "aws_ecs_task_definition",
+  "aws_eip",
   "aws_iam_instance_profile",
   "aws_iam_role",
   "aws_iam_role_policy_attachment",
@@ -44,6 +51,7 @@ const demoWebServiceLiveApplySupportedResourceTypes = new Set([
   "aws_lb",
   "aws_lb_listener",
   "aws_lb_target_group",
+  "aws_nat_gateway",
   "aws_s3_bucket_policy",
   "aws_s3_bucket_website_configuration",
   "aws_s3_object"

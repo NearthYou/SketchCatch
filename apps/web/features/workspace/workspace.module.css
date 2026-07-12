@@ -6008,6 +6008,126 @@
   z-index: 8;
 }
 
+.liveObservationDiagramMap {
+  background: #f7f8fa;
+  border: 1px solid #d9dde5;
+  height: clamp(430px, 58vh, 680px);
+  overflow: hidden;
+  position: relative;
+  width: 100%;
+}
+
+.liveObservationDiagramEdges {
+  height: 100%;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+  position: absolute;
+  width: 100%;
+  z-index: 20;
+}
+
+.liveObservationDiagramEdge,
+.liveObservationDiagramEdgeActive {
+  fill: none;
+  vector-effect: non-scaling-stroke;
+}
+
+.liveObservationDiagramEdge {
+  stroke: #aeb6c4;
+  stroke-width: 1;
+}
+
+.liveObservationDiagramEdgeActive {
+  stroke: #4968d4;
+  stroke-width: 2.5;
+}
+
+.liveObservationDiagramPulse {
+  fill: #2f65f5;
+  filter: drop-shadow(0 0 5px rgba(47, 101, 245, 0.6));
+}
+
+.liveObservationDiagramNode,
+.liveObservationDiagramArea {
+  box-sizing: border-box;
+  position: absolute;
+}
+
+.liveObservationDiagramArea {
+  background: rgba(255, 255, 255, 0.34);
+  border: 1px dashed #9099aa;
+  color: #4c5565;
+  padding: 8px 10px;
+}
+
+.liveObservationDiagramArea strong {
+  display: block;
+  font-size: 10px;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.liveObservationDiagramNode {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #c9cfda;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  justify-content: center;
+  min-height: 28px;
+  padding: 5px;
+  text-align: center;
+}
+
+.liveObservationDiagramNode img {
+  height: min(42%, 30px);
+  object-fit: contain;
+  width: min(42%, 30px);
+}
+
+.liveObservationDiagramNode strong {
+  font-size: clamp(8px, 0.72vw, 11px);
+  line-height: 1.15;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.liveObservationDiagramNode[data-observation-state="active"] {
+  border-color: #2f65f5;
+  box-shadow: 0 0 0 2px rgba(47, 101, 245, 0.14);
+}
+
+.liveObservationDiagramNode[data-observation-state="launching"] {
+  animation: liveObservationTaskLaunching 1s ease-in-out infinite alternate;
+  border-color: #e58b20;
+  box-shadow: 0 0 0 2px rgba(229, 139, 32, 0.16);
+}
+
+.liveObservationDiagramNode[data-observation-state="inactive"] {
+  filter: grayscale(1);
+  opacity: 0.42;
+}
+
+.liveObservationDiagramMap[data-pressure-level="high"] .liveObservationDiagramEdgeActive,
+.liveObservationDiagramMap[data-pressure-level="critical"] .liveObservationDiagramEdgeActive {
+  stroke: #db3b30;
+}
+
+.liveObservationDiagramMap[data-pressure-level="critical"] .liveObservationDiagramPulse {
+  fill: #db3b30;
+}
+
+@keyframes liveObservationTaskLaunching {
+  from { opacity: 0.58; }
+  to { opacity: 1; }
+}
+
 .liveObservationSignalMap {
   --live-signal-accent: #67e8f9;
   --live-signal-route: rgba(103, 232, 249, 0.68);

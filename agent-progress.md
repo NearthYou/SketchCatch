@@ -96,6 +96,15 @@ Short English-only working log for the current agent context. Older records are 
 - Kept the ECS deployment workflow and removed the retired EC2 deployment workflow.
 - Reconciled the new Workspace shell, Board viewport behavior, Resource panel extraction, and Live Observation styles.
 
+### 2026-07-12 - Add diagram-based ECS Fargate Live Observation
+
+- Added ECS Service capacity targets to the Live Observation contract and AWS adapter, mapping desired, running, and pending Fargate tasks into the shared capacity snapshot.
+- Added ECS/Fargate Terraform rendering support for service networking, load balancer attachment, Application Auto Scaling, and the outputs required to reconstruct an observation target.
+- Replaced the fixed observation map in the modal with a renderer driven by the saved project DiagramJson coordinates and edges; capacity-unit nodes now activate only when the matching Fargate task is running or launching.
+- Created a local successful ECS/Fargate demo deployment project with a two-AZ VPC, public ALB, private Fargate tasks, NAT gateway, CloudWatch logs, and target-tracking scaling from one to two tasks.
+- Verification: focused API tests passed 40/40; focused web observation and catalog tests passed 50/50; generated demo Terraform passed `terraform validate`; `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
+- Risk: no AWS apply was performed. The local simulated provider proves the observation contract and animation path; real task scaling still requires an explicitly approved AWS deployment and cleanup workflow.
+
 ## Verification
 
 

@@ -1,6 +1,7 @@
 import type {
   DeploymentObservation,
-  DeploymentObservabilityProvider
+  DeploymentObservabilityProvider,
+  DeploymentObservabilityTarget
 } from "./deployment-observability-provider.js";
 
 const CLOUDWATCH_PERIOD_SECONDS = 60;
@@ -28,7 +29,7 @@ export function createSimulatedCloudWatchAgentObservabilityProvider(options: {
   const now = options.now ?? Date.now;
 
   return {
-    async observe(): Promise<DeploymentObservation> {
+    async observe(target): Promise<DeploymentObservation> {
       const currentTimeMs = now();
       const recentTrafficCount = trafficEventTimesMs.filter(
         (eventTimeMs) => currentTimeMs - eventTimeMs <= RECENT_TRAFFIC_WINDOW_MS
@@ -51,7 +52,7 @@ export function createSimulatedCloudWatchAgentObservabilityProvider(options: {
           delayedBySeconds: AGENT_DELAY_SECONDS,
           errorCode: null
         },
-        capacity: createCapacityObservation(stage, currentTimeMs)
+        capacity: createCapacityObservation(stage, currentTimeMs, target)
       };
     }
   };
@@ -77,10 +78,13 @@ function getAgentSimulationStage(recentTrafficCount: number): AgentSimulationSta
 
 function createCapacityObservation(
   stage: AgentSimulationStage,
-  currentTimeMs: number
+  currentTimeMs: number,
+  target: DeploymentObservabilityTarget
 ): DeploymentObservation["capacity"] {
   const observedAt = new Date(currentTimeMs).toISOString();
   const scaleActivityStartedAt = new Date(currentTimeMs - 6_000).toISOString();
+
+  const isEcsService = target.capacityTarget.kind === "ecs_service";
 
   if (stage === "scaled") {
     return {
@@ -90,12 +94,14 @@ function createCapacityObservation(
       inServiceInstanceCount: 2,
       maxCapacity: 2,
       instances: [
-        createInstance("i-agent-demo-a", "InService"),
-        createInstance("i-agent-demo-b", "InService")
+        createCapacityUnit(isEcsService, "a", true),
+        createCapacityUnit(isEcsService, "b", true)
       ],
       latestActivity: {
         statusCode: "Successful",
-        description: "Simulated CloudWatch Agent metric crossed the scale-out threshold; ASG now has two healthy EC2 instances.",
+        description: isEcsService
+          ? "Simulated ALB metric crossed the scale-out threshold; ECS Service now has two healthy Fargate tasks."
+          : "Simulated CloudWatch Agent metric crossed the scale-out threshold; ASG now has two healthy EC2 instances.",
         startedAt: scaleActivityStartedAt,
         endedAt: observedAt
       },
@@ -112,12 +118,14 @@ function createCapacityObservation(
       inServiceInstanceCount: 1,
       maxCapacity: 2,
       instances: [
-        createInstance("i-agent-demo-a", "InService"),
-        createInstance("i-agent-demo-b", "Pending")
+        createCapacityUnit(isEcsService, "a", true),
+        createCapacityUnit(isEcsService, "b", false)
       ],
       latestActivity: {
         statusCode: "InProgress",
-        description: "Simulated CloudWatch Agent metric triggered ASG scale-out; a second EC2 instance is launching.",
+        description: isEcsService
+          ? "Simulated ALB metric triggered ECS Service scale-out; a second Fargate task is provisioning."
+          : "Simulated CloudWatch Agent metric triggered ASG scale-out; a second EC2 instance is launching.",
         startedAt: scaleActivityStartedAt,
         endedAt: null
       },
@@ -132,11 +140,13 @@ function createCapacityObservation(
     currentInstanceCount: 1,
     inServiceInstanceCount: 1,
     maxCapacity: 2,
-    instances: [createInstance("i-agent-demo-a", "InService")],
+    instances: [createCapacityUnit(isEcsService, "a", true)],
     latestActivity: stage === "warming"
       ? {
           statusCode: "Monitoring",
-          description: "Simulated CloudWatch Agent is reporting rising request pressure; ASG threshold is not crossed yet.",
+          description: isEcsService
+            ? "Simulated ALB metric is reporting rising request pressure; ECS Service threshold is not crossed yet."
+            : "Simulated CloudWatch Agent is reporting rising request pressure; ASG threshold is not crossed yet.",
           startedAt: observedAt,
           endedAt: null
         }
@@ -151,5 +161,17 @@ function createInstance(instanceId: string, lifecycleState: string) {
     healthStatus: lifecycleState === "InService" ? "Healthy" : "Pending",
     instanceId,
     lifecycleState
+  };
+}
+
+function createCapacityUnit(isEcsService: boolean, suffix: string, ready: boolean) {
+  if (!isEcsService) {
+    return createInstance(`i-agent-demo-${suffix}`, ready ? "InService" : "Pending");
+  }
+
+  return {
+    healthStatus: ready ? "Healthy" : "Pending",
+    instanceId: `task/demo-service/${suffix}`,
+    lifecycleState: ready ? "RUNNING" : "PROVISIONING"
   };
 }

@@ -1,13 +1,28 @@
 import type { LiveObservationSnapshot } from "@sketchcatch/types";
 
-export type DeploymentObservabilityTarget = {
+type DeploymentObservabilityTargetBase = {
   readonly awsConnectionId: string;
   readonly roleArn: string;
   readonly externalId: string;
   readonly region: string;
-  readonly asgName: string;
   readonly albArnSuffix: string;
   readonly targetGroupArnSuffix: string;
+};
+
+export type DeploymentCapacityTarget =
+  | {
+      readonly kind: "asg";
+      readonly asgName: string;
+    }
+  | {
+      readonly kind: "ecs_service";
+      readonly clusterName: string;
+      readonly serviceName: string;
+      readonly maxCapacity: number;
+    };
+
+export type DeploymentObservabilityTarget = DeploymentObservabilityTargetBase & {
+  readonly capacityTarget: DeploymentCapacityTarget;
 };
 
 export type DeploymentObservation = Pick<
