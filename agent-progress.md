@@ -12,8 +12,7 @@ Short English-only working log for the current agent context. Older records are 
 - Public Repository recommendation now shows ranked template candidates, asks follow-up questions, and creates an enriched repository-aware diagram only after the user accepts board creation.
 - Repository template candidates now use readable light selection rows with scoped button styles, explicit reasons/tradeoffs, and responsive layouts.
 - Deployment type is hidden when repository evidence is decisive and shown only for ambiguous analysis.
-- Local `db:migrate` could not be run in this shell because `DATABASE_URL` is empty.
-- No cloud deployment, Terraform apply, or infrastructure mutation was run during this work session.
+- CI/CD handoff is a prominent standalone setting, visually separated from follow-up questions.
 
 ## Session Record
 
@@ -25,10 +24,11 @@ Short English-only working log for the current agent context. Older records are 
   - Split candidate content into rank, title, fit, reasons, tradeoffs, and selected state.
   - Added responsive one-column candidate details and preserved source title casing.
   - Removed the duplicate deployment selector for repositories with decisive deployment evidence.
+  - Shared the separated CI/CD handoff and follow-up question sections across public and connected Repository flows.
 - Verification:
   - Focused recommendation tests, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
   - Lint retains only the pre-existing API `setNow` warning.
-  - Browser-verified candidate readability, 390px layout, and conditional deployment-question removal.
+  - Browser-verified candidate readability, 390px layout, conditional deployment-question removal, and CI/CD section hierarchy.
 
 ### 2026-07-12 - Fail fast when API database URL is missing
 

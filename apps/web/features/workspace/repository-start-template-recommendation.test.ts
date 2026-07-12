@@ -20,6 +20,10 @@ test("Repository start screen exposes deployment, CI/CD, and template recommenda
   assert.match(source, /publicCandidateList/);
   assert.match(source, /publicCandidateDetail/);
   assert.match(source, /publicBoardAction/);
+  assert.match(source, /CiCdHandoffOption/);
+  assert.match(source, /CI\/CD 인계 설정/);
+  assert.match(source, /questionSection/);
+  assert.match(source, /추가 질문/);
   assert.match(source, /shouldAskPublicRepositoryDeploymentType/);
   assert.match(source, /getPublicRepositoryTemplateDeploymentType/);
   assert.match(source, /role="radiogroup"/);

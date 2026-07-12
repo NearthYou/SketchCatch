@@ -42,6 +42,10 @@ import { AiDraftBoardPreview } from "../ai/ai-draft-board-preview";
 import styles from "./repository-start.module.css";
 
 type RequestState = "idle" | "loading" | "error";
+type RepositoryQuestionView = Pick<
+  RepositoryAnalysisQuestion,
+  "answerType" | "id" | "options" | "prompt"
+>;
 
 type RepositoryStartClientProps = {
   readonly initialDefaultBranch?: string;
@@ -416,10 +420,7 @@ export function RepositoryStartClient({
                     <option value="serverless">서버리스 기반</option>
                   </select>
                 </label>
-                <label className={styles.checkboxLabel}>
-                  <input checked={usesCiCd} onChange={(event) => setUsesCiCd(event.target.checked)} type="checkbox" />
-                  <span>CI/CD 인계 사용</span>
-                </label>
+                <CiCdHandoffOption checked={usesCiCd} onChange={setUsesCiCd} />
                 <RepositoryQuestions
                   answers={answers}
                   onAnswer={(questionId, value) =>
@@ -474,44 +475,70 @@ function RepositoryQuestions({
 }: {
   readonly answers: Record<string, string | boolean>;
   readonly onAnswer: (questionId: string, value: string | boolean) => void;
-  readonly questions: readonly RepositoryAnalysisQuestion[];
+  readonly questions: readonly RepositoryQuestionView[];
 }) {
   if (questions.length === 0) return null;
 
   return (
-    <div className={styles.questionList}>
-      {questions.map((question) => (
-        <label key={question.id}>
-          <span>{question.prompt}</span>
-          {question.answerType === "boolean" ? (
-            <select
-              value={String(answers[question.id] ?? "")}
-              onChange={(event) => onAnswer(question.id, event.target.value === "true")}
-            >
-              <option value="">선택</option>
-              <option value="true">예</option>
-              <option value="false">아니요</option>
-            </select>
-          ) : question.answerType === "single_select" ? (
-            <select
-              value={String(answers[question.id] ?? "")}
-              onChange={(event) => onAnswer(question.id, event.target.value)}
-            >
-              <option value="">선택</option>
-              {(question.options ?? []).map((option) => (
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </select>
-          ) : (
-            <input
-              value={String(answers[question.id] ?? "")}
-              onChange={(event) => onAnswer(question.id, event.target.value)}
-              type="text"
-            />
-          )}
-        </label>
-      ))}
-    </div>
+    <section className={styles.questionSection} aria-label="추가 질문">
+      <div className={styles.questionSectionHeader}>
+        <strong>추가 질문</strong>
+        <span>추천 결과를 아키텍처에 맞게 조정합니다.</span>
+      </div>
+      <div className={styles.questionList}>
+        {questions.map((question) => (
+          <label key={question.id}>
+            <span>{question.prompt}</span>
+            {question.answerType === "boolean" ? (
+              <select
+                value={String(answers[question.id] ?? "")}
+                onChange={(event) => onAnswer(question.id, event.target.value === "true")}
+              >
+                <option value="">선택</option>
+                <option value="true">예</option>
+                <option value="false">아니요</option>
+              </select>
+            ) : question.answerType === "single_select" ? (
+              <select
+                value={String(answers[question.id] ?? "")}
+                onChange={(event) => onAnswer(question.id, event.target.value)}
+              >
+                <option value="">선택</option>
+                {(question.options ?? []).map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            ) : (
+              <input
+                value={String(answers[question.id] ?? "")}
+                onChange={(event) => onAnswer(question.id, event.target.value)}
+                type="text"
+              />
+            )}
+          </label>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function CiCdHandoffOption({
+  checked,
+  onChange
+}: {
+  readonly checked: boolean;
+  readonly onChange: (checked: boolean) => void;
+}) {
+  return (
+    <section className={styles.ciCdSection} aria-label="CI/CD 인계 설정">
+      <label className={styles.ciCdLabel}>
+        <input checked={checked} onChange={(event) => onChange(event.target.checked)} type="checkbox" />
+        <span className={styles.ciCdCopy}>
+          <strong>CI/CD 인계 사용</strong>
+          <small>GitHub PR과 자동 배포 흐름에 연결합니다.</small>
+        </span>
+      </label>
+    </section>
   );
 }
 
@@ -640,39 +667,8 @@ function PublicRepositoryRecommendationStep({
           </select>
         </label>
       ) : null}
-      <label className={styles.checkboxLabel}>
-        <input checked={usesCiCd} onChange={(event) => onUsesCiCdChange(event.target.checked)} type="checkbox" />
-        <span>CI/CD 인계 사용</span>
-      </label>
-      {recommendation.questions.length > 0 ? (
-        <div className={styles.questionList}>
-          {recommendation.questions.map((question) => (
-            <label key={question.id}>
-              <span>{question.prompt}</span>
-              {question.answerType === "boolean" ? (
-                <select
-                  value={String(answers[question.id] ?? "")}
-                  onChange={(event) => onAnswer(question.id, event.target.value === "true")}
-                >
-                  <option value="">선택</option>
-                  <option value="true">예</option>
-                  <option value="false">아니요</option>
-                </select>
-              ) : (
-                <select
-                  value={String(answers[question.id] ?? "")}
-                  onChange={(event) => onAnswer(question.id, event.target.value)}
-                >
-                  <option value="">선택</option>
-                  {(question.options ?? []).map((option) => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
-                </select>
-              )}
-            </label>
-          ))}
-        </div>
-      ) : null}
+      <CiCdHandoffOption checked={usesCiCd} onChange={onUsesCiCdChange} />
+      <RepositoryQuestions answers={answers} onAnswer={onAnswer} questions={recommendation.questions} />
       <button
         className={styles.publicBoardAction}
         disabled={isBusy || !analysis.recommendedTemplateId}

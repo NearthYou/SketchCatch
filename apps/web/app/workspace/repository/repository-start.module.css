@@ -474,15 +474,70 @@
   font: inherit;
 }
 
-.checkboxLabel {
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  justify-content: start;
+.ciCdSection {
+  margin: 2px 0;
+  border-top: 1px solid var(--color-hairline-strong);
+  border-bottom: 1px solid var(--color-hairline-strong);
+  padding: 16px;
+  background: var(--color-surface-soft);
 }
 
-.checkboxLabel input {
-  width: 18px;
-  height: 18px;
+.ciCdLabel {
+  display: grid;
+  align-items: center;
+  cursor: pointer;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 12px;
+}
+
+.ciCdLabel input {
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  accent-color: var(--color-primary);
+}
+
+.ciCdCopy {
+  display: grid;
+  gap: 3px;
+  text-transform: none;
+}
+
+.ciCdCopy strong {
+  color: var(--color-ink);
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.ciCdCopy small {
+  color: var(--color-body);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.45;
+}
+
+.questionSection {
+  display: grid;
+  gap: 14px;
+  border-top: 1px solid var(--color-hairline);
+  padding-top: 16px;
+}
+
+.questionSectionHeader {
+  display: grid;
+  gap: 3px;
+}
+
+.questionSectionHeader strong {
+  color: var(--color-ink);
+  font-size: 15px;
+}
+
+.questionSectionHeader span {
+  color: var(--color-muted);
+  font-size: 12px;
+  font-weight: 400;
+  text-transform: none;
 }
 
 .questionList {
