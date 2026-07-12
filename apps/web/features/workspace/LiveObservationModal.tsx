@@ -36,7 +36,7 @@ import {
 } from "./api";
 import {
   clearMockRequestFlowBurst,
-  createAutoStartedMockRequestFlowState,
+  createInitialMockRequestFlowState,
   replayMockRequestFlow
 } from "./live-observation-mock-preview";
 import { getLiveObservationSignalBurstLifetimeMs } from "./live-observation-signal-map";
@@ -74,7 +74,6 @@ const LIVE_OBSERVATION_TRANSPORT =
     ? "polling"
     : "stream";
 const LIVE_OBSERVATION_POLL_INTERVAL_MS = 2_000;
-const MOCK_SNAPSHOT_INTERVAL_MS = 2_000;
 const DESIGN_SIMULATION_DEFAULTS = {
   budgetLevel: "normal",
   expectedUserCount: 1000,
@@ -118,10 +117,8 @@ export function LiveObservationModal({
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [boostProgress, setBoostProgress] = useState(EMPTY_BOOST_PROGRESS);
   const [requestFlowBurst, setRequestFlowBurst] = useState<LiveObservationSignalMapBurst | null>(null);
-  const [mockRequestFlowState, setMockRequestFlowState] = useState(() =>
-    SHOW_MOCK_ANIMATION_PREVIEW
-      ? createAutoStartedMockRequestFlowState()
-      : { burst: null, sequence: 0, snapshot: null, visible: false }
+  const [mockRequestFlowState, setMockRequestFlowState] = useState(
+    createInitialMockRequestFlowState
   );
   const mockRequestFlowBurst = mockRequestFlowState.burst;
   const boardSnapshot = useMemo(
@@ -230,18 +227,6 @@ export function LiveObservationModal({
 
     return () => window.clearTimeout(timer);
   }, [mockRequestFlowBurst]);
-
-  useEffect(() => {
-    if (!SHOW_MOCK_ANIMATION_PREVIEW || session || !mockRequestFlowState.visible) {
-      return;
-    }
-
-    const timer = window.setInterval(() => {
-      setMockRequestFlowState(replayMockRequestFlow);
-    }, MOCK_SNAPSHOT_INTERVAL_MS);
-
-    return () => window.clearInterval(timer);
-  }, [mockRequestFlowState.visible, session]);
 
   useEffect(() => {
     if (!SHOW_MOCK_ANIMATION_PREVIEW || session || !mockRequestFlowState.snapshot) {

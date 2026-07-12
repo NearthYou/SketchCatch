@@ -188,8 +188,8 @@ test("presentation particles stay inside connectors and the stage hugs its conte
   assert.match(mapRule, /height:\s*clamp\(300px,\s*42vh,\s*430px\)/);
   assert.match(particleRule, /box-sizing:\s*border-box/);
   assert.match(surfaceRule, /min-height:\s*210px/);
-  assert.match(stylesSource, /from \{ left:\s*-3px; opacity:\s*0; \}/);
-  assert.match(stylesSource, /to \{ left:\s*calc\(100% - 4px\); opacity:\s*0; \}/);
+  assert.match(stylesSource, /from \{ left:\s*-10px; opacity:\s*0; \}/);
+  assert.match(stylesSource, /to \{ left:\s*calc\(100% - 5px\); opacity:\s*0; \}/);
   assert.doesNotMatch(surfaceRule, /height:\s*100%/);
 });
 
@@ -202,10 +202,24 @@ test("capacity presentation expands with visible units and summarizes overflow",
   assert.match(diagramMapSource, /\+\{model\.hiddenCapacityCount\}/);
 });
 
-test("traffic bursts and capacity activation use emphatic bounded animation", () => {
+test("traffic bursts alone activate visible circular flow particles", () => {
   const diagramMapSource = readWorkspaceFile("LiveObservationDiagramMap.tsx");
 
   assert.match(diagramMapSource, /Math\.min\(4, burst\?\.visibleParticleCount/);
+  assert.match(diagramMapSource, /data-flowing=\{burst !== null\}/);
+  assert.match(stylesSource, /@keyframes liveObservationPresentationSegmentParticle/);
+  assert.match(
+    stylesSource,
+    /\[data-flowing="true"\][\s\S]{0,180}\.liveObservationPresentationConnector::after[\s\S]{0,120}animation:\s*liveObservationConnectorFlow/
+  );
+  assert.doesNotMatch(
+    getCssRule(stylesSource, "liveObservationPresentationConnector::after"),
+    /animation:/
+  );
+  assert.match(
+    getCssRule(stylesSource, "liveObservationPresentationSegmentParticle"),
+    /border-radius:\s*50%[\s\S]*height:\s*10px[\s\S]*width:\s*10px/
+  );
   assert.match(stylesSource, /@keyframes liveObservationCapacityLaunch/);
   assert.match(stylesSource, /@keyframes liveObservationCapacityActivated/);
   assert.match(
@@ -218,10 +232,12 @@ test("traffic bursts and capacity activation use emphatic bounded animation", ()
   );
 });
 
-test("development mock automatically replays the real animation path with labeled local data", () => {
+test("development mock stays idle until observation traffic is explicitly driven", () => {
   assert.match(modalSource, /process\.env\.NODE_ENV === "development"/);
   assert.doesNotMatch(modalSource, /목업 애니메이션 재생/);
-  assert.match(modalSource, /createAutoStartedMockRequestFlowState/);
+  assert.match(modalSource, /createInitialMockRequestFlowState/);
+  assert.doesNotMatch(modalSource, /createAutoStartedMockRequestFlowState/);
+  assert.doesNotMatch(mockPreviewSource, /createAutoStartedMockRequestFlowState/);
   assert.match(modalSource, /setMockRequestFlowState\(replayMockRequestFlow\)/);
   assert.match(mockPreviewSource, /getLiveObservationRequestBurst\(100, 108, true\)/);
   assert.match(mockPreviewSource, /snapshot:\s*createMockLiveObservationSnapshot\(sequence\)/);
@@ -229,7 +245,7 @@ test("development mock automatically replays the real animation path with labele
   assert.match(mockPreviewSource, /i-prototype-b/);
   assert.match(mockPreviewSource, /statusCode:\s*scaleOutComplete \? "Successful" : "InProgress"/);
   assert.match(modalSource, /displayedSnapshot/);
-  assert.match(modalSource, /setInterval\(\(\) => \{[\s\S]{0,140}setMockRequestFlowState\(replayMockRequestFlow\)/);
+  assert.doesNotMatch(modalSource, /setInterval\(\(\) => \{[\s\S]{0,140}setMockRequestFlowState\(replayMockRequestFlow\)/);
   assert.doesNotMatch(modalSource, /function MockRequestFlowPreview/);
   assert.match(modalSource, /showDevelopmentMockMap/);
   assert.match(
@@ -267,7 +283,10 @@ test("AI simulation is on by default, retains state while collapsed, and omits r
   assert.match(modalSource, /aria-pressed=\{isAiSimulationVisible\}/);
   assert.match(modalSource, /isAiSimulationVisible \? \(/);
   assert.doesNotMatch(modalSource, /setDesignSimulation\(null\)[\s\S]{0,300}setAiSimulationVisible/);
-  assert.match(panelPiecesSource, /aiResultSummary[\s\S]*병목 후보[\s\S]*장애 대응[\s\S]*비용·다음 검토/);
+  assert.match(panelPiecesSource, /aiResultSummary[\s\S]*병목 후보[\s\S]*장애 대응[\s\S]*<strong>비용<\/strong>/);
+  assert.doesNotMatch(panelPiecesSource, /비용·다음 검토/);
+  assert.doesNotMatch(panelPiecesSource, /costRecommendationItems/);
+  assert.match(panelPiecesSource, /costReviewItems\.map/);
   assert.doesNotMatch(panelPiecesSource, />요청 흐름</);
   assert.doesNotMatch(panelPiecesSource, /simulation\.requestFlow\.map/);
   assert.match(

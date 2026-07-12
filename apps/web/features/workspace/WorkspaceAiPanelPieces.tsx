@@ -201,9 +201,6 @@ export function WorkspaceAiDesignSimulationResult({
   readonly simulation: DesignSimulationResult;
 }) {
   const costReviewItems = simulation.costEstimate?.reviewMessages ?? simulation.costPressure;
-  const costRecommendationItems = simulation.recommendations.filter(
-    (item) => !costReviewItems.includes(item)
-  );
 
   return (
     <div className={`${styles.aiResultStack} ${styles.aiSimulationResult}`}>
@@ -232,14 +229,14 @@ export function WorkspaceAiDesignSimulationResult({
           </ul>
         </section>
         <section className={styles.aiSimulationCard}>
-          <strong>비용·다음 검토</strong>
+          <strong>비용</strong>
           {simulation.costEstimate !== undefined ? (
             <div className={styles.aiSimulationCostMeta}>
               <span>${formatMoney(simulation.costEstimate.totalEstimate.amount)}</span>
             </div>
           ) : null}
           <ul>
-            {[...costReviewItems, ...costRecommendationItems].map((item, index) => (
+            {costReviewItems.map((item, index) => (
               <li key={`cost-${index}-${item}`}>
                 <p>{item}</p>
               </li>

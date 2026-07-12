@@ -133,6 +133,14 @@ Short English-only working log for the current agent context. Older records are 
 - Verification: focused Live Observation and workspace tests passed 127/127; web and repository typechecks passed; `pnpm harness:check`, `pnpm lint`, and `pnpm build` passed. The full web suite passed 864/868 and reproduced four pre-existing failures in the node-toolbar CSS contract, dashboard-project route expectation, AWS priority coverage, and the stale 126-entry gallery count.
 - Risk: the in-app browser session still redirects the protected workspace to login, so a final authenticated modal screenshot remains pending. The four existing full-suite failures remain outside this change set; static UI contracts, animation bounds, responsive layout, and data-state behavior for this work are covered by focused tests.
 
+### 2026-07-12 - Gate Live Observation motion on received traffic
+
+- Removed the development mock auto-start and recurring replay so opening Live Observation no longer creates traffic or capacity changes before the user starts an observation.
+- Kept connectors still by default and activate their motion plus larger circular request particles only for a bounded accepted-event burst after the observation session is running.
+- Renamed the AI simulation cost card to `비용` and removed recommendation items already repeated by the AI explanation while preserving concrete cost review messages and the estimate.
+- Verification: focused Live Observation and workspace tests passed 131/131; `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
+- Risk: the authenticated workspace still redirects to login in the in-app browser. Port 53125 is an older static brainstorming prototype rather than the SketchCatch runtime, so it cannot visually verify these source changes.
+
 ## Verification
 
 

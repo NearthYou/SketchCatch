@@ -52,6 +52,7 @@ export function LiveObservationDiagramMap({
     <section
       aria-label="프로젝트 다이어그램에서 분석한 메인 트래픽 경로"
       className={styles.liveObservationDiagramMap}
+      data-flowing={burst !== null}
       data-pressure-level={model.pressureLevel}
     >
       <header className={styles.liveObservationPresentationHeader}>
