@@ -58,6 +58,30 @@ test("resolveTemplateSiblingVisualCollisions expands a parent to contain a child
   assert.equal(resolvedVpc.size.height % 40, 0);
 });
 
+test("resolveTemplateSiblingVisualCollisions keeps the board available when collision placement reaches its cap", () => {
+  const tallArea = {
+    ...areaNode("a-tall-area", { x: 80, y: 80 }),
+    size: { height: 2_000, width: 160 }
+  };
+  const overlappingResource = resourceNode("z-overlapping-resource", { x: 80, y: 80 });
+  const originalConsoleError = console.error;
+  const errors: string[] = [];
+
+  console.error = (message?: unknown) => {
+    errors.push(String(message));
+  };
+
+  try {
+    assert.doesNotThrow(() =>
+      resolveTemplateSiblingVisualCollisions(createDiagram([tallArea, overlappingResource]), 1)
+    );
+  } finally {
+    console.error = originalConsoleError;
+  }
+
+  assert.deepEqual(errors, ["Unable to place Template node without overlap: z-overlapping-resource"]);
+});
+
 test("resolveTemplateSiblingVisualCollisions keeps a collapsed helper inside its parent without expanding it", () => {
   const securityGroup = areaNode("security-group", { x: 80, y: 80 });
   const launchTemplate = hiddenLaunchTemplateNode(
