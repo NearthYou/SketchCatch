@@ -10,25 +10,35 @@
   cursor: pointer;
 }
 
-.costTabs {
+.costFolder {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  border-bottom: 1px solid var(--color-hairline);
-  padding-bottom: 12px;
+}
+
+.costTabs {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--color-hairline-strong);
+  padding: 0 12px;
 }
 
 .costTab {
+  position: relative;
   display: grid;
-  min-height: 72px;
+  min-width: 220px;
+  min-height: 64px;
   gap: 4px;
   border: 1px solid var(--color-hairline-strong);
-  border-radius: var(--radius-control);
-  padding: 14px 16px;
-  background: var(--color-canvas);
+  border-bottom: 0;
+  border-radius: var(--radius-control) var(--radius-control) 0 0;
+  margin-bottom: -1px;
+  padding: 12px 16px 13px;
+  background: var(--color-surface-strong);
   color: var(--color-body);
   cursor: pointer;
   text-align: left;
+  z-index: 1;
 }
 
 .costTab strong {
@@ -37,15 +47,26 @@
 }
 
 .costTab span {
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.45;
   word-break: keep-all;
 }
 
 .costTab[aria-selected="true"] {
   border-color: var(--color-ink);
-  background: var(--color-surface-strong);
-  box-shadow: var(--shadow-ring);
+  border-bottom: 1px solid var(--color-canvas);
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  z-index: 2;
+}
+
+.costFolderPanel {
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--radius-card);
+  margin-top: -1px;
+  padding: 24px;
+  background: var(--color-canvas);
+  box-shadow: var(--shadow-card);
 }
 
 .costTab:focus-visible,
@@ -106,8 +127,8 @@
   padding: 4px 9px;
   background: var(--color-surface-strong);
   color: var(--color-ink);
-  font-size: 11px;
-  font-weight: 700;
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .projectCostValue,
@@ -121,7 +142,7 @@
 .projectCostValue span,
 .costUnavailable span {
   color: var(--color-body);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .projectCostValue strong {
@@ -132,7 +153,7 @@
 
 .projectCostValue small {
   color: var(--color-body);
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .costUnavailable strong {
@@ -269,7 +290,9 @@
   .metricGrid,
   .twoColumn,
   .costProjectGrid { grid-template-columns: 1fr; }
-  .costTabs { grid-template-columns: 1fr; }
+  .costTabs { padding-inline: 8px; }
+  .costTab { min-width: 190px; }
+  .costFolderPanel { padding: 16px; }
   .costPanelToolbar { flex-direction: column; align-items: stretch; }
   .costPanelToolbar .iconAction { align-self: flex-end; }
   .controlRow { display: grid; width: 100%; }

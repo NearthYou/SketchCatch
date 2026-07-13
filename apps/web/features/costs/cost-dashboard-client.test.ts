@@ -34,6 +34,8 @@ test("cost request coordinator aborts a superseded request and keeps only the ne
 
 test("cost dashboard separates pre-deployment estimates from deployed usage with tabs", () => {
   assert.match(clientSource, /role="tablist"/);
+  assert.match(clientSource, /styles\.costFolder/);
+  assert.match(clientSource, /styles\.costFolderPanel/);
   assert.match(clientSource, /예상 비용/);
   assert.match(clientSource, /실제 사용량/);
   assert.match(clientSource, /CostEstimatePanel/);

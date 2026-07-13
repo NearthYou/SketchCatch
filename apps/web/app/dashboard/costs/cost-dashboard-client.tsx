@@ -44,8 +44,9 @@ export function CostDashboardClient() {
         </div>
       </header>
 
-      <div aria-label="비용 데이터 보기" className={styles.costTabs} role="tablist">
-        <button
+      <div className={styles.costFolder}>
+        <div aria-label="비용 데이터 보기" className={styles.costTabs} role="tablist">
+          <button
           aria-controls="cost-panel-estimate"
           aria-selected={activeTab === "estimate"}
           className={styles.costTab}
@@ -61,8 +62,8 @@ export function CostDashboardClient() {
         >
           <strong>예상 비용</strong>
           <span>아직 배포하지 않은 프로젝트</span>
-        </button>
-        <button
+          </button>
+          <button
           aria-controls="cost-panel-usage"
           aria-selected={activeTab === "usage"}
           className={styles.costTab}
@@ -78,16 +79,18 @@ export function CostDashboardClient() {
         >
           <strong>실제 사용량</strong>
           <span>성공적으로 배포한 프로젝트</span>
-        </button>
-      </div>
+          </button>
+        </div>
 
-      <section
-        aria-labelledby={`cost-tab-${activeTab}`}
-        id={`cost-panel-${activeTab}`}
-        role="tabpanel"
-      >
-        {activeTab === "estimate" ? <CostEstimatePanel /> : <CostUsagePanel />}
-      </section>
+        <section
+          aria-labelledby={`cost-tab-${activeTab}`}
+          className={styles.costFolderPanel}
+          id={`cost-panel-${activeTab}`}
+          role="tabpanel"
+        >
+          {activeTab === "estimate" ? <CostEstimatePanel /> : <CostUsagePanel />}
+        </section>
+      </div>
     </div>
   );
 }
