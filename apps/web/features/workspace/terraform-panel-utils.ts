@@ -79,6 +79,78 @@ export function createTerraformFilesFromGeneratedCode(
     }));
 }
 
+export function mergeGeneratedTerraformFiles(
+  existingFiles: readonly TerraformVirtualFile[],
+  generatedFiles: readonly TerraformVirtualFile[],
+  preservedResourceAddresses: ReadonlySet<string>
+): TerraformVirtualFile[] {
+  const generatedAddresses = new Set(
+    generatedFiles.flatMap((file) => parseTerraformBlocks(file.fileName, file.code).map((block) => block.address))
+  );
+  const staleManagedAddresses = parseTerraformFiles(existingFiles)
+    .map((block) => block.address)
+    .filter((address) =>
+      !generatedAddresses.has(address) && !preservedResourceAddresses.has(address)
+    );
+  const nextFiles = removeTerraformBlocksByAddress(existingFiles, staleManagedAddresses)
+    .map((file) => ({ ...file }));
+
+  for (const generatedFile of generatedFiles) {
+    const generatedBlocks = parseTerraformBlocks(generatedFile.fileName, generatedFile.code);
+
+    if (generatedBlocks.length === 0) {
+      if (!nextFiles.some((file) => file.fileName === generatedFile.fileName)) {
+        nextFiles.push({ ...generatedFile });
+      }
+      continue;
+    }
+
+    for (const generatedBlock of generatedBlocks) {
+      if (preservedResourceAddresses.has(generatedBlock.address)) {
+        continue;
+      }
+
+      let replaced = false;
+      for (let fileIndex = 0; fileIndex < nextFiles.length; fileIndex += 1) {
+        const file = nextFiles[fileIndex];
+        if (!file) continue;
+        const existingBlock = parseTerraformBlocks(file.fileName, file.code)
+          .find((block) => block.address === generatedBlock.address);
+        if (!existingBlock) continue;
+
+        nextFiles[fileIndex] = {
+          ...file,
+          code: `${file.code.slice(0, existingBlock.startOffset)}${generatedBlock.code}${file.code.slice(existingBlock.endOffset)}`
+        };
+        replaced = true;
+        break;
+      }
+
+      if (!replaced) {
+        const targetIndex = nextFiles.findIndex((file) => file.fileName === generatedFile.fileName);
+        if (targetIndex === -1) {
+          nextFiles.push({ fileName: generatedFile.fileName, code: generatedBlock.code });
+        } else {
+          const target = nextFiles[targetIndex]!;
+          nextFiles[targetIndex] = { ...target, code: appendTerraformBlock(target.code, generatedBlock.code) };
+        }
+      }
+    }
+  }
+
+  return nextFiles.sort((left, right) => compareTerraformFileNames(left.fileName, right.fileName));
+}
+
+export function getTerraformAddressesRemovedFromDiagram(
+  previousAddresses: ReadonlySet<string>,
+  currentAddresses: ReadonlySet<string>,
+  preservedResourceAddresses: ReadonlySet<string>
+): string[] {
+  return Array.from(previousAddresses).filter((address) =>
+    !currentAddresses.has(address) && !preservedResourceAddresses.has(address)
+  );
+}
+
 export function getDiagramTerraformAddresses(diagramJson: DiagramEditorPanelContext["diagram"]): Set<string> {
   const addresses = new Set<string>();
 
@@ -273,8 +345,10 @@ function getNodeTerraformAddressCandidates(node: DiagramNode | null): string[] {
 
   const parameterAddress = toNodeTerraformAddress(node);
   const displayAddress = toNodeDisplayTerraformAddress(node);
+  const hasMatchingResourceType =
+    node.parameters?.resourceType?.trim() === node.type.trim();
   const candidates =
-    node.parameters?.terraformBlockType === "data"
+    node.parameters?.terraformBlockType === "data" || hasMatchingResourceType
       ? [
           parameterAddress,
           displayAddress,

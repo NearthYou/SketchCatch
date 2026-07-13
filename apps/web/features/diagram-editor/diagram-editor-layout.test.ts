@@ -324,28 +324,42 @@ test("collapsed right panel does not leave the mobile fixed rail shell visible",
   assert.match(collapsedMobileRightRailRule, /width:\s*0;/);
 });
 
-test("right panel resize handle does not show a purple hover rail", () => {
+test("right panel resize handle shows a muted hover grip", () => {
   const rightRailStateRule = getCssRuleContaining(".rightRailResizeHandle:hover::after");
 
-  assert.match(rightRailStateRule, /background:\s*transparent;/);
+  assert.match(rightRailStateRule, /background:\s*#8b9098;/);
   assert.match(rightRailStateRule, /box-shadow:\s*none;/);
-  assert.doesNotMatch(rightRailStateRule, /#7c5cff/);
-  assert.doesNotMatch(rightRailStateRule, /rgba\(124,\s*92,\s*255/);
 });
 
-test("left panel resize handle does not show a purple hover rail", () => {
+test("left panel resize handle shows a muted hover grip", () => {
   const leftRailStateRule = getCssRuleContaining(".leftRailResizeHandle:hover::after");
 
-  assert.match(leftRailStateRule, /background:\s*transparent;/);
+  assert.match(leftRailStateRule, /background:\s*#8b9098;/);
   assert.match(leftRailStateRule, /box-shadow:\s*none;/);
-  assert.doesNotMatch(leftRailStateRule, /#7c5cff/);
-  assert.doesNotMatch(leftRailStateRule, /rgba\(124,\s*92,\s*255/);
 });
 
-test("left and right resize handle hover states share one transparent rule", () => {
+test("left and right resize handles share the muted hover, focus, and active grip", () => {
   assert.match(
     diagramEditorStyles,
-    /\.leftRailResizeHandle:hover::after,\s*\.leftRailResizeHandle:focus-visible::after,\s*\.leftRailResizeHandle:active::after,\s*\.rightRailResizeHandle:hover::after,\s*\.rightRailResizeHandle:focus-visible::after,\s*\.rightRailResizeHandle:active::after\s*\{[^}]*background:\s*transparent;[^}]*box-shadow:\s*none;/s
+    /\.leftRailResizeHandle:hover::after,\s*\.leftRailResizeHandle:focus-visible::after,\s*\.leftRailResizeHandle:active::after,\s*\.rightRailResizeHandle:hover::after,\s*\.rightRailResizeHandle:focus-visible::after,\s*\.rightRailResizeHandle:active::after\s*\{[^}]*background:\s*#8b9098;[^}]*box-shadow:\s*none;/s
+  );
+});
+
+test("panel resize grip is short, centered, and rounded instead of a full-height rail", () => {
+  const resizeGripRule = getCssRuleContaining(".leftRailResizeHandle::after,");
+
+  assert.match(resizeGripRule, /border-radius:\s*999px;/);
+  assert.match(resizeGripRule, /height:\s*40px;/);
+  assert.match(resizeGripRule, /top:\s*50%;/);
+  assert.match(resizeGripRule, /transform:\s*translateY\(-50%\);/);
+  assert.match(resizeGripRule, /width:\s*3px;/);
+  assert.doesNotMatch(resizeGripRule, /bottom:\s*10px;/);
+});
+
+test("left and right resize handles use the bidirectional horizontal resize cursor", () => {
+  assert.match(
+    diagramEditorStyles,
+    /button\.leftRailResizeHandle,\s*button\.rightRailResizeHandle\s*\{[^}]*cursor:\s*ew-resize;/s
   );
 });
 
@@ -577,15 +591,13 @@ test("diagram editor fits and centers visual footprints inside the unobscured bo
   );
 });
 
-test("parameter updates synchronize all reference edges within one diagram update transaction", () => {
+test("parameter updates do not create hardcoded reference edges", () => {
   assert.match(
     diagramEditorSource,
     /const nextNodes = updateNodeById\(currentDiagram\.nodes, nodeId, \(node\) =>\s*applyNodeParametersUpdateWithAutoTagSync\(node, update\)\s*\);/s
   );
-  assert.match(
-    diagramEditorSource,
-    /nodes: nextNodes,\s*edges: syncParameterReferenceEdges\(nextNodes, currentDiagram\.edges\)/s
-  );
+  assert.doesNotMatch(diagramEditorSource, /syncParameterReferenceEdges/);
+  assert.match(diagramEditorSource, /nodes: nextNodes/);
 });
 
 test("Area auto expansion is a persistent pressed toolbar preference after canvas pan", () => {
@@ -606,6 +618,25 @@ test("Area auto expansion is a persistent pressed toolbar preference after canva
     /const nodesWithExpandedParents = autoExpandAreasEnabled\s*\? expandParentAreaNodesForEnteredChild\(nodesWithAssignedParents, nextNode\.id\)\s*:\s*nodesWithAssignedParents;/s
   );
   assert.match(diagramEditorSource, /<Expand aria-hidden="true" size=\{16\} \/>/);
+});
+
+test("canvas tools dock vertically along the left center", () => {
+  const canvasToolbarRule = getCssBlock(".canvasToolbar");
+  const toolbarGroupRule = getCssBlock(".toolbarGroup");
+
+  assert.match(canvasToolbarRule, /display:\s*flex;/);
+  assert.match(canvasToolbarRule, /flex-direction:\s*column;/);
+  assert.match(canvasToolbarRule, /left:\s*16px;/);
+  assert.match(canvasToolbarRule, /top:\s*50%;/);
+  assert.match(canvasToolbarRule, /transform:\s*translateY\(-50%\);/);
+  assert.doesNotMatch(canvasToolbarRule, /bottom:/);
+  assert.doesNotMatch(canvasToolbarRule, /translateX/);
+  assert.match(toolbarGroupRule, /display:\s*inline-flex;/);
+  assert.match(toolbarGroupRule, /flex-direction:\s*column;/);
+  assert.match(
+    diagramEditorStyles,
+    /@media \(max-width:\s*640px\)[\s\S]*?\.canvasToolbar\s*\{[^}]*left:\s*10px;[^}]*max-height:\s*calc\(100% - 20px\);/s
+  );
 });
 
 test("new and existing resources expand newly assigned parent areas before applying reference targets", () => {

@@ -286,10 +286,11 @@ test("renders Autoscaling Policy nested target tracking configuration", () => {
           policyType: "TargetTrackingScaling",
           targetTrackingConfiguration: {
             targetValue: 70,
+            disableScaleIn: false,
             predefinedMetricSpecification: [
               {
-                predefinedMetricType: "ASGAverageCPUUtilization",
-                resourceLabel: "app/targetgroup"
+                predefinedMetricType: "ALBRequestCountPerTarget",
+                resourceLabel: "${aws_lb.load_balancer.arn_suffix}/${aws_lb_target_group.target_group.arn_suffix}"
               }
             ]
           }
@@ -307,9 +308,10 @@ test("renders Autoscaling Policy nested target tracking configuration", () => {
   policy_type = "TargetTrackingScaling"
   target_tracking_configuration {
     target_value = 70
+    disable_scale_in = false
     predefined_metric_specification {
-      predefined_metric_type = "ASGAverageCPUUtilization"
-      resource_label = "app/targetgroup"
+      predefined_metric_type = "ALBRequestCountPerTarget"
+      resource_label = "\${aws_lb.load_balancer.arn_suffix}/\${aws_lb_target_group.target_group.arn_suffix}"
     }
   }
 }`

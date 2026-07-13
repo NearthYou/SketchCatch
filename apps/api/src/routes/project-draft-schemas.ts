@@ -89,5 +89,9 @@ export const projectDraftQuerySchema = z.object({
 });
 
 export const saveProjectDraftBodySchema = z.object({
-  diagramJson: diagramJsonSchema
+  diagramJson: diagramJsonSchema,
+  terraformFiles: z.array(z.object({
+    fileName: z.string().trim().min(1),
+    terraformCode: z.string()
+  }).strict()).optional()
 });

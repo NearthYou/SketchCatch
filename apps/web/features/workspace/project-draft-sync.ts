@@ -1,4 +1,4 @@
-import type { DiagramJson, ProjectDraftResponse } from "../../../../packages/types/src";
+import type { DiagramJson, ProjectDraftResponse, TerraformSyncFileInput } from "../../../../packages/types/src";
 import { getProjectDraft, saveProjectDraft } from "./api";
 import {
   chooseInitialDiagram,
@@ -18,6 +18,7 @@ export type LoadProjectDiagramDraftInput = {
 
 export type SaveProjectDiagramDraftInput = {
   diagramJson: DiagramJson;
+  terraformFiles?: TerraformSyncFileInput[] | undefined;
   localCacheWorkspaceId?: string | undefined;
   previousLocalDraft?: LocalProjectDraft | null | undefined;
   projectId: string;
@@ -151,7 +152,8 @@ export async function saveServerProjectDiagramDraft(
   try {
     serverResponse = await saveServer({
       projectId: input.projectId,
-      diagramJson: input.diagramJson
+      diagramJson: input.diagramJson,
+      ...(input.terraformFiles !== undefined ? { terraformFiles: input.terraformFiles } : {})
     });
   } catch (error) {
     return {
@@ -190,6 +192,7 @@ function createProjectLocalDraft(input: SaveProjectDiagramDraftInput, savedAt: s
     workspaceId: getLocalCacheWorkspaceId(input),
     projectId: input.projectId,
     diagramJson: input.diagramJson,
+    terraformFiles: input.terraformFiles,
     previousDraft: input.previousLocalDraft,
     savedAt
   });

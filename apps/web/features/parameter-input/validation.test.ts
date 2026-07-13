@@ -3,7 +3,9 @@ import { test } from "node:test";
 import type { DiagramNode } from "../../../../packages/types/src";
 import type { ParameterCatalog } from "./catalog";
 import type { ParameterCatalogDefinition } from "./catalog";
+import { terraformParameterCatalog } from "./catalog";
 import {
+  buildReferenceOptions,
   getActiveOptionalDefinitions,
   getMainDefinitions,
   getOptionalDefinitions,
@@ -12,6 +14,59 @@ import {
   mergeNodeParameters,
   validateParameters
 } from "./validation";
+
+test("Launch Template AMI options use the target-specific Terraform attribute", () => {
+  const imageIdDefinition = terraformParameterCatalog.resources.aws_launch_template?.find(
+    (definition) => definition.name === "imageId"
+  );
+  assert.ok(imageIdDefinition);
+
+  const launchTemplate = makeResourceNode({
+    id: "launch-template",
+    type: "aws_launch_template",
+    label: "LAUNCH TEMPLATE",
+    parameters: {
+      resourceType: "aws_launch_template",
+      resourceName: "traffic",
+      fileName: "main",
+      values: {}
+    }
+  });
+  const ami = makeResourceNode({
+    id: "ami",
+    type: "aws_ami",
+    label: "AMI",
+    parameters: {
+      terraformBlockType: "data",
+      resourceType: "aws_ami",
+      resourceName: "al2023",
+      fileName: "main",
+      values: {}
+    }
+  });
+  const ssmParameter = makeResourceNode({
+    id: "ssm-parameter",
+    type: "aws_ssm_parameter",
+    label: "AMAZON LINUX 2023",
+    parameters: {
+      terraformBlockType: "data",
+      resourceType: "aws_ssm_parameter",
+      resourceName: "amazon_linux_2023",
+      fileName: "main",
+      values: {}
+    }
+  });
+
+  assert.deepEqual(
+    buildReferenceOptions(
+      [launchTemplate, ami, ssmParameter],
+      launchTemplate.id,
+      imageIdDefinition,
+      terraformParameterCatalog
+    ).map((option) => option.reference),
+    ["data.aws_ami.al2023.id", "data.aws_ssm_parameter.amazon_linux_2023.value"]
+  );
+});
 
 test("getRequiredDefinitions returns only provider-required parameters", () => {
   const definitions = [

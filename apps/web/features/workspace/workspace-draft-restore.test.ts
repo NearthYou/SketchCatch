@@ -52,3 +52,28 @@ test("workspace restore repairs incomplete legacy records with required fallback
 
   assert.deepEqual(restoreSavedDiagram(incompleteDiagram, fallbackDiagram), fallbackDiagram);
 });
+
+test("workspace restore removes legacy automatic parameter-reference edges but keeps manual edges", () => {
+  const savedDiagram: DiagramJson = {
+    nodes: [],
+    edges: [
+      {
+        id: "manual-edge",
+        sourceNodeId: "asg",
+        targetNodeId: "target-group"
+      },
+      {
+        id: "parameter-reference:asg:targetGroupArns[0]:target-group",
+        sourceNodeId: "asg",
+        targetNodeId: "target-group",
+        metadata: {
+          managedBy: "parameter-reference",
+          parameterPath: "targetGroupArns[0]"
+        }
+      }
+    ],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  assert.deepEqual(restoreSavedDiagram(savedDiagram, fallbackDiagram).edges, [savedDiagram.edges[0]]);
+});

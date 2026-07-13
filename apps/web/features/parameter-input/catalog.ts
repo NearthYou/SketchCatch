@@ -162,7 +162,26 @@ const priorityResourceFallbacks: Record<string, readonly ParameterCatalogDefinit
     core("name", "name", "Name"),
     number("port", "port", "Port", false, "80"),
     select("protocol", "protocol", "Protocol", ["HTTP", "HTTPS", "TCP", "TLS", "UDP"]),
+    select("targetType", "target_type", "Target type", ["instance", "ip", "lambda", "alb"]),
     ref("vpcId", "vpc_id", "VPC", ["aws_vpc"], false),
+    number(
+      "deregistrationDelay",
+      "deregistration_delay",
+      "Deregistration delay",
+      false,
+      "300"
+    ),
+    nestedBlock("healthCheck", "health_check", "Health check", [
+      boolean("enabled", "enabled", "Enabled"),
+      select("protocol", "protocol", "Protocol", ["HTTP", "HTTPS", "TCP", "TLS", "UDP"]),
+      core("port", "port", "Port", "traffic-port"),
+      core("path", "path", "Path", "/health"),
+      core("matcher", "matcher", "Matcher", "200"),
+      number("interval", "interval", "Interval", false, "15"),
+      number("timeout", "timeout", "Timeout", false, "5"),
+      number("healthyThreshold", "healthy_threshold", "Healthy threshold", false, "2"),
+      number("unhealthyThreshold", "unhealthy_threshold", "Unhealthy threshold", false, "2")
+    ], false),
     commonTags
   ],
   aws_lb_target_group_attachment: [
@@ -505,6 +524,57 @@ const priorityResourceFallbacks: Record<string, readonly ParameterCatalogDefinit
 } satisfies Record<string, readonly ParameterCatalogDefinition[]>;
 
 const terraformValidateRequiredAdditions = {
+  aws_launch_template: {
+    definitions: [
+      field({
+        name: "updateDefaultVersion",
+        terraformName: "update_default_version",
+        label: "Update default version",
+        type: "boolean",
+        inputKind: "checkbox",
+        core: true,
+        description: "새 Launch Template version을 기본 version으로 지정할지 정합니다."
+      }),
+      nestedBlock("metadataOptions", "metadata_options", "Metadata options", [
+        select("httpEndpoint", "http_endpoint", "HTTP endpoint", ["enabled", "disabled"]),
+        select("httpTokens", "http_tokens", "HTTP tokens", ["required", "optional"])
+      ], false, true),
+      nestedBlock("networkInterfaces", "network_interfaces", "Network interfaces", [
+        field({
+          name: "associatePublicIpAddress",
+          terraformName: "associate_public_ip_address",
+          label: "Associate public IP",
+          type: "boolean",
+          inputKind: "checkbox"
+        }),
+        field({
+          name: "securityGroups",
+          terraformName: "security_groups",
+          label: "Security groups",
+          type: "list",
+          inputKind: "reference-picker",
+          referenceTargetTypes: ["aws_security_group"]
+        })
+      ], false, true),
+      nestedBlock("tagSpecifications", "tag_specifications", "Tag specifications", [
+        select(
+          "resourceType",
+          "resource_type",
+          "Resource type",
+          ["instance", "volume", "network-interface", "spot-instances-request"],
+          true
+        ),
+        field({
+          name: "tags",
+          terraformName: "tags",
+          label: "Tags",
+          type: "map",
+          inputKind: "key-value",
+          required: true
+        })
+      ])
+    ]
+  },
   aws_cloudfront_distribution: {
     definitions: [
       field({
@@ -515,10 +585,39 @@ const terraformValidateRequiredAdditions = {
         inputKind: "checkbox",
         required: true
       }),
+      core("defaultRootObject", "default_root_object", "Default root object", "index.html"),
       nestedBlock("origin", "origin", "Origin", [
         required("domainName", "domain_name", "Domain name", "example.com"),
-        required("originId", "origin_id", "Origin ID", "primary")
-      ]),
+        required("originId", "origin_id", "Origin ID", "primary"),
+        ref(
+          "originAccessControlId",
+          "origin_access_control_id",
+          "Origin access control",
+          ["aws_cloudfront_origin_access_control"],
+          false,
+          "id"
+        ),
+        nestedBlock("customOriginConfig", "custom_origin_config", "Custom origin config", [
+          number("httpPort", "http_port", "HTTP port", true, "80"),
+          number("httpsPort", "https_port", "HTTPS port", true, "443"),
+          select(
+            "originProtocolPolicy",
+            "origin_protocol_policy",
+            "Origin protocol policy",
+            ["http-only", "https-only", "match-viewer"],
+            true
+          ),
+          field({
+            name: "originSslProtocols",
+            terraformName: "origin_ssl_protocols",
+            label: "Origin SSL protocols",
+            type: "list",
+            inputKind: "text",
+            required: true,
+            placeholder: "TLSv1.2"
+          })
+        ], false, true)
+      ], true, true),
       nestedBlock("defaultCacheBehavior", "default_cache_behavior", "Default cache behavior", [
         field({
           name: "allowedMethods",
@@ -545,8 +644,44 @@ const terraformValidateRequiredAdditions = {
           "Viewer protocol policy",
           ["redirect-to-https", "allow-all", "https-only"],
           true
+        ),
+        core("cachePolicyId", "cache_policy_id", "Cache policy ID")
+      ], true, true),
+      nestedBlock("orderedCacheBehavior", "ordered_cache_behavior", "Ordered cache behavior", [
+        required("pathPattern", "path_pattern", "Path pattern", "/api/*"),
+        required("targetOriginId", "target_origin_id", "Target origin ID", "alb-api"),
+        select(
+          "viewerProtocolPolicy",
+          "viewer_protocol_policy",
+          "Viewer protocol policy",
+          ["redirect-to-https", "allow-all", "https-only"],
+          true
+        ),
+        field({
+          name: "allowedMethods",
+          terraformName: "allowed_methods",
+          label: "Allowed methods",
+          type: "list",
+          inputKind: "text",
+          required: true,
+          placeholder: "GET"
+        }),
+        field({
+          name: "cachedMethods",
+          terraformName: "cached_methods",
+          label: "Cached methods",
+          type: "list",
+          inputKind: "text",
+          required: true,
+          placeholder: "GET"
+        }),
+        core("cachePolicyId", "cache_policy_id", "Cache policy ID"),
+        core(
+          "originRequestPolicyId",
+          "origin_request_policy_id",
+          "Origin request policy ID"
         )
-      ]),
+      ], false, true),
       nestedBlock("restrictions", "restrictions", "Restrictions", [
         nestedBlock(
           "geoRestriction",
@@ -564,7 +699,7 @@ const terraformValidateRequiredAdditions = {
           true,
           true
         )
-      ]),
+      ], true, true),
       nestedBlock("viewerCertificate", "viewer_certificate", "Viewer certificate", [
         field({
           name: "cloudfrontDefaultCertificate",
@@ -574,7 +709,7 @@ const terraformValidateRequiredAdditions = {
           inputKind: "checkbox",
           core: true
         })
-      ])
+      ], true, true)
     ]
   },
   aws_wafv2_web_acl: {

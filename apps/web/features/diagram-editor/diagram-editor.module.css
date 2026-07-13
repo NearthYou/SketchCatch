@@ -905,12 +905,12 @@
   pointer-events: auto;
 }
 
-.leftRailResizeHandle,
-.rightRailResizeHandle {
+button.leftRailResizeHandle,
+button.rightRailResizeHandle {
   background: transparent;
   border: 0;
   bottom: 0;
-  cursor: col-resize;
+  cursor: ew-resize;
   padding: 0;
   position: absolute;
   top: 0;
@@ -931,14 +931,15 @@
 .rightRailResizeHandle::after {
   background: transparent;
   border-radius: 999px;
-  bottom: 10px;
   content: "";
+  height: 40px;
   position: absolute;
-  top: 10px;
+  top: 50%;
+  transform: translateY(-50%);
   transition:
     background 120ms ease,
     box-shadow 120ms ease;
-  width: 2px;
+  width: 3px;
 }
 
 .leftRailResizeHandle::after {
@@ -955,7 +956,7 @@
 .rightRailResizeHandle:hover::after,
 .rightRailResizeHandle:focus-visible::after,
 .rightRailResizeHandle:active::after {
-  background: transparent;
+  background: #8b9098;
   box-shadow: none;
 }
 
@@ -982,16 +983,16 @@
   background: var(--workspace-surface);
   border: 1px solid var(--workspace-line);
   border-radius: 8px;
-  bottom: 16px;
   box-shadow: 0 12px 32px rgba(23, 23, 23, 0.12);
   display: flex;
+  flex-direction: column;
   gap: 6px;
-  left: 50%;
-  max-width: calc(100% - 32px);
-  min-height: 42px;
+  left: 16px;
+  max-height: calc(100% - 32px);
   padding: 5px;
   position: absolute;
-  transform: translateX(-50%);
+  top: 50%;
+  transform: translateY(-50%);
   width: fit-content;
   z-index: 12;
 }
@@ -1003,6 +1004,7 @@
   border-radius: 6px;
   box-shadow: 0 8px 20px rgba(23, 32, 51, 0.08);
   display: inline-flex;
+  flex-direction: column;
   gap: 2px;
   padding: 3px;
 }
@@ -2408,12 +2410,20 @@
   border-radius: 2px;
   box-shadow: none;
   height: 6px;
+  opacity: 0;
   padding: 0;
-  pointer-events: all;
+  pointer-events: none;
   position: absolute;
   touch-action: none;
+  transition: opacity 120ms ease;
   width: 6px;
   z-index: 3;
+}
+
+.canvasPanel :global(.react-flow__node:hover) .manualResizeHandle:not(.manualResizeHandleSide),
+.nodeShellSelected ~ .manualResizeHandle {
+  opacity: 1;
+  pointer-events: all;
 }
 
 .manualResizeHandle::before {
@@ -2452,47 +2462,59 @@
 }
 
 .manualResizeHandleTop {
-  cursor: ns-resize;
   top: -4px;
 }
 
 .manualResizeHandleRight {
-  cursor: ew-resize;
   right: -4px;
 }
 
 .manualResizeHandleBottom {
   bottom: -4px;
-  cursor: ns-resize;
 }
 
 .manualResizeHandleLeft {
-  cursor: ew-resize;
   left: -4px;
 }
 
 .manualResizeHandleTopLeft {
-  cursor: nwse-resize;
   left: -3px;
   top: -3px;
 }
 
 .manualResizeHandleTopRight {
-  cursor: nesw-resize;
   right: -3px;
   top: -3px;
 }
 
 .manualResizeHandleBottomLeft {
   bottom: -3px;
-  cursor: nesw-resize;
   left: -3px;
 }
 
 .manualResizeHandleBottomRight {
   bottom: -3px;
-  cursor: nwse-resize;
   right: -3px;
+}
+
+.manualResizeHandle.manualResizeHandleTop,
+.manualResizeHandle.manualResizeHandleBottom {
+  cursor: ns-resize;
+}
+
+.manualResizeHandle.manualResizeHandleLeft,
+.manualResizeHandle.manualResizeHandleRight {
+  cursor: ew-resize;
+}
+
+.manualResizeHandle.manualResizeHandleTopLeft,
+.manualResizeHandle.manualResizeHandleBottomRight {
+  cursor: nwse-resize;
+}
+
+.manualResizeHandle.manualResizeHandleTopRight,
+.manualResizeHandle.manualResizeHandleBottomLeft {
+  cursor: nesw-resize;
 }
 
 .manualResizeHandle:not(.manualResizeHandleSide):hover,
@@ -2750,8 +2772,8 @@
   }
 
   .canvasToolbar {
-    bottom: 10px;
-    max-width: calc(100% - 20px);
+    left: 10px;
+    max-height: calc(100% - 20px);
   }
 }
 

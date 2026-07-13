@@ -25,7 +25,8 @@ import type {
   GitCicdRepositorySettingsPreview,
   RepositoryAnalysisAiHandoff,
   ReverseEngineeringResourceSelection,
-  ReverseEngineeringScanResult
+  ReverseEngineeringScanResult,
+  TerraformSyncFileInput
 } from "@sketchcatch/types";
 
 export const assetTypeEnum = pgEnum("asset_type", [
@@ -309,6 +310,7 @@ export const projectDrafts = pgTable(
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
     diagramJson: jsonb("diagram_json").$type<DiagramJson>().notNull(),
+    terraformFiles: jsonb("terraform_files").$type<TerraformSyncFileInput[]>(),
     revision: integer("revision").notNull().default(1),
     serverSavedAt: timestamp("server_saved_at", { withTimezone: true }).notNull().defaultNow(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

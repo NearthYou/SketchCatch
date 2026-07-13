@@ -266,6 +266,15 @@ export const resourceDefinitions = [
     terraformSync: true
   }),
   createAwsResourceDefinition({
+    id: "aws-ec2-managed-prefix-list",
+    parameterPanel: false,
+    resourceType: "UNKNOWN",
+    terraformBlockType: "data",
+    terraformPreview: true,
+    terraformResourceType: "aws_ec2_managed_prefix_list",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
     id: "aws-key-pair",
     resourceType: "KEY_PAIR",
     terraformPreview: true,

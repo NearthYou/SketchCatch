@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { DiagramJson, TemplateId } from "../../../../packages/types/src";
+import type { DiagramJson, TemplateId, TerraformSyncFileInput } from "../../../../packages/types/src";
 import { useAuth } from "../../components/auth/auth-provider";
 import { getApiErrorMessage } from "../../lib/api-client";
 import { DiagramEditor } from "../diagram-editor";
@@ -105,6 +105,8 @@ export function ProjectWorkspaceDraftManager({
   const [terraformSafeFixApplyResult, setTerraformSafeFixApplyResult] =
     useState<TerraformSafeFixApplyResult | null>(null);
   const latestDiagramRef = useRef<DiagramJson>(EMPTY_DIAGRAM);
+  const latestTerraformFilesRef = useRef<TerraformSyncFileInput[]>([]);
+  const [initialTerraformFiles, setInitialTerraformFiles] = useState<TerraformSyncFileInput[]>([]);
   const localDraftRef = useRef<LocalProjectDraft | null>(null);
   const localSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasPendingLocalChangesRef = useRef(false);
@@ -153,6 +155,7 @@ export function ProjectWorkspaceDraftManager({
       localCacheWorkspaceId,
       projectId,
       diagramJson: latestDiagramRef.current,
+      terraformFiles: latestTerraformFilesRef.current,
       previousLocalDraft: localDraftRef.current
     });
     const current = draftChangeVersionRef.current === changeVersion;
@@ -233,6 +236,7 @@ export function ProjectWorkspaceDraftManager({
               localCacheWorkspaceId,
               projectId,
               diagramJson: latestDiagramRef.current,
+              terraformFiles: latestTerraformFilesRef.current,
               previousLocalDraft: baseLocalDraft,
               shouldSyncLocalDraft: () => draftChangeVersionRef.current === serverSaveVersion
             });
@@ -352,10 +356,12 @@ export function ProjectWorkspaceDraftManager({
 
         const nextDiagram = restoreSavedDiagram(loadedDraft.diagramJson, EMPTY_DIAGRAM);
         latestDiagramRef.current = nextDiagram;
+        latestTerraformFilesRef.current = loadedDraft.terraformFiles ?? [];
         hasPendingLocalChangesRef.current = false;
         serverDirtyRef.current = loadedDraft.source === "local";
         draftChangeVersionRef.current = 0;
         setInitialDiagram(nextDiagram);
+        setInitialTerraformFiles(loadedDraft.terraformFiles ?? []);
         setRepositoryTemplateId(verifiedRepositoryTemplateId);
         setCurrentLocalDraft(loadedDraft.localDraft);
         setLocalSaveState(loadedDraft.localDraft ? "local-saved" : "idle");
@@ -455,6 +461,19 @@ export function ProjectWorkspaceDraftManager({
     setTerraformIssueAiRequest(request);
   }, []);
 
+  const handleTerraformFilesChange = useCallback((files: readonly TerraformSyncFileInput[]): void => {
+    latestTerraformFilesRef.current = [...files];
+    draftChangeVersionRef.current += 1;
+    hasPendingLocalChangesRef.current = true;
+    serverDirtyRef.current = true;
+    setLocalSaveState("local-pending");
+    setServerSaveState("server-dirty");
+    clearLocalSaveTimer();
+    localSaveTimerRef.current = setTimeout(() => {
+      void persistLocalDraftNow().catch(() => setLocalSaveState("local-failed"));
+    }, localSaveDebounceMs);
+  }, [clearLocalSaveTimer, localSaveDebounceMs, persistLocalDraftNow]);
+
   const requestTerraformSafeFixApply = useCallback((
     request: TerraformSafeFixApplyRequest
   ): void => {
@@ -499,9 +518,11 @@ export function ProjectWorkspaceDraftManager({
             context={context}
             deploymentAvailability="enabled"
             initialView={initialRightPanelView}
+            initialTerraformFiles={initialTerraformFiles}
             onTerraformIssueAiRequest={requestTerraformIssueAi}
             onTerraformPreviewAiRequest={setTerraformPreviewAiRequest}
             onTerraformSafeFixApplyResult={setTerraformSafeFixApplyResult}
+            onTerraformFilesChange={handleTerraformFilesChange}
             projectId={projectId}
             projectName={projectName}
             terraformSafeFixApplyRequest={terraformSafeFixApplyRequest}

@@ -2439,6 +2439,7 @@ export type ProjectDraft = {
   id: string;
   projectId: string;
   diagramJson: DiagramJson;
+  terraformFiles?: TerraformSyncFileInput[] | undefined;
   revision: number;
   serverSavedAt: IsoDateTimeString;
   createdAt: IsoDateTimeString;
@@ -2447,6 +2448,7 @@ export type ProjectDraft = {
 
 export type SaveProjectDraftRequest = {
   diagramJson: DiagramJson;
+  terraformFiles?: TerraformSyncFileInput[] | undefined;
 };
 
 export type ProjectDraftResponse = {
@@ -2523,6 +2525,7 @@ export type ResourceParameterDefinition = {
   options?: string[] | undefined;
   referenceTargetTypes?: string[] | undefined;
   referenceAttribute?: string | undefined;
+  referenceAttributesByTargetType?: Record<string, string> | undefined;
 };
 
 export type TerraformResourceParameterCatalog = {
@@ -2618,5 +2621,6 @@ export type TerraformDiagramChangeProposal =
 export type TerraformSyncToDiagramResponse = {
   diagramJson: DiagramJson;
   diagnostics: TerraformDiagnostic[];
+  preservedResourceAddresses?: string[] | undefined;
   proposals?: TerraformDiagramChangeProposal[] | undefined;
 };

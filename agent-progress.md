@@ -4,7 +4,7 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- Branch: `feature/sw/356-live-observation`.
+- Branch: `Feat/jh/346-시뮬레이션-기능-구현-및-테스트`.
 - Repository recommendation guarantees 2-3 unique candidates and validates question IDs, semantics, and duplicate prompts before display.
 - Deployment type is hidden when repository evidence is decisive and shown only for ambiguous analysis.
 - CI/CD handoff is a prominent standalone setting; its GitHub App repository panel appears only while enabled.
@@ -12,6 +12,13 @@ Short English-only working log for the current agent context. Older records are 
 - Follow-up questions depend on the selected Template, affect diagram creation, and use direct clickable choices.
 
 ## Session Record
+
+### 2026-07-13 - Repair Terraform nested-block merge regression
+
+- Fast-forwarded the local branch to the remote `dev` merge commit that CI evaluated and reproduced the duplicate `aws_launch_template` key failure.
+- Consolidated both branch variants into one Launch Template nested-block set while preserving IAM profile, metadata, monitoring, network interface, and tag support.
+- Kept the pending direct-resource rename boundary fix and its regression intact across the fast-forward.
+- Verification: full typecheck, 20 focused Terraform/rename regressions, lint, build, harness, and diff checks pass. Lint retains one pre-existing API unused-argument warning.
 
 ### 2026-07-13 - Add and review diagram-based Live Observation for ECS Fargate and ASG
 

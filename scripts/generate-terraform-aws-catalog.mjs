@@ -241,6 +241,7 @@ function mergeDefinitionWithSchema(definition, block, parentPath, errorPath, err
     options: definition.options,
     referenceTargetTypes: definition.referenceTargetTypes,
     referenceAttribute: definition.referenceAttribute,
+    referenceAttributesByTargetType: definition.referenceAttributesByTargetType,
     placeholder: definition.placeholder
   });
 

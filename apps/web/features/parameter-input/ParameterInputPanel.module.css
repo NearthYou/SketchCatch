@@ -762,7 +762,7 @@ div.resourceIcon,
   border-radius: 8px;
   display: grid;
   gap: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .parameterField {

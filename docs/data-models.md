@@ -497,6 +497,7 @@ type ProjectDraft = {
   id: string;
   projectId: string;
   diagramJson: DiagramJson;
+  terraformFiles?: TerraformSyncFileInput[];
   revision: number;
   serverSavedAt: IsoDateTimeString;
   createdAt: IsoDateTimeString;
@@ -506,7 +507,7 @@ type ProjectDraft = {
 
 DB 기준: `project_drafts`
 
-프로젝트당 최신 draft 1개를 유지한다. `diagramJson`은 화면 복구와 Terraform 변환을 위해 JSONB로 저장한다.
+프로젝트당 최신 draft 1개를 유지한다. `diagramJson`과 편집 중인 선택적 `terraformFiles`는 같은 revision의 화면 복구 상태로 JSONB에 저장한다. `terraformFiles`는 SketchCatch 동기화 subset이 해석하지 못하는 유효 HCL을 재접속 후에도 원문 그대로 유지하기 위한 working draft이며, 승인된 배포/릴리스 산출물의 영구 저장 기준은 계속 S3 `TerraformArtifact`다.
 
 ## ProjectAsset와 TerraformArtifact
 
@@ -531,7 +532,7 @@ type TerraformArtifact = ProjectAsset & {
 };
 ```
 
-Terraform 원문은 RDS `content` 컬럼에 저장하지 않는다. API가 미리보기를 제공하기 위해 S3에서 읽어 임시 응답으로 내려줄 수는 있지만, 영구 저장 기준은 S3 object다.
+승인된 Terraform 산출물 원문은 RDS의 독립 `content` 컬럼에 저장하지 않는다. 다만 최신 편집 복구를 위한 `ProjectDraft.terraformFiles`는 DiagramJson과 함께 RDS JSONB에 임시 working state로 저장한다. 배포 이력과 릴리스 artifact의 영구 저장 기준은 S3 object다.
 
 ## Terraform 생성과 Editor 검증 DTO
 
@@ -552,7 +553,7 @@ type TerraformGenerateResponse = {
 
 `POST /api/terraform/generate`는 `preview` mode Architecture Dependency Diagnostics를 함께 반환한다. 이 diagnostics는 Terraform HCL 생성 결과와 구분된 구조 경고이며, `warning`만으로는 HTTP 성공 응답이나 Terraform Preview 생성을 바꾸지 않는다.
 
-Terraform 역동기화는 사용자가 편집 중인 Terraform 문자열을 기존 `DiagramJson`에 반영한다. 지원 범위 밖 HCL, 매칭할 수 없는 block, 불확실한 파싱이 있으면 기존 `DiagramJson`을 변경하지 않고 diagnostics를 반환한다.
+Terraform 역동기화는 사용자가 편집 중인 Terraform 문자열을 기존 `DiagramJson`에 반영한다. 명백한 문법·구조 오류는 `error`로 저장을 차단한다. 유효하지만 SketchCatch subset 밖인 top-level block, expression, nested block은 `warning`으로 반환하고 원문 전용으로 보존한다. 미지원 구문이 포함된 resource/data block은 부분 값으로 Diagram을 변경하지 않는다.
 
 ```ts
 type TerraformSyncToDiagramRequest = {
@@ -569,6 +570,7 @@ type TerraformSyncFileInput = {
 type TerraformSyncToDiagramResponse = {
   diagramJson: DiagramJson;
   diagnostics: TerraformDiagnostic[];
+  preservedResourceAddresses?: string[];
   proposals?: TerraformDiagramChangeProposal[];
 };
 ```

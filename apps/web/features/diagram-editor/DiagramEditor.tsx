@@ -116,7 +116,6 @@ import {
   updateNodeById
 } from "./diagram-utils";
 import { toFlowEdges, toFlowNodes } from "./flow-mappers";
-import { syncParameterReferenceEdges } from "./parameter-reference-edges";
 import {
   applyContainingReferenceDropTargets
 } from "./reference-drop-targets";
@@ -813,8 +812,7 @@ function DiagramEditorInner({
 
         return {
           ...currentDiagram,
-          nodes: nextNodes,
-          edges: syncParameterReferenceEdges(nextNodes, currentDiagram.edges)
+          nodes: nextNodes
         };
       });
     },

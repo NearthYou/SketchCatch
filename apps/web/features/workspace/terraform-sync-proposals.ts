@@ -8,6 +8,7 @@ import type {
 import { cloneParameterValue } from "../diagram-editor/parameter-value-utils";
 import { RESOURCE_NODE_DEFAULT_SIZE } from "../diagram-editor/resource-node-geometry";
 import { resourceCatalog } from "../resource-settings/catalog";
+import type { TerraformVirtualFile } from "./terraform-panel-utils";
 
 type ApprovedProposalIds = ReadonlySet<string> | readonly string[];
 const DEFAULT_CREATED_NODE_SIZE = RESOURCE_NODE_DEFAULT_SIZE;
@@ -63,6 +64,175 @@ export function applyAllTerraformSyncProposals(
     diagramJson,
     proposals,
     proposals.map((proposal, index) => getTerraformSyncProposalId(proposal, index))
+  );
+}
+
+type TerraformReferenceRewrite = {
+  readonly fromAddress: string;
+  readonly toAddress: string;
+};
+
+export function rewriteTerraformReferencesForSyncProposals(
+  files: readonly TerraformVirtualFile[],
+  proposals: readonly TerraformDiagramChangeProposal[]
+): TerraformVirtualFile[] {
+  const rewrites = proposals
+    .filter(
+      (proposal): proposal is Extract<TerraformDiagramChangeProposal, { kind: "rename_candidate" }> =>
+        proposal.kind === "rename_candidate"
+    )
+    .map((proposal) => ({
+      fromAddress: createTerraformAddress(proposal.from),
+      toAddress: createTerraformAddress(proposal.to)
+    }))
+    .filter((rewrite) => rewrite.fromAddress !== rewrite.toAddress)
+    .sort((left, right) => right.fromAddress.length - left.fromAddress.length);
+
+  if (rewrites.length === 0) {
+    return [...files];
+  }
+
+  return files.map((file) => {
+    if (!file.fileName.endsWith(".tf")) {
+      return file;
+    }
+
+    const code = rewriteTerraformReferenceExpressions(file.code, rewrites);
+
+    return code === file.code ? file : { ...file, code };
+  });
+}
+
+function createTerraformAddress(identity: {
+  readonly terraformBlockType: TerraformBlockType;
+  readonly resourceType: string;
+  readonly resourceName: string;
+}): string {
+  const address = `${identity.resourceType}.${identity.resourceName}`;
+  return identity.terraformBlockType === "data" ? `data.${address}` : address;
+}
+
+function rewriteTerraformReferenceExpressions(
+  code: string,
+  rewrites: readonly TerraformReferenceRewrite[]
+): string {
+  const parts = code.split(/(\r\n|\r|\n)/);
+  let heredocMarker: string | null = null;
+  let inBlockComment = false;
+
+  return parts
+    .map((part) => {
+      if (/^(?:\r\n|\r|\n)$/.test(part)) {
+        return part;
+      }
+
+      if (heredocMarker) {
+        if (part.trim() === heredocMarker) {
+          heredocMarker = null;
+        }
+
+        return part;
+      }
+
+      let index = 0;
+      let inString = false;
+      let escaped = false;
+      let rewrittenLine = "";
+
+      while (index < part.length) {
+        const character = part[index] ?? "";
+        const nextCharacter = part[index + 1] ?? "";
+
+        if (inBlockComment) {
+          rewrittenLine += character;
+
+          if (character === "*" && nextCharacter === "/") {
+            rewrittenLine += nextCharacter;
+            index += 2;
+            inBlockComment = false;
+            continue;
+          }
+
+          index += 1;
+          continue;
+        }
+
+        if (inString) {
+          rewrittenLine += character;
+
+          if (escaped) {
+            escaped = false;
+          } else if (character === "\\") {
+            escaped = true;
+          } else if (character === '"') {
+            inString = false;
+          }
+
+          index += 1;
+          continue;
+        }
+
+        if (character === '"') {
+          inString = true;
+          rewrittenLine += character;
+          index += 1;
+          continue;
+        }
+
+        if (character === "#" || (character === "/" && nextCharacter === "/")) {
+          rewrittenLine += part.slice(index);
+          break;
+        }
+
+        if (character === "/" && nextCharacter === "*") {
+          inBlockComment = true;
+          rewrittenLine += "/*";
+          index += 2;
+          continue;
+        }
+
+        const heredocMatch = /^<<-?\s*([A-Za-z_][A-Za-z0-9_]*)/.exec(part.slice(index));
+
+        if (heredocMatch?.[1]) {
+          heredocMarker = heredocMatch[1];
+          rewrittenLine += part.slice(index);
+          break;
+        }
+
+        const rewrite = rewrites.find((candidate) =>
+          isTerraformReferenceRewriteAt(part, index, candidate.fromAddress)
+        );
+
+        if (rewrite) {
+          rewrittenLine += rewrite.toAddress;
+          index += rewrite.fromAddress.length;
+          continue;
+        }
+
+        rewrittenLine += character;
+        index += 1;
+      }
+
+      return rewrittenLine;
+    })
+    .join("");
+}
+
+function isTerraformReferenceRewriteAt(
+  codeLine: string,
+  index: number,
+  fromAddress: string
+): boolean {
+  if (!codeLine.startsWith(fromAddress, index)) {
+    return false;
+  }
+
+  const previousCharacter = codeLine[index - 1];
+  const nextCharacter = codeLine[index + fromAddress.length];
+
+  return (
+    (previousCharacter === undefined || !/[A-Za-z0-9_.-]/.test(previousCharacter)) &&
+    (nextCharacter === undefined || !/[A-Za-z0-9_-]/.test(nextCharacter))
   );
 }
 
