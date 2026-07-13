@@ -1473,7 +1473,10 @@ export function DirectDeploymentScreen({
         <p className={styles.deploymentHint}>Terraform output이 없습니다.</p>
       ) : (
         <>
-          <DeploymentOutputLinks links={deploymentOutputLinks} />
+          <DeploymentOutputLinks
+            links={deploymentOutputLinks}
+            scopeKey={selectedDeploymentId || null}
+          />
           <div className={styles.deploymentResultRows}>
             {terraformOutputs.map((output) => (
               <article className={styles.deploymentResultRow} key={output.id}>

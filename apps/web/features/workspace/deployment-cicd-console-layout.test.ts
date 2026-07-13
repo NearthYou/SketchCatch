@@ -66,9 +66,9 @@ test("Direct and CI/CD screens share accessible Deployment Output links", () => 
   const cicdSource = readWorkspaceSource("CicdConsoleScreen.tsx");
 
   assert.match(directSource, /import \{ DeploymentOutputLinks \}/);
-  assert.match(directSource, /<DeploymentOutputLinks/);
+  assert.match(directSource, /<DeploymentOutputLinks[^>]*scopeKey=\{selectedDeploymentId \|\| null\}/);
   assert.match(cicdSource, /import \{ DeploymentOutputLinks \}/);
-  assert.match(cicdSource, /<DeploymentOutputLinks/);
+  assert.match(cicdSource, /<DeploymentOutputLinks[^>]*scopeKey=\{selectedRun\?\.id \?\? null\}/);
 });
 
 test("one workspace notification host survives console screen changes", () => {

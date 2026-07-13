@@ -364,7 +364,7 @@ export function CicdConsoleScreen({
         </label>
       ) : null}
 
-      <DeploymentOutputLinks links={outputLinks} />
+      <DeploymentOutputLinks links={outputLinks} scopeKey={selectedRun?.id ?? null} />
 
       {config?.validationStatus === "valid" && runs.length === 0 && activeView !== "settings" ? (
         <p className={styles.cicdState} role="status">아직 감지된 Pipeline Run이 없습니다.</p>

@@ -211,6 +211,8 @@ Short English-only working log for the current agent context. Older records are 
 - Risk:
   - Browser visual verification was not repeated because these fixes are state-boundary changes covered by focused and workspace tests.
 
+- 2026-07-13 Task 8 Minor review: Scoped Output clipboard feedback to the selected Deployment/Pipeline Run and current links, including late-Promise ownership; focused tests 17/17 and Web/root lint/typecheck/build passed. Existing warnings remain, and the source-regex integration-test limitation is ledger-only.
+
 ## Next Action
 
 - Run Task 9 end-to-end verification and final issue #361 review.

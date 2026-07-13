@@ -77,6 +77,18 @@ test("the shared Output cards expose safe new-tab links and accessible clipboard
   assert.match(source, /URL을 복사하지 못했습니다\./);
 });
 
+test("clipboard feedback resets when the selected Deployment or its links change", () => {
+  const source = readFileSync(new URL("DeploymentOutputLinks.tsx", import.meta.url), "utf8");
+
+  assert.match(source, /readonly scopeKey: string \| null/);
+  assert.match(source, /const linksKey = links\.map/);
+  assert.match(source, /currentClipboardScopeRef\.current\.scopeKey === scopeKey/);
+  assert.match(
+    source,
+    /useEffect\(\(\) => \{\s*setClipboardFeedback\(null\);\s*\}, \[linksKey, scopeKey\]\);/
+  );
+});
+
 test("Direct Output state never exposes deployment A values while deployment B is selected", () => {
   const outputA = { ...createOutput("appUrl", "https://a.example.com"), deploymentId: "deployment-a" };
   const outputB = { ...createOutput("appUrl", "https://b.example.com"), deploymentId: "deployment-b" };

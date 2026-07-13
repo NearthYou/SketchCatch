@@ -1,21 +1,32 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { SafeDeploymentLink } from "./deployment-output-links";
 import styles from "./workspace.module.css";
 
 type ClipboardFeedback = {
+  readonly linksKey: string;
+  readonly scopeKey: string | null;
   readonly url: string;
   readonly message: string;
 };
 
 export function DeploymentOutputLinks({
-  links
+  links,
+  scopeKey
 }: {
   readonly links: readonly SafeDeploymentLink[];
+  readonly scopeKey: string | null;
 }) {
   const [clipboardFeedback, setClipboardFeedback] =
     useState<ClipboardFeedback | null>(null);
+  const linksKey = links.map((link) => `${link.kind}:${link.url}`).join("|");
+  const currentClipboardScopeRef = useRef({ linksKey, scopeKey });
+  currentClipboardScopeRef.current = { linksKey, scopeKey };
+
+  useEffect(() => {
+    setClipboardFeedback(null);
+  }, [linksKey, scopeKey]);
 
   if (links.length === 0) {
     return null;
@@ -27,9 +38,30 @@ export function DeploymentOutputLinks({
         throw new Error("Clipboard API unavailable");
       }
       await navigator.clipboard.writeText(url);
-      setClipboardFeedback({ url, message: "URL을 복사했습니다." });
+      if (!isCurrentClipboardScope()) {
+        return;
+      }
+      setClipboardFeedback({
+        linksKey,
+        message: "URL을 복사했습니다.",
+        scopeKey,
+        url
+      });
     } catch {
-      setClipboardFeedback({ url, message: "URL을 복사하지 못했습니다. 수동으로 복사해 주세요." });
+      if (!isCurrentClipboardScope()) {
+        return;
+      }
+      setClipboardFeedback({
+        linksKey,
+        message: "URL을 복사하지 못했습니다. 수동으로 복사해 주세요.",
+        scopeKey,
+        url
+      });
+    }
+
+    function isCurrentClipboardScope(): boolean {
+      return currentClipboardScopeRef.current.linksKey === linksKey &&
+        currentClipboardScopeRef.current.scopeKey === scopeKey;
     }
   }
 
@@ -44,7 +76,11 @@ export function DeploymentOutputLinks({
             <button type="button" onClick={() => void copyUrl(link.url)}>URL 복사</button>
           </div>
           <span aria-live="polite">
-            {clipboardFeedback?.url === link.url ? clipboardFeedback.message : ""}
+            {clipboardFeedback?.linksKey === linksKey &&
+            clipboardFeedback.scopeKey === scopeKey &&
+            clipboardFeedback.url === link.url
+              ? clipboardFeedback.message
+              : ""}
           </span>
         </article>
       ))}
