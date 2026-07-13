@@ -13,30 +13,6 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
-### 2026-07-12 - Implement issue #349 repository template recommendations
-
-- Goal: Extend connected Repository Analysis into a template candidate recommendation flow for issue #349.
-- Completed:
-  - Added shared deployment type, dynamic question, answer, and template recommendation DTOs.
-  - Extended Repository Analysis results with inferred deployment type, CI/CD default, max-five questions, and supported template candidates.
-  - Added backend recommendation endpoint for user deployment type, CI/CD, and answer payloads.
-  - Kept final template validation constrained to supported `TemplateId` values from stored analysis or recommendation candidates.
-  - Updated the repository start UI with deployment single-select, CI/CD checkbox, dynamic questions, and candidate cards.
-  - Documented the contract in `docs/data-models.md`.
-- Verification:
-  - `pnpm --filter @sketchcatch/types typecheck`
-  - `pnpm --filter @sketchcatch/api typecheck`
-  - `pnpm --filter @sketchcatch/web typecheck`
-  - `pnpm --dir apps/api exec tsx --test src/source-repositories/repository-analysis.test.ts src/routes/source-repositories.test.ts src/source-repositories/source-repository-service.test.ts`
-  - `pnpm --dir apps/web exec tsx --test features/workspace/api.test.ts features/workspace/project-github-settings.test.ts features/workspace/repository-start-template-recommendation.test.ts`
-  - `pnpm harness:check`
-  - `pnpm lint` passed with the pre-existing `live-observations` `setNow` warning.
-  - `pnpm typecheck`
-  - `pnpm build`
-  - `git diff --check` passed with CRLF conversion warnings only.
-- Risk:
-  - No GitHub PR, cloud deployment, Terraform apply, or infrastructure mutation was run.
-
 ### 2026-07-12 - Handle missing Source Repository DB migrations
 
 - Goal: Diagnose the raw SQL internal error shown when starting from a GitHub repository with an unmigrated API database.
@@ -201,6 +177,27 @@ Short English-only working log for the current agent context. Older records are 
   - Root `pnpm test` still reports an unrelated Web CSS expectation around the mobile `.canvasToolbar` bottom offset; no Web source behavior was changed in this workstream.
   - No Terraform apply/destroy, cloud mutation, or Git/CI/CD handoff was performed.
 
+### 2026-07-13 - Restore Web source-regression baseline for issue #362
+
+- Goal: Align stale Web source-regression expectations with the current Area expansion and compact toolbar contracts.
+- Completed:
+  - Updated Area auto-expansion coverage to follow child-node entry detection.
+  - Updated compact canvas toolbar coverage for the current left-centered placement.
+  - Made related catalog, fixture, and CSS source assertions resilient to current generated content and Windows line endings.
+  - Addressed review feedback by caching normalized CSS source and rejecting empty AWS icon paths.
+  - Merged the latest `origin/dev` without conflicts.
+- Verification:
+  - Review-focused Web tests passed (26 tests).
+  - 172 focused Web tests passed.
+  - Full Web suite passed (1,024 tests).
+  - `pnpm lint` passed with the pre-existing `live-observations` `setNow` warning.
+  - `pnpm typecheck`
+  - `pnpm build`
+  - `pnpm harness:check`
+  - `git diff --check`
+- Risk:
+  - This work changes test contracts only; no Web runtime behavior or cloud infrastructure was changed.
+
 ## Next Action
 
-- Review and commit the issue #364 baseline repair on `feature/sw/364-api-test-baseline`.
+- Run repository checks and publish issue #362 for review.

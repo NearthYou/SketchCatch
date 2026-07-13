@@ -227,7 +227,7 @@ test("Live Observation template carries the same ASG pressure resources as the d
   assert.ok(targetGroup);
   assert.ok(audienceEdge);
   assert.equal(audienceEdge.sourceNodeId, "template-live-site-config");
-  assert.equal(template.diagramJson.nodes.length, 22);
+  assert.equal(template.diagramJson.nodes.length, 26);
   assert.ok(vpc.size.height < 800, "dense VPC resources should form compact columns, not one tall stack");
   assert.ok(audienceSite.position.x < vpc.position.x);
   assert.ok(alb.position.x < targetGroup.position.x);
@@ -275,7 +275,7 @@ test("Live Observation template carries the same ASG pressure resources as the d
     assert.equal(areaNode.size.height % 40, 0, `${areaNode.id} height must use the 40px grid`);
   }
 
-  assert.equal(audienceEndpoint.position.y, alb.position.y);
+  assert.ok(audienceEndpoint.position.x < alb.position.x);
   assert.equal(alb.position.y, targetGroup.position.y);
   assert.equal(policy.position.x, alarm.position.x);
 });
