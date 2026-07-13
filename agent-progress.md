@@ -15,22 +15,20 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-13 - Add deployment completion notifications and safe Output links
+
+- Added one session-deduplicated workspace notification host and shared accessible Output cards across safe CI/CD and Direct terminal transitions.
+- Verification: Task 8/Direct tests, Web and root lint/typecheck/build, and full harness passed; no external mutation ran. Existing API `setNow` and Next multi-lockfile warnings remain.
+
 ### 2026-07-13 - Split Direct Deployment and CI/CD console screens
 
-- Extracted the Direct Deployment workflow into a focused screen and moved full-screen focus, close, and project-scoped top-screen restoration into a common console Shell.
-- Added CI/CD Overview, Activity, Logs, and strict repository monitoring Settings with active/idle visible polling, active-first run selection, stale/permission/empty/failure states, incremental log retry, and Live Observation runtime-log navigation.
-- Preserved screen-local subview/run state across top-level switching and kept Task 8 notifications/shared Output cards as later integration work.
-- Verification: 35 focused tests and 564 Web workspace tests passed; root lint, typecheck, build, harness, and diff checks passed. Existing API `setNow` and Next multi-lockfile warnings remain.
-- No GitHub, Terraform, AWS, deployment, database, or secret mutation ran.
+- Split Direct Deployment and CI/CD into focused screens with common full-screen behavior, screen-local state, strict monitoring settings, polling, logs, and recovery states.
+- Verification: 35 focused and 564 workspace tests plus root lint/typecheck/build/harness/diff passed; no external mutation ran. Existing warnings remain.
 
 ### 2026-07-13 - Add Web CI/CD clients and pure console state helpers
 
-- Added typed monitoring, paginated Pipeline Run, incremental log, detail, and stale-aware refresh clients using the existing authenticated API boundary.
-- Added pure active/idle polling, terminal transition, notification key, current/history selection, stale detection, and safe deployment Output link helpers.
-- Review fixes separated terminal state from notifiable completion: cancellation remains terminal but only succeeded/failed transitions are collected for notifications; API regressions cover queryless default lists and detail/log authentication.
-- Sensitive Outputs are filtered before value parsing; only HTTP(S) static/app and API entry points become actions while other values remain available for detail rendering.
-- Verification: 56 focused Web tests, root and Web/types lint and typecheck, full build, harness, and diff checks passed. Lint retained the pre-existing API `setNow` warning, and the build retained the existing Next.js multi-lockfile workspace-root warning.
-- No external GitHub, deployment, Terraform, AWS, or database mutation ran.
+- Added authenticated CI/CD clients plus pure polling, selection, terminal notification, stale-state, and sensitive-first HTTP(S) Output helpers.
+- Verification: 56 focused tests plus root/Web lint/typecheck/build/harness/diff passed; no external mutation ran. Existing warnings remain.
 
 ### 2026-07-13 - Expose authenticated Pipeline Run APIs
 
@@ -215,4 +213,4 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Next Action
 
-- Continue with Task 8 only after Task 7 review acceptance.
+- Run Task 9 end-to-end verification and final issue #361 review.

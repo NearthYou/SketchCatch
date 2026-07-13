@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { TerraformOutput } from "../../../../packages/types/src";
 import { getSafeDeploymentLinks } from "./deployment-output-links";
+import { readFileSync } from "node:fs";
 
 test("deployment links prefer the static Web entry point and then the API endpoint", () => {
   const outputs = [
@@ -57,6 +58,18 @@ test("deployment links accept only valid HTTP(S) strings and leave other outputs
 
   assert.deepEqual(getSafeDeploymentLinks(outputs), []);
   assert.equal(outputs[4]?.value, "assets-production");
+});
+
+test("the shared Output cards expose safe new-tab links and accessible clipboard feedback", () => {
+  const source = readFileSync(new URL("DeploymentOutputLinks.tsx", import.meta.url), "utf8");
+
+  assert.match(source, /target="_blank"/);
+  assert.match(source, /rel="noreferrer"/);
+  assert.match(source, />사이트 열기</);
+  assert.match(source, />URL 복사</);
+  assert.match(source, /aria-live="polite"/);
+  assert.match(source, /URL을 복사했습니다\./);
+  assert.match(source, /URL을 복사하지 못했습니다\./);
 });
 
 function createOutput(

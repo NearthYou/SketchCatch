@@ -20,15 +20,19 @@ import { CicdActivityView } from "./CicdActivityView";
 import { CicdLogsView } from "./CicdLogsView";
 import { CicdMonitoringSettings } from "./CicdMonitoringSettings";
 import { CicdOverviewView } from "./CicdOverviewView";
+import { DeploymentOutputLinks } from "./DeploymentOutputLinks";
 import {
   getActiveCicdPipelineRun,
   getCicdPipelineRunState,
   getCicdPollIntervalMs,
+  getNotifiablePipelineRunTransitions,
   getSelectedCicdPipelineRunId,
   initialCicdConsoleRequestState,
   mergeCicdPipelineRun,
   reduceCicdConsoleRequestState
 } from "./cicd-console-state";
+import { getSafePipelineRunLinks } from "./deployment-output-links";
+import { useWorkspaceNotifications } from "./WorkspaceNotificationHost";
 import styles from "./workspace.module.css";
 
 export type CicdConsoleView = "overview" | "activity" | "logs" | "settings";
@@ -61,6 +65,8 @@ export function CicdConsoleScreen({
   const logsSequenceRef = useRef(0);
   const loadedProjectIdRef = useRef<string | null>(null);
   const hasExplicitRunSelectionRef = useRef(false);
+  const runsRef = useRef<GitCicdPipelineRun[]>([]);
+  const notifyWorkspace = useWorkspaceNotifications();
 
   const { logsErrorMessage, permissionFailure, screenErrorMessage } = requestState;
 
@@ -69,6 +75,7 @@ export function CicdConsoleScreen({
     [runs, selectedRunId]
   );
   const selectedRun = runState.selectedRun;
+  const outputLinks = useMemo(() => getSafePipelineRunLinks(selectedRun), [selectedRun]);
   const settingsHref = `/dashboard/projects/${encodeURIComponent(projectId)}/settings?tab=github`;
 
   const loadRuns = useCallback(async (): Promise<GitCicdPipelineRun[]> => {
@@ -77,7 +84,19 @@ export function CicdConsoleScreen({
   }, [projectId]);
 
   const applyRuns = useCallback((nextRuns: readonly GitCicdPipelineRun[]): void => {
-    setRuns([...nextRuns]);
+    const nextRunList = [...nextRuns];
+    getNotifiablePipelineRunTransitions(runsRef.current, nextRunList).forEach((run) => {
+      const succeeded = run.status === "succeeded";
+      notifyWorkspace({
+        type: "pipeline_terminal",
+        runId: run.id,
+        status: run.status,
+        title: succeeded ? "배포 완료" : "배포 실패",
+        body: `프로젝트 ${projectId} · ${run.branch} · ${run.commitSha.slice(0, 8)} · ${succeeded ? "성공" : "실패"}`
+      });
+    });
+    runsRef.current = nextRunList;
+    setRuns(nextRunList);
     setSelectedRunId((currentId) =>
       getSelectedCicdPipelineRunId(
         nextRuns,
@@ -85,7 +104,7 @@ export function CicdConsoleScreen({
         hasExplicitRunSelectionRef.current
       )
     );
-  }, []);
+  }, [notifyWorkspace, projectId]);
 
   useEffect(() => {
     if (!isVisible || loadedProjectIdRef.current === projectId) {
@@ -193,7 +212,7 @@ export function CicdConsoleScreen({
     void getGitCicdPipelineRun(selectedRunId)
       .then((detail) => {
         if (!cancelled) {
-          setRuns((currentRuns) => mergeCicdPipelineRun(currentRuns, detail));
+          applyRuns(mergeCicdPipelineRun(runsRef.current, detail));
           dispatchRequestState({ type: "success", scope: "detail" });
         }
       })
@@ -210,7 +229,7 @@ export function CicdConsoleScreen({
     return () => {
       cancelled = true;
     };
-  }, [selectedRunId]);
+  }, [applyRuns, selectedRunId]);
 
   useEffect(() => {
     logsSequenceRef.current = 0;
@@ -360,6 +379,8 @@ export function CicdConsoleScreen({
           </select>
         </label>
       ) : null}
+
+      <DeploymentOutputLinks links={outputLinks} />
 
       {config?.validationStatus === "valid" && runs.length === 0 && activeView !== "settings" ? (
         <p className={styles.cicdState} role="status">아직 감지된 Pipeline Run이 없습니다.</p>

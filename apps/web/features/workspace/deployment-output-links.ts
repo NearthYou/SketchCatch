@@ -1,4 +1,4 @@
-import type { TerraformOutput } from "../../../../packages/types/src";
+import type { GitCicdPipelineRun, TerraformOutput } from "../../../../packages/types/src";
 
 export type SafeDeploymentLink = {
   readonly kind: "web" | "api";
@@ -24,6 +24,23 @@ export function getSafeDeploymentLinks(
     links.push({ kind: "api", label: "API endpoint", url: apiUrl });
   }
 
+  return links;
+}
+
+export function getSafePipelineRunLinks(
+  run: Pick<GitCicdPipelineRun, "apiUrl" | "appUrl"> | null
+): SafeDeploymentLink[] {
+  if (!run) {
+    return [];
+  }
+
+  const links: SafeDeploymentLink[] = [];
+  if (run.appUrl && isSafeHttpUrl(run.appUrl)) {
+    links.push({ kind: "web", label: "Web entry point", url: run.appUrl });
+  }
+  if (run.apiUrl && isSafeHttpUrl(run.apiUrl)) {
+    links.push({ kind: "api", label: "API endpoint", url: run.apiUrl });
+  }
   return links;
 }
 

@@ -60,3 +60,20 @@ test("monitoring settings save only normalized repository-relative paths", () =>
   assert.match(settingsSource, /normalizeCicdMonitoredPath\(draft\.infraPath\)/);
   assert.doesNotMatch(settingsSource, /normalizePathForSave/);
 });
+
+test("Direct and CI/CD screens share accessible Deployment Output links", () => {
+  const directSource = readWorkspaceSource("DirectDeploymentScreen.tsx");
+  const cicdSource = readWorkspaceSource("CicdConsoleScreen.tsx");
+
+  assert.match(directSource, /import \{ DeploymentOutputLinks \}/);
+  assert.match(directSource, /<DeploymentOutputLinks/);
+  assert.match(cicdSource, /import \{ DeploymentOutputLinks \}/);
+  assert.match(cicdSource, /<DeploymentOutputLinks/);
+});
+
+test("one workspace notification host survives console screen changes", () => {
+  const managerSource = readWorkspaceSource("ProjectWorkspaceDraftManager.tsx");
+
+  assert.equal(managerSource.match(/<WorkspaceNotificationHost/g)?.length, 1);
+  assert.match(managerSource, /<WorkspaceNotificationHost>[\s\S]*<DiagramEditor/);
+});

@@ -71,6 +71,10 @@ import {
   type DirectDeploymentStepId
 } from "./deployment-console-state";
 import { getDeploymentDurationLabel } from "./deployment-duration";
+import { DeploymentOutputLinks } from "./DeploymentOutputLinks";
+import { getSafeDeploymentLinks } from "./deployment-output-links";
+import { useWorkspaceNotifications } from "./WorkspaceNotificationHost";
+import { getNotifiableDirectDeploymentTransitions } from "./workspace-notifications";
 import styles from "./workspace.module.css";
 
 type DeploymentRuntimeSnapshot = {
@@ -151,6 +155,8 @@ export function DirectDeploymentScreen({
   const [selectedDirectStepId, setSelectedDirectStepId] =
     useState<DirectDeploymentStepId>("save");
   const trafficAbortControllerRef = useRef<AbortController | null>(null);
+  const previousDeploymentsRef = useRef<Deployment[]>([]);
+  const notifyWorkspace = useWorkspaceNotifications();
   const isDeploymentOverlayOpen = true;
 
   const verifiedAwsConnections = useMemo(
@@ -199,6 +205,27 @@ export function DirectDeploymentScreen({
     () => deployments.find((deployment) => deployment.id === selectedDeploymentId) ?? null,
     [deployments, selectedDeploymentId]
   );
+  const deploymentOutputLinks = useMemo(
+    () => getSafeDeploymentLinks(terraformOutputs),
+    [terraformOutputs]
+  );
+  useEffect(() => {
+    getNotifiableDirectDeploymentTransitions(
+      previousDeploymentsRef.current,
+      deployments,
+      selectedDeploymentId
+    ).forEach((deployment) => {
+      const succeeded = deployment.status === "SUCCESS";
+      notifyWorkspace({
+        type: "direct_terminal",
+        runId: deployment.id,
+        status: succeeded ? "succeeded" : "failed",
+        title: succeeded ? "배포 완료" : "배포 실패",
+        body: `프로젝트 ${projectId} · Direct · ${deployment.id.slice(0, 8)} · ${succeeded ? "성공" : "실패"}`
+      });
+    });
+    previousDeploymentsRef.current = deployments;
+  }, [deployments, notifyWorkspace, projectId, selectedDeploymentId]);
   useEffect(() => {
     setDurationNow(Date.now());
 
@@ -1409,15 +1436,18 @@ export function DirectDeploymentScreen({
       {terraformOutputs.length === 0 ? (
         <p className={styles.deploymentHint}>Terraform output이 없습니다.</p>
       ) : (
-        <div className={styles.deploymentResultRows}>
-          {terraformOutputs.map((output) => (
-            <article className={styles.deploymentResultRow} key={output.id}>
-              <strong>{output.name}</strong>
-              <span className={styles.deploymentResultMeta}>{output.sensitive ? "sensitive" : "plain"}</span>
-              <span className={styles.deploymentResultValue}>{formatOutputValue(output)}</span>
-            </article>
-          ))}
-        </div>
+        <>
+          <DeploymentOutputLinks links={deploymentOutputLinks} />
+          <div className={styles.deploymentResultRows}>
+            {terraformOutputs.map((output) => (
+              <article className={styles.deploymentResultRow} key={output.id}>
+                <strong>{output.name}</strong>
+                <span className={styles.deploymentResultMeta}>{output.sensitive ? "sensitive" : "plain"}</span>
+                <span className={styles.deploymentResultValue}>{formatOutputValue(output)}</span>
+              </article>
+            ))}
+          </div>
+        </>
       )}
       <div className={styles.deploymentSummary}>
         <InfoRow label="Traffic target" value={apiBaseUrl || "api_base_url output 없음"} />
