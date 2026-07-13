@@ -44,6 +44,7 @@ export function createGitCicdAutomationFiles(
 ): GitCicdGeneratedFile[] {
   const settingsPreview = createRepositorySettingsPreview(input);
   const ecsFargate = getEcsFargateWorkflowInput(input);
+  const lambda = getLambdaWorkflowInput(input);
 
   return [
     {
@@ -53,7 +54,11 @@ export function createGitCicdAutomationFiles(
     },
     {
       path: ".github/workflows/sketchcatch-app.yml",
-      content: ecsFargate ? renderEcsFargateAppWorkflow(input, ecsFargate) : renderAppWorkflow(input),
+      content: ecsFargate
+        ? renderEcsFargateAppWorkflow(input, ecsFargate)
+        : lambda
+          ? renderLambdaAppWorkflow(input, lambda)
+          : renderAppWorkflow(input),
       contentType: "text/yaml"
     },
     {
@@ -125,6 +130,22 @@ export function createRepositorySettingsPreview(
         input.runtimeConfig?.runtimeTargetKind === "ecs_fargate"
           ? input.runtimeConfig.ecrRepositoryName
           : "",
+      SKETCHCATCH_LAMBDA_FUNCTION:
+        input.runtimeConfig?.runtimeTargetKind === "lambda"
+          ? input.runtimeConfig.functionName
+          : "",
+      SKETCHCATCH_LAMBDA_ALIAS:
+        input.runtimeConfig?.runtimeTargetKind === "lambda"
+          ? input.runtimeConfig.aliasName
+          : "",
+      SKETCHCATCH_CODEDEPLOY_APPLICATION:
+        input.runtimeConfig?.runtimeTargetKind === "lambda"
+          ? input.runtimeConfig.codeDeployApplicationName
+          : "",
+      SKETCHCATCH_CODEDEPLOY_GROUP:
+        input.runtimeConfig?.runtimeTargetKind === "lambda"
+          ? input.runtimeConfig.codeDeployDeploymentGroupName
+          : "",
       SKETCHCATCH_ECS_CLUSTER:
         input.runtimeConfig?.runtimeTargetKind === "ecs_fargate"
           ? input.runtimeConfig.clusterName
@@ -140,7 +161,9 @@ export function createRepositorySettingsPreview(
       SKETCHCATCH_OUTPUT_URL:
         input.runtimeConfig?.runtimeTargetKind === "ecs_fargate"
           ? input.runtimeConfig.outputUrl
-          : ""
+          : input.runtimeConfig?.runtimeTargetKind === "lambda"
+            ? input.runtimeConfig.outputUrl
+            : ""
     },
     secrets: [],
     workflowFiles: [
@@ -157,6 +180,14 @@ type EcsFargateWorkflowInput = {
     dockerfilePath: string;
   };
   runtimeConfig: Extract<ProjectDeploymentRuntimeConfig, { runtimeTargetKind: "ecs_fargate" }>;
+};
+
+type LambdaWorkflowInput = {
+  confirmedBuildConfig: ConfirmedBuildConfig & {
+    buildPreset: "sam_build";
+    samTemplatePath: string;
+  };
+  runtimeConfig: Extract<ProjectDeploymentRuntimeConfig, { runtimeTargetKind: "lambda" }>;
 };
 
 function getEcsFargateWorkflowInput(
@@ -178,6 +209,28 @@ function getEcsFargateWorkflowInput(
       ...build,
       buildPreset: "docker_build",
       dockerfilePath: build.dockerfilePath
+    },
+    runtimeConfig: runtime
+  };
+}
+
+function getLambdaWorkflowInput(input: GitCicdWorkflowRenderInput): LambdaWorkflowInput | null {
+  const build = input.confirmedBuildConfig;
+  const runtime = input.runtimeConfig;
+  if (
+    input.runtimeTargetKind !== "lambda" ||
+    !build ||
+    build.buildPreset !== "sam_build" ||
+    !build.samTemplatePath ||
+    runtime?.runtimeTargetKind !== "lambda"
+  ) {
+    return null;
+  }
+  return {
+    confirmedBuildConfig: {
+      ...build,
+      buildPreset: "sam_build",
+      samTemplatePath: build.samTemplatePath
     },
     runtimeConfig: runtime
   };
@@ -405,6 +458,220 @@ jobs:
 `;
 }
 
+function renderLambdaAppWorkflow(
+  input: GitCicdWorkflowRenderInput,
+  lambda: LambdaWorkflowInput
+): string {
+  const environmentName = input.environmentName ?? defaultGitCicdEnvironmentName;
+  const build = lambda.confirmedBuildConfig;
+  const runtime = lambda.runtimeConfig;
+  return `name: SketchCatch App
+
+on:
+  workflow_run:
+    workflows: ["SketchCatch Infra"]
+    types: [completed]
+    branches: [${JSON.stringify(input.targetBranch)}]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: sketchcatch-lambda-${input.projectSlug}-${environmentName}
+  cancel-in-progress: false
+
+env:
+  SKETCHCATCH_RELEASE_SHA: \${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+  SKETCHCATCH_RELEASE_BUCKET: \${{ vars.SKETCHCATCH_RELEASE_BUCKET }}
+  SKETCHCATCH_LAMBDA_FUNCTION: \${{ vars.SKETCHCATCH_LAMBDA_FUNCTION }}
+  SKETCHCATCH_LAMBDA_ALIAS: \${{ vars.SKETCHCATCH_LAMBDA_ALIAS }}
+  SKETCHCATCH_CODEDEPLOY_APPLICATION: \${{ vars.SKETCHCATCH_CODEDEPLOY_APPLICATION }}
+  SKETCHCATCH_CODEDEPLOY_GROUP: \${{ vars.SKETCHCATCH_CODEDEPLOY_GROUP }}
+  SKETCHCATCH_OUTPUT_URL: \${{ vars.SKETCHCATCH_OUTPUT_URL }}
+  SKETCHCATCH_SOURCE_ROOT: ${JSON.stringify(build.sourceRoot)}
+  SKETCHCATCH_SAM_TEMPLATE: ${JSON.stringify(build.samTemplatePath)}
+  SKETCHCATCH_FUNCTION_LOGICAL_ID: ${JSON.stringify(runtime.functionLogicalId)}
+  SKETCHCATCH_HEALTH_CHECK_PATH: ${JSON.stringify(build.healthCheckPath ?? "/")}
+
+jobs:
+  release:
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == ${JSON.stringify(input.targetBranch)})
+    runs-on: ubuntu-latest
+    environment: ${environmentName}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: \${{ env.SKETCHCATCH_RELEASE_SHA }}
+      - uses: aws-actions/setup-sam@v2
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: \${{ vars.SKETCHCATCH_AWS_ROLE_ARN }}
+          aws-region: \${{ vars.SKETCHCATCH_AWS_REGION }}
+      - name: Build confirmed SAM application
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SKETCHCATCH_RELEASE_BUCKET"
+          test -f "$SKETCHCATCH_SAM_TEMPLATE"
+          sam validate --template-file "$SKETCHCATCH_SAM_TEMPLATE"
+          sam build --template-file "$SKETCHCATCH_SAM_TEMPLATE"
+          FUNCTION_BUILD_DIR=".aws-sam/build/$SKETCHCATCH_FUNCTION_LOGICAL_ID"
+          test -d "$FUNCTION_BUILD_DIR"
+          (cd "$FUNCTION_BUILD_DIR" && zip -q -r "$GITHUB_WORKSPACE/sketchcatch-lambda.zip" .)
+          ARTIFACT_DIGEST=$(sha256sum sketchcatch-lambda.zip | cut -d' ' -f1)
+          ARTIFACT_KEY="lambda/$SKETCHCATCH_RELEASE_SHA/$ARTIFACT_DIGEST.zip"
+          aws s3 cp sketchcatch-lambda.zip "s3://$SKETCHCATCH_RELEASE_BUCKET/$ARTIFACT_KEY" --only-show-errors
+          echo "SKETCHCATCH_ARTIFACT_DIGEST=sha256:$ARTIFACT_DIGEST" >> "$GITHUB_ENV"
+          echo "SKETCHCATCH_ARTIFACT_KEY=$ARTIFACT_KEY" >> "$GITHUB_ENV"
+          echo "SKETCHCATCH_ARTIFACT_URI=s3://$SKETCHCATCH_RELEASE_BUCKET/$ARTIFACT_KEY" >> "$GITHUB_ENV"
+      - name: Publish immutable Lambda version
+        shell: bash
+        run: |
+          set -euo pipefail
+          PREVIOUS_VERSION=$(aws lambda get-alias --function-name "$SKETCHCATCH_LAMBDA_FUNCTION" --name "$SKETCHCATCH_LAMBDA_ALIAS" --query 'FunctionVersion' --output text)
+          test "$PREVIOUS_VERSION" != '$LATEST'
+          aws lambda update-function-code \
+            --function-name "$SKETCHCATCH_LAMBDA_FUNCTION" \
+            --s3-bucket "$SKETCHCATCH_RELEASE_BUCKET" \
+            --s3-key "$SKETCHCATCH_ARTIFACT_KEY" \
+            --publish \
+            --output json > sketchcatch-lambda-version.json
+          aws lambda wait function-updated-v2 --function-name "$SKETCHCATCH_LAMBDA_FUNCTION"
+          PUBLISHED_VERSION=$(jq -r '.Version' sketchcatch-lambda-version.json)
+          REMOTE_CODE_SHA=$(jq -r '.CodeSha256' sketchcatch-lambda-version.json | base64 --decode | xxd -p -c 256)
+          test "$PUBLISHED_VERSION" != '$LATEST'
+          test "sha256:$REMOTE_CODE_SHA" = "$SKETCHCATCH_ARTIFACT_DIGEST"
+          echo "SKETCHCATCH_PREVIOUS_VERSION=$PREVIOUS_VERSION" >> "$GITHUB_ENV"
+          echo "SKETCHCATCH_PUBLISHED_VERSION=$PUBLISHED_VERSION" >> "$GITHUB_ENV"
+      - name: Validate CodeDeploy rollback policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws deploy get-deployment-group \
+            --application-name "$SKETCHCATCH_CODEDEPLOY_APPLICATION" \
+            --deployment-group-name "$SKETCHCATCH_CODEDEPLOY_GROUP" \
+            --output json > sketchcatch-deployment-group.json
+          python3 - <<'PY'
+          import json
+
+          with open("sketchcatch-deployment-group.json", encoding="utf-8") as handle:
+              group = json.load(handle).get("deploymentGroupInfo") or {}
+          rollback = group.get("autoRollbackConfiguration") or {}
+          if group.get("deploymentConfigName") != "CodeDeployDefault.LambdaAllAtOnce":
+              raise SystemExit("Lambda deployment group must use CodeDeployDefault.LambdaAllAtOnce")
+          if rollback.get("enabled") is not True or "DEPLOYMENT_FAILURE" not in (rollback.get("events") or []):
+              raise SystemExit("Lambda deployment group must auto-rollback DEPLOYMENT_FAILURE")
+          PY
+      - name: Create Lambda deployment revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+
+          content = """version: 0.0
+          Resources:
+            - TargetFunction:
+                Type: AWS::Lambda::Function
+                Properties:
+                  Name: {function_name}
+                  Alias: {alias_name}
+                  CurrentVersion: {previous_version}
+                  TargetVersion: {published_version}
+          """.format(
+              function_name=os.environ["SKETCHCATCH_LAMBDA_FUNCTION"],
+              alias_name=os.environ["SKETCHCATCH_LAMBDA_ALIAS"],
+              previous_version=os.environ["SKETCHCATCH_PREVIOUS_VERSION"],
+              published_version=os.environ["SKETCHCATCH_PUBLISHED_VERSION"]
+          )
+          revision = {
+              "revisionType": "AppSpecContent",
+              "appSpecContent": {
+                  "content": content,
+                  "sha256": hashlib.sha256(content.encode()).hexdigest()
+              }
+          }
+          with open("sketchcatch-codedeploy-revision.json", "w", encoding="utf-8") as handle:
+              json.dump(revision, handle)
+          PY
+          DEPLOYMENT_ID=$(aws deploy create-deployment \
+            --application-name "$SKETCHCATCH_CODEDEPLOY_APPLICATION" \
+            --deployment-group-name "$SKETCHCATCH_CODEDEPLOY_GROUP" \
+            --deployment-config-name CodeDeployDefault.LambdaAllAtOnce \
+            --revision file://sketchcatch-codedeploy-revision.json \
+            --query 'deploymentId' --output text)
+          echo "SKETCHCATCH_CODEDEPLOY_DEPLOYMENT_ID=$DEPLOYMENT_ID" >> "$GITHUB_ENV"
+      - name: Deploy Lambda alias AllAtOnce
+        shell: bash
+        run: |
+          set +e
+          aws deploy wait deployment-successful --deployment-id "$SKETCHCATCH_CODEDEPLOY_DEPLOYMENT_ID"
+          WAIT_STATUS=$?
+          set -e
+          echo "SKETCHCATCH_CODEDEPLOY_WAIT_STATUS=$WAIT_STATUS" >> "$GITHUB_ENV"
+      - name: Verify Lambda release
+        if: always() && env.SKETCHCATCH_CODEDEPLOY_DEPLOYMENT_ID != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          DEPLOYMENT_STATUS=$(aws deploy get-deployment --deployment-id "$SKETCHCATCH_CODEDEPLOY_DEPLOYMENT_ID" --query 'deploymentInfo.status' --output text)
+          ACTIVE_VERSION=$(aws lambda get-alias --function-name "$SKETCHCATCH_LAMBDA_FUNCTION" --name "$SKETCHCATCH_LAMBDA_ALIAS" --query 'FunctionVersion' --output text)
+          if [ "$DEPLOYMENT_STATUS" = "Succeeded" ]; then
+            test "$ACTIVE_VERSION" = "$SKETCHCATCH_PUBLISHED_VERSION"
+            OUTCOME=succeeded
+            HEALTH_URL="\${SKETCHCATCH_OUTPUT_URL%/}\${SKETCHCATCH_HEALTH_CHECK_PATH}"
+            if ! curl --fail --show-error --max-time 10 --max-redirs 0 --proto '=https' "$HEALTH_URL" >/dev/null; then
+              ALIAS_REVISION_ID=$(aws lambda get-alias --function-name "$SKETCHCATCH_LAMBDA_FUNCTION" --name "$SKETCHCATCH_LAMBDA_ALIAS" --query 'RevisionId' --output text)
+              aws lambda update-alias \
+                --function-name "$SKETCHCATCH_LAMBDA_FUNCTION" \
+                --name "$SKETCHCATCH_LAMBDA_ALIAS" \
+                --function-version "$SKETCHCATCH_PREVIOUS_VERSION" \
+                --revision-id "$ALIAS_REVISION_ID" >/dev/null
+              ACTIVE_VERSION=$(aws lambda get-alias --function-name "$SKETCHCATCH_LAMBDA_FUNCTION" --name "$SKETCHCATCH_LAMBDA_ALIAS" --query 'FunctionVersion' --output text)
+              test "$ACTIVE_VERSION" = "$SKETCHCATCH_PREVIOUS_VERSION"
+              OUTCOME=failed
+            fi
+          else
+            for attempt in $(seq 1 20); do
+              ACTIVE_VERSION=$(aws lambda get-alias --function-name "$SKETCHCATCH_LAMBDA_FUNCTION" --name "$SKETCHCATCH_LAMBDA_ALIAS" --query 'FunctionVersion' --output text)
+              if [ "$ACTIVE_VERSION" = "$SKETCHCATCH_PREVIOUS_VERSION" ]; then break; fi
+              sleep 5
+            done
+            if [ "$ACTIVE_VERSION" = "$SKETCHCATCH_PREVIOUS_VERSION" ]; then OUTCOME=rolled_back; else OUTCOME=failed; fi
+          fi
+          python3 - "$OUTCOME" "$ACTIVE_VERSION" <<'PY'
+          import base64
+          import json
+          import os
+          import sys
+
+          evidence = {
+              "schemaVersion": 1,
+              "runtimeTargetKind": "lambda",
+              "outcome": sys.argv[1],
+              "commitSha": os.environ["SKETCHCATCH_RELEASE_SHA"],
+              "artifactDigest": os.environ["SKETCHCATCH_ARTIFACT_DIGEST"],
+              "artifactUri": os.environ["SKETCHCATCH_ARTIFACT_URI"],
+              "functionName": os.environ["SKETCHCATCH_LAMBDA_FUNCTION"],
+              "aliasName": os.environ["SKETCHCATCH_LAMBDA_ALIAS"],
+              "publishedVersion": os.environ["SKETCHCATCH_PUBLISHED_VERSION"],
+              "previousVersion": os.environ["SKETCHCATCH_PREVIOUS_VERSION"],
+              "activeVersion": sys.argv[2],
+              "deploymentId": os.environ["SKETCHCATCH_CODEDEPLOY_DEPLOYMENT_ID"],
+              "deploymentConfigName": "CodeDeployDefault.LambdaAllAtOnce",
+              "outputUrl": os.environ["SKETCHCATCH_OUTPUT_URL"]
+          }
+          encoded = base64.b64encode(json.dumps(evidence, separators=(",", ":")).encode()).decode()
+          print(f"SKETCHCATCH_LAMBDA_RELEASE_EVIDENCE_B64={encoded}")
+          PY
+          test "$OUTCOME" = succeeded
+`;
+}
+
 function renderEcsFargateBuildspec(): string {
   return `version: 0.2
 
@@ -459,8 +726,13 @@ function renderInfraWorkflow(input: GitCicdWorkflowRenderInput): string {
   const infraPathGlob = createMonitoredPathGlob(input.infraPath ?? terraformDirectory);
   const environmentName = input.environmentName ?? defaultGitCicdEnvironmentName;
   const ecsFargate = getEcsFargateWorkflowInput(input);
-  const ecsTriggerPaths = ecsFargate
-    ? `\n      - ${JSON.stringify(createMonitoredPathGlob(input.appPath ?? ecsFargate.confirmedBuildConfig.sourceRoot))}\n      - 'sketchcatch/${input.projectSlug}/ci-cd/buildspec-ecs.yml'`
+  const lambda = getLambdaWorkflowInput(input);
+  const applicationSourceRoot =
+    ecsFargate?.confirmedBuildConfig.sourceRoot ?? lambda?.confirmedBuildConfig.sourceRoot;
+  const applicationTriggerPaths = applicationSourceRoot
+    ? `\n      - ${JSON.stringify(createMonitoredPathGlob(input.appPath ?? applicationSourceRoot))}${
+        ecsFargate ? `\n      - 'sketchcatch/${input.projectSlug}/ci-cd/buildspec-ecs.yml'` : ""
+      }`
     : "";
 
   return `name: SketchCatch Infra
@@ -470,7 +742,7 @@ on:
     branches: [${JSON.stringify(input.targetBranch)}]
     paths:
       - ${JSON.stringify(infraPathGlob)}
-${ecsTriggerPaths}
+${applicationTriggerPaths}
       - '.github/workflows/sketchcatch-infra.yml'
   workflow_dispatch:
 

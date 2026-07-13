@@ -791,7 +791,12 @@ test("POST /api/projects/:projectId/git-cicd-handoffs creates an internal metada
   assert.equal(providerCall?.userAcceptedChangeId, "accepted-change-1");
   assert.equal(providerCall?.runtimeTargetKind, "ecs_fargate");
   assert.equal(providerCall?.confirmedBuildConfig.dockerfilePath, "apps/web/Dockerfile");
-  assert.equal(providerCall?.runtimeConfig.serviceName, "sketchcatch-web");
+  assert.equal(
+    providerCall?.runtimeConfig.runtimeTargetKind === "ecs_fargate"
+      ? providerCall.runtimeConfig.serviceName
+      : null,
+    "sketchcatch-web"
+  );
   assert.equal(providerCall?.awsRoleArn, "arn:aws:iam::123456789012:role/SketchCatch");
   assertResponseHasNoSecretFields(body.handoff);
 
@@ -835,6 +840,57 @@ test("POST GitOps handoff rejects stale or ambiguous repository Docker evidence"
 
   assert.equal(response.statusCode, 409);
   assert.match(response.json().message, /current, unambiguous Docker build evidence/i);
+  await app.close();
+});
+
+test("POST GitOps handoff accepts one current SAM template for a confirmed Lambda target", async () => {
+  const repository = new FakeGitCicdHandoffRepository();
+  repository.deploymentTarget = createLambdaDeploymentTargetRecord();
+  repository.monitoringConfig = {
+    ...repository.monitoringConfig!,
+    appPath: { mode: "subdirectory", path: "apps/worker" }
+  };
+  repository.sourceRepository = createSourceRepositoryRecord({
+    analysisResult: {
+      status: "template_selected",
+      templateId: "minimal-serverless-api",
+      applicationUnits: [
+        {
+          id: "worker",
+          rootPath: "apps/worker",
+          kind: "backend",
+          frameworks: ["sam"],
+          evidencePaths: ["apps/worker/template.yaml"]
+        }
+      ],
+      evidence: [
+        {
+          kind: "framework_config",
+          path: "apps/worker/template.yaml",
+          applicationUnitId: "worker",
+          signals: []
+        }
+      ],
+      missingEvidence: [],
+      selectionReasons: ["SAM template detected"]
+    }
+  });
+  const providerCalls: GitCicdProviderCreateInput[] = [];
+  const app = await buildGitCicdHandoffTestApp(repository, {
+    provider: createProviderSpy(providerCalls)
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/projects/${projectId}/git-cicd-handoffs`,
+    headers: await authHeaders(),
+    payload: createHandoffBody()
+  });
+
+  assert.equal(response.statusCode, 201);
+  assert.equal(providerCalls[0]?.runtimeTargetKind, "lambda");
+  assert.equal(providerCalls[0]?.confirmedBuildConfig.samTemplatePath, "apps/worker/template.yaml");
+  assert.equal(providerCalls[0]?.runtimeConfig.runtimeTargetKind, "lambda");
   await app.close();
 });
 
@@ -2450,6 +2506,40 @@ function createEcsDeploymentTargetRecord(): GitCicdHandoffDeploymentTargetRecord
     rolloutStrategy: "all_at_once" as const,
     createdAt: fixedNow,
     updatedAt: fixedNow
+  };
+}
+
+function createLambdaDeploymentTargetRecord(): GitCicdHandoffDeploymentTargetRecord {
+  return {
+    ...createEcsDeploymentTargetRecord(),
+    runtimeTargetKind: "lambda",
+    confirmedBuildConfig: {
+      sourceRoot: "apps/worker",
+      evidence: [{ kind: "sam_template", path: "apps/worker/template.yaml" }],
+      installPreset: "none",
+      buildPreset: "sam_build",
+      artifactOutputPath: null,
+      runtimeEntrypoint: null,
+      healthCheckPath: "/health",
+      dockerfilePath: null,
+      packageManifestPath: null,
+      samTemplatePath: "apps/worker/template.yaml",
+      appSpecPath: null,
+      staticOutputPath: null,
+      exactSemVerTag: null,
+      manifestVersion: "2.0.0",
+      confirmedCommitSha: "b".repeat(40),
+      confirmedAt: "2026-01-01T00:00:00.000Z"
+    },
+    runtimeConfig: {
+      runtimeTargetKind: "lambda",
+      functionLogicalId: "ApiFunction",
+      functionName: "sketchcatch-api",
+      aliasName: "live",
+      codeDeployApplicationName: "sketchcatch-api",
+      codeDeployDeploymentGroupName: "sketchcatch-api-live",
+      outputUrl: "https://lambda.example.com"
+    }
   };
 }
 

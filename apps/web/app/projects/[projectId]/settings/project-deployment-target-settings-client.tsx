@@ -1,7 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { AwsConnection, ProjectDeploymentTarget, RuntimeTargetKind } from "@sketchcatch/types";
+import type {
+  AwsConnection,
+  ProjectDeploymentTarget,
+  RuntimeTargetKind,
+  SourceRepository
+} from "@sketchcatch/types";
 import { useAuth } from "../../../../components/auth/auth-provider";
 import { getApiErrorMessage } from "../../../../lib/api-client";
 import {
@@ -11,10 +16,10 @@ import {
   putProjectDeploymentTarget
 } from "../../../../features/workspace/api";
 import {
+  changeDeploymentTargetRuntime,
   createDeploymentTargetDraft,
   createDeploymentTargetRequest,
   formatDeploymentTargetUpdatedAt,
-  getDefaultDeploymentEvidencePath,
   isDeploymentTargetDraftReady,
   type ProjectDeploymentTargetDraft
 } from "./project-deployment-target-state";
@@ -37,6 +42,7 @@ export function ProjectDeploymentTargetSettingsClient({
   const { status: authStatus } = useAuth();
   const [connections, setConnections] = useState<AwsConnection[]>([]);
   const [target, setTarget] = useState<ProjectDeploymentTarget | null>(null);
+  const [sourceRepository, setSourceRepository] = useState<SourceRepository | null>(null);
   const [draft, setDraft] = useState<ProjectDeploymentTargetDraft>(() =>
     createDeploymentTargetDraft(null, [])
   );
@@ -65,7 +71,7 @@ export function ProjectDeploymentTargetSettingsClient({
           listSourceRepositories(projectId)
         ]);
         if (cancelled) return;
-        const sourceRepository = sourceRepositories.find(
+        const nextSourceRepository = sourceRepositories.find(
           (repository) =>
             repository.provider === "github" &&
             repository.status === "active" &&
@@ -73,7 +79,8 @@ export function ProjectDeploymentTargetSettingsClient({
         );
         setConnections(nextConnections);
         setTarget(nextTarget);
-        setDraft(createDeploymentTargetDraft(nextTarget, nextConnections, sourceRepository));
+        setSourceRepository(nextSourceRepository ?? null);
+        setDraft(createDeploymentTargetDraft(nextTarget, nextConnections, nextSourceRepository));
         setRequestState("idle");
       } catch (error) {
         if (cancelled) return;
@@ -97,12 +104,9 @@ export function ProjectDeploymentTargetSettingsClient({
   }
 
   function changeRuntime(runtimeTargetKind: RuntimeTargetKind) {
-    setDraft((current) => ({
-      ...current,
-      runtimeTargetKind,
-      evidencePath: getDefaultDeploymentEvidencePath(runtimeTargetKind),
-      healthCheckPath: runtimeTargetKind === "ecs_fargate" ? current.healthCheckPath || "/health" : ""
-    }));
+    setDraft((current) =>
+      changeDeploymentTargetRuntime(current, runtimeTargetKind, sourceRepository)
+    );
     setMessage("");
   }
 
@@ -219,6 +223,38 @@ export function ProjectDeploymentTargetSettingsClient({
             <label className={styles.field}>
               <span>Container</span>
               <input onChange={(event) => updateDraft("containerName", event.target.value)} value={draft.containerName} />
+            </label>
+            <label className={styles.field}>
+              <span>Output URL</span>
+              <input onChange={(event) => updateDraft("outputUrl", event.target.value)} placeholder="https://api.example.com" value={draft.outputUrl} />
+            </label>
+            <label className={styles.field}>
+              <span>Health check path</span>
+              <input onChange={(event) => updateDraft("healthCheckPath", event.target.value)} value={draft.healthCheckPath} />
+            </label>
+          </>
+        ) : null}
+        {draft.runtimeTargetKind === "lambda" ? (
+          <>
+            <label className={styles.field}>
+              <span>SAM function logical ID</span>
+              <input onChange={(event) => updateDraft("functionLogicalId", event.target.value)} value={draft.functionLogicalId} />
+            </label>
+            <label className={styles.field}>
+              <span>Lambda function</span>
+              <input onChange={(event) => updateDraft("functionName", event.target.value)} value={draft.functionName} />
+            </label>
+            <label className={styles.field}>
+              <span>Lambda alias</span>
+              <input onChange={(event) => updateDraft("aliasName", event.target.value)} value={draft.aliasName} />
+            </label>
+            <label className={styles.field}>
+              <span>CodeDeploy application</span>
+              <input onChange={(event) => updateDraft("codeDeployApplicationName", event.target.value)} value={draft.codeDeployApplicationName} />
+            </label>
+            <label className={styles.field}>
+              <span>CodeDeploy deployment group</span>
+              <input onChange={(event) => updateDraft("codeDeployDeploymentGroupName", event.target.value)} value={draft.codeDeployDeploymentGroupName} />
             </label>
             <label className={styles.field}>
               <span>Output URL</span>

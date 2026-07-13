@@ -765,18 +765,34 @@ type EcsFargateRuntimeConfig = {
   containerName: string;
   outputUrl: string;
 };
+
+type LambdaRuntimeConfig = {
+  runtimeTargetKind: "lambda";
+  functionLogicalId: string;
+  functionName: string;
+  aliasName: string;
+  codeDeployApplicationName: string;
+  codeDeployDeploymentGroupName: string;
+  outputUrl: string;
+};
 ```
+
+Lambda target은 저장소 분석에서 단 하나로 확인된 `template.yaml|yml`을 `sam_template` build evidence로
+확정하고, SAM logical ID, Lambda function/alias, CodeDeploy application/deployment group, HTTPS Output
+URL을 비민감 `runtimeConfig`로 저장한다. `0038_lambda_gitops_runtime.sql`은 기존 ECS JSON 계약을
+유지하면서 Lambda discriminator를 추가한다. API는 runtime kind와 JSON discriminator가 다르거나
+`$LATEST`, 숫자 전용 alias, unsafe resource name, credential/query/fragment가 포함된 URL을 거부한다.
 
 `ConfirmedBuildConfig`는 임의 shell command를 저장하지 않는다. repository-relative `sourceRoot`, evidence 종류와
 경로, 허용된 install/build preset, runtime별 artifact/entrypoint/health path, exact SemVer tag 또는 manifest
 version, 확인한 commit SHA와 시각만 저장한다. `null`은 migration으로 복원한 legacy target에만 허용하며,
 사용자가 PUT으로 저장하는 새 target은 확인된 build config가 필수다.
 
-`runtimeConfig`는 provider adapter가 실제 런타임을 재조회하는 데 필요한 비밀이 아닌 좌표다. ECS/Fargate는
-CodeBuild project, ECR repository, ECS cluster/service/container와 credential/query/fragment가 없는 HTTPS
-Output URL을 저장한다. 새 ECS/Fargate target은 이 값이 필수이며 다른 runtime은 해당 adapter가 구현될
-때까지 `null`만 허용한다. `0037_ecs_gitops_runtime.sql`은 기존 row를 유지하기 위해 nullable JSONB로
-추가하지만 새 PUT은 service validation에서 완전한 값을 요구한다.
+`runtimeConfig`는 provider adapter가 실제 런타임을 재조회하는 데 필요한 비밀이 아닌 좌표다. ECS/Fargate와
+Lambda target은 각 adapter의 완전한 좌표가 필수다. EC2/ASG와 Static target은 해당 adapter가 구현될 때까지
+`null`만 허용한다. `0037_ecs_gitops_runtime.sql`은 기존 row를 유지하기 위해 nullable JSONB로 추가했고,
+`0038_lambda_gitops_runtime.sql`은 기존 ECS discriminator를 보존한 채 Lambda discriminator를 확장한다.
+새 PUT은 service validation에서 선택한 runtime과 일치하는 완전한 값을 요구한다.
 
 API는 `GET|PUT /api/projects/:projectId/deployment-target`을 사용한다. Direct와 GitOps는 같은 target row를
 읽으며 환경별 복제, EKS, 임의 rollout 전략은 이 계약에 포함하지 않는다.

@@ -1059,7 +1059,7 @@ export async function createGitCicdHandoff(
     );
   }
   const deploymentTarget = await repository.findProjectDeploymentTarget(input.projectId);
-  assertEcsGitOpsTarget(deploymentTarget, sourceRepository, monitoringConfig.appPath);
+  assertGitOpsTarget(deploymentTarget, sourceRepository, monitoringConfig.appPath);
 
   const handoffId = generateId();
   const projectSlug = createProjectSlug(project.name);
@@ -1231,48 +1231,75 @@ export async function createGitCicdHandoff(
   });
 }
 
-function assertEcsGitOpsTarget(
+function assertGitOpsTarget(
   target: GitCicdHandoffDeploymentTargetRecord | undefined,
   sourceRepository: GitCicdHandoffSourceRepositoryRecord,
   appPath: GitCicdMonitoredPath
 ): asserts target is GitCicdHandoffDeploymentTargetRecord & {
-  runtimeTargetKind: "ecs_fargate";
   confirmedBuildConfig: ConfirmedBuildConfig;
-  runtimeConfig: Extract<ProjectDeploymentRuntimeConfig, { runtimeTargetKind: "ecs_fargate" }>;
+  runtimeConfig: ProjectDeploymentRuntimeConfig;
   awsRoleArn: string;
 } {
   if (
     !target ||
-    target.runtimeTargetKind !== "ecs_fargate" ||
     !target.confirmedBuildConfig ||
     !target.runtimeConfig ||
-    target.runtimeConfig.runtimeTargetKind !== "ecs_fargate" ||
+    target.runtimeConfig.runtimeTargetKind !== target.runtimeTargetKind ||
     !target.awsRoleArn
   ) {
     throw new GitCicdHandoffProviderConflictError(
-      "GitOps application handoff requires a confirmed ECS Fargate project deployment target"
+      "GitOps application handoff requires a confirmed project deployment target"
     );
   }
 
   const build = target.confirmedBuildConfig;
   const revision = sourceRepository.analysisRevision;
-  const dockerfiles = sourceRepository.analysisResult?.evidence.filter(
-    (item) => item.kind === "dockerfile"
-  ) ?? [];
-  if (
-    build.buildPreset !== "docker_build" ||
-    !build.dockerfilePath ||
-    !revision ||
-    !/^(?:[a-f\d]{40}|[a-f\d]{64})$/i.test(revision) ||
-    build.confirmedCommitSha.toLowerCase() !== revision.toLowerCase() ||
-    dockerfiles.length !== 1 ||
-    dockerfiles[0]?.path !== build.dockerfilePath ||
-    appPath.path !== build.sourceRoot
-  ) {
-    throw new GitCicdHandoffProviderConflictError(
-      "GitOps application handoff requires current, unambiguous Docker build evidence"
-    );
+  const hasCurrentRevision =
+    Boolean(revision) &&
+    /^(?:[a-f\d]{40}|[a-f\d]{64})$/i.test(revision ?? "") &&
+    build.confirmedCommitSha.toLowerCase() === revision?.toLowerCase() &&
+    appPath.path === build.sourceRoot;
+  if (target.runtimeTargetKind === "ecs_fargate") {
+    const dockerfiles = sourceRepository.analysisResult?.evidence.filter(
+      (item) => item.kind === "dockerfile"
+    ) ?? [];
+    if (
+      target.runtimeConfig.runtimeTargetKind !== "ecs_fargate" ||
+      build.buildPreset !== "docker_build" ||
+      !build.dockerfilePath ||
+      !hasCurrentRevision ||
+      dockerfiles.length !== 1 ||
+      dockerfiles[0]?.path !== build.dockerfilePath
+    ) {
+      throw new GitCicdHandoffProviderConflictError(
+        "GitOps application handoff requires current, unambiguous Docker build evidence"
+      );
+    }
+    return;
   }
+  if (target.runtimeTargetKind === "lambda") {
+    const samTemplates = sourceRepository.analysisResult?.evidence.filter(
+      (item) =>
+        item.kind === "framework_config" &&
+        /(?:^|\/)template\.ya?ml$/i.test(item.path)
+    ) ?? [];
+    if (
+      target.runtimeConfig.runtimeTargetKind !== "lambda" ||
+      build.buildPreset !== "sam_build" ||
+      !build.samTemplatePath ||
+      !hasCurrentRevision ||
+      samTemplates.length !== 1 ||
+      samTemplates[0]?.path !== build.samTemplatePath
+    ) {
+      throw new GitCicdHandoffProviderConflictError(
+        "GitOps application handoff requires current, unambiguous SAM build evidence"
+      );
+    }
+    return;
+  }
+  throw new GitCicdHandoffProviderConflictError(
+    "GitOps application handoff does not yet support the selected runtime"
+  );
 }
 
 export async function listProjectGitCicdHandoffs(

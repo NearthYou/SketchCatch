@@ -505,9 +505,11 @@ export const projectDeploymentTargets = pgTable(
     check(
       "project_deployment_targets_runtime_config_check",
       sql`${table.runtimeConfig} is null or (
-        ${table.runtimeTargetKind} = 'ecs_fargate'
-        and jsonb_typeof(${table.runtimeConfig}) = 'object'
-        and ${table.runtimeConfig}->>'runtimeTargetKind' = 'ecs_fargate'
+        jsonb_typeof(${table.runtimeConfig}) = 'object'
+        and (
+          (${table.runtimeTargetKind} = 'ecs_fargate' and ${table.runtimeConfig}->>'runtimeTargetKind' = 'ecs_fargate')
+          or (${table.runtimeTargetKind} = 'lambda' and ${table.runtimeConfig}->>'runtimeTargetKind' = 'lambda')
+        )
       )`
     )
   ]

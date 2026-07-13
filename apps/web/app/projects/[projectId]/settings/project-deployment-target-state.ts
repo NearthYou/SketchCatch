@@ -21,6 +21,11 @@ export type ProjectDeploymentTargetDraft = {
   clusterName: string;
   serviceName: string;
   containerName: string;
+  functionLogicalId: string;
+  functionName: string;
+  aliasName: string;
+  codeDeployApplicationName: string;
+  codeDeployDeploymentGroupName: string;
   outputUrl: string;
   evidenceSuggested: boolean;
 };
@@ -61,7 +66,10 @@ export function createDeploymentTargetDraft(
   const ecsConfig = target?.runtimeConfig?.runtimeTargetKind === "ecs_fargate"
     ? target.runtimeConfig
     : null;
-  const suggestion = target ? null : getDockerEvidenceSuggestion(sourceRepository);
+  const lambdaConfig = target?.runtimeConfig?.runtimeTargetKind === "lambda"
+    ? target.runtimeConfig
+    : null;
+  const suggestion = target ? null : getEvidenceSuggestion(runtimeTargetKind, sourceRepository);
   return {
     connectionId:
       target?.connectionId ?? connections.find((item) => item.status === "verified")?.id ?? "",
@@ -79,7 +87,33 @@ export function createDeploymentTargetDraft(
     clusterName: ecsConfig?.clusterName ?? "",
     serviceName: ecsConfig?.serviceName ?? "",
     containerName: ecsConfig?.containerName ?? "",
-    outputUrl: ecsConfig?.outputUrl ?? "",
+    functionLogicalId: lambdaConfig?.functionLogicalId ?? "",
+    functionName: lambdaConfig?.functionName ?? "",
+    aliasName: lambdaConfig?.aliasName ?? "",
+    codeDeployApplicationName: lambdaConfig?.codeDeployApplicationName ?? "",
+    codeDeployDeploymentGroupName: lambdaConfig?.codeDeployDeploymentGroupName ?? "",
+    outputUrl: ecsConfig?.outputUrl ?? lambdaConfig?.outputUrl ?? "",
+    evidenceSuggested: Boolean(suggestion)
+  };
+}
+
+export function changeDeploymentTargetRuntime(
+  draft: ProjectDeploymentTargetDraft,
+  runtimeTargetKind: RuntimeTargetKind,
+  sourceRepository?: SourceRepository | null
+): ProjectDeploymentTargetDraft {
+  const suggestion = getEvidenceSuggestion(runtimeTargetKind, sourceRepository);
+  return {
+    ...draft,
+    runtimeTargetKind,
+    sourceRoot: suggestion?.sourceRoot ?? ".",
+    evidencePath: suggestion?.evidencePath ?? getDefaultDeploymentEvidencePath(runtimeTargetKind),
+    commitSha: suggestion?.commitSha ?? "",
+    healthCheckPath:
+      runtimeTargetKind === "ecs_fargate" || runtimeTargetKind === "lambda"
+        ? draft.healthCheckPath || "/health"
+        : "",
+    outputUrl: "",
     evidenceSuggested: Boolean(suggestion)
   };
 }
@@ -108,7 +142,9 @@ export function isDeploymentTargetDraftReady(
     draft.sourceRoot.trim().length > 0 &&
     draft.evidencePath.trim().length > 0 &&
     (draft.runtimeTargetKind !== "ecs_fargate" ||
-      (/^\//.test(draft.healthCheckPath) && hasCompleteEcsCoordinates(draft)))
+      (/^\//.test(draft.healthCheckPath) && hasCompleteEcsCoordinates(draft))) &&
+    (draft.runtimeTargetKind !== "lambda" ||
+      (/^\//.test(draft.healthCheckPath) && hasCompleteLambdaCoordinates(draft)))
   );
 }
 
@@ -145,7 +181,17 @@ export function createDeploymentTargetRequest(
             containerName: draft.containerName.trim(),
             outputUrl: draft.outputUrl.trim()
           }
-        : null,
+        : draft.runtimeTargetKind === "lambda"
+          ? {
+              runtimeTargetKind: "lambda",
+              functionLogicalId: draft.functionLogicalId.trim(),
+              functionName: draft.functionName.trim(),
+              aliasName: draft.aliasName.trim(),
+              codeDeployApplicationName: draft.codeDeployApplicationName.trim(),
+              codeDeployDeploymentGroupName: draft.codeDeployDeploymentGroupName.trim(),
+              outputUrl: draft.outputUrl.trim()
+            }
+          : null,
     confirmedBuildConfig: {
       sourceRoot: draft.sourceRoot.trim(),
       evidence: [{ kind: runtime.evidenceKind, path: evidencePath }],
@@ -154,7 +200,9 @@ export function createDeploymentTargetRequest(
       artifactOutputPath: draft.runtimeTargetKind === "static_site" ? evidencePath : null,
       runtimeEntrypoint: null,
       healthCheckPath:
-        draft.runtimeTargetKind === "ecs_fargate" ? draft.healthCheckPath.trim() : null,
+        draft.runtimeTargetKind === "ecs_fargate" || draft.runtimeTargetKind === "lambda"
+          ? draft.healthCheckPath.trim()
+          : null,
       dockerfilePath: draft.runtimeTargetKind === "ecs_fargate" ? evidencePath : null,
       packageManifestPath: null,
       samTemplatePath: draft.runtimeTargetKind === "lambda" ? evidencePath : null,
@@ -168,7 +216,10 @@ export function createDeploymentTargetRequest(
   };
 }
 
-function getDockerEvidenceSuggestion(sourceRepository?: SourceRepository | null): {
+function getEvidenceSuggestion(
+  runtimeTargetKind: RuntimeTargetKind,
+  sourceRepository?: SourceRepository | null
+): {
   sourceRoot: string;
   evidencePath: string;
   commitSha: string;
@@ -188,10 +239,15 @@ function getDockerEvidenceSuggestion(sourceRepository?: SourceRepository | null)
     !Array.isArray(handoff.evidence) ||
     !Array.isArray(handoff.applicationUnits)
   ) return null;
-  const dockerfiles = handoff.evidence.filter((item) => item.kind === "dockerfile");
-  if (dockerfiles.length !== 1) return null;
+  const evidenceKind = runtimeBuildConfig[runtimeTargetKind].evidenceKind;
+  const matchingEvidence = handoff.evidence.filter((item) =>
+    runtimeTargetKind === "lambda"
+      ? item.kind === "framework_config" && /(?:^|\/)template\.ya?ml$/i.test(item.path)
+      : item.kind === evidenceKind
+  );
+  if (matchingEvidence.length !== 1) return null;
 
-  const evidence = dockerfiles[0];
+  const evidence = matchingEvidence[0];
   if (!evidence) return null;
   const applicationUnit = handoff.applicationUnits.find(
     (unit) => unit.id === evidence.applicationUnitId
@@ -214,15 +270,24 @@ function hasCompleteEcsCoordinates(draft: ProjectDeploymentTargetDraft): boolean
     draft.containerName
   ];
   if (values.some((value) => value.trim().length === 0)) return false;
+  return hasSafeHttpsOutputUrl(draft.outputUrl);
+}
+
+function hasCompleteLambdaCoordinates(draft: ProjectDeploymentTargetDraft): boolean {
+  const values = [
+    draft.functionLogicalId,
+    draft.functionName,
+    draft.aliasName,
+    draft.codeDeployApplicationName,
+    draft.codeDeployDeploymentGroupName
+  ];
+  return values.every((value) => value.trim().length > 0) && hasSafeHttpsOutputUrl(draft.outputUrl);
+}
+
+function hasSafeHttpsOutputUrl(value: string): boolean {
   try {
-    const url = new URL(draft.outputUrl.trim());
-    return (
-      url.protocol === "https:" &&
-      !url.username &&
-      !url.password &&
-      !url.search &&
-      !url.hash
-    );
+    const url = new URL(value.trim());
+    return url.protocol === "https:" && !url.username && !url.password && !url.search && !url.hash;
   } catch {
     return false;
   }
