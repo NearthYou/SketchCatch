@@ -5,6 +5,7 @@ import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { format, resolveConfig } from "prettier";
 import { normalizeCapture } from "./normalize-capture.mjs";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
@@ -30,7 +31,11 @@ export async function runSourceFixtureGenerator(argv = process.argv.slice(2)) {
   const fixtures = await loadFixtureConfigs(cli.configFileName);
   for (const config of fixtures) {
     const outputPath = path.join(sourcesDirectory, config.outputFileName);
-    const generated = generateFixture(config);
+    const prettierConfig = (await resolveConfig(outputPath)) ?? {};
+    const generated = await format(generateFixture(config), {
+      ...prettierConfig,
+      filepath: outputPath
+    });
     if (cli.mode === "check") {
       if (readFileSync(outputPath, "utf8") !== generated) {
         throw new Error(`Generated Brainboard source fixture is stale: ${outputPath}`);
@@ -211,9 +216,7 @@ function sourceFile(file, workspaceOmissions) {
     includeInWorkspace: file.includeInWorkspace
   };
   const omissions = (workspaceOmissions[file.fileName] ?? []).map((omission) =>
-    typeof omission === "string"
-      ? { sourceText: omission, occurrenceCount: 1 }
-      : omission
+    typeof omission === "string" ? { sourceText: omission, occurrenceCount: 1 } : omission
   );
   if (omissions.length === 0) return result;
   if (!file.includeInWorkspace) {
