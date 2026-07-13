@@ -10,6 +10,10 @@ test("GitHub App callback keeps repository selection and return flow visible", a
 
   assert.match(source, /listGitHubInstallationRepositories/);
   assert.match(source, /connectGitHubSourceRepository/);
+  assert.match(source, /useAuth/);
+  assert.match(source, /getGitHubCallbackAuthDecision/);
+  assert.match(source, /decision\.kind === "wait"/);
+  assert.match(source, /router\.replace\(decision\.href\)/);
   assert.match(source, /Repository 선택/);
   assert.match(source, /router\.replace/);
   assert.match(source, /Manage permissions in settings/);

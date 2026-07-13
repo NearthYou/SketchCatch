@@ -5,7 +5,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import type { GitHubRepositoryCandidate } from "@sketchcatch/types";
+import { useAuth } from "../../../../components/auth/auth-provider";
 import { ProductBrand } from "../../../../components/ui/ProductBrand";
+import { getGitHubCallbackAuthDecision } from "../../../../features/auth/github-callback-auth";
 import {
   connectGitHubSourceRepository,
   listGitHubInstallationRepositories
@@ -28,6 +30,7 @@ type CallbackState =
 // GitHub App에서 돌아온 사용자가 Repository 하나를 골라 프로젝트 시작 흐름을 이어가게 합니다.
 export default function GitHubIntegrationCallbackPage() {
   const router = useRouter();
+  const { status: authStatus } = useAuth();
   const [callbackState, setCallbackState] = useState<CallbackState>({ status: "loading" });
   const selectableCount = useMemo(
     () =>
@@ -43,14 +46,27 @@ export default function GitHubIntegrationCallbackPage() {
 
     async function loadRepositories(): Promise<void> {
       const searchParams = new URLSearchParams(window.location.search);
-      const installationId = searchParams.get("installation_id")?.trim();
-      const state = searchParams.get("state")?.trim();
+      const installationId = searchParams.get("installation_id")?.trim() ?? "";
+      const state = searchParams.get("state")?.trim() ?? "";
+      const decision = getGitHubCallbackAuthDecision({
+        authStatus,
+        installationId,
+        returnPath: `${window.location.pathname}${window.location.search}`,
+        state
+      });
 
-      if (!installationId || !state) {
+      if (decision.kind === "invalid") {
         setCallbackState({
           status: "error",
           message: "GitHub 연결 정보가 없습니다. Repository 시작 화면에서 다시 연결해주세요."
         });
+        return;
+      }
+
+      if (decision.kind === "wait") return;
+
+      if (decision.kind === "redirect") {
+        router.replace(decision.href);
         return;
       }
 
@@ -77,7 +93,7 @@ export default function GitHubIntegrationCallbackPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [authStatus, router]);
 
   // 사용자가 고른 Repository만 프로젝트에 연결하고 분석 시작 화면으로 돌아갑니다.
   async function selectRepository(repository: GitHubRepositoryCandidate): Promise<void> {
