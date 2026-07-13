@@ -7,6 +7,8 @@ import type {
   GitCicdHandoffPipelineStatus,
   GitCicdHandoffPipelineStatusResponse,
   GitCicdHandoffResponse,
+  GitCicdMonitoringConfig,
+  GitCicdMonitoringConfigResponse,
   GitCicdRepositorySettingsApplyResponse
 } from "@sketchcatch/types";
 import { requireActiveUserId } from "../auth/current-user.js";
@@ -51,6 +53,17 @@ import {
   createGitHubRepositorySettingsOAuthStart
 } from "../git-cicd/github-oauth-repository-settings.js";
 import type { GitCicdPipelineStatusProvider } from "../git-cicd/github-actions-pipeline-status-provider.js";
+import {
+  createGitHubMonitoringProviderFromEnv,
+  createPostgresGitCicdMonitoringRepository,
+  getGitCicdMonitoringConfig,
+  GitCicdMonitoringNotFoundError,
+  GitCicdMonitoringValidationError,
+  updateGitCicdMonitoringConfig,
+  type GitCicdMonitoringConfigRecord,
+  type GitCicdMonitoringProvider,
+  type GitCicdMonitoringRepository
+} from "../git-cicd/git-cicd-monitoring-service.js";
 import { createRuntimeCacheFromEnv, type RuntimeCache } from "../runtime-cache/index.js";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
@@ -90,6 +103,30 @@ const githubOAuthCallbackQuerySchema = z
   .passthrough();
 
 const branchSchema = z.string().trim().min(1).max(255);
+
+const monitoringParamsSchema = z
+  .object({
+    projectId: z.uuid(),
+    sourceRepositoryId: z.string().trim().min(1).max(128)
+  })
+  .strict();
+
+const monitoredPathSchema = z
+  .object({
+    mode: z.enum(["repository_root", "subdirectory"]),
+    path: z.string().trim().max(1024)
+  })
+  .strict();
+
+const updateMonitoringBodySchema = z
+  .object({
+    enabled: z.boolean(),
+    monitorBranch: branchSchema,
+    appPath: monitoredPathSchema,
+    infraPath: monitoredPathSchema,
+    userAcceptedChangeId: z.string().trim().min(1).max(128)
+  })
+  .strict();
 
 const createGitCicdHandoffBodySchema = z
   .object({
@@ -138,6 +175,10 @@ type GitCicdHandoffRouteOptions = {
   createGitCicdHandoffRepository?: (
     db: DatabaseClient["db"]
   ) => GitCicdHandoffRepository;
+  createGitCicdMonitoringRepository?: (
+    db: DatabaseClient["db"]
+  ) => GitCicdMonitoringRepository;
+  gitCicdMonitoringProvider?: GitCicdMonitoringProvider;
   gitCicdHandoffProvider?: GitCicdHandoffProvider;
   gitCicdPipelineStatusProvider?: GitCicdPipelineStatusProvider;
   gitCicdRepositorySettingsApplier?: GitCicdRepositorySettingsApplier;
@@ -161,6 +202,66 @@ export async function registerGitCicdHandoffRoutes(
 ): Promise<void> {
   const getGitCicdDatabaseClient = options?.getDatabaseClient ?? getDatabaseClient;
   const runtimeCache = options?.runtimeCache ?? createRuntimeCacheFromEnv();
+
+  app.get(
+    "/projects/:projectId/source-repositories/:sourceRepositoryId/cicd-monitoring",
+    async (request, reply) => {
+      const params = monitoringParamsSchema.parse(request.params);
+      const client = getGitCicdDatabaseClient();
+      const accessContext = {
+        kind: "user",
+        userId: await requireActiveUserId(request, () => client)
+      } as const;
+      const repository =
+        options?.createGitCicdMonitoringRepository?.(client.db) ??
+        createPostgresGitCicdMonitoringRepository(client.db);
+
+      try {
+        const config = await getGitCicdMonitoringConfig(
+          { ...params, accessContext },
+          repository
+        );
+        const response: GitCicdMonitoringConfigResponse = {
+          config: toGitCicdMonitoringConfig(config)
+        };
+        return reply.status(200).send(response);
+      } catch (error) {
+        return handleGitCicdMonitoringError(error, reply);
+      }
+    }
+  );
+
+  app.put(
+    "/projects/:projectId/source-repositories/:sourceRepositoryId/cicd-monitoring",
+    async (request, reply) => {
+      const params = monitoringParamsSchema.parse(request.params);
+      const body = updateMonitoringBodySchema.parse(request.body);
+      const client = getGitCicdDatabaseClient();
+      const accessContext = {
+        kind: "user",
+        userId: await requireActiveUserId(request, () => client)
+      } as const;
+      const repository =
+        options?.createGitCicdMonitoringRepository?.(client.db) ??
+        createPostgresGitCicdMonitoringRepository(client.db);
+      const provider =
+        options?.gitCicdMonitoringProvider ?? createGitHubMonitoringProviderFromEnv();
+
+      try {
+        const config = await updateGitCicdMonitoringConfig(
+          { ...params, ...body, accessContext },
+          repository,
+          provider
+        );
+        const response: GitCicdMonitoringConfigResponse = {
+          config: toGitCicdMonitoringConfig(config)
+        };
+        return reply.status(200).send(response);
+      } catch (error) {
+        return handleGitCicdMonitoringError(error, reply);
+      }
+    }
+  );
 
   app.post("/projects/:projectId/git-cicd-handoffs", async (request, reply) => {
     const params = projectHandoffParamsSchema.parse(request.params);
@@ -698,4 +799,37 @@ function handleGitCicdHandoffError(error: unknown, reply: FastifyReply) {
   }
 
   throw error;
+}
+
+function handleGitCicdMonitoringError(error: unknown, reply: FastifyReply) {
+  if (error instanceof GitCicdMonitoringNotFoundError) {
+    return reply.status(404).send({
+      error: "not_found",
+      message: error.message
+    });
+  }
+  if (error instanceof GitCicdMonitoringValidationError) {
+    return reply.status(error.code === "GITHUB_PERMISSION_REQUIRED" ? 403 : 422).send({
+      error: "validation_failed",
+      code: error.code,
+      message: error.message
+    });
+  }
+  throw error;
+}
+
+function toGitCicdMonitoringConfig(
+  row: GitCicdMonitoringConfigRecord
+): GitCicdMonitoringConfig {
+  return {
+    sourceRepositoryId: row.sourceRepositoryId,
+    enabled: row.enabled,
+    monitorBranch: row.monitorBranch,
+    appPath: row.appPath,
+    infraPath: row.infraPath,
+    validationStatus: row.validationStatus,
+    validationMessage: row.validationMessage,
+    validatedAt: row.validatedAt?.toISOString() ?? null,
+    updatedAt: row.updatedAt.toISOString()
+  };
 }

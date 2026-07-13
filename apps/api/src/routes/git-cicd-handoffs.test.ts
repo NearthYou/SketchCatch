@@ -4,6 +4,7 @@ import Fastify from "fastify";
 import { ZodError } from "zod";
 import type {
   DeploymentPlanSummary,
+  GitCicdMonitoringConfigResponse,
   GitCicdHandoffListResponse,
   GitCicdHandoffResponse,
   GitCicdHandoffStatus
@@ -30,6 +31,11 @@ import {
   type UpdateGitCicdHandoffStatusRecordInput
 } from "../git-cicd/git-cicd-handoff-service.js";
 import type { AwsRoleDiffGateway } from "../git-cicd/aws-role-diff-apply-service.js";
+import type {
+  GitCicdMonitoringConfigRecord,
+  GitCicdMonitoringProvider,
+  GitCicdMonitoringRepository
+} from "../git-cicd/git-cicd-monitoring-service.js";
 import {
   GitCicdRepositorySettingsPermissionError,
   type GitCicdRepositorySettingsApplier
@@ -131,6 +137,17 @@ class FakeGitCicdHandoffRepository implements GitCicdHandoffRepository {
     createApprovedPlanArtifactRecord();
   handoff: GitCicdHandoffRecord | undefined = createHandoffRecord();
   handoffs: GitCicdHandoffRecord[] = [createHandoffRecord()];
+  monitoringConfig: GitCicdMonitoringConfigRecord | undefined = {
+    sourceRepositoryId,
+    enabled: true,
+    monitorBranch: "main",
+    appPath: { mode: "subdirectory", path: "apps/web" },
+    infraPath: { mode: "subdirectory", path: "infra" },
+    validationStatus: "valid",
+    validationMessage: null,
+    validatedAt: fixedNow,
+    updatedAt: fixedNow
+  };
 
   async findAccessibleProject(candidateProjectId: string, accessContext: ProjectAccessContext) {
     this.calls.push({
@@ -212,6 +229,12 @@ class FakeGitCicdHandoffRepository implements GitCicdHandoffRepository {
     }
 
     return this.sourceRepository;
+  }
+
+  async findMonitoringConfig(candidateSourceRepositoryId: string) {
+    return candidateSourceRepositoryId === sourceRepositoryId
+      ? this.monitoringConfig
+      : undefined;
   }
 
   // 테스트 요청도 실제 서버와 같은 승인 Deployment 조회 경계를 통과시킵니다.
@@ -1306,6 +1329,167 @@ test("GET /api/projects/:projectId/git-cicd-handoffs requires authentication", a
   await app.close();
 });
 
+test("POST Git/CI/CD handoff is blocked until monitoring is enabled and valid", async () => {
+  const repository = new FakeGitCicdHandoffRepository();
+  repository.monitoringConfig = {
+    ...repository.monitoringConfig!,
+    validationStatus: "required"
+  };
+  const providerCalls: GitCicdProviderCreateInput[] = [];
+  const app = await buildGitCicdHandoffTestApp(repository, {
+    provider: createProviderSpy(providerCalls)
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/projects/${projectId}/git-cicd-handoffs`,
+    headers: await authHeaders(),
+    payload: createHandoffBody()
+  });
+
+  assert.equal(response.statusCode, 409);
+  assert.match(response.json().message, /monitoring/i);
+  assert.equal(providerCalls.length, 0);
+  await app.close();
+});
+
+test("GET cicd-monitoring ensures and returns a durable default config", async () => {
+  const monitoringRepository = new FakeMonitoringRepository();
+  const app = await buildGitCicdHandoffTestApp(new FakeGitCicdHandoffRepository(), {
+    monitoringRepository,
+    monitoringProvider: createMonitoringProvider()
+  });
+
+  const response = await app.inject({
+    method: "GET",
+    url: `/api/projects/${projectId}/source-repositories/${sourceRepositoryId}/cicd-monitoring`,
+    headers: await authHeaders()
+  });
+
+  assert.equal(response.statusCode, 200);
+  const body = response.json() as GitCicdMonitoringConfigResponse;
+  assert.equal(body.config.enabled, true);
+  assert.equal(body.config.monitorBranch, "main");
+  assert.deepEqual(body.config.appPath, { mode: "repository_root", path: "." });
+  assert.equal(body.config.validationStatus, "required");
+  assert.equal(monitoringRepository.config?.sourceRepositoryId, sourceRepositoryId);
+  await app.close();
+});
+
+test("PUT cicd-monitoring validates and persists a normalized enabled config", async () => {
+  const monitoringRepository = new FakeMonitoringRepository();
+  const app = await buildGitCicdHandoffTestApp(new FakeGitCicdHandoffRepository(), {
+    monitoringRepository,
+    monitoringProvider: createMonitoringProvider()
+  });
+
+  const response = await app.inject({
+    method: "PUT",
+    url: `/api/projects/${projectId}/source-repositories/${sourceRepositoryId}/cicd-monitoring`,
+    headers: await authHeaders(),
+    payload: {
+      enabled: true,
+      monitorBranch: "main",
+      appPath: { mode: "subdirectory", path: "./apps/web/" },
+      infraPath: { mode: "repository_root", path: "ignored" },
+      userAcceptedChangeId: "accepted-monitoring-1"
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+  const body = response.json() as GitCicdMonitoringConfigResponse;
+  assert.deepEqual(body.config.appPath, { mode: "subdirectory", path: "apps/web" });
+  assert.deepEqual(body.config.infraPath, { mode: "repository_root", path: "." });
+  assert.equal(body.config.validationStatus, "valid");
+  await app.close();
+});
+
+test("PUT cicd-monitoring requires an accepted change and returns stable validation errors", async () => {
+  const app = await buildGitCicdHandoffTestApp(new FakeGitCicdHandoffRepository(), {
+    monitoringRepository: new FakeMonitoringRepository(),
+    monitoringProvider: {
+      async validateBranch() {
+        return false;
+      },
+      async validateDirectory() {
+        return "directory";
+      }
+    }
+  });
+  const payload = {
+    enabled: true,
+    monitorBranch: "missing",
+    appPath: { mode: "repository_root", path: "." },
+    infraPath: { mode: "repository_root", path: "." }
+  };
+
+  const missingAcceptance = await app.inject({
+    method: "PUT",
+    url: `/api/projects/${projectId}/source-repositories/${sourceRepositoryId}/cicd-monitoring`,
+    headers: await authHeaders(),
+    payload
+  });
+  assert.equal(missingAcceptance.statusCode, 400);
+
+  const invalidBranch = await app.inject({
+    method: "PUT",
+    url: `/api/projects/${projectId}/source-repositories/${sourceRepositoryId}/cicd-monitoring`,
+    headers: await authHeaders(),
+    payload: { ...payload, userAcceptedChangeId: "accepted-monitoring-1" }
+  });
+  assert.equal(invalidBranch.statusCode, 422);
+  assert.equal(invalidBranch.json().code, "MONITOR_BRANCH_NOT_FOUND");
+  await app.close();
+});
+
+class FakeMonitoringRepository implements GitCicdMonitoringRepository {
+  config: GitCicdMonitoringConfigRecord | undefined;
+
+  async findAccessibleSourceRepository(
+    candidateProjectId: string,
+    candidateSourceRepositoryId: string,
+    accessContext: ProjectAccessContext
+  ) {
+    if (
+      candidateProjectId !== projectId ||
+      candidateSourceRepositoryId !== sourceRepositoryId ||
+      accessContext.userId !== userId
+    ) {
+      return undefined;
+    }
+    return {
+      id: sourceRepositoryId,
+      projectId,
+      provider: "github" as const,
+      status: "active" as const,
+      githubInstallationId: "42",
+      owner: "owner",
+      name: "repo",
+      defaultBranch: "main"
+    };
+  }
+
+  async findConfig(candidateSourceRepositoryId: string) {
+    return candidateSourceRepositoryId === sourceRepositoryId ? this.config : undefined;
+  }
+
+  async upsertConfig(input: Omit<GitCicdMonitoringConfigRecord, "updatedAt">) {
+    this.config = { ...input, updatedAt: fixedNow };
+    return this.config;
+  }
+}
+
+function createMonitoringProvider(): GitCicdMonitoringProvider {
+  return {
+    async validateBranch() {
+      return true;
+    },
+    async validateDirectory() {
+      return "directory";
+    }
+  };
+}
+
 type GitCicdRouteTestOptions = {
   provider?: GitCicdHandoffProvider;
   runtimeCache?: RuntimeCache;
@@ -1316,6 +1500,8 @@ type GitCicdRouteTestOptions = {
   ) => GitCicdRepositorySettingsApplier;
   githubOAuthFetch?: typeof fetch;
   awsRoleDiffGateway?: AwsRoleDiffGateway;
+  monitoringRepository?: GitCicdMonitoringRepository;
+  monitoringProvider?: GitCicdMonitoringProvider;
 };
 
 async function buildGitCicdHandoffTestApp(
@@ -1341,6 +1527,12 @@ async function buildGitCicdHandoffTestApp(
     prefix: "/api",
     getDatabaseClient: () => fakeAuthDb.client,
     createGitCicdHandoffRepository: () => repository,
+    ...(routeOptions.monitoringRepository
+      ? { createGitCicdMonitoringRepository: () => routeOptions.monitoringRepository! }
+      : {}),
+    ...(routeOptions.monitoringProvider
+      ? { gitCicdMonitoringProvider: routeOptions.monitoringProvider }
+      : {}),
     ...(routeOptions.provider ? { gitCicdHandoffProvider: routeOptions.provider } : {}),
     ...(routeOptions.repositorySettingsApplier
       ? { gitCicdRepositorySettingsApplier: routeOptions.repositorySettingsApplier }

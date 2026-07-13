@@ -15,6 +15,11 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-13 - Validate and persist repository CI/CD monitoring settings
+
+- Added durable RDS-only monitoring defaults, safe path normalization, and read-only GitHub validation with stable errors.
+- Blocked handoff creation until monitoring is enabled and valid, then rendered validated app/infra paths into approved workflows.
+- Verification: 62 focused API tests, API typecheck, API lint, full build, harness, and diff checks passed; lint retains one pre-existing `setNow` warning, and no real GitHub, AWS, Terraform, or repository mutation ran.
 ### 2026-07-13 - Design separate Deployment and CI/CD console screens
 
 - Defined independent Deployment and CI/CD information architectures inside the existing full-screen console.
@@ -211,4 +216,4 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Next Action
 
-- Execute Task 1 from `docs/superpowers/plans/2026-07-13-deployment-cicd-console-separation.md` in the isolated #361 worktree.
+- Execute Task 4 from `docs/superpowers/plans/2026-07-13-deployment-cicd-console-separation.md` in the isolated #361 worktree.

@@ -1015,6 +1015,101 @@ test("getLatestWorkflowRunForHeadSha keeps pr_created when no Actions run exists
   assert.equal(status.pipelineRunUrl, null);
 });
 
+test("validateRepositoryBranch maps GitHub 404 to false", async () => {
+  const calls: GitHubApiCall[] = [];
+  const client = createGitHubAppClient({
+    appId: "12345",
+    privateKey,
+    fetch: createGitHubFetchStub(calls, ({ pathname }) => {
+      if (pathname === "/app/installations/42/access_tokens") {
+        return jsonResponse({ token: "installation-token" });
+      }
+      return jsonResponse({ message: "not found" }, 404);
+    })
+  });
+
+  assert.equal(
+    await client.validateRepositoryBranch({
+      installationId: "42",
+      owner: "owner",
+      name: "repo",
+      branch: "missing"
+    }),
+    false
+  );
+  assert.equal(
+    calls.some(
+      (call) => call.pathname === "/repos/owner/repo/git/ref/heads/missing"
+    ),
+    true
+  );
+});
+
+test("validateRepositoryDirectory distinguishes directory file and missing", async () => {
+  const client = createGitHubAppClient({
+    appId: "12345",
+    privateKey,
+    fetch: createGitHubFetchStub([], ({ pathname }) => {
+      if (pathname === "/app/installations/42/access_tokens") {
+        return jsonResponse({ token: "installation-token" });
+      }
+      if (pathname.endsWith("/contents/apps/web")) {
+        return jsonResponse([{ type: "file", name: "package.json" }]);
+      }
+      if (pathname.endsWith("/contents/README.md")) {
+        return jsonResponse({ type: "file", name: "README.md" });
+      }
+      return jsonResponse({ message: "not found" }, 404);
+    })
+  });
+  const base = {
+    installationId: "42",
+    owner: "owner",
+    name: "repo",
+    branch: "main"
+  };
+
+  assert.equal(
+    await client.validateRepositoryDirectory({ ...base, path: "apps/web" }),
+    "directory"
+  );
+  assert.equal(
+    await client.validateRepositoryDirectory({ ...base, path: "README.md" }),
+    "file"
+  );
+  assert.equal(
+    await client.validateRepositoryDirectory({ ...base, path: "missing" }),
+    "missing"
+  );
+});
+
+test("repository validation propagates GitHub permission errors", async () => {
+  const client = createGitHubAppClient({
+    appId: "12345",
+    privateKey,
+    fetch: createGitHubFetchStub([], ({ pathname }) => {
+      if (pathname === "/app/installations/42/access_tokens") {
+        return jsonResponse({ token: "installation-token" });
+      }
+      return jsonResponse({ message: "forbidden" }, 403);
+    })
+  });
+
+  await assert.rejects(
+    client.validateRepositoryBranch({
+      installationId: "42",
+      owner: "owner",
+      name: "repo",
+      branch: "main"
+    }),
+    (error: unknown) =>
+      typeof error === "object" &&
+      error !== null &&
+      "statusCode" in error &&
+      error.statusCode === 403
+  );
+});
+
 type GitHubApiCall = {
   method: string;
   pathname: string;

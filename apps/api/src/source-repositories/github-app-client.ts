@@ -62,6 +62,13 @@ export type GitHubRepositorySettingsResult = {
   variables: string[];
 };
 
+export type GitHubRepositoryRefInput = {
+  installationId: string;
+  owner: string;
+  name: string;
+  branch: string;
+};
+
 export type GitHubActionsPipelineStatus = {
   status: GitCicdHandoffStatus;
   pipelineRunUrl: string | null;
@@ -177,6 +184,10 @@ export type GitHubAppClient = {
   applyRepositorySettings(
     input: GitHubRepositorySettingsInput
   ): Promise<GitHubRepositorySettingsResult>;
+  validateRepositoryBranch(input: GitHubRepositoryRefInput): Promise<boolean>;
+  validateRepositoryDirectory(
+    input: GitHubRepositoryRefInput & { path: string }
+  ): Promise<"directory" | "file" | "missing">;
   getLatestWorkflowRunForHeadSha(input: {
     installationId: string;
     owner: string;
@@ -337,6 +348,40 @@ export function createGitHubAppClient(
   }
 
   return {
+    async validateRepositoryBranch(input) {
+      try {
+        await requestWithInstallationToken<Record<string, unknown>>(
+          input.installationId,
+          createRepositoryPath(
+            input,
+            `/git/ref/heads/${encodeURIComponent(input.branch)}`
+          )
+        );
+        return true;
+      } catch (error) {
+        if (isHttpStatus(error, 404)) {
+          return false;
+        }
+        throw error;
+      }
+    },
+
+    async validateRepositoryDirectory(input) {
+      const suffix = input.path === "." ? "/contents" : `/contents/${encodePath(input.path)}`;
+      try {
+        const contents = await requestWithInstallationToken<unknown>(
+          input.installationId,
+          `${createRepositoryPath(input, suffix)}?ref=${encodeURIComponent(input.branch)}`
+        );
+        return Array.isArray(contents) ? "directory" : "file";
+      } catch (error) {
+        if (isHttpStatus(error, 404)) {
+          return "missing";
+        }
+        throw error;
+      }
+    },
+
     async listInstallations() {
       const installations: GitHubAppInstallation[] = [];
 
