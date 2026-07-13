@@ -4,7 +4,7 @@ import type {
   DiagramNodeParameters,
   TerraformSyncFileInput
 } from "./index.js";
-import { getResourceDefinitionByTerraform } from "./resource-definitions.js";
+import { getResourceDefinitionByTerraform } from "@sketchcatch/types/resource-definitions";
 
 const AWS_REQUIRED_PROVIDER = `    aws = {
       source  = "hashicorp/aws"
