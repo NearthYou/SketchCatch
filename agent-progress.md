@@ -202,7 +202,7 @@ Short English-only working log for the current agent context. Older records are 
 - Goal: Address Task 7 review findings without entering Task 8 output or notification scope.
 - Completed:
   - Preserved API ordering when an older active run becomes terminal and stopped refreshing terminal runs.
-  - Preserved only explicit run selections; automatic selection follows the newest run after refresh.
+  - Preserved valid explicit run selections; automatic selection follows the active run, then the newest run after it becomes terminal.
   - Centralized permission recovery for successful list, detail, refresh, and settings requests.
   - Isolated logs errors so logs retry does not clear unrelated screen errors.
   - Matched frontend monitored-path completeness and normalization to the backend boundary.

@@ -208,7 +208,7 @@ export function getSelectedCicdPipelineRunId(
   if (preserveExplicitSelection && selectedRunId && runs.some((run) => run.id === selectedRunId)) {
     return selectedRunId;
   }
-  return runs[0]?.id ?? null;
+  return getActiveCicdPipelineRun(runs)?.id ?? runs[0]?.id ?? null;
 }
 
 export function isCicdPipelineRunStale(

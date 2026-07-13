@@ -163,7 +163,7 @@ test("run state falls back to the newest run and current selection when there is
   });
 });
 
-test("refreshing an older run replaces it without moving it ahead of a newer run", () => {
+test("automatic selection follows the active run until its terminal refresh", () => {
   const newerTerminal = createPipelineRun({
     id: "run-b",
     status: "succeeded",
@@ -180,10 +180,16 @@ test("refreshing an older run replaces it without moving it ahead of a newer run
     createdAt: "2026-07-13T02:00:00.000Z"
   });
 
-  const runs = mergeCicdPipelineRun([newerTerminal, olderActive], refreshedOlder);
+  const initialRuns = [newerTerminal, olderActive];
+
+  assert.equal(getSelectedCicdPipelineRunId(initialRuns, null, false), "run-a");
+  assert.equal(getSelectedCicdPipelineRunId(initialRuns, "run-b", true), "run-b");
+  assert.equal(getSelectedCicdPipelineRunId(initialRuns, "missing-run", true), "run-a");
+
+  const runs = mergeCicdPipelineRun(initialRuns, refreshedOlder);
 
   assert.deepEqual(runs.map((run) => run.id), ["run-b", "run-a"]);
-  assert.equal(getSelectedCicdPipelineRunId(runs, "run-a", false), "run-b");
+  assert.equal(getSelectedCicdPipelineRunId(runs, null, false), "run-b");
   assert.equal(getActiveCicdPipelineRun(runs), null);
   assert.equal(getCicdPollIntervalMs(runs), IDLE_CICD_POLL_INTERVAL_MS);
 });
