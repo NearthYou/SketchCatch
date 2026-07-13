@@ -146,7 +146,11 @@ test("OPTIONS preflight allows the configured public web origin", async () => {
     assert.equal(response.headers["access-control-allow-origin"], "http://127.0.0.1:3002");
     assert.equal(response.headers["access-control-allow-credentials"], "true");
   } finally {
-    process.env.SKETCHCATCH_PUBLIC_BASE_URL = previousPublicBaseUrl;
+    if (previousPublicBaseUrl === undefined) {
+      delete process.env.SKETCHCATCH_PUBLIC_BASE_URL;
+    } else {
+      process.env.SKETCHCATCH_PUBLIC_BASE_URL = previousPublicBaseUrl;
+    }
     await app.close();
   }
 });

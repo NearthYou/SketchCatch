@@ -1143,7 +1143,7 @@ export async function listCostProjectEstimates(input: {
   expectedUserCount: number;
   period: CostEstimatePeriod;
   region?: string | undefined;
-}): Promise<CostProjectEstimateListResponse> {
+}, options: { readonly signal?: AbortSignal | undefined } = {}): Promise<CostProjectEstimateListResponse> {
   const params = new URLSearchParams({
     expectedUserCount: String(input.expectedUserCount),
     period: input.period,
@@ -1151,7 +1151,8 @@ export async function listCostProjectEstimates(input: {
   });
 
   return apiFetch<CostProjectEstimateListResponse>(`/costs/projects?${params.toString()}`, {
-    auth: true
+    auth: true,
+    ...(options.signal ? { signal: options.signal } : {})
   });
 }
 

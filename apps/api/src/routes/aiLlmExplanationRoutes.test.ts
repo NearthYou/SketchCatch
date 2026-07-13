@@ -96,7 +96,7 @@ test("POST /api/ai/safety-finding-explanation explains one deterministic finding
   }
 });
 
-test("POST /api/ai/pre-deployment-check includes per-finding safety explanations", async () => {
+test("POST /api/ai/pre-deployment-check returns immediate findings without inline LLM work", async () => {
   const explainedFindingIds: string[] = [];
   const app = buildApp({
     createLlmExplanation: async (input) => ({
@@ -157,22 +157,24 @@ test("POST /api/ai/pre-deployment-check includes per-finding safety explanations
         findings: z.array(
           z.object({
             id: z.string(),
-            aiSafetyExplanation: aiSafetyExplanationSchema
+            aiSafetyExplanation: aiSafetyExplanationSchema.optional()
           })
         ),
-        llmExplanation: llmExplanationSchema
+        deepScan: z.object({ status: z.literal("not_required") }),
+        llmExplanation: llmExplanationSchema.optional()
       })
       .parse(response.json());
 
-    assert.equal(body.findings[0]?.aiSafetyExplanation.riskSummary, `${body.findings[0]?.id} risk`);
-    assert.equal(body.llmExplanation.target, "pre_deployment_check");
-    assert.deepEqual(explainedFindingIds, body.findings.map((finding) => finding.id));
+    assert.ok(body.findings.length > 0);
+    assert.equal(body.findings[0]?.aiSafetyExplanation, undefined);
+    assert.equal(body.llmExplanation, undefined);
+    assert.deepEqual(explainedFindingIds, []);
   } finally {
     await app.close();
   }
 });
 
-test("POST /api/ai/pre-deployment-check returns fallback llmExplanation when Bedrock credit is not confirmed", async () => {
+test("POST /api/ai/pre-deployment-check stays immediate when Bedrock credit is not confirmed", async () => {
   const restoreAiEnv = forceAwsAiCreditBlocked();
   const app = buildApp();
 
@@ -211,17 +213,13 @@ test("POST /api/ai/pre-deployment-check returns fallback llmExplanation when Bed
       .object({
         summary: z.string(),
         findings: z.array(z.object({ id: z.string() })),
-        llmExplanation: llmExplanationSchema
+        deepScan: z.object({ status: z.literal("not_required") }),
+        llmExplanation: llmExplanationSchema.optional()
       })
       .parse(response.json());
 
     assert.ok(body.findings.length > 0);
-    assert.equal(body.llmExplanation.target, "pre_deployment_check");
-    assert.equal(body.llmExplanation.fallbackUsed, true);
-    assert.equal(body.llmExplanation.fallbackReason, "credit_not_confirmed");
-    assert.ok(body.llmExplanation.summary.length > 0);
-    assert.ok(body.llmExplanation.highlights.length > 0);
-    assert.ok(body.llmExplanation.nextActions.length > 0);
+    assert.equal(body.llmExplanation, undefined);
   } finally {
     restoreAiEnv();
     await app.close();

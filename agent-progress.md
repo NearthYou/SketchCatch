@@ -13,56 +13,6 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
-### 2026-07-13 - Repair Terraform nested-block merge regression
-
-- Fast-forwarded the local branch to the remote `dev` merge commit that CI evaluated and reproduced the duplicate `aws_launch_template` key failure.
-- Consolidated both branch variants into one Launch Template nested-block set while preserving IAM profile, metadata, monitoring, network interface, and tag support.
-- Kept the pending direct-resource rename boundary fix and its regression intact across the fast-forward.
-- Verification: full typecheck, 20 focused Terraform/rename regressions, lint, build, harness, and diff checks pass. Lint retains one pre-existing API unused-argument warning.
-
-### 2026-07-13 - Add and review diagram-based Live Observation for ECS Fargate and ASG
-
-- Added diagram-derived main traffic paths, REST polling-compatible snapshots, CloudWatch Agent/ASG and ECS Fargate observability, and presentation-focused capacity visualization.
-- Moved AI simulation results out of the chat dock and kept bottleneck, cost, and failure analysis in the simulation panel.
-- Represented each accepted request as one 28px particle moving sequentially across analyzed connector segments; observation remains idle until traffic is explicitly started.
-- Final review added metadata-free ECS/ASG capacity inference scoped to the selected controller, five-request bursts, disconnect-safe SSE startup, automatically expiring per-observation simulated traffic, metric-correct request thresholds, real Traffic API audience links with explicit simulation fallback, and polling listener cleanup.
-- Verification: focused Web tests passed 82/82 plus 9 diagram tests, focused API tests passed 38/38 plus 18 service/route tests; harness, lint, typecheck, and build passed. No AWS or Terraform mutation ran.
-- PR review: Kubernetes `depends_on` addresses now render as references and both polling/SSE delay messages use valid Korean text; 21 Terraform and 31 modal tests passed.
-
-### 2026-07-12 - Repair Repository candidate selection UI
-
-- Goal: Replace the unreadable black template candidate rows with a clear comparison and selection surface.
-- Completed:
-  - Removed the broad result-panel button selector that overrode candidate styles.
-  - Split candidate content into rank, title, fit, reasons, tradeoffs, and selected state.
-  - Added responsive one-column candidate details and preserved source title casing.
-  - Removed the duplicate deployment selector for repositories with decisive deployment evidence.
-  - Shared the separated CI/CD handoff and follow-up question sections across public and connected Repository flows.
-  - Made the public-flow GitHub App repository panel conditional on CI/CD handoff and reset it for each new URL analysis.
-  - Split public Repository configuration and follow-up questions into separate confirmed steps.
-  - Recomputed questions per selected Template, removed redundant/unused questions, reset stale answers, rendered full-box choices, and required every answer before board creation.
-- Verification:
-  - Focused recommendation tests, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
-  - Lint retains only the pre-existing API `setNow` warning.
-  - Live-tested `Jungle_AI_Board`: AI source, two unique candidates, relevant non-duplicated questions, and cache-covered repeat analysis.
-
-### 2026-07-12 - Fail fast when API database URL is missing
-
-- Goal: Diagnose `/api/auth/login` returning 500 with `DATABASE_URL is required`.
-- Completed:
-  - Reproduced the login failure with a minimal POST to `http://localhost:3000/api/auth/login`.
-  - Added a startup regression test proving the API must reject missing `DATABASE_URL` before Terraform warmup, deployment recovery, or listen.
-  - Added the `requireDatabaseUrl()` startup guard after the static AWS credential-source check.
-- Verification:
-  - `pnpm --dir apps/api exec tsx --test src/server-startup.test.ts`
-  - `pnpm --filter @sketchcatch/api typecheck`
-  - `pnpm harness:check`
-  - `pnpm lint` passed with the pre-existing `live-observations` `setNow` warning.
-  - `pnpm typecheck`
-  - `pnpm build`
-- Risk:
-  - The already-running API process still needs to be restarted, and local login still requires a real `DATABASE_URL` configured outside git.
-
 ### 2026-07-12 - Implement issue #349 repository template recommendations
 
 - Goal: Extend connected Repository Analysis into a template candidate recommendation flow for issue #349.
@@ -198,6 +148,59 @@ Short English-only working log for the current agent context. Older records are 
 - Risk:
   - Browser visual verification has not been run yet in this worktree.
 
+### 2026-07-13 - Refine actual cost notice and chart readability
+
+- Goal: Clarify fallback project cost allocation and make the actual usage chart readable at a glance.
+- Completed:
+  - Reworded the fallback allocation notice to explain that AWS project cost data may arrive later.
+  - Added readable date labels on the X axis and dollar labels on the Y axis.
+  - Limited long ranges to six date ticks and added a stable zero-cost `$0`, `$2`, `$4` scale.
+  - Reduced data points to a 2 px radius and aligned chart colors and captions with `DESIGN.md`.
+  - Prevented duplicate Y-axis labels for one-cent usage data.
+- Verification:
+  - `pnpm --dir apps/web exec tsx --test features/costs/cost-usage-charts.test.ts features/costs/cost-dashboard-client.test.ts features/costs/cost-usage-copy.test.ts` (19 passed)
+  - `pnpm test -- --output-logs=errors-only`
+  - `pnpm lint` passed with the pre-existing `live-observations` `setNow` warning.
+  - `pnpm typecheck`
+  - `pnpm build`
+  - `pnpm harness:check`
+  - `git diff --check`
+- Risk:
+  - Authenticated browser visual QA was not available; the supplied screenshot and source-level UI regression tests were used as the visual contract.
+
+### 2026-07-13 - Stabilize actual cost chart typography
+
+- Goal: Keep chart typography compact and professional at every dashboard width.
+- Completed:
+  - Recomputed the SVG coordinate width from its rendered container with `ResizeObserver` so labels no longer scale with the card.
+  - Fixed the chart height at 220 px and retained the `DESIGN.md` 13 px caption token at its true rendered size.
+  - Added a source-level regression for responsive width, fixed height, and typography token usage.
+- Verification:
+  - 16 focused chart tests and the full test suite passed.
+  - `pnpm lint` passed with the pre-existing `live-observations` `setNow` warning.
+  - `pnpm typecheck`, `pnpm build`, and `git diff --check` passed.
+- Review:
+  - Spec review found no issues; standards review finding about the caption token was fixed in `dcda929b`.
+
+### 2026-07-13 - Restore API test baseline for issue #364
+
+- Goal: Restore the 23 failing API baseline tests without hiding deployment safety or product-contract regressions.
+- Completed:
+  - Deferred deployment S3 artifact storage initialization until artifact access is required so domain and safety errors remain observable without S3 configuration.
+  - Corrected Terraform reference and nested-block rendering for archive data, hyphenated resource names, CloudFront, and Kubernetes selectors.
+  - Aligned AI architecture materialization with serverless SPA, optional-load-balancer Fargate, and EKS capability constraints.
+  - Updated stale repository, Q business, LLM explanation, demo asset, and priority resource coverage tests to current contracts.
+- Verification:
+  - `pnpm --dir apps/api test` (1,257 passed)
+  - `pnpm lint` passed with the pre-existing `live-observations` `setNow` warning.
+  - `pnpm typecheck`
+  - `pnpm build`
+  - `pnpm harness:check`
+  - `git diff --check` passed with CRLF conversion warnings only.
+- Risk:
+  - Root `pnpm test` still reports an unrelated Web CSS expectation around the mobile `.canvasToolbar` bottom offset; no Web source behavior was changed in this workstream.
+  - No Terraform apply/destroy, cloud mutation, or Git/CI/CD handoff was performed.
+
 ## Next Action
 
-- Await PR #358 checks and merge into `dev`.
+- Review and commit the issue #364 baseline repair on `feature/sw/364-api-test-baseline`.
