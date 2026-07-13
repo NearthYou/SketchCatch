@@ -5,12 +5,30 @@ import type {
 } from "@sketchcatch/types";
 
 export type CostUsageLineChart = {
+  readonly height: number;
   readonly maxAmount: number;
   readonly path: string;
+  readonly plot: {
+    readonly bottom: number;
+    readonly left: number;
+    readonly right: number;
+    readonly top: number;
+  };
   readonly points: readonly {
     readonly amount: number;
     readonly date: string;
     readonly x: number;
+    readonly y: number;
+  }[];
+  readonly width: number;
+  readonly xTicks: readonly {
+    readonly date: string;
+    readonly label: string;
+    readonly x: number;
+  }[];
+  readonly yTicks: readonly {
+    readonly amount: number;
+    readonly label: string;
     readonly y: number;
   }[];
 };
@@ -35,12 +53,21 @@ export function createCostUsageLineChart(
   } = {}
 ): CostUsageLineChart {
   const width = options.width ?? 640;
-  const height = options.height ?? 180;
-  const maxAmount = Math.max(...dailyTrend.map((point) => point.amount), 1);
+  const height = options.height ?? 220;
+  const plot = {
+    bottom: height - 28,
+    left: 44,
+    right: width - 12,
+    top: 12
+  };
+  const maxAmount = Math.max(...dailyTrend.map((point) => point.amount), 0);
+  const yAxis = createCostYAxis(maxAmount);
   const pointCount = dailyTrend.length;
   const points = dailyTrend.map((point, index) => {
-    const x = pointCount <= 1 ? width / 2 : (index / (pointCount - 1)) * width;
-    const y = height - (point.amount / maxAmount) * height;
+    const x = pointCount <= 1
+      ? (plot.left + plot.right) / 2
+      : plot.left + (index / (pointCount - 1)) * (plot.right - plot.left);
+    const y = plot.bottom - (point.amount / yAxis.maxAmount) * (plot.bottom - plot.top);
 
     return {
       amount: point.amount,
@@ -51,9 +78,20 @@ export function createCostUsageLineChart(
   });
 
   return {
+    height,
     maxAmount,
     path: createSvgPath(points),
-    points
+    plot,
+    points,
+    width,
+    xTicks: createCostDateTicks(points),
+    yTicks: yAxis.amounts.map((amount) => ({
+      amount,
+      label: formatCostAxisAmount(amount),
+      y: roundChartCoordinate(
+        plot.bottom - (amount / yAxis.maxAmount) * (plot.bottom - plot.top)
+      )
+    }))
   };
 }
 
@@ -151,6 +189,75 @@ function createSvgPath(
   return points
     .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`)
     .join(" ");
+}
+
+function createCostDateTicks(
+  points: CostUsageLineChart["points"],
+  maxTickCount = 6
+): CostUsageLineChart["xTicks"] {
+  if (points.length === 0) return [];
+
+  const tickCount = Math.min(points.length, maxTickCount);
+  const indices = tickCount === 1
+    ? [0]
+    : Array.from(
+        { length: tickCount },
+        (_, index) => Math.round((index / (tickCount - 1)) * (points.length - 1))
+      );
+
+  return [...new Set(indices)].map((index) => {
+    const point = points[index]!;
+
+    return {
+      date: point.date,
+      label: formatCostAxisDate(point.date),
+      x: point.x
+    };
+  });
+}
+
+function createCostYAxis(maxAmount: number): {
+  readonly amounts: readonly number[];
+  readonly maxAmount: number;
+} {
+  if (maxAmount <= 0) {
+    return {
+      amounts: [0, 2, 4],
+      maxAmount: 4
+    };
+  }
+
+  const step = createNiceCostStep(maxAmount / 3);
+  const axisMaxAmount = roundUsd(Math.ceil(maxAmount / step) * step);
+  const intervalCount = Math.round(axisMaxAmount / step);
+
+  return {
+    amounts: Array.from(
+      { length: intervalCount + 1 },
+      (_, index) => roundUsd(index * step)
+    ),
+    maxAmount: axisMaxAmount
+  };
+}
+
+function createNiceCostStep(rawStep: number): number {
+  const magnitude = 10 ** Math.floor(Math.log10(rawStep));
+  const normalizedStep = rawStep / magnitude;
+  const niceStep = normalizedStep <= 1 ? 1 : normalizedStep <= 2 ? 2 : normalizedStep <= 5 ? 5 : 10;
+
+  return niceStep * magnitude;
+}
+
+function formatCostAxisDate(date: string): string {
+  const [, month = "", day = ""] = date.split("-");
+
+  return `${Number(month)}.${Number(day)}`;
+}
+
+function formatCostAxisAmount(amount: number): string {
+  const fractionDigits = Number.isInteger(amount) ? 0 : amount < 1 ? 2 : 1;
+
+  return `$${amount.toFixed(fractionDigits).replace(/\.0+$/, "")}`;
 }
 
 function roundChartCoordinate(value: number): number {

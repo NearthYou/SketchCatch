@@ -7,7 +7,8 @@ import { ProductState } from "../../../components/ui/ProductState";
 import {
   createCostUsageLineChart,
   createServiceCostBars,
-  sumEstimatedMonthlySavings
+  sumEstimatedMonthlySavings,
+  type CostUsageLineChart
 } from "../../../features/costs/cost-usage-charts";
 import {
   formatCostUsageAwsConnectionLabel,
@@ -177,7 +178,7 @@ export function CostUsagePanel() {
 
       <section className={styles.chartSection}>
         <div><h2>일별 실제 비용</h2><span>{data?.startDate} - {data?.endDate}</span></div>
-        {chart.points.length === 0 ? <p>표시할 비용이 없습니다.</p> : <svg aria-label="일별 AWS 실제 비용 추세" role="img" viewBox="0 0 640 200"><path d={chart.path} /><g>{chart.points.map((point) => <circle cx={point.x} cy={point.y} key={point.date} r="4"><title>{point.date}: {formatUsd(point.amount)}</title></circle>)}</g></svg>}
+        {chart.points.length === 0 ? <p>표시할 비용이 없습니다.</p> : <CostUsageChart chart={chart} />}
       </section>
 
       <section className={styles.twoColumn}>
@@ -185,6 +186,74 @@ export function CostUsagePanel() {
         <div className={styles.listSection}><h2>절감 제안</h2>{scopedRecommendations.length ? scopedRecommendations.map((item) => <article className={styles.recommendation} key={item.id}><span>{item.severity === "high" ? "높음" : "확인"}</span><strong>{item.title}</strong><p>{item.reason}</p><small>{formatUsd(item.estimatedMonthlySavings.amount)} 절감 예상</small></article>) : <p>현재 절감 제안이 없습니다.</p>}</div>
       </section>
     </div>
+  );
+}
+
+function CostUsageChart({ chart }: { readonly chart: CostUsageLineChart }) {
+  return (
+    <svg
+      aria-label="일별 AWS 실제 비용 추세"
+      className={styles.costChart}
+      role="img"
+      viewBox={`0 0 ${chart.width} ${chart.height}`}
+    >
+      <g aria-hidden="true">
+        {chart.yTicks.map((tick) => (
+          <line
+            className={styles.chartGridLine}
+            key={`grid-${tick.amount}`}
+            x1={chart.plot.left}
+            x2={chart.plot.right}
+            y1={tick.y}
+            y2={tick.y}
+          />
+        ))}
+        <line
+          className={styles.chartAxisLine}
+          x1={chart.plot.left}
+          x2={chart.plot.left}
+          y1={chart.plot.top}
+          y2={chart.plot.bottom}
+        />
+        {chart.yTicks.map((tick) => (
+          <text
+            className={styles.chartAxisLabel}
+            dominantBaseline="middle"
+            key={`y-${tick.amount}`}
+            textAnchor="end"
+            x={chart.plot.left - 9}
+            y={tick.y}
+          >
+            {tick.label}
+          </text>
+        ))}
+        {chart.xTicks.map((tick) => (
+          <text
+            className={styles.chartAxisLabel}
+            key={tick.date}
+            textAnchor="middle"
+            x={tick.x}
+            y={chart.height - 7}
+          >
+            {tick.label}
+          </text>
+        ))}
+      </g>
+      <path className={styles.chartLine} d={chart.path} />
+      <g>
+        {chart.points.map((point) => (
+          <circle
+            className={styles.chartPoint}
+            cx={point.x}
+            cy={point.y}
+            key={point.date}
+            r="2"
+          >
+            <title>{point.date}: {formatUsd(point.amount)}</title>
+          </circle>
+        ))}
+      </g>
+    </svg>
   );
 }
 

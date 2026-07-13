@@ -85,3 +85,13 @@ test("folder tabs do not create a scroll container", () => {
   assert.doesNotMatch(costTabsRule, /overflow/);
   assert.match(dashboardToolsCss, /\.costTab\s*\{\s*min-width:\s*0;\s*flex:\s*1 1 0;/);
 });
+
+test("actual usage chart renders readable axes with compact data points", () => {
+  assert.match(usagePanelSource, /chart\.xTicks\.map/);
+  assert.match(usagePanelSource, /chart\.yTicks\.map/);
+  assert.match(usagePanelSource, /className=\{styles\.chartAxisLabel\}/);
+  assert.match(usagePanelSource, /className=\{styles\.chartPoint\}/);
+  assert.match(usagePanelSource, /r="2"/);
+  assert.match(dashboardToolsCss, /\.chartGridLine\s*\{/);
+  assert.match(dashboardToolsCss, /\.chartAxisLabel\s*\{/);
+});
