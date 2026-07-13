@@ -18,6 +18,14 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-13 - Close final issue #361 whole-branch review findings
+
+- Added project-scoped read-only discovery for every valid monitoring target and wired the workspace observer to discover first commits even while the console is closed; provider failure preserves the RDS list and notification baseline.
+- Bounded GitHub discovery to two pages and ten recent commit groups, targeted single-run reads with `head_sha`, and preferred `run_started_at`.
+- Added migration `0033`, sortable deterministic upstream ordering, stable log revisions, atomic stale-regression rejection, and rerun log reset without changing the accepted handoff provenance tuple.
+- Verification: focused API 123/123, focused Web 74/74, full Web 1070/1070, root lint, typecheck, build, harness, diff, and added-line secret scan passed. Lint retains the existing unused `setNow` warning; build retains the existing Next.js multiple-lockfile root warning.
+- Risks: migration and credentialed browser acceptance were not run without an approved safe environment. A selected run outside the newest 50 and mounted observer/browser integration remain explicit test gaps. No external mutation or push ran.
+
 ### 2026-07-13 - Integrate current dev before whole-branch review
 
 - Merged current `origin/dev` into `feature/sw/361-deployment-cicd-console`; only progress/history records conflicted, and both workstreams were preserved.
@@ -175,5 +183,5 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Next Action
 
-- Run the whole-branch review after integrating current `origin/dev`. Investigate the unrelated full API-suite baseline failures separately; run migration and credentialed browser acceptance only with an approved safe environment.
+- Review the final issue #361 commits, then investigate unrelated full API-suite baseline failures separately. Run migration and credentialed browser acceptance only with an approved safe environment.
 - Confirm the responsive chart visually with authenticated actual-usage data when browser automation is available.
