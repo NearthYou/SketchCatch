@@ -111,23 +111,23 @@ test("save project draft body preserves legacy DiagramJson byte-equivalently", (
 });
 
 test("save project draft body preserves source-exact presentation and authored edge routes", () => {
+  const sourceExactEdge = {
+    ...validDiagram.edges[0]!,
+    sourceHandleId: "handle-right",
+    targetHandleId: "handle-left",
+    zIndex: 12,
+    route: authoredEdgeRoute
+  };
   const parsed = saveProjectDraftBodySchema.parse({
     diagramJson: {
       ...validDiagram,
       presentation: sourceExactPresentation,
-      edges: [
-        {
-          ...validDiagram.edges[0]!,
-          zIndex: 12,
-          route: authoredEdgeRoute
-        }
-      ]
+      edges: [sourceExactEdge]
     }
   });
 
   assert.deepEqual(parsed.diagramJson.presentation, sourceExactPresentation);
-  assert.deepEqual(parsed.diagramJson.edges[0]?.route, authoredEdgeRoute);
-  assert.equal(parsed.diagramJson.edges[0]?.zIndex, 12);
+  assert.deepEqual(parsed.diagramJson.edges[0], sourceExactEdge);
 });
 
 test("save project draft body rejects non-finite source viewBox coordinates", () => {

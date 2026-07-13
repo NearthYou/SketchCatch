@@ -38,6 +38,8 @@ test("cloneDiagram deeply clones source-exact presentation, authored routes, and
         id: "edge-1",
         sourceNodeId: "source-node",
         targetNodeId: "target-node",
+        sourceHandleId: "handle-right",
+        targetHandleId: "handle-left",
         zIndex: 8,
         route: {
           svgPath: "M 40 60 L 160 60 L 160 240 L 300 240",
@@ -76,6 +78,7 @@ test("cloneDiagram deeply clones source-exact presentation, authored routes, and
   const cloned = cloneDiagram(source);
 
   assert.deepEqual(cloned, source);
+  assert.deepEqual(cloned.edges[0], source.edges[0]);
   assert.notEqual(cloned.presentation, source.presentation);
   assert.notEqual(cloned.presentation?.sourceViewBox, source.presentation?.sourceViewBox);
   assert.notEqual(cloned.edges[0]?.route, source.edges[0]?.route);

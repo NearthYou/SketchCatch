@@ -850,6 +850,8 @@ test("POST /api/terraform/sync-to-diagram preserves source-exact presentation an
         id: "edge-1",
         sourceNodeId: "source-node",
         targetNodeId: "target-node",
+        sourceHandleId: "handle-right",
+        targetHandleId: "handle-left",
         zIndex: 7,
         route: {
           svgPath: "M -10 50 L 160 50 L 160 250 L 280 250",
