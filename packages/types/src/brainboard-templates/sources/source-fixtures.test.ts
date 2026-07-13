@@ -219,7 +219,11 @@ test("Training keeps raw source files but sanitizes only UUID metadata in worksp
     assert.equal(workspaceSeed.code, expectedCode);
     assert.equal(workspaceSeed.sha256, sha256(expectedCode));
     assert.deepEqual(workspaceSeed.omissions, [
-      { reason: "brainboard-architecture-uuid", sourceText: omittedLine }
+      {
+        reason: "brainboard-architecture-uuid",
+        sourceText: omittedLine,
+        occurrenceCount: 1
+      }
     ]);
   }
 });

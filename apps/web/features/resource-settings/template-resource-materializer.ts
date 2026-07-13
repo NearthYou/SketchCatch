@@ -40,6 +40,15 @@ function materializeCatalogResourceNodes(
   for (const templateNode of diagram.nodes) {
     const presentationCatalogItemId = templateNode.metadata?.presentationCatalogItemId;
 
+    if (
+      templateNode.kind === "design" &&
+      !presentationCatalogItemId &&
+      !templateNode.parameters
+    ) {
+      nodes.push(cloneUnresolvedPresentationNode(templateNode));
+      continue;
+    }
+
     if (templateNode.kind === "design" && presentationCatalogItemId) {
       const presentationItem = findCatalogItemById(presentationCatalogItemId);
 
@@ -184,6 +193,10 @@ function mergeTemplateParameters(
   paletteParameters: DiagramNodeParameters | undefined,
   templateParameters: DiagramNodeParameters | undefined
 ): DiagramNodeParameters | undefined {
+  if (templateParameters?.terraformSourceAuthority === "workspace-seed") {
+    return cloneParameters(templateParameters);
+  }
+
   if (!paletteParameters) {
     return templateParameters ? cloneParameters(templateParameters) : undefined;
   }
@@ -199,6 +212,16 @@ function mergeTemplateParameters(
       ...cloneParameterValue(paletteParameters.values),
       ...cloneParameterValue(templateParameters.values)
     }
+  };
+}
+
+function cloneUnresolvedPresentationNode(node: DiagramNode): DiagramNode {
+  return {
+    ...node,
+    position: { ...node.position },
+    size: { ...node.size },
+    ...(node.style ? { style: { ...node.style } } : {}),
+    ...(node.metadata ? { metadata: { ...node.metadata } } : {})
   };
 }
 

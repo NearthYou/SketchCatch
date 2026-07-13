@@ -72,6 +72,7 @@ const diagramNodeMetadataSchema: z.ZodType<DiagramNodeMetadata> = z.object({
 
 const diagramNodeParametersSchema = z.object({
   terraformBlockType: z.enum(["resource", "data"]).optional(),
+  terraformSourceAuthority: z.literal("workspace-seed").optional(),
   resourceType: z.string().min(1),
   resourceName: z.string().min(1),
   fileName: z.string().min(1),
@@ -85,7 +86,7 @@ const diagramNodeSchema = z.object({
   kind: z.enum(["resource", "design"]),
   position: diagramPositionSchema,
   size: diagramSizeSchema,
-  label: z.string().min(1),
+  label: z.string(),
   iconUrl: z.string().min(1).optional(),
   locked: z.boolean(),
   zIndex: z.number().finite(),

@@ -238,6 +238,35 @@ export function getDiagramTerraformAddresses(diagramJson: DiagramEditorPanelCont
   return addresses;
 }
 
+export function getSourceAuthoritativeTerraformAddresses(
+  diagramJson: DiagramEditorPanelContext["diagram"]
+): Set<string> {
+  const addresses = new Set<string>();
+
+  for (const node of diagramJson.nodes) {
+    if (node.parameters?.terraformSourceAuthority !== "workspace-seed") {
+      continue;
+    }
+
+    const address = toNodeTerraformAddress(node);
+    if (address) {
+      addresses.add(address);
+    }
+  }
+
+  return addresses;
+}
+
+export function getEffectivePreservedTerraformAddresses(
+  diagramJson: DiagramEditorPanelContext["diagram"],
+  classifiedAddresses: ReadonlySet<string>
+): Set<string> {
+  return new Set([
+    ...classifiedAddresses,
+    ...getSourceAuthoritativeTerraformAddresses(diagramJson)
+  ]);
+}
+
 export function getTerraformFileOptions(
   diagramJson: DiagramEditorPanelContext["diagram"],
   files: readonly TerraformVirtualFile[]

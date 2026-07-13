@@ -335,16 +335,18 @@ function validateWorkspaceSeed(
       omission.reason !== "brainboard-architecture-uuid" ||
       omission.sourceText.length === 0 ||
       !BRAINBOARD_ARCHITECTURE_UUID_LINE_PATTERN.test(omission.sourceText) ||
-      countOccurrences(expectedCode, omission.sourceText) !== 1
+      !Number.isInteger(omission.occurrenceCount) ||
+      omission.occurrenceCount < 1 ||
+      countOccurrences(expectedCode, omission.sourceText) !== omission.occurrenceCount
     ) {
       errors.push({
         code: "brainboard.source.invalid_workspace_seed",
         path: `terraform.files[${fileIndex}].workspaceSeed.omissions[${omissionIndex}]`,
-        message: `Workspace omission ${omissionIndex} for ${file.fileName} must identify one exact reviewed UUID fragment.`
+        message: `Workspace omission ${omissionIndex} for ${file.fileName} must identify an exact reviewed count of one UUID assignment line.`
       });
       continue;
     }
-    expectedCode = expectedCode.replace(omission.sourceText, "");
+    expectedCode = expectedCode.split(omission.sourceText).join("");
   }
   if (expectedCode !== workspaceSeed.code) {
     errors.push({

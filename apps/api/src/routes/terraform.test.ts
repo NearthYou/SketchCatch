@@ -72,6 +72,52 @@ test("POST /api/terraform/generate returns Terraform code for an active user", a
   await app.close();
 });
 
+test("POST /api/terraform/generate preserves empty source labels and workspace-seed authority", async () => {
+  const fakeDb = new AuthOnlyFakeDb({
+    users: [{ id: ACTIVE_USER_ID, deletedAt: null }]
+  });
+  const app = buildApp({ getDatabaseClient: () => fakeDb.client });
+  const diagramJson = {
+    nodes: [
+      {
+        id: "captured-vpc",
+        type: "aws_vpc",
+        kind: "resource",
+        label: "",
+        parameters: {
+          terraformSourceAuthority: "workspace-seed",
+          resourceType: "aws_vpc",
+          resourceName: "captured",
+          fileName: "network.tf",
+          values: {}
+        }
+      }
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/terraform/sync-to-diagram",
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: {
+      diagramJson,
+      terraformCode: `resource "aws_vpc" "captured" {\n  cidr_block = "10.0.0.0/16"\n}`
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+  const body = response.json() as TerraformSyncToDiagramResponse;
+  assert.equal(body.diagramJson.nodes[0]?.label, "");
+  assert.equal(
+    body.diagramJson.nodes[0]?.parameters?.terraformSourceAuthority,
+    "workspace-seed"
+  );
+
+  await app.close();
+});
+
 test("POST /api/terraform/generate accepts parameter-reference edge metadata", async () => {
   const fakeDb = new AuthOnlyFakeDb({
     users: [

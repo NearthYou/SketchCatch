@@ -105,6 +105,8 @@ export type BrainboardTerraformWorkspaceOmission = {
   readonly reason: "brainboard-architecture-uuid";
   /** Exact source fragment, including whitespace and newline, removed from the workspace seed. */
   readonly sourceText: string;
+  /** Exact number of reviewed occurrences removed from the immutable source file. */
+  readonly occurrenceCount: number;
 };
 
 export type BrainboardTerraformWorkspaceSeed = {

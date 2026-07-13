@@ -6,6 +6,8 @@ import {
   mergeGeneratedTerraformFiles,
   findTerraformBlockForNode,
   getDiagramTerraformAddresses,
+  getEffectivePreservedTerraformAddresses,
+  getSourceAuthoritativeTerraformAddresses,
   getTerraformAddressesRemovedFromDiagram,
   getTerraformFileOptions,
   parseTerraformFiles,
@@ -51,6 +53,66 @@ test("mergeGeneratedTerraformFiles keeps an opaque resource absent from generate
   );
 
   assert.equal(result.find((file) => file.fileName === "custom.tf")?.code, opaqueCode);
+});
+
+test("workspace-seed source addresses preserve exact resource and data blocks from generated defaults", () => {
+  const resourceNode = makeNode("resource", "aws_s3_bucket", "captured_bucket", "storage.tf");
+  const dataNode = makeNode("data", "aws_iam_policy", "change_password", "iam.tf");
+  resourceNode.parameters = {
+    ...resourceNode.parameters!,
+    terraformSourceAuthority: "workspace-seed"
+  } as typeof resourceNode.parameters;
+  dataNode.parameters = {
+    ...dataNode.parameters!,
+    terraformSourceAuthority: "workspace-seed"
+  } as typeof dataNode.parameters;
+  const diagram: DiagramJson = {
+    nodes: [resourceNode, dataNode, makeNode("resource", "aws_vpc", "managed")],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+  const preservedAddresses = getSourceAuthoritativeTerraformAddresses(diagram);
+  const sourceBucket = `resource "aws_s3_bucket" "captured_bucket" {\n  bucket = var.source_bucket\n}`;
+  const sourcePolicy = `data "aws_iam_policy" "change_password" {\n  arn = var.policy_arn\n}`;
+  const result = mergeGeneratedTerraformFiles(
+    [
+      { fileName: "storage.tf", code: sourceBucket },
+      { fileName: "iam.tf", code: sourcePolicy }
+    ],
+    [
+      { fileName: "storage.tf", code: `resource "aws_s3_bucket" "captured_bucket" {\n  force_destroy = false\n}` },
+      { fileName: "iam.tf", code: `data "aws_iam_policy" "change_password" {\n  arn = "generated"\n}` }
+    ],
+    preservedAddresses
+  );
+
+  assert.deepEqual(
+    [...preservedAddresses].sort(),
+    ["aws_s3_bucket.captured_bucket", "data.aws_iam_policy.change_password"]
+  );
+  assert.equal(result.find(({ fileName }) => fileName === "storage.tf")?.code, sourceBucket);
+  assert.equal(result.find(({ fileName }) => fileName === "iam.tf")?.code, sourcePolicy);
+});
+
+test("effective preserved addresses union parser evidence with current workspace-seed nodes", () => {
+  const sourceNode = makeNode("resource", "aws_s3_bucket", "captured_bucket");
+  sourceNode.parameters = {
+    ...sourceNode.parameters!,
+    terraformSourceAuthority: "workspace-seed"
+  } as typeof sourceNode.parameters;
+  const diagram: DiagramJson = {
+    nodes: [sourceNode],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  assert.deepEqual(
+    [...getEffectivePreservedTerraformAddresses(
+      diagram,
+      new Set(["aws_custom_service.opaque"])
+    )].sort(),
+    ["aws_custom_service.opaque", "aws_s3_bucket.captured_bucket"]
+  );
 });
 
 test("getTerraformAddressesRemovedFromDiagram excludes opaque preserved addresses", () => {

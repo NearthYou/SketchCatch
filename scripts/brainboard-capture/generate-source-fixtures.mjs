@@ -210,24 +210,36 @@ function sourceFile(file, workspaceOmissions) {
     sha256: file.sha256,
     includeInWorkspace: file.includeInWorkspace
   };
-  const sourceTexts = workspaceOmissions[file.fileName] ?? [];
-  if (sourceTexts.length === 0) return result;
+  const omissions = (workspaceOmissions[file.fileName] ?? []).map((omission) =>
+    typeof omission === "string"
+      ? { sourceText: omission, occurrenceCount: 1 }
+      : omission
+  );
+  if (omissions.length === 0) return result;
   if (!file.includeInWorkspace) {
     throw new Error(`Cannot sanitize excluded source file ${file.fileName}`);
   }
   let workspaceCode = file.code;
-  for (const sourceText of sourceTexts) {
-    if (workspaceCode.split(sourceText).length !== 2) {
-      throw new Error(`${file.fileName} does not contain exactly one reviewed fragment`);
+  for (const { sourceText, occurrenceCount } of omissions) {
+    const actualOccurrenceCount = workspaceCode.split(sourceText).length - 1;
+    if (
+      !Number.isInteger(occurrenceCount) ||
+      occurrenceCount < 1 ||
+      actualOccurrenceCount !== occurrenceCount
+    ) {
+      throw new Error(
+        `${file.fileName} contains ${actualOccurrenceCount}, not ${occurrenceCount}, reviewed fragment occurrences`
+      );
     }
-    workspaceCode = workspaceCode.replace(sourceText, "");
+    workspaceCode = workspaceCode.split(sourceText).join("");
   }
   result.workspaceSeed = {
     code: workspaceCode,
     sha256: sha256(workspaceCode),
-    omissions: sourceTexts.map((sourceText) => ({
+    omissions: omissions.map(({ sourceText, occurrenceCount }) => ({
       reason: "brainboard-architecture-uuid",
-      sourceText
+      sourceText,
+      occurrenceCount
     }))
   };
   return result;

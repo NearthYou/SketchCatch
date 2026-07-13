@@ -2570,6 +2570,8 @@ export type DiagramNodeMetadata = {
 
 export type DiagramNodeParameters = {
   terraformBlockType?: TerraformBlockType | undefined;
+  /** Exact Terraform files, rather than palette defaults, are authoritative for this node. */
+  terraformSourceAuthority?: "workspace-seed" | undefined;
   resourceType: string;
   resourceName: string;
   fileName: string;

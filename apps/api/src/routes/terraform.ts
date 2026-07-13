@@ -81,6 +81,7 @@ const diagramVariableSchema: z.ZodType<DiagramVariable> = z.object({
 
 const diagramNodeParametersSchema = z.object({
   terraformBlockType: terraformBlockTypeSchema.optional(),
+  terraformSourceAuthority: z.literal("workspace-seed").optional(),
   resourceType: terraformIdentifierSchema,
   resourceName: terraformIdentifierSchema,
   fileName: z.string().min(1),
@@ -125,7 +126,7 @@ const diagramNodeSchema = z.object({
       height: z.number()
     })
     .default({ width: 160, height: 96 }),
-  label: z.string().min(1),
+  label: z.string(),
   iconUrl: z.string().min(1).optional(),
   locked: z.boolean().default(false),
   zIndex: z.number().int().default(0),

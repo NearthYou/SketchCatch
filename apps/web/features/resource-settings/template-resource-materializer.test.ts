@@ -57,6 +57,63 @@ test("source fixtures can materialize disabled schema-less catalog resources", (
   }
 });
 
+test("source-exact materialization preserves unresolved parameterless presentation nodes", () => {
+  const unresolvedNode: DiagramNode = {
+    id: "captured-empty-text",
+    type: "brainboard_text",
+    kind: "design",
+    label: "",
+    locked: false,
+    position: { x: -120.5, y: 44.25 },
+    size: { width: 240, height: 80 },
+    zIndex: 7
+  };
+  const sourceDiagram: DiagramJson = {
+    ...createDiagram([unresolvedNode]),
+    presentation: {
+      geometryPolicy: "source-exact",
+      sourceViewBox: { x: -500, y: -300, width: 1400, height: 900 }
+    }
+  };
+
+  const materialized = materializeTemplateDiagram(sourceDiagram);
+
+  assert.deepEqual(materialized.nodes[0], unresolvedNode);
+});
+
+test("source-exact materialization does not invent palette values for workspace-seed resources", () => {
+  const sourceBucket = {
+    ...createTemplateNode("aws_s3_bucket", {
+      fileName: "storage.tf",
+      resourceName: "captured_bucket",
+      resourceType: "aws_s3_bucket",
+      terraformBlockType: "resource",
+      values: {}
+    }),
+    id: "captured-bucket",
+    parameters: {
+      fileName: "storage.tf",
+      resourceName: "captured_bucket",
+      resourceType: "aws_s3_bucket",
+      terraformBlockType: "resource",
+      terraformSourceAuthority: "workspace-seed",
+      values: {}
+    }
+  } as unknown as DiagramNode;
+  const sourceDiagram: DiagramJson = {
+    ...createDiagram([sourceBucket]),
+    presentation: {
+      geometryPolicy: "source-exact",
+      sourceViewBox: { x: 0, y: 0, width: 800, height: 600 }
+    }
+  };
+
+  const materialized = materializeTemplateDiagram(sourceDiagram);
+
+  assert.deepEqual(materialized.nodes[0]?.parameters, sourceBucket.parameters);
+  assert.equal(materialized.nodes[0]?.iconUrl, requireCatalogItem("aws_s3_bucket").iconUrl);
+});
+
 test("materializeTemplateDiagram retains explicit template identity, Terraform values, and oversized VPC area", () => {
   const sourceNode: DiagramNode = {
     id: "template-production-vpc",

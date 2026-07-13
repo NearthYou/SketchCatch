@@ -24,6 +24,7 @@ import {
   mergeGeneratedTerraformFiles,
   findTerraformBlockForNode,
   getDiagramTerraformAddresses,
+  getEffectivePreservedTerraformAddresses,
   getTerraformAddressesRemovedFromDiagram,
   getTerraformFileCode,
   getTerraformFileOptions,
@@ -258,7 +259,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
   const latestExternalDiscardRequestIdRef = useRef(externalDiscardRequestId);
   const latestExternalSaveRequestIdRef = useRef(externalSaveRequestId);
   const latestTerraformRefreshRequestIdRef = useRef(context.terraformRefreshRequestId);
-  const preservedResourceAddressesRef = useRef(new Set<string>());
+  const classifiedPreservedResourceAddressesRef = useRef(new Set<string>());
   const initialTerraformSourceClassifiedRef = useRef(!initialTerraformFiles?.length);
   const lineNumberRef = useRef<HTMLOListElement | null>(null);
   const lastScrolledNodeIdRef = useRef<string | null>(null);
@@ -429,7 +430,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
             return;
           }
 
-          preservedResourceAddressesRef.current = new Set(
+          classifiedPreservedResourceAddressesRef.current = new Set(
             classification.preservedResourceAddresses ?? []
           );
           initialTerraformSourceClassifiedRef.current = true;
@@ -443,8 +444,12 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
 
         onArchitectureDiagnosticsChange(generated.architectureDiagnostics);
         const generatedFiles = createTerraformFilesFromGeneratedCode(context.diagram, generated.terraformCode);
-        const nextFiles = preserveExistingSource
-          ? mergeGeneratedTerraformFiles(terraformFiles, generatedFiles, preservedResourceAddressesRef.current)
+        const effectivePreservedAddresses = getEffectivePreservedTerraformAddresses(
+          context.diagram,
+          classifiedPreservedResourceAddressesRef.current
+        );
+        const nextFiles = preserveExistingSource || effectivePreservedAddresses.size > 0
+          ? mergeGeneratedTerraformFiles(terraformFiles, generatedFiles, effectivePreservedAddresses)
           : generatedFiles;
         codeVersionRef.current += 1;
         setTerraformFiles(nextFiles);
@@ -554,7 +559,9 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
       terraformCode: combinedTerraformCode,
       terraformFiles: toTerraformValidationFiles(terraformFiles)
     });
-    preservedResourceAddressesRef.current = new Set(syncResult.preservedResourceAddresses ?? []);
+    classifiedPreservedResourceAddressesRef.current = new Set(
+      syncResult.preservedResourceAddresses ?? []
+    );
     initialTerraformSourceClassifiedRef.current = true;
 
     if (requestCodeVersion !== codeVersionRef.current) {
@@ -599,7 +606,9 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
         terraformCode: savedTerraformCode,
         terraformFiles: toTerraformValidationFiles(rewrittenTerraformFiles)
       });
-      preservedResourceAddressesRef.current = new Set(syncResult.preservedResourceAddresses ?? []);
+      classifiedPreservedResourceAddressesRef.current = new Set(
+        syncResult.preservedResourceAddresses ?? []
+      );
       initialTerraformSourceClassifiedRef.current = true;
 
       if (requestCodeVersion !== codeVersionRef.current) {
@@ -907,7 +916,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     }
 
     latestExternalDiscardRequestIdRef.current = externalDiscardRequestId;
-    preservedResourceAddressesRef.current = new Set();
+    classifiedPreservedResourceAddressesRef.current = new Set();
     initialTerraformSourceClassifiedRef.current = true;
     void refreshTerraformCode(currentDiagramFingerprint, false);
   }, [currentDiagramFingerprint, externalDiscardRequestId, refreshTerraformCode]);
@@ -932,7 +941,10 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     const deletedAddresses = getTerraformAddressesRemovedFromDiagram(
       previousAddresses,
       currentDiagramResourceAddresses,
-      preservedResourceAddressesRef.current
+      getEffectivePreservedTerraformAddresses(
+        context.diagram,
+        classifiedPreservedResourceAddressesRef.current
+      )
     );
 
     if (deletedAddresses.length === 0) {

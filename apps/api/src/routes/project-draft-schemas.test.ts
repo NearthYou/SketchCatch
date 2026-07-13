@@ -136,6 +136,30 @@ test("save project draft body preserves source-exact node rotation, presentation
   assert.deepEqual(parsed.diagramJson.edges[0], sourceExactEdge);
 });
 
+test("save project draft body preserves empty source labels and workspace-seed authority", () => {
+  const parsed = saveProjectDraftBodySchema.parse({
+    diagramJson: {
+      ...validDiagram,
+      nodes: [
+        {
+          ...validDiagram.nodes[0]!,
+          label: "",
+          parameters: {
+            ...validDiagram.nodes[0]!.parameters!,
+            terraformSourceAuthority: "workspace-seed"
+          }
+        }
+      ]
+    }
+  });
+
+  assert.equal(parsed.diagramJson.nodes[0]?.label, "");
+  assert.equal(
+    parsed.diagramJson.nodes[0]?.parameters?.terraformSourceAuthority,
+    "workspace-seed"
+  );
+});
+
 test("save project draft body rejects non-finite node rotation", () => {
   const result = saveProjectDraftBodySchema.safeParse({
     diagramJson: {

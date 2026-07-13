@@ -453,7 +453,9 @@ test("validator proves workspace seeds remove only exact reviewed source fragmen
   file.workspaceSeed = {
     code: sanitizedCode,
     sha256: sha256(sanitizedCode),
-    omissions: [{ reason: "brainboard-architecture-uuid", sourceText: omittedLine }]
+    omissions: [
+      { reason: "brainboard-architecture-uuid", sourceText: omittedLine, occurrenceCount: 1 }
+    ]
   };
 
   assert.deepEqual(errorCodes(source), []);
@@ -462,12 +464,16 @@ test("validator proves workspace seeds remove only exact reviewed source fragmen
   file.workspaceSeed.code = file.code.replace(overBroadFragment, "");
   file.workspaceSeed.sha256 = sha256(file.workspaceSeed.code);
   file.workspaceSeed.omissions = [
-    { reason: "brainboard-architecture-uuid", sourceText: overBroadFragment }
+    {
+      reason: "brainboard-architecture-uuid",
+      sourceText: overBroadFragment,
+      occurrenceCount: 1
+    }
   ];
   assert.deepEqual(errorCodes(source), ["brainboard.source.invalid_workspace_seed"]);
 
   file.workspaceSeed.omissions = [
-    { reason: "brainboard-architecture-uuid", sourceText: omittedLine }
+    { reason: "brainboard-architecture-uuid", sourceText: omittedLine, occurrenceCount: 1 }
   ];
   file.workspaceSeed.code = `${sanitizedCode}\n`;
   file.workspaceSeed.sha256 = sha256(file.workspaceSeed.code);
@@ -476,6 +482,37 @@ test("validator proves workspace seeds remove only exact reviewed source fragmen
   file.workspaceSeed.code = sanitizedCode;
   file.workspaceSeed.sha256 = "0".repeat(64);
   assert.deepEqual(errorCodes(source), ["brainboard.source.workspace_sha256_mismatch"]);
+});
+
+test("validator accepts an exact reviewed UUID line repeated a declared number of times", () => {
+  const source = makeValidSource();
+  const file = source.terraform.files[0]!;
+  const omittedLine = `  archUUID = "${source.origin.cloneArchitectureId}"\n`;
+  file.code = file.code.replace("}\n", `${omittedLine}${omittedLine}${omittedLine}}\n`);
+  file.sha256 = sha256(file.code);
+  const sanitizedCode = file.code.split(omittedLine).join("");
+  file.workspaceSeed = {
+    code: sanitizedCode,
+    sha256: sha256(sanitizedCode),
+    omissions: [
+      {
+        reason: "brainboard-architecture-uuid",
+        sourceText: omittedLine,
+        occurrenceCount: 3
+      }
+    ]
+  };
+
+  assert.deepEqual(errorCodes(source), []);
+
+  file.workspaceSeed.omissions = [
+    {
+      reason: "brainboard-architecture-uuid",
+      sourceText: omittedLine,
+      occurrenceCount: 2
+    }
+  ];
+  assert.deepEqual(errorCodes(source), ["brainboard.source.invalid_workspace_seed"]);
 });
 
 function requireValidator(): NonNullable<PublicContract["validateBrainboardTemplateSource"]> {

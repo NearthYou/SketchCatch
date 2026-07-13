@@ -1167,7 +1167,8 @@ export const trainingAwsOnboardingSource = defineCapturedBrainboardTemplate(
           "omissions": [
             {
               "reason": "brainboard-architecture-uuid",
-              "sourceText": "    archUUID = \"db83bcc0-696a-4f64-a6d5-fcc143caf3e2\"\n"
+              "sourceText": "    archUUID = \"db83bcc0-696a-4f64-a6d5-fcc143caf3e2\"\n",
+              "occurrenceCount": 1
             }
           ]
         }
@@ -1213,7 +1214,8 @@ export const trainingAwsOnboardingSource = defineCapturedBrainboardTemplate(
           "omissions": [
             {
               "reason": "brainboard-architecture-uuid",
-              "sourceText": "    archuuid = \"d71155af-5339-44f1-ae11-2bcd29411c2d\"\n"
+              "sourceText": "    archuuid = \"d71155af-5339-44f1-ae11-2bcd29411c2d\"\n",
+              "occurrenceCount": 1
             }
           ]
         }
