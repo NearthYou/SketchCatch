@@ -1,36 +1,15 @@
 import type {
   LiveObservationPressureLevel,
-  LiveObservationSession,
-  LiveObservationSnapshot
+  LiveObservationSnapshot,
+  LiveObservationV2Session
 } from "@sketchcatch/types";
 
-const BOOST_REQUESTS_PER_SECOND = 5;
-const BOOST_MAX_DURATION_MS = 90_000;
-const BOOST_MAX_REQUESTS = 450;
-const BOOST_MAX_CONCURRENCY = 5;
 const MAX_VISIBLE_REQUEST_PARTICLES = 5;
 
 export type LiveObservationDeploymentCandidate = {
   readonly id: string;
   readonly status: string;
-  readonly liveProfile: string;
   readonly completedAt: string | null;
-};
-
-export type PresenterTrafficBoostProgress = {
-  readonly attemptedRequests: number;
-  readonly successfulTrafficRequests: number;
-  readonly acceptedReceipts: number;
-  readonly trafficFailures: number;
-  readonly receiptFailures: number;
-  readonly inFlightRequests: number;
-  readonly running: boolean;
-};
-
-export type PresenterTrafficBoostController = {
-  start(): void;
-  stop(): void;
-  getProgress(): PresenterTrafficBoostProgress;
 };
 
 export type LiveObservationInstanceMarker = {
@@ -58,20 +37,6 @@ export function getLiveObservationPressureLabel(
       return "포화 임박";
   }
 }
-
-type IntervalScheduler = {
-  setInterval(callback: () => void, delayMs: number): unknown;
-  clearInterval(handle: unknown): void;
-};
-
-type PresenterTrafficBoostDependencies = {
-  readonly fetch?: typeof globalThis.fetch | undefined;
-  readonly now?: (() => number) | undefined;
-  readonly createEventId?: (() => string) | undefined;
-  readonly scheduler?: IntervalScheduler | undefined;
-  readonly onProgress?: ((progress: PresenterTrafficBoostProgress) => void) | undefined;
-};
-
 export function getEligibleLiveObservationDeployments<
   T extends LiveObservationDeploymentCandidate
 >(deployments: readonly T[]): T[] {
@@ -79,7 +44,6 @@ export function getEligibleLiveObservationDeployments<
     .filter(
       (deployment) =>
         deployment.status === "SUCCESS" &&
-        deployment.liveProfile === "demo_web_service" &&
         deployment.completedAt !== null
     )
     .sort(
@@ -87,6 +51,28 @@ export function getEligibleLiveObservationDeployments<
         new Date(right.completedAt ?? 0).getTime() -
         new Date(left.completedAt ?? 0).getTime()
     );
+}
+
+export function getLiveObservationAudienceUrl(
+  session: LiveObservationV2Session
+): string | null {
+  try {
+    const url = new URL(session.audienceUrl);
+    const expectedPath = `/observe/${encodeURIComponent(session.id)}`;
+    if (
+      url.protocol !== "https:" ||
+      url.username !== "" ||
+      url.password !== "" ||
+      url.pathname !== expectedPath ||
+      url.search !== "" ||
+      url.hash !== ""
+    ) {
+      return null;
+    }
+    return `${url.origin}${expectedPath}`;
+  } catch {
+    return null;
+  }
 }
 
 export function getLiveObservationRequestBurst(
@@ -175,171 +161,3 @@ export function getLiveObservationInstanceMarkers(
 
   return markers;
 }
-
-export function createPresenterTrafficBoost(
-  session: LiveObservationSession,
-  dependencies: PresenterTrafficBoostDependencies = {}
-): PresenterTrafficBoostController {
-  const fetchRequest = dependencies.fetch ?? globalThis.fetch;
-  const now = dependencies.now ?? Date.now;
-  const createEventId = dependencies.createEventId ?? createUuid;
-  const scheduler = dependencies.scheduler ?? browserIntervalScheduler;
-  const receiptUrl = createReceiptUrl(session.audienceUrl);
-  const abortController = new AbortController();
-  let intervalHandle: unknown;
-  let startedAt: number | null = null;
-  let attemptedRequests = 0;
-  let successfulTrafficRequests = 0;
-  let acceptedReceipts = 0;
-  let trafficFailures = 0;
-  let receiptFailures = 0;
-  let inFlightRequests = 0;
-  let running = false;
-
-  const getProgress = (): PresenterTrafficBoostProgress => ({
-    acceptedReceipts,
-    attemptedRequests,
-    inFlightRequests,
-    receiptFailures,
-    running,
-    successfulTrafficRequests,
-    trafficFailures
-  });
-  const notify = () => dependencies.onProgress?.(getProgress());
-  const stop = () => {
-    if (!running && abortController.signal.aborted) {
-      return;
-    }
-
-    running = false;
-    abortController.abort();
-    if (intervalHandle !== undefined) {
-      scheduler.clearInterval(intervalHandle);
-      intervalHandle = undefined;
-    }
-    notify();
-  };
-  const finishIfComplete = () => {
-    if (attemptedRequests >= BOOST_MAX_REQUESTS && inFlightRequests === 0) {
-      stop();
-    }
-  };
-  const sendTrafficAndReceipt = async () => {
-    inFlightRequests += 1;
-    notify();
-
-    try {
-      let trafficResponse: Response;
-      try {
-        trafficResponse = await fetchRequest(session.trafficApiUrl, {
-          method: "POST",
-          signal: abortController.signal
-        });
-      } catch {
-        if (!abortController.signal.aborted) {
-          trafficFailures += 1;
-        }
-        return;
-      }
-
-      if (!trafficResponse.ok) {
-        trafficFailures += 1;
-        return;
-      }
-
-      successfulTrafficRequests += 1;
-      try {
-        const receiptResponse = await fetchRequest(receiptUrl, {
-          body: JSON.stringify({ eventId: createEventId() }),
-          headers: { "Content-Type": "application/json" },
-          method: "POST",
-          signal: abortController.signal
-        });
-
-        if (receiptResponse.ok) {
-          acceptedReceipts += 1;
-        } else {
-          receiptFailures += 1;
-        }
-      } catch {
-        if (!abortController.signal.aborted) {
-          receiptFailures += 1;
-        }
-      }
-    } finally {
-      inFlightRequests -= 1;
-      notify();
-      finishIfComplete();
-    }
-  };
-  const dispatchBatch = () => {
-    if (!running || startedAt === null) {
-      return;
-    }
-
-    if (now() - startedAt >= BOOST_MAX_DURATION_MS) {
-      stop();
-      return;
-    }
-
-    const availableConcurrency = BOOST_MAX_CONCURRENCY - inFlightRequests;
-    const remainingRequests = BOOST_MAX_REQUESTS - attemptedRequests;
-    const batchSize = Math.min(
-      BOOST_REQUESTS_PER_SECOND,
-      availableConcurrency,
-      remainingRequests
-    );
-
-    for (let index = 0; index < batchSize; index += 1) {
-      attemptedRequests += 1;
-      void sendTrafficAndReceipt();
-    }
-
-    finishIfComplete();
-  };
-
-  return {
-    getProgress,
-    start() {
-      if (running || abortController.signal.aborted) {
-        return;
-      }
-
-      running = true;
-      startedAt = now();
-      intervalHandle = scheduler.setInterval(dispatchBatch, 1_000);
-      dispatchBatch();
-      notify();
-    },
-    stop
-  };
-}
-
-function createReceiptUrl(audienceUrl: string): string {
-  const url = new URL(audienceUrl);
-  const token = url.searchParams.get("observation");
-  const collector = url.searchParams.get("collector");
-
-  if (!token || !collector) {
-    throw new Error("Live Observation audience URL is missing collector metadata");
-  }
-
-  return `${collector.replace(/\/+$/, "")}/api/live-observations/public/${encodeURIComponent(token)}/events`;
-}
-
-function createUuid(): string {
-  if (!globalThis.crypto?.randomUUID) {
-    throw new Error("Secure UUID generation is unavailable");
-  }
-
-  return globalThis.crypto.randomUUID();
-}
-
-const browserIntervalScheduler: IntervalScheduler = {
-  clearInterval(handle) {
-    globalThis.clearInterval(handle as ReturnType<typeof globalThis.setInterval>);
-  },
-  setInterval(callback, delayMs) {
-    return globalThis.setInterval(callback, delayMs);
-  }
-};

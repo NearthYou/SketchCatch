@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { LiveObservationSession } from "@sketchcatch/types";
+import type { LiveObservationV2Session } from "@sketchcatch/types";
 import {
-  createPresenterTrafficBoost,
   getEligibleLiveObservationDeployments,
+  getLiveObservationAudienceUrl,
   getLiveObservationInstanceMarkers,
   getLiveObservationPressureLabel,
   getLiveObservationRequestBurst,
@@ -17,7 +17,7 @@ test("pressure levels have exact visible Korean labels", () => {
   assert.equal(getLiveObservationPressureLabel("critical"), "포화 임박");
 });
 
-test("eligible Live Observation deployments are successful demo deployments ordered newest first", () => {
+test("eligible Live Observation deployments are successful completed deployments ordered newest first", () => {
   const deployments = [
     createDeploymentCandidate("older", "SUCCESS", "demo_web_service", "2026-07-10T01:00:00.000Z"),
     createDeploymentCandidate("practice", "SUCCESS", "practice", "2026-07-10T04:00:00.000Z"),
@@ -27,7 +27,28 @@ test("eligible Live Observation deployments are successful demo deployments orde
 
   assert.deepEqual(
     getEligibleLiveObservationDeployments(deployments).map((deployment) => deployment.id),
-    ["latest", "older"]
+    ["practice", "latest", "older"]
+  );
+});
+
+test("audience URL accepts only the capability-free v2 observe path", () => {
+  const session: LiveObservationV2Session = {
+    audienceUrl: "https://audience.example.com/observe/22222222-2222-4222-8222-222222222222",
+    createdAt: "2026-07-10T00:00:00.000Z",
+    deploymentId: "11111111-1111-4111-8111-111111111111",
+    expiresAt: "2026-07-10T00:15:00.000Z",
+    id: "22222222-2222-4222-8222-222222222222",
+    status: "active"
+  };
+
+  assert.equal(getLiveObservationAudienceUrl(session), session.audienceUrl);
+  assert.equal(
+    getLiveObservationAudienceUrl({ ...session, audienceUrl: `${session.audienceUrl}?capability=secret` }),
+    null
+  );
+  assert.equal(
+    getLiveObservationAudienceUrl({ ...session, audienceUrl: "https://audience.example.com/other" }),
+    null
   );
 });
 
@@ -51,101 +72,6 @@ test("request particles alternate only between actual InService target indexes",
   assert.deepEqual(getLiveObservationRequestTargetIndexes(3, 2, 2), [1, 0, 1]);
   assert.deepEqual(getLiveObservationRequestTargetIndexes(3, 1, 4), [0, 0, 0]);
   assert.deepEqual(getLiveObservationRequestTargetIndexes(3, 0, 1), []);
-});
-
-test("presenter boost sends at most 5 requests per second and 450 total", async () => {
-  const scheduler = new FakeScheduler();
-  let nowMs = 0;
-  let trafficRequests = 0;
-  let receiptRequests = 0;
-  const controller = createPresenterTrafficBoost(createSession(), {
-    createEventId: () => `event-${receiptRequests + 1}`,
-    fetch: async (input) => {
-      const url = String(input);
-      if (url.endsWith("/api/traffic")) {
-        trafficRequests += 1;
-      } else {
-        receiptRequests += 1;
-      }
-      return new Response(null, { status: 202 });
-    },
-    now: () => nowMs,
-    scheduler
-  });
-
-  controller.start();
-  await flushAsyncWork();
-  assert.equal(trafficRequests, 5);
-
-  for (let second = 1; second < 90; second += 1) {
-    nowMs = second * 1_000;
-    scheduler.tick();
-    await flushAsyncWork();
-  }
-
-  nowMs = 90_000;
-  scheduler.tick();
-  await flushAsyncWork();
-
-  assert.equal(trafficRequests, 450);
-  assert.equal(receiptRequests, 450);
-  assert.equal(controller.getProgress().running, false);
-  assert.equal(controller.getProgress().attemptedRequests, 450);
-});
-
-test("presenter boost never exceeds concurrency 5 and aborts immediately", async () => {
-  const scheduler = new FakeScheduler();
-  const pendingSignals: AbortSignal[] = [];
-  let activeRequests = 0;
-  let maximumConcurrency = 0;
-  const controller = createPresenterTrafficBoost(createSession(), {
-    createEventId: () => "event-pending",
-    fetch: async (_input, init) => {
-      activeRequests += 1;
-      maximumConcurrency = Math.max(maximumConcurrency, activeRequests);
-      if (init?.signal) {
-        pendingSignals.push(init.signal);
-      }
-      return new Promise<Response>(() => undefined);
-    },
-    now: () => 0,
-    scheduler
-  });
-
-  controller.start();
-  scheduler.tick();
-
-  assert.equal(maximumConcurrency, 5);
-  controller.stop();
-  assert.ok(pendingSignals.every((signal) => signal.aborted));
-  assert.equal(controller.getProgress().running, false);
-});
-
-test("presenter boost sends receipt only when Traffic API returns 2xx", async () => {
-  const scheduler = new FakeScheduler();
-  let trafficRequests = 0;
-  let receiptRequests = 0;
-  const controller = createPresenterTrafficBoost(createSession(), {
-    createEventId: () => "event-id",
-    fetch: async (input) => {
-      if (String(input).endsWith("/api/traffic")) {
-        trafficRequests += 1;
-        return new Response(null, { status: trafficRequests === 1 ? 500 : 204 });
-      }
-      receiptRequests += 1;
-      return new Response(null, { status: 202 });
-    },
-    now: () => 0,
-    scheduler
-  });
-
-  controller.start();
-  await flushAsyncWork();
-
-  assert.equal(trafficRequests, 5);
-  assert.equal(receiptRequests, 4);
-  assert.equal(controller.getProgress().trafficFailures, 1);
-  controller.stop();
 });
 
 test("instance markers distinguish expected, launching, InService, and unavailable AWS states", () => {
@@ -234,19 +160,6 @@ function createDeploymentCandidate(
   return { completedAt, id, liveProfile, status };
 }
 
-function createSession(): LiveObservationSession {
-  return {
-    audienceUrl:
-      "https://audience.example.com/?observation=public-token&collector=https%3A%2F%2Fapp.example.com",
-    createdAt: "2026-07-10T00:00:00.000Z",
-    deploymentId: "11111111-1111-4111-8111-111111111111",
-    expiresAt: "2026-07-10T00:15:00.000Z",
-    id: "22222222-2222-4222-8222-222222222222",
-    status: "active",
-    trafficApiUrl: "https://traffic.example.com/api/traffic"
-  };
-}
-
 function createSnapshot(input: {
   desiredCapacity?: number | undefined;
   instances?: Array<ReturnType<typeof createInstance>> | undefined;
@@ -288,27 +201,4 @@ function createSnapshot(input: {
 
 function createInstance(instanceId: string, lifecycleState: string) {
   return { healthStatus: "Healthy", instanceId, lifecycleState };
-}
-
-class FakeScheduler {
-  private readonly callbacks = new Set<() => void>();
-
-  setInterval(callback: () => void): object {
-    this.callbacks.add(callback);
-    return callback;
-  }
-
-  clearInterval(handle: object): void {
-    this.callbacks.delete(handle as () => void);
-  }
-
-  tick(): void {
-    for (const callback of [...this.callbacks]) {
-      callback();
-    }
-  }
-}
-
-async function flushAsyncWork(): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, 0));
 }

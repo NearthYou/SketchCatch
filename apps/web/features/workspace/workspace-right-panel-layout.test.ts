@@ -507,7 +507,7 @@ test("right panel exposes resources, terraform, and deploy while Issues live ins
   assert.doesNotMatch(stylesSource, /\.panelDeployButton\s*\{/);
 });
 
-test("simulation opens beside Deploy and remains available in the collapsed shortcut rail", () => {
+test("Live Observation opens beside Deploy and remains available in the collapsed shortcut rail", () => {
   const modeBarIndex = componentSource.indexOf("className={styles.rightPanelModeBar}");
   const modeBarEndIndex = componentSource.indexOf(
     "<div className={styles.rightPanelView}",
@@ -515,7 +515,7 @@ test("simulation opens beside Deploy and remains available in the collapsed shor
   );
   const modeBarSource = componentSource.slice(modeBarIndex, modeBarEndIndex);
   const deployIndex = modeBarSource.indexOf("<span>Deploy</span>");
-  const simulationIndex = modeBarSource.indexOf("<span>시뮬레이션</span>");
+  const observationIndex = modeBarSource.indexOf("<span>Live Observation</span>");
   const collapsedPanelIndex = componentSource.indexOf(
     '<aside className={styles.collapsedRightPanel}'
   );
@@ -526,12 +526,12 @@ test("simulation opens beside Deploy and remains available in the collapsed shor
   );
 
   assert.ok(deployIndex > -1);
-  assert.ok(simulationIndex > deployIndex);
+  assert.ok(observationIndex > deployIndex);
   assert.match(modeBarSource, /onClick=\{openLiveObservation\}/);
-  assert.match(collapsedPanelSource, /title="시뮬레이션"/);
+  assert.match(collapsedPanelSource, /title="Live Observation"/);
   assert.match(collapsedPanelSource, /onClick=\{openLiveObservation\}/);
   assert.match(componentSource, /<LiveObservationModal/);
-  assert.match(componentSource, /diagramJson=\{context\.diagram\}/);
+  assert.doesNotMatch(componentSource, /<LiveObservationModal[\s\S]{0,160}diagramJson=/);
   assert.match(componentSource, /projectId=\{projectId\}/);
 });
 
