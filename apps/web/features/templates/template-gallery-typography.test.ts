@@ -16,8 +16,13 @@ test("template search and dropdown controls use the bundled Pretendard font", ()
   assert.match(galleryStyles, /\.controls\s*\{[^}]*font-family:\s*var\(--font-sans\)/s);
   assert.match(
     galleryStyles,
-    /\.searchField input,\s*\.selectField select,\s*\.selectField option\s*\{[^}]*font-family:\s*var\(--font-sans\)/s
+    /\.searchField input,\s*\.searchField input::placeholder,\s*\.selectField select,\s*\.selectField option\s*\{[^}]*font-family:\s*"Pretendard"[^}]*!important/s
   );
+  assert.match(
+    galleryStyles,
+    /\.searchField input,\s*\.selectField select\s*\{[^}]*appearance:\s*none/s
+  );
+  assert.match(galleryStyles, /\.selectField::after\s*\{[^}]*pointer-events:\s*none/s);
 });
 
 function readLocalFile(relativePath: string): string {

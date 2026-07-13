@@ -18,6 +18,10 @@
   gap: 7px;
 }
 
+.selectField {
+  position: relative;
+}
+
 .searchField {
   align-items: center;
   background: #ffffff;
@@ -55,13 +59,42 @@
   color: #171717;
   font: inherit;
   min-height: 42px;
-  padding: 0 10px;
+  padding: 0 38px 0 12px;
 }
 
 .searchField input,
+.searchField input::placeholder,
 .selectField select,
 .selectField option {
-  font-family: var(--font-sans);
+  font-family: "Pretendard", "Noto Sans KR", sans-serif !important;
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 0;
+  line-height: 1.5;
+}
+
+.searchField input,
+.selectField select {
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.searchField input::placeholder {
+  color: #777b84;
+  opacity: 1;
+}
+
+.selectField::after {
+  position: absolute;
+  right: 15px;
+  bottom: 18px;
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid #55585f;
+  border-bottom: 1.5px solid #55585f;
+  content: "";
+  pointer-events: none;
+  transform: rotate(45deg);
 }
 
 .grid {
