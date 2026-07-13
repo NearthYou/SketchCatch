@@ -74,6 +74,8 @@ export type GitHubRepositoryInput = Omit<GitHubRepositoryRefInput, "branch">;
 
 export type GitHubWorkflowRunSummary = {
   id: number;
+  runAttempt: number;
+  updatedAt: string | null;
   commitSha: string;
   commitMessage: string;
   branch: string;
@@ -89,6 +91,15 @@ export type GitHubWorkflowJobSummary = {
   id: number;
   name: string;
   runUrl: string;
+  status: string;
+  conclusion: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  steps: GitHubWorkflowStepSummary[];
+};
+
+export type GitHubWorkflowStepSummary = {
+  name: string;
   status: string;
   conclusion: string | null;
   startedAt: string | null;
@@ -318,6 +329,7 @@ type GitHubWorkflowRunsResponse = {
 
 type GitHubWorkflowRunApiResponse = {
   readonly id?: unknown;
+  readonly run_attempt?: unknown;
   readonly head_sha?: unknown;
   readonly head_branch?: unknown;
   readonly html_url?: unknown;
@@ -344,6 +356,14 @@ type GitHubWorkflowJobApiResponse = {
   readonly id?: unknown;
   readonly name?: unknown;
   readonly html_url?: unknown;
+  readonly status?: unknown;
+  readonly conclusion?: unknown;
+  readonly started_at?: unknown;
+  readonly completed_at?: unknown;
+  readonly steps?: GitHubWorkflowStepApiResponse[];
+};
+type GitHubWorkflowStepApiResponse = {
+  readonly name?: unknown;
   readonly status?: unknown;
   readonly conclusion?: unknown;
   readonly started_at?: unknown;
@@ -402,32 +422,55 @@ export function createGitHubAppClient(
 
   return {
     async listBranchWorkflowRuns(input) {
-      const response = await requestWithInstallationToken<GitHubWorkflowRunsResponse>(
-        input.installationId,
-        createRepositoryPath(
-          input,
-          `/actions/runs?branch=${encodeURIComponent(input.branch)}&per_page=50`
-        )
-      );
-      return (response.workflow_runs ?? []).map(toWorkflowRunSummary);
+      const runs: GitHubWorkflowRunSummary[] = [];
+      for (let page = 1; ; page += 1) {
+        const response = await requestWithInstallationToken<GitHubWorkflowRunsResponse>(
+          input.installationId,
+          createRepositoryPath(
+            input,
+            `/actions/runs?branch=${encodeURIComponent(input.branch)}&per_page=100&page=${page}`
+          )
+        );
+        const pageRuns = response.workflow_runs ?? [];
+        runs.push(...pageRuns.map(toWorkflowRunSummary));
+        if (pageRuns.length < 100) break;
+      }
+      return runs;
     },
 
     async listCommitFiles(input) {
-      const response = await requestWithInstallationToken<GitHubCommitFilesResponse>(
-        input.installationId,
-        createRepositoryPath(input, `/commits/${encodeURIComponent(input.commitSha)}`)
-      );
-      return (response.files ?? []).flatMap((file) =>
-        typeof file.filename === "string" && file.filename ? [file.filename] : []
-      );
+      const files: string[] = [];
+      for (let page = 1; ; page += 1) {
+        const response = await requestWithInstallationToken<GitHubCommitFilesResponse>(
+          input.installationId,
+          createRepositoryPath(
+            input,
+            `/commits/${encodeURIComponent(input.commitSha)}?per_page=100&page=${page}`
+          )
+        );
+        const pageFiles = response.files ?? [];
+        files.push(
+          ...pageFiles.flatMap((file) =>
+            typeof file.filename === "string" && file.filename ? [file.filename] : []
+          )
+        );
+        if (pageFiles.length < 100) break;
+      }
+      return files;
     },
 
     async listWorkflowJobs(input) {
-      const response = await requestWithInstallationToken<GitHubWorkflowJobsResponse>(
-        input.installationId,
-        createRepositoryPath(input, `/actions/runs/${input.runId}/jobs?per_page=100`)
-      );
-      return (response.jobs ?? []).map(toWorkflowJobSummary);
+      const jobs: GitHubWorkflowJobSummary[] = [];
+      for (let page = 1; ; page += 1) {
+        const response = await requestWithInstallationToken<GitHubWorkflowJobsResponse>(
+          input.installationId,
+          createRepositoryPath(input, `/actions/runs/${input.runId}/jobs?per_page=100&page=${page}`)
+        );
+        const pageJobs = response.jobs ?? [];
+        jobs.push(...pageJobs.map(toWorkflowJobSummary));
+        if (pageJobs.length < 100) break;
+      }
+      return jobs;
     },
 
     async readWorkflowJobLog(input) {
@@ -810,6 +853,8 @@ function toWorkflowRunSummary(run: GitHubWorkflowRunApiResponse): GitHubWorkflow
   const status = readRequiredString(run.status, "workflow run status");
   return {
     id: readRequiredNumber(run.id, "workflow run id"),
+    runAttempt: readOptionalNumber(run.run_attempt) ?? 1,
+    updatedAt: readDateString(run.updated_at),
     commitSha: readRequiredString(run.head_sha, "workflow run commit sha"),
     commitMessage: readRequiredString(run.head_commit?.message, "workflow run commit message"),
     branch: readRequiredString(run.head_branch, "workflow run branch"),
@@ -830,7 +875,18 @@ function toWorkflowJobSummary(job: GitHubWorkflowJobApiResponse): GitHubWorkflow
     status: readRequiredString(job.status, "workflow job status"),
     conclusion: typeof job.conclusion === "string" ? job.conclusion : null,
     startedAt: readDateString(job.started_at),
-    finishedAt: readDateString(job.completed_at)
+    finishedAt: readDateString(job.completed_at),
+    steps: (job.steps ?? []).map(toWorkflowStepSummary)
+  };
+}
+
+function toWorkflowStepSummary(step: GitHubWorkflowStepApiResponse): GitHubWorkflowStepSummary {
+  return {
+    name: readRequiredString(step.name, "workflow step name"),
+    status: readRequiredString(step.status, "workflow step status"),
+    conclusion: typeof step.conclusion === "string" ? step.conclusion : null,
+    startedAt: readDateString(step.started_at),
+    finishedAt: readDateString(step.completed_at)
   };
 }
 
@@ -1356,6 +1412,10 @@ function readRequiredNumber(value: unknown, label: string): number {
   }
 
   return value;
+}
+
+function readOptionalNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 function readDateString(value: unknown): string | null {

@@ -50,8 +50,10 @@ export function createGitHubActionsRunProvider(
   return {
     listCommitFiles: (input) => client.listCommitFiles(input),
     async listSnapshots(input) {
-      const runs = (await client.listBranchWorkflowRuns(input)).filter((run) =>
-        monitoredWorkflowNames.has(run.workflowName)
+      const runs = selectLatestWorkflowAttempts(
+        (await client.listBranchWorkflowRuns(input)).filter((run) =>
+          monitoredWorkflowNames.has(run.workflowName)
+        )
       );
       const groups = new Map<string, GitHubWorkflowRunSummary[]>();
       for (const run of runs)
@@ -63,21 +65,38 @@ export function createGitHubActionsRunProvider(
         const logs: GitCicdRunProviderLog[] = [];
         for (const run of commitRuns) {
           for (const job of await client.listWorkflowJobs({ ...input, runId: run.id })) {
-            const stageKind = mapJobStageKind(run.workflowName, job.name);
-            jobs.push({
-              stageKind,
-              status: mapStageStatus(job.status, job.conclusion),
-              runUrl: job.runUrl,
-              startedAt: toDate(job.startedAt),
-              finishedAt: toDate(job.finishedAt)
+            const jobStageKind = mapJobStageKind(run.workflowName, job.name);
+            const mappedSteps = (job.steps ?? []).flatMap((step) => {
+              const stageKind = mapStepStageKind(run.workflowName, job.name, step.name);
+              return stageKind
+                ? [
+                    {
+                      stageKind,
+                      status: mapStageStatus(step.status, step.conclusion),
+                      runUrl: job.runUrl,
+                      startedAt: toDate(step.startedAt),
+                      finishedAt: toDate(step.finishedAt)
+                    }
+                  ]
+                : [];
             });
+            if (mappedSteps.length) jobs.push(...mappedSteps);
+            else {
+              jobs.push({
+                stageKind: jobStageKind,
+                status: mapStageStatus(job.status, job.conclusion),
+                runUrl: job.runUrl,
+                startedAt: toDate(job.startedAt),
+                finishedAt: toDate(job.finishedAt)
+              });
+            }
             if (job.status !== "completed") continue;
             const text = maskDeploymentMessage(
               await client.readWorkflowJobLog({ ...input, jobId: job.id })
             );
             for (const line of text.split(/\r?\n/).filter(Boolean)) {
               logs.push({
-                stageKind,
+                stageKind: mappedSteps.length === 1 ? mappedSteps[0]!.stageKind : jobStageKind,
                 level: job.conclusion === "failure" ? "error" : "info",
                 message: line
               });
@@ -105,12 +124,44 @@ export function createGitHubActionsRunProvider(
   };
 }
 
+function selectLatestWorkflowAttempts(
+  runs: readonly GitHubWorkflowRunSummary[]
+): GitHubWorkflowRunSummary[] {
+  const selected = new Map<string, GitHubWorkflowRunSummary>();
+  for (const run of runs) {
+    const key = `${run.commitSha}\0${run.workflowName}`;
+    const current = selected.get(key);
+    if (!current || compareAttempts(run, current) > 0) selected.set(key, run);
+  }
+  return [...selected.values()];
+}
+
+function compareAttempts(left: GitHubWorkflowRunSummary, right: GitHubWorkflowRunSummary): number {
+  if (left.runAttempt !== right.runAttempt) return left.runAttempt - right.runAttempt;
+  const leftUpdated = left.updatedAt ? Date.parse(left.updatedAt) : 0;
+  const rightUpdated = right.updatedAt ? Date.parse(right.updatedAt) : 0;
+  if (leftUpdated !== rightUpdated) return leftUpdated - rightUpdated;
+  return left.id - right.id;
+}
+
+function mapStepStageKind(
+  workflowName: string,
+  jobName: string,
+  stepName: string
+): GitCicdPipelineStageKind | null {
+  if (workflowName !== "SketchCatch App" || jobName !== "release") return null;
+  if (stepName === "Upload release artifact") return "app_build";
+  if (stepName === "Refresh Auto Scaling Group") return "app_deploy";
+  if (stepName === "Verify URLs") return "verify";
+  return null;
+}
+
 function mapJobStageKind(workflowName: string, jobName: string): GitCicdPipelineStageKind | null {
   const name = jobName.toLowerCase();
   if (name.includes("verify")) return "verify";
   if (workflowName === "SketchCatch Infra") {
-    if (name.includes("plan")) return "infra_plan";
-    if (name.includes("apply")) return "infra_apply";
+    if (name === "plan") return "infra_plan";
+    if (name === "apply") return "infra_apply";
   }
   if (workflowName === "SketchCatch App") {
     if (name.includes("build")) return "app_build";
@@ -120,25 +171,32 @@ function mapJobStageKind(workflowName: string, jobName: string): GitCicdPipeline
 }
 
 function mapStageStatus(status: string, conclusion: string | null): GitCicdPipelineStageStatus {
-  if (status === "queued" || status === "waiting") return "queued";
-  if (status !== "completed") return "running";
+  if (["queued", "waiting", "pending", "requested"].includes(status)) return "queued";
+  if (status === "in_progress") return "running";
+  if (status !== "completed") return "not_started";
   if (conclusion === "success") return "succeeded";
+  if (conclusion === "skipped") return "skipped";
   if (conclusion === "cancelled") return "cancelled";
   return "failed";
 }
 
 function aggregateStatus(runs: readonly GitHubWorkflowRunSummary[]): GitCicdPipelineRunStatus {
-  if (runs.some((run) => run.status !== "completed")) return "running";
   if (
     runs.some(
       (run) =>
-        run.conclusion === "failure" ||
-        run.conclusion === "timed_out" ||
-        run.conclusion === "action_required"
+        run.status === "completed" &&
+        run.conclusion !== "success" &&
+        run.conclusion !== "skipped" &&
+        run.conclusion !== "cancelled"
     )
   )
     return "failed";
-  if (runs.some((run) => run.conclusion === "cancelled")) return "cancelled";
+  if (runs.some((run) => run.status === "completed" && run.conclusion === "cancelled"))
+    return "cancelled";
+  if (runs.some((run) => run.status === "in_progress")) return "running";
+  if (runs.some((run) => ["queued", "waiting", "pending", "requested"].includes(run.status)))
+    return "queued";
+  if (runs.some((run) => run.status !== "completed")) return "detected";
   return "succeeded";
 }
 

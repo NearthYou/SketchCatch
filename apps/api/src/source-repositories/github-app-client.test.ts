@@ -1164,6 +1164,8 @@ test("GitHub Actions read methods return focused models from read-only endpoints
   assert.deepEqual(runs, [
     {
       id: 11,
+      runAttempt: 1,
+      updatedAt: "2026-07-13T00:01:00Z",
       commitSha: "abc",
       commitMessage: "Ship app",
       branch: "main",
@@ -1184,7 +1186,8 @@ test("GitHub Actions read methods return focused models from read-only endpoints
       status: "completed",
       conclusion: "success",
       startedAt: "2026-07-13T00:00:00Z",
-      finishedAt: "2026-07-13T00:01:00Z"
+      finishedAt: "2026-07-13T00:01:00Z",
+      steps: []
     }
   ]);
   assert.equal(
@@ -1214,6 +1217,86 @@ test("readWorkflowJobLog masks secret values before returning text", async () =>
   });
   assert.equal(log, "deploy [REDACTED]\nfinished");
 });
+
+test("GitHub Actions reads paginate runs jobs and immutable commit files", async () => {
+  const calls: GitHubApiCall[] = [];
+  const client = createGitHubAppClient({
+    appId: "12345",
+    privateKey,
+    fetch: createGitHubFetchStub(calls, ({ pathname, search }) => {
+      if (pathname === "/app/installations/42/access_tokens")
+        return jsonResponse({ token: "installation-token" });
+      const page = new URLSearchParams(search).get("page");
+      const count = page === "1" ? 100 : 1;
+      if (pathname.endsWith("/actions/runs"))
+        return jsonResponse({
+          workflow_runs: Array.from({ length: count }, (_, index) =>
+            workflowRunPayload((page === "1" ? 0 : 100) + index)
+          )
+        });
+      if (pathname.endsWith("/actions/runs/11/jobs"))
+        return jsonResponse({
+          jobs: Array.from({ length: count }, (_, index) =>
+            workflowJobPayload((page === "1" ? 0 : 100) + index)
+          )
+        });
+      if (pathname.endsWith("/commits/abc"))
+        return jsonResponse({
+          files: Array.from({ length: count }, (_, index) => ({
+            filename: `apps/web/${(page === "1" ? 0 : 100) + index}.tsx`
+          }))
+        });
+      throw new Error(`Unexpected path ${pathname}`);
+    })
+  });
+  const repo = { installationId: "42", owner: "owner", name: "repo", branch: "main" };
+
+  assert.equal((await client.listBranchWorkflowRuns(repo)).length, 101);
+  assert.equal((await client.listWorkflowJobs({ ...repo, runId: 11 })).length, 101);
+  assert.equal((await client.listCommitFiles({ ...repo, commitSha: "abc" })).length, 101);
+  assert.equal(
+    calls.filter((call) => call.search.includes("per_page=100") && call.search.includes("page=2"))
+      .length,
+    3
+  );
+});
+
+function workflowRunPayload(id: number) {
+  return {
+    id,
+    run_attempt: 1,
+    head_sha: `sha-${id}`,
+    head_branch: "main",
+    name: "SketchCatch App",
+    html_url: `run-${id}`,
+    status: "completed",
+    conclusion: "success",
+    created_at: "2026-07-13T00:00:00Z",
+    updated_at: "2026-07-13T00:01:00Z",
+    head_commit: { message: "Ship" }
+  };
+}
+
+function workflowJobPayload(id: number) {
+  return {
+    id,
+    name: "release",
+    html_url: `job-${id}`,
+    status: "completed",
+    conclusion: "success",
+    started_at: null,
+    completed_at: null,
+    steps: [
+      {
+        name: "Upload release artifact",
+        status: "completed",
+        conclusion: "success",
+        started_at: null,
+        completed_at: null
+      }
+    ]
+  };
+}
 
 type GitHubApiCall = {
   method: string;

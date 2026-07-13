@@ -22,6 +22,7 @@ Short English-only working log for the current agent context. Older records are 
 - Added idempotent transactional Pipeline Run, six-stage, and deterministic log persistence with stale-state fallback.
 - Verification: 29 focused tests, API typecheck/lint, full build, harness, and diff checks passed; lint retains one pre-existing `setNow` warning.
 - No real GitHub, AWS, Terraform, database migration, or deployment mutation ran.
+- Reviewer fixes added exact generated release-step mapping, full GitHub pagination, latest-attempt selection, fail-closed status semantics, and unseen-SHA-only commit-file discovery.
 
 ### 2026-07-13 - Validate and persist repository CI/CD monitoring settings
 

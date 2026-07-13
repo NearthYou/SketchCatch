@@ -42,3 +42,28 @@ Each failure was caused by the intended missing behavior rather than a typo or t
 - The PostgreSQL transaction was typechecked and exercised through its repository contract, but no real database migration or database integration run was performed, as required by the task.
 - GitHub Actions job-to-stage mapping deliberately recognizes only Plan, Apply, Build, Deploy, and Verify names within the two exact SketchCatch workflows. Expanding workflow semantics should be a planned contract change.
 - No GitHub, AWS, Terraform, deployment, or repository mutation occurred.
+
+## Reviewer Fixes RED/GREEN
+
+### RED
+
+The combined focused suite produced five expected failures:
+
+- The exact generated App job `release` mapped to a null stage instead of its real steps.
+- An older failed workflow attempt overrode a successful rerun.
+- A queued run was reported as running.
+- Runs, jobs, and commit files stopped after one page (`1` result instead of `101`).
+- The same immutable commit files were fetched twice, and the second lookup failure made the refresh stale.
+
+### GREEN
+
+- Extended the focused GitHub job model with real step names and states. The existing generated steps map exactly as follows: `Upload release artifact` to `app_build`, `Refresh Auto Scaling Group` to `app_deploy`, and `Verify URLs` to `verify`. No stage is marked successful unless its corresponding GitHub step succeeded.
+- Consolidated workflow reruns by `(commitSha, workflowName)` using `run_attempt`, then `updated_at`, then run id. Only the selected attempt supplies jobs, logs, URLs, and aggregate status.
+- Implemented explicit queued, running, succeeded, skipped, cancelled, and failed stage semantics. All unrecognized completed conclusions fail closed; unknown nonterminal stage states remain `not_started` rather than being fabricated as running.
+- Added complete `per_page=100&page=N` pagination for branch workflow runs, workflow jobs, and commit files, with two-page 101-item regression coverage for each endpoint.
+- Added repository lookup of existing commit SHAs/scopes before immutable file discovery. Two refreshes perform two repository existence lookups but only one provider commit-file lookup, and the second refresh remains fresh.
+- Reviewer-fix focused suite: 34 tests passed. API typecheck and lint passed; lint retains the pre-existing `setNow` warning.
+
+### Deferred Minor
+
+- `run_started_at` remains based on the GitHub workflow run `created_at` field. A separate follow-up may adopt a more precise provider timestamp if the GitHub contract and stored model are expanded; this minor issue was recorded and not changed here.

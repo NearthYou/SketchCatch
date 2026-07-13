@@ -96,6 +96,39 @@ test("provider failure preserves persisted status and refresh time while returni
   assert.equal(stale.runs[0]?.lastRefreshedAt.toISOString(), "2026-07-13T01:00:00.000Z");
 });
 
+test("refresh reuses persisted change scope without refetching immutable commit files", async () => {
+  const repository = createMemoryRepository();
+  const base = createProvider();
+  let commitFileCalls = 0;
+  const provider: GitCicdRunProvider = {
+    listSnapshots: base.listSnapshots,
+    async listCommitFiles(input) {
+      commitFileCalls += 1;
+      if (commitFileCalls > 1) throw new Error("immutable commit lookup must not repeat");
+      return base.listCommitFiles(input);
+    }
+  };
+  const service = createGitCicdPipelineRunService({
+    repository,
+    provider,
+    createId: sequentialIds()
+  });
+
+  await service.refreshProjectPipelineRuns({
+    projectId: "project-1",
+    sourceRepositoryId: "repo-1"
+  });
+  const refreshed = await service.refreshProjectPipelineRuns({
+    projectId: "project-1",
+    sourceRepositoryId: "repo-1"
+  });
+
+  assert.equal(commitFileCalls, 1);
+  assert.equal(repository.existingLookupCalls.value, 2);
+  assert.equal(refreshed.stale, false);
+  assert.equal(refreshed.runs[0]?.changeScope, "app");
+});
+
 function createProvider(shouldFail: () => boolean = () => false): GitCicdRunProvider {
   return {
     async listCommitFiles() {
@@ -142,6 +175,7 @@ function createMemoryRepository() {
     runs: [] as PersistedPipelineRun[],
     stages: [] as PersistedPipelineStage[],
     logs: [] as PersistedPipelineLog[],
+    existingLookupCalls: { value: 0 },
     target: {
       projectId: "project-1",
       sourceRepositoryId: "repo-1",
@@ -163,6 +197,14 @@ function createMemoryRepository() {
         stages: state.stages.filter((stage) => stage.pipelineRunId === run.id)
       })),
     listPipelineLogs: async (_runId, since) => state.logs.filter((log) => log.sequence > since),
+    findPipelineRunsByCommitShas: async (_sourceRepositoryId, commitShas) => {
+      state.existingLookupCalls.value += 1;
+      return new Map(
+        state.runs
+          .filter((run) => commitShas.includes(run.commitSha))
+          .map((run) => [run.commitSha, run])
+      );
+    },
     async persistSnapshot(input) {
       let run = state.runs.find(
         (item) =>

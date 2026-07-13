@@ -89,6 +89,10 @@ export type GitCicdPipelinePersistenceRepository = {
   findRunRefreshTarget(pipelineRunId: string): Promise<PipelineRefreshTarget | undefined>;
   listProjectPipelineRuns(projectId: string): Promise<PipelineRunWithStages[]>;
   listPipelineLogs(pipelineRunId: string, sinceSequence: number): Promise<PersistedPipelineLog[]>;
+  findPipelineRunsByCommitShas(
+    sourceRepositoryId: string,
+    commitShas: readonly string[]
+  ): Promise<Map<string, PersistedPipelineRun>>;
   persistSnapshot(input: {
     run: PersistedPipelineRun;
     stages: PersistedPipelineStage[];
@@ -122,17 +126,28 @@ export function createGitCicdPipelineRunService(options: {
         name: target.name,
         branch: target.monitorBranch
       });
+      const relevantSnapshots = onlyCommitSha
+        ? snapshots.filter((snapshot) => snapshot.commitSha === onlyCommitSha)
+        : snapshots;
+      const existingRuns = await options.repository.findPipelineRunsByCommitShas(
+        target.sourceRepositoryId,
+        [...new Set(relevantSnapshots.map((snapshot) => snapshot.commitSha))]
+      );
       const refreshed: PipelineRunWithStages[] = [];
-      for (const snapshot of snapshots) {
-        if (onlyCommitSha && snapshot.commitSha !== onlyCommitSha) continue;
-        const files = await options.provider.listCommitFiles({
-          installationId: target.installationId,
-          owner: target.owner,
-          name: target.name,
-          branch: target.monitorBranch,
-          commitSha: snapshot.commitSha
-        });
-        const changeScope = classifyPipelineChangeScope(files, target);
+      for (const snapshot of relevantSnapshots) {
+        const existingRun = existingRuns.get(snapshot.commitSha);
+        const changeScope =
+          existingRun?.changeScope ??
+          classifyPipelineChangeScope(
+            await options.provider.listCommitFiles({
+              installationId: target.installationId,
+              owner: target.owner,
+              name: target.name,
+              branch: target.monitorBranch,
+              commitSha: snapshot.commitSha
+            }),
+            target
+          );
         if (!changeScope) continue;
         refreshed.push(await persistSnapshot(target, snapshot, changeScope));
       }
@@ -319,6 +334,19 @@ export function createPostgresGitCicdPipelinePersistenceRepository(
           )
         )
         .orderBy(asc(gitCicdPipelineLogs.sequence));
+    },
+    async findPipelineRunsByCommitShas(sourceRepositoryId, commitShas) {
+      if (!commitShas.length) return new Map();
+      const runs = await db
+        .select()
+        .from(gitCicdPipelineRuns)
+        .where(
+          and(
+            eq(gitCicdPipelineRuns.sourceRepositoryId, sourceRepositoryId),
+            inArray(gitCicdPipelineRuns.commitSha, [...commitShas])
+          )
+        );
+      return new Map(runs.map((run) => [run.commitSha, run]));
     },
     persistSnapshot(input) {
       return db.transaction(async (tx) => {
