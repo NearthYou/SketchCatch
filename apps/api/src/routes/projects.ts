@@ -1,27 +1,19 @@
 import { randomUUID } from "node:crypto";
-import {
-  DeleteObjectCommand,
-  GetObjectCommand,
-  HeadObjectCommand,
-  PutObjectCommand,
-  S3ServiceException
-} from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { and, desc, eq, sql } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import type { ApiErrorResponse, ArchitectureJson } from "@sketchcatch/types";
 import { RESOURCE_TYPES } from "@sketchcatch/types";
 import { requireActiveUserId } from "../auth/current-user.js";
-import { requireS3BucketName } from "../config/env.js";
 import { getDatabaseClient, type DatabaseClient } from "../db/client.js";
 import { defaultTerraformArtifactMaxBytes } from "../deployments/terraform-workspace.js";
 import {
-  createS3ProjectDeletionStorage,
   deleteProjectRecords,
   getProjectDeletePreview,
   type ProjectDeletionStorage
 } from "../projects/project-deletion-service.js";
+import { createProjectAssetStorage } from "../projects/project-asset-storage-factory.js";
+import type { ProjectAssetStorage } from "../projects/project-asset-storage.js";
 import {
   cleanupSupersededProjectThumbnails,
   compareProjectThumbnailsNewestFirst
@@ -34,7 +26,6 @@ import {
   touchUpdatedAt
 } from "../db/schema.js";
 import { getNextDraftRevision, toProjectDraft } from "../modules/projects/project-drafts.js";
-import { getS3Client } from "../s3/client.js";
 import { saveProjectDraftBodySchema } from "./project-draft-schemas.js";
 
 const createProjectBodySchema = z.object({
@@ -164,38 +155,14 @@ type ProjectRouteOptions = {
   projectDeletionStorage?: ProjectDeletionStorage;
 };
 
-export type ProjectAssetStorage = {
-  createUploadUrl(input: {
-    bucketName: string;
-    objectKey: string;
-    contentType: string;
-    expiresInSeconds: number;
-  }): Promise<string>;
-  putObject(input: {
-    bucketName: string;
-    objectKey: string;
-    contentType: string;
-    body: string | Buffer;
-  }): Promise<void>;
-  getObject?(input: {
-    bucketName: string;
-    objectKey: string;
-  }): Promise<{ body: Buffer; contentType: string }>;
-  deleteObject(input: { bucketName: string; objectKey: string }): Promise<void>;
-  objectExists(input: {
-    bucketName: string;
-    objectKey: string;
-    byteSize: number | null;
-  }): Promise<boolean>;
-};
-
 export async function registerProjectRoutes(
   app: FastifyInstance,
   options: ProjectRouteOptions = {}
 ): Promise<void> {
   const getProjectDatabaseClient = options.getDatabaseClient ?? getDatabaseClient;
-  const getProjectAssetStorage = () =>
-    options.projectAssetStorage ?? createDefaultProjectAssetStorage();
+  const projectAssetStorage = options.projectAssetStorage ?? createProjectAssetStorage();
+  const projectDeletionStorage =
+    options.projectDeletionStorage ?? createProjectDeletionStorage(projectAssetStorage);
 
   app.addContentTypeParser(
     ["image/png", "image/webp"],
@@ -308,7 +275,7 @@ export async function registerProjectRoutes(
       action: body.action,
       db,
       projectId: params.id,
-      storage: options.projectDeletionStorage ?? createDefaultProjectDeletionStorage(),
+      storage: projectDeletionStorage,
       userId: currentUserId
     });
 
@@ -577,8 +544,7 @@ export async function registerProjectRoutes(
         }
       }
 
-      await getProjectAssetStorage().putObject({
-        bucketName: requireS3BucketName(),
+      await projectAssetStorage.putObject({
         objectKey: asset.objectKey,
         contentType: asset.contentType,
         body
@@ -625,21 +591,14 @@ export async function registerProjectRoutes(
       return sendNotFound(reply, "저장된 보드 캡처를 찾을 수 없습니다.");
     }
 
-    const storage = getProjectAssetStorage();
-
-    if (!storage.getObject) {
-      throw new Error("Project asset storage does not support object reads");
-    }
-
-    const object = await storage.getObject({
-      bucketName: requireS3BucketName(),
+    const object = await projectAssetStorage.getObject({
       objectKey: thumbnail.objectKey
     });
 
     return reply
       .header("Cache-Control", "private, no-store")
-      .type(object.contentType || thumbnail.contentType)
-      .send(object.body);
+      .type(thumbnail.contentType)
+      .send(object);
   });
 
   app.post("/projects/:id/assets/:assetId/confirm-upload", async (request, reply) => {
@@ -671,7 +630,7 @@ export async function registerProjectRoutes(
           db,
           log: request.log,
           projectId: params.id,
-          storage: getProjectAssetStorage()
+          storage: projectAssetStorage
         });
       }
 
@@ -680,15 +639,13 @@ export async function registerProjectRoutes(
       return response;
     }
 
-    const bucketName = requireS3BucketName();
-    const uploaded = await getProjectAssetStorage().objectExists({
-      bucketName,
+    const uploaded = await projectAssetStorage.objectExists({
       objectKey: asset.objectKey,
       byteSize: asset.byteSize
     });
 
     if (!uploaded) {
-      return sendConflict(reply, "S3에서 업로드된 파일을 확인하지 못했습니다.");
+      return sendConflict(reply, "스토리지에서 업로드된 파일을 확인하지 못했습니다.");
     }
 
     const [confirmedAsset] = await db
@@ -706,7 +663,7 @@ export async function registerProjectRoutes(
         db,
         log: request.log,
         projectId: params.id,
-        storage: getProjectAssetStorage()
+        storage: projectAssetStorage
       });
     }
 
@@ -739,8 +696,7 @@ export async function registerProjectRoutes(
     }
 
     try {
-      await getProjectAssetStorage().deleteObject({
-        bucketName: requireS3BucketName(),
+      await projectAssetStorage.deleteObject({
         objectKey: asset.objectKey
       });
     } catch (error) {
@@ -798,8 +754,6 @@ async function pruneUploadedProjectThumbnails({
   readonly projectId: string;
   readonly storage: ProjectAssetStorage;
 }): Promise<void> {
-  const bucketName = requireS3BucketName();
-
   try {
     await cleanupSupersededProjectThumbnails({
       listUploaded: async () =>
@@ -818,7 +772,7 @@ async function pruneUploadedProjectThumbnails({
             )
           ),
       deleteObject: async (objectKey) => {
-        await storage.deleteObject({ bucketName, objectKey });
+        await storage.deleteObject({ objectKey });
       },
       deleteRow: async (assetId) => {
         await db
@@ -867,105 +821,12 @@ function sendConflict(reply: FastifyReply, message: string): FastifyReply {
   return reply.status(409).send(response);
 }
 
-function createDefaultProjectAssetStorage(): ProjectAssetStorage {
-  const s3Client = getS3Client();
-
-  return {
-    async createUploadUrl(input) {
-      return getSignedUrl(
-        s3Client,
-        new PutObjectCommand({
-          Bucket: input.bucketName,
-          Key: input.objectKey,
-          ContentType: input.contentType
-        }),
-        { expiresIn: input.expiresInSeconds }
-      );
-    },
-    async putObject(input) {
-      await s3Client.send(
-        new PutObjectCommand({
-          Bucket: input.bucketName,
-          Key: input.objectKey,
-          Body: input.body,
-          ContentType: input.contentType
-        })
-      );
-    },
-    async getObject(input) {
-      const object = await s3Client.send(
-        new GetObjectCommand({
-          Bucket: input.bucketName,
-          Key: input.objectKey
-        })
-      );
-
-      if (!object.Body) {
-        throw new Error(`Project asset object has no body: ${input.objectKey}`);
-      }
-
-      return {
-        body: Buffer.from(await object.Body.transformToByteArray()),
-        contentType: object.ContentType ?? "application/octet-stream"
-      };
-    },
-    async deleteObject(input) {
-      await s3Client.send(
-        new DeleteObjectCommand({
-          Bucket: input.bucketName,
-          Key: input.objectKey
-        })
-      );
-    },
-    async objectExists(input) {
-      try {
-        const object = await s3Client.send(
-          new HeadObjectCommand({
-            Bucket: input.bucketName,
-            Key: input.objectKey
-          })
-        );
-
-        if (input.byteSize !== null) {
-          return object.ContentLength === input.byteSize;
-        }
-
-        return true;
-      } catch (error) {
-        if (isS3ObjectMissingError(error)) {
-          return false;
-        }
-
-        throw error;
-      }
-    }
-  };
-}
-
-function createDefaultProjectDeletionStorage(): ProjectDeletionStorage {
+function createProjectDeletionStorage(storage: ProjectAssetStorage): ProjectDeletionStorage {
   return {
     async deleteObject(objectKey) {
-      const storage = createS3ProjectDeletionStorage({
-        bucketName: requireS3BucketName(),
-        s3Client: getS3Client()
-      });
-
-      await storage.deleteObject(objectKey);
+      await storage.deleteObject({ objectKey });
     }
   };
-}
-
-function isS3ObjectMissingError(error: unknown): boolean {
-  if (error instanceof S3ServiceException) {
-    return error.$metadata.httpStatusCode === 404 || error.name === "NotFound";
-  }
-
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "name" in error &&
-    (error.name === "NotFound" || error.name === "NoSuchKey")
-  );
 }
 
 function buildObjectKey(
@@ -974,7 +835,7 @@ function buildObjectKey(
   assetId: string,
   fileName: string
 ): string {
-  const safeFileName = fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
+  const safeFileName = fileName.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 180);
 
   return `projects/${projectId}/assets/${assetType}/${assetId}-${safeFileName}`;
 }
