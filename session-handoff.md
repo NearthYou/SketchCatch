@@ -4,27 +4,30 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Currently Verified
 
-- Branch `feat/ck/349-repo-analysis` has issue #349 Repository Analysis template recommendation work plus a focused API startup guard.
-- New project Repository start shows the Repository URL analysis panel above the primary `Repository 분석하기` action.
-- API startup now requires `DATABASE_URL` before Terraform warmup, deployment recovery, or listening.
-- The focused startup regression test, API typecheck, harness check, lint, typecheck, and build passed.
+- Branch: `fix/gg/355-review-followup-v2`; PR #366 targets `dev`.
+- Six AWS Templates retain 103 Terraform-deployable Resources and 28 parameterless Catalog-backed Design nodes.
+- Authenticated Template Board QA previously passed 72/72 checks; evidence is in `docs/gg/feat-infrastructure-template/017_AWS템플릿Design실화면QA_gg.md`.
+- The latest `origin/dev` at `39118a79` is integrated, including the separated Direct Deployment and CI/CD console from merged PR #368.
+- The deployment context passes only the `isTerraformDeployableNode` count into `DirectDeploymentScreen`.
+
+## Verification
+
+- Pre-integration PR #366 CI, focused Template/Terraform tests, lint, typecheck, and harness passed.
+- Post-integration verification passed: 110 focused conflict tests, harness, lint, typecheck, build, and whitespace checks. Lint retains one pre-existing warning.
+- Root tests passed 1,325/1,328; three unchanged Windows-only path expectations fail on macOS and are identical in the pre-merge branch and `origin/dev`.
 
 ## Changes This Session
 
-- Reproduced `/api/auth/login` returning 500 when the running API has no `DATABASE_URL`.
-- Added a regression test in `apps/api/src/server-startup.test.ts`.
-- Added `requireDatabaseUrl()` to `apps/api/src/server-startup.ts`.
-- Moved `RepositoryUrlStartPanel` above the action button group in `apps/web/app/workspace/new/workspace-start-client.tsx`.
-- Added source-order coverage in `apps/web/app/workspace/new/workspace-start-options.test.ts`.
-- Updated `agent-progress.md`.
+- Kept the new `DeploymentPanel` compatibility adapter and moved the branch Resource-count contract to `DirectDeploymentScreen`.
+- Combined the Template test contracts with the current 26-node Live Observation layout expectation.
+- Archived completed PR #368 and Template work records while keeping only PR #366 as the active harness context.
 
 ## Broken Or Unverified
 
-- The already-running API process may still be old code and must be restarted.
-- Local login still needs a real `DATABASE_URL` configured outside git, then migrations run if the database is fresh or stale.
-- Browser screenshot verification for the Repository URL panel move was skipped because browser automation is not installed in this worktree.
-- `apps/web/next-env.d.ts` was already modified before this fix and was not touched.
+- Migrations `0032` and `0033` arrived from `dev` but were not applied without an approved non-production `DATABASE_URL`.
+- Credentialed browser acceptance for CI/CD was not run without safe GitHub/AWS test state.
+- No Terraform Apply/Destroy, AWS mutation, deployment API mutation, or migration execution was performed during conflict resolution.
 
 ## Best Next Action
 
-- Configure local `DATABASE_URL`, restart the API, and retry login. If the database is new or behind, run `pnpm --filter @sketchcatch/api db:migrate`.
+- Commit and push the staged merge, then confirm PR #366 is mergeable and review threads remain resolved.

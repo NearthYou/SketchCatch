@@ -72,6 +72,7 @@ type AvailabilityZoneProposalPlan = {
   parentAreaNodeIdByBlockKey: Map<string, string>;
 };
 
+// Sync safe Terraform values while keeping structural changes explicit and presentation-neutral.
 export function syncTerraformToDiagramJson(
   diagramJson: DiagramJson,
   input: TerraformSyncInput
@@ -150,7 +151,8 @@ export function syncTerraformToDiagramJson(
   );
   const availabilityZoneProposalPlan = createAvailabilityZoneProposalPlan(
     diagramJson.nodes,
-    syncBlocks
+    syncBlocks,
+    nodeByIdentityKey
   );
   const diagnostics: TerraformDiagnostic[] = [];
   const valuesByNodeId = new Map<string, Record<string, unknown>>();
@@ -368,11 +370,14 @@ function createChangeProposals(
   return proposals;
 }
 
+// Preserve authored presentation AZ hierarchy while still grouping genuinely Terraform-only children.
 function createAvailabilityZoneProposalPlan(
   nodes: readonly DiagramNode[],
-  blocks: readonly ParsedBlock[]
+  blocks: readonly ParsedBlock[],
+  nodeByIdentityKey: ReadonlyMap<string, DiagramNode>
 ): AvailabilityZoneProposalPlan {
   const usedNodeIds = new Set(nodes.map((node) => node.id));
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
   const azNodeIdByValue = createExistingAvailabilityZoneNodeIdByValue(nodes);
   const azCreateProposalByValue = new Map<string, CreateCandidateProposal>();
   const parentAreaNodeIdByBlockKey = new Map<string, string>();
@@ -381,6 +386,19 @@ function createAvailabilityZoneProposalPlan(
     const availabilityZone = getBlockAvailabilityZone(block);
 
     if (!availabilityZone) {
+      continue;
+    }
+
+    const blockKey = createTerraformBlockIdentityKey(block.identity);
+    const matchedNode = nodeByIdentityKey.get(blockKey);
+    const matchedParentNode = matchedNode?.metadata?.parentAreaNodeId
+      ? nodeById.get(matchedNode.metadata.parentAreaNodeId)
+      : undefined;
+
+    if (
+      matchedParentNode?.kind === "design" &&
+      matchedParentNode.metadata?.presentationCatalogItemId === "aws-availability-zone"
+    ) {
       continue;
     }
 
@@ -396,7 +414,7 @@ function createAvailabilityZoneProposalPlan(
       );
     }
 
-    parentAreaNodeIdByBlockKey.set(createTerraformBlockIdentityKey(block.identity), azNodeId);
+    parentAreaNodeIdByBlockKey.set(blockKey, azNodeId);
   }
 
   return {

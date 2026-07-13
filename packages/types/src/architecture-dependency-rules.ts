@@ -300,13 +300,13 @@ function hasResourceReference(
   );
 }
 
+// Resolve Terraform context through visual-only containers without skipping Resource boundaries.
 function hasContainingAreaReference(
   node: DiagramNode,
   check: Extract<DependencyCheck, { kind: "containing-area-reference" }>,
   graph: ResolvedArchitectureGraph
 ): boolean {
-  const parentNodeId = node.metadata?.parentAreaNodeId;
-  const parentNode = parentNodeId ? graph.nodeById.get(parentNodeId) : undefined;
+  const parentNode = findContainingResourceNode(node, graph);
   const targetNode = resolveParameterReferenceTarget(getParameterValue(node, check.parameterPath), graph);
 
   return Boolean(
@@ -314,6 +314,32 @@ function hasContainingAreaReference(
       parentNode.parameters?.resourceType === check.areaTerraformType &&
       targetNode?.id === parentNode.id
   );
+}
+
+// Stop at the first deployable ancestor so malformed cross-Resource containment still fails.
+function findContainingResourceNode(
+  node: DiagramNode,
+  graph: ResolvedArchitectureGraph
+): DiagramNode | null {
+  let parentNodeId = node.metadata?.parentAreaNodeId;
+  const visitedNodeIds = new Set<string>([node.id]);
+
+  while (parentNodeId && !visitedNodeIds.has(parentNodeId)) {
+    visitedNodeIds.add(parentNodeId);
+    const parentNode = graph.nodeById.get(parentNodeId);
+
+    if (!parentNode) {
+      return null;
+    }
+
+    if (parentNode.kind !== "design") {
+      return parentNode;
+    }
+
+    parentNodeId = parentNode.metadata?.parentAreaNodeId;
+  }
+
+  return null;
 }
 
 function hasReferencedTargetParentReference(
@@ -327,8 +353,7 @@ function hasReferencedTargetParentReference(
     return true;
   }
 
-  const parentNodeId = targetNode.metadata?.parentAreaNodeId;
-  const parentNode = parentNodeId ? graph.nodeById.get(parentNodeId) : undefined;
+  const parentNode = findContainingResourceNode(targetNode, graph);
   const configuredParent = resolveParameterReferenceTarget(
     getParameterValue(targetNode, check.parentParameterPath),
     graph

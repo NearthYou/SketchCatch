@@ -5,6 +5,8 @@ import { ArrowRight, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import {
   filterBoardTemplates,
+  getBoardTemplateRelationshipCount,
+  getBoardTemplateResourceCount,
   listBoardTemplateTags,
   type BoardTemplate,
   type BoardTemplateSort
@@ -113,16 +115,25 @@ export function TemplateGallery({
                       <p>{template.description}</p>
                     </div>
                     <dl>
-                      <div><dt>Resource</dt><dd>{template.diagramJson.nodes.length}</dd></div>
-                      <div><dt>관계</dt><dd>{template.diagramJson.edges.length}</dd></div>
+                      <div>
+                        <dt>Resource</dt>
+                        <dd>{getBoardTemplateResourceCount(template)}</dd>
+                      </div>
+                      <div>
+                        <dt>관계</dt>
+                        <dd>{getBoardTemplateRelationshipCount(template)}</dd>
+                      </div>
                     </dl>
                   </div>
                   <div className={styles.tags}>
-                    {template.tags.map((templateTag) => <span key={templateTag}>{templateTag}</span>)}
+                    {template.tags.map((templateTag) => (
+                      <span key={templateTag}>{templateTag}</span>
+                    ))}
                   </div>
                   {actionHref ? (
                     <Link className={styles.action} href={actionHref(template)}>
-                      {actionLabel}<ArrowRight aria-hidden="true" size={15} />
+                      {actionLabel}
+                      <ArrowRight aria-hidden="true" size={15} />
                     </Link>
                   ) : (
                     <button

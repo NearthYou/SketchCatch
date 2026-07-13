@@ -11,6 +11,7 @@ const diagramEditorCssSource = readFileSync(
   fileURLToPath(new URL("./diagram-editor.module.css", import.meta.url)),
   "utf8"
 );
+const normalizedDiagramEditorCssSource = diagramEditorCssSource.replace(/\r\n?/gu, "\n");
 
 test("diagram node view is a memoized custom node renderer", () => {
   assert.match(diagramNodeViewSource, /import \{[^}]*memo[^}]*\} from "react"/);
@@ -525,15 +526,15 @@ function getCssBlock(selector: string): string {
 }
 
 function getCssRuleContaining(selector: string): string {
-  const selectorStart = diagramEditorCssSource.indexOf(selector);
+  const selectorStart = normalizedDiagramEditorCssSource.indexOf(selector);
 
   assert.notEqual(selectorStart, -1);
 
-  const blockStart = diagramEditorCssSource.indexOf("{", selectorStart);
-  const blockEnd = diagramEditorCssSource.indexOf("}", blockStart);
+  const blockStart = normalizedDiagramEditorCssSource.indexOf("{", selectorStart);
+  const blockEnd = normalizedDiagramEditorCssSource.indexOf("}", blockStart);
 
   assert.notEqual(blockStart, -1);
   assert.notEqual(blockEnd, -1);
 
-  return diagramEditorCssSource.slice(selectorStart, blockEnd + 1);
+  return normalizedDiagramEditorCssSource.slice(selectorStart, blockEnd + 1);
 }

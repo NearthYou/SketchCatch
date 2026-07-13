@@ -30,6 +30,9 @@ import {
 } from "./git-cicd/git-cicd-handoff-service.js";
 import { createGitHubAppGitProvider } from "./git-cicd/github-app-git-provider.js";
 import { createGitHubActionsPipelineStatusProvider } from "./git-cicd/github-actions-pipeline-status-provider.js";
+import { createGitHubActionsRunProvider } from "./git-cicd/github-actions-run-provider.js";
+import { requireGitHubAppConfig } from "./config/env.js";
+import { createGitHubAppClient } from "./source-repositories/github-app-client.js";
 import {
   registerTerraformRoutes,
   type TerraformRouteOptions
@@ -154,6 +157,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
         app.log.warn({ error }, "Runtime Cache degraded; continuing with fallback state");
       }
     });
+  const githubAppClient = createLazyGitHubAppClient();
   const stopRefreshTokenCleanupJob =
     process.env.NODE_ENV === "test"
       ? undefined
@@ -246,9 +250,12 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     prefix: "/api",
     getDatabaseClient: getAppDatabaseClient,
     gitCicdHandoffProvider: createDelegatingGitCicdHandoffProvider({
-      githubProvider: createGitHubGitCicdHandoffProvider(createGitHubAppGitProvider())
+      githubProvider: createGitHubGitCicdHandoffProvider(
+        createGitHubAppGitProvider({ githubAppClient })
+      )
     }),
-    gitCicdPipelineStatusProvider: createGitHubActionsPipelineStatusProvider(),
+    gitCicdPipelineStatusProvider: createGitHubActionsPipelineStatusProvider({ githubAppClient }),
+    gitCicdRunProvider: createGitHubActionsRunProvider(githubAppClient),
     runtimeCache
   });
   app.register(registerCostRoutes, createCostRouteOptions(options, getAppDatabaseClient));
@@ -267,6 +274,24 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   });
 
   return app;
+}
+
+type SharedGitHubAppClient = ReturnType<typeof createGitHubAppClient>;
+
+function createLazyGitHubAppClient(): SharedGitHubAppClient {
+  let client: SharedGitHubAppClient | undefined;
+  const getClient = () => {
+    if (!client) {
+      const config = requireGitHubAppConfig();
+      client = createGitHubAppClient({ appId: config.appId, privateKey: config.privateKey });
+    }
+    return client;
+  };
+  return new Proxy({} as SharedGitHubAppClient, {
+    get(_target, property) {
+      return Reflect.get(getClient(), property);
+    }
+  });
 }
 
 // AI route 옵션은 undefined 필드를 넘기지 않게 분리해 exact optional 타입을 지킵니다.

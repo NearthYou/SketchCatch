@@ -6,7 +6,12 @@ import type {
   DeploymentPlanSummary,
   GitCicdHandoffListResponse,
   GitCicdHandoffResponse,
-  GitCicdHandoffStatus
+  GitCicdHandoffStatus,
+  GitCicdMonitoringConfigResponse,
+  GitCicdPipelineLogListResponse,
+  GitCicdPipelineRunListResponse,
+  GitCicdPipelineRunRefreshResponse,
+  GitCicdPipelineRunResponse
 } from "@sketchcatch/types";
 import { createAccessToken } from "../auth/tokens.js";
 import type { DatabaseClient } from "../db/client.js";
@@ -30,6 +35,23 @@ import {
   type UpdateGitCicdHandoffStatusRecordInput
 } from "../git-cicd/git-cicd-handoff-service.js";
 import type { AwsRoleDiffGateway } from "../git-cicd/aws-role-diff-apply-service.js";
+import type {
+  GitCicdMonitoringConfigRecord,
+  GitCicdMonitoringProvider,
+  GitCicdMonitoringRepository
+} from "../git-cicd/git-cicd-monitoring-service.js";
+import {
+  GitCicdPipelineRunInvalidCursorError,
+  type GitCicdPipelinePersistenceRepository,
+  type PersistedPipelineLog,
+  type PersistedPipelineRun,
+  type PipelineRefreshTarget,
+  type PipelineRunWithStages
+} from "../git-cicd/git-cicd-pipeline-run-service.js";
+import type {
+  GitCicdRunProvider,
+  GitCicdRunProviderSnapshot
+} from "../git-cicd/github-actions-run-provider.js";
 import {
   GitCicdRepositorySettingsPermissionError,
   type GitCicdRepositorySettingsApplier
@@ -49,9 +71,290 @@ const deploymentId = "66666666-6666-4666-8666-666666666666";
 const handoffId = "44444444-4444-4444-8444-444444444444";
 const userId = "55555555-5555-4555-8555-555555555555";
 const sourceRepositoryId = "repo-1";
+const pipelineRunId = "77777777-7777-4777-8777-777777777777";
 const fixedNow = new Date("2026-01-01T00:00:00.000Z");
 
 type UserRecord = typeof users.$inferSelect;
+
+test("GET Pipeline Runs defaults to 20, caps at 50, and paginates newest first", async () => {
+  const pipelineRepository = new FakePipelineRepository(
+    Array.from({ length: 55 }, (_, index) => createPipelineRun(index))
+  );
+  pipelineRepository.runs.reverse();
+  const app = await buildGitCicdHandoffTestApp(new FakeGitCicdHandoffRepository(), {
+    pipelineRepository
+  });
+  const headers = await authHeaders();
+
+  const first = await app.inject({
+    headers,
+    method: "GET",
+    url: `/api/projects/${projectId}/git-cicd-pipeline-runs`
+  });
+  assert.equal(first.statusCode, 200);
+  const firstBody = first.json() as GitCicdPipelineRunListResponse;
+  assert.equal(firstBody.runs.length, 20);
+  assert.equal(firstBody.runs[0]?.commitMessage, "Commit 54");
+  assert.equal(firstBody.runs[19]?.commitMessage, "Commit 35");
+  assert.equal(firstBody.nextCursor, firstBody.runs[19]?.id);
+
+  pipelineRepository.runs.push(createPipelineRun(56));
+  const second = await app.inject({
+    headers,
+    method: "GET",
+    url: `/api/projects/${projectId}/git-cicd-pipeline-runs?cursor=${firstBody.nextCursor}`
+  });
+  assert.equal(second.statusCode, 200);
+  const secondBody = second.json() as GitCicdPipelineRunListResponse;
+  assert.equal(secondBody.runs[0]?.commitMessage, "Commit 34");
+  assert.equal(
+    secondBody.runs.some((run) => firstBody.runs.some((firstRun) => firstRun.id === run.id)),
+    false
+  );
+
+  const maximum = await app.inject({
+    headers,
+    method: "GET",
+    url: `/api/projects/${projectId}/git-cicd-pipeline-runs?limit=50`
+  });
+  assert.equal(maximum.statusCode, 200);
+  assert.equal((maximum.json() as GitCicdPipelineRunListResponse).runs.length, 50);
+
+  for (const url of [
+    `/api/projects/${projectId}/git-cicd-pipeline-runs?limit=51`,
+    `/api/projects/${projectId}/git-cicd-pipeline-runs?limit=20&unexpected=true`
+  ]) {
+    assert.equal((await app.inject({ headers, method: "GET", url })).statusCode, 400);
+  }
+
+  for (const cursor of ["missing-cursor", "foreign-project-cursor"]) {
+    if (cursor === "foreign-project-cursor") {
+      pipelineRepository.runs.push({
+        ...createPipelineRun(57),
+        id: cursor,
+        projectId: "99999999-9999-4999-8999-999999999999"
+      });
+    }
+    const invalidCursor = await app.inject({
+      headers,
+      method: "GET",
+      url: `/api/projects/${projectId}/git-cicd-pipeline-runs?cursor=${cursor}`
+    });
+    assert.equal(invalidCursor.statusCode, 400);
+    assert.deepEqual(invalidCursor.json(), {
+      error: "bad_request",
+      message: "Invalid Pipeline Run cursor"
+    });
+  }
+  await app.close();
+});
+
+test("Pipeline Run detail and incremental logs return typed ISO responses", async () => {
+  const pipelineRepository = new FakePipelineRepository([createPipelineRun(0)]);
+  pipelineRepository.logs = [1, 2, 3].map((sequence) => createPipelineLog(sequence));
+  pipelineRepository.refreshEnabled = false;
+  const app = await buildGitCicdHandoffTestApp(new FakeGitCicdHandoffRepository(), {
+    pipelineRepository
+  });
+  const headers = await authHeaders();
+
+  const detail = await app.inject({
+    headers,
+    method: "GET",
+    url: `/api/git-cicd-pipeline-runs/${pipelineRunId}`
+  });
+  assert.equal(detail.statusCode, 200);
+  const detailBody = detail.json() as GitCicdPipelineRunResponse;
+  assert.equal(detailBody.run.id, pipelineRunId);
+  assert.equal(detailBody.run.createdAt, "2026-01-01T00:00:00.000Z");
+  assert.equal(detailBody.run.stages[0]?.startedAt, "2026-01-01T00:00:00.000Z");
+
+  const logs = await app.inject({
+    headers,
+    method: "GET",
+    url: `/api/git-cicd-pipeline-runs/${pipelineRunId}/logs?sinceSequence=1`
+  });
+  assert.equal(logs.statusCode, 200);
+  const logsBody = logs.json() as GitCicdPipelineLogListResponse;
+  assert.deepEqual(logsBody.logs.map((log) => log.sequence), [2, 3]);
+  assert.equal(logsBody.nextSequence, 3);
+  assert.equal(logsBody.logs[0]?.createdAt, "2026-01-01T00:00:00.000Z");
+
+  const blockedRefresh = await app.inject({
+    headers,
+    method: "POST",
+    url: `/api/git-cicd-pipeline-runs/${pipelineRunId}/refresh`
+  });
+  assert.equal(blockedRefresh.statusCode, 404);
+  assert.deepEqual(blockedRefresh.json(), {
+    error: "not_found",
+    message: "Pipeline Run not found"
+  });
+  assert.equal(pipelineRepository.findRunRefreshTargetCalls, 1);
+
+  assert.equal(
+    (
+      await app.inject({
+        headers,
+        method: "GET",
+        url: `/api/git-cicd-pipeline-runs/${pipelineRunId}/logs?sinceSequence=0&extra=1`
+      })
+    ).statusCode,
+    400
+  );
+  await app.close();
+});
+
+test("Pipeline Run routes hide inaccessible projects and runs behind stable 404 responses", async () => {
+  const pipelineRepository = new FakePipelineRepository([createPipelineRun(0)]);
+  const handoffRepository = new FakeGitCicdHandoffRepository();
+  const otherUser = createUserRecord({ id: "88888888-8888-4888-8888-888888888888" });
+  const app = await buildGitCicdHandoffTestApp(handoffRepository, {
+    pipelineRepository,
+    userRows: [otherUser]
+  });
+  const headers = await authHeaders(otherUser.id);
+
+  for (const request of [
+    { method: "GET" as const, url: `/api/projects/${projectId}/git-cicd-pipeline-runs` },
+    { method: "GET" as const, url: `/api/git-cicd-pipeline-runs/${pipelineRunId}` },
+    { method: "GET" as const, url: `/api/git-cicd-pipeline-runs/${pipelineRunId}/logs` },
+    { method: "POST" as const, url: `/api/git-cicd-pipeline-runs/${pipelineRunId}/refresh` }
+  ]) {
+    const response = await app.inject({ ...request, headers });
+    assert.equal(response.statusCode, 404, `${request.method} ${request.url}`);
+    assert.deepEqual(response.json(), {
+      error: "not_found",
+      message: "Pipeline Run not found"
+    });
+  }
+  await app.close();
+});
+
+test("POST Pipeline Run refresh performs read-only provider sync and returns persisted detail", async () => {
+  const pipelineRepository = new FakePipelineRepository([createPipelineRun(0)]);
+  const providerCalls: string[] = [];
+  const pipelineProvider = createPipelineProvider(providerCalls);
+  const app = await buildGitCicdHandoffTestApp(new FakeGitCicdHandoffRepository(), {
+    pipelineProvider,
+    pipelineRepository
+  });
+
+  const response = await app.inject({
+    headers: await authHeaders(),
+    method: "POST",
+    url: `/api/git-cicd-pipeline-runs/${pipelineRunId}/refresh`
+  });
+
+  assert.equal(response.statusCode, 200);
+  const body = response.json() as GitCicdPipelineRunRefreshResponse;
+  assert.equal(body.run.status, "succeeded");
+  assert.equal(body.stale, false);
+  assert.equal(body.errorMessage, null);
+  assert.deepEqual(providerCalls, ["listSnapshots", "listCommitFiles"]);
+  assert.equal(pipelineRepository.persistCount, 1);
+  assert.equal(pipelineRepository.findRunRefreshTargetCalls, 1);
+  await app.close();
+});
+
+test("POST Pipeline Run refresh returns sanitized stale metadata with persisted state", async () => {
+  const pipelineRepository = new FakePipelineRepository([createPipelineRun(0)]);
+  const pipelineProvider: GitCicdRunProvider = {
+    async listSnapshots() {
+      throw new Error("github token=raw-secret provider detail");
+    },
+    async listCommitFiles() {
+      return [];
+    }
+  };
+  const app = await buildGitCicdHandoffTestApp(new FakeGitCicdHandoffRepository(), {
+    pipelineProvider,
+    pipelineRepository
+  });
+
+  const response = await app.inject({
+    headers: await authHeaders(),
+    method: "POST",
+    url: `/api/git-cicd-pipeline-runs/${pipelineRunId}/refresh`
+  });
+
+  assert.equal(response.statusCode, 200);
+  const body = response.json() as GitCicdPipelineRunRefreshResponse;
+  assert.equal(body.run.id, pipelineRunId);
+  assert.equal(body.stale, true);
+  assert.equal(
+    body.errorMessage,
+    "GitHub Actions status refresh failed; showing the last persisted state."
+  );
+  assert.equal(JSON.stringify(body).includes("raw-secret"), false);
+  await app.close();
+});
+
+test("POST project Pipeline Run discovery persists empty-history commits and reports stale fallback", async () => {
+  const pipelineRepository = new FakePipelineRepository([]);
+  const providerCalls: string[] = [];
+  const app = await buildGitCicdHandoffTestApp(new FakeGitCicdHandoffRepository(), {
+    pipelineProvider: createPipelineProvider(providerCalls),
+    pipelineRepository
+  });
+  const headers = await authHeaders();
+
+  const discovered = await app.inject({
+    headers,
+    method: "POST",
+    url: `/api/projects/${projectId}/git-cicd-pipeline-runs/refresh`
+  });
+  assert.equal(discovered.statusCode, 200);
+  const body = discovered.json() as {
+    runs: Array<{ id: string; status: string }>;
+    targets: Array<{ sourceRepositoryId: string; stale: boolean; errorMessage: string | null }>;
+    stale: boolean;
+  };
+  assert.equal(body.runs.length, 1);
+  assert.equal(body.runs[0]?.status, "succeeded");
+  assert.deepEqual(body.targets, [
+    { sourceRepositoryId, stale: false, errorMessage: null }
+  ]);
+  assert.equal(body.stale, false);
+  assert.deepEqual(providerCalls, ["listSnapshots", "listCommitFiles"]);
+
+  const staleApp = await buildGitCicdHandoffTestApp(new FakeGitCicdHandoffRepository(), {
+    pipelineProvider: {
+      async listSnapshots() {
+        throw new Error("provider token=secret");
+      },
+      async listCommitFiles() {
+        return [];
+      }
+    },
+    pipelineRepository
+  });
+  const stale = await staleApp.inject({
+    headers,
+    method: "POST",
+    url: `/api/projects/${projectId}/git-cicd-pipeline-runs/refresh`
+  });
+  assert.equal(stale.statusCode, 200);
+  assert.equal(stale.json().stale, true);
+  assert.equal(stale.json().runs.length, 1);
+  assert.equal(JSON.stringify(stale.json()).includes("secret"), false);
+
+  const otherUser = createUserRecord({ id: "88888888-8888-4888-8888-888888888888" });
+  const forbiddenApp = await buildGitCicdHandoffTestApp(new FakeGitCicdHandoffRepository(), {
+    pipelineRepository,
+    userRows: [otherUser]
+  });
+  const forbidden = await forbiddenApp.inject({
+    headers: await authHeaders(otherUser.id),
+    method: "POST",
+    url: `/api/projects/${projectId}/git-cicd-pipeline-runs/refresh`
+  });
+  assert.equal(forbidden.statusCode, 404);
+
+  await app.close();
+  await staleApp.close();
+  await forbiddenApp.close();
+});
 
 type RepositoryCall =
   | {
@@ -131,6 +434,17 @@ class FakeGitCicdHandoffRepository implements GitCicdHandoffRepository {
     createApprovedPlanArtifactRecord();
   handoff: GitCicdHandoffRecord | undefined = createHandoffRecord();
   handoffs: GitCicdHandoffRecord[] = [createHandoffRecord()];
+  monitoringConfig: GitCicdMonitoringConfigRecord | undefined = {
+    sourceRepositoryId,
+    enabled: true,
+    monitorBranch: "main",
+    appPath: { mode: "subdirectory", path: "apps/web" },
+    infraPath: { mode: "subdirectory", path: "infra" },
+    validationStatus: "valid",
+    validationMessage: null,
+    validatedAt: fixedNow,
+    updatedAt: fixedNow
+  };
 
   async findAccessibleProject(candidateProjectId: string, accessContext: ProjectAccessContext) {
     this.calls.push({
@@ -212,6 +526,12 @@ class FakeGitCicdHandoffRepository implements GitCicdHandoffRepository {
     }
 
     return this.sourceRepository;
+  }
+
+  async findMonitoringConfig(candidateSourceRepositoryId: string) {
+    return candidateSourceRepositoryId === sourceRepositoryId
+      ? this.monitoringConfig
+      : undefined;
   }
 
   // 테스트 요청도 실제 서버와 같은 승인 Deployment 조회 경계를 통과시킵니다.
@@ -418,7 +738,11 @@ test("POST /api/projects/:projectId/git-cicd-handoffs creates an internal metada
     method: "POST",
     url: `/api/projects/${projectId}/git-cicd-handoffs`,
     headers: await authHeaders(),
-    payload: createHandoffBody()
+    payload: {
+      ...createHandoffBody(),
+      staticSiteUrl: "http://app.example.com:8080/dashboard/",
+      apiBaseUrl: "https://api.example.com/v1"
+    }
   });
 
   assert.equal(response.statusCode, 201);
@@ -431,6 +755,8 @@ test("POST /api/projects/:projectId/git-cicd-handoffs creates an internal metada
   assert.equal(body.handoff.status, "draft");
   assert.equal(body.handoff.pullRequestUrl, null);
   assert.equal(body.handoff.pipelineRunUrl, null);
+  assert.equal(body.handoff.staticSiteUrl, "http://app.example.com:8080/dashboard/");
+  assert.equal(body.handoff.apiBaseUrl, "https://api.example.com/v1");
   assert.equal(body.handoff.createdByUserId, userId);
   assert.equal(providerCalls.length, 1);
   const providerCall = providerCalls[0];
@@ -1306,6 +1632,447 @@ test("GET /api/projects/:projectId/git-cicd-handoffs requires authentication", a
   await app.close();
 });
 
+test("POST /api/projects/:projectId/git-cicd-handoffs rejects sensitive Output URLs", async () => {
+  const repository = new FakeGitCicdHandoffRepository();
+  const providerCalls: GitCicdProviderCreateInput[] = [];
+  const app = await buildGitCicdHandoffTestApp(repository, {
+    provider: createProviderSpy(providerCalls)
+  });
+  const unsafeValues = [
+    "https://operator:secret@app.example.com/dashboard",
+    "https://app.example.com/dashboard?token=secret",
+    "https://app.example.com/dashboard#secret",
+    "javascript:alert('secret')",
+    "file:///tmp/private-output",
+    "not a URL"
+  ];
+
+  for (const staticSiteUrl of unsafeValues) {
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/projects/${projectId}/git-cicd-handoffs`,
+      headers: await authHeaders(),
+      payload: { ...createHandoffBody(), staticSiteUrl }
+    });
+
+    assert.equal(response.statusCode, 400, staticSiteUrl);
+    assert.equal(response.body.includes("secret"), false);
+  }
+
+  const apiQueryResponse = await app.inject({
+    method: "POST",
+    url: `/api/projects/${projectId}/git-cicd-handoffs`,
+    headers: await authHeaders(),
+    payload: {
+      ...createHandoffBody(),
+      apiBaseUrl: "https://api.example.com/v1?signature=secret"
+    }
+  });
+  assert.equal(apiQueryResponse.statusCode, 400);
+  assert.equal(apiQueryResponse.body.includes("secret"), false);
+  assert.equal(providerCalls.length, 0);
+  assert.equal(repository.calls.some((call) => call.name === "createHandoff"), false);
+
+  await app.close();
+});
+
+test("POST Git/CI/CD handoff is blocked until monitoring is enabled and valid", async () => {
+  const repository = new FakeGitCicdHandoffRepository();
+  repository.monitoringConfig = {
+    ...repository.monitoringConfig!,
+    validationStatus: "required"
+  };
+  const providerCalls: GitCicdProviderCreateInput[] = [];
+  const app = await buildGitCicdHandoffTestApp(repository, {
+    provider: createProviderSpy(providerCalls)
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/projects/${projectId}/git-cicd-handoffs`,
+    headers: await authHeaders(),
+    payload: createHandoffBody()
+  });
+
+  assert.equal(response.statusCode, 409);
+  assert.match(response.json().message, /monitoring/i);
+  assert.equal(providerCalls.length, 0);
+  await app.close();
+});
+
+test("GET cicd-monitoring ensures and returns a durable default config", async () => {
+  const monitoringRepository = new FakeMonitoringRepository();
+  const app = await buildGitCicdHandoffTestApp(new FakeGitCicdHandoffRepository(), {
+    monitoringRepository,
+    monitoringProvider: createMonitoringProvider()
+  });
+
+  const response = await app.inject({
+    method: "GET",
+    url: `/api/projects/${projectId}/source-repositories/${sourceRepositoryId}/cicd-monitoring`,
+    headers: await authHeaders()
+  });
+
+  assert.equal(response.statusCode, 200);
+  const body = response.json() as GitCicdMonitoringConfigResponse;
+  assert.equal(body.config.enabled, true);
+  assert.equal(body.config.monitorBranch, "main");
+  assert.deepEqual(body.config.appPath, { mode: "repository_root", path: "." });
+  assert.equal(body.config.validationStatus, "required");
+  assert.equal(monitoringRepository.config?.sourceRepositoryId, sourceRepositoryId);
+  await app.close();
+});
+
+test("PUT cicd-monitoring validates and persists a normalized enabled config", async () => {
+  const monitoringRepository = new FakeMonitoringRepository();
+  const app = await buildGitCicdHandoffTestApp(new FakeGitCicdHandoffRepository(), {
+    monitoringRepository,
+    monitoringProvider: createMonitoringProvider()
+  });
+
+  const response = await app.inject({
+    method: "PUT",
+    url: `/api/projects/${projectId}/source-repositories/${sourceRepositoryId}/cicd-monitoring`,
+    headers: await authHeaders(),
+    payload: {
+      enabled: true,
+      monitorBranch: "main",
+      appPath: { mode: "subdirectory", path: "./apps/web/" },
+      infraPath: { mode: "repository_root", path: "ignored" },
+      userAcceptedChangeId: "accepted-monitoring-1"
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+  const body = response.json() as GitCicdMonitoringConfigResponse;
+  assert.deepEqual(body.config.appPath, { mode: "subdirectory", path: "apps/web" });
+  assert.deepEqual(body.config.infraPath, { mode: "repository_root", path: "." });
+  assert.equal(body.config.validationStatus, "valid");
+  await app.close();
+});
+
+test("disabled PUT cicd-monitoring does not require GitHub App configuration", async () => {
+  const previousGitHubEnv = {
+    appId: process.env.GIT_APP_ID,
+    appSlug: process.env.GIT_APP_SLUG,
+    privateKey: process.env.GIT_APP_PRIVATE_KEY_BASE64,
+    callbackUrl: process.env.GIT_APP_CALLBACK_URL
+  };
+  delete process.env.GIT_APP_ID;
+  delete process.env.GIT_APP_SLUG;
+  delete process.env.GIT_APP_PRIVATE_KEY_BASE64;
+  delete process.env.GIT_APP_CALLBACK_URL;
+  const app = await buildGitCicdHandoffTestApp(new FakeGitCicdHandoffRepository(), {
+    monitoringRepository: new FakeMonitoringRepository()
+  });
+
+  try {
+    const response = await app.inject({
+      method: "PUT",
+      url: `/api/projects/${projectId}/source-repositories/${sourceRepositoryId}/cicd-monitoring`,
+      headers: await authHeaders(),
+      payload: {
+        enabled: false,
+        monitorBranch: "main",
+        appPath: { mode: "repository_root", path: "." },
+        infraPath: { mode: "repository_root", path: "." },
+        userAcceptedChangeId: "accepted-monitoring-1"
+      }
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.json().config.enabled, false);
+  } finally {
+    await app.close();
+    restoreEnvironmentVariable("GIT_APP_ID", previousGitHubEnv.appId);
+    restoreEnvironmentVariable("GIT_APP_SLUG", previousGitHubEnv.appSlug);
+    restoreEnvironmentVariable("GIT_APP_PRIVATE_KEY_BASE64", previousGitHubEnv.privateKey);
+    restoreEnvironmentVariable("GIT_APP_CALLBACK_URL", previousGitHubEnv.callbackUrl);
+  }
+});
+
+test("PUT cicd-monitoring requires an accepted change and returns stable validation errors", async () => {
+  const app = await buildGitCicdHandoffTestApp(new FakeGitCicdHandoffRepository(), {
+    monitoringRepository: new FakeMonitoringRepository(),
+    monitoringProvider: {
+      async validateBranch() {
+        return false;
+      },
+      async validateDirectory() {
+        return "directory";
+      }
+    }
+  });
+  const payload = {
+    enabled: true,
+    monitorBranch: "missing",
+    appPath: { mode: "repository_root", path: "." },
+    infraPath: { mode: "repository_root", path: "." }
+  };
+
+  const missingAcceptance = await app.inject({
+    method: "PUT",
+    url: `/api/projects/${projectId}/source-repositories/${sourceRepositoryId}/cicd-monitoring`,
+    headers: await authHeaders(),
+    payload
+  });
+  assert.equal(missingAcceptance.statusCode, 400);
+
+  const invalidBranch = await app.inject({
+    method: "PUT",
+    url: `/api/projects/${projectId}/source-repositories/${sourceRepositoryId}/cicd-monitoring`,
+    headers: await authHeaders(),
+    payload: { ...payload, userAcceptedChangeId: "accepted-monitoring-1" }
+  });
+  assert.equal(invalidBranch.statusCode, 422);
+  assert.equal(invalidBranch.json().code, "MONITOR_BRANCH_NOT_FOUND");
+  await app.close();
+});
+
+class FakeMonitoringRepository implements GitCicdMonitoringRepository {
+  config: GitCicdMonitoringConfigRecord | undefined;
+
+  async findAccessibleSourceRepository(
+    candidateProjectId: string,
+    candidateSourceRepositoryId: string,
+    accessContext: ProjectAccessContext
+  ) {
+    if (
+      candidateProjectId !== projectId ||
+      candidateSourceRepositoryId !== sourceRepositoryId ||
+      accessContext.userId !== userId
+    ) {
+      return undefined;
+    }
+    return {
+      id: sourceRepositoryId,
+      projectId,
+      provider: "github" as const,
+      status: "active" as const,
+      githubInstallationId: "42",
+      owner: "owner",
+      name: "repo",
+      defaultBranch: "main"
+    };
+  }
+
+  async findConfig(candidateSourceRepositoryId: string) {
+    return candidateSourceRepositoryId === sourceRepositoryId ? this.config : undefined;
+  }
+
+  async ensureDefaultConfig(input: Omit<GitCicdMonitoringConfigRecord, "updatedAt">) {
+    this.config ??= { ...input, updatedAt: fixedNow };
+    return this.config;
+  }
+
+  async upsertConfig(input: Omit<GitCicdMonitoringConfigRecord, "updatedAt">) {
+    this.config = { ...input, updatedAt: fixedNow };
+    return this.config;
+  }
+}
+
+function createMonitoringProvider(): GitCicdMonitoringProvider {
+  return {
+    async validateBranch() {
+      return true;
+    },
+    async validateDirectory() {
+      return "directory";
+    }
+  };
+}
+
+function restoreEnvironmentVariable(name: string, value: string | undefined): void {
+  if (value === undefined) {
+    delete process.env[name];
+    return;
+  }
+  process.env[name] = value;
+}
+
+class FakePipelineRepository implements GitCicdPipelinePersistenceRepository {
+  logs: PersistedPipelineLog[] = [];
+  persistCount = 0;
+  refreshEnabled = true;
+  findRunRefreshTargetCalls = 0;
+
+  constructor(readonly runs: PipelineRunWithStages[]) {}
+
+  async listRefreshTargets(candidateProjectId: string) {
+    return this.refreshEnabled && candidateProjectId === projectId
+      ? [createPipelineRefreshTarget()]
+      : [];
+  }
+
+  async findRefreshTarget(candidateProjectId: string, candidateSourceRepositoryId: string) {
+    return this.refreshEnabled && candidateProjectId === projectId && candidateSourceRepositoryId === sourceRepositoryId
+      ? createPipelineRefreshTarget()
+      : undefined;
+  }
+
+  async findPipelineRun(candidatePipelineRunId: string) {
+    return this.runs.find((run) => run.id === candidatePipelineRunId);
+  }
+
+  async findRunRefreshTarget(candidatePipelineRunId: string) {
+    this.findRunRefreshTargetCalls += 1;
+    const run = await this.findPipelineRun(candidatePipelineRunId);
+    return this.refreshEnabled && run
+      ? { ...createPipelineRefreshTarget(), commitSha: run.commitSha }
+      : undefined;
+  }
+
+  async listProjectPipelineRuns(candidateProjectId: string) {
+    return this.runs.filter((run) => run.projectId === candidateProjectId);
+  }
+
+  async listProjectPipelineRunPage(input: {
+    projectId: string;
+    cursor?: string;
+    limit: number;
+  }) {
+    const scoped = this.runs
+      .filter((run) => run.projectId === input.projectId)
+      .sort(
+        (left, right) =>
+          right.createdAt.getTime() - left.createdAt.getTime() ||
+          right.id.localeCompare(left.id)
+      );
+    const cursorIndex = input.cursor
+      ? scoped.findIndex((run) => run.id === input.cursor)
+      : -1;
+    if (input.cursor && cursorIndex < 0) {
+      throw new GitCicdPipelineRunInvalidCursorError();
+    }
+    return scoped.slice(cursorIndex + 1, cursorIndex + 1 + input.limit);
+  }
+
+  async listPipelineLogs(candidatePipelineRunId: string, sinceSequence: number) {
+    return this.logs.filter(
+      (log) => log.pipelineRunId === candidatePipelineRunId && log.sequence > sinceSequence
+    );
+  }
+
+  async findPipelineRunsByCommitShas(
+    _candidateSourceRepositoryId: string,
+    _commitShas: readonly string[]
+  ) {
+    return new Map<string, PersistedPipelineRun>();
+  }
+
+  async persistSnapshot(input: {
+    run: PersistedPipelineRun;
+    stages: PipelineRunWithStages["stages"];
+    logs: PersistedPipelineLog[];
+  }) {
+    this.persistCount += 1;
+    const existingIndex = this.runs.findIndex((run) => run.commitSha === input.run.commitSha);
+    const existing = this.runs[existingIndex];
+    const id = existing?.id ?? input.run.id;
+    const persisted = {
+      ...input.run,
+      id,
+      stages: input.stages.map((stage) => ({ ...stage, pipelineRunId: id }))
+    };
+    if (existingIndex >= 0) this.runs.splice(existingIndex, 1, persisted);
+    else this.runs.push(persisted);
+    this.logs = input.logs.map((log) => ({ ...log, pipelineRunId: id }));
+    return persisted;
+  }
+}
+
+function createPipelineRefreshTarget(): PipelineRefreshTarget {
+  return {
+    projectId,
+    sourceRepositoryId,
+    installationId: "installation-1",
+    owner: "sketchcatch",
+    name: "infra-live",
+    monitorBranch: "main",
+    appPath: { mode: "subdirectory", path: "apps/web" },
+    infraPath: { mode: "subdirectory", path: "infra" },
+    handoffId: null,
+    appUrl: null,
+    apiUrl: null
+  };
+}
+
+function createPipelineRun(index: number): PipelineRunWithStages {
+  const createdAt = new Date(fixedNow.getTime() + index * 60_000);
+  const id = index === 0 ? pipelineRunId : `pipeline-run-${index}`;
+  return {
+    id,
+    projectId,
+    sourceRepositoryId,
+    handoffId: null,
+    commitSha: `${index}`.padStart(40, "a"),
+    commitMessage: `Commit ${index}`,
+    branch: "main",
+    changeScope: "app_and_infra",
+    status: "running",
+    statusMessage: "Workflow: running",
+    pipelineRunUrl: `https://example.invalid/actions/runs/${index}`,
+    appUrl: null,
+    apiUrl: null,
+    startedAt: fixedNow,
+    finishedAt: null,
+    upstreamOrderingToken: "2026-01-01T00:00:00.000Z|SketchCatch App:1:1",
+    logRevision: "SketchCatch App:1:1",
+    lastRefreshedAt: fixedNow,
+    createdAt,
+    stages: [
+      {
+        id: `stage-${index}`,
+        pipelineRunId: id,
+        kind: "detect",
+        status: "succeeded",
+        runUrl: null,
+        startedAt: fixedNow,
+        finishedAt: fixedNow
+      }
+    ]
+  };
+}
+
+function createPipelineLog(sequence: number): PersistedPipelineLog {
+  return {
+    id: `log-${sequence}`,
+    pipelineRunId,
+    stageId: "stage-0",
+    sequence,
+    level: "info",
+    message: `Log ${sequence}`,
+    createdAt: fixedNow
+  };
+}
+
+function createPipelineProvider(calls: string[]): GitCicdRunProvider {
+  const snapshot: GitCicdRunProviderSnapshot = {
+    commitSha: createPipelineRun(0).commitSha,
+    commitMessage: "Commit 0",
+    branch: "main",
+    workflowName: "SketchCatch",
+    runUrl: "https://example.invalid/actions/runs/0",
+    status: "succeeded",
+    upstreamOrderingToken: "2026-01-01T00:01:00.000Z|SketchCatch App:1:1",
+    logRevision: "SketchCatch App:1:1",
+    startedAt: fixedNow,
+    finishedAt: fixedNow,
+    jobs: [],
+    logs: []
+  };
+  return {
+    async listSnapshots() {
+      calls.push("listSnapshots");
+      return [snapshot];
+    },
+    async listCommitFiles() {
+      calls.push("listCommitFiles");
+      return ["apps/web/page.tsx"];
+    }
+  };
+}
+
 type GitCicdRouteTestOptions = {
   provider?: GitCicdHandoffProvider;
   runtimeCache?: RuntimeCache;
@@ -1316,6 +2083,10 @@ type GitCicdRouteTestOptions = {
   ) => GitCicdRepositorySettingsApplier;
   githubOAuthFetch?: typeof fetch;
   awsRoleDiffGateway?: AwsRoleDiffGateway;
+  monitoringRepository?: GitCicdMonitoringRepository;
+  monitoringProvider?: GitCicdMonitoringProvider;
+  pipelineRepository?: GitCicdPipelinePersistenceRepository;
+  pipelineProvider?: GitCicdRunProvider;
 };
 
 async function buildGitCicdHandoffTestApp(
@@ -1341,6 +2112,18 @@ async function buildGitCicdHandoffTestApp(
     prefix: "/api",
     getDatabaseClient: () => fakeAuthDb.client,
     createGitCicdHandoffRepository: () => repository,
+    ...(routeOptions.monitoringRepository
+      ? { createGitCicdMonitoringRepository: () => routeOptions.monitoringRepository! }
+      : {}),
+    ...(routeOptions.monitoringProvider
+      ? { gitCicdMonitoringProvider: routeOptions.monitoringProvider }
+      : {}),
+    ...(routeOptions.pipelineRepository
+      ? { createGitCicdPipelinePersistenceRepository: () => routeOptions.pipelineRepository! }
+      : {}),
+    ...(routeOptions.pipelineProvider
+      ? { gitCicdRunProvider: routeOptions.pipelineProvider }
+      : {}),
     ...(routeOptions.provider ? { gitCicdHandoffProvider: routeOptions.provider } : {}),
     ...(routeOptions.repositorySettingsApplier
       ? { gitCicdRepositorySettingsApplier: routeOptions.repositorySettingsApplier }

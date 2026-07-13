@@ -195,7 +195,13 @@ function selectPreviewAreaNodes(
     degree: degreeByNodeId.get(node.id) ?? 0,
     runtimeDegree: runtimeDegreeByNodeId.get(node.id) ?? 0
   }));
-  const rootAreas = annotatedAreaNodes.filter(({ depth }) => depth === 0);
+  const rootAreas = annotatedAreaNodes
+    .filter(({ depth }) => depth === 0)
+    .sort((left, right) =>
+      right.runtimeDegree - left.runtimeDegree ||
+      right.degree - left.degree ||
+      left.sourceIndex - right.sourceIndex
+    );
   const nestedAreas = annotatedAreaNodes.filter(({ depth }) => depth > 0);
   const connectedNestedAreas = nestedAreas
     .filter(({ runtimeDegree }) => runtimeDegree > 0)
@@ -207,8 +213,9 @@ function selectPreviewAreaNodes(
   // If that flow has no area edge (for example a small VPC/Subnet template), retain its
   // first nested frame so the containment relationship stays legible.
   return [
-    ...rootAreas,
-    ...(connectedNestedAreas.length > 0 ? connectedNestedAreas : nestedAreas)
+    ...rootAreas.slice(0, 1),
+    ...(connectedNestedAreas.length > 0 ? connectedNestedAreas : nestedAreas),
+    ...rootAreas.slice(1)
   ]
     .slice(0, MAX_VISIBLE_AREA_NODES)
     .map(({ node }) => node);

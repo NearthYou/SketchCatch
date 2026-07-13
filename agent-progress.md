@@ -5,204 +5,32 @@ Short English-only working log for the current agent context. Older records are 
 ## Current Verified State
 
 - Branch: `fix/ys/363-uiux-개선`.
-- Actual usage returns a six-month comparison with account totals, tagged project actuals, and clearly marked fallback allocations.
+- PR #366 preserves six Catalog-backed AWS Template Boards with 103 Terraform-deployable Resources and 28 parameterless Design nodes.
+- The current `dev` Deployment/CI/CD console split is integrated without restoring the retired monolithic panel.
+- Workspace deployment context counts only `isTerraformDeployableNode` results and passes that value into the Direct Deployment screen; CI/CD remains a separate screen.
+- Migrations `0032` and `0033` came from `dev` and have not been executed by this gg workstream.
 
 ## Session Record
-### 2026-07-13 - Refine deployment preflight findings UI
 
-- Restored the Step 2 heading and content to one vertical flow by removing stale grid placement.
-- Rebuilt the preflight summary, severity badges, finding metadata, and actions around `DESIGN.md` tokens and Korean-first labels.
-- Verification: 7 focused pre-deployment tests, lint, typecheck, and build passed. The full Web suite retained 7 unrelated baseline failures (1027/1034 passed).
+### 2026-07-13 - Resolve dev merge conflicts on the UI/UX branch
 
-### 2026-07-13 - Compact deployment console action icons
+- Kept the `dev` Deployment/CI/CD console split and the thin `DeploymentPanel` adapter instead of restoring the retired monolith.
+- Ported this branch's compact deployment actions and pre-deployment finding layout into `DirectDeploymentScreen`.
+- Preserved the shared Template dropdown UI while adopting `dev` Resource and relationship count helpers.
+- Resolved test coverage against the new split source files and retained both branches' regression contracts.
+- Verification: 100 focused Template and workspace regressions passed; harness, lint, typecheck, and build passed. Lint retains one pre-existing unused-argument warning.
 
-- Constrained deployment primary, secondary, and danger action icons to 16 px so browser-default SVG dimensions cannot expand the buttons.
-- Added a focused source-level regression for the deployment action icon size.
-- Verification: focused regression, lint, typecheck, build, diff check, and harness passed. Lint retains one unrelated `setNow` warning.
-- Full `pnpm test -- --output-logs=errors-only` ran; the new regression passed and the Web package retains 7 unrelated baseline failures (1026/1033 passed).
-- Review: Standards and Spec reviews found no issues. Authenticated browser visual QA remained unavailable.
+### 2026-07-13 - Integrate current dev into PR #366
 
-### 2026-07-13 - Add actual-usage monthly cost comparison
-
-- Added six-month account and project monthly trends, MTD forecast, and previous-month comparison to the existing cost usage response.
-- Preserved `SketchCatchProjectId` monthly actuals, reconciled partial tag coverage against each account month, and marked only allocated months as estimated.
-- Added responsive comparison cards and bars before the daily chart with per-month `집계 중` and `추정` states.
-- Verification: 42 focused API/Web tests passed; lint, typecheck, build, diff check, and harness passed. Lint retains one unrelated `setNow` warning.
-- Full `pnpm test -- --output-logs=errors-only` ran; the Web package retains 7 unrelated baseline failures while all cost tests pass.
-- Review: final Standards and Spec reviews found no remaining issues. Authenticated browser visual QA was unavailable because the in-app browser had no session and Chrome control was unavailable.
-
-### 2026-07-13 - Unify Dashboard dropdowns and repair Template search alignment
-
-- Replaced live Projects, Templates, Costs, and Settings selects with one white 42px Pretendard control, then restored the Template search field's grid layout so its icon and text stay vertically centered.
-- Verification: full tests, focused dropdown and search-alignment regressions, lint, typecheck, build, diff check, and harness pass; lint retains one unrelated API `setNow` warning. Authenticated visual QA was unavailable because the in-app browser had no session and Chrome control was unavailable.
-
-### 2026-07-13 - Restore saved architecture thumbnails above project cards
-
-- Restored Dashboard thumbnails, stacked previews above details, removed duplicate headings and Draft badges, clarified page copy, widened filters, normalized action-menu icons, and compacted timestamps.
-- Reused each saved Project Draft `DiagramJson`, preserving authored node positions and edges in the SVG thumbnail.
-- Verification: focused thumbnail tests, lint, typecheck, build, diff check, and harness pass; lint retains one unrelated API `setNow` warning. Authenticated visual QA was unavailable because the in-app browser had no session and Chrome control was unavailable.
-
-### 2026-07-13 - Split estimated and actual project costs with folder tabs
-
-- Added deployment-aware cost contracts across Direct Deployment and Git/CI/CD, including Destroy lifecycle handling.
-- Added separate estimated-cost and actual-usage panels, project scoping, honest sample/allocation copy, keyboard tabs, and the requested compact folder-style tab surface from `DESIGN.md`; removed the final header and tab helper copy per visual feedback.
-- Follow-up UX: direct expected-user input with validation, refresh feedback on both normal and empty states, and scroll-free responsive folder tabs.
-- Follow-up commits: `ad7fb94b`, `104cb8bc`, `c80dac82`, `aaccecfa`.
-- Commits: `4819f64c`, `ff16587d`, `ac29756a`, `da99fdb7`, `a0aeefe0`.
-- Verification: 6 focused API tests, 19 focused Web tests, lint, typecheck, build, and harness pass. Lint retains one unrelated unused-argument warning.
-- Risk: authenticated visual browser QA was blocked because the in-app browser had no session and Chrome control was unavailable. The full Web suite retains seven unrelated baseline failures outside cost files.
-
-### 2026-07-13 - Repair Terraform nested-block merge regression
-
-- Fast-forwarded the local branch to the remote `dev` merge commit that CI evaluated and reproduced the duplicate `aws_launch_template` key failure.
-- Consolidated both branch variants into one Launch Template nested-block set while preserving IAM profile, metadata, monitoring, network interface, and tag support.
-- Kept the pending direct-resource rename boundary fix and its regression intact across the fast-forward.
-- Verification: full typecheck, 20 focused Terraform/rename regressions, lint, build, harness, and diff checks pass. Lint retains one pre-existing API unused-argument warning.
-
-### 2026-07-13 - Add and review diagram-based Live Observation for ECS Fargate and ASG
-
-- Added diagram-derived main traffic paths, REST polling-compatible snapshots, CloudWatch Agent/ASG and ECS Fargate observability, and presentation-focused capacity visualization.
-- Moved AI simulation results out of the chat dock and kept bottleneck, cost, and failure analysis in the simulation panel.
-- Represented each accepted request as one 28px particle moving sequentially across analyzed connector segments; observation remains idle until traffic is explicitly started.
-- Final review added metadata-free ECS/ASG capacity inference scoped to the selected controller, five-request bursts, disconnect-safe SSE startup, automatically expiring per-observation simulated traffic, metric-correct request thresholds, real Traffic API audience links with explicit simulation fallback, and polling listener cleanup.
-- Verification: focused Web tests passed 82/82 plus 9 diagram tests, focused API tests passed 38/38 plus 18 service/route tests; harness, lint, typecheck, and build passed. No AWS or Terraform mutation ran.
-- PR review: Kubernetes `depends_on` addresses now render as references and both polling/SSE delay messages use valid Korean text; 21 Terraform and 31 modal tests passed.
-
-### 2026-07-12 - Implement issue #349 repository template recommendations
-
-- Goal: Extend connected Repository Analysis into a template candidate recommendation flow for issue #349.
-- Completed:
-  - Added shared deployment type, dynamic question, answer, and template recommendation DTOs.
-  - Extended Repository Analysis results with inferred deployment type, CI/CD default, max-five questions, and supported template candidates.
-  - Added backend recommendation endpoint for user deployment type, CI/CD, and answer payloads.
-  - Kept final template validation constrained to supported `TemplateId` values from stored analysis or recommendation candidates.
-  - Updated the repository start UI with deployment single-select, CI/CD checkbox, dynamic questions, and candidate cards.
-  - Documented the contract in `docs/data-models.md`.
-- Verification:
-  - `pnpm --filter @sketchcatch/types typecheck`
-  - `pnpm --filter @sketchcatch/api typecheck`
-  - `pnpm --filter @sketchcatch/web typecheck`
-  - `pnpm --dir apps/api exec tsx --test src/source-repositories/repository-analysis.test.ts src/routes/source-repositories.test.ts src/source-repositories/source-repository-service.test.ts`
-  - `pnpm --dir apps/web exec tsx --test features/workspace/api.test.ts features/workspace/project-github-settings.test.ts features/workspace/repository-start-template-recommendation.test.ts`
-  - `pnpm harness:check`
-  - `pnpm lint` passed with the pre-existing `live-observations` `setNow` warning.
-  - `pnpm typecheck`
-  - `pnpm build`
-  - `git diff --check` passed with CRLF conversion warnings only.
-- Risk:
-  - No GitHub PR, cloud deployment, Terraform apply, or infrastructure mutation was run.
-
-### 2026-07-12 - Handle missing Source Repository DB migrations
-
-- Goal: Diagnose the raw SQL internal error shown when starting from a GitHub repository with an unmigrated API database.
-- Completed:
-  - Confirmed the failing query targets `source_repositories` columns added by existing migrations, especially the repository analysis columns.
-  - Added route-level detection for PostgreSQL undefined table/column errors on `source_repositories`.
-  - Returned a stable `service_unavailable` / `DATABASE_MIGRATION_REQUIRED` response instead of leaking the Drizzle query and params.
-  - Added the web API error translation so Repository start screens show an actionable migration message.
-- Verification:
-  - `pnpm --dir apps/api exec tsx --test src/routes/source-repositories.test.ts`
-  - `pnpm --dir apps/web exec tsx --test features/workspace/api-client-error-message.test.ts`
-  - `pnpm --dir apps/api typecheck`
-  - `pnpm --dir apps/web typecheck`
-- Risk:
-  - The actual runtime DB still needs `pnpm --filter @sketchcatch/api db:migrate` from a shell with `DATABASE_URL` configured.
-
-### 2026-07-12 - Move GitHub permission expansion to settings
-
-- Goal: Keep Repository start focused on selecting/analyzing repositories while managing GitHub App repository permission expansion from project settings.
-- Completed:
-  - Removed direct GitHub App install URL opening from the Repository start screen.
-  - Replaced the Repository start permission action with a project GitHub settings link.
-  - Changed the GitHub App callback permission action to route to project GitHub settings.
-  - Added source-level regression coverage so start/callback screens no longer import `createGitHubSourceRepositoryInstallUrl`.
-- Verification:
-  - `pnpm --dir apps/web exec tsx --test features/workspace/repository-start-template-recommendation.test.ts features/workspace/github-callback-route.test.ts`
-  - `pnpm --dir apps/web typecheck`
-  - `pnpm harness:check`
-  - `pnpm lint` passed with the pre-existing `live-observations` `setNow` warning.
-  - `pnpm typecheck`
-  - `pnpm build`
-
-### 2026-07-12 - Add public GitHub URL repository start
-
-- Goal: Let users start Repository Analysis by pasting a public GitHub repository URL without first connecting GitHub in settings.
-- Completed:
-  - Added a Repository URL and branch form to the Repository start screen.
-  - Wired the form to the existing public `/ai/source-repository-analysis` client.
-  - Displayed detected signals, evidence files, recommendation reason, and the matched template.
-  - Saved the recommended template board to the project draft before opening the workspace.
-  - Kept URL analysis visible even if connected GitHub repository status cannot be loaded.
-  - Added a project settings handoff when public evidence cannot be read, covering private/restricted repositories and branch mismatches.
-- Verification:
-  - `pnpm --dir apps/web exec tsx --test features/workspace/repository-start-template-recommendation.test.ts`
-  - `pnpm --dir apps/web typecheck`
-  - `pnpm harness:check`
-  - `pnpm lint` passed with the pre-existing `live-observations` `setNow` warning.
-  - `pnpm typecheck`
-  - `pnpm build`
-  - `git diff --check` passed with CRLF conversion warnings only.
-  - `pnpm lint` passed with the pre-existing `live-observations` `setNow` warning; `pnpm typecheck`, `pnpm build`, and `pnpm harness:check` passed.
-
-### 2026-07-12 - Inline public Repository URL start on new project screen
-
-- Goal: Keep GitHub Repository start on the new project screen and remove the separate Repository URL entry step from the primary journey.
-- Completed:
-  - Changed Repository start action to open an inline URL/branch panel instead of routing to `/workspace/repository`.
-  - Wired public GitHub URL analysis into the new project screen, creating the project only after a supported template recommendation is found.
-  - Saved the recommended template board draft before opening the workspace.
-  - Kept private/restricted repository guidance pointed at GitHub permissions in settings.
-  - Added regression coverage for the inline Repository URL form action.
-- Verification:
-  - `pnpm --dir apps/web exec tsx --test app/workspace/new/workspace-start-options.test.ts features/workspace/repository-start-template-recommendation.test.ts`
-  - `pnpm --dir apps/web typecheck`
-  - `pnpm harness:check`
-  - `pnpm lint` passed with the pre-existing `live-observations` `setNow` warning.
-  - `pnpm typecheck`
-  - `pnpm build` passed; Next/Turbopack emitted a non-fatal `.next/dev/cache/turbopack` symlink metadata warning.
-  - `git diff --check` passed with CRLF conversion warnings only.
-  - `pnpm harness:check`
-  - `pnpm lint` passed with the pre-existing `live-observations` `setNow` warning.
-  - `pnpm typecheck`
-  - `pnpm build`
-  - `git diff --check` passed with CRLF conversion warnings only.
-- Risk:
-  - Browser visual verification was skipped because Playwright/browser automation dependencies are not installed in this worktree.
-
-### 2026-07-13 - Refine actual cost notice and chart readability
-
-- Goal: Clarify fallback project cost allocation and make the actual usage chart readable at a glance.
-- Completed:
-  - Reworded the fallback allocation notice to explain that AWS project cost data may arrive later.
-  - Added readable date labels on the X axis and dollar labels on the Y axis.
-  - Limited long ranges to six date ticks and added a stable zero-cost `$0`, `$2`, `$4` scale.
-  - Reduced data points to a 2 px radius and aligned chart colors and captions with `DESIGN.md`.
-  - Prevented duplicate Y-axis labels for one-cent usage data.
-- Verification:
-  - `pnpm --dir apps/web exec tsx --test features/costs/cost-usage-charts.test.ts features/costs/cost-dashboard-client.test.ts features/costs/cost-usage-copy.test.ts` (19 passed)
-  - `pnpm test -- --output-logs=errors-only`
-  - `pnpm lint` passed with the pre-existing `live-observations` `setNow` warning.
-  - `pnpm typecheck`
-  - `pnpm build`
-  - `pnpm harness:check`
-  - `git diff --check`
-- Risk:
-  - Authenticated browser visual QA was not available; the supplied screenshot and source-level UI regression tests were used as the visual contract.
-
-### 2026-07-13 - Stabilize actual cost chart typography
-
-- Goal: Keep chart typography compact and professional at every dashboard width.
-- Completed:
-  - Recomputed the SVG coordinate width from its rendered container with `ResizeObserver` so labels no longer scale with the card.
-  - Fixed the chart height at 220 px and retained the `DESIGN.md` 13 px caption token at its true rendered size.
-  - Added a source-level regression for responsive width, fixed height, and typography token usage.
-- Verification:
-  - 16 focused chart tests and the full test suite passed.
-  - `pnpm lint` passed with the pre-existing `live-observations` `setNow` warning.
-  - `pnpm typecheck`, `pnpm build`, and `git diff --check` passed.
-- Review:
-  - Spec review found no issues; standards review finding about the caption token was fixed in `dcda929b`.
+- Merged `origin/dev` at `39118a79`, including the completed PR #368 Deployment/CI/CD console and Web baseline updates.
+- Resolved the deployment conflict by keeping the new console adapter and moving the branch's deployable-Resource count contract into `DirectDeploymentScreen`.
+- Preserved both Template regression contracts: the 103 deployable Resource total and the updated 26-node Live Observation baseline.
+- Archived completed PR #368 and Template/PR #366 records instead of combining two stale active workstreams.
+- Verification: no conflict markers or whitespace errors; 110 focused conflict regressions, harness, lint, typecheck, and build passed. Lint retains one pre-existing unused-argument warning.
+- Root tests passed 1,325/1,328; the three failures are unchanged Windows-only path expectations shared by the pre-merge branch and `origin/dev`, not conflict-resolution regressions.
+- Risk: no Terraform Apply/Destroy, AWS mutation, deployment API mutation, or database migration execution is part of this merge.
 
 ## Next Action
 
-- Confirm the monthly comparison visually with authenticated Cost Explorer data when browser automation is available.
+- Commit the resolved merge after the required checks pass.
+- Run migrations and credentialed browser acceptance only with an approved safe environment.

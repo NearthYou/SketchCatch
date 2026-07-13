@@ -113,10 +113,12 @@ export async function runDeploymentDestroyPlan(
         awsConnection,
         options.awsStsGateway ?? createAwsSdkStsGateway()
       ));
-  const planArtifactStorage =
-    options.planArtifactStorage ?? createS3DeploymentPlanArtifactStorage();
-  const applyArtifactStorage =
-    options.applyArtifactStorage ?? createS3DeploymentApplyArtifactStorage();
+  let planArtifactStorage = options.planArtifactStorage;
+  const getPlanArtifactStorage = () =>
+    (planArtifactStorage ??= createS3DeploymentPlanArtifactStorage());
+  let applyArtifactStorage = options.applyArtifactStorage;
+  const getApplyArtifactStorage = () =>
+    (applyArtifactStorage ??= createS3DeploymentApplyArtifactStorage());
   const generatePlanArtifactId = options.generatePlanArtifactId ?? randomUUID;
   const readTerraformArtifactFile = options.readTerraformArtifactFile ?? readFile;
   const writeTerraformStateFile = options.writeTerraformStateFile ?? writeFile;
@@ -152,17 +154,11 @@ export async function runDeploymentDestroyPlan(
         : Promise.resolve(undefined),
       requireDeploymentAwsConnection(deployment, input.accessContext, repository)
     ]);
-    const [preparedWorkspace, stateBuffer] = await Promise.all([
-      prepareTerraformWorkspace({
-        objectKey: artifact.objectKey,
-        fileName: artifact.fileName,
-        contentType: artifact.contentType
-      }),
-      applyArtifactStorage.downloadDeploymentState({
-        deploymentId: deployment.id,
-        objectKey: deployment.stateObjectKey ?? ""
-      })
-    ]);
+    const preparedWorkspace = await prepareTerraformWorkspace({
+      objectKey: artifact.objectKey,
+      fileName: artifact.fileName,
+      contentType: artifact.contentType
+    });
     workspace = preparedWorkspace;
 
     const terraformArtifactContent = await readTerraformArtifactFile(workspace.mainFilePath);
@@ -180,7 +176,7 @@ export async function runDeploymentDestroyPlan(
       terraformArtifactSha256
     });
 
-    const [awsCredentials] = await Promise.all([
+    const [awsCredentials, stateBuffer] = await Promise.all([
       prepareAwsCredentialsForDestroyPlan({
         deploymentId: deployment.id,
         awsConnection,
@@ -190,11 +186,17 @@ export async function runDeploymentDestroyPlan(
           failureRecorded = true;
         }
       }),
+      getApplyArtifactStorage().downloadDeploymentState({
+        deploymentId: deployment.id,
+        objectKey: deployment.stateObjectKey ?? ""
+      })
+    ]);
+    await Promise.all([
       writeTerraformStateFile(join(preparedWorkspace.workdir, "terraform.tfstate"), stateBuffer),
       restoreTerraformLockFile({
         deploymentId: deployment.id,
         workspace: preparedWorkspace,
-        storage: planArtifactStorage
+        storage: getPlanArtifactStorage()
       })
     ]);
     const wasPreMarkedRunning =
@@ -253,7 +255,7 @@ export async function runDeploymentDestroyPlan(
         uploadTerraformLockFile({
           deploymentId: deployment.id,
           workspace: workspace!,
-          storage: planArtifactStorage
+          storage: getPlanArtifactStorage()
         })
     });
     sequence = lockUpload.sequence;
@@ -353,7 +355,7 @@ export async function runDeploymentDestroyPlan(
         label: "terraform destroy plan artifact upload",
         repository,
         operation: () =>
-          planArtifactStorage.uploadDeploymentPlanArtifact({
+          getPlanArtifactStorage().uploadDeploymentPlanArtifact({
             deploymentId: deployment.id,
             planArtifactId,
             planFilePath: join(workspace!.workdir, defaultPlanFileName)
@@ -405,7 +407,7 @@ export async function runDeploymentDestroyPlan(
       };
     } catch (error) {
       if (uploadedPlanArtifact) {
-        await planArtifactStorage.deleteDeploymentPlanArtifact(uploadedPlanArtifact.objectKey).catch(
+        await getPlanArtifactStorage().deleteDeploymentPlanArtifact(uploadedPlanArtifact.objectKey).catch(
           () => undefined
         );
       }

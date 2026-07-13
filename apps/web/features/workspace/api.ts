@@ -55,6 +55,14 @@ import type {
   GitCicdHandoffPipelineStatusResponse,
   GitCicdHandoffResponse,
   GitCicdGitHubOAuthStartResponse,
+  GitCicdMonitoringConfig,
+  GitCicdMonitoringConfigResponse,
+  GitCicdPipelineLogListResponse,
+  GitCicdPipelineProjectRefreshResponse,
+  GitCicdPipelineRun,
+  GitCicdPipelineRunListResponse,
+  GitCicdPipelineRunRefreshResponse,
+  GitCicdPipelineRunResponse,
   GitCicdRepositorySettingsApplyResponse,
   GitCicdAwsRoleDiffApplyResponse,
   GitHubAppExistingInstallationCallbackUrlResponse,
@@ -98,6 +106,7 @@ import type {
   TerraformSyncToDiagramResponse,
   TerraformValidateRequest,
   TerraformValidateResponse,
+  UpdateGitCicdMonitoringConfigRequest,
   VerifyAwsConnectionCreatedRoleRequest,
   VerifyAwsConnectionRequest,
   VerifyAwsConnectionResponse
@@ -918,6 +927,104 @@ export async function listGitCicdHandoffs(projectId: string): Promise<GitCicdHan
   );
 
   return response.handoffs;
+}
+
+export async function getGitCicdMonitoringConfig(
+  projectId: string,
+  sourceRepositoryId: string
+): Promise<GitCicdMonitoringConfig> {
+  const response = await apiFetch<GitCicdMonitoringConfigResponse>(
+    `/projects/${encodeURIComponent(projectId)}/source-repositories/${encodeURIComponent(
+      sourceRepositoryId
+    )}/cicd-monitoring`,
+    { auth: true }
+  );
+
+  return response.config;
+}
+
+export async function updateGitCicdMonitoringConfig(
+  projectId: string,
+  sourceRepositoryId: string,
+  request: UpdateGitCicdMonitoringConfigRequest
+): Promise<GitCicdMonitoringConfig> {
+  const response = await apiFetch<GitCicdMonitoringConfigResponse>(
+    `/projects/${encodeURIComponent(projectId)}/source-repositories/${encodeURIComponent(
+      sourceRepositoryId
+    )}/cicd-monitoring`,
+    {
+      auth: true,
+      method: "PUT",
+      body: request
+    }
+  );
+
+  return response.config;
+}
+
+export async function listGitCicdPipelineRuns(
+  projectId: string,
+  options: {
+    readonly cursor?: string | undefined;
+    readonly limit?: number | undefined;
+  } = {}
+): Promise<GitCicdPipelineRunListResponse> {
+  const params = new URLSearchParams();
+  if (options.cursor !== undefined) {
+    params.set("cursor", options.cursor);
+  }
+  if (options.limit !== undefined) {
+    params.set("limit", String(options.limit));
+  }
+  const query = params.size > 0 ? `?${params.toString()}` : "";
+
+  return apiFetch<GitCicdPipelineRunListResponse>(
+    `/projects/${encodeURIComponent(projectId)}/git-cicd-pipeline-runs${query}`,
+    { auth: true }
+  );
+}
+
+export async function refreshProjectGitCicdPipelineRuns(
+  projectId: string
+): Promise<GitCicdPipelineProjectRefreshResponse> {
+  return apiFetch<GitCicdPipelineProjectRefreshResponse>(
+    `/projects/${encodeURIComponent(projectId)}/git-cicd-pipeline-runs/refresh`,
+    { auth: true, method: "POST" }
+  );
+}
+
+export async function getGitCicdPipelineRun(
+  pipelineRunId: string
+): Promise<GitCicdPipelineRun> {
+  const response = await apiFetch<GitCicdPipelineRunResponse>(
+    `/git-cicd-pipeline-runs/${encodeURIComponent(pipelineRunId)}`,
+    { auth: true }
+  );
+
+  return response.run;
+}
+
+export async function listGitCicdPipelineLogs(
+  pipelineRunId: string,
+  sinceSequence: number
+): Promise<GitCicdPipelineLogListResponse> {
+  const params = new URLSearchParams({ sinceSequence: String(sinceSequence) });
+  return apiFetch<GitCicdPipelineLogListResponse>(
+    `/git-cicd-pipeline-runs/${encodeURIComponent(pipelineRunId)}/logs?${params.toString()}`,
+    { auth: true }
+  );
+}
+
+export async function refreshGitCicdPipelineRun(
+  pipelineRunId: string
+): Promise<GitCicdPipelineRunRefreshResponse> {
+  return apiFetch<GitCicdPipelineRunRefreshResponse>(
+    `/git-cicd-pipeline-runs/${encodeURIComponent(pipelineRunId)}/refresh`,
+    {
+      auth: true,
+      method: "POST"
+    }
+  );
 }
 
 export async function createGitCicdHandoff({

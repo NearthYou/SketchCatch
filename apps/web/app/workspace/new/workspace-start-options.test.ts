@@ -12,6 +12,10 @@ const startClientSource = readFileSync(
   "utf8"
 );
 const startPageSource = readFileSync(fileURLToPath(new URL("page.tsx", import.meta.url)), "utf8");
+const startStylesSource = readFileSync(
+  fileURLToPath(new URL("workspace-start.module.css", import.meta.url)),
+  "utf8"
+);
 
 test("createWorkspaceStartOptions exposes four guided starts and keeps blank board small", () => {
   const options = createWorkspaceStartOptions();
@@ -57,6 +61,24 @@ test("WorkspaceStartClient hydrates a stored form before persisting changes", ()
   assert.match(startClientSource, /isStartFormHydrated/);
   assert.match(startClientSource, /if \(!isStartFormHydrated\) \{\s+return;/);
   assert.match(startClientSource, /setIsStartFormHydrated\(true\)/);
+});
+
+test("WorkspaceStartClient shows an inline project-name error after an empty submission", () => {
+  assert.match(startClientSource, /const \[projectNameError, setProjectNameError\]/);
+  assert.match(startClientSource, /setProjectNameError\("프로젝트 이름을 입력해주세요\."\)/);
+  assert.match(startClientSource, /aria-invalid=\{Boolean\(projectNameError\)\}/);
+  assert.match(startClientSource, /aria-describedby=\{projectNameError \? "workspace-title-error" : undefined\}/);
+  assert.match(startClientSource, /id="workspace-title-error"/);
+  assert.doesNotMatch(startClientSource, /const canContinue =\s+title\.trim\(\)\.length > 0/);
+  assert.match(startStylesSource, /\.nameFieldError input/);
+  assert.match(startStylesSource, /\.fieldError/);
+});
+
+test("WorkspaceStartClient moves focus and the viewport to the project name after an empty submission", () => {
+  assert.match(startClientSource, /const projectNameInputRef = useRef<HTMLInputElement>\(null\)/);
+  assert.match(startClientSource, /projectNameInputRef\.current\?\.focus\(\)/);
+  assert.match(startClientSource, /projectNameInputRef\.current\?\.scrollIntoView\(/);
+  assert.match(startClientSource, /ref=\{projectNameInputRef\}/);
 });
 
 test("resolveWorkspaceStartAction sends Reverse users without a verified AWS Role to settings", () => {

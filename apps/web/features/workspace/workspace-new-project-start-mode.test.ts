@@ -10,7 +10,7 @@ test("new project start keeps all five start modes and core API calls", () => {
   assert.match(workspaceStartClientSource, /ai: Bot/);
   assert.match(workspaceStartClientSource, /reverse: CloudDownload/);
   assert.match(workspaceStartClientSource, /template: Boxes/);
-  assert.match(workspaceStartClientSource, /github: GitBranch/);
+  assert.match(workspaceStartClientSource, /repository: GitBranch/);
   assert.match(workspaceStartClientSource, /blank: LayoutPanelTop/);
   assert.match(workspaceStartClientSource, /listAwsConnections/);
   assert.match(workspaceStartClientSource, /resolveWorkspaceStartAction/);

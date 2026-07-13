@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import type { DiagramNode, DiagramNodeParameters } from "@sketchcatch/types";
+import {
+  buildTemplateDiagramJson,
+  templateDefinitions,
+  type DiagramNode,
+  type DiagramNodeParameters
+} from "@sketchcatch/types";
 import { convertDiagramJsonToArchitectureJson } from "./diagram-to-architecture.js";
 
 test("diagram-to-architecture uses shared resource definitions for Terraform mapping", () => {
@@ -13,6 +18,30 @@ test("diagram-to-architecture uses shared resource definitions for Terraform map
 
   assert.doesNotMatch(source, /TERRAFORM_RESOURCE_TYPE_TO_RESOURCE_TYPE/);
   assert.match(source, /getResourceDefinitionByTerraform/);
+});
+
+test("Template presentation nodes and edges stay outside ArchitectureJson", () => {
+  // Architecture conversion must project only the original deployable graph, even when the Board shows Design flow.
+  for (const definition of templateDefinitions) {
+    const diagramJson = buildTemplateDiagramJson(definition.id, {
+      projectSlug: "architecture",
+      shortId: "presentation"
+    });
+    const architectureJson = convertDiagramJsonToArchitectureJson(diagramJson);
+
+    assert.equal(architectureJson.nodes.length, definition.resources.length, `${definition.id} resources`);
+    assert.equal(architectureJson.edges.length, definition.relationships.length, `${definition.id} relationships`);
+    assert.equal(
+      architectureJson.nodes.some((node) => node.id.includes("-presentation-")),
+      false,
+      `${definition.id} presentation nodes`
+    );
+    assert.equal(
+      architectureJson.edges.some((edge) => edge.id.includes("-presentation-")),
+      false,
+      `${definition.id} presentation edges`
+    );
+  }
 });
 
 test("converts supported DiagramJson resource nodes to ArchitectureJson nodes", () => {
