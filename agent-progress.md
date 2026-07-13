@@ -4,14 +4,23 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- Branch: `Feat/jh/346-시뮬레이션-기능-구현-및-테스트`.
-- Repository recommendation guarantees 2-3 unique candidates and validates question IDs, semantics, and duplicate prompts before display.
-- Deployment type is hidden when repository evidence is decisive and shown only for ambiguous analysis.
-- CI/CD handoff is a prominent standalone setting; its GitHub App repository panel appears only while enabled.
-- Public Repository setup confirms Template and CI/CD before opening a separate follow-up-question stage.
-- Follow-up questions depend on the selected Template, affect diagram creation, and use direct clickable choices.
+- Branch: `fix/gg/355-review-followup-v2`.
+- Six AWS Template Boards now preserve their existing resource graph and Terraform semantics while using authored PNG-aligned positions, grouping, viewport, and edge routing.
+- All 103 visible Template nodes materialize from active Resource Catalog items; no fake AWS tiles, temporary emoji nodes, or raw Terraform logical-name nodes were added.
+- Desktop Board QA passed 12 visual and structural checks for each of the six Templates. Evidence is in `docs/gg/feat-infrastructure-template/014_AWS템플릿Board실화면QA_gg.md`.
 
 ## Session Record
+
+### 2026-07-13 - Verify AWS Template Board placement against live Board screens
+
+- Completed the PNG-to-Board layout work on `fix/gg/355-review-followup-v2` without changing Resource IDs, types, counts, Terraform values, relationship semantics, API calls, or approval behavior.
+- Confirmed all six Template Boards through an authenticated local Chrome session at the real `/workspace?templateId=...` route: Static (6), Minimal (12), Full (16), 3-Tier (30), ECS (20), and EKS (19).
+- Confirmed the 103/103 Catalog key/type/icon/kind match and documented that role labels are existing human-readable labels, not Terraform logical names or fabricated resources.
+- Recorded 12 independent checks per Template: Board opening, count, Catalog materialization, label boundary, flow, containment, support rails, PNG layer order, collision, crop, edge crossing, and viewport.
+- Corrected only two inaccurate prose descriptions in the placement contract; no production source behavior changed in this documentation follow-up.
+- Verification: focused Template suite (39 tests), Web/types typecheck, full typecheck, lint, harness, and `git diff --check` passed after this documentation update. `pnpm build` remains blocked by the pre-existing ignored broken `apps/web/.codegraph` symlink (`ENOENT stat`), not by Template code.
+- Risk: no Terraform plan/apply/destroy, AWS mutation, API mutation, or approval-flow action ran.
+- Clean-state checklist: the tracker has one unrelated `in_progress` item, this Template work is evidence-backed `passing`, no secrets were read or written, and no background process was started by this session.
 
 ### 2026-07-13 - Repair Terraform nested-block merge regression
 
@@ -200,4 +209,4 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Next Action
 
-- Await PR #358 checks and merge into `dev`.
+- No Template layout implementation is pending. If the Template graph changes later, rerun the focused Template suite and the live Board QA checklist in `014`.

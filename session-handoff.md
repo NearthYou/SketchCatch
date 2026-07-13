@@ -4,27 +4,29 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Currently Verified
 
-- Branch `feat/ck/349-repo-analysis` has issue #349 Repository Analysis template recommendation work plus a focused API startup guard.
-- New project Repository start shows the Repository URL analysis panel above the primary `Repository 분석하기` action.
-- API startup now requires `DATABASE_URL` before Terraform warmup, deployment recovery, or listening.
-- The focused startup regression test, API typecheck, harness check, lint, typecheck, and build passed.
+- Branch: `fix/gg/355-review-followup-v2`.
+- Six deployable AWS Templates use authored PNG-aligned Board presentation only: position, parent/group, viewport, visual container metadata, and edge handles/routing.
+- Resource IDs, types, counts, Terraform values, relationship IDs/source/target/label, API behavior, and approval behavior remain unchanged.
+- All 103 visible nodes materialize from active Resource Catalog items. No fake node, fake icon, or raw Terraform logical-name node is used.
+- Authenticated desktop Board QA passed for all six templates. The source mapping, 12-check-per-template result, and focused suite are recorded in `docs/gg/feat-infrastructure-template/014_AWS템플릿Board실화면QA_gg.md`.
+
+## Verification
+
+- Focused Template suite: 39 tests passed.
+- `pnpm --filter @sketchcatch/types typecheck`, `pnpm --filter @sketchcatch/web typecheck`, `pnpm typecheck`, `pnpm lint`, and the Node-LTS harness check passed.
+- `pnpm build` cannot start because the pre-existing ignored `apps/web/.codegraph` symlink targets a missing local path and causes `ENOENT stat`; this is unrelated to the Template changes.
 
 ## Changes This Session
 
-- Reproduced `/api/auth/login` returning 500 when the running API has no `DATABASE_URL`.
-- Added a regression test in `apps/api/src/server-startup.test.ts`.
-- Added `requireDatabaseUrl()` to `apps/api/src/server-startup.ts`.
-- Moved `RepositoryUrlStartPanel` above the action button group in `apps/web/app/workspace/new/workspace-start-client.tsx`.
-- Added source-order coverage in `apps/web/app/workspace/new/workspace-start-options.test.ts`.
-- Updated `agent-progress.md`.
+- Added the visual-only template presentation layout, contract and collision coverage, and the live Board QA record for the six deployable AWS Templates.
+- Updated the placement contract only where its prose differed from the actual relationship routing.
+- Updated `agent-progress.md` and `feature_list.json` with the current Template verification evidence.
 
 ## Broken Or Unverified
 
-- The already-running API process may still be old code and must be restarted.
-- Local login still needs a real `DATABASE_URL` configured outside git, then migrations run if the database is fresh or stale.
-- Browser screenshot verification for the Repository URL panel move was skipped because browser automation is not installed in this worktree.
-- `apps/web/next-env.d.ts` was already modified before this fix and was not touched.
+- `pnpm build` remains blocked before application compilation by the pre-existing ignored `apps/web/.codegraph` symlink pointing at a missing local directory.
+- No Terraform plan/apply/destroy, AWS mutation, API mutation, or approval-flow action was run because this work is presentation-only.
 
 ## Best Next Action
 
-- Configure local `DATABASE_URL`, restart the API, and retry login. If the database is new or behind, run `pnpm --filter @sketchcatch/api db:migrate`.
+- No continuation is required for the completed Template placement work. If a Template graph is changed later, rerun the `014` visual checklist and the focused Template suite before changing its status.
