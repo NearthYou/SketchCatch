@@ -372,10 +372,14 @@ function createResourceCatalogDiagramNode(
   position: DiagramNode["position"],
   zIndex: number
 ): DiagramNode {
-  const definitionId = getDefaultResourceDefinitionByResourceType(resourceType)?.id;
-  const resourceItem =
-    (definitionId ? RESOURCE_ITEMS_BY_DEFINITION_ID.get(definitionId) : undefined) ??
-    RESOURCE_ITEMS_BY_TERRAFORM_TYPE.get(terraformResourceType);
+  const defaultDefinition = getDefaultResourceDefinitionByResourceType(resourceType);
+  const defaultResourceItem = defaultDefinition
+    ? RESOURCE_ITEMS_BY_DEFINITION_ID.get(defaultDefinition.id)
+    : undefined;
+  const authoredResourceItem = RESOURCE_ITEMS_BY_TERRAFORM_TYPE.get(terraformResourceType);
+  const resourceItem = defaultDefinition?.terraform.resourceType === terraformResourceType
+    ? defaultResourceItem ?? authoredResourceItem
+    : authoredResourceItem ?? defaultResourceItem;
 
   if (!resourceItem) {
     return createFallbackDiagramNode(terraformResourceType, position, zIndex);
@@ -425,6 +429,11 @@ function createDiagramNodeParameters(
 ): DiagramNodeParameters {
   const config = node.config ?? {};
   const authoredTerraformBlockType = readTerraformBlockType(config["terraformBlockType"]);
+  const authoredTerraformResourceType = config["terraformResourceType"];
+  const usesCompanionTerraformType =
+    typeof authoredTerraformResourceType === "string" &&
+    authoredTerraformResourceType !== mapResourceTypeToTerraform(node.type);
+  const shouldInheritBaseValues = node.type !== "RDS_READ_REPLICA" && !usesCompanionTerraformType;
 
   return {
     fileName: baseParameters?.fileName ?? "main",
@@ -435,7 +444,7 @@ function createDiagramNodeParameters(
       baseParameters?.terraformBlockType ??
       DEFAULT_TERRAFORM_BLOCK_TYPE,
     values: {
-      ...(baseParameters?.values ?? {}),
+      ...(shouldInheritBaseValues ? baseParameters?.values ?? {} : {}),
       ...config
     }
   };

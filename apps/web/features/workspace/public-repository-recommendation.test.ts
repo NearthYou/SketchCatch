@@ -74,6 +74,7 @@ test("public repository AI draft carries authoritative deployment facts without 
 
   assert.equal(request.repositoryEvidence?.mode, "strict");
   assert.equal(request.repositoryEvidence?.facts.length, 5);
+  assert.equal(request.repositoryEvidence?.repositoryName, "Jungle_DB_API_W8");
   assert.match(request.prompt, /web frontend and API backend detected as separate application units/i);
   assert.match(request.prompt, /one runtime task; do not add dynamic task scaling/i);
   assert.match(request.prompt, /GitHub Actions builds and deploys; do not substitute CodePipeline/i);

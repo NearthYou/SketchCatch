@@ -117,7 +117,13 @@ export function createPublicRepositoryArchitectureDraftRequest(input: {
   return {
     templateId: input.templateId,
     ...(architectureFacts.length > 0
-      ? { repositoryEvidence: { mode: "strict" as const, facts: architectureFacts } }
+      ? {
+          repositoryEvidence: {
+            mode: "strict" as const,
+            facts: architectureFacts,
+            repositoryName: getRepositoryName(input.analysis.repositoryUrl)
+          }
+        }
       : {}),
     prompt: [
       "Generate a production-quality Practice Architecture for this source repository.",
@@ -157,6 +163,15 @@ export function createPublicRepositoryArchitectureDraftRequest(input: {
       "Generate a connected, readable diagram with only supported resource types. Avoid unrelated resources and duplicate nodes."
     ].join("\n")
   };
+}
+
+function getRepositoryName(repositoryUrl: string): string {
+  try {
+    const pathSegments = new URL(repositoryUrl).pathname.split("/").filter(Boolean);
+    return (pathSegments.at(-1) ?? "application").replace(/\.git$/iu, "");
+  } catch {
+    return "application";
+  }
 }
 
 function createFollowUpAnswerDisplayValue(

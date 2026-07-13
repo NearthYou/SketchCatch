@@ -136,7 +136,8 @@ const architectureDraftBodySchema: z.ZodType<CreateArchitectureDraftRequest> = z
         kind: z.enum(REPOSITORY_ARCHITECTURE_FACT_KINDS),
         value: z.string().trim().min(1).max(160),
         sourcePath: z.string().trim().min(1).max(500)
-      })).max(64)
+      })).max(64),
+      repositoryName: z.string().trim().min(1).max(100).optional()
     })
     .optional(),
   repositoryAnalysis: z

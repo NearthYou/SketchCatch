@@ -2108,6 +2108,7 @@ export type CreateArchitectureDraftRequest = {
   repositoryEvidence?: {
     mode: "strict";
     facts: readonly RepositoryArchitectureFact[];
+    repositoryName?: string | undefined;
   } | undefined;
   repositoryAnalysis?: {
     projectId: string;

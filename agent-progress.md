@@ -12,6 +12,31 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-14 - Catalog diagram layout references
+
+- Reviewed all 23 good and 9 failure images under `docs/diagram-layout-reference`.
+- Added a linked README entry for every image with a reusable layout observation or a concrete readability failure.
+- Omitted source metadata so the catalog focuses only on reusable layout observations and concrete readability failures.
+- Verification: image-to-entry coverage is 32/32 and `pnpm harness:check` passed. Documentation only; no code, Terraform, deployment, or cloud mutation changed.
+
+### 2026-07-14 - Make strict Repository Fargate drafts application-delivery ready
+
+- Added a private S3 origin contract with CloudFront OAC, public-access blocking, a scoped bucket policy, and a bootstrap `index.html` for the first infrastructure apply.
+- Routed `/api/*` through the same public CloudFront HTTPS endpoint to the ALB HTTP origin, removing browser mixed-content failures without inventing an ACM domain.
+- Added repository-derived AWS names, ECS runtime environment values, explicit log-group dependency, CI/CD delivery edges, and Terraform outputs for S3, CloudFront, ECR, ECS, and the unified API URL.
+- Fixed the Architecture-to-Diagram adapter to prefer an explicitly authored Terraform resource type, preventing companion resources from inheriting invalid parent defaults such as `force_destroy` on `aws_s3_bucket_public_access_block`.
+- Made optional frontend, ECR, CloudWatch, and GitHub Actions edges conditional so API-only evidence cannot produce dangling references to unsupported services.
+- Chrome verification recreated `whiskend/audience-live-check`, saved 33 Terraform resources, passed pre-deployment checks, and completed an AWS-backed Plan with `+33 ~0 -0 +/-0`. No Apply or cloud mutation was run.
+- Verification: all 59 Architecture Draft tests plus focused Terraform renderer, Repository request, and Diagram adapter tests passed; `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed. Full `pnpm test` reached 1,110/1,111 Web tests and retains the unrelated locale baseline where this Windows runtime formats the Korean day-period marker as `AM`.
+
+### 2026-07-14 - Refine Repository analysis controls
+
+- Renamed the Repository start heading to `GitHub Repository` and the handoff connection section to `CI/CD Connection` in Korean UI copy.
+- Prevented branch selection from colliding with URL analysis, replaced the large back action with a 32px icon control above the selected Template, and reduced question choices to compact content-width controls.
+- Aligned question hover and selected visuals while retaining persistent radio state and accessible focus treatment.
+- Chrome verification confirmed 12px gaps between URL, branch, and analysis controls; a 32x32 back control; 88x38 boolean choices; and matching hover/selected colors.
+- Verification: focused Repository start regression, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed. Lint retains the pre-existing Live Observation `setNow` warning.
+
 ### 2026-07-13 - Clarify strict Repository Fargate network placement
 
 - Replaced public task placement with two private app subnets while keeping the internet-facing ALB in the two public subnets.
@@ -87,30 +112,6 @@ Short English-only working log for the current agent context. Older records are 
   - `pnpm harness:check`
 - Risk:
   - Full Architecture Draft AI generation through `/ai/architecture-draft` is separate from the Repository recommendation flow; probing it showed environment-dependent failures (`422` from the running API route and expired AWS SSO in a direct configured call). The current Repository start path uses AI for ranking/questions and deterministic Template-based board creation.
-
-### 2026-07-12 - Implement issue #349 repository template recommendations
-
-- Goal: Extend connected Repository Analysis into a template candidate recommendation flow for issue #349.
-- Completed:
-  - Added shared deployment type, dynamic question, answer, and template recommendation DTOs.
-  - Extended Repository Analysis results with inferred deployment type, CI/CD default, max-five questions, and supported template candidates.
-  - Added backend recommendation endpoint for user deployment type, CI/CD, and answer payloads.
-  - Kept final template validation constrained to supported `TemplateId` values from stored analysis or recommendation candidates.
-  - Updated the repository start UI with deployment single-select, CI/CD checkbox, dynamic questions, and candidate cards.
-  - Documented the contract in `docs/data-models.md`.
-- Verification:
-  - `pnpm --filter @sketchcatch/types typecheck`
-  - `pnpm --filter @sketchcatch/api typecheck`
-  - `pnpm --filter @sketchcatch/web typecheck`
-  - `pnpm --dir apps/api exec tsx --test src/source-repositories/repository-analysis.test.ts src/routes/source-repositories.test.ts src/source-repositories/source-repository-service.test.ts`
-  - `pnpm --dir apps/web exec tsx --test features/workspace/api.test.ts features/workspace/project-github-settings.test.ts features/workspace/repository-start-template-recommendation.test.ts`
-  - `pnpm harness:check`
-  - `pnpm lint` passed with the pre-existing `live-observations` `setNow` warning.
-  - `pnpm typecheck`
-  - `pnpm build`
-  - `git diff --check` passed with CRLF conversion warnings only.
-- Risk:
-  - No GitHub PR, cloud deployment, Terraform apply, or infrastructure mutation was run.
 
 ### 2026-07-12 - Handle missing Source Repository DB migrations
 
@@ -215,4 +216,4 @@ Short English-only working log for the current agent context. Older records are 
   - The successful live artifact predated the output-preservation fix. Regression tests prove the corrected artifact path; a future deployment will persist Live Observation outputs without requiring another AWS mutation in this session.
 
 ## Next Action
-- Recreate the Repository draft before the next deployment so its Terraform artifact contains the preserved outputs.
+- Use the Git/CI/CD handoff to replace the bootstrap web object and smoke ECS revision with the repository build artifacts before production traffic.

@@ -128,6 +128,36 @@ test("convertArchitectureJsonToDiagramJson preserves authored Terraform identity
   assert.equal(diagramJson.nodes[0]?.metadata?.parentAreaNodeId, "managed-services");
 });
 
+test("explicit companion Terraform resources do not inherit parent resource defaults", () => {
+  const diagramJson = convertArchitectureJsonToDiagramJson({
+    nodes: [
+      {
+        id: "web-public-access",
+        type: "S3",
+        label: "S3 public access block",
+        positionX: 0,
+        positionY: 0,
+        config: {
+          terraformResourceType: "aws_s3_bucket_public_access_block",
+          bucket: "aws_s3_bucket.web.id",
+          blockPublicAcls: true,
+          blockPublicPolicy: true,
+          ignorePublicAcls: true,
+          restrictPublicBuckets: true
+        }
+      }
+    ],
+    edges: []
+  });
+
+  assert.equal(
+    diagramJson.nodes[0]?.parameters?.resourceType,
+    "aws_s3_bucket_public_access_block"
+  );
+  assert.equal(diagramJson.nodes[0]?.parameters?.values.forceDestroy, undefined);
+  assert.equal(diagramJson.nodes[0]?.parameters?.values.blockPublicAcls, true);
+});
+
 test("normalizeDiagramJsonConventions preserves saved names and Terraform references exactly", () => {
   const renamedAmi = makeConventionResourceNode("renamed-ami-stable-id", "aws_ami", "renamed");
   const ec2Instance = makeConventionResourceNode(

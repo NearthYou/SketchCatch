@@ -1961,6 +1961,18 @@ function usesStrictEcsRepositoryEvidence(request: CreateArchitectureDraftRequest
     );
 }
 
+function createStrictRepositoryDeploymentName(repositoryName: string | undefined): string {
+  const normalized = (repositoryName ?? "application")
+    .toLowerCase()
+    .replace(/\.git$/u, "")
+    .replace(/[^a-z0-9-]+/gu, "-")
+    .replace(/^-+|-+$/gu, "")
+    .slice(0, 20)
+    .replace(/-+$/u, "");
+
+  return normalized || "application";
+}
+
 function applyArchitectureDraftRequestPolicies(
   draft: AiArchitectureDraftResult,
   request: CreateArchitectureDraftRequest
@@ -2013,6 +2025,9 @@ function applyStrictRepositoryEvidencePolicy(
   const healthMatch = /^http:(\d{2,5})(\/[a-z0-9_./-]+)$/iu.exec(healthCheck ?? "");
   const containerPort = healthMatch ? Number(healthMatch[1]) : 80;
   const healthCheckPath = healthMatch?.[2] ?? "/";
+  const deploymentName = createStrictRepositoryDeploymentName(evidence.repositoryName);
+  const apiName = `${deploymentName}-api`;
+  const logGroupName = `/ecs/${apiName}`;
   const managedServicesAreaId = "repository-managed-services";
   const hasManagedServices = staticDelivery || usesEcr || usesCloudWatch;
   const vpcId = coreNodeId("vpc");
@@ -2026,6 +2041,14 @@ function applyStrictRepositoryEvidencePolicy(
   const privateRouteAssociationAId = "repository-private-route-association-a";
   const privateRouteAssociationBId = "repository-private-route-association-b";
   const fargateRuntimeId = "repository-fargate-runtime";
+  const webAssetsId = "repository-web-assets";
+  const webPublicAccessId = "repository-web-public-access";
+  const webBootstrapObjectId = "repository-web-bootstrap-index";
+  const cloudFrontOacId = "repository-cloudfront-oac";
+  const cloudFrontId = "repository-cloudfront";
+  const webBucketPolicyId = "repository-web-bucket-policy";
+  const ecrId = "repository-ecr";
+  const logGroupId = "repository-ecs-logs";
   const vpcRef = `aws_vpc.${vpcId}.id`;
   const publicSubnetRefs = [publicSubnetAId, publicSubnetBId].map(
     (id) => `aws_subnet.${id}.id`
@@ -2160,7 +2183,7 @@ function applyStrictRepositoryEvidencePolicy(
   if (staticDelivery) {
     additionalNodes.push(
       {
-        id: "repository-web-assets",
+        id: webAssetsId,
         type: "S3",
         label: "Static Web Assets",
         positionX: 580,
@@ -2168,14 +2191,63 @@ function applyStrictRepositoryEvidencePolicy(
         config: {
           terraformResourceName: "web_assets",
           parentAreaNodeId: managedServicesAreaId,
-          bucketPrefix: "web-assets-",
+          bucketPrefix: `${deploymentName}-web-`,
           bucketPurpose: "static_website_origin",
           publicAccessBlock: true,
           forceDestroy: true
         }
       },
       {
-        id: "repository-cloudfront",
+        id: webPublicAccessId,
+        type: "S3",
+        label: "S3 Public Access Block",
+        positionX: 560,
+        positionY: 280,
+        config: {
+          terraformResourceType: "aws_s3_bucket_public_access_block",
+          terraformResourceName: "web_public_access",
+          parentAreaNodeId: managedServicesAreaId,
+          bucket: `aws_s3_bucket.${webAssetsId}.id`,
+          blockPublicAcls: true,
+          blockPublicPolicy: true,
+          ignorePublicAcls: true,
+          restrictPublicBuckets: true
+        }
+      },
+      {
+        id: webBootstrapObjectId,
+        type: "S3",
+        label: "Bootstrap Index (CI/CD replaces)",
+        positionX: 760,
+        positionY: 280,
+        config: {
+          terraformResourceType: "aws_s3_object",
+          terraformResourceName: "web_bootstrap_index",
+          parentAreaNodeId: managedServicesAreaId,
+          bucket: `aws_s3_bucket.${webAssetsId}.id`,
+          key: "index.html",
+          contentType: "text/html; charset=utf-8",
+          content: "<!doctype html><html lang=\"en\"><meta charset=\"utf-8\"><title>Application deployment ready</title><body><main><h1>Application deployment ready</h1><p>GitHub Actions will replace this bootstrap document with apps/web/dist.</p></main></body></html>"
+        }
+      },
+      {
+        id: cloudFrontOacId,
+        type: "CLOUDFRONT",
+        label: "CloudFront Origin Access Control",
+        positionX: 300,
+        positionY: 280,
+        config: {
+          terraformResourceType: "aws_cloudfront_origin_access_control",
+          terraformResourceName: "web_oac",
+          parentAreaNodeId: managedServicesAreaId,
+          name: `${deploymentName}-web-oac`,
+          originAccessControlOriginType: "s3",
+          signingBehavior: "always",
+          signingProtocol: "sigv4"
+        }
+      },
+      {
+        id: cloudFrontId,
         type: "CLOUDFRONT",
         label: "CloudFront Web Entry",
         positionX: 340,
@@ -2185,11 +2257,24 @@ function applyStrictRepositoryEvidencePolicy(
           parentAreaNodeId: managedServicesAreaId,
           enabled: true,
           defaultRootObject: "index.html",
-          origin: [{
-            domainName: "aws_s3_bucket.web_assets.bucket_regional_domain_name",
-            originId: "web-assets",
-            s3OriginConfig: [{ originAccessIdentity: "" }]
-          }],
+          priceClass: "PriceClass_100",
+          origin: [
+            {
+              domainName: `aws_s3_bucket.${webAssetsId}.bucket_regional_domain_name`,
+              originId: "web-assets",
+              originAccessControlId: `aws_cloudfront_origin_access_control.${cloudFrontOacId}.id`
+            },
+            {
+              domainName: `aws_lb.${coreNodeId("load-balancer")}.dns_name`,
+              originId: "api-alb",
+              customOriginConfig: [{
+                httpPort: 80,
+                httpsPort: 443,
+                originProtocolPolicy: "http-only",
+                originSslProtocols: ["TLSv1.2"]
+              }]
+            }
+          ],
           defaultCacheBehavior: [{
             targetOriginId: "web-assets",
             viewerProtocolPolicy: "redirect-to-https",
@@ -2197,8 +2282,46 @@ function applyStrictRepositoryEvidencePolicy(
             cachedMethods: ["GET", "HEAD"],
             cachePolicyId: "658327ea-f89d-4fab-a63d-7e88639e58f6"
           }],
+          orderedCacheBehavior: [{
+            pathPattern: "/api/*",
+            targetOriginId: "api-alb",
+            viewerProtocolPolicy: "redirect-to-https",
+            allowedMethods: ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"],
+            cachedMethods: ["GET", "HEAD"],
+            cachePolicyId: "4135ea2d-6df8-44a3-9df3-4b5a84be39ad",
+            originRequestPolicyId: "b689b0a8-53d0-40ab-baf2-68738e2966ac"
+          }],
           restrictions: [{ geoRestriction: [{ restrictionType: "none" }] }],
           viewerCertificate: [{ cloudfrontDefaultCertificate: true }]
+        }
+      },
+      {
+        id: webBucketPolicyId,
+        type: "S3",
+        label: "CloudFront Read-only Bucket Policy",
+        positionX: 980,
+        positionY: 280,
+        config: {
+          terraformResourceType: "aws_s3_bucket_policy",
+          terraformResourceName: "web_cloudfront_read",
+          parentAreaNodeId: managedServicesAreaId,
+          bucket: `aws_s3_bucket.${webAssetsId}.id`,
+          dependsOn: [`aws_s3_bucket_public_access_block.${webPublicAccessId}`],
+          policy: JSON.stringify({
+            Version: "2012-10-17",
+            Statement: [{
+              Sid: "AllowCloudFrontServicePrincipalReadOnly",
+              Effect: "Allow",
+              Principal: { Service: "cloudfront.amazonaws.com" },
+              Action: "s3:GetObject",
+              Resource: `\${aws_s3_bucket.${webAssetsId}.arn}/*`,
+              Condition: {
+                StringEquals: {
+                  "AWS:SourceArn": `\${aws_cloudfront_distribution.${cloudFrontId}.arn}`
+                }
+              }
+            }]
+          })
         }
       }
     );
@@ -2206,7 +2329,7 @@ function applyStrictRepositoryEvidencePolicy(
 
   if (usesEcr) {
     additionalNodes.push({
-      id: "repository-ecr",
+      id: ecrId,
       type: "ECR_REPOSITORY",
       label: "ECR API Image Repository",
       positionX: 820,
@@ -2214,7 +2337,7 @@ function applyStrictRepositoryEvidencePolicy(
       config: {
         terraformResourceName: "api_image",
         parentAreaNodeId: managedServicesAreaId,
-        name: "application-api",
+        name: apiName,
         imageTagMutability: "IMMUTABLE",
         forceDelete: true,
         imageScanningConfiguration: { scanOnPush: true }
@@ -2224,7 +2347,7 @@ function applyStrictRepositoryEvidencePolicy(
 
   if (usesCloudWatch) {
     additionalNodes.push({
-      id: "repository-ecs-logs",
+      id: logGroupId,
       type: "CLOUDWATCH_LOG_GROUP",
       label: "CloudWatch ECS Container Logs",
       positionX: 1300,
@@ -2232,7 +2355,7 @@ function applyStrictRepositoryEvidencePolicy(
       config: {
         terraformResourceName: "ecs_logs",
         parentAreaNodeId: managedServicesAreaId,
-        name: "/ecs/application-api",
+        name: logGroupName,
         retentionInDays: 30
       }
     });
@@ -2333,11 +2456,14 @@ function applyStrictRepositoryEvidencePolicy(
           positionY: 680,
           config: {
             ...node.config,
+            name: `${deploymentName}-alb-sg`,
             parentAreaNodeId: publicSubnetAId,
             diagramWidth: 300,
             diagramHeight: 160,
-            description: requiresTlsAtAlb
-              ? "Allow HTTP for deployment validation until an ALB certificate is confirmed"
+            description: requiresTlsAtAlb && staticDelivery
+              ? "Allow CloudFront origin HTTP while CloudFront terminates public TLS"
+              : requiresTlsAtAlb
+                ? "Allow HTTP for deployment validation until an ALB certificate is confirmed"
               : "Allow public HTTP to the Application Load Balancer",
             ingress: [{
               fromPort: 80,
@@ -2354,6 +2480,7 @@ function applyStrictRepositoryEvidencePolicy(
           positionY: 1070,
           config: {
             ...node.config,
+            name: `${deploymentName}-task-sg`,
             parentAreaNodeId: privateAppSubnetAId,
             diagramWidth: 340,
             diagramHeight: 180,
@@ -2373,6 +2500,7 @@ function applyStrictRepositoryEvidencePolicy(
           positionY: 140,
           config: {
             ...node.config,
+            name: `${deploymentName}-cluster`,
             ...(hasManagedServices ? { parentAreaNodeId: managedServicesAreaId } : {})
           }
         };
@@ -2384,6 +2512,7 @@ function applyStrictRepositoryEvidencePolicy(
           positionY: 730,
           config: {
             ...node.config,
+            name: `${deploymentName.slice(0, 24)}-alb`,
             parentAreaNodeId: coreNodeId("alb-security-group"),
             subnets: publicSubnetRefs
           }
@@ -2396,6 +2525,7 @@ function applyStrictRepositoryEvidencePolicy(
           positionY: 700,
           config: {
             ...node.config,
+            name: `${deploymentName.slice(0, 24)}-api`,
             parentAreaNodeId: vpcId,
             port: containerPort,
             healthCheck: { path: healthCheckPath, matcher: "200-399" }
@@ -2404,7 +2534,11 @@ function applyStrictRepositoryEvidencePolicy(
       case "listener":
         return {
           ...node,
-          label: requiresTlsAtAlb ? "HTTP Listener (TLS Pending)" : "HTTP Listener",
+          label: requiresTlsAtAlb && staticDelivery
+            ? "CloudFront Origin HTTP Listener"
+            : requiresTlsAtAlb
+              ? "HTTP Listener (TLS Pending)"
+              : "HTTP Listener",
           positionX: 1560,
           positionY: 700,
           config: {
@@ -2423,7 +2557,10 @@ function applyStrictRepositoryEvidencePolicy(
           config: {
             ...node.config,
             ...(hasManagedServices ? { parentAreaNodeId: managedServicesAreaId } : {}),
-            family: "application-api",
+            family: apiName,
+            dependsOn: usesCloudWatch
+              ? [`aws_cloudwatch_log_group.${logGroupId}`]
+              : undefined,
             containerDefinitions: JSON.stringify([{
               name: "api",
               image: "public.ecr.aws/docker/library/nginx:1.27-alpine",
@@ -2433,12 +2570,22 @@ function applyStrictRepositoryEvidencePolicy(
                 "printf '%s\\n' 'server {' '  listen 8080;' '  default_type text/plain;' '  location = /health { return 200 ok; }' '  location / { return 200 SketchCatch-deployment-smoke; }' '}' > /etc/nginx/conf.d/default.conf && exec nginx -g 'daemon off;'"
               ],
               portMappings: [{ containerPort, hostPort: containerPort, protocol: "tcp" }],
+              environment: [
+                { name: "PORT", value: String(containerPort) },
+                ...(staticDelivery
+                  ? [{
+                      name: "WEB_ORIGIN",
+                      value: `https://\${aws_cloudfront_distribution.${cloudFrontId}.domain_name}`
+                    }]
+                  : []),
+                { name: "INSTANCE_ID", value: "fargate" }
+              ],
               ...(usesCloudWatch
                 ? {
                     logConfiguration: {
                       logDriver: "awslogs",
                       options: {
-                        "awslogs-group": "/ecs/application-api",
+                        "awslogs-group": logGroupName,
                         "awslogs-region": "ap-northeast-2",
                         "awslogs-stream-prefix": "api"
                       }
@@ -2456,6 +2603,7 @@ function applyStrictRepositoryEvidencePolicy(
           positionY: 140,
           config: {
             ...node.config,
+            name: `${deploymentName}-service`,
             ...(hasManagedServices ? { parentAreaNodeId: managedServicesAreaId } : {}),
             desiredCount: singleTask ? 1 : node.config.desiredCount,
             networkConfiguration: {
@@ -2505,6 +2653,7 @@ function applyStrictRepositoryEvidencePolicy(
           positionY: 300,
           config: {
             ...node.config,
+            name: `${deploymentName}-ecs-execution`,
             ...(hasManagedServices ? { parentAreaNodeId: managedServicesAreaId } : {})
           }
         };
@@ -2525,6 +2674,7 @@ function applyStrictRepositoryEvidencePolicy(
           positionY: 300,
           config: {
             ...node.config,
+            name: `${deploymentName}-ecs-task`,
             ...(hasManagedServices ? { parentAreaNodeId: managedServicesAreaId } : {})
           }
         };
@@ -2559,31 +2709,53 @@ function applyStrictRepositoryEvidencePolicy(
     });
   };
 
-  connect("repository-browser", "repository-cloudfront", "loads static web");
-  connect("repository-cloudfront", "repository-web-assets", "private origin");
-  connect(
-    "repository-browser",
-    coreNodeId("alb-security-group"),
-    requiresTlsAtAlb
-      ? "API -> ALB SG: TCP 80 (HTTPS 443 pending certificate)"
-      : "API -> ALB SG: TCP 80"
-  );
+  if (staticDelivery) {
+    connect("repository-browser", cloudFrontId, "HTTPS web and /api entry");
+    connect(cloudFrontId, webAssetsId, "private OAC origin");
+    connect(webAssetsId, webPublicAccessId, "blocks public access");
+    connect(webAssetsId, webBootstrapObjectId, "stores bootstrap index");
+    connect(cloudFrontOacId, cloudFrontId, "signs S3 origin requests");
+    connect(webBucketPolicyId, webAssetsId, "allows CloudFront read-only access");
+    connect(
+      cloudFrontId,
+      coreNodeId("alb-security-group"),
+      "proxies /api/* to ALB over HTTP"
+    );
+  } else {
+    connect("repository-browser", coreNodeId("alb-security-group"), "API -> ALB SG: TCP 80");
+  }
   connect(coreNodeId("alb-security-group"), coreNodeId("load-balancer"), "attached to public ALB");
   connect(
     coreNodeId("alb-security-group"),
     coreNodeId("task-security-group"),
     `ALB SG -> Task SG: TCP ${containerPort} only`
   );
-  connect(coreNodeId("load-balancer"), coreNodeId("listener"), "accepts HTTP");
-  connect(coreNodeId("listener"), coreNodeId("target-group"), "forwards /api");
+  connect(coreNodeId("load-balancer"), coreNodeId("listener"), "accepts CloudFront origin HTTP");
+  connect(coreNodeId("listener"), coreNodeId("target-group"), "forwards API traffic");
   connect(coreNodeId("target-group"), coreNodeId("service"), `health checks ${healthCheckPath}`);
+  connect(coreNodeId("cluster"), coreNodeId("service"), "runs the API service");
+  connect(coreNodeId("task"), coreNodeId("service"), "defines the deployed revision");
   connect(coreNodeId("service"), fargateRuntimeId, "schedules desired task in private app subnets");
-  connect("repository-ecr", fargateRuntimeId, "pulls API image from ECR");
-  connect(fargateRuntimeId, "repository-ecs-logs", "writes ECS container logs via awslogs");
+  if (usesEcr) {
+    connect(ecrId, fargateRuntimeId, "application revisions pull API image from ECR");
+  }
+  if (usesCloudWatch) {
+    connect(fargateRuntimeId, logGroupId, "writes ECS container logs via awslogs");
+  }
   connect(natEipId, natGatewayId, "allocates public address");
-  connect(natGatewayId, privateRouteTableId, "provides outbound egress");
-  connect("repository-github-actions", "repository-ecr", "builds and pushes image");
-  connect("repository-github-actions", coreNodeId("service"), "deploys task revision");
+  connect(privateRouteTableId, natGatewayId, "routes private egress through NAT");
+  connect(privateRouteAssociationAId, privateRouteTableId, "associates private app subnet A");
+  connect(privateRouteAssociationBId, privateRouteTableId, "associates private app subnet B");
+  if (usesGitHubActions) {
+    if (usesEcr) {
+      connect("repository-github-actions", ecrId, "builds and pushes API image");
+    }
+    if (staticDelivery) {
+      connect("repository-github-actions", webAssetsId, "uploads apps/web/dist");
+      connect("repository-github-actions", cloudFrontId, "invalidates updated static assets");
+    }
+    connect("repository-github-actions", coreNodeId("service"), "deploys task revision");
+  }
 
   return {
     ...draft,
@@ -2594,11 +2766,16 @@ function applyStrictRepositoryEvidencePolicy(
       assumptions: [
         ...draft.metadata.assumptions,
         "Repository evidence strict mode kept only explicitly supported deployment resources.",
-        ...(requiresTlsAtAlb
-          ? ["The repository requires ALB TLS termination; the initial deployment uses HTTP until the domain and certificate are user-confirmed."]
+        ...(requiresTlsAtAlb && staticDelivery
+          ? ["CloudFront terminates public HTTPS and routes /api/* to the ALB HTTP origin, so the web application does not make mixed-content API requests."]
+          : requiresTlsAtAlb
+            ? ["The repository requires ALB TLS termination; the initial deployment uses HTTP until the domain and certificate are user-confirmed."]
           : []),
         ...(usesEcr
-          ? ["The initial deployment uses a public 8080 /health smoke image until GitHub Actions publishes the repository application image to ECR."]
+          ? ["The initial Terraform apply uses a public 8080 /health smoke image because the new ECR repository is empty; the first application release registers the repository image as a new ECS task definition revision."]
+          : []),
+        ...(staticDelivery
+          ? ["Terraform uploads a bootstrap index.html so the CloudFront URL is immediately healthy; CI/CD replaces it with apps/web/dist and invalidates CloudFront."]
           : []),
         "The two private app subnets use one NAT gateway for cost-conscious ECR image pulls and CloudWatch log delivery; this is a single-AZ egress tradeoff."
       ]

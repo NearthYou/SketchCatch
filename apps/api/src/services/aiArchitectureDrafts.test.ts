@@ -183,6 +183,7 @@ test("repository evidence strict mode keeps the Fargate diagram minimal and evid
     templateId: "ecs-fargate-container-app",
     repositoryEvidence: {
       mode: "strict",
+      repositoryName: "audience-live-check",
       facts: [
         { kind: "frontend_delivery", value: "s3_cloudfront_static", sourcePath: "README.md" },
         { kind: "backend_runtime", value: "ecs_fargate_service", sourcePath: "README.md" },
@@ -216,7 +217,26 @@ test("repository evidence strict mode keeps the Fargate diagram minimal and evid
   const listener = response.architectureJson.nodes.find(
     (node) => node.type === "LOAD_BALANCER_LISTENER"
   );
-  const cloudFront = response.architectureJson.nodes.find((node) => node.type === "CLOUDFRONT");
+  const cloudFront = response.architectureJson.nodes.find(
+    (node) =>
+      node.type === "CLOUDFRONT" &&
+      node.config.terraformResourceType !== "aws_cloudfront_origin_access_control"
+  );
+  const cloudFrontOac = response.architectureJson.nodes.find(
+    (node) => node.config.terraformResourceType === "aws_cloudfront_origin_access_control"
+  );
+  const webBucket = response.architectureJson.nodes.find(
+    (node) => node.type === "S3" && node.config.bucketPurpose === "static_website_origin"
+  );
+  const webPublicAccess = response.architectureJson.nodes.find(
+    (node) => node.config.terraformResourceType === "aws_s3_bucket_public_access_block"
+  );
+  const webBootstrap = response.architectureJson.nodes.find(
+    (node) => node.config.terraformResourceType === "aws_s3_object"
+  );
+  const webBucketPolicy = response.architectureJson.nodes.find(
+    (node) => node.config.terraformResourceType === "aws_s3_bucket_policy"
+  );
   const taskDefinition = response.architectureJson.nodes.find(
     (node) => node.type === "ECS_TASK_DEFINITION"
   );
@@ -228,6 +248,12 @@ test("repository evidence strict mode keeps the Fargate diagram minimal and evid
   );
   const taskSecurityGroup = response.architectureJson.nodes.find(
     (node) => node.config.templateResourceId === "task-security-group"
+  );
+  const executionPolicy = response.architectureJson.nodes.find(
+    (node) => node.config.templateResourceId === "execution-policy"
+  );
+  const taskRole = response.architectureJson.nodes.find(
+    (node) => node.config.templateResourceId === "task-role"
   );
   const publicSubnets = response.architectureJson.nodes.filter(
     (node) => node.type === "SUBNET" && node.config.mapPublicIpOnLaunch === true
@@ -248,8 +274,8 @@ test("repository evidence strict mode keeps the Fargate diagram minimal and evid
   assert.equal(countNodes("SUBNET"), 4);
   assert.equal(publicSubnets.length, 2);
   assert.equal(privateAppSubnets.length, 2);
-  assert.equal(countNodes("S3"), 1);
-  assert.equal(countNodes("CLOUDFRONT"), 1);
+  assert.equal(countNodes("S3"), 4);
+  assert.equal(countNodes("CLOUDFRONT"), 2);
   assert.equal(countNodes("ECR_REPOSITORY"), 1);
   assert.equal(countNodes("CLOUDWATCH_LOG_GROUP"), 1);
   assert.equal(countNodes("ACM_CERTIFICATE"), 0);
@@ -297,11 +323,41 @@ test("repository evidence strict mode keeps the Fargate diagram minimal and evid
   assert.deepEqual(cloudFront?.config.viewerCertificate, [{
     cloudfrontDefaultCertificate: true
   }]);
+  assert.equal((cloudFront?.config.origin as unknown[] | undefined)?.length, 2);
+  assert.deepEqual(cloudFront?.config.orderedCacheBehavior, [{
+    pathPattern: "/api/*",
+    targetOriginId: "api-alb",
+    viewerProtocolPolicy: "redirect-to-https",
+    allowedMethods: ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"],
+    cachedMethods: ["GET", "HEAD"],
+    cachePolicyId: "4135ea2d-6df8-44a3-9df3-4b5a84be39ad",
+    originRequestPolicyId: "b689b0a8-53d0-40ab-baf2-68738e2966ac"
+  }]);
+  assert.equal(cloudFrontOac?.config.signingBehavior, "always");
+  assert.equal(cloudFrontOac?.config.signingProtocol, "sigv4");
+  assert.deepEqual(
+    [
+      webPublicAccess?.config.blockPublicAcls,
+      webPublicAccess?.config.blockPublicPolicy,
+      webPublicAccess?.config.ignorePublicAcls,
+      webPublicAccess?.config.restrictPublicBuckets
+    ],
+    [true, true, true, true]
+  );
+  assert.equal(webBootstrap?.config.key, "index.html");
+  assert.match(String(webBucketPolicy?.config.policy), /cloudfront\.amazonaws\.com/u);
+  assert.match(String(webBucketPolicy?.config.policy), /repository-cloudfront/u);
+  assert.match(String(webBucket?.config.bucketPrefix), /^audience-live-check-web-/u);
   assert.match(String(taskDefinition?.config.containerDefinitions), /nginx:1\.27-alpine/u);
   assert.match(String(taskDefinition?.config.containerDefinitions), /\/health/u);
   const containerDefinitions = JSON.parse(
     String(taskDefinition?.config.containerDefinitions)
-  ) as Array<{ entryPoint?: string[]; command?: string[] }>;
+  ) as Array<{
+    entryPoint?: string[];
+    command?: string[];
+    environment?: Array<{ name: string; value: string }>;
+    logConfiguration?: { options?: Record<string, string> };
+  }>;
   assert.deepEqual(containerDefinitions[0]?.entryPoint, ["/bin/sh", "-c"]);
   assert.equal(containerDefinitions[0]?.command?.length, 1);
   assert.match(
@@ -309,6 +365,25 @@ test("repository evidence strict mode keeps the Fargate diagram minimal and evid
     /default_type text\/plain;.*return 200 ok;.*exec nginx/u
   );
   assert.equal((containerDefinitions[0]?.command?.[0] ?? "").includes('\\"'), false);
+  assert.deepEqual(containerDefinitions[0]?.environment, [
+    { name: "PORT", value: "8080" },
+    {
+      name: "WEB_ORIGIN",
+      value: "https://${aws_cloudfront_distribution.repository-cloudfront.domain_name}"
+    },
+    { name: "INSTANCE_ID", value: "fargate" }
+  ]);
+  assert.equal(
+    containerDefinitions[0]?.logConfiguration?.options?.["awslogs-group"],
+    "/ecs/audience-live-check-api"
+  );
+  assert.deepEqual(taskDefinition?.config.dependsOn, [
+    "aws_cloudwatch_log_group.repository-ecs-logs"
+  ]);
+  assert.equal(taskDefinition?.config.family, "audience-live-check-api");
+  assert.equal(service?.config.name, "audience-live-check-service");
+  assert.equal(executionPolicy?.config.name, undefined);
+  assert.equal(taskRole?.config.name, "audience-live-check-ecs-task");
   assert.ok(labels.has("Browser"));
   assert.ok(labels.has("GitHub Actions"));
   assert.ok(labels.has("AWS Managed Services"));
@@ -317,18 +392,20 @@ test("repository evidence strict mode keeps the Fargate diagram minimal and evid
     vpc !== undefined &&
     managedServices.positionY + Number(managedServices.config.diagramHeight) < vpc.positionY
   );
-  assert.ok(edgeLabels.has("builds and pushes image"));
+  assert.ok(edgeLabels.has("builds and pushes API image"));
+  assert.ok(edgeLabels.has("uploads apps/web/dist"));
+  assert.ok(edgeLabels.has("invalidates updated static assets"));
   assert.ok(edgeLabels.has("deploys task revision"));
   assert.ok(edgeLabels.has("health checks /health"));
-  assert.ok(edgeLabels.has("API -> ALB SG: TCP 80 (HTTPS 443 pending certificate)"));
+  assert.ok(edgeLabels.has("HTTPS web and /api entry"));
+  assert.ok(edgeLabels.has("proxies /api/* to ALB over HTTP"));
   assert.ok(edgeLabels.has("ALB SG -> Task SG: TCP 8080 only"));
-  assert.ok(edgeLabels.has("pulls API image from ECR"));
+  assert.ok(edgeLabels.has("application revisions pull API image from ECR"));
   assert.ok(edgeLabels.has("writes ECS container logs via awslogs"));
   assert.equal(
     response.architectureJson.edges.filter(
       (edge) =>
-        edge.sourceId === "repository-browser" &&
-        [loadBalancer?.id, albSecurityGroup?.id].includes(edge.targetId)
+        edge.sourceId === "repository-browser" && edge.targetId === cloudFront?.id
     ).length,
     1
   );
@@ -346,7 +423,7 @@ test("repository evidence strict mode keeps the Fargate diagram minimal and evid
   }]);
   assert.ok(
     response.metadata.assumptions.some((assumption) =>
-      assumption.includes("domain and certificate") && assumption.includes("HTTP")
+      assumption.includes("CloudFront terminates public HTTPS") && assumption.includes("/api/*")
     )
   );
   assert.deepEqual(
@@ -355,6 +432,68 @@ test("repository evidence strict mode keeps the Fargate diagram minimal and evid
     ),
     []
   );
+});
+
+test("repository evidence strict mode does not create edges for unsupported delivery services", async () => {
+  const provider = createFakeAmazonQProvider(createNormalizedRequirementPlan);
+  const response = await createAmazonQArchitectureDraftResponse({
+    prompt: [
+      "website type: API server mobile app backend",
+      "traffic: small traffic under daily 100 users concurrent 10",
+      "database: no database required",
+      "frontend technology: mobile app native client",
+      "backend: simple API Node.js in one managed ECS Fargate task",
+      "region: Korea only Seoul region ap-northeast-2",
+      "monthly budget: under 10 manwon minimum cost",
+      "SSL HTTPS: optional HTTP acceptable",
+      "file upload: none",
+      "realtime feature: none",
+      "realtime notification transport: simple polling with cost warning",
+      "management preference: managed container runtime",
+      "loading time target: within 5 seconds",
+      "website size: under 10MB",
+      "traffic pattern: steady traffic",
+      "downtime tolerance: monthly 8 hours within 99 availability"
+    ].join("\n"),
+    templateId: "ecs-fargate-container-app",
+    repositoryEvidence: {
+      mode: "strict",
+      repositoryName: "api-only",
+      facts: [
+        { kind: "backend_runtime", value: "ecs_fargate_service", sourcePath: "README.md" },
+        { kind: "traffic_entry", value: "application_load_balancer", sourcePath: "README.md" },
+        { kind: "health_check", value: "http:8080/health", sourcePath: "Dockerfile" },
+        { kind: "runtime_scale", value: "single_task", sourcePath: "README.md" }
+      ]
+    }
+  }, {
+    provider,
+    creditPolicy: confirmedCreditPolicy
+  });
+
+  assert.ok(!("status" in response), JSON.stringify(response));
+  if ("status" in response) return;
+
+  const nodeIds = new Set(response.architectureJson.nodes.map((node) => node.id));
+  assert.ok(response.architectureJson.edges.every(
+    (edge) => nodeIds.has(edge.sourceId) && nodeIds.has(edge.targetId)
+  ));
+  assert.equal(
+    response.architectureJson.edges.some((edge) => edge.sourceId === "repository-cloudfront"),
+    false
+  );
+  assert.equal(
+    response.architectureJson.edges.some((edge) => edge.sourceId === "repository-github-actions"),
+    false
+  );
+  const albSecurityGroupId = response.architectureJson.nodes.find(
+    (node) => node.config.templateResourceId === "alb-security-group"
+  )?.id;
+  assert.ok(response.architectureJson.edges.some(
+    (edge) =>
+      edge.sourceId === "repository-browser" &&
+      edge.targetId === albSecurityGroupId
+  ));
 });
 
 test("createAmazonQArchitectureDraftResponse sends the web deployment answer path to Amazon Q", async () => {

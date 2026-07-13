@@ -72,12 +72,15 @@ function renderInlineLambdaArchive(node: InfrastructureGraphNode): string {
 
 function renderLiveObservationOutputs(graph: InfrastructureGraph): string[] {
   const website = findResourceNode(graph, "aws_s3_bucket_website_configuration");
+  const webBucket = findResourceNode(graph, "aws_s3_bucket");
   const cloudFront = findResourceNode(graph, "aws_cloudfront_distribution");
+  const ecrRepository = findResourceNode(graph, "aws_ecr_repository");
   const loadBalancer = findResourceNode(graph, "aws_lb");
   const targetGroup = findResourceNode(graph, "aws_lb_target_group");
   const autoScalingGroup = findResourceNode(graph, "aws_autoscaling_group");
   const ecsCluster = findResourceNode(graph, "aws_ecs_cluster");
   const ecsService = findResourceNode(graph, "aws_ecs_service");
+  const ecsTaskDefinition = findResourceNode(graph, "aws_ecs_task_definition");
   const applicationScalingTarget = findResourceNode(graph, "aws_appautoscaling_target");
   const alarm = graph.nodes.find(
     (node) =>
@@ -103,14 +106,50 @@ function renderLiveObservationOutputs(graph: InfrastructureGraph): string[] {
         ]
       : [];
 
+  if (cloudFront) {
+    commonOutputs.push(
+      renderOutput(
+        "cloudfront_distribution_id",
+        `aws_cloudfront_distribution.${cloudFront.iac.resourceName}.id`
+      )
+    );
+  }
+
+  if (webBucket && (website || cloudFront)) {
+    commonOutputs.push(
+      renderOutput("static_site_bucket_name", `aws_s3_bucket.${webBucket.iac.resourceName}.bucket`)
+    );
+  }
+
+  if (ecrRepository) {
+    commonOutputs.push(
+      renderOutput(
+        "ecr_repository_url",
+        `aws_ecr_repository.${ecrRepository.iac.resourceName}.repository_url`
+      )
+    );
+  }
+
+  if (ecsTaskDefinition) {
+    commonOutputs.push(
+      renderOutput(
+        "ecs_task_family",
+        `aws_ecs_task_definition.${ecsTaskDefinition.iac.resourceName}.family`
+      )
+    );
+  }
+
   if (!loadBalancer || !targetGroup) {
     return commonOutputs;
   }
 
   const loadBalancerAddress = `aws_lb.${loadBalancer.iac.resourceName}`;
   const targetGroupAddress = `aws_lb_target_group.${targetGroup.iac.resourceName}`;
+  const apiBaseUrl = cloudFront && cloudFrontRoutesApiTraffic(cloudFront)
+    ? `"https://\${aws_cloudfront_distribution.${cloudFront.iac.resourceName}.domain_name}"`
+    : `"http://\${${loadBalancerAddress}.dns_name}"`;
   commonOutputs.push(
-    renderOutput("api_base_url", `"http://\${${loadBalancerAddress}.dns_name}"`),
+    renderOutput("api_base_url", apiBaseUrl),
     renderOutput("alb_arn_suffix", `${loadBalancerAddress}.arn_suffix`),
     renderOutput("target_group_arn_suffix", `${targetGroupAddress}.arn_suffix`)
   );
@@ -157,6 +196,17 @@ function renderLiveObservationOutputs(graph: InfrastructureGraph): string[] {
       ? []
       : [renderOutput("scale_out_threshold", String(requestThreshold))])
   ];
+}
+
+function cloudFrontRoutesApiTraffic(node: InfrastructureGraphNode): boolean {
+  const behaviorValue = node.config["orderedCacheBehavior"];
+  const behaviors = Array.isArray(behaviorValue) ? behaviorValue : [behaviorValue];
+
+  return behaviors.some((behavior) =>
+    isRecord(behavior) &&
+    typeof behavior["pathPattern"] === "string" &&
+    behavior["pathPattern"].startsWith("/api/")
+  );
 }
 
 function findAlbRequestCountTargetValue(
