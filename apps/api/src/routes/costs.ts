@@ -69,6 +69,17 @@ export async function registerCostRoutes(
       .where(eq(projects.userId, currentUserId))
       .orderBy(desc(projects.updatedAt), desc(projects.createdAt));
     const projectIds = projectRows.map((project) => project.id);
+    const deploymentRows =
+      projectIds.length === 0
+        ? []
+        : await db
+            .select()
+            .from(deployments)
+            .where(inArray(deployments.projectId, projectIds))
+            .orderBy(desc(deployments.completedAt), desc(deployments.updatedAt));
+    const deployedProjectIds = new Set(
+      selectLatestSuccessfulDeployments(deploymentRows).map((deployment) => deployment.projectId)
+    );
     const architectureRows =
       projectIds.length === 0
         ? []
@@ -90,7 +101,14 @@ export async function registerCostRoutes(
       project
     }));
     const projectEstimates = await Promise.all(
-      rows.map((row) => createCostProjectEstimate(row, query, pricingRateProvider))
+      rows.map((row) =>
+        createCostProjectEstimate(
+          row,
+          query,
+          pricingRateProvider,
+          deployedProjectIds.has(row.project.id)
+        )
+      )
     );
     const totalEstimateAmount = roundUsd(
       projectEstimates.reduce(
@@ -162,6 +180,9 @@ export async function registerCostRoutes(
             .where(inArray(deployments.projectId, projectIds))
             .orderBy(desc(deployments.completedAt), desc(deployments.updatedAt));
     const latestSuccessfulDeployments = selectLatestSuccessfulDeployments(deploymentRows);
+    const deployedProjectIds = new Set(
+      latestSuccessfulDeployments.map((deployment) => deployment.projectId)
+    );
     const deploymentIds = latestSuccessfulDeployments.map((deployment) => deployment.id);
     const deployedResourceRows =
       deploymentIds.length === 0
@@ -177,7 +198,9 @@ export async function registerCostRoutes(
         deployedResources: deployedResourceRows.map(toCostUsageDeployedResource),
         deployments: latestSuccessfulDeployments.map(toCostUsageDeployment),
         projectId: query.projectId,
-        projects: projectRows.map(toProject),
+        projects: projectRows
+          .filter((project) => deployedProjectIds.has(project.id))
+          .map(toProject),
         range: query.range,
         userId: currentUserId
       },
@@ -209,12 +232,14 @@ async function createCostProjectEstimate(
     period: CostEstimatePeriod;
     region: string;
   },
-  pricingRateProvider: CostPricingRateProvider
+  pricingRateProvider: CostPricingRateProvider,
+  isDeployed: boolean
 ): Promise<CostProjectEstimate> {
   if (row.architecture === undefined) {
     return {
       project: toProject(row.project),
-      costEstimate: null
+      costEstimate: null,
+      deploymentState: isDeployed ? "deployed" : "not_deployed"
     };
   }
 
@@ -230,7 +255,8 @@ async function createCostProjectEstimate(
 
   return {
     project: toProject(row.project),
-    costEstimate
+    costEstimate,
+    deploymentState: isDeployed ? "deployed" : "not_deployed"
   };
 }
 

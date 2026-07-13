@@ -33,7 +33,7 @@ type AwsConnectionRow = typeof awsConnections.$inferSelect;
 type DeploymentRow = typeof deployments.$inferSelect;
 type DeployedResourceRow = typeof deployedResources.$inferSelect;
 
-test("GET /api/costs/projects returns every owned project and estimates the latest architecture", async () => {
+test("GET /api/costs/projects returns deployment state and estimates the latest architecture", async () => {
   const fakeDb = new CostRouteFakeDb({
     users: [makeUser()],
     projects: [
@@ -67,6 +67,12 @@ test("GET /api/costs/projects returns every owned project and estimates the late
         architectureJson: createEc2Architecture(),
         createdAt: new Date("2026-06-26T00:00:00.000Z")
       })
+    ],
+    deployments: [
+      makeDeployment({
+        projectId: PROJECT_WITH_ARCHITECTURE_ID,
+        status: "SUCCESS"
+      })
     ]
   });
   const app = buildApp({
@@ -87,7 +93,9 @@ test("GET /api/costs/projects returns every owned project and estimates the late
     [PROJECT_WITHOUT_ARCHITECTURE_ID, PROJECT_WITH_ARCHITECTURE_ID]
   );
   assert.equal(body.projects[0].costEstimate, null);
+  assert.equal(body.projects[0].deploymentState, "not_deployed");
   assert.equal(body.projects[1].costEstimate.totalEstimate.amount, 8.5);
+  assert.equal(body.projects[1].deploymentState, "deployed");
   assert.equal(body.totalEstimate.amount, 8.5);
 
   await app.close();
@@ -181,10 +189,10 @@ test("GET /api/costs/usage calls the usage provider with the verified AWS connec
   assert.equal(providerInput.current?.range, "7d");
   assert.equal(providerInput.current?.projectId, PROJECT_WITH_ARCHITECTURE_ID);
   assert.equal(providerInput.current?.awsConnection?.id, "88888888-8888-4888-8888-888888888888");
-  assert.equal(providerInput.current?.projects.length, 2);
+  assert.equal(providerInput.current?.projects.length, 1);
   assert.deepEqual(
     providerInput.current?.projects.map((project) => project.id),
-    [PROJECT_WITH_ARCHITECTURE_ID, PROJECT_WITHOUT_ARCHITECTURE_ID]
+    [PROJECT_WITH_ARCHITECTURE_ID]
   );
   assert.equal(providerInput.current?.deployments.length, 1);
   assert.equal(providerInput.current?.deployedResources.length, 1);
