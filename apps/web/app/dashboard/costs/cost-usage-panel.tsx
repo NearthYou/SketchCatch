@@ -22,7 +22,9 @@ import {
   selectCostUsageProject
 } from "../../../features/costs/cost-usage-project-view";
 import { createCostRequestCoordinator } from "../../../features/costs/cost-request-coordinator";
+import { createCostUsageDisplayCopy } from "../../../features/costs/cost-usage-copy";
 import { listAwsConnections, listCostUsageAnalysis } from "../../../features/workspace/api";
+import { CostMetric, formatUsd } from "./cost-dashboard-presentation";
 import styles from "../dashboard-tools.module.css";
 
 type CostLoadState = "loading" | "ready" | "error";
@@ -70,6 +72,14 @@ export function CostUsagePanel() {
   const currentCost = selectedProject?.amount ?? data?.totalCost.amount;
   const forecastCost = useMemo(
     () => scaleForecast(data, selectedProject?.amount),
+    [data, selectedProject]
+  );
+  const displayCopy = useMemo(
+    () => createCostUsageDisplayCopy({
+      dataSource: data?.dataSource ?? null,
+      hasSelectedProject: selectedProject !== null,
+      projectSource: selectedProject?.source
+    }),
     [data, selectedProject]
   );
 
@@ -130,11 +140,11 @@ export function CostUsagePanel() {
         <button className={styles.iconAction} aria-label="실제 사용량 새로고침" onClick={() => void loadCosts()} title="새로고침" type="button"><RefreshCw size={17} /></button>
       </div>
 
-      {data?.dataSource === "sample" ? <p className="dashboardInformationBand" role="status">예시 데이터입니다. 실제 AWS 청구액이 아니며, 검증된 AWS 연결 후 실제 사용량으로 전환됩니다.</p> : null}
+      {displayCopy.sampleNotice ? <p className="dashboardInformationBand" role="status">{displayCopy.sampleNotice}</p> : null}
       {errorMessage ? <p className={styles.errorBand}>{errorMessage}</p> : null}
 
       <section className={styles.metricGrid}>
-        <CostMetric icon={<WalletCards size={18} />} label={selectedProject ? `${selectedProject.projectName} 실제 비용` : "배포 프로젝트 실제 비용"} value={formatUsd(currentCost)} />
+        <CostMetric icon={<WalletCards size={18} />} label={selectedProject ? `${selectedProject.projectName} ${displayCopy.metricCostLabel}` : displayCopy.metricCostLabel} value={formatUsd(currentCost)} />
         <CostMetric icon={<TrendingUp size={18} />} label="월말 예상" value={formatUsd(forecastCost)} />
         <CostMetric icon={<AlertTriangle size={18} />} label="절감 가능" value={formatUsd(savings)} />
       </section>
@@ -152,18 +162,8 @@ export function CostUsagePanel() {
   );
 }
 
-function CostMetric({ icon, label, value }: { readonly icon: React.ReactNode; readonly label: string; readonly value: string }) {
-  return <article className={styles.metricCard}>{icon}<span>{label}</span><strong>{value}</strong></article>;
-}
-
 function scaleForecast(data: CostUsageAnalysisResponse | null, selectedAmount: number | undefined): number | undefined {
   if (data === null || selectedAmount === undefined) return data?.forecastMonthEndCost.amount;
   if (data.totalCost.amount <= 0) return 0;
   return Math.round((data.forecastMonthEndCost.amount * selectedAmount / data.totalCost.amount + Number.EPSILON) * 100) / 100;
-}
-
-function formatUsd(amount: number | undefined): string {
-  return typeof amount === "number"
-    ? new Intl.NumberFormat("ko-KR", { style: "currency", currency: "USD" }).format(amount)
-    : "계산 못 함";
 }

@@ -19,7 +19,8 @@ test("sample usage is clearly separated from actual AWS billing data", () => {
 test("Cost Explorer usage keeps the actual billing labels", () => {
   const copy = createCostUsageDisplayCopy({
     dataSource: "aws_cost_explorer",
-    hasSelectedProject: true
+    hasSelectedProject: true,
+    projectSource: "cost_explorer_tag"
   });
 
   assert.equal(copy.controlKicker, "Actual usage");
@@ -28,6 +29,17 @@ test("Cost Explorer usage keeps the actual billing labels", () => {
   assert.equal(copy.metricCostLabel, "프로젝트 실제 비용");
   assert.equal(copy.projectCostTitle, "프로젝트별 실제 비용");
   assert.equal(copy.sampleNotice, null);
+});
+
+test("resource-weighted project allocation is not labelled as an actual project bill", () => {
+  const copy = createCostUsageDisplayCopy({
+    dataSource: "aws_cost_explorer",
+    hasSelectedProject: true,
+    projectSource: "deployed_resource_estimate"
+  });
+
+  assert.equal(copy.metricCostLabel, "프로젝트 비용 배분액");
+  assert.match(copy.sampleNotice ?? "", /배포 리소스 비율로 배분/);
 });
 
 test("loading state does not claim that unknown data is actual billing data", () => {

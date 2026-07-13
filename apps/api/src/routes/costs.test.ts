@@ -9,6 +9,7 @@ import {
   awsConnections,
   deployedResources,
   deployments,
+  gitCicdHandoffs,
   projects,
   users
 } from "../db/schema.js";
@@ -32,6 +33,7 @@ type ArchitectureRow = typeof architectures.$inferSelect;
 type AwsConnectionRow = typeof awsConnections.$inferSelect;
 type DeploymentRow = typeof deployments.$inferSelect;
 type DeployedResourceRow = typeof deployedResources.$inferSelect;
+type GitCicdHandoffRow = typeof gitCicdHandoffs.$inferSelect;
 
 test("GET /api/costs/projects returns deployment state and estimates the latest architecture", async () => {
   const fakeDb = new CostRouteFakeDb({
@@ -116,6 +118,55 @@ test("GET /api/costs/usage requires an authenticated user", async () => {
 
   assert.equal(response.statusCode, 401);
 
+  await app.close();
+});
+
+test("GET /api/costs/projects treats a newer destroy as not deployed", async () => {
+  const fakeDb = new CostRouteFakeDb({
+    users: [makeUser()],
+    projects: [makeProject()],
+    deployments: [
+      makeDeployment({
+        id: "99999999-9999-4999-8999-999999999991",
+        status: "SUCCESS",
+        completedAt: new Date("2026-06-25T00:00:00.000Z")
+      }),
+      makeDeployment({
+        id: "99999999-9999-4999-8999-999999999992",
+        status: "DESTROYED",
+        completedAt: new Date("2026-06-27T00:00:00.000Z")
+      })
+    ]
+  });
+  const app = buildApp({ getDatabaseClient: () => fakeDb.client });
+
+  const response = await app.inject({
+    method: "GET",
+    url: "/api/costs/projects",
+    headers: await authHeaders(ACTIVE_USER_ID)
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.json().projects[0].deploymentState, "not_deployed");
+  await app.close();
+});
+
+test("GET /api/costs/projects treats a successful Git CI/CD handoff as deployed", async () => {
+  const fakeDb = new CostRouteFakeDb({
+    users: [makeUser()],
+    projects: [makeProject()],
+    gitCicdHandoffs: [makeGitCicdHandoff()]
+  });
+  const app = buildApp({ getDatabaseClient: () => fakeDb.client });
+
+  const response = await app.inject({
+    method: "GET",
+    url: "/api/costs/projects",
+    headers: await authHeaders(ACTIVE_USER_ID)
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.json().projects[0].deploymentState, "deployed");
   await app.close();
 });
 
@@ -346,6 +397,51 @@ function makeDeployedResource(
   };
 }
 
+function makeGitCicdHandoff(overrides: Partial<GitCicdHandoffRow> = {}): GitCicdHandoffRow {
+  return {
+    apiBaseUrl: null,
+    appPipelineRunUrl: null,
+    appPipelineStatus: "success",
+    architectureId: "66666666-6666-4666-8666-666666666666",
+    awsRoleDiff: null,
+    commitMessage: null,
+    createdAt: new Date("2026-06-25T00:00:00.000Z"),
+    createdByUserId: ACTIVE_USER_ID,
+    deploymentMode: "infra_and_app",
+    destroyPipelineRunUrl: null,
+    destroyPipelineStatus: "not_started",
+    environmentName: "sketchcatch-production",
+    githubOAuthRequired: false,
+    handoffKind: "terraform_iac",
+    id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    infraPipelineRunUrl: "https://github.com/example/actions/runs/1",
+    infraPipelineStatus: "success",
+    mergeCommitSha: "abc123",
+    pipelineRunUrl: "https://github.com/example/actions/runs/1",
+    projectId: PROJECT_WITH_ARCHITECTURE_ID,
+    pullRequestHeadSha: "abc123",
+    pullRequestNumber: 1,
+    pullRequestTitle: "Deploy",
+    pullRequestUrl: "https://github.com/example/pull/1",
+    repositoryName: "example",
+    repositoryOwner: "owner",
+    repositoryProvider: "github",
+    repositorySettingsPreview: null,
+    requiresEnvironmentApproval: true,
+    sourceBranch: "feature/deploy",
+    sourceDeploymentId: null,
+    sourceRepositoryId: "repository-1",
+    staticSiteUrl: null,
+    status: "pipeline_success",
+    statusMessage: null,
+    targetBranch: "main",
+    terraformArtifactId: "terraform-artifact",
+    updatedAt: new Date("2026-06-26T00:00:00.000Z"),
+    userAcceptedChangeId: "accepted-change",
+    ...overrides
+  };
+}
+
 function createEc2Architecture(): ArchitectureJson {
   return createArchitectureJson([
     {
@@ -404,6 +500,7 @@ class CostRouteFakeDb {
   awsConnectionRows: AwsConnectionRow[];
   deploymentRows: DeploymentRow[];
   deployedResourceRows: DeployedResourceRow[];
+  gitCicdHandoffRows: GitCicdHandoffRow[];
   client: DatabaseClient;
 
   constructor(data: {
@@ -413,6 +510,7 @@ class CostRouteFakeDb {
     awsConnections?: AwsConnectionRow[];
     deployments?: DeploymentRow[];
     deployedResources?: DeployedResourceRow[];
+    gitCicdHandoffs?: GitCicdHandoffRow[];
   }) {
     this.userRows = data.users ?? [];
     this.projectRows = data.projects ?? [];
@@ -420,6 +518,7 @@ class CostRouteFakeDb {
     this.awsConnectionRows = data.awsConnections ?? [];
     this.deploymentRows = data.deployments ?? [];
     this.deployedResourceRows = data.deployedResources ?? [];
+    this.gitCicdHandoffRows = data.gitCicdHandoffs ?? [];
     this.client = {
       db: this.createDb() as Database,
       pool: {
@@ -484,6 +583,18 @@ class CostRouteFakeDb {
       return this.deployedResourceRows.filter((resource) =>
         deploymentIds.has(resource.deploymentId)
       );
+    }
+
+    if (table === gitCicdHandoffs) {
+      const ownedProjectIds = new Set(
+        this.projectRows
+          .filter((project) => project.userId === ACTIVE_USER_ID)
+          .map((project) => project.id)
+      );
+
+      return this.gitCicdHandoffRows
+        .filter((handoff) => ownedProjectIds.has(handoff.projectId))
+        .sort((left, right) => right.updatedAt.getTime() - left.updatedAt.getTime());
     }
 
     return [];

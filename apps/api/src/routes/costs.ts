@@ -11,7 +11,14 @@ import { z } from "zod";
 import { requireActiveUserId } from "../auth/current-user.js";
 import { getDatabaseClient, type DatabaseClient } from "../db/client.js";
 import { toAwsConnection } from "../aws-connections/aws-connection-service.js";
-import { architectures, awsConnections, deployedResources, deployments, projects } from "../db/schema.js";
+import {
+  architectures,
+  awsConnections,
+  deployedResources,
+  deployments,
+  gitCicdHandoffs,
+  projects
+} from "../db/schema.js";
 import { createConfiguredAwsPricingRateProvider } from "../services/awsPricingRateProvider.js";
 import {
   analyzeCost,
@@ -69,17 +76,7 @@ export async function registerCostRoutes(
       .where(eq(projects.userId, currentUserId))
       .orderBy(desc(projects.updatedAt), desc(projects.createdAt));
     const projectIds = projectRows.map((project) => project.id);
-    const deploymentRows =
-      projectIds.length === 0
-        ? []
-        : await db
-            .select()
-            .from(deployments)
-            .where(inArray(deployments.projectId, projectIds))
-            .orderBy(desc(deployments.completedAt), desc(deployments.updatedAt));
-    const deployedProjectIds = new Set(
-      selectLatestSuccessfulDeployments(deploymentRows).map((deployment) => deployment.projectId)
-    );
+    const { deployedProjectIds } = await loadCostDeploymentContext(db, projectIds);
     const architectureRows =
       projectIds.length === 0
         ? []
@@ -171,19 +168,9 @@ export async function registerCostRoutes(
             .orderBy(desc(awsConnections.updatedAt), desc(awsConnections.createdAt));
     const awsConnection =
       selectedAwsConnectionRows[0] === undefined ? null : toAwsConnection(selectedAwsConnectionRows[0]);
-    const deploymentRows =
-      projectIds.length === 0
-        ? []
-        : await db
-            .select()
-            .from(deployments)
-            .where(inArray(deployments.projectId, projectIds))
-            .orderBy(desc(deployments.completedAt), desc(deployments.updatedAt));
-    const latestSuccessfulDeployments = selectLatestSuccessfulDeployments(deploymentRows);
-    const deployedProjectIds = new Set(
-      latestSuccessfulDeployments.map((deployment) => deployment.projectId)
-    );
-    const deploymentIds = latestSuccessfulDeployments.map((deployment) => deployment.id);
+    const { activeDirectDeployments, deployedProjectIds } =
+      await loadCostDeploymentContext(db, projectIds);
+    const deploymentIds = activeDirectDeployments.map((deployment) => deployment.id);
     const deployedResourceRows =
       deploymentIds.length === 0
         ? []
@@ -196,7 +183,7 @@ export async function registerCostRoutes(
       {
         awsConnection,
         deployedResources: deployedResourceRows.map(toCostUsageDeployedResource),
-        deployments: latestSuccessfulDeployments.map(toCostUsageDeployment),
+        deployments: activeDirectDeployments.map(toCostUsageDeployment),
         projectId: query.projectId,
         projects: projectRows
           .filter((project) => deployedProjectIds.has(project.id))
@@ -209,20 +196,65 @@ export async function registerCostRoutes(
   });
 }
 
-function selectLatestSuccessfulDeployments(
+async function loadCostDeploymentContext(
+  db: DatabaseClient["db"],
+  projectIds: readonly string[]
+): Promise<{
+  activeDirectDeployments: (typeof deployments.$inferSelect)[];
+  deployedProjectIds: Set<string>;
+}> {
+  if (projectIds.length === 0) {
+    return {
+      activeDirectDeployments: [],
+      deployedProjectIds: new Set()
+    };
+  }
+
+  const [deploymentRows, handoffRows] = await Promise.all([
+    db
+      .select()
+      .from(deployments)
+      .where(inArray(deployments.projectId, projectIds))
+      .orderBy(desc(deployments.completedAt), desc(deployments.updatedAt)),
+    db
+      .select()
+      .from(gitCicdHandoffs)
+      .where(inArray(gitCicdHandoffs.projectId, projectIds))
+      .orderBy(desc(gitCicdHandoffs.updatedAt), desc(gitCicdHandoffs.createdAt))
+  ]);
+  const activeDirectDeployments = selectActiveDirectDeployments(deploymentRows);
+  const deployedProjectIds = new Set(
+    activeDirectDeployments.map((deployment) => deployment.projectId)
+  );
+
+  for (const handoff of handoffRows) {
+    if (handoff.status === "pipeline_success" && handoff.destroyPipelineStatus !== "success") {
+      deployedProjectIds.add(handoff.projectId);
+    }
+  }
+
+  return { activeDirectDeployments, deployedProjectIds };
+}
+
+function selectActiveDirectDeployments(
   rows: readonly (typeof deployments.$inferSelect)[]
 ): (typeof deployments.$inferSelect)[] {
-  const latestDeploymentsByProjectId = new Map<string, typeof deployments.$inferSelect>();
+  const latestLifecycleByProjectId = new Map<string, typeof deployments.$inferSelect>();
 
   for (const deployment of rows) {
-    if (deployment.status !== "SUCCESS" || latestDeploymentsByProjectId.has(deployment.projectId)) {
+    if (
+      latestLifecycleByProjectId.has(deployment.projectId) ||
+      (deployment.status !== "SUCCESS" && deployment.status !== "DESTROYED")
+    ) {
       continue;
     }
 
-    latestDeploymentsByProjectId.set(deployment.projectId, deployment);
+    latestLifecycleByProjectId.set(deployment.projectId, deployment);
   }
 
-  return [...latestDeploymentsByProjectId.values()];
+  return [...latestLifecycleByProjectId.values()].filter(
+    (deployment) => deployment.status === "SUCCESS"
+  );
 }
 
 async function createCostProjectEstimate(

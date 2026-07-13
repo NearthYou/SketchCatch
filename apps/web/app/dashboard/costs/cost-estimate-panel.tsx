@@ -14,6 +14,7 @@ import {
 } from "../../../features/costs/cost-estimate-project-view";
 import { createCostRequestCoordinator } from "../../../features/costs/cost-request-coordinator";
 import { listCostProjectEstimates } from "../../../features/workspace/api";
+import { CostMetric, formatUsd } from "./cost-dashboard-presentation";
 import styles from "../dashboard-tools.module.css";
 
 type CostLoadState = "loading" | "ready" | "error";
@@ -155,16 +156,6 @@ export function CostEstimatePanel() {
   );
 }
 
-function CostMetric({ icon, label, value }: { readonly icon: React.ReactNode; readonly label: string; readonly value: string }) {
-  return <article className={styles.metricCard}>{icon}<span>{label}</span><strong>{value}</strong></article>;
-}
-
 function getPeriodLabel(period: CostEstimatePeriod): string {
   return period === "day" ? "하루" : period === "week" ? "일주일" : "한 달";
-}
-
-function formatUsd(amount: number | undefined): string {
-  return typeof amount === "number"
-    ? new Intl.NumberFormat("ko-KR", { style: "currency", currency: "USD" }).format(amount)
-    : "계산 못 함";
 }

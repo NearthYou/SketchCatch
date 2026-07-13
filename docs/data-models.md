@@ -1842,7 +1842,7 @@ type CostProjectEstimateListResponse = {
 };
 ```
 
-`deploymentState`는 프로젝트의 최신 성공 상태인 Direct Deployment record가 현재 `SUCCESS`인지 구분한다. 비용관리 화면의 `예상 비용` 탭은 `not_deployed` 프로젝트만 보여주고, `실제 사용량` 탭은 `deployed` 프로젝트만 사용한다.
+`deploymentState`는 Direct Deployment의 최신 `SUCCESS`/`DESTROYED` lifecycle 상태와 Git/CI/CD handoff의 `pipeline_success`/destroy pipeline 상태를 함께 확인한다. 활성 Direct Deployment가 있거나 destroy되지 않은 성공 Git/CI/CD handoff가 있으면 `deployed`, 그렇지 않으면 `not_deployed`다. 비용관리 화면의 `예상 비용` 탭은 `not_deployed` 프로젝트만 보여주고, `실제 사용량` 탭은 `deployed` 프로젝트만 사용한다.
 
 비용관리 페이지의 실제 사용량 분석 탭은 `GET /api/costs/usage?range=30d&awsConnectionId=...` 응답을 사용한다. 화면은 `GET /api/aws/connections`에서 `verified` AWS 연결만 선택지로 보여주고, 사용자가 선택한 연결의 `awsConnectionId`를 사용량 분석 요청에 전달한다. `awsConnectionId`가 있으면 해당 사용자의 `verified` AWS 연결만 사용하고, 없으면 최신 `verified` 연결을 사용한다. 연결이 없거나 Cost Explorer/CloudWatch 조회가 실패하면 API는 오류를 화면에 노출하지 않고 deterministic sample 응답으로 같은 DTO를 반환한다. 실제 사용량의 프로젝트 배분 대상은 현재 `SUCCESS` Deployment가 있는 프로젝트로 제한해 미배포 프로젝트에 실제 청구액이 표시되지 않게 한다.
 

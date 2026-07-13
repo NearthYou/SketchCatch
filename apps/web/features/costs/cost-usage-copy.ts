@@ -1,8 +1,12 @@
-import type { CostUsageAnalysisResponse } from "@sketchcatch/types";
+import type {
+  CostProjectUsageSource,
+  CostUsageAnalysisResponse
+} from "@sketchcatch/types";
 
 type CostUsageDisplayCopyOptions = {
   readonly dataSource: CostUsageAnalysisResponse["dataSource"] | null;
   readonly hasSelectedProject: boolean;
+  readonly projectSource?: CostProjectUsageSource | null | undefined;
 };
 
 type CostUsageDisplayCopy = {
@@ -18,7 +22,8 @@ type CostUsageDisplayCopy = {
 // 실제 AWS 비용과 Sample data가 화면에서 섞이지 않도록 문구를 고릅니다.
 export function createCostUsageDisplayCopy({
   dataSource,
-  hasSelectedProject
+  hasSelectedProject,
+  projectSource
 }: CostUsageDisplayCopyOptions): CostUsageDisplayCopy {
   if (dataSource === "sample") {
     return {
@@ -34,6 +39,19 @@ export function createCostUsageDisplayCopy({
   }
 
   if (dataSource === "aws_cost_explorer") {
+    if (hasSelectedProject && projectSource === "deployed_resource_estimate") {
+      return {
+        controlKicker: "Allocated usage",
+        loadingMessage: "사용량 분석 데이터를 불러오는 중입니다.",
+        metricCostLabel: "프로젝트 비용 배분액",
+        projectCostTitle: "프로젝트별 비용 배분액",
+        sampleNotice:
+          "프로젝트 Cost Explorer tag가 없어 실제 계정 비용을 배포 리소스 비율로 배분한 값입니다.",
+        summaryKicker: "Allocated cost",
+        summaryTitle: "프로젝트 비용 배분"
+      };
+    }
+
     return {
       controlKicker: "Actual usage",
       loadingMessage: "사용량 분석 데이터를 불러오는 중입니다.",
