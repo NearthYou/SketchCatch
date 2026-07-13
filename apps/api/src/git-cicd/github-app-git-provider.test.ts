@@ -111,6 +111,8 @@ function createGitHubClient(pullRequests: GitHubAppCreatePullRequestInput[]): Gi
     async listInstallations() { return []; },
     async listInstallationRepositories() { return []; },
     async applyRepositorySettings() { return { environmentName: "production", variables: [] }; },
+    async validateRepositoryBranch() { throw new Error("not used"); },
+    async validateRepositoryDirectory() { throw new Error("not used"); },
     async getLatestWorkflowRunForHeadSha() {
       return { status: "pr_created", pipelineRunUrl: null, statusMessage: "unused" };
     },

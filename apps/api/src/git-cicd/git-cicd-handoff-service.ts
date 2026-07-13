@@ -8,6 +8,7 @@ import type {
   GitCicdPipelineDetailStatus,
   GitCicdRepositorySettingsPreview,
   GitCicdHandoffStatus,
+  GitCicdMonitoredPath,
   SourceRepositoryProvider
 } from "@sketchcatch/types";
 import type { Database } from "../db/client.js";
@@ -16,6 +17,7 @@ import {
   deploymentPlanArtifacts,
   deployments,
   gitCicdHandoffs,
+  gitCicdMonitoringConfigs,
   projectAssets,
   projects,
   sourceRepositories,
@@ -180,6 +182,8 @@ export type GitCicdProviderCreateInput = {
   terraformArtifactId: string;
   handoffKind: GitCicdHandoffKind;
   targetBranch: string;
+  appPath: GitCicdMonitoredPath;
+  infraPath: GitCicdMonitoredPath;
   projectSlug: string;
   environmentName: string;
   rdsEnabled: boolean;
@@ -295,6 +299,9 @@ export type GitCicdHandoffRepository = {
     sourceRepositoryId: string,
     projectId: string
   ): Promise<GitCicdHandoffSourceRepositoryRecord | undefined>;
+  findMonitoringConfig(
+    sourceRepositoryId: string
+  ): Promise<typeof gitCicdMonitoringConfigs.$inferSelect | undefined>;
   findApprovedDeploymentForHandoff(
     deploymentId: string,
     projectId: string
@@ -455,6 +462,8 @@ export function createGitHubGitCicdHandoffProvider(
               repositoryOwner: input.sourceRepository.owner,
               repositoryName: input.sourceRepository.name,
               targetBranch: input.targetBranch,
+              appPath: input.appPath.path,
+              infraPath: input.infraPath.path,
               userAcceptedChangeId: input.userAcceptedChangeId,
               environmentName: input.environmentName,
               awsRegion: input.awsRegion,
@@ -702,6 +711,14 @@ export function createPostgresGitCicdHandoffRepository(
         );
 
       return sourceRepository;
+    },
+
+    async findMonitoringConfig(sourceRepositoryId) {
+      const [config] = await db
+        .select()
+        .from(gitCicdMonitoringConfigs)
+        .where(eq(gitCicdMonitoringConfigs.sourceRepositoryId, sourceRepositoryId));
+      return config;
     },
 
     // Git handoff가 실제 승인된 Plan을 기반으로 하는지 서버 DB에서 확인합니다.
@@ -989,9 +1006,25 @@ export async function createGitCicdHandoff(
     throw new GitCicdHandoffNotFoundError("Active source repository not found for project");
   }
 
+  const monitoringConfig = await repository.findMonitoringConfig(input.sourceRepositoryId);
+  if (
+    !monitoringConfig ||
+    monitoringConfig.enabled !== true ||
+    monitoringConfig.validationStatus !== "valid"
+  ) {
+    throw new GitCicdHandoffProviderConflictError(
+      "Git/CI/CD handoff requires enabled and valid repository monitoring settings"
+    );
+  }
+
   const handoffId = generateId();
   const projectSlug = createProjectSlug(project.name);
-  const targetBranch = input.targetBranch ?? sourceRepository.defaultBranch;
+  const targetBranch = input.targetBranch ?? monitoringConfig.monitorBranch;
+  if (targetBranch !== monitoringConfig.monitorBranch) {
+    throw new GitCicdHandoffProviderConflictError(
+      "Git/CI/CD handoff target branch must match the validated monitoring branch"
+    );
+  }
   const sourceBranch = input.sourceBranch ?? null;
   const commitMessage = input.commitMessage ?? null;
   const handoffKind = input.handoffKind ?? "terraform_iac";
@@ -1009,6 +1042,8 @@ export async function createGitCicdHandoff(
     repositoryOwner: sourceRepository.owner,
     repositoryName: sourceRepository.name,
     targetBranch,
+    appPath: monitoringConfig.appPath.path,
+    infraPath: monitoringConfig.infraPath.path,
     environmentName,
     awsRegion,
     awsRoleArn,
@@ -1051,6 +1086,8 @@ export async function createGitCicdHandoff(
     terraformArtifactId: input.terraformArtifactId,
     handoffKind,
     targetBranch,
+    appPath: monitoringConfig.appPath,
+    infraPath: monitoringConfig.infraPath,
     projectSlug,
     environmentName,
     rdsEnabled,

@@ -4,29 +4,30 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Currently Verified
 
-- Branch: `fix/gg/355-review-followup-v2`.
-- Six deployable AWS Templates retain 103 parameterized Resources and add 28 parameterless Design nodes through a separate presentation graph.
-- Resource IDs, types, counts, Terraform values, semantic relationships, API behavior, and approval behavior remain unchanged.
-- Every Resource and Design node materializes an active Resource Catalog item; Source Repository uses the existing repository SVG and no fake or emoji node exists.
-- Authenticated new-project and Board QA passed 72/72 checks across all six Templates. Evidence and project IDs are in `docs/gg/feat-infrastructure-template/017_AWS템플릿Design실화면QA_gg.md`.
+- Branch: `fix/gg/355-review-followup-v2`; PR #366 targets `dev`.
+- Six AWS Templates retain 103 Terraform-deployable Resources and 28 parameterless Catalog-backed Design nodes.
+- Authenticated Template Board QA previously passed 72/72 checks; evidence is in `docs/gg/feat-infrastructure-template/017_AWS템플릿Design실화면QA_gg.md`.
+- The latest `origin/dev` at `39118a79` is integrated, including the separated Direct Deployment and CI/CD console from merged PR #368.
+- The deployment context passes only the `isTerraformDeployableNode` count into `DirectDeploymentScreen`.
 
 ## Verification
 
-- Focused Template/Catalog/layout suite: 60 tests passed; 4 direct Template library regressions passed.
-- `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `git diff --check` passed. Lint has one pre-existing API warning.
-- `pnpm build` cannot start because the pre-existing ignored `apps/web/.codegraph` symlink targets a missing local path and causes `ENOENT stat`; this is unrelated to the Template changes.
+- Pre-integration PR #366 CI, focused Template/Terraform tests, lint, typecheck, and harness passed.
+- Post-integration verification passed: 110 focused conflict tests, harness, lint, typecheck, build, and whitespace checks. Lint retains one pre-existing warning.
+- Root tests passed 1,325/1,328; three unchanged Windows-only path expectations fail on macOS and are identical in the pre-merge branch and `origin/dev`.
 
 ## Changes This Session
 
-- Added separate presentation nodes/edges, Catalog-backed Source Repository, Region/AZ/Group hierarchy, and compact 40px authored layouts.
-- Fixed Resource counts and Resource sorting so the 28 Design nodes never inflate the 103 deployable Resource total.
-- Recorded the final live Board QA and updated harness trackers with current evidence.
+- Kept the new `DeploymentPanel` compatibility adapter and moved the branch Resource-count contract to `DirectDeploymentScreen`.
+- Combined the Template test contracts with the current 26-node Live Observation layout expectation.
+- Archived completed PR #368 and Template work records while keeping only PR #366 as the active harness context.
 
 ## Broken Or Unverified
 
-- `pnpm build` remains blocked before application compilation by the pre-existing ignored `apps/web/.codegraph` symlink pointing at a missing local directory.
-- No Terraform plan/apply/destroy, AWS mutation, API mutation, or approval-flow action was run because this work is presentation-only.
+- Migrations `0032` and `0033` arrived from `dev` but were not applied without an approved non-production `DATABASE_URL`.
+- Credentialed browser acceptance for CI/CD was not run without safe GitHub/AWS test state.
+- No Terraform Apply/Destroy, AWS mutation, deployment API mutation, or migration execution was performed during conflict resolution.
 
 ## Best Next Action
 
-- No continuation is required for the completed Template Design/layout work. If the graph changes later, rerun the `017` visual checklist and focused suite before changing its status.
+- Commit and push the staged merge, then confirm PR #366 is mergeable and review threads remain resolved.
