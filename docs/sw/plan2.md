@@ -190,11 +190,13 @@
 
 완료 기준:
 
-- [ ] AppSpec과 versioned S3 bundle digest가 확인된다.
-- [ ] `CodeDeployDefault.AllAtOnce`와 ASG 대상이 최소 권한으로 연결된다.
-- [ ] 일부 instance 실패도 전체 release 실패로 처리한다.
-- [ ] 이전 검증 bundle rollback과 health evidence가 기록된다.
+- [x] AppSpec과 versioned S3 bundle digest가 확인된다.
+- [x] `CodeDeployDefault.AllAtOnce`와 ASG 대상이 최소 권한으로 연결된다.
+- [x] 일부 instance 실패도 전체 release 실패로 처리한다.
+- [x] 이전 검증 bundle rollback과 health evidence가 기록된다.
 - [ ] sandbox deploy/rollback/cleanup이 통과한다.
+
+실제 AWS sandbox mutation과 cleanup evidence는 공통 승인 게이트를 적용하는 Issue #378에서 수집한다.
 
 ### Issue #376. Static GitOps 릴리즈와 공통 CI 로그 정리
 

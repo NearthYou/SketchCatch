@@ -372,6 +372,35 @@
       "notes": "Implemented in issue #374 on feature/sw/374-lambda-gitops-release. No AWS mutation was performed; sandbox deployment, rollback, and cleanup evidence remain assigned to issue #378."
     },
     {
+      "id": "EC2-ASG-GITOPS-RELEASE-001",
+      "priority": 1,
+      "area": "gitops-release",
+      "title": "Repository-confirmed EC2/ASG CodeDeploy AllAtOnce GitOps release",
+      "user_visible_behavior": "Developers publish a versioned S3 bundle from confirmed AppSpec evidence, deploy it to the configured Auto Scaling group with CodeDeploy AllAtOnce, and inspect verified instance and rollback evidence.",
+      "status": "passing",
+      "verification": [
+        "GitOps handoff rejects missing, ambiguous, or stale AppSpec build evidence.",
+        "ApplicationRelease records the commit, bundle digest and version, CodeDeploy revision, instance result, and Output URL.",
+        "CodeDeployDefault.AllAtOnce, the configured Auto Scaling group, all target instance success, and rollback policy are verified by provider re-query.",
+        "A failed deployment or health check restores the previous verified bundle and records masked rollback evidence."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-14",
+        "commands": [
+          "pnpm --filter api exec tsx --test src/git-cicd/git-cicd-workflows.test.ts src/git-cicd/github-actions-run-provider.test.ts src/git-cicd/ec2-asg-gitops-release-reconciler.test.ts",
+          "pnpm test",
+          "pnpm migration:compatibility:check",
+          "pnpm --filter api db:migrate (temporary PostgreSQL 16, migrations 0000-0039)",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build",
+          "pnpm harness:check"
+        ],
+        "notes": "Focused workflow/provider/reconciler tests passed 31/31. Full Web and other workspace tests passed; API had only three unchanged Windows symlink fixture EPERM setup failures. PostgreSQL 16 migrations, compatibility, lint, typecheck, build, and harness passed."
+      },
+      "notes": "Sandbox deployment, rollback, and cleanup evidence remain assigned to issue #378; no AWS mutation is authorized in this workstream."
+    },
+    {
       "id": "AWS-TEMPLATE-LAYOUT-001",
       "priority": 2,
       "area": "template-board",

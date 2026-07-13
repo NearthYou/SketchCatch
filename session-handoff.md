@@ -4,29 +4,29 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Currently Verified
 
-- Branch: `feature/sw/372-direct-deploy-three-stage`; issue #372 is implemented and locally verified.
-- Project save and deployment preparation are locked to one exact draft revision and snapshot hash.
-- Direct Deployment exposes exactly `validation`, `approval`, and `deployment`; Apply and Destroy use the same external stages.
-- Approval seals the prepared snapshot hash, and execute rejects missing or changed snapshot evidence.
+- Branch: `feature/sw/375-ec2-codedeploy-release`; issue #375 is implemented and locally verified.
+- EC2/ASG GitOps handoff requires one current AppSpec and complete CodeDeploy, ASG, Output URL, and health-path coordinates.
+- The generated workflow publishes an immutable versioned S3 bundle and restores the previous verified revision on CodeDeploy, instance, or health failure.
+- API reconciliation re-queries CodeDeploy, S3, and ASG state before writing the shared release ledger.
 
 ## Verification
 
-- Deployment-focused API tests and Web 1,145/1,145 passed.
-- PostgreSQL 16 applied migrations 0000-0036 with `ON_ERROR_STOP=1`; migration compatibility passed.
-- Harness, lint, typecheck, and build passed through `scripts/init-harness.ps1 -Full` on 2026-07-14.
-- API passed 1,456/1,459; the only failures are three unchanged Windows symlink fixture setup errors (`EPERM`).
+- Focused workflow/provider/reconciler tests passed 31/31.
+- PostgreSQL 16 applied migrations 0000-0039; migration compatibility passed.
+- Harness, lint, typecheck, build, and whitespace checks passed on 2026-07-14.
+- Full Web and other workspace tests passed; API has only three unchanged Windows symlink fixture setup errors (`EPERM`).
 
 ## Changes This Session
 
-- Added revision-locked deployment preparation, snapshot-bound approval/execute guards, project save hotkeys, and the three-stage Direct Deployment UI.
-- Updated shared contracts, migration/schema, API/Web tests, deployment documentation, and harness evidence.
+- Added EC2/ASG runtime contracts and project target settings, migration/schema support, generated CodeDeploy workflow, evidence parser, AWS re-query reconciler, and tests.
+- Updated deployment/data-model documentation and harness evidence.
 
 ## Broken Or Unverified
 
 - Three unrelated filesystem security tests require Windows symlink privileges unavailable on this machine.
-- No Terraform Apply/Destroy, cloud mutation, deployment mutation, or production database migration was performed.
+- No Terraform Apply/Destroy, AWS mutation, deployment mutation, or production database migration was performed.
 
 ## Best Next Action
 
-- Commit/push issue #372, open its Korean PR, wait five minutes, resolve review/CI feedback, and merge to `dev`.
-- Continue issue #373 from refreshed `dev` according to `docs/sw/spec2.md`, `docs/sw/plan2.md`, and `docs/sw/agents2.md`.
+- Commit/push issue #375, open its Korean PR, wait five minutes, resolve review/CI feedback, and merge to `dev`.
+- Continue issue #376 from refreshed `dev` according to `docs/sw/spec2.md`, `docs/sw/plan2.md`, and `docs/sw/agents2.md`.

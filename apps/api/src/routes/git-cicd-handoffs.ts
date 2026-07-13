@@ -73,6 +73,11 @@ import {
   LambdaGitOpsReleaseVerificationError
 } from "../git-cicd/lambda-gitops-release-reconciler.js";
 import {
+  createAwsEc2AsgGitOpsCloudGateway,
+  createEc2AsgGitOpsReleaseReconciler,
+  createPostgresEc2AsgGitOpsReleaseRepository
+} from "../git-cicd/ec2-asg-gitops-release-reconciler.js";
+import {
   createGitOpsReleaseReconciler,
   type GitOpsReleaseReconciler
 } from "../git-cicd/gitops-release-reconciler.js";
@@ -964,6 +969,10 @@ async function getGitCicdPipelineRunRequestContext(
           lambda: createLambdaGitOpsReleaseReconciler({
             repository: createPostgresLambdaGitOpsReleaseRepository(client.db),
             gateway: createAwsLambdaGitOpsCloudGateway()
+          }),
+          ec2Asg: createEc2AsgGitOpsReleaseReconciler({
+            repository: createPostgresEc2AsgGitOpsReleaseRepository(client.db),
+            gateway: createAwsEc2AsgGitOpsCloudGateway()
           })
         }));
   return {

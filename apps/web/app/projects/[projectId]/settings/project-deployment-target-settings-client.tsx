@@ -266,6 +266,30 @@ export function ProjectDeploymentTargetSettingsClient({
             </label>
           </>
         ) : null}
+        {draft.runtimeTargetKind === "ec2_asg" ? (
+          <>
+            <label className={styles.field}>
+              <span>CodeDeploy application</span>
+              <input onChange={(event) => updateDraft("codeDeployApplicationName", event.target.value)} value={draft.codeDeployApplicationName} />
+            </label>
+            <label className={styles.field}>
+              <span>CodeDeploy deployment group</span>
+              <input onChange={(event) => updateDraft("codeDeployDeploymentGroupName", event.target.value)} value={draft.codeDeployDeploymentGroupName} />
+            </label>
+            <label className={styles.field}>
+              <span>Auto Scaling group</span>
+              <input onChange={(event) => updateDraft("autoScalingGroupName", event.target.value)} value={draft.autoScalingGroupName} />
+            </label>
+            <label className={styles.field}>
+              <span>Output URL</span>
+              <input onChange={(event) => updateDraft("outputUrl", event.target.value)} placeholder="https://api.example.com" value={draft.outputUrl} />
+            </label>
+            <label className={styles.field}>
+              <span>Health check path</span>
+              <input onChange={(event) => updateDraft("healthCheckPath", event.target.value)} value={draft.healthCheckPath} />
+            </label>
+          </>
+        ) : null}
       </div>
 
       {verifiedConnections.length === 0 && requestState !== "loading" ? (

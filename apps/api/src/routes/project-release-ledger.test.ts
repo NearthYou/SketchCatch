@@ -88,6 +88,41 @@ test("project deployment target API accepts a complete Lambda runtime contract",
   assert.equal(state.target?.runtimeTargetKind, "lambda");
 });
 
+test("project deployment target API accepts a complete EC2 ASG runtime contract", async (t) => {
+  const state = createRepositoryState();
+  const app = await buildRouteApp(state.repository);
+  t.after(() => app.close());
+  const payload = createTargetPayload();
+
+  const response = await app.inject({
+    method: "PUT",
+    url: `/api/projects/${projectId}/deployment-target`,
+    headers: await authHeaders(),
+    payload: {
+      ...payload,
+      runtimeTargetKind: "ec2_asg",
+      runtimeConfig: {
+        runtimeTargetKind: "ec2_asg",
+        codeDeployApplicationName: "sketchcatch-api",
+        codeDeployDeploymentGroupName: "sketchcatch-api-asg",
+        autoScalingGroupName: "sketchcatch-api-asg",
+        outputUrl: "https://ec2.example.com"
+      },
+      confirmedBuildConfig: {
+        ...payload.confirmedBuildConfig,
+        evidence: [{ kind: "appspec", path: "appspec.yml" }],
+        buildPreset: "codedeploy_bundle",
+        dockerfilePath: null,
+        appSpecPath: "appspec.yml"
+      }
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.json().target.runtimeConfig.autoScalingGroupName, "sketchcatch-api-asg");
+  assert.equal(state.target?.runtimeTargetKind, "ec2_asg");
+});
+
 test("release API returns Direct and GitOps rows from one project history", async (t) => {
   const state = createRepositoryState();
   state.releases.push(

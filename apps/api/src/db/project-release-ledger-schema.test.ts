@@ -44,6 +44,18 @@ test("Lambda runtime coordinates extend the JSON contract without destructive da
   assert.doesNotMatch(migration, /DROP TABLE|DROP COLUMN|TRUNCATE/i);
 });
 
+test("EC2 ASG runtime coordinates extend the JSON contract without destructive data changes", () => {
+  const migrationUrl = new URL("../../drizzle/0039_ec2_asg_gitops_runtime.sql", import.meta.url);
+
+  assert.equal(existsSync(migrationUrl), true);
+  const migration = readFileSync(migrationUrl, "utf8");
+
+  assert.match(migration, /runtime_target_kind" = 'ec2_asg'/);
+  assert.match(migration, /'runtimeTargetKind' = 'ec2_asg'/);
+  assert.match(migration, /VALIDATE CONSTRAINT/);
+  assert.doesNotMatch(migration, /DROP TABLE|DROP COLUMN|TRUNCATE/i);
+});
+
 test("Direct and GitOps application releases share one project ledger", () => {
   const config = getTableConfig(applicationReleases);
 

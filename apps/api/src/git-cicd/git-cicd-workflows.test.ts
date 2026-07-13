@@ -248,6 +248,70 @@ test("Lambda automation uses confirmed SAM evidence and CodeDeploy AllAtOnce rol
   assert.equal(settings.variables.SKETCHCATCH_OUTPUT_URL, "https://lambda.example.com");
 });
 
+test("EC2 ASG automation publishes a versioned bundle and verifies AllAtOnce rollback", () => {
+  const input = {
+    projectSlug: "api-project",
+    repositoryOwner: "owner",
+    repositoryName: "repo",
+    targetBranch: "main",
+    appPath: "apps/api",
+    releaseBucket: "sketchcatch-release",
+    runtimeTargetKind: "ec2_asg" as const,
+    confirmedBuildConfig: {
+      sourceRoot: "apps/api",
+      evidence: [{ kind: "appspec" as const, path: "apps/api/appspec.yml" }],
+      installPreset: "none" as const,
+      buildPreset: "codedeploy_bundle" as const,
+      artifactOutputPath: null,
+      runtimeEntrypoint: null,
+      healthCheckPath: "/health",
+      dockerfilePath: null,
+      packageManifestPath: null,
+      samTemplatePath: null,
+      appSpecPath: "apps/api/appspec.yml",
+      staticOutputPath: null,
+      exactSemVerTag: null,
+      manifestVersion: "3.0.0",
+      confirmedCommitSha: "a".repeat(40),
+      confirmedAt: "2026-07-14T00:00:00.000Z"
+    },
+    runtimeConfig: {
+      runtimeTargetKind: "ec2_asg" as const,
+      codeDeployApplicationName: "sketchcatch-api",
+      codeDeployDeploymentGroupName: "sketchcatch-api-asg",
+      autoScalingGroupName: "sketchcatch-api-asg",
+      outputUrl: "https://ec2.example.com"
+    }
+  };
+  const files = createGitCicdAutomationFiles(input);
+  const appWorkflow = files.find(
+    (file) => file.path === ".github/workflows/sketchcatch-app.yml"
+  )?.content ?? "";
+  const settings = createRepositorySettingsPreview(input);
+
+  assert.match(appWorkflow, /name: Build confirmed CodeDeploy bundle/);
+  assert.match(appWorkflow, /name: Publish versioned S3 bundle/);
+  assert.match(appWorkflow, /get-bucket-versioning/);
+  assert.match(appWorkflow, /put-object/);
+  assert.match(appWorkflow, /--checksum-algorithm SHA256/);
+  assert.match(appWorkflow, /VersionId/);
+  assert.match(appWorkflow, /CodeDeployDefault\.AllAtOnce/);
+  assert.match(appWorkflow, /DEPLOYMENT_FAILURE/);
+  assert.match(appWorkflow, /lastSuccessfulDeployment/);
+  assert.match(appWorkflow, /rollbackDeploymentId/);
+  assert.match(appWorkflow, /list-deployment-instances/);
+  assert.match(appWorkflow, /include-only-statuses Succeeded/);
+  assert.match(appWorkflow, /SketchCatch instance-failure rollback/);
+  assert.match(appWorkflow, /FAILURE_REASON=instance_failure/);
+  assert.match(appWorkflow, /SKETCHCATCH_EC2_RELEASE_EVIDENCE_B64/);
+  assert.match(appWorkflow, /curl .*HEALTH_URL/);
+  assert.doesNotMatch(appWorkflow, /start-instance-refresh/);
+  assert.equal(settings.variables.SKETCHCATCH_ASG_NAME, "sketchcatch-api-asg");
+  assert.equal(settings.variables.SKETCHCATCH_CODEDEPLOY_APPLICATION, "sketchcatch-api");
+  assert.equal(settings.variables.SKETCHCATCH_CODEDEPLOY_GROUP, "sketchcatch-api-asg");
+  assert.equal(settings.variables.SKETCHCATCH_OUTPUT_URL, "https://ec2.example.com");
+});
+
 test("default S3 bucket names trim separators left at the 63-character boundary", () => {
   const preview = createRepositorySettingsPreview({
     projectSlug: "demo-project",

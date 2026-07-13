@@ -894,6 +894,57 @@ test("POST GitOps handoff accepts one current SAM template for a confirmed Lambd
   await app.close();
 });
 
+test("POST GitOps handoff accepts one current AppSpec for a confirmed EC2 ASG target", async () => {
+  const repository = new FakeGitCicdHandoffRepository();
+  repository.deploymentTarget = createEc2AsgDeploymentTargetRecord();
+  repository.monitoringConfig = {
+    ...repository.monitoringConfig!,
+    appPath: { mode: "subdirectory", path: "apps/api" }
+  };
+  repository.sourceRepository = createSourceRepositoryRecord({
+    analysisResult: {
+      status: "template_selected",
+      templateId: "three-tier-web-app",
+      applicationUnits: [
+        {
+          id: "api",
+          rootPath: "apps/api",
+          kind: "backend",
+          frameworks: [],
+          evidencePaths: ["apps/api/appspec.yml"]
+        }
+      ],
+      evidence: [
+        {
+          kind: "framework_config",
+          path: "apps/api/appspec.yml",
+          applicationUnitId: "api",
+          signals: []
+        }
+      ],
+      missingEvidence: [],
+      selectionReasons: ["AppSpec detected"]
+    }
+  });
+  const providerCalls: GitCicdProviderCreateInput[] = [];
+  const app = await buildGitCicdHandoffTestApp(repository, {
+    provider: createProviderSpy(providerCalls)
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/projects/${projectId}/git-cicd-handoffs`,
+    headers: await authHeaders(),
+    payload: createHandoffBody()
+  });
+
+  assert.equal(response.statusCode, 201);
+  assert.equal(providerCalls[0]?.runtimeTargetKind, "ec2_asg");
+  assert.equal(providerCalls[0]?.confirmedBuildConfig.appSpecPath, "apps/api/appspec.yml");
+  assert.equal(providerCalls[0]?.runtimeConfig.runtimeTargetKind, "ec2_asg");
+  await app.close();
+});
+
 test("POST GitOps handoff rejects AWS coordinates outside the project target", async () => {
   const repository = new FakeGitCicdHandoffRepository();
   const app = await buildGitCicdHandoffTestApp(repository, {
@@ -2539,6 +2590,38 @@ function createLambdaDeploymentTargetRecord(): GitCicdHandoffDeploymentTargetRec
       codeDeployApplicationName: "sketchcatch-api",
       codeDeployDeploymentGroupName: "sketchcatch-api-live",
       outputUrl: "https://lambda.example.com"
+    }
+  };
+}
+
+function createEc2AsgDeploymentTargetRecord(): GitCicdHandoffDeploymentTargetRecord {
+  return {
+    ...createEcsDeploymentTargetRecord(),
+    runtimeTargetKind: "ec2_asg",
+    confirmedBuildConfig: {
+      sourceRoot: "apps/api",
+      evidence: [{ kind: "appspec", path: "apps/api/appspec.yml" }],
+      installPreset: "none",
+      buildPreset: "codedeploy_bundle",
+      artifactOutputPath: null,
+      runtimeEntrypoint: null,
+      healthCheckPath: "/health",
+      dockerfilePath: null,
+      packageManifestPath: null,
+      samTemplatePath: null,
+      appSpecPath: "apps/api/appspec.yml",
+      staticOutputPath: null,
+      exactSemVerTag: null,
+      manifestVersion: "3.0.0",
+      confirmedCommitSha: "b".repeat(40),
+      confirmedAt: "2026-01-01T00:00:00.000Z"
+    },
+    runtimeConfig: {
+      runtimeTargetKind: "ec2_asg",
+      codeDeployApplicationName: "sketchcatch-api",
+      codeDeployDeploymentGroupName: "sketchcatch-api-asg",
+      autoScalingGroupName: "sketchcatch-api-asg",
+      outputUrl: "https://ec2.example.com"
     }
   };
 }

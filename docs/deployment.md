@@ -138,6 +138,25 @@ AllAtOnce/rollback 정책이 다르면 release ledger를 갱신하지 않고 sta
 공통 `application_releases`에 `lambda_alias` provider revision, artifact S3 URI, Output URL, health/rollback
 evidence로 upsert한다.
 
+### EC2/ASG GitOps 릴리즈
+
+EC2/ASG target은 현재 저장소 분석 revision에서 정확히 하나로 확인된 source root의 `appspec.yml|yaml`만
+사용한다. workflow는 해당 source root를 deterministic ZIP으로 만들고 SHA-256 checksum과 함께 versioning이
+활성화된 release S3 bucket의 commit/digest key에 업로드한다. S3 `VersionId`가 없는 업로드는 배포하지 않는다.
+
+배포 전에 CodeDeploy deployment group이 `Server`, `CodeDeployDefault.AllAtOnce`, 정확히 하나의 설정된
+Auto Scaling group, `DEPLOYMENT_FAILURE` automatic rollback을 사용하는지 확인한다. 또한
+`lastSuccessfulDeployment`의 versioned S3 revision을 rollback baseline으로 고정한다. CodeDeploy 실패는 AWS가
+만든 rollback deployment가 성공할 때까지 확인한다. CodeDeploy가 일부 instance 성공만으로 성공을 반환해도
+전체 target/success 집합이 다르면 release 실패로 판정하며, 이 경우와 배포 후 HTTPS health 실패 모두 같은 이전
+revision으로 새 rollback deployment를 명시적으로 실행한다.
+
+완료 시 workflow는 active deployment의 모든 target instance가 `Succeeded`인지 비교하고 Output URL health를
+다시 확인한다. API는 verified connection으로 원본·활성 CodeDeploy revision, deployment group 정책, S3
+`ChecksumSHA256`/`VersionId`, 현재 ASG의 `Healthy`·`InService` instance 집합을 재조회한다. 전체 집합과 digest,
+revision이 일치해야만 공통 release ledger에 `codedeploy_deployment` provider revision과 health/rollback evidence를
+기록한다. 실제 sandbox deploy, rollback, artifact cleanup은 공통 승인 게이트가 있는 #378에서 수행한다.
+
 ### Git/CI/CD 자동 배포 PR 산출물
 
 2026-07-07 기준 Git/CI/CD 자동 배포 handoff는 PR artifact 생성 이후에도 두 개의 명시적 apply 단계를 제공한다.
@@ -158,7 +177,7 @@ evidence로 upsert한다.
 - `sketchcatch/<project>/ci-cd/aws-role-diff.json`
 - ECS/Fargate target일 때 `sketchcatch/<project>/ci-cd/buildspec-ecs.yml`
 
-`sketchcatch-infra.yml`은 merge 후 target branch push에서 Terraform backend S3 bucket/key를 부트스트랩하고 `terraform plan`을 실행합니다. `terraform apply` job은 GitHub Environment approval 뒤에만 실행됩니다. `sketchcatch-app.yml`은 infra workflow 성공 후 프로젝트 runtime adapter를 실행합니다. ECS/Fargate는 CodeBuild → ECR digest → ECS revision → HTTPS health, Lambda는 SAM build → S3 digest → immutable version → CodeDeploy AllAtOnce alias → HTTPS health 순서입니다. legacy EC2/ASG target은 기존 release artifact와 Instance Refresh 경로를 유지합니다. `sketchcatch-destroy.yml`은 수동 실행과 Environment approval 뒤 같은 S3 backend로 `terraform destroy`를 실행합니다.
+`sketchcatch-infra.yml`은 merge 후 target branch push에서 Terraform backend S3 bucket/key를 부트스트랩하고 `terraform plan`을 실행합니다. `terraform apply` job은 GitHub Environment approval 뒤에만 실행됩니다. `sketchcatch-app.yml`은 infra workflow 성공 후 프로젝트 runtime adapter를 실행합니다. ECS/Fargate는 CodeBuild → ECR digest → ECS revision → HTTPS health, Lambda는 SAM build → S3 digest → immutable version → CodeDeploy AllAtOnce alias → HTTPS health, EC2/ASG는 AppSpec 확인 → versioned S3 bundle → CodeDeploy AllAtOnce → 전체 instance와 HTTPS health 확인 순서입니다. `sketchcatch-destroy.yml`은 수동 실행과 Environment approval 뒤 같은 S3 backend로 `terraform destroy`를 실행합니다.
 
 Repository settings와 IAM role 변경은 preview JSON으로 PR에 남깁니다. 실제 repository variables/environment 설정과 AWS role trust/policy 변경은 GitHub App 권한 또는 GitHub user OAuth 추가 승인, AWS role diff 승인, secret masking을 통과한 별도 mutation path에서만 수행해야 합니다. OAuth token 원문은 DB/로그/API 응답에 저장하지 않습니다.
 

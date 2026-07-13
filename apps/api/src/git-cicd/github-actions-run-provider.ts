@@ -1,4 +1,5 @@
 import type {
+  Ec2AsgGitOpsReleaseEvidence,
   EcsGitOpsReleaseEvidence,
   GitOpsReleaseEvidence,
   GitCicdPipelineRunStatus,
@@ -114,7 +115,9 @@ export function createGitHubActionsRunProvider(
                 ? "ECS release evidence captured."
                 : line.includes("SKETCHCATCH_LAMBDA_RELEASE_EVIDENCE_B64=")
                   ? "Lambda release evidence captured."
-                  : null;
+                  : line.includes("SKETCHCATCH_EC2_RELEASE_EVIDENCE_B64=")
+                    ? "EC2 ASG release evidence captured."
+                    : null;
               logs.push({
                 stageKind: evidenceLabel ? "verify" : activeStageKind,
                 level: job.conclusion === "failure" ? "error" : "info",
@@ -249,10 +252,14 @@ function mapStepStageKind(
   if (stepName === "Build confirmed SAM application") return "app_build";
   if (stepName === "Publish immutable ECR digest") return "artifact_publish";
   if (stepName === "Publish immutable Lambda version") return "artifact_publish";
+  if (stepName === "Build confirmed CodeDeploy bundle") return "app_build";
+  if (stepName === "Publish versioned S3 bundle") return "artifact_publish";
   if (stepName === "Deploy ECS Fargate revision" || stepName === "Refresh Auto Scaling Group") return "app_deploy";
   if (stepName === "Deploy Lambda alias AllAtOnce") return "app_deploy";
+  if (stepName === "Deploy EC2 ASG bundle AllAtOnce") return "app_deploy";
   if (stepName === "Verify ECS release" || stepName === "Verify URLs") return "verify";
   if (stepName === "Verify Lambda release") return "verify";
+  if (stepName === "Verify EC2 ASG release and rollback") return "verify";
   return null;
 }
 
@@ -270,6 +277,10 @@ function mapLogLineStageKind(
     "Publish immutable Lambda version",
     "Deploy Lambda alias AllAtOnce",
     "Verify Lambda release",
+    "Build confirmed CodeDeploy bundle",
+    "Publish versioned S3 bundle",
+    "Deploy EC2 ASG bundle AllAtOnce",
+    "Verify EC2 ASG release and rollback",
     "Upload release artifact",
     "Refresh Auto Scaling Group",
     "Verify URLs"
@@ -283,7 +294,8 @@ function parseReleaseEvidence(text: string): GitOpsReleaseEvidence[] {
   const results: GitOpsReleaseEvidence[] = [];
   for (const marker of [
     /SKETCHCATCH_ECS_RELEASE_EVIDENCE_B64=([A-Za-z0-9+/]{1,12000}={0,2})(?:\s|$)/g,
-    /SKETCHCATCH_LAMBDA_RELEASE_EVIDENCE_B64=([A-Za-z0-9+/]{1,12000}={0,2})(?:\s|$)/g
+    /SKETCHCATCH_LAMBDA_RELEASE_EVIDENCE_B64=([A-Za-z0-9+/]{1,12000}={0,2})(?:\s|$)/g,
+    /SKETCHCATCH_EC2_RELEASE_EVIDENCE_B64=([A-Za-z0-9+/]{1,12000}={0,2})(?:\s|$)/g
   ]) {
     let match: RegExpExecArray | null;
     while ((match = marker.exec(text)) !== null) {
@@ -292,7 +304,10 @@ function parseReleaseEvidence(text: string): GitOpsReleaseEvidence[] {
         const decoded = Buffer.from(match[1], "base64");
         if (decoded.byteLength > 8_192) continue;
         const value: unknown = JSON.parse(decoded.toString("utf8"));
-        const evidence = validateEcsReleaseEvidence(value) ?? validateLambdaReleaseEvidence(value);
+        const evidence =
+          validateEcsReleaseEvidence(value) ??
+          validateLambdaReleaseEvidence(value) ??
+          validateEc2AsgReleaseEvidence(value);
         if (evidence) results.push(evidence);
       } catch {
         continue;
@@ -360,6 +375,73 @@ function isSafeS3ArtifactUri(value: string, digest: string): boolean {
   if (value.length > 2_048 || /[\s\0]/.test(value)) return false;
   if (!/^s3:\/\/[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]\/.+/.test(value)) return false;
   return value.endsWith(`/${digest.slice("sha256:".length)}.zip`);
+}
+
+function validateEc2AsgReleaseEvidence(value: unknown): Ec2AsgGitOpsReleaseEvidence | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const item = value as Record<string, unknown>;
+  const allowedKeys = new Set([
+    "schemaVersion", "runtimeTargetKind", "outcome", "failureReason", "commitSha", "artifactDigest",
+    "artifactUri", "artifactVersionId", "previousArtifactUri", "previousArtifactVersionId",
+    "codeDeployApplicationName", "codeDeployDeploymentGroupName", "autoScalingGroupName",
+    "deploymentId", "activeDeploymentId", "deploymentConfigName", "targetInstanceCount",
+    "succeededInstanceCount", "outputUrl"
+  ]);
+  if (Object.keys(item).some((key) => !allowedKeys.has(key))) return null;
+  const stringKeys = [
+    "commitSha", "artifactDigest", "artifactUri", "artifactVersionId", "previousArtifactUri",
+    "previousArtifactVersionId", "codeDeployApplicationName", "codeDeployDeploymentGroupName",
+    "autoScalingGroupName", "deploymentId", "activeDeploymentId", "deploymentConfigName",
+    "outputUrl"
+  ] as const;
+  if (stringKeys.some((key) => typeof item[key] !== "string")) return null;
+  const outcome = String(item.outcome);
+  const digest = String(item.artifactDigest);
+  const deploymentId = String(item.deploymentId);
+  const activeDeploymentId = String(item.activeDeploymentId);
+  const targetCount = item.targetInstanceCount;
+  const succeededCount = item.succeededInstanceCount;
+  const codeDeployNamePattern = /^[A-Za-z0-9._+=,@-]{1,100}$/;
+  const asgNamePattern = /^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,254}$/;
+  const versionIdPattern = /^[A-Za-z0-9._~+/=-]{1,1024}$/;
+  if (
+    item.schemaVersion !== 1 ||
+    item.runtimeTargetKind !== "ec2_asg" ||
+    !["succeeded", "rolled_back", "failed"].includes(outcome) ||
+    (outcome === "succeeded" && item.failureReason !== null) ||
+    (outcome === "rolled_back" && item.failureReason !== "codedeploy_failure") ||
+    (outcome === "failed" &&
+      !["instance_failure", "health_check_failure"].includes(String(item.failureReason))) ||
+    !/^(?:[a-f\d]{40}|[a-f\d]{64})$/i.test(String(item.commitSha)) ||
+    !/^sha256:[a-f\d]{64}$/.test(digest) ||
+    !isSafeS3ArtifactUri(String(item.artifactUri), digest) ||
+    !isSafeS3Uri(String(item.previousArtifactUri)) ||
+    !versionIdPattern.test(String(item.artifactVersionId)) ||
+    !versionIdPattern.test(String(item.previousArtifactVersionId)) ||
+    !codeDeployNamePattern.test(String(item.codeDeployApplicationName)) ||
+    !codeDeployNamePattern.test(String(item.codeDeployDeploymentGroupName)) ||
+    !asgNamePattern.test(String(item.autoScalingGroupName)) ||
+    !/^d-[A-Za-z0-9]+$/.test(deploymentId) ||
+    !/^d-[A-Za-z0-9]+$/.test(activeDeploymentId) ||
+    item.deploymentConfigName !== "CodeDeployDefault.AllAtOnce" ||
+    !Number.isInteger(targetCount) ||
+    !Number.isInteger(succeededCount) ||
+    Number(targetCount) < 1 ||
+    Number(targetCount) > 10_000 ||
+    targetCount !== succeededCount ||
+    (outcome === "succeeded" && activeDeploymentId !== deploymentId) ||
+    (outcome !== "succeeded" && activeDeploymentId === deploymentId) ||
+    !isSafeHttpsUrl(String(item.outputUrl))
+  ) return null;
+  return item as Ec2AsgGitOpsReleaseEvidence;
+}
+
+function isSafeS3Uri(value: string): boolean {
+  return (
+    value.length <= 2_048 &&
+    !/[\s\0?#]/.test(value) &&
+    /^s3:\/\/[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]\/.+/.test(value)
+  );
 }
 
 function validateEcsReleaseEvidence(value: unknown): EcsGitOpsReleaseEvidence | null {
