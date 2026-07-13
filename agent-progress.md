@@ -33,31 +33,13 @@ Short English-only working log for the current agent context. Older records are 
 - Risk: no Terraform plan/apply/destroy, AWS mutation, API mutation, or approval-flow action ran.
 - Clean-state checklist: the tracker has one unrelated `in_progress` item, this Template work is evidence-backed `passing`, no secrets were read or written, and no background process was started by this session.
 
-### 2026-07-13 - Split estimated and actual project costs with folder tabs
+### 2026-07-13 - Resolve PR #366 review and synchronize latest dev
 
-- Added deployment-aware cost contracts across Direct Deployment and Git/CI/CD, including Destroy lifecycle handling.
-- Added separate estimated-cost and actual-usage panels, project scoping, honest sample/allocation copy, keyboard tabs, and the requested compact folder-style tab surface from `DESIGN.md`; removed the final header and tab helper copy per visual feedback.
-- Follow-up UX: direct expected-user input with validation, refresh feedback on both normal and empty states, and scroll-free responsive folder tabs.
-- Follow-up commits: `ad7fb94b`, `104cb8bc`, `c80dac82`, `aaccecfa`.
-- Commits: `4819f64c`, `ff16587d`, `ac29756a`, `da99fdb7`, `a0aeefe0`.
-- Verification: 6 focused API tests, 19 focused Web tests, lint, typecheck, build, and harness pass. Lint retains one unrelated unused-argument warning.
-- Risk: authenticated visual browser QA was blocked because the in-app browser had no session and Chrome control was unavailable. The full Web suite retains seven unrelated baseline failures outside cost files.
-
-### 2026-07-13 - Repair Terraform nested-block merge regression
-
-- Fast-forwarded the local branch to the remote `dev` merge commit that CI evaluated and reproduced the duplicate `aws_launch_template` key failure.
-- Consolidated both branch variants into one Launch Template nested-block set while preserving IAM profile, metadata, monitoring, network interface, and tag support.
-- Kept the pending direct-resource rename boundary fix and its regression intact across the fast-forward.
-- Verification: full typecheck, 20 focused Terraform/rename regressions, lint, build, harness, and diff checks pass. Lint retains one pre-existing API unused-argument warning.
-
-### 2026-07-13 - Add and review diagram-based Live Observation for ECS Fargate and ASG
-
-- Added diagram-derived main traffic paths, REST polling-compatible snapshots, CloudWatch Agent/ASG and ECS Fargate observability, and presentation-focused capacity visualization.
-- Moved AI simulation results out of the chat dock and kept bottleneck, cost, and failure analysis in the simulation panel.
-- Represented each accepted request as one 28px particle moving sequentially across analyzed connector segments; observation remains idle until traffic is explicitly started.
-- Final review added metadata-free ECS/ASG capacity inference scoped to the selected controller, five-request bursts, disconnect-safe SSE startup, automatically expiring per-observation simulated traffic, metric-correct request thresholds, real Traffic API audience links with explicit simulation fallback, and polling listener cleanup.
-- Verification: focused Web tests passed 82/82 plus 9 diagram tests, focused API tests passed 38/38 plus 18 service/route tests; harness, lint, typecheck, and build passed. No AWS or Terraform mutation ran.
-- PR review: Kubernetes `depends_on` addresses now render as references and both polling/SSE delay messages use valid Korean text; 21 Terraform and 31 modal tests passed.
+- Fixed the source-export runtime import that failed the clean CI Web build and pushed the focused correction to the PR branch.
+- Verified the Gemini AZ suggestion against Template materialization and the API Terraform renderer, replied with the contract evidence, and resolved the only review thread without introducing a fingerprint/renderer mismatch.
+- Merged the latest `origin/dev` API baseline repair while preserving the Template QA records and keeping already archived shared work out of this active log.
+- Verification before the dev merge: clean worktree build passed, PR checks passed, and the focused fingerprint, materializer, and infrastructure graph suites passed 45/45.
+- Risk: no Terraform plan/apply/destroy, AWS mutation, deployment API mutation, or approval-flow action ran; local Web and API development servers were started for the user.
 
 ### 2026-07-12 - Handle missing Source Repository DB migrations
 
@@ -203,6 +185,25 @@ Short English-only working log for the current agent context. Older records are 
   - `pnpm typecheck`, `pnpm build`, and `git diff --check` passed.
 - Review:
   - Spec review found no issues; standards review finding about the caption token was fixed in `dcda929b`.
+
+### 2026-07-13 - Restore API test baseline for issue #364
+
+- Goal: Restore the 23 failing API baseline tests without hiding deployment safety or product-contract regressions.
+- Completed:
+  - Deferred deployment S3 artifact storage initialization until artifact access is required so domain and safety errors remain observable without S3 configuration.
+  - Corrected Terraform reference and nested-block rendering for archive data, hyphenated resource names, CloudFront, and Kubernetes selectors.
+  - Aligned AI architecture materialization with serverless SPA, optional-load-balancer Fargate, and EKS capability constraints.
+  - Updated stale repository, Q business, LLM explanation, demo asset, and priority resource coverage tests to current contracts.
+- Verification:
+  - `pnpm --dir apps/api test` (1,257 passed)
+  - `pnpm lint` passed with the pre-existing `live-observations` `setNow` warning.
+  - `pnpm typecheck`
+  - `pnpm build`
+  - `pnpm harness:check`
+  - `git diff --check` passed with CRLF conversion warnings only.
+- Risk:
+  - Root `pnpm test` still reports an unrelated Web CSS expectation around the mobile `.canvasToolbar` bottom offset; no Web source behavior was changed in this workstream.
+  - No Terraform apply/destroy, cloud mutation, or Git/CI/CD handoff was performed.
 
 ## Next Action
 

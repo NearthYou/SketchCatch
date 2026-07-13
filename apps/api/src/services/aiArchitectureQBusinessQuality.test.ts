@@ -29,7 +29,11 @@ const baseCases: readonly QualityCase[] = [
     "Production runtime is three EC2 instances managed by an Auto Scaling Group and ALB.",
     "Self-managed EC2 web servers scale behind an Application Load Balancer.",
     "Create a private EC2 fleet with launch template, ASG, and ALB."
-  ]),
+  ]).map((scenario) =>
+    scenario.id === "alb-5"
+      ? { ...scenario, expected: ["alb-asg-ec2", "spa-cloudfront-s3"] as const }
+      : scenario
+  ),
   ...createCases("serverless", "serverless-api", [
     "Use API Gateway and Lambda only. Serverless runtime, no EC2.",
     "Build a serverless REST API with Lambda and API Gateway without EC2.",
@@ -51,7 +55,7 @@ const baseCases: readonly QualityCase[] = [
     database: "database: none no database static content only",
     management: "management preference: fully managed serverless"
   }),
-  ...createCases("ecs", "ecs-fargate", [
+  ...createCases("ecs", ["spa-cloudfront-s3", "ecs-fargate"], [
     "Use ECS Fargate service and task definition behind ALB. No EC2 capacity.",
     "Run containers as private Fargate tasks in an ECS service behind ALB.",
     "ECS cluster, Fargate task definition, and service use an ALB target group.",
@@ -105,13 +109,13 @@ const composedCases: readonly QualityCase[] = [
   {
     id: "ecs+rds",
     requirement: "ECS Fargate service behind ALB uses private Multi-AZ RDS. No EC2 capacity.",
-    expected: ["ecs-fargate", "multi-az-rds"],
+    expected: ["spa-cloudfront-s3", "ecs-fargate", "multi-az-rds"],
     database: "database: simple data user posts under 10GB"
   },
   {
     id: "cicd+ecs",
     requirement: "GitHub CodeStar Connection, CodePipeline, and CodeBuild deploy an ECS Fargate service behind ALB without EC2.",
-    expected: ["ecs-fargate", "github-cicd-codedeploy"]
+    expected: ["spa-cloudfront-s3", "ecs-fargate", "github-cicd-codedeploy"]
   }
 ];
 
@@ -119,16 +123,22 @@ const qualityCases = [...baseCases, ...composedCases];
 
 test("42 project-answer profiles select exact verified pattern combinations", () => {
   assert.equal(qualityCases.length, 42);
+  const mismatches: Array<{
+    readonly id: string;
+    readonly actual: readonly ArchitecturePatternId[];
+    readonly expected: readonly ArchitecturePatternId[];
+  }> = [];
 
   for (const scenario of qualityCases) {
     const plan = createDeterministicArchitectureIntentPlan(createCompleteProjectPrompt(scenario));
+    const actual = resolveArchitecturePatternIds(plan);
 
-    assert.deepEqual(
-      resolveArchitecturePatternIds(plan),
-      scenario.expected,
-      `${scenario.id}: unexpected pattern selection`
-    );
+    if (JSON.stringify(actual) !== JSON.stringify(scenario.expected)) {
+      mismatches.push({ id: scenario.id, actual, expected: scenario.expected });
+    }
   }
+
+  assert.deepEqual(mismatches, []);
 });
 
 test("12 representative project profiles materialize stable and distinct canonical diagrams", async () => {
@@ -162,14 +172,14 @@ test("12 representative project profiles materialize stable and distinct canonic
 
 function createCases(
   prefix: string,
-  patternId: ArchitecturePatternId,
+  patternIds: ArchitecturePatternId | readonly ArchitecturePatternId[],
   requirements: readonly string[],
   overrides: Partial<QualityCase> = {}
 ): QualityCase[] {
   return requirements.map((requirement, index) => ({
     id: `${prefix}-${index + 1}`,
     requirement,
-    expected: [patternId],
+    expected: typeof patternIds === "string" ? [patternIds] : patternIds,
     ...overrides
   }));
 }

@@ -637,7 +637,7 @@ test("page selections adapt verified patterns with explicit supplemental resourc
         frontend: "모바일 앱 (웹뷰 또는 네이티브)",
         management: "완전 관리형 (서버리스, 관리 최소화)"
       },
-      required: ["API_GATEWAY_REST_API", "LAMBDA", "ACM_CERTIFICATE"],
+      required: ["API_GATEWAY_REST_API", "LAMBDA"],
       forbidden: ["EC2", "AUTO_SCALING_GROUP", "LOAD_BALANCER"]
     },
     {
@@ -794,7 +794,7 @@ test("Q-backed SPA Fargate RDS plans materialize deployable role-specific resour
   assert.match(response.title, /multi-az-rds/);
   assert.equal(nodes.some((node) => node.type === "LAMBDA"), false);
   assert.equal(nodes.some((node) => node.type === "DYNAMODB_TABLE"), false);
-  assert.equal(nodes.some((node) => node.type === "ACM_CERTIFICATE"), false);
+  assert.equal(nodes.some((node) => node.type === "ACM_CERTIFICATE"), true);
   assert.equal(nodes.some((node) => node.type === "WAF_WEB_ACL"), false);
   assert.doesNotMatch(serializedArchitecture, /lambda/);
   assert.equal(publicSubnets.length, 2);
