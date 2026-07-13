@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { TemplateId } from "@sketchcatch/types";
+import type { CreateArchitectureDraftRequest, TemplateId } from "@sketchcatch/types";
 import { buildApp } from "../app.js";
 import { createAccessToken } from "../auth/tokens.js";
 import type { DatabaseClient } from "../db/client.js";
@@ -58,6 +58,65 @@ test("Repository Analysis handoff rejects a client-supplied replacement Template
   await app.close();
 });
 
+test("Repository Analysis Template fallback generates without a fixed Template", async () => {
+  const capturedRequests: CreateArchitectureDraftRequest[] = [];
+  const app = buildHandoffApp("static-web-hosting", {
+    createArchitectureDraftResponse: (request: CreateArchitectureDraftRequest) => {
+      capturedRequests.push(request);
+      return {
+        architectureJson: { edges: [], nodes: [] },
+        metadata: {
+          assumptions: [],
+          confidence: "medium",
+          explanations: [],
+          source: "amazon_q"
+        },
+        title: "Template fallback Architecture Draft"
+      };
+    }
+  });
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    headers: await authHeaders(),
+    payload: {
+      prompt: "",
+      repositoryAnalysis: {
+        projectId,
+        sourceRepositoryId
+      },
+      templateFallback: {
+        mode: "template_unselected",
+        deploymentType: "git_cicd_deployment",
+        ciCdEnabled: true,
+        dynamicQuestionAnswers: [
+          {
+            question: "Runtime preference",
+            answer: "Use managed containers"
+          }
+        ],
+        recommendationCandidates: [
+          {
+            templateId: "static-web-hosting",
+            title: "static-web-hosting",
+            reason: "static frontend"
+          }
+        ]
+      }
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(capturedRequests.length, 1);
+  const request = capturedRequests[0]!;
+  assert.equal(request.templateId, undefined);
+  assert.equal(request.templateFallback?.deploymentType, "git_cicd_deployment");
+  assert.equal(request.repositoryAnalysisContext?.repositoryName, "NearthYou/mini-react");
+  assert.match(request.prompt, /user reviewed the Template recommendation result/i);
+  assert.match(request.prompt, /CI\/CD handoff requested: true/i);
+  await app.close();
+});
+
 test("Repository Analysis handoff requires authentication", async () => {
   const app = buildHandoffApp("static-web-hosting");
   const response = await app.inject({
@@ -76,11 +135,15 @@ test("Repository Analysis handoff requires authentication", async () => {
   await app.close();
 });
 
-function buildHandoffApp(templateId: TemplateId) {
+function buildHandoffApp(
+  templateId: TemplateId,
+  options: Partial<Parameters<typeof buildApp>[0]> = {}
+) {
   const databaseClient = createAuthDatabaseClient();
   const repository = createSourceRepository(templateId);
 
   return buildApp({
+    ...options,
     getDatabaseClient: () => databaseClient,
     sourceRepositoryRoutes: {
       createSourceRepositoryRepository: () => repository

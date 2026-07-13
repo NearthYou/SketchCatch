@@ -708,6 +708,41 @@ export type SourceRepositoryAnalysis = Omit<
   "sourceRepositoryId"
 >;
 
+export type ArchitectureDraftTemplateFallbackDeploymentType =
+  | "direct_deployment"
+  | "git_cicd_deployment"
+  | "undecided";
+
+export type ArchitectureDraftDynamicQuestionAnswer = {
+  readonly questionId?: string | undefined;
+  readonly question: string;
+  readonly answer: string;
+};
+
+export type ArchitectureDraftTemplateRecommendationCandidate = {
+  readonly templateId: TemplateId | string;
+  readonly title: string;
+  readonly reason: string;
+  readonly confidence?: number | undefined;
+};
+
+export type ArchitectureDraftTemplateFallbackContext = {
+  readonly mode: "template_unselected";
+  readonly deploymentType: ArchitectureDraftTemplateFallbackDeploymentType;
+  readonly ciCdEnabled: boolean;
+  readonly dynamicQuestionAnswers: readonly ArchitectureDraftDynamicQuestionAnswer[];
+  readonly recommendationCandidates: readonly ArchitectureDraftTemplateRecommendationCandidate[];
+  readonly additionalRequirements?: string | undefined;
+};
+
+export type ArchitectureDraftRepositoryAnalysisContext = {
+  readonly sourceRepositoryId: string;
+  readonly repositoryName: string;
+  readonly repositoryRevision: string;
+  readonly analyzedAt: IsoDateTimeString;
+  readonly aiHandoff: RepositoryAnalysisAiHandoff;
+};
+
 export type GitCicdHandoffStatus =
   | "draft"
   | "pr_created"
@@ -1927,6 +1962,8 @@ export type CreateArchitectureDraftRequest = {
     projectId: string;
     sourceRepositoryId: string;
   } | undefined;
+  templateFallback?: ArchitectureDraftTemplateFallbackContext | undefined;
+  repositoryAnalysisContext?: ArchitectureDraftRepositoryAnalysisContext | undefined;
 };
 
 export const ARCHITECTURE_DRAFT_PROGRESS_STAGES = [

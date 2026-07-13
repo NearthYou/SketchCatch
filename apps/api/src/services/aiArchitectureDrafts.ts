@@ -67,6 +67,13 @@ export { ArchitectureDraftGenerationError } from "./aiArchitectureDraftGeneratio
 const SUPPORTED_RESOURCE_TYPES = SUPPORTED_ARCHITECTURE_RESOURCE_TYPES;
 const SUPPORTED_RESOURCE_CATALOG = SUPPORTED_ARCHITECTURE_RESOURCE_CATALOG;
 type FixedTemplateSelection = TemplateDefinition;
+type TemplateFallbackContextPayload = {
+  readonly templateSelection: "user_did_not_choose_template";
+  readonly repositoryAnalysisContext?: NonNullable<
+    CreateArchitectureDraftRequest["repositoryAnalysisContext"]
+  > | undefined;
+  readonly fallback: NonNullable<CreateArchitectureDraftRequest["templateFallback"]>;
+};
 
 const SUPPORTED_RESOURCE_TYPE_SET = new Set<ResourceType>(SUPPORTED_RESOURCE_TYPES);
 const DEFAULT_PREVIEW_NODE_SIZE = { width: 124, height: 96 } as const;
@@ -307,6 +314,7 @@ export async function createAmazonQArchitectureDraftResponse(
   );
   const architectureBrief = createAmazonQArchitectureBrief(request.prompt);
   const fixedTemplateSelection = createFixedTemplateSelection(request.templateId);
+  const templateFallbackContext = createTemplateFallbackContextPayload(request);
   const referenceKnowledge = createAwsArchitectureReferenceKnowledgePayload();
   const payload = maskSecretsForAi({
     architectureBrief,
@@ -315,6 +323,7 @@ export async function createAmazonQArchitectureDraftResponse(
     fixedTemplateSelection,
     prompt: request.prompt,
     referenceKnowledge,
+    ...(templateFallbackContext === null ? {} : { templateFallbackContext }),
     supportedResourceTypes: SUPPORTED_RESOURCE_TYPES,
     supportedResourceCatalog: SUPPORTED_RESOURCE_CATALOG
   });
@@ -330,7 +339,8 @@ export async function createAmazonQArchitectureDraftResponse(
         request.prompt,
         architectureDecisionSpace,
         normalizedRequirement,
-        fixedTemplateSelection
+        fixedTemplateSelection,
+        templateFallbackContext
       ),
       payload: activePayload
     });
@@ -353,6 +363,7 @@ export async function createAmazonQArchitectureDraftResponse(
           fixedTemplateSelection,
           prompt: request.prompt,
           referenceKnowledge,
+          ...(templateFallbackContext === null ? {} : { templateFallbackContext }),
           validationIssues,
           previousArchitectureJson: parsedResponse.architectureJson,
           supportedResourceTypes: SUPPORTED_RESOURCE_TYPES,
@@ -367,6 +378,7 @@ export async function createAmazonQArchitectureDraftResponse(
             architectureDecisionSpace,
             normalizedRequirement,
             fixedTemplateSelection,
+            templateFallbackContext,
             validationIssues,
             parsedResponse.architectureJson
           ),
@@ -437,6 +449,7 @@ export async function createAmazonQArchitectureDraftResponse(
           fixedTemplateSelection,
           prompt: request.prompt,
           referenceKnowledge,
+          ...(templateFallbackContext === null ? {} : { templateFallbackContext }),
           validationIssues,
           previousPlan,
           supportedResourceTypes: SUPPORTED_RESOURCE_TYPES,
@@ -451,6 +464,7 @@ export async function createAmazonQArchitectureDraftResponse(
             architectureDecisionSpace,
             normalizedRequirement,
             fixedTemplateSelection,
+            templateFallbackContext,
             validationIssues,
             previousPlan
           ),
@@ -1506,7 +1520,8 @@ function createAmazonQArchitectureDraftPrompt(
   prompt: string,
   architectureDecisionSpace: ArchitectureDecisionSpace,
   normalizedRequirement: ArchitectureIntentPlan | null,
-  fixedTemplateSelection: FixedTemplateSelection | null
+  fixedTemplateSelection: FixedTemplateSelection | null,
+  templateFallbackContext: TemplateFallbackContextPayload | null
 ): string {
   return [
     createAmazonQArchitectureDraftInstructions(),
@@ -1518,6 +1533,7 @@ function createAmazonQArchitectureDraftPrompt(
     "ArchitectureDecisionSpace:",
     JSON.stringify(architectureDecisionSpace, null, 2),
     createFixedTemplateSelectionPrompt(fixedTemplateSelection),
+    createTemplateFallbackPromptSection(templateFallbackContext),
     "User requirement prompt:",
     prompt
   ].join("\n\n");
@@ -1529,6 +1545,7 @@ function createAmazonQArchitectureDraftRepairPrompt(
   architectureDecisionSpace: ArchitectureDecisionSpace,
   normalizedRequirement: ArchitectureIntentPlan | null,
   fixedTemplateSelection: FixedTemplateSelection | null,
+  templateFallbackContext: TemplateFallbackContextPayload | null,
   validationIssues: readonly string[],
   previousArchitectureJson: ArchitectureJson
 ): string {
@@ -1544,6 +1561,7 @@ function createAmazonQArchitectureDraftRepairPrompt(
     "ArchitectureDecisionSpace:",
     JSON.stringify(architectureDecisionSpace, null, 2),
     createFixedTemplateSelectionPrompt(fixedTemplateSelection),
+    createTemplateFallbackPromptSection(templateFallbackContext),
     "Validation issues:",
     ...validationIssues.map((issue) => `- ${issue}`),
     "Original user requirement prompt:",
@@ -1558,6 +1576,7 @@ function createAmazonQArchitecturePlanRepairPrompt(
   architectureDecisionSpace: ArchitectureDecisionSpace,
   normalizedRequirement: ArchitectureIntentPlan | null,
   fixedTemplateSelection: FixedTemplateSelection | null,
+  templateFallbackContext: TemplateFallbackContextPayload | null,
   validationIssues: readonly string[],
   previousPlan: Record<string, unknown>
 ): string {
@@ -1570,6 +1589,7 @@ function createAmazonQArchitecturePlanRepairPrompt(
     "ArchitectureDecisionSpace:",
     JSON.stringify(architectureDecisionSpace, null, 2),
     createFixedTemplateSelectionPrompt(fixedTemplateSelection),
+    createTemplateFallbackPromptSection(templateFallbackContext),
     "Validation issues:",
     ...validationIssues.map((issue) => `- ${issue}`),
     "Previous invalid plan:",
@@ -1605,6 +1625,38 @@ function createFixedTemplateSelection(templateId: TemplateId | undefined): Fixed
 }
 
 // AI prompt에 선택 Template을 기본 결정으로 유지하고 부족한 요구만 보완하라고 명시합니다.
+function createTemplateFallbackContextPayload(
+  request: CreateArchitectureDraftRequest
+): TemplateFallbackContextPayload | null {
+  if (request.templateFallback === undefined) {
+    return null;
+  }
+
+  return {
+    templateSelection: "user_did_not_choose_template",
+    fallback: request.templateFallback,
+    ...(request.repositoryAnalysisContext
+      ? { repositoryAnalysisContext: request.repositoryAnalysisContext }
+      : {})
+  };
+}
+
+function createTemplateFallbackPromptSection(
+  context: TemplateFallbackContextPayload | null
+): string {
+  if (context === null) {
+    return "Template Fallback Context: none";
+  }
+
+  return [
+    "Template Fallback Context:",
+    JSON.stringify(context, null, 2),
+    "The user explicitly did not choose a Template. Do not apply Fixed Template Selection.",
+    "Treat repositoryAnalysisContext, deploymentType, ciCdEnabled, dynamicQuestionAnswers, recommendationCandidates, and additionalRequirements as strong constraints.",
+    "Use recommendationCandidates as rejected candidates and explanatory context only; generate the Practice Architecture without copying a Template skeleton."
+  ].join("\n");
+}
+
 function createFixedTemplateSelectionPrompt(selection: FixedTemplateSelection | null): string {
   if (selection === null) {
     return "Fixed Template Selection: none";

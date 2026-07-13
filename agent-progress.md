@@ -13,6 +13,13 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-13 - Merge latest dev into AI diagram fallback branch
+
+- Fast-forwarded `feat/ck/350-ai-diagram-fallback` to latest `origin/dev`.
+- Reapplied the stashed Template-unselected AI fallback work after conflicts in API route, Repository start UI, CSS, data model docs, and progress log.
+- Kept the latest Repository Analysis recommendation flow from `dev` and restored the fallback request resolver, UI CTA, and documentation contract.
+- Verification: `pnpm harness:check`, `pnpm --dir apps/api exec tsx --test src/routes/ai-repository-handoff.test.ts`, `pnpm --dir apps/web exec tsx --test features/workspace/repository-template-fallback.test.ts app/workspace/repository/repository-start-client.test.ts`, `pnpm typecheck`, `pnpm lint`, and `pnpm build` passed. Lint retained one pre-existing API unused-argument warning in `apps/api/src/live-observations/live-observation-store-contract.ts`.
+
 ### 2026-07-13 - Repair Terraform nested-block merge regression
 
 - Fast-forwarded the local branch to the remote `dev` merge commit that CI evaluated and reproduced the duplicate `aws_launch_template` key failure.
