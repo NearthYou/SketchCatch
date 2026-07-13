@@ -62,6 +62,15 @@ test("selects static web hosting for a Vite frontend in a monorepo", () => {
   // Then
   assert.equal(result.status, "template_selected");
   assert.equal(result.templateId, "static-web-hosting");
+  assert.deepEqual(
+    result.evidence.find((evidence) => evidence.kind === "static_output"),
+    {
+      kind: "static_output",
+      path: "apps/web/dist",
+      applicationUnitId: "apps/web",
+      signals: ["Vite static build output"]
+    }
+  );
   assert.deepEqual(result.applicationUnits, [
     {
       id: "apps/web",

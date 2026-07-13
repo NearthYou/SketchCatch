@@ -2,6 +2,7 @@ import type {
   AwsConnection,
   BuildEvidenceKind,
   BuildExecutionPreset,
+  BuildInstallPreset,
   ProjectDeploymentTarget,
   PutProjectDeploymentTargetRequest,
   RuntimeTargetKind,
@@ -15,6 +16,7 @@ export type ProjectDeploymentTargetDraft = {
   evidencePath: string;
   commitSha: string;
   version: string;
+  installPreset: BuildInstallPreset;
   healthCheckPath: string;
   codeBuildProjectName: string;
   ecrRepositoryName: string;
@@ -27,6 +29,9 @@ export type ProjectDeploymentTargetDraft = {
   codeDeployApplicationName: string;
   codeDeployDeploymentGroupName: string;
   autoScalingGroupName: string;
+  hostingBucketName: string;
+  cloudFrontDistributionId: string;
+  cloudFrontOriginId: string;
   outputUrl: string;
   evidenceSuggested: boolean;
 };
@@ -73,6 +78,9 @@ export function createDeploymentTargetDraft(
   const ec2AsgConfig = target?.runtimeConfig?.runtimeTargetKind === "ec2_asg"
     ? target.runtimeConfig
     : null;
+  const staticConfig = target?.runtimeConfig?.runtimeTargetKind === "static_site"
+    ? target.runtimeConfig
+    : null;
   const suggestion = target ? null : getEvidenceSuggestion(runtimeTargetKind, sourceRepository);
   return {
     connectionId:
@@ -85,6 +93,7 @@ export function createDeploymentTargetDraft(
       getDefaultDeploymentEvidencePath(runtimeTargetKind),
     commitSha: config?.confirmedCommitSha ?? suggestion?.commitSha ?? "",
     version: config?.exactSemVerTag ?? config?.manifestVersion ?? "",
+    installPreset: config?.installPreset ?? suggestion?.installPreset ?? "none",
     healthCheckPath: config?.healthCheckPath ?? "/health",
     codeBuildProjectName: ecsConfig?.codeBuildProjectName ?? "",
     ecrRepositoryName: ecsConfig?.ecrRepositoryName ?? "",
@@ -101,7 +110,15 @@ export function createDeploymentTargetDraft(
       ec2AsgConfig?.codeDeployDeploymentGroupName ??
       "",
     autoScalingGroupName: ec2AsgConfig?.autoScalingGroupName ?? "",
-    outputUrl: ecsConfig?.outputUrl ?? lambdaConfig?.outputUrl ?? ec2AsgConfig?.outputUrl ?? "",
+    hostingBucketName: staticConfig?.hostingBucketName ?? "",
+    cloudFrontDistributionId: staticConfig?.cloudFrontDistributionId ?? "",
+    cloudFrontOriginId: staticConfig?.cloudFrontOriginId ?? "",
+    outputUrl:
+      ecsConfig?.outputUrl ??
+      lambdaConfig?.outputUrl ??
+      ec2AsgConfig?.outputUrl ??
+      staticConfig?.outputUrl ??
+      "",
     evidenceSuggested: Boolean(suggestion)
   };
 }
@@ -118,6 +135,7 @@ export function changeDeploymentTargetRuntime(
     sourceRoot: suggestion?.sourceRoot ?? ".",
     evidencePath: suggestion?.evidencePath ?? getDefaultDeploymentEvidencePath(runtimeTargetKind),
     commitSha: suggestion?.commitSha ?? "",
+    installPreset: suggestion?.installPreset ?? "none",
     healthCheckPath:
       runtimeTargetKind === "ecs_fargate" ||
       runtimeTargetKind === "lambda" ||
@@ -157,7 +175,9 @@ export function isDeploymentTargetDraftReady(
     (draft.runtimeTargetKind !== "lambda" ||
       (/^\//.test(draft.healthCheckPath) && hasCompleteLambdaCoordinates(draft))) &&
     (draft.runtimeTargetKind !== "ec2_asg" ||
-      (/^\//.test(draft.healthCheckPath) && hasCompleteEc2AsgCoordinates(draft)))
+      (/^\//.test(draft.healthCheckPath) && hasCompleteEc2AsgCoordinates(draft))) &&
+    (draft.runtimeTargetKind !== "static_site" ||
+      (draft.installPreset !== "none" && hasCompleteStaticSiteCoordinates(draft)))
   );
 }
 
@@ -212,11 +232,17 @@ export function createDeploymentTargetRequest(
                 autoScalingGroupName: draft.autoScalingGroupName.trim(),
                 outputUrl: draft.outputUrl.trim()
               }
-            : null,
+            : {
+                runtimeTargetKind: "static_site",
+                hostingBucketName: draft.hostingBucketName.trim(),
+                cloudFrontDistributionId: draft.cloudFrontDistributionId.trim(),
+                cloudFrontOriginId: draft.cloudFrontOriginId.trim(),
+                outputUrl: draft.outputUrl.trim()
+              },
     confirmedBuildConfig: {
       sourceRoot: draft.sourceRoot.trim(),
       evidence: [{ kind: runtime.evidenceKind, path: evidencePath }],
-      installPreset: "none",
+      installPreset: draft.runtimeTargetKind === "static_site" ? draft.installPreset : "none",
       buildPreset: runtime.buildPreset,
       artifactOutputPath: draft.runtimeTargetKind === "static_site" ? evidencePath : null,
       runtimeEntrypoint: null,
@@ -246,6 +272,7 @@ function getEvidenceSuggestion(
   sourceRoot: string;
   evidencePath: string;
   commitSha: string;
+  installPreset: BuildInstallPreset;
 } | null {
   if (
     !sourceRepository ||
@@ -282,8 +309,26 @@ function getEvidenceSuggestion(
     sourceRoot:
       applicationUnit?.rootPath ?? (separator === -1 ? "." : evidence.path.slice(0, separator)),
     evidencePath: evidence.path,
-    commitSha: sourceRepository.analysis.repositoryRevision.toLowerCase()
+    commitSha: sourceRepository.analysis.repositoryRevision.toLowerCase(),
+    installPreset:
+      runtimeTargetKind === "static_site"
+        ? inferInstallPreset(handoff.evidence)
+        : "none"
   };
+}
+
+function inferInstallPreset(
+  evidence: readonly { kind: string; path: string }[]
+): BuildInstallPreset {
+  const lockfiles = evidence
+    .filter((item) => item.kind === "lockfile")
+    .map((item) => item.path.toLowerCase());
+  if (lockfiles.some((path) => path.endsWith("pnpm-lock.yaml"))) {
+    return "pnpm_frozen_lockfile";
+  }
+  if (lockfiles.some((path) => path.endsWith("package-lock.json"))) return "npm_ci";
+  if (lockfiles.some((path) => path.endsWith("yarn.lock"))) return "yarn_frozen_lockfile";
+  return "none";
 }
 
 function hasCompleteEcsCoordinates(draft: ProjectDeploymentTargetDraft): boolean {
@@ -314,6 +359,15 @@ function hasCompleteEc2AsgCoordinates(draft: ProjectDeploymentTargetDraft): bool
     draft.codeDeployApplicationName,
     draft.codeDeployDeploymentGroupName,
     draft.autoScalingGroupName
+  ];
+  return values.every((value) => value.trim().length > 0) && hasSafeHttpsOutputUrl(draft.outputUrl);
+}
+
+function hasCompleteStaticSiteCoordinates(draft: ProjectDeploymentTargetDraft): boolean {
+  const values = [
+    draft.hostingBucketName,
+    draft.cloudFrontDistributionId,
+    draft.cloudFrontOriginId
   ];
   return values.every((value) => value.trim().length > 0) && hasSafeHttpsOutputUrl(draft.outputUrl);
 }

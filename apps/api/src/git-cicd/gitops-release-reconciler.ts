@@ -8,6 +8,7 @@ import type {
 } from "./ecs-gitops-release-reconciler.js";
 import type { LambdaGitOpsReleaseReconciler } from "./lambda-gitops-release-reconciler.js";
 import type { Ec2AsgGitOpsReleaseReconciler } from "./ec2-asg-gitops-release-reconciler.js";
+import type { StaticSiteGitOpsReleaseReconciler } from "./static-site-gitops-release-reconciler.js";
 
 export type GitOpsReleaseReconcileInput = {
   projectId: string;
@@ -27,6 +28,7 @@ export function createGitOpsReleaseReconciler(options: {
   ecs: EcsGitOpsReleaseReconciler;
   lambda: LambdaGitOpsReleaseReconciler;
   ec2Asg: Ec2AsgGitOpsReleaseReconciler;
+  staticSite: StaticSiteGitOpsReleaseReconciler;
 }): GitOpsReleaseReconciler {
   return {
     reconcile(input) {
@@ -36,7 +38,10 @@ export function createGitOpsReleaseReconciler(options: {
       if (input.evidence.runtimeTargetKind === "lambda") {
         return options.lambda.reconcile({ ...input, evidence: input.evidence });
       }
-      return options.ec2Asg.reconcile({ ...input, evidence: input.evidence });
+      if (input.evidence.runtimeTargetKind === "ec2_asg") {
+        return options.ec2Asg.reconcile({ ...input, evidence: input.evidence });
+      }
+      return options.staticSite.reconcile({ ...input, evidence: input.evidence });
     }
   };
 }

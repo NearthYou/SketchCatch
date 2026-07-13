@@ -78,6 +78,11 @@ import {
   createPostgresEc2AsgGitOpsReleaseRepository
 } from "../git-cicd/ec2-asg-gitops-release-reconciler.js";
 import {
+  createAwsStaticSiteGitOpsCloudGateway,
+  createPostgresStaticSiteGitOpsReleaseRepository,
+  createStaticSiteGitOpsReleaseReconciler
+} from "../git-cicd/static-site-gitops-release-reconciler.js";
+import {
   createGitOpsReleaseReconciler,
   type GitOpsReleaseReconciler
 } from "../git-cicd/gitops-release-reconciler.js";
@@ -973,6 +978,10 @@ async function getGitCicdPipelineRunRequestContext(
           ec2Asg: createEc2AsgGitOpsReleaseReconciler({
             repository: createPostgresEc2AsgGitOpsReleaseRepository(client.db),
             gateway: createAwsEc2AsgGitOpsCloudGateway()
+          }),
+          staticSite: createStaticSiteGitOpsReleaseReconciler({
+            repository: createPostgresStaticSiteGitOpsReleaseRepository(client.db),
+            gateway: createAwsStaticSiteGitOpsCloudGateway()
           })
         }));
   return {

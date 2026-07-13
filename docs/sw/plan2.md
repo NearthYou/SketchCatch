@@ -210,10 +210,10 @@
 
 완료 기준:
 
-- [ ] static output 감지와 개발자 확인이 없으면 배포하지 않는다.
-- [ ] versioned prefix, object digest, active pointer, invalidation이 추적된다.
-- [ ] ECS/Lambda/EC2/Static run이 같은 stage/log/release UI 계약을 사용한다.
-- [ ] branch/path 설정은 프로젝트 설정에 있고 CI/CD 화면에는 실행 정보만 남는다.
+- [x] static output 감지와 개발자 확인이 없으면 배포하지 않는다.
+- [x] versioned prefix, object digest, active pointer, invalidation이 추적된다.
+- [x] ECS/Lambda/EC2/Static run이 같은 stage/log/release UI 계약을 사용한다.
+- [x] branch/path 설정은 프로젝트 설정에 있고 CI/CD 화면에는 실행 정보만 남는다.
 - [ ] sandbox deploy와 이전 release pointer rollback, cleanup이 통과한다.
 
 ## Milestone 4. P1-1 운영 알림 및 샌드박스 검증

@@ -945,6 +945,57 @@ test("POST GitOps handoff accepts one current AppSpec for a confirmed EC2 ASG ta
   await app.close();
 });
 
+test("POST GitOps handoff accepts one current output for a confirmed static target", async () => {
+  const repository = new FakeGitCicdHandoffRepository();
+  repository.deploymentTarget = createStaticSiteDeploymentTargetRecord();
+  repository.monitoringConfig = {
+    ...repository.monitoringConfig!,
+    appPath: { mode: "subdirectory", path: "apps/web" }
+  };
+  repository.sourceRepository = createSourceRepositoryRecord({
+    analysisResult: {
+      status: "template_selected",
+      templateId: "static-web-hosting",
+      applicationUnits: [
+        {
+          id: "web",
+          rootPath: "apps/web",
+          kind: "frontend",
+          frameworks: ["vite"],
+          evidencePaths: ["apps/web/dist"]
+        }
+      ],
+      evidence: [
+        {
+          kind: "static_output",
+          path: "apps/web/dist",
+          applicationUnitId: "web",
+          signals: ["Vite static build output"]
+        }
+      ],
+      missingEvidence: [],
+      selectionReasons: ["Static output detected"]
+    }
+  });
+  const providerCalls: GitCicdProviderCreateInput[] = [];
+  const app = await buildGitCicdHandoffTestApp(repository, {
+    provider: createProviderSpy(providerCalls)
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/projects/${projectId}/git-cicd-handoffs`,
+    headers: await authHeaders(),
+    payload: createHandoffBody()
+  });
+
+  assert.equal(response.statusCode, 201);
+  assert.equal(providerCalls[0]?.runtimeTargetKind, "static_site");
+  assert.equal(providerCalls[0]?.confirmedBuildConfig.staticOutputPath, "apps/web/dist");
+  assert.equal(providerCalls[0]?.runtimeConfig.runtimeTargetKind, "static_site");
+  await app.close();
+});
+
 test("POST GitOps handoff rejects AWS coordinates outside the project target", async () => {
   const repository = new FakeGitCicdHandoffRepository();
   const app = await buildGitCicdHandoffTestApp(repository, {
@@ -2622,6 +2673,38 @@ function createEc2AsgDeploymentTargetRecord(): GitCicdHandoffDeploymentTargetRec
       codeDeployDeploymentGroupName: "sketchcatch-api-asg",
       autoScalingGroupName: "sketchcatch-api-asg",
       outputUrl: "https://ec2.example.com"
+    }
+  };
+}
+
+function createStaticSiteDeploymentTargetRecord(): GitCicdHandoffDeploymentTargetRecord {
+  return {
+    ...createEcsDeploymentTargetRecord(),
+    runtimeTargetKind: "static_site",
+    confirmedBuildConfig: {
+      sourceRoot: "apps/web",
+      evidence: [{ kind: "static_output", path: "apps/web/dist" }],
+      installPreset: "pnpm_frozen_lockfile",
+      buildPreset: "static_export",
+      artifactOutputPath: "apps/web/dist",
+      runtimeEntrypoint: null,
+      healthCheckPath: null,
+      dockerfilePath: null,
+      packageManifestPath: null,
+      samTemplatePath: null,
+      appSpecPath: null,
+      staticOutputPath: "apps/web/dist",
+      exactSemVerTag: null,
+      manifestVersion: "4.0.0",
+      confirmedCommitSha: "b".repeat(40),
+      confirmedAt: "2026-01-01T00:00:00.000Z"
+    },
+    runtimeConfig: {
+      runtimeTargetKind: "static_site",
+      hostingBucketName: "sketchcatch-static-releases",
+      cloudFrontDistributionId: "E1234567890ABC",
+      cloudFrontOriginId: "static-origin",
+      outputUrl: "https://static.example.com"
     }
   };
 }

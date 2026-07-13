@@ -85,10 +85,10 @@ function formatStage(kind: GitCicdPipelineRun["stages"][number]["kind"]): string
   return ({
     detect: "변경 감지",
     app_build: "앱 빌드",
-    artifact_publish: "이미지 게시",
+    artifact_publish: "아티팩트 게시",
     infra_plan: "Terraform Plan",
     infra_apply: "Terraform Apply",
-    app_deploy: "앱 배포",
+    app_deploy: "릴리즈 적용",
     verify: "배포 검증"
   } as const)[kind];
 }

@@ -123,6 +123,45 @@ test("project deployment target API accepts a complete EC2 ASG runtime contract"
   assert.equal(state.target?.runtimeTargetKind, "ec2_asg");
 });
 
+test("project deployment target API accepts a complete static site runtime contract", async (t) => {
+  const state = createRepositoryState();
+  const app = await buildRouteApp(state.repository);
+  t.after(() => app.close());
+  const payload = createTargetPayload();
+
+  const response = await app.inject({
+    method: "PUT",
+    url: `/api/projects/${projectId}/deployment-target`,
+    headers: await authHeaders(),
+    payload: {
+      ...payload,
+      runtimeTargetKind: "static_site",
+      runtimeConfig: {
+        runtimeTargetKind: "static_site",
+        hostingBucketName: "sketchcatch-static-releases",
+        cloudFrontDistributionId: "E1234567890ABC",
+        cloudFrontOriginId: "static-origin",
+        outputUrl: "https://static.example.com"
+      },
+      confirmedBuildConfig: {
+        ...payload.confirmedBuildConfig,
+        sourceRoot: "apps/web",
+        evidence: [{ kind: "static_output", path: "apps/web/dist" }],
+        installPreset: "pnpm_frozen_lockfile",
+        buildPreset: "static_export",
+        artifactOutputPath: "apps/web/dist",
+        healthCheckPath: null,
+        dockerfilePath: null,
+        staticOutputPath: "apps/web/dist"
+      }
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.json().target.runtimeConfig.hostingBucketName, "sketchcatch-static-releases");
+  assert.equal(state.target?.runtimeTargetKind, "static_site");
+});
+
 test("release API returns Direct and GitOps rows from one project history", async (t) => {
   const state = createRepositoryState();
   state.releases.push(

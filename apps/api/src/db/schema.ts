@@ -510,6 +510,7 @@ export const projectDeploymentTargets = pgTable(
           (${table.runtimeTargetKind} = 'ecs_fargate' and ${table.runtimeConfig}->>'runtimeTargetKind' = 'ecs_fargate')
           or (${table.runtimeTargetKind} = 'lambda' and ${table.runtimeConfig}->>'runtimeTargetKind' = 'lambda')
           or (${table.runtimeTargetKind} = 'ec2_asg' and ${table.runtimeConfig}->>'runtimeTargetKind' = 'ec2_asg')
+          or (${table.runtimeTargetKind} = 'static_site' and ${table.runtimeConfig}->>'runtimeTargetKind' = 'static_site')
         )
       )`
     )
