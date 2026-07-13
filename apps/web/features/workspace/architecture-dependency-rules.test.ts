@@ -33,6 +33,79 @@ test("preview reports a missing containment parent without stopping other evalua
   ]);
 });
 
+test("a presentation AZ between a Subnet and its referenced VPC is transparent", () => {
+  // Presentation-only containers may refine the Board hierarchy without changing Terraform context.
+  const vpc = vpcNode();
+  const availabilityZone: DiagramNode = {
+    id: "az-presentation",
+    type: "aws-availability-zone",
+    kind: "design",
+    position: { x: 0, y: 0 },
+    size: { width: 240, height: 180 },
+    label: "AZ A",
+    locked: false,
+    zIndex: 0,
+    metadata: {
+      parentAreaNodeId: vpc.id,
+      presentationCatalogItemId: "aws-availability-zone"
+    }
+  };
+  const subnet = resourceNode({
+    id: "subnet-1",
+    metadata: { parentAreaNodeId: availabilityZone.id },
+    resourceName: "public",
+    resourceType: "aws_subnet",
+    values: { vpcId: "aws_vpc.main.id" }
+  });
+
+  assert.equal(
+    evaluateArchitectureDependencies(diagramWith(vpc, availabilityZone, subnet), "preview").some(
+      (diagnostic) => diagnostic.code === "architecture.aws.subnet.vpc_context_missing"
+    ),
+    false
+  );
+});
+
+test("a Subnet whose presentation ancestry disagrees with its VPC reference still warns", () => {
+  // Ignoring presentation containers must not accept a different Terraform Resource ancestor.
+  const referencedVpc = vpcNode();
+  const containingVpc = resourceNode({
+    id: "vpc-2",
+    resourceName: "other",
+    resourceType: "aws_vpc",
+    values: { cidrBlock: "10.1.0.0/16" }
+  });
+  const availabilityZone: DiagramNode = {
+    id: "az-presentation",
+    type: "aws-availability-zone",
+    kind: "design",
+    position: { x: 0, y: 0 },
+    size: { width: 240, height: 180 },
+    label: "AZ A",
+    locked: false,
+    zIndex: 0,
+    metadata: {
+      parentAreaNodeId: containingVpc.id,
+      presentationCatalogItemId: "aws-availability-zone"
+    }
+  };
+  const subnet = resourceNode({
+    id: "subnet-1",
+    metadata: { parentAreaNodeId: availabilityZone.id },
+    resourceName: "public",
+    resourceType: "aws_subnet",
+    values: { vpcId: "aws_vpc.main.id" }
+  });
+
+  assert.equal(
+    evaluateArchitectureDependencies(
+      diagramWith(referencedVpc, containingVpc, availabilityZone, subnet),
+      "preview"
+    ).some((diagnostic) => diagnostic.code === "architecture.aws.subnet.vpc_context_missing"),
+    true
+  );
+});
+
 test("a fresh EC2 outside a relevant area is silent in contextual mode", () => {
   assert.deepEqual(evaluateArchitectureDependencies(diagramWith(ec2Node()), "contextual"), []);
 });
