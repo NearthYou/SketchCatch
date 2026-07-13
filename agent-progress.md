@@ -19,16 +19,6 @@ Short English-only working log for the current agent context. Older records are 
 - Omitted source metadata so the catalog focuses only on reusable layout observations and concrete readability failures.
 - Verification: image-to-entry coverage is 32/32 and `pnpm harness:check` passed. Documentation only; no code, Terraform, deployment, or cloud mutation changed.
 
-### 2026-07-14 - Make strict Repository Fargate drafts application-delivery ready
-
-- Added a private S3 origin contract with CloudFront OAC, public-access blocking, a scoped bucket policy, and a bootstrap `index.html` for the first infrastructure apply.
-- Routed `/api/*` through the same public CloudFront HTTPS endpoint to the ALB HTTP origin, removing browser mixed-content failures without inventing an ACM domain.
-- Added repository-derived AWS names, ECS runtime environment values, explicit log-group dependency, CI/CD delivery edges, and Terraform outputs for S3, CloudFront, ECR, ECS, and the unified API URL.
-- Fixed the Architecture-to-Diagram adapter to prefer an explicitly authored Terraform resource type, preventing companion resources from inheriting invalid parent defaults such as `force_destroy` on `aws_s3_bucket_public_access_block`.
-- Made optional frontend, ECR, CloudWatch, and GitHub Actions edges conditional so API-only evidence cannot produce dangling references to unsupported services.
-- Chrome verification recreated `whiskend/audience-live-check`, saved 33 Terraform resources, passed pre-deployment checks, and completed an AWS-backed Plan with `+33 ~0 -0 +/-0`. No Apply or cloud mutation was run.
-- Verification: all 59 Architecture Draft tests plus focused Terraform renderer, Repository request, and Diagram adapter tests passed; `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed. Full `pnpm test` reached 1,110/1,111 Web tests and retains the unrelated locale baseline where this Windows runtime formats the Korean day-period marker as `AM`.
-
 ### 2026-07-14 - Refine Repository analysis controls
 
 - Renamed the Repository start heading to `GitHub Repository` and the handoff connection section to `CI/CD Connection` in Korean UI copy.
@@ -208,6 +198,13 @@ Short English-only working log for the current agent context. Older records are 
 - Confirmed repeated fresh generations were stable. HCL declaration order differed from the saved round-trip artifact, but all structured values and references were identical.
 - Verification: focused strict Repository regression passed; generated Terraform passed `terraform validate`, deterministic gate, Terraform diagnostics, and architecture configuration checks with zero findings.
 - Risk: the new Chrome tab had no active SketchCatch session, so the visible click sequence stopped at login; the same public endpoints and production UI request builder were exercised directly.
+
+### 2026-07-14 - Remove remaining AWS deployment infrastructure
+- Confirmed the 33-resource `audience-live-check` Direct Deployment remained `DESTROYED`.
+- Audited account `691684280342` in `ap-northeast-2` through the authenticated AWS Console CloudShell.
+- Removed leftover non-default VPC `vpc-03c3600ede1150a51` and its custom security group, route table, and internet gateway.
+- Final service audit found zero deployment-owned VPC, NAT, EIP, EC2, CloudFront, S3, ECR, ECS, ALB, Logs, RDS, Lambda, API Gateway, DynamoDB, SQS, or SNS resources; the VPC Console showed only the default VPC.
+- Retained the verified SketchCatch connection CloudFormation stack, execution role, and CloudFormation template bucket because they are operator connection infrastructure rather than user Deployment resources.
 
 ## Next Action
 - Continue the automatic diagram layout workstream without changing the verified Fargate resource, connection, or runtime parameter contract.
