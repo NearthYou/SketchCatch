@@ -129,6 +129,84 @@ test("refresh reuses persisted change scope without refetching immutable commit 
   assert.equal(refreshed.runs[0]?.changeScope, "app");
 });
 
+test("listProjectPipelineRuns delegates stable cursor pagination and requests limit plus one", async () => {
+  const repository = createMemoryRepository();
+  repository.runs.push(
+    createPersistedRun("run-a", "2026-07-13T03:00:00Z"),
+    createPersistedRun("run-b", "2026-07-13T02:00:00Z"),
+    createPersistedRun("run-c", "2026-07-13T01:00:00Z")
+  );
+  const service = createGitCicdPipelineRunService({ repository, provider: createProvider() });
+
+  const page = await service.listProjectPipelineRuns({ projectId: "project-1", limit: 2 });
+
+  assert.deepEqual(page.runs.map((run) => run.id), ["run-a", "run-b"]);
+  assert.equal(page.nextCursor, "run-b");
+  repository.runs.push(createPersistedRun("run-new", "2026-07-13T04:00:00Z"));
+  const nextPage = await service.listProjectPipelineRuns({
+    projectId: "project-1",
+    cursor: page.nextCursor!,
+    limit: 2
+  });
+  assert.deepEqual(nextPage.runs.map((run) => run.id), ["run-c"]);
+  assert.deepEqual(repository.listRequests, [
+    { projectId: "project-1", limit: 3 },
+    { projectId: "project-1", cursor: "run-b", limit: 3 }
+  ]);
+});
+
+test("listProjectPipelineRuns rejects an unknown project-scoped cursor", async () => {
+  const repository = createMemoryRepository();
+  const service = createGitCicdPipelineRunService({ repository, provider: createProvider() });
+
+  await assert.rejects(
+    service.listProjectPipelineRuns({
+      projectId: "project-1",
+      cursor: "foreign-or-missing-run",
+      limit: 20
+    }),
+    /invalid pipeline run cursor/i
+  );
+});
+
+test("refreshPipelineRun throws a typed unavailable error when monitoring became disabled", async () => {
+  const repository = createMemoryRepository();
+  repository.runs.push(createPersistedRun("run-a", "2026-07-13T01:00:00Z"));
+  repository.refreshTargetEnabled.value = false;
+  const service = createGitCicdPipelineRunService({ repository, provider: createProvider() });
+
+  await assert.rejects(
+    service.refreshPipelineRun({ pipelineRunId: "run-a" }),
+    (error: unknown) =>
+      error instanceof Error &&
+      error.name === "GitCicdPipelineRunRefreshUnavailableError" &&
+      error.message === "Pipeline Run not found"
+  );
+});
+
+function createPersistedRun(id: string, createdAt: string): PersistedPipelineRun {
+  const timestamp = new Date(createdAt);
+  return {
+    id,
+    projectId: "project-1",
+    sourceRepositoryId: "repo-1",
+    handoffId: null,
+    commitSha: id,
+    commitMessage: id,
+    branch: "main",
+    changeScope: "app",
+    status: "running",
+    statusMessage: null,
+    pipelineRunUrl: null,
+    appUrl: null,
+    apiUrl: null,
+    startedAt: timestamp,
+    finishedAt: null,
+    lastRefreshedAt: timestamp,
+    createdAt: timestamp
+  };
+}
+
 function createProvider(shouldFail: () => boolean = () => false): GitCicdRunProvider {
   return {
     async listCommitFiles() {
@@ -176,6 +254,8 @@ function createMemoryRepository() {
     stages: [] as PersistedPipelineStage[],
     logs: [] as PersistedPipelineLog[],
     existingLookupCalls: { value: 0 },
+    listRequests: [] as unknown[],
+    refreshTargetEnabled: { value: true },
     target: {
       projectId: "project-1",
       sourceRepositoryId: "repo-1",
@@ -185,10 +265,22 @@ function createMemoryRepository() {
       monitorBranch: "main",
       appPath: config.appPath,
       infraPath: config.infraPath
-    }
+    } as
+      | {
+          projectId: string;
+          sourceRepositoryId: string;
+          installationId: string;
+          owner: string;
+          name: string;
+          monitorBranch: string;
+          appPath: typeof config.appPath;
+          infraPath: typeof config.infraPath;
+        }
+      | undefined
   };
   const repository: GitCicdPipelinePersistenceRepository = {
-    findRefreshTarget: async () => state.target,
+    findRefreshTarget: async () =>
+      state.refreshTargetEnabled.value ? state.target : undefined,
     findPipelineRun: async (pipelineRunId) => {
       const run = state.runs.find((candidate) => candidate.id === pipelineRunId);
       return run
@@ -199,12 +291,34 @@ function createMemoryRepository() {
         : undefined;
     },
     findRunRefreshTarget: async () =>
-      state.runs.length ? { ...state.target, commitSha: state.runs[0]!.commitSha } : undefined,
-    listProjectPipelineRuns: async () =>
-      state.runs.map((run) => ({
+      state.refreshTargetEnabled.value && state.target && state.runs.length
+        ? { ...state.target, commitSha: state.runs[0]!.commitSha }
+        : undefined,
+    listProjectPipelineRuns: async (...args: unknown[]) => {
+      state.listRequests.push(args[0]);
+      return state.runs.map((run) => ({
         ...run,
         stages: state.stages.filter((stage) => stage.pipelineRunId === run.id)
-      })),
+      }));
+    },
+    listProjectPipelineRunPage: async (input) => {
+      state.listRequests.push(input);
+      const scoped = state.runs
+        .filter((run) => run.projectId === input.projectId)
+        .sort(
+          (left, right) =>
+            right.createdAt.getTime() - left.createdAt.getTime() ||
+            right.id.localeCompare(left.id)
+        );
+      const cursorIndex = input.cursor
+        ? scoped.findIndex((run) => run.id === input.cursor)
+        : -1;
+      if (input.cursor && cursorIndex < 0) throw new Error("Invalid Pipeline Run cursor");
+      return scoped.slice(cursorIndex + 1, cursorIndex + 1 + input.limit).map((run) => ({
+        ...run,
+        stages: state.stages.filter((stage) => stage.pipelineRunId === run.id)
+      }));
+    },
     listPipelineLogs: async (_runId, since) => state.logs.filter((log) => log.sequence > since),
     findPipelineRunsByCommitShas: async (_sourceRepositoryId, commitShas) => {
       state.existingLookupCalls.value += 1;

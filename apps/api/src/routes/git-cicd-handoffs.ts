@@ -13,6 +13,7 @@ import type {
   GitCicdPipelineLogListResponse,
   GitCicdPipelineRun,
   GitCicdPipelineRunListResponse,
+  GitCicdPipelineRunRefreshResponse,
   GitCicdPipelineRunResponse,
   GitCicdRepositorySettingsApplyResponse
 } from "@sketchcatch/types";
@@ -61,6 +62,8 @@ import type { GitCicdPipelineStatusProvider } from "../git-cicd/github-actions-p
 import {
   createGitCicdPipelineRunService,
   createPostgresGitCicdPipelinePersistenceRepository,
+  GitCicdPipelineRunInvalidCursorError,
+  GitCicdPipelineRunRefreshUnavailableError,
   type GitCicdPipelinePersistenceRepository,
   type PersistedPipelineLog,
   type PipelineRunWithStages
@@ -230,7 +233,6 @@ type GitCicdHandoffRequestContext = {
 type GitCicdPipelineRunRequestContext = {
   accessContext: ProjectAccessContext;
   handoffRepository: GitCicdHandoffRepository;
-  pipelineRepository: GitCicdPipelinePersistenceRepository;
   service: ReturnType<typeof createGitCicdPipelineRunService>;
 };
 
@@ -312,18 +314,14 @@ export async function registerGitCicdHandoffRoutes(
 
     try {
       await requirePipelineProjectAccess(params.projectId, context);
-      const runs = (
-        await context.service.listProjectPipelineRuns({ projectId: params.projectId })
-      ).sort(comparePipelineRunsNewestFirst);
-      const cursorIndex = query.cursor
-        ? runs.findIndex((run) => run.id === query.cursor)
-        : -1;
-      const pageStart = cursorIndex >= 0 ? cursorIndex + 1 : query.cursor ? runs.length : 0;
-      const page = runs.slice(pageStart, pageStart + query.limit);
+      const page = await context.service.listProjectPipelineRuns({
+        projectId: params.projectId,
+        limit: query.limit,
+        ...(query.cursor ? { cursor: query.cursor } : {})
+      });
       const response: GitCicdPipelineRunListResponse = {
-        runs: page.map(toGitCicdPipelineRun),
-        nextCursor:
-          pageStart + page.length < runs.length ? (page.at(-1)?.id ?? null) : null
+        runs: page.runs.map(toGitCicdPipelineRun),
+        nextCursor: page.nextCursor
       };
       return reply.status(200).send(response);
     } catch (error) {
@@ -382,14 +380,21 @@ export async function registerGitCicdHandoffRoutes(
     );
 
     try {
-      await requireAccessiblePipelineRun(params.pipelineRunId, context);
-      if (!(await context.pipelineRepository.findRunRefreshTarget(params.pipelineRunId))) {
-        throw new GitCicdHandoffNotFoundError("Pipeline Run not found");
-      }
-      await context.service.refreshPipelineRun({ pipelineRunId: params.pipelineRunId });
-      const run = await context.service.getPipelineRun({ pipelineRunId: params.pipelineRunId });
-      if (!run) throw new GitCicdHandoffNotFoundError("Pipeline Run not found");
-      const response: GitCicdPipelineRunResponse = { run: toGitCicdPipelineRun(run) };
+      const result = await context.service.refreshPipelineRun({
+        pipelineRunId: params.pipelineRunId,
+        authorizeProject: async (projectId) =>
+          Boolean(
+            await context.handoffRepository.findAccessibleProject(
+              projectId,
+              context.accessContext
+            )
+          )
+      });
+      const response: GitCicdPipelineRunRefreshResponse = {
+        run: toGitCicdPipelineRun(result.run),
+        stale: result.stale,
+        errorMessage: result.errorMessage
+      };
       return reply.status(200).send(response);
     } catch (error) {
       return handleGitCicdHandoffError(error, reply);
@@ -888,7 +893,6 @@ async function getGitCicdPipelineRunRequestContext(
     handoffRepository:
       options?.createGitCicdHandoffRepository?.(client.db) ??
       createPostgresGitCicdHandoffRepository(client.db),
-    pipelineRepository,
     service: createGitCicdPipelineRunService({
       repository: pipelineRepository,
       provider: options?.gitCicdRunProvider ?? unconfiguredGitCicdRunProvider
@@ -915,13 +919,6 @@ async function requireAccessiblePipelineRun(
   if (!run) throw new GitCicdHandoffNotFoundError("Pipeline Run not found");
   await requirePipelineProjectAccess(run.projectId, context);
   return run;
-}
-
-function comparePipelineRunsNewestFirst(
-  left: PipelineRunWithStages,
-  right: PipelineRunWithStages
-): number {
-  return right.createdAt.getTime() - left.createdAt.getTime() || right.id.localeCompare(left.id);
 }
 
 function toGitCicdPipelineRun(row: PipelineRunWithStages): GitCicdPipelineRun {
@@ -964,6 +961,20 @@ async function getGitCicdHandoffRequestContext(
 }
 
 function handleGitCicdHandoffError(error: unknown, reply: FastifyReply) {
+  if (error instanceof GitCicdPipelineRunInvalidCursorError) {
+    return reply.status(400).send({
+      error: "bad_request",
+      message: error.message
+    });
+  }
+
+  if (error instanceof GitCicdPipelineRunRefreshUnavailableError) {
+    return reply.status(404).send({
+      error: "not_found",
+      message: error.message
+    });
+  }
+
   if (error instanceof GitCicdHandoffNotFoundError) {
     return reply.status(404).send({
       error: "not_found",

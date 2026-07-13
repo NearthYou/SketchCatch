@@ -1227,11 +1227,19 @@ type GitCicdPipelineRunListResponse = {
 
 type GitCicdPipelineRunResponse = { run: GitCicdPipelineRun };
 
+type GitCicdPipelineRunRefreshResponse = {
+  run: GitCicdPipelineRun;
+  stale: boolean;
+  errorMessage: string | null;
+};
+
 type GitCicdPipelineLogListResponse = {
   logs: GitCicdPipelineLog[];
   nextSequence: number;
 };
 ```
+
+`POST /api/git-cicd-pipeline-runs/:pipelineRunId/refresh`는 `GitCicdPipelineRunRefreshResponse`를 반환한다. GitHub Actions 읽기가 실패하면 마지막 RDS 상태와 함께 `stale: true` 및 비밀이나 provider 원문을 포함하지 않는 고정 `errorMessage`를 반환한다. 성공 시 `stale: false`, `errorMessage: null`이다.
 
 API 경로:
 

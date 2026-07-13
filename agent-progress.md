@@ -18,6 +18,7 @@ Short English-only working log for the current agent context. Older records are 
 ### 2026-07-13 - Expose authenticated Pipeline Run APIs
 
 - Added project-owned Pipeline Run list/detail/log/refresh routes with strict validation, typed ISO DTOs, newest-first cursor pagination, and incremental log reads.
+- Review fixes moved stable `(createdAt, id)` keyset pagination into RDS/service, added explicit stale refresh responses, and removed the route refresh precheck/double lookup.
 - Preserved persisted history access after monitoring is disabled while keeping refresh behind the enabled-and-valid monitoring target.
 - Reused one lazy GitHub App client across handoff, pipeline-status, and run providers; no real GitHub or deployment mutation ran.
 - Verification: 49 focused API/app tests, lazy-config smoke, API/root lint, typecheck, build, harness, and diff checks passed; lint retains one pre-existing `setNow` warning.

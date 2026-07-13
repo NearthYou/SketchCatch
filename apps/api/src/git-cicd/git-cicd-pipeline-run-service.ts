@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, desc, eq, gt, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, lt, or } from "drizzle-orm";
 import type {
   GitCicdMonitoredPath,
   GitCicdPipelineChangeScope,
@@ -89,6 +89,11 @@ export type GitCicdPipelinePersistenceRepository = {
   findPipelineRun(pipelineRunId: string): Promise<PipelineRunWithStages | undefined>;
   findRunRefreshTarget(pipelineRunId: string): Promise<PipelineRefreshTarget | undefined>;
   listProjectPipelineRuns(projectId: string): Promise<PipelineRunWithStages[]>;
+  listProjectPipelineRunPage(input: {
+    projectId: string;
+    cursor?: string;
+    limit: number;
+  }): Promise<PipelineRunWithStages[]>;
   listPipelineLogs(pipelineRunId: string, sinceSequence: number): Promise<PersistedPipelineLog[]>;
   findPipelineRunsByCommitShas(
     sourceRepositoryId: string,
@@ -106,6 +111,20 @@ export type PipelineRefreshResult = {
   stale: boolean;
   errorMessage: string | null;
 };
+
+export class GitCicdPipelineRunInvalidCursorError extends Error {
+  constructor() {
+    super("Invalid Pipeline Run cursor");
+    this.name = "GitCicdPipelineRunInvalidCursorError";
+  }
+}
+
+export class GitCicdPipelineRunRefreshUnavailableError extends Error {
+  constructor() {
+    super("Pipeline Run not found");
+    this.name = "GitCicdPipelineRunRefreshUnavailableError";
+  }
+}
 
 export function createGitCicdPipelineRunService(options: {
   repository: GitCicdPipelinePersistenceRepository;
@@ -220,13 +239,37 @@ export function createGitCicdPipelineRunService(options: {
       if (!target) throw new Error("Enabled and valid Git/CI/CD monitoring target not found");
       return refreshTarget(target);
     },
-    async refreshPipelineRun(input: { pipelineRunId: string }): Promise<PipelineRefreshResult> {
+    async refreshPipelineRun(input: {
+      pipelineRunId: string;
+      authorizeProject?: (projectId: string) => Promise<boolean>;
+    }): Promise<{ run: PipelineRunWithStages; stale: boolean; errorMessage: string | null }> {
       const target = await options.repository.findRunRefreshTarget(input.pipelineRunId);
-      if (!target?.commitSha) throw new Error("Pipeline Run not found");
-      return refreshTarget(target, target.commitSha);
+      if (!target?.commitSha) throw new GitCicdPipelineRunRefreshUnavailableError();
+      if (input.authorizeProject && !(await input.authorizeProject(target.projectId))) {
+        throw new GitCicdPipelineRunRefreshUnavailableError();
+      }
+      const result = await refreshTarget(target, target.commitSha);
+      const run =
+        result.runs.find((candidate) => candidate.id === input.pipelineRunId) ??
+        (await options.repository.findPipelineRun(input.pipelineRunId));
+      if (!run) throw new GitCicdPipelineRunRefreshUnavailableError();
+      return { run: maskRun(run), stale: result.stale, errorMessage: result.errorMessage };
     },
-    async listProjectPipelineRuns(input: { projectId: string }) {
-      return maskRuns(await options.repository.listProjectPipelineRuns(input.projectId));
+    async listProjectPipelineRuns(input: {
+      projectId: string;
+      cursor?: string;
+      limit: number;
+    }) {
+      const rows = await options.repository.listProjectPipelineRunPage({
+        projectId: input.projectId,
+        limit: input.limit + 1,
+        ...(input.cursor ? { cursor: input.cursor } : {})
+      });
+      const runs = rows.slice(0, input.limit);
+      return {
+        runs: maskRuns(runs),
+        nextCursor: rows.length > input.limit ? (runs.at(-1)?.id ?? null) : null
+      };
     },
     async getPipelineRun(input: { pipelineRunId: string }) {
       const run = await options.repository.findPipelineRun(input.pipelineRunId);
@@ -292,6 +335,56 @@ export function createPostgresGitCicdPipelinePersistenceRepository(
     }));
   }
 
+  async function listRunPage(input: {
+    projectId: string;
+    cursor?: string;
+    limit: number;
+  }): Promise<PipelineRunWithStages[]> {
+    let cursor: { createdAt: Date; id: string } | undefined;
+    if (input.cursor) {
+      [cursor] = await db
+        .select({ createdAt: gitCicdPipelineRuns.createdAt, id: gitCicdPipelineRuns.id })
+        .from(gitCicdPipelineRuns)
+        .where(
+          and(
+            eq(gitCicdPipelineRuns.projectId, input.projectId),
+            eq(gitCicdPipelineRuns.id, input.cursor)
+          )
+        );
+      if (!cursor) throw new GitCicdPipelineRunInvalidCursorError();
+    }
+    const keysetCondition = cursor
+      ? or(
+          lt(gitCicdPipelineRuns.createdAt, cursor.createdAt),
+          and(
+            eq(gitCicdPipelineRuns.createdAt, cursor.createdAt),
+            lt(gitCicdPipelineRuns.id, cursor.id)
+          )
+        )
+      : undefined;
+    const runs = await db
+      .select()
+      .from(gitCicdPipelineRuns)
+      .where(
+        keysetCondition
+          ? and(eq(gitCicdPipelineRuns.projectId, input.projectId), keysetCondition)
+          : eq(gitCicdPipelineRuns.projectId, input.projectId)
+      )
+      .orderBy(desc(gitCicdPipelineRuns.createdAt), desc(gitCicdPipelineRuns.id))
+      .limit(input.limit);
+    if (!runs.length) return [];
+    const stages = await db
+      .select()
+      .from(gitCicdPipelineStages)
+      .where(inArray(gitCicdPipelineStages.pipelineRunId, runs.map((run) => run.id)));
+    return runs.map((run) => ({
+      ...run,
+      stages: stages
+        .filter((stage) => stage.pipelineRunId === run.id)
+        .sort((left, right) => stageKinds.indexOf(left.kind) - stageKinds.indexOf(right.kind))
+    }));
+  }
+
   return {
     findRefreshTarget(projectId, sourceRepositoryId) {
       return findTarget(
@@ -345,6 +438,7 @@ export function createPostgresGitCicdPipelinePersistenceRepository(
       return target ? { ...target, commitSha: run.commitSha } : undefined;
     },
     listProjectPipelineRuns: listRuns,
+    listProjectPipelineRunPage: listRunPage,
     listPipelineLogs(pipelineRunId, sinceSequence) {
       return db
         .select()

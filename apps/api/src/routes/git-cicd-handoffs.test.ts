@@ -10,6 +10,7 @@ import type {
   GitCicdMonitoringConfigResponse,
   GitCicdPipelineLogListResponse,
   GitCicdPipelineRunListResponse,
+  GitCicdPipelineRunRefreshResponse,
   GitCicdPipelineRunResponse
 } from "@sketchcatch/types";
 import { createAccessToken } from "../auth/tokens.js";
@@ -39,12 +40,13 @@ import type {
   GitCicdMonitoringProvider,
   GitCicdMonitoringRepository
 } from "../git-cicd/git-cicd-monitoring-service.js";
-import type {
-  GitCicdPipelinePersistenceRepository,
-  PersistedPipelineLog,
-  PersistedPipelineRun,
-  PipelineRefreshTarget,
-  PipelineRunWithStages
+import {
+  GitCicdPipelineRunInvalidCursorError,
+  type GitCicdPipelinePersistenceRepository,
+  type PersistedPipelineLog,
+  type PersistedPipelineRun,
+  type PipelineRefreshTarget,
+  type PipelineRunWithStages
 } from "../git-cicd/git-cicd-pipeline-run-service.js";
 import type {
   GitCicdRunProvider,
@@ -96,6 +98,7 @@ test("GET Pipeline Runs defaults to 20, caps at 50, and paginates newest first",
   assert.equal(firstBody.runs[19]?.commitMessage, "Commit 35");
   assert.equal(firstBody.nextCursor, firstBody.runs[19]?.id);
 
+  pipelineRepository.runs.push(createPipelineRun(56));
   const second = await app.inject({
     headers,
     method: "GET",
@@ -104,6 +107,10 @@ test("GET Pipeline Runs defaults to 20, caps at 50, and paginates newest first",
   assert.equal(second.statusCode, 200);
   const secondBody = second.json() as GitCicdPipelineRunListResponse;
   assert.equal(secondBody.runs[0]?.commitMessage, "Commit 34");
+  assert.equal(
+    secondBody.runs.some((run) => firstBody.runs.some((firstRun) => firstRun.id === run.id)),
+    false
+  );
 
   const maximum = await app.inject({
     headers,
@@ -118,6 +125,26 @@ test("GET Pipeline Runs defaults to 20, caps at 50, and paginates newest first",
     `/api/projects/${projectId}/git-cicd-pipeline-runs?limit=20&unexpected=true`
   ]) {
     assert.equal((await app.inject({ headers, method: "GET", url })).statusCode, 400);
+  }
+
+  for (const cursor of ["missing-cursor", "foreign-project-cursor"]) {
+    if (cursor === "foreign-project-cursor") {
+      pipelineRepository.runs.push({
+        ...createPipelineRun(57),
+        id: cursor,
+        projectId: "99999999-9999-4999-8999-999999999999"
+      });
+    }
+    const invalidCursor = await app.inject({
+      headers,
+      method: "GET",
+      url: `/api/projects/${projectId}/git-cicd-pipeline-runs?cursor=${cursor}`
+    });
+    assert.equal(invalidCursor.statusCode, 400);
+    assert.deepEqual(invalidCursor.json(), {
+      error: "bad_request",
+      message: "Invalid Pipeline Run cursor"
+    });
   }
   await app.close();
 });
@@ -159,6 +186,11 @@ test("Pipeline Run detail and incremental logs return typed ISO responses", asyn
     url: `/api/git-cicd-pipeline-runs/${pipelineRunId}/refresh`
   });
   assert.equal(blockedRefresh.statusCode, 404);
+  assert.deepEqual(blockedRefresh.json(), {
+    error: "not_found",
+    message: "Pipeline Run not found"
+  });
+  assert.equal(pipelineRepository.findRunRefreshTargetCalls, 1);
 
   assert.equal(
     (
@@ -215,9 +247,46 @@ test("POST Pipeline Run refresh performs read-only provider sync and returns per
   });
 
   assert.equal(response.statusCode, 200);
-  assert.equal((response.json() as GitCicdPipelineRunResponse).run.status, "succeeded");
+  const body = response.json() as GitCicdPipelineRunRefreshResponse;
+  assert.equal(body.run.status, "succeeded");
+  assert.equal(body.stale, false);
+  assert.equal(body.errorMessage, null);
   assert.deepEqual(providerCalls, ["listSnapshots", "listCommitFiles"]);
   assert.equal(pipelineRepository.persistCount, 1);
+  assert.equal(pipelineRepository.findRunRefreshTargetCalls, 1);
+  await app.close();
+});
+
+test("POST Pipeline Run refresh returns sanitized stale metadata with persisted state", async () => {
+  const pipelineRepository = new FakePipelineRepository([createPipelineRun(0)]);
+  const pipelineProvider: GitCicdRunProvider = {
+    async listSnapshots() {
+      throw new Error("github token=raw-secret provider detail");
+    },
+    async listCommitFiles() {
+      return [];
+    }
+  };
+  const app = await buildGitCicdHandoffTestApp(new FakeGitCicdHandoffRepository(), {
+    pipelineProvider,
+    pipelineRepository
+  });
+
+  const response = await app.inject({
+    headers: await authHeaders(),
+    method: "POST",
+    url: `/api/git-cicd-pipeline-runs/${pipelineRunId}/refresh`
+  });
+
+  assert.equal(response.statusCode, 200);
+  const body = response.json() as GitCicdPipelineRunRefreshResponse;
+  assert.equal(body.run.id, pipelineRunId);
+  assert.equal(body.stale, true);
+  assert.equal(
+    body.errorMessage,
+    "GitHub Actions status refresh failed; showing the last persisted state."
+  );
+  assert.equal(JSON.stringify(body).includes("raw-secret"), false);
   await app.close();
 });
 
@@ -1709,6 +1778,7 @@ class FakePipelineRepository implements GitCicdPipelinePersistenceRepository {
   logs: PersistedPipelineLog[] = [];
   persistCount = 0;
   refreshEnabled = true;
+  findRunRefreshTargetCalls = 0;
 
   constructor(readonly runs: PipelineRunWithStages[]) {}
 
@@ -1723,6 +1793,7 @@ class FakePipelineRepository implements GitCicdPipelinePersistenceRepository {
   }
 
   async findRunRefreshTarget(candidatePipelineRunId: string) {
+    this.findRunRefreshTargetCalls += 1;
     const run = await this.findPipelineRun(candidatePipelineRunId);
     return this.refreshEnabled && run
       ? { ...createPipelineRefreshTarget(), commitSha: run.commitSha }
@@ -1731,6 +1802,27 @@ class FakePipelineRepository implements GitCicdPipelinePersistenceRepository {
 
   async listProjectPipelineRuns(candidateProjectId: string) {
     return this.runs.filter((run) => run.projectId === candidateProjectId);
+  }
+
+  async listProjectPipelineRunPage(input: {
+    projectId: string;
+    cursor?: string;
+    limit: number;
+  }) {
+    const scoped = this.runs
+      .filter((run) => run.projectId === input.projectId)
+      .sort(
+        (left, right) =>
+          right.createdAt.getTime() - left.createdAt.getTime() ||
+          right.id.localeCompare(left.id)
+      );
+    const cursorIndex = input.cursor
+      ? scoped.findIndex((run) => run.id === input.cursor)
+      : -1;
+    if (input.cursor && cursorIndex < 0) {
+      throw new GitCicdPipelineRunInvalidCursorError();
+    }
+    return scoped.slice(cursorIndex + 1, cursorIndex + 1 + input.limit);
   }
 
   async listPipelineLogs(candidatePipelineRunId: string, sinceSequence: number) {

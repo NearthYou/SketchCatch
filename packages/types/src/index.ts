@@ -816,6 +816,12 @@ export type GitCicdPipelineRunResponse = {
   run: GitCicdPipelineRun;
 };
 
+export type GitCicdPipelineRunRefreshResponse = {
+  run: GitCicdPipelineRun;
+  stale: boolean;
+  errorMessage: string | null;
+};
+
 export type GitCicdPipelineLogListResponse = {
   logs: GitCicdPipelineLog[];
   nextSequence: number;
