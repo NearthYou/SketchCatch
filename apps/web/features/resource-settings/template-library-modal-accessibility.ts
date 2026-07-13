@@ -47,7 +47,7 @@ export function setupTemplateLibraryModalAccessibility({
 
     const focusableElements = Array.from(
       dialog.querySelectorAll<HTMLElement>(templateLibraryModalFocusableSelector)
-    );
+    ).filter((element) => element.tabIndex >= 0);
     const firstFocusableElement = focusableElements[0];
     const lastFocusableElement = focusableElements.at(-1);
 

@@ -20,6 +20,7 @@ test("Template 전체보기 modal lifecycle traps focus and restores the surroun
     const closeButton = new FakeHTMLElement(documentRoot);
     const middleButton = new FakeHTMLElement(documentRoot);
     const lastButton = new FakeHTMLElement(documentRoot);
+    const selectMenuOption = new FakeHTMLElement(documentRoot);
     let firstCloseCount = 0;
     let latestCloseCount = 0;
     let currentOnClose = () => {
@@ -30,7 +31,13 @@ test("Template 전체보기 modal lifecycle traps focus and restores the surroun
     documentRoot.activeElement = opener;
     documentRoot.body.children.push(appRoot, alreadyInertSibling, overlay);
     documentRoot.body.style.overflow = "clip";
-    dialog.focusableElements = [closeButton, middleButton, lastButton];
+    selectMenuOption.tabIndex = -1;
+    dialog.focusableElements = [
+      closeButton,
+      middleButton,
+      lastButton,
+      selectMenuOption
+    ];
 
     const cleanup = setupTemplateLibraryModalAccessibility({
       closeButton: closeButton as unknown as HTMLButtonElement,
@@ -96,6 +103,7 @@ class FakeDocument extends EventTarget {
 class FakeHTMLElement extends EventTarget {
   focusableElements: FakeHTMLElement[] = [];
   inert = false;
+  tabIndex = 0;
 
   constructor(private readonly documentRoot: FakeDocument) {
     super();
