@@ -5,13 +5,13 @@ Short English-only working log for the current agent context. Older records are 
 ## Current Verified State
 
 - Branch: `Feat/jh/346-시뮬레이션-기능-구현-및-테스트`.
-- Repository recommendation guarantees 2-3 unique candidates and validates question IDs, semantics, and duplicate prompts before display.
-- Deployment type is hidden when repository evidence is decisive and shown only for ambiguous analysis.
-- CI/CD handoff is a prominent standalone setting; its GitHub App repository panel appears only while enabled.
-- Public Repository setup confirms Template and CI/CD before opening a separate follow-up-question stage.
-- Follow-up questions depend on the selected Template, affect diagram creation, and use direct clickable choices.
+- Repository start validates 2-3 unique candidates and follow-up questions, hides decisive deployment type, and confirms Template and CI/CD before opening follow-up questions.
 
 ## Session Record
+
+### 2026-07-13 - Add cost management header description
+
+- Added a one-line Cost Management introduction connecting estimated cost and actual usage; 8 focused Web tests, lint, typecheck, build, diff check, and harness pass, with one unrelated API `setNow` warning.
 
 ### 2026-07-13 - Restore saved architecture thumbnails above project cards
 
