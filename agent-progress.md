@@ -79,23 +79,6 @@ Short English-only working log for the current agent context. Older records are 
 - Verification: focused Web tests passed 82/82 plus 9 diagram tests, focused API tests passed 38/38 plus 18 service/route tests; harness, lint, typecheck, and build passed. No AWS or Terraform mutation ran.
 - PR review: Kubernetes `depends_on` addresses now render as references and both polling/SSE delay messages use valid Korean text; 21 Terraform and 31 modal tests passed.
 
-### 2026-07-12 - Repair Repository candidate selection UI
-
-- Goal: Replace the unreadable black template candidate rows with a clear comparison and selection surface.
-- Completed:
-  - Removed the broad result-panel button selector that overrode candidate styles.
-  - Split candidate content into rank, title, fit, reasons, tradeoffs, and selected state.
-  - Added responsive one-column candidate details and preserved source title casing.
-  - Removed the duplicate deployment selector for repositories with decisive deployment evidence.
-  - Shared the separated CI/CD handoff and follow-up question sections across public and connected Repository flows.
-  - Made the public-flow GitHub App repository panel conditional on CI/CD handoff and reset it for each new URL analysis.
-  - Split public Repository configuration and follow-up questions into separate confirmed steps.
-  - Recomputed questions per selected Template, removed redundant/unused questions, reset stale answers, rendered full-box choices, and required every answer before board creation.
-- Verification:
-  - Focused recommendation tests, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
-  - Lint retains only the pre-existing API `setNow` warning.
-  - Live-tested `Jungle_AI_Board`: AI source, two unique candidates, relevant non-duplicated questions, and cache-covered repeat analysis.
-
 ### 2026-07-12 - Fail fast when API database URL is missing
 
 - Goal: Diagnose `/api/auth/login` returning 500 with `DATABASE_URL is required`.
@@ -214,6 +197,22 @@ Short English-only working log for the current agent context. Older records are 
 - Risk:
   - Browser visual verification was skipped because Playwright/browser automation dependencies are not installed in this worktree.
 
+### 2026-07-13 - Harden CI/CD console refresh and recovery
+
+- Goal: Address Task 7 review findings without entering Task 8 output or notification scope.
+- Completed:
+  - Preserved API ordering when an older active run becomes terminal and stopped refreshing terminal runs.
+  - Preserved only explicit run selections; automatic selection follows the newest run after refresh.
+  - Centralized permission recovery for successful list, detail, refresh, and settings requests.
+  - Isolated logs errors so logs retry does not clear unrelated screen errors.
+  - Matched frontend monitored-path completeness and normalization to the backend boundary.
+- Verification:
+  - Focused state/layout tests passed, 19/19; all Web tests passed, 1034/1034.
+  - Web and root lint/typecheck/build passed. Root lint retained the pre-existing API `setNow` warning.
+  - `pnpm harness:check` and `git diff --check` passed; diff check reported line-ending conversion warnings only.
+- Risk:
+  - Browser visual verification was not repeated because these fixes are state-boundary changes covered by focused and workspace tests.
+
 ## Next Action
 
-- Execute Task 7 from `docs/superpowers/plans/2026-07-13-deployment-cicd-console-separation.md` in the isolated #361 worktree.
+- Continue with Task 8 only after Task 7 review acceptance.

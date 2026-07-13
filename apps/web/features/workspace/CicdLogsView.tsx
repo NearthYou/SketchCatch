@@ -2,12 +2,14 @@ import type { GitCicdPipelineLog, GitCicdPipelineRun } from "@sketchcatch/types"
 import styles from "./workspace.module.css";
 
 export function CicdLogsView({
+  errorMessage,
   isLoading,
   logs,
   onOpenLiveObservation,
   onRetry,
   run
 }: {
+  readonly errorMessage: string;
   readonly isLoading: boolean;
   readonly logs: readonly GitCicdPipelineLog[];
   readonly onOpenLiveObservation?: (() => void) | undefined;
@@ -30,6 +32,9 @@ export function CicdLogsView({
           ) : null}
         </div>
       </div>
+      {errorMessage ? (
+        <p className={styles.deploymentStageAlert} role="alert">{errorMessage}</p>
+      ) : null}
       {!run ? (
         <p className={styles.deploymentHint}>로그를 볼 Pipeline Run을 선택하세요.</p>
       ) : logs.length === 0 ? (

@@ -6,6 +6,7 @@ import type {
 } from "@sketchcatch/types";
 import {
   isCicdMonitoringDraftComplete,
+  normalizeCicdMonitoredPath,
   type CicdMonitoringDraft
 } from "./cicd-console-state";
 import styles from "./workspace.module.css";
@@ -26,15 +27,17 @@ export function CicdMonitoringSettings({
   const canSave = !isSaving && isCicdMonitoringDraftComplete(draft);
 
   async function save(): Promise<void> {
-    if (!canSave) {
+    const appPath = normalizeCicdMonitoredPath(draft.appPath);
+    const infraPath = normalizeCicdMonitoredPath(draft.infraPath);
+    if (!canSave || appPath === null || infraPath === null) {
       return;
     }
 
     await onSave({
       ...draft,
       monitorBranch: draft.monitorBranch.trim() || config.monitorBranch,
-      appPath: normalizePathForSave(draft.appPath, config.appPath),
-      infraPath: normalizePathForSave(draft.infraPath, config.infraPath),
+      appPath,
+      infraPath,
       userAcceptedChangeId: `cicd-monitoring-${crypto.randomUUID()}`
     });
   }
@@ -148,20 +151,4 @@ function toDraft(config: GitCicdMonitoringConfig): CicdMonitoringDraft {
     appPath: config.appPath,
     infraPath: config.infraPath
   };
-}
-
-function normalizePath(path: GitCicdMonitoredPath): GitCicdMonitoredPath {
-  return path.mode === "repository_root"
-    ? { mode: "repository_root", path: "." }
-    : { mode: "subdirectory", path: path.path.trim() };
-}
-
-function normalizePathForSave(
-  path: GitCicdMonitoredPath,
-  fallback: GitCicdMonitoredPath
-): GitCicdMonitoredPath {
-  if (path.mode === "subdirectory" && path.path.trim().length === 0) {
-    return fallback;
-  }
-  return normalizePath(path);
 }

@@ -29,6 +29,30 @@ export type CicdPipelineRunState = {
   readonly selectedRun: GitCicdPipelineRun | null;
 };
 
+export type CicdConsoleRequestState = {
+  readonly permissionFailure: boolean;
+  readonly screenErrorMessage: string;
+  readonly logsErrorMessage: string;
+};
+
+export type CicdConsoleRequestAction =
+  | {
+      readonly type: "success";
+      readonly scope: "list" | "detail" | "refresh" | "settings" | "logs";
+    }
+  | {
+      readonly type: "failure";
+      readonly scope: "screen" | "logs";
+      readonly message: string;
+      readonly permissionFailure: boolean;
+    };
+
+export const initialCicdConsoleRequestState: CicdConsoleRequestState = {
+  permissionFailure: false,
+  screenErrorMessage: "",
+  logsErrorMessage: ""
+};
+
 export function getCicdPollIntervalMs(runs: readonly PipelineRunStatusValue[]): number {
   return runs.some((run) => !isTerminalPipelineStatus(run.status))
     ? ACTIVE_CICD_POLL_INTERVAL_MS
@@ -36,15 +60,66 @@ export function getCicdPollIntervalMs(runs: readonly PipelineRunStatusValue[]): 
 }
 
 export function isCicdMonitoringDraftComplete(draft: CicdMonitoringDraft): boolean {
-  if (!draft.enabled) {
-    return true;
+  const hasValidPaths =
+    normalizeCicdMonitoredPath(draft.appPath) !== null &&
+    normalizeCicdMonitoredPath(draft.infraPath) !== null;
+  return hasValidPaths && (!draft.enabled || draft.monitorBranch.trim().length > 0);
+}
+
+export function normalizeCicdMonitoredPath(
+  path: GitCicdMonitoredPath
+): GitCicdMonitoredPath | null {
+  if (path.mode === "repository_root") {
+    return { mode: "repository_root", path: "." };
   }
 
-  return (
-    draft.monitorBranch.trim().length > 0 &&
-    isExplicitMonitoredPath(draft.appPath) &&
-    isExplicitMonitoredPath(draft.infraPath)
-  );
+  const rawPath = path.path.trim();
+  const normalizedSeparators = rawPath.replaceAll("\\", "/");
+  if (
+    normalizedSeparators.length === 0 ||
+    normalizedSeparators.startsWith("/") ||
+    /^[a-z][a-z\d+.-]*:/i.test(rawPath)
+  ) {
+    return null;
+  }
+
+  const segments = normalizedSeparators
+    .split("/")
+    .filter((segment) => segment.length > 0 && segment !== ".");
+  if (segments.length === 0 || segments.some((segment) => segment === "..")) {
+    return null;
+  }
+
+  return { mode: "subdirectory", path: segments.join("/") };
+}
+
+export function reduceCicdConsoleRequestState(
+  state: CicdConsoleRequestState,
+  action: CicdConsoleRequestAction
+): CicdConsoleRequestState {
+  if (action.type === "success") {
+    if (action.scope === "logs") {
+      return { ...state, logsErrorMessage: "" };
+    }
+    return {
+      ...state,
+      permissionFailure: false,
+      screenErrorMessage: ""
+    };
+  }
+
+  if (action.scope === "logs") {
+    return {
+      ...state,
+      permissionFailure: state.permissionFailure || action.permissionFailure,
+      logsErrorMessage: action.message
+    };
+  }
+  return {
+    ...state,
+    permissionFailure: action.permissionFailure,
+    screenErrorMessage: action.message
+  };
 }
 
 export function isTerminalPipelineTransition(
@@ -110,6 +185,32 @@ export function getCicdPipelineRunState(
   };
 }
 
+export function getActiveCicdPipelineRun(
+  runs: readonly GitCicdPipelineRun[]
+): GitCicdPipelineRun | null {
+  return runs.find((run) => !isTerminalPipelineStatus(run.status)) ?? null;
+}
+
+export function mergeCicdPipelineRun(
+  runs: readonly GitCicdPipelineRun[],
+  refreshedRun: GitCicdPipelineRun
+): GitCicdPipelineRun[] {
+  const byId = new Map(runs.map((run) => [run.id, run]));
+  byId.set(refreshedRun.id, refreshedRun);
+  return [...byId.values()].sort(comparePipelineRunsNewestFirst);
+}
+
+export function getSelectedCicdPipelineRunId(
+  runs: readonly GitCicdPipelineRun[],
+  selectedRunId: string | null,
+  preserveExplicitSelection: boolean
+): string | null {
+  if (preserveExplicitSelection && selectedRunId && runs.some((run) => run.id === selectedRunId)) {
+    return selectedRunId;
+  }
+  return runs[0]?.id ?? null;
+}
+
 export function isCicdPipelineRunStale(
   run: Pick<GitCicdPipelineRun, "lastRefreshedAt" | "status">,
   nowMs = Date.now()
@@ -126,11 +227,13 @@ function isTerminalPipelineStatus(status: GitCicdPipelineRunStatus): boolean {
   return TERMINAL_PIPELINE_RUN_STATUSES.has(status);
 }
 
-function isExplicitMonitoredPath(path: GitCicdMonitoredPath): boolean {
-  if (path.mode === "repository_root") {
-    return path.path === ".";
+function comparePipelineRunsNewestFirst(
+  left: GitCicdPipelineRun,
+  right: GitCicdPipelineRun
+): number {
+  const createdAtDifference = Date.parse(right.createdAt) - Date.parse(left.createdAt);
+  if (createdAtDifference !== 0) {
+    return createdAtDifference;
   }
-
-  const normalizedPath = path.path.trim();
-  return normalizedPath.length > 0 && normalizedPath !== ".";
+  return right.id.localeCompare(left.id);
 }

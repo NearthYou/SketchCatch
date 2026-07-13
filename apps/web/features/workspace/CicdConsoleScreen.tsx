@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import type {
   GitCicdMonitoringConfig,
   GitCicdPipelineLog,
@@ -21,8 +21,13 @@ import { CicdLogsView } from "./CicdLogsView";
 import { CicdMonitoringSettings } from "./CicdMonitoringSettings";
 import { CicdOverviewView } from "./CicdOverviewView";
 import {
+  getActiveCicdPipelineRun,
   getCicdPipelineRunState,
-  getCicdPollIntervalMs
+  getCicdPollIntervalMs,
+  getSelectedCicdPipelineRunId,
+  initialCicdConsoleRequestState,
+  mergeCicdPipelineRun,
+  reduceCicdConsoleRequestState
 } from "./cicd-console-state";
 import styles from "./workspace.module.css";
 
@@ -49,10 +54,15 @@ export function CicdConsoleScreen({
   const [isLogsLoading, setIsLogsLoading] = useState(false);
   const [loadRequestId, setLoadRequestId] = useState(0);
   const [logsReloadRequestId, setLogsReloadRequestId] = useState(0);
-  const [errorMessage, setErrorMessage] = useState("");
-  const [permissionFailure, setPermissionFailure] = useState(false);
+  const [requestState, dispatchRequestState] = useReducer(
+    reduceCicdConsoleRequestState,
+    initialCicdConsoleRequestState
+  );
   const logsSequenceRef = useRef(0);
   const loadedProjectIdRef = useRef<string | null>(null);
+  const hasExplicitRunSelectionRef = useRef(false);
+
+  const { logsErrorMessage, permissionFailure, screenErrorMessage } = requestState;
 
   const runState = useMemo(
     () => getCicdPipelineRunState(runs, selectedRunId),
@@ -63,12 +73,19 @@ export function CicdConsoleScreen({
 
   const loadRuns = useCallback(async (): Promise<GitCicdPipelineRun[]> => {
     const response = await listGitCicdPipelineRuns(projectId, { limit: 50 });
-    setRuns(response.runs);
-    setSelectedRunId((currentId) =>
-      getCicdPipelineRunState(response.runs, currentId).selectedRun?.id ?? null
-    );
     return response.runs;
   }, [projectId]);
+
+  const applyRuns = useCallback((nextRuns: readonly GitCicdPipelineRun[]): void => {
+    setRuns([...nextRuns]);
+    setSelectedRunId((currentId) =>
+      getSelectedCicdPipelineRunId(
+        nextRuns,
+        currentId,
+        hasExplicitRunSelectionRef.current
+      )
+    );
+  }, []);
 
   useEffect(() => {
     if (!isVisible || loadedProjectIdRef.current === projectId) {
@@ -79,8 +96,6 @@ export function CicdConsoleScreen({
 
     async function loadConsole(): Promise<void> {
       setIsInitialLoading(true);
-      setErrorMessage("");
-      setPermissionFailure(false);
 
       try {
         const [repositories, initialRuns] = await Promise.all([
@@ -100,13 +115,18 @@ export function CicdConsoleScreen({
 
         setRepository(activeRepository);
         setConfig(monitoringConfig);
-        setRuns(initialRuns.runs);
-        setSelectedRunId(getCicdPipelineRunState(initialRuns.runs).selectedRun?.id ?? null);
+        hasExplicitRunSelectionRef.current = false;
+        applyRuns(initialRuns.runs);
+        dispatchRequestState({ type: "success", scope: "list" });
         loadedProjectIdRef.current = projectId;
       } catch (error) {
         if (!cancelled) {
-          setPermissionFailure(isGitHubPermissionFailure(error));
-          setErrorMessage(getApiErrorMessage(error, "CI/CD 정보를 불러오지 못했습니다."));
+          dispatchRequestState({
+            type: "failure",
+            scope: "screen",
+            message: getApiErrorMessage(error, "CI/CD 정보를 불러오지 못했습니다."),
+            permissionFailure: isGitHubPermissionFailure(error)
+          });
         }
       } finally {
         if (!cancelled) {
@@ -119,7 +139,7 @@ export function CicdConsoleScreen({
     return () => {
       cancelled = true;
     };
-  }, [isVisible, loadRequestId, projectId]);
+  }, [applyRuns, isVisible, loadRequestId, projectId]);
 
   const refresh = useCallback(async (): Promise<void> => {
     if (!isVisible || document.visibilityState !== "visible") {
@@ -127,29 +147,31 @@ export function CicdConsoleScreen({
     }
 
     setIsRefreshing(true);
-    setErrorMessage("");
     try {
-      const current = getCicdPipelineRunState(runs, selectedRunId).currentRun;
-      const refreshed = current ? await refreshGitCicdPipelineRun(current.id) : null;
+      const activeRun = getActiveCicdPipelineRun(runs);
+      const refreshed = activeRun ? await refreshGitCicdPipelineRun(activeRun.id) : null;
       const nextRuns = await loadRuns();
-      if (refreshed) {
-        setRuns([
-          refreshed.run,
-          ...nextRuns.filter((run) => run.id !== refreshed.run.id)
-        ]);
-        if (refreshed.errorMessage) {
-          setErrorMessage(refreshed.errorMessage);
-        }
-      } else {
-        setRuns(nextRuns);
+      applyRuns(refreshed ? mergeCicdPipelineRun(nextRuns, refreshed.run) : nextRuns);
+      dispatchRequestState({ type: "success", scope: "refresh" });
+      if (refreshed?.errorMessage) {
+        dispatchRequestState({
+          type: "failure",
+          scope: "screen",
+          message: refreshed.errorMessage,
+          permissionFailure: false
+        });
       }
     } catch (error) {
-      setPermissionFailure(isGitHubPermissionFailure(error));
-      setErrorMessage(getApiErrorMessage(error, "CI/CD 상태를 갱신하지 못했습니다."));
+      dispatchRequestState({
+        type: "failure",
+        scope: "screen",
+        message: getApiErrorMessage(error, "CI/CD 상태를 갱신하지 못했습니다."),
+        permissionFailure: isGitHubPermissionFailure(error)
+      });
     } finally {
       setIsRefreshing(false);
     }
-  }, [isVisible, loadRuns, runs, selectedRunId]);
+  }, [applyRuns, isVisible, loadRuns, runs]);
 
   useEffect(() => {
     if (!isVisible) {
@@ -171,10 +193,20 @@ export function CicdConsoleScreen({
     void getGitCicdPipelineRun(selectedRunId)
       .then((detail) => {
         if (!cancelled) {
-          setRuns((currentRuns) => currentRuns.map((run) => run.id === detail.id ? detail : run));
+          setRuns((currentRuns) => mergeCicdPipelineRun(currentRuns, detail));
+          dispatchRequestState({ type: "success", scope: "detail" });
         }
       })
-      .catch(() => undefined);
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          dispatchRequestState({
+            type: "failure",
+            scope: "screen",
+            message: getApiErrorMessage(error, "Pipeline Run 정보를 불러오지 못했습니다."),
+            permissionFailure: isGitHubPermissionFailure(error)
+          });
+        }
+      });
     return () => {
       cancelled = true;
     };
@@ -201,10 +233,16 @@ export function CicdConsoleScreen({
         if (!cancelled) {
           logsSequenceRef.current = response.nextSequence;
           setLogs((currentLogs) => mergeLogs(currentLogs, response.logs));
+          dispatchRequestState({ type: "success", scope: "logs" });
         }
       } catch (error) {
         if (!cancelled) {
-          setErrorMessage(getApiErrorMessage(error, "CI/CD 로그를 불러오지 못했습니다."));
+          dispatchRequestState({
+            type: "failure",
+            scope: "logs",
+            message: getApiErrorMessage(error, "CI/CD 로그를 불러오지 못했습니다."),
+            permissionFailure: isGitHubPermissionFailure(error)
+          });
         }
       } finally {
         if (!cancelled) {
@@ -226,14 +264,17 @@ export function CicdConsoleScreen({
       return;
     }
     setIsSaving(true);
-    setErrorMessage("");
     try {
       const nextConfig = await updateGitCicdMonitoringConfig(projectId, repository.id, request);
       setConfig(nextConfig);
-      setPermissionFailure(false);
+      dispatchRequestState({ type: "success", scope: "settings" });
     } catch (error) {
-      setPermissionFailure(isGitHubPermissionFailure(error));
-      setErrorMessage(getApiErrorMessage(error, "CI/CD 설정을 저장하지 못했습니다."));
+      dispatchRequestState({
+        type: "failure",
+        scope: "screen",
+        message: getApiErrorMessage(error, "CI/CD 설정을 저장하지 못했습니다."),
+        permissionFailure: isGitHubPermissionFailure(error)
+      });
     } finally {
       setIsSaving(false);
     }
@@ -247,17 +288,22 @@ export function CicdConsoleScreen({
     return (
       <div className={styles.cicdState} role="alert">
         <h3>GitHub 권한을 확인해 주세요.</h3>
-        <p>{errorMessage}</p>
+        <p>{screenErrorMessage}</p>
         <a className={styles.deploymentPrimaryButton} href={settingsHref}>프로젝트 GitHub 설정 열기</a>
+        <button className={styles.deploymentSecondaryButton} onClick={() => {
+          loadedProjectIdRef.current = null;
+          setIsInitialLoading(true);
+          setLoadRequestId((requestId) => requestId + 1);
+        }} type="button">다시 시도</button>
       </div>
     );
   }
 
-  if (errorMessage && !repository) {
+  if (screenErrorMessage && !repository) {
     return (
       <div className={styles.cicdState} role="alert">
         <h3>CI/CD 정보를 불러오지 못했습니다.</h3>
-        <p>{errorMessage}</p>
+        <p>{screenErrorMessage}</p>
         <button className={styles.deploymentPrimaryButton} onClick={() => {
           loadedProjectIdRef.current = null;
           setIsInitialLoading(true);
@@ -299,12 +345,15 @@ export function CicdConsoleScreen({
           CI/CD 설정이 필요합니다.
         </button>
       ) : null}
-      {errorMessage ? <p className={styles.deploymentStageAlert} role="alert">{errorMessage}</p> : null}
+      {screenErrorMessage ? <p className={styles.deploymentStageAlert} role="alert">{screenErrorMessage}</p> : null}
 
       {runs.length > 0 ? (
         <label className={styles.cicdRunSelect}>
           Pipeline Run
-          <select value={selectedRun?.id ?? ""} onChange={(event) => setSelectedRunId(event.target.value)}>
+          <select value={selectedRun?.id ?? ""} onChange={(event) => {
+            hasExplicitRunSelectionRef.current = true;
+            setSelectedRunId(event.target.value);
+          }}>
             {runs.map((run) => (
               <option key={run.id} value={run.id}>{run.commitSha.slice(0, 8)} · {run.commitMessage}</option>
             ))}
@@ -320,6 +369,7 @@ export function CicdConsoleScreen({
         <CicdActivityView run={selectedRun} />
       ) : activeView === "logs" ? (
         <CicdLogsView
+          errorMessage={logsErrorMessage}
           isLoading={isLogsLoading}
           logs={logs}
           onOpenLiveObservation={onOpenLiveObservation}

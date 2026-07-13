@@ -5,13 +5,19 @@ import {
   ACTIVE_CICD_POLL_INTERVAL_MS,
   IDLE_CICD_POLL_INTERVAL_MS,
   createPipelineNotificationKey,
+  getActiveCicdPipelineRun,
   getCicdPipelineRunState,
   getCicdPollIntervalMs,
   getNotifiablePipelineRunTransitions,
+  getSelectedCicdPipelineRunId,
+  initialCicdConsoleRequestState,
   isCicdMonitoringDraftComplete,
   isCicdPipelineRunStale,
   isNotifiablePipelineTransition,
-  isTerminalPipelineTransition
+  isTerminalPipelineTransition,
+  mergeCicdPipelineRun,
+  normalizeCicdMonitoredPath,
+  reduceCicdConsoleRequestState
 } from "./cicd-console-state";
 
 test("CI/CD polling uses five seconds while any run is active and thirty seconds while idle", () => {
@@ -60,6 +66,15 @@ test("enabled monitoring requires a branch and explicit app and infrastructure p
       monitorBranch: "",
       appPath: { mode: "subdirectory", path: "" },
       infraPath: { mode: "subdirectory", path: "" }
+    }),
+    false
+  );
+  assert.equal(
+    isCicdMonitoringDraftComplete({
+      enabled: false,
+      monitorBranch: "",
+      appPath: { mode: "repository_root", path: "ignored" },
+      infraPath: { mode: "subdirectory", path: "./infra/" }
     }),
     true
   );
@@ -146,6 +161,97 @@ test("run state falls back to the newest run and current selection when there is
     historyRuns: [],
     selectedRun: null
   });
+});
+
+test("refreshing an older run replaces it without moving it ahead of a newer run", () => {
+  const newerTerminal = createPipelineRun({
+    id: "run-b",
+    status: "succeeded",
+    createdAt: "2026-07-13T03:00:00.000Z"
+  });
+  const olderActive = createPipelineRun({
+    id: "run-a",
+    status: "running",
+    createdAt: "2026-07-13T02:00:00.000Z"
+  });
+  const refreshedOlder = createPipelineRun({
+    id: "run-a",
+    status: "failed",
+    createdAt: "2026-07-13T02:00:00.000Z"
+  });
+
+  const runs = mergeCicdPipelineRun([newerTerminal, olderActive], refreshedOlder);
+
+  assert.deepEqual(runs.map((run) => run.id), ["run-b", "run-a"]);
+  assert.equal(getSelectedCicdPipelineRunId(runs, "run-a", false), "run-b");
+  assert.equal(getActiveCicdPipelineRun(runs), null);
+  assert.equal(getCicdPollIntervalMs(runs), IDLE_CICD_POLL_INTERVAL_MS);
+});
+
+test("an explicit history selection is preserved when refreshed runs are sorted", () => {
+  const runs = [
+    createPipelineRun({ id: "run-b", createdAt: "2026-07-13T03:00:00.000Z" }),
+    createPipelineRun({ id: "run-a", createdAt: "2026-07-13T02:00:00.000Z" })
+  ];
+
+  assert.equal(getSelectedCicdPipelineRunId(runs, "run-a", true), "run-a");
+});
+
+test("successful CI/CD requests recover a previous permission failure", () => {
+  const failed = reduceCicdConsoleRequestState(initialCicdConsoleRequestState, {
+    type: "failure",
+    scope: "screen",
+    message: "GitHub permission denied",
+    permissionFailure: true
+  });
+  const recovered = reduceCicdConsoleRequestState(failed, {
+    type: "success",
+    scope: "detail"
+  });
+
+  assert.equal(failed.permissionFailure, true);
+  assert.deepEqual(recovered, initialCicdConsoleRequestState);
+});
+
+test("a successful logs retry clears only the logs error", () => {
+  const screenFailed = reduceCicdConsoleRequestState(initialCicdConsoleRequestState, {
+    type: "failure",
+    scope: "screen",
+    message: "Refresh failed",
+    permissionFailure: false
+  });
+  const logsFailed = reduceCicdConsoleRequestState(screenFailed, {
+    type: "failure",
+    scope: "logs",
+    message: "Logs failed",
+    permissionFailure: false
+  });
+  const logsRecovered = reduceCicdConsoleRequestState(logsFailed, {
+    type: "success",
+    scope: "logs"
+  });
+
+  assert.equal(logsRecovered.screenErrorMessage, "Refresh failed");
+  assert.equal(logsRecovered.logsErrorMessage, "");
+});
+
+test("monitored paths use the same repository-relative normalization as the API", () => {
+  assert.deepEqual(
+    normalizeCicdMonitoredPath({ mode: "repository_root", path: "anything" }),
+    { mode: "repository_root", path: "." }
+  );
+  assert.deepEqual(
+    normalizeCicdMonitoredPath({ mode: "subdirectory", path: " ./apps\\web/ " }),
+    { mode: "subdirectory", path: "apps/web" }
+  );
+
+  for (const path of ["", ".", "./", "/apps/web", "C:\\apps\\web", "\\apps\\web", "apps/../web"]) {
+    assert.equal(
+      normalizeCicdMonitoredPath({ mode: "subdirectory", path }),
+      null,
+      `expected ${path || "<empty>"} to be rejected`
+    );
+  }
 });
 
 test("only non-terminal runs older than sixty seconds are stale", () => {

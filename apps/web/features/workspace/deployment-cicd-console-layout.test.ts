@@ -40,3 +40,23 @@ test("WorkspaceRightPanel keeps the full-screen portal and Terraform leave gate"
   assert.match(panelSource, /createPortal\(deploymentConsoleContent, document\.body\)/);
   assert.match(panelSource, /requestTerraformLeave\(\{ kind: "deployment-console" \}\)/);
 });
+
+test("the CI/CD screen wires sorted refreshes and request-scoped recovery state", () => {
+  const cicdSource = readWorkspaceSource("CicdConsoleScreen.tsx");
+
+  assert.match(cicdSource, /getActiveCicdPipelineRun\(runs\)/);
+  assert.match(cicdSource, /mergeCicdPipelineRun\(nextRuns, refreshed\.run\)/);
+  assert.match(cicdSource, /hasExplicitRunSelectionRef\.current = true/);
+  for (const scope of ["list", "detail", "refresh", "settings"] as const) {
+    assert.match(cicdSource, new RegExp(`type: "success", scope: "${scope}"`));
+  }
+  assert.match(cicdSource, /errorMessage=\{logsErrorMessage\}/);
+});
+
+test("monitoring settings save only normalized repository-relative paths", () => {
+  const settingsSource = readWorkspaceSource("CicdMonitoringSettings.tsx");
+
+  assert.match(settingsSource, /normalizeCicdMonitoredPath\(draft\.appPath\)/);
+  assert.match(settingsSource, /normalizeCicdMonitoredPath\(draft\.infraPath\)/);
+  assert.doesNotMatch(settingsSource, /normalizePathForSave/);
+});
