@@ -342,8 +342,7 @@ export function RepositoryStartClient({
 
       <section className={styles.content} aria-labelledby="repository-start-title">
         <header className={styles.heading}>
-          <span>GitHub 저장소</span>
-          <h1 id="repository-start-title">코드 근거로 시작하기</h1>
+          <h1 id="repository-start-title">GitHub 저장소</h1>
           <p>{projectName}</p>
         </header>
 
@@ -443,7 +442,7 @@ export function RepositoryStartClient({
         && !activeRepository ? (
           <section className={styles.connectionPanel}>
             <GitBranch aria-hidden="true" size={24} />
-            <h2>CI/CD 인계 저장소 연결</h2>
+            <h2>CI/CD 연결</h2>
             <p className={styles.inlineHint}>
               GitHub App 권한이 있는 저장소를 선택해 PR과 자동 배포 흐름에 연결합니다.
             </p>
@@ -716,13 +715,19 @@ function PublicRepositoryRecommendationStep({
     return (
       <section className={styles.publicAnalysisResult} aria-label="public 저장소 추가 질문">
         <div className={styles.publicQuestionSummary}>
+          <button
+            aria-label="템플릿 선택으로 돌아가기"
+            className={styles.publicBackAction}
+            onClick={onEditConfiguration}
+            title="템플릿 선택으로 돌아가기"
+            type="button"
+          >
+            <ArrowLeft aria-hidden="true" size={16} />
+          </button>
           <div>
             <span>선택한 템플릿</span>
             <strong>{selectedCandidate?.displayTitle ?? "추천 템플릿"}</strong>
           </div>
-          <button className={styles.publicBackAction} onClick={onEditConfiguration} type="button">
-            <ArrowLeft aria-hidden="true" size={16} /> 이전
-          </button>
         </div>
         <RepositoryQuestions answers={answers} onAnswer={onAnswer} questions={recommendation.questions} />
         <button
