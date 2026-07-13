@@ -38,13 +38,13 @@
 - Modify: `.gitignore`
 - Modify: `docs/development.md`
 
-- [ ] Write failing adapter and factory tests for round-trip, exact size, path safety, symlink safety, atomic cleanup, delete cleanup, environment selection, and production fail-closed.
-- [ ] Run the focused tests and confirm RED.
-- [ ] Implement the provider-neutral interface, filesystem/S3 adapters, and environment factory.
-- [ ] Register one adapter per Project route registration and reuse it for upload, read, confirm, abort, thumbnail prune, and default Project deletion.
-- [ ] Remove route-level `bucketName`, `requireS3BucketName`, AWS command imports, and dead `createUploadUrl` coupling.
-- [ ] Document local root/backend variables and ignore `.local-data`.
-- [ ] Run focused API tests, typecheck, lint, and `git diff --check`.
+- [x] Write failing adapter and factory tests for round-trip, exact size, path safety, symlink safety, atomic cleanup, delete cleanup, environment selection, and production fail-closed.
+- [x] Run the focused tests and confirm RED.
+- [x] Implement the provider-neutral interface, filesystem/S3 adapters, and environment factory.
+- [x] Register one adapter per Project route registration and reuse it for upload, read, confirm, abort, thumbnail prune, and default Project deletion.
+- [x] Remove route-level `bucketName`, `requireS3BucketName`, AWS command imports, and dead `createUploadUrl` coupling.
+- [x] Document local root/backend variables and ignore `.local-data`.
+- [x] Run focused API tests, typecheck, lint, and `git diff --check`.
 
 ### Task 2: Actual Board capture lifecycle
 
