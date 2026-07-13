@@ -55,3 +55,9 @@ test("both cost panels keep only the newest response", () => {
     assert.match(source, /requestCoordinatorRef\.current\.dispose\(\)/);
   }
 });
+
+test("estimated user count accepts direct numeric input", () => {
+  assert.match(estimatePanelSource, /type="number"/);
+  assert.match(estimatePanelSource, /normalizeExpectedUserCount/);
+  assert.match(estimatePanelSource, /onBlur=\{applyExpectedUserCount\}/);
+});

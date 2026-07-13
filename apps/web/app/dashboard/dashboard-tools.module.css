@@ -65,7 +65,8 @@
 
 .costTab:focus-visible,
 .iconAction:focus-visible,
-.controlRow select:focus-visible {
+.controlRow select:focus-visible,
+.controlRow input:focus-visible {
   outline: 2px solid var(--color-ink);
   outline-offset: 2px;
 }
@@ -172,6 +173,7 @@
 }
 
 .controlRow select,
+.controlRow input,
 .setupSection input {
   min-height: 42px;
   border: 1px solid var(--color-hairline-strong);

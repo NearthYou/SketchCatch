@@ -12,6 +12,11 @@ import {
   selectUndeployedCostProjects,
   sumCostProjectEstimates
 } from "../../../features/costs/cost-estimate-project-view";
+import {
+  MAX_EXPECTED_USER_COUNT,
+  MIN_EXPECTED_USER_COUNT,
+  normalizeExpectedUserCount
+} from "../../../features/costs/cost-estimate-input";
 import { createCostRequestCoordinator } from "../../../features/costs/cost-request-coordinator";
 import { listCostProjectEstimates } from "../../../features/workspace/api";
 import { CostMetric, formatUsd } from "./cost-dashboard-presentation";
@@ -22,6 +27,7 @@ type CostLoadState = "loading" | "ready" | "error";
 export function CostEstimatePanel() {
   const [period, setPeriod] = useState<CostEstimatePeriod>("month");
   const [expectedUserCount, setExpectedUserCount] = useState(1000);
+  const [expectedUserCountInput, setExpectedUserCountInput] = useState("1000");
   const [data, setData] = useState<CostProjectEstimateListResponse | null>(null);
   const [loadState, setLoadState] = useState<CostLoadState>("loading");
   const [errorMessage, setErrorMessage] = useState("");
@@ -66,6 +72,19 @@ export function CostEstimatePanel() {
     }
   }
 
+  function applyExpectedUserCount(): void {
+    const normalized = normalizeExpectedUserCount(expectedUserCountInput);
+
+    if (normalized === null) {
+      setExpectedUserCountInput(String(expectedUserCount));
+      return;
+    }
+
+    setExpectedUserCount(normalized);
+    setExpectedUserCountInput(String(normalized));
+    void loadEstimates(period, normalized);
+  }
+
   useEffect(() => () => requestCoordinatorRef.current.dispose(), []);
   useEffect(() => {
     void loadEstimates("month", 1000);
@@ -85,18 +104,19 @@ export function CostEstimatePanel() {
         <div className={styles.controlRow}>
           <label>
             <span>예상 사용자</span>
-            <select
-              onChange={(event) => {
-                const count = Number(event.target.value);
-                setExpectedUserCount(count);
-                void loadEstimates(period, count);
+            <input
+              inputMode="numeric"
+              max={MAX_EXPECTED_USER_COUNT}
+              min={MIN_EXPECTED_USER_COUNT}
+              onBlur={applyExpectedUserCount}
+              onChange={(event) => setExpectedUserCountInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") event.currentTarget.blur();
               }}
-              value={expectedUserCount}
-            >
-              <option value={1000}>월 1,000명</option>
-              <option value={10000}>월 10,000명</option>
-              <option value={100000}>월 100,000명</option>
-            </select>
+              step={1}
+              type="number"
+              value={expectedUserCountInput}
+            />
           </label>
           <label>
             <span>표시 기간</span>
