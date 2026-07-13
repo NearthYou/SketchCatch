@@ -19,6 +19,7 @@ import {
   normalizeCicdMonitoredPath,
   reduceCicdConsoleRequestState
 } from "./cicd-console-state";
+import * as cicdConsoleState from "./cicd-console-state";
 
 test("CI/CD polling uses five seconds while any run is active and thirty seconds while idle", () => {
   assert.equal(ACTIVE_CICD_POLL_INTERVAL_MS, 5_000);
@@ -286,6 +287,36 @@ test("only non-terminal runs older than sixty seconds are stale", () => {
   );
 });
 
+test("log state synchronously resets sequence and visible logs when the same run gets a new revision", () => {
+  const reduceCicdLogState = (
+    cicdConsoleState as unknown as {
+      reduceCicdLogState?: (
+        state: { runId: string | null; logRevision: string | null; sequence: number; logs: unknown[] },
+        run: { id: string; logRevision: string } | null
+      ) => { runId: string | null; logRevision: string | null; sequence: number; logs: unknown[] };
+    }
+  ).reduceCicdLogState;
+  assert.equal(typeof reduceCicdLogState, "function");
+
+  const unchanged = reduceCicdLogState!(
+    { runId: "run-1", logRevision: "attempt-1", sequence: 7, logs: [{ id: "old" }] },
+    { id: "run-1", logRevision: "attempt-1" }
+  );
+  assert.equal(unchanged.sequence, 7);
+  assert.equal(unchanged.logs.length, 1);
+
+  const reset = reduceCicdLogState!(
+    unchanged,
+    { id: "run-1", logRevision: "attempt-2" }
+  );
+  assert.deepEqual(reset, {
+    runId: "run-1",
+    logRevision: "attempt-2",
+    sequence: 0,
+    logs: []
+  });
+});
+
 function createPipelineRun(
   overrides: Partial<GitCicdPipelineRun> = {}
 ): GitCicdPipelineRun {
@@ -305,6 +336,8 @@ function createPipelineRun(
     apiUrl: null,
     startedAt: "2026-07-13T03:00:00.000Z",
     finishedAt: null,
+    upstreamOrderingToken: "2026-07-13T03:00:00.000Z|SketchCatch App:1:1",
+    logRevision: "SketchCatch App:1:1",
     lastRefreshedAt: "2026-07-13T03:00:00.000Z",
     createdAt: "2026-07-13T03:00:00.000Z",
     stages: [],

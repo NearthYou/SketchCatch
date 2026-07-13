@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
 import type {
   GitCicdMonitoringConfig,
   GitCicdPipelineLog,
@@ -13,7 +13,7 @@ import {
   listGitCicdPipelineLogs,
   listGitCicdPipelineRuns,
   listSourceRepositories,
-  refreshGitCicdPipelineRun,
+  refreshProjectGitCicdPipelineRuns,
   updateGitCicdMonitoringConfig
 } from "./api";
 import { CicdActivityView } from "./CicdActivityView";
@@ -22,12 +22,12 @@ import { CicdMonitoringSettings } from "./CicdMonitoringSettings";
 import { CicdOverviewView } from "./CicdOverviewView";
 import { DeploymentOutputLinks } from "./DeploymentOutputLinks";
 import {
-  getActiveCicdPipelineRun,
   getCicdPipelineRunState,
   getCicdPollIntervalMs,
   getSelectedCicdPipelineRunId,
   initialCicdConsoleRequestState,
   mergeCicdPipelineRun,
+  reduceCicdLogState,
   reduceCicdConsoleRequestState
 } from "./cicd-console-state";
 import { getSafePipelineRunLinks } from "./deployment-output-links";
@@ -63,6 +63,10 @@ export function CicdConsoleScreen({
   const logsSequenceRef = useRef(0);
   const loadedProjectIdRef = useRef<string | null>(null);
   const hasExplicitRunSelectionRef = useRef(false);
+  const logOwnerRef = useRef<{ runId: string | null; logRevision: string | null }>({
+    runId: null,
+    logRevision: null
+  });
 
   const { logsErrorMessage, permissionFailure, screenErrorMessage } = requestState;
 
@@ -71,6 +75,8 @@ export function CicdConsoleScreen({
     [runs, selectedRunId]
   );
   const selectedRun = runState.selectedRun;
+  const selectedRunIdForLogs = selectedRun?.id ?? null;
+  const selectedLogRevision = selectedRun?.logRevision ?? null;
   const outputLinks = useMemo(() => getSafePipelineRunLinks(selectedRun), [selectedRun]);
   const settingsHref = `/dashboard/projects/${encodeURIComponent(projectId)}/settings?tab=github`;
 
@@ -144,23 +150,41 @@ export function CicdConsoleScreen({
     };
   }, [applyRuns, isVisible, loadRequestId, projectId]);
 
-  const refresh = useCallback(async (): Promise<void> => {
+  const refreshList = useCallback(async (): Promise<void> => {
     if (!isVisible || document.visibilityState !== "visible") {
       return;
     }
 
     setIsRefreshing(true);
     try {
-      const activeRun = getActiveCicdPipelineRun(runs);
-      const refreshed = activeRun ? await refreshGitCicdPipelineRun(activeRun.id) : null;
       const nextRuns = await loadRuns();
-      applyRuns(refreshed ? mergeCicdPipelineRun(nextRuns, refreshed.run) : nextRuns);
+      applyRuns(nextRuns);
       dispatchRequestState({ type: "success", scope: "refresh" });
-      if (refreshed?.errorMessage) {
+    } catch (error) {
+      dispatchRequestState({
+        type: "failure",
+        scope: "screen",
+        message: getApiErrorMessage(error, "CI/CD 상태를 갱신하지 못했습니다."),
+        permissionFailure: isGitHubPermissionFailure(error)
+      });
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [applyRuns, isVisible, loadRuns]);
+
+  const manualRefresh = useCallback(async (): Promise<void> => {
+    if (!isVisible || document.visibilityState !== "visible") return;
+    setIsRefreshing(true);
+    try {
+      const result = await refreshProjectGitCicdPipelineRuns(projectId);
+      applyRuns(result.runs);
+      dispatchRequestState({ type: "success", scope: "refresh" });
+      const errorMessage = result.targets.find((target) => target.errorMessage)?.errorMessage;
+      if (errorMessage) {
         dispatchRequestState({
           type: "failure",
           scope: "screen",
-          message: refreshed.errorMessage,
+          message: errorMessage,
           permissionFailure: false
         });
       }
@@ -174,18 +198,18 @@ export function CicdConsoleScreen({
     } finally {
       setIsRefreshing(false);
     }
-  }, [applyRuns, isVisible, loadRuns, runs]);
+  }, [applyRuns, isVisible, projectId]);
 
   useEffect(() => {
     if (!isVisible) {
       return;
     }
     const intervalId = window.setInterval(
-      () => void refresh(),
+      () => void refreshList(),
       getCicdPollIntervalMs(runs)
     );
     return () => window.clearInterval(intervalId);
-  }, [isVisible, refresh, runs]);
+  }, [isVisible, refreshList, runs]);
 
   useEffect(() => {
     if (!selectedRunId) {
@@ -215,10 +239,24 @@ export function CicdConsoleScreen({
     };
   }, [selectedRunId]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    const next = reduceCicdLogState(
+      {
+        ...logOwnerRef.current,
+        sequence: logsSequenceRef.current,
+        logs: []
+      },
+      selectedRunIdForLogs
+        ? { id: selectedRunIdForLogs, logRevision: selectedLogRevision ?? "" }
+        : null
+    );
+    if (next.runId === logOwnerRef.current.runId && next.logRevision === logOwnerRef.current.logRevision) {
+      return;
+    }
+    logOwnerRef.current = { runId: next.runId, logRevision: next.logRevision };
     logsSequenceRef.current = 0;
     setLogs([]);
-  }, [selectedRunId]);
+  }, [selectedLogRevision, selectedRunIdForLogs]);
 
   useEffect(() => {
     if (!isVisible || activeView !== "logs" || !selectedRunId) {
@@ -260,7 +298,7 @@ export function CicdConsoleScreen({
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [activeView, isVisible, logsReloadRequestId, runs, selectedRunId]);
+  }, [activeView, isVisible, logsReloadRequestId, runs, selectedLogRevision, selectedRunId]);
 
   async function saveConfig(request: UpdateGitCicdMonitoringConfigRequest): Promise<void> {
     if (!repository) {
@@ -338,7 +376,7 @@ export function CicdConsoleScreen({
             {({ overview: "Overview", activity: "Activity", logs: "Logs", settings: "Settings" } as const)[view]}
           </button>
         ))}
-        <button disabled={isRefreshing} onClick={() => void refresh()} type="button">
+        <button disabled={isRefreshing} onClick={() => void manualRefresh()} type="button">
           {isRefreshing ? "갱신 중" : "새로고침"}
         </button>
       </div>

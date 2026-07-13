@@ -44,8 +44,11 @@ test("WorkspaceRightPanel keeps the full-screen portal and Terraform leave gate"
 test("the CI/CD screen wires sorted refreshes and request-scoped recovery state", () => {
   const cicdSource = readWorkspaceSource("CicdConsoleScreen.tsx");
 
-  assert.match(cicdSource, /getActiveCicdPipelineRun\(runs\)/);
-  assert.match(cicdSource, /mergeCicdPipelineRun\(nextRuns, refreshed\.run\)/);
+  assert.match(cicdSource, /const refreshList = useCallback/);
+  assert.match(cicdSource, /const nextRuns = await loadRuns\(\)/);
+  assert.match(cicdSource, /const manualRefresh = useCallback/);
+  assert.match(cicdSource, /refreshProjectGitCicdPipelineRuns\(projectId\)/);
+  assert.match(cicdSource, /mergeCicdPipelineRun\(currentRuns, detail\)/);
   assert.match(cicdSource, /hasExplicitRunSelectionRef\.current = true/);
   for (const scope of ["list", "detail", "refresh", "settings"] as const) {
     assert.match(cicdSource, new RegExp(`type: "success", scope: "${scope}"`));
@@ -81,12 +84,30 @@ test("one workspace notification host survives console screen changes", () => {
   assert.match(managerSource, /<WorkspaceNotificationHost projectId=\{projectId\}>[\s\S]*<DiagramEditor/);
   assert.match(hostSource, /listDeployments\(projectId\)/);
   assert.match(hostSource, /listGitCicdPipelineRuns\(projectId/);
-  assert.match(hostSource, /refreshGitCicdPipelineRun/);
+  assert.match(hostSource, /refreshProjectGitCicdPipelineRuns\(projectId\)/);
+  assert.match(
+    hostSource,
+    /refreshProjectGitCicdPipelineRuns\(projectId\)[\s\S]*listGitCicdPipelineRuns\(projectId/
+  );
   assert.match(hostSource, /window\.setTimeout/);
   assert.match(hostSource, /window\.clearTimeout/);
   assert.match(hostSource, /\}, \[notify, projectId\]\);/);
   assert.doesNotMatch(directSource, /useWorkspaceNotifications|getNotifiableDirectDeploymentTransitions/);
   assert.doesNotMatch(cicdSource, /useWorkspaceNotifications|getNotifiablePipelineRunTransitions/);
+});
+
+test("the visible CI/CD console keeps automatic refresh RDS-only and resets logs by revision", () => {
+  const cicdSource = readWorkspaceSource("CicdConsoleScreen.tsx");
+
+  assert.match(cicdSource, /refreshProjectGitCicdPipelineRuns/);
+  assert.match(cicdSource, /manualRefresh/);
+  assert.doesNotMatch(
+    cicdSource.slice(cicdSource.indexOf("useEffect(() =>", cicdSource.indexOf("manualRefresh"))),
+    /refreshProjectGitCicdPipelineRuns/
+  );
+  assert.match(cicdSource, /const selectedLogRevision = selectedRun\?\.logRevision/);
+  assert.match(cicdSource, /logsSequenceRef\.current = 0/);
+  assert.match(cicdSource, /setLogs\(\[\]\)/);
 });
 
 test("Direct Output rendering is scoped to the selected Deployment owner", () => {

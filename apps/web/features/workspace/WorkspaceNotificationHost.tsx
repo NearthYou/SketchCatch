@@ -7,13 +7,11 @@ import {
   useState,
   type ReactNode
 } from "react";
-import type { GitCicdPipelineRun } from "@sketchcatch/types";
 import {
   listDeployments,
   listGitCicdPipelineRuns,
-  refreshGitCicdPipelineRun
+  refreshProjectGitCicdPipelineRuns
 } from "./api";
-import { mergeCicdPipelineRun } from "./cicd-console-state";
 import {
   createInitialWorkspaceNotificationState,
   reduceWorkspaceNotifications,
@@ -171,25 +169,13 @@ export function WorkspaceNotificationHost({
   );
 }
 
-async function loadObservedPipelineRuns(projectId: string): Promise<GitCicdPipelineRun[]> {
-  const response = await listGitCicdPipelineRuns(projectId, { limit: 50 });
-  const activeRuns = response.runs.filter((run) => !isPipelineRunTerminal(run.status));
-  if (activeRuns.length === 0) {
-    return response.runs;
+async function loadObservedPipelineRuns(projectId: string) {
+  const discovery = await refreshProjectGitCicdPipelineRuns(projectId);
+  if (discovery.stale) {
+    throw new Error("Pipeline Run discovery is stale");
   }
-
-  const refreshResults = await Promise.allSettled(
-    activeRuns.map((run) => refreshGitCicdPipelineRun(run.id))
-  );
-  return refreshResults.reduce<GitCicdPipelineRun[]>((runs, result) => {
-    return result.status === "fulfilled"
-      ? mergeCicdPipelineRun(runs, result.value.run)
-      : runs;
-  }, response.runs);
-}
-
-function isPipelineRunTerminal(status: GitCicdPipelineRun["status"]): boolean {
-  return status === "succeeded" || status === "failed" || status === "cancelled";
+  const response = await listGitCicdPipelineRuns(projectId, { limit: 50 });
+  return response.runs;
 }
 
 function getBrowserNotificationAvailability(): BrowserNotificationAvailability {

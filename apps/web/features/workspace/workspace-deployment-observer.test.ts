@@ -138,6 +138,8 @@ function createPipelineRun(status: GitCicdPipelineRun["status"]): GitCicdPipelin
     apiUrl: null,
     startedAt: null,
     finishedAt: null,
+    upstreamOrderingToken: "2026-07-13T03:00:00.000Z|SketchCatch App:1:1",
+    logRevision: "SketchCatch App:1:1",
     lastRefreshedAt: "2026-07-13T03:00:00.000Z",
     createdAt: "2026-07-13T03:00:00.000Z",
     stages: []

@@ -1,5 +1,6 @@
 import type {
   GitCicdMonitoredPath,
+  GitCicdPipelineLog,
   GitCicdPipelineRun,
   GitCicdPipelineRunStatus
 } from "../../../../packages/types/src";
@@ -21,6 +22,13 @@ export type CicdMonitoringDraft = {
   readonly monitorBranch: string;
   readonly appPath: GitCicdMonitoredPath;
   readonly infraPath: GitCicdMonitoredPath;
+};
+
+export type CicdLogState = {
+  readonly runId: string | null;
+  readonly logRevision: string | null;
+  readonly sequence: number;
+  readonly logs: readonly GitCicdPipelineLog[];
 };
 
 export type CicdPipelineRunState = {
@@ -57,6 +65,16 @@ export function getCicdPollIntervalMs(runs: readonly PipelineRunStatusValue[]): 
   return runs.some((run) => !isTerminalPipelineStatus(run.status))
     ? ACTIVE_CICD_POLL_INTERVAL_MS
     : IDLE_CICD_POLL_INTERVAL_MS;
+}
+
+export function reduceCicdLogState(
+  state: CicdLogState,
+  run: Pick<GitCicdPipelineRun, "id" | "logRevision"> | null
+): CicdLogState {
+  const runId = run?.id ?? null;
+  const logRevision = run?.logRevision ?? null;
+  if (state.runId === runId && state.logRevision === logRevision) return state;
+  return { runId, logRevision, sequence: 0, logs: [] };
 }
 
 export function isCicdMonitoringDraftComplete(draft: CicdMonitoringDraft): boolean {

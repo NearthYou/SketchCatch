@@ -58,6 +58,7 @@ import type {
   GitCicdMonitoringConfig,
   GitCicdMonitoringConfigResponse,
   GitCicdPipelineLogListResponse,
+  GitCicdPipelineProjectRefreshResponse,
   GitCicdPipelineRun,
   GitCicdPipelineRunListResponse,
   GitCicdPipelineRunRefreshResponse,
@@ -980,6 +981,15 @@ export async function listGitCicdPipelineRuns(
   return apiFetch<GitCicdPipelineRunListResponse>(
     `/projects/${encodeURIComponent(projectId)}/git-cicd-pipeline-runs${query}`,
     { auth: true }
+  );
+}
+
+export async function refreshProjectGitCicdPipelineRuns(
+  projectId: string
+): Promise<GitCicdPipelineProjectRefreshResponse> {
+  return apiFetch<GitCicdPipelineProjectRefreshResponse>(
+    `/projects/${encodeURIComponent(projectId)}/git-cicd-pipeline-runs/refresh`,
+    { auth: true, method: "POST" }
   );
 }
 

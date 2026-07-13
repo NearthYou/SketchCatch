@@ -43,6 +43,7 @@ import {
   listReverseEngineeringScans,
   pollLiveObservationSnapshots,
   refreshGitCicdPipelineRun,
+  refreshProjectGitCicdPipelineRuns,
   runDeploymentDestroy,
   runDeploymentDestroyPlan,
   runAiPreDeploymentCheck,
@@ -558,6 +559,37 @@ test("Pipeline Run list client preserves the cursor page and URL-encodes the que
   assert.equal(new Headers(requests[1]?.init?.headers).get("authorization"), "Bearer access-token");
   assert.deepEqual(page, { runs: [run], nextCursor: "next+cursor==" });
   assert.deepEqual(defaultPage, { runs: [run], nextCursor: "next+cursor==" });
+});
+
+test("project Pipeline Run discovery uses the authenticated project-scoped POST contract", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+  const run = createGitCicdPipelineRunPayload();
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+  installAuthSession();
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+    return Response.json({
+      runs: [run],
+      targets: [{ sourceRepositoryId: "repo-1", stale: false, errorMessage: null }],
+      stale: false
+    });
+  };
+
+  const result = await refreshProjectGitCicdPipelineRuns("project/one");
+
+  assert.equal(
+    String(requests[0]?.input),
+    "/api/projects/project%2Fone/git-cicd-pipeline-runs/refresh"
+  );
+  assert.equal(requests[0]?.init?.method, "POST");
+  assert.equal(new Headers(requests[0]?.init?.headers).get("authorization"), "Bearer access-token");
+  assert.equal(result.runs[0]?.logRevision, "SketchCatch App:1:1");
+  assert.equal(result.stale, false);
 });
 
 test("Pipeline Run detail, incremental logs, and refresh clients preserve typed response metadata", async (context) => {
@@ -2811,6 +2843,8 @@ function createGitCicdPipelineRunPayload() {
     apiUrl: null,
     startedAt: "2026-07-13T00:00:00.000Z",
     finishedAt: null,
+    upstreamOrderingToken: "2026-07-13T00:00:05.000Z|SketchCatch App:1:1",
+    logRevision: "SketchCatch App:1:1",
     lastRefreshedAt: "2026-07-13T00:00:05.000Z",
     createdAt: "2026-07-13T00:00:00.000Z",
     stages: []
