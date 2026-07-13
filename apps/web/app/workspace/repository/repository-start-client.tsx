@@ -174,6 +174,7 @@ export function RepositoryStartClient({
       setPublicAnalysis(result);
       const nextDeploymentType = getPublicRepositoryDeploymentDefault(result);
       setDeploymentType(nextDeploymentType);
+      setUsesCiCd(result.aiHandoff?.usesCiCdDefault ?? false);
       setSelectedPublicTemplateId(
         createPublicRepositoryRecommendation({
           analysis: result,
@@ -559,7 +560,7 @@ function RepositoryQuestions({
   );
 }
 
-function hasRepositoryQuestionAnswer(value: string | boolean | undefined): boolean {
+function hasRepositoryQuestionAnswer(value: string | boolean | undefined): value is string | boolean {
   return typeof value === "boolean" || (typeof value === "string" && value.trim().length > 0);
 }
 

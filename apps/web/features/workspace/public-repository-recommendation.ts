@@ -49,13 +49,17 @@ export function createPublicRepositoryRecommendation(input: {
   const candidates = createPublicRepositoryTemplateCandidates(input);
   const selectedTemplateId = input.selectedTemplateId ?? candidates[0]?.templateId;
   const selectedCandidate = candidates.find((candidate) => candidate.templateId === selectedTemplateId);
+  const candidateQuestions = selectedCandidate?.questions ?? [];
+  const handoffQuestions = createPublicRepositoryHandoffQuestions(input.analysis);
   return {
     candidates,
-    questions: selectedCandidate?.questions !== undefined
-      ? selectedCandidate.questions.slice(0, 5)
-      : selectedTemplateId
-        ? createPublicRepositoryQuestions(input.analysis, selectedTemplateId)
-        : []
+    questions: candidateQuestions.length > 0
+      ? candidateQuestions.slice(0, 5)
+      : handoffQuestions.length > 0
+        ? handoffQuestions
+        : selectedTemplateId
+          ? createPublicRepositoryQuestions(input.analysis, selectedTemplateId)
+          : []
   };
 }
 
@@ -192,6 +196,19 @@ function createPublicRepositoryTemplateCandidates(input: {
     })
     .sort((left, right) => right.confidence - left.confidence)
     .slice(0, 4);
+}
+
+function createPublicRepositoryHandoffQuestions(
+  analysis: SourceRepositoryAnalysisResult
+): readonly PublicRepositoryQuestion[] {
+  return (analysis.aiHandoff?.questions ?? [])
+    .map((question) => ({
+      id: question.id,
+      prompt: question.prompt,
+      answerType: question.answerType,
+      ...(question.options ? { options: question.options } : {})
+    }))
+    .slice(0, 5);
 }
 
 function createPublicRepositoryQuestions(

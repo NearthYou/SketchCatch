@@ -72,6 +72,77 @@ test("repository recommendation uses backend-ranked candidates without synthesiz
   );
 });
 
+test("repository recommendation falls back to handoff questions when ranked candidates have none", () => {
+  const analysis: SourceRepositoryAnalysisResult = {
+    ...createAnalysis(),
+    detectedSignals: ["Container"],
+    repositoryUrl: "https://github.com/chaekang/Jungle_DB_API_W8",
+    aiHandoff: {
+      ...createAnalysis().aiHandoff!,
+      questions: [
+        {
+          id: "data-persistence",
+          prompt: "Should this service include persistent storage?",
+          answerType: "boolean",
+          required: true,
+          reason: "Repository evidence does not prove whether runtime data must persist."
+        },
+        {
+          id: "application-scope",
+          prompt: "Which runtime components should be deployed?",
+          answerType: "free_text",
+          required: true,
+          reason: "Container evidence was found, but the deployable unit is ambiguous."
+        },
+        {
+          id: "operations-preference",
+          prompt: "Do you prefer simpler ECS operations or Kubernetes control?",
+          answerType: "single_select",
+          options: [
+            { label: "ECS Fargate", value: "ecs" },
+            { label: "EKS", value: "eks" }
+          ],
+          required: true,
+          reason: "Both ECS and EKS are plausible container targets."
+        }
+      ],
+      recommendation: {
+        deploymentType: "container",
+        usesCiCd: true,
+        candidates: [
+          {
+            templateId: "ecs-fargate-container-app",
+            displayTitle: "ECS Fargate container app",
+            confidence: 0.87,
+            reasons: ["Dockerfile evidence matches a managed container service."],
+            tradeoffs: ["Less Kubernetes control than EKS."],
+            questions: []
+          },
+          {
+            templateId: "eks-container-app",
+            displayTitle: "EKS container app",
+            confidence: 0.67,
+            reasons: ["Container evidence could run on Kubernetes."],
+            tradeoffs: ["Higher operational complexity."]
+          }
+        ]
+      }
+    }
+  };
+
+  const recommendation = createPublicRepositoryRecommendation({
+    analysis,
+    answers: {},
+    deploymentType: "container",
+    selectedTemplateId: "ecs-fargate-container-app"
+  });
+
+  assert.deepEqual(
+    recommendation.questions.map((question) => question.id),
+    ["data-persistence", "application-scope", "operations-preference"]
+  );
+});
+
 test("legacy public analysis fallback still returns at least two comparison candidates", () => {
   for (const deploymentType of ["ec2_vm", "container", "serverless"] as const) {
     const recommendation = createPublicRepositoryRecommendation({

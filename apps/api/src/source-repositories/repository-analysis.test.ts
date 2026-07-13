@@ -138,6 +138,60 @@ test("selects full serverless web app for frontend backend API and Cognito evide
   );
 });
 
+test("detects NestJS packages and FastAPI Docker applications as backend units", () => {
+  const snapshot = {
+    revision: "mixed-backend-revision",
+    treePaths: [
+      "apps/fastapi-api/Dockerfile",
+      "apps/fastapi-api/README.md",
+      "apps/nest-api/Dockerfile",
+      "apps/nest-api/package.json",
+      "package.json"
+    ],
+    files: [
+      {
+        path: "package.json",
+        content: JSON.stringify({ private: true, workspaces: ["apps/*"] })
+      },
+      {
+        path: "apps/nest-api/package.json",
+        content: JSON.stringify({ dependencies: { "@nestjs/core": "11.0.0" } })
+      },
+      {
+        path: "apps/nest-api/Dockerfile",
+        content: "FROM node:24"
+      },
+      {
+        path: "apps/fastapi-api/Dockerfile",
+        content: "FROM python:3.13\nCMD [\"uvicorn\", \"app.main:app\"]"
+      },
+      {
+        path: "apps/fastapi-api/README.md",
+        content: "FastAPI recommendation service"
+      }
+    ]
+  } as const;
+
+  const result = analyzeRepositoryEvidence(snapshot);
+
+  assert.deepEqual(result.applicationUnits, [
+    {
+      id: "apps/fastapi-api",
+      rootPath: "apps/fastapi-api",
+      kind: "backend",
+      frameworks: ["FastAPI"],
+      evidencePaths: ["apps/fastapi-api/Dockerfile"]
+    },
+    {
+      id: "apps/nest-api",
+      rootPath: "apps/nest-api",
+      kind: "backend",
+      frameworks: ["NestJS"],
+      evidencePaths: ["apps/nest-api/package.json"]
+    }
+  ]);
+});
+
 test("selects three tier web app only with explicit VPC ALB ASG and RDS evidence", () => {
   // Given
   const snapshot = {

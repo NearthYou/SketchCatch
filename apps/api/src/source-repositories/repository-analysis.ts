@@ -31,6 +31,7 @@ const frameworkDefinitions = [
   { packageName: "react", name: "React", kind: "frontend" },
   { packageName: "next", name: "Next.js", kind: "fullstack" },
   { packageName: "vite", name: "Vite", kind: "frontend" },
+  { packageName: "@nestjs/core", name: "NestJS", kind: "backend" },
   { packageName: "fastify", name: "Fastify", kind: "backend" },
   { packageName: "express", name: "Express", kind: "backend" },
   { packageName: "serverless", name: "Serverless Framework", kind: "backend" }
@@ -140,7 +141,7 @@ function detectApplicationUnits(
     )
     .flatMap((file) => createApplicationUnit(file, files));
 
-  return [...packageUnits, ...detectDockerApplicationUnits(treePaths, packageUnits)]
+  return [...packageUnits, ...detectDockerApplicationUnits(treePaths, packageUnits, files)]
     .sort((left, right) => left.rootPath.localeCompare(right.rootPath));
 }
 
@@ -173,7 +174,8 @@ function isDeclaredWorkspaceRoot(rootPath: string, patterns: readonly string[]):
 // package framework가 없어도 Dockerfile이 나타내는 실행 단위를 보존한다.
 function detectDockerApplicationUnits(
   treePaths: readonly string[],
-  packageUnits: readonly RepositoryApplicationUnit[]
+  packageUnits: readonly RepositoryApplicationUnit[],
+  files: readonly GitHubRepositoryEvidenceFile[]
 ): RepositoryApplicationUnit[] {
   const dockerPaths = treePaths.filter(
     (path) => getRepositoryEvidenceKind(path) === "dockerfile"
@@ -186,18 +188,38 @@ function detectDockerApplicationUnits(
       packageUnits.some((unit) => isWithinRoot(path, unit.rootPath))
     );
 
+    const frameworks = detectDockerBackendFrameworks(rootPath, files);
+
     return belongsToPackageUnit
       ? []
       : [
           {
             id: rootPath,
             rootPath,
-            kind: "unknown" as const,
-            frameworks: [],
+            kind: frameworks.length > 0 ? "backend" as const : "unknown" as const,
+            frameworks,
             evidencePaths: paths.sort()
           }
         ];
   });
+}
+
+function detectDockerBackendFrameworks(
+  rootPath: string,
+  files: readonly GitHubRepositoryEvidenceFile[]
+): string[] {
+  const text = files
+    .filter((file) => isWithinRoot(file.path, rootPath))
+    .map((file) => `${file.path}\n${file.content}`)
+    .join("\n")
+    .toLowerCase();
+  const frameworks: string[] = [];
+
+  if (/fastapi|uvicorn/.test(text)) frameworks.push("FastAPI");
+  if (/\bdjango\b|gunicorn/.test(text)) frameworks.push("Django");
+  if (/\bflask\b/.test(text)) frameworks.push("Flask");
+
+  return frameworks;
 }
 
 // 하나의 package.json에서 framework와 실행 단위 종류를 결정한다.

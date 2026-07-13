@@ -38,6 +38,26 @@ test("every deployment type returns at least two unique candidates with non-dupl
   }
 });
 
+test("container recommendations reflect repository topology instead of returning fixed ECS and EKS scores", () => {
+  const singleService = recommendRepositoryTemplates(createSingleServiceContainerInput());
+  const multiService = recommendRepositoryTemplates(createInput());
+
+  assert.deepEqual(
+    singleService.candidates.map((candidate) => candidate.templateId),
+    ["ecs-fargate-container-app", "eks-container-app"]
+  );
+  assert.deepEqual(
+    multiService.candidates.map((candidate) => candidate.templateId),
+    ["ecs-fargate-container-app", "three-tier-web-app", "eks-container-app"]
+  );
+  assert.notDeepEqual(
+    singleService.candidates.map((candidate) => candidate.confidence),
+    multiService.candidates.map((candidate) => candidate.confidence)
+  );
+  assert.match(singleService.candidates[0]?.reasons.join(" ") ?? "", /single|단일|하나/iu);
+  assert.match(multiService.candidates[0]?.reasons.join(" ") ?? "", /frontend|backend|database|프론트엔드|백엔드|데이터베이스/iu);
+});
+
 test("AI ranks only supported repository templates and generates template-specific questions", async () => {
   let capturedInput = "";
   const input = createInput();
@@ -91,9 +111,11 @@ test("AI ranks only supported repository templates and generates template-specif
 
   assert.match(capturedInput, /ecs-fargate-container-app/);
   assert.match(capturedInput, /allowedQuestionIds/);
+  assert.match(capturedInput, /repositoryProfile/);
+  assert.doesNotMatch(capturedInput, /currentConfidence/);
   assert.deepEqual(
     recommendation.candidates.map((candidate) => candidate.templateId),
-    ["eks-container-app", "ecs-fargate-container-app"]
+    ["eks-container-app", "ecs-fargate-container-app", "three-tier-web-app"]
   );
   assert.equal(recommendation.rankingSource, "ai");
   assert.equal(recommendation.fallbackReason, undefined);
@@ -271,7 +293,7 @@ function createInput(): RepositoryTemplateRecommendationInput {
         },
         {
           path: "apps/api/package.json",
-          content: '{"dependencies":{"@nestjs/core":"latest","typeorm":"latest"}}'
+          content: '{"dependencies":{"@nestjs/core":"latest"}}'
         },
         {
           path: "Dockerfile",
@@ -279,7 +301,7 @@ function createInput(): RepositoryTemplateRecommendationInput {
         },
         {
           path: "docker-compose.yml",
-          content: "services:\n  db:\n    image: postgres:16"
+          content: "services:\n  db:\n    image: pgvector/pgvector:pg16"
         }
       ]
     },
@@ -303,6 +325,43 @@ function createInput(): RepositoryTemplateRecommendationInput {
     missingEvidence: [],
     deploymentType: "container",
     usesCiCd: true,
+    answers: []
+  };
+}
+
+function createSingleServiceContainerInput(): RepositoryTemplateRecommendationInput {
+  return {
+    snapshot: {
+      revision: "commit-sha",
+      treePaths: ["src/server.c", "Dockerfile", "docker-compose.yml", "README.md"],
+      files: [
+        {
+          path: "Dockerfile",
+          content: "FROM alpine:3.20\nCOPY sql_processor /app/sql_processor"
+        },
+        {
+          path: "docker-compose.yml",
+          content: "services:\n  api:\n    build: .\n    volumes:\n      - db-data:/app/data"
+        },
+        {
+          path: "README.md",
+          content: "C99 single HTTP API container with CSV volume persistence for a small VM."
+        }
+      ]
+    },
+    applicationUnits: [
+      {
+        id: "api",
+        rootPath: ".",
+        kind: "backend",
+        frameworks: [],
+        evidencePaths: ["Dockerfile", "README.md"]
+      }
+    ],
+    evidence: [],
+    missingEvidence: [],
+    deploymentType: "container",
+    usesCiCd: false,
     answers: []
   };
 }
