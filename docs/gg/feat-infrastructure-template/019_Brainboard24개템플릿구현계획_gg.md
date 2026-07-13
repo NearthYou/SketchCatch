@@ -88,6 +88,25 @@ pnpm --filter @sketchcatch/api exec tsx --test ../../packages/types/src/brainboa
 5. `cloneDiagram`이 variables뿐 아니라 presentation과 authored route의 nested 값을 deep clone하도록 보완한다.
 6. 기존 request fixture가 byte-equivalent payload로 통과하는지 확인한다.
 
+## Task 3-1. capture audit에서 확인된 source-exact 계약 gap 닫기
+
+**Files**
+
+- Modify: `packages/types/src/brainboard-templates/source-types.ts`
+- Modify: `packages/types/src/brainboard-templates/source-contract.test.ts`
+- Modify: `packages/types/src/index.ts`
+- Modify: `apps/api/src/routes/project-draft-schemas.ts`
+- Modify: `apps/api/src/routes/project-draft-schemas.test.ts`
+- Modify: `apps/api/src/routes/terraform.ts`
+- Modify: `apps/api/src/routes/terraform.test.ts`
+- Modify: `apps/web/features/diagram-editor/diagram-utils.test.ts`
+
+1. raw node의 `transform`과 parsed rotation을 source 계약에 보존하고, runtime `DiagramNode.rotation`은 optional로 추가한다. 기존 Diagram에는 field가 없어도 동일하게 동작해야 한다.
+2. raw edge의 `sourcePoint`/`targetPoint`를 source 계약에 명시하고 authored route의 두 endpoint로 lossless 변환한다.
+3. node rotation과 edge endpoint point가 clone/save/parse/terraform-sync round-trip에서 exact equality로 보존되는 RED test를 먼저 추가한다.
+4. 실패 capture는 완전한 `BrainboardTemplateSource`로 위장하지 않고 source URL, preview URL/dimension, attempts, error를 가진 discriminated evidence variant로 모델링한다.
+5. visible text가 비어 있는 11개 text node와 style이 없는 2개 shape node는 값을 발명하지 않고 unresolved evidence로 남긴다.
+
 ## Task 4. materializer와 editor normalization에서 원본 geometry 보존하기
 
 **Files**
@@ -159,8 +178,12 @@ pnpm --filter @sketchcatch/api exec tsx --test ../../packages/types/src/brainboa
 5. normalize script는 browser JSON을 source type의 결정적 순서와 숫자 형식으로 바꾸며 의미를 추정하지 않는다.
 6. status file에는 `captured/materialized/verified/failed`, clone board URL, 마지막 오류를 Template별로 기록한다.
 7. 한 항목이 실패해도 `failed`를 기록한 뒤 다음 항목을 계속한다.
+8. raw evidence는 immutable input으로 취급한다. 더 작은 rectangle을 parent로 가리키는 link만, child를 완전히 감싸는 가장 작은 strictly-larger candidate로 교체하고 tie는 override 없이는 실패시킨다.
+9. raw parent cycle, semantic duplicate edge, nonzero rotation, 빈 text/style, visual-only node, one-address/multi-visual alias를 validation report에 별도 경고로 남긴다.
+10. Terraform node/address 대응은 title/name exact match, type별 단일 후보, HCL reference/value, containment, edge topology, reviewed override 순으로 해결하고 배열 index끼리 대응하지 않는다.
+11. Terraform expression은 plain string으로 낮추지 않는다. variable/local/index/function/interpolation/heredoc을 구분하는 tagged expression 계약을 먼저 추가하고, block file name과 includeInWorkspace를 원본 그대로 보존한다.
 
-## Task 7. 24개 fixture를 다운로드 순으로 추가하기
+## Task 7. captured 23개 fixture와 failed 1개 evidence를 다운로드 순으로 추가하기
 
 **Files**
 
@@ -188,6 +211,10 @@ pnpm --filter @sketchcatch/api exec tsx --test ../../packages/types/src/brainboa
 - Create: `packages/types/src/brainboard-templates/sources/aws-iam-users.ts`
 - Create: `packages/types/src/brainboard-templates/sources/aws-dashcam-video-pipeline.ts`
 - Create: `packages/types/src/brainboard-templates/sources/aws-secure-s3-bucket.ts`
+
+1. clone에 성공한 23개만 deployable `BrainboardTemplateSource`로 만들고 validator를 통과시킨다.
+2. `09fd3420…`은 preview/attempt/error만 가진 failed evidence로 등록하며 diagram/Terraform 값을 추측하지 않는다.
+3. exported catalog order는 manifest의 24개 다운로드 순서를 유지하되 deployable source registry와 evidence registry를 구분한다.
 - Modify: `packages/types/src/brainboard-templates/source-contract.test.ts`
 
 1. 먼저 이미 수집한 Training/EKS 두 fixture를 넣고 source validator를 통과시킨다.
@@ -268,11 +295,11 @@ pnpm --filter @sketchcatch/web exec tsx --test features/resource-settings/catalo
 - Modify: `apps/web/app/templates/templates-client.test.ts`
 - Modify: `apps/web/app/workspace/new/workspace-start-client.test.ts`
 
-1. RED: `listBoardTemplates()`가 기존 여섯 개와 신규 24개를 합쳐 정확히 30개를 반환하고, 신규 순서는 download 내림차순인지 검증한다.
+1. RED: gallery가 기존 여섯 개와 신규 24개 entry를 합쳐 정확히 30개를 반환하고, 신규 순서는 download 내림차순인지 검증한다.
 2. 별도 `빈 보드로 시작` action이 card count에 포함되지 않는지 검증한다.
 3. 기존 여섯 thumbnail hash map을 고정한 채 신규 24개 hash를 합쳐 전체 `Record<TemplateId, TemplateThumbnailAsset>`를 만든다.
 4. 각 신규 board를 실제 DiagramEditor에서 1280×720 WebP로 capture하고 manifest에 SHA-256 diagram hash를 기록한다.
-5. 두 gallery surface와 Workspace picker에서 30개 card, 검색/tag/resource sort, template apply가 동작하는지 검증한다.
+5. 두 gallery surface와 Workspace picker에서 30개 card, 검색/tag/resource sort가 동작하는지 검증한다. captured 23개는 apply 가능해야 하고, failed 1개는 preview-only/사용 불가 상태와 이유를 명시하며 apply/deploy 경로에 들어가지 않아야 한다.
 
 ## Task 12. 원본 대조 QA, 전체 검증, 완료 기록
 
