@@ -10,12 +10,11 @@ import type {
   DeployedResource,
   Deployment,
   DeploymentFailureExplanation,
-  DeploymentLiveProfile,
+  DeploymentScope,
   DiagramJson,
   DeploymentLog,
   TerraformDiagnostic,
   TerraformSourceLocation,
-  TerraformSyncFileInput,
   TerraformOutput
 } from "@sketchcatch/types";
 import { Clipboard, ClipboardCheck, Code2, ShieldCheck, Trash2 } from "lucide-react";
@@ -25,7 +24,7 @@ import { getApiErrorMessage } from "../../lib/api-client";
 import {
   approveDeploymentPlan,
   cancelDeployment as cancelDeploymentRun,
-  createDeployment,
+  executeDeployment,
   getAiPreDeploymentDeepScan,
   getDeploymentFailureExplanation,
   listApplicationReleases,
@@ -34,8 +33,8 @@ import {
   listDeploymentLogs,
   listDeployments,
   listTerraformOutputs,
+  prepareDeployment,
   runDeploymentInit,
-  runDeploymentApply,
   runDeploymentDestroy,
   runDeploymentDestroyPlan,
   runDeploymentPlan,
@@ -47,7 +46,6 @@ import {
   getDeploymentActionState,
   getDeploymentLogMessageTokens,
   getDeploymentLogTone,
-  getRecommendedDeploymentLiveProfile,
   hasCompleteDeploymentApprovalSnapshot,
   shouldAutoRefreshDeployment,
   shouldShowDeploymentInfoValue,
@@ -62,7 +60,7 @@ import {
   createPreDeploymentAnalysisFromTerraformDiagnostics
 } from "./pre-deployment-diagnostics";
 import type { AiRequestState } from "./WorkspaceAiPanelPieces";
-import type { SavedWorkspaceTerraformArtifact } from "./workspace-deployment-artifacts";
+import type { PreparedWorkspaceDeploymentArtifacts } from "./workspace-deployment-artifacts";
 import type { RequestState } from "./workspace-right-panel.types";
 import {
   canLoadDeploymentData,
@@ -114,10 +112,9 @@ export type DirectDeploymentScreenProps = {
   readonly deploymentAvailability: DeploymentAvailability;
   readonly diagramJson: DiagramJson;
   readonly hasUnsavedDeploymentBaseline: boolean;
-  readonly onGetTerraformFiles: () => readonly TerraformSyncFileInput[];
   readonly onConfirmationStateChange?: ((isOpen: boolean) => void) | undefined;
   readonly onOpenFindingTerraformSource: (finding: CheckFinding) => TerraformSourceLocation | null;
-  readonly onPrepareDeploymentArtifacts: () => Promise<SavedWorkspaceTerraformArtifact>;
+  readonly onPrepareDeploymentArtifacts: () => Promise<PreparedWorkspaceDeploymentArtifacts>;
   readonly onPreDeploymentCheckStateChange: Dispatch<SetStateAction<DeploymentPreDeploymentCheckState>>;
   readonly onValidateTerraformDiagnostics: () => Promise<TerraformDiagnostic[]>;
   readonly preDeploymentCheckState: DeploymentPreDeploymentCheckState;
@@ -132,7 +129,6 @@ export function DirectDeploymentScreen({
   diagramJson,
   hasUnsavedDeploymentBaseline,
   onConfirmationStateChange,
-  onGetTerraformFiles,
   onOpenFindingTerraformSource,
   onPrepareDeploymentArtifacts,
   onPreDeploymentCheckStateChange,
@@ -150,8 +146,7 @@ export function DirectDeploymentScreen({
     initialDeploymentOutputState
   );
   const [selectedAwsConnectionId, setSelectedAwsConnectionId] = useState("");
-  const [selectedLiveProfile, setSelectedLiveProfile] =
-    useState<DeploymentLiveProfile>(() => getRecommendedDeploymentLiveProfile(diagramJson));
+  const [selectedScope, setSelectedScope] = useState<DeploymentScope | "auto">("auto");
   const [selectedDeploymentId, setSelectedDeploymentId] = useState("");
   const [durationNow, setDurationNow] = useState(() => Date.now());
   const [showApplyConfirmation, setShowApplyConfirmation] = useState(false);
@@ -163,7 +158,7 @@ export function DirectDeploymentScreen({
   const [failureExplanationState, setFailureExplanationState] = useState<RequestState>("idle");
   const [failureExplanationErrorMessage, setFailureExplanationErrorMessage] = useState("");
   const [selectedDirectStepId, setSelectedDirectStepId] =
-    useState<DirectDeploymentStepId>("save");
+    useState<DirectDeploymentStepId>("validation");
   const isDeploymentOverlayOpen = true;
 
   const verifiedAwsConnections = useMemo(
@@ -179,22 +174,27 @@ export function DirectDeploymentScreen({
       })),
     [verifiedAwsConnections]
   );
-  const liveProfileOptions = useMemo<SelectMenuOption[]>(
+  const deploymentScopeOptions = useMemo<SelectMenuOption[]>(
     () => [
       {
-        detail: "VPC, EC2, S3 bucket 중심의 기본 안전 범위",
-        label: "Practice",
-        value: "practice"
+        detail: "저장된 Terraform과 확인된 프로젝트 실행 타깃을 기준으로 결정",
+        label: "자동 감지",
+        value: "auto"
       },
       {
-        detail: "S3 website, EC2 API, ALB, ASG demo",
-        label: "Demo web service",
-        value: "demo_web_service"
+        detail: "Terraform 인프라만 배포",
+        label: "인프라",
+        value: "infrastructure"
       },
       {
-        detail: "Demo web service plus RDS",
-        label: "AWS Template deployment",
-        value: "demo_web_service_with_rds"
+        detail: "확인된 프로젝트 애플리케이션 타깃만 배포",
+        label: "애플리케이션",
+        value: "application"
+      },
+      {
+        detail: "인프라와 애플리케이션을 한 프로젝트 릴리즈로 배포",
+        label: "전체 스택",
+        value: "full_stack"
       }
     ],
     []
@@ -243,7 +243,6 @@ export function DirectDeploymentScreen({
   const canDestroy = deploymentActions.canDestroy;
   const canCancelDeployment = deploymentActions.canCancelDeployment;
   const shouldShowApplyButton = deploymentActions.shouldShowApplyButton;
-  const shouldShowApprovePlanButton = deploymentActions.shouldShowApprovePlanButton;
   const shouldShowDestroyPlanButton = deploymentActions.shouldShowDestroyPlanButton;
   const shouldShowDestroyButton = deploymentActions.shouldShowDestroyButton;
   const deploymentActionHint = selectedDeployment
@@ -579,8 +578,12 @@ export function DirectDeploymentScreen({
     }
   }
 
-  async function runPreDeploymentCheck(): Promise<boolean> {
-    if (!boardSnapshot.hasResources) {
+  async function runPreDeploymentCheck(
+    preparedArtifacts: PreparedWorkspaceDeploymentArtifacts
+  ): Promise<boolean> {
+    const preparedBoardSnapshot = createWorkspaceAiBoardSnapshot(preparedArtifacts.diagramJson);
+
+    if (!preparedBoardSnapshot.hasResources) {
       updatePreDeploymentCheckState({
         errorMessage: "Architecture Board에 Resource가 있어야 실행할 수 있습니다.",
         requestState: "error"
@@ -602,7 +605,7 @@ export function DirectDeploymentScreen({
       if (hasTerraformDiagnosticError) {
         updatePreDeploymentCheckState({
           analysis: createPreDeploymentAnalysisFromTerraformDiagnostics(currentTerraformDiagnostics),
-          fingerprint: boardSnapshot.fingerprint,
+          fingerprint: preparedBoardSnapshot.fingerprint,
           requestState: "idle"
         });
         return false;
@@ -610,21 +613,21 @@ export function DirectDeploymentScreen({
 
       const result = addTerraformDiagnosticsToPreDeploymentAnalysis(
         await runAiPreDeploymentCheck({
-          architectureJson: boardSnapshot.architectureJson,
-          terraformFiles: [...onGetTerraformFiles()]
+          architectureJson: preparedBoardSnapshot.architectureJson,
+          terraformFiles: [...preparedArtifacts.terraformFiles]
         }),
         currentTerraformDiagnostics
       );
       updatePreDeploymentCheckState({
         analysis: result,
-        fingerprint: boardSnapshot.fingerprint,
+        fingerprint: preparedBoardSnapshot.fingerprint,
         requestState: "idle"
       });
       if (result.deepScan?.status === "running" && result.deepScan.scanId) {
         void pollPreDeploymentDeepScan(
           result.deepScan.scanId,
           currentTerraformDiagnostics,
-          boardSnapshot.fingerprint
+          preparedBoardSnapshot.fingerprint
         );
       }
       return true;
@@ -688,34 +691,49 @@ export function DirectDeploymentScreen({
       return;
     }
 
-    const checkPassed = await runPreDeploymentCheck();
+    setRequestState("loading");
+    setErrorMessage("");
+    let preparedArtifacts: PreparedWorkspaceDeploymentArtifacts;
+
+    try {
+      preparedArtifacts = await onPrepareDeploymentArtifacts();
+      setRequestState("idle");
+    } catch (error) {
+      setRequestState("error");
+      setErrorMessage(getApiErrorMessage(error, "프로젝트 저장과 배포 준비에 실패했습니다."));
+      return;
+    }
+
+    const checkPassed = await runPreDeploymentCheck(preparedArtifacts);
 
     if (!checkPassed) {
       return;
     }
 
-    await startDeploymentReview();
+    await startDeploymentReview(preparedArtifacts);
   }
 
-  async function startDeploymentReview(): Promise<void> {
+  async function startDeploymentReview(
+    savedArtifacts: PreparedWorkspaceDeploymentArtifacts
+  ): Promise<void> {
     if (!canStartDeploymentReview) {
       return;
     }
 
     dispatchTerraformOutputState({ type: "clear", deploymentId: null });
     await runRequest(async () => {
-      const savedArtifacts = await onPrepareDeploymentArtifacts();
       const snapshot = await loadDeploymentPanelSnapshot();
 
       applyDeploymentPanelSnapshot(snapshot);
       setSelectedDeploymentId("");
 
-      const deployment = await createDeployment({
+      const deployment = await prepareDeployment({
         projectId,
         architectureId: savedArtifacts.architecture.id,
         terraformArtifactId: savedArtifacts.terraformArtifact.id,
         awsConnectionId: selectedAwsConnectionId,
-        liveProfile: selectedLiveProfile
+        draftRevision: savedArtifacts.preparedDraftRevision,
+        scope: selectedScope
       });
       const prewarmedDeployment = await runDeploymentInit(deployment.id).catch(() => deployment);
 
@@ -730,20 +748,6 @@ export function DirectDeploymentScreen({
       setShowApplyConfirmation(false);
       setShowDestroyConfirmation(false);
     }, "배포 검토를 시작하지 못했습니다.");
-  }
-
-  async function saveDeploymentBaseline(): Promise<void> {
-    if (requestState === "loading") {
-      return;
-    }
-
-    await runRequest(async () => {
-      await onPrepareDeploymentArtifacts();
-      const snapshot = await loadDeploymentPanelSnapshot();
-
-      applyDeploymentPanelSnapshot(snapshot);
-      setSelectedDeploymentId("");
-    }, "배포 기준을 저장하지 못했습니다.");
   }
 
   async function startTerraformPlan(): Promise<void> {
@@ -814,7 +818,7 @@ export function DirectDeploymentScreen({
       deploymentId: selectedDeployment.id
     });
     await runRequest(async () => {
-      const deployment = await runDeploymentApply(selectedDeployment.id);
+      const deployment = await executeDeployment(selectedDeployment.id);
       setDeployments((currentDeployments) =>
         currentDeployments.map((currentDeployment) =>
           currentDeployment.id === deployment.id ? deployment : currentDeployment
@@ -931,48 +935,20 @@ export function DirectDeploymentScreen({
       verifiedAwsConnections.find((connection) => connection.id === selectedAwsConnectionId) ??
       null;
     const requestError =
-      selectedStep.id === "preflight" && preDeploymentState === "error"
+      selectedStep.id === "validation" && preDeploymentState === "error"
         ? preDeploymentErrorMessage
         : requestState === "error"
           ? errorMessage
           : "";
 
     function renderDirectStepContent(stepId: DirectDeploymentStepId) {
-      if (stepId === "save") {
+      if (stepId === "validation") {
         return (
           <>
             <div className={styles.deploymentStepHeading}>
-              <span>Step 1</span>
-              <h3>변경사항 저장</h3>
-              <p>현재 Board와 Terraform 파일을 하나의 배포 기준으로 동기화합니다.</p>
-            </div>
-            <div className={styles.deploymentStepCallout}>
-              <strong>{hasUnsavedDeploymentBaseline ? "저장되지 않은 변경사항이 있습니다" : "최신 변경사항이 저장돼 있습니다"}</strong>
-              <p>저장된 artifact만 이후 검사와 Plan의 입력으로 사용됩니다.</p>
-            </div>
-            <div className={styles.deploymentStepActionBar}>
-              <p>{hasUnsavedDeploymentBaseline ? "저장 후 배포 전 검사가 열립니다." : "필요하면 현재 상태를 다시 저장할 수 있습니다."}</p>
-              <button
-                className={styles.deploymentPrimaryButton}
-                disabled={requestState === "loading"}
-                onClick={saveDeploymentBaseline}
-                type="button"
-              >
-                <DeploymentBaselineIcon size={16} aria-hidden="true" />
-                {requestState === "loading" ? "저장 중" : "변경사항 저장"}
-              </button>
-            </div>
-          </>
-        );
-      }
-
-      if (stepId === "preflight") {
-        return (
-          <>
-            <div className={styles.deploymentStepHeading}>
-              <span>Step 2</span>
-              <h3>배포 전 검사</h3>
-              <p>Terraform 진단과 보안·비용 위험을 확인하고 배포 대상을 생성합니다.</p>
+              <span>1단계</span>
+              <h3>검증</h3>
+              <p>프로젝트 저장, 안전 검사, Terraform Plan을 같은 단계에서 처리합니다.</p>
             </div>
             <div className={styles.deploymentStageSettings}>
               <SelectMenu
@@ -985,90 +961,86 @@ export function DirectDeploymentScreen({
                 value={selectedAwsConnectionId}
               />
               <SelectMenu
-                ariaLabel="Live deployment profile"
-                emptyLabel="Live profile 없음"
-                onChange={(value) => setSelectedLiveProfile(value as DeploymentLiveProfile)}
-                options={liveProfileOptions}
+                ariaLabel="배포 범위 선택"
+                disabled={requestState === "loading"}
+                emptyLabel="배포 범위 없음"
+                onChange={(value) => setSelectedScope(value as DeploymentScope | "auto")}
+                options={deploymentScopeOptions}
                 size={isDeploymentOverlayOpen ? "large" : "regular"}
-                value={selectedLiveProfile}
+                value={selectedScope}
               />
+            </div>
+            <div className={styles.deploymentStepSummary}>
+              <InfoRow
+                label="저장"
+                value={hasUnsavedDeploymentBaseline ? "변경사항 있음" : "완료"}
+              />
+              <InfoRow label="범위" value={selectedDeployment?.scope ?? selectedScope} />
+              <InfoRow label="Plan" value={hasCurrentPlan ? "완료" : "대기"} />
+              {selectedDeployment?.planSummary ? <PlanSummaryRows deployment={selectedDeployment} /> : null}
             </div>
             {preDeploymentAnalysis !== null && !hasStalePreDeploymentAnalysis ? (
               <DeploymentPreDeploymentSummary
                 analysis={preDeploymentAnalysis}
                 onOpenFindingTerraformSource={onOpenFindingTerraformSource}
               />
-            ) : (
-              <div className={styles.deploymentStepCallout}>
-                <strong>아직 실행된 검사가 없습니다</strong>
-                <p>검사 전 상태는 실패가 아닙니다. AWS 연결을 선택한 뒤 검사를 실행하세요.</p>
+            ) : null}
+            <div className={styles.deploymentStepActionBar}>
+              <p>{selectedStep.disabledReason ?? "검증 단계에서는 실제 리소스를 변경하지 않습니다."}</p>
+              {!selectedDeployment || hasUnsavedDeploymentBaseline || directPreflightState === "idle" ? (
+                <button
+                  className={styles.deploymentPrimaryButton}
+                  disabled={!canRunDeploymentReviewStep}
+                  onClick={() => void runDeploymentReviewStep()}
+                  type="button"
+                >
+                  <DeploymentBaselineIcon size={16} aria-hidden="true" />
+                  {requestState === "loading" || preDeploymentState === "loading"
+                    ? "저장·검증 중"
+                    : "저장하고 검증"}
+                </button>
+              ) : !hasCurrentPlan ? (
+                <button
+                  className={styles.deploymentPrimaryButton}
+                  disabled={!canRunPlan}
+                  onClick={() => void startTerraformPlan()}
+                  type="button"
+                >
+                  <DashboardIcon name="rocket" />
+                  {requestState === "loading" ? "Plan 생성 중" : "Plan 생성"}
+                </button>
+              ) : null}
+            </div>
+          </>
+        );
+      }
+
+      if (stepId === "approval") {
+        return (
+          <>
+            <div className={styles.deploymentStepHeading}>
+              <span>2단계</span>
+              <h3>승인</h3>
+              <p>범위, 변경량, 차단 사유와 비용 경고를 확인한 뒤 Plan을 승인합니다.</p>
+            </div>
+            <div className={styles.deploymentStepSummary}>
+              <InfoRow label="범위" value={selectedDeployment?.scope ?? "확인 필요"} />
+              <InfoRow
+                label="차단"
+                value={selectedDeployment?.isBlocked ? selectedDeployment.blockedReason ?? "차단됨" : "없음"}
+              />
+              {selectedDeployment?.planSummary ? <PlanSummaryRows deployment={selectedDeployment} /> : null}
+            </div>
+            <details className={styles.deploymentDisclosure}>
+              <summary>실행 대상과 스냅샷</summary>
+              <div className={styles.deploymentDisclosureBody}>
+                <InfoRow label="AWS account" value={selectedAwsConnection?.accountId ?? "확인 필요"} />
+                <InfoRow label="AWS region" value={selectedAwsConnection?.region ?? "확인 필요"} />
+                <InfoRow label="Prepared snapshot" value={formatShortHash(selectedDeployment?.preparedSnapshotHash ?? null)} />
               </div>
-            )}
+            </details>
             <div className={styles.deploymentStepActionBar}>
-              <p>{selectedStep.disabledReason ?? "검사를 통과하면 Plan 생성 단계로 이동합니다."}</p>
-              <button
-                className={styles.deploymentPrimaryButton}
-                disabled={!canRunDeploymentReviewStep}
-                onClick={() => void runDeploymentReviewStep()}
-                type="button"
-              >
-                <ShieldCheck size={16} aria-hidden="true" />
-                {preDeploymentState === "loading" || requestState === "loading"
-                  ? "검사 중"
-                  : selectedDeployment
-                    ? "다시 검사"
-                    : "배포 전 검사 실행"}
-              </button>
-            </div>
-          </>
-        );
-      }
-
-      if (stepId === "plan") {
-        return (
-          <>
-            <div className={styles.deploymentStepHeading}>
-              <span>Step 3</span>
-              <h3>Plan 생성</h3>
-              <p>실제 인프라를 변경하지 않고 create, update, delete 영향을 계산합니다.</p>
-            </div>
-            <div className={styles.deploymentStepSummary}>
-              <InfoRow label="Deployment" value={selectedDeployment?.status ?? "검사 후 생성"} />
-              <InfoRow label="Plan" value={hasCurrentPlan ? "생성됨" : "아직 없음"} />
-              {selectedDeployment?.planSummary ? <PlanSummaryRows deployment={selectedDeployment} /> : null}
-            </div>
-            <div className={styles.deploymentStepActionBar}>
-              <p>{selectedStep.disabledReason ?? "Plan은 AWS 리소스를 변경하지 않습니다."}</p>
-              <button
-                className={styles.deploymentPrimaryButton}
-                disabled={!canRunPlan}
-                onClick={() => void startTerraformPlan()}
-                type="button"
-              >
-                <DashboardIcon name="rocket" />
-                {requestState === "loading" ? "Plan 생성 중" : "Plan 생성"}
-              </button>
-            </div>
-          </>
-        );
-      }
-
-      if (stepId === "approve") {
-        return (
-          <>
-            <div className={styles.deploymentStepHeading}>
-              <span>Step 4</span>
-              <h3>Plan 승인</h3>
-              <p>실행 계정과 region, 변경량, Plan snapshot을 확인하고 명시적으로 승인합니다.</p>
-            </div>
-            <div className={styles.deploymentStepSummary}>
-              <InfoRow label="AWS account" value={selectedDeployment?.approvedAwsAccountId ?? selectedAwsConnection?.accountId ?? "확인 필요"} />
-              <InfoRow label="AWS region" value={selectedDeployment?.approvedAwsRegion ?? selectedAwsConnection?.region ?? "확인 필요"} />
-              <InfoRow label="tfplan hash" value={formatShortHash(selectedDeployment?.approvedTfplanHash ?? null)} />
-              {selectedDeployment?.planSummary ? <PlanSummaryRows deployment={selectedDeployment} /> : null}
-            </div>
-            <div className={styles.deploymentStepActionBar}>
-              <p>{selectedStep.disabledReason ?? "승인 snapshot이 Apply 직전에 다시 검증됩니다."}</p>
+              <p>{selectedStep.disabledReason ?? "승인된 스냅샷만 실행할 수 있습니다."}</p>
               <button
                 className={styles.deploymentPrimaryButton}
                 disabled={!canApprovePlan}
@@ -1086,44 +1058,63 @@ export function DirectDeploymentScreen({
       return (
         <>
           <div className={styles.deploymentStepHeading}>
-            <span>Step 5</span>
-            <h3>Apply 실행</h3>
-            <p>승인된 Plan과 동일한 snapshot만 실제 AWS 리소스에 적용합니다.</p>
+            <span>3단계</span>
+            <h3>배포</h3>
+            <p>승인된 스냅샷을 실행하고 상태, 릴리즈 버전, Output URL을 확인합니다.</p>
           </div>
           <div className={styles.deploymentStepSummary}>
-            <InfoRow label="Deployment 상태" value={selectedDeployment?.status ?? "대기"} />
-            <InfoRow label="승인" value={selectedDeployment ? formatApprovalState(selectedDeployment) : "Plan 필요"} />
+            <InfoRow label="상태" value={selectedDeployment?.status ?? "대기"} />
+            <InfoRow label="범위" value={selectedDeployment?.scope ?? "대기"} />
             <InfoRow label="현재 작업" value={primaryDeploymentStepStatus} />
+            {selectedDeployment?.planSummary ? <PlanSummaryRows deployment={selectedDeployment} /> : null}
+            <OptionalInfoRow
+              label="릴리즈"
+              value={applicationReleases.find((release) => release.deploymentId === selectedDeployment?.id)?.version ?? null}
+            />
           </div>
+          {deploymentOutputLinks.length > 0 ? (
+            <DeploymentOutputLinks links={deploymentOutputLinks} scopeKey={selectedDeploymentId || null} />
+          ) : null}
           {showApplyConfirmation && selectedDeployment ? (
             <div className={styles.deploymentApplyConfirm}>
-              <h3>Apply 최종 확인</h3>
+              <h3>배포 실행 확인</h3>
               <InfoRow label="AWS account" value={selectedDeployment.approvedAwsAccountId ?? "없음"} />
               <InfoRow label="AWS region" value={selectedDeployment.approvedAwsRegion ?? "없음"} />
-              <InfoRow label="tfplan hash" value={formatShortHash(selectedDeployment.approvedTfplanHash)} />
-              <p>AWS 비용이 발생할 수 있습니다. 승인된 Plan과 대상 계정을 다시 확인하세요.</p>
+              <p>승인된 Plan과 프로젝트 스냅샷이 일치할 때만 실행됩니다.</p>
               <div className={styles.deploymentApplyActions}>
                 <button className={styles.deploymentSecondaryButton} onClick={() => setShowApplyConfirmation(false)} type="button">취소</button>
                 <button className={styles.deploymentPrimaryButton} disabled={!canApply} onClick={startTerraformApply} type="button">
                   <DashboardIcon name="rocket" />
-                  AWS 리소스 생성
+                  배포 실행
+                </button>
+              </div>
+            </div>
+          ) : null}
+          {showDestroyConfirmation && selectedDeployment ? (
+            <div className={styles.deploymentDestroyConfirm}>
+              <h3>정리 실행 확인</h3>
+              <p>승인된 Destroy Plan으로 프로젝트 리소스를 정리합니다.</p>
+              <div className={styles.deploymentApplyActions}>
+                <button className={styles.deploymentSecondaryButton} onClick={() => setShowDestroyConfirmation(false)} type="button">취소</button>
+                <button className={styles.deploymentDangerButton} disabled={!canDestroy} onClick={startTerraformDestroy} type="button">
+                  <Trash2 size={16} aria-hidden="true" />
+                  정리 실행
                 </button>
               </div>
             </div>
           ) : null}
           <div className={styles.deploymentStepActionBar}>
-            <p>{selectedStep.disabledReason ?? (deploymentActionHint || "Apply 전 서버가 승인 snapshot을 다시 검증합니다.")}</p>
+            <p>{selectedStep.disabledReason ?? deploymentActionHint}</p>
             {selectedDeployment?.status === "RUNNING" ? (
-              <button className={styles.deploymentSecondaryButton} disabled={!canCancelDeployment} onClick={cancelSelectedDeployment} type="button">실행 취소 요청</button>
+              <button className={styles.deploymentSecondaryButton} disabled={!canCancelDeployment} onClick={cancelSelectedDeployment} type="button">실행 취소</button>
+            ) : shouldShowDestroyPlanButton ? (
+              <button className={styles.deploymentSecondaryButton} disabled={!canRunDestroyPlan} onClick={() => void startTerraformDestroyPlan()} type="button">Destroy Plan 생성</button>
+            ) : shouldShowDestroyButton ? (
+              <button className={styles.deploymentDangerButton} disabled={!canDestroy} onClick={() => setShowDestroyConfirmation(true)} type="button">정리 실행 검토</button>
             ) : (
-              <button
-                className={styles.deploymentPrimaryButton}
-                disabled={!canApply}
-                onClick={() => setShowApplyConfirmation(true)}
-                type="button"
-              >
+              <button className={styles.deploymentPrimaryButton} disabled={!canApply} onClick={() => setShowApplyConfirmation(true)} type="button">
                 <DashboardIcon name="rocket" />
-                Apply 실행 검토
+                배포 실행 검토
               </button>
             )}
           </div>
@@ -1161,7 +1152,7 @@ export function DirectDeploymentScreen({
         <article className={styles.deploymentStepWorkspace} data-state={selectedStep.state}>
           {renderDirectStepContent(selectedStep.id)}
           {requestError ? <p className={styles.deploymentStageAlert} role="alert">{requestError}</p> : null}
-          {selectedStep.id === "apply" && selectedDeployment?.status === "FAILED" ? (
+          {selectedStep.id === "deployment" && selectedDeployment?.status === "FAILED" ? (
             <p className={styles.deploymentStageAlert} role="alert">
               {selectedDeployment.errorSummary ?? "배포가 실패했습니다. 배포 기록에서 원인을 확인하세요."}
             </p>
@@ -1170,18 +1161,22 @@ export function DirectDeploymentScreen({
 
         <aside className={styles.deploymentContextPanel} aria-label="배포 컨텍스트">
           <div>
-            <span>Deployment context</span>
-            <h3>실행 대상</h3>
+            <span>현재 배포</span>
+            <h3>{selectedDeployment?.status ?? "준비 전"}</h3>
           </div>
           <dl>
-            <div><dt>AWS account</dt><dd>{selectedAwsConnection?.accountId ?? "연결 필요"}</dd></div>
-            <div><dt>Region</dt><dd>{selectedAwsConnection?.region ?? "선택 전"}</dd></div>
-            <div><dt>Connection</dt><dd>{selectedAwsConnection ? "Verified" : "연결 필요"}</dd></div>
-            <div><dt>Terraform artifact</dt><dd>{selectedDeployment ? formatShortHash(selectedDeployment.terraformArtifactId) : "저장 후 생성"}</dd></div>
-            <div><dt>Architecture</dt><dd>{deployableResourceCount} resources</dd></div>
-            <div><dt>저장 상태</dt><dd>{hasUnsavedDeploymentBaseline ? "변경사항 있음" : "저장됨"}</dd></div>
+            <div><dt>범위</dt><dd>{selectedDeployment?.scope ?? selectedScope}</dd></div>
+            <div><dt>변경</dt><dd>{selectedDeployment?.planSummary ? `+${selectedDeployment.planSummary.createCount} ~${selectedDeployment.planSummary.updateCount} -${selectedDeployment.planSummary.deleteCount}` : "Plan 전"}</dd></div>
+            <div><dt>차단</dt><dd>{selectedDeployment?.isBlocked ? selectedDeployment.blockedReason ?? "차단됨" : "없음"}</dd></div>
           </dl>
-          <p>Apply와 Destroy는 승인 snapshot, 대상 계정, artifact가 모두 일치할 때만 실행됩니다.</p>
+          <details className={styles.deploymentDisclosure}>
+            <summary>실행 세부정보</summary>
+            <div className={styles.deploymentDisclosureBody}>
+              <InfoRow label="AWS account" value={selectedAwsConnection?.accountId ?? "연결 필요"} />
+              <InfoRow label="Region" value={selectedAwsConnection?.region ?? "선택 전"} />
+              <InfoRow label="Resources" value={String(deployableResourceCount)} />
+            </div>
+          </details>
         </aside>
       </section>
     );
@@ -1237,148 +1232,6 @@ export function DirectDeploymentScreen({
           explanation={failureExplanation}
           state={failureExplanationState}
         />
-      ) : null}
-
-      {selectedDeployment?.status === "RUNNING" ? (
-        <button
-          className={styles.deploymentSecondaryButton}
-          disabled={!canCancelDeployment}
-          onClick={cancelSelectedDeployment}
-          type="button"
-        >
-          실행 취소 요청
-        </button>
-      ) : null}
-
-      {selectedDeployment && shouldShowDestroyPlanButton ? (
-        <button
-          className={styles.deploymentSecondaryButton}
-          disabled={!canRunDestroyPlan}
-          onClick={() => void startTerraformDestroyPlan()}
-          type="button"
-        >
-          <Trash2 size={16} aria-hidden="true" />
-          {selectedDeployment.currentPlanOperation === "destroy"
-            ? "Destroy Plan 재생성"
-            : "Destroy Plan 생성"}
-        </button>
-      ) : null}
-
-      {selectedDeployment && shouldShowApprovePlanButton ? (
-        <button
-          className={styles.deploymentPrimaryButton}
-          disabled={!canApprovePlan}
-          onClick={() => void approveCurrentPlan()}
-          type="button"
-        >
-          <ShieldCheck size={16} aria-hidden="true" />
-          {requestState === "loading" ? "승인 처리 중" : deploymentActions.approvePlanLabel}
-        </button>
-      ) : null}
-
-      {selectedDeployment && shouldShowDestroyButton ? (
-        <button
-          className={styles.deploymentDangerButton}
-          disabled={!canDestroy}
-          onClick={() => setShowDestroyConfirmation(true)}
-          type="button"
-        >
-          <Trash2 size={16} aria-hidden="true" />
-          Destroy 실행 검토
-        </button>
-      ) : null}
-
-      {selectedDeployment && showApplyConfirmation ? (
-        <div className={styles.deploymentApplyConfirm}>
-          <h3>Apply 확인</h3>
-          <InfoRow
-            label="AWS account"
-            value={selectedDeployment.approvedAwsAccountId ?? "없음"}
-          />
-          <InfoRow label="AWS region" value={selectedDeployment.approvedAwsRegion ?? "없음"} />
-          <InfoRow
-            label="tfplan hash"
-            value={formatShortHash(selectedDeployment.approvedTfplanHash)}
-          />
-          <InfoRow
-            label="Artifact hash"
-            value={formatShortHash(selectedDeployment.approvedTerraformArtifactHash)}
-          />
-          {selectedDeployment.planSummary ? (
-            <InfoRow
-              label="Plan changes"
-              value={`+${selectedDeployment.planSummary.createCount} ~${selectedDeployment.planSummary.updateCount} -${selectedDeployment.planSummary.deleteCount} +/-${selectedDeployment.planSummary.replaceCount}`}
-            />
-          ) : null}
-          <p>
-            이번 MVP Apply는 VPC, Public Subnet, Internet Gateway, Route Table, Security Group,
-            EC2, S3 Bucket 범위만 실행합니다. 실행 후 AWS 비용이 발생할 수 있으니 실습 완료
-            후 콘솔에서 리소스를 직접 확인하고 정리하세요.
-          </p>
-          <div className={styles.deploymentApplyActions}>
-            <button
-              className={styles.deploymentSecondaryButton}
-              disabled={requestState === "loading"}
-              onClick={() => setShowApplyConfirmation(false)}
-              type="button"
-            >
-              취소
-            </button>
-            <button
-              className={styles.deploymentPrimaryButton}
-              disabled={!canApply}
-              onClick={startTerraformApply}
-              type="button"
-            >
-              <DashboardIcon name="rocket" />
-              <span className={styles.deploymentButtonText}>AWS 리소스 생성</span>
-            </button>
-          </div>
-        </div>
-      ) : null}
-
-      {selectedDeployment && showDestroyConfirmation ? (
-        <div className={styles.deploymentDestroyConfirm}>
-          <h3>Destroy 확인</h3>
-          <InfoRow
-            label="AWS account"
-            value={selectedDeployment.approvedAwsAccountId ?? "없음"}
-          />
-          <InfoRow label="AWS region" value={selectedDeployment.approvedAwsRegion ?? "없음"} />
-          {selectedDeployment.planSummary ? (
-            <InfoRow
-              label="Destroy changes"
-              value={`+${selectedDeployment.planSummary.createCount} ~${selectedDeployment.planSummary.updateCount} -${selectedDeployment.planSummary.deleteCount} +/-${selectedDeployment.planSummary.replaceCount}`}
-            />
-          ) : null}
-          <p>
-            승인된 Destroy Plan을 실제 AWS에 적용합니다. 실행 후 삭제된 리소스는 SketchCatch에서
-            `DESTROYED` 상태로 정리됩니다.
-          </p>
-          <div className={styles.deploymentApplyActions}>
-            <button
-              className={styles.deploymentSecondaryButton}
-              disabled={requestState === "loading"}
-              onClick={() => setShowDestroyConfirmation(false)}
-              type="button"
-            >
-              취소
-            </button>
-            <button
-              className={styles.deploymentDangerButton}
-              disabled={!canDestroy}
-              onClick={startTerraformDestroy}
-              type="button"
-            >
-              <Trash2 size={16} aria-hidden="true" />
-              <span className={styles.deploymentButtonText}>AWS 리소스 삭제</span>
-            </button>
-          </div>
-        </div>
-      ) : null}
-
-      {deploymentActionHint ? (
-        <p className={styles.deploymentHint}>{deploymentActionHint}</p>
       ) : null}
     </section>
   );

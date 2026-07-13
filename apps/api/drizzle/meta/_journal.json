@@ -253,6 +253,13 @@
       "when": 1784073600000,
       "tag": "0035_project_release_ledger",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1784073600001,
+      "tag": "0036_deployment_prepared_revision",
+      "breakpoints": true
     }
   ]
 }

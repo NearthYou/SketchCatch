@@ -102,6 +102,8 @@ export function ProjectWorkspaceDraftManager({
   const [thumbnailLifecycleState, setThumbnailLifecycleState] =
     useState<ProjectBoardThumbnailLifecycleState>("idle");
   const [serverSaveToastVisible, setServerSaveToastVisible] = useState(false);
+  const [deploymentOpenRequestId, setDeploymentOpenRequestId] = useState(0);
+  const [saveAndDeployError, setSaveAndDeployError] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [terraformIssueAiRequest, setTerraformIssueAiRequest] =
     useState<TerraformIssueAiRequest | null>(null);
@@ -357,6 +359,18 @@ export function ProjectWorkspaceDraftManager({
     void flushDraftToServer("external");
   }, [flushDraftToServer]);
 
+  const saveAndOpenDeployment = useCallback(async (): Promise<void> => {
+    setSaveAndDeployError("");
+    const result = await flushDraftToServer("manual");
+
+    if (!result.ok) {
+      setSaveAndDeployError("프로젝트 저장에 실패해 배포를 시작하지 않았습니다.");
+      return;
+    }
+
+    setDeploymentOpenRequestId((requestId) => requestId + 1);
+  }, [flushDraftToServer]);
+
   useEffect(() => {
     let cancelled = false;
     draftReadyRef.current = false;
@@ -584,11 +598,13 @@ export function ProjectWorkspaceDraftManager({
         onBoardReady={handleBoardReady}
         onDiagramChange={handleDiagramChange}
         onDiagramSaveRequest={() => flushDraftToServer("manual")}
+        onSaveAndDeployRequest={saveAndOpenDeployment}
         projectName={projectName}
         workspaceUserName={workspaceUserName}
         rightPanel={(context) => (
           <WorkspaceRightPanel
             context={context}
+            deploymentOpenRequestId={deploymentOpenRequestId}
             deploymentAvailability="enabled"
             initialView={initialRightPanelView}
             initialTerraformFiles={initialTerraformFiles}
@@ -606,6 +622,11 @@ export function ProjectWorkspaceDraftManager({
       {serverSaveToastVisible ? (
         <div className={styles.serverSaveToast} role="status" aria-live="polite">
           저장되었습니다.
+        </div>
+      ) : null}
+      {saveAndDeployError ? (
+        <div className={styles.serverSaveToast} role="alert">
+          {saveAndDeployError}
         </div>
       ) : null}
     </WorkspaceNotificationHost>

@@ -537,6 +537,9 @@ export const deployments = pgTable(
       (): AnyPgColumn => applicationReleases.id,
       { onDelete: "set null" }
     ),
+    preparedDraftRevision: integer("prepared_draft_revision"),
+    preparedSnapshotHash: varchar("prepared_snapshot_hash", { length: 64 }),
+    approvedPreparedSnapshotHash: varchar("approved_prepared_snapshot_hash", { length: 64 }),
     currentPlanArtifactId: varchar("current_plan_artifact_id", { length: 36 }),
     stateObjectKey: text("state_object_key"),
     resultWarningSummary: text("result_warning_summary"),
@@ -572,6 +575,10 @@ export const deployments = pgTable(
     index("deployments_aws_connection_id_idx").on(table.awsConnectionId),
     index("deployments_current_plan_artifact_id_idx").on(table.currentPlanArtifactId),
     index("deployments_approved_plan_artifact_id_idx").on(table.approvedPlanArtifactId),
+    index("deployments_project_prepared_revision_idx").on(
+      table.projectId,
+      table.preparedDraftRevision
+    ),
     uniqueIndex("deployments_release_id_unique")
       .on(table.releaseId)
       .where(sql`${table.releaseId} is not null`),
@@ -584,6 +591,18 @@ export const deployments = pgTable(
       sql`${table.targetKind} is null or ${table.targetKind} in ('ecs_fargate', 'lambda', 'ec2_asg', 'static_site')`
     ),
     check("deployments_source_check", sql`${table.source} in ('direct', 'gitops')`),
+    check(
+      "deployments_prepared_snapshot_pair_check",
+      sql`(
+        (${table.preparedDraftRevision} is null and ${table.preparedSnapshotHash} is null)
+        or
+        (${table.preparedDraftRevision} > 0 and ${table.preparedSnapshotHash} ~ '^[0-9a-f]{64}$')
+      )`
+    ),
+    check(
+      "deployments_approved_prepared_snapshot_hash_check",
+      sql`${table.approvedPreparedSnapshotHash} is null or ${table.approvedPreparedSnapshotHash} ~ '^[0-9a-f]{64}$'`
+    ),
     uniqueIndex("deployments_project_running_unique")
       .on(table.projectId)
       .where(sql`${table.status} = 'RUNNING'`)

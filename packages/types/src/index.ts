@@ -994,6 +994,7 @@ export type RuntimeTargetKind = "ecs_fargate" | "lambda" | "ec2_asg" | "static_s
 export type DeploymentRolloutStrategy = "all_at_once";
 export type DeploymentScope = "infrastructure" | "application" | "full_stack";
 export type DeploymentSource = "direct" | "gitops";
+export type DeploymentConsolePhase = "validation" | "approval" | "deployment";
 
 export type BuildEvidenceKind =
   | "dockerfile"
@@ -1153,6 +1154,10 @@ export type Deployment = DeploymentBlock & {
   targetKind: RuntimeTargetKind | null;
   source: DeploymentSource;
   releaseId: string | null;
+  consolePhase?: DeploymentConsolePhase | undefined;
+  preparedDraftRevision?: number | null | undefined;
+  preparedSnapshotHash?: string | null | undefined;
+  approvedPreparedSnapshotHash?: string | null | undefined;
   currentPlanArtifactId: string | null;
   currentPlanOperation: "apply" | "destroy" | null;
   stateObjectKey: string | null;
@@ -1464,6 +1469,14 @@ export type CreateDeploymentRequest = {
   scope?: DeploymentScope | undefined;
   targetKind?: RuntimeTargetKind | null | undefined;
   source?: DeploymentSource | undefined;
+};
+
+export type PrepareDeploymentRequest = {
+  architectureId: string;
+  terraformArtifactId: string;
+  awsConnectionId: string;
+  draftRevision: number;
+  scope: DeploymentScope | "auto";
 };
 
 export type DeploymentLiveProfile = "practice" | "demo_web_service" | "demo_web_service_with_rds";

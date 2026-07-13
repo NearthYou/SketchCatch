@@ -164,6 +164,7 @@ export async function approveDeploymentPlan(
     approvedTfplanHash: currentPlanArtifact.sha256,
     approvedAwsAccountId: currentPlanArtifact.accountId,
     approvedAwsRegion: currentPlanArtifact.region,
+    approvedPreparedSnapshotHash: deployment.preparedSnapshotHash ?? null,
     planSummary: {
       ...deployment.planSummary,
       blocked: false
@@ -186,6 +187,7 @@ export function assertDeploymentApplyPreconditions(
   const deployment = input.deployment;
 
   assertDeploymentApprovalSnapshot(deployment, "apply");
+  assertPreparedSnapshotMatchesApproval(deployment, "apply");
 
   if (input.currentPlanArtifact.operation !== "apply") {
     throw new DeploymentApplyPreconditionError(
@@ -258,6 +260,7 @@ export function assertDeploymentDestroyPreconditions(
   const deployment = input.deployment;
 
   assertDeploymentApprovalSnapshot(deployment, "destroy");
+  assertPreparedSnapshotMatchesApproval(deployment, "destroy");
 
   if (input.currentPlanArtifact.operation !== "destroy") {
     throw new DeploymentConflictError("Terraform destroy plan is required before destroy");
@@ -384,7 +387,33 @@ function getMissingApprovalSnapshotFields(deployment: DeploymentRecord): string[
     ["approvedAwsRegion", deployment.approvedAwsRegion]
   ];
 
+  if (deployment.preparedSnapshotHash) {
+    snapshotFields.push([
+      "approvedPreparedSnapshotHash",
+      deployment.approvedPreparedSnapshotHash
+    ]);
+  }
+
   return snapshotFields.filter(([, value]) => !value).map(([field]) => field);
+}
+
+function assertPreparedSnapshotMatchesApproval(
+  deployment: DeploymentRecord,
+  operation: "apply" | "destroy"
+): void {
+  if (
+    deployment.preparedSnapshotHash === null ||
+    deployment.approvedPreparedSnapshotHash === deployment.preparedSnapshotHash
+  ) {
+    return;
+  }
+
+  const message = `Prepared project draft changed after approval before ${operation}`;
+  if (operation === "apply") {
+    throw new DeploymentApplyPreconditionError("approval_snapshot", message);
+  }
+
+  throw new DeploymentConflictError(message);
 }
 
 async function requireDeploymentAwsConnection(

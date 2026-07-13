@@ -27,10 +27,11 @@ function createInput(
   };
 }
 
-test("unsaved changes make save the active Direct Deployment step", () => {
+test("Direct Deployment exposes exactly validation, approval, and deployment", () => {
   const flow = getDirectDeploymentFlow(createInput({ hasUnsavedBaseline: true }));
 
-  assert.equal(flow.activeStepId, "save");
+  assert.deepEqual(flow.steps.map((step) => step.id), ["validation", "approval", "deployment"]);
+  assert.equal(flow.activeStepId, "validation");
   assert.equal(flow.steps[0]?.state, "active");
   assert.equal(flow.steps[1]?.state, "idle");
 });
@@ -38,9 +39,9 @@ test("unsaved changes make save the active Direct Deployment step", () => {
 test("a never-run Preflight step is neutral and active after save", () => {
   const flow = getDirectDeploymentFlow(createInput());
 
-  assert.equal(flow.activeStepId, "preflight");
-  assert.equal(flow.steps[1]?.state, "active");
-  assert.notEqual(flow.steps[1]?.state, "error");
+  assert.equal(flow.activeStepId, "validation");
+  assert.equal(flow.steps[0]?.state, "active");
+  assert.notEqual(flow.steps[0]?.state, "error");
 });
 
 test("a created deployment without a plan advances to Plan", () => {
@@ -57,8 +58,8 @@ test("a created deployment without a plan advances to Plan", () => {
     })
   );
 
-  assert.equal(flow.activeStepId, "plan");
-  assert.equal(flow.steps[2]?.state, "active");
+  assert.equal(flow.activeStepId, "validation");
+  assert.equal(flow.steps[0]?.state, "active");
 });
 
 test("a warning Preflight still advances a created deployment to Plan", () => {
@@ -75,9 +76,8 @@ test("a warning Preflight still advances a created deployment to Plan", () => {
     })
   );
 
-  assert.equal(flow.activeStepId, "plan");
-  assert.equal(flow.steps[1]?.state, "warning");
-  assert.equal(flow.steps[2]?.state, "active");
+  assert.equal(flow.activeStepId, "validation");
+  assert.equal(flow.steps[0]?.state, "warning");
 });
 
 test("an unapproved apply plan advances to approval", () => {
@@ -94,8 +94,8 @@ test("an unapproved apply plan advances to approval", () => {
     })
   );
 
-  assert.equal(flow.activeStepId, "approve");
-  assert.equal(flow.steps[3]?.state, "active");
+  assert.equal(flow.activeStepId, "approval");
+  assert.equal(flow.steps[1]?.state, "active");
 });
 
 test("an approved apply plan advances to Apply", () => {
@@ -112,8 +112,8 @@ test("an approved apply plan advances to Apply", () => {
     })
   );
 
-  assert.equal(flow.activeStepId, "apply");
-  assert.equal(flow.steps[4]?.state, "active");
+  assert.equal(flow.activeStepId, "deployment");
+  assert.equal(flow.steps[2]?.state, "active");
 });
 
 test("running apply reports a running final step", () => {
@@ -131,23 +131,23 @@ test("running apply reports a running final step", () => {
     })
   );
 
-  assert.equal(flow.activeStepId, "apply");
-  assert.equal(flow.steps[4]?.state, "running");
+  assert.equal(flow.activeStepId, "deployment");
+  assert.equal(flow.steps[2]?.state, "running");
 });
 
 test("blocked Preflight stops the flow without using idle error color", () => {
   const flow = getDirectDeploymentFlow(createInput({ preflightState: "blocked" }));
 
-  assert.equal(flow.activeStepId, "preflight");
-  assert.equal(flow.steps[1]?.state, "blocked");
-  assert.equal(flow.steps[2]?.state, "idle");
+  assert.equal(flow.activeStepId, "validation");
+  assert.equal(flow.steps[0]?.state, "blocked");
+  assert.equal(flow.steps[1]?.state, "idle");
 });
 
-test("destroy plans never produce the Direct Apply action", () => {
+test("destroy uses the same approval and deployment phases", () => {
   const flow = getDirectDeploymentFlow(
     createInput({
       deployment: {
-        approvedAt: "2026-07-11T00:00:00.000Z",
+        approvedAt: null,
         currentPlanArtifactId: "destroy-plan",
         currentPlanOperation: "destroy",
         status: "SUCCESS"
@@ -156,7 +156,6 @@ test("destroy plans never produce the Direct Apply action", () => {
     })
   );
 
-  assert.equal(flow.activeStepId, "plan");
-  assert.equal(flow.steps[2]?.state, "blocked");
-  assert.match(flow.steps[2]?.statusLabel ?? "", /배포 기록/);
+  assert.equal(flow.activeStepId, "approval");
+  assert.equal(flow.steps[1]?.state, "active");
 });

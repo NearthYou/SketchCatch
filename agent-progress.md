@@ -4,12 +4,20 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- Branch: `feature/sw/371-project-deployment-release-ledger` based on merged issue #370 (`5160a377`).
-- Issue #371 is implemented and locally verified: one project target, structured build evidence, shared Direct/GitOps release ledger, and common History UI.
-- Migration `0035_project_release_ledger.sql` applies successfully after migrations 0000-0034 on PostgreSQL 16.
+- Branch: `feature/sw/372-direct-deploy-three-stage` based on merged issue #371 (`450e7181`).
+- Issue #372 is implemented and locally verified: revision-locked save/prepare, exactly three Direct Deployment stages, snapshot-bound approval/execute, and summary-first project UI.
+- Migration `0036_deployment_prepared_revision.sql` applies successfully after migrations 0000-0035 on PostgreSQL 16.
 - No cloud mutation or production database migration was performed.
 
 ## Session Record
+
+### 2026-07-14 - Revision-locked three-stage Direct Deployment
+
+- Added project-level `Ctrl+S`/`Command+S` save and `저장하고 배포`, with deployment preparation allowed only after the exact saved project draft revision is available.
+- Added immutable preparation revision/hash evidence, transactional stale-revision rejection, approval snapshot sealing, and execute-time drift blocking.
+- Reduced the operator flow to `검증 -> 승인 -> 배포`, retained legacy Apply compatibility, and moved raw target, snapshot, and history data behind details.
+- Verification passed: deployment-focused API tests, Web 1,145/1,145, PostgreSQL migrations 0000-0036, migration compatibility, harness, lint, typecheck, and build.
+- API passed 1,456/1,459; the only failures are three unchanged Windows symlink fixture setup errors (`EPERM`).
 
 ### 2026-07-14 - Project deployment target and release ledger
 
@@ -36,5 +44,5 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Next Action
 
-- Commit and push issue #371, open its Korean PR, wait at least five minutes, resolve review/CI feedback, and merge to `dev`.
-- Then create or refresh the issue #372 branch from `dev` and reduce Direct Deployment to the specified three-stage Save/Deploy flow.
+- Commit and push issue #372, open its Korean PR, wait at least five minutes, resolve review/CI feedback, and merge to `dev`.
+- Then create or refresh the issue #373 branch from `dev` and continue the prioritized `docs/sw/plan2.md` milestones without changing the RAG recommendation scope.

@@ -189,6 +189,7 @@ function addTerraformDiagnosticSource(
 export type PreparedTerraformArtifactSource = {
   readonly diagramJson: DiagramJson;
   readonly terraformCode: string;
+  readonly terraformFiles: readonly TerraformSyncFileInput[];
 };
 
 export type TerraformCodePanelHandle = {
@@ -648,7 +649,10 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
 
     return {
       diagramJson: nextDiagramJson,
-      terraformCode: savedTerraformCode
+      terraformCode: savedTerraformCode,
+      terraformFiles: toTerraformValidationFiles(
+        didRewriteTerraformReferences ? rewrittenTerraformFiles : terraformFiles
+      )
     };
   }, [
     combinedTerraformCode,
@@ -1174,7 +1178,11 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
 
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
       event.preventDefault();
-      void saveCodeToDiagram();
+      void saveCodeToDiagram().then(async (saved) => {
+        if (saved) {
+          await context.saveDiagramNow?.();
+        }
+      });
     }
   }
 

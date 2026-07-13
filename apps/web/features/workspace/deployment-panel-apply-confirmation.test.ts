@@ -15,7 +15,7 @@ test("apply confirmation can be dismissed after it opens for an approved plan", 
   );
   assert.match(
     deploymentPanelSource,
-    /\{selectedDeployment && showApplyConfirmation \? \(/
+    /\{showApplyConfirmation && selectedDeployment \? \(/
   );
   assert.doesNotMatch(
     deploymentPanelSource,
