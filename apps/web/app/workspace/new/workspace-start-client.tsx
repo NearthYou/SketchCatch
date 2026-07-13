@@ -12,7 +12,7 @@ import {
   LoaderCircle,
   type LucideIcon
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { TemplateGallery } from "../../../components/templates/TemplateGallery";
 import { ProductBrand } from "../../../components/ui/ProductBrand";
 import {
@@ -71,6 +71,7 @@ export function WorkspaceStartClient({
 } = {}) {
   const router = useRouter();
   const [title, setTitle] = useState("");
+  const projectNameInputRef = useRef<HTMLInputElement>(null);
   const [selectedKind, setSelectedKind] = useState<WorkspaceStartKind>(initialStartKind ?? "ai");
   const [isStartFormHydrated, setIsStartFormHydrated] = useState(initialStartKind !== undefined);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(
@@ -132,6 +133,9 @@ export function WorkspaceStartClient({
     if (!projectName) {
       setProjectNameError("프로젝트 이름을 입력해주세요.");
       setErrorMessage("");
+      // 오류를 확인한 뒤 바로 이름을 입력할 수 있도록 입력창으로 이동합니다.
+      projectNameInputRef.current?.focus();
+      projectNameInputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
       return;
     }
 
@@ -292,6 +296,7 @@ export function WorkspaceStartClient({
                 setErrorMessage("");
               }}
               placeholder="예: 예약 서비스 API"
+              ref={projectNameInputRef}
               type="text"
               value={title}
             />

@@ -74,6 +74,13 @@ test("WorkspaceStartClient shows an inline project-name error after an empty sub
   assert.match(startStylesSource, /\.fieldError/);
 });
 
+test("WorkspaceStartClient moves focus and the viewport to the project name after an empty submission", () => {
+  assert.match(startClientSource, /const projectNameInputRef = useRef<HTMLInputElement>\(null\)/);
+  assert.match(startClientSource, /projectNameInputRef\.current\?\.focus\(\)/);
+  assert.match(startClientSource, /projectNameInputRef\.current\?\.scrollIntoView\(/);
+  assert.match(startClientSource, /ref=\{projectNameInputRef\}/);
+});
+
 test("resolveWorkspaceStartAction sends Reverse users without a verified AWS Role to settings", () => {
   const action = resolveWorkspaceStartAction({
     cloudPlatform: "aws",
