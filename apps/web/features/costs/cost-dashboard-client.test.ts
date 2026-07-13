@@ -95,3 +95,14 @@ test("actual usage chart renders readable axes with compact data points", () => 
   assert.match(dashboardToolsCss, /\.chartGridLine\s*\{/);
   assert.match(dashboardToolsCss, /\.chartAxisLabel\s*\{/);
 });
+
+test("actual usage chart keeps service-sized labels without stretching the SVG", () => {
+  const chartRule = dashboardToolsCss.match(/\.costChart\s*\{[^}]+\}/)?.[0] ?? "";
+  const axisLabelRule = dashboardToolsCss.match(/\.chartAxisLabel\s*\{[^}]+\}/)?.[0] ?? "";
+
+  assert.match(usagePanelSource, /new ResizeObserver/);
+  assert.match(usagePanelSource, /createCostUsageLineChart\(dailyTrend, \{ width: chartWidth \}\)/);
+  assert.match(chartRule, /height:\s*220px/);
+  assert.doesNotMatch(chartRule, /min-height/);
+  assert.match(axisLabelRule, /font-size:\s*12px/);
+});

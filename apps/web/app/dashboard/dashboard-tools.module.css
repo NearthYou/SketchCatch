@@ -279,7 +279,7 @@
 .costChart {
   display: block;
   width: 100%;
-  min-height: 220px;
+  height: 220px;
   overflow: visible;
 }
 
@@ -297,7 +297,7 @@
 
 .chartAxisLabel {
   fill: var(--color-body);
-  font-size: 13px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
   font-weight: 500;
 }

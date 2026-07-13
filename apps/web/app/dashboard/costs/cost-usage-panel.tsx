@@ -2,13 +2,17 @@
 
 import { AlertTriangle, RefreshCw, TrendingUp, WalletCards } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { AwsConnection, CostUsageAnalysisRange, CostUsageAnalysisResponse } from "@sketchcatch/types";
+import type {
+  AwsConnection,
+  CostUsageAnalysisRange,
+  CostUsageAnalysisResponse,
+  CostUsageTrendPoint
+} from "@sketchcatch/types";
 import { ProductState } from "../../../components/ui/ProductState";
 import {
   createCostUsageLineChart,
   createServiceCostBars,
-  sumEstimatedMonthlySavings,
-  type CostUsageLineChart
+  sumEstimatedMonthlySavings
 } from "../../../features/costs/cost-usage-charts";
 import {
   formatCostUsageAwsConnectionLabel,
@@ -67,7 +71,6 @@ export function CostUsagePanel() {
       : (data?.recommendations ?? []).filter((item) => item.projectId === selectedProject.projectId),
     [data, selectedProject]
   );
-  const chart = useMemo(() => createCostUsageLineChart(scopedDailyTrend), [scopedDailyTrend]);
   const serviceBars = useMemo(() => createServiceCostBars(scopedServiceCosts), [scopedServiceCosts]);
   const savings = useMemo(() => sumEstimatedMonthlySavings(scopedRecommendations), [scopedRecommendations]);
   const currentCost = selectedProject?.amount ?? data?.totalCost.amount;
@@ -178,7 +181,9 @@ export function CostUsagePanel() {
 
       <section className={styles.chartSection}>
         <div><h2>일별 실제 비용</h2><span>{data?.startDate} - {data?.endDate}</span></div>
-        {chart.points.length === 0 ? <p>표시할 비용이 없습니다.</p> : <CostUsageChart chart={chart} />}
+        {scopedDailyTrend.length === 0
+          ? <p>표시할 비용이 없습니다.</p>
+          : <CostUsageChart dailyTrend={scopedDailyTrend} />}
       </section>
 
       <section className={styles.twoColumn}>
@@ -189,11 +194,37 @@ export function CostUsagePanel() {
   );
 }
 
-function CostUsageChart({ chart }: { readonly chart: CostUsageLineChart }) {
+function CostUsageChart({ dailyTrend }: { readonly dailyTrend: readonly CostUsageTrendPoint[] }) {
+  const chartRef = useRef<SVGSVGElement>(null);
+  const [chartWidth, setChartWidth] = useState(640);
+  const chart = useMemo(
+    () => createCostUsageLineChart(dailyTrend, { width: chartWidth }),
+    [chartWidth, dailyTrend]
+  );
+
+  useEffect(() => {
+    const chartElement = chartRef.current;
+    if (chartElement === null) return;
+
+    const updateChartWidth = (width: number) => {
+      const nextWidth = Math.max(320, Math.round(width));
+      setChartWidth((currentWidth) => currentWidth === nextWidth ? currentWidth : nextWidth);
+    };
+
+    updateChartWidth(chartElement.getBoundingClientRect().width);
+    const resizeObserver = new ResizeObserver(([entry]) => {
+      if (entry !== undefined) updateChartWidth(entry.contentRect.width);
+    });
+    resizeObserver.observe(chartElement);
+
+    return () => resizeObserver.disconnect();
+  }, []);
+
   return (
     <svg
       aria-label="일별 AWS 실제 비용 추세"
       className={styles.costChart}
+      ref={chartRef}
       role="img"
       viewBox={`0 0 ${chart.width} ${chart.height}`}
     >
