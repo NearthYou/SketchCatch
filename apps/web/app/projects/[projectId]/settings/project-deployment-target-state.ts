@@ -183,6 +183,11 @@ function getDockerEvidenceSuggestion(sourceRepository?: SourceRepository | null)
     return null;
   }
   const handoff = sourceRepository.analysis.aiHandoff;
+  if (
+    !handoff ||
+    !Array.isArray(handoff.evidence) ||
+    !Array.isArray(handoff.applicationUnits)
+  ) return null;
   const dockerfiles = handoff.evidence.filter((item) => item.kind === "dockerfile");
   if (dockerfiles.length !== 1) return null;
 

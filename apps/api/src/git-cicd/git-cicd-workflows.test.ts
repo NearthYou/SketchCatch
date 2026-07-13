@@ -148,6 +148,13 @@ test("ECS Fargate automation uses confirmed Docker evidence and immutable releas
   assert.match(appWorkflow, /minimumHealthyPercent=0,maximumPercent=100/);
   assert.match(appWorkflow, /deploymentCircuitBreaker=\{enable=true,rollback=true\}/);
   assert.match(appWorkflow, /name: Verify ECS release/);
+  assert.match(appWorkflow, /SKETCHCATCH_HEALTH_CHECK_PATH: "\/health"/);
+  assert.match(
+    appWorkflow,
+    /HEALTH_URL="\$\{SKETCHCATCH_OUTPUT_URL%\/\}\$\{SKETCHCATCH_HEALTH_CHECK_PATH\}"/
+  );
+  assert.match(appWorkflow, /desired_count >= 0/);
+  assert.match(appWorkflow, /curl .*"\$HEALTH_URL"/);
   assert.match(appWorkflow, /SKETCHCATCH_ECS_RELEASE_EVIDENCE_B64/);
   assert.match(buildspec, /docker build/);
   assert.match(buildspec, /docker push/);

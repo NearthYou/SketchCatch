@@ -11,7 +11,10 @@ import type {
   EcsGitOpsReleaseEvidence,
   GitCicdPipelineRunStatus
 } from "@sketchcatch/types";
-import { createAwsSdkStsGateway } from "../aws-connections/aws-connection-test-service.js";
+import {
+  createAwsSdkStsGateway,
+  type AwsConnectionStsGateway
+} from "../aws-connections/aws-connection-test-service.js";
 import type { Database } from "../db/client.js";
 import {
   applicationReleases,
@@ -202,6 +205,8 @@ function validateObservedState(
       );
   if (
     !validRevision ||
+    observed.desiredCount < 0 ||
+    observed.runningCount < 0 ||
     observed.desiredCount !== observed.runningCount ||
     observed.minimumHealthyPercent !== 0 ||
     observed.maximumPercent !== 100 ||
@@ -292,20 +297,25 @@ export function createPostgresEcsGitOpsReleaseRepository(
   };
 }
 
-export function createAwsEcsGitOpsCloudGateway(): EcsGitOpsCloudGateway {
+export function createAwsEcsGitOpsCloudGateway(options: {
+  stsGateway?: Pick<AwsConnectionStsGateway, "assumeRole">;
+  createClient?: (configuration: ConstructorParameters<typeof ECSClient>[0]) => ECSClient;
+} = {}): EcsGitOpsCloudGateway {
   return {
     async inspect(input) {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 15_000);
+      let client: ECSClient | undefined;
       try {
-        const credentials = await createAwsSdkStsGateway().assumeRole({
+        const credentials = await (options.stsGateway ?? createAwsSdkStsGateway()).assumeRole({
           roleArn: input.roleArn,
           externalId: input.externalId,
           region: input.region,
           roleSessionName: `sketchcatch-gitops-release-${randomUUID()}`,
           abortSignal: controller.signal
         });
-        const client = new ECSClient({ region: input.region, credentials });
+        client = options.createClient?.({ region: input.region, credentials }) ??
+          new ECSClient({ region: input.region, credentials });
         const serviceResponse = await client.send(
           new DescribeServicesCommand({
             cluster: input.clusterName,
@@ -339,6 +349,7 @@ export function createAwsEcsGitOpsCloudGateway(): EcsGitOpsCloudGateway {
           imageUri: containers.length === 1 ? (containers[0]?.image ?? "") : ""
         };
       } finally {
+        client?.destroy();
         clearTimeout(timeout);
       }
     }

@@ -210,6 +210,7 @@ env:
   SKETCHCATCH_ECS_SERVICE: \${{ vars.SKETCHCATCH_ECS_SERVICE }}
   SKETCHCATCH_ECS_CONTAINER: \${{ vars.SKETCHCATCH_ECS_CONTAINER }}
   SKETCHCATCH_OUTPUT_URL: \${{ vars.SKETCHCATCH_OUTPUT_URL }}
+  SKETCHCATCH_HEALTH_CHECK_PATH: ${JSON.stringify(ecs.confirmedBuildConfig.healthCheckPath ?? "/")}
   SKETCHCATCH_SOURCE_ROOT: ${JSON.stringify(ecs.confirmedBuildConfig.sourceRoot)}
   SKETCHCATCH_DOCKERFILE_PATH: ${JSON.stringify(ecs.confirmedBuildConfig.dockerfilePath)}
   SKETCHCATCH_BUILDSPEC_PATH: ${JSON.stringify(buildspecPath)}
@@ -238,6 +239,7 @@ jobs:
           test -n "$SKETCHCATCH_ECS_SERVICE"
           test -n "$SKETCHCATCH_ECS_CONTAINER"
           test -n "$SKETCHCATCH_OUTPUT_URL"
+          test -n "$SKETCHCATCH_HEALTH_CHECK_PATH"
           test -f "$SKETCHCATCH_DOCKERFILE_PATH"
           test -f "$SKETCHCATCH_BUILDSPEC_PATH"
       - name: Run CodeBuild
@@ -325,10 +327,16 @@ jobs:
               task = json.load(handle)
           config = service.get("deploymentConfiguration") or {}
           breaker = config.get("deploymentCircuitBreaker") or {}
+          desired_count = service.get("desiredCount")
+          running_count = service.get("runningCount")
           images = [item.get("image") for item in task.get("containerDefinitions", []) if item.get("name") == container_name]
           valid = (
               service.get("taskDefinition") == expected_task
-              and service.get("desiredCount") == service.get("runningCount")
+              and isinstance(desired_count, int)
+              and isinstance(running_count, int)
+              and desired_count >= 0
+              and running_count >= 0
+              and desired_count == running_count
               and config.get("minimumHealthyPercent") == 0
               and config.get("maximumPercent") == 100
               and breaker.get("enable") is True
@@ -338,7 +346,8 @@ jobs:
           if not valid:
               raise SystemExit("ECS release verification failed")
           PY
-          curl --fail --show-error --max-time 10 --max-redirs 0 --proto '=https' "$SKETCHCATCH_OUTPUT_URL" >/dev/null
+          HEALTH_URL="\${SKETCHCATCH_OUTPUT_URL%/}\${SKETCHCATCH_HEALTH_CHECK_PATH}"
+          curl --fail --show-error --max-time 10 --max-redirs 0 --proto '=https' "$HEALTH_URL" >/dev/null
           python3 - <<'PY'
           import base64
           import json

@@ -267,11 +267,10 @@ function mapLogLineStageKind(
 
 function parseEcsReleaseEvidence(text: string): EcsGitOpsReleaseEvidence[] {
   const results: EcsGitOpsReleaseEvidence[] = [];
-  for (const line of text.split(/\r?\n/)) {
-    const match = line.match(
-      /SKETCHCATCH_ECS_RELEASE_EVIDENCE_B64=([A-Za-z0-9+/]{1,12000}={0,2})(?:\s|$)/
-    );
-    if (!match?.[1]) continue;
+  const marker = /SKETCHCATCH_ECS_RELEASE_EVIDENCE_B64=([A-Za-z0-9+/]{1,12000}={0,2})(?:\s|$)/g;
+  let match: RegExpExecArray | null;
+  while ((match = marker.exec(text)) !== null) {
+    if (!match[1]) continue;
     try {
       const decoded = Buffer.from(match[1], "base64");
       if (decoded.byteLength > 8_192) continue;

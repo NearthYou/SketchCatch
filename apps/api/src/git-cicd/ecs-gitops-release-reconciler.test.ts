@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import {
+  DescribeServicesCommand,
+  DescribeTaskDefinitionCommand,
+  type ECSClient
+} from "@aws-sdk/client-ecs";
 import type { EcsGitOpsReleaseEvidence } from "@sketchcatch/types";
 import {
+  createAwsEcsGitOpsCloudGateway,
   createEcsGitOpsReleaseReconciler,
   EcsGitOpsReleaseVerificationError,
   type EcsGitOpsCloudGateway,
@@ -93,6 +99,93 @@ test("ECS drift rejects release persistence", async () => {
     EcsGitOpsReleaseVerificationError
   );
   assert.equal(repository.saved.length, 0);
+});
+
+test("missing ECS desired and running counts reject release persistence", async () => {
+  const repository = createRepository();
+  const reconciler = createEcsGitOpsReleaseReconciler({
+    repository,
+    gateway: createGateway({ desiredCount: -1, runningCount: -1 })
+  });
+
+  await assert.rejects(
+    reconciler.reconcile({
+      projectId,
+      pipelineRunId,
+      commitSha,
+      pipelineStatus: "succeeded",
+      startedAt: null,
+      finishedAt: new Date("2026-07-14T01:03:00.000Z"),
+      evidence: createEvidence()
+    }),
+    EcsGitOpsReleaseVerificationError
+  );
+  assert.equal(repository.saved.length, 0);
+});
+
+test("AWS ECS inspection always destroys its per-request client", async () => {
+  let destroyed = false;
+  const client = {
+    async send(command: unknown) {
+      if (command instanceof DescribeServicesCommand) {
+        return {
+          services: [
+            {
+              taskDefinition: taskDefinitionArn,
+              desiredCount: 2,
+              runningCount: 2,
+              deploymentConfiguration: {
+                minimumHealthyPercent: 0,
+                maximumPercent: 100,
+                deploymentCircuitBreaker: { enable: true, rollback: true }
+              }
+            }
+          ]
+        };
+      }
+      if (command instanceof DescribeTaskDefinitionCommand) {
+        return {
+          taskDefinition: {
+            containerDefinitions: [
+              {
+                name: "api",
+                image: `123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/sketchcatch/api@${digest}`
+              }
+            ]
+          }
+        };
+      }
+      throw new Error("Unexpected ECS command");
+    },
+    destroy() {
+      destroyed = true;
+    }
+  } as unknown as ECSClient;
+  const gateway = createAwsEcsGitOpsCloudGateway({
+    stsGateway: {
+      async assumeRole() {
+        return {
+          accessKeyId: "test-access-key",
+          secretAccessKey: "test-secret-key",
+          sessionToken: "test-session-token",
+          expiration: new Date("2026-07-14T03:00:00.000Z")
+        };
+      }
+    },
+    createClient: () => client
+  });
+
+  await gateway.inspect({
+    roleArn: "arn:aws:iam::123456789012:role/SketchCatch",
+    externalId: "external-id",
+    region: "ap-northeast-2",
+    clusterName: "sketchcatch-api",
+    serviceName: "sketchcatch-api",
+    containerName: "api",
+    attemptedTaskDefinitionArn: taskDefinitionArn
+  });
+
+  assert.equal(destroyed, true);
 });
 
 function createEvidence(

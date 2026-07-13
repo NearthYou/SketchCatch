@@ -168,6 +168,21 @@ test("ambiguous Dockerfile evidence is not suggested", () => {
   assert.equal(draft.evidenceSuggested, false);
 });
 
+test("malformed repository analysis fails closed without crashing settings", () => {
+  const repository = createSourceRepository({
+    analysis: {
+      repositoryRevision: "c".repeat(40),
+      analyzedAt: "2026-07-14T00:00:00.000Z",
+      aiHandoff: null
+    }
+  } as unknown as Partial<SourceRepository>);
+
+  const draft = createDeploymentTargetDraft(null, [connection], repository);
+
+  assert.equal(draft.evidenceSuggested, false);
+  assert.equal(draft.commitSha, "");
+});
+
 test("target save requires verified build evidence and complete ECS coordinates", () => {
   const draft = createDeploymentTargetDraft(null, [connection]);
 
