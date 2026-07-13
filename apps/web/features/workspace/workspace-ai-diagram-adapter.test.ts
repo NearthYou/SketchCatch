@@ -389,9 +389,32 @@ test("convertArchitectureJsonToDiagramJson keeps RDS read replicas separate from
     edges: []
   });
 
-  assert.deepEqual(diagramJson.nodes[0]?.parameters?.values, {
-    replicateSourceDb: "aws_db_instance.primary.identifier"
-  });
+  assert.deepEqual(
+    {
+      iconUrl: diagramJson.nodes[0]?.iconUrl,
+      id: diagramJson.nodes[0]?.id,
+      parameters: diagramJson.nodes[0]?.parameters,
+      type: diagramJson.nodes[0]?.type
+    },
+    {
+      iconUrl:
+        "/Architecture-Service-Icons_07312025/Arch_Database/64/Arch_Amazon-RDS_64.svg",
+      id: "rds-replica",
+      parameters: {
+        fileName: "main",
+        resourceName: "db_replica",
+        resourceType: "aws_db_instance",
+        terraformBlockType: "resource",
+        values: {
+          publiclyAccessible: false,
+          replicateSourceDb: "aws_db_instance.primary.identifier",
+          storageEncrypted: true,
+          storageType: "gp3"
+        }
+      },
+      type: "aws_db_instance"
+    }
+  );
 });
 
 test("convertArchitectureJsonToDiagramJson keeps non-containment edges as arrows", () => {

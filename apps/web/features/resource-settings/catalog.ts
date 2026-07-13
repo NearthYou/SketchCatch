@@ -18,6 +18,7 @@ type TerraformResourcePresentation = {
   readonly area: ResourceArea;
   readonly category: string;
   readonly definitionId: string;
+  readonly enabled?: boolean | undefined;
   readonly iconUrl: string;
   readonly label: string;
   readonly name: string;
@@ -365,6 +366,7 @@ const terraformResourcePresentations = [
   },
   {
     definitionId: "aws-iam-policy-data",
+    enabled: false,
     name: "IAM Policy Data Source",
     area: "security-identity",
     category: "IAM",
@@ -1391,6 +1393,7 @@ const terraformResourcePresentations = [
   },
   {
     definitionId: "aws-api-gateway-integration-response",
+    enabled: false,
     name: "API Gateway Integration Response",
     area: "application",
     category: "API Gateway REST",
@@ -1400,6 +1403,7 @@ const terraformResourcePresentations = [
   },
   {
     definitionId: "aws-api-gateway-method-response",
+    enabled: false,
     name: "API Gateway Method Response",
     area: "application",
     category: "API Gateway REST",
@@ -1409,6 +1413,7 @@ const terraformResourcePresentations = [
   },
   {
     definitionId: "aws-budgets-budget",
+    enabled: false,
     name: "AWS Budget",
     area: "tools",
     category: "Cloud Financial Management",
@@ -1418,6 +1423,7 @@ const terraformResourcePresentations = [
   },
   {
     definitionId: "aws-cloudfront-origin-access-identity",
+    enabled: false,
     name: "CloudFront Origin Access Identity",
     area: "network",
     category: "Edge / CDN",
@@ -1427,6 +1433,7 @@ const terraformResourcePresentations = [
   },
   {
     definitionId: "aws-docdb-cluster",
+    enabled: false,
     name: "DocumentDB Cluster",
     area: "database",
     category: "DocumentDB",
@@ -1436,6 +1443,7 @@ const terraformResourcePresentations = [
   },
   {
     definitionId: "aws-dynamodb-global-table",
+    enabled: false,
     name: "DynamoDB Global Table",
     area: "database",
     category: "DynamoDB",
@@ -1445,6 +1453,7 @@ const terraformResourcePresentations = [
   },
   {
     definitionId: "aws-elastic-beanstalk-application",
+    enabled: false,
     name: "Elastic Beanstalk Application",
     area: "compute",
     category: "Elastic Beanstalk",
@@ -1454,6 +1463,7 @@ const terraformResourcePresentations = [
   },
   {
     definitionId: "aws-elastic-beanstalk-environment",
+    enabled: false,
     name: "Elastic Beanstalk Environment",
     area: "compute",
     category: "Elastic Beanstalk",
@@ -1463,6 +1473,7 @@ const terraformResourcePresentations = [
   },
   {
     definitionId: "aws-elb",
+    enabled: false,
     name: "Classic Load Balancer",
     area: "network",
     category: "Load Balancing",
@@ -1472,6 +1483,7 @@ const terraformResourcePresentations = [
   },
   {
     definitionId: "aws-flow-log",
+    enabled: false,
     name: "VPC Flow Log",
     area: "network",
     category: "VPC Core",
@@ -1481,6 +1493,7 @@ const terraformResourcePresentations = [
   },
   {
     definitionId: "aws-fsx-lustre-file-system",
+    enabled: false,
     name: "FSx for Lustre File System",
     area: "storage",
     category: "FSx",
@@ -1490,6 +1503,7 @@ const terraformResourcePresentations = [
   },
   {
     definitionId: "aws-iam-group",
+    enabled: false,
     name: "IAM Group",
     area: "security-identity",
     category: "IAM",
@@ -1499,6 +1513,7 @@ const terraformResourcePresentations = [
   },
   {
     definitionId: "aws-iam-group-policy-attachment",
+    enabled: false,
     name: "IAM Group Policy Attachment",
     area: "security-identity",
     category: "IAM",
@@ -1508,6 +1523,7 @@ const terraformResourcePresentations = [
   },
   {
     definitionId: "aws-iam-user",
+    enabled: false,
     name: "IAM User",
     area: "security-identity",
     category: "IAM",
@@ -1517,6 +1533,7 @@ const terraformResourcePresentations = [
   },
   {
     definitionId: "aws-iam-user-group-membership",
+    enabled: false,
     name: "IAM User Group Membership",
     area: "security-identity",
     category: "IAM",
@@ -1526,6 +1543,7 @@ const terraformResourcePresentations = [
   },
   {
     definitionId: "aws-iam-user-login-profile",
+    enabled: false,
     name: "IAM User Login Profile",
     area: "security-identity",
     category: "IAM",
@@ -1535,6 +1553,7 @@ const terraformResourcePresentations = [
   },
   {
     definitionId: "aws-launch-configuration",
+    enabled: false,
     name: "EC2 Launch Configuration",
     area: "compute",
     category: "EC2 Launch & Scaling",
@@ -1544,6 +1563,7 @@ const terraformResourcePresentations = [
   },
   {
     definitionId: "aws-main-route-table-association",
+    enabled: false,
     name: "Main Route Table Association",
     area: "network",
     category: "Routing & Gateways",
@@ -1553,6 +1573,7 @@ const terraformResourcePresentations = [
   },
   {
     definitionId: "aws-network-interface",
+    enabled: false,
     name: "Elastic Network Interface",
     area: "network",
     category: "VPC Core",
@@ -1562,6 +1583,7 @@ const terraformResourcePresentations = [
   },
   {
     definitionId: "aws-organizations-account",
+    enabled: false,
     name: "AWS Organizations Account",
     area: "tools",
     category: "Organizations",
@@ -1571,6 +1593,7 @@ const terraformResourcePresentations = [
   },
   {
     definitionId: "aws-s3-bucket-acl",
+    enabled: false,
     name: "S3 Bucket ACL",
     area: "storage",
     category: "S3 Controls",
@@ -1580,6 +1603,7 @@ const terraformResourcePresentations = [
   },
   {
     definitionId: "aws-s3-bucket-logging",
+    enabled: false,
     name: "S3 Bucket Logging",
     area: "storage",
     category: "S3 Controls",
@@ -1589,6 +1613,7 @@ const terraformResourcePresentations = [
   },
   {
     definitionId: "aws-s3-bucket-notification",
+    enabled: false,
     name: "S3 Bucket Notification",
     area: "storage",
     category: "S3 Controls",
@@ -1598,6 +1623,7 @@ const terraformResourcePresentations = [
   },
   {
     definitionId: "aws-s3-bucket-object",
+    enabled: false,
     name: "S3 Bucket Object",
     area: "storage",
     category: "S3 Core",
@@ -1607,6 +1633,7 @@ const terraformResourcePresentations = [
   },
   {
     definitionId: "aws-s3-bucket-replication-configuration",
+    enabled: false,
     name: "S3 Bucket Replication Configuration",
     area: "storage",
     category: "S3 Controls",
@@ -1616,6 +1643,7 @@ const terraformResourcePresentations = [
   },
   {
     definitionId: "aws-ses-email-identity",
+    enabled: false,
     name: "SES Email Identity",
     area: "application",
     category: "Messaging",
@@ -1625,6 +1653,7 @@ const terraformResourcePresentations = [
   },
   {
     definitionId: "aws-vpc-peering-connection-accepter",
+    enabled: false,
     name: "VPC Peering Connection Accepter",
     area: "network",
     category: "VPC Core",
@@ -1634,6 +1663,7 @@ const terraformResourcePresentations = [
   },
   {
     definitionId: "aws-waf-ipset",
+    enabled: false,
     name: "WAF IP Set (Classic)",
     area: "security-identity",
     category: "Web Protection",
@@ -1643,6 +1673,7 @@ const terraformResourcePresentations = [
   },
   {
     definitionId: "aws-waf-rule",
+    enabled: false,
     name: "WAF Rule (Classic)",
     area: "security-identity",
     category: "Web Protection",
@@ -1652,6 +1683,7 @@ const terraformResourcePresentations = [
   },
   {
     definitionId: "aws-waf-web-acl",
+    enabled: false,
     name: "WAF Web ACL (Classic)",
     area: "security-identity",
     category: "Web Protection",
@@ -1676,7 +1708,7 @@ function createTerraformResourceItem(presentation: TerraformResourcePresentation
     area: presentation.area,
     category: resourceCategoryOverrides[definition.id] ?? presentation.category,
     iconUrl: presentation.iconUrl,
-    enabled: true,
+    enabled: presentation.enabled ?? definition.capabilities.parameterPanel,
     nodeDefaults: {
       ...(definition.terraform.blockType !== "resource"
         ? { terraformBlockType: definition.terraform.blockType }

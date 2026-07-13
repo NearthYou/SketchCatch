@@ -34,6 +34,29 @@ test("materializeTemplateDiagram gives a CloudFront template node the catalog ic
   assert.equal(cloudFront?.iconUrl, catalogItem.iconUrl);
 });
 
+test("source fixtures can materialize disabled schema-less catalog resources", () => {
+  const sourceFixtureOnlyItems = resourceCatalog.filter((item) => !item.enabled);
+
+  assert.ok(sourceFixtureOnlyItems.length >= 31);
+
+  for (const item of sourceFixtureOnlyItems) {
+    const diagram = materializeTemplateDiagram(
+      createDiagram([
+        createTemplateNode(item.nodeDefaults.type, {
+          fileName: "main",
+          resourceName: "captured_resource",
+          resourceType: item.nodeDefaults.type,
+          terraformBlockType: item.nodeDefaults.terraformBlockType ?? "resource",
+          values: {}
+        })
+      ])
+    );
+
+    assert.equal(diagram.nodes[0]?.iconUrl, item.iconUrl, item.id);
+    assert.equal(diagram.nodes[0]?.type, item.nodeDefaults.type, item.id);
+  }
+});
+
 test("materializeTemplateDiagram retains explicit template identity, Terraform values, and oversized VPC area", () => {
   const sourceNode: DiagramNode = {
     id: "template-production-vpc",

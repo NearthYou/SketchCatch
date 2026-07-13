@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import {
@@ -12,6 +12,10 @@ import { terraformParameterCatalog } from "../parameter-input/catalog";
 import { resourceCatalog } from "./catalog";
 
 const publicDirectoryPath = fileURLToPath(new URL("../../public", import.meta.url));
+const brainboardCaptureDirectoryPath = fileURLToPath(
+  new URL("../../../../docs/gg/feat-infrastructure-template/brainboard-captures/", import.meta.url)
+);
+const BRAINBOARD_CAPTURE_TERRAFORM_IDENTITY_COUNT = 87;
 
 const terraformDefinitionKeys = new Set(
   resourceDefinitions.map(
@@ -112,42 +116,38 @@ const requestedMissingCatalogItems = [
   }
 ] as const;
 
-const requiredBrainboardCatalogItems = [
-  ["aws-api-gateway-integration-response", "resource", "aws_api_gateway_integration_response"],
-  ["aws-api-gateway-method-response", "resource", "aws_api_gateway_method_response"],
-  ["aws-budgets-budget", "resource", "aws_budgets_budget"],
-  ["aws-cloudfront-origin-access-identity", "resource", "aws_cloudfront_origin_access_identity"],
-  ["aws-docdb-cluster", "resource", "aws_docdb_cluster"],
-  ["aws-dynamodb-global-table", "resource", "aws_dynamodb_global_table"],
-  ["aws-elastic-beanstalk-application", "resource", "aws_elastic_beanstalk_application"],
-  ["aws-elastic-beanstalk-environment", "resource", "aws_elastic_beanstalk_environment"],
-  ["aws-elb", "resource", "aws_elb"],
-  ["aws-flow-log", "resource", "aws_flow_log"],
-  ["aws-fsx-lustre-file-system", "resource", "aws_fsx_lustre_file_system"],
-  ["aws-iam-group", "resource", "aws_iam_group"],
-  ["aws-iam-group-policy-attachment", "resource", "aws_iam_group_policy_attachment"],
-  ["aws-iam-user", "resource", "aws_iam_user"],
-  ["aws-iam-user-group-membership", "resource", "aws_iam_user_group_membership"],
-  ["aws-iam-user-login-profile", "resource", "aws_iam_user_login_profile"],
-  ["aws-launch-configuration", "resource", "aws_launch_configuration"],
-  ["aws-main-route-table-association", "resource", "aws_main_route_table_association"],
-  ["aws-network-interface", "resource", "aws_network_interface"],
-  ["aws-organizations-account", "resource", "aws_organizations_account"],
-  ["aws-s3-bucket-acl", "resource", "aws_s3_bucket_acl"],
-  ["aws-s3-bucket-logging", "resource", "aws_s3_bucket_logging"],
-  ["aws-s3-bucket-notification", "resource", "aws_s3_bucket_notification"],
-  ["aws-s3-bucket-object", "resource", "aws_s3_bucket_object"],
-  [
-    "aws-s3-bucket-replication-configuration",
-    "resource",
-    "aws_s3_bucket_replication_configuration"
-  ],
-  ["aws-ses-email-identity", "resource", "aws_ses_email_identity"],
-  ["aws-vpc-peering-connection-accepter", "resource", "aws_vpc_peering_connection_accepter"],
-  ["aws-waf-ipset", "resource", "aws_waf_ipset"],
-  ["aws-waf-rule", "resource", "aws_waf_rule"],
-  ["aws-waf-web-acl", "resource", "aws_waf_web_acl"],
-  ["aws-iam-policy-data", "data", "aws_iam_policy"]
+const sourceFixtureOnlyCatalogItemIds = [
+  "aws-api-gateway-integration-response",
+  "aws-api-gateway-method-response",
+  "aws-budgets-budget",
+  "aws-cloudfront-origin-access-identity",
+  "aws-docdb-cluster",
+  "aws-dynamodb-global-table",
+  "aws-elastic-beanstalk-application",
+  "aws-elastic-beanstalk-environment",
+  "aws-elb",
+  "aws-flow-log",
+  "aws-fsx-lustre-file-system",
+  "aws-iam-group",
+  "aws-iam-group-policy-attachment",
+  "aws-iam-user",
+  "aws-iam-user-group-membership",
+  "aws-iam-user-login-profile",
+  "aws-launch-configuration",
+  "aws-main-route-table-association",
+  "aws-network-interface",
+  "aws-organizations-account",
+  "aws-s3-bucket-acl",
+  "aws-s3-bucket-logging",
+  "aws-s3-bucket-notification",
+  "aws-s3-bucket-object",
+  "aws-s3-bucket-replication-configuration",
+  "aws-ses-email-identity",
+  "aws-vpc-peering-connection-accepter",
+  "aws-waf-ipset",
+  "aws-waf-rule",
+  "aws-waf-web-acl",
+  "aws-iam-policy-data"
 ] as const;
 
 test("resourceCatalog sizes area defaults below the Region hierarchy root", () => {
@@ -273,6 +273,28 @@ test("resource parameter panel capability matches the parameter catalog", () => 
   assert.deepEqual(capabilityResourceTypes, parameterCatalogResourceTypes);
 });
 
+test("enabled Terraform palette items always have a non-empty parameter configuration", () => {
+  for (const resource of getTerraformCatalogItems().filter((item) => item.enabled)) {
+    const definition = getResourceDefinitionById(resource.id);
+    const parameters = terraformParameterCatalog.resources[resource.nodeDefaults.type];
+
+    assert.ok(definition, resource.id);
+    assert.equal(definition.capabilities.parameterPanel, true, resource.id);
+    assert.ok(parameters && parameters.length > 0, resource.id);
+  }
+});
+
+test("every configurable Terraform definition remains enabled in the manual palette", () => {
+  for (const definition of resourceDefinitions.filter(
+    (candidate) => candidate.capabilities.parameterPanel
+  )) {
+    const resource = resourceCatalog.find((candidate) => candidate.id === definition.id);
+
+    assert.ok(resource, definition.id);
+    assert.equal(resource.enabled, true, definition.id);
+  }
+});
+
 test("Autoscaling Policy is available through the shared definition and resource catalog", () => {
   const definition = getResourceDefinitionById("aws-autoscaling-policy");
   const resource = resourceCatalog.find((item) => item.id === "aws-autoscaling-policy");
@@ -388,24 +410,55 @@ test("resourceCatalog exposes requested missing resources with public icon asset
   }
 });
 
-test("resourceCatalog exposes each Brainboard Terraform identity exactly once", () => {
-  for (const [id, blockType, resourceType] of requiredBrainboardCatalogItems) {
+test("committed Brainboard captures have exactly one shared and catalog match for all 87 identities", () => {
+  const capturedIdentities = readCapturedTerraformIdentities();
+
+  assert.equal(capturedIdentities.length, BRAINBOARD_CAPTURE_TERRAFORM_IDENTITY_COUNT);
+
+  for (const { blockType, resourceType } of capturedIdentities) {
     const key = `${blockType}/${resourceType}`;
-    const matches = resourceCatalog.filter(
+    const sharedMatches = resourceDefinitions.filter(
+      (definition) =>
+        definition.terraform.blockType === blockType &&
+        definition.terraform.resourceType === resourceType
+    );
+    const catalogMatches = resourceCatalog.filter(
       (resource) => createCatalogResourceKey(resource) === key
     );
 
-    assert.equal(matches.length, 1, key);
-    assert.equal(matches[0]?.id, id, key);
-    assert.equal(matches[0]?.enabled, true, id);
-    assert.equal(matches[0]?.nodeDefaults.type, resourceType, id);
-    assert.equal(matches[0]?.nodeDefaults.terraformBlockType ?? "resource", blockType, id);
-    assert.ok(matches[0]?.iconUrl, `Missing icon for ${id}`);
+    assert.equal(sharedMatches.length, 1, `shared:${key}`);
+    assert.equal(catalogMatches.length, 1, `catalog:${key}`);
+    assert.equal(catalogMatches[0]?.id, sharedMatches[0]?.id, key);
+    assert.equal(catalogMatches[0]?.nodeDefaults.type, resourceType, key);
     assert.equal(
-      existsSync(`${publicDirectoryPath}${matches[0]?.iconUrl}`),
-      true,
-      matches[0]?.iconUrl
+      catalogMatches[0]?.nodeDefaults.terraformBlockType ?? "resource",
+      blockType,
+      key
     );
+    assert.ok(catalogMatches[0]?.iconUrl, `Missing icon for ${key}`);
+    assert.equal(
+      existsSync(`${publicDirectoryPath}${catalogMatches[0]?.iconUrl}`),
+      true,
+      catalogMatches[0]?.iconUrl
+    );
+  }
+});
+
+test("new schema-less Brainboard items stay source-fixture-only in the manual palette", () => {
+  assert.equal(sourceFixtureOnlyCatalogItemIds.length, 31);
+
+  for (const id of sourceFixtureOnlyCatalogItemIds) {
+    const resource = resourceCatalog.find((candidate) => candidate.id === id);
+    const definition = getResourceDefinitionById(id);
+
+    assert.ok(resource, id);
+    assert.ok(definition, id);
+    assert.equal(resource.enabled, false, id);
+    assert.equal(definition.capabilities.parameterPanel, false, id);
+    assert.equal(definition.capabilities.terraformPreview, true, id);
+    assert.equal(definition.capabilities.terraformSync, true, id);
+    assert.ok(resource.iconUrl, id);
+    assert.equal(existsSync(`${publicDirectoryPath}${resource.iconUrl}`), true, resource.iconUrl);
   }
 });
 
@@ -686,4 +739,53 @@ function collectParameterTerraformPaths(
 
 function createCatalogResourceKey(resource: (typeof resourceCatalog)[number]): string {
   return `${resource.nodeDefaults.terraformBlockType ?? "resource"}/${resource.nodeDefaults.type}`;
+}
+
+function readCapturedTerraformIdentities(): Array<{
+  readonly blockType: "data" | "resource";
+  readonly resourceType: string;
+}> {
+  const identityKeys = new Set<string>();
+
+  for (const fileName of readdirSync(brainboardCaptureDirectoryPath).sort()) {
+    if (!fileName.endsWith(".json")) {
+      continue;
+    }
+
+    const capture = JSON.parse(
+      readFileSync(`${brainboardCaptureDirectoryPath}/${fileName}`, "utf8")
+    ) as {
+      readonly terraform?: {
+        readonly resourceAddresses?: readonly string[] | undefined;
+      } | null;
+    };
+
+    for (const address of capture.terraform?.resourceAddresses ?? []) {
+      identityKeys.add(createTerraformIdentityKeyFromAddress(address));
+    }
+  }
+
+  return [...identityKeys].sort().map((key) => {
+    const separatorIndex = key.indexOf("/");
+    const blockType = key.slice(0, separatorIndex);
+
+    assert.ok(blockType === "data" || blockType === "resource", key);
+
+    return {
+      blockType,
+      resourceType: key.slice(separatorIndex + 1)
+    };
+  });
+}
+
+function createTerraformIdentityKeyFromAddress(address: string): string {
+  const segments = address.split(".");
+
+  if (segments[0] === "data") {
+    assert.ok(segments[1], `Invalid Terraform data address: ${address}`);
+    return `data/${segments[1]}`;
+  }
+
+  assert.ok(segments[0], `Invalid Terraform resource address: ${address}`);
+  return `resource/${segments[0]}`;
 }

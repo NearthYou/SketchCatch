@@ -1,76 +1,59 @@
 import assert from "node:assert/strict";
+import { readdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
+import type { TerraformBlockType } from "./index.js";
 import {
+  getDefaultResourceDefinitionByResourceType,
   getResourceDefinitionById,
   getResourceDefinitionByTerraform,
   resourceDefinitions
 } from "./resource-definitions.js";
 
-const requiredBrainboardResourceDefinitions = [
-  ["aws-api-gateway-integration-response", "resource", "aws_api_gateway_integration_response"],
-  ["aws-api-gateway-method-response", "resource", "aws_api_gateway_method_response"],
-  ["aws-budgets-budget", "resource", "aws_budgets_budget"],
-  ["aws-cloudfront-origin-access-identity", "resource", "aws_cloudfront_origin_access_identity"],
-  ["aws-docdb-cluster", "resource", "aws_docdb_cluster"],
-  ["aws-dynamodb-global-table", "resource", "aws_dynamodb_global_table"],
-  ["aws-elastic-beanstalk-application", "resource", "aws_elastic_beanstalk_application"],
-  ["aws-elastic-beanstalk-environment", "resource", "aws_elastic_beanstalk_environment"],
-  ["aws-elb", "resource", "aws_elb"],
-  ["aws-flow-log", "resource", "aws_flow_log"],
-  ["aws-fsx-lustre-file-system", "resource", "aws_fsx_lustre_file_system"],
-  ["aws-iam-group", "resource", "aws_iam_group"],
-  ["aws-iam-group-policy-attachment", "resource", "aws_iam_group_policy_attachment"],
-  ["aws-iam-user", "resource", "aws_iam_user"],
-  ["aws-iam-user-group-membership", "resource", "aws_iam_user_group_membership"],
-  ["aws-iam-user-login-profile", "resource", "aws_iam_user_login_profile"],
-  ["aws-launch-configuration", "resource", "aws_launch_configuration"],
-  ["aws-main-route-table-association", "resource", "aws_main_route_table_association"],
-  ["aws-network-interface", "resource", "aws_network_interface"],
-  ["aws-organizations-account", "resource", "aws_organizations_account"],
-  ["aws-s3-bucket-acl", "resource", "aws_s3_bucket_acl"],
-  ["aws-s3-bucket-logging", "resource", "aws_s3_bucket_logging"],
-  ["aws-s3-bucket-notification", "resource", "aws_s3_bucket_notification"],
-  ["aws-s3-bucket-object", "resource", "aws_s3_bucket_object"],
-  [
-    "aws-s3-bucket-replication-configuration",
-    "resource",
-    "aws_s3_bucket_replication_configuration"
-  ],
-  ["aws-ses-email-identity", "resource", "aws_ses_email_identity"],
-  ["aws-vpc-peering-connection-accepter", "resource", "aws_vpc_peering_connection_accepter"],
-  ["aws-waf-ipset", "resource", "aws_waf_ipset"],
-  ["aws-waf-rule", "resource", "aws_waf_rule"],
-  ["aws-waf-web-acl", "resource", "aws_waf_web_acl"],
-  ["aws-iam-policy-data", "data", "aws_iam_policy"]
-] as const;
+const BRAINBOARD_CAPTURE_TERRAFORM_IDENTITY_COUNT = 87;
+const brainboardCaptureDirectoryPath = fileURLToPath(
+  new URL("../../../docs/gg/feat-infrastructure-template/brainboard-captures/", import.meta.url)
+);
 
-test("Brainboard Terraform identities have exactly one shared resource definition", () => {
-  for (const [id, blockType, resourceType] of requiredBrainboardResourceDefinitions) {
+test("committed Brainboard captures have exactly one shared definition for all 87 Terraform identities", () => {
+  const capturedIdentities = readCapturedTerraformIdentities();
+
+  assert.equal(capturedIdentities.length, BRAINBOARD_CAPTURE_TERRAFORM_IDENTITY_COUNT);
+
+  for (const { blockType, resourceType } of capturedIdentities) {
+    const key = `${blockType}/${resourceType}`;
     const matches = resourceDefinitions.filter(
       (definition) =>
         definition.terraform.blockType === blockType &&
         definition.terraform.resourceType === resourceType
     );
 
-    assert.equal(matches.length, 1, `${blockType}/${resourceType}`);
-    assert.equal(matches[0]?.id, id, `${blockType}/${resourceType}`);
-    assert.equal(getResourceDefinitionById(id), matches[0], id);
-    assert.equal(
-      getResourceDefinitionByTerraform(blockType, resourceType),
-      matches[0],
-      `${blockType}/${resourceType}`
-    );
-    assert.equal(matches[0]?.provider, "aws", id);
-    assert.equal(matches[0]?.capabilities.terraformPreview, true, id);
-    assert.equal(matches[0]?.capabilities.terraformSync, true, id);
+    assert.equal(matches.length, 1, key);
+    assert.equal(getResourceDefinitionById(matches[0]?.id ?? ""), matches[0], key);
+    assert.equal(getResourceDefinitionByTerraform(blockType, resourceType), matches[0], key);
+    assert.equal(matches[0]?.provider, "aws", key);
+    assert.equal(matches[0]?.capabilities.terraformPreview, true, key);
+    assert.equal(matches[0]?.capabilities.terraformSync, true, key);
   }
+});
+
+test("RDS_READ_REPLICA uses the authoritative aws_db_instance definition as its default alias", () => {
+  const rdsInstance = getResourceDefinitionById("aws-rds-instance");
+  const readReplicaDefault = getDefaultResourceDefinitionByResourceType("RDS_READ_REPLICA");
+
+  assert.ok(rdsInstance);
+  assert.equal(readReplicaDefault, rdsInstance);
+  assert.deepEqual(readReplicaDefault.terraform, {
+    blockType: "resource",
+    resourceType: "aws_db_instance"
+  });
+  assert.equal(readReplicaDefault.resourceType, "RDS");
 });
 
 test("shared resource definition IDs and Terraform identities remain unique", () => {
   const ids = resourceDefinitions.map((definition) => definition.id);
   const terraformIdentities = resourceDefinitions.map(
-    (definition) =>
-      `${definition.terraform.blockType}/${definition.terraform.resourceType}`
+    (definition) => `${definition.terraform.blockType}/${definition.terraform.resourceType}`
   );
 
   assert.equal(new Set(ids).size, ids.length);
@@ -95,6 +78,55 @@ test("classic AWS identities stay distinct from newer Terraform resources", () =
     "aws_waf_ipset"
   );
 });
+
+function readCapturedTerraformIdentities(): Array<{
+  readonly blockType: TerraformBlockType;
+  readonly resourceType: string;
+}> {
+  const identityKeys = new Set<string>();
+
+  for (const fileName of readdirSync(brainboardCaptureDirectoryPath).sort()) {
+    if (!fileName.endsWith(".json")) {
+      continue;
+    }
+
+    const capture = JSON.parse(
+      readFileSync(`${brainboardCaptureDirectoryPath}/${fileName}`, "utf8")
+    ) as {
+      readonly terraform?: {
+        readonly resourceAddresses?: readonly string[] | undefined;
+      } | null;
+    };
+
+    for (const address of capture.terraform?.resourceAddresses ?? []) {
+      identityKeys.add(createTerraformIdentityKeyFromAddress(address));
+    }
+  }
+
+  return [...identityKeys].sort().map((key) => {
+    const separatorIndex = key.indexOf("/");
+    const blockType = key.slice(0, separatorIndex);
+
+    assert.ok(blockType === "data" || blockType === "resource", key);
+
+    return {
+      blockType,
+      resourceType: key.slice(separatorIndex + 1)
+    };
+  });
+}
+
+function createTerraformIdentityKeyFromAddress(address: string): string {
+  const segments = address.split(".");
+
+  if (segments[0] === "data") {
+    assert.ok(segments[1], `Invalid Terraform data address: ${address}`);
+    return `data/${segments[1]}`;
+  }
+
+  assert.ok(segments[0], `Invalid Terraform resource address: ${address}`);
+  return `resource/${segments[0]}`;
+}
 
 function assertDistinctTerraformIdentities(firstId: string, secondId: string): void {
   const first = getResourceDefinitionById(firstId);

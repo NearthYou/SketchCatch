@@ -34,6 +34,9 @@ type ResourceDefinitionInput = Omit<AwsResourceDefinitionInput, "terraformResour
 
 const DEFAULT_RESOURCE_TYPE: ResourceType = "UNKNOWN";
 const DEFAULT_TERRAFORM_BLOCK_TYPE: TerraformBlockType = "resource";
+const DEFAULT_RESOURCE_DEFINITION_ALIASES = [
+  ["RDS_READ_REPLICA", "aws-rds-instance"]
+] as const satisfies readonly (readonly [ResourceType, string])[];
 
 export const resourceDefinitions = [
   createAwsResourceDefinition({
@@ -1235,6 +1238,16 @@ function createDefaultResourceDefinitionByResourceType(): Map<ResourceType, Reso
     }
 
     definitions.set(definition.resourceType, definition);
+  }
+
+  for (const [resourceType, definitionId] of DEFAULT_RESOURCE_DEFINITION_ALIASES) {
+    const definition = resourceDefinitionById.get(definitionId);
+
+    if (!definition) {
+      throw new Error(`Missing default resource definition alias target: ${definitionId}`);
+    }
+
+    definitions.set(resourceType, definition);
   }
 
   return definitions;
