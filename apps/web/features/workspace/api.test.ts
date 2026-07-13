@@ -28,6 +28,7 @@ import {
   getGitCicdHandoffPipelineStatus,
   getAiPreDeploymentDeepScan,
   getProjectDeletePreview,
+  fetchProjectThumbnail,
   listDeploymentResources,
   listAwsConnections,
   listDeployments,
@@ -1221,6 +1222,37 @@ test("uploadProjectAsset sends auth headers for same-origin API uploads", async 
   assert.equal(headers.get("authorization"), "Bearer access-token");
   assert.equal(headers.get("content-type"), "text/plain");
   assert.equal(requests[0]?.init?.body, "resource {}");
+});
+
+test("fetchProjectThumbnail reads the authenticated raster capture path as a Blob", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+
+  installAuthSession();
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+
+    return new Response(new Blob(["captured-board"], { type: "image/webp" }), {
+      headers: { "Content-Type": "image/webp" },
+      status: 200
+    });
+  };
+
+  const thumbnail = await fetchProjectThumbnail(project.id);
+
+  assert.equal(String(requests[0]?.input), `/api/projects/${project.id}/thumbnail`);
+  assert.equal(new Headers(requests[0]?.init?.headers).get("authorization"), "Bearer access-token");
+  assert.equal(requests[0]?.init?.credentials, "include");
+  assert.equal(requests[0]?.init?.cache, "no-store");
+  assert.equal(thumbnail?.type, "image/webp");
+  assert.equal(await thumbnail?.text(), "captured-board");
 });
 
 test("confirmProjectAssetUpload marks the uploaded asset through the API", async (context) => {

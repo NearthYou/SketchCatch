@@ -1204,6 +1204,34 @@ test("deployment setup exposes a five-step Direct Deployment console", () => {
   assert.doesNotMatch(deploymentPanelSource, /DeploymentWizardStep/);
   assert.doesNotMatch(deploymentPanelSource, /startPrimaryDeploymentStep/);
 });
+
+test("deployment action icons stay compact inside their buttons", () => {
+  assert.match(
+    stylesSource,
+    /\.deploymentPrimaryButton svg,[\s\S]*?\.deploymentDangerButton svg\s*\{[^}]*\bheight:\s*16px;[^}]*\bwidth:\s*16px;/
+  );
+});
+
+test("deployment preflight keeps its heading and findings in one readable flow", () => {
+  const stageSettingsRule = getCssRule(stylesSource, "deploymentStageSettings");
+  const preflightSummaryRule = getCssRule(stylesSource, "deploymentPreflightSummary");
+  const gateHeaderRule = getCssRule(stylesSource, "deploymentGateHeader");
+  const findingHeaderRule = getCssRule(stylesSource, "deploymentFindingHeader");
+
+  assert.doesNotMatch(stageSettingsRule, /\bgrid-column:/);
+  assert.doesNotMatch(stageSettingsRule, /\bgrid-row:/);
+  assert.match(preflightSummaryRule, /\bborder-radius:\s*var\(--radius-card\);/);
+  assert.match(preflightSummaryRule, /\bpadding:\s*20px;/);
+  assert.match(gateHeaderRule, /\bdisplay:\s*flex;/);
+  assert.match(gateHeaderRule, /\bgap:\s*8px;/);
+  assert.match(findingHeaderRule, /\bdisplay:\s*flex;/);
+  assert.match(directDeploymentSource, /className=\{styles\.deploymentFindingHeader\}/);
+  assert.match(directDeploymentSource, /className=\{styles\.deploymentFindingMeta\}/);
+  assert.match(directDeploymentSource, /className=\{styles\.deploymentFindingActions\}/);
+  assert.match(directDeploymentSource, /배포 안전성 검사 결과/);
+  assert.match(directDeploymentSource, /발견 항목/);
+});
+
 test("CI/CD settings require explicit monitored paths and user acceptance", () => {
   const settingsSource = readWorkspaceFile("CicdMonitoringSettings.tsx");
 
@@ -1258,7 +1286,7 @@ test("pre-deployment check is owned by the deployment tab", () => {
   assert.match(terraformPanelSource, /validateCurrentTerraform/);
   assert.doesNotMatch(aiChatDockSource, /runAiPreDeploymentCheck/);
   assert.doesNotMatch(aiChatDockSource, /WorkspaceAiPreDeploymentResult/);
-  assert.match(preflightSummaryRule, /\bgap:\s*8px;/);
+  assert.match(preflightSummaryRule, /\bgap:\s*16px;/);
   assert.doesNotMatch(preflightFindingsRule, /\bmax-height:/);
   assert.doesNotMatch(preflightFindingsRule, /\boverflow-y:\s*auto;/);
   assert.doesNotMatch(preflightFindingsRule, /\bscrollbar-gutter:/);
@@ -1320,7 +1348,7 @@ test("pre-deployment check only downgrades checklist failures backed exclusively
 test("pre-deployment finding fix buttons open the existing terraform source location handler", () => {
   assert.match(deploymentPanelSource, /onOpenFindingTerraformSource/);
   assert.match(deploymentPanelSource, /className=\{styles\.deploymentFindingFixButton\}/);
-  assert.match(deploymentPanelSource, /<Code2 size=\{13\} aria-hidden="true" \/>/);
+  assert.match(deploymentPanelSource, /<Code2 size=\{14\} aria-hidden="true" \/>/);
   assert.match(componentSource, /getPreDeploymentFindingTerraformSourceLocation/);
   assert.match(componentSource, /openPreDeploymentFindingTerraformSource/);
   assert.match(componentSource, /terraformPanelRef\.current\?\.getTerraformFiles\(\)/);

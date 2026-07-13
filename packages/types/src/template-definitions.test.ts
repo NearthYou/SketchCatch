@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   buildTemplateDiagramJson,
+  createTemplateTerraformResourceNames,
   TEMPLATE_IDS,
   templateDefinitions,
   type TemplateId
@@ -14,7 +15,7 @@ test("the template registry contains the six deployable AWS patterns", () => {
   assert.ok(templateDefinitions.every((definition) => definition.relationships.length > 0));
 });
 
-test("each template builds a deterministic, connected DiagramJson", () => {
+test("each template builds a deterministic, connected DiagramJson with short Terraform local names", () => {
   for (const templateId of TEMPLATE_IDS) {
     const first = buildTemplateDiagramJson(templateId, {
       projectSlug: "sketchcatch",
@@ -38,9 +39,95 @@ test("each template builds a deterministic, connected DiagramJson", () => {
     assert.ok(
       first.nodes
         .filter((node) => node.kind === "resource")
-        .every((node) => node.parameters?.resourceName.startsWith("sketchcatch_")),
+        .every((node) => /^[a-z_][a-z0-9_]*$/u.test(node.parameters?.resourceName ?? "")),
       templateId
     );
+    assert.ok(
+      first.nodes
+        .filter((node) => node.kind === "resource")
+        .every((node) => !node.parameters?.resourceName.includes("sketchcatch") && !node.parameters?.resourceName.includes("test01")),
+      templateId
+    );
+
+    const withAnotherProject = buildTemplateDiagramJson(templateId, {
+      projectSlug: "another-project",
+      shortId: "another-template-instance"
+    });
+    assert.deepEqual(
+      first.nodes.map((node) => node.parameters?.resourceName),
+      withAnotherProject.nodes.map((node) => node.parameters?.resourceName),
+      templateId
+    );
+  }
+});
+
+test("Terraform local names add a deterministic suffix only for normalization collisions in the same block", () => {
+  const resources = [
+    { id: "edge-name", terraformBlockType: "resource" as const, terraformResourceType: "aws_example" },
+    { id: "edge_name", terraformBlockType: "resource" as const, terraformResourceType: "aws_example" },
+    { id: "edge_name_1", terraformBlockType: "resource" as const, terraformResourceType: "aws_example" },
+    { id: "edge name", terraformBlockType: "data" as const, terraformResourceType: "aws_example" },
+    { id: "edge.name", terraformBlockType: "resource" as const, terraformResourceType: "aws_other" },
+    { id: "123-start", terraformBlockType: "resource" as const, terraformResourceType: "aws_example" }
+  ];
+
+  const first = createTemplateTerraformResourceNames(resources);
+  const second = createTemplateTerraformResourceNames([...resources].reverse());
+
+  assert.match(first.get("edge-name") ?? "", /^edge_name_[a-z0-9]{6}$/u);
+  assert.match(first.get("edge_name") ?? "", /^edge_name_[a-z0-9]{6}$/u);
+  assert.notEqual(first.get("edge-name"), first.get("edge_name"));
+  assert.equal(first.get("edge_name_1"), "edge_name_1");
+  assert.equal(first.get("edge name"), "edge_name");
+  assert.equal(first.get("edge.name"), "edge_name");
+  assert.equal(first.get("123-start"), "resource_123_start");
+  assert.equal(first.get("edge-name"), second.get("edge-name"));
+  assert.equal(first.get("edge_name"), second.get("edge_name"));
+
+  const extended = createTemplateTerraformResourceNames([
+    ...resources,
+    { id: "EDGE NAME", terraformBlockType: "resource" as const, terraformResourceType: "aws_example" }
+  ]);
+  assert.equal(first.get("edge-name"), extended.get("edge-name"));
+  assert.equal(first.get("edge_name"), extended.get("edge_name"));
+});
+
+test("Terraform local names stay compact after normalization and collision suffixing", () => {
+  const longPrefix = "very-long-template-resource-name-that-should-never-leak-into-a-board-address";
+  const names = createTemplateTerraformResourceNames([
+    { id: `${longPrefix}-a`, terraformBlockType: "resource", terraformResourceType: "aws_example" },
+    { id: `${longPrefix} a`, terraformBlockType: "resource", terraformResourceType: "aws_example" }
+  ]);
+
+  assert.ok([...names.values()].every((name) => name.length <= 48));
+});
+
+test("template labels and AWS-facing names stay separate from Terraform local names", () => {
+  const diagram = buildTemplateDiagramJson("ecs-fargate-container-app", {
+    projectSlug: "sketchcatch",
+    shortId: "test01"
+  });
+  const subnet = diagram.nodes.find((node) => node.id.endsWith("-subnet-a"));
+  const albSecurityGroup = diagram.nodes.find((node) => node.id.endsWith("-alb-security-group"));
+
+  assert.equal(subnet?.label, "Public Subnet A");
+  assert.equal(subnet?.parameters?.resourceName, "subnet_a");
+  assert.equal(albSecurityGroup?.label, "ALB Security Group");
+  assert.equal(albSecurityGroup?.parameters?.resourceName, "alb_security_group");
+  assert.equal(albSecurityGroup?.parameters?.values.name, "fargate-alb");
+});
+
+test("all built-in template references resolve through the final Terraform local-name map", () => {
+  for (const templateId of TEMPLATE_IDS) {
+    const diagram = buildTemplateDiagramJson(templateId, {
+      projectSlug: "sketchcatch",
+      shortId: "test01"
+    });
+    const serializedValues = JSON.stringify(
+      diagram.nodes.flatMap((node) => node.parameters?.values ?? [])
+    );
+
+    assert.doesNotMatch(serializedValues, /@(?:ref|address):/u, templateId);
   }
 });
 
@@ -140,7 +227,7 @@ test("each template contains the resources required by its deployable default", 
   assert.doesNotMatch(builtContainerDefinitions, /@ref:/);
   assert.equal(
     builtContainer.logConfiguration?.options?.["awslogs-group"],
-    "${aws_cloudwatch_log_group.sketchcatch_log-group_test01.name}"
+    "${aws_cloudwatch_log_group.log_group.name}"
   );
 
   const eksTypes = resourceTypes("eks-container-app");
@@ -149,6 +236,136 @@ test("each template contains the resources required by its deployable default", 
   assert.ok(eksTypes.includes("aws_route_table"));
   assert.ok(eksTypes.includes("aws_route_table_association"));
   assert.ok(eksTypes.includes("aws_security_group"));
+});
+
+test("network templates keep gateways and route associations on their related boundaries", () => {
+  for (const templateId of [
+    "three-tier-web-app",
+    "ecs-fargate-container-app",
+    "eks-container-app"
+  ] as const) {
+    const definition = templateDefinitions.find((candidate) => candidate.id === templateId);
+    const vpc = definition?.resources.find((resource) => resource.id === "vpc");
+    const internetGateway = definition?.resources.find(
+      (resource) => resource.id === "internet-gateway"
+    );
+
+    assert.ok(vpc, `${templateId}/vpc`);
+    assert.ok(internetGateway, `${templateId}/internet-gateway`);
+    assert.notEqual(internetGateway.parentResourceId, "vpc", `${templateId}/internet-gateway parent`);
+    assert.ok(internetGateway.position.x < vpc.position.x, `${templateId}/internet-gateway left edge`);
+    assert.ok(
+      internetGateway.position.x + 48 > vpc.position.x,
+      `${templateId}/internet-gateway must straddle the VPC boundary`
+    );
+
+    for (const association of definition.resources.filter(
+      (resource) => resource.terraformResourceType === "aws_route_table_association"
+    )) {
+      const subnetReference = String(association.values.subnetId);
+      const subnetId = subnetReference.match(/^@ref:([^.]+)\.id$/u)?.[1];
+      const subnet = definition.resources.find((resource) => resource.id === subnetId);
+
+      assert.ok(subnet, `${templateId}/${association.id} subnet`);
+      assert.ok(
+        association.position.y < subnet.position.y && association.position.y + 48 > subnet.position.y,
+        `${templateId}/${association.id} must straddle ${subnet.id}'s top boundary`
+      );
+    }
+  }
+});
+
+test("security-group scopes enclose only their explicit targets without becoming parents", () => {
+  const scopeTargets = {
+    "three-tier-web-app": {
+      "alb-security-group": ["load-balancer"],
+      "app-security-group": ["launch-template", "application-group"],
+      "db-security-group": ["database"]
+    },
+    "ecs-fargate-container-app": {
+      "alb-security-group": ["load-balancer"],
+      "task-security-group": ["service"]
+    },
+    "eks-container-app": {
+      "cluster-security-group": ["cluster"]
+    }
+  } as const;
+
+  for (const [templateId, targetsByScopeId] of Object.entries(scopeTargets)) {
+    const definition = templateDefinitions.find((candidate) => candidate.id === templateId);
+
+    assert.ok(definition, templateId);
+    for (const [scopeId, targetIds] of Object.entries(targetsByScopeId)) {
+      const scope = definition.resources.find((resource) => resource.id === scopeId);
+
+      assert.ok(scope?.size, `${templateId}/${scopeId} scope size`);
+      for (const targetId of targetIds) {
+        const target = definition.resources.find((resource) => resource.id === targetId);
+
+        assert.ok(target, `${templateId}/${targetId}`);
+        assert.notEqual(target.parentResourceId, scopeId, `${templateId}/${targetId} parent`);
+        assert.ok(target.position.x >= scope.position.x, `${templateId}/${scopeId}/${targetId} left`);
+        assert.ok(target.position.y >= scope.position.y, `${templateId}/${scopeId}/${targetId} top`);
+        assert.ok(
+          target.position.x + 48 <= scope.position.x + scope.size.width,
+          `${templateId}/${scopeId}/${targetId} right`
+        );
+        assert.ok(
+          target.position.y + 48 <= scope.position.y + scope.size.height,
+          `${templateId}/${scopeId}/${targetId} bottom`
+        );
+        assert.ok(
+          definition.relationships.some(
+            (relationship) =>
+              relationship.sourceResourceId === scopeId && relationship.targetResourceId === targetId
+          ),
+          `${templateId}/${scopeId} must connect to ${targetId}`
+        );
+      }
+    }
+  }
+});
+
+test("EKS separates the control plane security scope from its workload presentation group", () => {
+  const definition = templateDefinitions.find((candidate) => candidate.id === "eks-container-app");
+  const cluster = definition?.resources.find((resource) => resource.id === "cluster");
+  const clusterSecurityGroup = definition?.resources.find(
+    (resource) => resource.id === "cluster-security-group"
+  );
+  const workloadGroup = definition?.presentationNodes.find((node) => node.id === "workloads-group");
+  const nodeGroup = definition?.resources.find((resource) => resource.id === "node-group");
+  const namespace = definition?.resources.find((resource) => resource.id === "namespace");
+
+  assert.ok(cluster);
+  assert.equal(cluster.presentationArea, undefined);
+  assert.equal(cluster.size, undefined);
+  assert.equal(cluster.parentResourceId, "vpc");
+  assert.ok(clusterSecurityGroup);
+  assert.ok(workloadGroup);
+  assert.equal(workloadGroup.catalogItemId, "design-group");
+  assert.equal(workloadGroup.parentNodeId, "vpc");
+  assert.equal(nodeGroup?.parentResourceId, "workloads-group");
+  assert.equal(namespace?.parentResourceId, "workloads-group");
+});
+
+test("serverless templates keep their authored composition close to a 16:9 card", () => {
+  for (const templateId of ["minimal-serverless-api", "full-serverless-web-app"] as const) {
+    const definition = templateDefinitions.find((candidate) => candidate.id === templateId);
+
+    assert.ok(definition, templateId);
+    const bounds = [...definition.resources, ...definition.presentationNodes].map((node) => ({
+      left: node.position.x,
+      top: node.position.y,
+      right: node.position.x + (node.size?.width ?? 48),
+      bottom: node.position.y + (node.size?.height ?? 48)
+    }));
+    const width = Math.max(...bounds.map((bound) => bound.right)) - Math.min(...bounds.map((bound) => bound.left));
+    const height = Math.max(...bounds.map((bound) => bound.bottom)) - Math.min(...bounds.map((bound) => bound.top));
+    const aspectRatio = width / height;
+
+    assert.ok(aspectRatio >= 1.75, `${templateId} is too tall: ${aspectRatio}`);
+    assert.ok(aspectRatio <= 2.3, `${templateId} is too wide: ${aspectRatio}`);
+  }
 });
 
 test("Lambda templates use an inline archive and least-privilege table policies", () => {

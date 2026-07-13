@@ -146,13 +146,12 @@ test("deployable Template materialization preserves reviewed geometry while draf
   assert.deepEqual(hydratedDraft.nodes[0]?.position, savedDraft.nodes[0]?.position);
 });
 
-test("reviewed API, ECS, EKS, and Namespace resources become real visual containers", () => {
+test("reviewed API, ECS, and Namespace resources become real visual containers", () => {
   const templates = listBoardTemplates();
   const requiredContainers = [
     ["minimal-serverless-api", "aws_api_gateway_rest_api"],
     ["full-serverless-web-app", "aws_api_gateway_rest_api"],
     ["ecs-fargate-container-app", "aws_ecs_cluster"],
-    ["eks-container-app", "aws_eks_cluster"],
     ["eks-container-app", "kubernetes_namespace"]
   ] as const;
 
@@ -163,6 +162,24 @@ test("reviewed API, ECS, EKS, and Namespace resources become real visual contain
 
     assert.ok(node, `${templateId}/${resourceType}`);
     assert.equal(isAreaNode(node), true, `${templateId}/${resourceType}`);
+  }
+});
+
+test("ASG and EKS control plane materialize as ordinary 48px Resource tiles", () => {
+  const templates = listBoardTemplates();
+  const expectedTiles = [
+    ["three-tier-web-app", "aws_autoscaling_group"],
+    ["eks-container-app", "aws_eks_cluster"]
+  ] as const;
+
+  for (const [templateId, resourceType] of expectedTiles) {
+    const node = templates
+      .find((template) => template.id === templateId)
+      ?.diagramJson.nodes.find((candidate) => candidate.parameters?.resourceType === resourceType);
+
+    assert.ok(node, `${templateId}/${resourceType}`);
+    assert.equal(isAreaNode(node), false, `${templateId}/${resourceType}`);
+    assert.deepEqual(node.size, { width: 48, height: 48 }, `${templateId}/${resourceType}`);
   }
 });
 

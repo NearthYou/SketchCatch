@@ -1487,7 +1487,7 @@ function DeploymentPreDeploymentSummary({
     <div className={styles.deploymentPreflightSummary} data-level={gateLevel}>
       <div className={styles.deploymentGateHeader}>
         <span className={styles.deploymentGateBadge}>{gateLevel.toUpperCase()}</span>
-        <strong>Pre-Deployment Gate</strong>
+        <strong>배포 안전성 검사 결과</strong>
       </div>
       <p>{analysis.summary}</p>
       {analysis.deepScan ? (
@@ -1504,15 +1504,15 @@ function DeploymentPreDeploymentSummary({
       <div className={styles.deploymentPreflightStats} aria-label="배포 전 검사 요약">
         <span>
           <strong>{analysis.findings.length}</strong>
-          Findings
+          발견 항목
         </span>
         <span>
           <strong>{failCount}</strong>
-          Fail
+          실패
         </span>
         <span>
           <strong>{warningCount}</strong>
-          Warning
+          주의
         </span>
       </div>
       {analysis.findings.length > 0 ? (
@@ -1545,21 +1545,29 @@ function DeploymentPreDeploymentFindingItem({
 
   return (
     <li data-severity={finding.severity}>
-      <span>{finding.severity.toUpperCase()}</span>
-      <strong>{finding.title}</strong>
-      {finding.resourceId ? <em>{finding.resourceId}</em> : null}
-      {finding.trivyRuleIds && finding.trivyRuleIds.length > 0 ? (
-        <em>Trivy rules · {finding.trivyRuleIds.join(", ")}</em>
+      <div className={styles.deploymentFindingHeader}>
+        <span>{finding.severity.toUpperCase()}</span>
+        <strong>{finding.title}</strong>
+      </div>
+      {finding.resourceId || (finding.trivyRuleIds && finding.trivyRuleIds.length > 0) ? (
+        <div className={styles.deploymentFindingMeta}>
+          {finding.resourceId ? <em>{finding.resourceId}</em> : null}
+          {finding.trivyRuleIds && finding.trivyRuleIds.length > 0 ? (
+            <em>Trivy rules · {finding.trivyRuleIds.join(", ")}</em>
+          ) : null}
+        </div>
       ) : null}
-      <button
-        className={styles.deploymentFindingFixButton}
-        onClick={openTerraformSource}
-        type="button"
-      >
-        <Code2 size={13} aria-hidden="true" />
-        수정
-      </button>
-      <DeploymentFindingAiExplanation finding={finding} />
+      <div className={styles.deploymentFindingActions}>
+        <button
+          className={styles.deploymentFindingFixButton}
+          onClick={openTerraformSource}
+          type="button"
+        >
+          <Code2 size={14} aria-hidden="true" />
+          코드에서 수정
+        </button>
+        <DeploymentFindingAiExplanation finding={finding} />
+      </div>
     </li>
   );
 }

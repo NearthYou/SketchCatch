@@ -55,6 +55,8 @@ test("rebuilt landing uses the official PNG logo with the brand text", () => {
   assert.doesNotMatch(rebuiltLandingSource, /sketchcatch-logo\.svg/);
   assert.match(rebuiltLandingSource, /sketchcatch-logo\.png/);
   assert.match(productEntrySource, />SketchCatch<\/span>/);
+  assert.match(landingStylesSource, /\.brand\s*\{[\s\S]*?gap:\s*7px;/);
+  assert.match(landingStylesSource, /\.brandMark\s*\{[\s\S]*?transform:\s*translateY\(-2px\);/);
 });
 
 test("public brand assets contain only the new PNG logo and favicon", () => {

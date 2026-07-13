@@ -36,7 +36,7 @@
   display: inline-flex;
   min-width: 0;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
   color: #171717;
   font-size: 18px;
   font-weight: 700;
@@ -50,7 +50,7 @@
   height: 24px;
   flex: 0 0 auto;
   object-fit: contain;
-  transform: translateY(-3px);
+  transform: translateY(-2px);
 }
 
 .dashboardNavigation {

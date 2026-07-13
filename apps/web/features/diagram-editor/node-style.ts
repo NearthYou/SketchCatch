@@ -9,7 +9,7 @@ const LEGACY_DEFAULT_BORDER_COLORS = new Set(["#8b98aa", "#2f6db3"]);
 const DASHED_AREA_NODE_TYPES = new Set([
   "aws_region",
   "aws_availability_zone",
-  "aws_autoscaling_group",
+  "aws_security_group",
   "design_region",
   "design_az",
   "design_group",

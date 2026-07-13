@@ -34,6 +34,106 @@ test("normalizes a 56px legacy icon to 48px around its original center", () => {
   assert.deepEqual(result.nodes[0]?.position, { x: 104, y: 84 });
 });
 
+test("normalizes every known legacy ASG Area size to a centered 48px Resource", () => {
+  const fixtures = [
+    { size: { width: 200, height: 130 }, position: { x: 176, y: 121 } },
+    { size: { width: 400, height: 260 }, position: { x: 276, y: 186 } },
+    { size: { width: 320, height: 240 }, position: { x: 236, y: 176 } }
+  ];
+
+  for (const fixture of fixtures) {
+    const result = normalizeDiagramResourceNodeGeometry(
+      makeDiagram(makeResourceNode({
+        position: { x: 100, y: 80 },
+        resourceType: "aws_autoscaling_group",
+        size: fixture.size
+      }))
+    );
+
+    assert.deepEqual(result.nodes[0]?.size, RESOURCE_NODE_DEFAULT_SIZE);
+    assert.deepEqual(result.nodes[0]?.position, fixture.position);
+  }
+});
+
+test("reparents legacy ASG and Security Group children to the nearest real containment Area", () => {
+  const vpc = makeResourceNode({ id: "vpc", resourceType: "aws_vpc", size: { width: 800, height: 600 } });
+  const asg = makeResourceNode({
+    id: "asg",
+    parentAreaNodeId: vpc.id,
+    resourceType: "aws_autoscaling_group",
+    size: { width: 200, height: 130 }
+  });
+  const securityGroup = makeResourceNode({
+    id: "security-group",
+    parentAreaNodeId: vpc.id,
+    resourceType: "aws_security_group",
+    size: { width: 240, height: 180 }
+  });
+  const asgChild = makeResourceNode({ id: "asg-child", parentAreaNodeId: asg.id });
+  const securityGroupChild = makeResourceNode({
+    id: "security-group-child",
+    parentAreaNodeId: securityGroup.id
+  });
+
+  const result = normalizeDiagramResourceNodeGeometry(
+    makeDiagram(vpc, asg, securityGroup, asgChild, securityGroupChild)
+  );
+
+  assert.equal(result.nodes.find((node) => node.id === asgChild.id)?.metadata?.parentAreaNodeId, vpc.id);
+  assert.equal(
+    result.nodes.find((node) => node.id === securityGroupChild.id)?.metadata?.parentAreaNodeId,
+    vpc.id
+  );
+});
+
+test("removes self-referential and cyclic visual-only parent chains", () => {
+  const selfParent = makeResourceNode({
+    id: "self-parent",
+    parentAreaNodeId: "self-parent",
+    resourceType: "aws_security_group",
+    size: { width: 240, height: 180 }
+  });
+  const first = makeResourceNode({
+    id: "first",
+    parentAreaNodeId: "second",
+    resourceType: "aws_security_group",
+    size: { width: 240, height: 180 }
+  });
+  const second = makeResourceNode({
+    id: "second",
+    parentAreaNodeId: "first",
+    resourceType: "aws_security_group",
+    size: { width: 240, height: 180 }
+  });
+  const result = normalizeDiagramResourceNodeGeometry(makeDiagram(selfParent, first, second));
+
+  assert.equal(result.nodes.find((node) => node.id === selfParent.id)?.metadata?.parentAreaNodeId, undefined);
+  assert.equal(result.nodes.find((node) => node.id === first.id)?.metadata?.parentAreaNodeId, undefined);
+  assert.equal(result.nodes.find((node) => node.id === second.id)?.metadata?.parentAreaNodeId, undefined);
+});
+
+test("removes parent assignments that inherit a containment Area cycle", () => {
+  const vpc = makeResourceNode({
+    id: "vpc",
+    parentAreaNodeId: "subnet",
+    resourceType: "aws_vpc",
+    size: { width: 800, height: 600 }
+  });
+  const subnet = makeResourceNode({
+    id: "subnet",
+    parentAreaNodeId: vpc.id,
+    resourceType: "aws_subnet",
+    size: { width: 600, height: 400 }
+  });
+  const instance = makeResourceNode({ id: "instance", parentAreaNodeId: subnet.id });
+
+  const result = normalizeDiagramResourceNodeGeometry(makeDiagram(vpc, subnet, instance));
+
+  assert.equal(result.nodes.find((node) => node.id === vpc.id)?.metadata?.parentAreaNodeId, undefined);
+  assert.equal(result.nodes.find((node) => node.id === subnet.id)?.metadata?.parentAreaNodeId, undefined);
+  assert.equal(result.nodes.find((node) => node.id === instance.id)?.metadata?.parentAreaNodeId, undefined);
+});
+
 test("preserves custom compact nodes and area geometry", () => {
   const compact = makeResourceNode({ id: "compact", size: { width: 80, height: 80 } });
   const area = makeResourceNode({
@@ -71,11 +171,13 @@ function makeDiagram(...nodes: DiagramNode[]): DiagramJson {
 
 function makeResourceNode({
   id = "instance",
+  parentAreaNodeId,
   position = { x: 0, y: 0 },
   resourceType = "aws_instance",
   size = { width: 48, height: 48 }
 }: {
   id?: string;
+  parentAreaNodeId?: string;
   position?: DiagramNode["position"];
   resourceType?: string;
   size?: DiagramNode["size"];
@@ -85,6 +187,7 @@ function makeResourceNode({
     kind: "resource",
     label: id,
     locked: false,
+    ...(parentAreaNodeId ? { metadata: { parentAreaNodeId } } : {}),
     parameters: {
       fileName: "main",
       resourceName: id,

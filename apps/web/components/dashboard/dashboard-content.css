@@ -490,17 +490,25 @@ a.dashboardActivityRow:hover {
   display: flex;
   align-items: end;
   gap: 12px;
-  padding: 18px 0;
-  border-bottom: 1px solid #f0f0f3;
+  padding: 4px 0 18px;
+  border-bottom: 1px solid var(--color-hairline);
+}
+
+.settingsField.projectSortField {
+  min-width: 176px;
+}
+
+.settingsField.projectDeploymentFilterField {
+  min-width: 120px;
 }
 
 .settingsField {
   display: grid;
   min-width: 0;
   gap: 7px;
-  color: #55585f;
-  font-size: 12px;
-  font-weight: 600;
+  color: var(--color-body);
+  font-size: 11px;
+  font-weight: 700;
 }
 
 .dashboardCardGrid {
@@ -536,12 +544,74 @@ a.dashboardActivityRow:hover {
   grid-template-columns: minmax(140px, 42%) minmax(0, 1fr);
 }
 
+.projectCardCompact .projectCardContentLink {
+  grid-template-columns: 1fr;
+}
+
 .projectCardContentLink {
   display: grid;
   min-width: 0;
   color: inherit;
   grid-template-columns: minmax(120px, 40%) minmax(0, 1fr);
   text-decoration: none;
+}
+
+.projectPreview {
+  position: relative;
+  min-width: 0;
+  height: 150px;
+  overflow: hidden;
+  border-bottom: 1px solid #f0f0f3;
+  background-color: #f8fafc;
+  background-image:
+    linear-gradient(rgba(93, 104, 120, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(93, 104, 120, 0.07) 1px, transparent 1px);
+  background-size: 12px 12px;
+}
+
+.projectCardWide .projectPreview {
+  height: 100%;
+  min-height: 148px;
+  border-right: 1px solid #f0f0f3;
+  border-bottom: 0;
+}
+
+.projectArchitecturePreview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.projectArchitectureSvg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.projectArchitectureEdge {
+  stroke: #8f98a6;
+  stroke-linecap: round;
+}
+
+.projectArchitectureNodeBox {
+  fill: rgba(255, 255, 255, 0.96);
+  stroke: #aeb7c4;
+  stroke-width: 1.5;
+}
+
+.projectArchitectureNodeFrame {
+  fill: rgba(237, 241, 247, 0.58);
+  stroke: #a8b2c0;
+  stroke-width: 1.4;
+}
+
+.projectArchitectureNodeAccent {
+  fill: #d9e0e9;
+}
+
+.projectArchitectureEmptyBoard {
+  position: absolute;
+  inset: 0;
 }
 
 .projectCardBody {
@@ -590,15 +660,32 @@ a.dashboardActivityRow:hover {
 }
 
 .projectCardMeta {
-  margin-top: auto;
+  min-width: 0;
+  margin-top: 2px;
   color: #777b84;
-  font-size: 11px;
+  font-size: 9px;
+  line-height: 1.2;
 }
 
 .projectCardMeta span {
-  display: inline-flex;
+  display: flex;
+  min-width: 0;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
+}
+
+.projectCardMeta .dashboardIcon {
+  width: 11px;
+  height: 11px;
+  flex: 0 0 11px;
+}
+
+.projectCardTimestamp {
+  min-width: 0;
+  overflow: hidden;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .projectCardWithActions {
@@ -632,27 +719,49 @@ a.dashboardActivityRow:hover {
   top: 40px;
   right: 0;
   display: grid;
-  width: 190px;
+  width: 176px;
   border: 1px solid #dcdee0;
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 6px;
   background: #ffffff;
-  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 16px 36px rgba(23, 23, 23, 0.16);
 }
 
 .projectCardActionMenuItem,
 .projectCardActionMenuStatus {
   display: flex;
-  min-height: 38px;
+  width: 100%;
+  min-height: 40px;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   border: 0;
-  border-radius: 6px;
+  border-radius: 7px;
   padding: 0 10px;
   background: transparent;
   color: #171717;
+  font: inherit;
   font-size: 12px;
+  font-weight: 650;
+  line-height: 1.35;
   text-decoration: none;
+}
+
+.projectCardActionMenuItem {
+  cursor: pointer;
+  text-align: left;
+}
+
+.projectCardActionMenuItem .dashboardIcon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+}
+
+.projectCardActionMenuItem span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .projectCardActionMenuItem:hover {
@@ -661,6 +770,11 @@ a.dashboardActivityRow:hover {
 
 .projectCardActionMenuItemDanger {
   color: #b42318;
+}
+
+.projectCardActionMenuItemDanger:hover,
+.projectCardActionMenuItemDanger:focus-visible {
+  background: #fff3f1;
 }
 
 .projectDeleteDialogOverlay {

@@ -50,6 +50,8 @@ export type RuntimeEnv = {
   naverOauthClientSecret: string | undefined;
   nodeEnv?: string | undefined;
   oauthRedirectBaseUrl: string | undefined;
+  projectAssetStorageBackend?: string | undefined;
+  projectAssetStorageRoot?: string | undefined;
   redisUrl?: string | undefined;
   s3BucketName: string | undefined;
   sketchcatchAwsCallerPrincipalArn: string | undefined;
@@ -118,6 +120,8 @@ export function getRuntimeEnv(): RuntimeEnv {
     naverOauthClientSecret: process.env.NAVER_OAUTH_CLIENT_SECRET,
     nodeEnv: process.env.NODE_ENV,
     oauthRedirectBaseUrl: process.env.OAUTH_REDIRECT_BASE_URL,
+    projectAssetStorageBackend: process.env.PROJECT_ASSET_STORAGE_BACKEND,
+    projectAssetStorageRoot: process.env.PROJECT_ASSET_STORAGE_ROOT,
     redisUrl: process.env.REDIS_URL,
     s3BucketName: process.env.S3_BUCKET_NAME,
     sketchcatchAwsCallerPrincipalArn: process.env.SKETCHCATCH_AWS_CALLER_PRINCIPAL_ARN,

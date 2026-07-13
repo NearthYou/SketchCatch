@@ -13,7 +13,7 @@ test("buildResourceMetadataRows exposes editable resource identity and read-only
       {
         editable: true,
         key: "resourceName",
-        label: "Resource name",
+        label: "Terraform resource name",
         value: "main_vpc"
       },
       {

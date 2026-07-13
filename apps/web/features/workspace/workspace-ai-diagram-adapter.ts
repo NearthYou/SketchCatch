@@ -16,15 +16,19 @@ import {
   getDefaultResourceDefinitionByResourceType,
   getResourceDefinitionByTerraform
 } from "@sketchcatch/types/resource-definitions";
-import { isAreaNode } from "../diagram-editor/area-nodes";
+import { isAreaNode, isContainmentAreaNode } from "../diagram-editor/area-nodes";
 import { BOARD_DEFAULT_EDGE_COLOR } from "../diagram-editor/constants";
 import { createDiagramNodeFromPayload } from "../diagram-editor/diagram-utils";
 import {
   doesOrthogonalRouteCrossResource,
   getObstacleSafeEdgeHandles
 } from "../diagram-editor/obstacle-safe-edge-routing";
-import { RESOURCE_NODE_DEFAULT_SIZE } from "../diagram-editor/resource-node-geometry";
+import {
+  normalizeDiagramResourceNodeGeometry,
+  RESOURCE_NODE_DEFAULT_SIZE
+} from "../diagram-editor/resource-node-geometry";
 import { getResourceNodeVisualBounds } from "../diagram-editor/resource-node-visual-footprint";
+import { fitSecurityGroupScopesToTargets } from "../diagram-editor/security-group-scope";
 import { resourceCatalog } from "../resource-settings/catalog";
 import { addServerStorageAreaNodes } from "./server-storage-board-layout";
 
@@ -102,7 +106,6 @@ const COMPACT_AREA_MIN_SIZES: Readonly<Record<string, DiagramNode["size"]>> = {
 };
 const AREA_PARENT_EDGE_LABELS = new Set(["contains", "hosts"]);
 const TERRAFORM_REFERENCE_ATTRIBUTE_SUFFIXES = ["id", "arn", "name", "execution_arn"] as const;
-const SECURITY_GROUP_REFERENCE_KEYS = ["securityGroupIds", "vpcSecurityGroupIds", "securityGroupId"] as const;
 const RESOURCE_ITEMS_BY_DEFINITION_ID = new Map(resourceCatalog.map((resourceItem) => [resourceItem.id, resourceItem]));
 const RESOURCE_ITEMS_BY_TERRAFORM_TYPE = createResourceItemsByTerraformType(resourceCatalog);
 const EDGE_STYLE_LABEL_PATTERNS: ReadonlyArray<{
@@ -197,10 +200,11 @@ export function convertArchitectureJsonToDiagramJson(architectureJson: Architect
     applyDiagramResourceNameConventions(addServerStorageAreaNodes(convertedNodes)),
     architectureJson.edges
   );
+  const laidOutNodes = resolveSiblingNodeCollisions(
+    fitAreaNodesToChildren(applyReadableTopologyLayout(preparedNodes))
+  );
   const nodes = applyDiagramLayerOrder(
-    fitAreaNodesToChildren(
-      resolveSiblingNodeCollisions(fitAreaNodesToChildren(applyReadableTopologyLayout(preparedNodes)))
-    )
+    fitAreaNodesToChildren(fitSecurityGroupScopesToTargets(laidOutNodes))
   );
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
 
@@ -596,12 +600,12 @@ function isConfigurationDependencyRoutingType(resourceType: string): boolean {
 }
 
 export function normalizeDiagramJsonConventions(diagramJson: DiagramJson): DiagramJson {
+  const preparedNodes = normalizeDiagramResourceNodeGeometry(diagramJson).nodes;
+  const laidOutNodes = resolveSiblingNodeCollisions(
+    fitAreaNodesToChildren(applyReadableTopologyLayout(preparedNodes))
+  );
   const nodes = applyDiagramLayerOrder(
-    fitAreaNodesToChildren(
-      resolveSiblingNodeCollisions(
-        fitAreaNodesToChildren(applyReadableTopologyLayout(diagramJson.nodes))
-      )
-    )
+    fitAreaNodesToChildren(fitSecurityGroupScopesToTargets(laidOutNodes))
   );
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
 
@@ -695,7 +699,7 @@ function shouldRenderDiagramEdge(
     targetId: edge.targetNodeId
   };
 
-  return !isAreaContainmentEdgeLabel(edge.label) && !isAreaContainmentRenderEdge(architectureEdge, sourceNode, targetNode, nodeById);
+  return !isAreaContainmentRenderEdge(architectureEdge, sourceNode, targetNode, nodeById);
 }
 
 function getDiagramEdgeStyleForExistingEdge(
@@ -775,19 +779,20 @@ function shouldRenderArchitectureEdge(
   return !isAreaContainmentRenderEdge(edge, sourceNode, targetNode, nodeById);
 }
 
+// contains/hosts는 실제 containment Area가 source일 때만 화면 edge 대신 parent 관계로 숨깁니다.
 function isAreaContainmentRenderEdge(
   edge: ArchitectureJson["edges"][number],
   sourceNode: DiagramNode,
   targetNode: DiagramNode,
   nodeById: ReadonlyMap<string, DiagramNode>
 ): boolean {
-  if (isAreaParentEdge(edge)) {
+  if (isAreaParentEdge(edge) && isContainmentAreaNode(sourceNode)) {
     return true;
   }
 
   return (
-    (isAreaDiagramNode(sourceNode) && hasAreaAncestor(targetNode, sourceNode.id, nodeById)) ||
-    (isAreaDiagramNode(targetNode) && hasAreaAncestor(sourceNode, targetNode.id, nodeById))
+    (isContainmentAreaNode(sourceNode) && hasAreaAncestor(targetNode, sourceNode.id, nodeById)) ||
+    (isContainmentAreaNode(targetNode) && hasAreaAncestor(sourceNode, targetNode.id, nodeById))
   );
 }
 
@@ -1369,7 +1374,6 @@ function applyAreaParentMetadata(
 
   return nodes.map((node) => {
     const parentAreaNodeId =
-      findSecurityBoundaryParentAreaNodeId(node, nodeById) ??
       node.metadata?.parentAreaNodeId ??
       findConfigParentAreaNodeId(node, nodeById) ??
       findEdgeParentAreaNodeId(node, nodeById, edges) ??
@@ -2177,61 +2181,6 @@ function getAreaChildPadding(child: DiagramNode): number {
   return isAreaDiagramNode(child) ? AREA_CHILD_PADDING : RESOURCE_AREA_INSET_PADDING;
 }
 
-function findSecurityBoundaryParentAreaNodeId(
-  node: DiagramNode,
-  nodeById: ReadonlyMap<string, DiagramNode>
-): string | undefined {
-  if (isSecurityGroupAreaNode(node)) {
-    return findProtectedSubnetAreaNodeId(node, nodeById);
-  }
-
-  const securityGroupNode = findReferencedSecurityGroupAreaNodes(node, nodeById)[0];
-
-  return securityGroupNode?.id;
-}
-
-function findProtectedSubnetAreaNodeId(
-  securityGroupNode: DiagramNode,
-  nodeById: ReadonlyMap<string, DiagramNode>
-): string | undefined {
-  for (const node of nodeById.values()) {
-    if (node.id === securityGroupNode.id || !referencesSecurityGroup(node, securityGroupNode, nodeById)) {
-      continue;
-    }
-
-    const subnetNode = findConfigAreaNodeByParameter(node, "subnetId", nodeById);
-
-    if (subnetNode && subnetNode.id !== securityGroupNode.id) {
-      return subnetNode.id;
-    }
-  }
-
-  return undefined;
-}
-
-function referencesSecurityGroup(
-  node: DiagramNode,
-  securityGroupNode: DiagramNode,
-  nodeById: ReadonlyMap<string, DiagramNode>
-): boolean {
-  return getSecurityGroupReferenceValues(node).some((referenceValue) => {
-    const referencedNode = findReferencedNode(referenceValue, nodeById);
-
-    return referencedNode?.id === securityGroupNode.id;
-  });
-}
-
-function findReferencedSecurityGroupAreaNodes(
-  node: DiagramNode,
-  nodeById: ReadonlyMap<string, DiagramNode>
-): DiagramNode[] {
-  return getSecurityGroupReferenceValues(node)
-    .map((referenceValue) => findReferencedNode(referenceValue, nodeById))
-    .filter((referencedNode): referencedNode is DiagramNode => {
-      return referencedNode !== undefined && isSecurityGroupAreaNode(referencedNode);
-    });
-}
-
 function findConfigParentAreaNodeId(
   node: DiagramNode,
   nodeById: ReadonlyMap<string, DiagramNode>
@@ -2353,6 +2302,7 @@ function normalizeReferenceValue(value: string): string {
   return value.trim().replace(/^\$\{(.+)\}$/u, "$1");
 }
 
+// SG visual scope는 contains edge가 있어도 persisted parent 후보로 사용하지 않습니다.
 function findEdgeParentAreaNodeId(
   node: DiagramNode,
   nodeById: ReadonlyMap<string, DiagramNode>,
@@ -2365,7 +2315,7 @@ function findEdgeParentAreaNodeId(
 
     const sourceNode = nodeById.get(edge.sourceId);
 
-    if (sourceNode && sourceNode.id !== node.id && isAreaDiagramNode(sourceNode)) {
+    if (sourceNode && sourceNode.id !== node.id && isContainmentAreaNode(sourceNode)) {
       return sourceNode.id;
     }
   }
@@ -2383,10 +2333,6 @@ function isAreaContainmentEdgeLabel(label: string | undefined): boolean {
 
 function isAreaDiagramNode(node: DiagramNode): boolean {
   return isAreaNode(node);
-}
-
-function isSecurityGroupAreaNode(node: DiagramNode): boolean {
-  return node.kind === "resource" && (node.parameters?.resourceType ?? node.type) === "aws_security_group";
 }
 
 function getDiagramNodeResourceType(node: DiagramNode | undefined): string {
@@ -2409,28 +2355,10 @@ function getStringParameterValue(node: DiagramNode, key: string): string | undef
   return typeof value === "string" && value.trim().length > 0 ? value : undefined;
 }
 
-function getSecurityGroupReferenceValues(node: DiagramNode): string[] {
-  return SECURITY_GROUP_REFERENCE_KEYS.flatMap((key) => getStringParameterValues(node, key));
-}
-
 function getStringConfigValue(config: ResourceConfig, key: string): string | undefined {
   const value = config[key];
 
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
-}
-
-function getStringParameterValues(node: DiagramNode, key: string): string[] {
-  const value = node.parameters?.values[key];
-
-  if (typeof value === "string" && value.trim().length > 0) {
-    return [value];
-  }
-
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  return value.filter(isString).filter((item) => item.trim().length > 0);
 }
 
 function getConvertibleResourceNodeParameters(node: DiagramNode): DiagramNodeParameters | null {
@@ -2604,6 +2532,7 @@ function isRecord(value: unknown): value is ResourceConfig {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+// SG rule 입력 배열에서 문자열 항목만 AWS ingress 값 후보로 남깁니다.
 function isString(value: unknown): value is string {
   return typeof value === "string";
 }
