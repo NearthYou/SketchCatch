@@ -75,9 +75,7 @@ function toTerraformFingerprintParameters(
   return {
     ...parameters,
     values: Object.fromEntries(
-      Object.entries(parameters.values ?? {}).filter(
-        ([key]) => !/^diagram(?:_|[A-Z])/.test(key)
-      )
+      Object.entries(parameters.values ?? {}).filter(([key]) => !/^diagram(?:_|[A-Z])/.test(key))
     )
   };
 }
@@ -127,7 +125,13 @@ export function createTerraformFilesFromGeneratedCode(
   }
   const nodeFileByAddress = new Map(
     diagramJson.nodes
-      .map((node) => [toNodeTerraformAddress(node), normalizeTerraformFileName(node.parameters?.fileName)] as const)
+      .map(
+        (node) =>
+          [
+            toNodeTerraformAddress(node),
+            normalizeTerraformFileName(node.parameters?.fileName)
+          ] as const
+      )
       .filter((entry): entry is readonly [string, string] => Boolean(entry[0]))
   );
   const generatedBlocks = parseTerraformBlocks("main.tf", generatedCode);
@@ -158,15 +162,18 @@ export function mergeGeneratedTerraformFiles(
   preservedResourceAddresses: ReadonlySet<string>
 ): TerraformVirtualFile[] {
   const generatedAddresses = new Set(
-    generatedFiles.flatMap((file) => parseTerraformBlocks(file.fileName, file.code).map((block) => block.address))
+    generatedFiles.flatMap((file) =>
+      parseTerraformBlocks(file.fileName, file.code).map((block) => block.address)
+    )
   );
   const staleManagedAddresses = parseTerraformFiles(existingFiles)
     .map((block) => block.address)
-    .filter((address) =>
-      !generatedAddresses.has(address) && !preservedResourceAddresses.has(address)
+    .filter(
+      (address) => !generatedAddresses.has(address) && !preservedResourceAddresses.has(address)
     );
-  const nextFiles = removeTerraformBlocksByAddress(existingFiles, staleManagedAddresses)
-    .map((file) => ({ ...file }));
+  const nextFiles = removeTerraformBlocksByAddress(existingFiles, staleManagedAddresses).map(
+    (file) => ({ ...file })
+  );
 
   for (const generatedFile of generatedFiles) {
     const generatedBlocks = parseTerraformBlocks(generatedFile.fileName, generatedFile.code);
@@ -187,8 +194,9 @@ export function mergeGeneratedTerraformFiles(
       for (let fileIndex = 0; fileIndex < nextFiles.length; fileIndex += 1) {
         const file = nextFiles[fileIndex];
         if (!file) continue;
-        const existingBlock = parseTerraformBlocks(file.fileName, file.code)
-          .find((block) => block.address === generatedBlock.address);
+        const existingBlock = parseTerraformBlocks(file.fileName, file.code).find(
+          (block) => block.address === generatedBlock.address
+        );
         if (!existingBlock) continue;
 
         nextFiles[fileIndex] = {
@@ -205,7 +213,10 @@ export function mergeGeneratedTerraformFiles(
           nextFiles.push({ fileName: generatedFile.fileName, code: generatedBlock.code });
         } else {
           const target = nextFiles[targetIndex]!;
-          nextFiles[targetIndex] = { ...target, code: appendTerraformBlock(target.code, generatedBlock.code) };
+          nextFiles[targetIndex] = {
+            ...target,
+            code: appendTerraformBlock(target.code, generatedBlock.code)
+          };
         }
       }
     }
@@ -214,17 +225,43 @@ export function mergeGeneratedTerraformFiles(
   return nextFiles.sort((left, right) => compareTerraformFileNames(left.fileName, right.fileName));
 }
 
+export function createTerraformFilesForRefresh({
+  baselineFiles,
+  currentFiles,
+  generatedFiles,
+  preserveExistingSource,
+  preservedResourceAddresses
+}: {
+  readonly baselineFiles: readonly TerraformVirtualFile[];
+  readonly currentFiles: readonly TerraformVirtualFile[];
+  readonly generatedFiles: readonly TerraformVirtualFile[];
+  readonly preserveExistingSource: boolean;
+  readonly preservedResourceAddresses: ReadonlySet<string>;
+}): TerraformVirtualFile[] {
+  if (!preserveExistingSource && preservedResourceAddresses.size === 0) {
+    return generatedFiles.map((file) => ({ ...file }));
+  }
+
+  return mergeGeneratedTerraformFiles(
+    preserveExistingSource ? currentFiles : baselineFiles,
+    generatedFiles,
+    preservedResourceAddresses
+  );
+}
+
 export function getTerraformAddressesRemovedFromDiagram(
   previousAddresses: ReadonlySet<string>,
   currentAddresses: ReadonlySet<string>,
   preservedResourceAddresses: ReadonlySet<string>
 ): string[] {
-  return Array.from(previousAddresses).filter((address) =>
-    !currentAddresses.has(address) && !preservedResourceAddresses.has(address)
+  return Array.from(previousAddresses).filter(
+    (address) => !currentAddresses.has(address) && !preservedResourceAddresses.has(address)
   );
 }
 
-export function getDiagramTerraformAddresses(diagramJson: DiagramEditorPanelContext["diagram"]): Set<string> {
+export function getDiagramTerraformAddresses(
+  diagramJson: DiagramEditorPanelContext["diagram"]
+): Set<string> {
   const addresses = new Set<string>();
 
   for (const node of diagramJson.nodes) {
@@ -285,8 +322,12 @@ export function getTerraformFileOptions(
 }
 
 export function compareTerraformFileNames(left: string, right: string): number {
-  const leftStandardIndex = TERRAFORM_FILE_SORT_ORDER.indexOf(left as (typeof TERRAFORM_FILE_SORT_ORDER)[number]);
-  const rightStandardIndex = TERRAFORM_FILE_SORT_ORDER.indexOf(right as (typeof TERRAFORM_FILE_SORT_ORDER)[number]);
+  const leftStandardIndex = TERRAFORM_FILE_SORT_ORDER.indexOf(
+    left as (typeof TERRAFORM_FILE_SORT_ORDER)[number]
+  );
+  const rightStandardIndex = TERRAFORM_FILE_SORT_ORDER.indexOf(
+    right as (typeof TERRAFORM_FILE_SORT_ORDER)[number]
+  );
 
   if (leftStandardIndex !== -1 || rightStandardIndex !== -1) {
     if (leftStandardIndex === -1) {
@@ -331,7 +372,10 @@ function normalizeTerraformCodeAfterBlockRemoval(terraformCode: string): string 
   return terraformCode.replace(/(?:\r?\n){3,}/g, "\n\n").trim();
 }
 
-export function getTerraformFileCode(files: readonly TerraformVirtualFile[], fileName: string): string {
+export function getTerraformFileCode(
+  files: readonly TerraformVirtualFile[],
+  fileName: string
+): string {
   return files.find((file) => file.fileName === fileName)?.code ?? "";
 }
 
@@ -342,7 +386,9 @@ export function combineTerraformFiles(files: readonly TerraformVirtualFile[]): s
     .join("\n\n");
 }
 
-export function parseTerraformFiles(files: readonly TerraformVirtualFile[]): TerraformBlockLocation[] {
+export function parseTerraformFiles(
+  files: readonly TerraformVirtualFile[]
+): TerraformBlockLocation[] {
   return files.flatMap((file) => parseTerraformBlocks(file.fileName, file.code));
 }
 
@@ -447,8 +493,7 @@ function getNodeTerraformAddressCandidates(node: DiagramNode | null): string[] {
 
   const parameterAddress = toNodeTerraformAddress(node);
   const displayAddress = toNodeDisplayTerraformAddress(node);
-  const hasMatchingResourceType =
-    node.parameters?.resourceType?.trim() === node.type.trim();
+  const hasMatchingResourceType = node.parameters?.resourceType?.trim() === node.type.trim();
   const candidates =
     node.parameters?.terraformBlockType === "data" || hasMatchingResourceType
       ? [
@@ -582,7 +627,7 @@ function countBraceDelta(line: string): number {
       continue;
     }
 
-    if (character === "\"") {
+    if (character === '"') {
       inString = !inString;
       continue;
     }

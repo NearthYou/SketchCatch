@@ -40,9 +40,7 @@ const workspaceRightPanelTypesSource = readWorkspaceFile("workspace-right-panel.
 const projectDraftManagerSource = readWorkspaceFile("ProjectWorkspaceDraftManager.tsx");
 const workspaceDraftManagerSource = readWorkspaceFile("WorkspaceDraftManager.tsx");
 const stylesSource = readWorkspaceFile("workspace.module.css");
-const diagramEditorStylesSource = readFeatureFile(
-  "../diagram-editor/diagram-editor.module.css"
-);
+const diagramEditorStylesSource = readFeatureFile("../diagram-editor/diagram-editor.module.css");
 
 test("deploy opens a full-screen console instead of rendering deployment inside the right panel", () => {
   const deploymentConsoleIndex = componentSource.indexOf(
@@ -76,7 +74,10 @@ test("deploy opens a full-screen console instead of rendering deployment inside 
   assert.match(componentSource, /setIsDeploymentConsoleOpen\(true\);/);
   assert.match(pendingDeploymentConsoleBranch, /setIsDeploymentConsoleOpen\(true\);/);
   assert.doesNotMatch(pendingDeploymentConsoleBranch, /context\.setRightPanelOpen\(false\);/);
-  assert.match(deploymentPanelSource, /const isDeploymentOverlayOpen = fullScreenOnly \|\| isDeploymentExpanded;/);
+  assert.match(
+    deploymentPanelSource,
+    /const isDeploymentOverlayOpen = fullScreenOnly \|\| isDeploymentExpanded;/
+  );
   assert.match(deploymentPanelSource, /\{isDeploymentOverlayOpen \? \(/);
   assert.match(deploymentPanelSource, /size=\{isDeploymentOverlayOpen \? "large" : "regular"\}/);
   assert.match(fullscreenHostRule, /\bdisplay:\s*contents;/);
@@ -131,7 +132,10 @@ test("right panel width stays locked after deployment leaves the panel", () => {
 });
 
 test("workspace managers restore the saved DiagramJson through one identity-preserving boundary", () => {
-  assert.match(projectDraftManagerSource, /restoreSavedDiagram\(loadedDraft\.diagramJson, EMPTY_DIAGRAM\)/);
+  assert.match(
+    projectDraftManagerSource,
+    /restoreSavedDiagram\(loadedDraft\.diagramJson, EMPTY_DIAGRAM\)/
+  );
   assert.match(
     workspaceDraftManagerSource,
     /restoreSavedDiagram\(storedLocalDraft\?\.diagramJson, EMPTY_DIAGRAM\)/
@@ -232,7 +236,7 @@ test("workspace shell follows DESIGN.md neutral surface and typography tokens", 
     rightPanelShellRule,
     rightPanelModeBarRule,
     rightPanelViewRule,
-    panelModeTextButtonActiveRule,
+    panelModeTextButtonActiveRule
   ]) {
     assert.doesNotMatch(shellRule, oldLandingAccentTokens);
   }
@@ -275,14 +279,22 @@ test("workspace internal panels keep only the DESIGN.md surface layer", () => {
     "rightPanelShell",
     finalPolishIndex
   );
-  const polishedTerraformPanelRule = getLastCssRuleAfter(stylesSource, "terraformPanel", finalPolishIndex);
+  const polishedTerraformPanelRule = getLastCssRuleAfter(
+    stylesSource,
+    "terraformPanel",
+    finalPolishIndex
+  );
   const polishedIssuesPanelRule = getCssRule(terraformIssuesStylesSource, "issuesPanel");
   const polishedPanelModeTextButtonActiveRule = getLastCssRuleAfter(
     stylesSource,
     "panelModeTextButtonActive",
     finalPolishIndex
   );
-  const polishedAiPanelHeaderRule = getLastCssRuleAfter(stylesSource, "aiPanelHeader", finalPolishIndex);
+  const polishedAiPanelHeaderRule = getLastCssRuleAfter(
+    stylesSource,
+    "aiPanelHeader",
+    finalPolishIndex
+  );
   const polishedDeploymentHeaderRule = getLastCssRuleAfter(
     stylesSource,
     "deploymentHeader",
@@ -323,13 +335,21 @@ test("workspace internal panels keep only the DESIGN.md surface layer", () => {
     "terraformPreviewButton",
     finalPolishIndex
   );
-  const polishedAiPrimaryButtonRule = getLastCssRuleAfter(stylesSource, "aiPrimaryButton", finalPolishIndex);
+  const polishedAiPrimaryButtonRule = getLastCssRuleAfter(
+    stylesSource,
+    "aiPrimaryButton",
+    finalPolishIndex
+  );
   const polishedDeploymentPrimaryButtonRule = getLastCssRuleAfter(
     stylesSource,
     "deploymentPrimaryButton",
     finalPolishIndex
   );
-  const polishedAiChatLauncherRule = getLastCssRuleAfter(stylesSource, "aiChatLauncher", finalPolishIndex);
+  const polishedAiChatLauncherRule = getLastCssRuleAfter(
+    stylesSource,
+    "aiChatLauncher",
+    finalPolishIndex
+  );
   const polishedAiChatDockRule = getLastCssRuleAfter(stylesSource, "aiChatDock", finalPolishIndex);
   const polishedAiChatTranscriptRule = getLastCssRuleAfter(
     stylesSource,
@@ -366,15 +386,27 @@ test("workspace internal panels keep only the DESIGN.md surface layer", () => {
   assert.match(polishedDeploymentExpandedShellRule, /\bbackground:\s*var\(--workspace-surface,/);
   assert.match(polishedDeploymentExpandedShellRule, /\bborder:\s*1px solid var\(--workspace-line,/);
   assert.match(polishedDeploymentExpandedShellRule, /\bfont-family:\s*var\(--workspace-font,/);
-  assert.match(polishedDeploymentExpandedBodyRule, /\bbackground:\s*var\(--workspace-surface-muted,/);
+  assert.match(
+    polishedDeploymentExpandedBodyRule,
+    /\bbackground:\s*var\(--workspace-surface-muted,/
+  );
   assert.match(polishedDeploymentStageStepperRule, /\bbackground:\s*var\(--workspace-surface,/);
   assert.match(polishedDeploymentStageStepperRule, /\bborder:\s*1px solid var\(--workspace-line,/);
   assert.match(polishedDeploymentStageDotRule, /\bbackground:\s*var\(--workspace-surface,/);
   assert.match(polishedDeploymentStageDotRule, /\bborder:\s*1px solid var\(--workspace-line,/);
   assert.match(polishedDeploymentStageActionCardRule, /\bbackground:\s*var\(--workspace-surface,/);
-  assert.match(polishedDeploymentStageActionCardRule, /\bborder:\s*1px solid var\(--workspace-line,/);
-  assert.match(polishedDeploymentStageSummaryPanelRule, /\bbackground:\s*var\(--workspace-surface-muted,/);
-  assert.match(polishedDeploymentStageSummaryPanelRule, /\bborder:\s*1px solid var\(--workspace-line,/);
+  assert.match(
+    polishedDeploymentStageActionCardRule,
+    /\bborder:\s*1px solid var\(--workspace-line,/
+  );
+  assert.match(
+    polishedDeploymentStageSummaryPanelRule,
+    /\bbackground:\s*var\(--workspace-surface-muted,/
+  );
+  assert.match(
+    polishedDeploymentStageSummaryPanelRule,
+    /\bborder:\s*1px solid var\(--workspace-line,/
+  );
   assert.match(polishedTerraformPreviewButtonRule, /\bcolor:\s*var\(--workspace-text,/);
   assert.match(polishedAiPrimaryButtonRule, /\bbackground:\s*var\(--workspace-accent,/);
   assert.match(polishedAiPrimaryButtonRule, /\bborder-color:\s*var\(--workspace-accent,/);
@@ -419,7 +451,7 @@ test("workspace internal panels keep only the DESIGN.md surface layer", () => {
     polishedAiChatTranscriptRule,
     polishedAiChatSendButtonRule,
     polishedIconButtonActiveRule,
-    polishedTextButtonActiveHoverRule,
+    polishedTextButtonActiveHoverRule
   ]) {
     assert.doesNotMatch(polishedRule, legacyPanelTokens);
   }
@@ -441,14 +473,8 @@ test("deployment panel gates remote content behind explicit availability", () =>
     "canLoadDeploymentData(deploymentAvailability)",
     contentIndex
   );
-  const setupIndex = directDeploymentSource.indexOf(
-    "{renderSetupSection()}",
-    availabilityIndex
-  );
-  const historyIndex = directDeploymentSource.indexOf(
-    "{renderHistoryView()}",
-    setupIndex
-  );
+  const setupIndex = directDeploymentSource.indexOf("{renderSetupSection()}", availabilityIndex);
+  const historyIndex = directDeploymentSource.indexOf("{renderHistoryView()}", setupIndex);
   const projectGateIndex = directDeploymentSource.indexOf(
     "프로젝트로 저장 후 배포할 수 있습니다",
     historyIndex
@@ -459,7 +485,10 @@ test("deployment panel gates remote content behind explicit availability", () =>
   assert.ok(setupIndex > availabilityIndex);
   assert.ok(historyIndex > setupIndex);
   assert.ok(projectGateIndex > historyIndex);
-  assert.match(deploymentShellSource, /className=\{styles\.deploymentPanelContent\}>\{screenContent\}/);
+  assert.match(
+    deploymentShellSource,
+    /className=\{styles\.deploymentPanelContent\}>\{screenContent\}/
+  );
   assert.doesNotMatch(deploymentPanelSource, /className=\{styles\.deploymentModeSwitch\}/);
 });
 
@@ -517,13 +546,10 @@ test("simulation opens beside Deploy and remains available in the collapsed shor
   const deployIndex = modeBarSource.indexOf("<span>Deploy</span>");
   const simulationIndex = modeBarSource.indexOf("<span>시뮬레이션</span>");
   const collapsedPanelIndex = componentSource.indexOf(
-    '<aside className={styles.collapsedRightPanel}'
+    "<aside className={styles.collapsedRightPanel}"
   );
   const collapsedPanelEndIndex = componentSource.indexOf("</aside>", collapsedPanelIndex);
-  const collapsedPanelSource = componentSource.slice(
-    collapsedPanelIndex,
-    collapsedPanelEndIndex
-  );
+  const collapsedPanelSource = componentSource.slice(collapsedPanelIndex, collapsedPanelEndIndex);
 
   assert.ok(deployIndex > -1);
   assert.ok(simulationIndex > deployIndex);
@@ -537,7 +563,7 @@ test("simulation opens beside Deploy and remains available in the collapsed shor
 
 test("reverse engineering is not reachable from persistent right panel toggles", () => {
   const collapsedPanelIndex = componentSource.indexOf(
-    '<aside className={styles.collapsedRightPanel}'
+    "<aside className={styles.collapsedRightPanel}"
   );
   const collapsedPanelEndIndex = componentSource.indexOf("</aside>", collapsedPanelIndex);
   const modeToggleIndex = componentSource.indexOf("className={styles.rightPanelModeBar}");
@@ -593,7 +619,10 @@ test("workspace AI opens from a floating chat dock instead of the right panel", 
 });
 
 test("resource workspace omits the decorative list toolbar", () => {
-  const resourceWorkspacePanelRule = getCssRule(resourceWorkspaceStylesSource, "resourceWorkspacePanel");
+  const resourceWorkspacePanelRule = getCssRule(
+    resourceWorkspaceStylesSource,
+    "resourceWorkspacePanel"
+  );
   const resourceListPanelRule = getCssRule(resourceWorkspaceStylesSource, "resourceListPanel");
 
   assert.doesNotMatch(resourceListSource, /className=\{styles\.resourceSectionToolbar\}/);
@@ -612,7 +641,10 @@ test("resource detail back action sits inside the detail view", () => {
     'aria-label="Resource 목록으로 돌아가기"',
     settingsPanelIndex
   );
-  const parameterPanelIndex = resourceWorkspaceSource.indexOf("<ParameterInputPanel", settingsPanelIndex);
+  const parameterPanelIndex = resourceWorkspaceSource.indexOf(
+    "<ParameterInputPanel",
+    settingsPanelIndex
+  );
   const settingsPanelRule = getCssRule(resourceWorkspaceStylesSource, "resourceSettingsPanel");
   const settingsHeaderRule = getCssRule(resourceWorkspaceStylesSource, "resourceSettingsHeader");
 
@@ -675,7 +707,10 @@ test("terraform issue fix cards omit procedural apply steps", () => {
 });
 
 test("workspace AI saves accepted generated and patched diagrams immediately", () => {
-  assert.match(projectDraftManagerSource, /onDiagramSaveRequest=\{\(\) => flushDraftToServer\("manual"\)\}/);
+  assert.match(
+    projectDraftManagerSource,
+    /onDiagramSaveRequest=\{\(\) => flushDraftToServer\("manual"\)\}/
+  );
   assert.match(workspaceDraftManagerSource, /onDiagramSaveRequest=\{saveCurrentDraftLocally\}/);
   assert.match(diagramEditorSource, /saveDiagramNow:\s*onDiagramSaveRequest/);
   assert.match(aiChatDockSource, /context\.saveDiagramNow\?\.\(\)/);
@@ -733,7 +768,10 @@ test("workspace AI chat keeps the floating dock width without prompt guide chips
 });
 
 test("workspace AI chat does not submit while Korean IME text is still composing", () => {
-  assert.match(aiChatDockSource, /composerTextareaRef\s*=\s*useRef<HTMLTextAreaElement \| null>\(null\)/);
+  assert.match(
+    aiChatDockSource,
+    /composerTextareaRef\s*=\s*useRef<HTMLTextAreaElement \| null>\(null\)/
+  );
   assert.match(aiChatDockSource, /composerTextareaRef\.current\?\.value \?\? composerValue/);
   assert.match(aiChatDockSource, /event\.nativeEvent\.isComposing/);
   assert.match(aiChatDockSource, /ref=\{composerTextareaRef\}/);
@@ -751,8 +789,14 @@ test("workspace AI chat blocks empty draft requests at the final chat boundary",
 
 test("workspace AI chat disables previously submitted suggestion choices", () => {
   assert.match(aiChatDockSource, /readonly selectedSuggestions\?: readonly string\[\];/);
-  assert.match(aiChatDockSource, /markChatMessageSuggestionsSelected\(messages, suggestionSelection\)/);
-  assert.match(aiChatDockSource, /const hasSubmittedSuggestion = submittedSuggestions\.length > 0;/);
+  assert.match(
+    aiChatDockSource,
+    /markChatMessageSuggestionsSelected\(messages, suggestionSelection\)/
+  );
+  assert.match(
+    aiChatDockSource,
+    /const hasSubmittedSuggestion = submittedSuggestions\.length > 0;/
+  );
   assert.match(aiChatDockSource, /disabled=\{isSuggestionDisabled\}/);
   assert.match(aiChatDockSource, /hasSubmittedSuggestion \|\|/);
   assert.match(aiChatDockSource, /candidate\.selectedSuggestions === undefined/);
@@ -768,7 +812,10 @@ test("workspace AI chat gates free-form prompts before diagram generation or pat
   const chatActionIndex = handleUserMessageBody.indexOf("const chatAction");
 
   assert.match(aiChatDockSource, /classifyWorkspaceAiChatPrompt/);
-  assert.match(handleUserMessageBody, /appendAssistantMessage\(\s*"question",\s*createWorkspaceAiPromptGateMessage/);
+  assert.match(
+    handleUserMessageBody,
+    /appendAssistantMessage\(\s*"question",\s*createWorkspaceAiPromptGateMessage/
+  );
   assert.ok(gateIndex >= 0);
   assert.ok(gateIndex < pendingPreviewIndex);
   assert.ok(gateIndex < chatActionIndex);
@@ -801,10 +848,16 @@ test("terraform code editor no longer opens resource parameter settings from hig
 
 test("terraform view embeds issues below code with a resizable split instead of a separate Issues tab", () => {
   const modeBarStartIndex = componentSource.indexOf("className={styles.rightPanelModeBar}");
-  const modeBarEndIndex = componentSource.indexOf("<div className={styles.rightPanelView}", modeBarStartIndex);
+  const modeBarEndIndex = componentSource.indexOf(
+    "<div className={styles.rightPanelView}",
+    modeBarStartIndex
+  );
   const modeBarSource = componentSource.slice(modeBarStartIndex, modeBarEndIndex);
   const terraformViewStartIndex = componentSource.indexOf('hidden={activeView !== "terraform"}');
-  const terraformViewEndIndex = componentSource.indexOf("{showTerraformLeaveDialog ? (", terraformViewStartIndex);
+  const terraformViewEndIndex = componentSource.indexOf(
+    "{showTerraformLeaveDialog ? (",
+    terraformViewStartIndex
+  );
   const terraformViewSource = componentSource.slice(terraformViewStartIndex, terraformViewEndIndex);
 
   assert.ok(modeBarStartIndex > -1);
@@ -838,7 +891,10 @@ test("terraform view embeds issues below code with a resizable split instead of 
   assert.match(terraformViewSource, /<WorkspaceIssuesPanel/);
   assert.match(terraformViewSource, /architectureDiagnostics=\{architectureDiagnostics\}/);
   assert.match(terraformViewSource, /terraformIssues=\{terraformIssues\}/);
-  assert.match(getCssRule(stylesSource, "terraformSplitLayout"), /grid-template-rows:\s*var\(--terraform-code-pane-ratio\) 10px minmax\(0,\s*1fr\);/);
+  assert.match(
+    getCssRule(stylesSource, "terraformSplitLayout"),
+    /grid-template-rows:\s*var\(--terraform-code-pane-ratio\) 10px minmax\(0,\s*1fr\);/
+  );
   assert.match(getCssRule(stylesSource, "terraformCodePane"), /\bmin-height:\s*0;/);
   assert.match(getCssRule(stylesSource, "terraformSplitResizeHandle"), /\bcursor:\s*row-resize;/);
   assert.match(getCssRule(stylesSource, "terraformIssuesPane"), /\bmin-height:\s*0;/);
@@ -883,13 +939,19 @@ test("terraform issue AI resolution bypasses the leave guard while editing", () 
 
 test("terraform code navigation stays reachable after a blocked save", () => {
   const requestViewIndex = componentSource.indexOf("const requestView = useCallback");
-  const requestViewEditorBypassIndex = componentSource.indexOf('if (nextView === "terraform")', requestViewIndex);
+  const requestViewEditorBypassIndex = componentSource.indexOf(
+    'if (nextView === "terraform")',
+    requestViewIndex
+  );
   const requestViewLeaveGuardIndex = componentSource.indexOf(
     'requestTerraformLeave({ kind: "view", view: nextView })',
     requestViewIndex
   );
   const collapsedViewIndex = componentSource.indexOf("function openCollapsedView");
-  const collapsedViewEditorBypassIndex = componentSource.indexOf('if (nextView === "terraform")', collapsedViewIndex);
+  const collapsedViewEditorBypassIndex = componentSource.indexOf(
+    'if (nextView === "terraform")',
+    collapsedViewIndex
+  );
   const collapsedViewLeaveGuardIndex = componentSource.indexOf(
     'requestTerraformLeave({ kind: "view", view: nextView })',
     collapsedViewIndex
@@ -899,7 +961,10 @@ test("terraform code navigation stays reachable after a blocked save", () => {
     "isTerraformEditorNavigationTarget(target)",
     documentClickIndex
   );
-  const replayTargetIndex = componentSource.indexOf("getTerraformLeaveReplayTarget(target)", documentClickIndex);
+  const replayTargetIndex = componentSource.indexOf(
+    "getTerraformLeaveReplayTarget(target)",
+    documentClickIndex
+  );
 
   assert.ok(requestViewIndex > -1);
   assert.ok(requestViewEditorBypassIndex > requestViewIndex);
@@ -919,8 +984,39 @@ test("discarding terraform edits resets the terraform code panel dirty state", (
   assert.match(componentSource, /externalDiscardRequestId=\{terraformDiscardRequestId\}/);
   assert.match(terraformPanelSource, /externalDiscardRequestId/);
   assert.match(terraformPanelSource, /latestExternalDiscardRequestIdRef/);
-  assert.match(terraformPanelSource, /latestExternalDiscardRequestIdRef\.current === externalDiscardRequestId/);
+  assert.match(
+    terraformPanelSource,
+    /latestExternalDiscardRequestIdRef\.current === externalDiscardRequestId/
+  );
   assert.match(terraformPanelSource, /void refreshTerraformCode\(currentDiagramFingerprint\)/);
+  assert.match(terraformPanelSource, /terraformBaselineFilesRef/);
+  assert.match(
+    terraformPanelSource,
+    /createTerraformFilesForRefresh\(\{[\s\S]*baselineFiles: terraformBaselineFilesRef\.current,[\s\S]*preserveExistingSource/
+  );
+});
+
+test("terraform refresh and AI safe-fix reject completions made stale by editor changes", () => {
+  const refreshSource = terraformPanelSource.slice(
+    terraformPanelSource.indexOf("const refreshTerraformCode = useCallback"),
+    terraformPanelSource.indexOf("const runTerraformModuleValidation")
+  );
+  const safeFixStartIndex = terraformPanelSource.indexOf(
+    "const applyTerraformSafeFixToCode = useCallback"
+  );
+  const safeFixSource = terraformPanelSource.slice(
+    safeFixStartIndex,
+    terraformPanelSource.indexOf("useImperativeHandle(ref", safeFixStartIndex)
+  );
+
+  assert.match(refreshSource, /const requestCodeVersion = codeVersionRef\.current/);
+  assert.ok(
+    (refreshSource.match(/requestCodeVersion !== codeVersionRef\.current/g) ?? []).length >= 2
+  );
+  assert.match(safeFixSource, /const requestCodeVersion = codeVersionRef\.current/);
+  assert.ok(
+    (safeFixSource.match(/requestCodeVersion !== codeVersionRef\.current/g) ?? []).length >= 2
+  );
 });
 
 test("terraform preview refreshes when the last diagram icon is deleted", () => {
@@ -934,7 +1030,10 @@ test("terraform preview failures mark previous files stale instead of synced", (
   assert.match(terraformPanelSource, /Terraform Preview 생성 실패/);
   assert.match(terraformPanelSource, /이전 Preview 표시 중/);
   assert.match(terraformPanelSource, /setIsTerraformPreviewStale\(true\)/);
-  assert.doesNotMatch(terraformPanelSource, /setStatusMessage\("그래프 기준으로 동기화됨"\);\s*latestDiagramFingerprintRef\.current = diagramFingerprint;\s*[\s\S]*catch/);
+  assert.doesNotMatch(
+    terraformPanelSource,
+    /setStatusMessage\("그래프 기준으로 동기화됨"\);\s*latestDiagramFingerprintRef\.current = diagramFingerprint;\s*[\s\S]*catch/
+  );
 });
 
 test("terraform status counts only the synced preview snapshot", () => {
@@ -978,7 +1077,10 @@ test("terraform leave dialog exposes blocked save feedback instead of ignoring f
   assert.match(componentSource, /saveMessage=\{terraformLeaveSaveMessage\}/);
   assert.match(terraformLeaveDialogSource, /saveState === "saving"/);
   assert.match(terraformLeaveDialogSource, /saveState === "blocked"/);
-  assert.match(terraformLeaveDialogSource, /role=\{saveState === "blocked" \? "alert" : "status"\}/);
+  assert.match(
+    terraformLeaveDialogSource,
+    /role=\{saveState === "blocked" \? "alert" : "status"\}/
+  );
   assert.match(terraformLeaveDialogSource, /저장 중/);
   assert.match(terraformLeaveDialogSource, /disabled=\{isSaving\}/);
 });
@@ -999,7 +1101,10 @@ test("blocked terraform leave save reveals the terraform panel when diagnostics 
 test("terraform leave save ignores stale external save completions", () => {
   assert.match(componentSource, /latestTerraformSaveRequestIdRef/);
   assert.match(componentSource, /latestTerraformSaveRequestIdRef\.current = nextRequestId/);
-  assert.match(componentSource, /handleTerraformExternalSaveComplete\(saved: boolean, requestId: number\)/);
+  assert.match(
+    componentSource,
+    /handleTerraformExternalSaveComplete\(saved: boolean, requestId: number\)/
+  );
   assert.match(componentSource, /requestId !== latestTerraformSaveRequestIdRef\.current/);
   assert.match(terraformPanelSource, /onExternalSaveComplete\(saved, externalSaveRequestId\)/);
 });
@@ -1029,7 +1134,10 @@ test("deployment expanded panel uses one readable body instead of a split pane",
   assert.match(expandedBodyRule, /\boverflow:\s*auto;/);
   assert.doesNotMatch(deploymentPanelSource, /deploymentExpandedGridRef/);
   assert.doesNotMatch(deploymentPanelSource, /"--deployment-details-width"/);
-  assert.doesNotMatch(deploymentPanelSource, /className=\{styles\.deploymentExpandedResizeHandle\}/);
+  assert.doesNotMatch(
+    deploymentPanelSource,
+    /className=\{styles\.deploymentExpandedResizeHandle\}/
+  );
   assert.doesNotMatch(deploymentPanelSource, /role="separator"/);
   assert.doesNotMatch(deploymentPanelSource, /startDeploymentPanelResize/);
   assert.doesNotMatch(deploymentPanelSource, /handleDeploymentPanelResizeKeyDown/);
@@ -1063,7 +1171,10 @@ test("deployment expanded overlay sits above the floating AI dock and blocks low
   assert.match(componentSource, /data-deployment-console-trigger/);
   assert.match(deploymentShellSource, /document\.body\.style\.overflow = "hidden"/);
   assert.match(deploymentShellSource, /className=\{styles\.deploymentExpandedTitleRow\}/);
-  assert.match(deploymentShellSource, /<h2 className=\{styles\.deploymentExpandedTitle\}>배포 콘솔<\/h2>/);
+  assert.match(
+    deploymentShellSource,
+    /<h2 className=\{styles\.deploymentExpandedTitle\}>배포 콘솔<\/h2>/
+  );
   assert.doesNotMatch(deploymentShellSource, /className=\{styles\.deploymentExpandedHeader\}/);
   assert.match(expandedOverlayRule, /\bpointer-events:\s*auto;/);
   assert.match(expandedShellRule, /\bposition:\s*relative;/);
@@ -1079,10 +1190,7 @@ test("deployment expanded body uses larger action and record text", () => {
     stylesSource,
     /\.deploymentExpandedBody\s+\.deploymentField\s*\{[\s\S]*?\bfont-size:\s*13px;/
   );
-  assert.match(
-    deploymentPanelSource,
-    /size=\{isDeploymentOverlayOpen \? "large" : "regular"\}/
-  );
+  assert.match(deploymentPanelSource, /size=\{isDeploymentOverlayOpen \? "large" : "regular"\}/);
   assert.match(
     stylesSource,
     /\.deploymentExpandedBody\s+\.deploymentPrimaryButton,\s*\.deploymentExpandedBody\s+\.deploymentSecondaryButton,\s*\.deploymentExpandedBody\s+\.deploymentDangerButton\s*\{[\s\S]*?\bfont-size:\s*14px;[\s\S]*?\bmin-height:\s*40px;/
@@ -1104,7 +1212,10 @@ test("deployment results render as compact rows instead of cards", () => {
   assert.match(deploymentPanelSource, /className=\{styles\.deploymentResultRows\}/);
   assert.doesNotMatch(stylesSource, /\.deploymentResultList\s+div\s*\{/);
   assert.match(resultRowsRule, /\bgap:\s*0;/);
-  assert.match(resultRowRule, /\bgrid-template-columns:\s*minmax\(0,\s*1\.15fr\) minmax\(88px,\s*0\.45fr\) minmax\(0,\s*1fr\);/);
+  assert.match(
+    resultRowRule,
+    /\bgrid-template-columns:\s*minmax\(0,\s*1\.15fr\) minmax\(88px,\s*0\.45fr\) minmax\(0,\s*1fr\);/
+  );
   assert.match(resultRowRule, /\bmin-height:\s*32px;/);
 });
 
@@ -1120,7 +1231,10 @@ test("deployment creation prepares fresh snapshot and terraform artifact before 
   assert.ok(prepareIndex > -1);
   assert.ok(createDeploymentIndex > prepareIndex);
   assert.match(deploymentPanelSource, /architectureId:\s*savedArtifacts\.architecture\.id/);
-  assert.match(deploymentPanelSource, /terraformArtifactId:\s*savedArtifacts\.terraformArtifact\.id/);
+  assert.match(
+    deploymentPanelSource,
+    /terraformArtifactId:\s*savedArtifacts\.terraformArtifact\.id/
+  );
   assert.match(componentSource, /ref=\{terraformPanelRef\}/);
   assert.match(componentSource, /onPrepareDeploymentArtifacts=\{prepareDeploymentArtifacts\}/);
 });
@@ -1240,7 +1354,10 @@ test("CI/CD settings require explicit monitored paths and user acceptance", () =
   assert.match(settingsSource, /애플리케이션 경로/);
   assert.match(settingsSource, /인프라 경로/);
   assert.match(settingsSource, /isCicdMonitoringDraftComplete\(draft\)/);
-  assert.match(settingsSource, /userAcceptedChangeId: `cicd-monitoring-\$\{crypto\.randomUUID\(\)\}`/);
+  assert.match(
+    settingsSource,
+    /userAcceptedChangeId: `cicd-monitoring-\$\{crypto\.randomUUID\(\)\}`/
+  );
   assert.match(cicdConsoleSource, /GitHub 권한을 확인해 주세요\./);
   assert.match(cicdConsoleSource, /프로젝트 GitHub 설정 열기/);
 });
@@ -1256,10 +1373,7 @@ test("deployment baseline save button shows pending and saved icons", () => {
   assert.match(componentSource, /isDeploymentBaselineDirty/);
   assert.match(componentSource, /toDeploymentBaselineFingerprint\(preparedSource\.diagramJson\)/);
   assert.match(componentSource, /setIsDeploymentBaselineDirty\(false\)/);
-  assert.match(
-    componentSource,
-    /hasUnsavedDeploymentBaseline=\{hasUnsavedDeploymentBaseline\}/
-  );
+  assert.match(componentSource, /hasUnsavedDeploymentBaseline=\{hasUnsavedDeploymentBaseline\}/);
 });
 
 test("pre-deployment check is owned by the deployment tab", () => {
@@ -1341,7 +1455,10 @@ test("pre-deployment check shows background Trivy state without blocking Plan cr
 
 test("pre-deployment check only downgrades checklist failures backed exclusively by high findings", () => {
   assert.match(deploymentPanelSource, /const highFindingIds = new Set/);
-  assert.match(deploymentPanelSource, /const hasIndependentChecklistFailure = analysis\.checklist\.some/);
+  assert.match(
+    deploymentPanelSource,
+    /const hasIndependentChecklistFailure = analysis\.checklist\.some/
+  );
   assert.match(deploymentPanelSource, /return "blocked"/);
 });
 
@@ -1353,9 +1470,15 @@ test("pre-deployment finding fix buttons open the existing terraform source loca
   assert.match(componentSource, /openPreDeploymentFindingTerraformSource/);
   assert.match(componentSource, /terraformPanelRef\.current\?\.getTerraformFiles\(\)/);
   assert.match(componentSource, /setActiveView\("terraform"\)/);
-  assert.match(componentSource, /terraformPanelRef\.current\?\.openTerraformSourceLocation\(sourceLocation\)/);
+  assert.match(
+    componentSource,
+    /terraformPanelRef\.current\?\.openTerraformSourceLocation\(sourceLocation\)/
+  );
   assert.match(componentSource, /onOpenFindingTerraformSource=\{\(finding\) => \{/);
-  assert.match(componentSource, /const sourceLocation = openPreDeploymentFindingTerraformSource\(finding\);/);
+  assert.match(
+    componentSource,
+    /const sourceLocation = openPreDeploymentFindingTerraformSource\(finding\);/
+  );
   assert.match(componentSource, /setIsDeploymentConsoleOpen\(false\);/);
 });
 
@@ -1379,7 +1502,10 @@ test("terraform errors surface as an issues banner and AI resolution lives in th
   assert.match(componentSource, /mergeTerraformValidationDiagnostics/);
   assert.match(componentSource, /storeTerraformIssues/);
   assert.match(componentSource, /loadedTerraformIssuesProjectId/);
-  assert.match(componentSource, /storeTerraformIssues\(window\.localStorage, projectId, terraformIssues\)/);
+  assert.match(
+    componentSource,
+    /storeTerraformIssues\(window\.localStorage, projectId, terraformIssues\)/
+  );
   assert.match(componentSource, /<WorkspaceIssuesPanel/);
   assert.match(componentSource, /architectureDiagnostics=\{architectureDiagnostics\}/);
   assert.match(aiChatDockSource, /runAiTerraformErrorExplanation/);
@@ -1405,7 +1531,10 @@ test("terraform errors surface as an issues banner and AI resolution lives in th
     terraformIssuesStylesSource,
     /\.terraformDiagnosticList > li > span\s*\{[^}]*color:\s*var\(--workspace-muted, #60646c\);/s
   );
-  assert.match(terraformIssuesStylesSource, /\.terraformDiagnosticSeverity\s*\{[^}]*color:\s*var\(--workspace-text, #171717\);/s);
+  assert.match(
+    terraformIssuesStylesSource,
+    /\.terraformDiagnosticSeverity\s*\{[^}]*color:\s*var\(--workspace-text, #171717\);/s
+  );
   assert.match(
     terraformIssuesStylesSource,
     /\.terraformDiagnosticMeta span\s*\{[^}]*background:\s*var\(--workspace-surface-muted, #fafafa\);[^}]*border:\s*1px solid var\(--workspace-line, #f0f0f3\);/s
@@ -1438,9 +1567,18 @@ test("terraform issue AI resolution opens the issue source before the chat answe
 
   assert.ok(aiClickIndex > -1);
   assert.ok(requestIndex > aiClickIndex);
-  assert.match(componentSource.slice(aiClickIndex, requestIndex), /getTerraformIssueSourceLocation\(issue\)/);
-  assert.match(componentSource.slice(aiClickIndex, requestIndex), /openTerraformIssueSourceLocation\(sourceLocation\)/);
-  assert.match(componentSource, /function getTerraformIssueSourceLocation\(\s*issue: TerraformIssueRecord\s*\)/);
+  assert.match(
+    componentSource.slice(aiClickIndex, requestIndex),
+    /getTerraformIssueSourceLocation\(issue\)/
+  );
+  assert.match(
+    componentSource.slice(aiClickIndex, requestIndex),
+    /openTerraformIssueSourceLocation\(sourceLocation\)/
+  );
+  assert.match(
+    componentSource,
+    /function getTerraformIssueSourceLocation\(\s*issue: TerraformIssueRecord\s*\)/
+  );
   assert.match(componentSource, /line: issue\.diagnostic\.line \?\? 1/);
   assert.match(componentSource, /const openTerraformIssueSourceLocation = useCallback/);
   assert.match(componentSource, /context\.setRightPanelOpen\(true\);/);
@@ -1451,13 +1589,25 @@ test("terraform issue AI resolution opens the issue source before the chat answe
 test("terraform issue AI fix opens the edited code and locks the apply button", () => {
   assert.match(componentSource, /getTerraformIssueFixSourceLocation/);
   assert.match(componentSource, /pendingTerraformIssueFixSourceLocation/);
-  assert.match(componentSource, /request\.codePreview\?\.sourceLine \?\? request\.diagnostic\.line \?\? 1/);
+  assert.match(
+    componentSource,
+    /request\.codePreview\?\.sourceLine \?\? request\.diagnostic\.line \?\? 1/
+  );
   assert.match(componentSource, /context\.setRightPanelOpen\(true\);/);
   assert.match(componentSource, /setActiveView\("terraform"\);/);
   assert.match(componentSource, /setPendingTerraformIssueFixSourceLocation\(sourceLocation\)/);
-  assert.match(componentSource, /terraformPanelRef\.current\?\.openTerraformSourceLocation\(pendingTerraformIssueFixSourceLocation\)/);
-  assert.match(projectDraftManagerSource, /const requestTerraformSafeFixApply = useCallback\(\(\s*request: TerraformSafeFixApplyRequest/);
-  assert.match(workspaceDraftManagerSource, /const requestTerraformSafeFixApply = useCallback\(\(\s*request: TerraformSafeFixApplyRequest/);
+  assert.match(
+    componentSource,
+    /terraformPanelRef\.current\?\.openTerraformSourceLocation\(pendingTerraformIssueFixSourceLocation\)/
+  );
+  assert.match(
+    projectDraftManagerSource,
+    /const requestTerraformSafeFixApply = useCallback\(\(\s*request: TerraformSafeFixApplyRequest/
+  );
+  assert.match(
+    workspaceDraftManagerSource,
+    /const requestTerraformSafeFixApply = useCallback\(\(\s*request: TerraformSafeFixApplyRequest/
+  );
   assert.match(projectDraftManagerSource, /setTerraformSafeFixApplyRequest\(request\)/);
   assert.match(workspaceDraftManagerSource, /setTerraformSafeFixApplyRequest\(request\)/);
   assert.match(aiChatDockSource, /completedTerraformFixRequestIds/);
@@ -1482,13 +1632,19 @@ test("terraform issue AI fix keeps remaining diagnostics visible after a partial
     "if (hasBlockingTerraformDiagnostic(validationDiagnostics))",
     originalDiagnosticIndex
   );
-  const syncIndex = terraformPanelSource.indexOf("const syncResult = await syncTerraformToDiagram", remainingDiagnosticsIndex);
+  const syncIndex = terraformPanelSource.indexOf(
+    "const syncResult = await syncTerraformToDiagram",
+    remainingDiagnosticsIndex
+  );
 
   assert.ok(safeFixIndex > -1);
   assert.ok(originalDiagnosticIndex > safeFixIndex);
   assert.ok(remainingDiagnosticsIndex > originalDiagnosticIndex);
   assert.ok(syncIndex > remainingDiagnosticsIndex);
-  assert.match(terraformPanelSource, /combineTerraformDiagnostics\(validationDiagnostics, syncResult\.diagnostics\)/);
+  assert.match(
+    terraformPanelSource,
+    /combineTerraformDiagnostics\(\s*validationDiagnostics,\s*syncResult\.diagnostics\s*\)/
+  );
 });
 
 test("terraform source navigation scrolls and focuses the target line deterministically", () => {
@@ -1503,7 +1659,10 @@ test("terraform source navigation scrolls and focuses the target line determinis
   assert.match(terraformPanelSource, /setCodeScrollTop\(textarea\.scrollTop\)/);
   assert.match(terraformPanelSource, /setCodeScrollLeft\(textarea\.scrollLeft\)/);
   assert.match(terraformPanelSource, /lineNumberRef\.current\.scrollTop = textarea\.scrollTop/);
-  assert.doesNotMatch(terraformPanelSource, /}, \[displayedTerraformCode, lineNumbers\.length\]\);/);
+  assert.doesNotMatch(
+    terraformPanelSource,
+    /}, \[displayedTerraformCode, lineNumbers\.length\]\);/
+  );
 });
 
 test("terraform issue AI resolution can close the chat dock without trapping the issue card", () => {
@@ -1514,8 +1673,14 @@ test("terraform issue AI resolution can close the chat dock without trapping the
 });
 
 test("terraform editor renders syntax colors and squiggly error underlines", () => {
-  const syntaxHighlightLayerRule = getCssRule(terraformEditorStylesSource, "terraformSyntaxHighlightLayer");
-  const highlightedLineErrorRule = getCssRule(terraformEditorStylesSource, "terraformHighlightedLineError");
+  const syntaxHighlightLayerRule = getCssRule(
+    terraformEditorStylesSource,
+    "terraformSyntaxHighlightLayer"
+  );
+  const highlightedLineErrorRule = getCssRule(
+    terraformEditorStylesSource,
+    "terraformHighlightedLineError"
+  );
   const lineNumberErrorRule = getCssRule(terraformEditorStylesSource, "terraformLineNumberError");
   const textareaRule = getCssRule(terraformEditorStylesSource, "terraformTextarea");
   const keywordRule = getCssRule(terraformEditorStylesSource, "terraformTokenKeyword");
@@ -1565,11 +1730,26 @@ test("terraform selected block scrolls to the editor center with a clamped targe
   assert.ok(selectedBlockEffectIndex > -1);
   assert.ok(sourceLocationEffectIndex > selectedBlockEffectIndex);
   assert.match(terraformPanelSource, /function clampTerraformEditorScrollTop/);
-  assert.match(selectedBlockEffectSource, /const blockTop = TERRAFORM_EDITOR_VERTICAL_PADDING \+ \(selectedBlock\.startLine - 1\) \* lineHeight;/);
-  assert.match(selectedBlockEffectSource, /const blockHeight = Math\.max\(1, selectedBlock\.endLine - selectedBlock\.startLine \+ 1\) \* lineHeight;/);
-  assert.match(selectedBlockEffectSource, /const targetScrollTop = blockTop \+ blockHeight \/ 2 - textarea\.clientHeight \/ 2;/);
-  assert.match(selectedBlockEffectSource, /clampTerraformEditorScrollTop\(targetScrollTop, textarea\)/);
-  assert.match(selectedBlockEffectSource, /lineNumberRef\.current\.scrollTop = textarea\.scrollTop;/);
+  assert.match(
+    selectedBlockEffectSource,
+    /const blockTop = TERRAFORM_EDITOR_VERTICAL_PADDING \+ \(selectedBlock\.startLine - 1\) \* lineHeight;/
+  );
+  assert.match(
+    selectedBlockEffectSource,
+    /const blockHeight =\s*Math\.max\(1, selectedBlock\.endLine - selectedBlock\.startLine \+ 1\) \* lineHeight;/
+  );
+  assert.match(
+    selectedBlockEffectSource,
+    /const targetScrollTop = blockTop \+ blockHeight \/ 2 - textarea\.clientHeight \/ 2;/
+  );
+  assert.match(
+    selectedBlockEffectSource,
+    /clampTerraformEditorScrollTop\(targetScrollTop, textarea\)/
+  );
+  assert.match(
+    selectedBlockEffectSource,
+    /lineNumberRef\.current\.scrollTop = textarea\.scrollTop;/
+  );
   assert.doesNotMatch(selectedBlockEffectSource, /selectedBlock\.startLine - 2/);
 });
 
@@ -1584,14 +1764,20 @@ test("terraform preview explanation is triggered from the terraform code panel",
   assert.match(aiChatDockSource, /activeChatTab === "preview"/);
   assert.match(aiChatDockSource, /Preview 설명/);
   assert.doesNotMatch(aiChatDockSource, /WorkspaceAiTerraformPanel/);
-  assert.doesNotMatch(terraformPanelSource, /className=\{styles\.terraformPreviewExplanationPanel\}/);
+  assert.doesNotMatch(
+    terraformPanelSource,
+    /className=\{styles\.terraformPreviewExplanationPanel\}/
+  );
   assert.doesNotMatch(terraformPanelSource, /closeTerraformPreviewExplanation/);
   assert.doesNotMatch(terraformPanelSource, /setTerraformPreviewExplanation/);
   assert.doesNotMatch(terraformPanelSource, /checklist\.length\} Checks/);
 });
 
 test("terraform resource code mode keeps explanation but omits validation and deployment actions", () => {
-  assert.match(terraformToolbarSource, /<TerraformExplanationButton actions=\{actions\} state=\{state\} \/>/);
+  assert.match(
+    terraformToolbarSource,
+    /<TerraformExplanationButton actions=\{actions\} state=\{state\} \/>/
+  );
   assert.match(terraformToolbarSource, /<span>Preview 설명<\/span>/);
   assert.doesNotMatch(terraformPanelSource, /<span>Validate<\/span>/);
   assert.doesNotMatch(terraformPanelSource, />\s*Validate\s*<\/button>/);
@@ -1618,7 +1804,9 @@ test("terraform artifact preparation marks the terraform panel as loading", () =
   const prepareIndex = terraformPanelSource.indexOf("prepareTerraformArtifact: async () =>");
 
   assert.ok(prepareIndex > -1);
-  assert.ok(terraformPanelSource.indexOf('setRequestState("loading")', prepareIndex) > prepareIndex);
+  assert.ok(
+    terraformPanelSource.indexOf('setRequestState("loading")', prepareIndex) > prepareIndex
+  );
   assert.ok(terraformPanelSource.indexOf('setRequestState("idle")', prepareIndex) > prepareIndex);
   assert.ok(terraformPanelSource.indexOf('setRequestState("error")', prepareIndex) > prepareIndex);
   assert.match(terraformPanelSource, /isPreparingTerraformArtifactRef/);
@@ -1653,8 +1841,14 @@ test("terraform save and manual validate send the whole virtual file set", () =>
   assert.doesNotMatch(terraformPanelSource, /mode: "full"/);
   assert.doesNotMatch(terraformPanelSource, /mode: "static"/);
   assert.doesNotMatch(terraformPanelSource, /TerraformValidationMode/);
-  assert.match(terraformPanelSource, /terraformFiles:\s*toTerraformValidationFiles\(terraformFiles\)/);
-  assert.match(terraformPanelSource, /terraformCode:\s*terraformFiles\.length > 0 \? "" : combinedTerraformCode/);
+  assert.match(
+    terraformPanelSource,
+    /terraformFiles:\s*toTerraformValidationFiles\(terraformFiles\)/
+  );
+  assert.match(
+    terraformPanelSource,
+    /terraformCode:\s*terraformFiles\.length > 0 \? "" : combinedTerraformCode/
+  );
   assert.doesNotMatch(terraformPanelSource, /validateTerraformCode\(displayedTerraformCode\)/);
 });
 
@@ -1678,7 +1872,10 @@ test("terraform save modal invalidates stale external save completions when user
 });
 
 test("terraform sync proposals are auto-applied on explicit save without asking again", () => {
-  assert.match(terraformPanelSource, /terraformFiles:\s*toTerraformValidationFiles\(terraformFiles\)/);
+  assert.match(
+    terraformPanelSource,
+    /terraformFiles:\s*toTerraformValidationFiles\(terraformFiles\)/
+  );
   assert.match(terraformPanelSource, /applyAllTerraformSyncProposals/);
   assert.match(terraformPanelSource, /syncResult\.proposals && syncResult\.proposals\.length > 0/);
   assert.match(terraformPanelSource, /context\.applyDiagramJson\(nextDiagramJson\)/);
@@ -1693,7 +1890,10 @@ test("terraform sync proposals are auto-applied on explicit save without asking 
 
 test("terraform editor save allows intentionally empty terraform code", () => {
   const saveStartIndex = terraformPanelSource.indexOf("const saveCodeToDiagram = useCallback");
-  const saveEndIndex = terraformPanelSource.indexOf("const validateCurrentTerraform", saveStartIndex);
+  const saveEndIndex = terraformPanelSource.indexOf(
+    "const validateCurrentTerraform",
+    saveStartIndex
+  );
   const saveSource = terraformPanelSource.slice(saveStartIndex, saveEndIndex);
 
   assert.ok(saveStartIndex > -1);
@@ -1704,14 +1904,26 @@ test("terraform editor save allows intentionally empty terraform code", () => {
 
 test("terraform virtual file validation avoids request bursts and combined-code empty checks", () => {
   assert.doesNotMatch(terraformPanelSource, /Promise\.all\(\s*files/);
-  assert.match(terraformPanelSource, /nextFiles\.some\(\(file\) => file\.code\.trim\(\)\.length > 0\)/);
-  assert.doesNotMatch(terraformPanelSource, /combineTerraformFiles\(nextFiles\)\.trim\(\)\.length > 0/);
+  assert.match(
+    terraformPanelSource,
+    /nextFiles\.some\(\(file\) => file\.code\.trim\(\)\.length > 0\)/
+  );
+  assert.doesNotMatch(
+    terraformPanelSource,
+    /combineTerraformFiles\(nextFiles\)\.trim\(\)\.length > 0/
+  );
 });
 
 test("terraform editor keeps diagnostics visible after local edits", () => {
   const handleCodeChangeIndex = terraformPanelSource.indexOf("function handleCodeChange");
-  const handleCodeChangeEndIndex = terraformPanelSource.indexOf("function handleCodeKeyDown", handleCodeChangeIndex);
-  const handleCodeChangeSource = terraformPanelSource.slice(handleCodeChangeIndex, handleCodeChangeEndIndex);
+  const handleCodeChangeEndIndex = terraformPanelSource.indexOf(
+    "function handleCodeKeyDown",
+    handleCodeChangeIndex
+  );
+  const handleCodeChangeSource = terraformPanelSource.slice(
+    handleCodeChangeIndex,
+    handleCodeChangeEndIndex
+  );
 
   assert.ok(handleCodeChangeIndex > -1);
   assert.ok(handleCodeChangeEndIndex > handleCodeChangeIndex);
@@ -1750,9 +1962,7 @@ function getCssRule(source: string, className: string): string {
 function getCssRuleAfter(source: string, className: string, fromIndex: number): string {
   assert.ok(fromIndex > -1, `Expected a starting point before .${className} CSS rule`);
 
-  const match = new RegExp(`\\.${className}\\s*\\{(?<body>[^}]*)\\}`).exec(
-    source.slice(fromIndex)
-  );
+  const match = new RegExp(`\\.${className}\\s*\\{(?<body>[^}]*)\\}`).exec(source.slice(fromIndex));
 
   assert.ok(match?.groups?.body, `Expected .${className} CSS rule to exist`);
 
@@ -1763,9 +1973,7 @@ function getLastCssRuleAfter(source: string, className: string, fromIndex: numbe
   assert.ok(fromIndex > -1, `Expected a starting point before .${className} CSS rule`);
 
   const matches = Array.from(
-    source
-      .slice(fromIndex)
-      .matchAll(new RegExp(`\\.${className}\\s*\\{(?<body>[^}]*)\\}`, "g"))
+    source.slice(fromIndex).matchAll(new RegExp(`\\.${className}\\s*\\{(?<body>[^}]*)\\}`, "g"))
   );
   const match = matches.at(-1);
 

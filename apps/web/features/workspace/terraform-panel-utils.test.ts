@@ -3,6 +3,7 @@ import { test } from "node:test";
 import type { DiagramJson, DiagramNode } from "@sketchcatch/types";
 import {
   createTerraformFilesFromGeneratedCode,
+  createTerraformFilesForRefresh,
   mergeGeneratedTerraformFiles,
   findTerraformBlockForNode,
   getDiagramTerraformAddresses,
@@ -33,10 +34,12 @@ test("mergeGeneratedTerraformFiles preserves an exact top-level variable block",
 
 test("mergeGeneratedTerraformFiles removes a managed Subnet absent from generated Diagram code", () => {
   const result = mergeGeneratedTerraformFiles(
-    [{
-      fileName: "main.tf",
-      code: `resource "aws_subnet" "subnet_A" {\n  cidr_block = "10.0.1.0/24"\n}`
-    }],
+    [
+      {
+        fileName: "main.tf",
+        code: `resource "aws_subnet" "subnet_A" {\n  cidr_block = "10.0.1.0/24"\n}`
+      }
+    ],
     [{ fileName: "main.tf", code: "" }],
     new Set()
   );
@@ -80,18 +83,112 @@ test("workspace-seed source addresses preserve exact resource and data blocks fr
       { fileName: "iam.tf", code: sourcePolicy }
     ],
     [
-      { fileName: "storage.tf", code: `resource "aws_s3_bucket" "captured_bucket" {\n  force_destroy = false\n}` },
-      { fileName: "iam.tf", code: `data "aws_iam_policy" "change_password" {\n  arn = "generated"\n}` }
+      {
+        fileName: "storage.tf",
+        code: `resource "aws_s3_bucket" "captured_bucket" {\n  force_destroy = false\n}`
+      },
+      {
+        fileName: "iam.tf",
+        code: `data "aws_iam_policy" "change_password" {\n  arn = "generated"\n}`
+      }
     ],
     preservedAddresses
   );
 
-  assert.deepEqual(
-    [...preservedAddresses].sort(),
-    ["aws_s3_bucket.captured_bucket", "data.aws_iam_policy.change_password"]
-  );
+  assert.deepEqual([...preservedAddresses].sort(), [
+    "aws_s3_bucket.captured_bucket",
+    "data.aws_iam_policy.change_password"
+  ]);
   assert.equal(result.find(({ fileName }) => fileName === "storage.tf")?.code, sourceBucket);
   assert.equal(result.find(({ fileName }) => fileName === "iam.tf")?.code, sourcePolicy);
+});
+
+test("discard restores edited workspace-seed resource and data blocks from the saved baseline", () => {
+  const baselineFiles = [
+    {
+      fileName: "storage.tf",
+      code: `resource "aws_s3_bucket" "captured_bucket" {\n  bucket = var.source_bucket\n}`
+    },
+    {
+      fileName: "iam.tf",
+      code: `data "aws_iam_policy" "change_password" {\n  arn = var.policy_arn\n}`
+    }
+  ];
+  const result = createTerraformFilesForRefresh({
+    baselineFiles,
+    currentFiles: [
+      {
+        fileName: "storage.tf",
+        code: `resource "aws_s3_bucket" "captured_bucket" {\n  bucket = "unsaved-edit"\n}`
+      },
+      {
+        fileName: "iam.tf",
+        code: `data "aws_iam_policy" "change_password" {\n  arn = "unsaved-edit"\n}`
+      }
+    ],
+    generatedFiles: [
+      {
+        fileName: "storage.tf",
+        code: `resource "aws_s3_bucket" "captured_bucket" {\n  force_destroy = false\n}`
+      },
+      {
+        fileName: "iam.tf",
+        code: `data "aws_iam_policy" "change_password" {\n  arn = "generated"\n}`
+      }
+    ],
+    preserveExistingSource: false,
+    preservedResourceAddresses: new Set([
+      "aws_s3_bucket.captured_bucket",
+      "data.aws_iam_policy.change_password"
+    ])
+  });
+
+  assert.equal(
+    result.find(({ fileName }) => fileName === "storage.tf")?.code,
+    baselineFiles[0]?.code
+  );
+  assert.equal(result.find(({ fileName }) => fileName === "iam.tf")?.code, baselineFiles[1]?.code);
+});
+
+test("discard restores deleted workspace-seed resource and data blocks from the saved baseline", () => {
+  const baselineFiles = [
+    {
+      fileName: "storage.tf",
+      code: `resource "aws_s3_bucket" "captured_bucket" {\n  bucket = var.source_bucket\n}`
+    },
+    {
+      fileName: "iam.tf",
+      code: `data "aws_iam_policy" "change_password" {\n  arn = var.policy_arn\n}`
+    }
+  ];
+  const result = createTerraformFilesForRefresh({
+    baselineFiles,
+    currentFiles: [
+      { fileName: "storage.tf", code: "" },
+      { fileName: "iam.tf", code: "" }
+    ],
+    generatedFiles: [
+      {
+        fileName: "storage.tf",
+        code: `resource "aws_s3_bucket" "captured_bucket" {\n  force_destroy = false\n}`
+      },
+      {
+        fileName: "iam.tf",
+        code: `data "aws_iam_policy" "change_password" {\n  arn = "generated"\n}`
+      }
+    ],
+    preserveExistingSource: false,
+    preservedResourceAddresses: new Set([
+      "aws_s3_bucket.captured_bucket",
+      "data.aws_iam_policy.change_password"
+    ])
+  });
+
+  assert.equal(
+    result.find(({ fileName }) => fileName === "storage.tf")?.code,
+    baselineFiles[0]?.code
+  );
+  assert.equal(result.find(({ fileName }) => fileName === "iam.tf")?.code, baselineFiles[1]?.code);
 });
 
 test("effective preserved addresses union parser evidence with current workspace-seed nodes", () => {
@@ -107,20 +204,22 @@ test("effective preserved addresses union parser evidence with current workspace
   };
 
   assert.deepEqual(
-    [...getEffectivePreservedTerraformAddresses(
-      diagram,
-      new Set(["aws_custom_service.opaque"])
-    )].sort(),
+    [
+      ...getEffectivePreservedTerraformAddresses(diagram, new Set(["aws_custom_service.opaque"]))
+    ].sort(),
     ["aws_custom_service.opaque", "aws_s3_bucket.captured_bucket"]
   );
 });
 
 test("getTerraformAddressesRemovedFromDiagram excludes opaque preserved addresses", () => {
-  assert.deepEqual(getTerraformAddressesRemovedFromDiagram(
-    new Set(["aws_subnet.subnet_A", "aws_custom_service.opaque"]),
-    new Set(),
-    new Set(["aws_custom_service.opaque"])
-  ), ["aws_subnet.subnet_A"]);
+  assert.deepEqual(
+    getTerraformAddressesRemovedFromDiagram(
+      new Set(["aws_subnet.subnet_A", "aws_custom_service.opaque"]),
+      new Set(),
+      new Set(["aws_custom_service.opaque"])
+    ),
+    ["aws_subnet.subnet_A"]
+  );
 });
 
 test("parseTerraformFiles keeps CRLF offsets aligned with original source slices", () => {
@@ -180,8 +279,14 @@ data "aws_ami" "ubuntu" {
 
   assert.equal(blocks[0]?.address, "aws_instance.web");
   assert.equal(blocks[1]?.address, "data.aws_ami.ubuntu");
-  assert.equal(findTerraformBlockForNode(blocks, makeNode("resource", "aws_instance", "web"))?.blockType, "resource");
-  assert.equal(findTerraformBlockForNode(blocks, makeNode("data", "aws_ami", "ubuntu"))?.blockType, "data");
+  assert.equal(
+    findTerraformBlockForNode(blocks, makeNode("resource", "aws_instance", "web"))?.blockType,
+    "resource"
+  );
+  assert.equal(
+    findTerraformBlockForNode(blocks, makeNode("data", "aws_ami", "ubuntu"))?.blockType,
+    "data"
+  );
 });
 
 test("findTerraformBlockForNode prefers the visible node identity over stale parameters", () => {
@@ -201,7 +306,10 @@ resource "aws_instance" "ec2_instance" {
     label: "EC2 Instance"
   };
 
-  assert.equal(findTerraformBlockForNode(blocks, ec2NodeWithStaleParameters)?.address, "aws_instance.ec2_instance");
+  assert.equal(
+    findTerraformBlockForNode(blocks, ec2NodeWithStaleParameters)?.address,
+    "aws_instance.ec2_instance"
+  );
 });
 
 test("findTerraformBlockForNode uses the resource name when same-type nodes share a label", () => {
@@ -277,8 +385,14 @@ resource "aws_subnet" "public" {
     files.find((file) => file.fileName === "providers.tf")?.code ?? "",
     /source\s*= "hashicorp\/aws"/
   );
-  assert.equal(files.find((file) => file.fileName === "network.tf")?.code.includes("aws_vpc"), true);
-  assert.equal(files.find((file) => file.fileName === "subnets.tf")?.code.includes("aws_subnet"), true);
+  assert.equal(
+    files.find((file) => file.fileName === "network.tf")?.code.includes("aws_vpc"),
+    true
+  );
+  assert.equal(
+    files.find((file) => file.fileName === "subnets.tf")?.code.includes("aws_subnet"),
+    true
+  );
 });
 
 test("createTerraformFilesFromGeneratedCode configures Kubernetes from the EKS cluster", () => {
@@ -291,10 +405,13 @@ test("createTerraformFilesFromGeneratedCode configures Kubernetes from the EKS c
     viewport: { x: 0, y: 0, zoom: 1 }
   };
 
-  const files = createTerraformFilesFromGeneratedCode(diagram, [
-    'resource "aws_eks_cluster" "practice_cluster" {}',
-    'resource "kubernetes_namespace" "practice" {}'
-  ].join("\n\n"));
+  const files = createTerraformFilesFromGeneratedCode(
+    diagram,
+    [
+      'resource "aws_eks_cluster" "practice_cluster" {}',
+      'resource "kubernetes_namespace" "practice" {}'
+    ].join("\n\n")
+  );
   const providerCode = files.find((file) => file.fileName === "providers.tf")?.code ?? "";
 
   assert.match(providerCode, /source\s*= "hashicorp\/kubernetes"/);
@@ -318,10 +435,7 @@ test("createTerraformFilesFromGeneratedCode clears terraform code when the diagr
 
 test("getDiagramTerraformAddresses returns resource and data addresses from diagram nodes", () => {
   const addresses = getDiagramTerraformAddresses({
-    nodes: [
-      makeNode("resource", "aws_instance", "web"),
-      makeNode("data", "aws_ami", "ubuntu")
-    ],
+    nodes: [makeNode("resource", "aws_instance", "web"), makeNode("data", "aws_ami", "ubuntu")],
     edges: [],
     viewport: { x: 0, y: 0, zoom: 1 }
   });
@@ -383,8 +497,14 @@ test("diagram fingerprints ignore viewport-only changes", () => {
     viewport: { x: 240, y: -80, zoom: 0.75 }
   };
 
-  assert.equal(toTerraformRefreshFingerprint(diagramJson), toTerraformRefreshFingerprint(pannedDiagramJson));
-  assert.equal(toDeploymentBaselineFingerprint(diagramJson), toDeploymentBaselineFingerprint(pannedDiagramJson));
+  assert.equal(
+    toTerraformRefreshFingerprint(diagramJson),
+    toTerraformRefreshFingerprint(pannedDiagramJson)
+  );
+  assert.equal(
+    toDeploymentBaselineFingerprint(diagramJson),
+    toDeploymentBaselineFingerprint(pannedDiagramJson)
+  );
 });
 
 test("diagram fingerprints ignore presentation-only node and edge edits", () => {
@@ -499,11 +619,7 @@ test("diagram fingerprints change when a deployable child moves between Design A
   };
   const movedDiagramJson: DiagramJson = {
     ...diagramJson,
-    nodes: [
-      designAzA,
-      designAzB,
-      { ...subnet, metadata: { parentAreaNodeId: designAzB.id } }
-    ]
+    nodes: [designAzA, designAzB, { ...subnet, metadata: { parentAreaNodeId: designAzB.id } }]
   };
 
   assert.notEqual(
@@ -524,23 +640,27 @@ test("diagram fingerprints change when Terraform identity or values change", () 
   };
   const renamedDiagramJson: DiagramJson = {
     ...diagramJson,
-    nodes: [{
-      ...diagramJson.nodes[0]!,
-      parameters: {
-        ...diagramJson.nodes[0]!.parameters!,
-        resourceName: "production"
+    nodes: [
+      {
+        ...diagramJson.nodes[0]!,
+        parameters: {
+          ...diagramJson.nodes[0]!.parameters!,
+          resourceName: "production"
+        }
       }
-    }]
+    ]
   };
   const valueChangedDiagramJson: DiagramJson = {
     ...diagramJson,
-    nodes: [{
-      ...diagramJson.nodes[0]!,
-      parameters: {
-        ...diagramJson.nodes[0]!.parameters!,
-        values: { cidrBlock: "10.42.0.0/16" }
+    nodes: [
+      {
+        ...diagramJson.nodes[0]!,
+        parameters: {
+          ...diagramJson.nodes[0]!.parameters!,
+          values: { cidrBlock: "10.42.0.0/16" }
+        }
       }
-    }]
+    ]
   };
 
   assert.notEqual(
