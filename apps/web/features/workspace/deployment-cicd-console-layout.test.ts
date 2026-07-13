@@ -27,6 +27,14 @@ test("focused screens do not cross their execution client boundaries", () => {
   assert.doesNotMatch(cicdSource, /runDeploymentApply/);
 });
 
+test("Direct Deployment has no browser-side production traffic simulator", () => {
+  const directSource = readWorkspaceSource("DirectDeploymentScreen.tsx");
+
+  assert.doesNotMatch(directSource, /runTrafficSimulator|trafficSimulator|trafficAbortController/);
+  assert.doesNotMatch(directSource, /Array\.from\(\{ length: 20 \}|source=sketchcatch/);
+  assert.doesNotMatch(directSource, /트래픽 시뮬레이션|Traffic simulation/);
+});
+
 test("DeploymentPanel is a compatibility adapter without the former tab state", () => {
   const panelSource = readWorkspaceSource("DeploymentPanel.tsx");
 

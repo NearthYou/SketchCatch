@@ -1,60 +1,37 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createLiveObservationAudienceClient } from "../../../features/live-observation/live-observation-audience-client";
 import {
-  createLiveObservationAudienceClient,
-  LiveObservationAudienceError
-} from "../../../features/live-observation/live-observation-audience-client";
+  createLiveObservationAudienceSession,
+  initialLiveObservationAudienceState,
+  type LiveObservationAudiencePageState
+} from "../../../features/live-observation/live-observation-audience-session";
 import styles from "./observe.module.css";
 
-type PageState =
-  | "connecting"
-  | "ready"
-  | "sending"
-  | "success"
-  | "error"
-  | "expired"
-  | "rate_limited";
-
 export function ObserveClient({ publicId }: { readonly publicId: string }) {
-  const clientRef = useRef<ReturnType<typeof createLiveObservationAudienceClient> | null>(null);
-  const activeRef = useRef(false);
-  const [pageState, setPageState] = useState<PageState>("connecting");
-  const [successCount, setSuccessCount] = useState(0);
+  const [viewState, setViewState] = useState(initialLiveObservationAudienceState);
+  const sessionRef = useRef<ReturnType<typeof createLiveObservationAudienceSession> | null>(null);
+  if (!sessionRef.current) {
+    sessionRef.current = createLiveObservationAudienceSession({
+      createClient: createLiveObservationAudienceClient,
+      onState: setViewState
+    });
+  }
+  const session = sessionRef.current;
 
-  useEffect(() => {
-    const client = createLiveObservationAudienceClient(publicId);
-    activeRef.current = true;
-    clientRef.current = client;
-    void client.bootstrap().then(
-      () => {
-        if (activeRef.current) setPageState("ready");
-      },
-      (error: unknown) => {
-        if (activeRef.current) setPageState(toPageState(error));
-      }
-    );
-    return () => {
-      activeRef.current = false;
-      client.dispose();
-    };
-  }, [publicId]);
+  useEffect(() => session.activate(publicId), [publicId, session]);
 
-  async function sendRequest(): Promise<void> {
-    const client = clientRef.current;
-    if (!client || pageState === "sending") return;
-    setPageState("sending");
-    try {
-      await client.request();
-      if (!activeRef.current) return;
-      setSuccessCount((count) => count + 1);
-      setPageState("success");
-    } catch (error) {
-      if (activeRef.current) setPageState(toPageState(error));
+  function runPrimaryAction(): void {
+    if (viewState.bootstrapReady) {
+      void session.request();
+    } else {
+      session.reconnect();
     }
   }
 
-  const canRequest = pageState === "ready" || pageState === "success" || pageState === "error";
+  const isBusy = viewState.pageState === "connecting" || viewState.pageState === "sending";
+  const canRunPrimaryAction = !isBusy && viewState.pageState !== "expired";
 
   return (
     <main className={styles.page}>
@@ -64,29 +41,45 @@ export function ObserveClient({ publicId }: { readonly publicId: string }) {
         <p className={styles.copy}>버튼을 누르면 검증된 서비스로 요청 한 건을 안전하게 전달합니다.</p>
         <button
           className={styles.button}
-          disabled={!canRequest}
-          onClick={() => void sendRequest()}
+          disabled={!canRunPrimaryAction}
+          onClick={runPrimaryAction}
           type="button"
         >
-          {pageState === "sending" ? "전송 중" : "요청 보내기"}
+          {getPrimaryActionLabel(viewState.pageState, viewState.bootstrapReady)}
         </button>
-        <p className={styles.status} data-state={pageState} role="status" aria-live="polite">
-          {getStatusMessage(pageState, successCount)}
+        <p
+          className={styles.status}
+          data-state={viewState.pageState}
+          role="status"
+          aria-live="polite"
+        >
+          {getStatusMessage(
+            viewState.pageState,
+            viewState.successCount,
+            viewState.bootstrapReady
+          )}
         </p>
       </section>
     </main>
   );
 }
 
-function toPageState(error: unknown): Extract<PageState, "error" | "expired" | "rate_limited"> {
-  if (error instanceof LiveObservationAudienceError) {
-    if (error.kind === "expired") return "expired";
-    if (error.kind === "rate_limited") return "rate_limited";
-  }
-  return "error";
+function getPrimaryActionLabel(
+  pageState: LiveObservationAudiencePageState,
+  bootstrapReady: boolean
+): string {
+  if (pageState === "connecting") return "연결 중";
+  if (pageState === "sending") return "전송 중";
+  if (!bootstrapReady) return "다시 연결";
+  if (pageState === "rate_limited" || pageState === "error") return "다시 요청";
+  return "요청 보내기";
 }
 
-function getStatusMessage(state: PageState, successCount: number): string {
+function getStatusMessage(
+  state: LiveObservationAudiencePageState,
+  successCount: number,
+  bootstrapReady: boolean
+): string {
   switch (state) {
     case "connecting":
       return "관측 세션을 확인하고 있습니다.";
@@ -99,8 +92,12 @@ function getStatusMessage(state: PageState, successCount: number): string {
     case "expired":
       return "관측 세션이 종료되었거나 만료되었습니다.";
     case "rate_limited":
-      return "요청 한도에 도달했습니다. 잠시 후 다시 시도해주세요.";
+      return bootstrapReady
+        ? "요청 한도에 도달했습니다. 다시 요청할 수 있습니다."
+        : "연결 요청 한도에 도달했습니다. 다시 연결할 수 있습니다.";
     case "error":
-      return "요청을 전달하지 못했습니다. 잠시 후 다시 시도해주세요.";
+      return bootstrapReady
+        ? "요청을 전달하지 못했습니다. 다시 요청해주세요."
+        : "관측 세션에 연결하지 못했습니다. 다시 연결해주세요.";
   }
 }

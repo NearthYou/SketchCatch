@@ -16,6 +16,9 @@ test("operator modal uses the v2 session contract and server stream lifecycle", 
   assert.match(modalSource, /abortController\.abort\(\)/);
   assert.match(modalSource, /window\.clearInterval/);
   assert.match(modalSource, /window\.clearTimeout/);
+  assert.match(modalSource, /let cancelled = false/);
+  assert.match(modalSource, /if \(!cancelled\)/);
+  assert.match(modalSource, /cancelled = true/);
 });
 
 test("operator modal selects successful deployments without a demo profile gate", () => {
@@ -29,6 +32,23 @@ test("operator modal exposes only capability-free audience links to QR and copy"
   assert.match(modalSource, /QRCode\.toDataURL\(audienceUrl/);
   assert.match(modalSource, /navigator\.clipboard\.writeText\(audienceUrl\)/);
   assert.doesNotMatch(modalSource, /searchParams|capability|collector|trafficApiUrl/);
+});
+
+test("an invalid audience URL keeps the created session visible while blocking audience utilities", () => {
+  const startBlock = modalSource.slice(
+    modalSource.indexOf("async function startObservation"),
+    modalSource.indexOf("async function endSession")
+  );
+  assert.ok(startBlock.indexOf("setSession(response.session)") >= 0);
+  assert.ok(startBlock.indexOf("setSnapshot(response.snapshot)") >= 0);
+  assert.ok(startBlock.indexOf("setSession(response.session)") < startBlock.indexOf("getLiveObservationAudienceUrl(response.session)"));
+  assert.ok(startBlock.indexOf("setSnapshot(response.snapshot)") < startBlock.indexOf("getLiveObservationAudienceUrl(response.session)"));
+  assert.match(modalSource, /\{session \? \([\s\S]*?세션 종료/);
+  assert.match(modalSource, /disabled=\{!isSessionActive \|\| requestState === "loading"\}/);
+  assert.match(
+    modalSource,
+    /catch \{[\s\S]{0,100}if \(!activeRef\.current\) return;[\s\S]{0,100}setErrorMessage/
+  );
 });
 
 test("operator modal contains no mock, presenter boost, or simulation controls", () => {

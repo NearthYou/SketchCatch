@@ -219,13 +219,13 @@ export function LiveObservationModal({ onClose, projectId }: LiveObservationModa
         abortController.signal
       );
       if (abortController.signal.aborted) return;
-      if (!getLiveObservationAudienceUrl(response.session)) {
-        setErrorMessage("관객 접속 주소를 안전하게 확인하지 못했습니다.");
-        return;
-      }
       setSession(response.session);
       setSnapshot(response.snapshot);
       setNowMs(Date.now());
+      if (!getLiveObservationAudienceUrl(response.session)) {
+        setAudienceUtilityOpen(false);
+        return;
+      }
     } catch (error) {
       if (!abortController.signal.aborted) {
         setErrorMessage(getApiErrorMessage(error, "관측 세션을 시작하지 못했습니다."));
@@ -267,6 +267,7 @@ export function LiveObservationModal({ onClose, projectId }: LiveObservationModa
       if (copiedTimerRef.current !== null) window.clearTimeout(copiedTimerRef.current);
       copiedTimerRef.current = window.setTimeout(() => setCopied(false), 1_500);
     } catch {
+      if (!activeRef.current) return;
       setErrorMessage("관객 URL을 복사하지 못했습니다. 링크를 직접 열어주세요.");
     }
   }

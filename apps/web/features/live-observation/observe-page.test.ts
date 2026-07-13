@@ -10,7 +10,8 @@ const stylesSource = readAppFile("../../app/observe/[publicId]/observe.module.cs
 test("public observe route bootstraps by path id and never renders a credential", () => {
   assert.match(pageSource, /params: Promise<\{ publicId: string \}>/);
   assert.match(pageSource, /<ObserveClient publicId=\{publicId\}/);
-  assert.match(clientSource, /createLiveObservationAudienceClient\(publicId\)/);
+  assert.match(clientSource, /createClient: createLiveObservationAudienceClient/);
+  assert.match(clientSource, /session\.activate\(publicId\)/);
   assert.doesNotMatch(clientSource, /capability|credential|collector|targetUrl|trafficUrl/);
 });
 
@@ -21,13 +22,18 @@ test("public observe page shows concise ready, success, failure, expiry and rate
   assert.match(clientSource, /"expired"/);
   assert.match(clientSource, /"rate_limited"/);
   assert.match(clientSource, /"요청 보내기"/);
+  assert.match(clientSource, /"다시 연결"/);
+  assert.match(clientSource, /"다시 요청"/);
   assert.doesNotMatch(clientSource, /시뮬레이션|데모|mock/i);
 });
 
-test("public observe page disposes bootstrap and request work on unmount", () => {
-  assert.match(clientSource, /client\.bootstrap\(\)/);
-  assert.match(clientSource, /client\.request\(\)/);
-  assert.match(clientSource, /activeRef\.current = false;[\s\S]{0,80}client\.dispose\(\)/);
+test("public observe page delegates lifecycle and retries to the single-flight session controller", () => {
+  assert.match(clientSource, /createLiveObservationAudienceSession/);
+  assert.match(clientSource, /session\.activate\(publicId\)/);
+  assert.match(clientSource, /session\.reconnect\(\)/);
+  assert.match(clientSource, /session\.request\(\)/);
+  assert.match(clientSource, /bootstrapReady/);
+  assert.doesNotMatch(clientSource, /activeRef/);
 });
 
 test("public observe page has explicit desktop, mobile and reduced-motion contracts", () => {
