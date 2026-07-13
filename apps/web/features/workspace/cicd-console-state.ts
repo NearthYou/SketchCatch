@@ -36,7 +36,17 @@ export function isTerminalPipelineTransition(
   );
 }
 
-export function getTerminalPipelineRunTransitions(
+export function isNotifiablePipelineTransition(
+  previousStatus: GitCicdPipelineRunStatus,
+  nextStatus: GitCicdPipelineRunStatus
+): boolean {
+  return (
+    !isTerminalPipelineStatus(previousStatus) &&
+    (nextStatus === "succeeded" || nextStatus === "failed")
+  );
+}
+
+export function getNotifiablePipelineRunTransitions(
   previousRuns: readonly GitCicdPipelineRun[],
   nextRuns: readonly GitCicdPipelineRun[]
 ): GitCicdPipelineRun[] {
@@ -48,7 +58,7 @@ export function getTerminalPipelineRunTransitions(
     const previousStatus = previousStatusByRunId.get(run.id);
     return (
       previousStatus !== undefined &&
-      isTerminalPipelineTransition(previousStatus, run.status)
+      isNotifiablePipelineTransition(previousStatus, run.status)
     );
   });
 }

@@ -15,8 +15,9 @@ Use this file only for compact continuation context. Write it in English.
 
 - Added authenticated monitoring and Pipeline Run Web clients with encoded paths, cursor/log wrappers, and stale-aware refresh metadata.
 - Added pure 5-second active/30-second idle polling, terminal notification, current/history selection, and 60-second stale-state helpers.
+- Review fixes keep cancellation terminal but exclude it from the succeeded/failed notification transition collector, and cover queryless lists plus detail/log authentication.
 - Added HTTP(S)-only deployment Output actions with sensitive-before-parse filtering and static/app then API precedence.
-- Focused Web tests pass 55/55; root and Web/types lint and typecheck, full build, harness, and diff checks pass.
+- Focused Web tests pass 56/56; root and Web/types lint and typecheck, full build, harness, and diff checks pass.
 
 ## Broken Or Unverified
 

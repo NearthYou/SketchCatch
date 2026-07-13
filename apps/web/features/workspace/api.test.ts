@@ -542,6 +542,7 @@ test("Pipeline Run list client preserves the cursor page and URL-encodes the que
     cursor: "created+id/==",
     limit: 25
   });
+  const defaultPage = await listGitCicdPipelineRuns("project/one");
 
   assert.equal(
     String(requests[0]?.input),
@@ -549,7 +550,14 @@ test("Pipeline Run list client preserves the cursor page and URL-encodes the que
   );
   assert.equal(requests[0]?.init?.method, undefined);
   assert.equal(new Headers(requests[0]?.init?.headers).get("authorization"), "Bearer access-token");
+  assert.equal(
+    String(requests[1]?.input),
+    "/api/projects/project%2Fone/git-cicd-pipeline-runs"
+  );
+  assert.equal(requests[1]?.init?.method, undefined);
+  assert.equal(new Headers(requests[1]?.init?.headers).get("authorization"), "Bearer access-token");
   assert.deepEqual(page, { runs: [run], nextCursor: "next+cursor==" });
+  assert.deepEqual(defaultPage, { runs: [run], nextCursor: "next+cursor==" });
 });
 
 test("Pipeline Run detail, incremental logs, and refresh clients preserve typed response metadata", async (context) => {
@@ -591,6 +599,8 @@ test("Pipeline Run detail, incremental logs, and refresh clients preserve typed 
   );
   assert.equal(String(requests[2]?.input), "/api/git-cicd-pipeline-runs/run%2Fone/refresh");
   assert.equal(requests[2]?.init?.method, "POST");
+  assert.equal(new Headers(requests[0]?.init?.headers).get("authorization"), "Bearer access-token");
+  assert.equal(new Headers(requests[1]?.init?.headers).get("authorization"), "Bearer access-token");
   assert.equal(new Headers(requests[2]?.init?.headers).get("authorization"), "Bearer access-token");
   assert.deepEqual(detail, run);
   assert.deepEqual(logsPage, { logs: [log], nextSequence: 18 });

@@ -19,8 +19,9 @@ Short English-only working log for the current agent context. Older records are 
 
 - Added typed monitoring, paginated Pipeline Run, incremental log, detail, and stale-aware refresh clients using the existing authenticated API boundary.
 - Added pure active/idle polling, terminal transition, notification key, current/history selection, stale detection, and safe deployment Output link helpers.
+- Review fixes separated terminal state from notifiable completion: cancellation remains terminal but only succeeded/failed transitions are collected for notifications; API regressions cover queryless default lists and detail/log authentication.
 - Sensitive Outputs are filtered before value parsing; only HTTP(S) static/app and API entry points become actions while other values remain available for detail rendering.
-- Verification: 55 focused Web tests, root and Web/types lint and typecheck, full build, harness, and diff checks passed. Lint retained the pre-existing API `setNow` warning, and the build retained the existing Next.js multi-lockfile workspace-root warning.
+- Verification: 56 focused Web tests, root and Web/types lint and typecheck, full build, harness, and diff checks passed. Lint retained the pre-existing API `setNow` warning, and the build retained the existing Next.js multi-lockfile workspace-root warning.
 - No external GitHub, deployment, Terraform, AWS, or database mutation ran.
 
 ### 2026-07-13 - Expose authenticated Pipeline Run APIs

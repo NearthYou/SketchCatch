@@ -7,8 +7,9 @@ import {
   createPipelineNotificationKey,
   getCicdPipelineRunState,
   getCicdPollIntervalMs,
-  getTerminalPipelineRunTransitions,
+  getNotifiablePipelineRunTransitions,
   isCicdPipelineRunStale,
+  isNotifiablePipelineTransition,
   isTerminalPipelineTransition
 } from "./cicd-console-state";
 
@@ -27,25 +28,36 @@ test("CI/CD polling uses five seconds while any run is active and thirty seconds
 test("terminal transition detection only reports a non-terminal run reaching a terminal status", () => {
   assert.equal(isTerminalPipelineTransition("running", "succeeded"), true);
   assert.equal(isTerminalPipelineTransition("queued", "failed"), true);
-  assert.equal(isTerminalPipelineTransition("detected", "cancelled"), true);
+  assert.equal(isTerminalPipelineTransition("running", "cancelled"), true);
   assert.equal(isTerminalPipelineTransition("running", "running"), false);
   assert.equal(isTerminalPipelineTransition("succeeded", "failed"), false);
 });
 
-test("terminal run transitions are matched by run id and produce stable deduplication keys", () => {
+test("notifiable transitions include only non-terminal runs that succeed or fail", () => {
+  assert.equal(isNotifiablePipelineTransition("running", "succeeded"), true);
+  assert.equal(isNotifiablePipelineTransition("running", "failed"), true);
+  assert.equal(isNotifiablePipelineTransition("running", "cancelled"), false);
+  assert.equal(isNotifiablePipelineTransition("succeeded", "failed"), false);
+});
+
+test("notifiable run transitions are matched by run id and produce stable deduplication keys", () => {
   const previousRuns = [
     createPipelineRun({ id: "run-1", status: "running" }),
-    createPipelineRun({ id: "run-2", status: "succeeded" })
+    createPipelineRun({ id: "run-2", status: "queued" }),
+    createPipelineRun({ id: "run-3", status: "running" }),
+    createPipelineRun({ id: "run-4", status: "succeeded" })
   ];
   const nextRuns = [
     createPipelineRun({ id: "run-1", status: "succeeded" }),
     createPipelineRun({ id: "run-2", status: "failed" }),
-    createPipelineRun({ id: "run-3", status: "failed" })
+    createPipelineRun({ id: "run-3", status: "cancelled" }),
+    createPipelineRun({ id: "run-4", status: "failed" }),
+    createPipelineRun({ id: "run-5", status: "failed" })
   ];
 
   assert.deepEqual(
-    getTerminalPipelineRunTransitions(previousRuns, nextRuns).map((run) => run.id),
-    ["run-1"]
+    getNotifiablePipelineRunTransitions(previousRuns, nextRuns).map((run) => run.id),
+    ["run-1", "run-2"]
   );
   assert.equal(createPipelineNotificationKey("run-1", "succeeded"), "run-1:succeeded");
 });
