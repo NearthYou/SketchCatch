@@ -883,6 +883,53 @@ test("convertArchitectureJsonToDiagramJson expands area nodes to include upper-l
   assert.equal(vpcNode?.size.height, 280);
 });
 
+test("convertArchitectureJsonToDiagramJson keeps managed services outside the VPC boundary", () => {
+  const managedServicesId = "managed-services";
+  const architectureJson: ArchitectureJson = {
+    nodes: [
+      {
+        id: managedServicesId,
+        type: "UNKNOWN",
+        label: "AWS Managed Services",
+        positionX: 20,
+        positionY: -700,
+        config: {
+          diagramKind: "design",
+          diagramType: "design_group",
+          diagramWidth: 1100,
+          diagramHeight: 360
+        }
+      },
+      ...(["CLOUDFRONT", "S3", "ECR_REPOSITORY", "CLOUDWATCH_LOG_GROUP", "ACM_CERTIFICATE"] as const)
+        .map((type, index) => ({
+          id: `managed-${type.toLowerCase()}`,
+          type,
+          label: type,
+          positionX: 80 + index * 220,
+          positionY: -600,
+          config: { parentAreaNodeId: managedServicesId }
+        })),
+      {
+        id: "vpc-main",
+        type: "VPC",
+        label: "Application VPC",
+        positionX: 80,
+        positionY: 80,
+        config: {}
+      }
+    ],
+    edges: []
+  };
+
+  const diagramJson = convertArchitectureJsonToDiagramJson(architectureJson);
+  const managedServices = diagramJson.nodes.find((node) => node.id === managedServicesId);
+  const vpc = diagramJson.nodes.find((node) => node.id === "vpc-main");
+
+  assert.ok(managedServices);
+  assert.ok(vpc);
+  assert.ok(managedServices.position.y + managedServices.size.height < vpc.position.y);
+});
+
 test("convertArchitectureJsonToDiagramJson keeps area layers behind contained resources", () => {
   const architectureJson: ArchitectureJson = {
     nodes: [

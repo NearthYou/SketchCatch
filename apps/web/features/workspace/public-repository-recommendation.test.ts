@@ -45,6 +45,46 @@ test("public repository AI draft keeps the selected Template and includes follow
   assert.notEqual(relationalRequest.prompt, noPersistenceRequest.prompt);
 });
 
+test("public repository AI draft carries authoritative deployment facts without generic scaling assumptions", () => {
+  const analysis = createAnalysisWithChoiceQuestions();
+  analysis.detectedSignals = [...analysis.detectedSignals, "Auto Scaling"];
+  analysis.recommendationReason = "Use multiple containers and add a shared session store.";
+  analysis.aiHandoff = {
+    ...analysis.aiHandoff!,
+    applicationUnits: [
+      { id: "apps/api", rootPath: "apps/api", kind: "backend", frameworks: ["Express"], evidencePaths: [] },
+      { id: "apps/web", rootPath: "apps/web", kind: "frontend", frameworks: ["React", "Vite"], evidencePaths: [] }
+    ],
+    architectureFacts: [
+      { kind: "frontend_delivery", value: "s3_cloudfront_static", sourcePath: "README.md" },
+      { kind: "backend_runtime", value: "ecs_fargate_service", sourcePath: "README.md" },
+      { kind: "ci_cd", value: "github_actions", sourcePath: "README.md" },
+      { kind: "runtime_scale", value: "single_task", sourcePath: "README.md" },
+      { kind: "excluded_capability", value: "database", sourcePath: "README.md" }
+    ]
+  };
+
+  const request = createPublicRepositoryArchitectureDraftRequest({
+    analysis,
+    answers: {},
+    deploymentType: "container",
+    templateId: "ecs-fargate-container-app",
+    usesCiCd: true
+  });
+
+  assert.equal(request.repositoryEvidence?.mode, "strict");
+  assert.equal(request.repositoryEvidence?.facts.length, 5);
+  assert.match(request.prompt, /web frontend and API backend detected as separate application units/i);
+  assert.match(request.prompt, /one runtime task; do not add dynamic task scaling/i);
+  assert.match(request.prompt, /GitHub Actions builds and deploys; do not substitute CodePipeline/i);
+  assert.match(request.prompt, /no persistent database required by explicit repository evidence/i);
+  assert.doesNotMatch(request.prompt, /horizontal scaling readiness/i);
+  assert.doesNotMatch(request.prompt, /mostly steady with occasional bursts/i);
+  assert.doesNotMatch(request.prompt, /Availability target: 99\.9%/i);
+  assert.doesNotMatch(request.prompt, /Auto Scaling/i);
+  assert.doesNotMatch(request.prompt, /multiple containers|shared session store/i);
+});
+
 test("public repository recommendation returns multiple candidates and follow-up questions", () => {
   const analysis = createAnalysis();
   const deploymentType = getPublicRepositoryDeploymentDefault(analysis);

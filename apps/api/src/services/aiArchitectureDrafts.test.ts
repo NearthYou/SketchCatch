@@ -6,7 +6,8 @@ import type { AiTextProvider } from "./aiLlmExplanation.js";
 import {
   ArchitectureDraftGenerationError,
   createAmazonQArchitectureDraftResponse,
-  createArchitectureDraft
+  createArchitectureDraft,
+  createDeterministicArchitectureIntentPlan
 } from "./aiArchitectureDrafts.js";
 
 const confirmedCreditPolicy = {
@@ -15,6 +16,20 @@ const confirmedCreditPolicy = {
   transcribe: false,
   billingMode: "aws_credit_only"
 } as const;
+
+test("GitHub Actions handoff does not imply an AWS-native CI/CD pipeline", () => {
+  const githubActionsPlan = createDeterministicArchitectureIntentPlan(
+    "GitHub Actions builds an image, pushes to ECR, and deploys ECS. Do not substitute CodePipeline or CodeBuild."
+  );
+  const awsNativePlan = createDeterministicArchitectureIntentPlan(
+    "Use CodeStar Connection, CodePipeline, CodeBuild, and CodeDeploy for delivery."
+  );
+
+  assert.equal(githubActionsPlan?.patternIds?.includes("github-cicd-codedeploy") ?? false, false);
+  assert.equal(githubActionsPlan?.requiredResources?.includes("CODEPIPELINE") ?? false, false);
+  assert.equal(awsNativePlan?.patternIds?.includes("github-cicd-codedeploy"), true);
+  assert.equal(awsNativePlan?.requiredResources?.includes("CODEPIPELINE"), true);
+});
 
 test("fixed Template keeps its core resources and merges compatible answer-driven additions", () => {
   const result = createArchitectureDraft({
@@ -131,6 +146,120 @@ test("fixed Template keeps CI/CD resource parameters aligned with merged Terrafo
   assert.ok(!response.architectureJson.nodes.some((node) => node.id === "public-subnet-a"));
   assert.ok(!response.architectureJson.nodes.some((node) => node.id === "ecs-execution-role"));
   assert.doesNotMatch(JSON.stringify(response.architectureJson), /aws_vpc\.vpc_main\./u);
+});
+
+test("repository evidence strict mode keeps the Fargate diagram minimal and evidence-backed", async () => {
+  const provider = createFakeAmazonQProvider(createNormalizedRequirementPlan);
+  const response = await createAmazonQArchitectureDraftResponse({
+    prompt: [
+      "Generate a source repository architecture on the selected ECS Fargate Template.",
+      "Repository architecture facts are authoritative.",
+      "Use S3 and CloudFront for the static web frontend.",
+      "Use ECR and one ECS Fargate task behind an ALB with /health on port 8080.",
+      "Use CloudWatch for logs and metrics.",
+      "GitHub Actions builds and deploys; do not substitute CodePipeline, CodeBuild, or CodeDeploy.",
+      "No database, Redis, WebSocket, or authentication is required.",
+      "Repository-inferred requirement profile:",
+      "- Application type: web frontend and API backend detected as separate application units.",
+      "- Traffic: not established by repository evidence; do not infer burst scaling.",
+      "- Database: no persistent database required by explicit repository evidence.",
+      "- Frontend: SPA frontend detected.",
+      "- Backend: Express API in a container.",
+      "- Primary region: ap-northeast-2 (Seoul) for the initial draft.",
+      "- Budget: cost-conscious initial deployment.",
+      "- HTTPS: TLS terminated at the Application Load Balancer.",
+      "- File upload: not required.",
+      "- Realtime features: not required.",
+      "- Management preference: managed container runtime.",
+      "- Performance target: not established by repository evidence.",
+      "- Runtime scale: one runtime task; do not add autoscaling.",
+      "- Traffic pattern: not established by repository evidence.",
+      "- Availability target: not established by repository evidence.",
+      "Required Components: preserve the selected ECS Fargate Template and add only evidence-backed resources.",
+      "Architecture Flow: Browser to CloudFront and S3; Browser to ALB to ECS Fargate.",
+      "Validation Checklist: keep the selected Template core visible and connected."
+    ].join("\n"),
+    templateId: "ecs-fargate-container-app",
+    repositoryEvidence: {
+      mode: "strict",
+      facts: [
+        { kind: "frontend_delivery", value: "s3_cloudfront_static", sourcePath: "README.md" },
+        { kind: "backend_runtime", value: "ecs_fargate_service", sourcePath: "README.md" },
+        { kind: "container_registry", value: "ecr", sourcePath: "README.md" },
+        { kind: "traffic_entry", value: "application_load_balancer", sourcePath: "README.md" },
+        { kind: "observability", value: "cloudwatch", sourcePath: "README.md" },
+        { kind: "ci_cd", value: "github_actions", sourcePath: "README.md" },
+        { kind: "health_check", value: "http:8080/health", sourcePath: "apps/api/Dockerfile" },
+        { kind: "transport_security", value: "alb_tls_termination", sourcePath: "README.md" },
+        { kind: "runtime_scale", value: "single_task", sourcePath: "README.md" },
+        { kind: "excluded_capability", value: "database", sourcePath: "README.md" },
+        { kind: "excluded_capability", value: "redis", sourcePath: "README.md" },
+        { kind: "excluded_capability", value: "websocket", sourcePath: "README.md" },
+        { kind: "excluded_capability", value: "authentication", sourcePath: "README.md" }
+      ]
+    }
+  }, {
+    provider,
+    creditPolicy: confirmedCreditPolicy
+  });
+
+  assert.ok(!("status" in response));
+  if ("status" in response) return;
+
+  const countNodes = (type: ArchitectureJson["nodes"][number]["type"]): number =>
+    response.architectureJson.nodes.filter((node) => node.type === type).length;
+  const service = response.architectureJson.nodes.find((node) => node.type === "ECS_SERVICE");
+  const targetGroup = response.architectureJson.nodes.find(
+    (node) => node.type === "LOAD_BALANCER_TARGET_GROUP"
+  );
+  const vpc = response.architectureJson.nodes.find((node) => node.type === "VPC");
+  const managedServices = response.architectureJson.nodes.find(
+    (node) => node.label === "AWS Managed Services"
+  );
+  const labels = new Set(response.architectureJson.nodes.map((node) => node.label));
+  const edgeLabels = new Set(response.architectureJson.edges.map((edge) => edge.label));
+
+  assert.equal(countNodes("SUBNET"), 2);
+  assert.equal(countNodes("S3"), 1);
+  assert.equal(countNodes("CLOUDFRONT"), 1);
+  assert.equal(countNodes("ECR_REPOSITORY"), 1);
+  assert.equal(countNodes("CLOUDWATCH_LOG_GROUP"), 1);
+  assert.equal(countNodes("ACM_CERTIFICATE"), 1);
+  assert.equal(countNodes("UNKNOWN"), 3);
+  assert.equal(countNodes("NAT_GATEWAY"), 0);
+  assert.equal(countNodes("ELASTIC_IP"), 0);
+  assert.equal(countNodes("APPLICATION_AUTO_SCALING_TARGET"), 0);
+  assert.equal(countNodes("APPLICATION_AUTO_SCALING_POLICY"), 0);
+  assert.equal(countNodes("CODESTAR_CONNECTION"), 0);
+  assert.equal(countNodes("CODEPIPELINE"), 0);
+  assert.equal(countNodes("CODEBUILD_PROJECT"), 0);
+  assert.equal(countNodes("RDS"), 0);
+  assert.equal(countNodes("ELASTICACHE_REDIS"), 0);
+  assert.equal(countNodes("API_GATEWAY_WEBSOCKET_API"), 0);
+  assert.equal(countNodes("COGNITO_USER_POOL"), 0);
+  assert.ok(
+    response.architectureJson.nodes
+      .filter((node) => node.type === "SUBNET")
+      .every((node) => node.config.mapPublicIpOnLaunch === true)
+  );
+  assert.equal(service?.config.desiredCount, 1);
+  assert.equal(
+    (service?.config.loadBalancer as { containerPort?: number } | undefined)?.containerPort,
+    8080
+  );
+  assert.deepEqual(targetGroup?.config.healthCheck, { path: "/health", matcher: "200-399" });
+  assert.ok(labels.has("Browser"));
+  assert.ok(labels.has("GitHub Actions"));
+  assert.ok(labels.has("AWS Managed Services"));
+  assert.ok(
+    managedServices !== undefined &&
+    vpc !== undefined &&
+    managedServices.positionY + Number(managedServices.config.diagramHeight) < vpc.positionY
+  );
+  assert.ok(edgeLabels.has("HTTPS API"));
+  assert.ok(edgeLabels.has("builds and pushes image"));
+  assert.ok(edgeLabels.has("deploys task revision"));
+  assert.ok(edgeLabels.has("health checks /health"));
 });
 
 test("createAmazonQArchitectureDraftResponse sends the web deployment answer path to Amazon Q", async () => {

@@ -2098,6 +2098,23 @@ type RepositoryAnalysisEvidence = {
   signals: string[];
 };
 
+type RepositoryArchitectureFact = {
+  kind:
+    | "frontend_delivery"
+    | "backend_runtime"
+    | "container_registry"
+    | "traffic_entry"
+    | "observability"
+    | "ci_cd"
+    | "health_check"
+    | "transport_security"
+    | "runtime_scale"
+    | "excluded_capability"
+    | "infrastructure_definition";
+  value: string;
+  sourcePath: string;
+};
+
 type RepositoryDeploymentType = "ec2_vm" | "container" | "serverless";
 
 type RepositoryAnalysisQuestion = {
@@ -2132,9 +2149,10 @@ type RepositoryAnalysisAiHandoff =
   | {
       status: "template_selected";
       templateId: TemplateId;
-      applicationUnits: RepositoryApplicationUnit[];
-      evidence: RepositoryAnalysisEvidence[];
-      missingEvidence: RepositoryEvidenceKind[];
+       applicationUnits: RepositoryApplicationUnit[];
+       evidence: RepositoryAnalysisEvidence[];
+       architectureFacts?: RepositoryArchitectureFact[];
+       missingEvidence: RepositoryEvidenceKind[];
       deploymentTypeDefault?: RepositoryDeploymentType | null;
       usesCiCdDefault?: boolean | null;
       questions?: RepositoryAnalysisQuestion[];
@@ -2144,9 +2162,10 @@ type RepositoryAnalysisAiHandoff =
   | {
       status: "template_selection_failed";
       templateId: null;
-      applicationUnits: RepositoryApplicationUnit[];
-      evidence: RepositoryAnalysisEvidence[];
-      missingEvidence: RepositoryEvidenceKind[];
+       applicationUnits: RepositoryApplicationUnit[];
+       evidence: RepositoryAnalysisEvidence[];
+       architectureFacts?: RepositoryArchitectureFact[];
+       missingEvidence: RepositoryEvidenceKind[];
       deploymentTypeDefault?: RepositoryDeploymentType | null;
       usesCiCdDefault?: boolean | null;
       questions?: RepositoryAnalysisQuestion[];

@@ -13,6 +13,26 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-13 - Constrain Repository diagrams to authoritative evidence
+
+- Reproduced the `audience-live-check` Repository flow producing an over-inferred ECS board and a later `422` during strict regeneration.
+- Added structured Repository architecture facts for static S3/CloudFront delivery, ECS Fargate, ECR, ALB, CloudWatch, GitHub Actions, TLS, one task, Docker health checks, exclusions, and missing IaC definitions.
+- Made strict Repository evidence rebuild the Architecture Intent Plan and final ECS diagram deterministically instead of inheriting generic private subnet, NAT, autoscaling, AWS-native CI/CD, persistence, realtime, or authentication assumptions.
+- Configured the evidence-backed API contract as ALB HTTPS -> one ECS Fargate service on port 8080 with `/health`, with GitHub Actions represented as an external actor.
+- Separated AWS managed services from the VPC boundary and removed redundant delivery edges; added adapter coverage for non-overlapping managed-service and VPC areas.
+- Removed candidate-ranking prose and contradictory broad signals from strict AI prompts so unsupported recommendations cannot become architecture requirements.
+- Chrome verification before the final layout adjustment confirmed successful generation with 26 nodes, no `422`, and no forbidden NAT, CodePipeline, CodeBuild, autoscaling, RDS, Redis, WebSocket, or Cognito resources. The Chrome login expired before the final post-layout screenshot; deterministic adapter coverage verifies the managed-service/VPC separation.
+- Verification: 58 Architecture Draft tests, 42 Web recommendation/adapter tests, 8 Repository analysis tests, the `.git` route regression, `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm harness:check`, and `git diff --check` passed. Lint retains the pre-existing unused `setNow` warning in the Live Observation store contract.
+
+### 2026-07-13 - Eliminate generated ECS board diagnostics
+
+- Reproduced six diagnostics on the generated `audience-live-check` ECS Fargate board: two Terraform round-trip warnings and four false Subnet/VPC placement warnings.
+- Allowed bare Terraform resource addresses only in `depends_on`, aligned nested-block parsing with the generator's shared generic nested-block contract, and preserved existing Diagram area parents during Availability Zone sync.
+- Updated architecture containment checks to accept matching VPC ancestors or full geometric containment, covering the single-parent VPC/AZ representation without hiding missing references or partial overlaps.
+- Added regressions for ECS dependencies, Application Auto Scaling nested metrics, VPC parent preservation, nested area ancestors, and AZ-grouped Subnets.
+- Chrome verification on the same saved project: Terraform diagnostics `2 -> 0`, Architecture diagnostics `4 -> 0`, total issue badge `6 -> 0`.
+- Verification: 57 focused API Terraform tests, 40 focused Web architecture tests, `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed. Lint retains the pre-existing unused `setNow` warning in the Live Observation store contract.
+
 ### 2026-07-13 - Merge latest dev into AI diagram fallback branch
 
 - Fast-forwarded `feat/ck/350-ai-diagram-fallback` to latest `origin/dev`.

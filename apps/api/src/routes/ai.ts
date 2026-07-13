@@ -27,7 +27,11 @@ import type {
   TranscribeConfirmation,
   VoiceRequirementInput
 } from "@sketchcatch/types";
-import { RESOURCE_TYPES, TEMPLATE_IDS } from "@sketchcatch/types";
+import {
+  REPOSITORY_ARCHITECTURE_FACT_KINDS,
+  RESOURCE_TYPES,
+  TEMPLATE_IDS
+} from "@sketchcatch/types";
 import {
   ArchitectureDraftGenerationError,
   createConfiguredAmazonQArchitectureDraftResponse,
@@ -125,6 +129,16 @@ const architectureJsonSchema: z.ZodType<ArchitectureJson> = z.object({
 const architectureDraftBodySchema: z.ZodType<CreateArchitectureDraftRequest> = z.object({
   prompt: z.string().trim().min(1),
   templateId: z.enum(TEMPLATE_IDS).optional(),
+  repositoryEvidence: z
+    .object({
+      mode: z.literal("strict"),
+      facts: z.array(z.object({
+        kind: z.enum(REPOSITORY_ARCHITECTURE_FACT_KINDS),
+        value: z.string().trim().min(1).max(160),
+        sourcePath: z.string().trim().min(1).max(500)
+      })).max(64)
+    })
+    .optional(),
   repositoryAnalysis: z
     .object({
       projectId: z.uuid(),
@@ -866,7 +880,7 @@ type PublicGitHubRecursiveTreeResponse = {
 const PUBLIC_GITHUB_API_BASE_URL = "https://api.github.com";
 const MAX_PUBLIC_REPOSITORY_EVIDENCE_FILES = 24;
 const PUBLIC_GITHUB_REQUEST_TIMEOUT_MS = 10_000;
-const PUBLIC_REPOSITORY_ANALYSIS_CACHE_NAMESPACE = "ai:public-repository-analysis:v10";
+const PUBLIC_REPOSITORY_ANALYSIS_CACHE_NAMESPACE = "ai:public-repository-analysis:v11";
 const PUBLIC_REPOSITORY_ANALYSIS_CACHE_TTL_MS = 5 * 60 * 1_000;
 
 // GitHub URL에서 owner/repo만 뽑습니다. public repository 근거 파일을 읽을 때 이 값이 필요합니다.

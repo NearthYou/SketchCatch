@@ -91,10 +91,34 @@ export function createPublicRepositoryArchitectureDraftRequest(input: {
   const evidenceFileLines = input.analysis.evidenceFiles
     .filter((file) => file.found)
     .map((file) => `- ${file.path}`);
+  const architectureFacts = input.analysis.aiHandoff?.architectureFacts ?? [];
+  const strictRepositoryEvidence = architectureFacts.length > 0;
+  const excludedCapabilities = new Set(
+    architectureFacts
+      .filter((fact) => fact.kind === "excluded_capability")
+      .map((fact) => fact.value)
+  );
+  const detectedSignals = input.analysis.detectedSignals.filter((signal) => {
+    if (!strictRepositoryEvidence) return true;
+    if (signal === "Auto Scaling" && architectureFacts.some(
+      (fact) => fact.kind === "runtime_scale" && fact.value === "single_task"
+    )) return false;
+    if (signal === "Database" && excludedCapabilities.has("database")) return false;
+    if (signal === "Redis" && excludedCapabilities.has("redis")) return false;
+    if (signal === "WebSocket" && excludedCapabilities.has("websocket")) return false;
+    if (signal === "Authentication" && excludedCapabilities.has("authentication")) return false;
+    return true;
+  });
+  const architectureFactLines = architectureFacts.map((fact) =>
+    `- ${fact.kind}: ${fact.value} (source: ${fact.sourcePath})`
+  );
   const inferredRequirementLines = createInferredRepositoryRequirementLines(input);
 
   return {
     templateId: input.templateId,
+    ...(architectureFacts.length > 0
+      ? { repositoryEvidence: { mode: "strict" as const, facts: architectureFacts } }
+      : {}),
     prompt: [
       "Generate a production-quality Practice Architecture for this source repository.",
       "Priority rules:",
@@ -106,8 +130,10 @@ export function createPublicRepositoryArchitectureDraftRequest(input: {
       `Repository: ${input.analysis.repositoryUrl} at ${input.analysis.defaultBranch}.`,
       `Deployment type: ${input.deploymentType}.`,
       `Git/CI/CD handoff requested: ${input.usesCiCd ? "yes" : "no"}.`,
-      `Detected signals: ${input.analysis.detectedSignals.join(", ") || "none"}.`,
-      `Repository recommendation context: ${input.analysis.recommendationReason}`,
+      `Detected signals: ${detectedSignals.join(", ") || "none"}.`,
+      strictRepositoryEvidence
+        ? "Repository recommendation context: candidate ranking only; authoritative architecture facts below control the draft."
+        : `Repository recommendation context: ${input.analysis.recommendationReason}`,
       "Repository-inferred requirement profile:",
       ...inferredRequirementLines,
       "Confirmed follow-up answers:",
@@ -118,6 +144,8 @@ export function createPublicRepositoryArchitectureDraftRequest(input: {
       ...(applicationUnitLines.length > 0 ? applicationUnitLines : ["- none"]),
       "Repository evidence files:",
       ...(evidenceFileLines.length > 0 ? evidenceFileLines : ["- none"]),
+      "Repository architecture facts (authoritative; do not replace with generic production assumptions):",
+      ...(architectureFactLines.length > 0 ? architectureFactLines : ["- none"]),
       "Required Components:",
       `- Preserve every core resource and relationship from ${input.templateId}.`,
       "- Add only the supporting resources required by the confirmed answers and Repository Analysis.",
@@ -162,15 +190,27 @@ function createInferredRepositoryRequirementLines(input: {
   const applicationScope = normalizedAnswers.get("application-scope");
   const dataPersistence = normalizedAnswers.get("data-persistence");
   const operationsPreference = normalizedAnswers.get("operations-preference");
+  const architectureFacts = input.analysis.aiHandoff?.architectureFacts ?? [];
+  const hasArchitectureFact = (kind: string, value: string): boolean =>
+    architectureFacts.some((fact) => fact.kind === kind && fact.value === value);
   const frameworks = [...new Set(
     (input.analysis.aiHandoff?.applicationUnits ?? []).flatMap((unit) => unit.frameworks)
   )];
+  const applicationUnits = input.analysis.aiHandoff?.applicationUnits ?? [];
+  const hasFrontendUnit = applicationUnits.some((unit) =>
+    unit.kind === "frontend" || unit.kind === "fullstack"
+  );
+  const hasBackendUnit = applicationUnits.some((unit) =>
+    unit.kind === "backend" || unit.kind === "fullstack"
+  );
   const applicationType = applicationScope === "api"
     ? "API server/backend service, not a public website frontend"
     : applicationScope === "web"
       ? "public web frontend"
       : applicationScope === "web_and_api"
-        ? "dynamic web application with a public frontend and API backend"
+      ? "dynamic web application with a public frontend and API backend"
+        : hasFrontendUnit && hasBackendUnit
+          ? "web frontend and API backend detected as separate application units"
         : input.analysis.detectedSignals.includes("React")
           ? "web application inferred from the detected frontend"
           : "API server/backend service inferred from Repository Analysis";
@@ -180,7 +220,9 @@ function createInferredRepositoryRequirementLines(input: {
       ? "managed key-value or document database required"
       : dataPersistence === "none"
         ? "no persistent database required"
-        : input.analysis.detectedSignals.includes("Database")
+        : hasArchitectureFact("excluded_capability", "database")
+          ? "no persistent database required by explicit repository evidence"
+          : input.analysis.detectedSignals.includes("Database")
           ? "database tier inferred from repository evidence"
           : "no database evidence; keep persistence minimal";
   const frontendRequirement = applicationScope === "api"
@@ -196,24 +238,35 @@ function createInferredRepositoryRequirementLines(input: {
     : operationsPreference === "container"
       ? "managed container runtime preferred"
       : "managed services preferred where compatible";
+  const runtimeScale = hasArchitectureFact("runtime_scale", "single_task")
+    ? "one runtime task; do not add dynamic task scaling unless the user explicitly overrides this repository contract"
+    : "not established by repository evidence";
+  const transportSecurity = hasArchitectureFact("transport_security", "alb_tls_termination")
+    ? "HTTPS with TLS terminated at the Application Load Balancer"
+    : "not established by repository evidence";
+  const ciCd = hasArchitectureFact("ci_cd", "github_actions")
+    ? "GitHub Actions builds and deploys; do not substitute CodePipeline, CodeBuild, or CodeDeploy"
+    : input.usesCiCd
+      ? "Git/CI/CD handoff requested, but the pipeline implementation is not established by repository evidence"
+      : "not required in this draft";
 
   return [
     `- Application type: ${applicationType}.`,
-    "- Traffic: initial small-to-medium workload with horizontal scaling readiness.",
+    "- Traffic: not established by repository evidence; do not infer burst scaling.",
     `- Database: ${databaseRequirement}.`,
     `- Frontend: ${frontendRequirement}.`,
     `- Backend: ${backendRequirement}.`,
     "- Primary region: ap-northeast-2 (Seoul) for the initial draft.",
     "- Budget: cost-conscious initial deployment without sacrificing the selected Template core.",
-    "- HTTPS: production preference; domain and certificate details are not available from Repository Analysis.",
+    `- HTTPS: ${transportSecurity}; domain and certificate details are not available from Repository Analysis.`,
     "- File upload: not required; Repository Analysis found no supporting evidence.",
     "- Realtime features: not required; Repository Analysis found no supporting evidence.",
     `- Management preference: ${managementPreference}.`,
-    "- Performance target: normal API and page responses within 3 seconds.",
-    "- Initial deployment size: small repository; exact build artifact size is unknown.",
-    "- Traffic pattern: mostly steady with occasional bursts.",
-    "- Availability target: 99.9% with managed recovery where the Template supports it.",
-    `- Git/CI/CD: ${input.usesCiCd ? "include a deployment handoff path" : "not required in this draft"}.`
+    "- Performance target: not established by repository evidence.",
+    `- Runtime scale: ${runtimeScale}.`,
+    "- Traffic pattern: not established by repository evidence.",
+    "- Availability target: not established by repository evidence.",
+    `- Git/CI/CD: ${ciCd}.`
   ];
 }
 

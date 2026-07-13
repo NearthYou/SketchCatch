@@ -2152,6 +2152,14 @@ test("POST /api/ai/source-repository-analysis accepts clone URLs ending in .git"
     assert.ok(body.detectedSignals.includes("Node API"));
     assert.equal(body.aiHandoff.deploymentTypeDefault, "container");
     assert.equal(body.aiHandoff.recommendation.candidates[0].templateId, "ecs-fargate-container-app");
+    assert.ok(body.aiHandoff.architectureFacts.some(
+      (fact: { kind: string; value: string }) =>
+        fact.kind === "backend_runtime" && fact.value === "ecs_fargate_service"
+    ));
+    assert.ok(body.aiHandoff.architectureFacts.some(
+      (fact: { kind: string; value: string }) =>
+        fact.kind === "excluded_capability" && fact.value === "database"
+    ));
   } finally {
     globalThis.fetch = originalFetch;
     await app.close();
