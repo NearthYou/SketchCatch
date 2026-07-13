@@ -210,6 +210,41 @@ test("release ledger rejects unsafe Output URLs and secret-like provider metadat
     ),
     /metadata/i
   );
+  await assert.rejects(
+    recordApplicationRelease(
+      {
+        ...createReleaseInput(),
+        providerRevision: {
+          provider: "aws",
+          resourceType: "ecs_service",
+          revisionId: "task-definition/api:42",
+          artifactReference: null,
+          metadata: { private__key: "must-not-be-stored" }
+        }
+      },
+      repository,
+      () => crypto.randomUUID(),
+      () => now
+    ),
+    /metadata/i
+  );
+  await assert.rejects(
+    recordApplicationRelease(
+      {
+        ...createReleaseInput(),
+        providerRevision: {
+          provider: "aws",
+          resourceType: "ecs_service",
+          revisionId: "task-definition/api:42",
+          artifactReference: null
+        } as never
+      },
+      repository,
+      () => crypto.randomUUID(),
+      () => now
+    ),
+    /revision evidence/i
+  );
 });
 
 class InMemoryProjectReleaseLedgerRepository implements ProjectReleaseLedgerRepository {

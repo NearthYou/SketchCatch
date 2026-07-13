@@ -12,6 +12,7 @@ import {
 import {
   createDeploymentTargetDraft,
   createDeploymentTargetRequest,
+  formatDeploymentTargetUpdatedAt,
   getDefaultDeploymentEvidencePath,
   isDeploymentTargetDraftReady,
   type ProjectDeploymentTargetDraft
@@ -130,7 +131,7 @@ export function ProjectDeploymentTargetSettingsClient({
         <div className="settingsInfoGrid">
           <article><span>Runtime</span><strong>{runtimeLabels[target.runtimeTargetKind]}</strong></article>
           <article><span>Region</span><strong>{target.region}</strong></article>
-          <article><span>Last saved</span><strong>{new Date(target.updatedAt).toLocaleString("ko-KR")}</strong></article>
+          <article><span>Last saved</span><strong>{formatDeploymentTargetUpdatedAt(target.updatedAt)}</strong></article>
         </div>
       ) : null}
 

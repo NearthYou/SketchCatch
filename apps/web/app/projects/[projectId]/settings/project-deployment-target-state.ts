@@ -65,6 +65,14 @@ export function getDefaultDeploymentEvidencePath(runtimeTargetKind: RuntimeTarge
   return runtimeBuildConfig[runtimeTargetKind].defaultPath;
 }
 
+export function formatDeploymentTargetUpdatedAt(value: string): string {
+  return new Date(value).toLocaleString("ko-KR", {
+    timeZone: "Asia/Seoul",
+    dateStyle: "medium",
+    timeStyle: "medium"
+  });
+}
+
 export function isDeploymentTargetDraftReady(
   draft: ProjectDeploymentTargetDraft,
   connections: readonly AwsConnection[]

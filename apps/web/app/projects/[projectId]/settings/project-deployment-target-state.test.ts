@@ -4,6 +4,7 @@ import type { AwsConnection, ProjectDeploymentTarget } from "@sketchcatch/types"
 import {
   createDeploymentTargetDraft,
   createDeploymentTargetRequest,
+  formatDeploymentTargetUpdatedAt,
   isDeploymentTargetDraftReady
 } from "./project-deployment-target-state.js";
 
@@ -93,5 +94,12 @@ test("target save requires a verified connection and canonical commit SHA", () =
       { ...connection, status: "failed" }
     ]),
     false
+  );
+});
+
+test("deployment target timestamps use an explicit Seoul timezone", () => {
+  assert.match(
+    formatDeploymentTargetUpdatedAt("2026-07-14T00:00:00.000Z"),
+    /2026.*7.*14.*9:00:00/
   );
 });

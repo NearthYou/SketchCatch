@@ -491,6 +491,9 @@ function validateReleaseEvidence(
       !isBoundedIdentifier(revision.revisionId, 1_024) ||
       (revision.artifactReference !== null &&
         !isBoundedIdentifier(revision.artifactReference, 2_048)) ||
+      !revision.metadata ||
+      typeof revision.metadata !== "object" ||
+      Array.isArray(revision.metadata) ||
       Object.keys(revision.metadata).length > 50
     ) {
       throw new ReleaseLedgerValidationError("Provider revision evidence is invalid.");
@@ -508,7 +511,8 @@ function assertNoSecretLikeKeys(value: JsonValue | null, label: string): void {
     return;
   }
   for (const [key, item] of Object.entries(value)) {
-    if (/(?:secret|token|password|credential|private.?key|access.?key)/i.test(key)) {
+    const normalizedKey = key.replace(/[^a-z0-9]/gi, "");
+    if (/(?:secret|token|password|credential|privatekey|accesskey)/i.test(normalizedKey)) {
       throw new ReleaseLedgerValidationError(`${label} must not contain secret-like fields.`);
     }
     assertNoSecretLikeKeys(item, label);
