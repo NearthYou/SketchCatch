@@ -5,6 +5,7 @@ import { ArrowRight, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import {
   filterBoardTemplates,
+  getBoardTemplateRelationshipCount,
   getBoardTemplateResourceCount,
   listBoardTemplateTags,
   type BoardTemplate,
@@ -101,7 +102,7 @@ export function TemplateGallery({
                       </div>
                       <div>
                         <dt>관계</dt>
-                        <dd>{template.diagramJson.edges.length}</dd>
+                        <dd>{getBoardTemplateRelationshipCount(template)}</dd>
                       </div>
                     </dl>
                   </div>

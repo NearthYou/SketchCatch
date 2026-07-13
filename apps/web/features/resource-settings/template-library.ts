@@ -1,4 +1,4 @@
-import type { DiagramJson } from "../../../../packages/types/src";
+import { isTerraformDeployableNode, type DiagramJson } from "../../../../packages/types/src";
 import {
   buildTemplateDiagramJson,
   templateDefinitions,
@@ -695,9 +695,21 @@ export function listBoardTemplates(): readonly BoardTemplate[] {
   }));
 }
 
-// Design presentation node를 제외하고 실제 Terraform으로 배포되는 Resource만 셉니다.
+// Resource kind와 Terraform parameters가 모두 있는 실제 배포 Resource만 셉니다.
 export function getBoardTemplateResourceCount(template: BoardTemplate): number {
-  return template.diagramJson.nodes.filter((node) => node.parameters !== undefined).length;
+  return template.diagramJson.nodes.filter(isTerraformDeployableNode).length;
+}
+
+// 양쪽 끝이 배포 Resource인 semantic relationship만 Gallery 숫자에 포함합니다.
+export function getBoardTemplateRelationshipCount(template: BoardTemplate): number {
+  const deployableNodeIds = new Set(
+    template.diagramJson.nodes.filter(isTerraformDeployableNode).map((node) => node.id)
+  );
+
+  return template.diagramJson.edges.filter(
+    (edge) =>
+      deployableNodeIds.has(edge.sourceNodeId) && deployableNodeIds.has(edge.targetNodeId)
+  ).length;
 }
 
 // Live Observation과 기존 저장 Draft 검증은 배포 Template 카탈로그와 분리된 레거시 fixture를 사용합니다.

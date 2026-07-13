@@ -99,6 +99,14 @@ test("workspace owners explicitly gate Deployment availability", () => {
   assert.match(deploymentPanelSource, /canLoadDeploymentData\(deploymentAvailability\)/);
 });
 
+test("Deployment context labels only Terraform-deployable board nodes as resources", () => {
+  assert.match(componentSource, /isTerraformDeployableNode/);
+  assert.match(componentSource, /deployableResourceCount=\{deployableResourceCount\}/);
+  assert.doesNotMatch(componentSource, /currentNodeCount=\{context\.nodes\.length\}/);
+  assert.match(deploymentPanelSource, /\{deployableResourceCount\} resources/);
+  assert.doesNotMatch(deploymentPanelSource, /currentNodeCount|board nodes/);
+});
+
 test("right panel width stays locked after deployment leaves the panel", () => {
   const rightRailRule = getCssRule(diagramEditorStylesSource, "rightRail");
   const rightPanelShellRule = getCssRule(stylesSource, "rightPanelShell");

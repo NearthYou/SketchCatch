@@ -7,6 +7,7 @@ import {
   applyTemplateToDiagramWithBackup,
   buildBoardTemplateDiagram,
   filterBoardTemplates,
+  getBoardTemplateRelationshipCount,
   getBoardTemplateResourceCount,
   listBoardTemplateTags,
   listBoardTemplates,
@@ -107,6 +108,37 @@ test("listBoardTemplates exposes exactly the six deployable TemplateDefinitions"
     templates.reduce((count, template) => count + getBoardTemplateResourceCount(template), 0),
     103
   );
+});
+
+test("Template counts use deployable Terraform identity instead of visual node kind alone", () => {
+  const visualResourceArea = createCountNode("visual-vpc", "resource", true);
+  const parameterlessResource = createCountNode("parameterless-resource", "resource", false);
+  const parameterizedDesign = createCountNode("design-region", "design", true);
+  const template = {
+    id: "count-contract",
+    title: "Count contract",
+    description: "Count contract fixture",
+    tags: [],
+    diagramJson: {
+      nodes: [visualResourceArea, parameterlessResource, parameterizedDesign],
+      edges: [
+        {
+          id: "semantic-self",
+          sourceNodeId: visualResourceArea.id,
+          targetNodeId: visualResourceArea.id
+        },
+        {
+          id: "presentation-edge",
+          sourceNodeId: parameterizedDesign.id,
+          targetNodeId: visualResourceArea.id
+        }
+      ],
+      viewport: { x: 0, y: 0, zoom: 1 }
+    }
+  };
+
+  assert.equal(getBoardTemplateResourceCount(template), 1);
+  assert.equal(getBoardTemplateRelationshipCount(template), 1);
 });
 
 test("board templates use 48px geometry and compact Area bounds around direct children", () => {
@@ -361,6 +393,35 @@ function createDiagram(nodeId: string): DiagramJson {
     ],
     edges: [],
     viewport: { x: 0, y: 0, zoom: 1 }
+  };
+}
+
+// Count fixtures deliberately vary Resource kind and Terraform parameter presence independently.
+function createCountNode(
+  id: string,
+  kind: DiagramJson["nodes"][number]["kind"],
+  withParameters: boolean
+): DiagramJson["nodes"][number] {
+  return {
+    id,
+    kind,
+    label: id,
+    locked: false,
+    position: { x: 0, y: 0 },
+    size: { height: 120, width: 120 },
+    type: "aws_vpc",
+    zIndex: 1,
+    ...(withParameters
+      ? {
+          parameters: {
+            fileName: "main.tf",
+            resourceName: id.replaceAll("-", "_"),
+            resourceType: "aws_vpc",
+            terraformBlockType: "resource" as const,
+            values: {}
+          }
+        }
+      : {})
   };
 }
 

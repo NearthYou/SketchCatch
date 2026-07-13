@@ -117,8 +117,9 @@ export const initialPreDeploymentCheckState: DeploymentPreDeploymentCheckState =
   requestState: "idle"
 };
 
+// Deployment context keeps presentation nodes outside the executable Resource summary.
 export function DeploymentPanel({
-  currentNodeCount,
+  deployableResourceCount,
   deploymentAvailability,
   diagramJson,
   fullScreenOnly = false,
@@ -134,7 +135,7 @@ export function DeploymentPanel({
   projectId,
   projectName
 }: {
-  readonly currentNodeCount: number;
+  readonly deployableResourceCount: number;
   readonly deploymentAvailability: DeploymentAvailability;
   readonly diagramJson: DiagramJson;
   readonly fullScreenOnly?: boolean | undefined;
@@ -1499,7 +1500,7 @@ export function DeploymentPanel({
             <div><dt>Region</dt><dd>{selectedAwsConnection?.region ?? "선택 전"}</dd></div>
             <div><dt>Connection</dt><dd>{selectedAwsConnection ? "Verified" : "연결 필요"}</dd></div>
             <div><dt>Terraform artifact</dt><dd>{selectedDeployment ? formatShortHash(selectedDeployment.terraformArtifactId) : "저장 후 생성"}</dd></div>
-            <div><dt>Architecture</dt><dd>{currentNodeCount} resources</dd></div>
+            <div><dt>Architecture</dt><dd>{deployableResourceCount} resources</dd></div>
             <div><dt>저장 상태</dt><dd>{hasUnsavedDeploymentBaseline ? "변경사항 있음" : "저장됨"}</dd></div>
           </dl>
           <p>Apply와 Destroy는 승인 snapshot, 대상 계정, artifact가 모두 일치할 때만 실행됩니다.</p>
@@ -2133,7 +2134,7 @@ export function DeploymentPanel({
           <div>
             <p className={styles.projectEyebrow}>Deployment</p>
             <h2>{projectName}</h2>
-            <span>{currentNodeCount} board nodes</span>
+            <span>{deployableResourceCount} resources</span>
           </div>
           <button
             aria-label="Deployment 패널 확장"
