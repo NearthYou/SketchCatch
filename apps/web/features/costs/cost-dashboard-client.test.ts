@@ -38,6 +38,10 @@ test("cost dashboard separates pre-deployment estimates from deployed usage with
   assert.match(clientSource, /실제 사용량/);
   assert.match(clientSource, /CostEstimatePanel/);
   assert.match(clientSource, /CostUsagePanel/);
+  assert.match(clientSource, /event\.key === "ArrowRight"/);
+  assert.match(clientSource, /event\.key === "ArrowLeft"/);
+  assert.match(clientSource, /tabIndex=\{activeTab === "estimate" \? 0 : -1\}/);
+  assert.match(clientSource, /tabIndex=\{activeTab === "usage" \? 0 : -1\}/);
 });
 
 test("both cost panels keep only the newest response", () => {
