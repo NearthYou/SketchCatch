@@ -182,6 +182,14 @@ test("failed evidence enforces attempts, linked HTTPS metadata, dimensions, erro
       code: "brainboard.capture.failed_attempted_at_invalid"
     },
     {
+      name: "paired non-date capture index and attempted date",
+      mutate(raw, _entry, index) {
+        raw.attemptedAt = "not-a-date";
+        index.capturedAt = "not-a-date";
+      },
+      code: "brainboard.capture.index_captured_at_invalid"
+    },
+    {
       name: "source URL not linked to source template UUID",
       mutate(raw) {
         raw.origin.sourceUrl =
@@ -277,7 +285,7 @@ function validateMutatedFailedEvidence(t, mutate) {
   const entry = index.templates[11];
   const failedPath = path.join(temporaryCaptures, entry.file);
   const raw = JSON.parse(readFileSync(failedPath, "utf8"));
-  mutate(raw, entry);
+  mutate(raw, entry, index);
   const rawText = `${JSON.stringify(raw, null, 2)}\n`;
   writeFileSync(failedPath, rawText);
   entry.captureSha256 = subject.sha256(rawText);

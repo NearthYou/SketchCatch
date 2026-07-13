@@ -40,7 +40,7 @@ Generation is validity-gated. `--write-status` does not create or change a statu
 
 Validation checks the exact 24-entry package manifest/index metadata and download order, 23 captured plus one failed record, raw/diagram/Terraform aggregate hashes, every Terraform file hash, unique contiguous ranks and DOM orders, unique IDs/files/addresses, dangling parents and edge endpoints, finite viewBox/node geometry/rotation/edge points, authored endpoint-to-waypoint equality, and endpoint proximity to its referenced node.
 
-The failed `09fd3420-d8f0-409c-a1cc-694dba97443f` record must retain its exact Brainboard source-UUID linkage, an `attemptedAt` date equal to the index `capturedAt` date, its HTTPS preview URL at exactly 3840×2160, all four reviewed attempt records and results, the final `Clone into current architecture` action, and a non-empty final error. It must not gain `provider`, `viewport`, `nodes`, `edges`, or `terraform` fields.
+The immutable index `capturedAt` date must remain the reviewed `2026-07-14`. The failed `09fd3420-d8f0-409c-a1cc-694dba97443f` record must retain its exact Brainboard source-UUID linkage, an `attemptedAt` date equal to that index date, its HTTPS preview URL at exactly 3840×2160, all four reviewed attempt records and results, the final `Clone into current architecture` action, and a non-empty final error. It must not gain `provider`, `viewport`, `nodes`, `edges`, or `terraform` fields.
 
 Visual-node/Terraform-address mapping is audit-only here. The tool reports exact title/name matches, type-level single candidates, missing types, one-address/multi-visual groups, and ambiguous groups. It never pairs ambiguous arrays by index.
 

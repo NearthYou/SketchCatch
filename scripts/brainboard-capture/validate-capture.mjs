@@ -27,6 +27,7 @@ const SOURCE_MANIFEST_RELATIVE_PATH = "packages/types/src/brainboard-templates/m
 const SOURCE_IDS_RELATIVE_PATH = "packages/types/src/brainboard-templates/ids.ts";
 const EXPECTED_AUTHOR = "Chafik Belhaoues";
 const EXPECTED_PROVIDER = "aws";
+const EXPECTED_CAPTURED_AT = "2026-07-14";
 const EXPECTED_FAILED_ATTEMPTS = [
   {
     architectureName: "AWS instance and DB with multiple networks #381 09fd3420",
@@ -267,6 +268,15 @@ function validateIndexMetadata(index, manifest, capturesDirectory, addError) {
       null,
       "author/provider",
       `Capture index must target ${EXPECTED_AUTHOR} AWS templates`
+    );
+  }
+  if (index.capturedAt !== EXPECTED_CAPTURED_AT) {
+    addError(
+      "metadataMismatches",
+      "brainboard.capture.index_captured_at_invalid",
+      null,
+      "capturedAt",
+      `Capture index capturedAt must preserve the reviewed date ${EXPECTED_CAPTURED_AT}`
     );
   }
   if (!Array.isArray(index.templates) || index.templates.length !== 24) {
