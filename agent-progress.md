@@ -15,6 +15,14 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-13 - Discover and persist commit-scoped Pipeline Runs
+
+- Added read-only GitHub Actions run, commit-file, job, and masked log reads.
+- Grouped exact SketchCatch workflows by commit SHA and classified monitored app/infra changes with segment-safe paths.
+- Added idempotent transactional Pipeline Run, six-stage, and deterministic log persistence with stale-state fallback.
+- Verification: 29 focused tests, API typecheck/lint, full build, harness, and diff checks passed; lint retains one pre-existing `setNow` warning.
+- No real GitHub, AWS, Terraform, database migration, or deployment mutation ran.
+
 ### 2026-07-13 - Validate and persist repository CI/CD monitoring settings
 
 - Added atomic RDS-only monitoring defaults, lazy read-only GitHub validation, safe path normalization, and stable errors.
@@ -200,20 +208,6 @@ Short English-only working log for the current agent context. Older records are 
 - Risk:
   - Browser visual verification has not been rerun yet in this worktree.
 
-### 2026-07-12 - Split public Repository analysis from board creation
-
-- Goal: Keep the new-project Repository URL flow from showing raw analysis details or opening the board before the user accepts the recommendation.
-- Completed:
-  - Changed the new project Repository URL action to create a project and route to the Repository analysis step instead of calling analysis or saving a board draft inline.
-  - Passed Repository URL and branch into `/workspace/repository` so that page owns analysis, template recommendation, deployment type, CI/CD, and follow-up questions.
-  - Replaced the public Repository analysis detail card with a recommendation/question step that does not render evidence files or detected file lists.
-  - Moved board draft saving and `/workspace` navigation behind the final `Create board` action.
-- Verification:
-  - `pnpm --dir apps/web exec tsx --test app/workspace/new/workspace-start-options.test.ts features/workspace/repository-start-template-recommendation.test.ts`
-  - `pnpm --dir apps/web typecheck`
-- Risk:
-  - Browser visual verification has not been run yet in this worktree.
-
 ## Next Action
 
-- Execute Task 4 from `docs/superpowers/plans/2026-07-13-deployment-cicd-console-separation.md` in the isolated #361 worktree.
+- Execute Task 5 from `docs/superpowers/plans/2026-07-13-deployment-cicd-console-separation.md` in the isolated #361 worktree.

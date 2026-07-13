@@ -142,10 +142,7 @@ test("readRepositoryEvidence reads the recursive tree and only allowed static ev
         return jsonResponse({ sha: "commit-sha" });
       }
 
-      if (
-        pathname === "/repos/owner/repo/git/trees/commit-sha" &&
-        search === "?recursive=1"
-      ) {
+      if (pathname === "/repos/owner/repo/git/trees/commit-sha" && search === "?recursive=1") {
         return jsonResponse({
           sha: "tree-sha",
           truncated: false,
@@ -515,7 +512,7 @@ test("createPullRequest updates a generated file even when the target branch alr
         search === "?ref=sketchcatch%2Fproject%2Fiac-12345678"
       ) {
         return jsonResponse({
-          content: Buffer.from("resource \"aws_s3_bucket\" \"old\" {}").toString("base64"),
+          content: Buffer.from('resource "aws_s3_bucket" "old" {}').toString("base64"),
           encoding: "base64",
           sha: "source-file-sha"
         });
@@ -554,7 +551,7 @@ test("createPullRequest updates a generated file even when the target branch alr
     files: [
       {
         path: "sketchcatch/project/terraform/main.tf",
-        content: "resource \"aws_s3_bucket\" \"smoke\" {}"
+        content: 'resource "aws_s3_bucket" "smoke" {}'
       }
     ]
   });
@@ -642,7 +639,7 @@ test("createPullRequest updates a file on an existing SketchCatch source branch"
     files: [
       {
         path: "sketchcatch/project/terraform/main.tf",
-        content: "resource \"aws_s3_bucket\" \"smoke\" {}"
+        content: 'resource "aws_s3_bucket" "smoke" {}'
       }
     ]
   });
@@ -651,7 +648,10 @@ test("createPullRequest updates a file on an existing SketchCatch source branch"
   assert.equal(result.pullRequestNumber, 7);
   assert.equal(result.pullRequestHeadSha, "new-head-sha");
   assert.equal(result.commitSha, "new-commit-sha");
-  assert.equal(calls.some((call) => call.method === "PUT"), true);
+  assert.equal(
+    calls.some((call) => call.method === "PUT"),
+    true
+  );
 });
 
 test("createPullRequest bootstraps an empty repository before opening the handoff PR", async () => {
@@ -674,8 +674,7 @@ test("createPullRequest bootstraps an empty repository before opening the handof
             path: "README.md",
             mode: "100644",
             type: "blob",
-            content:
-              "# empty-repo\n\nInitialized by SketchCatch for Git/CI/CD handoff.\n"
+            content: "# empty-repo\n\nInitialized by SketchCatch for Git/CI/CD handoff.\n"
           }
         ]);
         return jsonResponse({ sha: "initial-tree-sha" });
@@ -742,7 +741,7 @@ test("createPullRequest bootstraps an empty repository before opening the handof
     files: [
       {
         path: "sketchcatch/project/terraform/main.tf",
-        content: "resource \"aws_s3_bucket\" \"smoke\" {}"
+        content: 'resource "aws_s3_bucket" "smoke" {}'
       }
     ]
   });
@@ -761,7 +760,7 @@ test("createPullRequest bootstraps an empty repository before opening the handof
 
 test("createPullRequest skips unchanged files and rejects empty handoff diffs", async () => {
   const calls: GitHubApiCall[] = [];
-  const unchangedContent = "resource \"aws_s3_bucket\" \"smoke\" {}";
+  const unchangedContent = 'resource "aws_s3_bucket" "smoke" {}';
   const client = createGitHubAppClient({
     appId: "12345",
     privateKey,
@@ -818,8 +817,14 @@ test("createPullRequest skips unchanged files and rejects empty handoff diffs", 
       "statusCode" in error &&
       error.statusCode === 409
   );
-  assert.equal(calls.some((call) => call.method === "PUT"), false);
-  assert.equal(calls.some((call) => call.pathname.endsWith("/pulls")), false);
+  assert.equal(
+    calls.some((call) => call.method === "PUT"),
+    false
+  );
+  assert.equal(
+    calls.some((call) => call.pathname.endsWith("/pulls")),
+    false
+  );
 });
 
 test("applyRepositorySettings creates environment and upserts repository variables", async () => {
@@ -1038,9 +1043,7 @@ test("validateRepositoryBranch maps GitHub 404 to false", async () => {
     false
   );
   assert.equal(
-    calls.some(
-      (call) => call.pathname === "/repos/owner/repo/git/ref/heads/missing"
-    ),
+    calls.some((call) => call.pathname === "/repos/owner/repo/git/ref/heads/missing"),
     true
   );
 });
@@ -1073,14 +1076,8 @@ test("validateRepositoryDirectory distinguishes directory file and missing", asy
     await client.validateRepositoryDirectory({ ...base, path: "apps/web" }),
     "directory"
   );
-  assert.equal(
-    await client.validateRepositoryDirectory({ ...base, path: "README.md" }),
-    "file"
-  );
-  assert.equal(
-    await client.validateRepositoryDirectory({ ...base, path: "missing" }),
-    "missing"
-  );
+  assert.equal(await client.validateRepositoryDirectory({ ...base, path: "README.md" }), "file");
+  assert.equal(await client.validateRepositoryDirectory({ ...base, path: "missing" }), "missing");
 });
 
 test("repository validation propagates GitHub permission errors", async () => {
@@ -1108,6 +1105,114 @@ test("repository validation propagates GitHub permission errors", async () => {
       "statusCode" in error &&
       error.statusCode === 403
   );
+});
+
+test("GitHub Actions read methods return focused models from read-only endpoints", async () => {
+  const calls: GitHubApiCall[] = [];
+  const client = createGitHubAppClient({
+    appId: "12345",
+    privateKey,
+    fetch: createGitHubFetchStub(calls, ({ pathname }) => {
+      if (pathname === "/app/installations/42/access_tokens") {
+        return jsonResponse({ token: "installation-token" });
+      }
+      if (pathname.endsWith("/actions/runs")) {
+        return jsonResponse({
+          workflow_runs: [
+            {
+              id: 11,
+              head_sha: "abc",
+              head_branch: "main",
+              name: "SketchCatch App",
+              html_url: "https://example/run/11",
+              status: "in_progress",
+              conclusion: null,
+              created_at: "2026-07-13T00:00:00Z",
+              updated_at: "2026-07-13T00:01:00Z",
+              head_commit: { message: "Ship app" }
+            }
+          ]
+        });
+      }
+      if (pathname.endsWith("/commits/abc")) {
+        return jsonResponse({ files: [{ filename: "apps/web/page.tsx" }] });
+      }
+      if (pathname.endsWith("/actions/runs/11/jobs")) {
+        return jsonResponse({
+          jobs: [
+            {
+              id: 22,
+              name: "Build",
+              status: "completed",
+              conclusion: "success",
+              html_url: "https://example/job/22",
+              started_at: "2026-07-13T00:00:00Z",
+              completed_at: "2026-07-13T00:01:00Z"
+            }
+          ]
+        });
+      }
+      throw new Error(`Unexpected GitHub path: ${pathname}`);
+    })
+  });
+  const repo = { installationId: "42", owner: "owner", name: "repo" };
+
+  const runs = await client.listBranchWorkflowRuns({ ...repo, branch: "main" });
+  const files = await client.listCommitFiles({ ...repo, branch: "main", commitSha: "abc" });
+  const jobs = await client.listWorkflowJobs({ ...repo, runId: 11 });
+
+  assert.deepEqual(runs, [
+    {
+      id: 11,
+      commitSha: "abc",
+      commitMessage: "Ship app",
+      branch: "main",
+      workflowName: "SketchCatch App",
+      runUrl: "https://example/run/11",
+      status: "in_progress",
+      conclusion: null,
+      startedAt: "2026-07-13T00:00:00Z",
+      finishedAt: null
+    }
+  ]);
+  assert.deepEqual(files, ["apps/web/page.tsx"]);
+  assert.deepEqual(jobs, [
+    {
+      id: 22,
+      name: "Build",
+      runUrl: "https://example/job/22",
+      status: "completed",
+      conclusion: "success",
+      startedAt: "2026-07-13T00:00:00Z",
+      finishedAt: "2026-07-13T00:01:00Z"
+    }
+  ]);
+  assert.equal(
+    calls.filter(
+      (call) => call.method !== "GET" && call.pathname !== "/app/installations/42/access_tokens"
+    ).length,
+    0
+  );
+});
+
+test("readWorkflowJobLog masks secret values before returning text", async () => {
+  const client = createGitHubAppClient({
+    appId: "12345",
+    privateKey,
+    fetch: createGitHubFetchStub([], ({ pathname }) => {
+      if (pathname === "/app/installations/42/access_tokens")
+        return jsonResponse({ token: "installation-token" });
+      return new Response("deploy token=super-secret\nfinished", { status: 200 });
+    })
+  });
+
+  const log = await client.readWorkflowJobLog({
+    installationId: "42",
+    owner: "owner",
+    name: "repo",
+    jobId: 22
+  });
+  assert.equal(log, "deploy [REDACTED]\nfinished");
 });
 
 type GitHubApiCall = {
