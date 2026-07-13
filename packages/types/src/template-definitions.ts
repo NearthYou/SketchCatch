@@ -1,4 +1,10 @@
-import type { DiagramJson, DiagramNode, DiagramNodeKind, TerraformBlockType } from "./index.js";
+import type {
+  DiagramEdge,
+  DiagramJson,
+  DiagramNode,
+  DiagramNodeKind,
+  TerraformBlockType
+} from "./index.js";
 
 export const TEMPLATE_IDS = [
   "static-web-hosting",
@@ -20,7 +26,9 @@ export type TemplateResourceDefinition = {
   readonly terraformResourceType: string;
   readonly values: Record<string, unknown>;
   readonly position: { readonly x: number; readonly y: number };
+  readonly size?: DiagramNode["size"];
   readonly parentResourceId?: string;
+  readonly presentationArea?: boolean;
   readonly kind?: DiagramNodeKind;
 };
 
@@ -29,6 +37,9 @@ export type TemplateRelationship = {
   readonly sourceResourceId: string;
   readonly targetResourceId: string;
   readonly label: string;
+  readonly sourceHandleId?: string;
+  readonly targetHandleId?: string;
+  readonly type?: DiagramEdge["type"];
 };
 
 export type TemplateParameterDefinition = {
@@ -36,6 +47,25 @@ export type TemplateParameterDefinition = {
   readonly label: string;
   readonly required: boolean;
   readonly defaultValue: unknown;
+};
+
+export type TemplatePresentationNodeDefinition = {
+  readonly id: string;
+  readonly catalogItemId: string;
+  readonly label: string;
+  readonly position: { readonly x: number; readonly y: number };
+  readonly size: DiagramNode["size"];
+  readonly parentNodeId?: string;
+};
+
+export type TemplatePresentationEdgeDefinition = {
+  readonly id: string;
+  readonly sourceNodeId: string;
+  readonly targetNodeId: string;
+  readonly label: string;
+  readonly sourceHandleId?: string;
+  readonly targetHandleId?: string;
+  readonly type?: DiagramEdge["type"];
 };
 
 export type TemplateDefinition = {
@@ -46,7 +76,10 @@ export type TemplateDefinition = {
   readonly providers: readonly TemplateProvider[];
   readonly resources: readonly TemplateResourceDefinition[];
   readonly relationships: readonly TemplateRelationship[];
+  readonly presentationNodes: readonly TemplatePresentationNodeDefinition[];
+  readonly presentationEdges: readonly TemplatePresentationEdgeDefinition[];
   readonly parameters: readonly TemplateParameterDefinition[];
+  readonly viewport?: DiagramJson["viewport"];
 };
 
 export type BuildTemplateDiagramInput = {
@@ -119,6 +152,259 @@ const DYNAMODB_ACTIONS = [
   "dynamodb:Scan"
 ] as const;
 const THREE_TIER_USER_DATA = "IyEvYmluL2Jhc2gKIyBza2V0Y2hjYXRjaC1kZW1vLW1hbmFnZWQtdXNlci1kYXRhOnYxCiMgc2tldGNoY2F0Y2gtZGVtby1tYW5hZ2VkLXVzZXItZGF0YS1zaGEyNTY6ZTMxODQ5OGZkYTIxMTc0OTNlNjljOWM3ZmZkOTdmMWEwM2JkMDc3OTVkMDA4MzEwMTdiMTc4MTBkODZmODkxMApzZXQgLWV1eG8gcGlwZWZhaWwKZG5mIGluc3RhbGwgLXkgbmdpbngKc3lzdGVtY3RsIGVuYWJsZSAtLW5vdyBuZ2lueAo=";
+
+type TemplatePresentationPlacement = {
+  readonly position: TemplateResourceDefinition["position"];
+  readonly parentResourceId?: string;
+  readonly size?: DiagramNode["size"];
+  readonly presentationArea?: boolean;
+};
+
+type TemplatePresentationLayout = {
+  readonly viewport: DiagramJson["viewport"];
+  readonly resources: Readonly<Record<string, TemplatePresentationPlacement>>;
+  readonly routing: Readonly<Record<string, Pick<TemplateRelationship, "sourceHandleId" | "targetHandleId" | "type">>>;
+  readonly presentationNodes: Readonly<Record<string, Omit<TemplatePresentationNodeDefinition, "id">>>;
+  readonly presentationEdges: Readonly<Record<string, Omit<TemplatePresentationEdgeDefinition, "id">>>;
+};
+
+// The presentation layer is deliberately separate from deployable resource values.
+// It lets a template follow the AWS pattern diagram without changing Terraform identity or behavior.
+const TEMPLATE_PRESENTATION_LAYOUTS: Readonly<Record<TemplateId, TemplatePresentationLayout>> = {
+  "static-web-hosting": {
+    viewport: { x: 0, y: 0, zoom: 0.8 },
+    resources: {
+      bucket: layoutAt(560, 400, "region"),
+      "index-object": layoutAt(760, 400, "region"),
+      "public-access": layoutAt(560, 560, "region"),
+      oac: layoutAt(320, 560),
+      distribution: layoutAt(320, 400),
+      "bucket-policy": layoutAt(760, 560, "region")
+    },
+    routing: {
+      "bucket-public-access": layoutRoute("handle-bottom", "handle-top"),
+      "bucket-index": layoutRoute("handle-right", "handle-left"),
+      "bucket-oac": layoutRoute("handle-bottom", "handle-right"),
+      "oac-distribution": layoutRoute("handle-top", "handle-bottom"),
+      "distribution-bucket": layoutRoute("handle-right", "handle-left"),
+      "bucket-policy-bucket": layoutRoute("handle-left", "handle-right")
+    },
+    presentationNodes: {
+      user: presentationNode("design-user-client", "User / Client", 120, 400),
+      region: presentationNode("aws-region", "Region", 480, 240, { width: 480, height: 480 })
+    },
+    presentationEdges: {
+      "user-distribution": presentationEdge("user", "distribution", "requests", "handle-right", "handle-left")
+    }
+  },
+  "minimal-serverless-api": {
+    viewport: { x: 0, y: 0, zoom: 0.68 },
+    resources: {
+      api: layoutAt(360, 240, "region", { width: 320, height: 760 }, true),
+      route: layoutAt(440, 360, "api"),
+      method: layoutAt(440, 480, "api"),
+      integration: layoutAt(440, 600, "api"),
+      deployment: layoutAt(440, 720, "api"),
+      stage: layoutAt(440, 840, "api"),
+      handler: layoutAt(760, 600, "region"),
+      role: layoutAt(760, 1160),
+      "role-policy": layoutAt(960, 1160),
+      permission: layoutAt(760, 360, "region"),
+      table: layoutAt(960, 600, "region"),
+      "log-group": layoutAt(1080, 600, "region")
+    },
+    routing: {
+      "api-route": layoutRoute("handle-bottom", "handle-top"),
+      "route-method": layoutRoute("handle-bottom", "handle-top"),
+      "method-integration": layoutRoute("handle-bottom", "handle-top"),
+      "integration-handler": layoutRoute("handle-right", "handle-left"),
+      "handler-role": layoutRoute("handle-bottom", "handle-top"),
+      "handler-table": layoutRoute("handle-right", "handle-left")
+    },
+    presentationNodes: {
+      user: presentationNode("design-user-client", "User / Client", 120, 600),
+      region: presentationNode("aws-region", "Region", 280, 160, { width: 1000, height: 920 })
+    },
+    presentationEdges: {
+      "user-api": presentationEdge("user", "api", "requests", "handle-right", "handle-left")
+    }
+  },
+  "full-serverless-web-app": {
+    viewport: { x: 0, y: 0, zoom: 0.52 },
+    resources: {
+      frontend: layoutAt(520, 680, "frontend-group"),
+      "user-pool": layoutAt(760, 680, "identity-group"),
+      "user-client": layoutAt(760, 400, "identity-group"),
+      api: layoutAt(1000, 200, "api-group", { width: 280, height: 960 }, true),
+      authorizer: layoutAt(1080, 320, "api"),
+      route: layoutAt(1080, 440, "api"),
+      method: layoutAt(1080, 560, "api"),
+      integration: layoutAt(1080, 680, "api"),
+      deployment: layoutAt(1080, 800, "api"),
+      stage: layoutAt(1080, 920, "api"),
+      handler: layoutAt(1440, 680, "compute-group"),
+      role: layoutAt(1440, 1480, "global-iam-group"),
+      "role-policy": layoutAt(1640, 1480, "global-iam-group"),
+      permission: layoutAt(1440, 480, "compute-group"),
+      table: layoutAt(1680, 680, "data-ops-group"),
+      "log-group": layoutAt(1680, 840, "data-ops-group")
+    },
+    routing: {
+      "frontend-api": layoutRoute("handle-bottom", "handle-bottom"),
+      "client-pool": layoutRoute("handle-bottom", "handle-top"),
+      "api-pool": layoutRoute("handle-left", "handle-right"),
+      "api-handler": layoutRoute("handle-right", "handle-left"),
+      "handler-table": layoutRoute("handle-right", "handle-left")
+    },
+    presentationNodes: {
+      "source-repository": presentationNode("design-source-repository", "Source Repository", 160, 480, undefined, "source-user-group"),
+      user: presentationNode("design-user-client", "User / Client", 160, 680, undefined, "source-user-group"),
+      region: presentationNode("aws-region", "Region", 360, 80, { width: 1560, height: 1240 }),
+      "source-user-group": presentationNode("design-group", "Source / User", 80, 360, { width: 240, height: 480 }),
+      "frontend-group": presentationNode("design-group", "Frontend", 440, 560, { width: 240, height: 360 }, "region"),
+      "identity-group": presentationNode("design-group", "Identity", 680, 280, { width: 240, height: 560 }, "region"),
+      "api-group": presentationNode("design-group", "API", 920, 120, { width: 440, height: 1120 }, "region"),
+      "compute-group": presentationNode("design-group", "Compute", 1360, 400, { width: 240, height: 600 }, "region"),
+      "data-ops-group": presentationNode("design-group", "Data / Ops", 1600, 560, { width: 240, height: 480 }, "region"),
+      "global-iam-group": presentationNode("design-group", "Global IAM", 1360, 1360, { width: 480, height: 320 })
+    },
+    presentationEdges: {
+      "source-frontend": presentationEdge("source-repository", "frontend", "source", "handle-right", "handle-left"),
+      "user-frontend": presentationEdge("user", "frontend", "opens", "handle-right", "handle-left"),
+      "user-pool": presentationEdge("user", "user-pool", "authenticates", "handle-top", "handle-top")
+    }
+  },
+  "three-tier-web-app": {
+    viewport: { x: 0, y: 0, zoom: 0.42 },
+    resources: {
+      vpc: layoutAt(320, 160, "region", { width: 2000, height: 1680 }),
+      "public-subnet-a": layoutAt(840, 480, "az-a", { width: 560, height: 360 }),
+      "public-subnet-b": layoutAt(1600, 480, "az-b", { width: 560, height: 360 }),
+      "app-subnet-a": layoutAt(840, 920, "az-a", { width: 560, height: 440 }),
+      "app-subnet-b": layoutAt(1600, 920, "az-b", { width: 560, height: 440 }),
+      "db-subnet-a": layoutAt(840, 1400, "az-a", { width: 560, height: 320 }),
+      "db-subnet-b": layoutAt(1600, 1400, "az-b", { width: 560, height: 320 }),
+      "internet-gateway": layoutAt(400, 280, "vpc"),
+      "public-route-table": layoutAt(400, 600, "vpc"),
+      "public-route-a": layoutAt(560, 560, "vpc"),
+      "public-route-b": layoutAt(560, 680, "vpc"),
+      "nat-gateway": layoutAt(920, 280, "vpc"),
+      "nat-eip": layoutAt(760, 280, "vpc"),
+      "app-route-table": layoutAt(400, 1040, "vpc"),
+      "app-route-a": layoutAt(560, 1000, "vpc"),
+      "app-route-b": layoutAt(560, 1120, "vpc"),
+      "db-route-table": layoutAt(400, 1480, "vpc"),
+      "db-route-a": layoutAt(560, 1440, "vpc"),
+      "db-route-b": layoutAt(560, 1560, "vpc"),
+      "alb-security-group": layoutAt(880, 720, "public-subnet-a"),
+      "app-security-group": layoutAt(1840, 1160, "app-subnet-b"),
+      "db-security-group": layoutAt(1840, 1600, "db-subnet-b"),
+      "latest-ami": layoutAt(1240, 1200, "app-subnet-a"),
+      "launch-template": layoutAt(960, 1120, "application-group"),
+      "load-balancer": layoutAt(880, 600, "public-subnet-a"),
+      "target-group": layoutAt(1640, 1040, "app-subnet-b"),
+      listener: layoutAt(1040, 600, "public-subnet-a"),
+      "application-group": layoutAt(880, 1000, "app-subnet-a", { width: 320, height: 240 }),
+      "db-subnet-group": layoutAt(880, 1520, "db-subnet-a"),
+      database: layoutAt(1640, 1480, "db-subnet-b")
+    },
+    routing: {
+      "vpc-igw": layoutRoute("handle-top", "handle-bottom"),
+      "public-nat": layoutRoute("handle-top", "handle-bottom"),
+      "alb-asg": layoutRoute("handle-bottom", "handle-top"),
+      "app-db": layoutRoute("handle-bottom", "handle-top")
+    },
+    presentationNodes: {
+      internet: presentationNode("design-internet", "Internet", 120, 280),
+      region: presentationNode("aws-region", "Region", 240, 80, { width: 2160, height: 1840 }),
+      "az-a": presentationNode("aws-availability-zone", "AZ A", 760, 400, { width: 720, height: 1400 }, "vpc"),
+      "az-b": presentationNode("aws-availability-zone", "AZ B", 1520, 400, { width: 720, height: 1400 }, "vpc")
+    },
+    presentationEdges: {
+      "internet-igw": presentationEdge("internet", "internet-gateway", "connects", "handle-right", "handle-left")
+    }
+  },
+  "ecs-fargate-container-app": {
+    viewport: { x: 0, y: 0, zoom: 0.4 },
+    resources: {
+      vpc: layoutAt(360, 600, "region", { width: 1600, height: 1280 }),
+      "subnet-a": layoutAt(560, 920, "az-a", { width: 440, height: 320 }),
+      "subnet-b": layoutAt(1240, 920, "az-b", { width: 440, height: 320 }),
+      "internet-gateway": layoutAt(440, 720, "vpc"),
+      "route-table": layoutAt(600, 720, "vpc"),
+      "route-a": layoutAt(760, 720, "vpc"),
+      "route-b": layoutAt(920, 720, "vpc"),
+      cluster: layoutAt(520, 1360, "vpc", { width: 1200, height: 400 }, true),
+      "alb-security-group": layoutAt(640, 1120, "subnet-a"),
+      "task-security-group": layoutAt(680, 1600, "cluster"),
+      "execution-role": layoutAt(2160, 200, "global-iam-group"),
+      "execution-policy": layoutAt(2360, 200, "global-iam-group"),
+      "task-role": layoutAt(2360, 320, "global-iam-group"),
+      repository: layoutAt(2360, 840, "definition-ops-group"),
+      "log-group": layoutAt(2360, 1000, "definition-ops-group"),
+      "load-balancer": layoutAt(640, 1000, "subnet-a"),
+      "target-group": layoutAt(1320, 1040, "subnet-b"),
+      listener: layoutAt(800, 1000, "subnet-a"),
+      task: layoutAt(2160, 1000, "definition-ops-group"),
+      service: layoutAt(880, 1480, "cluster")
+    },
+    routing: {
+      "cluster-service": layoutRoute("handle-right", "handle-left"),
+      "service-task": layoutRoute("handle-right", "handle-left"),
+      "repository-task": layoutRoute("handle-bottom", "handle-top"),
+      "task-log-group": layoutRoute("handle-right", "handle-left"),
+      "task-role": layoutRoute("handle-top", "handle-bottom")
+    },
+    presentationNodes: {
+      user: presentationNode("design-user-client", "User / Client", 120, 1000),
+      region: presentationNode("aws-region", "Region", 280, 520, { width: 2360, height: 1440 }),
+      "az-a": presentationNode("aws-availability-zone", "AZ A", 480, 840, { width: 600, height: 480 }, "vpc"),
+      "az-b": presentationNode("aws-availability-zone", "AZ B", 1160, 840, { width: 600, height: 480 }, "vpc"),
+      "definition-ops-group": presentationNode("design-group", "Definition / Ops", 2040, 720, { width: 520, height: 800 }, "region"),
+      "global-iam-group": presentationNode("design-group", "Global IAM", 2040, 80, { width: 520, height: 360 })
+    },
+    presentationEdges: {
+      "user-load-balancer": presentationEdge("user", "load-balancer", "requests", "handle-right", "handle-left")
+    }
+  },
+  "eks-container-app": {
+    viewport: { x: 0, y: 0, zoom: 0.4 },
+    resources: {
+      vpc: layoutAt(360, 160, "region", { width: 1600, height: 1280 }),
+      "subnet-a": layoutAt(560, 480, "az-a", { width: 440, height: 160 }),
+      "subnet-b": layoutAt(1240, 480, "az-b", { width: 440, height: 160 }),
+      "internet-gateway": layoutAt(440, 280, "vpc"),
+      "route-table": layoutAt(600, 280, "vpc"),
+      "route-a": layoutAt(760, 280, "vpc"),
+      "route-b": layoutAt(920, 280, "vpc"),
+      "cluster-security-group": layoutAt(1640, 1280, "vpc"),
+      "cluster-role": layoutAt(2200, 440, "global-iam-group"),
+      "node-role": layoutAt(2200, 600, "global-iam-group"),
+      "cluster-policy": layoutAt(2400, 440, "global-iam-group"),
+      "node-policy": layoutAt(2400, 600, "global-iam-group"),
+      "node-cni-policy": layoutAt(2200, 760, "global-iam-group"),
+      "node-ecr-policy": layoutAt(2400, 760, "global-iam-group"),
+      cluster: layoutAt(520, 800, "vpc", { width: 1200, height: 400 }, true),
+      "node-group": layoutAt(640, 960, "cluster"),
+      namespace: layoutAt(960, 880, "cluster", { width: 600, height: 240 }, true),
+      deployment: layoutAt(1040, 1000, "namespace"),
+      service: layoutAt(1200, 1000, "namespace")
+    },
+    routing: {
+      "cluster-role": layoutRoute("handle-left", "handle-right"),
+      "cluster-subnet": layoutRoute("handle-top", "handle-bottom"),
+      "cluster-node-group": layoutRoute("handle-left", "handle-left"),
+      "deployment-service": layoutRoute("handle-right", "handle-left")
+    },
+    presentationNodes: {
+      region: presentationNode("aws-region", "Region", 280, 80, { width: 1760, height: 1440 }),
+      "az-a": presentationNode("aws-availability-zone", "AZ A", 480, 400, { width: 600, height: 360 }, "vpc"),
+      "az-b": presentationNode("aws-availability-zone", "AZ B", 1160, 400, { width: 600, height: 360 }, "vpc"),
+      "global-iam-group": presentationNode("design-group", "Global IAM", 2120, 320, { width: 520, height: 800 })
+    },
+    presentationEdges: {}
+  }
+};
 
 export const templateDefinitions = [
   createTemplate({
@@ -305,10 +591,12 @@ export const templateDefinitions = [
       resource("execution-role", "ECS Execution Role", "aws", "aws_iam_role", 300, 500, { name: "fargate-execution-role", assumeRolePolicy: ECS_ASSUME_ROLE_POLICY }),
       resource("execution-policy", "ECS Execution Policy", "aws", "aws_iam_role_policy_attachment", 500, 500, { role: "@ref:execution-role.name", policyArn: "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy" }),
       resource("task-role", "ECS Task Role", "aws", "aws_iam_role", 700, 500, { name: "fargate-task-role", assumeRolePolicy: ECS_ASSUME_ROLE_POLICY }),
+      resource("repository", "ECR Repository", "aws", "aws_ecr_repository", 900, 500, { name: "fargate-app", imageTagMutability: "IMMUTABLE" }),
+      resource("log-group", "Fargate Log Group", "aws", "aws_cloudwatch_log_group", 1100, 500, { name: "/ecs/fargate-app", retentionInDays: 7 }),
       resource("load-balancer", "Application Load Balancer", "aws", "aws_lb", 100, 660, { name: "fargate-alb", loadBalancerType: "application", subnets: ["@ref:subnet-a.id", "@ref:subnet-b.id"], securityGroups: ["@ref:alb-security-group.id"] }),
       resource("target-group", "Fargate Target Group", "aws", "aws_lb_target_group", 300, 660, { name: "fargate-web", port: 80, protocol: "HTTP", targetType: "ip", vpcId: "@ref:vpc.id", healthCheck: { path: "/", matcher: "200-399" } }),
       resource("listener", "HTTP Listener", "aws", "aws_lb_listener", 500, 660, { loadBalancerArn: "@ref:load-balancer.arn", port: 80, protocol: "HTTP", defaultAction: { type: "forward", targetGroupArn: "@ref:target-group.arn" } }),
-      resource("task", "ECS Task Definition", "aws", "aws_ecs_task_definition", 700, 660, { family: "fargate-app", networkMode: "awsvpc", requiresCompatibilities: ["FARGATE"], cpu: 256, memory: 512, executionRoleArn: "@ref:execution-role.arn", taskRoleArn: "@ref:task-role.arn", containerDefinitions: JSON.stringify([{ name: "web", image: "public.ecr.aws/docker/library/nginx:stable", essential: true, portMappings: [{ containerPort: 80, hostPort: 80, protocol: "tcp" }] }]) }),
+      resource("task", "ECS Task Definition", "aws", "aws_ecs_task_definition", 700, 660, { family: "fargate-app", networkMode: "awsvpc", requiresCompatibilities: ["FARGATE"], cpu: 256, memory: 512, executionRoleArn: "@ref:execution-role.arn", taskRoleArn: "@ref:task-role.arn", containerDefinitions: JSON.stringify([{ name: "web", image: "public.ecr.aws/docker/library/nginx:stable", essential: true, portMappings: [{ containerPort: 80, hostPort: 80, protocol: "tcp" }], logConfiguration: { logDriver: "awslogs", options: { "awslogs-group": "${@ref:log-group.name}", "awslogs-region": "ap-northeast-2", "awslogs-stream-prefix": "ecs" } } }]) }),
       resource("service", "ECS Service", "aws", "aws_ecs_service", 900, 660, { name: "fargate-service", cluster: "@ref:cluster.id", taskDefinition: "@ref:task.arn", desiredCount: 1, launchType: "FARGATE", healthCheckGracePeriodSeconds: 30, networkConfiguration: { subnets: ["@ref:subnet-a.id", "@ref:subnet-b.id"], securityGroups: ["@ref:task-security-group.id"], assignPublicIp: true }, loadBalancer: { targetGroupArn: "@ref:target-group.arn", containerName: "web", containerPort: 80 }, dependsOn: ["@address:listener"] })
     ],
     relationships: [
@@ -316,6 +604,9 @@ export const templateDefinitions = [
       relationship("vpc-subnet-b", "vpc", "subnet-b", "contains"),
       relationship("cluster-service", "cluster", "service", "runs"),
       relationship("service-task", "service", "task", "uses"),
+      // The zero-step default stays on the public nginx image until an image is pushed to this ECR repository.
+      relationship("repository-task", "repository", "task", "optional image source"),
+      relationship("task-log-group", "task", "log-group", "writes logs"),
       relationship("task-role", "task", "execution-role", "assumes")
     ],
     parameters: [parameter("projectSlug", "Project slug", true, "sketchcatch"), parameter("containerImage", "Container image", true, "public.ecr.aws/docker/library/nginx:stable")]
@@ -374,6 +665,7 @@ export function buildTemplateDiagramJson(
   templateId: TemplateId,
   input: BuildTemplateDiagramInput
 ): DiagramJson {
+  // This builder appends a parameterless visual graph while resolving deployable values exactly as before.
   const definition = getTemplateDefinitionById(templateId);
   const resourceById = new Map(definition.resources.map((resource) => [resource.id, resource]));
   const resourceNames = new Map(
@@ -382,17 +674,41 @@ export function buildTemplateDiagramJson(
   const nodeIdByResourceId = new Map(
     definition.resources.map((resource) => [resource.id, `template-${templateId}-${resource.id}`])
   );
+  const nodeIdByPresentationId = new Map(
+    definition.presentationNodes.map((node) => [node.id, `template-${templateId}-presentation-${node.id}`])
+  );
+  const nodeIdByTemplateNodeId = new Map([...nodeIdByResourceId, ...nodeIdByPresentationId]);
 
   return {
-    nodes: definition.resources.map((resource) => createDiagramNode(resource, resourceById, resourceNames, nodeIdByResourceId)),
-    edges: definition.relationships.map((relationship) => ({
-      id: `template-${templateId}-${relationship.id}`,
-      label: relationship.label,
-      sourceNodeId: nodeIdByResourceId.get(relationship.sourceResourceId) ?? "",
-      targetNodeId: nodeIdByResourceId.get(relationship.targetResourceId) ?? "",
-      type: "smoothstep"
-    })),
-    viewport: { x: 0, y: 0, zoom: 0.8 }
+    nodes: [
+      ...definition.resources.map((resource) =>
+        createDiagramNode(resource, resourceById, resourceNames, nodeIdByResourceId, nodeIdByTemplateNodeId)
+      ),
+      ...definition.presentationNodes.map((node) =>
+        createPresentationDiagramNode(node, nodeIdByPresentationId, nodeIdByTemplateNodeId)
+      )
+    ],
+    edges: [
+      ...definition.relationships.map((relationship) => ({
+        id: `template-${templateId}-${relationship.id}`,
+        label: relationship.label,
+        sourceNodeId: nodeIdByResourceId.get(relationship.sourceResourceId) ?? "",
+        targetNodeId: nodeIdByResourceId.get(relationship.targetResourceId) ?? "",
+        type: relationship.type ?? "smoothstep",
+        ...(relationship.sourceHandleId ? { sourceHandleId: relationship.sourceHandleId } : {}),
+        ...(relationship.targetHandleId ? { targetHandleId: relationship.targetHandleId } : {})
+      })),
+      ...definition.presentationEdges.map((edge) => ({
+        id: `template-${templateId}-presentation-${edge.id}`,
+        label: edge.label,
+        sourceNodeId: nodeIdByTemplateNodeId.get(edge.sourceNodeId) ?? "",
+        targetNodeId: nodeIdByTemplateNodeId.get(edge.targetNodeId) ?? "",
+        type: edge.type ?? "smoothstep",
+        ...(edge.sourceHandleId ? { sourceHandleId: edge.sourceHandleId } : {}),
+        ...(edge.targetHandleId ? { targetHandleId: edge.targetHandleId } : {})
+      }))
+    ],
+    viewport: definition.viewport ? { ...definition.viewport } : { x: 0, y: 0, zoom: 0.8 }
   };
 }
 
@@ -400,8 +716,10 @@ function createDiagramNode(
   resource: TemplateResourceDefinition,
   resourceById: ReadonlyMap<string, TemplateResourceDefinition>,
   resourceNames: ReadonlyMap<string, string>,
-  nodeIdByResourceId: ReadonlyMap<string, string>
+  nodeIdByResourceId: ReadonlyMap<string, string>,
+  nodeIdByTemplateNodeId: ReadonlyMap<string, string>
 ): DiagramNode {
+  // Preserve the catalog-backed resource identity while applying only template-authored Board geometry.
   const values = resolveTemplateValue(resource.values, resourceById, resourceNames);
 
   return {
@@ -409,8 +727,13 @@ function createDiagramNode(
     kind: resource.kind ?? "resource",
     label: resource.label,
     locked: false,
-    metadata: resource.parentResourceId
-      ? { parentAreaNodeId: nodeIdByResourceId.get(resource.parentResourceId) }
+    metadata: resource.parentResourceId || resource.presentationArea
+      ? {
+          ...(resource.parentResourceId
+            ? { parentAreaNodeId: nodeIdByTemplateNodeId.get(resource.parentResourceId) }
+            : {}),
+          ...(resource.presentationArea ? { presentationArea: true } : {})
+        }
       : undefined,
     parameters: {
       resourceType: resource.terraformResourceType,
@@ -419,10 +742,38 @@ function createDiagramNode(
       terraformBlockType: resource.terraformBlockType,
       values
     },
-    position: resource.position,
-    size: resource.kind === "design" ? { width: 260, height: 180 } : { width: 124, height: 96 },
+    position: { ...resource.position },
+    size: resource.size
+      ? { ...resource.size }
+      : resource.kind === "design"
+        ? { width: 260, height: 180 }
+        : { width: 124, height: 96 },
     type: resource.terraformResourceType,
     zIndex: resource.kind === "design" ? 0 : 1
+  };
+}
+
+// Presentation nodes carry only Catalog identity and Board geometry, never Terraform identity or values.
+function createPresentationDiagramNode(
+  node: TemplatePresentationNodeDefinition,
+  nodeIdByPresentationId: ReadonlyMap<string, string>,
+  nodeIdByTemplateNodeId: ReadonlyMap<string, string>
+): DiagramNode {
+  return {
+    id: nodeIdByPresentationId.get(node.id) ?? `template-presentation-${node.id}`,
+    kind: "design",
+    label: node.label,
+    locked: false,
+    metadata: {
+      presentationCatalogItemId: node.catalogItemId,
+      ...(node.parentNodeId
+        ? { parentAreaNodeId: nodeIdByTemplateNodeId.get(node.parentNodeId) }
+        : {})
+    },
+    position: { ...node.position },
+    size: { ...node.size },
+    type: node.catalogItemId,
+    zIndex: 0
   };
 }
 
@@ -569,10 +920,164 @@ function createDynamoDbPolicy(tableResourceId: string): string {
   });
 }
 
-function createTemplate(input: Omit<TemplateDefinition, "providers">): TemplateDefinition {
+// Apply visual-only PNG placement after the resource list is declared, keeping Terraform values immutable here.
+function createTemplate(
+  input: Omit<TemplateDefinition, "providers" | "viewport" | "presentationNodes" | "presentationEdges">
+): TemplateDefinition {
+  const presentation = TEMPLATE_PRESENTATION_LAYOUTS[input.id];
+
+  if (!presentation) {
+    throw new Error(`Missing Template presentation layout: ${input.id}`);
+  }
+
+  const resources = input.resources.map((resource) => {
+    const placement = presentation.resources[resource.id];
+
+    if (!placement) {
+      throw new Error(`Missing Template presentation resource: ${input.id}/${resource.id}`);
+    }
+
+    const {
+      position: _position,
+      parentResourceId: _parentResourceId,
+      size: _size,
+      presentationArea: _presentationArea,
+      ...semanticResource
+    } = resource;
+
+    return {
+      ...semanticResource,
+      position: { ...placement.position },
+      ...(placement.parentResourceId ? { parentResourceId: placement.parentResourceId } : {}),
+      ...(placement.size ? { size: { ...placement.size } } : {}),
+      ...(placement.presentationArea ? { presentationArea: true } : {})
+    };
+  });
+  const relationships = input.relationships.map((relationship) => {
+    const routing = presentation.routing[relationship.id];
+    const {
+      sourceHandleId: _sourceHandleId,
+      targetHandleId: _targetHandleId,
+      type: _type,
+      ...semanticRelationship
+    } = relationship;
+
+    return routing
+      ? { ...semanticRelationship, ...routing }
+      : semanticRelationship;
+  });
+  const presentationNodes = Object.entries(presentation.presentationNodes).map(([id, node]) => ({
+    id,
+    ...node,
+    position: { ...node.position },
+    size: { ...node.size }
+  }));
+  const presentationEdges = Object.entries(presentation.presentationEdges).map(([id, edge]) => ({
+    id,
+    ...edge
+  }));
+
+  validatePresentationGraph(input.id, resources, presentationNodes, presentationEdges);
+
   return {
     ...input,
-    providers: [...new Set(input.resources.map((resource) => resource.provider))]
+    resources,
+    relationships,
+    presentationNodes,
+    presentationEdges,
+    viewport: { ...presentation.viewport },
+    providers: [...new Set(resources.map((resource) => resource.provider))]
+  };
+}
+
+// Fail at registry construction when a visual edge is dangling or accidentally becomes a semantic-only edge.
+function validatePresentationGraph(
+  templateId: TemplateId,
+  resources: readonly TemplateResourceDefinition[],
+  presentationNodes: readonly TemplatePresentationNodeDefinition[],
+  presentationEdges: readonly TemplatePresentationEdgeDefinition[]
+): void {
+  const resourceIds = new Set(resources.map((resource) => resource.id));
+  const presentationNodeIds = new Set(presentationNodes.map((node) => node.id));
+  const allNodeIds = new Set([...resourceIds, ...presentationNodeIds]);
+
+  for (const node of presentationNodes) {
+    if (node.parentNodeId && !allNodeIds.has(node.parentNodeId)) {
+      throw new Error(`Invalid Template presentation parent: ${templateId}/${node.id}/${node.parentNodeId}`);
+    }
+  }
+
+  for (const resource of resources) {
+    if (resource.parentResourceId && !allNodeIds.has(resource.parentResourceId)) {
+      throw new Error(`Invalid Template resource parent: ${templateId}/${resource.id}/${resource.parentResourceId}`);
+    }
+  }
+
+  for (const edge of presentationEdges) {
+    if (!allNodeIds.has(edge.sourceNodeId) || !allNodeIds.has(edge.targetNodeId)) {
+      throw new Error(`Invalid Template presentation edge: ${templateId}/${edge.id}`);
+    }
+
+    if (!presentationNodeIds.has(edge.sourceNodeId) && !presentationNodeIds.has(edge.targetNodeId)) {
+      throw new Error(`Template presentation edge must touch Design: ${templateId}/${edge.id}`);
+    }
+  }
+}
+
+// Keep all layout coordinates on the same grid so edits remain easy to inspect in the Board.
+function layoutAt(
+  x: number,
+  y: number,
+  parentResourceId?: string,
+  size?: DiagramNode["size"],
+  presentationArea?: boolean
+): TemplatePresentationPlacement {
+  return {
+    position: { x, y },
+    ...(parentResourceId ? { parentResourceId } : {}),
+    ...(size ? { size } : {}),
+    ...(presentationArea ? { presentationArea: true } : {})
+  };
+}
+
+// Stored handles make support rails deterministic instead of letting auto-routing cross the runtime flow.
+function layoutRoute(sourceHandleId: string, targetHandleId: string) {
+  return { sourceHandleId, targetHandleId, type: "smoothstep" as const };
+}
+
+// Keep Catalog identity next to authored Design geometry without copying Terraform parameter contracts.
+function presentationNode(
+  catalogItemId: string,
+  label: string,
+  x: number,
+  y: number,
+  size: DiagramNode["size"] = { width: 48, height: 48 },
+  parentNodeId?: string
+): Omit<TemplatePresentationNodeDefinition, "id"> {
+  return {
+    catalogItemId,
+    label,
+    position: { x, y },
+    size: { ...size },
+    ...(parentNodeId ? { parentNodeId } : {})
+  };
+}
+
+// Visual flow edges are authored separately so no deployment relationship can be inferred from them.
+function presentationEdge(
+  sourceNodeId: string,
+  targetNodeId: string,
+  label: string,
+  sourceHandleId: string,
+  targetHandleId: string
+): Omit<TemplatePresentationEdgeDefinition, "id"> {
+  return {
+    sourceNodeId,
+    targetNodeId,
+    label,
+    sourceHandleId,
+    targetHandleId,
+    type: "smoothstep"
   };
 }
 

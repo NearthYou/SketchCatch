@@ -27,7 +27,8 @@ test("each template builds a deterministic, connected DiagramJson", () => {
 
     assert.deepEqual(first, second, templateId);
     assert.ok(first.nodes.length > 0, templateId);
-    assert.ok(first.nodes.every((node) => node.parameters), templateId);
+    assert.ok(first.nodes.filter((node) => node.kind === "resource").every((node) => node.parameters), templateId);
+    assert.ok(first.nodes.filter((node) => node.kind === "design").every((node) => !node.parameters), templateId);
 
     const nodeIds = new Set(first.nodes.map((node) => node.id));
     assert.ok(
@@ -35,7 +36,9 @@ test("each template builds a deterministic, connected DiagramJson", () => {
       templateId
     );
     assert.ok(
-      first.nodes.every((node) => node.parameters?.resourceName.startsWith("sketchcatch_")),
+      first.nodes
+        .filter((node) => node.kind === "resource")
+        .every((node) => node.parameters?.resourceName.startsWith("sketchcatch_")),
       templateId
     );
   }
@@ -100,10 +103,45 @@ test("each template contains the resources required by its deployable default", 
     "aws_route_table_association",
     "aws_lb",
     "aws_lb_target_group",
-    "aws_lb_listener"
+    "aws_lb_listener",
+    "aws_ecr_repository",
+    "aws_cloudwatch_log_group"
   ]) {
     assert.ok(ecsTypes.includes(requiredType), `ecs-fargate-container-app: ${requiredType}`);
   }
+
+  const ecsDefinition = definitions.get("ecs-fargate-container-app");
+  const ecsTask = ecsDefinition?.resources.find((resource) => resource.id === "task");
+  const ecsContainer = JSON.parse(String(ecsTask?.values.containerDefinitions))[0] as {
+    image?: string;
+    logConfiguration?: { logDriver?: string; options?: Record<string, string> };
+  };
+  const ecsRepositoryRelationship = ecsDefinition?.relationships.find(
+    (relationship) => relationship.id === "repository-task"
+  );
+  assert.equal(ecsContainer.image, "public.ecr.aws/docker/library/nginx:stable");
+  assert.equal(ecsRepositoryRelationship?.label, "optional image source");
+  assert.equal(ecsContainer.logConfiguration?.logDriver, "awslogs");
+  assert.equal(ecsContainer.logConfiguration?.options?.["awslogs-group"], "${@ref:log-group.name}");
+  assert.equal(ecsContainer.logConfiguration?.options?.["awslogs-stream-prefix"], "ecs");
+
+  const builtEcs = buildTemplateDiagramJson("ecs-fargate-container-app", {
+    projectSlug: "sketchcatch",
+    shortId: "test01"
+  });
+  const builtTask = builtEcs.nodes.find(
+    (node) => node.parameters?.resourceType === "aws_ecs_task_definition"
+  );
+  const builtContainerDefinitions = String(builtTask?.parameters?.values.containerDefinitions);
+  const builtContainer = JSON.parse(builtContainerDefinitions)[0] as {
+    logConfiguration?: { options?: Record<string, string> };
+  };
+
+  assert.doesNotMatch(builtContainerDefinitions, /@ref:/);
+  assert.equal(
+    builtContainer.logConfiguration?.options?.["awslogs-group"],
+    "${aws_cloudwatch_log_group.sketchcatch_log-group_test01.name}"
+  );
 
   const eksTypes = resourceTypes("eks-container-app");
   assert.equal(eksTypes.filter((resourceType) => resourceType === "aws_subnet").length, 2);

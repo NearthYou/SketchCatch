@@ -81,8 +81,9 @@ const TERRAFORM_NESTED_BLOCK_ATTRIBUTES: Record<string, ReadonlySet<string>> = {
 
 const TERRAFORM_NESTED_BLOCK_ATTRIBUTES_BY_PATH: Record<string, ReadonlySet<string>> = {
   "aws_autoscaling_policy.targetTrackingConfiguration": new Set(["predefinedMetricSpecification"]),
-  "aws_cloudfront_distribution.origin": new Set(["customOriginConfig"]),
-  "aws_cloudfront_distribution.restrictions": new Set(["geoRestriction"])
+  "aws_cloudfront_distribution.origin": new Set(["customOriginConfig", "s3OriginConfig"]),
+  "aws_cloudfront_distribution.restrictions": new Set(["geoRestriction"]),
+  "kubernetes_deployment.spec": new Set(["selector"])
 };
 
 const TERRAFORM_SINGLE_NESTED_BLOCK_ATTRIBUTES: Record<string, ReadonlySet<string>> = {
@@ -100,8 +101,6 @@ const GENERIC_TERRAFORM_NESTED_BLOCKS = new Set([
   "networkConfiguration",
   "port",
   "predefinedMetricSpecification",
-  "selector",
-  "s3OriginConfig",
   "spec",
   "template"
 ]);

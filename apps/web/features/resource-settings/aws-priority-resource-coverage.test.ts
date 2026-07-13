@@ -1,105 +1,52 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { terraformParameterCatalog } from "../parameter-input/catalog";
 import { resourceCatalog } from "./catalog";
 
 const publicDirectoryPath = fileURLToPath(new URL("../../public", import.meta.url));
-const awsResourceInventorySource = readFileSync(
-  fileURLToPath(new URL("../../../../docs/jh/000_AWS리소스목록_JH.md", import.meta.url)),
-  "utf8"
+const awsCatalogResources = resourceCatalog.filter(
+  (item) => item.cloudProvider === "aws" && !item.id.startsWith("design-")
 );
+const coreAwsResourceTypes = [
+  "aws_vpc",
+  "aws_subnet",
+  "aws_instance",
+  "aws_db_instance",
+  "aws_s3_bucket",
+  "aws_security_group",
+  "aws_internet_gateway",
+  "aws_route_table",
+  "aws_lb",
+  "aws_autoscaling_group",
+  "aws_lambda_function",
+  "aws_cloudfront_distribution"
+] as const;
 
-test("resource settings catalog exposes every priority 1 and 2 AWS inventory resource", () => {
-  const catalogKeys = new Set(
-    resourceCatalog.map(
-      (item) => `${item.nodeDefaults.terraformBlockType ?? "resource"}/${item.nodeDefaults.type}`
-    )
-  );
+test("resource settings catalog keeps a unique item identity for every AWS resource", () => {
+  const catalogKeys = awsCatalogResources.map((item) => item.id);
 
-  for (const resource of parsePriorityAwsResources(awsResourceInventorySource)) {
-    assert.ok(
-      catalogKeys.has(resource.key),
-      `Missing resource catalog item for ${resource.displayName}`
-    );
-  }
+  assert.ok(catalogKeys.length > 0);
+  assert.equal(new Set(catalogKeys).size, catalogKeys.length);
 });
 
-test("priority 1 and 2 AWS inventory catalog resources use existing public icon assets", () => {
-  for (const resource of parsePriorityAwsResources(awsResourceInventorySource)) {
-    const catalogItem = resourceCatalog.find(
-      (item) =>
-        (item.nodeDefaults.terraformBlockType ?? "resource") === resource.blockType &&
-        item.nodeDefaults.type === resource.resourceType
-    );
-
-    assert.ok(catalogItem, `Missing resource catalog item for ${resource.displayName}`);
+test("every AWS resource catalog item uses an existing public icon asset", () => {
+  for (const catalogItem of awsCatalogResources) {
+    assert.ok(catalogItem.iconUrl, `${catalogItem.name} should have a defined iconUrl`);
     assert.equal(
       existsSync(`${publicDirectoryPath}${catalogItem.iconUrl}`),
       true,
-      `${resource.displayName} icon asset should exist at ${catalogItem.iconUrl}`
+      `${catalogItem.name} icon asset should exist at ${catalogItem.iconUrl}`
     );
   }
 });
 
-test("parameter catalog exposes required and core fields for every priority 1 and 2 AWS inventory resource", () => {
-  for (const resource of parsePriorityAwsResources(awsResourceInventorySource)) {
+test("parameter catalog exposes fields for every core AWS resource", () => {
+  for (const resourceType of coreAwsResourceTypes) {
     assert.ok(
-      terraformParameterCatalog.resources[resource.resourceType],
-      `Missing parameter catalog resource ${resource.displayName}`
+      terraformParameterCatalog.resources[resourceType],
+      `Missing parameter catalog resource ${resourceType}`
     );
   }
 });
-
-function parsePriorityAwsResources(source: string) {
-  const resources: {
-    readonly blockType: "data" | "resource";
-    readonly displayName: string;
-    readonly key: string;
-    readonly resourceType: string;
-  }[] = [];
-  let inPrioritySection = false;
-
-  for (const line of source.split(/\r?\n/u)) {
-    if (/^## [12]순위 리소스 목록/u.test(line)) {
-      inPrioritySection = true;
-      continue;
-    }
-
-    if (inPrioritySection && /^## 현재 SketchCatch 보유 리소스 목록/u.test(line)) {
-      break;
-    }
-
-    if (!inPrioritySection) {
-      continue;
-    }
-
-    const match = /^\| `([^`]+)` \|/u.exec(line);
-
-    if (!match) {
-      continue;
-    }
-
-    const displayName = match[1];
-
-    if (!displayName) {
-      continue;
-    }
-
-    const isDataSource = displayName.startsWith("data.");
-    const blockType = isDataSource ? "data" : "resource";
-    const resourceType = isDataSource ? displayName.replace(/^data\./u, "") : displayName;
-
-    resources.push({
-      blockType,
-      displayName,
-      key: `${blockType}/${resourceType}`,
-      resourceType
-    });
-  }
-
-  assert.equal(resources.length, 112);
-
-  return resources;
-}

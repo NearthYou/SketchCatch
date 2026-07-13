@@ -50,10 +50,12 @@ Short English-only working log for the current agent context. Older records are 
 
 ### 2026-07-13 - Merge latest dev into AI diagram fallback branch
 
-- Fast-forwarded `feat/ck/350-ai-diagram-fallback` to latest `origin/dev`.
-- Reapplied the stashed Template-unselected AI fallback work after conflicts in API route, Repository start UI, CSS, data model docs, and progress log.
-- Kept the latest Repository Analysis recommendation flow from `dev` and restored the fallback request resolver, UI CTA, and documentation contract.
-- Verification: `pnpm harness:check`, `pnpm --dir apps/api exec tsx --test src/routes/ai-repository-handoff.test.ts`, `pnpm --dir apps/web exec tsx --test features/workspace/repository-template-fallback.test.ts app/workspace/repository/repository-start-client.test.ts`, `pnpm typecheck`, `pnpm lint`, and `pnpm build` passed. Lint retained one pre-existing API unused-argument warning in `apps/api/src/live-observations/live-observation-store-contract.ts`.
+- Merged `origin/dev` at `885c1a09`, including Template Design contracts and the separated Direct Deployment/CI/CD console.
+- Combined load-balancer exclusion sizing with Repository CI/CD IAM role sizing and kept strict evidence authoritative over newly expanded Template resources.
+- Preserved path-specific CloudFront/Kubernetes nested blocks and Resource AZ, Design AZ, physical containment, and conflicting-VPC diagnostics.
+- Removed an automatic-merge duplicate in Terraform AZ synchronization while retaining existing Diagram parent hierarchy.
+- Verification: 78 focused merge regressions, `pnpm harness:check`, `pnpm typecheck`, `pnpm lint`, `pnpm build`, and `git diff --check` passed. Lint retains the pre-existing `setNow` warning.
+- Risk: migrations `0032` and `0033` were not applied, and no cloud or deployment mutation was performed.
 
 ### 2026-07-13 - Public Repository AI recommendation and question recovery
 
@@ -148,7 +150,6 @@ Short English-only working log for the current agent context. Older records are 
   - `pnpm typecheck`, `pnpm build`, and `git diff --check` passed.
 - Review:
   - Spec review found no issues; standards review finding about the caption token was fixed in `dcda929b`.
-
 ### 2026-07-13 - Repository-specific AI recommendation profiles
 
 - Reproduced that unrelated Docker repositories received the same ECS/EKS candidates and 87%/67% scores because container candidates and baseline confidence were fixed before the AI call.
@@ -215,3 +216,4 @@ Short English-only working log for the current agent context. Older records are 
 ## Next Action
 
 - Regenerate the Repository Fargate draft once after pulling this change so its Terraform artifact includes the new Live Observation outputs.
+- Run migrations and credentialed browser acceptance only with an approved safe environment.

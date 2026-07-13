@@ -13,9 +13,9 @@ const DEFAULT_TERRAFORM_BLOCK_TYPE: TerraformBlockType = "resource";
 const INDENT_UNIT = "  ";
 export const TERRAFORM_IDENTIFIER_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_-]*$/;
 const TERRAFORM_REFERENCE_PATTERN =
-  /^(?:var|local|each|count|path|terraform)\.[a-zA-Z_][a-zA-Z0-9_]*$|^module\.[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)*$|^(?:aws|kubernetes)_[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)*$|^data\.aws_[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)*$/;
+  /^(?:var|local|each|count|path|terraform)\.[a-zA-Z_][a-zA-Z0-9_]*$|^module\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)*$|^(?:aws|kubernetes)_[a-zA-Z0-9_]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)*$|^data\.[a-zA-Z_][a-zA-Z0-9_]*\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)*$/;
 const TERRAFORM_RESOURCE_ADDRESS_PATTERN =
-  /^(?:(?:aws|kubernetes)_[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+|module\.[a-zA-Z0-9_]+)$/;
+  /^(?:(?:aws|kubernetes)_[a-zA-Z0-9_]+\.[a-zA-Z0-9_-]+|module\.[a-zA-Z0-9_-]+)$/;
 
 export class TerraformDiagramValidationError extends Error {
   readonly reason = "invalid_identifier";
@@ -236,7 +236,7 @@ function renderBodyEntry(
   const normalizedValue = normalizeTopLevelValue(resourceType, key, value);
 
   if (shouldRenderNestedBlocks(resourceType, key, normalizedValue)) {
-    return renderNestedBlocks(key, normalizedValue, indentLevel);
+    return renderNestedBlocks(resourceType, key, normalizedValue, indentLevel, []);
   }
 
   return [renderAttribute(key, normalizedValue, indentLevel)];
@@ -299,9 +299,11 @@ function shouldRenderNestedBlocks(
 }
 
 function renderNestedBlocks(
+  resourceType: string,
   key: string,
   value: Record<string, unknown> | Record<string, unknown>[],
-  indentLevel: number
+  indentLevel: number,
+  parentPath: readonly string[]
 ): string[] {
   const blockName = toSnakeCase(key);
   const values = Array.isArray(value) ? value : [value];
@@ -312,19 +314,32 @@ function renderNestedBlocks(
     [
       `${indent(indentLevel)}${blockName} {`,
       ...Object.entries(value).flatMap(([nestedKey, nestedValue]) =>
-        renderNestedBlockEntry(nestedKey, nestedValue, indentLevel + 1)
+        renderNestedBlockEntry(
+          resourceType,
+          [...parentPath, key],
+          nestedKey,
+          nestedValue,
+          indentLevel + 1
+        )
       ),
       `${indent(indentLevel)}}`
     ].join("\n")
   );
 }
 
-function renderNestedBlockEntry(key: string, value: unknown, indentLevel: number): string[] {
+function renderNestedBlockEntry(
+  resourceType: string,
+  parentPath: readonly string[],
+  key: string,
+  value: unknown,
+  indentLevel: number
+): string[] {
   if (
-    isGenericTerraformNestedBlock(key) &&
+    (isTerraformNestedBlockAttribute(resourceType, key, parentPath) ||
+      isGenericTerraformNestedBlock(key)) &&
     ((Array.isArray(value) && value.every(isRecord)) || isRecord(value))
   ) {
-    return renderNestedBlocks(key, value, indentLevel);
+    return renderNestedBlocks(resourceType, key, value, indentLevel, parentPath);
   }
 
   return [renderAttribute(key, value, indentLevel)];

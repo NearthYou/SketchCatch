@@ -86,6 +86,29 @@ test("isAreaNode excludes regular design and resource nodes", () => {
   assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_internet_gateway" })), false);
 });
 
+test("template-only resource containers do not change generic catalog resource behavior", () => {
+  for (const resourceType of [
+    "aws_api_gateway_rest_api",
+    "aws_ecs_cluster",
+    "aws_eks_cluster",
+    "kubernetes_namespace"
+  ]) {
+    assert.equal(isAreaNode(makeResourceNode({ resourceType })), false, resourceType);
+  }
+});
+
+test("an authored presentation flag turns a catalog resource into a template-only Area", () => {
+  const apiGateway = makeResourceNode({ resourceType: "aws_api_gateway_rest_api" });
+  const ecsCluster = makeResourceNode({ resourceType: "aws_ecs_cluster" });
+  const eksCluster = makeResourceNode({ resourceType: "aws_eks_cluster" });
+  const namespace = makeResourceNode({ resourceType: "kubernetes_namespace" });
+
+  for (const node of [apiGateway, ecsCluster, eksCluster, namespace]) {
+    node.metadata = { presentationArea: true };
+    assert.equal(isAreaNode(node), true, node.parameters?.resourceType ?? "unknown resource");
+  }
+});
+
 test("area node helpers distinguish design containers from resource containers", () => {
   const region = makeDesignNode({ type: "design_region" });
   const regionResource = makeResourceNode({ resourceType: "aws_region" });

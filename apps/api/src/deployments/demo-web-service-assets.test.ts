@@ -109,7 +109,7 @@ test("embedded Python Traffic API compiles and exposes OPTIONS, traffic, and hea
 });
 
 function extractEmbeddedPython(source: string): string {
-  const match = /cat >\/opt\/sketchcatch-demo-api\.py <<'PY'\n([\s\S]*?)\nPY/.exec(source);
+  const match = /cat >\/opt\/sketchcatch-demo-api\.py <<'PY'\r?\n([\s\S]*?)\r?\nPY/.exec(source);
 
   assert.ok(match?.[1], "embedded Python API source was not found");
   return match[1];

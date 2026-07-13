@@ -4,26 +4,28 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Currently Verified
 
-- Branch `feat/ck/350-ai-diagram-fallback` generates provider-valid Terraform for the strict `audience-live-check` ECS Fargate Repository draft.
-- The generated 25-node, 22-resource artifact passes the Direct Deployment safety gate and `terraform validate` with AWS provider v6.54.0.
-- Focused Web, Terraform, and Architecture Draft regressions pass; lint, typecheck, and production build pass.
+- Branch `feat/ck/350-ai-diagram-fallback` includes `origin/dev` at `885c1a09`.
+- Repository URL analysis resolves the GitHub default branch, exposes fetched branches through the shared SelectMenu, and reanalyzes the selected revision.
+- Strict `audience-live-check` evidence still targets the minimal ECS Fargate architecture without unsupported persistence or scaling assumptions.
+- The latest Template Design contracts and separated Direct Deployment/CI/CD console from `dev` are present.
+
+## Verification
+
+- 78 focused Architecture Draft, Terraform, Repository UI, and VPC/AZ dependency regressions passed.
+- `pnpm harness:check`, `pnpm typecheck`, `pnpm lint`, `pnpm build`, and `git diff --check` passed.
+- Lint retains the pre-existing unused `setNow` warning in the Live Observation store contract.
 
 ## Changes This Session
 
-- Preserved authored Terraform identities through the ArchitectureJson-to-DiagramJson adapter.
-- Filtered Diagram and Template metadata before HCL rendering.
-- Added ECR and CloudFront nested-block support.
-- Made the strict CloudFront draft complete and deployable.
-- Deferred ALB TLS until a domain and certificate are confirmed instead of generating `api.example.com`.
-- Added a public 8080 `/health` smoke container for the first deployment before the repository image reaches ECR.
+- Merged the latest `origin/dev` and preserved both the branch's Repository/Fargate changes and `dev` deployment/template behavior.
+- Combined load-balancer exclusion sizing with CI/CD IAM role sizing.
+- Preserved ECR/CloudFront nested blocks and Resource AZ, Design AZ, and physical VPC containment regressions.
 
 ## Broken Or Unverified
 
-- Real Terraform Plan, Apply, health verification, Destroy Plan, and Destroy have not run.
-- Chrome is at the SketchCatch login page. The user must sign in so the saved AWS connection can be selected.
-- All local AWS CLI profiles currently fail STS because their sessions are expired.
-- Root `pnpm test` has unrelated existing Web assertion failures; changed-path tests pass.
+- Migrations `0032` and `0033` arrived from `dev` but were not applied without an approved non-production `DATABASE_URL`.
+- No Terraform Apply/Destroy, AWS mutation, deployment API mutation, or migration execution was performed during conflict resolution.
 
 ## Best Next Action
 
-- After the user signs in through Chrome, return to the Repository workspace and run the explicit Direct Deployment Plan, approval, Apply, health check, Destroy Plan, approval, and Destroy flow. Verify no deployment-owned resources remain.
+- Review or push the completed merge when ready; run migrations only in an approved non-production environment.

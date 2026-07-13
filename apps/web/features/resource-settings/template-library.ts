@@ -1,4 +1,4 @@
-import type { DiagramJson } from "../../../../packages/types/src";
+import { isTerraformDeployableNode, type DiagramJson } from "../../../../packages/types/src";
 import {
   buildTemplateDiagramJson,
   templateDefinitions,
@@ -49,8 +49,8 @@ const LIVE_OBSERVATION_MANAGED_USER_DATA_BASE64 =
 
 const LIVE_OBSERVATION_AUDIENCE_HTML = [
   '<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">',
-  '<title>SketchCatch Live Observation</title><style>body{max-width:680px;margin:0 auto;padding:56px 24px;font:16px/1.6 Pretendard,sans-serif;color:#172033;background:#fafafa}',
-  'main{padding:32px;border:1px solid #dcdee0;border-radius:16px;background:#fff}button{width:100%;padding:18px;border:0;border-radius:8px;color:#fff;background:#000;font-size:18px;font-weight:700}</style></head>',
+  "<title>SketchCatch Live Observation</title><style>body{max-width:680px;margin:0 auto;padding:56px 24px;font:16px/1.6 Pretendard,sans-serif;color:#172033;background:#fafafa}",
+  "main{padding:32px;border:1px solid #dcdee0;border-radius:16px;background:#fff}button{width:100%;padding:18px;border:0;border-radius:8px;color:#fff;background:#000;font-size:18px;font-weight:700}</style></head>",
   '<body><main><h1>실시간 트래픽 보내기</h1><p>성공한 Traffic API 요청만 Live Observation에 집계합니다.</p><button id="send-traffic">트래픽 1건 보내기</button><p id="status"></p><p id="count">이 브라우저의 Traffic 성공 0건</p></main>',
   '<script>const q=new URLSearchParams(location.search),token=q.get("observation"),collector=(q.get("collector")||"").replace(/\\/$/,""),button=document.getElementById("send-traffic"),status=document.getElementById("status"),count=document.getElementById("count");let successes=0;',
   'button.onclick=async()=>{button.disabled=true;try{const response=await fetch("http://${aws_lb.demo.dns_name}/api/traffic",{method:"POST"});if(!response.ok)throw new Error("Traffic API 요청에 실패했습니다.");successes+=1;count.textContent="이 브라우저의 Traffic 성공 "+successes+"건";',
@@ -231,7 +231,8 @@ const legacyBoardTemplates: readonly BoardTemplate[] = [
   {
     id: "template-live-observation",
     title: "실시간 트래픽 · ASG 관측",
-    description: "관객 트래픽이 ALB와 ASG 스케일 아웃으로 이어지는 Live Observation 데모 구조입니다.",
+    description:
+      "관객 트래픽이 ALB와 ASG 스케일 아웃으로 이어지는 Live Observation 데모 구조입니다.",
     tags: ["Live Observation", "ALB", "ASG", "CloudWatch"],
     diagramJson: {
       nodes: [
@@ -336,12 +337,14 @@ const legacyBoardTemplates: readonly BoardTemplate[] = [
           type: "aws_security_group",
           values: {
             egress: [{ cidrBlocks: ["0.0.0.0/0"], fromPort: 0, protocol: "-1", toPort: 0 }],
-            ingress: [{
-              fromPort: 8080,
-              protocol: "tcp",
-              securityGroups: ["aws_security_group.alb.id"],
-              toPort: 8080
-            }],
+            ingress: [
+              {
+                fromPort: 8080,
+                protocol: "tcp",
+                securityGroups: ["aws_security_group.alb.id"],
+                toPort: 8080
+              }
+            ],
             namePrefix: "sc-lo-api-",
             vpcId: "aws_vpc.demo.id"
           }
@@ -607,16 +610,66 @@ const legacyBoardTemplates: readonly BoardTemplate[] = [
         })
       ],
       edges: [
-        createTemplateEdge("template-live-site-flow", "template-live-site-config", "template-live-alb", "audience traffic"),
-        createTemplateEdge("template-live-alb-target", "template-live-alb", "template-live-target-group", "routes"),
-        createTemplateEdge("template-live-target-asg", "template-live-target-group", "template-live-asg", "targets"),
-        createTemplateEdge("template-live-role-policy", "template-live-agent-role", "template-live-agent-policy", "grants"),
-        createTemplateEdge("template-live-role-profile", "template-live-agent-role", "template-live-agent-profile", "assumes"),
-        createTemplateEdge("template-live-profile-launch", "template-live-agent-profile", "template-live-launch-template", "profile"),
-        createTemplateEdge("template-live-agent-logs", "template-live-launch-template", "template-live-log-group", "agent metrics"),
-        createTemplateEdge("template-live-launch-asg", "template-live-launch-template", "template-live-asg", "launches"),
-        createTemplateEdge("template-live-alarm-policy", "template-live-alarm", "template-live-policy", "triggers"),
-        createTemplateEdge("template-live-policy-asg", "template-live-policy", "template-live-asg", "+1 instance")
+        createTemplateEdge(
+          "template-live-site-flow",
+          "template-live-site-config",
+          "template-live-alb",
+          "audience traffic"
+        ),
+        createTemplateEdge(
+          "template-live-alb-target",
+          "template-live-alb",
+          "template-live-target-group",
+          "routes"
+        ),
+        createTemplateEdge(
+          "template-live-target-asg",
+          "template-live-target-group",
+          "template-live-asg",
+          "targets"
+        ),
+        createTemplateEdge(
+          "template-live-role-policy",
+          "template-live-agent-role",
+          "template-live-agent-policy",
+          "grants"
+        ),
+        createTemplateEdge(
+          "template-live-role-profile",
+          "template-live-agent-role",
+          "template-live-agent-profile",
+          "assumes"
+        ),
+        createTemplateEdge(
+          "template-live-profile-launch",
+          "template-live-agent-profile",
+          "template-live-launch-template",
+          "profile"
+        ),
+        createTemplateEdge(
+          "template-live-agent-logs",
+          "template-live-launch-template",
+          "template-live-log-group",
+          "agent metrics"
+        ),
+        createTemplateEdge(
+          "template-live-launch-asg",
+          "template-live-launch-template",
+          "template-live-asg",
+          "launches"
+        ),
+        createTemplateEdge(
+          "template-live-alarm-policy",
+          "template-live-alarm",
+          "template-live-policy",
+          "triggers"
+        ),
+        createTemplateEdge(
+          "template-live-policy-asg",
+          "template-live-policy",
+          "template-live-asg",
+          "+1 instance"
+        )
       ],
       viewport: { x: 0, y: 0, zoom: 0.62 }
     }
@@ -634,12 +687,29 @@ const boardTemplates: readonly BoardTemplate[] = templateDefinitions.map((defini
   })
 }));
 
-// 페이지와 보드 모달이 같은 템플릿 목록을 쓰도록 한 곳에서 목록을 제공합니다.
+// 페이지와 보드 모달은 PNG 검토를 마친 authored geometry를 같은 목록에서 사용한다.
 export function listBoardTemplates(): readonly BoardTemplate[] {
   return boardTemplates.map((template) => ({
     ...template,
-    diagramJson: materializeTemplateDiagram(cloneDiagramJson(template.diagramJson))
+    diagramJson: materializeTemplateDiagram(cloneDiagramJson(template.diagramJson), "authored")
   }));
+}
+
+// Resource kind와 Terraform parameters가 모두 있는 실제 배포 Resource만 셉니다.
+export function getBoardTemplateResourceCount(template: BoardTemplate): number {
+  return template.diagramJson.nodes.filter(isTerraformDeployableNode).length;
+}
+
+// 양쪽 끝이 배포 Resource인 semantic relationship만 Gallery 숫자에 포함합니다.
+export function getBoardTemplateRelationshipCount(template: BoardTemplate): number {
+  const deployableNodeIds = new Set(
+    template.diagramJson.nodes.filter(isTerraformDeployableNode).map((node) => node.id)
+  );
+
+  return template.diagramJson.edges.filter(
+    (edge) =>
+      deployableNodeIds.has(edge.sourceNodeId) && deployableNodeIds.has(edge.targetNodeId)
+  ).length;
 }
 
 // Live Observation과 기존 저장 Draft 검증은 배포 Template 카탈로그와 분리된 레거시 fixture를 사용합니다.
@@ -654,9 +724,12 @@ export function buildBoardTemplateDiagram(
   templateId: string | undefined,
   input: { readonly projectSlug: string; readonly shortId: string }
 ): DiagramJson | undefined {
+  // New Boards must retain the reviewed layout instead of re-running the generic topology arranger.
   const definitionId = resolveTemplateDefinitionId(templateId);
   const definition = templateDefinitions.find((candidate) => candidate.id === definitionId);
-  return definition ? materializeTemplateDiagram(buildTemplateDiagramJson(definition.id, input)) : undefined;
+  return definition
+    ? materializeTemplateDiagram(buildTemplateDiagramJson(definition.id, input), "authored")
+    : undefined;
 }
 
 function resolveTemplateDefinitionId(templateId: string | undefined): TemplateId | undefined {
@@ -686,12 +759,14 @@ export function filterBoardTemplates(
   });
 
   if (filter.sort === "name") {
-    return [...filteredTemplates].sort((left, right) => left.title.localeCompare(right.title, "ko-KR"));
+    return [...filteredTemplates].sort((left, right) =>
+      left.title.localeCompare(right.title, "ko-KR")
+    );
   }
 
   if (filter.sort === "resources") {
     return [...filteredTemplates].sort(
-      (left, right) => right.diagramJson.nodes.length - left.diagramJson.nodes.length
+      (left, right) => getBoardTemplateResourceCount(right) - getBoardTemplateResourceCount(left)
     );
   }
 
@@ -735,7 +810,9 @@ export function applyTemplateToDiagramWithBackup({
 }
 
 // localStorage에 저장된 템플릿 덮어쓰기 백업을 읽습니다.
-export function readTemplateOverwriteBackups(storage: TemplateStorage): readonly TemplateOverwriteBackup[] {
+export function readTemplateOverwriteBackups(
+  storage: TemplateStorage
+): readonly TemplateOverwriteBackup[] {
   const rawValue = storage.getItem(TEMPLATE_OVERWRITE_BACKUP_STORAGE_KEY);
 
   if (!rawValue) {
@@ -832,14 +909,18 @@ function createTemplateEdge(
   return { id, label, sourceNodeId, targetNodeId, type: "smoothstep" };
 }
 
+// Optional node fields stay absent while nested mutable values receive independent copies.
 function cloneDiagramJson(diagramJson: DiagramJson): DiagramJson {
   return {
     ...diagramJson,
-    edges: diagramJson.edges.map((edge) => ({ ...edge, style: edge.style ? { ...edge.style } : undefined })),
+    edges: diagramJson.edges.map((edge) => ({
+      ...edge,
+      style: edge.style ? { ...edge.style } : undefined
+    })),
     nodes: diagramJson.nodes.map((node) => ({
       ...node,
       metadata: node.metadata ? { ...node.metadata } : undefined,
-      parameters: node.parameters ? { ...node.parameters } : undefined,
+      ...(node.parameters ? { parameters: { ...node.parameters } } : {}),
       position: { ...node.position },
       size: { ...node.size },
       style: node.style ? { ...node.style } : undefined
@@ -870,5 +951,7 @@ function isDiagramJson(value: unknown): value is DiagramJson {
   }
 
   const candidate = value as Partial<DiagramJson>;
-  return Array.isArray(candidate.nodes) && Array.isArray(candidate.edges) && Boolean(candidate.viewport);
+  return (
+    Array.isArray(candidate.nodes) && Array.isArray(candidate.edges) && Boolean(candidate.viewport)
+  );
 }

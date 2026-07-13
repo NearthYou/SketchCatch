@@ -75,6 +75,7 @@ type AvailabilityZoneProposalPlan = {
   parentAreaNodeIdByBlockKey: Map<string, string>;
 };
 
+// Sync safe Terraform values while keeping structural changes explicit and presentation-neutral.
 export function syncTerraformToDiagramJson(
   diagramJson: DiagramJson,
   input: TerraformSyncInput
@@ -372,6 +373,7 @@ function createChangeProposals(
   return proposals;
 }
 
+// Preserve authored presentation AZ hierarchy while still grouping genuinely Terraform-only children.
 function createAvailabilityZoneProposalPlan(
   nodes: readonly DiagramNode[],
   blocks: readonly ParsedBlock[],

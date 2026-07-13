@@ -1,8 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import type { DiagramJson, DiagramNode } from "@sketchcatch/types";
+import {
+  buildTemplateDiagramJson,
+  type DiagramJson,
+  type DiagramNode
+} from "@sketchcatch/types";
 import { getResourceDefinitionByTerraform } from "@sketchcatch/types/resource-definitions";
 import { syncTerraformToDiagramJson } from "./terraform-to-diagram.js";
+import { generateTerraformFromDiagramJson } from "./terraform-preview.js";
 
 test("updates values for a matching generated resource block", () => {
   const diagramJson: DiagramJson = {
@@ -526,6 +531,39 @@ test("ignores generated Terraform configuration blocks while syncing resource fi
   assert.deepEqual(result.diagnostics, []);
   assert.deepEqual(result.proposals, []);
   assert.equal(result.diagramJson.nodes[0]?.parameters?.values.cidrBlock, "10.9.0.0/16");
+});
+
+test("generated Template Terraform keeps presentation AZ parents unchanged when synced", () => {
+  // Real Template round-trips must not turn visual AZ containers into deployable Resources.
+  for (const templateId of [
+    "three-tier-web-app",
+    "ecs-fargate-container-app",
+    "eks-container-app"
+  ] as const) {
+    const diagramJson = buildTemplateDiagramJson(templateId, {
+      projectSlug: "round-trip",
+      shortId: "presentation"
+    });
+    const originalParentByNodeId = new Map(
+      diagramJson.nodes.map((node) => [node.id, node.metadata?.parentAreaNodeId])
+    );
+    const result = syncTerraformToDiagramJson(
+      diagramJson,
+      generateTerraformFromDiagramJson(diagramJson)
+    );
+    const availabilityZoneProposals = (result.proposals ?? []).filter(
+      (proposal) =>
+        proposal.kind === "create_candidate" &&
+        proposal.identity.resourceType === "aws_availability_zone"
+    );
+
+    assert.deepEqual(availabilityZoneProposals, [], `${templateId} AZ proposals`);
+    assert.deepEqual(
+      new Map(result.diagramJson.nodes.map((node) => [node.id, node.metadata?.parentAreaNodeId])),
+      originalParentByNodeId,
+      `${templateId} parent hierarchy`
+    );
+  }
 });
 
 test("creates AZ area proposal before Subnet and EBS proposals that use availability_zone", () => {

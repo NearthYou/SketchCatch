@@ -733,6 +733,139 @@ export type SourceRepositoryAnalysis = Omit<
   "sourceRepositoryId"
 >;
 
+export type GitCicdMonitoringValidationStatus = "required" | "valid" | "invalid";
+
+export type GitCicdMonitoredPath = {
+  mode: "repository_root" | "subdirectory";
+  path: string;
+};
+
+export type GitCicdMonitoringConfig = {
+  sourceRepositoryId: string;
+  enabled: boolean;
+  monitorBranch: string;
+  appPath: GitCicdMonitoredPath;
+  infraPath: GitCicdMonitoredPath;
+  validationStatus: GitCicdMonitoringValidationStatus;
+  validationMessage: string | null;
+  validatedAt: IsoDateTimeString | null;
+  updatedAt: IsoDateTimeString;
+};
+
+export type GitCicdPipelineRunStatus =
+  | "detected"
+  | "queued"
+  | "running"
+  | "succeeded"
+  | "failed"
+  | "cancelled";
+
+export type GitCicdPipelineChangeScope = "app" | "infra" | "app_and_infra";
+
+export type GitCicdPipelineStageKind =
+  | "detect"
+  | "app_build"
+  | "infra_plan"
+  | "infra_apply"
+  | "app_deploy"
+  | "verify";
+
+export type GitCicdPipelineStageStatus =
+  | "not_started"
+  | "queued"
+  | "running"
+  | "succeeded"
+  | "failed"
+  | "skipped"
+  | "cancelled";
+
+export type GitCicdPipelineStage = {
+  id: string;
+  pipelineRunId: string;
+  kind: GitCicdPipelineStageKind;
+  status: GitCicdPipelineStageStatus;
+  runUrl: string | null;
+  startedAt: IsoDateTimeString | null;
+  finishedAt: IsoDateTimeString | null;
+};
+
+export type GitCicdPipelineRun = {
+  id: string;
+  projectId: string;
+  sourceRepositoryId: string;
+  handoffId: string | null;
+  commitSha: string;
+  commitMessage: string;
+  branch: string;
+  changeScope: GitCicdPipelineChangeScope;
+  status: GitCicdPipelineRunStatus;
+  statusMessage: string | null;
+  pipelineRunUrl: string | null;
+  appUrl: string | null;
+  apiUrl: string | null;
+  startedAt: IsoDateTimeString | null;
+  finishedAt: IsoDateTimeString | null;
+  upstreamOrderingToken: string;
+  logRevision: string;
+  lastRefreshedAt: IsoDateTimeString;
+  createdAt: IsoDateTimeString;
+  stages: GitCicdPipelineStage[];
+};
+
+export type GitCicdPipelineLog = {
+  id: string;
+  pipelineRunId: string;
+  stageId: string | null;
+  sequence: number;
+  level: "info" | "warning" | "error";
+  message: string;
+  createdAt: IsoDateTimeString;
+};
+
+export type UpdateGitCicdMonitoringConfigRequest = {
+  enabled: boolean;
+  monitorBranch: string;
+  appPath: GitCicdMonitoredPath;
+  infraPath: GitCicdMonitoredPath;
+  userAcceptedChangeId: string;
+};
+
+export type GitCicdMonitoringConfigResponse = {
+  config: GitCicdMonitoringConfig;
+};
+
+export type GitCicdPipelineRunListResponse = {
+  runs: GitCicdPipelineRun[];
+  nextCursor: string | null;
+};
+
+export type GitCicdPipelineRunResponse = {
+  run: GitCicdPipelineRun;
+};
+
+export type GitCicdPipelineRunRefreshResponse = {
+  run: GitCicdPipelineRun;
+  stale: boolean;
+  errorMessage: string | null;
+};
+
+export type GitCicdPipelineRefreshTargetResult = {
+  sourceRepositoryId: string;
+  stale: boolean;
+  errorMessage: string | null;
+};
+
+export type GitCicdPipelineProjectRefreshResponse = {
+  runs: GitCicdPipelineRun[];
+  targets: GitCicdPipelineRefreshTargetResult[];
+  stale: boolean;
+};
+
+export type GitCicdPipelineLogListResponse = {
+  logs: GitCicdPipelineLog[];
+  nextSequence: number;
+};
+
 export type GitCicdHandoffStatus =
   | "draft"
   | "pr_created"
@@ -1067,7 +1200,10 @@ export type {
   TemplateResourceDefinition
 } from "./template-definitions.ts";
 
-export { createTerraformProviderFiles } from "./terraform-provider-files.ts";
+export {
+  createTerraformProviderFiles,
+  isTerraformDeployableNode
+} from "./terraform-provider-files.ts";
 
 export type ReverseEngineeringScanStatus =
   | "queued"
@@ -2367,6 +2503,10 @@ export type AwsRegionCode =
 
 export type DiagramNodeMetadata = {
   parentAreaNodeId?: string | undefined;
+  /** Limits a resource's area-frame rendering to an authored presentation, not every catalog use. */
+  presentationArea?: boolean | undefined;
+  /** Lets Web materialization reuse an exact Resource Panel item for a parameterless Template Design node. */
+  presentationCatalogItemId?: string | undefined;
   liveObservationRole?:
     | "traffic-source"
     | "traffic-hop"

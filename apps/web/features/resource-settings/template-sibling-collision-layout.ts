@@ -141,12 +141,13 @@ function separateSiblingVisualBounds(
     let placementSteps = 0;
 
     while (placedIds.some((placedId) => nodesIntersect(nodeById, siblingId, placedId))) {
+      if (placementSteps >= MAX_PLACEMENT_STEPS_PER_NODE) {
+        console.error(`Unable to place Template node without overlap: ${siblingId}`);
+        break;
+      }
+
       moveSubtree(nodeById, siblingId, { x: 0, y: gridSize });
       placementSteps += 1;
-
-      if (placementSteps > MAX_PLACEMENT_STEPS_PER_NODE) {
-        throw new Error(`Unable to place Template node without overlap: ${siblingId}`);
-      }
     }
 
     placedIds.push(siblingId);

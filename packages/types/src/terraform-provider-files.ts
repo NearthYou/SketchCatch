@@ -1,4 +1,10 @@
-import type { DiagramJson, DiagramNode, TerraformSyncFileInput } from "./index.js";
+import type {
+  DiagramJson,
+  DiagramNode,
+  DiagramNodeParameters,
+  TerraformSyncFileInput
+} from "./index.js";
+import { getResourceDefinitionByTerraform } from "@sketchcatch/types/resource-definitions";
 
 const AWS_REQUIRED_PROVIDER = `    aws = {
       source  = "hashicorp/aws"
@@ -15,15 +21,17 @@ const ARCHIVE_REQUIRED_PROVIDER = `    archive = {
       version = "~> 2.0"
     }`;
 
+// Provider files follow the same resource-plus-parameters boundary as Terraform graph generation.
 export function createTerraformProviderFiles(
   diagramJson: DiagramJson
 ): readonly TerraformSyncFileInput[] {
-  const resourceTypes = new Set(diagramJson.nodes.map(getTerraformResourceType));
+  const deployableNodes = diagramJson.nodes.filter(isTerraformDeployableNode);
+  const resourceTypes = new Set(deployableNodes.map(getTerraformResourceType));
   const usesAws = [...resourceTypes].some((resourceType) => resourceType.startsWith("aws_"));
   const usesKubernetes = [...resourceTypes].some((resourceType) =>
     resourceType.startsWith("kubernetes_")
   );
-  const usesArchive = diagramJson.nodes.some((node) =>
+  const usesArchive = deployableNodes.some((node) =>
     getTerraformResourceType(node) === "aws_lambda_function" &&
     typeof node.parameters?.values?.inlineSource === "string"
   );
@@ -38,7 +46,7 @@ export function createTerraformProviderFiles(
     ...(usesKubernetes ? [KUBERNETES_REQUIRED_PROVIDER] : [])
   ].join("\n");
   const eksCluster = usesKubernetes
-    ? diagramJson.nodes.find((node) => getTerraformResourceType(node) === "aws_eks_cluster")
+    ? deployableNodes.find((node) => getTerraformResourceType(node) === "aws_eks_cluster")
     : undefined;
 
   return [{
@@ -50,6 +58,26 @@ ${requiredProviders}
 }
 ${eksCluster ? renderEksKubernetesProvider(eksCluster) : ""}`
   }];
+}
+
+// A Terraform node needs both Resource behavior and an explicit Terraform identity/value container.
+export function isTerraformDeployableNode(
+  node: DiagramNode
+): node is DiagramNode & { readonly parameters: DiagramNodeParameters } {
+  if (node.kind !== "resource" || node.parameters === undefined) {
+    return false;
+  }
+
+  if (node.parameters.values?.["sketchcatchReferenceTerraform"] === true) {
+    return false;
+  }
+
+  const resourceDefinition = getResourceDefinitionByTerraform(
+    node.parameters.terraformBlockType ?? "resource",
+    node.parameters.resourceType
+  );
+
+  return resourceDefinition?.capabilities.terraformPreview === true;
 }
 
 function renderEksKubernetesProvider(clusterNode: DiagramNode): string {

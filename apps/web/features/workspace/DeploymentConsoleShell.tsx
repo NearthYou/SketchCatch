@@ -1,0 +1,175 @@
+import { useEffect, useRef, useState } from "react";
+import { Maximize2, X } from "lucide-react";
+import { CicdConsoleScreen } from "./CicdConsoleScreen";
+import {
+  DirectDeploymentScreen,
+  type DirectDeploymentScreenProps
+} from "./DirectDeploymentScreen";
+import styles from "./workspace.module.css";
+
+export type DeploymentConsoleScreen = "deployment" | "cicd";
+
+export type DeploymentConsoleShellProps = DirectDeploymentScreenProps & {
+  readonly activeScreen?: DeploymentConsoleScreen | undefined;
+  readonly fullScreenOnly?: boolean | undefined;
+  readonly initialExpanded?: boolean | undefined;
+  readonly onActiveScreenChange?: ((screen: DeploymentConsoleScreen) => void) | undefined;
+  readonly onExpandedClose?: (() => void) | undefined;
+  readonly onOpenLiveObservation?: (() => void) | undefined;
+  readonly projectName: string;
+};
+
+export function DeploymentConsoleShell({
+  activeScreen: controlledActiveScreen,
+  fullScreenOnly = false,
+  initialExpanded = false,
+  onActiveScreenChange,
+  onExpandedClose,
+  onOpenLiveObservation,
+  projectName,
+  ...directProps
+}: DeploymentConsoleShellProps) {
+  const storageKey = `sketchcatch:deployment-console-screen:${directProps.projectId}`;
+  const [storedActiveScreen, setStoredActiveScreen] = useState<DeploymentConsoleScreen>("deployment");
+  const [isDeploymentExpanded, setIsDeploymentExpanded] = useState(initialExpanded);
+  const [confirmationDismissRequestId, setConfirmationDismissRequestId] = useState(0);
+  const confirmationOpenRef = useRef(false);
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const activeScreen = controlledActiveScreen ?? storedActiveScreen;
+  const isDeploymentOverlayOpen = fullScreenOnly || isDeploymentExpanded;
+
+  useEffect(() => {
+    const storedValue = window.localStorage.getItem(storageKey);
+    setStoredActiveScreen(isDeploymentConsoleScreen(storedValue) ? storedValue : "deployment");
+  }, [storageKey]);
+
+  useEffect(() => {
+    if (!isDeploymentOverlayOpen) {
+      return;
+    }
+
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const focusFrame = window.requestAnimationFrame(() => closeButtonRef.current?.focus());
+
+    function handleKeyDown(event: KeyboardEvent): void {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        if (confirmationOpenRef.current) {
+          setConfirmationDismissRequestId((requestId) => requestId + 1);
+          return;
+        }
+        close();
+        return;
+      }
+      if (event.key !== "Tab") {
+        return;
+      }
+
+      const focusable = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>(
+        'a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), [tabindex]:not([tabindex="-1"])'
+      ) ?? []);
+      const first = focusable[0];
+      const last = focusable.at(-1);
+      if (!first || !last) {
+        return;
+      }
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      document.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+      window.requestAnimationFrame(() => {
+        (document.querySelector<HTMLElement>("[data-deployment-console-trigger]") ?? previousFocus)?.focus();
+      });
+    };
+  }, [isDeploymentOverlayOpen]);
+
+  function close(): void {
+    setIsDeploymentExpanded(false);
+    onExpandedClose?.();
+  }
+
+  function selectScreen(screen: DeploymentConsoleScreen): void {
+    setStoredActiveScreen(screen);
+    window.localStorage.setItem(storageKey, screen);
+    onActiveScreenChange?.(screen);
+  }
+
+  const screenContent = (
+    <>
+      <nav className={styles.deploymentConsoleScreenNavigation} aria-label="배포 실행 경로">
+        <button aria-pressed={activeScreen === "deployment"} onClick={() => selectScreen("deployment")} type="button">
+          배포
+        </button>
+        <button aria-pressed={activeScreen === "cicd"} onClick={() => selectScreen("cicd")} type="button">
+          CI/CD
+        </button>
+      </nav>
+      <div className={styles.deploymentConsoleScreenBody}>
+        <div hidden={activeScreen !== "deployment"}>
+          <DirectDeploymentScreen
+            {...directProps}
+            confirmationDismissRequestId={confirmationDismissRequestId}
+            onConfirmationStateChange={(isOpen) => {
+              confirmationOpenRef.current = isOpen;
+            }}
+          />
+        </div>
+        <div hidden={activeScreen !== "cicd"}>
+          <CicdConsoleScreen
+            isVisible={activeScreen === "cicd"}
+            onOpenLiveObservation={onOpenLiveObservation}
+            projectId={directProps.projectId}
+          />
+        </div>
+      </div>
+    </>
+  );
+
+  return (
+    <div className={fullScreenOnly ? styles.deploymentPanelFullscreenHost : styles.deploymentPanel}>
+      {!fullScreenOnly ? (
+        <header className={styles.deploymentHeader}>
+          <div className={styles.deploymentHeaderTop}>
+            <div><p className={styles.projectEyebrow}>Deployment</p><h2>{projectName}</h2></div>
+            <button aria-label="Deployment 패널 확장" className={styles.deploymentExpandButton} onClick={() => setIsDeploymentExpanded(true)} type="button">
+              <Maximize2 size={16} aria-hidden="true" />
+            </button>
+          </div>
+        </header>
+      ) : null}
+      {!fullScreenOnly ? <div className={styles.deploymentPanelContent}>{screenContent}</div> : null}
+      {isDeploymentOverlayOpen ? (
+        <div aria-label="Deployment console" aria-modal="true" className={styles.deploymentExpandedOverlay} onClick={(event) => event.target === event.currentTarget && close()} role="dialog">
+          <div className={styles.deploymentExpandedShell} ref={dialogRef}>
+            <button aria-label="Deployment 패널 닫기" className={styles.deploymentExpandedCloseButton} onClick={close} ref={closeButtonRef} type="button">
+              <X size={18} aria-hidden="true" />
+            </button>
+            <div className={styles.deploymentExpandedBody}>
+              <div className={styles.deploymentExpandedTitleRow}>
+                <div><p className={styles.projectEyebrow}>IaC Operations</p><h2 className={styles.deploymentExpandedTitle}>배포 콘솔</h2><span>{projectName}</span></div>
+              </div>
+              {screenContent}
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function isDeploymentConsoleScreen(value: string | null): value is DeploymentConsoleScreen {
+  return value === "deployment" || value === "cicd";
+}

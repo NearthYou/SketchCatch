@@ -300,21 +300,49 @@ function hasResourceReference(
   );
 }
 
+// Resolve Terraform context through visual-only containers without skipping Resource boundaries.
 function hasContainingAreaReference(
   node: DiagramNode,
   check: Extract<DependencyCheck, { kind: "containing-area-reference" }>,
   graph: ResolvedArchitectureGraph
 ): boolean {
+  const parentNode = findContainingResourceNode(node, graph);
   const targetNode = resolveParameterReferenceTarget(getParameterValue(node, check.parameterPath), graph);
 
-  return Boolean(
-    targetNode &&
-      targetNode.parameters?.resourceType === check.areaTerraformType &&
-      (
-        hasAreaAncestor(node, targetNode.id, graph) ||
-        isNodeFullyInsideArea(node, targetNode)
-      )
-  );
+  if (!targetNode || targetNode.parameters?.resourceType !== check.areaTerraformType) {
+    return false;
+  }
+
+  return parentNode ? parentNode.id === targetNode.id : isNodeFullyInsideArea(node, targetNode);
+}
+
+// Design and legacy AZ containers are transparent, but another deployable ancestor is a hard boundary.
+function findContainingResourceNode(
+  node: DiagramNode,
+  graph: ResolvedArchitectureGraph
+): DiagramNode | null {
+  let parentNodeId = node.metadata?.parentAreaNodeId;
+  const visitedNodeIds = new Set<string>([node.id]);
+
+  while (parentNodeId && !visitedNodeIds.has(parentNodeId)) {
+    visitedNodeIds.add(parentNodeId);
+    const parentNode = graph.nodeById.get(parentNodeId);
+
+    if (!parentNode) {
+      return null;
+    }
+
+    if (
+      parentNode.kind !== "design" &&
+      parentNode.parameters?.resourceType !== "aws_availability_zone"
+    ) {
+      return parentNode;
+    }
+
+    parentNodeId = parentNode.metadata?.parentAreaNodeId;
+  }
+
+  return null;
 }
 
 function hasReferencedTargetParentReference(
@@ -328,39 +356,19 @@ function hasReferencedTargetParentReference(
     return true;
   }
 
+  const parentNode = findContainingResourceNode(targetNode, graph);
   const configuredParent = resolveParameterReferenceTarget(
     getParameterValue(targetNode, check.parentParameterPath),
     graph
   );
 
-  return Boolean(
-    configuredParent &&
-      configuredParent.parameters?.resourceType === check.parentTerraformType &&
-      (
-        hasAreaAncestor(targetNode, configuredParent.id, graph) ||
-        isNodeFullyInsideArea(targetNode, configuredParent)
-      )
-  );
-}
-
-function hasAreaAncestor(
-  node: DiagramNode,
-  ancestorNodeId: string,
-  graph: ResolvedArchitectureGraph
-): boolean {
-  let parentNodeId = node.metadata?.parentAreaNodeId;
-  const visitedNodeIds = new Set<string>([node.id]);
-
-  while (parentNodeId && !visitedNodeIds.has(parentNodeId)) {
-    if (parentNodeId === ancestorNodeId) {
-      return true;
-    }
-
-    visitedNodeIds.add(parentNodeId);
-    parentNodeId = graph.nodeById.get(parentNodeId)?.metadata?.parentAreaNodeId;
+  if (!configuredParent || configuredParent.parameters?.resourceType !== check.parentTerraformType) {
+    return false;
   }
 
-  return false;
+  return parentNode
+    ? parentNode.id === configuredParent.id
+    : isNodeFullyInsideArea(targetNode, configuredParent);
 }
 
 function isNodeFullyInsideArea(node: DiagramNode, areaNode: DiagramNode): boolean {
