@@ -16,6 +16,10 @@ import { registerHealthRoutes } from "./routes/health.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerOAuthRoutes } from "./routes/oauth.js";
 import { registerProjectRoutes } from "./routes/projects.js";
+import {
+  registerProjectReleaseLedgerRoutes,
+  type ProjectReleaseLedgerRouteOptions
+} from "./routes/project-release-ledger.js";
 import type { ProjectAssetStorage } from "./projects/project-asset-storage.js";
 import {
   registerSourceRepositoryRoutes,
@@ -117,6 +121,7 @@ export type BuildAppOptions = {
   passwordResetRequestIpRateLimiter?: RateLimiter;
   projectAssetStorage?: ProjectAssetStorage;
   projectDeletionStorage?: ProjectDeletionStorage;
+  projectReleaseLedgerRoutes?: Pick<ProjectReleaseLedgerRouteOptions, "createRepository">;
   sourceRepositoryRoutes?: Pick<
     SourceRepositoryRouteOptions,
     | "createSourceRepositoryRepository"
@@ -259,6 +264,11 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     getDatabaseClient: getAppDatabaseClient,
     projectAssetStorage: options.projectAssetStorage,
     projectDeletionStorage: options.projectDeletionStorage
+  });
+  app.register(registerProjectReleaseLedgerRoutes, {
+    prefix: "/api",
+    getDatabaseClient: getAppDatabaseClient,
+    ...options.projectReleaseLedgerRoutes
   });
   app.register(registerSourceRepositoryRoutes, {
     prefix: "/api",

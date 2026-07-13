@@ -989,6 +989,128 @@ export type GitCicdHandoffPipelineStatusResponse = {
   pipelineStatus: GitCicdHandoffPipelineStatus;
 };
 
+export type DeploymentTargetProvider = "aws";
+export type RuntimeTargetKind = "ecs_fargate" | "lambda" | "ec2_asg" | "static_site";
+export type DeploymentRolloutStrategy = "all_at_once";
+export type DeploymentScope = "infrastructure" | "application" | "full_stack";
+export type DeploymentSource = "direct" | "gitops";
+
+export type BuildEvidenceKind =
+  | "dockerfile"
+  | "package_manifest"
+  | "sam_template"
+  | "appspec"
+  | "static_output";
+
+export type BuildEvidence = {
+  kind: BuildEvidenceKind;
+  path: string;
+};
+
+export type BuildInstallPreset =
+  | "none"
+  | "pnpm_frozen_lockfile"
+  | "npm_ci"
+  | "yarn_frozen_lockfile";
+
+export type BuildExecutionPreset =
+  | "docker_build"
+  | "pnpm_build"
+  | "npm_build"
+  | "yarn_build"
+  | "sam_build"
+  | "codedeploy_bundle"
+  | "static_export";
+
+export type ConfirmedBuildConfig = {
+  sourceRoot: string;
+  evidence: BuildEvidence[];
+  installPreset: BuildInstallPreset;
+  buildPreset: BuildExecutionPreset;
+  artifactOutputPath: string | null;
+  runtimeEntrypoint: string | null;
+  healthCheckPath: string | null;
+  dockerfilePath: string | null;
+  packageManifestPath: string | null;
+  samTemplatePath: string | null;
+  appSpecPath: string | null;
+  staticOutputPath: string | null;
+  exactSemVerTag: string | null;
+  manifestVersion: string | null;
+  confirmedCommitSha: string;
+  confirmedAt: IsoDateTimeString;
+};
+
+export type ProjectDeploymentTarget = {
+  projectId: string;
+  provider: DeploymentTargetProvider;
+  connectionId: string;
+  region: string;
+  runtimeTargetKind: RuntimeTargetKind;
+  confirmedBuildConfig: ConfirmedBuildConfig | null;
+  rolloutStrategy: DeploymentRolloutStrategy;
+  createdAt: IsoDateTimeString;
+  updatedAt: IsoDateTimeString;
+};
+
+export type PutProjectDeploymentTargetRequest = Omit<
+  ProjectDeploymentTarget,
+  "projectId" | "confirmedBuildConfig" | "createdAt" | "updatedAt"
+> & {
+  confirmedBuildConfig: ConfirmedBuildConfig;
+};
+
+export type ProjectDeploymentTargetResponse = {
+  target: ProjectDeploymentTarget | null;
+};
+
+export type ApplicationReleaseStatus =
+  | "pending"
+  | "building"
+  | "deploying"
+  | "succeeded"
+  | "failed"
+  | "rolled_back"
+  | "cancelled";
+
+export type ApplicationReleaseProviderRevision = {
+  provider: DeploymentTargetProvider;
+  resourceType: string;
+  revisionId: string;
+  artifactReference: string | null;
+  metadata: Record<string, string | number | boolean | null>;
+};
+
+export type ApplicationRelease = {
+  id: string;
+  projectId: string;
+  deploymentId: string | null;
+  pipelineRunId: string | null;
+  source: DeploymentSource;
+  runtimeTargetKind: RuntimeTargetKind;
+  version: string;
+  commitSha: string;
+  artifactDigestAlgorithm: "sha256";
+  artifactDigest: string;
+  providerRevision: ApplicationReleaseProviderRevision | null;
+  outputUrl: string | null;
+  status: ApplicationReleaseStatus;
+  healthEvidence: JsonValue | null;
+  rollbackEvidence: JsonValue | null;
+  startedAt: IsoDateTimeString | null;
+  completedAt: IsoDateTimeString | null;
+  createdAt: IsoDateTimeString;
+  updatedAt: IsoDateTimeString;
+};
+
+export type ApplicationReleaseResponse = {
+  release: ApplicationRelease;
+};
+
+export type ApplicationReleaseListResponse = {
+  releases: ApplicationRelease[];
+};
+
 export type GitCicdGitHubOAuthStartResponse = {
   authorizationUrl: string;
   expiresAt: IsoDateTimeString;
@@ -1027,6 +1149,10 @@ export type Deployment = DeploymentBlock & {
   terraformArtifactId: string;
   awsConnectionId: string | null;
   liveProfile: DeploymentLiveProfile;
+  scope: DeploymentScope;
+  targetKind: RuntimeTargetKind | null;
+  source: DeploymentSource;
+  releaseId: string | null;
   currentPlanArtifactId: string | null;
   currentPlanOperation: "apply" | "destroy" | null;
   stateObjectKey: string | null;
@@ -1335,6 +1461,9 @@ export type CreateDeploymentRequest = {
   terraformArtifactId: string;
   awsConnectionId: string;
   liveProfile?: DeploymentLiveProfile | undefined;
+  scope?: DeploymentScope | undefined;
+  targetKind?: RuntimeTargetKind | null | undefined;
+  source?: DeploymentSource | undefined;
 };
 
 export type DeploymentLiveProfile = "practice" | "demo_web_service" | "demo_web_service_with_rds";

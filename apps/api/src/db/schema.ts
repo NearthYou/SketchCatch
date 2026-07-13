@@ -1,5 +1,6 @@
 ﻿import { relations, sql } from "drizzle-orm";
 import {
+  type AnyPgColumn,
   boolean,
   check,
   index,
@@ -13,7 +14,12 @@ import {
   varchar
 } from "drizzle-orm/pg-core";
 import type {
+  ApplicationReleaseProviderRevision,
+  ApplicationReleaseStatus,
   ArchitectureJson,
+  ConfirmedBuildConfig,
+  DeploymentScope,
+  DeploymentSource,
   DeploymentLiveObservationManifestV2,
   DeploymentLiveProfile,
   DeploymentPlanSummary,
@@ -29,9 +35,11 @@ import type {
   GitCicdPipelineStageKind,
   GitCicdPipelineStageStatus,
   GitCicdRepositorySettingsPreview,
+  JsonValue,
   RepositoryAnalysisAiHandoff,
   ReverseEngineeringResourceSelection,
   ReverseEngineeringScanResult,
+  RuntimeTargetKind,
   TerraformSyncFileInput
 } from "@sketchcatch/types";
 
@@ -459,6 +467,42 @@ export const reverseEngineeringScanLogs = pgTable(
   ]
 );
 
+export const projectDeploymentTargets = pgTable(
+  "project_deployment_targets",
+  {
+    projectId: varchar("project_id", { length: 36 })
+      .primaryKey()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    provider: varchar("provider", { length: 32 }).$type<"aws">().notNull().default("aws"),
+    connectionId: varchar("connection_id", { length: 36 })
+      .notNull()
+      .references(() => awsConnections.id, { onDelete: "restrict" }),
+    region: varchar("region", { length: 32 }).notNull(),
+    runtimeTargetKind: varchar("runtime_target_kind", { length: 32 })
+      .$type<RuntimeTargetKind>()
+      .notNull(),
+    confirmedBuildConfig: jsonb("confirmed_build_config").$type<ConfirmedBuildConfig>(),
+    rolloutStrategy: varchar("rollout_strategy", { length: 32 })
+      .$type<"all_at_once">()
+      .notNull()
+      .default("all_at_once"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    index("project_deployment_targets_connection_id_idx").on(table.connectionId),
+    check("project_deployment_targets_provider_check", sql`${table.provider} = 'aws'`),
+    check(
+      "project_deployment_targets_runtime_kind_check",
+      sql`${table.runtimeTargetKind} in ('ecs_fargate', 'lambda', 'ec2_asg', 'static_site')`
+    ),
+    check(
+      "project_deployment_targets_rollout_check",
+      sql`${table.rolloutStrategy} = 'all_at_once'`
+    )
+  ]
+);
+
 export const deployments = pgTable(
   "deployments",
   {
@@ -480,6 +524,19 @@ export const deployments = pgTable(
       .$type<DeploymentLiveProfile>()
       .notNull()
       .default("practice"),
+    scope: varchar("scope", { length: 32 })
+      .$type<DeploymentScope>()
+      .notNull()
+      .default("infrastructure"),
+    targetKind: varchar("target_kind", { length: 32 }).$type<RuntimeTargetKind>(),
+    source: varchar("source", { length: 16 })
+      .$type<DeploymentSource>()
+      .notNull()
+      .default("direct"),
+    releaseId: varchar("release_id", { length: 36 }).references(
+      (): AnyPgColumn => applicationReleases.id,
+      { onDelete: "set null" }
+    ),
     currentPlanArtifactId: varchar("current_plan_artifact_id", { length: 36 }),
     stateObjectKey: text("state_object_key"),
     resultWarningSummary: text("result_warning_summary"),
@@ -515,6 +572,18 @@ export const deployments = pgTable(
     index("deployments_aws_connection_id_idx").on(table.awsConnectionId),
     index("deployments_current_plan_artifact_id_idx").on(table.currentPlanArtifactId),
     index("deployments_approved_plan_artifact_id_idx").on(table.approvedPlanArtifactId),
+    uniqueIndex("deployments_release_id_unique")
+      .on(table.releaseId)
+      .where(sql`${table.releaseId} is not null`),
+    check(
+      "deployments_scope_check",
+      sql`${table.scope} in ('infrastructure', 'application', 'full_stack')`
+    ),
+    check(
+      "deployments_target_kind_check",
+      sql`${table.targetKind} is null or ${table.targetKind} in ('ecs_fargate', 'lambda', 'ec2_asg', 'static_site')`
+    ),
+    check("deployments_source_check", sql`${table.source} in ('direct', 'gitops')`),
     uniqueIndex("deployments_project_running_unique")
       .on(table.projectId)
       .where(sql`${table.status} = 'RUNNING'`)
@@ -787,6 +856,76 @@ export const gitCicdPipelineLogs = pgTable(
   ]
 );
 
+export const applicationReleases = pgTable(
+  "application_releases",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    projectId: varchar("project_id", { length: 36 })
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    deploymentId: varchar("deployment_id", { length: 36 }).references(() => deployments.id, {
+      onDelete: "set null"
+    }),
+    pipelineRunId: varchar("pipeline_run_id", { length: 36 }).references(
+      () => gitCicdPipelineRuns.id,
+      { onDelete: "set null" }
+    ),
+    source: varchar("source", { length: 16 }).$type<DeploymentSource>().notNull(),
+    runtimeTargetKind: varchar("runtime_target_kind", { length: 32 })
+      .$type<RuntimeTargetKind>()
+      .notNull(),
+    version: varchar("version", { length: 128 }).notNull(),
+    commitSha: varchar("commit_sha", { length: 64 }).notNull(),
+    artifactDigestAlgorithm: varchar("artifact_digest_algorithm", { length: 16 })
+      .$type<"sha256">()
+      .notNull()
+      .default("sha256"),
+    artifactDigest: varchar("artifact_digest", { length: 64 }).notNull(),
+    providerRevision: jsonb("provider_revision").$type<ApplicationReleaseProviderRevision>(),
+    outputUrl: text("output_url"),
+    status: varchar("status", { length: 16 })
+      .$type<ApplicationReleaseStatus>()
+      .notNull()
+      .default("pending"),
+    healthEvidence: jsonb("health_evidence").$type<JsonValue>(),
+    rollbackEvidence: jsonb("rollback_evidence").$type<JsonValue>(),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    index("application_releases_project_created_id_idx").on(
+      table.projectId,
+      table.createdAt.desc(),
+      table.id.desc()
+    ),
+    uniqueIndex("application_releases_deployment_unique")
+      .on(table.deploymentId)
+      .where(sql`${table.deploymentId} is not null`),
+    uniqueIndex("application_releases_pipeline_run_unique")
+      .on(table.pipelineRunId)
+      .where(sql`${table.pipelineRunId} is not null`),
+    check("application_releases_source_check", sql`${table.source} in ('direct', 'gitops')`),
+    check(
+      "application_releases_runtime_kind_check",
+      sql`${table.runtimeTargetKind} in ('ecs_fargate', 'lambda', 'ec2_asg', 'static_site')`
+    ),
+    check(
+      "application_releases_status_check",
+      sql`${table.status} in ('pending', 'building', 'deploying', 'succeeded', 'failed', 'rolled_back', 'cancelled')`
+    ),
+    check(
+      "application_releases_digest_check",
+      sql`${table.artifactDigestAlgorithm} = 'sha256' and ${table.artifactDigest} ~ '^[0-9a-f]{64}$'`
+    ),
+    check(
+      "application_releases_commit_sha_check",
+      sql`${table.commitSha} ~ '^([0-9a-f]{40}|[0-9a-f]{64})$'`
+    )
+  ]
+);
+
 export const deploymentPlanArtifacts = pgTable(
   "deployment_plan_artifacts",
   {
@@ -918,10 +1057,12 @@ export const projectsRelations = relations(projects, ({ many, one }) => ({
     references: [users.id]
   }),
   draft: one(projectDrafts),
+  deploymentTarget: one(projectDeploymentTargets),
   architectures: many(architectures),
   assets: many(projectAssets),
   sourceRepositories: many(sourceRepositories),
   deployments: many(deployments),
+  applicationReleases: many(applicationReleases),
   reverseEngineeringScans: many(reverseEngineeringScans),
   gitCicdHandoffs: many(gitCicdHandoffs),
   gitCicdPipelineRuns: many(gitCicdPipelineRuns)
@@ -972,6 +1113,11 @@ export const deploymentsRelations = relations(deployments, ({ one, many }) => ({
     fields: [deployments.awsConnectionId],
     references: [awsConnections.id]
   }),
+  release: one(applicationReleases, {
+    fields: [deployments.releaseId],
+    references: [applicationReleases.id],
+    relationName: "deployment_release_pointer"
+  }),
   liveObservationManifest: one(deploymentLiveObservationManifests),
   logs: many(deploymentLogs),
   jobs: many(deploymentJobs),
@@ -979,6 +1125,20 @@ export const deploymentsRelations = relations(deployments, ({ one, many }) => ({
   resources: many(deployedResources),
   outputs: many(terraformOutputs)
 }));
+
+export const projectDeploymentTargetsRelations = relations(
+  projectDeploymentTargets,
+  ({ one }) => ({
+    project: one(projects, {
+      fields: [projectDeploymentTargets.projectId],
+      references: [projects.id]
+    }),
+    connection: one(awsConnections, {
+      fields: [projectDeploymentTargets.connectionId],
+      references: [awsConnections.id]
+    })
+  })
+);
 
 export const deploymentLiveObservationManifestsRelations = relations(
   deploymentLiveObservationManifests,
@@ -1065,9 +1225,26 @@ export const gitCicdPipelineRunsRelations = relations(
       references: [gitCicdHandoffs.id]
     }),
     stages: many(gitCicdPipelineStages),
-    logs: many(gitCicdPipelineLogs)
+    logs: many(gitCicdPipelineLogs),
+    release: one(applicationReleases)
   })
 );
+
+export const applicationReleasesRelations = relations(applicationReleases, ({ one }) => ({
+  project: one(projects, {
+    fields: [applicationReleases.projectId],
+    references: [projects.id]
+  }),
+  deployment: one(deployments, {
+    fields: [applicationReleases.deploymentId],
+    references: [deployments.id],
+    relationName: "application_release_deployment"
+  }),
+  pipelineRun: one(gitCicdPipelineRuns, {
+    fields: [applicationReleases.pipelineRunId],
+    references: [gitCicdPipelineRuns.id]
+  })
+}));
 
 export const gitCicdPipelineStagesRelations = relations(
   gitCicdPipelineStages,
@@ -1128,7 +1305,8 @@ export const awsConnectionsRelations = relations(awsConnections, ({ one, many })
     fields: [awsConnections.userId],
     references: [users.id]
   }),
-  reverseEngineeringScans: many(reverseEngineeringScans)
+  reverseEngineeringScans: many(reverseEngineeringScans),
+  projectDeploymentTargets: many(projectDeploymentTargets)
 }));
 
 export const reverseEngineeringScansRelations = relations(

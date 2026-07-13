@@ -733,6 +733,71 @@ connection ID로 이 ARN을 계산해 저장합니다. 기존에 저장됐거나
 
 `Deployment`는 이 연결을 `awsConnectionId`로 참조한다.
 
+## ProjectDeploymentTarget
+
+`ProjectDeploymentTarget`은 프로젝트가 실제 application을 배포할 단일 타깃이다. 프로젝트 ID가
+`project_deployment_targets`의 PK이므로 프로젝트마다 row는 하나만 존재한다. MVP는 AWS Provider Adapter를
+먼저 사용하지만, UI와 application release 계약은 provider-neutral 용어를 유지한다. 새 설정은 소유자가 가진
+`verified` connection과 그 connection의 region만 선택할 수 있다.
+
+```ts
+type RuntimeTargetKind = "ecs_fargate" | "lambda" | "ec2_asg" | "static_site";
+
+type ProjectDeploymentTarget = {
+  projectId: string;
+  provider: "aws";
+  connectionId: string;
+  region: string;
+  runtimeTargetKind: RuntimeTargetKind;
+  confirmedBuildConfig: ConfirmedBuildConfig | null;
+  rolloutStrategy: "all_at_once";
+  createdAt: IsoDateTimeString;
+  updatedAt: IsoDateTimeString;
+};
+```
+
+`ConfirmedBuildConfig`는 임의 shell command를 저장하지 않는다. repository-relative `sourceRoot`, evidence 종류와
+경로, 허용된 install/build preset, runtime별 artifact/entrypoint/health path, exact SemVer tag 또는 manifest
+version, 확인한 commit SHA와 시각만 저장한다. `null`은 migration으로 복원한 legacy target에만 허용하며,
+사용자가 PUT으로 저장하는 새 target은 확인된 build config가 필수다.
+
+API는 `GET|PUT /api/projects/:projectId/deployment-target`을 사용한다. Direct와 GitOps는 같은 target row를
+읽으며 환경별 복제, EKS, 임의 rollout 전략은 이 계약에 포함하지 않는다.
+
+## ApplicationRelease
+
+`ApplicationRelease`는 application 배포 결과의 공통 원장이다. Direct release는 `deploymentId`, GitOps
+release는 `pipelineRunId`를 하나만 가지며 둘 다 `GET /api/projects/:projectId/releases`에서 조회한다.
+
+```ts
+type ApplicationRelease = {
+  id: string;
+  projectId: string;
+  deploymentId: string | null;
+  pipelineRunId: string | null;
+  source: "direct" | "gitops";
+  runtimeTargetKind: RuntimeTargetKind;
+  version: string;
+  commitSha: string;
+  artifactDigestAlgorithm: "sha256";
+  artifactDigest: string;
+  providerRevision: ApplicationReleaseProviderRevision | null;
+  outputUrl: string | null;
+  status: "pending" | "building" | "deploying" | "succeeded" | "failed" | "rolled_back" | "cancelled";
+  healthEvidence: JsonValue | null;
+  rollbackEvidence: JsonValue | null;
+  startedAt: IsoDateTimeString | null;
+  completedAt: IsoDateTimeString | null;
+  createdAt: IsoDateTimeString;
+  updatedAt: IsoDateTimeString;
+};
+```
+
+release version은 exact SemVer tag, manifest version, `sha-<commit 앞 12자리>` 순으로 결정한다. artifact는
+SHA-256 digest로 식별한다. `providerRevision`은 provider, resource type, revision ID, artifact reference,
+비민감 metadata를 담고 canonical fingerprint 비교로 실제 provider revision drift를 판정한다. 실제 artifact와
+release evidence는 S3에 두며 RDS에는 식별자, 상태, 검증 결과만 저장한다.
+
 ## Deployment
 
 `Deployment`는 사용자가 승인한 IaC Preview를 실제 클라우드 리소스에 반영하는 실행 단위다.
@@ -744,6 +809,11 @@ type Deployment = {
   architectureId: string;
   terraformArtifactId: string;
   awsConnectionId: string | null;
+  liveProfile: "practice" | "demo_web_service" | "demo_web_service_with_rds";
+  scope: "infrastructure" | "application" | "full_stack";
+  targetKind: RuntimeTargetKind | null;
+  source: "direct" | "gitops";
+  releaseId: string | null;
   currentPlanArtifactId: string | null;
   currentPlanOperation: "apply" | "destroy" | null;
   stateObjectKey: string | null;

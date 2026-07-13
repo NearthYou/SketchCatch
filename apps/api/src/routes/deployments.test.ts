@@ -1076,6 +1076,10 @@ function createDeploymentRecord(
     terraformArtifactId,
     awsConnectionId,
     liveProfile: "practice",
+    scope: "infrastructure",
+    targetKind: null,
+    source: "direct",
+    releaseId: null,
     currentPlanArtifactId: null,
     stateObjectKey: null,
     resultWarningSummary: null,
@@ -1380,6 +1384,9 @@ test("POST /api/projects/:projectId/deployments returns a created deployment", a
         terraformArtifactId,
         awsConnectionId,
         liveProfile: "practice",
+        scope: "infrastructure",
+        targetKind: null,
+        source: "direct",
         status: "PENDING"
       }
     }

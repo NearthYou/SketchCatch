@@ -113,8 +113,11 @@ const createDeploymentBodySchema = z.object({
   awsConnectionId: z.uuid(),
   liveProfile: z
     .enum(["practice", "demo_web_service", "demo_web_service_with_rds"])
-    .default("practice")
-});
+    .default("practice"),
+  scope: z.enum(["infrastructure", "application", "full_stack"]).optional(),
+  targetKind: z.enum(["ecs_fargate", "lambda", "ec2_asg", "static_site"]).nullable().optional(),
+  source: z.enum(["direct", "gitops"]).optional()
+}).strict();
 
 const deploymentParamsSchema = z.object({
   deploymentId: z.uuid()
@@ -355,6 +358,10 @@ async function toDeployment(
     terraformArtifactId: row.terraformArtifactId,
     awsConnectionId: row.awsConnectionId,
     liveProfile: row.liveProfile,
+    scope: row.scope,
+    targetKind: row.targetKind,
+    source: row.source,
+    releaseId: row.releaseId,
     currentPlanArtifactId: row.currentPlanArtifactId,
     currentPlanOperation,
     stateObjectKey: row.stateObjectKey,
@@ -454,7 +461,10 @@ export async function registerDeploymentRoutes(
           architectureId: body.architectureId,
           terraformArtifactId: body.terraformArtifactId,
           awsConnectionId: body.awsConnectionId,
-          liveProfile: body.liveProfile
+          liveProfile: body.liveProfile,
+          ...(body.scope !== undefined ? { scope: body.scope } : {}),
+          ...(body.targetKind !== undefined ? { targetKind: body.targetKind } : {}),
+          ...(body.source !== undefined ? { source: body.source } : {})
         },
         repository
       );
