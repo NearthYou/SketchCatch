@@ -176,10 +176,15 @@ function normalizeBaseUrl(value: string): string {
 }
 
 function readCapacityTarget(outputs: Readonly<Record<string, unknown>>) {
+  const autoScalingGroupName = readOptionalString(outputs, "asg_name");
   const clusterName = readOptionalString(outputs, "ecs_cluster_name");
   const serviceName = readOptionalString(outputs, "ecs_service_name");
   const maxCapacity = readOptionalPositiveNumber(outputs, "max_capacity");
   const hasEcsEvidence = clusterName !== null || serviceName !== null || maxCapacity !== null;
+
+  if (autoScalingGroupName && hasEcsEvidence) {
+    throw new Error("Ambiguous capacity target evidence");
+  }
 
   if (hasEcsEvidence) {
     if (!clusterName || !serviceName || maxCapacity === null) {
@@ -195,7 +200,7 @@ function readCapacityTarget(outputs: Readonly<Record<string, unknown>>) {
 
   return {
     kind: "asg" as const,
-    autoScalingGroupName: readString(outputs, "asg_name")
+    autoScalingGroupName: autoScalingGroupName ?? readString(outputs, "asg_name")
   };
 }
 

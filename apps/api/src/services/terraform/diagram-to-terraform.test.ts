@@ -372,9 +372,16 @@ test("does not emit an ECS request threshold from a CPU target tracking policy",
       createLiveObservationNode("aws_lb_target_group", "api", {}),
       ...createHttpsAlbListenerNodes(),
       createLiveObservationNode("aws_ecs_cluster", "demo", {}),
-      createLiveObservationNode("aws_ecs_service", "api", {}),
-      createLiveObservationNode("aws_appautoscaling_target", "api", { maxCapacity: 2 }),
+      createLiveObservationNode("aws_ecs_service", "api", {
+        cluster: "aws_ecs_cluster.demo.id",
+        loadBalancer: { targetGroupArn: "aws_lb_target_group.api.arn" }
+      }),
+      createLiveObservationNode("aws_appautoscaling_target", "api", {
+        maxCapacity: 2,
+        resourceId: "service/${aws_ecs_cluster.demo.name}/${aws_ecs_service.api.name}"
+      }),
       createLiveObservationNode("aws_appautoscaling_policy", "api_cpu", {
+        resourceId: "aws_appautoscaling_target.api.resource_id",
         targetTrackingScalingPolicyConfiguration: {
           targetValue: 60,
           predefinedMetricSpecification: [{
@@ -475,6 +482,146 @@ test("renders Live Observation outputs only for an explicit HTTPS ALB topology",
   assert.doesNotMatch(terraform, /output "static_site_url"/);
   assert.doesNotMatch(terraform, /output "api_base_url"/);
   assert.match(terraform, /output "scale_out_threshold"[\s\S]*value = 60/);
+});
+
+test("Live Observation selects the explicitly linked ECS runtime instead of unrelated first nodes", () => {
+  const unrelated = createEcsObservationRuntime("other", "other", "other", "other", 9);
+  const selected = createEcsObservationRuntime("api", "api", "api", "api", 2);
+  const graph: InfrastructureGraph = {
+    nodes: [
+      createLiveObservationNode("aws_lb", "other", {}),
+      createLiveObservationNode("aws_lb_target_group", "other", {}),
+      ...unrelated.nodes,
+      createLiveObservationNode("aws_lb", "selected", {}),
+      createLiveObservationNode("aws_lb_target_group", "api", {}),
+      createLiveObservationNode("aws_acm_certificate", "selected", {
+        domainName: "selected.example.com"
+      }),
+      createLiveObservationNode("aws_lb_listener", "selected", {
+        loadBalancerArn: "aws_lb.selected.arn",
+        port: 443,
+        protocol: "HTTPS",
+        certificateArn: "aws_acm_certificate.selected.arn",
+        defaultAction: {
+          type: "forward",
+          targetGroupArn: "aws_lb_target_group.api.arn"
+        }
+      }),
+      createLiveObservationNode("aws_route53_record", "selected", {
+        name: "selected.example.com",
+        type: "CNAME",
+        records: ["aws_lb.selected.dns_name"]
+      }),
+      ...selected.nodes
+    ],
+    edges: [...unrelated.edges, ...selected.edges]
+  };
+
+  const terraform = renderTerraformFromInfrastructureGraph(graph);
+
+  assert.match(terraform, /output "load_balancer_arn"[\s\S]*aws_lb\.selected\.arn/);
+  assert.match(terraform, /output "target_group_arn"[\s\S]*aws_lb_target_group\.api\.arn/);
+  assert.match(terraform, /output "ecs_cluster_name"[\s\S]*aws_ecs_cluster\.api\.name/);
+  assert.match(terraform, /output "ecs_service_name"[\s\S]*aws_ecs_service\.api\.name/);
+  assert.match(terraform, /output "max_capacity"[\s\S]*value = 2/);
+  assert.match(terraform, /output "log_group_name"[\s\S]*aws_cloudwatch_log_group\.api\.name/);
+  assert.doesNotMatch(terraform, /output "ecs_service_name"[\s\S]*aws_ecs_service\.other\.name/);
+  assert.doesNotMatch(terraform, /output "log_group_name"[\s\S]*aws_cloudwatch_log_group\.other\.name/);
+});
+
+test("Live Observation blocks a target group attached to multiple runtimes", () => {
+  const first = createEcsObservationRuntime("first", "api", "shared", "first", 2);
+  const second = createEcsObservationRuntime("second", "api", "shared", "second", 3);
+  const graph: InfrastructureGraph = {
+    nodes: [
+      createLiveObservationNode("aws_lb", "demo", {}),
+      createLiveObservationNode("aws_lb_target_group", "api", {}),
+      ...createHttpsAlbListenerNodes(),
+      ...first.nodes,
+      ...second.nodes
+    ],
+    edges: [...first.edges, ...second.edges]
+  };
+
+  const terraform = renderTerraformFromInfrastructureGraph(graph);
+
+  assert.doesNotMatch(terraform, /output "traffic_url"/);
+  assert.doesNotMatch(terraform, /output "ecs_service_name"/);
+});
+
+test("Live Observation does not use a legacy fallback when multiple runtimes are unlinked", () => {
+  const first = createEcsObservationRuntime("first", "other-a", "shared", "first", 2);
+  const second = createEcsObservationRuntime("second", "other-b", "shared", "second", 3);
+  const graph: InfrastructureGraph = {
+    nodes: [
+      createLiveObservationNode("aws_lb", "demo", {}),
+      createLiveObservationNode("aws_lb_target_group", "api", {}),
+      ...createHttpsAlbListenerNodes(),
+      ...first.nodes,
+      ...second.nodes
+    ],
+    edges: [...first.edges, ...second.edges]
+  };
+
+  const terraform = renderTerraformFromInfrastructureGraph(graph);
+
+  assert.doesNotMatch(terraform, /output "traffic_url"/);
+  assert.doesNotMatch(terraform, /output "ecs_service_name"/);
+});
+
+test("Live Observation rejects a stale edge that contradicts the runtime target reference", () => {
+  const runtime = createEcsObservationRuntime("api", "other", "api", "api", 2);
+  const graph: InfrastructureGraph = {
+    nodes: [
+      createLiveObservationNode("aws_lb", "demo", {}),
+      createLiveObservationNode("aws_lb_target_group", "api", {}),
+      ...createHttpsAlbListenerNodes(),
+      ...runtime.nodes
+    ],
+    edges: [
+      ...runtime.edges,
+      {
+        id: "stale-api-target",
+        sourceId: "aws_lb_target_group-api",
+        targetId: "aws_ecs_service-api"
+      }
+    ]
+  };
+
+  const terraform = renderTerraformFromInfrastructureGraph(graph);
+
+  assert.doesNotMatch(terraform, /output "traffic_url"/);
+});
+
+test("Live Observation rejects a listener with more than one forward action", () => {
+  const runtime = createEcsObservationRuntime("api", "api", "demo", "api", 2);
+  const listenerNodes = createHttpsAlbListenerNodes().map((node) =>
+    node.iac.resourceType === "aws_lb_listener"
+      ? {
+          ...node,
+          config: {
+            ...node.config,
+            defaultAction: [
+              { type: "forward", targetGroupArn: "aws_lb_target_group.api.arn" },
+              { type: "forward" }
+            ]
+          }
+        }
+      : node
+  );
+  const graph: InfrastructureGraph = {
+    nodes: [
+      createLiveObservationNode("aws_lb", "demo", {}),
+      createLiveObservationNode("aws_lb_target_group", "api", {}),
+      ...listenerNodes,
+      ...runtime.nodes
+    ],
+    edges: runtime.edges
+  };
+
+  const terraform = renderTerraformFromInfrastructureGraph(graph);
+
+  assert.doesNotMatch(terraform, /output "traffic_url"/);
 });
 
 test("HTTPS ALB graphs without exact ACM Route53 CNAME evidence are ineligible", () => {
@@ -747,4 +894,57 @@ function createHttpsAlbListenerNodes(): InfrastructureGraph["nodes"] {
       records: ["aws_lb.demo.dns_name"]
     })
   ];
+}
+
+function createEcsObservationRuntime(
+  name: string,
+  targetGroupName: string,
+  clusterName: string,
+  logGroupName: string,
+  maxCapacity: number
+): { nodes: InfrastructureGraph["nodes"]; edges: InfrastructureGraph["edges"] } {
+  const taskId = `aws_ecs_task_definition-${name}`;
+  const serviceId = `aws_ecs_service-${name}`;
+  const logId = `aws_cloudwatch_log_group-${logGroupName}`;
+  const scalingTargetId = `aws_appautoscaling_target-${name}`;
+  return {
+    nodes: [
+      createLiveObservationNode("aws_ecs_cluster", clusterName, {}),
+      createLiveObservationNode("aws_ecs_task_definition", name, {}),
+      createLiveObservationNode("aws_ecs_service", name, {
+        cluster: `aws_ecs_cluster.${clusterName}.id`,
+        taskDefinition: `aws_ecs_task_definition.${name}.arn`,
+        loadBalancer: {
+          targetGroupArn: `aws_lb_target_group.${targetGroupName}.arn`,
+          containerName: name,
+          containerPort: 8080
+        }
+      }),
+      createLiveObservationNode("aws_appautoscaling_target", name, {
+        maxCapacity,
+        resourceId:
+          `service/\${aws_ecs_cluster.${clusterName}.name}/` +
+          `\${aws_ecs_service.${name}.name}`
+      }),
+      createLiveObservationNode("aws_appautoscaling_policy", name, {
+        resourceId: `aws_appautoscaling_target.${name}.resource_id`,
+        targetTrackingScalingPolicyConfiguration: {
+          targetValue: 60,
+          predefinedMetricSpecification: [{
+            predefinedMetricType: "ALBRequestCountPerTarget",
+            resourceLabel:
+              "${aws_lb.selected.arn_suffix}/" +
+              `\${aws_lb_target_group.${targetGroupName}.arn_suffix}`
+          }]
+        }
+      }),
+      createLiveObservationNode("aws_cloudwatch_log_group", logGroupName, {})
+    ],
+    edges: [
+      { id: `${name}-target`, sourceId: `aws_lb_target_group-${targetGroupName}`, targetId: serviceId },
+      { id: `${name}-task`, sourceId: taskId, targetId: serviceId },
+      { id: `${name}-logs`, sourceId: taskId, targetId: logId },
+      { id: `${name}-scales`, sourceId: serviceId, targetId: scalingTargetId }
+    ]
+  };
 }

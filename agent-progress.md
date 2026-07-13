@@ -4,7 +4,7 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- Branch: `fix/gg/355-review-followup-v2`.
+- Branch: `feature/sw/370-live-observation-v2`.
 - PR #366 preserves six Catalog-backed AWS Template Boards with 103 Terraform-deployable Resources and 28 parameterless Design nodes.
 - The current `dev` Deployment/CI/CD console split is integrated without restoring the retired monolithic panel.
 - Workspace deployment context counts only `isTerraformDeployableNode` results and passes that value into the Direct Deployment screen; CI/CD remains a separate screen.
@@ -19,8 +19,11 @@ Short English-only working log for the current agent context. Older records are 
 - Connected verified log-group Terraform outputs to deployment manifests and added the required ECS/Logs read permissions to AWS connection setup.
 - Updated Redis Lua validation for manifest adapter v1/v2 and fixed the Windows integration runner; Redis 8 integration passed 31/31.
 - Review follow-up bound refreshes to their Deployment, aligned completed metric periods, derived capacity from exact Target Group health, validated complete AWS ARN identity, expanded secret masking, and hardened Store error mapping plus abortable bounded caching.
+- Second review follow-up replaced whole-LB request evidence with aligned Target Group 2xx/3xx/4xx/5xx classes and treats sparse classes as zero only when the same period has request evidence.
+- Terraform output discovery now requires one coherent listener, LB, Target Group, runtime, scaling target, and runtime-owned log topology; ambiguous or contradictory graph evidence fails closed.
+- Manifest materialization rejects simultaneous ASG and ECS capacity outputs.
 - Kept one-hop proxy trust and repaired stale auth fixtures; spoofed-chain rejection remains covered.
-- Verification: API 1407/1407, Web 1069/1069, Redis 31/31, harness, lint, typecheck, build, and whitespace checks passed.
+- Verification: focused regression 62/62, API 1418/1418, Web 1069/1069, Redis 31/31, harness, lint, typecheck, build, and whitespace checks passed.
 - Risk: no credentialed AWS sandbox evidence and no Terraform Apply/Destroy, deployment mutation, database migration, or AWS mutation.
 
 ### 2026-07-13 - Integrate current dev into PR #366
@@ -35,5 +38,5 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Next Action
 
-- Commit and push the resolved merge, then confirm GitHub reports PR #366 mergeable with no unresolved review thread.
+- Push the focused Live Observation follow-up commit, then confirm the branch PR is mergeable with no unresolved review thread.
 - Run migrations and credentialed browser acceptance only with an approved safe environment.

@@ -71,46 +71,12 @@ function renderInlineLambdaArchive(node: InfrastructureGraphNode): string {
 }
 
 function renderLiveObservationOutputs(graph: InfrastructureGraph): string[] {
-  const loadBalancer = findResourceNode(graph, "aws_lb");
-  const targetGroup = findResourceNode(graph, "aws_lb_target_group");
-  const certificate = findResourceNode(graph, "aws_acm_certificate");
-  const autoScalingGroup = findResourceNode(graph, "aws_autoscaling_group");
-  const ecsCluster = findResourceNode(graph, "aws_ecs_cluster");
-  const ecsService = findResourceNode(graph, "aws_ecs_service");
-  const applicationScalingTarget = findResourceNode(graph, "aws_appautoscaling_target");
-  const alarm = graph.nodes.find(
-    (node) =>
-      node.iac.terraformBlockType === "resource" &&
-      node.iac.resourceType === "aws_cloudwatch_metric_alarm" &&
-      node.config["metricName"] === "RequestCountPerTarget" &&
-      typeof node.config["threshold"] === "number"
-  );
+  const topology = resolveLiveObservationTopology(graph);
+  if (!topology) return [];
 
-  if (!loadBalancer || !targetGroup || !certificate) {
-    return [];
-  }
-
+  const { loadBalancer, targetGroup, trafficRecord } = topology;
   const loadBalancerAddress = `aws_lb.${loadBalancer.iac.resourceName}`;
   const targetGroupAddress = `aws_lb_target_group.${targetGroup.iac.resourceName}`;
-  const certificateAddress = `aws_acm_certificate.${certificate.iac.resourceName}`;
-  if (
-    !hasValidatedHttpsListener(
-      graph,
-      loadBalancerAddress,
-      targetGroupAddress,
-      certificateAddress
-    )
-  ) {
-    return [];
-  }
-  const trafficRecord = findValidatedTrafficRecord(
-    graph,
-    loadBalancerAddress,
-    certificate
-  );
-  if (!trafficRecord) {
-    return [];
-  }
   const trafficRecordAddress = `aws_route53_record.${trafficRecord.iac.resourceName}`;
   const commonOutputs = [
     renderOutput("traffic_url", `"https://\${${trafficRecordAddress}.name}/traffic"`),
@@ -118,10 +84,11 @@ function renderLiveObservationOutputs(graph: InfrastructureGraph): string[] {
     renderOutput("load_balancer_dns_name", `${loadBalancerAddress}.dns_name`),
     renderOutput("load_balancer_arn", `${loadBalancerAddress}.arn`),
     renderOutput("target_group_arn", `${targetGroupAddress}.arn`),
-    ...renderLiveObservationLogGroupOutputs(graph)
+    ...renderLiveObservationLogGroupOutputs(topology.logGroups)
   ];
 
-  if (autoScalingGroup && alarm) {
+  if (topology.capacity.kind === "asg") {
+    const { autoScalingGroup, alarm } = topology.capacity;
     const autoScalingGroupAddress = `aws_autoscaling_group.${autoScalingGroup.iac.resourceName}`;
 
     return [
@@ -131,16 +98,8 @@ function renderLiveObservationOutputs(graph: InfrastructureGraph): string[] {
     ];
   }
 
-  const maxCapacity = applicationScalingTarget?.config["maxCapacity"];
-
-  if (
-    !ecsCluster ||
-    !ecsService ||
-    !applicationScalingTarget ||
-    typeof maxCapacity !== "number"
-  ) {
-    return [];
-  }
+  const { ecsCluster, ecsService, applicationScalingTarget } = topology.capacity;
+  const maxCapacity = applicationScalingTarget.config["maxCapacity"] as number;
 
   const ecsClusterAddress = `aws_ecs_cluster.${ecsCluster.iac.resourceName}`;
   const ecsServiceAddress = `aws_ecs_service.${ecsService.iac.resourceName}`;
@@ -148,7 +107,8 @@ function renderLiveObservationOutputs(graph: InfrastructureGraph): string[] {
   const requestThreshold = findAlbRequestCountTargetValue(
     graph,
     loadBalancerAddress,
-    targetGroupAddress
+    targetGroupAddress,
+    applicationScalingTarget
   );
 
   return [
@@ -162,14 +122,283 @@ function renderLiveObservationOutputs(graph: InfrastructureGraph): string[] {
   ];
 }
 
-function renderLiveObservationLogGroupOutputs(graph: InfrastructureGraph): string[] {
-  const addresses = graph.nodes
-    .filter(
-      (node) =>
-        node.iac.terraformBlockType === "resource" &&
-        node.iac.resourceType === "aws_cloudwatch_log_group"
+type LiveObservationTopology = {
+  loadBalancer: InfrastructureGraphNode;
+  targetGroup: InfrastructureGraphNode;
+  trafficRecord: InfrastructureGraphNode;
+  logGroups: InfrastructureGraphNode[];
+  capacity:
+    | {
+        kind: "asg";
+        autoScalingGroup: InfrastructureGraphNode;
+        alarm: InfrastructureGraphNode;
+      }
+    | {
+        kind: "ecs_fargate";
+        ecsCluster: InfrastructureGraphNode;
+        ecsService: InfrastructureGraphNode;
+        applicationScalingTarget: InfrastructureGraphNode;
+      };
+};
+
+type RuntimeCandidate =
+  | { kind: "asg"; node: InfrastructureGraphNode }
+  | { kind: "ecs_fargate"; node: InfrastructureGraphNode };
+
+function resolveLiveObservationTopology(
+  graph: InfrastructureGraph
+): LiveObservationTopology | null {
+  const topologies: LiveObservationTopology[] = [];
+  for (const listener of resourceNodes(graph, "aws_lb_listener")) {
+    if (listener.config["protocol"] !== "HTTPS" || listener.config["port"] !== 443) {
+      continue;
+    }
+
+    const loadBalancer = findUniqueReferencedNode(
+      graph,
+      listener.config["loadBalancerArn"],
+      "aws_lb",
+      ["arn"]
+    );
+    const certificate = findUniqueReferencedNode(
+      graph,
+      listener.config["certificateArn"],
+      "aws_acm_certificate",
+      ["arn"]
+    );
+    if (!loadBalancer || !certificate) continue;
+
+    const targetGroupReferences = forwardTargetGroupReferences(listener);
+    if (targetGroupReferences.length !== 1) continue;
+    const targetGroup = findUniqueReferencedNode(
+      graph,
+      targetGroupReferences[0],
+      "aws_lb_target_group",
+      ["arn"]
+    );
+    if (!targetGroup) continue;
+    const trafficRecords = findValidatedTrafficRecords(
+      graph,
+      terraformAddress(loadBalancer),
+      certificate
+    );
+    if (trafficRecords.length !== 1) continue;
+
+    const runtime = resolveRuntimeTopology(graph, targetGroup);
+    if (!runtime) continue;
+    topologies.push({
+      loadBalancer,
+      targetGroup,
+      trafficRecord: trafficRecords[0]!,
+      logGroups: runtime.logGroups,
+      capacity: runtime.capacity
+    });
+  }
+
+  return topologies.length === 1 ? topologies[0]! : null;
+}
+
+function resolveRuntimeTopology(
+  graph: InfrastructureGraph,
+  targetGroup: InfrastructureGraphNode
+): Pick<LiveObservationTopology, "capacity" | "logGroups"> | null {
+  const runtimes: RuntimeCandidate[] = [
+    ...resourceNodes(graph, "aws_autoscaling_group").map(
+      (node): RuntimeCandidate => ({ kind: "asg", node })
+    ),
+    ...resourceNodes(graph, "aws_ecs_service").map(
+      (node): RuntimeCandidate => ({ kind: "ecs_fargate", node })
     )
-    .slice(0, 10)
+  ];
+  const targetGroupAddress = terraformAddress(targetGroup);
+  const attached = runtimes.filter((runtime) =>
+    runtimeReferencesTargetGroup(graph, runtime, targetGroup, targetGroupAddress)
+  );
+
+  let selected: RuntimeCandidate;
+  let legacySingleRuntime = false;
+  if (attached.length === 1) {
+    selected = attached[0]!;
+  } else if (
+    attached.length === 0 &&
+    runtimes.length === 1 &&
+    resourceNodes(graph, "aws_lb").length === 1 &&
+    resourceNodes(graph, "aws_lb_target_group").length === 1 &&
+    !runtimeHasAnotherTargetGroupLink(graph, runtimes[0]!)
+  ) {
+    selected = runtimes[0]!;
+    legacySingleRuntime = true;
+  } else {
+    return null;
+  }
+
+  const logGroups = resolveRuntimeLogGroups(graph, selected, legacySingleRuntime);
+  if (logGroups === null) return null;
+
+  if (selected.kind === "asg") {
+    const alarm = resolveAsgPressureAlarm(graph, selected.node, legacySingleRuntime);
+    if (!alarm) return null;
+    return {
+      capacity: {
+        kind: "asg",
+        autoScalingGroup: selected.node,
+        alarm
+      },
+      logGroups
+    };
+  }
+
+  const ecsCluster = findUniqueReferencedNode(
+    graph,
+    selected.node.config["cluster"],
+    "aws_ecs_cluster",
+    ["id", "arn", "name"]
+  ) ?? (legacySingleRuntime ? onlyNode(resourceNodes(graph, "aws_ecs_cluster")) : null);
+  const applicationScalingTargets = resourceNodes(graph, "aws_appautoscaling_target")
+    .filter((node) =>
+      containsTerraformReference(
+        node.config["resourceId"],
+        terraformAddress(selected.node),
+        ["name"]
+      )
+    );
+  const applicationScalingTarget = onlyNode(applicationScalingTargets);
+  if (
+    !ecsCluster ||
+    !applicationScalingTarget ||
+    typeof applicationScalingTarget.config["maxCapacity"] !== "number"
+  ) {
+    return null;
+  }
+
+  return {
+    capacity: {
+      kind: "ecs_fargate",
+      ecsCluster,
+      ecsService: selected.node,
+      applicationScalingTarget
+    },
+    logGroups
+  };
+}
+
+function runtimeReferencesTargetGroup(
+  graph: InfrastructureGraph,
+  runtime: RuntimeCandidate,
+  targetGroup: InfrastructureGraphNode,
+  targetGroupAddress: string
+): boolean {
+  const configValue = runtime.kind === "asg"
+    ? runtime.node.config["targetGroupArns"]
+    : runtime.node.config["loadBalancer"];
+  return containsTerraformReferenceOfType(
+    configValue,
+    "aws_lb_target_group",
+    "arn"
+  )
+    ? containsTerraformReference(configValue, targetGroupAddress, ["arn"])
+    : nodesDirectlyConnected(graph, runtime.node, targetGroup);
+}
+
+function runtimeHasAnotherTargetGroupLink(
+  graph: InfrastructureGraph,
+  runtime: RuntimeCandidate
+): boolean {
+  const configValue = runtime.kind === "asg"
+    ? runtime.node.config["targetGroupArns"]
+    : runtime.node.config["loadBalancer"];
+  if (containsTerraformReferenceOfType(configValue, "aws_lb_target_group", "arn")) {
+    return true;
+  }
+  return resourceNodes(graph, "aws_lb_target_group").some(
+    (targetGroup) =>
+      nodesDirectlyConnected(graph, runtime.node, targetGroup)
+  );
+}
+
+function resolveRuntimeLogGroups(
+  graph: InfrastructureGraph,
+  runtime: RuntimeCandidate,
+  legacySingleRuntime: boolean
+): InfrastructureGraphNode[] | null {
+  const allowedSupportTypes = runtime.kind === "ecs_fargate"
+    ? new Set(["aws_ecs_service", "aws_ecs_task_definition", "aws_cloudwatch_log_group"])
+    : new Set([
+        "aws_autoscaling_group",
+        "aws_launch_template",
+        "aws_iam_instance_profile",
+        "aws_iam_role",
+        "aws_iam_role_policy",
+        "aws_iam_policy",
+        "aws_cloudwatch_log_group"
+      ]);
+  const reachable = reachableSupportNodes(graph, runtime.node, allowedSupportTypes);
+  const explicit = uniqueNodes(
+    reachable.filter((node) => node.iac.resourceType === "aws_cloudwatch_log_group")
+  );
+  const allLogGroups = resourceNodes(graph, "aws_cloudwatch_log_group");
+  const selected = explicit.length > 0
+    ? explicit
+    : legacySingleRuntime && allLogGroups.length <= 1
+      ? allLogGroups
+      : [];
+  return selected.length <= 10 ? selected : null;
+}
+
+function reachableSupportNodes(
+  graph: InfrastructureGraph,
+  start: InfrastructureGraphNode,
+  allowedResourceTypes: ReadonlySet<string>
+): InfrastructureGraphNode[] {
+  const nodeById = new Map(graph.nodes.map((node) => [node.id, node]));
+  const visited = new Set([start.id]);
+  const queue = [start.id];
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    for (const edge of graph.edges) {
+      const neighborId = edge.sourceId === current
+        ? edge.targetId
+        : edge.targetId === current
+          ? edge.sourceId
+          : null;
+      if (!neighborId || visited.has(neighborId)) continue;
+      const neighbor = nodeById.get(neighborId);
+      if (!neighbor || !allowedResourceTypes.has(neighbor.iac.resourceType)) continue;
+      visited.add(neighborId);
+      queue.push(neighborId);
+    }
+  }
+  return [...visited].flatMap((id) => {
+    const node = nodeById.get(id);
+    return node ? [node] : [];
+  });
+}
+
+function resolveAsgPressureAlarm(
+  graph: InfrastructureGraph,
+  autoScalingGroup: InfrastructureGraphNode,
+  legacySingleRuntime: boolean
+): InfrastructureGraphNode | null {
+  const candidates = resourceNodes(graph, "aws_cloudwatch_metric_alarm").filter(
+    (node) =>
+      node.config["metricName"] === "RequestCountPerTarget" &&
+      typeof node.config["threshold"] === "number"
+  );
+  const linked = candidates.filter(
+    (node) =>
+      containsTerraformReference(
+        node.config["dimensions"],
+        terraformAddress(autoScalingGroup),
+        ["name"]
+      ) || nodesDirectlyConnected(graph, node, autoScalingGroup)
+  );
+  return onlyNode(linked) ?? (legacySingleRuntime ? onlyNode(candidates) : null);
+}
+
+function renderLiveObservationLogGroupOutputs(
+  logGroups: readonly InfrastructureGraphNode[]
+): string[] {
+  const addresses = logGroups
     .map((node) => `aws_cloudwatch_log_group.${node.iac.resourceName}.name`);
 
   if (addresses.length === 0) return [];
@@ -180,17 +409,17 @@ function renderLiveObservationLogGroupOutputs(graph: InfrastructureGraph): strin
   return [renderOutput("log_group_names", `[${addresses.join(", ")}]`)];
 }
 
-function findValidatedTrafficRecord(
+function findValidatedTrafficRecords(
   graph: InfrastructureGraph,
   loadBalancerAddress: string,
   certificate: InfrastructureGraphNode
-): InfrastructureGraphNode | undefined {
+): InfrastructureGraphNode[] {
   const certificateDomainName = certificate.config["domainName"];
   if (typeof certificateDomainName !== "string" || certificateDomainName.length === 0) {
-    return undefined;
+    return [];
   }
 
-  return graph.nodes.find((node) => {
+  return graph.nodes.filter((node) => {
     if (
       node.iac.terraformBlockType !== "resource" ||
       node.iac.resourceType !== "aws_route53_record" ||
@@ -209,44 +438,32 @@ function findValidatedTrafficRecord(
   });
 }
 
-function hasValidatedHttpsListener(
-  graph: InfrastructureGraph,
-  loadBalancerAddress: string,
-  targetGroupAddress: string,
-  certificateAddress: string
-): boolean {
-  return graph.nodes.some((node) => {
-    if (
-      node.iac.terraformBlockType !== "resource" ||
-      node.iac.resourceType !== "aws_lb_listener" ||
-      node.config["protocol"] !== "HTTPS" ||
-      node.config["port"] !== 443 ||
-      node.config["loadBalancerArn"] !== `${loadBalancerAddress}.arn` ||
-      node.config["certificateArn"] !== `${certificateAddress}.arn`
-    ) {
-      return false;
-    }
-
-    const defaultAction = node.config["defaultAction"];
-    const actions = Array.isArray(defaultAction) ? defaultAction : [defaultAction];
-    return actions.some(
-      (action) =>
-        isRecord(action) &&
-        action["type"] === "forward" &&
-        action["targetGroupArn"] === `${targetGroupAddress}.arn`
-    );
-  });
+function forwardTargetGroupReferences(listener: InfrastructureGraphNode): unknown[] {
+  const defaultAction = listener.config["defaultAction"];
+  const actions = Array.isArray(defaultAction) ? defaultAction : [defaultAction];
+  return actions.flatMap((action) =>
+    isRecord(action) && action["type"] === "forward"
+      ? [action["targetGroupArn"]]
+      : []
+  );
 }
 
 function findAlbRequestCountTargetValue(
   graph: InfrastructureGraph,
   loadBalancerAddress: string,
-  targetGroupAddress: string
+  targetGroupAddress: string,
+  applicationScalingTarget: InfrastructureGraphNode
 ): number | null {
+  const scalingTargetAddress = terraformAddress(applicationScalingTarget);
   for (const policy of graph.nodes) {
     if (
       policy.iac.terraformBlockType !== "resource" ||
-      policy.iac.resourceType !== "aws_appautoscaling_policy"
+      policy.iac.resourceType !== "aws_appautoscaling_policy" ||
+      !containsTerraformReference(
+        policy.config["resourceId"],
+        scalingTargetAddress,
+        ["resource_id"]
+      )
     ) continue;
 
     const configuration = policy.config["targetTrackingScalingPolicyConfiguration"];
@@ -275,14 +492,94 @@ function findAlbRequestCountTargetValue(
   return null;
 }
 
-function findResourceNode(
+function resourceNodes(
   graph: InfrastructureGraph,
   resourceType: string
-): InfrastructureGraphNode | undefined {
-  return graph.nodes.find(
+): InfrastructureGraphNode[] {
+  return graph.nodes.filter(
     (node) =>
       node.iac.terraformBlockType === "resource" && node.iac.resourceType === resourceType
   );
+}
+
+function findUniqueReferencedNode(
+  graph: InfrastructureGraph,
+  value: unknown,
+  resourceType: string,
+  attributes: readonly string[]
+): InfrastructureGraphNode | null {
+  return onlyNode(
+    resourceNodes(graph, resourceType).filter((node) =>
+      containsTerraformReference(value, terraformAddress(node), attributes)
+    )
+  );
+}
+
+function containsTerraformReference(
+  value: unknown,
+  address: string,
+  attributes: readonly string[]
+): boolean {
+  if (typeof value === "string") {
+    return attributes.some((attribute) => {
+      const reference = `${address}.${attribute}`;
+      return value === reference || value.includes(`\${${reference}}`);
+    });
+  }
+  if (Array.isArray(value)) {
+    return value.some((candidate) =>
+      containsTerraformReference(candidate, address, attributes)
+    );
+  }
+  return isRecord(value) && Object.values(value).some((candidate) =>
+    containsTerraformReference(candidate, address, attributes)
+  );
+}
+
+function containsTerraformReferenceOfType(
+  value: unknown,
+  resourceType: string,
+  attribute: string
+): boolean {
+  if (typeof value === "string") {
+    const escapedResourceType = resourceType.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const escapedAttribute = attribute.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(
+      `${escapedResourceType}\\.[a-zA-Z_][a-zA-Z0-9_-]*\\.${escapedAttribute}(?:[^a-zA-Z0-9_]|$)`
+    ).test(value);
+  }
+  if (Array.isArray(value)) {
+    return value.some((candidate) =>
+      containsTerraformReferenceOfType(candidate, resourceType, attribute)
+    );
+  }
+  return isRecord(value) && Object.values(value).some((candidate) =>
+    containsTerraformReferenceOfType(candidate, resourceType, attribute)
+  );
+}
+
+function nodesDirectlyConnected(
+  graph: InfrastructureGraph,
+  left: InfrastructureGraphNode,
+  right: InfrastructureGraphNode
+): boolean {
+  return graph.edges.some(
+    (edge) =>
+      (edge.sourceId === left.id && edge.targetId === right.id) ||
+      (edge.sourceId === right.id && edge.targetId === left.id)
+  );
+}
+
+function terraformAddress(node: InfrastructureGraphNode): string {
+  return `${node.iac.resourceType}.${node.iac.resourceName}`;
+}
+
+function onlyNode<T>(nodes: readonly T[]): T | null {
+  return nodes.length === 1 ? nodes[0]! : null;
+}
+
+function uniqueNodes(nodes: readonly InfrastructureGraphNode[]): InfrastructureGraphNode[] {
+  return [...new Map(nodes.map((node) => [node.id, node])).values()];
 }
 
 function renderOutput(name: string, valueExpression: string): string {

@@ -24,8 +24,8 @@ test("AWS snapshot provider normalizes ALB metrics, ASG capacity, and redacted b
         metricInputs.push(input);
         return {
           metricDataResults: [
-            { id: "requests", timestamps: [OBSERVED_AT], values: [120] },
-            { id: "errors", timestamps: [OBSERVED_AT], values: [3] },
+            { id: "responses_2xx", timestamps: [OBSERVED_AT], values: [117] },
+            { id: "responses_5xx", timestamps: [OBSERVED_AT], values: [3] },
             { id: "latency", timestamps: [OBSERVED_AT], values: [0.183] }
           ]
         };
@@ -86,12 +86,84 @@ test("AWS snapshot provider normalizes ALB metrics, ASG capacity, and redacted b
   assert.deepEqual(
     (metricInputs[0] as { metrics: Array<{ metricName: string; stat: string; scope: string }> }).metrics,
     [
-      { id: "requests", metricName: "RequestCount", stat: "Sum", scope: "load_balancer" },
-      { id: "errors", metricName: "HTTPCode_Target_5XX_Count", stat: "Sum", scope: "target_group" },
+      { id: "responses_2xx", metricName: "HTTPCode_Target_2XX_Count", stat: "Sum", scope: "target_group" },
+      { id: "responses_3xx", metricName: "HTTPCode_Target_3XX_Count", stat: "Sum", scope: "target_group" },
+      { id: "responses_4xx", metricName: "HTTPCode_Target_4XX_Count", stat: "Sum", scope: "target_group" },
+      { id: "responses_5xx", metricName: "HTTPCode_Target_5XX_Count", stat: "Sum", scope: "target_group" },
       { id: "latency", metricName: "TargetResponseTime", stat: "p95", scope: "target_group" }
     ]
   );
   assert.equal(metricInputs.length, 1);
+});
+
+test("same-target-group success traffic treats a sparse 5xx class as zero", async () => {
+  const snapshot = await observeWithMetrics([
+    { id: "responses_2xx", timestamps: [OBSERVED_AT], values: [120] },
+    { id: "latency", timestamps: [OBSERVED_AT], values: [0.12] }
+  ], "sparse-5xx");
+
+  assert.equal(snapshot.state, "available");
+  assert.equal(snapshot.requests, 120);
+  assert.equal(snapshot.errorRate, 0);
+  assert.equal(snapshot.availability, 100);
+});
+
+test("same-target-group response classes derive aligned requests and errors", async () => {
+  const snapshot = await observeWithMetrics([
+    { id: "responses_2xx", timestamps: [OBSERVED_AT], values: [80] },
+    { id: "responses_3xx", timestamps: [OBSERVED_AT], values: [10] },
+    { id: "responses_4xx", timestamps: [OBSERVED_AT], values: [5] },
+    { id: "responses_5xx", timestamps: [OBSERVED_AT], values: [5] },
+    { id: "latency", timestamps: [OBSERVED_AT], values: [0.2] }
+  ], "mixed-responses");
+
+  assert.equal(snapshot.state, "available");
+  assert.equal(snapshot.requests, 100);
+  assert.equal(snapshot.errorRate, 5);
+  assert.equal(snapshot.availability, 95);
+});
+
+test("target latency alone never proves a zero-request period", async () => {
+  const snapshot = await observeWithMetrics([
+    { id: "latency", timestamps: [OBSERVED_AT], values: [0.2] }
+  ], "missing-response-counts");
+
+  assert.equal(snapshot.state, "unavailable");
+  assert.deepEqual(
+    [snapshot.requests, snapshot.errorRate, snapshot.p95LatencyMs, snapshot.availability],
+    [null, null, null, null]
+  );
+});
+
+test("response classes from different periods are never combined", async () => {
+  const snapshot = await observeWithMetrics([
+    { id: "responses_2xx", timestamps: [OBSERVED_AT], values: [10] },
+    { id: "responses_5xx", timestamps: [new Date(NOW_MS - 120_000)], values: [5] },
+    { id: "latency", timestamps: [OBSERVED_AT], values: [0.2] }
+  ], "misaligned-response-classes");
+
+  assert.equal(snapshot.state, "available");
+  assert.equal(snapshot.requests, 10);
+  assert.equal(snapshot.errorRate, 0);
+});
+
+test("CloudWatch request evidence is scoped to the selected target group", async () => {
+  const metricInputs: Array<{
+    metrics: Array<{ id: string; metricName: string; stat: string; scope: string }>;
+  }> = [];
+  await observeWithMetrics([
+    { id: "responses_2xx", timestamps: [OBSERVED_AT], values: [1] },
+    { id: "latency", timestamps: [OBSERVED_AT], values: [0.01] }
+  ], "target-group-scope", metricInputs);
+
+  assert.deepEqual(metricInputs[0]?.metrics, [
+    { id: "responses_2xx", metricName: "HTTPCode_Target_2XX_Count", stat: "Sum", scope: "target_group" },
+    { id: "responses_3xx", metricName: "HTTPCode_Target_3XX_Count", stat: "Sum", scope: "target_group" },
+    { id: "responses_4xx", metricName: "HTTPCode_Target_4XX_Count", stat: "Sum", scope: "target_group" },
+    { id: "responses_5xx", metricName: "HTTPCode_Target_5XX_Count", stat: "Sum", scope: "target_group" },
+    { id: "latency", metricName: "TargetResponseTime", stat: "p95", scope: "target_group" }
+  ]);
+  assert.equal(metricInputs[0]?.metrics.some((metric) => metric.metricName === "RequestCount"), false);
 });
 
 test("metric freshness is measured from the completed period end", async () => {
@@ -101,8 +173,7 @@ test("metric freshness is measured from the completed period end", async () => {
     async prepareCredentials() { return CREDENTIALS; },
     cloudWatchClientFactory: () => ({ async getMetricData() { return {
       metricDataResults: [
-        { id: "requests", timestamps: [periodStart], values: [10] },
-        { id: "errors", timestamps: [periodStart], values: [0] },
+        { id: "responses_2xx", timestamps: [periodStart], values: [10] },
         { id: "latency", timestamps: [periodStart], values: [0.1] }
       ]
     }; } }),
@@ -134,8 +205,7 @@ test("misaligned CloudWatch metric periods fail closed without quantitative valu
     async prepareCredentials() { return CREDENTIALS; },
     cloudWatchClientFactory: () => ({ async getMetricData() { return {
       metricDataResults: [
-        { id: "requests", timestamps: [new Date(NOW_MS - 60_000)], values: [10] },
-        { id: "errors", timestamps: [new Date(NOW_MS - 120_000)], values: [0] },
+        { id: "responses_2xx", timestamps: [new Date(NOW_MS - 120_000)], values: [10] },
         { id: "latency", timestamps: [new Date(NOW_MS - 60_000)], values: [0.1] }
       ]
     }; } }),
@@ -179,8 +249,7 @@ test("delayed or unavailable AWS evidence never retains quantitative values", as
           if (mode === "missing") return { metricDataResults: [] };
           const timestamp = new Date(NOW_MS - 180_000);
           return { metricDataResults: [
-            { id: "requests", timestamps: [timestamp], values: [999] },
-            { id: "errors", timestamps: [timestamp], values: [999] },
+            { id: "responses_2xx", timestamps: [timestamp], values: [999] },
             { id: "latency", timestamps: [timestamp], values: [999] }
           ] };
         }
@@ -228,8 +297,7 @@ test("ECS/Fargate capacity uses desired and running task evidence", async () => 
     now: () => NOW_MS,
     async prepareCredentials() { return CREDENTIALS; },
     cloudWatchClientFactory: () => ({ async getMetricData() { return { metricDataResults: [
-      { id: "requests", timestamps: [OBSERVED_AT], values: [0] },
-      { id: "errors", timestamps: [OBSERVED_AT], values: [0] },
+      { id: "responses_2xx", timestamps: [OBSERVED_AT], values: [0] },
       { id: "latency", timestamps: [OBSERVED_AT], values: [0.01] }
     ] }; } }),
     autoScalingClientFactory: () => ({ async describeAutoScalingGroup() { return {}; } }),
@@ -467,10 +535,40 @@ function createTarget(): AwsLiveObservationSnapshotTarget {
 
 function metricDataResults(timestamp: Date) {
   return [
-    { id: "requests", timestamps: [timestamp], values: [10] },
-    { id: "errors", timestamps: [timestamp], values: [0] },
+    { id: "responses_2xx", timestamps: [timestamp], values: [10] },
     { id: "latency", timestamps: [timestamp], values: [0.1] }
   ];
+}
+
+async function observeWithMetrics(
+  metricDataResults: Array<{ id: string; timestamps: Date[]; values: number[] }>,
+  observationId: string,
+  metricInputs: Array<{
+    metrics: Array<{ id: string; metricName: string; stat: string; scope: string }>;
+  }> = []
+) {
+  const provider = createAwsLiveObservationSnapshotProvider({
+    now: () => NOW_MS,
+    async prepareCredentials() { return CREDENTIALS; },
+    cloudWatchClientFactory: () => ({ async getMetricData(input) {
+      metricInputs.push(input);
+      return { metricDataResults };
+    } }),
+    autoScalingClientFactory: () => ({ async describeAutoScalingGroup() { return {
+      autoScalingGroups: [{
+        autoScalingGroupName: "customer-asg",
+        desiredCapacity: 1,
+        maxSize: 2,
+        instances: [{ instanceId: "i-1", lifecycleState: "InService" }]
+      }]
+    }; } }),
+    targetHealthClientFactory: () => ({ async describeTargetHealth() {
+      return { targets: [{ id: "i-1", state: "healthy" }] };
+    } }),
+    ecsClientFactory: () => ({ async describeService() { return {}; } }),
+    logsClientFactory: () => ({ async filterLogEvents() { return { events: [] }; } })
+  });
+  return provider.observe(createTarget(), observationId);
 }
 
 function createDeferred<T>() {

@@ -38,9 +38,17 @@ test("ASG graph outputs and successful approved evidence materialize a valid man
 test("ECS Fargate graph outputs and successful approved evidence materialize a valid manifest", async () => {
   const graph = createBaseGraph([
     node("aws_ecs_cluster", "platform", {}),
-    node("aws_ecs_service", "api", {}),
-    node("aws_appautoscaling_target", "api", { maxCapacity: 4 }),
+    node("aws_ecs_service", "api", {
+      cluster: "aws_ecs_cluster.platform.id",
+      loadBalancer: { targetGroupArn: "aws_lb_target_group.api.arn" }
+    }),
+    node("aws_appautoscaling_target", "api", {
+      maxCapacity: 4,
+      resourceId:
+        "service/${aws_ecs_cluster.platform.name}/${aws_ecs_service.api.name}"
+    }),
     node("aws_appautoscaling_policy", "requests", {
+      resourceId: "aws_appautoscaling_target.api.resource_id",
       targetTrackingScalingPolicyConfiguration: {
         targetValue: 60,
         predefinedMetricSpecification: {

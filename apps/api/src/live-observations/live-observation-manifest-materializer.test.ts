@@ -95,6 +95,23 @@ test("materializer persists a verified ECS Fargate manifest from ARN suffix outp
   );
 });
 
+test("materializer rejects ambiguous ASG and ECS capacity output evidence", () => {
+  assert.throws(
+    () => createDeploymentLiveObservationManifest({
+      audienceBaseUrl: "https://audience.example.com",
+      deployment: createDeployment(),
+      connection: createConnection(),
+      outputs: createOutputs({
+        asg_name: "customer-platform-asg",
+        ecs_cluster_name: "customer-platform",
+        ecs_service_name: "api",
+        max_capacity: 4
+      })
+    }),
+    /Ambiguous capacity target evidence/
+  );
+});
+
 test("materializer fails closed and stores a generic invalid row for unverified evidence", async () => {
   for (const input of [
     {

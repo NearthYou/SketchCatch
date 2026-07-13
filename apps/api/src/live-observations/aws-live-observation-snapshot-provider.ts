@@ -25,7 +25,19 @@ const CACHE_TTL_MS = 10_000;
 const CACHE_MAX_ENTRIES = 1_000;
 const REQUEST_TIMEOUT_MS = 5_000;
 
-type MetricId = "requests" | "errors" | "latency";
+type ResponseMetricId =
+  | "responses_2xx"
+  | "responses_3xx"
+  | "responses_4xx"
+  | "responses_5xx";
+type MetricId = ResponseMetricId | "latency";
+
+const RESPONSE_METRIC_IDS: readonly ResponseMetricId[] = [
+  "responses_2xx",
+  "responses_3xx",
+  "responses_4xx",
+  "responses_5xx"
+];
 
 export type AwsLiveObservationSnapshotTarget = {
   awsConnectionId: string;
@@ -367,9 +379,26 @@ async function observeMetrics(
       startTime: new Date(evaluatedAtMs - LOOKBACK_MS),
       endTime: new Date(evaluatedAtMs),
       metrics: [
-        { id: "requests", metricName: "RequestCount", stat: "Sum", scope: "load_balancer" },
         {
-          id: "errors",
+          id: "responses_2xx",
+          metricName: "HTTPCode_Target_2XX_Count",
+          stat: "Sum",
+          scope: "target_group"
+        },
+        {
+          id: "responses_3xx",
+          metricName: "HTTPCode_Target_3XX_Count",
+          stat: "Sum",
+          scope: "target_group"
+        },
+        {
+          id: "responses_4xx",
+          metricName: "HTTPCode_Target_4XX_Count",
+          stat: "Sum",
+          scope: "target_group"
+        },
+        {
+          id: "responses_5xx",
           metricName: "HTTPCode_Target_5XX_Count",
           stat: "Sum",
           scope: "target_group"
@@ -382,32 +411,47 @@ async function observeMetrics(
         }
       ]
     });
-    const points = Object.fromEntries(
-      (["requests", "errors", "latency"] as const).map((id) => [
+    const latency = latestCompletedPoint(
+      response.metricDataResults?.find((result) => result.id === "latency"),
+      evaluatedAtMs
+    );
+    if (!latency) {
+      return { state: "unavailable", observedAt: null };
+    }
+
+    const periodStartMs = latency.timestamp.getTime();
+    const responsePoints = Object.fromEntries(
+      RESPONSE_METRIC_IDS.map((id) => [
         id,
-        latestCompletedPoint(response.metricDataResults?.find((result) => result.id === id), evaluatedAtMs)
+        completedPointAt(
+          response.metricDataResults?.find((result) => result.id === id),
+          periodStartMs,
+          evaluatedAtMs
+        )
       ])
-    ) as Record<MetricId, { timestamp: Date; value: number } | null>;
-    if (!points.requests || !points.errors || !points.latency) {
+    ) as Record<ResponseMetricId, { timestamp: Date; value: number } | null>;
+    if (!RESPONSE_METRIC_IDS.some((id) => responsePoints[id] !== null)) {
       return { state: "unavailable", observedAt: null };
     }
-    const periodStarts = [
-      points.requests.timestamp.getTime(),
-      points.errors.timestamp.getTime(),
-      points.latency.timestamp.getTime()
-    ];
-    if (new Set(periodStarts).size !== 1) {
+
+    const requests = RESPONSE_METRIC_IDS.reduce(
+      (total, id) => total + (responsePoints[id]?.value ?? 0),
+      0
+    );
+    const errors = responsePoints.responses_5xx?.value ?? 0;
+    if (!Number.isFinite(requests) || errors > requests) {
       return { state: "unavailable", observedAt: null };
     }
-    const observedAtMs = periodStarts[0]! + PERIOD_SECONDS * 1_000;
+
+    const observedAtMs = periodStartMs + PERIOD_SECONDS * 1_000;
     if (evaluatedAtMs - observedAtMs > PERIOD_SECONDS * 1_000) {
       return { state: "delayed", observedAt: new Date(observedAtMs).toISOString() };
     }
     return {
       state: "available",
-      requests: points.requests.value,
-      errors: points.errors.value,
-      latencySeconds: points.latency.value,
+      requests,
+      errors,
+      latencySeconds: latency.value,
       observedAt: new Date(observedAtMs).toISOString()
     };
   } catch {
@@ -434,6 +478,18 @@ function latestCompletedPoint(
         point.timestamp.getTime() + PERIOD_SECONDS * 1_000 <= evaluatedAtMs
     )
     .sort((left, right) => right.timestamp.getTime() - left.timestamp.getTime())[0] ?? null;
+}
+
+function completedPointAt(
+  result: {
+    timestamps?: readonly Date[] | undefined;
+    values?: readonly number[] | undefined;
+  } | undefined,
+  periodStartMs: number,
+  evaluatedAtMs: number
+): { timestamp: Date; value: number } | null {
+  const point = latestCompletedPoint(result, evaluatedAtMs);
+  return point?.timestamp.getTime() === periodStartMs ? point : null;
 }
 
 async function observeCapacity(
