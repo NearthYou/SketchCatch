@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { getGitHubCallbackAuthDecision } from "./github-callback-auth";
+import {
+  getGitHubCallbackAuthDecision,
+  getOrCreateGitHubCallbackRepositoryRequest
+} from "./github-callback-auth";
 
 test("callback waits while auth is loading and loads only when authenticated", () => {
   assert.deepEqual(getGitHubCallbackAuthDecision(validInput("loading")), {
@@ -28,6 +31,24 @@ test("callback reports missing GitHub parameters before auth redirect", () => {
     }),
     { kind: "invalid" }
   );
+});
+
+test("callback effect replays share the active repository request", async () => {
+  let loadCount = 0;
+  const load = async () => {
+    loadCount += 1;
+    return ["repository"];
+  };
+  const firstRequest = getOrCreateGitHubCallbackRepositoryRequest(null, "123:signed-state", load);
+  const replayedRequest = getOrCreateGitHubCallbackRepositoryRequest(
+    firstRequest,
+    "123:signed-state",
+    load
+  );
+
+  assert.strictEqual(replayedRequest, firstRequest);
+  assert.equal(loadCount, 1);
+  assert.deepEqual(await replayedRequest.promise, ["repository"]);
 });
 
 function validInput(authStatus: "loading" | "authenticated" | "unauthenticated") {

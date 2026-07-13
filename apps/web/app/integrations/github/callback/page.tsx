@@ -3,11 +3,15 @@
 import { ArrowLeft, FileCode2, LoaderCircle, Settings2, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { GitHubRepositoryCandidate } from "@sketchcatch/types";
 import { useAuth } from "../../../../components/auth/auth-provider";
 import { ProductBrand } from "../../../../components/ui/ProductBrand";
-import { getGitHubCallbackAuthDecision } from "../../../../features/auth/github-callback-auth";
+import {
+  getGitHubCallbackAuthDecision,
+  getOrCreateGitHubCallbackRepositoryRequest,
+  type GitHubCallbackRepositoryRequest
+} from "../../../../features/auth/github-callback-auth";
 import {
   connectGitHubSourceRepository,
   listGitHubInstallationRepositories
@@ -27,10 +31,15 @@ type CallbackState =
     }
   | { readonly status: "saving" };
 
+type RepositoryListRequest = GitHubCallbackRepositoryRequest<
+  Awaited<ReturnType<typeof listGitHubInstallationRepositories>>
+>;
+
 // GitHub App에서 돌아온 사용자가 Repository 하나를 골라 프로젝트 시작 흐름을 이어가게 합니다.
 export default function GitHubIntegrationCallbackPage() {
   const router = useRouter();
   const { status: authStatus } = useAuth();
+  const repositoryListRequestRef = useRef<RepositoryListRequest | null>(null);
   const [callbackState, setCallbackState] = useState<CallbackState>({ status: "loading" });
   const selectableCount = useMemo(
     () =>
@@ -70,8 +79,15 @@ export default function GitHubIntegrationCallbackPage() {
         return;
       }
 
+      const request = getOrCreateGitHubCallbackRepositoryRequest(
+        repositoryListRequestRef.current,
+        `${installationId}:${state}`,
+        () => listGitHubInstallationRepositories({ installationId, state })
+      );
+      repositoryListRequestRef.current = request;
+
       try {
-        const result = await listGitHubInstallationRepositories({ installationId, state });
+        const result = await request.promise;
         if (cancelled) return;
         setCallbackState({
           installationId,

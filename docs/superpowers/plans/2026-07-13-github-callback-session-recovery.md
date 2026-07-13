@@ -1,14 +1,14 @@
-# GitHub Callback Session Recovery Implementation Plan
+# GitHub callback 세션 복구 구현 계획
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **에이전트 작업자 필수 스킬:** 이 계획은 `superpowers:subagent-driven-development` 또는 `superpowers:executing-plans`로 작업별 실행한다. 진행 상태는 checkbox (`- [ ]`)로 추적한다.
 
-**Goal:** GitHub App callback이 인증 복구를 기다리고, 복구 실패 시 로그인 후 같은 callback으로 안전하게 돌아오게 한다.
+**목표:** GitHub App callback이 인증 복구를 기다리고, 복구 실패 시 로그인 후 같은 callback으로 안전하게 돌아오게 한다.
 
-**Architecture:** `AuthProvider`의 상태를 callback 요청 gate로 사용하고, callback 전용 순수 decision helper가 대기·조회·로그인 이동을 결정한다. API client는 refresh 400/401을 `null`로 지우지 않고 원래 `ApiClientError`로 전달하며 기존 single-flight promise는 유지한다.
+**아키텍처:** `AuthProvider`의 상태를 callback 요청 gate로 사용하고, callback 전용 순수 decision helper가 대기·조회·로그인 이동을 결정한다. API client는 refresh 400/401을 `null`로 지우지 않고 원래 `ApiClientError`로 전달하며 기존 single-flight promise는 유지한다.
 
-**Tech Stack:** Next.js App Router, React, TypeScript, Node.js test runner, Fastify API error contract
+**기술 스택:** Next.js App Router, React, TypeScript, Node.js test runner, Fastify API error contract
 
-## Global Constraints
+## 전역 제약
 
 - access token은 런타임 메모리에만 저장하고 refresh token은 기존 `HttpOnly`, `SameSite=Lax` cookie 계약을 유지한다.
 - refresh token, callback URL, GitHub state를 Web Storage나 DB에 새로 저장하지 않는다.
@@ -18,28 +18,28 @@
 
 ---
 
-## File Map
+## 파일 구성
 
-- Create `apps/web/features/auth/github-callback-auth.ts`: callback의 인증 상태와 query를 대기·조회·로그인 이동 결정으로 변환한다.
-- Create `apps/web/features/auth/github-callback-auth.test.ts`: callback decision helper의 실제 동작을 검증한다.
-- Modify `apps/web/app/integrations/github/callback/page.tsx`: `AuthProvider` 상태를 기다리고 helper 결정에 따라 API 호출 또는 로그인 이동을 수행한다.
-- Modify `apps/web/features/workspace/github-callback-route.test.ts`: callback page가 인증 gate와 안전한 login return flow를 사용하는지 회귀 검증한다.
-- Modify `apps/web/lib/api-client.ts`: refresh 400/401 응답의 `ApiClientError`를 보존한다.
-- Modify `apps/web/features/workspace/api-client-auth-session.test.ts`: refresh 오류 전달과 single-flight 동시성 회귀를 검증한다.
-- Modify `docs/data-models.md`: 외부 redirect 후 인증 복구와 callback `returnTo` 계약을 기록한다.
-- Modify `agent-progress.md`: 구현 결과와 실제 검증 명령을 기록한다.
+- 생성 `apps/web/features/auth/github-callback-auth.ts`: callback의 인증 상태와 query를 대기·조회·로그인 이동 결정으로 변환한다.
+- 생성 `apps/web/features/auth/github-callback-auth.test.ts`: callback decision helper의 실제 동작을 검증한다.
+- 수정 `apps/web/app/integrations/github/callback/page.tsx`: `AuthProvider` 상태를 기다리고 helper 결정에 따라 API 호출 또는 로그인 이동을 수행한다.
+- 수정 `apps/web/features/workspace/github-callback-route.test.ts`: callback page가 인증 gate와 안전한 login return flow를 사용하는지 회귀 검증한다.
+- 수정 `apps/web/lib/api-client.ts`: refresh 400/401 응답의 `ApiClientError`를 보존한다.
+- 수정 `apps/web/features/workspace/api-client-auth-session.test.ts`: refresh 오류 전달과 single-flight 동시성 회귀를 검증한다.
+- 수정 `docs/data-models.md`: 외부 redirect 후 인증 복구와 callback `returnTo` 계약을 기록한다.
+- 수정 `agent-progress.md`: 구현 결과와 실제 검증 명령을 기록한다.
 
-### Task 1: Preserve Refresh Failures
+### 작업 1: Refresh 실패 보존
 
-**Files:**
-- Modify: `apps/web/features/workspace/api-client-auth-session.test.ts`
-- Modify: `apps/web/lib/api-client.ts`
+**파일:**
+- 수정: `apps/web/features/workspace/api-client-auth-session.test.ts`
+- 수정: `apps/web/lib/api-client.ts`
 
-**Interfaces:**
-- Consumes: `apiFetch<T>(path, { auth: true })`, `ApiClientError`, module-level `refreshSessionPromise`.
-- Produces: refresh 400/401가 원래 status, error code, message를 가진 `ApiClientError` rejection으로 전달되는 계약.
+**인터페이스:**
+- 입력: `apiFetch<T>(path, { auth: true })`, `ApiClientError`, module-level `refreshSessionPromise`.
+- 출력: refresh 400/401가 원래 status, error code, message를 가진 `ApiClientError` rejection으로 전달되는 계약.
 
-- [ ] **Step 1: Write the failing refresh-error test**
+- [ ] **단계 1: 실패하는 refresh 오류 테스트 작성**
 
 ```ts
 test("authenticated requests expose the refresh failure instead of the original 401", async (context) => {
@@ -99,15 +99,15 @@ function restoreGlobal(name: "window" | "document", descriptor: PropertyDescript
 }
 ```
 
-- [ ] **Step 2: Run the test and verify RED**
+- [ ] **단계 2: 테스트 실행 및 RED 확인**
 
-Run: `pnpm --dir apps/web exec tsx --test features/workspace/api-client-auth-session.test.ts`
+실행: `pnpm --dir apps/web exec tsx --test features/workspace/api-client-auth-session.test.ts`
 
-Expected: FAIL because the request rejects with the original `Authentication required` response.
+예상: refresh 오류가 아니라 기존 `Authentication required` 응답으로 reject되어 실패한다.
 
-- [ ] **Step 3: Preserve the refresh response error**
+- [ ] **단계 3: refresh 응답 오류 보존**
 
-Replace the 400/401 branch in `refreshStoredSession()` with:
+`refreshStoredSession()`의 400/401 분기를 다음 코드로 교체한다.
 
 ```ts
 if (response.status === 400 || response.status === 401) {
@@ -116,7 +116,7 @@ if (response.status === 400 || response.status === 401) {
 }
 ```
 
-- [ ] **Step 4: Add and verify the single-flight regression**
+- [ ] **단계 4: single-flight 회귀 테스트 추가 및 확인**
 
 ```ts
 test("concurrent authenticated requests share one refresh request", async (context) => {
@@ -158,30 +158,30 @@ test("concurrent authenticated requests share one refresh request", async (conte
 });
 ```
 
-Run: `pnpm --dir apps/web exec tsx --test features/workspace/api-client-auth-session.test.ts`
+실행: `pnpm --dir apps/web exec tsx --test features/workspace/api-client-auth-session.test.ts`
 
-Expected: PASS with all tests in the file passing and refresh request count equal to 1.
+예상: 파일의 모든 테스트가 통과하고 refresh 요청 횟수가 1이다.
 
-- [ ] **Step 5: Commit Task 1**
+- [ ] **단계 5: 작업 1 커밋**
 
 ```bash
 git add apps/web/lib/api-client.ts apps/web/features/workspace/api-client-auth-session.test.ts
 git commit -m "Fix: refresh 인증 오류 보존"
 ```
 
-### Task 2: Gate the GitHub Callback on Authentication
+### 작업 2: GitHub callback 인증 gate 적용
 
-**Files:**
-- Create: `apps/web/features/auth/github-callback-auth.ts`
-- Create: `apps/web/features/auth/github-callback-auth.test.ts`
-- Modify: `apps/web/app/integrations/github/callback/page.tsx`
-- Modify: `apps/web/features/workspace/github-callback-route.test.ts`
+**파일:**
+- 생성: `apps/web/features/auth/github-callback-auth.ts`
+- 생성: `apps/web/features/auth/github-callback-auth.test.ts`
+- 수정: `apps/web/app/integrations/github/callback/page.tsx`
+- 수정: `apps/web/features/workspace/github-callback-route.test.ts`
 
-**Interfaces:**
-- Consumes: `AuthContextValue.status`, callback `installation_id`, callback `state`, and the current internal path including query.
-- Produces: `getGitHubCallbackAuthDecision(input): GitHubCallbackAuthDecision` with `invalid`, `wait`, `load`, or `redirect` decisions.
+**인터페이스:**
+- 입력: `AuthContextValue.status`, callback `installation_id`, callback `state`, query를 포함한 현재 내부 path.
+- 출력: `invalid`, `wait`, `load`, `redirect` 결정을 반환하는 `getGitHubCallbackAuthDecision(input): GitHubCallbackAuthDecision`.
 
-- [ ] **Step 1: Write failing decision tests**
+- [ ] **단계 1: 실패하는 decision 테스트 작성**
 
 ```ts
 test("callback waits while auth is loading and loads only when authenticated", () => {
@@ -219,13 +219,13 @@ function validInput(authStatus: "loading" | "authenticated" | "unauthenticated")
 }
 ```
 
-- [ ] **Step 2: Run helper tests and verify RED**
+- [ ] **단계 2: helper 테스트 실행 및 RED 확인**
 
-Run: `pnpm --dir apps/web exec tsx --test features/auth/github-callback-auth.test.ts`
+실행: `pnpm --dir apps/web exec tsx --test features/auth/github-callback-auth.test.ts`
 
-Expected: FAIL because `github-callback-auth.ts` and its exported function do not exist.
+예상: `github-callback-auth.ts`와 export 함수가 없어 실패한다.
 
-- [ ] **Step 3: Implement the minimal decision helper**
+- [ ] **단계 3: 최소 decision helper 구현**
 
 ```ts
 export type GitHubCallbackAuthDecision =
@@ -252,7 +252,7 @@ export function getGitHubCallbackAuthDecision(input: {
 }
 ```
 
-- [ ] **Step 4: Integrate the decision with the callback page**
+- [ ] **단계 4: callback page에 decision 통합**
 
 ```ts
 const { status: authStatus } = useAuth();
@@ -310,7 +310,7 @@ useEffect(() => {
 }, [authStatus, router]);
 ```
 
-- [ ] **Step 5: Strengthen callback source-contract coverage**
+- [ ] **단계 5: callback source-contract 검증 강화**
 
 ```ts
 assert.match(source, /useAuth/);
@@ -320,49 +320,49 @@ assert.match(source, /decision\.kind === "wait"/);
 assert.match(source, /listGitHubInstallationRepositories/);
 ```
 
-Run: `pnpm --dir apps/web exec tsx --test features/auth/github-callback-auth.test.ts features/workspace/github-callback-route.test.ts features/auth/return-path.test.ts features/auth/login-page.test.ts`
+실행: `pnpm --dir apps/web exec tsx --test features/auth/github-callback-auth.test.ts features/workspace/github-callback-route.test.ts features/auth/return-path.test.ts features/auth/login-page.test.ts`
 
-Expected: PASS for helper behavior, callback integration, and existing safe `returnTo` handling.
+예상: helper 동작, callback 통합, 기존의 안전한 `returnTo` 처리가 모두 통과한다.
 
-- [ ] **Step 6: Commit Task 2**
+- [ ] **단계 6: 작업 2 커밋**
 
 ```bash
 git add apps/web/features/auth/github-callback-auth.ts apps/web/features/auth/github-callback-auth.test.ts apps/web/app/integrations/github/callback/page.tsx apps/web/features/workspace/github-callback-route.test.ts
 git commit -m "Fix: GitHub callback 인증 복구 대기"
 ```
 
-### Task 3: Document and Verify the Complete Flow
+### 작업 3: 전체 흐름 문서화 및 검증
 
-**Files:**
-- Modify: `docs/data-models.md`
-- Modify: `agent-progress.md`
+**파일:**
+- 수정: `docs/data-models.md`
+- 수정: `agent-progress.md`
 
-**Interfaces:**
-- Consumes: the implemented refresh error and callback decision contracts.
-- Produces: canonical documentation and reproducible verification evidence.
+**인터페이스:**
+- 입력: 구현된 refresh 오류와 callback decision 계약.
+- 출력: canonical 문서와 재현 가능한 검증 증거.
 
-- [ ] **Step 1: Update the auth contract documentation**
+- [ ] **단계 1: 인증 계약 문서 갱신**
 
-Append to the existing auth-session paragraph in `docs/data-models.md`:
+`docs/data-models.md`의 기존 auth-session 문단에 다음 내용을 추가한다.
 
 ```md
 GitHub App처럼 외부 origin을 왕복하는 callback 화면은 `AuthProvider`의 refresh 복구가 끝나기 전에 보호 API를 호출하지 않는다. 복구할 수 없으면 현재 내부 callback path와 query를 안전한 `returnTo`로 로그인에 전달하고, 로그인 성공 후 같은 callback을 다시 처리한다. refresh API의 인증 오류는 최초 보호 API 401로 덮어쓰지 않는다.
 ```
 
-- [ ] **Step 2: Run focused verification**
+- [ ] **단계 2: 집중 검증 실행**
 
-Run:
+실행:
 
 ```bash
 pnpm --dir apps/web exec tsx --test features/workspace/api-client-auth-session.test.ts features/auth/github-callback-auth.test.ts features/workspace/github-callback-route.test.ts features/auth/return-path.test.ts features/auth/login-page.test.ts
 pnpm --dir apps/api exec tsx --test src/routes/auth.scenarios.test.ts src/routes/source-repositories.test.ts
 ```
 
-Expected: all selected Web and API tests pass.
+예상: 선택한 Web 및 API 테스트가 모두 통과한다.
 
-- [ ] **Step 3: Run repository-required verification**
+- [ ] **단계 3: 저장소 필수 검증 실행**
 
-Run:
+실행:
 
 ```bash
 pnpm harness:check
@@ -372,17 +372,17 @@ pnpm build
 git diff --check
 ```
 
-Expected: commands exit 0. Any pre-existing unrelated warning or baseline failure must be recorded without claiming it was fixed.
+예상: 모든 명령이 종료 코드 0을 반환한다. 기존의 관련 없는 경고나 기준선 실패는 수정했다고 주장하지 않고 그대로 기록한다.
 
-- [ ] **Step 4: Update progress evidence**
+- [ ] **단계 4: 진행 증거 갱신**
 
-Add an English-only session entry to `agent-progress.md` naming the GitHub callback session recovery behavior, the focused tests, and the required checks actually run. Do not change the unrelated `LIVE-OBSERVATION-V2-001` tracker state.
+`agent-progress.md`에 GitHub callback 세션 복구 동작, 집중 테스트, 실제 실행한 필수 검증을 영어로 기록한다. 관련 없는 `LIVE-OBSERVATION-V2-001` tracker 상태는 변경하지 않는다.
 
-- [ ] **Step 5: Commit Task 3 documentation**
+- [ ] **단계 5: 작업 3 문서 커밋**
 
 ```bash
 git add docs/data-models.md
 git commit -m "Docs: GitHub callback 복구 검증 기록"
 ```
 
-Leave `agent-progress.md` unstaged because it already contains unrelated worktree changes; report that preservation explicitly in the handoff.
+`agent-progress.md`에는 기존 worktree 변경이 있으므로 staging하지 않고, 해당 보존 사실을 handoff에 명시한다.

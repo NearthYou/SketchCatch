@@ -4,6 +4,23 @@ export type GitHubCallbackAuthDecision =
   | { readonly kind: "load" }
   | { readonly href: string; readonly kind: "redirect" };
 
+export type GitHubCallbackRepositoryRequest<T> = {
+  readonly key: string;
+  readonly promise: Promise<T>;
+};
+
+export function getOrCreateGitHubCallbackRepositoryRequest<T>(
+  current: GitHubCallbackRepositoryRequest<T> | null,
+  key: string,
+  load: () => Promise<T>
+): GitHubCallbackRepositoryRequest<T> {
+  if (current?.key === key) {
+    return current;
+  }
+
+  return { key, promise: load() };
+}
+
 export function getGitHubCallbackAuthDecision(input: {
   readonly authStatus: "loading" | "authenticated" | "unauthenticated";
   readonly installationId: string | null;
