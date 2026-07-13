@@ -85,11 +85,6 @@ const requestedResourceDefinitions = [
     terraformResourceType: "aws_cloudwatch_dashboard"
   },
   {
-    id: "aws-rds-read-replica",
-    resourceType: "RDS_READ_REPLICA",
-    terraformResourceType: "aws_db_instance"
-  },
-  {
     id: "aws-rds-cluster",
     resourceType: "RDS_CLUSTER",
     terraformResourceType: "aws_rds_cluster"
@@ -284,7 +279,17 @@ test("priority AWS ResourceTypes are represented by explicit shared definitions"
   }
 });
 
-test("RDS read replica does not replace the generic aws_db_instance lookup", () => {
+test("aws_db_instance has one authoritative shared resource identity", () => {
+  const definitions = resourceDefinitions.filter(
+    (definition) =>
+      definition.terraform.blockType === "resource" &&
+      definition.terraform.resourceType === "aws_db_instance"
+  );
+
+  assert.deepEqual(
+    definitions.map((definition) => definition.id),
+    ["aws-rds-instance"]
+  );
   assert.equal(getResourceDefinitionByTerraform("resource", "aws_db_instance")?.id, "aws-rds-instance");
 });
 

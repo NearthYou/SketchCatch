@@ -314,11 +314,11 @@ test("createDiagramNodeFromPayload does not set desiredCapacity for new Auto Sca
   assert.equal("desiredCapacity" in (node.parameters?.values ?? {}), false);
 });
 
-test("createDiagramNodeFromPayload does not apply RDS instance defaults to read replicas", () => {
+test("createDiagramNodeFromPayload uses the authoritative RDS defaults before read replica configuration", () => {
   const node = createDiagramNodeFromPayload(
     makeResourceDragPayload(
       makeResourceItem({
-        id: "aws-rds-read-replica",
+        id: "aws-rds-instance",
         resourceType: "aws_db_instance",
         label: "RDS Read Replica"
       })
@@ -327,7 +327,12 @@ test("createDiagramNodeFromPayload does not apply RDS instance defaults to read 
     1
   );
 
-  assert.deepEqual(node.parameters?.values, {});
+  assert.deepEqual(node.parameters?.values, {
+    publiclyAccessible: false,
+    storageEncrypted: true,
+    storageType: "gp3"
+  });
+  assert.equal("replicateSourceDb" in (node.parameters?.values ?? {}), false);
 });
 
 test("createDiagramNodeFromPayload appends a numeric suffix for duplicate resource icon names", () => {

@@ -45,11 +45,6 @@ const requestedMissingCatalogItems = [
       "/Architecture-Service-Icons_07312025/Arch_Security-Identity-Compliance/64/Arch_AWS-Certificate-Manager_64.svg"
   },
   {
-    id: "aws-rds-read-replica",
-    type: "aws_db_instance",
-    iconUrl: "/Architecture-Service-Icons_07312025/Arch_Database/64/Arch_Amazon-RDS_64.svg"
-  },
-  {
     id: "aws-rds-cluster",
     type: "aws_rds_cluster",
     iconUrl:
@@ -115,6 +110,44 @@ const requestedMissingCatalogItems = [
     iconUrl:
       "/Architecture-Service-Icons_07312025/Arch_Containers/64/Arch_Amazon-Elastic-Kubernetes-Service_64.svg"
   }
+] as const;
+
+const requiredBrainboardCatalogItems = [
+  ["aws-api-gateway-integration-response", "resource", "aws_api_gateway_integration_response"],
+  ["aws-api-gateway-method-response", "resource", "aws_api_gateway_method_response"],
+  ["aws-budgets-budget", "resource", "aws_budgets_budget"],
+  ["aws-cloudfront-origin-access-identity", "resource", "aws_cloudfront_origin_access_identity"],
+  ["aws-docdb-cluster", "resource", "aws_docdb_cluster"],
+  ["aws-dynamodb-global-table", "resource", "aws_dynamodb_global_table"],
+  ["aws-elastic-beanstalk-application", "resource", "aws_elastic_beanstalk_application"],
+  ["aws-elastic-beanstalk-environment", "resource", "aws_elastic_beanstalk_environment"],
+  ["aws-elb", "resource", "aws_elb"],
+  ["aws-flow-log", "resource", "aws_flow_log"],
+  ["aws-fsx-lustre-file-system", "resource", "aws_fsx_lustre_file_system"],
+  ["aws-iam-group", "resource", "aws_iam_group"],
+  ["aws-iam-group-policy-attachment", "resource", "aws_iam_group_policy_attachment"],
+  ["aws-iam-user", "resource", "aws_iam_user"],
+  ["aws-iam-user-group-membership", "resource", "aws_iam_user_group_membership"],
+  ["aws-iam-user-login-profile", "resource", "aws_iam_user_login_profile"],
+  ["aws-launch-configuration", "resource", "aws_launch_configuration"],
+  ["aws-main-route-table-association", "resource", "aws_main_route_table_association"],
+  ["aws-network-interface", "resource", "aws_network_interface"],
+  ["aws-organizations-account", "resource", "aws_organizations_account"],
+  ["aws-s3-bucket-acl", "resource", "aws_s3_bucket_acl"],
+  ["aws-s3-bucket-logging", "resource", "aws_s3_bucket_logging"],
+  ["aws-s3-bucket-notification", "resource", "aws_s3_bucket_notification"],
+  ["aws-s3-bucket-object", "resource", "aws_s3_bucket_object"],
+  [
+    "aws-s3-bucket-replication-configuration",
+    "resource",
+    "aws_s3_bucket_replication_configuration"
+  ],
+  ["aws-ses-email-identity", "resource", "aws_ses_email_identity"],
+  ["aws-vpc-peering-connection-accepter", "resource", "aws_vpc_peering_connection_accepter"],
+  ["aws-waf-ipset", "resource", "aws_waf_ipset"],
+  ["aws-waf-rule", "resource", "aws_waf_rule"],
+  ["aws-waf-web-acl", "resource", "aws_waf_web_acl"],
+  ["aws-iam-policy-data", "data", "aws_iam_policy"]
 ] as const;
 
 test("resourceCatalog sizes area defaults below the Region hierarchy root", () => {
@@ -355,6 +388,45 @@ test("resourceCatalog exposes requested missing resources with public icon asset
   }
 });
 
+test("resourceCatalog exposes each Brainboard Terraform identity exactly once", () => {
+  for (const [id, blockType, resourceType] of requiredBrainboardCatalogItems) {
+    const key = `${blockType}/${resourceType}`;
+    const matches = resourceCatalog.filter(
+      (resource) => createCatalogResourceKey(resource) === key
+    );
+
+    assert.equal(matches.length, 1, key);
+    assert.equal(matches[0]?.id, id, key);
+    assert.equal(matches[0]?.enabled, true, id);
+    assert.equal(matches[0]?.nodeDefaults.type, resourceType, id);
+    assert.equal(matches[0]?.nodeDefaults.terraformBlockType ?? "resource", blockType, id);
+    assert.ok(matches[0]?.iconUrl, `Missing icon for ${id}`);
+    assert.equal(
+      existsSync(`${publicDirectoryPath}${matches[0]?.iconUrl}`),
+      true,
+      matches[0]?.iconUrl
+    );
+  }
+});
+
+test("resourceCatalog IDs and Terraform identities remain unique", () => {
+  const ids = resourceCatalog.map((resource) => resource.id);
+  const terraformIdentities = getTerraformCatalogItems().map(createCatalogResourceKey);
+
+  assert.equal(new Set(ids).size, ids.length);
+  assert.equal(new Set(terraformIdentities).size, terraformIdentities.length);
+});
+
+test("resourceCatalog does not alias classic AWS resources to newer identities", () => {
+  assertDistinctCatalogIdentities("aws-elb", "aws-lb");
+  assertDistinctCatalogIdentities(
+    "aws-cloudfront-origin-access-identity",
+    "aws-cloudfront-origin-access-control"
+  );
+  assertDistinctCatalogIdentities("aws-s3-bucket-object", "aws-s3-object");
+  assertDistinctCatalogIdentities("aws-waf-web-acl", "aws-wafv2-web-acl");
+});
+
 test("resourceCatalog assigns readable subcategories inside each large resource area", () => {
   assertCatalogCategory("aws-vpc", "VPC Core");
   assertCatalogCategory("aws-route", "Routing & Gateways");
@@ -548,6 +620,15 @@ function assertCatalogCategory(resourceId: string, expectedCategory: string) {
 
   assert.ok(resource, `Missing catalog resource: ${resourceId}`);
   assert.equal(resource.category, expectedCategory, resourceId);
+}
+
+function assertDistinctCatalogIdentities(firstId: string, secondId: string) {
+  const first = resourceCatalog.find((resource) => resource.id === firstId);
+  const second = resourceCatalog.find((resource) => resource.id === secondId);
+
+  assert.ok(first, firstId);
+  assert.ok(second, secondId);
+  assert.notEqual(createCatalogResourceKey(first), createCatalogResourceKey(second));
 }
 
 function getTerraformCatalogItems() {
