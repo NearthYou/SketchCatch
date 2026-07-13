@@ -136,3 +136,120 @@ test("capture status is a deterministic 24-item download-order projection with f
   assert.equal("nodes" in failed, false);
   assert.equal("terraform" in failed, false);
 });
+
+test("failed evidence enforces attempts, linked HTTPS metadata, dimensions, error, and no source fabrication", async (t) => {
+  const cases = [
+    {
+      name: "one attempt",
+      mutate(raw) {
+        raw.attempts = raw.attempts.slice(0, 1);
+      },
+      code: "brainboard.capture.failed_attempts_invalid"
+    },
+    {
+      name: "missing final clone action",
+      mutate(raw) {
+        delete raw.attempts[3].action;
+      },
+      code: "brainboard.capture.failed_attempts_invalid"
+    },
+    {
+      name: "source URL not linked to source template UUID",
+      mutate(raw) {
+        raw.origin.sourceUrl =
+          "https://app.brainboard.co/templates/11111111-2222-4333-8444-555555555555";
+      },
+      code: "brainboard.capture.failed_source_url_invalid"
+    },
+    {
+      name: "non-Brainboard source URL",
+      mutate(raw) {
+        raw.origin.sourceUrl = `https://example.com/templates/${raw.sourceTemplateId}`;
+      },
+      code: "brainboard.capture.failed_source_url_invalid"
+    },
+    {
+      name: "HTTP preview URL",
+      mutate(raw) {
+        raw.origin.previewUrl = raw.origin.previewUrl.replace("https://", "http://");
+      },
+      code: "brainboard.capture.failed_preview_url_invalid"
+    },
+    {
+      name: "zero preview width",
+      mutate(raw) {
+        raw.origin.previewWidth = 0;
+      },
+      code: "brainboard.capture.failed_preview_dimensions_invalid"
+    },
+    {
+      name: "negative preview height",
+      mutate(raw) {
+        raw.origin.previewHeight = -1;
+      },
+      code: "brainboard.capture.failed_preview_dimensions_invalid"
+    },
+    {
+      name: "fractional preview width",
+      mutate(raw) {
+        raw.origin.previewWidth = 1.5;
+      },
+      code: "brainboard.capture.failed_preview_dimensions_invalid"
+    },
+    {
+      name: "empty final error",
+      mutate(raw, entry) {
+        raw.error = "";
+        entry.error = "";
+      },
+      code: "brainboard.capture.failed_error_missing"
+    },
+    {
+      name: "provider fabrication",
+      mutate(raw) {
+        raw.provider = "aws";
+      },
+      code: "brainboard.capture.failed_fabricated_source"
+    },
+    {
+      name: "graph fabrication",
+      mutate(raw) {
+        raw.nodes = [];
+      },
+      code: "brainboard.capture.failed_fabricated_source"
+    }
+  ];
+
+  for (const testCase of cases) {
+    await t.test(testCase.name, (subtest) => {
+      const report = validateMutatedFailedEvidence(subtest, testCase.mutate);
+      assert.ok(
+        report.errors.some(({ code }) => code === testCase.code),
+        `missing ${testCase.code}: ${JSON.stringify(report.errors)}`
+      );
+    });
+  }
+});
+
+function validateMutatedFailedEvidence(t, mutate) {
+  const temporaryRoot = mkdtempSync(path.join(os.tmpdir(), "brainboard-failed-test-"));
+  t.after(() => rmSync(temporaryRoot, { force: true, recursive: true }));
+  const temporaryCaptures = path.join(temporaryRoot, "captures");
+  const temporaryIndex = path.join(temporaryRoot, "index.json");
+  cpSync(capturesDirectory, temporaryCaptures, { recursive: true });
+  const index = JSON.parse(readFileSync(indexPath, "utf8"));
+  const entry = index.templates[11];
+  const failedPath = path.join(temporaryCaptures, entry.file);
+  const raw = JSON.parse(readFileSync(failedPath, "utf8"));
+  mutate(raw, entry);
+  const rawText = `${JSON.stringify(raw, null, 2)}\n`;
+  writeFileSync(failedPath, rawText);
+  entry.captureSha256 = subject.sha256(rawText);
+  writeFileSync(temporaryIndex, `${JSON.stringify(index, null, 2)}\n`);
+
+  return subject.validateCaptureCorpus({
+    indexPath: temporaryIndex,
+    capturesDirectory: temporaryCaptures,
+    repositoryRoot
+  });
+}

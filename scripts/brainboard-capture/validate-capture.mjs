@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL, URL } from "node:url";
 import { parseRotation, parseViewBox } from "./normalize-capture.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
@@ -27,6 +27,25 @@ const SOURCE_MANIFEST_RELATIVE_PATH = "packages/types/src/brainboard-templates/m
 const SOURCE_IDS_RELATIVE_PATH = "packages/types/src/brainboard-templates/ids.ts";
 const EXPECTED_AUTHOR = "Chafik Belhaoues";
 const EXPECTED_PROVIDER = "aws";
+const EXPECTED_FAILED_ATTEMPT_CONTEXTS = [
+  {
+    architectureName: "AWS instance and DB with multiple networks #381 09fd3420"
+  },
+  {
+    architectureName: "#381 multi-network 09fd3420"
+  },
+  {
+    architectureName: "#381 09fd3420",
+    project: "Project 1",
+    environment: "Development"
+  },
+  {
+    architectureName: "#381 recovery 09fd3420",
+    project: "ai-workout-board-production",
+    environment: "Production",
+    action: "Clone into current architecture"
+  }
+];
 
 export function validateCaptureCorpus({
   indexPath = DEFAULT_INDEX_PATH,
@@ -384,40 +403,107 @@ function validateFailedEvidence(capture, entry, file, addError) {
       );
     }
   }
-  if (!Array.isArray(capture.attempts) || capture.attempts.length === 0) {
+  if (!hasExactFailedAttempts(capture.attempts)) {
     addError(
       "metadataMismatches",
-      "brainboard.capture.failed_attempts_missing",
+      "brainboard.capture.failed_attempts_invalid",
       file,
       "attempts",
-      "Failed evidence must preserve at least one capture attempt"
+      "Failed evidence must preserve the four reviewed attempts and final Clone into current architecture action"
     );
   }
+  const expectedSourceUrl = `https://app.brainboard.co/templates/${entry.sourceTemplateId}`;
   if (
-    typeof capture.origin?.previewUrl !== "string" ||
-    !Number.isFinite(capture.origin?.previewWidth) ||
-    !Number.isFinite(capture.origin?.previewHeight)
+    capture.origin?.platform !== "brainboard" ||
+    capture.origin?.sourceUrl !== expectedSourceUrl ||
+    capture.sourceTemplateId !== entry.sourceTemplateId
   ) {
     addError(
       "metadataMismatches",
-      "brainboard.capture.failed_preview_missing",
+      "brainboard.capture.failed_source_url_invalid",
+      file,
+      "origin.sourceUrl",
+      `Failed source URL must be exactly linked to ${entry.sourceTemplateId}`
+    );
+  }
+  if (!isLinkedHttpsPreviewUrl(capture.origin?.previewUrl, entry)) {
+    addError(
+      "metadataMismatches",
+      "brainboard.capture.failed_preview_url_invalid",
       file,
       "origin.previewUrl",
-      "Failed evidence must preserve preview URL and dimensions"
+      "Failed preview URL must be HTTPS, match the index, and contain the source template UUID"
+    );
+  }
+  if (
+    !Number.isInteger(capture.origin?.previewWidth) ||
+    capture.origin.previewWidth <= 0 ||
+    !Number.isInteger(capture.origin?.previewHeight) ||
+    capture.origin.previewHeight <= 0
+  ) {
+    addError(
+      "metadataMismatches",
+      "brainboard.capture.failed_preview_dimensions_invalid",
+      file,
+      "origin.previewWidth/origin.previewHeight",
+      "Failed preview dimensions must be positive finite integers"
+    );
+  }
+  if (typeof capture.error !== "string" || capture.error.trim() === "") {
+    addError(
+      "metadataMismatches",
+      "brainboard.capture.failed_error_missing",
+      file,
+      "error",
+      "Failed evidence must preserve a non-empty final error"
     );
   }
   if (
     entry.cloneBoardUrl !== null ||
     entry.diagramSha256 !== null ||
-    entry.terraformSha256 !== null
+    entry.terraformSha256 !== null ||
+    entry.nodeCount !== 0 ||
+    entry.edgeCount !== 0 ||
+    entry.terraformFileCount !== 0 ||
+    entry.resourceAddressCount !== 0
   ) {
     addError(
       "metadataMismatches",
       "brainboard.capture.failed_index_fabrication",
       file,
-      "cloneBoardUrl/diagramSha256/terraformSha256",
-      "Failed index evidence cannot claim a clone, diagram hash, or Terraform hash"
+      "cloneBoardUrl/counts/hashes",
+      "Failed index evidence cannot claim a clone, graph, Terraform source, or complete-source hash"
     );
+  }
+}
+
+function hasExactFailedAttempts(attempts) {
+  if (!Array.isArray(attempts) || attempts.length !== EXPECTED_FAILED_ATTEMPT_CONTEXTS.length) {
+    return false;
+  }
+  return attempts.every((attempt, index) => {
+    const expected = EXPECTED_FAILED_ATTEMPT_CONTEXTS[index];
+    return (
+      attempt?.architectureName === expected.architectureName &&
+      attempt?.project === expected.project &&
+      attempt?.environment === expected.environment &&
+      attempt?.action === expected.action &&
+      typeof attempt?.result === "string" &&
+      attempt.result.trim() !== ""
+    );
+  });
+}
+
+function isLinkedHttpsPreviewUrl(rawPreviewUrl, entry) {
+  if (typeof rawPreviewUrl !== "string" || rawPreviewUrl !== entry.previewUrl) return false;
+  try {
+    const previewUrl = new URL(rawPreviewUrl);
+    return (
+      previewUrl.protocol === "https:" &&
+      previewUrl.pathname.endsWith(`/architecture/${entry.sourceTemplateId}.webp`)
+    );
+  } catch {
+    return false;
   }
 }
 
@@ -1082,20 +1168,20 @@ async function main() {
       indexPath: cli.indexPath,
       capturesDirectory: cli.capturesDirectory
     });
-    const statusText = `${JSON.stringify(
-      buildCaptureStatus({
-        indexPath: cli.indexPath,
-        capturesDirectory: cli.capturesDirectory
-      }),
-      null,
-      2
-    )}\n`;
+    if (!report.valid && (cli.writeStatusPath || cli.checkStatusPath)) {
+      const errorCodes = [...new Set(report.errors.map(({ code }) => code))];
+      throw new Error(
+        `Capture validation failed; refusing to read or write status (${errorCodes.join(", ")})`
+      );
+    }
     if (cli.writeStatusPath) {
       assertOutsideRawCaptures(cli.writeStatusPath, cli.capturesDirectory);
+      const statusText = buildStatusText(cli);
       writeFileSync(cli.writeStatusPath, statusText);
       process.stdout.write(`Wrote deterministic capture status: ${cli.writeStatusPath}\n`);
     } else if (cli.checkStatusPath) {
       assertOutsideRawCaptures(cli.checkStatusPath, cli.capturesDirectory);
+      const statusText = buildStatusText(cli);
       if (readFileSync(cli.checkStatusPath, "utf8") !== statusText) {
         throw new Error(`Capture status is stale: ${cli.checkStatusPath}`);
       }
@@ -1110,6 +1196,17 @@ async function main() {
     process.stderr.write(`${error instanceof Error ? error.stack : String(error)}\n`);
     process.exitCode = 1;
   }
+}
+
+function buildStatusText(cli) {
+  return `${JSON.stringify(
+    buildCaptureStatus({
+      indexPath: cli.indexPath,
+      capturesDirectory: cli.capturesDirectory
+    }),
+    null,
+    2
+  )}\n`;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {

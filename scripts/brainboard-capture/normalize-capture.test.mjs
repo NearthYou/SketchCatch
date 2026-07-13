@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { appendFileSync, cpSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath, URL } from "node:url";
@@ -398,6 +399,27 @@ test("full corpus normalization repairs exactly 59 parents with zero cycles and 
     index.templates.map(({ file }) => [file, hashFile(path.join(capturesDirectory, file))])
   );
   assert.deepEqual(rawHashesAfter, rawHashesBefore, "raw capture bytes are immutable evidence");
+});
+
+test("full corpus normalization rejects raw bytes that do not match the capture index", (t) => {
+  const temporaryRoot = mkdtempSync(path.join(os.tmpdir(), "brainboard-normalize-test-"));
+  t.after(() => rmSync(temporaryRoot, { force: true, recursive: true }));
+  const temporaryCaptures = path.join(temporaryRoot, "captures");
+  cpSync(capturesDirectory, temporaryCaptures, { recursive: true });
+  appendFileSync(path.join(temporaryCaptures, "training-aws-onboarding.json"), " \n");
+
+  assert.throws(
+    () =>
+      subject.normalizeCaptureCorpus({
+        indexPath,
+        capturesDirectory: temporaryCaptures
+      }),
+    (error) => {
+      assert.equal(error.code, "brainboard.normalize.raw_sha_mismatch");
+      assert.equal(error.details.file, "training-aws-onboarding.json");
+      return true;
+    }
+  );
 });
 
 function makeCapture(overrides = {}) {

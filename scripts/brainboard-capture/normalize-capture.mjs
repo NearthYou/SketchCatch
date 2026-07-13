@@ -117,9 +117,25 @@ export function normalizeCaptureCorpus({
   let sourceEdges = 0;
   let normalizedEdges = 0;
 
-  for (const entry of index.templates) {
+  const verifiedRawCaptures = index.templates.map((entry) => {
     const capturePath = path.join(capturesDirectory, entry.file);
     const rawBytes = readFileSync(capturePath);
+    const rawCaptureSha256 = digest(rawBytes);
+    if (rawCaptureSha256 !== entry.captureSha256) {
+      throw new CaptureIntegrityError(
+        "brainboard.normalize.raw_sha_mismatch",
+        `Raw capture SHA-256 does not match the immutable index for ${entry.file}`,
+        {
+          file: entry.file,
+          expectedSha256: entry.captureSha256,
+          actualSha256: rawCaptureSha256
+        }
+      );
+    }
+    return { entry, rawBytes, rawCaptureSha256 };
+  });
+
+  for (const { entry, rawBytes, rawCaptureSha256 } of verifiedRawCaptures) {
     const rawCapture = JSON.parse(rawBytes);
     const normalized = normalizeCapture(rawCapture, {
       parentOverrides: parentOverrides[entry.id] ?? {},
@@ -134,7 +150,7 @@ export function normalizeCaptureCorpus({
         id: entry.id,
         file: entry.file,
         captureStatus: "failed",
-        rawCaptureSha256: digest(rawBytes),
+        rawCaptureSha256,
         normalizedSha256: digest(JSON.stringify(normalized)),
         parentRepairs: 0,
         remainingParentCycles: 0,
@@ -172,7 +188,7 @@ export function normalizeCaptureCorpus({
       id: entry.id,
       file: entry.file,
       captureStatus: "captured",
-      rawCaptureSha256: digest(rawBytes),
+      rawCaptureSha256,
       normalizedSha256: digest(JSON.stringify(normalized)),
       nodeCount: normalized.nodes.length,
       edgeCount: normalized.edges.length,
@@ -347,6 +363,15 @@ export class ParentNormalizationError extends Error {
   constructor(code, message, details) {
     super(message);
     this.name = "ParentNormalizationError";
+    this.code = code;
+    this.details = details;
+  }
+}
+
+export class CaptureIntegrityError extends Error {
+  constructor(code, message, details) {
+    super(message);
+    this.name = "CaptureIntegrityError";
     this.code = code;
     this.details = details;
   }
