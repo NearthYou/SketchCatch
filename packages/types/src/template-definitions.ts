@@ -172,14 +172,14 @@ type TemplatePresentationLayout = {
 // It lets a template follow the AWS pattern diagram without changing Terraform identity or behavior.
 const TEMPLATE_PRESENTATION_LAYOUTS: Readonly<Record<TemplateId, TemplatePresentationLayout>> = {
   "static-web-hosting": {
-    viewport: { x: 0, y: 0, zoom: 0.75 },
+    viewport: { x: 0, y: 0, zoom: 0.8 },
     resources: {
-      bucket: layoutAt(920, 280, "region"),
-      "index-object": layoutAt(1120, 360, "region"),
-      "public-access": layoutAt(920, 520, "region"),
-      oac: layoutAt(640, 480),
-      distribution: layoutAt(480, 280),
-      "bucket-policy": layoutAt(1480, 560, "region")
+      bucket: layoutAt(560, 400, "region"),
+      "index-object": layoutAt(760, 400, "region"),
+      "public-access": layoutAt(560, 560, "region"),
+      oac: layoutAt(320, 560),
+      distribution: layoutAt(320, 400),
+      "bucket-policy": layoutAt(760, 560, "region")
     },
     routing: {
       "bucket-public-access": layoutRoute("handle-bottom", "handle-top"),
@@ -190,28 +190,28 @@ const TEMPLATE_PRESENTATION_LAYOUTS: Readonly<Record<TemplateId, TemplatePresent
       "bucket-policy-bucket": layoutRoute("handle-left", "handle-right")
     },
     presentationNodes: {
-      user: presentationNode("design-user-client", "User / Client", 240, 280),
-      region: presentationNode("aws-region", "Region", 800, 160, { width: 880, height: 560 })
+      user: presentationNode("design-user-client", "User / Client", 120, 400),
+      region: presentationNode("aws-region", "Region", 480, 240, { width: 480, height: 480 })
     },
     presentationEdges: {
       "user-distribution": presentationEdge("user", "distribution", "requests", "handle-right", "handle-left")
     }
   },
   "minimal-serverless-api": {
-    viewport: { x: 0, y: 0, zoom: 0.64 },
+    viewport: { x: 0, y: 0, zoom: 0.68 },
     resources: {
-      api: layoutAt(320, 240, "region", { width: 480, height: 900 }, true),
-      route: layoutAt(440, 380, "api"),
-      method: layoutAt(440, 520, "api"),
-      integration: layoutAt(440, 660, "api"),
-      deployment: layoutAt(440, 800, "api"),
-      stage: layoutAt(440, 940, "api"),
-      handler: layoutAt(880, 560, "region"),
-      role: layoutAt(880, 840),
-      "role-policy": layoutAt(1160, 840),
-      permission: layoutAt(880, 320, "region"),
-      table: layoutAt(1200, 560, "region"),
-      "log-group": layoutAt(1480, 560, "region")
+      api: layoutAt(360, 240, "region", { width: 320, height: 760 }, true),
+      route: layoutAt(440, 360, "api"),
+      method: layoutAt(440, 480, "api"),
+      integration: layoutAt(440, 600, "api"),
+      deployment: layoutAt(440, 720, "api"),
+      stage: layoutAt(440, 840, "api"),
+      handler: layoutAt(760, 600, "region"),
+      role: layoutAt(760, 1160),
+      "role-policy": layoutAt(960, 1160),
+      permission: layoutAt(760, 360, "region"),
+      table: layoutAt(960, 600, "region"),
+      "log-group": layoutAt(1080, 600, "region")
     },
     routing: {
       "api-route": layoutRoute("handle-bottom", "handle-top"),
@@ -222,91 +222,91 @@ const TEMPLATE_PRESENTATION_LAYOUTS: Readonly<Record<TemplateId, TemplatePresent
       "handler-table": layoutRoute("handle-right", "handle-left")
     },
     presentationNodes: {
-      user: presentationNode("design-user-client", "User / Client", 80, 560),
-      region: presentationNode("aws-region", "Region", 240, 160, { width: 1520, height: 1000 })
+      user: presentationNode("design-user-client", "User / Client", 120, 600),
+      region: presentationNode("aws-region", "Region", 280, 160, { width: 1000, height: 920 })
     },
     presentationEdges: {
       "user-api": presentationEdge("user", "api", "requests", "handle-right", "handle-left")
     }
   },
   "full-serverless-web-app": {
-    viewport: { x: 0, y: 0, zoom: 0.48 },
+    viewport: { x: 0, y: 0, zoom: 0.52 },
     resources: {
-      frontend: layoutAt(200, 560, "frontend-group"),
-      "user-pool": layoutAt(560, 640, "identity-group"),
-      "user-client": layoutAt(560, 400, "identity-group"),
-      api: layoutAt(920, 260, "api-group", { width: 480, height: 1040 }, true),
-      authorizer: layoutAt(1040, 420, "api"),
-      route: layoutAt(1040, 580, "api"),
-      method: layoutAt(1040, 720, "api"),
-      integration: layoutAt(1040, 860, "api"),
-      deployment: layoutAt(1040, 1000, "api"),
-      stage: layoutAt(1040, 1140, "api"),
-      handler: layoutAt(1520, 560, "compute-group"),
-      role: layoutAt(1520, 1440, "global-iam-group"),
-      "role-policy": layoutAt(1760, 1440, "global-iam-group"),
-      permission: layoutAt(1520, 400, "compute-group"),
-      table: layoutAt(1840, 560, "data-ops-group"),
-      "log-group": layoutAt(2080, 720, "data-ops-group")
+      frontend: layoutAt(520, 680, "frontend-group"),
+      "user-pool": layoutAt(760, 680, "identity-group"),
+      "user-client": layoutAt(760, 400, "identity-group"),
+      api: layoutAt(1000, 200, "api-group", { width: 280, height: 960 }, true),
+      authorizer: layoutAt(1080, 320, "api"),
+      route: layoutAt(1080, 440, "api"),
+      method: layoutAt(1080, 560, "api"),
+      integration: layoutAt(1080, 680, "api"),
+      deployment: layoutAt(1080, 800, "api"),
+      stage: layoutAt(1080, 920, "api"),
+      handler: layoutAt(1440, 680, "compute-group"),
+      role: layoutAt(1440, 1480, "global-iam-group"),
+      "role-policy": layoutAt(1640, 1480, "global-iam-group"),
+      permission: layoutAt(1440, 480, "compute-group"),
+      table: layoutAt(1680, 680, "data-ops-group"),
+      "log-group": layoutAt(1680, 840, "data-ops-group")
     },
     routing: {
-      "frontend-api": layoutRoute("handle-right", "handle-left"),
+      "frontend-api": layoutRoute("handle-bottom", "handle-bottom"),
       "client-pool": layoutRoute("handle-bottom", "handle-top"),
       "api-pool": layoutRoute("handle-left", "handle-right"),
       "api-handler": layoutRoute("handle-right", "handle-left"),
       "handler-table": layoutRoute("handle-right", "handle-left")
     },
     presentationNodes: {
-      "source-repository": presentationNode("design-source-repository", "Source Repository", -160, 400, undefined, "source-user-group"),
-      user: presentationNode("design-user-client", "User / Client", -160, 600, undefined, "source-user-group"),
-      region: presentationNode("aws-region", "Region", 120, 160, { width: 2160, height: 1200 }),
-      "source-user-group": presentationNode("design-group", "Source / User", -240, 280, { width: 320, height: 520 }),
-      "frontend-group": presentationNode("design-group", "Frontend", 160, 280, { width: 240, height: 600 }, "region"),
-      "identity-group": presentationNode("design-group", "Identity", 480, 280, { width: 240, height: 600 }, "region"),
-      "api-group": presentationNode("design-group", "API", 840, 200, { width: 640, height: 1160 }, "region"),
-      "compute-group": presentationNode("design-group", "Compute", 1480, 280, { width: 240, height: 600 }, "region"),
-      "data-ops-group": presentationNode("design-group", "Data / Ops", 1800, 280, { width: 400, height: 600 }, "region"),
-      "global-iam-group": presentationNode("design-group", "Global IAM", 1480, 1360, { width: 480, height: 240 })
+      "source-repository": presentationNode("design-source-repository", "Source Repository", 160, 480, undefined, "source-user-group"),
+      user: presentationNode("design-user-client", "User / Client", 160, 680, undefined, "source-user-group"),
+      region: presentationNode("aws-region", "Region", 360, 80, { width: 1560, height: 1240 }),
+      "source-user-group": presentationNode("design-group", "Source / User", 80, 360, { width: 240, height: 480 }),
+      "frontend-group": presentationNode("design-group", "Frontend", 440, 560, { width: 240, height: 360 }, "region"),
+      "identity-group": presentationNode("design-group", "Identity", 680, 280, { width: 240, height: 560 }, "region"),
+      "api-group": presentationNode("design-group", "API", 920, 120, { width: 440, height: 1120 }, "region"),
+      "compute-group": presentationNode("design-group", "Compute", 1360, 400, { width: 240, height: 600 }, "region"),
+      "data-ops-group": presentationNode("design-group", "Data / Ops", 1600, 560, { width: 240, height: 480 }, "region"),
+      "global-iam-group": presentationNode("design-group", "Global IAM", 1360, 1360, { width: 480, height: 320 })
     },
     presentationEdges: {
       "source-frontend": presentationEdge("source-repository", "frontend", "source", "handle-right", "handle-left"),
       "user-frontend": presentationEdge("user", "frontend", "opens", "handle-right", "handle-left"),
-      "user-pool": presentationEdge("user", "user-pool", "authenticates", "handle-right", "handle-left")
+      "user-pool": presentationEdge("user", "user-pool", "authenticates", "handle-top", "handle-top")
     }
   },
   "three-tier-web-app": {
-    viewport: { x: 0, y: 0, zoom: 0.38 },
+    viewport: { x: 0, y: 0, zoom: 0.42 },
     resources: {
-      vpc: layoutAt(160, 160, "region", { width: 2400, height: 1840 }),
-      "public-subnet-a": layoutAt(680, 440, "az-a", { width: 560, height: 400 }),
-      "public-subnet-b": layoutAt(1440, 440, "az-b", { width: 560, height: 400 }),
-      "app-subnet-a": layoutAt(680, 920, "az-a", { width: 560, height: 440 }),
-      "app-subnet-b": layoutAt(1440, 920, "az-b", { width: 560, height: 440 }),
-      "db-subnet-a": layoutAt(680, 1400, "az-a", { width: 560, height: 360 }),
-      "db-subnet-b": layoutAt(1440, 1400, "az-b", { width: 560, height: 360 }),
-      "internet-gateway": layoutAt(320, 280, "vpc"),
-      "public-route-table": layoutAt(320, 560, "vpc"),
-      "public-route-a": layoutAt(520, 560, "vpc"),
-      "public-route-b": layoutAt(520, 680, "vpc"),
-      "nat-gateway": layoutAt(1120, 280, "vpc"),
-      "nat-eip": layoutAt(960, 280, "vpc"),
-      "app-route-table": layoutAt(320, 1040, "vpc"),
-      "app-route-a": layoutAt(520, 1040, "vpc"),
-      "app-route-b": layoutAt(520, 1160, "vpc"),
-      "db-route-table": layoutAt(320, 1520, "vpc"),
-      "db-route-a": layoutAt(520, 1520, "vpc"),
-      "db-route-b": layoutAt(520, 1640, "vpc"),
-      "alb-security-group": layoutAt(820, 680, "public-subnet-a"),
-      "app-security-group": layoutAt(1760, 1120, "app-subnet-b"),
-      "db-security-group": layoutAt(1820, 1560, "db-subnet-b"),
-      "latest-ami": layoutAt(1120, 1240, "app-subnet-a"),
-      "launch-template": layoutAt(900, 1080, "application-group"),
-      "load-balancer": layoutAt(820, 560, "public-subnet-a"),
-      "target-group": layoutAt(1520, 1000, "app-subnet-b"),
-      listener: layoutAt(1040, 560, "public-subnet-a"),
-      "application-group": layoutAt(760, 980, "app-subnet-a", { width: 400, height: 220 }),
-      "db-subnet-group": layoutAt(860, 1480, "db-subnet-a"),
-      database: layoutAt(1660, 1460, "db-subnet-b")
+      vpc: layoutAt(320, 160, "region", { width: 2000, height: 1680 }),
+      "public-subnet-a": layoutAt(840, 480, "az-a", { width: 560, height: 360 }),
+      "public-subnet-b": layoutAt(1600, 480, "az-b", { width: 560, height: 360 }),
+      "app-subnet-a": layoutAt(840, 920, "az-a", { width: 560, height: 440 }),
+      "app-subnet-b": layoutAt(1600, 920, "az-b", { width: 560, height: 440 }),
+      "db-subnet-a": layoutAt(840, 1400, "az-a", { width: 560, height: 320 }),
+      "db-subnet-b": layoutAt(1600, 1400, "az-b", { width: 560, height: 320 }),
+      "internet-gateway": layoutAt(400, 280, "vpc"),
+      "public-route-table": layoutAt(400, 600, "vpc"),
+      "public-route-a": layoutAt(560, 560, "vpc"),
+      "public-route-b": layoutAt(560, 680, "vpc"),
+      "nat-gateway": layoutAt(920, 280, "vpc"),
+      "nat-eip": layoutAt(760, 280, "vpc"),
+      "app-route-table": layoutAt(400, 1040, "vpc"),
+      "app-route-a": layoutAt(560, 1000, "vpc"),
+      "app-route-b": layoutAt(560, 1120, "vpc"),
+      "db-route-table": layoutAt(400, 1480, "vpc"),
+      "db-route-a": layoutAt(560, 1440, "vpc"),
+      "db-route-b": layoutAt(560, 1560, "vpc"),
+      "alb-security-group": layoutAt(880, 720, "public-subnet-a"),
+      "app-security-group": layoutAt(1840, 1160, "app-subnet-b"),
+      "db-security-group": layoutAt(1840, 1600, "db-subnet-b"),
+      "latest-ami": layoutAt(1240, 1200, "app-subnet-a"),
+      "launch-template": layoutAt(960, 1120, "application-group"),
+      "load-balancer": layoutAt(880, 600, "public-subnet-a"),
+      "target-group": layoutAt(1640, 1040, "app-subnet-b"),
+      listener: layoutAt(1040, 600, "public-subnet-a"),
+      "application-group": layoutAt(880, 1000, "app-subnet-a", { width: 320, height: 240 }),
+      "db-subnet-group": layoutAt(880, 1520, "db-subnet-a"),
+      database: layoutAt(1640, 1480, "db-subnet-b")
     },
     routing: {
       "vpc-igw": layoutRoute("handle-top", "handle-bottom"),
@@ -315,10 +315,10 @@ const TEMPLATE_PRESENTATION_LAYOUTS: Readonly<Record<TemplateId, TemplatePresent
       "app-db": layoutRoute("handle-bottom", "handle-top")
     },
     presentationNodes: {
-      internet: presentationNode("design-internet", "Internet", -80, 280),
-      region: presentationNode("aws-region", "Region", 80, 80, { width: 2560, height: 2000 }),
-      "az-a": presentationNode("aws-availability-zone", "AZ A", 640, 360, { width: 640, height: 1480 }, "vpc"),
-      "az-b": presentationNode("aws-availability-zone", "AZ B", 1400, 360, { width: 640, height: 1480 }, "vpc")
+      internet: presentationNode("design-internet", "Internet", 120, 280),
+      region: presentationNode("aws-region", "Region", 240, 80, { width: 2160, height: 1840 }),
+      "az-a": presentationNode("aws-availability-zone", "AZ A", 760, 400, { width: 720, height: 1400 }, "vpc"),
+      "az-b": presentationNode("aws-availability-zone", "AZ B", 1520, 400, { width: 720, height: 1400 }, "vpc")
     },
     presentationEdges: {
       "internet-igw": presentationEdge("internet", "internet-gateway", "connects", "handle-right", "handle-left")
@@ -327,80 +327,80 @@ const TEMPLATE_PRESENTATION_LAYOUTS: Readonly<Record<TemplateId, TemplatePresent
   "ecs-fargate-container-app": {
     viewport: { x: 0, y: 0, zoom: 0.4 },
     resources: {
-      vpc: layoutAt(160, 160, "region", { width: 1800, height: 1440 }),
-      "subnet-a": layoutAt(400, 360, "az-a", { width: 560, height: 400 }),
-      "subnet-b": layoutAt(1120, 360, "az-b", { width: 560, height: 320 }),
-      "internet-gateway": layoutAt(320, 1360, "vpc"),
-      "route-table": layoutAt(520, 1360, "vpc"),
-      "route-a": layoutAt(720, 1360, "vpc"),
-      "route-b": layoutAt(880, 1360, "vpc"),
-      cluster: layoutAt(440, 760, "vpc", { width: 1200, height: 560 }, true),
-      "alb-security-group": layoutAt(480, 620, "subnet-a"),
-      "task-security-group": layoutAt(600, 1160, "cluster"),
-      "execution-role": layoutAt(2960, 480, "global-iam-group"),
-      "execution-policy": layoutAt(3200, 480, "global-iam-group"),
-      "task-role": layoutAt(2960, 680, "global-iam-group"),
-      repository: layoutAt(2200, 360, "definition-ops-group"),
-      "log-group": layoutAt(2520, 560, "definition-ops-group"),
-      "load-balancer": layoutAt(600, 440, "subnet-a"),
-      "target-group": layoutAt(1200, 480, "subnet-b"),
-      listener: layoutAt(800, 560, "subnet-a"),
-      task: layoutAt(2200, 560, "definition-ops-group"),
-      service: layoutAt(880, 980, "cluster")
+      vpc: layoutAt(360, 600, "region", { width: 1600, height: 1280 }),
+      "subnet-a": layoutAt(560, 920, "az-a", { width: 440, height: 320 }),
+      "subnet-b": layoutAt(1240, 920, "az-b", { width: 440, height: 320 }),
+      "internet-gateway": layoutAt(440, 720, "vpc"),
+      "route-table": layoutAt(600, 720, "vpc"),
+      "route-a": layoutAt(760, 720, "vpc"),
+      "route-b": layoutAt(920, 720, "vpc"),
+      cluster: layoutAt(520, 1360, "vpc", { width: 1200, height: 400 }, true),
+      "alb-security-group": layoutAt(640, 1120, "subnet-a"),
+      "task-security-group": layoutAt(680, 1600, "cluster"),
+      "execution-role": layoutAt(2160, 200, "global-iam-group"),
+      "execution-policy": layoutAt(2360, 200, "global-iam-group"),
+      "task-role": layoutAt(2360, 320, "global-iam-group"),
+      repository: layoutAt(2360, 840, "definition-ops-group"),
+      "log-group": layoutAt(2360, 1000, "definition-ops-group"),
+      "load-balancer": layoutAt(640, 1000, "subnet-a"),
+      "target-group": layoutAt(1320, 1040, "subnet-b"),
+      listener: layoutAt(800, 1000, "subnet-a"),
+      task: layoutAt(2160, 1000, "definition-ops-group"),
+      service: layoutAt(880, 1480, "cluster")
     },
     routing: {
       "cluster-service": layoutRoute("handle-right", "handle-left"),
       "service-task": layoutRoute("handle-right", "handle-left"),
       "repository-task": layoutRoute("handle-bottom", "handle-top"),
       "task-log-group": layoutRoute("handle-right", "handle-left"),
-      "task-role": layoutRoute("handle-bottom", "handle-top")
+      "task-role": layoutRoute("handle-top", "handle-bottom")
     },
     presentationNodes: {
-      user: presentationNode("design-user-client", "User / Client", -80, 440),
-      region: presentationNode("aws-region", "Region", 80, 80, { width: 2720, height: 1600 }),
-      "az-a": presentationNode("aws-availability-zone", "AZ A", 360, 280, { width: 640, height: 520 }, "vpc"),
-      "az-b": presentationNode("aws-availability-zone", "AZ B", 1080, 280, { width: 640, height: 520 }, "vpc"),
-      "definition-ops-group": presentationNode("design-group", "Definition / Ops", 2120, 280, { width: 600, height: 800 }, "region"),
-      "global-iam-group": presentationNode("design-group", "Global IAM", 2880, 360, { width: 560, height: 480 })
+      user: presentationNode("design-user-client", "User / Client", 120, 1000),
+      region: presentationNode("aws-region", "Region", 280, 520, { width: 2360, height: 1440 }),
+      "az-a": presentationNode("aws-availability-zone", "AZ A", 480, 840, { width: 600, height: 480 }, "vpc"),
+      "az-b": presentationNode("aws-availability-zone", "AZ B", 1160, 840, { width: 600, height: 480 }, "vpc"),
+      "definition-ops-group": presentationNode("design-group", "Definition / Ops", 2040, 720, { width: 520, height: 800 }, "region"),
+      "global-iam-group": presentationNode("design-group", "Global IAM", 2040, 80, { width: 520, height: 360 })
     },
     presentationEdges: {
       "user-load-balancer": presentationEdge("user", "load-balancer", "requests", "handle-right", "handle-left")
     }
   },
   "eks-container-app": {
-    viewport: { x: 0, y: 0, zoom: 0.42 },
+    viewport: { x: 0, y: 0, zoom: 0.4 },
     resources: {
-      vpc: layoutAt(160, 160, "region", { width: 1800, height: 1280 }),
-      "subnet-a": layoutAt(400, 360, "az-a", { width: 560, height: 200 }),
-      "subnet-b": layoutAt(1120, 360, "az-b", { width: 560, height: 200 }),
-      "internet-gateway": layoutAt(320, 1240, "vpc"),
-      "route-table": layoutAt(520, 1240, "vpc"),
-      "route-a": layoutAt(720, 1240, "vpc"),
-      "route-b": layoutAt(880, 1240, "vpc"),
-      "cluster-security-group": layoutAt(1680, 1200, "vpc"),
-      "cluster-role": layoutAt(2160, 480, "global-iam-group"),
-      "node-role": layoutAt(2160, 680, "global-iam-group"),
-      "cluster-policy": layoutAt(2400, 480, "global-iam-group"),
-      "node-policy": layoutAt(2400, 680, "global-iam-group"),
-      "node-cni-policy": layoutAt(2160, 880, "global-iam-group"),
-      "node-ecr-policy": layoutAt(2400, 880, "global-iam-group"),
-      cluster: layoutAt(400, 640, "vpc", { width: 1200, height: 480 }, true),
-      "node-group": layoutAt(600, 800, "cluster"),
-      namespace: layoutAt(920, 760, "cluster", { width: 560, height: 280 }, true),
-      deployment: layoutAt(1040, 900, "namespace"),
-      service: layoutAt(1280, 900, "namespace")
+      vpc: layoutAt(360, 160, "region", { width: 1600, height: 1280 }),
+      "subnet-a": layoutAt(560, 480, "az-a", { width: 440, height: 160 }),
+      "subnet-b": layoutAt(1240, 480, "az-b", { width: 440, height: 160 }),
+      "internet-gateway": layoutAt(440, 280, "vpc"),
+      "route-table": layoutAt(600, 280, "vpc"),
+      "route-a": layoutAt(760, 280, "vpc"),
+      "route-b": layoutAt(920, 280, "vpc"),
+      "cluster-security-group": layoutAt(1640, 1280, "vpc"),
+      "cluster-role": layoutAt(2200, 440, "global-iam-group"),
+      "node-role": layoutAt(2200, 600, "global-iam-group"),
+      "cluster-policy": layoutAt(2400, 440, "global-iam-group"),
+      "node-policy": layoutAt(2400, 600, "global-iam-group"),
+      "node-cni-policy": layoutAt(2200, 760, "global-iam-group"),
+      "node-ecr-policy": layoutAt(2400, 760, "global-iam-group"),
+      cluster: layoutAt(520, 800, "vpc", { width: 1200, height: 400 }, true),
+      "node-group": layoutAt(640, 960, "cluster"),
+      namespace: layoutAt(960, 880, "cluster", { width: 600, height: 240 }, true),
+      deployment: layoutAt(1040, 1000, "namespace"),
+      service: layoutAt(1200, 1000, "namespace")
     },
     routing: {
       "cluster-role": layoutRoute("handle-left", "handle-right"),
       "cluster-subnet": layoutRoute("handle-top", "handle-bottom"),
-      "cluster-node-group": layoutRoute("handle-right", "handle-left"),
+      "cluster-node-group": layoutRoute("handle-left", "handle-left"),
       "deployment-service": layoutRoute("handle-right", "handle-left")
     },
     presentationNodes: {
-      region: presentationNode("aws-region", "Region", 80, 80, { width: 1960, height: 1440 }),
-      "az-a": presentationNode("aws-availability-zone", "AZ A", 360, 280, { width: 640, height: 320 }, "vpc"),
-      "az-b": presentationNode("aws-availability-zone", "AZ B", 1080, 280, { width: 640, height: 320 }, "vpc"),
-      "global-iam-group": presentationNode("design-group", "Global IAM", 2080, 360, { width: 560, height: 720 })
+      region: presentationNode("aws-region", "Region", 280, 80, { width: 1760, height: 1440 }),
+      "az-a": presentationNode("aws-availability-zone", "AZ A", 480, 400, { width: 600, height: 360 }, "vpc"),
+      "az-b": presentationNode("aws-availability-zone", "AZ B", 1160, 400, { width: 600, height: 360 }, "vpc"),
+      "global-iam-group": presentationNode("design-group", "Global IAM", 2120, 320, { width: 520, height: 800 })
     },
     presentationEdges: {}
   }

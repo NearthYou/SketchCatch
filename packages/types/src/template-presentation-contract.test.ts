@@ -9,73 +9,77 @@ import {
 type PresentationNodeExpectation = {
   readonly catalogItemId: string;
   readonly parentNodeId?: string;
+  readonly position: { readonly x: number; readonly y: number };
+  readonly size?: { readonly width: number; readonly height: number };
 };
 
 type PresentationEdgeExpectation = {
   readonly sourceNodeId: string;
   readonly targetNodeId: string;
+  readonly sourceHandleId: string;
+  readonly targetHandleId: string;
 };
 
 const EXPECTED_PRESENTATION_NODES = {
   "static-web-hosting": {
-    user: node("design-user-client"),
-    region: node("aws-region")
+    user: node("design-user-client", 120, 400),
+    region: node("aws-region", 480, 240, undefined, { width: 480, height: 480 })
   },
   "minimal-serverless-api": {
-    user: node("design-user-client"),
-    region: node("aws-region")
+    user: node("design-user-client", 120, 600),
+    region: node("aws-region", 280, 160, undefined, { width: 1000, height: 920 })
   },
   "full-serverless-web-app": {
-    "source-repository": node("design-source-repository", "source-user-group"),
-    user: node("design-user-client", "source-user-group"),
-    region: node("aws-region"),
-    "source-user-group": node("design-group"),
-    "frontend-group": node("design-group", "region"),
-    "identity-group": node("design-group", "region"),
-    "api-group": node("design-group", "region"),
-    "compute-group": node("design-group", "region"),
-    "data-ops-group": node("design-group", "region"),
-    "global-iam-group": node("design-group")
+    "source-repository": node("design-source-repository", 160, 480, "source-user-group"),
+    user: node("design-user-client", 160, 680, "source-user-group"),
+    region: node("aws-region", 360, 80, undefined, { width: 1560, height: 1240 }),
+    "source-user-group": node("design-group", 80, 360, undefined, { width: 240, height: 480 }),
+    "frontend-group": node("design-group", 440, 560, "region", { width: 240, height: 360 }),
+    "identity-group": node("design-group", 680, 280, "region", { width: 240, height: 560 }),
+    "api-group": node("design-group", 920, 120, "region", { width: 440, height: 1120 }),
+    "compute-group": node("design-group", 1360, 400, "region", { width: 240, height: 600 }),
+    "data-ops-group": node("design-group", 1600, 560, "region", { width: 240, height: 480 }),
+    "global-iam-group": node("design-group", 1360, 1360, undefined, { width: 480, height: 320 })
   },
   "three-tier-web-app": {
-    internet: node("design-internet"),
-    region: node("aws-region"),
-    "az-a": node("aws-availability-zone", "vpc"),
-    "az-b": node("aws-availability-zone", "vpc")
+    internet: node("design-internet", 120, 280),
+    region: node("aws-region", 240, 80, undefined, { width: 2160, height: 1840 }),
+    "az-a": node("aws-availability-zone", 760, 400, "vpc", { width: 720, height: 1400 }),
+    "az-b": node("aws-availability-zone", 1520, 400, "vpc", { width: 720, height: 1400 })
   },
   "ecs-fargate-container-app": {
-    user: node("design-user-client"),
-    region: node("aws-region"),
-    "az-a": node("aws-availability-zone", "vpc"),
-    "az-b": node("aws-availability-zone", "vpc"),
-    "definition-ops-group": node("design-group", "region"),
-    "global-iam-group": node("design-group")
+    user: node("design-user-client", 120, 1000),
+    region: node("aws-region", 280, 520, undefined, { width: 2360, height: 1440 }),
+    "az-a": node("aws-availability-zone", 480, 840, "vpc", { width: 600, height: 480 }),
+    "az-b": node("aws-availability-zone", 1160, 840, "vpc", { width: 600, height: 480 }),
+    "definition-ops-group": node("design-group", 2040, 720, "region", { width: 520, height: 800 }),
+    "global-iam-group": node("design-group", 2040, 80, undefined, { width: 520, height: 360 })
   },
   "eks-container-app": {
-    region: node("aws-region"),
-    "az-a": node("aws-availability-zone", "vpc"),
-    "az-b": node("aws-availability-zone", "vpc"),
-    "global-iam-group": node("design-group")
+    region: node("aws-region", 280, 80, undefined, { width: 1760, height: 1440 }),
+    "az-a": node("aws-availability-zone", 480, 400, "vpc", { width: 600, height: 360 }),
+    "az-b": node("aws-availability-zone", 1160, 400, "vpc", { width: 600, height: 360 }),
+    "global-iam-group": node("design-group", 2120, 320, undefined, { width: 520, height: 800 })
   }
 } as const satisfies Record<TemplateId, Readonly<Record<string, PresentationNodeExpectation>>>;
 
 const EXPECTED_PRESENTATION_EDGES = {
   "static-web-hosting": {
-    "user-distribution": edge("user", "distribution")
+    "user-distribution": edge("user", "distribution", "handle-right", "handle-left")
   },
   "minimal-serverless-api": {
-    "user-api": edge("user", "api")
+    "user-api": edge("user", "api", "handle-right", "handle-left")
   },
   "full-serverless-web-app": {
-    "source-frontend": edge("source-repository", "frontend"),
-    "user-frontend": edge("user", "frontend"),
-    "user-pool": edge("user", "user-pool")
+    "source-frontend": edge("source-repository", "frontend", "handle-right", "handle-left"),
+    "user-frontend": edge("user", "frontend", "handle-right", "handle-left"),
+    "user-pool": edge("user", "user-pool", "handle-top", "handle-top")
   },
   "three-tier-web-app": {
-    "internet-igw": edge("internet", "internet-gateway")
+    "internet-igw": edge("internet", "internet-gateway", "handle-right", "handle-left")
   },
   "ecs-fargate-container-app": {
-    "user-load-balancer": edge("user", "load-balancer")
+    "user-load-balancer": edge("user", "load-balancer", "handle-right", "handle-left")
   },
   "eks-container-app": {}
 } as const satisfies Record<TemplateId, Readonly<Record<string, PresentationEdgeExpectation>>>;
@@ -152,7 +156,9 @@ test("six deployable templates keep Design nodes and edges outside their semanti
         nodeDefinition.id,
         {
           catalogItemId: nodeDefinition.catalogItemId,
-          ...(nodeDefinition.parentNodeId ? { parentNodeId: nodeDefinition.parentNodeId } : {})
+          ...(nodeDefinition.parentNodeId ? { parentNodeId: nodeDefinition.parentNodeId } : {}),
+          position: nodeDefinition.position,
+          ...(nodeDefinition.size ? { size: nodeDefinition.size } : {})
         }
       ])),
       expectedNodes,
@@ -163,7 +169,9 @@ test("six deployable templates keep Design nodes and edges outside their semanti
         edgeDefinition.id,
         {
           sourceNodeId: edgeDefinition.sourceNodeId,
-          targetNodeId: edgeDefinition.targetNodeId
+          targetNodeId: edgeDefinition.targetNodeId,
+          sourceHandleId: edgeDefinition.sourceHandleId,
+          targetHandleId: edgeDefinition.targetHandleId
         }
       ])),
       expectedEdges,
@@ -235,11 +243,27 @@ test("built Template diagrams keep presentation nodes parameterless and parents 
 });
 
 // Test fixtures use the same compact shape as the production presentation contract.
-function node(catalogItemId: string, parentNodeId?: string): PresentationNodeExpectation {
-  return { catalogItemId, ...(parentNodeId ? { parentNodeId } : {}) };
+function node(
+  catalogItemId: string,
+  x: number,
+  y: number,
+  parentNodeId?: string,
+  size?: PresentationNodeExpectation["size"]
+): PresentationNodeExpectation {
+  return {
+    catalogItemId,
+    ...(parentNodeId ? { parentNodeId } : {}),
+    position: { x, y },
+    size: size ?? { width: 48, height: 48 }
+  };
 }
 
-// Presentation edge fixtures intentionally omit labels and routing from the structural assertion.
-function edge(sourceNodeId: string, targetNodeId: string): PresentationEdgeExpectation {
-  return { sourceNodeId, targetNodeId };
+// Presentation edge fixtures pin routing because a compact layout depends on predictable edge exits.
+function edge(
+  sourceNodeId: string,
+  targetNodeId: string,
+  sourceHandleId: string,
+  targetHandleId: string
+): PresentationEdgeExpectation {
+  return { sourceNodeId, targetNodeId, sourceHandleId, targetHandleId };
 }

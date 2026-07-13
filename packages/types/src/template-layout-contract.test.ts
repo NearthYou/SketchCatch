@@ -21,129 +21,129 @@ type EdgeRoutingExpectation = {
 };
 
 const EXPECTED_VIEWPORTS = {
-  "static-web-hosting": { x: 0, y: 0, zoom: 0.75 },
-  "minimal-serverless-api": { x: 0, y: 0, zoom: 0.64 },
-  "full-serverless-web-app": { x: 0, y: 0, zoom: 0.48 },
-  "three-tier-web-app": { x: 0, y: 0, zoom: 0.38 },
+  "static-web-hosting": { x: 0, y: 0, zoom: 0.8 },
+  "minimal-serverless-api": { x: 0, y: 0, zoom: 0.68 },
+  "full-serverless-web-app": { x: 0, y: 0, zoom: 0.52 },
+  "three-tier-web-app": { x: 0, y: 0, zoom: 0.42 },
   "ecs-fargate-container-app": { x: 0, y: 0, zoom: 0.4 },
-  "eks-container-app": { x: 0, y: 0, zoom: 0.42 }
+  "eks-container-app": { x: 0, y: 0, zoom: 0.4 }
 } as const satisfies Record<TemplateId, { readonly x: number; readonly y: number; readonly zoom: number }>;
 
 const EXPECTED_LAYOUTS = {
   "static-web-hosting": {
-    bucket: at(920, 280),
-    "index-object": at(1120, 360),
-    "public-access": at(920, 520),
-    oac: at(640, 480),
-    distribution: at(480, 280),
-    "bucket-policy": at(1480, 560)
+    bucket: at(560, 400, "region"),
+    "index-object": at(760, 400, "region"),
+    "public-access": at(560, 560, "region"),
+    oac: at(320, 560),
+    distribution: at(320, 400),
+    "bucket-policy": at(760, 560, "region")
   },
   "minimal-serverless-api": {
-    api: at(320, 240, undefined, { width: 480, height: 900 }, true),
-    route: at(440, 380, "api"),
-    method: at(440, 520, "api"),
-    integration: at(440, 660, "api"),
-    deployment: at(440, 800, "api"),
-    stage: at(440, 940, "api"),
-    handler: at(880, 560),
-    role: at(880, 840),
-    "role-policy": at(1160, 840),
-    permission: at(880, 320),
-    table: at(1200, 560),
-    "log-group": at(1480, 560)
+    api: at(360, 240, "region", { width: 320, height: 760 }, true),
+    route: at(440, 360, "api"),
+    method: at(440, 480, "api"),
+    integration: at(440, 600, "api"),
+    deployment: at(440, 720, "api"),
+    stage: at(440, 840, "api"),
+    handler: at(760, 600, "region"),
+    role: at(760, 1160),
+    "role-policy": at(960, 1160),
+    permission: at(760, 360, "region"),
+    table: at(960, 600, "region"),
+    "log-group": at(1080, 600, "region")
   },
   "full-serverless-web-app": {
-    frontend: at(200, 560),
-    "user-pool": at(560, 640),
-    "user-client": at(560, 400),
-    api: at(920, 260, undefined, { width: 480, height: 1040 }, true),
-    authorizer: at(1040, 420, "api"),
-    route: at(1040, 580, "api"),
-    method: at(1040, 720, "api"),
-    integration: at(1040, 860, "api"),
-    deployment: at(1040, 1000, "api"),
-    stage: at(1040, 1140, "api"),
-    handler: at(1520, 560),
-    role: at(1520, 840),
-    "role-policy": at(1760, 840),
-    permission: at(1520, 400),
-    table: at(1840, 560),
-    "log-group": at(2080, 720)
+    frontend: at(520, 680, "frontend-group"),
+    "user-pool": at(760, 680, "identity-group"),
+    "user-client": at(760, 400, "identity-group"),
+    api: at(1000, 200, "api-group", { width: 280, height: 960 }, true),
+    authorizer: at(1080, 320, "api"),
+    route: at(1080, 440, "api"),
+    method: at(1080, 560, "api"),
+    integration: at(1080, 680, "api"),
+    deployment: at(1080, 800, "api"),
+    stage: at(1080, 920, "api"),
+    handler: at(1440, 680, "compute-group"),
+    role: at(1440, 1480, "global-iam-group"),
+    "role-policy": at(1640, 1480, "global-iam-group"),
+    permission: at(1440, 480, "compute-group"),
+    table: at(1680, 680, "data-ops-group"),
+    "log-group": at(1680, 840, "data-ops-group")
   },
   "three-tier-web-app": {
-    vpc: at(160, 160, undefined, { width: 2400, height: 1840 }),
-    "public-subnet-a": at(680, 440, "vpc", { width: 560, height: 400 }),
-    "public-subnet-b": at(1440, 440, "vpc", { width: 560, height: 400 }),
-    "app-subnet-a": at(680, 920, "vpc", { width: 560, height: 440 }),
-    "app-subnet-b": at(1440, 920, "vpc", { width: 560, height: 440 }),
-    "db-subnet-a": at(680, 1400, "vpc", { width: 560, height: 360 }),
-    "db-subnet-b": at(1440, 1400, "vpc", { width: 560, height: 360 }),
-    "internet-gateway": at(320, 280, "vpc"),
-    "public-route-table": at(320, 560, "vpc"),
-    "public-route-a": at(520, 560, "vpc"),
-    "public-route-b": at(520, 680, "vpc"),
-    "nat-gateway": at(1120, 280, "vpc"),
-    "nat-eip": at(960, 280, "vpc"),
-    "app-route-table": at(320, 1040, "vpc"),
-    "app-route-a": at(520, 1040, "vpc"),
-    "app-route-b": at(520, 1160, "vpc"),
-    "db-route-table": at(320, 1520, "vpc"),
-    "db-route-a": at(520, 1520, "vpc"),
-    "db-route-b": at(520, 1640, "vpc"),
-    "alb-security-group": at(820, 680, "public-subnet-a"),
-    "app-security-group": at(1760, 1120, "app-subnet-b"),
-    "db-security-group": at(1820, 1560, "db-subnet-b"),
-    "latest-ami": at(1120, 1240, "app-subnet-a"),
-    "launch-template": at(900, 1080, "application-group"),
-    "load-balancer": at(820, 560, "public-subnet-a"),
-    "target-group": at(1520, 1000, "app-subnet-b"),
-    listener: at(1040, 560, "public-subnet-a"),
-    "application-group": at(760, 980, "app-subnet-a", { width: 400, height: 220 }),
-    "db-subnet-group": at(860, 1480, "db-subnet-a"),
-    database: at(1660, 1460, "db-subnet-b")
+    vpc: at(320, 160, "region", { width: 2000, height: 1680 }),
+    "public-subnet-a": at(840, 480, "az-a", { width: 560, height: 360 }),
+    "public-subnet-b": at(1600, 480, "az-b", { width: 560, height: 360 }),
+    "app-subnet-a": at(840, 920, "az-a", { width: 560, height: 440 }),
+    "app-subnet-b": at(1600, 920, "az-b", { width: 560, height: 440 }),
+    "db-subnet-a": at(840, 1400, "az-a", { width: 560, height: 320 }),
+    "db-subnet-b": at(1600, 1400, "az-b", { width: 560, height: 320 }),
+    "internet-gateway": at(400, 280, "vpc"),
+    "public-route-table": at(400, 600, "vpc"),
+    "public-route-a": at(560, 560, "vpc"),
+    "public-route-b": at(560, 680, "vpc"),
+    "nat-gateway": at(920, 280, "vpc"),
+    "nat-eip": at(760, 280, "vpc"),
+    "app-route-table": at(400, 1040, "vpc"),
+    "app-route-a": at(560, 1000, "vpc"),
+    "app-route-b": at(560, 1120, "vpc"),
+    "db-route-table": at(400, 1480, "vpc"),
+    "db-route-a": at(560, 1440, "vpc"),
+    "db-route-b": at(560, 1560, "vpc"),
+    "alb-security-group": at(880, 720, "public-subnet-a"),
+    "app-security-group": at(1840, 1160, "app-subnet-b"),
+    "db-security-group": at(1840, 1600, "db-subnet-b"),
+    "latest-ami": at(1240, 1200, "app-subnet-a"),
+    "launch-template": at(960, 1120, "application-group"),
+    "load-balancer": at(880, 600, "public-subnet-a"),
+    "target-group": at(1640, 1040, "app-subnet-b"),
+    listener: at(1040, 600, "public-subnet-a"),
+    "application-group": at(880, 1000, "app-subnet-a", { width: 320, height: 240 }),
+    "db-subnet-group": at(880, 1520, "db-subnet-a"),
+    database: at(1640, 1480, "db-subnet-b")
   },
   "ecs-fargate-container-app": {
-    vpc: at(160, 160, undefined, { width: 1800, height: 1440 }),
-    "subnet-a": at(400, 360, "vpc", { width: 560, height: 400 }),
-    "subnet-b": at(1120, 360, "vpc", { width: 560, height: 320 }),
-    "internet-gateway": at(320, 1360, "vpc"),
-    "route-table": at(520, 1360, "vpc"),
-    "route-a": at(720, 1360, "vpc"),
-    "route-b": at(880, 1360, "vpc"),
-    cluster: at(440, 760, "vpc", { width: 1200, height: 560 }, true),
-    "alb-security-group": at(480, 620, "subnet-a"),
-    "task-security-group": at(600, 1160, "cluster"),
-    "execution-role": at(2200, 760),
-    "execution-policy": at(2440, 760),
-    "task-role": at(2200, 960),
-    repository: at(2200, 360),
-    "log-group": at(2600, 560),
-    "load-balancer": at(600, 440, "subnet-a"),
-    "target-group": at(1200, 480, "subnet-b"),
-    listener: at(800, 560, "subnet-a"),
-    task: at(2200, 560),
-    service: at(880, 980, "cluster")
+    vpc: at(360, 600, "region", { width: 1600, height: 1280 }),
+    "subnet-a": at(560, 920, "az-a", { width: 440, height: 320 }),
+    "subnet-b": at(1240, 920, "az-b", { width: 440, height: 320 }),
+    "internet-gateway": at(440, 720, "vpc"),
+    "route-table": at(600, 720, "vpc"),
+    "route-a": at(760, 720, "vpc"),
+    "route-b": at(920, 720, "vpc"),
+    cluster: at(520, 1360, "vpc", { width: 1200, height: 400 }, true),
+    "alb-security-group": at(640, 1120, "subnet-a"),
+    "task-security-group": at(680, 1600, "cluster"),
+    "execution-role": at(2160, 200, "global-iam-group"),
+    "execution-policy": at(2360, 200, "global-iam-group"),
+    "task-role": at(2360, 320, "global-iam-group"),
+    repository: at(2360, 840, "definition-ops-group"),
+    "log-group": at(2360, 1000, "definition-ops-group"),
+    "load-balancer": at(640, 1000, "subnet-a"),
+    "target-group": at(1320, 1040, "subnet-b"),
+    listener: at(800, 1000, "subnet-a"),
+    task: at(2160, 1000, "definition-ops-group"),
+    service: at(880, 1480, "cluster")
   },
   "eks-container-app": {
-    vpc: at(160, 160, undefined, { width: 1800, height: 1280 }),
-    "subnet-a": at(400, 360, "vpc", { width: 560, height: 200 }),
-    "subnet-b": at(1120, 360, "vpc", { width: 560, height: 200 }),
-    "internet-gateway": at(320, 1240, "vpc"),
-    "route-table": at(520, 1240, "vpc"),
-    "route-a": at(720, 1240, "vpc"),
-    "route-b": at(880, 1240, "vpc"),
-    "cluster-security-group": at(2160, 360),
-    "cluster-role": at(2160, 560),
-    "node-role": at(2160, 760),
-    "cluster-policy": at(2400, 560),
-    "node-policy": at(2400, 760),
-    "node-cni-policy": at(2160, 960),
-    "node-ecr-policy": at(2400, 960),
-    cluster: at(400, 640, "vpc", { width: 1200, height: 480 }, true),
-    "node-group": at(600, 800, "cluster"),
-    namespace: at(920, 760, "cluster", { width: 560, height: 280 }, true),
-    deployment: at(1040, 900, "namespace"),
-    service: at(1280, 900, "namespace")
+    vpc: at(360, 160, "region", { width: 1600, height: 1280 }),
+    "subnet-a": at(560, 480, "az-a", { width: 440, height: 160 }),
+    "subnet-b": at(1240, 480, "az-b", { width: 440, height: 160 }),
+    "internet-gateway": at(440, 280, "vpc"),
+    "route-table": at(600, 280, "vpc"),
+    "route-a": at(760, 280, "vpc"),
+    "route-b": at(920, 280, "vpc"),
+    "cluster-security-group": at(1640, 1280, "vpc"),
+    "cluster-role": at(2200, 440, "global-iam-group"),
+    "node-role": at(2200, 600, "global-iam-group"),
+    "cluster-policy": at(2400, 440, "global-iam-group"),
+    "node-policy": at(2400, 600, "global-iam-group"),
+    "node-cni-policy": at(2200, 760, "global-iam-group"),
+    "node-ecr-policy": at(2400, 760, "global-iam-group"),
+    cluster: at(520, 800, "vpc", { width: 1200, height: 400 }, true),
+    "node-group": at(640, 960, "cluster"),
+    namespace: at(960, 880, "cluster", { width: 600, height: 240 }, true),
+    deployment: at(1040, 1000, "namespace"),
+    service: at(1200, 1000, "namespace")
   }
 } as const satisfies Record<TemplateId, Readonly<Record<string, LayoutExpectation>>>;
 
@@ -165,7 +165,7 @@ const EXPECTED_ROUTING = {
     "handler-table": route("handle-right", "handle-left")
   },
   "full-serverless-web-app": {
-    "frontend-api": route("handle-right", "handle-left"),
+    "frontend-api": route("handle-bottom", "handle-bottom"),
     "client-pool": route("handle-bottom", "handle-top"),
     "api-pool": route("handle-left", "handle-right"),
     "api-handler": route("handle-right", "handle-left"),
@@ -182,12 +182,12 @@ const EXPECTED_ROUTING = {
     "service-task": route("handle-right", "handle-left"),
     "repository-task": route("handle-bottom", "handle-top"),
     "task-log-group": route("handle-right", "handle-left"),
-    "task-role": route("handle-bottom", "handle-top")
+    "task-role": route("handle-top", "handle-bottom")
   },
   "eks-container-app": {
     "cluster-role": route("handle-left", "handle-right"),
     "cluster-subnet": route("handle-top", "handle-bottom"),
-    "cluster-node-group": route("handle-right", "handle-left"),
+    "cluster-node-group": route("handle-left", "handle-left"),
     "deployment-service": route("handle-right", "handle-left")
   }
 } as const satisfies Record<TemplateId, Readonly<Record<string, EdgeRoutingExpectation>>>;
@@ -240,6 +240,31 @@ test("six deployable templates keep their semantic graph while adopting the PNG 
   }
 });
 
+test("all authored template placements stay on the compact 40px grid", () => {
+  // A shared grid keeps nested areas, resource cards, and Design annotations aligned across every template.
+  for (const definition of templateDefinitions) {
+    for (const resource of definition.resources) {
+      assertGridValue(resource.position.x, `${definition.id}/${resource.id} x`);
+      assertGridValue(resource.position.y, `${definition.id}/${resource.id} y`);
+
+      if (resource.size) {
+        assertGridValue(resource.size.width, `${definition.id}/${resource.id} width`);
+        assertGridValue(resource.size.height, `${definition.id}/${resource.id} height`);
+      }
+    }
+
+    for (const presentationNode of definition.presentationNodes) {
+      assertGridValue(presentationNode.position.x, `${definition.id}/${presentationNode.id} presentation x`);
+      assertGridValue(presentationNode.position.y, `${definition.id}/${presentationNode.id} presentation y`);
+
+      if (presentationNode.size && (presentationNode.size.width > 48 || presentationNode.size.height > 48)) {
+        assertGridValue(presentationNode.size.width, `${definition.id}/${presentationNode.id} presentation width`);
+        assertGridValue(presentationNode.size.height, `${definition.id}/${presentationNode.id} presentation height`);
+      }
+    }
+  }
+});
+
 function at(
   x: number,
   y: number,
@@ -257,6 +282,11 @@ function at(
 
 function route(sourceHandleId: string, targetHandleId: string): EdgeRoutingExpectation {
   return { sourceHandleId, targetHandleId };
+}
+
+// Grid assertions include the offending field in their message so a layout drift is quick to repair.
+function assertGridValue(value: number, field: string): void {
+  assert.equal(value % 40, 0, `${field} must align to the 40px grid`);
 }
 
 function createSemanticHash(definition: TemplateDefinition): string {
