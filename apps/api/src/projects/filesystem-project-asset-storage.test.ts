@@ -5,6 +5,7 @@ import {
   mkdtemp,
   readFile,
   readdir,
+  realpath,
   rm,
   stat,
   symlink,
@@ -115,6 +116,28 @@ test("filesystem delete prunes empty parents when the final object is already mi
   assert.equal((await stat(rootDirectory)).isDirectory(), true);
 });
 
+test("filesystem delete prunes empty parents when the object disappears during unlink", async (t) => {
+  const rootDirectory = await createTemporaryRoot(t);
+  let deleteFileCalls = 0;
+  const storageOptions = {
+    rootDirectory,
+    async deleteFile(path: Parameters<typeof unlink>[0]) {
+      deleteFileCalls += 1;
+      await unlink(path);
+      await unlink(path);
+    }
+  };
+  const storage = createFilesystemProjectAssetStorage(storageOptions);
+  const objectKey = "projects/project-id/assets/disappears-during-delete.webp";
+
+  await storage.putObject({ objectKey, contentType: "image/webp", body: "capture" });
+  await storage.deleteObject({ objectKey });
+
+  assert.equal(deleteFileCalls, 1);
+  await assert.rejects(lstat(join(rootDirectory, "projects")), hasCode("ENOENT"));
+  assert.equal((await stat(rootDirectory)).isDirectory(), true);
+});
+
 test("filesystem storage rejects unsafe object keys for every operation", async (t) => {
   const rootDirectory = await createTemporaryRoot(t);
   const storage = createFilesystemProjectAssetStorage({ rootDirectory });
@@ -202,6 +225,29 @@ test("filesystem storage rejects a symlinked intermediate while creating its roo
   assert.deepEqual(await readdir(outsideDirectory), []);
 });
 
+test("filesystem storage rejects a symlinked root ancestor when the full root already exists", async (t) => {
+  const rootParent = await createTemporaryRoot(t);
+  const outsideDirectory = await createTemporaryRoot(t);
+  const outsideRoot = join(outsideDirectory, "project-assets");
+  const linkedIntermediate = join(rootParent, ".local-data");
+  const storage = createFilesystemProjectAssetStorage({
+    rootDirectory: join(linkedIntermediate, "project-assets")
+  });
+
+  await mkdir(outsideRoot, { mode: 0o700 });
+  await symlink(outsideDirectory, linkedIntermediate, "dir");
+
+  await assert.rejects(
+    storage.putObject({
+      objectKey: "projects/project-id/capture.webp",
+      contentType: "image/webp",
+      body: "capture"
+    }),
+    /symlink/i
+  );
+  assert.deepEqual(await readdir(outsideRoot), []);
+});
+
 test("filesystem storage removes its exclusive temporary file when a write fails", async (t) => {
   const rootDirectory = await createTemporaryRoot(t);
   const storage = createFilesystemProjectAssetStorage({ rootDirectory });
@@ -220,7 +266,8 @@ test("filesystem storage removes its exclusive temporary file when a write fails
 });
 
 async function createTemporaryRoot(t: TestContext): Promise<string> {
-  const rootDirectory = await mkdtemp(join(tmpdir(), "sketchcatch-project-assets-"));
+  const temporaryDirectory = await mkdtemp(join(tmpdir(), "sketchcatch-project-assets-"));
+  const rootDirectory = await realpath(temporaryDirectory);
   t.after(async () => rm(rootDirectory, { force: true, recursive: true }));
   return rootDirectory;
 }

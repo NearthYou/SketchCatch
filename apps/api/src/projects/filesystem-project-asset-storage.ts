@@ -11,13 +11,14 @@ import {
   unlink,
   type FileHandle
 } from "node:fs/promises";
-import { dirname, isAbsolute, join, relative, resolve, sep, win32 } from "node:path";
+import { dirname, isAbsolute, join, parse, relative, resolve, sep, win32 } from "node:path";
 import type { ProjectAssetStorage } from "./project-asset-storage.js";
 
 const directoryMode = 0o700;
 const fileMode = 0o600;
 
 export type CreateFilesystemProjectAssetStorageOptions = {
+  deleteFile?: typeof unlink;
   rootDirectory?: string;
 };
 
@@ -28,6 +29,7 @@ export function createFilesystemProjectAssetStorage(
     process.cwd(),
     options.rootDirectory ?? ".local-data/project-assets"
   );
+  const deleteFile = options.deleteFile ?? unlink;
 
   return {
     async putObject(input) {
@@ -120,9 +122,10 @@ export function createFilesystemProjectAssetStorage(
       requireRegularFinalObject(object, objectStats);
 
       try {
-        await unlink(object.absolutePath);
+        await deleteFile(object.absolutePath);
       } catch (error) {
         if (isMissingError(error)) {
+          await pruneEmptyParentDirectories(object);
           return;
         }
 
@@ -253,8 +256,35 @@ async function requireRootDirectory(
   }
 
   requireRegularDirectory(object.objectKey, rootStats);
+  await requireRootDirectoryAncestry(object);
   await chmodDirectoryWhereSupported(object.rootDirectory, object.objectKey);
   return true;
+}
+
+async function requireRootDirectoryAncestry(object: ResolvedObject): Promise<void> {
+  const filesystemRoot = parse(object.rootDirectory).root;
+  const filesystemRootStats = await getStats(filesystemRoot, object.objectKey);
+
+  if (!filesystemRootStats) {
+    throw storageError(`Project asset filesystem root is missing: ${object.objectKey}`);
+  }
+
+  requireRegularDirectory(object.objectKey, filesystemRootStats);
+
+  const relativeRoot = relative(filesystemRoot, object.rootDirectory);
+  const rootSegments = relativeRoot.length === 0 ? [] : relativeRoot.split(sep);
+  let currentDirectory = filesystemRoot;
+
+  for (const segment of rootSegments) {
+    currentDirectory = join(currentDirectory, segment);
+    const directoryStats = await getStats(currentDirectory, object.objectKey);
+
+    if (!directoryStats) {
+      throw storageError(`Project asset storage root disappeared: ${object.objectKey}`);
+    }
+
+    requireRegularDirectory(object.objectKey, directoryStats);
+  }
 }
 
 async function createRootDirectoryWithoutSymlinks(object: ResolvedObject): Promise<void> {

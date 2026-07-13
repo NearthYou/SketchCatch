@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ApiErrorResponse } from "@sketchcatch/types";
@@ -744,7 +744,8 @@ test("GET /api/projects/:id/thumbnail returns the latest authenticated Board cap
 });
 
 test("Project thumbnail upload and read share a real filesystem storage instance", async (t) => {
-  const rootDirectory = await mkdtemp(join(tmpdir(), "sketchcatch-route-project-assets-"));
+  const temporaryDirectory = await mkdtemp(join(tmpdir(), "sketchcatch-route-project-assets-"));
+  const rootDirectory = await realpath(temporaryDirectory);
   t.after(async () => rm(rootDirectory, { force: true, recursive: true }));
   const projectAssetStorage = createFilesystemProjectAssetStorage({ rootDirectory });
   const thumbnailBytes = Buffer.from("RIFF\u0010\u0000\u0000\u0000WEBPVP8 route-capture", "binary");
