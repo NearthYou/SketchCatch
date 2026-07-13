@@ -137,10 +137,15 @@ function selectLatestWorkflowAttempts(
 }
 
 function compareAttempts(left: GitHubWorkflowRunSummary, right: GitHubWorkflowRunSummary): number {
-  if (left.runAttempt !== right.runAttempt) return left.runAttempt - right.runAttempt;
+  if (left.id === right.id && left.runAttempt !== right.runAttempt) {
+    return left.runAttempt - right.runAttempt;
+  }
   const leftUpdated = left.updatedAt ? Date.parse(left.updatedAt) : 0;
   const rightUpdated = right.updatedAt ? Date.parse(right.updatedAt) : 0;
   if (leftUpdated !== rightUpdated) return leftUpdated - rightUpdated;
+  const leftCreated = left.createdAt ? Date.parse(left.createdAt) : 0;
+  const rightCreated = right.createdAt ? Date.parse(right.createdAt) : 0;
+  if (leftCreated !== rightCreated) return leftCreated - rightCreated;
   return left.id - right.id;
 }
 
@@ -181,6 +186,10 @@ function mapStageStatus(status: string, conclusion: string | null): GitCicdPipel
 }
 
 function aggregateStatus(runs: readonly GitHubWorkflowRunSummary[]): GitCicdPipelineRunStatus {
+  if (runs.some((run) => run.status === "in_progress")) return "running";
+  if (runs.some((run) => ["queued", "waiting", "pending", "requested"].includes(run.status)))
+    return "queued";
+  if (runs.some((run) => run.status !== "completed")) return "detected";
   if (
     runs.some(
       (run) =>
@@ -193,10 +202,6 @@ function aggregateStatus(runs: readonly GitHubWorkflowRunSummary[]): GitCicdPipe
     return "failed";
   if (runs.some((run) => run.status === "completed" && run.conclusion === "cancelled"))
     return "cancelled";
-  if (runs.some((run) => run.status === "in_progress")) return "running";
-  if (runs.some((run) => ["queued", "waiting", "pending", "requested"].includes(run.status)))
-    return "queued";
-  if (runs.some((run) => run.status !== "completed")) return "detected";
   return "succeeded";
 }
 

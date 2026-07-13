@@ -76,6 +76,7 @@ export type GitHubWorkflowRunSummary = {
   id: number;
   runAttempt: number;
   updatedAt: string | null;
+  createdAt: string | null;
   commitSha: string;
   commitMessage: string;
   branch: string;
@@ -855,6 +856,7 @@ function toWorkflowRunSummary(run: GitHubWorkflowRunApiResponse): GitHubWorkflow
     id: readRequiredNumber(run.id, "workflow run id"),
     runAttempt: readOptionalNumber(run.run_attempt) ?? 1,
     updatedAt: readDateString(run.updated_at),
+    createdAt: readDateString(run.created_at),
     commitSha: readRequiredString(run.head_sha, "workflow run commit sha"),
     commitMessage: readRequiredString(run.head_commit?.message, "workflow run commit message"),
     branch: readRequiredString(run.head_branch, "workflow run branch"),

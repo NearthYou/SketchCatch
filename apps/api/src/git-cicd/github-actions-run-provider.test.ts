@@ -70,7 +70,7 @@ test("provider maps the exact generated release job steps to app stages", async 
   );
 });
 
-test("provider selects only the latest workflow attempt for a commit", async () => {
+test("provider selects the larger attempt only for the same GitHub run id", async () => {
   const requestedRunIds: number[] = [];
   const client = {
     listCommitFiles: async () => [],
@@ -84,7 +84,7 @@ test("provider selects only the latest workflow attempt for a commit", async () 
         runUrl: "old"
       }),
       run({
-        id: 20,
+        id: 10,
         runAttempt: 2,
         updatedAt: "2026-07-13T00:02:00Z",
         status: "completed",
@@ -102,7 +102,38 @@ test("provider selects only the latest workflow attempt for a commit", async () 
   const [snapshot] = await createGitHubActionsRunProvider(client).listSnapshots(repository);
   assert.equal(snapshot?.status, "succeeded");
   assert.equal(snapshot?.runUrl, "new");
-  assert.deepEqual(requestedRunIds, [20]);
+  assert.deepEqual(requestedRunIds, [10]);
+});
+
+test("provider selects newer distinct run id even when its attempt is lower", async () => {
+  const client = {
+    listCommitFiles: async () => [],
+    listBranchWorkflowRuns: async () => [
+      run({
+        id: 10,
+        runAttempt: 2,
+        updatedAt: "2026-07-13T00:02:00Z",
+        createdAt: "2026-07-13T00:01:00Z",
+        status: "completed",
+        conclusion: "failure",
+        runUrl: "older-attempt-two"
+      }),
+      run({
+        id: 20,
+        runAttempt: 1,
+        updatedAt: "2026-07-13T00:03:00Z",
+        createdAt: "2026-07-13T00:02:00Z",
+        status: "completed",
+        conclusion: "success",
+        runUrl: "newer-attempt-one"
+      })
+    ],
+    listWorkflowJobs: async () => [],
+    readWorkflowJobLog: async () => ""
+  } as GitHubActionsReadClient;
+  const [snapshot] = await createGitHubActionsRunProvider(client).listSnapshots(repository);
+  assert.equal(snapshot?.status, "succeeded");
+  assert.equal(snapshot?.runUrl, "newer-attempt-one");
 });
 
 test("provider maps aggregate terminal failure and cancelled statuses", async () => {
@@ -114,6 +145,39 @@ test("provider maps aggregate terminal failure and cancelled statuses", async ()
     const client = clientForRun(run({ status: "completed", conclusion }));
     const [snapshot] = await createGitHubActionsRunProvider(client).listSnapshots(repository);
     assert.equal(snapshot?.status, expected);
+  }
+});
+
+test("provider keeps mixed workflows nonterminal until all selected workflows finish", async () => {
+  for (const item of [
+    { infra: ["completed", "failure"], app: ["in_progress", null], expected: "running" },
+    { infra: ["completed", "cancelled"], app: ["in_progress", null], expected: "running" },
+    { infra: ["completed", "failure"], app: ["queued", null], expected: "queued" },
+    { infra: ["completed", "failure"], app: ["completed", "success"], expected: "failed" },
+    { infra: ["completed", "cancelled"], app: ["completed", "success"], expected: "cancelled" },
+    { infra: ["completed", "success"], app: ["completed", "success"], expected: "succeeded" }
+  ] as const) {
+    const client = {
+      listCommitFiles: async () => [],
+      listBranchWorkflowRuns: async () => [
+        run({
+          id: 1,
+          workflowName: "SketchCatch Infra",
+          status: item.infra[0],
+          conclusion: item.infra[1]
+        }),
+        run({
+          id: 2,
+          workflowName: "SketchCatch App",
+          status: item.app[0],
+          conclusion: item.app[1]
+        })
+      ],
+      listWorkflowJobs: async () => [],
+      readWorkflowJobLog: async () => ""
+    } as GitHubActionsReadClient;
+    const [snapshot] = await createGitHubActionsRunProvider(client).listSnapshots(repository);
+    assert.equal(snapshot?.status, item.expected);
   }
 });
 
@@ -185,6 +249,7 @@ function baseRun() {
     id: 1,
     runAttempt: 1,
     updatedAt: "2026-07-13T00:00:00Z",
+    createdAt: "2026-07-13T00:00:00Z",
     commitSha: "abc",
     commitMessage: "Ship",
     branch: "main",

@@ -1166,6 +1166,7 @@ test("GitHub Actions read methods return focused models from read-only endpoints
       id: 11,
       runAttempt: 1,
       updatedAt: "2026-07-13T00:01:00Z",
+      createdAt: "2026-07-13T00:00:00Z",
       commitSha: "abc",
       commitMessage: "Ship app",
       branch: "main",

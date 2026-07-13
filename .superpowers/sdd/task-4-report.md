@@ -67,3 +67,18 @@ The combined focused suite produced five expected failures:
 ### Deferred Minor
 
 - `run_started_at` remains based on the GitHub workflow run `created_at` field. A separate follow-up may adopt a more precise provider timestamp if the GitHub contract and stored model are expanded; this minor issue was recorded and not changed here.
+
+## Final Important Fixes RED/GREEN
+
+### RED
+
+- Mixed `failed + in_progress` workflows incorrectly aggregated to `failed` instead of remaining `running`.
+- A distinct older run with `run_attempt=2` incorrectly beat a newer distinct run with `run_attempt=1`.
+
+### GREEN
+
+- Aggregate status now gives active selected workflows precedence: `in_progress` wins as `running`, then queued-like states win as `queued`; terminal failed/cancelled/succeeded evaluation occurs only after every selected workflow is terminal.
+- Added mixed Infra/App regressions for failed/running, cancelled/running, failed/queued, failed/success, cancelled/success, and success/success combinations.
+- `run_attempt` is compared only for the same GitHub run id. Distinct runs are ordered by `updated_at`, then `created_at`, then numeric run id.
+- Replaced the unsafe distinct-id attempt test with a same-id rerun test and a newer-distinct-id attempt-one regression.
+- Final focused suite: 36 tests passed. The deferred `run_started_at` Minor remains unchanged.
