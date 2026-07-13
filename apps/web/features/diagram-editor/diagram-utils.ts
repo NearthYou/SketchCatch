@@ -65,6 +65,66 @@ export function areDiagramsEqual(first: DiagramJson, second: DiagramJson): boole
   return JSON.stringify(first) === JSON.stringify(second);
 }
 
+export function clearAuthoredRoutesForNodeIds(
+  diagram: DiagramJson,
+  nodeIds: ReadonlySet<string>
+): DiagramJson {
+  if (nodeIds.size === 0) {
+    return diagram;
+  }
+
+  let didClearRoute = false;
+  const edges = diagram.edges.map((edge) => {
+    if (
+      !edge.route ||
+      (!nodeIds.has(edge.sourceNodeId) && !nodeIds.has(edge.targetNodeId))
+    ) {
+      return edge;
+    }
+
+    const { route: _route, ...edgeWithoutRoute } = edge;
+    didClearRoute = true;
+    return edgeWithoutRoute;
+  });
+
+  return didClearRoute ? { ...diagram, edges } : diagram;
+}
+
+export function getNodeGeometryChangedIds(
+  previousNodes: readonly DiagramNode[],
+  currentNodes: readonly DiagramNode[]
+): Set<string> {
+  const previousNodeById = new Map(previousNodes.map((node) => [node.id, node]));
+  const currentNodeById = new Map(currentNodes.map((node) => [node.id, node]));
+  const changedNodeIds = new Set<string>();
+
+  for (const [nodeId, currentNode] of currentNodeById) {
+    const previousNode = previousNodeById.get(nodeId);
+
+    if (!previousNode || hasNodeGeometryChanged(previousNode, currentNode)) {
+      changedNodeIds.add(nodeId);
+    }
+  }
+
+  for (const nodeId of previousNodeById.keys()) {
+    if (!currentNodeById.has(nodeId)) {
+      changedNodeIds.add(nodeId);
+    }
+  }
+
+  return changedNodeIds;
+}
+
+function hasNodeGeometryChanged(previousNode: DiagramNode, currentNode: DiagramNode): boolean {
+  return (
+    previousNode.position.x !== currentNode.position.x ||
+    previousNode.position.y !== currentNode.position.y ||
+    previousNode.size.width !== currentNode.size.width ||
+    previousNode.size.height !== currentNode.size.height ||
+    (previousNode.rotation ?? 0) !== (currentNode.rotation ?? 0)
+  );
+}
+
 export function parseResourceDragPayload(dataTransfer: DataTransfer): ResourceDragPayload | null {
   const serializedPayload =
     dataTransfer.getData(RESOURCE_DRAG_MIME_TYPE) ||

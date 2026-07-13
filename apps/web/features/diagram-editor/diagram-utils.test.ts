@@ -4,11 +4,13 @@ import type { DiagramJson, DiagramNode, ResourceItem } from "../../../../package
 import {
   applyNodeParametersUpdateWithAutoTagSync,
   clearActiveResourceDragPayload,
+  clearAuthoredRoutesForNodeIds,
   cloneDiagram,
   createDiagramEdge,
   createDiagramNodeFromPayload,
   createPastedNodes,
   getActiveResourceDragPayload,
+  getNodeGeometryChangedIds,
   writeResourceDragPayload
 } from "./diagram-utils";
 
@@ -118,6 +120,117 @@ test("cloneDiagram preserves source-exact node rotation and deeply clones author
   assert.equal(source.edges[0]?.route?.labelPosition?.x, 170);
   assert.equal(source.variables?.[0]?.bindings[0]?.nodeId, "source-node");
   assert.deepEqual(source.variables?.[0]?.value, { entries: ["10.0.0.0/8"] });
+});
+
+test("clearAuthoredRoutesForNodeIds immutably clears only routes connected to changed nodes", () => {
+  const route = {
+    svgPath: "M 0 0 L 100 100",
+    sourcePoint: { x: 0, y: 0 },
+    targetPoint: { x: 100, y: 100 },
+    waypoints: [{ x: 50, y: 50 }],
+    labelPosition: { x: 50, y: 45 },
+    arrowDirection: "source-to-target" as const,
+    arrowAngle: 45
+  };
+  const sourceRouteEdge = {
+    id: "changed-source",
+    sourceNodeId: "changed-node",
+    targetNodeId: "other-node",
+    type: "smoothstep",
+    style: { color: "#123456" },
+    route
+  };
+  const targetRouteEdge = {
+    id: "changed-target",
+    sourceNodeId: "other-node",
+    targetNodeId: "changed-node",
+    route
+  };
+  const unrelatedRouteEdge = {
+    id: "unrelated",
+    sourceNodeId: "other-node",
+    targetNodeId: "third-node",
+    route
+  };
+  const routeLessConnectedEdge = {
+    id: "legacy-connected",
+    sourceNodeId: "changed-node",
+    targetNodeId: "third-node"
+  };
+  const diagram: DiagramJson = {
+    nodes: [],
+    edges: [
+      sourceRouteEdge,
+      targetRouteEdge,
+      unrelatedRouteEdge,
+      routeLessConnectedEdge
+    ],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  const cleared = clearAuthoredRoutesForNodeIds(diagram, new Set(["changed-node"]));
+
+  assert.notEqual(cleared, diagram);
+  assert.equal(cleared.nodes, diagram.nodes);
+  assert.equal(cleared.edges[0]?.route, undefined);
+  assert.equal(cleared.edges[0]?.type, "smoothstep");
+  assert.equal(cleared.edges[0]?.style, sourceRouteEdge.style);
+  assert.equal(cleared.edges[1]?.route, undefined);
+  assert.equal(cleared.edges[2], unrelatedRouteEdge);
+  assert.equal(cleared.edges[3], routeLessConnectedEdge);
+  assert.equal(diagram.edges[0]?.route, route);
+});
+
+test("clearAuthoredRoutesForNodeIds reuses the diagram when no authored route is affected", () => {
+  const diagram: DiagramJson = {
+    nodes: [],
+    edges: [
+      {
+        id: "legacy-edge",
+        sourceNodeId: "source-node",
+        targetNodeId: "target-node"
+      }
+    ],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  assert.equal(clearAuthoredRoutesForNodeIds(diagram, new Set(["source-node"])), diagram);
+  assert.equal(clearAuthoredRoutesForNodeIds(diagram, new Set()), diagram);
+});
+
+test("getNodeGeometryChangedIds detects position, size, and rotation but ignores style and z-order", () => {
+  const makeGeometryNode = (id: string): DiagramNode => ({
+    id,
+    type: "sketchcatch_shape",
+    kind: "design",
+    position: { x: 10, y: 20 },
+    size: { width: 100, height: 80 },
+    label: id,
+    locked: false,
+    rotation: 0,
+    zIndex: 1
+  });
+  const previous = [
+    makeGeometryNode("moved"),
+    makeGeometryNode("resized-parent"),
+    makeGeometryNode("rotated"),
+    makeGeometryNode("style-only")
+  ];
+  const current = [
+    { ...previous[0]!, position: { x: 30, y: 40 } },
+    { ...previous[1]!, size: { width: 160, height: 120 } },
+    { ...previous[2]!, rotation: -90 },
+    {
+      ...previous[3]!,
+      style: { textColor: "#ffffff" },
+      zIndex: 999
+    }
+  ];
+
+  assert.deepEqual(
+    [...getNodeGeometryChangedIds(previous, current)].sort(),
+    ["moved", "resized-parent", "rotated"]
+  );
 });
 
 test("active resource drag payload is available when dragover dataTransfer reads are empty", () => {

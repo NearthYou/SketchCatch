@@ -104,6 +104,7 @@ import {
   applyNodeParametersUpdateWithAutoTagSync,
   areDiagramsEqual,
   clearActiveResourceDragPayload,
+  clearAuthoredRoutesForNodeIds,
   cloneDiagram,
   createDiagramEdge,
   createDiagramNodeFromPayload,
@@ -111,6 +112,7 @@ import {
   getDefaultViewport,
   getActiveResourceDragPayload,
   getNextZIndex,
+  getNodeGeometryChangedIds,
   removeEdgesFromDiagram,
   removeNodesFromDiagram,
   updateDiagramViewport,
@@ -182,6 +184,16 @@ function areBoardViewportFramesEqual(
 
 function getBoardMotionDuration(durationMs: number): number {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : durationMs;
+}
+
+function clearAuthoredRoutesForNodeGeometryChanges(
+  previousNodes: readonly DiagramNode[],
+  diagram: DiagramJson
+): DiagramJson {
+  return clearAuthoredRoutesForNodeIds(
+    diagram,
+    getNodeGeometryChangedIds(previousNodes, diagram.nodes)
+  );
 }
 
 type AreaBlankDragState = {
@@ -796,12 +808,16 @@ function DiagramEditorInner({
 
   const updateNodeMetadata = useCallback(
     (nodeId: string, update: DiagramNodeMetadataUpdate | ((node: DiagramNode) => DiagramNodeMetadataUpdate)) => {
-      commitDiagramUpdate((currentDiagram) => ({
-        ...currentDiagram,
-        nodes: updateNodeById(currentDiagram.nodes, nodeId, (node) =>
-          applyNodeMetadataUpdate(node, typeof update === "function" ? update(node) : update)
-        )
-      }));
+      commitDiagramUpdate((currentDiagram) => {
+        const nextDiagram = {
+          ...currentDiagram,
+          nodes: updateNodeById(currentDiagram.nodes, nodeId, (node) =>
+            applyNodeMetadataUpdate(node, typeof update === "function" ? update(node) : update)
+          )
+        };
+
+        return clearAuthoredRoutesForNodeGeometryChanges(currentDiagram.nodes, nextDiagram);
+      });
     },
     [commitDiagramUpdate]
   );
@@ -814,7 +830,7 @@ function DiagramEditorInner({
           applyNodeParametersUpdateWithAutoTagSync(node, update)
         );
 
-        return {
+        const nextDiagram = {
           ...currentDiagram,
           nodes: refitSecurityGroupScopesForTargetChanges({
             changedNodeIds: new Set([nodeId]),
@@ -822,6 +838,8 @@ function DiagramEditorInner({
             previousNodes: currentDiagram.nodes
           })
         };
+
+        return clearAuthoredRoutesForNodeGeometryChanges(currentDiagram.nodes, nextDiagram);
       });
     },
     [commitDiagramUpdate]
@@ -1052,7 +1070,7 @@ function DiagramEditorInner({
         resizedDiagram.nodes,
         new Set([nodeId])
       );
-      const after = {
+      const resizedAndRefittedDiagram = {
         ...resizedDiagram,
         nodes: refitSecurityGroupScopesForTargetChanges({
           changedNodeIds: new Set([nodeId]),
@@ -1060,6 +1078,18 @@ function DiagramEditorInner({
           previousNodes: before?.nodes ?? resizedDiagram.nodes
         })
       };
+      const after = before
+        ? clearAuthoredRoutesForNodeGeometryChanges(before.nodes, resizedAndRefittedDiagram)
+        : clearAuthoredRoutesForNodeIds(
+            resizedAndRefittedDiagram,
+            new Set([
+              nodeId,
+              ...getNodeGeometryChangedIds(
+                resizedDiagram.nodes,
+                resizedAndRefittedDiagram.nodes
+              )
+            ])
+          );
 
       replaceDiagram(after);
 
@@ -1096,6 +1126,20 @@ function DiagramEditorInner({
   );
 
   const displayNodes = isPreviewActive ? visibleDiagram.nodes : dragPreviewNodes ?? diagram.nodes;
+  const staleAuthoredRouteNodeIds = useMemo(() => {
+    if (isPreviewActive) {
+      return new Set<string>();
+    }
+
+    const previousNodes = dragPreviewNodes
+      ? diagram.nodes
+      : resizeSnapshotRef.current?.nodes;
+    const currentNodes = dragPreviewNodes ?? diagram.nodes;
+
+    return previousNodes
+      ? getNodeGeometryChangedIds(previousNodes, currentNodes)
+      : new Set<string>();
+  }, [diagram.nodes, dragPreviewNodes, isPreviewActive]);
   const flowNodes = useMemo(
     () => {
       const nextFlowNodes = toFlowNodes(
@@ -1108,6 +1152,7 @@ function DiagramEditorInner({
           activeConnectionSourceNodeId: isPreviewActive ? null : connectStartNodeIdRef.current,
           cachedNodesById: flowNodeCacheRef.current,
           edges: visibleDiagram.edges,
+          geometryPolicy: visibleDiagram.presentation?.geometryPolicy,
           isPreview: isPreviewActive,
           previewAnnotations: isPreviewActive ? previewAnnotations ?? undefined : undefined
         }
@@ -1133,7 +1178,8 @@ function DiagramEditorInner({
       isPreviewActive,
       previewAnnotations,
       selectedNodeIds,
-      visibleDiagram.edges
+      visibleDiagram.edges,
+      visibleDiagram.presentation?.geometryPolicy
     ]
   );
 
@@ -1144,10 +1190,20 @@ function DiagramEditorInner({
   const flowEdges = useMemo(
     () =>
       toFlowEdges(visibleDiagram.edges, isPreviewActive ? [] : selectedEdgeIds, displayNodes, {
+        geometryPolicy: visibleDiagram.presentation?.geometryPolicy,
         isPreview: isPreviewActive,
-        previewAnnotations: isPreviewActive ? previewAnnotations ?? undefined : undefined
+        previewAnnotations: isPreviewActive ? previewAnnotations ?? undefined : undefined,
+        staleAuthoredRouteNodeIds
       }),
-    [displayNodes, isPreviewActive, previewAnnotations, selectedEdgeIds, visibleDiagram.edges]
+    [
+      displayNodes,
+      isPreviewActive,
+      previewAnnotations,
+      selectedEdgeIds,
+      staleAuthoredRouteNodeIds,
+      visibleDiagram.edges,
+      visibleDiagram.presentation?.geometryPolicy
+    ]
   );
 
   const handleInit = useCallback<OnInit<DiagramFlowNode, DiagramFlowEdge>>((instance) => {
@@ -1192,8 +1248,7 @@ function DiagramEditorInner({
 
       applyLiveDiagramUpdate((currentDiagram) => {
         const directlyMovedNodeIds = new Set(positionByNodeId.keys());
-
-        return {
+        const nextDiagram = {
           ...currentDiagram,
           nodes: getDraggedPreviewNodes({
             currentNodes: currentDiagram.nodes,
@@ -1202,6 +1257,8 @@ function DiagramEditorInner({
             snapshotNodes: currentDiagram.nodes
           })
         };
+
+        return clearAuthoredRoutesForNodeGeometryChanges(currentDiagram.nodes, nextDiagram);
       });
     },
     [applyLiveDiagramUpdate, interactionMode, selectedNodeIds, setDragPreviewNodesForState]
@@ -1382,10 +1439,14 @@ function DiagramEditorInner({
           snapGridSize: DIAGRAM_SNAP_GRID_SIZE,
           snapshotNodes: dragState.snapshotNodes
         });
-        const after = {
+        const finalizedDiagram = {
           ...diagramRef.current,
           nodes: finalizedNodes.nodes
         };
+        const after = clearAuthoredRoutesForNodeGeometryChanges(
+          dragState.before.nodes,
+          finalizedDiagram
+        );
 
         if (!areDiagramsEqual(dragState.before, after)) {
           replaceDiagram(after);
@@ -1610,10 +1671,13 @@ function DiagramEditorInner({
         snapGridSize: DIAGRAM_SNAP_GRID_SIZE,
         snapshotNodes
       });
-      const after = {
+      const finalizedDiagram = {
         ...diagramRef.current,
         nodes: finalizedNodes.nodes
       };
+      const after = before
+        ? clearAuthoredRoutesForNodeGeometryChanges(before.nodes, finalizedDiagram)
+        : finalizedDiagram;
 
       if (before && !areDiagramsEqual(before, after)) {
         replaceDiagram(after);
@@ -1749,10 +1813,14 @@ function DiagramEditorInner({
       snapGridSize: DIAGRAM_SNAP_GRID_SIZE,
       snapshotNodes: dragState.snapshotNodes
     });
-    const after = {
+    const finalizedDiagram = {
       ...diagramRef.current,
       nodes: finalizedNodes.nodes
     };
+    const after = clearAuthoredRoutesForNodeGeometryChanges(
+      dragState.before.nodes,
+      finalizedDiagram
+    );
 
     if (!areDiagramsEqual(dragState.before, after)) {
       replaceDiagram(after);
@@ -1793,10 +1861,11 @@ function DiagramEditorInner({
       snapGridSize: DIAGRAM_SNAP_GRID_SIZE,
       snapshotNodes: before.nodes
     });
-    const after = {
+    const finalizedDiagram = {
       ...diagramRef.current,
       nodes: finalizedNodes.nodes
     };
+    const after = clearAuthoredRoutesForNodeGeometryChanges(before.nodes, finalizedDiagram);
 
     if (!areDiagramsEqual(before, after)) {
       replaceDiagram(after);
@@ -1870,7 +1939,7 @@ function DiagramEditorInner({
           ? expandParentAreaNodesForEnteredChild(nodesWithAssignedParents, nextNode.id)
           : nodesWithAssignedParents;
 
-        return {
+        const nextDiagram = {
           ...currentDiagram,
           nodes: applyContainingReferenceDropTargets(
             nodesWithExpandedParents,
@@ -1878,6 +1947,8 @@ function DiagramEditorInner({
             terraformParameterCatalog
           )
         };
+
+        return clearAuthoredRoutesForNodeGeometryChanges(currentDiagram.nodes, nextDiagram);
       });
       setSelectedNodeIds([nextNode.id]);
       setSelectedEdgeIds([]);
@@ -1987,7 +2058,7 @@ function DiagramEditorInner({
         deletedNodeIds
       );
 
-      return {
+      const nextDiagram = {
         ...diagramWithoutSelection,
         nodes: refitSecurityGroupScopesForTargetChanges({
           changedNodeIds: deletedNodeIds,
@@ -1995,6 +2066,8 @@ function DiagramEditorInner({
           previousNodes: currentDiagram.nodes
         })
       };
+
+      return clearAuthoredRoutesForNodeGeometryChanges(currentDiagram.nodes, nextDiagram);
     });
     setSelectedNodeIds([]);
     setSelectedEdgeIds([]);
@@ -2049,7 +2122,14 @@ function DiagramEditorInner({
     (edgeId: string, type: NonNullable<DiagramEdge["type"]>) => {
       commitDiagramUpdate((currentDiagram) => ({
         ...currentDiagram,
-        edges: currentDiagram.edges.map((edge) => (edge.id === edgeId ? { ...edge, type } : edge))
+        edges: currentDiagram.edges.map((edge) => {
+          if (edge.id !== edgeId) {
+            return edge;
+          }
+
+          const { route: _route, ...edgeWithoutRoute } = edge;
+          return { ...edgeWithoutRoute, type };
+        })
       }));
     },
     [commitDiagramUpdate]
@@ -2756,6 +2836,7 @@ function DiagramEditorInner({
             edgeTypes={EDGE_TYPES}
             edges={flowEdges}
             elementsSelectable={!isPreviewActive || allowPreviewInspection}
+            elevateNodesOnSelect={visibleDiagram.presentation?.geometryPolicy !== "source-exact"}
             maxZoom={2}
             minZoom={0.25}
             multiSelectionKeyCode={["Shift", "Meta", "Control"]}

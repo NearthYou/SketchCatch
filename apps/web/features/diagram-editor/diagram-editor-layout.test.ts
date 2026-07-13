@@ -146,6 +146,68 @@ test("direct node drag coalesces preview work to animation frames and flushes th
   );
 });
 
+test("source-exact geometry policy and explicit live-route staleness reach React Flow", () => {
+  assert.equal(
+    diagramEditorSource.match(/geometryPolicy: visibleDiagram\.presentation\?\.geometryPolicy/g)?.length,
+    2
+  );
+  assert.match(
+    diagramEditorSource,
+    /const staleAuthoredRouteNodeIds = useMemo\([\s\S]*?getNodeGeometryChangedIds\([\s\S]*?\);/s
+  );
+  assert.match(diagramEditorSource, /staleAuthoredRouteNodeIds,/);
+  assert.match(
+    diagramEditorSource,
+    /elevateNodesOnSelect=\{visibleDiagram\.presentation\?\.geometryPolicy !== "source-exact"\}/
+  );
+});
+
+test("every persisted node geometry mutation invalidates incident authored routes", () => {
+  assert.match(
+    diagramEditorSource,
+    /function clearAuthoredRoutesForNodeGeometryChanges\([\s\S]*?clearAuthoredRoutesForNodeIds\([\s\S]*?getNodeGeometryChangedIds\(/s
+  );
+
+  const mutationBlocks = [
+    ["const updateNodeMetadata = useCallback(", "const updateNodeParameters = useCallback"],
+    ["const updateNodeParameters = useCallback", "const applyDiagramJson = useCallback"],
+    ["const handleResizeEnd = useCallback(", "const flowNodeHandlers = useMemo"],
+    ["const handleNodesChange = useCallback", "const handleEdgesChange = useCallback"],
+    ["const finishAreaBlankDrag = useCallback(", "const handleCanvasPointerDown = useCallback"],
+    ["const handleNodeDragStop = useCallback(", "const clearConnectionActivityOnRelease = useCallback"],
+    ["const finalizeAreaBlankDragWithoutAnimation = useCallback(", "const finalizeNodeDragWithoutAnimation = useCallback"],
+    ["const finalizeNodeDragWithoutAnimation = useCallback(", "const finalizeActiveDragWithoutAnimation = useCallback"],
+    ["const handleDrop = useCallback(", "const handleDragOver = useCallback"],
+    ["const deleteSelection = useCallback(", "const copySelectedNodes = useCallback"]
+  ] as const;
+
+  for (const [startMarker, endMarker] of mutationBlocks) {
+    assert.match(
+      getSourceBlock(diagramEditorSource, startMarker, endMarker),
+      /clearAuthoredRoutesForNodeGeometryChanges\(/,
+      startMarker
+    );
+  }
+});
+
+test("edge type changes clear authored routes while style-only changes preserve them", () => {
+  const styleBlock = getSourceBlock(
+    diagramEditorSource,
+    "const updateEdgeStyle = useCallback(",
+    "const updateEdgeType = useCallback("
+  );
+  const typeBlock = getSourceBlock(
+    diagramEditorSource,
+    "const updateEdgeType = useCallback(",
+    "const deleteEdge = useCallback("
+  );
+
+  assert.match(styleBlock, /edge\.id === edgeId \? \{ \.\.\.edge, style \} : edge/);
+  assert.doesNotMatch(styleBlock, /route|clearAuthoredRoutes/);
+  assert.match(typeBlock, /const \{ route: _route, \.\.\.edgeWithoutRoute \} = edge;/);
+  assert.match(typeBlock, /return \{ \.\.\.edgeWithoutRoute, type \};/);
+});
+
 test("diagram editor restores select mode after temporary middle-button pan", () => {
   assert.match(diagramEditorSource, /getTemporaryPanReleaseMode/);
   assert.match(diagramEditorSource, /window\.addEventListener\("pointerup",\s*restoreTemporaryPanMode\)/);
@@ -681,7 +743,7 @@ test("canvas tools dock vertically along the left center", () => {
 test("new and existing resources expand newly assigned parent areas before applying reference targets", () => {
   assert.match(
     diagramEditorSource,
-    /const nodesWithAssignedParents = applyAreaNodeParentAssignments\(\s*nodesWithNextNode,\s*new Set\(\[nextNode\.id\]\)\s*\);\s*const nodesWithExpandedParents = autoExpandAreasEnabled\s*\? expandParentAreaNodesForEnteredChild\(nodesWithAssignedParents, nextNode\.id\)\s*:\s*nodesWithAssignedParents;\s*return \{\s*\.\.\.currentDiagram,\s*nodes: applyContainingReferenceDropTargets\(\s*nodesWithExpandedParents,/s
+    /const nodesWithAssignedParents = applyAreaNodeParentAssignments\(\s*nodesWithNextNode,\s*new Set\(\[nextNode\.id\]\)\s*\);\s*const nodesWithExpandedParents = autoExpandAreasEnabled\s*\? expandParentAreaNodesForEnteredChild\(nodesWithAssignedParents, nextNode\.id\)\s*:\s*nodesWithAssignedParents;\s*const nextDiagram = \{\s*\.\.\.currentDiagram,\s*nodes: applyContainingReferenceDropTargets\(\s*nodesWithExpandedParents,[\s\S]*?return clearAuthoredRoutesForNodeGeometryChanges\(currentDiagram\.nodes, nextDiagram\);/s
   );
   assert.match(
     diagramEditorSource,

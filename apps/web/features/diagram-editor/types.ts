@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import type { Edge, Node } from "@xyflow/react";
 import type {
   DiagramEdge,
+  DiagramEdgeRoute,
   DiagramJson,
   DiagramNode,
   DiagramNodeParameters
@@ -100,8 +101,10 @@ export type DiagramFlowNodeData = Record<string, unknown> & {
 } & DiagramFlowNodeHandlers;
 
 export type DiagramFlowEdgeData = Record<string, unknown> & {
+  authoredRoute?: DiagramEdgeRoute | undefined;
   edge: DiagramEdge;
   isAnimated: boolean;
+  isAuthoredRouteStale: boolean;
   pathKind: DiagramEdgeKind;
   previewState?: DiagramPreviewState | undefined;
 };
