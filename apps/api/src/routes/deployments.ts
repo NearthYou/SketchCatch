@@ -63,6 +63,11 @@ import {
   type DeploymentLogRecord,
   type ProjectAccessContext
 } from "../deployments/deployment-service.js";
+import {
+  getDeploymentConsolePhase,
+  resolveDeploymentPreparation,
+  type DeploymentPreparationRepository
+} from "../deployments/deployment-preparation-service.js";
 import { createDeploymentFailureExplanation } from "../deployments/deployment-failure-explanation.js";
 import {
   cancelTrackedDeploymentRun,
@@ -118,6 +123,16 @@ const createDeploymentBodySchema = z.object({
   targetKind: z.enum(["ecs_fargate", "lambda", "ec2_asg", "static_site"]).nullable().optional(),
   source: z.enum(["direct", "gitops"]).optional()
 }).strict();
+
+const prepareDeploymentBodySchema = z
+  .object({
+    architectureId: z.uuid(),
+    terraformArtifactId: z.uuid(),
+    awsConnectionId: z.uuid(),
+    draftRevision: z.number().int().positive(),
+    scope: z.enum(["auto", "infrastructure", "application", "full_stack"])
+  })
+  .strict();
 
 const deploymentParamsSchema = z.object({
   deploymentId: z.uuid()
@@ -341,6 +356,19 @@ function handleDeploymentError(error: unknown, reply: FastifyReply) {
   throw error;
 }
 
+function requireDeploymentPreparationRepository(
+  repository: DeploymentRepository
+): DeploymentRepository & DeploymentPreparationRepository {
+  if (
+    !repository.findProjectDraftForPreparation ||
+    !repository.findProjectTargetForPreparation
+  ) {
+    throw new Error("Deployment preparation repository is not configured");
+  }
+
+  return repository as DeploymentRepository & DeploymentPreparationRepository;
+}
+
 async function toDeployment(
   row: DeploymentRow,
   repository: DeploymentRepository
@@ -362,6 +390,10 @@ async function toDeployment(
     targetKind: row.targetKind,
     source: row.source,
     releaseId: row.releaseId,
+    consolePhase: getDeploymentConsolePhase(row),
+    preparedDraftRevision: row.preparedDraftRevision,
+    preparedSnapshotHash: row.preparedSnapshotHash,
+    approvedPreparedSnapshotHash: row.approvedPreparedSnapshotHash,
     currentPlanArtifactId: row.currentPlanArtifactId,
     currentPlanOperation,
     stateObjectKey: row.stateObjectKey,
@@ -487,6 +519,67 @@ export async function registerDeploymentRoutes(
           }
         } catch (error) {
           request.log.warn({ error, projectId: params.projectId }, "Failed to prune deployment history");
+        }
+      }
+
+      return reply.status(201).send({
+        deployment: await toDeployment(deployment, repository)
+      });
+    } catch (error) {
+      return handleDeploymentError(error, reply);
+    }
+  });
+
+  app.post("/projects/:projectId/deployments/prepare", async (request, reply) => {
+    const params = createDeploymentParamsSchema.parse(request.params);
+    const body = prepareDeploymentBodySchema.parse(request.body);
+    const { accessContext, db, repository } = await getDeploymentRequestContext(
+      request,
+      options,
+      getDeploymentDatabaseClient
+    );
+
+    try {
+      const project = await repository.findAccessibleProject(params.projectId, accessContext);
+      if (!project) {
+        throw new DeploymentNotFoundError("Project not found");
+      }
+
+      const preparationRepository = requireDeploymentPreparationRepository(repository);
+      const preparation = await resolveDeploymentPreparation(
+        {
+          projectId: params.projectId,
+          awsConnectionId: body.awsConnectionId,
+          draftRevision: body.draftRevision,
+          requestedScope: body.scope
+        },
+        preparationRepository
+      );
+      const deployment = await createDeployment(
+        {
+          projectId: params.projectId,
+          accessContext,
+          architectureId: body.architectureId,
+          terraformArtifactId: body.terraformArtifactId,
+          awsConnectionId: body.awsConnectionId,
+          liveProfile: "practice",
+          scope: preparation.scope,
+          targetKind: preparation.targetKind,
+          source: "direct",
+          preparedDraftRevision: preparation.preparedDraftRevision,
+          preparedSnapshotHash: preparation.preparedSnapshotHash
+        },
+        repository
+      );
+
+      if (pruneProjectDeploymentStorage) {
+        try {
+          await pruneProjectDeploymentStorage({ db, projectId: params.projectId });
+        } catch (error) {
+          request.log.warn(
+            { error, projectId: params.projectId },
+            "Failed to prune deployment history"
+          );
         }
       }
 
@@ -814,7 +907,7 @@ export async function registerDeploymentRoutes(
     }
   });
 
-  app.post("/deployments/:deploymentId/apply", async (request, reply) => {
+  const handleDeploymentExecute = async (request: FastifyRequest, reply: FastifyReply) => {
     const params = deploymentParamsSchema.parse(request.params);
     z.object({}).parse(request.body ?? {});
     const { accessContext, jobRepository, repository } = await getDeploymentRequestContext(
@@ -894,7 +987,10 @@ export async function registerDeploymentRoutes(
     } catch (error) {
       return handleDeploymentError(error, reply);
     }
-  });
+  };
+
+  app.post("/deployments/:deploymentId/apply", handleDeploymentExecute);
+  app.post("/deployments/:deploymentId/execute", handleDeploymentExecute);
 
   app.post("/deployments/:deploymentId/destroy/plan", async (request, reply) => {
     const params = deploymentParamsSchema.parse(request.params);

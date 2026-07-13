@@ -289,6 +289,33 @@
       "notes": "Implemented in issue #371 on branch feature/sw/371-project-deployment-release-ledger. No cloud mutation was performed."
     },
     {
+      "id": "DIRECT-DEPLOYMENT-THREE-STAGE-001",
+      "priority": 1,
+      "area": "deployment-ux",
+      "title": "Revision-locked three-stage Direct Deployment",
+      "user_visible_behavior": "개발자는 Board와 Terraform을 한 번에 저장하고 검증, 승인, 배포 세 단계만 거쳐 프로젝트를 배포한다.",
+      "status": "passing",
+      "verification": [
+        "Ctrl+S와 Command+S가 diagram과 Terraform draft를 같은 server revision으로 저장한다.",
+        "prepare가 최신 saved revision만 받아 immutable Deployment를 만들고 stale revision을 거부한다.",
+        "approval snapshot과 execute snapshot이 다르면 실행이 차단된다.",
+        "Direct Deployment UI가 정확히 세 단계와 summary-first 운영 정보를 표시한다."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-14",
+        "commands": [
+          "pnpm --filter @sketchcatch/api exec tsx --test src/deployments/deployment-preparation-service.test.ts src/deployments/deployment-service.test.ts src/deployments/deployment-approval-service.test.ts src/routes/deployments.test.ts src/db/deployment-preparation-schema.test.ts",
+          "pnpm --filter @sketchcatch/web test",
+          "pnpm --filter @sketchcatch/api test",
+          "node scripts/check-db-migration-compatibility.mjs",
+          "PostgreSQL 16 temporary container: apply apps/api/drizzle/0000..0036 with psql ON_ERROR_STOP=1",
+          "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/init-harness.ps1 -Full"
+        ],
+        "notes": "Focused deployment contracts, Web 1,145/1,145, migration compatibility, PostgreSQL migrations, harness, lint, typecheck, and build passed. API passed 1,456/1,459; the only failures are three unchanged Windows symlink fixture setup EPERM errors."
+      },
+      "notes": "Implemented in issue #372 on branch feature/sw/372-direct-deploy-three-stage. No cloud mutation was performed."
+    },
+    {
       "id": "AWS-TEMPLATE-LAYOUT-001",
       "priority": 2,
       "area": "template-board",

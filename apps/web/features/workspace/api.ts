@@ -83,6 +83,7 @@ import type {
   ProjectResponse,
   ProjectDeploymentTarget,
   ProjectDeploymentTargetResponse,
+  PrepareDeploymentRequest,
   PutProjectDeploymentTargetRequest,
   RecommendRepositoryTemplateRequest,
   RecommendRepositoryTemplateResponse,
@@ -823,6 +824,34 @@ export async function createDeployment({
   return response.deployment;
 }
 
+export async function prepareDeployment({
+  projectId,
+  architectureId,
+  terraformArtifactId,
+  awsConnectionId,
+  draftRevision,
+  scope
+}: {
+  projectId: string;
+} & PrepareDeploymentRequest): Promise<Deployment> {
+  const response = await apiFetch<DeploymentResponse>(
+    `/projects/${encodeURIComponent(projectId)}/deployments/prepare`,
+    {
+      auth: true,
+      method: "POST",
+      body: {
+        architectureId,
+        terraformArtifactId,
+        awsConnectionId,
+        draftRevision,
+        scope
+      }
+    }
+  );
+
+  return response.deployment;
+}
+
 export async function listDeployments(
   projectId: string,
   options: { readonly signal?: AbortSignal | undefined } = {}
@@ -1415,6 +1444,19 @@ export async function approveDeploymentPlan(
 export async function runDeploymentApply(deploymentId: string): Promise<Deployment> {
   const response = await apiFetch<DeploymentResponse>(
     `/deployments/${encodeURIComponent(deploymentId)}/apply`,
+    {
+      auth: true,
+      method: "POST",
+      body: {}
+    }
+  );
+
+  return response.deployment;
+}
+
+export async function executeDeployment(deploymentId: string): Promise<Deployment> {
+  const response = await apiFetch<DeploymentResponse>(
+    `/deployments/${encodeURIComponent(deploymentId)}/execute`,
     {
       auth: true,
       method: "POST",

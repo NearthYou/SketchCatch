@@ -814,6 +814,10 @@ type Deployment = {
   targetKind: RuntimeTargetKind | null;
   source: "direct" | "gitops";
   releaseId: string | null;
+  consolePhase: "validation" | "approval" | "deployment";
+  preparedDraftRevision: number | null;
+  preparedSnapshotHash: string | null;
+  approvedPreparedSnapshotHash: string | null;
   currentPlanArtifactId: string | null;
   currentPlanOperation: "apply" | "destroy" | null;
   stateObjectKey: string | null;
@@ -852,6 +856,17 @@ type Deployment = {
   updatedAt: IsoDateTimeString;
 };
 ```
+
+Direct Deployment의 외부 상태는 `validation`, `approval`, `deployment` 세 단계만 사용한다. 저장,
+Pre-Deployment Check, `terraform init`, `terraform plan`은 `validation` 내부 작업이며 실제 실행과
+정리는 `deployment`에서 처리한다. 내부 Terraform stage와 로그는 기존 실행 증거로 그대로 보존한다.
+
+`POST /api/projects/:projectId/deployments/prepare`는 사용자가 저장한 `ProjectDraft.revision`을 정확히
+받아야 한다. 서버는 같은 revision의 `diagramJson`과 `terraformFiles`를 canonical SHA-256으로 묶어
+`preparedSnapshotHash`에 저장하고, 생성 transaction에서 revision을 다시 잠금 검증한다. 저장 실패나
+stale revision이면 Deployment를 만들지 않는다. 승인 시 `approvedPreparedSnapshotHash`를 고정하며
+Apply/Destroy 직전 승인 snapshot과 준비 snapshot이 다르면 실행하지 않는다. 기존 Deployment는 세 필드가
+모두 `null`인 legacy record로 호환한다.
 
 `Deployment`는 제품/문서/화면/코드에서 실제 실행 단위로 통일한다.
 

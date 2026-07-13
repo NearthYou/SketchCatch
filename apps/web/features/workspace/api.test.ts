@@ -12,6 +12,7 @@ import {
   createArchitectureSnapshot,
   createAwsConnectionSetup,
   createDeployment,
+  executeDeployment,
   createLiveObservation,
   createGitCicdGitHubOAuthStartUrl,
   createProjectAssetUpload,
@@ -43,6 +44,7 @@ import {
   listReverseEngineeringScanLogs,
   listReverseEngineeringScans,
   pollLiveObservationSnapshots,
+  prepareDeployment,
   refreshGitCicdPipelineRun,
   refreshProjectGitCicdPipelineRuns,
   runDeploymentDestroy,
@@ -2173,6 +2175,54 @@ test("createDeployment posts selected artifact and verified AWS connection", asy
     awsConnectionId: "33333333-3333-4333-8333-333333333333"
   });
   assert.equal(deployment.status, "PENDING");
+});
+
+test("prepare and execute deployment use the revision-locked endpoints", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+
+  installAuthSession();
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+    return new Response(
+      JSON.stringify({
+        deployment: createDeploymentPayload({
+          id: "44444444-4444-4444-8444-444444444444",
+          projectId: project.id
+        })
+      }),
+      { headers: { "Content-Type": "application/json" }, status: 200 }
+    );
+  };
+
+  await prepareDeployment({
+    projectId: project.id,
+    architectureId: "55555555-5555-4555-8555-555555555555",
+    terraformArtifactId: "66666666-6666-4666-8666-666666666666",
+    awsConnectionId: "33333333-3333-4333-8333-333333333333",
+    draftRevision: 7,
+    scope: "auto"
+  });
+  await executeDeployment("44444444-4444-4444-8444-444444444444");
+
+  assert.equal(String(requests[0]?.input), `/api/projects/${project.id}/deployments/prepare`);
+  assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
+    architectureId: "55555555-5555-4555-8555-555555555555",
+    terraformArtifactId: "66666666-6666-4666-8666-666666666666",
+    awsConnectionId: "33333333-3333-4333-8333-333333333333",
+    draftRevision: 7,
+    scope: "auto"
+  });
+  assert.equal(
+    String(requests[1]?.input),
+    "/api/deployments/44444444-4444-4444-8444-444444444444/execute"
+  );
 });
 
 test("deployment helpers list records, start plan, approve plan, apply, destroy, and read results", async (context) => {

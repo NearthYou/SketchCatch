@@ -117,6 +117,21 @@ CI/CD `Activity`와 `Logs`는 GitHub Actions의 Detect, Build, Plan/Apply, Deplo
 
 Repository settings와 IAM role 변경은 preview JSON으로 PR에 남깁니다. 실제 repository variables/environment 설정과 AWS role trust/policy 변경은 GitHub App 권한 또는 GitHub user OAuth 추가 승인, AWS role diff 승인, secret masking을 통과한 별도 mutation path에서만 수행해야 합니다. OAuth token 원문은 DB/로그/API 응답에 저장하지 않습니다.
 
+## Direct Deployment 사용자 단계
+
+사용자에게 노출하는 흐름은 다음 세 단계다.
+
+1. `검증`: `Ctrl+S`/`Command+S` 또는 `저장하고 배포`로 Board와 Terraform working draft를 한 번의
+   ProjectDraft 저장으로 고정하고, Pre-Deployment Check와 Terraform Plan을 수행한다.
+2. `승인`: 배포 범위, 변경량, blocker, 비용·보안 경고를 확인하고 준비 snapshot과 Plan을 승인한다.
+3. `배포`: 승인된 snapshot을 실행하고 상태, 릴리즈 버전, Output URL을 확인한다. Destroy도 같은
+   `검증 → 승인 → 배포` 구조를 사용한다.
+
+`저장하고 배포`는 저장 성공 후에만 콘솔을 연다. prepare 요청은 저장된 draft revision을 포함하며 서버의
+현재 revision과 다르면 `409 conflict`로 중단한다. `/execute`는 기존 Apply 안전 게이트와 같은 경로를
+사용하며 승인 snapshot, Terraform artifact, tfplan, AWS account/region을 다시 확인한다. Raw hash,
+리소스 inventory, 전체 로그는 기본 요약에서 접힌 세부정보로 제공한다.
+
 ## Direct Deployment Path 실행 순서
 
 ```text

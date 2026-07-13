@@ -23,6 +23,8 @@ import {
   deploymentPlanArtifacts,
   deployedResources,
   deployments,
+  projectDeploymentTargets,
+  projectDrafts,
   projectAssets,
   projects,
   terraformOutputs,
@@ -51,6 +53,8 @@ export type CreateDeploymentInput = {
   scope?: DeploymentScope | undefined;
   targetKind?: RuntimeTargetKind | null | undefined;
   source?: DeploymentSource | undefined;
+  preparedDraftRevision?: number | null | undefined;
+  preparedSnapshotHash?: string | null | undefined;
 };
 
 export type CreateDeploymentRecordInput = {
@@ -63,6 +67,8 @@ export type CreateDeploymentRecordInput = {
   scope: DeploymentScope;
   targetKind: RuntimeTargetKind | null;
   source: DeploymentSource;
+  preparedDraftRevision: number | null;
+  preparedSnapshotHash: string | null;
   status: "PENDING";
 };
 
@@ -130,6 +136,7 @@ export type ApproveDeploymentInput = {
   approvedTfplanHash: string;
   approvedAwsAccountId: string;
   approvedAwsRegion: string;
+  approvedPreparedSnapshotHash: string | null;
   planSummary: DeploymentPlanSummary;
   status?: "PENDING" | "SUCCESS" | "FAILED";
   preserveFailureDetails?: boolean;
@@ -209,6 +216,21 @@ export type DeploymentRepository = {
     planArtifactId: string
   ): Promise<DeploymentPlanArtifactRecord | undefined>;
   findRunningDeploymentInProject(projectId: string): Promise<DeploymentRecord | undefined>;
+  findProjectDraftForPreparation?(
+    projectId: string
+  ): Promise<
+    | Pick<typeof projectDrafts.$inferSelect, "revision" | "diagramJson" | "terraformFiles">
+    | undefined
+  >;
+  findProjectTargetForPreparation?(
+    projectId: string
+  ): Promise<
+    | Pick<
+        typeof projectDeploymentTargets.$inferSelect,
+        "connectionId" | "runtimeTargetKind" | "confirmedBuildConfig"
+      >
+    | undefined
+  >;
 
   listDeploymentProjectRows?(
     accessContext: ProjectAccessContext
@@ -300,7 +322,8 @@ const clearDeploymentApprovalFields = {
   approvedTerraformArtifactHash: null,
   approvedTfplanHash: null,
   approvedAwsAccountId: null,
-  approvedAwsRegion: null
+  approvedAwsRegion: null,
+  approvedPreparedSnapshotHash: null
 };
 
 function createRunningDeploymentValues(activeStage: DeploymentStage) {
@@ -420,13 +443,51 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
     },
 
     async createDeployment(input) {
-      const [deployment] = await db.insert(deployments).values(input).returning();
+      return db.transaction(async (tx) => {
+        if (input.preparedDraftRevision !== null) {
+          const [draft] = await tx
+            .select({ revision: projectDrafts.revision })
+            .from(projectDrafts)
+            .where(eq(projectDrafts.projectId, input.projectId))
+            .for("update");
 
-      if (!deployment) {
-        throw new Error("Deployment creation failed");
-      }
+          if (!draft || draft.revision !== input.preparedDraftRevision) {
+            throw new DeploymentConflictError("Project draft revision changed before deployment creation");
+          }
+        }
 
-      return deployment;
+        const [deployment] = await tx.insert(deployments).values(input).returning();
+
+        if (!deployment) {
+          throw new Error("Deployment creation failed");
+        }
+
+        return deployment;
+      });
+    },
+
+    async findProjectDraftForPreparation(projectId) {
+      const [draft] = await db
+        .select({
+          revision: projectDrafts.revision,
+          diagramJson: projectDrafts.diagramJson,
+          terraformFiles: projectDrafts.terraformFiles
+        })
+        .from(projectDrafts)
+        .where(eq(projectDrafts.projectId, projectId));
+      return draft;
+    },
+
+    async findProjectTargetForPreparation(projectId) {
+      const [target] = await db
+        .select({
+          connectionId: projectDeploymentTargets.connectionId,
+          runtimeTargetKind: projectDeploymentTargets.runtimeTargetKind,
+          confirmedBuildConfig: projectDeploymentTargets.confirmedBuildConfig
+        })
+        .from(projectDeploymentTargets)
+        .where(eq(projectDeploymentTargets.projectId, projectId));
+      return target;
     },
 
     async findDeploymentById(deploymentId) {
@@ -661,6 +722,7 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
         approvedTfplanHash: input.approvedTfplanHash,
         approvedAwsAccountId: input.approvedAwsAccountId,
         approvedAwsRegion: input.approvedAwsRegion,
+        approvedPreparedSnapshotHash: input.approvedPreparedSnapshotHash,
         planSummary: input.planSummary,
         isBlocked: false,
         blockedBy: null,
@@ -934,6 +996,8 @@ export async function createDeployment(
     scope: input.scope ?? "infrastructure",
     targetKind: input.targetKind ?? null,
     source: input.source ?? "direct",
+    preparedDraftRevision: input.preparedDraftRevision ?? null,
+    preparedSnapshotHash: input.preparedSnapshotHash ?? null,
     status: "PENDING"
   });
 }
