@@ -95,53 +95,6 @@ export async function registerLiveObservationPublicCollectorRoutes(
     }
   );
 
-  app.options("/live-observations/public/:observationId/events", async (request, reply) => {
-    try {
-      const params = paramsSchema.parse(request.params);
-      const result = await options.collector.preflight({
-        observationId: params.observationId,
-        origin: firstHeaderValue(request.headers.origin)
-      });
-      applyCors(reply, result.audienceOrigin);
-      return reply.status(204).send();
-    } catch (error) {
-      return handlePublicError(error, reply);
-    }
-  });
-
-  app.post(
-    "/live-observations/public/:observationId/events",
-    {
-      bodyLimit: BODY_LIMIT_BYTES,
-      async onRequest(request, reply) {
-        try {
-          const params = paramsSchema.parse(request.params);
-          const authorized = await options.collector.authorize({
-            authorization: firstHeaderValue(request.headers.authorization),
-            observationId: params.observationId,
-            origin: firstHeaderValue(request.headers.origin)
-          });
-          applyCors(reply, authorized.audienceOrigin);
-          authorizedRequests.set(request, authorized);
-        } catch (error) {
-          return handlePublicError(error, reply);
-        }
-      }
-    },
-    async (request, reply) => {
-      try {
-        const authorized = authorizedRequests.get(request);
-        if (!authorized) {
-          throw new LiveObservationPublicCollectorError("unavailable");
-        }
-        const body = bodySchema.parse(request.body);
-        const response = await authorized.collectEvent(body.eventId);
-        return reply.status(response.accepted ? 202 : 200).send(response);
-      } catch (error) {
-        return handlePublicError(error, reply);
-      }
-    }
-  );
 }
 
 function applyCors(reply: FastifyReply, audienceOrigin: string): void {

@@ -246,10 +246,10 @@ export function registerLiveObservationStoreContract(input: {
 
     createValue.capability.kid = "mutated-key";
     createValue.manifest.provenance.region = "us-east-1";
-    asPayload(createValue.manifest).autoScalingGroupName = "mutated-input";
+    asAsgCapacityTarget(createValue.manifest).autoScalingGroupName = "mutated-input";
     created.session.capability.kid = "mutated-result";
     created.session.manifest.provenance.region = "eu-west-1";
-    asPayload(created.session.manifest).autoScalingGroupName = "mutated-result";
+    asAsgCapacityTarget(created.session.manifest).autoScalingGroupName = "mutated-result";
     created.session.live.acceptedEventCount = 999;
 
     const firstRead = await store.readSession({ observationId: OBSERVATION_ID });
@@ -257,7 +257,7 @@ export function registerLiveObservationStoreContract(input: {
     assert.equal(firstRead.session.capability.kid, "current-key");
     assert.equal(firstRead.session.manifest.provenance.region, "ap-northeast-2");
     assert.equal(
-      asPayload(firstRead.session.manifest).autoScalingGroupName,
+      asAsgCapacityTarget(firstRead.session.manifest).autoScalingGroupName,
       "sc-lo-asg-123e4567e89b"
     );
     assert.equal(firstRead.session.live.acceptedEventCount, 0);
@@ -269,7 +269,7 @@ export function registerLiveObservationStoreContract(input: {
     assert.equal(secondRead.session.live.pressurePercent, 0);
     assert.equal(
       secondRead.session.manifest.endpoints.trafficUrl,
-      "https://traffic.example.com/events"
+      "https://sc-lo-alb-123e4567e89b-123456789.ap-northeast-2.elb.amazonaws.com/traffic"
     );
 
     const stopped = await store.stopSession({
@@ -1520,7 +1520,8 @@ function createManifest(
     },
     endpoints: {
       audienceBaseUrl: "https://audience.example.com",
-      trafficUrl: "https://traffic.example.com/events"
+      trafficUrl:
+        `https://sc-lo-alb-${resourceSuffix}-123456789.ap-northeast-2.elb.amazonaws.com/traffic`
     },
     pressure: {
       metric: "requests_per_target_per_minute",
@@ -1529,9 +1530,10 @@ function createManifest(
     },
     adapter: {
       kind: "aws-live-observation",
-      version: 1,
+      version: 2,
       payload: {
-        cloudFrontDistributionId: "E1ABCDEFGHIJKL",
+        loadBalancerDnsName:
+          `sc-lo-alb-${resourceSuffix}-123456789.ap-northeast-2.elb.amazonaws.com`,
         loadBalancerArn:
           "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:" +
           "loadbalancer/app/sc-lo-alb-" +
@@ -1542,7 +1544,10 @@ function createManifest(
           "targetgroup/sc-lo-api-" +
           resourceSuffix +
           "/6d0ecf831eec9f09",
-        autoScalingGroupName: "sc-lo-asg-" + resourceSuffix
+        capacityTarget: {
+          kind: "asg",
+          autoScalingGroupName: "sc-lo-asg-" + resourceSuffix
+        }
       }
     }
   };
@@ -1572,6 +1577,18 @@ function asPayload(
   manifest: DeploymentLiveObservationManifestV2
 ): Record<string, string> {
   return manifest.adapter.payload as Record<string, string>;
+}
+
+function asAsgCapacityTarget(
+  manifest: DeploymentLiveObservationManifestV2
+): { kind: "asg"; autoScalingGroupName: string } {
+  if (
+    manifest.adapter.version !== 2 ||
+    manifest.adapter.payload.capacityTarget.kind !== "asg"
+  ) {
+    assert.fail("Expected adapter v2 ASG capacity target");
+  }
+  return manifest.adapter.payload.capacityTarget;
 }
 
 function mutateInput(

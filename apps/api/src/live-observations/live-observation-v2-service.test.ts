@@ -149,7 +149,8 @@ function createManifest(): DeploymentLiveObservationManifestV2 {
     },
     endpoints: {
       audienceBaseUrl: "https://sketchcatch.example.com",
-      trafficUrl: "https://traffic.example.com/events"
+      trafficUrl:
+        "https://customer-platform-123456789.ap-northeast-2.elb.amazonaws.com/traffic"
     },
     pressure: {
       metric: "requests_per_target_per_minute",
@@ -160,6 +161,8 @@ function createManifest(): DeploymentLiveObservationManifestV2 {
       kind: "aws-live-observation",
       version: 2,
       payload: {
+        loadBalancerDnsName:
+          "customer-platform-123456789.ap-northeast-2.elb.amazonaws.com",
         loadBalancerArn:
           "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:loadbalancer/app/customer-platform/50dc6c495c0c9188",
         targetGroupArn:

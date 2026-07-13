@@ -66,6 +66,7 @@ const awsLiveObservationAdapterPayloadV1Schema = z
 
 const awsLiveObservationAdapterPayloadV2Schema = z
   .object({
+    loadBalancerDnsName: z.string().min(1).max(253),
     loadBalancerArn: z.string().regex(generalLoadBalancerArnPattern),
     targetGroupArn: z.string().regex(generalTargetGroupArnPattern),
     capacityTarget: z.discriminatedUnion("kind", [
@@ -208,12 +209,59 @@ export const deploymentLiveObservationManifestV2Schema: z.ZodType<DeploymentLive
           message: "Target group region must match manifest provenance"
         });
       }
+
+      if (
+        loadBalancerIdentity.partition !==
+        partitionForRegion(manifest.provenance.region)
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: ["adapter", "payload", "loadBalancerArn"],
+          message: "Load balancer partition must match manifest region"
+        });
+      }
+
+      if (manifest.adapter.version === 2) {
+        const trafficUrl = new URL(manifest.endpoints.trafficUrl);
+        const dnsName = manifest.adapter.payload.loadBalancerDnsName;
+        if (
+          !isPublicAlbDnsName({
+            dnsName,
+            loadBalancerName: loadBalancerIdentity.resourceSuffix,
+            partition: loadBalancerIdentity.partition,
+            region: loadBalancerIdentity.region
+          })
+        ) {
+          context.addIssue({
+            code: "custom",
+            path: ["adapter", "payload", "loadBalancerDnsName"],
+            message: "Load balancer DNS name must identify the public ALB"
+          });
+        }
+        if (trafficUrl.hostname !== dnsName || trafficUrl.port !== "") {
+          context.addIssue({
+            code: "custom",
+            path: ["endpoints", "trafficUrl"],
+            message: "Traffic URL must use the verified public ALB DNS name on HTTPS 443"
+          });
+        }
+      }
     });
 
 export function parseDeploymentLiveObservationManifestV2(
   value: unknown
 ): DeploymentLiveObservationManifestV2 {
   return deploymentLiveObservationManifestV2Schema.parse(value);
+}
+
+export function requireLiveObservationTrafficTarget(
+  value: unknown
+): string {
+  const manifest = parseDeploymentLiveObservationManifestV2(value);
+  if (manifest.adapter.version !== 2) {
+    throw new Error("Live Observation traffic target requires adapter v2 evidence");
+  }
+  return manifest.endpoints.trafficUrl;
 }
 
 type ElasticLoadBalancingArnIdentity = {
@@ -247,4 +295,29 @@ function parseElasticLoadBalancingArnIdentity(
     accountId,
     resourceSuffix
   };
+}
+
+function partitionForRegion(region: string): string {
+  if (region.startsWith("cn-")) return "aws-cn";
+  if (region.startsWith("us-gov-")) return "aws-us-gov";
+  return "aws";
+}
+
+function isPublicAlbDnsName(input: {
+  dnsName: string;
+  loadBalancerName: string;
+  partition: string;
+  region: string;
+}): boolean {
+  if (input.dnsName !== input.dnsName.toLowerCase()) return false;
+  const suffix =
+    input.partition === "aws-cn"
+      ? `${input.region}.elb.amazonaws.com.cn`
+      : `${input.region}.elb.amazonaws.com`;
+  const expectedPrefix = `${input.loadBalancerName}-`;
+  const labelSuffix = `.${suffix}`;
+  if (!input.dnsName.endsWith(labelSuffix)) return false;
+  const label = input.dnsName.slice(0, -labelSuffix.length);
+  if (label.startsWith("internal-") || !label.startsWith(expectedPrefix)) return false;
+  return /^[0-9]{1,16}$/.test(label.slice(expectedPrefix.length));
 }

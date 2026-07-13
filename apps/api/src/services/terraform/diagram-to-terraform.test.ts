@@ -321,9 +321,9 @@ test("renders Autoscaling Policy nested target tracking configuration", () => {
 test("renders ECS Fargate Live Observation outputs and Application Auto Scaling blocks", () => {
   const graph: InfrastructureGraph = {
     nodes: [
-      createLiveObservationNode("aws_s3_bucket_website_configuration", "site", {}),
       createLiveObservationNode("aws_lb", "demo", {}),
       createLiveObservationNode("aws_lb_target_group", "api", {}),
+      ...createHttpsAlbListenerNodes(),
       createLiveObservationNode("aws_ecs_cluster", "demo", { name: "demo-cluster" }),
       createLiveObservationNode("aws_ecs_service", "api", {
         cluster: "aws_ecs_cluster.demo.id",
@@ -368,9 +368,9 @@ test("renders ECS Fargate Live Observation outputs and Application Auto Scaling 
 test("does not emit an ECS request threshold from a CPU target tracking policy", () => {
   const graph: InfrastructureGraph = {
     nodes: [
-      createLiveObservationNode("aws_s3_bucket_website_configuration", "site", {}),
       createLiveObservationNode("aws_lb", "demo", {}),
       createLiveObservationNode("aws_lb_target_group", "api", {}),
+      ...createHttpsAlbListenerNodes(),
       createLiveObservationNode("aws_ecs_cluster", "demo", {}),
       createLiveObservationNode("aws_ecs_service", "api", {}),
       createLiveObservationNode("aws_appautoscaling_target", "api", { maxCapacity: 2 }),
@@ -445,12 +445,12 @@ test("renders CloudWatch Alarm dimensions and Autoscaling Policy action referenc
   );
 });
 
-test("renders Live Observation outputs for the complete demo topology", () => {
+test("renders Live Observation outputs only for an explicit HTTPS ALB topology", () => {
   const graph: InfrastructureGraph = {
     nodes: [
-      createLiveObservationNode("aws_s3_bucket_website_configuration", "site", {}),
       createLiveObservationNode("aws_lb", "demo", {}),
       createLiveObservationNode("aws_lb_target_group", "api", {}),
+      ...createHttpsAlbListenerNodes(),
       createLiveObservationNode("aws_autoscaling_group", "api", {}),
       createLiveObservationNode("aws_cloudwatch_metric_alarm", "scale_out", {
         metricName: "RequestCountPerTarget",
@@ -462,14 +462,40 @@ test("renders Live Observation outputs for the complete demo topology", () => {
 
   const terraform = renderTerraformFromInfrastructureGraph(graph);
 
-  assert.match(terraform, /output "static_site_url"/);
-  assert.match(terraform, /aws_s3_bucket_website_configuration\.site\.website_endpoint/);
-  assert.match(terraform, /output "api_base_url"/);
-  assert.match(terraform, /aws_lb\.demo\.dns_name/);
+  assert.match(terraform, /output "traffic_url"[\s\S]*https:\/\/\$\{aws_lb\.demo\.dns_name\}\/traffic/);
+  assert.match(terraform, /output "load_balancer_dns_name"[\s\S]*aws_lb\.demo\.dns_name/);
+  assert.match(terraform, /output "load_balancer_arn"[\s\S]*aws_lb\.demo\.arn/);
+  assert.match(terraform, /output "target_group_arn"[\s\S]*aws_lb_target_group\.api\.arn/);
   assert.match(terraform, /output "asg_name"/);
-  assert.match(terraform, /output "alb_arn_suffix"/);
-  assert.match(terraform, /output "target_group_arn_suffix"/);
+  assert.doesNotMatch(terraform, /output "static_site_url"/);
+  assert.doesNotMatch(terraform, /output "api_base_url"/);
   assert.match(terraform, /output "scale_out_threshold"[\s\S]*value = 60/);
+});
+
+test("HTTP-only ALB graphs intentionally omit all Live Observation outputs", () => {
+  const graph: InfrastructureGraph = {
+    nodes: [
+      createLiveObservationNode("aws_lb", "demo", {}),
+      createLiveObservationNode("aws_lb_target_group", "api", {}),
+      createLiveObservationNode("aws_lb_listener", "http", {
+        loadBalancerArn: "aws_lb.demo.arn",
+        port: 80,
+        protocol: "HTTP",
+        defaultAction: { type: "forward", targetGroupArn: "aws_lb_target_group.api.arn" }
+      }),
+      createLiveObservationNode("aws_autoscaling_group", "api", {}),
+      createLiveObservationNode("aws_cloudwatch_metric_alarm", "scale_out", {
+        metricName: "RequestCountPerTarget",
+        threshold: 60
+      })
+    ],
+    edges: []
+  };
+
+  const terraform = renderTerraformFromInfrastructureGraph(graph);
+  assert.doesNotMatch(terraform, /output "traffic_url"/);
+  assert.doesNotMatch(terraform, /output "load_balancer_dns_name"/);
+  assert.doesNotMatch(terraform, /output "api_base_url"/);
 });
 
 test("renders Step Scaling adjustments as nested Terraform blocks", () => {
@@ -645,4 +671,20 @@ function createLiveObservationNode(
     },
     config
   };
+}
+
+function createHttpsAlbListenerNodes(): InfrastructureGraph["nodes"] {
+  return [
+    createLiveObservationNode("aws_acm_certificate", "demo", { domainName: "api.example.com" }),
+    createLiveObservationNode("aws_lb_listener", "https", {
+      loadBalancerArn: "aws_lb.demo.arn",
+      port: 443,
+      protocol: "HTTPS",
+      certificateArn: "aws_acm_certificate.demo.arn",
+      defaultAction: {
+        type: "forward",
+        targetGroupArn: "aws_lb_target_group.api.arn"
+      }
+    })
+  ];
 }

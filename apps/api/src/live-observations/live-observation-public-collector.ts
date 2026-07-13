@@ -4,6 +4,7 @@ import {
   type LiveObservationStore
 } from "./live-observation-store.js";
 import type { LiveObservationPublicRequestRateLimiter } from "./live-observation-public-request-rate-limiter.js";
+import { requireLiveObservationTrafficTarget } from "./live-observation-manifest.js";
 
 export type LiveObservationPublicCollectorErrorCode =
   | "bad_request"
@@ -29,10 +30,6 @@ type LiveObservationCapability = ReturnType<typeof createLiveObservationCapabili
 export type LiveObservationAuthorizedCollector = Readonly<{
   audienceOrigin: string;
   request(input: { eventId: string; ipAddress: string }): Promise<{
-    accepted: boolean;
-    acceptedEventCount: number;
-  }>;
-  collectEvent(eventId: string): Promise<{
     accepted: boolean;
     acceptedEventCount: number;
   }>;
@@ -106,7 +103,6 @@ export function createLiveObservationPublicCollector(options: {
 
       return Object.freeze({
         audienceOrigin,
-        collectEvent,
         async request(requestInput: { eventId: string; ipAddress: string }) {
           try {
             const rateLimit = await options.requestRateLimiter.consume({
@@ -134,8 +130,11 @@ export function createLiveObservationPublicCollector(options: {
             ) {
               throw collectorError("gone");
             }
+            const trafficUrl = requireLiveObservationTrafficTarget(
+              live.session.manifest
+            );
             const response = await options.fetch(
-              live.session.manifest.endpoints.trafficUrl,
+              trafficUrl,
               {
                 method: "POST",
                 redirect: "manual",

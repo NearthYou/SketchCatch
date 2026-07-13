@@ -6,6 +6,7 @@ import type {
 } from "@sketchcatch/types";
 import type { DeploymentLiveObservationManifestRepository } from "./live-observation-manifest-repository.js";
 import {
+  assertDeploymentLiveObservationManifestReusable,
   createDeploymentLiveObservationManifest,
   materializeDeploymentLiveObservationManifest
 } from "./live-observation-manifest-materializer.js";
@@ -29,6 +30,8 @@ test("materializer persists a verified ASG manifest without credential evidence"
   assert.equal(record.status, "valid");
   assert.equal(repository.valid?.adapter.version, 2);
   assert.deepEqual(repository.valid?.adapter.payload, {
+    loadBalancerDnsName:
+      "customer-platform-123456789.ap-northeast-2.elb.amazonaws.com",
     loadBalancerArn:
       "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:loadbalancer/app/customer-platform/50dc6c495c0c9188",
     targetGroupArn:
@@ -112,6 +115,34 @@ test("materializer fails closed and stores a generic invalid row for unverified 
       deployment: createDeployment(),
       connection: createConnection(),
       outputs: createOutputs({ traffic_url: "http://api.example.com/traffic" })
+    },
+    {
+      audienceBaseUrl: "https://audience.example.com",
+      deployment: createDeployment({ approvedAwsAccountId: "210987654321" }),
+      connection: createConnection(),
+      outputs: createOutputs({ asg_name: "customer-platform-asg" })
+    },
+    {
+      audienceBaseUrl: "https://audience.example.com",
+      deployment: createDeployment(),
+      connection: createConnection(),
+      outputs: createOutputs({
+        asg_name: "customer-platform-asg",
+        load_balancer_dns_name:
+          "internal-customer-platform-123456789.ap-northeast-2.elb.amazonaws.com",
+        traffic_url:
+          "https://internal-customer-platform-123456789.ap-northeast-2.elb.amazonaws.com/traffic"
+      })
+    },
+    {
+      audienceBaseUrl: "https://audience.example.com",
+      deployment: createDeployment(),
+      connection: createConnection(),
+      outputs: createOutputs({
+        asg_name: "customer-platform-asg",
+        traffic_url:
+          "https://other-platform-123456789.ap-northeast-2.elb.amazonaws.com/traffic"
+      })
     }
   ]) {
     const repository = new FakeManifestRepository();
@@ -126,12 +157,96 @@ test("materializer fails closed and stores a generic invalid row for unverified 
   }
 });
 
+test("materializer propagates persistence failures instead of converting them to manifest_invalid", async () => {
+  let invalidWrites = 0;
+  const repository: DeploymentLiveObservationManifestRepository = {
+    async findByDeploymentId() {
+      return null;
+    },
+    async saveValid() {
+      throw new Error("database unavailable");
+    },
+    async saveInvalid() {
+      invalidWrites += 1;
+      throw new Error("unexpected invalid write");
+    }
+  };
+
+  await assert.rejects(
+    () =>
+      materializeDeploymentLiveObservationManifest(
+        {
+          audienceBaseUrl: "https://audience.example.com",
+          deployment: createDeployment(),
+          connection: createConnection(),
+          outputs: createOutputs({ asg_name: "customer-platform-asg" })
+        },
+        repository
+      ),
+    /database unavailable/
+  );
+  assert.equal(invalidWrites, 0);
+});
+
+test("existing immutable manifest must match all current approved deployment evidence", async () => {
+  const manifest = createDeploymentLiveObservationManifest({
+    audienceBaseUrl: "https://audience.example.com",
+    deployment: createDeployment(),
+    connection: createConnection(),
+    outputs: createOutputs({ asg_name: "customer-platform-asg" })
+  });
+  const record = createRecord("valid", manifest, null);
+
+  assert.doesNotThrow(() =>
+    assertDeploymentLiveObservationManifestReusable({
+      connection: createConnection(),
+      deployment: createDeployment(),
+      record
+    })
+  );
+
+  for (const deployment of [
+    createDeployment({ approvedTerraformArtifactHash: "f".repeat(64) }),
+    createDeployment({ awsConnectionId: "11111111-1111-4111-8111-111111111111" }),
+    createDeployment({ approvedAwsAccountId: "210987654321" }),
+    createDeployment({ approvedAwsRegion: "us-east-1" })
+  ]) {
+    assert.throws(() =>
+      assertDeploymentLiveObservationManifestReusable({
+        connection: createConnection(),
+        deployment,
+        record
+      })
+    );
+  }
+
+  const wrongArnManifest = structuredClone(manifest);
+  wrongArnManifest.adapter.payload.loadBalancerArn =
+    wrongArnManifest.adapter.payload.loadBalancerArn.replace(
+      "123456789012",
+      "210987654321"
+    );
+  wrongArnManifest.adapter.payload.targetGroupArn =
+    wrongArnManifest.adapter.payload.targetGroupArn.replace(
+      "123456789012",
+      "210987654321"
+    );
+  assert.throws(() =>
+    assertDeploymentLiveObservationManifestReusable({
+      connection: createConnection(),
+      deployment: createDeployment(),
+      record: createRecord("valid", wrongArnManifest, null)
+    })
+  );
+});
+
 function createDeployment(overrides: Record<string, unknown> = {}) {
   return {
     id: DEPLOYMENT_ID,
     status: "SUCCESS" as const,
     awsConnectionId: CONNECTION_ID,
     approvedTerraformArtifactHash: "0123456789abcdef".repeat(4),
+    approvedAwsAccountId: "123456789012",
     approvedAwsRegion: "ap-northeast-2",
     ...overrides
   };
@@ -151,7 +266,10 @@ function createConnection(overrides: Record<string, unknown> = {}) {
 function createOutputs(overrides: Record<string, unknown> = {}) {
   return {
     static_site_url: "https://audience.example.com",
-    traffic_url: "https://api.example.com/traffic",
+    traffic_url:
+      "https://customer-platform-123456789.ap-northeast-2.elb.amazonaws.com/traffic",
+    load_balancer_dns_name:
+      "customer-platform-123456789.ap-northeast-2.elb.amazonaws.com",
     load_balancer_arn:
       "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:loadbalancer/app/customer-platform/50dc6c495c0c9188",
     target_group_arn:

@@ -1354,6 +1354,7 @@ export type DeploymentLiveObservationAwsAdapterV2 = {
   kind: "aws-live-observation";
   version: 2;
   payload: {
+    loadBalancerDnsName: string;
     loadBalancerArn: string;
     targetGroupArn: string;
     capacityTarget:

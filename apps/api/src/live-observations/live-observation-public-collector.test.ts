@@ -15,7 +15,7 @@ const NOW_MS = Date.parse("2026-07-11T00:00:00.000Z");
 const SECRET = Buffer.alloc(32, 0x31).toString("base64url");
 const EVENT_ID = "00000000-0000-4000-8000-000000000001";
 
-test("public collector authenticates Store-bound claims before accepting one event", async () => {
+test("public collector authenticates Store-bound claims before requesting and accepting one receipt", async () => {
   const fixture = await createFixture();
   const authorized = await fixture.collector.authorize({
     authorization: `LiveObservation ${fixture.credential}`,
@@ -24,14 +24,46 @@ test("public collector authenticates Store-bound claims before accepting one eve
   });
 
   assert.equal(authorized.audienceOrigin, "https://audience.example.com");
-  assert.deepEqual(await authorized.collectEvent(EVENT_ID), {
+  assert.deepEqual(await authorized.request({ eventId: EVENT_ID, ipAddress: "203.0.113.42" }), {
     accepted: true,
     acceptedEventCount: 1
   });
-  assert.deepEqual(await authorized.collectEvent(EVENT_ID), {
+  assert.deepEqual(await authorized.request({ eventId: EVENT_ID, ipAddress: "203.0.113.42" }), {
     accepted: false,
     acceptedEventCount: 1
   });
+});
+
+test("authorized public request revalidates the ALB traffic target immediately before fetch", async () => {
+  let fetchCalls = 0;
+  let corruptReread = false;
+  const fixture = await createFixture(
+    (store) => ({
+      ...store,
+      async readSession(input) {
+        const result = await store.readSession(input);
+        if (corruptReread && result.kind === "active") {
+          result.session.manifest.endpoints.trafficUrl =
+            "https://169.254.169.254/latest/meta-data";
+        }
+        return result;
+      }
+    }),
+    {
+      async fetch() {
+        fetchCalls += 1;
+        return { status: 204 };
+      }
+    }
+  );
+  const authorized = await authorize(fixture);
+  corruptReread = true;
+
+  await assertCollectorError(
+    () => authorized.request({ eventId: EVENT_ID, ipAddress: "203.0.113.42" }),
+    "unavailable"
+  );
+  assert.equal(fetchCalls, 0);
 });
 
 test("authorized public request POSTs only to Store trafficUrl before accepting its receipt", async () => {
@@ -377,7 +409,10 @@ test("public collector maps Store rate, cap, disappearance, and failure outcomes
       }
     }));
     const authorized = await authorize(fixture);
-    await assertCollectorError(() => authorized.collectEvent(EVENT_ID), code);
+    await assertCollectorError(
+      () => authorized.request({ eventId: EVENT_ID, ipAddress: "203.0.113.42" }),
+      code
+    );
   }
 
   const unavailable = await createFixture((store) => ({
@@ -387,7 +422,10 @@ test("public collector maps Store rate, cap, disappearance, and failure outcomes
     }
   }));
   await assertCollectorError(
-    () => authorize(unavailable).then((session) => session.collectEvent(EVENT_ID)),
+    () =>
+      authorize(unavailable).then((session) =>
+        session.request({ eventId: EVENT_ID, ipAddress: "203.0.113.42" })
+      ),
     "unavailable"
   );
 });

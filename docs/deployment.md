@@ -188,7 +188,7 @@ Terraform 정의는 `infra/aws/terraform`에 있습니다.
 - API와 web은 각각 독립된 Fargate task definition과 ECS service를 사용합니다.
 - ALB listener는 `/api`, `/api/*`, `/health`, `/health/db`를 API target group으로, 나머지 `/*`를 기본 web target group으로 전달합니다.
 - API target group은 port `4000`, web target group은 port `3000`이며 둘 다 Fargate `awsvpc`에 맞춘 `ip` target mode입니다.
-- ALB가 `X-Forwarded-For`와 `X-Forwarded-Proto`를 전달하고, Fastify의 `trustProxy`가 이를 해석합니다.
+- ALB가 `X-Forwarded-For`와 `X-Forwarded-Proto`를 전달하고, Fastify는 production topology의 ALB 한 hop만 신뢰합니다. 임의의 leading `X-Forwarded-For` 값은 client IP rate-limit identity로 사용하지 않습니다.
 - Next.js client의 API base URL은 same-origin `/api`입니다. `API_PROXY_TARGET` rewrite는 local/dev fallback이며 production ALB의 `/api` rule보다 앞서지 않습니다.
 - 기존 EC2 ALB와 legacy ECS target은 제거되어 ECS ALB만 production traffic을 받습니다.
 - NAT Gateway는 기본 생성하지 않고 public Fargate + ALB 구조를 유지합니다.
@@ -457,9 +457,9 @@ LIVE_OBSERVATION_ENABLED=false
 SKETCHCATCH_PUBLIC_BASE_URL=https://sketchcatch.net
 ```
 
-`SKETCHCATCH_PUBLIC_BASE_URL`은 audience page가 public receipt collector를 호출할 기준 origin입니다. Nginx/ALB는 이 origin의 `/api/live-observations/...` 요청을 API로 전달해야 합니다. audience S3 website origin과 SketchCatch Web origin만 collector CORS 응답을 받을 수 있습니다.
+`SKETCHCATCH_PUBLIC_BASE_URL`은 audience page가 public Live Observation API를 호출할 기준 origin입니다. Nginx/ALB는 이 origin의 `/api/live-observations/...` 요청을 API로 전달해야 하며 exact SketchCatch Web origin만 CORS 응답을 받을 수 있습니다.
 
-운영 조립은 v2 Store route만 등록하며 legacy token path route는 등록하지 않습니다. audience URL은 `/observe/:observationId`이고 capability는 exact-Origin bootstrap 응답으로만 전달되며 URL, RDS, Redis, browser storage, 로그에 저장하지 않습니다.
+운영 조립은 v2 Store route만 등록하며 legacy token path와 direct `/events` route는 등록하지 않습니다. audience URL은 `/observe/:observationId`이고 session-bound transient capability는 exact-Origin bootstrap 응답으로만 전달되며 URL, RDS, Redis, browser storage, 로그에 저장하지 않습니다. 같은 active session의 여러 audience client가 bootstrap을 반복하는 것은 정상 동작입니다.
 
 `LIVE_OBSERVATION_ENABLED=true`이면 application startup은 다음 capability keyring을 필수로 검증합니다.
 
@@ -492,7 +492,7 @@ cloudwatch:GetMetricData
 cloudwatch:GetMetricStatistics
 ```
 
-Demo Web Service의 Live Observation output은 `static_site_url`, `api_base_url`, `asg_name`, `alb_arn_suffix`, `target_group_arn_suffix`, `scale_out_threshold`입니다. Terraform Safety Gate는 `1/1/2` ASG, `RequestCountPerTarget` 60건/분, Step Scaling `+1`, cooldown 180초 형태만 허용하며 scale-in은 허용하지 않습니다.
+Diagram-to-Terraform의 Live Observation v2 output은 검증된 HTTPS:443 ALB listener와 graph 안의 ACM certificate가 있을 때만 `traffic_url`, `load_balancer_dns_name`, `load_balancer_arn`, `target_group_arn`, capacity target, `scale_out_threshold`를 생성합니다. S3 website나 HTTP `api_base_url`을 v2 target으로 사용하지 않으며 HTTP-only graph는 Live Observation 대상이 아닙니다.
 
 로컬 자동 검증은 AWS 리소스를 만들지 않습니다.
 

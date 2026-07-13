@@ -71,9 +71,9 @@ function renderInlineLambdaArchive(node: InfrastructureGraphNode): string {
 }
 
 function renderLiveObservationOutputs(graph: InfrastructureGraph): string[] {
-  const website = findResourceNode(graph, "aws_s3_bucket_website_configuration");
   const loadBalancer = findResourceNode(graph, "aws_lb");
   const targetGroup = findResourceNode(graph, "aws_lb_target_group");
+  const certificate = findResourceNode(graph, "aws_acm_certificate");
   const autoScalingGroup = findResourceNode(graph, "aws_autoscaling_group");
   const ecsCluster = findResourceNode(graph, "aws_ecs_cluster");
   const ecsService = findResourceNode(graph, "aws_ecs_service");
@@ -86,18 +86,28 @@ function renderLiveObservationOutputs(graph: InfrastructureGraph): string[] {
       typeof node.config["threshold"] === "number"
   );
 
-  if (!website || !loadBalancer || !targetGroup) {
+  if (!loadBalancer || !targetGroup || !certificate) {
     return [];
   }
 
-  const websiteAddress = `aws_s3_bucket_website_configuration.${website.iac.resourceName}`;
   const loadBalancerAddress = `aws_lb.${loadBalancer.iac.resourceName}`;
   const targetGroupAddress = `aws_lb_target_group.${targetGroup.iac.resourceName}`;
+  const certificateAddress = `aws_acm_certificate.${certificate.iac.resourceName}`;
+  if (
+    !hasValidatedHttpsListener(
+      graph,
+      loadBalancerAddress,
+      targetGroupAddress,
+      certificateAddress
+    )
+  ) {
+    return [];
+  }
   const commonOutputs = [
-    renderOutput("static_site_url", `"http://\${${websiteAddress}.website_endpoint}"`),
-    renderOutput("api_base_url", `"http://\${${loadBalancerAddress}.dns_name}"`),
-    renderOutput("alb_arn_suffix", `${loadBalancerAddress}.arn_suffix`),
-    renderOutput("target_group_arn_suffix", `${targetGroupAddress}.arn_suffix`)
+    renderOutput("traffic_url", `"https://\${${loadBalancerAddress}.dns_name}/traffic"`),
+    renderOutput("load_balancer_dns_name", `${loadBalancerAddress}.dns_name`),
+    renderOutput("load_balancer_arn", `${loadBalancerAddress}.arn`),
+    renderOutput("target_group_arn", `${targetGroupAddress}.arn`)
   ];
 
   if (autoScalingGroup && alarm) {
@@ -139,6 +149,35 @@ function renderLiveObservationOutputs(graph: InfrastructureGraph): string[] {
       ? []
       : [renderOutput("scale_out_threshold", String(requestThreshold))])
   ];
+}
+
+function hasValidatedHttpsListener(
+  graph: InfrastructureGraph,
+  loadBalancerAddress: string,
+  targetGroupAddress: string,
+  certificateAddress: string
+): boolean {
+  return graph.nodes.some((node) => {
+    if (
+      node.iac.terraformBlockType !== "resource" ||
+      node.iac.resourceType !== "aws_lb_listener" ||
+      node.config["protocol"] !== "HTTPS" ||
+      node.config["port"] !== 443 ||
+      node.config["loadBalancerArn"] !== `${loadBalancerAddress}.arn` ||
+      node.config["certificateArn"] !== `${certificateAddress}.arn`
+    ) {
+      return false;
+    }
+
+    const defaultAction = node.config["defaultAction"];
+    const actions = Array.isArray(defaultAction) ? defaultAction : [defaultAction];
+    return actions.some(
+      (action) =>
+        isRecord(action) &&
+        action["type"] === "forward" &&
+        action["targetGroupArn"] === `${targetGroupAddress}.arn`
+    );
+  });
 }
 
 function findAlbRequestCountTargetValue(

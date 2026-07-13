@@ -166,7 +166,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     });
   const app = Fastify({
     logger: createApiLoggerOptions(),
-    trustProxy: true
+    trustProxy: 1
   });
   const runtimeCache =
     options.runtimeCache ??

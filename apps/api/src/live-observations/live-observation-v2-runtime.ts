@@ -12,6 +12,7 @@ import type { RuntimeCache } from "../runtime-cache/index.js";
 import { createInMemoryLiveObservationStore } from "./in-memory-live-observation-store.js";
 import { createLiveObservationCapability, type LiveObservationCapabilityKeyring } from "./live-observation-capability.js";
 import {
+  assertDeploymentLiveObservationManifestReusable,
   materializeDeploymentLiveObservationManifest
 } from "./live-observation-manifest-materializer.js";
 import {
@@ -101,7 +102,21 @@ export function createLiveObservationV2Runtime(options: {
           "LIVE_OBSERVATION_DEPLOYMENT_NOT_ELIGIBLE"
         );
       }
-      if (await repository.findByDeploymentId(deploymentId)) return;
+      const existing = await repository.findByDeploymentId(deploymentId);
+      if (existing) {
+        try {
+          assertDeploymentLiveObservationManifestReusable({
+            connection,
+            deployment: context.deployment,
+            record: existing
+          });
+          return;
+        } catch {
+          throw new LiveObservationV2ServiceError(
+            "LIVE_OBSERVATION_DEPLOYMENT_NOT_ELIGIBLE"
+          );
+        }
+      }
 
       const terraformOutputs = await listTerraformOutputs(
         { deploymentId, accessContext: context.accessContext },

@@ -10,6 +10,7 @@ type DeploymentEvidence = {
   readonly status: string;
   readonly awsConnectionId: string | null;
   readonly approvedTerraformArtifactHash: string | null;
+  readonly approvedAwsAccountId: string | null;
   readonly approvedAwsRegion: string | null;
 };
 
@@ -30,15 +31,16 @@ export async function materializeDeploymentLiveObservationManifest(
   },
   repository: DeploymentLiveObservationManifestRepository
 ): Promise<DeploymentLiveObservationManifestRecord> {
+  let manifest: DeploymentLiveObservationManifestV2;
   try {
-    const manifest = createDeploymentLiveObservationManifest(input);
-    return await repository.saveValid(manifest);
+    manifest = createDeploymentLiveObservationManifest(input);
   } catch {
     return repository.saveInvalid({
       deploymentId: input.deployment.id,
       reason: "manifest materialization failed"
     });
   }
+  return repository.saveValid(manifest);
 }
 
 export function createDeploymentLiveObservationManifest(input: {
@@ -57,6 +59,7 @@ export function createDeploymentLiveObservationManifest(input: {
     deployment.awsConnectionId !== connection.id ||
     typeof accountId !== "string" ||
     !/^[0-9]{12}$/.test(accountId) ||
+    deployment.approvedAwsAccountId !== accountId ||
     !connection.lastVerifiedAt ||
     deployment.approvedAwsRegion !== connection.region ||
     typeof artifactHash !== "string" ||
@@ -67,7 +70,8 @@ export function createDeploymentLiveObservationManifest(input: {
 
   const verifiedAt = toIsoDateTime(connection.lastVerifiedAt);
   const audienceBaseUrl = input.audienceBaseUrl;
-  const trafficUrl = readTrafficUrl(outputs);
+  const trafficUrl = readString(outputs, "traffic_url");
+  const loadBalancerDnsName = readString(outputs, "load_balancer_dns_name");
   const loadBalancerArn = readAwsArn(outputs, "load_balancer_arn", "alb_arn_suffix", {
     accountId,
     region: connection.region
@@ -108,12 +112,56 @@ export function createDeploymentLiveObservationManifest(input: {
       kind: "aws-live-observation",
       version: 2,
       payload: {
+        loadBalancerDnsName,
         loadBalancerArn,
         targetGroupArn,
         capacityTarget: readCapacityTarget(outputs)
       }
     }
   });
+}
+
+export function assertDeploymentLiveObservationManifestReusable(input: {
+  readonly deployment: DeploymentEvidence;
+  readonly connection: ConnectionEvidence | null;
+  readonly record: DeploymentLiveObservationManifestRecord;
+}): void {
+  const { connection, deployment, record } = input;
+  const manifest = record.manifest
+    ? parseDeploymentLiveObservationManifestV2(record.manifest)
+    : null;
+  const accountId = connection?.accountId;
+  if (
+    record.status !== "valid" ||
+    !manifest ||
+    record.deploymentId !== deployment.id ||
+    manifest.provenance.deploymentId !== deployment.id ||
+    deployment.status !== "SUCCESS" ||
+    manifest.provenance.terraformArtifactSha256 !==
+      deployment.approvedTerraformArtifactHash ||
+    deployment.awsConnectionId !== connection?.id ||
+    manifest.provenance.awsConnectionId !== connection?.id ||
+    connection?.status !== "verified" ||
+    !connection.lastVerifiedAt ||
+    !accountId ||
+    deployment.approvedAwsAccountId !== accountId ||
+    deployment.approvedAwsRegion !== connection.region ||
+    manifest.provenance.region !== connection.region
+  ) {
+    throw new Error("Immutable manifest evidence does not match deployment approval");
+  }
+
+  for (const arn of [
+    manifest.adapter.payload.loadBalancerArn,
+    manifest.adapter.payload.targetGroupArn
+  ]) {
+    const identity = /^arn:(aws|aws-cn|aws-us-gov):elasticloadbalancing:([^:]+):([0-9]{12}):/.exec(
+      arn
+    );
+    if (identity?.[2] !== connection.region || identity[3] !== accountId) {
+      throw new Error("Immutable manifest AWS identity does not match deployment approval");
+    }
+  }
 }
 
 function readCapacityTarget(outputs: Readonly<Record<string, unknown>>) {
@@ -138,15 +186,6 @@ function readCapacityTarget(outputs: Readonly<Record<string, unknown>>) {
     kind: "asg" as const,
     autoScalingGroupName: readString(outputs, "asg_name")
   };
-}
-
-function readTrafficUrl(outputs: Readonly<Record<string, unknown>>): string {
-  const explicit = readOptionalString(outputs, "traffic_url");
-  if (explicit) return explicit;
-
-  const apiBaseUrl = new URL(readString(outputs, "api_base_url"));
-  apiBaseUrl.pathname = `${apiBaseUrl.pathname.replace(/\/$/, "")}/traffic`;
-  return apiBaseUrl.toString();
 }
 
 function readAwsArn(

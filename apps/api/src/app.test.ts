@@ -24,7 +24,7 @@ test("GET /health returns ok", async () => {
   await app.close();
 });
 
-test("trusts ALB forwarded protocol and client IP headers", async () => {
+test("trusts exactly one ALB hop and ignores spoofed leading client IP headers", async () => {
   const app = buildApp();
 
   app.get("/forwarded-context", async (request) => ({
@@ -34,7 +34,7 @@ test("trusts ALB forwarded protocol and client IP headers", async () => {
 
   const response = await app.inject({
     headers: {
-      "x-forwarded-for": "203.0.113.10, 10.0.0.5",
+      "x-forwarded-for": "192.0.2.99, 203.0.113.10",
       "x-forwarded-proto": "https"
     },
     method: "GET",
@@ -158,7 +158,6 @@ test("Live Observation v2 app composition exposes Store routes and removes legac
         async authorize() {
           return {
             audienceOrigin: "https://sketchcatch.example.com",
-            collectEvent: async () => ({ accepted: true, acceptedEventCount: 1 }),
             request: async () => ({ accepted: true, acceptedEventCount: 1 })
           };
         },
@@ -217,8 +216,7 @@ test("Live Observation v2 app composition exposes Store routes and removes legac
     url: `/api/live-observations/public/${"a".repeat(43)}/events`,
     headers: { origin: "https://sketchcatch.example.com" }
   });
-  assert.equal(legacyToken.statusCode, 400);
-  assert.equal(legacyToken.json().error, "LIVE_OBSERVATION_COLLECTOR_BAD_REQUEST");
+  assert.equal(legacyToken.statusCode, 404);
 
   await app.close();
 });
