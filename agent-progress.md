@@ -8,6 +8,12 @@ Short English-only working log for the current agent context. Older records are 
 - Actual usage returns a six-month comparison with account totals, tagged project actuals, and clearly marked fallback allocations.
 
 ## Session Record
+### 2026-07-13 - Refine deployment preflight findings UI
+
+- Restored the Step 2 heading and content to one vertical flow by removing stale grid placement.
+- Rebuilt the preflight summary, severity badges, finding metadata, and actions around `DESIGN.md` tokens and Korean-first labels.
+- Verification: 7 focused pre-deployment tests, lint, typecheck, and build passed. The full Web suite retained 7 unrelated baseline failures (1027/1034 passed).
+
 ### 2026-07-13 - Compact deployment console action icons
 
 - Constrained deployment primary, secondary, and danger action icons to 16 px so browser-default SVG dimensions cannot expand the buttons.
