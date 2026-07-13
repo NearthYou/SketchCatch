@@ -294,7 +294,7 @@ export async function createGitHubInstallUrl(
   };
   const { state, expiresAt } = await createGitHubAppState(stateInput);
   const installUrl = new URL(
-    `https://github.com/apps/${encodeURIComponent(input.appSlug)}/installations/new`
+    `https://github.com/apps/${encodeURIComponent(input.appSlug)}/installations/select_target`
   );
 
   installUrl.searchParams.set("state", state);

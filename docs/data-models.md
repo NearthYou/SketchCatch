@@ -243,8 +243,6 @@ Terraform 변환에 필요한 값은 아래 4개다.
 
 DB에는 refresh token 원문을 저장하지 않고 hash만 저장한다. API 응답 DTO와 프론트 상태에는 refresh token 원문을 넣지 않고, 서버가 `HttpOnly`, `SameSite=Lax` 쿠키로 내려보낸다. access token은 짧은 만료 시간을 가진 표준 JWT로 다루며, 프론트는 access token을 `localStorage`나 `sessionStorage`에 저장하지 않고 런타임 메모리에만 보관한다. 새로고침처럼 메모리가 비면 `/api/auth/refresh`가 refresh cookie로 새 access token을 복구한다. refresh/logout 같은 cookie 기반 인증 요청은 CSRF 방지를 위해 별도 CSRF cookie 값과 `X-CSRF-Token` header 값이 일치해야 한다.
 
-GitHub App처럼 외부 origin을 왕복하는 callback 화면은 `AuthProvider`의 refresh 복구가 끝나기 전에 보호 API를 호출하지 않는다. 복구할 수 없으면 현재 내부 callback path와 query를 안전한 `returnTo`로 로그인에 전달하고, 로그인 성공 후 같은 callback을 다시 처리한다. refresh API의 인증 오류는 최초 보호 API 401로 덮어쓰지 않는다.
-
 ```ts
 type AuthSession = {
   accessToken: string;

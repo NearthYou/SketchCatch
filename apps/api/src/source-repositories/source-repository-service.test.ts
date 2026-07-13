@@ -61,7 +61,7 @@ test("GitHub App callback lists installation repositories without storing the in
   assert.equal(repository.rows.length, 0);
 });
 
-test("GitHub App install URL uses the official installation path and keeps the signed state", async () => {
+test("GitHub App install URL starts at target selection so already-installed accounts keep the signed state", async () => {
   const repository = createInMemorySourceRepositoryRepository();
   const install = await createGitHubInstallUrl(
     {
@@ -75,7 +75,7 @@ test("GitHub App install URL uses the official installation path and keeps the s
   const installUrl = new URL(install.installUrl);
 
   assert.equal(installUrl.origin, "https://github.com");
-  assert.equal(installUrl.pathname, "/apps/sketchcatch-test/installations/new");
+  assert.equal(installUrl.pathname, "/apps/sketchcatch-test/installations/select_target");
   assert.ok(installUrl.searchParams.get("state"));
 });
 

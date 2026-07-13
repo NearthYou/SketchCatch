@@ -248,7 +248,7 @@ async function refreshStoredSession(): Promise<AuthSession | null> {
 
   if (response.status === 400 || response.status === 401) {
     clearStoredAuthSession();
-    throw await toApiClientError(response);
+    return null;
   }
 
   if (!response.ok) {

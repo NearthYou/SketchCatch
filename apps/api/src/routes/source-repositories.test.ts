@@ -427,7 +427,7 @@ test("source repository routes issue a GitHub install URL with an API-signed sta
   const installUrl = new URL(body.installUrl);
 
   assert.equal(installUrl.origin, "https://github.com");
-  assert.equal(installUrl.pathname, "/apps/sketchcatch-test/installations/new");
+  assert.equal(installUrl.pathname, "/apps/sketchcatch-test/installations/select_target");
   assert.ok(installUrl.searchParams.get("state"));
   assert.equal(repository.findAccessibleProjectCalls.length, 1);
 });
