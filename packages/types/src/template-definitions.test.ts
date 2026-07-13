@@ -27,7 +27,8 @@ test("each template builds a deterministic, connected DiagramJson", () => {
 
     assert.deepEqual(first, second, templateId);
     assert.ok(first.nodes.length > 0, templateId);
-    assert.ok(first.nodes.every((node) => node.parameters), templateId);
+    assert.ok(first.nodes.filter((node) => node.kind === "resource").every((node) => node.parameters), templateId);
+    assert.ok(first.nodes.filter((node) => node.kind === "design").every((node) => !node.parameters), templateId);
 
     const nodeIds = new Set(first.nodes.map((node) => node.id));
     assert.ok(
@@ -35,7 +36,9 @@ test("each template builds a deterministic, connected DiagramJson", () => {
       templateId
     );
     assert.ok(
-      first.nodes.every((node) => node.parameters?.resourceName.startsWith("sketchcatch_")),
+      first.nodes
+        .filter((node) => node.kind === "resource")
+        .every((node) => node.parameters?.resourceName.startsWith("sketchcatch_")),
       templateId
     );
   }

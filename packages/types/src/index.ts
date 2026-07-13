@@ -2337,6 +2337,8 @@ export type DiagramNodeMetadata = {
   parentAreaNodeId?: string | undefined;
   /** Limits a resource's area-frame rendering to an authored presentation, not every catalog use. */
   presentationArea?: boolean | undefined;
+  /** Lets Web materialization reuse an exact Resource Panel item for a parameterless Template Design node. */
+  presentationCatalogItemId?: string | undefined;
   liveObservationRole?:
     | "traffic-source"
     | "traffic-hop"

@@ -166,6 +166,27 @@ test("reviewed API, ECS, EKS, and Namespace resources become real visual contain
   }
 });
 
+test("Template presentation nodes materialize exact Catalog items without Terraform parameters", () => {
+  // Design nodes reuse the real panel payload even when Region and AZ normally create resource parameters on drag.
+  for (const template of listBoardTemplates()) {
+    const definition = templateDefinitions.find((candidate) => candidate.id === template.id);
+
+    assert.ok(definition, `Missing definition for ${template.id}`);
+    for (const presentationNode of definition.presentationNodes) {
+      const diagramNode = template.diagramJson.nodes.find(
+        (candidate) => candidate.id === `template-${template.id}-presentation-${presentationNode.id}`
+      );
+      const catalogItem = requireCatalogItemById(presentationNode.catalogItemId);
+
+      assert.ok(diagramNode, `${template.id}/${presentationNode.id}`);
+      assert.equal(diagramNode.type, catalogItem.nodeDefaults.type);
+      assert.equal(diagramNode.iconUrl, catalogItem.iconUrl);
+      assert.equal(diagramNode.kind, "design");
+      assert.equal(diagramNode.parameters, undefined);
+    }
+  }
+});
+
 function createDiagram(nodes: DiagramNode[]): DiagramJson {
   return {
     nodes,
@@ -197,6 +218,14 @@ function requireCatalogItem(resourceType: string) {
   );
 
   assert.ok(catalogItem, `Missing resource catalog item: ${resourceType}`);
+  return catalogItem;
+}
+
+// Presentation materialization is keyed by stable Catalog id because Region and AZ are not Terraform resources.
+function requireCatalogItemById(catalogItemId: string) {
+  const catalogItem = resourceCatalog.find((candidate) => candidate.id === catalogItemId);
+
+  assert.ok(catalogItem, `Missing resource catalog item: ${catalogItemId}`);
   return catalogItem;
 }
 

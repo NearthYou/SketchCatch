@@ -30,9 +30,28 @@ function materializeCatalogResourceNodes(
   diagram: DiagramJson,
   mode: "strict" | "tolerant"
 ): DiagramJson {
+  // Exact Catalog ids keep presentation-only Region/AZ nodes separate from normal manual-drag resource behavior.
   const nodes: DiagramNode[] = [];
 
   for (const templateNode of diagram.nodes) {
+    const presentationCatalogItemId = templateNode.metadata?.presentationCatalogItemId;
+
+    if (templateNode.kind === "design" && presentationCatalogItemId) {
+      const presentationItem = findCatalogItemById(presentationCatalogItemId);
+
+      if (!presentationItem) {
+        if (mode === "strict") {
+          throw new Error(`Missing presentation catalog resource: ${presentationCatalogItemId}`);
+        }
+
+        nodes.push(templateNode);
+        continue;
+      }
+
+      nodes.push(materializeCatalogPresentationNode(templateNode, presentationItem, nodes));
+      continue;
+    }
+
     const terraformBlockType = templateNode.parameters?.terraformBlockType ?? "resource";
     const resourceType = templateNode.parameters?.resourceType ?? templateNode.type;
     const resourceItem = findCatalogResourceItem(terraformBlockType, resourceType);
@@ -50,6 +69,11 @@ function materializeCatalogResourceNodes(
   }
 
   return { ...diagram, nodes };
+}
+
+// Presentation lookup uses the panel's stable id so duplicate Terraform-like Region/AZ identities are impossible.
+function findCatalogItemById(catalogItemId: string): ResourceItem | undefined {
+  return resourceCatalog.find((candidate) => candidate.id === catalogItemId);
 }
 
 function findCatalogResourceItem(
@@ -82,6 +106,37 @@ function materializeCatalogResourceNode(
     locked: templateNode.locked,
     metadata: templateNode.metadata ? { ...templateNode.metadata } : undefined,
     parameters,
+    position: { ...templateNode.position },
+    style: templateNode.style ? { ...templateNode.style } : paletteNode.style,
+    zIndex: templateNode.zIndex
+  };
+
+  return {
+    ...materializedNode,
+    size: getMaterializedSize(templateNode, paletteNode, materializedNode)
+  };
+}
+
+// Reuse the real panel icon and type while stripping parameters that manual Region/AZ drag normally creates.
+function materializeCatalogPresentationNode(
+  templateNode: DiagramNode,
+  resourceItem: ResourceItem,
+  currentNodes: readonly DiagramNode[]
+): DiagramNode {
+  const paletteNode = createDiagramNodeFromPayload(
+    { source: "resource-settings-panel", item: resourceItem },
+    templateNode.position,
+    templateNode.zIndex,
+    currentNodes
+  );
+  const { parameters: _parameters, ...parameterlessPaletteNode } = paletteNode;
+  const materializedNode: DiagramNode = {
+    ...parameterlessPaletteNode,
+    id: templateNode.id,
+    kind: "design",
+    label: templateNode.label,
+    locked: templateNode.locked,
+    metadata: templateNode.metadata ? { ...templateNode.metadata } : undefined,
     position: { ...templateNode.position },
     style: templateNode.style ? { ...templateNode.style } : paletteNode.style,
     zIndex: templateNode.zIndex

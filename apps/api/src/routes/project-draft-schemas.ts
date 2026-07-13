@@ -19,6 +19,8 @@ const diagramNodeStyleSchema = z.object({
 
 const diagramNodeMetadataSchema: z.ZodType<DiagramNodeMetadata> = z.object({
   parentAreaNodeId: z.string().min(1).optional(),
+  presentationArea: z.boolean().optional(),
+  presentationCatalogItemId: z.string().min(1).optional(),
   reverseEngineering: z.object({
     source: z.literal("aws_scan"),
     protectedValueKeys: z.array(z.string().min(1)),

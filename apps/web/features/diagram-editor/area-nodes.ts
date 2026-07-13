@@ -7,6 +7,8 @@ import {
 import { getResourceNodeDisplayLabel } from "./resource-node-display-label";
 
 const designAreaNodeTypes = new Set([
+  "aws_region",
+  "aws_availability_zone",
   "design_region",
   "design_az",
   "design_group",
