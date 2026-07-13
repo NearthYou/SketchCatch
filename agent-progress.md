@@ -8,6 +8,14 @@ Short English-only working log for the current agent context. Older records are 
 - Actual usage returns a six-month comparison with account totals, tagged project actuals, and clearly marked fallback allocations.
 
 ## Session Record
+### 2026-07-13 - Compact deployment console action icons
+
+- Constrained deployment primary, secondary, and danger action icons to 16 px so browser-default SVG dimensions cannot expand the buttons.
+- Added a focused source-level regression for the deployment action icon size.
+- Verification: focused regression, lint, typecheck, build, diff check, and harness passed. Lint retains one unrelated `setNow` warning.
+- Full `pnpm test -- --output-logs=errors-only` ran; the new regression passed and the Web package retains 7 unrelated baseline failures (1026/1033 passed).
+- Review: Standards and Spec reviews found no issues. Authenticated browser visual QA remained unavailable.
+
 ### 2026-07-13 - Add actual-usage monthly cost comparison
 
 - Added six-month account and project monthly trends, MTD forecast, and previous-month comparison to the existing cost usage response.

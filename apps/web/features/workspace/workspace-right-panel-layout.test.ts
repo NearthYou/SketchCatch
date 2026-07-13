@@ -1195,6 +1195,14 @@ test("deployment setup exposes a five-step Direct Deployment console", () => {
   assert.doesNotMatch(deploymentPanelSource, /DeploymentWizardStep/);
   assert.doesNotMatch(deploymentPanelSource, /startPrimaryDeploymentStep/);
 });
+
+test("deployment action icons stay compact inside their buttons", () => {
+  assert.match(
+    stylesSource,
+    /\.deploymentPrimaryButton svg,[\s\S]*?\.deploymentDangerButton svg\s*\{[^}]*\bheight:\s*16px;[^}]*\bwidth:\s*16px;/
+  );
+});
+
 test("Git CI/CD handoff actions use user-facing labels and helper text", () => {
   const actionGroupRule = getCssRule(stylesSource, "deploymentActionGroup");
   const actionItemRule = getCssRule(stylesSource, "deploymentActionItem");
