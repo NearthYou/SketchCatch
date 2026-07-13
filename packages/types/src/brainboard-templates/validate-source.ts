@@ -11,6 +11,7 @@ export type BrainboardSourceValidationErrorCode =
   | "brainboard.source.dangling_parent"
   | "brainboard.source.dangling_edge_source"
   | "brainboard.source.dangling_edge_target"
+  | "brainboard.source.non_finite_rotation"
   | "brainboard.source.parent_cycle"
   | "brainboard.source.sha256_mismatch"
   | "brainboard.source.missing_resource_address"
@@ -88,6 +89,13 @@ export function validateBrainboardTemplateSource(
 
   const nodeIds = new Set(source.nodes.map(({ sourceNodeId }) => sourceNodeId));
   source.nodes.forEach((node, index) => {
+    if (!Number.isFinite(node.rotation)) {
+      errors.push({
+        code: "brainboard.source.non_finite_rotation",
+        path: `nodes[${index}].rotation`,
+        message: `Node ${node.sourceNodeId} rotation must be a finite number.`
+      });
+    }
     if (node.parentSourceNodeId !== null && !nodeIds.has(node.parentSourceNodeId)) {
       errors.push({
         code: "brainboard.source.dangling_parent",

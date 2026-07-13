@@ -221,6 +221,41 @@ test("source contract preserves viewport, ordered graph evidence, Terraform iden
   assert.deepEqual(source.edges[0]?.targetPoint, source.edges[0]?.waypoints.at(-1));
 });
 
+test("validator accepts a finite -90 degree node rotation", () => {
+  const source = makeValidSource();
+  source.nodes[0]!.rotation = -90;
+
+  assert.deepEqual(requireValidator()(source), { valid: true, errors: [] });
+});
+
+test("validator rejects every non-finite node rotation with a dedicated error", () => {
+  const cases = [
+    ["NaN", Number.NaN],
+    ["positive infinity", Number.POSITIVE_INFINITY],
+    ["negative infinity", Number.NEGATIVE_INFINITY]
+  ] as const;
+
+  for (const [label, rotation] of cases) {
+    const source = makeValidSource();
+    source.nodes[0]!.rotation = rotation;
+
+    assert.deepEqual(
+      requireValidator()(source),
+      {
+        valid: false,
+        errors: [
+          {
+            code: "brainboard.source.non_finite_rotation",
+            path: "nodes[0].rotation",
+            message: "Node bucket rotation must be a finite number."
+          }
+        ]
+      },
+      label
+    );
+  }
+});
+
 test("failed capture evidence is discriminated from complete graph and Terraform sources", () => {
   type CompleteStatusExcludesFailed = Extract<
     BrainboardTemplateCaptureStatus,
@@ -411,7 +446,7 @@ function makeValidSource() {
         parentSourceNodeId: null as string | null,
         zIndex: 2,
         rawTransform: "translate(100, 200), rotate(-90 30 30)",
-        rotation: -90,
+        rotation: -90 as number,
         terraformBlockType: "resource",
         terraformResourceType: "aws_s3_bucket",
         resourceName: "example",
