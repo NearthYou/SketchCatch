@@ -232,6 +232,86 @@ test("provider maps exact generated plan job stage statuses", async () => {
   }
 });
 
+test("provider bounds hydration to recent commit groups independently of repository history", async () => {
+  const hydratedRunIds: number[] = [];
+  const client = {
+    listCommitFiles: async () => [],
+    listBranchWorkflowRuns: async () =>
+      Array.from({ length: 25 }, (_, index) =>
+        run({
+          id: index + 1,
+          commitSha: `sha-${index}`,
+          updatedAt: new Date(Date.UTC(2026, 6, 13, 0, index)).toISOString(),
+          createdAt: new Date(Date.UTC(2026, 6, 13, 0, index)).toISOString()
+        })
+      ),
+    listWorkflowJobs: async ({ runId }: { runId: number }) => {
+      hydratedRunIds.push(runId);
+      return [];
+    },
+    readWorkflowJobLog: async () => ""
+  } as GitHubActionsReadClient;
+
+  const snapshots = await createGitHubActionsRunProvider(client).listSnapshots(repository);
+
+  assert.equal(snapshots.length, 10);
+  assert.equal(hydratedRunIds.length, 10);
+  assert.deepEqual(hydratedRunIds, [25, 24, 23, 22, 21, 20, 19, 18, 17, 16]);
+});
+
+test("provider targets one commit and derives stable upstream and log revisions", async () => {
+  const listInputs: unknown[] = [];
+  const hydratedRunIds: number[] = [];
+  const client = {
+    listCommitFiles: async () => [],
+    listBranchWorkflowRuns: async (input: unknown) => {
+      listInputs.push(input);
+      return [
+        run({ id: 11, commitSha: "target", runAttempt: 2, updatedAt: "2026-07-13T00:02:00Z" }),
+        run({ id: 22, commitSha: "other", updatedAt: "2026-07-13T00:03:00Z" })
+      ];
+    },
+    listWorkflowJobs: async ({ runId }: { runId: number }) => {
+      hydratedRunIds.push(runId);
+      return [];
+    },
+    readWorkflowJobLog: async () => ""
+  } as GitHubActionsReadClient;
+
+  const snapshots = await createGitHubActionsRunProvider(client).listSnapshots({
+    ...repository,
+    commitSha: "target"
+  });
+
+  assert.equal(snapshots.length, 1);
+  assert.deepEqual(hydratedRunIds, [11]);
+  assert.deepEqual(listInputs, [{ ...repository, commitSha: "target" }]);
+  const snapshot = snapshots[0] as unknown as Record<string, unknown>;
+  assert.equal(snapshot.logRevision, "SketchCatch App:11:2");
+  assert.equal(
+    snapshot.upstreamOrderingToken,
+    "2026-07-13T00:02:00.000Z|SketchCatch App:00000000000000000011:0000000002"
+  );
+});
+
+test("provider ordering token remains monotonic when numeric run ids cross digit widths", async () => {
+  const client = {
+    listCommitFiles: async () => [],
+    listBranchWorkflowRuns: async () => [
+      run({ id: 9, commitSha: "older", updatedAt: "2026-07-13T00:02:00Z" }),
+      run({ id: 10, commitSha: "newer", updatedAt: "2026-07-13T00:02:00Z" })
+    ],
+    listWorkflowJobs: async () => [],
+    readWorkflowJobLog: async () => ""
+  } as GitHubActionsReadClient;
+
+  const snapshots = await createGitHubActionsRunProvider(client).listSnapshots(repository);
+  const older = snapshots.find((snapshot) => snapshot.commitSha === "older")!;
+  const newer = snapshots.find((snapshot) => snapshot.commitSha === "newer")!;
+
+  assert.ok(older.upstreamOrderingToken < newer.upstreamOrderingToken);
+});
+
 function clientForRun(workflowRun: ReturnType<typeof run>): GitHubActionsReadClient {
   return {
     listCommitFiles: async () => [],

@@ -290,6 +290,72 @@ test("POST Pipeline Run refresh returns sanitized stale metadata with persisted 
   await app.close();
 });
 
+test("POST project Pipeline Run discovery persists empty-history commits and reports stale fallback", async () => {
+  const pipelineRepository = new FakePipelineRepository([]);
+  const providerCalls: string[] = [];
+  const app = await buildGitCicdHandoffTestApp(new FakeGitCicdHandoffRepository(), {
+    pipelineProvider: createPipelineProvider(providerCalls),
+    pipelineRepository
+  });
+  const headers = await authHeaders();
+
+  const discovered = await app.inject({
+    headers,
+    method: "POST",
+    url: `/api/projects/${projectId}/git-cicd-pipeline-runs/refresh`
+  });
+  assert.equal(discovered.statusCode, 200);
+  const body = discovered.json() as {
+    runs: Array<{ id: string; status: string }>;
+    targets: Array<{ sourceRepositoryId: string; stale: boolean; errorMessage: string | null }>;
+    stale: boolean;
+  };
+  assert.equal(body.runs.length, 1);
+  assert.equal(body.runs[0]?.status, "succeeded");
+  assert.deepEqual(body.targets, [
+    { sourceRepositoryId, stale: false, errorMessage: null }
+  ]);
+  assert.equal(body.stale, false);
+  assert.deepEqual(providerCalls, ["listSnapshots", "listCommitFiles"]);
+
+  const staleApp = await buildGitCicdHandoffTestApp(new FakeGitCicdHandoffRepository(), {
+    pipelineProvider: {
+      async listSnapshots() {
+        throw new Error("provider token=secret");
+      },
+      async listCommitFiles() {
+        return [];
+      }
+    },
+    pipelineRepository
+  });
+  const stale = await staleApp.inject({
+    headers,
+    method: "POST",
+    url: `/api/projects/${projectId}/git-cicd-pipeline-runs/refresh`
+  });
+  assert.equal(stale.statusCode, 200);
+  assert.equal(stale.json().stale, true);
+  assert.equal(stale.json().runs.length, 1);
+  assert.equal(JSON.stringify(stale.json()).includes("secret"), false);
+
+  const otherUser = createUserRecord({ id: "88888888-8888-4888-8888-888888888888" });
+  const forbiddenApp = await buildGitCicdHandoffTestApp(new FakeGitCicdHandoffRepository(), {
+    pipelineRepository,
+    userRows: [otherUser]
+  });
+  const forbidden = await forbiddenApp.inject({
+    headers: await authHeaders(otherUser.id),
+    method: "POST",
+    url: `/api/projects/${projectId}/git-cicd-pipeline-runs/refresh`
+  });
+  assert.equal(forbidden.statusCode, 404);
+
+  await app.close();
+  await staleApp.close();
+  await forbiddenApp.close();
+});
+
 type RepositoryCall =
   | {
       name: "findAccessibleProject";
@@ -1832,6 +1898,12 @@ class FakePipelineRepository implements GitCicdPipelinePersistenceRepository {
 
   constructor(readonly runs: PipelineRunWithStages[]) {}
 
+  async listRefreshTargets(candidateProjectId: string) {
+    return this.refreshEnabled && candidateProjectId === projectId
+      ? [createPipelineRefreshTarget()]
+      : [];
+  }
+
   async findRefreshTarget(candidateProjectId: string, candidateSourceRepositoryId: string) {
     return this.refreshEnabled && candidateProjectId === projectId && candidateSourceRepositoryId === sourceRepositoryId
       ? createPipelineRefreshTarget()
@@ -1944,6 +2016,8 @@ function createPipelineRun(index: number): PipelineRunWithStages {
     apiUrl: null,
     startedAt: fixedNow,
     finishedAt: null,
+    upstreamOrderingToken: "2026-01-01T00:00:00.000Z|SketchCatch App:1:1",
+    logRevision: "SketchCatch App:1:1",
     lastRefreshedAt: fixedNow,
     createdAt,
     stages: [
@@ -1980,6 +2054,8 @@ function createPipelineProvider(calls: string[]): GitCicdRunProvider {
     workflowName: "SketchCatch",
     runUrl: "https://example.invalid/actions/runs/0",
     status: "succeeded",
+    upstreamOrderingToken: "2026-01-01T00:01:00.000Z|SketchCatch App:1:1",
+    logRevision: "SketchCatch App:1:1",
     startedAt: fixedNow,
     finishedAt: fixedNow,
     jobs: [],

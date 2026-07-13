@@ -11,6 +11,7 @@ import type {
   GitCicdMonitoringConfigResponse,
   GitCicdPipelineLog,
   GitCicdPipelineLogListResponse,
+  GitCicdPipelineProjectRefreshResponse,
   GitCicdPipelineRun,
   GitCicdPipelineRunListResponse,
   GitCicdPipelineRunRefreshResponse,
@@ -328,6 +329,30 @@ export async function registerGitCicdHandoffRoutes(
       const response: GitCicdPipelineRunListResponse = {
         runs: page.runs.map(toGitCicdPipelineRun),
         nextCursor: page.nextCursor
+      };
+      return reply.status(200).send(response);
+    } catch (error) {
+      return handleGitCicdHandoffError(error, reply);
+    }
+  });
+
+  app.post("/projects/:projectId/git-cicd-pipeline-runs/refresh", async (request, reply) => {
+    const params = pipelineRunProjectParamsSchema.parse(request.params);
+    const context = await getGitCicdPipelineRunRequestContext(
+      request,
+      options,
+      getGitCicdDatabaseClient
+    );
+
+    try {
+      await requirePipelineProjectAccess(params.projectId, context);
+      const result = await context.service.refreshProjectMonitoringTargets({
+        projectId: params.projectId
+      });
+      const response: GitCicdPipelineProjectRefreshResponse = {
+        runs: result.runs.map(toGitCicdPipelineRun),
+        targets: result.targets,
+        stale: result.stale
       };
       return reply.status(200).send(response);
     } catch (error) {

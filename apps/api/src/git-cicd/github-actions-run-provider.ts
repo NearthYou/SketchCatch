@@ -33,16 +33,21 @@ export type GitCicdRunProviderSnapshot = {
   startedAt: Date | null;
   finishedAt: Date | null;
   status: GitCicdPipelineRunStatus;
+  upstreamOrderingToken: string;
+  logRevision: string;
   jobs: GitCicdRunProviderJob[];
   logs: GitCicdRunProviderLog[];
 };
 
 export type GitCicdRunProvider = {
-  listSnapshots(input: GitHubRepositoryRefInput): Promise<GitCicdRunProviderSnapshot[]>;
+  listSnapshots(
+    input: GitHubRepositoryRefInput & { commitSha?: string }
+  ): Promise<GitCicdRunProviderSnapshot[]>;
   listCommitFiles(input: GitHubRepositoryRefInput & { commitSha: string }): Promise<string[]>;
 };
 
 const monitoredWorkflowNames = new Set(["SketchCatch Infra", "SketchCatch App"]);
+export const maxHydratedPipelineCommitGroups = 10;
 
 export function createGitHubActionsRunProvider(
   client: GitHubActionsReadClient
@@ -52,18 +57,19 @@ export function createGitHubActionsRunProvider(
     async listSnapshots(input) {
       const runs = selectLatestWorkflowAttempts(
         (await client.listBranchWorkflowRuns(input)).filter((run) =>
-          monitoredWorkflowNames.has(run.workflowName)
+          monitoredWorkflowNames.has(run.workflowName) &&
+          (!input.commitSha || run.commitSha === input.commitSha)
         )
-      );
+      ).sort(compareWorkflowRunsNewestFirst);
       const groups = new Map<string, GitHubWorkflowRunSummary[]>();
       for (const run of runs)
         groups.set(run.commitSha, [...(groups.get(run.commitSha) ?? []), run]);
 
       const snapshots: GitCicdRunProviderSnapshot[] = [];
-      for (const [commitSha, commitRuns] of groups) {
+      for (const [commitSha, commitRuns] of [...groups].slice(0, maxHydratedPipelineCommitGroups)) {
         const jobs: GitCicdRunProviderJob[] = [];
         const logs: GitCicdRunProviderLog[] = [];
-        for (const run of commitRuns) {
+        for (const run of [...commitRuns].sort(compareWorkflowHydrationOrder)) {
           for (const job of await client.listWorkflowJobs({ ...input, runId: run.id })) {
             const jobStageKind = mapJobStageKind(run.workflowName, job.name);
             const mappedSteps = (job.steps ?? []).flatMap((step) => {
@@ -104,6 +110,7 @@ export function createGitHubActionsRunProvider(
           }
         }
         const first = commitRuns[0]!;
+        const logRevision = createSelectedWorkflowRevision(commitRuns);
         snapshots.push({
           commitSha,
           commitMessage: first.commitMessage,
@@ -115,6 +122,8 @@ export function createGitHubActionsRunProvider(
             ? maxDate(commitRuns.map((run) => toDate(run.finishedAt)))
             : null,
           status: aggregateStatus(commitRuns),
+          upstreamOrderingToken: `${getMaxWorkflowUpdatedAt(commitRuns).toISOString()}|${createSelectedWorkflowOrderingRevision(commitRuns)}`,
+          logRevision,
           jobs,
           logs
         });
@@ -122,6 +131,73 @@ export function createGitHubActionsRunProvider(
       return snapshots;
     }
   };
+}
+
+function compareWorkflowRunsNewestFirst(
+  left: GitHubWorkflowRunSummary,
+  right: GitHubWorkflowRunSummary
+): number {
+  const updatedDifference = readWorkflowTime(right.updatedAt) - readWorkflowTime(left.updatedAt);
+  if (updatedDifference !== 0) return updatedDifference;
+  const createdDifference = readWorkflowTime(right.createdAt) - readWorkflowTime(left.createdAt);
+  if (createdDifference !== 0) return createdDifference;
+  const shaDifference = left.commitSha.localeCompare(right.commitSha);
+  if (shaDifference !== 0) return shaDifference;
+  const workflowDifference = left.workflowName.localeCompare(right.workflowName);
+  return workflowDifference !== 0 ? workflowDifference : right.id - left.id;
+}
+
+function compareWorkflowHydrationOrder(
+  left: GitHubWorkflowRunSummary,
+  right: GitHubWorkflowRunSummary
+): number {
+  const workflowOrder = ["SketchCatch Infra", "SketchCatch App"];
+  return (
+    workflowOrder.indexOf(left.workflowName) - workflowOrder.indexOf(right.workflowName) ||
+    left.id - right.id
+  );
+}
+
+function createSelectedWorkflowRevision(runs: readonly GitHubWorkflowRunSummary[]): string {
+  return [...runs]
+    .sort(
+      (left, right) =>
+        left.workflowName.localeCompare(right.workflowName) ||
+        left.id - right.id ||
+        left.runAttempt - right.runAttempt
+    )
+    .map((run) => `${run.workflowName}:${run.id}:${run.runAttempt}`)
+    .join("|");
+}
+
+function createSelectedWorkflowOrderingRevision(
+  runs: readonly GitHubWorkflowRunSummary[]
+): string {
+  return [...runs]
+    .sort(
+      (left, right) =>
+        left.workflowName.localeCompare(right.workflowName) ||
+        left.id - right.id ||
+        left.runAttempt - right.runAttempt
+    )
+    .map(
+      (run) =>
+        `${run.workflowName}:${String(run.id).padStart(20, "0")}:${String(run.runAttempt).padStart(10, "0")}`
+    )
+    .join("|");
+}
+
+function getMaxWorkflowUpdatedAt(runs: readonly GitHubWorkflowRunSummary[]): Date {
+  const timestamp = Math.max(
+    ...runs.map((run) => readWorkflowTime(run.updatedAt) || readWorkflowTime(run.createdAt))
+  );
+  return new Date(timestamp);
+}
+
+function readWorkflowTime(value: string | null): number {
+  if (!value) return 0;
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? timestamp : 0;
 }
 
 function selectLatestWorkflowAttempts(

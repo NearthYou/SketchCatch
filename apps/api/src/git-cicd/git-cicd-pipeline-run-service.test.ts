@@ -7,7 +7,8 @@ import {
   type PipelineRefreshTarget,
   type PersistedPipelineLog,
   type PersistedPipelineRun,
-  type PersistedPipelineStage
+  type PersistedPipelineStage,
+  type PipelineRunWithStages
 } from "./git-cicd-pipeline-run-service.js";
 import type { GitCicdRunProvider } from "./github-actions-run-provider.js";
 
@@ -245,6 +246,73 @@ test("provider failure preserves persisted status and refresh time while returni
   assert.equal(stale.runs[0]?.lastRefreshedAt.toISOString(), "2026-07-13T01:00:00.000Z");
 });
 
+test("project discovery refreshes every enabled valid active GitHub monitoring target", async () => {
+  const repository = createMemoryRepository();
+  const secondTarget = {
+    ...repository.target!,
+    sourceRepositoryId: "repo-2",
+    name: "repo-2"
+  };
+  Object.assign(repository, {
+    listRefreshTargets: async () => [repository.target!, secondTarget]
+  });
+  const providerInputs: unknown[] = [];
+  const baseProvider = createProvider();
+  const provider: GitCicdRunProvider = {
+    ...baseProvider,
+    async listSnapshots(input) {
+      providerInputs.push(input);
+      return (await baseProvider.listSnapshots(input)).map((snapshot) => ({
+        ...snapshot,
+        commitSha: input.name === "repo-2" ? "def" : "abc"
+      }));
+    }
+  };
+  const service = createGitCicdPipelineRunService({
+    repository,
+    provider,
+    createId: sequentialIds()
+  });
+  const discover = (
+    service as unknown as {
+      refreshProjectMonitoringTargets?: (input: { projectId: string }) => Promise<{
+        targets: Array<{ sourceRepositoryId: string; stale: boolean }>;
+        runs: PipelineRunWithStages[];
+        stale: boolean;
+      }>;
+    }
+  ).refreshProjectMonitoringTargets;
+
+  assert.equal(typeof discover, "function");
+  const result = await discover!({ projectId: "project-1" });
+  assert.deepEqual(
+    result.targets.map((target) => [target.sourceRepositoryId, target.stale]),
+    [["repo-1", false], ["repo-2", false]]
+  );
+  assert.deepEqual(new Set(result.runs.map((run) => run.commitSha)), new Set(["abc", "def"]));
+  assert.deepEqual(providerInputs.map((input) => (input as { name: string }).name), ["repo", "repo-2"]);
+  assert.equal(result.stale, false);
+});
+
+test("targeted Pipeline Run refresh asks the provider for only that commit", async () => {
+  const repository = createMemoryRepository();
+  repository.runs.push(createPersistedRun("run-a", "2026-07-13T01:00:00Z"));
+  const requestedCommitShas: Array<string | undefined> = [];
+  const baseProvider = createProvider();
+  const provider: GitCicdRunProvider = {
+    ...baseProvider,
+    async listSnapshots(input) {
+      requestedCommitShas.push((input as typeof input & { commitSha?: string }).commitSha);
+      return baseProvider.listSnapshots(input);
+    }
+  };
+  const service = createGitCicdPipelineRunService({ repository, provider });
+
+  await service.refreshPipelineRun({ pipelineRunId: "run-a" });
+
+  assert.deepEqual(requestedCommitShas, ["run-a"]);
+});
+
 test("refresh reuses persisted change scope without refetching immutable commit files", async () => {
   const repository = createMemoryRepository();
   const base = createProvider();
@@ -351,6 +419,8 @@ function createPersistedRun(id: string, createdAt: string): PersistedPipelineRun
     apiUrl: null,
     startedAt: timestamp,
     finishedAt: null,
+    upstreamOrderingToken: `${timestamp.toISOString()}|SketchCatch App:1:1`,
+    logRevision: "SketchCatch App:1:1",
     lastRefreshedAt: timestamp,
     createdAt: timestamp
   };
@@ -373,6 +443,8 @@ function createProvider(shouldFail: () => boolean = () => false): GitCicdRunProv
           startedAt: new Date("2026-07-13T00:00:00Z"),
           finishedAt: null,
           status: "running",
+          upstreamOrderingToken: "2026-07-13T00:01:00.000Z|SketchCatch App:1:1",
+          logRevision: "SketchCatch App:1:1",
           jobs: [
             {
               stageKind: "app_build",
@@ -420,6 +492,8 @@ function createMemoryRepository() {
     } as PipelineRefreshTarget | undefined
   };
   const repository: GitCicdPipelinePersistenceRepository = {
+    listRefreshTargets: async () =>
+      state.refreshTargetEnabled.value && state.target ? [state.target] : [],
     findRefreshTarget: async () =>
       state.refreshTargetEnabled.value ? state.target : undefined,
     findPipelineRun: async (pipelineRunId) => {

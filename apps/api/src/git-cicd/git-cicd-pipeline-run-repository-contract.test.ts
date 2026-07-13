@@ -25,3 +25,22 @@ test("Pipeline Run page query keeps project-scoped keyset, descending order, bou
     /inArray\(gitCicdPipelineStages\.pipelineRunId, runs\.map\(\(run\) => run\.id\)\)/
   );
 });
+
+test("Pipeline Run snapshot upsert conditionally rejects stale upstream revisions before stages and logs", () => {
+  const source = readFileSync(
+    new URL("./git-cicd-pipeline-run-service.ts", import.meta.url),
+    "utf8"
+  );
+  const persistSnapshot = source.slice(
+    source.indexOf("persistSnapshot(input)"),
+    source.indexOf("function buildStages")
+  );
+
+  assert.match(persistSnapshot, /upstreamOrderingToken/);
+  assert.match(persistSnapshot, /logRevision/);
+  assert.match(persistSnapshot, /setWhere:\s*or\(/);
+  assert.match(persistSnapshot, /gitCicdPipelineRuns\.upstreamOrderingToken/);
+  assert.match(persistSnapshot, /terminalPipelineRunStatuses/);
+  assert.match(persistSnapshot, /if \(!run\)[\s\S]*const \[persistedRun\]/);
+  assert.match(persistSnapshot, /if \(!run\)[\s\S]*persistedStages[\s\S]*return/);
+});

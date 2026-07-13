@@ -1228,7 +1228,10 @@ test("GitHub Actions reads paginate runs jobs and immutable commit files", async
       if (pathname === "/app/installations/42/access_tokens")
         return jsonResponse({ token: "installation-token" });
       const page = new URLSearchParams(search).get("page");
-      const count = page === "1" ? 100 : 1;
+      if (pathname.endsWith("/actions/runs") && page === "3") {
+        throw new Error("workflow run pagination exceeded the bounded discovery window");
+      }
+      const count = pathname.endsWith("/actions/runs") ? 100 : page === "1" ? 100 : 1;
       if (pathname.endsWith("/actions/runs"))
         return jsonResponse({
           workflow_runs: Array.from({ length: count }, (_, index) =>
@@ -1252,7 +1255,7 @@ test("GitHub Actions reads paginate runs jobs and immutable commit files", async
   });
   const repo = { installationId: "42", owner: "owner", name: "repo", branch: "main" };
 
-  assert.equal((await client.listBranchWorkflowRuns(repo)).length, 101);
+  assert.equal((await client.listBranchWorkflowRuns(repo)).length, 200);
   assert.equal((await client.listWorkflowJobs({ ...repo, runId: 11 })).length, 101);
   assert.equal((await client.listCommitFiles({ ...repo, commitSha: "abc" })).length, 101);
   assert.equal(
@@ -1260,6 +1263,47 @@ test("GitHub Actions reads paginate runs jobs and immutable commit files", async
       .length,
     3
   );
+  assert.equal(
+    calls.filter(
+      (call) => call.pathname.endsWith("/actions/runs") && call.search.includes("page=3")
+    ).length,
+    0
+  );
+});
+
+test("GitHub Actions targeted run discovery sends head_sha and prefers run_started_at", async () => {
+  const calls: GitHubApiCall[] = [];
+  const client = createGitHubAppClient({
+    appId: "12345",
+    privateKey,
+    fetch: createGitHubFetchStub(calls, ({ pathname }) => {
+      if (pathname === "/app/installations/42/access_tokens")
+        return jsonResponse({ token: "installation-token" });
+      return jsonResponse({
+        workflow_runs: [
+          {
+            ...workflowRunPayload(11),
+            head_sha: "target-sha",
+            run_started_at: "2026-07-13T00:00:30Z"
+          }
+        ]
+      });
+    })
+  });
+
+  const targetInput = {
+    installationId: "42",
+    owner: "owner",
+    name: "repo",
+    branch: "main",
+    commitSha: "target-sha"
+  };
+  const runs = await client.listBranchWorkflowRuns(targetInput);
+
+  assert.equal(runs[0]?.startedAt, "2026-07-13T00:00:30Z");
+  const request = calls.find((call) => call.pathname.endsWith("/actions/runs"));
+  assert.ok(request);
+  assert.match(request.search, /head_sha=target-sha/);
 });
 
 function workflowRunPayload(id: number) {

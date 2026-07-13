@@ -780,6 +780,8 @@ export type GitCicdPipelineRun = {
   apiUrl: string | null;
   startedAt: IsoDateTimeString | null;
   finishedAt: IsoDateTimeString | null;
+  upstreamOrderingToken: string;
+  logRevision: string;
   lastRefreshedAt: IsoDateTimeString;
   createdAt: IsoDateTimeString;
   stages: GitCicdPipelineStage[];
@@ -820,6 +822,18 @@ export type GitCicdPipelineRunRefreshResponse = {
   run: GitCicdPipelineRun;
   stale: boolean;
   errorMessage: string | null;
+};
+
+export type GitCicdPipelineRefreshTargetResult = {
+  sourceRepositoryId: string;
+  stale: boolean;
+  errorMessage: string | null;
+};
+
+export type GitCicdPipelineProjectRefreshResponse = {
+  runs: GitCicdPipelineRun[];
+  targets: GitCicdPipelineRefreshTargetResult[];
+  stale: boolean;
 };
 
 export type GitCicdPipelineLogListResponse = {

@@ -18,6 +18,8 @@ const maxRepositoryTreeEntries = 20_000;
 const maxRepositoryEvidenceFiles = 64;
 const maxRepositoryEvidenceFileBytes = 256 * 1024;
 const maxRepositoryEvidenceTotalBytes = 2 * 1024 * 1024;
+const githubActionsRunPageSize = 100;
+export const maxGitHubActionsRunPages = 2;
 
 export type GitHubAppClientOptions = {
   appId: string;
@@ -71,6 +73,10 @@ export type GitHubRepositoryRefInput = {
 };
 
 export type GitHubRepositoryInput = Omit<GitHubRepositoryRefInput, "branch">;
+
+export type GitHubWorkflowRunReadInput = GitHubRepositoryRefInput & {
+  commitSha?: string;
+};
 
 export type GitHubWorkflowRunSummary = {
   id: number;
@@ -338,12 +344,13 @@ type GitHubWorkflowRunApiResponse = {
   readonly status?: unknown;
   readonly conclusion?: unknown;
   readonly created_at?: unknown;
+  readonly run_started_at?: unknown;
   readonly updated_at?: unknown;
   readonly head_commit?: { readonly message?: unknown };
 };
 
 export type GitHubActionsReadClient = {
-  listBranchWorkflowRuns(input: GitHubRepositoryRefInput): Promise<GitHubWorkflowRunSummary[]>;
+  listBranchWorkflowRuns(input: GitHubWorkflowRunReadInput): Promise<GitHubWorkflowRunSummary[]>;
   listCommitFiles(input: GitHubRepositoryRefInput & { commitSha: string }): Promise<string[]>;
   listWorkflowJobs(
     input: GitHubRepositoryInput & { runId: number }
@@ -424,17 +431,20 @@ export function createGitHubAppClient(
   return {
     async listBranchWorkflowRuns(input) {
       const runs: GitHubWorkflowRunSummary[] = [];
-      for (let page = 1; ; page += 1) {
+      for (let page = 1; page <= maxGitHubActionsRunPages; page += 1) {
+        const params = new URLSearchParams({
+          branch: input.branch,
+          per_page: String(githubActionsRunPageSize),
+          page: String(page)
+        });
+        if (input.commitSha) params.set("head_sha", input.commitSha);
         const response = await requestWithInstallationToken<GitHubWorkflowRunsResponse>(
           input.installationId,
-          createRepositoryPath(
-            input,
-            `/actions/runs?branch=${encodeURIComponent(input.branch)}&per_page=100&page=${page}`
-          )
+          createRepositoryPath(input, `/actions/runs?${params.toString()}`)
         );
         const pageRuns = response.workflow_runs ?? [];
         runs.push(...pageRuns.map(toWorkflowRunSummary));
-        if (pageRuns.length < 100) break;
+        if (pageRuns.length < githubActionsRunPageSize) break;
       }
       return runs;
     },
@@ -864,7 +874,7 @@ function toWorkflowRunSummary(run: GitHubWorkflowRunApiResponse): GitHubWorkflow
     runUrl: readRequiredString(run.html_url, "workflow run url"),
     status,
     conclusion: typeof run.conclusion === "string" ? run.conclusion : null,
-    startedAt: readDateString(run.created_at),
+    startedAt: readDateString(run.run_started_at) ?? readDateString(run.created_at),
     finishedAt: status === "completed" ? readDateString(run.updated_at) : null
   };
 }

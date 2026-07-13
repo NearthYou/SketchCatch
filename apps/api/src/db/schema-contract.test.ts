@@ -42,6 +42,8 @@ test("Git/CI/CD monitoring tables expose commit-scoped run history", () => {
   assert.ok(gitCicdMonitoringConfigs.sourceRepositoryId);
   assert.ok(gitCicdMonitoringConfigs.validationStatus);
   assert.ok(gitCicdPipelineRuns.commitSha);
+  assert.ok(gitCicdPipelineRuns.upstreamOrderingToken);
+  assert.ok(gitCicdPipelineRuns.logRevision);
   assert.ok(gitCicdPipelineStages.pipelineRunId);
   assert.ok(gitCicdPipelineLogs.sequence);
 
@@ -80,6 +82,18 @@ test("Git/CI/CD monitoring tables expose commit-scoped run history", () => {
       "sequence"
     ])
   );
+});
+
+test("Pipeline Run revision migration adds deterministic concurrency and log reset columns", () => {
+  const migrationUrl = new URL(
+    "../../drizzle/0033_git_cicd_pipeline_upstream_revision.sql",
+    import.meta.url
+  );
+  assert.equal(existsSync(migrationUrl), true);
+  const migration = readFileSync(migrationUrl, "utf8");
+  assert.match(migration, /ADD COLUMN "upstream_ordering_token" text/);
+  assert.match(migration, /ADD COLUMN "log_revision" text/);
+  assert.doesNotMatch(migration, /DROP TABLE|DELETE FROM|TRUNCATE/i);
 });
 
 test("Git/CI/CD monitoring migration safely backfills active repositories", () => {

@@ -166,6 +166,111 @@ test("snapshot upsert replaces or preserves the provenance tuple atomically", as
   assert.deepEqual(readProvenanceTuple(storedEmptyB), ["handoff-b", null, null]);
 });
 
+test("reverse completion order keeps the terminal run stages and logs when stale upsert is rejected", async () => {
+  const terminal = createRun({
+    status: "succeeded",
+    upstreamOrderingToken: "2026-07-13T00:05:00.000Z|SketchCatch App:10:2",
+    logRevision: "SketchCatch App:10:2",
+    finishedAt: new Date("2026-07-13T00:05:00.000Z")
+  });
+  const terminalStage = {
+    id: "stage-terminal",
+    pipelineRunId: terminal.id,
+    kind: "app_deploy" as const,
+    status: "succeeded" as const,
+    runUrl: "https://github.example/jobs/terminal",
+    startedAt: new Date("2026-07-13T00:03:00.000Z"),
+    finishedAt: new Date("2026-07-13T00:05:00.000Z")
+  };
+  const queries: string[] = [];
+  let runInsertCount = 0;
+  const proxy = drizzle(async (sql) => {
+    queries.push(sql);
+    if (sql.startsWith('insert into "git_cicd_pipeline_runs"')) {
+      runInsertCount += 1;
+      return { rows: runInsertCount === 1 ? [toRunRow(terminal)] : [] };
+    }
+    if (sql.startsWith('insert into "git_cicd_pipeline_stages"')) {
+      return { rows: [[
+        terminalStage.id,
+        terminalStage.pipelineRunId,
+        terminalStage.kind,
+        terminalStage.status,
+        terminalStage.runUrl,
+        terminalStage.startedAt,
+        terminalStage.finishedAt
+      ]] };
+    }
+    if (sql.includes('from "git_cicd_pipeline_runs"')) return { rows: [toRunRow(terminal)] };
+    if (sql.includes('from "git_cicd_pipeline_stages"')) {
+      return { rows: [[
+        terminalStage.id,
+        terminalStage.pipelineRunId,
+        terminalStage.kind,
+        terminalStage.status,
+        terminalStage.runUrl,
+        terminalStage.startedAt,
+        terminalStage.finishedAt
+      ]] };
+    }
+    return { rows: [] };
+  });
+  const db = {
+    transaction: async <T>(callback: (tx: typeof proxy) => Promise<T>) => callback(proxy)
+  } as unknown as Database;
+  const repository = createPostgresGitCicdPipelinePersistenceRepository(db);
+  const terminalLog = {
+    id: "log-terminal",
+    pipelineRunId: terminal.id,
+    stageId: terminalStage.id,
+    sequence: 1,
+    level: "info" as const,
+    message: "terminal log",
+    createdAt: terminal.finishedAt!
+  };
+
+  await repository.persistSnapshot({ run: terminal, stages: [terminalStage], logs: [terminalLog] });
+  const secondInsertIndex = queries.length;
+  const stale = createRun({
+    status: "running",
+    upstreamOrderingToken: "2026-07-13T00:04:00.000Z|SketchCatch App:10:1",
+    logRevision: "SketchCatch App:10:1",
+    finishedAt: null
+  });
+  const persisted = await repository.persistSnapshot({
+    run: stale,
+    stages: [{ ...terminalStage, id: "stage-stale", status: "running", finishedAt: null }],
+    logs: [{ ...terminalLog, id: "log-stale", message: "stale running log" }]
+  });
+
+  assert.equal(persisted.status, "succeeded");
+  assert.equal(persisted.logRevision, "SketchCatch App:10:2");
+  assert.deepEqual(persisted.stages.map((stage) => stage.status), ["succeeded"]);
+  const staleQueries = queries.slice(secondInsertIndex);
+  assert.equal(staleQueries.some((sql) => sql.startsWith('insert into "git_cicd_pipeline_stages"')), false);
+  assert.equal(staleQueries.some((sql) => sql.startsWith('delete from "git_cicd_pipeline_logs"')), false);
+  assert.equal(staleQueries.some((sql) => sql.includes("stale running log")), false);
+  assert.match(staleQueries[0] ?? "", /"upstream_ordering_token" < \$\d+/);
+  assert.match(staleQueries[0] ?? "", /"status" not in/);
+
+  const sameRevisionQueryIndex = queries.length;
+  const sameRevision = await repository.persistSnapshot({
+    run: { ...stale, upstreamOrderingToken: terminal.upstreamOrderingToken },
+    stages: [{ ...terminalStage, id: "stage-same", status: "running", finishedAt: null }],
+    logs: [{ ...terminalLog, id: "log-same", message: "same revision running log" }]
+  });
+  assert.equal(sameRevision.status, "succeeded");
+  const sameRevisionQueries = queries.slice(sameRevisionQueryIndex);
+  assert.equal(
+    sameRevisionQueries.some((sql) => sql.startsWith('insert into "git_cicd_pipeline_stages"')),
+    false
+  );
+  assert.equal(
+    sameRevisionQueries.some((sql) => sql.startsWith('delete from "git_cicd_pipeline_logs"')),
+    false
+  );
+});
+
 function readProvenanceTuple(
   run: Pick<PersistedPipelineRun, "handoffId" | "appUrl" | "apiUrl">
 ): [string | null, string | null, string | null] {
@@ -190,6 +295,8 @@ function createRun(overrides: Partial<PersistedPipelineRun> = {}): PersistedPipe
     apiUrl: null,
     startedAt: timestamp,
     finishedAt: null,
+    upstreamOrderingToken: `${timestamp.toISOString()}|SketchCatch App:1:1`,
+    logRevision: "SketchCatch App:1:1",
     lastRefreshedAt: timestamp,
     createdAt: timestamp,
     ...overrides
@@ -213,6 +320,8 @@ function toRunRow(run: PersistedPipelineRun): unknown[] {
     run.apiUrl,
     run.startedAt,
     run.finishedAt,
+    run.upstreamOrderingToken,
+    run.logRevision,
     run.lastRefreshedAt,
     run.createdAt
   ];

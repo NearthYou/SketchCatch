@@ -705,6 +705,8 @@ export const gitCicdPipelineRuns = pgTable(
     apiUrl: text("api_url"),
     startedAt: timestamp("started_at", { withTimezone: true }),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
+    upstreamOrderingToken: text("upstream_ordering_token").notNull().default(""),
+    logRevision: text("log_revision").notNull().default(""),
     lastRefreshedAt: timestamp("last_refreshed_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

@@ -31,6 +31,11 @@ const stageKinds: readonly GitCicdPipelineStageKind[] = [
   "app_deploy",
   "verify"
 ];
+const terminalPipelineRunStatuses: readonly GitCicdPipelineRunStatus[] = [
+  "succeeded",
+  "failed",
+  "cancelled"
+];
 
 export type PipelineRefreshTarget = {
   projectId: string;
@@ -63,6 +68,8 @@ export type PersistedPipelineRun = {
   apiUrl: string | null;
   startedAt: Date | null;
   finishedAt: Date | null;
+  upstreamOrderingToken: string;
+  logRevision: string;
   lastRefreshedAt: Date;
   createdAt: Date;
 };
@@ -87,6 +94,7 @@ export type PersistedPipelineLog = {
 export type PipelineRunWithStages = PersistedPipelineRun & { stages: PersistedPipelineStage[] };
 
 export type GitCicdPipelinePersistenceRepository = {
+  listRefreshTargets(projectId: string): Promise<PipelineRefreshTarget[]>;
   findRefreshTarget(
     projectId: string,
     sourceRepositoryId: string
@@ -149,7 +157,8 @@ export function createGitCicdPipelineRunService(options: {
         installationId: target.installationId,
         owner: target.owner,
         name: target.name,
-        branch: target.monitorBranch
+        branch: target.monitorBranch,
+        ...(onlyCommitSha ? { commitSha: onlyCommitSha } : {})
       });
       const relevantSnapshots = onlyCommitSha
         ? snapshots.filter((snapshot) => snapshot.commitSha === onlyCommitSha)
@@ -213,6 +222,8 @@ export function createGitCicdPipelineRunService(options: {
       apiUrl: normalizeNonSensitiveHttpUrl(target.apiUrl),
       startedAt: snapshot.startedAt,
       finishedAt: snapshot.finishedAt,
+      upstreamOrderingToken: snapshot.upstreamOrderingToken,
+      logRevision: snapshot.logRevision,
       lastRefreshedAt: refreshedAt,
       createdAt: refreshedAt
     };
@@ -233,6 +244,28 @@ export function createGitCicdPipelineRunService(options: {
   }
 
   return {
+    async refreshProjectMonitoringTargets(input: { projectId: string }) {
+      const targets = await options.repository.listRefreshTargets(input.projectId);
+      const results = await Promise.all(
+        targets.map(async (target) => ({
+          sourceRepositoryId: target.sourceRepositoryId,
+          result: await refreshTarget(target)
+        }))
+      );
+      const runs = await options.repository.listProjectPipelineRunPage({
+        projectId: input.projectId,
+        limit: 50
+      });
+      return {
+        runs: maskRuns(runs),
+        targets: results.map(({ sourceRepositoryId, result }) => ({
+          sourceRepositoryId,
+          stale: result.stale,
+          errorMessage: result.errorMessage
+        })),
+        stale: results.some(({ result }) => result.stale)
+      };
+    },
     async refreshProjectPipelineRuns(input: {
       projectId: string;
       sourceRepositoryId: string;
@@ -294,7 +327,13 @@ export function createPostgresGitCicdPipelinePersistenceRepository(
   async function findTarget(
     where: ReturnType<typeof and>
   ): Promise<PipelineRefreshTarget | undefined> {
-    const [target] = await db
+    return (await findTargets(where))[0];
+  }
+
+  async function findTargets(
+    where: ReturnType<typeof and>
+  ): Promise<PipelineRefreshTarget[]> {
+    const targets = await db
       .select({
         projectId: sourceRepositories.projectId,
         sourceRepositoryId: sourceRepositories.id,
@@ -311,31 +350,35 @@ export function createPostgresGitCicdPipelinePersistenceRepository(
         eq(gitCicdMonitoringConfigs.sourceRepositoryId, sourceRepositories.id)
       )
       .where(where);
-    if (!target?.installationId) return undefined;
-    const [handoff] = await db
-      .select({
-        id: gitCicdHandoffs.id,
-        appUrl: gitCicdHandoffs.staticSiteUrl,
-        apiUrl: gitCicdHandoffs.apiBaseUrl
-      })
-      .from(gitCicdHandoffs)
-      .where(
-        and(
-          eq(gitCicdHandoffs.projectId, target.projectId),
-          eq(gitCicdHandoffs.sourceRepositoryId, target.sourceRepositoryId),
-          eq(gitCicdHandoffs.targetBranch, target.monitorBranch),
-          notInArray(gitCicdHandoffs.status, ["draft", "cancelled"])
+    const refreshTargets: PipelineRefreshTarget[] = [];
+    for (const target of targets) {
+      if (!target.installationId) continue;
+      const [handoff] = await db
+        .select({
+          id: gitCicdHandoffs.id,
+          appUrl: gitCicdHandoffs.staticSiteUrl,
+          apiUrl: gitCicdHandoffs.apiBaseUrl
+        })
+        .from(gitCicdHandoffs)
+        .where(
+          and(
+            eq(gitCicdHandoffs.projectId, target.projectId),
+            eq(gitCicdHandoffs.sourceRepositoryId, target.sourceRepositoryId),
+            eq(gitCicdHandoffs.targetBranch, target.monitorBranch),
+            notInArray(gitCicdHandoffs.status, ["draft", "cancelled"])
+          )
         )
-      )
-      .orderBy(desc(gitCicdHandoffs.createdAt), desc(gitCicdHandoffs.id))
-      .limit(1);
-    return {
-      ...target,
-      installationId: target.installationId,
-      handoffId: handoff?.id ?? null,
-      appUrl: handoff?.appUrl ?? null,
-      apiUrl: handoff?.apiUrl ?? null
-    };
+        .orderBy(desc(gitCicdHandoffs.createdAt), desc(gitCicdHandoffs.id))
+        .limit(1);
+      refreshTargets.push({
+        ...target,
+        installationId: target.installationId,
+        handoffId: handoff?.id ?? null,
+        appUrl: handoff?.appUrl ?? null,
+        apiUrl: handoff?.apiUrl ?? null
+      });
+    }
+    return refreshTargets;
   }
 
   async function listRuns(projectId: string): Promise<PipelineRunWithStages[]> {
@@ -414,6 +457,17 @@ export function createPostgresGitCicdPipelinePersistenceRepository(
   }
 
   return {
+    listRefreshTargets(projectId) {
+      return findTargets(
+        and(
+          eq(sourceRepositories.projectId, projectId),
+          eq(sourceRepositories.status, "active"),
+          eq(sourceRepositories.provider, "github"),
+          eq(gitCicdMonitoringConfigs.enabled, true),
+          eq(gitCicdMonitoringConfigs.validationStatus, "valid")
+        )
+      );
+    },
     findRefreshTarget(projectId, sourceRepositoryId) {
       return findTarget(
         and(
@@ -494,6 +548,7 @@ export function createPostgresGitCicdPipelinePersistenceRepository(
     },
     persistSnapshot(input) {
       return db.transaction(async (tx) => {
+        const incomingIsTerminal = terminalPipelineRunStatuses.includes(input.run.status);
         const [run] = await tx
           .insert(gitCicdPipelineRuns)
           .values(input.run)
@@ -511,11 +566,43 @@ export function createPostgresGitCicdPipelinePersistenceRepository(
               apiUrl: sql`case when ${input.run.handoffId} is null then ${gitCicdPipelineRuns.apiUrl} else ${input.run.apiUrl} end`,
               startedAt: input.run.startedAt,
               finishedAt: input.run.finishedAt,
+              upstreamOrderingToken: input.run.upstreamOrderingToken,
+              logRevision: input.run.logRevision,
               lastRefreshedAt: input.run.lastRefreshedAt
-            }
+            },
+            setWhere: or(
+              lt(gitCicdPipelineRuns.upstreamOrderingToken, input.run.upstreamOrderingToken),
+              and(
+                eq(gitCicdPipelineRuns.upstreamOrderingToken, input.run.upstreamOrderingToken),
+                incomingIsTerminal
+                  ? sql`true`
+                  : notInArray(gitCicdPipelineRuns.status, [...terminalPipelineRunStatuses])
+              )
+            )!
           })
           .returning();
-        if (!run) throw new Error("Failed to persist Pipeline Run");
+        if (!run) {
+          const [persistedRun] = await tx
+            .select()
+            .from(gitCicdPipelineRuns)
+            .where(
+              and(
+                eq(gitCicdPipelineRuns.sourceRepositoryId, input.run.sourceRepositoryId),
+                eq(gitCicdPipelineRuns.commitSha, input.run.commitSha)
+              )
+            );
+          if (!persistedRun) throw new Error("Failed to read persisted Pipeline Run");
+          const persistedStages = await tx
+            .select()
+            .from(gitCicdPipelineStages)
+            .where(eq(gitCicdPipelineStages.pipelineRunId, persistedRun.id));
+          return {
+            ...persistedRun,
+            stages: persistedStages.sort(
+              (left, right) => stageKinds.indexOf(left.kind) - stageKinds.indexOf(right.kind)
+            )
+          };
+        }
 
         const persistedStages: PersistedPipelineStage[] = [];
         const inputKindById = new Map(input.stages.map((stage) => [stage.id, stage.kind]));
