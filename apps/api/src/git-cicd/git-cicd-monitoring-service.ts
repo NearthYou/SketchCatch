@@ -47,13 +47,19 @@ export type GitCicdMonitoringProvider = {
   ): Promise<"directory" | "file" | "missing">;
 };
 
+export type GitCicdMonitoringProviderSource =
+  | GitCicdMonitoringProvider
+  | (() => GitCicdMonitoringProvider);
+
 export type GitCicdMonitoringRepository = {
   findAccessibleSourceRepository(
     projectId: string,
     sourceRepositoryId: string,
     accessContext: ProjectAccessContext
   ): Promise<GitCicdMonitoringSourceRepository | undefined>;
-  findConfig(sourceRepositoryId: string): Promise<GitCicdMonitoringConfigRecord | undefined>;
+  ensureDefaultConfig(
+    input: Omit<GitCicdMonitoringConfigRecord, "updatedAt">
+  ): Promise<GitCicdMonitoringConfigRecord>;
   upsertConfig(
     input: Omit<GitCicdMonitoringConfigRecord, "updatedAt">
   ): Promise<GitCicdMonitoringConfigRecord>;
@@ -126,12 +132,7 @@ export async function getGitCicdMonitoringConfig(
   repository: GitCicdMonitoringRepository
 ): Promise<GitCicdMonitoringConfigRecord> {
   const sourceRepository = await requireSourceRepository(input, repository);
-  const existing = await repository.findConfig(input.sourceRepositoryId);
-  if (existing) {
-    return existing;
-  }
-
-  return repository.upsertConfig({
+  return repository.ensureDefaultConfig({
     sourceRepositoryId: sourceRepository.id,
     enabled: true,
     monitorBranch: sourceRepository.defaultBranch,
@@ -146,7 +147,7 @@ export async function getGitCicdMonitoringConfig(
 export async function updateGitCicdMonitoringConfig(
   input: UpdateMonitoringInput,
   repository: GitCicdMonitoringRepository,
-  provider: GitCicdMonitoringProvider,
+  providerSource: GitCicdMonitoringProviderSource,
   now: () => Date = () => new Date()
 ): Promise<GitCicdMonitoringConfigRecord> {
   const sourceRepository = await requireSourceRepository(input, repository);
@@ -165,6 +166,9 @@ export async function updateGitCicdMonitoringConfig(
       validatedAt: null
     });
   }
+
+  const provider =
+    typeof providerSource === "function" ? providerSource() : providerSource;
 
   await validateMonitoringTarget({
     sourceRepository,
@@ -292,11 +296,19 @@ export function createPostgresGitCicdMonitoringRepository(
         );
       return sourceRepository;
     },
-    async findConfig(sourceRepositoryId) {
+    async ensureDefaultConfig(input) {
+      await db
+        .insert(gitCicdMonitoringConfigs)
+        .values(input)
+        .onConflictDoNothing({ target: gitCicdMonitoringConfigs.sourceRepositoryId });
+
       const [config] = await db
         .select()
         .from(gitCicdMonitoringConfigs)
-        .where(eq(gitCicdMonitoringConfigs.sourceRepositoryId, sourceRepositoryId));
+        .where(eq(gitCicdMonitoringConfigs.sourceRepositoryId, input.sourceRepositoryId));
+      if (!config) {
+        throw new Error("Failed to ensure Git/CI/CD monitoring config");
+      }
       return config;
     },
     async upsertConfig(input) {

@@ -41,3 +41,24 @@ Implemented repository CI/CD monitoring settings for issue #361: durable default
 ## Review
 
 No secrets, network calls outside injected fetch fakes, dependency changes, schema changes, or direct infrastructure/Git mutations were introduced. Evaluator result: Accept; all safety hard-fail conditions are absent.
+
+## Important review fixes
+
+### RED
+
+1. `pnpm --dir apps/api exec tsx --test --test-name-pattern="does not require GitHub App" src/routes/git-cicd-handoffs.test.ts`
+   - Disabled PUT through the real default-provider path returned HTTP 500 when GitHub App environment variables were absent; expected 200.
+2. `pnpm --dir apps/api exec tsx --test --test-name-pattern="concurrent default insert" src/git-cicd/git-cicd-monitoring-service.test.ts`
+   - GET returned and persisted the default `required` config instead of preserving the concurrent `valid` winner.
+
+### GREEN
+
+- The route now passes the default GitHub monitoring provider as a factory. The service resolves that factory only after the disabled persistence early return, so disabled PUT does not read GitHub App configuration.
+- `ensureDefaultConfig` now performs `INSERT ... ON CONFLICT DO NOTHING` and then reads the winning row. GET no longer uses the overwrite-capable PUT upsert path.
+- The disabled/no-env route regression and concurrent validated-winner regression both pass.
+- Focused service, client, route, and workflow tests: 64 passed, 0 failed.
+- API typecheck passed.
+- API lint passed with the same pre-existing `setNow` warning.
+- Full build passed for 5/5 packages; the existing Next.js workspace-root warning remains.
+- Final `pnpm harness:check` and `git diff --check` passed.
+- No real GitHub, AWS, Terraform, or repository mutation ran.

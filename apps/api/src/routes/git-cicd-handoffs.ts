@@ -244,14 +244,14 @@ export async function registerGitCicdHandoffRoutes(
       const repository =
         options?.createGitCicdMonitoringRepository?.(client.db) ??
         createPostgresGitCicdMonitoringRepository(client.db);
-      const provider =
-        options?.gitCicdMonitoringProvider ?? createGitHubMonitoringProviderFromEnv();
+      const providerSource =
+        options?.gitCicdMonitoringProvider ?? createGitHubMonitoringProviderFromEnv;
 
       try {
         const config = await updateGitCicdMonitoringConfig(
           { ...params, ...body, accessContext },
           repository,
-          provider
+          providerSource
         );
         const response: GitCicdMonitoringConfigResponse = {
           config: toGitCicdMonitoringConfig(config)

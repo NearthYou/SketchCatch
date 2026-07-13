@@ -204,6 +204,62 @@ test("get persists a durable enabled default for an active repository without a 
   assert.equal(result.validationStatus, "required");
 });
 
+test("get preserves a validated config that wins a concurrent default insert", async () => {
+  const validatedConfig: GitCicdMonitoringConfigRecord = {
+    sourceRepositoryId: "repository-1",
+    enabled: true,
+    monitorBranch: "release",
+    appPath: { mode: "subdirectory", path: "apps/web" },
+    infraPath: { mode: "subdirectory", path: "infra" },
+    validationStatus: "valid",
+    validationMessage: null,
+    validatedAt: new Date("2026-07-13T00:00:00.000Z"),
+    updatedAt: new Date("2026-07-13T00:00:00.000Z")
+  };
+  let storedConfig: GitCicdMonitoringConfigRecord | undefined;
+  const repository = {
+    async findAccessibleSourceRepository() {
+      return sourceRepository;
+    },
+    async findConfig() {
+      return storedConfig;
+    },
+    async ensureDefaultConfig(input: Omit<GitCicdMonitoringConfigRecord, "updatedAt">) {
+      storedConfig ??= validatedConfig;
+      storedConfig ??= {
+        ...input,
+        updatedAt: new Date("2026-07-13T00:00:00.000Z")
+      };
+      return storedConfig;
+    },
+    async upsertConfig(input: Omit<GitCicdMonitoringConfigRecord, "updatedAt">) {
+      storedConfig ??= validatedConfig;
+      storedConfig = {
+        ...input,
+        updatedAt: new Date("2026-07-13T00:00:00.000Z")
+      };
+      return storedConfig;
+    }
+  } as GitCicdMonitoringRepository & {
+    ensureDefaultConfig(
+      input: Omit<GitCicdMonitoringConfigRecord, "updatedAt">
+    ): Promise<GitCicdMonitoringConfigRecord>;
+  };
+
+  const result = await getGitCicdMonitoringConfig(
+    {
+      projectId: "project-1",
+      sourceRepositoryId: "repository-1",
+      accessContext
+    },
+    repository
+  );
+
+  assert.equal(result.validationStatus, "valid");
+  assert.equal(result.monitorBranch, "release");
+  assert.deepEqual(storedConfig, validatedConfig);
+});
+
 function createRepository(): GitCicdMonitoringRepository {
   let config: GitCicdMonitoringConfigRecord | undefined;
   return {
@@ -214,8 +270,12 @@ function createRepository(): GitCicdMonitoringRepository {
         ? sourceRepository
         : undefined;
     },
-    async findConfig(sourceRepositoryId) {
-      return sourceRepositoryId === sourceRepository.id ? config : undefined;
+    async ensureDefaultConfig(input) {
+      config ??= {
+        ...input,
+        updatedAt: new Date("2026-07-13T00:00:00.000Z")
+      };
+      return config;
     },
     async upsertConfig(input) {
       config = {

@@ -1404,6 +1404,46 @@ test("PUT cicd-monitoring validates and persists a normalized enabled config", a
   await app.close();
 });
 
+test("disabled PUT cicd-monitoring does not require GitHub App configuration", async () => {
+  const previousGitHubEnv = {
+    appId: process.env.GIT_APP_ID,
+    appSlug: process.env.GIT_APP_SLUG,
+    privateKey: process.env.GIT_APP_PRIVATE_KEY_BASE64,
+    callbackUrl: process.env.GIT_APP_CALLBACK_URL
+  };
+  delete process.env.GIT_APP_ID;
+  delete process.env.GIT_APP_SLUG;
+  delete process.env.GIT_APP_PRIVATE_KEY_BASE64;
+  delete process.env.GIT_APP_CALLBACK_URL;
+  const app = await buildGitCicdHandoffTestApp(new FakeGitCicdHandoffRepository(), {
+    monitoringRepository: new FakeMonitoringRepository()
+  });
+
+  try {
+    const response = await app.inject({
+      method: "PUT",
+      url: `/api/projects/${projectId}/source-repositories/${sourceRepositoryId}/cicd-monitoring`,
+      headers: await authHeaders(),
+      payload: {
+        enabled: false,
+        monitorBranch: "main",
+        appPath: { mode: "repository_root", path: "." },
+        infraPath: { mode: "repository_root", path: "." },
+        userAcceptedChangeId: "accepted-monitoring-1"
+      }
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.json().config.enabled, false);
+  } finally {
+    await app.close();
+    restoreEnvironmentVariable("GIT_APP_ID", previousGitHubEnv.appId);
+    restoreEnvironmentVariable("GIT_APP_SLUG", previousGitHubEnv.appSlug);
+    restoreEnvironmentVariable("GIT_APP_PRIVATE_KEY_BASE64", previousGitHubEnv.privateKey);
+    restoreEnvironmentVariable("GIT_APP_CALLBACK_URL", previousGitHubEnv.callbackUrl);
+  }
+});
+
 test("PUT cicd-monitoring requires an accepted change and returns stable validation errors", async () => {
   const app = await buildGitCicdHandoffTestApp(new FakeGitCicdHandoffRepository(), {
     monitoringRepository: new FakeMonitoringRepository(),
@@ -1473,6 +1513,11 @@ class FakeMonitoringRepository implements GitCicdMonitoringRepository {
     return candidateSourceRepositoryId === sourceRepositoryId ? this.config : undefined;
   }
 
+  async ensureDefaultConfig(input: Omit<GitCicdMonitoringConfigRecord, "updatedAt">) {
+    this.config ??= { ...input, updatedAt: fixedNow };
+    return this.config;
+  }
+
   async upsertConfig(input: Omit<GitCicdMonitoringConfigRecord, "updatedAt">) {
     this.config = { ...input, updatedAt: fixedNow };
     return this.config;
@@ -1488,6 +1533,14 @@ function createMonitoringProvider(): GitCicdMonitoringProvider {
       return "directory";
     }
   };
+}
+
+function restoreEnvironmentVariable(name: string, value: string | undefined): void {
+  if (value === undefined) {
+    delete process.env[name];
+    return;
+  }
+  process.env[name] = value;
 }
 
 type GitCicdRouteTestOptions = {
