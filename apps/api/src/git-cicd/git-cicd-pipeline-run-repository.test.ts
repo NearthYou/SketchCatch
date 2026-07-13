@@ -82,50 +82,95 @@ test("refresh target remains usable when no accepted handoff applies", async () 
   assert.equal(target?.apiUrl, null);
 });
 
-test("snapshot upsert refreshes accepted URLs and preserves known URLs when metadata is null", async () => {
+test("snapshot upsert replaces or preserves the provenance tuple atomically", async () => {
   const queries: Array<{ sql: string; params: unknown[] }> = [];
-  const returnedRun = createRun({
-    handoffId: "handoff-late",
-    appUrl: "https://late-app.example.com",
-    apiUrl: "https://late-api.example.com"
+  const acceptedA = createRun({
+    handoffId: "handoff-a",
+    appUrl: "https://a-app.example.com",
+    apiUrl: "https://a-api.example.com"
   });
+  const preservedA = { ...acceptedA };
+  const partialB = createRun({
+    handoffId: "handoff-b",
+    appUrl: null,
+    apiUrl: "https://b-api.example.com/v2"
+  });
+  const emptyB = createRun({ handoffId: "handoff-b", appUrl: null, apiUrl: null });
+  const returnedRuns = [acceptedA, preservedA, partialB, emptyB];
   const proxy = drizzle(async (sql, params) => {
     queries.push({ sql, params });
-    return sql.startsWith('insert into "git_cicd_pipeline_runs"')
-      ? { rows: [toRunRow(returnedRun)] }
-      : { rows: [] };
+    if (!sql.startsWith('insert into "git_cicd_pipeline_runs"')) return { rows: [] };
+    const returnedRun = returnedRuns.shift();
+    assert.ok(returnedRun);
+    return { rows: [toRunRow(returnedRun)] };
   });
   const db = {
     transaction: async <T>(callback: (tx: typeof proxy) => Promise<T>) => callback(proxy)
   } as unknown as Database;
   const repository = createPostgresGitCicdPipelinePersistenceRepository(db);
 
-  const refreshed = await repository.persistSnapshot({
-    run: returnedRun,
+  const storedA = await repository.persistSnapshot({
+    run: acceptedA,
     stages: [],
     logs: []
   });
 
-  assert.equal(refreshed.handoffId, "handoff-late");
-  assert.equal(refreshed.appUrl, "https://late-app.example.com");
-  assert.equal(refreshed.apiUrl, "https://late-api.example.com");
+  assert.deepEqual(readProvenanceTuple(storedA), [
+    "handoff-a",
+    "https://a-app.example.com",
+    "https://a-api.example.com"
+  ]);
   const upsert = queries.find(({ sql }) => sql.startsWith('insert into "git_cicd_pipeline_runs"'));
   assert.ok(upsert);
-  assert.match(upsert.sql, /"handoff_id" = coalesce\(\$\d+, "git_cicd_pipeline_runs"\."handoff_id"\)/);
-  assert.match(upsert.sql, /"app_url" = coalesce\(\$\d+, "git_cicd_pipeline_runs"\."app_url"\)/);
-  assert.match(upsert.sql, /"api_url" = coalesce\(\$\d+, "git_cicd_pipeline_runs"\."api_url"\)/);
+  assert.match(
+    upsert.sql,
+    /"handoff_id" = case when \$\d+ is null then "git_cicd_pipeline_runs"\."handoff_id" else \$\d+ end/
+  );
+  assert.match(
+    upsert.sql,
+    /"app_url" = case when \$\d+ is null then "git_cicd_pipeline_runs"\."app_url" else \$\d+ end/
+  );
+  assert.match(
+    upsert.sql,
+    /"api_url" = case when \$\d+ is null then "git_cicd_pipeline_runs"\."api_url" else \$\d+ end/
+  );
 
-  queries.length = 0;
-  const missingMetadata = createRun({ handoffId: null, appUrl: null, apiUrl: null });
+  const noHandoff = createRun({ handoffId: null, appUrl: null, apiUrl: null });
   const preserved = await repository.persistSnapshot({
-    run: missingMetadata,
+    run: noHandoff,
     stages: [],
     logs: []
   });
-  assert.equal(preserved.handoffId, "handoff-late");
-  assert.equal(preserved.appUrl, "https://late-app.example.com");
-  assert.equal(preserved.apiUrl, "https://late-api.example.com");
+  assert.deepEqual(readProvenanceTuple(preserved), [
+    "handoff-a",
+    "https://a-app.example.com",
+    "https://a-api.example.com"
+  ]);
+
+  const storedPartialB = await repository.persistSnapshot({
+    run: partialB,
+    stages: [],
+    logs: []
+  });
+  assert.deepEqual(readProvenanceTuple(storedPartialB), [
+    "handoff-b",
+    null,
+    "https://b-api.example.com/v2"
+  ]);
+
+  const storedEmptyB = await repository.persistSnapshot({
+    run: emptyB,
+    stages: [],
+    logs: []
+  });
+  assert.deepEqual(readProvenanceTuple(storedEmptyB), ["handoff-b", null, null]);
 });
+
+function readProvenanceTuple(
+  run: Pick<PersistedPipelineRun, "handoffId" | "appUrl" | "apiUrl">
+): [string | null, string | null, string | null] {
+  return [run.handoffId, run.appUrl, run.apiUrl];
+}
 
 function createRun(overrides: Partial<PersistedPipelineRun> = {}): PersistedPipelineRun {
   const timestamp = new Date("2026-07-13T00:00:00.000Z");

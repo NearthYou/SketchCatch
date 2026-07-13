@@ -74,7 +74,7 @@ test("refresh populates only trusted HTTP(S) URLs from an accepted handoff", asy
   const repository = createMemoryRepository();
   Object.assign(repository.target!, {
     handoffId: "handoff-1",
-    appUrl: "https://app.example.com",
+    appUrl: "http://app.example.com:8080/dashboard/",
     apiUrl: "javascript:alert('secret')"
   });
   const service = createGitCicdPipelineRunService({
@@ -89,7 +89,7 @@ test("refresh populates only trusted HTTP(S) URLs from an accepted handoff", asy
   });
 
   assert.equal(result.runs[0]?.handoffId, "handoff-1");
-  assert.equal(result.runs[0]?.appUrl, "https://app.example.com");
+  assert.equal(result.runs[0]?.appUrl, "http://app.example.com:8080/dashboard/");
   assert.equal(result.runs[0]?.apiUrl, null);
 });
 
@@ -116,7 +116,53 @@ test("refresh rejects malformed and non-HTTP accepted handoff URLs", async () =>
   assert.equal(result.runs[0]?.apiUrl, null);
 });
 
-test("refresh updates late accepted URLs and preserves them across a temporary metadata miss", async () => {
+test("refresh rejects credential-bearing and query-bearing handoff URLs", async () => {
+  const repository = createMemoryRepository();
+  Object.assign(repository.target!, {
+    handoffId: "handoff-sensitive",
+    appUrl: "https://operator:secret@app.example.com/dashboard",
+    apiUrl: "https://api.example.com/v1?token=secret"
+  });
+  const service = createGitCicdPipelineRunService({
+    repository,
+    provider: createProvider(),
+    createId: sequentialIds()
+  });
+
+  const result = await service.refreshProjectPipelineRuns({
+    projectId: "project-1",
+    sourceRepositoryId: "repo-1"
+  });
+
+  assert.equal(result.runs[0]?.handoffId, "handoff-sensitive");
+  assert.equal(result.runs[0]?.appUrl, null);
+  assert.equal(result.runs[0]?.apiUrl, null);
+  assert.equal(JSON.stringify(repository.runs).includes("secret"), false);
+});
+
+test("refresh rejects fragment-bearing handoff URLs", async () => {
+  const repository = createMemoryRepository();
+  Object.assign(repository.target!, {
+    handoffId: "handoff-fragment",
+    appUrl: "https://app.example.com/dashboard#private",
+    apiUrl: null
+  });
+  const service = createGitCicdPipelineRunService({
+    repository,
+    provider: createProvider(),
+    createId: sequentialIds()
+  });
+
+  const result = await service.refreshProjectPipelineRuns({
+    projectId: "project-1",
+    sourceRepositoryId: "repo-1"
+  });
+
+  assert.equal(result.runs[0]?.appUrl, null);
+  assert.equal(JSON.stringify(repository.runs).includes("private"), false);
+});
+
+test("refresh replaces an accepted provenance tuple atomically and preserves it only without a handoff", async () => {
   const repository = createMemoryRepository();
   const service = createGitCicdPipelineRunService({
     repository,
@@ -126,26 +172,50 @@ test("refresh updates late accepted URLs and preserves them across a temporary m
 
   await service.refreshProjectPipelineRuns({ projectId: "project-1", sourceRepositoryId: "repo-1" });
   Object.assign(repository.target!, {
-    handoffId: "handoff-late",
-    appUrl: "https://late-app.example.com",
-    apiUrl: "https://late-api.example.com"
+    handoffId: "handoff-a",
+    appUrl: "https://a-app.example.com",
+    apiUrl: "https://a-api.example.com"
   });
-  const updated = await service.refreshProjectPipelineRuns({
+  const acceptedA = await service.refreshProjectPipelineRuns({
     projectId: "project-1",
     sourceRepositoryId: "repo-1"
   });
   Object.assign(repository.target!, { handoffId: null, appUrl: null, apiUrl: null });
-  const preserved = await service.refreshProjectPipelineRuns({
+  const preservedA = await service.refreshProjectPipelineRuns({
+    projectId: "project-1",
+    sourceRepositoryId: "repo-1"
+  });
+  Object.assign(repository.target!, {
+    handoffId: "handoff-b",
+    appUrl: null,
+    apiUrl: "https://b-api.example.com/v2"
+  });
+  const partialB = await service.refreshProjectPipelineRuns({
+    projectId: "project-1",
+    sourceRepositoryId: "repo-1"
+  });
+  Object.assign(repository.target!, { handoffId: "handoff-b", appUrl: null, apiUrl: null });
+  const emptyB = await service.refreshProjectPipelineRuns({
     projectId: "project-1",
     sourceRepositoryId: "repo-1"
   });
 
-  assert.equal(updated.runs[0]?.handoffId, "handoff-late");
-  assert.equal(updated.runs[0]?.appUrl, "https://late-app.example.com");
-  assert.equal(updated.runs[0]?.apiUrl, "https://late-api.example.com");
-  assert.equal(preserved.runs[0]?.handoffId, "handoff-late");
-  assert.equal(preserved.runs[0]?.appUrl, "https://late-app.example.com");
-  assert.equal(preserved.runs[0]?.apiUrl, "https://late-api.example.com");
+  assert.deepEqual(readProvenanceTuple(acceptedA.runs[0]), [
+    "handoff-a",
+    "https://a-app.example.com",
+    "https://a-api.example.com"
+  ]);
+  assert.deepEqual(readProvenanceTuple(preservedA.runs[0]), [
+    "handoff-a",
+    "https://a-app.example.com",
+    "https://a-api.example.com"
+  ]);
+  assert.deepEqual(readProvenanceTuple(partialB.runs[0]), [
+    "handoff-b",
+    null,
+    "https://b-api.example.com/v2"
+  ]);
+  assert.deepEqual(readProvenanceTuple(emptyB.runs[0]), ["handoff-b", null, null]);
 });
 
 test("provider failure preserves persisted status and refresh time while returning stale", async () => {
@@ -406,12 +476,18 @@ function createMemoryRepository() {
           item.commitSha === input.run.commitSha
       );
       if (run) {
+        const provenance =
+          input.run.handoffId === null
+            ? { handoffId: run.handoffId, appUrl: run.appUrl, apiUrl: run.apiUrl }
+            : {
+                handoffId: input.run.handoffId,
+                appUrl: input.run.appUrl,
+                apiUrl: input.run.apiUrl
+              };
         Object.assign(run, {
           ...input.run,
           id: run.id,
-          handoffId: input.run.handoffId ?? run.handoffId,
-          appUrl: input.run.appUrl ?? run.appUrl,
-          apiUrl: input.run.apiUrl ?? run.apiUrl,
+          ...provenance,
           createdAt: run.createdAt
         });
       }
@@ -450,4 +526,10 @@ function createMemoryRepository() {
     }
   };
   return Object.assign(repository, state);
+}
+
+function readProvenanceTuple(
+  run: Pick<PersistedPipelineRun, "handoffId" | "appUrl" | "apiUrl"> | undefined
+): [string | null, string | null, string | null] {
+  return [run?.handoffId ?? null, run?.appUrl ?? null, run?.apiUrl ?? null];
 }

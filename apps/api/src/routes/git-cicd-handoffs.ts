@@ -69,6 +69,7 @@ import {
   type PipelineRunWithStages
 } from "../git-cicd/git-cicd-pipeline-run-service.js";
 import type { GitCicdRunProvider } from "../git-cicd/github-actions-run-provider.js";
+import { normalizeNonSensitiveHttpUrl } from "../git-cicd/non-sensitive-http-url.js";
 import {
   createGitHubMonitoringProviderFromEnv,
   createPostgresGitCicdMonitoringRepository,
@@ -158,6 +159,11 @@ const updateMonitoringBodySchema = z
   })
   .strict();
 
+const nonSensitiveHttpUrlSchema = z.string().refine(
+  (value) => normalizeNonSensitiveHttpUrl(value) !== null,
+  { message: "Must be an absolute HTTP(S) URL without credentials, query, or fragment" }
+);
+
 const createGitCicdHandoffBodySchema = z
   .object({
     architectureId: z.uuid(),
@@ -176,8 +182,8 @@ const createGitCicdHandoffBodySchema = z
     awsRoleArn: z.string().trim().min(1).max(2048).nullable().optional(),
     tfStateBucket: z.string().trim().min(3).max(63).optional(),
     releaseBucket: z.string().trim().min(3).max(63).optional(),
-    staticSiteUrl: z.string().url().nullable().optional(),
-    apiBaseUrl: z.string().url().nullable().optional(),
+    staticSiteUrl: nonSensitiveHttpUrlSchema.nullable().optional(),
+    apiBaseUrl: nonSensitiveHttpUrlSchema.nullable().optional(),
     userAcceptedChangeId: z.string().trim().min(1).max(128)
   })
   .strict();

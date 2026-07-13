@@ -672,7 +672,11 @@ test("POST /api/projects/:projectId/git-cicd-handoffs creates an internal metada
     method: "POST",
     url: `/api/projects/${projectId}/git-cicd-handoffs`,
     headers: await authHeaders(),
-    payload: createHandoffBody()
+    payload: {
+      ...createHandoffBody(),
+      staticSiteUrl: "http://app.example.com:8080/dashboard/",
+      apiBaseUrl: "https://api.example.com/v1"
+    }
   });
 
   assert.equal(response.statusCode, 201);
@@ -685,6 +689,8 @@ test("POST /api/projects/:projectId/git-cicd-handoffs creates an internal metada
   assert.equal(body.handoff.status, "draft");
   assert.equal(body.handoff.pullRequestUrl, null);
   assert.equal(body.handoff.pipelineRunUrl, null);
+  assert.equal(body.handoff.staticSiteUrl, "http://app.example.com:8080/dashboard/");
+  assert.equal(body.handoff.apiBaseUrl, "https://api.example.com/v1");
   assert.equal(body.handoff.createdByUserId, userId);
   assert.equal(providerCalls.length, 1);
   const providerCall = providerCalls[0];
@@ -1556,6 +1562,50 @@ test("GET /api/projects/:projectId/git-cicd-handoffs requires authentication", a
   });
 
   assert.equal(response.statusCode, 401);
+
+  await app.close();
+});
+
+test("POST /api/projects/:projectId/git-cicd-handoffs rejects sensitive Output URLs", async () => {
+  const repository = new FakeGitCicdHandoffRepository();
+  const providerCalls: GitCicdProviderCreateInput[] = [];
+  const app = await buildGitCicdHandoffTestApp(repository, {
+    provider: createProviderSpy(providerCalls)
+  });
+  const unsafeValues = [
+    "https://operator:secret@app.example.com/dashboard",
+    "https://app.example.com/dashboard?token=secret",
+    "https://app.example.com/dashboard#secret",
+    "javascript:alert('secret')",
+    "file:///tmp/private-output",
+    "not a URL"
+  ];
+
+  for (const staticSiteUrl of unsafeValues) {
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/projects/${projectId}/git-cicd-handoffs`,
+      headers: await authHeaders(),
+      payload: { ...createHandoffBody(), staticSiteUrl }
+    });
+
+    assert.equal(response.statusCode, 400, staticSiteUrl);
+    assert.equal(response.body.includes("secret"), false);
+  }
+
+  const apiQueryResponse = await app.inject({
+    method: "POST",
+    url: `/api/projects/${projectId}/git-cicd-handoffs`,
+    headers: await authHeaders(),
+    payload: {
+      ...createHandoffBody(),
+      apiBaseUrl: "https://api.example.com/v1?signature=secret"
+    }
+  });
+  assert.equal(apiQueryResponse.statusCode, 400);
+  assert.equal(apiQueryResponse.body.includes("secret"), false);
+  assert.equal(providerCalls.length, 0);
+  assert.equal(repository.calls.some((call) => call.name === "createHandoff"), false);
 
   await app.close();
 });

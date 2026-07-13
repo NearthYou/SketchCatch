@@ -21,6 +21,7 @@ import type {
   GitCicdRunProvider,
   GitCicdRunProviderSnapshot
 } from "./github-actions-run-provider.js";
+import { normalizeNonSensitiveHttpUrl } from "./non-sensitive-http-url.js";
 
 const stageKinds: readonly GitCicdPipelineStageKind[] = [
   "detect",
@@ -208,8 +209,8 @@ export function createGitCicdPipelineRunService(options: {
       status: snapshot.status,
       statusMessage: `${snapshot.workflowName}: ${snapshot.status}`,
       pipelineRunUrl: snapshot.runUrl,
-      appUrl: normalizeHttpUrl(target.appUrl),
-      apiUrl: normalizeHttpUrl(target.apiUrl),
+      appUrl: normalizeNonSensitiveHttpUrl(target.appUrl),
+      apiUrl: normalizeNonSensitiveHttpUrl(target.apiUrl),
       startedAt: snapshot.startedAt,
       finishedAt: snapshot.finishedAt,
       lastRefreshedAt: refreshedAt,
@@ -505,9 +506,9 @@ export function createPostgresGitCicdPipelinePersistenceRepository(
               status: input.run.status,
               statusMessage: input.run.statusMessage,
               pipelineRunUrl: input.run.pipelineRunUrl,
-              handoffId: sql`coalesce(${input.run.handoffId}, ${gitCicdPipelineRuns.handoffId})`,
-              appUrl: sql`coalesce(${input.run.appUrl}, ${gitCicdPipelineRuns.appUrl})`,
-              apiUrl: sql`coalesce(${input.run.apiUrl}, ${gitCicdPipelineRuns.apiUrl})`,
+              handoffId: sql`case when ${input.run.handoffId} is null then ${gitCicdPipelineRuns.handoffId} else ${input.run.handoffId} end`,
+              appUrl: sql`case when ${input.run.handoffId} is null then ${gitCicdPipelineRuns.appUrl} else ${input.run.appUrl} end`,
+              apiUrl: sql`case when ${input.run.handoffId} is null then ${gitCicdPipelineRuns.apiUrl} else ${input.run.apiUrl} end`,
               startedAt: input.run.startedAt,
               finishedAt: input.run.finishedAt,
               lastRefreshedAt: input.run.lastRefreshedAt
@@ -596,16 +597,6 @@ function maskRuns(runs: PipelineRunWithStages[]): PipelineRunWithStages[] {
 }
 function maskLog(log: PersistedPipelineLog): PersistedPipelineLog {
   return { ...log, message: maskDeploymentMessage(log.message) };
-}
-
-function normalizeHttpUrl(value: string | null): string | null {
-  if (!value) return null;
-  try {
-    const url = new URL(value);
-    return url.protocol === "http:" || url.protocol === "https:" ? value : null;
-  } catch {
-    return null;
-  }
 }
 
 export function classifyPipelineChangeScope(

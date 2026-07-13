@@ -74,91 +74,6 @@ Short English-only working log for the current agent context. Older records are 
 - Added a nine-task TDD implementation plan covering contracts, migration, monitoring validation, Pipeline Run synchronization, API routes, UI separation, notifications, Outputs, and end-to-end verification.
 - Verification: design self-review and `git diff --check` passed; no product code, Terraform, Git handoff, or cloud mutation ran.
 
-### 2026-07-13 - Repair Terraform nested-block merge regression
-
-- Fast-forwarded the local branch to the remote `dev` merge commit that CI evaluated and reproduced the duplicate `aws_launch_template` key failure.
-- Consolidated both branch variants into one Launch Template nested-block set while preserving IAM profile, metadata, monitoring, network interface, and tag support.
-- Kept the pending direct-resource rename boundary fix and its regression intact across the fast-forward.
-- Verification: full typecheck, 20 focused Terraform/rename regressions, lint, build, harness, and diff checks pass. Lint retains one pre-existing API unused-argument warning.
-
-### 2026-07-13 - Add and review diagram-based Live Observation for ECS Fargate and ASG
-
-- Added diagram-derived main traffic paths, REST polling-compatible snapshots, CloudWatch Agent/ASG and ECS Fargate observability, and presentation-focused capacity visualization.
-- Moved AI simulation results out of the chat dock and kept bottleneck, cost, and failure analysis in the simulation panel.
-- Represented each accepted request as one 28px particle moving sequentially across analyzed connector segments; observation remains idle until traffic is explicitly started.
-- Final review added metadata-free ECS/ASG capacity inference scoped to the selected controller, five-request bursts, disconnect-safe SSE startup, automatically expiring per-observation simulated traffic, metric-correct request thresholds, real Traffic API audience links with explicit simulation fallback, and polling listener cleanup.
-- Verification: focused Web tests passed 82/82 plus 9 diagram tests, focused API tests passed 38/38 plus 18 service/route tests; harness, lint, typecheck, and build passed. No AWS or Terraform mutation ran.
-- PR review: Kubernetes `depends_on` addresses now render as references and both polling/SSE delay messages use valid Korean text; 21 Terraform and 31 modal tests passed.
-
-### 2026-07-12 - Implement issue #349 repository template recommendations
-
-- Goal: Extend connected Repository Analysis into a template candidate recommendation flow for issue #349.
-- Completed:
-  - Added shared deployment type, dynamic question, answer, and template recommendation DTOs.
-  - Extended Repository Analysis results with inferred deployment type, CI/CD default, max-five questions, and supported template candidates.
-  - Added backend recommendation endpoint for user deployment type, CI/CD, and answer payloads.
-  - Kept final template validation constrained to supported `TemplateId` values from stored analysis or recommendation candidates.
-  - Updated the repository start UI with deployment single-select, CI/CD checkbox, dynamic questions, and candidate cards.
-  - Documented the contract in `docs/data-models.md`.
-- Verification:
-  - `pnpm --filter @sketchcatch/types typecheck`
-  - `pnpm --filter @sketchcatch/api typecheck`
-  - `pnpm --filter @sketchcatch/web typecheck`
-  - `pnpm --dir apps/api exec tsx --test src/source-repositories/repository-analysis.test.ts src/routes/source-repositories.test.ts src/source-repositories/source-repository-service.test.ts`
-  - `pnpm --dir apps/web exec tsx --test features/workspace/api.test.ts features/workspace/project-github-settings.test.ts features/workspace/repository-start-template-recommendation.test.ts`
-  - `pnpm harness:check`
-  - `pnpm lint` passed with the pre-existing `live-observations` `setNow` warning.
-  - `pnpm typecheck`
-  - `pnpm build`
-  - `git diff --check` passed with CRLF conversion warnings only.
-- Risk:
-  - No GitHub PR, cloud deployment, Terraform apply, or infrastructure mutation was run.
-
-### 2026-07-12 - Add public GitHub URL repository start
-
-- Goal: Let users start Repository Analysis by pasting a public GitHub repository URL without first connecting GitHub in settings.
-- Completed:
-  - Added a Repository URL and branch form to the Repository start screen.
-  - Wired the form to the existing public `/ai/source-repository-analysis` client.
-  - Displayed detected signals, evidence files, recommendation reason, and the matched template.
-  - Saved the recommended template board to the project draft before opening the workspace.
-  - Kept URL analysis visible even if connected GitHub repository status cannot be loaded.
-  - Added a project settings handoff when public evidence cannot be read, covering private/restricted repositories and branch mismatches.
-- Verification:
-  - `pnpm --dir apps/web exec tsx --test features/workspace/repository-start-template-recommendation.test.ts`
-  - `pnpm --dir apps/web typecheck`
-  - `pnpm harness:check`
-  - `pnpm lint` passed with the pre-existing `live-observations` `setNow` warning.
-  - `pnpm typecheck`
-  - `pnpm build`
-  - `git diff --check` passed with CRLF conversion warnings only.
-  - `pnpm lint` passed with the pre-existing `live-observations` `setNow` warning; `pnpm typecheck`, `pnpm build`, and `pnpm harness:check` passed.
-
-### 2026-07-12 - Inline public Repository URL start on new project screen
-
-- Goal: Keep GitHub Repository start on the new project screen and remove the separate Repository URL entry step from the primary journey.
-- Completed:
-  - Changed Repository start action to open an inline URL/branch panel instead of routing to `/workspace/repository`.
-  - Wired public GitHub URL analysis into the new project screen, creating the project only after a supported template recommendation is found.
-  - Saved the recommended template board draft before opening the workspace.
-  - Kept private/restricted repository guidance pointed at GitHub permissions in settings.
-  - Added regression coverage for the inline Repository URL form action.
-- Verification:
-  - `pnpm --dir apps/web exec tsx --test app/workspace/new/workspace-start-options.test.ts features/workspace/repository-start-template-recommendation.test.ts`
-  - `pnpm --dir apps/web typecheck`
-  - `pnpm harness:check`
-  - `pnpm lint` passed with the pre-existing `live-observations` `setNow` warning.
-  - `pnpm typecheck`
-  - `pnpm build` passed; Next/Turbopack emitted a non-fatal `.next/dev/cache/turbopack` symlink metadata warning.
-  - `git diff --check` passed with CRLF conversion warnings only.
-  - `pnpm harness:check`
-  - `pnpm lint` passed with the pre-existing `live-observations` `setNow` warning.
-  - `pnpm typecheck`
-  - `pnpm build`
-  - `git diff --check` passed with CRLF conversion warnings only.
-- Risk:
-  - Browser visual verification was skipped because Playwright/browser automation dependencies are not installed in this worktree.
-
 ### 2026-07-13 - Harden CI/CD console refresh and recovery
 
 - Goal: Address Task 7 review findings without entering Task 8 output or notification scope.
@@ -182,17 +97,32 @@ Short English-only working log for the current agent context. Older records are 
 - Goal: Close the Task 9 review gap by persisting trusted CI/CD Web/API URLs instead of implying Terraform Output provenance.
 - Completed:
   - Selected the latest non-draft/non-cancelled handoff for the same Source Repository and monitored target branch.
-  - Persisted only valid HTTP(S) `staticSiteUrl`/`apiBaseUrl` values as `appUrl`/`apiUrl`, linked `handoffId`, refreshed late accepted values, and preserved existing non-null metadata across temporary null lookups.
+  - Persisted valid HTTP(S) `staticSiteUrl`/`apiBaseUrl` values as `appUrl`/`apiUrl` and linked `handoffId`; the later atomic tuple review supersedes the initial per-field null preservation behavior.
   - Added service and PostgreSQL query/upsert contract coverage; clarified conditional handoff provenance in architecture/deployment docs.
   - Archived two older July 12 entries in `docs/agent-history/2026-07.md`.
 - Verification:
-  - Focused API 109/109 and focused Web 82/82 passed.
+  - Focused API 109/109 passed at commit `e144429a`: `pnpm --dir apps/api exec tsx --test src/db/schema-contract.test.ts src/git-cicd/git-cicd-monitoring-service.test.ts src/git-cicd/git-cicd-pipeline-run-service.test.ts src/git-cicd/git-cicd-pipeline-run-repository.test.ts src/git-cicd/github-actions-run-provider.test.ts src/git-cicd/git-cicd-workflows.test.ts src/routes/git-cicd-handoffs.test.ts src/source-repositories/github-app-client.test.ts`. Focused Web 82/82 passed.
   - `pnpm lint` passed with the pre-existing `setNow` warning; `pnpm typecheck` and `pnpm build` passed. Build retained the existing Next.js multiple-lockfile root warning and changed no tracked generated file.
   - Full `pnpm test` did not pass: API 1282/1305 passed and Web passed. The 23 unrelated API failures were: `embedded Python Traffic API compiles and exposes OPTIONS, traffic, and health handlers`; ten `runDeploymentInit`/`runDeploymentDestroyPlan` tests; `findUnsupportedLiveApplyResourceTypesFromTerraformShowJson allows demo web service resources only for the demo profile`; two AI route tests plus `POST /api/ai/source-repository-analysis reads nested public repository evidence`; five Q/template-selection tests; `src/services/terraform/aws-priority-resource-coverage.test.ts`; `renders the requested CloudFront nested values back as blocks`; and `all AWS templates generate Terraform Preview from their shared definitions`.
   - Structured mismatches included `undefined` vs `true` for embedded Python, missing `S3_BUCKET_NAME` vs expected deployment errors, added S3 `contentType`, omitted `aws_iam_role`, `three-tier-web-app` vs `template-api-db`, extra `spa-cloudfront-s3`, `true` vs `false` in the Q-backed plan, list-shaped `custom_origin_config` vs an HCL block, and quoted archive references vs unquoted references. The remaining assertion failures emitted no structured actual/expected pair.
 - Risk:
   - No DB migration, browser journey, GitHub/AWS mutation, Terraform Apply/Destroy, push, or external notification was run.
 
+### 2026-07-13 - Harden CI/CD Output provenance tuple and URL safety
+
+- Goal: Resolve the second Task 9 review without mixing provenance across handoffs or persisting sensitive URL material.
+- Completed:
+  - Made `handoffId`/`appUrl`/`apiUrl` an atomic tuple: no applicable handoff preserves the existing tuple, while an applicable handoff replaces all three fields including null URLs.
+  - Shared one backend validator between handoff request validation and Pipeline Run normalization. It accepts absolute HTTP(S) URLs without username/password, query, or fragment and preserves safe path/port values.
+  - Added A-to-B partial/all-null, no-handoff preservation, route rejection/no-storage, and PostgreSQL CASE contract coverage.
+  - Updated canonical docs and archived five unrelated older workstreams verbatim.
+- Verification:
+  - Focused API 112/112: `pnpm --dir apps/api exec tsx --test src/db/schema-contract.test.ts src/git-cicd/git-cicd-monitoring-service.test.ts src/git-cicd/git-cicd-pipeline-run-service.test.ts src/git-cicd/git-cicd-pipeline-run-repository.test.ts src/git-cicd/github-actions-run-provider.test.ts src/git-cicd/git-cicd-workflows.test.ts src/routes/git-cicd-handoffs.test.ts src/source-repositories/github-app-client.test.ts`.
+  - Focused Web 82/82 passed; `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check` passed. Existing warnings remain: unused API `setNow` and Next.js multiple-lockfile root inference.
+  - Full `pnpm test` was not rerun; the exact prior API 1282/1305 baseline and its 23 unrelated failures remain recorded above and in the Task 9 scratch report.
+- Risk:
+  - No DB migration, browser journey, GitHub/AWS mutation, Terraform Apply/Destroy, push, or external notification was run.
+
 ## Next Action
 
-- Review the Task 9 follow-up commit. Investigate the unrelated full API-suite baseline failures separately; run migration and credentialed browser acceptance only with an approved safe environment.
+- Review the second Task 9 follow-up commit. Investigate the unrelated full API-suite baseline failures separately; run migration and credentialed browser acceptance only with an approved safe environment.

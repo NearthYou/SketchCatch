@@ -168,13 +168,13 @@ Git/CI/CD 관측의 영구 source of truth는 RDS다.
 
 Web은 화면이 보일 때 active Pipeline Run이 있으면 5초, 모두 terminal이면 30초 간격으로 인증 API를 polling한다. CI/CD Logs는 선택한 run의 마지막 `sequence` 이후만 증분 조회한다. Workspace-level observer는 콘솔을 닫아도 같은 project가 mount된 동안 Direct/Pipeline terminal 전환을 같은 5초/30초 정책으로 관측한다. document가 숨겨진 동안 화면 refresh와 log fetch는 provider 호출을 진행하지 않는다.
 
-API refresh는 GitHub Actions, job, commit file과 마스킹된 log를 read-only로 조회해 RDS record를 idempotent하게 갱신한다. 같은 Source Repository와 monitoring target branch에서 가장 최근에 생성된 non-draft/non-cancelled `GitCicdHandoff`가 있으면, 사용자 수락 설정인 `staticSiteUrl`과 `apiBaseUrl`을 각각 Pipeline Run의 `appUrl`과 `apiUrl` provenance로 연결한다. HTTP(S)가 아닌 값은 저장하지 않고, 일시적으로 handoff metadata를 찾지 못한 refresh는 이미 저장된 non-null URL을 지우지 않는다. provider 조회가 실패하면 마지막으로 저장된 status와 `lastRefreshedAt`을 보존하고 stale 응답을 반환한다. Redis Runtime Cache는 handoff/pipeline status의 짧은 보조 cache로 사용할 수 있지만 Pipeline Run, stage, log의 최종 기록을 대체하지 않는다.
+API refresh는 GitHub Actions, job, commit file과 마스킹된 log를 read-only로 조회해 RDS record를 idempotent하게 갱신한다. 같은 Source Repository와 monitoring target branch에서 가장 최근에 생성된 non-draft/non-cancelled `GitCicdHandoff`가 있으면, 사용자 수락 설정인 `staticSiteUrl`과 `apiBaseUrl`을 각각 Pipeline Run의 `appUrl`과 `apiUrl` provenance로 연결한다. `handoffId`, `appUrl`, `apiUrl`은 하나의 provenance tuple이다. 적용 가능한 handoff가 없으면 기존 tuple 전체를 보존하고, handoff가 있으면 두 URL이 null이어도 들어온 tuple 전체로 교체한다. URL은 username/password, query, fragment가 없는 절대 HTTP(S) entry/base URL만 허용하며 path와 port는 보존한다. 거부된 값은 Pipeline Run에 저장하지 않는다. provider 조회가 실패하면 마지막으로 저장된 status와 `lastRefreshedAt`을 보존하고 stale 응답을 반환한다. Redis Runtime Cache는 handoff/pipeline status의 짧은 보조 cache로 사용할 수 있지만 Pipeline Run, stage, log의 최종 기록을 대체하지 않는다.
 
 모니터링 설정 변경에는 `userAcceptedChangeId`가 필요하며, enabled 상태는 branch와 app/infra path가 GitHub에서 검증되어야 한다. Pipeline refresh와 조회는 Git commit, workflow 설정, repository settings, AWS Resource를 변경하지 않는다. Git/CI/CD handoff, repository settings 적용, GitHub OAuth 보강, AWS role diff 적용은 각각 기존의 명시적 사용자 승인 경계를 유지한다.
 
 완료 알림은 첫 snapshot을 silent baseline으로 삼고, 이후 non-terminal 상태가 `succeeded` 또는 `failed`로 바뀔 때만 만든다. `cancelled`와 처음부터 terminal인 record는 알리지 않으며, `runId:status` key를 `sessionStorage`에 저장해 browser session 안에서 중복을 막는다. in-app 알림은 기본 fallback이고 browser Notification은 사용자가 버튼으로 권한을 요청해 `granted`가 된 경우에만 추가한다. 권한 거부, 미지원, API 예외가 있어도 in-app 알림은 유지한다.
 
-CI/CD Logs는 GitHub Actions의 build/deploy workflow 증거이며 Runtime application log가 아니다. Runtime Log 동작은 Live Observation으로 이동할 뿐 Pipeline Run status를 변경하지 않는다. Direct Deployment 링크는 non-sensitive Terraform Output에서 분류하지만, CI/CD 링크는 위 accepted handoff 설정에서 유래한 `appUrl`/`apiUrl`이 저장되고 HTTP(S) 검증을 통과한 경우에만 조건부로 표시한다.
+CI/CD Logs는 GitHub Actions의 build/deploy workflow 증거이며 Runtime application log가 아니다. Runtime Log 동작은 Live Observation으로 이동할 뿐 Pipeline Run status를 변경하지 않는다. Direct Deployment 링크는 non-sensitive Terraform Output에서 분류하지만, CI/CD 링크는 위 accepted handoff 설정에서 유래한 `appUrl`/`apiUrl`이 credential/query/fragment 없는 HTTP(S) 검증을 통과한 경우에만 조건부로 표시한다.
 
 ## Live Observation 실행 경계
 

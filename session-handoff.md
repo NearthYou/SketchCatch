@@ -7,13 +7,13 @@ Use this file only for compact continuation context. Write it in English.
 - Issue #361 tracks the Deployment/CI/CD console separation as one feature workstream.
 - Branch `feature/sw/361-deployment-cicd-console` contains the approved design and Tasks 1-9 implementation.
 - Direct Deployment and CI/CD remain independent screens and records; monitoring requires accepted branch/app/infra settings, and Pipeline Runs are commit-scoped RDS history.
-- Task 9 follow-up connects Pipeline Run `handoffId`/`appUrl`/`apiUrl` to the latest applicable accepted handoff; focused API 109/109 and focused Web 82/82 pass.
+- Task 9 follow-up connects Pipeline Run `handoffId`/`appUrl`/`apiUrl` to the latest applicable accepted handoff as one atomic tuple; focused API 112/112 and focused Web 82/82 pass.
 
 ## Changes This Session
 
-- Added trusted handoff lookup, HTTP(S) validation, late metadata refresh, and non-null preservation coverage.
+- Added trusted handoff lookup and shared non-sensitive HTTP(S) validation; provenance metadata now uses atomic tuple replacement or whole-tuple preservation when no handoff applies.
 - Corrected architecture/deployment docs so CI/CD Outputs are conditional handoff metadata, not Terraform Outputs.
-- Archived two older July 12 progress records and recorded full-suite baseline failures.
+- Archived seven older unrelated progress records in total and recorded full-suite baseline failures.
 
 ## Broken Or Unverified
 
@@ -25,4 +25,4 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Best Next Action
 
-- Review the Task 9 follow-up commit and triage the unrelated full API-suite failures separately. Collect migration and browser acceptance evidence only after an approved local test DB and safe GitHub/AWS test environment are available.
+- Review the second Task 9 follow-up commit and triage the unrelated full API-suite failures separately. Collect migration and browser acceptance evidence only after an approved local test DB and safe GitHub/AWS test environment are available.
