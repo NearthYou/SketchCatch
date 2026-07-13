@@ -42,6 +42,10 @@ test("cost dashboard separates pre-deployment estimates from deployed usage with
   assert.match(clientSource, /styles\.costFolderPanel/);
   assert.match(clientSource, /예상 비용/);
   assert.match(clientSource, /실제 사용량/);
+  assert.match(
+    clientSource,
+    /프로젝트의 예상 비용과 실제 사용량을 한곳에서 비교하고 관리합니다\./
+  );
   assert.match(clientSource, /CostEstimatePanel/);
   assert.match(clientSource, /CostUsagePanel/);
   assert.match(clientSource, /event\.key === "ArrowRight"/);
@@ -105,4 +109,19 @@ test("actual usage chart keeps service-sized labels without stretching the SVG",
   assert.match(chartRule, /height:\s*220px/);
   assert.doesNotMatch(chartRule, /min-height/);
   assert.match(axisLabelRule, /font-size:\s*13px/);
+});
+
+test("actual usage panel presents monthly comparison before the daily trend", () => {
+  assert.match(usagePanelSource, /월별 비교/);
+  assert.match(usagePanelSource, /전월 실제/);
+  assert.match(usagePanelSource, /이번 달 사용/);
+  assert.match(usagePanelSource, /월말 예상/);
+  assert.match(usagePanelSource, /전월 대비/);
+  assert.match(usagePanelSource, /createCostUsageMonthlyBars/);
+  assert.match(usagePanelSource, /bar\.isEstimated \? "추정"/);
+  assert.match(usagePanelSource, /styles\.monthlyComparisonGrid/);
+  assert.match(usagePanelSource, /styles\.monthlyChart/);
+  assert.ok(usagePanelSource.indexOf("월별 비교") < usagePanelSource.indexOf("일별 실제 비용"));
+  assert.match(dashboardToolsCss, /\.monthlyComparisonGrid\s*\{/);
+  assert.match(dashboardToolsCss, /\.monthlyChart\s*\{/);
 });

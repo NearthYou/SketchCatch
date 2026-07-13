@@ -4,13 +4,21 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- Branch: `fix/gg/355-review-followup-v2`.
+- Branch: `fix/ys/363-uiux-개선`.
 - PR #366 preserves six Catalog-backed AWS Template Boards with 103 Terraform-deployable Resources and 28 parameterless Design nodes.
 - The current `dev` Deployment/CI/CD console split is integrated without restoring the retired monolithic panel.
 - Workspace deployment context counts only `isTerraformDeployableNode` results and passes that value into the Direct Deployment screen; CI/CD remains a separate screen.
 - Migrations `0032` and `0033` came from `dev` and have not been executed by this gg workstream.
 
 ## Session Record
+
+### 2026-07-13 - Resolve dev merge conflicts on the UI/UX branch
+
+- Kept the `dev` Deployment/CI/CD console split and the thin `DeploymentPanel` adapter instead of restoring the retired monolith.
+- Ported this branch's compact deployment actions and pre-deployment finding layout into `DirectDeploymentScreen`.
+- Preserved the shared Template dropdown UI while adopting `dev` Resource and relationship count helpers.
+- Resolved test coverage against the new split source files and retained both branches' regression contracts.
+- Verification: 100 focused Template and workspace regressions passed; harness, lint, typecheck, and build passed. Lint retains one pre-existing unused-argument warning.
 
 ### 2026-07-13 - Integrate current dev into PR #366
 
@@ -24,5 +32,5 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Next Action
 
-- Commit and push the resolved merge, then confirm GitHub reports PR #366 mergeable with no unresolved review thread.
+- Commit the resolved merge after the required checks pass.
 - Run migrations and credentialed browser acceptance only with an approved safe environment.

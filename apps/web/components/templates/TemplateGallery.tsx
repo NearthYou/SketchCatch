@@ -11,8 +11,18 @@ import {
   type BoardTemplate,
   type BoardTemplateSort
 } from "../../features/resource-settings/template-library";
+import {
+  SelectMenu,
+  type SelectMenuOption
+} from "../ui/SelectMenu";
 import styles from "./TemplateGallery.module.css";
 import { createTemplatePreviewModel } from "./template-preview-model";
+
+const TEMPLATE_SORT_OPTIONS: readonly SelectMenuOption[] = [
+  { label: "추천순", value: "recommended" },
+  { label: "이름순", value: "name" },
+  { label: "Resource 많은 순", value: "resources" }
+];
 
 export type TemplateGalleryProps = {
   readonly actionHref?: ((template: BoardTemplate) => string) | undefined;
@@ -34,6 +44,13 @@ export function TemplateGallery({
   const [sort, setSort] = useState<BoardTemplateSort>("recommended");
   const [tag, setTag] = useState("all");
   const tags = useMemo(() => listBoardTemplateTags(templates), [templates]);
+  const tagOptions = useMemo<readonly SelectMenuOption[]>(
+    () => [
+      { label: "전체", value: "all" },
+      ...tags.map((templateTag) => ({ label: templateTag, value: templateTag }))
+    ],
+    [tags]
+  );
   const visibleTemplates = useMemo(
     () => filterBoardTemplates(templates, { query, sort, tag }),
     [query, sort, tag, templates]
@@ -52,28 +69,30 @@ export function TemplateGallery({
             value={query}
           />
         </label>
-        <label className={styles.selectField}>
+        <div className={styles.selectField}>
           <span>Tag</span>
-          <select onChange={(event) => setTag(event.currentTarget.value)} value={tag}>
-            <option value="all">전체</option>
-            {tags.map((templateTag) => (
-              <option key={templateTag} value={templateTag}>
-                {templateTag}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className={styles.selectField}>
+          <SelectMenu
+            ariaLabel="Template Tag 선택"
+            emptyLabel="Tag 선택"
+            onChange={setTag}
+            options={tagOptions}
+            size="large"
+            tone="surface"
+            value={tag}
+          />
+        </div>
+        <div className={styles.selectField}>
           <span>정렬</span>
-          <select
-            onChange={(event) => setSort(event.currentTarget.value as BoardTemplateSort)}
+          <SelectMenu
+            ariaLabel="Template 정렬 선택"
+            emptyLabel="정렬 선택"
+            onChange={(value) => setSort(value as BoardTemplateSort)}
+            options={TEMPLATE_SORT_OPTIONS}
+            size="large"
+            tone="surface"
             value={sort}
-          >
-            <option value="recommended">추천순</option>
-            <option value="name">이름순</option>
-            <option value="resources">Resource 많은 순</option>
-          </select>
-        </label>
+          />
+        </div>
       </div>
 
       {visibleTemplates.length === 0 ? (

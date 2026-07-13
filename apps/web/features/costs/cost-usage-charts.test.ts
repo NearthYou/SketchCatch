@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   analyzeCostUsageTrendShape,
   createCostUsageLineChart,
+  createCostUsageMonthlyBars,
   createServiceCostBars,
   sumEstimatedMonthlySavings
 } from "./cost-usage-charts";
@@ -92,6 +93,20 @@ test("createServiceCostBars limits rows and maps service labels", () => {
   assert.deepEqual(bars, [
     { amount: 20, label: "Amazon RDS", percentage: 50 },
     { amount: 10, label: "Amazon EC2", percentage: 25 }
+  ]);
+});
+
+test("createCostUsageMonthlyBars normalizes six readable monthly columns", () => {
+  const bars = createCostUsageMonthlyBars([
+    { amount: 100, isEstimated: false, isPartial: false, month: "2026-05" },
+    { amount: 200, isEstimated: false, isPartial: false, month: "2026-06" },
+    { amount: 50, isEstimated: true, isPartial: true, month: "2026-07" }
+  ]);
+
+  assert.deepEqual(bars, [
+    { amount: 100, heightPercentage: 50, isEstimated: false, isPartial: false, label: "5월", month: "2026-05" },
+    { amount: 200, heightPercentage: 100, isEstimated: false, isPartial: false, label: "6월", month: "2026-06" },
+    { amount: 50, heightPercentage: 25, isEstimated: true, isPartial: true, label: "7월", month: "2026-07" }
   ]);
 });
 
