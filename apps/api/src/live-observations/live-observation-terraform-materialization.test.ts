@@ -134,6 +134,7 @@ async function materializeGraph(
   );
   for (const required of [
     "traffic_url",
+    "traffic_hostname",
     "load_balancer_dns_name",
     "load_balancer_arn",
     "target_group_arn",
@@ -143,8 +144,8 @@ async function materializeGraph(
   }
 
   const resolvedValues: Record<string, unknown> = {
-    traffic_url:
-      "https://customer-platform-123456789.ap-northeast-2.elb.amazonaws.com/traffic",
+    traffic_url: "https://api.example.com/traffic",
+    traffic_hostname: "api.example.com",
     load_balancer_dns_name:
       "customer-platform-123456789.ap-northeast-2.elb.amazonaws.com",
     load_balancer_arn:
@@ -197,6 +198,11 @@ function createBaseGraph(capacityNodes: InfrastructureGraph["nodes"]): Infrastru
           type: "forward",
           targetGroupArn: "aws_lb_target_group.api.arn"
         }
+      }),
+      node("aws_route53_record", "api", {
+        name: "api.example.com",
+        type: "CNAME",
+        records: ["aws_lb.platform.dns_name"]
       }),
       ...capacityNodes
     ],

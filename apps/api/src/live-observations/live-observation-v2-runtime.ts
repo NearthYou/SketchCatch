@@ -20,6 +20,7 @@ import {
   type DeploymentLiveObservationManifestRepository
 } from "./live-observation-manifest-repository.js";
 import { createLiveObservationPublicCollector } from "./live-observation-public-collector.js";
+import { createLiveObservationHttpsTransport } from "./live-observation-https-transport.js";
 import { createLiveObservationPublicRequestRateLimiter } from "./live-observation-public-request-rate-limiter.js";
 import {
   LiveObservationStoreUnavailableError,
@@ -62,13 +63,12 @@ export function createLiveObservationV2Runtime(options: {
   });
   const collector = createLiveObservationPublicCollector({
     capability,
-    createTimeoutSignal: AbortSignal.timeout,
-    fetch: async (url, init) => fetch(url, init),
     requestRateLimiter: createLiveObservationPublicRequestRateLimiter({
       runtimeCache: options.runtimeCache,
       requireRedis: options.runtimeEnv.nodeEnv === "production"
     }),
-    store
+    store,
+    trafficTransport: createLiveObservationHttpsTransport()
   });
 
   async function loadDeployment(request: FastifyRequest, deploymentId: string) {
@@ -106,6 +106,7 @@ export function createLiveObservationV2Runtime(options: {
       if (existing) {
         try {
           assertDeploymentLiveObservationManifestReusable({
+            audienceBaseUrl,
             connection,
             deployment: context.deployment,
             record: existing

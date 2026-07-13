@@ -1,4 +1,5 @@
 import type { DeploymentLiveObservationManifestV2 } from "@sketchcatch/types";
+import { isIP } from "node:net";
 import { z } from "zod";
 
 const awsPartitionPattern = "(?:aws|aws-cn|aws-us-gov)";
@@ -66,6 +67,7 @@ const awsLiveObservationAdapterPayloadV1Schema = z
 
 const awsLiveObservationAdapterPayloadV2Schema = z
   .object({
+    trafficHostname: z.string().min(1).max(253),
     loadBalancerDnsName: z.string().min(1).max(253),
     loadBalancerArn: z.string().regex(generalLoadBalancerArnPattern),
     targetGroupArn: z.string().regex(generalTargetGroupArnPattern),
@@ -223,6 +225,7 @@ export const deploymentLiveObservationManifestV2Schema: z.ZodType<DeploymentLive
 
       if (manifest.adapter.version === 2) {
         const trafficUrl = new URL(manifest.endpoints.trafficUrl);
+        const trafficHostname = manifest.adapter.payload.trafficHostname;
         const dnsName = manifest.adapter.payload.loadBalancerDnsName;
         if (
           !isPublicAlbDnsName({
@@ -238,11 +241,18 @@ export const deploymentLiveObservationManifestV2Schema: z.ZodType<DeploymentLive
             message: "Load balancer DNS name must identify the public ALB"
           });
         }
-        if (trafficUrl.hostname !== dnsName || trafficUrl.port !== "") {
+        if (!isPublicCustomHostname(trafficHostname)) {
+          context.addIssue({
+            code: "custom",
+            path: ["adapter", "payload", "trafficHostname"],
+            message: "Traffic hostname must be a public custom DNS name"
+          });
+        }
+        if (trafficUrl.hostname !== trafficHostname || trafficUrl.port !== "") {
           context.addIssue({
             code: "custom",
             path: ["endpoints", "trafficUrl"],
-            message: "Traffic URL must use the verified public ALB DNS name on HTTPS 443"
+            message: "Traffic URL must use the verified custom hostname on HTTPS 443"
           });
         }
       }
@@ -257,11 +267,23 @@ export function parseDeploymentLiveObservationManifestV2(
 export function requireLiveObservationTrafficTarget(
   value: unknown
 ): string {
+  return requireLiveObservationTrafficTargetEvidence(value).trafficUrl;
+}
+
+export function requireLiveObservationTrafficTargetEvidence(value: unknown): {
+  readonly trafficUrl: string;
+  readonly trafficHostname: string;
+  readonly loadBalancerDnsName: string;
+} {
   const manifest = parseDeploymentLiveObservationManifestV2(value);
   if (manifest.adapter.version !== 2) {
     throw new Error("Live Observation traffic target requires adapter v2 evidence");
   }
-  return manifest.endpoints.trafficUrl;
+  return {
+    trafficUrl: manifest.endpoints.trafficUrl,
+    trafficHostname: manifest.adapter.payload.trafficHostname,
+    loadBalancerDnsName: manifest.adapter.payload.loadBalancerDnsName
+  };
 }
 
 type ElasticLoadBalancingArnIdentity = {
@@ -320,4 +342,35 @@ function isPublicAlbDnsName(input: {
   const label = input.dnsName.slice(0, -labelSuffix.length);
   if (label.startsWith("internal-") || !label.startsWith(expectedPrefix)) return false;
   return /^[0-9]{1,16}$/.test(label.slice(expectedPrefix.length));
+}
+
+function isPublicCustomHostname(hostname: string): boolean {
+  if (
+    hostname !== hostname.toLowerCase() ||
+    hostname.endsWith(".") ||
+    isIP(hostname) !== 0 ||
+    hostname.endsWith(".amazonaws.com") ||
+    hostname.endsWith(".amazonaws.com.cn")
+  ) {
+    return false;
+  }
+
+  const labels = hostname.split(".");
+  if (labels.length < 2) return false;
+  if (
+    labels.some(
+      (label) =>
+        !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label) ||
+        label === "localhost" ||
+        label === "metadata" ||
+        label === "instance-data" ||
+        label === "internal" ||
+        label.startsWith("internal-")
+    )
+  ) {
+    return false;
+  }
+  return !["local", "localhost", "internal", "invalid", "test"].includes(
+    labels.at(-1) ?? ""
+  );
 }

@@ -34,8 +34,8 @@ test("public collector authenticates Store-bound claims before requesting and ac
   });
 });
 
-test("authorized public request revalidates the ALB traffic target immediately before fetch", async () => {
-  let fetchCalls = 0;
+test("authorized public request revalidates the traffic target immediately before transport", async () => {
+  let transportCalls = 0;
   let corruptReread = false;
   const fixture = await createFixture(
     (store) => ({
@@ -50,8 +50,8 @@ test("authorized public request revalidates the ALB traffic target immediately b
       }
     }),
     {
-      async fetch() {
-        fetchCalls += 1;
+      async post() {
+        transportCalls += 1;
         return { status: 204 };
       }
     }
@@ -63,28 +63,15 @@ test("authorized public request revalidates the ALB traffic target immediately b
     () => authorized.request({ eventId: EVENT_ID, ipAddress: "203.0.113.42" }),
     "unavailable"
   );
-  assert.equal(fetchCalls, 0);
+  assert.equal(transportCalls, 0);
 });
 
-test("authorized public request POSTs only to Store trafficUrl before accepting its receipt", async () => {
-  const fetchCalls: Array<{ input: string; init: RequestInit }> = [];
-  const timeoutCalls: number[] = [];
-  const signal = new AbortController().signal;
-  let bodyReads = 0;
+test("authorized public request passes only the current Store manifest to transport before receipt", async () => {
+  const transportCalls: unknown[] = [];
   const fixture = await createFixture(undefined, {
-    createTimeoutSignal(timeoutMs) {
-      timeoutCalls.push(timeoutMs);
-      return signal;
-    },
-    async fetch(input, init) {
-      fetchCalls.push({ input, init });
-      return {
-        status: 204,
-        async text() {
-          bodyReads += 1;
-          return "ignored";
-        }
-      };
+    async post(manifest) {
+      transportCalls.push(manifest);
+      return { status: 204 };
     }
   });
   const authorized = await authorize(fixture);
@@ -93,14 +80,7 @@ test("authorized public request POSTs only to Store trafficUrl before accepting 
     await authorized.request({ eventId: EVENT_ID, ipAddress: "203.0.113.42" }),
     { accepted: true, acceptedEventCount: 1 }
   );
-  assert.deepEqual(fetchCalls, [
-    {
-      input: fixture.input.manifest.endpoints.trafficUrl,
-      init: { method: "POST", redirect: "manual", signal }
-    }
-  ]);
-  assert.deepEqual(timeoutCalls, [3_000]);
-  assert.equal(bodyReads, 0);
+  assert.deepEqual(transportCalls, [fixture.input.manifest]);
 });
 
 test("authorized public request returns one generic error and accepts no receipt for redirect, timeout, or non-2xx", async () => {
@@ -112,8 +92,8 @@ test("authorized public request returns one generic error and accepts no receipt
     }
   ];
 
-  for (const fetch of cases) {
-    const fixture = await createFixture(undefined, { fetch });
+  for (const post of cases) {
+    const fixture = await createFixture(undefined, { post });
     const authorized = await authorize(fixture);
 
     await assertCollectorError(
@@ -126,11 +106,11 @@ test("authorized public request returns one generic error and accepts no receipt
   }
 });
 
-test("authorized public request rechecks a stopped Store session before performing fetch", async () => {
-  let fetchCalls = 0;
+test("authorized public request rechecks a stopped Store session before transport", async () => {
+  let transportCalls = 0;
   const fixture = await createFixture(undefined, {
-    async fetch() {
-      fetchCalls += 1;
+    async post() {
+      transportCalls += 1;
       return { status: 204 };
     }
   });
@@ -145,15 +125,15 @@ test("authorized public request rechecks a stopped Store session before performi
     () => authorized.request({ eventId: EVENT_ID, ipAddress: "203.0.113.42" }),
     "gone"
   );
-  assert.equal(fetchCalls, 0);
+  assert.equal(transportCalls, 0);
 });
 
-test("authorized public request rechecks exact Store expiry before performing fetch", async () => {
+test("authorized public request rechecks exact Store expiry before transport", async () => {
   let nowMs = NOW_MS;
-  let fetchCalls = 0;
+  let transportCalls = 0;
   const fixture = await createFixture(undefined, {
-    async fetch() {
-      fetchCalls += 1;
+    async post() {
+      transportCalls += 1;
       return { status: 204 };
     },
     now: () => nowMs
@@ -165,13 +145,13 @@ test("authorized public request rechecks exact Store expiry before performing fe
     () => authorized.request({ eventId: EVENT_ID, ipAddress: "203.0.113.42" }),
     "gone"
   );
-  assert.equal(fetchCalls, 0);
+  assert.equal(transportCalls, 0);
 });
 
-test("authorized public request refuses missing and unavailable Store rereads before fetch", async () => {
+test("authorized public request refuses missing and unavailable Store rereads before transport", async () => {
   for (const failure of ["not_found", "unavailable"] as const) {
     let failReread = false;
-    let fetchCalls = 0;
+    let transportCalls = 0;
     const fixture = await createFixture(
       (store) => ({
         ...store,
@@ -187,8 +167,8 @@ test("authorized public request refuses missing and unavailable Store rereads be
         }
       }),
       {
-        async fetch() {
-          fetchCalls += 1;
+        async post() {
+          transportCalls += 1;
           return { status: 204 };
         }
       }
@@ -200,16 +180,16 @@ test("authorized public request refuses missing and unavailable Store rereads be
       () => authorized.request({ eventId: EVENT_ID, ipAddress: "203.0.113.42" }),
       failure
     );
-    assert.equal(fetchCalls, 0);
+    assert.equal(transportCalls, 0);
   }
 });
 
 test("authorized public request cannot follow a replacement session with the same observation ID", async () => {
   let nowMs = NOW_MS;
-  let fetchCalls = 0;
+  let transportCalls = 0;
   const fixture = await createFixture(undefined, {
-    async fetch() {
-      fetchCalls += 1;
+    async post() {
+      transportCalls += 1;
       return { status: 204 };
     },
     now: () => nowMs
@@ -231,7 +211,7 @@ test("authorized public request cannot follow a replacement session with the sam
     () => authorized.request({ eventId: EVENT_ID, ipAddress: "203.0.113.42" }),
     "gone"
   );
-  assert.equal(fetchCalls, 0);
+  assert.equal(transportCalls, 0);
 });
 
 test("public collector rejects invalid capability and origin without Store mutation", async () => {
@@ -436,12 +416,8 @@ async function createFixture(
     active: Extract<Awaited<ReturnType<LiveObservationStore["createSession"]>>, { kind: "created" }>
   ) => LiveObservationStore,
   requestOptions: {
-    createTimeoutSignal?: (timeoutMs: number) => AbortSignal;
-    fetch?: (
-      input: string,
-      init: { method: "POST"; redirect: "manual"; signal: AbortSignal }
-    ) => Promise<{ status: number }>;
     now?: () => number;
+    post?: (manifest: unknown) => Promise<{ status: number }>;
   } = {}
 ) {
   const now = requestOptions.now ?? (() => NOW_MS);
@@ -469,17 +445,14 @@ async function createFixture(
     capability,
     collector: createLiveObservationPublicCollector({
       capability,
-      createTimeoutSignal: requestOptions.createTimeoutSignal ?? AbortSignal.timeout,
-      fetch:
-        requestOptions.fetch ??
-        (async () => {
-          return { status: 204 };
-        }),
       requestRateLimiter: createLiveObservationPublicRequestRateLimiter({
         now,
         runtimeCache: createInMemoryRuntimeCache({ cleanupIntervalMs: null, now })
       }),
-      store
+      store,
+      trafficTransport: {
+        post: requestOptions.post ?? (async () => ({ status: 204 }))
+      }
     }),
     created,
     credential,

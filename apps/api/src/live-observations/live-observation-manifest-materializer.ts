@@ -71,6 +71,7 @@ export function createDeploymentLiveObservationManifest(input: {
   const verifiedAt = toIsoDateTime(connection.lastVerifiedAt);
   const audienceBaseUrl = input.audienceBaseUrl;
   const trafficUrl = readString(outputs, "traffic_url");
+  const trafficHostname = readString(outputs, "traffic_hostname");
   const loadBalancerDnsName = readString(outputs, "load_balancer_dns_name");
   const loadBalancerArn = readAwsArn(outputs, "load_balancer_arn", "alb_arn_suffix", {
     accountId,
@@ -112,6 +113,7 @@ export function createDeploymentLiveObservationManifest(input: {
       kind: "aws-live-observation",
       version: 2,
       payload: {
+        trafficHostname,
         loadBalancerDnsName,
         loadBalancerArn,
         targetGroupArn,
@@ -122,6 +124,7 @@ export function createDeploymentLiveObservationManifest(input: {
 }
 
 export function assertDeploymentLiveObservationManifestReusable(input: {
+  readonly audienceBaseUrl: string;
   readonly deployment: DeploymentEvidence;
   readonly connection: ConnectionEvidence | null;
   readonly record: DeploymentLiveObservationManifestRecord;
@@ -134,6 +137,9 @@ export function assertDeploymentLiveObservationManifestReusable(input: {
   if (
     record.status !== "valid" ||
     !manifest ||
+    manifest.adapter.version !== 2 ||
+    normalizeBaseUrl(manifest.endpoints.audienceBaseUrl) !==
+      normalizeBaseUrl(input.audienceBaseUrl) ||
     record.deploymentId !== deployment.id ||
     manifest.provenance.deploymentId !== deployment.id ||
     deployment.status !== "SUCCESS" ||
@@ -162,6 +168,10 @@ export function assertDeploymentLiveObservationManifestReusable(input: {
       throw new Error("Immutable manifest AWS identity does not match deployment approval");
     }
   }
+}
+
+function normalizeBaseUrl(value: string): string {
+  return new URL(value).toString().replace(/\/$/, "");
 }
 
 function readCapacityTarget(outputs: Readonly<Record<string, unknown>>) {

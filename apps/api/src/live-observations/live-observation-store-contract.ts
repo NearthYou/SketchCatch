@@ -269,7 +269,7 @@ export function registerLiveObservationStoreContract(input: {
     assert.equal(secondRead.session.live.pressurePercent, 0);
     assert.equal(
       secondRead.session.manifest.endpoints.trafficUrl,
-      "https://sc-lo-alb-123e4567e89b-123456789.ap-northeast-2.elb.amazonaws.com/traffic"
+      "https://api-123e4567e89b.example.com/traffic"
     );
 
     const stopped = await store.stopSession({
@@ -1520,8 +1520,7 @@ function createManifest(
     },
     endpoints: {
       audienceBaseUrl: "https://audience.example.com",
-      trafficUrl:
-        `https://sc-lo-alb-${resourceSuffix}-123456789.ap-northeast-2.elb.amazonaws.com/traffic`
+      trafficUrl: `https://api-${resourceSuffix}.example.com/traffic`
     },
     pressure: {
       metric: "requests_per_target_per_minute",
@@ -1532,6 +1531,7 @@ function createManifest(
       kind: "aws-live-observation",
       version: 2,
       payload: {
+        trafficHostname: `api-${resourceSuffix}.example.com`,
         loadBalancerDnsName:
           `sc-lo-alb-${resourceSuffix}-123456789.ap-northeast-2.elb.amazonaws.com`,
         loadBalancerArn:

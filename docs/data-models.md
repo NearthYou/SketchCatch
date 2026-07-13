@@ -1409,6 +1409,7 @@ type AwsLiveObservationAdapterPayloadV1 = {
 };
 
 type AwsLiveObservationAdapterPayloadV2 = {
+  trafficHostname: string;
   loadBalancerDnsName: string;
   loadBalancerArn: string;
   targetGroupArn: string;
@@ -1427,11 +1428,11 @@ type AwsLiveObservationAdapterPayloadV2 = {
 
 `kind: "aws-live-observation"`, `version: 1`의 runtime validator는 `payload`를 위 `AwsLiveObservationAdapterPayloadV1`의 정확한 네 string key만 가진 strict object로 제한한다. `resourceSuffix`는 `deploymentId`에서 hyphen을 제거한 뒤 앞 12개 hex 문자를 lowercase로 변환한 서버 소유 결정값이다. `loadBalancerArn`의 resource name은 정확히 `loadbalancer/app/sc-lo-alb-${resourceSuffix}`, `targetGroupArn`은 정확히 `targetgroup/sc-lo-api-${resourceSuffix}`, `autoScalingGroupName`은 정확히 `sc-lo-asg-${resourceSuffix}`여야 한다. ALB/TG ARN은 같은 AWS partition, region, 12자리 account ID를 사용해야 하고 그 region은 `provenance.region`과 같아야 한다. `cloudFrontDistributionId`는 `E`로 시작하는 bounded uppercase distribution ID이며 Stage 2 materializer가 AWS relationship read로 실제 연관성을 검증한다. array, nested object, extra key, number, boolean, 임의 string leaf는 허용하지 않는다.
 
-`version: 2`는 기존 v1 row를 계속 읽으면서 운영 Deployment의 ASG 또는 ECS/Fargate capacity target을 명시한다. `loadBalancerDnsName`은 approved region/partition의 public AWS ALB DNS만 허용하며 ALB ARN name과 `trafficUrl` host에 정확히 결합한다. IP literal, localhost, `internal-*`, credential, query, fragment, custom HTTPS port는 거부한다. ALB/TG ARN의 partition, account, region 일치와 bounded AWS name을 검증하고, ECS/Fargate는 `clusterName`, `serviceName`, positive integer `maxCapacity`를 모두 요구한다. manifest materializer는 `SUCCESS` Deployment의 승인된 Terraform artifact SHA-256/account/region, 현재 verified AWS connection, 비민감 Terraform output, `SKETCHCATCH_PUBLIC_BASE_URL`만 사용하며 불완전한 증거는 generic `manifest_invalid` row로 저장한다.
+`version: 2`는 기존 v1 row를 계속 읽으면서 운영 Deployment의 ASG 또는 ECS/Fargate capacity target을 명시한다. `trafficHostname`은 ACM certificate의 `domainName`과 정확히 같은 public custom hostname이며 `trafficUrl` host와 일치해야 한다. `loadBalancerDnsName`은 approved region/partition의 public AWS ALB DNS만 허용하고 ALB ARN name에 결합한다. IP literal, localhost, `internal-*`, AWS ALB 기본 도메인을 custom hostname으로 사용하는 값, credential, query, fragment, custom HTTPS port는 거부한다. ALB/TG ARN의 partition, account, region 일치와 bounded AWS name을 검증하고, ECS/Fargate는 `clusterName`, `serviceName`, positive integer `maxCapacity`를 모두 요구한다. manifest materializer는 `SUCCESS` Deployment의 승인된 Terraform artifact SHA-256/account/region, 현재 verified AWS connection, 비민감 Terraform output, `SKETCHCATCH_PUBLIC_BASE_URL`만 사용하며 불완전한 증거는 generic `manifest_invalid` row로 저장한다.
 
 `status: "valid"`이면 검증을 통과한 `manifest`가 반드시 존재하고 `invalidReason`은 `null`이다. `status: "manifest_invalid"`이면 `manifest`는 `null`이고 서버가 정한 non-empty generic `invalidReason`이 반드시 존재한다. 호출자가 제공한 실패 사유나 raw diagnostic은 보존하지 않는다. raw Terraform, credential, Role ARN, External ID, private token, password, access key, secret key, private key 등 secret material은 manifest record 어디에도 저장하지 않는다.
 
-manifest materialization 실패는 이미 성공한 Deployment의 `SUCCESS`를 변경하지 않는다. 대신 같은 one-to-one row에 `manifest_invalid`를 기록한다. 기존 adapter v1 row는 그대로 읽으며, row가 없는 Deployment는 인증된 session 생성 요청에서 verified evidence를 한 번 materialize한다. repository는 insert-once이고 conflict에서 동일한 row만 재사용한다. 이후 row는 immutable source of truth로 사용하고, session 생성 때마다 Deployment 접근권한과 approved artifact/account/region, verified AWS connection, adapter ARN identity를 다시 확인한다.
+manifest materialization 실패는 이미 성공한 Deployment의 `SUCCESS`를 변경하지 않는다. 대신 같은 one-to-one row에 `manifest_invalid`를 기록한다. 기존 adapter v1 row는 repository/parser 호환을 위해 그대로 읽지만 새 v2 session 생성과 immutable reuse에는 사용할 수 없다. row가 없는 Deployment는 인증된 session 생성 요청에서 verified evidence를 한 번 materialize한다. repository는 insert-once이고 conflict에서 동일한 row만 재사용한다. 이후 row는 immutable source of truth로 사용하고, session 생성 때마다 Deployment 접근권한과 approved artifact/account/region, verified AWS connection, adapter v2, adapter ARN identity, 현재 `SKETCHCATCH_PUBLIC_BASE_URL`과 manifest `audienceBaseUrl` 일치를 다시 확인한다.
 
 ### Live Observation capability v2
 

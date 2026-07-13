@@ -96,6 +96,37 @@ test("v2 service fails closed when the deployment has no valid manifest", async 
   }
 });
 
+test("v2 service rejects a readable legacy adapter before Store session creation", async () => {
+  const record = createValidRecord();
+  if (!record.manifest) assert.fail("Expected manifest");
+  record.manifest.adapter = {
+    kind: "aws-live-observation",
+    version: 1,
+    payload: {
+      cloudFrontDistributionId: "E1234567890ABC",
+      loadBalancerArn: record.manifest.adapter.payload.loadBalancerArn,
+      targetGroupArn: record.manifest.adapter.payload.targetGroupArn,
+      autoScalingGroupName: "customer-platform-asg"
+    }
+  };
+  const store = createInMemoryLiveObservationStore({ now: () => NOW_MS });
+  const service = createLiveObservationV2Service({
+    audienceBaseUrl: "https://sketchcatch.example.com",
+    capabilityKid: "current-key",
+    createObservationId: () => OBSERVATION_ID,
+    manifestRepository: new FakeManifestRepository(record),
+    store
+  });
+
+  await assert.rejects(
+    () => service.createSession(DEPLOYMENT_ID),
+    (error) =>
+      error instanceof LiveObservationV2ServiceError &&
+      error.code === "LIVE_OBSERVATION_DEPLOYMENT_NOT_ELIGIBLE"
+  );
+  assert.equal((await store.readSession({ observationId: OBSERVATION_ID })).kind, "not_found");
+});
+
 class FakeManifestRepository implements DeploymentLiveObservationManifestRepository {
   constructor(private readonly record: DeploymentLiveObservationManifestRecord | null) {}
 
@@ -149,8 +180,7 @@ function createManifest(): DeploymentLiveObservationManifestV2 {
     },
     endpoints: {
       audienceBaseUrl: "https://sketchcatch.example.com",
-      trafficUrl:
-        "https://customer-platform-123456789.ap-northeast-2.elb.amazonaws.com/traffic"
+      trafficUrl: "https://api.example.com/traffic"
     },
     pressure: {
       metric: "requests_per_target_per_minute",
@@ -161,6 +191,7 @@ function createManifest(): DeploymentLiveObservationManifestV2 {
       kind: "aws-live-observation",
       version: 2,
       payload: {
+        trafficHostname: "api.example.com",
         loadBalancerDnsName:
           "customer-platform-123456789.ap-northeast-2.elb.amazonaws.com",
         loadBalancerArn:

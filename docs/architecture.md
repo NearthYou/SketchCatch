@@ -180,7 +180,7 @@ CI/CD Logs는 GitHub Actions의 build/deploy workflow 증거이며 Runtime appli
 
 ## Live Observation 실행 경계
 
-공개 audience page는 URL에 capability를 넣지 않고 session-bound bootstrap credential을 메모리에만 보유한다. 여러 audience client는 같은 active session에서 bootstrap을 반복할 수 있다. 실제 요청은 서버가 approved region/account의 public AWS ALB DNS와 ARN에 결합된 HTTPS `trafficUrl`을 fetch 직전 다시 검증한 뒤 redirect 미허용, 3초 timeout, response body 미저장 조건으로 전송하며 성공한 2xx 뒤에만 Store receipt를 반영한다. public write endpoint는 `/requests` 하나뿐이며 IP별 전역 한도는 ALB가 추가한 client IP의 SHA-256 fingerprint로만 집계한다.
+공개 audience page는 URL에 capability를 넣지 않고 session-bound bootstrap credential을 메모리에만 보유한다. 여러 audience client는 같은 active session에서 bootstrap을 반복할 수 있다. 실제 요청은 ACM custom hostname의 CNAME이 manifest의 public AWS ALB DNS와 정확히 일치하는지 다시 조회하고, ALB의 모든 A/AAAA 응답이 public address인지 검증한 뒤 선택한 IP로 HTTPS 연결을 고정한다. TLS SNI와 Host는 custom hostname을 유지하며 POST, redirect 미허용, 3초 timeout, response body 폐기 조건으로 전송하고 성공한 2xx 뒤에만 Store receipt를 반영한다. DNS 불일치, 빈 응답, 하나라도 private·loopback·link-local·metadata·multicast·reserved address가 포함된 응답은 upstream 연결 전에 generic unavailable로 차단한다. public write endpoint는 `/requests` 하나뿐이며 IP별 전역 한도는 ALB가 추가한 client IP의 SHA-256 fingerprint로만 집계한다.
 
 API의 Live Observation service는 session/receipt/snapshot 계산을 소유하고 `DeploymentObservabilityProvider`만 호출한다. AWS adapter는 CloudWatch `RequestCountPerTarget`, ASG lifecycle/capacity/activity를 조회하며 세션별 결과를 10초 cache한다. SSE는 1초 snapshot, 15초 heartbeat를 제공하고 Web은 연결 실패 시 인증 GET snapshot 후 exponential backoff로 재연결한다. CloudWatch와 ASG 오류는 각 상태를 `unavailable`로 만들 뿐 live receipt stream이나 다른 카드를 sample 값으로 대체하지 않는다.
 

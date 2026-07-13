@@ -39,7 +39,11 @@ export function createLiveObservationV2Service(options: {
   return Object.freeze({
     async createSession(deploymentId: string): Promise<CreateLiveObservationV2Response> {
       const record = await options.manifestRepository.findByDeploymentId(deploymentId);
-      if (record?.status !== "valid" || !record.manifest) {
+      if (
+        record?.status !== "valid" ||
+        !record.manifest ||
+        record.manifest.adapter.version !== 2
+      ) {
         throw serviceError("LIVE_OBSERVATION_DEPLOYMENT_NOT_ELIGIBLE");
       }
 

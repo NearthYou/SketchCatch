@@ -462,7 +462,8 @@ test("renders Live Observation outputs only for an explicit HTTPS ALB topology",
 
   const terraform = renderTerraformFromInfrastructureGraph(graph);
 
-  assert.match(terraform, /output "traffic_url"[\s\S]*https:\/\/\$\{aws_lb\.demo\.dns_name\}\/traffic/);
+  assert.match(terraform, /output "traffic_url"[\s\S]*https:\/\/\$\{aws_route53_record\.api\.name\}\/traffic/);
+  assert.match(terraform, /output "traffic_hostname"[\s\S]*aws_route53_record\.api\.name/);
   assert.match(terraform, /output "load_balancer_dns_name"[\s\S]*aws_lb\.demo\.dns_name/);
   assert.match(terraform, /output "load_balancer_arn"[\s\S]*aws_lb\.demo\.arn/);
   assert.match(terraform, /output "target_group_arn"[\s\S]*aws_lb_target_group\.api\.arn/);
@@ -470,6 +471,56 @@ test("renders Live Observation outputs only for an explicit HTTPS ALB topology",
   assert.doesNotMatch(terraform, /output "static_site_url"/);
   assert.doesNotMatch(terraform, /output "api_base_url"/);
   assert.match(terraform, /output "scale_out_threshold"[\s\S]*value = 60/);
+});
+
+test("HTTPS ALB graphs without exact ACM Route53 CNAME evidence are ineligible", () => {
+  const baseNodes: InfrastructureGraph["nodes"] = [
+    createLiveObservationNode("aws_lb", "demo", {}),
+    createLiveObservationNode("aws_lb_target_group", "api", {}),
+    createLiveObservationNode("aws_acm_certificate", "demo", {
+      domainName: "api.example.com"
+    }),
+    createLiveObservationNode("aws_lb_listener", "https", {
+      loadBalancerArn: "aws_lb.demo.arn",
+      port: 443,
+      protocol: "HTTPS",
+      certificateArn: "aws_acm_certificate.demo.arn",
+      defaultAction: {
+        type: "forward",
+        targetGroupArn: "aws_lb_target_group.api.arn"
+      }
+    }),
+    createLiveObservationNode("aws_autoscaling_group", "api", {}),
+    createLiveObservationNode("aws_cloudwatch_metric_alarm", "scale_out", {
+      metricName: "RequestCountPerTarget",
+      threshold: 60
+    })
+  ];
+  const invalidDnsNodes = [
+    [],
+    [
+      createLiveObservationNode("aws_route53_record", "api", {
+        name: "other.example.com",
+        type: "CNAME",
+        records: ["aws_lb.demo.dns_name"]
+      })
+    ],
+    [
+      createLiveObservationNode("aws_route53_record", "api", {
+        name: "api.example.com",
+        type: "CNAME",
+        records: ["aws_lb.other.dns_name"]
+      })
+    ]
+  ];
+
+  for (const dnsNodes of invalidDnsNodes) {
+    const terraform = renderTerraformFromInfrastructureGraph({
+      nodes: [...baseNodes, ...dnsNodes],
+      edges: []
+    });
+    assert.doesNotMatch(terraform, /output "traffic_url"/);
+  }
 });
 
 test("HTTP-only ALB graphs intentionally omit all Live Observation outputs", () => {
@@ -685,6 +736,11 @@ function createHttpsAlbListenerNodes(): InfrastructureGraph["nodes"] {
         type: "forward",
         targetGroupArn: "aws_lb_target_group.api.arn"
       }
+    }),
+    createLiveObservationNode("aws_route53_record", "api", {
+      name: "api.example.com",
+      type: "CNAME",
+      records: ["aws_lb.demo.dns_name"]
     })
   ];
 }

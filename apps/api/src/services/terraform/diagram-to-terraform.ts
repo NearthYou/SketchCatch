@@ -103,8 +103,18 @@ function renderLiveObservationOutputs(graph: InfrastructureGraph): string[] {
   ) {
     return [];
   }
+  const trafficRecord = findValidatedTrafficRecord(
+    graph,
+    loadBalancerAddress,
+    certificate
+  );
+  if (!trafficRecord) {
+    return [];
+  }
+  const trafficRecordAddress = `aws_route53_record.${trafficRecord.iac.resourceName}`;
   const commonOutputs = [
-    renderOutput("traffic_url", `"https://\${${loadBalancerAddress}.dns_name}/traffic"`),
+    renderOutput("traffic_url", `"https://\${${trafficRecordAddress}.name}/traffic"`),
+    renderOutput("traffic_hostname", `${trafficRecordAddress}.name`),
     renderOutput("load_balancer_dns_name", `${loadBalancerAddress}.dns_name`),
     renderOutput("load_balancer_arn", `${loadBalancerAddress}.arn`),
     renderOutput("target_group_arn", `${targetGroupAddress}.arn`)
@@ -149,6 +159,35 @@ function renderLiveObservationOutputs(graph: InfrastructureGraph): string[] {
       ? []
       : [renderOutput("scale_out_threshold", String(requestThreshold))])
   ];
+}
+
+function findValidatedTrafficRecord(
+  graph: InfrastructureGraph,
+  loadBalancerAddress: string,
+  certificate: InfrastructureGraphNode
+): InfrastructureGraphNode | undefined {
+  const certificateDomainName = certificate.config["domainName"];
+  if (typeof certificateDomainName !== "string" || certificateDomainName.length === 0) {
+    return undefined;
+  }
+
+  return graph.nodes.find((node) => {
+    if (
+      node.iac.terraformBlockType !== "resource" ||
+      node.iac.resourceType !== "aws_route53_record" ||
+      node.config["name"] !== certificateDomainName ||
+      node.config["type"] !== "CNAME"
+    ) {
+      return false;
+    }
+
+    const records = node.config["records"];
+    return (
+      Array.isArray(records) &&
+      records.length === 1 &&
+      records[0] === `${loadBalancerAddress}.dns_name`
+    );
+  });
 }
 
 function hasValidatedHttpsListener(

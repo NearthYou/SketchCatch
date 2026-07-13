@@ -41,13 +41,11 @@ export type LiveObservationPublicCollector = ReturnType<
 
 export function createLiveObservationPublicCollector(options: {
   capability: LiveObservationCapability;
-  createTimeoutSignal: (timeoutMs: number) => AbortSignal;
-  fetch: (
-    input: string,
-    init: { method: "POST"; redirect: "manual"; signal: AbortSignal }
-  ) => Promise<{ status: number }>;
   requestRateLimiter: LiveObservationPublicRequestRateLimiter;
   store: LiveObservationStore;
+  trafficTransport: {
+    post(manifest: unknown): Promise<{ status: number }>;
+  };
 }) {
   return Object.freeze({
     async authorize(input: {
@@ -130,17 +128,8 @@ export function createLiveObservationPublicCollector(options: {
             ) {
               throw collectorError("gone");
             }
-            const trafficUrl = requireLiveObservationTrafficTarget(
-              live.session.manifest
-            );
-            const response = await options.fetch(
-              trafficUrl,
-              {
-                method: "POST",
-                redirect: "manual",
-                signal: options.createTimeoutSignal(3_000)
-              }
-            );
+            requireLiveObservationTrafficTarget(live.session.manifest);
+            const response = await options.trafficTransport.post(live.session.manifest);
             if (!Number.isInteger(response.status) || response.status < 200 || response.status >= 300) {
               throw collectorError("unavailable");
             }

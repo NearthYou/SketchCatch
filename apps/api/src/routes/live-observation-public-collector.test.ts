@@ -46,13 +46,12 @@ test("v2 request route connects verified 2xx traffic to Store collection", async
   const app = await createApp(
     createLiveObservationPublicCollector({
       capability,
-      createTimeoutSignal: AbortSignal.timeout,
-      fetch: async () => ({ status: 204 }),
       requestRateLimiter: createLiveObservationPublicRequestRateLimiter({
         now: () => NOW_MS,
         runtimeCache: createInMemoryRuntimeCache({ cleanupIntervalMs: null, now: () => NOW_MS })
       }),
-      store
+      store,
+      trafficTransport: { post: async () => ({ status: 204 }) }
     })
   );
   t.after(() => app.close());

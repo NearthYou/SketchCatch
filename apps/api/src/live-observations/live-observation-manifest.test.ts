@@ -320,13 +320,13 @@ test("manifest v2 keeps adapter v1 readable and accepts an ASG adapter v2 target
   const candidate = createValidManifest() as unknown as Record<string, unknown>;
   candidate.endpoints = {
     audienceBaseUrl: "https://audience.example.com",
-    trafficUrl:
-      "https://customer-platform-123456789.ap-northeast-2.elb.amazonaws.com/traffic"
+    trafficUrl: "https://api.example.com/traffic"
   };
   candidate.adapter = {
     kind: "aws-live-observation",
     version: 2,
     payload: {
+      trafficHostname: "api.example.com",
       loadBalancerDnsName:
         "customer-platform-123456789.ap-northeast-2.elb.amazonaws.com",
       loadBalancerArn:
@@ -351,13 +351,13 @@ test("manifest v2 accepts an ECS Fargate adapter v2 target and rejects partial t
   const candidate = createValidManifest() as unknown as Record<string, unknown>;
   candidate.endpoints = {
     audienceBaseUrl: "https://audience.example.com",
-    trafficUrl:
-      "https://customer-platform-123456789.ap-northeast-2.elb.amazonaws.com/traffic"
+    trafficUrl: "https://api.example.com/traffic"
   };
   candidate.adapter = {
     kind: "aws-live-observation",
     version: 2,
     payload: {
+      trafficHostname: "api.example.com",
       loadBalancerDnsName:
         "customer-platform-123456789.ap-northeast-2.elb.amazonaws.com",
       loadBalancerArn:
@@ -380,12 +380,17 @@ test("manifest v2 accepts an ECS Fargate adapter v2 target and rejects partial t
   assert.throws(() => parseDeploymentLiveObservationManifestV2(partial));
 });
 
-test("adapter v2 binds trafficUrl to a public ALB DNS name in the ARN region and partition", () => {
+test("adapter v2 binds a public custom TLS hostname to verified public ALB DNS evidence", () => {
   assert.doesNotThrow(() => parseDeploymentLiveObservationManifestV2(createValidAdapterV2Manifest()));
 
   const invalidCandidates = [
-    withV2Path(["endpoints", "trafficUrl"], "https://169.254.169.254/latest/meta-data"),
-    withV2Path(["endpoints", "trafficUrl"], "https://localhost/traffic"),
+    withV2Path(["adapter", "payload", "trafficHostname"], "169.254.169.254"),
+    withV2Path(["adapter", "payload", "trafficHostname"], "localhost"),
+    withV2Path(["adapter", "payload", "trafficHostname"], "internal-api.example.com"),
+    withV2Path(
+      ["adapter", "payload", "trafficHostname"],
+      "customer-platform-123456789.ap-northeast-2.elb.amazonaws.com"
+    ),
     withV2Path(
       ["endpoints", "trafficUrl"],
       "https://internal-customer-platform-123456789.ap-northeast-2.elb.amazonaws.com/traffic"
@@ -404,11 +409,11 @@ test("adapter v2 binds trafficUrl to a public ALB DNS name in the ARN region and
     ),
     withV2Path(
       ["endpoints", "trafficUrl"],
-      "https://user@customer-platform-123456789.ap-northeast-2.elb.amazonaws.com/traffic"
+      "https://user@api.example.com/traffic"
     ),
     withV2Path(
       ["endpoints", "trafficUrl"],
-      "https://customer-platform-123456789.ap-northeast-2.elb.amazonaws.com/traffic?target=metadata"
+      "https://api.example.com/traffic?target=metadata"
     )
   ];
 
@@ -468,13 +473,13 @@ function createValidAdapterV2Manifest(): Record<string, unknown> {
   const candidate = structuredClone(createValidManifest()) as unknown as Record<string, unknown>;
   candidate.endpoints = {
     audienceBaseUrl: "https://audience.example.com",
-    trafficUrl:
-      "https://customer-platform-123456789.ap-northeast-2.elb.amazonaws.com/traffic"
+    trafficUrl: "https://api.example.com/traffic"
   };
   candidate.adapter = {
     kind: "aws-live-observation",
     version: 2,
     payload: {
+      trafficHostname: "api.example.com",
       loadBalancerDnsName:
         "customer-platform-123456789.ap-northeast-2.elb.amazonaws.com",
       loadBalancerArn:

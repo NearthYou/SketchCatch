@@ -30,6 +30,7 @@ test("materializer persists a verified ASG manifest without credential evidence"
   assert.equal(record.status, "valid");
   assert.equal(repository.valid?.adapter.version, 2);
   assert.deepEqual(repository.valid?.adapter.payload, {
+    trafficHostname: "api.example.com",
     loadBalancerDnsName:
       "customer-platform-123456789.ap-northeast-2.elb.amazonaws.com",
     loadBalancerArn:
@@ -199,6 +200,7 @@ test("existing immutable manifest must match all current approved deployment evi
 
   assert.doesNotThrow(() =>
     assertDeploymentLiveObservationManifestReusable({
+      audienceBaseUrl: "https://audience.example.com",
       connection: createConnection(),
       deployment: createDeployment(),
       record
@@ -213,6 +215,7 @@ test("existing immutable manifest must match all current approved deployment evi
   ]) {
     assert.throws(() =>
       assertDeploymentLiveObservationManifestReusable({
+        audienceBaseUrl: "https://audience.example.com",
         connection: createConnection(),
         deployment,
         record
@@ -233,9 +236,39 @@ test("existing immutable manifest must match all current approved deployment evi
     );
   assert.throws(() =>
     assertDeploymentLiveObservationManifestReusable({
+      audienceBaseUrl: "https://audience.example.com",
       connection: createConnection(),
       deployment: createDeployment(),
       record: createRecord("valid", wrongArnManifest, null)
+    })
+  );
+
+  assert.throws(() =>
+    assertDeploymentLiveObservationManifestReusable({
+      audienceBaseUrl: "https://new-audience.example.com",
+      connection: createConnection(),
+      deployment: createDeployment(),
+      record
+    })
+  );
+
+  const legacyManifest = structuredClone(manifest);
+  legacyManifest.adapter = {
+    kind: "aws-live-observation",
+    version: 1,
+    payload: {
+      cloudFrontDistributionId: "E1234567890ABC",
+      loadBalancerArn: manifest.adapter.payload.loadBalancerArn,
+      targetGroupArn: manifest.adapter.payload.targetGroupArn,
+      autoScalingGroupName: "customer-platform-asg"
+    }
+  };
+  assert.throws(() =>
+    assertDeploymentLiveObservationManifestReusable({
+      audienceBaseUrl: "https://audience.example.com",
+      connection: createConnection(),
+      deployment: createDeployment(),
+      record: createRecord("valid", legacyManifest, null)
     })
   );
 });
@@ -266,8 +299,8 @@ function createConnection(overrides: Record<string, unknown> = {}) {
 function createOutputs(overrides: Record<string, unknown> = {}) {
   return {
     static_site_url: "https://audience.example.com",
-    traffic_url:
-      "https://customer-platform-123456789.ap-northeast-2.elb.amazonaws.com/traffic",
+    traffic_url: "https://api.example.com/traffic",
+    traffic_hostname: "api.example.com",
     load_balancer_dns_name:
       "customer-platform-123456789.ap-northeast-2.elb.amazonaws.com",
     load_balancer_arn:
