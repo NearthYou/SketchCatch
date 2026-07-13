@@ -1118,6 +1118,129 @@ Runtime Cache hit 여부를 알려준다. `GET /api/git-cicd-handoffs/:handoffId
 cache miss 또는 invalid snapshot이면 RDS handoff record를 읽어 같은 응답 모양으로 반환한다. `PATCH /api/git-cicd-handoffs/:handoffId/status`는
 RDS record를 갱신한 뒤 best-effort로 Runtime Cache snapshot을 갱신한다.
 
+## Git/CI/CD Monitoring and Pipeline Runs
+
+`GitCicdMonitoringConfig`는 하나의 active `SourceRepository`에 속한다. `GitCicdHandoff`는 승인된 Git/PR handoff로 계속 유지한다. `GitCicdPipelineRun`은 하나의 source commit에 속하며 handoff 또는 Direct Deployment record를 대체하지 않는다.
+
+```ts
+type GitCicdMonitoringValidationStatus = "required" | "valid" | "invalid";
+
+type GitCicdMonitoredPath = {
+  mode: "repository_root" | "subdirectory";
+  path: string;
+};
+
+type GitCicdMonitoringConfig = {
+  sourceRepositoryId: string;
+  enabled: boolean;
+  monitorBranch: string;
+  appPath: GitCicdMonitoredPath;
+  infraPath: GitCicdMonitoredPath;
+  validationStatus: GitCicdMonitoringValidationStatus;
+  validationMessage: string | null;
+  validatedAt: IsoDateTimeString | null;
+  updatedAt: IsoDateTimeString;
+};
+
+type GitCicdPipelineRunStatus =
+  | "detected"
+  | "queued"
+  | "running"
+  | "succeeded"
+  | "failed"
+  | "cancelled";
+
+type GitCicdPipelineChangeScope = "app" | "infra" | "app_and_infra";
+
+type GitCicdPipelineStageKind =
+  | "detect"
+  | "app_build"
+  | "infra_plan"
+  | "infra_apply"
+  | "app_deploy"
+  | "verify";
+
+type GitCicdPipelineStageStatus =
+  | "not_started"
+  | "queued"
+  | "running"
+  | "succeeded"
+  | "failed"
+  | "skipped"
+  | "cancelled";
+
+type GitCicdPipelineStage = {
+  id: string;
+  pipelineRunId: string;
+  kind: GitCicdPipelineStageKind;
+  status: GitCicdPipelineStageStatus;
+  runUrl: string | null;
+  startedAt: IsoDateTimeString | null;
+  finishedAt: IsoDateTimeString | null;
+};
+
+type GitCicdPipelineRun = {
+  id: string;
+  projectId: string;
+  sourceRepositoryId: string;
+  handoffId: string | null;
+  commitSha: string;
+  commitMessage: string;
+  branch: string;
+  changeScope: GitCicdPipelineChangeScope;
+  status: GitCicdPipelineRunStatus;
+  statusMessage: string | null;
+  pipelineRunUrl: string | null;
+  appUrl: string | null;
+  apiUrl: string | null;
+  startedAt: IsoDateTimeString | null;
+  finishedAt: IsoDateTimeString | null;
+  lastRefreshedAt: IsoDateTimeString;
+  createdAt: IsoDateTimeString;
+  stages: GitCicdPipelineStage[];
+};
+
+type GitCicdPipelineLog = {
+  id: string;
+  pipelineRunId: string;
+  stageId: string | null;
+  sequence: number;
+  level: "info" | "warning" | "error";
+  message: string;
+  createdAt: IsoDateTimeString;
+};
+
+type UpdateGitCicdMonitoringConfigRequest = {
+  enabled: boolean;
+  monitorBranch: string;
+  appPath: GitCicdMonitoredPath;
+  infraPath: GitCicdMonitoredPath;
+  userAcceptedChangeId: string;
+};
+
+type GitCicdMonitoringConfigResponse = { config: GitCicdMonitoringConfig };
+
+type GitCicdPipelineRunListResponse = {
+  runs: GitCicdPipelineRun[];
+  nextCursor: string | null;
+};
+
+type GitCicdPipelineRunResponse = { run: GitCicdPipelineRun };
+
+type GitCicdPipelineLogListResponse = {
+  logs: GitCicdPipelineLog[];
+  nextSequence: number;
+};
+```
+
+API 경로:
+
+- `GET/PUT /projects/:projectId/source-repositories/:sourceRepositoryId/cicd-monitoring`
+- `GET /projects/:projectId/git-cicd-pipeline-runs`
+- `GET /git-cicd-pipeline-runs/:pipelineRunId`
+- `GET /git-cicd-pipeline-runs/:pipelineRunId/logs?sinceSequence=`
+- `POST /git-cicd-pipeline-runs/:pipelineRunId/refresh`
+
 ## Reverse Engineering Scan
 
 `ReverseEngineeringScan`은 사용자가 기존 AWS 상태를 읽어오라고 눌렀을 때 생기는 작업 기록이다.
