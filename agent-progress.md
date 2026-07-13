@@ -184,8 +184,10 @@ Short English-only working log for the current agent context. Older records are 
   - Updated Area auto-expansion coverage to follow child-node entry detection.
   - Updated compact canvas toolbar coverage for the current left-centered placement.
   - Made related catalog, fixture, and CSS source assertions resilient to current generated content and Windows line endings.
+  - Addressed review feedback by caching normalized CSS source and rejecting empty AWS icon paths.
   - Merged the latest `origin/dev` without conflicts.
 - Verification:
+  - Review-focused Web tests passed (26 tests).
   - 172 focused Web tests passed.
   - Full Web suite passed (1,024 tests).
   - `pnpm lint` passed with the pre-existing `live-observations` `setNow` warning.

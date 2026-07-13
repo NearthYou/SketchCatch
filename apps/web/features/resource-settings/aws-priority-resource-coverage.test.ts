@@ -33,6 +33,7 @@ test("resource settings catalog keeps a unique item identity for every AWS resou
 
 test("every AWS resource catalog item uses an existing public icon asset", () => {
   for (const catalogItem of awsCatalogResources) {
+    assert.ok(catalogItem.iconUrl, `${catalogItem.name} should have a defined iconUrl`);
     assert.equal(
       existsSync(`${publicDirectoryPath}${catalogItem.iconUrl}`),
       true,
