@@ -38,6 +38,8 @@ const NON_RENDERABLE_TERRAFORM_CONFIG_KEYS = new Set([
   "managed_by_auto_scaling_group",
   "originResourceId",
   "origin_resource_id",
+  "parentAreaNodeId",
+  "parent_area_node_id",
   "publicAccessBlock",
   "public_access_block",
   "servicePurpose",
@@ -47,7 +49,11 @@ const NON_RENDERABLE_TERRAFORM_CONFIG_KEYS = new Set([
   "terraformResourceName",
   "terraform_resource_name",
   "terraformResourceType",
-  "terraform_resource_type"
+  "terraform_resource_type",
+  "terraformBlockType",
+  "terraform_block_type",
+  "templateResourceId",
+  "template_resource_id"
 ]);
 
 export function buildInfrastructureGraphFromDiagramJson(diagramJson: DiagramJson): InfrastructureGraph {

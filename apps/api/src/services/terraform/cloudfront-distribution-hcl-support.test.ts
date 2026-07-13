@@ -139,3 +139,30 @@ test("renders the requested CloudFront nested values back as blocks", () => {
   );
   assert.deepEqual(roundTripProposal?.parameters.values, values);
 });
+
+test("renders ECR image scanning configuration as a nested block", () => {
+  const graph: InfrastructureGraph = {
+    nodes: [{
+      id: "repository",
+      label: "API image repository",
+      iac: {
+        provider: "aws",
+        terraformBlockType: "resource",
+        resourceType: "aws_ecr_repository",
+        resourceName: "api_image",
+        fileName: "main"
+      },
+      config: {
+        name: "application-api",
+        imageScanningConfiguration: { scanOnPush: true }
+      }
+    }],
+    edges: []
+  };
+
+  const renderedCode = renderTerraformFromInfrastructureGraph(graph);
+
+  assert.match(renderedCode, /image_scanning_configuration \{/);
+  assert.match(renderedCode, /scan_on_push = true/);
+  assert.doesNotMatch(renderedCode, /image_scanning_configuration = \{/);
+});

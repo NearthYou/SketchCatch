@@ -87,6 +87,47 @@ test("convertArchitectureJsonToDiagramJson preserves authored node border style"
   assert.equal(diagramJson.nodes[0]?.style?.borderStyle, "dashed");
 });
 
+test("convertArchitectureJsonToDiagramJson preserves authored Terraform identity", () => {
+  const diagramJson = convertArchitectureJsonToDiagramJson({
+    nodes: [
+      {
+        id: "execution-policy",
+        type: "IAM_POLICY",
+        label: "ECS execution policy",
+        positionX: 0,
+        positionY: 0,
+        config: {
+          terraformResourceName: "execution_policy",
+          terraformResourceType: "aws_iam_role_policy_attachment",
+          terraformBlockType: "resource",
+          templateResourceId: "execution-policy",
+          parentAreaNodeId: "managed-services",
+          role: "aws_iam_role.execution_role.name",
+          policyArn: "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+        }
+      }
+    ],
+    edges: []
+  });
+
+  assert.deepEqual(diagramJson.nodes[0]?.parameters, {
+    fileName: "main",
+    resourceName: "execution_policy",
+    resourceType: "aws_iam_role_policy_attachment",
+    terraformBlockType: "resource",
+    values: {
+      terraformResourceName: "execution_policy",
+      terraformResourceType: "aws_iam_role_policy_attachment",
+      terraformBlockType: "resource",
+      templateResourceId: "execution-policy",
+      parentAreaNodeId: "managed-services",
+      role: "aws_iam_role.execution_role.name",
+      policyArn: "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+    }
+  });
+  assert.equal(diagramJson.nodes[0]?.metadata?.parentAreaNodeId, "managed-services");
+});
+
 test("normalizeDiagramJsonConventions preserves saved names and Terraform references exactly", () => {
   const renamedAmi = makeConventionResourceNode("renamed-ami-stable-id", "aws_ami", "renamed");
   const ec2Instance = makeConventionResourceNode(

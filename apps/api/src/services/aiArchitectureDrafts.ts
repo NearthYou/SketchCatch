@@ -1914,9 +1914,6 @@ function applyRepositoryEvidencePriorityToRequirementPlan(
   if (hasFact("observability", "cloudwatch")) {
     requiredResources.add("CLOUDWATCH_LOG_GROUP");
   }
-  if (hasFact("transport_security", "alb_tls_termination")) {
-    requiredResources.add("ACM_CERTIFICATE");
-  }
   if (hasFact("excluded_capability", "database")) {
     requiredResources.delete("RDS");
   }
@@ -2006,14 +2003,14 @@ function applyStrictRepositoryEvidencePolicy(
   const usesEcr = hasFact("container_registry", "ecr");
   const usesCloudWatch = hasFact("observability", "cloudwatch");
   const usesGitHubActions = hasFact("ci_cd", "github_actions");
-  const terminatesTlsAtAlb = hasFact("transport_security", "alb_tls_termination");
+  const requiresTlsAtAlb = hasFact("transport_security", "alb_tls_termination");
   const singleTask = hasFact("runtime_scale", "single_task");
   const healthCheck = evidence.facts.find((fact) => fact.kind === "health_check")?.value;
   const healthMatch = /^http:(\d{2,5})(\/[a-z0-9_./-]+)$/iu.exec(healthCheck ?? "");
   const containerPort = healthMatch ? Number(healthMatch[1]) : 80;
   const healthCheckPath = healthMatch?.[2] ?? "/";
   const managedServicesAreaId = "repository-managed-services";
-  const hasManagedServices = staticDelivery || usesEcr || usesCloudWatch || terminatesTlsAtAlb;
+  const hasManagedServices = staticDelivery || usesEcr || usesCloudWatch;
   const additionalNodes: ArchitectureJson["nodes"] = [];
 
   if (hasManagedServices) {
@@ -2046,7 +2043,7 @@ function applyStrictRepositoryEvidencePolicy(
           bucketPrefix: "web-assets-",
           bucketPurpose: "static_website_origin",
           publicAccessBlock: true,
-          forceDestroy: false
+          forceDestroy: true
         }
       },
       {
@@ -2058,10 +2055,22 @@ function applyStrictRepositoryEvidencePolicy(
         config: {
           terraformResourceName: "web_cdn",
           parentAreaNodeId: managedServicesAreaId,
-          originResourceId: "repository-web-assets",
-          originType: "static",
           enabled: true,
-          viewerProtocolPolicy: "redirect-to-https"
+          defaultRootObject: "index.html",
+          origin: [{
+            domainName: "aws_s3_bucket.web_assets.bucket_regional_domain_name",
+            originId: "web-assets",
+            s3OriginConfig: [{ originAccessIdentity: "" }]
+          }],
+          defaultCacheBehavior: [{
+            targetOriginId: "web-assets",
+            viewerProtocolPolicy: "redirect-to-https",
+            allowedMethods: ["GET", "HEAD"],
+            cachedMethods: ["GET", "HEAD"],
+            cachePolicyId: "658327ea-f89d-4fab-a63d-7e88639e58f6"
+          }],
+          restrictions: [{ geoRestriction: [{ restrictionType: "none" }] }],
+          viewerCertificate: [{ cloudfrontDefaultCertificate: true }]
         }
       }
     );
@@ -2079,6 +2088,7 @@ function applyStrictRepositoryEvidencePolicy(
         parentAreaNodeId: managedServicesAreaId,
         name: "application-api",
         imageTagMutability: "IMMUTABLE",
+        forceDelete: true,
         imageScanningConfiguration: { scanOnPush: true }
       }
     });
@@ -2096,22 +2106,6 @@ function applyStrictRepositoryEvidencePolicy(
         parentAreaNodeId: managedServicesAreaId,
         name: "/ecs/application-api",
         retentionInDays: 30
-      }
-    });
-  }
-
-  if (terminatesTlsAtAlb) {
-    additionalNodes.push({
-      id: "repository-api-certificate",
-      type: "ACM_CERTIFICATE",
-      label: "API TLS Certificate",
-      positionX: 960,
-      positionY: -600,
-      config: {
-        terraformResourceName: "api_certificate",
-        parentAreaNodeId: managedServicesAreaId,
-        domainName: "api.example.com",
-        validationMethod: "DNS"
       }
     });
   }
@@ -2149,21 +2143,21 @@ function applyStrictRepositoryEvidencePolicy(
   const updatedCoreNodes = coreNodes.map((node) => {
     switch (node.config.templateResourceId) {
       case "alb-security-group":
-        return terminatesTlsAtAlb
-          ? {
-              ...node,
-              config: {
-                ...node.config,
-                description: "Allow public HTTPS to the Application Load Balancer",
-                ingress: [{
-                  fromPort: 443,
-                  toPort: 443,
-                  protocol: "tcp",
-                  cidrBlocks: ["0.0.0.0/0"]
-                }]
-              }
-            }
-          : node;
+        return {
+          ...node,
+          config: {
+            ...node.config,
+            description: requiresTlsAtAlb
+              ? "Allow HTTP for deployment validation until an ALB certificate is confirmed"
+              : "Allow public HTTP to the Application Load Balancer",
+            ingress: [{
+              fromPort: 80,
+              toPort: 80,
+              protocol: "tcp",
+              cidrBlocks: ["0.0.0.0/0"]
+            }]
+          }
+        };
       case "task-security-group":
         return {
           ...node,
@@ -2189,19 +2183,15 @@ function applyStrictRepositoryEvidencePolicy(
           }
         };
       case "listener":
-        return terminatesTlsAtAlb
-          ? {
-              ...node,
-              label: "HTTPS Listener",
-              config: {
-                ...node.config,
-                port: 443,
-                protocol: "HTTPS",
-                sslPolicy: "ELBSecurityPolicy-TLS13-1-2-2021-06",
-                certificateArn: "aws_acm_certificate.api_certificate.arn"
-              }
-            }
-          : node;
+        return {
+          ...node,
+          label: requiresTlsAtAlb ? "HTTP Listener (TLS Pending)" : "HTTP Listener",
+          config: {
+            ...node.config,
+            port: 80,
+            protocol: "HTTP"
+          }
+        };
       case "task":
         return {
           ...node,
@@ -2211,10 +2201,12 @@ function applyStrictRepositoryEvidencePolicy(
             family: "application-api",
             containerDefinitions: JSON.stringify([{
               name: "api",
-              image: usesEcr
-                ? "${aws_ecr_repository.api_image.repository_url}:latest"
-                : "public.ecr.aws/docker/library/nginx:stable",
+              image: "public.ecr.aws/docker/library/nginx:1.27-alpine",
               essential: true,
+              entryPoint: ["/bin/sh", "-c"],
+              command: [
+                "printf 'server { listen 8080; location = /health { add_header Content-Type text/plain; return 200 \\\"ok\\\"; } location / { add_header Content-Type text/plain; return 200 \\\"SketchCatch deployment smoke\\\"; } }' > /etc/nginx/conf.d/default.conf && exec nginx -g 'daemon off;'"
+              ],
               portMappings: [{ containerPort, hostPort: containerPort, protocol: "tcp" }],
               ...(usesCloudWatch
                 ? {
@@ -2280,13 +2272,12 @@ function applyStrictRepositoryEvidencePolicy(
 
   connect("repository-browser", "repository-cloudfront", "loads static web");
   connect("repository-cloudfront", "repository-web-assets", "private origin");
-  connect("repository-browser", coreNodeId("load-balancer"), terminatesTlsAtAlb ? "HTTPS API" : "API requests");
-  connect(coreNodeId("load-balancer"), coreNodeId("listener"), terminatesTlsAtAlb ? "accepts HTTPS" : "accepts HTTP");
+  connect("repository-browser", coreNodeId("load-balancer"), requiresTlsAtAlb ? "API requests (TLS pending)" : "API requests");
+  connect(coreNodeId("load-balancer"), coreNodeId("listener"), "accepts HTTP");
   connect(coreNodeId("listener"), coreNodeId("target-group"), "forwards /api");
   connect(coreNodeId("target-group"), coreNodeId("service"), `health checks ${healthCheckPath}`);
-  connect("repository-ecr", coreNodeId("task"), "container image");
+  connect("repository-ecr", coreNodeId("task"), "application image after CI/CD");
   connect(coreNodeId("task"), "repository-ecs-logs", "logs");
-  connect("repository-api-certificate", coreNodeId("listener"), "TLS certificate");
   connect("repository-github-actions", "repository-ecr", "builds and pushes image");
   connect("repository-github-actions", coreNodeId("service"), "deploys task revision");
 
@@ -2299,8 +2290,11 @@ function applyStrictRepositoryEvidencePolicy(
       assumptions: [
         ...draft.metadata.assumptions,
         "Repository evidence strict mode kept only explicitly supported deployment resources.",
-        ...(terminatesTlsAtAlb
-          ? ["The repository requires ALB TLS termination, but the certificate domain remains a user-confirmed deployment parameter."]
+        ...(requiresTlsAtAlb
+          ? ["The repository requires ALB TLS termination; the initial deployment uses HTTP until the domain and certificate are user-confirmed."]
+          : []),
+        ...(usesEcr
+          ? ["The initial deployment uses a public 8080 /health smoke image until GitHub Actions publishes the repository application image to ECR."]
           : [])
       ]
     }
@@ -3906,7 +3900,6 @@ function findStrictRepositoryEvidenceValidationIssues(
   }
   if (hasFact("container_registry", "ecr")) requiredTypes.add("ECR_REPOSITORY");
   if (hasFact("observability", "cloudwatch")) requiredTypes.add("CLOUDWATCH_LOG_GROUP");
-  if (hasFact("transport_security", "alb_tls_termination")) requiredTypes.add("ACM_CERTIFICATE");
 
   const missingTypes = [...requiredTypes].filter((resourceType) => !nodeTypes.has(resourceType));
   if (missingTypes.length > 0) {
@@ -3985,8 +3978,8 @@ function findStrictRepositoryEvidenceValidationIssues(
 
   if (hasFact("transport_security", "alb_tls_termination")) {
     const listener = architectureJson.nodes.find((node) => node.type === "LOAD_BALANCER_LISTENER");
-    if (listener?.config.port !== 443 || listener.config.protocol !== "HTTPS") {
-      issues.push("Strict repository evidence requires HTTPS termination on the ALB listener.");
+    if (listener?.config.port !== 80 || listener.config.protocol !== "HTTP") {
+      issues.push("Strict repository evidence without a confirmed certificate requires an explicit HTTP deployment-validation listener.");
     }
   }
 

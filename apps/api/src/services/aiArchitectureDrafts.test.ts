@@ -212,6 +212,13 @@ test("repository evidence strict mode keeps the Fargate diagram minimal and evid
   const targetGroup = response.architectureJson.nodes.find(
     (node) => node.type === "LOAD_BALANCER_TARGET_GROUP"
   );
+  const listener = response.architectureJson.nodes.find(
+    (node) => node.type === "LOAD_BALANCER_LISTENER"
+  );
+  const cloudFront = response.architectureJson.nodes.find((node) => node.type === "CLOUDFRONT");
+  const taskDefinition = response.architectureJson.nodes.find(
+    (node) => node.type === "ECS_TASK_DEFINITION"
+  );
   const vpc = response.architectureJson.nodes.find((node) => node.type === "VPC");
   const managedServices = response.architectureJson.nodes.find(
     (node) => node.label === "AWS Managed Services"
@@ -224,7 +231,7 @@ test("repository evidence strict mode keeps the Fargate diagram minimal and evid
   assert.equal(countNodes("CLOUDFRONT"), 1);
   assert.equal(countNodes("ECR_REPOSITORY"), 1);
   assert.equal(countNodes("CLOUDWATCH_LOG_GROUP"), 1);
-  assert.equal(countNodes("ACM_CERTIFICATE"), 1);
+  assert.equal(countNodes("ACM_CERTIFICATE"), 0);
   assert.equal(countNodes("UNKNOWN"), 3);
   assert.equal(countNodes("NAT_GATEWAY"), 0);
   assert.equal(countNodes("ELASTIC_IP"), 0);
@@ -248,6 +255,16 @@ test("repository evidence strict mode keeps the Fargate diagram minimal and evid
     8080
   );
   assert.deepEqual(targetGroup?.config.healthCheck, { path: "/health", matcher: "200-399" });
+  assert.equal(listener?.config.port, 80);
+  assert.equal(listener?.config.protocol, "HTTP");
+  assert.deepEqual(cloudFront?.config.restrictions, [{
+    geoRestriction: [{ restrictionType: "none" }]
+  }]);
+  assert.deepEqual(cloudFront?.config.viewerCertificate, [{
+    cloudfrontDefaultCertificate: true
+  }]);
+  assert.match(String(taskDefinition?.config.containerDefinitions), /nginx:1\.27-alpine/u);
+  assert.match(String(taskDefinition?.config.containerDefinitions), /\/health/u);
   assert.ok(labels.has("Browser"));
   assert.ok(labels.has("GitHub Actions"));
   assert.ok(labels.has("AWS Managed Services"));
@@ -256,10 +273,15 @@ test("repository evidence strict mode keeps the Fargate diagram minimal and evid
     vpc !== undefined &&
     managedServices.positionY + Number(managedServices.config.diagramHeight) < vpc.positionY
   );
-  assert.ok(edgeLabels.has("HTTPS API"));
+  assert.ok(edgeLabels.has("API requests (TLS pending)"));
   assert.ok(edgeLabels.has("builds and pushes image"));
   assert.ok(edgeLabels.has("deploys task revision"));
   assert.ok(edgeLabels.has("health checks /health"));
+  assert.ok(
+    response.metadata.assumptions.some((assumption) =>
+      assumption.includes("domain and certificate") && assumption.includes("HTTP")
+    )
+  );
 });
 
 test("createAmazonQArchitectureDraftResponse sends the web deployment answer path to Amazon Q", async () => {

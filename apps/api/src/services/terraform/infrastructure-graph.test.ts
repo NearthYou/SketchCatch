@@ -20,7 +20,10 @@ test("buildInfrastructureGraphFromDiagramJson projects renderable resource nodes
           fileName: "network",
           values: {
             cidrBlock: "10.0.0.0/16",
-            diagramRenderAsResource: true
+            diagramRenderAsResource: true,
+            parentAreaNodeId: "aws-cloud",
+            templateResourceId: "vpc",
+            terraformBlockType: "resource"
           }
         }
       })

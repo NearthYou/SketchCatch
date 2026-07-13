@@ -54,6 +54,7 @@ const TERRAFORM_NESTED_BLOCK_ATTRIBUTES: Record<string, ReadonlySet<string>> = {
     "loadBalancer",
     "networkConfiguration"
   ]),
+  aws_ecr_repository: new Set(["imageScanningConfiguration"]),
   aws_instance: new Set(["rootBlockDevice"]),
   aws_lambda_function: new Set(["environment"]),
   aws_launch_template: new Set([
@@ -91,6 +92,7 @@ const TERRAFORM_SINGLE_NESTED_BLOCK_ATTRIBUTES: Record<string, ReadonlySet<strin
 const GENERIC_TERRAFORM_NESTED_BLOCKS = new Set([
   "container",
   "cookies",
+  "customOriginConfig",
   "forwardedValues",
   "geoRestriction",
   "loadBalancer",
@@ -99,6 +101,7 @@ const GENERIC_TERRAFORM_NESTED_BLOCKS = new Set([
   "port",
   "predefinedMetricSpecification",
   "selector",
+  "s3OriginConfig",
   "spec",
   "template"
 ]);

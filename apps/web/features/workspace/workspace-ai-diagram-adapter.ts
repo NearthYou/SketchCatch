@@ -255,7 +255,12 @@ function convertArchitectureNodeToDiagramNode(node: ArchitectureJson["nodes"][nu
   }
 
   const config = node.config ?? {};
-  const terraformResourceType = mapResourceTypeToTerraform(node.type);
+  const authoredTerraformResourceType = config["terraformResourceType"];
+  const terraformResourceType =
+    typeof authoredTerraformResourceType === "string" &&
+    authoredTerraformResourceType.trim().length > 0
+      ? authoredTerraformResourceType
+      : mapResourceTypeToTerraform(node.type);
   const position = {
     x: node.positionX,
     y: node.positionY
@@ -419,17 +424,25 @@ function createDiagramNodeParameters(
   baseParameters: DiagramNodeParameters | undefined
 ): DiagramNodeParameters {
   const config = node.config ?? {};
+  const authoredTerraformBlockType = readTerraformBlockType(config["terraformBlockType"]);
 
   return {
     fileName: baseParameters?.fileName ?? "main",
     resourceName: getArchitectureResourceName(node, terraformResourceType),
     resourceType: terraformResourceType,
-    terraformBlockType: baseParameters?.terraformBlockType ?? DEFAULT_TERRAFORM_BLOCK_TYPE,
+    terraformBlockType:
+      authoredTerraformBlockType ??
+      baseParameters?.terraformBlockType ??
+      DEFAULT_TERRAFORM_BLOCK_TYPE,
     values: {
       ...(baseParameters?.values ?? {}),
       ...config
     }
   };
+}
+
+function readTerraformBlockType(value: unknown): TerraformBlockType | undefined {
+  return value === "resource" || value === "data" ? value : undefined;
 }
 
 function convertArchitectureEdgesToDiagramEdges(

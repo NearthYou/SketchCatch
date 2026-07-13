@@ -4,12 +4,10 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- Branch: `Feat/jh/346-시뮬레이션-기능-구현-및-테스트`.
-- Repository recommendation guarantees 2-3 unique candidates and validates question IDs, semantics, and duplicate prompts before display.
-- Deployment type is hidden when repository evidence is decisive and shown only for ambiguous analysis.
-- CI/CD handoff is a prominent standalone setting; its GitHub App repository panel appears only while enabled.
-- Public Repository setup confirms Template and CI/CD before opening a separate follow-up-question stage.
-- Follow-up questions depend on the selected Template, affect diagram creation, and use direct clickable choices.
+- Branch: `feat/ck/350-ai-diagram-fallback`.
+- Strict `audience-live-check` Repository evidence produces a minimal ECS Fargate architecture without unsupported persistence, autoscaling, or AWS-native CI/CD resources.
+- Generated Terraform passes the Direct Deployment safety gate and `terraform validate` with AWS provider v6.54.0.
+- Real Plan, Apply, and Destroy remain pending until the Chrome login and stored AWS connection are restored.
 
 ## Session Record
 
@@ -39,32 +37,6 @@ Short English-only working log for the current agent context. Older records are 
 - Reapplied the stashed Template-unselected AI fallback work after conflicts in API route, Repository start UI, CSS, data model docs, and progress log.
 - Kept the latest Repository Analysis recommendation flow from `dev` and restored the fallback request resolver, UI CTA, and documentation contract.
 - Verification: `pnpm harness:check`, `pnpm --dir apps/api exec tsx --test src/routes/ai-repository-handoff.test.ts`, `pnpm --dir apps/web exec tsx --test features/workspace/repository-template-fallback.test.ts app/workspace/repository/repository-start-client.test.ts`, `pnpm typecheck`, `pnpm lint`, and `pnpm build` passed. Lint retained one pre-existing API unused-argument warning in `apps/api/src/live-observations/live-observation-store-contract.ts`.
-
-### 2026-07-13 - Split estimated and actual project costs with folder tabs
-
-- Added deployment-aware cost contracts across Direct Deployment and Git/CI/CD, including Destroy lifecycle handling.
-- Added separate estimated-cost and actual-usage panels, project scoping, honest sample/allocation copy, keyboard tabs, and the requested compact folder-style tab surface from `DESIGN.md`; removed the final header and tab helper copy per visual feedback.
-- Follow-up UX: direct expected-user input with validation, refresh feedback on both normal and empty states, and scroll-free responsive folder tabs.
-- Follow-up commits: `ad7fb94b`, `104cb8bc`, `c80dac82`, `aaccecfa`.
-- Commits: `4819f64c`, `ff16587d`, `ac29756a`, `da99fdb7`, `a0aeefe0`.
-- Verification: 6 focused API tests, 19 focused Web tests, lint, typecheck, build, and harness pass. Lint retains one unrelated unused-argument warning.
-- Risk: authenticated visual browser QA was blocked because the in-app browser had no session and Chrome control was unavailable. The full Web suite retains seven unrelated baseline failures outside cost files.
-
-### 2026-07-13 - Repair Terraform nested-block merge regression
-
-- Fast-forwarded the local branch to the remote `dev` merge commit that CI evaluated and reproduced the duplicate `aws_launch_template` key failure.
-- Consolidated both branch variants into one Launch Template nested-block set while preserving IAM profile, metadata, monitoring, network interface, and tag support.
-- Kept the pending direct-resource rename boundary fix and its regression intact across the fast-forward.
-- Verification: full typecheck, 20 focused Terraform/rename regressions, lint, build, harness, and diff checks pass. Lint retains one pre-existing API unused-argument warning.
-
-### 2026-07-13 - Add and review diagram-based Live Observation for ECS Fargate and ASG
-
-- Added diagram-derived main traffic paths, REST polling-compatible snapshots, CloudWatch Agent/ASG and ECS Fargate observability, and presentation-focused capacity visualization.
-- Moved AI simulation results out of the chat dock and kept bottleneck, cost, and failure analysis in the simulation panel.
-- Represented each accepted request as one 28px particle moving sequentially across analyzed connector segments; observation remains idle until traffic is explicitly started.
-- Final review added metadata-free ECS/ASG capacity inference scoped to the selected controller, five-request bursts, disconnect-safe SSE startup, automatically expiring per-observation simulated traffic, metric-correct request thresholds, real Traffic API audience links with explicit simulation fallback, and polling listener cleanup.
-- Verification: focused Web tests passed 82/82 plus 9 diagram tests, focused API tests passed 38/38 plus 18 service/route tests; harness, lint, typecheck, and build passed. No AWS or Terraform mutation ran.
-- PR review: Kubernetes `depends_on` addresses now render as references and both polling/SSE delay messages use valid Korean text; 21 Terraform and 31 modal tests passed.
 
 ### 2026-07-13 - Public Repository AI recommendation and question recovery
 
@@ -198,6 +170,28 @@ Short English-only working log for the current agent context. Older records are 
 - Verification: `pnpm --dir apps/api exec tsx --test --test-name-pattern "clone URLs ending in .git" src/routes/ai.test.ts`; `pnpm --dir apps/web exec tsx --test features/workspace/public-repository-recommendation.test.ts`; `pnpm harness:check`; `pnpm lint`; `pnpm typecheck`; `pnpm build`.
 - Note: running the full `apps/api/src/routes/ai.test.ts` file still shows two unrelated baseline failures in repository-template and template-selection assertions.
 
+### 2026-07-13 - Make strict Repository Fargate drafts Terraform-valid
+
+- Goal: Remove unsupported inference from the `audience-live-check` draft and prove that its generated Terraform is valid before Direct Deployment.
+- Completed:
+  - Preserved authored Terraform resource and block identities when Architecture Drafts become DiagramJson, fixing the IAM policy attachment being rendered as `aws_iam_policy`.
+  - Prevented Board and Template metadata from leaking into generated HCL.
+  - Added nested-block rendering for ECR image scanning and CloudFront origin configuration.
+  - Replaced incomplete CloudFront values with provider-valid origin, cache behavior, restriction, and default certificate blocks.
+  - Removed the undeployable placeholder ACM certificate and exposed ALB TLS as a pending user-confirmed domain/certificate requirement.
+  - Added an initial public 8080 `/health` smoke image so the first ECS deployment can stabilize before GitHub Actions publishes the repository image to ECR.
+- Verification:
+  - Focused Web adapter tests: 35 passed.
+  - Focused Terraform graph/rendering tests: 16 passed.
+  - Focused Architecture Draft tests: 58 passed.
+  - Generated strict Repository Terraform passed the `demo_web_service_with_rds` safety gate.
+  - `terraform init -backend=false` and `terraform validate` passed with AWS provider v6.54.0.
+  - API/Web lint and typecheck passed; API lint retains the pre-existing unused `setNow` warning.
+  - `pnpm build` passed.
+- Risk:
+  - Real Plan, Apply, health verification, and Destroy are pending because Chrome is logged out and every local AWS CLI profile has an expired session.
+  - Root `pnpm test` still has unrelated existing Web failures in dashboard timezone, node-toolbar token, and mobile canvas-toolbar assertions; all changed-path tests pass.
+
 ## Next Action
 
-- Push or open a PR for the Repository URL and Template-first Repository Architecture Draft fixes.
+- Restore the authenticated Chrome session, select a verified AWS connection, and run the approved Direct Deployment Plan, Apply, health verification, Destroy Plan, and Destroy flow for `audience-live-check`.
