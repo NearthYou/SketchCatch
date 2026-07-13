@@ -31,7 +31,16 @@ test("normalizeMonitoredPath normalizes repository root and rejects unsafe subdi
     path: "apps/web"
   });
 
-  for (const path of ["../secrets", "apps/../../secrets", "/etc", "C:\\secrets", "https://x/y"]) {
+  for (const path of [
+    "",
+    ".",
+    "./",
+    "../secrets",
+    "apps/../../secrets",
+    "/etc",
+    "C:\\secrets",
+    "https://x/y"
+  ]) {
     assert.throws(
       () => normalizeMonitoredPath({ mode: "subdirectory", path }),
       GitCicdMonitoringValidationError

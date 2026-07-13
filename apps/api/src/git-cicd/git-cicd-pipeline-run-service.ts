@@ -699,10 +699,21 @@ export function classifyPipelineChangeScope(
   return null;
 }
 
-function isInsideMonitoredPath(file: string, monitoredPath: GitCicdMonitoredPath): boolean {
-  if (monitoredPath.mode === "repository_root") return true;
+function isInsideMonitoredPath(
+  file: string,
+  monitoredPath?: GitCicdMonitoredPath
+): boolean {
+  if (monitoredPath?.mode === "repository_root") return true;
+  const monitoredPathValue = monitoredPath?.path;
+  if (
+    monitoredPath?.mode !== "subdirectory" ||
+    typeof monitoredPathValue !== "string" ||
+    monitoredPathValue.trim().length === 0
+  ) {
+    return false;
+  }
   const normalizedFile = file.replaceAll("\\", "/").replace(/^\.\//, "");
-  const normalizedPath = monitoredPath.path
+  const normalizedPath = monitoredPathValue
     .replaceAll("\\", "/")
     .replace(/^\.\//, "")
     .replace(/\/$/, "");

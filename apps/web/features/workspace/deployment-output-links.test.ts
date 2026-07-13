@@ -85,7 +85,11 @@ test("clipboard feedback resets when the selected Deployment or its links change
   assert.match(source, /currentClipboardScopeRef\.current\.scopeKey === scopeKey/);
   assert.match(
     source,
-    /useEffect\(\(\) => \{\s*setClipboardFeedback\(null\);\s*\}, \[linksKey, scopeKey\]\);/
+    /useEffect\(\(\) => \{\s*currentClipboardScopeRef\.current = \{ linksKey, scopeKey \};\s*setClipboardFeedback\(null\);\s*\}, \[linksKey, scopeKey\]\);/
+  );
+  assert.equal(
+    source.match(/currentClipboardScopeRef\.current = \{ linksKey, scopeKey \}/g)?.length,
+    1
   );
 });
 

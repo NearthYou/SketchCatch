@@ -19,6 +19,15 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-13 - Address PR #368 review feedback
+
+- Replaced SSR-sensitive log ownership synchronization with `useEffect` while deriving `visibleLogs` from committed owner state so a run switch cannot flash another run's logs.
+- Moved clipboard scope ref writes out of render and into the existing effect, preserving late-Promise ownership checks.
+- Made Pipeline Run path classification fail closed for missing or incomplete legacy path objects.
+- Kept request-path normalization strict: empty or traversal subdirectories remain validation errors instead of silently widening to repository root; expanded the rejection regression cases.
+- TDD evidence: Web review tests failed 2/18 then passed 18/18; Pipeline API failed 1/16 then passed 16/16. Expanded API 124/124, Web 85/85, full test tasks 5/5, lint, typecheck, build, harness, and diff checks passed.
+- Existing warnings and environment-dependent migration/browser risks remain unchanged. No external mutation ran.
+
 ### 2026-07-13 - Merge latest dev and restore full-repository green
 
 - Merged `origin/dev` after PRs #366 and #367, preserving issue #361 behavior while adopting the reviewed API and Web test baselines.

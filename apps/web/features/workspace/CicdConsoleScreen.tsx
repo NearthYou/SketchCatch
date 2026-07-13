@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import type {
   GitCicdMonitoringConfig,
   GitCicdPipelineLog,
@@ -50,6 +50,10 @@ export function CicdConsoleScreen({
   const [runs, setRuns] = useState<GitCicdPipelineRun[]>([]);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [logs, setLogs] = useState<GitCicdPipelineLog[]>([]);
+  const [logsOwner, setLogsOwner] = useState<{
+    runId: string | null;
+    logRevision: string | null;
+  }>({ runId: null, logRevision: null });
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -77,6 +81,11 @@ export function CicdConsoleScreen({
   const selectedRun = runState.selectedRun;
   const selectedRunIdForLogs = selectedRun?.id ?? null;
   const selectedLogRevision = selectedRun?.logRevision ?? null;
+  const visibleLogs =
+    logsOwner.runId === selectedRunIdForLogs &&
+    logsOwner.logRevision === selectedLogRevision
+      ? logs
+      : [];
   const outputLinks = useMemo(() => getSafePipelineRunLinks(selectedRun), [selectedRun]);
   const settingsHref = `/dashboard/projects/${encodeURIComponent(projectId)}/settings?tab=github`;
 
@@ -239,7 +248,7 @@ export function CicdConsoleScreen({
     };
   }, [selectedRunId]);
 
-  useLayoutEffect(() => {
+  useEffect(() => {
     const next = reduceCicdLogState(
       {
         ...logOwnerRef.current,
@@ -253,8 +262,10 @@ export function CicdConsoleScreen({
     if (next.runId === logOwnerRef.current.runId && next.logRevision === logOwnerRef.current.logRevision) {
       return;
     }
-    logOwnerRef.current = { runId: next.runId, logRevision: next.logRevision };
+    const nextOwner = { runId: next.runId, logRevision: next.logRevision };
+    logOwnerRef.current = nextOwner;
     logsSequenceRef.current = 0;
+    setLogsOwner(nextOwner);
     setLogs([]);
   }, [selectedLogRevision, selectedRunIdForLogs]);
 
@@ -414,7 +425,7 @@ export function CicdConsoleScreen({
         <CicdLogsView
           errorMessage={logsErrorMessage}
           isLoading={isLogsLoading}
-          logs={logs}
+          logs={visibleLogs}
           onOpenLiveObservation={onOpenLiveObservation}
           onRetry={() => setLogsReloadRequestId((requestId) => requestId + 1)}
           run={selectedRun}

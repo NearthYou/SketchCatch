@@ -10,6 +10,7 @@ Use this file only for compact continuation context. Write it in English.
 - Final re-review replaced present-workflow lexical ordering with fixed Infra/App presence and zero-padded run ID/attempt slots so equal-time partial snapshots cannot outrank their strict superset.
 - Expanded API 125/125 and focused Web 74/74 pass after the fixed-slot re-review change. Prior full Web 1070/1070 evidence remains valid; lint, typecheck, build, harness, diff, and added-line secret scan pass.
 - Latest `origin/dev` is merged at `60d543f2`; issue #361 focused API 123/123, focused Web 85/85, full repository test tasks 5/5, lint, typecheck, build, harness, and diff checks pass.
+- PR #368 review fixes keep log/clipboard ownership updates out of render/layout effects and fail closed on incomplete legacy monitored paths; expanded API 124/124 and focused Web 85/85 pass.
 
 ## Changes This Session
 
@@ -27,4 +28,4 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Best Next Action
 
-- Publish issue #361 for review, address actionable feedback, and merge after required checks pass. Collect migration and browser acceptance evidence only after an approved local test DB and safe GitHub/AWS test environment are available.
+- Push the verified PR #368 review fixes, resolve all review threads, and merge after the refreshed required checks pass. Collect migration and browser acceptance evidence only after an approved local test DB and safe GitHub/AWS test environment are available.

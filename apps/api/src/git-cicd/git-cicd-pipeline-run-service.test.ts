@@ -32,6 +32,15 @@ test("classifyPipelineChangeScope uses path-segment-safe matching", () => {
   assert.equal(classifyPipelineChangeScope(["infra/terraform-old/main.tf"], config), null);
 });
 
+test("classifyPipelineChangeScope fails closed for incomplete legacy monitored paths", () => {
+  const incompleteConfig = {
+    appPath: undefined,
+    infraPath: { mode: "subdirectory" }
+  } as unknown as typeof config;
+
+  assert.equal(classifyPipelineChangeScope(["apps/web/page.tsx"], incompleteConfig), null);
+});
+
 test("refresh is idempotent and persists six deterministic stages and log sequences", async () => {
   const repository = createMemoryRepository();
   const provider = createProvider();

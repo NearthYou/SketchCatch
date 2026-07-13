@@ -108,6 +108,9 @@ test("the visible CI/CD console keeps automatic refresh RDS-only and resets logs
   assert.match(cicdSource, /const selectedLogRevision = selectedRun\?\.logRevision/);
   assert.match(cicdSource, /logsSequenceRef\.current = 0/);
   assert.match(cicdSource, /setLogs\(\[\]\)/);
+  assert.doesNotMatch(cicdSource, /\buseLayoutEffect\b/);
+  assert.match(cicdSource, /const visibleLogs =/);
+  assert.match(cicdSource, /logs=\{visibleLogs\}/);
 });
 
 test("Direct Output rendering is scoped to the selected Deployment owner", () => {

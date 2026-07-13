@@ -22,9 +22,9 @@ export function DeploymentOutputLinks({
     useState<ClipboardFeedback | null>(null);
   const linksKey = links.map((link) => `${link.kind}:${link.url}`).join("|");
   const currentClipboardScopeRef = useRef({ linksKey, scopeKey });
-  currentClipboardScopeRef.current = { linksKey, scopeKey };
 
   useEffect(() => {
+    currentClipboardScopeRef.current = { linksKey, scopeKey };
     setClipboardFeedback(null);
   }, [linksKey, scopeKey]);
 
