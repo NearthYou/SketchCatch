@@ -8,6 +8,7 @@ import {
   getCicdPipelineRunState,
   getCicdPollIntervalMs,
   getNotifiablePipelineRunTransitions,
+  isCicdMonitoringDraftComplete,
   isCicdPipelineRunStale,
   isNotifiablePipelineTransition,
   isTerminalPipelineTransition
@@ -23,6 +24,45 @@ test("CI/CD polling uses five seconds while any run is active and thirty seconds
   );
   assert.equal(getCicdPollIntervalMs([{ status: "succeeded" }]), 30_000);
   assert.equal(getCicdPollIntervalMs([]), 30_000);
+});
+
+test("enabled monitoring requires a branch and explicit app and infrastructure paths", () => {
+  assert.equal(
+    isCicdMonitoringDraftComplete({
+      enabled: true,
+      monitorBranch: "main",
+      appPath: { mode: "repository_root", path: "." },
+      infraPath: { mode: "subdirectory", path: "infra" }
+    }),
+    true
+  );
+  assert.equal(
+    isCicdMonitoringDraftComplete({
+      enabled: true,
+      monitorBranch: "main",
+      appPath: { mode: "subdirectory", path: "" },
+      infraPath: { mode: "repository_root", path: "." }
+    }),
+    false
+  );
+  assert.equal(
+    isCicdMonitoringDraftComplete({
+      enabled: true,
+      monitorBranch: " ",
+      appPath: { mode: "repository_root", path: "." },
+      infraPath: { mode: "repository_root", path: "." }
+    }),
+    false
+  );
+  assert.equal(
+    isCicdMonitoringDraftComplete({
+      enabled: false,
+      monitorBranch: "",
+      appPath: { mode: "subdirectory", path: "" },
+      infraPath: { mode: "subdirectory", path: "" }
+    }),
+    true
+  );
 });
 
 test("terminal transition detection only reports a non-terminal run reaching a terminal status", () => {

@@ -1,4 +1,5 @@
 import type {
+  GitCicdMonitoredPath,
   GitCicdPipelineRun,
   GitCicdPipelineRunStatus
 } from "../../../../packages/types/src";
@@ -15,6 +16,13 @@ const TERMINAL_PIPELINE_RUN_STATUSES: ReadonlySet<GitCicdPipelineRunStatus> = ne
 
 type PipelineRunStatusValue = Pick<GitCicdPipelineRun, "status">;
 
+export type CicdMonitoringDraft = {
+  readonly enabled: boolean;
+  readonly monitorBranch: string;
+  readonly appPath: GitCicdMonitoredPath;
+  readonly infraPath: GitCicdMonitoredPath;
+};
+
 export type CicdPipelineRunState = {
   readonly currentRun: GitCicdPipelineRun | null;
   readonly historyRuns: GitCicdPipelineRun[];
@@ -25,6 +33,18 @@ export function getCicdPollIntervalMs(runs: readonly PipelineRunStatusValue[]): 
   return runs.some((run) => !isTerminalPipelineStatus(run.status))
     ? ACTIVE_CICD_POLL_INTERVAL_MS
     : IDLE_CICD_POLL_INTERVAL_MS;
+}
+
+export function isCicdMonitoringDraftComplete(draft: CicdMonitoringDraft): boolean {
+  if (!draft.enabled) {
+    return true;
+  }
+
+  return (
+    draft.monitorBranch.trim().length > 0 &&
+    isExplicitMonitoredPath(draft.appPath) &&
+    isExplicitMonitoredPath(draft.infraPath)
+  );
 }
 
 export function isTerminalPipelineTransition(
@@ -104,4 +124,13 @@ export function isCicdPipelineRunStale(
 
 function isTerminalPipelineStatus(status: GitCicdPipelineRunStatus): boolean {
   return TERMINAL_PIPELINE_RUN_STATUSES.has(status);
+}
+
+function isExplicitMonitoredPath(path: GitCicdMonitoredPath): boolean {
+  if (path.mode === "repository_root") {
+    return path.path === ".";
+  }
+
+  const normalizedPath = path.path.trim();
+  return normalizedPath.length > 0 && normalizedPath !== ".";
 }

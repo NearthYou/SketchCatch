@@ -15,6 +15,14 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-13 - Split Direct Deployment and CI/CD console screens
+
+- Extracted the Direct Deployment workflow into a focused screen and moved full-screen focus, close, and project-scoped top-screen restoration into a common console Shell.
+- Added CI/CD Overview, Activity, Logs, and strict repository monitoring Settings with active/idle visible polling, active-first run selection, stale/permission/empty/failure states, incremental log retry, and Live Observation runtime-log navigation.
+- Preserved screen-local subview/run state across top-level switching and kept Task 8 notifications/shared Output cards as later integration work.
+- Verification: 35 focused tests and 564 Web workspace tests passed; root lint, typecheck, build, harness, and diff checks passed. Existing API `setNow` and Next multi-lockfile warnings remain.
+- No GitHub, Terraform, AWS, deployment, database, or secret mutation ran.
+
 ### 2026-07-13 - Add Web CI/CD clients and pure console state helpers
 
 - Added typed monitoring, paginated Pipeline Run, incremental log, detail, and stale-aware refresh clients using the existing authenticated API boundary.
