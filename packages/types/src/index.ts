@@ -2584,6 +2584,32 @@ export type DiagramEdgeMetadata = {
   parameterPath: string;
 };
 
+export type DiagramPoint = {
+  x: number;
+  y: number;
+};
+
+export type DiagramBounds = DiagramPoint & {
+  width: number;
+  height: number;
+};
+
+export type DiagramEdgeArrowDirection =
+  | "source-to-target"
+  | "target-to-source"
+  | "bidirectional"
+  | "none";
+
+export type DiagramEdgeRoute = {
+  svgPath: string;
+  sourcePoint: DiagramPoint;
+  targetPoint: DiagramPoint;
+  waypoints: DiagramPoint[];
+  labelPosition?: DiagramPoint | undefined;
+  arrowDirection?: DiagramEdgeArrowDirection | undefined;
+  arrowAngle?: number | undefined;
+};
+
 export type DiagramEdge = {
   id: string;
   sourceNodeId: string;
@@ -2594,6 +2620,8 @@ export type DiagramEdge = {
   type?: string | undefined;
   style?: DiagramEdgeStyle | undefined;
   metadata?: DiagramEdgeMetadata | undefined;
+  route?: DiagramEdgeRoute | undefined;
+  zIndex?: number | undefined;
 };
 
 export type DiagramViewport = {
@@ -2618,11 +2646,20 @@ export type DiagramVariable = {
   source: DiagramVariableSource;
 };
 
+export type DiagramGeometryPolicy = "catalog-normalized" | "source-exact";
+
+export type DiagramPresentation = {
+  geometryPolicy: DiagramGeometryPolicy;
+  sourceViewBox?: DiagramBounds | undefined;
+  initialViewportPending?: boolean | undefined;
+};
+
 export type DiagramJson = {
   nodes: DiagramNode[];
   edges: DiagramEdge[];
   viewport: DiagramViewport;
   variables?: DiagramVariable[] | undefined;
+  presentation?: DiagramPresentation | undefined;
 };
 
 export type ProjectDraft = {

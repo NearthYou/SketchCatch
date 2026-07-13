@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { DiagramNode, ResourceItem } from "../../../../packages/types/src";
+import type { DiagramJson, DiagramNode, ResourceItem } from "../../../../packages/types/src";
 import {
   applyNodeParametersUpdateWithAutoTagSync,
   clearActiveResourceDragPayload,
+  cloneDiagram,
   createDiagramEdge,
   createDiagramNodeFromPayload,
   createPastedNodes,
@@ -28,6 +29,79 @@ const resourceItem: ResourceItem = {
     }
   }
 };
+
+test("cloneDiagram deeply clones source-exact presentation, authored routes, and variables", () => {
+  const source: DiagramJson = {
+    nodes: [],
+    edges: [
+      {
+        id: "edge-1",
+        sourceNodeId: "source-node",
+        targetNodeId: "target-node",
+        zIndex: 8,
+        route: {
+          svgPath: "M 40 60 L 160 60 L 160 240 L 300 240",
+          sourcePoint: { x: 40, y: 60 },
+          targetPoint: { x: 300, y: 240 },
+          waypoints: [
+            { x: 160, y: 60 },
+            { x: 160, y: 240 }
+          ],
+          labelPosition: { x: 170, y: 146 },
+          arrowDirection: "source-to-target",
+          arrowAngle: 90
+        }
+      }
+    ],
+    viewport: { x: 0, y: 0, zoom: 1 },
+    variables: [
+      {
+        id: "variable-1",
+        name: "allowedCidrs",
+        type: "list(string)",
+        value: {
+          entries: ["10.0.0.0/8"]
+        },
+        bindings: [{ nodeId: "source-node", parameterKey: "cidrBlocks" }],
+        source: "user"
+      }
+    ],
+    presentation: {
+      geometryPolicy: "source-exact",
+      sourceViewBox: { x: -120, y: -80, width: 1440, height: 900 },
+      initialViewportPending: true
+    }
+  };
+
+  const cloned = cloneDiagram(source);
+
+  assert.deepEqual(cloned, source);
+  assert.notEqual(cloned.presentation, source.presentation);
+  assert.notEqual(cloned.presentation?.sourceViewBox, source.presentation?.sourceViewBox);
+  assert.notEqual(cloned.edges[0]?.route, source.edges[0]?.route);
+  assert.notEqual(cloned.edges[0]?.route?.sourcePoint, source.edges[0]?.route?.sourcePoint);
+  assert.notEqual(cloned.edges[0]?.route?.targetPoint, source.edges[0]?.route?.targetPoint);
+  assert.notEqual(cloned.edges[0]?.route?.waypoints, source.edges[0]?.route?.waypoints);
+  assert.notEqual(cloned.edges[0]?.route?.waypoints[0], source.edges[0]?.route?.waypoints[0]);
+  assert.notEqual(cloned.edges[0]?.route?.labelPosition, source.edges[0]?.route?.labelPosition);
+  assert.notEqual(cloned.variables, source.variables);
+  assert.notEqual(cloned.variables?.[0]?.bindings, source.variables?.[0]?.bindings);
+  assert.notEqual(cloned.variables?.[0]?.value, source.variables?.[0]?.value);
+
+  cloned.presentation!.sourceViewBox!.x = 999;
+  cloned.edges[0]!.route!.sourcePoint.x = 999;
+  cloned.edges[0]!.route!.waypoints[0]!.y = 999;
+  cloned.edges[0]!.route!.labelPosition!.x = 999;
+  cloned.variables![0]!.bindings[0]!.nodeId = "mutated-node";
+  ((cloned.variables![0]!.value as { entries: string[] }).entries)[0] = "0.0.0.0/0";
+
+  assert.equal(source.presentation?.sourceViewBox?.x, -120);
+  assert.equal(source.edges[0]?.route?.sourcePoint.x, 40);
+  assert.equal(source.edges[0]?.route?.waypoints[0]?.y, 60);
+  assert.equal(source.edges[0]?.route?.labelPosition?.x, 170);
+  assert.equal(source.variables?.[0]?.bindings[0]?.nodeId, "source-node");
+  assert.deepEqual(source.variables?.[0]?.value, { entries: ["10.0.0.0/8"] });
+});
 
 test("active resource drag payload is available when dragover dataTransfer reads are empty", () => {
   const dragStartDataTransfer = createFakeDataTransfer();

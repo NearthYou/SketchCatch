@@ -2,9 +2,15 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type {
   ApiErrorResponse,
+  DiagramBounds,
   DiagramEdgeMetadata,
+  DiagramEdgeRoute,
   DiagramJson,
   DiagramNodeMetadata,
+  DiagramPoint,
+  DiagramPresentation,
+  DiagramVariable,
+  DiagramVariableBinding,
   TerraformGenerateResponse,
   TerraformSyncToDiagramResponse,
   TerraformValidateRequest,
@@ -41,6 +47,38 @@ const terraformValidateBodySchema = z.object({
 const terraformBlockTypeSchema = z.enum(["resource", "data"]);
 const terraformIdentifierSchema = z.string().min(1).regex(TERRAFORM_IDENTIFIER_PATTERN);
 
+const diagramPointSchema: z.ZodType<DiagramPoint> = z.object({
+  x: z.number().finite(),
+  y: z.number().finite()
+}).strict();
+
+const diagramBoundsSchema: z.ZodType<DiagramBounds> = z.object({
+  x: z.number().finite(),
+  y: z.number().finite(),
+  width: z.number().finite().positive(),
+  height: z.number().finite().positive()
+}).strict();
+
+const diagramPresentationSchema: z.ZodType<DiagramPresentation> = z.object({
+  geometryPolicy: z.enum(["catalog-normalized", "source-exact"]),
+  sourceViewBox: diagramBoundsSchema.optional(),
+  initialViewportPending: z.boolean().optional()
+}).strict();
+
+const diagramVariableBindingSchema: z.ZodType<DiagramVariableBinding> = z.object({
+  nodeId: z.string().min(1),
+  parameterKey: z.string().min(1)
+}).strict();
+
+const diagramVariableSchema: z.ZodType<DiagramVariable> = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  type: z.string().min(1),
+  value: z.unknown(),
+  bindings: z.array(diagramVariableBindingSchema),
+  source: z.enum(["module", "user"])
+}).strict();
+
 const diagramNodeParametersSchema = z.object({
   terraformBlockType: terraformBlockTypeSchema.optional(),
   resourceType: terraformIdentifierSchema,
@@ -59,6 +97,16 @@ const diagramNodeMetadataSchema: z.ZodType<DiagramNodeMetadata> = z.object({
 const diagramEdgeMetadataSchema: z.ZodType<DiagramEdgeMetadata> = z.object({
   managedBy: z.literal("parameter-reference"),
   parameterPath: z.string().min(1)
+}).strict();
+
+const diagramEdgeRouteSchema: z.ZodType<DiagramEdgeRoute> = z.object({
+  svgPath: z.string().min(1),
+  sourcePoint: diagramPointSchema,
+  targetPoint: diagramPointSchema,
+  waypoints: z.array(diagramPointSchema),
+  labelPosition: diagramPointSchema.optional(),
+  arrowDirection: z.enum(["source-to-target", "target-to-source", "bidirectional", "none"]).optional(),
+  arrowAngle: z.number().finite().optional()
 }).strict();
 
 const diagramNodeSchema = z.object({
@@ -108,7 +156,9 @@ const diagramEdgeSchema = z.object({
       animated: z.boolean().optional()
     })
     .optional(),
-  metadata: diagramEdgeMetadataSchema.optional()
+  metadata: diagramEdgeMetadataSchema.optional(),
+  route: diagramEdgeRouteSchema.optional(),
+  zIndex: z.number().finite().optional()
 });
 
 const diagramJsonSchema: z.ZodType<DiagramJson> = z.object({
@@ -118,7 +168,9 @@ const diagramJsonSchema: z.ZodType<DiagramJson> = z.object({
     x: z.number(),
     y: z.number(),
     zoom: z.number()
-  })
+  }),
+  variables: z.array(diagramVariableSchema).optional(),
+  presentation: diagramPresentationSchema.optional()
 });
 
 const terraformGenerateBodySchema = z.object({

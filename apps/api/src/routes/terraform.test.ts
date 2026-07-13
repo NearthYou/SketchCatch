@@ -810,6 +810,133 @@ test("POST /api/terraform/sync-to-diagram updates matching DiagramJson values", 
   await app.close();
 });
 
+test("POST /api/terraform/sync-to-diagram preserves source-exact presentation and authored edge routes", async () => {
+  const fakeDb = new AuthOnlyFakeDb({
+    users: [
+      {
+        id: ACTIVE_USER_ID,
+        deletedAt: null
+      }
+    ]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+  const diagramJson = {
+    nodes: [
+      {
+        id: "source-node",
+        type: "sketchcatch_user_client",
+        kind: "design",
+        position: { x: -40, y: 20 },
+        size: { width: 60, height: 60 },
+        label: "Source",
+        locked: false,
+        zIndex: 3
+      },
+      {
+        id: "target-node",
+        type: "sketchcatch_internet",
+        kind: "design",
+        position: { x: 280, y: 220 },
+        size: { width: 60, height: 60 },
+        label: "Target",
+        locked: false,
+        zIndex: 4
+      }
+    ],
+    edges: [
+      {
+        id: "edge-1",
+        sourceNodeId: "source-node",
+        targetNodeId: "target-node",
+        zIndex: 7,
+        route: {
+          svgPath: "M -10 50 L 160 50 L 160 250 L 280 250",
+          sourcePoint: { x: -10, y: 50 },
+          targetPoint: { x: 280, y: 250 },
+          waypoints: [
+            { x: 160, y: 50 },
+            { x: 160, y: 250 }
+          ],
+          labelPosition: { x: 170, y: 138 },
+          arrowDirection: "source-to-target",
+          arrowAngle: 90
+        }
+      }
+    ],
+    viewport: {
+      x: 0,
+      y: 0,
+      zoom: 1
+    },
+    presentation: {
+      geometryPolicy: "source-exact",
+      sourceViewBox: { x: -120, y: -80, width: 1440, height: 900 },
+      initialViewportPending: true
+    },
+    variables: [
+      {
+        id: "variable-1",
+        name: "environment",
+        type: "string",
+        value: "production",
+        bindings: [{ nodeId: "source-node", parameterKey: "tags.Environment" }],
+        source: "user"
+      }
+    ]
+  };
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/terraform/sync-to-diagram",
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: {
+      diagramJson,
+      terraformCode: `provider "aws" {
+  region = "ap-northeast-2"
+}`
+    }
+  });
+  const body = response.json() as TerraformSyncToDiagramResponse;
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(body.diagramJson.presentation, diagramJson.presentation);
+  assert.deepEqual(body.diagramJson.edges[0], diagramJson.edges[0]);
+  assert.deepEqual(body.diagramJson.variables, diagramJson.variables);
+
+  await app.close();
+});
+
+test("POST /api/terraform/generate rejects non-finite source-exact presentation numbers", async () => {
+  const fakeDb = new AuthOnlyFakeDb({
+    users: [
+      {
+        id: ACTIVE_USER_ID,
+        deletedAt: null
+      }
+    ]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+  const headers = await authHeaders(ACTIVE_USER_ID);
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/terraform/generate",
+    headers: {
+      ...headers,
+      "content-type": "application/json"
+    },
+    payload: `{"diagramJson":{"nodes":[],"edges":[],"viewport":{"x":0,"y":0,"zoom":1},"presentation":{"geometryPolicy":"source-exact","sourceViewBox":{"x":1e309,"y":0,"width":1440,"height":900},"initialViewportPending":true}}}`
+  });
+
+  assert.equal(response.statusCode, 400);
+
+  await app.close();
+});
+
 test("POST /api/terraform/sync-to-diagram accepts Terraform file inputs", async () => {
   const fakeDb = new AuthOnlyFakeDb({
     users: [

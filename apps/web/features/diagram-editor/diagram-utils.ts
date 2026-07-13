@@ -38,10 +38,26 @@ const areaResourceParameterDefaults: Readonly<
 };
 
 export function cloneDiagram(diagram: DiagramJson): DiagramJson {
+  const variables = diagram.variables?.map((variable) => ({
+    ...variable,
+    value: cloneParameterValue(variable.value),
+    bindings: variable.bindings.map((binding) => ({ ...binding }))
+  }));
+  const presentation = diagram.presentation
+    ? {
+        ...diagram.presentation,
+        ...(diagram.presentation.sourceViewBox
+          ? { sourceViewBox: { ...diagram.presentation.sourceViewBox } }
+          : {})
+      }
+    : undefined;
+
   return {
     nodes: diagram.nodes.map((node) => cloneNode(node)),
     edges: diagram.edges.map((edge) => cloneEdge(edge)),
-    viewport: { ...diagram.viewport }
+    viewport: { ...diagram.viewport },
+    ...(variables ? { variables } : {}),
+    ...(presentation ? { presentation } : {})
   };
 }
 
@@ -374,9 +390,22 @@ function clearParentAreaNodeId(node: DiagramNode): DiagramNode {
 }
 
 function cloneEdge(edge: DiagramEdge): DiagramEdge {
+  const route = edge.route
+    ? {
+        ...edge.route,
+        sourcePoint: { ...edge.route.sourcePoint },
+        targetPoint: { ...edge.route.targetPoint },
+        waypoints: edge.route.waypoints.map((waypoint) => ({ ...waypoint })),
+        ...(edge.route.labelPosition
+          ? { labelPosition: { ...edge.route.labelPosition } }
+          : {})
+      }
+    : undefined;
+
   return {
     ...edge,
-    ...(edge.style ? { style: { ...edge.style } } : {})
+    ...(edge.style ? { style: { ...edge.style } } : {}),
+    ...(route ? { route } : {})
   };
 }
 
