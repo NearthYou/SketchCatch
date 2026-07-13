@@ -627,36 +627,29 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
   }
 
   return (
-    <section className="dashboardPanel" aria-labelledby="all-projects-title">
-      <div className="dashboardPanelHeader">
-        <div>
-          <p className="dashboardPanelKicker">Worked projects</p>
-          <h2 id="all-projects-title">내가 작업한 프로젝트</h2>
-        </div>
-      </div>
-
+    <section className="dashboardPanel" aria-label="프로젝트 목록">
       <div className="projectListControls" aria-label="프로젝트 정렬 및 필터">
-        <div className="settingsField">
-          정렬
+        <div className="settingsField projectSortField">
+          <span>정렬</span>
           <SelectMenu
             ariaLabel="프로젝트 정렬 선택"
             emptyLabel="정렬 선택"
             onChange={(value) => setSortMode(value as ProjectSortMode)}
             options={PROJECT_SORT_OPTIONS}
-            size="compact"
-            tone="dashboard"
+            size="large"
+            tone="surface"
             value={sortMode}
           />
         </div>
-        <div className="settingsField">
-          배포 여부
+        <div className="settingsField projectDeploymentFilterField">
+          <span>배포 여부</span>
           <SelectMenu
             ariaLabel="프로젝트 배포 여부 필터 선택"
             emptyLabel="필터 선택"
             onChange={(value) => setDeploymentFilter(value as ProjectDeploymentFilter)}
             options={PROJECT_DEPLOYMENT_FILTER_OPTIONS}
-            size="compact"
-            tone="dashboard"
+            size="large"
+            tone="surface"
             value={deploymentFilter}
           />
         </div>

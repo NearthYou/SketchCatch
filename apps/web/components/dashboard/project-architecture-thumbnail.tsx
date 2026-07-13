@@ -52,7 +52,7 @@ export function ProjectArchitectureThumbnail({
 
   return (
     <BoardThumbnailImage
-      className="projectArchitecturePreview"
+      className="projectPreview projectArchitecturePreview"
       alt={`${projectName} Architecture 미리보기`}
       src={thumbnailUrl}
       state={state}

@@ -13,7 +13,7 @@ export function DashboardProjectsRoute() {
         <div>
           <p className="dashboardEyebrow">Project workspace</p>
           <h1>프로젝트</h1>
-          <p>저장된 Practice Architecture와 최근 작업을 확인합니다.</p>
+          <p>설계한 프로젝트를 확인하고, 이어서 작업하거나 배포 상태를 관리합니다.</p>
         </div>
         <label className="dashboardSearchField">
           <Search aria-hidden="true" size={17} />

@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Project } from "@sketchcatch/types";
 import {
+  createCostExplorerMonthlyTrend,
+  createCostExplorerProjectMonthlyTrends,
   createProjectUsageCosts,
   createRecommendationsFromWaste,
   createResourceUsageCosts,
@@ -47,6 +49,35 @@ test("createSampleCostUsageAnalysis returns deterministic fallback usage data", 
   assert.equal(result.resourceCosts.length > 0, true);
   assert.equal(result.wasteResources.length, 2);
   assert.equal(result.recommendations.length, 2);
+});
+
+test("createSampleCostUsageAnalysis returns a six-month comparison including the partial current month", () => {
+  const result = createSampleCostUsageAnalysis({
+    awsConnection: null,
+    deployedResources: [],
+    deployments: [],
+    now: fixedNow,
+    projects: [projectA],
+    range: "30d",
+    userId
+  });
+
+  assert.deepEqual(
+    result.monthlyTrend.map((point) => [point.month, point.isPartial, point.isEstimated]),
+    [
+      ["2026-02", false, true],
+      ["2026-03", false, true],
+      ["2026-04", false, true],
+      ["2026-05", false, true],
+      ["2026-06", false, true],
+      ["2026-07", true, true]
+    ]
+  );
+  assert.equal(result.monthlyComparison.previousMonthActual.amount, 151.2);
+  assert.equal(result.monthlyComparison.currentMonthToDate.amount, 38.5);
+  assert.equal(result.monthlyComparison.currentMonthForecast.amount, 170.5);
+  assert.equal(result.monthlyComparison.forecastChangeAmount.amount, 19.3);
+  assert.equal(result.monthlyComparison.forecastChangePercentage, 12.8);
 });
 
 test("createSampleCostUsageAnalysis does not invent project rows when the user has no projects", () => {
@@ -100,9 +131,128 @@ test("createSampleCostUsageAnalysis scopes project rows and resources to the sel
     result.resourceCosts.reduce((sum, resource) => sum + resource.amount, 0).toFixed(2),
     result.totalCost.amount.toFixed(2)
   );
+  assert.equal(result.monthlyTrend.length, 6);
+  assert.equal(result.monthlyTrend.every((point) => point.isEstimated), true);
+  assert.equal(
+    result.monthlyComparison.currentMonthToDate.amount,
+    result.monthlyTrend.at(-1)?.amount
+  );
+});
+
+test("createCostExplorerMonthlyTrend fills missing months and marks only the current month partial", () => {
+  const result = createCostExplorerMonthlyTrend(
+    {
+      ResultsByTime: [
+        {
+          TimePeriod: { End: "2026-03-01", Start: "2026-02-01" },
+          Total: { UnblendedCost: { Amount: "120.456", Unit: "USD" } }
+        },
+        {
+          TimePeriod: { End: "2026-07-08", Start: "2026-07-01" },
+          Total: { UnblendedCost: { Amount: "42.1", Unit: "USD" } }
+        }
+      ]
+    },
+    fixedNow
+  );
+
+  assert.deepEqual(
+    result.map((point) => [point.month, point.amount, point.isPartial, point.isEstimated]),
+    [
+      ["2026-02", 120.46, false, false],
+      ["2026-03", 0, false, false],
+      ["2026-04", 0, false, false],
+      ["2026-05", 0, false, false],
+      ["2026-06", 0, false, false],
+      ["2026-07", 42.1, true, false]
+    ]
+  );
+});
+
+test("createCostExplorerProjectMonthlyTrends preserves tagged monthly actual costs", () => {
+  const result = createCostExplorerProjectMonthlyTrends(
+    {
+      ResultsByTime: [
+        {
+          Groups: [{
+            Keys: [`${"SketchCatchProjectId"}$${projectA.id}`],
+            Metrics: { UnblendedCost: { Amount: "12.34", Unit: "USD" } }
+          }],
+          TimePeriod: { End: "2026-03-01", Start: "2026-02-01" }
+        },
+        {
+          Groups: [{
+            Keys: [`${"SketchCatchProjectId"}$${projectA.id}`],
+            Metrics: { UnblendedCost: { Amount: "7.5", Unit: "USD" } }
+          }],
+          TimePeriod: { End: "2026-07-08", Start: "2026-07-01" }
+        }
+      ]
+    },
+    fixedNow
+  );
+
+  assert.deepEqual(
+    result.get(projectA.id)?.map((point) => [point.month, point.amount, point.isEstimated]),
+    [
+      ["2026-02", 12.34, false],
+      ["2026-03", 0, true],
+      ["2026-04", 0, true],
+      ["2026-05", 0, true],
+      ["2026-06", 0, true],
+      ["2026-07", 7.5, false]
+    ]
+  );
+});
+
+test("createProjectUsageCosts merges tagged projects with estimated untagged projects", () => {
+  const accountMonthlyTrend = [
+    { amount: 100, isEstimated: false, isPartial: false, month: "2026-06" },
+    { amount: 50, isEstimated: false, isPartial: true, month: "2026-07" }
+  ];
+  const result = createProjectUsageCosts({
+    accountMonthlyTrend,
+    deployedResources: [],
+    deployments: [],
+    projects: [projectA, projectB],
+    taggedProjectCosts: new Map([[projectA.id, 30]]),
+    taggedProjectMonthlyTrends: new Map([[
+      projectA.id,
+      [
+        { amount: 80, isEstimated: false, isPartial: false, month: "2026-06" },
+        { amount: 0, isEstimated: true, isPartial: true, month: "2026-07" }
+      ]
+    ]]),
+    totalCostAmount: 100
+  });
+
+  assert.deepEqual(
+    result.map((row) => [row.projectId, row.amount, row.source]),
+    [
+      [projectB.id, 70, "deployed_resource_estimate"],
+      [projectA.id, 30, "cost_explorer_tag"]
+    ]
+  );
+  assert.deepEqual(
+    result.find((row) => row.projectId === projectA.id)?.monthlyTrend,
+    [
+      { amount: 80, isEstimated: false, isPartial: false, month: "2026-06" },
+      { amount: 15, isEstimated: true, isPartial: true, month: "2026-07" }
+    ]
+  );
+  assert.deepEqual(
+    result.find((row) => row.projectId === projectB.id)?.monthlyTrend,
+    [
+      { amount: 20, isEstimated: true, isPartial: false, month: "2026-06" },
+      { amount: 35, isEstimated: true, isPartial: true, month: "2026-07" }
+    ]
+  );
 });
 
 test("createProjectUsageCosts prefers Cost Explorer project tags over deployment approximation", () => {
+  const taggedMonthlyTrend = [
+    { amount: 30, isEstimated: false, isPartial: true, month: "2026-07" }
+  ];
   const result = createProjectUsageCosts({
     deployedResources: [
       makeResource({ deploymentId: "deployment-a", id: "resource-a1" }),
@@ -119,6 +269,7 @@ test("createProjectUsageCosts prefers Cost Explorer project tags over deployment
       [projectA.id, 30],
       [projectB.id, 70]
     ]),
+    taggedProjectMonthlyTrends: new Map([[projectA.id, taggedMonthlyTrend]]),
     totalCostAmount: 100
   });
 
@@ -129,6 +280,7 @@ test("createProjectUsageCosts prefers Cost Explorer project tags over deployment
       [projectA.id, 30, "cost_explorer_tag"]
     ]
   );
+  assert.deepEqual(result.find((row) => row.projectId === projectA.id)?.monthlyTrend, taggedMonthlyTrend);
 });
 
 test("createProjectUsageCosts ignores tags outside deployed projects and falls back to deployment approximation", () => {

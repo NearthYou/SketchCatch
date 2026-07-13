@@ -9,12 +9,44 @@ const selectMenuStylesSource = readUiFile("select-menu.module.css");
 test("SelectMenu exposes a workspace tone for DESIGN.md workspace panels", () => {
   assert.match(
     selectMenuSource,
-    /export type SelectMenuTone = "board" \| "default" \| "dashboard" \| "workspace";/
+    /export type SelectMenuTone = "board" \| "default" \| "dashboard" \| "surface" \| "workspace";/
   );
   assert.match(selectMenuSource, /tone === "workspace"/);
   assert.match(selectMenuSource, /return "workspaceTone";/);
   assert.doesNotMatch(selectMenuSource, /purpleTone|tone === "purple"/);
   assert.doesNotMatch(selectMenuStylesSource, /\.purpleTone/);
+});
+
+test("SelectMenu surface tone provides the shared dashboard dropdown typography", () => {
+  const triggerRule = getCssRuleContaining(
+    selectMenuStylesSource,
+    ".surfaceTone .selectMenuTrigger"
+  );
+  const optionLabelRule = getCssRuleContaining(
+    selectMenuStylesSource,
+    ".surfaceTone .selectMenuOptionLabel"
+  );
+  const selectedLabelRule = getCssRuleContaining(
+    selectMenuStylesSource,
+    ".surfaceTone .selectMenuOptionSelected .selectMenuOptionLabel"
+  );
+
+  assert.match(triggerRule, /font-family:\s*var\(--font-sans\)/);
+  assert.match(triggerRule, /font-size:\s*14px/);
+  assert.match(triggerRule, /font-weight:\s*500/);
+  assert.match(triggerRule, /min-height:\s*42px/);
+  assert.match(optionLabelRule, /font-size:\s*14px/);
+  assert.match(optionLabelRule, /font-weight:\s*500/);
+  assert.match(selectedLabelRule, /font-weight:\s*600/);
+
+  const surfaceToneStyles = selectMenuStylesSource.slice(
+    selectMenuStylesSource.indexOf(".surfaceTone"),
+    selectMenuStylesSource.indexOf(".dashboardTone")
+  );
+  assert.match(surfaceToneStyles, /var\(--color-canvas\)/);
+  assert.match(surfaceToneStyles, /var\(--color-hairline-strong\)/);
+  assert.match(surfaceToneStyles, /var\(--radius-control\)/);
+  assert.doesNotMatch(surfaceToneStyles, /#[0-9a-f]{3,8}\b/i);
 });
 
 test("SelectMenu board tone uses the calm Board tokens", () => {

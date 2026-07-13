@@ -15,6 +15,10 @@ const gallerySource = readFileSync(
   join(currentDir, "../../components/templates/TemplateGallery.tsx"),
   "utf8"
 );
+const projectCardSource = readFileSync(
+  join(currentDir, "../../components/dashboard/api-project-card.tsx"),
+  "utf8"
+);
 const legacyProjectCardSource = readFileSync(
   join(currentDir, "../../components/dashboard/project-card.tsx"),
   "utf8"
@@ -23,13 +27,19 @@ const imageSource = readFileSync(
   join(currentDir, "../../components/architecture-board/BoardThumbnailImage.tsx"),
   "utf8"
 );
+const dashboardStyles = readFileSync(
+  join(currentDir, "../../components/dashboard/dashboard-content.css"),
+  "utf8"
+);
+
 test("Template and Project cards consume captured raster thumbnails through one image component", () => {
   assert.match(gallerySource, /<BoardThumbnailImage[\s\S]*src=\{template\.thumbnailSrc \?\? null\}/);
   assert.match(thumbnailSource, /<BoardThumbnailImage[\s\S]*src=\{thumbnailUrl\}/);
+  assert.match(projectCardSource, /<ProjectArchitectureThumbnail/);
   assert.match(legacyProjectCardSource, /<ProjectArchitectureThumbnail/);
   assert.doesNotMatch(gallerySource, /createTemplatePreviewModel|ArchitectureBoardSnapshot|<svg/);
   assert.doesNotMatch(thumbnailSource, /getProjectDraft|buildThumbnailModel|ArchitectureBoardSnapshot|<svg/);
-  assert.doesNotMatch(legacyProjectCardSource, /projectPreviewNodeVpc|projectPreviewLineOne/);
+  assert.doesNotMatch(projectCardSource, /projectPreviewNodeVpc|projectPreviewLineOne/);
 });
 
 test("shared raster image keeps a fixed 16:9 contain frame and explicit loading, empty, and error states", () => {
@@ -41,4 +51,30 @@ test("shared raster image keeps a fixed 16:9 contain frame and explicit loading,
   assert.equal(BOARD_THUMBNAIL_CAPTURE_CONTRACT.aspectRatio, "16 / 9");
   assert.match(imageSource, /aspectRatio:\s*BOARD_THUMBNAIL_CAPTURE_CONTRACT\.aspectRatio/);
   assert.match(imageSource, /objectFit:\s*"contain"/);
+});
+
+test("compact project cards keep the captured Board above the merged dev card details", () => {
+  assert.match(projectCardSource, /projectCard projectCardCompact projectCardLink/);
+  assert.match(thumbnailSource, /className="projectPreview projectArchitecturePreview"/);
+  assert.match(
+    dashboardStyles,
+    /\.projectCardCompact \.projectCardContentLink\s*\{[^}]*grid-template-columns:\s*1fr/s
+  );
+  assert.match(
+    dashboardStyles,
+    /\.projectPreview\s*\{[^}]*height:\s*150px[^}]*background-image:/s
+  );
+});
+
+test("draft project cards keep the timestamp compact without rendering a draft badge", () => {
+  assert.match(projectCardSource, /uiStatus !== "DRAFT"/);
+  assert.match(projectCardSource, /<time className="projectCardTimestamp" dateTime=\{timestampValue\}>/);
+  assert.match(
+    dashboardStyles,
+    /\.projectCardMeta \.dashboardIcon\s*\{[^}]*width:\s*11px[^}]*height:\s*11px/s
+  );
+  assert.match(
+    dashboardStyles,
+    /\.projectCardTimestamp\s*\{[^}]*text-overflow:\s*ellipsis[^}]*white-space:\s*nowrap/s
+  );
 });
