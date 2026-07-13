@@ -1933,8 +1933,8 @@ function applyRepositoryEvidencePriorityToRequirementPlan(
       trafficEntry: "LOAD_BALANCER",
       compute: "ECS_FARGATE",
       ...(hasFact("runtime_scale", "single_task") ? { computeCount: 1 } : {}),
-      placement: "public_subnets",
-      spreadAcrossPrivateSubnets: false,
+      placement: "private_subnets",
+      spreadAcrossPrivateSubnets: true,
       autoScaling: false
     },
     forbiddenCapabilities: mergeUniqueTextItems(plan.forbiddenCapabilities, [
@@ -1947,7 +1947,8 @@ function applyRepositoryEvidencePriorityToRequirementPlan(
     amazonQBrief: mergeUniqueTextItems(plan.amazonQBrief, [
       "Repository evidence is authoritative: keep one Fargate task unless the user explicitly overrides it.",
       "Use GitHub Actions as an external delivery actor; do not add AWS-native CI/CD pipeline resources.",
-      "Do not infer private subnets, NAT gateways, autoscaling, or persistence from generic production defaults."
+      "Place the internet-facing ALB in two public subnets and the Fargate service in two private app subnets.",
+      "Use one cost-conscious NAT gateway for private task image pulls and log delivery; do not add autoscaling or persistence."
     ])
   };
 }
@@ -2014,20 +2015,144 @@ function applyStrictRepositoryEvidencePolicy(
   const healthCheckPath = healthMatch?.[2] ?? "/";
   const managedServicesAreaId = "repository-managed-services";
   const hasManagedServices = staticDelivery || usesEcr || usesCloudWatch;
+  const vpcId = coreNodeId("vpc");
+  const publicSubnetAId = coreNodeId("subnet-a");
+  const publicSubnetBId = coreNodeId("subnet-b");
+  const privateAppSubnetAId = "repository-private-app-subnet-a";
+  const privateAppSubnetBId = "repository-private-app-subnet-b";
+  const natEipId = "repository-nat-eip";
+  const natGatewayId = "repository-nat-gateway";
+  const privateRouteTableId = "repository-private-route-table";
+  const privateRouteAssociationAId = "repository-private-route-association-a";
+  const privateRouteAssociationBId = "repository-private-route-association-b";
+  const fargateRuntimeId = "repository-fargate-runtime";
+  const vpcRef = `aws_vpc.${vpcId}.id`;
+  const publicSubnetRefs = [publicSubnetAId, publicSubnetBId].map(
+    (id) => `aws_subnet.${id}.id`
+  );
+  const privateAppSubnetRefs = [privateAppSubnetAId, privateAppSubnetBId].map(
+    (id) => `aws_subnet.${id}.id`
+  );
   const additionalNodes: ArchitectureJson["nodes"] = [];
+
+  additionalNodes.push(
+    {
+      id: privateAppSubnetAId,
+      type: "SUBNET",
+      label: "Private App Subnet A",
+      positionX: 360,
+      positionY: 1010,
+      config: {
+        terraformResourceName: "private_app_a",
+        parentAreaNodeId: vpcId,
+        vpcId: vpcRef,
+        cidrBlock: "10.30.11.0/24",
+        availabilityZone: "ap-northeast-2a",
+        tier: "private_app",
+        mapPublicIpOnLaunch: false,
+        diagramWidth: 420,
+        diagramHeight: 300
+      }
+    },
+    {
+      id: privateAppSubnetBId,
+      type: "SUBNET",
+      label: "Private App Subnet B",
+      positionX: 840,
+      positionY: 1010,
+      config: {
+        terraformResourceName: "private_app_b",
+        parentAreaNodeId: vpcId,
+        vpcId: vpcRef,
+        cidrBlock: "10.30.12.0/24",
+        availabilityZone: "ap-northeast-2b",
+        tier: "private_app",
+        mapPublicIpOnLaunch: false,
+        diagramWidth: 420,
+        diagramHeight: 300
+      }
+    },
+    {
+      id: natEipId,
+      type: "ELASTIC_IP",
+      label: "NAT Elastic IP",
+      positionX: 900,
+      positionY: 690,
+      config: {
+        terraformResourceName: "nat",
+        parentAreaNodeId: publicSubnetAId,
+        domain: "vpc"
+      }
+    },
+    {
+      id: natGatewayId,
+      type: "NAT_GATEWAY",
+      label: "NAT Gateway (private egress)",
+      positionX: 1080,
+      positionY: 690,
+      config: {
+        terraformResourceName: "private_egress",
+        parentAreaNodeId: publicSubnetAId,
+        allocationId: `aws_eip.${natEipId}.id`,
+        subnetId: `aws_subnet.${publicSubnetAId}.id`
+      }
+    },
+    {
+      id: privateRouteTableId,
+      type: "ROUTE_TABLE",
+      label: "Private App Route Table",
+      positionX: 1360,
+      positionY: 1080,
+      config: {
+        terraformResourceName: "private_app",
+        parentAreaNodeId: vpcId,
+        vpcId: vpcRef,
+        route: [{
+          cidrBlock: "0.0.0.0/0",
+          natGatewayId: `aws_nat_gateway.${natGatewayId}.id`
+        }]
+      }
+    },
+    {
+      id: privateRouteAssociationAId,
+      type: "ROUTE_TABLE_ASSOCIATION",
+      label: "Private Route A",
+      positionX: 1580,
+      positionY: 1080,
+      config: {
+        terraformResourceName: "private_app_a",
+        parentAreaNodeId: vpcId,
+        subnetId: `aws_subnet.${privateAppSubnetAId}.id`,
+        routeTableId: `aws_route_table.${privateRouteTableId}.id`
+      }
+    },
+    {
+      id: privateRouteAssociationBId,
+      type: "ROUTE_TABLE_ASSOCIATION",
+      label: "Private Route B",
+      positionX: 1800,
+      positionY: 1080,
+      config: {
+        terraformResourceName: "private_app_b",
+        parentAreaNodeId: vpcId,
+        subnetId: `aws_subnet.${privateAppSubnetBId}.id`,
+        routeTableId: `aws_route_table.${privateRouteTableId}.id`
+      }
+    }
+  );
 
   if (hasManagedServices) {
     additionalNodes.push({
       id: managedServicesAreaId,
       type: "UNKNOWN",
       label: "AWS Managed Services",
-      positionX: 20,
-      positionY: -700,
+      positionX: 260,
+      positionY: 40,
       config: {
         diagramKind: "design",
         diagramType: "design_group",
-        diagramWidth: 1100,
-        diagramHeight: 360
+        diagramWidth: 1800,
+        diagramHeight: 400
       }
     });
   }
@@ -2038,8 +2163,8 @@ function applyStrictRepositoryEvidencePolicy(
         id: "repository-web-assets",
         type: "S3",
         label: "Static Web Assets",
-        positionX: 300,
-        positionY: -600,
+        positionX: 580,
+        positionY: 140,
         config: {
           terraformResourceName: "web_assets",
           parentAreaNodeId: managedServicesAreaId,
@@ -2053,8 +2178,8 @@ function applyStrictRepositoryEvidencePolicy(
         id: "repository-cloudfront",
         type: "CLOUDFRONT",
         label: "CloudFront Web Entry",
-        positionX: 80,
-        positionY: -600,
+        positionX: 340,
+        positionY: 140,
         config: {
           terraformResourceName: "web_cdn",
           parentAreaNodeId: managedServicesAreaId,
@@ -2083,9 +2208,9 @@ function applyStrictRepositoryEvidencePolicy(
     additionalNodes.push({
       id: "repository-ecr",
       type: "ECR_REPOSITORY",
-      label: "API Image Repository",
-      positionX: 520,
-      positionY: -600,
+      label: "ECR API Image Repository",
+      positionX: 820,
+      positionY: 140,
       config: {
         terraformResourceName: "api_image",
         parentAreaNodeId: managedServicesAreaId,
@@ -2101,9 +2226,9 @@ function applyStrictRepositoryEvidencePolicy(
     additionalNodes.push({
       id: "repository-ecs-logs",
       type: "CLOUDWATCH_LOG_GROUP",
-      label: "ECS Logs",
-      positionX: 740,
-      positionY: -600,
+      label: "CloudWatch ECS Container Logs",
+      positionX: 1300,
+      positionY: 140,
       config: {
         terraformResourceName: "ecs_logs",
         parentAreaNodeId: managedServicesAreaId,
@@ -2117,8 +2242,8 @@ function applyStrictRepositoryEvidencePolicy(
     id: "repository-browser",
     type: "UNKNOWN",
     label: "Browser",
-    positionX: -360,
-    positionY: 280,
+    positionX: 40,
+    positionY: 680,
     config: {
       diagramKind: "design",
       diagramType: "client",
@@ -2127,13 +2252,28 @@ function applyStrictRepositoryEvidencePolicy(
     }
   });
 
+  additionalNodes.push({
+    id: fargateRuntimeId,
+    type: "UNKNOWN",
+    label: "Fargate Task (1, Private App A/B)",
+    positionX: 460,
+    positionY: 1140,
+    config: {
+      diagramKind: "design",
+      diagramType: "aws_ecs_task_definition",
+      diagramWidth: 260,
+      diagramHeight: 96,
+      parentAreaNodeId: coreNodeId("task-security-group")
+    }
+  });
+
   if (usesGitHubActions) {
     additionalNodes.push({
       id: "repository-github-actions",
       type: "UNKNOWN",
       label: "GitHub Actions",
-      positionX: 420,
-      positionY: 1020,
+      positionX: 40,
+      positionY: 180,
       config: {
         diagramKind: "design",
         diagramType: "github_actions",
@@ -2145,11 +2285,57 @@ function applyStrictRepositoryEvidencePolicy(
 
   const updatedCoreNodes = coreNodes.map((node) => {
     switch (node.config.templateResourceId) {
+      case "vpc":
+        return {
+          ...node,
+          positionX: 260,
+          positionY: 500,
+          config: {
+            ...node.config,
+            diagramWidth: 1800,
+            diagramHeight: 900
+          }
+        };
+      case "subnet-a":
+        return {
+          ...node,
+          label: "Public Subnet A",
+          positionX: 360,
+          positionY: 620,
+          config: {
+            ...node.config,
+            parentAreaNodeId: vpcId,
+            tier: "public",
+            mapPublicIpOnLaunch: true,
+            diagramWidth: 420,
+            diagramHeight: 280
+          }
+        };
+      case "subnet-b":
+        return {
+          ...node,
+          label: "Public Subnet B",
+          positionX: 840,
+          positionY: 620,
+          config: {
+            ...node.config,
+            parentAreaNodeId: vpcId,
+            tier: "public",
+            mapPublicIpOnLaunch: true,
+            diagramWidth: 420,
+            diagramHeight: 280
+          }
+        };
       case "alb-security-group":
         return {
           ...node,
+          positionX: 420,
+          positionY: 680,
           config: {
             ...node.config,
+            parentAreaNodeId: publicSubnetAId,
+            diagramWidth: 300,
+            diagramHeight: 160,
             description: requiresTlsAtAlb
               ? "Allow HTTP for deployment validation until an ALB certificate is confirmed"
               : "Allow public HTTP to the Application Load Balancer",
@@ -2164,8 +2350,13 @@ function applyStrictRepositoryEvidencePolicy(
       case "task-security-group":
         return {
           ...node,
+          positionX: 420,
+          positionY: 1070,
           config: {
             ...node.config,
+            parentAreaNodeId: privateAppSubnetAId,
+            diagramWidth: 340,
+            diagramHeight: 180,
             description: `Allow ALB traffic to the API on port ${containerPort}`,
             ingress: [{
               fromPort: containerPort,
@@ -2175,12 +2366,37 @@ function applyStrictRepositoryEvidencePolicy(
             }]
           }
         };
+      case "cluster":
+        return {
+          ...node,
+          positionX: 1540,
+          positionY: 140,
+          config: {
+            ...node.config,
+            ...(hasManagedServices ? { parentAreaNodeId: managedServicesAreaId } : {})
+          }
+        };
+      case "load-balancer":
+        return {
+          ...node,
+          label: "Internet-facing ALB (Public A/B)",
+          positionX: 500,
+          positionY: 730,
+          config: {
+            ...node.config,
+            parentAreaNodeId: coreNodeId("alb-security-group"),
+            subnets: publicSubnetRefs
+          }
+        };
       case "target-group":
         return {
           ...node,
           label: "API Target Group",
+          positionX: 1360,
+          positionY: 700,
           config: {
             ...node.config,
+            parentAreaNodeId: vpcId,
             port: containerPort,
             healthCheck: { path: healthCheckPath, matcher: "200-399" }
           }
@@ -2189,8 +2405,11 @@ function applyStrictRepositoryEvidencePolicy(
         return {
           ...node,
           label: requiresTlsAtAlb ? "HTTP Listener (TLS Pending)" : "HTTP Listener",
+          positionX: 1560,
+          positionY: 700,
           config: {
             ...node.config,
+            parentAreaNodeId: vpcId,
             port: 80,
             protocol: "HTTP"
           }
@@ -2198,9 +2417,12 @@ function applyStrictRepositoryEvidencePolicy(
       case "task":
         return {
           ...node,
-          label: "API Task Definition",
+          label: "API Task Definition (control plane)",
+          positionX: 1060,
+          positionY: 140,
           config: {
             ...node.config,
+            ...(hasManagedServices ? { parentAreaNodeId: managedServicesAreaId } : {}),
             family: "application-api",
             containerDefinitions: JSON.stringify([{
               name: "api",
@@ -2230,14 +2452,80 @@ function applyStrictRepositoryEvidencePolicy(
         return {
           ...node,
           label: "API Fargate Service",
+          positionX: 1780,
+          positionY: 140,
           config: {
             ...node.config,
+            ...(hasManagedServices ? { parentAreaNodeId: managedServicesAreaId } : {}),
             desiredCount: singleTask ? 1 : node.config.desiredCount,
+            networkConfiguration: {
+              subnets: privateAppSubnetRefs,
+              securityGroups: [`aws_security_group.${coreNodeId("task-security-group")}.id`],
+              assignPublicIp: false
+            },
             loadBalancer: {
               targetGroupArn: `aws_lb_target_group.${coreNodeId("target-group")}.arn`,
               containerName: "api",
               containerPort
             }
+          }
+        };
+      case "internet-gateway":
+        return {
+          ...node,
+          positionX: 1800,
+          positionY: 620,
+          config: { ...node.config, parentAreaNodeId: vpcId }
+        };
+      case "route-table":
+        return {
+          ...node,
+          positionX: 1800,
+          positionY: 780,
+          config: { ...node.config, parentAreaNodeId: vpcId }
+        };
+      case "route-a":
+        return {
+          ...node,
+          positionX: 1580,
+          positionY: 920,
+          config: { ...node.config, parentAreaNodeId: vpcId }
+        };
+      case "route-b":
+        return {
+          ...node,
+          positionX: 1800,
+          positionY: 920,
+          config: { ...node.config, parentAreaNodeId: vpcId }
+        };
+      case "execution-role":
+        return {
+          ...node,
+          positionX: 820,
+          positionY: 300,
+          config: {
+            ...node.config,
+            ...(hasManagedServices ? { parentAreaNodeId: managedServicesAreaId } : {})
+          }
+        };
+      case "execution-policy":
+        return {
+          ...node,
+          positionX: 1060,
+          positionY: 300,
+          config: {
+            ...node.config,
+            ...(hasManagedServices ? { parentAreaNodeId: managedServicesAreaId } : {})
+          }
+        };
+      case "task-role":
+        return {
+          ...node,
+          positionX: 1300,
+          positionY: 300,
+          config: {
+            ...node.config,
+            ...(hasManagedServices ? { parentAreaNodeId: managedServicesAreaId } : {})
           }
         };
       default:
@@ -2246,9 +2534,7 @@ function applyStrictRepositoryEvidencePolicy(
   });
   const nodes = [...updatedCoreNodes, ...additionalNodes];
   const nodeIds = new Set(nodes.map((node) => node.id));
-  const edges = fixedTemplateDraft.architectureJson.edges.filter((edge) =>
-    nodeIds.has(edge.sourceId) && nodeIds.has(edge.targetId)
-  );
+  const edges: ArchitectureJson["edges"] = [];
   const edgePairs = new Set(edges.map((edge) => `${edge.sourceId}->${edge.targetId}`));
   const connect = (sourceId: string, targetId: string, label: string): void => {
     const pair = `${sourceId}->${targetId}`;
@@ -2275,12 +2561,27 @@ function applyStrictRepositoryEvidencePolicy(
 
   connect("repository-browser", "repository-cloudfront", "loads static web");
   connect("repository-cloudfront", "repository-web-assets", "private origin");
-  connect("repository-browser", coreNodeId("load-balancer"), requiresTlsAtAlb ? "API requests (TLS pending)" : "API requests");
+  connect(
+    "repository-browser",
+    coreNodeId("alb-security-group"),
+    requiresTlsAtAlb
+      ? "API -> ALB SG: TCP 80 (HTTPS 443 pending certificate)"
+      : "API -> ALB SG: TCP 80"
+  );
+  connect(coreNodeId("alb-security-group"), coreNodeId("load-balancer"), "attached to public ALB");
+  connect(
+    coreNodeId("alb-security-group"),
+    coreNodeId("task-security-group"),
+    `ALB SG -> Task SG: TCP ${containerPort} only`
+  );
   connect(coreNodeId("load-balancer"), coreNodeId("listener"), "accepts HTTP");
   connect(coreNodeId("listener"), coreNodeId("target-group"), "forwards /api");
   connect(coreNodeId("target-group"), coreNodeId("service"), `health checks ${healthCheckPath}`);
-  connect("repository-ecr", coreNodeId("task"), "application image after CI/CD");
-  connect(coreNodeId("task"), "repository-ecs-logs", "logs");
+  connect(coreNodeId("service"), fargateRuntimeId, "schedules desired task in private app subnets");
+  connect("repository-ecr", fargateRuntimeId, "pulls API image from ECR");
+  connect(fargateRuntimeId, "repository-ecs-logs", "writes ECS container logs via awslogs");
+  connect(natEipId, natGatewayId, "allocates public address");
+  connect(natGatewayId, privateRouteTableId, "provides outbound egress");
   connect("repository-github-actions", "repository-ecr", "builds and pushes image");
   connect("repository-github-actions", coreNodeId("service"), "deploys task revision");
 
@@ -2298,7 +2599,8 @@ function applyStrictRepositoryEvidencePolicy(
           : []),
         ...(usesEcr
           ? ["The initial deployment uses a public 8080 /health smoke image until GitHub Actions publishes the repository application image to ECR."]
-          : [])
+          : []),
+        "The two private app subnets use one NAT gateway for cost-conscious ECR image pulls and CloudWatch log delivery; this is a single-AZ egress tradeoff."
       ]
     }
   };
@@ -3932,7 +4234,6 @@ function findStrictRepositoryEvidenceValidationIssues(
   const forbiddenTypes = new Set<ResourceType>([
     "APPLICATION_AUTO_SCALING_TARGET",
     "APPLICATION_AUTO_SCALING_POLICY",
-    "NAT_GATEWAY",
     "CODESTAR_CONNECTION",
     "CODEPIPELINE",
     "CODEBUILD_PROJECT",
@@ -3971,6 +4272,51 @@ function findStrictRepositoryEvidenceValidationIssues(
     if (services.length !== 1 || services[0]?.config.desiredCount !== 1) {
       issues.push("Strict repository evidence requires exactly one ECS service with desiredCount 1.");
     }
+  }
+
+  const publicSubnets = architectureJson.nodes.filter(
+    (node) => node.type === "SUBNET" && node.config.mapPublicIpOnLaunch === true
+  );
+  const privateAppSubnets = architectureJson.nodes.filter(
+    (node) =>
+      node.type === "SUBNET" &&
+      node.config.mapPublicIpOnLaunch === false &&
+      node.config.tier === "private_app"
+  );
+  const loadBalancer = architectureJson.nodes.find((node) => node.type === "LOAD_BALANCER");
+  const service = architectureJson.nodes.find((node) => node.type === "ECS_SERVICE");
+  const loadBalancerSubnetRefs = Array.isArray(loadBalancer?.config.subnets)
+    ? loadBalancer.config.subnets
+    : [];
+  const serviceNetworkConfiguration = isObjectRecord(service?.config.networkConfiguration)
+    ? service.config.networkConfiguration
+    : undefined;
+  const serviceSubnetRefs = Array.isArray(serviceNetworkConfiguration?.subnets)
+    ? serviceNetworkConfiguration.subnets
+    : [];
+
+  if (
+    publicSubnets.length !== 2 ||
+    !publicSubnets.every((subnet) =>
+      loadBalancerSubnetRefs.includes(`aws_subnet.${subnet.id}.id`)
+    )
+  ) {
+    issues.push("Strict repository evidence requires the internet-facing ALB in two public subnets.");
+  }
+  if (
+    privateAppSubnets.length !== 2 ||
+    !privateAppSubnets.every((subnet) =>
+      serviceSubnetRefs.includes(`aws_subnet.${subnet.id}.id`)
+    ) ||
+    serviceNetworkConfiguration?.assignPublicIp !== false
+  ) {
+    issues.push("Strict repository evidence requires Fargate tasks in two private app subnets without public IP assignment.");
+  }
+  if (
+    architectureJson.nodes.filter((node) => node.type === "NAT_GATEWAY").length !== 1 ||
+    architectureJson.nodes.filter((node) => node.type === "ELASTIC_IP").length !== 1
+  ) {
+    issues.push("Strict repository evidence requires one cost-conscious NAT egress path for private Fargate tasks.");
   }
 
   const healthCheck = facts.find((fact) => fact.kind === "health_check")?.value;

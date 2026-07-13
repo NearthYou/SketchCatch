@@ -737,12 +737,14 @@ function parseTerraformBlocks(sourceFileName: string, terraformCode: string): Pa
           continue;
         }
 
-        diagnostics.push({
-          severity: "warning",
-          code: "terraform.sync.unsupported_block",
-          line: index + 1,
-          message: `${topLevelBlockType} block은 Diagram으로 동기화하지 않고 Terraform 원문으로 보존합니다.`
-        });
+        if (topLevelBlockType !== "output") {
+          diagnostics.push({
+            severity: "warning",
+            code: "terraform.sync.unsupported_block",
+            line: index + 1,
+            message: `${topLevelBlockType} block은 Diagram으로 동기화하지 않고 Terraform 원문으로 보존합니다.`
+          });
+        }
         ignoredConfigurationBlockCount += 1;
         index = bodyResult.endIndex;
         continue;

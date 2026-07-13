@@ -1691,6 +1691,10 @@ function getReadableLayoutSlot(node: DiagramNode, parentNode?: DiagramNode): Rea
     return getRegionReadableLayoutSlot(resourceType, resourceName);
   }
 
+  if (parentNode?.kind === "design" && /managed services|control plane/iu.test(parentNode.label)) {
+    return getManagedServicesReadableLayoutSlot(resourceType, resourceName);
+  }
+
   if (resourceType === "aws_iam_role" || resourceType === "aws_iam_instance_profile") {
     return { column: 2, row: 0 };
   }
@@ -1805,7 +1809,54 @@ function getReadableLayoutSlot(node: DiagramNode, parentNode?: DiagramNode): Rea
     return { column: 1, row: 3 };
   }
 
+  if (resourceType === "aws_internet_gateway") {
+    return { column: 0, row: 0 };
+  }
+
+  if (resourceType === "aws_eip") {
+    return { column: 1, row: 0 };
+  }
+
+  if (resourceType === "aws_nat_gateway") {
+    return { column: 2, row: 0 };
+  }
+
+  if (resourceType === "aws_route_table") {
+    return /private/u.test(resourceName)
+      ? { column: 1, row: 1 }
+      : { column: 1, row: 0 };
+  }
+
+  if (resourceType === "aws_route_table_association") {
+    const column = /(^|[_\s-])b([_\s-]|$)/u.test(resourceName) ? 4 : 3;
+    return /private/u.test(resourceName)
+      ? { column, row: 1 }
+      : { column, row: 0 };
+  }
+
   return { column: 3, row: 2 };
+}
+
+function getManagedServicesReadableLayoutSlot(
+  resourceType: string,
+  resourceName: string
+): ReadableLayoutSlot {
+  if (resourceType === "aws_cloudfront_distribution") return { column: 0, row: 1 };
+  if (resourceType === "aws_s3_bucket") return { column: 1, row: 1 };
+  if (resourceType === "aws_ecr_repository") return { column: 2, row: 1 };
+  if (resourceType === "aws_ecs_task_definition") return { column: 3, row: 1 };
+  if (resourceType === "aws_ecs_cluster") return { column: 4, row: 1 };
+  if (resourceType === "aws_ecs_service") return { column: 5, row: 1 };
+  if (resourceType === "aws_cloudwatch_log_group") return { column: 6, row: 1 };
+  if (resourceType === "aws_iam_role_policy_attachment") return { column: 4, row: 0 };
+
+  if (resourceType === "aws_iam_role") {
+    return /(^|[_\s-])task([_\s-]|$)/u.test(resourceName)
+      ? { column: 3, row: 0 }
+      : { column: 2, row: 0 };
+  }
+
+  return { column: 5, row: 0 };
 }
 
 function getRegionReadableLayoutSlot(resourceType: string, resourceName: string): ReadableLayoutSlot {

@@ -220,6 +220,24 @@ test("repository evidence strict mode keeps the Fargate diagram minimal and evid
   const taskDefinition = response.architectureJson.nodes.find(
     (node) => node.type === "ECS_TASK_DEFINITION"
   );
+  const loadBalancer = response.architectureJson.nodes.find(
+    (node) => node.type === "LOAD_BALANCER"
+  );
+  const albSecurityGroup = response.architectureJson.nodes.find(
+    (node) => node.config.templateResourceId === "alb-security-group"
+  );
+  const taskSecurityGroup = response.architectureJson.nodes.find(
+    (node) => node.config.templateResourceId === "task-security-group"
+  );
+  const publicSubnets = response.architectureJson.nodes.filter(
+    (node) => node.type === "SUBNET" && node.config.mapPublicIpOnLaunch === true
+  );
+  const privateAppSubnets = response.architectureJson.nodes.filter(
+    (node) => node.type === "SUBNET" && node.config.mapPublicIpOnLaunch === false
+  );
+  const fargateRuntime = response.architectureJson.nodes.find(
+    (node) => node.id === "repository-fargate-runtime"
+  );
   const vpc = response.architectureJson.nodes.find((node) => node.type === "VPC");
   const managedServices = response.architectureJson.nodes.find(
     (node) => node.label === "AWS Managed Services"
@@ -227,15 +245,17 @@ test("repository evidence strict mode keeps the Fargate diagram minimal and evid
   const labels = new Set(response.architectureJson.nodes.map((node) => node.label));
   const edgeLabels = new Set(response.architectureJson.edges.map((edge) => edge.label));
 
-  assert.equal(countNodes("SUBNET"), 2);
+  assert.equal(countNodes("SUBNET"), 4);
+  assert.equal(publicSubnets.length, 2);
+  assert.equal(privateAppSubnets.length, 2);
   assert.equal(countNodes("S3"), 1);
   assert.equal(countNodes("CLOUDFRONT"), 1);
   assert.equal(countNodes("ECR_REPOSITORY"), 1);
   assert.equal(countNodes("CLOUDWATCH_LOG_GROUP"), 1);
   assert.equal(countNodes("ACM_CERTIFICATE"), 0);
-  assert.equal(countNodes("UNKNOWN"), 3);
-  assert.equal(countNodes("NAT_GATEWAY"), 0);
-  assert.equal(countNodes("ELASTIC_IP"), 0);
+  assert.equal(countNodes("UNKNOWN"), 4);
+  assert.equal(countNodes("NAT_GATEWAY"), 1);
+  assert.equal(countNodes("ELASTIC_IP"), 1);
   assert.equal(countNodes("APPLICATION_AUTO_SCALING_TARGET"), 0);
   assert.equal(countNodes("APPLICATION_AUTO_SCALING_POLICY"), 0);
   assert.equal(countNodes("CODESTAR_CONNECTION"), 0);
@@ -245,11 +265,24 @@ test("repository evidence strict mode keeps the Fargate diagram minimal and evid
   assert.equal(countNodes("ELASTICACHE_REDIS"), 0);
   assert.equal(countNodes("API_GATEWAY_WEBSOCKET_API"), 0);
   assert.equal(countNodes("COGNITO_USER_POOL"), 0);
-  assert.ok(
-    response.architectureJson.nodes
-      .filter((node) => node.type === "SUBNET")
-      .every((node) => node.config.mapPublicIpOnLaunch === true)
+  assert.deepEqual(
+    [...((loadBalancer?.config.subnets as string[] | undefined) ?? [])].sort(),
+    publicSubnets.map((node) => `aws_subnet.${node.id}.id`).sort()
   );
+  assert.deepEqual(
+    [...((service?.config.networkConfiguration as { subnets?: string[] } | undefined)?.subnets ?? [])].sort(),
+    privateAppSubnets.map((node) => `aws_subnet.${node.id}.id`).sort()
+  );
+  assert.equal(
+    (service?.config.networkConfiguration as { assignPublicIp?: boolean } | undefined)?.assignPublicIp,
+    false
+  );
+  assert.equal(albSecurityGroup?.config.parentAreaNodeId, publicSubnets[0]?.id);
+  assert.equal(loadBalancer?.config.parentAreaNodeId, albSecurityGroup?.id);
+  assert.equal(taskSecurityGroup?.config.parentAreaNodeId, privateAppSubnets[0]?.id);
+  assert.equal(fargateRuntime?.config.parentAreaNodeId, taskSecurityGroup?.id);
+  assert.match(loadBalancer?.label ?? "", /Public A\/B/u);
+  assert.match(fargateRuntime?.label ?? "", /Private App A\/B/u);
   assert.equal(service?.config.desiredCount, 1);
   assert.equal(
     (service?.config.loadBalancer as { containerPort?: number } | undefined)?.containerPort,
@@ -284,10 +317,33 @@ test("repository evidence strict mode keeps the Fargate diagram minimal and evid
     vpc !== undefined &&
     managedServices.positionY + Number(managedServices.config.diagramHeight) < vpc.positionY
   );
-  assert.ok(edgeLabels.has("API requests (TLS pending)"));
   assert.ok(edgeLabels.has("builds and pushes image"));
   assert.ok(edgeLabels.has("deploys task revision"));
   assert.ok(edgeLabels.has("health checks /health"));
+  assert.ok(edgeLabels.has("API -> ALB SG: TCP 80 (HTTPS 443 pending certificate)"));
+  assert.ok(edgeLabels.has("ALB SG -> Task SG: TCP 8080 only"));
+  assert.ok(edgeLabels.has("pulls API image from ECR"));
+  assert.ok(edgeLabels.has("writes ECS container logs via awslogs"));
+  assert.equal(
+    response.architectureJson.edges.filter(
+      (edge) =>
+        edge.sourceId === "repository-browser" &&
+        [loadBalancer?.id, albSecurityGroup?.id].includes(edge.targetId)
+    ).length,
+    1
+  );
+  assert.deepEqual(albSecurityGroup?.config.ingress, [{
+    fromPort: 80,
+    toPort: 80,
+    protocol: "tcp",
+    cidrBlocks: ["0.0.0.0/0"]
+  }]);
+  assert.deepEqual(taskSecurityGroup?.config.ingress, [{
+    fromPort: 8080,
+    toPort: 8080,
+    protocol: "tcp",
+    securityGroups: [`aws_security_group.${albSecurityGroup?.id}.id`]
+  }]);
   assert.ok(
     response.metadata.assumptions.some((assumption) =>
       assumption.includes("domain and certificate") && assumption.includes("HTTP")

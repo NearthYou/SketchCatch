@@ -267,7 +267,9 @@ export function assertDeploymentDestroyPreconditions(
     input.sourceStatus !== "SUCCESS" &&
     !(
       input.sourceStatus === "FAILED" &&
-      (input.sourceFailureStage === "apply" || input.sourceFailureStage === "destroy")
+      (input.sourceFailureStage === "plan" ||
+        input.sourceFailureStage === "apply" ||
+        input.sourceFailureStage === "destroy")
     )
   ) {
     throw new DeploymentConflictError("Deployment cannot be destroyed in this state");

@@ -829,7 +829,8 @@ test("omits AI semantic metadata that is not accepted by the Terraform provider"
             instanceType: "t3.micro",
             servicePurpose: "content_board",
             terraformResourceName: "app_server",
-            terraformResourceType: "aws_instance"
+            terraformResourceType: "aws_instance",
+            tier: "private_app"
           }
         }
       })
@@ -851,7 +852,7 @@ test("omits AI semantic metadata that is not accepted by the Terraform provider"
   assert.doesNotMatch(terraformCode, /resource "aws_s3_bucket_public_access_block"/);
   assert.doesNotMatch(
     terraformCode,
-    /bucket_purpose|public_access_block\s*=|service_purpose|origin_resource_id|application_purpose|terraform_resource_name|terraform_resource_type/
+    /bucket_purpose|public_access_block\s*=|service_purpose|origin_resource_id|application_purpose|terraform_resource_name|terraform_resource_type|tier\s*=/
   );
 });
 

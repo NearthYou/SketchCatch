@@ -27,6 +27,7 @@ import type {
   UploadDeploymentPlanArtifactInput,
   UploadedDeploymentPlanArtifact
 } from "./deployment-plan-artifact-storage.js";
+import { terraformMutationTimeoutMs } from "./terraform-runner.js";
 
 const projectId = "11111111-1111-4111-8111-111111111111";
 const architectureId = "22222222-2222-4222-8222-222222222222";
@@ -681,7 +682,8 @@ test("runDeploymentPlan saves a tfplan artifact, summary, warnings, logs, and cu
         runnerStages.push("init");
         return createRunnerResult("init");
       },
-      runTerraformPlan: async () => {
+      runTerraformPlan: async (_workdir, options) => {
+        assert.equal(options?.timeoutMs, terraformMutationTimeoutMs);
         runnerStages.push("plan");
         return createRunnerResult("plan", {
           stdout: "Plan: 1 to add, 0 to change, 0 to destroy.\n"

@@ -224,6 +224,21 @@ test("failed apply with partial state offers cleanup planning", () => {
   assert.equal(state.canRunDestroyPlan, true);
 });
 
+test("failed cleanup plan with state can be regenerated", () => {
+  const state = getDeploymentActionState(
+    createDeployment({
+      failureStage: "plan",
+      stateObjectKey: "deployments/deployment-id/state/terraform.tfstate",
+      status: "FAILED"
+    }),
+    "idle"
+  );
+
+  assert.equal(state.shouldShowApplyPlanButton, false);
+  assert.equal(state.shouldShowDestroyPlanButton, true);
+  assert.equal(state.canRunDestroyPlan, true);
+});
+
 test("auto-refreshes while Terraform work is running", () => {
   assert.equal(
     shouldAutoRefreshDeployment(

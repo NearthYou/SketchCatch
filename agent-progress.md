@@ -11,6 +11,16 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-13 - Clarify strict Repository Fargate network placement
+
+- Replaced public task placement with two private app subnets while keeping the internet-facing ALB in the two public subnets.
+- Added one cost-conscious NAT egress path so private tasks can pull ECR images and deliver CloudWatch logs without public IP assignment.
+- Nested the ALB under its public-subnet security group and the visible Fargate runtime under its private-subnet task security group.
+- Replaced ambiguous ECR and CloudWatch edges with explicit image-pull and `awslogs` labels, and labeled the SG-to-SG TCP 8080 rule.
+- Added strict validation and regression assertions for subnet selection, public IP assignment, NAT count, containment, security-group rules, and non-duplicated Browser ingress.
+- Verification: strict Repository regression and all 58 Architecture Draft tests passed; API typecheck passed; direct API-to-Board-to-Terraform conversion produced zero Terraform syntax diagnostics.
+- Risk: Chrome visual verification was blocked by the expired local SketchCatch login. No deployment, Terraform apply/destroy, migration, or cloud mutation was performed.
+
 ### 2026-07-13 - Select analyzed public repository branches
 
 - Removed the free-text branch field from the initial Repository URL start form.
@@ -117,39 +127,6 @@ Short English-only working log for the current agent context. Older records are 
 - Risk:
   - The actual runtime DB still needs `pnpm --filter @sketchcatch/api db:migrate` from a shell with `DATABASE_URL` configured.
 
-### 2026-07-13 - Refine actual cost notice and chart readability
-
-- Goal: Clarify fallback project cost allocation and make the actual usage chart readable at a glance.
-- Completed:
-  - Reworded the fallback allocation notice to explain that AWS project cost data may arrive later.
-  - Added readable date labels on the X axis and dollar labels on the Y axis.
-  - Limited long ranges to six date ticks and added a stable zero-cost `$0`, `$2`, `$4` scale.
-  - Reduced data points to a 2 px radius and aligned chart colors and captions with `DESIGN.md`.
-  - Prevented duplicate Y-axis labels for one-cent usage data.
-- Verification:
-  - `pnpm --dir apps/web exec tsx --test features/costs/cost-usage-charts.test.ts features/costs/cost-dashboard-client.test.ts features/costs/cost-usage-copy.test.ts` (19 passed)
-  - `pnpm test -- --output-logs=errors-only`
-  - `pnpm lint` passed with the pre-existing `live-observations` `setNow` warning.
-  - `pnpm typecheck`
-  - `pnpm build`
-  - `pnpm harness:check`
-  - `git diff --check`
-- Risk:
-  - Authenticated browser visual QA was not available; the supplied screenshot and source-level UI regression tests were used as the visual contract.
-
-### 2026-07-13 - Stabilize actual cost chart typography
-
-- Goal: Keep chart typography compact and professional at every dashboard width.
-- Completed:
-  - Recomputed the SVG coordinate width from its rendered container with `ResizeObserver` so labels no longer scale with the card.
-  - Fixed the chart height at 220 px and retained the `DESIGN.md` 13 px caption token at its true rendered size.
-  - Added a source-level regression for responsive width, fixed height, and typography token usage.
-- Verification:
-  - 16 focused chart tests and the full test suite passed.
-  - `pnpm lint` passed with the pre-existing `live-observations` `setNow` warning.
-  - `pnpm typecheck`, `pnpm build`, and `git diff --check` passed.
-- Review:
-  - Spec review found no issues; standards review finding about the caption token was fixed in `dcda929b`.
 ### 2026-07-13 - Repository-specific AI recommendation profiles
 
 - Reproduced that unrelated Docker repositories received the same ECS/EKS candidates and 87%/67% scores because container candidates and baseline confidence were fixed before the AI call.
@@ -213,7 +190,29 @@ Short English-only working log for the current agent context. Older records are 
 - AWS Console verification: CloudFront 0, ECS clusters 0, active task definitions 0, ECR repositories 0, ALBs 0, target groups 0, and CloudWatch log groups 0 after cleanup. Two older `sketchcatch-demo-vpc` leftovers were also removed; the verified connection role and AWS-managed service-linked roles were retained.
 - Verification: 76 focused API tests, `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check` passed. Lint retains the pre-existing unused `setNow` warning.
 
+### 2026-07-14 - Prove strict Repository Fargate deploy and cleanup
+
+- Goal: Correct the Repository-derived Fargate topology, prove Direct Deployment in AWS, and leave no deployment-owned infrastructure behind.
+- Completed:
+  - Placed the internet-facing ALB in two public subnets and the single Fargate task in two private app subnets with one explicit NAT egress path.
+  - Added explicit ALB SG ingress, Task SG TCP 8080, ECR image-pull, CloudWatch log, and CI/CD control-plane labels while keeping unsupported persistence and scale-out resources absent.
+  - Removed visual `tier` metadata from Terraform arguments before rendering.
+  - Raised Plan and Destroy Plan execution from the generic 60-second command limit to the 15-minute deployment mutation limit.
+  - Allowed state-backed cleanup to be replanned and destroyed after a cleanup Plan failure.
+  - Preserved generated Terraform `output` blocks through virtual-file routing and accepted them as non-Diagram configuration during validation and sync.
+- Live verification:
+  - Pre-deployment check returned zero findings.
+  - Plan completed with `29 to add`; Apply completed with 29 resources; ALB `/health` returned HTTP 200 and `ok`.
+  - An interrupted first cleanup removed 14 resources. The corrected cleanup Plan completed after 126.6 seconds with 15 remaining resources, and Destroy finished with `15 destroyed` and deployment status `DESTROYED`.
+  - AWS Console showed CloudFront 0, ECS clusters 0, ALBs 0, ECR repositories 0, CloudWatch log groups 0, the deployment S3 bucket at 0 matches, both IAM roles at 0 matches, and no matching VPC or EIP. The NAT Gateway remains only as an AWS `Deleted` history row.
+- Verification:
+  - 15 focused deployment Plan/Destroy API tests passed.
+  - 23 deployment action tests passed.
+  - 92 Terraform diagnostics/sync tests passed.
+  - 25 Terraform virtual-file and palette pipeline tests passed.
+- Risk:
+  - The successful live artifact predated the output-preservation fix. Regression tests prove the corrected artifact path; a future deployment will persist Live Observation outputs without requiring another AWS mutation in this session.
+
 ## Next Action
 
-- Regenerate the Repository Fargate draft once after pulling this change so its Terraform artifact includes the new Live Observation outputs.
-- Run migrations and credentialed browser acceptance only with an approved safe environment.
+- Merge the latest `origin/dev`, rerun the required repository checks, and recreate the Repository draft before the next deployment so its Terraform artifact contains outputs.

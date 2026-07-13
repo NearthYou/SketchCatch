@@ -1498,7 +1498,9 @@ function requireDeploymentCanStartDestroyPlan(deployment: DeploymentRecord): voi
 
   if (
     deployment.status === "FAILED" &&
-    (deployment.failureStage === "apply" || deployment.failureStage === "destroy")
+    (deployment.failureStage === "plan" ||
+      deployment.failureStage === "apply" ||
+      deployment.failureStage === "destroy")
   ) {
     return;
   }

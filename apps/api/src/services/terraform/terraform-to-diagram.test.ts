@@ -533,6 +533,23 @@ test("ignores generated Terraform configuration blocks while syncing resource fi
   assert.equal(result.diagramJson.nodes[0]?.parameters?.values.cidrBlock, "10.9.0.0/16");
 });
 
+test("ignores generated output blocks without sync warnings", () => {
+  const diagramJson = makeSingleVpcDiagramJson();
+  const result = syncTerraformToDiagramJson(
+    diagramJson,
+    `resource "aws_vpc" "main" {
+  cidr_block = "10.9.0.0/16"
+}
+
+output "vpc_id" {
+  value = aws_vpc.main.id
+}`
+  );
+
+  assert.deepEqual(result.diagnostics, []);
+  assert.deepEqual(result.proposals, []);
+});
+
 test("generated Template Terraform keeps presentation AZ parents unchanged when synced", () => {
   // Real Template round-trips must not turn visual AZ containers into deployable Resources.
   for (const templateId of [

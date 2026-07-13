@@ -53,7 +53,8 @@ const NON_RENDERABLE_TERRAFORM_CONFIG_KEYS = new Set([
   "terraformBlockType",
   "terraform_block_type",
   "templateResourceId",
-  "template_resource_id"
+  "template_resource_id",
+  "tier"
 ]);
 
 export function buildInfrastructureGraphFromDiagramJson(diagramJson: DiagramJson): InfrastructureGraph {
