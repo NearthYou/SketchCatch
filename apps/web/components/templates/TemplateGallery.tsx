@@ -5,6 +5,7 @@ import { ArrowRight, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import {
   filterBoardTemplates,
+  getBoardTemplateResourceCount,
   listBoardTemplateTags,
   type BoardTemplate,
   type BoardTemplateSort
@@ -55,7 +56,9 @@ export function TemplateGallery({
           <select onChange={(event) => setTag(event.currentTarget.value)} value={tag}>
             <option value="all">전체</option>
             {tags.map((templateTag) => (
-              <option key={templateTag} value={templateTag}>{templateTag}</option>
+              <option key={templateTag} value={templateTag}>
+                {templateTag}
+              </option>
             ))}
           </select>
         </label>
@@ -92,16 +95,25 @@ export function TemplateGallery({
                       <p>{template.description}</p>
                     </div>
                     <dl>
-                      <div><dt>Resource</dt><dd>{template.diagramJson.nodes.length}</dd></div>
-                      <div><dt>관계</dt><dd>{template.diagramJson.edges.length}</dd></div>
+                      <div>
+                        <dt>Resource</dt>
+                        <dd>{getBoardTemplateResourceCount(template)}</dd>
+                      </div>
+                      <div>
+                        <dt>관계</dt>
+                        <dd>{template.diagramJson.edges.length}</dd>
+                      </div>
                     </dl>
                   </div>
                   <div className={styles.tags}>
-                    {template.tags.map((templateTag) => <span key={templateTag}>{templateTag}</span>)}
+                    {template.tags.map((templateTag) => (
+                      <span key={templateTag}>{templateTag}</span>
+                    ))}
                   </div>
                   {actionHref ? (
                     <Link className={styles.action} href={actionHref(template)}>
-                      {actionLabel}<ArrowRight aria-hidden="true" size={15} />
+                      {actionLabel}
+                      <ArrowRight aria-hidden="true" size={15} />
                     </Link>
                   ) : (
                     <button
@@ -148,39 +160,43 @@ function TemplateDiagramPreview({ template }: { readonly template: BoardTemplate
             />
           );
         })}
-        {model.nodes.filter((node) => node.isArea).map((node) => (
-          <rect
-            className={styles.previewAreaFrame}
-            height={node.height}
-            key={node.id}
-            width={node.width}
-            x={node.x}
-            y={node.y}
-          />
-        ))}
-        {model.nodes.filter((node) => !node.isArea).map((node) => (
-          <g className={styles.previewResource} key={node.id}>
+        {model.nodes
+          .filter((node) => node.isArea)
+          .map((node) => (
             <rect
-              className={styles.previewResourceTile}
+              className={styles.previewAreaFrame}
               height={node.height}
-              rx="1.5"
+              key={node.id}
               width={node.width}
               x={node.x}
               y={node.y}
             />
-            {node.iconUrl ? (
-              <image
-                className={styles.previewResourceIcon}
-                height={node.height - 2}
-                href={node.iconUrl}
-                preserveAspectRatio="xMidYMid meet"
-                width={node.width - 2}
-                x={node.x + 1}
-                y={node.y + 1}
+          ))}
+        {model.nodes
+          .filter((node) => !node.isArea)
+          .map((node) => (
+            <g className={styles.previewResource} key={node.id}>
+              <rect
+                className={styles.previewResourceTile}
+                height={node.height}
+                rx="1.5"
+                width={node.width}
+                x={node.x}
+                y={node.y}
               />
-            ) : null}
-          </g>
-        ))}
+              {node.iconUrl ? (
+                <image
+                  className={styles.previewResourceIcon}
+                  height={node.height - 2}
+                  href={node.iconUrl}
+                  preserveAspectRatio="xMidYMid meet"
+                  width={node.width - 2}
+                  x={node.x + 1}
+                  y={node.y + 1}
+                />
+              ) : null}
+            </g>
+          ))}
       </svg>
       {model.omittedNodeCount > 0 ? (
         <span

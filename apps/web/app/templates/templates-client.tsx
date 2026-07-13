@@ -8,7 +8,10 @@ import {
   type OwnedTemplate
 } from "../../components/dashboard/dashboard-data";
 import { DashboardIcon } from "../../components/dashboard/dashboard-icons";
-import { listBoardTemplates } from "../../features/resource-settings/template-library";
+import {
+  getBoardTemplateResourceCount,
+  listBoardTemplates
+} from "../../features/resource-settings/template-library";
 
 type TemplateFormState = {
   readonly title: string;
@@ -143,7 +146,7 @@ export function TemplatesClient() {
                   <span>{template.tags.join(" · ")}</span>
                   <h3>{template.title}</h3>
                 </div>
-                <strong>{template.diagramJson.nodes.length}개 리소스</strong>
+                <strong>{getBoardTemplateResourceCount(template)}개 리소스</strong>
               </div>
               <p>{template.description}</p>
               <div className="dashboardChipRow">
@@ -245,11 +248,19 @@ export function TemplatesClient() {
                   <p>{template.description}</p>
                 </div>
                 <div className="templateRowActions">
-                  <button className="dashboardSecondaryButton" onClick={() => startEditing(template)} type="button">
+                  <button
+                    className="dashboardSecondaryButton"
+                    onClick={() => startEditing(template)}
+                    type="button"
+                  >
                     <DashboardIcon name="edit" />
                     <span>수정</span>
                   </button>
-                  <button className="dashboardDangerButton" onClick={() => deleteTemplate(template.id)} type="button">
+                  <button
+                    className="dashboardDangerButton"
+                    onClick={() => deleteTemplate(template.id)}
+                    type="button"
+                  >
                     <DashboardIcon name="trash" />
                     <span>삭제</span>
                   </button>
