@@ -156,7 +156,19 @@ Short English-only working log for the current agent context. Older records are 
 - Bumped the public Repository analysis cache namespace to invalidate stale recommendations.
 - Verified real API results: `Jungle_DB_API_W8` receives ECS/EKS recommendations based on local CSV persistence, while `Jungle_AI_Board` detects FastAPI, NestJS, React/Vite and receives three-tier, ECS, and EKS candidates with distinct scores and reasons.
 
+### 2026-07-13 - Template-first Amazon Q Repository diagrams
+
+- Replaced deterministic public Repository board creation with the real `/ai/architecture-draft` Amazon Q path.
+- Kept the selected Template as the fixed core, merged only compatible answer-driven resources, and made conflicting runtime preferences advisory.
+- Added repository-inferred Architecture Draft context without inventing unsupported upload, realtime, or certificate requirements.
+- Reflowed merged root resources into topology lanes while preserving resource identity, Terraform type, parameters, and edges.
+- Flattened Template Terraform values into resource config and resolved all `@ref` and `@address` placeholders to final Terraform addresses.
+- Removed incompatible CodeDeploy Server resources from non-EC2 Templates.
+- Added semantic Template merging for equivalent public network and ECS role resources while preserving distinct private DB, runtime, and CI/CD resources.
+- Added CodeBuild and CodePipeline service roles and stable Terraform names for the CI/CD dependency chain.
+- Live verification for `chaekang/Jungle_DB_API_W8`: relational/API/direct-host answers produced an Amazon Q ECS Fargate draft with 49 Board resources and RDS, no EC2, no upload resources, no CodeDeploy Server resources, no unresolved Template placeholders, and zero dangling references across 83 Terraform references. The no-database/managed variant kept ECS and omitted RDS.
+- Verification: 4 focused API regressions, 41 focused Web regressions, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check` passed. Lint retains the pre-existing unused `setNow` warning in the Live Observation store contract.
+
 ## Next Action
 
-- Decide whether public Repository board creation should remain AI-assisted Template generation or be changed to full Architecture Draft AI generation after stabilizing `/ai/architecture-draft` provider/runtime requirements.
-- Confirm the responsive chart visually with authenticated actual-usage data when browser automation is available.
+- Review and commit the verified Template-first Repository Architecture Draft changes.

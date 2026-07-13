@@ -10,7 +10,10 @@ test("Repository start screen does not expose a Template-unselected AI fallback"
   const source = readFileSync(join(currentDir, "repository-start-client.tsx"), "utf8");
 
   assert.match(source, /createPublicRepositoryRecommendation/);
-  assert.match(source, /createPublicRepositoryDiagram/);
+  assert.match(source, /createPublicRepositoryArchitectureDraftRequest/);
+  assert.match(source, /createAiArchitectureDraft/);
+  assert.match(source, /getDiagramJsonForArchitectureDraft/);
+  assert.doesNotMatch(source, /createPublicRepositoryDiagram/);
   assert.doesNotMatch(source, /AI FALLBACK/);
   assert.doesNotMatch(source, /fallbackAdditionalRequirements/);
   assert.doesNotMatch(source, /generatePublicFallbackArchitectureDraft/);

@@ -16,6 +16,123 @@ const confirmedCreditPolicy = {
   billingMode: "aws_credit_only"
 } as const;
 
+test("fixed Template keeps its core resources and merges compatible answer-driven additions", () => {
+  const result = createArchitectureDraft({
+    prompt: [
+      "Generate an API backend on the selected ECS Fargate Template.",
+      "The selected Template is the highest-priority constraint.",
+      "Include a managed relational database such as RDS and connect the backend workload to it.",
+      "Do not include a public web frontend."
+    ].join("\n"),
+    templateId: "ecs-fargate-container-app"
+  });
+
+  assert.ok(
+    result.architectureJson.nodes.some((node) =>
+      node.id.startsWith("fixed-template-ecs-fargate-container-app-")
+      && node.type === "ECS_SERVICE"
+    )
+  );
+  assert.ok(result.architectureJson.nodes.some((node) => node.type === "RDS"));
+  assert.equal(
+    result.architectureJson.nodes.filter((node) => node.type === "ECS_SERVICE").length,
+    1
+  );
+  const fixedVpc = result.architectureJson.nodes.find((node) =>
+    node.id === "fixed-template-ecs-fargate-container-app-vpc"
+  );
+  const fixedService = result.architectureJson.nodes.find((node) =>
+    node.id === "fixed-template-ecs-fargate-container-app-service"
+  );
+  const fixedSubnet = result.architectureJson.nodes.find((node) =>
+    node.id === "fixed-template-ecs-fargate-container-app-subnet-a"
+  );
+  assert.equal(fixedVpc?.config.cidrBlock, "10.30.0.0/16");
+  assert.equal(fixedVpc?.config.values, undefined);
+  assert.equal(
+    fixedSubnet?.config.vpcId,
+    "aws_vpc.fixed-template-ecs-fargate-container-app-vpc.id"
+  );
+  assert.equal(fixedService?.config.launchType, "FARGATE");
+  assert.equal(fixedService?.config.desiredCount, 1);
+  assert.equal(fixedService?.config.values, undefined);
+  assert.equal(
+    fixedService?.config.cluster,
+    "aws_ecs_cluster.fixed-template-ecs-fargate-container-app-cluster.id"
+  );
+  assert.deepEqual(fixedService?.config.dependsOn, [
+    "aws_lb_listener.fixed-template-ecs-fargate-container-app-listener"
+  ]);
+  assert.ok(
+    result.architectureJson.edges.some((edge) => {
+      const source = result.architectureJson.nodes.find((node) => node.id === edge.sourceId);
+      const target = result.architectureJson.nodes.find((node) => node.id === edge.targetId);
+      return new Set([source?.type, target?.type]).has("ECS_SERVICE")
+        && new Set([source?.type, target?.type]).has("RDS");
+    })
+  );
+});
+
+test("fixed Template resolves data-source addresses with the Terraform data prefix", () => {
+  const result = createArchitectureDraft({
+    prompt: "Generate an API backend using the selected Template core.",
+    templateId: "three-tier-web-app"
+  });
+  const launchTemplate = result.architectureJson.nodes.find((node) =>
+    node.id === "fixed-template-three-tier-web-app-launch-template"
+  );
+
+  assert.equal(
+    launchTemplate?.config.imageId,
+    "data.aws_ami.fixed-template-three-tier-web-app-latest-ami.id"
+  );
+});
+
+test("fixed Template keeps CI/CD resource parameters aligned with merged Terraform names", async () => {
+  const provider = createFakeAmazonQProvider(createNormalizedRequirementPlan);
+  const response = await createAmazonQArchitectureDraftResponse({
+    prompt: [
+      "Generate a production-quality Practice Architecture for a source repository.",
+      "The selected Template is the highest-priority constraint.",
+      "Selected Template: ecs-fargate-container-app.",
+      "Required Components: preserve the selected ECS Fargate Template and add only compatible supporting resources.",
+      "Include a managed relational database such as RDS.",
+      "Include a Git/CI/CD handoff with CodeStar Connection, CodePipeline, CodeBuild, and an S3 artifact bucket.",
+      "Include the API backend scope and omit a public web frontend.",
+      "File upload: not required. Realtime transport: not required."
+    ].join("\n"),
+    templateId: "ecs-fargate-container-app"
+  }, {
+    provider,
+    creditPolicy: confirmedCreditPolicy
+  });
+  assert.ok(!("status" in response));
+  if ("status" in response) return;
+
+  const countNodes = (type: ArchitectureJson["nodes"][number]["type"]): number =>
+    response.architectureJson.nodes.filter((node) => node.type === type).length;
+  const terraformNames = new Set(
+    response.architectureJson.nodes
+      .map((node) => node.config.terraformResourceName)
+      .filter((name): name is string => typeof name === "string")
+  );
+
+  assert.ok(terraformNames.has("codebuild_service_role"));
+  assert.ok(terraformNames.has("codepipeline_service_role"));
+  assert.ok(terraformNames.has("codepipeline_artifacts"));
+  assert.ok(terraformNames.has("github"));
+  assert.ok(terraformNames.has("build"));
+  assert.equal(countNodes("INTERNET_GATEWAY"), 1);
+  assert.equal(countNodes("SUBNET"), 6);
+  assert.equal(countNodes("ROUTE_TABLE"), 3);
+  assert.equal(countNodes("ROUTE_TABLE_ASSOCIATION"), 6);
+  assert.equal(countNodes("SECURITY_GROUP"), 3);
+  assert.equal(countNodes("IAM_ROLE"), 4);
+  assert.ok(!response.architectureJson.nodes.some((node) => node.id === "public-subnet-a"));
+  assert.ok(!response.architectureJson.nodes.some((node) => node.id === "ecs-execution-role"));
+  assert.doesNotMatch(JSON.stringify(response.architectureJson), /aws_vpc\.vpc_main\./u);
+});
+
 test("createAmazonQArchitectureDraftResponse sends the web deployment answer path to Amazon Q", async () => {
   let callCount = 0;
   const provider = createFakeAmazonQProvider((request) => {
@@ -34,6 +151,44 @@ test("createAmazonQArchitectureDraftResponse sends the web deployment answer pat
   );
 
   assert.ok(callCount > 0);
+});
+
+test("selected Repository Template and follow-up answers reach Amazon Q without generic clarification", async () => {
+  let callCount = 0;
+  let requestedPayload: unknown;
+  const provider = createFakeAmazonQProvider((request) => {
+    callCount += 1;
+    requestedPayload = request.payload;
+    return createNormalizedRequirementPlan(request);
+  });
+
+  const response = await createAmazonQArchitectureDraftResponse(
+    {
+      prompt: [
+        "Generate a production-quality Practice Architecture for a source repository.",
+        "The selected Template is the highest-priority constraint.",
+        "Selected Template: ecs-fargate-container-app.",
+        "Required Components: preserve the selected ECS Fargate Template and add only compatible supporting resources.",
+        "Include a managed relational database such as RDS.",
+        "Include the API backend scope and omit a public web frontend.",
+        "The user prefers direct host operations, but preserve the selected Template core."
+      ].join("\n"),
+      templateId: "ecs-fargate-container-app"
+    },
+    {
+      provider,
+      creditPolicy: confirmedCreditPolicy
+    }
+  );
+
+  assert.equal(callCount, 1);
+  assert.ok(!("status" in response));
+  const payload = requestedPayload as {
+    fixedTemplateSelection?: { id?: string };
+    prompt?: string;
+  };
+  assert.equal(payload.fixedTemplateSelection?.id, "ecs-fargate-container-app");
+  assert.match(payload.prompt ?? "", /relational database/i);
 });
 
 test("createAmazonQArchitectureDraftResponse asks the next required website question before calling Amazon Q", async () => {

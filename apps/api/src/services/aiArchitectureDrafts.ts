@@ -301,9 +301,12 @@ export async function createAmazonQArchitectureDraftResponse(
     prompt: request.prompt,
     provider: options.requirementNormalizerProvider
   });
-  const normalizedRequirement = mergeArchitectureIntentPlans(
-    providerNormalizedRequirement,
-    createDeterministicArchitectureIntentPlan(request.prompt)
+  const normalizedRequirement = applyFixedTemplatePriorityToRequirementPlan(
+    mergeArchitectureIntentPlans(
+      providerNormalizedRequirement,
+      createDeterministicArchitectureIntentPlan(request.prompt)
+    ),
+    request.templateId
   );
   const architectureBrief = createAmazonQArchitectureBrief(request.prompt);
   const fixedTemplateSelection = createFixedTemplateSelection(request.templateId);
@@ -1618,7 +1621,111 @@ function createFixedTemplateSelectionPrompt(selection: FixedTemplateSelection | 
   ].join("\n");
 }
 
-// Repository Analysis Template은 초안 자체로 고정하고 추가 요구는 이후 Patch 흐름에서 보완합니다.
+// 선택 Template의 핵심 리소스를 유지하면서 AI가 답변에 맞춰 만든 호환 리소스와 연결을 보강합니다.
+function applyFixedTemplatePriorityToRequirementPlan(
+  plan: ArchitectureIntentPlan | null,
+  templateId: TemplateId | undefined
+): ArchitectureIntentPlan | null {
+  if (plan === null || templateId === undefined) {
+    return plan;
+  }
+
+  const allowedPatternIds: Readonly<Record<TemplateId, ReadonlySet<string>>> = {
+    "ecs-fargate-container-app": new Set([
+      "ecs-fargate",
+      "multi-az-rds",
+      "spa-cloudfront-s3"
+    ]),
+    "eks-container-app": new Set([
+      "multi-az-rds",
+      "spa-cloudfront-s3"
+    ]),
+    "full-serverless-web-app": new Set([
+      "serverless-api",
+      "multi-az-rds",
+      "spa-cloudfront-s3"
+    ]),
+    "minimal-serverless-api": new Set([
+      "serverless-api",
+      "multi-az-rds"
+    ]),
+    "static-web-hosting": new Set(["spa-cloudfront-s3"]),
+    "three-tier-web-app": new Set([
+      "alb-asg-ec2",
+      "github-cicd-codedeploy",
+      "multi-az-rds",
+      "spa-cloudfront-s3"
+    ])
+  };
+  const fixedCompute: Readonly<Record<TemplateId, string | undefined>> = {
+    "ecs-fargate-container-app": "ECS_FARGATE",
+    "eks-container-app": "EKS_CLUSTER",
+    "full-serverless-web-app": "LAMBDA",
+    "minimal-serverless-api": "LAMBDA",
+    "static-web-hosting": undefined,
+    "three-tier-web-app": "EC2"
+  };
+  const requiredResources = (plan.requiredResources ?? []).filter((resourceType) =>
+    SUPPORTED_RESOURCE_TYPE_SET.has(resourceType as ResourceType)
+      && isCompatibleTemplateAddition(templateId, resourceType as ResourceType)
+  );
+  const resourceQuantities = Object.fromEntries(
+    Object.entries(plan.resourceQuantities ?? {}).filter(([resourceType]) =>
+      SUPPORTED_RESOURCE_TYPE_SET.has(resourceType as ResourceType)
+        && isCompatibleTemplateAddition(templateId, resourceType as ResourceType)
+    )
+  );
+  const patternIds = (plan.patternIds ?? []).filter((patternId) =>
+    allowedPatternIds[templateId].has(patternId)
+  );
+  const templateForbidsEc2Runtime = templateId !== "three-tier-web-app";
+  const forbiddenCapabilities = mergeUniqueTextItems(
+    (plan.forbiddenCapabilities ?? []).filter((capability) => {
+      const normalizedCapability = capability.toLowerCase();
+
+      if (normalizedCapability === "load_balancer" && templateId === "ecs-fargate-container-app") {
+        return false;
+      }
+      if (normalizedCapability === "database" && templateId === "three-tier-web-app") {
+        return false;
+      }
+      if (normalizedCapability === "ec2_runtime" && templateId === "three-tier-web-app") {
+        return false;
+      }
+
+      return true;
+    }),
+    templateForbidsEc2Runtime ? ["ec2_runtime"] : []
+  );
+  const compute = fixedCompute[templateId];
+  const runtimeTopology = compute === undefined
+    ? undefined
+    : {
+        ...(plan.runtimeTopology ?? {}),
+        compute,
+        ...(templateId === "ecs-fargate-container-app" ? { trafficEntry: "LOAD_BALANCER" } : {}),
+        ...(compute === "EC2"
+          ? {}
+          : { computeCount: undefined, spreadAcrossPrivateSubnets: undefined })
+      };
+
+  return {
+    ...plan,
+    ...(patternIds.length === 0 ? { patternIds: undefined } : { patternIds }),
+    ...(requiredResources.length === 0 ? { requiredResources: undefined } : { requiredResources }),
+    ...(Object.keys(resourceQuantities).length === 0
+      ? { resourceQuantities: undefined }
+      : { resourceQuantities }),
+    ...(forbiddenCapabilities.length === 0
+      ? { forbiddenCapabilities: undefined }
+      : { forbiddenCapabilities }),
+    runtimeTopology,
+    amazonQBrief: mergeUniqueTextItems(plan.amazonQBrief, [
+      `The selected Template ${templateId} is authoritative. Treat conflicting runtime or operations answers as advisory assumptions instead of replacing its compute model.`
+    ])
+  };
+}
+
 function applyFixedTemplateSelection(
   draft: AiArchitectureDraftResult,
   templateId: TemplateId | undefined
@@ -1639,6 +1746,11 @@ function applyFixedTemplateSelection(
       );
     }
 
+    const resolvedValues = resolveFixedTemplateValue(resource.values, definition);
+    if (!isObjectRecord(resolvedValues)) {
+      throw new Error(`Template resource values must be an object: ${resource.id}`);
+    }
+
     return {
       id: `fixed-template-${definition.id}-${resource.id}`,
       type: resourceDefinition.resourceType,
@@ -1646,10 +1758,10 @@ function applyFixedTemplateSelection(
       positionX: resource.position.x,
       positionY: resource.position.y,
       config: {
+        ...resolvedValues,
         templateResourceId: resource.id,
         terraformBlockType: resource.terraformBlockType,
-        terraformResourceType: resource.terraformResourceType,
-        values: resource.values
+        terraformResourceType: resource.terraformResourceType
       }
     };
   });
@@ -1659,12 +1771,100 @@ function applyFixedTemplateSelection(
     targetId: `fixed-template-${definition.id}-${relationship.targetResourceId}`,
     label: relationship.label
   }));
+  const availableFixedNodeIdsByType = new Map<ResourceType, string[]>();
+  const mergedNodeIds = new Set(fixedNodes.map((node) => node.id));
+  const draftNodeIdMap = new Map<string, string>();
+  const additionalNodes: ArchitectureJson["nodes"] = [];
+
+  for (const node of fixedNodes) {
+    if (!TEMPLATE_CORE_DEDUPE_RESOURCE_TYPES.has(node.type)) {
+      continue;
+    }
+
+    const ids = availableFixedNodeIdsByType.get(node.type) ?? [];
+    ids.push(node.id);
+    availableFixedNodeIdsByType.set(node.type, ids);
+  }
+
+  for (const node of draft.architectureJson.nodes) {
+    const matchingFixedIds = availableFixedNodeIdsByType.get(node.type);
+    const matchingFixedId =
+      findSemanticFixedTemplateMergeTarget(templateId, node, fixedNodes) ??
+      matchingFixedIds?.shift();
+
+    if (matchingFixedId) {
+      draftNodeIdMap.set(node.id, matchingFixedId);
+      continue;
+    }
+
+    if (!isCompatibleTemplateAddition(templateId, node.type)) {
+      continue;
+    }
+
+    const mergedNodeId = createUniqueTemplateMergeId(node.id, mergedNodeIds);
+    mergedNodeIds.add(mergedNodeId);
+    draftNodeIdMap.set(node.id, mergedNodeId);
+    additionalNodes.push({ ...node, id: mergedNodeId });
+  }
+
+  const mergedEdgeIds = new Set(fixedEdges.map((edge) => edge.id));
+  const mergedEdgePairs = new Set(
+    fixedEdges.map((edge) => `${edge.sourceId}->${edge.targetId}`)
+  );
+  const remappedAdditionalNodes = additionalNodes.map((node) => ({
+    ...node,
+    config: remapMergedArchitectureReferences(
+      node.config,
+      draft.architectureJson.nodes,
+      draftNodeIdMap
+    )
+  }));
+  const additionalEdges: ArchitectureJson["edges"] = [];
+
+  for (const edge of draft.architectureJson.edges) {
+    const sourceId = draftNodeIdMap.get(edge.sourceId);
+    const targetId = draftNodeIdMap.get(edge.targetId);
+
+    if (!sourceId || !targetId || sourceId === targetId) continue;
+
+    const edgePair = `${sourceId}->${targetId}`;
+    if (mergedEdgePairs.has(edgePair)) continue;
+
+    const mergedEdgeId = createUniqueTemplateMergeId(edge.id, mergedEdgeIds);
+    mergedEdgeIds.add(mergedEdgeId);
+    mergedEdgePairs.add(edgePair);
+    additionalEdges.push({ ...edge, id: mergedEdgeId, sourceId, targetId });
+  }
+
+  const fixedWorkloadNode = findFixedTemplateWorkloadNode(templateId, fixedNodes);
+  if (fixedWorkloadNode) {
+    for (const dataNode of remappedAdditionalNodes.filter((node) => TEMPLATE_DATA_RESOURCE_TYPES.has(node.type))) {
+      const hasWorkloadDataEdge = [...fixedEdges, ...additionalEdges].some((edge) =>
+        (edge.sourceId === fixedWorkloadNode.id && edge.targetId === dataNode.id)
+        || (edge.sourceId === dataNode.id && edge.targetId === fixedWorkloadNode.id)
+      );
+      if (hasWorkloadDataEdge) continue;
+
+      const edgeId = createUniqueTemplateMergeId(
+        `fixed-template-${definition.id}-${fixedWorkloadNode.id}-${dataNode.id}`,
+        mergedEdgeIds
+      );
+      mergedEdgeIds.add(edgeId);
+      additionalEdges.push({
+        id: edgeId,
+        sourceId: fixedWorkloadNode.id,
+        targetId: dataNode.id,
+        label: "reads/writes"
+      });
+    }
+  }
 
   return {
     ...draft,
+    diagramJson: undefined,
     architectureJson: {
-      nodes: fixedNodes,
-      edges: fixedEdges
+      nodes: [...fixedNodes, ...remappedAdditionalNodes],
+      edges: [...fixedEdges, ...additionalEdges]
     },
     metadata: {
       ...draft.metadata,
@@ -1674,6 +1874,236 @@ function applyFixedTemplateSelection(
       ]
     }
   };
+}
+
+function resolveFixedTemplateValue(value: unknown, definition: TemplateDefinition): unknown {
+  if (typeof value === "string") {
+    const referenceMatch = /^@ref:([^.]+)\.(.+)$/u.exec(value);
+    const addressMatch = /^@address:(.+)$/u.exec(value);
+    const targetResourceId = referenceMatch?.[1] ?? addressMatch?.[1];
+
+    if (!targetResourceId) {
+      return value;
+    }
+
+    const targetResource = definition.resources.find((resource) => resource.id === targetResourceId);
+    if (!targetResource) {
+      throw new Error(`Template reference target is missing: ${targetResourceId}`);
+    }
+
+    const targetNodeId = `fixed-template-${definition.id}-${targetResource.id}`;
+    const address = `${targetResource.terraformBlockType === "data" ? "data." : ""}${targetResource.terraformResourceType}.${targetNodeId}`;
+    return referenceMatch ? `${address}.${referenceMatch[2]}` : address;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => resolveFixedTemplateValue(item, definition));
+  }
+
+  if (!isObjectRecord(value)) {
+    return value;
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).map(([key, entryValue]) => [
+      key,
+      resolveFixedTemplateValue(entryValue, definition)
+    ])
+  );
+}
+
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+const TEMPLATE_CORE_DEDUPE_RESOURCE_TYPES = new Set<ResourceType>([
+  "AMPLIFY_APP",
+  "API_GATEWAY_REST_API",
+  "CLOUDFRONT",
+  "EC2",
+  "ECS_CLUSTER",
+  "ECS_SERVICE",
+  "ECS_TASK_DEFINITION",
+  "EKS_CLUSTER",
+  "KUBERNETES_DEPLOYMENT",
+  "KUBERNETES_NAMESPACE",
+  "KUBERNETES_SERVICE",
+  "LAMBDA",
+  "LOAD_BALANCER",
+  "LOAD_BALANCER_LISTENER",
+  "LOAD_BALANCER_TARGET_GROUP",
+  "VPC"
+]);
+
+const ECS_FARGATE_TEMPLATE_SEMANTIC_MERGE_TARGETS: Readonly<Record<string, string>> = {
+  "public-subnet-a": "subnet-a",
+  "public-subnet-b": "subnet-b",
+  "internet-gateway": "internet-gateway",
+  "public-route-table": "route-table",
+  "public-route-association-a": "route-a",
+  "public-route-association-b": "route-b",
+  "alb-security-group": "alb-security-group",
+  "app-security-group": "task-security-group",
+  "ecs-execution-role": "execution-role",
+  "ecs-task-role": "task-role"
+};
+
+function findSemanticFixedTemplateMergeTarget(
+  templateId: TemplateId,
+  draftNode: ArchitectureJson["nodes"][number],
+  fixedNodes: readonly ArchitectureJson["nodes"][number][]
+): string | undefined {
+  if (templateId !== "ecs-fargate-container-app") {
+    return undefined;
+  }
+
+  const targetTemplateResourceId = ECS_FARGATE_TEMPLATE_SEMANTIC_MERGE_TARGETS[draftNode.id];
+  if (!targetTemplateResourceId) {
+    return undefined;
+  }
+
+  return fixedNodes.find(
+    (node) => node.config.templateResourceId === targetTemplateResourceId
+  )?.id;
+}
+
+function remapMergedArchitectureReferences(
+  value: unknown,
+  draftNodes: readonly ArchitectureJson["nodes"][number][],
+  draftNodeIdMap: ReadonlyMap<string, string>
+): ArchitectureJson["nodes"][number]["config"] {
+  const replacements = draftNodes.flatMap((draftNode) => {
+    const mergedNodeId = draftNodeIdMap.get(draftNode.id);
+    const terraformResourceType = resourceDefinitions.find(
+      (definition) => definition.resourceType === draftNode.type
+    )?.terraform.resourceType;
+
+    if (!mergedNodeId || !terraformResourceType || mergedNodeId === draftNode.id) {
+      return [];
+    }
+
+    const sourceNames = new Set([
+      draftNode.id,
+      draftNode.id.replaceAll("-", "_"),
+      typeof draftNode.config.terraformResourceName === "string"
+        ? draftNode.config.terraformResourceName
+        : undefined
+    ].filter((name): name is string => Boolean(name)));
+    const prefix = draftNode.config.terraformBlockType === "data" ? "data." : "";
+
+    return [...sourceNames].map((sourceName) => ({
+      from: `${prefix}${terraformResourceType}.${sourceName}`,
+      to: `${prefix}${terraformResourceType}.${mergedNodeId}`
+    }));
+  });
+  const remapValue = (entryValue: unknown): unknown => {
+    if (typeof entryValue === "string") {
+      let remappedValue = entryValue;
+      for (const replacement of replacements) {
+        remappedValue = remappedValue.replaceAll(replacement.from, replacement.to);
+      }
+      return remappedValue;
+    }
+
+    if (Array.isArray(entryValue)) {
+      return entryValue.map(remapValue);
+    }
+
+    if (!isObjectRecord(entryValue)) {
+      return entryValue;
+    }
+
+    return Object.fromEntries(
+      Object.entries(entryValue).map(([key, nestedValue]) => [key, remapValue(nestedValue)])
+    );
+  };
+  const remapped = remapValue(value);
+
+  return isObjectRecord(remapped) ? remapped : {};
+}
+
+function isCompatibleTemplateAddition(templateId: TemplateId, resourceType: ResourceType): boolean {
+  const incompatibleComputeTypes = new Set<ResourceType>([
+    "AMPLIFY_APP",
+    "AMI",
+    "API_GATEWAY_REST_API",
+    "AUTO_SCALING_GROUP",
+    "EC2",
+    "ECS_CLUSTER",
+    "ECS_SERVICE",
+    "ECS_TASK_DEFINITION",
+    "EKS_CLUSTER",
+    "KUBERNETES_DEPLOYMENT",
+    "KUBERNETES_NAMESPACE",
+    "KUBERNETES_SERVICE",
+    "LAMBDA",
+    "IAM_INSTANCE_PROFILE"
+  ]);
+  const allowedComputeTypes: Readonly<Record<TemplateId, ReadonlySet<ResourceType>>> = {
+    "ecs-fargate-container-app": new Set([
+      "ECS_CLUSTER",
+      "ECS_SERVICE",
+      "ECS_TASK_DEFINITION"
+    ]),
+    "eks-container-app": new Set([
+      "EKS_CLUSTER",
+      "KUBERNETES_DEPLOYMENT",
+      "KUBERNETES_NAMESPACE",
+      "KUBERNETES_SERVICE"
+    ]),
+    "full-serverless-web-app": new Set(["AMPLIFY_APP", "API_GATEWAY_REST_API", "LAMBDA"]),
+    "minimal-serverless-api": new Set(["API_GATEWAY_REST_API", "LAMBDA"]),
+    "static-web-hosting": new Set(),
+    "three-tier-web-app": new Set(["AMI", "AUTO_SCALING_GROUP", "EC2", "IAM_INSTANCE_PROFILE"])
+  };
+
+  if (templateId === "static-web-hosting" && ["DB_SUBNET_GROUP", "DYNAMODB_TABLE", "RDS"].includes(resourceType)) {
+    return false;
+  }
+
+  if (
+    templateId !== "three-tier-web-app"
+    && (resourceType === "CODEDEPLOY_APP" || resourceType === "CODEDEPLOY_DEPLOYMENT_GROUP")
+  ) {
+    return false;
+  }
+
+  return !incompatibleComputeTypes.has(resourceType) || allowedComputeTypes[templateId].has(resourceType);
+}
+
+const TEMPLATE_DATA_RESOURCE_TYPES = new Set<ResourceType>([
+  "DYNAMODB_TABLE",
+  "RDS",
+  "RDS_CLUSTER"
+]);
+
+function findFixedTemplateWorkloadNode(
+  templateId: TemplateId,
+  fixedNodes: ArchitectureJson["nodes"]
+): ArchitectureJson["nodes"][number] | undefined {
+  const workloadTypes: Readonly<Record<TemplateId, readonly ResourceType[]>> = {
+    "ecs-fargate-container-app": ["ECS_SERVICE", "ECS_TASK_DEFINITION"],
+    "eks-container-app": ["KUBERNETES_DEPLOYMENT", "KUBERNETES_SERVICE"],
+    "full-serverless-web-app": ["LAMBDA"],
+    "minimal-serverless-api": ["LAMBDA"],
+    "static-web-hosting": [],
+    "three-tier-web-app": ["EC2", "AUTO_SCALING_GROUP"]
+  };
+
+  for (const resourceType of workloadTypes[templateId]) {
+    const node = fixedNodes.find((candidate) => candidate.type === resourceType);
+    if (node) return node;
+  }
+
+  return undefined;
+}
+
+function createUniqueTemplateMergeId(baseId: string, occupiedIds: ReadonlySet<string>): string {
+  if (!occupiedIds.has(baseId)) return baseId;
+
+  let suffix = 2;
+  while (occupiedIds.has(`${baseId}-${suffix}`)) suffix += 1;
+  return `${baseId}-${suffix}`;
 }
 
 function createAmazonQArchitectureBrief(prompt: string): string {
@@ -2423,14 +2853,17 @@ function createAmazonQPlanDraftResult(
   providerMetadata: AiProviderMetadata
 ): AiArchitectureDraftResult {
   const providerPlanIsCanonical = (response.plan.patternIds?.length ?? 0) > 0;
-  const plan = normalizeArchitecturePlanTopologyInvariants(
-    reconcileCanonicalProviderPlan(
-      providerPlanIsCanonical
-        ? response.plan
-        : mergeArchitectureIntentPlans(response.plan, normalizedRequirement),
-      response.plan
+  const plan = applyFixedTemplatePriorityToRequirementPlan(
+    normalizeArchitecturePlanTopologyInvariants(
+      reconcileCanonicalProviderPlan(
+        providerPlanIsCanonical
+          ? response.plan
+          : mergeArchitectureIntentPlans(response.plan, normalizedRequirement),
+        response.plan
+      ),
+      request.prompt
     ),
-    request.prompt
+    request.templateId
   );
   const requestDraft = createArchitectureDraft(request);
   const draft = createArchitectureDraft({
@@ -2562,6 +2995,11 @@ function normalizeArchitecturePlanTopologyInvariants(
   const cloudFrontStaticDeliveryRequired = hasSpaStaticDelivery && requiresCloudFrontStaticDelivery(normalizedPrompt);
   const requiredResources = new Set(plan.requiredResources ?? []);
   const resourceQuantities = { ...(plan.resourceQuantities ?? {}) };
+  const hasCiCdHandoff =
+    patternIds.has("github-cicd-codedeploy") ||
+    requiredResources.has("CODEBUILD_PROJECT") ||
+    requiredResources.has("CODEPIPELINE") ||
+    requiredResources.has("CODESTAR_CONNECTION");
   const fargateServiceCount = usesFargatePattern ? resolveFargateServiceCount(normalizedPrompt) : 1;
 
   if (usesSelfManagedEc2) {
@@ -2734,7 +3172,10 @@ function normalizeArchitecturePlanTopologyInvariants(
       resourceQuantities.SECURITY_GROUP ?? 0,
       hasDatabase ? 3 : 2
     );
-    resourceQuantities.IAM_ROLE = Math.max(resourceQuantities.IAM_ROLE ?? 0, 2);
+    resourceQuantities.IAM_ROLE = Math.max(
+      resourceQuantities.IAM_ROLE ?? 0,
+      hasCiCdHandoff ? 4 : 2
+    );
     resourceQuantities.CLOUDWATCH_METRIC_ALARM = Math.max(
       resourceQuantities.CLOUDWATCH_METRIC_ALARM ?? 0,
       hasDatabase ? 2 : 1
@@ -4917,6 +5358,11 @@ function configureCanonicalPatternResources(
   prompt: string
 ): ArchitectureJson {
   const patternIds = new Set(plan?.patternIds ?? []);
+  const hasCiCdHandoff =
+    patternIds.has("github-cicd-codedeploy") ||
+    (plan?.requiredResources ?? []).some((resourceType) =>
+      ["CODEBUILD_PROJECT", "CODEPIPELINE", "CODESTAR_CONNECTION"].includes(resourceType)
+    );
   const hasEcsRuntime = architectureJson.nodes.some(
     (node) => node.type === "ECS_SERVICE" || node.type === "ECS_TASK_DEFINITION"
   );
@@ -5027,6 +5473,14 @@ function configureCanonicalPatternResources(
     Version: "2012-10-17",
     Statement: [{ Effect: "Allow", Principal: { Service: "ecs-tasks.amazonaws.com" }, Action: "sts:AssumeRole" }]
   });
+  const codeBuildTrustPolicy = JSON.stringify({
+    Version: "2012-10-17",
+    Statement: [{ Effect: "Allow", Principal: { Service: "codebuild.amazonaws.com" }, Action: "sts:AssumeRole" }]
+  });
+  const codePipelineTrustPolicy = JSON.stringify({
+    Version: "2012-10-17",
+    Statement: [{ Effect: "Allow", Principal: { Service: "codepipeline.amazonaws.com" }, Action: "sts:AssumeRole" }]
+  });
   const publicSubnetRefs = ["public-subnet-a", "public-subnet-b"].map((id) =>
     canonicalTerraformReference("aws_subnet", id)
   );
@@ -5054,7 +5508,19 @@ function configureCanonicalPatternResources(
     ["SECURITY_GROUP", securityGroupSpecs],
     ["IAM_ROLE", [
       canonicalNodeSpec("ecs-execution-role", "ECS Task Execution Role", 1180, 700, { assumeRolePolicy: roleTrustPolicy }),
-      canonicalNodeSpec("ecs-task-role", "ECS Task Role", 1380, 700, { assumeRolePolicy: roleTrustPolicy })
+      canonicalNodeSpec("ecs-task-role", "ECS Task Role", 1380, 700, { assumeRolePolicy: roleTrustPolicy }),
+      ...(hasCiCdHandoff
+        ? [
+            canonicalNodeSpec("codebuild-service-role", "CodeBuild Service Role", 1580, 700, {
+              terraformResourceName: "codebuild_service_role",
+              assumeRolePolicy: codeBuildTrustPolicy
+            }),
+            canonicalNodeSpec("codepipeline-service-role", "CodePipeline Service Role", 1780, 700, {
+              terraformResourceName: "codepipeline_service_role",
+              assumeRolePolicy: codePipelineTrustPolicy
+            })
+          ]
+        : [])
     ]],
     ["IAM_POLICY", [canonicalNodeSpec("ecs-task-policy", "ECS Task Policy", 1380, 840, {
       policy: JSON.stringify({
@@ -5240,7 +5706,46 @@ function configureCanonicalPatternResources(
     }
   });
 
-  return { nodes, edges: architectureJson.edges };
+  return {
+    nodes: applyCanonicalCiCdTerraformNames(nodes, hasCiCdHandoff),
+    edges: architectureJson.edges
+  };
+}
+
+function applyCanonicalCiCdTerraformNames(
+  nodes: readonly ArchitectureJson["nodes"][number][],
+  hasCiCdHandoff: boolean
+): ArchitectureJson["nodes"] {
+  if (!hasCiCdHandoff) {
+    return [...nodes];
+  }
+
+  const artifactBucket = [...nodes].reverse().find(
+    (node) => node.type === "S3" && node.config.bucketPurpose !== "static_website_origin"
+  );
+
+  return nodes.map((node) => {
+    const terraformResourceName = (() => {
+      switch (node.type) {
+        case "CODEBUILD_PROJECT":
+          return "build";
+        case "CODEPIPELINE":
+          return "pipeline";
+        case "CODESTAR_CONNECTION":
+          return "github";
+        case "S3":
+          return node.id === artifactBucket?.id ? "codepipeline_artifacts" : undefined;
+        case "VPC":
+          return "vpc_main";
+        default:
+          return undefined;
+      }
+    })();
+
+    return terraformResourceName === undefined
+      ? node
+      : { ...node, config: { ...node.config, terraformResourceName } };
+  });
 }
 
 function configureCanonicalServerlessApiResources(

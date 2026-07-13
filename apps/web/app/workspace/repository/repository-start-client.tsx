@@ -20,6 +20,7 @@ import {
   analyzePublicSourceRepository,
   analyzeSourceRepository,
   connectGitHubSourceRepository,
+  createAiArchitectureDraft,
   listGitHubInstalledRepositories,
   listSourceRepositories,
   recommendRepositoryTemplate,
@@ -31,13 +32,14 @@ import {
 } from "../../projects/[projectId]/settings/project-github-settings-state";
 import { buildBoardTemplateDiagram } from "../../../features/resource-settings/template-library";
 import {
-  createPublicRepositoryDiagram,
+  createPublicRepositoryArchitectureDraftRequest,
   createPublicRepositoryRecommendation,
   getPublicRepositoryDeploymentDefault,
   getPublicRepositoryTemplateDeploymentType,
   shouldAskPublicRepositoryDeploymentType,
   type PublicRepositoryTemplateId
 } from "../../../features/workspace/public-repository-recommendation";
+import { getDiagramJsonForArchitectureDraft } from "../../../features/workspace/workspace-ai-diagram-adapter";
 import { AiDraftBoardPreview } from "../ai/ai-draft-board-preview";
 import styles from "./repository-start.module.css";
 
@@ -217,19 +219,33 @@ export function RepositoryStartClient({
     const effectiveDeploymentType = shouldAskPublicRepositoryDeploymentType(publicAnalysis)
       ? deploymentType
       : getPublicRepositoryTemplateDeploymentType(templateId);
-    const diagram = createPublicRepositoryDiagram({
-      analysis: publicAnalysis,
-      answers,
-      deploymentType: effectiveDeploymentType,
-      projectName,
-      templateId,
-      usesCiCd
-    });
-
     setPublicAnalysisState("loading");
     setErrorMessage("");
 
     try {
+      const draft = await createAiArchitectureDraft(
+        createPublicRepositoryArchitectureDraftRequest({
+          analysis: publicAnalysis,
+          answers,
+          deploymentType: effectiveDeploymentType,
+          templateId,
+          usesCiCd
+        })
+      );
+
+      if ("status" in draft) {
+        setPublicAnalysisState("error");
+        setErrorMessage(`Amazon Q가 추가 확인을 요청했습니다: ${draft.question}`);
+        return;
+      }
+
+      if (draft.metadata.source !== "amazon_q") {
+        setPublicAnalysisState("error");
+        setErrorMessage("Amazon Q가 현재 다이어그램을 생성하지 못했습니다. AWS 인증과 Amazon Q 설정을 확인해주세요.");
+        return;
+      }
+
+      const diagram = getDiagramJsonForArchitectureDraft(draft);
       await saveProjectDraft({ diagramJson: diagram, projectId });
       setPublicAnalysisState("idle");
       router.push(
@@ -240,7 +256,7 @@ export function RepositoryStartClient({
       );
     } catch (error) {
       setPublicAnalysisState("error");
-      setErrorMessage(getApiErrorMessage(error, "저장소 보드를 생성하지 못했습니다."));
+      setErrorMessage(getApiErrorMessage(error, "Amazon Q로 저장소 다이어그램을 생성하지 못했습니다."));
     }
   }
 

@@ -1,12 +1,9 @@
 import type {
-  ArchitectureJson,
-  DiagramJson,
+  CreateArchitectureDraftRequest,
   RepositoryDeploymentType,
-  SourceRepositoryAnalysisResult,
-  ResourceType
+  SourceRepositoryAnalysisResult
 } from "@sketchcatch/types";
 import type { TemplateId } from "../../../../packages/types/src/template-definitions";
-import { convertArchitectureJsonToDiagramJson } from "./workspace-ai-diagram-adapter";
 
 export type PublicRepositoryTemplateId = TemplateId;
 
@@ -63,23 +60,161 @@ export function createPublicRepositoryRecommendation(input: {
   };
 }
 
-export function createPublicRepositoryDiagram(input: {
+export function createPublicRepositoryArchitectureDraftRequest(input: {
   readonly analysis: SourceRepositoryAnalysisResult;
   readonly answers: Record<string, string | boolean>;
   readonly deploymentType: RepositoryDeploymentType;
-  readonly projectName: string;
   readonly templateId: TemplateId;
   readonly usesCiCd: boolean;
-}): DiagramJson {
-  return convertArchitectureJsonToDiagramJson(
-    createPublicRepositoryArchitecture({
-      analysis: input.analysis,
-      answers: input.answers,
-      deploymentType: input.deploymentType,
-      templateId: input.templateId,
-      usesCiCd: input.usesCiCd
-    })
+}): CreateArchitectureDraftRequest {
+  const questions = createPublicRepositoryRecommendation({
+    analysis: input.analysis,
+    answers: input.answers,
+    deploymentType: input.deploymentType,
+    selectedTemplateId: input.templateId
+  }).questions;
+  const questionById = new Map(questions.map((question) => [question.id, question]));
+  const answerEntries = Object.entries(input.answers).sort(([left], [right]) => left.localeCompare(right));
+  const answerLines = answerEntries.map(([questionId, value]) => {
+    const question = questionById.get(questionId);
+    const optionLabel = question?.options?.find((option) => option.value === String(value))?.label;
+    const displayValue = createFollowUpAnswerDisplayValue(questionId, value, optionLabel);
+
+    return `- ${question?.prompt ?? questionId} [${questionId}]: ${displayValue}`;
+  });
+  const answerConstraints = answerEntries
+    .map(([questionId, value]) => createFollowUpAnswerConstraint(questionId, value))
+    .filter((constraint): constraint is string => constraint !== null);
+  const applicationUnitLines = (input.analysis.aiHandoff?.applicationUnits ?? []).map((unit) =>
+    `- ${unit.kind} at ${unit.rootPath || "."}; frameworks: ${unit.frameworks.join(", ") || "unknown"}`
   );
+  const evidenceFileLines = input.analysis.evidenceFiles
+    .filter((file) => file.found)
+    .map((file) => `- ${file.path}`);
+  const inferredRequirementLines = createInferredRepositoryRequirementLines(input);
+
+  return {
+    templateId: input.templateId,
+    prompt: [
+      "Generate a production-quality Practice Architecture for this source repository.",
+      "Priority rules:",
+      "1. The selected Template is the highest-priority constraint. Keep its core service and deployment model.",
+      "2. Apply every confirmed follow-up answer by adding, removing, or configuring supporting resources when compatible with the selected Template.",
+      "3. Use Repository Analysis evidence to refine runtime boundaries and resource connections without replacing the selected Template.",
+      "4. If a follow-up answer conflicts with the selected Template, preserve the Template and reflect the answer only where compatible; record the conflict as an assumption.",
+      `Selected Template: ${input.templateId} (${formatPublicRepositoryTemplate(input.templateId)}).`,
+      `Repository: ${input.analysis.repositoryUrl} at ${input.analysis.defaultBranch}.`,
+      `Deployment type: ${input.deploymentType}.`,
+      `Git/CI/CD handoff requested: ${input.usesCiCd ? "yes" : "no"}.`,
+      `Detected signals: ${input.analysis.detectedSignals.join(", ") || "none"}.`,
+      `Repository recommendation context: ${input.analysis.recommendationReason}`,
+      "Repository-inferred requirement profile:",
+      ...inferredRequirementLines,
+      "Confirmed follow-up answers:",
+      ...(answerLines.length > 0 ? answerLines : ["- none"]),
+      "Normalized answer constraints:",
+      ...(answerConstraints.length > 0 ? answerConstraints.map((constraint) => `- ${constraint}`) : ["- none"]),
+      "Detected application units:",
+      ...(applicationUnitLines.length > 0 ? applicationUnitLines : ["- none"]),
+      "Repository evidence files:",
+      ...(evidenceFileLines.length > 0 ? evidenceFileLines : ["- none"]),
+      "Required Components:",
+      `- Preserve every core resource and relationship from ${input.templateId}.`,
+      "- Add only the supporting resources required by the confirmed answers and Repository Analysis.",
+      "Architecture Flow:",
+      "- Keep the selected Template traffic and deployment flow, then connect answer-driven data or delivery resources to the appropriate workload.",
+      "Validation Checklist:",
+      "- The selected Template core remains visible and connected.",
+      "- Every confirmed follow-up answer is reflected or documented as a Template conflict assumption.",
+      "Generate a connected, readable diagram with only supported resource types. Avoid unrelated resources and duplicate nodes."
+    ].join("\n")
+  };
+}
+
+function createFollowUpAnswerDisplayValue(
+  questionId: string,
+  value: string | boolean,
+  optionLabel: string | undefined
+): string {
+  const normalizedQuestionId = questionId.replaceAll("_", "-");
+  const normalizedValue = typeof value === "string" ? value.replaceAll("_", "-") : value;
+
+  if (
+    normalizedQuestionId === "operations-preference"
+    && (normalizedValue === "self-managed-vm" || normalizedValue === "ec2")
+  ) {
+    return "Direct host operations preference (advisory only; selected Template remains authoritative)";
+  }
+
+  return optionLabel ?? (typeof value === "boolean" ? (value ? "Yes" : "No") : value);
+}
+
+function createInferredRepositoryRequirementLines(input: {
+  readonly analysis: SourceRepositoryAnalysisResult;
+  readonly answers: Record<string, string | boolean>;
+  readonly deploymentType: RepositoryDeploymentType;
+  readonly templateId: TemplateId;
+  readonly usesCiCd: boolean;
+}): string[] {
+  const normalizedAnswers = new Map(
+    Object.entries(input.answers).map(([questionId, value]) => [questionId.replaceAll("_", "-"), value])
+  );
+  const applicationScope = normalizedAnswers.get("application-scope");
+  const dataPersistence = normalizedAnswers.get("data-persistence");
+  const operationsPreference = normalizedAnswers.get("operations-preference");
+  const frameworks = [...new Set(
+    (input.analysis.aiHandoff?.applicationUnits ?? []).flatMap((unit) => unit.frameworks)
+  )];
+  const applicationType = applicationScope === "api"
+    ? "API server/backend service, not a public website frontend"
+    : applicationScope === "web"
+      ? "public web frontend"
+      : applicationScope === "web_and_api"
+        ? "dynamic web application with a public frontend and API backend"
+        : input.analysis.detectedSignals.includes("React")
+          ? "web application inferred from the detected frontend"
+          : "API server/backend service inferred from Repository Analysis";
+  const databaseRequirement = dataPersistence === "relational"
+    ? "managed relational database required"
+    : dataPersistence === "key_value"
+      ? "managed key-value or document database required"
+      : dataPersistence === "none"
+        ? "no persistent database required"
+        : input.analysis.detectedSignals.includes("Database")
+          ? "database tier inferred from repository evidence"
+          : "no database evidence; keep persistence minimal";
+  const frontendRequirement = applicationScope === "api"
+    ? "no public frontend"
+    : input.analysis.detectedSignals.includes("React")
+      ? "SPA frontend detected"
+      : "no frontend framework detected";
+  const backendRequirement = frameworks.length > 0
+    ? `backend/runtime frameworks: ${frameworks.join(", ")}`
+    : "API backend inferred from the selected application scope and container evidence";
+  const managementPreference = operationsPreference === "self_managed_vm"
+    ? "direct host operations preferred where compatible; selected Template remains authoritative"
+    : operationsPreference === "container"
+      ? "managed container runtime preferred"
+      : "managed services preferred where compatible";
+
+  return [
+    `- Application type: ${applicationType}.`,
+    "- Traffic: initial small-to-medium workload with horizontal scaling readiness.",
+    `- Database: ${databaseRequirement}.`,
+    `- Frontend: ${frontendRequirement}.`,
+    `- Backend: ${backendRequirement}.`,
+    "- Primary region: ap-northeast-2 (Seoul) for the initial draft.",
+    "- Budget: cost-conscious initial deployment without sacrificing the selected Template core.",
+    "- HTTPS: production preference; domain and certificate details are not available from Repository Analysis.",
+    "- File upload: not required; Repository Analysis found no supporting evidence.",
+    "- Realtime features: not required; Repository Analysis found no supporting evidence.",
+    `- Management preference: ${managementPreference}.`,
+    "- Performance target: normal API and page responses within 3 seconds.",
+    "- Initial deployment size: small repository; exact build artifact size is unknown.",
+    "- Traffic pattern: mostly steady with occasional bursts.",
+    "- Availability target: 99.9% with managed recovery where the Template supports it.",
+    `- Git/CI/CD: ${input.usesCiCd ? "include a deployment handoff path" : "not required in this draft"}.`
+  ];
 }
 
 export function formatPublicRepositoryTemplate(templateId: string): string {
@@ -342,124 +477,46 @@ function createCandidate(
   };
 }
 
-function createPublicRepositoryArchitecture(input: {
-  readonly analysis: SourceRepositoryAnalysisResult;
-  readonly answers: Record<string, string | boolean>;
-  readonly deploymentType: RepositoryDeploymentType;
-  readonly templateId: TemplateId;
-  readonly usesCiCd: boolean;
-}): ArchitectureJson {
-  const signals = new Set(input.analysis.detectedSignals);
-  const includeFrontend = signals.has("React") && input.answers.include_frontend !== false;
-  const includeDatabase = signals.has("Database") && input.answers.include_database !== false;
-  const includeNodeApi = signals.has("Node API") && input.answers.primary_runtime !== "python";
-  const includePythonApi = signals.has("Python API") && input.answers.primary_runtime !== "node";
-  const nodes: ArchitectureJson["nodes"] = [];
-  const edges: ArchitectureJson["edges"] = [];
+function createFollowUpAnswerConstraint(
+  questionId: string,
+  value: string | boolean
+): string | null {
+  const normalizedQuestionId = questionId.replaceAll("_", "-");
+  const normalizedValue = typeof value === "string" ? value.replaceAll("_", "-") : value;
 
-  const addNode = createNodeAdder(nodes);
-  const addEdge = createEdgeAdder(edges);
+  if (normalizedQuestionId === "data-persistence") {
+    if (normalizedValue === "none" || normalizedValue === false) return "Do not add a persistent data store.";
+    if (normalizedValue === "relational" || normalizedValue === true) {
+      return "Include a managed relational database such as RDS and connect the backend workload to it.";
+    }
+    if (normalizedValue === "key-value") return "Include a managed key-value or document database.";
+  }
 
-  if (input.templateId === "static-web-hosting") {
-    if (includeFrontend) {
-      addNode("frontend", "S3", "React 정적 사이트", 260, 180);
-      addNode("cdn", "CLOUDFRONT", "CloudFront", 520, 180);
-      addEdge("frontend-cdn", "cdn", "frontend", "origin");
-    }
-    if (includeNodeApi || includePythonApi) {
-      addNode("api", "LAMBDA", includePythonApi ? "Python API" : "Node API", 520, 360);
-      addEdge("cdn-api", "cdn", "api", "API 요청");
-    }
-  } else if (input.templateId === "full-serverless-web-app" || input.templateId === "minimal-serverless-api") {
-    if (includeFrontend && input.templateId === "full-serverless-web-app") {
-      addNode("frontend", "AMPLIFY_APP", "React 프론트엔드", 160, 180);
-    }
-    addNode("api", "API_GATEWAY_REST_API", "API Gateway", 420, 180);
-    if (includeNodeApi) addNode("node-api", "LAMBDA", "Node API", 680, 120);
-    if (includePythonApi) addNode("python-api", "LAMBDA", "Python API", 680, 260);
-    if (includeDatabase) addNode("table", "DYNAMODB_TABLE", "애플리케이션 데이터", 940, 180);
-    if (includeFrontend && input.templateId === "full-serverless-web-app") addEdge("frontend-api", "frontend", "api", "호출");
-    if (includeNodeApi) addEdge("api-node", "api", "node-api", "invoke");
-    if (includePythonApi) addEdge("api-python", "api", "python-api", "invoke");
-    if (includeDatabase) {
-      if (includeNodeApi) addEdge("node-data", "node-api", "table", "읽기/쓰기");
-      if (includePythonApi) addEdge("python-data", "python-api", "table", "읽기/쓰기");
-    }
-  } else if (input.templateId === "ecs-fargate-container-app") {
-    addNode("vpc", "VPC", "서비스 VPC", 360, 80);
-    addNode("alb", "LOAD_BALANCER", "애플리케이션 로드 밸런서", 180, 260);
-    addNode("cluster", "ECS_CLUSTER", "ECS 클러스터", 460, 260);
-    addNode("service", "ECS_SERVICE", "Fargate 서비스", 720, 260);
-    addNode("task", "ECS_TASK_DEFINITION", "앱 컨테이너 태스크", 980, 260);
-    addEdge("alb-service", "alb", "service", "트래픽");
-    addEdge("service-task", "service", "task", "실행");
-    if (includeFrontend) {
-      addNode("frontend", "S3", "React 정적 사이트", 180, 460);
-      addNode("cdn", "CLOUDFRONT", "CloudFront", 460, 460);
-      addEdge("cdn-frontend", "cdn", "frontend", "origin");
-      addEdge("cdn-alb", "cdn", "alb", "API 요청");
-    }
-    if (includeDatabase) {
-      addNode("db", "RDS", "RDS 데이터베이스", 980, 460);
-      addEdge("task-db", "task", "db", "읽기/쓰기");
-    }
-  } else if (input.templateId === "eks-container-app") {
-    addNode("vpc", "VPC", "서비스 VPC", 320, 80);
-    addNode("cluster", "EKS_CLUSTER", "EKS 클러스터", 360, 260);
-    addNode("namespace", "KUBERNETES_NAMESPACE", "앱 Namespace", 620, 220);
-    addNode("deployment", "KUBERNETES_DEPLOYMENT", "API Deployment", 860, 220);
-    addNode("service", "KUBERNETES_SERVICE", "Service", 860, 380);
-    addEdge("cluster-ns", "cluster", "namespace", "hosts");
-    addEdge("ns-deployment", "namespace", "deployment", "contains");
-    addEdge("deployment-service", "deployment", "service", "exposes");
-    if (includeDatabase) {
-      addNode("db", "RDS", "RDS 데이터베이스", 1120, 300);
-      addEdge("service-db", "service", "db", "읽기/쓰기");
-    }
-  } else {
-    addNode("vpc", "VPC", "서비스 VPC", 360, 80);
-    addNode("alb", "LOAD_BALANCER", "애플리케이션 로드 밸런서", 180, 260);
-    addNode("asg", "AUTO_SCALING_GROUP", "API Auto Scaling 그룹", 460, 260);
-    addNode("ec2", "EC2", createEc2Label(includeNodeApi, includePythonApi), 720, 260);
-    addEdge("alb-asg", "alb", "asg", "트래픽");
-    addEdge("asg-ec2", "asg", "ec2", "실행");
-    if (includeFrontend) {
-      addNode("frontend", "S3", "React 정적 사이트", 180, 460);
-      addNode("cdn", "CLOUDFRONT", "CloudFront", 460, 460);
-      addEdge("cdn-frontend", "cdn", "frontend", "origin");
-      addEdge("cdn-alb", "cdn", "alb", "API 요청");
-    }
-    if (includeDatabase) {
-      addNode("db", "RDS", "RDS 데이터베이스", 980, 260);
-      addEdge("ec2-db", "ec2", "db", "읽기/쓰기");
+  if (normalizedQuestionId === "application-scope") {
+    if (normalizedValue === "web") return "Include the public web frontend scope only.";
+    if (normalizedValue === "api") return "Include the API backend scope and omit a public web frontend.";
+    if (normalizedValue === "web-and-api") return "Include both a public web frontend and an API backend.";
+  }
+
+  if (normalizedQuestionId === "operations-preference") {
+    if (normalizedValue === "managed") return "Prefer managed services where compatible with the selected Template.";
+    if (normalizedValue === "container") return "Prefer a managed container runtime within the selected Template.";
+    if (normalizedValue === "self-managed-vm" || normalizedValue === "ec2") {
+      return "The user prefers direct host operations, but this is advisory: preserve the selected Template core and record incompatible operational preferences as an assumption.";
     }
   }
 
-  if (input.usesCiCd) {
-    addNode("pipeline", "CODEPIPELINE", "CI/CD 파이프라인", 180, 640);
-    const deployTarget = nodes.find((node) =>
-      ["ECS_SERVICE", "KUBERNETES_DEPLOYMENT", "AUTO_SCALING_GROUP", "LAMBDA", "AMPLIFY_APP"].includes(node.type)
-    );
-    if (deployTarget) addEdge("pipeline-deploy", "pipeline", deployTarget.id, "배포");
+  if (normalizedQuestionId === "include-database") {
+    return value === true ? "Include the database tier." : "Do not include a database tier.";
   }
 
-  return { edges, nodes };
-}
+  if (normalizedQuestionId === "include-frontend") {
+    return value === true ? "Include the frontend tier." : "Do not include the frontend tier.";
+  }
 
-function createEc2Label(includeNodeApi: boolean, includePythonApi: boolean): string {
-  if (includeNodeApi && includePythonApi) return "Node + Python API";
-  if (includePythonApi) return "Python API";
-  return "Node API";
-}
+  if (normalizedQuestionId === "primary-runtime" && typeof value === "string") {
+    return `Use ${value} as the primary application runtime.`;
+  }
 
-function createNodeAdder(nodes: ArchitectureJson["nodes"]) {
-  return (id: string, type: ResourceType, label: string, positionX: number, positionY: number): void => {
-    nodes.push({ config: {}, id, label, positionX, positionY, type });
-  };
-}
-
-function createEdgeAdder(edges: ArchitectureJson["edges"]) {
-  return (id: string, sourceId: string, targetId: string, label: string): void => {
-    edges.push({ id, label, sourceId, targetId });
-  };
+  return null;
 }

@@ -1491,6 +1491,89 @@ test("convertArchitectureJsonToDiagramJson arranges serverless resources into re
   assertNoEdgeLineOverlap(diagramJson);
 });
 
+test("convertArchitectureJsonToDiagramJson reflows Template additions without changing resource parameters", () => {
+  const architectureJson: ArchitectureJson = {
+    nodes: [
+      {
+        id: "template-vpc",
+        type: "VPC",
+        label: "Template VPC",
+        positionX: 300,
+        positionY: 80,
+        config: { cidrBlock: "10.30.0.0/16", templateResourceId: "vpc" }
+      },
+      {
+        id: "template-cluster",
+        type: "ECS_CLUSTER",
+        label: "Template ECS Cluster",
+        positionX: 500,
+        positionY: 220,
+        config: { name: "fargate-cluster", templateResourceId: "cluster" }
+      },
+      {
+        id: "template-load-balancer",
+        type: "LOAD_BALANCER",
+        label: "Template ALB",
+        positionX: 100,
+        positionY: 660,
+        config: { internal: false, templateResourceId: "load-balancer" }
+      },
+      {
+        id: "template-task",
+        type: "ECS_TASK_DEFINITION",
+        label: "Template Task",
+        positionX: 700,
+        positionY: 660,
+        config: { cpu: 256, memory: 512, templateResourceId: "task" }
+      },
+      {
+        id: "template-service",
+        type: "ECS_SERVICE",
+        label: "Template Service",
+        positionX: 900,
+        positionY: 660,
+        config: { desiredCount: 1, launchType: "FARGATE", templateResourceId: "service" }
+      },
+      {
+        id: "answer-database",
+        type: "RDS",
+        label: "Multi-AZ Application Database",
+        positionX: 730,
+        positionY: 1120,
+        config: { engine: "postgres", multiAz: true, publiclyAccessible: false }
+      }
+    ],
+    edges: [
+      { id: "cluster-service", sourceId: "template-cluster", targetId: "template-service", label: "runs" },
+      { id: "service-task", sourceId: "template-service", targetId: "template-task", label: "uses" },
+      { id: "service-database", sourceId: "template-service", targetId: "answer-database", label: "reads/writes" }
+    ]
+  };
+
+  const diagramJson = convertArchitectureJsonToDiagramJson(architectureJson);
+  const nodeById = new Map(diagramJson.nodes.map((node) => [node.id, node]));
+  const service = nodeById.get("template-service");
+  const task = nodeById.get("template-task");
+  const database = nodeById.get("answer-database");
+
+  assert.equal(diagramJson.nodes.length, architectureJson.nodes.length);
+  assert.equal(diagramJson.edges.length, architectureJson.edges.length);
+  assert.equal(service?.parameters?.resourceType, "aws_ecs_service");
+  assert.equal(service?.parameters?.values.desiredCount, 1);
+  assert.equal(service?.parameters?.values.launchType, "FARGATE");
+  assert.equal(service?.parameters?.values.templateResourceId, "service");
+  assert.equal(task?.parameters?.values.cpu, 256);
+  assert.equal(task?.parameters?.values.memory, 512);
+  assert.equal(database?.parameters?.resourceType, "aws_db_instance");
+  assert.equal(database?.parameters?.values.engine, "postgres");
+  assert.equal(database?.parameters?.values.multiAz, true);
+  assert.equal(database?.parameters?.values.publiclyAccessible, false);
+  assert.ok(task && service && database);
+  assert.ok(task.position.x < service.position.x);
+  assert.ok(service.position.x < database.position.x);
+  assertNoSiblingNodeOverlap(diagramJson);
+});
+
 test("convertArchitectureJsonToDiagramJson keeps mixed cloud area drafts compact and routable", () => {
   const architectureJson: ArchitectureJson = {
     nodes: [

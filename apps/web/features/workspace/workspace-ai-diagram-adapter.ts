@@ -1576,7 +1576,6 @@ type ReadableLayoutSlot = {
 
 function applyReadableTopologyLayout(nodes: readonly DiagramNode[]): DiagramNode[] {
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
-  const hasAreaNodes = nodes.some(isAreaDiagramNode);
   const nodesByParentId = createReadableLayoutNodesByParentId(nodes);
   const parentIds = [...nodesByParentId.keys()].sort(
     (leftParentId, rightParentId) =>
@@ -1585,10 +1584,6 @@ function applyReadableTopologyLayout(nodes: readonly DiagramNode[]): DiagramNode
 
   for (const parentId of parentIds) {
     const groupNodes = nodesByParentId.get(parentId) ?? [];
-
-    if (hasAreaNodes && parentId === ROOT_PARENT_AREA_ID) {
-      continue;
-    }
 
     if (groupNodes.length < READABLE_LAYOUT_MIN_GROUP_SIZE) {
       continue;
@@ -1695,6 +1690,30 @@ function getReadableLayoutSlot(node: DiagramNode, parentNode?: DiagramNode): Rea
     return { column: 3, row: 0 };
   }
 
+  if (resourceType === "aws_codestarconnections_connection") {
+    return { column: 0, row: 0 };
+  }
+
+  if (resourceType === "aws_codepipeline") {
+    return { column: 1, row: 0 };
+  }
+
+  if (resourceType === "aws_codebuild_project") {
+    return { column: 2, row: 0 };
+  }
+
+  if (resourceType === "aws_codedeploy_app" || resourceType === "aws_codedeploy_deployment_group") {
+    return { column: 3, row: 0 };
+  }
+
+  if (resourceType === "aws_ecr_repository") {
+    return { column: 1, row: 1 };
+  }
+
+  if (resourceType === "aws_ecs_cluster") {
+    return { column: 2, row: 1 };
+  }
+
   if (
     resourceType === "aws_cloudfront_distribution" ||
     resourceType === "aws_route53_record" ||
@@ -1733,17 +1752,31 @@ function getReadableLayoutSlot(node: DiagramNode, parentNode?: DiagramNode): Rea
     resourceType === "aws_lambda_function" ||
     resourceType === "aws_instance" ||
     resourceType === "aws_autoscaling_group" ||
-    resourceType === "aws_lb_target_group"
+    resourceType === "aws_lb_target_group" ||
+    resourceType === "aws_ecs_task_definition"
   ) {
     return { column: 2, row: 2 };
   }
 
+  if (resourceType === "aws_ecs_service") {
+    return { column: 3, row: 2 };
+  }
+
   if (
-    resourceType === "aws_s3_bucket" ||
-    resourceType === "aws_db_instance" ||
-    resourceType === "aws_db_subnet_group" ||
-    resourceType === "aws_ebs_volume"
+    resourceType === "aws_appautoscaling_target" ||
+    resourceType === "aws_appautoscaling_policy"
   ) {
+    return { column: 4, row: 2 };
+  }
+
+  if (
+    resourceType === "aws_db_instance" ||
+    resourceType === "aws_db_subnet_group"
+  ) {
+    return { column: 5, row: 2 };
+  }
+
+  if (resourceType === "aws_s3_bucket" || resourceType === "aws_ebs_volume") {
     return { column: 3, row: 2 };
   }
 
@@ -1752,7 +1785,7 @@ function getReadableLayoutSlot(node: DiagramNode, parentNode?: DiagramNode): Rea
   }
 
   if (resourceType === "aws_cloudwatch_metric_alarm") {
-    return { column: 3, row: 3 };
+    return { column: 4, row: 3 };
   }
 
   if (resourceType === "aws_security_group_rule") {
