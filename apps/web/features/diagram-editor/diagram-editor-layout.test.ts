@@ -628,6 +628,107 @@ test("diagram editor gives exact fixture zoom priority over initial fit-view", (
   );
 });
 
+test("source-exact entries consume a pending source viewport once and otherwise restore the saved viewport", () => {
+  const sourceViewportBlock = getSourceBlock(
+    diagramEditorSource,
+    "const applyRequestedInitialViewport = useCallback(",
+    "const handleMoveEnd = useCallback<OnMoveEnd>("
+  );
+  const consumePendingIndex = sourceViewportBlock.indexOf(
+    "shouldApplySourceViewportRef.current = false;"
+  );
+  const applyPendingIndex = sourceViewportBlock.indexOf(
+    "applyInitialSourceViewBoxViewport(visibleDiagram, frame)"
+  );
+
+  assert.match(
+    diagramEditorSource,
+    /import \{[\s\S]*applyInitialSourceViewBoxViewport,[\s\S]*getSourceViewBoxMinimumZoom,[\s\S]*\} from "\.\/board-viewport";/
+  );
+  assert.match(
+    diagramEditorSource,
+    /const shouldApplySourceViewportRef = useRef\(true\);/
+  );
+  assert.match(
+    diagramEditorSource,
+    /const wasSourceViewBoxViewportRef = useRef\(false\);/
+  );
+  assert.notEqual(consumePendingIndex, -1);
+  assert.notEqual(applyPendingIndex, -1);
+  assert.ok(consumePendingIndex < applyPendingIndex);
+  assert.match(sourceViewportBlock, /const viewport = nextDiagram\.viewport;/);
+  assert.match(
+    sourceViewportBlock,
+    /if \(previewDiagram !== null\) \{\s*setPreviewDiagramState\(nextDiagram\);\s*\} else \{\s*replaceDiagram\(nextDiagram\);\s*\}/
+  );
+  assert.match(
+    sourceViewportBlock,
+    /runViewportMoveWithoutPersistence\(\(\) =>\s*getFlowInstance\(\)\.setViewport\(viewport, \{ duration: 0 \}\)\s*\)/
+  );
+  assert.match(
+    sourceViewportBlock,
+    /const shouldRestoreLegacyViewport = wasSourceViewBoxViewportRef\.current;[\s\S]*?wasSourceViewBoxViewportRef\.current = false;[\s\S]*?if \(shouldRestoreLegacyViewport\) \{[\s\S]*?getFlowInstance\(\)\.setViewport\(visibleDiagram\.viewport, \{ duration: 0 \}\)/
+  );
+  assert.match(
+    sourceViewportBlock,
+    /wasSourceViewBoxViewportRef\.current = true;[\s\S]*?applyInitialSourceViewBoxViewport\(visibleDiagram, frame\)/
+  );
+  assert.doesNotMatch(sourceViewportBlock, /fitVisibleDiagram/);
+  assert.match(
+    sourceViewportBlock,
+    /initialSourceViewportFrameRef\.current = window\.requestAnimationFrame\(\(\) => \{[\s\S]*?applyRequestedInitialViewport\(\);/
+  );
+});
+
+test("source viewport requests are renewed by prop replacement, preview, and apply entry points", () => {
+  const setPreviewBlock = getSourceBlock(
+    diagramEditorSource,
+    'const setPreviewDiagram = useCallback<DiagramEditorPanelContext["setPreviewDiagram"]>(',
+    "const setDragPreviewNodesForState = useCallback("
+  );
+  const propReplacementBlock = getSourceBlock(
+    diagramEditorSource,
+    "useEffect(() => {\n    cancelSnapAnimation();",
+    "const pushHistory = useCallback("
+  );
+  const applyDiagramBlock = getSourceBlock(
+    diagramEditorSource,
+    'const applyDiagramJson = useCallback<DiagramEditorPanelContext["applyDiagramJson"]>(',
+    "// 템플릿 적용은"
+  );
+
+  assert.match(setPreviewBlock, /shouldApplySourceViewportRef\.current = true;/);
+  assert.match(propReplacementBlock, /shouldApplySourceViewportRef\.current = true;/);
+  assert.match(applyDiagramBlock, /setPreviewDiagram\(null\);/);
+});
+
+test("source-exact boards lower min zoom conditionally without changing the legacy zoom contract", () => {
+  assert.match(diagramEditorSource, /const \[boardMinimumZoom, setBoardMinimumZoom\] = useState\(0\.25\);/);
+  assert.match(
+    diagramEditorSource,
+    /getSourceViewBoxMinimumZoom\(presentation\.sourceViewBox, frame\)/
+  );
+  assert.match(diagramEditorSource, /minZoom=\{boardMinimumZoom\}/);
+  assert.match(diagramEditorSource, /maxZoom=\{2\}/);
+  assert.match(diagramEditorSource, /const normalizedInitialBoardZoom = parseBoardZoom\(initialBoardZoom\);/);
+  assert.match(
+    diagramEditorSource,
+    /const hasSourceViewBoxViewport =\s*visibleDiagram\.presentation\?\.geometryPolicy === "source-exact" &&\s*visibleDiagram\.presentation\.sourceViewBox !== undefined;/
+  );
+  assert.match(
+    diagramEditorSource,
+    /!shouldApplyInitialBoardZoomRef\.current \|\|[\s\S]*?hasSourceViewBoxViewport/
+  );
+  assert.match(
+    diagramEditorSource,
+    /!shouldAutoFitInitialDiagramRef\.current \|\|[\s\S]*?hasSourceViewBoxViewport/
+  );
+  assert.match(
+    diagramEditorSource,
+    /function refitCompactBoard\(\): void \{\s*if \(hasSourceViewBoxViewport \|\| window\.innerWidth > 1120\)/
+  );
+});
+
 test("diagram editor fits and centers visual footprints inside the unobscured board frame", () => {
   assert.match(
     diagramEditorSource,

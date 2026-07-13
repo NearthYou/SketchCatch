@@ -81,12 +81,14 @@ import {
 } from "./canvas-pointer-hit-test";
 import { isAwsDiagramConnectionAllowed } from "./aws-resource-connection-policy";
 import {
+  applyInitialSourceViewBoxViewport,
   getBoardZoomPresentationScale,
   getCenteredBoardViewport,
+  getSourceViewBoxMinimumZoom,
   getUnobscuredBoardViewportFrame,
   offsetBoardViewportToFrame,
-  rebaseBoardViewport,
-  parseBoardZoom
+  parseBoardZoom,
+  rebaseBoardViewport
 } from "./board-viewport";
 import type { BoardViewportFrame } from "./board-viewport";
 import { DiagramEdgeToolbar } from "./DiagramEdgeToolbar";
@@ -282,6 +284,7 @@ function DiagramEditorInner({
   const [isConnectionActive, setConnectionActive] = useState(false);
   const [interactionMode, setInteractionMode] = useState<"select" | "pan">("select");
   const [isFlowReady, setFlowReady] = useState(false);
+  const [boardMinimumZoom, setBoardMinimumZoom] = useState(0.25);
   const temporaryPanPreviousModeRef = useRef<"select" | "pan" | null>(null);
   const clipboardRef = useRef<DiagramNode[]>([]);
   const canvasPanelRef = useRef<HTMLDivElement | null>(null);
@@ -308,6 +311,9 @@ function DiagramEditorInner({
   const shouldApplyInitialBoardZoomRef = useRef(
     normalizedInitialBoardZoom !== undefined && (initialDiagram?.nodes.length ?? 0) > 0
   );
+  const shouldApplySourceViewportRef = useRef(true);
+  const wasSourceViewBoxViewportRef = useRef(false);
+  const initialSourceViewportFrameRef = useRef<number | null>(null);
   const initialAutoFitFrameRef = useRef<number | null>(null);
   const automaticViewportMoveRequestIdRef = useRef(0);
   const automaticViewportReleaseFrameRef = useRef<number | null>(null);
@@ -338,6 +344,9 @@ function DiagramEditorInner({
   const hasRightRail = rightPanel !== null;
   const isPreviewActive = previewDiagram !== null;
   const visibleDiagram = previewDiagram ?? diagram;
+  const hasSourceViewBoxViewport =
+    visibleDiagram.presentation?.geometryPolicy === "source-exact" &&
+    visibleDiagram.presentation.sourceViewBox !== undefined;
   const selectedEdge = isPreviewActive ? null : getSingleSelectedEdgeForToolbar(diagram.edges, selectedNodeIds, selectedEdgeIds);
   const hoveredSelectedAreaNode = hoveredAreaBlankNodeId && selectedNodeId === hoveredAreaBlankNodeId
     ? diagram.nodes.find((node) => node.id === hoveredAreaBlankNodeId) ?? null
@@ -374,6 +383,7 @@ function DiagramEditorInner({
 
   const setPreviewDiagram = useCallback<DiagramEditorPanelContext["setPreviewDiagram"]>(
     (nextPreviewDiagram, nextPreviewAnnotations = null) => {
+      shouldApplySourceViewportRef.current = true;
       setPreviewDiagramState(
         nextPreviewDiagram === null
           ? null
@@ -450,6 +460,7 @@ function DiagramEditorInner({
   useEffect(() => {
     cancelSnapAnimation();
     const nextDiagram = normalizeDiagramResourceNodeGeometry(cloneDiagram(initialDiagram ?? EMPTY_DIAGRAM));
+    shouldApplySourceViewportRef.current = true;
     replaceDiagram(nextDiagram, false);
     shouldAutoFitInitialDiagramRef.current =
       normalizedInitialBoardZoom === undefined && nextDiagram.nodes.length > 0;
@@ -2180,6 +2191,81 @@ function DiagramEditorInner({
     []
   );
 
+  const applyRequestedInitialViewport = useCallback(() => {
+    if (!isFlowReady || !shouldApplySourceViewportRef.current) {
+      return;
+    }
+
+    const presentation = visibleDiagram.presentation;
+    shouldApplySourceViewportRef.current = false;
+
+    if (
+      presentation?.geometryPolicy !== "source-exact" ||
+      presentation.sourceViewBox === undefined
+    ) {
+      const shouldRestoreLegacyViewport = wasSourceViewBoxViewportRef.current;
+      wasSourceViewBoxViewportRef.current = false;
+      setBoardMinimumZoom(0.25);
+
+      if (shouldRestoreLegacyViewport) {
+        runViewportMoveWithoutPersistence(() =>
+          getFlowInstance().setViewport(visibleDiagram.viewport, { duration: 0 })
+        );
+      }
+
+      return;
+    }
+
+    wasSourceViewBoxViewportRef.current = true;
+    const frame = getCurrentBoardViewportFrame() ?? { x: 0, y: 0, width: 1, height: 1 };
+    const nextDiagram = applyInitialSourceViewBoxViewport(visibleDiagram, frame);
+    const viewport = nextDiagram.viewport;
+
+    setBoardMinimumZoom(getSourceViewBoxMinimumZoom(presentation.sourceViewBox, frame));
+
+    if (nextDiagram !== visibleDiagram) {
+      if (previewDiagram !== null) {
+        setPreviewDiagramState(nextDiagram);
+      } else {
+        replaceDiagram(nextDiagram);
+      }
+    }
+
+    runViewportMoveWithoutPersistence(() =>
+      getFlowInstance().setViewport(viewport, { duration: 0 })
+    );
+  }, [
+    getCurrentBoardViewportFrame,
+    getFlowInstance,
+    isFlowReady,
+    previewDiagram,
+    replaceDiagram,
+    runViewportMoveWithoutPersistence,
+    visibleDiagram
+  ]);
+
+  useEffect(() => {
+    if (
+      !isFlowReady ||
+      !shouldApplySourceViewportRef.current ||
+      initialSourceViewportFrameRef.current !== null
+    ) {
+      return;
+    }
+
+    initialSourceViewportFrameRef.current = window.requestAnimationFrame(() => {
+      initialSourceViewportFrameRef.current = null;
+      applyRequestedInitialViewport();
+    });
+
+    return () => {
+      if (initialSourceViewportFrameRef.current !== null) {
+        window.cancelAnimationFrame(initialSourceViewportFrameRef.current);
+        initialSourceViewportFrameRef.current = null;
+      }
+    };
+  }, [applyRequestedInitialViewport, isFlowReady]);
+
   const handleMoveEnd = useCallback<OnMoveEnd>(
     (_event, viewport) => {
       persistViewportAfterMove(
@@ -2283,6 +2369,7 @@ function DiagramEditorInner({
     if (
       !isFlowReady ||
       !shouldApplyInitialBoardZoomRef.current ||
+      hasSourceViewBoxViewport ||
       normalizedInitialBoardZoom === undefined ||
       diagram.nodes.length === 0
     ) {
@@ -2318,6 +2405,7 @@ function DiagramEditorInner({
   }, [
     diagram.nodes.length,
     getCurrentBoardViewportFrame,
+    hasSourceViewBoxViewport,
     isFlowReady,
     normalizedInitialBoardZoom,
     previewDiagram,
@@ -2354,7 +2442,12 @@ function DiagramEditorInner({
   ]);
 
   useEffect(() => {
-    if (!isFlowReady || !shouldAutoFitInitialDiagramRef.current || diagram.nodes.length === 0) {
+    if (
+      !isFlowReady ||
+      !shouldAutoFitInitialDiagramRef.current ||
+      hasSourceViewBoxViewport ||
+      diagram.nodes.length === 0
+    ) {
       return;
     }
 
@@ -2376,13 +2469,14 @@ function DiagramEditorInner({
         initialAutoFitFrameRef.current = null;
       }
     };
-  }, [diagram.nodes.length, fitVisibleDiagram, isFlowReady]);
+  }, [diagram.nodes.length, fitVisibleDiagram, hasSourceViewBoxViewport, isFlowReady]);
 
   useEffect(() => {
     if (
       !isFlowReady ||
       normalizedInitialBoardZoom !== undefined ||
       previewDiagram === null ||
+      hasSourceViewBoxViewport ||
       previewDiagram.nodes.length === 0
     ) {
       return;
@@ -2393,7 +2487,13 @@ function DiagramEditorInner({
     });
 
     return () => window.cancelAnimationFrame(frame);
-  }, [fitVisibleDiagram, isFlowReady, normalizedInitialBoardZoom, previewDiagram]);
+  }, [
+    fitVisibleDiagram,
+    hasSourceViewBoxViewport,
+    isFlowReady,
+    normalizedInitialBoardZoom,
+    previewDiagram
+  ]);
 
   useEffect(() => {
     function handleVisibilityChange(): void {
@@ -2522,7 +2622,7 @@ function DiagramEditorInner({
 
     /** 패널이 접힌 뒤 확정된 Board 크기를 기준으로 노드가 모두 보이게 맞춥니다. */
     function refitCompactBoard(): void {
-      if (window.innerWidth > 1120) {
+      if (hasSourceViewBoxViewport || window.innerWidth > 1120) {
         return;
       }
 
@@ -2545,7 +2645,7 @@ function DiagramEditorInner({
         window.cancelAnimationFrame(fitFrame);
       }
     };
-  }, [fitVisibleDiagram, isFlowReady]);
+  }, [fitVisibleDiagram, hasSourceViewBoxViewport, isFlowReady]);
 
   useEffect(() => {
     let resizeFrame: number | null = null;
@@ -2556,7 +2656,7 @@ function DiagramEditorInner({
       updateLeftPanelWidth(leftPanelWidth);
       updateRightPanelWidth(rightPanelWidth);
 
-      if (!isFlowReady || window.innerWidth > 1120) {
+      if (!isFlowReady || hasSourceViewBoxViewport || window.innerWidth > 1120) {
         return;
       }
 
@@ -2587,7 +2687,15 @@ function DiagramEditorInner({
         window.cancelAnimationFrame(settledLayoutFrame);
       }
     };
-  }, [fitVisibleDiagram, isFlowReady, leftPanelWidth, rightPanelWidth, updateLeftPanelWidth, updateRightPanelWidth]);
+  }, [
+    fitVisibleDiagram,
+    hasSourceViewBoxViewport,
+    isFlowReady,
+    leftPanelWidth,
+    rightPanelWidth,
+    updateLeftPanelWidth,
+    updateRightPanelWidth
+  ]);
 
   function handleShellKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
     if (event.key === "Escape") {
@@ -2838,7 +2946,7 @@ function DiagramEditorInner({
             elementsSelectable={!isPreviewActive || allowPreviewInspection}
             elevateNodesOnSelect={visibleDiagram.presentation?.geometryPolicy !== "source-exact"}
             maxZoom={2}
-            minZoom={0.25}
+            minZoom={boardMinimumZoom}
             multiSelectionKeyCode={["Shift", "Meta", "Control"]}
             nodeTypes={NODE_TYPES}
             nodes={flowNodes}
