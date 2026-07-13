@@ -95,7 +95,7 @@
   display: inline-flex;
   font-size: 16px;
   font-weight: 700;
-  gap: 9px;
+  gap: 7px;
   min-width: 0;
   text-decoration: none;
 }
@@ -109,7 +109,7 @@
 .projectBarLogo {
   flex: 0 0 auto;
   object-fit: contain;
-  transform: translateY(-3px);
+  transform: translateY(-1px);
 }
 
 .projectBarContext {

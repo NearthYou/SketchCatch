@@ -229,6 +229,8 @@ test("diagram editor exposes project, save, and panel controls in one stable top
   assert.match(projectBarBlock, /grid-column:\s*1 \/ -1;/);
   assert.match(projectBarBlock, /height:\s*64px;/);
   assert.match(brandLinkBlock, /background:\s*transparent;/);
+  assert.match(brandLinkBlock, /gap:\s*7px;/);
+  assert.match(diagramEditorStyles, /\.projectBarLogo\s*\{[\s\S]*?transform:\s*translateY\(-1px\);/);
   assert.match(saveStatusBlock, /min-width:\s*0;/);
 });
 
