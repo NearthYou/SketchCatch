@@ -117,6 +117,7 @@ export function createDeploymentLiveObservationManifest(input: {
         loadBalancerDnsName,
         loadBalancerArn,
         targetGroupArn,
+        logGroupNames: readLogGroupNames(outputs),
         capacityTarget: readCapacityTarget(outputs)
       }
     }
@@ -245,6 +246,26 @@ function readOptionalPositiveNumber(
   if (raw === undefined || raw === null || raw === "") return null;
   const value = typeof raw === "number" ? raw : Number(raw);
   return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function readLogGroupNames(outputs: Readonly<Record<string, unknown>>): string[] {
+  const single = readOptionalString(outputs, "log_group_name");
+  const multiple = outputs.log_group_names;
+  if (
+    multiple !== undefined &&
+    multiple !== null &&
+    (!Array.isArray(multiple) || multiple.some((value) => typeof value !== "string"))
+  ) {
+    throw new Error("Invalid log_group_names");
+  }
+  const names = [single, ...((multiple as string[] | undefined) ?? [])]
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    .map((value) => value.trim());
+  const unique = [...new Set(names)];
+  if (unique.length > 10 || unique.some((value) => !/^[A-Za-z0-9_./#-]{1,512}$/.test(value))) {
+    throw new Error("Invalid log group evidence");
+  }
+  return unique;
 }
 
 function toIsoDateTime(value: string | Date): string {

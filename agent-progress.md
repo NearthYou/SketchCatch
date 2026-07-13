@@ -12,6 +12,15 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-14 - Live Observation v2 provider snapshot and AWS evidence
+
+- Added the strict provider-neutral observation snapshot, Store enforcement, observer lease service, and authenticated AWS evidence refresh path.
+- Added ALB request/error/p95 metrics, ASG and ECS/Fargate capacity, bounded redacted CloudWatch Logs, explicit unavailable/delayed stale-null behavior, and common operator UI evidence.
+- Connected verified log-group Terraform outputs to deployment manifests and added the required ECS/Logs read permissions to AWS connection setup.
+- Updated Redis Lua validation for manifest adapter v1/v2 and fixed the Windows integration runner; Redis 8 integration passed 31/31.
+- Verification: combined API 217/217, focused Web 74/74, Redis 31/31, harness, lint, typecheck, build, and whitespace checks passed.
+- Risk: no credentialed AWS sandbox evidence and no Terraform Apply/Destroy, deployment mutation, database migration, or AWS mutation.
+
 ### 2026-07-13 - Integrate current dev into PR #366
 
 - Merged `origin/dev` at `39118a79`, including the completed PR #368 Deployment/CI/CD console and Web baseline updates.

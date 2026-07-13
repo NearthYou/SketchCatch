@@ -67,6 +67,16 @@ test("operator modal remains an accessible responsive dialog with reduced motion
   assert.match(stylesSource, /@media \(prefers-reduced-motion: reduce\)/);
 });
 
+test("operator modal renders the provider-neutral metrics and bounded log evidence", () => {
+  assert.match(modalSource, /getLiveObservationProviderEvidence/);
+  for (const label of ["요청", "오류율", "p95 지연", "가용성", "용량"]) {
+    assert.match(modalSource, new RegExp(label));
+  }
+  assert.match(modalSource, /<details/);
+  assert.match(modalSource, /providerSnapshot\.logs/);
+  assert.doesNotMatch(modalSource, /requestCountPerTarget|desiredCapacity|inServiceInstanceCount/);
+});
+
 function readWorkspaceFile(fileName: string): string {
   return readFileSync(fileURLToPath(new URL(fileName, import.meta.url)), "utf8");
 }

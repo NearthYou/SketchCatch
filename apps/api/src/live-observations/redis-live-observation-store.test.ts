@@ -361,7 +361,7 @@ function storeOperations(): ReadonlyArray<{
           fencingToken: 1,
           observation: {
             observedAt: "2026-07-11T00:00:00.000Z",
-            payload: { state: "healthy" }
+            payload: providerSnapshot("2026-07-11T00:00:00.000Z")
           },
           observationId: INPUT.observationId,
           observerId: OBSERVER_ID
@@ -443,6 +443,19 @@ function assertGenericUnavailable(error: Error, secret?: string): void {
 
 function countMatches(value: string, pattern: RegExp): number {
   return [...value.matchAll(pattern)].length;
+}
+
+function providerSnapshot(observedAt: string) {
+  return {
+    requests: 1,
+    errorRate: 0,
+    p95LatencyMs: 10,
+    availability: 100,
+    capacity: { desired: 1, running: 1, healthy: 1, max: 2 },
+    logs: [{ timestamp: observedAt, message: "healthy" }],
+    observedAt,
+    state: "available" as const
+  };
 }
 
 class FakeRedisClient implements RedisLiveObservationStoreClient {

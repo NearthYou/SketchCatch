@@ -22,7 +22,10 @@ test("materializer persists a verified ASG manifest without credential evidence"
       audienceBaseUrl: "https://audience.example.com",
       deployment: createDeployment(),
       connection: createConnection(),
-      outputs: createOutputs({ asg_name: "customer-platform-asg" })
+      outputs: createOutputs({
+        asg_name: "customer-platform-asg",
+        log_group_name: "/aws/ecs/customer-platform"
+      })
     },
     repository
   );
@@ -37,6 +40,7 @@ test("materializer persists a verified ASG manifest without credential evidence"
       "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:loadbalancer/app/customer-platform/50dc6c495c0c9188",
     targetGroupArn:
       "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:targetgroup/customer-api/6d0ecf831eec9f09",
+    logGroupNames: ["/aws/ecs/customer-platform"],
     capacityTarget: {
       kind: "asg",
       autoScalingGroupName: "customer-platform-asg"

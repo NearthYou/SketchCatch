@@ -22,6 +22,9 @@ test("v2 authenticated routes prepare create and authorize read and stop", async
     },
     async requireDeploymentAccess(_request, deploymentId) {
       calls.push(`access:${deploymentId}`);
+    },
+    async refreshObservation(_request, deploymentId, observationId) {
+      calls.push(`refresh:${deploymentId}:${observationId}`);
     }
   });
   await app.ready();
@@ -49,6 +52,7 @@ test("v2 authenticated routes prepare create and authorize read and stop", async
     `prepare:${DEPLOYMENT_ID}`,
     `create:${DEPLOYMENT_ID}`,
     `access:${DEPLOYMENT_ID}`,
+    `refresh:${DEPLOYMENT_ID}:${OBSERVATION_ID}`,
     `read:${DEPLOYMENT_ID}:${OBSERVATION_ID}`,
     `access:${DEPLOYMENT_ID}`,
     `stop:${DEPLOYMENT_ID}:${OBSERVATION_ID}`
@@ -61,7 +65,8 @@ test("v2 authenticated stream emits a snapshot and closes in once mode", async (
     enabled: true,
     liveObservationService: createService([]),
     async prepareDeploymentManifest() {},
-    async requireDeploymentAccess() {}
+    async requireDeploymentAccess() {},
+    async refreshObservation() {}
   });
   await app.ready();
   t.after(() => app.close());
@@ -83,7 +88,8 @@ test("disabled v2 authenticated plugin registers no live observation routes", as
     enabled: false,
     liveObservationService: createService([]),
     async prepareDeploymentManifest() {},
-    async requireDeploymentAccess() {}
+    async requireDeploymentAccess() {},
+    async refreshObservation() {}
   });
   await app.ready();
   t.after(() => app.close());

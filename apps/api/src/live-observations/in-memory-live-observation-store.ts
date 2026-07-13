@@ -1,9 +1,9 @@
 import type {
   DeploymentLiveObservationManifestV2,
-  IsoDateTimeString,
-  JsonValue
+  IsoDateTimeString
 } from "@sketchcatch/types";
 import { parseDeploymentLiveObservationManifestV2 } from "./live-observation-manifest.js";
+import { parseLiveObservationProviderSnapshot } from "./live-observation-provider-snapshot.js";
 import {
   LIVE_OBSERVATION_STORE_POLICY,
   LiveObservationStoreClockError,
@@ -842,7 +842,7 @@ function parseObservationCommitInput(input: unknown): {
       fencingToken: input.fencingToken as number,
       observation: {
         observedAt,
-        payload: cloneJsonValue(input.observation.payload)
+        payload: parseLiveObservationProviderSnapshot(input.observation.payload)
       },
       observedAtMs: Date.parse(observedAt)
     };
@@ -906,75 +906,6 @@ function parseCanonicalIso(value: unknown): IsoDateTimeString {
   }
 
   return value;
-}
-
-function cloneJsonValue(
-  value: unknown,
-  ancestors: Set<object> = new Set()
-): JsonValue {
-  if (
-    value === null ||
-    typeof value === "string" ||
-    typeof value === "boolean"
-  ) {
-    return value;
-  }
-
-  if (typeof value === "number") {
-    if (!Number.isFinite(value)) {
-      throw new LiveObservationStoreInputError();
-    }
-    return value;
-  }
-
-  if (typeof value !== "object" || ancestors.has(value)) {
-    throw new LiveObservationStoreInputError();
-  }
-
-  ancestors.add(value);
-  try {
-    if (Array.isArray(value)) {
-      const keys = Reflect.ownKeys(value);
-      if (
-        keys.length !== value.length + 1 ||
-        keys.some(
-          (key) =>
-            key !== "length" &&
-            (typeof key !== "string" || !/^(0|[1-9][0-9]*)$/.test(key))
-        )
-      ) {
-        throw new LiveObservationStoreInputError();
-      }
-
-      return value.map((_, index) => {
-        const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
-        if (!descriptor || !("value" in descriptor) || !descriptor.enumerable) {
-          throw new LiveObservationStoreInputError();
-        }
-        return cloneJsonValue(descriptor.value, ancestors);
-      });
-    }
-
-    const prototype = Object.getPrototypeOf(value);
-    if (prototype !== Object.prototype && prototype !== null) {
-      throw new LiveObservationStoreInputError();
-    }
-
-    const entries: Array<[string, JsonValue]> = [];
-    for (const key of Reflect.ownKeys(value)) {
-      if (typeof key !== "string") {
-        throw new LiveObservationStoreInputError();
-      }
-      const descriptor = Object.getOwnPropertyDescriptor(value, key);
-      if (!descriptor || !("value" in descriptor) || !descriptor.enumerable) {
-        throw new LiveObservationStoreInputError();
-      }
-      entries.push([key, cloneJsonValue(descriptor.value, ancestors)]);
-    }
-    return Object.fromEntries(entries);
-  } finally {
-    ancestors.delete(value);
-  }
 }
 
 function readOperationTime(now: () => number): OperationTime {

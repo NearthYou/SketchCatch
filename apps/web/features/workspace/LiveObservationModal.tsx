@@ -20,6 +20,7 @@ import {
 import {
   getEligibleLiveObservationDeployments,
   getLiveObservationAudienceUrl,
+  getLiveObservationProviderEvidence,
   getLiveObservationPressureLabel
 } from "./live-observation";
 import styles from "./workspace.module.css";
@@ -65,6 +66,10 @@ export function LiveObservationModal({ onClose, projectId }: LiveObservationModa
   const isSessionActive =
     session !== null && snapshot?.status === "active" && remainingSeconds > 0;
   const visibleErrorMessage = errorMessage || streamErrorMessage;
+  const providerSnapshot = snapshot?.latestObservation?.payload ?? null;
+  const providerEvidence = providerSnapshot
+    ? getLiveObservationProviderEvidence(providerSnapshot)
+    : null;
 
   useEffect(() => {
     activeRef.current = true;
@@ -412,6 +417,32 @@ export function LiveObservationModal({ onClose, projectId }: LiveObservationModa
                 <strong>{snapshot.live.rollingRequestsPerSecond.toFixed(1)} req/s</strong>
                 <p>{getLiveObservationPressureLabel(snapshot.live.pressureLevel)}</p>
               </div>
+              <div data-source="aws">
+                <span>요청</span>
+                <strong>{providerEvidence?.requests ?? "—"}</strong>
+                <p>CloudWatch ALB RequestCount</p>
+                <small>{providerEvidence?.stateLabel ?? "수집 대기"}</small>
+              </div>
+              <div data-source="aws">
+                <span>오류율</span>
+                <strong>{providerEvidence?.errorRate ?? "—"}</strong>
+                <p>Target 5xx 기준</p>
+              </div>
+              <div data-source="aws">
+                <span>p95 지연</span>
+                <strong>{providerEvidence?.p95Latency ?? "—"}</strong>
+                <p>TargetResponseTime p95</p>
+              </div>
+              <div data-source="aws">
+                <span>가용성</span>
+                <strong>{providerEvidence?.availability ?? "—"}</strong>
+                <p>RequestCount와 Target 5xx 기반</p>
+              </div>
+              <div data-source="aws">
+                <span>용량</span>
+                <strong>{providerEvidence?.capacity ?? "—"}</strong>
+                <p>정상 / 실행 / 최대</p>
+              </div>
             </section>
           ) : (
             <div className={styles.liveObservationIntro}>
@@ -421,6 +452,19 @@ export function LiveObservationModal({ onClose, projectId }: LiveObservationModa
               </div>
             </div>
           )}
+          {providerSnapshot && providerSnapshot.logs.length > 0 ? (
+            <details className={styles.liveObservationLogs}>
+              <summary>최근 런타임 로그 {providerSnapshot.logs.length}건</summary>
+              <ol>
+                {providerSnapshot.logs.map((entry, index) => (
+                  <li key={`${entry.timestamp}-${index}`}>
+                    <time dateTime={entry.timestamp}>{formatTimestamp(entry.timestamp)}</time>
+                    <code>{entry.message}</code>
+                  </li>
+                ))}
+              </ol>
+            </details>
+          ) : null}
         </main>
 
         {session ? (

@@ -193,7 +193,8 @@ test("Live Observation v2 app composition exposes Store routes and removes legac
         }
       },
       async prepareDeploymentManifest() {},
-      async requireDeploymentAccess() {}
+      async requireDeploymentAccess() {},
+      async refreshObservation() {}
     }
   });
 

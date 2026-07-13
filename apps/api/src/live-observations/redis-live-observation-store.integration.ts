@@ -204,7 +204,7 @@ test("production store uses Redis TIME and exact absolute active expiries", asyn
         fencingToken: observer.lease.fencingToken,
         observation: {
           observedAt: new Date(evaluatedAtMs).toISOString(),
-          payload: { health: "available" }
+          payload: providerSnapshot(new Date(evaluatedAtMs).toISOString(), "available")
         },
         observationId: input.observationId,
         observerId: FIRST_OBSERVER_ID
@@ -301,12 +301,13 @@ test("two clients serialize every contested transition", async () => {
   ]);
   assert.deepEqual(boosts.map((result) => result.kind).sort(), ["acquired", "busy"]);
 
+  const serializedSnapshot = providerSnapshot(claimed.evaluatedAt, "serialized");
   const [commit, stop] = await Promise.all([
     firstStore.commitObservation({
       fencingToken: claimed.lease.fencingToken,
       observation: {
         observedAt: claimed.evaluatedAt,
-        payload: { serialized: true }
+        payload: serializedSnapshot
       },
       observationId,
       observerId
@@ -321,7 +322,7 @@ test("two clients serialize every contested transition", async () => {
   if (stop.kind === "stopped") {
     assert.deepEqual(
       stop.session.finalObservation?.payload ?? null,
-      commit.kind === "committed" ? { serialized: true } : null
+      commit.kind === "committed" ? serializedSnapshot : null
     );
   }
 });
@@ -471,7 +472,7 @@ test("same-shape stored JSON corruption fails closed before mutation", async () 
         fencingToken: observer.lease.fencingToken,
         observation: {
           observedAt: new Date(START_MS).toISOString(),
-          payload: { state: "available" }
+          payload: providerSnapshot(new Date(START_MS).toISOString(), "available")
         },
         observationId: input.observationId,
         observerId: FIRST_OBSERVER_ID
@@ -495,6 +496,19 @@ test("same-shape stored JSON corruption fails closed before mutation", async () 
   assert.equal(await redis.get(claimKey), input.observationId);
   assert.equal(await redis.hGet(keys.terminal, "status"), "expired");
 });
+
+function providerSnapshot(observedAt: string, message: string) {
+  return {
+    requests: 1,
+    errorRate: 0,
+    p95LatencyMs: 10,
+    availability: 100,
+    capacity: { desired: 1, running: 1, healthy: 1, max: 2 },
+    logs: [{ timestamp: observedAt, message }],
+    observedAt,
+    state: "available" as const
+  };
+}
 
 function terminalFieldNames(): string[] {
   return [

@@ -1,7 +1,7 @@
 import type {
   DeploymentLiveObservationManifestV2,
   IsoDateTimeString,
-  JsonValue
+  LiveObservationProviderSnapshot
 } from "@sketchcatch/types";
 
 export const LIVE_OBSERVATION_STORE_POLICY = Object.freeze({
@@ -35,7 +35,7 @@ export type LiveObservationStoreLiveView = {
 
 export type LiveObservationStoreObservation = {
   observedAt: IsoDateTimeString;
-  payload: JsonValue;
+  payload: LiveObservationProviderSnapshot;
 };
 
 export type LiveObservationStoreActiveSession = {

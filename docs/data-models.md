@@ -1413,6 +1413,7 @@ type AwsLiveObservationAdapterPayloadV2 = {
   loadBalancerDnsName: string;
   loadBalancerArn: string;
   targetGroupArn: string;
+  logGroupNames?: string[];
   capacityTarget:
     | { kind: "asg"; autoScalingGroupName: string }
     | {
@@ -1428,7 +1429,7 @@ type AwsLiveObservationAdapterPayloadV2 = {
 
 `kind: "aws-live-observation"`, `version: 1`의 runtime validator는 `payload`를 위 `AwsLiveObservationAdapterPayloadV1`의 정확한 네 string key만 가진 strict object로 제한한다. `resourceSuffix`는 `deploymentId`에서 hyphen을 제거한 뒤 앞 12개 hex 문자를 lowercase로 변환한 서버 소유 결정값이다. `loadBalancerArn`의 resource name은 정확히 `loadbalancer/app/sc-lo-alb-${resourceSuffix}`, `targetGroupArn`은 정확히 `targetgroup/sc-lo-api-${resourceSuffix}`, `autoScalingGroupName`은 정확히 `sc-lo-asg-${resourceSuffix}`여야 한다. ALB/TG ARN은 같은 AWS partition, region, 12자리 account ID를 사용해야 하고 그 region은 `provenance.region`과 같아야 한다. `cloudFrontDistributionId`는 `E`로 시작하는 bounded uppercase distribution ID이며 Stage 2 materializer가 AWS relationship read로 실제 연관성을 검증한다. array, nested object, extra key, number, boolean, 임의 string leaf는 허용하지 않는다.
 
-`version: 2`는 기존 v1 row를 계속 읽으면서 운영 Deployment의 ASG 또는 ECS/Fargate capacity target을 명시한다. `trafficHostname`은 ACM certificate의 `domainName`과 정확히 같은 public custom hostname이며 `trafficUrl` host와 일치해야 한다. `loadBalancerDnsName`은 approved region/partition의 public AWS ALB DNS만 허용하고 ALB ARN name에 결합한다. IP literal, localhost, `internal-*`, AWS ALB 기본 도메인을 custom hostname으로 사용하는 값, credential, query, fragment, custom HTTPS port는 거부한다. ALB/TG ARN의 partition, account, region 일치와 bounded AWS name을 검증하고, ECS/Fargate는 `clusterName`, `serviceName`, positive integer `maxCapacity`를 모두 요구한다. manifest materializer는 `SUCCESS` Deployment의 승인된 Terraform artifact SHA-256/account/region, 현재 verified AWS connection, 비민감 Terraform output, `SKETCHCATCH_PUBLIC_BASE_URL`만 사용하며 불완전한 증거는 generic `manifest_invalid` row로 저장한다.
+`version: 2`는 기존 v1 row를 계속 읽으면서 운영 Deployment의 ASG 또는 ECS/Fargate capacity target을 명시한다. `trafficHostname`은 ACM certificate의 `domainName`과 정확히 같은 public custom hostname이며 `trafficUrl` host와 일치해야 한다. `loadBalancerDnsName`은 approved region/partition의 public AWS ALB DNS만 허용하고 ALB ARN name에 결합한다. IP literal, localhost, `internal-*`, AWS ALB 기본 도메인을 custom hostname으로 사용하는 값, credential, query, fragment, custom HTTPS port는 거부한다. ALB/TG ARN의 partition, account, region 일치와 bounded AWS name을 검증하고, ECS/Fargate는 `clusterName`, `serviceName`, positive integer `maxCapacity`를 모두 요구한다. `logGroupNames`는 비민감 Terraform output에서 검증한 최대 10개의 CloudWatch Logs group 이름만 담는다. manifest materializer는 `SUCCESS` Deployment의 승인된 Terraform artifact SHA-256/account/region, 현재 verified AWS connection, 비민감 Terraform output, `SKETCHCATCH_PUBLIC_BASE_URL`만 사용하며 불완전한 증거는 generic `manifest_invalid` row로 저장한다.
 
 `status: "valid"`이면 검증을 통과한 `manifest`가 반드시 존재하고 `invalidReason`은 `null`이다. `status: "manifest_invalid"`이면 `manifest`는 `null`이고 서버가 정한 non-empty generic `invalidReason`이 반드시 존재한다. 호출자가 제공한 실패 사유나 raw diagnostic은 보존하지 않는다. raw Terraform, credential, Role ARN, External ID, private token, password, access key, secret key, private key 등 secret material은 manifest record 어디에도 저장하지 않는다.
 
@@ -1458,7 +1459,7 @@ rotation 중 previous key는 absolute `stoppedIssuingAt`을 기준으로 `create
 
 ### Live Observation Store v2
 
-v2 Store는 lifecycle과 receipt 집계를 위한 전용 provider-neutral seam이다. 외부 Interface는 createSession, readSession, collectEvent, stopSession 네 연산만 노출한다. caller가 TTL, rate policy, clock을 변경하거나 내부 Map/Redis key를 검사·초기화하는 메서드는 제공하지 않는다. in-memory Adapter의 주입 now 함수는 테스트와 로컬 실행을 위한 내부 구성이고, 이후 production Redis Adapter는 같은 계약을 Redis TIME과 원자 command/Lua로 구현한다.
+v2 Store는 lifecycle, receipt 집계, fenced provider observation을 위한 전용 provider-neutral seam이다. 외부 Interface는 session 네 연산과 observer lease/commit, presenter lease 연산만 노출한다. caller가 TTL, rate policy, clock을 변경하거나 내부 Map/Redis key를 검사·초기화하는 메서드는 제공하지 않는다. in-memory Adapter의 주입 now 함수는 테스트와 로컬 실행을 위한 내부 구성이고 production Redis Adapter는 같은 계약을 Redis TIME과 원자 Lua로 구현한다.
 
 ~~~ts
 type LiveObservationStore = {
@@ -1472,6 +1473,16 @@ type LiveObservationStore = {
     observationId: string;
     deploymentId: string;
   }): Promise<LiveObservationStoreStopResult>;
+  claimObserverLease(input: {
+    observationId: string;
+    observerId: string;
+  }): Promise<LiveObservationStoreObserverLeaseClaimResult>;
+  commitObservation(input: {
+    observationId: string;
+    observerId: string;
+    fencingToken: number;
+    observation: LiveObservationStoreObservation;
+  }): Promise<LiveObservationStoreObservationCommitResult>;
 };
 ~~~
 
@@ -1479,7 +1490,27 @@ create input은 canonical lowercase observation UUID, 검증된 DeploymentLiveOb
 
 모든 non-throwing result는 kind discriminant와 evaluatedAt을 가진다. evaluatedAt, createdAt, expiresAt, bucket, expiry/stop 경계는 한 operation에서 정확히 한 번 읽은 Store clock 값으로 계산한다. create는 created, active_exists, observation_id_conflict를 반환하고 read는 active, terminal, not_found를 반환한다. collect는 accepted, duplicate, rate_limited, event_limit_reached, gone, not_found를 반환하며 accepted 계열에는 live, gone에는 terminal session을 사용한다. stop은 stopped, already_terminal, not_found를 반환한다. malformed caller input은 LiveObservationStoreInputError, 잘못된 in-memory clock은 LiveObservationStoreClockError이고, future Redis 장애를 위한 LiveObservationStoreUnavailableError는 고정된 generic message만 사용한다.
 
-active read shape는 observationId, deploymentId, status, 안전하게 재파싱한 manifest, kid/tokenVersion, createdAt/expiresAt, live, latestObservation을 포함한다. Task 3A의 latestObservation은 null이며 Task 3B의 fenced observation commit이 같은 read shape를 채운다. live는 acceptedEventCount, 10초 rollingRequestsPerSecond, projectedRequestsPerMinute, manifest pressure target 기준 pressurePercent, pressureLevel, observedAt을 반환하고 계산값은 소수 셋째 자리까지 반올림한다. pressureLevel 경계는 normal 40 미만, warning 40 이상 70 미만, high 70 이상 100 미만, critical 100 이상이다.
+active read shape는 observationId, deploymentId, status, 안전하게 재파싱한 manifest, kid/tokenVersion, createdAt/expiresAt, live, latestObservation을 포함한다. `latestObservation.payload`는 아래 provider-neutral 공통 snapshot schema로 다시 파싱한 값만 허용하고 임의 JSON이나 provider credential을 받지 않는다. observer lease와 fencing token을 얻은 service만 새 snapshot을 commit한다. live는 acceptedEventCount, 10초 rollingRequestsPerSecond, projectedRequestsPerMinute, manifest pressure target 기준 pressurePercent, pressureLevel, observedAt을 반환하고 계산값은 소수 셋째 자리까지 반올림한다. pressureLevel 경계는 normal 40 미만, warning 40 이상 70 미만, high 70 이상 100 미만, critical 100 이상이다.
+
+```ts
+type LiveObservationProviderSnapshot = {
+  requests: number | null;
+  errorRate: number | null;
+  p95LatencyMs: number | null;
+  availability: number | null;
+  capacity: {
+    desired: number | null;
+    running: number | null;
+    healthy: number | null;
+    max: number | null;
+  };
+  logs: Array<{ timestamp: IsoDateTimeString; message: string }>;
+  observedAt: IsoDateTimeString | null;
+  state: "available" | "delayed" | "unavailable";
+};
+```
+
+`available`만 완전한 정량값을 가진다. `delayed`와 `unavailable`은 requests, errorRate, p95LatencyMs, availability, capacity 수치를 모두 `null`로 저장하고 이전 수치를 보존하거나 sample 값으로 대체하지 않는다. 로그는 최근 5분, 최대 50건, 메시지당 4,096자이며 credential-shaped 값이 masking된 fresh evidence만 허용한다.
 
 Store 고정 policy는 session lifetime 15분, terminal tombstone retention 60초, rolling/rate window 10초, weighted burst 초당 20, rolling window accepted event 120, session accepted event 10,000이다. duplicate는 burst/rate/cap을 소비하지 않으며 cap 검사는 dedupe 뒤, rate 계산 앞에서 수행한다. weighted burst는 candidateCurrentSecond + previousSecond * (1 - currentSecondProgress)이고, rejected eventId는 dedupe set에 넣지 않아 이후 재시도할 수 있다.
 

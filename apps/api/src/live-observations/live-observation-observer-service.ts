@@ -1,0 +1,147 @@
+import { randomUUID } from "node:crypto";
+import type {
+  DeploymentLiveObservationManifestV2,
+  LiveObservationProviderSnapshot
+} from "@sketchcatch/types";
+import type {
+  AwsLiveObservationSnapshotProvider,
+  AwsLiveObservationSnapshotTarget
+} from "./aws-live-observation-snapshot-provider.js";
+import { parseLiveObservationProviderSnapshot } from "./live-observation-provider-snapshot.js";
+import type { LiveObservationStore } from "./live-observation-store.js";
+
+export type LiveObservationAwsConnectionEvidence = {
+  id: string;
+  accountId: string | null;
+  roleArn: string | null;
+  externalId: string;
+  region: string;
+  status: string;
+};
+
+export function createLiveObservationObserverService(options: {
+  store: LiveObservationStore;
+  provider: AwsLiveObservationSnapshotProvider;
+  createObserverId?: () => string;
+}) {
+  const observerId = (options.createObserverId ?? randomUUID)();
+
+  return Object.freeze({
+    async refresh(input: {
+      observationId: string;
+      connection: LiveObservationAwsConnectionEvidence | null;
+    }): Promise<void> {
+      const read = await options.store.readSession({ observationId: input.observationId });
+      if (read.kind !== "active") return;
+
+      const claim = await options.store.claimObserverLease({
+        observationId: input.observationId,
+        observerId
+      });
+      if (claim.kind !== "claimed") return;
+
+      const target = createProviderTarget(read.session.manifest, input.connection);
+      let snapshot: LiveObservationProviderSnapshot;
+      if (!target) {
+        snapshot = unavailableSnapshot(claim.evaluatedAt);
+      } else {
+        try {
+          snapshot = parseLiveObservationProviderSnapshot(
+            await options.provider.observe(target, input.observationId)
+          );
+        } catch {
+          snapshot = unavailableSnapshot(claim.evaluatedAt);
+        }
+      }
+
+      await options.store.commitObservation({
+        observationId: input.observationId,
+        observerId,
+        fencingToken: claim.lease.fencingToken,
+        observation: {
+          observedAt: claim.evaluatedAt,
+          payload: snapshot
+        }
+      });
+    }
+  });
+}
+
+export function createProviderTarget(
+  manifest: DeploymentLiveObservationManifestV2,
+  connection: LiveObservationAwsConnectionEvidence | null
+): AwsLiveObservationSnapshotTarget | null {
+  if (manifest.adapter.version !== 2 || !connection) return null;
+  const loadBalancer = parseAlbArn(manifest.adapter.payload.loadBalancerArn);
+  const targetGroup = parseTargetGroupArn(manifest.adapter.payload.targetGroupArn);
+  const role = /^arn:(aws|aws-cn|aws-us-gov):iam::([0-9]{12}):role\/[\w+=,.@/-]+$/.exec(
+    connection.roleArn ?? ""
+  );
+  if (
+    connection.status !== "verified" ||
+    connection.id !== manifest.provenance.awsConnectionId ||
+    connection.region !== manifest.provenance.region ||
+    !connection.accountId ||
+    !connection.externalId.trim() ||
+    !loadBalancer ||
+    !targetGroup ||
+    !role ||
+    loadBalancer.region !== connection.region ||
+    targetGroup.region !== connection.region ||
+    loadBalancer.accountId !== connection.accountId ||
+    targetGroup.accountId !== connection.accountId ||
+    role[2] !== connection.accountId
+  ) {
+    return null;
+  }
+
+  const capacityTarget = manifest.adapter.payload.capacityTarget.kind === "asg"
+    ? {
+        kind: "asg" as const,
+        autoScalingGroupName: manifest.adapter.payload.capacityTarget.autoScalingGroupName
+      }
+    : {
+        kind: "ecs_fargate" as const,
+        clusterName: manifest.adapter.payload.capacityTarget.clusterName,
+        serviceName: manifest.adapter.payload.capacityTarget.serviceName,
+        maxCapacity: manifest.adapter.payload.capacityTarget.maxCapacity
+      };
+
+  return {
+    awsConnectionId: connection.id,
+    roleArn: connection.roleArn!,
+    externalId: connection.externalId,
+    region: connection.region,
+    loadBalancerArnSuffix: loadBalancer.suffix,
+    targetGroupArnSuffix: targetGroup.suffix,
+    logGroupNames: [...(manifest.adapter.payload.logGroupNames ?? [])],
+    capacityTarget
+  };
+}
+
+function parseAlbArn(value: string) {
+  const match = /^arn:(?:aws|aws-cn|aws-us-gov):elasticloadbalancing:([^:]+):([0-9]{12}):loadbalancer\/(app\/[A-Za-z0-9-]+\/[0-9a-f]{16})$/.exec(value);
+  return match?.[1] && match[2] && match[3]
+    ? { region: match[1], accountId: match[2], suffix: match[3] }
+    : null;
+}
+
+function parseTargetGroupArn(value: string) {
+  const match = /^arn:(?:aws|aws-cn|aws-us-gov):elasticloadbalancing:([^:]+):([0-9]{12}):(targetgroup\/[A-Za-z0-9-]+\/[0-9a-f]{16})$/.exec(value);
+  return match?.[1] && match[2] && match[3]
+    ? { region: match[1], accountId: match[2], suffix: match[3] }
+    : null;
+}
+
+function unavailableSnapshot(observedAt: string): LiveObservationProviderSnapshot {
+  return {
+    requests: null,
+    errorRate: null,
+    p95LatencyMs: null,
+    availability: null,
+    capacity: { desired: null, running: null, healthy: null, max: null },
+    logs: [],
+    observedAt,
+    state: "unavailable"
+  };
+}

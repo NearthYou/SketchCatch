@@ -117,7 +117,8 @@ function renderLiveObservationOutputs(graph: InfrastructureGraph): string[] {
     renderOutput("traffic_hostname", `${trafficRecordAddress}.name`),
     renderOutput("load_balancer_dns_name", `${loadBalancerAddress}.dns_name`),
     renderOutput("load_balancer_arn", `${loadBalancerAddress}.arn`),
-    renderOutput("target_group_arn", `${targetGroupAddress}.arn`)
+    renderOutput("target_group_arn", `${targetGroupAddress}.arn`),
+    ...renderLiveObservationLogGroupOutputs(graph)
   ];
 
   if (autoScalingGroup && alarm) {
@@ -159,6 +160,24 @@ function renderLiveObservationOutputs(graph: InfrastructureGraph): string[] {
       ? []
       : [renderOutput("scale_out_threshold", String(requestThreshold))])
   ];
+}
+
+function renderLiveObservationLogGroupOutputs(graph: InfrastructureGraph): string[] {
+  const addresses = graph.nodes
+    .filter(
+      (node) =>
+        node.iac.terraformBlockType === "resource" &&
+        node.iac.resourceType === "aws_cloudwatch_log_group"
+    )
+    .slice(0, 10)
+    .map((node) => `aws_cloudwatch_log_group.${node.iac.resourceName}.name`);
+
+  if (addresses.length === 0) return [];
+  if (addresses.length === 1) {
+    return [renderOutput("log_group_name", addresses[0]!)];
+  }
+
+  return [renderOutput("log_group_names", `[${addresses.join(", ")}]`)];
 }
 
 function findValidatedTrafficRecord(

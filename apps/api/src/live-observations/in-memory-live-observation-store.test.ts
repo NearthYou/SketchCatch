@@ -51,7 +51,7 @@ test("in-memory LiveObservationStore samples its clock once per operation", asyn
     fencingToken: observer.lease.fencingToken,
     observation: {
       observedAt: new Date(now).toISOString(),
-      payload: { state: "available" }
+      payload: providerSnapshot(new Date(now).toISOString())
     }
   });
   assert.equal(clockCalls, 3);
@@ -83,3 +83,16 @@ test("in-memory LiveObservationStore samples its clock once per operation", asyn
   });
   assert.equal(clockCalls, 9);
 });
+
+function providerSnapshot(observedAt: string) {
+  return {
+    requests: 1,
+    errorRate: 0,
+    p95LatencyMs: 10,
+    availability: 100,
+    capacity: { desired: 1, running: 1, healthy: 1, max: 2 },
+    logs: [{ timestamp: observedAt, message: "healthy" }],
+    observedAt,
+    state: "available" as const
+  };
+}

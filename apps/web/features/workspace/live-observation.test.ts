@@ -4,6 +4,7 @@ import type { LiveObservationV2Session } from "@sketchcatch/types";
 import {
   getEligibleLiveObservationDeployments,
   getLiveObservationAudienceUrl,
+  getLiveObservationProviderEvidence,
   getLiveObservationInstanceMarkers,
   getLiveObservationPressureLabel,
   getLiveObservationRequestBurst,
@@ -50,6 +51,52 @@ test("audience URL accepts only the capability-free v2 observe path", () => {
     getLiveObservationAudienceUrl({ ...session, audienceUrl: "https://audience.example.com/other" }),
     null
   );
+});
+
+test("provider evidence renders common metrics only while state is available", () => {
+  const available = getLiveObservationProviderEvidence({
+    requests: 120,
+    errorRate: 2.5,
+    p95LatencyMs: 183,
+    availability: 97.5,
+    capacity: { desired: 2, running: 2, healthy: 2, max: 4 },
+    logs: [],
+    observedAt: "2026-07-11T00:00:00.000Z",
+    state: "available"
+  });
+  assert.deepEqual(available, {
+    stateLabel: "정상",
+    requests: "120",
+    errorRate: "2.5%",
+    p95Latency: "183ms",
+    availability: "97.5%",
+    capacity: "2 / 2 / 4"
+  });
+
+  for (const state of ["delayed", "unavailable"] as const) {
+    const evidence = getLiveObservationProviderEvidence({
+      requests: null,
+      errorRate: null,
+      p95LatencyMs: null,
+      availability: null,
+      capacity: { desired: null, running: null, healthy: null, max: null },
+      logs: [],
+      observedAt: "2026-07-11T00:00:00.000Z",
+      state
+    });
+    assert.deepEqual(
+      { ...evidence, stateLabel: undefined },
+      {
+        stateLabel: undefined,
+        requests: "—",
+        errorRate: "—",
+        p95Latency: "—",
+        availability: "—",
+        capacity: "—"
+      }
+    );
+    assert.equal(evidence.stateLabel, state === "delayed" ? "지연" : "사용 불가");
+  }
 });
 
 test("request burst renders only positive counter deltas and caps visible particles at five", () => {

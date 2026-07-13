@@ -275,7 +275,8 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
       enabled: true,
       liveObservationService: liveObservationV2Runtime.liveObservationService,
       prepareDeploymentManifest: liveObservationV2Runtime.prepareDeploymentManifest,
-      requireDeploymentAccess: liveObservationV2Runtime.requireDeploymentAccess
+      requireDeploymentAccess: liveObservationV2Runtime.requireDeploymentAccess,
+      refreshObservation: liveObservationV2Runtime.refreshObservation
     });
     app.register(registerLiveObservationPublicCollectorRoutes, {
       prefix: "/api",

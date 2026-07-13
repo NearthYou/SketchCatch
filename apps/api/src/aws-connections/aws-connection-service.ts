@@ -726,7 +726,9 @@ function createTerraformApplyPolicyDocument(): Record<string, unknown> {
           "elasticloadbalancing:DescribeLoadBalancers",
           "elasticloadbalancing:DescribeTargetGroups",
           "cloudwatch:GetMetricData",
-          "cloudwatch:GetMetricStatistics"
+          "cloudwatch:GetMetricStatistics",
+          "ecs:DescribeServices",
+          "logs:FilterLogEvents"
         ],
         Resource: "*"
       }
@@ -905,6 +907,8 @@ function createAwsConnectionCloudFormationTemplateBody(input: {
     "              - elasticloadbalancing:DescribeTargetGroups",
     "              - cloudwatch:GetMetricData",
     "              - cloudwatch:GetMetricStatistics",
+    "              - ecs:DescribeServices",
+    "              - logs:FilterLogEvents",
     '            Resource: "*"',
     "Outputs:",
     "  RoleArn:",

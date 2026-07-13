@@ -882,7 +882,7 @@ export function registerLiveObservationStoreContract(input: {
 
     const current = await store.readSession({ observationId: OBSERVATION_ID });
     assertKind(current, "active");
-    assert.deepEqual(current.session.latestObservation?.payload, { sequence: 2 });
+    assert.equal(current.session.latestObservation?.payload.requests, 2);
 
     setNow(Date.parse(claim.lease.expiresAt));
     assertKind(
@@ -899,8 +899,7 @@ export function registerLiveObservationStoreContract(input: {
   });
 
   contractTest("freezes detached latest observations on stop and natural expiry", async ({
-    store,
-    setNow
+    store
   }) => {
     assertKind(await store.createSession(createInput()), "created");
     const claim = await store.claimObserverLease({
@@ -908,9 +907,7 @@ export function registerLiveObservationStoreContract(input: {
       observerId: FIRST_OBSERVER_ID
     });
     assertKind(claim, "claimed");
-    const retainedInput = observation(START_MS, {
-      nested: { state: "original" }
-    });
+    const retainedInput = observation(START_MS, { state: "original" });
     assertKind(
       await store.commitObservation({
         observationId: OBSERVATION_ID,
@@ -920,30 +917,19 @@ export function registerLiveObservationStoreContract(input: {
       }),
       "committed"
     );
-    (retainedInput.payload as { nested: { state: string } }).nested.state =
-      "mutated-input";
+    retainedInput.payload.logs[0]!.message = "mutated-input";
 
     const active = await store.readSession({ observationId: OBSERVATION_ID });
     assertKind(active, "active");
-    assert.equal(
-      (active.session.latestObservation?.payload as { nested: { state: string } })
-        .nested.state,
-      "original"
-    );
-    (active.session.latestObservation?.payload as { nested: { state: string } })
-      .nested.state = "mutated-result";
+    assert.equal(active.session.latestObservation?.payload.logs[0]?.message, '{"state":"original"}');
+    active.session.latestObservation!.payload.logs[0]!.message = "mutated-result";
 
     const stopped = await store.stopSession({
       observationId: OBSERVATION_ID,
       deploymentId: DEPLOYMENT_ID
     });
     assertKind(stopped, "stopped");
-    assert.equal(
-      (stopped.session.finalObservation?.payload as {
-        nested: { state: string };
-      }).nested.state,
-      "original"
-    );
+    assert.equal(stopped.session.finalObservation?.payload.logs[0]?.message, '{"state":"original"}');
 
     const secondHarness = input.createHarness();
     const created = await secondHarness.store.createSession(createInput());
@@ -1055,7 +1041,7 @@ export function registerLiveObservationStoreContract(input: {
           fencingToken: claim.lease.fencingToken,
           observation: {
             observedAt: "2026-07-11T09:00:00.000+09:00",
-            payload: null
+            payload: null as never
           }
         }),
       () =>
@@ -1307,9 +1293,10 @@ export function registerLiveObservationStoreContract(input: {
     ]);
     assertKind(stop, "stopped");
     if (commit.kind === "committed") {
-      assert.deepEqual(stop.session.finalObservation?.payload, {
-        serialized: true
-      });
+      assert.deepEqual(
+        stop.session.finalObservation?.payload,
+        observation(START_MS, { serialized: true }).payload
+      );
     } else {
       assertKind(commit, "gone");
       assert.equal(stop.session.finalObservation, null);
@@ -1566,10 +1553,22 @@ function iso(value: number): string {
 function observation(
   observedAtMs: number,
   payload: unknown
-): { observedAt: string; payload: never } {
+): { observedAt: string; payload: import("@sketchcatch/types").LiveObservationProviderSnapshot } {
+  const marker = payload && typeof payload === "object" && "sequence" in payload
+    ? Number((payload as { sequence: unknown }).sequence)
+    : 1;
   return {
     observedAt: iso(observedAtMs),
-    payload: payload as never
+    payload: {
+      requests: Number.isFinite(marker) && marker >= 0 ? marker : 1,
+      errorRate: 0,
+      p95LatencyMs: 10,
+      availability: 100,
+      capacity: { desired: 1, running: 1, healthy: 1, max: 2 },
+      logs: [{ timestamp: iso(observedAtMs), message: JSON.stringify(payload) ?? "null" }],
+      observedAt: iso(observedAtMs),
+      state: "available"
+    }
   };
 }
 

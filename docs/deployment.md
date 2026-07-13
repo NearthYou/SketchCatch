@@ -450,7 +450,7 @@ pnpm --filter @sketchcatch/api test -- runtime-cache
 
 ## Live Observation 운영 설정
 
-Live Observation은 성공한 `demo_web_service` Deployment의 실제 Traffic API, CloudWatch 측정값, Auto Scaling 상태를 15분 동안 관측하는 opt-in 기능입니다. 운영 API runtime에는 다음 비민감 환경 변수를 주입합니다.
+Live Observation은 verified manifest가 있는 성공 Deployment의 실제 Output URL, CloudWatch 측정값, ASG 또는 ECS/Fargate capacity, 최근 runtime log를 15분 동안 관측하는 opt-in 기능입니다. 운영 API runtime에는 다음 비민감 환경 변수를 주입합니다.
 
 ```text
 LIVE_OBSERVATION_ENABLED=false
@@ -490,9 +490,13 @@ elasticloadbalancing:DescribeLoadBalancers
 elasticloadbalancing:DescribeTargetGroups
 cloudwatch:GetMetricData
 cloudwatch:GetMetricStatistics
+logs:FilterLogEvents
+ecs:DescribeServices
 ```
 
-Diagram-to-Terraform의 Live Observation v2 output은 같은 ALB/target group에 연결된 HTTPS:443 listener와 ACM certificate가 있고, `name`이 certificate `domainName`과 정확히 같으며 `records`가 해당 `aws_lb.*.dns_name` 하나만 가리키는 Route53 CNAME이 있을 때만 생성합니다. 출력은 custom domain 기반 `traffic_url`, `traffic_hostname`, 검증 증거인 `load_balancer_dns_name`, `load_balancer_arn`, `target_group_arn`, capacity target, `scale_out_threshold`입니다. S3 website, HTTP `api_base_url`, ALB 기본 DNS를 traffic URL로 사용하지 않으며 HTTP-only·DNS 누락·certificate/CNAME 불일치 graph는 Live Observation 대상이 아닙니다.
+Diagram-to-Terraform의 Live Observation v2 output은 같은 ALB/target group에 연결된 HTTPS:443 listener와 ACM certificate가 있고, `name`이 certificate `domainName`과 정확히 같으며 `records`가 해당 `aws_lb.*.dns_name` 하나만 가리키는 Route53 CNAME이 있을 때만 생성합니다. 출력은 custom domain 기반 `traffic_url`, `traffic_hostname`, 검증 증거인 `load_balancer_dns_name`, `load_balancer_arn`, `target_group_arn`, capacity target, `scale_out_threshold`와 선택적인 `log_group_name`/`log_group_names`입니다. 로그 group은 Terraform output으로 검증된 이름만 manifest에 들어갑니다. S3 website, HTTP `api_base_url`, ALB 기본 DNS를 traffic URL로 사용하지 않으며 HTTP-only·DNS 누락·certificate/CNAME 불일치 graph는 Live Observation 대상이 아닙니다.
+
+CloudWatch 관측은 `RequestCount`, `HTTPCode_Target_5XX_Count`, `TargetResponseTime` p95를 같은 60초 period에서 읽고 error rate와 availability를 계산합니다. ASG는 desired/running/healthy/max, ECS/Fargate는 desired/running/max와 running task 기반 healthy 값을 사용합니다. metric이 60초보다 지연되거나 metric/capacity/log 조회가 실패하면 UI와 Store는 기존 숫자를 재사용하지 않고 정량 필드를 `null`로 표시합니다. CloudWatch Logs는 최근 5분 최대 50건만 읽고 credential-shaped 값은 저장 전 masking합니다.
 
 로컬 자동 검증은 AWS 리소스를 만들지 않습니다.
 

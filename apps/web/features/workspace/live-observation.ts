@@ -1,5 +1,6 @@
 import type {
   LiveObservationPressureLevel,
+  LiveObservationProviderSnapshot,
   LiveObservationSnapshot,
   LiveObservationV2Session
 } from "@sketchcatch/types";
@@ -36,6 +37,37 @@ export function getLiveObservationPressureLabel(
     case "critical":
       return "포화 임박";
   }
+}
+
+export function getLiveObservationProviderEvidence(
+  snapshot: LiveObservationProviderSnapshot
+): {
+  stateLabel: string;
+  requests: string;
+  errorRate: string;
+  p95Latency: string;
+  availability: string;
+  capacity: string;
+} {
+  if (snapshot.state !== "available") {
+    return {
+      stateLabel: snapshot.state === "delayed" ? "지연" : "사용 불가",
+      requests: "—",
+      errorRate: "—",
+      p95Latency: "—",
+      availability: "—",
+      capacity: "—"
+    };
+  }
+
+  return {
+    stateLabel: "정상",
+    requests: String(snapshot.requests),
+    errorRate: `${snapshot.errorRate}%`,
+    p95Latency: `${snapshot.p95LatencyMs}ms`,
+    availability: `${snapshot.availability}%`,
+    capacity: `${snapshot.capacity.healthy} / ${snapshot.capacity.running} / ${snapshot.capacity.max}`
+  };
 }
 export function getEligibleLiveObservationDeployments<
   T extends LiveObservationDeploymentCandidate

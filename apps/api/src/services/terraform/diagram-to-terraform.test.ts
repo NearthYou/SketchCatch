@@ -452,6 +452,9 @@ test("renders Live Observation outputs only for an explicit HTTPS ALB topology",
       createLiveObservationNode("aws_lb_target_group", "api", {}),
       ...createHttpsAlbListenerNodes(),
       createLiveObservationNode("aws_autoscaling_group", "api", {}),
+      createLiveObservationNode("aws_cloudwatch_log_group", "api", {
+        name: "/aws/ec2/api"
+      }),
       createLiveObservationNode("aws_cloudwatch_metric_alarm", "scale_out", {
         metricName: "RequestCountPerTarget",
         threshold: 60
@@ -467,6 +470,7 @@ test("renders Live Observation outputs only for an explicit HTTPS ALB topology",
   assert.match(terraform, /output "load_balancer_dns_name"[\s\S]*aws_lb\.demo\.dns_name/);
   assert.match(terraform, /output "load_balancer_arn"[\s\S]*aws_lb\.demo\.arn/);
   assert.match(terraform, /output "target_group_arn"[\s\S]*aws_lb_target_group\.api\.arn/);
+  assert.match(terraform, /output "log_group_name"[\s\S]*aws_cloudwatch_log_group\.api\.name/);
   assert.match(terraform, /output "asg_name"/);
   assert.doesNotMatch(terraform, /output "static_site_url"/);
   assert.doesNotMatch(terraform, /output "api_base_url"/);

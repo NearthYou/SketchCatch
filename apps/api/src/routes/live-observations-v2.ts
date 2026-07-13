@@ -20,6 +20,11 @@ export type LiveObservationV2RouteOptions = {
     request: FastifyRequest,
     deploymentId: string
   ) => Promise<void>;
+  readonly refreshObservation: (
+    request: FastifyRequest,
+    deploymentId: string,
+    observationId: string
+  ) => Promise<void>;
 };
 
 export async function registerLiveObservationV2Routes(
@@ -45,6 +50,7 @@ export async function registerLiveObservationV2Routes(
       try {
         const params = observationParamsSchema.parse(request.params);
         await options.requireDeploymentAccess(request, params.deploymentId);
+        await options.refreshObservation(request, params.deploymentId, params.observationId);
         return reply
           .status(200)
           .send(
@@ -72,6 +78,7 @@ export async function registerLiveObservationV2Routes(
           once: query.once === "true",
           reply,
           request,
+          refreshObservation: options.refreshObservation,
           service: options.liveObservationService
         });
       } catch (error) {
@@ -107,6 +114,7 @@ async function streamSnapshots(input: {
   once: boolean;
   reply: FastifyReply;
   request: FastifyRequest;
+  refreshObservation: LiveObservationV2RouteOptions["refreshObservation"];
   service: LiveObservationV2Service;
 }): Promise<void> {
   input.reply.raw.writeHead(200, {
@@ -135,6 +143,11 @@ async function streamSnapshots(input: {
     if (closed || updating) return;
     updating = true;
     try {
+      await input.refreshObservation(
+        input.request,
+        input.deploymentId,
+        input.observationId
+      );
       const response = await input.service.readSession(
         input.deploymentId,
         input.observationId

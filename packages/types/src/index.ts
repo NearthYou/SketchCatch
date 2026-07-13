@@ -1358,6 +1358,7 @@ export type DeploymentLiveObservationAwsAdapterV2 = {
     loadBalancerDnsName: string;
     loadBalancerArn: string;
     targetGroupArn: string;
+    logGroupNames?: string[] | undefined;
     capacityTarget:
       | {
           kind: "asg";
@@ -1419,6 +1420,25 @@ export type LiveObservationPressureLevel =
   | "critical";
 
 export type LiveObservationAwsState = "available" | "delayed" | "unavailable";
+
+export type LiveObservationProviderSnapshot = {
+  requests: number | null;
+  errorRate: number | null;
+  p95LatencyMs: number | null;
+  availability: number | null;
+  capacity: {
+    desired: number | null;
+    running: number | null;
+    healthy: number | null;
+    max: number | null;
+  };
+  logs: Array<{
+    timestamp: IsoDateTimeString;
+    message: string;
+  }>;
+  observedAt: IsoDateTimeString | null;
+  state: LiveObservationAwsState;
+};
 
 export type LiveObservationSession = {
   id: string;
@@ -1515,7 +1535,7 @@ export type LiveObservationV2Snapshot = {
   };
   latestObservation: {
     observedAt: IsoDateTimeString;
-    payload: JsonValue;
+    payload: LiveObservationProviderSnapshot;
   } | null;
   terminalAt: IsoDateTimeString | null;
 };

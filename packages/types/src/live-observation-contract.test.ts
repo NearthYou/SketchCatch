@@ -5,6 +5,7 @@ import type {
   DeploymentLiveObservationManifestStatus,
   DeploymentLiveObservationManifestV2,
   JsonValue,
+  LiveObservationProviderSnapshot,
   LiveObservationSnapshotResponse,
   StopLiveObservationResponse
 } from "./index.js";
@@ -19,6 +20,27 @@ export type LiveObservationContract = {
   snapshot: LiveObservationSnapshotResponse;
   stop: StopLiveObservationResponse;
 };
+
+export const liveObservationProviderSnapshotContract = {
+  requests: 120,
+  errorRate: 2.5,
+  p95LatencyMs: 183,
+  availability: 97.5,
+  capacity: {
+    desired: 2,
+    running: 2,
+    healthy: 2,
+    max: 4
+  },
+  logs: [
+    {
+      timestamp: "2026-07-11T00:00:00.000Z",
+      message: "request completed"
+    }
+  ],
+  observedAt: "2026-07-11T00:00:00.000Z",
+  state: "available"
+} satisfies LiveObservationProviderSnapshot;
 
 const deploymentId = "123e4567-e89b-42d3-a456-426614174000";
 const resourceSuffix = "123e4567e89b";

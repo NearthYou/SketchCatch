@@ -71,6 +71,10 @@ const awsLiveObservationAdapterPayloadV2Schema = z
     loadBalancerDnsName: z.string().min(1).max(253),
     loadBalancerArn: z.string().regex(generalLoadBalancerArnPattern),
     targetGroupArn: z.string().regex(generalTargetGroupArnPattern),
+    logGroupNames: z
+      .array(z.string().regex(/^[A-Za-z0-9_./#-]{1,512}$/))
+      .max(10)
+      .optional(),
     capacityTarget: z.discriminatedUnion("kind", [
       z
         .object({

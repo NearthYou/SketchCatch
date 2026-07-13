@@ -9,6 +9,7 @@ import {
   type ProjectAccessContext
 } from "../deployments/deployment-service.js";
 import type { RuntimeCache } from "../runtime-cache/index.js";
+import { createAwsLiveObservationSnapshotProvider } from "./aws-live-observation-snapshot-provider.js";
 import { createInMemoryLiveObservationStore } from "./in-memory-live-observation-store.js";
 import { createLiveObservationCapability, type LiveObservationCapabilityKeyring } from "./live-observation-capability.js";
 import {
@@ -22,6 +23,7 @@ import {
 import { createLiveObservationPublicCollector } from "./live-observation-public-collector.js";
 import { createLiveObservationHttpsTransport } from "./live-observation-https-transport.js";
 import { createLiveObservationPublicRequestRateLimiter } from "./live-observation-public-request-rate-limiter.js";
+import { createLiveObservationObserverService } from "./live-observation-observer-service.js";
 import {
   LiveObservationStoreUnavailableError,
   type LiveObservationStore
@@ -43,6 +45,11 @@ export type LiveObservationV2Runtime = {
     request: FastifyRequest,
     deploymentId: string
   ) => Promise<void>;
+  readonly refreshObservation: (
+    request: FastifyRequest,
+    deploymentId: string,
+    observationId: string
+  ) => Promise<void>;
 };
 
 export function createLiveObservationV2Runtime(options: {
@@ -59,6 +66,10 @@ export function createLiveObservationV2Runtime(options: {
     audienceBaseUrl,
     capabilityKid: capability.currentKid,
     manifestRepository,
+    store
+  });
+  const observerService = createLiveObservationObserverService({
+    provider: createAwsLiveObservationSnapshotProvider(),
     store
   });
   const collector = createLiveObservationPublicCollector({
@@ -141,6 +152,16 @@ export function createLiveObservationV2Runtime(options: {
     },
     async requireDeploymentAccess(request, deploymentId) {
       await loadDeployment(request, deploymentId);
+    },
+    async refreshObservation(request, deploymentId, observationId) {
+      const context = await loadDeployment(request, deploymentId);
+      const connection = context.deployment.awsConnectionId
+        ? await context.deploymentRepository.findVerifiedAwsConnectionById(
+            context.deployment.awsConnectionId,
+            context.accessContext
+          ) ?? null
+        : null;
+      await observerService.refresh({ observationId, connection });
     }
   };
 }

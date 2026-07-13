@@ -98,11 +98,44 @@ local function manifestJson(value, deploymentId)
     kind = true, version = true, payload = true
   }, 3) then return false end
   local payload = adapter.payload
-  if not exactObjectKeys(payload, {
-    cloudFrontDistributionId = true, loadBalancerArn = true,
-    targetGroupArn = true, autoScalingGroupName = true
-  }, 4) then return false end
-  return manifest.schemaVersion == 2 and manifest.provider == 'aws' and
+  if type(payload) ~= 'table' then return false end
+  local validAdapter = false
+  if adapter.kind == 'aws-live-observation' and adapter.version == 1 then
+    validAdapter = exactObjectKeys(payload, {
+      cloudFrontDistributionId = true, loadBalancerArn = true,
+      targetGroupArn = true, autoScalingGroupName = true
+    }, 4) and type(payload.cloudFrontDistributionId) == 'string' and
+      type(payload.loadBalancerArn) == 'string' and type(payload.targetGroupArn) == 'string' and
+      type(payload.autoScalingGroupName) == 'string'
+  elseif adapter.kind == 'aws-live-observation' and adapter.version == 2 then
+    local payloadCount = payload.logGroupNames == nil and 5 or 6
+    local validLogs = payload.logGroupNames == nil
+    if type(payload.logGroupNames) == 'table' then
+      validLogs = #payload.logGroupNames <= 10
+      for index = 1, #payload.logGroupNames do
+        if type(payload.logGroupNames[index]) ~= 'string' or payload.logGroupNames[index] == '' then
+          validLogs = false
+        end
+      end
+    end
+    local capacity = payload.capacityTarget
+    local validCapacity = type(capacity) == 'table' and
+      ((capacity.kind == 'asg' and exactObjectKeys(capacity, {
+        kind = true, autoScalingGroupName = true
+      }, 2) and type(capacity.autoScalingGroupName) == 'string') or
+      (capacity.kind == 'ecs_fargate' and exactObjectKeys(capacity, {
+        kind = true, clusterName = true, serviceName = true, maxCapacity = true
+      }, 4) and type(capacity.clusterName) == 'string' and
+        type(capacity.serviceName) == 'string' and type(capacity.maxCapacity) == 'number' and
+        capacity.maxCapacity > 0 and math.floor(capacity.maxCapacity) == capacity.maxCapacity))
+    validAdapter = exactObjectKeys(payload, {
+      trafficHostname = true, loadBalancerDnsName = true, loadBalancerArn = true,
+      targetGroupArn = true, logGroupNames = true, capacityTarget = true
+    }, payloadCount) and type(payload.trafficHostname) == 'string' and
+      type(payload.loadBalancerDnsName) == 'string' and type(payload.loadBalancerArn) == 'string' and
+      type(payload.targetGroupArn) == 'string' and validLogs and validCapacity
+  end
+  return manifest.schemaVersion == 2 and manifest.provider == 'aws' and validAdapter and
     provenance.deploymentId == deploymentId and canonicalUuid(provenance.deploymentId) and
     canonicalUuidV4(provenance.awsConnectionId) and
     type(provenance.terraformArtifactSha256) == 'string' and
@@ -112,11 +145,7 @@ local function manifestJson(value, deploymentId)
     type(provenance.verifiedAt) == 'string' and
     type(endpoints.audienceBaseUrl) == 'string' and type(endpoints.trafficUrl) == 'string' and
     pressure.metric == 'requests_per_target_per_minute' and
-    pressure.target == 60 and pressure.windowSeconds == 60 and
-    adapter.kind == 'aws-live-observation' and adapter.version == 1 and
-    type(payload.cloudFrontDistributionId) == 'string' and
-    type(payload.loadBalancerArn) == 'string' and type(payload.targetGroupArn) == 'string' and
-    type(payload.autoScalingGroupName) == 'string'
+    pressure.target == 60 and pressure.windowSeconds == 60
 end
 
 local function observationJson(value)
