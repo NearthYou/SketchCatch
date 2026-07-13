@@ -1156,6 +1156,36 @@ export type AwsConnectionListResponse = {
   awsConnections: AwsConnection[];
 };
 
+export { BRAINBOARD_TEMPLATE_IDS } from "./brainboard-templates/ids.ts";
+export type { BrainboardTemplateId } from "./brainboard-templates/ids.ts";
+export {
+  BRAINBOARD_TEMPLATE_AUTHOR,
+  BRAINBOARD_TEMPLATE_PROVIDER,
+  brainboardTemplateManifest
+} from "./brainboard-templates/manifest.ts";
+export type { BrainboardTemplateManifestEntry } from "./brainboard-templates/manifest.ts";
+export type {
+  BrainboardSourceArrowDirection,
+  BrainboardSourceEdge,
+  BrainboardSourceNode,
+  BrainboardSourcePoint,
+  BrainboardSourcePresentationNode,
+  BrainboardSourceResourceNode,
+  BrainboardSourceSize,
+  BrainboardSourceValue,
+  BrainboardSourceViewport,
+  BrainboardTemplateCaptureStatus,
+  BrainboardTemplateOrigin,
+  BrainboardTemplateSource,
+  BrainboardTerraformFile
+} from "./brainboard-templates/source-types.ts";
+export { validateBrainboardTemplateSource } from "./brainboard-templates/validate-source.ts";
+export type {
+  BrainboardSourceValidationError,
+  BrainboardSourceValidationErrorCode,
+  BrainboardSourceValidationResult
+} from "./brainboard-templates/validate-source.ts";
+
 export {
   buildTemplateDiagramJson,
   getTemplateDefinitionById,
