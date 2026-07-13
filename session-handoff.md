@@ -6,6 +6,7 @@ Use this file only for compact continuation context. Write it in English.
 
 - Issue #361 tracks the Deployment/CI/CD console separation as one feature workstream.
 - Branch `feature/sw/361-deployment-cicd-console` contains the approved design and Tasks 1-9 implementation.
+- Current `origin/dev` is merged locally; only progress/history records conflicted, and both workstreams were preserved.
 - Direct Deployment and CI/CD remain independent screens and records; monitoring requires accepted branch/app/infra settings, and Pipeline Runs are commit-scoped RDS history.
 - Task 9 follow-up connects Pipeline Run `handoffId`/`appUrl`/`apiUrl` to the latest applicable accepted handoff as one atomic tuple; focused API 112/112 and focused Web 82/82 pass.
 
@@ -25,4 +26,4 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Best Next Action
 
-- Review the second Task 9 follow-up commit and triage the unrelated full API-suite failures separately. Collect migration and browser acceptance evidence only after an approved local test DB and safe GitHub/AWS test environment are available.
+- Run the whole-branch review, then triage the unrelated full API-suite failures separately. Collect migration and browser acceptance evidence only after an approved local test DB and safe GitHub/AWS test environment are available.

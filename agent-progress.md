@@ -18,6 +18,22 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-13 - Integrate current dev before whole-branch review
+
+- Merged current `origin/dev` into `feature/sw/361-deployment-cicd-console`; only progress/history records conflicted, and both workstreams were preserved.
+- Verification after conflict resolution: focused issue #361 API 112/112 and Web 82/82, `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm harness:check`, and diff checks passed.
+- Existing warnings remain: unused API `setNow` and Next.js multiple-lockfile root inference. No push or external mutation ran.
+
+### 2026-07-13 - Split estimated and actual project costs with folder tabs
+
+- Added deployment-aware cost contracts across Direct Deployment and Git/CI/CD, including Destroy lifecycle handling.
+- Added separate estimated-cost and actual-usage panels, project scoping, honest sample/allocation copy, keyboard tabs, and the requested compact folder-style tab surface from `DESIGN.md`; removed the final header and tab helper copy per visual feedback.
+- Follow-up UX: direct expected-user input with validation, refresh feedback on both normal and empty states, and scroll-free responsive folder tabs.
+- Follow-up commits: `ad7fb94b`, `104cb8bc`, `c80dac82`, `aaccecfa`.
+- Commits: `4819f64c`, `ff16587d`, `ac29756a`, `da99fdb7`, `a0aeefe0`.
+- Verification: 6 focused API tests, 19 focused Web tests, lint, typecheck, build, and harness pass. Lint retains one unrelated unused-argument warning.
+- Risk: authenticated visual browser QA was blocked because the in-app browser had no session and Chrome control was unavailable. The full Web suite retains seven unrelated baseline failures outside cost files.
+
 ### 2026-07-13 - Integrate and document the Deployment/CI/CD console
 
 - Documented the separate Direct/Pipeline Run record boundaries, 5s active/30s idle polling, RDS source of truth, accepted-change gates, session-deduplicated notifications, safe Output links, and Live Observation Runtime log boundary.
@@ -123,6 +139,41 @@ Short English-only working log for the current agent context. Older records are 
 - Risk:
   - No DB migration, browser journey, GitHub/AWS mutation, Terraform Apply/Destroy, push, or external notification was run.
 
+### 2026-07-13 - Refine actual cost notice and chart readability
+
+- Goal: Clarify fallback project cost allocation and make the actual usage chart readable at a glance.
+- Completed:
+  - Reworded the fallback allocation notice to explain that AWS project cost data may arrive later.
+  - Added readable date labels on the X axis and dollar labels on the Y axis.
+  - Limited long ranges to six date ticks and added a stable zero-cost `$0`, `$2`, `$4` scale.
+  - Reduced data points to a 2 px radius and aligned chart colors and captions with `DESIGN.md`.
+  - Prevented duplicate Y-axis labels for one-cent usage data.
+- Verification:
+  - `pnpm --dir apps/web exec tsx --test features/costs/cost-usage-charts.test.ts features/costs/cost-dashboard-client.test.ts features/costs/cost-usage-copy.test.ts` (19 passed)
+  - `pnpm test -- --output-logs=errors-only`
+  - `pnpm lint` passed with the pre-existing `live-observations` `setNow` warning.
+  - `pnpm typecheck`
+  - `pnpm build`
+  - `pnpm harness:check`
+  - `git diff --check`
+- Risk:
+  - Authenticated browser visual QA was not available; the supplied screenshot and source-level UI regression tests were used as the visual contract.
+
+### 2026-07-13 - Stabilize actual cost chart typography
+
+- Goal: Keep chart typography compact and professional at every dashboard width.
+- Completed:
+  - Recomputed the SVG coordinate width from its rendered container with `ResizeObserver` so labels no longer scale with the card.
+  - Fixed the chart height at 220 px and retained the `DESIGN.md` 13 px caption token at its true rendered size.
+  - Added a source-level regression for responsive width, fixed height, and typography token usage.
+- Verification:
+  - 16 focused chart tests and the full test suite passed.
+  - `pnpm lint` passed with the pre-existing `live-observations` `setNow` warning.
+  - `pnpm typecheck`, `pnpm build`, and `git diff --check` passed.
+- Review:
+  - Spec review found no issues; standards review finding about the caption token was fixed in `dcda929b`.
+
 ## Next Action
 
-- Review the second Task 9 follow-up commit. Investigate the unrelated full API-suite baseline failures separately; run migration and credentialed browser acceptance only with an approved safe environment.
+- Run the whole-branch review after integrating current `origin/dev`. Investigate the unrelated full API-suite baseline failures separately; run migration and credentialed browser acceptance only with an approved safe environment.
+- Confirm the responsive chart visually with authenticated actual-usage data when browser automation is available.
