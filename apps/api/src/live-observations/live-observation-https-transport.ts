@@ -5,14 +5,13 @@ import { requireLiveObservationTrafficTargetEvidence } from "./live-observation-
 
 type TrafficResponse = {
   readonly statusCode?: number | undefined;
-  resume(): void;
+  destroy(error?: Error): void;
 };
 
 type TrafficRequest = {
   destroy(error: Error): void;
   end(): void;
   on(event: "error", handler: (error: Error) => void): TrafficRequest;
-  setTimeout(timeoutMs: number, handler: () => void): TrafficRequest;
 };
 
 type TrafficRequester = (
@@ -21,34 +20,65 @@ type TrafficRequester = (
 ) => TrafficRequest;
 
 type DnsResolver = (hostname: string) => Promise<readonly string[]>;
+type TimeoutScheduler = {
+  readonly clearTimeout: (handle: unknown) => void;
+  readonly now: () => number;
+  readonly setTimeout: (handler: () => void, timeoutMs: number) => unknown;
+};
+
+type TrafficDeadline = TimeoutScheduler & {
+  readonly expiresAt: number;
+  expired: boolean;
+};
 
 const TRAFFIC_REQUEST_TIMEOUT_MS = 3_000;
 const GENERIC_ERROR_MESSAGE = "Live Observation traffic request unavailable";
 
 export function createLiveObservationHttpsTransport(options: {
+  readonly clearTimeout?: ((handle: unknown) => void) | undefined;
+  readonly now?: (() => number) | undefined;
   readonly request?: TrafficRequester;
   readonly resolve4?: DnsResolver;
   readonly resolve6?: DnsResolver;
   readonly resolveCname?: DnsResolver;
+  readonly setTimeout?: ((handler: () => void, timeoutMs: number) => unknown) | undefined;
 } = {}) {
   const request = options.request ?? (httpsRequest as unknown as TrafficRequester);
   const resolveIpv4 = options.resolve4 ?? resolve4;
   const resolveIpv6 = options.resolve6 ?? resolve6;
   const resolveTrafficCname = options.resolveCname ?? resolveCname;
+  const scheduler: TimeoutScheduler = {
+    clearTimeout:
+      options.clearTimeout ??
+      ((handle) => globalThis.clearTimeout(handle as ReturnType<typeof setTimeout>)),
+    now: options.now ?? (() => performance.now()),
+    setTimeout:
+      options.setTimeout ??
+      ((handler, timeoutMs) => globalThis.setTimeout(handler, timeoutMs))
+  };
 
   return Object.freeze({
     async post(manifest: unknown): Promise<{ status: number }> {
+      const deadline = createTrafficDeadline(scheduler);
       try {
         const evidence = requireLiveObservationTrafficTargetEvidence(manifest);
-        await assertVerifiedCname(
-          evidence.trafficHostname,
-          evidence.loadBalancerDnsName,
-          resolveTrafficCname
-        );
-        const addresses = await resolvePublicAddresses(
-          evidence.loadBalancerDnsName,
-          resolveIpv4,
-          resolveIpv6
+        const addresses = await runWithinDeadline(
+          deadline,
+          async () => {
+            await assertVerifiedCname(
+              evidence.trafficHostname,
+              evidence.loadBalancerDnsName,
+              resolveTrafficCname
+            );
+            assertDeadlineActive(deadline);
+            const resolved = await resolvePublicAddresses(
+              evidence.loadBalancerDnsName,
+              resolveIpv4,
+              resolveIpv6
+            );
+            assertDeadlineActive(deadline);
+            return resolved;
+          }
         );
         const selected = addresses[0];
         if (!selected) throw new Error(GENERIC_ERROR_MESSAGE);
@@ -56,6 +86,7 @@ export function createLiveObservationHttpsTransport(options: {
         return await postPinnedHttpsRequest({
           address: selected.address,
           family: selected.family,
+          deadline,
           request,
           trafficHostname: evidence.trafficHostname,
           trafficUrl: evidence.trafficUrl
@@ -65,6 +96,70 @@ export function createLiveObservationHttpsTransport(options: {
       }
     }
   });
+}
+
+function createTrafficDeadline(scheduler: TimeoutScheduler): TrafficDeadline {
+  return {
+    ...scheduler,
+    expiresAt: scheduler.now() + TRAFFIC_REQUEST_TIMEOUT_MS,
+    expired: false
+  };
+}
+
+function runWithinDeadline<T>(
+  deadline: TrafficDeadline,
+  operation: () => Promise<T>
+): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const remainingMs = getRemainingDeadlineMs(deadline);
+    if (remainingMs <= 0 || deadline.expired) {
+      deadline.expired = true;
+      reject(new Error(GENERIC_ERROR_MESSAGE));
+      return;
+    }
+
+    let settled = false;
+    const timer = deadline.setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      deadline.expired = true;
+      deadline.clearTimeout(timer);
+      reject(new Error(GENERIC_ERROR_MESSAGE));
+    }, remainingMs);
+    const settle = (handler: () => void) => {
+      if (settled) return;
+      settled = true;
+      deadline.clearTimeout(timer);
+      handler();
+    };
+
+    try {
+      operation().then(
+        (value) => {
+          try {
+            assertDeadlineActive(deadline);
+            settle(() => resolve(value));
+          } catch (error) {
+            settle(() => reject(error));
+          }
+        },
+        (error) => settle(() => reject(error))
+      );
+    } catch (error) {
+      settle(() => reject(error));
+    }
+  });
+}
+
+function assertDeadlineActive(deadline: TrafficDeadline): void {
+  if (deadline.expired || getRemainingDeadlineMs(deadline) <= 0) {
+    deadline.expired = true;
+    throw new Error(GENERIC_ERROR_MESSAGE);
+  }
+}
+
+function getRemainingDeadlineMs(deadline: TrafficDeadline): number {
+  return Math.max(0, deadline.expiresAt - deadline.now());
 }
 
 async function assertVerifiedCname(
@@ -117,6 +212,7 @@ async function resolveOptional(hostname: string, resolver: DnsResolver): Promise
 
 function postPinnedHttpsRequest(input: {
   readonly address: string;
+  readonly deadline: TrafficDeadline;
   readonly family: 4 | 6;
   readonly request: TrafficRequester;
   readonly trafficHostname: string;
@@ -124,35 +220,78 @@ function postPinnedHttpsRequest(input: {
 }): Promise<{ status: number }> {
   const url = new URL(input.trafficUrl);
   return new Promise((resolve, reject) => {
-    const request = input.request(
-      {
-        agent: false,
-        headers: { Host: input.trafficHostname },
-        hostname: input.trafficHostname,
-        lookup: (_hostname, _options, callback) => {
-          callback(null, input.address, input.family);
-        },
-        method: "POST",
-        path: url.pathname,
-        port: 443,
-        protocol: "https:",
-        servername: input.trafficHostname
-      },
-      (response) => {
-        const status = response.statusCode;
-        response.resume();
-        if (!Number.isInteger(status)) {
-          reject(new Error(GENERIC_ERROR_MESSAGE));
-          return;
+    const remainingMs = getRemainingDeadlineMs(input.deadline);
+    if (remainingMs <= 0 || input.deadline.expired) {
+      input.deadline.expired = true;
+      reject(new Error(GENERIC_ERROR_MESSAGE));
+      return;
+    }
+
+    let request: TrafficRequest | undefined;
+    let settled = false;
+    let timer: unknown;
+    const clearTimer = () => {
+      if (timer === undefined) return;
+      input.deadline.clearTimeout(timer);
+      timer = undefined;
+    };
+    const settleError = (destroyRequest: boolean) => {
+      if (settled) return;
+      settled = true;
+      clearTimer();
+      if (destroyRequest && request) {
+        try {
+          request.destroy(new Error(GENERIC_ERROR_MESSAGE));
+        } catch {
+          // The request is already settling with a generic error.
         }
-        resolve({ status: status as number });
       }
-    );
-    request.on("error", () => reject(new Error(GENERIC_ERROR_MESSAGE)));
-    request.setTimeout(TRAFFIC_REQUEST_TIMEOUT_MS, () => {
-      request.destroy(new Error(GENERIC_ERROR_MESSAGE));
-    });
-    request.end();
+      reject(new Error(GENERIC_ERROR_MESSAGE));
+    };
+
+    try {
+      request = input.request(
+        {
+          agent: false,
+          headers: { Host: input.trafficHostname },
+          hostname: input.trafficHostname,
+          lookup: (_hostname, _options, callback) => {
+            callback(null, input.address, input.family);
+          },
+          method: "POST",
+          path: url.pathname,
+          port: 443,
+          protocol: "https:",
+          servername: input.trafficHostname
+        },
+        (response) => {
+          const status = response.statusCode;
+          if (settled) {
+            response.destroy();
+            return;
+          }
+          settled = true;
+          let destroyFailed = false;
+          try {
+            response.destroy();
+          } catch {
+            destroyFailed = true;
+          }
+          clearTimer();
+          if (destroyFailed || !Number.isInteger(status)) {
+            reject(new Error(GENERIC_ERROR_MESSAGE));
+            return;
+          }
+          resolve({ status: status as number });
+        }
+      );
+      request.on("error", () => settleError(false));
+      if (settled) return;
+      timer = input.deadline.setTimeout(() => settleError(true), remainingMs);
+      request.end();
+    } catch {
+      settleError(true);
+    }
   });
 }
 
@@ -180,11 +319,17 @@ function isPublicIpv4(address: string): boolean {
 function isPublicIpv6(address: string): boolean {
   const value = parseIpv6(address);
   if (value === null || !isInIpv6Range(value, 0x2000n << 112n, 3)) return false;
+  if (address.includes(".")) return false;
+  if (isInIpv6Range(value, parseIpv6("2001::") ?? 0n, 23)) return false;
   if (isInIpv6Range(value, parseIpv6("2001::") ?? 0n, 32)) return false;
   if (isInIpv6Range(value, parseIpv6("2001:2::") ?? 0n, 48)) return false;
   if (isInIpv6Range(value, parseIpv6("2001:10::") ?? 0n, 28)) return false;
   if (isInIpv6Range(value, parseIpv6("2001:20::") ?? 0n, 28)) return false;
   if (isInIpv6Range(value, parseIpv6("2001:db8::") ?? 0n, 32)) return false;
+  if (isInIpv6Range(value, parseIpv6("2002::") ?? 0n, 16)) return false;
+  if (isInIpv6Range(value, parseIpv6("3f00::") ?? 0n, 8)) return false;
+  if (isInIpv6Range(value, parseIpv6("3ffe::") ?? 0n, 16)) return false;
+  if (isInIpv6Range(value, parseIpv6("3fff::") ?? 0n, 20)) return false;
   return true;
 }
 
