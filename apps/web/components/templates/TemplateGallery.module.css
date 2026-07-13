@@ -7,6 +7,7 @@
 .controls {
   align-items: end;
   display: grid;
+  font-family: var(--font-sans);
   gap: 10px;
   grid-template-columns: minmax(220px, 1fr) minmax(130px, 180px) minmax(150px, 190px);
 }
@@ -55,6 +56,12 @@
   font: inherit;
   min-height: 42px;
   padding: 0 10px;
+}
+
+.searchField input,
+.selectField select,
+.selectField option {
+  font-family: var(--font-sans);
 }
 
 .grid {

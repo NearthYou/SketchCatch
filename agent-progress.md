@@ -9,9 +9,9 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
-### 2026-07-13 - Polish cost header and project list filters
+### 2026-07-13 - Polish dashboard controls and template typography
 
-- Added the Cost Management introduction, switched Project filters to white menus, and protected both filter widths from label truncation; focused Web tests, lint, typecheck, build, diff check, and harness pass, with one unrelated API `setNow` warning.
+- Polished Cost and Project controls, then bundled Pretendard and applied it explicitly to Template search/select controls; focused Web tests, lint, typecheck, build, diff check, and harness pass, with one unrelated API `setNow` warning.
 
 ### 2026-07-13 - Restore saved architecture thumbnails above project cards
 
