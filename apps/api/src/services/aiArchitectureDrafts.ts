@@ -2525,7 +2525,11 @@ function normalizeArchitecturePlanTopologyInvariants(
 
   const normalizedPrompt = prompt.normalize("NFKC").toLowerCase();
   const patternIds = new Set(plan.patternIds ?? []);
-  const usesSelfManagedEc2 = requiresSelfManagedEc2Architecture(normalizedPrompt);
+  const usesEksRuntime = (plan.requiredResources ?? []).some(
+    (resourceType) => resourceType === "EKS_CLUSTER" || resourceType === "EKS_NODE_GROUP"
+  );
+  const usesSelfManagedEc2 =
+    !usesEksRuntime && requiresSelfManagedEc2Architecture(normalizedPrompt);
 
   if (usesSelfManagedEc2) {
     patternIds.delete("ecs-fargate");
@@ -2541,7 +2545,9 @@ function normalizeArchitecturePlanTopologyInvariants(
 
   const usesEc2Pattern = patternIds.has("alb-asg-ec2");
   const usesFargatePattern =
-    patternIds.has("ecs-fargate") && !patternIds.has("serverless-api");
+    !usesEksRuntime &&
+    patternIds.has("ecs-fargate") &&
+    !patternIds.has("serverless-api");
   const operationalRequirements = resolveArchitectureOperationalRequirements(prompt);
   const topology = plan.runtimeTopology;
   const requiresEc2Spread =
@@ -2560,6 +2566,9 @@ function normalizeArchitecturePlanTopologyInvariants(
   const hasDatabase = patternIds.has("multi-az-rds");
   const hasSpaStaticDelivery = patternIds.has("spa-cloudfront-s3");
   const cloudFrontStaticDeliveryRequired = hasSpaStaticDelivery && requiresCloudFrontStaticDelivery(normalizedPrompt);
+  const loadBalancerForbidden = (plan.forbiddenCapabilities ?? []).some(
+    (capability) => capability.toLowerCase() === "load_balancer"
+  );
   const requiredResources = new Set(plan.requiredResources ?? []);
   const resourceQuantities = { ...(plan.resourceQuantities ?? {}) };
   const fargateServiceCount = usesFargatePattern ? resolveFargateServiceCount(normalizedPrompt) : 1;
@@ -2699,6 +2708,14 @@ function normalizeArchitecturePlanTopologyInvariants(
       "CLOUDWATCH_LOG_GROUP",
       "CLOUDWATCH_METRIC_ALARM"
     ] as const) {
+      if (
+        loadBalancerForbidden &&
+        ["LOAD_BALANCER", "LOAD_BALANCER_LISTENER", "LOAD_BALANCER_TARGET_GROUP"].includes(
+          resourceType
+        )
+      ) {
+        continue;
+      }
       requiredResources.add(resourceType);
     }
 
@@ -2707,7 +2724,7 @@ function normalizeArchitecturePlanTopologyInvariants(
       requiredResources.add("APPLICATION_AUTO_SCALING_POLICY");
     }
 
-    if (requiresHttpsTransport(normalizedPrompt)) {
+    if (!loadBalancerForbidden && requiresHttpsTransport(normalizedPrompt)) {
       requiredResources.add("ACM_CERTIFICATE");
     }
 
@@ -2730,10 +2747,11 @@ function normalizeArchitecturePlanTopologyInvariants(
       resourceQuantities.ROUTE_TABLE_ASSOCIATION ?? 0,
       hasDatabase ? 6 : 4
     );
-    resourceQuantities.SECURITY_GROUP = Math.max(
-      resourceQuantities.SECURITY_GROUP ?? 0,
-      hasDatabase ? 3 : 2
-    );
+    const requiredSecurityGroupCount =
+      (loadBalancerForbidden ? 1 : 2) + (hasDatabase ? 1 : 0);
+    resourceQuantities.SECURITY_GROUP = loadBalancerForbidden
+      ? requiredSecurityGroupCount
+      : Math.max(resourceQuantities.SECURITY_GROUP ?? 0, requiredSecurityGroupCount);
     resourceQuantities.IAM_ROLE = Math.max(resourceQuantities.IAM_ROLE ?? 0, 2);
     resourceQuantities.CLOUDWATCH_METRIC_ALARM = Math.max(
       resourceQuantities.CLOUDWATCH_METRIC_ALARM ?? 0,
@@ -2742,10 +2760,12 @@ function normalizeArchitecturePlanTopologyInvariants(
 
     resourceQuantities.ECS_SERVICE = Math.max(resourceQuantities.ECS_SERVICE ?? 0, fargateServiceCount);
     resourceQuantities.ECS_TASK_DEFINITION = Math.max(resourceQuantities.ECS_TASK_DEFINITION ?? 0, fargateServiceCount);
-    resourceQuantities.LOAD_BALANCER_TARGET_GROUP = Math.max(
-      resourceQuantities.LOAD_BALANCER_TARGET_GROUP ?? 0,
-      fargateServiceCount
-    );
+    if (!loadBalancerForbidden) {
+      resourceQuantities.LOAD_BALANCER_TARGET_GROUP = Math.max(
+        resourceQuantities.LOAD_BALANCER_TARGET_GROUP ?? 0,
+        fargateServiceCount
+      );
+    }
     resourceQuantities.CLOUDWATCH_LOG_GROUP = Math.max(
       resourceQuantities.CLOUDWATCH_LOG_GROUP ?? 0,
       fargateServiceCount
@@ -3053,7 +3073,7 @@ function findCanonicalPatternMaterializationIssues(
   if (
     ecsServices.length < serviceProfiles.length ||
     ecsTaskDefinitions.length < serviceProfiles.length ||
-    targetGroups.length < serviceProfiles.length
+    (hasLoadBalancer && targetGroups.length < serviceProfiles.length)
   ) {
     issues.push("The Fargate plan must materialize each required service with its own service, task definition, and target group.");
   }
@@ -3071,9 +3091,10 @@ function findCanonicalPatternMaterializationIssues(
       service.config.networkConfiguration.assignPublicIp !== false ||
       !Array.isArray(service.config.networkConfiguration.subnets) ||
       service.config.networkConfiguration.subnets.length !== 2 ||
-      serviceLoadBalancer === undefined ||
-      serviceLoadBalancer.containerName !== profile.containerName ||
-      serviceLoadBalancer.containerPort !== 8080
+      (hasLoadBalancer &&
+        (serviceLoadBalancer === undefined ||
+          serviceLoadBalancer.containerName !== profile.containerName ||
+          serviceLoadBalancer.containerPort !== 8080))
     ) {
       issues.push(`The Fargate service ${profile.serviceId} must run two private tasks without public IPs.`);
     }
@@ -5158,12 +5179,24 @@ function configureCanonicalPatternResources(
       taskDefinition: canonicalTerraformReference("aws_ecs_task_definition", profile.taskDefinitionId, "arn"),
       desiredCount: taskSizing.desiredCount,
       launchType: "FARGATE",
-      healthCheckGracePeriodSeconds: 60,
+      ...(hasLoadBalancer ? { healthCheckGracePeriodSeconds: 60 } : {}),
       deploymentMinimumHealthyPercent: 100,
       deploymentMaximumPercent: 200,
       deploymentCircuitBreaker: { enable: true, rollback: true },
       networkConfiguration: { assignPublicIp: false, subnets: privateAppSubnetRefs, securityGroups: [canonicalTerraformReference("aws_security_group", "app-security-group")] },
-      loadBalancer: { targetGroupArn: canonicalTerraformReference("aws_lb_target_group", profile.targetGroupId, "arn"), containerName: profile.containerName, containerPort: 8080 }
+      ...(hasLoadBalancer
+        ? {
+            loadBalancer: {
+              targetGroupArn: canonicalTerraformReference(
+                "aws_lb_target_group",
+                profile.targetGroupId,
+                "arn"
+              ),
+              containerName: profile.containerName,
+              containerPort: 8080
+            }
+          }
+        : {})
     }))],
     ...(hasDatabase
       ? [["DB_SUBNET_GROUP", [canonicalNodeSpec("db-subnet-group", "DB Subnet Group", 680, 920, {
@@ -5228,7 +5261,46 @@ function configureCanonicalPatternResources(
       case "ECS_TASK_DEFINITION":
         return { ...node, id: primaryServiceProfile.taskDefinitionId, label: primaryServiceProfile.taskDefinitionLabel, config: { family: primaryServiceProfile.taskFamily, networkMode: "awsvpc", requiresCompatibilities: ["FARGATE"], cpu: taskSizing.cpu, memory: taskSizing.memory, executionRoleArn: canonicalTerraformReference("aws_iam_role", "ecs-execution-role", "arn"), taskRoleArn: canonicalTerraformReference("aws_iam_role", "ecs-task-role", "arn"), applicationFramework: frontendProfile === "ssr" ? "next_nuxt_ssr" : undefined, containerDefinitions: JSON.stringify([{ name: primaryServiceProfile.containerName, image: "public.ecr.aws/docker/library/nginx:1.27-alpine", essential: true, portMappings: [{ containerPort: 8080, protocol: "tcp" }], logConfiguration: { logDriver: "awslogs", options: { "awslogs-group": primaryServiceProfile.logGroupName, "awslogs-region": region, "awslogs-stream-prefix": primaryServiceProfile.containerName } } }]) } };
       case "ECS_SERVICE":
-        return { ...node, id: primaryServiceProfile.serviceId, label: primaryServiceProfile.serviceLabel, config: { name: primaryServiceProfile.serviceName, cluster: canonicalTerraformReference("aws_ecs_cluster", "ecs-cluster"), taskDefinition: canonicalTerraformReference("aws_ecs_task_definition", primaryServiceProfile.taskDefinitionId, "arn"), desiredCount: taskSizing.desiredCount, launchType: "FARGATE", healthCheckGracePeriodSeconds: 60, deploymentMinimumHealthyPercent: 100, deploymentMaximumPercent: 200, deploymentCircuitBreaker: { enable: true, rollback: true }, networkConfiguration: { assignPublicIp: false, subnets: privateAppSubnetRefs, securityGroups: [canonicalTerraformReference("aws_security_group", "app-security-group")] }, loadBalancer: { targetGroupArn: canonicalTerraformReference("aws_lb_target_group", primaryServiceProfile.targetGroupId, "arn"), containerName: primaryServiceProfile.containerName, containerPort: 8080 } } };
+        return {
+          ...node,
+          id: primaryServiceProfile.serviceId,
+          label: primaryServiceProfile.serviceLabel,
+          config: {
+            name: primaryServiceProfile.serviceName,
+            cluster: canonicalTerraformReference("aws_ecs_cluster", "ecs-cluster"),
+            taskDefinition: canonicalTerraformReference(
+              "aws_ecs_task_definition",
+              primaryServiceProfile.taskDefinitionId,
+              "arn"
+            ),
+            desiredCount: taskSizing.desiredCount,
+            launchType: "FARGATE",
+            ...(hasLoadBalancer ? { healthCheckGracePeriodSeconds: 60 } : {}),
+            deploymentMinimumHealthyPercent: 100,
+            deploymentMaximumPercent: 200,
+            deploymentCircuitBreaker: { enable: true, rollback: true },
+            networkConfiguration: {
+              assignPublicIp: false,
+              subnets: privateAppSubnetRefs,
+              securityGroups: [
+                canonicalTerraformReference("aws_security_group", "app-security-group")
+              ]
+            },
+            ...(hasLoadBalancer
+              ? {
+                  loadBalancer: {
+                    targetGroupArn: canonicalTerraformReference(
+                      "aws_lb_target_group",
+                      primaryServiceProfile.targetGroupId,
+                      "arn"
+                    ),
+                    containerName: primaryServiceProfile.containerName,
+                    containerPort: 8080
+                  }
+                }
+              : {})
+          }
+        };
       case "CLOUDFRONT":
         return { ...node, config: { ...node.config, originResourceId: frontendProfile === "ssr" ? "application-load-balancer" : staticBucket?.id, originType: frontendProfile === "ssr" ? "application" : "static", enabled: true, viewerProtocolPolicy: "redirect-to-https" } };
       case "RDS":
@@ -5288,7 +5360,7 @@ function configureCanonicalServerlessApiResources(
           }
         };
       case "S3":
-        if (hasCloudFront && node.config.bucketPurpose === "static_website_origin") {
+        if (hasCloudFront && node.id === staticBucket?.id) {
           return {
             ...node,
             id: staticOriginId,
