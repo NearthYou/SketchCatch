@@ -12,7 +12,7 @@ test("project Board thumbnail captures the real marked canvas and uploads it as 
   const capture = new Blob(["captured-board"], { type: "image/webp" });
   const calls: string[] = [];
   const service = createProjectBoardThumbnailCaptureService({
-    findCaptureElement: () => captureElement,
+    findCaptureElement: () => assert.fail("an exact Board element must not use the fallback selector"),
     captureElement: async (element) => {
       assert.equal(element, captureElement);
       calls.push("capture");
@@ -45,10 +45,27 @@ test("project Board thumbnail captures the real marked canvas and uploads it as 
     }
   });
 
-  const result = await service.captureAndUpload({ projectId });
+  const result = await service.captureAndUpload({ projectId, element: captureElement });
 
   assert.deepEqual(result, { status: "uploaded", assetId });
   assert.deepEqual(calls, ["capture", "create", "upload", "confirm"]);
+});
+
+test("project Board thumbnail skips a disconnected exact Board element", async () => {
+  const disconnectedElement = { isConnected: false } as HTMLElement;
+  const service = createProjectBoardThumbnailCaptureService({
+    findCaptureElement: () => assert.fail("an exact Board element must not use the fallback selector"),
+    captureElement: async () => assert.fail("a disconnected Board must not be captured"),
+    createProjectAssetUpload: async () => assert.fail("asset creation should not run"),
+    uploadProjectAsset: async () => assert.fail("upload should not run"),
+    confirmProjectAssetUpload: async () => assert.fail("confirmation should not run"),
+    abortProjectAssetUpload: async () => assert.fail("abort should not run")
+  });
+
+  assert.deepEqual(
+    await service.captureAndUpload({ projectId, element: disconnectedElement }),
+    { status: "skipped" }
+  );
 });
 
 test("project Board thumbnail skips upload when the real Board DOM is unavailable", async () => {
@@ -65,9 +82,10 @@ test("project Board thumbnail skips upload when the real Board DOM is unavailabl
 });
 
 test("project Board thumbnail aborts pending metadata when upload fails", async () => {
+  const captureElement = {} as HTMLElement;
   const aborted: Array<{ assetId: string; projectId: string }> = [];
   const service = createProjectBoardThumbnailCaptureService({
-    findCaptureElement: () => ({} as HTMLElement),
+    findCaptureElement: () => assert.fail("an exact Board element must not use the fallback selector"),
     captureElement: async () => new Blob(["capture"], { type: "image/webp" }),
     createProjectAssetUpload: async () => createUploadResponse(),
     uploadProjectAsset: async () => {
@@ -79,11 +97,18 @@ test("project Board thumbnail aborts pending metadata when upload fails", async 
     }
   });
 
-  await assert.rejects(service.captureAndUpload({ projectId }), /upload failed/);
+  await assert.rejects(
+    service.captureAndUpload({ projectId, element: captureElement }),
+    /upload failed/
+  );
   assert.deepEqual(aborted, [{ assetId, projectId }]);
 });
 
-test("project Board thumbnail serializes one latest capture behind an in-flight autosave", async () => {
+test("project Board thumbnail serializes only the latest exact element behind an in-flight capture", async () => {
+  const firstElement = { id: "first" } as unknown as HTMLElement;
+  const staleElement = { id: "stale" } as unknown as HTMLElement;
+  const latestElement = { id: "latest" } as unknown as HTMLElement;
+  const capturedElements: HTMLElement[] = [];
   let captureCount = 0;
   let activeCaptureCount = 0;
   let maxActiveCaptureCount = 0;
@@ -93,8 +118,9 @@ test("project Board thumbnail serializes one latest capture behind an in-flight 
     releaseCapture = resolve;
   });
   const service = createProjectBoardThumbnailCaptureService({
-    findCaptureElement: () => ({} as HTMLElement),
-    captureElement: async () => {
+    findCaptureElement: () => assert.fail("exact Board elements must not use the fallback selector"),
+    captureElement: async (element) => {
+      capturedElements.push(element);
       captureCount += 1;
       activeCaptureCount += 1;
       maxActiveCaptureCount = Math.max(maxActiveCaptureCount, activeCaptureCount);
@@ -115,10 +141,10 @@ test("project Board thumbnail serializes one latest capture behind an in-flight 
     abortProjectAssetUpload: async () => assert.fail("successful capture must not abort")
   });
 
-  const first = service.captureAndUpload({ projectId });
+  const first = service.captureAndUpload({ projectId, element: firstElement });
   await Promise.resolve();
-  const second = service.captureAndUpload({ projectId });
-  const third = service.captureAndUpload({ projectId });
+  const second = service.captureAndUpload({ projectId, element: staleElement });
+  const third = service.captureAndUpload({ projectId, element: latestElement });
   releaseCapture?.();
 
   assert.deepEqual(await Promise.all([first, second, third]), [
@@ -129,6 +155,7 @@ test("project Board thumbnail serializes one latest capture behind an in-flight 
   assert.equal(captureCount, 2);
   assert.equal(createCount, 2);
   assert.equal(maxActiveCaptureCount, 1);
+  assert.deepEqual(capturedElements, [firstElement, latestElement]);
 });
 
 function createUploadResponse(): ProjectAssetUploadResponse {

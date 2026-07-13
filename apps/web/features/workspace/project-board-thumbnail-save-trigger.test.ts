@@ -11,18 +11,47 @@ const editorSource = readFileSync(
   fileURLToPath(new URL("../diagram-editor/DiagramEditor.tsx", import.meta.url)),
   "utf8"
 );
+const editorTypesSource = readFileSync(
+  fileURLToPath(new URL("../diagram-editor/types.ts", import.meta.url)),
+  "utf8"
+);
 
-test("successful server draft saves queue a real Board DOM thumbnail capture", () => {
+test("successful stable server draft saves await the lifecycle before showing success", () => {
   const successBranch = managerSource.slice(
     managerSource.indexOf("if (result.ok)"),
     managerSource.indexOf("serverDirtyRef.current = true", managerSource.indexOf("if (result.ok)"))
   );
 
-  assert.match(managerSource, /captureAndUploadProjectBoardThumbnail/);
-  assert.match(successBranch, /captureAndUploadProjectBoardThumbnail\(\{ projectId \}\)/);
+  assert.doesNotMatch(managerSource, /void captureAndUploadProjectBoardThumbnail/);
+  assert.match(
+    successBranch,
+    /setServerSaveState\("server-saved"\)[\s\S]*await thumbnailLifecycle\.requestSavedRevision\(result\.serverDraft\.revision\)[\s\S]*showServerSaveToast\(\)[\s\S]*return result/
+  );
 });
 
-test("DiagramEditor marks the actual ReactFlow surface as the capture source", () => {
+test("server loads request initial thumbnail backfill while local and empty loads defer", () => {
+  const loadBranch = managerSource.slice(
+    managerSource.indexOf("const loadedDraft = await repository.load"),
+    managerSource.indexOf("setLoadState(\"ready\")")
+  );
+
+  assert.match(
+    loadBranch,
+    /loadedDraft\.source === "server"[\s\S]*loadedDraft\.serverDraft[\s\S]*requestInitialServerRevision\(loadedDraft\.serverDraft\.revision\)/
+  );
+  assert.equal(loadBranch.match(/requestInitialServerRevision/g)?.length, 1);
+});
+
+test("DiagramEditor delivers the exact marked ReactFlow element from its current canvas", () => {
+  const initBranch = editorSource.slice(
+    editorSource.indexOf("const handleInit"),
+    editorSource.indexOf("const handleNodesChange")
+  );
+
+  assert.match(editorTypesSource, /onBoardReady\?: \(\(element: HTMLElement\) => void\)/);
+  assert.match(initBranch, /canvasPanelRef\.current\?\.querySelector<HTMLElement>/);
+  assert.match(initBranch, /BOARD_THUMBNAIL_CAPTURE_CONTRACT\.sourceSelector/);
+  assert.match(initBranch, /onBoardReady\?\.\(captureElement\)/);
   assert.match(editorSource, /data-architecture-board-capture-source="true"/);
-  assert.match(editorSource, /<ReactFlow/);
+  assert.match(managerSource, /onBoardReady=\{handleBoardReady\}/);
 });

@@ -51,6 +51,7 @@ import type {
 } from "react";
 import type { DiagramEdge, DiagramJson, DiagramNode } from "../../../../packages/types/src";
 
+import { BOARD_THUMBNAIL_CAPTURE_CONTRACT } from "../../components/architecture-board/board-thumbnail-capture-contract";
 import { ParameterInputPanel } from "../parameter-input";
 import { terraformParameterCatalog } from "../parameter-input/catalog";
 import { ResourceSettingsPanel } from "../resource-settings";
@@ -216,6 +217,7 @@ function DiagramEditorInner({
   initialSelectedEdgeIds,
   initialSelectedNodeIds,
   leftPanel,
+  onBoardReady,
   onDiagramChange,
   onDiagramSaveRequest,
   projectName = "Project workspace",
@@ -1151,7 +1153,14 @@ function DiagramEditorInner({
   const handleInit = useCallback<OnInit<DiagramFlowNode, DiagramFlowEdge>>((instance) => {
     flowInstanceRef.current = instance;
     setFlowReady(true);
-  }, []);
+    const captureElement = canvasPanelRef.current?.querySelector<HTMLElement>(
+      BOARD_THUMBNAIL_CAPTURE_CONTRACT.sourceSelector
+    );
+
+    if (captureElement) {
+      onBoardReady?.(captureElement);
+    }
+  }, [onBoardReady]);
 
   const handleNodesChange = useCallback<OnNodesChange<DiagramFlowNode>>(
     (changes) => {

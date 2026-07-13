@@ -113,16 +113,20 @@ export function createProjectBoardThumbnailCaptureService(
   const captureStates = new Map<
     string,
     {
+      latestElement: HTMLElement | undefined;
       promise: Promise<ProjectBoardThumbnailCaptureResult>;
       rerunRequested: boolean;
     }
   >();
 
   // 한 Project에 동시에 들어온 autosave 요청은 같은 실제 DOM 캡처와 업로드를 공유합니다.
-  async function captureAndUploadOnce(projectId: string): Promise<ProjectBoardThumbnailCaptureResult> {
-    const captureElement = dependencies.findCaptureElement();
+  async function captureAndUploadOnce(
+    projectId: string,
+    exactElement: HTMLElement | undefined
+  ): Promise<ProjectBoardThumbnailCaptureResult> {
+    const captureElement = exactElement ?? dependencies.findCaptureElement();
 
-    if (!captureElement) {
+    if (!captureElement || captureElement.isConnected === false) {
       return { status: "skipped" };
     }
 
@@ -155,13 +159,14 @@ export function createProjectBoardThumbnailCaptureService(
   // 진행 중 요청 뒤에 도착한 autosave들은 병렬 실행 없이 마지막 Board 상태를 한 번 더 캡처합니다.
   async function captureUntilCurrent(
     projectId: string,
-    state: { rerunRequested: boolean }
+    state: { latestElement: HTMLElement | undefined; rerunRequested: boolean }
   ): Promise<ProjectBoardThumbnailCaptureResult> {
     let result: ProjectBoardThumbnailCaptureResult;
 
     do {
       state.rerunRequested = false;
-      result = await captureAndUploadOnce(projectId);
+      const element = state.latestElement;
+      result = await captureAndUploadOnce(projectId, element);
     } while (state.rerunRequested);
 
     return result;
@@ -169,18 +174,22 @@ export function createProjectBoardThumbnailCaptureService(
 
   return {
     captureAndUpload({
+      element,
       projectId
     }: {
+      readonly element?: HTMLElement | undefined;
       readonly projectId: string;
     }): Promise<ProjectBoardThumbnailCaptureResult> {
       const existingState = captureStates.get(projectId);
 
       if (existingState) {
+        existingState.latestElement = element;
         existingState.rerunRequested = true;
         return existingState.promise;
       }
 
       const state = {
+        latestElement: element,
         promise: Promise.resolve<ProjectBoardThumbnailCaptureResult>({ status: "skipped" }),
         rerunRequested: false
       };
@@ -203,6 +212,7 @@ const defaultCaptureService = createProjectBoardThumbnailCaptureService(defaultD
 
 // Server draft 저장 완료 후 호출하는 기본 실제 Board 캡처 진입점입니다.
 export function captureAndUploadProjectBoardThumbnail(input: {
+  readonly element?: HTMLElement | undefined;
   readonly projectId: string;
 }): Promise<ProjectBoardThumbnailCaptureResult> {
   return defaultCaptureService.captureAndUpload(input);
