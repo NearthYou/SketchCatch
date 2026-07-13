@@ -7,6 +7,7 @@ import {
   TEMPLATE_IDS,
   templateDefinitions,
   type RepositoryTemplateId,
+  type TemplateDefinition,
   type TemplateId
 } from "./template-definitions.js";
 
@@ -109,6 +110,118 @@ test("Terraform local names add a deterministic suffix only for normalization co
   ]);
   assert.equal(first.get("edge-name"), extended.get("edge-name"));
   assert.equal(first.get("edge_name"), extended.get("edge_name"));
+});
+
+test("duplicate explicit Terraform local names fail deterministically in the same block", () => {
+  const resources = [
+    {
+      id: "second",
+      terraformBlockType: "resource" as const,
+      terraformResourceName: "shared_name",
+      terraformResourceType: "aws_example"
+    },
+    {
+      id: "first",
+      terraformBlockType: "resource" as const,
+      terraformResourceName: "shared_name",
+      terraformResourceType: "aws_example"
+    }
+  ];
+  const expectedError = {
+    name: "Error",
+    message:
+      'Duplicate explicit TemplateDefinition Terraform resource name "shared_name" in resource:aws_example: first, second'
+  };
+
+  assert.throws(() => createTemplateTerraformResourceNames(resources), expectedError);
+  assert.throws(
+    () => createTemplateTerraformResourceNames([...resources].reverse()),
+    expectedError
+  );
+});
+
+test("explicit Terraform local names win collisions while generated fallbacks receive suffixes", () => {
+  const resources = [
+    {
+      id: "authored",
+      terraformBlockType: "resource" as const,
+      terraformResourceName: "edge_name",
+      terraformResourceType: "aws_example"
+    },
+    {
+      id: "edge-name",
+      terraformBlockType: "resource" as const,
+      terraformResourceType: "aws_example"
+    }
+  ];
+  const first = createTemplateTerraformResourceNames(resources);
+  const second = createTemplateTerraformResourceNames([...resources].reverse());
+
+  assert.equal(first.get("authored"), "edge_name");
+  assert.match(first.get("edge-name") ?? "", /^edge_name_[a-z0-9]{6}$/u);
+  assert.equal(first.get("authored"), second.get("authored"));
+  assert.equal(first.get("edge-name"), second.get("edge-name"));
+});
+
+test("a unique explicit Terraform local name remains exact in nodes and resolved references", () => {
+  const explicitTemplate = {
+    id: "explicit-name-contract" as TemplateId,
+    title: "Explicit name contract",
+    description: "Explicit Terraform identity fixture",
+    tags: ["fixture"],
+    providers: ["aws"],
+    resources: [
+      {
+        id: "bucket",
+        label: "Bucket",
+        provider: "aws",
+        terraformBlockType: "resource",
+        terraformResourceType: "aws_s3_bucket",
+        terraformResourceName: "captured_bucket",
+        values: { bucket: "captured-bucket" },
+        position: { x: 0, y: 0 }
+      },
+      {
+        id: "consumer",
+        label: "Consumer",
+        provider: "aws",
+        terraformBlockType: "resource",
+        terraformResourceType: "aws_example",
+        values: {
+          bucketAddress: "@address:bucket",
+          bucketId: "@ref:bucket.id"
+        },
+        position: { x: 80, y: 0 }
+      }
+    ],
+    relationships: [],
+    presentationNodes: [],
+    presentationEdges: [],
+    parameters: []
+  } as unknown as TemplateDefinition;
+  const mutableDefinitions = templateDefinitions as unknown as TemplateDefinition[];
+  mutableDefinitions.push(explicitTemplate);
+
+  try {
+    const diagram = buildTemplateDiagramJson(explicitTemplate.id, {
+      projectSlug: "contract",
+      shortId: "explicit-name"
+    });
+    const bucket = diagram.nodes.find((node) => node.type === "aws_s3_bucket");
+    const consumer = diagram.nodes.find((node) => node.type === "aws_example");
+
+    assert.equal(bucket?.parameters?.resourceName, "captured_bucket");
+    assert.equal(
+      consumer?.parameters?.values.bucketAddress,
+      "aws_s3_bucket.captured_bucket"
+    );
+    assert.equal(
+      consumer?.parameters?.values.bucketId,
+      "aws_s3_bucket.captured_bucket.id"
+    );
+  } finally {
+    mutableDefinitions.splice(mutableDefinitions.indexOf(explicitTemplate), 1);
+  }
 });
 
 test("Terraform local names stay compact after normalization and collision suffixing", () => {

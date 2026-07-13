@@ -876,10 +876,12 @@ export function createTemplateTerraformResourceNames(
   // Resolve the full identity set first so references never observe a partially assigned collision suffix.
   const normalizedResources = resources.map((resource) => ({
     ...resource,
+    hasExplicitName: resource.terraformResourceName !== undefined,
     normalizedName: resource.terraformResourceName ?? toTerraformIdentifier(resource.id)
   }));
   const resourcesById = new Map<string, (typeof normalizedResources)[number]>();
   const collisionGroups = new Map<string, (typeof normalizedResources)[number][]>();
+  const explicitNameGroups = new Map<string, (typeof normalizedResources)[number][]>();
   const reservedNamesByNamespace = new Map<string, Set<string>>();
 
   for (const resource of normalizedResources) {
@@ -894,16 +896,39 @@ export function createTemplateTerraformResourceNames(
       ...(reservedNamesByNamespace.get(namespaceKey) ?? []),
       resource.normalizedName
     ]));
-    collisionGroups.set(collisionKey, [
-      ...(collisionGroups.get(collisionKey) ?? []),
-      resource
-    ]);
+    const targetGroups = resource.hasExplicitName ? explicitNameGroups : collisionGroups;
+    targetGroups.set(collisionKey, [...(targetGroups.get(collisionKey) ?? []), resource]);
+  }
+
+  const duplicateExplicitNameGroup = [...explicitNameGroups.entries()]
+    .filter(([, group]) => group.length > 1)
+    .sort(([leftKey], [rightKey]) =>
+      leftKey < rightKey ? -1 : leftKey > rightKey ? 1 : 0
+    )[0]?.[1];
+
+  if (duplicateExplicitNameGroup) {
+    const firstResource = duplicateExplicitNameGroup[0];
+    const resourceIds = duplicateExplicitNameGroup
+      .map(({ id }) => id)
+      .sort((left, right) => left < right ? -1 : left > right ? 1 : 0);
+
+    throw new Error(
+      `Duplicate explicit TemplateDefinition Terraform resource name "${firstResource?.normalizedName}" in ${firstResource?.terraformBlockType}:${firstResource?.terraformResourceType}: ${resourceIds.join(", ")}`
+    );
   }
 
   const resourceNames = new Map<string, string>();
 
-  for (const group of collisionGroups.values()) {
-    if (group.length === 1) {
+  for (const group of explicitNameGroups.values()) {
+    const resource = group[0];
+
+    if (resource) {
+      resourceNames.set(resource.id, resource.normalizedName);
+    }
+  }
+
+  for (const [collisionKey, group] of collisionGroups) {
+    if (group.length === 1 && !explicitNameGroups.has(collisionKey)) {
       const resource = group[0];
 
       if (resource) {
