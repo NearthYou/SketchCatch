@@ -39,23 +39,6 @@ Short English-only working log for the current agent context. Older records are 
 - Verification: focused Web tests passed 82/82 plus 9 diagram tests, focused API tests passed 38/38 plus 18 service/route tests; harness, lint, typecheck, and build passed. No AWS or Terraform mutation ran.
 - PR review: Kubernetes `depends_on` addresses now render as references and both polling/SSE delay messages use valid Korean text; 21 Terraform and 31 modal tests passed.
 
-### 2026-07-12 - Fail fast when API database URL is missing
-
-- Goal: Diagnose `/api/auth/login` returning 500 with `DATABASE_URL is required`.
-- Completed:
-  - Reproduced the login failure with a minimal POST to `http://localhost:3000/api/auth/login`.
-  - Added a startup regression test proving the API must reject missing `DATABASE_URL` before Terraform warmup, deployment recovery, or listen.
-  - Added the `requireDatabaseUrl()` startup guard after the static AWS credential-source check.
-- Verification:
-  - `pnpm --dir apps/api exec tsx --test src/server-startup.test.ts`
-  - `pnpm --filter @sketchcatch/api typecheck`
-  - `pnpm harness:check`
-  - `pnpm lint` passed with the pre-existing `live-observations` `setNow` warning.
-  - `pnpm typecheck`
-  - `pnpm build`
-- Risk:
-  - The already-running API process still needs to be restarted, and local login still requires a real `DATABASE_URL` configured outside git.
-
 ### 2026-07-12 - Implement issue #349 repository template recommendations
 
 - Goal: Extend connected Repository Analysis into a template candidate recommendation flow for issue #349.
@@ -211,6 +194,20 @@ Short English-only working log for the current agent context. Older records are 
 - Risk:
   - Authenticated browser visual QA was not available; the supplied screenshot and source-level UI regression tests were used as the visual contract.
 
+### 2026-07-13 - Stabilize actual cost chart typography
+
+- Goal: Keep chart typography compact and professional at every dashboard width.
+- Completed:
+  - Recomputed the SVG coordinate width from its rendered container with `ResizeObserver` so labels no longer scale with the card.
+  - Fixed the chart height at 220 px and retained the `DESIGN.md` 13 px caption token at its true rendered size.
+  - Added a source-level regression for responsive width, fixed height, and typography token usage.
+- Verification:
+  - 16 focused chart tests and the full test suite passed.
+  - `pnpm lint` passed with the pre-existing `live-observations` `setNow` warning.
+  - `pnpm typecheck`, `pnpm build`, and `git diff --check` passed.
+- Review:
+  - Spec review found no issues; standards review finding about the caption token was fixed in `dcda929b`.
+
 ## Next Action
 
-- Confirm the refined chart visually with authenticated actual-usage data when browser automation is available.
+- Confirm the responsive chart visually with authenticated actual-usage data when browser automation is available.
