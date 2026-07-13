@@ -1,6 +1,6 @@
 import { resolve4, resolve6, resolveCname } from "node:dns/promises";
 import { request as httpsRequest, type RequestOptions } from "node:https";
-import { isIP } from "node:net";
+import { isIP, type TcpNetConnectOpts } from "node:net";
 import { requireLiveObservationTrafficTargetEvidence } from "./live-observation-manifest.js";
 
 type TrafficResponse = {
@@ -15,9 +15,12 @@ type TrafficRequest = {
 };
 
 type TrafficRequester = (
-  options: RequestOptions,
+  options: PinnedHttpsRequestOptions,
   onResponse: (response: TrafficResponse) => void
 ) => TrafficRequest;
+
+type PinnedHttpsRequestOptions = RequestOptions &
+  Pick<TcpNetConnectOpts, "autoSelectFamily" | "family">;
 
 type DnsResolver = (hostname: string) => Promise<readonly string[]>;
 type TimeoutScheduler = {
@@ -253,6 +256,8 @@ function postPinnedHttpsRequest(input: {
       request = input.request(
         {
           agent: false,
+          autoSelectFamily: false,
+          family: input.family,
           headers: { Host: input.trafficHostname },
           hostname: input.trafficHostname,
           lookup: (_hostname, _options, callback) => {

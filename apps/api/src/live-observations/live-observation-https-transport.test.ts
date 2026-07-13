@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { RequestOptions } from "node:https";
+import type { TcpNetConnectOpts } from "node:net";
 import { createLiveObservationHttpsTransport } from "./live-observation-https-transport.js";
+
+type PinnedHttpsRequestOptions = RequestOptions &
+  Pick<TcpNetConnectOpts, "autoSelectFamily" | "family">;
 
 const manifest = {
   schemaVersion: 2 as const,
@@ -42,7 +46,7 @@ const manifest = {
 };
 
 test("HTTPS transport validates DNS, pins the validated address, and preserves TLS hostname", async () => {
-  let requestOptions: RequestOptions | undefined;
+  let requestOptions: PinnedHttpsRequestOptions | undefined;
   let responseDestroyed = false;
   let socketTimeoutCalled = false;
   const dnsQueries: Array<{ kind: string; hostname: string }> = [];
@@ -92,6 +96,8 @@ test("HTTPS transport validates DNS, pins the validated address, and preserves T
   assert.equal(requestOptions?.port, 443);
   assert.equal(requestOptions?.path, "/traffic");
   assert.equal(requestOptions?.agent, false);
+  assert.equal(requestOptions?.family, 4);
+  assert.equal(requestOptions?.autoSelectFamily, false);
   assert.equal((requestOptions?.headers as Record<string, string>)?.Host, "api.example.com");
   assert.equal(responseDestroyed, true);
   assert.equal(socketTimeoutCalled, false);
@@ -115,6 +121,42 @@ test("HTTPS transport validates DNS, pins the validated address, and preserves T
       if (error) return reject(error);
       assert.equal(address, "3.34.1.10");
       assert.equal(family, 4);
+      resolve();
+    });
+  });
+});
+
+test("HTTPS pins IPv6 with a single-address lookup contract", async () => {
+  let requestOptions: PinnedHttpsRequestOptions | undefined;
+  const transport = createLiveObservationHttpsTransport({
+    resolveCname: async () => [manifest.adapter.payload.loadBalancerDnsName],
+    resolve4: async () => [],
+    resolve6: async () => ["2600:1f14::10"],
+    request(options, onResponse) {
+      requestOptions = options;
+      const request = {
+        destroy() {},
+        end() {
+          onResponse({ statusCode: 204, destroy() {} });
+        },
+        on() {
+          return request;
+        }
+      };
+      return request;
+    }
+  });
+
+  assert.deepEqual(await transport.post(manifest), { status: 204 });
+  assert.equal(requestOptions?.family, 6);
+  assert.equal(requestOptions?.autoSelectFamily, false);
+  const lookup = requestOptions?.lookup;
+  assert.equal(typeof lookup, "function");
+  await new Promise<void>((resolve, reject) => {
+    lookup?.("ignored.example.com", { all: false, family: 6 }, (error, address, family) => {
+      if (error) return reject(error);
+      assert.equal(address, "2600:1f14::10");
+      assert.equal(family, 6);
       resolve();
     });
   });
