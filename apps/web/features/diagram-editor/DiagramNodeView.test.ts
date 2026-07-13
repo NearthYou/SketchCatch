@@ -345,7 +345,9 @@ test("node toolbar uses compact board tokens and honest color targets", () => {
   const toolbarBlock = getCssBlock(".nodeToolbar");
   const disclosureBlock = getCssBlock(".nodeToolbarDisclosure");
   const panelBlock = getCssBlock(".nodeToolbarPanel");
-  const iconButtonBlock = getCssRuleContaining(".iconButton,");
+  const iconButtonBlock = getCssRuleContaining(
+    ".iconButton,\n.iconButtonSelected,\n.iconButtonDanger {"
+  );
   const swatchButtonBlock = getCssBlock(".swatchButton");
   const swatchVisualBlock = getCssBlock(".nodeSwatchVisual");
 
@@ -523,15 +525,16 @@ function getCssBlock(selector: string): string {
 }
 
 function getCssRuleContaining(selector: string): string {
-  const selectorStart = diagramEditorCssSource.indexOf(selector);
+  const normalizedSource = diagramEditorCssSource.replace(/\r\n?/gu, "\n");
+  const selectorStart = normalizedSource.indexOf(selector);
 
   assert.notEqual(selectorStart, -1);
 
-  const blockStart = diagramEditorCssSource.indexOf("{", selectorStart);
-  const blockEnd = diagramEditorCssSource.indexOf("}", blockStart);
+  const blockStart = normalizedSource.indexOf("{", selectorStart);
+  const blockEnd = normalizedSource.indexOf("}", blockStart);
 
   assert.notEqual(blockStart, -1);
   assert.notEqual(blockEnd, -1);
 
-  return diagramEditorCssSource.slice(selectorStart, blockEnd + 1);
+  return normalizedSource.slice(selectorStart, blockEnd + 1);
 }
