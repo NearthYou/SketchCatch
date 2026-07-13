@@ -40,7 +40,6 @@ export function CostDashboardClient() {
         <div>
           <p className="dashboardEyebrow">Cost management</p>
           <h1>비용 관리</h1>
-          <p>배포 전 예상 비용과 배포 후 실제 AWS 사용량을 분리해 확인합니다.</p>
         </div>
       </header>
 
@@ -61,7 +60,6 @@ export function CostDashboardClient() {
           type="button"
         >
           <strong>예상 비용</strong>
-          <span>아직 배포하지 않은 프로젝트</span>
           </button>
           <button
           aria-controls="cost-panel-usage"
@@ -78,7 +76,6 @@ export function CostDashboardClient() {
           type="button"
         >
           <strong>실제 사용량</strong>
-          <span>성공적으로 배포한 프로젝트</span>
           </button>
         </div>
 
