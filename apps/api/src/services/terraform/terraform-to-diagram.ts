@@ -16,6 +16,7 @@ import {
 } from "./terraform-identity.js";
 import { isSupportedTerraformFunctionExpression } from "./terraform-function-expressions.js";
 import {
+  isGenericTerraformNestedBlock,
   isTerraformNestedBlockAttribute,
   isTerraformSingleNestedBlockAttribute
 } from "./terraform-nested-blocks.js";
@@ -31,6 +32,8 @@ const ATTRIBUTE_PATTERN = /^\s*([A-Za-z_][A-Za-z0-9_-]*)\s*=\s*(.*)$/;
 const IDENTIFIER_PATTERN = /^[A-Za-z_][A-Za-z0-9_-]*$/;
 const REFERENCE_PATTERN =
   /^(?:var|local|each|count|path|terraform)\.[A-Za-z_][A-Za-z0-9_-]*(?:\.[A-Za-z0-9_-]+)*$|^module\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$|^(?:aws|kubernetes)_[A-Za-z0-9_]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$|^data\.(?:aws|kubernetes)_[A-Za-z0-9_]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$/;
+const DEPENDENCY_ADDRESS_PATTERN =
+  /^(?:(?:aws|kubernetes)_[A-Za-z0-9_]+\.[A-Za-z0-9_-]+|data\.(?:aws|kubernetes)_[A-Za-z0-9_]+\.[A-Za-z0-9_-]+|module\.[A-Za-z0-9_-]+)$/;
 const TERRAFORM_UTILITY_BLOCK_KEYS = new Set(["resource/random_password", "resource/terraform_data"]);
 type ParsedBlock = {
   blockType: TerraformBlockType;
@@ -150,7 +153,8 @@ export function syncTerraformToDiagramJson(
   );
   const availabilityZoneProposalPlan = createAvailabilityZoneProposalPlan(
     diagramJson.nodes,
-    syncBlocks
+    syncBlocks,
+    nodeByIdentityKey
   );
   const diagnostics: TerraformDiagnostic[] = [];
   const valuesByNodeId = new Map<string, Record<string, unknown>>();
@@ -370,7 +374,8 @@ function createChangeProposals(
 
 function createAvailabilityZoneProposalPlan(
   nodes: readonly DiagramNode[],
-  blocks: readonly ParsedBlock[]
+  blocks: readonly ParsedBlock[],
+  nodeByIdentityKey: ReadonlyMap<string, DiagramNode>
 ): AvailabilityZoneProposalPlan {
   const usedNodeIds = new Set(nodes.map((node) => node.id));
   const azNodeIdByValue = createExistingAvailabilityZoneNodeIdByValue(nodes);
@@ -378,6 +383,13 @@ function createAvailabilityZoneProposalPlan(
   const parentAreaNodeIdByBlockKey = new Map<string, string>();
 
   for (const block of blocks) {
+    const blockKey = createTerraformBlockIdentityKey(block.identity);
+    const matchedNode = nodeByIdentityKey.get(blockKey);
+
+    if (matchedNode?.metadata?.parentAreaNodeId) {
+      continue;
+    }
+
     const availabilityZone = getBlockAvailabilityZone(block);
 
     if (!availabilityZone) {
@@ -396,7 +408,7 @@ function createAvailabilityZoneProposalPlan(
       );
     }
 
-    parentAreaNodeIdByBlockKey.set(createTerraformBlockIdentityKey(block.identity), azNodeId);
+    parentAreaNodeIdByBlockKey.set(blockKey, azNodeId);
   }
 
   return {
@@ -935,7 +947,12 @@ function parseAttributes(
       diagnostics.push(...nestedBlock.diagnostics);
       index = nestedBlock.endIndex;
 
-      if (!resourceType || !isTerraformNestedBlockAttribute(resourceType, nestedBlockName, parentPath)) {
+      const isSupportedNestedBlock = resourceType && (
+        isTerraformNestedBlockAttribute(resourceType, nestedBlockName, parentPath) ||
+        (parentPath.length > 0 && isGenericTerraformNestedBlock(nestedBlockName))
+      );
+
+      if (!isSupportedNestedBlock) {
         diagnostics.push({
           severity: "error",
           code: "terraform.sync.nested_block",
@@ -1012,7 +1029,12 @@ function parseAttributes(
     }
 
     const valueText = valueLines.join("\n");
-    const parsedValue = parseAttributeValue(valueText, bodyLine.line, resourceAddress);
+    const parsedValue = parseAttributeValue(
+      valueText,
+      bodyLine.line,
+      resourceAddress,
+      terraformName === "depends_on"
+    );
 
     if (parsedValue.diagnostic) {
       diagnostics.push(parsedValue.diagnostic);
@@ -1132,7 +1154,8 @@ function isNestedBlockOpening(lineText: string): boolean {
 function parseAttributeValue(
   valueText: string,
   line: number,
-  resourceAddress: string
+  resourceAddress: string,
+  allowDependencyAddress = false
 ): { value?: unknown; diagnostic?: TerraformDiagnostic } {
   const trimmedValueText = valueText.trim();
 
@@ -1140,7 +1163,7 @@ function parseAttributeValue(
     return { value: trimmedValueText };
   }
 
-  const parser = new HclValueParser(valueText);
+  const parser = new HclValueParser(valueText, allowDependencyAddress);
   const value = parser.parseValue();
 
   if (value.status === "unsupported") {
@@ -1192,7 +1215,10 @@ type ValueParseResult =
 class HclValueParser {
   private index = 0;
 
-  constructor(private readonly source: string) {}
+  constructor(
+    private readonly source: string,
+    private readonly allowDependencyAddress = false
+  ) {}
 
   parseValue(): ValueParseResult {
     this.skipWhitespace();
@@ -1382,7 +1408,10 @@ class HclValueParser {
       return { status: "ok", value: Number(literal) };
     }
 
-    if (REFERENCE_PATTERN.test(literal)) {
+    if (
+      REFERENCE_PATTERN.test(literal) ||
+      (this.allowDependencyAddress && DEPENDENCY_ADDRESS_PATTERN.test(literal))
+    ) {
       return { status: "ok", value: literal };
     }
 

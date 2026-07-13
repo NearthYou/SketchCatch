@@ -305,14 +305,15 @@ function hasContainingAreaReference(
   check: Extract<DependencyCheck, { kind: "containing-area-reference" }>,
   graph: ResolvedArchitectureGraph
 ): boolean {
-  const parentNodeId = node.metadata?.parentAreaNodeId;
-  const parentNode = parentNodeId ? graph.nodeById.get(parentNodeId) : undefined;
   const targetNode = resolveParameterReferenceTarget(getParameterValue(node, check.parameterPath), graph);
 
   return Boolean(
-    parentNode &&
-      parentNode.parameters?.resourceType === check.areaTerraformType &&
-      targetNode?.id === parentNode.id
+    targetNode &&
+      targetNode.parameters?.resourceType === check.areaTerraformType &&
+      (
+        hasAreaAncestor(node, targetNode.id, graph) ||
+        isNodeFullyInsideArea(node, targetNode)
+      )
   );
 }
 
@@ -327,17 +328,52 @@ function hasReferencedTargetParentReference(
     return true;
   }
 
-  const parentNodeId = targetNode.metadata?.parentAreaNodeId;
-  const parentNode = parentNodeId ? graph.nodeById.get(parentNodeId) : undefined;
   const configuredParent = resolveParameterReferenceTarget(
     getParameterValue(targetNode, check.parentParameterPath),
     graph
   );
 
   return Boolean(
-    parentNode &&
-      parentNode.parameters?.resourceType === check.parentTerraformType &&
-      configuredParent?.id === parentNode.id
+    configuredParent &&
+      configuredParent.parameters?.resourceType === check.parentTerraformType &&
+      (
+        hasAreaAncestor(targetNode, configuredParent.id, graph) ||
+        isNodeFullyInsideArea(targetNode, configuredParent)
+      )
+  );
+}
+
+function hasAreaAncestor(
+  node: DiagramNode,
+  ancestorNodeId: string,
+  graph: ResolvedArchitectureGraph
+): boolean {
+  let parentNodeId = node.metadata?.parentAreaNodeId;
+  const visitedNodeIds = new Set<string>([node.id]);
+
+  while (parentNodeId && !visitedNodeIds.has(parentNodeId)) {
+    if (parentNodeId === ancestorNodeId) {
+      return true;
+    }
+
+    visitedNodeIds.add(parentNodeId);
+    parentNodeId = graph.nodeById.get(parentNodeId)?.metadata?.parentAreaNodeId;
+  }
+
+  return false;
+}
+
+function isNodeFullyInsideArea(node: DiagramNode, areaNode: DiagramNode): boolean {
+  const nodeRight = node.position.x + node.size.width;
+  const nodeBottom = node.position.y + node.size.height;
+  const areaRight = areaNode.position.x + areaNode.size.width;
+  const areaBottom = areaNode.position.y + areaNode.size.height;
+
+  return (
+    node.position.x >= areaNode.position.x &&
+    node.position.y >= areaNode.position.y &&
+    nodeRight <= areaRight &&
+    nodeBottom <= areaBottom
   );
 }
 
