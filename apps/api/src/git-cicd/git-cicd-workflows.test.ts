@@ -13,6 +13,8 @@ test("createGitCicdAutomationFiles renders infra app destroy workflows and manif
     repositoryOwner: "owner",
     repositoryName: "repo",
     targetBranch: "main",
+    appPath: "apps/web",
+    infraPath: "infra/terraform",
     userAcceptedChangeId: "accepted-change-123",
     environmentName: "sketchcatch-production",
     awsRegion: "ap-northeast-2",
@@ -36,8 +38,12 @@ test("createGitCicdAutomationFiles renders infra app destroy workflows and manif
     ]
   );
   assert.match(files[0]?.content ?? "", /terraform plan/);
+  assert.match(files[0]?.content ?? "", /"infra\/terraform\/\*\*"/);
   assert.match(files[0]?.content ?? "", /environment: sketchcatch-production/);
   assert.match(files[1]?.content ?? "", /start-instance-refresh/);
+  assert.match(files[1]?.content ?? "", /branches: \["main"\]/);
+  assert.match(files[1]?.content ?? "", /"apps\/web\/\*\*"/);
+  assert.match(files[1]?.content ?? "", /github\.event_name == 'push'/);
   assert.match(files[1]?.content ?? "", /python3 -/);
   assert.doesNotMatch(files[1]?.content ?? "", /python -/);
   assert.match(files[1]?.content ?? "", /SKETCHCATCH_RELEASE_ID/);

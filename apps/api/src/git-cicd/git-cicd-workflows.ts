@@ -11,6 +11,8 @@ export type GitCicdWorkflowRenderInput = {
   repositoryOwner: string;
   repositoryName: string;
   targetBranch: string;
+  appPath?: string | undefined;
+  infraPath?: string | undefined;
   userAcceptedChangeId?: string | undefined;
   environmentName?: string | undefined;
   awsRegion?: string | undefined;
@@ -131,6 +133,7 @@ export function createAwsRoleDiffPreview(input: GitCicdWorkflowRenderInput): Git
 
 function renderInfraWorkflow(input: GitCicdWorkflowRenderInput): string {
   const terraformDirectory = `sketchcatch/${input.projectSlug}/terraform`;
+  const infraPathGlob = createMonitoredPathGlob(input.infraPath ?? terraformDirectory);
   const environmentName = input.environmentName ?? defaultGitCicdEnvironmentName;
 
   return `name: SketchCatch Infra
@@ -139,7 +142,7 @@ on:
   push:
     branches: [${JSON.stringify(input.targetBranch)}]
     paths:
-      - '${terraformDirectory}/**'
+      - ${JSON.stringify(infraPathGlob)}
       - '.github/workflows/sketchcatch-infra.yml'
   workflow_dispatch:
 
@@ -224,10 +227,16 @@ jobs:
 function renderAppWorkflow(input: GitCicdWorkflowRenderInput): string {
   const releaseDirectory = `sketchcatch/${input.projectSlug}/static-site`;
   const environmentName = input.environmentName ?? defaultGitCicdEnvironmentName;
+  const appPathGlob = createMonitoredPathGlob(input.appPath ?? releaseDirectory);
 
   return `name: SketchCatch App
 
 on:
+  push:
+    branches: [${JSON.stringify(input.targetBranch)}]
+    paths:
+      - ${JSON.stringify(appPathGlob)}
+      - '.github/workflows/sketchcatch-app.yml'
   workflow_run:
     workflows: ["SketchCatch Infra"]
     types: [completed]
@@ -242,7 +251,7 @@ env:
 
 jobs:
   release:
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     environment: ${environmentName}
     steps:
@@ -367,6 +376,10 @@ jobs:
             fi
           done
 `;
+}
+
+function createMonitoredPathGlob(monitoredPath: string): string {
+  return monitoredPath === "." ? "**" : `${monitoredPath}/**`;
 }
 
 function renderDestroyWorkflow(input: GitCicdWorkflowRenderInput): string {

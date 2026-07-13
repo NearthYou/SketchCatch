@@ -688,6 +688,7 @@ export function WorkspaceRightPanel({
       initialExpanded
       onExpandedClose={() => setIsDeploymentConsoleOpen(false)}
       onGetTerraformFiles={getTerraformFilesForPreDeployment}
+      onOpenLiveObservation={openLiveObservation}
       onOpenFindingTerraformSource={(finding) => {
         const sourceLocation = openPreDeploymentFindingTerraformSource(finding);
 
