@@ -495,7 +495,7 @@ export function ProjectWorkspaceDraftManager({
   }
 
   return (
-    <WorkspaceNotificationHost>
+    <WorkspaceNotificationHost projectId={projectId}>
       <DiagramEditor
         floatingPanel={(context) => (
           <WorkspaceAiChatDock

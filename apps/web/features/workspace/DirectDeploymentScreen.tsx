@@ -1,5 +1,6 @@
 ﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
+import { useReducer } from "react";
 import type {
   AiPreDeploymentAnalysisResult,
   AiSafetyExplanation,
@@ -72,9 +73,12 @@ import {
 } from "./deployment-console-state";
 import { getDeploymentDurationLabel } from "./deployment-duration";
 import { DeploymentOutputLinks } from "./DeploymentOutputLinks";
-import { getSafeDeploymentLinks } from "./deployment-output-links";
-import { useWorkspaceNotifications } from "./WorkspaceNotificationHost";
-import { getNotifiableDirectDeploymentTransitions } from "./workspace-notifications";
+import {
+  getSafeDeploymentLinks,
+  getVisibleDeploymentOutputs,
+  initialDeploymentOutputState,
+  reduceDeploymentOutputState
+} from "./deployment-output-links";
 import styles from "./workspace.module.css";
 
 type DeploymentRuntimeSnapshot = {
@@ -82,6 +86,7 @@ type DeploymentRuntimeSnapshot = {
   readonly logs: DeploymentLog[];
   readonly resources: DeployedResource[];
   readonly outputs: TerraformOutput[];
+  readonly outputsDeploymentId: string | null;
 };
 type DeploymentPanelSnapshot = DeploymentRuntimeSnapshot & {
   readonly awsConnections: AwsConnection[];
@@ -135,7 +140,10 @@ export function DirectDeploymentScreen({
   const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [deploymentLogs, setDeploymentLogs] = useState<DeploymentLog[]>([]);
   const [deploymentResources, setDeploymentResources] = useState<DeployedResource[]>([]);
-  const [terraformOutputs, setTerraformOutputs] = useState<TerraformOutput[]>([]);
+  const [terraformOutputState, dispatchTerraformOutputState] = useReducer(
+    reduceDeploymentOutputState,
+    initialDeploymentOutputState
+  );
   const [selectedAwsConnectionId, setSelectedAwsConnectionId] = useState("");
   const [selectedLiveProfile, setSelectedLiveProfile] =
     useState<DeploymentLiveProfile>(() => getRecommendedDeploymentLiveProfile(diagramJson));
@@ -155,8 +163,6 @@ export function DirectDeploymentScreen({
   const [selectedDirectStepId, setSelectedDirectStepId] =
     useState<DirectDeploymentStepId>("save");
   const trafficAbortControllerRef = useRef<AbortController | null>(null);
-  const previousDeploymentsRef = useRef<Deployment[]>([]);
-  const notifyWorkspace = useWorkspaceNotifications();
   const isDeploymentOverlayOpen = true;
 
   const verifiedAwsConnections = useMemo(
@@ -205,27 +211,14 @@ export function DirectDeploymentScreen({
     () => deployments.find((deployment) => deployment.id === selectedDeploymentId) ?? null,
     [deployments, selectedDeploymentId]
   );
+  const terraformOutputs = useMemo(
+    () => getVisibleDeploymentOutputs(terraformOutputState, selectedDeploymentId),
+    [selectedDeploymentId, terraformOutputState]
+  );
   const deploymentOutputLinks = useMemo(
     () => getSafeDeploymentLinks(terraformOutputs),
     [terraformOutputs]
   );
-  useEffect(() => {
-    getNotifiableDirectDeploymentTransitions(
-      previousDeploymentsRef.current,
-      deployments,
-      selectedDeploymentId
-    ).forEach((deployment) => {
-      const succeeded = deployment.status === "SUCCESS";
-      notifyWorkspace({
-        type: "direct_terminal",
-        runId: deployment.id,
-        status: succeeded ? "succeeded" : "failed",
-        title: succeeded ? "배포 완료" : "배포 실패",
-        body: `프로젝트 ${projectId} · Direct · ${deployment.id.slice(0, 8)} · ${succeeded ? "성공" : "실패"}`
-      });
-    });
-    previousDeploymentsRef.current = deployments;
-  }, [deployments, notifyWorkspace, projectId, selectedDeploymentId]);
   useEffect(() => {
     setDurationNow(Date.now());
 
@@ -330,7 +323,8 @@ export function DirectDeploymentScreen({
       deployments: nextDeployments,
       logs: nextLogs,
       resources: nextResources,
-      outputs: nextOutputs
+      outputs: nextOutputs,
+      outputsDeploymentId: selectedDeploymentId || null
     };
   }, [projectId, selectedDeploymentId]);
 
@@ -338,7 +332,15 @@ export function DirectDeploymentScreen({
     setDeployments(snapshot.deployments);
     setDeploymentLogs(snapshot.logs);
     setDeploymentResources(snapshot.resources);
-    setTerraformOutputs(snapshot.outputs);
+    dispatchTerraformOutputState(
+      snapshot.outputsDeploymentId
+        ? {
+            type: "loaded",
+            deploymentId: snapshot.outputsDeploymentId,
+            outputs: snapshot.outputs
+          }
+        : { type: "clear", deploymentId: null }
+    );
   }, []);
 
   const loadDeploymentPanelSnapshot = useCallback(async (): Promise<DeploymentPanelSnapshot> => {
@@ -425,7 +427,7 @@ export function DirectDeploymentScreen({
     if (!selectedDeploymentId) {
       setDeploymentLogs([]);
       setDeploymentResources([]);
-      setTerraformOutputs([]);
+      dispatchTerraformOutputState({ type: "clear", deploymentId: null });
       setFailureExplanation(null);
       setFailureExplanationState("idle");
       setFailureExplanationErrorMessage("");
@@ -435,6 +437,7 @@ export function DirectDeploymentScreen({
     }
 
     let cancelled = false;
+    dispatchTerraformOutputState({ type: "clear", deploymentId: selectedDeploymentId });
 
     async function loadApplyDetails(): Promise<void> {
       await runRequest(async () => {
@@ -447,7 +450,11 @@ export function DirectDeploymentScreen({
         if (!cancelled) {
           setDeploymentLogs(logs);
           setDeploymentResources(resources);
-          setTerraformOutputs(outputs);
+          dispatchTerraformOutputState({
+            type: "loaded",
+            deploymentId: selectedDeploymentId,
+            outputs
+          });
           setShowApplyConfirmation(false);
           setShowDestroyConfirmation(false);
         }
@@ -713,6 +720,7 @@ export function DirectDeploymentScreen({
       return;
     }
 
+    dispatchTerraformOutputState({ type: "clear", deploymentId: null });
     await runRequest(async () => {
       const savedArtifacts = await onPrepareDeploymentArtifacts();
       const snapshot = await loadDeploymentPanelSnapshot();
@@ -733,7 +741,10 @@ export function DirectDeploymentScreen({
       setSelectedDeploymentId(prewarmedDeployment.id);
       setDeploymentLogs([]);
       setDeploymentResources([]);
-      setTerraformOutputs([]);
+      dispatchTerraformOutputState({
+        type: "clear",
+        deploymentId: prewarmedDeployment.id
+      });
       setShowApplyConfirmation(false);
       setShowDestroyConfirmation(false);
     }, "배포 검토를 시작하지 못했습니다.");
@@ -758,6 +769,10 @@ export function DirectDeploymentScreen({
       return;
     }
 
+    dispatchTerraformOutputState({
+      type: "clear",
+      deploymentId: selectedDeployment.id
+    });
     await runRequest(async () => {
       const deployment = await runDeploymentPlan(selectedDeployment.id);
       setDeployments((currentDeployments) =>
@@ -773,7 +788,7 @@ export function DirectDeploymentScreen({
       ]);
       setDeploymentLogs(logs);
       setDeploymentResources(resources);
-      setTerraformOutputs(outputs);
+      dispatchTerraformOutputState({ type: "loaded", deploymentId: deployment.id, outputs });
       setShowApplyConfirmation(false);
       setShowDestroyConfirmation(false);
     }, "Terraform Plan을 시작하지 못했습니다.");
@@ -784,6 +799,10 @@ export function DirectDeploymentScreen({
       return;
     }
 
+    dispatchTerraformOutputState({
+      type: "clear",
+      deploymentId: selectedDeployment.id
+    });
     await runRequest(async () => {
       const deployment = await approveDeploymentPlan(selectedDeployment.id);
       setDeployments((currentDeployments) =>
@@ -799,7 +818,7 @@ export function DirectDeploymentScreen({
       ]);
       setDeploymentLogs(logs);
       setDeploymentResources(resources);
-      setTerraformOutputs(outputs);
+      dispatchTerraformOutputState({ type: "loaded", deploymentId: deployment.id, outputs });
     }, "Terraform Plan을 승인하지 못했습니다.");
   }
 
@@ -808,6 +827,10 @@ export function DirectDeploymentScreen({
       return;
     }
 
+    dispatchTerraformOutputState({
+      type: "clear",
+      deploymentId: selectedDeployment.id
+    });
     await runRequest(async () => {
       const deployment = await runDeploymentApply(selectedDeployment.id);
       setDeployments((currentDeployments) =>
@@ -825,7 +848,7 @@ export function DirectDeploymentScreen({
       ]);
       setDeploymentLogs(logs);
       setDeploymentResources(resources);
-      setTerraformOutputs(outputs);
+      dispatchTerraformOutputState({ type: "loaded", deploymentId: deployment.id, outputs });
     }, "Terraform Apply를 시작하지 못했습니다.");
   }
 
@@ -834,6 +857,10 @@ export function DirectDeploymentScreen({
       return;
     }
 
+    dispatchTerraformOutputState({
+      type: "clear",
+      deploymentId: selectedDeployment.id
+    });
     await runRequest(async () => {
       const deployment = await runDeploymentDestroyPlan(selectedDeployment.id);
       setDeployments((currentDeployments) =>
@@ -851,7 +878,7 @@ export function DirectDeploymentScreen({
       ]);
       setDeploymentLogs(logs);
       setDeploymentResources(resources);
-      setTerraformOutputs(outputs);
+      dispatchTerraformOutputState({ type: "loaded", deploymentId: deployment.id, outputs });
     }, "Terraform Destroy Plan을 시작하지 못했습니다.");
   }
 
@@ -860,6 +887,10 @@ export function DirectDeploymentScreen({
       return;
     }
 
+    dispatchTerraformOutputState({
+      type: "clear",
+      deploymentId: selectedDeployment.id
+    });
     await runRequest(async () => {
       const deployment = await runDeploymentDestroy(selectedDeployment.id);
       setDeployments((currentDeployments) =>
@@ -877,7 +908,7 @@ export function DirectDeploymentScreen({
       ]);
       setDeploymentLogs(logs);
       setDeploymentResources(resources);
-      setTerraformOutputs(outputs);
+      dispatchTerraformOutputState({ type: "loaded", deploymentId: deployment.id, outputs });
     }, "Terraform Destroy를 시작하지 못했습니다.");
   }
 
@@ -886,6 +917,10 @@ export function DirectDeploymentScreen({
       return;
     }
 
+    dispatchTerraformOutputState({
+      type: "clear",
+      deploymentId: selectedDeployment.id
+    });
     await runRequest(async () => {
       const deployment = await cancelDeploymentRun(selectedDeployment.id);
       setDeployments((currentDeployments) =>
@@ -900,6 +935,7 @@ export function DirectDeploymentScreen({
   }
 
   async function refreshDeploymentPanel(): Promise<void> {
+    dispatchTerraformOutputState({ type: "clear", deploymentId: selectedDeploymentId || null });
     await runRequest(async () => {
       applyDeploymentPanelSnapshot(await loadDeploymentPanelSnapshot());
     }, "배포 상태를 새로고침하지 못했습니다.");

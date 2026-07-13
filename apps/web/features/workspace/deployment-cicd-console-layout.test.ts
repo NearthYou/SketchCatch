@@ -73,7 +73,26 @@ test("Direct and CI/CD screens share accessible Deployment Output links", () => 
 
 test("one workspace notification host survives console screen changes", () => {
   const managerSource = readWorkspaceSource("ProjectWorkspaceDraftManager.tsx");
+  const hostSource = readWorkspaceSource("WorkspaceNotificationHost.tsx");
+  const directSource = readWorkspaceSource("DirectDeploymentScreen.tsx");
+  const cicdSource = readWorkspaceSource("CicdConsoleScreen.tsx");
 
   assert.equal(managerSource.match(/<WorkspaceNotificationHost/g)?.length, 1);
-  assert.match(managerSource, /<WorkspaceNotificationHost>[\s\S]*<DiagramEditor/);
+  assert.match(managerSource, /<WorkspaceNotificationHost projectId=\{projectId\}>[\s\S]*<DiagramEditor/);
+  assert.match(hostSource, /listDeployments\(projectId\)/);
+  assert.match(hostSource, /listGitCicdPipelineRuns\(projectId/);
+  assert.match(hostSource, /refreshGitCicdPipelineRun/);
+  assert.match(hostSource, /window\.setTimeout/);
+  assert.match(hostSource, /window\.clearTimeout/);
+  assert.match(hostSource, /\}, \[notify, projectId\]\);/);
+  assert.doesNotMatch(directSource, /useWorkspaceNotifications|getNotifiableDirectDeploymentTransitions/);
+  assert.doesNotMatch(cicdSource, /useWorkspaceNotifications|getNotifiablePipelineRunTransitions/);
+});
+
+test("Direct Output rendering is scoped to the selected Deployment owner", () => {
+  const directSource = readWorkspaceSource("DirectDeploymentScreen.tsx");
+
+  assert.match(directSource, /reduceDeploymentOutputState/);
+  assert.match(directSource, /getVisibleDeploymentOutputs\([^]*selectedDeploymentId/);
+  assert.match(directSource, /type: "clear",\s*deploymentId: selectedDeploymentId/);
 });

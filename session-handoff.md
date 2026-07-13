@@ -13,10 +13,10 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Changes This Session
 
-- Added one workspace notification host with session deduplication, in-app fallback, and explicit-only browser Notification permission.
-- Connected safe, once-per-run succeeded/failed notifications to CI/CD and selected Direct apply transitions without logs or Output values.
-- Added shared Web/API Output cards with safe new-tab and accessible clipboard behavior; Direct non-URL details remain visible.
-- Task 8 and Direct focused tests, root lint/typecheck/build, and full harness pass.
+- Added one project-level workspace observer with session deduplication, in-app fallback, explicit-only browser permission, and polling that survives console closure.
+- Connected safe CI/CD and authoritative Direct apply transitions while preserving baseline across failures and excluding initial terminal, null, destroy, and cancellation states.
+- Scoped Direct Output cards/details to matching Deployment owners with safe new-tab and accessible clipboard behavior.
+- Task 8 review-focused and full Web tests plus Web lint/typecheck/build pass.
 
 ## Broken Or Unverified
 

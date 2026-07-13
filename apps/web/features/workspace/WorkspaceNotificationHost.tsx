@@ -1,13 +1,19 @@
 "use client";
 
 import {
-  createContext,
   useCallback,
-  useContext,
+  useEffect,
   useRef,
   useState,
   type ReactNode
 } from "react";
+import type { GitCicdPipelineRun } from "@sketchcatch/types";
+import {
+  listDeployments,
+  listGitCicdPipelineRuns,
+  refreshGitCicdPipelineRun
+} from "./api";
+import { mergeCicdPipelineRun } from "./cicd-console-state";
 import {
   createInitialWorkspaceNotificationState,
   reduceWorkspaceNotifications,
@@ -16,23 +22,22 @@ import {
   type WorkspaceNotificationEvent,
   type WorkspaceNotificationState
 } from "./workspace-notifications";
+import {
+  createInitialWorkspaceDeploymentObservation,
+  getWorkspaceDeploymentObserverIntervalMs,
+  observeWorkspaceDeploymentSnapshots,
+  type WorkspaceDeploymentSnapshotUpdate
+} from "./workspace-deployment-observer";
 import styles from "./workspace.module.css";
 
 const SESSION_STORAGE_KEY = "sketchcatch:workspace-notification-keys";
-const WorkspaceNotificationContext = createContext<
-  (event: WorkspaceNotificationEvent) => void
->(() => undefined);
-
-export function useWorkspaceNotifications(): (
-  event: WorkspaceNotificationEvent
-) => void {
-  return useContext(WorkspaceNotificationContext);
-}
 
 export function WorkspaceNotificationHost({
-  children
+  children,
+  projectId
 }: {
   readonly children: ReactNode;
+  readonly projectId: string;
 }) {
   const [state, setState] = useState<WorkspaceNotificationState>(() =>
     createInitialWorkspaceNotificationState(readStoredNotificationKeys())
@@ -78,8 +83,69 @@ export function WorkspaceNotificationHost({
     }
   }
 
+  useEffect(() => {
+    let cancelled = false;
+    let timeoutId: number | null = null;
+    let observation = createInitialWorkspaceDeploymentObservation();
+
+    async function poll(): Promise<void> {
+      const [directResult, pipelineResult] = await Promise.allSettled([
+        listDeployments(projectId),
+        loadObservedPipelineRuns(projectId)
+      ]);
+      if (cancelled) {
+        return;
+      }
+
+      const update: WorkspaceDeploymentSnapshotUpdate = {
+        ...(directResult.status === "fulfilled"
+          ? { deployments: directResult.value }
+          : {}),
+        ...(pipelineResult.status === "fulfilled"
+          ? { pipelineRuns: pipelineResult.value }
+          : {})
+      };
+      const result = observeWorkspaceDeploymentSnapshots(observation, update);
+      observation = result.state;
+
+      result.directTransitions.forEach((deployment) => {
+        const succeeded = deployment.status === "SUCCESS";
+        notify({
+          type: "direct_terminal",
+          runId: deployment.id,
+          status: succeeded ? "succeeded" : "failed",
+          title: succeeded ? "배포 완료" : "배포 실패",
+          body: `프로젝트 ${projectId} · Direct · ${deployment.id.slice(0, 8)} · ${succeeded ? "성공" : "실패"}`
+        });
+      });
+      result.pipelineTransitions.forEach((run) => {
+        const succeeded = run.status === "succeeded";
+        notify({
+          type: "pipeline_terminal",
+          runId: run.id,
+          status: run.status,
+          title: succeeded ? "배포 완료" : "배포 실패",
+          body: `프로젝트 ${projectId} · ${run.branch} · ${run.commitSha.slice(0, 8)} · ${succeeded ? "성공" : "실패"}`
+        });
+      });
+
+      timeoutId = window.setTimeout(
+        () => void poll(),
+        getWorkspaceDeploymentObserverIntervalMs(observation)
+      );
+    }
+
+    void poll();
+    return () => {
+      cancelled = true;
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+      }
+    };
+  }, [notify, projectId]);
+
   return (
-    <WorkspaceNotificationContext.Provider value={notify}>
+    <>
       {children}
       <aside className={styles.workspaceNotificationHost} aria-label="배포 알림">
         <button onClick={requestBrowserNotificationPermission} type="button">
@@ -101,8 +167,29 @@ export function WorkspaceNotificationHost({
           </ol>
         ) : null}
       </aside>
-    </WorkspaceNotificationContext.Provider>
+    </>
   );
+}
+
+async function loadObservedPipelineRuns(projectId: string): Promise<GitCicdPipelineRun[]> {
+  const response = await listGitCicdPipelineRuns(projectId, { limit: 50 });
+  const activeRuns = response.runs.filter((run) => !isPipelineRunTerminal(run.status));
+  if (activeRuns.length === 0) {
+    return response.runs;
+  }
+
+  const refreshResults = await Promise.allSettled(
+    activeRuns.map((run) => refreshGitCicdPipelineRun(run.id))
+  );
+  return refreshResults.reduce<GitCicdPipelineRun[]>((runs, result) => {
+    return result.status === "fulfilled"
+      ? mergeCicdPipelineRun(runs, result.value.run)
+      : runs;
+  }, response.runs);
+}
+
+function isPipelineRunTerminal(status: GitCicdPipelineRun["status"]): boolean {
+  return status === "succeeded" || status === "failed" || status === "cancelled";
 }
 
 function getBrowserNotificationAvailability(): BrowserNotificationAvailability {

@@ -76,7 +76,10 @@ test("browser notification permission is requested only by the explicit control"
 
   assert.match(hostSource, />\s*브라우저 알림 켜기\s*</);
   assert.match(hostSource, /onClick=\{requestBrowserNotificationPermission\}/);
-  assert.doesNotMatch(hostSource, /useEffect\([^]*requestPermission/);
+  assert.doesNotMatch(
+    hostSource,
+    /useEffect\(\s*(?:async\s*)?\(\)\s*=>\s*(?:void\s*)?requestBrowserNotificationPermission/
+  );
 });
 
 test("browser Notification failures cannot interrupt the in-app fallback", () => {
@@ -119,6 +122,14 @@ test("Direct notifications include only selected apply success or failure transi
     getNotifiableDirectDeploymentTransitions(
       [createDeployment("RUNNING", "destroy")],
       [createDeployment("FAILED", "destroy")],
+      running.id
+    ),
+    []
+  );
+  assert.deepEqual(
+    getNotifiableDirectDeploymentTransitions(
+      [createDeployment("RUNNING", null)],
+      [createDeployment("SUCCESS", null)],
       running.id
     ),
     []

@@ -17,8 +17,8 @@ Short English-only working log for the current agent context. Older records are 
 
 ### 2026-07-13 - Add deployment completion notifications and safe Output links
 
-- Added one session-deduplicated workspace notification host and shared accessible Output cards across safe CI/CD and Direct terminal transitions.
-- Verification: Task 8/Direct tests, Web and root lint/typecheck/build, and full harness passed; no external mutation ran. Existing API `setNow` and Next multi-lockfile warnings remain.
+- Added a session-deduplicated project observer that survives console closure, plus deployment-owned accessible Output cards and authoritative apply-only Direct notifications.
+- Verification: review-focused and full Web tests plus Web lint/typecheck/build passed; no external mutation ran. Existing API `setNow` and Next multi-lockfile warnings remain.
 
 ### 2026-07-13 - Split Direct Deployment and CI/CD console screens
 

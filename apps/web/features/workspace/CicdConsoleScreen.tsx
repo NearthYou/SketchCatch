@@ -25,14 +25,12 @@ import {
   getActiveCicdPipelineRun,
   getCicdPipelineRunState,
   getCicdPollIntervalMs,
-  getNotifiablePipelineRunTransitions,
   getSelectedCicdPipelineRunId,
   initialCicdConsoleRequestState,
   mergeCicdPipelineRun,
   reduceCicdConsoleRequestState
 } from "./cicd-console-state";
 import { getSafePipelineRunLinks } from "./deployment-output-links";
-import { useWorkspaceNotifications } from "./WorkspaceNotificationHost";
 import styles from "./workspace.module.css";
 
 export type CicdConsoleView = "overview" | "activity" | "logs" | "settings";
@@ -65,8 +63,6 @@ export function CicdConsoleScreen({
   const logsSequenceRef = useRef(0);
   const loadedProjectIdRef = useRef<string | null>(null);
   const hasExplicitRunSelectionRef = useRef(false);
-  const runsRef = useRef<GitCicdPipelineRun[]>([]);
-  const notifyWorkspace = useWorkspaceNotifications();
 
   const { logsErrorMessage, permissionFailure, screenErrorMessage } = requestState;
 
@@ -84,19 +80,7 @@ export function CicdConsoleScreen({
   }, [projectId]);
 
   const applyRuns = useCallback((nextRuns: readonly GitCicdPipelineRun[]): void => {
-    const nextRunList = [...nextRuns];
-    getNotifiablePipelineRunTransitions(runsRef.current, nextRunList).forEach((run) => {
-      const succeeded = run.status === "succeeded";
-      notifyWorkspace({
-        type: "pipeline_terminal",
-        runId: run.id,
-        status: run.status,
-        title: succeeded ? "배포 완료" : "배포 실패",
-        body: `프로젝트 ${projectId} · ${run.branch} · ${run.commitSha.slice(0, 8)} · ${succeeded ? "성공" : "실패"}`
-      });
-    });
-    runsRef.current = nextRunList;
-    setRuns(nextRunList);
+    setRuns([...nextRuns]);
     setSelectedRunId((currentId) =>
       getSelectedCicdPipelineRunId(
         nextRuns,
@@ -104,7 +88,7 @@ export function CicdConsoleScreen({
         hasExplicitRunSelectionRef.current
       )
     );
-  }, [notifyWorkspace, projectId]);
+  }, []);
 
   useEffect(() => {
     if (!isVisible || loadedProjectIdRef.current === projectId) {
@@ -212,7 +196,7 @@ export function CicdConsoleScreen({
     void getGitCicdPipelineRun(selectedRunId)
       .then((detail) => {
         if (!cancelled) {
-          applyRuns(mergeCicdPipelineRun(runsRef.current, detail));
+          setRuns((currentRuns) => mergeCicdPipelineRun(currentRuns, detail));
           dispatchRequestState({ type: "success", scope: "detail" });
         }
       })
@@ -229,7 +213,7 @@ export function CicdConsoleScreen({
     return () => {
       cancelled = true;
     };
-  }, [applyRuns, selectedRunId]);
+  }, [selectedRunId]);
 
   useEffect(() => {
     logsSequenceRef.current = 0;

@@ -6,6 +6,27 @@ export type SafeDeploymentLink = {
   readonly url: string;
 };
 
+export type DeploymentOutputState = {
+  readonly deploymentId: string | null;
+  readonly outputs: readonly TerraformOutput[];
+};
+
+export type DeploymentOutputAction =
+  | {
+      readonly type: "clear";
+      readonly deploymentId: string | null;
+    }
+  | {
+      readonly type: "loaded";
+      readonly deploymentId: string;
+      readonly outputs: readonly TerraformOutput[];
+    };
+
+export const initialDeploymentOutputState: DeploymentOutputState = {
+  deploymentId: null,
+  outputs: []
+};
+
 const WEB_OUTPUT_NAMES = ["staticsiteurl", "appurl"] as const;
 const API_OUTPUT_NAMES = ["apibaseurl", "apiurl"] as const;
 
@@ -42,6 +63,28 @@ export function getSafePipelineRunLinks(
     links.push({ kind: "api", label: "API endpoint", url: run.apiUrl });
   }
   return links;
+}
+
+export function reduceDeploymentOutputState(
+  _state: DeploymentOutputState,
+  action: DeploymentOutputAction
+): DeploymentOutputState {
+  if (action.type === "clear") {
+    return { deploymentId: action.deploymentId, outputs: [] };
+  }
+  return {
+    deploymentId: action.deploymentId,
+    outputs: action.outputs.filter(
+      (output) => output.deploymentId === action.deploymentId
+    )
+  };
+}
+
+export function getVisibleDeploymentOutputs(
+  state: DeploymentOutputState,
+  selectedDeploymentId: string
+): readonly TerraformOutput[] {
+  return state.deploymentId === selectedDeploymentId ? state.outputs : [];
 }
 
 function findFirstSafeUrl(

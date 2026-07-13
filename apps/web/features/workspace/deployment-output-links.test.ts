@@ -1,7 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { TerraformOutput } from "../../../../packages/types/src";
-import { getSafeDeploymentLinks } from "./deployment-output-links";
+import {
+  getSafeDeploymentLinks,
+  getVisibleDeploymentOutputs,
+  initialDeploymentOutputState,
+  reduceDeploymentOutputState
+} from "./deployment-output-links";
 import { readFileSync } from "node:fs";
 
 test("deployment links prefer the static Web entry point and then the API endpoint", () => {
@@ -70,6 +75,45 @@ test("the shared Output cards expose safe new-tab links and accessible clipboard
   assert.match(source, /aria-live="polite"/);
   assert.match(source, /URL을 복사했습니다\./);
   assert.match(source, /URL을 복사하지 못했습니다\./);
+});
+
+test("Direct Output state never exposes deployment A values while deployment B is selected", () => {
+  const outputA = { ...createOutput("appUrl", "https://a.example.com"), deploymentId: "deployment-a" };
+  const outputB = { ...createOutput("appUrl", "https://b.example.com"), deploymentId: "deployment-b" };
+  const loadedA = reduceDeploymentOutputState(initialDeploymentOutputState, {
+    type: "loaded",
+    deploymentId: "deployment-a",
+    outputs: [outputA]
+  });
+  const pendingB = reduceDeploymentOutputState(loadedA, {
+    type: "clear",
+    deploymentId: "deployment-b"
+  });
+  const failedB = reduceDeploymentOutputState(pendingB, {
+    type: "clear",
+    deploymentId: "deployment-b"
+  });
+  const loadedB = reduceDeploymentOutputState(failedB, {
+    type: "loaded",
+    deploymentId: "deployment-b",
+    outputs: [outputB]
+  });
+
+  assert.deepEqual(getVisibleDeploymentOutputs(loadedA, "deployment-a"), [outputA]);
+  assert.deepEqual(getVisibleDeploymentOutputs(loadedA, "deployment-b"), []);
+  assert.deepEqual(getVisibleDeploymentOutputs(pendingB, "deployment-b"), []);
+  assert.deepEqual(getVisibleDeploymentOutputs(failedB, "deployment-b"), []);
+  assert.deepEqual(getVisibleDeploymentOutputs(loadedB, "deployment-b"), [outputB]);
+});
+
+test("Direct Output state rejects records whose deployment owner does not match the load", () => {
+  const mismatched = reduceDeploymentOutputState(initialDeploymentOutputState, {
+    type: "loaded",
+    deploymentId: "deployment-b",
+    outputs: [createOutput("appUrl", "https://a.example.com")]
+  });
+
+  assert.deepEqual(getVisibleDeploymentOutputs(mismatched, "deployment-b"), []);
 });
 
 function createOutput(

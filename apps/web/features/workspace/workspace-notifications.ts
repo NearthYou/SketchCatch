@@ -71,32 +71,25 @@ export function shouldCreateBrowserNotification(
 export function getNotifiableDirectDeploymentTransitions(
   previousDeployments: readonly Deployment[],
   nextDeployments: readonly Deployment[],
-  selectedDeploymentId: string
+  selectedDeploymentId?: string
 ): Deployment[] {
-  if (!selectedDeploymentId) {
-    return [];
-  }
-
-  const previous = previousDeployments.find(
-    (deployment) => deployment.id === selectedDeploymentId
+  const previousById = new Map(
+    previousDeployments.map((deployment) => [deployment.id, deployment] as const)
   );
-  const next = nextDeployments.find(
-    (deployment) => deployment.id === selectedDeploymentId
-  );
-  if (!previous || !next) {
-    return [];
-  }
 
-  const isApplyTransition =
-    previous.currentPlanOperation !== "destroy" &&
-    next.currentPlanOperation !== "destroy";
-  const isNotifiableStatus = next.status === "SUCCESS" || next.status === "FAILED";
-
-  return !isTerminalDirectDeployment(previous.status) &&
-    isApplyTransition &&
-    isNotifiableStatus
-    ? [next]
-    : [];
+  return nextDeployments.filter((next) => {
+    if (selectedDeploymentId && next.id !== selectedDeploymentId) {
+      return false;
+    }
+    const previous = previousById.get(next.id);
+    return Boolean(
+      previous &&
+      !isTerminalDirectDeployment(previous.status) &&
+      previous.currentPlanOperation === "apply" &&
+      next.currentPlanOperation === "apply" &&
+      (next.status === "SUCCESS" || next.status === "FAILED")
+    );
+  });
 }
 
 function isTerminalDirectDeployment(status: Deployment["status"]): boolean {
