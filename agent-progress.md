@@ -114,38 +114,6 @@ Short English-only working log for the current agent context. Older records are 
 - Risk:
   - No GitHub PR, cloud deployment, Terraform apply, or infrastructure mutation was run.
 
-### 2026-07-12 - Handle missing Source Repository DB migrations
-
-- Goal: Diagnose the raw SQL internal error shown when starting from a GitHub repository with an unmigrated API database.
-- Completed:
-  - Confirmed the failing query targets `source_repositories` columns added by existing migrations, especially the repository analysis columns.
-  - Added route-level detection for PostgreSQL undefined table/column errors on `source_repositories`.
-  - Returned a stable `service_unavailable` / `DATABASE_MIGRATION_REQUIRED` response instead of leaking the Drizzle query and params.
-  - Added the web API error translation so Repository start screens show an actionable migration message.
-- Verification:
-  - `pnpm --dir apps/api exec tsx --test src/routes/source-repositories.test.ts`
-  - `pnpm --dir apps/web exec tsx --test features/workspace/api-client-error-message.test.ts`
-  - `pnpm --dir apps/api typecheck`
-  - `pnpm --dir apps/web typecheck`
-- Risk:
-  - The actual runtime DB still needs `pnpm --filter @sketchcatch/api db:migrate` from a shell with `DATABASE_URL` configured.
-
-### 2026-07-12 - Move GitHub permission expansion to settings
-
-- Goal: Keep Repository start focused on selecting/analyzing repositories while managing GitHub App repository permission expansion from project settings.
-- Completed:
-  - Removed direct GitHub App install URL opening from the Repository start screen.
-  - Replaced the Repository start permission action with a project GitHub settings link.
-  - Changed the GitHub App callback permission action to route to project GitHub settings.
-  - Added source-level regression coverage so start/callback screens no longer import `createGitHubSourceRepositoryInstallUrl`.
-- Verification:
-  - `pnpm --dir apps/web exec tsx --test features/workspace/repository-start-template-recommendation.test.ts features/workspace/github-callback-route.test.ts`
-  - `pnpm --dir apps/web typecheck`
-  - `pnpm harness:check`
-  - `pnpm lint` passed with the pre-existing `live-observations` `setNow` warning.
-  - `pnpm typecheck`
-  - `pnpm build`
-
 ### 2026-07-12 - Add public GitHub URL repository start
 
 - Goal: Let users start Repository Analysis by pasting a public GitHub repository URL without first connecting GitHub in settings.
@@ -209,6 +177,22 @@ Short English-only working log for the current agent context. Older records are 
 
 - 2026-07-13 Task 8 Minor review: Scoped Output clipboard feedback to the selected Deployment/Pipeline Run and current links, including late-Promise ownership; focused tests 17/17 and Web/root lint/typecheck/build passed. Existing warnings remain, and the source-regex integration-test limitation is ledger-only.
 
+### 2026-07-13 - Connect Pipeline Run Outputs to accepted handoff metadata
+
+- Goal: Close the Task 9 review gap by persisting trusted CI/CD Web/API URLs instead of implying Terraform Output provenance.
+- Completed:
+  - Selected the latest non-draft/non-cancelled handoff for the same Source Repository and monitored target branch.
+  - Persisted only valid HTTP(S) `staticSiteUrl`/`apiBaseUrl` values as `appUrl`/`apiUrl`, linked `handoffId`, refreshed late accepted values, and preserved existing non-null metadata across temporary null lookups.
+  - Added service and PostgreSQL query/upsert contract coverage; clarified conditional handoff provenance in architecture/deployment docs.
+  - Archived two older July 12 entries in `docs/agent-history/2026-07.md`.
+- Verification:
+  - Focused API 109/109 and focused Web 82/82 passed.
+  - `pnpm lint` passed with the pre-existing `setNow` warning; `pnpm typecheck` and `pnpm build` passed. Build retained the existing Next.js multiple-lockfile root warning and changed no tracked generated file.
+  - Full `pnpm test` did not pass: API 1282/1305 passed and Web passed. The 23 unrelated API failures were: `embedded Python Traffic API compiles and exposes OPTIONS, traffic, and health handlers`; ten `runDeploymentInit`/`runDeploymentDestroyPlan` tests; `findUnsupportedLiveApplyResourceTypesFromTerraformShowJson allows demo web service resources only for the demo profile`; two AI route tests plus `POST /api/ai/source-repository-analysis reads nested public repository evidence`; five Q/template-selection tests; `src/services/terraform/aws-priority-resource-coverage.test.ts`; `renders the requested CloudFront nested values back as blocks`; and `all AWS templates generate Terraform Preview from their shared definitions`.
+  - Structured mismatches included `undefined` vs `true` for embedded Python, missing `S3_BUCKET_NAME` vs expected deployment errors, added S3 `contentType`, omitted `aws_iam_role`, `three-tier-web-app` vs `template-api-db`, extra `spa-cloudfront-s3`, `true` vs `false` in the Q-backed plan, list-shaped `custom_origin_config` vs an HCL block, and quoted archive references vs unquoted references. The remaining assertion failures emitted no structured actual/expected pair.
+- Risk:
+  - No DB migration, browser journey, GitHub/AWS mutation, Terraform Apply/Destroy, push, or external notification was run.
+
 ## Next Action
 
-- Review the Task 9 commit. If an approved local test database and safe GitHub/AWS test environment are later provided, run migration and the credentialed representative browser journey as separate acceptance evidence.
+- Review the Task 9 follow-up commit. Investigate the unrelated full API-suite baseline failures separately; run migration and credentialed browser acceptance only with an approved safe environment.

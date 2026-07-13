@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, desc, eq, gt, inArray, lt, or } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, lt, notInArray, or, sql } from "drizzle-orm";
 import type {
   GitCicdMonitoredPath,
   GitCicdPipelineChangeScope,
@@ -11,6 +11,7 @@ import { maskDeploymentMessage } from "../deployments/log-masking.js";
 import type { Database } from "../db/client.js";
 import {
   gitCicdMonitoringConfigs,
+  gitCicdHandoffs,
   gitCicdPipelineLogs,
   gitCicdPipelineRuns,
   gitCicdPipelineStages,
@@ -39,6 +40,9 @@ export type PipelineRefreshTarget = {
   monitorBranch: string;
   appPath: GitCicdMonitoredPath;
   infraPath: GitCicdMonitoredPath;
+  handoffId: string | null;
+  appUrl: string | null;
+  apiUrl: string | null;
   commitSha?: string;
 };
 
@@ -196,7 +200,7 @@ export function createGitCicdPipelineRunService(options: {
       id: runId,
       projectId: target.projectId,
       sourceRepositoryId: target.sourceRepositoryId,
-      handoffId: null,
+      handoffId: target.handoffId,
       commitSha: snapshot.commitSha,
       commitMessage: maskDeploymentMessage(snapshot.commitMessage),
       branch: snapshot.branch,
@@ -204,8 +208,8 @@ export function createGitCicdPipelineRunService(options: {
       status: snapshot.status,
       statusMessage: `${snapshot.workflowName}: ${snapshot.status}`,
       pipelineRunUrl: snapshot.runUrl,
-      appUrl: null,
-      apiUrl: null,
+      appUrl: normalizeHttpUrl(target.appUrl),
+      apiUrl: normalizeHttpUrl(target.apiUrl),
       startedAt: snapshot.startedAt,
       finishedAt: snapshot.finishedAt,
       lastRefreshedAt: refreshedAt,
@@ -307,7 +311,30 @@ export function createPostgresGitCicdPipelinePersistenceRepository(
       )
       .where(where);
     if (!target?.installationId) return undefined;
-    return { ...target, installationId: target.installationId };
+    const [handoff] = await db
+      .select({
+        id: gitCicdHandoffs.id,
+        appUrl: gitCicdHandoffs.staticSiteUrl,
+        apiUrl: gitCicdHandoffs.apiBaseUrl
+      })
+      .from(gitCicdHandoffs)
+      .where(
+        and(
+          eq(gitCicdHandoffs.projectId, target.projectId),
+          eq(gitCicdHandoffs.sourceRepositoryId, target.sourceRepositoryId),
+          eq(gitCicdHandoffs.targetBranch, target.monitorBranch),
+          notInArray(gitCicdHandoffs.status, ["draft", "cancelled"])
+        )
+      )
+      .orderBy(desc(gitCicdHandoffs.createdAt), desc(gitCicdHandoffs.id))
+      .limit(1);
+    return {
+      ...target,
+      installationId: target.installationId,
+      handoffId: handoff?.id ?? null,
+      appUrl: handoff?.appUrl ?? null,
+      apiUrl: handoff?.apiUrl ?? null
+    };
   }
 
   async function listRuns(projectId: string): Promise<PipelineRunWithStages[]> {
@@ -478,6 +505,9 @@ export function createPostgresGitCicdPipelinePersistenceRepository(
               status: input.run.status,
               statusMessage: input.run.statusMessage,
               pipelineRunUrl: input.run.pipelineRunUrl,
+              handoffId: sql`coalesce(${input.run.handoffId}, ${gitCicdPipelineRuns.handoffId})`,
+              appUrl: sql`coalesce(${input.run.appUrl}, ${gitCicdPipelineRuns.appUrl})`,
+              apiUrl: sql`coalesce(${input.run.apiUrl}, ${gitCicdPipelineRuns.apiUrl})`,
               startedAt: input.run.startedAt,
               finishedAt: input.run.finishedAt,
               lastRefreshedAt: input.run.lastRefreshedAt
@@ -566,6 +596,16 @@ function maskRuns(runs: PipelineRunWithStages[]): PipelineRunWithStages[] {
 }
 function maskLog(log: PersistedPipelineLog): PersistedPipelineLog {
   return { ...log, message: maskDeploymentMessage(log.message) };
+}
+
+function normalizeHttpUrl(value: string | null): string | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:" ? value : null;
+  } catch {
+    return null;
+  }
 }
 
 export function classifyPipelineChangeScope(

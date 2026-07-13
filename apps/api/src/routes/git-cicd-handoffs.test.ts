@@ -1868,7 +1868,10 @@ function createPipelineRefreshTarget(): PipelineRefreshTarget {
     name: "infra-live",
     monitorBranch: "main",
     appPath: { mode: "subdirectory", path: "apps/web" },
-    infraPath: { mode: "subdirectory", path: "infra" }
+    infraPath: { mode: "subdirectory", path: "infra" },
+    handoffId: null,
+    appUrl: null,
+    apiUrl: null
   };
 }
 
