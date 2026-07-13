@@ -7,6 +7,7 @@ import { getApiErrorMessage } from "../../../../lib/api-client";
 import {
   getProjectDeploymentTarget,
   listAwsConnections,
+  listSourceRepositories,
   putProjectDeploymentTarget
 } from "../../../../features/workspace/api";
 import {
@@ -58,14 +59,21 @@ export function ProjectDeploymentTargetSettingsClient({
       setRequestState("loading");
       setMessage("");
       try {
-        const [nextConnections, nextTarget] = await Promise.all([
+        const [nextConnections, nextTarget, sourceRepositories] = await Promise.all([
           listAwsConnections(),
-          getProjectDeploymentTarget(projectId)
+          getProjectDeploymentTarget(projectId),
+          listSourceRepositories(projectId)
         ]);
         if (cancelled) return;
+        const sourceRepository = sourceRepositories.find(
+          (repository) =>
+            repository.provider === "github" &&
+            repository.status === "active" &&
+            !repository.archived
+        );
         setConnections(nextConnections);
         setTarget(nextTarget);
-        setDraft(createDeploymentTargetDraft(nextTarget, nextConnections));
+        setDraft(createDeploymentTargetDraft(nextTarget, nextConnections, sourceRepository));
         setRequestState("idle");
       } catch (error) {
         if (cancelled) return;
@@ -125,7 +133,7 @@ export function ProjectDeploymentTargetSettingsClient({
           <h2 id="deployment-target-title">프로젝트 배포 타깃</h2>
         </div>
       </div>
-      <p>Direct와 GitOps가 함께 사용하는 단일 실행 타깃과 검증된 빌드 기준입니다.</p>
+      <p>Direct와 GitOps가 함께 사용하는 실행 위치와 저장소 빌드 증거입니다.</p>
 
       {target ? (
         <div className="settingsInfoGrid">
@@ -170,6 +178,7 @@ export function ProjectDeploymentTargetSettingsClient({
         <label className={styles.field}>
           <span>Build evidence path</span>
           <input onChange={(event) => updateDraft("evidencePath", event.target.value)} value={draft.evidencePath} />
+          {draft.evidenceSuggested ? <small>저장소 분석에서 감지됨 · 저장 시 확정</small> : null}
         </label>
         <label className={styles.field}>
           <span>Confirmed commit SHA</span>
@@ -190,10 +199,36 @@ export function ProjectDeploymentTargetSettingsClient({
           />
         </label>
         {draft.runtimeTargetKind === "ecs_fargate" ? (
-          <label className={styles.field}>
-            <span>Health check path</span>
-            <input onChange={(event) => updateDraft("healthCheckPath", event.target.value)} value={draft.healthCheckPath} />
-          </label>
+          <>
+            <label className={styles.field}>
+              <span>CodeBuild project</span>
+              <input onChange={(event) => updateDraft("codeBuildProjectName", event.target.value)} value={draft.codeBuildProjectName} />
+            </label>
+            <label className={styles.field}>
+              <span>ECR repository</span>
+              <input onChange={(event) => updateDraft("ecrRepositoryName", event.target.value)} value={draft.ecrRepositoryName} />
+            </label>
+            <label className={styles.field}>
+              <span>ECS cluster</span>
+              <input onChange={(event) => updateDraft("clusterName", event.target.value)} value={draft.clusterName} />
+            </label>
+            <label className={styles.field}>
+              <span>ECS service</span>
+              <input onChange={(event) => updateDraft("serviceName", event.target.value)} value={draft.serviceName} />
+            </label>
+            <label className={styles.field}>
+              <span>Container</span>
+              <input onChange={(event) => updateDraft("containerName", event.target.value)} value={draft.containerName} />
+            </label>
+            <label className={styles.field}>
+              <span>Output URL</span>
+              <input onChange={(event) => updateDraft("outputUrl", event.target.value)} placeholder="https://api.example.com" value={draft.outputUrl} />
+            </label>
+            <label className={styles.field}>
+              <span>Health check path</span>
+              <input onChange={(event) => updateDraft("healthCheckPath", event.target.value)} value={draft.healthCheckPath} />
+            </label>
+          </>
         ) : null}
       </div>
 

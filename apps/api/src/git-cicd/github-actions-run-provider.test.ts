@@ -5,7 +5,7 @@ import { createGitHubActionsRunProvider } from "./github-actions-run-provider.js
 
 const repository = { installationId: "42", owner: "owner", name: "repo", branch: "main" };
 
-test("provider maps the exact generated release job steps to app stages", async () => {
+test("provider maps generated ECS release steps to build publish deploy and health stages", async () => {
   const client = {
     listCommitFiles: async () => [],
     listBranchWorkflowRuns: async () => [
@@ -48,9 +48,10 @@ test("provider maps the exact generated release job steps to app stages", async 
               startedAt: null,
               finishedAt: null,
               steps: [
-                step("Upload release artifact", "completed", "success"),
-                step("Refresh Auto Scaling Group", "in_progress", null),
-                step("Verify URLs", "queued", null)
+                step("Run CodeBuild", "completed", "success"),
+                step("Publish immutable ECR digest", "completed", "success"),
+                step("Deploy ECS Fargate revision", "in_progress", null),
+                step("Verify ECS release", "queued", null)
               ]
             }
           ],
@@ -64,10 +65,58 @@ test("provider maps the exact generated release job steps to app stages", async 
     [
       ["infra_plan", "succeeded"],
       ["app_build", "succeeded"],
+      ["artifact_publish", "succeeded"],
       ["app_deploy", "running"],
       ["verify", "queued"]
     ]
   );
+});
+
+test("provider parses bounded ECS release evidence while keeping job logs masked", async () => {
+  const evidence = {
+    schemaVersion: 1,
+    runtimeTargetKind: "ecs_fargate",
+    outcome: "succeeded",
+    commitSha: "a".repeat(40),
+    imageDigest: `sha256:${"b".repeat(64)}`,
+    imageUri: `123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/sketchcatch/api@sha256:${"b".repeat(64)}`,
+    clusterName: "sketchcatch-api",
+    serviceName: "sketchcatch-api",
+    containerName: "api",
+    taskDefinitionArn: "arn:aws:ecs:ap-northeast-2:123456789012:task-definition/sketchcatch-api:42",
+    previousTaskDefinitionArn: "arn:aws:ecs:ap-northeast-2:123456789012:task-definition/sketchcatch-api:41",
+    outputUrl: "https://api.example.com"
+  };
+  const encoded = Buffer.from(JSON.stringify(evidence)).toString("base64");
+  const client = {
+    listCommitFiles: async () => [],
+    listBranchWorkflowRuns: async () => [
+      run({ commitSha: "a".repeat(40), status: "completed", conclusion: "success" })
+    ],
+    listWorkflowJobs: async () => [
+      {
+        id: 22,
+        name: "release",
+        runUrl: "release",
+        status: "completed",
+        conclusion: "success",
+        startedAt: null,
+        finishedAt: null,
+        steps: [step("Verify ECS release", "completed", "success")]
+      }
+    ],
+    readWorkflowJobLog: async () =>
+      `Verify ECS release\ntoken=super-secret\nSKETCHCATCH_ECS_RELEASE_EVIDENCE_B64=${encoded}`
+  } as GitHubActionsReadClient;
+
+  const [snapshot] = await createGitHubActionsRunProvider(client).listSnapshots(repository);
+  const actual = snapshot as typeof snapshot & { releaseEvidence?: typeof evidence | null };
+
+  assert.deepEqual(actual?.releaseEvidence, evidence);
+  assert.equal(snapshot?.logs.some((log) => log.message.includes("super-secret")), false);
+  assert.equal(snapshot?.logs.some((log) => log.message.includes(encoded)), false);
+  assert.equal(snapshot?.logs.at(-1)?.message, "ECS release evidence captured.");
+  assert.equal(snapshot?.logs.at(-1)?.stageKind, "verify");
 });
 
 test("provider selects the larger attempt only for the same GitHub run id", async () => {

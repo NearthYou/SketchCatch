@@ -22,6 +22,7 @@ import {
   type CreateGitCicdHandoffRecordInput,
   type GitProviderCreatePullRequestInput,
   type GitCicdHandoffArchitectureRecord,
+  type GitCicdHandoffDeploymentTargetRecord,
   type GitCicdHandoffApprovedDeploymentRecord,
   type GitCicdHandoffApprovedPlanArtifactRecord,
   type GitCicdHandoffProvider,
@@ -445,6 +446,8 @@ class FakeGitCicdHandoffRepository implements GitCicdHandoffRepository {
     validatedAt: fixedNow,
     updatedAt: fixedNow
   };
+  deploymentTarget: GitCicdHandoffDeploymentTargetRecord | undefined =
+    createEcsDeploymentTargetRecord();
 
   async findAccessibleProject(candidateProjectId: string, accessContext: ProjectAccessContext) {
     this.calls.push({
@@ -531,6 +534,12 @@ class FakeGitCicdHandoffRepository implements GitCicdHandoffRepository {
   async findMonitoringConfig(candidateSourceRepositoryId: string) {
     return candidateSourceRepositoryId === sourceRepositoryId
       ? this.monitoringConfig
+      : undefined;
+  }
+
+  async findProjectDeploymentTarget(candidateProjectId: string) {
+    return this.deploymentTarget?.projectId === candidateProjectId
+      ? this.deploymentTarget
       : undefined;
   }
 
@@ -780,8 +789,74 @@ test("POST /api/projects/:projectId/git-cicd-handoffs creates an internal metada
   assert.match(providerCall?.pullRequestDraft.body ?? "", /## Review checklist/);
   assert.equal(providerCall?.pullRequestDraft.reviewChecklist.length, 4);
   assert.equal(providerCall?.userAcceptedChangeId, "accepted-change-1");
+  assert.equal(providerCall?.runtimeTargetKind, "ecs_fargate");
+  assert.equal(providerCall?.confirmedBuildConfig.dockerfilePath, "apps/web/Dockerfile");
+  assert.equal(providerCall?.runtimeConfig.serviceName, "sketchcatch-web");
+  assert.equal(providerCall?.awsRoleArn, "arn:aws:iam::123456789012:role/SketchCatch");
   assertResponseHasNoSecretFields(body.handoff);
 
+  await app.close();
+});
+
+test("POST GitOps handoff rejects a project without a confirmed ECS deployment target", async () => {
+  const repository = new FakeGitCicdHandoffRepository();
+  repository.deploymentTarget = undefined;
+  const app = await buildGitCicdHandoffTestApp(repository, {
+    provider: createProviderSpy([])
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/projects/${projectId}/git-cicd-handoffs`,
+    headers: await authHeaders(),
+    payload: createHandoffBody()
+  });
+
+  assert.equal(response.statusCode, 409);
+  assert.match(response.json().message, /deployment target/i);
+  await app.close();
+});
+
+test("POST GitOps handoff rejects stale or ambiguous repository Docker evidence", async () => {
+  const repository = new FakeGitCicdHandoffRepository();
+  repository.sourceRepository = createSourceRepositoryRecord({
+    analysisRevision: "c".repeat(40)
+  });
+  const app = await buildGitCicdHandoffTestApp(repository, {
+    provider: createProviderSpy([])
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/projects/${projectId}/git-cicd-handoffs`,
+    headers: await authHeaders(),
+    payload: createHandoffBody()
+  });
+
+  assert.equal(response.statusCode, 409);
+  assert.match(response.json().message, /current, unambiguous Docker build evidence/i);
+  await app.close();
+});
+
+test("POST GitOps handoff rejects AWS coordinates outside the project target", async () => {
+  const repository = new FakeGitCicdHandoffRepository();
+  const app = await buildGitCicdHandoffTestApp(repository, {
+    provider: createProviderSpy([])
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/projects/${projectId}/git-cicd-handoffs`,
+    headers: await authHeaders(),
+    payload: {
+      ...createHandoffBody(),
+      awsRegion: "us-east-1",
+      awsRoleArn: "arn:aws:iam::999999999999:role/Other"
+    }
+  });
+
+  assert.equal(response.statusCode, 409);
+  assert.match(response.json().message, /project deployment target/i);
   await app.close();
 });
 
@@ -839,6 +914,15 @@ test("POST /api/projects/:projectId/git-cicd-handoffs creates GitHub PR handoff 
     gitProviderCalls[0]?.files[0]?.expectedSha256,
     "a".repeat(64)
   );
+  assert(
+    gitProviderCalls[0]?.files.some(
+      (file) => file.path === "sketchcatch/test-project/ci-cd/buildspec-ecs.yml"
+    )
+  );
+  const appWorkflow = gitProviderCalls[0]?.files.find(
+    (file) => file.path === ".github/workflows/sketchcatch-app.yml"
+  );
+  assert.match(appWorkflow?.content ?? "", /minimumHealthyPercent=0,maximumPercent=100/);
   assert.match(gitProviderCalls[0]?.pullRequest.body ?? "", /Create 2, update 1, delete 0, replace 0/);
   assert.match(gitProviderCalls[0]?.pullRequest.body ?? "", /Pre-Deployment Check/);
   assert.equal(gitProviderCalls[0]?.pullRequest.reviewChecklist.length, 4);
@@ -2299,7 +2383,73 @@ function createSourceRepositoryRecord(
     name: "infra-live",
     defaultBranch: "main",
     repositoryUrl: "https://example.invalid/sketchcatch/infra-live",
+    analysisResult: {
+      status: "template_selected",
+      templateId: "ecs-fargate-container-app",
+      applicationUnits: [
+        {
+          id: "web",
+          rootPath: "apps/web",
+          kind: "frontend",
+          frameworks: ["nextjs"],
+          evidencePaths: ["apps/web/Dockerfile"]
+        }
+      ],
+      evidence: [
+        {
+          kind: "dockerfile",
+          path: "apps/web/Dockerfile",
+          applicationUnitId: "web",
+          signals: []
+        }
+      ],
+      missingEvidence: [],
+      selectionReasons: ["Dockerfile detected"]
+    },
+    analysisRevision: "b".repeat(40),
+    analyzedAt: fixedNow,
     ...overrides
+  };
+}
+
+function createEcsDeploymentTargetRecord(): GitCicdHandoffDeploymentTargetRecord {
+  return {
+    projectId,
+    provider: "aws" as const,
+    connectionId: "88888888-8888-4888-8888-888888888888",
+    region: "ap-northeast-2",
+    runtimeTargetKind: "ecs_fargate" as const,
+    confirmedBuildConfig: {
+      sourceRoot: "apps/web",
+      evidence: [{ kind: "dockerfile" as const, path: "apps/web/Dockerfile" }],
+      installPreset: "none" as const,
+      buildPreset: "docker_build" as const,
+      artifactOutputPath: null,
+      runtimeEntrypoint: null,
+      healthCheckPath: "/health",
+      dockerfilePath: "apps/web/Dockerfile",
+      packageManifestPath: null,
+      samTemplatePath: null,
+      appSpecPath: null,
+      staticOutputPath: null,
+      exactSemVerTag: null,
+      manifestVersion: "1.0.0",
+      confirmedCommitSha: "b".repeat(40),
+      confirmedAt: "2026-01-01T00:00:00.000Z"
+    },
+    runtimeConfig: {
+      runtimeTargetKind: "ecs_fargate" as const,
+      codeBuildProjectName: "sketchcatch-web-build",
+      ecrRepositoryName: "sketchcatch/web",
+      clusterName: "sketchcatch-web",
+      serviceName: "sketchcatch-web",
+      containerName: "web",
+      outputUrl: "https://app.example.com"
+    },
+    awsRoleArn: "arn:aws:iam::123456789012:role/SketchCatch",
+    rolloutStrategy: "all_at_once" as const,
+    createdAt: fixedNow,
+    updatedAt: fixedNow
   };
 }
 

@@ -51,13 +51,17 @@ test("project target is one replaceable record with structured build evidence", 
 
   const first = await putProjectDeploymentTarget(createTargetInput(), repository, () => now);
   const updated = await putProjectDeploymentTarget(
-    createTargetInput({ runtimeTargetKind: "lambda", confirmedBuildConfig: createBuildConfig({
-      evidence: [{ kind: "sam_template", path: "template.yaml" }],
-      buildPreset: "sam_build",
-      dockerfilePath: null,
-      samTemplatePath: "template.yaml",
-      healthCheckPath: null
-    }) }),
+    createTargetInput({
+      runtimeTargetKind: "lambda",
+      runtimeConfig: null,
+      confirmedBuildConfig: createBuildConfig({
+        evidence: [{ kind: "sam_template", path: "template.yaml" }],
+        buildPreset: "sam_build",
+        dockerfilePath: null,
+        samTemplatePath: "template.yaml",
+        healthCheckPath: null
+      })
+    }),
     repository,
     () => new Date("2026-07-14T00:01:00.000Z")
   );
@@ -94,6 +98,39 @@ test("project target rejects runtime-incompatible or unsafe build evidence", asy
       () => now
     ),
     ReleaseLedgerValidationError
+  );
+});
+
+test("ECS project target requires safe immutable runtime coordinates", async () => {
+  const repository = new InMemoryProjectReleaseLedgerRepository();
+
+  await assert.rejects(
+    putProjectDeploymentTarget(
+      createTargetInput({ runtimeConfig: null }),
+      repository,
+      () => now
+    ),
+    /runtime configuration/i
+  );
+  await assert.rejects(
+    putProjectDeploymentTarget(
+      createTargetInput({
+        runtimeConfig: createEcsRuntimeConfig({ outputUrl: "https://api.example.com?token=x" })
+      }),
+      repository,
+      () => now
+    ),
+    /output url/i
+  );
+  await assert.rejects(
+    putProjectDeploymentTarget(
+      createTargetInput({
+        runtimeConfig: createEcsRuntimeConfig({ serviceName: "../service" })
+      }),
+      repository,
+      () => now
+    ),
+    /runtime configuration/i
   );
 });
 
@@ -325,10 +362,24 @@ function createTargetInput(
       region: "ap-northeast-2",
       runtimeTargetKind: "ecs_fargate",
       confirmedBuildConfig: createBuildConfig(),
+      runtimeConfig: createEcsRuntimeConfig(),
       rolloutStrategy: "all_at_once",
       ...targetOverrides
     } satisfies PutProjectDeploymentTargetRequest
   };
+}
+
+function createEcsRuntimeConfig(overrides: Record<string, unknown> = {}) {
+  return {
+    runtimeTargetKind: "ecs_fargate",
+    codeBuildProjectName: "api-build",
+    ecrRepositoryName: "api",
+    clusterName: "api-cluster",
+    serviceName: "api-service",
+    containerName: "api",
+    outputUrl: "https://api.example.com",
+    ...overrides
+  } as PutProjectDeploymentTargetRequest["runtimeConfig"];
 }
 
 function createBuildConfig(overrides: Record<string, unknown> = {}) {

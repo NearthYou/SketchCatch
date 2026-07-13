@@ -6,6 +6,7 @@ import type {
   ConfirmedBuildConfig,
   DeploymentSource,
   JsonValue,
+  ProjectDeploymentRuntimeConfig,
   PutProjectDeploymentTargetRequest,
   RuntimeTargetKind
 } from "@sketchcatch/types";
@@ -33,6 +34,7 @@ export type SaveProjectDeploymentTargetInput = {
   region: string;
   runtimeTargetKind: RuntimeTargetKind;
   confirmedBuildConfig: ConfirmedBuildConfig;
+  runtimeConfig: ProjectDeploymentRuntimeConfig | null;
   rolloutStrategy: "all_at_once";
   updatedAt: Date;
 };
@@ -142,6 +144,7 @@ export function createPostgresProjectReleaseLedgerRepository(
             region: input.region,
             runtimeTargetKind: input.runtimeTargetKind,
             confirmedBuildConfig: input.confirmedBuildConfig,
+            runtimeConfig: input.runtimeConfig,
             rolloutStrategy: input.rolloutStrategy,
             updatedAt: input.updatedAt
           }
@@ -253,6 +256,10 @@ export async function putProjectDeploymentTarget(
     input.target.runtimeTargetKind,
     input.target.confirmedBuildConfig
   );
+  validateProjectDeploymentRuntimeConfig(
+    input.target.runtimeTargetKind,
+    input.target.runtimeConfig
+  );
 
   return repository.saveProjectDeploymentTarget({
     projectId: input.projectId,
@@ -261,6 +268,7 @@ export async function putProjectDeploymentTarget(
     region: connection.region,
     runtimeTargetKind: input.target.runtimeTargetKind,
     confirmedBuildConfig: input.target.confirmedBuildConfig,
+    runtimeConfig: input.target.runtimeConfig,
     rolloutStrategy: input.target.rolloutStrategy,
     updatedAt: now()
   });
@@ -413,6 +421,60 @@ export function validateConfirmedBuildConfig(
   if (!validForRuntime) {
     throw new ReleaseLedgerValidationError(
       "Build evidence and preset do not match the selected runtime."
+    );
+  }
+}
+
+export function validateProjectDeploymentRuntimeConfig(
+  runtimeTargetKind: RuntimeTargetKind,
+  config: ProjectDeploymentRuntimeConfig | null
+): void {
+  if (runtimeTargetKind !== "ecs_fargate") {
+    if (config !== null) {
+      throw new ReleaseLedgerValidationError(
+        "Runtime configuration is only supported for ECS Fargate targets."
+      );
+    }
+    return;
+  }
+  if (!config || config.runtimeTargetKind !== "ecs_fargate") {
+    throw new ReleaseLedgerValidationError(
+      "ECS Fargate runtime configuration is required."
+    );
+  }
+
+  const codeBuildNamePattern = /^[A-Za-z0-9][A-Za-z0-9_-]{1,254}$/;
+  const ecsNamePattern = /^[A-Za-z0-9][A-Za-z0-9_-]{0,254}$/;
+  const ecrRepositoryPattern = /^(?:[a-z0-9]+(?:[._-][a-z0-9]+)*)(?:\/[a-z0-9]+(?:[._-][a-z0-9]+)*)*$/;
+  if (
+    !codeBuildNamePattern.test(config.codeBuildProjectName) ||
+    config.ecrRepositoryName.length > 256 ||
+    !ecrRepositoryPattern.test(config.ecrRepositoryName) ||
+    !ecsNamePattern.test(config.clusterName) ||
+    !ecsNamePattern.test(config.serviceName) ||
+    !ecsNamePattern.test(config.containerName)
+  ) {
+    throw new ReleaseLedgerValidationError(
+      "ECS Fargate runtime configuration contains an invalid resource name."
+    );
+  }
+
+  let outputUrl: URL;
+  try {
+    outputUrl = new URL(config.outputUrl);
+  } catch {
+    throw new ReleaseLedgerValidationError("Output URL must be an absolute HTTPS URL.");
+  }
+  if (
+    outputUrl.protocol !== "https:" ||
+    outputUrl.username ||
+    outputUrl.password ||
+    outputUrl.search ||
+    outputUrl.hash ||
+    config.outputUrl.length > 2_048
+  ) {
+    throw new ReleaseLedgerValidationError(
+      "Output URL must be HTTPS and must not contain credentials, query parameters, or fragments."
     );
   }
 }

@@ -92,7 +92,28 @@ Pipeline Run의 commit, branch, change scope, status, stage, start/end time, 조
 
 `0033_git_cicd_pipeline_upstream_revision.sql`은 `upstream_ordering_token`과 `log_revision`을 추가합니다. Ordering token은 최대 provider 갱신 시각 뒤에 Infra/App presence와 각 workflow의 zero-padded run ID/attempt를 고정 슬롯으로 저장하므로, 같은 시각의 Infra+App snapshot은 어느 partial snapshot보다 항상 새롭습니다. Conditional upsert는 오래된 token과 같은 revision의 terminal-to-non-terminal 역행을 거부하며, 거부된 snapshot은 stage/log를 쓰지 않습니다. 운영 적용은 승인된 non-production/production migration workflow에서 별도로 실행하고 schema drift를 확인해야 합니다.
 
-CI/CD `Activity`와 `Logs`는 GitHub Actions의 Detect, Build, Plan/Apply, Deploy, Verify 증거만 보여줍니다. application Runtime log, CloudWatch 측정값, ASG/ECS capacity는 Live Observation에서 확인합니다. `Runtime logs는 Live Observation에서 보기`는 관측 화면으로 이동할 뿐 CI/CD run을 refresh하거나 status를 변경하는 mutation이 아닙니다. CI/CD Output action은 위 trusted handoff source가 있는 Pipeline Run에서 credential/query/fragment가 없는 유효한 HTTP(S) Web/API entry point만 조건부로 노출하며, 새 탭 링크는 `rel="noreferrer"` 경계를 유지합니다.
+CI/CD `Activity`와 `Logs`는 GitHub Actions의 Detect, Build, Artifact Publish, Plan/Apply, Deploy, Health 증거만 보여줍니다. application Runtime log, CloudWatch 측정값, ASG/ECS capacity는 Live Observation에서 확인합니다. `Runtime logs는 Live Observation에서 보기`는 관측 화면으로 이동할 뿐 CI/CD run을 refresh하거나 status를 변경하는 mutation이 아닙니다. CI/CD Output action은 위 trusted handoff source가 있는 Pipeline Run에서 credential/query/fragment가 없는 유효한 HTTP(S) Web/API entry point만 조건부로 노출하며, 새 탭 링크는 `rel="noreferrer"` 경계를 유지합니다.
+
+### 사용자 프로젝트 ECS/Fargate GitOps 릴리즈
+
+GitOps application handoff는 프로젝트의 단일 `ProjectDeploymentTarget`이 ECS/Fargate이고 저장소 분석에서
+Dockerfile이 하나로 확정됐을 때만 생성된다. 확인한 commit SHA, Dockerfile, source root와 monitoring app
+path가 다르면 `409 conflict`로 중단한다. 개발자가 저장한 CodeBuild/ECR/ECS 좌표는 GitHub Environment
+variable preview와 생성 workflow에 전달되며 임의 shell command는 저장하지 않는다.
+
+ECS 경로에서는 Infra workflow가 app/infra 변경을 모두 받아 먼저 완료되고, App workflow가 같은
+`workflow_run.head_sha`를 checkout해 CodeBuild를 실행한다. CodeBuild는 ECR tag를 push한 뒤 immutable
+digest를 다시 조회한다. App workflow는 그 digest를 참조하는 task definition을 등록하고
+`minimumHealthyPercent=0`, `maximumPercent=100`, deployment circuit breaker rollback을 강제한다.
+Build, Publish, Deploy, Health는 별도 Pipeline stage로 저장되고 GitHub job log는 기존 마스킹·cursor 계약을
+사용한다.
+
+완료 또는 rollback 시 workflow는 제한된 JSON evidence를 base64 marker로 남긴다. API는 marker 원문을
+로그에 노출하지 않고 schema, commit, digest, ECS ARN, HTTPS Output URL을 검증한다. 그 뒤 verified AWS
+connection으로 ECS service와 attempted task definition을 다시 읽어 service revision, container image,
+desired/running count, 0/100 설정과 circuit breaker를 대조한다. 일치한 결과만 `application_releases`에
+pipelineRunId 기준으로 upsert하고 Activity에 version, digest, task revision, Output URL을 표시한다. Provider
+오류나 drift는 기존 Release Ledger를 덮지 않고 stale refresh로 보고한다.
 
 ### Git/CI/CD 자동 배포 PR 산출물
 
@@ -112,8 +133,9 @@ CI/CD `Activity`와 `Logs`는 GitHub Actions의 Detect, Build, Plan/Apply, Deplo
 - `.github/workflows/sketchcatch-destroy.yml`
 - `sketchcatch/<project>/ci-cd/repository-settings.json`
 - `sketchcatch/<project>/ci-cd/aws-role-diff.json`
+- ECS/Fargate target일 때 `sketchcatch/<project>/ci-cd/buildspec-ecs.yml`
 
-`sketchcatch-infra.yml`은 merge 후 target branch push에서 Terraform backend S3 bucket/key를 부트스트랩하고 `terraform plan`을 실행합니다. `terraform apply` job은 GitHub Environment approval 뒤에만 실행됩니다. `sketchcatch-app.yml`은 infra workflow 성공 후 S3 release artifact를 업로드하고, `SKETCHCATCH_ASG_NAME`이 설정된 경우 ASG Instance Refresh를 실행합니다. `sketchcatch-destroy.yml`은 수동 실행과 Environment approval 뒤 같은 S3 backend로 `terraform destroy`를 실행합니다.
+`sketchcatch-infra.yml`은 merge 후 target branch push에서 Terraform backend S3 bucket/key를 부트스트랩하고 `terraform plan`을 실행합니다. `terraform apply` job은 GitHub Environment approval 뒤에만 실행됩니다. `sketchcatch-app.yml`은 infra workflow 성공 후 프로젝트 runtime adapter를 실행합니다. ECS/Fargate는 CodeBuild → ECR digest → ECS revision → HTTPS health 순서이고, legacy EC2/ASG target은 기존 release artifact와 Instance Refresh 경로를 유지합니다. `sketchcatch-destroy.yml`은 수동 실행과 Environment approval 뒤 같은 S3 backend로 `terraform destroy`를 실행합니다.
 
 Repository settings와 IAM role 변경은 preview JSON으로 PR에 남깁니다. 실제 repository variables/environment 설정과 AWS role trust/policy 변경은 GitHub App 권한 또는 GitHub user OAuth 추가 승인, AWS role diff 승인, secret masking을 통과한 별도 mutation path에서만 수행해야 합니다. OAuth token 원문은 DB/로그/API 응답에 저장하지 않습니다.
 

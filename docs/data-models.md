@@ -750,9 +750,20 @@ type ProjectDeploymentTarget = {
   region: string;
   runtimeTargetKind: RuntimeTargetKind;
   confirmedBuildConfig: ConfirmedBuildConfig | null;
+  runtimeConfig: ProjectDeploymentRuntimeConfig | null;
   rolloutStrategy: "all_at_once";
   createdAt: IsoDateTimeString;
   updatedAt: IsoDateTimeString;
+};
+
+type EcsFargateRuntimeConfig = {
+  runtimeTargetKind: "ecs_fargate";
+  codeBuildProjectName: string;
+  ecrRepositoryName: string;
+  clusterName: string;
+  serviceName: string;
+  containerName: string;
+  outputUrl: string;
 };
 ```
 
@@ -760,6 +771,12 @@ type ProjectDeploymentTarget = {
 경로, 허용된 install/build preset, runtime별 artifact/entrypoint/health path, exact SemVer tag 또는 manifest
 version, 확인한 commit SHA와 시각만 저장한다. `null`은 migration으로 복원한 legacy target에만 허용하며,
 사용자가 PUT으로 저장하는 새 target은 확인된 build config가 필수다.
+
+`runtimeConfig`는 provider adapter가 실제 런타임을 재조회하는 데 필요한 비밀이 아닌 좌표다. ECS/Fargate는
+CodeBuild project, ECR repository, ECS cluster/service/container와 credential/query/fragment가 없는 HTTPS
+Output URL을 저장한다. 새 ECS/Fargate target은 이 값이 필수이며 다른 runtime은 해당 adapter가 구현될
+때까지 `null`만 허용한다. `0037_ecs_gitops_runtime.sql`은 기존 row를 유지하기 위해 nullable JSONB로
+추가하지만 새 PUT은 service validation에서 완전한 값을 요구한다.
 
 API는 `GET|PUT /api/projects/:projectId/deployment-target`을 사용한다. Direct와 GitOps는 같은 target row를
 읽으며 환경별 복제, EKS, 임의 rollout 전략은 이 계약에 포함하지 않는다.
@@ -1240,6 +1257,7 @@ type GitCicdPipelineChangeScope = "app" | "infra" | "app_and_infra";
 type GitCicdPipelineStageKind =
   | "detect"
   | "app_build"
+  | "artifact_publish"
   | "infra_plan"
   | "infra_apply"
   | "app_deploy"
@@ -1285,6 +1303,7 @@ type GitCicdPipelineRun = {
   lastRefreshedAt: IsoDateTimeString;
   createdAt: IsoDateTimeString;
   stages: GitCicdPipelineStage[];
+  release?: ApplicationRelease | null;
 };
 
 type GitCicdPipelineLog = {

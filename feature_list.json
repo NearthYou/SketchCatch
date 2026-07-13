@@ -316,6 +316,32 @@
       "notes": "Implemented in issue #372 on branch feature/sw/372-direct-deploy-three-stage. No cloud mutation was performed."
     },
     {
+      "id": "ECS-FARGATE-GITOPS-RELEASE-001",
+      "priority": 1,
+      "area": "gitops-release",
+      "title": "Repository-confirmed ECS/Fargate GitOps release",
+      "user_visible_behavior": "개발자는 확인한 Docker build 설정으로 immutable ECR image를 만들고 ECS/Fargate 즉시 교체 단계, 마스킹 로그, 릴리즈 증거를 확인한다.",
+      "status": "passing",
+      "verification": [
+        "미확인 또는 모호한 Docker build config는 GitOps handoff와 workflow 실행을 차단한다.",
+        "ApplicationRelease가 version, commit SHA, image digest, ECS task revision, Output URL을 기록한다.",
+        "ECS minimum healthy 0, maximum 100, circuit breaker rollback 계약이 workflow와 provider 재조회에서 검증된다.",
+        "CI/CD 화면이 build, publish, deploy, health 단계와 마스킹된 증분 로그를 표시한다."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-14",
+        "commands": [
+          "pnpm --filter @sketchcatch/api exec tsx --test src/git-cicd/ecs-gitops-release-reconciler.test.ts src/git-cicd/git-cicd-workflows.test.ts src/git-cicd/github-actions-run-provider.test.ts src/git-cicd/git-cicd-pipeline-run-service.test.ts src/releases/project-release-ledger-service.test.ts src/routes/project-release-ledger.test.ts src/routes/git-cicd-handoffs.test.ts",
+          "pnpm exec tsx .\\app\\projects\\[projectId]\\settings\\project-deployment-target-state.test.ts (from apps/web)",
+          "pnpm test",
+          "pnpm migration:compatibility:check",
+          "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/init-harness.ps1 -Full"
+        ],
+        "notes": "Focused API 87/87 and target-state 6/6 passed. Full Web tests passed; API passed 1,468/1,471 with only three unchanged Windows symlink fixture EPERM failures. Migration compatibility, harness, lint, typecheck, and build passed."
+      },
+      "notes": "Implemented in issue #373 on feature/sw/373-ecs-gitops-release. No cloud mutation was performed; sandbox deployment and rollback evidence remain assigned to issue #378."
+    },
+    {
       "id": "AWS-TEMPLATE-LAYOUT-001",
       "priority": 2,
       "area": "template-board",

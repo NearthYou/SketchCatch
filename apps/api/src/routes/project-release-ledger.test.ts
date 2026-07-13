@@ -35,6 +35,7 @@ test("project deployment target API persists only structured confirmed build con
   assert.equal(response.statusCode, 200);
   assert.equal(response.json().target.runtimeTargetKind, "ecs_fargate");
   assert.equal(state.target?.confirmedBuildConfig?.buildPreset, "docker_build");
+  assert.equal(state.target?.runtimeConfig?.serviceName, "sketchcatch-api");
 
   const arbitraryCommandResponse = await app.inject({
     method: "PUT",
@@ -187,6 +188,15 @@ function createTargetPayload() {
     region: "ap-northeast-2",
     runtimeTargetKind: "ecs_fargate",
     rolloutStrategy: "all_at_once",
+    runtimeConfig: {
+      runtimeTargetKind: "ecs_fargate",
+      codeBuildProjectName: "sketchcatch-api-build",
+      ecrRepositoryName: "sketchcatch/api",
+      clusterName: "sketchcatch-api",
+      serviceName: "sketchcatch-api",
+      containerName: "api",
+      outputUrl: "https://api.example.com"
+    },
     confirmedBuildConfig: {
       sourceRoot: ".",
       evidence: [{ kind: "dockerfile", path: "Dockerfile" }],

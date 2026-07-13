@@ -63,6 +63,17 @@ const confirmedBuildConfigSchema = z
     confirmedAt: z.iso.datetime({ offset: true })
   })
   .strict();
+const ecsFargateRuntimeConfigSchema = z
+  .object({
+    runtimeTargetKind: z.literal("ecs_fargate"),
+    codeBuildProjectName: z.string().trim().min(2).max(255),
+    ecrRepositoryName: z.string().trim().min(1).max(256),
+    clusterName: z.string().trim().min(1).max(255),
+    serviceName: z.string().trim().min(1).max(255),
+    containerName: z.string().trim().min(1).max(255),
+    outputUrl: z.url().max(2_048)
+  })
+  .strict();
 const putTargetBodySchema = z
   .object({
     provider: z.literal("aws"),
@@ -70,6 +81,7 @@ const putTargetBodySchema = z
     region: z.string().trim().regex(/^[a-z]{2}(?:-gov)?-[a-z]+-\d$/).max(32),
     runtimeTargetKind: z.enum(["ecs_fargate", "lambda", "ec2_asg", "static_site"]),
     confirmedBuildConfig: confirmedBuildConfigSchema,
+    runtimeConfig: ecsFargateRuntimeConfigSchema.nullable(),
     rolloutStrategy: z.literal("all_at_once")
   })
   .strict();
@@ -175,6 +187,7 @@ function toProjectDeploymentTarget(row: ProjectDeploymentTargetRecord): ProjectD
     region: row.region,
     runtimeTargetKind: row.runtimeTargetKind,
     confirmedBuildConfig: row.confirmedBuildConfig,
+    runtimeConfig: row.runtimeConfig,
     rolloutStrategy: row.rolloutStrategy,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString()
