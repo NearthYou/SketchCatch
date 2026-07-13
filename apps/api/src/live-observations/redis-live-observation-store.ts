@@ -21,7 +21,6 @@ import {
   parseStoreCreateInput,
   parseStoreObservationCommitInput,
   parseStoreObserverLeaseInput,
-  parseStorePresenterLeaseInput,
   parseStoreReadInput,
   parseStoreStopInput
 } from "./live-observation-store-values.js";
@@ -265,79 +264,6 @@ export function createRedisLiveObservationStoreInternal(
         }
         throw unavailable();
       });
-    },
-
-    async acquirePresenterBoostLease(input) {
-      const parsed = parseStorePresenterLeaseInput(input);
-      const keys = createRedisLiveObservationStoreKeys(options.keyNamespace, parsed.observationId);
-      const raw = await execute(
-        options.scripts.acquirePresenterBoostLease,
-        [keys.session, keys.terminal],
-        [parsed.observationId, parsed.leaseId]
-      );
-      return decodeSafely(() => {
-        const tuple = decodeTuple(raw);
-        if (tuple[1] === "gone") {
-          return { kind: "gone", ...decodeTerminal(tuple, parsed.observationId) };
-        }
-        if (tuple[1] === "acquired" || tuple[1] === "already_acquired") {
-          const lease = decodePresenterLease(tuple, parsed.leaseId);
-          return { kind: tuple[1], ...lease };
-        }
-        if (tuple[1] === "busy" || tuple[1] === "not_found") {
-          assertLength(tuple, 3);
-          return { kind: tuple[1], evaluatedAt: epochMsToIso(parseSafeInteger(tuple[2])) };
-        }
-        throw unavailable();
-      });
-    },
-
-    async renewPresenterBoostLease(input) {
-      const parsed = parseStorePresenterLeaseInput(input);
-      const keys = createRedisLiveObservationStoreKeys(options.keyNamespace, parsed.observationId);
-      const raw = await execute(
-        options.scripts.renewPresenterBoostLease,
-        [keys.session, keys.terminal],
-        [parsed.observationId, parsed.leaseId]
-      );
-      return decodeSafely(() => {
-        const tuple = decodeTuple(raw);
-        if (tuple[1] === "gone") {
-          return { kind: "gone", ...decodeTerminal(tuple, parsed.observationId) };
-        }
-        if (tuple[1] === "renewed") {
-          return {
-            kind: "renewed",
-            ...decodePresenterLease(tuple, parsed.leaseId)
-          };
-        }
-        if (tuple[1] === "lease_lost" || tuple[1] === "not_found") {
-          assertLength(tuple, 3);
-          return { kind: tuple[1], evaluatedAt: epochMsToIso(parseSafeInteger(tuple[2])) };
-        }
-        throw unavailable();
-      });
-    },
-
-    async releasePresenterBoostLease(input) {
-      const parsed = parseStorePresenterLeaseInput(input);
-      const keys = createRedisLiveObservationStoreKeys(options.keyNamespace, parsed.observationId);
-      const raw = await execute(
-        options.scripts.releasePresenterBoostLease,
-        [keys.session, keys.terminal],
-        [parsed.observationId, parsed.leaseId]
-      );
-      return decodeSafely(() => {
-        const tuple = decodeTuple(raw);
-        if (tuple[1] === "gone") {
-          return { kind: "gone", ...decodeTerminal(tuple, parsed.observationId) };
-        }
-        if (tuple[1] === "released" || tuple[1] === "lease_lost" || tuple[1] === "not_found") {
-          assertLength(tuple, 3);
-          return { kind: tuple[1], evaluatedAt: epochMsToIso(parseSafeInteger(tuple[2])) };
-        }
-        throw unavailable();
-      });
     }
   };
 
@@ -520,34 +446,6 @@ function decodeLive(tuple: RedisReplyTuple): {
   return {
     evaluatedAt: epochMsToIso(evaluatedAtMs),
     live: createStoreLiveView(accepted, rolling, pressureTarget, evaluatedAtMs)
-  };
-}
-
-function decodePresenterLease(
-  tuple: RedisReplyTuple,
-  expectedLeaseId: string
-): {
-  evaluatedAt: ReturnType<typeof epochMsToIso>;
-  lease: { leaseId: string; expiresAt: ReturnType<typeof epochMsToIso> };
-} {
-  assertLength(tuple, 5);
-  const leaseId = required(tuple, 3);
-  assertUuid(leaseId);
-  const evaluatedAtMs = parseSafeInteger(tuple[2]);
-  const expiresAtMs = parseSafeInteger(required(tuple, 4));
-  if (
-    leaseId !== expectedLeaseId ||
-    expiresAtMs <= evaluatedAtMs ||
-    expiresAtMs > evaluatedAtMs + 10_000
-  ) {
-    throw unavailable();
-  }
-  return {
-    evaluatedAt: epochMsToIso(evaluatedAtMs),
-    lease: {
-      leaseId,
-      expiresAt: epochMsToIso(expiresAtMs)
-    }
   };
 }
 

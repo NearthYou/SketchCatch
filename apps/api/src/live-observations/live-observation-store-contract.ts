@@ -20,8 +20,6 @@ const AWS_CONNECTION_ID = "abcdef12-3456-4789-8abc-def012345678";
 const ARTIFACT_SHA = "0123456789abcdef".repeat(4);
 const FIRST_OBSERVER_ID = "11111111-1111-4111-8111-111111111111";
 const SECOND_OBSERVER_ID = "22222222-2222-4222-8222-222222222222";
-const FIRST_BOOST_LEASE_ID = "33333333-3333-4333-8333-333333333333";
-const SECOND_BOOST_LEASE_ID = "44444444-4444-4444-8444-444444444444";
 
 export type LiveObservationStoreContractHarness = {
   store: LiveObservationStore;
@@ -58,8 +56,7 @@ export function registerLiveObservationStoreContract(input: {
       maxWeightedBurstPerSecond: 20,
       maxAcceptedEventsPerRateWindow: 120,
       maxAcceptedEventsPerSession: 10_000,
-      observerLeaseDurationMs: 15_000,
-      presenterBoostLeaseDurationMs: 10_000
+      observerLeaseDurationMs: 15_000
     });
 
     const created = await store.createSession(createInput());
@@ -1043,11 +1040,6 @@ export function registerLiveObservationStoreContract(input: {
             observedAt: "2026-07-11T09:00:00.000+09:00",
             payload: null as never
           }
-        }),
-      () =>
-        store.acquirePresenterBoostLease({
-          observationId: OBSERVATION_ID,
-          leaseId: SECOND_OBSERVATION_ID.toUpperCase()
         })
     ];
 
@@ -1067,134 +1059,6 @@ export function registerLiveObservationStoreContract(input: {
     assertGenericInputError(futureError);
   });
 
-  contractTest("serializes presenter acquire and keeps same-id retries idempotent", async ({
-    store,
-    setNow
-  }) => {
-    assertKind(await store.createSession(createInput()), "created");
-    const acquired = await Promise.all([
-      store.acquirePresenterBoostLease({
-        observationId: OBSERVATION_ID,
-        leaseId: FIRST_BOOST_LEASE_ID
-      }),
-      store.acquirePresenterBoostLease({
-        observationId: OBSERVATION_ID,
-        leaseId: SECOND_BOOST_LEASE_ID
-      })
-    ]);
-    const winner = acquired.find((result) => result.kind === "acquired");
-    assert.ok(winner);
-    assert.equal(acquired.filter((result) => result.kind === "busy").length, 1);
-    assertKind(winner, "acquired");
-    assert.equal(winner.lease.expiresAt, iso(START_MS + 10_000));
-    const winningLeaseId =
-      acquired[0] === winner ? FIRST_BOOST_LEASE_ID : SECOND_BOOST_LEASE_ID;
-    const waitingLeaseId =
-      acquired[0] === winner ? SECOND_BOOST_LEASE_ID : FIRST_BOOST_LEASE_ID;
-
-    setNow(START_MS + 1_000);
-    const retry = await store.acquirePresenterBoostLease({
-      observationId: OBSERVATION_ID,
-      leaseId: winningLeaseId
-    });
-    assertKind(retry, "already_acquired");
-    assert.equal(retry.lease.expiresAt, winner.lease.expiresAt);
-    const busy = await store.acquirePresenterBoostLease({
-      observationId: OBSERVATION_ID,
-      leaseId: waitingLeaseId
-    });
-    assertKind(busy, "busy");
-    assert.deepEqual(Object.keys(busy).sort(), ["evaluatedAt", "kind"]);
-
-    setNow(START_MS + 10_000);
-    const next = await store.acquirePresenterBoostLease({
-      observationId: OBSERVATION_ID,
-      leaseId: waitingLeaseId
-    });
-    assertKind(next, "acquired");
-    assert.equal(next.lease.expiresAt, iso(START_MS + 20_000));
-  });
-
-  contractTest("renews, releases, and session-caps presenter leases exactly", async ({
-    store,
-    setNow
-  }) => {
-    const created = await store.createSession(createInput());
-    assertKind(created, "created");
-    const acquired = await store.acquirePresenterBoostLease({
-      observationId: OBSERVATION_ID,
-      leaseId: FIRST_BOOST_LEASE_ID
-    });
-    assertKind(acquired, "acquired");
-
-    assertKind(
-      await store.renewPresenterBoostLease({
-        observationId: OBSERVATION_ID,
-        leaseId: SECOND_BOOST_LEASE_ID
-      }),
-      "lease_lost"
-    );
-    assertKind(
-      await store.releasePresenterBoostLease({
-        observationId: OBSERVATION_ID,
-        leaseId: SECOND_BOOST_LEASE_ID
-      }),
-      "lease_lost"
-    );
-
-    setNow(START_MS + 3_000);
-    const renewed = await store.renewPresenterBoostLease({
-      observationId: OBSERVATION_ID,
-      leaseId: FIRST_BOOST_LEASE_ID
-    });
-    assertKind(renewed, "renewed");
-    assert.equal(renewed.lease.expiresAt, iso(START_MS + 13_000));
-
-    const released = await store.releasePresenterBoostLease({
-      observationId: OBSERVATION_ID,
-      leaseId: FIRST_BOOST_LEASE_ID
-    });
-    assertKind(released, "released");
-    assertKind(
-      await store.renewPresenterBoostLease({
-        observationId: OBSERVATION_ID,
-        leaseId: FIRST_BOOST_LEASE_ID
-      }),
-      "lease_lost"
-    );
-    assertKind(
-      await store.acquirePresenterBoostLease({
-        observationId: OBSERVATION_ID,
-        leaseId: SECOND_BOOST_LEASE_ID
-      }),
-      "acquired"
-    );
-
-    setNow(START_MS + 13_000);
-    assertKind(
-      await store.renewPresenterBoostLease({
-        observationId: OBSERVATION_ID,
-        leaseId: SECOND_BOOST_LEASE_ID
-      }),
-      "lease_lost"
-    );
-
-    const expiresAtMs = Date.parse(created.session.expiresAt);
-    setNow(expiresAtMs - 5_000);
-    const capped = await store.acquirePresenterBoostLease({
-      observationId: OBSERVATION_ID,
-      leaseId: FIRST_BOOST_LEASE_ID
-    });
-    assertKind(capped, "acquired");
-    assert.equal(capped.lease.expiresAt, created.session.expiresAt);
-    const cappedRenewal = await store.renewPresenterBoostLease({
-      observationId: OBSERVATION_ID,
-      leaseId: FIRST_BOOST_LEASE_ID
-    });
-    assertKind(cappedRenewal, "renewed");
-    assert.equal(cappedRenewal.lease.expiresAt, created.session.expiresAt);
-  });
-
   contractTest("cleans lease state at terminal and tombstone purge boundaries", async ({
     store,
     setNow
@@ -1205,13 +1069,6 @@ export function registerLiveObservationStoreContract(input: {
       observerId: FIRST_OBSERVER_ID
     });
     assertKind(claim, "claimed");
-    assertKind(
-      await store.acquirePresenterBoostLease({
-        observationId: OBSERVATION_ID,
-        leaseId: FIRST_BOOST_LEASE_ID
-      }),
-      "acquired"
-    );
     assertKind(
       await store.commitObservation({
         observationId: OBSERVATION_ID,
@@ -1228,7 +1085,6 @@ export function registerLiveObservationStoreContract(input: {
     assertKind(stopped, "stopped");
     const terminalJson = JSON.stringify(stopped.session);
     assert.equal(terminalJson.includes(FIRST_OBSERVER_ID), false);
-    assert.equal(terminalJson.includes(FIRST_BOOST_LEASE_ID), false);
     assert.equal(terminalJson.includes("fencingToken"), false);
 
     const terminalOperations = [
@@ -1244,21 +1100,6 @@ export function registerLiveObservationStoreContract(input: {
           fencingToken: claim.lease.fencingToken,
           observation: observation(START_MS, null)
         }),
-      () =>
-        store.acquirePresenterBoostLease({
-          observationId: OBSERVATION_ID,
-          leaseId: SECOND_BOOST_LEASE_ID
-        }),
-      () =>
-        store.renewPresenterBoostLease({
-          observationId: OBSERVATION_ID,
-          leaseId: FIRST_BOOST_LEASE_ID
-        }),
-      () =>
-        store.releasePresenterBoostLease({
-          observationId: OBSERVATION_ID,
-          leaseId: FIRST_BOOST_LEASE_ID
-        })
     ];
     for (const operation of terminalOperations) {
       assertKind(await operation(), "gone");
@@ -1270,7 +1111,7 @@ export function registerLiveObservationStoreContract(input: {
     }
   });
 
-  contractTest("serializes observation stop and presenter release races", async ({
+  contractTest("serializes observation stop races", async ({
     store
   }) => {
     assertKind(await store.createSession(createInput()), "created");
@@ -1302,40 +1143,6 @@ export function registerLiveObservationStoreContract(input: {
       assert.equal(stop.session.finalObservation, null);
     }
 
-    const secondHarness = input.createHarness();
-    assertKind(
-      await secondHarness.store.createSession(createInput()),
-      "created"
-    );
-    assertKind(
-      await secondHarness.store.acquirePresenterBoostLease({
-        observationId: OBSERVATION_ID,
-        leaseId: FIRST_BOOST_LEASE_ID
-      }),
-      "acquired"
-    );
-    const [released, acquired] = await Promise.all([
-      secondHarness.store.releasePresenterBoostLease({
-        observationId: OBSERVATION_ID,
-        leaseId: FIRST_BOOST_LEASE_ID
-      }),
-      secondHarness.store.acquirePresenterBoostLease({
-        observationId: OBSERVATION_ID,
-        leaseId: SECOND_BOOST_LEASE_ID
-      })
-    ]);
-    assertKind(released, "released");
-    if (acquired.kind === "busy") {
-      assertKind(
-        await secondHarness.store.acquirePresenterBoostLease({
-          observationId: OBSERVATION_ID,
-          leaseId: SECOND_BOOST_LEASE_ID
-        }),
-        "acquired"
-      );
-    } else {
-      assertKind(acquired, "acquired");
-    }
   });
 
   contractTest("rejects malformed inputs with the fixed non-reflective error", async ({

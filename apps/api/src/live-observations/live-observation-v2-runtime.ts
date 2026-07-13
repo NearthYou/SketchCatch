@@ -203,10 +203,7 @@ function createUnavailableStore(): LiveObservationStore {
     collectEvent: unavailable,
     stopSession: unavailable,
     claimObserverLease: unavailable,
-    commitObservation: unavailable,
-    acquirePresenterBoostLease: unavailable,
-    renewPresenterBoostLease: unavailable,
-    releasePresenterBoostLease: unavailable
+    commitObservation: unavailable
   };
 }
 

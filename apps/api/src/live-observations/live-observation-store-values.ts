@@ -121,21 +121,6 @@ export function parseStoreObservationCommitInput(input: unknown): {
   }
 }
 
-export function parseStorePresenterLeaseInput(input: unknown): {
-  observationId: string;
-  leaseId: string;
-} {
-  try {
-    assertExactObject(input, ["observationId", "leaseId"]);
-    return {
-      observationId: parseCanonicalUuid(input.observationId),
-      leaseId: parseCanonicalUuid(input.leaseId)
-    };
-  } catch {
-    throw new LiveObservationStoreInputError();
-  }
-}
-
 export function cloneStoreSnapshot(value: unknown): LiveObservationProviderSnapshot {
   return parseLiveObservationProviderSnapshot(value);
 }

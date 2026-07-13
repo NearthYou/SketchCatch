@@ -502,7 +502,7 @@ CloudWatch 관측은 선택된 동일 Target Group의 `HTTPCode_Target_2XX_Count
 로컬 자동 검증은 AWS 리소스를 만들지 않습니다.
 
 ```bash
-pnpm --filter @sketchcatch/api exec tsx --test src/live-observations/*.test.ts src/routes/live-observations.test.ts src/deployments/demo-web-service-assets.test.ts
+pnpm --filter @sketchcatch/api exec tsx --test src/live-observations/*.test.ts src/routes/live-observations-v2.test.ts src/routes/live-observation-public-collector.test.ts
 pnpm --filter @sketchcatch/web exec tsx --test features/workspace/live-observation.test.ts features/workspace/live-observation-modal.test.ts
 ```
 

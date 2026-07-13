@@ -20,7 +20,6 @@ const NAMESPACE = "unit_test";
 const INPUT = createLiveObservationStoreContractInput();
 const SECOND_OBSERVATION_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const OBSERVER_ID = "11111111-1111-4111-8111-111111111111";
-const LEASE_ID = "33333333-3333-4333-8333-333333333333";
 const EVENT_ID = "00000000-0000-4000-8000-000000000001";
 const EVALUATED_AT_MS = Date.parse("2026-07-11T00:00:00.000Z");
 
@@ -204,29 +203,7 @@ test("strict replies reject impossible counters and response identity swaps", as
   );
 });
 
-test("lease replies bind requested identities and future expiries", async () => {
-  const invalidPresenterReplies = [
-    [
-      "1",
-      "acquired",
-      String(EVALUATED_AT_MS),
-      SECOND_OBSERVATION_ID,
-      String(EVALUATED_AT_MS + 10_000)
-    ],
-    ["1", "acquired", String(EVALUATED_AT_MS), LEASE_ID, String(EVALUATED_AT_MS)]
-  ];
-  for (const reply of invalidPresenterReplies) {
-    const client = new FakeRedisClient({ evalReply: reply });
-    assertGenericUnavailable(
-      await captureError(() =>
-        createStore(client).acquirePresenterBoostLease({
-          leaseId: LEASE_ID,
-          observationId: INPUT.observationId
-        })
-      )
-    );
-  }
-
+test("observer lease replies require future expiries", async () => {
   const invalidObserverExpiry = new FakeRedisClient({
     evalReply: ["1", "claimed", String(EVALUATED_AT_MS), "1", String(EVALUATED_AT_MS)]
   });
@@ -365,30 +342,6 @@ function storeOperations(): ReadonlyArray<{
           },
           observationId: INPUT.observationId,
           observerId: OBSERVER_ID
-        })
-    },
-    {
-      name: "acquirePresenterBoostLease",
-      invoke: (store) =>
-        store.acquirePresenterBoostLease({
-          leaseId: LEASE_ID,
-          observationId: INPUT.observationId
-        })
-    },
-    {
-      name: "renewPresenterBoostLease",
-      invoke: (store) =>
-        store.renewPresenterBoostLease({
-          leaseId: LEASE_ID,
-          observationId: INPUT.observationId
-        })
-    },
-    {
-      name: "releasePresenterBoostLease",
-      invoke: (store) =>
-        store.releasePresenterBoostLease({
-          leaseId: LEASE_ID,
-          observationId: INPUT.observationId
         })
     }
   ];

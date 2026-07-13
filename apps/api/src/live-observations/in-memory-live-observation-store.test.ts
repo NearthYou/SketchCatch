@@ -55,33 +55,18 @@ test("in-memory LiveObservationStore samples its clock once per operation", asyn
     }
   });
   assert.equal(clockCalls, 3);
-  await store.acquirePresenterBoostLease({
-    observationId: input.observationId,
-    leaseId: "33333333-3333-4333-8333-333333333333"
-  });
-  assert.equal(clockCalls, 4);
-  await store.renewPresenterBoostLease({
-    observationId: input.observationId,
-    leaseId: "33333333-3333-4333-8333-333333333333"
-  });
-  assert.equal(clockCalls, 5);
-  await store.releasePresenterBoostLease({
-    observationId: input.observationId,
-    leaseId: "33333333-3333-4333-8333-333333333333"
-  });
-  assert.equal(clockCalls, 6);
   await store.readSession({ observationId: input.observationId });
-  assert.equal(clockCalls, 7);
+  assert.equal(clockCalls, 4);
   await store.collectEvent({
     observationId: input.observationId,
     eventId: "00000000-0000-4000-8000-000000000001"
   });
-  assert.equal(clockCalls, 8);
+  assert.equal(clockCalls, 5);
   await store.stopSession({
     observationId: input.observationId,
     deploymentId: input.manifest.provenance.deploymentId
   });
-  assert.equal(clockCalls, 9);
+  assert.equal(clockCalls, 6);
 });
 
 function providerSnapshot(observedAt: string) {

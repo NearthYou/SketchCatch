@@ -19,8 +19,6 @@ const START_MS = Date.parse("2026-07-11T00:00:00.000Z");
 const SECOND_OBSERVATION_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const FIRST_OBSERVER_ID = "11111111-1111-4111-8111-111111111111";
 const SECOND_OBSERVER_ID = "22222222-2222-4222-8222-222222222222";
-const FIRST_LEASE_ID = "33333333-3333-4333-8333-333333333333";
-const SECOND_LEASE_ID = "44444444-4444-4444-8444-444444444444";
 
 if (!configuredRedisUrl) {
   throw new Error("LIVE_OBSERVATION_REDIS_TEST_URL is required");
@@ -212,33 +210,6 @@ test("production store uses Redis TIME and exact absolute active expiries", asyn
     ).kind,
     "committed"
   );
-  assert.equal(
-    (
-      await store.acquirePresenterBoostLease({
-        leaseId: FIRST_LEASE_ID,
-        observationId: input.observationId
-      })
-    ).kind,
-    "acquired"
-  );
-  assert.equal(
-    (
-      await store.renewPresenterBoostLease({
-        leaseId: FIRST_LEASE_ID,
-        observationId: input.observationId
-      })
-    ).kind,
-    "renewed"
-  );
-  assert.equal(
-    (
-      await store.releasePresenterBoostLease({
-        leaseId: FIRST_LEASE_ID,
-        observationId: input.observationId
-      })
-    ).kind,
-    "released"
-  );
   assert.deepEqual(
     await Promise.all([
       pexpiretime(redis, keys.session),
@@ -294,12 +265,6 @@ test("two clients serialize every contested transition", async () => {
   const claimed = observers[claimedIndex];
   assert.ok(claimed && claimed.kind === "claimed");
   const observerId = claimedIndex === 0 ? FIRST_OBSERVER_ID : SECOND_OBSERVER_ID;
-
-  const boosts = await Promise.all([
-    firstStore.acquirePresenterBoostLease({ observationId, leaseId: FIRST_LEASE_ID }),
-    secondStore.acquirePresenterBoostLease({ observationId, leaseId: SECOND_LEASE_ID })
-  ]);
-  assert.deepEqual(boosts.map((result) => result.kind).sort(), ["acquired", "busy"]);
 
   const serializedSnapshot = providerSnapshot(claimed.evaluatedAt, "serialized");
   const [commit, stop] = await Promise.all([
@@ -390,9 +355,7 @@ test("stop retains only a sixty-second minimal terminal and logical purge is exa
     "bucket:",
     "observerId",
     "observerFencingToken",
-    "observerLeaseExpiresAtMs",
-    "presenterLeaseId",
-    "presenterLeaseExpiresAtMs"
+    "observerLeaseExpiresAtMs"
   ]) {
     assert.equal(
       Object.keys(terminal).some((field) => field.startsWith(forbidden)),

@@ -5,10 +5,9 @@ Short English-only working log for the current agent context. Older records are 
 ## Current Verified State
 
 - Branch: `feature/sw/370-live-observation-v2`.
-- PR #366 preserves six Catalog-backed AWS Template Boards with 103 Terraform-deployable Resources and 28 parameterless Design nodes.
-- The current `dev` Deployment/CI/CD console split is integrated without restoring the retired monolithic panel.
-- Workspace deployment context counts only `isTerraformDeployableNode` results and passes that value into the Direct Deployment screen; CI/CD remains a separate screen.
-- Migrations `0032` and `0033` came from `dev` and have not been executed by this gg workstream.
+- Issue #370 Tasks 1-5 are implemented locally; the feature flag remains false until external acceptance gates pass.
+- Live Observation uses only the v2 Store, public collector, server-side observer, and provider-neutral snapshot paths.
+- Legacy v1 routes, simulated CloudWatch provider, and presenter traffic-boost leases are removed.
 
 ## Session Record
 
@@ -28,6 +27,14 @@ Short English-only working log for the current agent context. Older records are 
 - Verification: final Task 4 focused regression 76/76, API 1429/1429, harness, lint, typecheck, build, and whitespace checks passed.
 - Risk: no credentialed AWS sandbox evidence and no Terraform Apply/Destroy, deployment mutation, database migration, or AWS mutation.
 
+### 2026-07-14 - Live Observation v2 production-path cleanup
+
+- Removed the unused v1 routes/service/providers and the demo-only presenter traffic-boost lease contract from in-memory and Redis Stores.
+- Updated Redis Lua reconciliation and retained atomic Store parity without legacy presenter fields.
+- Confirmed desktop, mobile, reduced-motion, StrictMode cleanup, capability erasure, QR, and signal geometry contracts through automated tests.
+- Verification: API full suite passed; Web passed 1,069/1,069; Redis 8 integration passed 29/29; `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check` passed.
+- External acceptance remains unverified: the in-app browser blocks localhost, Chrome launch was not approved, and AWS STS is unavailable with the current environment. No cloud mutation was attempted.
+
 ### 2026-07-13 - Integrate current dev into PR #366
 
 - Merged `origin/dev` at `39118a79`, including the completed PR #368 Deployment/CI/CD console and Web baseline updates.
@@ -40,5 +47,5 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Next Action
 
-- Push the focused Live Observation follow-up commit, then confirm the branch PR is mergeable with no unresolved review thread.
-- Run migrations and credentialed browser acceptance only with an approved safe environment.
+- Commit and push the Task 5 cleanup, open the issue #370 PR, wait five minutes, then resolve review and CI feedback before merging to `dev`.
+- Keep the feature flag false until credentialed Chromium and an explicitly approved non-production AWS sandbox can provide acceptance evidence.

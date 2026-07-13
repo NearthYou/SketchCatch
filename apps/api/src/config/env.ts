@@ -46,7 +46,6 @@ export type RuntimeEnv = {
   liveObservationCapabilityPreviousSecret?: string | undefined;
   liveObservationCapabilityPreviousStoppedIssuingAt?: string | undefined;
   liveObservationEnabled?: string | undefined;
-  liveObservationSimulatedAgent?: string | undefined;
   naverOauthClientId: string | undefined;
   naverOauthClientSecret: string | undefined;
   nodeEnv?: string | undefined;
@@ -115,7 +114,6 @@ export function getRuntimeEnv(): RuntimeEnv {
     liveObservationCapabilityPreviousStoppedIssuingAt:
       process.env.LIVE_OBSERVATION_CAPABILITY_PREVIOUS_STOPPED_ISSUING_AT,
     liveObservationEnabled: process.env.LIVE_OBSERVATION_ENABLED,
-    liveObservationSimulatedAgent: process.env.LIVE_OBSERVATION_SIMULATED_AGENT,
     naverOauthClientId: process.env.NAVER_OAUTH_CLIENT_ID,
     naverOauthClientSecret: process.env.NAVER_OAUTH_CLIENT_SECRET,
     nodeEnv: process.env.NODE_ENV,

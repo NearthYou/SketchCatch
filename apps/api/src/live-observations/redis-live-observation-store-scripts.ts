@@ -226,7 +226,7 @@ local function reconcile(sessionKey, terminalKey, observationId)
       'pressureTarget', 'acceptedEventCount', 'manifestJson', 'manifestJsonSha1',
       'capabilityKid', 'tokenVersion', 'latestObservationJson', 'latestObservationJsonSha1',
       'latestObservedAtMs', 'observerFencingToken',
-      'observerId', 'observerLeaseExpiresAtMs', 'presenterLeaseId', 'presenterLeaseExpiresAtMs')
+      'observerId', 'observerLeaseExpiresAtMs')
     for index = 1, 15 do
       if activeValues[index] == false then return 'corrupt' end
     end
@@ -244,13 +244,9 @@ local function reconcile(sessionKey, terminalKey, observationId)
        (activeValues[12] ~= '' and (not observationJson(activeValues[12]) or
          not canonicalInteger(activeValues[14]) or tonumber(activeValues[14]) > tonumber(activeValues[5]))) or
        ((activeValues[16] == false) ~= (activeValues[17] == false)) or
-       ((activeValues[18] == false) ~= (activeValues[19] == false)) or
        (activeValues[16] ~= false and (not canonicalUuid(activeValues[16]) or
          not canonicalPositiveInteger(activeValues[17]) or
-         tonumber(activeValues[17]) > tonumber(activeValues[5]) or tonumber(activeValues[15]) < 1)) or
-       (activeValues[18] ~= false and (not canonicalUuid(activeValues[18]) or
-         not canonicalPositiveInteger(activeValues[19]) or
-         tonumber(activeValues[19]) > tonumber(activeValues[5]))) then
+         tonumber(activeValues[17]) > tonumber(activeValues[5]) or tonumber(activeValues[15]) < 1)) then
       return 'corrupt'
     end
     if redis.call('EXISTS', terminalKey) ~= 1 then return 'corrupt' end
@@ -544,70 +540,6 @@ redis.call('HSET', KEYS[2], 'finalObservationJson', ARGV[7],
 return simple('committed')
 `;
 
-const ACQUIRE_PRESENTER = `
-local observationId = ARGV[3]
-local leaseId = ARGV[4]
-local state = reconcile(KEYS[1], KEYS[2], observationId)
-if state == 'corrupt' then return corrupt() end
-if state == 'terminal' then return terminalTuple('gone', KEYS[2]) end
-if state == 'not_found' then return simple('not_found') end
-local currentId = redis.call('HGET', KEYS[1], 'presenterLeaseId')
-local currentExpiry = tonumber(redis.call('HGET', KEYS[1], 'presenterLeaseExpiresAtMs') or '0')
-if currentId and nowMs < currentExpiry then
-  if currentId == leaseId then
-    return {VERSION, 'already_acquired', integerString(nowMs), currentId, integerString(currentExpiry)}
-  end
-  return simple('busy')
-end
-local sessionExpiry = tonumber(redis.call('HGET', KEYS[1], 'expiresAtMs'))
-if not sessionExpiry then return corrupt() end
-local nextExpiry = math.min(nowMs + 10000, sessionExpiry)
-redis.call('HSET', KEYS[1], 'presenterLeaseId', leaseId,
-  'presenterLeaseExpiresAtMs', integerString(nextExpiry))
-return {VERSION, 'acquired', integerString(nowMs), leaseId, integerString(nextExpiry)}
-`;
-
-const RENEW_PRESENTER = `
-local observationId = ARGV[3]
-local leaseId = ARGV[4]
-local state = reconcile(KEYS[1], KEYS[2], observationId)
-if state == 'corrupt' then return corrupt() end
-if state == 'terminal' then return terminalTuple('gone', KEYS[2]) end
-if state == 'not_found' then return simple('not_found') end
-local currentId = redis.call('HGET', KEYS[1], 'presenterLeaseId')
-local currentExpiry = tonumber(redis.call('HGET', KEYS[1], 'presenterLeaseExpiresAtMs') or '0')
-if not currentId or nowMs >= currentExpiry or currentId ~= leaseId then
-  if currentId and nowMs >= currentExpiry then
-    redis.call('HDEL', KEYS[1], 'presenterLeaseId', 'presenterLeaseExpiresAtMs')
-  end
-  return simple('lease_lost')
-end
-local sessionExpiry = tonumber(redis.call('HGET', KEYS[1], 'expiresAtMs'))
-if not sessionExpiry then return corrupt() end
-local nextExpiry = math.min(nowMs + 10000, sessionExpiry)
-redis.call('HSET', KEYS[1], 'presenterLeaseExpiresAtMs', integerString(nextExpiry))
-return {VERSION, 'renewed', integerString(nowMs), leaseId, integerString(nextExpiry)}
-`;
-
-const RELEASE_PRESENTER = `
-local observationId = ARGV[3]
-local leaseId = ARGV[4]
-local state = reconcile(KEYS[1], KEYS[2], observationId)
-if state == 'corrupt' then return corrupt() end
-if state == 'terminal' then return terminalTuple('gone', KEYS[2]) end
-if state == 'not_found' then return simple('not_found') end
-local currentId = redis.call('HGET', KEYS[1], 'presenterLeaseId')
-local currentExpiry = tonumber(redis.call('HGET', KEYS[1], 'presenterLeaseExpiresAtMs') or '0')
-if not currentId or nowMs >= currentExpiry or currentId ~= leaseId then
-  if currentId and nowMs >= currentExpiry then
-    redis.call('HDEL', KEYS[1], 'presenterLeaseId', 'presenterLeaseExpiresAtMs')
-  end
-  return simple('lease_lost')
-end
-redis.call('HDEL', KEYS[1], 'presenterLeaseId', 'presenterLeaseExpiresAtMs')
-return simple('released')
-`;
-
 export type RedisLiveObservationStoreScripts = Readonly<{
   createSession: string;
   readSession: string;
@@ -615,9 +547,6 @@ export type RedisLiveObservationStoreScripts = Readonly<{
   stopSession: string;
   claimObserverLease: string;
   commitObservation: string;
-  acquirePresenterBoostLease: string;
-  renewPresenterBoostLease: string;
-  releasePresenterBoostLease: string;
 }>;
 
 function buildScripts(testClock: boolean): RedisLiveObservationStoreScripts {
@@ -627,10 +556,7 @@ function buildScripts(testClock: boolean): RedisLiveObservationStoreScripts {
     collectEvent: script(COLLECT, testClock),
     stopSession: script(STOP, testClock),
     claimObserverLease: script(CLAIM_OBSERVER, testClock),
-    commitObservation: script(COMMIT_OBSERVATION, testClock),
-    acquirePresenterBoostLease: script(ACQUIRE_PRESENTER, testClock),
-    renewPresenterBoostLease: script(RENEW_PRESENTER, testClock),
-    releasePresenterBoostLease: script(RELEASE_PRESENTER, testClock)
+    commitObservation: script(COMMIT_OBSERVATION, testClock)
   });
 }
 
