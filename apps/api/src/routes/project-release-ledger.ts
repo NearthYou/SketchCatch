@@ -85,9 +85,19 @@ const lambdaRuntimeConfigSchema = z
     outputUrl: z.url().max(2_048)
   })
   .strict();
+const ec2AsgRuntimeConfigSchema = z
+  .object({
+    runtimeTargetKind: z.literal("ec2_asg"),
+    codeDeployApplicationName: z.string().trim().min(1).max(100),
+    codeDeployDeploymentGroupName: z.string().trim().min(1).max(100),
+    autoScalingGroupName: z.string().trim().min(1).max(255),
+    outputUrl: z.url().max(2_048)
+  })
+  .strict();
 const deploymentRuntimeConfigSchema = z.discriminatedUnion("runtimeTargetKind", [
   ecsFargateRuntimeConfigSchema,
-  lambdaRuntimeConfigSchema
+  lambdaRuntimeConfigSchema,
+  ec2AsgRuntimeConfigSchema
 ]);
 const putTargetBodySchema = z
   .object({

@@ -7,6 +7,7 @@ import type {
   EcsGitOpsReleaseRecord
 } from "./ecs-gitops-release-reconciler.js";
 import type { LambdaGitOpsReleaseReconciler } from "./lambda-gitops-release-reconciler.js";
+import type { Ec2AsgGitOpsReleaseReconciler } from "./ec2-asg-gitops-release-reconciler.js";
 
 export type GitOpsReleaseReconcileInput = {
   projectId: string;
@@ -25,13 +26,17 @@ export type GitOpsReleaseReconciler = {
 export function createGitOpsReleaseReconciler(options: {
   ecs: EcsGitOpsReleaseReconciler;
   lambda: LambdaGitOpsReleaseReconciler;
+  ec2Asg: Ec2AsgGitOpsReleaseReconciler;
 }): GitOpsReleaseReconciler {
   return {
     reconcile(input) {
       if (input.evidence.runtimeTargetKind === "ecs_fargate") {
         return options.ecs.reconcile({ ...input, evidence: input.evidence });
       }
-      return options.lambda.reconcile({ ...input, evidence: input.evidence });
+      if (input.evidence.runtimeTargetKind === "lambda") {
+        return options.lambda.reconcile({ ...input, evidence: input.evidence });
+      }
+      return options.ec2Asg.reconcile({ ...input, evidence: input.evidence });
     }
   };
 }

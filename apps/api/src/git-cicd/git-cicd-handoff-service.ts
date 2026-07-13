@@ -1297,6 +1297,26 @@ function assertGitOpsTarget(
     }
     return;
   }
+  if (target.runtimeTargetKind === "ec2_asg") {
+    const appSpecs = sourceRepository.analysisResult?.evidence.filter(
+      (item) =>
+        item.kind === "framework_config" &&
+        /(?:^|\/)appspec\.ya?ml$/i.test(item.path)
+    ) ?? [];
+    if (
+      target.runtimeConfig.runtimeTargetKind !== "ec2_asg" ||
+      build.buildPreset !== "codedeploy_bundle" ||
+      !build.appSpecPath ||
+      !hasCurrentRevision ||
+      appSpecs.length !== 1 ||
+      appSpecs[0]?.path !== build.appSpecPath
+    ) {
+      throw new GitCicdHandoffProviderConflictError(
+        "GitOps application handoff requires current, unambiguous AppSpec build evidence"
+      );
+    }
+    return;
+  }
   throw new GitCicdHandoffProviderConflictError(
     "GitOps application handoff does not yet support the selected runtime"
   );

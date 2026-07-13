@@ -775,7 +775,27 @@ type LambdaRuntimeConfig = {
   codeDeployDeploymentGroupName: string;
   outputUrl: string;
 };
+
+type Ec2AsgRuntimeConfig = {
+  runtimeTargetKind: "ec2_asg";
+  codeDeployApplicationName: string;
+  codeDeployDeploymentGroupName: string;
+  autoScalingGroupName: string;
+  outputUrl: string;
+};
 ```
+
+EC2/ASG target은 저장소 분석에서 정확히 하나로 확인한 `appspec.yml|yaml`을 `appspec` build evidence로
+확정하고 CodeDeploy application/deployment group, Auto Scaling group, HTTPS Output URL을 비밀이 아닌
+`runtimeConfig` 좌표로 저장한다. `0039_ec2_asg_gitops_runtime.sql`은 기존 ECS와 Lambda discriminator를
+보존하면서 `ec2_asg`를 확장한다. 새 PUT은 안전한 resource name, runtime discriminator 일치, credential·query·
+fragment가 없는 HTTPS URL을 요구한다.
+
+EC2/ASG GitOps release evidence는 현재 bundle의 SHA-256, S3 URI와 VersionId, 이전 검증 bundle URI와
+VersionId, 원본·활성 CodeDeploy deployment ID, 전체/성공 instance 수와 `codedeploy_failure | instance_failure |
+health_check_failure | null` 실패 원인을 가진다. API는 verified connection으로
+CodeDeploy deployment/group, S3 checksum, ASG healthy InService instance, CodeDeploy instance status를 다시
+조회한 뒤 모두 일치할 때만 공통 `ApplicationRelease` 원장에 기록한다.
 
 Lambda target은 저장소 분석에서 단 하나로 확인된 `template.yaml|yml`을 `sam_template` build evidence로
 확정하고, SAM logical ID, Lambda function/alias, CodeDeploy application/deployment group, HTTPS Output
@@ -788,10 +808,10 @@ URL을 비민감 `runtimeConfig`로 저장한다. `0038_lambda_gitops_runtime.sq
 version, 확인한 commit SHA와 시각만 저장한다. `null`은 migration으로 복원한 legacy target에만 허용하며,
 사용자가 PUT으로 저장하는 새 target은 확인된 build config가 필수다.
 
-`runtimeConfig`는 provider adapter가 실제 런타임을 재조회하는 데 필요한 비밀이 아닌 좌표다. ECS/Fargate와
-Lambda target은 각 adapter의 완전한 좌표가 필수다. EC2/ASG와 Static target은 해당 adapter가 구현될 때까지
+`runtimeConfig`는 provider adapter가 실제 런타임을 재조회하는 데 필요한 비밀이 아닌 좌표다. ECS/Fargate,
+Lambda, EC2/ASG target은 각 adapter의 완전한 좌표가 필수다. Static target은 해당 adapter가 구현될 때까지
 `null`만 허용한다. `0037_ecs_gitops_runtime.sql`은 기존 row를 유지하기 위해 nullable JSONB로 추가했고,
-`0038_lambda_gitops_runtime.sql`은 기존 ECS discriminator를 보존한 채 Lambda discriminator를 확장한다.
+`0038_lambda_gitops_runtime.sql`과 `0039_ec2_asg_gitops_runtime.sql`이 discriminator를 순차 확장한다.
 새 PUT은 service validation에서 선택한 runtime과 일치하는 완전한 값을 요구한다.
 
 API는 `GET|PUT /api/projects/:projectId/deployment-target`을 사용한다. Direct와 GitOps는 같은 target row를

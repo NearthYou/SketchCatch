@@ -43,7 +43,8 @@ test("deployment target draft maps each runtime to a structured build preset", (
         evidencePath,
         commitSha: "a".repeat(40),
         ...(runtimeTargetKind === "ecs_fargate" ? createEcsCoordinates() : {}),
-        ...(runtimeTargetKind === "lambda" ? createLambdaCoordinates() : {})
+        ...(runtimeTargetKind === "lambda" ? createLambdaCoordinates() : {}),
+        ...(runtimeTargetKind === "ec2_asg" ? createEc2AsgCoordinates() : {})
       },
       [connection],
       new Date("2026-07-14T00:00:00.000Z")
@@ -102,6 +103,55 @@ test("Lambda runtime selection suggests one current SAM template and requires ru
   const request = createDeploymentTargetRequest(ready, [connection]);
   assert.equal(request.runtimeConfig?.runtimeTargetKind, "lambda");
   assert.equal(request.runtimeConfig?.functionName, "sketchcatch-api");
+  assert.equal(request.confirmedBuildConfig.healthCheckPath, "/health");
+});
+
+test("EC2 ASG runtime selection suggests one current AppSpec and requires runtime coordinates", () => {
+  const repository = createSourceRepository({
+    analysis: {
+      repositoryRevision: "e".repeat(40),
+      analyzedAt: "2026-07-14T00:00:00.000Z",
+      aiHandoff: {
+        status: "template_selected",
+        templateId: "three-tier-web-app",
+        applicationUnits: [
+          {
+            id: "api",
+            rootPath: "apps/api",
+            kind: "backend",
+            frameworks: [],
+            evidencePaths: ["apps/api/appspec.yml"]
+          }
+        ],
+        evidence: [
+          {
+            kind: "framework_config",
+            path: "apps/api/appspec.yml",
+            applicationUnitId: "api",
+            signals: []
+          }
+        ],
+        missingEvidence: [],
+        selectionReasons: ["AppSpec detected"]
+      }
+    }
+  });
+  const draft = changeDeploymentTargetRuntime(
+    createDeploymentTargetDraft(null, [connection]),
+    "ec2_asg",
+    repository
+  );
+
+  assert.equal(draft.sourceRoot, "apps/api");
+  assert.equal(draft.evidencePath, "apps/api/appspec.yml");
+  assert.equal(draft.commitSha, "e".repeat(40));
+  assert.equal(isDeploymentTargetDraftReady(draft, [connection]), false);
+
+  const ready = { ...draft, ...createEc2AsgCoordinates() };
+  assert.equal(isDeploymentTargetDraftReady(ready, [connection]), true);
+  const request = createDeploymentTargetRequest(ready, [connection]);
+  assert.equal(request.runtimeConfig?.runtimeTargetKind, "ec2_asg");
+  assert.equal(request.runtimeConfig?.autoScalingGroupName, "sketchcatch-api-asg");
   assert.equal(request.confirmedBuildConfig.healthCheckPath, "/health");
 });
 
@@ -273,6 +323,16 @@ function createLambdaCoordinates() {
     codeDeployApplicationName: "sketchcatch-api",
     codeDeployDeploymentGroupName: "sketchcatch-api-live",
     outputUrl: "https://lambda.example.com",
+    healthCheckPath: "/health"
+  };
+}
+
+function createEc2AsgCoordinates() {
+  return {
+    codeDeployApplicationName: "sketchcatch-api",
+    codeDeployDeploymentGroupName: "sketchcatch-api-asg",
+    autoScalingGroupName: "sketchcatch-api-asg",
+    outputUrl: "https://ec2.example.com",
     healthCheckPath: "/health"
   };
 }

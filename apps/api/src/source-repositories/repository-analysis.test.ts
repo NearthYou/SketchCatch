@@ -2,6 +2,28 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { analyzeRepositoryEvidence } from "./repository-analysis.js";
 
+test("captures CodeDeploy AppSpec as repository framework evidence", () => {
+  const result = analyzeRepositoryEvidence({
+    revision: "appspec-revision",
+    treePaths: ["apps/api/appspec.yml", "apps/api/package.json"],
+    files: [
+      {
+        path: "apps/api/package.json",
+        content: JSON.stringify({ name: "api", scripts: { start: "node server.js" } })
+      },
+      {
+        path: "apps/api/appspec.yml",
+        content: "version: 0.0\nos: linux\nfiles:\n  - source: /\n    destination: /srv/api"
+      }
+    ]
+  });
+
+  assert.equal(
+    result.evidence.find((evidence) => evidence.path === "apps/api/appspec.yml")?.kind,
+    "framework_config"
+  );
+});
+
 test("selects static web hosting for a Vite frontend in a monorepo", () => {
   // Given
   const snapshot = {

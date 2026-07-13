@@ -45,6 +45,7 @@ export function createGitCicdAutomationFiles(
   const settingsPreview = createRepositorySettingsPreview(input);
   const ecsFargate = getEcsFargateWorkflowInput(input);
   const lambda = getLambdaWorkflowInput(input);
+  const ec2Asg = getEc2AsgWorkflowInput(input);
 
   return [
     {
@@ -58,7 +59,9 @@ export function createGitCicdAutomationFiles(
         ? renderEcsFargateAppWorkflow(input, ecsFargate)
         : lambda
           ? renderLambdaAppWorkflow(input, lambda)
-          : renderAppWorkflow(input),
+          : ec2Asg
+            ? renderEc2AsgAppWorkflow(input, ec2Asg)
+            : renderAppWorkflow(input),
       contentType: "text/yaml"
     },
     {
@@ -121,7 +124,10 @@ export function createRepositorySettingsPreview(
       SKETCHCATCH_RDS_ENABLED: String(input.rdsEnabled === true),
       SKETCHCATCH_STATIC_SITE_URL: input.staticSiteUrl ?? "",
       SKETCHCATCH_API_BASE_URL: input.apiBaseUrl ?? "",
-      SKETCHCATCH_ASG_NAME: "",
+      SKETCHCATCH_ASG_NAME:
+        input.runtimeConfig?.runtimeTargetKind === "ec2_asg"
+          ? input.runtimeConfig.autoScalingGroupName
+          : "",
       SKETCHCATCH_CODEBUILD_PROJECT:
         input.runtimeConfig?.runtimeTargetKind === "ecs_fargate"
           ? input.runtimeConfig.codeBuildProjectName
@@ -139,11 +145,13 @@ export function createRepositorySettingsPreview(
           ? input.runtimeConfig.aliasName
           : "",
       SKETCHCATCH_CODEDEPLOY_APPLICATION:
-        input.runtimeConfig?.runtimeTargetKind === "lambda"
+        input.runtimeConfig?.runtimeTargetKind === "lambda" ||
+        input.runtimeConfig?.runtimeTargetKind === "ec2_asg"
           ? input.runtimeConfig.codeDeployApplicationName
           : "",
       SKETCHCATCH_CODEDEPLOY_GROUP:
-        input.runtimeConfig?.runtimeTargetKind === "lambda"
+        input.runtimeConfig?.runtimeTargetKind === "lambda" ||
+        input.runtimeConfig?.runtimeTargetKind === "ec2_asg"
           ? input.runtimeConfig.codeDeployDeploymentGroupName
           : "",
       SKETCHCATCH_ECS_CLUSTER:
@@ -163,7 +171,9 @@ export function createRepositorySettingsPreview(
           ? input.runtimeConfig.outputUrl
           : input.runtimeConfig?.runtimeTargetKind === "lambda"
             ? input.runtimeConfig.outputUrl
-            : ""
+            : input.runtimeConfig?.runtimeTargetKind === "ec2_asg"
+              ? input.runtimeConfig.outputUrl
+              : ""
     },
     secrets: [],
     workflowFiles: [
@@ -188,6 +198,14 @@ type LambdaWorkflowInput = {
     samTemplatePath: string;
   };
   runtimeConfig: Extract<ProjectDeploymentRuntimeConfig, { runtimeTargetKind: "lambda" }>;
+};
+
+type Ec2AsgWorkflowInput = {
+  confirmedBuildConfig: ConfirmedBuildConfig & {
+    buildPreset: "codedeploy_bundle";
+    appSpecPath: string;
+  };
+  runtimeConfig: Extract<ProjectDeploymentRuntimeConfig, { runtimeTargetKind: "ec2_asg" }>;
 };
 
 function getEcsFargateWorkflowInput(
@@ -231,6 +249,28 @@ function getLambdaWorkflowInput(input: GitCicdWorkflowRenderInput): LambdaWorkfl
       ...build,
       buildPreset: "sam_build",
       samTemplatePath: build.samTemplatePath
+    },
+    runtimeConfig: runtime
+  };
+}
+
+function getEc2AsgWorkflowInput(input: GitCicdWorkflowRenderInput): Ec2AsgWorkflowInput | null {
+  const build = input.confirmedBuildConfig;
+  const runtime = input.runtimeConfig;
+  if (
+    input.runtimeTargetKind !== "ec2_asg" ||
+    !build ||
+    build.buildPreset !== "codedeploy_bundle" ||
+    !build.appSpecPath ||
+    runtime?.runtimeTargetKind !== "ec2_asg"
+  ) {
+    return null;
+  }
+  return {
+    confirmedBuildConfig: {
+      ...build,
+      buildPreset: "codedeploy_bundle",
+      appSpecPath: build.appSpecPath
     },
     runtimeConfig: runtime
   };
@@ -674,6 +714,292 @@ jobs:
 `;
 }
 
+function renderEc2AsgAppWorkflow(
+  input: GitCicdWorkflowRenderInput,
+  ec2Asg: Ec2AsgWorkflowInput
+): string {
+  const environmentName = input.environmentName ?? defaultGitCicdEnvironmentName;
+  const build = ec2Asg.confirmedBuildConfig;
+  return `name: SketchCatch App
+
+on:
+  workflow_run:
+    workflows: ["SketchCatch Infra"]
+    types: [completed]
+    branches: [${JSON.stringify(input.targetBranch)}]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: sketchcatch-ec2-asg-${input.projectSlug}-${environmentName}
+  cancel-in-progress: false
+
+env:
+  SKETCHCATCH_RELEASE_SHA: \${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+  SKETCHCATCH_RELEASE_BUCKET: \${{ vars.SKETCHCATCH_RELEASE_BUCKET }}
+  SKETCHCATCH_CODEDEPLOY_APPLICATION: \${{ vars.SKETCHCATCH_CODEDEPLOY_APPLICATION }}
+  SKETCHCATCH_CODEDEPLOY_GROUP: \${{ vars.SKETCHCATCH_CODEDEPLOY_GROUP }}
+  SKETCHCATCH_ASG_NAME: \${{ vars.SKETCHCATCH_ASG_NAME }}
+  SKETCHCATCH_OUTPUT_URL: \${{ vars.SKETCHCATCH_OUTPUT_URL }}
+  SKETCHCATCH_SOURCE_ROOT: ${JSON.stringify(build.sourceRoot)}
+  SKETCHCATCH_APPSPEC_PATH: ${JSON.stringify(build.appSpecPath)}
+  SKETCHCATCH_HEALTH_CHECK_PATH: ${JSON.stringify(build.healthCheckPath ?? "/")}
+
+jobs:
+  release:
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == ${JSON.stringify(input.targetBranch)})
+    runs-on: ubuntu-latest
+    environment: ${environmentName}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: \${{ env.SKETCHCATCH_RELEASE_SHA }}
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: \${{ vars.SKETCHCATCH_AWS_ROLE_ARN }}
+          aws-region: \${{ vars.SKETCHCATCH_AWS_REGION }}
+      - name: Validate CodeDeploy target and rollback baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SKETCHCATCH_RELEASE_SHA"
+          test "$(aws s3api get-bucket-versioning --bucket "$SKETCHCATCH_RELEASE_BUCKET" --query Status --output text)" = Enabled
+          aws deploy get-deployment-group \
+            --application-name "$SKETCHCATCH_CODEDEPLOY_APPLICATION" \
+            --deployment-group-name "$SKETCHCATCH_CODEDEPLOY_GROUP" \
+            --output json > sketchcatch-deployment-group.json
+          python3 - <<'PY'
+          import json
+          import os
+
+          with open("sketchcatch-deployment-group.json", encoding="utf-8") as handle:
+              group = json.load(handle).get("deploymentGroupInfo") or {}
+          rollback = group.get("autoRollbackConfiguration") or {}
+          asg_names = {item.get("name") for item in (group.get("autoScalingGroups") or [])}
+          if group.get("computePlatform") != "Server":
+              raise SystemExit("CodeDeploy deployment group must use the Server compute platform")
+          if group.get("deploymentConfigName") != "CodeDeployDefault.AllAtOnce":
+              raise SystemExit("EC2 deployment group must use CodeDeployDefault.AllAtOnce")
+          if asg_names != {os.environ["SKETCHCATCH_ASG_NAME"]}:
+              raise SystemExit("CodeDeploy deployment group must target exactly the configured Auto Scaling group")
+          if rollback.get("enabled") is not True or "DEPLOYMENT_FAILURE" not in (rollback.get("events") or []):
+              raise SystemExit("EC2 deployment group must auto-rollback DEPLOYMENT_FAILURE")
+          previous_id = (group.get("lastSuccessfulDeployment") or {}).get("deploymentId")
+          if not previous_id:
+              raise SystemExit("A previous successful CodeDeploy revision is required as the rollback baseline")
+          PY
+          PREVIOUS_DEPLOYMENT_ID=$(python3 -c 'import json; print(json.load(open("sketchcatch-deployment-group.json"))["deploymentGroupInfo"]["lastSuccessfulDeployment"]["deploymentId"])')
+          aws deploy get-deployment --deployment-id "$PREVIOUS_DEPLOYMENT_ID" --query 'deploymentInfo.revision' --output json > sketchcatch-previous-revision.json
+          python3 - <<'PY'
+          import json
+
+          with open("sketchcatch-previous-revision.json", encoding="utf-8") as handle:
+              revision = json.load(handle)
+          location = revision.get("s3Location") or {}
+          if revision.get("revisionType") != "S3" or location.get("bundleType") != "zip":
+              raise SystemExit("Previous successful revision must be a versioned S3 ZIP bundle")
+          for key in ("bucket", "key", "version"):
+              if not location.get(key):
+                  raise SystemExit(f"Previous S3 revision is missing {key}")
+          PY
+          PREVIOUS_BUCKET=$(jq -r '.s3Location.bucket' sketchcatch-previous-revision.json)
+          PREVIOUS_KEY=$(jq -r '.s3Location.key' sketchcatch-previous-revision.json)
+          PREVIOUS_VERSION_ID=$(jq -r '.s3Location.version' sketchcatch-previous-revision.json)
+          echo "SKETCHCATCH_PREVIOUS_ARTIFACT_URI=s3://$PREVIOUS_BUCKET/$PREVIOUS_KEY" >> "$GITHUB_ENV"
+          echo "SKETCHCATCH_PREVIOUS_ARTIFACT_VERSION_ID=$PREVIOUS_VERSION_ID" >> "$GITHUB_ENV"
+      - name: Build confirmed CodeDeploy bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          APPSPEC_RELATIVE=$(python3 - <<'PY'
+          import os
+          from pathlib import PurePosixPath
+
+          root = PurePosixPath(os.environ["SKETCHCATCH_SOURCE_ROOT"])
+          appspec = PurePosixPath(os.environ["SKETCHCATCH_APPSPEC_PATH"])
+          relative = appspec if str(root) == "." else appspec.relative_to(root)
+          if len(relative.parts) != 1 or relative.name.lower() not in {"appspec.yml", "appspec.yaml"}:
+              raise SystemExit("AppSpec must be at the confirmed source root")
+          print(relative.as_posix())
+          PY
+          )
+          test -f "$SKETCHCATCH_SOURCE_ROOT/$APPSPEC_RELATIVE"
+          BUNDLE_PATH="$RUNNER_TEMP/sketchcatch-ec2-$SKETCHCATCH_RELEASE_SHA.zip"
+          (cd "$SKETCHCATCH_SOURCE_ROOT" && zip -q -X -r "$BUNDLE_PATH" . -x '.git/*')
+          ARTIFACT_DIGEST=$(sha256sum "$BUNDLE_PATH" | awk '{print $1}')
+          CHECKSUM_SHA256=$(printf '%s' "$ARTIFACT_DIGEST" | xxd -r -p | base64 -w0)
+          ARTIFACT_KEY="${input.projectSlug}/ec2-asg/$SKETCHCATCH_RELEASE_SHA/$ARTIFACT_DIGEST.zip"
+          echo "SKETCHCATCH_BUNDLE_PATH=$BUNDLE_PATH" >> "$GITHUB_ENV"
+          echo "SKETCHCATCH_ARTIFACT_DIGEST=sha256:$ARTIFACT_DIGEST" >> "$GITHUB_ENV"
+          echo "SKETCHCATCH_ARTIFACT_KEY=$ARTIFACT_KEY" >> "$GITHUB_ENV"
+          echo "SKETCHCATCH_CHECKSUM_SHA256=$CHECKSUM_SHA256" >> "$GITHUB_ENV"
+      - name: Publish versioned S3 bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws s3api put-object \
+            --bucket "$SKETCHCATCH_RELEASE_BUCKET" \
+            --key "$SKETCHCATCH_ARTIFACT_KEY" \
+            --body "$SKETCHCATCH_BUNDLE_PATH" \
+            --checksum-algorithm SHA256 \
+            --checksum-sha256 "$SKETCHCATCH_CHECKSUM_SHA256" \
+            --output json > sketchcatch-put-object.json
+          VERSION_ID=$(jq -r '.VersionId // empty' sketchcatch-put-object.json)
+          ETAG=$(jq -r '.ETag // empty' sketchcatch-put-object.json)
+          REMOTE_CHECKSUM=$(jq -r '.ChecksumSHA256 // empty' sketchcatch-put-object.json)
+          test -n "$VERSION_ID"
+          test -n "$ETAG"
+          test "$REMOTE_CHECKSUM" = "$SKETCHCATCH_CHECKSUM_SHA256"
+          jq -n \
+            --arg bucket "$SKETCHCATCH_RELEASE_BUCKET" \
+            --arg key "$SKETCHCATCH_ARTIFACT_KEY" \
+            --arg version "$VERSION_ID" \
+            --arg eTag "$ETAG" \
+            '{revisionType:"S3",s3Location:{bucket:$bucket,key:$key,bundleType:"zip",version:$version,eTag:$eTag}}' \
+            > sketchcatch-current-revision.json
+          echo "SKETCHCATCH_ARTIFACT_URI=s3://$SKETCHCATCH_RELEASE_BUCKET/$SKETCHCATCH_ARTIFACT_KEY" >> "$GITHUB_ENV"
+          echo "SKETCHCATCH_ARTIFACT_VERSION_ID=$VERSION_ID" >> "$GITHUB_ENV"
+      - name: Deploy EC2 ASG bundle AllAtOnce
+        shell: bash
+        run: |
+          set -euo pipefail
+          DEPLOYMENT_ID=$(aws deploy create-deployment \
+            --application-name "$SKETCHCATCH_CODEDEPLOY_APPLICATION" \
+            --deployment-group-name "$SKETCHCATCH_CODEDEPLOY_GROUP" \
+            --deployment-config-name CodeDeployDefault.AllAtOnce \
+            --revision file://sketchcatch-current-revision.json \
+            --query deploymentId --output text)
+          echo "SKETCHCATCH_CODEDEPLOY_DEPLOYMENT_ID=$DEPLOYMENT_ID" >> "$GITHUB_ENV"
+          set +e
+          aws deploy wait deployment-successful --deployment-id "$DEPLOYMENT_ID"
+          WAIT_STATUS=$?
+          set -e
+          echo "SKETCHCATCH_CODEDEPLOY_WAIT_STATUS=$WAIT_STATUS" >> "$GITHUB_ENV"
+      - name: Verify EC2 ASG release and rollback
+        if: always() && env.SKETCHCATCH_CODEDEPLOY_DEPLOYMENT_ID != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          ORIGINAL_STATUS=$(aws deploy get-deployment --deployment-id "$SKETCHCATCH_CODEDEPLOY_DEPLOYMENT_ID" --query 'deploymentInfo.status' --output text)
+          ACTIVE_DEPLOYMENT_ID="$SKETCHCATCH_CODEDEPLOY_DEPLOYMENT_ID"
+          OUTCOME=succeeded
+          FAILURE_REASON=""
+          restore_previous_revision() {
+            aws deploy create-deployment \
+              --application-name "$SKETCHCATCH_CODEDEPLOY_APPLICATION" \
+              --deployment-group-name "$SKETCHCATCH_CODEDEPLOY_GROUP" \
+              --deployment-config-name CodeDeployDefault.AllAtOnce \
+              --revision file://sketchcatch-previous-revision.json \
+              --description "$1" \
+              --query deploymentId --output text
+          }
+          if [ "$ORIGINAL_STATUS" = Succeeded ]; then
+            aws deploy list-deployment-instances --deployment-id "$SKETCHCATCH_CODEDEPLOY_DEPLOYMENT_ID" --output json > sketchcatch-original-instances.json
+            aws deploy list-deployment-instances --deployment-id "$SKETCHCATCH_CODEDEPLOY_DEPLOYMENT_ID" --include-only-statuses Succeeded --output json > sketchcatch-original-succeeded-instances.json
+            ORIGINAL_TARGET_COUNT=$(jq '.instancesList | length' sketchcatch-original-instances.json)
+            ORIGINAL_SUCCEEDED_COUNT=$(jq '.instancesList | length' sketchcatch-original-succeeded-instances.json)
+            if [ "$ORIGINAL_TARGET_COUNT" -eq 0 ] || [ "$ORIGINAL_SUCCEEDED_COUNT" -ne "$ORIGINAL_TARGET_COUNT" ]; then
+              ACTIVE_DEPLOYMENT_ID=$(restore_previous_revision "SketchCatch instance-failure rollback")
+              set +e
+              aws deploy wait deployment-successful --deployment-id "$ACTIVE_DEPLOYMENT_ID"
+              set -e
+              OUTCOME=failed
+              FAILURE_REASON=instance_failure
+            else
+              HEALTH_URL="\${SKETCHCATCH_OUTPUT_URL%/}\${SKETCHCATCH_HEALTH_CHECK_PATH}"
+              if ! curl --fail --show-error --max-time 10 --max-redirs 0 --proto '=https' "$HEALTH_URL" >/dev/null; then
+                ACTIVE_DEPLOYMENT_ID=$(restore_previous_revision "SketchCatch health-check rollback")
+                set +e
+                aws deploy wait deployment-successful --deployment-id "$ACTIVE_DEPLOYMENT_ID"
+                set -e
+                OUTCOME=failed
+                FAILURE_REASON=health_check_failure
+              fi
+            fi
+          else
+            ROLLBACK_DEPLOYMENT_ID=""
+            for attempt in $(seq 1 20); do
+              ROLLBACK_DEPLOYMENT_ID=$(aws deploy get-deployment \
+                --deployment-id "$SKETCHCATCH_CODEDEPLOY_DEPLOYMENT_ID" \
+                --query 'deploymentInfo.rollbackInfo.rollbackDeploymentId' --output text)
+              if [ "$ROLLBACK_DEPLOYMENT_ID" != None ] && [ -n "$ROLLBACK_DEPLOYMENT_ID" ]; then break; fi
+              sleep 5
+            done
+            ACTIVE_DEPLOYMENT_ID="$ROLLBACK_DEPLOYMENT_ID"
+            if [ -n "$ACTIVE_DEPLOYMENT_ID" ] && [ "$ACTIVE_DEPLOYMENT_ID" != None ]; then
+              set +e
+              aws deploy wait deployment-successful --deployment-id "$ACTIVE_DEPLOYMENT_ID"
+              set -e
+            fi
+            OUTCOME=rolled_back
+            FAILURE_REASON=codedeploy_failure
+          fi
+          ACTIVE_STATUS=$(aws deploy get-deployment --deployment-id "$ACTIVE_DEPLOYMENT_ID" --query 'deploymentInfo.status' --output text)
+          aws deploy get-deployment --deployment-id "$ACTIVE_DEPLOYMENT_ID" --query 'deploymentInfo.revision' --output json > sketchcatch-active-revision.json
+          aws deploy list-deployment-instances --deployment-id "$ACTIVE_DEPLOYMENT_ID" --output json > sketchcatch-all-instances.json
+          aws deploy list-deployment-instances --deployment-id "$ACTIVE_DEPLOYMENT_ID" --include-only-statuses Succeeded --output json > sketchcatch-succeeded-instances.json
+          TARGET_COUNT=$(jq '.instancesList | length' sketchcatch-all-instances.json)
+          SUCCEEDED_COUNT=$(jq '.instancesList | length' sketchcatch-succeeded-instances.json)
+          EXPECTED_REVISION=sketchcatch-current-revision.json
+          if [ "$OUTCOME" != succeeded ]; then EXPECTED_REVISION=sketchcatch-previous-revision.json; fi
+          REVISION_MATCH=$(python3 - "$EXPECTED_REVISION" <<'PY'
+          import json
+          import sys
+
+          with open(sys.argv[1], encoding="utf-8") as handle:
+              expected = json.load(handle).get("s3Location") or {}
+          with open("sketchcatch-active-revision.json", encoding="utf-8") as handle:
+              active = json.load(handle).get("s3Location") or {}
+          fields = ("bucket", "key", "bundleType", "version", "eTag")
+          print("1" if all(active.get(field) == expected.get(field) for field in fields) else "0")
+          PY
+          )
+          HEALTH_URL="\${SKETCHCATCH_OUTPUT_URL%/}\${SKETCHCATCH_HEALTH_CHECK_PATH}"
+          HEALTHY=0
+          if curl --fail --show-error --max-time 10 --max-redirs 0 --proto '=https' "$HEALTH_URL" >/dev/null; then HEALTHY=1; fi
+          export ACTIVE_DEPLOYMENT_ID TARGET_COUNT SUCCEEDED_COUNT FAILURE_REASON
+          python3 - "$OUTCOME" <<'PY'
+          import base64
+          import json
+          import os
+          import sys
+
+          evidence = {
+              "schemaVersion": 1,
+              "runtimeTargetKind": "ec2_asg",
+              "outcome": sys.argv[1],
+              "failureReason": os.environ["FAILURE_REASON"] or None,
+              "commitSha": os.environ["SKETCHCATCH_RELEASE_SHA"],
+              "artifactDigest": os.environ["SKETCHCATCH_ARTIFACT_DIGEST"],
+              "artifactUri": os.environ["SKETCHCATCH_ARTIFACT_URI"],
+              "artifactVersionId": os.environ["SKETCHCATCH_ARTIFACT_VERSION_ID"],
+              "previousArtifactUri": os.environ["SKETCHCATCH_PREVIOUS_ARTIFACT_URI"],
+              "previousArtifactVersionId": os.environ["SKETCHCATCH_PREVIOUS_ARTIFACT_VERSION_ID"],
+              "codeDeployApplicationName": os.environ["SKETCHCATCH_CODEDEPLOY_APPLICATION"],
+              "codeDeployDeploymentGroupName": os.environ["SKETCHCATCH_CODEDEPLOY_GROUP"],
+              "autoScalingGroupName": os.environ["SKETCHCATCH_ASG_NAME"],
+              "deploymentId": os.environ["SKETCHCATCH_CODEDEPLOY_DEPLOYMENT_ID"],
+              "activeDeploymentId": os.environ["ACTIVE_DEPLOYMENT_ID"],
+              "deploymentConfigName": "CodeDeployDefault.AllAtOnce",
+              "targetInstanceCount": int(os.environ["TARGET_COUNT"]),
+              "succeededInstanceCount": int(os.environ["SUCCEEDED_COUNT"]),
+              "outputUrl": os.environ["SKETCHCATCH_OUTPUT_URL"]
+          }
+          encoded = base64.b64encode(json.dumps(evidence, separators=(",", ":")).encode()).decode()
+          print(f"SKETCHCATCH_EC2_RELEASE_EVIDENCE_B64={encoded}")
+          PY
+          test "$ACTIVE_STATUS" = Succeeded
+          test "$TARGET_COUNT" -gt 0
+          test "$SUCCEEDED_COUNT" -eq "$TARGET_COUNT"
+          test "$REVISION_MATCH" = 1
+          test "$HEALTHY" = 1
+          test "$OUTCOME" = succeeded
+`;
+}
+
 function renderEcsFargateBuildspec(): string {
   return `version: 0.2
 
@@ -729,8 +1055,11 @@ function renderInfraWorkflow(input: GitCicdWorkflowRenderInput): string {
   const environmentName = input.environmentName ?? defaultGitCicdEnvironmentName;
   const ecsFargate = getEcsFargateWorkflowInput(input);
   const lambda = getLambdaWorkflowInput(input);
+  const ec2Asg = getEc2AsgWorkflowInput(input);
   const applicationSourceRoot =
-    ecsFargate?.confirmedBuildConfig.sourceRoot ?? lambda?.confirmedBuildConfig.sourceRoot;
+    ecsFargate?.confirmedBuildConfig.sourceRoot ??
+    lambda?.confirmedBuildConfig.sourceRoot ??
+    ec2Asg?.confirmedBuildConfig.sourceRoot;
   const applicationTriggerPaths = applicationSourceRoot
     ? `\n      - ${JSON.stringify(createMonitoredPathGlob(input.appPath ?? applicationSourceRoot))}${
         ecsFargate ? `\n      - 'sketchcatch/${input.projectSlug}/ci-cd/buildspec-ecs.yml'` : ""

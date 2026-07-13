@@ -176,6 +176,68 @@ test("provider maps Lambda stages and parses one bounded Lambda release evidence
   assert.equal(snapshot?.logs.at(-1)?.message, "Lambda release evidence captured.");
 });
 
+test("provider maps EC2 ASG stages and parses one bounded release evidence record", async () => {
+  const evidence = {
+    schemaVersion: 1,
+    runtimeTargetKind: "ec2_asg",
+    outcome: "succeeded",
+    failureReason: null,
+    commitSha: "a".repeat(40),
+    artifactDigest: `sha256:${"b".repeat(64)}`,
+    artifactUri: `s3://sketchcatch-release/api/ec2-asg/${"a".repeat(40)}/${"b".repeat(64)}.zip`,
+    artifactVersionId: "version-current",
+    previousArtifactUri: "s3://sketchcatch-release/api/ec2-asg/previous.zip",
+    previousArtifactVersionId: "version-previous",
+    codeDeployApplicationName: "sketchcatch-api",
+    codeDeployDeploymentGroupName: "sketchcatch-api-asg",
+    autoScalingGroupName: "sketchcatch-api-asg",
+    deploymentId: "d-CURRENT123",
+    activeDeploymentId: "d-CURRENT123",
+    deploymentConfigName: "CodeDeployDefault.AllAtOnce",
+    targetInstanceCount: 2,
+    succeededInstanceCount: 2,
+    outputUrl: "https://ec2.example.com"
+  } as const;
+  const encoded = Buffer.from(JSON.stringify(evidence)).toString("base64");
+  const client = {
+    listCommitFiles: async () => [],
+    listBranchWorkflowRuns: async () => [
+      run({ id: 7, workflowName: "SketchCatch App", commitSha: evidence.commitSha })
+    ],
+    listWorkflowJobs: async () => [
+      {
+        id: 77,
+        name: "release",
+        runUrl: "release",
+        status: "completed",
+        conclusion: "success",
+        startedAt: null,
+        finishedAt: null,
+        steps: [
+          step("Build confirmed CodeDeploy bundle", "completed", "success"),
+          step("Publish versioned S3 bundle", "completed", "success"),
+          step("Deploy EC2 ASG bundle AllAtOnce", "completed", "success"),
+          step("Verify EC2 ASG release and rollback", "completed", "success")
+        ]
+      }
+    ],
+    readWorkflowJobLog: async () =>
+      `Verify EC2 ASG release and rollback\nSKETCHCATCH_EC2_RELEASE_EVIDENCE_B64=${encoded}`
+  } as GitHubActionsReadClient;
+
+  const [snapshot] = await createGitHubActionsRunProvider(client).listSnapshots(repository);
+
+  assert.deepEqual(snapshot?.jobs.map((job) => job.stageKind), [
+    "app_build",
+    "artifact_publish",
+    "app_deploy",
+    "verify"
+  ]);
+  assert.deepEqual(snapshot?.releaseEvidence, evidence);
+  assert.equal(snapshot?.logs.some((log) => log.message.includes(encoded)), false);
+  assert.equal(snapshot?.logs.at(-1)?.message, "EC2 ASG release evidence captured.");
+});
+
 test("provider selects the larger attempt only for the same GitHub run id", async () => {
   const requestedRunIds: number[] = [];
   const client = {

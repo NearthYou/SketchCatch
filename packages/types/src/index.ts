@@ -1077,9 +1077,36 @@ export type LambdaGitOpsReleaseEvidence = {
   outputUrl: string;
 };
 
+export type Ec2AsgGitOpsReleaseEvidence = {
+  schemaVersion: 1;
+  runtimeTargetKind: "ec2_asg";
+  outcome: "succeeded" | "rolled_back" | "failed";
+  failureReason:
+    | "codedeploy_failure"
+    | "instance_failure"
+    | "health_check_failure"
+    | null;
+  commitSha: string;
+  artifactDigest: string;
+  artifactUri: string;
+  artifactVersionId: string;
+  previousArtifactUri: string;
+  previousArtifactVersionId: string;
+  codeDeployApplicationName: string;
+  codeDeployDeploymentGroupName: string;
+  autoScalingGroupName: string;
+  deploymentId: string;
+  activeDeploymentId: string;
+  deploymentConfigName: "CodeDeployDefault.AllAtOnce";
+  targetInstanceCount: number;
+  succeededInstanceCount: number;
+  outputUrl: string;
+};
+
 export type GitOpsReleaseEvidence =
   | EcsGitOpsReleaseEvidence
-  | LambdaGitOpsReleaseEvidence;
+  | LambdaGitOpsReleaseEvidence
+  | Ec2AsgGitOpsReleaseEvidence;
 
 export type EcsFargateRuntimeConfig = {
   runtimeTargetKind: "ecs_fargate";
@@ -1101,7 +1128,18 @@ export type LambdaRuntimeConfig = {
   outputUrl: string;
 };
 
-export type ProjectDeploymentRuntimeConfig = EcsFargateRuntimeConfig | LambdaRuntimeConfig;
+export type Ec2AsgRuntimeConfig = {
+  runtimeTargetKind: "ec2_asg";
+  codeDeployApplicationName: string;
+  codeDeployDeploymentGroupName: string;
+  autoScalingGroupName: string;
+  outputUrl: string;
+};
+
+export type ProjectDeploymentRuntimeConfig =
+  | EcsFargateRuntimeConfig
+  | LambdaRuntimeConfig
+  | Ec2AsgRuntimeConfig;
 
 export type ProjectDeploymentTarget = {
   projectId: string;

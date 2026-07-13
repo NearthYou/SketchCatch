@@ -429,6 +429,26 @@ export function validateProjectDeploymentRuntimeConfig(
   runtimeTargetKind: RuntimeTargetKind,
   config: ProjectDeploymentRuntimeConfig | null
 ): void {
+  if (runtimeTargetKind === "ec2_asg") {
+    if (!config || config.runtimeTargetKind !== "ec2_asg") {
+      throw new ReleaseLedgerValidationError(
+        "EC2 Auto Scaling runtime configuration is required."
+      );
+    }
+    const codeDeployNamePattern = /^[A-Za-z0-9._+=,@-]{1,100}$/;
+    const autoScalingGroupNamePattern = /^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,254}$/;
+    if (
+      !codeDeployNamePattern.test(config.codeDeployApplicationName) ||
+      !codeDeployNamePattern.test(config.codeDeployDeploymentGroupName) ||
+      !autoScalingGroupNamePattern.test(config.autoScalingGroupName)
+    ) {
+      throw new ReleaseLedgerValidationError(
+        "EC2 Auto Scaling runtime configuration contains an invalid resource name."
+      );
+    }
+    validateRuntimeOutputUrl(config.outputUrl);
+    return;
+  }
   if (runtimeTargetKind === "lambda") {
     if (!config || config.runtimeTargetKind !== "lambda") {
       throw new ReleaseLedgerValidationError(

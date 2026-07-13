@@ -182,6 +182,55 @@ test("Lambda project target requires safe function, alias, and CodeDeploy coordi
   assert.equal(target.runtimeConfig?.functionName, "sketchcatch-api");
 });
 
+test("EC2 ASG project target requires safe Auto Scaling and CodeDeploy coordinates", async () => {
+  const repository = new InMemoryProjectReleaseLedgerRepository();
+  const build = createBuildConfig({
+    evidence: [{ kind: "appspec", path: "deploy/appspec.yml" }],
+    buildPreset: "codedeploy_bundle",
+    sourceRoot: ".",
+    healthCheckPath: "/health",
+    dockerfilePath: null,
+    appSpecPath: "deploy/appspec.yml"
+  });
+
+  await assert.rejects(
+    putProjectDeploymentTarget(
+      createTargetInput({
+        runtimeTargetKind: "ec2_asg",
+        confirmedBuildConfig: build,
+        runtimeConfig: null
+      }),
+      repository,
+      () => now
+    ),
+    /EC2 Auto Scaling runtime configuration/i
+  );
+  await assert.rejects(
+    putProjectDeploymentTarget(
+      createTargetInput({
+        runtimeTargetKind: "ec2_asg",
+        confirmedBuildConfig: build,
+        runtimeConfig: createEc2AsgRuntimeConfig({ autoScalingGroupName: "../asg" })
+      }),
+      repository,
+      () => now
+    ),
+    /runtime configuration/i
+  );
+  const target = await putProjectDeploymentTarget(
+    createTargetInput({
+      runtimeTargetKind: "ec2_asg",
+      confirmedBuildConfig: build,
+      runtimeConfig: createEc2AsgRuntimeConfig()
+    }),
+    repository,
+    () => now
+  );
+
+  assert.equal(target.runtimeConfig?.runtimeTargetKind, "ec2_asg");
+  assert.equal(target.runtimeConfig?.autoScalingGroupName, "sketchcatch-api-asg");
+});
+
 test("Direct and GitOps releases are recorded in the same project history", async () => {
   const repository = new InMemoryProjectReleaseLedgerRepository();
   await putProjectDeploymentTarget(createTargetInput(), repository, () => now);
@@ -439,6 +488,17 @@ function createLambdaRuntimeConfig(overrides: Record<string, unknown> = {}) {
     codeDeployApplicationName: "sketchcatch-api",
     codeDeployDeploymentGroupName: "sketchcatch-api-live",
     outputUrl: "https://lambda.example.com",
+    ...overrides
+  } as PutProjectDeploymentTargetRequest["runtimeConfig"];
+}
+
+function createEc2AsgRuntimeConfig(overrides: Record<string, unknown> = {}) {
+  return {
+    runtimeTargetKind: "ec2_asg",
+    codeDeployApplicationName: "sketchcatch-api",
+    codeDeployDeploymentGroupName: "sketchcatch-api-asg",
+    autoScalingGroupName: "sketchcatch-api-asg",
+    outputUrl: "https://ec2.example.com",
     ...overrides
   } as PutProjectDeploymentTargetRequest["runtimeConfig"];
 }

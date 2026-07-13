@@ -26,6 +26,7 @@ export type ProjectDeploymentTargetDraft = {
   aliasName: string;
   codeDeployApplicationName: string;
   codeDeployDeploymentGroupName: string;
+  autoScalingGroupName: string;
   outputUrl: string;
   evidenceSuggested: boolean;
 };
@@ -69,6 +70,9 @@ export function createDeploymentTargetDraft(
   const lambdaConfig = target?.runtimeConfig?.runtimeTargetKind === "lambda"
     ? target.runtimeConfig
     : null;
+  const ec2AsgConfig = target?.runtimeConfig?.runtimeTargetKind === "ec2_asg"
+    ? target.runtimeConfig
+    : null;
   const suggestion = target ? null : getEvidenceSuggestion(runtimeTargetKind, sourceRepository);
   return {
     connectionId:
@@ -90,9 +94,14 @@ export function createDeploymentTargetDraft(
     functionLogicalId: lambdaConfig?.functionLogicalId ?? "",
     functionName: lambdaConfig?.functionName ?? "",
     aliasName: lambdaConfig?.aliasName ?? "",
-    codeDeployApplicationName: lambdaConfig?.codeDeployApplicationName ?? "",
-    codeDeployDeploymentGroupName: lambdaConfig?.codeDeployDeploymentGroupName ?? "",
-    outputUrl: ecsConfig?.outputUrl ?? lambdaConfig?.outputUrl ?? "",
+    codeDeployApplicationName:
+      lambdaConfig?.codeDeployApplicationName ?? ec2AsgConfig?.codeDeployApplicationName ?? "",
+    codeDeployDeploymentGroupName:
+      lambdaConfig?.codeDeployDeploymentGroupName ??
+      ec2AsgConfig?.codeDeployDeploymentGroupName ??
+      "",
+    autoScalingGroupName: ec2AsgConfig?.autoScalingGroupName ?? "",
+    outputUrl: ecsConfig?.outputUrl ?? lambdaConfig?.outputUrl ?? ec2AsgConfig?.outputUrl ?? "",
     evidenceSuggested: Boolean(suggestion)
   };
 }
@@ -110,7 +119,9 @@ export function changeDeploymentTargetRuntime(
     evidencePath: suggestion?.evidencePath ?? getDefaultDeploymentEvidencePath(runtimeTargetKind),
     commitSha: suggestion?.commitSha ?? "",
     healthCheckPath:
-      runtimeTargetKind === "ecs_fargate" || runtimeTargetKind === "lambda"
+      runtimeTargetKind === "ecs_fargate" ||
+      runtimeTargetKind === "lambda" ||
+      runtimeTargetKind === "ec2_asg"
         ? draft.healthCheckPath || "/health"
         : "",
     outputUrl: "",
@@ -144,7 +155,9 @@ export function isDeploymentTargetDraftReady(
     (draft.runtimeTargetKind !== "ecs_fargate" ||
       (/^\//.test(draft.healthCheckPath) && hasCompleteEcsCoordinates(draft))) &&
     (draft.runtimeTargetKind !== "lambda" ||
-      (/^\//.test(draft.healthCheckPath) && hasCompleteLambdaCoordinates(draft)))
+      (/^\//.test(draft.healthCheckPath) && hasCompleteLambdaCoordinates(draft))) &&
+    (draft.runtimeTargetKind !== "ec2_asg" ||
+      (/^\//.test(draft.healthCheckPath) && hasCompleteEc2AsgCoordinates(draft)))
   );
 }
 
@@ -191,7 +204,15 @@ export function createDeploymentTargetRequest(
               codeDeployDeploymentGroupName: draft.codeDeployDeploymentGroupName.trim(),
               outputUrl: draft.outputUrl.trim()
             }
-          : null,
+          : draft.runtimeTargetKind === "ec2_asg"
+            ? {
+                runtimeTargetKind: "ec2_asg",
+                codeDeployApplicationName: draft.codeDeployApplicationName.trim(),
+                codeDeployDeploymentGroupName: draft.codeDeployDeploymentGroupName.trim(),
+                autoScalingGroupName: draft.autoScalingGroupName.trim(),
+                outputUrl: draft.outputUrl.trim()
+              }
+            : null,
     confirmedBuildConfig: {
       sourceRoot: draft.sourceRoot.trim(),
       evidence: [{ kind: runtime.evidenceKind, path: evidencePath }],
@@ -200,7 +221,9 @@ export function createDeploymentTargetRequest(
       artifactOutputPath: draft.runtimeTargetKind === "static_site" ? evidencePath : null,
       runtimeEntrypoint: null,
       healthCheckPath:
-        draft.runtimeTargetKind === "ecs_fargate" || draft.runtimeTargetKind === "lambda"
+        draft.runtimeTargetKind === "ecs_fargate" ||
+        draft.runtimeTargetKind === "lambda" ||
+        draft.runtimeTargetKind === "ec2_asg"
           ? draft.healthCheckPath.trim()
           : null,
       dockerfilePath: draft.runtimeTargetKind === "ecs_fargate" ? evidencePath : null,
@@ -243,7 +266,9 @@ function getEvidenceSuggestion(
   const matchingEvidence = handoff.evidence.filter((item) =>
     runtimeTargetKind === "lambda"
       ? item.kind === "framework_config" && /(?:^|\/)template\.ya?ml$/i.test(item.path)
-      : item.kind === evidenceKind
+      : runtimeTargetKind === "ec2_asg"
+        ? item.kind === "framework_config" && /(?:^|\/)appspec\.ya?ml$/i.test(item.path)
+        : item.kind === evidenceKind
   );
   if (matchingEvidence.length !== 1) return null;
 
@@ -280,6 +305,15 @@ function hasCompleteLambdaCoordinates(draft: ProjectDeploymentTargetDraft): bool
     draft.aliasName,
     draft.codeDeployApplicationName,
     draft.codeDeployDeploymentGroupName
+  ];
+  return values.every((value) => value.trim().length > 0) && hasSafeHttpsOutputUrl(draft.outputUrl);
+}
+
+function hasCompleteEc2AsgCoordinates(draft: ProjectDeploymentTargetDraft): boolean {
+  const values = [
+    draft.codeDeployApplicationName,
+    draft.codeDeployDeploymentGroupName,
+    draft.autoScalingGroupName
   ];
   return values.every((value) => value.trim().length > 0) && hasSafeHttpsOutputUrl(draft.outputUrl);
 }
