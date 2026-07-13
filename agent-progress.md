@@ -21,6 +21,7 @@ Short English-only working log for the current agent context. Older records are 
 - Kept Direct Deployment records separate from commit-scoped Pipeline Runs and CI/CD logs.
 - Defined repository-level branch, app path, and infrastructure path monitoring settings, completion notifications, and accessible Output URL actions.
 - Defined polling-based GitHub Actions observation, browser Notification fallback behavior, error handling, compatibility, and acceptance tests.
+- Added a nine-task TDD implementation plan covering contracts, migration, monitoring validation, Pipeline Run synchronization, API routes, UI separation, notifications, Outputs, and end-to-end verification.
 - Verification: design self-review and `git diff --check` passed; no product code, Terraform, Git handoff, or cloud mutation ran.
 
 ### 2026-07-13 - Repair Terraform nested-block merge regression
@@ -210,4 +211,4 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Next Action
 
-- Await PR #358 checks and merge into `dev`.
+- Execute Task 1 from `docs/superpowers/plans/2026-07-13-deployment-cicd-console-separation.md` in the isolated #361 worktree.
