@@ -9,9 +9,9 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
-### 2026-07-13 - Polish cost header and project deployment filter
+### 2026-07-13 - Polish cost header and project list filters
 
-- Added the Cost Management introduction and prevented the Project deployment filter from collapsing below readable width; focused Web tests, lint, typecheck, build, diff check, and harness pass, with one unrelated API `setNow` warning.
+- Added the Cost Management introduction, switched Project filters to white menus, and protected both filter widths from label truncation; focused Web tests, lint, typecheck, build, diff check, and harness pass, with one unrelated API `setNow` warning.
 
 ### 2026-07-13 - Restore saved architecture thumbnails above project cards
 

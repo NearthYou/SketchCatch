@@ -494,8 +494,8 @@ a.dashboardActivityRow:hover {
   border-bottom: 1px solid #f0f0f3;
 }
 
-.projectSortField {
-  min-width: 154px;
+.settingsField.projectSortField {
+  min-width: 176px;
 }
 
 .settingsField.projectDeploymentFilterField {

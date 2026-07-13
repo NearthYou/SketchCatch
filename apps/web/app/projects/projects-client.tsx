@@ -637,7 +637,7 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
             onChange={(value) => setSortMode(value as ProjectSortMode)}
             options={PROJECT_SORT_OPTIONS}
             size="compact"
-            tone="dashboard"
+            tone="default"
             value={sortMode}
           />
         </div>
@@ -649,7 +649,7 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
             onChange={(value) => setDeploymentFilter(value as ProjectDeploymentFilter)}
             options={PROJECT_DEPLOYMENT_FILTER_OPTIONS}
             size="compact"
-            tone="dashboard"
+            tone="default"
             value={deploymentFilter}
           />
         </div>
