@@ -1,6 +1,6 @@
 import type { BrainboardTemplateId } from "./ids.js";
 
-export type BrainboardTemplateCaptureStatus = "captured" | "materialized" | "verified" | "failed";
+export type BrainboardTemplateCaptureStatus = "captured" | "materialized" | "verified";
 
 export type BrainboardSourceValue =
   | string
@@ -30,6 +30,9 @@ type BrainboardSourceNodeBase = {
   readonly size: BrainboardSourceSize;
   readonly parentSourceNodeId: string | null;
   readonly zIndex: number;
+  readonly rawTransform: string;
+  /** Parsed rotation in degrees. Capture normalization must only emit finite values. */
+  readonly rotation: number;
 };
 
 export type BrainboardSourceResourceNode = BrainboardSourceNodeBase & {
@@ -62,6 +65,8 @@ export type BrainboardSourceEdge = {
   readonly sourcePort: string;
   readonly targetPort: string;
   readonly svgPath: string;
+  readonly sourcePoint: BrainboardSourcePoint;
+  readonly targetPoint: BrainboardSourcePoint;
   readonly waypoints: readonly BrainboardSourcePoint[];
   readonly arrowDirection: BrainboardSourceArrowDirection;
   readonly arrowAngle: number;
@@ -99,3 +104,37 @@ export type BrainboardTemplateSource = {
     readonly resourceAddresses: readonly string[];
   };
 };
+
+export type BrainboardFailedCaptureAttempt = {
+  readonly architectureName: string;
+  readonly project?: string | undefined;
+  readonly environment?: string | undefined;
+  readonly action?: string | undefined;
+  readonly result: string;
+};
+
+export type BrainboardFailedCaptureOrigin = {
+  readonly platform: "brainboard";
+  readonly author: "Chafik Belhaoues";
+  readonly sourceTemplateId: string;
+  readonly sourceUrl: string;
+  readonly previewUrl: string;
+  readonly previewWidth: number;
+  readonly previewHeight: number;
+  readonly downloads: number;
+};
+
+export type BrainboardFailedCaptureEvidence = {
+  readonly id: BrainboardTemplateId;
+  readonly captureStatus: "failed";
+  readonly title: string;
+  readonly provider: "aws";
+  readonly attemptedAt: string;
+  readonly error: string;
+  readonly attempts: readonly BrainboardFailedCaptureAttempt[];
+  readonly origin: BrainboardFailedCaptureOrigin;
+};
+
+export type BrainboardTemplateEvidence =
+  | BrainboardTemplateSource
+  | BrainboardFailedCaptureEvidence;

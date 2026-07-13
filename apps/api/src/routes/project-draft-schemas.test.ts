@@ -110,7 +110,11 @@ test("save project draft body preserves legacy DiagramJson byte-equivalently", (
   assert.equal(JSON.stringify(parsed), JSON.stringify(payload));
 });
 
-test("save project draft body preserves source-exact presentation and authored edge routes", () => {
+test("save project draft body preserves source-exact node rotation, presentation, and authored edge routes", () => {
+  const rotatedSourceNode = {
+    ...validDiagram.nodes[0]!,
+    rotation: -90
+  };
   const sourceExactEdge = {
     ...validDiagram.edges[0]!,
     sourceHandleId: "handle-right",
@@ -121,13 +125,31 @@ test("save project draft body preserves source-exact presentation and authored e
   const parsed = saveProjectDraftBodySchema.parse({
     diagramJson: {
       ...validDiagram,
+      nodes: [rotatedSourceNode],
       presentation: sourceExactPresentation,
       edges: [sourceExactEdge]
     }
   });
 
   assert.deepEqual(parsed.diagramJson.presentation, sourceExactPresentation);
+  assert.deepEqual(parsed.diagramJson.nodes[0], rotatedSourceNode);
   assert.deepEqual(parsed.diagramJson.edges[0], sourceExactEdge);
+});
+
+test("save project draft body rejects non-finite node rotation", () => {
+  const result = saveProjectDraftBodySchema.safeParse({
+    diagramJson: {
+      ...validDiagram,
+      nodes: [
+        {
+          ...validDiagram.nodes[0]!,
+          rotation: Number.POSITIVE_INFINITY
+        }
+      ]
+    }
+  });
+
+  assert.equal(result.success, false);
 });
 
 test("save project draft body rejects non-finite source viewBox coordinates", () => {

@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { test } from "node:test";
-import type { BrainboardTemplateSource } from "./source-types.js";
+import type {
+  BrainboardFailedCaptureEvidence,
+  BrainboardTemplateCaptureStatus,
+  BrainboardTemplateEvidence,
+  BrainboardTemplateSource
+} from "./source-types.js";
 
 type ManifestEntry = {
   readonly author: string;
@@ -206,9 +211,60 @@ test("Brainboard IDs remain separate from the six repository recommendation IDs"
 });
 
 test("source contract preserves viewport, ordered graph evidence, Terraform identity, and file order", () => {
-  const result = requireValidator()(makeValidSource());
+  const source = makeValidSource();
+  const result = requireValidator()(source);
 
   assert.deepEqual(result, { valid: true, errors: [] });
+  assert.equal(source.nodes[0]?.rawTransform, "translate(100, 200), rotate(-90 30 30)");
+  assert.equal(source.nodes[0]?.rotation, -90);
+  assert.deepEqual(source.edges[0]?.sourcePoint, source.edges[0]?.waypoints[0]);
+  assert.deepEqual(source.edges[0]?.targetPoint, source.edges[0]?.waypoints.at(-1));
+});
+
+test("failed capture evidence is discriminated from complete graph and Terraform sources", () => {
+  type CompleteStatusExcludesFailed = Extract<
+    BrainboardTemplateCaptureStatus,
+    "failed"
+  > extends never
+    ? true
+    : false;
+  const completeStatusExcludesFailed: CompleteStatusExcludesFailed = true;
+  const evidence = {
+    id: "brainboard-aws-instance-db-multiple-networks",
+    captureStatus: "failed",
+    title: "AWS instance and DB with multiple networks",
+    provider: "aws",
+    attemptedAt: "2026-07-14",
+    error: "Brainboard template clone failed with HTTP 400",
+    attempts: [
+      {
+        architectureName: "#381 09fd3420",
+        project: "Project 1",
+        environment: "Development",
+        result: "HTTP 400 ERR_BAD_REQUEST"
+      }
+    ],
+    origin: {
+      platform: "brainboard",
+      author: "Chafik Belhaoues",
+      sourceTemplateId: "09fd3420-d8f0-409c-a1cc-694dba97443f",
+      sourceUrl: "https://app.brainboard.co/templates/09fd3420-d8f0-409c-a1cc-694dba97443f",
+      previewUrl:
+        "https://s3.us-east-2.amazonaws.com/brainboard-screenshots-prod/architecture/09fd3420-d8f0-409c-a1cc-694dba97443f.webp",
+      previewWidth: 3840,
+      previewHeight: 2160,
+      downloads: 460
+    }
+  } satisfies BrainboardFailedCaptureEvidence;
+  const templateEvidence: BrainboardTemplateEvidence = evidence;
+
+  assert.equal(completeStatusExcludesFailed, true);
+  assert.equal(templateEvidence.captureStatus, "failed");
+  assert.equal(templateEvidence.attempts.length, 1);
+  assert.equal(templateEvidence.origin.previewWidth, 3840);
+  assert.equal("nodes" in templateEvidence, false);
+  assert.equal("edges" in templateEvidence, false);
+  assert.equal("terraform" in templateEvidence, false);
 });
 
 test("validator reports duplicate node, edge, DOM order, address, and file entries separately", () => {
@@ -354,6 +410,8 @@ function makeValidSource() {
         size: { width: 60, height: 60 },
         parentSourceNodeId: null as string | null,
         zIndex: 2,
+        rawTransform: "translate(100, 200), rotate(-90 30 30)",
+        rotation: -90,
         terraformBlockType: "resource",
         terraformResourceType: "aws_s3_bucket",
         resourceName: "example",
@@ -369,6 +427,8 @@ function makeValidSource() {
         size: { width: 800, height: 600 },
         parentSourceNodeId: null as string | null,
         zIndex: 0,
+        rawTransform: "translate(0, 0), rotate(0 400 300)",
+        rotation: 0,
         catalogId: "aws-cloud"
       }
     ],
@@ -381,6 +441,8 @@ function makeValidSource() {
         sourcePort: "right",
         targetPort: "left",
         svgPath: "M 60 60 L 100 200",
+        sourcePoint: { x: 60, y: 60 },
+        targetPoint: { x: 100, y: 200 },
         waypoints: [
           { x: 60, y: 60 },
           { x: 100, y: 200 }
@@ -395,7 +457,7 @@ function makeValidSource() {
           fileName: "main.tf",
           code: mainCode,
           sha256: sha256(mainCode),
-          includeInWorkspace: true
+          includeInWorkspace: true as boolean
         }
       ],
       resourceAddresses: ["aws_s3_bucket.example"]

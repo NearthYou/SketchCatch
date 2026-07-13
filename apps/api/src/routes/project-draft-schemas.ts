@@ -89,6 +89,7 @@ const diagramNodeSchema = z.object({
   iconUrl: z.string().min(1).optional(),
   locked: z.boolean(),
   zIndex: z.number().finite(),
+  rotation: z.number().finite().optional(),
   style: diagramNodeStyleSchema.optional(),
   metadata: diagramNodeMetadataSchema.optional(),
   parameters: diagramNodeParametersSchema.optional()

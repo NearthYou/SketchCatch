@@ -129,6 +129,7 @@ const diagramNodeSchema = z.object({
   iconUrl: z.string().min(1).optional(),
   locked: z.boolean().default(false),
   zIndex: z.number().int().default(0),
+  rotation: z.number().finite().optional(),
   style: z
     .object({
       textColor: z.string().min(1).optional(),

@@ -1165,6 +1165,9 @@ export {
 } from "./brainboard-templates/manifest.ts";
 export type { BrainboardTemplateManifestEntry } from "./brainboard-templates/manifest.ts";
 export type {
+  BrainboardFailedCaptureAttempt,
+  BrainboardFailedCaptureEvidence,
+  BrainboardFailedCaptureOrigin,
   BrainboardSourceArrowDirection,
   BrainboardSourceEdge,
   BrainboardSourceNode,
@@ -1175,6 +1178,7 @@ export type {
   BrainboardSourceValue,
   BrainboardSourceViewport,
   BrainboardTemplateCaptureStatus,
+  BrainboardTemplateEvidence,
   BrainboardTemplateOrigin,
   BrainboardTemplateSource,
   BrainboardTerraformFile
@@ -2567,6 +2571,7 @@ export type DiagramNode = {
   iconUrl?: string | undefined;
   locked: boolean;
   zIndex: number;
+  rotation?: number | undefined;
   style?: DiagramNodeStyle | undefined;
   metadata?: DiagramNodeMetadata | undefined;
   parameters?: DiagramNodeParameters | undefined;

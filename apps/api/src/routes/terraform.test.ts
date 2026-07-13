@@ -810,7 +810,7 @@ test("POST /api/terraform/sync-to-diagram updates matching DiagramJson values", 
   await app.close();
 });
 
-test("POST /api/terraform/sync-to-diagram preserves source-exact presentation and authored edge routes", async () => {
+test("POST /api/terraform/sync-to-diagram preserves source-exact node rotation, presentation, and authored edge routes", async () => {
   const fakeDb = new AuthOnlyFakeDb({
     users: [
       {
@@ -832,7 +832,8 @@ test("POST /api/terraform/sync-to-diagram preserves source-exact presentation an
         size: { width: 60, height: 60 },
         label: "Source",
         locked: false,
-        zIndex: 3
+        zIndex: 3,
+        rotation: -90
       },
       {
         id: "target-node",
@@ -904,8 +905,39 @@ test("POST /api/terraform/sync-to-diagram preserves source-exact presentation an
 
   assert.equal(response.statusCode, 200);
   assert.deepEqual(body.diagramJson.presentation, diagramJson.presentation);
+  assert.equal(body.diagramJson.nodes[0]?.rotation, -90);
   assert.deepEqual(body.diagramJson.edges[0], diagramJson.edges[0]);
   assert.deepEqual(body.diagramJson.variables, diagramJson.variables);
+
+  await app.close();
+});
+
+test("POST /api/terraform/generate rejects non-finite node rotation", async () => {
+  const fakeDb = new AuthOnlyFakeDb({
+    users: [
+      {
+        id: ACTIVE_USER_ID,
+        deletedAt: null
+      }
+    ]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+  const headers = await authHeaders(ACTIVE_USER_ID);
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/terraform/generate",
+    headers: {
+      ...headers,
+      "content-type": "application/json"
+    },
+    payload:
+      '{"diagramJson":{"nodes":[{"id":"node-1","type":"sketchcatch_user_client","kind":"design","position":{"x":0,"y":0},"size":{"width":60,"height":60},"label":"Source","locked":false,"zIndex":0,"rotation":1e309}],"edges":[],"viewport":{"x":0,"y":0,"zoom":1}}}'
+  });
+
+  assert.equal(response.statusCode, 400);
 
   await app.close();
 });

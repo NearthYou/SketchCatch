@@ -30,9 +30,21 @@ const resourceItem: ResourceItem = {
   }
 };
 
-test("cloneDiagram deeply clones source-exact presentation, authored routes, and variables", () => {
+test("cloneDiagram preserves source-exact node rotation and deeply clones authored data", () => {
   const source: DiagramJson = {
-    nodes: [],
+    nodes: [
+      {
+        id: "rotated-node",
+        type: "sketchcatch_user_client",
+        kind: "design",
+        position: { x: 40, y: 60 },
+        size: { width: 60, height: 60 },
+        label: "Rotated source",
+        locked: false,
+        zIndex: 4,
+        rotation: -90
+      }
+    ],
     edges: [
       {
         id: "edge-1",
@@ -78,6 +90,8 @@ test("cloneDiagram deeply clones source-exact presentation, authored routes, and
   const cloned = cloneDiagram(source);
 
   assert.deepEqual(cloned, source);
+  assert.notEqual(cloned.nodes[0], source.nodes[0]);
+  assert.equal(cloned.nodes[0]?.rotation, -90);
   assert.deepEqual(cloned.edges[0], source.edges[0]);
   assert.notEqual(cloned.presentation, source.presentation);
   assert.notEqual(cloned.presentation?.sourceViewBox, source.presentation?.sourceViewBox);
