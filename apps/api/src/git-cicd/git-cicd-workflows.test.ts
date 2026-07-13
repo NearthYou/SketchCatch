@@ -231,6 +231,8 @@ test("Lambda automation uses confirmed SAM evidence and CodeDeploy AllAtOnce rol
   assert.match(appWorkflow, /update-function-code/);
   assert.match(appWorkflow, /CodeDeployDefault\.LambdaAllAtOnce/);
   assert.match(appWorkflow, /DEPLOYMENT_FAILURE/);
+  assert.match(appWorkflow, /import textwrap/);
+  assert.match(appWorkflow, /content = textwrap\.dedent\(/);
   assert.match(appWorkflow, /aws lambda update-alias/);
   assert.match(appWorkflow, /--revision-id/);
   assert.match(appWorkflow, /cancel-in-progress: false/);

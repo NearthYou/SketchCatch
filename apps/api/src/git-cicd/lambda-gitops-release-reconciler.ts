@@ -112,15 +112,24 @@ export function createLambdaGitOpsReleaseReconciler(options: {
         );
       }
       validateEvidenceAgainstTarget(input, target);
-      const observed = await options.gateway.inspect({
-        ...target.connection,
-        functionName: target.runtimeConfig.functionName,
-        aliasName: target.runtimeConfig.aliasName,
-        publishedVersion: input.evidence.publishedVersion,
-        codeDeployApplicationName: target.runtimeConfig.codeDeployApplicationName,
-        codeDeployDeploymentGroupName: target.runtimeConfig.codeDeployDeploymentGroupName,
-        deploymentId: input.evidence.deploymentId
-      });
+      let observed: LambdaGitOpsObservedState;
+      try {
+        observed = await options.gateway.inspect({
+          ...target.connection,
+          functionName: target.runtimeConfig.functionName,
+          aliasName: target.runtimeConfig.aliasName,
+          publishedVersion: input.evidence.publishedVersion,
+          codeDeployApplicationName: target.runtimeConfig.codeDeployApplicationName,
+          codeDeployDeploymentGroupName: target.runtimeConfig.codeDeployDeploymentGroupName,
+          deploymentId: input.evidence.deploymentId
+        });
+      } catch (error) {
+        throw new LambdaGitOpsReleaseVerificationError(
+          `Failed to inspect Lambda/CodeDeploy release state: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+      }
       validateObservedState(input.evidence, observed, target.runtimeConfig);
 
       const timestamp = now();
@@ -384,11 +393,15 @@ export function createAwsLambdaGitOpsCloudGateway(options: {
           : "";
         const rollback = deploymentGroup.deploymentGroupInfo?.autoRollbackConfiguration;
         const deploymentInfo = deployment.deploymentInfo;
+        const additionalVersionWeights = alias.RoutingConfig?.AdditionalVersionWeights;
         const observed: LambdaGitOpsObservedState = {
           aliasVersion: alias.FunctionVersion ?? "",
-          additionalVersionWeightCount: Object.keys(
-            alias.RoutingConfig?.AdditionalVersionWeights ?? {}
-          ).length,
+          additionalVersionWeightCount:
+            additionalVersionWeights &&
+            typeof additionalVersionWeights === "object" &&
+            !Array.isArray(additionalVersionWeights)
+              ? Object.keys(additionalVersionWeights).length
+              : 0,
           publishedVersion: published.Configuration?.Version ?? "",
           artifactDigest,
           deploymentStatus: deploymentInfo?.status ?? "",

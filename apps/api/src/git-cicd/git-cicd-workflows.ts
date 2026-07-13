@@ -572,17 +572,19 @@ jobs:
           import hashlib
           import json
           import os
+          import textwrap
 
-          content = """version: 0.0
-          Resources:
-            - TargetFunction:
-                Type: AWS::Lambda::Function
-                Properties:
-                  Name: {function_name}
-                  Alias: {alias_name}
-                  CurrentVersion: {previous_version}
-                  TargetVersion: {published_version}
-          """.format(
+          content = textwrap.dedent("""\\
+              version: 0.0
+              Resources:
+                - TargetFunction:
+                    Type: AWS::Lambda::Function
+                    Properties:
+                      Name: {function_name}
+                      Alias: {alias_name}
+                      CurrentVersion: {previous_version}
+                      TargetVersion: {published_version}
+          """).format(
               function_name=os.environ["SKETCHCATCH_LAMBDA_FUNCTION"],
               alias_name=os.environ["SKETCHCATCH_LAMBDA_ALIAS"],
               previous_version=os.environ["SKETCHCATCH_PREVIOUS_VERSION"],

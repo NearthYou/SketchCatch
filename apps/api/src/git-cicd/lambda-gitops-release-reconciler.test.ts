@@ -132,12 +132,42 @@ test("Lambda reconciler rejects target drift, non-AllAtOnce config, and incomple
   }
 });
 
+test("Lambda reconciler wraps cloud inspection failures as release verification errors", async () => {
+  const reconciler = createLambdaGitOpsReleaseReconciler({
+    repository: new FakeLambdaReleaseRepository(),
+    gateway: {
+      inspect: async () => {
+        throw new Error("connection timed out");
+      }
+    }
+  });
+
+  await assert.rejects(
+    reconciler.reconcile({
+      projectId,
+      pipelineRunId,
+      commitSha,
+      pipelineStatus: "succeeded",
+      startedAt: null,
+      finishedAt: null,
+      evidence: createEvidence()
+    }),
+    (error: unknown) =>
+      error instanceof LambdaGitOpsReleaseVerificationError &&
+      error.message ===
+        "Failed to inspect Lambda/CodeDeploy release state: connection timed out"
+  );
+});
+
 test("AWS Lambda gateway re-queries alias, version, deployment, and rollback policy then destroys clients", async () => {
   let destroyedClients = 0;
   const lambdaClient = {
     async send(command: { constructor: { name: string } }) {
       if (command.constructor.name === "GetAliasCommand") {
-        return { FunctionVersion: "42", RoutingConfig: { AdditionalVersionWeights: {} } };
+        return {
+          FunctionVersion: "42",
+          RoutingConfig: { AdditionalVersionWeights: ["invalid-metadata-shape"] }
+        };
       }
       return {
         Configuration: {
@@ -206,6 +236,7 @@ test("AWS Lambda gateway re-queries alias, version, deployment, and rollback pol
 
   assert.equal(observed.artifactDigest, artifactHex);
   assert.equal(observed.aliasVersion, "42");
+  assert.equal(observed.additionalVersionWeightCount, 0);
   assert.equal(observed.computePlatform, "Lambda");
   assert.equal(destroyedClients, 2);
 });
