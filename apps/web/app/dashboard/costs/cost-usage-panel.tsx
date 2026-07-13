@@ -137,7 +137,18 @@ export function CostUsagePanel() {
           <label><span>AWS 연결</span><select onChange={(event) => { const id = event.target.value; setSelectedConnectionId(id); void loadCosts(range, id); }} value={selectedConnectionId}>{connections.length === 0 ? <option value="">검증된 연결 없음</option> : null}{connections.map((connection) => <option key={connection.id} value={connection.id}>{formatCostUsageAwsConnectionLabel(connection)}</option>)}</select></label>
           <label><span>기간</span><select onChange={(event) => { const next = event.target.value as CostUsageAnalysisRange; setRange(next); void loadCosts(next); }} value={range}><option value="7d">최근 7일</option><option value="30d">최근 30일</option><option value="month_to_date">이번 달</option></select></label>
         </div>
-        <button className={styles.iconAction} aria-label="실제 사용량 새로고침" onClick={() => void loadCosts()} title="새로고침" type="button"><RefreshCw size={17} /></button>
+        <button
+          aria-busy={loadState === "loading"}
+          aria-label={loadState === "loading" ? "실제 사용량 새로고침 중" : "실제 사용량 새로고침"}
+          className={styles.iconAction}
+          data-loading={loadState === "loading"}
+          disabled={loadState === "loading"}
+          onClick={() => void loadCosts()}
+          title={loadState === "loading" ? "새로고침 중" : "새로고침"}
+          type="button"
+        >
+          <RefreshCw aria-hidden="true" size={17} />
+        </button>
       </div>
 
       {displayCopy.sampleNotice ? <p className="dashboardInformationBand" role="status">{displayCopy.sampleNotice}</p> : null}

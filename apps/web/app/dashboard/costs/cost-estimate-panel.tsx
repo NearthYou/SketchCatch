@@ -134,7 +134,18 @@ export function CostEstimatePanel() {
             </select>
           </label>
         </div>
-        <button className={styles.iconAction} aria-label="예상 비용 새로고침" onClick={() => void loadEstimates()} title="새로고침" type="button"><RefreshCw size={17} /></button>
+        <button
+          aria-busy={loadState === "loading"}
+          aria-label={loadState === "loading" ? "예상 비용 새로고침 중" : "예상 비용 새로고침"}
+          className={styles.iconAction}
+          data-loading={loadState === "loading"}
+          disabled={loadState === "loading"}
+          onClick={() => void loadEstimates()}
+          title={loadState === "loading" ? "새로고침 중" : "새로고침"}
+          type="button"
+        >
+          <RefreshCw aria-hidden="true" size={17} />
+        </button>
       </div>
 
       {errorMessage ? <p className={styles.errorBand}>{errorMessage}</p> : null}

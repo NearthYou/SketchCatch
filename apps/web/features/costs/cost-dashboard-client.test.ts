@@ -61,3 +61,11 @@ test("estimated user count accepts direct numeric input", () => {
   assert.match(estimatePanelSource, /normalizeExpectedUserCount/);
   assert.match(estimatePanelSource, /onBlur=\{applyExpectedUserCount\}/);
 });
+
+test("both cost panels expose refresh and disable duplicate refresh while loading", () => {
+  for (const source of [estimatePanelSource, usagePanelSource]) {
+    assert.match(source, /data-loading=\{loadState === "loading"\}/);
+    assert.match(source, /disabled=\{loadState === "loading"\}/);
+    assert.match(source, /title=\{loadState === "loading" \? "새로고침 중" : "새로고침"\}/);
+  }
+});
