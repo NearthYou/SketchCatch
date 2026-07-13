@@ -791,7 +791,7 @@ jobs:
           if not previous_id:
               raise SystemExit("A previous successful CodeDeploy revision is required as the rollback baseline")
           PY
-          PREVIOUS_DEPLOYMENT_ID=$(python3 -c 'import json; print(json.load(open("sketchcatch-deployment-group.json"))["deploymentGroupInfo"]["lastSuccessfulDeployment"]["deploymentId"])')
+          PREVIOUS_DEPLOYMENT_ID=$(jq -r '.deploymentGroupInfo.lastSuccessfulDeployment.deploymentId' sketchcatch-deployment-group.json)
           aws deploy get-deployment --deployment-id "$PREVIOUS_DEPLOYMENT_ID" --query 'deploymentInfo.revision' --output json > sketchcatch-previous-revision.json
           python3 - <<'PY'
           import json
