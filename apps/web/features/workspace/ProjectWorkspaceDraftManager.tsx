@@ -29,6 +29,7 @@ import {
   type ProjectDraftRepository
 } from "./project-draft-repository";
 import { runProjectDraftServerSaveFlight } from "./project-draft-save-flight";
+import { captureAndUploadProjectBoardThumbnail } from "./project-board-thumbnail";
 import {
   getProjectSaveStatus,
   type ProjectLocalSaveState,
@@ -244,6 +245,7 @@ export function ProjectWorkspaceDraftManager({
 
             if (result.ok) {
               if (draftChangeVersionRef.current === serverSaveVersion) {
+                void captureAndUploadProjectBoardThumbnail({ projectId }).catch(() => undefined);
                 setCurrentLocalDraft(result.localDraft);
                 serverDirtyRef.current = false;
                 setLocalSaveState("local-saved");

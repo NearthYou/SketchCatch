@@ -189,6 +189,35 @@ export async function getProjectDraft(projectId: string): Promise<ProjectDraftRe
   });
 }
 
+// 인증된 Project의 최신 실제 Board 캡처를 raster Blob으로 읽습니다.
+export async function fetchProjectThumbnail(projectId: string): Promise<Blob | null> {
+  const headers = new Headers({ Accept: "image/webp,image/png" });
+  const session = readStoredAuthSession();
+
+  if (session) {
+    headers.set("Authorization", `Bearer ${session.accessToken}`);
+  }
+
+  const response = await fetch(
+    buildApiUrl(`/projects/${encodeURIComponent(projectId)}/thumbnail`),
+    {
+      cache: "no-store",
+      credentials: "include",
+      headers
+    }
+  );
+
+  if (response.status === 404) {
+    return null;
+  }
+
+  if (!response.ok) {
+    throw new Error("Project Board 캡처를 불러오지 못했습니다.");
+  }
+
+  return response.blob();
+}
+
 export async function saveProjectDraft({
   projectId,
   diagramJson,
@@ -298,7 +327,13 @@ export async function uploadProjectAsset(
   });
 
   if (!response.ok) {
-    throw new Error("Terraform artifact 업로드에 실패했습니다.");
+    const contentType = headers.get("Content-Type")?.toLowerCase();
+
+    throw new Error(
+      contentType?.startsWith("text/")
+        ? "Terraform artifact 업로드에 실패했습니다."
+        : "Project asset 업로드에 실패했습니다."
+    );
   }
 }
 
