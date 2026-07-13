@@ -1372,6 +1372,21 @@ export type CostUsageTrendPoint = {
   amount: number;
 };
 
+export type CostUsageMonthlyPoint = {
+  month: string;
+  amount: number;
+  isPartial: boolean;
+  isEstimated: boolean;
+};
+
+export type CostUsageMonthlyComparison = {
+  previousMonthActual: MoneyEstimate;
+  currentMonthToDate: MoneyEstimate;
+  currentMonthForecast: MoneyEstimate;
+  forecastChangeAmount: MoneyEstimate;
+  forecastChangePercentage: number | null;
+};
+
 export type CostServiceUsage = {
   service: string;
   amount: number;
@@ -1385,6 +1400,7 @@ export type CostProjectUsage = {
   percentage: number;
   source: CostProjectUsageSource;
   resourceCount: number;
+  monthlyTrend: CostUsageMonthlyPoint[];
 };
 
 export type CostResourceUsageSource =
@@ -1457,6 +1473,8 @@ export type CostUsageAnalysisResponse = {
   totalCost: MoneyEstimate;
   forecastMonthEndCost: MoneyEstimate;
   dailyTrend: CostUsageTrendPoint[];
+  monthlyTrend: CostUsageMonthlyPoint[];
+  monthlyComparison: CostUsageMonthlyComparison;
   serviceCosts: CostServiceUsage[];
   projectCosts: CostProjectUsage[];
   resourceCosts: CostResourceUsage[];

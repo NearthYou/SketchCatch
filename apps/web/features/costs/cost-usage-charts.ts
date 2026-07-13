@@ -1,6 +1,7 @@
 import type {
   CostOptimizationRecommendation,
   CostServiceUsage,
+  CostUsageMonthlyPoint,
   CostUsageTrendPoint
 } from "@sketchcatch/types";
 
@@ -37,6 +38,15 @@ export type CostServiceBar = {
   readonly amount: number;
   readonly label: string;
   readonly percentage: number;
+};
+
+export type CostUsageMonthlyBar = {
+  readonly amount: number;
+  readonly heightPercentage: number;
+  readonly isEstimated: boolean;
+  readonly isPartial: boolean;
+  readonly label: string;
+  readonly month: string;
 };
 
 export type CostUsageTrendInsight = {
@@ -105,6 +115,23 @@ export function createServiceCostBars(
     amount: service.amount,
     label: service.service,
     percentage: service.percentage
+  }));
+}
+
+export function createCostUsageMonthlyBars(
+  monthlyTrend: readonly CostUsageMonthlyPoint[]
+): CostUsageMonthlyBar[] {
+  const maxAmount = Math.max(...monthlyTrend.map((point) => point.amount), 0);
+
+  return monthlyTrend.map((point) => ({
+    amount: point.amount,
+    heightPercentage: maxAmount <= 0
+      ? 0
+      : Math.round((point.amount / maxAmount) * 1000) / 10,
+    isEstimated: point.isEstimated,
+    isPartial: point.isPartial,
+    label: `${Number(point.month.slice(5, 7))}월`,
+    month: point.month
   }));
 }
 

@@ -4,10 +4,19 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- Branch: `Feat/jh/346-시뮬레이션-기능-구현-및-테스트`.
-- Repository start validates 2-3 unique candidates and follow-up questions, hides decisive deployment type, and confirms Template and CI/CD before opening follow-up questions.
+- Branch: `fix/ys/363-uiux-개선`.
+- Actual usage returns a six-month comparison with account totals, tagged project actuals, and clearly marked fallback allocations.
 
 ## Session Record
+### 2026-07-13 - Add actual-usage monthly cost comparison
+
+- Added six-month account and project monthly trends, MTD forecast, and previous-month comparison to the existing cost usage response.
+- Preserved `SketchCatchProjectId` monthly actuals, reconciled partial tag coverage against each account month, and marked only allocated months as estimated.
+- Added responsive comparison cards and bars before the daily chart with per-month `집계 중` and `추정` states.
+- Verification: 42 focused API/Web tests passed; lint, typecheck, build, diff check, and harness passed. Lint retains one unrelated `setNow` warning.
+- Full `pnpm test -- --output-logs=errors-only` ran; the Web package retains 7 unrelated baseline failures while all cost tests pass.
+- Review: final Standards and Spec reviews found no remaining issues. Authenticated browser visual QA was unavailable because the in-app browser had no session and Chrome control was unavailable.
+
 ### 2026-07-13 - Unify Dashboard dropdowns and repair Template search alignment
 
 - Replaced live Projects, Templates, Costs, and Settings selects with one white 42px Pretendard control, then restored the Template search field's grid layout so its icon and text stay vertically centered.
@@ -146,40 +155,6 @@ Short English-only working log for the current agent context. Older records are 
 - Risk:
   - Browser visual verification was skipped because Playwright/browser automation dependencies are not installed in this worktree.
 
-### 2026-07-12 - Open board after public Repository template recommendation
-
-- Goal: Ensure a successful public Repository URL recommendation creates the project draft and opens the workspace instead of stopping on a no-template message.
-- Completed:
-  - Confirmed the reported repository analysis returned `template-api-db` with React, Node API, Python API, Database, and Container signals.
-  - Mapped legacy public Repository Analysis template ids such as `template-api-db` to supported board `TemplateDefinition` ids.
-  - Kept the inline new-project Repository URL flow creating and saving the recommended template diagram before routing to the workspace.
-  - Added regression coverage for `template-api-db` producing a board with ALB, ASG, and RDS resources.
-- Verification:
-  - `pnpm --dir apps/web exec tsx --test features/resource-settings/template-library.test.ts app/workspace/new/workspace-start-options.test.ts features/workspace/repository-start-template-recommendation.test.ts`
-  - `pnpm --dir apps/web typecheck`
-  - `pnpm --dir apps/api exec tsx --test src/services/aiRepositoryAnalysis.test.ts src/routes/ai.test.ts`
-  - `pnpm harness:check`
-  - `pnpm lint` passed with the pre-existing `live-observations` `setNow` warning.
-  - `pnpm typecheck`
-  - `pnpm build`
-  - `git diff --check` passed with CRLF conversion warnings only.
-- Risk:
-  - Browser visual verification has not been rerun yet in this worktree.
-
-### 2026-07-12 - Split public Repository analysis from board creation
-
-- Goal: Keep the new-project Repository URL flow from showing raw analysis details or opening the board before the user accepts the recommendation.
-- Completed:
-  - Changed the new project Repository URL action to create a project and route to the Repository analysis step instead of calling analysis or saving a board draft inline.
-  - Passed Repository URL and branch into `/workspace/repository` so that page owns analysis, template recommendation, deployment type, CI/CD, and follow-up questions.
-  - Replaced the public Repository analysis detail card with a recommendation/question step that does not render evidence files or detected file lists.
-  - Moved board draft saving and `/workspace` navigation behind the final `Create board` action.
-- Verification:
-  - `pnpm --dir apps/web exec tsx --test app/workspace/new/workspace-start-options.test.ts features/workspace/repository-start-template-recommendation.test.ts`
-  - `pnpm --dir apps/web typecheck`
-- Risk:
-  - Browser visual verification has not been run yet in this worktree.
-
 ### 2026-07-13 - Refine actual cost notice and chart readability
 
 - Goal: Clarify fallback project cost allocation and make the actual usage chart readable at a glance.
@@ -216,4 +191,4 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Next Action
 
-- Confirm the responsive chart visually with authenticated actual-usage data when browser automation is available.
+- Confirm the monthly comparison visually with authenticated Cost Explorer data when browser automation is available.

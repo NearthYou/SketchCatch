@@ -1850,6 +1850,8 @@ type CostProjectEstimateListResponse = {
 
 실제 비용 데이터 출처는 AWS Cost Explorer와 CloudWatch다. Cost Explorer는 `UnblendedCost` 기준으로 일별 비용, 서비스별 비용, `SketchCatchProjectId` tag 기반 프로젝트별 비용을 조회한다. 사용량 분석의 프로젝트 목록은 사용자가 실제로 생성한 프로젝트 레코드를 기준으로 한다. 프로젝트 tag 비용이 있으면 이 값을 우선한다. tag 비용이 없거나 프로젝트와 tag가 맞지 않으면 최신 성공 `deployments`와 `deployed_resources`를 기준으로 프로젝트별 비용을 근사 배분한다. 샘플 fallback도 프로젝트 행을 임의 생성하지 않고 실제 프로젝트 이름을 사용한다. 리소스별 비용은 현재 v1에서 배포 리소스 기준 균등 배분이며, 실제 리소스 단위 Cost Explorer 청구 원장 대체물이 아니다. `/api/costs/usage`는 선택적으로 `projectId` query를 받아 전체 계정 비용 배분을 먼저 계산한 뒤 응답을 해당 프로젝트의 비용, 서비스, 리소스, 그래프로 좁힌다.
 
+월별 비교는 현재 월을 포함한 최근 6개월의 `UnblendedCost`를 반환한다. 현재 월은 `isPartial=true`로 표시하고, 현재까지의 일평균을 해당 월의 전체 일수로 환산해 월말 예상 비용과 전월 대비 금액·비율을 계산한다. `SketchCatchProjectId` tag가 있는 프로젝트는 월별 tag 실측을 우선 사용한다. 각 월의 계정 비용에서 tag 실측 합계를 먼저 차감한 뒤, 남은 금액을 tag가 없거나 해당 월 tag가 누락된 프로젝트의 선택 기간 비용 비율로 배분하고 `isEstimated=true`로 표시한다.
+
 CloudWatch 기반 낭비 탐지는 v1에서 EC2, RDS, ALB, NAT Gateway를 우선 지원한다. 기준은 EC2/RDS 평균 CPU 5% 미만, RDS 평균 connection 1 미만, ALB 요청량 매우 낮음, NAT Gateway 처리량 낮음이다. 이 결과는 비용 절감 추천으로 표시되지만, 리소스를 자동 중지하거나 삭제하지 않는다.
 
 ```ts
@@ -1862,6 +1864,21 @@ type CostProjectUsageSource = "cost_explorer_tag" | "deployed_resource_estimate"
 type CostUsageTrendPoint = {
   date: string;
   amount: number;
+};
+
+type CostUsageMonthlyPoint = {
+  month: string;
+  amount: number;
+  isPartial: boolean;
+  isEstimated: boolean;
+};
+
+type CostUsageMonthlyComparison = {
+  previousMonthActual: MoneyEstimate;
+  currentMonthToDate: MoneyEstimate;
+  currentMonthForecast: MoneyEstimate;
+  forecastChangeAmount: MoneyEstimate;
+  forecastChangePercentage: number | null;
 };
 
 type CostServiceUsage = {
@@ -1877,6 +1894,7 @@ type CostProjectUsage = {
   percentage: number;
   source: CostProjectUsageSource;
   resourceCount: number;
+  monthlyTrend: CostUsageMonthlyPoint[];
 };
 
 type CostResourceUsageSource = "cost_explorer_resource" | "deployed_resource_estimate" | "sample";
@@ -1944,6 +1962,8 @@ type CostUsageAnalysisResponse = {
   totalCost: MoneyEstimate;
   forecastMonthEndCost: MoneyEstimate;
   dailyTrend: CostUsageTrendPoint[];
+  monthlyTrend: CostUsageMonthlyPoint[];
+  monthlyComparison: CostUsageMonthlyComparison;
   serviceCosts: CostServiceUsage[];
   projectCosts: CostProjectUsage[];
   resourceCosts: CostResourceUsage[];

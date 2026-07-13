@@ -110,3 +110,18 @@ test("actual usage chart keeps service-sized labels without stretching the SVG",
   assert.doesNotMatch(chartRule, /min-height/);
   assert.match(axisLabelRule, /font-size:\s*13px/);
 });
+
+test("actual usage panel presents monthly comparison before the daily trend", () => {
+  assert.match(usagePanelSource, /월별 비교/);
+  assert.match(usagePanelSource, /전월 실제/);
+  assert.match(usagePanelSource, /이번 달 사용/);
+  assert.match(usagePanelSource, /월말 예상/);
+  assert.match(usagePanelSource, /전월 대비/);
+  assert.match(usagePanelSource, /createCostUsageMonthlyBars/);
+  assert.match(usagePanelSource, /bar\.isEstimated \? "추정"/);
+  assert.match(usagePanelSource, /styles\.monthlyComparisonGrid/);
+  assert.match(usagePanelSource, /styles\.monthlyChart/);
+  assert.ok(usagePanelSource.indexOf("월별 비교") < usagePanelSource.indexOf("일별 실제 비용"));
+  assert.match(dashboardToolsCss, /\.monthlyComparisonGrid\s*\{/);
+  assert.match(dashboardToolsCss, /\.monthlyChart\s*\{/);
+});
