@@ -796,12 +796,6 @@
   border-left: 3px solid var(--workspace-line-strong);
 }
 
-.leftRail :global(.templateCatalogCard small) {
-  color: var(--workspace-muted);
-  font-size: 10px;
-  line-height: 1.35;
-}
-
 .rightRail {
   background: var(--workspace-surface);
   border: 0;

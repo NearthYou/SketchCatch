@@ -15,6 +15,13 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-14 - Remove redundant Template card helper copy
+
+- Removed both explanatory `small` lines from the Workspace Template library and immediate-apply cards without replacement.
+- Preserved visible names, accessible names, click behavior, and removed the now-dead Template card `small` style.
+- Verified independent RED/GREEN coverage for both card variants; the focused suite passed 9/9.
+- The complete Web suite, typecheck, lint, harness, and diff check passed with the repository user's Node v24.18.0 runtime. Review found no Critical, Important, or Minor issue.
+
 ### 2026-07-14 - Close Template Portal review findings
 
 - Unified the Template 전체보기 trigger's accessible and visible functional name while keeping comparison and Board non-application as supporting copy.

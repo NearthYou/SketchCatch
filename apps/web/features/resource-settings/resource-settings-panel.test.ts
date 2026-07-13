@@ -38,6 +38,11 @@ test("workspace Template cards apply their own template while the library contro
     "button",
     'className="templateCatalogCard templateLibraryOpenCard"'
   );
+  const applyControl = readContainingJsxElement(
+    panelSource,
+    "button",
+    'className="templateCatalogCard templateApplyCard"'
+  );
 
   assert.match(
     libraryControl,
@@ -52,12 +57,13 @@ test("workspace Template cards apply their own template while the library contro
     libraryControl,
     /<strong className="templateLibraryOpenLabel">\s*<Maximize2 aria-hidden="true" size=\{14\} \/>\s*템플릿 전체보기\s*<\/strong>/
   );
-  assert.match(libraryControl, /<small>[\s\S]*비교[\s\S]*Board에 적용하지 않습니다\.[\s\S]*<\/small>/);
+  assert.doesNotMatch(libraryControl, /<small>/);
   assert.doesNotMatch(
     libraryControl,
     /Template preview|전체 템플릿을 큰 화면으로 비교|Template library 큰 미리보기 열기/
   );
   assert.match(panelSource, /aria-label=\{`\$\{template\.title\} Template 적용`\}/);
+  assert.doesNotMatch(applyControl, /<small>/);
 });
 
 test("workspace Template 전체보기 uses a body Portal below the project navigator", () => {

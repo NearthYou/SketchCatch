@@ -368,7 +368,6 @@ function TemplatesPanel({
             <Maximize2 aria-hidden="true" size={14} />
             템플릿 전체보기
           </strong>
-          <small>모든 Template을 큰 화면에서 비교하며, 이 버튼은 Board에 적용하지 않습니다.</small>
         </button>
         {templates.map((template) => (
           <button
@@ -380,7 +379,6 @@ function TemplatesPanel({
           >
             <span>{template.tags.slice(0, 2).join(" · ")}</span>
             <strong>{template.title}</strong>
-            <small>현재 Board에 바로 적용</small>
           </button>
         ))}
       </div>
