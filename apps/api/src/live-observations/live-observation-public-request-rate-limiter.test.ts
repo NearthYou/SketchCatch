@@ -6,6 +6,7 @@ import { createInMemoryRuntimeCache } from "../runtime-cache/index.js";
 import { createLiveObservationPublicRequestRateLimiter } from "./live-observation-public-request-rate-limiter.js";
 
 const OBSERVATION_ID = "11111111-1111-4111-8111-111111111111";
+const SECOND_OBSERVATION_ID = "22222222-2222-4222-8222-222222222222";
 const IP_ADDRESS = "203.0.113.42";
 const START_MS = Date.parse("2026-07-13T00:00:00.000Z");
 
@@ -35,6 +36,35 @@ test("public request limiter allows only 30 requests per IP in each 60-second wi
   assert.deepEqual(
     await limiter.consume({ observationId: OBSERVATION_ID, ipAddress: IP_ADDRESS }),
     { kind: "allowed" }
+  );
+});
+
+test("public request limiter shares one global IP budget across observations", async () => {
+  const runtimeCache = createInMemoryRuntimeCache({
+    cleanupIntervalMs: null,
+    now: () => START_MS
+  });
+  const limiter = createLiveObservationPublicRequestRateLimiter({
+    now: () => START_MS,
+    runtimeCache
+  });
+
+  for (let count = 0; count < 30; count += 1) {
+    assert.deepEqual(
+      await limiter.consume({
+        observationId: count % 2 === 0 ? OBSERVATION_ID : SECOND_OBSERVATION_ID,
+        ipAddress: IP_ADDRESS
+      }),
+      { kind: "allowed" }
+    );
+  }
+
+  assert.deepEqual(
+    await limiter.consume({
+      observationId: SECOND_OBSERVATION_ID,
+      ipAddress: IP_ADDRESS
+    }),
+    { kind: "rate_limited", retryAfterSeconds: 60 }
   );
 });
 

@@ -56,7 +56,7 @@ export function registerLiveObservationStoreContract(input: {
       terminalTombstoneRetentionMs: 60_000,
       rollingWindowSeconds: 10,
       maxWeightedBurstPerSecond: 20,
-      maxAcceptedEventsPerRateWindow: 100,
+      maxAcceptedEventsPerRateWindow: 120,
       maxAcceptedEventsPerSession: 10_000,
       observerLeaseDurationMs: 15_000,
       presenterBoostLeaseDurationMs: 10_000
@@ -515,7 +515,7 @@ export function registerLiveObservationStoreContract(input: {
     assert.equal(acceptedRetry.live.acceptedEventCount, 21);
   });
 
-  contractTest("enforces the 100-event rolling window and does not dedupe rejection", async ({
+  contractTest("enforces the 120-event rolling window and does not dedupe rejection", async ({
     store,
     setNow,
     advanceBy
@@ -524,11 +524,11 @@ export function registerLiveObservationStoreContract(input: {
     assertKind(await store.createSession(createInput()), "created");
 
     for (let second = 0; second < 10; second += 1) {
-      for (let offset = 0; offset < 10; offset += 1) {
+      for (let offset = 0; offset < 12; offset += 1) {
         assertKind(
           await store.collectEvent({
             observationId: OBSERVATION_ID,
-            eventId: eventId(second * 10 + offset)
+            eventId: eventId(second * 12 + offset)
           }),
           "accepted"
         );
@@ -538,13 +538,13 @@ export function registerLiveObservationStoreContract(input: {
       }
     }
 
-    const retryEventId = eventId(100);
+    const retryEventId = eventId(120);
     const limited = await store.collectEvent({
       observationId: OBSERVATION_ID,
       eventId: retryEventId
     });
     assertKind(limited, "rate_limited");
-    assert.equal(limited.live.acceptedEventCount, 100);
+    assert.equal(limited.live.acceptedEventCount, 120);
 
     advanceBy(1_000);
     const retry = await store.collectEvent({
@@ -552,10 +552,10 @@ export function registerLiveObservationStoreContract(input: {
       eventId: retryEventId
     });
     assertKind(retry, "accepted");
-    assert.equal(retry.live.acceptedEventCount, 101);
+    assert.equal(retry.live.acceptedEventCount, 121);
   });
 
-  contractTest("accepts events beyond the former 5,000-event session cap", async ({
+  contractTest("accepts exactly 10,000 events before enforcing the session cap", async ({
     store,
     setNow,
     advanceBy
@@ -563,23 +563,26 @@ export function registerLiveObservationStoreContract(input: {
     setNow(START_MS + 500);
     assertKind(await store.createSession(createInput()), "created");
 
-    for (let index = 0; index < 5_001; index += 1) {
+    for (let index = 0; index < 10_000; index += 1) {
       const result = await store.collectEvent({
         observationId: OBSERVATION_ID,
         eventId: eventId(index)
       });
       assertKind(result, "accepted");
-      if ((index + 1) % 10 === 0 && index + 1 < 5_001) {
+      if (index === 9_999) {
+        assert.equal(result.live.acceptedEventCount, 10_000);
+      }
+      if ((index + 1) % 12 === 0 && index + 1 < 10_000) {
         advanceBy(1_000);
       }
     }
 
-    const duplicate = await store.collectEvent({
+    const capped = await store.collectEvent({
       observationId: OBSERVATION_ID,
-      eventId: eventId(0)
+      eventId: eventId(10_000)
     });
-    assertKind(duplicate, "duplicate");
-    assert.equal(duplicate.live.acceptedEventCount, 5_001);
+    assertKind(capped, "event_limit_reached");
+    assert.equal(capped.live.acceptedEventCount, 10_000);
   });
 
   contractTest("serializes collect-before-stop into the frozen final view", async ({

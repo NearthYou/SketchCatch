@@ -138,7 +138,7 @@ local function rollingCount(sessionKey, currentSecond)
     if stored ~= false then
       if not canonicalNonnegativeInteger(stored) then return nil end
       count = count + tonumber(stored)
-      if count > 100 then return nil end
+      if count > 120 then return nil end
     end
   end
   return count
@@ -242,7 +242,7 @@ local function reconcile(sessionKey, terminalKey, observationId)
        not canonicalInteger(shadowValues[10]) or not canonicalInteger(shadowValues[11]) or
        tonumber(shadowValues[10]) ~= tonumber(activeValues[5]) or
        tonumber(shadowValues[11]) ~= tonumber(activeValues[5]) + 60000 or
-       tonumber(shadowValues[9]) > 100 or
+       tonumber(shadowValues[9]) > 120 or
        tonumber(shadowValues[9]) > tonumber(shadowValues[8]) then
       return 'corrupt'
     end
@@ -282,7 +282,7 @@ local function reconcile(sessionKey, terminalKey, observationId)
     local accepted = tonumber(terminalValues[4])
     local rolling = tonumber(terminalValues[5])
     if accepted > 10000 or
-       rolling < 0 or rolling > 100 or rolling > accepted or
+       rolling < 0 or rolling > 120 or rolling > accepted or
        (values[3] == 'expired' and terminalAt ~= tonumber(values[4])) or
        (values[3] == 'stopped' and terminalAt >= tonumber(values[4])) or
        tonumber(values[5]) ~= terminalAt + 60000 then
@@ -396,7 +396,7 @@ local previousCount = tonumber(redis.call('HGET', KEYS[1], 'bucket:' .. integerS
 local progressMs = nowMs - currentSecond * 1000
 local candidateCurrent = currentCount + 1
 local weightedNumerator = candidateCurrent * 1000 + previousCount * (1000 - progressMs)
-if weightedNumerator > 20000 or currentRolling + 1 > 100 then
+if weightedNumerator > 20000 or currentRolling + 1 > 120 then
   return liveTuple('rate_limited', KEYS[1], currentRolling)
 end
 

@@ -120,11 +120,28 @@ export function createLiveObservationPublicCollector(options: {
               throw collectorError("unavailable");
             }
 
-            const response = await options.fetch(active.session.manifest.endpoints.trafficUrl, {
-              method: "POST",
-              redirect: "manual",
-              signal: options.createTimeoutSignal(3_000)
-            });
+            const live = await readActiveSession(
+              options.store,
+              active.session.observationId
+            );
+            if (
+              live.session.createdAt !== active.session.createdAt ||
+              live.session.expiresAt !== active.session.expiresAt ||
+              live.session.deploymentId !== active.session.deploymentId ||
+              live.session.capability.kid !== active.session.capability.kid ||
+              live.session.capability.tokenVersion !==
+                active.session.capability.tokenVersion
+            ) {
+              throw collectorError("gone");
+            }
+            const response = await options.fetch(
+              live.session.manifest.endpoints.trafficUrl,
+              {
+                method: "POST",
+                redirect: "manual",
+                signal: options.createTimeoutSignal(3_000)
+              }
+            );
             if (!Number.isInteger(response.status) || response.status < 200 || response.status >= 300) {
               throw collectorError("unavailable");
             }

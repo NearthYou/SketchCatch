@@ -94,6 +94,114 @@ test("authorized public request returns one generic error and accepts no receipt
   }
 });
 
+test("authorized public request rechecks a stopped Store session before performing fetch", async () => {
+  let fetchCalls = 0;
+  const fixture = await createFixture(undefined, {
+    async fetch() {
+      fetchCalls += 1;
+      return { status: 204 };
+    }
+  });
+  const authorized = await authorize(fixture);
+  const stopped = await fixture.store.stopSession({
+    deploymentId: fixture.input.manifest.provenance.deploymentId,
+    observationId: fixture.input.observationId
+  });
+  assert.equal(stopped.kind, "stopped");
+
+  await assertCollectorError(
+    () => authorized.request({ eventId: EVENT_ID, ipAddress: "203.0.113.42" }),
+    "gone"
+  );
+  assert.equal(fetchCalls, 0);
+});
+
+test("authorized public request rechecks exact Store expiry before performing fetch", async () => {
+  let nowMs = NOW_MS;
+  let fetchCalls = 0;
+  const fixture = await createFixture(undefined, {
+    async fetch() {
+      fetchCalls += 1;
+      return { status: 204 };
+    },
+    now: () => nowMs
+  });
+  const authorized = await authorize(fixture);
+  nowMs = Date.parse(fixture.created.session.expiresAt);
+
+  await assertCollectorError(
+    () => authorized.request({ eventId: EVENT_ID, ipAddress: "203.0.113.42" }),
+    "gone"
+  );
+  assert.equal(fetchCalls, 0);
+});
+
+test("authorized public request refuses missing and unavailable Store rereads before fetch", async () => {
+  for (const failure of ["not_found", "unavailable"] as const) {
+    let failReread = false;
+    let fetchCalls = 0;
+    const fixture = await createFixture(
+      (store) => ({
+        ...store,
+        async readSession(input) {
+          if (!failReread) return store.readSession(input);
+          if (failure === "not_found") {
+            return {
+              kind: "not_found" as const,
+              evaluatedAt: new Date(NOW_MS).toISOString()
+            };
+          }
+          throw new Error("redis unavailable probe");
+        }
+      }),
+      {
+        async fetch() {
+          fetchCalls += 1;
+          return { status: 204 };
+        }
+      }
+    );
+    const authorized = await authorize(fixture);
+    failReread = true;
+
+    await assertCollectorError(
+      () => authorized.request({ eventId: EVENT_ID, ipAddress: "203.0.113.42" }),
+      failure
+    );
+    assert.equal(fetchCalls, 0);
+  }
+});
+
+test("authorized public request cannot follow a replacement session with the same observation ID", async () => {
+  let nowMs = NOW_MS;
+  let fetchCalls = 0;
+  const fixture = await createFixture(undefined, {
+    async fetch() {
+      fetchCalls += 1;
+      return { status: 204 };
+    },
+    now: () => nowMs
+  });
+  const authorized = await authorize(fixture);
+  assert.equal(
+    (
+      await fixture.store.stopSession({
+        deploymentId: fixture.input.manifest.provenance.deploymentId,
+        observationId: fixture.input.observationId
+      })
+    ).kind,
+    "stopped"
+  );
+  nowMs += 60_000;
+  assert.equal((await fixture.store.createSession(fixture.input)).kind, "created");
+
+  await assertCollectorError(
+    () => authorized.request({ eventId: EVENT_ID, ipAddress: "203.0.113.42" }),
+    "gone"
+  );
+  assert.equal(fetchCalls, 0);
+});
+
 test("public collector rejects invalid capability and origin without Store mutation", async () => {
   const fixture = await createFixture();
 
@@ -295,12 +403,14 @@ async function createFixture(
       input: string,
       init: { method: "POST"; redirect: "manual"; signal: AbortSignal }
     ) => Promise<{ status: number }>;
+    now?: () => number;
   } = {}
 ) {
-  const baseStore = createInMemoryLiveObservationStore({ now: () => NOW_MS });
+  const now = requestOptions.now ?? (() => NOW_MS);
+  const baseStore = createInMemoryLiveObservationStore({ now });
   const capability = createLiveObservationCapability({
     keyring: { current: { kid: "current-key", secret: SECRET } },
-    now: () => NOW_MS
+    now
   });
   const input = createLiveObservationStoreContractInput();
   const created = await baseStore.createSession(input);
@@ -328,8 +438,8 @@ async function createFixture(
           return { status: 204 };
         }),
       requestRateLimiter: createLiveObservationPublicRequestRateLimiter({
-        now: () => NOW_MS,
-        runtimeCache: createInMemoryRuntimeCache({ cleanupIntervalMs: null, now: () => NOW_MS })
+        now,
+        runtimeCache: createInMemoryRuntimeCache({ cleanupIntervalMs: null, now })
       }),
       store
     }),

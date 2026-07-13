@@ -185,6 +185,15 @@ test("strict replies reject impossible counters and response identity swaps", as
     )
   );
 
+  const unsafeRollingCount = new FakeRedisClient({
+    evalReply: activeReply({ acceptedEventCount: 121, rollingCount: 121 })
+  });
+  assertGenericUnavailable(
+    await captureError(() =>
+      createStore(unsafeRollingCount).readSession({ observationId: INPUT.observationId })
+    )
+  );
+
   const swappedIdentity = new FakeRedisClient({
     evalReply: activeReply({ observationId: SECOND_OBSERVATION_ID })
   });
@@ -264,6 +273,7 @@ test("collect Lua uses exact integer weighted-rate arithmetic and the 10,000 ses
   assert.match(collect, /candidateCurrent\s*\*\s*1000/);
   assert.match(collect, /previousCount\s*\*\s*\(\s*1000\s*-\s*progressMs\s*\)/);
   assert.match(collect, />\s*20000/);
+  assert.match(collect, /currentRolling\s*\+\s*1\s*>\s*120/);
   assert.match(collect, /total\s*>=\s*10000/);
   assert.doesNotMatch(collect, /\b5000\b/);
   assert.doesNotMatch(collect, /local\s+weighted\s*=/);
@@ -388,6 +398,7 @@ function activeReply(
   overrides: {
     observationId?: string;
     acceptedEventCount?: number;
+    rollingCount?: number;
     latestObservationJson?: string;
   } = {}
 ): string[] {
@@ -403,7 +414,7 @@ function activeReply(
     String(EVALUATED_AT_MS),
     String(EVALUATED_AT_MS + 900_000),
     String(overrides.acceptedEventCount ?? 0),
-    "0",
+    String(overrides.rollingCount ?? 0),
     String(INPUT.manifest.pressure.target),
     overrides.latestObservationJson ?? ""
   ];

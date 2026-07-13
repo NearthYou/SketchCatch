@@ -9,7 +9,7 @@ export const LIVE_OBSERVATION_STORE_POLICY = Object.freeze({
   terminalTombstoneRetentionMs: 60 * 1_000,
   rollingWindowSeconds: 10,
   maxWeightedBurstPerSecond: 20,
-  maxAcceptedEventsPerRateWindow: 100,
+  maxAcceptedEventsPerRateWindow: 120,
   maxAcceptedEventsPerSession: 10_000,
   observerLeaseDurationMs: 15 * 1_000,
   presenterBoostLeaseDurationMs: 10 * 1_000

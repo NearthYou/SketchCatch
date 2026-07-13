@@ -50,7 +50,7 @@ export function createLiveObservationPublicRequestRateLimiter(options: {
         count = await options.runtimeCache.increment(
           {
             namespace: CACHE_NAMESPACE,
-            key: `${input.observationId}:${ipFingerprint}:${windowNumber}`
+            key: `${ipFingerprint}:${windowNumber}`
           },
           1,
           { ttlMs }
