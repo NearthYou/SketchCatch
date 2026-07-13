@@ -649,8 +649,8 @@ test("new and existing resources expand newly assigned parent areas before apply
     /expandParentAreaNodesForEnteredChild\(nodesWithAssignedParents,\s*nextNode\.id\)/s
   );
   assert.match(dragTransactionSource, /expandParentAreaNodesForEnteredChild/);
-  assert.match(dragTransactionSource, /autoExpandAreasEnabled\s*\? enteredResourceNodeIds\.reduce/);
-  assert.match(dragTransactionSource, /getEnteredResourceNodeIds/);
+  assert.match(dragTransactionSource, /autoExpandAreasEnabled\s*\? enteredChildNodeIds\.reduce/);
+  assert.match(dragTransactionSource, /getEnteredChildNodeIds/);
   assert.doesNotMatch(
     diagramEditorSource,
     /nodes: applyContainingReferenceDropTargets\(\s*nodesWithAssignedParents,\s*new Set\(\[nextNode\.id\]\)/s

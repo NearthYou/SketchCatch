@@ -229,14 +229,14 @@ test("save confirmation stays inside compact workspace viewports", () => {
   );
 });
 
-test("mobile AI launcher stays above the canvas toolbar", () => {
+test("mobile AI launcher and canvas toolbar keep their compact placements", () => {
   assert.match(
     stylesSource,
     /@media\s*\(max-width:\s*640px\)[\s\S]*?\.aiChatLauncher,[\s\S]*?bottom:\s*76px;/
   );
   assert.match(
     diagramEditorStylesSource,
-    /@media\s*\(max-width:\s*640px\)[\s\S]*?\.canvasToolbar\s*{[\s\S]*?bottom:\s*10px;/
+    /@media\s*\(max-width:\s*640px\)[\s\S]*?\.canvasToolbar\s*{[^}]*left:\s*10px;[^}]*max-height:\s*calc\(100% - 20px\);/
   );
 });
 
