@@ -53,13 +53,41 @@ export function setupTemplateLibraryModalAccessibility({
 
     if (!firstFocusableElement || !lastFocusableElement) return;
 
-    if (event.shiftKey && documentRoot.activeElement === firstFocusableElement) {
+    const activeElement = documentRoot.activeElement;
+
+    if (event.shiftKey && activeElement === firstFocusableElement) {
       event.preventDefault();
       lastFocusableElement.focus();
-    } else if (!event.shiftKey && documentRoot.activeElement === lastFocusableElement) {
+      return;
+    }
+
+    if (!event.shiftKey && activeElement === lastFocusableElement) {
       event.preventDefault();
       firstFocusableElement.focus();
+      return;
     }
+
+    if (focusableElements.some((element) => element === activeElement)) return;
+
+    const wrapTarget = event.shiftKey ? lastFocusableElement : firstFocusableElement;
+
+    if (!activeElement || !dialog.contains(activeElement)) {
+      event.preventDefault();
+      wrapTarget.focus();
+      return;
+    }
+
+    const direction = event.shiftKey
+      ? Node.DOCUMENT_POSITION_PRECEDING
+      : Node.DOCUMENT_POSITION_FOLLOWING;
+    const hasFocusableElementInDirection = focusableElements.some((element) =>
+      Boolean(activeElement.compareDocumentPosition(element) & direction)
+    );
+
+    if (hasFocusableElementInDirection) return;
+
+    event.preventDefault();
+    wrapTarget.focus();
   };
 
   documentRoot.addEventListener("keydown", handleKeyDown);

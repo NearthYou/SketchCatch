@@ -4,11 +4,16 @@ import { setupTemplateLibraryModalAccessibility } from "./template-library-modal
 
 test("Template 전체보기 modal lifecycle traps focus and restores the surrounding document", () => {
   const originalHTMLElement = Object.getOwnPropertyDescriptor(globalThis, "HTMLElement");
+  const originalNode = Object.getOwnPropertyDescriptor(globalThis, "Node");
   const documentRoot = new FakeDocument();
 
   Object.defineProperty(globalThis, "HTMLElement", {
     configurable: true,
     value: FakeHTMLElement
+  });
+  Object.defineProperty(globalThis, "Node", {
+    configurable: true,
+    value: FakeNode
   });
 
   try {
@@ -17,10 +22,11 @@ test("Template 전체보기 modal lifecycle traps focus and restores the surroun
     const alreadyInertSibling = new FakeHTMLElement(documentRoot);
     const overlay = new FakeHTMLElement(documentRoot);
     const dialog = new FakeHTMLElement(documentRoot);
+    const leadingSelectMenuOption = new FakeHTMLElement(documentRoot);
     const closeButton = new FakeHTMLElement(documentRoot);
     const middleButton = new FakeHTMLElement(documentRoot);
     const lastButton = new FakeHTMLElement(documentRoot);
-    const selectMenuOption = new FakeHTMLElement(documentRoot);
+    const trailingSelectMenuOption = new FakeHTMLElement(documentRoot);
     let firstCloseCount = 0;
     let latestCloseCount = 0;
     let currentOnClose = () => {
@@ -31,12 +37,23 @@ test("Template 전체보기 modal lifecycle traps focus and restores the surroun
     documentRoot.activeElement = opener;
     documentRoot.body.children.push(appRoot, alreadyInertSibling, overlay);
     documentRoot.body.style.overflow = "clip";
-    selectMenuOption.tabIndex = -1;
-    dialog.focusableElements = [
+    appRoot.append(opener);
+    overlay.append(dialog);
+    leadingSelectMenuOption.tabIndex = -1;
+    trailingSelectMenuOption.tabIndex = -1;
+    dialog.append(
+      leadingSelectMenuOption,
       closeButton,
       middleButton,
       lastButton,
-      selectMenuOption
+      trailingSelectMenuOption
+    );
+    dialog.focusableElements = [
+      leadingSelectMenuOption,
+      closeButton,
+      middleButton,
+      lastButton,
+      trailingSelectMenuOption
     ];
 
     const cleanup = setupTemplateLibraryModalAccessibility({
@@ -65,6 +82,42 @@ test("Template 전체보기 modal lifecycle traps focus and restores the surroun
     assert.equal(shiftTabFromFirst.defaultPrevented, true);
     assert.equal(documentRoot.activeElement, lastButton);
 
+    documentRoot.activeElement = trailingSelectMenuOption;
+    const tabFromTrailingRovingOption = new FakeKeyboardEvent("Tab");
+    documentRoot.dispatchEvent(tabFromTrailingRovingOption);
+    assert.equal(tabFromTrailingRovingOption.defaultPrevented, true);
+    assert.equal(documentRoot.activeElement, closeButton);
+
+    documentRoot.activeElement = leadingSelectMenuOption;
+    const shiftTabFromLeadingRovingOption = new FakeKeyboardEvent("Tab", true);
+    documentRoot.dispatchEvent(shiftTabFromLeadingRovingOption);
+    assert.equal(shiftTabFromLeadingRovingOption.defaultPrevented, true);
+    assert.equal(documentRoot.activeElement, lastButton);
+
+    documentRoot.activeElement = leadingSelectMenuOption;
+    const tabTowardInternalStop = new FakeKeyboardEvent("Tab");
+    documentRoot.dispatchEvent(tabTowardInternalStop);
+    assert.equal(tabTowardInternalStop.defaultPrevented, false);
+    assert.equal(documentRoot.activeElement, leadingSelectMenuOption);
+
+    documentRoot.activeElement = trailingSelectMenuOption;
+    const shiftTabTowardInternalStop = new FakeKeyboardEvent("Tab", true);
+    documentRoot.dispatchEvent(shiftTabTowardInternalStop);
+    assert.equal(shiftTabTowardInternalStop.defaultPrevented, false);
+    assert.equal(documentRoot.activeElement, trailingSelectMenuOption);
+
+    documentRoot.activeElement = opener;
+    const tabFromOutside = new FakeKeyboardEvent("Tab");
+    documentRoot.dispatchEvent(tabFromOutside);
+    assert.equal(tabFromOutside.defaultPrevented, true);
+    assert.equal(documentRoot.activeElement, closeButton);
+
+    documentRoot.activeElement = opener;
+    const shiftTabFromOutside = new FakeKeyboardEvent("Tab", true);
+    documentRoot.dispatchEvent(shiftTabFromOutside);
+    assert.equal(shiftTabFromOutside.defaultPrevented, true);
+    assert.equal(documentRoot.activeElement, lastButton);
+
     currentOnClose = () => {
       latestCloseCount += 1;
     };
@@ -89,6 +142,11 @@ test("Template 전체보기 modal lifecycle traps focus and restores the surroun
     } else {
       Reflect.deleteProperty(globalThis, "HTMLElement");
     }
+    if (originalNode) {
+      Object.defineProperty(globalThis, "Node", originalNode);
+    } else {
+      Reflect.deleteProperty(globalThis, "Node");
+    }
   }
 });
 
@@ -98,9 +156,19 @@ class FakeDocument extends EventTarget {
     children: [] as FakeHTMLElement[],
     style: { overflow: "" }
   };
+
+  getDocumentOrder(): FakeHTMLElement[] {
+    return this.body.children.flatMap((element) => element.getDocumentOrder());
+  }
+}
+
+class FakeNode {
+  static readonly DOCUMENT_POSITION_PRECEDING = 2;
+  static readonly DOCUMENT_POSITION_FOLLOWING = 4;
 }
 
 class FakeHTMLElement extends EventTarget {
+  readonly childElements: FakeHTMLElement[] = [];
   focusableElements: FakeHTMLElement[] = [];
   inert = false;
   tabIndex = 0;
@@ -109,8 +177,36 @@ class FakeHTMLElement extends EventTarget {
     super();
   }
 
+  append(...elements: FakeHTMLElement[]): void {
+    this.childElements.push(...elements);
+  }
+
+  compareDocumentPosition(element: FakeHTMLElement): number {
+    const documentOrder = this.documentRoot.getDocumentOrder();
+    const currentIndex = documentOrder.indexOf(this);
+    const elementIndex = documentOrder.indexOf(element);
+
+    if (currentIndex === -1 || elementIndex === -1) return 1;
+    if (elementIndex < currentIndex) return FakeNode.DOCUMENT_POSITION_PRECEDING;
+    if (elementIndex > currentIndex) return FakeNode.DOCUMENT_POSITION_FOLLOWING;
+    return 0;
+  }
+
+  contains(element: FakeHTMLElement | null): boolean {
+    return (
+      element === this || this.childElements.some((child) => child.contains(element))
+    );
+  }
+
   focus(): void {
     this.documentRoot.activeElement = this;
+  }
+
+  getDocumentOrder(): FakeHTMLElement[] {
+    return [
+      this,
+      ...this.childElements.flatMap((element) => element.getDocumentOrder())
+    ];
   }
 
   querySelectorAll<T extends Element>(_selector: string): T[] {
