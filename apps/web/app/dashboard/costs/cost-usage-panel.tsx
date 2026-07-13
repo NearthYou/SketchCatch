@@ -126,7 +126,22 @@ export function CostUsagePanel() {
   }
 
   if (data?.projectCosts.length === 0) {
-    return <ProductState description="프로젝트를 배포하면 AWS Cost Explorer와 CloudWatch 기반 실제 사용량이 여기에 표시됩니다." kind="empty" title="배포된 프로젝트가 없습니다" />;
+    return (
+      <ProductState
+        action={
+          <button
+            disabled={loadState === "loading"}
+            onClick={() => void loadCosts()}
+            type="button"
+          >
+            {loadState === "loading" ? "새로고침 중" : "새로고침"}
+          </button>
+        }
+        description="프로젝트를 배포하면 AWS Cost Explorer와 CloudWatch 기반 실제 사용량이 여기에 표시됩니다."
+        kind="empty"
+        title="배포된 프로젝트가 없습니다"
+      />
+    );
   }
 
   return (

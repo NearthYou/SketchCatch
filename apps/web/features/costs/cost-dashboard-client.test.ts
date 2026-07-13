@@ -64,6 +64,8 @@ test("estimated user count accepts direct numeric input", () => {
   assert.match(estimatePanelSource, /type="number"/);
   assert.match(estimatePanelSource, /normalizeExpectedUserCount/);
   assert.match(estimatePanelSource, /onBlur=\{applyExpectedUserCount\}/);
+  assert.match(estimatePanelSource, /aria-invalid=\{expectedUserCountError \? true : undefined\}/);
+  assert.match(estimatePanelSource, /1명 이상 1,000,000명 이하/);
 });
 
 test("both cost panels expose refresh and disable duplicate refresh while loading", () => {
@@ -72,6 +74,9 @@ test("both cost panels expose refresh and disable duplicate refresh while loadin
     assert.match(source, /disabled=\{loadState === "loading"\}/);
     assert.match(source, /title=\{loadState === "loading" \? "새로고침 중" : "새로고침"\}/);
   }
+
+  assert.match(usagePanelSource, /title="배포된 프로젝트가 없습니다"/);
+  assert.match(usagePanelSource, /\{loadState === "loading" \? "새로고침 중" : "새로고침"\}/);
 });
 
 test("folder tabs do not create a scroll container", () => {

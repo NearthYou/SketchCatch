@@ -28,6 +28,7 @@ export function CostEstimatePanel() {
   const [period, setPeriod] = useState<CostEstimatePeriod>("month");
   const [expectedUserCount, setExpectedUserCount] = useState(1000);
   const [expectedUserCountInput, setExpectedUserCountInput] = useState("1000");
+  const [expectedUserCountError, setExpectedUserCountError] = useState("");
   const [data, setData] = useState<CostProjectEstimateListResponse | null>(null);
   const [loadState, setLoadState] = useState<CostLoadState>("loading");
   const [errorMessage, setErrorMessage] = useState("");
@@ -76,10 +77,11 @@ export function CostEstimatePanel() {
     const normalized = normalizeExpectedUserCount(expectedUserCountInput);
 
     if (normalized === null) {
-      setExpectedUserCountInput(String(expectedUserCount));
+      setExpectedUserCountError("1명 이상 1,000,000명 이하로 입력해 주세요.");
       return;
     }
 
+    setExpectedUserCountError("");
     setExpectedUserCount(normalized);
     setExpectedUserCountInput(String(normalized));
     void loadEstimates(period, normalized);
@@ -105,11 +107,16 @@ export function CostEstimatePanel() {
           <label>
             <span>예상 사용자</span>
             <input
+              aria-describedby={expectedUserCountError ? "expected-user-count-error" : undefined}
+              aria-invalid={expectedUserCountError ? true : undefined}
               inputMode="numeric"
               max={MAX_EXPECTED_USER_COUNT}
               min={MIN_EXPECTED_USER_COUNT}
               onBlur={applyExpectedUserCount}
-              onChange={(event) => setExpectedUserCountInput(event.target.value)}
+              onChange={(event) => {
+                setExpectedUserCountInput(event.target.value);
+                setExpectedUserCountError("");
+              }}
               onKeyDown={(event) => {
                 if (event.key === "Enter") event.currentTarget.blur();
               }}
@@ -117,6 +124,11 @@ export function CostEstimatePanel() {
               type="number"
               value={expectedUserCountInput}
             />
+            {expectedUserCountError ? (
+              <small className={styles.fieldError} id="expected-user-count-error" role="alert">
+                {expectedUserCountError}
+              </small>
+            ) : null}
           </label>
           <label>
             <span>표시 기간</span>

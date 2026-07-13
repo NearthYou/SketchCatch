@@ -199,6 +199,19 @@
   color: var(--color-ink);
 }
 
+.controlRow input {
+  min-height: 44px;
+  padding-inline: 16px;
+  font-size: 16px;
+}
+
+.fieldError {
+  color: var(--color-error);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
 .primaryAction {
   display: inline-flex;
   min-height: 42px;
