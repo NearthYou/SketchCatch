@@ -32,5 +32,5 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Next Action
 
-- Commit and push the verified latest-dev merge to PR #380, then confirm GitHub reports it mergeable.
+- Review CI and feedback on PR #380; latest dev is merged, the branch is pushed, and GitHub reports the PR mergeable.
 - Re-run `pnpm build` after the repository restores `apps/web/.codegraph`; run Terraform validation only in an environment with the CLI installed.
