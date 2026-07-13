@@ -8,7 +8,7 @@ Short English-only working log for the current agent context. Older records are 
 - Latest `origin/dev` at `99db7f61` is merged, including the current dashboard UI/UX and Deployment/CI/CD console updates.
 - Strict `audience-live-check` Repository evidence produces a minimal ECS Fargate architecture without unsupported persistence, autoscaling, or AWS-native CI/CD resources.
 - Generated Terraform passes the Direct Deployment safety gate and `terraform validate` with AWS provider v6.54.0.
-- Real Plan and Apply created 29 resources, ALB `/health` returned HTTP 200, and cleanup finished as `DESTROYED` with AWS Console absence checks.
+- Real Plan and Apply created 33 resources, the current Repository API and web builds worked through CloudFront and ECS, and cleanup finished as `DESTROYED` with direct AWS absence checks.
 
 ## Session Record
 
@@ -92,26 +92,6 @@ Short English-only working log for the current agent context. Older records are 
 - Removed an automatic-merge duplicate in Terraform AZ synchronization while retaining existing Diagram parent hierarchy.
 - Verification: 78 focused merge regressions, `pnpm harness:check`, `pnpm typecheck`, `pnpm lint`, `pnpm build`, and `git diff --check` passed. Lint retains the pre-existing `setNow` warning.
 - Risk: migrations `0032` and `0033` were not applied, and no cloud or deployment mutation was performed.
-
-### 2026-07-13 - Public Repository AI recommendation and question recovery
-
-- Goal: Verify whether public Repository start sends evidence to AI, renders AI answers, and creates a board for `https://github.com/chaekang/Jungle_DB_API_W8`.
-- Completed:
-  - Confirmed `/ai/source-repository-analysis` calls the repository template AI ranker and returns `rankingSource: "ai"` for the reported repository.
-  - Fixed the UI recommendation step so backend handoff-level questions are rendered when AI-ranked candidates contain empty `questions` arrays.
-  - Removed the Template-unselected AI fallback UI and contract surface added on this branch because it created a confusing second generation path.
-  - Applied pending local DB migrations; the observed board-save failure was caused by the local `project_drafts` table missing the `terraform_files` column.
-  - Browser-verified the public Repository flow: AI-ranked ECS/EKS recommendations render, follow-up questions render, answers create and save a workspace board.
-- Verification:
-  - `pnpm --dir apps/web exec tsx --test app/workspace/repository/repository-start-client.test.ts features/workspace/public-repository-recommendation.test.ts`
-  - `pnpm --dir apps/web typecheck`
-  - `pnpm --dir apps/api typecheck`
-  - `pnpm lint` passed with the pre-existing `live-observations` `setNow` warning.
-  - `pnpm typecheck`
-  - `pnpm build`
-  - `pnpm harness:check`
-- Risk:
-  - Full Architecture Draft AI generation through `/ai/architecture-draft` is separate from the Repository recommendation flow; probing it showed environment-dependent failures (`422` from the running API route and expired AWS SSO in a direct configured call). The current Repository start path uses AI for ranking/questions and deterministic Template-based board creation.
 
 ### 2026-07-12 - Handle missing Source Repository DB migrations
 
@@ -215,5 +195,25 @@ Short English-only working log for the current agent context. Older records are 
 - Risk:
   - The successful live artifact predated the output-preservation fix. Regression tests prove the corrected artifact path; a future deployment will persist Live Observation outputs without requiring another AWS mutation in this session.
 
+### 2026-07-14 - Attach and verify the real Repository application
+
+- Goal: Prove that the generated Fargate architecture can run the current `whiskend/audience-live-check` source, serve its web application, and clean up completely.
+- Completed:
+  - Cloned the current default branch, passed all 17 repository tests, built the API Docker image, and verified `/health` plus `POST /api/check-ins` locally.
+  - Applied the generated architecture with 33 AWS resources through Direct Deployment.
+  - Pushed the real API image to ECR, registered the application task revision with `PORT=8080`, `WEB_ORIGIN` set to the CloudFront URL, and `INSTANCE_ID=fargate`, then stabilized the one-task ECS service.
+  - Built the Vite web application with the CloudFront API base URL, synced it to the private S3 origin, and invalidated CloudFront.
+  - Verified the public site, check-in creation, heartbeat, CORS, and browser UI state `참여 중 · 연결됨`; the heartbeat was served by `fargate`.
+  - Ran the approved Destroy Plan (`33 to destroy`) to `DESTROYED`, removed the externally registered ECS task definition revisions, and queried AWS directly by deployment IDs and names.
+  - Confirmed CloudFront/OAC, ECR, ALB/target group, S3, CloudWatch Logs, IAM roles, VPC, subnets, security groups, EIP, internet gateway, and route tables are absent; ECS cluster/service are `INACTIVE`, active task definitions are zero, and the NAT Gateway remains only as a `deleted` history record.
+- Verification:
+  - `npm ci`, `npm test`, and the API Docker build in a fresh clone of `whiskend/audience-live-check`.
+  - Local container `/health` and `POST /api/check-ins` requests.
+  - Direct Deployment Plan/Apply (`33 to add`) and approved Destroy (`33 to destroy`).
+  - Public CloudFront site request, API check-in/heartbeat requests, and Chrome participation flow.
+  - Direct AWS CLI absence checks using the verified connection's temporary execution credentials.
+- Risk:
+  - No deployment-contract defect was found. ECS service and task-definition deletion metadata can remain visible briefly as `INACTIVE` or `DELETE_IN_PROGRESS`, but no active or billable application resource remains.
+
 ## Next Action
-- Use the Git/CI/CD handoff to replace the bootstrap web object and smoke ECS revision with the repository build artifacts before production traffic.
+- Continue the automatic diagram layout workstream without changing the verified Fargate resource, connection, or runtime parameter contract.
