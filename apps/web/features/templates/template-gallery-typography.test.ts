@@ -25,6 +25,12 @@ test("template search and shared dashboard dropdowns use the bundled Pretendard 
   assert.doesNotMatch(gallerySource, /<select\b/);
 });
 
+test("template search control centers its icon and text within the 42px field", () => {
+  assert.match(galleryStyles, /\.searchField\s*\{[^}]*display:\s*grid/s);
+  assert.match(galleryStyles, /\.searchField\s*\{[^}]*align-items:\s*center/s);
+  assert.match(galleryStyles, /\.searchField\s*\{[^}]*min-height:\s*42px/s);
+});
+
 function readLocalFile(relativePath: string): string {
   return readFileSync(fileURLToPath(new URL(relativePath, import.meta.url)), "utf8");
 }

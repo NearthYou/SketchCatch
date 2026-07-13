@@ -8,10 +8,10 @@ Short English-only working log for the current agent context. Older records are 
 - Repository start validates 2-3 unique candidates and follow-up questions, hides decisive deployment type, and confirms Template and CI/CD before opening follow-up questions.
 
 ## Session Record
-### 2026-07-13 - Unify Dashboard dropdown controls
+### 2026-07-13 - Unify Dashboard dropdowns and repair Template search alignment
 
-- Replaced live Projects, Templates, Costs, and Settings selects with one white 42px Pretendard control using 14px/500 text, 14px/600 selected options, readable long-option wrapping, and shared keyboard behavior.
-- Verification: full tests, focused dropdown regressions, lint, typecheck, build, diff check, and harness pass; lint retains one unrelated API `setNow` warning. Authenticated visual QA was unavailable because the in-app browser had no session and Chrome control was unavailable.
+- Replaced live Projects, Templates, Costs, and Settings selects with one white 42px Pretendard control, then restored the Template search field's grid layout so its icon and text stay vertically centered.
+- Verification: full tests, focused dropdown and search-alignment regressions, lint, typecheck, build, diff check, and harness pass; lint retains one unrelated API `setNow` warning. Authenticated visual QA was unavailable because the in-app browser had no session and Chrome control was unavailable.
 
 ### 2026-07-13 - Restore saved architecture thumbnails above project cards
 

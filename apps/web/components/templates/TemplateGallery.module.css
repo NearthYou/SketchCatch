@@ -17,6 +17,8 @@
   background: #ffffff;
   border: 1px solid #dcdee0;
   border-radius: 8px;
+  display: grid;
+  gap: 7px;
   grid-template-columns: auto minmax(0, 1fr);
   min-height: 42px;
   padding: 0 12px;
