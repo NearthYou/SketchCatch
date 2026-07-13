@@ -81,7 +81,7 @@ test("applyAreaNodeMovement moves nodes contained in a moved area by the same de
   assert.deepEqual(getNodePosition(result, instance.id), { x: 120, y: 95 });
 });
 
-test("applyAreaNodeMovement moves nodes contained in a moved ASG area by the same delta", () => {
+test("applyAreaNodeMovement keeps ASG-linked instances stationary because ASG is a Resource", () => {
   const autoscalingGroup = makeResourceNode({
     id: "asg-1",
     resourceType: "aws_autoscaling_group",
@@ -103,7 +103,7 @@ test("applyAreaNodeMovement moves nodes contained in a moved ASG area by the sam
     new Set([autoscalingGroup.id])
   );
 
-  assert.deepEqual(getNodePosition(result, instance.id), { x: 92, y: 72 });
+  assert.deepEqual(getNodePosition(result, instance.id), { x: 56, y: 48 });
 });
 
 test("applyAreaNodeMovement does not adopt a resource just because an area was moved over it", () => {
@@ -347,7 +347,7 @@ test("applyAreaNodeParentAssignments assigns a parent only to directly moved nod
   assert.equal(getNodeById(result, instance.id)?.metadata?.parentAreaNodeId, region.id);
 });
 
-test("applyAreaNodeParentAssignments assigns a moved child to an ASG area", () => {
+test("applyAreaNodeParentAssignments does not assign a moved child to an ASG Resource", () => {
   const autoscalingGroup = makeResourceNode({
     id: "asg-1",
     resourceType: "aws_autoscaling_group",
@@ -363,7 +363,35 @@ test("applyAreaNodeParentAssignments assigns a moved child to an ASG area", () =
 
   const result = applyAreaNodeParentAssignments([autoscalingGroup, instance], new Set([instance.id]));
 
-  assert.equal(getNodeById(result, instance.id)?.metadata?.parentAreaNodeId, autoscalingGroup.id);
+  assert.equal(getNodeById(result, instance.id)?.metadata?.parentAreaNodeId, undefined);
+});
+
+test("applyAreaNodeParentAssignments skips a Security Group scope in favor of its Subnet", () => {
+  const subnet = makeResourceNode({
+    id: "subnet-1",
+    resourceType: "aws_subnet",
+    position: { x: 0, y: 0 },
+    size: { width: 400, height: 300 }
+  });
+  const securityGroup = makeResourceNode({
+    id: "sg-1",
+    resourceType: "aws_security_group",
+    position: { x: 40, y: 40 },
+    size: { width: 300, height: 220 }
+  });
+  const instance = makeResourceNode({
+    id: "instance-1",
+    resourceType: "aws_instance",
+    position: { x: 120, y: 100 },
+    size: { width: 56, height: 56 }
+  });
+
+  const result = applyAreaNodeParentAssignments(
+    [subnet, securityGroup, instance],
+    new Set([instance.id])
+  );
+
+  assert.equal(getNodeById(result, instance.id)?.metadata?.parentAreaNodeId, subnet.id);
 });
 
 test("applyAreaNodeParentAssignments does not assign stationary nodes to a moved area", () => {

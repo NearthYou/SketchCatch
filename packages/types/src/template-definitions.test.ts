@@ -238,6 +238,136 @@ test("each template contains the resources required by its deployable default", 
   assert.ok(eksTypes.includes("aws_security_group"));
 });
 
+test("network templates keep gateways and route associations on their related boundaries", () => {
+  for (const templateId of [
+    "three-tier-web-app",
+    "ecs-fargate-container-app",
+    "eks-container-app"
+  ] as const) {
+    const definition = templateDefinitions.find((candidate) => candidate.id === templateId);
+    const vpc = definition?.resources.find((resource) => resource.id === "vpc");
+    const internetGateway = definition?.resources.find(
+      (resource) => resource.id === "internet-gateway"
+    );
+
+    assert.ok(vpc, `${templateId}/vpc`);
+    assert.ok(internetGateway, `${templateId}/internet-gateway`);
+    assert.notEqual(internetGateway.parentResourceId, "vpc", `${templateId}/internet-gateway parent`);
+    assert.ok(internetGateway.position.x < vpc.position.x, `${templateId}/internet-gateway left edge`);
+    assert.ok(
+      internetGateway.position.x + 48 > vpc.position.x,
+      `${templateId}/internet-gateway must straddle the VPC boundary`
+    );
+
+    for (const association of definition.resources.filter(
+      (resource) => resource.terraformResourceType === "aws_route_table_association"
+    )) {
+      const subnetReference = String(association.values.subnetId);
+      const subnetId = subnetReference.match(/^@ref:([^.]+)\.id$/u)?.[1];
+      const subnet = definition.resources.find((resource) => resource.id === subnetId);
+
+      assert.ok(subnet, `${templateId}/${association.id} subnet`);
+      assert.ok(
+        association.position.y < subnet.position.y && association.position.y + 48 > subnet.position.y,
+        `${templateId}/${association.id} must straddle ${subnet.id}'s top boundary`
+      );
+    }
+  }
+});
+
+test("security-group scopes enclose only their explicit targets without becoming parents", () => {
+  const scopeTargets = {
+    "three-tier-web-app": {
+      "alb-security-group": ["load-balancer"],
+      "app-security-group": ["launch-template", "application-group"],
+      "db-security-group": ["database"]
+    },
+    "ecs-fargate-container-app": {
+      "alb-security-group": ["load-balancer"],
+      "task-security-group": ["service"]
+    },
+    "eks-container-app": {
+      "cluster-security-group": ["cluster"]
+    }
+  } as const;
+
+  for (const [templateId, targetsByScopeId] of Object.entries(scopeTargets)) {
+    const definition = templateDefinitions.find((candidate) => candidate.id === templateId);
+
+    assert.ok(definition, templateId);
+    for (const [scopeId, targetIds] of Object.entries(targetsByScopeId)) {
+      const scope = definition.resources.find((resource) => resource.id === scopeId);
+
+      assert.ok(scope?.size, `${templateId}/${scopeId} scope size`);
+      for (const targetId of targetIds) {
+        const target = definition.resources.find((resource) => resource.id === targetId);
+
+        assert.ok(target, `${templateId}/${targetId}`);
+        assert.notEqual(target.parentResourceId, scopeId, `${templateId}/${targetId} parent`);
+        assert.ok(target.position.x >= scope.position.x, `${templateId}/${scopeId}/${targetId} left`);
+        assert.ok(target.position.y >= scope.position.y, `${templateId}/${scopeId}/${targetId} top`);
+        assert.ok(
+          target.position.x + 48 <= scope.position.x + scope.size.width,
+          `${templateId}/${scopeId}/${targetId} right`
+        );
+        assert.ok(
+          target.position.y + 48 <= scope.position.y + scope.size.height,
+          `${templateId}/${scopeId}/${targetId} bottom`
+        );
+        assert.ok(
+          definition.relationships.some(
+            (relationship) =>
+              relationship.sourceResourceId === scopeId && relationship.targetResourceId === targetId
+          ),
+          `${templateId}/${scopeId} must connect to ${targetId}`
+        );
+      }
+    }
+  }
+});
+
+test("EKS separates the control plane security scope from its workload presentation group", () => {
+  const definition = templateDefinitions.find((candidate) => candidate.id === "eks-container-app");
+  const cluster = definition?.resources.find((resource) => resource.id === "cluster");
+  const clusterSecurityGroup = definition?.resources.find(
+    (resource) => resource.id === "cluster-security-group"
+  );
+  const workloadGroup = definition?.presentationNodes.find((node) => node.id === "workloads-group");
+  const nodeGroup = definition?.resources.find((resource) => resource.id === "node-group");
+  const namespace = definition?.resources.find((resource) => resource.id === "namespace");
+
+  assert.ok(cluster);
+  assert.equal(cluster.presentationArea, undefined);
+  assert.equal(cluster.size, undefined);
+  assert.equal(cluster.parentResourceId, "vpc");
+  assert.ok(clusterSecurityGroup);
+  assert.ok(workloadGroup);
+  assert.equal(workloadGroup.catalogItemId, "design-group");
+  assert.equal(workloadGroup.parentNodeId, "vpc");
+  assert.equal(nodeGroup?.parentResourceId, "workloads-group");
+  assert.equal(namespace?.parentResourceId, "workloads-group");
+});
+
+test("serverless templates keep their authored composition close to a 16:9 card", () => {
+  for (const templateId of ["minimal-serverless-api", "full-serverless-web-app"] as const) {
+    const definition = templateDefinitions.find((candidate) => candidate.id === templateId);
+
+    assert.ok(definition, templateId);
+    const bounds = [...definition.resources, ...definition.presentationNodes].map((node) => ({
+      left: node.position.x,
+      top: node.position.y,
+      right: node.position.x + (node.size?.width ?? 48),
+      bottom: node.position.y + (node.size?.height ?? 48)
+    }));
+    const width = Math.max(...bounds.map((bound) => bound.right)) - Math.min(...bounds.map((bound) => bound.left));
+    const height = Math.max(...bounds.map((bound) => bound.bottom)) - Math.min(...bounds.map((bound) => bound.top));
+    const aspectRatio = width / height;
+
+    assert.ok(aspectRatio >= 1.75, `${templateId} is too tall: ${aspectRatio}`);
+    assert.ok(aspectRatio <= 2.3, `${templateId} is too wide: ${aspectRatio}`);
+  }
+});
+
 test("Lambda templates use an inline archive and least-privilege table policies", () => {
   for (const templateId of ["minimal-serverless-api", "full-serverless-web-app"] as const) {
     const definition = templateDefinitions.find((candidate) => candidate.id === templateId);

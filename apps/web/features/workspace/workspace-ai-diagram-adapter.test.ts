@@ -9,7 +9,7 @@ import {
   getDiagramJsonForArchitectureDraft,
   normalizeDiagramJsonConventions
 } from "./workspace-ai-diagram-adapter";
-import { isAreaNode } from "../diagram-editor/area-nodes";
+import { isAreaNode, isSecurityGroupScopeNode } from "../diagram-editor/area-nodes";
 
 function makeConventionResourceNode(
   id: string,
@@ -32,6 +32,42 @@ function makeConventionResourceNode(
     size: resourceType === "aws_vpc" ? { width: 240, height: 160 } : { width: 48, height: 48 },
     type: resourceType,
     zIndex: resourceType === "aws_vpc" ? 0 : 1
+  };
+}
+
+// SG scope fixture에 실제 containment parent와 authored geometry를 함께 둡니다.
+function makeScopedNode(
+  id: string,
+  resourceType: string,
+  resourceName: string,
+  parentAreaNodeId: string,
+  position: DiagramNode["position"]
+): DiagramNode {
+  return {
+    ...makeConventionResourceNode(id, resourceType, resourceName),
+    metadata: { parentAreaNodeId },
+    position,
+    size: { width: 180, height: 120 }
+  };
+}
+
+// 다양한 Terraform SG attachment path를 가진 일반 Resource fixture를 만듭니다.
+function makeReferencedNode(
+  id: string,
+  resourceType: string,
+  resourceName: string,
+  position: DiagramNode["position"],
+  values: NonNullable<DiagramNode["parameters"]>["values"]
+): DiagramNode {
+  const node = makeConventionResourceNode(id, resourceType, resourceName);
+
+  return {
+    ...node,
+    parameters: {
+      ...node.parameters!,
+      values
+    },
+    position
   };
 }
 
@@ -132,6 +168,103 @@ test("normalizeDiagramJsonConventions preserves saved names and Terraform refere
   assert.doesNotMatch(vpcName ?? "", /node|stable|id/);
   assert.doesNotMatch(renamedAmiAfter?.parameters?.resourceName ?? "", /node|stable|id/);
   assert.doesNotMatch(ec2After?.parameters?.resourceName ?? "", /node|stable|id/);
+});
+
+test("normalizeDiagramJsonConventions fits SG scopes around ALB, ECS, and EKS attachment paths", () => {
+  const vpc = {
+    ...makeConventionResourceNode("vpc", "aws_vpc", "vpc"),
+    position: { x: 0, y: 0 },
+    size: { width: 2_000, height: 1_000 }
+  };
+  const scopeFixtures = [
+    {
+      scope: makeScopedNode("alb-sg", "aws_security_group", "alb_sg", vpc.id, { x: 120, y: 120 }),
+      target: makeReferencedNode("load-balancer", "aws_lb", "load_balancer", { x: 320, y: 160 }, {
+        securityGroups: ["aws_security_group.alb_sg.id"]
+      })
+    },
+    {
+      scope: makeScopedNode("task-sg", "aws_security_group", "task_sg", vpc.id, { x: 680, y: 120 }),
+      target: makeReferencedNode("ecs-service", "aws_ecs_service", "ecs_service", { x: 840, y: 160 }, {
+        networkConfiguration: { securityGroups: ["aws_security_group.task_sg.id"] }
+      })
+    },
+    {
+      scope: makeScopedNode("cluster-sg", "aws_security_group", "cluster_sg", vpc.id, { x: 1_200, y: 120 }),
+      target: makeReferencedNode("eks-cluster", "aws_eks_cluster", "eks_cluster", { x: 1_360, y: 160 }, {
+        vpcConfig: { securityGroupIds: ["aws_security_group.cluster_sg.id"] }
+      })
+    }
+  ];
+  const normalized = normalizeDiagramJsonConventions({
+    nodes: [vpc, ...scopeFixtures.flatMap(({ scope, target }) => [scope, target])],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  });
+  const nodeById = new Map(normalized.nodes.map((node) => [node.id, node]));
+
+  for (const { scope, target } of scopeFixtures) {
+    assertContainsNode(nodeById.get(scope.id), nodeById.get(target.id));
+  }
+});
+
+test("normalizeDiagramJsonConventions repairs visual-only parents and keeps SG relationship edges", () => {
+  const vpc = {
+    ...makeConventionResourceNode("vpc", "aws_vpc", "vpc"),
+    position: { x: 0, y: 0 },
+    size: { width: 800, height: 600 }
+  };
+  const subnet = {
+    ...makeConventionResourceNode("subnet", "aws_subnet", "subnet"),
+    metadata: { parentAreaNodeId: vpc.id },
+    position: { x: 80, y: 80 },
+    size: { width: 600, height: 400 }
+  };
+  const securityGroup = makeScopedNode(
+    "security-group",
+    "aws_security_group",
+    "security_group",
+    vpc.id,
+    { x: 160, y: 160 }
+  );
+  const autoscalingGroup = makeScopedNode(
+    "asg",
+    "aws_autoscaling_group",
+    "asg",
+    subnet.id,
+    { x: 240, y: 240 }
+  );
+  const instance = {
+    ...makeReferencedNode("instance", "aws_instance", "instance", { x: 320, y: 320 }, {}),
+    metadata: { parentAreaNodeId: securityGroup.id }
+  };
+  const launchTemplate = {
+    ...makeReferencedNode("launch-template", "aws_launch_template", "launch_template", { x: 400, y: 320 }, {}),
+    metadata: { parentAreaNodeId: autoscalingGroup.id }
+  };
+  const normalized = normalizeDiagramJsonConventions({
+    nodes: [vpc, subnet, securityGroup, autoscalingGroup, instance, launchTemplate],
+    edges: [
+      {
+        id: "vpc-subnet",
+        label: "contains",
+        sourceNodeId: vpc.id,
+        targetNodeId: subnet.id
+      },
+      {
+        id: "sg-instance",
+        label: "contains",
+        sourceNodeId: securityGroup.id,
+        targetNodeId: instance.id
+      }
+    ],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  });
+  const nodeById = new Map(normalized.nodes.map((node) => [node.id, node]));
+
+  assert.equal(nodeById.get(instance.id)?.metadata?.parentAreaNodeId, vpc.id);
+  assert.equal(nodeById.get(launchTemplate.id)?.metadata?.parentAreaNodeId, subnet.id);
+  assert.deepEqual(normalized.edges.map((edge) => edge.id), ["sg-instance"]);
 });
 
 test("convertArchitectureJsonToDiagramJson creates board nodes and hides containment arrows from an Architecture Draft", () => {
@@ -1082,8 +1215,8 @@ test("convertArchitectureJsonToDiagramJson marks VPC and Subnet containment for 
       { id: "server-storage-az", parentAreaNodeId: "vpc-main" },
       { id: "vpc-main", parentAreaNodeId: "server-storage-region" },
       { id: "subnet-app", parentAreaNodeId: "server-storage-az" },
-      { id: "sg-app", parentAreaNodeId: "subnet-app" },
-      { id: "ec2-api", parentAreaNodeId: "sg-app" }
+      { id: "sg-app", parentAreaNodeId: "vpc-main" },
+      { id: "ec2-api", parentAreaNodeId: "subnet-app" }
     ]
   );
 
@@ -1092,9 +1225,16 @@ test("convertArchitectureJsonToDiagramJson marks VPC and Subnet containment for 
   assertContainsNode(nodeById.get("vpc-main"), nodeById.get("subnet-app"));
   assertContainsNode(nodeById.get("vpc-main"), nodeById.get("server-storage-az"));
   assertContainsNode(nodeById.get("server-storage-az"), nodeById.get("subnet-app"));
-  assertContainsNode(nodeById.get("subnet-app"), nodeById.get("sg-app"));
+  assertContainsNode(nodeById.get("vpc-main"), nodeById.get("sg-app"));
   assertContainsNode(nodeById.get("sg-app"), nodeById.get("ec2-api"));
-  assert.deepEqual(diagramJson.edges, []);
+  assert.deepEqual(
+    diagramJson.edges.map((edge) => ({
+      label: edge.label,
+      sourceNodeId: edge.sourceNodeId,
+      targetNodeId: edge.targetNodeId
+    })),
+    [{ label: "allows traffic", sourceNodeId: "sg-app", targetNodeId: "ec2-api" }]
+  );
 });
 
 test("convertArchitectureJsonToDiagramJson maps server and storage draft resources to Terraform nodes", () => {
@@ -1793,13 +1933,13 @@ test("convertArchitectureJsonToDiagramJson lays out server and storage draft as 
       {
         id: "security-group",
         kind: "resource",
-        parentAreaNodeId: "subnet",
+        parentAreaNodeId: "vpc",
         type: "aws_security_group"
       },
       {
         id: "ec2-instance",
         kind: "resource",
-        parentAreaNodeId: "security-group",
+        parentAreaNodeId: "subnet",
         type: "aws_instance"
       },
       {
@@ -1846,7 +1986,7 @@ test("convertArchitectureJsonToDiagramJson lays out server and storage draft as 
   assertContainsNode(regionNode, vpcNode);
   assertContainsNode(vpcNode, azNode);
   assertContainsNode(azNode, subnetNode);
-  assertContainsNode(subnetNode, securityGroupNode);
+  assertContainsNode(vpcNode, securityGroupNode);
   assertContainsNode(securityGroupNode, instanceNode);
   assert.deepEqual(regionNode?.parameters?.values, {
     awsRegion: "ap-northeast-2"
@@ -1960,9 +2100,9 @@ test("convertArchitectureJsonToDiagramJson lays out generated EC2 drafts inside 
       { id: "server-storage-az", parentAreaNodeId: "vpc-main", type: "aws_availability_zone" },
       { id: "vpc-main", parentAreaNodeId: "server-storage-region", type: "aws_vpc" },
       { id: "public-subnet", parentAreaNodeId: "server-storage-az", type: "aws_subnet" },
-      { id: "app-security-group", parentAreaNodeId: "public-subnet", type: "aws_security_group" },
+      { id: "app-security-group", parentAreaNodeId: "vpc-main", type: "aws_security_group" },
       { id: "internet-gateway", parentAreaNodeId: "vpc-main", type: "aws_internet_gateway" },
-      { id: "app-server", parentAreaNodeId: "app-security-group", type: "aws_instance" }
+      { id: "app-server", parentAreaNodeId: "public-subnet", type: "aws_instance" }
     ]
   );
 
@@ -1971,7 +2111,7 @@ test("convertArchitectureJsonToDiagramJson lays out generated EC2 drafts inside 
   assertContainsNode(nodeById.get("server-storage-region"), nodeById.get("vpc-main"));
   assertContainsNode(nodeById.get("vpc-main"), nodeById.get("server-storage-az"));
   assertContainsNode(nodeById.get("server-storage-az"), nodeById.get("public-subnet"));
-  assertContainsNode(nodeById.get("public-subnet"), nodeById.get("app-security-group"));
+  assertContainsNode(nodeById.get("vpc-main"), nodeById.get("app-security-group"));
   assertContainsNode(nodeById.get("vpc-main"), nodeById.get("internet-gateway"));
   assertContainsNode(nodeById.get("app-security-group"), nodeById.get("app-server"));
 });
@@ -2351,6 +2491,10 @@ function assertNoSiblingNodeOverlap(diagramJson: DiagramJson): void {
         continue;
       }
 
+      if (isSecurityGroupScopeNode(left) || isSecurityGroupScopeNode(right)) {
+        continue;
+      }
+
       if (left.metadata?.parentAreaNodeId !== right.metadata?.parentAreaNodeId) {
         continue;
       }
@@ -2398,7 +2542,7 @@ function assertNoNonAncestorAreaResourceOverlap(diagramJson: DiagramJson): void 
   const nodeById = new Map(diagramJson.nodes.map((node) => [node.id, node]));
 
   for (const area of diagramJson.nodes) {
-    if (!isAreaNode(area)) {
+    if (!isAreaNode(area) || isSecurityGroupScopeNode(area)) {
       continue;
     }
 

@@ -9,7 +9,6 @@ const size = RESOURCE_NODE_DEFAULT_SIZE;
 const vpcAreaSize = { width: 240, height: 160 };
 const subnetAreaSize = { width: 180, height: 120 };
 const securityGroupAreaSize = subnetAreaSize;
-const autoscalingGroupAreaSize = { width: 200, height: 130 };
 
 const groupIconPath = "/Architecture-Group-Icons_07312025";
 const serviceIconPath = "/Architecture-Service-Icons_07312025";
@@ -525,7 +524,7 @@ const terraformResourcePresentations = [
     category: "Compute",
     iconUrl: `${serviceIconPath}/Arch_Compute/64/Arch_Amazon-EC2-Auto-Scaling_64.svg`,
     label: "Auto Scaling Group",
-    size: autoscalingGroupAreaSize
+    size
   },
   {
     definitionId: "aws-autoscaling-policy",

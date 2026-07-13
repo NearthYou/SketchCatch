@@ -123,6 +123,7 @@ import type { NodeResizeUpdate } from "./node-resize";
 import { scalePaletteAreaNodeSize } from "./palette-area-node-size";
 import { normalizeDiagramResourceNodeGeometry } from "./resource-node-geometry";
 import { getDiagramVisualBounds } from "./resource-node-visual-footprint";
+import { refitSecurityGroupScopesForTargetChanges } from "./security-group-scope";
 import {
   canStartAreaBlankDrag,
   getSingleSelectedEdgeForToolbar,
@@ -803,6 +804,7 @@ function DiagramEditorInner({
     [commitDiagramUpdate]
   );
 
+  /** attachment parameter 변경 시 양쪽 SG visual scope까지 같은 history 항목으로 갱신합니다. */
   const updateNodeParameters = useCallback<DiagramEditorPanelContext["updateNodeParameters"]>(
     (nodeId, update) => {
       commitDiagramUpdate((currentDiagram) => {
@@ -812,7 +814,11 @@ function DiagramEditorInner({
 
         return {
           ...currentDiagram,
-          nodes: nextNodes
+          nodes: refitSecurityGroupScopesForTargetChanges({
+            changedNodeIds: new Set([nodeId]),
+            currentNodes: nextNodes,
+            previousNodes: currentDiagram.nodes
+          })
         };
       });
     },
@@ -821,7 +827,7 @@ function DiagramEditorInner({
 
   const applyDiagramJson = useCallback<DiagramEditorPanelContext["applyDiagramJson"]>(
     (nextDiagram) => {
-      commitDiagramUpdate(() => cloneDiagram(nextDiagram));
+      commitDiagramUpdate(() => normalizeDiagramResourceNodeGeometry(cloneDiagram(nextDiagram)));
       setPreviewDiagram(null);
       setInspectedNodeId(null);
       setSelectedNodeIds([]);
@@ -1028,6 +1034,7 @@ function DiagramEditorInner({
     [applyLiveDiagramUpdate]
   );
 
+  /** resize 확정 시 parent와 연결된 SG visual scope를 같은 history 항목으로 정리합니다. */
   const handleResizeEnd = useCallback(
     (nodeId: string, update: NodeResizeUpdate) => {
       const before = resizeSnapshotRef.current;
@@ -1039,9 +1046,17 @@ function DiagramEditorInner({
           size: update.size
         }))
       };
+      const nodesWithClearedParents = clearOutOfBoundsAreaParentAssignments(
+        resizedDiagram.nodes,
+        new Set([nodeId])
+      );
       const after = {
         ...resizedDiagram,
-        nodes: clearOutOfBoundsAreaParentAssignments(resizedDiagram.nodes, new Set([nodeId]))
+        nodes: refitSecurityGroupScopesForTargetChanges({
+          changedNodeIds: new Set([nodeId]),
+          currentNodes: nodesWithClearedParents,
+          previousNodes: before?.nodes ?? resizedDiagram.nodes
+        })
       };
 
       replaceDiagram(after);
@@ -1942,6 +1957,7 @@ function DiagramEditorInner({
     [focusEditorShell]
   );
 
+  /** target 삭제 뒤 남은 attachment 기준으로 SG visual scope를 축소하거나 다시 맞춥니다. */
   const deleteSelection = useCallback(() => {
     cancelSnapAnimation();
     const nodeIds = selectedNodeIds;
@@ -1957,10 +1973,18 @@ function DiagramEditorInner({
         removeNodesFromDiagram(currentDiagram, nodeIds),
         edgeIds
       );
+      const nodesWithClearedParents = clearDeletedAreaParentAssignments(
+        diagramWithoutSelection.nodes,
+        deletedNodeIds
+      );
 
       return {
         ...diagramWithoutSelection,
-        nodes: clearDeletedAreaParentAssignments(diagramWithoutSelection.nodes, deletedNodeIds)
+        nodes: refitSecurityGroupScopesForTargetChanges({
+          changedNodeIds: deletedNodeIds,
+          currentNodes: nodesWithClearedParents,
+          previousNodes: currentDiagram.nodes
+        })
       };
     });
     setSelectedNodeIds([]);
@@ -2714,6 +2738,7 @@ function DiagramEditorInner({
           ) : null}
 
           <ReactFlow<DiagramFlowNode, DiagramFlowEdge>
+            data-architecture-board-capture-source="true"
             connectOnClick={true}
             connectionMode={ConnectionMode.Loose}
             connectionRadius={28 * boardZoomPresentationScale.controlScale}

@@ -4,6 +4,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const panelSource = readLocalFile("index.tsx");
+const editorStyles = readLocalFile("../diagram-editor/diagram-editor.module.css");
 
 test("resource settings logic keeps provider, resource, template, and module contracts", () => {
   assert.match(panelSource, /Resources/);
@@ -28,12 +29,24 @@ test("workspace Template panel renders the complete catalog inside its scrollabl
 test("workspace Template cards apply their own template while the library control opens the modal", () => {
   assert.match(
     panelSource,
-    /templateCatalogCardWide" onClick=\{\(\) => setModalOpen\(true\)\}/
+    /templateCatalogCard templateLibraryOpenCard"[\s\S]*onClick=\{\(\) => setModalOpen\(true\)\}/
   );
   assert.match(
     panelSource,
-    /templateCatalogCard" key=\{template\.id\} onClick=\{\(\) => onTemplateApply\?\.\(template\)\}/
+    /templateCatalogCard templateApplyCard"[\s\S]*key=\{template\.id\}[\s\S]*onClick=\{\(\) => onTemplateApply\?\.\(template\)\}/
   );
+  assert.match(panelSource, /aria-label="Template library 큰 미리보기 열기"/);
+  assert.match(panelSource, /aria-label=\{`\$\{template\.title\} Template 적용`\}/);
+});
+
+test("workspace Template catalog owns a stable scroll viewport with all rows top-aligned", () => {
+  const catalogStyle = readCssRule(editorStyles, ".leftRail :global(.templateCatalogPanel)");
+
+  assert.match(catalogStyle, /align-content:\s*start/);
+  assert.match(catalogStyle, /grid-auto-rows:\s*max-content/);
+  assert.match(catalogStyle, /overflow-y:\s*auto/);
+  assert.match(catalogStyle, /overscroll-behavior:\s*contain/);
+  assert.match(catalogStyle, /scrollbar-gutter:\s*stable/);
 });
 
 test("resource catalog keeps category grouping and flat search results", () => {
@@ -47,4 +60,15 @@ test("resource catalog keeps category grouping and flat search results", () => {
 
 function readLocalFile(fileName: string): string {
   return readFileSync(fileURLToPath(new URL(fileName, import.meta.url)), "utf8");
+}
+
+function readCssRule(source: string, selector: string): string {
+  const selectorIndex = source.indexOf(selector);
+
+  assert.ok(selectorIndex >= 0, `Missing CSS selector: ${selector}`);
+  const ruleStart = source.indexOf("{", selectorIndex);
+  const ruleEnd = source.indexOf("}", ruleStart);
+
+  assert.ok(ruleStart >= 0 && ruleEnd > ruleStart, `Invalid CSS rule: ${selector}`);
+  return source.slice(ruleStart, ruleEnd + 1);
 }

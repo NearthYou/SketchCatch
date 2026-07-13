@@ -29,7 +29,13 @@ import type {
 
 import { getBoardNodeStateBadge, getBoardZoomLevel } from "./board-visual-state";
 import { BORDER_COLOR_SWATCHES, NODE_COLOR_SWATCHES } from "./constants";
-import { getAreaNodeIconUrl, getAreaNodeLabel, getAreaNodeMetaLabel, isAreaNode } from "./area-nodes";
+import {
+  getAreaNodeIconUrl,
+  getAreaNodeLabel,
+  getAreaNodeMetaLabel,
+  isAreaNode,
+  isSecurityGroupScopeNode
+} from "./area-nodes";
 import { getNodeResizeBounds } from "./node-resize-bounds";
 import { calculateNodeResize } from "./node-resize";
 import type { NodeResizeHandlePosition, NodeResizeUpdate } from "./node-resize";
@@ -115,6 +121,7 @@ const RESIZE_HANDLES: readonly {
   }
 ];
 
+/** 실제 containment와 보안 범위를 서로 다른 Board 표면으로 렌더링합니다. */
 export const DiagramNodeView = memo(function DiagramNodeView(
   { data, id, isConnectable, selected }: NodeProps<DiagramFlowNode>
 ) {
@@ -127,6 +134,7 @@ export const DiagramNodeView = memo(function DiagramNodeView(
   const canResize = !node.locked && !data.isPreview && !data.isConnectionActive;
   const isResourceNode = node.kind === "resource";
   const isArea = isAreaNode(node);
+  const isSecurityGroupScope = isSecurityGroupScopeNode(node);
   const usesIconTileLayout = isResourceNode || (node.kind === "design" && !isArea && Boolean(node.iconUrl));
   const canChangeBorderColor = canChangeNodeBorderColor(node);
   const borderColor = getNodeDisplayBorderColor(node);
@@ -292,6 +300,7 @@ export const DiagramNodeView = memo(function DiagramNodeView(
           data.previewState === "deleted" ? styles.nodeShellPatchDeleted : undefined,
           data.isAreaDropTarget ? styles.nodeShellAreaDropTarget : undefined,
           isArea ? styles.nodeShellArea : undefined,
+          isSecurityGroupScope ? styles.nodeShellSecurityGroupScope : undefined,
           areaDepthClass,
           !isArea ? (usesIconTileLayout ? styles.nodeShellResource : styles.nodeShellDesign) : undefined,
           zoomLevel === "far" ? styles.nodeShellZoomFar : undefined,

@@ -534,6 +534,10 @@ test("diagram editor normalizes legacy Resource Object geometry at every diagram
     diagramEditorSource,
     /setPreviewDiagramState\(\s*nextPreviewDiagram === null\s*\? null\s*:\s*normalizeDiagramResourceNodeGeometry\(nextPreviewDiagram\)\s*\)/s
   );
+  assert.match(
+    diagramEditorSource,
+    /commitDiagramUpdate\(\(\) =>\s*normalizeDiagramResourceNodeGeometry\(cloneDiagram\(nextDiagram\)\)\s*\)/s
+  );
 });
 
 test("diagram editor gives exact fixture zoom priority over initial fit-view", () => {
@@ -597,7 +601,36 @@ test("parameter updates do not create hardcoded reference edges", () => {
     /const nextNodes = updateNodeById\(currentDiagram\.nodes, nodeId, \(node\) =>\s*applyNodeParametersUpdateWithAutoTagSync\(node, update\)\s*\);/s
   );
   assert.doesNotMatch(diagramEditorSource, /syncParameterReferenceEdges/);
-  assert.match(diagramEditorSource, /nodes: nextNodes/);
+  assert.match(
+    diagramEditorSource,
+    /nodes: refitSecurityGroupScopesForTargetChanges\(\{\s*changedNodeIds: new Set\(\[nodeId\]\),\s*currentNodes: nextNodes,\s*previousNodes: currentDiagram\.nodes\s*\}\)/s
+  );
+});
+
+test("deleting a Resource refits the Security Group scopes that referenced it", () => {
+  const deleteSelectionSource = getSourceBlock(
+    diagramEditorSource,
+    "const deleteSelection = useCallback(",
+    "const copySelectedNodes = useCallback("
+  );
+
+  assert.match(
+    deleteSelectionSource,
+    /refitSecurityGroupScopesForTargetChanges\(\{\s*changedNodeIds: deletedNodeIds,\s*currentNodes: nodesWithClearedParents,\s*previousNodes: currentDiagram\.nodes\s*\}\)/s
+  );
+});
+
+test("finishing a Resource resize refits its referenced Security Group scope", () => {
+  const handleResizeEndSource = getSourceBlock(
+    diagramEditorSource,
+    "const handleResizeEnd = useCallback(",
+    "const flowNodeHandlers = useMemo<DiagramFlowNodeHandlers>("
+  );
+
+  assert.match(
+    handleResizeEndSource,
+    /refitSecurityGroupScopesForTargetChanges\(\{\s*changedNodeIds: new Set\(\[nodeId\]\),\s*currentNodes: nodesWithClearedParents,\s*previousNodes: before\?\.nodes \?\? resizedDiagram\.nodes\s*\}\)/s
+  );
 });
 
 test("Area auto expansion is a persistent pressed toolbar preference after canvas pan", () => {

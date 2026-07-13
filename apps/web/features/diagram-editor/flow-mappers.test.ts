@@ -313,7 +313,7 @@ test("toFlowNodes marks area nodes for click-through body hit testing", () => {
 
   assert.equal(flowNodes.find((node) => node.id === "vpc-1")?.className, "diagramAreaFlowNode");
   assert.equal(flowNodes.find((node) => node.id === "security-group-1")?.className, "diagramAreaFlowNode");
-  assert.equal(flowNodes.find((node) => node.id === "asg-1")?.className, "diagramAreaFlowNode");
+  assert.equal(flowNodes.find((node) => node.id === "asg-1")?.className, undefined);
   assert.equal(flowNodes.find((node) => node.id === "instance-1")?.className, undefined);
 });
 
@@ -418,7 +418,7 @@ test("toFlowNodes exposes the visual depth of nested Area surfaces", () => {
   assert.equal(flowNodes.find((node) => node.id === "vpc-1")?.data.areaDepth, 2);
 });
 
-test("toFlowEdges stacks ASG resource connections above containing area backgrounds", () => {
+test("toFlowEdges keeps ASG resource connections above backgrounds and behind resource tiles", () => {
   const region = makeDesignAreaNode({ id: "region-1", type: "sketchcatch_region" });
   const instance = makeNode({
     id: "instance-1",
@@ -438,7 +438,7 @@ test("toFlowEdges stacks ASG resource connections above containing area backgrou
   const edgeZIndex = getFlowEdgeZIndex(flowEdges, "instance-1-to-asg-1");
 
   assert.ok(regionZIndex < edgeZIndex);
-  assert.ok(autoscalingGroupZIndex < edgeZIndex);
+  assert.ok(edgeZIndex < autoscalingGroupZIndex);
 });
 
 test("toFlowEdges stacks selected area endpoint edges above unselected area endpoint edges", () => {
@@ -696,19 +696,25 @@ test("toFlowEdges renders configuration dependency endpoints as thin solid lines
   assert.equal(flowEdges[0]?.style?.strokeWidth, 1.25);
 });
 
-test("toFlowEdges hides containment labels from rendered edges", () => {
+test("toFlowEdges hides containment labels only when a real containment Area is the source", () => {
+  const vpc = makeNode({ id: "vpc-1", resourceType: "aws_vpc" });
+  const subnet = makeNode({ id: "subnet-1", parentAreaNodeId: vpc.id, resourceType: "aws_subnet" });
+  const instance = makeNode({ id: "instance-1", parentAreaNodeId: subnet.id, resourceType: "aws_instance" });
+  const securityGroup = makeNode({ id: "security-group-1", parentAreaNodeId: vpc.id, resourceType: "aws_security_group" });
   const flowEdges = toFlowEdges(
     [
       { ...makeEdge("vpc-1", "subnet-1"), id: "contains", label: "contains" },
       { ...makeEdge("subnet-1", "instance-1"), id: "hosts", label: "hosts" },
+      { ...makeEdge("security-group-1", "instance-1"), id: "sg-contains", label: "contains" },
       { ...makeEdge("client-1", "api-1"), id: "https", label: "HTTPS" }
     ],
-    []
+    [],
+    [vpc, subnet, instance, securityGroup]
   );
 
   assert.deepEqual(
     flowEdges.map((edge) => edge.id),
-    ["https"]
+    ["sg-contains", "https"]
   );
 });
 

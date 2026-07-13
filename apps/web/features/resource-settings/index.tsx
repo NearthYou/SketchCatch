@@ -13,6 +13,7 @@ import {
   Database,
   Grid2X2,
   Archive,
+  Maximize2,
   Monitor,
   Network,
   PanelLeftClose,
@@ -342,6 +343,7 @@ export function ResourceSettingsPanel({
   );
 }
 
+// 왼쪽 목록의 즉시 적용과 큰 비교 화면 열기를 서로 다른 동작으로 제공합니다.
 function TemplatesPanel({
   onTemplateApply
 }: {
@@ -353,14 +355,30 @@ function TemplatesPanel({
   return (
     <>
       <div className="templateCatalogPanel">
-        <button className="templateCatalogCard templateCatalogCardWide" onClick={() => setModalOpen(true)} type="button">
-          <span>Template library</span>
-          <strong>큰 모달로 열기</strong>
+        <button
+          aria-label="Template library 큰 미리보기 열기"
+          className="templateCatalogCard templateLibraryOpenCard"
+          onClick={() => setModalOpen(true)}
+          type="button"
+        >
+          <span className="templateLibraryOpenLabel">
+            <Maximize2 aria-hidden="true" size={14} />
+            Template preview
+          </span>
+          <strong>전체 템플릿을 큰 화면으로 비교</strong>
+          <small>이 버튼은 Board에 적용하지 않습니다.</small>
         </button>
         {templates.map((template) => (
-          <button className="templateCatalogCard" key={template.id} onClick={() => onTemplateApply?.(template)} type="button">
+          <button
+            aria-label={`${template.title} Template 적용`}
+            className="templateCatalogCard templateApplyCard"
+            key={template.id}
+            onClick={() => onTemplateApply?.(template)}
+            type="button"
+          >
             <span>{template.tags.slice(0, 2).join(" · ")}</span>
             <strong>{template.title}</strong>
+            <small>현재 Board에 바로 적용</small>
           </button>
         ))}
       </div>
