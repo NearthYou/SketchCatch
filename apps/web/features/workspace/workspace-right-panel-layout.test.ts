@@ -1014,7 +1014,8 @@ test("deployment screen separates Direct Deployment and CI/CD into focused scree
   assert.match(deploymentShellSource, />\s*CI\/CD\s*</);
   assert.match(deploymentShellSource, /aria-pressed=\{activeScreen === "deployment"\}/);
   assert.match(deploymentShellSource, /aria-pressed=\{activeScreen === "cicd"\}/);
-  assert.match(directDeploymentSource, /Direct Deployment 기록/);
+  assert.match(directDeploymentSource, /Deployment History/);
+  assert.match(directDeploymentSource, /Application releases/);
   assert.match(cicdConsoleSource, /"overview" \| "activity" \| "logs" \| "settings"/);
   assert.match(navigationRule, /\bborder:\s*1px solid var\(--workspace-line,/);
   assert.match(disclosureRule, /\bborder:\s*1px solid #dce3ee;/);

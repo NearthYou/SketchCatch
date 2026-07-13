@@ -246,6 +246,13 @@
       "when": 1783987200002,
       "tag": "0034_live_observation_manifest_invariants",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1784073600000,
+      "tag": "0035_project_release_ledger",
+      "breakpoints": true
     }
   ]
 }

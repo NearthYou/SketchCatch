@@ -4,6 +4,8 @@ import type {
   AiPreDeploymentCheckRequest,
   AiPreDeploymentDeepScanResponse,
   AiSafetyExplanation,
+  ApplicationRelease,
+  ApplicationReleaseListResponse,
   AiTerraformErrorExplanationResult,
   AiTerraformPreviewExplanationResult,
   AiTerraformStage,
@@ -79,6 +81,9 @@ import type {
   ProjectDeletePreviewResponse,
   ProjectListResponse,
   ProjectResponse,
+  ProjectDeploymentTarget,
+  ProjectDeploymentTargetResponse,
+  PutProjectDeploymentTargetRequest,
   RecommendRepositoryTemplateRequest,
   RecommendRepositoryTemplateResponse,
   RecentSuccessfulDeploymentProject,
@@ -148,6 +153,36 @@ export async function listProjects(): Promise<Project[]> {
 export async function getProject(projectId: string): Promise<Project> {
   const response = await getProjectDetails(projectId);
   return response.project;
+}
+
+export async function getProjectDeploymentTarget(
+  projectId: string
+): Promise<ProjectDeploymentTarget | null> {
+  const response = await apiFetch<ProjectDeploymentTargetResponse>(
+    `/projects/${encodeURIComponent(projectId)}/deployment-target`,
+    { auth: true }
+  );
+  return response.target;
+}
+
+export async function putProjectDeploymentTarget(
+  projectId: string,
+  target: PutProjectDeploymentTargetRequest
+): Promise<ProjectDeploymentTarget> {
+  const response = await apiFetch<ProjectDeploymentTargetResponse>(
+    `/projects/${encodeURIComponent(projectId)}/deployment-target`,
+    { auth: true, method: "PUT", body: target }
+  );
+  if (!response.target) throw new Error("Deployment target response is empty.");
+  return response.target;
+}
+
+export async function listApplicationReleases(projectId: string): Promise<ApplicationRelease[]> {
+  const response = await apiFetch<ApplicationReleaseListResponse>(
+    `/projects/${encodeURIComponent(projectId)}/releases`,
+    { auth: true }
+  );
+  return response.releases;
 }
 
 export async function getProjectDeletePreview(
@@ -761,7 +796,10 @@ export async function createDeployment({
   architectureId,
   terraformArtifactId,
   awsConnectionId,
-  liveProfile
+  liveProfile,
+  scope,
+  targetKind,
+  source
 }: {
   projectId: string;
 } & CreateDeploymentRequest): Promise<Deployment> {
@@ -774,7 +812,10 @@ export async function createDeployment({
         architectureId,
         terraformArtifactId,
         awsConnectionId,
-        ...(liveProfile !== undefined ? { liveProfile } : {})
+        ...(liveProfile !== undefined ? { liveProfile } : {}),
+        ...(scope !== undefined ? { scope } : {}),
+        ...(targetKind !== undefined ? { targetKind } : {}),
+        ...(source !== undefined ? { source } : {})
       }
     }
   );

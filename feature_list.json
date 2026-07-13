@@ -248,7 +248,7 @@
       "area": "live-observation",
       "title": "Server-verified Live Observation v2",
       "user_visible_behavior": "검증된 Deployment를 선택해 15분 관측 세션을 시작하고, 실제 요청·CloudWatch·capacity 증거와 scale-out 진행을 안전한 시네마틱 화면에서 확인한다.",
-      "status": "in_progress",
+      "status": "blocked",
       "verification": [
         "v2 manifest, capability, Store, collector, IAM, CloudFront, AWS adapter 계약이 provider-neutral core seam 뒤에서 연결된다.",
         "기능 flag는 Redis/Chromium/approved AWS sandbox gate가 모두 통과할 때까지 false다.",
@@ -257,7 +257,36 @@
         "desktop/mobile/reduced-motion 브라우저 흐름이 실제 snapshot 값과 lifecycle cleanup을 검증한다.",
         "실제 AWS apply/destroy는 별도 명시 승인이 있을 때만 수행한다."
       ],
-      "notes": "Task 1~4의 manifest, capability, Store, AWS observation adapter, provider-neutral snapshot, runtime ownership 검증은 완료됐다. Task 5 자동 검증도 완료했고 legacy demo route, simulated provider, presenter traffic boost 계약을 제거했다. API 전체 테스트, Web 1,069개 테스트, Redis 29개 통합 테스트와 harness/lint/typecheck/build가 통과했다. in-app browser가 localhost를 차단하고 현재 AWS STS credential이 없어 credentialed Chromium 및 approved AWS sandbox 실증 전까지 in_progress와 feature flag false를 유지한다."
+      "notes": "Implementation and automated verification merged in PR #382. External acceptance is deferred to issue #378 because the in-app browser blocks localhost and the current environment has no reachable AWS STS credentials. The feature flag remains false until credentialed Chromium and an approved AWS sandbox provide evidence."
+    },
+    {
+      "id": "PROJECT-RELEASE-LEDGER-001",
+      "priority": 1,
+      "area": "deployment-domain",
+      "title": "Project deployment target and shared release ledger",
+      "user_visible_behavior": "개발자는 프로젝트의 단일 배포 타깃을 설정하고 Direct/GitOps 릴리즈의 version, SHA, digest, provider revision, Output URL을 한 이력에서 확인한다.",
+      "status": "passing",
+      "verification": [
+        "프로젝트당 배포 타깃 row가 하나만 존재하고 소유하지 않은 connection 변경을 차단한다.",
+        "Direct와 GitOps 릴리즈가 같은 API와 History UI 계약을 사용한다.",
+        "SemVer tag, manifest version, SHA fallback과 artifact digest가 결정적으로 계산된다.",
+        "provider revision drift와 legacy Deployment backfill 호환이 테스트된다."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-14",
+        "commands": [
+          "pnpm --filter @sketchcatch/api exec tsx --test src/deployments/deployment-service.test.ts src/routes/deployments.test.ts src/releases/application-release-identity.test.ts src/releases/project-release-ledger-service.test.ts src/routes/project-release-ledger.test.ts src/db/project-release-ledger-schema.test.ts",
+          "pnpm --filter @sketchcatch/web test",
+          "node scripts/check-db-migration-compatibility.mjs",
+          "PostgreSQL 16 temporary container: apply apps/api/drizzle/0000..0035 with psql ON_ERROR_STOP=1",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build",
+          "pnpm harness:check"
+        ],
+        "notes": "Project target, shared release ledger, authorization, structured build evidence, migration/backfill, History UI, and legacy Deployment adapters passed. API full suite has three unrelated Windows symlink fixture setup failures (EPERM); all #371-focused tests pass."
+      },
+      "notes": "Implemented in issue #371 on branch feature/sw/371-project-deployment-release-ledger. No cloud mutation was performed."
     },
     {
       "id": "AWS-TEMPLATE-LAYOUT-001",

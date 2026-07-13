@@ -2,6 +2,7 @@
 import type { Dispatch, SetStateAction } from "react";
 import { useReducer } from "react";
 import type {
+  ApplicationRelease,
   AiPreDeploymentAnalysisResult,
   AiSafetyExplanation,
   AwsConnection,
@@ -27,6 +28,7 @@ import {
   createDeployment,
   getAiPreDeploymentDeepScan,
   getDeploymentFailureExplanation,
+  listApplicationReleases,
   listAwsConnections,
   listDeploymentResources,
   listDeploymentLogs,
@@ -83,6 +85,7 @@ import styles from "./workspace.module.css";
 
 type DeploymentRuntimeSnapshot = {
   readonly deployments: Deployment[];
+  readonly releases: ApplicationRelease[];
   readonly logs: DeploymentLog[];
   readonly resources: DeployedResource[];
   readonly outputs: TerraformOutput[];
@@ -139,6 +142,7 @@ export function DirectDeploymentScreen({
 }: DirectDeploymentScreenProps) {
   const [awsConnections, setAwsConnections] = useState<AwsConnection[]>([]);
   const [deployments, setDeployments] = useState<Deployment[]>([]);
+  const [applicationReleases, setApplicationReleases] = useState<ApplicationRelease[]>([]);
   const [deploymentLogs, setDeploymentLogs] = useState<DeploymentLog[]>([]);
   const [deploymentResources, setDeploymentResources] = useState<DeployedResource[]>([]);
   const [terraformOutputState, dispatchTerraformOutputState] = useReducer(
@@ -300,12 +304,14 @@ export function DirectDeploymentScreen({
   const loadDeploymentRuntimeSnapshot = useCallback(async (): Promise<DeploymentRuntimeSnapshot> => {
     const [
       nextDeployments,
+      nextReleases,
       nextLogs,
       nextResources,
       nextOutputs
     ] =
       await Promise.all([
       listDeployments(projectId),
+      listApplicationReleases(projectId),
       selectedDeploymentId ? listDeploymentLogs(selectedDeploymentId) : Promise.resolve([]),
       selectedDeploymentId ? listDeploymentResources(selectedDeploymentId) : Promise.resolve([]),
       selectedDeploymentId ? listTerraformOutputs(selectedDeploymentId) : Promise.resolve([])
@@ -313,6 +319,7 @@ export function DirectDeploymentScreen({
 
     return {
       deployments: nextDeployments,
+      releases: nextReleases,
       logs: nextLogs,
       resources: nextResources,
       outputs: nextOutputs,
@@ -322,6 +329,7 @@ export function DirectDeploymentScreen({
 
   const applyDeploymentRuntimeSnapshot = useCallback((snapshot: DeploymentRuntimeSnapshot): void => {
     setDeployments(snapshot.deployments);
+    setApplicationReleases(snapshot.releases);
     setDeploymentLogs(snapshot.logs);
     setDeploymentResources(snapshot.resources);
     dispatchTerraformOutputState(
@@ -1420,9 +1428,49 @@ export function DirectDeploymentScreen({
     </section>
   );
 
+  const renderApplicationReleaseHistory = () => (
+    <section className={styles.deploymentSection}>
+      <div className={styles.deploymentSectionHeader}>
+        <h3>Application releases</h3>
+        <small>{applicationReleases.length} releases</small>
+      </div>
+      {applicationReleases.length === 0 ? (
+        <p className={styles.deploymentHint}>아직 application release가 없습니다.</p>
+      ) : (
+        <div className={styles.deploymentResultRows}>
+          {applicationReleases.map((release) => {
+            const outputUrl = getSafeReleaseOutputUrl(release.outputUrl);
+            return (
+              <article className={styles.deploymentResultRow} key={release.id}>
+                <strong>{release.version}</strong>
+                <span className={styles.deploymentResultMeta}>
+                  {release.source.toUpperCase()} · {release.status} · {release.runtimeTargetKind}
+                </span>
+                <span className={styles.deploymentResultValue}>
+                  {formatShortReleaseIdentity(release)}
+                </span>
+                {release.providerRevision ? (
+                  <span className={styles.deploymentResultValue}>
+                    {release.providerRevision.resourceType}: {release.providerRevision.revisionId}
+                  </span>
+                ) : null}
+                {outputUrl ? (
+                  <a href={outputUrl} rel="noreferrer" target="_blank">{outputUrl}</a>
+                ) : null}
+              </article>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+
   const renderHistoryView = () => (
     <div className={styles.deploymentHistoryGrid}>
-      <div className={styles.deploymentHistoryPrimary}>{renderRecordsSection()}</div>
+      <div className={styles.deploymentHistoryPrimary}>
+        {renderApplicationReleaseHistory()}
+        {renderRecordsSection()}
+      </div>
       <div className={styles.deploymentHistorySecondary}>
         <details className={styles.deploymentDisclosure} open>
           <summary>
@@ -1447,8 +1495,8 @@ export function DirectDeploymentScreen({
       {renderSetupSection()}
       <details className={styles.deploymentDisclosure}>
         <summary>
-          <span>Direct Deployment 기록</span>
-          <small>{deployments.length} records</small>
+          <span>Deployment History</span>
+          <small>{applicationReleases.length} releases</small>
         </summary>
         <div className={styles.deploymentDisclosureBody}>{renderHistoryView()}</div>
       </details>
@@ -2100,6 +2148,20 @@ function getDeploymentLogTokenClassName(token: DeploymentLogMessageToken): strin
       return styles.deploymentLogTokenString ?? plainClassName;
     case "plain":
       return plainClassName;
+  }
+}
+
+function formatShortReleaseIdentity(release: ApplicationRelease): string {
+  return `commit ${release.commitSha.slice(0, 12)} · sha256:${release.artifactDigest.slice(0, 12)}`;
+}
+
+function getSafeReleaseOutputUrl(value: string | null): string | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" || url.protocol === "http:" ? url.toString() : null;
+  } catch {
+    return null;
   }
 }
 

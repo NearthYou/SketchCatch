@@ -4,13 +4,20 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- Branch: `feature/sw/370-live-observation-v2`.
-- Issue #370 Tasks 1-5 are implemented; the feature flag remains false until external acceptance gates pass.
-- Live Observation uses only the v2 Store, public collector, server-side observer, and provider-neutral snapshot paths.
-- Legacy v1 routes, simulated CloudWatch providers, and presenter traffic-boost leases are removed.
-- Latest `origin/dev` at `186ff261` is being integrated, including the completed Workspace Template Board UX and project thumbnail storage work.
+- Branch: `feature/sw/371-project-deployment-release-ledger` based on merged issue #370 (`5160a377`).
+- Issue #371 is implemented and locally verified: one project target, structured build evidence, shared Direct/GitOps release ledger, and common History UI.
+- Migration `0035_project_release_ledger.sql` applies successfully after migrations 0000-0034 on PostgreSQL 16.
+- No cloud mutation or production database migration was performed.
 
 ## Session Record
+
+### 2026-07-14 - Project deployment target and release ledger
+
+- Added provider-neutral runtime/scope/source contracts, one target row per project, and a shared application release ledger with version, commit, digest, provider revision, health, rollback, and Output URL evidence.
+- Added authenticated target/release APIs, verified connection ownership and region checks, safe structured build presets, secret-like evidence rejection, legacy Deployment adapters, and migration backfill.
+- Added project target settings and a Direct/GitOps release History view.
+- Verification passed: #371 API focus 63/63, Web 1,138/1,138, PostgreSQL migrations 0000-0035, migration compatibility, lint, typecheck, and build.
+- API full suite passed 1,443/1,448 before two fixture expectations were updated; those two now pass in the focused suite. The remaining three failures are unchanged Windows symlink fixture `EPERM` setup failures.
 
 ### 2026-07-14 - Integrate latest dev into issue #370
 
@@ -29,5 +36,5 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Next Action
 
-- Finish the merge commit, push the branch, open the issue #370 PR, wait five minutes, then resolve review and CI feedback before merging to `dev`.
-- Keep the feature flag false until credentialed Chromium and an explicitly approved non-production AWS sandbox provide acceptance evidence.
+- Commit and push issue #371, open its Korean PR, wait at least five minutes, resolve review/CI feedback, and merge to `dev`.
+- Then create or refresh the issue #372 branch from `dev` and reduce Direct Deployment to the specified three-stage Save/Deploy flow.

@@ -8,8 +8,11 @@ import type {
   DeploymentLiveProfile,
   DeploymentLogLevel,
   DeploymentPlanSummary,
+  DeploymentScope,
+  DeploymentSource,
   DeploymentStage,
   DeploymentStatus,
+  RuntimeTargetKind,
   TerraformOutput
 } from "@sketchcatch/types";
 import type { Database } from "../db/client.js";
@@ -45,6 +48,9 @@ export type CreateDeploymentInput = {
   terraformArtifactId: string;
   awsConnectionId: string;
   liveProfile?: DeploymentLiveProfile | undefined;
+  scope?: DeploymentScope | undefined;
+  targetKind?: RuntimeTargetKind | null | undefined;
+  source?: DeploymentSource | undefined;
 };
 
 export type CreateDeploymentRecordInput = {
@@ -54,6 +60,9 @@ export type CreateDeploymentRecordInput = {
   terraformArtifactId: string;
   awsConnectionId: string;
   liveProfile: DeploymentLiveProfile;
+  scope: DeploymentScope;
+  targetKind: RuntimeTargetKind | null;
+  source: DeploymentSource;
   status: "PENDING";
 };
 
@@ -922,6 +931,9 @@ export async function createDeployment(
     terraformArtifactId: input.terraformArtifactId,
     awsConnectionId: awsConnection.id,
     liveProfile: input.liveProfile ?? "practice",
+    scope: input.scope ?? "infrastructure",
+    targetKind: input.targetKind ?? null,
+    source: input.source ?? "direct",
     status: "PENDING"
   });
 }
