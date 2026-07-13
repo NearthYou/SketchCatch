@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useMemo, useState, type DragEvent } from "react";
+import { createPortal } from "react-dom";
 import type { ResourceArea, ResourceItem } from "../../../../packages/types/src/index";
 import { TemplateGallery } from "../../components/templates/TemplateGallery";
 import { clearActiveResourceDragPayload, writeResourceDragPayload } from "../diagram-editor/diagram-utils";
@@ -40,6 +41,7 @@ import {
   listBoardTemplates,
   type BoardTemplate
 } from "./template-library";
+import modalStyles from "./template-library-modal.module.css";
 
 const areaLabels: Record<ResourceArea, string> = {
   containers: "Containers",
@@ -407,16 +409,21 @@ function TemplateLibraryModal({
   readonly onTemplateApply: (template: BoardTemplate) => void;
   readonly templates: readonly BoardTemplate[];
 }) {
-  return (
-    <div className="templateModalOverlay" role="presentation">
-      <section className="templateModal" aria-label="Template 큰 모달" role="dialog">
-        <div className="templateModalHeader">
+  return createPortal(
+    <div className={modalStyles.overlay} role="presentation">
+      <section
+        aria-label="템플릿 전체보기"
+        aria-modal="true"
+        className={modalStyles.dialog}
+        role="dialog"
+      >
+        <div className={modalStyles.header}>
           <div>
             <span>Template library</span>
-            <h2>템플릿 보관함</h2>
+            <h2>템플릿 전체보기</h2>
             <p>선택하면 현재 보드를 백업하고 템플릿 구조로 덮어씁니다.</p>
           </div>
-          <button className="templateModalCloseButton" onClick={onClose} type="button">
+          <button className={modalStyles.closeButton} onClick={onClose} type="button">
             닫기
           </button>
         </div>
@@ -430,7 +437,8 @@ function TemplateLibraryModal({
           templates={templates}
         />
       </section>
-    </div>
+    </div>,
+    document.body
   );
 }
 

@@ -697,9 +697,7 @@
 }
 
 .leftRail :global(.modulesImportButton),
-.leftRail :global(.modulesCatalogButton),
-.leftRail :global(.templateModalCloseButton),
-.leftRail :global(.templateModalApplyButton) {
+.leftRail :global(.modulesCatalogButton) {
   background: var(--workspace-surface);
   border: 1px solid var(--workspace-line-strong);
   border-radius: 8px;
@@ -712,8 +710,7 @@
   padding: 0 12px;
 }
 
-.leftRail :global(.modulesCatalogButton),
-.leftRail :global(.templateModalApplyButton) {
+.leftRail :global(.modulesCatalogButton) {
   background: var(--workspace-accent);
   border-color: var(--workspace-accent);
   color: #ffffff;
@@ -803,91 +800,6 @@
   color: var(--workspace-muted);
   font-size: 10px;
   line-height: 1.35;
-}
-
-.leftRail :global(.templateModalOverlay) {
-  align-items: center;
-  background: rgba(23, 23, 23, 0.42);
-  display: flex;
-  inset: 0;
-  justify-content: center;
-  padding: 24px;
-  position: fixed;
-  z-index: 120;
-}
-
-.leftRail :global(.templateModal) {
-  background: var(--workspace-surface);
-  border: 1px solid var(--workspace-line-strong);
-  border-radius: 12px;
-  box-shadow: 0 32px 80px -32px rgba(23, 23, 23, 0.34);
-  max-height: calc(100dvh - 48px);
-  max-width: 960px;
-  overflow: auto;
-  padding: 24px;
-  width: 100%;
-}
-
-.leftRail :global(.templateModalHeader) {
-  align-items: start;
-  border-bottom: 1px solid var(--workspace-line);
-  display: flex;
-  gap: 24px;
-  justify-content: space-between;
-  margin-bottom: 18px;
-  padding-bottom: 18px;
-}
-
-.leftRail :global(.templateModalHeader h2),
-.leftRail :global(.templateModalHeader p) {
-  margin: 4px 0 0;
-}
-
-.leftRail :global(.templateModalHeader p) {
-  color: var(--workspace-muted);
-  font-size: 13px;
-}
-
-.leftRail :global(.templateModalGrid) {
-  display: grid;
-  gap: 12px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.leftRail :global(.templateModalCard) {
-  border: 1px solid var(--workspace-line);
-  border-radius: 12px;
-  display: grid;
-  gap: 12px;
-  padding: 14px;
-}
-
-.leftRail :global(.templateModalCard h3),
-.leftRail :global(.templateModalCard p) {
-  margin: 4px 0 0;
-}
-
-.leftRail :global(.templateModalCard p),
-.leftRail :global(.templateModalCard span) {
-  color: var(--workspace-muted);
-  font-size: 12px;
-}
-
-.leftRail :global(.templateModalPreview) {
-  background: var(--workspace-surface-muted);
-  border: 1px solid var(--workspace-line);
-  border-radius: 8px;
-  height: 120px;
-  overflow: hidden;
-  position: relative;
-}
-
-.leftRail :global(.templateModalPreview i) {
-  background: var(--workspace-accent);
-  border-radius: 4px;
-  height: 12px;
-  position: absolute;
-  width: 12px;
 }
 
 .rightRail {

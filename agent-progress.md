@@ -9,9 +9,17 @@ Short English-only working log for the current agent context. Older records are 
 - Six deployable AWS Templates use compact 40px-grid authored layouts and real Resource-panel Catalog items.
 - Security Group is a visual scope with explicit attachment edges, never a persisted containment parent; ASG is a regular 48px Resource.
 - Template cards and large previews use actual 1280x720 ReactFlow Board WebP captures. Project cards use the latest authenticated Board DOM capture.
+- Workspace Template 전체보기 renders through a body Portal below the 64px project navigator and owns its overlay styles outside the left rail.
 - No `apps/api/drizzle/**` migration file was created, edited, renamed, or renumbered in this workstream.
 
 ## Session Record
+
+### 2026-07-14 - Move Template 전체보기 to a body Portal
+
+- Added a dedicated modal CSS Module and rendered `TemplateLibraryModal` into `document.body`, with the overlay starting below the 64px project navigator.
+- TDD evidence: the focused test failed first because `template-library-modal.module.css` did not exist, then passed 7/7 after the Portal implementation.
+- Web typecheck and lint passed. The full Web suite passed 1,137/1,138; its only failure is the existing bundled-Node locale mismatch in `dashboard timestamps use the production display timezone`.
+- Web build remains blocked before compilation by the existing missing `apps/web/.codegraph` path. No API, migration, cloud, deployment, or dependency change was made.
 
 ### 2026-07-13 - Integrate latest dev after PR #380 conflict detection
 
@@ -32,5 +40,5 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Next Action
 
-- Review CI and feedback on PR #380; latest dev is merged, the branch is pushed, and GitHub reports the PR mergeable.
+- Push the Template Portal fix to PR #380 and visually confirm that the modal opens below the project navigator.
 - Re-run `pnpm build` after the repository restores `apps/web/.codegraph`; run Terraform validation only in an environment with the CLI installed.

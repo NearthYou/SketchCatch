@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 const panelSource = readLocalFile("index.tsx");
 const editorStyles = readLocalFile("../diagram-editor/diagram-editor.module.css");
+const modalStyles = readLocalFile("template-library-modal.module.css");
 
 test("resource settings logic keeps provider, resource, template, and module contracts", () => {
   assert.match(panelSource, /Resources/);
@@ -37,6 +38,17 @@ test("workspace Template cards apply their own template while the library contro
   );
   assert.match(panelSource, /aria-label="Template library 큰 미리보기 열기"/);
   assert.match(panelSource, /aria-label=\{`\$\{template\.title\} Template 적용`\}/);
+});
+
+test("workspace Template 전체보기 uses a body Portal below the project navigator", () => {
+  assert.match(panelSource, /import \{ createPortal \} from "react-dom"/);
+  assert.match(panelSource, /aria-label="템플릿 전체보기"/);
+  assert.match(panelSource, /return createPortal\([\s\S]*document\.body/);
+
+  const overlayStyle = readCssRule(modalStyles, ".overlay");
+  const dialogStyle = readCssRule(modalStyles, ".dialog");
+  assert.match(overlayStyle, /inset:\s*64px 0 0/);
+  assert.match(dialogStyle, /max-height:\s*calc\(100dvh - 112px\)/);
 });
 
 test("workspace Template catalog owns a stable scroll viewport with all rows top-aligned", () => {
