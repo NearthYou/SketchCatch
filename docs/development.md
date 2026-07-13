@@ -60,7 +60,18 @@ pnpm --filter @sketchcatch/api db:generate
 pnpm --filter @sketchcatch/api db:migrate
 ```
 
-S3 presigned upload 기능은 다음 환경 변수가 필요하다.
+Project thumbnail과 API 경유 Terraform artifact upload는 local development와 test에서 기본적으로 filesystem을 사용한다. Browser는 storage provider와 관계없이 기존 same-origin `upload-content` endpoint에 PUT한다.
+
+```text
+PROJECT_ASSET_STORAGE_BACKEND=
+PROJECT_ASSET_STORAGE_ROOT=.local-data/project-assets
+```
+
+`PROJECT_ASSET_STORAGE_BACKEND`를 비워 두면 `development`와 `test`는 `filesystem`, `production`은 `s3`를 선택한다. `PROJECT_ASSET_STORAGE_ROOT`가 상대 경로이면 API process의 `process.cwd()` 기준으로 해석하고, 절대 경로도 허용한다. 기본 root는 `<process.cwd()>/.local-data/project-assets`이며 Git에서 제외된다.
+
+로컬에서 S3 동작을 명시적으로 확인할 때만 `PROJECT_ASSET_STORAGE_BACKEND=s3`와 `S3_BUCKET_NAME`을 함께 설정한다. `NODE_ENV=production`은 filesystem 설정을 거부하고 `S3_BUCKET_NAME`이 없는 경우 startup을 실패시킨다.
+
+다른 AWS 연동 기능에는 다음 환경 변수가 필요할 수 있다.
 
 ```text
 AWS_REGION=ap-northeast-2

@@ -21,7 +21,6 @@ const designAreaNodeTypes = new Set([
 const resourceAreaNodeTypes = new Set([
   "aws_region",
   "aws_availability_zone",
-  "aws_autoscaling_group",
   "aws_vpc",
   "aws_subnet",
   "aws_security_group"
@@ -37,19 +36,21 @@ const designAreaNodeIconByType: Record<string, string> = {
   sketchcatch_region: `${groupIconPath}/Region_32.svg`
 };
 
+/** 화면에서 범위 프레임으로 보이는 노드와 일반 타일을 구분합니다. */
 export function isAreaNode(node: DiagramNode): boolean {
   return isDesignAreaNode(node) || isResourceAreaNode(node);
 }
 
+/** 실제 parent가 될 수 없는 보안 범위를 건너뛰고 drop 대상만 찾습니다. */
 export function findInnermostAreaDropTarget(
   childNode: DiagramNode,
   nodes: readonly DiagramNode[]
 ): DiagramNode | null {
-  if (isAreaNode(childNode)) {
+  if (isContainmentAreaNode(childNode)) {
     return null;
   }
 
-  return findInnermostAreaNodeAtPoint(
+  return findInnermostContainmentAreaNodeAtPoint(
     nodes.filter((node) => node.id !== childNode.id),
     {
       x: childNode.position.x + childNode.size.width / 2,
@@ -58,23 +59,20 @@ export function findInnermostAreaDropTarget(
   );
 }
 
+/** 선택 hit-test를 위해 visual scope까지 포함한 가장 작은 Area를 찾습니다. */
 export function findInnermostAreaNodeAtPoint(
   nodes: readonly DiagramNode[],
   point: DiagramNode["position"]
 ): DiagramNode | null {
-  let innermostNode: DiagramNode | null = null;
+  return findInnermostMatchingAreaNodeAtPoint(nodes, point, isAreaNode);
+}
 
-  for (const node of nodes) {
-    if (!isAreaNode(node) || !containsPoint(node, point)) {
-      continue;
-    }
-
-    if (!innermostNode || compareAreaNodes(node, innermostNode) < 0) {
-      innermostNode = node;
-    }
-  }
-
-  return innermostNode;
+/** persisted parent 지정에는 VPC/Subnet 같은 실제 containment Area만 사용합니다. */
+export function findInnermostContainmentAreaNodeAtPoint(
+  nodes: readonly DiagramNode[],
+  point: DiagramNode["position"]
+): DiagramNode | null {
+  return findInnermostMatchingAreaNodeAtPoint(nodes, point, isContainmentAreaNode);
 }
 
 export function getAreaNodeLabel(node: DiagramNode): string {
@@ -124,11 +122,46 @@ export function isDesignAreaNode(node: DiagramNode): boolean {
 }
 
 export function isResourceAreaNode(node: DiagramNode): boolean {
+  if (node.kind !== "resource" || getResourceNodeType(node) === "aws_autoscaling_group") {
+    return false;
+  }
+
   // Authored templates can opt a real catalog Resource into a frame without changing generic Board behavior.
-  return node.kind === "resource" && (
+  return (
     node.metadata?.presentationArea === true ||
     resourceAreaNodeTypes.has(getResourceNodeType(node))
   );
+}
+
+/** Security Group은 읽기 쉬운 범위지만 AWS 포함 관계를 만들지는 않습니다. */
+export function isContainmentAreaNode(node: DiagramNode): boolean {
+  return isAreaNode(node) && !isSecurityGroupScopeNode(node);
+}
+
+/** Security Group resource가 visual scope 역할을 하는지 판별합니다. */
+export function isSecurityGroupScopeNode(node: DiagramNode): boolean {
+  return node.kind === "resource" && getResourceNodeType(node) === "aws_security_group";
+}
+
+/** 주어진 Area 정책으로 점을 포함하는 가장 작은 프레임을 찾습니다. */
+function findInnermostMatchingAreaNodeAtPoint(
+  nodes: readonly DiagramNode[],
+  point: DiagramNode["position"],
+  matchesArea: (node: DiagramNode) => boolean
+): DiagramNode | null {
+  let innermostNode: DiagramNode | null = null;
+
+  for (const node of nodes) {
+    if (!matchesArea(node) || !containsPoint(node, point)) {
+      continue;
+    }
+
+    if (!innermostNode || compareAreaNodes(node, innermostNode) < 0) {
+      innermostNode = node;
+    }
+  }
+
+  return innermostNode;
 }
 
 function getResourceNodeType(node: DiagramNode): string {

@@ -7,6 +7,7 @@ import {
 import { isAreaNode } from "../diagram-editor/area-nodes";
 import { RESOURCE_NODE_DEFAULT_SIZE } from "../diagram-editor/resource-node-geometry";
 import { materializeTemplateDiagram } from "./template-resource-materializer";
+import { getTemplateThumbnailAsset } from "./template-thumbnail-manifest";
 
 export const TEMPLATE_OVERWRITE_BACKUP_STORAGE_KEY = "sketchcatch.templateOverwriteBackups";
 
@@ -16,6 +17,7 @@ export type BoardTemplate = {
   readonly description: string;
   readonly tags: readonly string[];
   readonly diagramJson: DiagramJson;
+  readonly thumbnailSrc?: string | undefined;
 };
 
 export type TemplateOverwriteBackup = {
@@ -681,13 +683,14 @@ const boardTemplates: readonly BoardTemplate[] = templateDefinitions.map((defini
   title: definition.title,
   description: definition.description,
   tags: definition.tags,
+  thumbnailSrc: getTemplateThumbnailAsset(definition.id).src,
   diagramJson: buildTemplateDiagramJson(definition.id, {
     projectSlug: "sketchcatch",
     shortId: definition.id
   })
 }));
 
-// 페이지와 보드 모달은 PNG 검토를 마친 authored geometry를 같은 목록에서 사용한다.
+// 페이지와 보드 모달은 실제 Board 캡처로 검토한 authored geometry를 같은 목록에서 사용한다.
 export function listBoardTemplates(): readonly BoardTemplate[] {
   return boardTemplates.map((template) => ({
     ...template,

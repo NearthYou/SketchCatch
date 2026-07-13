@@ -58,9 +58,10 @@ test("getNodeResizeBounds removes area node max limits while keeping minimum siz
     ...unrestrictedMax
   });
   assert.deepEqual(getNodeResizeBounds(makeResourceNode("aws_autoscaling_group")), {
-    minWidth: 100,
-    minHeight: 65,
-    ...unrestrictedMax
+    minWidth: RESOURCE_NODE_COMPACT_MIN_SIZE.width,
+    minHeight: RESOURCE_NODE_COMPACT_MIN_SIZE.height,
+    maxWidth: 260,
+    maxHeight: 260
   });
 });
 

@@ -4,33 +4,57 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- Branch: `fix/ys/363-uiux-개선`.
-- PR #366 preserves six Catalog-backed AWS Template Boards with 103 Terraform-deployable Resources and 28 parameterless Design nodes.
-- The current `dev` Deployment/CI/CD console split is integrated without restoring the retired monolithic panel.
-- Workspace deployment context counts only `isTerraformDeployableNode` results and passes that value into the Direct Deployment screen; CI/CD remains a separate screen.
-- Migrations `0032` and `0033` came from `dev` and have not been executed by this gg workstream.
+- Branch: `feat/gg/369-workspace-template-board-ux`.
+- Latest `origin/dev` at `99db7f61` is integrated into PR #380 with conflict regressions passing.
+- Six deployable AWS Templates use compact 40px-grid authored layouts and real Resource-panel Catalog items.
+- Security Group is a visual scope with explicit attachment edges, never a persisted containment parent; ASG is a regular 48px Resource.
+- Template cards and large previews use actual 1280x720 ReactFlow Board WebP captures. Project cards use the latest authenticated Board DOM capture.
+- Workspace Template 전체보기 renders through a body Portal below the 64px project navigator, isolates the background, and keeps keyboard focus inside the dialog.
+- The complete Web suite passes 1,141/1,141 with the repository user's Node v24.18.0 runtime.
+- No `apps/api/drizzle/**` migration file was created, edited, renamed, or renumbered in this workstream.
 
 ## Session Record
 
-### 2026-07-13 - Resolve dev merge conflicts on the UI/UX branch
+### 2026-07-14 - Remove redundant Template card helper copy
 
-- Kept the `dev` Deployment/CI/CD console split and the thin `DeploymentPanel` adapter instead of restoring the retired monolith.
-- Ported this branch's compact deployment actions and pre-deployment finding layout into `DirectDeploymentScreen`.
-- Preserved the shared Template dropdown UI while adopting `dev` Resource and relationship count helpers.
-- Resolved test coverage against the new split source files and retained both branches' regression contracts.
-- Verification: 100 focused Template and workspace regressions passed; harness, lint, typecheck, and build passed. Lint retains one pre-existing unused-argument warning.
+- Removed both explanatory `small` lines from the Workspace Template library and immediate-apply cards without replacement.
+- Preserved visible names, accessible names, click behavior, and removed the now-dead Template card `small` style.
+- Verified independent RED/GREEN coverage for both card variants; the focused suite passed 9/9.
+- The complete Web suite, typecheck, lint, harness, and diff check passed with the repository user's Node v24.18.0 runtime. Review found no Critical, Important, or Minor issue.
 
-### 2026-07-13 - Integrate current dev into PR #366
+### 2026-07-14 - Close Template Portal review findings
 
-- Merged `origin/dev` at `39118a79`, including the completed PR #368 Deployment/CI/CD console and Web baseline updates.
-- Resolved the deployment conflict by keeping the new console adapter and moving the branch's deployable-Resource count contract into `DirectDeploymentScreen`.
-- Preserved both Template regression contracts: the 103 deployable Resource total and the updated 26-node Live Observation baseline.
-- Archived completed PR #368 and Template/PR #366 records instead of combining two stale active workstreams.
-- Verification: no conflict markers or whitespace errors; 110 focused conflict regressions, harness, lint, typecheck, and build passed. Lint retains one pre-existing unused-argument warning.
-- Root tests passed 1,325/1,328; the three failures are unchanged Windows-only path expectations shared by the pre-merge branch and `origin/dev`, not conflict-resolution regressions.
-- Risk: no Terraform Apply/Destroy, AWS mutation, deployment API mutation, or database migration execution is part of this merge.
+- Unified the Template 전체보기 trigger's accessible and visible functional name while keeping comparison and Board non-application as supporting copy.
+- Added symmetric modal focus, Escape, Tab/Shift+Tab, body sibling `inert`, body overflow, cleanup, and visible focus-ring behavior without a new dependency.
+- TDD evidence progressed through five expected RED/GREEN cycles; the final focused suite passed 10/10, including an executed fake-DOM lifecycle regression.
+- Web typecheck and lint passed. The full Web suite initially exposed the bundled-Node timestamp locale mismatch, then passed 1,141/1,141 with the repository user's Node v24.18.0 runtime.
+- Updated the design and implementation plan. No API, migration, cloud, deployment, or dependency change was made.
+
+### 2026-07-14 - Move Template 전체보기 to a body Portal
+
+- Added a dedicated modal CSS Module and rendered `TemplateLibraryModal` into `document.body`, with the overlay starting below the 64px project navigator.
+- TDD evidence: the focused test failed first because `template-library-modal.module.css` did not exist, then passed 7/7 after the Portal implementation.
+- Web typecheck and lint passed. The full Web suite passed 1,137/1,138; its only failure is the existing bundled-Node locale mismatch in `dashboard timestamps use the production display timezone`.
+- Web build remains blocked before compilation by the existing missing `apps/web/.codegraph` path. No API, migration, cloud, deployment, or dependency change was made.
+
+### 2026-07-13 - Integrate latest dev after PR #380 conflict detection
+
+- Merged `origin/dev` at `99db7f61` after GitHub reported the first PR revision as conflicting.
+- Kept dev's shared SelectMenu typography, compact Project card layout, cost UI, and deployment updates while retaining actual Board raster captures instead of the reintroduced synthetic SVG preview.
+- Verification after conflict resolution: Web 1,137/1,137; focused capture and shared-dropdown regressions 26/26; typecheck and harness passed; lint retained one existing unused-argument warning.
+- Root API tests remained 1,335/1,338 because of the same three existing Windows path-separator fixtures on macOS.
+
+### 2026-07-13 - Implement issue #369 Workspace and Template Board UX
+
+- Added the repository-wide migration collision reporting contract, blank-board single-flight navigation, compact Template geometry, Terraform local-name separation, and actual Board thumbnail flow.
+- Removed the synthetic Template SVG preview model. Static Template captures now record the exact materialized DiagramJson hash; saved Projects upload a real ReactFlow DOM WebP after autosave.
+- Browser QA confirmed all six Workspace Template entries scroll correctly, the large-preview control does not apply a Template, and Dashboard cards render raster Board captures.
+- Initial verification: Web 1,125/1,125; focused Template contract 17/17; focused thumbnail API 25/25; harness, typecheck, migration compatibility, and API build passed.
+- Root API tests remained 1,331/1,334 because of the three existing Windows path-separator fixtures on macOS. Lint retained one existing unused-argument warning.
+- Full Web build was blocked by the existing missing `apps/web/.codegraph`; Terraform CLI validation could not start because this environment has no `terraform` binary.
+- Risk: no Terraform Apply/Destroy, AWS mutation, deployment mutation, or database migration execution was performed.
 
 ## Next Action
 
-- Commit the resolved merge after the required checks pass.
-- Run migrations and credentialed browser acceptance only with an approved safe environment.
+- Monitor PR #380 after the Template Portal review fix is pushed; repeat browser QA when the running local server is reachable from the in-app browser.
+- Re-run `pnpm build` after the repository restores `apps/web/.codegraph`; run Terraform validation only in an environment with the CLI installed.

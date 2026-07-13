@@ -1,26 +1,23 @@
 import { randomUUID } from "node:crypto";
-import {
-  DeleteObjectCommand,
-  HeadObjectCommand,
-  PutObjectCommand,
-  S3ServiceException
-} from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { and, desc, eq, sql } from "drizzle-orm";
-import type { FastifyInstance, FastifyReply } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import type { ApiErrorResponse, ArchitectureJson } from "@sketchcatch/types";
 import { RESOURCE_TYPES } from "@sketchcatch/types";
 import { requireActiveUserId } from "../auth/current-user.js";
-import { requireS3BucketName } from "../config/env.js";
 import { getDatabaseClient, type DatabaseClient } from "../db/client.js";
 import { defaultTerraformArtifactMaxBytes } from "../deployments/terraform-workspace.js";
 import {
-  createS3ProjectDeletionStorage,
   deleteProjectRecords,
   getProjectDeletePreview,
   type ProjectDeletionStorage
 } from "../projects/project-deletion-service.js";
+import { createProjectAssetStorage } from "../projects/project-asset-storage-factory.js";
+import type { ProjectAssetStorage } from "../projects/project-asset-storage.js";
+import {
+  cleanupSupersededProjectThumbnails,
+  compareProjectThumbnailsNewestFirst
+} from "../projects/project-thumbnail-cleanup.js";
 import {
   architectures,
   projectAssets,
@@ -29,7 +26,6 @@ import {
   touchUpdatedAt
 } from "../db/schema.js";
 import { getNextDraftRevision, toProjectDraft } from "../modules/projects/project-drafts.js";
-import { getS3Client } from "../s3/client.js";
 import { saveProjectDraftBodySchema } from "./project-draft-schemas.js";
 
 const createProjectBodySchema = z.object({
@@ -93,6 +89,9 @@ const assetTypeSchema = z.enum([
   "thumbnail"
 ]);
 
+export const defaultProjectThumbnailMaxBytes = 2 * 1024 * 1024;
+const projectThumbnailContentTypes = new Set(["image/png", "image/webp"]);
+
 const presignedUploadBodySchema = z
   .object({
     architectureId: z.string().uuid().optional(),
@@ -102,6 +101,32 @@ const presignedUploadBodySchema = z
     byteSize: z.number().int().positive().optional()
   })
   .superRefine((body, ctx) => {
+    if (body.assetType === "thumbnail") {
+      if (body.byteSize === undefined) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["byteSize"],
+          message: "Thumbnail byteSize is required"
+        });
+      } else if (body.byteSize > defaultProjectThumbnailMaxBytes) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["byteSize"],
+          message: `Thumbnail must be ${defaultProjectThumbnailMaxBytes} bytes or smaller`
+        });
+      }
+
+      if (!projectThumbnailContentTypes.has(body.contentType)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["contentType"],
+          message: "Thumbnail contentType must be image/png or image/webp"
+        });
+      }
+
+      return;
+    }
+
     if (body.assetType !== "terraform_file") {
       return;
     }
@@ -130,34 +155,20 @@ type ProjectRouteOptions = {
   projectDeletionStorage?: ProjectDeletionStorage;
 };
 
-export type ProjectAssetStorage = {
-  createUploadUrl(input: {
-    bucketName: string;
-    objectKey: string;
-    contentType: string;
-    expiresInSeconds: number;
-  }): Promise<string>;
-  putObject(input: {
-    bucketName: string;
-    objectKey: string;
-    contentType: string;
-    body: string | Buffer;
-  }): Promise<void>;
-  deleteObject(input: { bucketName: string; objectKey: string }): Promise<void>;
-  objectExists(input: {
-    bucketName: string;
-    objectKey: string;
-    byteSize: number | null;
-  }): Promise<boolean>;
-};
-
 export async function registerProjectRoutes(
   app: FastifyInstance,
   options: ProjectRouteOptions = {}
 ): Promise<void> {
   const getProjectDatabaseClient = options.getDatabaseClient ?? getDatabaseClient;
-  const getProjectAssetStorage = () =>
-    options.projectAssetStorage ?? createDefaultProjectAssetStorage();
+  const projectAssetStorage = options.projectAssetStorage ?? createProjectAssetStorage();
+  const projectDeletionStorage =
+    options.projectDeletionStorage ?? createProjectDeletionStorage(projectAssetStorage);
+
+  app.addContentTypeParser(
+    ["image/png", "image/webp"],
+    { bodyLimit: defaultProjectThumbnailMaxBytes, parseAs: "buffer" },
+    (_request, body, done) => done(null, body)
+  );
 
   app.get("/projects", async (request) => {
     const currentUserId = await requireActiveUserId(request, getProjectDatabaseClient);
@@ -264,7 +275,7 @@ export async function registerProjectRoutes(
       action: body.action,
       db,
       projectId: params.id,
-      storage: options.projectDeletionStorage ?? createDefaultProjectDeletionStorage(),
+      storage: projectDeletionStorage,
       userId: currentUserId
     });
 
@@ -479,7 +490,7 @@ export async function registerProjectRoutes(
 
   app.put(
     "/projects/:id/assets/:assetId/upload-content",
-    { bodyLimit: defaultTerraformArtifactMaxBytes },
+    { bodyLimit: Math.max(defaultTerraformArtifactMaxBytes, defaultProjectThumbnailMaxBytes) },
     async (request, reply) => {
       const currentUserId = await requireActiveUserId(request, getProjectDatabaseClient);
       const params = assetRouteParamsSchema.parse(request.params);
@@ -503,8 +514,8 @@ export async function registerProjectRoutes(
         return sendNotFound(reply, "업로드 대기 중인 파일 기록을 찾을 수 없습니다.");
       }
 
-      if (asset.assetType !== "terraform_file") {
-        return sendBadRequest(reply, "API 업로드는 Terraform artifact에만 사용할 수 있습니다.");
+      if (asset.assetType !== "terraform_file" && asset.assetType !== "thumbnail") {
+        return sendBadRequest(reply, "이 asset type은 API 업로드를 지원하지 않습니다.");
       }
 
       if (typeof request.body !== "string" && !Buffer.isBuffer(request.body)) {
@@ -520,8 +531,20 @@ export async function registerProjectRoutes(
         return sendConflict(reply, "업로드된 파일 크기가 요청한 artifact 크기와 다릅니다.");
       }
 
-      await getProjectAssetStorage().putObject({
-        bucketName: requireS3BucketName(),
+      if (asset.assetType === "thumbnail") {
+        const requestContentType = request.headers["content-type"]?.split(";", 1)[0]?.trim();
+
+        if (
+          !Buffer.isBuffer(body) ||
+          byteSize > defaultProjectThumbnailMaxBytes ||
+          !projectThumbnailContentTypes.has(asset.contentType) ||
+          requestContentType !== asset.contentType
+        ) {
+          return sendBadRequest(reply, "Thumbnail은 등록한 형식과 일치하는 PNG 또는 WebP여야 합니다.");
+        }
+      }
+
+      await projectAssetStorage.putObject({
         objectKey: asset.objectKey,
         contentType: asset.contentType,
         body
@@ -540,6 +563,43 @@ export async function registerProjectRoutes(
       return reply.status(204).send();
     }
   );
+
+  app.get("/projects/:id/thumbnail", async (request, reply) => {
+    const currentUserId = await requireActiveUserId(request, getProjectDatabaseClient);
+    const params = routeParamsSchema.parse(request.params);
+    const { db } = getProjectDatabaseClient();
+
+    const [project] = await db
+      .select()
+      .from(projects)
+      .where(and(eq(projects.id, params.id), eq(projects.userId, currentUserId)));
+
+    if (!project) {
+      return sendNotFound(reply, "프로젝트를 찾을 수 없습니다.");
+    }
+
+    const assets = await db
+      .select()
+      .from(projectAssets)
+      .where(eq(projectAssets.projectId, params.id))
+      .orderBy(desc(projectAssets.createdAt));
+    const thumbnail = assets
+      .filter((asset) => asset.assetType === "thumbnail" && asset.uploadStatus === "uploaded")
+      .sort(compareProjectThumbnailsNewestFirst)[0];
+
+    if (!thumbnail) {
+      return sendNotFound(reply, "저장된 보드 캡처를 찾을 수 없습니다.");
+    }
+
+    const object = await projectAssetStorage.getObject({
+      objectKey: thumbnail.objectKey
+    });
+
+    return reply
+      .header("Cache-Control", "private, no-store")
+      .type(thumbnail.contentType)
+      .send(object);
+  });
 
   app.post("/projects/:id/assets/:assetId/confirm-upload", async (request, reply) => {
     const currentUserId = await requireActiveUserId(request, getProjectDatabaseClient);
@@ -565,20 +625,27 @@ export async function registerProjectRoutes(
     }
 
     if (asset.uploadStatus === "uploaded") {
+      if (asset.assetType === "thumbnail") {
+        await pruneUploadedProjectThumbnails({
+          db,
+          log: request.log,
+          projectId: params.id,
+          storage: projectAssetStorage
+        });
+      }
+
       const response = { asset };
 
       return response;
     }
 
-    const bucketName = requireS3BucketName();
-    const uploaded = await getProjectAssetStorage().objectExists({
-      bucketName,
+    const uploaded = await projectAssetStorage.objectExists({
       objectKey: asset.objectKey,
       byteSize: asset.byteSize
     });
 
     if (!uploaded) {
-      return sendConflict(reply, "S3에서 업로드된 파일을 확인하지 못했습니다.");
+      return sendConflict(reply, "스토리지에서 업로드된 파일을 확인하지 못했습니다.");
     }
 
     const [confirmedAsset] = await db
@@ -589,6 +656,15 @@ export async function registerProjectRoutes(
 
     if (!confirmedAsset) {
       return sendNotFound(reply, "업로드된 파일 기록을 찾을 수 없습니다.");
+    }
+
+    if (confirmedAsset.assetType === "thumbnail") {
+      await pruneUploadedProjectThumbnails({
+        db,
+        log: request.log,
+        projectId: params.id,
+        storage: projectAssetStorage
+      });
     }
 
     const response = { asset: confirmedAsset };
@@ -620,8 +696,7 @@ export async function registerProjectRoutes(
     }
 
     try {
-      await getProjectAssetStorage().deleteObject({
-        bucketName: requireS3BucketName(),
+      await projectAssetStorage.deleteObject({
         objectKey: asset.objectKey
       });
     } catch (error) {
@@ -667,6 +742,58 @@ function attachReverseEngineeringSource(
   };
 }
 
+// confirm된 Project 캡처 중 canonical 최신 한 장만 남기고 cleanup 실패는 저장 성공과 분리합니다.
+async function pruneUploadedProjectThumbnails({
+  db,
+  log,
+  projectId,
+  storage
+}: {
+  readonly db: DatabaseClient["db"];
+  readonly log: FastifyRequest["log"];
+  readonly projectId: string;
+  readonly storage: ProjectAssetStorage;
+}): Promise<void> {
+  try {
+    await cleanupSupersededProjectThumbnails({
+      listUploaded: async () =>
+        db
+          .select({
+            createdAt: projectAssets.createdAt,
+            id: projectAssets.id,
+            objectKey: projectAssets.objectKey
+          })
+          .from(projectAssets)
+          .where(
+            and(
+              eq(projectAssets.projectId, projectId),
+              eq(projectAssets.assetType, "thumbnail"),
+              eq(projectAssets.uploadStatus, "uploaded")
+            )
+          ),
+      deleteObject: async (objectKey) => {
+        await storage.deleteObject({ objectKey });
+      },
+      deleteRow: async (assetId) => {
+        await db
+          .delete(projectAssets)
+          .where(and(eq(projectAssets.id, assetId), eq(projectAssets.projectId, projectId)));
+      },
+      onDeleteError: (error, thumbnail) => {
+        log.warn(
+          { error, objectKey: thumbnail.objectKey, projectId },
+          "Failed to prune superseded project thumbnail"
+        );
+      }
+    });
+  } catch (error) {
+    log.warn(
+      { error, projectId },
+      "Failed to list superseded project thumbnails"
+    );
+  }
+}
+
 function sendNotFound(reply: FastifyReply, message: string): FastifyReply {
   const response: ApiErrorResponse = {
     error: "not_found",
@@ -694,88 +821,12 @@ function sendConflict(reply: FastifyReply, message: string): FastifyReply {
   return reply.status(409).send(response);
 }
 
-function createDefaultProjectAssetStorage(): ProjectAssetStorage {
-  const s3Client = getS3Client();
-
-  return {
-    async createUploadUrl(input) {
-      return getSignedUrl(
-        s3Client,
-        new PutObjectCommand({
-          Bucket: input.bucketName,
-          Key: input.objectKey,
-          ContentType: input.contentType
-        }),
-        { expiresIn: input.expiresInSeconds }
-      );
-    },
-    async putObject(input) {
-      await s3Client.send(
-        new PutObjectCommand({
-          Bucket: input.bucketName,
-          Key: input.objectKey,
-          Body: input.body,
-          ContentType: input.contentType
-        })
-      );
-    },
-    async deleteObject(input) {
-      await s3Client.send(
-        new DeleteObjectCommand({
-          Bucket: input.bucketName,
-          Key: input.objectKey
-        })
-      );
-    },
-    async objectExists(input) {
-      try {
-        const object = await s3Client.send(
-          new HeadObjectCommand({
-            Bucket: input.bucketName,
-            Key: input.objectKey
-          })
-        );
-
-        if (input.byteSize !== null) {
-          return object.ContentLength === input.byteSize;
-        }
-
-        return true;
-      } catch (error) {
-        if (isS3ObjectMissingError(error)) {
-          return false;
-        }
-
-        throw error;
-      }
-    }
-  };
-}
-
-function createDefaultProjectDeletionStorage(): ProjectDeletionStorage {
+function createProjectDeletionStorage(storage: ProjectAssetStorage): ProjectDeletionStorage {
   return {
     async deleteObject(objectKey) {
-      const storage = createS3ProjectDeletionStorage({
-        bucketName: requireS3BucketName(),
-        s3Client: getS3Client()
-      });
-
-      await storage.deleteObject(objectKey);
+      await storage.deleteObject({ objectKey });
     }
   };
-}
-
-function isS3ObjectMissingError(error: unknown): boolean {
-  if (error instanceof S3ServiceException) {
-    return error.$metadata.httpStatusCode === 404 || error.name === "NotFound";
-  }
-
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "name" in error &&
-    (error.name === "NotFound" || error.name === "NoSuchKey")
-  );
 }
 
 function buildObjectKey(
@@ -784,7 +835,7 @@ function buildObjectKey(
   assetId: string,
   fileName: string
 ): string {
-  const safeFileName = fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
+  const safeFileName = fileName.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 180);
 
   return `projects/${projectId}/assets/${assetType}/${assetId}-${safeFileName}`;
 }

@@ -7,7 +7,7 @@ import {
   normalizeEdgeKind
 } from "./diagram-utils";
 import { BOARD_DEFAULT_EDGE_COLOR } from "./constants";
-import { getAreaNodeLabel, isAreaNode } from "./area-nodes";
+import { getAreaNodeLabel, isAreaNode, isContainmentAreaNode } from "./area-nodes";
 import { isAwsDiagramConnectionAllowed } from "./aws-resource-connection-policy";
 import { getResourceNodeDisplayLabel } from "./resource-node-display-label";
 import {
@@ -221,7 +221,7 @@ export function toFlowEdges(
   const previewAnnotations = options.previewAnnotations;
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
 
-  return edges.filter((edge) => !isContainmentEdge(edge)).map((edge) => {
+  return edges.filter((edge) => !isContainmentEdge(edge, nodeById)).map((edge) => {
     const selected = !isPreview && selectedEdgeIdSet.has(edge.id);
     const edgeStyle = getResolvedDiagramEdgeStyle(edge, nodeById);
     const color = edgeStyle.color ?? BOARD_DEFAULT_EDGE_COLOR;
@@ -392,10 +392,21 @@ function getVisibleEdgeLabel(label: string | undefined): string | undefined {
   return `${characters.slice(0, EDGE_LABEL_MAX_CHARACTERS - 1).join("").trimEnd()}…`;
 }
 
-function isContainmentEdge(edge: DiagramEdge): boolean {
+/** contains/hosts label만으로 SG 같은 visual scope 관계를 숨기지 않습니다. */
+function isContainmentEdge(
+  edge: DiagramEdge,
+  nodeById: ReadonlyMap<string, DiagramNode>
+): boolean {
   const normalizedLabel = edge.label?.trim().toLowerCase();
 
-  return normalizedLabel != null && CONTAINMENT_EDGE_LABELS.has(normalizedLabel);
+  if (normalizedLabel == null || !CONTAINMENT_EDGE_LABELS.has(normalizedLabel)) {
+    return false;
+  }
+
+  const sourceNode = nodeById.get(edge.sourceNodeId);
+
+  // 노드 정보 없이 사용하는 legacy 호출은 이전 필터 동작을 보존합니다.
+  return sourceNode ? isContainmentAreaNode(sourceNode) : true;
 }
 
 function getFlowEdgeStyle(

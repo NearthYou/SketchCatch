@@ -500,6 +500,15 @@ test("diagram node view applies computed area border style through CSS variables
   );
 });
 
+test("Security Group scopes use a distinct translucent dashed presentation", () => {
+  const scopeBlock = getCssBlock(".nodeShellArea.nodeShellSecurityGroupScope");
+
+  assert.match(diagramNodeViewSource, /isSecurityGroupScopeNode/);
+  assert.match(diagramNodeViewSource, /styles\.nodeShellSecurityGroupScope/);
+  assert.match(scopeBlock, /--area-body-background:/);
+  assert.match(scopeBlock, /--area-border-width:\s*2px;/);
+});
+
 test("Area placement feedback uses a restrained purple target state without a reference badge", () => {
   const targetBlock = getCssBlock(".nodeShellArea.nodeShellAreaDropTarget");
 

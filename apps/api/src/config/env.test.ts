@@ -66,6 +66,25 @@ test("assertNoStaticAwsCredentialsForApiServer rejects static AWS credential env
   );
 });
 
+test("getRuntimeEnv reads provider-neutral Project asset storage settings", () => {
+  const originalValues = saveEnvValues([
+    "PROJECT_ASSET_STORAGE_BACKEND",
+    "PROJECT_ASSET_STORAGE_ROOT"
+  ]);
+
+  try {
+    process.env.PROJECT_ASSET_STORAGE_BACKEND = "filesystem";
+    process.env.PROJECT_ASSET_STORAGE_ROOT = ".local-data/custom-project-assets";
+
+    const env = getRuntimeEnv();
+
+    assert.equal(env.projectAssetStorageBackend, "filesystem");
+    assert.equal(env.projectAssetStorageRoot, ".local-data/custom-project-assets");
+  } finally {
+    restoreEnvValues(originalValues);
+  }
+});
+
 test("requireGitHubAppConfig reads GIT_APP configuration", () => {
   const originalValues = saveEnvValues([
     "GIT_APP_ID",

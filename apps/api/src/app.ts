@@ -15,7 +15,8 @@ import type { CreateSafetyFindingExplanation } from "./services/aiSafetyFindingE
 import { registerHealthRoutes } from "./routes/health.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerOAuthRoutes } from "./routes/oauth.js";
-import { registerProjectRoutes, type ProjectAssetStorage } from "./routes/projects.js";
+import { registerProjectRoutes } from "./routes/projects.js";
+import type { ProjectAssetStorage } from "./projects/project-asset-storage.js";
 import {
   registerSourceRepositoryRoutes,
   type SourceRepositoryRouteOptions

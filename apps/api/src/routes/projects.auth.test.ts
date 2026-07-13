@@ -1,5 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { mkdtemp, realpath, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { ApiErrorResponse } from "@sketchcatch/types";
 import { buildApp } from "../app.js";
 import { createAccessToken } from "../auth/tokens.js";
@@ -14,10 +17,11 @@ import {
   users
 } from "../db/schema.js";
 import { defaultTerraformArtifactMaxBytes } from "../deployments/terraform-workspace.js";
+import { createFilesystemProjectAssetStorage } from "../projects/filesystem-project-asset-storage.js";
+import type { ProjectAssetStorage } from "../projects/project-asset-storage.js";
 
 process.env.NODE_ENV = "test";
 process.env.AUTH_TOKEN_SECRET = "test-auth-token-secret-with-at-least-32-characters";
-process.env.S3_BUCKET_NAME = "sketchcatch-test-bucket";
 
 const ACTIVE_USER_ID = "11111111-1111-4111-8111-111111111111";
 const OTHER_USER_ID = "22222222-2222-4222-8222-222222222222";
@@ -320,6 +324,42 @@ test("DELETE /api/projects/:id reports S3 cleanup failures but still deletes rec
   await app.close();
 });
 
+test("DELETE /api/projects/:id reuses the injected Project asset storage by default", async () => {
+  const deletedObjectKeys: string[] = [];
+  const fakeDb = new ProjectRouteFakeDb({
+    activeUserId: ACTIVE_USER_ID,
+    requestedProjectId: ACTIVE_PROJECT_ID,
+    users: [makeUser({ id: ACTIVE_USER_ID })],
+    projects: [makeProject({ id: ACTIVE_PROJECT_ID, userId: ACTIVE_USER_ID })],
+    projectAssets: [
+      makeProjectAsset({
+        objectKey: "projects/project-id/thumbnail.webp",
+        projectId: ACTIVE_PROJECT_ID
+      })
+    ]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client,
+    projectAssetStorage: createProjectAssetStorageStub({
+      async deleteObject(input) {
+        deletedObjectKeys.push(input.objectKey);
+      }
+    })
+  });
+
+  const response = await app.inject({
+    method: "DELETE",
+    url: `/api/projects/${ACTIVE_PROJECT_ID}`,
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: { action: "delete_project" }
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(deletedObjectKeys, ["projects/project-id/thumbnail.webp"]);
+
+  await app.close();
+});
+
 test("GET /api/projects/:id/delete-preview reports planned deployments", async () => {
   const fakeDb = new ProjectRouteFakeDb({
     activeUserId: ACTIVE_USER_ID,
@@ -500,12 +540,6 @@ test("POST /api/projects/:id/assets/presigned-upload rejects oversized Terraform
 });
 
 test("POST /api/projects/:id/assets/presigned-upload creates a pending asset upload", async () => {
-  const uploadUrlRequests: Array<{
-    bucketName: string;
-    contentType: string;
-    expiresInSeconds: number;
-    objectKey: string;
-  }> = [];
   const fakeDb = new ProjectRouteFakeDb({
     activeUserId: ACTIVE_USER_ID,
     requestedProjectId: ACTIVE_PROJECT_ID,
@@ -520,21 +554,7 @@ test("POST /api/projects/:id/assets/presigned-upload creates a pending asset upl
   });
   const app = buildApp({
     getDatabaseClient: () => fakeDb.client,
-    projectAssetStorage: {
-      async createUploadUrl(input) {
-        uploadUrlRequests.push(input);
-        return "https://s3.example.test/upload";
-      },
-      async putObject() {
-        throw new Error("putObject should not run");
-      },
-      async deleteObject() {
-        throw new Error("deleteObject should not run");
-      },
-      async objectExists() {
-        throw new Error("objectExists should not run");
-      }
-    }
+    projectAssetStorage: createProjectAssetStorageStub()
   });
 
   const response = await app.inject({
@@ -557,19 +577,13 @@ test("POST /api/projects/:id/assets/presigned-upload creates a pending asset upl
     response.json().upload.url,
     `/api/projects/${ACTIVE_PROJECT_ID}/assets/${response.json().asset.id}/upload-content`
   );
-  assert.equal(uploadUrlRequests.length, 0);
 
   await app.close();
 });
 
 test("PUT /api/projects/:id/assets/:assetId/upload-content uploads Terraform artifact through API", async () => {
   const terraformCode = "resource \"aws_s3_bucket\" \"site\" {}\n";
-  const putObjectRequests: Array<{
-    body: string | Buffer;
-    bucketName: string;
-    contentType: string;
-    objectKey: string;
-  }> = [];
+  const putObjectRequests: Array<Parameters<ProjectAssetStorage["putObject"]>[0]> = [];
   const fakeDb = new ProjectRouteFakeDb({
     activeUserId: ACTIVE_USER_ID,
     requestedProjectAssetId: ACTIVE_ASSET_ID,
@@ -589,20 +603,11 @@ test("PUT /api/projects/:id/assets/:assetId/upload-content uploads Terraform art
   });
   const app = buildApp({
     getDatabaseClient: () => fakeDb.client,
-    projectAssetStorage: {
-      async createUploadUrl() {
-        throw new Error("createUploadUrl should not run");
-      },
+    projectAssetStorage: createProjectAssetStorageStub({
       async putObject(input) {
         putObjectRequests.push(input);
-      },
-      async deleteObject() {
-        throw new Error("deleteObject should not run");
-      },
-      async objectExists() {
-        throw new Error("objectExists should not run");
       }
-    }
+    })
   });
 
   const response = await app.inject({
@@ -619,7 +624,6 @@ test("PUT /api/projects/:id/assets/:assetId/upload-content uploads Terraform art
   assert.equal(fakeDb.projectAssetRows[0]?.uploadStatus, "uploaded");
   assert.deepEqual(putObjectRequests, [
     {
-      bucketName: "sketchcatch-test-bucket",
       objectKey: "projects/project-id/diagram.png",
       contentType: "text/plain",
       body: terraformCode
@@ -629,12 +633,202 @@ test("PUT /api/projects/:id/assets/:assetId/upload-content uploads Terraform art
   await app.close();
 });
 
-test("POST /api/projects/:id/assets/:assetId/confirm-upload marks an existing S3 object uploaded", async () => {
-  const objectExistsRequests: Array<{
-    bucketName: string;
-    byteSize: number | null;
-    objectKey: string;
-  }> = [];
+test("PUT /api/projects/:id/assets/:assetId/upload-content stores a captured WebP thumbnail", async () => {
+  const thumbnailBytes = Buffer.from("RIFF\u0010\u0000\u0000\u0000WEBPVP8 captured-board", "binary");
+  const putObjectRequests: Array<Parameters<ProjectAssetStorage["putObject"]>[0]> = [];
+  const fakeDb = new ProjectRouteFakeDb({
+    activeUserId: ACTIVE_USER_ID,
+    requestedProjectAssetId: ACTIVE_ASSET_ID,
+    requestedProjectId: ACTIVE_PROJECT_ID,
+    users: [makeUser({ id: ACTIVE_USER_ID })],
+    projects: [makeProject({ id: ACTIVE_PROJECT_ID, userId: ACTIVE_USER_ID })],
+    projectAssets: [
+      makeProjectAsset({
+        id: ACTIVE_ASSET_ID,
+        projectId: ACTIVE_PROJECT_ID,
+        assetType: "thumbnail",
+        contentType: "image/webp",
+        byteSize: thumbnailBytes.byteLength,
+        uploadStatus: "pending"
+      })
+    ]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client,
+    projectAssetStorage: createProjectAssetStorageStub({
+      async putObject(input) {
+        putObjectRequests.push(input);
+      }
+    })
+  });
+
+  const response = await app.inject({
+    method: "PUT",
+    url: `/api/projects/${ACTIVE_PROJECT_ID}/assets/${ACTIVE_ASSET_ID}/upload-content`,
+    headers: {
+      ...(await authHeaders(ACTIVE_USER_ID)),
+      "content-type": "image/webp"
+    },
+    payload: thumbnailBytes
+  });
+
+  assert.equal(response.statusCode, 204);
+  assert.equal(fakeDb.projectAssetRows[0]?.uploadStatus, "uploaded");
+  assert.equal(putObjectRequests.length, 1);
+  assert.equal(putObjectRequests[0]?.contentType, "image/webp");
+  assert.deepEqual(putObjectRequests[0]?.body, thumbnailBytes);
+
+  await app.close();
+});
+
+test("GET /api/projects/:id/thumbnail returns the latest authenticated Board capture", async () => {
+  const thumbnailBytes = Buffer.from("RIFF\u0010\u0000\u0000\u0000WEBPVP8 captured-board", "binary");
+  const thumbnailObjectKey = "projects/project-id/assets/thumbnail/latest-board.webp";
+  const getObjectRequests: Array<Parameters<ProjectAssetStorage["getObject"]>[0]> = [];
+  const fakeDb = new ProjectRouteFakeDb({
+    activeUserId: ACTIVE_USER_ID,
+    requestedProjectId: ACTIVE_PROJECT_ID,
+    users: [makeUser({ id: ACTIVE_USER_ID })],
+    projects: [makeProject({ id: ACTIVE_PROJECT_ID, userId: ACTIVE_USER_ID })],
+    projectAssets: [
+      makeProjectAsset({
+        id: "11111111-1111-4111-8111-111111111111",
+        projectId: ACTIVE_PROJECT_ID,
+        assetType: "thumbnail",
+        contentType: "image/webp",
+        objectKey: "projects/project-id/assets/thumbnail/equal-time-older-board.webp",
+        uploadStatus: "uploaded",
+        createdAt: new Date("2026-07-13T00:00:00.000Z")
+      }),
+      makeProjectAsset({
+        id: ACTIVE_ASSET_ID,
+        projectId: ACTIVE_PROJECT_ID,
+        assetType: "thumbnail",
+        contentType: "image/webp",
+        objectKey: thumbnailObjectKey,
+        uploadStatus: "uploaded",
+        createdAt: new Date("2026-07-13T00:00:00.000Z")
+      }),
+      makeProjectAsset({
+        id: "33333333-3333-4333-8333-333333333333",
+        projectId: ACTIVE_PROJECT_ID,
+        assetType: "diagram_png",
+        uploadStatus: "uploaded",
+        createdAt: new Date("2026-07-12T00:00:00.000Z")
+      })
+    ]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client,
+    projectAssetStorage: createProjectAssetStorageStub({
+      async getObject(input) {
+        getObjectRequests.push(input);
+        return thumbnailBytes;
+      }
+    })
+  });
+
+  const response = await app.inject({
+    method: "GET",
+    url: `/api/projects/${ACTIVE_PROJECT_ID}/thumbnail`,
+    headers: await authHeaders(ACTIVE_USER_ID)
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.match(response.headers["content-type"] ?? "", /^image\/webp/u);
+  assert.match(response.headers["cache-control"] ?? "", /private/u);
+  assert.deepEqual(response.rawPayload, thumbnailBytes);
+  assert.deepEqual(getObjectRequests, [{ objectKey: thumbnailObjectKey }]);
+
+  await app.close();
+});
+
+test("Project thumbnail upload and read share a real filesystem storage instance", async (t) => {
+  const temporaryDirectory = await mkdtemp(join(tmpdir(), "sketchcatch-route-project-assets-"));
+  const rootDirectory = await realpath(temporaryDirectory);
+  t.after(async () => rm(rootDirectory, { force: true, recursive: true }));
+  const projectAssetStorage = createFilesystemProjectAssetStorage({ rootDirectory });
+  const thumbnailBytes = Buffer.from("RIFF\u0010\u0000\u0000\u0000WEBPVP8 route-capture", "binary");
+  const fakeDb = new ProjectRouteFakeDb({
+    activeUserId: ACTIVE_USER_ID,
+    requestedProjectId: ACTIVE_PROJECT_ID,
+    users: [makeUser({ id: ACTIVE_USER_ID })],
+    projects: [makeProject({ id: ACTIVE_PROJECT_ID, userId: ACTIVE_USER_ID })]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client,
+    projectAssetStorage
+  });
+
+  const pendingResponse = await app.inject({
+    method: "POST",
+    url: `/api/projects/${ACTIVE_PROJECT_ID}/assets/presigned-upload`,
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: {
+      assetType: "thumbnail",
+      fileName: `${"b".repeat(250)}.webp`,
+      contentType: "image/webp",
+      byteSize: thumbnailBytes.byteLength
+    }
+  });
+  const pendingAsset = pendingResponse.json().asset as ProjectAssetRow;
+
+  const uploadResponse = await app.inject({
+    method: "PUT",
+    url: `/api/projects/${ACTIVE_PROJECT_ID}/assets/${pendingAsset.id}/upload-content`,
+    headers: {
+      ...(await authHeaders(ACTIVE_USER_ID)),
+      "content-type": "image/webp"
+    },
+    payload: thumbnailBytes
+  });
+  const thumbnailResponse = await app.inject({
+    method: "GET",
+    url: `/api/projects/${ACTIVE_PROJECT_ID}/thumbnail`,
+    headers: await authHeaders(ACTIVE_USER_ID)
+  });
+
+  assert.equal(pendingResponse.statusCode, 201);
+  assert.equal(uploadResponse.statusCode, 204);
+  assert.equal(thumbnailResponse.statusCode, 200);
+  assert.match(thumbnailResponse.headers["content-type"] ?? "", /^image\/webp/u);
+  assert.deepEqual(thumbnailResponse.rawPayload, thumbnailBytes);
+  assert.equal(
+    await projectAssetStorage.objectExists({
+      objectKey: pendingAsset.objectKey,
+      byteSize: thumbnailBytes.byteLength
+    }),
+    true
+  );
+
+  await app.close();
+});
+
+test("GET /api/projects/:id/thumbnail hides captures owned by another user", async () => {
+  const fakeDb = new ProjectRouteFakeDb({
+    activeUserId: ACTIVE_USER_ID,
+    requestedProjectId: OTHER_PROJECT_ID,
+    users: [makeUser({ id: ACTIVE_USER_ID })],
+    projects: [makeProject({ id: OTHER_PROJECT_ID, userId: OTHER_USER_ID })]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "GET",
+    url: `/api/projects/${OTHER_PROJECT_ID}/thumbnail`,
+    headers: await authHeaders(ACTIVE_USER_ID)
+  });
+
+  assert.equal(response.statusCode, 404);
+  assertErrorResponse(response.json() as ApiErrorResponse, "not_found");
+
+  await app.close();
+});
+
+test("POST /api/projects/:id/assets/:assetId/confirm-upload marks an existing stored object uploaded", async () => {
+  const objectExistsRequests: Array<Parameters<ProjectAssetStorage["objectExists"]>[0]> = [];
   const fakeDb = new ProjectRouteFakeDb({
     activeUserId: ACTIVE_USER_ID,
     requestedProjectAssetId: ACTIVE_ASSET_ID,
@@ -651,21 +845,12 @@ test("POST /api/projects/:id/assets/:assetId/confirm-upload marks an existing S3
   });
   const app = buildApp({
     getDatabaseClient: () => fakeDb.client,
-    projectAssetStorage: {
-      async createUploadUrl() {
-        throw new Error("createUploadUrl should not run");
-      },
-      async putObject() {
-        throw new Error("putObject should not run");
-      },
-      async deleteObject() {
-        throw new Error("deleteObject should not run");
-      },
+    projectAssetStorage: createProjectAssetStorageStub({
       async objectExists(input) {
         objectExistsRequests.push(input);
         return true;
       }
-    }
+    })
   });
 
   const response = await app.inject({
@@ -679,7 +864,6 @@ test("POST /api/projects/:id/assets/:assetId/confirm-upload marks an existing S3
   assert.equal(fakeDb.projectAssetRows[0]?.uploadStatus, "uploaded");
   assert.deepEqual(objectExistsRequests, [
     {
-      bucketName: "sketchcatch-test-bucket",
       byteSize: 1024,
       objectKey: "projects/project-id/diagram.png"
     }
@@ -688,7 +872,7 @@ test("POST /api/projects/:id/assets/:assetId/confirm-upload marks an existing S3
   await app.close();
 });
 
-test("POST /api/projects/:id/assets/:assetId/confirm-upload rejects a missing S3 object", async () => {
+test("POST /api/projects/:id/assets/:assetId/confirm-upload rejects a missing stored object", async () => {
   const fakeDb = new ProjectRouteFakeDb({
     activeUserId: ACTIVE_USER_ID,
     requestedProjectAssetId: ACTIVE_ASSET_ID,
@@ -705,20 +889,11 @@ test("POST /api/projects/:id/assets/:assetId/confirm-upload rejects a missing S3
   });
   const app = buildApp({
     getDatabaseClient: () => fakeDb.client,
-    projectAssetStorage: {
-      async createUploadUrl() {
-        throw new Error("createUploadUrl should not run");
-      },
-      async putObject() {
-        throw new Error("putObject should not run");
-      },
-      async deleteObject() {
-        throw new Error("deleteObject should not run");
-      },
+    projectAssetStorage: createProjectAssetStorageStub({
       async objectExists() {
         return false;
       }
-    }
+    })
   });
 
   const response = await app.inject({
@@ -752,20 +927,11 @@ test("POST /api/projects/:id/assets/:assetId/abort-upload deletes only pending a
   });
   const app = buildApp({
     getDatabaseClient: () => fakeDb.client,
-    projectAssetStorage: {
-      async createUploadUrl() {
-        throw new Error("createUploadUrl should not run");
-      },
-      async putObject() {
-        throw new Error("putObject should not run");
-      },
+    projectAssetStorage: createProjectAssetStorageStub({
       async deleteObject(input) {
         deletedObjectKeys.push(input.objectKey);
-      },
-      async objectExists() {
-        throw new Error("objectExists should not run");
       }
-    }
+    })
   });
 
   const response = await app.inject({
@@ -780,6 +946,26 @@ test("POST /api/projects/:id/assets/:assetId/abort-upload deletes only pending a
 
   await app.close();
 });
+
+function createProjectAssetStorageStub(
+  overrides: Partial<ProjectAssetStorage> = {}
+): ProjectAssetStorage {
+  return {
+    async putObject() {
+      throw new Error("putObject should not run");
+    },
+    async getObject() {
+      throw new Error("getObject should not run");
+    },
+    async deleteObject() {
+      throw new Error("deleteObject should not run");
+    },
+    async objectExists() {
+      throw new Error("objectExists should not run");
+    },
+    ...overrides
+  };
+}
 
 function assertErrorResponse(
   body: ApiErrorResponse,

@@ -157,7 +157,9 @@ test("OPTIONS preflight allows the configured public web origin", async () => {
 
 test("production 500 responses do not expose internal error messages", async () => {
   const previousNodeEnv = process.env.NODE_ENV;
+  const previousS3BucketName = process.env.S3_BUCKET_NAME;
   process.env.NODE_ENV = "production";
+  process.env.S3_BUCKET_NAME = "test-project-assets";
   const app = buildApp();
 
   app.get("/boom", async () => {
@@ -177,6 +179,11 @@ test("production 500 responses do not expose internal error messages", async () 
     });
   } finally {
     process.env.NODE_ENV = previousNodeEnv;
+    if (previousS3BucketName === undefined) {
+      delete process.env.S3_BUCKET_NAME;
+    } else {
+      process.env.S3_BUCKET_NAME = previousS3BucketName;
+    }
     await app.close();
   }
 });
