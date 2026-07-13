@@ -46,7 +46,7 @@
 }
 
 .brand {
-  gap: 6px;
+  gap: 7px;
 }
 
 .brand img {
@@ -54,7 +54,7 @@
   width: 16px;
   height: 24px;
   object-fit: contain;
-  transform: translateY(-3px);
+  transform: translateY(-2px);
 }
 
 .backLink {
@@ -404,7 +404,7 @@
   .page { padding: 8px; }
   .topbar { top: 8px; min-height: 64px; padding: 0 14px; }
   .topbar > strong { display: none; }
-  .brand { gap: 6px; font-size: 16px; }
+  .brand { gap: 7px; font-size: 16px; }
   .brand img { width: 14px; height: 21px; }
   .backLink { font-size: 0; }
   .backLink svg { width: 20px; height: 20px; }
