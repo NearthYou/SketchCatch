@@ -9,6 +9,7 @@ import type {
 } from "./aws-live-observation-snapshot-provider.js";
 import { parseLiveObservationProviderSnapshot } from "./live-observation-provider-snapshot.js";
 import type { LiveObservationStore } from "./live-observation-store.js";
+import { LiveObservationV2ServiceError } from "./live-observation-v2-service.js";
 
 export type LiveObservationAwsConnectionEvidence = {
   id: string;
@@ -29,15 +30,23 @@ export function createLiveObservationObserverService(options: {
   return Object.freeze({
     async refresh(input: {
       observationId: string;
+      expectedDeploymentId: string;
       connection: LiveObservationAwsConnectionEvidence | null;
     }): Promise<void> {
-      const read = await options.store.readSession({ observationId: input.observationId });
-      if (read.kind !== "active") return;
+      const read = await mapStoreOperation(() =>
+        options.store.readSession({ observationId: input.observationId })
+      );
+      if (
+        read.kind !== "active" ||
+        read.session.deploymentId !== input.expectedDeploymentId
+      ) return;
 
-      const claim = await options.store.claimObserverLease({
-        observationId: input.observationId,
-        observerId
-      });
+      const claim = await mapStoreOperation(() =>
+        options.store.claimObserverLease({
+          observationId: input.observationId,
+          observerId
+        })
+      );
       if (claim.kind !== "claimed") return;
 
       const target = createProviderTarget(read.session.manifest, input.connection);
@@ -54,17 +63,27 @@ export function createLiveObservationObserverService(options: {
         }
       }
 
-      await options.store.commitObservation({
-        observationId: input.observationId,
-        observerId,
-        fencingToken: claim.lease.fencingToken,
-        observation: {
-          observedAt: claim.evaluatedAt,
-          payload: snapshot
-        }
-      });
+      await mapStoreOperation(() =>
+        options.store.commitObservation({
+          observationId: input.observationId,
+          observerId,
+          fencingToken: claim.lease.fencingToken,
+          observation: {
+            observedAt: claim.evaluatedAt,
+            payload: snapshot
+          }
+        })
+      );
     }
   });
+}
+
+async function mapStoreOperation<T>(operation: () => Promise<T>): Promise<T> {
+  try {
+    return await operation();
+  } catch {
+    throw new LiveObservationV2ServiceError("LIVE_OBSERVATION_CACHE_UNAVAILABLE");
+  }
 }
 
 export function createProviderTarget(
@@ -77,6 +96,7 @@ export function createProviderTarget(
   const role = /^arn:(aws|aws-cn|aws-us-gov):iam::([0-9]{12}):role\/[\w+=,.@/-]+$/.exec(
     connection.roleArn ?? ""
   );
+  const expectedPartition = partitionForRegion(connection.region);
   if (
     connection.status !== "verified" ||
     connection.id !== manifest.provenance.awsConnectionId ||
@@ -86,6 +106,9 @@ export function createProviderTarget(
     !loadBalancer ||
     !targetGroup ||
     !role ||
+    loadBalancer.partition !== expectedPartition ||
+    targetGroup.partition !== expectedPartition ||
+    role[1] !== expectedPartition ||
     loadBalancer.region !== connection.region ||
     targetGroup.region !== connection.region ||
     loadBalancer.accountId !== connection.accountId ||
@@ -113,6 +136,7 @@ export function createProviderTarget(
     externalId: connection.externalId,
     region: connection.region,
     loadBalancerArnSuffix: loadBalancer.suffix,
+    targetGroupArn: manifest.adapter.payload.targetGroupArn,
     targetGroupArnSuffix: targetGroup.suffix,
     logGroupNames: [...(manifest.adapter.payload.logGroupNames ?? [])],
     capacityTarget
@@ -120,17 +144,23 @@ export function createProviderTarget(
 }
 
 function parseAlbArn(value: string) {
-  const match = /^arn:(?:aws|aws-cn|aws-us-gov):elasticloadbalancing:([^:]+):([0-9]{12}):loadbalancer\/(app\/[A-Za-z0-9-]+\/[0-9a-f]{16})$/.exec(value);
-  return match?.[1] && match[2] && match[3]
-    ? { region: match[1], accountId: match[2], suffix: match[3] }
+  const match = /^arn:(aws|aws-cn|aws-us-gov):elasticloadbalancing:([^:]+):([0-9]{12}):loadbalancer\/(app\/[A-Za-z0-9-]+\/[0-9a-f]{16})$/.exec(value);
+  return match?.[1] && match[2] && match[3] && match[4]
+    ? { partition: match[1], region: match[2], accountId: match[3], suffix: match[4] }
     : null;
 }
 
 function parseTargetGroupArn(value: string) {
-  const match = /^arn:(?:aws|aws-cn|aws-us-gov):elasticloadbalancing:([^:]+):([0-9]{12}):(targetgroup\/[A-Za-z0-9-]+\/[0-9a-f]{16})$/.exec(value);
-  return match?.[1] && match[2] && match[3]
-    ? { region: match[1], accountId: match[2], suffix: match[3] }
+  const match = /^arn:(aws|aws-cn|aws-us-gov):elasticloadbalancing:([^:]+):([0-9]{12}):(targetgroup\/[A-Za-z0-9-]+\/[0-9a-f]{16})$/.exec(value);
+  return match?.[1] && match[2] && match[3] && match[4]
+    ? { partition: match[1], region: match[2], accountId: match[3], suffix: match[4] }
     : null;
+}
+
+function partitionForRegion(region: string): "aws" | "aws-cn" | "aws-us-gov" {
+  if (region.startsWith("cn-")) return "aws-cn";
+  if (region.startsWith("us-gov-")) return "aws-us-gov";
+  return "aws";
 }
 
 function unavailableSnapshot(observedAt: string): LiveObservationProviderSnapshot {

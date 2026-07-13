@@ -133,6 +133,20 @@ test("materializer fails closed and stores a generic invalid row for unverified 
       connection: createConnection(),
       outputs: createOutputs({
         asg_name: "customer-platform-asg",
+        load_balancer_arn:
+          "arn:aws:elasticloadbalancing:ap-northeast-2:210987654321:" +
+          "loadbalancer/app/customer-platform/50dc6c495c0c9188",
+        target_group_arn:
+          "arn:aws:elasticloadbalancing:ap-northeast-2:210987654321:" +
+          "targetgroup/customer-api/6d0ecf831eec9f09"
+      })
+    },
+    {
+      audienceBaseUrl: "https://audience.example.com",
+      deployment: createDeployment(),
+      connection: createConnection(),
+      outputs: createOutputs({
+        asg_name: "customer-platform-asg",
         load_balancer_dns_name:
           "internal-customer-platform-123456789.ap-northeast-2.elb.amazonaws.com",
         traffic_url:

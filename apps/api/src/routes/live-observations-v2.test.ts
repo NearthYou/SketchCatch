@@ -5,7 +5,10 @@ import type {
   CreateLiveObservationV2Response,
   LiveObservationV2SnapshotResponse
 } from "@sketchcatch/types";
-import type { LiveObservationV2Service } from "../live-observations/live-observation-v2-service.js";
+import {
+  LiveObservationV2ServiceError,
+  type LiveObservationV2Service
+} from "../live-observations/live-observation-v2-service.js";
 import { registerLiveObservationV2Routes } from "./live-observations-v2.js";
 
 const DEPLOYMENT_ID = "123e4567-e89b-42d3-a456-426614174000";
@@ -80,6 +83,57 @@ test("v2 authenticated stream emits a snapshot and closes in once mode", async (
   assert.match(response.headers["content-type"] ?? "", /text\/event-stream/);
   assert.match(response.body, /event: snapshot/);
   assert.match(response.body, new RegExp(OBSERVATION_ID));
+});
+
+test("v2 authenticated GET maps observer Store outages to a stable sanitized 503", async (t) => {
+  const app = Fastify();
+  await app.register(registerLiveObservationV2Routes, {
+    enabled: true,
+    liveObservationService: createService([]),
+    async prepareDeploymentManifest() {},
+    async requireDeploymentAccess() {},
+    async refreshObservation() {
+      throw new LiveObservationV2ServiceError("LIVE_OBSERVATION_CACHE_UNAVAILABLE");
+    }
+  });
+  await app.ready();
+  t.after(() => app.close());
+
+  const response = await app.inject({
+    method: "GET",
+    url: `/deployments/${DEPLOYMENT_ID}/live-observations/${OBSERVATION_ID}`
+  });
+
+  assert.equal(response.statusCode, 503);
+  assert.deepEqual(response.json(), {
+    error: "LIVE_OBSERVATION_CACHE_UNAVAILABLE",
+    message: "Live Observation session request failed"
+  });
+});
+
+test("v2 authenticated SSE emits one sanitized error event for observer Store outages", async (t) => {
+  const app = Fastify();
+  await app.register(registerLiveObservationV2Routes, {
+    enabled: true,
+    liveObservationService: createService([]),
+    async prepareDeploymentManifest() {},
+    async requireDeploymentAccess() {},
+    async refreshObservation() {
+      throw new LiveObservationV2ServiceError("LIVE_OBSERVATION_CACHE_UNAVAILABLE");
+    }
+  });
+  await app.ready();
+  t.after(() => app.close());
+
+  const response = await app.inject({
+    method: "GET",
+    url: `/deployments/${DEPLOYMENT_ID}/live-observations/${OBSERVATION_ID}/stream?once=true`
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal((response.body.match(/event: error/g) ?? []).length, 1);
+  assert.match(response.body, /LIVE_OBSERVATION_CACHE_UNAVAILABLE/);
+  assert.doesNotMatch(response.body, /stack|Store unavailable|internal/i);
 });
 
 test("disabled v2 authenticated plugin registers no live observation routes", async (t) => {

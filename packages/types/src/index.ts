@@ -1419,7 +1419,10 @@ export type LiveObservationPressureLevel =
   | "high"
   | "critical";
 
-export type LiveObservationAwsState = "available" | "delayed" | "unavailable";
+export type LiveObservationProviderState = "available" | "delayed" | "unavailable";
+
+/** @deprecated Use LiveObservationProviderState. */
+export type LiveObservationAwsState = LiveObservationProviderState;
 
 export type LiveObservationProviderSnapshot = {
   requests: number | null;
@@ -1437,7 +1440,7 @@ export type LiveObservationProviderSnapshot = {
     message: string;
   }>;
   observedAt: IsoDateTimeString | null;
-  state: LiveObservationAwsState;
+  state: LiveObservationProviderState;
 };
 
 export type LiveObservationSession = {
@@ -1462,7 +1465,7 @@ export type LiveObservationSnapshot = {
     observedAt: IsoDateTimeString;
   };
   cloudWatch: {
-    state: LiveObservationAwsState;
+    state: LiveObservationProviderState;
     requestCountPerTarget: number | null;
     periodSeconds: 60;
     observedAt: IsoDateTimeString | null;
@@ -1470,7 +1473,7 @@ export type LiveObservationSnapshot = {
     errorCode: string | null;
   };
   capacity: {
-    state: LiveObservationAwsState;
+    state: LiveObservationProviderState;
     desiredCapacity: number | null;
     currentInstanceCount: number | null;
     inServiceInstanceCount: number | null;

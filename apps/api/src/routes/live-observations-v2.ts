@@ -155,7 +155,19 @@ async function streamSnapshots(input: {
       if (closed) return;
       input.reply.raw.write(`event: snapshot\ndata: ${JSON.stringify(response.snapshot)}\n\n`);
       if (response.snapshot.status !== "active") close();
-    } catch {
+    } catch (error) {
+      if (
+        !closed &&
+        error instanceof LiveObservationV2ServiceError &&
+        error.code === "LIVE_OBSERVATION_CACHE_UNAVAILABLE"
+      ) {
+        input.reply.raw.write(
+          `event: error\ndata: ${JSON.stringify({
+            error: "LIVE_OBSERVATION_CACHE_UNAVAILABLE",
+            message: "Live Observation session request failed"
+          })}\n\n`
+        );
+      }
       close();
     } finally {
       updating = false;

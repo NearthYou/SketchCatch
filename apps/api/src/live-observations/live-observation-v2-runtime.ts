@@ -161,7 +161,11 @@ export function createLiveObservationV2Runtime(options: {
             context.accessContext
           ) ?? null
         : null;
-      await observerService.refresh({ observationId, connection });
+      await observerService.refresh({
+        observationId,
+        expectedDeploymentId: deploymentId,
+        connection
+      });
     }
   };
 }

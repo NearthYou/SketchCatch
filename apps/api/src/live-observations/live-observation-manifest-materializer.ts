@@ -206,16 +206,30 @@ function readAwsArn(
   identity: { accountId: string; region: string }
 ): string {
   const arn = readOptionalString(outputs, arnName);
-  if (arn) return arn;
+  const partition = partitionForRegion(identity.region);
+  if (arn) {
+    const parsed = /^arn:(aws|aws-cn|aws-us-gov):elasticloadbalancing:([^:]+):([0-9]{12}):/.exec(
+      arn
+    );
+    if (
+      parsed?.[1] !== partition ||
+      parsed[2] !== identity.region ||
+      parsed[3] !== identity.accountId
+    ) {
+      throw new Error("AWS ARN identity does not match verified connection");
+    }
+    return arn;
+  }
 
   const suffix = readString(outputs, suffixName);
-  const partition = identity.region.startsWith("cn-")
-    ? "aws-cn"
-    : identity.region.startsWith("us-gov-")
-      ? "aws-us-gov"
-      : "aws";
   const resource = arnName === "load_balancer_arn" ? `loadbalancer/${suffix}` : suffix;
   return `arn:${partition}:elasticloadbalancing:${identity.region}:${identity.accountId}:${resource}`;
+}
+
+function partitionForRegion(region: string): "aws" | "aws-cn" | "aws-us-gov" {
+  if (region.startsWith("cn-")) return "aws-cn";
+  if (region.startsWith("us-gov-")) return "aws-us-gov";
+  return "aws";
 }
 
 function readString(outputs: Readonly<Record<string, unknown>>, name: string): string {

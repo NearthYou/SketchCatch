@@ -5,10 +5,13 @@ import type {
   DeploymentLiveObservationManifestStatus,
   DeploymentLiveObservationManifestV2,
   JsonValue,
+  LiveObservationProviderState,
   LiveObservationProviderSnapshot,
   LiveObservationSnapshotResponse,
   StopLiveObservationResponse
 } from "./index.js";
+
+export const liveObservationProviderStateContract: LiveObservationProviderState = "available";
 
 export type LiveObservationContract = {
   collect: CollectLiveObservationEventResponse;

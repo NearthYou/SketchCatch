@@ -6,6 +6,10 @@ import {
 import { CloudWatchClient, GetMetricDataCommand } from "@aws-sdk/client-cloudwatch";
 import { CloudWatchLogsClient, FilterLogEventsCommand } from "@aws-sdk/client-cloudwatch-logs";
 import { DescribeServicesCommand, ECSClient } from "@aws-sdk/client-ecs";
+import {
+  DescribeTargetHealthCommand,
+  ElasticLoadBalancingV2Client
+} from "@aws-sdk/client-elastic-load-balancing-v2";
 import type { LiveObservationProviderSnapshot } from "@sketchcatch/types";
 import {
   createAwsSdkStsGateway,
@@ -18,6 +22,8 @@ const PERIOD_SECONDS = 60;
 const LOOKBACK_MS = 5 * 60 * 1_000;
 const MAX_LOG_ENTRIES = 50;
 const CACHE_TTL_MS = 10_000;
+const CACHE_MAX_ENTRIES = 1_000;
+const REQUEST_TIMEOUT_MS = 5_000;
 
 type MetricId = "requests" | "errors" | "latency";
 
@@ -27,6 +33,7 @@ export type AwsLiveObservationSnapshotTarget = {
   externalId: string;
   region: string;
   loadBalancerArnSuffix: string;
+  targetGroupArn: string;
   targetGroupArnSuffix: string;
   logGroupNames: string[];
   capacityTarget:
@@ -43,6 +50,7 @@ export type AwsLiveObservationSnapshotProvider = {
 
 type CloudWatchClientPort = {
   getMetricData(input: {
+    abortSignal: AbortSignal;
     namespace: "AWS/ApplicationELB";
     loadBalancerArnSuffix: string;
     targetGroupArnSuffix: string;
@@ -65,7 +73,7 @@ type CloudWatchClientPort = {
 };
 
 type AutoScalingClientPort = {
-  describeAutoScalingGroup(name: string): Promise<{
+  describeAutoScalingGroup(name: string, abortSignal: AbortSignal): Promise<{
     autoScalingGroups?: ReadonlyArray<{
       autoScalingGroupName?: string | undefined;
       desiredCapacity?: number | undefined;
@@ -80,13 +88,27 @@ type AutoScalingClientPort = {
 };
 
 type EcsClientPort = {
-  describeService(clusterName: string, serviceName: string): Promise<{
+  describeService(
+    clusterName: string,
+    serviceName: string,
+    abortSignal: AbortSignal
+  ): Promise<{
     service?: { desiredCount?: number | undefined; runningCount?: number | undefined } | undefined;
+  }>;
+};
+
+type TargetHealthClientPort = {
+  describeTargetHealth(targetGroupArn: string, abortSignal: AbortSignal): Promise<{
+    targets?: ReadonlyArray<{
+      id?: string | undefined;
+      state?: string | undefined;
+    }> | undefined;
   }>;
 };
 
 type LogsClientPort = {
   filterLogEvents(input: {
+    abortSignal: AbortSignal;
     logGroupName: string;
     startTime: number;
     endTime: number;
@@ -101,7 +123,8 @@ type LogsClientPort = {
 
 export type AwsLiveObservationSnapshotProviderOptions = {
   prepareCredentials?: (
-    target: AwsLiveObservationSnapshotTarget
+    target: AwsLiveObservationSnapshotTarget,
+    abortSignal: AbortSignal
   ) => Promise<AwsTemporaryCredentials>;
   cloudWatchClientFactory?: (input: {
     region: string;
@@ -115,10 +138,20 @@ export type AwsLiveObservationSnapshotProviderOptions = {
     region: string;
     credentials: AwsTemporaryCredentials;
   }) => EcsClientPort;
+  targetHealthClientFactory?: (input: {
+    region: string;
+    credentials: AwsTemporaryCredentials;
+  }) => TargetHealthClientPort;
   logsClientFactory?: (input: {
     region: string;
     credentials: AwsTemporaryCredentials;
   }) => LogsClientPort;
+  cacheTtlMs?: number;
+  cacheMaxEntries?: number;
+  requestTimeoutMs?: number;
+  deadlineScheduler?: {
+    schedule(callback: () => void, delayMs: number): { cancel(): void };
+  };
   now?: () => number;
 };
 
@@ -129,29 +162,54 @@ export function createAwsLiveObservationSnapshotProvider(
   const cloudWatchClientFactory = options.cloudWatchClientFactory ?? createDefaultCloudWatchClient;
   const autoScalingClientFactory = options.autoScalingClientFactory ?? createDefaultAutoScalingClient;
   const ecsClientFactory = options.ecsClientFactory ?? createDefaultEcsClient;
+  const targetHealthClientFactory =
+    options.targetHealthClientFactory ?? createDefaultTargetHealthClient;
   const logsClientFactory = options.logsClientFactory ?? createDefaultLogsClient;
   const now = options.now ?? Date.now;
+  const cacheTtlMs = positiveIntegerOption(options.cacheTtlMs, CACHE_TTL_MS);
+  const cacheMaxEntries = positiveIntegerOption(
+    options.cacheMaxEntries,
+    CACHE_MAX_ENTRIES
+  );
+  const requestTimeoutMs = positiveIntegerOption(
+    options.requestTimeoutMs,
+    REQUEST_TIMEOUT_MS
+  );
+  const deadlineScheduler = options.deadlineScheduler ?? createDeadlineScheduler();
 
   const observeFresh = async (
     target: AwsLiveObservationSnapshotTarget,
-    evaluatedAtMs: number
+    evaluatedAtMs: number,
+    abortSignal: AbortSignal
   ): Promise<LiveObservationProviderSnapshot> => {
     let credentials: AwsTemporaryCredentials;
     try {
-      credentials = await prepareCredentials(target);
+      credentials = await prepareCredentials(target, abortSignal);
     } catch {
       return emptySnapshot("unavailable", new Date(evaluatedAtMs).toISOString());
     }
 
     const clientInput = { region: target.region, credentials };
     const [metrics, capacity, logs] = await Promise.all([
-      observeMetrics(cloudWatchClientFactory(clientInput), target, evaluatedAtMs),
+      observeMetrics(
+        cloudWatchClientFactory(clientInput),
+        target,
+        evaluatedAtMs,
+        abortSignal
+      ),
       observeCapacity(
         target,
         autoScalingClientFactory(clientInput),
-        ecsClientFactory(clientInput)
+        ecsClientFactory(clientInput),
+        targetHealthClientFactory(clientInput),
+        abortSignal
       ),
-      observeLogs(logsClientFactory(clientInput), target.logGroupNames, evaluatedAtMs)
+      observeLogs(
+        logsClientFactory(clientInput),
+        target.logGroupNames,
+        evaluatedAtMs,
+        abortSignal
+      )
     ]);
 
     if (metrics.state !== "available" || !capacity || logs === null) {
@@ -177,24 +235,72 @@ export function createAwsLiveObservationSnapshotProvider(
       state: "available"
     });
   };
-  const cache = new Map<
-    string,
-    { expiresAtMs: number; pending: Promise<LiveObservationProviderSnapshot> }
-  >();
+  type CacheEntry =
+    | { state: "pending"; pending: Promise<LiveObservationProviderSnapshot> }
+    | {
+        state: "settled";
+        snapshot: LiveObservationProviderSnapshot;
+        settledAtMs: number;
+        expiresAtMs: number;
+      };
+  const cache = new Map<string, CacheEntry>();
 
   return {
     async observe(target, observationId) {
       const evaluatedAtMs = now();
       for (const [key, entry] of cache) {
-        if (entry.expiresAtMs <= evaluatedAtMs) cache.delete(key);
+        if (entry.state === "settled" && entry.expiresAtMs <= evaluatedAtMs) {
+          cache.delete(key);
+        }
       }
       const key = createCacheKey(observationId, target);
       const cached = cache.get(key);
       if (cached) {
-        return parseLiveObservationProviderSnapshot(await cached.pending);
+        return cached.state === "pending"
+          ? parseLiveObservationProviderSnapshot(await cached.pending)
+          : parseLiveObservationProviderSnapshot(cached.snapshot);
       }
-      const pending = observeFresh(target, evaluatedAtMs);
-      cache.set(key, { expiresAtMs: evaluatedAtMs + CACHE_TTL_MS, pending });
+
+      if (cache.size >= cacheMaxEntries) {
+        const settled = [...cache.entries()]
+          .filter(
+            (entry): entry is [string, Extract<CacheEntry, { state: "settled" }>] =>
+              entry[1].state === "settled"
+          )
+          .sort((left, right) => left[1].settledAtMs - right[1].settledAtMs)[0];
+        if (!settled) {
+          return emptySnapshot("unavailable", new Date(evaluatedAtMs).toISOString());
+        }
+        cache.delete(settled[0]);
+      }
+
+      const abortController = new AbortController();
+      const deadline = deadlineScheduler.schedule(
+        () => abortController.abort(),
+        requestTimeoutMs
+      );
+      const pending = observeFresh(target, evaluatedAtMs, abortController.signal)
+        .catch(() => emptySnapshot("unavailable", new Date(evaluatedAtMs).toISOString()))
+        .then((snapshot) => {
+          const parsed = parseLiveObservationProviderSnapshot(snapshot);
+          const settledAtMs = now();
+          const current = cache.get(key);
+          if (current?.state === "pending" && current.pending === pending) {
+            cache.set(key, {
+              state: "settled",
+              snapshot: parsed,
+              settledAtMs,
+              expiresAtMs: settledAtMs + cacheTtlMs
+            });
+          }
+          return parsed;
+        })
+        .finally(() => deadline.cancel());
+      const pendingEntry: Extract<CacheEntry, { state: "pending" }> = {
+        state: "pending",
+        pending
+      };
+      cache.set(key, pendingEntry);
       return parseLiveObservationProviderSnapshot(await pending);
     }
   };
@@ -217,22 +323,43 @@ function createCacheKey(
     target.awsConnectionId,
     target.region,
     target.loadBalancerArnSuffix,
+    target.targetGroupArn,
     target.targetGroupArnSuffix,
     capacity,
     ...target.logGroupNames
   ].join("|");
 }
 
+function positiveIntegerOption(value: number | undefined, fallback: number): number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0
+    ? value
+    : fallback;
+}
+
+function createDeadlineScheduler(): NonNullable<
+  AwsLiveObservationSnapshotProviderOptions["deadlineScheduler"]
+> {
+  return {
+    schedule(callback, delayMs) {
+      const timeout = setTimeout(callback, delayMs);
+      timeout.unref();
+      return { cancel: () => clearTimeout(timeout) };
+    }
+  };
+}
+
 async function observeMetrics(
   client: CloudWatchClientPort,
   target: AwsLiveObservationSnapshotTarget,
-  evaluatedAtMs: number
+  evaluatedAtMs: number,
+  abortSignal: AbortSignal
 ): Promise<
   | { state: "available"; requests: number; errors: number; latencySeconds: number; observedAt: string }
   | { state: "delayed" | "unavailable"; observedAt: string | null }
 > {
   try {
     const response = await client.getMetricData({
+      abortSignal,
       namespace: "AWS/ApplicationELB",
       loadBalancerArnSuffix: target.loadBalancerArnSuffix,
       targetGroupArnSuffix: target.targetGroupArnSuffix,
@@ -264,11 +391,15 @@ async function observeMetrics(
     if (!points.requests || !points.errors || !points.latency) {
       return { state: "unavailable", observedAt: null };
     }
-    const observedAtMs = Math.min(
+    const periodStarts = [
       points.requests.timestamp.getTime(),
       points.errors.timestamp.getTime(),
       points.latency.timestamp.getTime()
-    );
+    ];
+    if (new Set(periodStarts).size !== 1) {
+      return { state: "unavailable", observedAt: null };
+    }
+    const observedAtMs = periodStarts[0]! + PERIOD_SECONDS * 1_000;
     if (evaluatedAtMs - observedAtMs > PERIOD_SECONDS * 1_000) {
       return { state: "delayed", observedAt: new Date(observedAtMs).toISOString() };
     }
@@ -308,31 +439,56 @@ function latestCompletedPoint(
 async function observeCapacity(
   target: AwsLiveObservationSnapshotTarget,
   autoScaling: AutoScalingClientPort,
-  ecs: EcsClientPort
+  ecs: EcsClientPort,
+  targetHealth: TargetHealthClientPort,
+  abortSignal: AbortSignal
 ): Promise<LiveObservationProviderSnapshot["capacity"] | null> {
   try {
+    const health = await targetHealth.describeTargetHealth(
+      target.targetGroupArn,
+      abortSignal
+    );
+    const healthyTargetIds = new Set(
+      (health.targets ?? [])
+        .filter(
+          (candidate): candidate is typeof candidate & { id: string } =>
+            candidate.state === "healthy" &&
+            typeof candidate.id === "string" &&
+            candidate.id.length > 0
+        )
+        .map((candidate) => candidate.id)
+    );
     if (target.capacityTarget.kind === "ecs_fargate") {
       const response = await ecs.describeService(
         target.capacityTarget.clusterName,
-        target.capacityTarget.serviceName
+        target.capacityTarget.serviceName,
+        abortSignal
       );
       const desired = response.service?.desiredCount;
       const running = response.service?.runningCount;
       if (!isCount(desired) || !isCount(running)) return null;
-      return { desired, running, healthy: running, max: target.capacityTarget.maxCapacity };
+      return {
+        desired,
+        running,
+        healthy: Math.min(running, healthyTargetIds.size),
+        max: target.capacityTarget.maxCapacity
+      };
     }
 
     const asgName = target.capacityTarget.autoScalingGroupName;
-    const response = await autoScaling.describeAutoScalingGroup(asgName);
+    const response = await autoScaling.describeAutoScalingGroup(asgName, abortSignal);
     const group = response.autoScalingGroups?.find(
       (candidate) => candidate.autoScalingGroupName === asgName
     );
     if (!group || !isCount(group.desiredCapacity) || !isCount(group.maxSize)) return null;
-    const instances = group.instances ?? [];
-    const running = instances.filter((instance) => Boolean(instance.instanceId)).length;
-    const healthy = instances.filter(
-      (instance) => instance.lifecycleState === "InService" && instance.healthStatus === "Healthy"
-    ).length;
+    const runningInstanceIds = (group.instances ?? [])
+      .filter(
+        (instance): instance is typeof instance & { instanceId: string } =>
+          instance.lifecycleState === "InService" && Boolean(instance.instanceId)
+      )
+      .map((instance) => instance.instanceId);
+    const running = runningInstanceIds.length;
+    const healthy = runningInstanceIds.filter((id) => healthyTargetIds.has(id)).length;
     return { desired: group.desiredCapacity, running, healthy, max: group.maxSize };
   } catch {
     return null;
@@ -342,12 +498,14 @@ async function observeCapacity(
 async function observeLogs(
   client: LogsClientPort,
   logGroupNames: readonly string[],
-  evaluatedAtMs: number
+  evaluatedAtMs: number,
+  abortSignal: AbortSignal
 ): Promise<LiveObservationProviderSnapshot["logs"] | null> {
   try {
     const results = await Promise.all(
       logGroupNames.map((logGroupName) =>
         client.filterLogEvents({
+          abortSignal,
           logGroupName,
           startTime: evaluatedAtMs - LOOKBACK_MS,
           endTime: evaluatedAtMs,
@@ -402,13 +560,15 @@ function roundPercent(value: number): number {
 }
 
 async function prepareDefaultCredentials(
-  target: AwsLiveObservationSnapshotTarget
+  target: AwsLiveObservationSnapshotTarget,
+  abortSignal: AbortSignal
 ): Promise<AwsTemporaryCredentials> {
   return createAwsSdkStsGateway().assumeRole({
     roleArn: target.roleArn,
     externalId: target.externalId,
     region: target.region,
-    roleSessionName: `sketchcatch-live-observation-${randomUUID()}`
+    roleSessionName: `sketchcatch-live-observation-${randomUUID()}`,
+    abortSignal
   });
 }
 
@@ -419,29 +579,32 @@ function createDefaultCloudWatchClient(input: {
   const client = new CloudWatchClient(input);
   return {
     async getMetricData(metricInput) {
-      const response = await client.send(new GetMetricDataCommand({
-        StartTime: metricInput.startTime,
-        EndTime: metricInput.endTime,
-        ScanBy: "TimestampDescending",
-        MetricDataQueries: metricInput.metrics.map((metric) => ({
-          Id: metric.id,
-          ReturnData: true,
-          MetricStat: {
-            Metric: {
-              Namespace: metricInput.namespace,
-              MetricName: metric.metricName,
-              Dimensions: [
-                { Name: "LoadBalancer", Value: metricInput.loadBalancerArnSuffix },
-                ...(metric.scope === "target_group"
-                  ? [{ Name: "TargetGroup", Value: metricInput.targetGroupArnSuffix }]
-                  : [])
-              ]
-            },
-            Period: metricInput.periodSeconds,
-            Stat: metric.stat
-          }
-        }))
-      }));
+      const response = await client.send(
+        new GetMetricDataCommand({
+          StartTime: metricInput.startTime,
+          EndTime: metricInput.endTime,
+          ScanBy: "TimestampDescending",
+          MetricDataQueries: metricInput.metrics.map((metric) => ({
+            Id: metric.id,
+            ReturnData: true,
+            MetricStat: {
+              Metric: {
+                Namespace: metricInput.namespace,
+                MetricName: metric.metricName,
+                Dimensions: [
+                  { Name: "LoadBalancer", Value: metricInput.loadBalancerArnSuffix },
+                  ...(metric.scope === "target_group"
+                    ? [{ Name: "TargetGroup", Value: metricInput.targetGroupArnSuffix }]
+                    : [])
+                ]
+              },
+              Period: metricInput.periodSeconds,
+              Stat: metric.stat
+            }
+          }))
+        }),
+        { abortSignal: metricInput.abortSignal }
+      );
       return {
         metricDataResults: response.MetricDataResults?.map((result) => ({
           id: result.Id,
@@ -459,10 +622,13 @@ function createDefaultAutoScalingClient(input: {
 }): AutoScalingClientPort {
   const client = new AutoScalingClient(input);
   return {
-    async describeAutoScalingGroup(name) {
-      const response = await client.send(new DescribeAutoScalingGroupsCommand({
-        AutoScalingGroupNames: [name]
-      }));
+    async describeAutoScalingGroup(name, abortSignal) {
+      const response = await client.send(
+        new DescribeAutoScalingGroupsCommand({
+          AutoScalingGroupNames: [name]
+        }),
+        { abortSignal }
+      );
       return { autoScalingGroups: response.AutoScalingGroups?.map((group) => ({
         autoScalingGroupName: group.AutoScalingGroupName,
         desiredCapacity: group.DesiredCapacity,
@@ -483,16 +649,42 @@ function createDefaultEcsClient(input: {
 }): EcsClientPort {
   const client = new ECSClient(input);
   return {
-    async describeService(clusterName, serviceName) {
-      const response = await client.send(new DescribeServicesCommand({
-        cluster: clusterName,
-        services: [serviceName]
-      }));
+    async describeService(clusterName, serviceName, abortSignal) {
+      const response = await client.send(
+        new DescribeServicesCommand({
+          cluster: clusterName,
+          services: [serviceName]
+        }),
+        { abortSignal }
+      );
       const service = response.services?.[0];
       return { service: service ? {
         desiredCount: service.desiredCount,
         runningCount: service.runningCount
       } : undefined };
+    }
+  };
+}
+
+function createDefaultTargetHealthClient(input: {
+  region: string;
+  credentials: AwsTemporaryCredentials;
+}): TargetHealthClientPort {
+  const client = new ElasticLoadBalancingV2Client(input);
+  return {
+    async describeTargetHealth(targetGroupArn, abortSignal) {
+      const response = await client.send(
+        new DescribeTargetHealthCommand({
+          TargetGroupArn: targetGroupArn
+        }),
+        { abortSignal }
+      );
+      return {
+        targets: response.TargetHealthDescriptions?.map((description) => ({
+          id: description.Target?.Id,
+          state: description.TargetHealth?.State
+        }))
+      };
     }
   };
 }
@@ -504,13 +696,16 @@ function createDefaultLogsClient(input: {
   const client = new CloudWatchLogsClient(input);
   return {
     async filterLogEvents(logInput) {
-      const response = await client.send(new FilterLogEventsCommand({
-        logGroupName: logInput.logGroupName,
-        startTime: logInput.startTime,
-        endTime: logInput.endTime,
-        limit: logInput.limit,
-        interleaved: true
-      }));
+      const response = await client.send(
+        new FilterLogEventsCommand({
+          logGroupName: logInput.logGroupName,
+          startTime: logInput.startTime,
+          endTime: logInput.endTime,
+          limit: logInput.limit,
+          interleaved: true
+        }),
+        { abortSignal: logInput.abortSignal }
+      );
       return { events: response.events?.map((event) => ({
         timestamp: event.timestamp,
         message: event.message

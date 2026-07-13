@@ -1493,6 +1493,8 @@ create input은 canonical lowercase observation UUID, 검증된 DeploymentLiveOb
 active read shape는 observationId, deploymentId, status, 안전하게 재파싱한 manifest, kid/tokenVersion, createdAt/expiresAt, live, latestObservation을 포함한다. `latestObservation.payload`는 아래 provider-neutral 공통 snapshot schema로 다시 파싱한 값만 허용하고 임의 JSON이나 provider credential을 받지 않는다. observer lease와 fencing token을 얻은 service만 새 snapshot을 commit한다. live는 acceptedEventCount, 10초 rollingRequestsPerSecond, projectedRequestsPerMinute, manifest pressure target 기준 pressurePercent, pressureLevel, observedAt을 반환하고 계산값은 소수 셋째 자리까지 반올림한다. pressureLevel 경계는 normal 40 미만, warning 40 이상 70 미만, high 70 이상 100 미만, critical 100 이상이다.
 
 ```ts
+type LiveObservationProviderState = "available" | "delayed" | "unavailable";
+
 type LiveObservationProviderSnapshot = {
   requests: number | null;
   errorRate: number | null;
@@ -1506,11 +1508,11 @@ type LiveObservationProviderSnapshot = {
   };
   logs: Array<{ timestamp: IsoDateTimeString; message: string }>;
   observedAt: IsoDateTimeString | null;
-  state: "available" | "delayed" | "unavailable";
+  state: LiveObservationProviderState;
 };
 ```
 
-`available`만 완전한 정량값을 가진다. `delayed`와 `unavailable`은 requests, errorRate, p95LatencyMs, availability, capacity 수치를 모두 `null`로 저장하고 이전 수치를 보존하거나 sample 값으로 대체하지 않는다. 로그는 최근 5분, 최대 50건, 메시지당 4,096자이며 credential-shaped 값이 masking된 fresh evidence만 허용한다.
+`available`만 완전한 정량값을 가진다. `delayed`와 `unavailable`은 requests, errorRate, p95LatencyMs, availability, capacity 수치를 모두 `null`로 저장하고 이전 수치를 보존하거나 sample 값으로 대체하지 않는다. ASG `running`은 `InService` instance만 세고 ECS `running`은 service task count를 사용하며, 두 target의 `healthy`는 immutable manifest의 정확한 target group ARN으로 조회한 ELB target health를 사용하고 항상 `running` 이하다. 로그는 최근 5분, 최대 50건, 메시지당 4,096자이며 Authorization/JWT/GitHub token/PEM을 포함한 credential-shaped 값이 중앙 masker로 제거된 fresh evidence만 허용한다.
 
 Store 고정 policy는 session lifetime 15분, terminal tombstone retention 60초, rolling/rate window 10초, weighted burst 초당 20, rolling window accepted event 120, session accepted event 10,000이다. duplicate는 burst/rate/cap을 소비하지 않으며 cap 검사는 dedupe 뒤, rate 계산 앞에서 수행한다. weighted burst는 candidateCurrentSecond + previousSecond * (1 - currentSecondProgress)이고, rejected eventId는 dedupe set에 넣지 않아 이후 재시도할 수 있다.
 
