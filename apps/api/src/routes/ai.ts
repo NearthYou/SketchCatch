@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import type { FastifyInstance, FastifyRequest } from "fastify";
+import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type {
   AiArchitectureDraftResult,
@@ -11,10 +11,8 @@ import type {
   AiTerraformErrorExplanationResult,
   AiTerraformPreviewExplanationResult,
   ApiErrorResponse,
-  ArchitectureDraftRepositoryAnalysisContext,
   ArchitectureDraftProgressStage,
   ArchitectureDraftStreamEvent,
-  ArchitectureDraftTemplateFallbackContext,
   ArchitecturePatchPreviewResponse,
   ArchitectureJson,
   CheckFinding,
@@ -72,10 +70,7 @@ import { requireActiveUserId } from "../auth/current-user.js";
 import { getDatabaseClient, type DatabaseClient } from "../db/client.js";
 import {
   createPostgresSourceRepositoryRepository,
-  listSourceRepositories as listProjectSourceRepositoryRecords,
-  RepositoryAnalysisTemplateSelectionError,
   requireRepositoryAnalysisTemplateId,
-  type SourceRepositoryRecord,
   type SourceRepositoryRepository
 } from "../source-repositories/source-repository-service.js";
 import {
@@ -127,49 +122,16 @@ const architectureJsonSchema: z.ZodType<ArchitectureJson> = z.object({
   edges: z.array(resourceEdgeSchema)
 });
 
-const architectureDraftTemplateFallbackSchema: z.ZodType<ArchitectureDraftTemplateFallbackContext> = z.object({
-  mode: z.literal("template_unselected"),
-  deploymentType: z.enum(["direct_deployment", "git_cicd_deployment", "undecided"]),
-  ciCdEnabled: z.boolean(),
-  dynamicQuestionAnswers: z.array(
-    z.object({
-      questionId: z.string().trim().min(1).optional(),
-      question: z.string().trim().min(1),
-      answer: z.string().trim().min(1)
+const architectureDraftBodySchema: z.ZodType<CreateArchitectureDraftRequest> = z.object({
+  prompt: z.string().trim().min(1),
+  templateId: z.enum(TEMPLATE_IDS).optional(),
+  repositoryAnalysis: z
+    .object({
+      projectId: z.uuid(),
+      sourceRepositoryId: z.uuid()
     })
-  ),
-  recommendationCandidates: z.array(
-    z.object({
-      templateId: z.string().trim().min(1),
-      title: z.string().trim().min(1),
-      reason: z.string().trim().min(1),
-      confidence: z.number().min(0).max(1).optional()
-    })
-  ),
-  additionalRequirements: z.string().trim().optional()
+    .optional()
 });
-
-const architectureDraftBodySchema: z.ZodType<CreateArchitectureDraftRequest> = z
-  .object({
-    prompt: z.string().trim(),
-    templateId: z.enum(TEMPLATE_IDS).optional(),
-    repositoryAnalysis: z
-      .object({
-        projectId: z.uuid(),
-        sourceRepositoryId: z.uuid()
-      })
-      .optional(),
-    templateFallback: architectureDraftTemplateFallbackSchema.optional()
-  })
-  .superRefine((body, context) => {
-    if (body.prompt.trim().length === 0 && body.templateFallback === undefined) {
-      context.addIssue({
-        code: "custom",
-        message: "Requirement Prompt is required",
-        path: ["prompt"]
-      });
-    }
-  });
 
 const repositoryTemplateIdSchema = z.enum(TEMPLATE_IDS);
 
@@ -333,20 +295,30 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
 
   app.post("/ai/architecture-draft", async (request): Promise<CreateArchitectureDraftResponse> => {
     const body = architectureDraftBodySchema.parse(request.body);
-    return createArchitectureDraftResponse(
-      await resolveArchitectureDraftRequest(body, request, {
-        createSourceRepositoryRepository,
-        getAiDatabaseClient
-      })
-    );
+
+    if (body.repositoryAnalysis) {
+      const userId = await requireActiveUserId(request, getAiDatabaseClient);
+      const selectedTemplateId = await requireRepositoryAnalysisTemplateId(
+        {
+          projectId: body.repositoryAnalysis.projectId,
+          sourceRepositoryId: body.repositoryAnalysis.sourceRepositoryId,
+          requestedTemplateId: body.templateId,
+          accessContext: { kind: "user", userId }
+        },
+        createSourceRepositoryRepository(getAiDatabaseClient().db)
+      );
+
+      return createArchitectureDraftResponse({
+        ...body,
+        templateId: selectedTemplateId
+      });
+    }
+
+    return createArchitectureDraftResponse(body);
   });
 
   app.post("/ai/architecture-draft/stream", async (request, reply) => {
     const body = architectureDraftBodySchema.parse(request.body);
-    const resolvedBody = await resolveArchitectureDraftRequest(body, request, {
-      createSourceRepositoryRepository,
-      getAiDatabaseClient
-    });
 
     reply.hijack();
     for (const [name, value] of Object.entries(reply.getHeaders())) {
@@ -370,7 +342,7 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
     };
 
     try {
-      const result = await createArchitectureDraftResponse(resolvedBody, { onProgress });
+      const result = await createArchitectureDraftResponse(body, { onProgress });
       writeEvent({ type: "result", result });
     } catch (error) {
       const errorContext = {
@@ -649,141 +621,6 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
 }
 
 // Architecture Draft 계열 route가 같은 LLM 설명 계약을 쓰도록 한곳에서 붙입니다.
-type ResolveArchitectureDraftRequestOptions = {
-  readonly createSourceRepositoryRepository: (db: DatabaseClient["db"]) => SourceRepositoryRepository;
-  readonly getAiDatabaseClient: () => DatabaseClient;
-};
-
-async function resolveArchitectureDraftRequest(
-  body: CreateArchitectureDraftRequest,
-  request: FastifyRequest,
-  options: ResolveArchitectureDraftRequestOptions
-): Promise<CreateArchitectureDraftRequest> {
-  if (!body.repositoryAnalysis) {
-    return body;
-  }
-
-  const userId = await requireActiveUserId(request, options.getAiDatabaseClient);
-  const repository = options.createSourceRepositoryRepository(options.getAiDatabaseClient().db);
-  const accessContext = { kind: "user" as const, userId };
-
-  if (body.templateFallback) {
-    const repositoryAnalysisContext = await requireRepositoryAnalysisContext(
-      {
-        projectId: body.repositoryAnalysis.projectId,
-        sourceRepositoryId: body.repositoryAnalysis.sourceRepositoryId,
-        accessContext
-      },
-      repository
-    );
-
-    return {
-      ...body,
-      prompt:
-        body.prompt.trim().length > 0
-          ? body.prompt
-          : createTemplateFallbackPrompt(body.templateFallback, repositoryAnalysisContext),
-      repositoryAnalysisContext,
-      templateId: undefined
-    };
-  }
-
-  const selectedTemplateId = await requireRepositoryAnalysisTemplateId(
-    {
-      projectId: body.repositoryAnalysis.projectId,
-      sourceRepositoryId: body.repositoryAnalysis.sourceRepositoryId,
-      requestedTemplateId: body.templateId,
-      accessContext
-    },
-    repository
-  );
-
-  return {
-    ...body,
-    templateId: selectedTemplateId
-  };
-}
-
-async function requireRepositoryAnalysisContext(
-  input: {
-    readonly projectId: string;
-    readonly sourceRepositoryId: string;
-    readonly accessContext: { readonly kind: "user"; readonly userId: string };
-  },
-  repository: SourceRepositoryRepository
-): Promise<ArchitectureDraftRepositoryAnalysisContext> {
-  const repositories = await listProjectSourceRepositoryRecords(
-    {
-      projectId: input.projectId,
-      accessContext: input.accessContext
-    },
-    repository
-  );
-  const sourceRepository = repositories.find((candidate) => candidate.id === input.sourceRepositoryId);
-
-  if (
-    !sourceRepository ||
-    sourceRepository.provider !== "github" ||
-    sourceRepository.status !== "active" ||
-    !sourceRepository.analysisResult ||
-    !sourceRepository.analyzedAt ||
-    !sourceRepository.analysisRevision
-  ) {
-    throw new RepositoryAnalysisTemplateSelectionError(
-      "REPOSITORY_ANALYSIS_TEMPLATE_UNAVAILABLE"
-    );
-  }
-
-  return toRepositoryAnalysisContext(sourceRepository);
-}
-
-function toRepositoryAnalysisContext(
-  sourceRepository: SourceRepositoryRecord
-): ArchitectureDraftRepositoryAnalysisContext {
-  return {
-    sourceRepositoryId: sourceRepository.id,
-    repositoryName: `${sourceRepository.owner}/${sourceRepository.name}`,
-    repositoryRevision: sourceRepository.analysisRevision ?? "",
-    analyzedAt: toIsoDateTimeString(sourceRepository.analyzedAt!),
-    aiHandoff: sourceRepository.analysisResult!
-  };
-}
-
-function toIsoDateTimeString(value: Date | string): string {
-  return value instanceof Date ? value.toISOString() : value;
-}
-
-function createTemplateFallbackPrompt(
-  fallback: ArchitectureDraftTemplateFallbackContext,
-  repositoryAnalysisContext: ArchitectureDraftRepositoryAnalysisContext
-): string {
-  const candidateLines = fallback.recommendationCandidates.map(
-    (candidate) =>
-      `- ${candidate.title} (${candidate.templateId}): ${candidate.reason}${
-        candidate.confidence === undefined ? "" : `, confidence ${candidate.confidence}`
-      }`
-  );
-  const answerLines = fallback.dynamicQuestionAnswers.map(
-    (answer) => `- ${answer.question}: ${answer.answer}`
-  );
-
-  return [
-    "Generate a Practice Architecture without applying any fixed Template.",
-    "The user reviewed the Template recommendation result and explicitly did not choose a Template.",
-    `Repository Analysis: ${repositoryAnalysisContext.repositoryName} at ${repositoryAnalysisContext.repositoryRevision}.`,
-    `Repository Analysis result: ${JSON.stringify(repositoryAnalysisContext.aiHandoff)}`,
-    `Deployment path selection: ${fallback.deploymentType}.`,
-    `CI/CD handoff requested: ${fallback.ciCdEnabled ? "true" : "false"}.`,
-    "Dynamic question answers:",
-    ...(answerLines.length > 0 ? answerLines : ["- none provided"]),
-    "Rejected recommendation candidates:",
-    ...(candidateLines.length > 0 ? candidateLines : ["- none provided"]),
-    "Additional requirements:",
-    fallback.additionalRequirements?.trim() || "- none provided",
-    "Respect repository analysis, deployment path, CI/CD selection, and dynamic answers as stronger constraints than generic defaults."
-  ].join("\n");
-}
-
 async function addArchitectureDraftLlmExplanation(
   result: AiArchitectureDraftResult,
   createLlmExplanation: CreateLlmExplanation,

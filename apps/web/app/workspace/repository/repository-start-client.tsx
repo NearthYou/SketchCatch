@@ -2,13 +2,10 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ArrowRight, Check, GitBranch, LoaderCircle, Search, Settings2, Sparkles } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, GitBranch, LoaderCircle, Search, Settings2 } from "lucide-react";
 import type { FormEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
-  ArchitectureDraftClarification,
-  ArchitectureDraftTemplateFallbackDeploymentType,
-  CreateArchitectureDraftResponse,
   GitHubInstalledRepositoryCandidate,
   RepositoryAnalysisQuestion,
   RepositoryDeploymentType,
@@ -23,7 +20,6 @@ import {
   analyzePublicSourceRepository,
   analyzeSourceRepository,
   connectGitHubSourceRepository,
-  createAiArchitectureDraft,
   listGitHubInstalledRepositories,
   listSourceRepositories,
   recommendRepositoryTemplate,
@@ -42,8 +38,6 @@ import {
   shouldAskPublicRepositoryDeploymentType,
   type PublicRepositoryTemplateId
 } from "../../../features/workspace/public-repository-recommendation";
-import { buildRepositoryTemplateFallbackDraftRequest } from "../../../features/workspace/repository-template-fallback";
-import { getDiagramJsonForArchitectureDraft } from "../../../features/workspace/workspace-ai-diagram-adapter";
 import { AiDraftBoardPreview } from "../ai/ai-draft-board-preview";
 import styles from "./repository-start.module.css";
 
@@ -86,11 +80,6 @@ export function RepositoryStartClient({
   const [selectedPublicTemplateId, setSelectedPublicTemplateId] = useState<PublicRepositoryTemplateId | null>(null);
   const [publicRecommendationStage, setPublicRecommendationStage] = useState<PublicRecommendationStage>("configuration");
   const [recommendation, setRecommendation] = useState<RepositoryTemplateRecommendationResult | null>(null);
-  const [fallbackAdditionalRequirements, setFallbackAdditionalRequirements] = useState("");
-  const [fallbackCiCdEnabled, setFallbackCiCdEnabled] = useState(false);
-  const [fallbackDeploymentType, setFallbackDeploymentType] =
-    useState<ArchitectureDraftTemplateFallbackDeploymentType>("undecided");
-  const [fallbackState, setFallbackState] = useState<RequestState>("idle");
   const [errorMessage, setErrorMessage] = useState("");
   const activeRepository = useMemo(
     () => findActiveGitHubRepository(repositories),
@@ -315,44 +304,6 @@ export function RepositoryStartClient({
     }
   }
 
-  async function generateFallbackArchitectureDraft(): Promise<void> {
-    if (!activeRepository || fallbackState === "loading") return;
-    setFallbackState("loading");
-    setErrorMessage("");
-
-    try {
-      const response = await createAiArchitectureDraft(
-        buildRepositoryTemplateFallbackDraftRequest({
-          additionalRequirements: fallbackAdditionalRequirements,
-          ciCdEnabled: fallbackCiCdEnabled,
-          deploymentType: fallbackDeploymentType,
-          projectId,
-          repository: activeRepository
-        })
-      );
-
-      if (isArchitectureDraftClarificationResponse(response)) {
-        setFallbackState("error");
-        setErrorMessage(`AI가 추가 확인을 요청했습니다: ${response.question}`);
-        return;
-      }
-
-      await saveProjectDraft({
-        diagramJson: getDiagramJsonForArchitectureDraft(response),
-        projectId
-      });
-      router.push(
-        `/workspace?${new URLSearchParams({
-          projectId,
-          projectName
-        }).toString()}`
-      );
-    } catch (error) {
-      setFallbackState("error");
-      setErrorMessage(getApiErrorMessage(error, "Template 없이 AI Architecture Draft를 만들지 못했습니다."));
-    }
-  }
-
   return (
     <main className={styles.page}>
       <header className={styles.topbar}>
@@ -529,60 +480,6 @@ export function RepositoryStartClient({
                   </strong>
                 </div>
                 <AiDraftBoardPreview diagram={previewDiagram} />
-              </section>
-            ) : null}
-            {activeRepository.analysis?.aiHandoff ? (
-              <section className={styles.fallbackPanel} aria-label="Template 미선택 AI 생성">
-                <div>
-                  <span>AI FALLBACK</span>
-                  <strong>원하는 Template이 없어요</strong>
-                  <p>Template을 고르지 않고 Repository 분석과 선택 조건만으로 Architecture Draft를 생성합니다.</p>
-                </div>
-                <div className={styles.fallbackControls}>
-                  <label>
-                    배포 방식
-                    <select
-                      onChange={(event) =>
-                        setFallbackDeploymentType(
-                          event.target.value as ArchitectureDraftTemplateFallbackDeploymentType
-                        )
-                      }
-                      value={fallbackDeploymentType}
-                    >
-                      <option value="undecided">아직 정하지 않음</option>
-                      <option value="direct_deployment">Direct Deployment</option>
-                      <option value="git_cicd_deployment">Git/CI/CD Deployment</option>
-                    </select>
-                  </label>
-                  <label className={styles.checkboxControl}>
-                    <input
-                      checked={fallbackCiCdEnabled}
-                      onChange={(event) => setFallbackCiCdEnabled(event.target.checked)}
-                      type="checkbox"
-                    />
-                    CI/CD handoff 포함
-                  </label>
-                </div>
-                <textarea
-                  aria-label="AI fallback 추가 요구사항"
-                  onChange={(event) => setFallbackAdditionalRequirements(event.target.value)}
-                  placeholder="추가 요구사항이 있으면 적어주세요. 비워도 Repository 분석 결과만으로 생성합니다."
-                  rows={4}
-                  value={fallbackAdditionalRequirements}
-                />
-                <button
-                  className={styles.fallbackAction}
-                  disabled={fallbackState === "loading" || actionState === "loading"}
-                  onClick={() => void generateFallbackArchitectureDraft()}
-                  type="button"
-                >
-                  {fallbackState === "loading" ? (
-                    <LoaderCircle className={styles.spin} size={16} />
-                  ) : (
-                    <Sparkles aria-hidden="true" size={16} />
-                  )}
-                  {fallbackState === "loading" ? "AI 생성 중" : "Template 없이 AI로 생성"}
-                </button>
               </section>
             ) : null}
           </section>
@@ -861,11 +758,6 @@ function PublicRepositoryRecommendationStep({
   );
 }
 
-function isArchitectureDraftClarificationResponse(
-  response: CreateArchitectureDraftResponse
-): response is ArchitectureDraftClarification {
-  return "status" in response && response.status === "needs_clarification";
-}
 
 function createRepositoryPreviewDiagram(
   projectName: string,

@@ -2232,37 +2232,3 @@ type RepositoryTemplateRecommendationResult = {
 ```
 
 추천 결과의 `templateId`는 반드시 `TemplateId`로 검증되어야 한다. Workspace handoff는 저장된 `aiHandoff.templateId` 또는 추천 후보의 `templateId`만 허용하며, URL에서 임의로 바꾼 Template은 `REPOSITORY_ANALYSIS_TEMPLATE_MISMATCH`로 거부한다.
-
-## Template 미선택 AI fallback 계약
-
-Template 추천 결과에서 사용자가 추천 Template을 고르지 않으면 `CreateArchitectureDraftRequest.templateFallback`으로 AI Architecture Draft fallback을 요청한다. 이 요청은 `templateId`를 보내지 않거나 서버에서 제거해야 하며, 저장된 Repository Analysis를 서버가 다시 조회해 `repositoryAnalysisContext`로 보강한다. fallback은 Template skeleton을 고정하지 않고 다음 값을 강한 제약으로 prompt에 포함한다.
-
-```ts
-type ArchitectureDraftTemplateFallbackContext = {
-  mode: "template_unselected";
-  deploymentType: "direct_deployment" | "git_cicd_deployment" | "undecided";
-  ciCdEnabled: boolean;
-  dynamicQuestionAnswers: {
-    questionId?: string;
-    question: string;
-    answer: string;
-  }[];
-  recommendationCandidates: {
-    templateId: TemplateId | string;
-    title: string;
-    reason: string;
-    confidence?: number;
-  }[];
-  additionalRequirements?: string;
-};
-
-type ArchitectureDraftRepositoryAnalysisContext = {
-  sourceRepositoryId: string;
-  repositoryName: string;
-  repositoryRevision: string;
-  analyzedAt: IsoDateTimeString;
-  aiHandoff: RepositoryAnalysisAiHandoff;
-};
-```
-
-`additionalRequirements`는 선택 입력이다. 비어 있어도 fallback 요청은 Repository Analysis, 배포 방식, CI/CD 선택, 동적 질문 답변, 추천 후보를 기준으로 생성되어야 한다. 추천 후보는 사용자가 선택하지 않은 context로만 사용하며, AI는 `Fixed Template Selection: none` 상태에서 Practice Architecture를 생성한다.

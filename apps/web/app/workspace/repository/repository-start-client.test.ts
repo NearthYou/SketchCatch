@@ -6,13 +6,14 @@ import { dirname, join } from "node:path";
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
 
-test("Repository start screen exposes the Template-unselected AI fallback", () => {
+test("Repository start screen does not expose a Template-unselected AI fallback", () => {
   const source = readFileSync(join(currentDir, "repository-start-client.tsx"), "utf8");
 
-  assert.match(source, /원하는 Template이 없어요/);
-  assert.match(source, /Template 없이 AI로 생성/);
-  assert.match(source, /fallbackAdditionalRequirements/);
-  assert.match(source, /direct_deployment/);
-  assert.match(source, /git_cicd_deployment/);
-  assert.match(source, /CI\/CD handoff 포함/);
+  assert.match(source, /createPublicRepositoryRecommendation/);
+  assert.match(source, /createPublicRepositoryDiagram/);
+  assert.doesNotMatch(source, /AI FALLBACK/);
+  assert.doesNotMatch(source, /fallbackAdditionalRequirements/);
+  assert.doesNotMatch(source, /generatePublicFallbackArchitectureDraft/);
+  assert.doesNotMatch(source, /buildPublicRepositoryTemplateFallbackDraftRequest/);
+  assert.doesNotMatch(source, /Template 없이 AI로 생성/);
 });
