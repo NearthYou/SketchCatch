@@ -1344,9 +1344,12 @@ export type RecentSuccessfulDeploymentProjectListResponse = {
   items: RecentSuccessfulDeploymentProject[];
 };
 
+export type CostProjectDeploymentState = "deployed" | "not_deployed";
+
 export type CostProjectEstimate = {
   project: Project;
   costEstimate: CostEstimateResult | null;
+  deploymentState: CostProjectDeploymentState;
 };
 
 export type CostProjectEstimateListResponse = {
