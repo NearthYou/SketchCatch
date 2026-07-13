@@ -208,6 +208,26 @@ Short English-only working log for the current agent context. Older records are 
 - Risk:
   - Browser visual verification has not been run yet in this worktree.
 
+### 2026-07-13 - Refine actual cost notice and chart readability
+
+- Goal: Clarify fallback project cost allocation and make the actual usage chart readable at a glance.
+- Completed:
+  - Reworded the fallback allocation notice to explain that AWS project cost data may arrive later.
+  - Added readable date labels on the X axis and dollar labels on the Y axis.
+  - Limited long ranges to six date ticks and added a stable zero-cost `$0`, `$2`, `$4` scale.
+  - Reduced data points to a 2 px radius and aligned chart colors and captions with `DESIGN.md`.
+  - Prevented duplicate Y-axis labels for one-cent usage data.
+- Verification:
+  - `pnpm --dir apps/web exec tsx --test features/costs/cost-usage-charts.test.ts features/costs/cost-dashboard-client.test.ts features/costs/cost-usage-copy.test.ts` (19 passed)
+  - `pnpm test -- --output-logs=errors-only`
+  - `pnpm lint` passed with the pre-existing `live-observations` `setNow` warning.
+  - `pnpm typecheck`
+  - `pnpm build`
+  - `pnpm harness:check`
+  - `git diff --check`
+- Risk:
+  - Authenticated browser visual QA was not available; the supplied screenshot and source-level UI regression tests were used as the visual contract.
+
 ## Next Action
 
-- Await PR #358 checks and merge into `dev`.
+- Confirm the refined chart visually with authenticated actual-usage data when browser automation is available.
