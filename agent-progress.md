@@ -11,6 +11,14 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-13 - Route Repository fallback into AI diagram chat
+
+- Added the `원하는 구성이 없나요? AI로 새 설계 만들기` action below public Repository recommendations.
+- Preserved the current project identity while routing to the dedicated pre-Board `/workspace/ai` conversation.
+- Reused the Repository project on approval instead of creating a duplicate project; AI output remains a preview until the user accepts `Board에 적용`.
+- Chrome verification confirmed the CTA, project-preserving `/workspace/ai` URL, dedicated conversation, empty PREVIEW, and absence of Board controls.
+- Verification: 3 focused Web regressions, `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm harness:check`, and `git diff --check` passed. Lint retains the pre-existing `setNow` warning in the Live Observation store contract.
+
 ### 2026-07-13 - Constrain Repository diagrams to authoritative evidence
 
 - Reproduced the `audience-live-check` Repository flow producing an over-inferred ECS board and a later `422` during strict regeneration.

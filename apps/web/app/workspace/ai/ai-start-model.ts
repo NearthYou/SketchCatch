@@ -18,6 +18,12 @@ export type AiStartProjectDraft = {
   readonly updatedAt: string;
 };
 
+export type AiStartExistingProject = {
+  readonly projectId: string;
+  readonly projectName: string;
+  readonly returnHref: string;
+};
+
 export type AiStartMessage = {
   readonly content: string;
   readonly createdAt: string;

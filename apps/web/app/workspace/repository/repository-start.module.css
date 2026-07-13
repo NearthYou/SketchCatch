@@ -364,6 +364,33 @@
   opacity: 0.4;
 }
 
+.publicAiFallbackAction {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--radius-control);
+  padding: 0 14px;
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: border-color 140ms ease, background-color 140ms ease;
+}
+
+.publicAiFallbackAction:hover {
+  border-color: var(--color-ink);
+  background: var(--color-surface-soft);
+}
+
+.publicAiFallbackAction:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
 .publicQuestionSummary {
   display: flex;
   align-items: center;
@@ -690,5 +717,6 @@
   .publicUrlForm button,
   .analysisPanel > button,
   .boardAction,
-  .publicBoardAction { width: 100%; }
+  .publicBoardAction,
+  .publicAiFallbackAction { width: 100%; }
 }

@@ -2,7 +2,16 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ArrowRight, Check, GitBranch, LoaderCircle, Search, Settings2 } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  GitBranch,
+  LoaderCircle,
+  Search,
+  Settings2,
+  Sparkles
+} from "lucide-react";
 import type { FormEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
@@ -40,6 +49,7 @@ import {
   type PublicRepositoryTemplateId
 } from "../../../features/workspace/public-repository-recommendation";
 import { getDiagramJsonForArchitectureDraft } from "../../../features/workspace/workspace-ai-diagram-adapter";
+import { createWorkspaceAiStartHref } from "../../../features/workspace/workspace-ai-start-entry";
 import { AiDraftBoardPreview } from "../ai/ai-draft-board-preview";
 import styles from "./repository-start.module.css";
 
@@ -372,6 +382,7 @@ export function RepositoryStartClient({
             ) : null}
             {publicAnalysis ? (
               <PublicRepositoryRecommendationStep
+                aiDesignHref={createWorkspaceAiStartHref({ projectId, projectName })}
                 answers={answers}
                 analysis={publicAnalysis}
                 deploymentType={deploymentType}
@@ -634,6 +645,7 @@ function RepositoryTemplateCandidates({
 }
 
 function PublicRepositoryRecommendationStep({
+  aiDesignHref,
   answers,
   analysis,
   deploymentType,
@@ -649,6 +661,7 @@ function PublicRepositoryRecommendationStep({
   stage,
   usesCiCd
 }: {
+  readonly aiDesignHref: string;
   readonly answers: Record<string, string | boolean>;
   readonly analysis: SourceRepositoryAnalysisResult;
   readonly deploymentType: RepositoryDeploymentType;
@@ -771,6 +784,10 @@ function PublicRepositoryRecommendationStep({
       >
         확인 <ArrowRight aria-hidden="true" size={16} />
       </button>
+      <Link className={styles.publicAiFallbackAction} href={aiDesignHref}>
+        <Sparkles aria-hidden="true" size={16} />
+        원하는 구성이 없나요? AI로 새 설계 만들기
+      </Link>
     </section>
   );
 }

@@ -43,6 +43,7 @@ import {
   readAiStartProjectDraft,
   storeApprovedAiStartMessages,
   trimAiStartMessages,
+  type AiStartExistingProject,
   type AiStartMessage,
   type AiStartProjectDraft
 } from "./ai-start-model";
@@ -65,8 +66,15 @@ type PatchTargetOptions = {
   readonly skipConnection?: boolean | undefined;
 };
 
-export function useAiStartWorkflow() {
+export function useAiStartWorkflow({
+  existingProject
+}: {
+  readonly existingProject?: AiStartExistingProject | undefined;
+} = {}) {
   const router = useRouter();
+  const existingProjectId = existingProject?.projectId;
+  const existingProjectName = existingProject?.projectName;
+  const existingProjectReturnHref = existingProject?.returnHref;
   const [projectDraft, setProjectDraft] = useState<AiStartProjectDraft | null>(null);
   const [composerValue, setComposerValue] = useState("");
   const [messages, setMessages] = useState<AiStartMessage[]>([]);
@@ -91,7 +99,13 @@ export function useAiStartWorkflow() {
   });
 
   useEffect(() => {
-    const storedDraft = readAiStartProjectDraft();
+    const storedDraft = existingProjectId && existingProjectName
+      ? {
+          projectName: existingProjectName,
+          startMode: "ai" as const,
+          updatedAt: new Date().toISOString()
+        }
+      : readAiStartProjectDraft();
 
     if (storedDraft === null) {
       router.replace("/workspace/new");
@@ -106,7 +120,7 @@ export function useAiStartWorkflow() {
         `${storedDraft.projectName}에 필요한 구조를 알려주세요.`
       )
     ]);
-  }, [router]);
+  }, [existingProjectId, existingProjectName, router]);
 
   async function submitPrompt(value = composerValue): Promise<void> {
     const prompt = value.trim();
@@ -243,7 +257,7 @@ export function useAiStartWorkflow() {
     beginRequest(false);
 
     try {
-      let projectId = createdProjectId;
+      let projectId = existingProjectId ?? createdProjectId;
 
       if (projectId === null) {
         const project = await createProject({ name: projectDraft.projectName });
@@ -256,7 +270,9 @@ export function useAiStartWorkflow() {
       );
       await saveProjectDraft({ diagramJson: previewDiagram, projectId });
       storeApprovedAiStartMessages(projectId, approvedMessages);
-      clearAiStartProjectDraft();
+      if (!existingProjectId) {
+        clearAiStartProjectDraft();
+      }
       router.push(
         `/workspace?${new URLSearchParams({
           projectId,
@@ -275,7 +291,7 @@ export function useAiStartWorkflow() {
   }
 
   function cancelStart(): void {
-    router.push("/workspace/new");
+    router.push(existingProjectReturnHref ?? "/workspace/new");
   }
 
   async function answerDraftFollowUp(
