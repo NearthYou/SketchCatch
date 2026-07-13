@@ -16,6 +16,10 @@ const usagePanelSource = readFileSync(
   fileURLToPath(new URL("../../app/dashboard/costs/cost-usage-panel.tsx", import.meta.url)),
   "utf8"
 );
+const dashboardToolsCss = readFileSync(
+  fileURLToPath(new URL("../../app/dashboard/dashboard-tools.module.css", import.meta.url)),
+  "utf8"
+);
 
 test("cost request coordinator aborts a superseded request and keeps only the newest request current", () => {
   const coordinator = createCostRequestCoordinator();
@@ -68,4 +72,11 @@ test("both cost panels expose refresh and disable duplicate refresh while loadin
     assert.match(source, /disabled=\{loadState === "loading"\}/);
     assert.match(source, /title=\{loadState === "loading" \? "새로고침 중" : "새로고침"\}/);
   }
+});
+
+test("folder tabs do not create a scroll container", () => {
+  const costTabsRule = dashboardToolsCss.match(/\.costTabs\s*\{[^}]+\}/)?.[0] ?? "";
+
+  assert.doesNotMatch(costTabsRule, /overflow/);
+  assert.match(dashboardToolsCss, /\.costTab\s*\{\s*min-width:\s*0;\s*flex:\s*1 1 0;/);
 });
