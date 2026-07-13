@@ -24,6 +24,7 @@ import type {
 } from "@sketchcatch/types";
 import { ProductBrand } from "../../../components/ui/ProductBrand";
 import { ProductState } from "../../../components/ui/ProductState";
+import { SelectMenu } from "../../../components/ui/SelectMenu";
 import { getApiErrorMessage } from "../../../lib/api-client";
 import {
   analyzePublicSourceRepository,
@@ -68,7 +69,7 @@ type RepositoryStartClientProps = {
 };
 
 export function RepositoryStartClient({
-  initialDefaultBranch = "main",
+  initialDefaultBranch = "",
   initialRepositoryUrl = "",
   projectId,
   projectName
@@ -184,6 +185,7 @@ export function RepositoryStartClient({
         ...(trimmedDefaultBranch ? { defaultBranch: trimmedDefaultBranch } : {})
       });
       setPublicAnalysis(result);
+      setDefaultBranch(result.defaultBranch);
       const nextDeploymentType = getPublicRepositoryDeploymentDefault(result);
       setDeploymentType(nextDeploymentType);
       setUsesCiCd(result.aiHandoff?.usesCiCdDefault ?? false);
@@ -351,25 +353,47 @@ export function RepositoryStartClient({
               <>
                 <GitBranch aria-hidden="true" size={24} />
                 <h2>GitHub 저장소 URL 분석</h2>
-                <form className={styles.publicUrlForm} onSubmit={(event) => void analyzeRepositoryUrl(event)}>
+                <form
+                  className={styles.publicUrlForm}
+                  data-has-branches={publicAnalysis !== null}
+                  onSubmit={(event) => void analyzeRepositoryUrl(event)}
+                >
                   <label>
                     <span>저장소 URL</span>
                     <input
-                      onChange={(event) => setRepositoryUrl(event.target.value)}
+                      onChange={(event) => {
+                        const nextRepositoryUrl = event.target.value;
+                        setRepositoryUrl(nextRepositoryUrl);
+
+                        if (nextRepositoryUrl !== publicAnalysis?.repositoryUrl) {
+                          setPublicAnalysis(null);
+                          setDefaultBranch("");
+                        }
+                      }}
                       placeholder="https://github.com/owner/repository"
                       type="url"
                       value={repositoryUrl}
                     />
                   </label>
-                  <label>
-                    <span>브랜치</span>
-                    <input
-                      onChange={(event) => setDefaultBranch(event.target.value)}
-                      placeholder="main"
-                      type="text"
-                      value={defaultBranch}
-                    />
-                  </label>
+                  {publicAnalysis ? (
+                    <label>
+                      <span>브랜치</span>
+                      <SelectMenu
+                        ariaLabel="분석할 브랜치"
+                        className={styles.branchSelect}
+                        disabled={isPublicAnalysisBusy}
+                        emptyLabel="브랜치 선택"
+                        onChange={setDefaultBranch}
+                        options={publicAnalysis.availableBranches.map((branch) => ({
+                          label: branch,
+                          value: branch
+                        }))}
+                        size="large"
+                        tone="workspace"
+                        value={defaultBranch}
+                      />
+                    </label>
+                  ) : null}
                   <button disabled={isPublicAnalysisBusy || !repositoryUrl.trim()} type="submit">
                     {isPublicAnalysisBusy ? <LoaderCircle className={styles.spin} size={16} /> : <Search size={16} />}
                     {isPublicAnalysisBusy ? "분석 중" : "URL 분석"}

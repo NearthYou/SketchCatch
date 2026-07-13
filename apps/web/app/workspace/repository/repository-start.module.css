@@ -86,7 +86,7 @@
 
 .actions button,
 .actions a,
-.publicUrlForm button,
+.publicUrlForm > button,
 .analysisPanel > button,
 .recommendationForm button,
 .candidateList button,
@@ -118,8 +118,12 @@
 .publicUrlForm {
   display: grid;
   align-items: end;
-  grid-template-columns: minmax(220px, 1fr) minmax(120px, 160px) auto;
+  grid-template-columns: minmax(220px, 1fr) auto;
   gap: 12px;
+}
+
+.publicUrlForm[data-has-branches="true"] {
+  grid-template-columns: minmax(220px, 1fr) minmax(160px, 220px) auto;
 }
 
 .publicUrlForm label {
@@ -138,6 +142,14 @@
   background: var(--color-canvas);
   color: var(--color-ink);
   font: inherit;
+}
+
+.branchSelect {
+  --workspace-line: var(--color-hairline-strong);
+  --workspace-muted: var(--color-body);
+  --workspace-surface: var(--color-canvas);
+  --workspace-surface-muted: #f7f7f8;
+  --workspace-text: var(--color-ink);
 }
 
 .inlineHint {
@@ -706,6 +718,7 @@
   .content { padding: 48px 8px 72px; }
   .heading h1 { font-size: 30px; }
   .publicUrlForm { grid-template-columns: 1fr; }
+  .publicUrlForm[data-has-branches="true"] { grid-template-columns: 1fr; }
   .analysisPanel { grid-template-columns: 1fr; }
   .recommendationPanel article { grid-template-columns: 1fr; }
   .publicRecommendationHeader { align-items: start; flex-direction: column; gap: 6px; }
@@ -714,7 +727,7 @@
   .publicCandidateHeading { align-items: start; flex-direction: column; gap: 2px; }
   .publicCandidateDetail { grid-template-columns: 1fr; gap: 9px; }
   .publicQuestionSummary { align-items: start; }
-  .publicUrlForm button,
+  .publicUrlForm > button,
   .analysisPanel > button,
   .boardAction,
   .publicBoardAction,

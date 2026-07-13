@@ -262,6 +262,7 @@ test("deployment type is only requested when repository evidence cannot determin
 
 function createAnalysis(): SourceRepositoryAnalysisResult {
   return {
+    availableBranches: ["main", "develop"],
     defaultBranch: "main",
     detectedSignals: ["React", "Node API", "Python API", "Database", "Container"],
     evidenceFiles: [],

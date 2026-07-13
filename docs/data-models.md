@@ -2074,6 +2074,8 @@ Git/CI/CD handoff 생성 요청은 `sourceRepositoryId`만 받습니다. reposit
 
 Repository Analysis는 active GitHub Source Repository의 최신 default branch를 요청 시점에 정적으로 읽는다. repository tree, `package.json`, lockfile, `Dockerfile`, framework config, `README`만 evidence로 사용하며 Repository 코드를 실행하지 않는다. 새로고침 뒤에도 사용자가 마지막 결과를 확인할 수 있도록 구조화된 `AI Handoff`, 분석 revision, 분석 시각만 `source_repositories`에 저장한다. 원본 파일 내용과 GitHub App installation repository 목록은 RDS/S3에 저장하지 않는다.
 
+Public Repository URL 분석은 첫 요청에서 사용자가 branch를 직접 입력받지 않는다. GitHub repository metadata의 `default_branch`를 분석 revision으로 사용하고, 응답의 `availableBranches`에 조회 가능한 branch 이름을 함께 반환한다. 이후 사용자가 branch dropdown에서 다른 branch를 선택해 재분석하면 해당 branch를 `defaultBranch`로 명시하여 동일한 evidence 수집 과정을 다시 실행한다.
+
 ```ts
 type RepositoryEvidenceKind =
   | "repository_tree"

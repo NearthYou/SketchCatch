@@ -11,6 +11,15 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-13 - Select analyzed public repository branches
+
+- Removed the free-text branch field from the initial Repository URL start form.
+- Resolved the first analysis revision from GitHub `default_branch`, with `main`, `master`, and first-branch fallbacks when metadata is unavailable.
+- Added paginated public branch discovery to the analysis response and exposed it through the designed, keyboard-accessible shared SelectMenu after the first analysis.
+- Reanalysis now sends the selected branch and refreshes evidence, recommendations, and the selected revision for that branch.
+- Chrome verification confirmed a URL-only first form, `master` auto-selection for `octocat/Hello-World`, all three returned branches, and successful reanalysis on `test`.
+- Verification: 3 focused API route tests, 20 focused Web tests, `pnpm typecheck`, `pnpm lint`, `pnpm build`, and `git diff --check` passed. Lint retains the pre-existing `setNow` warning in the Live Observation store contract.
+
 ### 2026-07-13 - Route Repository fallback into AI diagram chat
 
 - Added the `원하는 구성이 없나요? AI로 새 설계 만들기` action below public Repository recommendations.
@@ -139,13 +148,6 @@ Short English-only working log for the current agent context. Older records are 
   - `pnpm typecheck`, `pnpm build`, and `git diff --check` passed.
 - Review:
   - Spec review found no issues; standards review finding about the caption token was fixed in `dcda929b`.
-
-### 2026-07-13 - Repeated Chrome verification of Repository AI responses
-
-- Created and saved the local project `AI 응답 반복 검증` from `chaekang/Jungle_DB_API_W8`; the resulting workspace contains the expected six-resource ECS Fargate diagram.
-- Three analyses inside the five-minute cache window returned the exact same recommendation text and scores because `/ai/source-repository-analysis` caches the complete result by raw Repository URL and branch.
-- Two cache-bypassed analyses produced different AI-written recommendation reasons, confirming fresh model responses, while both retained the same 87% ECS Fargate and 67% EKS confidence values supplied as deterministic baseline scores in the AI input.
-- Re-running `pnpm --dir apps/api db:migrate` was required before the local draft save succeeded.
 
 ### 2026-07-13 - Repository-specific AI recommendation profiles
 

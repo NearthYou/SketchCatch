@@ -543,6 +543,7 @@ export type AnalyzeSourceRepositoryRequest = {
 export type SourceRepositoryAnalysisResult = {
   repositoryUrl: string;
   defaultBranch: string;
+  availableBranches: string[];
   evidenceFiles: RepositoryAnalysisEvidenceFile[];
   detectedSignals: string[];
   recommendedTemplateId: RepositoryAnalysisTemplateId | null;

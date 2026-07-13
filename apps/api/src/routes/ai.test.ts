@@ -2036,7 +2036,7 @@ test("POST /api/ai/source-repository-analysis reads nested public repository evi
     assert.ok(body.detectedSignals.includes("Node API"));
     assert.ok(body.detectedSignals.includes("Database"));
     assert.ok(body.detectedSignals.includes("Container"));
-    assert.equal(body.recommendedTemplateId, "template-api-db");
+    assert.equal(body.recommendedTemplateId, "three-tier-web-app");
     assert.equal(body.aiHandoff.deploymentTypeDefault, "container");
     assert.ok(body.aiHandoff.recommendation.candidates.length >= 2);
     assert.equal(body.aiHandoff.recommendation.candidates[0].templateId, "ecs-fargate-container-app");
@@ -2160,6 +2160,65 @@ test("POST /api/ai/source-repository-analysis accepts clone URLs ending in .git"
       (fact: { kind: string; value: string }) =>
         fact.kind === "excluded_capability" && fact.value === "database"
     ));
+  } finally {
+    globalThis.fetch = originalFetch;
+    await app.close();
+  }
+});
+
+test("POST /api/ai/source-repository-analysis resolves the GitHub default branch and supports branch reanalysis", async () => {
+  const originalFetch = globalThis.fetch;
+  const requestedTreeUrls: string[] = [];
+  globalThis.fetch = async (input) => {
+    const url = String(input);
+
+    if (url === "https://api.github.com/repos/example/legacy-default") {
+      return Response.json({ default_branch: "master" });
+    }
+
+    if (url.includes("/repos/example/legacy-default/branches?")) {
+      return Response.json([{ name: "develop" }, { name: "master" }, { name: "release" }]);
+    }
+
+    if (url.includes("/repos/example/legacy-default/git/trees/")) {
+      requestedTreeUrls.push(url);
+      return Response.json({ truncated: false, tree: [{ path: "README.md", type: "blob" }] });
+    }
+
+    if (url.endsWith("/README.md")) {
+      return new Response("A small public repository", { status: 200 });
+    }
+
+    return new Response("", { status: 404 });
+  };
+
+  const app = buildApp();
+
+  try {
+    const defaultResponse = await app.inject({
+      method: "POST",
+      url: "/api/ai/source-repository-analysis",
+      payload: { repositoryUrl: "https://github.com/example/legacy-default" }
+    });
+
+    assert.equal(defaultResponse.statusCode, 200, defaultResponse.body);
+    assert.equal(defaultResponse.json().defaultBranch, "master");
+    assert.deepEqual(defaultResponse.json().availableBranches, ["master", "develop", "release"]);
+
+    const branchResponse = await app.inject({
+      method: "POST",
+      url: "/api/ai/source-repository-analysis",
+      payload: {
+        repositoryUrl: "https://github.com/example/legacy-default",
+        defaultBranch: "develop"
+      }
+    });
+
+    assert.equal(branchResponse.statusCode, 200, branchResponse.body);
+    assert.equal(branchResponse.json().defaultBranch, "develop");
+    assert.deepEqual(branchResponse.json().availableBranches, ["develop", "master", "release"]);
+    assert.ok(requestedTreeUrls.some((url) => url.includes("/git/trees/master?")));
+    assert.ok(requestedTreeUrls.some((url) => url.includes("/git/trees/develop?")));
   } finally {
     globalThis.fetch = originalFetch;
     await app.close();

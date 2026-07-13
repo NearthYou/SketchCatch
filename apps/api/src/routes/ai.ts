@@ -383,8 +383,8 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
     async (request): Promise<SourceRepositoryAnalysisResult> => {
       const body = sourceRepositoryAnalysisBodySchema.parse(request.body);
       const repository = parseGitHubRepositoryUrl(body.repositoryUrl);
-      const defaultBranch = body.defaultBranch ?? "main";
-      const cacheKey = createPublicRepositoryAnalysisCacheKey(body.repositoryUrl, defaultBranch);
+      const requestedBranch = body.defaultBranch ?? "";
+      const cacheKey = createPublicRepositoryAnalysisCacheKey(body.repositoryUrl, requestedBranch);
       const cachedAnalysis = await options.runtimeCache
         ?.get<SourceRepositoryAnalysisResult>(cacheKey)
         .catch(() => null);
@@ -393,6 +393,13 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
         return cachedAnalysis;
       }
 
+      const branchInventory = await fetchPublicRepositoryBranchInventory(repository);
+      const defaultBranch = resolvePublicRepositoryAnalysisBranch(
+        requestedBranch,
+        branchInventory.defaultBranch,
+        branchInventory.branches
+      );
+      const availableBranches = orderPublicRepositoryBranches(defaultBranch, branchInventory.branches);
       const snapshot = await fetchRepositoryEvidence(repository, defaultBranch);
       const legacyAnalysis = analyzeLegacyRepositoryEvidence({
         defaultBranch,
@@ -423,6 +430,7 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
 
       const result: SourceRepositoryAnalysisResult = {
         ...legacyAnalysis,
+        availableBranches,
         aiHandoff: recommendation ? { ...aiHandoff, recommendation } : aiHandoff
       };
 
@@ -877,10 +885,24 @@ type PublicGitHubRecursiveTreeResponse = {
   }>;
 };
 
+type PublicGitHubRepositoryResponse = {
+  readonly default_branch?: unknown;
+};
+
+type PublicGitHubBranchResponse = Array<{
+  readonly name?: unknown;
+}>;
+
+type PublicRepositoryBranchInventory = {
+  readonly defaultBranch: string | null;
+  readonly branches: readonly string[];
+};
+
 const PUBLIC_GITHUB_API_BASE_URL = "https://api.github.com";
 const MAX_PUBLIC_REPOSITORY_EVIDENCE_FILES = 24;
+const MAX_PUBLIC_REPOSITORY_BRANCH_PAGES = 50;
 const PUBLIC_GITHUB_REQUEST_TIMEOUT_MS = 10_000;
-const PUBLIC_REPOSITORY_ANALYSIS_CACHE_NAMESPACE = "ai:public-repository-analysis:v11";
+const PUBLIC_REPOSITORY_ANALYSIS_CACHE_NAMESPACE = "ai:public-repository-analysis:v12";
 const PUBLIC_REPOSITORY_ANALYSIS_CACHE_TTL_MS = 5 * 60 * 1_000;
 
 // GitHub URL에서 owner/repo만 뽑습니다. public repository 근거 파일을 읽을 때 이 값이 필요합니다.
@@ -902,6 +924,73 @@ function createPublicRepositoryAnalysisCacheKey(repositoryUrl: string, defaultBr
       .update(`${repositoryUrl.trim().toLowerCase()}\0${defaultBranch.trim()}`)
       .digest("hex")
   };
+}
+
+async function fetchPublicRepositoryBranchInventory(
+  repository: GitHubRepository
+): Promise<PublicRepositoryBranchInventory> {
+  const repositoryPath = `${PUBLIC_GITHUB_API_BASE_URL}/repos/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.repo)}`;
+  const requestOptions = {
+    headers: {
+      Accept: "application/vnd.github+json",
+      "User-Agent": "SketchCatch"
+    },
+    signal: AbortSignal.timeout(PUBLIC_GITHUB_REQUEST_TIMEOUT_MS)
+  };
+  const metadataPromise = fetch(repositoryPath, requestOptions).catch(() => null);
+  const branches: string[] = [];
+
+  for (let page = 1; page <= MAX_PUBLIC_REPOSITORY_BRANCH_PAGES; page += 1) {
+    const response = await fetch(
+      `${repositoryPath}/branches?per_page=100&page=${page}`,
+      requestOptions
+    ).catch(() => null);
+
+    if (!response?.ok) break;
+
+    const pageBranches = (await response.json()) as PublicGitHubBranchResponse;
+    branches.push(
+      ...pageBranches.flatMap((branch) =>
+        typeof branch.name === "string" && branch.name.trim() ? [branch.name.trim()] : []
+      )
+    );
+
+    if (pageBranches.length < 100) break;
+  }
+
+  const metadataResponse = await metadataPromise;
+  const metadata = metadataResponse?.ok
+    ? ((await metadataResponse.json()) as PublicGitHubRepositoryResponse)
+    : null;
+
+  return {
+    defaultBranch:
+      typeof metadata?.default_branch === "string" && metadata.default_branch.trim()
+        ? metadata.default_branch.trim()
+        : null,
+    branches: [...new Set(branches)]
+  };
+}
+
+function resolvePublicRepositoryAnalysisBranch(
+  requestedBranch: string,
+  repositoryDefaultBranch: string | null,
+  branches: readonly string[]
+): string {
+  const requested = requestedBranch.trim();
+
+  if (requested) return requested;
+  if (repositoryDefaultBranch) return repositoryDefaultBranch;
+  if (branches.includes("main")) return "main";
+  if (branches.includes("master")) return "master";
+  return branches[0] ?? "main";
+}
+
+function orderPublicRepositoryBranches(selectedBranch: string, branches: readonly string[]): string[] {
+  return [
+    selectedBranch,
+    ...branches.filter((branch) => branch !== selectedBranch).sort((left, right) => left.localeCompare(right))
+  ];
 }
 
 // GitHub 전체 코드를 분석하지 않고, README/package/Docker 관련 파일만 가볍게 읽습니다.

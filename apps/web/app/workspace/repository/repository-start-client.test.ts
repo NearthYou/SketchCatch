@@ -23,3 +23,15 @@ test("Repository start screen exposes an explicit AI chat fallback", () => {
   assert.doesNotMatch(source, /buildPublicRepositoryTemplateFallbackDraftRequest/);
   assert.doesNotMatch(source, /Template 없이 AI로 생성/);
 });
+
+test("Repository start screen selects a fetched branch before reanalysis", () => {
+  const source = readFileSync(join(currentDir, "repository-start-client.tsx"), "utf8");
+
+  assert.match(source, /setDefaultBranch\(result\.defaultBranch\)/);
+  assert.match(source, /publicAnalysis\.availableBranches\.map/);
+  assert.match(source, /<SelectMenu/);
+  assert.match(source, /tone="workspace"/);
+  assert.match(source, /setDefaultBranch\(""\)/);
+  assert.match(source, /analyzePublicRepositoryUrl\(repositoryUrl, defaultBranch\)/);
+  assert.doesNotMatch(source, /placeholder="main"/);
+});
