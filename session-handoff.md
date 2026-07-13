@@ -9,21 +9,20 @@ Use this file only for compact continuation context. Write it in English.
 - Both experiences stay inside the existing full-screen console as independent top-level screens.
 - Repository monitoring is Source Repository scoped and requires branch, app path, and infrastructure path confirmation.
 - Pipeline Runs are commit-scoped and remain separate from approved Git/CI/CD handoffs and Direct Deployment records.
-- Tasks 1-5 are implemented through the authenticated Pipeline Run HTTP boundary.
+- Tasks 1-6 are implemented through the authenticated Web client and pure console-state boundary.
 
 ## Changes This Session
 
-- Added strict project-owned list/detail/log/refresh APIs with typed DTOs and cursor pagination.
-- Review fixes use RDS-owned `(createdAt, id)` keyset pages, stable invalid-cursor errors, explicit stale refresh metadata, and one authoritative refresh-target lookup.
-- Kept persisted detail/log history readable after monitoring is disabled; refresh still requires a valid enabled target.
-- Shared one lazy GitHub App client across handoff, status, and run providers.
-- Focused app/route/service tests pass 53/53; schema/migration and repository query contracts pass; root lint, typecheck, and build pass.
+- Added authenticated monitoring and Pipeline Run Web clients with encoded paths, cursor/log wrappers, and stale-aware refresh metadata.
+- Added pure 5-second active/30-second idle polling, terminal notification, current/history selection, and 60-second stale-state helpers.
+- Added HTTP(S)-only deployment Output actions with sensitive-before-parse filtering and static/app then API precedence.
+- Focused Web tests pass 55/55; root and Web/types lint and typecheck, full build, harness, and diff checks pass.
 
 ## Broken Or Unverified
 
-- Tasks 6-9 (web clients/state, separate console UI, notifications/outputs, end-to-end verification) remain.
-- Lint retains the pre-existing unused `setNow` warning.
+- Tasks 7-9 (separate console UI, notifications/outputs, end-to-end verification) remain.
+- Root lint retains the pre-existing API `setNow` warning; the full build retains the existing Next.js multi-lockfile workspace-root warning.
 
 ## Best Next Action
 
-- Execute Task 6 from `docs/superpowers/plans/2026-07-13-deployment-cicd-console-separation.md`.
+- Execute Task 7 from `docs/superpowers/plans/2026-07-13-deployment-cicd-console-separation.md`.

@@ -15,6 +15,14 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-13 - Add Web CI/CD clients and pure console state helpers
+
+- Added typed monitoring, paginated Pipeline Run, incremental log, detail, and stale-aware refresh clients using the existing authenticated API boundary.
+- Added pure active/idle polling, terminal transition, notification key, current/history selection, stale detection, and safe deployment Output link helpers.
+- Sensitive Outputs are filtered before value parsing; only HTTP(S) static/app and API entry points become actions while other values remain available for detail rendering.
+- Verification: 55 focused Web tests, root and Web/types lint and typecheck, full build, harness, and diff checks passed. Lint retained the pre-existing API `setNow` warning, and the build retained the existing Next.js multi-lockfile workspace-root warning.
+- No external GitHub, deployment, Terraform, AWS, or database mutation ran.
+
 ### 2026-07-13 - Expose authenticated Pipeline Run APIs
 
 - Added project-owned Pipeline Run list/detail/log/refresh routes with strict validation, typed ISO DTOs, newest-first cursor pagination, and incremental log reads.
@@ -199,4 +207,4 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Next Action
 
-- Execute Task 6 from `docs/superpowers/plans/2026-07-13-deployment-cicd-console-separation.md` in the isolated #361 worktree.
+- Execute Task 7 from `docs/superpowers/plans/2026-07-13-deployment-cicd-console-separation.md` in the isolated #361 worktree.
