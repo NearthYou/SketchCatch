@@ -150,6 +150,17 @@ const sourceFixtureOnlyCatalogItemIds = [
   "aws-iam-policy-data"
 ] as const;
 
+const legacySchemaLessPaletteItemIds = [
+  "aws-cognito-user-pool",
+  "aws-cognito-user-pool-client",
+  "aws-caller-identity",
+  "aws-ssm-parameter",
+  "aws-ec2-managed-prefix-list",
+  "aws-s3-website-configuration",
+  "aws-codestarconnections-connection",
+  "aws-step-functions-state-machine"
+] as const;
+
 test("resourceCatalog sizes area defaults below the Region hierarchy root", () => {
   assert.deepEqual(getResourceSize("aws_region"), { width: 260, height: 180 });
   assert.deepEqual(getResourceSize("aws_vpc"), { width: 240, height: 160 });
@@ -273,14 +284,15 @@ test("resource parameter panel capability matches the parameter catalog", () => 
   assert.deepEqual(capabilityResourceTypes, parameterCatalogResourceTypes);
 });
 
-test("enabled Terraform palette items always have a non-empty parameter configuration", () => {
-  for (const resource of getTerraformCatalogItems().filter((item) => item.enabled)) {
-    const definition = getResourceDefinitionById(resource.id);
-    const parameters = terraformParameterCatalog.resources[resource.nodeDefaults.type];
+test("legacy schema-less Terraform items remain enabled in the manual palette", () => {
+  for (const id of legacySchemaLessPaletteItemIds) {
+    const resource = resourceCatalog.find((candidate) => candidate.id === id);
+    const definition = getResourceDefinitionById(id);
 
-    assert.ok(definition, resource.id);
-    assert.equal(definition.capabilities.parameterPanel, true, resource.id);
-    assert.ok(parameters && parameters.length > 0, resource.id);
+    assert.ok(resource, id);
+    assert.ok(definition, id);
+    assert.equal(definition.capabilities.parameterPanel, false, id);
+    assert.equal(resource.enabled, true, id);
   }
 });
 
@@ -446,6 +458,14 @@ test("committed Brainboard captures have exactly one shared and catalog match fo
 
 test("new schema-less Brainboard items stay source-fixture-only in the manual palette", () => {
   assert.equal(sourceFixtureOnlyCatalogItemIds.length, 31);
+
+  assert.deepEqual(
+    getTerraformCatalogItems()
+      .filter((resource) => !resource.enabled)
+      .map((resource) => resource.id)
+      .sort(),
+    [...sourceFixtureOnlyCatalogItemIds].sort()
+  );
 
   for (const id of sourceFixtureOnlyCatalogItemIds) {
     const resource = resourceCatalog.find((candidate) => candidate.id === id);

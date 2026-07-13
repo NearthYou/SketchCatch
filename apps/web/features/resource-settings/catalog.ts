@@ -1708,7 +1708,7 @@ function createTerraformResourceItem(presentation: TerraformResourcePresentation
     area: presentation.area,
     category: resourceCategoryOverrides[definition.id] ?? presentation.category,
     iconUrl: presentation.iconUrl,
-    enabled: presentation.enabled ?? definition.capabilities.parameterPanel,
+    enabled: presentation.enabled ?? true,
     nodeDefaults: {
       ...(definition.terraform.blockType !== "resource"
         ? { terraformBlockType: definition.terraform.blockType }

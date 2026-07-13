@@ -37,7 +37,7 @@ test("materializeTemplateDiagram gives a CloudFront template node the catalog ic
 test("source fixtures can materialize disabled schema-less catalog resources", () => {
   const sourceFixtureOnlyItems = resourceCatalog.filter((item) => !item.enabled);
 
-  assert.ok(sourceFixtureOnlyItems.length >= 31);
+  assert.equal(sourceFixtureOnlyItems.length, 31);
 
   for (const item of sourceFixtureOnlyItems) {
     const diagram = materializeTemplateDiagram(
