@@ -4,10 +4,13 @@ import Fastify from "fastify";
 import { ZodError } from "zod";
 import type {
   DeploymentPlanSummary,
-  GitCicdMonitoringConfigResponse,
   GitCicdHandoffListResponse,
   GitCicdHandoffResponse,
-  GitCicdHandoffStatus
+  GitCicdHandoffStatus,
+  GitCicdMonitoringConfigResponse,
+  GitCicdPipelineLogListResponse,
+  GitCicdPipelineRunListResponse,
+  GitCicdPipelineRunResponse
 } from "@sketchcatch/types";
 import { createAccessToken } from "../auth/tokens.js";
 import type { DatabaseClient } from "../db/client.js";
@@ -36,6 +39,17 @@ import type {
   GitCicdMonitoringProvider,
   GitCicdMonitoringRepository
 } from "../git-cicd/git-cicd-monitoring-service.js";
+import type {
+  GitCicdPipelinePersistenceRepository,
+  PersistedPipelineLog,
+  PersistedPipelineRun,
+  PipelineRefreshTarget,
+  PipelineRunWithStages
+} from "../git-cicd/git-cicd-pipeline-run-service.js";
+import type {
+  GitCicdRunProvider,
+  GitCicdRunProviderSnapshot
+} from "../git-cicd/github-actions-run-provider.js";
 import {
   GitCicdRepositorySettingsPermissionError,
   type GitCicdRepositorySettingsApplier
@@ -55,9 +69,157 @@ const deploymentId = "66666666-6666-4666-8666-666666666666";
 const handoffId = "44444444-4444-4444-8444-444444444444";
 const userId = "55555555-5555-4555-8555-555555555555";
 const sourceRepositoryId = "repo-1";
+const pipelineRunId = "77777777-7777-4777-8777-777777777777";
 const fixedNow = new Date("2026-01-01T00:00:00.000Z");
 
 type UserRecord = typeof users.$inferSelect;
+
+test("GET Pipeline Runs defaults to 20, caps at 50, and paginates newest first", async () => {
+  const pipelineRepository = new FakePipelineRepository(
+    Array.from({ length: 55 }, (_, index) => createPipelineRun(index))
+  );
+  pipelineRepository.runs.reverse();
+  const app = await buildGitCicdHandoffTestApp(new FakeGitCicdHandoffRepository(), {
+    pipelineRepository
+  });
+  const headers = await authHeaders();
+
+  const first = await app.inject({
+    headers,
+    method: "GET",
+    url: `/api/projects/${projectId}/git-cicd-pipeline-runs`
+  });
+  assert.equal(first.statusCode, 200);
+  const firstBody = first.json() as GitCicdPipelineRunListResponse;
+  assert.equal(firstBody.runs.length, 20);
+  assert.equal(firstBody.runs[0]?.commitMessage, "Commit 54");
+  assert.equal(firstBody.runs[19]?.commitMessage, "Commit 35");
+  assert.equal(firstBody.nextCursor, firstBody.runs[19]?.id);
+
+  const second = await app.inject({
+    headers,
+    method: "GET",
+    url: `/api/projects/${projectId}/git-cicd-pipeline-runs?cursor=${firstBody.nextCursor}`
+  });
+  assert.equal(second.statusCode, 200);
+  const secondBody = second.json() as GitCicdPipelineRunListResponse;
+  assert.equal(secondBody.runs[0]?.commitMessage, "Commit 34");
+
+  const maximum = await app.inject({
+    headers,
+    method: "GET",
+    url: `/api/projects/${projectId}/git-cicd-pipeline-runs?limit=50`
+  });
+  assert.equal(maximum.statusCode, 200);
+  assert.equal((maximum.json() as GitCicdPipelineRunListResponse).runs.length, 50);
+
+  for (const url of [
+    `/api/projects/${projectId}/git-cicd-pipeline-runs?limit=51`,
+    `/api/projects/${projectId}/git-cicd-pipeline-runs?limit=20&unexpected=true`
+  ]) {
+    assert.equal((await app.inject({ headers, method: "GET", url })).statusCode, 400);
+  }
+  await app.close();
+});
+
+test("Pipeline Run detail and incremental logs return typed ISO responses", async () => {
+  const pipelineRepository = new FakePipelineRepository([createPipelineRun(0)]);
+  pipelineRepository.logs = [1, 2, 3].map((sequence) => createPipelineLog(sequence));
+  pipelineRepository.refreshEnabled = false;
+  const app = await buildGitCicdHandoffTestApp(new FakeGitCicdHandoffRepository(), {
+    pipelineRepository
+  });
+  const headers = await authHeaders();
+
+  const detail = await app.inject({
+    headers,
+    method: "GET",
+    url: `/api/git-cicd-pipeline-runs/${pipelineRunId}`
+  });
+  assert.equal(detail.statusCode, 200);
+  const detailBody = detail.json() as GitCicdPipelineRunResponse;
+  assert.equal(detailBody.run.id, pipelineRunId);
+  assert.equal(detailBody.run.createdAt, "2026-01-01T00:00:00.000Z");
+  assert.equal(detailBody.run.stages[0]?.startedAt, "2026-01-01T00:00:00.000Z");
+
+  const logs = await app.inject({
+    headers,
+    method: "GET",
+    url: `/api/git-cicd-pipeline-runs/${pipelineRunId}/logs?sinceSequence=1`
+  });
+  assert.equal(logs.statusCode, 200);
+  const logsBody = logs.json() as GitCicdPipelineLogListResponse;
+  assert.deepEqual(logsBody.logs.map((log) => log.sequence), [2, 3]);
+  assert.equal(logsBody.nextSequence, 3);
+  assert.equal(logsBody.logs[0]?.createdAt, "2026-01-01T00:00:00.000Z");
+
+  const blockedRefresh = await app.inject({
+    headers,
+    method: "POST",
+    url: `/api/git-cicd-pipeline-runs/${pipelineRunId}/refresh`
+  });
+  assert.equal(blockedRefresh.statusCode, 404);
+
+  assert.equal(
+    (
+      await app.inject({
+        headers,
+        method: "GET",
+        url: `/api/git-cicd-pipeline-runs/${pipelineRunId}/logs?sinceSequence=0&extra=1`
+      })
+    ).statusCode,
+    400
+  );
+  await app.close();
+});
+
+test("Pipeline Run routes hide inaccessible projects and runs behind stable 404 responses", async () => {
+  const pipelineRepository = new FakePipelineRepository([createPipelineRun(0)]);
+  const handoffRepository = new FakeGitCicdHandoffRepository();
+  const otherUser = createUserRecord({ id: "88888888-8888-4888-8888-888888888888" });
+  const app = await buildGitCicdHandoffTestApp(handoffRepository, {
+    pipelineRepository,
+    userRows: [otherUser]
+  });
+  const headers = await authHeaders(otherUser.id);
+
+  for (const request of [
+    { method: "GET" as const, url: `/api/projects/${projectId}/git-cicd-pipeline-runs` },
+    { method: "GET" as const, url: `/api/git-cicd-pipeline-runs/${pipelineRunId}` },
+    { method: "GET" as const, url: `/api/git-cicd-pipeline-runs/${pipelineRunId}/logs` },
+    { method: "POST" as const, url: `/api/git-cicd-pipeline-runs/${pipelineRunId}/refresh` }
+  ]) {
+    const response = await app.inject({ ...request, headers });
+    assert.equal(response.statusCode, 404, `${request.method} ${request.url}`);
+    assert.deepEqual(response.json(), {
+      error: "not_found",
+      message: "Pipeline Run not found"
+    });
+  }
+  await app.close();
+});
+
+test("POST Pipeline Run refresh performs read-only provider sync and returns persisted detail", async () => {
+  const pipelineRepository = new FakePipelineRepository([createPipelineRun(0)]);
+  const providerCalls: string[] = [];
+  const pipelineProvider = createPipelineProvider(providerCalls);
+  const app = await buildGitCicdHandoffTestApp(new FakeGitCicdHandoffRepository(), {
+    pipelineProvider,
+    pipelineRepository
+  });
+
+  const response = await app.inject({
+    headers: await authHeaders(),
+    method: "POST",
+    url: `/api/git-cicd-pipeline-runs/${pipelineRunId}/refresh`
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal((response.json() as GitCicdPipelineRunResponse).run.status, "succeeded");
+  assert.deepEqual(providerCalls, ["listSnapshots", "listCommitFiles"]);
+  assert.equal(pipelineRepository.persistCount, 1);
+  await app.close();
+});
 
 type RepositoryCall =
   | {
@@ -1543,6 +1705,153 @@ function restoreEnvironmentVariable(name: string, value: string | undefined): vo
   process.env[name] = value;
 }
 
+class FakePipelineRepository implements GitCicdPipelinePersistenceRepository {
+  logs: PersistedPipelineLog[] = [];
+  persistCount = 0;
+  refreshEnabled = true;
+
+  constructor(readonly runs: PipelineRunWithStages[]) {}
+
+  async findRefreshTarget(candidateProjectId: string, candidateSourceRepositoryId: string) {
+    return this.refreshEnabled && candidateProjectId === projectId && candidateSourceRepositoryId === sourceRepositoryId
+      ? createPipelineRefreshTarget()
+      : undefined;
+  }
+
+  async findPipelineRun(candidatePipelineRunId: string) {
+    return this.runs.find((run) => run.id === candidatePipelineRunId);
+  }
+
+  async findRunRefreshTarget(candidatePipelineRunId: string) {
+    const run = await this.findPipelineRun(candidatePipelineRunId);
+    return this.refreshEnabled && run
+      ? { ...createPipelineRefreshTarget(), commitSha: run.commitSha }
+      : undefined;
+  }
+
+  async listProjectPipelineRuns(candidateProjectId: string) {
+    return this.runs.filter((run) => run.projectId === candidateProjectId);
+  }
+
+  async listPipelineLogs(candidatePipelineRunId: string, sinceSequence: number) {
+    return this.logs.filter(
+      (log) => log.pipelineRunId === candidatePipelineRunId && log.sequence > sinceSequence
+    );
+  }
+
+  async findPipelineRunsByCommitShas(
+    _candidateSourceRepositoryId: string,
+    _commitShas: readonly string[]
+  ) {
+    return new Map<string, PersistedPipelineRun>();
+  }
+
+  async persistSnapshot(input: {
+    run: PersistedPipelineRun;
+    stages: PipelineRunWithStages["stages"];
+    logs: PersistedPipelineLog[];
+  }) {
+    this.persistCount += 1;
+    const existingIndex = this.runs.findIndex((run) => run.commitSha === input.run.commitSha);
+    const existing = this.runs[existingIndex];
+    const id = existing?.id ?? input.run.id;
+    const persisted = {
+      ...input.run,
+      id,
+      stages: input.stages.map((stage) => ({ ...stage, pipelineRunId: id }))
+    };
+    if (existingIndex >= 0) this.runs.splice(existingIndex, 1, persisted);
+    else this.runs.push(persisted);
+    this.logs = input.logs.map((log) => ({ ...log, pipelineRunId: id }));
+    return persisted;
+  }
+}
+
+function createPipelineRefreshTarget(): PipelineRefreshTarget {
+  return {
+    projectId,
+    sourceRepositoryId,
+    installationId: "installation-1",
+    owner: "sketchcatch",
+    name: "infra-live",
+    monitorBranch: "main",
+    appPath: { mode: "subdirectory", path: "apps/web" },
+    infraPath: { mode: "subdirectory", path: "infra" }
+  };
+}
+
+function createPipelineRun(index: number): PipelineRunWithStages {
+  const createdAt = new Date(fixedNow.getTime() + index * 60_000);
+  const id = index === 0 ? pipelineRunId : `pipeline-run-${index}`;
+  return {
+    id,
+    projectId,
+    sourceRepositoryId,
+    handoffId: null,
+    commitSha: `${index}`.padStart(40, "a"),
+    commitMessage: `Commit ${index}`,
+    branch: "main",
+    changeScope: "app_and_infra",
+    status: "running",
+    statusMessage: "Workflow: running",
+    pipelineRunUrl: `https://example.invalid/actions/runs/${index}`,
+    appUrl: null,
+    apiUrl: null,
+    startedAt: fixedNow,
+    finishedAt: null,
+    lastRefreshedAt: fixedNow,
+    createdAt,
+    stages: [
+      {
+        id: `stage-${index}`,
+        pipelineRunId: id,
+        kind: "detect",
+        status: "succeeded",
+        runUrl: null,
+        startedAt: fixedNow,
+        finishedAt: fixedNow
+      }
+    ]
+  };
+}
+
+function createPipelineLog(sequence: number): PersistedPipelineLog {
+  return {
+    id: `log-${sequence}`,
+    pipelineRunId,
+    stageId: "stage-0",
+    sequence,
+    level: "info",
+    message: `Log ${sequence}`,
+    createdAt: fixedNow
+  };
+}
+
+function createPipelineProvider(calls: string[]): GitCicdRunProvider {
+  const snapshot: GitCicdRunProviderSnapshot = {
+    commitSha: createPipelineRun(0).commitSha,
+    commitMessage: "Commit 0",
+    branch: "main",
+    workflowName: "SketchCatch",
+    runUrl: "https://example.invalid/actions/runs/0",
+    status: "succeeded",
+    startedAt: fixedNow,
+    finishedAt: fixedNow,
+    jobs: [],
+    logs: []
+  };
+  return {
+    async listSnapshots() {
+      calls.push("listSnapshots");
+      return [snapshot];
+    },
+    async listCommitFiles() {
+      calls.push("listCommitFiles");
+      return ["apps/web/page.tsx"];
+    }
+  };
+}
+
 type GitCicdRouteTestOptions = {
   provider?: GitCicdHandoffProvider;
   runtimeCache?: RuntimeCache;
@@ -1555,6 +1864,8 @@ type GitCicdRouteTestOptions = {
   awsRoleDiffGateway?: AwsRoleDiffGateway;
   monitoringRepository?: GitCicdMonitoringRepository;
   monitoringProvider?: GitCicdMonitoringProvider;
+  pipelineRepository?: GitCicdPipelinePersistenceRepository;
+  pipelineProvider?: GitCicdRunProvider;
 };
 
 async function buildGitCicdHandoffTestApp(
@@ -1585,6 +1896,12 @@ async function buildGitCicdHandoffTestApp(
       : {}),
     ...(routeOptions.monitoringProvider
       ? { gitCicdMonitoringProvider: routeOptions.monitoringProvider }
+      : {}),
+    ...(routeOptions.pipelineRepository
+      ? { createGitCicdPipelinePersistenceRepository: () => routeOptions.pipelineRepository! }
+      : {}),
+    ...(routeOptions.pipelineProvider
+      ? { gitCicdRunProvider: routeOptions.pipelineProvider }
       : {}),
     ...(routeOptions.provider ? { gitCicdHandoffProvider: routeOptions.provider } : {}),
     ...(routeOptions.repositorySettingsApplier

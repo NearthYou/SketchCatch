@@ -15,6 +15,13 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-13 - Expose authenticated Pipeline Run APIs
+
+- Added project-owned Pipeline Run list/detail/log/refresh routes with strict validation, typed ISO DTOs, newest-first cursor pagination, and incremental log reads.
+- Preserved persisted history access after monitoring is disabled while keeping refresh behind the enabled-and-valid monitoring target.
+- Reused one lazy GitHub App client across handoff, pipeline-status, and run providers; no real GitHub or deployment mutation ran.
+- Verification: 49 focused API/app tests, lazy-config smoke, API/root lint, typecheck, build, harness, and diff checks passed; lint retains one pre-existing `setNow` warning.
+
 ### 2026-07-13 - Discover and persist commit-scoped Pipeline Runs
 
 - Added read-only GitHub Actions run, commit-file, job, and masked log reads.
@@ -189,26 +196,6 @@ Short English-only working log for the current agent context. Older records are 
 - Risk:
   - Browser visual verification was skipped because Playwright/browser automation dependencies are not installed in this worktree.
 
-### 2026-07-12 - Open board after public Repository template recommendation
-
-- Goal: Ensure a successful public Repository URL recommendation creates the project draft and opens the workspace instead of stopping on a no-template message.
-- Completed:
-  - Confirmed the reported repository analysis returned `template-api-db` with React, Node API, Python API, Database, and Container signals.
-  - Mapped legacy public Repository Analysis template ids such as `template-api-db` to supported board `TemplateDefinition` ids.
-  - Kept the inline new-project Repository URL flow creating and saving the recommended template diagram before routing to the workspace.
-  - Added regression coverage for `template-api-db` producing a board with ALB, ASG, and RDS resources.
-- Verification:
-  - `pnpm --dir apps/web exec tsx --test features/resource-settings/template-library.test.ts app/workspace/new/workspace-start-options.test.ts features/workspace/repository-start-template-recommendation.test.ts`
-  - `pnpm --dir apps/web typecheck`
-  - `pnpm --dir apps/api exec tsx --test src/services/aiRepositoryAnalysis.test.ts src/routes/ai.test.ts`
-  - `pnpm harness:check`
-  - `pnpm lint` passed with the pre-existing `live-observations` `setNow` warning.
-  - `pnpm typecheck`
-  - `pnpm build`
-  - `git diff --check` passed with CRLF conversion warnings only.
-- Risk:
-  - Browser visual verification has not been rerun yet in this worktree.
-
 ## Next Action
 
-- Execute Task 5 from `docs/superpowers/plans/2026-07-13-deployment-cicd-console-separation.md` in the isolated #361 worktree.
+- Execute Task 6 from `docs/superpowers/plans/2026-07-13-deployment-cicd-console-separation.md` in the isolated #361 worktree.

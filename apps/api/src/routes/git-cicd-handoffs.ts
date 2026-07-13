@@ -9,6 +9,11 @@ import type {
   GitCicdHandoffResponse,
   GitCicdMonitoringConfig,
   GitCicdMonitoringConfigResponse,
+  GitCicdPipelineLog,
+  GitCicdPipelineLogListResponse,
+  GitCicdPipelineRun,
+  GitCicdPipelineRunListResponse,
+  GitCicdPipelineRunResponse,
   GitCicdRepositorySettingsApplyResponse
 } from "@sketchcatch/types";
 import { requireActiveUserId } from "../auth/current-user.js";
@@ -54,6 +59,14 @@ import {
 } from "../git-cicd/github-oauth-repository-settings.js";
 import type { GitCicdPipelineStatusProvider } from "../git-cicd/github-actions-pipeline-status-provider.js";
 import {
+  createGitCicdPipelineRunService,
+  createPostgresGitCicdPipelinePersistenceRepository,
+  type GitCicdPipelinePersistenceRepository,
+  type PersistedPipelineLog,
+  type PipelineRunWithStages
+} from "../git-cicd/git-cicd-pipeline-run-service.js";
+import type { GitCicdRunProvider } from "../git-cicd/github-actions-run-provider.js";
+import {
   createGitHubMonitoringProviderFromEnv,
   createPostgresGitCicdMonitoringRepository,
   getGitCicdMonitoringConfig,
@@ -89,6 +102,20 @@ const gitCicdPipelineDetailStatusSchema = z.enum([
 const projectHandoffParamsSchema = z.object({
   projectId: z.uuid()
 });
+
+const pipelineRunProjectParamsSchema = z.object({ projectId: z.uuid() }).strict();
+const pipelineRunParamsSchema = z.object({ pipelineRunId: z.uuid() }).strict();
+const pipelineRunListQuerySchema = z
+  .object({
+    cursor: z.string().trim().min(1).optional(),
+    limit: z.coerce.number().int().min(1).max(50).default(20)
+  })
+  .strict();
+const pipelineLogQuerySchema = z
+  .object({
+    sinceSequence: z.coerce.number().int().min(0).default(0)
+  })
+  .strict();
 
 const handoffParamsSchema = z.object({
   handoffId: z.uuid()
@@ -178,6 +205,10 @@ type GitCicdHandoffRouteOptions = {
   createGitCicdMonitoringRepository?: (
     db: DatabaseClient["db"]
   ) => GitCicdMonitoringRepository;
+  createGitCicdPipelinePersistenceRepository?: (
+    db: DatabaseClient["db"]
+  ) => GitCicdPipelinePersistenceRepository;
+  gitCicdRunProvider?: GitCicdRunProvider;
   gitCicdMonitoringProvider?: GitCicdMonitoringProvider;
   gitCicdHandoffProvider?: GitCicdHandoffProvider;
   gitCicdPipelineStatusProvider?: GitCicdPipelineStatusProvider;
@@ -194,6 +225,13 @@ type GitCicdHandoffRequestContext = {
   accessContext: ProjectAccessContext;
   repository: GitCicdHandoffRepository;
   provider: GitCicdHandoffProvider;
+};
+
+type GitCicdPipelineRunRequestContext = {
+  accessContext: ProjectAccessContext;
+  handoffRepository: GitCicdHandoffRepository;
+  pipelineRepository: GitCicdPipelinePersistenceRepository;
+  service: ReturnType<typeof createGitCicdPipelineRunService>;
 };
 
 export async function registerGitCicdHandoffRoutes(
@@ -262,6 +300,101 @@ export async function registerGitCicdHandoffRoutes(
       }
     }
   );
+
+  app.get("/projects/:projectId/git-cicd-pipeline-runs", async (request, reply) => {
+    const params = pipelineRunProjectParamsSchema.parse(request.params);
+    const query = pipelineRunListQuerySchema.parse(request.query);
+    const context = await getGitCicdPipelineRunRequestContext(
+      request,
+      options,
+      getGitCicdDatabaseClient
+    );
+
+    try {
+      await requirePipelineProjectAccess(params.projectId, context);
+      const runs = (
+        await context.service.listProjectPipelineRuns({ projectId: params.projectId })
+      ).sort(comparePipelineRunsNewestFirst);
+      const cursorIndex = query.cursor
+        ? runs.findIndex((run) => run.id === query.cursor)
+        : -1;
+      const pageStart = cursorIndex >= 0 ? cursorIndex + 1 : query.cursor ? runs.length : 0;
+      const page = runs.slice(pageStart, pageStart + query.limit);
+      const response: GitCicdPipelineRunListResponse = {
+        runs: page.map(toGitCicdPipelineRun),
+        nextCursor:
+          pageStart + page.length < runs.length ? (page.at(-1)?.id ?? null) : null
+      };
+      return reply.status(200).send(response);
+    } catch (error) {
+      return handleGitCicdHandoffError(error, reply);
+    }
+  });
+
+  app.get("/git-cicd-pipeline-runs/:pipelineRunId", async (request, reply) => {
+    const params = pipelineRunParamsSchema.parse(request.params);
+    const context = await getGitCicdPipelineRunRequestContext(
+      request,
+      options,
+      getGitCicdDatabaseClient
+    );
+
+    try {
+      const run = await requireAccessiblePipelineRun(params.pipelineRunId, context);
+      const response: GitCicdPipelineRunResponse = { run: toGitCicdPipelineRun(run) };
+      return reply.status(200).send(response);
+    } catch (error) {
+      return handleGitCicdHandoffError(error, reply);
+    }
+  });
+
+  app.get("/git-cicd-pipeline-runs/:pipelineRunId/logs", async (request, reply) => {
+    const params = pipelineRunParamsSchema.parse(request.params);
+    const query = pipelineLogQuerySchema.parse(request.query);
+    const context = await getGitCicdPipelineRunRequestContext(
+      request,
+      options,
+      getGitCicdDatabaseClient
+    );
+
+    try {
+      await requireAccessiblePipelineRun(params.pipelineRunId, context);
+      const logs = await context.service.listPipelineLogs({
+        pipelineRunId: params.pipelineRunId,
+        sinceSequence: query.sinceSequence
+      });
+      const response: GitCicdPipelineLogListResponse = {
+        logs: logs.map(toGitCicdPipelineLog),
+        nextSequence: logs.at(-1)?.sequence ?? query.sinceSequence
+      };
+      return reply.status(200).send(response);
+    } catch (error) {
+      return handleGitCicdHandoffError(error, reply);
+    }
+  });
+
+  app.post("/git-cicd-pipeline-runs/:pipelineRunId/refresh", async (request, reply) => {
+    const params = pipelineRunParamsSchema.parse(request.params);
+    const context = await getGitCicdPipelineRunRequestContext(
+      request,
+      options,
+      getGitCicdDatabaseClient
+    );
+
+    try {
+      await requireAccessiblePipelineRun(params.pipelineRunId, context);
+      if (!(await context.pipelineRepository.findRunRefreshTarget(params.pipelineRunId))) {
+        throw new GitCicdHandoffNotFoundError("Pipeline Run not found");
+      }
+      await context.service.refreshPipelineRun({ pipelineRunId: params.pipelineRunId });
+      const run = await context.service.getPipelineRun({ pipelineRunId: params.pipelineRunId });
+      if (!run) throw new GitCicdHandoffNotFoundError("Pipeline Run not found");
+      const response: GitCicdPipelineRunResponse = { run: toGitCicdPipelineRun(run) };
+      return reply.status(200).send(response);
+    } catch (error) {
+      return handleGitCicdHandoffError(error, reply);
+    }
+  });
 
   app.post("/projects/:projectId/git-cicd-handoffs", async (request, reply) => {
     const params = projectHandoffParamsSchema.parse(request.params);
@@ -726,6 +859,88 @@ function shouldRefreshGitHubPipelineStatus(handoff: GitCicdHandoffRecord): boole
     handoff.repositoryProvider === "github" &&
     (handoff.status === "pr_created" || handoff.status === "pipeline_running")
   );
+}
+
+const unconfiguredGitCicdRunProvider: GitCicdRunProvider = {
+  async listSnapshots() {
+    throw new Error("Git/CI/CD Pipeline Run provider is not configured");
+  },
+  async listCommitFiles() {
+    throw new Error("Git/CI/CD Pipeline Run provider is not configured");
+  }
+};
+
+async function getGitCicdPipelineRunRequestContext(
+  request: FastifyRequest,
+  options: GitCicdHandoffRouteOptions | undefined,
+  getGitCicdDatabaseClient: () => DatabaseClient
+): Promise<GitCicdPipelineRunRequestContext> {
+  const client = getGitCicdDatabaseClient();
+  const accessContext: ProjectAccessContext = {
+    kind: "user",
+    userId: await requireActiveUserId(request, () => client)
+  };
+  const pipelineRepository =
+    options?.createGitCicdPipelinePersistenceRepository?.(client.db) ??
+    createPostgresGitCicdPipelinePersistenceRepository(client.db);
+  return {
+    accessContext,
+    handoffRepository:
+      options?.createGitCicdHandoffRepository?.(client.db) ??
+      createPostgresGitCicdHandoffRepository(client.db),
+    pipelineRepository,
+    service: createGitCicdPipelineRunService({
+      repository: pipelineRepository,
+      provider: options?.gitCicdRunProvider ?? unconfiguredGitCicdRunProvider
+    })
+  };
+}
+
+async function requirePipelineProjectAccess(
+  projectId: string,
+  context: GitCicdPipelineRunRequestContext
+): Promise<void> {
+  const project = await context.handoffRepository.findAccessibleProject(
+    projectId,
+    context.accessContext
+  );
+  if (!project) throw new GitCicdHandoffNotFoundError("Pipeline Run not found");
+}
+
+async function requireAccessiblePipelineRun(
+  pipelineRunId: string,
+  context: GitCicdPipelineRunRequestContext
+): Promise<PipelineRunWithStages> {
+  const run = await context.service.getPipelineRun({ pipelineRunId });
+  if (!run) throw new GitCicdHandoffNotFoundError("Pipeline Run not found");
+  await requirePipelineProjectAccess(run.projectId, context);
+  return run;
+}
+
+function comparePipelineRunsNewestFirst(
+  left: PipelineRunWithStages,
+  right: PipelineRunWithStages
+): number {
+  return right.createdAt.getTime() - left.createdAt.getTime() || right.id.localeCompare(left.id);
+}
+
+function toGitCicdPipelineRun(row: PipelineRunWithStages): GitCicdPipelineRun {
+  return {
+    ...row,
+    startedAt: row.startedAt?.toISOString() ?? null,
+    finishedAt: row.finishedAt?.toISOString() ?? null,
+    lastRefreshedAt: row.lastRefreshedAt.toISOString(),
+    createdAt: row.createdAt.toISOString(),
+    stages: row.stages.map((stage) => ({
+      ...stage,
+      startedAt: stage.startedAt?.toISOString() ?? null,
+      finishedAt: stage.finishedAt?.toISOString() ?? null
+    }))
+  };
+}
+
+function toGitCicdPipelineLog(row: PersistedPipelineLog): GitCicdPipelineLog {
+  return { ...row, createdAt: row.createdAt.toISOString() };
 }
 
 async function getGitCicdHandoffRequestContext(

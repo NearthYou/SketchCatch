@@ -86,6 +86,7 @@ export type GitCicdPipelinePersistenceRepository = {
     projectId: string,
     sourceRepositoryId: string
   ): Promise<PipelineRefreshTarget | undefined>;
+  findPipelineRun(pipelineRunId: string): Promise<PipelineRunWithStages | undefined>;
   findRunRefreshTarget(pipelineRunId: string): Promise<PipelineRefreshTarget | undefined>;
   listProjectPipelineRuns(projectId: string): Promise<PipelineRunWithStages[]>;
   listPipelineLogs(pipelineRunId: string, sinceSequence: number): Promise<PersistedPipelineLog[]>;
@@ -227,6 +228,10 @@ export function createGitCicdPipelineRunService(options: {
     async listProjectPipelineRuns(input: { projectId: string }) {
       return maskRuns(await options.repository.listProjectPipelineRuns(input.projectId));
     },
+    async getPipelineRun(input: { pipelineRunId: string }) {
+      const run = await options.repository.findPipelineRun(input.pipelineRunId);
+      return run ? maskRun(run) : undefined;
+    },
     async listPipelineLogs(input: { pipelineRunId: string; sinceSequence?: number }) {
       return (
         await options.repository.listPipelineLogs(input.pipelineRunId, input.sinceSequence ?? 0)
@@ -299,6 +304,23 @@ export function createPostgresGitCicdPipelinePersistenceRepository(
           eq(gitCicdMonitoringConfigs.validationStatus, "valid")
         )
       );
+    },
+    async findPipelineRun(pipelineRunId) {
+      const [run] = await db
+        .select()
+        .from(gitCicdPipelineRuns)
+        .where(eq(gitCicdPipelineRuns.id, pipelineRunId));
+      if (!run) return undefined;
+      const stages = await db
+        .select()
+        .from(gitCicdPipelineStages)
+        .where(eq(gitCicdPipelineStages.pipelineRunId, pipelineRunId));
+      return {
+        ...run,
+        stages: stages.sort(
+          (left, right) => stageKinds.indexOf(left.kind) - stageKinds.indexOf(right.kind)
+        )
+      };
     },
     async findRunRefreshTarget(pipelineRunId) {
       const [run] = await db

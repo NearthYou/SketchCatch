@@ -189,6 +189,15 @@ function createMemoryRepository() {
   };
   const repository: GitCicdPipelinePersistenceRepository = {
     findRefreshTarget: async () => state.target,
+    findPipelineRun: async (pipelineRunId) => {
+      const run = state.runs.find((candidate) => candidate.id === pipelineRunId);
+      return run
+        ? {
+            ...run,
+            stages: state.stages.filter((stage) => stage.pipelineRunId === run.id)
+          }
+        : undefined;
+    },
     findRunRefreshTarget: async () =>
       state.runs.length ? { ...state.target, commitSha: state.runs[0]!.commitSha } : undefined,
     listProjectPipelineRuns: async () =>
