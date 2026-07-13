@@ -39,7 +39,10 @@ test("resource-weighted project allocation is not labelled as an actual project 
   });
 
   assert.equal(copy.metricCostLabel, "프로젝트 비용 배분액");
-  assert.match(copy.sampleNotice ?? "", /배포 리소스 비율로 배분/);
+  assert.equal(
+    copy.sampleNotice,
+    "프로젝트별 AWS 비용 데이터가 아직 없어, 배포 리소스를 기준으로 비용을 계산했습니다. AWS 비용 반영에는 시간이 걸릴 수 있습니다."
+  );
 });
 
 test("loading state does not claim that unknown data is actual billing data", () => {

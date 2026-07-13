@@ -46,7 +46,7 @@ export function createCostUsageDisplayCopy({
         metricCostLabel: "프로젝트 비용 배분액",
         projectCostTitle: "프로젝트별 비용 배분액",
         sampleNotice:
-          "프로젝트 Cost Explorer tag가 없어 실제 계정 비용을 배포 리소스 비율로 배분한 값입니다.",
+          "프로젝트별 AWS 비용 데이터가 아직 없어, 배포 리소스를 기준으로 비용을 계산했습니다. AWS 비용 반영에는 시간이 걸릴 수 있습니다.",
         summaryKicker: "Allocated cost",
         summaryTitle: "프로젝트 비용 배분"
       };
