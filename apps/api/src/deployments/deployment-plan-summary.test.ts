@@ -276,7 +276,6 @@ test("findUnsupportedLiveApplyResourceTypesFromTerraformShowJson allows demo web
       "aws_cloudwatch_metric_alarm",
       "aws_db_instance",
       "aws_iam_instance_profile",
-      "aws_iam_role",
       "aws_iam_role_policy_attachment",
       "aws_lb"
     ]

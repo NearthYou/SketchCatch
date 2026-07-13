@@ -38,16 +38,6 @@ Short English-only working log for the current agent context. Older records are 
 - Verification after conflict resolution: focused issue #361 API 112/112 and Web 82/82, `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm harness:check`, and diff checks passed.
 - Existing warnings remain: unused API `setNow` and Next.js multiple-lockfile root inference. No push or external mutation ran.
 
-### 2026-07-13 - Split estimated and actual project costs with folder tabs
-
-- Added deployment-aware cost contracts across Direct Deployment and Git/CI/CD, including Destroy lifecycle handling.
-- Added separate estimated-cost and actual-usage panels, project scoping, honest sample/allocation copy, keyboard tabs, and the requested compact folder-style tab surface from `DESIGN.md`; removed the final header and tab helper copy per visual feedback.
-- Follow-up UX: direct expected-user input with validation, refresh feedback on both normal and empty states, and scroll-free responsive folder tabs.
-- Follow-up commits: `ad7fb94b`, `104cb8bc`, `c80dac82`, `aaccecfa`.
-- Commits: `4819f64c`, `ff16587d`, `ac29756a`, `da99fdb7`, `a0aeefe0`.
-- Verification: 6 focused API tests, 19 focused Web tests, lint, typecheck, build, and harness pass. Lint retains one unrelated unused-argument warning.
-- Risk: authenticated visual browser QA was blocked because the in-app browser had no session and Chrome control was unavailable. The full Web suite retains seven unrelated baseline failures outside cost files.
-
 ### 2026-07-13 - Integrate and document the Deployment/CI/CD console
 
 - Documented the separate Direct/Pipeline Run record boundaries, 5s active/30s idle polling, RDS source of truth, accepted-change gates, session-deduplicated notifications, safe Output links, and Live Observation Runtime log boundary.
@@ -153,41 +143,47 @@ Short English-only working log for the current agent context. Older records are 
 - Risk:
   - No DB migration, browser journey, GitHub/AWS mutation, Terraform Apply/Destroy, push, or external notification was run.
 
-### 2026-07-13 - Refine actual cost notice and chart readability
+### 2026-07-13 - Restore API test baseline for issue #364
 
-- Goal: Clarify fallback project cost allocation and make the actual usage chart readable at a glance.
+- Goal: Restore the 23 failing API baseline tests without hiding deployment safety or product-contract regressions.
 - Completed:
-  - Reworded the fallback allocation notice to explain that AWS project cost data may arrive later.
-  - Added readable date labels on the X axis and dollar labels on the Y axis.
-  - Limited long ranges to six date ticks and added a stable zero-cost `$0`, `$2`, `$4` scale.
-  - Reduced data points to a 2 px radius and aligned chart colors and captions with `DESIGN.md`.
-  - Prevented duplicate Y-axis labels for one-cent usage data.
+  - Deferred deployment S3 artifact storage initialization until artifact access is required so domain and safety errors remain observable without S3 configuration.
+  - Corrected Terraform reference and nested-block rendering for archive data, hyphenated resource names, CloudFront, and Kubernetes selectors.
+  - Aligned AI architecture materialization with serverless SPA, optional-load-balancer Fargate, and EKS capability constraints.
+  - Updated stale repository, Q business, LLM explanation, demo asset, and priority resource coverage tests to current contracts.
 - Verification:
-  - `pnpm --dir apps/web exec tsx --test features/costs/cost-usage-charts.test.ts features/costs/cost-dashboard-client.test.ts features/costs/cost-usage-copy.test.ts` (19 passed)
-  - `pnpm test -- --output-logs=errors-only`
+  - `pnpm --dir apps/api test` (1,257 passed)
+  - `pnpm lint` passed with the pre-existing `live-observations` `setNow` warning.
+  - `pnpm typecheck`
+  - `pnpm build`
+  - `pnpm harness:check`
+  - `git diff --check` passed with CRLF conversion warnings only.
+- Risk:
+  - Root `pnpm test` still reports an unrelated Web CSS expectation around the mobile `.canvasToolbar` bottom offset; no Web source behavior was changed in this workstream.
+  - No Terraform apply/destroy, cloud mutation, or Git/CI/CD handoff was performed.
+
+### 2026-07-13 - Restore Web source-regression baseline for issue #362
+
+- Goal: Align stale Web source-regression expectations with the current Area expansion and compact toolbar contracts.
+- Completed:
+  - Updated Area auto-expansion coverage to follow child-node entry detection.
+  - Updated compact canvas toolbar coverage for the current left-centered placement.
+  - Made related catalog, fixture, and CSS source assertions resilient to current generated content and Windows line endings.
+  - Addressed review feedback by caching normalized CSS source and rejecting empty AWS icon paths.
+  - Merged the latest `origin/dev` without conflicts.
+- Verification:
+  - Review-focused Web tests passed (26 tests).
+  - 172 focused Web tests passed.
+  - Full Web suite passed (1,024 tests).
   - `pnpm lint` passed with the pre-existing `live-observations` `setNow` warning.
   - `pnpm typecheck`
   - `pnpm build`
   - `pnpm harness:check`
   - `git diff --check`
 - Risk:
-  - Authenticated browser visual QA was not available; the supplied screenshot and source-level UI regression tests were used as the visual contract.
-
-### 2026-07-13 - Stabilize actual cost chart typography
-
-- Goal: Keep chart typography compact and professional at every dashboard width.
-- Completed:
-  - Recomputed the SVG coordinate width from its rendered container with `ResizeObserver` so labels no longer scale with the card.
-  - Fixed the chart height at 220 px and retained the `DESIGN.md` 13 px caption token at its true rendered size.
-  - Added a source-level regression for responsive width, fixed height, and typography token usage.
-- Verification:
-  - 16 focused chart tests and the full test suite passed.
-  - `pnpm lint` passed with the pre-existing `live-observations` `setNow` warning.
-  - `pnpm typecheck`, `pnpm build`, and `git diff --check` passed.
-- Review:
-  - Spec review found no issues; standards review finding about the caption token was fixed in `dcda929b`.
+  - This work changes test contracts only; no Web runtime behavior or cloud infrastructure was changed.
 
 ## Next Action
 
-- Review the final issue #361 commits, then investigate unrelated full API-suite baseline failures separately. Run migration and credentialed browser acceptance only with an approved safe environment.
-- Confirm the responsive chart visually with authenticated actual-usage data when browser automation is available.
+- Verify the latest `dev` merge across issue #361 focused suites and the full repository checks, then publish issue #361 for review.
+- Run migrations and credentialed browser acceptance only with an approved safe environment.
