@@ -79,6 +79,7 @@ export function WorkspaceStartClient({
       : null
   );
   const [errorMessage, setErrorMessage] = useState("");
+  const [projectNameError, setProjectNameError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [repositoryUrlFormVisible, setRepositoryUrlFormVisible] = useState(initialStartKind === "repository");
   const [repositoryUrl, setRepositoryUrl] = useState("");
@@ -88,7 +89,6 @@ export function WorkspaceStartClient({
     [selectedTemplateId]
   );
   const canContinue =
-    title.trim().length > 0 &&
     !isSubmitting &&
     (selectedKind !== "template" || selectedTemplate !== null) &&
     (selectedKind !== "repository" ||
@@ -125,13 +125,17 @@ export function WorkspaceStartClient({
     writeWorkspaceStartForm({ projectName: title, selectedKind, selectedTemplateId });
   }, [isStartFormHydrated, selectedKind, selectedTemplateId, title]);
 
+  // 시작 요청 전에 프로젝트 이름을 필드 단위로 검증합니다.
   async function handleContinue(): Promise<void> {
     const projectName = title.trim();
 
     if (!projectName) {
-      setErrorMessage("프로젝트 이름을 입력해주세요.");
+      setProjectNameError("프로젝트 이름을 입력해주세요.");
+      setErrorMessage("");
       return;
     }
+
+    setProjectNameError("");
 
     if (selectedKind === "template" && !selectedTemplate) {
       setErrorMessage("사용할 Template을 선택해주세요.");
@@ -267,20 +271,35 @@ export function WorkspaceStartClient({
             <h1 id="workspace-start-title">어떻게 시작할까요?</h1>
           </header>
 
-          <label className={styles.nameField} htmlFor="workspace-title-input">
+          <label
+            className={
+              projectNameError
+                ? `${styles.nameField} ${styles.nameFieldError}`
+                : styles.nameField
+            }
+            htmlFor="workspace-title-input"
+          >
             <span>프로젝트 이름</span>
             <input
+              aria-describedby={projectNameError ? "workspace-title-error" : undefined}
+              aria-invalid={Boolean(projectNameError)}
               autoFocus
               id="workspace-title-input"
               maxLength={80}
               onChange={(event) => {
                 setTitle(event.target.value);
+                setProjectNameError("");
                 setErrorMessage("");
               }}
               placeholder="예: 예약 서비스 API"
               type="text"
               value={title}
             />
+            {projectNameError ? (
+              <span className={styles.fieldError} id="workspace-title-error" role="alert">
+                {projectNameError}
+              </span>
+            ) : null}
           </label>
 
           <div className={styles.optionList} role="radiogroup" aria-label="프로젝트 시작 방식">
