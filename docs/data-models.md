@@ -1257,7 +1257,7 @@ type GitCicdPipelineLogListResponse = {
 
 `POST /api/projects/:projectId/git-cicd-pipeline-runs/refresh`는 project 소유권을 확인한 뒤 해당 project의 enabled, valid monitoring target을 모두 read-only로 발견·갱신한다. 개별 target 실패는 그 target의 마지막 RDS 상태를 보존하고 `targets[].stale`로 표시하며, 응답의 `stale`은 하나 이상의 target이 stale일 때 `true`다. Workspace observer는 콘솔이 닫혀 있어도 이 endpoint를 먼저 호출한 다음 RDS 목록을 읽는다.
 
-GitHub Actions 발견은 target branch별 최대 2 page, 최근 최대 10 commit group으로 제한한다. 특정 run refresh는 `head_sha`로 대상 commit만 조회한다. `upstreamOrderingToken`은 provider의 갱신 시각과 workflow run revision을 결합한 단조 비교 token이며, RDS upsert는 이전 token 또는 같은 revision의 terminal-to-non-terminal 역행을 원자적으로 거부한다. 거부된 snapshot은 stage/log를 갱신하지 않는다. `logRevision`이 바뀌면 Web은 증분 log sequence와 표시 log를 0/빈 목록으로 초기화해 rerun log를 이전 attempt와 섞지 않는다.
+GitHub Actions 발견은 target branch별 최대 2 page, 최근 최대 10 commit group으로 제한한다. 특정 run refresh는 `head_sha`로 대상 commit만 조회한다. `upstreamOrderingToken`은 provider의 최대 갱신 시각 뒤에 정확한 `SketchCatch Infra`, `SketchCatch App` workflow의 고정 presence slot과 zero-padded run ID/attempt slot을 결합한다. 같은 최대 갱신 시각에서는 Infra-only 또는 App-only보다 Infra+App strict superset이 항상 크고, 같은 workflow slot의 rerun도 단조 증가한다. RDS upsert는 이전 token 또는 같은 revision의 terminal-to-non-terminal 역행을 원자적으로 거부한다. 거부된 snapshot은 stage/log를 갱신하지 않는다. 사람에게 읽히는 workflow identity/attempt 기반 `logRevision`은 ordering key와 분리하며, 값이 바뀌면 Web은 증분 log sequence와 표시 log를 0/빈 목록으로 초기화해 rerun log를 이전 attempt와 섞지 않는다.
 
 API 경로:
 

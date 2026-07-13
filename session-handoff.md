@@ -7,7 +7,8 @@ Use this file only for compact continuation context. Write it in English.
 - Issue #361 tracks the Deployment/CI/CD console separation as one feature workstream.
 - Branch `feature/sw/361-deployment-cicd-console` contains the approved design, Tasks 1-9, and all four final whole-branch review fixes.
 - Project discovery covers empty history and every enabled/valid target; GitHub reads are bounded/targeted; atomic upstream ordering protects terminal state; rerun logs reset by revision.
-- Focused API 123/123, focused Web 74/74, full Web 1070/1070, lint, typecheck, build, harness, diff, and added-line secret scan pass.
+- Final re-review replaced present-workflow lexical ordering with fixed Infra/App presence and zero-padded run ID/attempt slots so equal-time partial snapshots cannot outrank their strict superset.
+- Expanded API 125/125 and focused Web 74/74 pass after the fixed-slot re-review change. Prior full Web 1070/1070 evidence remains valid; lint, typecheck, build, harness, diff, and added-line secret scan pass.
 
 ## Changes This Session
 

@@ -290,27 +290,52 @@ test("provider targets one commit and derives stable upstream and log revisions"
   assert.equal(snapshot.logRevision, "SketchCatch App:11:2");
   assert.equal(
     snapshot.upstreamOrderingToken,
-    "2026-07-13T00:02:00.000Z|SketchCatch App:00000000000000000011:0000000002"
+    "2026-07-13T00:02:00.000Z|01|00000000000000000000:0000000000|00000000000000000011:0000000002"
   );
 });
 
-test("provider ordering token remains monotonic when numeric run ids cross digit widths", async () => {
+test("provider ordering token treats Infra to Infra+App as a newer strict superset", async () => {
+  const infra = run({ id: 20, workflowName: "SketchCatch Infra" });
+  const app = run({ id: 10, workflowName: "SketchCatch App" });
+
+  const partial = await snapshotForRuns([infra]);
+  const superset = await snapshotForRuns([infra, app]);
+
+  assert.ok(partial.upstreamOrderingToken < superset.upstreamOrderingToken);
+  assert.ok(superset.upstreamOrderingToken > partial.upstreamOrderingToken);
+});
+
+test("provider ordering token treats App to App+Infra as a newer strict superset", async () => {
+  const app = run({ id: 10, workflowName: "SketchCatch App" });
+  const infra = run({ id: 20, workflowName: "SketchCatch Infra" });
+
+  const partial = await snapshotForRuns([app]);
+  const superset = await snapshotForRuns([app, infra]);
+
+  assert.ok(partial.upstreamOrderingToken < superset.upstreamOrderingToken);
+  assert.ok(superset.upstreamOrderingToken > partial.upstreamOrderingToken);
+});
+
+test("provider fixed workflow slots advance for run id and attempt increments", async () => {
+  const idNine = await snapshotForRuns([run({ id: 9, runAttempt: 1 })]);
+  const idTen = await snapshotForRuns([run({ id: 10, runAttempt: 1 })]);
+  const attemptTwo = await snapshotForRuns([run({ id: 10, runAttempt: 2 })]);
+
+  assert.ok(idNine.upstreamOrderingToken < idTen.upstreamOrderingToken);
+  assert.ok(idTen.upstreamOrderingToken < attemptTwo.upstreamOrderingToken);
+});
+
+async function snapshotForRuns(workflowRuns: ReturnType<typeof run>[]) {
   const client = {
     listCommitFiles: async () => [],
-    listBranchWorkflowRuns: async () => [
-      run({ id: 9, commitSha: "older", updatedAt: "2026-07-13T00:02:00Z" }),
-      run({ id: 10, commitSha: "newer", updatedAt: "2026-07-13T00:02:00Z" })
-    ],
+    listBranchWorkflowRuns: async () => workflowRuns,
     listWorkflowJobs: async () => [],
     readWorkflowJobLog: async () => ""
   } as GitHubActionsReadClient;
-
-  const snapshots = await createGitHubActionsRunProvider(client).listSnapshots(repository);
-  const older = snapshots.find((snapshot) => snapshot.commitSha === "older")!;
-  const newer = snapshots.find((snapshot) => snapshot.commitSha === "newer")!;
-
-  assert.ok(older.upstreamOrderingToken < newer.upstreamOrderingToken);
-});
+  const [snapshot] = await createGitHubActionsRunProvider(client).listSnapshots(repository);
+  assert.ok(snapshot);
+  return snapshot;
+}
 
 function clientForRun(workflowRun: ReturnType<typeof run>): GitHubActionsReadClient {
   return {

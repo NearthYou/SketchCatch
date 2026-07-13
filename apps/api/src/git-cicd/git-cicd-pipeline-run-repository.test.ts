@@ -166,10 +166,10 @@ test("snapshot upsert replaces or preserves the provenance tuple atomically", as
   assert.deepEqual(readProvenanceTuple(storedEmptyB), ["handoff-b", null, null]);
 });
 
-test("reverse completion order keeps the terminal run stages and logs when stale upsert is rejected", async () => {
+test("reverse completion rejects an equal-time partial workflow snapshot and keeps terminal stages and logs", async () => {
   const terminal = createRun({
     status: "succeeded",
-    upstreamOrderingToken: "2026-07-13T00:05:00.000Z|SketchCatch App:10:2",
+    upstreamOrderingToken: "2026-07-13T00:05:00.000Z|11|00000000000000000020:0000000001|00000000000000000010:0000000002",
     logRevision: "SketchCatch App:10:2",
     finishedAt: new Date("2026-07-13T00:05:00.000Z")
   });
@@ -233,7 +233,7 @@ test("reverse completion order keeps the terminal run stages and logs when stale
   const secondInsertIndex = queries.length;
   const stale = createRun({
     status: "running",
-    upstreamOrderingToken: "2026-07-13T00:04:00.000Z|SketchCatch App:10:1",
+    upstreamOrderingToken: "2026-07-13T00:05:00.000Z|01|00000000000000000000:0000000000|00000000000000000010:0000000001",
     logRevision: "SketchCatch App:10:1",
     finishedAt: null
   });

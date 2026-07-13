@@ -18,6 +18,12 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-13 - Make Pipeline Run aggregate ordering monotonic
+
+- Replaced present-workflow lexical ordering with fixed Infra/App presence and zero-padded run ID/attempt slots, while keeping `logRevision` separate.
+- TDD reproduced Infra-only -> Infra+App regression at the same provider timestamp (15/16), then passed both superset directions, reverse partial rejection, ID width, attempt increment, and terminal same-token protection (16/16).
+- Verification: provider/repository 16/16, expanded API 125/125, focused Web 74/74, lint, typecheck, build, harness, diff, and added-line secret scan passed. No migration, external mutation, or push ran.
+
 ### 2026-07-13 - Close final issue #361 whole-branch review findings
 
 - Added project-scoped read-only discovery for every valid monitoring target and wired the workspace observer to discover first commits even while the console is closed; provider failure preserves the RDS list and notification baseline.

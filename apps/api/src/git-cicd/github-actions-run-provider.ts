@@ -46,7 +46,8 @@ export type GitCicdRunProvider = {
   listCommitFiles(input: GitHubRepositoryRefInput & { commitSha: string }): Promise<string[]>;
 };
 
-const monitoredWorkflowNames = new Set(["SketchCatch Infra", "SketchCatch App"]);
+const monitoredWorkflowSlots = ["SketchCatch Infra", "SketchCatch App"] as const;
+const monitoredWorkflowNames = new Set<string>(monitoredWorkflowSlots);
 export const maxHydratedPipelineCommitGroups = 10;
 
 export function createGitHubActionsRunProvider(
@@ -173,18 +174,17 @@ function createSelectedWorkflowRevision(runs: readonly GitHubWorkflowRunSummary[
 function createSelectedWorkflowOrderingRevision(
   runs: readonly GitHubWorkflowRunSummary[]
 ): string {
-  return [...runs]
-    .sort(
-      (left, right) =>
-        left.workflowName.localeCompare(right.workflowName) ||
-        left.id - right.id ||
-        left.runAttempt - right.runAttempt
-    )
-    .map(
-      (run) =>
-        `${run.workflowName}:${String(run.id).padStart(20, "0")}:${String(run.runAttempt).padStart(10, "0")}`
-    )
-    .join("|");
+  const selectedByWorkflow = new Map(runs.map((run) => [run.workflowName, run]));
+  const presenceMask = monitoredWorkflowSlots
+    .map((workflowName) => (selectedByWorkflow.has(workflowName) ? "1" : "0"))
+    .join("");
+  const slots = monitoredWorkflowSlots.map((workflowName) => {
+    const run = selectedByWorkflow.get(workflowName);
+    return run
+      ? `${String(run.id).padStart(20, "0")}:${String(run.runAttempt).padStart(10, "0")}`
+      : "00000000000000000000:0000000000";
+  });
+  return [presenceMask, ...slots].join("|");
 }
 
 function getMaxWorkflowUpdatedAt(runs: readonly GitHubWorkflowRunSummary[]): Date {
