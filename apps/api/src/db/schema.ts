@@ -21,7 +21,13 @@ import type {
   GitCicdAwsRoleDiff,
   GitCicdDeploymentMode,
   GitCicdHandoffKind,
+  GitCicdMonitoredPath,
+  GitCicdMonitoringValidationStatus,
+  GitCicdPipelineChangeScope,
   GitCicdPipelineDetailStatus,
+  GitCicdPipelineRunStatus,
+  GitCicdPipelineStageKind,
+  GitCicdPipelineStageStatus,
   GitCicdRepositorySettingsPreview,
   RepositoryAnalysisAiHandoff,
   ReverseEngineeringResourceSelection,
@@ -656,6 +662,109 @@ export const gitCicdHandoffs = pgTable(
   ]
 );
 
+export const gitCicdMonitoringConfigs = pgTable("git_cicd_monitoring_configs", {
+  sourceRepositoryId: varchar("source_repository_id", { length: 36 })
+    .primaryKey()
+    .references(() => sourceRepositories.id, { onDelete: "cascade" }),
+  enabled: boolean("enabled").notNull().default(true),
+  monitorBranch: varchar("monitor_branch", { length: 255 }).notNull(),
+  appPath: jsonb("app_path").$type<GitCicdMonitoredPath>().notNull(),
+  infraPath: jsonb("infra_path").$type<GitCicdMonitoredPath>().notNull(),
+  validationStatus: varchar("validation_status", { length: 16 })
+    .$type<GitCicdMonitoringValidationStatus>()
+    .notNull()
+    .default("required"),
+  validationMessage: text("validation_message"),
+  validatedAt: timestamp("validated_at", { withTimezone: true }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+});
+
+export const gitCicdPipelineRuns = pgTable(
+  "git_cicd_pipeline_runs",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    projectId: varchar("project_id", { length: 36 })
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    sourceRepositoryId: varchar("source_repository_id", { length: 36 })
+      .notNull()
+      .references(() => sourceRepositories.id, { onDelete: "cascade" }),
+    handoffId: varchar("handoff_id", { length: 36 }).references(() => gitCicdHandoffs.id, {
+      onDelete: "set null"
+    }),
+    commitSha: varchar("commit_sha", { length: 64 }).notNull(),
+    commitMessage: text("commit_message").notNull(),
+    branch: varchar("branch", { length: 255 }).notNull(),
+    changeScope: varchar("change_scope", { length: 32 })
+      .$type<GitCicdPipelineChangeScope>()
+      .notNull(),
+    status: varchar("status", { length: 16 }).$type<GitCicdPipelineRunStatus>().notNull(),
+    statusMessage: text("status_message"),
+    pipelineRunUrl: text("pipeline_run_url"),
+    appUrl: text("app_url"),
+    apiUrl: text("api_url"),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+    lastRefreshedAt: timestamp("last_refreshed_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    uniqueIndex("git_cicd_pipeline_runs_repository_commit_unique").on(
+      table.sourceRepositoryId,
+      table.commitSha
+    ),
+    index("git_cicd_pipeline_runs_project_id_idx").on(table.projectId),
+    index("git_cicd_pipeline_runs_status_idx").on(table.status),
+    index("git_cicd_pipeline_runs_created_at_idx").on(table.createdAt)
+  ]
+);
+
+export const gitCicdPipelineStages = pgTable(
+  "git_cicd_pipeline_stages",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    pipelineRunId: varchar("pipeline_run_id", { length: 36 })
+      .notNull()
+      .references(() => gitCicdPipelineRuns.id, { onDelete: "cascade" }),
+    kind: varchar("kind", { length: 32 }).$type<GitCicdPipelineStageKind>().notNull(),
+    status: varchar("status", { length: 16 }).$type<GitCicdPipelineStageStatus>().notNull(),
+    runUrl: text("run_url"),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    finishedAt: timestamp("finished_at", { withTimezone: true })
+  },
+  (table) => [
+    uniqueIndex("git_cicd_pipeline_stages_run_kind_unique").on(
+      table.pipelineRunId,
+      table.kind
+    )
+  ]
+);
+
+export const gitCicdPipelineLogs = pgTable(
+  "git_cicd_pipeline_logs",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    pipelineRunId: varchar("pipeline_run_id", { length: 36 })
+      .notNull()
+      .references(() => gitCicdPipelineRuns.id, { onDelete: "cascade" }),
+    stageId: varchar("stage_id", { length: 36 }).references(() => gitCicdPipelineStages.id, {
+      onDelete: "set null"
+    }),
+    sequence: integer("sequence").notNull(),
+    level: varchar("level", { length: 16 }).$type<"info" | "warning" | "error">().notNull(),
+    message: text("message").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    uniqueIndex("git_cicd_pipeline_logs_run_sequence_unique").on(
+      table.pipelineRunId,
+      table.sequence
+    )
+  ]
+);
+
 export const deploymentPlanArtifacts = pgTable(
   "deployment_plan_artifacts",
   {
@@ -792,7 +901,8 @@ export const projectsRelations = relations(projects, ({ many, one }) => ({
   sourceRepositories: many(sourceRepositories),
   deployments: many(deployments),
   reverseEngineeringScans: many(reverseEngineeringScans),
-  gitCicdHandoffs: many(gitCicdHandoffs)
+  gitCicdHandoffs: many(gitCicdHandoffs),
+  gitCicdPipelineRuns: many(gitCicdPipelineRuns)
 }));
 
 export const architecturesRelations = relations(architectures, ({ many, one }) => ({
@@ -878,10 +988,12 @@ export const sourceRepositoriesRelations = relations(sourceRepositories, ({ one,
     fields: [sourceRepositories.createdByUserId],
     references: [users.id]
   }),
-  gitCicdHandoffs: many(gitCicdHandoffs)
+  gitCicdHandoffs: many(gitCicdHandoffs),
+  monitoringConfig: one(gitCicdMonitoringConfigs),
+  pipelineRuns: many(gitCicdPipelineRuns)
 }));
 
-export const gitCicdHandoffsRelations = relations(gitCicdHandoffs, ({ one }) => ({
+export const gitCicdHandoffsRelations = relations(gitCicdHandoffs, ({ one, many }) => ({
   project: one(projects, {
     fields: [gitCicdHandoffs.projectId],
     references: [projects.id]
@@ -901,6 +1013,59 @@ export const gitCicdHandoffsRelations = relations(gitCicdHandoffs, ({ one }) => 
   createdBy: one(users, {
     fields: [gitCicdHandoffs.createdByUserId],
     references: [users.id]
+  }),
+  pipelineRuns: many(gitCicdPipelineRuns)
+}));
+
+export const gitCicdMonitoringConfigsRelations = relations(
+  gitCicdMonitoringConfigs,
+  ({ one }) => ({
+    sourceRepository: one(sourceRepositories, {
+      fields: [gitCicdMonitoringConfigs.sourceRepositoryId],
+      references: [sourceRepositories.id]
+    })
+  })
+);
+
+export const gitCicdPipelineRunsRelations = relations(
+  gitCicdPipelineRuns,
+  ({ many, one }) => ({
+    project: one(projects, {
+      fields: [gitCicdPipelineRuns.projectId],
+      references: [projects.id]
+    }),
+    sourceRepository: one(sourceRepositories, {
+      fields: [gitCicdPipelineRuns.sourceRepositoryId],
+      references: [sourceRepositories.id]
+    }),
+    handoff: one(gitCicdHandoffs, {
+      fields: [gitCicdPipelineRuns.handoffId],
+      references: [gitCicdHandoffs.id]
+    }),
+    stages: many(gitCicdPipelineStages),
+    logs: many(gitCicdPipelineLogs)
+  })
+);
+
+export const gitCicdPipelineStagesRelations = relations(
+  gitCicdPipelineStages,
+  ({ many, one }) => ({
+    pipelineRun: one(gitCicdPipelineRuns, {
+      fields: [gitCicdPipelineStages.pipelineRunId],
+      references: [gitCicdPipelineRuns.id]
+    }),
+    logs: many(gitCicdPipelineLogs)
+  })
+);
+
+export const gitCicdPipelineLogsRelations = relations(gitCicdPipelineLogs, ({ one }) => ({
+  pipelineRun: one(gitCicdPipelineRuns, {
+    fields: [gitCicdPipelineLogs.pipelineRunId],
+    references: [gitCicdPipelineRuns.id]
+  }),
+  stage: one(gitCicdPipelineStages, {
+    fields: [gitCicdPipelineLogs.stageId],
+    references: [gitCicdPipelineStages.id]
   })
 }));
 

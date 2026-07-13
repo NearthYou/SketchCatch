@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { existsSync, readFileSync } from "node:fs";
 import {
   createTableRelationsHelpers,
   extractTablesRelationalConfig
@@ -23,6 +24,10 @@ import {
   gitCicdHandoffStatusEnum,
   gitCicdHandoffKindEnum,
   gitCicdHandoffs,
+  gitCicdMonitoringConfigs,
+  gitCicdPipelineLogs,
+  gitCicdPipelineRuns,
+  gitCicdPipelineStages,
   gitCicdRepositoryProviderEnum,
   projectAssets,
   projectDrafts,
@@ -32,6 +37,46 @@ import {
   reverseEngineeringScans,
   users
 } from "./schema.js";
+
+test("Git/CI/CD monitoring tables expose commit-scoped run history", () => {
+  assert.ok(gitCicdMonitoringConfigs.sourceRepositoryId);
+  assert.ok(gitCicdMonitoringConfigs.validationStatus);
+  assert.ok(gitCicdPipelineRuns.commitSha);
+  assert.ok(gitCicdPipelineStages.pipelineRunId);
+  assert.ok(gitCicdPipelineLogs.sequence);
+
+  assert(
+    hasUniqueIndex(getTableConfig(gitCicdPipelineRuns).indexes, "git_cicd_pipeline_runs_repository_commit_unique", [
+      "source_repository_id",
+      "commit_sha"
+    ])
+  );
+  assert(
+    hasUniqueIndex(getTableConfig(gitCicdPipelineStages).indexes, "git_cicd_pipeline_stages_run_kind_unique", [
+      "pipeline_run_id",
+      "kind"
+    ])
+  );
+  assert(
+    hasUniqueIndex(getTableConfig(gitCicdPipelineLogs).indexes, "git_cicd_pipeline_logs_run_sequence_unique", [
+      "pipeline_run_id",
+      "sequence"
+    ])
+  );
+});
+
+test("Git/CI/CD monitoring migration safely backfills active repositories", () => {
+  const migrationUrl = new URL("../../drizzle/0032_git_cicd_monitoring_runs.sql", import.meta.url);
+
+  assert.equal(existsSync(migrationUrl), true);
+  const migration = readFileSync(migrationUrl, "utf8");
+
+  assert.match(migration, /INSERT INTO "git_cicd_monitoring_configs"/);
+  assert.match(migration, /WHERE "status" = 'active'/);
+  assert.match(migration, /'required'/);
+  assert.match(migration, /'\{"mode":"repository_root","path":"\."\}'::jsonb/);
+  assert.doesNotMatch(migration, /(?:INSERT INTO|UPDATE|DELETE FROM) "git_cicd_handoffs"/);
+});
 
 test("deployment status enum uses a domain-specific database name", () => {
   assert.equal(deploymentStatusEnum.enumName, "deployment_status");

@@ -158,7 +158,7 @@ git commit -m "Feat: CI/CD 모니터링 계약 정의"
 
 **Files:**
 - Modify: `apps/api/src/db/schema.ts`
-- Create: `apps/api/drizzle/0031_git_cicd_monitoring_runs.sql`
+- Create: `apps/api/drizzle/0032_git_cicd_monitoring_runs.sql`
 - Modify: `apps/api/drizzle/meta/_journal.json`
 - Test: `apps/api/src/db/schema-contract.test.ts`
 
@@ -218,7 +218,7 @@ For Pipeline Runs add a unique index on `(source_repository_id, commit_sha)`, in
 
 Run: `pnpm --filter @sketchcatch/api db:generate`
 
-Rename the generated SQL to `0031_git_cicd_monitoring_runs.sql` only if Drizzle generates a different descriptive suffix. Inspect the SQL and ensure it:
+Rename the generated SQL to `0032_git_cicd_monitoring_runs.sql` only if Drizzle generates a different descriptive suffix. Inspect the SQL and ensure it:
 
 ```sql
 INSERT INTO "git_cicd_monitoring_configs" (
@@ -869,7 +869,7 @@ Run with a non-production `DATABASE_URL`:
 pnpm --filter @sketchcatch/api db:migrate
 ```
 
-Expected: migration `0031_git_cicd_monitoring_runs.sql` applies; existing active Source Repositories receive `validationStatus = 'required'`; existing handoff rows remain unchanged.
+Expected: migration `0032_git_cicd_monitoring_runs.sql` applies; existing active Source Repositories receive `validationStatus = 'required'`; existing handoff rows remain unchanged.
 
 - [ ] **Step 4: Run the representative browser journey**
 
