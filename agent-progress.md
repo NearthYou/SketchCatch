@@ -5,9 +5,10 @@ Short English-only working log for the current agent context. Older records are 
 ## Current Verified State
 
 - Branch: `feat/ck/350-ai-diagram-fallback`.
+- Latest `origin/dev` at `99db7f61` is merged, including the current dashboard UI/UX and Deployment/CI/CD console updates.
 - Strict `audience-live-check` Repository evidence produces a minimal ECS Fargate architecture without unsupported persistence, autoscaling, or AWS-native CI/CD resources.
 - Generated Terraform passes the Direct Deployment safety gate and `terraform validate` with AWS provider v6.54.0.
-- Real Plan, Apply, and Destroy remain pending until the Chrome login and stored AWS connection are restored.
+- Real Plan and Apply created 29 resources, ALB `/health` returned HTTP 200, and cleanup finished as `DESTROYED` with AWS Console absence checks.
 
 ## Session Record
 
@@ -214,5 +215,4 @@ Short English-only working log for the current agent context. Older records are 
   - The successful live artifact predated the output-preservation fix. Regression tests prove the corrected artifact path; a future deployment will persist Live Observation outputs without requiring another AWS mutation in this session.
 
 ## Next Action
-
-- Merge the latest `origin/dev`, rerun the required repository checks, and recreate the Repository draft before the next deployment so its Terraform artifact contains outputs.
+- Recreate the Repository draft before the next deployment so its Terraform artifact contains the preserved outputs.

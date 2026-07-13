@@ -16,7 +16,7 @@ Use this file only for compact continuation context. Write it in English.
 ## Verification
 
 - Focused verification passed: 15 deployment Plan/Destroy tests, 23 deployment action tests, 92 Terraform diagnostics/sync tests, and 25 virtual-file/palette pipeline tests.
-- Final full repository checks and latest-`dev` merge remain to be run after this handoff update.
+- Latest `origin/dev` is merged; focused integration tests plus `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check` passed.
 
 ## Changes This Session
 
@@ -35,4 +35,4 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Best Next Action
 
-- Commit the verified feature, merge latest `origin/dev`, rerun full checks, then recreate the strict Repository board before its next deployment.
+- Recreate the strict Repository board before its next deployment so the new Terraform artifact includes preserved outputs.

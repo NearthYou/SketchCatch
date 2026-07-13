@@ -10,7 +10,12 @@ import type {
 } from "@sketchcatch/types";
 import { ProductState } from "../../../components/ui/ProductState";
 import {
+  SelectMenu,
+  type SelectMenuOption
+} from "../../../components/ui/SelectMenu";
+import {
   createCostUsageLineChart,
+  createCostUsageMonthlyBars,
   createServiceCostBars,
   sumEstimatedMonthlySavings
 } from "../../../features/costs/cost-usage-charts";
@@ -22,6 +27,8 @@ import {
   COST_USAGE_ALL_PROJECTS_KEY,
   createCostUsageProjectOptions,
   createScopedCostUsageDailyTrend,
+  createScopedCostUsageMonthlyComparison,
+  createScopedCostUsageMonthlyTrend,
   createScopedCostUsageServiceCosts,
   normalizeCostUsageProjectKey,
   selectCostUsageProject
@@ -34,6 +41,12 @@ import styles from "../dashboard-tools.module.css";
 
 type CostLoadState = "loading" | "ready" | "error";
 
+const COST_USAGE_RANGE_OPTIONS: readonly SelectMenuOption[] = [
+  { label: "최근 7일", value: "7d" },
+  { label: "최근 30일", value: "30d" },
+  { label: "이번 달", value: "month_to_date" }
+];
+
 export function CostUsagePanel() {
   const [connections, setConnections] = useState<readonly AwsConnection[]>([]);
   const [selectedConnectionId, setSelectedConnectionId] = useState("");
@@ -44,6 +57,22 @@ export function CostUsagePanel() {
   const [errorMessage, setErrorMessage] = useState("");
   const requestCoordinatorRef = useRef(createCostRequestCoordinator());
   const projectOptions = useMemo(() => createCostUsageProjectOptions(data?.projectCosts ?? []), [data]);
+  const projectSelectOptions = useMemo<readonly SelectMenuOption[]>(
+    () => [
+      { label: "전체 배포 프로젝트", value: COST_USAGE_ALL_PROJECTS_KEY },
+      ...projectOptions.map((project) => ({ label: project.label, value: project.key }))
+    ],
+    [projectOptions]
+  );
+  const connectionSelectOptions = useMemo<readonly SelectMenuOption[]>(
+    () => connections.length === 0
+      ? [{ label: "검증된 연결 없음", value: "" }]
+      : connections.map((connection) => ({
+          label: formatCostUsageAwsConnectionLabel(connection),
+          value: connection.id
+        })),
+    [connections]
+  );
   const selectedProject = useMemo(
     () => selectCostUsageProject(data?.projectCosts ?? [], selectedProjectKey),
     [data, selectedProjectKey]
@@ -65,6 +94,25 @@ export function CostUsagePanel() {
     }),
     [data, selectedProject]
   );
+  const scopedMonthlyTrend = useMemo(
+    () => createScopedCostUsageMonthlyTrend({
+      monthlyTrend: data?.monthlyTrend ?? [],
+      selectedProject,
+      totalCostAmount: data?.totalCost.amount ?? 0
+    }),
+    [data, selectedProject]
+  );
+  const scopedMonthlyComparison = useMemo(
+    () => data === null
+      ? null
+      : createScopedCostUsageMonthlyComparison({
+          generatedAt: data.generatedAt,
+          monthlyComparison: data.monthlyComparison,
+          selectedProject,
+          totalCostAmount: data.totalCost.amount
+        }),
+    [data, selectedProject]
+  );
   const scopedRecommendations = useMemo(
     () => selectedProject === null
       ? data?.recommendations ?? []
@@ -72,6 +120,19 @@ export function CostUsagePanel() {
     [data, selectedProject]
   );
   const serviceBars = useMemo(() => createServiceCostBars(scopedServiceCosts), [scopedServiceCosts]);
+  const monthlyBars = useMemo(() => createCostUsageMonthlyBars(scopedMonthlyTrend), [scopedMonthlyTrend]);
+  const monthlyHasEstimate = monthlyBars.some((bar) => bar.isEstimated);
+  const monthlyHasActual = monthlyBars.some((bar) => !bar.isEstimated);
+  const monthlyScopeLabel = selectedProject
+    ? `${selectedProject.projectName} · ${monthlyHasEstimate
+        ? monthlyHasActual ? "실측·추정 혼합" : "추정 배분"
+        : "태그 실측"}`
+    : data?.dataSource === "sample" ? "AWS 계정 전체 · 예시" : "AWS 계정 전체";
+  const monthlyEstimateNote = selectedProject && monthlyHasEstimate
+    ? "‘추정’으로 표시된 월은 선택 기간의 프로젝트 비용 비율로 배분한 값입니다."
+    : data?.dataSource === "sample"
+      ? "AWS 실제 사용량을 연결하면 월별 실측 데이터로 교체됩니다."
+      : null;
   const savings = useMemo(() => sumEstimatedMonthlySavings(scopedRecommendations), [scopedRecommendations]);
   const currentCost = selectedProject?.amount ?? data?.totalCost.amount;
   const forecastCost = useMemo(
@@ -152,9 +213,49 @@ export function CostUsagePanel() {
     <div className={styles.costPanelStack}>
       <div className={styles.costPanelToolbar}>
         <div className={styles.controlRow}>
-          <label><span>배포 프로젝트</span><select onChange={(event) => setSelectedProjectKey(event.target.value)} value={selectedProjectKey}><option value={COST_USAGE_ALL_PROJECTS_KEY}>전체 배포 프로젝트</option>{projectOptions.map((project) => <option key={project.key} value={project.key}>{project.label}</option>)}</select></label>
-          <label><span>AWS 연결</span><select onChange={(event) => { const id = event.target.value; setSelectedConnectionId(id); void loadCosts(range, id); }} value={selectedConnectionId}>{connections.length === 0 ? <option value="">검증된 연결 없음</option> : null}{connections.map((connection) => <option key={connection.id} value={connection.id}>{formatCostUsageAwsConnectionLabel(connection)}</option>)}</select></label>
-          <label><span>기간</span><select onChange={(event) => { const next = event.target.value as CostUsageAnalysisRange; setRange(next); void loadCosts(next); }} value={range}><option value="7d">최근 7일</option><option value="30d">최근 30일</option><option value="month_to_date">이번 달</option></select></label>
+          <div className={styles.controlField}>
+            <span>배포 프로젝트</span>
+            <SelectMenu
+              ariaLabel="실제 사용량 배포 프로젝트 선택"
+              emptyLabel="배포 프로젝트 선택"
+              onChange={setSelectedProjectKey}
+              options={projectSelectOptions}
+              size="large"
+              tone="surface"
+              value={selectedProjectKey}
+            />
+          </div>
+          <div className={styles.controlField}>
+            <span>AWS 연결</span>
+            <SelectMenu
+              ariaLabel="실제 사용량 AWS 연결 선택"
+              emptyLabel="AWS 연결 선택"
+              onChange={(id) => {
+                setSelectedConnectionId(id);
+                void loadCosts(range, id);
+              }}
+              options={connectionSelectOptions}
+              size="large"
+              tone="surface"
+              value={selectedConnectionId}
+            />
+          </div>
+          <div className={styles.controlField}>
+            <span>기간</span>
+            <SelectMenu
+              ariaLabel="실제 사용량 기간 선택"
+              emptyLabel="기간 선택"
+              onChange={(value) => {
+                const nextRange = value as CostUsageAnalysisRange;
+                setRange(nextRange);
+                void loadCosts(nextRange);
+              }}
+              options={COST_USAGE_RANGE_OPTIONS}
+              size="large"
+              tone="surface"
+              value={range}
+            />
+          </div>
         </div>
         <button
           aria-busy={loadState === "loading"}
@@ -178,6 +279,53 @@ export function CostUsagePanel() {
         <CostMetric icon={<TrendingUp size={18} />} label="월말 예상" value={formatUsd(forecastCost)} />
         <CostMetric icon={<AlertTriangle size={18} />} label="절감 가능" value={formatUsd(savings)} />
       </section>
+
+      {scopedMonthlyComparison ? (
+        <section className={styles.monthlyComparisonSection}>
+          <div className={styles.monthlyComparisonHeader}>
+            <div>
+              <h2>월별 비교</h2>
+              <p>최근 6개월의 월별 비용과 이번 달 예상 비용을 비교합니다.</p>
+            </div>
+            <span>{monthlyScopeLabel}</span>
+          </div>
+
+          <div className={styles.monthlyComparisonGrid}>
+            <MonthlySummaryCard label={monthlyHasEstimate ? "전월 비용" : "전월 실제"} note={monthlyHasEstimate ? "추정 포함" : undefined} value={formatUsd(scopedMonthlyComparison.previousMonthActual.amount)} />
+            <MonthlySummaryCard label="이번 달 사용" note="집계 중" value={formatUsd(scopedMonthlyComparison.currentMonthToDate.amount)} />
+            <MonthlySummaryCard label="월말 예상" value={formatUsd(scopedMonthlyComparison.currentMonthForecast.amount)} />
+            <MonthlySummaryCard
+              direction={scopedMonthlyComparison.forecastChangeAmount.amount > 0 ? "up" : scopedMonthlyComparison.forecastChangeAmount.amount < 0 ? "down" : "flat"}
+              label="전월 대비"
+              note={formatComparisonPercentage(scopedMonthlyComparison.forecastChangePercentage)}
+              value={formatSignedUsd(scopedMonthlyComparison.forecastChangeAmount.amount)}
+            />
+          </div>
+
+          <div aria-label="최근 6개월 월별 비용" className={styles.monthlyChartViewport} role="img">
+            <div className={styles.monthlyChart}>
+              {monthlyBars.map((bar) => (
+                <div className={styles.monthlyBar} key={bar.month}>
+                  <strong>{formatUsd(bar.amount)}</strong>
+                  <div className={styles.monthlyBarTrack}>
+                    <i
+                      data-partial={bar.isPartial}
+                      style={{ height: `${Math.max(bar.amount > 0 ? 4 : 0, bar.heightPercentage)}%` }}
+                    />
+                  </div>
+                  <span>
+                    {bar.label}
+                    {bar.isPartial || bar.isEstimated
+                      ? <small>{[bar.isPartial ? "집계 중" : "", bar.isEstimated ? "추정" : ""].filter(Boolean).join(" · ")}</small>
+                      : null}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+          {monthlyEstimateNote ? <p className={styles.monthlyEstimateNote}>{monthlyEstimateNote}</p> : null}
+        </section>
+      ) : null}
 
       <section className={styles.chartSection}>
         <div><h2>일별 실제 비용</h2><span>{data?.startDate} - {data?.endDate}</span></div>
@@ -286,6 +434,38 @@ function CostUsageChart({ dailyTrend }: { readonly dailyTrend: readonly CostUsag
       </g>
     </svg>
   );
+}
+
+function MonthlySummaryCard({
+  direction = "flat",
+  label,
+  note,
+  value
+}: {
+  readonly direction?: "down" | "flat" | "up";
+  readonly label: string;
+  readonly note?: string | undefined;
+  readonly value: string;
+}) {
+  return (
+    <article className={styles.monthlySummaryCard} data-direction={direction}>
+      <span>{label}{note ? <small>{note}</small> : null}</span>
+      <strong>{value}</strong>
+    </article>
+  );
+}
+
+function formatSignedUsd(amount: number): string {
+  if (amount === 0) return formatUsd(0);
+
+  return `${amount > 0 ? "+" : "−"}${formatUsd(Math.abs(amount))}`;
+}
+
+function formatComparisonPercentage(percentage: number | null): string {
+  if (percentage === null) return "비교 데이터 없음";
+  if (percentage === 0) return "변동 없음";
+
+  return `${percentage > 0 ? "+" : ""}${percentage.toFixed(1)}%`;
 }
 
 function scaleForecast(data: CostUsageAnalysisResponse | null, selectedAmount: number | undefined): number | undefined {

@@ -40,6 +40,7 @@ export function CostDashboardClient() {
         <div>
           <p className="dashboardEyebrow">Cost management</p>
           <h1>비용 관리</h1>
+          <p>프로젝트의 예상 비용과 실제 사용량을 한곳에서 비교하고 관리합니다.</p>
         </div>
       </header>
 
