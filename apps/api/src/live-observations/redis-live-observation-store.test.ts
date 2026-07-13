@@ -177,7 +177,7 @@ test("production connect and EVAL failures cannot surface injected clock errors"
 
 test("strict replies reject impossible counters and response identity swaps", async () => {
   const unsafeCounter = new FakeRedisClient({
-    evalReply: activeReply({ acceptedEventCount: 5_001 })
+    evalReply: activeReply({ acceptedEventCount: 10_001 })
   });
   assertGenericUnavailable(
     await captureError(() =>
@@ -258,12 +258,14 @@ test("production Lua scripts use one Redis TIME and only absolute expiry", () =>
   );
 });
 
-test("collect Lua uses exact integer weighted-rate arithmetic", () => {
+test("collect Lua uses exact integer weighted-rate arithmetic and the 10,000 session cap", () => {
   const collect = REDIS_LIVE_OBSERVATION_STORE_SCRIPTS.collectEvent;
 
   assert.match(collect, /candidateCurrent\s*\*\s*1000/);
   assert.match(collect, /previousCount\s*\*\s*\(\s*1000\s*-\s*progressMs\s*\)/);
   assert.match(collect, />\s*20000/);
+  assert.match(collect, /total\s*>=\s*10000/);
+  assert.doesNotMatch(collect, /\b5000\b/);
   assert.doesNotMatch(collect, /local\s+weighted\s*=/);
 });
 

@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { createInMemoryRuntimeCache } from "../runtime-cache/index.js";
 import { createInMemoryLiveObservationStore } from "./in-memory-live-observation-store.js";
 import { createLiveObservationCapability } from "./live-observation-capability.js";
 import {
   createLiveObservationPublicCollector,
   LiveObservationPublicCollectorError
 } from "./live-observation-public-collector.js";
+import { createLiveObservationPublicRequestRateLimiter } from "./live-observation-public-request-rate-limiter.js";
 import { createLiveObservationStoreContractInput } from "./live-observation-store-contract.js";
 import type { LiveObservationStore } from "./live-observation-store.js";
 
@@ -30,6 +32,66 @@ test("public collector authenticates Store-bound claims before accepting one eve
     accepted: false,
     acceptedEventCount: 1
   });
+});
+
+test("authorized public request POSTs only to Store trafficUrl before accepting its receipt", async () => {
+  const fetchCalls: Array<{ input: string; init: RequestInit }> = [];
+  const timeoutCalls: number[] = [];
+  const signal = new AbortController().signal;
+  let bodyReads = 0;
+  const fixture = await createFixture(undefined, {
+    createTimeoutSignal(timeoutMs) {
+      timeoutCalls.push(timeoutMs);
+      return signal;
+    },
+    async fetch(input, init) {
+      fetchCalls.push({ input, init });
+      return {
+        status: 204,
+        async text() {
+          bodyReads += 1;
+          return "ignored";
+        }
+      };
+    }
+  });
+  const authorized = await authorize(fixture);
+
+  assert.deepEqual(
+    await authorized.request({ eventId: EVENT_ID, ipAddress: "203.0.113.42" }),
+    { accepted: true, acceptedEventCount: 1 }
+  );
+  assert.deepEqual(fetchCalls, [
+    {
+      input: fixture.input.manifest.endpoints.trafficUrl,
+      init: { method: "POST", redirect: "manual", signal }
+    }
+  ]);
+  assert.deepEqual(timeoutCalls, [3_000]);
+  assert.equal(bodyReads, 0);
+});
+
+test("authorized public request returns one generic error and accepts no receipt for redirect, timeout, or non-2xx", async () => {
+  const cases = [
+    async () => ({ status: 302 }),
+    async () => ({ status: 503 }),
+    async () => {
+      throw new DOMException("request timed out", "TimeoutError");
+    }
+  ];
+
+  for (const fetch of cases) {
+    const fixture = await createFixture(undefined, { fetch });
+    const authorized = await authorize(fixture);
+
+    await assertCollectorError(
+      () => authorized.request({ eventId: EVENT_ID, ipAddress: "203.0.113.42" }),
+      "unavailable"
+    );
+    const read = await fixture.store.readSession({ observationId: fixture.input.observationId });
+    assert.equal(read.kind, "active");
+    if (read.kind === "active") assert.equal(read.session.live.acceptedEventCount, 0);
+  }
 });
 
 test("public collector rejects invalid capability and origin without Store mutation", async () => {
@@ -76,6 +138,39 @@ test("public collector exposes exact-origin preflight without capability", async
       fixture.collector.preflight({
         observationId: fixture.input.observationId,
         origin: "https://app.example.com"
+      }),
+    "forbidden_origin"
+  );
+});
+
+test("public collector bootstrap regenerates a Store-bound capability only for the exact audience origin", async () => {
+  const fixture = await createFixture();
+
+  const bootstrap = await fixture.collector.bootstrap({
+    observationId: fixture.input.observationId,
+    origin: "https://audience.example.com"
+  });
+
+  assert.equal(bootstrap.audienceOrigin, "https://audience.example.com");
+  assert.equal(
+    fixture.capability.verify(
+      bootstrap.credential,
+      {
+        createdAt: fixture.created.session.createdAt,
+        expiresAt: fixture.created.session.expiresAt,
+        kid: fixture.created.session.capability.kid,
+        observationId: fixture.created.session.observationId,
+        tokenVersion: fixture.created.session.capability.tokenVersion
+      },
+      fixture.created.evaluatedAt
+    ),
+    true
+  );
+  await assertCollectorError(
+    () =>
+      fixture.collector.bootstrap({
+        observationId: fixture.input.observationId,
+        origin: "https://evil.example.com"
       }),
     "forbidden_origin"
   );
@@ -193,7 +288,14 @@ async function createFixture(
   wrapStore?: (
     store: LiveObservationStore,
     active: Extract<Awaited<ReturnType<LiveObservationStore["createSession"]>>, { kind: "created" }>
-  ) => LiveObservationStore
+  ) => LiveObservationStore,
+  requestOptions: {
+    createTimeoutSignal?: (timeoutMs: number) => AbortSignal;
+    fetch?: (
+      input: string,
+      init: { method: "POST"; redirect: "manual"; signal: AbortSignal }
+    ) => Promise<{ status: number }>;
+  } = {}
 ) {
   const baseStore = createInMemoryLiveObservationStore({ now: () => NOW_MS });
   const capability = createLiveObservationCapability({
@@ -217,7 +319,21 @@ async function createFixture(
 
   return {
     capability,
-    collector: createLiveObservationPublicCollector({ capability, store }),
+    collector: createLiveObservationPublicCollector({
+      capability,
+      createTimeoutSignal: requestOptions.createTimeoutSignal ?? AbortSignal.timeout,
+      fetch:
+        requestOptions.fetch ??
+        (async () => {
+          return { status: 204 };
+        }),
+      requestRateLimiter: createLiveObservationPublicRequestRateLimiter({
+        now: () => NOW_MS,
+        runtimeCache: createInMemoryRuntimeCache({ cleanupIntervalMs: null, now: () => NOW_MS })
+      }),
+      store
+    }),
+    created,
     credential,
     input,
     store

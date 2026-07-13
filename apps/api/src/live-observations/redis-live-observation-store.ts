@@ -428,7 +428,7 @@ function decodeActive(
     evaluatedAtMs < createdAtMs ||
     evaluatedAtMs >= expiresAtMs ||
     (latestObservation !== null && Date.parse(latestObservation.observedAt) > evaluatedAtMs) ||
-    accepted > 5_000 ||
+    accepted > 10_000 ||
     rolling > 100 ||
     rolling > accepted
   ) {
@@ -482,7 +482,7 @@ function decodeTerminal(
     evaluatedAtMs < terminalAtMs ||
     evaluatedAtMs >= terminalAtMs + 60_000 ||
     (finalObservation !== null && Date.parse(finalObservation.observedAt) > terminalAtMs) ||
-    accepted > 5_000 ||
+    accepted > 10_000 ||
     rolling > 100 ||
     rolling > accepted ||
     (status === "expired" && terminalAtMs !== expiresAtMs) ||
@@ -514,7 +514,7 @@ function decodeLive(tuple: RedisReplyTuple): {
   const accepted = nonnegativeInteger(required(tuple, 3));
   const rolling = nonnegativeInteger(required(tuple, 4));
   const pressureTarget = positiveInteger(required(tuple, 5));
-  if (accepted > 5_000 || rolling > 100 || rolling > accepted || pressureTarget !== 60) {
+  if (accepted > 10_000 || rolling > 100 || rolling > accepted || pressureTarget !== 60) {
     throw unavailable();
   }
   return {

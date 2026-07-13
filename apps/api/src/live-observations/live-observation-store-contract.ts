@@ -57,7 +57,7 @@ export function registerLiveObservationStoreContract(input: {
       rollingWindowSeconds: 10,
       maxWeightedBurstPerSecond: 20,
       maxAcceptedEventsPerRateWindow: 100,
-      maxAcceptedEventsPerSession: 5_000,
+      maxAcceptedEventsPerSession: 10_000,
       observerLeaseDurationMs: 15_000,
       presenterBoostLeaseDurationMs: 10_000
     });
@@ -555,7 +555,7 @@ export function registerLiveObservationStoreContract(input: {
     assert.equal(retry.live.acceptedEventCount, 101);
   });
 
-  contractTest("checks duplicates before the exact 5,000-event session cap", async ({
+  contractTest("accepts events beyond the former 5,000-event session cap", async ({
     store,
     setNow,
     advanceBy
@@ -563,13 +563,13 @@ export function registerLiveObservationStoreContract(input: {
     setNow(START_MS + 500);
     assertKind(await store.createSession(createInput()), "created");
 
-    for (let index = 0; index < 5_000; index += 1) {
+    for (let index = 0; index < 5_001; index += 1) {
       const result = await store.collectEvent({
         observationId: OBSERVATION_ID,
         eventId: eventId(index)
       });
       assertKind(result, "accepted");
-      if ((index + 1) % 10 === 0 && index + 1 < 5_000) {
+      if ((index + 1) % 10 === 0 && index + 1 < 5_001) {
         advanceBy(1_000);
       }
     }
@@ -579,14 +579,7 @@ export function registerLiveObservationStoreContract(input: {
       eventId: eventId(0)
     });
     assertKind(duplicate, "duplicate");
-    assert.equal(duplicate.live.acceptedEventCount, 5_000);
-
-    const capped = await store.collectEvent({
-      observationId: OBSERVATION_ID,
-      eventId: eventId(5_000)
-    });
-    assertKind(capped, "event_limit_reached");
-    assert.equal(capped.live.acceptedEventCount, 5_000);
+    assert.equal(duplicate.live.acceptedEventCount, 5_001);
   });
 
   contractTest("serializes collect-before-stop into the frozen final view", async ({

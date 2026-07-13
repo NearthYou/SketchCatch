@@ -10,7 +10,7 @@ export const LIVE_OBSERVATION_STORE_POLICY = Object.freeze({
   rollingWindowSeconds: 10,
   maxWeightedBurstPerSecond: 20,
   maxAcceptedEventsPerRateWindow: 100,
-  maxAcceptedEventsPerSession: 5_000,
+  maxAcceptedEventsPerSession: 10_000,
   observerLeaseDurationMs: 15 * 1_000,
   presenterBoostLeaseDurationMs: 10 * 1_000
 } as const);

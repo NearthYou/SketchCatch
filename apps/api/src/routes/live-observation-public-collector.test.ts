@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import Fastify from "fastify";
+import { createInMemoryRuntimeCache } from "../runtime-cache/index.js";
 import { createInMemoryLiveObservationStore } from "../live-observations/in-memory-live-observation-store.js";
 import { createLiveObservationCapability } from "../live-observations/live-observation-capability.js";
 import {
@@ -8,6 +9,7 @@ import {
   LiveObservationPublicCollectorError,
   type LiveObservationPublicCollector
 } from "../live-observations/live-observation-public-collector.js";
+import { createLiveObservationPublicRequestRateLimiter } from "../live-observations/live-observation-public-request-rate-limiter.js";
 import { createLiveObservationStoreContractInput } from "../live-observations/live-observation-store-contract.js";
 import { registerLiveObservationPublicCollectorRoutes } from "./live-observation-public-collector.js";
 
@@ -41,7 +43,18 @@ test("v2 collector route connects real capability verification to Store collecti
     },
     created.evaluatedAt
   ).credential;
-  const app = await createApp(createLiveObservationPublicCollector({ capability, store }));
+  const app = await createApp(
+    createLiveObservationPublicCollector({
+      capability,
+      createTimeoutSignal: AbortSignal.timeout,
+      fetch: async () => ({ status: 204 }),
+      requestRateLimiter: createLiveObservationPublicRequestRateLimiter({
+        now: () => NOW_MS,
+        runtimeCache: createInMemoryRuntimeCache({ cleanupIntervalMs: null, now: () => NOW_MS })
+      }),
+      store
+    })
+  );
   t.after(() => app.close());
 
   const first = await app.inject({
@@ -111,12 +124,14 @@ test("v2 collector authenticates before body validation and enforces a 1 KiB bod
   const collector = createCollector({
     async authorize() {
       authorizeCalls += 1;
+      const collectEvent = async () => {
+        collectCalls += 1;
+        return { accepted: true, acceptedEventCount: 1 };
+      };
       return {
         audienceOrigin: ORIGIN,
-        async collectEvent() {
-          collectCalls += 1;
-          return { accepted: true, acceptedEventCount: 1 };
-        }
+        collectEvent,
+        request: async () => collectEvent()
       };
     }
   });
@@ -205,15 +220,20 @@ async function createApp(collector: LiveObservationPublicCollector) {
 
 function createCollector(
   overrides: Partial<LiveObservationPublicCollector> & {
-    collectEvent?: () => Promise<{ accepted: boolean; acceptedEventCount: number }>;
+    collectEvent?: (eventId: string) => Promise<{
+      accepted: boolean;
+      acceptedEventCount: number;
+    }>;
   } = {}
 ): LiveObservationPublicCollector {
   return {
     async authorize() {
+      const collectEvent =
+        overrides.collectEvent ?? (async () => ({ accepted: true, acceptedEventCount: 1 }));
       return {
         audienceOrigin: ORIGIN,
-        collectEvent:
-          overrides.collectEvent ?? (async () => ({ accepted: true, acceptedEventCount: 1 }))
+        collectEvent,
+        request: async ({ eventId }) => collectEvent(eventId)
       };
     },
     async preflight() {

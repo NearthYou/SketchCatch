@@ -206,7 +206,7 @@ local function reconcile(sessionKey, terminalKey, observationId)
        not canonicalInteger(activeValues[4]) or not canonicalInteger(activeValues[5]) or
        tonumber(activeValues[5]) ~= tonumber(activeValues[4]) + 900000 or
        activeValues[6] ~= '60' or not canonicalNonnegativeInteger(activeValues[7]) or
-       tonumber(activeValues[7]) > 5000 or not manifestJson(activeValues[8], activeValues[3]) or
+       tonumber(activeValues[7]) > 10000 or not manifestJson(activeValues[8], activeValues[3]) or
        redis.sha1hex(activeValues[8]) ~= activeValues[9] or
        not canonicalKid(activeValues[10]) or not canonicalPositiveInteger(activeValues[11]) or
        redis.sha1hex(activeValues[12]) ~= activeValues[13] or
@@ -281,7 +281,7 @@ local function reconcile(sessionKey, terminalKey, observationId)
     local terminalAt = tonumber(terminalValues[3])
     local accepted = tonumber(terminalValues[4])
     local rolling = tonumber(terminalValues[5])
-    if accepted > 5000 or
+    if accepted > 10000 or
        rolling < 0 or rolling > 100 or rolling > accepted or
        (values[3] == 'expired' and terminalAt ~= tonumber(values[4])) or
        (values[3] == 'stopped' and terminalAt >= tonumber(values[4])) or
@@ -388,7 +388,7 @@ if redis.call('HEXISTS', KEYS[1], 'event:' .. eventId) == 1 then
 end
 local total = tonumber(redis.call('HGET', KEYS[1], 'acceptedEventCount'))
 if not total then return corrupt() end
-if total >= 5000 then return liveTuple('event_limit_reached', KEYS[1], currentRolling) end
+if total >= 10000 then return liveTuple('event_limit_reached', KEYS[1], currentRolling) end
 
 local currentField = 'bucket:' .. integerString(currentSecond)
 local currentCount = tonumber(redis.call('HGET', KEYS[1], currentField) or '0')

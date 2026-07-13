@@ -3,6 +3,7 @@ import {
   LiveObservationStoreInputError,
   type LiveObservationStore
 } from "./live-observation-store.js";
+import type { LiveObservationPublicRequestRateLimiter } from "./live-observation-public-request-rate-limiter.js";
 
 export type LiveObservationPublicCollectorErrorCode =
   | "bad_request"
@@ -27,6 +28,10 @@ type LiveObservationCapability = ReturnType<typeof createLiveObservationCapabili
 
 export type LiveObservationAuthorizedCollector = Readonly<{
   audienceOrigin: string;
+  request(input: { eventId: string; ipAddress: string }): Promise<{
+    accepted: boolean;
+    acceptedEventCount: number;
+  }>;
   collectEvent(eventId: string): Promise<{
     accepted: boolean;
     acceptedEventCount: number;
@@ -39,6 +44,12 @@ export type LiveObservationPublicCollector = ReturnType<
 
 export function createLiveObservationPublicCollector(options: {
   capability: LiveObservationCapability;
+  createTimeoutSignal: (timeoutMs: number) => AbortSignal;
+  fetch: (
+    input: string,
+    init: { method: "POST"; redirect: "manual"; signal: AbortSignal }
+  ) => Promise<{ status: number }>;
+  requestRateLimiter: LiveObservationPublicRequestRateLimiter;
   store: LiveObservationStore;
 }) {
   return Object.freeze({
@@ -66,35 +77,90 @@ export function createLiveObservationPublicCollector(options: {
         active.session.manifest.endpoints.audienceBaseUrl
       );
 
+      const collectEvent = async (eventId: string) => {
+        try {
+          const result = await options.store.collectEvent({
+            eventId,
+            observationId: active.session.observationId
+          });
+
+          switch (result.kind) {
+            case "accepted":
+            case "duplicate":
+              return {
+                accepted: result.kind === "accepted",
+                acceptedEventCount: result.live.acceptedEventCount
+              };
+            case "rate_limited":
+            case "event_limit_reached":
+              throw collectorError("rate_limited");
+            case "gone":
+              throw collectorError("gone");
+            case "not_found":
+              throw collectorError("not_found");
+          }
+        } catch (error) {
+          throw mapStoreError(error);
+        }
+      };
+
       return Object.freeze({
         audienceOrigin,
-        async collectEvent(eventId: string) {
+        collectEvent,
+        async request(requestInput: { eventId: string; ipAddress: string }) {
           try {
-            const result = await options.store.collectEvent({
-              eventId,
+            const rateLimit = await options.requestRateLimiter.consume({
+              ipAddress: requestInput.ipAddress,
               observationId: active.session.observationId
             });
+            if (rateLimit.kind === "rate_limited") {
+              throw collectorError("rate_limited");
+            }
+            if (rateLimit.kind === "unavailable") {
+              throw collectorError("unavailable");
+            }
 
-            switch (result.kind) {
-              case "accepted":
-              case "duplicate":
-                return {
-                  accepted: result.kind === "accepted",
-                  acceptedEventCount: result.live.acceptedEventCount
-                };
-              case "rate_limited":
-              case "event_limit_reached":
-                throw collectorError("rate_limited");
-              case "gone":
-                throw collectorError("gone");
-              case "not_found":
-                throw collectorError("not_found");
+            const response = await options.fetch(active.session.manifest.endpoints.trafficUrl, {
+              method: "POST",
+              redirect: "manual",
+              signal: options.createTimeoutSignal(3_000)
+            });
+            if (!Number.isInteger(response.status) || response.status < 200 || response.status >= 300) {
+              throw collectorError("unavailable");
             }
           } catch (error) {
-            throw mapStoreError(error);
+            if (error instanceof LiveObservationPublicCollectorError) throw error;
+            throw collectorError("unavailable");
           }
+
+          return collectEvent(requestInput.eventId);
         }
       });
+    },
+
+    async bootstrap(input: {
+      observationId: string;
+      origin: string | undefined;
+    }): Promise<{ audienceOrigin: string; credential: string }> {
+      const active = await readActiveSession(options.store, input.observationId);
+      const audienceOrigin = requireAudienceOrigin(
+        input.origin,
+        active.session.manifest.endpoints.audienceBaseUrl
+      );
+      const regenerated = options.capability.regenerate(
+        {
+          createdAt: active.session.createdAt,
+          expiresAt: active.session.expiresAt,
+          kid: active.session.capability.kid,
+          observationId: active.session.observationId,
+          tokenVersion: active.session.capability.tokenVersion
+        },
+        active.evaluatedAt
+      );
+      if (!regenerated) {
+        throw collectorError("unavailable");
+      }
+      return { audienceOrigin, credential: regenerated.credential };
     },
 
     async preflight(input: {
