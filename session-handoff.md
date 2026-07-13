@@ -17,7 +17,7 @@ Use this file only for compact continuation context. Write it in English.
 - Review fixes use RDS-owned `(createdAt, id)` keyset pages, stable invalid-cursor errors, explicit stale refresh metadata, and one authoritative refresh-target lookup.
 - Kept persisted detail/log history readable after monitoring is disabled; refresh still requires a valid enabled target.
 - Shared one lazy GitHub App client across handoff, status, and run providers.
-- Focused app/route/service tests pass 49/49; root lint, typecheck, and build pass.
+- Focused app/route/service tests pass 53/53; schema/migration and repository query contracts pass; root lint, typecheck, and build pass.
 
 ## Broken Or Unverified
 

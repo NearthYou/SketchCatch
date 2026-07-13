@@ -40,3 +40,9 @@ No real GitHub, Git, deployment, Terraform, AWS, or database mutation was execut
 - Added shared `GitCicdPipelineRunRefreshResponse` with sanitized stale-state metadata and documented the contract in `docs/data-models.md`.
 - Made `refreshPipelineRun` the single refresh-target lookup and authorization operation. Disabled, invalid, missing, or inaccessible refresh targets now throw a typed error mapped to the stable Pipeline Run 404.
 - Re-ran the app, service, and route suite: PASS, 53/53.
+
+## Pagination Index Evidence — RED/GREEN
+
+- RED: schema and migration contract tests failed because the Pipeline Run keyset access path had no matching composite index.
+- GREEN: added `git_cicd_pipeline_runs_project_created_id_idx` on `(project_id ASC, created_at DESC, id DESC)` to the feature-local unapplied 0032 migration and Drizzle schema.
+- Added a focused repository source contract proving the project predicate, `(createdAt, id)` keyset, descending order, bounded row query, and page-only stage ID restriction.

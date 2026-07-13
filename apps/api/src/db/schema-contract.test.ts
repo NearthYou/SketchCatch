@@ -51,6 +51,23 @@ test("Git/CI/CD monitoring tables expose commit-scoped run history", () => {
       "commit_sha"
     ])
   );
+  const pageIndex = getTableConfig(gitCicdPipelineRuns).indexes.find(
+    (candidate) => candidate.config.name === "git_cicd_pipeline_runs_project_created_id_idx"
+  );
+  assert.ok(pageIndex);
+  assert.deepEqual(pageIndex.config.columns.map(getColumnName), [
+    "project_id",
+    "created_at",
+    "id"
+  ]);
+  assert.deepEqual(
+    pageIndex.config.columns.map((column) =>
+      typeof column === "object" && column !== null && "indexConfig" in column
+        ? (column as { indexConfig: { order: string } }).indexConfig.order
+        : undefined
+    ),
+    ["asc", "desc", "desc"]
+  );
   assert(
     hasUniqueIndex(getTableConfig(gitCicdPipelineStages).indexes, "git_cicd_pipeline_stages_run_kind_unique", [
       "pipeline_run_id",
@@ -76,6 +93,10 @@ test("Git/CI/CD monitoring migration safely backfills active repositories", () =
   assert.match(migration, /'required'/);
   assert.match(migration, /'\{"mode":"repository_root","path":"\."\}'::jsonb/);
   assert.doesNotMatch(migration, /(?:INSERT INTO|UPDATE|DELETE FROM) "git_cicd_handoffs"/);
+  assert.match(
+    migration,
+    /CREATE INDEX "git_cicd_pipeline_runs_project_created_id_idx" ON "git_cicd_pipeline_runs" USING btree \("project_id","created_at" DESC,"id" DESC\)/
+  );
 });
 
 test("deployment status enum uses a domain-specific database name", () => {

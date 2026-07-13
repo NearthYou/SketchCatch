@@ -716,6 +716,11 @@ export const gitCicdPipelineRuns = pgTable(
       table.commitSha
     ),
     index("git_cicd_pipeline_runs_project_id_idx").on(table.projectId),
+    index("git_cicd_pipeline_runs_project_created_id_idx").on(
+      table.projectId,
+      table.createdAt.desc(),
+      table.id.desc()
+    ),
     index("git_cicd_pipeline_runs_status_idx").on(table.status),
     index("git_cicd_pipeline_runs_created_at_idx").on(table.createdAt)
   ]

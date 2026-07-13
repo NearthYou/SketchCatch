@@ -21,7 +21,7 @@ Short English-only working log for the current agent context. Older records are 
 - Review fixes moved stable `(createdAt, id)` keyset pagination into RDS/service, added explicit stale refresh responses, and removed the route refresh precheck/double lookup.
 - Preserved persisted history access after monitoring is disabled while keeping refresh behind the enabled-and-valid monitoring target.
 - Reused one lazy GitHub App client across handoff, pipeline-status, and run providers; no real GitHub or deployment mutation ran.
-- Verification: 49 focused API/app tests, lazy-config smoke, API/root lint, typecheck, build, harness, and diff checks passed; lint retains one pre-existing `setNow` warning.
+- Verification: 53 focused API/app tests, schema/migration and repository query contracts, lazy-config smoke, API/root lint, typecheck, build, harness, and diff checks passed; lint retains one pre-existing `setNow` warning.
 
 ### 2026-07-13 - Discover and persist commit-scoped Pipeline Runs
 

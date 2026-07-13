@@ -68,6 +68,8 @@ CREATE UNIQUE INDEX "git_cicd_pipeline_runs_repository_commit_unique" ON "git_ci
 --> statement-breakpoint
 CREATE INDEX "git_cicd_pipeline_runs_project_id_idx" ON "git_cicd_pipeline_runs" USING btree ("project_id");
 --> statement-breakpoint
+CREATE INDEX "git_cicd_pipeline_runs_project_created_id_idx" ON "git_cicd_pipeline_runs" USING btree ("project_id","created_at" DESC,"id" DESC);
+--> statement-breakpoint
 CREATE INDEX "git_cicd_pipeline_runs_status_idx" ON "git_cicd_pipeline_runs" USING btree ("status");
 --> statement-breakpoint
 CREATE INDEX "git_cicd_pipeline_runs_created_at_idx" ON "git_cicd_pipeline_runs" USING btree ("created_at");
