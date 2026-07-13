@@ -116,4 +116,3 @@ focused Template test와 catalog test도 별도로 실행한다. `apps/web/.code
 - 기존 배포 Resource 103개와 semantic hash가 그대로다.
 - 여섯 실제 Board 화면의 12개 QA가 모두 통과했다.
 - 통과하지 못한 검증은 숨기지 않고 이유와 영향 범위를 기록한다.
-
