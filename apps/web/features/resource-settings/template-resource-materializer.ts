@@ -18,8 +18,11 @@ export function materializeTemplateDiagram(
   presentationMode: TemplatePresentationMode = "compact"
 ): DiagramJson {
   const materialized = materializeCatalogResourceNodes(diagram, "strict");
+  const preservesAuthoredGeometry = diagram.presentation?.geometryPolicy === "source-exact";
 
-  return presentationMode === "authored" ? materialized : arrangeTemplateTopology(materialized);
+  return presentationMode === "authored" || preservesAuthoredGeometry
+    ? materialized
+    : arrangeTemplateTopology(materialized);
 }
 
 export function hydrateCatalogResourceNodes(diagram: DiagramJson): DiagramJson {
@@ -32,6 +35,7 @@ function materializeCatalogResourceNodes(
 ): DiagramJson {
   // Exact Catalog ids keep presentation-only Region/AZ nodes separate from normal manual-drag resource behavior.
   const nodes: DiagramNode[] = [];
+  const preservesAuthoredGeometry = diagram.presentation?.geometryPolicy === "source-exact";
 
   for (const templateNode of diagram.nodes) {
     const presentationCatalogItemId = templateNode.metadata?.presentationCatalogItemId;
@@ -48,7 +52,14 @@ function materializeCatalogResourceNodes(
         continue;
       }
 
-      nodes.push(materializeCatalogPresentationNode(templateNode, presentationItem, nodes));
+      nodes.push(
+        materializeCatalogPresentationNode(
+          templateNode,
+          presentationItem,
+          nodes,
+          preservesAuthoredGeometry
+        )
+      );
       continue;
     }
 
@@ -65,7 +76,14 @@ function materializeCatalogResourceNodes(
       continue;
     }
 
-    nodes.push(materializeCatalogResourceNode(templateNode, resourceItem, nodes));
+    nodes.push(
+      materializeCatalogResourceNode(
+        templateNode,
+        resourceItem,
+        nodes,
+        preservesAuthoredGeometry
+      )
+    );
   }
 
   return { ...diagram, nodes };
@@ -90,7 +108,8 @@ function findCatalogResourceItem(
 function materializeCatalogResourceNode(
   templateNode: DiagramNode,
   resourceItem: ResourceItem,
-  currentNodes: readonly DiagramNode[]
+  currentNodes: readonly DiagramNode[],
+  preservesAuthoredGeometry: boolean
 ): DiagramNode {
   const paletteNode = createDiagramNodeFromPayload(
     { source: "resource-settings-panel", item: resourceItem },
@@ -108,12 +127,18 @@ function materializeCatalogResourceNode(
     parameters,
     position: { ...templateNode.position },
     style: templateNode.style ? { ...templateNode.style } : paletteNode.style,
-    zIndex: templateNode.zIndex
+    zIndex: templateNode.zIndex,
+    ...(templateNode.rotation === undefined ? {} : { rotation: templateNode.rotation })
   };
 
   return {
     ...materializedNode,
-    size: getMaterializedSize(templateNode, paletteNode, materializedNode)
+    size: getMaterializedSize(
+      templateNode,
+      paletteNode,
+      materializedNode,
+      preservesAuthoredGeometry
+    )
   };
 }
 
@@ -121,7 +146,8 @@ function materializeCatalogResourceNode(
 function materializeCatalogPresentationNode(
   templateNode: DiagramNode,
   resourceItem: ResourceItem,
-  currentNodes: readonly DiagramNode[]
+  currentNodes: readonly DiagramNode[],
+  preservesAuthoredGeometry: boolean
 ): DiagramNode {
   const paletteNode = createDiagramNodeFromPayload(
     { source: "resource-settings-panel", item: resourceItem },
@@ -139,12 +165,18 @@ function materializeCatalogPresentationNode(
     metadata: templateNode.metadata ? { ...templateNode.metadata } : undefined,
     position: { ...templateNode.position },
     style: templateNode.style ? { ...templateNode.style } : paletteNode.style,
-    zIndex: templateNode.zIndex
+    zIndex: templateNode.zIndex,
+    ...(templateNode.rotation === undefined ? {} : { rotation: templateNode.rotation })
   };
 
   return {
     ...materializedNode,
-    size: getMaterializedSize(templateNode, paletteNode, materializedNode)
+    size: getMaterializedSize(
+      templateNode,
+      paletteNode,
+      materializedNode,
+      preservesAuthoredGeometry
+    )
   };
 }
 
@@ -180,8 +212,13 @@ function cloneParameters(parameters: DiagramNodeParameters): DiagramNodeParamete
 function getMaterializedSize(
   templateNode: DiagramNode,
   paletteNode: DiagramNode,
-  materializedNode: DiagramNode
+  materializedNode: DiagramNode,
+  preservesAuthoredGeometry: boolean
 ): DiagramNode["size"] {
+  if (preservesAuthoredGeometry) {
+    return { ...templateNode.size };
+  }
+
   if (!isAreaNode(materializedNode)) {
     return { ...paletteNode.size };
   }

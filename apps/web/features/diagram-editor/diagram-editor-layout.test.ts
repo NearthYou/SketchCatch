@@ -522,11 +522,15 @@ test("manual resize relies on node size effects to refresh React Flow internals"
   );
 });
 
-test("diagram editor normalizes legacy Resource Object geometry at every diagram entry point", () => {
+test("diagram editor applies the shared geometry policy at every diagram entry point", () => {
   assert.match(diagramEditorSource, /import \{ normalizeDiagramResourceNodeGeometry \} from "\.\/resource-node-geometry";/);
   assert.match(
     diagramEditorSource,
     /useState<DiagramJson>\(\(\) =>\s*normalizeDiagramResourceNodeGeometry\(cloneDiagram\(initialDiagram \?\? EMPTY_DIAGRAM\)\)\s*\)/s
+  );
+  assert.match(
+    diagramEditorSource,
+    /useState<DiagramJson \| null>\(\(\) =>\s*initialPreviewDiagram\s*\? normalizeDiagramResourceNodeGeometry\(cloneDiagram\(initialPreviewDiagram\)\)\s*:\s*null\s*\)/s
   );
   assert.match(
     diagramEditorSource,

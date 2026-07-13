@@ -1386,6 +1386,12 @@ button.rightRailResizeHandle {
   color: #98a2b5;
 }
 
+.nodeRotationFrame {
+  height: 100%;
+  position: relative;
+  width: 100%;
+}
+
 .nodeShell {
   align-items: center;
   background: var(--board-surface);

@@ -28,12 +28,16 @@ export type TemplateResourceDefinition = {
   readonly provider: TemplateProvider;
   readonly terraformBlockType: TerraformBlockType;
   readonly terraformResourceType: string;
+  readonly terraformResourceName?: string;
+  readonly fileName?: string;
   readonly values: Record<string, unknown>;
   readonly position: { readonly x: number; readonly y: number };
   readonly size?: DiagramNode["size"];
   readonly parentResourceId?: string;
   readonly presentationArea?: boolean;
   readonly kind?: DiagramNodeKind;
+  readonly zIndex?: DiagramNode["zIndex"];
+  readonly rotation?: DiagramNode["rotation"];
 };
 
 export type TemplateRelationship = {
@@ -60,6 +64,8 @@ export type TemplatePresentationNodeDefinition = {
   readonly position: { readonly x: number; readonly y: number };
   readonly size: DiagramNode["size"];
   readonly parentNodeId?: string;
+  readonly zIndex?: DiagramNode["zIndex"];
+  readonly rotation?: DiagramNode["rotation"];
 };
 
 export type TemplatePresentationEdgeDefinition = {
@@ -84,6 +90,7 @@ export type TemplateDefinition = {
   readonly presentationEdges: readonly TemplatePresentationEdgeDefinition[];
   readonly parameters: readonly TemplateParameterDefinition[];
   readonly viewport?: DiagramJson["viewport"];
+  readonly presentation?: DiagramJson["presentation"];
 };
 
 export type BuildTemplateDiagramInput = {
@@ -779,7 +786,17 @@ export function buildTemplateDiagramJson(
         ...(edge.targetHandleId ? { targetHandleId: edge.targetHandleId } : {})
       }))
     ],
-    viewport: definition.viewport ? { ...definition.viewport } : { x: 0, y: 0, zoom: 0.8 }
+    viewport: definition.viewport ? { ...definition.viewport } : { x: 0, y: 0, zoom: 0.8 },
+    ...(definition.presentation
+      ? {
+          presentation: {
+            ...definition.presentation,
+            ...(definition.presentation.sourceViewBox
+              ? { sourceViewBox: { ...definition.presentation.sourceViewBox } }
+              : {})
+          }
+        }
+      : {})
   };
 }
 
@@ -808,8 +825,8 @@ function createDiagramNode(
       : undefined,
     parameters: {
       resourceType: resource.terraformResourceType,
-      resourceName: resourceNames.get(resource.id) ?? resource.id,
-      fileName: "main.tf",
+      resourceName: resourceNames.get(resource.id) ?? resource.terraformResourceName ?? resource.id,
+      fileName: resource.fileName ?? "main.tf",
       terraformBlockType: resource.terraformBlockType,
       values
     },
@@ -820,7 +837,8 @@ function createDiagramNode(
         ? { width: 260, height: 180 }
         : { width: 124, height: 96 },
     type: resource.terraformResourceType,
-    zIndex: resource.kind === "design" ? 0 : 1
+    zIndex: resource.zIndex ?? (resource.kind === "design" ? 0 : 1),
+    ...(resource.rotation === undefined ? {} : { rotation: resource.rotation })
   };
 }
 
@@ -844,20 +862,21 @@ function createPresentationDiagramNode(
     position: { ...node.position },
     size: { ...node.size },
     type: node.catalogItemId,
-    zIndex: 0
+    zIndex: node.zIndex ?? 0,
+    ...(node.rotation === undefined ? {} : { rotation: node.rotation })
   };
 }
 
 export function createTemplateTerraformResourceNames(
   resources: readonly Pick<
     TemplateResourceDefinition,
-    "id" | "terraformBlockType" | "terraformResourceType"
+    "id" | "terraformBlockType" | "terraformResourceName" | "terraformResourceType"
   >[]
 ): ReadonlyMap<string, string> {
   // Resolve the full identity set first so references never observe a partially assigned collision suffix.
   const normalizedResources = resources.map((resource) => ({
     ...resource,
-    normalizedName: toTerraformIdentifier(resource.id)
+    normalizedName: resource.terraformResourceName ?? toTerraformIdentifier(resource.id)
   }));
   const resourcesById = new Map<string, (typeof normalizedResources)[number]>();
   const collisionGroups = new Map<string, (typeof normalizedResources)[number][]>();
