@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { DiagramJson, DiagramNode } from "./index.js";
-import { createTerraformProviderFiles } from "./terraform-provider-files.js";
+import {
+  createTerraformProviderFiles,
+  isTerraformDeployableNode
+} from "./terraform-provider-files.js";
 
 test("createTerraformProviderFiles ignores Design nodes with Terraform-like AWS types", () => {
   const diagramJson: DiagramJson = {
@@ -28,12 +31,38 @@ test("createTerraformProviderFiles keeps a resource-kind visual Area deployable"
   assert.match(providerCode, /source\s*= "hashicorp\/aws"/);
 });
 
+test("Terraform deployment boundaries exclude reference-only and unsupported Resource nodes", () => {
+  const referenceOnlyNode = makeNode(
+    "reference-instance",
+    "resource",
+    "aws_instance",
+    true,
+    { sketchcatchReferenceTerraform: true }
+  );
+  const unsupportedNode = makeNode(
+    "unsupported-resource",
+    "resource",
+    "aws_not_a_supported_resource",
+    true
+  );
+  const diagramJson: DiagramJson = {
+    nodes: [referenceOnlyNode, unsupportedNode],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  assert.equal(isTerraformDeployableNode(referenceOnlyNode), false);
+  assert.equal(isTerraformDeployableNode(unsupportedNode), false);
+  assert.deepEqual(createTerraformProviderFiles(diagramJson), []);
+});
+
 // Provider fixtures isolate visual kind from optional Terraform identity.
 function makeNode(
   id: string,
   kind: DiagramNode["kind"],
   type: string,
-  withParameters = false
+  withParameters = false,
+  values: Record<string, unknown> = {}
 ): DiagramNode {
   return {
     id,
@@ -51,7 +80,7 @@ function makeNode(
             resourceName: id.replaceAll("-", "_"),
             resourceType: type,
             terraformBlockType: "resource" as const,
-            values: {}
+            values
           }
         }
       : {})

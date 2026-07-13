@@ -4,6 +4,7 @@ import type {
   DiagramNodeParameters,
   TerraformSyncFileInput
 } from "./index.js";
+import { getResourceDefinitionByTerraform } from "./resource-definitions.js";
 
 const AWS_REQUIRED_PROVIDER = `    aws = {
       source  = "hashicorp/aws"
@@ -63,7 +64,20 @@ ${eksCluster ? renderEksKubernetesProvider(eksCluster) : ""}`
 export function isTerraformDeployableNode(
   node: DiagramNode
 ): node is DiagramNode & { readonly parameters: DiagramNodeParameters } {
-  return node.kind === "resource" && node.parameters !== undefined;
+  if (node.kind !== "resource" || node.parameters === undefined) {
+    return false;
+  }
+
+  if (node.parameters.values?.["sketchcatchReferenceTerraform"] === true) {
+    return false;
+  }
+
+  const resourceDefinition = getResourceDefinitionByTerraform(
+    node.parameters.terraformBlockType ?? "resource",
+    node.parameters.resourceType
+  );
+
+  return resourceDefinition?.capabilities.terraformPreview === true;
 }
 
 function renderEksKubernetesProvider(clusterNode: DiagramNode): string {

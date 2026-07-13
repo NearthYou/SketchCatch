@@ -161,43 +161,39 @@ function TemplateDiagramPreview({ template }: { readonly template: BoardTemplate
             />
           );
         })}
-        {model.nodes
-          .filter((node) => node.isArea)
-          .map((node) => (
+        {model.nodes.filter((node) => node.isArea).map((node) => (
+          <rect
+            className={styles.previewAreaFrame}
+            height={node.height}
+            key={node.id}
+            width={node.width}
+            x={node.x}
+            y={node.y}
+          />
+        ))}
+        {model.nodes.filter((node) => !node.isArea).map((node) => (
+          <g className={styles.previewResource} key={node.id}>
             <rect
-              className={styles.previewAreaFrame}
+              className={styles.previewResourceTile}
               height={node.height}
-              key={node.id}
+              rx="1.5"
               width={node.width}
               x={node.x}
               y={node.y}
             />
-          ))}
-        {model.nodes
-          .filter((node) => !node.isArea)
-          .map((node) => (
-            <g className={styles.previewResource} key={node.id}>
-              <rect
-                className={styles.previewResourceTile}
-                height={node.height}
-                rx="1.5"
-                width={node.width}
-                x={node.x}
-                y={node.y}
+            {node.iconUrl ? (
+              <image
+                className={styles.previewResourceIcon}
+                height={node.height - 2}
+                href={node.iconUrl}
+                preserveAspectRatio="xMidYMid meet"
+                width={node.width - 2}
+                x={node.x + 1}
+                y={node.y + 1}
               />
-              {node.iconUrl ? (
-                <image
-                  className={styles.previewResourceIcon}
-                  height={node.height - 2}
-                  href={node.iconUrl}
-                  preserveAspectRatio="xMidYMid meet"
-                  width={node.width - 2}
-                  x={node.x + 1}
-                  y={node.y + 1}
-                />
-              ) : null}
-            </g>
-          ))}
+            ) : null}
+          </g>
+        ))}
       </svg>
       {model.omittedNodeCount > 0 ? (
         <span

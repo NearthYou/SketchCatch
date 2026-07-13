@@ -596,7 +596,7 @@ export const templateDefinitions = [
       resource("load-balancer", "Application Load Balancer", "aws", "aws_lb", 100, 660, { name: "fargate-alb", loadBalancerType: "application", subnets: ["@ref:subnet-a.id", "@ref:subnet-b.id"], securityGroups: ["@ref:alb-security-group.id"] }),
       resource("target-group", "Fargate Target Group", "aws", "aws_lb_target_group", 300, 660, { name: "fargate-web", port: 80, protocol: "HTTP", targetType: "ip", vpcId: "@ref:vpc.id", healthCheck: { path: "/", matcher: "200-399" } }),
       resource("listener", "HTTP Listener", "aws", "aws_lb_listener", 500, 660, { loadBalancerArn: "@ref:load-balancer.arn", port: 80, protocol: "HTTP", defaultAction: { type: "forward", targetGroupArn: "@ref:target-group.arn" } }),
-      resource("task", "ECS Task Definition", "aws", "aws_ecs_task_definition", 700, 660, { family: "fargate-app", networkMode: "awsvpc", requiresCompatibilities: ["FARGATE"], cpu: 256, memory: 512, executionRoleArn: "@ref:execution-role.arn", taskRoleArn: "@ref:task-role.arn", containerDefinitions: JSON.stringify([{ name: "web", image: "public.ecr.aws/docker/library/nginx:stable", essential: true, portMappings: [{ containerPort: 80, hostPort: 80, protocol: "tcp" }], logConfiguration: { logDriver: "awslogs", options: { "awslogs-group": "@ref:log-group.name", "awslogs-region": "ap-northeast-2", "awslogs-stream-prefix": "ecs" } } }]) }),
+      resource("task", "ECS Task Definition", "aws", "aws_ecs_task_definition", 700, 660, { family: "fargate-app", networkMode: "awsvpc", requiresCompatibilities: ["FARGATE"], cpu: 256, memory: 512, executionRoleArn: "@ref:execution-role.arn", taskRoleArn: "@ref:task-role.arn", containerDefinitions: JSON.stringify([{ name: "web", image: "public.ecr.aws/docker/library/nginx:stable", essential: true, portMappings: [{ containerPort: 80, hostPort: 80, protocol: "tcp" }], logConfiguration: { logDriver: "awslogs", options: { "awslogs-group": "${@ref:log-group.name}", "awslogs-region": "ap-northeast-2", "awslogs-stream-prefix": "ecs" } } }]) }),
       resource("service", "ECS Service", "aws", "aws_ecs_service", 900, 660, { name: "fargate-service", cluster: "@ref:cluster.id", taskDefinition: "@ref:task.arn", desiredCount: 1, launchType: "FARGATE", healthCheckGracePeriodSeconds: 30, networkConfiguration: { subnets: ["@ref:subnet-a.id", "@ref:subnet-b.id"], securityGroups: ["@ref:task-security-group.id"], assignPublicIp: true }, loadBalancer: { targetGroupArn: "@ref:target-group.arn", containerName: "web", containerPort: 80 }, dependsOn: ["@address:listener"] })
     ],
     relationships: [
@@ -604,7 +604,8 @@ export const templateDefinitions = [
       relationship("vpc-subnet-b", "vpc", "subnet-b", "contains"),
       relationship("cluster-service", "cluster", "service", "runs"),
       relationship("service-task", "service", "task", "uses"),
-      relationship("repository-task", "repository", "task", "provides image"),
+      // The zero-step default stays on the public nginx image until an image is pushed to this ECR repository.
+      relationship("repository-task", "repository", "task", "optional image source"),
       relationship("task-log-group", "task", "log-group", "writes logs"),
       relationship("task-role", "task", "execution-role", "assumes")
     ],

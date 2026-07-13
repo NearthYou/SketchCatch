@@ -353,8 +353,7 @@ function hasReferencedTargetParentReference(
     return true;
   }
 
-  const parentNodeId = targetNode.metadata?.parentAreaNodeId;
-  const parentNode = parentNodeId ? graph.nodeById.get(parentNodeId) : undefined;
+  const parentNode = findContainingResourceNode(targetNode, graph);
   const configuredParent = resolveParameterReferenceTarget(
     getParameterValue(targetNode, check.parentParameterPath),
     graph

@@ -128,6 +128,49 @@ test("EC2 in a VPC-contained subnet with matching references is clean", () => {
   assert.equal(diagnostics.filter((diagnostic) => diagnostic.resourceNodeId === "ec2-1").length, 0);
 });
 
+test("EC2 accepts a referenced Subnet nested beneath a presentation AZ", () => {
+  const vpc = vpcNode();
+  const availabilityZone: DiagramNode = {
+    id: "az-presentation",
+    type: "aws-availability-zone",
+    kind: "design",
+    position: { x: 0, y: 0 },
+    size: { width: 240, height: 180 },
+    label: "AZ A",
+    locked: false,
+    zIndex: 0,
+    metadata: {
+      parentAreaNodeId: vpc.id,
+      presentationCatalogItemId: "aws-availability-zone"
+    }
+  };
+  const subnet = resourceNode({
+    id: "subnet-1",
+    metadata: { parentAreaNodeId: availabilityZone.id },
+    resourceName: "public",
+    resourceType: "aws_subnet",
+    values: { vpcId: "aws_vpc.main.id" }
+  });
+  const ami = amiNode();
+  const ec2 = resourceNode({
+    id: "ec2-1",
+    metadata: { parentAreaNodeId: subnet.id },
+    resourceName: "app",
+    resourceType: "aws_instance",
+    values: {
+      ami: "data.aws_ami.al2023.id",
+      subnetId: "aws_subnet.public.id"
+    }
+  });
+
+  const diagnostics = evaluateArchitectureDependencies(
+    diagramWith(vpc, availabilityZone, subnet, ami, ec2),
+    "preview"
+  );
+
+  assert.equal(diagnostics.filter((diagnostic) => diagnostic.resourceNodeId === ec2.id).length, 0);
+});
+
 function diagramWith(...nodes: DiagramNode[]): DiagramJson {
   return {
     nodes,
