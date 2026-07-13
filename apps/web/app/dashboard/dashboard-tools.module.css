@@ -10,6 +10,129 @@
   cursor: pointer;
 }
 
+.costTabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  border-bottom: 1px solid var(--color-hairline);
+  padding-bottom: 12px;
+}
+
+.costTab {
+  display: grid;
+  min-height: 72px;
+  gap: 4px;
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--radius-control);
+  padding: 14px 16px;
+  background: var(--color-canvas);
+  color: var(--color-body);
+  cursor: pointer;
+  text-align: left;
+}
+
+.costTab strong {
+  color: var(--color-ink);
+  font-size: 14px;
+}
+
+.costTab span {
+  font-size: 12px;
+  line-height: 1.45;
+  word-break: keep-all;
+}
+
+.costTab[aria-selected="true"] {
+  border-color: var(--color-ink);
+  background: var(--color-surface-strong);
+  box-shadow: var(--shadow-ring);
+}
+
+.costPanelStack {
+  display: grid;
+  gap: 20px;
+}
+
+.costPanelToolbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.costProjectGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.costProjectCard {
+  display: grid;
+  min-height: 210px;
+  align-content: space-between;
+  gap: 24px;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-card);
+  padding: 20px;
+  background: var(--color-canvas);
+  box-shadow: var(--shadow-card);
+}
+
+.costProjectCard h2 {
+  margin: 12px 0 5px;
+  color: var(--color-ink);
+  font-size: 18px;
+}
+
+.costProjectCard p {
+  margin: 0;
+  color: var(--color-body);
+  font-size: 13px;
+  line-height: 1.5;
+  word-break: keep-all;
+}
+
+.statusBadge {
+  display: inline-flex;
+  width: fit-content;
+  border-radius: var(--radius-pill);
+  padding: 4px 9px;
+  background: var(--color-surface-strong);
+  color: var(--color-ink);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.projectCostValue,
+.costUnavailable {
+  display: grid;
+  gap: 5px;
+  border-top: 1px solid var(--color-hairline);
+  padding-top: 16px;
+}
+
+.projectCostValue span,
+.costUnavailable span {
+  color: var(--color-body);
+  font-size: 12px;
+}
+
+.projectCostValue strong {
+  color: var(--color-ink);
+  font-size: 28px;
+  font-variant-numeric: tabular-nums;
+}
+
+.projectCostValue small {
+  color: var(--color-body);
+  font-size: 11px;
+}
+
+.costUnavailable strong {
+  color: var(--color-ink);
+  font-size: 14px;
+}
+
 .controlRow {
   display: flex;
   flex-wrap: wrap;
@@ -137,7 +260,10 @@
 
 @media (max-width: 760px) {
   .metricGrid,
-  .twoColumn { grid-template-columns: 1fr; }
+  .twoColumn,
+  .costProjectGrid { grid-template-columns: 1fr; }
+  .costTabs { grid-template-columns: 1fr; }
+  .costPanelToolbar { align-items: stretch; }
   .connectionList > article { grid-template-columns: 1fr; }
   .rowActions { flex-wrap: wrap; }
 }
