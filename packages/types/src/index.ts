@@ -1164,6 +1164,8 @@ export {
   brainboardTemplateManifest
 } from "./brainboard-templates/manifest.ts";
 export type { BrainboardTemplateManifestEntry } from "./brainboard-templates/manifest.ts";
+export { adaptBrainboardTemplateSource } from "./brainboard-templates/adapter.ts";
+export type { AdaptedBrainboardTemplate } from "./brainboard-templates/adapter.ts";
 export type {
   BrainboardFailedCaptureAttempt,
   BrainboardFailedCaptureEvidence,
@@ -1192,6 +1194,12 @@ export type {
   BrainboardSourceValidationErrorCode,
   BrainboardSourceValidationResult
 } from "./brainboard-templates/validate-source.ts";
+export {
+  brainboardFailedCaptureEvidence,
+  brainboardTemplateEvidence,
+  brainboardTemplateRegistry
+} from "./brainboard-templates/registry.ts";
+export type { BrainboardTemplateRegistryEntry } from "./brainboard-templates/registry.ts";
 export {
   awsKubernetesNativeCnisSource,
   brainboardTemplateSources,
