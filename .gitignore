@@ -56,6 +56,7 @@ AGENTS.local.md
 AGENTS.gg.md
 docs/jh/
 .superpowers/
+.worktrees/
 
 # Local AWS connection templates can contain account-specific ExternalId values.
 sketchcatch-aws-connection-*.yaml
