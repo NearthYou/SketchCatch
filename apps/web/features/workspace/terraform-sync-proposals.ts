@@ -232,7 +232,7 @@ function isTerraformReferenceRewriteAt(
 
   return (
     (previousCharacter === undefined || !/[A-Za-z0-9_.-]/.test(previousCharacter)) &&
-    nextCharacter === "."
+    (nextCharacter === undefined || !/[A-Za-z0-9_-]/.test(nextCharacter))
   );
 }
 

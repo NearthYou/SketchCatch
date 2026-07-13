@@ -423,6 +423,31 @@ test("rewriteTerraformReferencesForSyncProposals rewrites expressions across fil
   assert.match(rewritten[1]!.code, /\/\* aws_subnet\.subnet\.id \*\//);
 });
 
+test("rewriteTerraformReferencesForSyncProposals rewrites direct resource references at identifier boundaries", () => {
+  const proposals: TerraformDiagramChangeProposal[] = [
+    makeRenameProposal("resource", "aws_subnet", "subnet", "private", "subnet-1")
+  ];
+  const files = [{
+    fileName: "dependencies.tf",
+    code: `depends_on = [aws_subnet.subnet]
+resources  = [aws_subnet.subnet, aws_subnet.subnet ]
+at_eof     = aws_subnet.subnet
+long_name  = aws_subnet.subnet_extra
+hyphenated = aws_subnet.subnet-old`
+  }];
+
+  const rewritten = rewriteTerraformReferencesForSyncProposals(files, proposals);
+
+  assert.equal(
+    rewritten[0]?.code,
+    `depends_on = [aws_subnet.private]
+resources  = [aws_subnet.private, aws_subnet.private ]
+at_eof     = aws_subnet.private
+long_name  = aws_subnet.subnet_extra
+hyphenated = aws_subnet.subnet-old`
+  );
+});
+
 test("rewriteTerraformReferencesForSyncProposals preserves heredocs and rewrites data references", () => {
   const proposals: TerraformDiagramChangeProposal[] = [
     makeRenameProposal("data", "aws_ami", "selected", "runtime", "ami-1")
