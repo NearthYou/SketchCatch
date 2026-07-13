@@ -297,14 +297,14 @@
 
 .chartAxisLabel {
   fill: var(--color-body);
-  font-size: 11px;
+  font-size: 13px;
   font-variant-numeric: tabular-nums;
   font-weight: 500;
 }
 
 .chartLine {
   fill: none;
-  stroke: var(--color-text-link);
+  stroke: var(--color-ink);
   stroke-linecap: round;
   stroke-linejoin: round;
   stroke-width: 2;
@@ -312,7 +312,7 @@
 }
 
 .chartPoint {
-  fill: var(--color-text-link);
+  fill: var(--color-ink);
   stroke: var(--color-canvas);
   stroke-width: 1;
   vector-effect: non-scaling-stroke;

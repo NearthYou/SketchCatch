@@ -54,6 +54,18 @@ test("createCostUsageLineChart keeps a readable dollar scale for zero cost data"
   assert.equal(chart.points.every((point) => point.y === chart.plot.bottom), true);
 });
 
+test("createCostUsageLineChart keeps one-cent axis labels unique", () => {
+  const chart = createCostUsageLineChart([
+    { amount: 0.01, date: "2026-07-01" }
+  ]);
+
+  assert.deepEqual(
+    chart.yTicks.map((tick) => tick.label),
+    ["$0", "$0.01"]
+  );
+  assert.equal(new Set(chart.yTicks.map((tick) => tick.amount)).size, chart.yTicks.length);
+});
+
 test("createCostUsageLineChart limits long ranges to readable date ticks", () => {
   const dailyTrend = Array.from({ length: 30 }, (_, index) => ({
     amount: index,

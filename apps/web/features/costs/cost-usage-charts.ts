@@ -227,7 +227,7 @@ function createCostYAxis(maxAmount: number): {
     };
   }
 
-  const step = createNiceCostStep(maxAmount / 3);
+  const step = Math.max(createNiceCostStep(maxAmount / 3), 0.01);
   const axisMaxAmount = roundUsd(Math.ceil(maxAmount / step) * step);
   const intervalCount = Math.round(axisMaxAmount / step);
 
