@@ -98,11 +98,44 @@ local function manifestJson(value, deploymentId)
     kind = true, version = true, payload = true
   }, 3) then return false end
   local payload = adapter.payload
-  if not exactObjectKeys(payload, {
-    cloudFrontDistributionId = true, loadBalancerArn = true,
-    targetGroupArn = true, autoScalingGroupName = true
-  }, 4) then return false end
-  return manifest.schemaVersion == 2 and manifest.provider == 'aws' and
+  if type(payload) ~= 'table' then return false end
+  local validAdapter = false
+  if adapter.kind == 'aws-live-observation' and adapter.version == 1 then
+    validAdapter = exactObjectKeys(payload, {
+      cloudFrontDistributionId = true, loadBalancerArn = true,
+      targetGroupArn = true, autoScalingGroupName = true
+    }, 4) and type(payload.cloudFrontDistributionId) == 'string' and
+      type(payload.loadBalancerArn) == 'string' and type(payload.targetGroupArn) == 'string' and
+      type(payload.autoScalingGroupName) == 'string'
+  elseif adapter.kind == 'aws-live-observation' and adapter.version == 2 then
+    local payloadCount = payload.logGroupNames == nil and 5 or 6
+    local validLogs = payload.logGroupNames == nil
+    if type(payload.logGroupNames) == 'table' then
+      validLogs = #payload.logGroupNames <= 10
+      for index = 1, #payload.logGroupNames do
+        if type(payload.logGroupNames[index]) ~= 'string' or payload.logGroupNames[index] == '' then
+          validLogs = false
+        end
+      end
+    end
+    local capacity = payload.capacityTarget
+    local validCapacity = type(capacity) == 'table' and
+      ((capacity.kind == 'asg' and exactObjectKeys(capacity, {
+        kind = true, autoScalingGroupName = true
+      }, 2) and type(capacity.autoScalingGroupName) == 'string') or
+      (capacity.kind == 'ecs_fargate' and exactObjectKeys(capacity, {
+        kind = true, clusterName = true, serviceName = true, maxCapacity = true
+      }, 4) and type(capacity.clusterName) == 'string' and
+        type(capacity.serviceName) == 'string' and type(capacity.maxCapacity) == 'number' and
+        capacity.maxCapacity > 0 and math.floor(capacity.maxCapacity) == capacity.maxCapacity))
+    validAdapter = exactObjectKeys(payload, {
+      trafficHostname = true, loadBalancerDnsName = true, loadBalancerArn = true,
+      targetGroupArn = true, logGroupNames = true, capacityTarget = true
+    }, payloadCount) and type(payload.trafficHostname) == 'string' and
+      type(payload.loadBalancerDnsName) == 'string' and type(payload.loadBalancerArn) == 'string' and
+      type(payload.targetGroupArn) == 'string' and validLogs and validCapacity
+  end
+  return manifest.schemaVersion == 2 and manifest.provider == 'aws' and validAdapter and
     provenance.deploymentId == deploymentId and canonicalUuid(provenance.deploymentId) and
     canonicalUuidV4(provenance.awsConnectionId) and
     type(provenance.terraformArtifactSha256) == 'string' and
@@ -112,11 +145,7 @@ local function manifestJson(value, deploymentId)
     type(provenance.verifiedAt) == 'string' and
     type(endpoints.audienceBaseUrl) == 'string' and type(endpoints.trafficUrl) == 'string' and
     pressure.metric == 'requests_per_target_per_minute' and
-    pressure.target == 60 and pressure.windowSeconds == 60 and
-    adapter.kind == 'aws-live-observation' and adapter.version == 1 and
-    type(payload.cloudFrontDistributionId) == 'string' and
-    type(payload.loadBalancerArn) == 'string' and type(payload.targetGroupArn) == 'string' and
-    type(payload.autoScalingGroupName) == 'string'
+    pressure.target == 60 and pressure.windowSeconds == 60
 end
 
 local function observationJson(value)
@@ -138,7 +167,7 @@ local function rollingCount(sessionKey, currentSecond)
     if stored ~= false then
       if not canonicalNonnegativeInteger(stored) then return nil end
       count = count + tonumber(stored)
-      if count > 100 then return nil end
+      if count > 120 then return nil end
     end
   end
   return count
@@ -197,7 +226,7 @@ local function reconcile(sessionKey, terminalKey, observationId)
       'pressureTarget', 'acceptedEventCount', 'manifestJson', 'manifestJsonSha1',
       'capabilityKid', 'tokenVersion', 'latestObservationJson', 'latestObservationJsonSha1',
       'latestObservedAtMs', 'observerFencingToken',
-      'observerId', 'observerLeaseExpiresAtMs', 'presenterLeaseId', 'presenterLeaseExpiresAtMs')
+      'observerId', 'observerLeaseExpiresAtMs')
     for index = 1, 15 do
       if activeValues[index] == false then return 'corrupt' end
     end
@@ -206,7 +235,7 @@ local function reconcile(sessionKey, terminalKey, observationId)
        not canonicalInteger(activeValues[4]) or not canonicalInteger(activeValues[5]) or
        tonumber(activeValues[5]) ~= tonumber(activeValues[4]) + 900000 or
        activeValues[6] ~= '60' or not canonicalNonnegativeInteger(activeValues[7]) or
-       tonumber(activeValues[7]) > 5000 or not manifestJson(activeValues[8], activeValues[3]) or
+       tonumber(activeValues[7]) > 10000 or not manifestJson(activeValues[8], activeValues[3]) or
        redis.sha1hex(activeValues[8]) ~= activeValues[9] or
        not canonicalKid(activeValues[10]) or not canonicalPositiveInteger(activeValues[11]) or
        redis.sha1hex(activeValues[12]) ~= activeValues[13] or
@@ -215,13 +244,9 @@ local function reconcile(sessionKey, terminalKey, observationId)
        (activeValues[12] ~= '' and (not observationJson(activeValues[12]) or
          not canonicalInteger(activeValues[14]) or tonumber(activeValues[14]) > tonumber(activeValues[5]))) or
        ((activeValues[16] == false) ~= (activeValues[17] == false)) or
-       ((activeValues[18] == false) ~= (activeValues[19] == false)) or
        (activeValues[16] ~= false and (not canonicalUuid(activeValues[16]) or
          not canonicalPositiveInteger(activeValues[17]) or
-         tonumber(activeValues[17]) > tonumber(activeValues[5]) or tonumber(activeValues[15]) < 1)) or
-       (activeValues[18] ~= false and (not canonicalUuid(activeValues[18]) or
-         not canonicalPositiveInteger(activeValues[19]) or
-         tonumber(activeValues[19]) > tonumber(activeValues[5]))) then
+         tonumber(activeValues[17]) > tonumber(activeValues[5]) or tonumber(activeValues[15]) < 1)) then
       return 'corrupt'
     end
     if redis.call('EXISTS', terminalKey) ~= 1 then return 'corrupt' end
@@ -242,7 +267,7 @@ local function reconcile(sessionKey, terminalKey, observationId)
        not canonicalInteger(shadowValues[10]) or not canonicalInteger(shadowValues[11]) or
        tonumber(shadowValues[10]) ~= tonumber(activeValues[5]) or
        tonumber(shadowValues[11]) ~= tonumber(activeValues[5]) + 60000 or
-       tonumber(shadowValues[9]) > 100 or
+       tonumber(shadowValues[9]) > 120 or
        tonumber(shadowValues[9]) > tonumber(shadowValues[8]) then
       return 'corrupt'
     end
@@ -281,8 +306,8 @@ local function reconcile(sessionKey, terminalKey, observationId)
     local terminalAt = tonumber(terminalValues[3])
     local accepted = tonumber(terminalValues[4])
     local rolling = tonumber(terminalValues[5])
-    if accepted > 5000 or
-       rolling < 0 or rolling > 100 or rolling > accepted or
+    if accepted > 10000 or
+       rolling < 0 or rolling > 120 or rolling > accepted or
        (values[3] == 'expired' and terminalAt ~= tonumber(values[4])) or
        (values[3] == 'stopped' and terminalAt >= tonumber(values[4])) or
        tonumber(values[5]) ~= terminalAt + 60000 then
@@ -388,7 +413,7 @@ if redis.call('HEXISTS', KEYS[1], 'event:' .. eventId) == 1 then
 end
 local total = tonumber(redis.call('HGET', KEYS[1], 'acceptedEventCount'))
 if not total then return corrupt() end
-if total >= 5000 then return liveTuple('event_limit_reached', KEYS[1], currentRolling) end
+if total >= 10000 then return liveTuple('event_limit_reached', KEYS[1], currentRolling) end
 
 local currentField = 'bucket:' .. integerString(currentSecond)
 local currentCount = tonumber(redis.call('HGET', KEYS[1], currentField) or '0')
@@ -396,7 +421,7 @@ local previousCount = tonumber(redis.call('HGET', KEYS[1], 'bucket:' .. integerS
 local progressMs = nowMs - currentSecond * 1000
 local candidateCurrent = currentCount + 1
 local weightedNumerator = candidateCurrent * 1000 + previousCount * (1000 - progressMs)
-if weightedNumerator > 20000 or currentRolling + 1 > 100 then
+if weightedNumerator > 20000 or currentRolling + 1 > 120 then
   return liveTuple('rate_limited', KEYS[1], currentRolling)
 end
 
@@ -515,70 +540,6 @@ redis.call('HSET', KEYS[2], 'finalObservationJson', ARGV[7],
 return simple('committed')
 `;
 
-const ACQUIRE_PRESENTER = `
-local observationId = ARGV[3]
-local leaseId = ARGV[4]
-local state = reconcile(KEYS[1], KEYS[2], observationId)
-if state == 'corrupt' then return corrupt() end
-if state == 'terminal' then return terminalTuple('gone', KEYS[2]) end
-if state == 'not_found' then return simple('not_found') end
-local currentId = redis.call('HGET', KEYS[1], 'presenterLeaseId')
-local currentExpiry = tonumber(redis.call('HGET', KEYS[1], 'presenterLeaseExpiresAtMs') or '0')
-if currentId and nowMs < currentExpiry then
-  if currentId == leaseId then
-    return {VERSION, 'already_acquired', integerString(nowMs), currentId, integerString(currentExpiry)}
-  end
-  return simple('busy')
-end
-local sessionExpiry = tonumber(redis.call('HGET', KEYS[1], 'expiresAtMs'))
-if not sessionExpiry then return corrupt() end
-local nextExpiry = math.min(nowMs + 10000, sessionExpiry)
-redis.call('HSET', KEYS[1], 'presenterLeaseId', leaseId,
-  'presenterLeaseExpiresAtMs', integerString(nextExpiry))
-return {VERSION, 'acquired', integerString(nowMs), leaseId, integerString(nextExpiry)}
-`;
-
-const RENEW_PRESENTER = `
-local observationId = ARGV[3]
-local leaseId = ARGV[4]
-local state = reconcile(KEYS[1], KEYS[2], observationId)
-if state == 'corrupt' then return corrupt() end
-if state == 'terminal' then return terminalTuple('gone', KEYS[2]) end
-if state == 'not_found' then return simple('not_found') end
-local currentId = redis.call('HGET', KEYS[1], 'presenterLeaseId')
-local currentExpiry = tonumber(redis.call('HGET', KEYS[1], 'presenterLeaseExpiresAtMs') or '0')
-if not currentId or nowMs >= currentExpiry or currentId ~= leaseId then
-  if currentId and nowMs >= currentExpiry then
-    redis.call('HDEL', KEYS[1], 'presenterLeaseId', 'presenterLeaseExpiresAtMs')
-  end
-  return simple('lease_lost')
-end
-local sessionExpiry = tonumber(redis.call('HGET', KEYS[1], 'expiresAtMs'))
-if not sessionExpiry then return corrupt() end
-local nextExpiry = math.min(nowMs + 10000, sessionExpiry)
-redis.call('HSET', KEYS[1], 'presenterLeaseExpiresAtMs', integerString(nextExpiry))
-return {VERSION, 'renewed', integerString(nowMs), leaseId, integerString(nextExpiry)}
-`;
-
-const RELEASE_PRESENTER = `
-local observationId = ARGV[3]
-local leaseId = ARGV[4]
-local state = reconcile(KEYS[1], KEYS[2], observationId)
-if state == 'corrupt' then return corrupt() end
-if state == 'terminal' then return terminalTuple('gone', KEYS[2]) end
-if state == 'not_found' then return simple('not_found') end
-local currentId = redis.call('HGET', KEYS[1], 'presenterLeaseId')
-local currentExpiry = tonumber(redis.call('HGET', KEYS[1], 'presenterLeaseExpiresAtMs') or '0')
-if not currentId or nowMs >= currentExpiry or currentId ~= leaseId then
-  if currentId and nowMs >= currentExpiry then
-    redis.call('HDEL', KEYS[1], 'presenterLeaseId', 'presenterLeaseExpiresAtMs')
-  end
-  return simple('lease_lost')
-end
-redis.call('HDEL', KEYS[1], 'presenterLeaseId', 'presenterLeaseExpiresAtMs')
-return simple('released')
-`;
-
 export type RedisLiveObservationStoreScripts = Readonly<{
   createSession: string;
   readSession: string;
@@ -586,9 +547,6 @@ export type RedisLiveObservationStoreScripts = Readonly<{
   stopSession: string;
   claimObserverLease: string;
   commitObservation: string;
-  acquirePresenterBoostLease: string;
-  renewPresenterBoostLease: string;
-  releasePresenterBoostLease: string;
 }>;
 
 function buildScripts(testClock: boolean): RedisLiveObservationStoreScripts {
@@ -598,10 +556,7 @@ function buildScripts(testClock: boolean): RedisLiveObservationStoreScripts {
     collectEvent: script(COLLECT, testClock),
     stopSession: script(STOP, testClock),
     claimObserverLease: script(CLAIM_OBSERVER, testClock),
-    commitObservation: script(COMMIT_OBSERVATION, testClock),
-    acquirePresenterBoostLease: script(ACQUIRE_PRESENTER, testClock),
-    renewPresenterBoostLease: script(RENEW_PRESENTER, testClock),
-    releasePresenterBoostLease: script(RELEASE_PRESENTER, testClock)
+    commitObservation: script(COMMIT_OBSERVATION, testClock)
   });
 }
 

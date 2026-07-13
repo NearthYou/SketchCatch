@@ -1,9 +1,10 @@
 import type {
   DeploymentLiveObservationManifestV2,
   IsoDateTimeString,
-  JsonValue
+  LiveObservationProviderSnapshot
 } from "@sketchcatch/types";
 import { parseDeploymentLiveObservationManifestV2 } from "./live-observation-manifest.js";
+import { parseLiveObservationProviderSnapshot } from "./live-observation-provider-snapshot.js";
 import {
   LIVE_OBSERVATION_STORE_POLICY,
   LiveObservationStoreInputError,
@@ -111,7 +112,7 @@ export function parseStoreObservationCommitInput(input: unknown): {
       fencingToken: input.fencingToken as number,
       observation: {
         observedAt,
-        payload: cloneStoreJsonValue(input.observation.payload)
+        payload: parseLiveObservationProviderSnapshot(input.observation.payload)
       },
       observedAtMs: Date.parse(observedAt)
     };
@@ -120,75 +121,8 @@ export function parseStoreObservationCommitInput(input: unknown): {
   }
 }
 
-export function parseStorePresenterLeaseInput(input: unknown): {
-  observationId: string;
-  leaseId: string;
-} {
-  try {
-    assertExactObject(input, ["observationId", "leaseId"]);
-    return {
-      observationId: parseCanonicalUuid(input.observationId),
-      leaseId: parseCanonicalUuid(input.leaseId)
-    };
-  } catch {
-    throw new LiveObservationStoreInputError();
-  }
-}
-
-export function cloneStoreJsonValue(value: unknown, ancestors: Set<object> = new Set()): JsonValue {
-  if (value === null || typeof value === "string" || typeof value === "boolean") {
-    return value;
-  }
-  if (typeof value === "number") {
-    if (!Number.isFinite(value)) {
-      throw new LiveObservationStoreInputError();
-    }
-    return value;
-  }
-  if (typeof value !== "object" || ancestors.has(value)) {
-    throw new LiveObservationStoreInputError();
-  }
-
-  ancestors.add(value);
-  try {
-    if (Array.isArray(value)) {
-      const keys = Reflect.ownKeys(value);
-      if (
-        keys.length !== value.length + 1 ||
-        keys.some(
-          (key) => key !== "length" && (typeof key !== "string" || !/^(0|[1-9][0-9]*)$/.test(key))
-        )
-      ) {
-        throw new LiveObservationStoreInputError();
-      }
-      return value.map((_, index) => {
-        const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
-        if (!descriptor || !("value" in descriptor) || !descriptor.enumerable) {
-          throw new LiveObservationStoreInputError();
-        }
-        return cloneStoreJsonValue(descriptor.value, ancestors);
-      });
-    }
-
-    const prototype = Object.getPrototypeOf(value);
-    if (prototype !== Object.prototype && prototype !== null) {
-      throw new LiveObservationStoreInputError();
-    }
-    const entries: Array<[string, JsonValue]> = [];
-    for (const key of Reflect.ownKeys(value)) {
-      if (typeof key !== "string") {
-        throw new LiveObservationStoreInputError();
-      }
-      const descriptor = Object.getOwnPropertyDescriptor(value, key);
-      if (!descriptor || !("value" in descriptor) || !descriptor.enumerable) {
-        throw new LiveObservationStoreInputError();
-      }
-      entries.push([key, cloneStoreJsonValue(descriptor.value, ancestors)]);
-    }
-    return Object.fromEntries(entries);
-  } finally {
-    ancestors.delete(value);
-  }
+export function cloneStoreSnapshot(value: unknown): LiveObservationProviderSnapshot {
+  return parseLiveObservationProviderSnapshot(value);
 }
 
 export function parseStoredManifest(value: string): DeploymentLiveObservationManifestV2 {
@@ -203,7 +137,7 @@ export function parseStoredObservation(value: string): LiveObservationStoreObser
   assertExactObject(parsed, ["observedAt", "payload"]);
   return {
     observedAt: parseCanonicalIso(parsed.observedAt),
-    payload: cloneStoreJsonValue(parsed.payload)
+    payload: cloneStoreSnapshot(parsed.payload)
   };
 }
 

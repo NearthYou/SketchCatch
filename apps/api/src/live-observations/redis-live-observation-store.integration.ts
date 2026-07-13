@@ -19,8 +19,6 @@ const START_MS = Date.parse("2026-07-11T00:00:00.000Z");
 const SECOND_OBSERVATION_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const FIRST_OBSERVER_ID = "11111111-1111-4111-8111-111111111111";
 const SECOND_OBSERVER_ID = "22222222-2222-4222-8222-222222222222";
-const FIRST_LEASE_ID = "33333333-3333-4333-8333-333333333333";
-const SECOND_LEASE_ID = "44444444-4444-4444-8444-444444444444";
 
 if (!configuredRedisUrl) {
   throw new Error("LIVE_OBSERVATION_REDIS_TEST_URL is required");
@@ -204,40 +202,13 @@ test("production store uses Redis TIME and exact absolute active expiries", asyn
         fencingToken: observer.lease.fencingToken,
         observation: {
           observedAt: new Date(evaluatedAtMs).toISOString(),
-          payload: { health: "available" }
+          payload: providerSnapshot(new Date(evaluatedAtMs).toISOString(), "available")
         },
         observationId: input.observationId,
         observerId: FIRST_OBSERVER_ID
       })
     ).kind,
     "committed"
-  );
-  assert.equal(
-    (
-      await store.acquirePresenterBoostLease({
-        leaseId: FIRST_LEASE_ID,
-        observationId: input.observationId
-      })
-    ).kind,
-    "acquired"
-  );
-  assert.equal(
-    (
-      await store.renewPresenterBoostLease({
-        leaseId: FIRST_LEASE_ID,
-        observationId: input.observationId
-      })
-    ).kind,
-    "renewed"
-  );
-  assert.equal(
-    (
-      await store.releasePresenterBoostLease({
-        leaseId: FIRST_LEASE_ID,
-        observationId: input.observationId
-      })
-    ).kind,
-    "released"
   );
   assert.deepEqual(
     await Promise.all([
@@ -295,18 +266,13 @@ test("two clients serialize every contested transition", async () => {
   assert.ok(claimed && claimed.kind === "claimed");
   const observerId = claimedIndex === 0 ? FIRST_OBSERVER_ID : SECOND_OBSERVER_ID;
 
-  const boosts = await Promise.all([
-    firstStore.acquirePresenterBoostLease({ observationId, leaseId: FIRST_LEASE_ID }),
-    secondStore.acquirePresenterBoostLease({ observationId, leaseId: SECOND_LEASE_ID })
-  ]);
-  assert.deepEqual(boosts.map((result) => result.kind).sort(), ["acquired", "busy"]);
-
+  const serializedSnapshot = providerSnapshot(claimed.evaluatedAt, "serialized");
   const [commit, stop] = await Promise.all([
     firstStore.commitObservation({
       fencingToken: claimed.lease.fencingToken,
       observation: {
         observedAt: claimed.evaluatedAt,
-        payload: { serialized: true }
+        payload: serializedSnapshot
       },
       observationId,
       observerId
@@ -321,7 +287,7 @@ test("two clients serialize every contested transition", async () => {
   if (stop.kind === "stopped") {
     assert.deepEqual(
       stop.session.finalObservation?.payload ?? null,
-      commit.kind === "committed" ? { serialized: true } : null
+      commit.kind === "committed" ? serializedSnapshot : null
     );
   }
 });
@@ -389,9 +355,7 @@ test("stop retains only a sixty-second minimal terminal and logical purge is exa
     "bucket:",
     "observerId",
     "observerFencingToken",
-    "observerLeaseExpiresAtMs",
-    "presenterLeaseId",
-    "presenterLeaseExpiresAtMs"
+    "observerLeaseExpiresAtMs"
   ]) {
     assert.equal(
       Object.keys(terminal).some((field) => field.startsWith(forbidden)),
@@ -471,7 +435,7 @@ test("same-shape stored JSON corruption fails closed before mutation", async () 
         fencingToken: observer.lease.fencingToken,
         observation: {
           observedAt: new Date(START_MS).toISOString(),
-          payload: { state: "available" }
+          payload: providerSnapshot(new Date(START_MS).toISOString(), "available")
         },
         observationId: input.observationId,
         observerId: FIRST_OBSERVER_ID
@@ -495,6 +459,19 @@ test("same-shape stored JSON corruption fails closed before mutation", async () 
   assert.equal(await redis.get(claimKey), input.observationId);
   assert.equal(await redis.hGet(keys.terminal, "status"), "expired");
 });
+
+function providerSnapshot(observedAt: string, message: string) {
+  return {
+    requests: 1,
+    errorRate: 0,
+    p95LatencyMs: 10,
+    availability: 100,
+    capacity: { desired: 1, running: 1, healthy: 1, max: 2 },
+    logs: [{ timestamp: observedAt, message }],
+    observedAt,
+    state: "available" as const
+  };
+}
 
 function terminalFieldNames(): string[] {
   return [

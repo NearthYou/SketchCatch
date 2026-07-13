@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "lastUpdated": "2026-07-13",
+  "lastUpdated": "2026-07-14",
   "purpose": "Tracks agent-harness hardening work and active cross-session workstreams. Product scope remains in docs/product.md.",
   "statusRules": {
     "allowedStatuses": ["not_started", "in_progress", "blocked", "passing"],
@@ -257,7 +257,7 @@
         "desktop/mobile/reduced-motion 브라우저 흐름이 실제 snapshot 값과 lifecycle cleanup을 검증한다.",
         "실제 AWS apply/destroy는 별도 명시 승인이 있을 때만 수행한다."
       ],
-      "notes": "Task 1 manifest persistence와 Task 2 HMAC capability/logger redaction은 완료됐다. 현재 Task 3 dedicated Store contract와 in-memory adapter를 구현한다."
+      "notes": "Task 1~4의 manifest, capability, Store, AWS observation adapter, provider-neutral snapshot, runtime ownership 검증은 완료됐다. Task 5 자동 검증도 완료했고 legacy demo route, simulated provider, presenter traffic boost 계약을 제거했다. API 전체 테스트, Web 1,069개 테스트, Redis 29개 통합 테스트와 harness/lint/typecheck/build가 통과했다. in-app browser가 localhost를 차단하고 현재 AWS STS credential이 없어 credentialed Chromium 및 approved AWS sandbox 실증 전까지 in_progress와 feature flag false를 유지한다."
     },
     {
       "id": "AWS-TEMPLATE-LAYOUT-001",

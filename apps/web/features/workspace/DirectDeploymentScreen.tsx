@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { useReducer } from "react";
 import type {
@@ -148,9 +148,6 @@ export function DirectDeploymentScreen({
   const [selectedAwsConnectionId, setSelectedAwsConnectionId] = useState("");
   const [selectedLiveProfile, setSelectedLiveProfile] =
     useState<DeploymentLiveProfile>(() => getRecommendedDeploymentLiveProfile(diagramJson));
-  const [trafficSimulatorState, setTrafficSimulatorState] =
-    useState<RequestState>("idle");
-  const [trafficSimulatorSummary, setTrafficSimulatorSummary] = useState("");
   const [selectedDeploymentId, setSelectedDeploymentId] = useState("");
   const [durationNow, setDurationNow] = useState(() => Date.now());
   const [showApplyConfirmation, setShowApplyConfirmation] = useState(false);
@@ -163,7 +160,6 @@ export function DirectDeploymentScreen({
   const [failureExplanationErrorMessage, setFailureExplanationErrorMessage] = useState("");
   const [selectedDirectStepId, setSelectedDirectStepId] =
     useState<DirectDeploymentStepId>("save");
-  const trafficAbortControllerRef = useRef<AbortController | null>(null);
   const isDeploymentOverlayOpen = true;
 
   const verifiedAwsConnections = useMemo(
@@ -235,11 +231,6 @@ export function DirectDeploymentScreen({
     selectedAwsConnectionId.length > 0 &&
     requestState !== "loading";
   const hasCurrentPlan = Boolean(selectedDeployment?.currentPlanArtifactId);
-  const apiBaseUrlOutput = useMemo(
-    () => terraformOutputs.find((output) => output.name === "api_base_url") ?? null,
-    [terraformOutputs]
-  );
-  const apiBaseUrl = apiBaseUrlOutput ? formatOutputValue(apiBaseUrlOutput) : "";
   const deploymentActions = getDeploymentActionState(selectedDeployment, requestState);
   const canRunPlan = deploymentActions.canRunApplyPlan;
   const canApprovePlan = deploymentActions.canApprovePlan;
@@ -405,24 +396,6 @@ export function DirectDeploymentScreen({
       cancelled = true;
     };
   }, [applyDeploymentPanelSnapshot, deploymentAvailability, loadDeploymentPanelSnapshot]);
-
-  useEffect(() => {
-    trafficAbortControllerRef.current?.abort();
-    trafficAbortControllerRef.current = null;
-    setTrafficSimulatorState("idle");
-    setTrafficSimulatorSummary("");
-    return () => {
-      trafficAbortControllerRef.current?.abort();
-      trafficAbortControllerRef.current = null;
-    };
-  }, [selectedDeploymentId]);
-
-  useEffect(
-    () => () => {
-      trafficAbortControllerRef.current?.abort();
-    },
-    []
-  );
 
   useEffect(() => {
     if (!selectedDeploymentId) {
@@ -942,58 +915,6 @@ export function DirectDeploymentScreen({
     }, "배포 상태를 새로고침하지 못했습니다.");
   }
 
-  async function runTrafficSimulator(): Promise<void> {
-    if (!apiBaseUrl || apiBaseUrl === "[sensitive]") {
-      return;
-    }
-
-    trafficAbortControllerRef.current?.abort();
-    const controller = new AbortController();
-    trafficAbortControllerRef.current = controller;
-
-    setTrafficSimulatorState("loading");
-    setTrafficSimulatorSummary("");
-
-    try {
-      const baseUrl = apiBaseUrl.replace(/\/+$/, "");
-      const results = await Promise.allSettled(
-        Array.from({ length: 20 }, (_, index) =>
-          fetch(`${baseUrl}/api/health?source=sketchcatch&request=${index + 1}`, {
-            cache: "no-store",
-            signal: controller.signal
-          }).then((response) => {
-            if (!response.ok) {
-              throw new Error(`HTTP ${response.status}`);
-            }
-
-            return response.text();
-          })
-        )
-      );
-
-      if (controller.signal.aborted) {
-        return;
-      }
-
-      const succeeded = results.filter((result) => result.status === "fulfilled").length;
-      const failed = results.length - succeeded;
-
-      setTrafficSimulatorSummary(
-        `${succeeded}/${results.length} requests succeeded, ${failed} failed`
-      );
-      setTrafficSimulatorState(failed === 0 ? "idle" : "error");
-    } catch {
-      if (!controller.signal.aborted) {
-        setTrafficSimulatorState("error");
-        setTrafficSimulatorSummary("Traffic simulation failed.");
-      }
-    } finally {
-      if (trafficAbortControllerRef.current === controller) {
-        trafficAbortControllerRef.current = null;
-      }
-    }
-  }
-
   const renderSetupSection = () => {
     const selectedStep =
       directDeploymentFlow.steps.find((step) => step.id === selectedDirectStepId) ??
@@ -1489,32 +1410,6 @@ export function DirectDeploymentScreen({
           </div>
         </>
       )}
-      <div className={styles.deploymentSummary}>
-        <InfoRow label="Traffic target" value={apiBaseUrl || "api_base_url output 없음"} />
-        <button
-          className={styles.deploymentSecondaryButton}
-          disabled={!apiBaseUrl || trafficSimulatorState === "loading"}
-          onClick={runTrafficSimulator}
-          type="button"
-        >
-          <DashboardIcon name="server" />
-          트래픽 시뮬레이션
-        </button>
-        {trafficSimulatorState === "loading" ? (
-          <p className={styles.deploymentNotice}>트래픽 요청을 보내는 중입니다.</p>
-        ) : null}
-        {trafficSimulatorSummary ? (
-          <p
-            className={
-              trafficSimulatorState === "error"
-                ? styles.deploymentError
-                : styles.deploymentHint
-            }
-          >
-            {trafficSimulatorSummary}
-          </p>
-        ) : null}
-      </div>
     </section>
   );
 

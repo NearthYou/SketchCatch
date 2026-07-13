@@ -1339,6 +1339,40 @@ export type CreateDeploymentRequest = {
 
 export type DeploymentLiveProfile = "practice" | "demo_web_service" | "demo_web_service_with_rds";
 
+export type DeploymentLiveObservationAwsAdapterV1 = {
+  kind: "aws-live-observation";
+  version: 1;
+  payload: {
+    cloudFrontDistributionId: string;
+    loadBalancerArn: string;
+    targetGroupArn: string;
+    autoScalingGroupName: string;
+  };
+};
+
+export type DeploymentLiveObservationAwsAdapterV2 = {
+  kind: "aws-live-observation";
+  version: 2;
+  payload: {
+    trafficHostname: string;
+    loadBalancerDnsName: string;
+    loadBalancerArn: string;
+    targetGroupArn: string;
+    logGroupNames?: string[] | undefined;
+    capacityTarget:
+      | {
+          kind: "asg";
+          autoScalingGroupName: string;
+        }
+      | {
+          kind: "ecs_fargate";
+          clusterName: string;
+          serviceName: string;
+          maxCapacity: number;
+        };
+  };
+};
+
 export type DeploymentLiveObservationManifestV2 = {
   schemaVersion: 2;
   provider: "aws";
@@ -1360,9 +1394,7 @@ export type DeploymentLiveObservationManifestV2 = {
   };
   adapter: {
     kind: "aws-live-observation";
-    version: 1;
-    payload: JsonValue;
-  };
+  } & (DeploymentLiveObservationAwsAdapterV1 | DeploymentLiveObservationAwsAdapterV2);
 };
 
 export type DeploymentLiveObservationManifestStatus =
@@ -1387,7 +1419,29 @@ export type LiveObservationPressureLevel =
   | "high"
   | "critical";
 
-export type LiveObservationAwsState = "available" | "delayed" | "unavailable";
+export type LiveObservationProviderState = "available" | "delayed" | "unavailable";
+
+/** @deprecated Use LiveObservationProviderState. */
+export type LiveObservationAwsState = LiveObservationProviderState;
+
+export type LiveObservationProviderSnapshot = {
+  requests: number | null;
+  errorRate: number | null;
+  p95LatencyMs: number | null;
+  availability: number | null;
+  capacity: {
+    desired: number | null;
+    running: number | null;
+    healthy: number | null;
+    max: number | null;
+  };
+  logs: Array<{
+    timestamp: IsoDateTimeString;
+    message: string;
+  }>;
+  observedAt: IsoDateTimeString | null;
+  state: LiveObservationProviderState;
+};
 
 export type LiveObservationSession = {
   id: string;
@@ -1411,7 +1465,7 @@ export type LiveObservationSnapshot = {
     observedAt: IsoDateTimeString;
   };
   cloudWatch: {
-    state: LiveObservationAwsState;
+    state: LiveObservationProviderState;
     requestCountPerTarget: number | null;
     periodSeconds: 60;
     observedAt: IsoDateTimeString | null;
@@ -1419,7 +1473,7 @@ export type LiveObservationSnapshot = {
     errorCode: string | null;
   };
   capacity: {
-    state: LiveObservationAwsState;
+    state: LiveObservationProviderState;
     desiredCapacity: number | null;
     currentInstanceCount: number | null;
     inServiceInstanceCount: number | null;
@@ -1460,6 +1514,42 @@ export type CollectLiveObservationEventRequest = {
 export type CollectLiveObservationEventResponse = {
   accepted: boolean;
   acceptedEventCount: number;
+};
+
+export type LiveObservationV2Session = {
+  id: string;
+  deploymentId: string;
+  status: LiveObservationStatus;
+  audienceUrl: string;
+  createdAt: IsoDateTimeString;
+  expiresAt: IsoDateTimeString;
+};
+
+export type LiveObservationV2Snapshot = {
+  observationId: string;
+  status: LiveObservationStatus;
+  live: {
+    acceptedEventCount: number;
+    rollingRequestsPerSecond: number;
+    projectedRequestsPerMinute: number;
+    pressurePercent: number;
+    pressureLevel: LiveObservationPressureLevel;
+    observedAt: IsoDateTimeString;
+  };
+  latestObservation: {
+    observedAt: IsoDateTimeString;
+    payload: LiveObservationProviderSnapshot;
+  } | null;
+  terminalAt: IsoDateTimeString | null;
+};
+
+export type CreateLiveObservationV2Response = {
+  session: LiveObservationV2Session;
+  snapshot: LiveObservationV2Snapshot;
+};
+
+export type LiveObservationV2SnapshotResponse = {
+  snapshot: LiveObservationV2Snapshot;
 };
 
 export type DeploymentResponse = {

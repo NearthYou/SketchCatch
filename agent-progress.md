@@ -4,57 +4,30 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- Branch: `feat/gg/369-workspace-template-board-ux`.
-- Latest `origin/dev` at `99db7f61` is integrated into PR #380 with conflict regressions passing.
-- Six deployable AWS Templates use compact 40px-grid authored layouts and real Resource-panel Catalog items.
-- Security Group is a visual scope with explicit attachment edges, never a persisted containment parent; ASG is a regular 48px Resource.
-- Template cards and large previews use actual 1280x720 ReactFlow Board WebP captures. Project cards use the latest authenticated Board DOM capture.
-- Workspace Template 전체보기 renders through a body Portal below the 64px project navigator, isolates the background, and keeps keyboard focus inside the dialog.
-- The complete Web suite passes 1,141/1,141 with the repository user's Node v24.18.0 runtime.
-- No `apps/api/drizzle/**` migration file was created, edited, renamed, or renumbered in this workstream.
+- Branch: `feature/sw/370-live-observation-v2`.
+- Issue #370 Tasks 1-5 are implemented; the feature flag remains false until external acceptance gates pass.
+- Live Observation uses only the v2 Store, public collector, server-side observer, and provider-neutral snapshot paths.
+- Legacy v1 routes, simulated CloudWatch providers, and presenter traffic-boost leases are removed.
+- Latest `origin/dev` at `186ff261` is being integrated, including the completed Workspace Template Board UX and project thumbnail storage work.
 
 ## Session Record
 
-### 2026-07-14 - Remove redundant Template card helper copy
+### 2026-07-14 - Integrate latest dev into issue #370
 
-- Removed both explanatory `small` lines from the Workspace Template library and immediate-apply cards without replacement.
-- Preserved visible names, accessible names, click behavior, and removed the now-dead Template card `small` style.
-- Verified independent RED/GREEN coverage for both card variants; the focused suite passed 9/9.
-- The complete Web suite, typecheck, lint, harness, and diff check passed with the repository user's Node v24.18.0 runtime. Review found no Critical, Important, or Minor issue.
+- Merged `origin/dev` at `186ff261`; only this progress file required manual resolution.
+- Preserved the active Live Observation workstream while carrying forward dev's Template Portal, Board thumbnail, storage, cost, and shared UI changes.
+- Post-merge verification passed: Live Observation API 171/171 and Web 63/63, Web full 1,135/1,135, Redis 29/29, harness, lint, typecheck, build, and whitespace checks.
+- API passed 1,428/1,431; the only failures occur before product code because Windows Developer Mode is disabled and three new dev-side security fixtures cannot create symlinks (`EPERM`).
 
-### 2026-07-14 - Close Template Portal review findings
+### 2026-07-14 - Live Observation v2 production path
 
-- Unified the Template 전체보기 trigger's accessible and visible functional name while keeping comparison and Board non-application as supporting copy.
-- Added symmetric modal focus, Escape, Tab/Shift+Tab, body sibling `inert`, body overflow, cleanup, and visible focus-ring behavior without a new dependency.
-- TDD evidence progressed through five expected RED/GREEN cycles; the final focused suite passed 10/10, including an executed fake-DOM lifecycle regression.
-- Web typecheck and lint passed. The full Web suite initially exposed the bundled-Node timestamp locale mismatch, then passed 1,141/1,141 with the repository user's Node v24.18.0 runtime.
-- Updated the design and implementation plan. No API, migration, cloud, deployment, or dependency change was made.
-
-### 2026-07-14 - Move Template 전체보기 to a body Portal
-
-- Added a dedicated modal CSS Module and rendered `TemplateLibraryModal` into `document.body`, with the overlay starting below the 64px project navigator.
-- TDD evidence: the focused test failed first because `template-library-modal.module.css` did not exist, then passed 7/7 after the Portal implementation.
-- Web typecheck and lint passed. The full Web suite passed 1,137/1,138; its only failure is the existing bundled-Node locale mismatch in `dashboard timestamps use the production display timezone`.
-- Web build remains blocked before compilation by the existing missing `apps/web/.codegraph` path. No API, migration, cloud, deployment, or dependency change was made.
-
-### 2026-07-13 - Integrate latest dev after PR #380 conflict detection
-
-- Merged `origin/dev` at `99db7f61` after GitHub reported the first PR revision as conflicting.
-- Kept dev's shared SelectMenu typography, compact Project card layout, cost UI, and deployment updates while retaining actual Board raster captures instead of the reintroduced synthetic SVG preview.
-- Verification after conflict resolution: Web 1,137/1,137; focused capture and shared-dropdown regressions 26/26; typecheck and harness passed; lint retained one existing unused-argument warning.
-- Root API tests remained 1,335/1,338 because of the same three existing Windows path-separator fixtures on macOS.
-
-### 2026-07-13 - Implement issue #369 Workspace and Template Board UX
-
-- Added the repository-wide migration collision reporting contract, blank-board single-flight navigation, compact Template geometry, Terraform local-name separation, and actual Board thumbnail flow.
-- Removed the synthetic Template SVG preview model. Static Template captures now record the exact materialized DiagramJson hash; saved Projects upload a real ReactFlow DOM WebP after autosave.
-- Browser QA confirmed all six Workspace Template entries scroll correctly, the large-preview control does not apply a Template, and Dashboard cards render raster Board captures.
-- Initial verification: Web 1,125/1,125; focused Template contract 17/17; focused thumbnail API 25/25; harness, typecheck, migration compatibility, and API build passed.
-- Root API tests remained 1,331/1,334 because of the three existing Windows path-separator fixtures on macOS. Lint retained one existing unused-argument warning.
-- Full Web build was blocked by the existing missing `apps/web/.codegraph`; Terraform CLI validation could not start because this environment has no `terraform` binary.
-- Risk: no Terraform Apply/Destroy, AWS mutation, deployment mutation, or database migration execution was performed.
+- Added the provider-neutral observation snapshot, atomic Store, capability-scoped public collector, server-side AWS evidence refresh, and operator/audience UI.
+- Bound evidence to the selected Deployment and exact Target Group period, validated coherent runtime ownership, and masked credentials and sensitive headers.
+- Removed the unused v1 routes/services/providers and demo-only presenter traffic-boost Store contract.
+- Pre-merge verification passed: API full suite, Web 1,069/1,069, Redis 8 integration 29/29, harness, lint, typecheck, build, and whitespace checks.
+- External acceptance remains unverified: the in-app browser blocks localhost, Chrome launch was not approved, and AWS STS is unavailable. No cloud mutation was attempted.
 
 ## Next Action
 
-- Monitor PR #380 after the Template Portal review fix is pushed; repeat browser QA when the running local server is reachable from the in-app browser.
-- Re-run `pnpm build` after the repository restores `apps/web/.codegraph`; run Terraform validation only in an environment with the CLI installed.
+- Finish the merge commit, push the branch, open the issue #370 PR, wait five minutes, then resolve review and CI feedback before merging to `dev`.
+- Keep the feature flag false until credentialed Chromium and an explicitly approved non-production AWS sandbox provide acceptance evidence.

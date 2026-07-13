@@ -188,7 +188,7 @@ Terraform 정의는 `infra/aws/terraform`에 있습니다.
 - API와 web은 각각 독립된 Fargate task definition과 ECS service를 사용합니다.
 - ALB listener는 `/api`, `/api/*`, `/health`, `/health/db`를 API target group으로, 나머지 `/*`를 기본 web target group으로 전달합니다.
 - API target group은 port `4000`, web target group은 port `3000`이며 둘 다 Fargate `awsvpc`에 맞춘 `ip` target mode입니다.
-- ALB가 `X-Forwarded-For`와 `X-Forwarded-Proto`를 전달하고, Fastify의 `trustProxy`가 이를 해석합니다.
+- ALB가 `X-Forwarded-For`와 `X-Forwarded-Proto`를 전달하고, Fastify는 production topology의 ALB 한 hop만 신뢰합니다. 임의의 leading `X-Forwarded-For` 값은 client IP rate-limit identity로 사용하지 않습니다.
 - Next.js client의 API base URL은 same-origin `/api`입니다. `API_PROXY_TARGET` rewrite는 local/dev fallback이며 production ALB의 `/api` rule보다 앞서지 않습니다.
 - 기존 EC2 ALB와 legacy ECS target은 제거되어 ECS ALB만 production traffic을 받습니다.
 - NAT Gateway는 기본 생성하지 않고 public Fargate + ALB 구조를 유지합니다.
@@ -450,18 +450,18 @@ pnpm --filter @sketchcatch/api test -- runtime-cache
 
 ## Live Observation 운영 설정
 
-Live Observation은 성공한 `demo_web_service` Deployment의 실제 Traffic API, CloudWatch 측정값, Auto Scaling 상태를 15분 동안 관측하는 opt-in 기능입니다. 운영 API runtime에는 다음 비민감 환경 변수를 주입합니다.
+Live Observation은 verified manifest가 있는 성공 Deployment의 실제 Output URL, CloudWatch 측정값, ASG 또는 ECS/Fargate capacity, 최근 runtime log를 15분 동안 관측하는 opt-in 기능입니다. 운영 API runtime에는 다음 비민감 환경 변수를 주입합니다.
 
 ```text
 LIVE_OBSERVATION_ENABLED=false
 SKETCHCATCH_PUBLIC_BASE_URL=https://sketchcatch.net
 ```
 
-`SKETCHCATCH_PUBLIC_BASE_URL`은 audience page가 public receipt collector를 호출할 기준 origin입니다. Nginx/ALB는 이 origin의 `/api/live-observations/...` 요청을 API로 전달해야 합니다. audience S3 website origin과 SketchCatch Web origin만 collector CORS 응답을 받을 수 있습니다.
+`SKETCHCATCH_PUBLIC_BASE_URL`은 audience page가 public Live Observation API를 호출할 기준 origin입니다. Nginx/ALB는 이 origin의 `/api/live-observations/...` 요청을 API로 전달해야 하며 exact SketchCatch Web origin만 CORS 응답을 받을 수 있습니다.
 
-현재 v1 collector는 token을 URL path에 포함한다. API의 Pino 설정은 structured object의 lowercase `authorization`, `cookie`, `set-cookie` header field를 redaction하지만 URL path/query string, interpolated string, `Error.message`까지 sanitize하지는 않는다. 따라서 collector v2 migration이 완료될 때까지 production `LIVE_OBSERVATION_ENABLED`는 반드시 `false`로 유지한다.
+운영 조립은 v2 Store route만 등록하며 legacy token path와 direct `/events` route는 등록하지 않습니다. audience URL은 `/observe/:observationId`이고 session-bound transient capability는 exact-Origin bootstrap 응답으로만 전달되며 URL, RDS, Redis, browser storage, 로그에 저장하지 않습니다. 같은 active session의 여러 audience client가 bootstrap을 반복하는 것은 정상 동작입니다.
 
-v2 capability 경로를 연결할 때 사용할 환경 변수는 다음과 같다. 이 Task에서는 v2 runtime을 연결하거나 feature flag를 활성화하지 않으므로, 아래 값은 아직 application startup 필수값이 아니며 GitHub/ECS enforcement 대상에도 추가하지 않는다.
+`LIVE_OBSERVATION_ENABLED=true`이면 application startup은 다음 capability keyring을 필수로 검증합니다.
 
 ```text
 LIVE_OBSERVATION_CAPABILITY_CURRENT_KID=<1-32 character safe kid>
@@ -488,16 +488,21 @@ autoscaling:DescribeScalingActivities
 ec2:DescribeInstances
 elasticloadbalancing:DescribeLoadBalancers
 elasticloadbalancing:DescribeTargetGroups
+elasticloadbalancing:DescribeTargetHealth
 cloudwatch:GetMetricData
 cloudwatch:GetMetricStatistics
+logs:FilterLogEvents
+ecs:DescribeServices
 ```
 
-Demo Web Service의 Live Observation output은 `static_site_url`, `api_base_url`, `asg_name`, `alb_arn_suffix`, `target_group_arn_suffix`, `scale_out_threshold`입니다. Terraform Safety Gate는 `1/1/2` ASG, `RequestCountPerTarget` 60건/분, Step Scaling `+1`, cooldown 180초 형태만 허용하며 scale-in은 허용하지 않습니다.
+Diagram-to-Terraform의 Live Observation v2 output은 Terraform reference와 provider-neutral graph edge로 하나의 일관된 runtime을 증명할 때만 생성합니다. HTTPS:443 listener가 정확한 ALB, Target Group, ACM certificate를 참조하고, `name`이 certificate `domainName`과 같으며 `records`가 해당 `aws_lb.*.dns_name` 하나만 가리키는 Route53 CNAME이어야 합니다. Target Group은 정확히 하나의 ECS Service 또는 ASG에 연결되어야 하고, ECS Application Auto Scaling Target은 선택된 Service를 `resourceId`로 참조해야 합니다. 로그 group은 선택된 runtime에서 ECS Service→Task Definition→Log Group 또는 ASG→Launch Template→Instance Profile→Role/Policy→Log Group의 소유 방향으로만 추적하며, 공유 support resource에서 sibling runtime 방향으로 역탐색하지 않습니다. ASG request alarm은 정확히 하나의 `alarmActions`→`aws_autoscaling_policy`→`autoscalingGroupName` 체인과 선택된 ALB/Target Group `arn_suffix` dimension을 모두 요구합니다. 추가·미해결 action, sibling ASG dimension/edge, 다른 Target Group dimension은 전체 evidence를 무효화합니다. ECS request threshold도 선택된 scaling target과 ALB/Target Group을 가리키는 정책이 정확히 하나일 때만 출력하고 중복·상충 정책은 graph 순서와 무관하게 생략합니다. 여러 runtime이 붙거나, 연결되지 않은 여러 runtime 중 하나를 골라야 하거나, coherent target이 둘 이상이면 모든 Live Observation output을 생략합니다. reference가 없는 legacy graph는 LB, Target Group, runtime이 각각 하나뿐이고 다른 연결과 충돌하지 않을 때만 호환합니다. 출력은 custom domain 기반 `traffic_url`, `traffic_hostname`, 검증 증거인 `load_balancer_dns_name`, `load_balancer_arn`, `target_group_arn`, 단일 capacity target, `scale_out_threshold`와 선택적인 `log_group_name`/`log_group_names`입니다. ASG와 ECS capacity output이 동시에 존재하면 materializer도 모호한 evidence로 거부합니다. S3 website, HTTP `api_base_url`, ALB 기본 DNS를 traffic URL로 사용하지 않으며 HTTP-only·DNS 누락·certificate/CNAME 불일치 graph는 Live Observation 대상이 아닙니다.
+
+CloudWatch 관측은 선택된 동일 Target Group의 `HTTPCode_Target_2XX_Count`, `HTTPCode_Target_3XX_Count`, `HTTPCode_Target_4XX_Count`, `HTTPCode_Target_5XX_Count`를 합산해 request 수를 만들고, 같은 Target Group의 `TargetResponseTime` p95와 하나의 완료 60초 period로 정렬합니다. 각 query result가 유일한 `StatusCode=Complete`여야 하며 `PartialData`, `InternalError`, `Forbidden`, 누락 status는 unavailable입니다. p95가 선택한 period는 response result의 최신 point만 비교하지 않고 전체 finite point에서 정확히 찾습니다. 같은 period에 하나 이상의 response class가 있어야 하며 status가 Complete인 sparse class만 0으로 취급합니다. 다른 period의 class를 합치거나 whole-ALB `RequestCount`를 분모로 사용하지 않습니다. ASG running은 `InService` instance, ECS/Fargate running은 service task count이며 healthy는 `DescribeTargetHealth`의 실제 healthy target 수를 사용합니다. STS와 AWS read는 5초 abort deadline을 공유합니다. metric이 60초보다 지연되거나 period가 어긋나거나 metric/capacity/log 조회가 실패하면 UI와 Store는 기존 숫자를 재사용하지 않고 정량 필드를 `null`로 표시합니다. CloudWatch Logs는 최근 5분 최대 50건만 읽고 credential-shaped 값은 저장 전 중앙 masker로 제거합니다.
 
 로컬 자동 검증은 AWS 리소스를 만들지 않습니다.
 
 ```bash
-pnpm --filter @sketchcatch/api exec tsx --test src/live-observations/*.test.ts src/routes/live-observations.test.ts src/deployments/demo-web-service-assets.test.ts
+pnpm --filter @sketchcatch/api exec tsx --test src/live-observations/*.test.ts src/routes/live-observations-v2.test.ts src/routes/live-observation-public-collector.test.ts
 pnpm --filter @sketchcatch/web exec tsx --test features/workspace/live-observation.test.ts features/workspace/live-observation-modal.test.ts
 ```
 

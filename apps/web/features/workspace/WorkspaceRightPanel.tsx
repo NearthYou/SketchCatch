@@ -716,7 +716,6 @@ export function WorkspaceRightPanel({
     : null;
   const liveObservationModal = isLiveObservationOpen ? (
     <LiveObservationModal
-      diagramJson={context.diagram}
       onClose={() => setIsLiveObservationOpen(false)}
       projectId={projectId}
     />
@@ -769,7 +768,7 @@ export function WorkspaceRightPanel({
           <button
             className={styles.collapsedPanelButton}
             onClick={openLiveObservation}
-            title="시뮬레이션"
+            title="Live Observation"
             type="button"
           >
             <Activity size={18} aria-hidden="true" />
@@ -835,11 +834,11 @@ export function WorkspaceRightPanel({
           <button
             className={styles.panelModeTextButton}
             onClick={openLiveObservation}
-            title="실시간 트래픽 및 ASG 관측"
+            title="Live Observation"
             type="button"
           >
             <Activity size={14} aria-hidden="true" />
-            <span>시뮬레이션</span>
+            <span>Live Observation</span>
           </button>
         </div>
 

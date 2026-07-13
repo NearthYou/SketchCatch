@@ -1,4 +1,5 @@
 import { eq } from "drizzle-orm";
+import { isDeepStrictEqual } from "node:util";
 import type {
   DeploymentLiveObservationManifestRecord,
   DeploymentLiveObservationManifestStatus,
@@ -6,8 +7,7 @@ import type {
 } from "@sketchcatch/types";
 import type { Database } from "../db/client.js";
 import {
-  deploymentLiveObservationManifests,
-  touchUpdatedAt
+  deploymentLiveObservationManifests
 } from "../db/schema.js";
 import { parseDeploymentLiveObservationManifestV2 } from "./live-observation-manifest.js";
 
@@ -40,34 +40,38 @@ type DeploymentLiveObservationManifestPersistenceValues = {
 export function createPostgresDeploymentLiveObservationManifestRepository(
   db: Database
 ): DeploymentLiveObservationManifestRepository {
-  async function upsertManifestRecord(
+  async function insertImmutableManifestRecord(
     values: DeploymentLiveObservationManifestPersistenceValues
   ): Promise<DeploymentLiveObservationManifestRecord> {
     const [row] = await db
       .insert(deploymentLiveObservationManifests)
       .values(values)
-      .onConflictDoUpdate({
-        target: deploymentLiveObservationManifests.deploymentId,
-        set: {
-          schemaVersion: values.schemaVersion,
-          status: values.status,
-          manifest: values.manifest,
-          invalidReason: values.invalidReason,
-          ...touchUpdatedAt
-        }
+      .onConflictDoNothing({
+        target: deploymentLiveObservationManifests.deploymentId
       })
       .returning();
 
-    return requireManifestRecord(row);
+    if (row) return requireManifestRecord(row);
+
+    const existing = await findDatabaseRow(values.deploymentId);
+    if (!existing || !isIdenticalManifestRecord(existing, values)) {
+      throw new Error("Live Observation manifest immutable persistence conflict");
+    }
+    return toManifestRecord(existing);
+  }
+
+  async function findDatabaseRow(deploymentId: string) {
+    const [row] = await db
+      .select()
+      .from(deploymentLiveObservationManifests)
+      .where(eq(deploymentLiveObservationManifests.deploymentId, deploymentId))
+      .limit(1);
+    return row;
   }
 
   return {
     async findByDeploymentId(deploymentId) {
-      const [row] = await db
-        .select()
-        .from(deploymentLiveObservationManifests)
-        .where(eq(deploymentLiveObservationManifests.deploymentId, deploymentId))
-        .limit(1);
+      const row = await findDatabaseRow(deploymentId);
 
       return row ? toManifestRecord(row) : null;
     },
@@ -82,7 +86,7 @@ export function createPostgresDeploymentLiveObservationManifestRepository(
         invalidReason: null
       };
 
-      return upsertManifestRecord(values);
+      return insertImmutableManifestRecord(values);
     },
 
     async saveInvalid(input) {
@@ -100,9 +104,22 @@ export function createPostgresDeploymentLiveObservationManifestRepository(
         invalidReason: reason
       };
 
-      return upsertManifestRecord(values);
+      return insertImmutableManifestRecord(values);
     }
   };
+}
+
+function isIdenticalManifestRecord(
+  row: DeploymentLiveObservationManifestDatabaseRow,
+  values: DeploymentLiveObservationManifestPersistenceValues
+): boolean {
+  return (
+    row.deploymentId === values.deploymentId &&
+    row.schemaVersion === values.schemaVersion &&
+    row.status === values.status &&
+    row.invalidReason === values.invalidReason &&
+    isDeepStrictEqual(row.manifest, values.manifest)
+  );
 }
 
 function sanitizeInvalidReason(reason: string): string {

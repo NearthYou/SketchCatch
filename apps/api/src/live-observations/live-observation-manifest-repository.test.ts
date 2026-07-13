@@ -49,14 +49,8 @@ test("findByDeploymentId returns null when the one-to-one manifest row does not 
   assert.equal(await repository.findByDeploymentId("missing-deployment"), null);
 });
 
-test("saveValid verifies and upserts schema v2 while clearing an invalid reason", async () => {
-  const fakeDb = new FakeManifestDb([
-    createDatabaseRow({
-      status: "manifest_invalid",
-      manifest: null,
-      invalidReason: "previous materialization failure"
-    })
-  ]);
+test("saveValid verifies and inserts schema v2 exactly once", async () => {
+  const fakeDb = new FakeManifestDb();
   const repository = createPostgresDeploymentLiveObservationManifestRepository(
     fakeDb as unknown as Database
   );
@@ -75,12 +69,8 @@ test("saveValid verifies and upserts schema v2 while clearing an invalid reason"
     manifest,
     invalidReason: null
   });
-  assert.equal(fakeDb.lastConflictSet?.schemaVersion, 2);
-  assert.equal(fakeDb.lastConflictSet?.status, "valid");
-  assert.deepEqual(fakeDb.lastConflictSet?.manifest, manifest);
-  assert.equal(fakeDb.lastConflictSet?.invalidReason, null);
-  assert.ok(fakeDb.lastConflictSet?.updatedAt);
-  assert.equal(record.updatedAt, updatedAt.toISOString());
+  assert.equal(fakeDb.conflictDoNothingCalls, 1);
+  assert.equal(record.updatedAt, createdAt.toISOString());
 });
 
 test("saveValid rejects an invalid runtime manifest before attempting persistence", async () => {
@@ -95,12 +85,8 @@ test("saveValid rejects an invalid runtime manifest before attempting persistenc
   assert.equal(fakeDb.insertCalls, 0);
 });
 
-test("saveInvalid stores a constant generic reason for ordinary non-empty input", async () => {
-  const fakeDb = new FakeManifestDb([
-    createDatabaseRow({
-      manifest: createValidManifest()
-    })
-  ]);
+test("saveInvalid inserts a constant generic reason exactly once", async () => {
+  const fakeDb = new FakeManifestDb();
   const repository = createPostgresDeploymentLiveObservationManifestRepository(
     fakeDb as unknown as Database
   );
@@ -117,7 +103,7 @@ test("saveInvalid stores a constant generic reason for ordinary non-empty input"
     manifest: null,
     invalidReason: genericInvalidReason,
     createdAt: createdAt.toISOString(),
-    updatedAt: updatedAt.toISOString()
+    updatedAt: createdAt.toISOString()
   } satisfies DeploymentLiveObservationManifestRecord);
   assert.deepEqual(fakeDb.lastInsertValues, {
     deploymentId,
@@ -126,14 +112,45 @@ test("saveInvalid stores a constant generic reason for ordinary non-empty input"
     manifest: null,
     invalidReason: genericInvalidReason
   });
-  assert.equal(fakeDb.lastConflictSet?.schemaVersion, 2);
-  assert.equal(fakeDb.lastConflictSet?.status, "manifest_invalid");
-  assert.equal(fakeDb.lastConflictSet?.manifest, null);
-  assert.equal(
-    fakeDb.lastConflictSet?.invalidReason,
-    genericInvalidReason
+  assert.equal(fakeDb.conflictDoNothingCalls, 1);
+});
+
+test("identical concurrent insert attempts return the same immutable record", async () => {
+  const fakeDb = new FakeManifestDb();
+  const repository = createPostgresDeploymentLiveObservationManifestRepository(
+    fakeDb as unknown as Database
   );
-  assert.ok(fakeDb.lastConflictSet?.updatedAt);
+  const manifest = createValidManifest();
+
+  const [first, second] = await Promise.all([
+    repository.saveValid(manifest),
+    repository.saveValid(structuredClone(manifest))
+  ]);
+
+  assert.deepEqual(first, second);
+  assert.equal(fakeDb.rows.length, 1);
+  assert.equal(fakeDb.insertCalls, 2);
+});
+
+test("immutable persistence rejects attempts to replace a different existing record", async () => {
+  const invalidDb = new FakeManifestDb([
+    createDatabaseRow({ status: "manifest_invalid", manifest: null, invalidReason: genericInvalidReason })
+  ]);
+  const validRepository = createPostgresDeploymentLiveObservationManifestRepository(
+    invalidDb as unknown as Database
+  );
+  await assert.rejects(() => validRepository.saveValid(createValidManifest()), /conflict/i);
+  assert.equal(invalidDb.rows[0]?.status, "manifest_invalid");
+
+  const validDb = new FakeManifestDb([createDatabaseRow()]);
+  const invalidRepository = createPostgresDeploymentLiveObservationManifestRepository(
+    validDb as unknown as Database
+  );
+  await assert.rejects(
+    () => invalidRepository.saveInvalid({ deploymentId, reason: "new failure" }),
+    /conflict/i
+  );
+  assert.equal(validDb.rows[0]?.status, "valid");
 });
 
 test("saveInvalid replaces reviewer sensitive and prefixed Terraform probes with a generic reason", async () => {
@@ -254,7 +271,7 @@ class FakeManifestDb {
   readonly rows: ManifestDatabaseRow[];
   insertCalls = 0;
   lastInsertValues: Record<string, unknown> | null = null;
-  lastConflictSet: Record<string, unknown> | null = null;
+  conflictDoNothingCalls = 0;
 
   constructor(rows: ManifestDatabaseRow[] = []) {
     this.rows = rows;
@@ -278,37 +295,20 @@ class FakeManifestDb {
         this.lastInsertValues = values;
 
         return {
-          onConflictDoUpdate: ({ set }: { set: Record<string, unknown> }) => {
-            this.lastConflictSet = set;
-
+          onConflictDoNothing: () => {
+            this.conflictDoNothingCalls += 1;
             return {
               returning: async () => {
                 const deploymentId = String(values.deploymentId);
                 const existing = this.rows.find((row) => row.deploymentId === deploymentId);
-                const conflictValues = existing
-                  ? {
-                      ...set,
-                      updatedAt
-                    }
-                  : {};
+                if (existing) return [];
                 const row = {
-                  ...existing,
                   ...values,
-                  ...conflictValues,
                   deploymentId,
-                  createdAt: existing?.createdAt ?? createdAt,
-                  updatedAt: existing ? updatedAt : createdAt
+                  createdAt,
+                  updatedAt: createdAt
                 } as ManifestDatabaseRow;
-
-                const existingIndex = this.rows.findIndex(
-                  (candidate) => candidate.deploymentId === deploymentId
-                );
-                if (existingIndex >= 0) {
-                  this.rows[existingIndex] = row;
-                } else {
-                  this.rows.push(row);
-                }
-
+                this.rows.push(row);
                 return [row];
               }
             };

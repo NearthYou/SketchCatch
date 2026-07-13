@@ -30,7 +30,7 @@ import type {
   CreateDeploymentRequest,
   CreateGitCicdHandoffRequest,
   ConfirmProjectAssetUploadResponse,
-  CreateLiveObservationResponse,
+  CreateLiveObservationV2Response,
   CreateArchitecturePatchPreviewRequest,
   CreateDesignSimulationRequest,
   CreateProjectAssetUploadRequest,
@@ -70,8 +70,8 @@ import type {
   ListGitHubInstalledRepositoriesResponse,
   ListGitHubInstallationRepositoriesRequest,
   ListGitHubInstallationRepositoriesResponse,
-  LiveObservationSnapshot,
-  LiveObservationSnapshotResponse,
+  LiveObservationV2Snapshot,
+  LiveObservationV2SnapshotResponse,
   Project,
   ProjectAssetUploadResponse,
   ProjectDetailsResponse,
@@ -88,7 +88,6 @@ import type {
   SourceRepositoryAnalysisResult,
   SourceRepositoryListResponse,
   SourceRepositoryResponse,
-  StopLiveObservationResponse,
   ConnectGitHubSourceRepositoryRequest,
   ReverseEngineeringScan,
   ReverseEngineeringScanListResponse,
@@ -783,11 +782,15 @@ export async function createDeployment({
   return response.deployment;
 }
 
-export async function listDeployments(projectId: string): Promise<Deployment[]> {
+export async function listDeployments(
+  projectId: string,
+  options: { readonly signal?: AbortSignal | undefined } = {}
+): Promise<Deployment[]> {
   const response = await apiFetch<DeploymentListResponse>(
     `/projects/${encodeURIComponent(projectId)}/deployments`,
     {
-      auth: true
+      auth: true,
+      ...(options.signal ? { signal: options.signal } : {})
     }
   );
 
@@ -795,11 +798,12 @@ export async function listDeployments(projectId: string): Promise<Deployment[]> 
 }
 
 export async function createLiveObservation(
-  deploymentId: string
-): Promise<CreateLiveObservationResponse> {
-  return apiFetch<CreateLiveObservationResponse>(
+  deploymentId: string,
+  signal?: AbortSignal
+): Promise<CreateLiveObservationV2Response> {
+  return apiFetch<CreateLiveObservationV2Response>(
     `/deployments/${encodeURIComponent(deploymentId)}/live-observations`,
-    { auth: true, method: "POST" }
+    { auth: true, method: "POST", ...(signal ? { signal } : {}) }
   );
 }
 
@@ -807,8 +811,8 @@ export async function getLiveObservationSnapshot(
   deploymentId: string,
   observationId: string,
   signal?: AbortSignal
-): Promise<LiveObservationSnapshot> {
-  const response = await apiFetch<LiveObservationSnapshotResponse>(
+): Promise<LiveObservationV2Snapshot> {
+  const response = await apiFetch<LiveObservationV2SnapshotResponse>(
     `/deployments/${encodeURIComponent(deploymentId)}/live-observations/${encodeURIComponent(observationId)}`,
     { auth: true, ...(signal ? { signal } : {}) }
   );
@@ -818,11 +822,12 @@ export async function getLiveObservationSnapshot(
 
 export async function stopLiveObservation(
   deploymentId: string,
-  observationId: string
-): Promise<LiveObservationSnapshot> {
-  const response = await apiFetch<StopLiveObservationResponse>(
+  observationId: string,
+  signal?: AbortSignal
+): Promise<LiveObservationV2Snapshot> {
+  const response = await apiFetch<LiveObservationV2SnapshotResponse>(
     `/deployments/${encodeURIComponent(deploymentId)}/live-observations/${encodeURIComponent(observationId)}/stop`,
-    { auth: true, method: "POST" }
+    { auth: true, method: "POST", ...(signal ? { signal } : {}) }
   );
 
   return response.snapshot;
@@ -840,7 +845,7 @@ export async function pollLiveObservationSnapshots(input: {
   readonly observationId: string;
   readonly signal: AbortSignal;
   readonly onError?: ((failure: LiveObservationStreamFailure) => void) | undefined;
-  readonly onSnapshot: (snapshot: LiveObservationSnapshot) => void;
+  readonly onSnapshot: (snapshot: LiveObservationV2Snapshot) => void;
 }): Promise<void> {
   let retryCount = 0;
 
@@ -873,7 +878,7 @@ export async function streamLiveObservationSnapshots(input: {
   readonly observationId: string;
   readonly signal: AbortSignal;
   readonly onError?: ((failure: LiveObservationStreamFailure) => void) | undefined;
-  readonly onSnapshot: (snapshot: LiveObservationSnapshot) => void;
+  readonly onSnapshot: (snapshot: LiveObservationV2Snapshot) => void;
   readonly retryBaseDelayMs?: number | undefined;
 }): Promise<void> {
   let retryCount = 0;
@@ -919,8 +924,8 @@ async function readLiveObservationSnapshotStream(input: {
   readonly deploymentId: string;
   readonly observationId: string;
   readonly signal: AbortSignal;
-  readonly onSnapshot: (snapshot: LiveObservationSnapshot) => void;
-}): Promise<LiveObservationSnapshot["status"] | null> {
+  readonly onSnapshot: (snapshot: LiveObservationV2Snapshot) => void;
+}): Promise<LiveObservationV2Snapshot["status"] | null> {
   const session = readStoredAuthSession();
   const headers = new Headers({ Accept: "text/event-stream" });
   if (session) {
@@ -942,7 +947,7 @@ async function readLiveObservationSnapshotStream(input: {
     throw new Error("Live Observation stream request failed");
   }
 
-  let finalStatus: LiveObservationSnapshot["status"] | null = null;
+  let finalStatus: LiveObservationV2Snapshot["status"] | null = null;
   await readSseStream(response.body, (rawEvent) => {
     const snapshot = parseLiveObservationSnapshotEvent(rawEvent);
     if (snapshot) {
@@ -1558,7 +1563,7 @@ function drainRawSseEvents(buffer: string, onEvent: (rawEvent: string) => void):
   return nextBuffer;
 }
 
-function parseLiveObservationSnapshotEvent(rawEvent: string): LiveObservationSnapshot | null {
+function parseLiveObservationSnapshotEvent(rawEvent: string): LiveObservationV2Snapshot | null {
   let eventName = "message";
   const dataLines: string[] = [];
 
@@ -1574,7 +1579,7 @@ function parseLiveObservationSnapshotEvent(rawEvent: string): LiveObservationSna
     return null;
   }
 
-  return JSON.parse(dataLines.join("\n")) as LiveObservationSnapshot;
+  return JSON.parse(dataLines.join("\n")) as LiveObservationV2Snapshot;
 }
 
 async function waitForRetry(delayMs: number, signal: AbortSignal): Promise<void> {

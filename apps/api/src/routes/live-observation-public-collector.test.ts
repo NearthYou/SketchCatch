@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import Fastify from "fastify";
+import { createInMemoryRuntimeCache } from "../runtime-cache/index.js";
 import { createInMemoryLiveObservationStore } from "../live-observations/in-memory-live-observation-store.js";
 import { createLiveObservationCapability } from "../live-observations/live-observation-capability.js";
 import {
@@ -8,6 +9,7 @@ import {
   LiveObservationPublicCollectorError,
   type LiveObservationPublicCollector
 } from "../live-observations/live-observation-public-collector.js";
+import { createLiveObservationPublicRequestRateLimiter } from "../live-observations/live-observation-public-request-rate-limiter.js";
 import { createLiveObservationStoreContractInput } from "../live-observations/live-observation-store-contract.js";
 import { registerLiveObservationPublicCollectorRoutes } from "./live-observation-public-collector.js";
 
@@ -17,7 +19,7 @@ const AUTHORIZATION = `LiveObservation current-key.${"a".repeat(43)}`;
 const ORIGIN = "https://audience.example.com";
 const NOW_MS = Date.parse("2026-07-11T00:00:00.000Z");
 
-test("v2 collector route connects real capability verification to Store collection", async (t) => {
+test("v2 request route connects verified 2xx traffic to Store collection", async (t) => {
   const store = createInMemoryLiveObservationStore({ now: () => NOW_MS });
   const input = createLiveObservationStoreContractInput();
   const created = await store.createSession(input);
@@ -41,12 +43,22 @@ test("v2 collector route connects real capability verification to Store collecti
     },
     created.evaluatedAt
   ).credential;
-  const app = await createApp(createLiveObservationPublicCollector({ capability, store }));
+  const app = await createApp(
+    createLiveObservationPublicCollector({
+      capability,
+      requestRateLimiter: createLiveObservationPublicRequestRateLimiter({
+        now: () => NOW_MS,
+        runtimeCache: createInMemoryRuntimeCache({ cleanupIntervalMs: null, now: () => NOW_MS })
+      }),
+      store,
+      trafficTransport: { post: async () => ({ status: 204 }) }
+    })
+  );
   t.after(() => app.close());
 
   const first = await app.inject({
     method: "POST",
-    url: `/live-observations/public/${input.observationId}/events`,
+    url: `/live-observations/public/${input.observationId}/requests`,
     headers: {
       authorization: `LiveObservation ${credential}`,
       origin: ORIGIN
@@ -62,7 +74,7 @@ test("v2 collector route connects real capability verification to Store collecti
   });
   const gone = await app.inject({
     method: "POST",
-    url: `/live-observations/public/${input.observationId}/events`,
+    url: `/live-observations/public/${input.observationId}/requests`,
     headers: {
       authorization: `LiveObservation ${credential}`,
       origin: ORIGIN
@@ -72,10 +84,10 @@ test("v2 collector route connects real capability verification to Store collecti
   assert.equal(gone.statusCode, 410);
 });
 
-test("v2 collector route applies exact CORS and preserves accepted/duplicate semantics", async (t) => {
+test("v2 request route applies exact CORS and preserves accepted/duplicate semantics", async (t) => {
   let accepted = false;
   const collector = createCollector({
-    async collectEvent() {
+    async performRequest() {
       if (accepted) return { accepted: false, acceptedEventCount: 1 };
       accepted = true;
       return { accepted: true, acceptedEventCount: 1 };
@@ -86,7 +98,7 @@ test("v2 collector route applies exact CORS and preserves accepted/duplicate sem
 
   const preflight = await app.inject({
     method: "OPTIONS",
-    url: `/live-observations/public/${OBSERVATION_ID}/events`,
+    url: `/live-observations/public/${OBSERVATION_ID}/requests`,
     headers: { origin: ORIGIN }
   });
   assert.equal(preflight.statusCode, 204);
@@ -95,12 +107,12 @@ test("v2 collector route applies exact CORS and preserves accepted/duplicate sem
   assert.equal(preflight.headers["access-control-allow-headers"], "authorization,content-type");
   assert.equal(preflight.headers.vary, "Origin");
 
-  const first = await collect(app);
+  const first = await requestTraffic(app);
   assert.equal(first.statusCode, 202);
   assert.deepEqual(first.json(), { accepted: true, acceptedEventCount: 1 });
   assert.equal(first.headers["access-control-allow-origin"], ORIGIN);
 
-  const duplicate = await collect(app);
+  const duplicate = await requestTraffic(app);
   assert.equal(duplicate.statusCode, 200);
   assert.deepEqual(duplicate.json(), { accepted: false, acceptedEventCount: 1 });
 });
@@ -111,12 +123,13 @@ test("v2 collector authenticates before body validation and enforces a 1 KiB bod
   const collector = createCollector({
     async authorize() {
       authorizeCalls += 1;
+      const performRequest = async () => {
+        collectCalls += 1;
+        return { accepted: true, acceptedEventCount: 1 };
+      };
       return {
         audienceOrigin: ORIGIN,
-        async collectEvent() {
-          collectCalls += 1;
-          return { accepted: true, acceptedEventCount: 1 };
-        }
+        request: async () => performRequest()
       };
     }
   });
@@ -125,7 +138,7 @@ test("v2 collector authenticates before body validation and enforces a 1 KiB bod
 
   const malformed = await app.inject({
     method: "POST",
-    url: `/live-observations/public/${OBSERVATION_ID}/events`,
+    url: `/live-observations/public/${OBSERVATION_ID}/requests`,
     headers: { authorization: AUTHORIZATION, origin: ORIGIN },
     payload: { count: 1 }
   });
@@ -135,7 +148,7 @@ test("v2 collector authenticates before body validation and enforces a 1 KiB bod
 
   const invalidJson = await app.inject({
     method: "POST",
-    url: `/live-observations/public/${OBSERVATION_ID}/events`,
+    url: `/live-observations/public/${OBSERVATION_ID}/requests`,
     headers: {
       authorization: AUTHORIZATION,
       "content-type": "application/json",
@@ -153,7 +166,7 @@ test("v2 collector authenticates before body validation and enforces a 1 KiB bod
 
   const oversized = await app.inject({
     method: "POST",
-    url: `/live-observations/public/${OBSERVATION_ID}/events`,
+    url: `/live-observations/public/${OBSERVATION_ID}/requests`,
     headers: {
       authorization: AUTHORIZATION,
       "content-type": "application/json",
@@ -184,7 +197,7 @@ test("v2 collector route maps public failures to fixed generic statuses", async 
       })
     );
     t.after(() => app.close());
-    const response = await collect(app);
+    const response = await requestTraffic(app);
     assert.equal(response.statusCode, status, code);
     assert.deepEqual(response.json(), {
       error: `LIVE_OBSERVATION_COLLECTOR_${code.toUpperCase()}`,
@@ -193,8 +206,105 @@ test("v2 collector route maps public failures to fixed generic statuses", async 
   }
 });
 
-async function createApp(collector: LiveObservationPublicCollector) {
+test("v2 public bootstrap returns a transient credential with no-store caching", async (t) => {
+  const app = await createApp(
+    createCollector({
+      async bootstrap() {
+        return {
+          audienceOrigin: ORIGIN,
+          credential: `current-key.${"b".repeat(43)}`
+        };
+      }
+    })
+  );
+  t.after(() => app.close());
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/live-observations/public/${OBSERVATION_ID}/bootstrap`,
+    headers: { origin: ORIGIN }
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.headers["cache-control"], "no-store");
+  assert.equal(response.headers["access-control-allow-origin"], ORIGIN);
+  assert.deepEqual(response.json(), {
+    credential: `current-key.${"b".repeat(43)}`
+  });
+});
+
+test("v2 public request ignores spoofed leading XFF and uses the ALB-appended client IP", async (t) => {
+  let requestInput: { eventId: string; ipAddress: string } | null = null;
+  const app = await createApp(
+    createCollector({
+      async authorize() {
+        return {
+          audienceOrigin: ORIGIN,
+          async request(input) {
+            requestInput = input;
+            return { accepted: true, acceptedEventCount: 1 };
+          }
+        };
+      }
+    })
+  );
+  t.after(() => app.close());
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/live-observations/public/${OBSERVATION_ID}/requests`,
+    headers: {
+      authorization: AUTHORIZATION,
+      origin: ORIGIN,
+      "x-forwarded-for": "192.0.2.99, 203.0.113.42"
+    },
+    payload: { eventId: EVENT_ID },
+    remoteAddress: "203.0.113.10"
+  });
+
+  assert.equal(response.statusCode, 202);
+  assert.deepEqual(requestInput, {
+    eventId: EVENT_ID,
+    ipAddress: "203.0.113.42"
+  });
+});
+
+test("production public plugin exposes no direct event collection endpoint", async (t) => {
+  const app = await createApp(createCollector());
+  t.after(() => app.close());
+
+  for (const method of ["OPTIONS", "POST"] as const) {
+    const response = await app.inject({
+      method,
+      url: `/live-observations/public/${OBSERVATION_ID}/events`,
+      headers: { authorization: AUTHORIZATION, origin: ORIGIN },
+      ...(method === "POST" ? { payload: { eventId: EVENT_ID } } : {})
+    });
+    assert.equal(response.statusCode, 404);
+  }
+});
+
+test("disabled v2 public plugin registers no bootstrap, request, or collector route", async (t) => {
   const app = Fastify();
+  await app.register(registerLiveObservationPublicCollectorRoutes, {
+    collector: createCollector(),
+    enabled: false
+  });
+  await app.ready();
+  t.after(() => app.close());
+
+  for (const path of ["bootstrap", "requests", "events"]) {
+    const response = await app.inject({
+      method: "POST",
+      url: `/live-observations/public/${OBSERVATION_ID}/${path}`,
+      headers: { origin: ORIGIN }
+    });
+    assert.equal(response.statusCode, 404);
+  }
+});
+
+async function createApp(collector: LiveObservationPublicCollector) {
+  const app = Fastify({ trustProxy: 1 });
   await app.register(registerLiveObservationPublicCollectorRoutes, {
     collector,
     enabled: true
@@ -205,28 +315,38 @@ async function createApp(collector: LiveObservationPublicCollector) {
 
 function createCollector(
   overrides: Partial<LiveObservationPublicCollector> & {
-    collectEvent?: () => Promise<{ accepted: boolean; acceptedEventCount: number }>;
+    performRequest?: (eventId: string) => Promise<{
+      accepted: boolean;
+      acceptedEventCount: number;
+    }>;
   } = {}
 ): LiveObservationPublicCollector {
   return {
     async authorize() {
+      const performRequest =
+        overrides.performRequest ?? (async () => ({ accepted: true, acceptedEventCount: 1 }));
       return {
         audienceOrigin: ORIGIN,
-        collectEvent:
-          overrides.collectEvent ?? (async () => ({ accepted: true, acceptedEventCount: 1 }))
+        request: async ({ eventId }) => performRequest(eventId)
       };
     },
     async preflight() {
       return { audienceOrigin: ORIGIN };
     },
+    async bootstrap() {
+      return {
+        audienceOrigin: ORIGIN,
+        credential: `current-key.${"b".repeat(43)}`
+      };
+    },
     ...overrides
   } as LiveObservationPublicCollector;
 }
 
-function collect(app: Awaited<ReturnType<typeof createApp>>) {
+function requestTraffic(app: Awaited<ReturnType<typeof createApp>>) {
   return app.inject({
     method: "POST",
-    url: `/live-observations/public/${OBSERVATION_ID}/events`,
+    url: `/live-observations/public/${OBSERVATION_ID}/requests`,
     headers: { authorization: AUTHORIZATION, origin: ORIGIN },
     payload: { eventId: EVENT_ID }
   });

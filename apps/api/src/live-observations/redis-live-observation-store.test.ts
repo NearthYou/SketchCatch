@@ -20,7 +20,6 @@ const NAMESPACE = "unit_test";
 const INPUT = createLiveObservationStoreContractInput();
 const SECOND_OBSERVATION_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const OBSERVER_ID = "11111111-1111-4111-8111-111111111111";
-const LEASE_ID = "33333333-3333-4333-8333-333333333333";
 const EVENT_ID = "00000000-0000-4000-8000-000000000001";
 const EVALUATED_AT_MS = Date.parse("2026-07-11T00:00:00.000Z");
 
@@ -177,11 +176,20 @@ test("production connect and EVAL failures cannot surface injected clock errors"
 
 test("strict replies reject impossible counters and response identity swaps", async () => {
   const unsafeCounter = new FakeRedisClient({
-    evalReply: activeReply({ acceptedEventCount: 5_001 })
+    evalReply: activeReply({ acceptedEventCount: 10_001 })
   });
   assertGenericUnavailable(
     await captureError(() =>
       createStore(unsafeCounter).readSession({ observationId: INPUT.observationId })
+    )
+  );
+
+  const unsafeRollingCount = new FakeRedisClient({
+    evalReply: activeReply({ acceptedEventCount: 121, rollingCount: 121 })
+  });
+  assertGenericUnavailable(
+    await captureError(() =>
+      createStore(unsafeRollingCount).readSession({ observationId: INPUT.observationId })
     )
   );
 
@@ -195,29 +203,7 @@ test("strict replies reject impossible counters and response identity swaps", as
   );
 });
 
-test("lease replies bind requested identities and future expiries", async () => {
-  const invalidPresenterReplies = [
-    [
-      "1",
-      "acquired",
-      String(EVALUATED_AT_MS),
-      SECOND_OBSERVATION_ID,
-      String(EVALUATED_AT_MS + 10_000)
-    ],
-    ["1", "acquired", String(EVALUATED_AT_MS), LEASE_ID, String(EVALUATED_AT_MS)]
-  ];
-  for (const reply of invalidPresenterReplies) {
-    const client = new FakeRedisClient({ evalReply: reply });
-    assertGenericUnavailable(
-      await captureError(() =>
-        createStore(client).acquirePresenterBoostLease({
-          leaseId: LEASE_ID,
-          observationId: INPUT.observationId
-        })
-      )
-    );
-  }
-
+test("observer lease replies require future expiries", async () => {
   const invalidObserverExpiry = new FakeRedisClient({
     evalReply: ["1", "claimed", String(EVALUATED_AT_MS), "1", String(EVALUATED_AT_MS)]
   });
@@ -258,12 +244,15 @@ test("production Lua scripts use one Redis TIME and only absolute expiry", () =>
   );
 });
 
-test("collect Lua uses exact integer weighted-rate arithmetic", () => {
+test("collect Lua uses exact integer weighted-rate arithmetic and the 10,000 session cap", () => {
   const collect = REDIS_LIVE_OBSERVATION_STORE_SCRIPTS.collectEvent;
 
   assert.match(collect, /candidateCurrent\s*\*\s*1000/);
   assert.match(collect, /previousCount\s*\*\s*\(\s*1000\s*-\s*progressMs\s*\)/);
   assert.match(collect, />\s*20000/);
+  assert.match(collect, /currentRolling\s*\+\s*1\s*>\s*120/);
+  assert.match(collect, /total\s*>=\s*10000/);
+  assert.doesNotMatch(collect, /\b5000\b/);
   assert.doesNotMatch(collect, /local\s+weighted\s*=/);
 });
 
@@ -349,34 +338,10 @@ function storeOperations(): ReadonlyArray<{
           fencingToken: 1,
           observation: {
             observedAt: "2026-07-11T00:00:00.000Z",
-            payload: { state: "healthy" }
+            payload: providerSnapshot("2026-07-11T00:00:00.000Z")
           },
           observationId: INPUT.observationId,
           observerId: OBSERVER_ID
-        })
-    },
-    {
-      name: "acquirePresenterBoostLease",
-      invoke: (store) =>
-        store.acquirePresenterBoostLease({
-          leaseId: LEASE_ID,
-          observationId: INPUT.observationId
-        })
-    },
-    {
-      name: "renewPresenterBoostLease",
-      invoke: (store) =>
-        store.renewPresenterBoostLease({
-          leaseId: LEASE_ID,
-          observationId: INPUT.observationId
-        })
-    },
-    {
-      name: "releasePresenterBoostLease",
-      invoke: (store) =>
-        store.releasePresenterBoostLease({
-          leaseId: LEASE_ID,
-          observationId: INPUT.observationId
         })
     }
   ];
@@ -386,6 +351,7 @@ function activeReply(
   overrides: {
     observationId?: string;
     acceptedEventCount?: number;
+    rollingCount?: number;
     latestObservationJson?: string;
   } = {}
 ): string[] {
@@ -401,7 +367,7 @@ function activeReply(
     String(EVALUATED_AT_MS),
     String(EVALUATED_AT_MS + 900_000),
     String(overrides.acceptedEventCount ?? 0),
-    "0",
+    String(overrides.rollingCount ?? 0),
     String(INPUT.manifest.pressure.target),
     overrides.latestObservationJson ?? ""
   ];
@@ -430,6 +396,19 @@ function assertGenericUnavailable(error: Error, secret?: string): void {
 
 function countMatches(value: string, pattern: RegExp): number {
   return [...value.matchAll(pattern)].length;
+}
+
+function providerSnapshot(observedAt: string) {
+  return {
+    requests: 1,
+    errorRate: 0,
+    p95LatencyMs: 10,
+    availability: 100,
+    capacity: { desired: 1, running: 1, healthy: 1, max: 2 },
+    logs: [{ timestamp: observedAt, message: "healthy" }],
+    observedAt,
+    state: "available" as const
+  };
 }
 
 class FakeRedisClient implements RedisLiveObservationStoreClient {
