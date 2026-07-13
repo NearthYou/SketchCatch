@@ -175,10 +175,10 @@
 }
 
 .surfaceTone .selectMenuTrigger {
-  background: #ffffff;
-  border-color: #dcdee0;
-  border-radius: 8px;
-  color: #171717;
+  background: var(--color-canvas);
+  border-color: var(--color-hairline-strong);
+  border-radius: var(--radius-control);
+  color: var(--color-ink);
   font-family: var(--font-sans);
   font-size: 14px;
   font-weight: 500;
@@ -190,24 +190,24 @@
 .surfaceTone .selectMenuTrigger:hover,
 .surfaceTone .selectMenuTrigger:focus-visible,
 .surfaceTone .selectMenuTriggerOpen {
-  border-color: #171717;
-  box-shadow: 0 0 0 3px rgb(23 23 23 / 10%);
+  border-color: var(--color-ink);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-ink) 10%, transparent);
 }
 
 .surfaceTone .selectMenuTrigger:disabled {
-  background: #f7f8fa;
-  color: #777b84;
+  background: var(--color-surface-soft);
+  color: var(--color-muted);
 }
 
 .surfaceTone .selectMenuTrigger svg {
-  color: #55585f;
+  color: var(--color-body);
 }
 
 .surfaceTone .selectMenuDropdown {
-  background: #ffffff;
-  border-color: #dcdee0;
-  border-radius: 8px;
-  box-shadow: 0 12px 28px rgb(23 23 23 / 12%);
+  background: var(--color-canvas);
+  border-color: var(--color-hairline-strong);
+  border-radius: var(--radius-control);
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--color-ink) 12%, transparent);
   max-height: 240px;
   max-width: min(360px, calc(100vw - 32px));
   min-width: 100%;
@@ -217,9 +217,9 @@
 }
 
 .surfaceTone .selectMenuOption {
-  background: #ffffff;
-  border-radius: 6px;
-  color: #171717;
+  background: var(--color-canvas);
+  border-radius: var(--radius-control);
+  color: var(--color-ink);
   min-height: 38px;
   padding: 8px 10px;
 }
@@ -227,13 +227,13 @@
 .surfaceTone .selectMenuOption:hover,
 .surfaceTone .selectMenuOption:focus-visible,
 .surfaceTone .selectMenuOptionActive {
-  background: #f7f8fa;
+  background: var(--color-surface-soft);
 }
 
 .surfaceTone .selectMenuOptionSelected,
 .surfaceTone .selectMenuOptionSelected.selectMenuOptionActive {
-  background: #f0f0f3;
-  color: #171717;
+  background: var(--color-surface-strong);
+  color: var(--color-ink);
 }
 
 .surfaceTone .selectMenuOptionLabel {
@@ -251,7 +251,7 @@
 }
 
 .surfaceTone .selectMenuOptionSelected svg {
-  color: #171717;
+  color: var(--color-ink);
 }
 
 .dashboardTone .selectMenuTrigger {

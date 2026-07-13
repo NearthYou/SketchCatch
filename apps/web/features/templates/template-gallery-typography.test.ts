@@ -19,7 +19,9 @@ test("template search and shared dashboard dropdowns use the bundled Pretendard 
     galleryStyles,
     /\.searchField input,\s*\.searchField input::placeholder\s*\{[^}]*font-family:\s*"Pretendard"[^}]*!important/s
   );
-  assert.equal(gallerySource.match(/<DashboardSelectField/g)?.length, 2);
+  assert.equal(gallerySource.match(/<SelectMenu/g)?.length, 2);
+  assert.equal(gallerySource.match(/tone="surface"/g)?.length, 2);
+  assert.equal(gallerySource.match(/size="large"/g)?.length, 2);
   assert.doesNotMatch(gallerySource, /<select\b/);
 });
 

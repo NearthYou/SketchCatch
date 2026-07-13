@@ -3,25 +3,21 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
-const selectFieldSource = readLocalFile("../../components/ui/DashboardSelectField.tsx");
-const selectFieldStyles = readLocalFile("../../components/ui/dashboard-select-field.module.css");
-
 const dashboardDropdownSources = [
   "../../app/projects/projects-client.tsx",
   "../../components/templates/TemplateGallery.tsx",
   "../../app/dashboard/costs/cost-estimate-panel.tsx",
   "../../app/dashboard/costs/cost-usage-panel.tsx",
   "../../app/dashboard/settings/settings-dashboard-client.tsx"
-].map(readLocalFile);
+].map((path) => ({ path, source: readLocalFile(path) }));
 
 test("dashboard dropdowns share one light select field component", () => {
-  assert.match(selectFieldSource, /tone="surface"/);
-  assert.match(selectFieldSource, /size="large"/);
-  assert.match(selectFieldStyles, /font-size:\s*11px/);
-  assert.match(selectFieldStyles, /font-weight:\s*700/);
+  for (const { path, source } of dashboardDropdownSources) {
+    const selectCount = source.match(/<SelectMenu/g)?.length ?? 0;
 
-  for (const source of dashboardDropdownSources) {
-    assert.match(source, /DashboardSelectField/);
+    assert.ok(selectCount > 0, `${path} must use SelectMenu`);
+    assert.equal(source.match(/tone="surface"/g)?.length, selectCount);
+    assert.equal(source.match(/size="large"/g)?.length, selectCount);
     assert.doesNotMatch(source, /<select\b/);
   }
 });

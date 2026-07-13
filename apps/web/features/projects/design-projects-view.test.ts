@@ -47,16 +47,17 @@ test("dashboard projects keeps one clear heading and readable project controls",
     /설계한 프로젝트를 확인하고, 이어서 작업하거나 배포 상태를 관리합니다\./
   );
   assert.doesNotMatch(projectsClientSource, /Worked projects|내가 작업한 프로젝트/);
-  assert.equal(projectsClientSource.match(/<DashboardSelectField/g)?.length, 2);
-  assert.doesNotMatch(projectsClientSource, /<SelectMenu/);
-  assert.match(projectsClientSource, /className="projectDeploymentFilterField"/);
+  assert.equal(projectsClientSource.match(/<SelectMenu/g)?.length, 2);
+  assert.equal(projectsClientSource.match(/tone="surface"/g)?.length, 2);
+  assert.equal(projectsClientSource.match(/size="large"/g)?.length, 2);
+  assert.match(projectsClientSource, /settingsField projectDeploymentFilterField/);
   assert.match(
     dashboardStyles,
-    /\.projectSortField\s*\{[^}]*min-width:\s*176px/s
+    /\.settingsField\.projectSortField\s*\{[^}]*min-width:\s*176px/s
   );
   assert.match(
     dashboardStyles,
-    /\.projectDeploymentFilterField\s*\{[^}]*min-width:\s*120px/s
+    /\.settingsField\.projectDeploymentFilterField\s*\{[^}]*min-width:\s*120px/s
   );
   assert.match(
     dashboardStyles,

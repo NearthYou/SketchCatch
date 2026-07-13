@@ -10,9 +10,9 @@ import type {
 } from "@sketchcatch/types";
 import { ProductState } from "../../../components/ui/ProductState";
 import {
-  DashboardSelectField,
-  type DashboardSelectOption
-} from "../../../components/ui/DashboardSelectField";
+  SelectMenu,
+  type SelectMenuOption
+} from "../../../components/ui/SelectMenu";
 import {
   createCostUsageLineChart,
   createServiceCostBars,
@@ -38,7 +38,7 @@ import styles from "../dashboard-tools.module.css";
 
 type CostLoadState = "loading" | "ready" | "error";
 
-const COST_USAGE_RANGE_OPTIONS: readonly DashboardSelectOption[] = [
+const COST_USAGE_RANGE_OPTIONS: readonly SelectMenuOption[] = [
   { label: "최근 7일", value: "7d" },
   { label: "최근 30일", value: "30d" },
   { label: "이번 달", value: "month_to_date" }
@@ -54,14 +54,14 @@ export function CostUsagePanel() {
   const [errorMessage, setErrorMessage] = useState("");
   const requestCoordinatorRef = useRef(createCostRequestCoordinator());
   const projectOptions = useMemo(() => createCostUsageProjectOptions(data?.projectCosts ?? []), [data]);
-  const projectSelectOptions = useMemo<readonly DashboardSelectOption[]>(
+  const projectSelectOptions = useMemo<readonly SelectMenuOption[]>(
     () => [
       { label: "전체 배포 프로젝트", value: COST_USAGE_ALL_PROJECTS_KEY },
       ...projectOptions.map((project) => ({ label: project.label, value: project.key }))
     ],
     [projectOptions]
   );
-  const connectionSelectOptions = useMemo<readonly DashboardSelectOption[]>(
+  const connectionSelectOptions = useMemo<readonly SelectMenuOption[]>(
     () => connections.length === 0
       ? [{ label: "검증된 연결 없음", value: "" }]
       : connections.map((connection) => ({
@@ -178,40 +178,49 @@ export function CostUsagePanel() {
     <div className={styles.costPanelStack}>
       <div className={styles.costPanelToolbar}>
         <div className={styles.controlRow}>
-          <DashboardSelectField
-            ariaLabel="실제 사용량 배포 프로젝트 선택"
-            className={styles.controlField}
-            emptyLabel="배포 프로젝트 선택"
-            label="배포 프로젝트"
-            onChange={setSelectedProjectKey}
-            options={projectSelectOptions}
-            value={selectedProjectKey}
-          />
-          <DashboardSelectField
-            ariaLabel="실제 사용량 AWS 연결 선택"
-            className={styles.controlField}
-            emptyLabel="AWS 연결 선택"
-            label="AWS 연결"
-            onChange={(id) => {
-              setSelectedConnectionId(id);
-              void loadCosts(range, id);
-            }}
-            options={connectionSelectOptions}
-            value={selectedConnectionId}
-          />
-          <DashboardSelectField
-            ariaLabel="실제 사용량 기간 선택"
-            className={styles.controlField}
-            emptyLabel="기간 선택"
-            label="기간"
-            onChange={(value) => {
-              const nextRange = value as CostUsageAnalysisRange;
-              setRange(nextRange);
-              void loadCosts(nextRange);
-            }}
-            options={COST_USAGE_RANGE_OPTIONS}
-            value={range}
-          />
+          <div className={styles.controlField}>
+            <span>배포 프로젝트</span>
+            <SelectMenu
+              ariaLabel="실제 사용량 배포 프로젝트 선택"
+              emptyLabel="배포 프로젝트 선택"
+              onChange={setSelectedProjectKey}
+              options={projectSelectOptions}
+              size="large"
+              tone="surface"
+              value={selectedProjectKey}
+            />
+          </div>
+          <div className={styles.controlField}>
+            <span>AWS 연결</span>
+            <SelectMenu
+              ariaLabel="실제 사용량 AWS 연결 선택"
+              emptyLabel="AWS 연결 선택"
+              onChange={(id) => {
+                setSelectedConnectionId(id);
+                void loadCosts(range, id);
+              }}
+              options={connectionSelectOptions}
+              size="large"
+              tone="surface"
+              value={selectedConnectionId}
+            />
+          </div>
+          <div className={styles.controlField}>
+            <span>기간</span>
+            <SelectMenu
+              ariaLabel="실제 사용량 기간 선택"
+              emptyLabel="기간 선택"
+              onChange={(value) => {
+                const nextRange = value as CostUsageAnalysisRange;
+                setRange(nextRange);
+                void loadCosts(nextRange);
+              }}
+              options={COST_USAGE_RANGE_OPTIONS}
+              size="large"
+              tone="surface"
+              value={range}
+            />
+          </div>
         </div>
         <button
           aria-busy={loadState === "loading"}

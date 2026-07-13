@@ -8,7 +8,6 @@ Short English-only working log for the current agent context. Older records are 
 - Repository start validates 2-3 unique candidates and follow-up questions, hides decisive deployment type, and confirms Template and CI/CD before opening follow-up questions.
 
 ## Session Record
-
 ### 2026-07-13 - Unify Dashboard dropdown controls
 
 - Replaced live Projects, Templates, Costs, and Settings selects with one white 42px Pretendard control using 14px/500 text, 14px/600 selected options, readable long-option wrapping, and shared keyboard behavior.
