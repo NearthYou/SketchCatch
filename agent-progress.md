@@ -93,22 +93,6 @@ Short English-only working log for the current agent context. Older records are 
 - Verification: 78 focused merge regressions, `pnpm harness:check`, `pnpm typecheck`, `pnpm lint`, `pnpm build`, and `git diff --check` passed. Lint retains the pre-existing `setNow` warning.
 - Risk: migrations `0032` and `0033` were not applied, and no cloud or deployment mutation was performed.
 
-### 2026-07-12 - Handle missing Source Repository DB migrations
-
-- Goal: Diagnose the raw SQL internal error shown when starting from a GitHub repository with an unmigrated API database.
-- Completed:
-  - Confirmed the failing query targets `source_repositories` columns added by existing migrations, especially the repository analysis columns.
-  - Added route-level detection for PostgreSQL undefined table/column errors on `source_repositories`.
-  - Returned a stable `service_unavailable` / `DATABASE_MIGRATION_REQUIRED` response instead of leaking the Drizzle query and params.
-  - Added the web API error translation so Repository start screens show an actionable migration message.
-- Verification:
-  - `pnpm --dir apps/api exec tsx --test src/routes/source-repositories.test.ts`
-  - `pnpm --dir apps/web exec tsx --test features/workspace/api-client-error-message.test.ts`
-  - `pnpm --dir apps/api typecheck`
-  - `pnpm --dir apps/web typecheck`
-- Risk:
-  - The actual runtime DB still needs `pnpm --filter @sketchcatch/api db:migrate` from a shell with `DATABASE_URL` configured.
-
 ### 2026-07-13 - Repository-specific AI recommendation profiles
 
 - Reproduced that unrelated Docker repositories received the same ECS/EKS candidates and 87%/67% scores because container candidates and baseline confidence were fixed before the AI call.
@@ -214,6 +198,16 @@ Short English-only working log for the current agent context. Older records are 
   - Direct AWS CLI absence checks using the verified connection's temporary execution credentials.
 - Risk:
   - No deployment-contract defect was found. ECS service and task-definition deletion metadata can remain visible briefly as `INACTIVE` or `DELETE_IN_PROGRESS`, but no active or billable application resource remains.
+
+### 2026-07-14 - Reconfirm fresh Repository generation against the deployed baseline
+
+- Re-ran public URL analysis for `whiskend/audience-live-check`; `main`, 14 authoritative architecture facts, and ECS Fargate as the first AI candidate were returned.
+- Used the production Repository request builder with `include_frontend=true`, `deploymentType=container`, and `usesCiCd=true` to create fresh Amazon Q drafts.
+- Compared fresh output with the successfully deployed project `0b53ead6-ea09-4286-a40b-9d6c7349d185` after normalizing presentation metadata and singleton Terraform block representation.
+- Verified 33 deployable resources, 25 architecture edges, and 10 outputs with zero missing, extra, or changed deployment parameters and zero Terraform address differences.
+- Confirmed repeated fresh generations were stable. HCL declaration order differed from the saved round-trip artifact, but all structured values and references were identical.
+- Verification: focused strict Repository regression passed; generated Terraform passed `terraform validate`, deterministic gate, Terraform diagnostics, and architecture configuration checks with zero findings.
+- Risk: the new Chrome tab had no active SketchCatch session, so the visible click sequence stopped at login; the same public endpoints and production UI request builder were exercised directly.
 
 ## Next Action
 - Continue the automatic diagram layout workstream without changing the verified Fargate resource, connection, or runtime parameter contract.
