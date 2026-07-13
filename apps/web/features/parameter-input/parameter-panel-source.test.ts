@@ -35,6 +35,38 @@ test("ParameterInputPanel select menus use the neutral DESIGN.md tone", () => {
   assert.match(panelSource, /tone="workspace"/);
 });
 
+test("all parameter dropdown paths use an unclipped field-list boundary", () => {
+  const parameterFieldListRule = getLastCssRuleAfter(
+    stylesSource,
+    "parameterFieldList",
+    stylesSource.indexOf("/* DESIGN.md parameter input pass */")
+  );
+  const selectControlSource = getSourceSlice(
+    panelSource,
+    "function SelectControl",
+    "function MultiSelectControl"
+  );
+  const referencePickerSource = getSourceSlice(
+    panelSource,
+    "function ReferencePicker",
+    "function ListEditor"
+  );
+  const nestedEditorSource = getSourceSlice(
+    panelSource,
+    "function NestedEditor",
+    "function IconButton"
+  );
+
+  assert.match(parameterFieldListRule, /\boverflow:\s*visible;/);
+  assert.doesNotMatch(parameterFieldListRule, /\boverflow:\s*hidden;/);
+  assert.equal(panelSource.match(/styles\.parameterFieldList/g)?.length, 2);
+  assert.match(selectControlSource, /<SelectMenu/);
+  assert.match(referencePickerSource, /<SelectMenu/);
+  assert.match(nestedEditorSource, /<ParameterField/);
+  assert.match(panelSource, /function RegionField/);
+  assert.match(panelSource, /function AvailabilityZoneField[\s\S]*?<SelectMenu/);
+});
+
 test("ParameterInputPanel counts only required definition errors in the required summary", () => {
   assert.match(
     panelSource,
@@ -97,7 +129,8 @@ test("ParameterInputPanel lays out metadata, required inputs, and additional set
   assert.match(sectionHeaderRule, /\bpadding-bottom:\s*10px;/);
   assert.match(metadataGridRule, /\bgrid-template-columns:\s*repeat\(auto-fit, minmax\(160px, 1fr\)\);/);
   assert.match(parameterSummaryRule, /\bgrid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\);/);
-  assert.match(parameterFieldListRule, /\boverflow:\s*hidden;/);
+  assert.match(parameterFieldListRule, /\boverflow:\s*visible;/);
+  assert.doesNotMatch(parameterFieldListRule, /\boverflow:\s*hidden;/);
   assert.match(parameterFieldRule, /\bgrid-template-columns:\s*minmax\(0, 1fr\);/);
   assert.match(stylesSource.slice(designPassIndex), /@container \(min-width: 560px\)/);
   assert.match(

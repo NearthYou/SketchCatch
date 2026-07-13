@@ -17,13 +17,13 @@ export function WorkspaceIssuesPanel({
 }) {
   return (
     <div className={styles.issuesPanel}>
+      <div className={styles.terraformIssues}>
+        <TerraformIssuesPanel issues={terraformIssues} onResolveWithAi={onResolveTerraformIssueWithAi} />
+      </div>
       <ArchitectureIssuesPanel
         diagnostics={architectureDiagnostics}
         onFocusResource={onFocusArchitectureResource}
       />
-      <div className={styles.terraformIssues}>
-        <TerraformIssuesPanel issues={terraformIssues} onResolveWithAi={onResolveTerraformIssueWithAi} />
-      </div>
     </div>
   );
 }

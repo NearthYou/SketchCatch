@@ -194,32 +194,18 @@ export function WorkspaceAiPreDeploymentResult({
   );
 }
 
-// Design Simulation 결과를 흐름, 병목, 장애, 비용 검토 순서로 묶어 표시합니다.
+// AI Simulation 결과를 요약, 병목, 장애, 비용 검토 순서로 묶어 표시합니다.
 export function WorkspaceAiDesignSimulationResult({
   simulation
 }: {
   readonly simulation: DesignSimulationResult;
 }) {
   const costReviewItems = simulation.costEstimate?.reviewMessages ?? simulation.costPressure;
-  const costRecommendationItems = simulation.recommendations.filter(
-    (item) => !costReviewItems.includes(item)
-  );
 
   return (
     <div className={`${styles.aiResultStack} ${styles.aiSimulationResult}`}>
       <p className={styles.aiResultSummary}>{simulation.summary}</p>
       <div className={styles.aiSimulationGrid}>
-        <section className={styles.aiSimulationCard}>
-          <strong>요청 흐름</strong>
-          <ul>
-            {simulation.requestFlow.map((step, index) => (
-              <li key={`flow-${index}-${step.fromResourceId}-${step.toResourceId}`}>
-                <span>{step.fromResourceId} -&gt; {step.toResourceId}</span>
-                <p>{step.description}</p>
-              </li>
-            ))}
-          </ul>
-        </section>
         <section className={styles.aiSimulationCard}>
           <strong>병목 후보</strong>
           <ul>
@@ -243,14 +229,14 @@ export function WorkspaceAiDesignSimulationResult({
           </ul>
         </section>
         <section className={styles.aiSimulationCard}>
-          <strong>비용·다음 검토</strong>
+          <strong>비용</strong>
           {simulation.costEstimate !== undefined ? (
             <div className={styles.aiSimulationCostMeta}>
               <span>${formatMoney(simulation.costEstimate.totalEstimate.amount)}</span>
             </div>
           ) : null}
           <ul>
-            {[...costReviewItems, ...costRecommendationItems].map((item, index) => (
+            {costReviewItems.map((item, index) => (
               <li key={`cost-${index}-${item}`}>
                 <p>{item}</p>
               </li>

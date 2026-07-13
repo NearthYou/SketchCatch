@@ -485,6 +485,22 @@ test("toFlowEdges maps logical handle ids to real source and target handles", ()
   assert.equal(flowEdges[0]?.targetHandle, "target-handle-left");
 });
 
+test("toFlowEdges replaces stored handles when their rendered route crosses a resource", () => {
+  const source = makeNode({ id: "source", position: { x: 0, y: 100 }, resourceType: "aws_instance" });
+  const blocker = makeNode({ id: "blocker", position: { x: 240, y: 100 }, resourceType: "aws_s3_bucket" });
+  const target = makeNode({ id: "target", position: { x: 480, y: 100 }, resourceType: "aws_lambda_function" });
+  const edge = {
+    ...makeEdge(source.id, target.id),
+    sourceHandleId: "handle-right",
+    targetHandleId: "handle-left"
+  };
+
+  const [flowEdge] = toFlowEdges([edge], [], [source, blocker, target]);
+
+  assert.notEqual(flowEdge?.sourceHandle, "source-handle-right");
+  assert.notEqual(flowEdge?.targetHandle, "target-handle-left");
+});
+
 test("toFlowEdges keeps existing React Flow source and target handle ids stable", () => {
   const flowEdges = toFlowEdges(
     [
@@ -800,18 +816,20 @@ function makeNode({
   id,
   locked = false,
   parentAreaNodeId,
+  position = { x: 0, y: 0 },
   resourceType
 }: {
   id: string;
   locked?: boolean;
   parentAreaNodeId?: string;
+  position?: DiagramNode["position"];
   resourceType: string;
 }): DiagramNode {
   return {
     id,
     type: resourceType,
     kind: "resource",
-    position: { x: 0, y: 0 },
+    position,
     size: { width: 168, height: 96 },
     label: id,
     locked,

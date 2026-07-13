@@ -3,13 +3,19 @@ import type {
   InfrastructureGraphNode,
   TerraformBlockType
 } from "@sketchcatch/types";
-import { isTerraformNestedBlockAttribute } from "./terraform-nested-blocks.js";
+import { isSupportedTerraformFunctionExpression } from "./terraform-function-expressions.js";
+import {
+  isGenericTerraformNestedBlock,
+  isTerraformNestedBlockAttribute
+} from "./terraform-nested-blocks.js";
 
 const DEFAULT_TERRAFORM_BLOCK_TYPE: TerraformBlockType = "resource";
 const INDENT_UNIT = "  ";
 export const TERRAFORM_IDENTIFIER_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_-]*$/;
 const TERRAFORM_REFERENCE_PATTERN =
-  /^(?:var|local|each|count|path|terraform)\.[a-zA-Z_][a-zA-Z0-9_]*$|^module\.[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)*$|^aws_[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)*$|^data\.aws_[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)*$/;
+  /^(?:var|local|each|count|path|terraform)\.[a-zA-Z_][a-zA-Z0-9_]*$|^module\.[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)*$|^(?:aws|kubernetes)_[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)*$|^data\.aws_[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)*$/;
+const TERRAFORM_RESOURCE_ADDRESS_PATTERN =
+  /^(?:(?:aws|kubernetes)_[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+|module\.[a-zA-Z0-9_]+)$/;
 
 export class TerraformDiagramValidationError extends Error {
   readonly reason = "invalid_identifier";
@@ -69,6 +75,9 @@ function renderLiveObservationOutputs(graph: InfrastructureGraph): string[] {
   const loadBalancer = findResourceNode(graph, "aws_lb");
   const targetGroup = findResourceNode(graph, "aws_lb_target_group");
   const autoScalingGroup = findResourceNode(graph, "aws_autoscaling_group");
+  const ecsCluster = findResourceNode(graph, "aws_ecs_cluster");
+  const ecsService = findResourceNode(graph, "aws_ecs_service");
+  const applicationScalingTarget = findResourceNode(graph, "aws_appautoscaling_target");
   const alarm = graph.nodes.find(
     (node) =>
       node.iac.terraformBlockType === "resource" &&
@@ -77,23 +86,96 @@ function renderLiveObservationOutputs(graph: InfrastructureGraph): string[] {
       typeof node.config["threshold"] === "number"
   );
 
-  if (!website || !loadBalancer || !targetGroup || !autoScalingGroup || !alarm) {
+  if (!website || !loadBalancer || !targetGroup) {
     return [];
   }
 
   const websiteAddress = `aws_s3_bucket_website_configuration.${website.iac.resourceName}`;
   const loadBalancerAddress = `aws_lb.${loadBalancer.iac.resourceName}`;
   const targetGroupAddress = `aws_lb_target_group.${targetGroup.iac.resourceName}`;
-  const autoScalingGroupAddress = `aws_autoscaling_group.${autoScalingGroup.iac.resourceName}`;
-
-  return [
+  const commonOutputs = [
     renderOutput("static_site_url", `"http://\${${websiteAddress}.website_endpoint}"`),
     renderOutput("api_base_url", `"http://\${${loadBalancerAddress}.dns_name}"`),
-    renderOutput("asg_name", `${autoScalingGroupAddress}.name`),
     renderOutput("alb_arn_suffix", `${loadBalancerAddress}.arn_suffix`),
-    renderOutput("target_group_arn_suffix", `${targetGroupAddress}.arn_suffix`),
-    renderOutput("scale_out_threshold", String(alarm.config["threshold"]))
+    renderOutput("target_group_arn_suffix", `${targetGroupAddress}.arn_suffix`)
   ];
+
+  if (autoScalingGroup && alarm) {
+    const autoScalingGroupAddress = `aws_autoscaling_group.${autoScalingGroup.iac.resourceName}`;
+
+    return [
+      ...commonOutputs,
+      renderOutput("asg_name", `${autoScalingGroupAddress}.name`),
+      renderOutput("scale_out_threshold", String(alarm.config["threshold"]))
+    ];
+  }
+
+  const maxCapacity = applicationScalingTarget?.config["maxCapacity"];
+
+  if (
+    !ecsCluster ||
+    !ecsService ||
+    !applicationScalingTarget ||
+    typeof maxCapacity !== "number"
+  ) {
+    return [];
+  }
+
+  const ecsClusterAddress = `aws_ecs_cluster.${ecsCluster.iac.resourceName}`;
+  const ecsServiceAddress = `aws_ecs_service.${ecsService.iac.resourceName}`;
+
+  const requestThreshold = findAlbRequestCountTargetValue(
+    graph,
+    loadBalancerAddress,
+    targetGroupAddress
+  );
+
+  return [
+    ...commonOutputs,
+    renderOutput("ecs_cluster_name", `${ecsClusterAddress}.name`),
+    renderOutput("ecs_service_name", `${ecsServiceAddress}.name`),
+    renderOutput("max_capacity", String(maxCapacity)),
+    ...(requestThreshold === null
+      ? []
+      : [renderOutput("scale_out_threshold", String(requestThreshold))])
+  ];
+}
+
+function findAlbRequestCountTargetValue(
+  graph: InfrastructureGraph,
+  loadBalancerAddress: string,
+  targetGroupAddress: string
+): number | null {
+  for (const policy of graph.nodes) {
+    if (
+      policy.iac.terraformBlockType !== "resource" ||
+      policy.iac.resourceType !== "aws_appautoscaling_policy"
+    ) continue;
+
+    const configuration = policy.config["targetTrackingScalingPolicyConfiguration"];
+    if (!isRecord(configuration) || typeof configuration["targetValue"] !== "number") continue;
+
+    const specificationValue = configuration["predefinedMetricSpecification"];
+    const specification = Array.isArray(specificationValue)
+      ? specificationValue.find(isRecord)
+      : isRecord(specificationValue)
+        ? specificationValue
+        : undefined;
+    if (
+      specification?.["predefinedMetricType"] !== "ALBRequestCountPerTarget" ||
+      typeof specification["resourceLabel"] !== "string"
+    ) continue;
+
+    const resourceLabel = specification["resourceLabel"];
+    if (
+      resourceLabel.includes(`${loadBalancerAddress}.arn_suffix`) &&
+      resourceLabel.includes(`${targetGroupAddress}.arn_suffix`)
+    ) {
+      return configuration["targetValue"];
+    }
+  }
+
+  return null;
 }
 
 function findResourceNode(
@@ -220,7 +302,10 @@ function renderNestedBlocks(
 }
 
 function renderNestedBlockEntry(key: string, value: unknown, indentLevel: number): string[] {
-  if (Array.isArray(value) && value.every(isRecord)) {
+  if (
+    isGenericTerraformNestedBlock(key) &&
+    ((Array.isArray(value) && value.every(isRecord)) || isRecord(value))
+  ) {
     return renderNestedBlocks(key, value, indentLevel);
   }
 
@@ -231,7 +316,35 @@ function renderAttribute(key: string, value: unknown, indentLevel: number): stri
   const attributeName = toSnakeCase(key);
   assertTerraformIdentifier(attributeName, "attribute name");
 
-  return `${indent(indentLevel)}${attributeName} = ${renderValue(value, indentLevel)}`;
+  const renderedValue =
+    attributeName === "depends_on"
+      ? renderDependencyList(value, indentLevel)
+      : renderValue(value, indentLevel);
+
+  return `${indent(indentLevel)}${attributeName} = ${renderedValue}`;
+}
+
+function renderDependencyList(value: unknown, indentLevel: number): string {
+  if (!Array.isArray(value)) {
+    return renderValue(value, indentLevel);
+  }
+
+  if (value.length === 0) {
+    return "[]";
+  }
+
+  return [
+    "[",
+    ...value.map((dependency) => {
+      const renderedDependency =
+        typeof dependency === "string" && TERRAFORM_RESOURCE_ADDRESS_PATTERN.test(dependency)
+          ? dependency
+          : renderValue(dependency, indentLevel + 1);
+
+      return `${indent(indentLevel + 1)}${renderedDependency},`;
+    }),
+    `${indent(indentLevel)}]`
+  ].join("\n");
 }
 
 // JavaScript 값을 Terraform HCL 값 표현으로 바꾼다.
@@ -241,7 +354,9 @@ function renderValue(value: unknown, indentLevel: number): string {
   }
 
   if (typeof value === "string") {
-    return isTerraformReference(value) ? value : JSON.stringify(value);
+    return isTerraformReference(value) || isSupportedTerraformFunctionExpression(value)
+      ? value
+      : JSON.stringify(value);
   }
 
   if (typeof value === "number" || typeof value === "boolean") {

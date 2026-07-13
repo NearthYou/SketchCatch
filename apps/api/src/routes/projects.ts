@@ -384,6 +384,7 @@ export async function registerProjectRoutes(
         id: randomUUID(),
         projectId: params.id,
         diagramJson: body.diagramJson,
+        terraformFiles: body.terraformFiles ?? null,
         revision,
         serverSavedAt: now,
         updatedAt: now
@@ -392,6 +393,7 @@ export async function registerProjectRoutes(
         target: projectDrafts.projectId,
         set: {
           diagramJson: body.diagramJson,
+          terraformFiles: body.terraformFiles ?? null,
           revision,
           serverSavedAt: now,
           updatedAt: now

@@ -56,11 +56,13 @@ export type CreateLiveObservationServiceOptions = {
   readonly runtimeCache: RuntimeCache;
   readonly observabilityProvider: DeploymentObservabilityProvider;
   readonly publicApiBaseUrl: string;
+  readonly invalidateObservationCacheOnEvent?: boolean | undefined;
   readonly requireSharedCache?: boolean | undefined;
   readonly maxAcceptedEvents?: number | undefined;
   readonly now?: (() => number) | undefined;
   readonly createObservationId?: (() => string) | undefined;
   readonly createPublicToken?: (() => string) | undefined;
+  readonly onSessionTerminal?: ((observationId: string) => void) | undefined;
 };
 
 export type CreateLiveObservationSessionInput = {
@@ -68,9 +70,9 @@ export type CreateLiveObservationSessionInput = {
   readonly status: DeploymentStatus;
   readonly liveProfile: DeploymentLiveProfile;
   readonly outputs: Readonly<Record<string, unknown>>;
-  readonly observationTarget: Omit<
+  readonly observationTarget: Pick<
     DeploymentObservabilityTarget,
-    "asgName" | "albArnSuffix" | "targetGroupArnSuffix"
+    "awsConnectionId" | "roleArn" | "externalId" | "region"
   >;
 };
 
@@ -84,10 +86,10 @@ type StoredLiveObservationSession = {
 type RequiredDeploymentOutputs = {
   readonly staticSiteUrl: string;
   readonly apiBaseUrl: string;
-  readonly asgName: string;
   readonly albArnSuffix: string;
   readonly targetGroupArnSuffix: string;
   readonly scaleOutThreshold: number;
+  readonly capacityTarget: DeploymentObservabilityTarget["capacityTarget"];
 };
 
 export type LiveObservationService = ReturnType<typeof createLiveObservationService>;
@@ -134,6 +136,7 @@ export function createLiveObservationService(options: CreateLiveObservationServi
       const observationId = createObservationId();
       const publicToken = createPublicToken();
       const publicTokenHash = hashPublicToken(publicToken);
+      const trafficApiUrl = createTrafficApiUrl(requiredOutputs.apiBaseUrl);
       const session: LiveObservationSession = {
         id: observationId,
         deploymentId: input.deploymentId,
@@ -141,9 +144,10 @@ export function createLiveObservationService(options: CreateLiveObservationServi
         audienceUrl: createAudienceUrl(
           requiredOutputs.staticSiteUrl,
           publicToken,
-          publicApiBaseUrl
+          publicApiBaseUrl,
+          trafficApiUrl
         ),
-        trafficApiUrl: createTrafficApiUrl(requiredOutputs.apiBaseUrl),
+        trafficApiUrl,
         createdAt: new Date(createdAtMs).toISOString(),
         expiresAt: new Date(createdAtMs + SESSION_TTL_MS).toISOString()
       };
@@ -153,7 +157,7 @@ export function createLiveObservationService(options: CreateLiveObservationServi
         scaleOutThreshold: requiredOutputs.scaleOutThreshold,
         observationTarget: {
           ...input.observationTarget,
-          asgName: requiredOutputs.asgName,
+          capacityTarget: requiredOutputs.capacityTarget,
           albArnSuffix: requiredOutputs.albArnSuffix,
           targetGroupArnSuffix: requiredOutputs.targetGroupArnSuffix
         }
@@ -341,6 +345,10 @@ export function createLiveObservationService(options: CreateLiveObservationServi
         { ttlMs: REQUEST_BUCKET_TTL_MS }
       );
 
+      if (options.invalidateObservationCacheOnEvent) {
+        await options.runtimeCache.delete(createAwsObservationKey(storedSession.session.id));
+      }
+
       return {
         accepted: true,
         acceptedEventCount
@@ -424,7 +432,7 @@ export function createLiveObservationService(options: CreateLiveObservationServi
       currentTimeMs
     );
 
-    return {
+    const snapshot: LiveObservationSnapshot = {
       observationId,
       status,
       live: {
@@ -440,6 +448,12 @@ export function createLiveObservationService(options: CreateLiveObservationServi
       },
       ...observation
     };
+
+    if (status !== "active") {
+      options.onSessionTerminal?.(observationId);
+    }
+
+    return snapshot;
   }
 }
 
@@ -496,7 +510,7 @@ function parseRequiredOutputs(
   return {
     staticSiteUrl: readRequiredUrlOutput(outputs, "static_site_url"),
     apiBaseUrl: readRequiredUrlOutput(outputs, "api_base_url"),
-    asgName: readRequiredStringOutput(outputs, "asg_name"),
+    capacityTarget: parseCapacityTarget(outputs),
     albArnSuffix: readRequiredStringOutput(outputs, "alb_arn_suffix"),
     targetGroupArnSuffix: readRequiredStringOutput(
       outputs,
@@ -507,6 +521,40 @@ function parseRequiredOutputs(
       "scale_out_threshold"
     )
   };
+}
+
+function parseCapacityTarget(
+  outputs: Readonly<Record<string, unknown>>
+): DeploymentObservabilityTarget["capacityTarget"] {
+  const ecsClusterName = readOptionalStringOutput(outputs, "ecs_cluster_name");
+  const ecsServiceName = readOptionalStringOutput(outputs, "ecs_service_name");
+
+  if (ecsClusterName || ecsServiceName) {
+    if (!ecsClusterName || !ecsServiceName) {
+      throw invalidOutput(ecsClusterName ? "ecs_service_name" : "ecs_cluster_name");
+    }
+
+    return {
+      clusterName: ecsClusterName,
+      kind: "ecs_service",
+      maxCapacity: readRequiredPositiveNumberOutput(outputs, "max_capacity"),
+      serviceName: ecsServiceName
+    };
+  }
+
+  return {
+    asgName: readRequiredStringOutput(outputs, "asg_name"),
+    kind: "asg"
+  };
+}
+
+function readOptionalStringOutput(
+  outputs: Readonly<Record<string, unknown>>,
+  name: string
+): string | null {
+  const value = outputs[name];
+
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
 
 function readRequiredUrlOutput(
@@ -574,11 +622,13 @@ function normalizeHttpUrl(value: string, label: string): string {
 function createAudienceUrl(
   staticSiteUrl: string,
   publicToken: string,
-  publicApiBaseUrl: string
+  publicApiBaseUrl: string,
+  trafficApiUrl: string
 ): string {
   const audienceUrl = new URL(staticSiteUrl);
   audienceUrl.searchParams.set("observation", publicToken);
   audienceUrl.searchParams.set("collector", publicApiBaseUrl);
+  audienceUrl.searchParams.set("traffic", trafficApiUrl);
   return audienceUrl.toString();
 }
 
@@ -702,7 +752,10 @@ async function readDeploymentObservation(
   let observation: DeploymentObservation;
 
   try {
-    observation = await provider.observe(storedSession.observationTarget);
+    observation = await provider.observe(
+      storedSession.observationTarget,
+      storedSession.session.id
+    );
   } catch {
     observation = createUnavailableDeploymentObservation();
   }

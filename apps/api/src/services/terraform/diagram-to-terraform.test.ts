@@ -286,10 +286,11 @@ test("renders Autoscaling Policy nested target tracking configuration", () => {
           policyType: "TargetTrackingScaling",
           targetTrackingConfiguration: {
             targetValue: 70,
+            disableScaleIn: false,
             predefinedMetricSpecification: [
               {
-                predefinedMetricType: "ASGAverageCPUUtilization",
-                resourceLabel: "app/targetgroup"
+                predefinedMetricType: "ALBRequestCountPerTarget",
+                resourceLabel: "${aws_lb.load_balancer.arn_suffix}/${aws_lb_target_group.target_group.arn_suffix}"
               }
             ]
           }
@@ -307,13 +308,88 @@ test("renders Autoscaling Policy nested target tracking configuration", () => {
   policy_type = "TargetTrackingScaling"
   target_tracking_configuration {
     target_value = 70
+    disable_scale_in = false
     predefined_metric_specification {
-      predefined_metric_type = "ASGAverageCPUUtilization"
-      resource_label = "app/targetgroup"
+      predefined_metric_type = "ALBRequestCountPerTarget"
+      resource_label = "\${aws_lb.load_balancer.arn_suffix}/\${aws_lb_target_group.target_group.arn_suffix}"
     }
   }
 }`
   );
+});
+
+test("renders ECS Fargate Live Observation outputs and Application Auto Scaling blocks", () => {
+  const graph: InfrastructureGraph = {
+    nodes: [
+      createLiveObservationNode("aws_s3_bucket_website_configuration", "site", {}),
+      createLiveObservationNode("aws_lb", "demo", {}),
+      createLiveObservationNode("aws_lb_target_group", "api", {}),
+      createLiveObservationNode("aws_ecs_cluster", "demo", { name: "demo-cluster" }),
+      createLiveObservationNode("aws_ecs_service", "api", {
+        cluster: "aws_ecs_cluster.demo.id",
+        name: "demo-service"
+      }),
+      createLiveObservationNode("aws_appautoscaling_target", "api", {
+        maxCapacity: 2,
+        minCapacity: 1,
+        resourceId: "service/${aws_ecs_cluster.demo.name}/${aws_ecs_service.api.name}",
+        scalableDimension: "ecs:service:DesiredCount",
+        serviceNamespace: "ecs"
+      }),
+      createLiveObservationNode("aws_appautoscaling_policy", "api_requests", {
+        policyType: "TargetTrackingScaling",
+        resourceId: "aws_appautoscaling_target.api.resource_id",
+        scalableDimension: "aws_appautoscaling_target.api.scalable_dimension",
+        serviceNamespace: "aws_appautoscaling_target.api.service_namespace",
+        targetTrackingScalingPolicyConfiguration: {
+          targetValue: 60,
+          predefinedMetricSpecification: [{
+            predefinedMetricType: "ALBRequestCountPerTarget",
+            resourceLabel: "${aws_lb.demo.arn_suffix}/${aws_lb_target_group.api.arn_suffix}"
+          }]
+        }
+      })
+    ],
+    edges: []
+  };
+
+  const terraform = renderTerraformFromInfrastructureGraph(graph);
+
+  assert.match(terraform, /resource "aws_appautoscaling_policy" "api_requests"/);
+  assert.match(terraform, /target_tracking_scaling_policy_configuration \{/);
+  assert.match(terraform, /predefined_metric_specification \{/);
+  assert.match(terraform, /output "ecs_cluster_name" \{[\s\S]*aws_ecs_cluster\.demo\.name/);
+  assert.match(terraform, /output "ecs_service_name" \{[\s\S]*aws_ecs_service\.api\.name/);
+  assert.match(terraform, /output "max_capacity" \{[\s\S]*value = 2/);
+  assert.match(terraform, /output "scale_out_threshold" \{[\s\S]*value = 60/);
+  assert.doesNotMatch(terraform, /output "asg_name"/);
+});
+
+test("does not emit an ECS request threshold from a CPU target tracking policy", () => {
+  const graph: InfrastructureGraph = {
+    nodes: [
+      createLiveObservationNode("aws_s3_bucket_website_configuration", "site", {}),
+      createLiveObservationNode("aws_lb", "demo", {}),
+      createLiveObservationNode("aws_lb_target_group", "api", {}),
+      createLiveObservationNode("aws_ecs_cluster", "demo", {}),
+      createLiveObservationNode("aws_ecs_service", "api", {}),
+      createLiveObservationNode("aws_appautoscaling_target", "api", { maxCapacity: 2 }),
+      createLiveObservationNode("aws_appautoscaling_policy", "api_cpu", {
+        targetTrackingScalingPolicyConfiguration: {
+          targetValue: 60,
+          predefinedMetricSpecification: [{
+            predefinedMetricType: "ECSServiceAverageCPUUtilization"
+          }]
+        }
+      })
+    ],
+    edges: []
+  };
+
+  const terraform = renderTerraformFromInfrastructureGraph(graph);
+
+  assert.match(terraform, /output "ecs_service_name"/);
+  assert.doesNotMatch(terraform, /output "scale_out_threshold"/);
 });
 
 test("renders CloudWatch Alarm dimensions and Autoscaling Policy action reference", () => {

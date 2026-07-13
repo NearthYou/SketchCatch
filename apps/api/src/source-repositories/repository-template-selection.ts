@@ -6,7 +6,7 @@ import type {
 } from "@sketchcatch/types";
 import type { GitHubRepositoryEvidenceSnapshot } from "./github-app-client.js";
 
-type RepositoryTemplateSelectionInput = {
+export type RepositoryTemplateSelectionInput = {
   readonly snapshot: GitHubRepositoryEvidenceSnapshot;
   readonly applicationUnits: readonly RepositoryApplicationUnit[];
   readonly evidence: readonly RepositoryAnalysisEvidence[];

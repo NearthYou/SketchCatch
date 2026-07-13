@@ -65,6 +65,16 @@ test("save project draft body accepts full DiagramJson", () => {
   assert.equal(parsed.diagramJson.viewport.zoom, 1);
 });
 
+test("save project draft body preserves Terraform virtual files", () => {
+  const terraformFiles = [
+    { fileName: "main.tf", terraformCode: "resource \"aws_vpc\" \"main\" {}" },
+    { fileName: "variables.tf", terraformCode: "variable \"cidr\" { type = string }" }
+  ];
+  const parsed = saveProjectDraftBodySchema.parse({ diagramJson: validDiagram, terraformFiles });
+
+  assert.deepEqual(parsed.terraformFiles, terraformFiles);
+});
+
 test("save project draft body preserves diagram edge line style", () => {
   const parsed = saveProjectDraftBodySchema.parse({
     diagramJson: {

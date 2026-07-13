@@ -70,14 +70,20 @@ import { requireActiveUserId } from "../auth/current-user.js";
 import { getDatabaseClient, type DatabaseClient } from "../db/client.js";
 import {
   createPostgresSourceRepositoryRepository,
-  RepositoryAnalysisTemplateSelectionError,
   requireRepositoryAnalysisTemplateId,
   type SourceRepositoryRepository
 } from "../source-repositories/source-repository-service.js";
 import {
-  analyzeRepositoryEvidence,
+  getRepositoryEvidenceKind,
+  isIgnoredRepositoryEvidencePath,
+  isRepositoryEvidenceContentPath
+} from "../source-repositories/repository-evidence-path.js";
+import {
+  analyzeRepositoryEvidence as analyzeLegacyRepositoryEvidence,
   type RepositoryEvidenceFile
 } from "../services/aiRepositoryAnalysis.js";
+import { analyzeRepositoryEvidence as analyzeSourceRepositorySnapshot } from "../source-repositories/repository-analysis.js";
+import { recommendRepositoryTemplatesWithAi } from "../source-repositories/repository-template-recommendation.js";
 
 const MAX_PRE_DEPLOYMENT_TERRAFORM_FILE_COUNT = 64;
 const MAX_PRE_DEPLOYMENT_TERRAFORM_FILE_NAME_LENGTH = 180;
@@ -296,16 +302,11 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
         {
           projectId: body.repositoryAnalysis.projectId,
           sourceRepositoryId: body.repositoryAnalysis.sourceRepositoryId,
+          requestedTemplateId: body.templateId,
           accessContext: { kind: "user", userId }
         },
         createSourceRepositoryRepository(getAiDatabaseClient().db)
       );
-
-      if (body.templateId && body.templateId !== selectedTemplateId) {
-        throw new RepositoryAnalysisTemplateSelectionError(
-          "REPOSITORY_ANALYSIS_TEMPLATE_MISMATCH"
-        );
-      }
 
       return createArchitectureDraftResponse({
         ...body,
@@ -369,23 +370,67 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
       const body = sourceRepositoryAnalysisBodySchema.parse(request.body);
       const repository = parseGitHubRepositoryUrl(body.repositoryUrl);
       const defaultBranch = body.defaultBranch ?? "main";
-      const evidence = await fetchRepositoryEvidence(repository, defaultBranch);
+      const cacheKey = createPublicRepositoryAnalysisCacheKey(body.repositoryUrl, defaultBranch);
+      const cachedAnalysis = await options.runtimeCache
+        ?.get<SourceRepositoryAnalysisResult>(cacheKey)
+        .catch(() => null);
 
-      return analyzeRepositoryEvidence({
+      if (cachedAnalysis) {
+        return cachedAnalysis;
+      }
+
+      const snapshot = await fetchRepositoryEvidence(repository, defaultBranch);
+      const legacyAnalysis = analyzeLegacyRepositoryEvidence({
         defaultBranch,
-        evidence,
+        evidence: snapshot.files,
         repositoryUrl: body.repositoryUrl
       });
+
+      const aiHandoff = analyzeSourceRepositorySnapshot({
+        revision: defaultBranch,
+        treePaths: snapshot.treePaths,
+        files: snapshot.files
+      });
+      const recommendation = aiHandoff.deploymentTypeDefault
+        ? await recommendRepositoryTemplatesWithAi({
+            snapshot: {
+              revision: defaultBranch,
+              treePaths: snapshot.treePaths,
+              files: snapshot.files
+            },
+            applicationUnits: aiHandoff.applicationUnits,
+            evidence: aiHandoff.evidence,
+            missingEvidence: aiHandoff.missingEvidence,
+            deploymentType: aiHandoff.deploymentTypeDefault,
+            usesCiCd: aiHandoff.usesCiCdDefault ?? false,
+            answers: []
+          })
+        : aiHandoff.recommendation;
+
+      const result: SourceRepositoryAnalysisResult = {
+        ...legacyAnalysis,
+        aiHandoff: recommendation ? { ...aiHandoff, recommendation } : aiHandoff
+      };
+
+      await options.runtimeCache
+        ?.set(
+          cacheKey,
+          JSON.parse(JSON.stringify(result)) as RuntimeCacheJsonValue,
+          { ttlMs: PUBLIC_REPOSITORY_ANALYSIS_CACHE_TTL_MS }
+        )
+        .catch(() => undefined);
+
+      return result;
     }
   );
 
   app.post("/ai/github-architecture-draft", async (request): Promise<AiArchitectureDraftResult> => {
     const body = githubArchitectureDraftBodySchema.parse(request.body);
     const repository = parseGitHubRepositoryUrl(body.repositoryUrl);
-    const evidence = await fetchRepositoryEvidence(repository, body.defaultBranch ?? "main");
+    const snapshot = await fetchRepositoryEvidence(repository, body.defaultBranch ?? "main");
     const templateContext = getRepositoryTemplateContext(body.selectedTemplateId);
     const result = createArchitectureDraftFromRepositoryEvidence(body.repositoryUrl, [
-      ...evidence.map((file) => file.content),
+      ...snapshot.files.map((file) => file.content),
       templateContext
     ]);
 
@@ -810,7 +855,19 @@ type GitHubRepository = {
   readonly repo: string;
 };
 
-const GITHUB_EVIDENCE_PATHS = ["README.md", "package.json", "Dockerfile", "docker-compose.yml"] as const;
+type PublicGitHubRecursiveTreeResponse = {
+  readonly truncated?: unknown;
+  readonly tree?: Array<{
+    readonly path?: unknown;
+    readonly type?: unknown;
+  }>;
+};
+
+const PUBLIC_GITHUB_API_BASE_URL = "https://api.github.com";
+const MAX_PUBLIC_REPOSITORY_EVIDENCE_FILES = 24;
+const PUBLIC_GITHUB_REQUEST_TIMEOUT_MS = 10_000;
+const PUBLIC_REPOSITORY_ANALYSIS_CACHE_NAMESPACE = "ai:public-repository-analysis:v6";
+const PUBLIC_REPOSITORY_ANALYSIS_CACHE_TTL_MS = 5 * 60 * 1_000;
 
 // GitHub URL에서 owner/repo만 뽑습니다. public repository 근거 파일을 읽을 때 이 값이 필요합니다.
 function parseGitHubRepositoryUrl(repositoryUrl: string): GitHubRepository {
@@ -823,17 +880,33 @@ function parseGitHubRepositoryUrl(repositoryUrl: string): GitHubRepository {
   };
 }
 
+function createPublicRepositoryAnalysisCacheKey(repositoryUrl: string, defaultBranch: string) {
+  return {
+    namespace: PUBLIC_REPOSITORY_ANALYSIS_CACHE_NAMESPACE,
+    key: createHash("sha256")
+      .update(`${repositoryUrl.trim().toLowerCase()}\0${defaultBranch.trim()}`)
+      .digest("hex")
+  };
+}
+
 // GitHub 전체 코드를 분석하지 않고, README/package/Docker 관련 파일만 가볍게 읽습니다.
 async function fetchRepositoryEvidence(
   repository: GitHubRepository,
   defaultBranch: string
-): Promise<RepositoryEvidenceFile[]> {
+): Promise<{
+  readonly treePaths: readonly string[];
+  readonly files: readonly RepositoryEvidenceFile[];
+}> {
+  const treePaths = await fetchPublicRepositoryTreePaths(repository, defaultBranch);
+  const evidencePaths = selectPublicRepositoryEvidencePaths(treePaths);
   const evidence = await Promise.all(
-    GITHUB_EVIDENCE_PATHS.map(async (path) => {
+    evidencePaths.map(async (path) => {
       const url = `https://raw.githubusercontent.com/${repository.owner}/${repository.repo}/${encodeURIComponent(defaultBranch)}/${path}`;
-      const response = await fetch(url);
+      const response = await fetch(url, {
+        signal: AbortSignal.timeout(PUBLIC_GITHUB_REQUEST_TIMEOUT_MS)
+      }).catch(() => null);
 
-      if (!response.ok) {
+      if (!response?.ok) {
         return null;
       }
 
@@ -841,7 +914,73 @@ async function fetchRepositoryEvidence(
     })
   );
 
-  return evidence.flatMap((file) => (file === null ? [] : [file]));
+  return {
+    treePaths,
+    files: evidence.flatMap((file) => (file === null ? [] : [file]))
+  };
+}
+
+async function fetchPublicRepositoryTreePaths(
+  repository: GitHubRepository,
+  defaultBranch: string
+): Promise<readonly string[]> {
+  const url = `${PUBLIC_GITHUB_API_BASE_URL}/repos/${encodeURIComponent(repository.owner)}/${encodeURIComponent(
+    repository.repo
+  )}/git/trees/${encodeURIComponent(defaultBranch)}?recursive=1`;
+  const response = await fetch(url, {
+    headers: {
+      Accept: "application/vnd.github+json",
+      "User-Agent": "SketchCatch"
+    },
+    signal: AbortSignal.timeout(PUBLIC_GITHUB_REQUEST_TIMEOUT_MS)
+  }).catch(() => null);
+
+  if (!response?.ok) {
+    return [];
+  }
+
+  const tree = (await response.json()) as PublicGitHubRecursiveTreeResponse;
+
+  if (tree.truncated === true) {
+    return [];
+  }
+
+  return (tree.tree ?? [])
+    .flatMap((entry) =>
+      entry.type === "blob" && typeof entry.path === "string" && entry.path
+        ? [entry.path]
+        : []
+    )
+    .sort();
+}
+
+function selectPublicRepositoryEvidencePaths(treePaths: readonly string[]): readonly string[] {
+  return treePaths
+    .filter((path) => !isIgnoredRepositoryEvidencePath(path) && isRepositoryEvidenceContentPath(path))
+    .sort(comparePublicRepositoryEvidencePaths)
+    .slice(0, MAX_PUBLIC_REPOSITORY_EVIDENCE_FILES);
+}
+
+function comparePublicRepositoryEvidencePaths(left: string, right: string): number {
+  const priorityDelta = getPublicRepositoryEvidencePriority(left) - getPublicRepositoryEvidencePriority(right);
+
+  if (priorityDelta !== 0) {
+    return priorityDelta;
+  }
+
+  const depthDelta = left.split("/").length - right.split("/").length;
+
+  return depthDelta !== 0 ? depthDelta : left.localeCompare(right);
+}
+
+function getPublicRepositoryEvidencePriority(path: string): number {
+  const kind = getRepositoryEvidenceKind(path);
+
+  if (kind === "package_json") return 0;
+  if (kind === "dockerfile") return 1;
+  if (kind === "framework_config") return 2;
+  if (kind === "readme") return path.includes("/") ? 4 : 3;
+  return 5;
 }
 
 function getRepositoryTemplateContext(templateId: CreateGitHubArchitectureDraftRequest["selectedTemplateId"]): string {

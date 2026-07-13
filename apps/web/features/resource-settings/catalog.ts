@@ -42,6 +42,8 @@ const resourceCategoryOverrides: Record<string, string> = {
   "aws-api-gateway-websocket-api": "API Gateway v2",
   "aws-autoscaling-group": "EC2 Launch & Scaling",
   "aws-autoscaling-policy": "EC2 Launch & Scaling",
+  "aws-appautoscaling-target": "ECS",
+  "aws-appautoscaling-policy": "ECS",
   "aws-cloudfront-cache-policy": "Edge / CDN",
   "aws-cloudfront-distribution": "Edge / CDN",
   "aws-cloudfront-origin-access-control": "Edge / CDN",
@@ -467,6 +469,15 @@ const terraformResourcePresentations = [
     size
   },
   {
+    definitionId: "aws-ec2-managed-prefix-list",
+    name: "EC2 Managed Prefix List",
+    area: "network",
+    category: "Terraform Data Sources",
+    iconUrl: `${serviceIconPath}/Arch_Networking-Content-Delivery/64/Arch_Amazon-Virtual-Private-Cloud_64.svg`,
+    label: "Managed Prefix List",
+    size
+  },
+  {
     definitionId: "aws-key-pair",
     name: "Key Pair",
     area: "compute",
@@ -509,6 +520,24 @@ const terraformResourcePresentations = [
     category: "Compute",
     iconUrl: `${resourceIconPath}/Res_Compute/Res_Amazon-EC2_Auto-Scaling_48.svg`,
     label: "Autoscaling Policy",
+    size
+  },
+  {
+    definitionId: "aws-appautoscaling-target",
+    name: "Application Auto Scaling Target",
+    area: "containers",
+    category: "Containers",
+    iconUrl: `${resourceIconPath}/Res_Compute/Res_Amazon-EC2_Auto-Scaling_48.svg`,
+    label: "Scaling Target",
+    size
+  },
+  {
+    definitionId: "aws-appautoscaling-policy",
+    name: "Application Auto Scaling Policy",
+    area: "containers",
+    category: "Containers",
+    iconUrl: `${resourceIconPath}/Res_Compute/Res_Amazon-EC2_Auto-Scaling_48.svg`,
+    label: "Scaling Policy",
     size
   },
   {

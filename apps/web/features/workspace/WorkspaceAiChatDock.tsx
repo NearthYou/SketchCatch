@@ -15,7 +15,6 @@ import type {
   ArchitectureJson,
   CreateArchitectureDraftRequest,
   DiagramJson,
-  DesignSimulationResult,
   TerraformDiagnostic
 } from "@sketchcatch/types";
 import type { FormEvent, KeyboardEvent as ReactKeyboardEvent } from "react";
@@ -26,19 +25,14 @@ import {
   createAiArchitecturePatchPreview,
   createAiArchitectureDraft,
   runAiTerraformPreviewExplanation,
-  runAiTerraformErrorExplanation,
-  runAiDesignSimulation
+  runAiTerraformErrorExplanation
 } from "./api";
 import {
   convertDiagramJsonToArchitectureJson,
   getDiagramJsonForArchitectureDraft
 } from "./workspace-ai-diagram-adapter";
+import { createWorkspaceAiBoardSnapshot } from "./workspace-ai-panel-state";
 import {
-  createWorkspaceAiBoardSnapshot,
-  isWorkspaceAiResultStale
-} from "./workspace-ai-panel-state";
-import {
-  WorkspaceAiDesignSimulationResult,
   WorkspaceAiExplanation,
   WorkspaceAiTerraformPreviewResult,
   WorkspaceAiRequestMessage
@@ -92,11 +86,10 @@ type WorkspaceAiChatMessageKind =
   | "patch"
   | "question"
   | "preview"
-  | "simulation"
   | "status"
   | "terraform_issue";
 type WorkspaceAiChatSelectionMode = "single" | "multiple";
-type WorkspaceAiChatScope = "draft" | "errors" | "preview" | "simulation";
+type WorkspaceAiChatScope = "draft" | "errors" | "preview";
 
 type WorkspaceAiChatMessage = {
   readonly id: string;
@@ -138,13 +131,6 @@ const MAX_CHAT_MESSAGES = 80;
 const STORAGE_KEY_PREFIX = "sketchcatch.workspaceAiChat";
 const NO_RESOURCE_ADDITION_SUGGESTION = "추가 안 함";
 const NO_RESOURCE_ADDITION_MESSAGE = "추가 없이 지금까지의 요청으로 새 초안을 생성합니다.";
-const DESIGN_SIMULATION_DEFAULTS = {
-  budgetLevel: "normal",
-  expectedUserCount: 1000,
-  period: "month",
-  region: "ap-northeast-2",
-  trafficLevel: "normal"
-} as const;
 const VOICE_NO_SPEECH_TIMEOUT_MS = 8000;
 
 type BrowserSpeechRecognitionAlternative = {
@@ -221,7 +207,6 @@ export function WorkspaceAiChatDock({
   const [lastDraftRequest, setLastDraftRequest] = useState<CreateArchitectureDraftRequest | null>(
     null
   );
-  const [designSimulation, setDesignSimulation] = useState<DesignSimulationResult | null>(null);
   const [terraformPreviewExplanation, setTerraformPreviewExplanation] =
     useState<TerraformPreviewExplanationState | null>(null);
   const [terraformIssueResolution, setTerraformIssueResolution] =
@@ -233,10 +218,7 @@ export function WorkspaceAiChatDock({
     readonly number[]
   >([]);
   const [draftState, setDraftState] = useState<AiRequestState>("idle");
-  const [simulationState, setSimulationState] = useState<AiRequestState>("idle");
   const [draftErrorMessage, setDraftErrorMessage] = useState("");
-  const [simulationErrorMessage, setSimulationErrorMessage] = useState("");
-  const [simulationFingerprint, setSimulationFingerprint] = useState<string | null>(null);
   const repositoryTemplate = useMemo(
     () =>
       repositoryTemplateId
@@ -259,9 +241,6 @@ export function WorkspaceAiChatDock({
     () => createWorkspaceAiBoardSnapshot(context.diagram),
     [context.diagram]
   );
-  const hasStaleDesignSimulation =
-    designSimulation !== null &&
-    isWorkspaceAiResultStale(simulationFingerprint, boardSnapshot.fingerprint);
   const draftSafetyWarnings = useMemo(
     () => createDraftSafetyWarnings(draft, boardSnapshot.hasResources),
     [boardSnapshot.hasResources, draft]
@@ -276,8 +255,7 @@ export function WorkspaceAiChatDock({
     visibleMessages.length > 0 ||
     (activeChatTab === "draft" && draft !== null) ||
     (activeChatTab === "errors" && terraformIssueResolution !== null) ||
-    (activeChatTab === "preview" && terraformPreviewExplanation !== null) ||
-    (activeChatTab === "simulation" && designSimulation !== null);
+    (activeChatTab === "preview" && terraformPreviewExplanation !== null);
 
   useEffect(() => {
     if (loadedProjectIdRef.current !== projectId) {
@@ -313,13 +291,11 @@ export function WorkspaceAiChatDock({
     };
   }, [
     activeChatTab,
-    designSimulation,
     draft,
     draftState,
     isOpen,
     lastVisibleMessageId,
     patchPreviewModel,
-    simulationState,
     visibleMessages.length
   ]);
 
@@ -544,17 +520,6 @@ export function WorkspaceAiChatDock({
     setSelectedSuggestionLabelsByMessageId({});
     stopVoiceRecognition();
     setVoiceStatusMessage("");
-
-    if (activeChatTab === "simulation") {
-      setMessages((currentMessages) =>
-        currentMessages.filter((message) => getChatMessageScope(message) !== "simulation")
-      );
-      setDesignSimulation(null);
-      setSimulationFingerprint(null);
-      setSimulationErrorMessage("");
-      setSimulationState("idle");
-      return;
-    }
 
     if (activeChatTab === "preview") {
       setMessages((currentMessages) =>
@@ -986,8 +951,6 @@ export function WorkspaceAiChatDock({
     setPatchClarification(null);
     setDraftClarification(null);
     setDraftFollowUpSession(null);
-    setDesignSimulation(null);
-    setSimulationFingerprint(null);
     appendAssistantMessage("status", "생성했습니다. 현재 보드가 AI 초안으로 전체 교체되었습니다.");
   }
 
@@ -1001,8 +964,6 @@ export function WorkspaceAiChatDock({
     requestImmediateDiagramSave();
     setPatchPreviewModel(null);
     setPatchClarification(null);
-    setDesignSimulation(null);
-    setSimulationFingerprint(null);
     appendAssistantMessage("status", "수정 사항을 보드에 적용했습니다.");
   }
 
@@ -1068,50 +1029,6 @@ export function WorkspaceAiChatDock({
       messageId: message.id,
       suggestions: selectedSuggestions
     });
-  }
-
-  async function runDesignSimulation(): Promise<void> {
-    setActiveChatTab("simulation");
-
-    if (context.isPreviewActive) {
-      setSimulationState("error");
-      setSimulationErrorMessage("AI 초안 미리보기 중에는 현재 보드 시뮬레이션을 실행할 수 없습니다.");
-      appendAssistantMessage(
-        "question",
-        "질문: 먼저 초안을 생성하거나 취소한 뒤 현재 보드 시뮬레이션을 실행할까요?"
-      );
-      return;
-    }
-
-    if (!boardSnapshot.hasResources) {
-      setSimulationState("error");
-      setSimulationErrorMessage("아키텍처 보드에 리소스가 있어야 실행할 수 있습니다.");
-      appendAssistantMessage(
-        "question",
-        "질문: 아직 보드에 리소스가 없습니다. 먼저 만들고 싶은 서비스를 알려주면 초안을 생성해볼게요."
-      );
-      return;
-    }
-
-    setSimulationState("loading");
-    setSimulationErrorMessage("");
-
-    try {
-      const result = await runAiDesignSimulation({
-        architectureJson: boardSnapshot.architectureJson,
-        ...DESIGN_SIMULATION_DEFAULTS
-      });
-      setDesignSimulation(result);
-      setSimulationFingerprint(boardSnapshot.fingerprint);
-      setSimulationState("idle");
-      appendAssistantMessage("simulation", createSimulationResultMessage(result));
-    } catch (error) {
-      const message = getApiErrorMessage(error, "설계 시뮬레이션 중 오류가 발생했습니다.");
-
-      setSimulationState("error");
-      setSimulationErrorMessage(message);
-      appendAssistantMessage("error", message);
-    }
   }
 
   function handleComposerKeyDown(event: ReactKeyboardEvent<HTMLTextAreaElement>): void {
@@ -1315,15 +1232,6 @@ export function WorkspaceAiChatDock({
           >
             Preview 설명
           </button>
-          <button
-            aria-selected={activeChatTab === "simulation"}
-            className={styles.aiChatTabButton}
-            onClick={() => setActiveChatTab("simulation")}
-            role="tab"
-            type="button"
-          >
-            시뮬레이션
-          </button>
         </div>
         <button
           className={styles.aiChatClearButton}
@@ -1337,21 +1245,6 @@ export function WorkspaceAiChatDock({
       </div>
 
       <div className={styles.aiChatTranscript} ref={transcriptRef}>
-        {activeChatTab === "simulation" ? (
-          <div className={styles.aiChatSimulationIntro}>
-            <strong>현재 보드 기준으로 흐름, 병목, 장애, 예상 비용을 봅니다.</strong>
-            <button
-              className={styles.aiPrimaryButton}
-              disabled={simulationState === "loading" || context.isPreviewActive}
-              onClick={() => void runDesignSimulation()}
-              type="button"
-            >
-              <Sparkles size={14} aria-hidden="true" />
-              {simulationState === "loading" ? "계산 중" : "시뮬레이션 실행"}
-            </button>
-          </div>
-        ) : null}
-
         {visibleMessages.map((message) => {
           const isMultiSelect = message.selectionMode === "multiple";
           const submittedSuggestions = message.selectedSuggestions ?? [];
@@ -1422,9 +1315,6 @@ export function WorkspaceAiChatDock({
 
         {activeChatTab === "draft" ? (
           <WorkspaceAiRequestMessage state={draftState} message={draftErrorMessage} />
-        ) : null}
-        {activeChatTab === "simulation" ? (
-          <WorkspaceAiRequestMessage state={simulationState} message={simulationErrorMessage} />
         ) : null}
 
         {activeChatTab === "preview" && terraformPreviewExplanation !== null ? (
@@ -1580,12 +1470,6 @@ export function WorkspaceAiChatDock({
           </article>
         ) : null}
 
-        {activeChatTab === "simulation" && hasStaleDesignSimulation ? (
-          <p className={styles.aiStaleNotice}>보드 변경됨 · 다시 실행 필요</p>
-        ) : null}
-        {activeChatTab === "simulation" && designSimulation !== null ? (
-          <WorkspaceAiDesignSimulationResult simulation={designSimulation} />
-        ) : null}
       </div>
 
       <form className={styles.aiChatComposer} onSubmit={(event) => void submitChatPrompt(event)}>
@@ -1932,14 +1816,6 @@ function formatTerraformIssueRawMessage(diagnostic: TerraformDiagnostic): string
   return `${diagnostic.code ?? "terraform.unknown"}\n${formatTerraformDiagnosticTitle(diagnostic)}\n${diagnostic.message}`;
 }
 
-function createSimulationResultMessage(result: DesignSimulationResult): string {
-  const costHeadline = result.costEstimate?.reviewMessages[0];
-
-  return costHeadline === undefined
-    ? `현재 보드 시뮬레이션 결과: ${result.summary}`
-    : `현재 보드 시뮬레이션 결과: ${result.summary} ${costHeadline}`;
-}
-
 function createDraftSafetyWarnings(
   draft: AiArchitectureDraftResult | null,
   boardHasResources: boolean
@@ -2027,18 +1903,13 @@ function getChatMessageScope(message: WorkspaceAiChatMessage): WorkspaceAiChatSc
   if (
     message.scope === "draft" ||
     message.scope === "errors" ||
-    message.scope === "preview" ||
-    message.scope === "simulation"
+    message.scope === "preview"
   ) {
     return message.scope;
   }
 
   if (message.kind === "preview") {
     return "preview";
-  }
-
-  if (message.kind === "simulation") {
-    return "simulation";
   }
 
   if (message.kind === "terraform_issue") {
@@ -2106,8 +1977,7 @@ function isWorkspaceAiChatMessage(value: unknown): value is WorkspaceAiChatMessa
     (candidate.scope === undefined ||
       candidate.scope === "draft" ||
       candidate.scope === "errors" ||
-      candidate.scope === "preview" ||
-      candidate.scope === "simulation") &&
+      candidate.scope === "preview") &&
     (candidate.selectionMode === undefined ||
       candidate.selectionMode === "single" ||
       candidate.selectionMode === "multiple") &&
@@ -2122,7 +1992,6 @@ function isWorkspaceAiChatMessage(value: unknown): value is WorkspaceAiChatMessa
       candidate.kind === "patch" ||
       candidate.kind === "preview" ||
       candidate.kind === "question" ||
-      candidate.kind === "simulation" ||
       candidate.kind === "status" ||
       candidate.kind === "terraform_issue")
   );

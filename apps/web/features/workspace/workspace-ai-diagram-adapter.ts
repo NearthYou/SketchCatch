@@ -19,6 +19,10 @@ import {
 import { isAreaNode } from "../diagram-editor/area-nodes";
 import { BOARD_DEFAULT_EDGE_COLOR } from "../diagram-editor/constants";
 import { createDiagramNodeFromPayload } from "../diagram-editor/diagram-utils";
+import {
+  doesOrthogonalRouteCrossResource,
+  getObstacleSafeEdgeHandles
+} from "../diagram-editor/obstacle-safe-edge-routing";
 import { RESOURCE_NODE_DEFAULT_SIZE } from "../diagram-editor/resource-node-geometry";
 import { getResourceNodeVisualBounds } from "../diagram-editor/resource-node-visual-footprint";
 import { resourceCatalog } from "../resource-settings/catalog";
@@ -826,8 +830,20 @@ function getDefaultEdgeHandles(
 
   const routedHandles = getLowestOverlapEdgeHandles(sourceNode, targetNode, nodes, occupiedRoutes);
 
-  if (routedHandles) {
-    return routedHandles;
+  if (routedHandles?.sourceHandleId && routedHandles.targetHandleId) {
+    const completeRoutedHandles = {
+      sourceHandleId: routedHandles.sourceHandleId,
+      targetHandleId: routedHandles.targetHandleId
+    };
+
+    if (!doesOrthogonalRouteCrossResource(sourceNode, targetNode, completeRoutedHandles, nodes)) {
+      return completeRoutedHandles;
+    }
+  }
+
+  const obstacleSafeHandles = getObstacleSafeEdgeHandles(sourceNode, targetNode, nodes);
+  if (!doesOrthogonalRouteCrossResource(sourceNode, targetNode, obstacleSafeHandles, nodes)) {
+    return obstacleSafeHandles;
   }
 
   const sourceCenter = getNodeCenter(sourceNode);

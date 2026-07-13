@@ -9,6 +9,10 @@ import {
   GetMetricDataCommand
 } from "@aws-sdk/client-cloudwatch";
 import {
+  DescribeServicesCommand,
+  ECSClient
+} from "@aws-sdk/client-ecs";
+import {
   createAwsSdkStsGateway,
   type AwsTemporaryCredentials
 } from "../aws-connections/aws-connection-test-service.js";
@@ -62,6 +66,20 @@ export type AutoScalingObservabilityClient = {
   }>;
 };
 
+export type EcsObservabilityClient = {
+  describeService(clusterName: string, serviceName: string): Promise<{
+    readonly service?: {
+      readonly desiredCount?: number | undefined;
+      readonly runningCount?: number | undefined;
+      readonly pendingCount?: number | undefined;
+      readonly events?: ReadonlyArray<{
+        readonly createdAt?: Date | undefined;
+        readonly message?: string | undefined;
+      }> | undefined;
+    } | undefined;
+  }>;
+};
+
 export type AwsDeploymentObservabilityProviderOptions = {
   readonly prepareCredentials?: (
     target: DeploymentObservabilityTarget
@@ -74,6 +92,10 @@ export type AwsDeploymentObservabilityProviderOptions = {
     readonly region: string;
     readonly credentials: AwsTemporaryCredentials;
   }) => AutoScalingObservabilityClient;
+  readonly ecsClientFactory?: (input: {
+    readonly region: string;
+    readonly credentials: AwsTemporaryCredentials;
+  }) => EcsObservabilityClient;
   readonly now?: (() => number) | undefined;
 };
 
@@ -85,6 +107,7 @@ export function createAwsDeploymentObservabilityProvider(
     options.cloudWatchClientFactory ?? createDefaultCloudWatchClient;
   const autoScalingClientFactory =
     options.autoScalingClientFactory ?? createDefaultAutoScalingClient;
+  const ecsClientFactory = options.ecsClientFactory ?? createDefaultEcsClient;
   const now = options.now ?? Date.now;
 
   return {
@@ -105,16 +128,87 @@ export function createAwsDeploymentObservabilityProvider(
         credentials
       };
       const cloudWatchClient = cloudWatchClientFactory(clientInput);
-      const autoScalingClient = autoScalingClientFactory(clientInput);
       const currentTimeMs = now();
+      const capacityPromise = target.capacityTarget.kind === "ecs_service"
+        ? observeEcsService(
+            ecsClientFactory(clientInput),
+            target.capacityTarget.clusterName,
+            target.capacityTarget.serviceName,
+            target.capacityTarget.maxCapacity,
+            currentTimeMs
+          )
+        : observeAutoScaling(
+            autoScalingClientFactory(clientInput),
+            target.capacityTarget.asgName,
+            currentTimeMs
+          );
       const [cloudWatch, capacity] = await Promise.all([
         observeCloudWatch(cloudWatchClient, target, currentTimeMs),
-        observeAutoScaling(autoScalingClient, target.asgName, currentTimeMs)
+        capacityPromise
       ]);
 
       return { cloudWatch, capacity };
     }
   };
+}
+
+async function observeEcsService(
+  client: EcsObservabilityClient,
+  clusterName: string,
+  serviceName: string,
+  maxCapacity: number,
+  currentTimeMs: number
+): Promise<DeploymentObservation["capacity"]> {
+  try {
+    const result = await client.describeService(clusterName, serviceName);
+    const service = result.service;
+
+    if (!service) {
+      return createUnavailableCapacity("ECS_SERVICE_NOT_FOUND");
+    }
+
+    const runningCount = Math.max(0, service.runningCount ?? 0);
+    const pendingCount = Math.max(0, service.pendingCount ?? 0);
+    const instances = [
+      ...Array.from({ length: runningCount }, (_, index) => ({
+        healthStatus: "Healthy",
+        instanceId: `task/${serviceName}/${index + 1}`,
+        lifecycleState: "RUNNING"
+      })),
+      ...Array.from({ length: pendingCount }, (_, index) => ({
+        healthStatus: "Pending",
+        instanceId: `task/${serviceName}/pending-${index + 1}`,
+        lifecycleState: "PROVISIONING"
+      }))
+    ];
+    const latestEvent = [...(service.events ?? [])]
+      .filter(
+        (event): event is typeof event & { createdAt: Date } =>
+          event.createdAt instanceof Date && Number.isFinite(event.createdAt.getTime())
+      )
+      .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())[0];
+
+    return {
+      state: "available",
+      desiredCapacity: service.desiredCount ?? null,
+      currentInstanceCount: runningCount + pendingCount,
+      inServiceInstanceCount: runningCount,
+      maxCapacity,
+      instances,
+      latestActivity: latestEvent
+        ? {
+            statusCode: pendingCount > 0 ? "InProgress" : "Successful",
+            description: latestEvent.message ?? "ECS Service activity",
+            startedAt: latestEvent.createdAt.toISOString(),
+            endedAt: null
+          }
+        : null,
+      observedAt: new Date(currentTimeMs).toISOString(),
+      errorCode: null
+    };
+  } catch {
+    return createUnavailableCapacity("ECS_SERVICE_UNAVAILABLE");
+  }
 }
 
 async function observeCloudWatch(
@@ -403,6 +497,39 @@ function createDefaultAutoScalingClient(input: {
           startTime: activity.StartTime,
           endTime: activity.EndTime
         }))
+      };
+    }
+  };
+}
+
+function createDefaultEcsClient(input: {
+  readonly region: string;
+  readonly credentials: AwsTemporaryCredentials;
+}): EcsObservabilityClient {
+  const client = new ECSClient(input);
+
+  return {
+    async describeService(clusterName, serviceName) {
+      const result = await client.send(
+        new DescribeServicesCommand({
+          cluster: clusterName,
+          services: [serviceName]
+        })
+      );
+      const service = result.services?.[0];
+
+      return {
+        service: service
+          ? {
+              desiredCount: service.desiredCount,
+              runningCount: service.runningCount,
+              pendingCount: service.pendingCount,
+              events: service.events?.map((event) => ({
+                createdAt: event.createdAt,
+                message: event.message
+              }))
+            }
+          : undefined
       };
     }
   };

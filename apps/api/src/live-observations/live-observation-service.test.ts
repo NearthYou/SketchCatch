@@ -37,6 +37,7 @@ test("createSession validates deployment eligibility and reuses one active sessi
   assert.match(first.session.audienceUrl, /^https:\/\/audience\.example\.com\//);
   assert.match(first.session.audienceUrl, /observation=token-1/);
   assert.match(first.session.audienceUrl, /collector=https%3A%2F%2Fapp\.example\.com/);
+  assert.match(first.session.audienceUrl, /traffic=https%3A%2F%2Ftraffic\.example\.com%2Fapi%2Ftraffic/);
   assert.equal(first.session.createdAt, "2026-07-10T09:00:00.000Z");
   assert.equal(first.session.expiresAt, "2026-07-10T09:15:00.000Z");
 
@@ -60,6 +61,45 @@ test("createSession validates deployment eligibility and reuses one active sessi
       ),
     (error: unknown) => hasServiceCode(error, "LIVE_OBSERVATION_OUTPUT_INVALID")
   );
+});
+
+test("createSession accepts ECS Fargate outputs and builds an ECS service observation target", async () => {
+  let observedTarget: unknown;
+  const service = createService({
+    observabilityProvider: {
+      async observe(target, observationId) {
+        observedTarget = target;
+        return createObservabilityProvider().observe(target, observationId);
+      }
+    }
+  });
+
+  await service.createSession(
+    createSessionInput({
+      outputs: {
+        ...createRequiredOutputs(),
+        asg_name: undefined,
+        ecs_cluster_name: "demo-cluster",
+        ecs_service_name: "demo-service",
+        max_capacity: 2
+      }
+    })
+  );
+
+  assert.deepEqual(observedTarget, {
+    albArnSuffix: "app/demo/123",
+    awsConnectionId: "connection-1",
+    capacityTarget: {
+      clusterName: "demo-cluster",
+      kind: "ecs_service",
+      maxCapacity: 2,
+      serviceName: "demo-service"
+    },
+    externalId: "external-id",
+    region: "ap-northeast-2",
+    roleArn: "arn:aws:iam::123456789012:role/SketchCatchTerraformExecutionRole-demo",
+    targetGroupArnSuffix: "targetgroup/demo/456"
+  });
 });
 
 test("collectEvent deduplicates receipts and computes rolling pressure from accepted events", async () => {
@@ -191,17 +231,37 @@ test("collectEvent keeps the accepted count bounded when the session event cap i
 });
 
 test("stopSession ends observation without changing infrastructure and collector returns gone", async () => {
-  const service = createService();
+  const terminalObservationIds: string[] = [];
+  const service = createService({
+    onSessionTerminal: (observationId) => terminalObservationIds.push(observationId)
+  });
   const created = await service.createSession(createSessionInput());
 
   const stopped = await service.stopSession(created.session.id, created.session.deploymentId);
 
   assert.equal(stopped.status, "stopped");
+  assert.deepEqual(terminalObservationIds, [created.session.id]);
   assert.equal((await service.getSnapshot(created.session.id)).status, "stopped");
   await assert.rejects(
     () => service.collectEvent({ eventId: "after-stop", publicToken: "public-token" }),
     (error: unknown) => hasServiceCode(error, "LIVE_OBSERVATION_GONE")
   );
+});
+
+test("natural session expiry releases provider-owned observation state", async () => {
+  let currentTimeMs = fixedNowMs;
+  const terminalObservationIds: string[] = [];
+  const service = createService({
+    now: () => currentTimeMs,
+    onSessionTerminal: (observationId) => terminalObservationIds.push(observationId)
+  });
+  const created = await service.createSession(createSessionInput());
+
+  currentTimeMs = Date.parse(created.session.expiresAt);
+  const expired = await service.getSnapshot(created.session.id);
+
+  assert.equal(expired.status, "expired");
+  assert.deepEqual(terminalObservationIds, [created.session.id]);
 });
 
 test("createSession requires a healthy Redis backend when shared cache is required", async () => {

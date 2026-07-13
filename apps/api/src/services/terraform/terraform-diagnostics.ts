@@ -303,7 +303,7 @@ function checkBlocks(terraformCode: string): TerraformDiagnostic[] {
       trimmedLine.endsWith("{")
     ) {
       diagnostics.push({
-        severity: "error",
+        severity: "warning",
         code: "terraform.unsupported_block",
         line: index + 1,
         message: "Terraform editor 검증은 resource/data block만 지원합니다."
@@ -379,15 +379,6 @@ function checkBlocks(terraformCode: string): TerraformDiagnostic[] {
 
       addresses.add(address);
 
-      if (isInlineEmptyBlock(codeLine) || isEmptyBlock(lines, index)) {
-        diagnostics.push({
-          severity: "warning",
-          code: "terraform.empty_block",
-          line: index + 1,
-          resourceAddress: address,
-          message: `${address} block에 attribute가 없습니다.`
-        });
-      }
     }
 
     depth = Math.max(0, depth + getBraceDelta(codeLine));
@@ -559,7 +550,7 @@ function checkUndefinedReferences(terraformCode: string): TerraformDiagnostic[] 
 
       reportedReferences.add(referenceAddress);
       diagnostics.push({
-        severity: "error",
+        severity: "warning",
         code: "terraform.undefined_reference",
         line: index + 1,
         resourceAddress: referenceAddress,
@@ -681,30 +672,6 @@ function checkTrailingAttributeCommas(terraformCode: string): TerraformDiagnosti
   });
 
   return diagnostics;
-}
-
-function isEmptyBlock(lines: string[], headerIndex: number): boolean {
-  for (let index = headerIndex + 1; index < lines.length; index += 1) {
-    const lineText = lines[index];
-
-    if (lineText === undefined) {
-      continue;
-    }
-
-    const trimmedLine = stripLineComment(lineText).trim();
-
-    if (!trimmedLine) {
-      continue;
-    }
-
-    return trimmedLine === "}";
-  }
-
-  return false;
-}
-
-function isInlineEmptyBlock(lineText: string): boolean {
-  return /\{\s*\}\s*$/.test(stripLineComment(lineText));
 }
 
 function checkQuotedReferences(terraformCode: string): TerraformDiagnostic[] {

@@ -295,7 +295,7 @@ export function buildReferenceOptions(
     }
 
     const referencePrefix = params.terraformBlockType === "data" ? "data." : "";
-    const reference = `${referencePrefix}${params.resourceType}.${params.resourceName}.${getReferenceAttribute(definition)}`;
+    const reference = `${referencePrefix}${params.resourceType}.${params.resourceName}.${getReferenceAttribute(definition, params.resourceType)}`;
 
     options.push({
       label: `${node.label || params.resourceName} (${reference})`,
@@ -572,7 +572,18 @@ function hasDuplicateResourceName(
   });
 }
 
-export function getReferenceAttribute(definition: ParameterCatalogDefinition) {
+export function getReferenceAttribute(
+  definition: ParameterCatalogDefinition,
+  targetResourceType?: string
+) {
+  const targetSpecificAttribute = targetResourceType
+    ? definition.referenceAttributesByTargetType?.[targetResourceType]
+    : undefined;
+
+  if (targetSpecificAttribute) {
+    return targetSpecificAttribute;
+  }
+
   if (definition.referenceAttribute) {
     return definition.referenceAttribute;
   }

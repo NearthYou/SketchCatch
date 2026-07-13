@@ -76,11 +76,13 @@ export type WorkspaceRightPanelProps = {
   readonly context: DiagramEditorPanelContext;
   readonly deploymentAvailability: DeploymentAvailability;
   readonly initialView?: WorkspaceRightPanelView | undefined;
+  readonly initialTerraformFiles?: readonly TerraformSyncFileInput[] | undefined;
   readonly onTerraformIssueAiRequest: (request: TerraformIssueAiRequest) => void;
   readonly onTerraformPreviewAiRequest: (request: TerraformPreviewAiRequest) => void;
   readonly onTerraformSafeFixApplyResult: (result: TerraformSafeFixApplyResult) => void;
   readonly projectId: string;
   readonly projectName: string;
+  readonly onTerraformFilesChange?: ((files: readonly TerraformSyncFileInput[]) => void) | undefined;
   readonly terraformSafeFixApplyRequest: TerraformSafeFixApplyRequest | null;
 };
 
@@ -100,11 +102,13 @@ export function WorkspaceRightPanel({
   context,
   deploymentAvailability,
   initialView,
+  initialTerraformFiles,
   onTerraformIssueAiRequest,
   onTerraformPreviewAiRequest,
   onTerraformSafeFixApplyResult,
   projectId,
   projectName,
+  onTerraformFilesChange,
   terraformSafeFixApplyRequest
 }: WorkspaceRightPanelProps) {
   const terraformPanelRef = useRef<TerraformCodePanelHandle | null>(null);
@@ -706,9 +710,9 @@ export function WorkspaceRightPanel({
     : null;
   const liveObservationModal = isLiveObservationOpen ? (
     <LiveObservationModal
+      diagramJson={context.diagram}
       onClose={() => setIsLiveObservationOpen(false)}
       projectId={projectId}
-      projectName={projectName}
     />
   ) : null;
   const terraformSplitStyle = {
@@ -850,6 +854,7 @@ export function WorkspaceRightPanel({
               <TerraformCodePanel
                 ref={terraformPanelRef}
                 context={context}
+                initialTerraformFiles={initialTerraformFiles}
                 externalDiscardRequestId={terraformDiscardRequestId}
                 externalSaveRequestId={terraformSaveRequestId}
                 isVisible={activeView === "terraform"}
@@ -858,6 +863,7 @@ export function WorkspaceRightPanel({
                 onDirtyChange={handleTerraformDirtyChange}
                 onExternalSaveComplete={handleTerraformExternalSaveComplete}
                 onOpenIssues={focusTerraformIssuesPane}
+                onTerraformFilesChange={onTerraformFilesChange}
                 onTerraformPreviewAiRequest={onTerraformPreviewAiRequest}
               />
             </div>

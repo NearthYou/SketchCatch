@@ -253,6 +253,7 @@ test("rejects unknown AWS Terraform-only blocks without shared terraformSync def
   assert.equal(result.proposals?.length, 0);
   assert.equal(result.diagnostics[0]?.code, "terraform.sync.unsupported_resource");
   assert.equal(result.diagnostics[0]?.resourceAddress, "aws_unmodeled_service.example");
+  assert.deepEqual(result.preservedResourceAddresses, ["aws_unmodeled_service.example"]);
 });
 
 test("ignores Terraform utility blocks while syncing supported resources", () => {
@@ -276,6 +277,10 @@ resource "aws_vpc" "main" {
   );
 
   assert.deepEqual(result.diagnostics, []);
+  assert.deepEqual(result.preservedResourceAddresses, [
+    "random_password.db_password",
+    "terraform_data.build"
+  ]);
   assert.equal(result.proposals?.length, 1);
   assert.equal(result.proposals?.[0]?.kind, "create_candidate");
   assert.equal(result.proposals?.[0]?.identity.resourceType, "aws_vpc");
@@ -410,6 +415,36 @@ resource "aws_vpc" "main" {
   assert.equal(result.proposals?.length, 1);
   assert.equal(result.proposals?.[0]?.kind, "create_candidate");
   assert.equal(result.proposals?.[0]?.identity.resourceType, "aws_vpc");
+});
+
+test("ignores generated Terraform configuration blocks while syncing resource files", () => {
+  const diagramJson = makeSingleVpcDiagramJson();
+  const result = syncTerraformToDiagramJson(diagramJson, {
+    terraformCode: "",
+    terraformFiles: [
+      {
+        fileName: "providers.tf",
+        terraformCode: `terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+}`
+      },
+      {
+        fileName: "main.tf",
+        terraformCode: `resource "aws_vpc" "main" {
+  cidr_block = "10.9.0.0/16"
+}`
+      }
+    ]
+  });
+
+  assert.deepEqual(result.diagnostics, []);
+  assert.deepEqual(result.proposals, []);
+  assert.equal(result.diagramJson.nodes[0]?.parameters?.values.cidrBlock, "10.9.0.0/16");
 });
 
 test("creates AZ area proposal before Subnet and EBS proposals that use availability_zone", () => {

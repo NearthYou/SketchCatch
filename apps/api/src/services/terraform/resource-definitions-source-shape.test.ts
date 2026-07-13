@@ -165,6 +165,16 @@ const requestedResourceDefinitions = [
     terraformResourceType: "aws_ecs_task_definition"
   },
   {
+    id: "aws-appautoscaling-target",
+    resourceType: "APPLICATION_AUTO_SCALING_TARGET",
+    terraformResourceType: "aws_appautoscaling_target"
+  },
+  {
+    id: "aws-appautoscaling-policy",
+    resourceType: "APPLICATION_AUTO_SCALING_POLICY",
+    terraformResourceType: "aws_appautoscaling_policy"
+  },
+  {
     id: "aws-eks-cluster",
     resourceType: "EKS_CLUSTER",
     terraformResourceType: "aws_eks_cluster"

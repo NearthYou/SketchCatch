@@ -997,16 +997,81 @@ test("renders Kubernetes workload nested blocks and provider references", () => 
   assert.match(terraformCode, /container_port = 80/);
 });
 
+test("renders Launch Template instance profiles and dependency addresses with Terraform syntax", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      makeNode({
+        id: "launch-template-1",
+        type: "aws_launch_template",
+        kind: "resource",
+        label: "api",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_launch_template",
+          resourceName: "api",
+          fileName: "compute",
+          values: {
+            imageId: "data.aws_ami.al2023.id",
+            instanceType: "t3.micro",
+            iamInstanceProfile: {
+              name: "aws_iam_instance_profile.api_agent.name"
+            }
+          }
+        }
+      }),
+      makeNode({
+        id: "bucket-policy-1",
+        type: "aws_s3_bucket_policy",
+        kind: "resource",
+        label: "site",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_s3_bucket_policy",
+          resourceName: "site",
+          fileName: "site",
+          values: {
+            bucket: "aws_s3_bucket.site.id",
+            dependsOn: [
+              "aws_s3_bucket_public_access_block.site",
+              "kubernetes_namespace.sketchcatch"
+            ],
+            policy: "{}"
+          }
+        }
+      })
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  const terraformCode = generateTerraformFromDiagramJson(diagramJson);
+
+  assert.match(
+    terraformCode,
+    /iam_instance_profile \{[\s\S]*name = aws_iam_instance_profile\.api_agent\.name[\s\S]*\}/
+  );
+  assert.doesNotMatch(terraformCode, /iam_instance_profile\s*=/);
+  assert.match(
+    terraformCode,
+    /depends_on = \[[\s\S]*aws_s3_bucket_public_access_block\.site,[\s\S]*\]/
+  );
+  assert.doesNotMatch(terraformCode, /"aws_s3_bucket_public_access_block\.site"/);
+  assert.match(terraformCode, /kubernetes_namespace\.sketchcatch,/);
+  assert.doesNotMatch(terraformCode, /"kubernetes_namespace\.sketchcatch"/);
+});
+
 test("tracks curated nested block parameters as canonical camelCase keys", () => {
   const expectedNestedBlockAttributes: Record<string, string[]> = {
     aws_ami: ["filter"],
     aws_api_gateway_rest_api: ["endpointConfiguration"],
+    aws_appautoscaling_policy: ["targetTrackingScalingPolicyConfiguration"],
     aws_autoscaling_group: ["launchTemplate", "tag"],
     aws_db_parameter_group: ["parameter"],
     aws_dynamodb_table: ["attribute"],
     aws_cloudfront_cache_policy: ["parametersInCacheKeyAndForwardedToOrigin"],
     aws_cloudfront_distribution: [
       "defaultCacheBehavior",
+      "orderedCacheBehavior",
       "origin",
       "restrictions",
       "viewerCertificate"
@@ -1020,8 +1085,16 @@ test("tracks curated nested block parameters as canonical camelCase keys", () =>
     aws_instance: ["rootBlockDevice"],
     aws_eks_cluster: ["vpcConfig"],
     aws_eks_node_group: ["scalingConfig"],
+    aws_ecs_cluster: ["setting"],
+    aws_ecs_service: ["deploymentCircuitBreaker", "loadBalancer", "networkConfiguration"],
     aws_lambda_function: ["environment"],
-    aws_launch_template: ["iamInstanceProfile", "metadataOptions", "monitoring"],
+    aws_launch_template: [
+      "iamInstanceProfile",
+      "metadataOptions",
+      "monitoring",
+      "networkInterfaces",
+      "tagSpecifications"
+    ],
     aws_route_table: ["route"],
     aws_s3_bucket_server_side_encryption_configuration: ["rule"],
     aws_s3_bucket_lifecycle_configuration: ["rule"],

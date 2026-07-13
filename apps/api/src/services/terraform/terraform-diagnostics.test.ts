@@ -279,12 +279,12 @@ test("accepts block headers with trailing comments", () => {
   assert.equal(diagnostics.some((diagnostic) => diagnostic.code === "terraform.block_header"), false);
 });
 
-test("treats comment-only block bodies as empty", () => {
+test("allows comment-only block bodies as draft syntax", () => {
   const diagnostics = createTerraformDiagnostics(`resource "aws_vpc" "main" {
   # cidr_block will be filled later
 } # end`);
 
-  assert.equal(diagnostics[0]?.code, "terraform.empty_block");
+  assert.deepEqual(diagnostics, []);
 });
 
 test("ignores quoted Terraform references inside comments", () => {
@@ -479,7 +479,7 @@ test("warns about references to undeclared local Terraform resources", () => {
   assert.deepEqual(
     diagnostics.find((diagnostic) => diagnostic.code === "terraform.undefined_reference"),
     {
-      severity: "error",
+      severity: "warning",
       code: "terraform.undefined_reference",
       line: 2,
       resourceAddress: "aws_vpc.main",
@@ -497,7 +497,7 @@ test("detects undeclared two-part Terraform references", () => {
     (candidate) => candidate.code === "terraform.undefined_reference"
   );
 
-  assert.equal(diagnostic?.severity, "error");
+  assert.equal(diagnostic?.severity, "warning");
   assert.equal(diagnostic?.line, 2);
   assert.equal(diagnostic?.resourceAddress, "aws_vpc.not_existing_vpc");
 });
@@ -515,9 +515,24 @@ test("keeps collecting resource attributes after object attributes", () => {
     (candidate) => candidate.code === "terraform.undefined_reference"
   );
 
-  assert.equal(diagnostic?.severity, "error");
+  assert.equal(diagnostic?.severity, "warning");
   assert.equal(diagnostic?.line, 6);
   assert.equal(diagnostic?.resourceAddress, "aws_vpc.missing");
+});
+
+test("keeps empty blocks silent and undeclared references non-blocking for draft saves", () => {
+  const diagnostics = createTerraformDiagnostics(`resource "aws_cloudfront_distribution" "cdn" {
+}
+
+resource "aws_instance" "web" {
+  subnet_id = aws_subnet.missing.id
+}`);
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => ({ code: diagnostic.code, severity: diagnostic.severity })),
+    [{ code: "terraform.undefined_reference", severity: "warning" }]
+  );
+  assert.equal(diagnostics.some((diagnostic) => diagnostic.severity === "error"), false);
 });
 
 test("detects AWS attribute type mismatches without Terraform init", () => {
