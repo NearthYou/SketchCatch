@@ -1,5 +1,7 @@
 # AWS Template Board 실화면 QA
 
+> 이 문서는 Design presentation layer 도입 전의 103개 deployable Resource 배치 기준 기록이다. Region·AZ·Group·User/Client·Source Repository를 포함한 현재 최종 QA는 `017_AWS템플릿Design실화면QA_gg.md`를 본다.
+
 ## 목적
 
 `007_AWS템플릿패턴_gg.md`의 여섯 PNG 패턴과 `013_AWS템플릿보드배치매핑_gg.md`의 배치 계약이 실제 Architecture Board에서도 같은 구조로 보이는지 확인한 기록이다.
