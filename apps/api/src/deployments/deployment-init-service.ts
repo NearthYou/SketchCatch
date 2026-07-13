@@ -77,7 +77,9 @@ export async function runDeploymentInit(
         awsConnection,
         options.awsStsGateway ?? createAwsSdkStsGateway()
       ));
-  const initArtifactStorage = options.initArtifactStorage ?? createS3DeploymentPlanArtifactStorage();
+  let initArtifactStorage = options.initArtifactStorage;
+  const getInitArtifactStorage = () =>
+    (initArtifactStorage ??= createS3DeploymentPlanArtifactStorage());
 
   let workspace: PreparedTerraformWorkspace | undefined;
   let deploymentId: string | undefined;
@@ -211,7 +213,7 @@ export async function runDeploymentInit(
           uploadTerraformLockFile({
             deploymentId: deployment.id,
             workspace: workspace!,
-            storage: initArtifactStorage
+            storage: getInitArtifactStorage()
           })
       });
       sequence = lockUpload.sequence;
