@@ -1173,6 +1173,7 @@ export type {
   BrainboardSourceNode,
   BrainboardSourcePoint,
   BrainboardSourcePresentationNode,
+  BrainboardSourceResourceAddressMapping,
   BrainboardSourceResourceNode,
   BrainboardSourceSize,
   BrainboardSourceValue,
@@ -1181,7 +1182,9 @@ export type {
   BrainboardTemplateEvidence,
   BrainboardTemplateOrigin,
   BrainboardTemplateSource,
-  BrainboardTerraformFile
+  BrainboardTerraformFile,
+  BrainboardTerraformWorkspaceOmission,
+  BrainboardTerraformWorkspaceSeed
 } from "./brainboard-templates/source-types.ts";
 export { validateBrainboardTemplateSource } from "./brainboard-templates/validate-source.ts";
 export type {
@@ -1189,6 +1192,19 @@ export type {
   BrainboardSourceValidationErrorCode,
   BrainboardSourceValidationResult
 } from "./brainboard-templates/validate-source.ts";
+export {
+  awsKubernetesNativeCnisSource,
+  brainboardTemplateSources,
+  trainingAwsOnboardingSource
+} from "./brainboard-templates/sources/index.ts";
+export { defineCapturedBrainboardTemplate } from "./brainboard-templates/sources/define-source.ts";
+export type {
+  BrainboardCapturedNode,
+  BrainboardPresentationNodeBinding,
+  BrainboardResourceNodeBinding,
+  BrainboardSourceNodeBinding,
+  CapturedBrainboardTemplateDefinition
+} from "./brainboard-templates/sources/define-source.ts";
 
 export {
   buildTemplateDiagramJson,

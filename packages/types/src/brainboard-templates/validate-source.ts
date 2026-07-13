@@ -6,6 +6,7 @@ export type BrainboardSourceValidationErrorCode =
   | "brainboard.source.duplicate_node_order"
   | "brainboard.source.duplicate_edge_order"
   | "brainboard.source.duplicate_resource_address"
+  | "brainboard.source.duplicate_resource_node_address"
   | "brainboard.source.duplicate_file_name"
   | "brainboard.source.invalid_resource_address"
   | "brainboard.source.dangling_parent"
@@ -15,8 +16,12 @@ export type BrainboardSourceValidationErrorCode =
   | "brainboard.source.parent_cycle"
   | "brainboard.source.sha256_mismatch"
   | "brainboard.source.missing_resource_address"
+  | "brainboard.source.unmapped_resource_address"
   | "brainboard.source.missing_resource_block"
-  | "brainboard.source.clone_uuid_leak";
+  | "brainboard.source.clone_uuid_leak"
+  | "brainboard.source.invalid_presentation_alias"
+  | "brainboard.source.invalid_workspace_seed"
+  | "brainboard.source.workspace_sha256_mismatch";
 
 export type BrainboardSourceValidationError = {
   readonly code: BrainboardSourceValidationErrorCode;
@@ -31,6 +36,8 @@ export type BrainboardSourceValidationResult = {
 
 const CLONE_ARCHITECTURE_UUID_PATTERN =
   /\b(?:arch(?:itecture)?_?uuid|architecture_?id)\s*=\s*["'][0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}["']/iu;
+const BRAINBOARD_ARCHITECTURE_UUID_LINE_PATTERN =
+  /^[\t ]*arch(?:itecture)?_?uuid[\t ]*=[\t ]*["'][0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}["'][\t ]*\r?\n$/iu;
 const TERRAFORM_IDENTIFIER_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_-]*$/u;
 
 export function validateBrainboardTemplateSource(
@@ -123,6 +130,7 @@ export function validateBrainboardTemplateSource(
 
   addParentCycleErrors(source, errors);
   addTerraformErrors(source, errors);
+  addPresentationAliasErrors(source, errors);
 
   return { valid: errors.length === 0, errors };
 }
@@ -210,11 +218,34 @@ function addTerraformErrors(
         message: `SHA-256 mismatch for ${file.fileName}: expected ${file.sha256}, received ${actualSha256}.`
       });
     }
-    if (file.includeInWorkspace && containsCloneArchitectureUuid(source, file.code)) {
+    const workspaceCode = validateWorkspaceSeed(source, file, index, errors);
+    if (file.includeInWorkspace && containsCloneArchitectureUuid(source, workspaceCode)) {
       errors.push({
         code: "brainboard.source.clone_uuid_leak",
-        path: `terraform.files[${index}].code`,
+        path: file.workspaceSeed
+          ? `terraform.files[${index}].workspaceSeed.code`
+          : `terraform.files[${index}].code`,
         message: `Workspace seed file ${file.fileName} contains a Brainboard clone architecture UUID.`
+      });
+    }
+  });
+
+  const resourceNodeIndexesByAddress = new Map<string, number[]>();
+  const seenNodeIds = new Set<string>();
+  source.nodes.forEach((node, index) => {
+    if (node.kind !== "resource" || seenNodeIds.has(node.sourceNodeId)) {
+      return;
+    }
+    seenNodeIds.add(node.sourceNodeId);
+    const address = getResourceAddress(node);
+    const indexes = resourceNodeIndexesByAddress.get(address) ?? [];
+    indexes.push(index);
+    resourceNodeIndexesByAddress.set(address, indexes);
+    if (indexes.length > 1) {
+      errors.push({
+        code: "brainboard.source.duplicate_resource_node_address",
+        path: `nodes[${index}]`,
+        message: `Resource address ${address} is already mapped by nodes[${indexes[0]}].`
       });
     }
   });
@@ -254,11 +285,92 @@ function addTerraformErrors(
       });
       return;
     }
+    if ((resourceNodeIndexesByAddress.get(address)?.length ?? 0) === 0) {
+      errors.push({
+        code: "brainboard.source.unmapped_resource_address",
+        path: `terraform.resourceAddresses[${index}]`,
+        message: `Source address ${address} has no resource visual mapping.`
+      });
+    }
     if (!containsTerraformBlock(allTerraformCode, identity)) {
       errors.push({
         code: "brainboard.source.missing_resource_block",
         path: `terraform.resourceAddresses[${index}]`,
         message: `Source address ${address} has no matching Terraform block.`
+      });
+    }
+  });
+}
+
+function validateWorkspaceSeed(
+  source: BrainboardTemplateSource,
+  file: BrainboardTemplateSource["terraform"]["files"][number],
+  fileIndex: number,
+  errors: BrainboardSourceValidationError[]
+): string {
+  const workspaceSeed = file.workspaceSeed;
+  if (workspaceSeed === undefined) {
+    return file.code;
+  }
+
+  if (!file.includeInWorkspace || workspaceSeed.omissions.length === 0) {
+    errors.push({
+      code: "brainboard.source.invalid_workspace_seed",
+      path: `terraform.files[${fileIndex}].workspaceSeed`,
+      message: `Workspace seed for ${file.fileName} requires an included file and at least one reviewed omission.`
+    });
+  }
+
+  if (sha256Hex(workspaceSeed.code) !== workspaceSeed.sha256.toLowerCase()) {
+    errors.push({
+      code: "brainboard.source.workspace_sha256_mismatch",
+      path: `terraform.files[${fileIndex}].workspaceSeed.sha256`,
+      message: `Workspace seed SHA-256 mismatch for ${file.fileName}.`
+    });
+  }
+
+  let expectedCode = file.code;
+  for (const [omissionIndex, omission] of workspaceSeed.omissions.entries()) {
+    if (
+      omission.reason !== "brainboard-architecture-uuid" ||
+      omission.sourceText.length === 0 ||
+      !BRAINBOARD_ARCHITECTURE_UUID_LINE_PATTERN.test(omission.sourceText) ||
+      countOccurrences(expectedCode, omission.sourceText) !== 1
+    ) {
+      errors.push({
+        code: "brainboard.source.invalid_workspace_seed",
+        path: `terraform.files[${fileIndex}].workspaceSeed.omissions[${omissionIndex}]`,
+        message: `Workspace omission ${omissionIndex} for ${file.fileName} must identify one exact reviewed UUID fragment.`
+      });
+      continue;
+    }
+    expectedCode = expectedCode.replace(omission.sourceText, "");
+  }
+  if (expectedCode !== workspaceSeed.code) {
+    errors.push({
+      code: "brainboard.source.invalid_workspace_seed",
+      path: `terraform.files[${fileIndex}].workspaceSeed.code`,
+      message: `Workspace seed for ${file.fileName} differs by more than its reviewed omissions.`
+    });
+  }
+
+  return workspaceSeed.code;
+}
+
+function addPresentationAliasErrors(
+  source: BrainboardTemplateSource,
+  errors: BrainboardSourceValidationError[]
+): void {
+  const resourceAddresses = new Set(source.terraform.resourceAddresses);
+  source.nodes.forEach((node, index) => {
+    if (node.kind !== "presentation" || node.aliasOf === null) {
+      return;
+    }
+    if (node.catalogId === null || !resourceAddresses.has(node.aliasOf)) {
+      errors.push({
+        code: "brainboard.source.invalid_presentation_alias",
+        path: `nodes[${index}].aliasOf`,
+        message: `Presentation alias ${node.sourceNodeId} requires a catalog identity and a captured Terraform address.`
       });
     }
   });
@@ -443,10 +555,22 @@ function isTerraformIdentifier(value: string | undefined): value is string {
 
 function containsCloneArchitectureUuid(source: BrainboardTemplateSource, code: string): boolean {
   const cloneArchitectureId = source.origin.cloneArchitectureId;
-  if (cloneArchitectureId !== null && cloneArchitectureId.length > 0) {
-    return code.toLowerCase().includes(cloneArchitectureId.toLowerCase());
+  return (
+    (cloneArchitectureId !== null &&
+      cloneArchitectureId.length > 0 &&
+      code.toLowerCase().includes(cloneArchitectureId.toLowerCase())) ||
+    CLONE_ARCHITECTURE_UUID_PATTERN.test(code)
+  );
+}
+
+function countOccurrences(value: string, fragment: string): number {
+  let count = 0;
+  let index = 0;
+  while ((index = value.indexOf(fragment, index)) !== -1) {
+    count += 1;
+    index += fragment.length;
   }
-  return CLONE_ARCHITECTURE_UUID_PATTERN.test(code);
+  return count;
 }
 
 function sha256Hex(value: string): string {

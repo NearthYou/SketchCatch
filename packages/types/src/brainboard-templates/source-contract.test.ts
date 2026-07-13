@@ -387,7 +387,8 @@ test("validator reports SHA-256 mismatches and missing resource blocks", () => {
   assert.deepEqual(errorCodes(source), [
     "brainboard.source.missing_resource_address",
     "brainboard.source.missing_resource_block",
-    "brainboard.source.sha256_mismatch"
+    "brainboard.source.sha256_mismatch",
+    "brainboard.source.unmapped_resource_address"
   ]);
 });
 
@@ -405,6 +406,76 @@ test("validator rejects clone UUID leakage only from workspace seed files", () =
 
   source.terraform.files[1]!.includeInWorkspace = true;
   assert.deepEqual(errorCodes(source), ["brainboard.source.clone_uuid_leak"]);
+});
+
+test("validator requires every Terraform address to map to exactly one resource visual", () => {
+  const source = makeValidSource();
+  source.nodes.push({
+    ...source.nodes[0]!,
+    sourceNodeId: "bucket-copy",
+    domOrder: 2
+  });
+
+  assert.deepEqual(errorCodes(source), ["brainboard.source.duplicate_resource_node_address"]);
+
+  source.nodes.pop();
+  source.nodes[0]!.resourceName = "not-the-source-address";
+  assert.deepEqual(errorCodes(source), [
+    "brainboard.source.missing_resource_address",
+    "brainboard.source.missing_resource_block",
+    "brainboard.source.unmapped_resource_address"
+  ]);
+});
+
+test("validator accepts reviewed aliases and rejects aliases without a catalog or source address", () => {
+  const source = makeValidSource();
+  const presentation = source.nodes[1]!;
+  assert.equal(presentation.kind, "presentation");
+  presentation.aliasOf = "aws_s3_bucket.example";
+
+  assert.deepEqual(errorCodes(source), []);
+
+  presentation.catalogId = null;
+  assert.deepEqual(errorCodes(source), ["brainboard.source.invalid_presentation_alias"]);
+
+  presentation.catalogId = "aws-s3-bucket";
+  presentation.aliasOf = "aws_s3_bucket.missing";
+  assert.deepEqual(errorCodes(source), ["brainboard.source.invalid_presentation_alias"]);
+});
+
+test("validator proves workspace seeds remove only exact reviewed source fragments", () => {
+  const source = makeValidSource();
+  const file = source.terraform.files[0]!;
+  const omittedLine = `  architecture_uuid = "${source.origin.cloneArchitectureId}"\n`;
+  file.code = file.code.replace("}\n", `${omittedLine}}\n`);
+  file.sha256 = sha256(file.code);
+  const sanitizedCode = file.code.replace(omittedLine, "");
+  file.workspaceSeed = {
+    code: sanitizedCode,
+    sha256: sha256(sanitizedCode),
+    omissions: [{ reason: "brainboard-architecture-uuid", sourceText: omittedLine }]
+  };
+
+  assert.deepEqual(errorCodes(source), []);
+
+  const overBroadFragment = `${omittedLine}}\n`;
+  file.workspaceSeed.code = file.code.replace(overBroadFragment, "");
+  file.workspaceSeed.sha256 = sha256(file.workspaceSeed.code);
+  file.workspaceSeed.omissions = [
+    { reason: "brainboard-architecture-uuid", sourceText: overBroadFragment }
+  ];
+  assert.deepEqual(errorCodes(source), ["brainboard.source.invalid_workspace_seed"]);
+
+  file.workspaceSeed.omissions = [
+    { reason: "brainboard-architecture-uuid", sourceText: omittedLine }
+  ];
+  file.workspaceSeed.code = `${sanitizedCode}\n`;
+  file.workspaceSeed.sha256 = sha256(file.workspaceSeed.code);
+  assert.deepEqual(errorCodes(source), ["brainboard.source.invalid_workspace_seed"]);
+
+  file.workspaceSeed.code = sanitizedCode;
+  file.workspaceSeed.sha256 = "0".repeat(64);
+  assert.deepEqual(errorCodes(source), ["brainboard.source.workspace_sha256_mismatch"]);
 });
 
 function requireValidator(): NonNullable<PublicContract["validateBrainboardTemplateSource"]> {
@@ -451,6 +522,8 @@ function makeValidSource() {
         terraformResourceType: "aws_s3_bucket",
         resourceName: "example",
         fileName: "main.tf",
+        addressMapping: "exact-title",
+        valuesResolution: "resolved",
         values: { bucket: "example", tags: { Environment: "training" } }
       },
       {
@@ -464,13 +537,17 @@ function makeValidSource() {
         zIndex: 0,
         rawTransform: "translate(0, 0), rotate(0 400 300)",
         rotation: 0,
-        catalogId: "aws-cloud"
+        rawResourceType: "region",
+        catalogId: "aws-cloud" as string | null,
+        aliasOf: null as string | null,
+        style: null
       }
     ],
     edges: [
       {
         sourceEdgeId: "edge-1",
         domOrder: 0,
+        zIndex: 0,
         sourceNodeId: "region",
         targetNodeId: "bucket",
         sourcePort: "right",
@@ -483,7 +560,11 @@ function makeValidSource() {
           { x: 100, y: 200 }
         ],
         arrowDirection: "source-to-target",
-        arrowAngle: 45
+        arrowAngle: 45,
+        rawArrow: {
+          points: "55,55 60,60 55,65",
+          transform: "rotate(45, 100, 200)"
+        }
       }
     ],
     terraform: {

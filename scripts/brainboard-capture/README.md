@@ -18,6 +18,7 @@ node scripts/brainboard-capture/validate-capture.mjs
 node scripts/brainboard-capture/validate-capture.mjs --check-status
 node scripts/brainboard-capture/normalize-capture.mjs
 node scripts/brainboard-capture/normalize-capture.mjs --check-report
+node scripts/brainboard-capture/generate-source-fixtures.mjs --check
 ```
 
 `validate-capture.mjs` exits nonzero for integrity errors. Its expected warnings are raw evidence, not validation failures: 43 two-node parent cycles, 59 inverted smaller-parent links, 9 exact semantic duplicate-edge pairs, 10 nonzero rotations, 11 empty text nodes, 2 shape-style gaps, 5 empty `undefined.tf` files, and the 341 visual AWS nodes versus 331 Terraform addresses.
@@ -79,3 +80,26 @@ To inspect one capture without writing a file:
 ```bash
 node scripts/brainboard-capture/normalize-capture.mjs --input docs/gg/feat-infrastructure-template/brainboard-captures/aws-rds.json
 ```
+
+## Generate reviewed source fixtures
+
+Each independently owned `source-fixture-configs/batch-*.mjs` module declares explicit manifest
+ranks and source-node-ID bindings. The generator discovers the modules, verifies each rank against
+the immutable capture index, sorts by manifest rank, and then writes or checks only those generated
+TypeScript fixtures. Parallel batches therefore add separate config modules instead of editing a
+shared fixture array.
+
+```bash
+node scripts/brainboard-capture/generate-source-fixtures.mjs --write
+node scripts/brainboard-capture/generate-source-fixtures.mjs --check
+node scripts/brainboard-capture/generate-source-fixtures.mjs --write --config batch-01-02.mjs
+```
+
+Use targeted `--config` mode while parallel batches are in progress. It imports and writes only the
+named batch, so an incomplete sibling config cannot be read and another batch's generated files
+cannot be rewritten. The default all-config `--check` remains the final manifest-ranked corpus gate.
+
+Bindings must use `exact-title`, `single-residual`, or `reviewed-override`; array-position matching is
+not represented by the contract. Raw Terraform code and SHA remain immutable. A reviewed UUID
+metadata removal is recorded separately in `workspaceSeed`, including its exact source fragment,
+reason, sanitized code, and recomputed SHA.

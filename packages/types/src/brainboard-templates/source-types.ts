@@ -22,6 +22,11 @@ export type BrainboardSourceSize = {
 
 export type BrainboardSourceViewport = BrainboardSourcePoint & BrainboardSourceSize;
 
+export type BrainboardSourceResourceAddressMapping =
+  | "exact-title"
+  | "single-residual"
+  | "reviewed-override";
+
 type BrainboardSourceNodeBase = {
   readonly sourceNodeId: string;
   readonly domOrder: number;
@@ -35,18 +40,37 @@ type BrainboardSourceNodeBase = {
   readonly rotation: number;
 };
 
-export type BrainboardSourceResourceNode = BrainboardSourceNodeBase & {
+type BrainboardSourceResourceNodeBase = BrainboardSourceNodeBase & {
   readonly kind: "resource";
   readonly terraformBlockType: "resource" | "data";
   readonly terraformResourceType: string;
   readonly resourceName: string;
   readonly fileName: string;
-  readonly values: Readonly<Record<string, BrainboardSourceValue>>;
+  readonly addressMapping: BrainboardSourceResourceAddressMapping;
 };
+
+export type BrainboardSourceResourceNode = BrainboardSourceResourceNodeBase &
+  (
+    | {
+        readonly valuesResolution: "resolved";
+        readonly values: Readonly<Record<string, BrainboardSourceValue>>;
+      }
+    | {
+        /** The exact Terraform source file is authoritative until expressions are parsed safely. */
+        readonly valuesResolution: "source-file-authoritative/unresolved";
+        readonly values?: never;
+      }
+  );
 
 export type BrainboardSourcePresentationNode = BrainboardSourceNodeBase & {
   readonly kind: "presentation";
-  readonly catalogId: string;
+  /** Brainboard's captured visual type, even when no SketchCatch catalog identity is known. */
+  readonly rawResourceType: string;
+  readonly catalogId: string | null;
+  /** A reviewed second visual for an existing Terraform address, never a new resource identity. */
+  readonly aliasOf: string | null;
+  /** Null means the capture did not expose a style; callers must not invent one. */
+  readonly style: Readonly<Record<string, BrainboardSourceValue>> | null;
 };
 
 export type BrainboardSourceNode = BrainboardSourceResourceNode | BrainboardSourcePresentationNode;
@@ -60,6 +84,7 @@ export type BrainboardSourceArrowDirection =
 export type BrainboardSourceEdge = {
   readonly sourceEdgeId: string;
   readonly domOrder: number;
+  readonly zIndex: number;
   readonly sourceNodeId: string;
   readonly targetNodeId: string;
   readonly sourcePort: string;
@@ -70,6 +95,22 @@ export type BrainboardSourceEdge = {
   readonly waypoints: readonly BrainboardSourcePoint[];
   readonly arrowDirection: BrainboardSourceArrowDirection;
   readonly arrowAngle: number;
+  readonly rawArrow: {
+    readonly points: string;
+    readonly transform: string;
+  } | null;
+};
+
+export type BrainboardTerraformWorkspaceOmission = {
+  readonly reason: "brainboard-architecture-uuid";
+  /** Exact source fragment, including whitespace and newline, removed from the workspace seed. */
+  readonly sourceText: string;
+};
+
+export type BrainboardTerraformWorkspaceSeed = {
+  readonly code: string;
+  readonly sha256: string;
+  readonly omissions: readonly BrainboardTerraformWorkspaceOmission[];
 };
 
 export type BrainboardTerraformFile = {
@@ -77,6 +118,8 @@ export type BrainboardTerraformFile = {
   readonly code: string;
   readonly sha256: string;
   readonly includeInWorkspace: boolean;
+  /** Present only when reviewed metadata must be removed from the immutable raw source. */
+  readonly workspaceSeed?: BrainboardTerraformWorkspaceSeed;
 };
 
 export type BrainboardTemplateOrigin = {
@@ -94,7 +137,8 @@ export type BrainboardTemplateSource = {
   readonly origin: BrainboardTemplateOrigin;
   readonly captureStatus: BrainboardTemplateCaptureStatus;
   readonly title: string;
-  readonly description: string;
+  /** Null is explicit evidence that the Brainboard description was unavailable. */
+  readonly description: string | null;
   readonly provider: "aws";
   readonly viewport: BrainboardSourceViewport;
   readonly nodes: readonly BrainboardSourceNode[];
