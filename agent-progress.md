@@ -9,9 +9,10 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
-### 2026-07-13 - Polish dashboard controls and template typography
+### 2026-07-13 - Unify Dashboard dropdown controls
 
-- Polished Cost and Project controls, then bundled Pretendard and removed native form appearance from Template search/select controls so their text renders consistently; focused Web tests, lint, typecheck, build, diff check, and harness pass, with one unrelated API `setNow` warning.
+- Replaced live Projects, Templates, Costs, and Settings selects with one white 42px Pretendard control using 14px/500 text, 14px/600 selected options, readable long-option wrapping, and shared keyboard behavior.
+- Verification: full tests, focused dropdown regressions, lint, typecheck, build, diff check, and harness pass; lint retains one unrelated API `setNow` warning. Authenticated visual QA was unavailable because the in-app browser had no session and Chrome control was unavailable.
 
 ### 2026-07-13 - Restore saved architecture thumbnails above project cards
 

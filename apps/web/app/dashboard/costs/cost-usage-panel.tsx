@@ -10,6 +10,10 @@ import type {
 } from "@sketchcatch/types";
 import { ProductState } from "../../../components/ui/ProductState";
 import {
+  DashboardSelectField,
+  type DashboardSelectOption
+} from "../../../components/ui/DashboardSelectField";
+import {
   createCostUsageLineChart,
   createServiceCostBars,
   sumEstimatedMonthlySavings
@@ -34,6 +38,12 @@ import styles from "../dashboard-tools.module.css";
 
 type CostLoadState = "loading" | "ready" | "error";
 
+const COST_USAGE_RANGE_OPTIONS: readonly DashboardSelectOption[] = [
+  { label: "최근 7일", value: "7d" },
+  { label: "최근 30일", value: "30d" },
+  { label: "이번 달", value: "month_to_date" }
+];
+
 export function CostUsagePanel() {
   const [connections, setConnections] = useState<readonly AwsConnection[]>([]);
   const [selectedConnectionId, setSelectedConnectionId] = useState("");
@@ -44,6 +54,22 @@ export function CostUsagePanel() {
   const [errorMessage, setErrorMessage] = useState("");
   const requestCoordinatorRef = useRef(createCostRequestCoordinator());
   const projectOptions = useMemo(() => createCostUsageProjectOptions(data?.projectCosts ?? []), [data]);
+  const projectSelectOptions = useMemo<readonly DashboardSelectOption[]>(
+    () => [
+      { label: "전체 배포 프로젝트", value: COST_USAGE_ALL_PROJECTS_KEY },
+      ...projectOptions.map((project) => ({ label: project.label, value: project.key }))
+    ],
+    [projectOptions]
+  );
+  const connectionSelectOptions = useMemo<readonly DashboardSelectOption[]>(
+    () => connections.length === 0
+      ? [{ label: "검증된 연결 없음", value: "" }]
+      : connections.map((connection) => ({
+          label: formatCostUsageAwsConnectionLabel(connection),
+          value: connection.id
+        })),
+    [connections]
+  );
   const selectedProject = useMemo(
     () => selectCostUsageProject(data?.projectCosts ?? [], selectedProjectKey),
     [data, selectedProjectKey]
@@ -152,9 +178,40 @@ export function CostUsagePanel() {
     <div className={styles.costPanelStack}>
       <div className={styles.costPanelToolbar}>
         <div className={styles.controlRow}>
-          <label><span>배포 프로젝트</span><select onChange={(event) => setSelectedProjectKey(event.target.value)} value={selectedProjectKey}><option value={COST_USAGE_ALL_PROJECTS_KEY}>전체 배포 프로젝트</option>{projectOptions.map((project) => <option key={project.key} value={project.key}>{project.label}</option>)}</select></label>
-          <label><span>AWS 연결</span><select onChange={(event) => { const id = event.target.value; setSelectedConnectionId(id); void loadCosts(range, id); }} value={selectedConnectionId}>{connections.length === 0 ? <option value="">검증된 연결 없음</option> : null}{connections.map((connection) => <option key={connection.id} value={connection.id}>{formatCostUsageAwsConnectionLabel(connection)}</option>)}</select></label>
-          <label><span>기간</span><select onChange={(event) => { const next = event.target.value as CostUsageAnalysisRange; setRange(next); void loadCosts(next); }} value={range}><option value="7d">최근 7일</option><option value="30d">최근 30일</option><option value="month_to_date">이번 달</option></select></label>
+          <DashboardSelectField
+            ariaLabel="실제 사용량 배포 프로젝트 선택"
+            className={styles.controlField}
+            emptyLabel="배포 프로젝트 선택"
+            label="배포 프로젝트"
+            onChange={setSelectedProjectKey}
+            options={projectSelectOptions}
+            value={selectedProjectKey}
+          />
+          <DashboardSelectField
+            ariaLabel="실제 사용량 AWS 연결 선택"
+            className={styles.controlField}
+            emptyLabel="AWS 연결 선택"
+            label="AWS 연결"
+            onChange={(id) => {
+              setSelectedConnectionId(id);
+              void loadCosts(range, id);
+            }}
+            options={connectionSelectOptions}
+            value={selectedConnectionId}
+          />
+          <DashboardSelectField
+            ariaLabel="실제 사용량 기간 선택"
+            className={styles.controlField}
+            emptyLabel="기간 선택"
+            label="기간"
+            onChange={(value) => {
+              const nextRange = value as CostUsageAnalysisRange;
+              setRange(nextRange);
+              void loadCosts(nextRange);
+            }}
+            options={COST_USAGE_RANGE_OPTIONS}
+            value={range}
+          />
         </div>
         <button
           aria-busy={loadState === "loading"}

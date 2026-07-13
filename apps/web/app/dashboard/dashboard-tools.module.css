@@ -188,6 +188,10 @@
   font-weight: 700;
 }
 
+.controlField {
+  min-width: 220px;
+}
+
 .controlRow select,
 .controlRow input,
 .setupSection input {
@@ -359,7 +363,8 @@
   .costPanelToolbar { flex-direction: column; align-items: stretch; }
   .costPanelToolbar .iconAction { align-self: flex-end; }
   .controlRow { display: grid; width: 100%; }
-  .controlRow label { min-width: 0; }
+  .controlRow label,
+  .controlField { min-width: 0; }
   .connectionList > article { grid-template-columns: 1fr; }
   .rowActions { flex-wrap: wrap; }
 }

@@ -9,6 +9,10 @@ import type {
 } from "@sketchcatch/types";
 import { ProductState } from "../../../components/ui/ProductState";
 import {
+  DashboardSelectField,
+  type DashboardSelectOption
+} from "../../../components/ui/DashboardSelectField";
+import {
   createAwsConnectionSetup,
   deleteAwsConnection,
   getAwsConnectionCloudFormationTemplate,
@@ -19,6 +23,12 @@ import {
 import styles from "../dashboard-tools.module.css";
 
 type SettingsLoadState = "loading" | "ready" | "error";
+
+const AWS_REGION_OPTIONS: readonly DashboardSelectOption[] = [
+  { label: "서울", value: "ap-northeast-2" },
+  { label: "버지니아 북부", value: "us-east-1" },
+  { label: "도쿄", value: "ap-northeast-1" }
+];
 
 // AWS Role 생성 안내, CloudFormation 이동, 연결 검증과 삭제를 관리합니다.
 export function SettingsDashboardClient() {
@@ -143,7 +153,15 @@ export function SettingsDashboardClient() {
       <section className={styles.settingsSection}>
         <header><Cloud size={20} /><div><h2>AWS 계정 연결</h2><p>Access Key 대신 한 번 만든 Role을 사용합니다.</p></div></header>
         <div className={styles.controlRow}>
-          <label><span>기본 region</span><select onChange={(event) => setRegion(event.target.value)} value={region}><option value="ap-northeast-2">서울</option><option value="us-east-1">버지니아 북부</option><option value="ap-northeast-1">도쿄</option></select></label>
+          <DashboardSelectField
+            ariaLabel="기본 region 선택"
+            className={styles.controlField}
+            emptyLabel="region 선택"
+            label="기본 region"
+            onChange={setRegion}
+            options={AWS_REGION_OPTIONS}
+            value={region}
+          />
           <button className={styles.primaryAction} disabled={actionPending} onClick={() => void createConnection()} type="button">새 AWS 연결</button>
         </div>
       </section>

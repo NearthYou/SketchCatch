@@ -8,6 +8,10 @@ import type {
 } from "@sketchcatch/types";
 import { ProductState } from "../../../components/ui/ProductState";
 import {
+  DashboardSelectField,
+  type DashboardSelectOption
+} from "../../../components/ui/DashboardSelectField";
+import {
   countEstimatableCostProjects,
   selectUndeployedCostProjects,
   sumCostProjectEstimates
@@ -23,6 +27,12 @@ import { CostMetric, formatUsd } from "./cost-dashboard-presentation";
 import styles from "../dashboard-tools.module.css";
 
 type CostLoadState = "loading" | "ready" | "error";
+
+const COST_ESTIMATE_PERIOD_OPTIONS: readonly DashboardSelectOption[] = [
+  { label: "하루", value: "day" },
+  { label: "일주일", value: "week" },
+  { label: "한 달", value: "month" }
+];
 
 export function CostEstimatePanel() {
   const [period, setPeriod] = useState<CostEstimatePeriod>("month");
@@ -130,21 +140,19 @@ export function CostEstimatePanel() {
               </small>
             ) : null}
           </label>
-          <label>
-            <span>표시 기간</span>
-            <select
-              onChange={(event) => {
-                const nextPeriod = event.target.value as CostEstimatePeriod;
-                setPeriod(nextPeriod);
-                void loadEstimates(nextPeriod);
-              }}
-              value={period}
-            >
-              <option value="day">하루</option>
-              <option value="week">일주일</option>
-              <option value="month">한 달</option>
-            </select>
-          </label>
+          <DashboardSelectField
+            ariaLabel="예상 비용 표시 기간 선택"
+            className={styles.controlField}
+            emptyLabel="표시 기간 선택"
+            label="표시 기간"
+            onChange={(value) => {
+              const nextPeriod = value as CostEstimatePeriod;
+              setPeriod(nextPeriod);
+              void loadEstimates(nextPeriod);
+            }}
+            options={COST_ESTIMATE_PERIOD_OPTIONS}
+            value={period}
+          />
         </div>
         <button
           aria-busy={loadState === "loading"}

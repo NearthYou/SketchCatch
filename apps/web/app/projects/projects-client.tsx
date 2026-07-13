@@ -15,7 +15,10 @@ import type {
   ProjectDeletePreview
 } from "@sketchcatch/types";
 import { MoreHorizontal } from "lucide-react";
-import { SelectMenu, type SelectMenuOption } from "../../components/ui/SelectMenu";
+import {
+  DashboardSelectField,
+  type DashboardSelectOption
+} from "../../components/ui/DashboardSelectField";
 import { ApiProjectCard, getWorkspaceHref } from "../../components/dashboard/api-project-card";
 import { getApiErrorMessage } from "../../lib/api-client";
 import {
@@ -41,11 +44,11 @@ import { filterProjectsByName } from "../../features/projects/project-search";
 
 const DELETE_DEPLOYMENT_POLL_INTERVAL_MS = 2500;
 const DELETE_DEPLOYMENT_POLL_TIMEOUT_MS = 10 * 60 * 1000;
-const PROJECT_SORT_OPTIONS: SelectMenuOption[] = [
+const PROJECT_SORT_OPTIONS: DashboardSelectOption[] = [
   { label: "최근 작업한 순서", value: "recent_work" },
   { label: "최근 생성한 순서", value: "recent_created" }
 ];
-const PROJECT_DEPLOYMENT_FILTER_OPTIONS: SelectMenuOption[] = [
+const PROJECT_DEPLOYMENT_FILTER_OPTIONS: DashboardSelectOption[] = [
   { label: "전체", value: "all" },
   { label: "배포됨", value: "deployed" },
   { label: "미배포", value: "not_deployed" }
@@ -629,30 +632,24 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
   return (
     <section className="dashboardPanel" aria-label="프로젝트 목록">
       <div className="projectListControls" aria-label="프로젝트 정렬 및 필터">
-        <div className="settingsField projectSortField">
-          정렬
-          <SelectMenu
-            ariaLabel="프로젝트 정렬 선택"
-            emptyLabel="정렬 선택"
-            onChange={(value) => setSortMode(value as ProjectSortMode)}
-            options={PROJECT_SORT_OPTIONS}
-            size="compact"
-            tone="default"
-            value={sortMode}
-          />
-        </div>
-        <div className="settingsField projectDeploymentFilterField">
-          배포 여부
-          <SelectMenu
-            ariaLabel="프로젝트 배포 여부 필터 선택"
-            emptyLabel="필터 선택"
-            onChange={(value) => setDeploymentFilter(value as ProjectDeploymentFilter)}
-            options={PROJECT_DEPLOYMENT_FILTER_OPTIONS}
-            size="compact"
-            tone="default"
-            value={deploymentFilter}
-          />
-        </div>
+        <DashboardSelectField
+          ariaLabel="프로젝트 정렬 선택"
+          className="projectSortField"
+          emptyLabel="정렬 선택"
+          label="정렬"
+          onChange={(value) => setSortMode(value as ProjectSortMode)}
+          options={PROJECT_SORT_OPTIONS}
+          value={sortMode}
+        />
+        <DashboardSelectField
+          ariaLabel="프로젝트 배포 여부 필터 선택"
+          className="projectDeploymentFilterField"
+          emptyLabel="필터 선택"
+          label="배포 여부"
+          onChange={(value) => setDeploymentFilter(value as ProjectDeploymentFilter)}
+          options={PROJECT_DEPLOYMENT_FILTER_OPTIONS}
+          value={deploymentFilter}
+        />
       </div>
 
       {deleteErrorMessage ? (
