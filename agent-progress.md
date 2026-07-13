@@ -13,10 +13,19 @@ Short English-only working log for the current agent context. Older records are 
 - Public Repository setup confirms Template and CI/CD before opening a separate follow-up-question stage.
 - Follow-up questions depend on the selected Template, affect diagram creation, and use direct clickable choices.
 - Tasks 1-9 of issue #361 pass focused API/Web integration, the full Web suite, and repository completion gates.
+- The latest `dev` baseline is merged and the full repository test task is green across all five workspace packages.
 - CI/CD polling, RDS records, approval gates, notification limits, and CI/CD-vs-Runtime log separation are recorded in the canonical architecture and deployment docs.
 - Migration and credentialed browser acceptance remain unrun because this worktree has no `DATABASE_URL`, local stack, or test credentials.
 
 ## Session Record
+
+### 2026-07-13 - Merge latest dev and restore full-repository green
+
+- Merged `origin/dev` after PRs #366 and #367, preserving issue #361 behavior while adopting the reviewed API and Web test baselines.
+- Resolved overlapping #362 tests with the normalized CSS cache and non-empty icon URL assertion; archived unrelated cost records to keep the active progress log concise.
+- Verification: conflict-focused Web 26/26, issue #361 API 123/123, issue #361 Web 85/85, full `pnpm test` workspace tasks 5/5, lint, typecheck, build, harness, and diff checks passed.
+- Existing warnings remain: unused API `setNow` and Next.js multiple-workspace-root inference. The API test-generated untracked `apps/api/Python` directory was verified and removed.
+- Risks: migrations `0032`/`0033` and credentialed browser acceptance remain unrun without an approved non-production database and authenticated safe environment. No cloud, Terraform, repository settings, or deployment mutation ran.
 
 ### 2026-07-13 - Make Pipeline Run aggregate ordering monotonic
 
@@ -185,5 +194,5 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Next Action
 
-- Verify the latest `dev` merge across issue #361 focused suites and the full repository checks, then publish issue #361 for review.
+- Publish issue #361 for review, address all actionable feedback, and merge it into `dev` after required checks pass.
 - Run migrations and credentialed browser acceptance only with an approved safe environment.
