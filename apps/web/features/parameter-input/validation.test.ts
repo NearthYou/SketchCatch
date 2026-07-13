@@ -181,8 +181,38 @@ test("mergeNodeParameters preserves blank editable metadata while the user types
 
   assert.equal(merged.resourceName, "");
   assert.equal(merged.fileName, "");
-  assert.equal(validation.metadataErrors.resourceName, "Resource name은 필수입니다.");
+  assert.equal(validation.metadataErrors.resourceName, "Terraform resource name은 필수입니다.");
   assert.equal(validation.metadataErrors.fileName, "File name은 필수입니다.");
+});
+
+test("validateParameters allows the same local name in resource and data namespaces", () => {
+  const resourceNode = makeResourceNode({
+    id: "resource-vpc",
+    parameters: {
+      terraformBlockType: "resource",
+      resourceType: "aws_vpc",
+      resourceName: "main",
+      fileName: "main",
+      values: { cidrBlock: "10.0.0.0/16" }
+    }
+  });
+  const dataParameters = {
+    terraformBlockType: "data" as const,
+    resourceType: "aws_vpc",
+    resourceName: "main",
+    fileName: "data",
+    values: { cidrBlock: "10.0.0.0/16" }
+  };
+
+  const validation = validateParameters(
+    dataParameters,
+    [],
+    [resourceNode],
+    "data-vpc",
+    makeCatalog()
+  );
+
+  assert.equal(validation.metadataErrors.resourceName, undefined);
 });
 
 test("getValidationDefinitions ignores uncataloged raw editor values", () => {

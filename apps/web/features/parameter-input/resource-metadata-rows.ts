@@ -19,11 +19,12 @@ export type ResourceMetadataRow =
 export function buildResourceMetadataRows(
   parameters: Pick<ResourceNodeParameters, "fileName" | "resourceName" | "resourceType">
 ): readonly ResourceMetadataRow[] {
+  // Name the editable field by its Terraform role so it is not confused with the friendly Board label.
   return [
     {
       editable: true,
       key: "resourceName",
-      label: "Resource name",
+      label: "Terraform resource name",
       value: parameters.resourceName
     },
     {

@@ -87,6 +87,8 @@ export type BuildTemplateDiagramInput = {
   readonly shortId: string;
 };
 
+const TERRAFORM_LOCAL_NAME_MAX_LENGTH = 48;
+
 const LAMBDA_ASSUME_ROLE_POLICY = JSON.stringify({
   Version: "2012-10-17",
   Statement: [{
@@ -665,12 +667,11 @@ export function buildTemplateDiagramJson(
   templateId: TemplateId,
   input: BuildTemplateDiagramInput
 ): DiagramJson {
-  // This builder appends a parameterless visual graph while resolving deployable values exactly as before.
+  // Keep project metadata out of Terraform local names so Board labels and deployable identity remain separate.
+  void input;
   const definition = getTemplateDefinitionById(templateId);
   const resourceById = new Map(definition.resources.map((resource) => [resource.id, resource]));
-  const resourceNames = new Map(
-    definition.resources.map((resource) => [resource.id, createTerraformResourceName(input, resource.id)])
-  );
+  const resourceNames = createTemplateTerraformResourceNames(definition.resources);
   const nodeIdByResourceId = new Map(
     definition.resources.map((resource) => [resource.id, `template-${templateId}-${resource.id}`])
   );
@@ -777,10 +778,80 @@ function createPresentationDiagramNode(
   };
 }
 
-function createTerraformResourceName(input: BuildTemplateDiagramInput, resourceId: string): string {
-  const slug = toTerraformIdentifier(input.projectSlug);
-  const shortId = toTerraformIdentifier(input.shortId);
-  return `${slug}_${resourceId}_${shortId}`;
+export function createTemplateTerraformResourceNames(
+  resources: readonly Pick<
+    TemplateResourceDefinition,
+    "id" | "terraformBlockType" | "terraformResourceType"
+  >[]
+): ReadonlyMap<string, string> {
+  // Resolve the full identity set first so references never observe a partially assigned collision suffix.
+  const normalizedResources = resources.map((resource) => ({
+    ...resource,
+    normalizedName: toTerraformIdentifier(resource.id)
+  }));
+  const resourcesById = new Map<string, (typeof normalizedResources)[number]>();
+  const collisionGroups = new Map<string, (typeof normalizedResources)[number][]>();
+  const reservedNamesByNamespace = new Map<string, Set<string>>();
+
+  for (const resource of normalizedResources) {
+    if (resourcesById.has(resource.id)) {
+      throw new Error(`Duplicate TemplateDefinition resource id: ${resource.id}`);
+    }
+
+    resourcesById.set(resource.id, resource);
+    const namespaceKey = `${resource.terraformBlockType}:${resource.terraformResourceType}`;
+    const collisionKey = `${namespaceKey}:${resource.normalizedName}`;
+    reservedNamesByNamespace.set(namespaceKey, new Set([
+      ...(reservedNamesByNamespace.get(namespaceKey) ?? []),
+      resource.normalizedName
+    ]));
+    collisionGroups.set(collisionKey, [
+      ...(collisionGroups.get(collisionKey) ?? []),
+      resource
+    ]);
+  }
+
+  const resourceNames = new Map<string, string>();
+
+  for (const group of collisionGroups.values()) {
+    if (group.length === 1) {
+      const resource = group[0];
+
+      if (resource) {
+        resourceNames.set(resource.id, resource.normalizedName);
+      }
+      continue;
+    }
+
+    const sortedGroup = [...group].sort((left, right) =>
+      left.id < right.id ? -1 : left.id > right.id ? 1 : 0
+    );
+    const firstResource = sortedGroup[0];
+    const namespaceKey = firstResource
+      ? `${firstResource.terraformBlockType}:${firstResource.terraformResourceType}`
+      : "";
+    const reservedNames = reservedNamesByNamespace.get(namespaceKey) ?? new Set<string>();
+    sortedGroup.forEach((resource) => {
+      let attempt = 0;
+      let candidate = appendTerraformNameSuffix(
+        resource.normalizedName,
+        createStableTerraformNameSuffix(resource.id, attempt)
+      );
+
+      while (reservedNames.has(candidate)) {
+        attempt += 1;
+        candidate = appendTerraformNameSuffix(
+          resource.normalizedName,
+          createStableTerraformNameSuffix(resource.id, attempt)
+        );
+      }
+
+      resourceNames.set(resource.id, candidate);
+      reservedNames.add(candidate);
+    });
+  }
+
+  return resourceNames;
 }
 
 function resolveTemplateValue(
@@ -858,8 +929,30 @@ function resolveTemplateReference(
 }
 
 function toTerraformIdentifier(value: string): string {
-  const normalized = value.toLowerCase().replace(/[^a-z0-9_]/g, "_");
-  return /^[0-9]/.test(normalized) ? `project_${normalized}` : normalized || "project";
+  // Template resource IDs become compact Terraform locals without leaking project or Template IDs.
+  const normalized = value.toLowerCase().replace(/[^a-z0-9_]+/gu, "_").replace(/^_+|_+$/gu, "");
+  const prefixed = /^[0-9]/u.test(normalized) ? `resource_${normalized}` : normalized || "resource";
+  return prefixed.slice(0, TERRAFORM_LOCAL_NAME_MAX_LENGTH).replace(/_+$/gu, "") || "resource";
+}
+
+// 충돌 suffix를 붙여도 local name 길이 계약을 넘지 않게 base를 줄입니다.
+function appendTerraformNameSuffix(baseName: string, suffix: string): string {
+  const baseMaxLength = TERRAFORM_LOCAL_NAME_MAX_LENGTH - suffix.length - 1;
+  const compactBase = baseName.slice(0, baseMaxLength).replace(/_+$/gu, "") || "resource";
+  return `${compactBase}_${suffix}`;
+}
+
+// Resource ID에서 안정적인 짧은 suffix를 만들어 새 충돌 항목이 기존 주소를 재번호화하지 않게 합니다.
+function createStableTerraformNameSuffix(resourceId: string, attempt: number): string {
+  const input = attempt === 0 ? resourceId : `${resourceId}:${attempt}`;
+  let hash = 2166136261;
+
+  for (const character of input) {
+    hash ^= character.codePointAt(0) ?? 0;
+    hash = Math.imul(hash, 16777619);
+  }
+
+  return (hash >>> 0).toString(36).padStart(6, "0").slice(-6);
 }
 
 function resource(
