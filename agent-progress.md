@@ -4,7 +4,9 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- Branch: `Feat/jh/346-시뮬레이션-기능-구현-및-테스트`.
+- Branch: `feature/sw/361-deployment-cicd-console`.
+- The approved design separates Direct Deployment and CI/CD into independent screens inside the existing full-screen console.
+- Project repository monitoring defaults to enabled and requires a branch plus explicit app and infrastructure paths before execution.
 - Repository recommendation guarantees 2-3 unique candidates and validates question IDs, semantics, and duplicate prompts before display.
 - Deployment type is hidden when repository evidence is decisive and shown only for ambiguous analysis.
 - CI/CD handoff is a prominent standalone setting; its GitHub App repository panel appears only while enabled.
@@ -12,6 +14,14 @@ Short English-only working log for the current agent context. Older records are 
 - Follow-up questions depend on the selected Template, affect diagram creation, and use direct clickable choices.
 
 ## Session Record
+
+### 2026-07-13 - Design separate Deployment and CI/CD console screens
+
+- Defined independent Deployment and CI/CD information architectures inside the existing full-screen console.
+- Kept Direct Deployment records separate from commit-scoped Pipeline Runs and CI/CD logs.
+- Defined repository-level branch, app path, and infrastructure path monitoring settings, completion notifications, and accessible Output URL actions.
+- Defined polling-based GitHub Actions observation, browser Notification fallback behavior, error handling, compatibility, and acceptance tests.
+- Verification: design self-review and `git diff --check` passed; no product code, Terraform, Git handoff, or cloud mutation ran.
 
 ### 2026-07-13 - Repair Terraform nested-block merge regression
 
