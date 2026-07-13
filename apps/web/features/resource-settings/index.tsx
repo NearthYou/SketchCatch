@@ -23,7 +23,7 @@ import {
   ShieldCheck
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { useMemo, useState, type DragEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { createPortal } from "react-dom";
 import type { ResourceArea, ResourceItem } from "../../../../packages/types/src/index";
 import { TemplateGallery } from "../../components/templates/TemplateGallery";
@@ -41,6 +41,7 @@ import {
   listBoardTemplates,
   type BoardTemplate
 } from "./template-library";
+import { setupTemplateLibraryModalAccessibility } from "./template-library-modal-accessibility";
 import modalStyles from "./template-library-modal.module.css";
 
 const areaLabels: Record<ResourceArea, string> = {
@@ -345,7 +346,7 @@ export function ResourceSettingsPanel({
   );
 }
 
-// 왼쪽 목록의 즉시 적용과 큰 비교 화면 열기를 서로 다른 동작으로 제공합니다.
+// 왼쪽 목록의 즉시 적용과 템플릿 전체보기를 서로 다른 동작으로 제공합니다.
 function TemplatesPanel({
   onTemplateApply
 }: {
@@ -358,17 +359,16 @@ function TemplatesPanel({
     <>
       <div className="templateCatalogPanel">
         <button
-          aria-label="Template library 큰 미리보기 열기"
+          aria-label="템플릿 전체보기"
           className="templateCatalogCard templateLibraryOpenCard"
           onClick={() => setModalOpen(true)}
           type="button"
         >
-          <span className="templateLibraryOpenLabel">
+          <strong className="templateLibraryOpenLabel">
             <Maximize2 aria-hidden="true" size={14} />
-            Template preview
-          </span>
-          <strong>전체 템플릿을 큰 화면으로 비교</strong>
-          <small>이 버튼은 Board에 적용하지 않습니다.</small>
+            템플릿 전체보기
+          </strong>
+          <small>모든 Template을 큰 화면에서 비교하며, 이 버튼은 Board에 적용하지 않습니다.</small>
         </button>
         {templates.map((template) => (
           <button
@@ -409,12 +409,38 @@ function TemplateLibraryModal({
   readonly onTemplateApply: (template: BoardTemplate) => void;
   readonly templates: readonly BoardTemplate[];
 }) {
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const onCloseRef = useRef(onClose);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  useEffect(() => {
+    const overlay = overlayRef.current;
+    const dialog = dialogRef.current;
+    const closeButton = closeButtonRef.current;
+
+    if (!overlay || !dialog || !closeButton) return;
+
+    return setupTemplateLibraryModalAccessibility({
+      closeButton,
+      dialog,
+      documentRoot: document,
+      onClose: () => onCloseRef.current(),
+      overlay
+    });
+  }, []);
+
   return createPortal(
-    <div className={modalStyles.overlay} role="presentation">
+    <div className={modalStyles.overlay} ref={overlayRef} role="presentation">
       <section
         aria-label="템플릿 전체보기"
         aria-modal="true"
         className={modalStyles.dialog}
+        ref={dialogRef}
         role="dialog"
       >
         <div className={modalStyles.header}>
@@ -423,7 +449,12 @@ function TemplateLibraryModal({
             <h2>템플릿 전체보기</h2>
             <p>선택하면 현재 보드를 백업하고 템플릿 구조로 덮어씁니다.</p>
           </div>
-          <button className={modalStyles.closeButton} onClick={onClose} type="button">
+          <button
+            className={modalStyles.closeButton}
+            onClick={onClose}
+            ref={closeButtonRef}
+            type="button"
+          >
             닫기
           </button>
         </div>

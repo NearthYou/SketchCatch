@@ -15,6 +15,9 @@
 - 딤 오버레이는 `inset: 64px 0 0`으로 네비게이터 아래만 덮는다.
 - 데스크톱 모달 최대 높이는 `calc(100dvh - 112px)`로 제한한다.
 - Template 카드 즉시 적용과 전체보기 모달 열기 동작은 계속 분리한다.
+- 전체보기 진입 버튼의 `aria-label`과 visible 기능명은 `템플릿 전체보기`로 통일한다.
+- Modal은 초기/복원 포커스, Escape, 양방향 Tab 순환, body 형제 `inert`, body scroll lock을 setup/cleanup 대칭으로 관리한다.
+- 닫기 버튼은 `:focus-visible`에 2px outline을 제공한다.
 - 새 런타임 의존성을 추가하지 않는다.
 
 ---
@@ -233,3 +236,73 @@ git add apps/web/features/resource-settings/index.tsx \
   agent-progress.md
 git commit -m "Fix: 템플릿 전체보기 모달 레이어 정리"
 ```
+
+---
+
+### Task 2: Review Fix Wave — 기능명과 Modal 접근성
+
+**Files:**
+- Modify: `apps/web/features/resource-settings/resource-settings-panel.test.ts`
+- Modify: `apps/web/features/resource-settings/index.tsx`
+- Create: `apps/web/features/resource-settings/template-library-modal-accessibility.ts`
+- Create: `apps/web/features/resource-settings/template-library-modal-accessibility.test.ts`
+- Modify: `apps/web/features/resource-settings/template-library-modal.module.css`
+- Modify: `docs/superpowers/specs/2026-07-14-template-library-portal-design.md`
+- Modify: `docs/superpowers/plans/2026-07-14-template-library-portal.md`
+- Modify: `agent-progress.md`
+- Append ignored report: `.superpowers/sdd/template-library-portal-task-1-report.md`
+
+**Interfaces:**
+- Produces: 정확히 `템플릿 전체보기`인 진입 버튼 이름과 visible `strong`
+- Produces: `useRef`/`useEffect` 기반 focus lifecycle, Escape, Tab trap, body sibling `inert`, scroll lock, cleanup
+- Produces: latest close callback ref와 mount-only lifecycle effect
+- Produces: Node `EventTarget` fake DOM에서 실행되는 dependency-free behavioral regression
+- Produces: `.closeButton:focus-visible`의 2px outline
+
+- [x] **Step 1: 진입 버튼 블록의 새 명칭 계약을 테스트하고 RED 확인**
+
+  Focused result: 6/7 PASS, 옛 `aria-label` 때문에 새 블록 계약 1건 FAIL.
+
+- [x] **Step 2: 기능명 통일 후 focused GREEN 확인**
+
+  Focused result: 7/7 PASS. 비교/Board 비적용 안내는 `small`에 유지.
+
+- [x] **Step 3: focus lifecycle과 keyboard trap 계약을 테스트하고 RED/GREEN 확인**
+
+  RED: 7/8 PASS, `useEffect`/`useRef` 계약 부재로 1건 FAIL.
+  GREEN: 8/8 PASS after active-element capture, close-button focus, Escape, Tab/Shift+Tab cycle, listener cleanup, and focus restoration.
+
+- [x] **Step 4: body sibling inert와 scroll lock 계약을 테스트하고 RED/GREEN 확인**
+
+  RED: 8/9 PASS, body overflow/inert 상태 보존 부재로 1건 FAIL.
+  GREEN: 9/9 PASS after symmetric inert/overflow setup and cleanup.
+
+- [x] **Step 5: close button visible focus ring 계약을 테스트하고 RED/GREEN 확인**
+
+  RED: 9/10 PASS because the existing rule used `outline: none`.
+  GREEN: 10/10 PASS with a 2px outline and 2px offset.
+
+- [x] **Step 6: review 후 stable lifecycle과 behavioral helper를 RED/GREEN으로 보강**
+
+  RED: combined focused suite 8/10 PASS. Missing helper module and stable React wrapper each failed as expected.
+  GREEN: combined focused suite 10/10 PASS. Fake DOM dispatches Escape/Tab/Shift+Tab and verifies focus, existing inert values, overflow, cleanup, latest close callback, and listener removal.
+
+- [x] **Step 7: Web 전체 회귀 검사**
+
+```bash
+pnpm --filter @sketchcatch/web test
+pnpm --filter @sketchcatch/web typecheck
+pnpm --filter @sketchcatch/web lint
+```
+
+Expected: 새 실패 없음. 알려진 bundled-Node locale timestamp 1건만 기존 실패로 유지.
+
+- [x] **Step 8: 하네스, diff, report와 commit 검증**
+
+```bash
+pnpm harness:check
+git diff --check
+git status --short
+```
+
+Expected: 검사 PASS, 변경 범위는 fix wave 파일뿐이며 `apps/api/drizzle/**`는 변경하지 않음.

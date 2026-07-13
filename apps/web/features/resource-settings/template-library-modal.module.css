@@ -58,10 +58,14 @@
   padding: 0 12px;
 }
 
-.closeButton:hover,
+.closeButton:hover {
+  background: var(--workspace-surface-muted, #fafafa);
+}
+
 .closeButton:focus-visible {
   background: var(--workspace-surface-muted, #fafafa);
-  outline: none;
+  outline: 2px solid var(--workspace-accent, #000000);
+  outline-offset: 2px;
 }
 
 @media (max-width: 760px) {

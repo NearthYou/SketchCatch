@@ -6,6 +6,11 @@ import { fileURLToPath } from "node:url";
 const panelSource = readLocalFile("index.tsx");
 const editorStyles = readLocalFile("../diagram-editor/diagram-editor.module.css");
 const modalStyles = readLocalFile("template-library-modal.module.css");
+const modalSource = readSourceSection(
+  panelSource,
+  "function TemplateLibraryModal(",
+  "function ModuleCatalogPanel("
+);
 
 test("resource settings logic keeps provider, resource, template, and module contracts", () => {
   assert.match(panelSource, /Resources/);
@@ -28,15 +33,30 @@ test("workspace Template panel renders the complete catalog inside its scrollabl
 });
 
 test("workspace Template cards apply their own template while the library control opens the modal", () => {
-  assert.match(
+  const libraryControl = readContainingJsxElement(
     panelSource,
-    /templateCatalogCard templateLibraryOpenCard"[\s\S]*onClick=\{\(\) => setModalOpen\(true\)\}/
+    "button",
+    'className="templateCatalogCard templateLibraryOpenCard"'
+  );
+
+  assert.match(
+    libraryControl,
+    /onClick=\{\(\) => setModalOpen\(true\)\}/
   );
   assert.match(
     panelSource,
     /templateCatalogCard templateApplyCard"[\s\S]*key=\{template\.id\}[\s\S]*onClick=\{\(\) => onTemplateApply\?\.\(template\)\}/
   );
-  assert.match(panelSource, /aria-label="Template library 큰 미리보기 열기"/);
+  assert.match(libraryControl, /aria-label="템플릿 전체보기"/);
+  assert.match(
+    libraryControl,
+    /<strong className="templateLibraryOpenLabel">\s*<Maximize2 aria-hidden="true" size=\{14\} \/>\s*템플릿 전체보기\s*<\/strong>/
+  );
+  assert.match(libraryControl, /<small>[\s\S]*비교[\s\S]*Board에 적용하지 않습니다\.[\s\S]*<\/small>/);
+  assert.doesNotMatch(
+    libraryControl,
+    /Template preview|전체 템플릿을 큰 화면으로 비교|Template library 큰 미리보기 열기/
+  );
   assert.match(panelSource, /aria-label=\{`\$\{template\.title\} Template 적용`\}/);
 });
 
@@ -49,6 +69,40 @@ test("workspace Template 전체보기 uses a body Portal below the project navig
   const dialogStyle = readCssRule(modalStyles, ".dialog");
   assert.match(overlayStyle, /inset:\s*64px 0 0/);
   assert.match(dialogStyle, /max-height:\s*calc\(100dvh - 112px\)/);
+});
+
+test("workspace Template 전체보기 wires one stable accessibility lifecycle", () => {
+  assert.match(
+    panelSource,
+    /import \{ setupTemplateLibraryModalAccessibility \} from "\.\/template-library-modal-accessibility"/
+  );
+  assert.match(panelSource, /import \{[^}]*useEffect[^}]*useRef[^}]*\} from "react"/s);
+  assert.match(modalSource, /const overlayRef = useRef<HTMLDivElement>\(null\)/);
+  assert.match(modalSource, /const dialogRef = useRef<HTMLElement>\(null\)/);
+  assert.match(modalSource, /const closeButtonRef = useRef<HTMLButtonElement>\(null\)/);
+  assert.match(modalSource, /const onCloseRef = useRef\(onClose\)/);
+  assert.match(
+    modalSource,
+    /useEffect\(\(\) => \{[\s\S]*onCloseRef\.current = onClose[\s\S]*\}, \[onClose\]\)/
+  );
+  assert.match(
+    modalSource,
+    /return setupTemplateLibraryModalAccessibility\(\{[\s\S]*onClose: \(\) => onCloseRef\.current\(\)[\s\S]*\}\);[\s\S]*\}, \[\]\)/
+  );
+  assert.match(modalSource, /<div className=\{modalStyles\.overlay\} ref=\{overlayRef\}/);
+  assert.match(modalSource, /className=\{modalStyles\.dialog\}[\s\S]*ref=\{dialogRef\}/);
+  assert.match(
+    modalSource,
+    /className=\{modalStyles\.closeButton\}[\s\S]*ref=\{closeButtonRef\}/
+  );
+});
+
+test("workspace Template 전체보기 close button keeps a visible keyboard focus ring", () => {
+  const closeButtonFocusStyle = readCssRule(modalStyles, ".closeButton:focus-visible");
+
+  assert.match(closeButtonFocusStyle, /outline:\s*2px solid/);
+  assert.match(closeButtonFocusStyle, /outline-offset:\s*2px/);
+  assert.doesNotMatch(closeButtonFocusStyle, /outline:\s*none/);
 });
 
 test("workspace Template catalog owns a stable scroll viewport with all rows top-aligned", () => {
@@ -83,4 +137,24 @@ function readCssRule(source: string, selector: string): string {
 
   assert.ok(ruleStart >= 0 && ruleEnd > ruleStart, `Invalid CSS rule: ${selector}`);
   return source.slice(ruleStart, ruleEnd + 1);
+}
+
+function readContainingJsxElement(source: string, tagName: string, marker: string): string {
+  const markerIndex = source.indexOf(marker);
+
+  assert.ok(markerIndex >= 0, `Missing JSX marker: ${marker}`);
+  const elementStart = source.lastIndexOf(`<${tagName}`, markerIndex);
+  const elementEnd = source.indexOf(`</${tagName}>`, markerIndex);
+
+  assert.ok(elementStart >= 0 && elementEnd > markerIndex, `Invalid JSX element: ${marker}`);
+  return source.slice(elementStart, elementEnd + tagName.length + 3);
+}
+
+function readSourceSection(source: string, startMarker: string, endMarker: string): string {
+  const sectionStart = source.indexOf(startMarker);
+  const sectionEnd = source.indexOf(endMarker, sectionStart);
+
+  assert.ok(sectionStart >= 0, `Missing source marker: ${startMarker}`);
+  assert.ok(sectionEnd > sectionStart, `Missing source marker: ${endMarker}`);
+  return source.slice(sectionStart, sectionEnd);
 }

@@ -9,10 +9,18 @@ Short English-only working log for the current agent context. Older records are 
 - Six deployable AWS Templates use compact 40px-grid authored layouts and real Resource-panel Catalog items.
 - Security Group is a visual scope with explicit attachment edges, never a persisted containment parent; ASG is a regular 48px Resource.
 - Template cards and large previews use actual 1280x720 ReactFlow Board WebP captures. Project cards use the latest authenticated Board DOM capture.
-- Workspace Template 전체보기 renders through a body Portal below the 64px project navigator and owns its overlay styles outside the left rail.
+- Workspace Template 전체보기 renders through a body Portal below the 64px project navigator, isolates the background, and keeps keyboard focus inside the dialog.
 - No `apps/api/drizzle/**` migration file was created, edited, renamed, or renumbered in this workstream.
 
 ## Session Record
+
+### 2026-07-14 - Close Template Portal review findings
+
+- Unified the Template 전체보기 trigger's accessible and visible functional name while keeping comparison and Board non-application as supporting copy.
+- Added symmetric modal focus, Escape, Tab/Shift+Tab, body sibling `inert`, body overflow, cleanup, and visible focus-ring behavior without a new dependency.
+- TDD evidence progressed through five expected RED/GREEN cycles; the final focused suite passed 10/10, including an executed fake-DOM lifecycle regression.
+- Web typecheck and lint passed. The full Web suite passed 1,140/1,141; its only failure remains the existing bundled-Node timestamp locale mismatch.
+- Updated the design and implementation plan. No API, migration, cloud, deployment, or dependency change was made.
 
 ### 2026-07-14 - Move Template 전체보기 to a body Portal
 
@@ -40,5 +48,5 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Next Action
 
-- Push the Template Portal fix to PR #380 and visually confirm that the modal opens below the project navigator.
+- Push the Template Portal review fix to PR #380 and confirm the full keyboard loop in browser QA.
 - Re-run `pnpm build` after the repository restores `apps/web/.codegraph`; run Terraform validation only in an environment with the CLI installed.
