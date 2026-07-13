@@ -23,11 +23,11 @@ test("AWS snapshot provider normalizes ALB metrics, ASG capacity, and redacted b
       async getMetricData(input) {
         metricInputs.push(input);
         return {
-          metricDataResults: [
+          metricDataResults: completeMetricDataResults([
             { id: "responses_2xx", timestamps: [OBSERVED_AT], values: [117] },
             { id: "responses_5xx", timestamps: [OBSERVED_AT], values: [3] },
             { id: "latency", timestamps: [OBSERVED_AT], values: [0.183] }
-          ]
+          ])
         };
       }
     }),
@@ -147,6 +147,64 @@ test("response classes from different periods are never combined", async () => {
   assert.equal(snapshot.errorRate, 0);
 });
 
+test("response classes use the exact latency period even when a newer completed point exists", async () => {
+  const alignedPeriod = new Date(NOW_MS - 120_000);
+  const snapshot = await observeWithMetrics([
+    {
+      id: "responses_2xx",
+      statusCode: "Complete",
+      timestamps: [OBSERVED_AT, alignedPeriod],
+      values: [999, 80]
+    },
+    { id: "responses_3xx", statusCode: "Complete", timestamps: [], values: [] },
+    { id: "responses_4xx", statusCode: "Complete", timestamps: [], values: [] },
+    {
+      id: "responses_5xx",
+      statusCode: "Complete",
+      timestamps: [alignedPeriod],
+      values: [20]
+    },
+    {
+      id: "latency",
+      statusCode: "Complete",
+      timestamps: [alignedPeriod],
+      values: [0.2]
+    }
+  ], "exact-aligned-period");
+
+  assert.equal(snapshot.state, "available");
+  assert.equal(snapshot.requests, 100);
+  assert.equal(snapshot.errorRate, 20);
+});
+
+test("non-complete or missing CloudWatch query status fails closed", async () => {
+  for (const statusCode of ["PartialData", "InternalError", "Forbidden", undefined] as const) {
+    const snapshot = await observeWithMetrics([
+      {
+        id: "responses_2xx",
+        statusCode,
+        timestamps: [OBSERVED_AT],
+        values: [10]
+      },
+      { id: "responses_3xx", statusCode: "Complete", timestamps: [], values: [] },
+      { id: "responses_4xx", statusCode: "Complete", timestamps: [], values: [] },
+      { id: "responses_5xx", statusCode: "Complete", timestamps: [], values: [] },
+      {
+        id: "latency",
+        statusCode: "Complete",
+        timestamps: [OBSERVED_AT],
+        values: [0.1]
+      }
+    ], `query-status-${statusCode ?? "missing"}`);
+
+    assert.equal(snapshot.state, "unavailable", statusCode ?? "missing");
+    assert.deepEqual(
+      [snapshot.requests, snapshot.errorRate, snapshot.p95LatencyMs, snapshot.availability],
+      [null, null, null, null]
+    );
+  }
+});
+
 test("CloudWatch request evidence is scoped to the selected target group", async () => {
   const metricInputs: Array<{
     metrics: Array<{ id: string; metricName: string; stat: string; scope: string }>;
@@ -172,10 +230,10 @@ test("metric freshness is measured from the completed period end", async () => {
     now: () => NOW_MS,
     async prepareCredentials() { return CREDENTIALS; },
     cloudWatchClientFactory: () => ({ async getMetricData() { return {
-      metricDataResults: [
+      metricDataResults: completeMetricDataResults([
         { id: "responses_2xx", timestamps: [periodStart], values: [10] },
         { id: "latency", timestamps: [periodStart], values: [0.1] }
-      ]
+      ])
     }; } }),
     autoScalingClientFactory: () => ({ async describeAutoScalingGroup() { return {
       autoScalingGroups: [{
@@ -204,10 +262,10 @@ test("misaligned CloudWatch metric periods fail closed without quantitative valu
     now: () => NOW_MS,
     async prepareCredentials() { return CREDENTIALS; },
     cloudWatchClientFactory: () => ({ async getMetricData() { return {
-      metricDataResults: [
+      metricDataResults: completeMetricDataResults([
         { id: "responses_2xx", timestamps: [new Date(NOW_MS - 120_000)], values: [10] },
         { id: "latency", timestamps: [new Date(NOW_MS - 60_000)], values: [0.1] }
-      ]
+      ])
     }; } }),
     autoScalingClientFactory: () => ({ async describeAutoScalingGroup() { return {
       autoScalingGroups: [{
@@ -248,10 +306,10 @@ test("delayed or unavailable AWS evidence never retains quantitative values", as
         async getMetricData() {
           if (mode === "missing") return { metricDataResults: [] };
           const timestamp = new Date(NOW_MS - 180_000);
-          return { metricDataResults: [
+          return { metricDataResults: completeMetricDataResults([
             { id: "responses_2xx", timestamps: [timestamp], values: [999] },
             { id: "latency", timestamps: [timestamp], values: [999] }
-          ] };
+          ]) };
         }
       }),
       autoScalingClientFactory: () => ({
@@ -296,10 +354,10 @@ test("ECS/Fargate capacity uses desired and running task evidence", async () => 
   const provider = createAwsLiveObservationSnapshotProvider({
     now: () => NOW_MS,
     async prepareCredentials() { return CREDENTIALS; },
-    cloudWatchClientFactory: () => ({ async getMetricData() { return { metricDataResults: [
+    cloudWatchClientFactory: () => ({ async getMetricData() { return { metricDataResults: completeMetricDataResults([
       { id: "responses_2xx", timestamps: [OBSERVED_AT], values: [0] },
       { id: "latency", timestamps: [OBSERVED_AT], values: [0.01] }
-    ] }; } }),
+    ]) }; } }),
     autoScalingClientFactory: () => ({ async describeAutoScalingGroup() { return {}; } }),
     targetHealthClientFactory: () => ({
       async describeTargetHealth() {
@@ -533,15 +591,42 @@ function createTarget(): AwsLiveObservationSnapshotTarget {
   };
 }
 
+type MetricResultFixture = {
+  id: string;
+  statusCode?: "Complete" | "PartialData" | "InternalError" | "Forbidden" | undefined;
+  timestamps: Date[];
+  values: number[];
+};
+
+const METRIC_RESULT_IDS = [
+  "responses_2xx",
+  "responses_3xx",
+  "responses_4xx",
+  "responses_5xx",
+  "latency"
+] as const;
+
 function metricDataResults(timestamp: Date) {
-  return [
+  return completeMetricDataResults([
     { id: "responses_2xx", timestamps: [timestamp], values: [10] },
     { id: "latency", timestamps: [timestamp], values: [0.1] }
-  ];
+  ]);
+}
+
+function completeMetricDataResults(results: MetricResultFixture[]): MetricResultFixture[] {
+  return METRIC_RESULT_IDS.map((id) => {
+    const result = results.find((candidate) => candidate.id === id);
+    if (!result) {
+      return { id, statusCode: "Complete", timestamps: [], values: [] };
+    }
+    return Object.hasOwn(result, "statusCode")
+      ? result
+      : { ...result, statusCode: "Complete" };
+  });
 }
 
 async function observeWithMetrics(
-  metricDataResults: Array<{ id: string; timestamps: Date[]; values: number[] }>,
+  metricDataResults: MetricResultFixture[],
   observationId: string,
   metricInputs: Array<{
     metrics: Array<{ id: string; metricName: string; stat: string; scope: string }>;
@@ -552,7 +637,7 @@ async function observeWithMetrics(
     async prepareCredentials() { return CREDENTIALS; },
     cloudWatchClientFactory: () => ({ async getMetricData(input) {
       metricInputs.push(input);
-      return { metricDataResults };
+      return { metricDataResults: completeMetricDataResults(metricDataResults) };
     } }),
     autoScalingClientFactory: () => ({ async describeAutoScalingGroup() { return {
       autoScalingGroups: [{

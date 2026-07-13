@@ -529,6 +529,185 @@ test("Live Observation selects the explicitly linked ECS runtime instead of unre
   assert.doesNotMatch(terraform, /output "log_group_name"[\s\S]*aws_cloudwatch_log_group\.other\.name/);
 });
 
+test("Live Observation does not cross a shared ECS task into a sibling service log", () => {
+  const graph: InfrastructureGraph = {
+    nodes: [
+      createLiveObservationNode("aws_lb", "demo", {}),
+      createLiveObservationNode("aws_lb_target_group", "api", {}),
+      createLiveObservationNode("aws_lb_target_group", "sibling", {}),
+      ...createHttpsAlbListenerNodes(),
+      createLiveObservationNode("aws_ecs_cluster", "shared", {}),
+      createLiveObservationNode("aws_ecs_task_definition", "shared", {}),
+      createLiveObservationNode("aws_ecs_service", "selected", {
+        cluster: "aws_ecs_cluster.shared.id",
+        taskDefinition: "aws_ecs_task_definition.shared.arn",
+        loadBalancer: { targetGroupArn: "aws_lb_target_group.api.arn" }
+      }),
+      createLiveObservationNode("aws_ecs_service", "sibling", {
+        cluster: "aws_ecs_cluster.shared.id",
+        taskDefinition: "aws_ecs_task_definition.shared.arn",
+        loadBalancer: { targetGroupArn: "aws_lb_target_group.sibling.arn" }
+      }),
+      createLiveObservationNode("aws_appautoscaling_target", "selected", {
+        maxCapacity: 3,
+        resourceId:
+          "service/${aws_ecs_cluster.shared.name}/${aws_ecs_service.selected.name}"
+      }),
+      createLiveObservationNode("aws_cloudwatch_log_group", "selected", {}),
+      createLiveObservationNode("aws_cloudwatch_log_group", "sibling", {})
+    ],
+    edges: [
+      {
+        id: "selected-task",
+        sourceId: "aws_ecs_service-selected",
+        targetId: "aws_ecs_task_definition-shared"
+      },
+      {
+        id: "selected-log",
+        sourceId: "aws_ecs_task_definition-shared",
+        targetId: "aws_cloudwatch_log_group-selected"
+      },
+      {
+        id: "sibling-task",
+        sourceId: "aws_ecs_task_definition-shared",
+        targetId: "aws_ecs_service-sibling"
+      },
+      {
+        id: "sibling-log",
+        sourceId: "aws_ecs_service-sibling",
+        targetId: "aws_cloudwatch_log_group-sibling"
+      }
+    ]
+  };
+
+  const terraform = renderTerraformFromInfrastructureGraph(graph);
+
+  assert.match(terraform, /output "log_group_name"[\s\S]*aws_cloudwatch_log_group\.selected\.name/);
+  assert.doesNotMatch(terraform, /aws_cloudwatch_log_group\.sibling\.name/);
+});
+
+test("Live Observation does not cross a shared ASG IAM chain into a sibling log", () => {
+  const graph: InfrastructureGraph = {
+    nodes: [
+      createLiveObservationNode("aws_lb", "demo", {}),
+      createLiveObservationNode("aws_lb_target_group", "api", {}),
+      createLiveObservationNode("aws_lb_target_group", "sibling", {}),
+      ...createHttpsAlbListenerNodes(),
+      createLiveObservationNode("aws_autoscaling_group", "selected", {
+        targetGroupArns: ["aws_lb_target_group.api.arn"],
+        launchTemplate: { id: "aws_launch_template.selected.id" }
+      }),
+      createLiveObservationNode("aws_autoscaling_group", "sibling", {
+        targetGroupArns: ["aws_lb_target_group.sibling.arn"],
+        launchTemplate: { id: "aws_launch_template.sibling.id" }
+      }),
+      createLiveObservationNode("aws_launch_template", "selected", {
+        iamInstanceProfile: { name: "aws_iam_instance_profile.shared.name" }
+      }),
+      createLiveObservationNode("aws_launch_template", "sibling", {
+        iamInstanceProfile: { name: "aws_iam_instance_profile.shared.name" }
+      }),
+      createLiveObservationNode("aws_iam_instance_profile", "shared", {
+        role: "aws_iam_role.shared.name"
+      }),
+      createLiveObservationNode("aws_iam_role", "shared", {}),
+      createLiveObservationNode("aws_cloudwatch_log_group", "selected", {}),
+      createLiveObservationNode("aws_cloudwatch_log_group", "sibling", {}),
+      createLiveObservationNode("aws_cloudwatch_metric_alarm", "selected", {
+        metricName: "RequestCountPerTarget",
+        threshold: 60,
+        dimensions: {
+          AutoScalingGroupName: "aws_autoscaling_group.selected.name"
+        }
+      })
+    ],
+    edges: [
+      { id: "selected-lt", sourceId: "aws_autoscaling_group-selected", targetId: "aws_launch_template-selected" },
+      { id: "selected-profile", sourceId: "aws_launch_template-selected", targetId: "aws_iam_instance_profile-shared" },
+      { id: "shared-role", sourceId: "aws_iam_instance_profile-shared", targetId: "aws_iam_role-shared" },
+      { id: "sibling-profile", sourceId: "aws_iam_instance_profile-shared", targetId: "aws_launch_template-sibling" },
+      { id: "sibling-lt", sourceId: "aws_launch_template-sibling", targetId: "aws_autoscaling_group-sibling" },
+      { id: "selected-log", sourceId: "aws_launch_template-selected", targetId: "aws_cloudwatch_log_group-selected" },
+      { id: "sibling-log", sourceId: "aws_autoscaling_group-sibling", targetId: "aws_cloudwatch_log_group-sibling" }
+    ]
+  };
+
+  const terraform = renderTerraformFromInfrastructureGraph(graph);
+
+  assert.match(terraform, /output "log_group_name"[\s\S]*aws_cloudwatch_log_group\.selected\.name/);
+  assert.doesNotMatch(terraform, /aws_cloudwatch_log_group\.sibling\.name/);
+});
+
+test("Live Observation resolves an ASG alarm through its scaling policy action", () => {
+  const graph: InfrastructureGraph = {
+    nodes: [
+      createLiveObservationNode("aws_lb", "demo", {}),
+      createLiveObservationNode("aws_lb_target_group", "api", {}),
+      createLiveObservationNode("aws_lb_target_group", "sibling", {}),
+      ...createHttpsAlbListenerNodes(),
+      createLiveObservationNode("aws_autoscaling_group", "selected", {
+        targetGroupArns: ["aws_lb_target_group.api.arn"]
+      }),
+      createLiveObservationNode("aws_autoscaling_group", "sibling", {
+        targetGroupArns: ["aws_lb_target_group.sibling.arn"]
+      }),
+      createLiveObservationNode("aws_autoscaling_policy", "selected", {
+        autoscalingGroupName: "aws_autoscaling_group.selected.name"
+      }),
+      createLiveObservationNode("aws_cloudwatch_metric_alarm", "selected", {
+        metricName: "RequestCountPerTarget",
+        threshold: 75,
+        alarmActions: ["aws_autoscaling_policy.selected.arn"]
+      })
+    ],
+    edges: []
+  };
+
+  const terraform = renderTerraformFromInfrastructureGraph(graph);
+
+  assert.match(terraform, /output "asg_name"[\s\S]*aws_autoscaling_group\.selected\.name/);
+  assert.match(terraform, /output "scale_out_threshold"[\s\S]*value = 75/);
+});
+
+test("Live Observation rejects an ASG alarm with an ambiguous scaling policy action", () => {
+  const graph: InfrastructureGraph = {
+    nodes: [
+      createLiveObservationNode("aws_lb", "demo", {}),
+      createLiveObservationNode("aws_lb_target_group", "api", {}),
+      ...createHttpsAlbListenerNodes(),
+      createLiveObservationNode("aws_autoscaling_group", "selected", {
+        targetGroupArns: ["aws_lb_target_group.api.arn"]
+      }),
+      createLiveObservationNode("aws_autoscaling_policy", "first", {
+        autoscalingGroupName: "aws_autoscaling_group.selected.name"
+      }),
+      createLiveObservationNode("aws_autoscaling_policy", "second", {
+        autoscalingGroupName: "aws_autoscaling_group.selected.name"
+      }),
+      createLiveObservationNode("aws_cloudwatch_metric_alarm", "ambiguous", {
+        metricName: "RequestCountPerTarget",
+        threshold: 75,
+        alarmActions: [
+          "aws_autoscaling_policy.first.arn",
+          "aws_autoscaling_policy.second.arn"
+        ]
+      })
+    ],
+    edges: [
+      {
+        id: "stale-direct-alarm",
+        sourceId: "aws_cloudwatch_metric_alarm-ambiguous",
+        targetId: "aws_autoscaling_group-selected"
+      }
+    ]
+  };
+
+  const terraform = renderTerraformFromInfrastructureGraph(graph);
+
+  assert.doesNotMatch(terraform, /output "traffic_url"/);
+  assert.doesNotMatch(terraform, /output "asg_name"/);
+});
+
 test("Live Observation blocks a target group attached to multiple runtimes", () => {
   const first = createEcsObservationRuntime("first", "api", "shared", "first", 2);
   const second = createEcsObservationRuntime("second", "api", "shared", "second", 3);

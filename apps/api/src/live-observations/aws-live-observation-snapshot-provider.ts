@@ -31,6 +31,13 @@ type ResponseMetricId =
   | "responses_4xx"
   | "responses_5xx";
 type MetricId = ResponseMetricId | "latency";
+type MetricResultStatusCode = "Complete" | "PartialData" | "InternalError" | "Forbidden";
+type CloudWatchMetricDataResult = {
+  id?: string | undefined;
+  statusCode?: MetricResultStatusCode | undefined;
+  timestamps?: readonly Date[] | undefined;
+  values?: readonly number[] | undefined;
+};
 
 const RESPONSE_METRIC_IDS: readonly ResponseMetricId[] = [
   "responses_2xx",
@@ -38,6 +45,7 @@ const RESPONSE_METRIC_IDS: readonly ResponseMetricId[] = [
   "responses_4xx",
   "responses_5xx"
 ];
+const METRIC_IDS: readonly MetricId[] = [...RESPONSE_METRIC_IDS, "latency"];
 
 export type AwsLiveObservationSnapshotTarget = {
   awsConnectionId: string;
@@ -76,11 +84,7 @@ type CloudWatchClientPort = {
       scope: "load_balancer" | "target_group";
     }>;
   }): Promise<{
-    metricDataResults?: ReadonlyArray<{
-      id?: string | undefined;
-      timestamps?: readonly Date[] | undefined;
-      values?: readonly number[] | undefined;
-    }> | undefined;
+    metricDataResults?: ReadonlyArray<CloudWatchMetricDataResult> | undefined;
   }>;
 };
 
@@ -411,8 +415,17 @@ async function observeMetrics(
         }
       ]
     });
+    const results = new Map<MetricId, CloudWatchMetricDataResult>();
+    for (const id of METRIC_IDS) {
+      const candidates = response.metricDataResults?.filter((result) => result.id === id) ?? [];
+      if (candidates.length !== 1 || candidates[0]?.statusCode !== "Complete") {
+        return { state: "unavailable", observedAt: null };
+      }
+      results.set(id, candidates[0]);
+    }
+
     const latency = latestCompletedPoint(
-      response.metricDataResults?.find((result) => result.id === "latency"),
+      results.get("latency"),
       evaluatedAtMs
     );
     if (!latency) {
@@ -424,7 +437,7 @@ async function observeMetrics(
       RESPONSE_METRIC_IDS.map((id) => [
         id,
         completedPointAt(
-          response.metricDataResults?.find((result) => result.id === id),
+          results.get(id),
           periodStartMs,
           evaluatedAtMs
         )
@@ -466,6 +479,17 @@ function latestCompletedPoint(
   } | undefined,
   evaluatedAtMs: number
 ): { timestamp: Date; value: number } | null {
+  return completedPoints(result, evaluatedAtMs)
+    .sort((left, right) => right.timestamp.getTime() - left.timestamp.getTime())[0] ?? null;
+}
+
+function completedPoints(
+  result: {
+    timestamps?: readonly Date[] | undefined;
+    values?: readonly number[] | undefined;
+  } | undefined,
+  evaluatedAtMs: number
+): Array<{ timestamp: Date; value: number }> {
   return (result?.timestamps ?? [])
     .map((timestamp, index) => ({ timestamp, value: result?.values?.[index] }))
     .filter(
@@ -476,8 +500,7 @@ function latestCompletedPoint(
         Number.isFinite(point.value) &&
         point.value >= 0 &&
         point.timestamp.getTime() + PERIOD_SECONDS * 1_000 <= evaluatedAtMs
-    )
-    .sort((left, right) => right.timestamp.getTime() - left.timestamp.getTime())[0] ?? null;
+    );
 }
 
 function completedPointAt(
@@ -488,8 +511,10 @@ function completedPointAt(
   periodStartMs: number,
   evaluatedAtMs: number
 ): { timestamp: Date; value: number } | null {
-  const point = latestCompletedPoint(result, evaluatedAtMs);
-  return point?.timestamp.getTime() === periodStartMs ? point : null;
+  const points = completedPoints(result, evaluatedAtMs).filter(
+    (point) => point.timestamp.getTime() === periodStartMs
+  );
+  return points.length === 1 ? points[0]! : null;
 }
 
 async function observeCapacity(
@@ -664,6 +689,7 @@ function createDefaultCloudWatchClient(input: {
       return {
         metricDataResults: response.MetricDataResults?.map((result) => ({
           id: result.Id,
+          statusCode: result.StatusCode,
           timestamps: result.Timestamps,
           values: result.Values
         }))

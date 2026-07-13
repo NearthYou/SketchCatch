@@ -321,21 +321,32 @@ function resolveRuntimeLogGroups(
   runtime: RuntimeCandidate,
   legacySingleRuntime: boolean
 ): InfrastructureGraphNode[] | null {
-  const allowedSupportTypes = runtime.kind === "ecs_fargate"
-    ? new Set(["aws_ecs_service", "aws_ecs_task_definition", "aws_cloudwatch_log_group"])
-    : new Set([
-        "aws_autoscaling_group",
-        "aws_launch_template",
-        "aws_iam_instance_profile",
-        "aws_iam_role",
-        "aws_iam_role_policy",
-        "aws_iam_policy",
-        "aws_cloudwatch_log_group"
-      ]);
-  const reachable = reachableSupportNodes(graph, runtime.node, allowedSupportTypes);
-  const explicit = uniqueNodes(
-    reachable.filter((node) => node.iac.resourceType === "aws_cloudwatch_log_group")
+  const owners = runtime.kind === "ecs_fargate"
+    ? resolveEcsLogOwners(graph, runtime.node)
+    : resolveAsgLogOwners(graph, runtime.node);
+  if (!owners) return null;
+
+  const logGroups = resourceNodes(graph, "aws_cloudwatch_log_group");
+  const referenced = logGroups.filter((logGroup) =>
+    owners.some((owner) =>
+      containsTerraformReference(owner.config, terraformAddress(logGroup), ["name", "arn"])
+    )
   );
+  if (
+    owners.some((owner) =>
+      containsTerraformReferenceOfTypeForAttributes(
+        owner.config,
+        "aws_cloudwatch_log_group",
+        ["name", "arn"]
+      )
+    ) && referenced.length === 0
+  ) {
+    return null;
+  }
+  const explicit = uniqueNodes([
+    ...referenced,
+    ...owners.flatMap((owner) => outgoingNodes(graph, owner, "aws_cloudwatch_log_group"))
+  ]);
   const allLogGroups = resourceNodes(graph, "aws_cloudwatch_log_group");
   const selected = explicit.length > 0
     ? explicit
@@ -345,33 +356,101 @@ function resolveRuntimeLogGroups(
   return selected.length <= 10 ? selected : null;
 }
 
-function reachableSupportNodes(
+function resolveEcsLogOwners(
   graph: InfrastructureGraph,
-  start: InfrastructureGraphNode,
-  allowedResourceTypes: ReadonlySet<string>
-): InfrastructureGraphNode[] {
-  const nodeById = new Map(graph.nodes.map((node) => [node.id, node]));
-  const visited = new Set([start.id]);
-  const queue = [start.id];
-  while (queue.length > 0) {
-    const current = queue.shift()!;
-    for (const edge of graph.edges) {
-      const neighborId = edge.sourceId === current
-        ? edge.targetId
-        : edge.targetId === current
-          ? edge.sourceId
-          : null;
-      if (!neighborId || visited.has(neighborId)) continue;
-      const neighbor = nodeById.get(neighborId);
-      if (!neighbor || !allowedResourceTypes.has(neighbor.iac.resourceType)) continue;
-      visited.add(neighborId);
-      queue.push(neighborId);
-    }
+  service: InfrastructureGraphNode
+): InfrastructureGraphNode[] | null {
+  const taskDefinition = resolveOwnedSupportNode(
+    graph,
+    service,
+    service.config["taskDefinition"],
+    "aws_ecs_task_definition",
+    ["arn", "id"]
+  );
+  return taskDefinition === null
+    ? null
+    : taskDefinition
+      ? [service, taskDefinition]
+      : [service];
+}
+
+function resolveAsgLogOwners(
+  graph: InfrastructureGraph,
+  autoScalingGroup: InfrastructureGraphNode
+): InfrastructureGraphNode[] | null {
+  const owners = [autoScalingGroup];
+  const launchTemplate = resolveOwnedSupportNode(
+    graph,
+    autoScalingGroup,
+    autoScalingGroup.config["launchTemplate"],
+    "aws_launch_template",
+    ["id", "name", "arn"]
+  );
+  if (launchTemplate === null) return null;
+  if (!launchTemplate) return owners;
+  owners.push(launchTemplate);
+
+  const instanceProfile = resolveOwnedSupportNode(
+    graph,
+    launchTemplate,
+    launchTemplate.config["iamInstanceProfile"],
+    "aws_iam_instance_profile",
+    ["name", "arn", "id"]
+  );
+  if (instanceProfile === null) return null;
+  if (!instanceProfile) return owners;
+  owners.push(instanceProfile);
+
+  const role = resolveOwnedSupportNode(
+    graph,
+    instanceProfile,
+    instanceProfile.config["role"],
+    "aws_iam_role",
+    ["name", "arn", "id"]
+  );
+  if (role === null) return null;
+  if (!role) return owners;
+  owners.push(role);
+
+  for (const resourceType of ["aws_iam_role_policy", "aws_iam_policy"] as const) {
+    owners.push(...resourceNodes(graph, resourceType).filter((policy) =>
+      containsTerraformReference(policy.config["role"], terraformAddress(role), ["name", "id", "arn"]) ||
+      graph.edges.some((edge) => edge.sourceId === role.id && edge.targetId === policy.id)
+    ));
   }
-  return [...visited].flatMap((id) => {
-    const node = nodeById.get(id);
-    return node ? [node] : [];
-  });
+  return uniqueNodes(owners);
+}
+
+function resolveOwnedSupportNode(
+  graph: InfrastructureGraph,
+  owner: InfrastructureGraphNode,
+  referenceValue: unknown,
+  resourceType: string,
+  attributes: readonly string[]
+): InfrastructureGraphNode | null | undefined {
+  const candidates = resourceNodes(graph, resourceType);
+  const referenced = candidates.filter((candidate) =>
+    containsTerraformReference(referenceValue, terraformAddress(candidate), attributes)
+  );
+  if (referenced.length > 0) return onlyNode(referenced);
+  if (containsTerraformReferenceOfTypeForAttributes(referenceValue, resourceType, attributes)) {
+    return null;
+  }
+  const outgoing = outgoingNodes(graph, owner, resourceType);
+  return outgoing.length === 0 ? undefined : onlyNode(outgoing);
+}
+
+function outgoingNodes(
+  graph: InfrastructureGraph,
+  source: InfrastructureGraphNode,
+  resourceType: string
+): InfrastructureGraphNode[] {
+  const targetIds = new Set(
+    graph.edges
+      .filter((edge) => edge.sourceId === source.id)
+      .map((edge) => edge.targetId)
+  );
+  return resourceNodes(graph, resourceType).filter((node) => targetIds.has(node.id));
 }
 
 function resolveAsgPressureAlarm(
@@ -379,20 +458,85 @@ function resolveAsgPressureAlarm(
   autoScalingGroup: InfrastructureGraphNode,
   legacySingleRuntime: boolean
 ): InfrastructureGraphNode | null {
+  const autoScalingGroups = resourceNodes(graph, "aws_autoscaling_group");
   const candidates = resourceNodes(graph, "aws_cloudwatch_metric_alarm").filter(
     (node) =>
       node.config["metricName"] === "RequestCountPerTarget" &&
       typeof node.config["threshold"] === "number"
   );
-  const linked = candidates.filter(
-    (node) =>
+  const validCandidates = candidates.filter((alarm) => {
+    const actionOwner = resolveAlarmActionAutoScalingGroup(
+      graph,
+      alarm,
+      autoScalingGroups
+    );
+    if (actionOwner === null || (actionOwner && actionOwner.id !== autoScalingGroup.id)) {
+      return false;
+    }
+
+    const dimensionOwners = autoScalingGroups.filter((candidate) =>
       containsTerraformReference(
-        node.config["dimensions"],
-        terraformAddress(autoScalingGroup),
+        alarm.config["dimensions"],
+        terraformAddress(candidate),
         ["name"]
-      ) || nodesDirectlyConnected(graph, node, autoScalingGroup)
+      )
+    );
+    const hasDimensionReference = containsTerraformReferenceOfType(
+      alarm.config["dimensions"],
+      "aws_autoscaling_group",
+      "name"
+    );
+    const directlyLinked = hasDimensionReference
+      ? onlyNode(dimensionOwners)?.id === autoScalingGroup.id
+      : nodesDirectlyConnected(graph, alarm, autoScalingGroup);
+    return directlyLinked || actionOwner?.id === autoScalingGroup.id;
+  });
+  const linked = onlyNode(validCandidates);
+  if (linked) return linked;
+  if (validCandidates.length > 1 || !legacySingleRuntime) return null;
+
+  const legacyCandidates = candidates.filter(
+    (alarm) => resolveAlarmActionAutoScalingGroup(graph, alarm, autoScalingGroups) !== null
   );
-  return onlyNode(linked) ?? (legacySingleRuntime ? onlyNode(candidates) : null);
+  return onlyNode(legacyCandidates);
+}
+
+function resolveAlarmActionAutoScalingGroup(
+  graph: InfrastructureGraph,
+  alarm: InfrastructureGraphNode,
+  autoScalingGroups: readonly InfrastructureGraphNode[]
+): InfrastructureGraphNode | null | undefined {
+  const alarmActions = alarm.config["alarmActions"];
+  const hasPolicyReference = containsTerraformReferenceOfTypeForAttributes(
+    alarmActions,
+    "aws_autoscaling_policy",
+    ["arn", "id", "name"]
+  );
+  if (!hasPolicyReference) return undefined;
+
+  const policies = resourceNodes(graph, "aws_autoscaling_policy").filter((policy) =>
+    containsTerraformReference(alarmActions, terraformAddress(policy), ["arn", "id", "name"])
+  );
+  const policy = onlyNode(policies);
+  if (!policy) return null;
+
+  const policyOwners = autoScalingGroups.filter((candidate) =>
+    containsTerraformReference(
+      policy.config["autoscalingGroupName"],
+      terraformAddress(candidate),
+      ["name"]
+    )
+  );
+  if (
+    !containsTerraformReferenceOfType(
+      policy.config["autoscalingGroupName"],
+      "aws_autoscaling_group",
+      "name"
+    )
+  ) {
+    return null;
+  }
+  return onlyNode(policyOwners);
 }
 
 function renderLiveObservationLogGroupOutputs(
@@ -555,6 +699,16 @@ function containsTerraformReferenceOfType(
   }
   return isRecord(value) && Object.values(value).some((candidate) =>
     containsTerraformReferenceOfType(candidate, resourceType, attribute)
+  );
+}
+
+function containsTerraformReferenceOfTypeForAttributes(
+  value: unknown,
+  resourceType: string,
+  attributes: readonly string[]
+): boolean {
+  return attributes.some((attribute) =>
+    containsTerraformReferenceOfType(value, resourceType, attribute)
   );
 }
 
