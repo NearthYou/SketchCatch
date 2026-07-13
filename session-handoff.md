@@ -13,7 +13,7 @@ Use this file only for compact continuation context. Write it in English.
 
 - Added trusted handoff lookup and shared non-sensitive HTTP(S) validation; provenance metadata now uses atomic tuple replacement or whole-tuple preservation when no handoff applies.
 - Corrected architecture/deployment docs so CI/CD Outputs are conditional handoff metadata, not Terraform Outputs.
-- Archived seven older unrelated progress records in total and recorded full-suite baseline failures.
+- Archived eight older unrelated progress records in total and recorded full-suite baseline failures.
 
 ## Broken Or Unverified
 
