@@ -4,12 +4,21 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- Branch: `feature/sw/373-ecs-gitops-release` based on merged issue #372 (`6b521f0f`).
-- Issue #372 is merged in PR #384 after CI and review feedback resolution.
-- Issue #373 implementation is verified and ready for PR review.
+- Branch: `feature/sw/374-lambda-gitops-release` based on merged issue #373 (`6450d62d`).
+- Issues #371-#373 are merged after CI and review feedback resolution.
+- Issue #374 Lambda AllAtOnce GitOps release is verified and ready for PR review.
 - No cloud mutation or production database migration was performed.
 
 ## Session Record
+
+### 2026-07-14 - Repository-confirmed Lambda AllAtOnce GitOps release
+
+- Added Lambda runtime coordinates, one-current-SAM evidence gating, and project settings for function, alias, CodeDeploy, Output URL, and health path.
+- Added immutable SAM ZIP publication, digest-to-CodeSha256 verification, CodeDeployDefault.LambdaAllAtOnce alias promotion, automatic deployment rollback, and explicit health-failure alias restoration.
+- Added bounded masked Lambda evidence parsing, AWS Lambda and CodeDeploy re-query verification, weighted-alias drift rejection, and shared release ledger reconciliation.
+- Verification passed: focused API 100/100, target-state 8/8, migration compatibility, PostgreSQL migrations 0000-0038, harness, lint, typecheck, build, and whitespace checks.
+- The full Web suite passed. The API suite passed 1,481/1,484; only the three unchanged Windows symlink fixture setup errors (`EPERM`) remain.
+- Sandbox deployment, rollback, and cleanup evidence remain assigned to issue #378; no AWS mutation was attempted.
 
 ### 2026-07-14 - Repository-confirmed ECS/Fargate GitOps release
 
@@ -53,5 +62,5 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Next Action
 
-- Open the Korean issue #373 PR, wait at least five minutes, resolve review and CI feedback, and merge to `dev`.
-- Start issue #374 from the updated `dev` branch after issue #373 merges.
+- Open the Korean issue #374 PR, wait at least five minutes, resolve review and CI feedback, and merge to `dev`.
+- Start issue #375 from the updated `dev` branch after issue #374 merges.

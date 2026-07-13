@@ -67,6 +67,16 @@ import {
   type EcsGitOpsReleaseReconciler
 } from "../git-cicd/ecs-gitops-release-reconciler.js";
 import {
+  createAwsLambdaGitOpsCloudGateway,
+  createLambdaGitOpsReleaseReconciler,
+  createPostgresLambdaGitOpsReleaseRepository,
+  LambdaGitOpsReleaseVerificationError
+} from "../git-cicd/lambda-gitops-release-reconciler.js";
+import {
+  createGitOpsReleaseReconciler,
+  type GitOpsReleaseReconciler
+} from "../git-cicd/gitops-release-reconciler.js";
+import {
   createGitCicdPipelineRunService,
   createPostgresGitCicdPipelinePersistenceRepository,
   GitCicdPipelineRunInvalidCursorError,
@@ -234,6 +244,7 @@ type GitCicdHandoffRouteOptions = {
   ) => GitCicdRepositorySettingsApplier;
   githubOAuthFetch?: typeof fetch;
   awsRoleDiffGateway?: AwsRoleDiffGateway;
+  gitOpsReleaseReconciler?: GitOpsReleaseReconciler;
   ecsGitOpsReleaseReconciler?: EcsGitOpsReleaseReconciler;
   runtimeCache?: RuntimeCache;
 };
@@ -927,12 +938,33 @@ async function getGitCicdPipelineRunRequestContext(
     options?.createGitCicdPipelinePersistenceRepository?.(client.db) ??
     createPostgresGitCicdPipelinePersistenceRepository(client.db);
   const releaseReconciler =
-    options?.ecsGitOpsReleaseReconciler ??
+    options?.gitOpsReleaseReconciler ??
+    (options?.ecsGitOpsReleaseReconciler
+      ? {
+          reconcile(input) {
+            if (input.evidence.runtimeTargetKind !== "ecs_fargate") {
+              throw new LambdaGitOpsReleaseVerificationError(
+                "Lambda release reconciler is not configured"
+              );
+            }
+            return options.ecsGitOpsReleaseReconciler!.reconcile({
+              ...input,
+              evidence: input.evidence
+            });
+          }
+        } satisfies GitOpsReleaseReconciler
+      : undefined) ??
     (options?.createGitCicdPipelinePersistenceRepository
       ? undefined
-      : createEcsGitOpsReleaseReconciler({
-          repository: createPostgresEcsGitOpsReleaseRepository(client.db),
-          gateway: createAwsEcsGitOpsCloudGateway()
+      : createGitOpsReleaseReconciler({
+          ecs: createEcsGitOpsReleaseReconciler({
+            repository: createPostgresEcsGitOpsReleaseRepository(client.db),
+            gateway: createAwsEcsGitOpsCloudGateway()
+          }),
+          lambda: createLambdaGitOpsReleaseReconciler({
+            repository: createPostgresLambdaGitOpsReleaseRepository(client.db),
+            gateway: createAwsLambdaGitOpsCloudGateway()
+          })
         }));
   return {
     accessContext,

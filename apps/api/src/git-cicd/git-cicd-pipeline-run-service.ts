@@ -20,9 +20,10 @@ import {
 } from "../db/schema.js";
 import {
   EcsGitOpsReleaseVerificationError,
-  type EcsGitOpsReleaseReconciler,
   type EcsGitOpsReleaseRecord
 } from "./ecs-gitops-release-reconciler.js";
+import type { GitOpsReleaseReconciler } from "./gitops-release-reconciler.js";
+import { LambdaGitOpsReleaseVerificationError } from "./lambda-gitops-release-reconciler.js";
 import type {
   GitCicdRunProvider,
   GitCicdRunProviderSnapshot
@@ -154,7 +155,7 @@ export function createGitCicdPipelineRunService(options: {
   provider: GitCicdRunProvider;
   now?: () => Date;
   createId?: () => string;
-  releaseReconciler?: EcsGitOpsReleaseReconciler | undefined;
+  releaseReconciler?: GitOpsReleaseReconciler | undefined;
 }) {
   const now = options.now ?? (() => new Date());
   const createId = options.createId ?? randomUUID;
@@ -206,8 +207,9 @@ export function createGitCicdPipelineRunService(options: {
         runs: maskRuns(runs),
         stale: true,
         errorMessage:
-          error instanceof EcsGitOpsReleaseVerificationError
-            ? "ECS release verification failed; showing the last persisted state."
+          error instanceof EcsGitOpsReleaseVerificationError ||
+          error instanceof LambdaGitOpsReleaseVerificationError
+            ? "Application release verification failed; showing the last persisted state."
             : "GitHub Actions status refresh failed; showing the last persisted state."
       };
     }

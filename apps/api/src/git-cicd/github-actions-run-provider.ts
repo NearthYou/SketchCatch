@@ -1,8 +1,10 @@
 import type {
   EcsGitOpsReleaseEvidence,
+  GitOpsReleaseEvidence,
   GitCicdPipelineRunStatus,
   GitCicdPipelineStageKind,
-  GitCicdPipelineStageStatus
+  GitCicdPipelineStageStatus,
+  LambdaGitOpsReleaseEvidence
 } from "@sketchcatch/types";
 import { maskDeploymentMessage } from "../deployments/log-masking.js";
 import type {
@@ -38,7 +40,7 @@ export type GitCicdRunProviderSnapshot = {
   logRevision: string;
   jobs: GitCicdRunProviderJob[];
   logs: GitCicdRunProviderLog[];
-  releaseEvidence?: EcsGitOpsReleaseEvidence | null;
+  releaseEvidence?: GitOpsReleaseEvidence | null;
 };
 
 export type GitCicdRunProvider = {
@@ -72,7 +74,7 @@ export function createGitHubActionsRunProvider(
       for (const [commitSha, commitRuns] of [...groups].slice(0, maxHydratedPipelineCommitGroups)) {
         const jobs: GitCicdRunProviderJob[] = [];
         const logs: GitCicdRunProviderLog[] = [];
-        const releaseEvidenceCandidates: EcsGitOpsReleaseEvidence[] = [];
+        const releaseEvidenceCandidates: GitOpsReleaseEvidence[] = [];
         for (const run of [...commitRuns].sort(compareWorkflowHydrationOrder)) {
           for (const job of await client.listWorkflowJobs({ ...input, runId: run.id })) {
             const jobStageKind = mapJobStageKind(run.workflowName, job.name);
@@ -102,17 +104,21 @@ export function createGitHubActionsRunProvider(
             }
             if (job.status !== "completed") continue;
             const rawText = await client.readWorkflowJobLog({ ...input, jobId: job.id });
-            releaseEvidenceCandidates.push(...parseEcsReleaseEvidence(rawText));
+            releaseEvidenceCandidates.push(...parseReleaseEvidence(rawText));
             const text = maskDeploymentMessage(rawText);
             let activeStageKind = jobStageKind;
             for (const line of text.split(/\r?\n/).filter(Boolean)) {
               const lineStageKind = mapLogLineStageKind(run.workflowName, job.name, line);
               if (lineStageKind) activeStageKind = lineStageKind;
-              const containsEvidence = line.includes("SKETCHCATCH_ECS_RELEASE_EVIDENCE_B64=");
+              const evidenceLabel = line.includes("SKETCHCATCH_ECS_RELEASE_EVIDENCE_B64=")
+                ? "ECS release evidence captured."
+                : line.includes("SKETCHCATCH_LAMBDA_RELEASE_EVIDENCE_B64=")
+                  ? "Lambda release evidence captured."
+                  : null;
               logs.push({
-                stageKind: containsEvidence ? "verify" : activeStageKind,
+                stageKind: evidenceLabel ? "verify" : activeStageKind,
                 level: job.conclusion === "failure" ? "error" : "info",
-                message: containsEvidence ? "ECS release evidence captured." : line
+                message: evidenceLabel ?? line
               });
             }
           }
@@ -134,7 +140,7 @@ export function createGitHubActionsRunProvider(
           logRevision,
           jobs,
           logs,
-          releaseEvidence: selectEcsReleaseEvidence(releaseEvidenceCandidates, commitSha)
+          releaseEvidence: selectReleaseEvidence(releaseEvidenceCandidates, commitSha)
         });
       }
       return snapshots;
@@ -240,9 +246,13 @@ function mapStepStageKind(
 ): GitCicdPipelineStageKind | null {
   if (workflowName !== "SketchCatch App" || jobName !== "release") return null;
   if (stepName === "Run CodeBuild" || stepName === "Upload release artifact") return "app_build";
+  if (stepName === "Build confirmed SAM application") return "app_build";
   if (stepName === "Publish immutable ECR digest") return "artifact_publish";
+  if (stepName === "Publish immutable Lambda version") return "artifact_publish";
   if (stepName === "Deploy ECS Fargate revision" || stepName === "Refresh Auto Scaling Group") return "app_deploy";
+  if (stepName === "Deploy Lambda alias AllAtOnce") return "app_deploy";
   if (stepName === "Verify ECS release" || stepName === "Verify URLs") return "verify";
+  if (stepName === "Verify Lambda release") return "verify";
   return null;
 }
 
@@ -256,6 +266,10 @@ function mapLogLineStageKind(
     "Publish immutable ECR digest",
     "Deploy ECS Fargate revision",
     "Verify ECS release",
+    "Build confirmed SAM application",
+    "Publish immutable Lambda version",
+    "Deploy Lambda alias AllAtOnce",
+    "Verify Lambda release",
     "Upload release artifact",
     "Refresh Auto Scaling Group",
     "Verify URLs"
@@ -265,33 +279,87 @@ function mapLogLineStageKind(
   return null;
 }
 
-function parseEcsReleaseEvidence(text: string): EcsGitOpsReleaseEvidence[] {
-  const results: EcsGitOpsReleaseEvidence[] = [];
-  const marker = /SKETCHCATCH_ECS_RELEASE_EVIDENCE_B64=([A-Za-z0-9+/]{1,12000}={0,2})(?:\s|$)/g;
-  let match: RegExpExecArray | null;
-  while ((match = marker.exec(text)) !== null) {
-    if (!match[1]) continue;
-    try {
-      const decoded = Buffer.from(match[1], "base64");
-      if (decoded.byteLength > 8_192) continue;
-      const evidence = validateEcsReleaseEvidence(JSON.parse(decoded.toString("utf8")));
-      if (evidence) results.push(evidence);
-    } catch {
-      continue;
+function parseReleaseEvidence(text: string): GitOpsReleaseEvidence[] {
+  const results: GitOpsReleaseEvidence[] = [];
+  for (const marker of [
+    /SKETCHCATCH_ECS_RELEASE_EVIDENCE_B64=([A-Za-z0-9+/]{1,12000}={0,2})(?:\s|$)/g,
+    /SKETCHCATCH_LAMBDA_RELEASE_EVIDENCE_B64=([A-Za-z0-9+/]{1,12000}={0,2})(?:\s|$)/g
+  ]) {
+    let match: RegExpExecArray | null;
+    while ((match = marker.exec(text)) !== null) {
+      if (!match[1]) continue;
+      try {
+        const decoded = Buffer.from(match[1], "base64");
+        if (decoded.byteLength > 8_192) continue;
+        const value: unknown = JSON.parse(decoded.toString("utf8"));
+        const evidence = validateEcsReleaseEvidence(value) ?? validateLambdaReleaseEvidence(value);
+        if (evidence) results.push(evidence);
+      } catch {
+        continue;
+      }
     }
   }
   return results;
 }
 
-function selectEcsReleaseEvidence(
-  candidates: readonly EcsGitOpsReleaseEvidence[],
+function selectReleaseEvidence(
+  candidates: readonly GitOpsReleaseEvidence[],
   commitSha: string
-): EcsGitOpsReleaseEvidence | null {
+): GitOpsReleaseEvidence | null {
   const matching = candidates.filter(
     (candidate) => candidate.commitSha.toLowerCase() === commitSha.toLowerCase()
   );
   const distinct = new Map(matching.map((candidate) => [JSON.stringify(candidate), candidate]));
   return distinct.size === 1 ? [...distinct.values()][0]! : null;
+}
+
+function validateLambdaReleaseEvidence(value: unknown): LambdaGitOpsReleaseEvidence | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const item = value as Record<string, unknown>;
+  const allowedKeys = new Set([
+    "schemaVersion", "runtimeTargetKind", "outcome", "commitSha", "artifactDigest",
+    "artifactUri", "functionName", "aliasName", "publishedVersion", "previousVersion",
+    "activeVersion", "deploymentId", "deploymentConfigName", "outputUrl"
+  ]);
+  if (Object.keys(item).some((key) => !allowedKeys.has(key))) return null;
+  const stringKeys = [
+    "commitSha", "artifactDigest", "artifactUri", "functionName", "aliasName",
+    "publishedVersion", "previousVersion", "activeVersion", "deploymentId",
+    "deploymentConfigName", "outputUrl"
+  ] as const;
+  if (stringKeys.some((key) => typeof item[key] !== "string")) return null;
+  const outcome = String(item.outcome);
+  const publishedVersion = String(item.publishedVersion);
+  const previousVersion = String(item.previousVersion);
+  const activeVersion = String(item.activeVersion);
+  const artifactDigest = String(item.artifactDigest);
+  const artifactUri = String(item.artifactUri);
+  if (
+    item.schemaVersion !== 1 ||
+    item.runtimeTargetKind !== "lambda" ||
+    !["succeeded", "rolled_back", "failed"].includes(outcome) ||
+    !/^(?:[a-f\d]{40}|[a-f\d]{64})$/i.test(String(item.commitSha)) ||
+    !/^sha256:[a-f\d]{64}$/.test(artifactDigest) ||
+    !/^[A-Za-z0-9_-]{1,64}$/.test(String(item.functionName)) ||
+    !/^(?!\$LATEST$)(?!\d+$)[A-Za-z0-9_-]{1,128}$/.test(String(item.aliasName)) ||
+    !/^[1-9]\d*$/.test(publishedVersion) ||
+    !/^[1-9]\d*$/.test(previousVersion) ||
+    !/^[1-9]\d*$/.test(activeVersion) ||
+    !/^d-[A-Za-z0-9]+$/.test(String(item.deploymentId)) ||
+    item.deploymentConfigName !== "CodeDeployDefault.LambdaAllAtOnce" ||
+    (outcome === "succeeded" && activeVersion !== publishedVersion) ||
+    (outcome === "rolled_back" && activeVersion !== previousVersion) ||
+    (outcome === "failed" && activeVersion !== previousVersion) ||
+    !isSafeS3ArtifactUri(artifactUri, artifactDigest) ||
+    !isSafeHttpsUrl(String(item.outputUrl))
+  ) return null;
+  return item as LambdaGitOpsReleaseEvidence;
+}
+
+function isSafeS3ArtifactUri(value: string, digest: string): boolean {
+  if (value.length > 2_048 || /[\s\0]/.test(value)) return false;
+  if (!/^s3:\/\/[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]\/.+/.test(value)) return false;
+  return value.endsWith(`/${digest.slice("sha256:".length)}.zip`);
 }
 
 function validateEcsReleaseEvidence(value: unknown): EcsGitOpsReleaseEvidence | null {

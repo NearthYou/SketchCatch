@@ -26,11 +26,11 @@ export function CicdActivityView({ run }: { readonly run: GitCicdPipelineRun | n
             <dd>{run.release.version}</dd>
           </div>
           <div>
-            <dt>Image digest</dt>
+            <dt>Artifact digest</dt>
             <dd>{run.release.artifactDigest.slice(0, 12)}</dd>
           </div>
           <div>
-            <dt>ECS revision</dt>
+            <dt>Provider revision</dt>
             <dd>{run.release.providerRevision?.revisionId ?? "-"}</dd>
           </div>
           <div>

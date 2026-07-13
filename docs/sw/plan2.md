@@ -152,10 +152,10 @@
 
 완료 기준:
 
-- [ ] 모호하거나 미확인 build config는 workflow 실행을 차단한다.
-- [ ] release가 version, SHA, image digest, task revision, Output URL을 기록한다.
-- [ ] minimum healthy 0, maximum 100과 circuit breaker rollback이 검증된다.
-- [ ] CI/CD 화면에서 build, publish, deploy, health 단계와 masked log를 본다.
+- [x] 모호하거나 미확인 build config는 workflow 실행을 차단한다.
+- [x] release가 version, SHA, image digest, task revision, Output URL을 기록한다.
+- [x] minimum healthy 0, maximum 100과 circuit breaker rollback이 검증된다.
+- [x] CI/CD 화면에서 build, publish, deploy, health 단계와 masked log를 본다.
 - [ ] sandbox ECS 배포와 의도된 실패 rollback evidence가 남는다.
 
 ### Issue #374. Lambda AllAtOnce GitOps 릴리즈
@@ -170,11 +170,13 @@
 
 완료 기준:
 
-- [ ] SAM/package evidence가 확인된 저장소만 빌드한다.
-- [ ] artifact digest, Lambda version, alias revision이 release ledger와 일치한다.
-- [ ] `LambdaAllAtOnce` 성공과 실패 시 이전 alias 복원이 테스트된다.
-- [ ] workflow stage/log와 Output URL health evidence가 표시된다.
+- [x] SAM/package evidence가 확인된 저장소만 빌드한다.
+- [x] artifact digest, Lambda version, alias revision이 release ledger와 일치한다.
+- [x] `LambdaAllAtOnce` 성공과 실패 시 이전 alias 복원이 테스트된다.
+- [x] workflow stage/log와 Output URL health evidence가 표시된다.
 - [ ] sandbox deploy/rollback/cleanup이 통과한다.
+
+실제 AWS sandbox mutation과 cleanup evidence는 공통 승인 게이트를 적용하는 Issue #378에서 수집한다.
 
 ### Issue #375. EC2/ASG CodeDeploy AllAtOnce 릴리즈
 

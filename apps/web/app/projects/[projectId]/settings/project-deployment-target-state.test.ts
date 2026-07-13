@@ -6,6 +6,7 @@ import type {
   SourceRepository
 } from "@sketchcatch/types";
 import {
+  changeDeploymentTargetRuntime,
   createDeploymentTargetDraft,
   createDeploymentTargetRequest,
   formatDeploymentTargetUpdatedAt,
@@ -41,7 +42,8 @@ test("deployment target draft maps each runtime to a structured build preset", (
         runtimeTargetKind,
         evidencePath,
         commitSha: "a".repeat(40),
-        ...(runtimeTargetKind === "ecs_fargate" ? createEcsCoordinates() : {})
+        ...(runtimeTargetKind === "ecs_fargate" ? createEcsCoordinates() : {}),
+        ...(runtimeTargetKind === "lambda" ? createLambdaCoordinates() : {})
       },
       [connection],
       new Date("2026-07-14T00:00:00.000Z")
@@ -51,6 +53,56 @@ test("deployment target draft maps each runtime to a structured build preset", (
     assert.equal(request.confirmedBuildConfig?.buildPreset, buildPreset);
     assert.equal(request.confirmedBuildConfig?.evidence[0]?.kind, evidenceKind);
   }
+});
+
+test("Lambda runtime selection suggests one current SAM template and requires runtime coordinates", () => {
+  const repository = createSourceRepository({
+    analysis: {
+      repositoryRevision: "d".repeat(40),
+      analyzedAt: "2026-07-14T00:00:00.000Z",
+      aiHandoff: {
+        status: "template_selected",
+        templateId: "minimal-serverless-api",
+        applicationUnits: [
+          {
+            id: "worker",
+            rootPath: "apps/worker",
+            kind: "backend",
+            frameworks: ["sam"],
+            evidencePaths: ["apps/worker/template.yaml"]
+          }
+        ],
+        evidence: [
+          {
+            kind: "framework_config",
+            path: "apps/worker/template.yaml",
+            applicationUnitId: "worker",
+            signals: []
+          }
+        ],
+        missingEvidence: [],
+        selectionReasons: ["SAM template detected"]
+      }
+    }
+  });
+  const draft = changeDeploymentTargetRuntime(
+    createDeploymentTargetDraft(null, [connection]),
+    "lambda",
+    repository
+  );
+
+  assert.equal(draft.sourceRoot, "apps/worker");
+  assert.equal(draft.evidencePath, "apps/worker/template.yaml");
+  assert.equal(draft.commitSha, "d".repeat(40));
+  assert.equal(draft.evidenceSuggested, true);
+  assert.equal(isDeploymentTargetDraftReady(draft, [connection]), false);
+
+  const ready = { ...draft, ...createLambdaCoordinates() };
+  assert.equal(isDeploymentTargetDraftReady(ready, [connection]), true);
+  const request = createDeploymentTargetRequest(ready, [connection]);
+  assert.equal(request.runtimeConfig?.runtimeTargetKind, "lambda");
+  assert.equal(request.runtimeConfig?.functionName, "sketchcatch-api");
+  assert.equal(request.confirmedBuildConfig.healthCheckPath, "/health");
 });
 
 test("deployment target draft restores the persisted project target", () => {
@@ -210,6 +262,18 @@ function createEcsCoordinates() {
     serviceName: "sketchcatch-api",
     containerName: "api",
     outputUrl: "https://api.example.com"
+  };
+}
+
+function createLambdaCoordinates() {
+  return {
+    functionLogicalId: "ApiFunction",
+    functionName: "sketchcatch-api",
+    aliasName: "live",
+    codeDeployApplicationName: "sketchcatch-api",
+    codeDeployDeploymentGroupName: "sketchcatch-api-live",
+    outputUrl: "https://lambda.example.com",
+    healthCheckPath: "/health"
   };
 }
 

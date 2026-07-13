@@ -74,6 +74,21 @@ const ecsFargateRuntimeConfigSchema = z
     outputUrl: z.url().max(2_048)
   })
   .strict();
+const lambdaRuntimeConfigSchema = z
+  .object({
+    runtimeTargetKind: z.literal("lambda"),
+    functionLogicalId: z.string().trim().min(1).max(255),
+    functionName: z.string().trim().min(1).max(64),
+    aliasName: z.string().trim().min(1).max(128),
+    codeDeployApplicationName: z.string().trim().min(1).max(100),
+    codeDeployDeploymentGroupName: z.string().trim().min(1).max(100),
+    outputUrl: z.url().max(2_048)
+  })
+  .strict();
+const deploymentRuntimeConfigSchema = z.discriminatedUnion("runtimeTargetKind", [
+  ecsFargateRuntimeConfigSchema,
+  lambdaRuntimeConfigSchema
+]);
 const putTargetBodySchema = z
   .object({
     provider: z.literal("aws"),
@@ -81,7 +96,7 @@ const putTargetBodySchema = z
     region: z.string().trim().regex(/^[a-z]{2}(?:-gov)?-[a-z]+-\d$/).max(32),
     runtimeTargetKind: z.enum(["ecs_fargate", "lambda", "ec2_asg", "static_site"]),
     confirmedBuildConfig: confirmedBuildConfigSchema,
-    runtimeConfig: ecsFargateRuntimeConfigSchema.nullable(),
+    runtimeConfig: deploymentRuntimeConfigSchema.nullable(),
     rolloutStrategy: z.literal("all_at_once")
   })
   .strict();

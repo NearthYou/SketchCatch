@@ -1060,6 +1060,27 @@ export type EcsGitOpsReleaseEvidence = {
   outputUrl: string;
 };
 
+export type LambdaGitOpsReleaseEvidence = {
+  schemaVersion: 1;
+  runtimeTargetKind: "lambda";
+  outcome: "succeeded" | "rolled_back" | "failed";
+  commitSha: string;
+  artifactDigest: string;
+  artifactUri: string;
+  functionName: string;
+  aliasName: string;
+  publishedVersion: string;
+  previousVersion: string;
+  activeVersion: string;
+  deploymentId: string;
+  deploymentConfigName: "CodeDeployDefault.LambdaAllAtOnce";
+  outputUrl: string;
+};
+
+export type GitOpsReleaseEvidence =
+  | EcsGitOpsReleaseEvidence
+  | LambdaGitOpsReleaseEvidence;
+
 export type EcsFargateRuntimeConfig = {
   runtimeTargetKind: "ecs_fargate";
   codeBuildProjectName: string;
@@ -1070,7 +1091,17 @@ export type EcsFargateRuntimeConfig = {
   outputUrl: string;
 };
 
-export type ProjectDeploymentRuntimeConfig = EcsFargateRuntimeConfig;
+export type LambdaRuntimeConfig = {
+  runtimeTargetKind: "lambda";
+  functionLogicalId: string;
+  functionName: string;
+  aliasName: string;
+  codeDeployApplicationName: string;
+  codeDeployDeploymentGroupName: string;
+  outputUrl: string;
+};
+
+export type ProjectDeploymentRuntimeConfig = EcsFargateRuntimeConfig | LambdaRuntimeConfig;
 
 export type ProjectDeploymentTarget = {
   projectId: string;

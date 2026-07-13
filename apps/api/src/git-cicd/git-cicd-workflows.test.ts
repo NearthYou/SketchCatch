@@ -167,6 +167,87 @@ test("ECS Fargate automation uses confirmed Docker evidence and immutable releas
   assert.equal(settings.variables.SKETCHCATCH_OUTPUT_URL, "https://api.example.com");
 });
 
+test("Lambda automation uses confirmed SAM evidence and CodeDeploy AllAtOnce rollback controls", () => {
+  const files = createGitCicdAutomationFiles({
+    projectSlug: "worker-project",
+    repositoryOwner: "owner",
+    repositoryName: "repo",
+    targetBranch: "main",
+    appPath: "apps/worker",
+    runtimeTargetKind: "lambda",
+    confirmedBuildConfig: {
+      sourceRoot: "apps/worker",
+      evidence: [{ kind: "sam_template", path: "apps/worker/template.yaml" }],
+      installPreset: "none",
+      buildPreset: "sam_build",
+      artifactOutputPath: null,
+      runtimeEntrypoint: null,
+      healthCheckPath: "/health",
+      dockerfilePath: null,
+      packageManifestPath: null,
+      samTemplatePath: "apps/worker/template.yaml",
+      appSpecPath: null,
+      staticOutputPath: null,
+      exactSemVerTag: null,
+      manifestVersion: "2.0.0",
+      confirmedCommitSha: "a".repeat(40),
+      confirmedAt: "2026-07-14T00:00:00.000Z"
+    },
+    runtimeConfig: {
+      runtimeTargetKind: "lambda",
+      functionLogicalId: "ApiFunction",
+      functionName: "sketchcatch-api",
+      aliasName: "live",
+      codeDeployApplicationName: "sketchcatch-api",
+      codeDeployDeploymentGroupName: "sketchcatch-api-live",
+      outputUrl: "https://lambda.example.com"
+    }
+  });
+
+  const appWorkflow = files.find(
+    (file) => file.path === ".github/workflows/sketchcatch-app.yml"
+  )?.content ?? "";
+  const settings = createRepositorySettingsPreview({
+    projectSlug: "worker-project",
+    repositoryOwner: "owner",
+    repositoryName: "repo",
+    targetBranch: "main",
+    runtimeTargetKind: "lambda",
+    runtimeConfig: {
+      runtimeTargetKind: "lambda",
+      functionLogicalId: "ApiFunction",
+      functionName: "sketchcatch-api",
+      aliasName: "live",
+      codeDeployApplicationName: "sketchcatch-api",
+      codeDeployDeploymentGroupName: "sketchcatch-api-live",
+      outputUrl: "https://lambda.example.com"
+    }
+  });
+
+  assert.match(appWorkflow, /name: Build confirmed SAM application/);
+  assert.match(appWorkflow, /sam build --template-file/);
+  assert.match(appWorkflow, /apps\/worker\/template\.yaml/);
+  assert.match(appWorkflow, /name: Publish immutable Lambda version/);
+  assert.match(appWorkflow, /update-function-code/);
+  assert.match(appWorkflow, /CodeDeployDefault\.LambdaAllAtOnce/);
+  assert.match(appWorkflow, /DEPLOYMENT_FAILURE/);
+  assert.match(appWorkflow, /import textwrap/);
+  assert.match(appWorkflow, /content = textwrap\.dedent\(/);
+  assert.match(appWorkflow, /aws lambda update-alias/);
+  assert.match(appWorkflow, /--revision-id/);
+  assert.match(appWorkflow, /cancel-in-progress: false/);
+  assert.match(appWorkflow, /name: Deploy Lambda alias AllAtOnce/);
+  assert.match(appWorkflow, /name: Verify Lambda release/);
+  assert.match(appWorkflow, /SKETCHCATCH_LAMBDA_RELEASE_EVIDENCE_B64/);
+  assert.match(appWorkflow, /curl .*HEALTH_URL/);
+  assert.doesNotMatch(appWorkflow, /skipping/iu);
+  assert.equal(settings.variables.SKETCHCATCH_LAMBDA_FUNCTION, "sketchcatch-api");
+  assert.equal(settings.variables.SKETCHCATCH_LAMBDA_ALIAS, "live");
+  assert.equal(settings.variables.SKETCHCATCH_CODEDEPLOY_APPLICATION, "sketchcatch-api");
+  assert.equal(settings.variables.SKETCHCATCH_CODEDEPLOY_GROUP, "sketchcatch-api-live");
+  assert.equal(settings.variables.SKETCHCATCH_OUTPUT_URL, "https://lambda.example.com");
+});
+
 test("default S3 bucket names trim separators left at the 63-character boundary", () => {
   const preview = createRepositorySettingsPreview({
     projectSlug: "demo-project",

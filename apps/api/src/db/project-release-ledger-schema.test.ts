@@ -32,6 +32,18 @@ test("ECS runtime coordinates are added by a non-destructive migration", () => {
   assert.doesNotMatch(migration, /DROP TABLE|DROP COLUMN|TRUNCATE/i);
 });
 
+test("Lambda runtime coordinates extend the JSON contract without destructive data changes", () => {
+  const migrationUrl = new URL("../../drizzle/0038_lambda_gitops_runtime.sql", import.meta.url);
+
+  assert.equal(existsSync(migrationUrl), true);
+  const migration = readFileSync(migrationUrl, "utf8");
+
+  assert.match(migration, /runtime_target_kind" = 'lambda'/);
+  assert.match(migration, /'runtimeTargetKind' = 'lambda'/);
+  assert.match(migration, /VALIDATE CONSTRAINT/);
+  assert.doesNotMatch(migration, /DROP TABLE|DROP COLUMN|TRUNCATE/i);
+});
+
 test("Direct and GitOps application releases share one project ledger", () => {
   const config = getTableConfig(applicationReleases);
 

@@ -119,6 +119,63 @@ test("provider parses bounded ECS release evidence while keeping job logs masked
   assert.equal(snapshot?.logs.at(-1)?.stageKind, "verify");
 });
 
+test("provider maps Lambda stages and parses one bounded Lambda release evidence record", async () => {
+  const evidence = {
+    schemaVersion: 1,
+    runtimeTargetKind: "lambda",
+    outcome: "succeeded",
+    commitSha: "a".repeat(40),
+    artifactDigest: `sha256:${"b".repeat(64)}`,
+    artifactUri: `s3://sketchcatch-release/lambda/${"a".repeat(40)}/${"b".repeat(64)}.zip`,
+    functionName: "sketchcatch-api",
+    aliasName: "live",
+    publishedVersion: "42",
+    previousVersion: "41",
+    activeVersion: "42",
+    deploymentId: "d-ABCDEFGHI",
+    deploymentConfigName: "CodeDeployDefault.LambdaAllAtOnce",
+    outputUrl: "https://lambda.example.com"
+  } as const;
+  const encoded = Buffer.from(JSON.stringify(evidence)).toString("base64");
+  const client = {
+    listCommitFiles: async () => [],
+    listBranchWorkflowRuns: async () => [
+      run({ commitSha: "a".repeat(40), status: "completed", conclusion: "success" })
+    ],
+    listWorkflowJobs: async () => [
+      {
+        id: 22,
+        name: "release",
+        runUrl: "release",
+        status: "completed",
+        conclusion: "success",
+        startedAt: null,
+        finishedAt: null,
+        steps: [
+          step("Build confirmed SAM application", "completed", "success"),
+          step("Publish immutable Lambda version", "completed", "success"),
+          step("Deploy Lambda alias AllAtOnce", "completed", "success"),
+          step("Verify Lambda release", "completed", "success")
+        ]
+      }
+    ],
+    readWorkflowJobLog: async () =>
+      `Verify Lambda release\nSKETCHCATCH_LAMBDA_RELEASE_EVIDENCE_B64=${encoded}`
+  } as GitHubActionsReadClient;
+
+  const [snapshot] = await createGitHubActionsRunProvider(client).listSnapshots(repository);
+
+  assert.deepEqual(snapshot?.jobs.map((job) => job.stageKind), [
+    "app_build",
+    "artifact_publish",
+    "app_deploy",
+    "verify"
+  ]);
+  assert.deepEqual(snapshot?.releaseEvidence, evidence);
+  assert.equal(snapshot?.logs.some((log) => log.message.includes(encoded)), false);
+  assert.equal(snapshot?.logs.at(-1)?.message, "Lambda release evidence captured.");
+});
+
 test("provider selects the larger attempt only for the same GitHub run id", async () => {
   const requestedRunIds: number[] = [];
   const client = {

@@ -429,10 +429,34 @@ export function validateProjectDeploymentRuntimeConfig(
   runtimeTargetKind: RuntimeTargetKind,
   config: ProjectDeploymentRuntimeConfig | null
 ): void {
+  if (runtimeTargetKind === "lambda") {
+    if (!config || config.runtimeTargetKind !== "lambda") {
+      throw new ReleaseLedgerValidationError(
+        "Lambda runtime configuration is required."
+      );
+    }
+    const logicalIdPattern = /^[A-Za-z][A-Za-z0-9]{0,254}$/;
+    const functionNamePattern = /^[A-Za-z0-9_-]{1,64}$/;
+    const aliasPattern = /^(?!\$LATEST$)(?!\d+$)[A-Za-z0-9_-]{1,128}$/;
+    const codeDeployNamePattern = /^[A-Za-z0-9._+=,@-]{1,100}$/;
+    if (
+      !logicalIdPattern.test(config.functionLogicalId) ||
+      !functionNamePattern.test(config.functionName) ||
+      !aliasPattern.test(config.aliasName) ||
+      !codeDeployNamePattern.test(config.codeDeployApplicationName) ||
+      !codeDeployNamePattern.test(config.codeDeployDeploymentGroupName)
+    ) {
+      throw new ReleaseLedgerValidationError(
+        "Lambda runtime configuration contains an invalid resource name."
+      );
+    }
+    validateRuntimeOutputUrl(config.outputUrl);
+    return;
+  }
   if (runtimeTargetKind !== "ecs_fargate") {
     if (config !== null) {
       throw new ReleaseLedgerValidationError(
-        "Runtime configuration is only supported for ECS Fargate targets."
+        "Runtime configuration is not supported for the selected target."
       );
     }
     return;
@@ -459,9 +483,13 @@ export function validateProjectDeploymentRuntimeConfig(
     );
   }
 
+  validateRuntimeOutputUrl(config.outputUrl);
+}
+
+function validateRuntimeOutputUrl(value: string): void {
   let outputUrl: URL;
   try {
-    outputUrl = new URL(config.outputUrl);
+    outputUrl = new URL(value);
   } catch {
     throw new ReleaseLedgerValidationError("Output URL must be an absolute HTTPS URL.");
   }
@@ -471,7 +499,7 @@ export function validateProjectDeploymentRuntimeConfig(
     outputUrl.password ||
     outputUrl.search ||
     outputUrl.hash ||
-    config.outputUrl.length > 2_048
+    value.length > 2_048
   ) {
     throw new ReleaseLedgerValidationError(
       "Output URL must be HTTPS and must not contain credentials, query parameters, or fragments."
