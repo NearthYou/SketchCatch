@@ -20,6 +20,16 @@ Short English-only working log for the current agent context. Older records are 
 - Kept the latest Repository Analysis recommendation flow from `dev` and restored the fallback request resolver, UI CTA, and documentation contract.
 - Verification: `pnpm harness:check`, `pnpm --dir apps/api exec tsx --test src/routes/ai-repository-handoff.test.ts`, `pnpm --dir apps/web exec tsx --test features/workspace/repository-template-fallback.test.ts app/workspace/repository/repository-start-client.test.ts`, `pnpm typecheck`, `pnpm lint`, and `pnpm build` passed. Lint retained one pre-existing API unused-argument warning in `apps/api/src/live-observations/live-observation-store-contract.ts`.
 
+### 2026-07-13 - Split estimated and actual project costs with folder tabs
+
+- Added deployment-aware cost contracts across Direct Deployment and Git/CI/CD, including Destroy lifecycle handling.
+- Added separate estimated-cost and actual-usage panels, project scoping, honest sample/allocation copy, keyboard tabs, and the requested compact folder-style tab surface from `DESIGN.md`; removed the final header and tab helper copy per visual feedback.
+- Follow-up UX: direct expected-user input with validation, refresh feedback on both normal and empty states, and scroll-free responsive folder tabs.
+- Follow-up commits: `ad7fb94b`, `104cb8bc`, `c80dac82`, `aaccecfa`.
+- Commits: `4819f64c`, `ff16587d`, `ac29756a`, `da99fdb7`, `a0aeefe0`.
+- Verification: 6 focused API tests, 19 focused Web tests, lint, typecheck, build, and harness pass. Lint retains one unrelated unused-argument warning.
+- Risk: authenticated visual browser QA was blocked because the in-app browser had no session and Chrome control was unavailable. The full Web suite retains seven unrelated baseline failures outside cost files.
+
 ### 2026-07-13 - Repair Terraform nested-block merge regression
 
 - Fast-forwarded the local branch to the remote `dev` merge commit that CI evaluated and reproduced the duplicate `aws_launch_template` key failure.
@@ -56,9 +66,79 @@ Short English-only working log for the current agent context. Older records are 
 - Risk:
   - Full Architecture Draft AI generation through `/ai/architecture-draft` is separate from the Repository recommendation flow; probing it showed environment-dependent failures (`422` from the running API route and expired AWS SSO in a direct configured call). The current Repository start path uses AI for ranking/questions and deterministic Template-based board creation.
 
-## Next Action
+### 2026-07-12 - Implement issue #349 repository template recommendations
 
-- Decide whether public Repository board creation should remain AI-assisted Template generation or be changed to full Architecture Draft AI generation after stabilizing `/ai/architecture-draft` provider/runtime requirements.
+- Goal: Extend connected Repository Analysis into a template candidate recommendation flow for issue #349.
+- Completed:
+  - Added shared deployment type, dynamic question, answer, and template recommendation DTOs.
+  - Extended Repository Analysis results with inferred deployment type, CI/CD default, max-five questions, and supported template candidates.
+  - Added backend recommendation endpoint for user deployment type, CI/CD, and answer payloads.
+  - Kept final template validation constrained to supported `TemplateId` values from stored analysis or recommendation candidates.
+  - Updated the repository start UI with deployment single-select, CI/CD checkbox, dynamic questions, and candidate cards.
+  - Documented the contract in `docs/data-models.md`.
+- Verification:
+  - `pnpm --filter @sketchcatch/types typecheck`
+  - `pnpm --filter @sketchcatch/api typecheck`
+  - `pnpm --filter @sketchcatch/web typecheck`
+  - `pnpm --dir apps/api exec tsx --test src/source-repositories/repository-analysis.test.ts src/routes/source-repositories.test.ts src/source-repositories/source-repository-service.test.ts`
+  - `pnpm --dir apps/web exec tsx --test features/workspace/api.test.ts features/workspace/project-github-settings.test.ts features/workspace/repository-start-template-recommendation.test.ts`
+  - `pnpm harness:check`
+  - `pnpm lint` passed with the pre-existing `live-observations` `setNow` warning.
+  - `pnpm typecheck`
+  - `pnpm build`
+  - `git diff --check` passed with CRLF conversion warnings only.
+- Risk:
+  - No GitHub PR, cloud deployment, Terraform apply, or infrastructure mutation was run.
+
+### 2026-07-12 - Handle missing Source Repository DB migrations
+
+- Goal: Diagnose the raw SQL internal error shown when starting from a GitHub repository with an unmigrated API database.
+- Completed:
+  - Confirmed the failing query targets `source_repositories` columns added by existing migrations, especially the repository analysis columns.
+  - Added route-level detection for PostgreSQL undefined table/column errors on `source_repositories`.
+  - Returned a stable `service_unavailable` / `DATABASE_MIGRATION_REQUIRED` response instead of leaking the Drizzle query and params.
+  - Added the web API error translation so Repository start screens show an actionable migration message.
+- Verification:
+  - `pnpm --dir apps/api exec tsx --test src/routes/source-repositories.test.ts`
+  - `pnpm --dir apps/web exec tsx --test features/workspace/api-client-error-message.test.ts`
+  - `pnpm --dir apps/api typecheck`
+  - `pnpm --dir apps/web typecheck`
+- Risk:
+  - The actual runtime DB still needs `pnpm --filter @sketchcatch/api db:migrate` from a shell with `DATABASE_URL` configured.
+
+### 2026-07-13 - Refine actual cost notice and chart readability
+
+- Goal: Clarify fallback project cost allocation and make the actual usage chart readable at a glance.
+- Completed:
+  - Reworded the fallback allocation notice to explain that AWS project cost data may arrive later.
+  - Added readable date labels on the X axis and dollar labels on the Y axis.
+  - Limited long ranges to six date ticks and added a stable zero-cost `$0`, `$2`, `$4` scale.
+  - Reduced data points to a 2 px radius and aligned chart colors and captions with `DESIGN.md`.
+  - Prevented duplicate Y-axis labels for one-cent usage data.
+- Verification:
+  - `pnpm --dir apps/web exec tsx --test features/costs/cost-usage-charts.test.ts features/costs/cost-dashboard-client.test.ts features/costs/cost-usage-copy.test.ts` (19 passed)
+  - `pnpm test -- --output-logs=errors-only`
+  - `pnpm lint` passed with the pre-existing `live-observations` `setNow` warning.
+  - `pnpm typecheck`
+  - `pnpm build`
+  - `pnpm harness:check`
+  - `git diff --check`
+- Risk:
+  - Authenticated browser visual QA was not available; the supplied screenshot and source-level UI regression tests were used as the visual contract.
+
+### 2026-07-13 - Stabilize actual cost chart typography
+
+- Goal: Keep chart typography compact and professional at every dashboard width.
+- Completed:
+  - Recomputed the SVG coordinate width from its rendered container with `ResizeObserver` so labels no longer scale with the card.
+  - Fixed the chart height at 220 px and retained the `DESIGN.md` 13 px caption token at its true rendered size.
+  - Added a source-level regression for responsive width, fixed height, and typography token usage.
+- Verification:
+  - 16 focused chart tests and the full test suite passed.
+  - `pnpm lint` passed with the pre-existing `live-observations` `setNow` warning.
+  - `pnpm typecheck`, `pnpm build`, and `git diff --check` passed.
+- Review:
+  - Spec review found no issues; standards review finding about the caption token was fixed in `dcda929b`.
 
 ### 2026-07-13 - Repeated Chrome verification of Repository AI responses
 
@@ -75,3 +155,8 @@ Short English-only working log for the current agent context. Older records are 
 - Added NestJS package detection and FastAPI/uvicorn Docker evidence detection so backend Application Units are preserved.
 - Bumped the public Repository analysis cache namespace to invalidate stale recommendations.
 - Verified real API results: `Jungle_DB_API_W8` receives ECS/EKS recommendations based on local CSV persistence, while `Jungle_AI_Board` detects FastAPI, NestJS, React/Vite and receives three-tier, ECS, and EKS candidates with distinct scores and reasons.
+
+## Next Action
+
+- Decide whether public Repository board creation should remain AI-assisted Template generation or be changed to full Architecture Draft AI generation after stabilizing `/ai/architecture-draft` provider/runtime requirements.
+- Confirm the responsive chart visually with authenticated actual-usage data when browser automation is available.
