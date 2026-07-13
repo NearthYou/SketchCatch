@@ -305,10 +305,12 @@ export const templateDefinitions = [
       resource("execution-role", "ECS Execution Role", "aws", "aws_iam_role", 300, 500, { name: "fargate-execution-role", assumeRolePolicy: ECS_ASSUME_ROLE_POLICY }),
       resource("execution-policy", "ECS Execution Policy", "aws", "aws_iam_role_policy_attachment", 500, 500, { role: "@ref:execution-role.name", policyArn: "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy" }),
       resource("task-role", "ECS Task Role", "aws", "aws_iam_role", 700, 500, { name: "fargate-task-role", assumeRolePolicy: ECS_ASSUME_ROLE_POLICY }),
+      resource("repository", "ECR Repository", "aws", "aws_ecr_repository", 900, 500, { name: "fargate-app", imageTagMutability: "IMMUTABLE" }),
+      resource("log-group", "Fargate Log Group", "aws", "aws_cloudwatch_log_group", 1100, 500, { name: "/ecs/fargate-app", retentionInDays: 7 }),
       resource("load-balancer", "Application Load Balancer", "aws", "aws_lb", 100, 660, { name: "fargate-alb", loadBalancerType: "application", subnets: ["@ref:subnet-a.id", "@ref:subnet-b.id"], securityGroups: ["@ref:alb-security-group.id"] }),
       resource("target-group", "Fargate Target Group", "aws", "aws_lb_target_group", 300, 660, { name: "fargate-web", port: 80, protocol: "HTTP", targetType: "ip", vpcId: "@ref:vpc.id", healthCheck: { path: "/", matcher: "200-399" } }),
       resource("listener", "HTTP Listener", "aws", "aws_lb_listener", 500, 660, { loadBalancerArn: "@ref:load-balancer.arn", port: 80, protocol: "HTTP", defaultAction: { type: "forward", targetGroupArn: "@ref:target-group.arn" } }),
-      resource("task", "ECS Task Definition", "aws", "aws_ecs_task_definition", 700, 660, { family: "fargate-app", networkMode: "awsvpc", requiresCompatibilities: ["FARGATE"], cpu: 256, memory: 512, executionRoleArn: "@ref:execution-role.arn", taskRoleArn: "@ref:task-role.arn", containerDefinitions: JSON.stringify([{ name: "web", image: "public.ecr.aws/docker/library/nginx:stable", essential: true, portMappings: [{ containerPort: 80, hostPort: 80, protocol: "tcp" }] }]) }),
+      resource("task", "ECS Task Definition", "aws", "aws_ecs_task_definition", 700, 660, { family: "fargate-app", networkMode: "awsvpc", requiresCompatibilities: ["FARGATE"], cpu: 256, memory: 512, executionRoleArn: "@ref:execution-role.arn", taskRoleArn: "@ref:task-role.arn", containerDefinitions: JSON.stringify([{ name: "web", image: "public.ecr.aws/docker/library/nginx:stable", essential: true, portMappings: [{ containerPort: 80, hostPort: 80, protocol: "tcp" }], logConfiguration: { logDriver: "awslogs", options: { "awslogs-group": "@ref:log-group.name", "awslogs-region": "ap-northeast-2", "awslogs-stream-prefix": "ecs" } } }]) }),
       resource("service", "ECS Service", "aws", "aws_ecs_service", 900, 660, { name: "fargate-service", cluster: "@ref:cluster.id", taskDefinition: "@ref:task.arn", desiredCount: 1, launchType: "FARGATE", healthCheckGracePeriodSeconds: 30, networkConfiguration: { subnets: ["@ref:subnet-a.id", "@ref:subnet-b.id"], securityGroups: ["@ref:task-security-group.id"], assignPublicIp: true }, loadBalancer: { targetGroupArn: "@ref:target-group.arn", containerName: "web", containerPort: 80 }, dependsOn: ["@address:listener"] })
     ],
     relationships: [
@@ -316,6 +318,8 @@ export const templateDefinitions = [
       relationship("vpc-subnet-b", "vpc", "subnet-b", "contains"),
       relationship("cluster-service", "cluster", "service", "runs"),
       relationship("service-task", "service", "task", "uses"),
+      relationship("repository-task", "repository", "task", "provides image"),
+      relationship("task-log-group", "task", "log-group", "writes logs"),
       relationship("task-role", "task", "execution-role", "assumes")
     ],
     parameters: [parameter("projectSlug", "Project slug", true, "sketchcatch"), parameter("containerImage", "Container image", true, "public.ecr.aws/docker/library/nginx:stable")]

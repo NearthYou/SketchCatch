@@ -100,10 +100,21 @@ test("each template contains the resources required by its deployable default", 
     "aws_route_table_association",
     "aws_lb",
     "aws_lb_target_group",
-    "aws_lb_listener"
+    "aws_lb_listener",
+    "aws_ecr_repository",
+    "aws_cloudwatch_log_group"
   ]) {
     assert.ok(ecsTypes.includes(requiredType), `ecs-fargate-container-app: ${requiredType}`);
   }
+
+  const ecsDefinition = definitions.get("ecs-fargate-container-app");
+  const ecsTask = ecsDefinition?.resources.find((resource) => resource.id === "task");
+  const ecsContainer = JSON.parse(String(ecsTask?.values.containerDefinitions))[0] as {
+    logConfiguration?: { logDriver?: string; options?: Record<string, string> };
+  };
+  assert.equal(ecsContainer.logConfiguration?.logDriver, "awslogs");
+  assert.equal(ecsContainer.logConfiguration?.options?.["awslogs-group"], "@ref:log-group.name");
+  assert.equal(ecsContainer.logConfiguration?.options?.["awslogs-stream-prefix"], "ecs");
 
   const eksTypes = resourceTypes("eks-container-app");
   assert.equal(eksTypes.filter((resourceType) => resourceType === "aws_subnet").length, 2);
