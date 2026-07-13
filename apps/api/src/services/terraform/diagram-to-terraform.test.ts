@@ -399,6 +399,33 @@ test("does not emit an ECS request threshold from a CPU target tracking policy",
   assert.doesNotMatch(terraform, /output "scale_out_threshold"/);
 });
 
+test("ECS request threshold rejects duplicate matching policies in either graph order", () => {
+  const policies = [
+    createEcsRequestPolicy("first", 60, "api"),
+    createEcsRequestPolicy("second", 75, "api")
+  ];
+
+  for (const orderedPolicies of [policies, [...policies].reverse()]) {
+    const graph = createEcsThresholdGraph(orderedPolicies);
+    const terraform = renderTerraformFromInfrastructureGraph(graph);
+
+    assert.match(terraform, /output "ecs_service_name"/);
+    assert.doesNotMatch(terraform, /output "scale_out_threshold"/);
+  }
+});
+
+test("ECS request threshold rejects a contradictory selected-target policy", () => {
+  const graph = createEcsThresholdGraph([
+    createEcsRequestPolicy("valid", 60, "api"),
+    createEcsRequestPolicy("contradictory", 75, "sibling")
+  ], true);
+
+  const terraform = renderTerraformFromInfrastructureGraph(graph);
+
+  assert.match(terraform, /output "ecs_service_name"/);
+  assert.doesNotMatch(terraform, /output "scale_out_threshold"/);
+});
+
 test("renders CloudWatch Alarm dimensions and Autoscaling Policy action reference", () => {
   const graph: InfrastructureGraph = {
     nodes: [
@@ -462,9 +489,17 @@ test("renders Live Observation outputs only for an explicit HTTPS ALB topology",
       createLiveObservationNode("aws_cloudwatch_log_group", "api", {
         name: "/aws/ec2/api"
       }),
+      createLiveObservationNode("aws_autoscaling_policy", "scale_out", {
+        autoscalingGroupName: "aws_autoscaling_group.api.name"
+      }),
       createLiveObservationNode("aws_cloudwatch_metric_alarm", "scale_out", {
         metricName: "RequestCountPerTarget",
-        threshold: 60
+        threshold: 60,
+        alarmActions: ["aws_autoscaling_policy.scale_out.arn"],
+        dimensions: {
+          LoadBalancer: "aws_lb.demo.arn_suffix",
+          TargetGroup: "aws_lb_target_group.api.arn_suffix"
+        }
       })
     ],
     edges: []
@@ -613,11 +648,17 @@ test("Live Observation does not cross a shared ASG IAM chain into a sibling log"
       createLiveObservationNode("aws_iam_role", "shared", {}),
       createLiveObservationNode("aws_cloudwatch_log_group", "selected", {}),
       createLiveObservationNode("aws_cloudwatch_log_group", "sibling", {}),
+      createLiveObservationNode("aws_autoscaling_policy", "selected", {
+        autoscalingGroupName: "aws_autoscaling_group.selected.name"
+      }),
       createLiveObservationNode("aws_cloudwatch_metric_alarm", "selected", {
         metricName: "RequestCountPerTarget",
         threshold: 60,
+        alarmActions: ["aws_autoscaling_policy.selected.arn"],
         dimensions: {
-          AutoScalingGroupName: "aws_autoscaling_group.selected.name"
+          AutoScalingGroupName: "aws_autoscaling_group.selected.name",
+          LoadBalancer: "aws_lb.demo.arn_suffix",
+          TargetGroup: "aws_lb_target_group.api.arn_suffix"
         }
       })
     ],
@@ -657,7 +698,11 @@ test("Live Observation resolves an ASG alarm through its scaling policy action",
       createLiveObservationNode("aws_cloudwatch_metric_alarm", "selected", {
         metricName: "RequestCountPerTarget",
         threshold: 75,
-        alarmActions: ["aws_autoscaling_policy.selected.arn"]
+        alarmActions: ["aws_autoscaling_policy.selected.arn"],
+        dimensions: {
+          LoadBalancer: "aws_lb.demo.arn_suffix",
+          TargetGroup: "aws_lb_target_group.api.arn_suffix"
+        }
       })
     ],
     edges: []
@@ -667,6 +712,113 @@ test("Live Observation resolves an ASG alarm through its scaling policy action",
 
   assert.match(terraform, /output "asg_name"[\s\S]*aws_autoscaling_group\.selected\.name/);
   assert.match(terraform, /output "scale_out_threshold"[\s\S]*value = 75/);
+});
+
+test("Live Observation rejects an ASG alarm with an unresolved extra action", () => {
+  const graph: InfrastructureGraph = {
+    nodes: [
+      createLiveObservationNode("aws_lb", "demo", {}),
+      createLiveObservationNode("aws_lb_target_group", "api", {}),
+      ...createHttpsAlbListenerNodes(),
+      createLiveObservationNode("aws_autoscaling_group", "selected", {
+        targetGroupArns: ["aws_lb_target_group.api.arn"]
+      }),
+      createLiveObservationNode("aws_autoscaling_policy", "selected", {
+        autoscalingGroupName: "aws_autoscaling_group.selected.name"
+      }),
+      createLiveObservationNode("aws_cloudwatch_metric_alarm", "selected", {
+        metricName: "RequestCountPerTarget",
+        threshold: 75,
+        alarmActions: [
+          "aws_autoscaling_policy.selected.arn",
+          "aws_autoscaling_policy.missing.arn"
+        ],
+        dimensions: {
+          LoadBalancer: "aws_lb.demo.arn_suffix",
+          TargetGroup: "aws_lb_target_group.api.arn_suffix"
+        }
+      })
+    ],
+    edges: []
+  };
+
+  assert.doesNotMatch(
+    renderTerraformFromInfrastructureGraph(graph),
+    /output "traffic_url"/
+  );
+});
+
+test("Live Observation rejects conflicting sibling ASG ownership evidence", () => {
+  const graph: InfrastructureGraph = {
+    nodes: [
+      createLiveObservationNode("aws_lb", "demo", {}),
+      createLiveObservationNode("aws_lb_target_group", "api", {}),
+      createLiveObservationNode("aws_lb_target_group", "sibling", {}),
+      ...createHttpsAlbListenerNodes(),
+      createLiveObservationNode("aws_autoscaling_group", "selected", {
+        targetGroupArns: ["aws_lb_target_group.api.arn"]
+      }),
+      createLiveObservationNode("aws_autoscaling_group", "sibling", {
+        targetGroupArns: ["aws_lb_target_group.sibling.arn"]
+      }),
+      createLiveObservationNode("aws_autoscaling_policy", "selected", {
+        autoscalingGroupName: "aws_autoscaling_group.selected.name"
+      }),
+      createLiveObservationNode("aws_cloudwatch_metric_alarm", "selected", {
+        metricName: "RequestCountPerTarget",
+        threshold: 75,
+        alarmActions: ["aws_autoscaling_policy.selected.arn"],
+        dimensions: {
+          LoadBalancer: "aws_lb.demo.arn_suffix",
+          TargetGroup: "aws_lb_target_group.api.arn_suffix"
+        }
+      })
+    ],
+    edges: [
+      {
+        id: "conflicting-sibling-owner",
+        sourceId: "aws_cloudwatch_metric_alarm-selected",
+        targetId: "aws_autoscaling_group-sibling"
+      }
+    ]
+  };
+
+  assert.doesNotMatch(
+    renderTerraformFromInfrastructureGraph(graph),
+    /output "traffic_url"/
+  );
+});
+
+test("Live Observation rejects an ASG request alarm scoped to another target group", () => {
+  const graph: InfrastructureGraph = {
+    nodes: [
+      createLiveObservationNode("aws_lb", "demo", {}),
+      createLiveObservationNode("aws_lb_target_group", "api", {}),
+      createLiveObservationNode("aws_lb_target_group", "sibling", {}),
+      ...createHttpsAlbListenerNodes(),
+      createLiveObservationNode("aws_autoscaling_group", "selected", {
+        targetGroupArns: ["aws_lb_target_group.api.arn"]
+      }),
+      createLiveObservationNode("aws_autoscaling_policy", "selected", {
+        autoscalingGroupName: "aws_autoscaling_group.selected.name"
+      }),
+      createLiveObservationNode("aws_cloudwatch_metric_alarm", "selected", {
+        metricName: "RequestCountPerTarget",
+        threshold: 75,
+        alarmActions: ["aws_autoscaling_policy.selected.arn"],
+        dimensions: {
+          LoadBalancer: "aws_lb.demo.arn_suffix",
+          TargetGroup: "aws_lb_target_group.sibling.arn_suffix"
+        }
+      })
+    ],
+    edges: []
+  };
+
+  assert.doesNotMatch(
+    renderTerraformFromInfrastructureGraph(graph),
+    /output "traffic_url"/
+  );
 });
 
 test("Live Observation rejects an ASG alarm with an ambiguous scaling policy action", () => {
@@ -1051,6 +1203,52 @@ function createLiveObservationNode(
       fileName: "live-observation"
     },
     config
+  };
+}
+
+function createEcsRequestPolicy(
+  name: string,
+  targetValue: number,
+  targetGroupName: string
+): InfrastructureGraph["nodes"][number] {
+  return createLiveObservationNode("aws_appautoscaling_policy", name, {
+    resourceId: "aws_appautoscaling_target.api.resource_id",
+    targetTrackingScalingPolicyConfiguration: {
+      targetValue,
+      predefinedMetricSpecification: [{
+        predefinedMetricType: "ALBRequestCountPerTarget",
+        resourceLabel:
+          "${aws_lb.demo.arn_suffix}/" +
+          `\${aws_lb_target_group.${targetGroupName}.arn_suffix}`
+      }]
+    }
+  });
+}
+
+function createEcsThresholdGraph(
+  policies: InfrastructureGraph["nodes"],
+  includeSiblingTargetGroup = false
+): InfrastructureGraph {
+  return {
+    nodes: [
+      createLiveObservationNode("aws_lb", "demo", {}),
+      createLiveObservationNode("aws_lb_target_group", "api", {}),
+      ...(includeSiblingTargetGroup
+        ? [createLiveObservationNode("aws_lb_target_group", "sibling", {})]
+        : []),
+      ...createHttpsAlbListenerNodes(),
+      createLiveObservationNode("aws_ecs_cluster", "demo", {}),
+      createLiveObservationNode("aws_ecs_service", "api", {
+        cluster: "aws_ecs_cluster.demo.id",
+        loadBalancer: { targetGroupArn: "aws_lb_target_group.api.arn" }
+      }),
+      createLiveObservationNode("aws_appautoscaling_target", "api", {
+        maxCapacity: 3,
+        resourceId: "service/${aws_ecs_cluster.demo.name}/${aws_ecs_service.api.name}"
+      }),
+      ...policies
+    ],
+    edges: []
   };
 }
 

@@ -23,8 +23,9 @@ Short English-only working log for the current agent context. Older records are 
 - Terraform output discovery now requires one coherent listener, LB, Target Group, runtime, scaling target, and runtime-owned log topology; ambiguous or contradictory graph evidence fails closed.
 - Manifest materialization rejects simultaneous ASG and ECS capacity outputs.
 - Third review follow-up requires exact aligned CloudWatch points with unique Complete query status, keeps shared ECS/ASG support chains from leaking sibling logs, and resolves only unique ASG alarm-to-policy ownership chains.
+- Final Task 4 follow-up requires one complete ASG action/policy/LB/TG evidence chain and emits an ECS request threshold only for one non-contradictory policy independent of graph order.
 - Kept one-hop proxy trust and repaired stale auth fixtures; spoofed-chain rejection remains covered.
-- Verification: third-review focused regression 71/71, API 1424/1424, Web 1069/1069, Redis 31/31, harness, lint, typecheck, build, and whitespace checks passed.
+- Verification: final Task 4 focused regression 76/76, API 1429/1429, harness, lint, typecheck, build, and whitespace checks passed.
 - Risk: no credentialed AWS sandbox evidence and no Terraform Apply/Destroy, deployment mutation, database migration, or AWS mutation.
 
 ### 2026-07-13 - Integrate current dev into PR #366

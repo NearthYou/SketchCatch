@@ -15,9 +15,17 @@ const CONNECTION_ID = "abcdef12-3456-4789-8abc-def012345678";
 test("ASG graph outputs and successful approved evidence materialize a valid manifest", async () => {
   const graph = createBaseGraph([
     node("aws_autoscaling_group", "api", {}),
+    node("aws_autoscaling_policy", "requests", {
+      autoscalingGroupName: "aws_autoscaling_group.api.name"
+    }),
     node("aws_cloudwatch_metric_alarm", "requests", {
       metricName: "RequestCountPerTarget",
-      threshold: 60
+      threshold: 60,
+      alarmActions: ["aws_autoscaling_policy.requests.arn"],
+      dimensions: {
+        LoadBalancer: "aws_lb.platform.arn_suffix",
+        TargetGroup: "aws_lb_target_group.api.arn_suffix"
+      }
     })
   ]);
 

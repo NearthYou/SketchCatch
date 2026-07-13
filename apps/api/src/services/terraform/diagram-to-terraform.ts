@@ -184,7 +184,7 @@ function resolveLiveObservationTopology(
     );
     if (trafficRecords.length !== 1) continue;
 
-    const runtime = resolveRuntimeTopology(graph, targetGroup);
+    const runtime = resolveRuntimeTopology(graph, loadBalancer, targetGroup);
     if (!runtime) continue;
     topologies.push({
       loadBalancer,
@@ -200,6 +200,7 @@ function resolveLiveObservationTopology(
 
 function resolveRuntimeTopology(
   graph: InfrastructureGraph,
+  loadBalancer: InfrastructureGraphNode,
   targetGroup: InfrastructureGraphNode
 ): Pick<LiveObservationTopology, "capacity" | "logGroups"> | null {
   const runtimes: RuntimeCandidate[] = [
@@ -236,7 +237,12 @@ function resolveRuntimeTopology(
   if (logGroups === null) return null;
 
   if (selected.kind === "asg") {
-    const alarm = resolveAsgPressureAlarm(graph, selected.node, legacySingleRuntime);
+    const alarm = resolveAsgPressureAlarm(
+      graph,
+      loadBalancer,
+      targetGroup,
+      selected.node
+    );
     if (!alarm) return null;
     return {
       capacity: {
@@ -455,10 +461,13 @@ function outgoingNodes(
 
 function resolveAsgPressureAlarm(
   graph: InfrastructureGraph,
-  autoScalingGroup: InfrastructureGraphNode,
-  legacySingleRuntime: boolean
+  loadBalancer: InfrastructureGraphNode,
+  targetGroup: InfrastructureGraphNode,
+  autoScalingGroup: InfrastructureGraphNode
 ): InfrastructureGraphNode | null {
   const autoScalingGroups = resourceNodes(graph, "aws_autoscaling_group");
+  const loadBalancers = resourceNodes(graph, "aws_lb");
+  const targetGroups = resourceNodes(graph, "aws_lb_target_group");
   const candidates = resourceNodes(graph, "aws_cloudwatch_metric_alarm").filter(
     (node) =>
       node.config["metricName"] === "RequestCountPerTarget" &&
@@ -470,7 +479,28 @@ function resolveAsgPressureAlarm(
       alarm,
       autoScalingGroups
     );
-    if (actionOwner === null || (actionOwner && actionOwner.id !== autoScalingGroup.id)) {
+    if (!actionOwner || actionOwner.id !== autoScalingGroup.id) {
+      return false;
+    }
+
+    const loadBalancerDimensions = loadBalancers.filter((candidate) =>
+      containsTerraformReference(
+        alarm.config["dimensions"],
+        terraformAddress(candidate),
+        ["arn_suffix"]
+      )
+    );
+    const targetGroupDimensions = targetGroups.filter((candidate) =>
+      containsTerraformReference(
+        alarm.config["dimensions"],
+        terraformAddress(candidate),
+        ["arn_suffix"]
+      )
+    );
+    if (
+      onlyNode(loadBalancerDimensions)?.id !== loadBalancer.id ||
+      onlyNode(targetGroupDimensions)?.id !== targetGroup.id
+    ) {
       return false;
     }
 
@@ -486,19 +516,16 @@ function resolveAsgPressureAlarm(
       "aws_autoscaling_group",
       "name"
     );
-    const directlyLinked = hasDimensionReference
-      ? onlyNode(dimensionOwners)?.id === autoScalingGroup.id
-      : nodesDirectlyConnected(graph, alarm, autoScalingGroup);
-    return directlyLinked || actionOwner?.id === autoScalingGroup.id;
-  });
-  const linked = onlyNode(validCandidates);
-  if (linked) return linked;
-  if (validCandidates.length > 1 || !legacySingleRuntime) return null;
+    if (hasDimensionReference && onlyNode(dimensionOwners)?.id !== autoScalingGroup.id) {
+      return false;
+    }
 
-  const legacyCandidates = candidates.filter(
-    (alarm) => resolveAlarmActionAutoScalingGroup(graph, alarm, autoScalingGroups) !== null
-  );
-  return onlyNode(legacyCandidates);
+    const edgeOwners = autoScalingGroups.filter((candidate) =>
+      nodesDirectlyConnected(graph, alarm, candidate)
+    );
+    return edgeOwners.length === 0 || onlyNode(edgeOwners)?.id === autoScalingGroup.id;
+  });
+  return onlyNode(validCandidates);
 }
 
 function resolveAlarmActionAutoScalingGroup(
@@ -507,15 +534,14 @@ function resolveAlarmActionAutoScalingGroup(
   autoScalingGroups: readonly InfrastructureGraphNode[]
 ): InfrastructureGraphNode | null | undefined {
   const alarmActions = alarm.config["alarmActions"];
-  const hasPolicyReference = containsTerraformReferenceOfTypeForAttributes(
-    alarmActions,
-    "aws_autoscaling_policy",
-    ["arn", "id", "name"]
-  );
-  if (!hasPolicyReference) return undefined;
+  if (!Array.isArray(alarmActions) || alarmActions.length !== 1) return null;
+  const action = alarmActions[0];
+  if (!containsTerraformReferenceOfType(action, "aws_autoscaling_policy", "arn")) {
+    return null;
+  }
 
   const policies = resourceNodes(graph, "aws_autoscaling_policy").filter((policy) =>
-    containsTerraformReference(alarmActions, terraformAddress(policy), ["arn", "id", "name"])
+    containsTerraformReference(action, terraformAddress(policy), ["arn"])
   );
   const policy = onlyNode(policies);
   if (!policy) return null;
@@ -599,41 +625,61 @@ function findAlbRequestCountTargetValue(
   applicationScalingTarget: InfrastructureGraphNode
 ): number | null {
   const scalingTargetAddress = terraformAddress(applicationScalingTarget);
-  for (const policy of graph.nodes) {
-    if (
-      policy.iac.terraformBlockType !== "resource" ||
-      policy.iac.resourceType !== "aws_appautoscaling_policy" ||
-      !containsTerraformReference(
+  const selectedTargetPolicies = resourceNodes(graph, "aws_appautoscaling_policy").filter(
+    (policy) => containsTerraformReference(
         policy.config["resourceId"],
         scalingTargetAddress,
         ["resource_id"]
       )
-    ) continue;
-
+  );
+  const requestPolicies = selectedTargetPolicies.flatMap((policy) => {
     const configuration = policy.config["targetTrackingScalingPolicyConfiguration"];
-    if (!isRecord(configuration) || typeof configuration["targetValue"] !== "number") continue;
+    if (!isRecord(configuration)) return [];
 
     const specificationValue = configuration["predefinedMetricSpecification"];
-    const specification = Array.isArray(specificationValue)
-      ? specificationValue.find(isRecord)
+    const specifications = Array.isArray(specificationValue)
+      ? specificationValue.filter(isRecord)
       : isRecord(specificationValue)
-        ? specificationValue
-        : undefined;
-    if (
-      specification?.["predefinedMetricType"] !== "ALBRequestCountPerTarget" ||
-      typeof specification["resourceLabel"] !== "string"
-    ) continue;
+        ? [specificationValue]
+        : [];
+    const albRequestSpecifications = specifications.filter(
+      (specification) =>
+        specification["predefinedMetricType"] === "ALBRequestCountPerTarget"
+    );
+    if (albRequestSpecifications.length === 0) return [];
 
-    const resourceLabel = specification["resourceLabel"];
-    if (
-      resourceLabel.includes(`${loadBalancerAddress}.arn_suffix`) &&
-      resourceLabel.includes(`${targetGroupAddress}.arn_suffix`)
-    ) {
-      return configuration["targetValue"];
-    }
-  }
+    const specification = onlyNode(albRequestSpecifications);
+    const resourceLabel = specification?.["resourceLabel"];
+    const loadBalancerReferences = resourceNodes(graph, "aws_lb").filter((candidate) =>
+      containsTerraformReference(
+        resourceLabel,
+        terraformAddress(candidate),
+        ["arn_suffix"]
+      )
+    );
+    const targetGroupReferences = resourceNodes(graph, "aws_lb_target_group").filter(
+      (candidate) =>
+        containsTerraformReference(
+          resourceLabel,
+          terraformAddress(candidate),
+          ["arn_suffix"]
+        )
+    );
+    const targetValue = configuration["targetValue"];
+    const valid =
+      typeof targetValue === "number" &&
+      Number.isFinite(targetValue) &&
+      targetValue >= 0 &&
+      typeof resourceLabel === "string" &&
+      onlyNode(loadBalancerReferences) !== null &&
+      terraformAddress(loadBalancerReferences[0]!) === loadBalancerAddress &&
+      onlyNode(targetGroupReferences) !== null &&
+      terraformAddress(targetGroupReferences[0]!) === targetGroupAddress;
+    return [{ targetValue, valid }];
+  });
 
-  return null;
+  const selected = onlyNode(requestPolicies);
+  return selected?.valid ? selected.targetValue as number : null;
 }
 
 function resourceNodes(
