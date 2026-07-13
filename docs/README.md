@@ -12,6 +12,7 @@ SketchCatch 문서는 **SSOT(Single Source of Truth)** 기준으로 관리한다
 | [아키텍처](./architecture.md) | 모노레포 구조, 앱 경계, 저장소 경계, Terraform/AWS 실행 위치 | API, storage, worker, 인프라 실행 경계를 정할 때 |
 | [개발 가이드](./development.md) | 로컬 실행, Git flow, 팀 AI 협업 규칙, PR 체크 | 구현 전후 작업 절차와 검증 기준을 확인할 때 |
 | [배포 운영 문서](./deployment.md) | 운영 배포, Direct Deployment Path, Git/CI/CD Deployment Path, cleanup 절차 | Terraform Plan/Apply/Destroy, Git/CI/CD handoff, AWS 연결, 운영 배포를 다룰 때 |
+| [다이어그램 패턴 지식 저장소](./diagram-templates/README.md) | 검증된 AWS 패턴, Amazon Q Business 인덱싱 문서, S3 패키지와 검증 절차 | Architecture Draft의 패턴 근거를 추가하거나 Q Business 데이터 소스를 동기화할 때 |
 | [에이전트 진행 로그](../agent-progress.md) | 현재 검증 상태, 최근 작업, 다음 행동 | Codex/AI 에이전트가 이전 세션을 이어받을 때 |
 | [에이전트 진행 아카이브](./agent-history/) | 오래된 세션 기록 보관 | 과거 검증 증거가 명시적으로 필요할 때 |
 | [하네스 기능 목록](../feature_list.json) | 에이전트 하네스 작업 상태와 검증 증거 | 작업 범위와 완료 증거를 기계 가독 형태로 확인할 때 |
@@ -38,6 +39,7 @@ SketchCatch 문서는 **SSOT(Single Source of Truth)** 기준으로 관리한다
 - 기술 스택, 저장 기준, 실행 경계, ADR 수준 결정은 [아키텍처](./architecture.md)에 모은다.
 - Git 흐름, 팀 AI 작업 순서, PR 체크리스트는 [개발 가이드](./development.md)에 모은다.
 - 운영 배포, Direct Deployment Path, Git/CI/CD Deployment Path, cleanup 절차는 [배포 운영 문서](./deployment.md)에 모은다.
+- 검증된 Architecture Draft 패턴과 Amazon Q Business 인덱싱 패키지는 [다이어그램 패턴 지식 저장소](./diagram-templates/README.md)에 모은다.
 - 에이전트 세션 상태, 완료 증거, handoff는 루트 하네스 파일(`agent-progress.md`, `feature_list.json`, `session-handoff.md`, `clean-state-checklist.md`)에 짧게 남긴다. 오래된 세션 기록은 `docs/agent-history/`로 이동한다.
 - 같은 내용을 새 문서로 복제하지 않는다. 먼저 canonical 문서를 갱신한다.
 - 오래된 범위 문구는 남겨두지 않는다. MVP 목표가 바뀌면 canonical 문서에서 즉시 갱신한다.

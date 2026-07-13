@@ -11,6 +11,7 @@ const deploymentId = "44444444-4444-4444-8444-444444444444";
 const workspace: PreparedTerraformWorkspace = {
   workdir: "C:\\terraform-workspace",
   mainFilePath: "C:\\terraform-workspace\\main.tf",
+  terraformFiles: [],
   cleanup: async () => undefined
 };
 

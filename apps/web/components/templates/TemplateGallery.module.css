@@ -78,54 +78,69 @@
 }
 
 .preview {
-  background: #fafafa;
+  background-color: #f8fafc;
+  background-image:
+    linear-gradient(rgba(93, 104, 120, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(93, 104, 120, 0.07) 1px, transparent 1px);
+  background-size: 12px 12px;
   border-bottom: 1px solid #f0f0f3;
   height: 180px;
+  isolation: isolate;
   overflow: hidden;
   position: relative;
 }
 
 .preview svg {
+  display: block;
   height: 100%;
   inset: 0;
   position: absolute;
   width: 100%;
 }
 
-.preview line {
-  stroke: #999da3;
+.previewEdge {
+  stroke: #8f98a6;
+  stroke-linecap: round;
+  stroke-width: 0.5;
+}
+
+.previewAreaFrame {
+  fill: rgba(237, 241, 247, 0.58);
+  stroke: #a8b2c0;
+  stroke-dasharray: 2 1.5;
+  stroke-width: 0.55;
+}
+
+.previewResource {
+  filter: drop-shadow(0 0.35px 0.35px rgba(32, 42, 56, 0.2));
+}
+
+.previewResourceTile {
+  fill: rgba(255, 255, 255, 0.96);
+  stroke: #aeb7c4;
   stroke-width: 0.45;
 }
 
-.previewNode,
-.previewArea {
+.previewResourceIcon {
+  pointer-events: none;
+}
+
+.previewOmittedBadge {
   align-items: center;
-  background: #ffffff;
-  border: 1px solid #b8babc;
-  color: #44474d;
-  display: flex;
-  font-size: 8px;
-  height: 24px;
-  justify-content: center;
-  max-width: 78px;
-  overflow: hidden;
-  padding: 0 6px;
+  background: #273142;
+  border: 1px solid rgba(255, 255, 255, 0.92);
+  border-radius: 999px;
+  box-shadow: 0 1px 3px rgba(32, 42, 56, 0.22);
+  color: #ffffff;
+  display: inline-flex;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  min-height: 21px;
+  padding: 0 7px;
   position: absolute;
-  text-overflow: ellipsis;
-  transform: translate(-50%, -50%);
-  white-space: nowrap;
-}
-
-.previewNode {
-  border-radius: 8px;
-}
-
-.previewArea {
-  background: rgba(255, 255, 255, 0.45);
-  border-style: dashed;
-  height: 38px;
-  min-width: 86px;
-  z-index: 0;
+  right: 10px;
+  top: 10px;
 }
 
 .cardBody {

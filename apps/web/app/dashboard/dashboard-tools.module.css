@@ -1,0 +1,143 @@
+.iconAction {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--radius-control);
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  cursor: pointer;
+}
+
+.controlRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 12px;
+}
+
+.controlRow label {
+  display: grid;
+  min-width: 220px;
+  gap: 6px;
+  color: var(--color-body);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.controlRow select,
+.setupSection input {
+  min-height: 42px;
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--radius-control);
+  padding: 0 12px;
+  background: var(--color-canvas);
+  color: var(--color-ink);
+}
+
+.primaryAction {
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-control);
+  padding: 0 16px;
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.primaryAction:disabled { cursor: not-allowed; opacity: 0.45; }
+.errorBand { border-left: 3px solid var(--color-error); padding: 10px 12px; background: var(--color-error-surface); color: var(--color-ink); }
+
+.metricGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.metricCard {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-card);
+  padding: 20px;
+  background: var(--color-canvas);
+  box-shadow: var(--shadow-card);
+}
+
+.metricCard svg { color: var(--color-body); }
+.metricCard span { color: var(--color-body); font-size: 13px; }
+.metricCard strong { color: var(--color-ink); font-size: 28px; letter-spacing: 0; }
+
+.chartSection,
+.listSection,
+.settingsSection,
+.setupSection,
+.connectionList {
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-card);
+  padding: 20px;
+  background: var(--color-canvas);
+  box-shadow: var(--shadow-card);
+}
+
+.chartSection > div:first-child,
+.sectionHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.chartSection h2,
+.listSection h2,
+.settingsSection h2,
+.sectionHeading h2 { margin: 0; color: var(--color-ink); font-size: 16px; }
+.chartSection span,
+.sectionHeading span { color: var(--color-body); font-size: 12px; }
+.chartSection svg { display: block; width: 100%; min-height: 220px; overflow: visible; }
+.chartSection path { fill: none; stroke: var(--color-text-link); stroke-width: 3; vector-effect: non-scaling-stroke; }
+.chartSection circle { fill: var(--color-canvas); stroke: var(--color-text-link); stroke-width: 2; }
+
+.twoColumn { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.listSection { display: grid; align-content: start; gap: 10px; }
+.costBar { position: relative; display: grid; grid-template-columns: 1fr auto; gap: 8px; padding-bottom: 9px; overflow: hidden; color: var(--color-body); font-size: 13px; }
+.costBar strong { color: var(--color-ink); }
+.costBar i { position: absolute; bottom: 0; left: 0; height: 3px; border-radius: var(--radius-pill); background: var(--color-ink); }
+.recommendation { display: grid; gap: 5px; border-top: 1px solid var(--color-hairline); padding-top: 10px; }
+.recommendation span { color: var(--color-warning); font-size: 11px; font-weight: 700; }
+.recommendation strong { font-size: 13px; }
+.recommendation p { margin: 0; color: var(--color-body); font-size: 12px; line-height: 1.45; }
+.recommendation small { color: var(--color-success); font-size: 11px; }
+
+.settingsSection > header { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 16px; }
+.settingsSection p { margin: 3px 0 0; color: var(--color-body); font-size: 13px; }
+.setupSection { display: grid; gap: 14px; }
+.setupSection > div { display: flex; align-items: center; gap: 10px; }
+.setupSection > div > span { display: grid; width: 24px; height: 24px; flex: none; place-items: center; border-radius: var(--radius-pill); background: var(--color-ink); color: var(--color-on-primary); font-size: 11px; font-weight: 700; }
+.setupSection p { margin: 3px 0 0; color: var(--color-body); font-size: 12px; }
+.setupSection a { display: inline-flex; width: fit-content; align-items: center; gap: 6px; color: var(--color-text-link); font-size: 13px; font-weight: 700; text-decoration: none; }
+.setupSection label { display: grid; gap: 6px; }
+.setupSection pre { max-height: 220px; overflow: auto; border-radius: var(--radius-card); padding: 14px; background: var(--color-surface-dark); color: var(--color-on-primary); font-family: var(--font-code); font-size: 12px; white-space: pre-wrap; }
+
+.connectionList > p { color: var(--color-body); }
+.connectionList > article { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 14px; border-top: 1px solid var(--color-hairline); padding: 14px 0; }
+.connectionList article strong { font-size: 14px; }
+.connectionList article p { margin: 3px 0 0; overflow-wrap: anywhere; color: var(--color-body); font-size: 12px; }
+.connectionStatus { display: flex; align-items: center; gap: 5px; border-radius: var(--radius-pill); padding: 5px 8px; background: var(--color-surface-strong); color: var(--color-body); font-size: 11px; font-weight: 700; }
+.connectionStatus[data-status="verified"] { background: var(--color-success-surface); color: var(--color-success); }
+.rowActions { display: flex; gap: 7px; }
+.rowActions button { display: inline-flex; min-height: 36px; align-items: center; gap: 5px; border: 1px solid var(--color-hairline-strong); border-radius: var(--radius-control); padding: 0 10px; background: var(--color-canvas); color: var(--color-ink); cursor: pointer; font-size: 12px; font-weight: 700; }
+.rowActions button[data-danger="true"] { border-color: var(--color-error); color: var(--color-error); }
+
+@media (max-width: 760px) {
+  .metricGrid,
+  .twoColumn { grid-template-columns: 1fr; }
+  .connectionList > article { grid-template-columns: 1fr; }
+  .rowActions { flex-wrap: wrap; }
+}

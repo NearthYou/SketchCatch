@@ -6,6 +6,7 @@ import type {
 } from "react";
 import type {
   AiPreDeploymentAnalysisResult,
+  AiSafetyExplanation,
   AwsConnection,
   CheckFinding,
   DeployedResource,
@@ -36,6 +37,7 @@ import {
   createDeployment,
   createGitCicdHandoff,
   getGitCicdHandoffPipelineStatus,
+  getAiPreDeploymentDeepScan,
   getDeploymentFailureExplanation,
   listAwsConnections,
   listDeploymentResources,
@@ -50,6 +52,7 @@ import {
   runDeploymentDestroyPlan,
   runDeploymentPlan,
   runAiPreDeploymentCheck,
+  runAiSafetyFindingExplanation,
   streamDeploymentLogs
 } from "./api";
 import {
@@ -287,6 +290,7 @@ export function DeploymentPanel({
   const canDestroy = deploymentActions.canDestroy;
   const canCancelDeployment = deploymentActions.canCancelDeployment;
   const shouldShowApplyButton = deploymentActions.shouldShowApplyButton;
+  const shouldShowApprovePlanButton = deploymentActions.shouldShowApprovePlanButton;
   const shouldShowDestroyPlanButton = deploymentActions.shouldShowDestroyPlanButton;
   const shouldShowDestroyButton = deploymentActions.shouldShowDestroyButton;
   const deploymentActionHint = selectedDeployment
@@ -831,6 +835,13 @@ export function DeploymentPanel({
         fingerprint: boardSnapshot.fingerprint,
         requestState: "idle"
       });
+      if (result.deepScan?.status === "running" && result.deepScan.scanId) {
+        void pollPreDeploymentDeepScan(
+          result.deepScan.scanId,
+          currentTerraformDiagnostics,
+          boardSnapshot.fingerprint
+        );
+      }
       return true;
     } catch (error) {
       updatePreDeploymentCheckState({
@@ -838,6 +849,43 @@ export function DeploymentPanel({
         requestState: "error"
       });
       return false;
+    }
+  }
+
+  async function pollPreDeploymentDeepScan(
+    scanId: string,
+    terraformDiagnostics: readonly TerraformDiagnostic[],
+    fingerprint: string
+  ): Promise<void> {
+    for (let attempt = 0; attempt < 60; attempt += 1) {
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 500));
+      try {
+        const deepScan = await getAiPreDeploymentDeepScan(scanId);
+        if (deepScan.status === "running") continue;
+
+        if (deepScan.status === "complete" && deepScan.analysis) {
+          updatePreDeploymentCheckState({
+            analysis: addTerraformDiagnosticsToPreDeploymentAnalysis(
+              deepScan.analysis,
+              terraformDiagnostics
+            ),
+            fingerprint,
+            requestState: "idle"
+          });
+          return;
+        }
+
+        updatePreDeploymentCheckState({
+          errorMessage: deepScan.message ?? "Trivy 심층 검사를 완료하지 못했습니다. 다시 검사해 주세요."
+        });
+        return;
+      } catch (error) {
+        if (attempt === 59) {
+          updatePreDeploymentCheckState({
+            errorMessage: getApiErrorMessage(error, "Trivy 심층 검사 결과를 불러오지 못했습니다.")
+          });
+        }
+      }
     }
   }
 
@@ -1132,8 +1180,6 @@ export function DeploymentPanel({
         awsRegion: selectedDeployment.approvedAwsRegion ?? "ap-northeast-2",
         staticSiteUrl: staticSiteUrl && staticSiteUrl !== "[sensitive]" ? staticSiteUrl : null,
         apiBaseUrl: apiBaseUrl && apiBaseUrl !== "[sensitive]" ? apiBaseUrl : null,
-        approveAwsRoleDiff: true,
-        planSummary: selectedDeployment.planSummary ?? undefined,
         pullRequestTitle: "SketchCatch Git/CI/CD auto deploy",
         commitMessage: "Add SketchCatch Git/CI/CD auto deploy artifacts",
         userAcceptedChangeId: `git-cicd-auto-deploy-${selectedDeployment.id}`
@@ -1796,7 +1842,21 @@ export function DeploymentPanel({
           type="button"
         >
           <Trash2 size={16} aria-hidden="true" />
-          Destroy Plan 생성
+          {selectedDeployment.currentPlanOperation === "destroy"
+            ? "Destroy Plan 재생성"
+            : "Destroy Plan 생성"}
+        </button>
+      ) : null}
+
+      {selectedDeployment && shouldShowApprovePlanButton ? (
+        <button
+          className={styles.deploymentPrimaryButton}
+          disabled={!canApprovePlan}
+          onClick={() => void approveCurrentPlan()}
+          type="button"
+        >
+          <ShieldCheck size={16} aria-hidden="true" />
+          {requestState === "loading" ? "승인 처리 중" : deploymentActions.approvePlanLabel}
         </button>
       ) : null}
 
@@ -2151,6 +2211,17 @@ function DeploymentPreDeploymentSummary({
         <strong>Pre-Deployment Gate</strong>
       </div>
       <p>{analysis.summary}</p>
+      {analysis.deepScan ? (
+        <p className={styles.deploymentHint} data-testid="pre-deployment-deep-scan-status">
+          {analysis.deepScan.status === "running"
+            ? "핵심 안전검사 완료 · Trivy 심층검사 진행 중"
+            : analysis.deepScan.status === "complete"
+              ? "핵심 안전검사 및 Trivy 심층검사 완료 · 결과 병합됨"
+              : analysis.deepScan.status === "failed"
+                ? analysis.deepScan.message ?? "Trivy 심층검사를 완료하지 못했습니다."
+                : "핵심 안전검사 완료"}
+        </p>
+      ) : null}
       <div className={styles.deploymentPreflightStats} aria-label="배포 전 검사 요약">
         <span>
           <strong>{analysis.findings.length}</strong>
@@ -2198,6 +2269,9 @@ function DeploymentPreDeploymentFindingItem({
       <span>{finding.severity.toUpperCase()}</span>
       <strong>{finding.title}</strong>
       {finding.resourceId ? <em>{finding.resourceId}</em> : null}
+      {finding.trivyRuleIds && finding.trivyRuleIds.length > 0 ? (
+        <em>Trivy rules · {finding.trivyRuleIds.join(", ")}</em>
+      ) : null}
       <button
         className={styles.deploymentFindingFixButton}
         onClick={openTerraformSource}
@@ -2212,33 +2286,85 @@ function DeploymentPreDeploymentFindingItem({
 }
 
 function DeploymentFindingAiExplanation({ finding }: { readonly finding: CheckFinding }) {
-  const explanation = finding.aiSafetyExplanation;
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [explanation, setExplanation] = useState<AiSafetyExplanation | null>(
+    finding.aiSafetyExplanation ?? null
+  );
+  const [explanationState, setExplanationState] = useState<RequestState>("idle");
+  const [explanationError, setExplanationError] = useState("");
 
-  if (!explanation) {
-    return null;
+  async function toggleExplanation(): Promise<void> {
+    if (isExpanded) {
+      setIsExpanded(false);
+      return;
+    }
+
+    setIsExpanded(true);
+
+    if (explanation || explanationState === "loading") {
+      return;
+    }
+
+    setExplanationState("loading");
+    setExplanationError("");
+
+    try {
+      setExplanation(await runAiSafetyFindingExplanation(finding));
+      setExplanationState("idle");
+    } catch (error) {
+      setExplanationState("error");
+      setExplanationError(getApiErrorMessage(error, "AI 상세 설명을 불러오지 못했습니다."));
+    }
   }
 
   return (
-    <div className={styles.deploymentFindingAiExplanation}>
-      <p>{explanation.riskSummary}</p>
-      <dl>
-        <div>
-          <dt>왜 위험한가</dt>
-          <dd>{explanation.whyDangerous}</dd>
+    <>
+      <button
+        aria-expanded={isExpanded}
+        className={styles.deploymentFindingAiButton}
+        onClick={() => void toggleExplanation()}
+        type="button"
+      >
+        {isExpanded ? "설명 접기" : "설명 보기"}
+      </button>
+      {isExpanded ? (
+        <div className={styles.deploymentFindingAiExplanation}>
+          <p>{finding.description}</p>
+          <dl>
+            <div>
+              <dt>기본 권장 수정</dt>
+              <dd>{finding.recommendation}</dd>
+            </div>
+          </dl>
+          {explanationState === "loading" ? <p>AI 상세 설명을 생성하는 중입니다.</p> : null}
+          {explanationState === "error" ? <p role="alert">{explanationError}</p> : null}
+          {explanation ? (
+            <dl>
+              <div>
+                <dt>왜 위험한가</dt>
+                <dd>{explanation.whyDangerous}</dd>
+              </div>
+              <div>
+                <dt>AI 권장 수정</dt>
+                <dd>{explanation.recommendedFix}</dd>
+              </div>
+              {explanation.terraformHint ? (
+                <div>
+                  <dt>Terraform 힌트</dt>
+                  <dd>{explanation.terraformHint}</dd>
+                </div>
+              ) : null}
+            </dl>
+          ) : null}
+          {explanation ? (
+            <DeploymentPreDeploymentTextList
+              items={explanation.verificationSteps}
+              title="확인 방법"
+            />
+          ) : null}
         </div>
-        <div>
-          <dt>권장 수정</dt>
-          <dd>{explanation.recommendedFix}</dd>
-        </div>
-        {explanation.terraformHint ? (
-          <div>
-            <dt>Terraform 힌트</dt>
-            <dd>{explanation.terraformHint}</dd>
-          </div>
-        ) : null}
-      </dl>
-      <DeploymentPreDeploymentTextList items={explanation.verificationSteps} title="확인 방법" />
-    </div>
+      ) : null}
+    </>
   );
 }
 
@@ -2514,15 +2640,25 @@ function getDirectPreflightState({
     return "idle";
   }
 
-  if (
-    analysis.findings.some((finding) => finding.severity === "high") ||
-    countChecklistItems(analysis, "fail") > 0
-  ) {
+  const highFindingIds = new Set(
+    analysis.findings
+      .filter((finding) => finding.severity === "high")
+      .map((finding) => finding.id)
+  );
+  const hasIndependentChecklistFailure = analysis.checklist.some(
+    (item) =>
+      item.status === "fail" &&
+      (item.relatedFindingIds.length === 0 ||
+        item.relatedFindingIds.some((findingId) => !highFindingIds.has(findingId)))
+  );
+
+  if (hasIndependentChecklistFailure) {
     return "blocked";
   }
 
   if (
-    analysis.findings.some((finding) => finding.severity === "medium") ||
+    analysis.findings.length > 0 ||
+    countChecklistItems(analysis, "fail") > 0 ||
     countChecklistItems(analysis, "warning") > 0
   ) {
     return "warning";

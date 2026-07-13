@@ -165,6 +165,16 @@ const requestedResourceDefinitions = [
     terraformResourceType: "aws_ecs_task_definition"
   },
   {
+    id: "aws-appautoscaling-target",
+    resourceType: "APPLICATION_AUTO_SCALING_TARGET",
+    terraformResourceType: "aws_appautoscaling_target"
+  },
+  {
+    id: "aws-appautoscaling-policy",
+    resourceType: "APPLICATION_AUTO_SCALING_POLICY",
+    terraformResourceType: "aws_appautoscaling_policy"
+  },
+  {
     id: "aws-eks-cluster",
     resourceType: "EKS_CLUSTER",
     terraformResourceType: "aws_eks_cluster"
@@ -176,27 +186,27 @@ const requestedResourceDefinitions = [
   },
   {
     id: "aws-codebuild-project",
-    resourceType: "UNKNOWN",
+    resourceType: "CODEBUILD_PROJECT",
     terraformResourceType: "aws_codebuild_project"
   },
   {
     id: "aws-codedeploy-app",
-    resourceType: "UNKNOWN",
+    resourceType: "CODEDEPLOY_APP",
     terraformResourceType: "aws_codedeploy_app"
   },
   {
     id: "aws-codedeploy-deployment-group",
-    resourceType: "UNKNOWN",
+    resourceType: "CODEDEPLOY_DEPLOYMENT_GROUP",
     terraformResourceType: "aws_codedeploy_deployment_group"
   },
   {
     id: "aws-codepipeline",
-    resourceType: "UNKNOWN",
+    resourceType: "CODEPIPELINE",
     terraformResourceType: "aws_codepipeline"
   },
   {
     id: "aws-codestarconnections-connection",
-    resourceType: "UNKNOWN",
+    resourceType: "CODESTAR_CONNECTION",
     terraformResourceType: "aws_codestarconnections_connection"
   },
   {
@@ -221,13 +231,13 @@ const requestedResourceDefinitions = [
   },
   {
     id: "aws-caller-identity",
-    resourceType: "UNKNOWN",
+    resourceType: "AWS_CALLER_IDENTITY",
     terraformBlockType: "data",
     terraformResourceType: "aws_caller_identity"
   },
   {
     id: "aws-ssm-parameter",
-    resourceType: "UNKNOWN",
+    resourceType: "SSM_PARAMETER",
     terraformBlockType: "data",
     terraformResourceType: "aws_ssm_parameter"
   }

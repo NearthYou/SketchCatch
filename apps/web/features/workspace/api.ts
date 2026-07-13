@@ -2,6 +2,8 @@ import type {
   AiArchitectureDraftResult,
   AiPreDeploymentAnalysisResult,
   AiPreDeploymentCheckRequest,
+  AiPreDeploymentDeepScanResponse,
+  AiSafetyExplanation,
   AiTerraformErrorExplanationResult,
   AiTerraformPreviewExplanationResult,
   AiTerraformStage,
@@ -18,6 +20,7 @@ import type {
   CostProjectEstimateListResponse,
   CostUsageAnalysisRange,
   CostUsageAnalysisResponse,
+  CheckFinding,
   CreateArchitectureSnapshotRequest,
   CreateArchitectureDraftRequest,
   CreateArchitectureDraftResponse,
@@ -68,6 +71,8 @@ import type {
   ProjectDeletePreviewResponse,
   ProjectListResponse,
   ProjectResponse,
+  RecommendRepositoryTemplateRequest,
+  RecommendRepositoryTemplateResponse,
   RecentSuccessfulDeploymentProject,
   RecentSuccessfulDeploymentProjectListResponse,
   SourceRepository,
@@ -387,6 +392,20 @@ export async function runAiPreDeploymentCheck(
   });
 }
 
+export async function getAiPreDeploymentDeepScan(
+  scanId: string
+): Promise<AiPreDeploymentDeepScanResponse> {
+  return apiFetch<AiPreDeploymentDeepScanResponse>(
+    `/ai/pre-deployment-check/${encodeURIComponent(scanId)}`
+  );
+}
+
+export async function runAiSafetyFindingExplanation(
+  finding: CheckFinding
+): Promise<AiSafetyExplanation> {
+  return postPublicAiJson<AiSafetyExplanation>("/ai/safety-finding-explanation", { finding });
+}
+
 // 현재 Architecture Board와 운영 조건을 기준으로 Design Simulation을 실행합니다.
 export async function runAiDesignSimulation(
   input: CreateDesignSimulationRequest
@@ -501,9 +520,12 @@ export async function createAwsConnectionSetup({
   });
 }
 
-export async function listAwsConnections(): Promise<AwsConnection[]> {
+export async function listAwsConnections(
+  options: { readonly signal?: AbortSignal | undefined } = {}
+): Promise<AwsConnection[]> {
   const response = await apiFetch<AwsConnectionListResponse>("/aws/connections", {
-    auth: true
+    auth: true,
+    ...(options.signal ? { signal: options.signal } : {})
   });
 
   return response.awsConnections;
@@ -768,6 +790,40 @@ export type LiveObservationStreamFailure = Readonly<{
   source: "stream" | "snapshot-poll";
 }>;
 
+export async function pollLiveObservationSnapshots(input: {
+  readonly deploymentId: string;
+  readonly intervalMs?: number | undefined;
+  readonly observationId: string;
+  readonly signal: AbortSignal;
+  readonly onError?: ((failure: LiveObservationStreamFailure) => void) | undefined;
+  readonly onSnapshot: (snapshot: LiveObservationSnapshot) => void;
+}): Promise<void> {
+  let retryCount = 0;
+
+  while (!input.signal.aborted) {
+    try {
+      const snapshot = await getLiveObservationSnapshot(
+        input.deploymentId,
+        input.observationId,
+        input.signal
+      );
+      input.onSnapshot(snapshot);
+      retryCount = 0;
+      if (snapshot.status !== "active") {
+        return;
+      }
+    } catch (error) {
+      if (input.signal.aborted) {
+        return;
+      }
+      input.onError?.({ error, retryCount, source: "snapshot-poll" });
+      retryCount += 1;
+    }
+
+    await waitForRetry(input.intervalMs ?? 2_000, input.signal);
+  }
+}
+
 export async function streamLiveObservationSnapshots(input: {
   readonly deploymentId: string;
   readonly observationId: string;
@@ -961,6 +1017,26 @@ export async function analyzeSourceRepository(
   );
 }
 
+export async function recommendRepositoryTemplate({
+  projectId,
+  sourceRepositoryId,
+  ...input
+}: {
+  projectId: string;
+  sourceRepositoryId: string;
+} & RecommendRepositoryTemplateRequest): Promise<RecommendRepositoryTemplateResponse> {
+  return apiFetch<RecommendRepositoryTemplateResponse>(
+    `/projects/${encodeURIComponent(projectId)}/source-repositories/${encodeURIComponent(
+      sourceRepositoryId
+    )}/template-recommendation`,
+    {
+      auth: true,
+      method: "POST",
+      body: input
+    }
+  );
+}
+
 export async function createGitHubSourceRepositoryInstallUrl(
   projectId: string
 ): Promise<GitHubAppInstallUrlResponse> {
@@ -1079,11 +1155,14 @@ export async function listCostProjectEstimates(input: {
   });
 }
 
-export async function listCostUsageAnalysis(input: {
-  awsConnectionId?: string | undefined;
-  projectId?: string | undefined;
-  range: CostUsageAnalysisRange;
-}): Promise<CostUsageAnalysisResponse> {
+export async function listCostUsageAnalysis(
+  input: {
+    awsConnectionId?: string | undefined;
+    projectId?: string | undefined;
+    range: CostUsageAnalysisRange;
+  },
+  options: { readonly signal?: AbortSignal | undefined } = {}
+): Promise<CostUsageAnalysisResponse> {
   const params = new URLSearchParams({
     range: input.range
   });
@@ -1097,7 +1176,8 @@ export async function listCostUsageAnalysis(input: {
   }
 
   return apiFetch<CostUsageAnalysisResponse>(`/costs/usage?${params.toString()}`, {
-    auth: true
+    auth: true,
+    ...(options.signal ? { signal: options.signal } : {})
   });
 }
 
@@ -1360,15 +1440,17 @@ async function waitForRetry(delayMs: number, signal: AbortSignal): Promise<void>
   }
 
   await new Promise<void>((resolve) => {
-    const timeout = globalThis.setTimeout(resolve, delayMs);
-    signal.addEventListener(
-      "abort",
-      () => {
-        globalThis.clearTimeout(timeout);
-        resolve();
-      },
-      { once: true }
-    );
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      globalThis.clearTimeout(timeout);
+      signal.removeEventListener("abort", finish);
+      resolve();
+    };
+    const timeout = globalThis.setTimeout(finish, delayMs);
+    signal.addEventListener("abort", finish, { once: true });
+    if (signal.aborted) finish();
   });
 }
 

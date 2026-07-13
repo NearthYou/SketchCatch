@@ -5,10 +5,12 @@ import type {
   GitHubAppInstallUrlResponse,
   ListGitHubInstalledRepositoriesResponse,
   ListGitHubInstallationRepositoriesResponse,
+  RecommendRepositoryTemplateResponse,
   SourceRepository,
   SourceRepositoryListResponse,
   SourceRepositoryResponse
 } from "@sketchcatch/types";
+import { REPOSITORY_DEPLOYMENT_TYPES } from "@sketchcatch/types";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { requireActiveUserId } from "../auth/current-user.js";
 import { getDatabaseClient, type DatabaseClient } from "../db/client.js";
@@ -31,6 +33,7 @@ import {
   listGitHubInstalledRepositories,
   listGitHubInstallationRepositories,
   listSourceRepositories,
+  recommendSourceRepositoryTemplate,
   SourceRepositoryConflictError,
   SourceRepositoryNotFoundError,
   type SourceRepositoryRecord,
@@ -63,6 +66,19 @@ const connectGitHubRepositoryBodySchema = z
     installationId: z.string().trim().min(1).max(128),
     githubRepositoryId: z.string().trim().min(1).max(128),
     state: z.string().trim().min(1)
+  })
+  .strict();
+
+const repositoryAnalysisAnswerSchema = z.object({
+  questionId: z.string().trim().min(1).max(80),
+  value: z.union([z.string().trim().min(1).max(200), z.boolean()])
+});
+
+const recommendRepositoryTemplateBodySchema = z
+  .object({
+    deploymentType: z.enum(REPOSITORY_DEPLOYMENT_TYPES),
+    usesCiCd: z.boolean(),
+    answers: z.array(repositoryAnalysisAnswerSchema).max(5)
   })
   .strict();
 
@@ -174,6 +190,37 @@ export async function registerSourceRepositoryRoutes(
         }
 
         throw error;
+      }
+    }
+  );
+
+  app.post(
+    "/projects/:projectId/source-repositories/:sourceRepositoryId/template-recommendation",
+    async (request, reply) => {
+      const params = projectSourceRepositoryParamsSchema.parse(request.params);
+      const body = recommendRepositoryTemplateBodySchema.parse(request.body);
+      const { accessContext, repository } = await getSourceRepositoryRequestContext(
+        request,
+        options,
+        getSourceRepositoryDatabaseClient
+      );
+
+      try {
+        const response: RecommendRepositoryTemplateResponse = await recommendSourceRepositoryTemplate(
+          {
+            projectId: params.projectId,
+            sourceRepositoryId: params.sourceRepositoryId,
+            accessContext,
+            deploymentType: body.deploymentType,
+            usesCiCd: body.usesCiCd,
+            answers: body.answers
+          },
+          repository
+        );
+
+        return reply.status(200).send(response);
+      } catch (error) {
+        return handleSourceRepositoryError(error, reply);
       }
     }
   );
@@ -491,6 +538,13 @@ function toSourceRepositoryVisibility(
 
 // GitHub App와 Source Repository 내부 오류를 안정적인 사용자 응답 코드로 바꿉니다.
 function handleSourceRepositoryError(error: unknown, reply: FastifyReply) {
+  if (isSourceRepositorySchemaMismatchError(error)) {
+    return reply.status(503).send({
+      error: "service_unavailable",
+      message: "DATABASE_MIGRATION_REQUIRED"
+    });
+  }
+
   if (error instanceof SourceRepositoryNotFoundError) {
     return reply.status(404).send({
       error: "not_found",
@@ -532,4 +586,41 @@ function handleSourceRepositoryError(error: unknown, reply: FastifyReply) {
   }
 
   throw error;
+}
+
+function isSourceRepositorySchemaMismatchError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const code = getPostgresErrorCode(error);
+
+  return (
+    (code === "42P01" || code === "42703") &&
+    error.message.startsWith("Failed query:") &&
+    error.message.includes('"source_repositories"')
+  );
+}
+
+function getPostgresErrorCode(error: Error): string | null {
+  const cause = error.cause;
+
+  if (hasPostgresErrorCode(cause)) {
+    return cause.code;
+  }
+
+  if (hasPostgresErrorCode(error)) {
+    return error.code;
+  }
+
+  return null;
+}
+
+function hasPostgresErrorCode(value: unknown): value is { readonly code: string } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "code" in value &&
+    typeof (value as { readonly code?: unknown }).code === "string"
+  );
 }

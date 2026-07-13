@@ -24,6 +24,7 @@ import {
   getAwsConnectionCloudFormationTemplate,
   getDeploymentFailureExplanation,
   getGitCicdHandoffPipelineStatus,
+  getAiPreDeploymentDeepScan,
   getProjectDeletePreview,
   listDeploymentResources,
   listAwsConnections,
@@ -33,11 +34,14 @@ import {
   listTerraformOutputs,
   listCostUsageAnalysis,
   listProjects,
+  recommendRepositoryTemplate,
   listReverseEngineeringScanLogs,
   listReverseEngineeringScans,
+  pollLiveObservationSnapshots,
   runDeploymentDestroy,
   runDeploymentDestroyPlan,
   runAiPreDeploymentCheck,
+  runAiSafetyFindingExplanation,
   runDeploymentPlan,
   runDeploymentApply,
   stopLiveObservation,
@@ -222,6 +226,152 @@ test("Live Observation stream does not report an already-aborted signal as an er
   });
 
   assert.deepEqual(failures, []);
+});
+
+test("Live Observation polling reads authenticated snapshots until a terminal status", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const session = createLiveObservationSessionPayload();
+  const activeSnapshot = createLiveObservationSnapshotPayload("active");
+  const stoppedSnapshot = createLiveObservationSnapshotPayload("stopped");
+  const requests: string[] = [];
+  const received: unknown[] = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+  installAuthSession();
+
+  globalThis.fetch = async (input) => {
+    requests.push(String(input));
+    return Response.json(
+      { snapshot: requests.length === 1 ? activeSnapshot : stoppedSnapshot },
+      { status: 200 }
+    );
+  };
+
+  await pollLiveObservationSnapshots({
+    deploymentId: session.deploymentId,
+    intervalMs: 0,
+    observationId: session.id,
+    onSnapshot: (value) => received.push(value),
+    signal: new AbortController().signal
+  });
+
+  assert.deepEqual(requests, [
+    `/api/deployments/${session.deploymentId}/live-observations/${session.id}`,
+    `/api/deployments/${session.deploymentId}/live-observations/${session.id}`
+  ]);
+  assert.deepEqual(received, [activeSnapshot, stoppedSnapshot]);
+});
+
+test("Live Observation polling stops cleanly when aborted from a snapshot callback", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const controller = new AbortController();
+  const snapshot = createLiveObservationSnapshotPayload("active");
+  let requestCount = 0;
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+  installAuthSession();
+
+  globalThis.fetch = async () => {
+    requestCount += 1;
+    return Response.json({ snapshot }, { status: 200 });
+  };
+
+  await pollLiveObservationSnapshots({
+    deploymentId: "deployment-1",
+    intervalMs: 0,
+    observationId: "observation-1",
+    onSnapshot: () => controller.abort(),
+    signal: controller.signal
+  });
+
+  assert.equal(requestCount, 1);
+});
+
+test("Live Observation polling removes abort listeners after normal retry delays", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const controller = new AbortController();
+  const activeSnapshot = createLiveObservationSnapshotPayload("active");
+  const stoppedSnapshot = createLiveObservationSnapshotPayload("stopped");
+  const signal = controller.signal;
+  const originalAdd = signal.addEventListener.bind(signal);
+  const originalRemove = signal.removeEventListener.bind(signal);
+  let added = 0;
+  let removed = 0;
+  let requestCount = 0;
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+  installAuthSession();
+  signal.addEventListener = ((...args: Parameters<AbortSignal["addEventListener"]>) => {
+    added += 1;
+    return originalAdd(...args);
+  }) as AbortSignal["addEventListener"];
+  signal.removeEventListener = ((...args: Parameters<AbortSignal["removeEventListener"]>) => {
+    removed += 1;
+    return originalRemove(...args);
+  }) as AbortSignal["removeEventListener"];
+  globalThis.fetch = async () => {
+    requestCount += 1;
+    return Response.json(
+      { snapshot: requestCount === 1 ? activeSnapshot : stoppedSnapshot },
+      { status: 200 }
+    );
+  };
+
+  await pollLiveObservationSnapshots({
+    deploymentId: "deployment-1",
+    intervalMs: 1,
+    observationId: "observation-1",
+    onSnapshot: () => undefined,
+    signal
+  });
+
+  assert.equal(added, 1);
+  assert.equal(removed, 1);
+});
+
+test("Live Observation polling reports snapshot polling failures", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const controller = new AbortController();
+  const failures: LiveObservationStreamFailure[] = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+  installAuthSession();
+
+  globalThis.fetch = async () => new Response(null, { status: 503 });
+
+  await pollLiveObservationSnapshots({
+    deploymentId: "deployment-1",
+    intervalMs: 0,
+    observationId: "observation-1",
+    onError: (failure) => {
+      failures.push(failure);
+      controller.abort();
+    },
+    onSnapshot: () => undefined,
+    signal: controller.signal
+  });
+
+  assert.deepEqual(
+    failures.map(({ retryCount, source }) => ({ retryCount, source })),
+    [{ retryCount: 0, source: "snapshot-poll" }]
+  );
+  assert.ok(failures[0]?.error instanceof Error);
 });
 
 test("Live Observation stream identifies snapshot polling failures while retrying", async (context) => {
@@ -551,6 +701,79 @@ test("runAiPreDeploymentCheck sends Terraform files with the architecture", asyn
         terraformCode: "resource \"aws_security_group\" \"open_ssh\" {}"
       }
     ]
+  });
+});
+
+test("getAiPreDeploymentDeepScan polls the background Trivy result", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+    return new Response(JSON.stringify({ status: "running" }), {
+      headers: { "Content-Type": "application/json" },
+      status: 200
+    });
+  };
+
+  const result = await getAiPreDeploymentDeepScan(
+    "11111111-1111-4111-8111-111111111111"
+  );
+
+  assert.equal(
+    String(requests[0]?.input),
+    "/api/ai/pre-deployment-check/11111111-1111-4111-8111-111111111111"
+  );
+  assert.equal(result.status, "running");
+});
+
+test("runAiSafetyFindingExplanation requests one finding on demand", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+    return new Response(
+      JSON.stringify({
+        riskSummary: "summary",
+        whyDangerous: "why",
+        recommendedFix: "fix",
+        verificationSteps: [],
+        fallbackUsed: false
+      }),
+      { headers: { "Content-Type": "application/json" }, status: 200 }
+    );
+  };
+
+  await runAiSafetyFindingExplanation({
+    id: "trivy:s3-versioning:main.tf:aws_s3_bucket.assets:1",
+    category: "availability",
+    severity: "medium",
+    riskFamily: "S3_VERSIONING",
+    trivyRuleIds: ["AWS-0090"],
+    title: "S3 versioning",
+    description: "Versioning is disabled",
+    recommendation: "Enable versioning"
+  });
+
+  assert.equal(String(requests[0]?.input), "/api/ai/safety-finding-explanation");
+  assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
+    finding: {
+      id: "trivy:s3-versioning:main.tf:aws_s3_bucket.assets:1",
+      category: "availability",
+      severity: "medium",
+      riskFamily: "S3_VERSIONING",
+      trivyRuleIds: ["AWS-0090"],
+      title: "S3 versioning",
+      description: "Versioning is disabled",
+      recommendation: "Enable versioning"
+    }
   });
 });
 
@@ -2069,6 +2292,61 @@ test("analyzeSourceRepository posts to the connected repository and returns the 
   assert.equal(requests[0]?.init?.method, "POST");
   assert.equal(result.repositoryRevision, "abc123");
   assert.equal(result.aiHandoff.status, "template_selected");
+});
+
+test("recommendRepositoryTemplate posts deployment choices and answers to the connected repository", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+
+  installAuthSession();
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+
+    return Response.json({
+      sourceRepositoryId: "source-repository-1",
+      repositoryRevision: "abc123",
+      recommendation: {
+        deploymentType: "container",
+        usesCiCd: true,
+        candidates: [
+          {
+            templateId: "ecs-fargate-container-app",
+            displayTitle: "ECS Fargate Container App",
+            confidence: 0.87,
+            reasons: ["Docker evidence"],
+            tradeoffs: ["Review runtime sizing"]
+          }
+        ]
+      }
+    });
+  };
+
+  const result = await recommendRepositoryTemplate({
+    projectId: project.id,
+    sourceRepositoryId: "source-repository-1",
+    deploymentType: "container",
+    usesCiCd: true,
+    answers: [{ questionId: "operations-preference", value: "container" }]
+  });
+
+  assert.equal(
+    String(requests[0]?.input),
+    `/api/projects/${project.id}/source-repositories/source-repository-1/template-recommendation`
+  );
+  assert.equal(requests[0]?.init?.method, "POST");
+  assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
+    deploymentType: "container",
+    usesCiCd: true,
+    answers: [{ questionId: "operations-preference", value: "container" }]
+  });
+  assert.equal(result.recommendation.candidates[0]?.templateId, "ecs-fargate-container-app");
 });
 
 test("Git/CI/CD handoff helpers list handoffs and read pipeline status", async (context) => {

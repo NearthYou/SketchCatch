@@ -43,6 +43,7 @@ import {
   type ProjectAccessContext
 } from "./deployment-service.js";
 import {
+  createTerraformFilesSafetyContent,
   prepareTerraformWorkspace as defaultPrepareTerraformWorkspace,
   type PreparedTerraformWorkspace
 } from "./terraform-workspace.js";
@@ -161,7 +162,8 @@ export async function runDeploymentPlan(
       repository.findArchitectureInProject(deployment.architectureId, deployment.projectId),
       prepareTerraformWorkspace({
         objectKey: artifact.objectKey,
-        fileName: artifact.fileName
+        fileName: artifact.fileName,
+        contentType: artifact.contentType
       })
     ]);
     workspace = preparedWorkspace;
@@ -171,18 +173,26 @@ export async function runDeploymentPlan(
     }
 
     const terraformArtifactContent = await readTerraformArtifactFile(workspace.mainFilePath);
-    assertTerraformArtifactIsSafe(terraformArtifactContent, {
-      liveProfile: deployment.liveProfile
-    });
+    const workspaceTerraformFiles = preparedWorkspace.terraformFiles ?? [];
+    assertTerraformArtifactIsSafe(
+      createTerraformFilesSafetyContent(workspaceTerraformFiles, terraformArtifactContent),
+      { liveProfile: deployment.liveProfile }
+    );
     const terraformArtifactSha256 = createSha256(terraformArtifactContent);
+    const preDeploymentTerraformFiles = workspaceTerraformFiles.length
+      ? workspaceTerraformFiles
+      : [
+          {
+            fileName: artifact.fileName,
+            terraformCode: toTerraformCodeString(terraformArtifactContent)
+          }
+        ];
     const preDeploymentAnalysis = await analyzePreDeployment({
       architectureJson: architecture.architectureJson,
-      terraformFiles: [
-        {
-          fileName: artifact.fileName,
-          terraformCode: toTerraformCodeString(terraformArtifactContent)
-        }
-      ]
+      ...(preDeploymentTerraformFiles.length === 1
+        ? { artifactSha256: terraformArtifactSha256 }
+        : {}),
+      terraformFiles: preDeploymentTerraformFiles
     });
 
     const [awsCredentials] = await Promise.all([

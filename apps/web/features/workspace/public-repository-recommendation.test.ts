@@ -1,0 +1,192 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import type { SourceRepositoryAnalysisResult } from "@sketchcatch/types";
+import {
+  createPublicRepositoryDiagram,
+  createPublicRepositoryRecommendation,
+  getPublicRepositoryDeploymentDefault,
+  getPublicRepositoryTemplateDeploymentType,
+  shouldAskPublicRepositoryDeploymentType
+} from "./public-repository-recommendation";
+
+test("public repository recommendation returns multiple candidates and follow-up questions", () => {
+  const analysis = createAnalysis();
+  const deploymentType = getPublicRepositoryDeploymentDefault(analysis);
+  const recommendation = createPublicRepositoryRecommendation({
+    analysis,
+    answers: {},
+    deploymentType,
+    selectedTemplateId: "ecs-fargate-container-app"
+  });
+
+  assert.equal(deploymentType, "container");
+  assert.equal(shouldAskPublicRepositoryDeploymentType(analysis), false);
+  assert.equal(recommendation.candidates.length, 2);
+  assert.equal(recommendation.candidates[0]?.templateId, "ecs-fargate-container-app");
+  assert.deepEqual(
+    recommendation.questions.map((question) => question.id),
+    ["include_frontend", "include_database"]
+  );
+  assert.equal(recommendation.questions[0]?.prompt, "AI가 생성한 프론트엔드 확인 질문");
+});
+
+test("follow-up questions change with the selected template", () => {
+  const analysis = createAnalysis();
+  const serverless = createPublicRepositoryRecommendation({
+    analysis,
+    answers: {},
+    deploymentType: "serverless",
+    selectedTemplateId: "full-serverless-web-app"
+  });
+  const staticSite = createPublicRepositoryRecommendation({
+    analysis,
+    answers: {},
+    deploymentType: "serverless",
+    selectedTemplateId: "static-web-hosting"
+  });
+
+  assert.deepEqual(
+    serverless.questions.map((question) => question.id),
+    ["primary_runtime", "include_database"]
+  );
+  assert.deepEqual(staticSite.questions, []);
+  assert.ok(serverless.questions.length <= 5);
+});
+
+test("repository recommendation uses backend-ranked candidates without synthesizing extras", () => {
+  const analysis: SourceRepositoryAnalysisResult = {
+    ...createAnalysis(),
+    detectedSignals: ["Container"]
+  };
+  const recommendation = createPublicRepositoryRecommendation({
+    analysis,
+    answers: {},
+    deploymentType: "container"
+  });
+
+  assert.equal(recommendation.candidates.length, 2);
+  assert.equal(recommendation.candidates[0]?.templateId, "ecs-fargate-container-app");
+  assert.deepEqual(
+    new Set(recommendation.candidates.map((candidate) => candidate.templateId)),
+    new Set(["ecs-fargate-container-app", "eks-container-app"])
+  );
+});
+
+test("legacy public analysis fallback still returns at least two comparison candidates", () => {
+  for (const deploymentType of ["ec2_vm", "container", "serverless"] as const) {
+    const recommendation = createPublicRepositoryRecommendation({
+      analysis: {
+        ...createAnalysis(),
+        aiHandoff: undefined,
+        detectedSignals: [],
+        recommendedTemplateId: null
+      },
+      answers: {},
+      deploymentType
+    });
+
+    assert.ok(recommendation.candidates.length >= 2, deploymentType);
+    assert.equal(
+      new Set(recommendation.candidates.map((candidate) => candidate.templateId)).size,
+      recommendation.candidates.length,
+      deploymentType
+    );
+  }
+});
+
+test("deployment type is only requested when repository evidence cannot determine it", () => {
+  const ambiguousAnalysis: SourceRepositoryAnalysisResult = {
+    ...createAnalysis(),
+    detectedSignals: ["Node API", "Database"]
+  };
+
+  assert.equal(shouldAskPublicRepositoryDeploymentType(ambiguousAnalysis), true);
+  assert.equal(getPublicRepositoryTemplateDeploymentType("ecs-fargate-container-app"), "container");
+  assert.equal(getPublicRepositoryTemplateDeploymentType("full-serverless-web-app"), "serverless");
+  assert.equal(getPublicRepositoryTemplateDeploymentType("three-tier-web-app"), "ec2_vm");
+});
+
+test("public repository diagram enriches the selected template with repository signals", () => {
+  const diagram = createPublicRepositoryDiagram({
+    analysis: createAnalysis(),
+    answers: {
+      container_runtime: "ecs",
+      include_database: true,
+      include_frontend: true,
+      primary_runtime: "both",
+      traffic_profile: "scale"
+    },
+    deploymentType: "container",
+    projectName: "Jungle AI Board",
+    templateId: "ecs-fargate-container-app",
+    usesCiCd: true
+  });
+
+  const nodeTypes = new Set(diagram.nodes.map((node) => node.type));
+  assert.equal(nodeTypes.has("aws_ecs_service"), true);
+  assert.equal(nodeTypes.has("aws_db_instance"), true);
+  assert.equal(nodeTypes.has("aws_cloudfront_distribution"), true);
+  assert.equal(nodeTypes.has("aws_codepipeline"), true);
+  assert.ok(diagram.edges.length >= 5);
+  assert.ok(diagram.nodes.every((node) => node.label && !/^PUBLIC SUB/i.test(node.label)));
+  assert.ok(diagram.nodes.some((node) => node.label === "애플리케이션 로드 밸런서"));
+  assert.ok(diagram.nodes.some((node) => node.label === "CI/CD 파이프라인"));
+});
+
+function createAnalysis(): SourceRepositoryAnalysisResult {
+  return {
+    defaultBranch: "main",
+    detectedSignals: ["React", "Node API", "Python API", "Database", "Container"],
+    evidenceFiles: [],
+    recommendationReason: "React, Node API, Python API, Database, Container 신호가 있습니다.",
+    recommendedTemplateId: "three-tier-web-app",
+    repositoryUrl: "https://github.com/example/fullstack",
+    aiHandoff: {
+      status: "template_selection_failed",
+      templateId: null,
+      applicationUnits: [],
+      evidence: [],
+      missingEvidence: [],
+      mismatchReasons: ["비교 후보 선택이 필요합니다."],
+      deploymentTypeDefault: "container",
+      usesCiCdDefault: false,
+      questions: [],
+      recommendation: {
+        deploymentType: "container",
+        usesCiCd: false,
+        candidates: [
+          {
+            templateId: "ecs-fargate-container-app",
+            displayTitle: "ECS Fargate 컨테이너 앱",
+            confidence: 0.84,
+            reasons: ["컨테이너 근거가 ECS Fargate와 맞습니다."],
+            tradeoffs: ["Kubernetes 이식성은 EKS보다 낮습니다."],
+            questions: [
+              {
+                id: "include_frontend",
+                prompt: "AI가 생성한 프론트엔드 확인 질문",
+                answerType: "boolean",
+                required: true,
+                reason: "React가 감지되었습니다."
+              },
+              {
+                id: "include_database",
+                prompt: "AI가 생성한 데이터베이스 확인 질문",
+                answerType: "boolean",
+                required: true,
+                reason: "Database가 감지되었습니다."
+              }
+            ]
+          },
+          {
+            templateId: "eks-container-app",
+            displayTitle: "EKS 컨테이너 앱",
+            confidence: 0.64,
+            reasons: ["Kubernetes 운영 대안입니다."],
+            tradeoffs: ["클러스터 운영 복잡도가 높습니다."]
+          }
+        ]
+      }
+    }
+  };
+}

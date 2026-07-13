@@ -11,7 +11,7 @@
   top: 16px;
   display: flex;
   width: min(calc(100% - 48px), 1200px);
-  min-height: 72px;
+  min-height: 64px;
   align-items: center;
   margin: 0 auto;
   padding: 0 20px;
@@ -103,6 +103,7 @@
 .authForm > label,
 .authField {
   display: grid;
+  align-content: start;
   min-width: 0;
   gap: 8px;
   color: #303238;
@@ -325,6 +326,14 @@
   color: #0d74ce;
   font-weight: 600;
   text-underline-offset: 3px;
+}
+
+.authInlineAction {
+  color: #0d74ce;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
 }
 
 .authSwitch {

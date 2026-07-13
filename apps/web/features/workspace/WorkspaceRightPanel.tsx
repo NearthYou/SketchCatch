@@ -710,9 +710,9 @@ export function WorkspaceRightPanel({
     : null;
   const liveObservationModal = isLiveObservationOpen ? (
     <LiveObservationModal
+      diagramJson={context.diagram}
       onClose={() => setIsLiveObservationOpen(false)}
       projectId={projectId}
-      projectName={projectName}
     />
   ) : null;
   const terraformSplitStyle = {

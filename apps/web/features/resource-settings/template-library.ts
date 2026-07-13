@@ -1,10 +1,12 @@
 import type { DiagramJson } from "../../../../packages/types/src";
 import {
   buildTemplateDiagramJson,
-  templateDefinitions
+  templateDefinitions,
+  type TemplateId
 } from "../../../../packages/types/src/template-definitions";
 import { isAreaNode } from "../diagram-editor/area-nodes";
 import { RESOURCE_NODE_DEFAULT_SIZE } from "../diagram-editor/resource-node-geometry";
+import { materializeTemplateDiagram } from "./template-resource-materializer";
 
 export const TEMPLATE_OVERWRITE_BACKUP_STORAGE_KEY = "sketchcatch.templateOverwriteBackups";
 
@@ -36,6 +38,11 @@ type TemplateStorage = Pick<Storage, "getItem" | "setItem">;
 
 const MAX_TEMPLATE_BACKUPS = 10;
 const TEMPLATE_AREA_DEFAULT_SIZE = { height: 112, width: 112 } as const;
+const REPOSITORY_ANALYSIS_TEMPLATE_DEFINITION_IDS = new Map<string, TemplateId>([
+  ["template-static-website", "static-web-hosting"],
+  ["template-api-db", "three-tier-web-app"],
+  ["template-3tier", "three-tier-web-app"]
+]);
 
 const LIVE_OBSERVATION_MANAGED_USER_DATA_BASE64 =
   "IyEvYmluL2Jhc2gKIyBza2V0Y2hjYXRjaC1kZW1vLW1hbmFnZWQtdXNlci1kYXRhOnYxCiMgc2tldGNoY2F0Y2gtZGVtby1tYW5hZ2VkLXVzZXItZGF0YS1zaGEyNTY6NTMzYmZhNTUzZDgwN2FlYzdkYzYwOTQxNTg1ZmIxMTU3NzkzYjMxYmY3ZmEwY2FiZTQ2N2MxYmMwMDk5YWQ0NApzZXQgLWV1byBwaXBlZmFpbApkbmYgaW5zdGFsbCAteSBweXRob24zCmNhdCA+L29wdC9za2V0Y2hjYXRjaC1kZW1vLWFwaS5weSA8PCdQWScKZnJvbSBodHRwLnNlcnZlciBpbXBvcnQgQmFzZUhUVFBSZXF1ZXN0SGFuZGxlciwgVGhyZWFkaW5nSFRUUFNlcnZlcgppbXBvcnQganNvbgppbXBvcnQgb3MKaW1wb3J0IHRpbWUKCmNsYXNzIEhhbmRsZXIoQmFzZUhUVFBSZXF1ZXN0SGFuZGxlcik6CiAgICBkZWYgc2VuZF9qc29uKHNlbGYsIHN0YXR1cywgcGF5bG9hZCwgY29ycz1GYWxzZSk6CiAgICAgICAgYm9keSA9IGpzb24uZHVtcHMocGF5bG9hZCkuZW5jb2RlKCJ1dGYtOCIpCiAgICAgICAgc2VsZi5zZW5kX3Jlc3BvbnNlKHN0YXR1cykKICAgICAgICBpZiBjb3JzOgogICAgICAgICAgICBzZWxmLnNlbmRfaGVhZGVyKCJBY2Nlc3MtQ29udHJvbC1BbGxvdy1PcmlnaW4iLCAiKiIpCiAgICAgICAgICAgIHNlbGYuc2VuZF9oZWFkZXIoIkFjY2Vzcy1Db250cm9sLUFsbG93LUhlYWRlcnMiLCAiQ29udGVudC1UeXBlIikKICAgICAgICAgICAgc2VsZi5zZW5kX2hlYWRlcigiQWNjZXNzLUNvbnRyb2wtQWxsb3ctTWV0aG9kcyIsICJPUFRJT05TLCBQT1NUIikKICAgICAgICBzZWxmLnNlbmRfaGVhZGVyKCJDb250ZW50LVR5cGUiLCAiYXBwbGljYXRpb24vanNvbiIpCiAgICAgICAgc2VsZi5zZW5kX2hlYWRlcigiQ29udGVudC1MZW5ndGgiLCBzdHIobGVuKGJvZHkpKSkKICAgICAgICBzZWxmLmVuZF9oZWFkZXJzKCkKICAgICAgICBzZWxmLndmaWxlLndyaXRlKGJvZHkpCgogICAgZGVmIGRvX09QVElPTlMoc2VsZik6CiAgICAgICAgaWYgc2VsZi5wYXRoLnN0YXJ0c3dpdGgoIi9hcGkvdHJhZmZpYyIpOgogICAgICAgICAgICBzZWxmLnNlbmRfanNvbigyMDAsIHsib2siOiBUcnVlfSwgY29ycz1UcnVlKQogICAgICAgICAgICByZXR1cm4KICAgICAgICBzZWxmLnNlbmRfcmVzcG9uc2UoNDA0KQogICAgICAgIHNlbGYuZW5kX2hlYWRlcnMoKQoKICAgIGRlZiBkb19HRVQoc2VsZik6CiAgICAgICAgaWYgc2VsZi5wYXRoLnN0YXJ0c3dpdGgoIi9hcGkvaGVhbHRoIik6CiAgICAgICAgICAgIHNlbGYuc2VuZF9qc29uKDIwMCwgewogICAgICAgICAgICAgICAgIm9rIjogVHJ1ZSwKICAgICAgICAgICAgICAgICJpbnN0YW5jZSI6IG9zLnVuYW1lKCkubm9kZW5hbWUsCiAgICAgICAgICAgICAgICAicGF0aCI6IHNlbGYucGF0aCwKICAgICAgICAgICAgICAgICJ0aW1lIjogaW50KHRpbWUudGltZSgpKQogICAgICAgICAgICB9KQogICAgICAgICAgICByZXR1cm4KICAgICAgICBzZWxmLnNlbmRfcmVzcG9uc2UoNDA0KQogICAgICAgIHNlbGYuZW5kX2hlYWRlcnMoKQoKICAgIGRlZiBkb19QT1NUKHNlbGYpOgogICAgICAgIGlmIHNlbGYucGF0aC5zdGFydHN3aXRoKCIvYXBpL3RyYWZmaWMiKToKICAgICAgICAgICAgc2VsZi5zZW5kX2pzb24oMjAwLCB7CiAgICAgICAgICAgICAgICAib2siOiBUcnVlLAogICAgICAgICAgICAgICAgImluc3RhbmNlIjogb3MudW5hbWUoKS5ub2RlbmFtZSwKICAgICAgICAgICAgICAgICJyZWNlaXZlZEF0IjogaW50KHRpbWUudGltZSgpICogMTAwMCkKICAgICAgICAgICAgfSwgY29ycz1UcnVlKQogICAgICAgICAgICByZXR1cm4KICAgICAgICBzZWxmLnNlbmRfcmVzcG9uc2UoNDA0KQogICAgICAgIHNlbGYuZW5kX2hlYWRlcnMoKQoKVGhyZWFkaW5nSFRUUFNlcnZlcigoIjAuMC4wLjAiLCA4MDgwKSwgSGFuZGxlcikuc2VydmVfZm9yZXZlcigpClBZCmNhdCA+L2V0Yy9zeXN0ZW1kL3N5c3RlbS9za2V0Y2hjYXRjaC1kZW1vLWFwaS5zZXJ2aWNlIDw8J1VOSVQnCltVbml0XQpEZXNjcmlwdGlvbj1Ta2V0Y2hDYXRjaCBkZW1vIEFQSQpBZnRlcj1uZXR3b3JrLW9ubGluZS50YXJnZXQKCltTZXJ2aWNlXQpFeGVjU3RhcnQ9L3Vzci9iaW4vcHl0aG9uMyAvb3B0L3NrZXRjaGNhdGNoLWRlbW8tYXBpLnB5ClJlc3RhcnQ9YWx3YXlzClVzZXI9cm9vdAoKW0luc3RhbGxdCldhbnRlZEJ5PW11bHRpLXVzZXIudGFyZ2V0ClVOSVQKc3lzdGVtY3RsIGRhZW1vbi1yZWxvYWQKc3lzdGVtY3RsIGVuYWJsZSAtLW5vdyBza2V0Y2hjYXRjaC1kZW1vLWFwaS5zZXJ2aWNlCg==";
@@ -63,7 +70,7 @@ const LIVE_OBSERVATION_BUCKET_POLICY = JSON.stringify({
   Version: "2012-10-17"
 });
 
-const boardTemplates: readonly BoardTemplate[] = [
+const legacyBoardTemplates: readonly BoardTemplate[] = [
   {
     id: "template-static-website",
     title: "S3 정적 웹사이트",
@@ -415,6 +422,61 @@ const boardTemplates: readonly BoardTemplate[] = [
           }
         }),
         createTerraformTemplateNode({
+          id: "template-live-log-group",
+          label: "CloudWatch Agent Logs",
+          position: { x: 1060, y: 40 },
+          resourceName: "traffic",
+          type: "aws_cloudwatch_log_group",
+          values: {
+            name: "/sketchcatch/demo/sc-lo/traffic",
+            retentionInDays: 1,
+            tags: { SketchCatchDemo: "true" }
+          }
+        }),
+        createTerraformTemplateNode({
+          id: "template-live-agent-role",
+          label: "EC2 Agent IAM Role",
+          position: { x: 1060, y: 140 },
+          resourceName: "api_agent",
+          type: "aws_iam_role",
+          values: {
+            assumeRolePolicy: JSON.stringify({
+              Version: "2012-10-17",
+              Statement: [
+                {
+                  Effect: "Allow",
+                  Principal: { Service: "ec2.amazonaws.com" },
+                  Action: "sts:AssumeRole"
+                }
+              ]
+            }),
+            namePrefix: "sc-lo-api-agent-",
+            tags: { SketchCatchDemo: "true" }
+          }
+        }),
+        createTerraformTemplateNode({
+          id: "template-live-agent-policy",
+          label: "CloudWatch Agent Policy",
+          position: { x: 1240, y: 140 },
+          resourceName: "cloudwatch_agent",
+          type: "aws_iam_role_policy_attachment",
+          values: {
+            policyArn: "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy",
+            role: "aws_iam_role.api_agent.name"
+          }
+        }),
+        createTerraformTemplateNode({
+          id: "template-live-agent-profile",
+          label: "Instance Profile",
+          position: { x: 1240, y: 240 },
+          resourceName: "api_agent",
+          type: "aws_iam_instance_profile",
+          values: {
+            namePrefix: "sc-lo-api-agent-",
+            role: "aws_iam_role.api_agent.name"
+          }
+        }),
+        createTerraformTemplateNode({
           id: "template-live-alb",
           label: "Application Load Balancer",
           position: { x: 620, y: 280 },
@@ -473,6 +535,7 @@ const boardTemplates: readonly BoardTemplate[] = [
           values: {
             imageId: "data.aws_ami.al2023.id",
             instanceType: "t3.micro",
+            iamInstanceProfile: { name: "aws_iam_instance_profile.api_agent.name" },
             metadataOptions: { httpEndpoint: "enabled", httpTokens: "required" },
             namePrefix: "sc-lo-api-",
             tagSpecifications: {
@@ -547,6 +610,10 @@ const boardTemplates: readonly BoardTemplate[] = [
         createTemplateEdge("template-live-site-flow", "template-live-site-config", "template-live-alb", "audience traffic"),
         createTemplateEdge("template-live-alb-target", "template-live-alb", "template-live-target-group", "routes"),
         createTemplateEdge("template-live-target-asg", "template-live-target-group", "template-live-asg", "targets"),
+        createTemplateEdge("template-live-role-policy", "template-live-agent-role", "template-live-agent-policy", "grants"),
+        createTemplateEdge("template-live-role-profile", "template-live-agent-role", "template-live-agent-profile", "assumes"),
+        createTemplateEdge("template-live-profile-launch", "template-live-agent-profile", "template-live-launch-template", "profile"),
+        createTemplateEdge("template-live-agent-logs", "template-live-launch-template", "template-live-log-group", "agent metrics"),
         createTemplateEdge("template-live-launch-asg", "template-live-launch-template", "template-live-asg", "launches"),
         createTemplateEdge("template-live-alarm-policy", "template-live-alarm", "template-live-policy", "triggers"),
         createTemplateEdge("template-live-policy-asg", "template-live-policy", "template-live-asg", "+1 instance")
@@ -556,11 +623,30 @@ const boardTemplates: readonly BoardTemplate[] = [
   }
 ];
 
+const boardTemplates: readonly BoardTemplate[] = templateDefinitions.map((definition) => ({
+  id: definition.id,
+  title: definition.title,
+  description: definition.description,
+  tags: definition.tags,
+  diagramJson: buildTemplateDiagramJson(definition.id, {
+    projectSlug: "sketchcatch",
+    shortId: definition.id
+  })
+}));
+
 // 페이지와 보드 모달이 같은 템플릿 목록을 쓰도록 한 곳에서 목록을 제공합니다.
 export function listBoardTemplates(): readonly BoardTemplate[] {
   return boardTemplates.map((template) => ({
     ...template,
-    diagramJson: cloneDiagramJson(template.diagramJson)
+    diagramJson: materializeTemplateDiagram(cloneDiagramJson(template.diagramJson))
+  }));
+}
+
+// Live Observation과 기존 저장 Draft 검증은 배포 Template 카탈로그와 분리된 레거시 fixture를 사용합니다.
+export function listLegacyBoardTemplates(): readonly BoardTemplate[] {
+  return legacyBoardTemplates.map((template) => ({
+    ...template,
+    diagramJson: materializeTemplateDiagram(cloneDiagramJson(template.diagramJson))
   }));
 }
 
@@ -568,8 +654,20 @@ export function buildBoardTemplateDiagram(
   templateId: string | undefined,
   input: { readonly projectSlug: string; readonly shortId: string }
 ): DiagramJson | undefined {
-  const definition = templateDefinitions.find((candidate) => candidate.id === templateId);
-  return definition ? buildTemplateDiagramJson(definition.id, input) : undefined;
+  const definitionId = resolveTemplateDefinitionId(templateId);
+  const definition = templateDefinitions.find((candidate) => candidate.id === definitionId);
+  return definition ? materializeTemplateDiagram(buildTemplateDiagramJson(definition.id, input)) : undefined;
+}
+
+function resolveTemplateDefinitionId(templateId: string | undefined): TemplateId | undefined {
+  if (!templateId) {
+    return undefined;
+  }
+
+  return (
+    REPOSITORY_ANALYSIS_TEMPLATE_DEFINITION_IDS.get(templateId) ??
+    templateDefinitions.find((candidate) => candidate.id === templateId)?.id
+  );
 }
 
 // Template 목록에서 검색어와 tag를 적용하고 사용자가 고른 순서로 정렬합니다.

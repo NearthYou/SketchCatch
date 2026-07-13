@@ -10,10 +10,12 @@ import {
 } from "react";
 import type { LoginRequest } from "@sketchcatch/types";
 import { useAuth } from "../../components/auth/auth-provider";
+import { ProductState } from "../../components/ui/ProductState";
 import { getCapsLockWarningMessage, isCapsLockActive } from "../../features/auth/caps-lock";
 import { getSafeReturnPath } from "../../features/auth/return-path";
 import { getApiErrorMessage } from "../../lib/api-client";
 
+// 일반 로그인과 소셜 로그인 상태를 한 form 안에서 안전하게 연결합니다.
 export function LoginForm() {
   const router = useRouter();
   const { login, status } = useAuth();
@@ -21,11 +23,13 @@ export function LoginForm() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isPasswordCapsLockOn, setIsPasswordCapsLockOn] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
+  const [returnPath, setReturnPath] = useState("/dashboard");
   const passwordCapsLockWarning = getCapsLockWarningMessage(isPasswordCapsLockOn);
 
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search);
     const oauthError = searchParams.get("oauthError");
+    setReturnPath(getSafeReturnPath(searchParams.get("returnTo")));
 
     if (status === "authenticated") {
       router.replace(getSafeReturnPath(searchParams.get("returnTo")));
@@ -73,9 +77,16 @@ export function LoginForm() {
 
   if (status !== "unauthenticated") {
     return (
-      <div className="authStatus" aria-live="polite">
-        {status === "loading" ? "세션을 확인하고 있습니다." : "Dashboard로 이동합니다."}
-      </div>
+      <ProductState
+        compact
+        description={
+          status === "loading"
+            ? "저장된 로그인 정보를 확인하고 있습니다."
+            : "로그인이 확인되어 Dashboard로 이동합니다."
+        }
+        kind={status === "loading" ? "loading" : "waiting"}
+        title={status === "loading" ? "세션 확인 중" : "이동 중"}
+      />
     );
   }
 
@@ -84,7 +95,7 @@ export function LoginForm() {
       <div className="authSocialStack" aria-label="소셜 로그인">
         <a
           className="authSocialButton authSocialButtonNaver"
-          href={getOAuthStartHref("naver", rememberMe)}
+          href={getOAuthStartHref("naver", rememberMe, returnPath)}
         >
           <span className="authSocialMark" aria-hidden="true">
             N
@@ -93,7 +104,7 @@ export function LoginForm() {
         </a>
         <a
           className="authSocialButton authSocialButtonKakao"
-          href={getOAuthStartHref("kakao", rememberMe)}
+          href={getOAuthStartHref("kakao", rememberMe, returnPath)}
         >
           <span className="authSocialMark authSocialMarkKakao" aria-hidden="true">
             K
@@ -102,7 +113,7 @@ export function LoginForm() {
         </a>
         <a
           className="authSocialButton authSocialButtonGithub"
-          href={getOAuthStartHref("github", rememberMe)}
+          href={getOAuthStartHref("github", rememberMe, returnPath)}
         >
           <span className="authSocialMark authSocialMarkGithub" aria-hidden="true">
             G
@@ -158,9 +169,17 @@ export function LoginForm() {
         <Link href="/password-reset">비밀번호를 잊으셨나요?</Link>
       </div>
       {errorMessage ? (
-        <p className="authMessage authMessageError" role="alert">
-          {errorMessage}
-        </p>
+        <ProductState
+          action={
+            <Link className="authInlineAction" href="/dashboard">
+              Dashboard
+            </Link>
+          }
+          compact
+          description={errorMessage}
+          kind="error"
+          title="로그인하지 못했습니다"
+        />
       ) : null}
       <button aria-busy={isSubmitting} className="authSubmit" disabled={isSubmitting} type="submit">
         {isSubmitting ? "로그인 중" : "로그인"}
@@ -169,10 +188,16 @@ export function LoginForm() {
   );
 }
 
-function getOAuthStartHref(provider: "naver" | "kakao" | "github", rememberMe: boolean): string {
-  const baseHref = `/api/auth/oauth/${provider}/start`;
-
-  return rememberMe ? `${baseHref}?rememberMe=true` : baseHref;
+// 소셜 로그인 시작 주소에 로그인 전 내부 route와 유지 여부를 함께 담습니다.
+function getOAuthStartHref(
+  provider: "naver" | "kakao" | "github",
+  rememberMe: boolean,
+  returnTo: string
+): string {
+  return `/api/auth/oauth/${provider}/start?${new URLSearchParams({
+    ...(rememberMe ? { rememberMe: "true" } : {}),
+    returnTo
+  }).toString()}`;
 }
 
 function getOAuthErrorMessage(oauthError: string): string {

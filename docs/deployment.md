@@ -28,6 +28,18 @@ Requirement Input
 → Auto Cleanup
 ```
 
+Architecture Draft에서 Anonymous Amazon Q 패턴 검색을 활성화할 때는 다음 runtime 설정을 사용합니다.
+
+```text
+AI_ARCHITECTURE_REQUIREMENT_NORMALIZER=openai
+AMAZON_Q_ENABLED=true
+AMAZON_Q_REGION=ap-southeast-2
+AMAZON_Q_CREDIT_CONFIRMED=true
+AMAZON_Q_RETRIEVAL_APPLICATION_ID=<anonymous-q-application-id>
+```
+
+`AMAZON_Q_RETRIEVAL_APPLICATION_ID`가 비어 있으면 기존 `AMAZON_Q_APPLICATION_ID`를 사용합니다. Architecture Draft는 Creator mode application ID나 Q Business 사용자 구독을 요구하지 않습니다. 선택된 패턴마다 `RETRIEVAL_MODE`를 한 번 호출하므로 API rate/cost limit과 provider metadata를 유지해야 합니다.
+
 Direct Deployment Path의 실제 live apply 리소스는 안정성을 위해 아래로 제한합니다.
 
 - VPC
@@ -120,7 +132,7 @@ Repository settings와 IAM role 변경은 preview JSON으로 PR에 남깁니다.
 - Plan 실패 시 Apply 단계로 넘어가지 않습니다.
 - 승인 전 계정, region, 생성/수정/삭제 리소스, 비용/위험 요약을 표시합니다.
 - Plan 승인 화면의 최소 요약은 현재 `terraform show -json tfplan` 결과에서 생성합니다.
-- Pre-Deployment Check와 Safety Gate warning은 Plan 결과에 보존하되 Plan record 자체를 blocked로 만들지 않습니다.
+- Pre-Deployment Check와 Safety Gate warning은 Plan 결과에 보존하되 Plan record 자체나 Plan 승인을 blocked로 만들지 않습니다. High warning이 있어도 사용자는 Plan을 승인할 수 있으며, finding은 승인 전 검토 정보로 계속 표시합니다.
 - Apply 성공 후 사용자가 확인할 수 있는 output을 표시합니다.
 - Apply 실패 시 Deployment를 `FAILED`와 `failureStage: "apply"`로 남깁니다.
 - AWS 연결 또는 STS credential 준비 실패는 `failureStage: "aws_connection"`으로 남깁니다.
@@ -271,6 +283,12 @@ LIVE_OBSERVATION_ENABLED=false
 ```
 
 `TF_PLUGIN_CACHE_DIR`과 `TRIVY_CACHE_DIR`은 ECS task의 ephemeral 경로입니다. worker는 one-off task이며 host volume cache에 의존하지 않습니다.
+
+API startup은 listen 전에 작은 Terraform 구성을 한 번 검사해 Trivy process와 policy loading을 미리 수행합니다. Warm-up이 실패하면 warning을 기록하고 API startup과 deterministic fallback 검사는 계속합니다.
+
+동일 Terraform 파일 집합의 Trivy finding은 SHA-256 key로 process-local cache와 Redis Runtime Cache에 5분간 보관합니다. 같은 API process의 동일 key 검사는 진행 중인 scan 하나를 공유합니다. Key에는 Trivy version, checks bundle digest와 제외 rule 정책도 포함하며, cache read/write가 실패하면 cache를 우회해 실제 검사를 계속합니다.
+
+첫 요청의 응답 시간은 Trivy CLI 시작 시간과 분리합니다. Public S3, 공개 SSH, Public RDS, IAM wildcard 핵심 규칙은 API process 안에서 즉시 검사하고, Trivy 심층검사는 Runtime Cache에 상태를 기록하는 백그라운드 작업으로 실행합니다. 심층검사가 완료되기 전에는 Plan을 시작하지 않습니다.
 
 ## GitHub 비밀값
 

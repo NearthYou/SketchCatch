@@ -5,6 +5,7 @@ import {
 } from "../live-observations/live-observation-capability.js";
 
 export type RuntimeEnv = {
+  aiArchitectureRequirementNormalizer?: string | undefined;
   aiBillingMode?: string | undefined;
   aiDailyCallLimit?: string | undefined;
   aiRateLimitPerMinute?: string | undefined;
@@ -12,6 +13,7 @@ export type RuntimeEnv = {
   amazonQCreditConfirmed?: string | undefined;
   amazonQEnabled?: string | undefined;
   amazonQRegion?: string | undefined;
+  amazonQRetrievalApplicationId?: string | undefined;
   amazonQUserId?: string | undefined;
   awsRegion: string;
   authTokenSecret: string | undefined;
@@ -44,6 +46,7 @@ export type RuntimeEnv = {
   liveObservationCapabilityPreviousSecret?: string | undefined;
   liveObservationCapabilityPreviousStoppedIssuingAt?: string | undefined;
   liveObservationEnabled?: string | undefined;
+  liveObservationSimulatedAgent?: string | undefined;
   naverOauthClientId: string | undefined;
   naverOauthClientSecret: string | undefined;
   nodeEnv?: string | undefined;
@@ -66,6 +69,7 @@ const staticAwsCredentialEnvKeys = [
 
 export function getRuntimeEnv(): RuntimeEnv {
   return {
+    aiArchitectureRequirementNormalizer: process.env.AI_ARCHITECTURE_REQUIREMENT_NORMALIZER,
     aiBillingMode: process.env.AI_BILLING_MODE,
     aiDailyCallLimit: process.env.AI_DAILY_CALL_LIMIT,
     aiRateLimitPerMinute: process.env.AI_RATE_LIMIT_PER_MINUTE,
@@ -73,6 +77,7 @@ export function getRuntimeEnv(): RuntimeEnv {
     amazonQCreditConfirmed: process.env.AMAZON_Q_CREDIT_CONFIRMED,
     amazonQEnabled: process.env.AMAZON_Q_ENABLED,
     amazonQRegion: process.env.AMAZON_Q_REGION,
+    amazonQRetrievalApplicationId: process.env.AMAZON_Q_RETRIEVAL_APPLICATION_ID,
     amazonQUserId: process.env.AMAZON_Q_USER_ID,
     awsRegion: process.env.AWS_REGION ?? "ap-northeast-2",
     authTokenSecret: process.env.AUTH_TOKEN_SECRET,
@@ -110,6 +115,7 @@ export function getRuntimeEnv(): RuntimeEnv {
     liveObservationCapabilityPreviousStoppedIssuingAt:
       process.env.LIVE_OBSERVATION_CAPABILITY_PREVIOUS_STOPPED_ISSUING_AT,
     liveObservationEnabled: process.env.LIVE_OBSERVATION_ENABLED,
+    liveObservationSimulatedAgent: process.env.LIVE_OBSERVATION_SIMULATED_AGENT,
     naverOauthClientId: process.env.NAVER_OAUTH_CLIENT_ID,
     naverOauthClientSecret: process.env.NAVER_OAUTH_CLIENT_SECRET,
     nodeEnv: process.env.NODE_ENV,

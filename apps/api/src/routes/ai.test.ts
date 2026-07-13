@@ -4,6 +4,7 @@ import { z } from "zod";
 import { resourceDefinitions } from "@sketchcatch/types/resource-definitions";
 import { buildApp } from "../app.js";
 import { createInMemoryRuntimeCache } from "../runtime-cache/index.js";
+import { ArchitectureDraftGenerationError } from "../services/aiArchitectureDrafts.js";
 
 process.env.NODE_ENV = "test";
 
@@ -699,10 +700,12 @@ test("POST /api/ai/architecture-draft returns requirement facts and unsupported 
       (warning) => warning.code === "unsupported_requirement_substituted"
     )
   );
-  assert.match(substitutionWarning?.message ?? "", /EKS\/Kubernetes/);
-  assert.match(substitutionWarning?.message ?? "", /EC2/);
+  assert.ok(unsupportedBody.architectureJson.nodes.some((node) => node.type === "EKS_CLUSTER"));
+  assert.doesNotMatch(substitutionWarning?.message ?? "", /EKS\/Kubernetes/);
+  assert.match(substitutionWarning?.message ?? "", /멀티 리전/);
+  assert.match(substitutionWarning?.message ?? "", /단일 리전/);
   assert.match(substitutionWarning?.message ?? "", /대체/);
-  assert.ok(unsupportedBody.metadata.requirementFacts?.includes("server_runtime"));
+  assert.equal(unsupportedBody.metadata.requirementFacts?.includes("server_runtime"), false);
 
   const partialResponse = await app.inject({
     method: "POST",
@@ -717,12 +720,13 @@ test("POST /api/ai/architecture-draft returns requirement facts and unsupported 
   const partialBody = architectureDraftResponseSchema.parse(partialResponse.json());
 
   assert.equal(partialBody.metadata.selectedDraftPattern, "api_server");
-  assert.ok(
+  assert.ok(partialBody.architectureJson.nodes.some((node) => node.type === "EKS_CLUSTER"));
+  assert.equal(
     partialBody.metadata.guardrailWarnings?.some(
       (warning) => warning.code === "unsupported_requirement_substituted"
-    )
+    ),
+    false
   );
-  assert.ok(partialBody.metadata.guardrailWarnings?.some((warning) => warning.code === "partial_generation"));
 
   await app.close();
 });
@@ -761,7 +765,7 @@ test("POST /api/ai/architecture-draft understands beginner-friendly prompt wordi
       }
     });
 
-    assert.equal(response.statusCode, 200);
+    assert.equal(response.statusCode, 200, response.body);
 
     const body = architectureDraftResponseSchema.parse(response.json());
 
@@ -838,7 +842,7 @@ test("POST /api/ai/architecture-draft keeps purpose-specific diagrams distinct",
       }
     });
 
-    assert.equal(response.statusCode, 200);
+    assert.equal(response.statusCode, 200, response.body);
 
     const body = architectureDraftResponseSchema.parse(response.json());
     const nodeIds = body.architectureJson.nodes.map((node) => node.id);
@@ -1803,6 +1807,149 @@ test("POST /api/ai/architecture-draft rejects an empty prompt", async () => {
   await app.close();
 });
 
+test("POST /api/ai/architecture-draft returns 503 when Amazon Q is unavailable", async () => {
+  const app = buildApp({
+    createArchitectureDraftResponse: async () => {
+      throw new ArchitectureDraftGenerationError(new Error("Amazon Q request failed"));
+    }
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    payload: {
+      prompt: "운영 가능한 웹 아키텍처를 만들어줘"
+    }
+  });
+
+  assert.equal(response.statusCode, 503);
+  assert.deepEqual(response.json(), {
+    error: "service_unavailable",
+    message: "Amazon Q 아키텍처 생성 서비스를 일시적으로 사용할 수 없습니다. 잠시 후 다시 시도해주세요."
+  });
+
+  await app.close();
+});
+
+for (const errorCase of [
+  {
+    kind: "requirements_unsatisfied" as const,
+    statusCode: 422,
+    error: "unprocessable_entity"
+  },
+  {
+    kind: "provider_response_invalid" as const,
+    statusCode: 502,
+    error: "bad_gateway"
+  }
+]) {
+  test(`POST /api/ai/architecture-draft maps ${errorCase.kind} to ${errorCase.statusCode}`, async () => {
+    const app = buildApp({
+      createArchitectureDraftResponse: async () => {
+        throw new ArchitectureDraftGenerationError(new Error("generation failed"), errorCase.kind);
+      }
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/ai/architecture-draft",
+      payload: { prompt: "운영 가능한 웹 아키텍처를 만들어줘" }
+    });
+
+    assert.equal(response.statusCode, errorCase.statusCode);
+    assert.equal(response.json().error, errorCase.error);
+    await app.close();
+  });
+}
+
+test("POST /api/ai/architecture-draft/stream emits backend progress and the final Q result", async () => {
+  const app = buildApp({
+    createArchitectureDraftResponse: async (_request, options) => {
+      options?.onProgress?.("preparing_requirements");
+      options?.onProgress?.("querying_amazon_q");
+      options?.onProgress?.("validating_architecture");
+      options?.onProgress?.("building_diagram");
+
+      return {
+        architectureJson: { nodes: [], edges: [] },
+        title: "Q Architecture Draft",
+        metadata: {
+          source: "amazon_q",
+          confidence: "medium",
+          assumptions: [],
+          explanations: []
+        }
+      };
+    }
+  });
+
+  const response = await app.inject({
+    headers: {
+      origin: "http://localhost:3000"
+    },
+    method: "POST",
+    url: "/api/ai/architecture-draft/stream",
+    payload: {
+      prompt: "운영 가능한 웹 아키텍처를 만들어줘"
+    }
+  });
+  const events = response.body
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line) as { type: string; stage?: string; result?: { title: string } });
+
+  assert.equal(response.statusCode, 200);
+  assert.match(response.headers["content-type"] ?? "", /^application\/x-ndjson/);
+  assert.equal(response.headers["access-control-allow-origin"], "http://localhost:3000");
+  assert.deepEqual(
+    events.filter((event) => event.type === "progress").map((event) => event.stage),
+    [
+      "preparing_requirements",
+      "querying_amazon_q",
+      "validating_architecture",
+      "building_diagram"
+    ]
+  );
+  assert.equal(events.at(-1)?.type, "result");
+  assert.equal(events.at(-1)?.result?.title, "Q Architecture Draft");
+
+  await app.close();
+});
+
+test("POST /api/ai/architecture-draft/stream emits a typed error when Q generation fails", async () => {
+  const app = buildApp({
+    createArchitectureDraftResponse: async (_request, options) => {
+      options?.onProgress?.("querying_amazon_q");
+      throw new ArchitectureDraftGenerationError(new Error("Amazon Q request failed"));
+    }
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft/stream",
+    payload: {
+      prompt: "운영 가능한 웹 아키텍처를 만들어줘"
+    }
+  });
+  const events = response.body
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line) as { type: string; error?: { error: string; message: string } });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(events[0]?.type, "progress");
+  assert.deepEqual(events[1], {
+    type: "error",
+    error: {
+      error: "service_unavailable",
+      message: "Amazon Q 아키텍처 생성 서비스를 일시적으로 사용할 수 없습니다. 잠시 후 다시 시도해주세요.",
+      statusCode: 503
+    }
+  });
+
+  await app.close();
+});
+
 test("OPTIONS /api/ai/architecture-draft responds to browser CORS preflight", async () => {
   const app = buildApp();
 
@@ -1824,10 +1971,118 @@ test("OPTIONS /api/ai/architecture-draft responds to browser CORS preflight", as
   await app.close();
 });
 
+test("POST /api/ai/source-repository-analysis reads nested public repository evidence", async () => {
+  const originalFetch = globalThis.fetch;
+  let fetchCallCount = 0;
+  globalThis.fetch = async (input) => {
+    fetchCallCount += 1;
+    const url = String(input);
+
+    if (url.includes("api.github.com/repos/example/fullstack/git/trees/main")) {
+      return Response.json({
+        truncated: false,
+        tree: [
+          { path: "README.md", type: "blob" },
+          { path: "apps/fastapi-api/Dockerfile", type: "blob" },
+          { path: "apps/fastapi-api/requirements.txt", type: "blob" },
+          { path: "apps/nest-api/package.json", type: "blob" },
+          { path: "docker-compose.yml", type: "blob" },
+          { path: "node_modules/ignored/package.json", type: "blob" }
+        ]
+      });
+    }
+
+    if (url.endsWith("/README.md")) {
+      return new Response("React frontend, FastAPI API, and PostgreSQL database", { status: 200 });
+    }
+
+    if (url.endsWith("/apps/fastapi-api/Dockerfile")) {
+      return new Response("FROM python:3.12\nRUN pip install fastapi uvicorn", { status: 200 });
+    }
+
+    if (url.endsWith("/apps/fastapi-api/requirements.txt")) {
+      return new Response("fastapi\nuvicorn\n", { status: 200 });
+    }
+
+    if (url.endsWith("/apps/nest-api/package.json")) {
+      return new Response('{"dependencies":{"@nestjs/core":"latest","typeorm":"latest"}}', { status: 200 });
+    }
+
+    if (url.endsWith("/docker-compose.yml")) {
+      return new Response("services:\n  db:\n    image: postgres:16", { status: 200 });
+    }
+
+    return new Response("", { status: 404 });
+  };
+
+  const app = buildApp();
+
+  try {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/ai/source-repository-analysis",
+      payload: {
+        repositoryUrl: "https://github.com/example/fullstack",
+        defaultBranch: "main"
+      }
+    });
+
+    assert.equal(response.statusCode, 200);
+
+    const body = response.json();
+    const evidencePaths = body.evidenceFiles.map((file: { path: string }) => file.path);
+
+    assert.ok(body.detectedSignals.includes("Python API"));
+    assert.ok(body.detectedSignals.includes("Node API"));
+    assert.ok(body.detectedSignals.includes("Database"));
+    assert.ok(body.detectedSignals.includes("Container"));
+    assert.equal(body.recommendedTemplateId, "template-api-db");
+    assert.equal(body.aiHandoff.deploymentTypeDefault, "container");
+    assert.ok(body.aiHandoff.recommendation.candidates.length >= 2);
+    assert.equal(body.aiHandoff.recommendation.candidates[0].templateId, "ecs-fargate-container-app");
+    assert.ok(evidencePaths.includes("apps/fastapi-api/Dockerfile"));
+    assert.ok(evidencePaths.includes("apps/nest-api/package.json"));
+    assert.ok(evidencePaths.includes("docker-compose.yml"));
+    assert.equal(
+      body.evidenceFiles.some(
+        (file: { found: boolean; path: string }) => file.path === "Dockerfile" && file.found === false
+      ),
+      false
+    );
+
+    const firstRequestFetchCount = fetchCallCount;
+    const cachedResponse = await app.inject({
+      method: "POST",
+      url: "/api/ai/source-repository-analysis",
+      payload: {
+        repositoryUrl: "https://github.com/example/fullstack",
+        defaultBranch: "main"
+      }
+    });
+
+    assert.equal(cachedResponse.statusCode, 200);
+    assert.deepEqual(cachedResponse.json(), body);
+    assert.equal(fetchCallCount, firstRequestFetchCount);
+  } finally {
+    globalThis.fetch = originalFetch;
+    await app.close();
+  }
+});
+
 test("POST /api/ai/github-architecture-draft returns an Architecture Draft from public repository evidence", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (input) => {
     const url = String(input);
+
+    if (url.includes("api.github.com/repos/example/backend-api/git/trees/main")) {
+      return Response.json({
+        truncated: false,
+        tree: [
+          { path: "README.md", type: "blob" },
+          { path: "package.json", type: "blob" }
+        ]
+      });
+    }
 
     if (url.endsWith("/README.md")) {
       return new Response("Express API server with PostgreSQL database", { status: 200 });
@@ -1847,11 +2102,12 @@ test("POST /api/ai/github-architecture-draft returns an Architecture Draft from 
       method: "POST",
       url: "/api/ai/github-architecture-draft",
       payload: {
-        repositoryUrl: "https://github.com/example/backend-api"
+        repositoryUrl: "https://github.com/example/backend-api",
+        selectedTemplateId: "three-tier-web-app"
       }
     });
 
-    assert.equal(response.statusCode, 200);
+    assert.equal(response.statusCode, 200, response.body);
 
     const body = architectureDraftResponseSchema.parse(response.json());
     const nodeTypes = body.architectureJson.nodes.map((node) => node.type);
@@ -1981,6 +2237,7 @@ test("POST /api/ai/pre-deployment-check reports cost and missing configuration r
 
 test("POST /api/ai/pre-deployment-check forwards Terraform files to the Trivy-backed analyzer", async () => {
   let receivedTerraformFileName = "";
+  let explanationCalls = 0;
   const app = buildApp({
     analyzePreDeploymentCheck: async (input) => {
       receivedTerraformFileName = input.terraformFiles?.[0]?.fileName ?? "";
@@ -2013,13 +2270,16 @@ test("POST /api/ai/pre-deployment-check forwards Terraform files to the Trivy-ba
         suggestions: []
       };
     },
-    createSafetyFindingExplanation: async () => ({
-      riskSummary: "Public SSH is exposed.",
-      whyDangerous: "Internet SSH increases attack attempts.",
-      recommendedFix: "Restrict SSH CIDR.",
-      verificationSteps: ["Run the check again."],
-      fallbackUsed: false
-    })
+    createSafetyFindingExplanation: async () => {
+      explanationCalls += 1;
+      return {
+        riskSummary: "Public SSH is exposed.",
+        whyDangerous: "Internet SSH increases attack attempts.",
+        recommendedFix: "Restrict SSH CIDR.",
+        verificationSteps: ["Run the check again."],
+        fallbackUsed: false
+      };
+    }
   });
 
   const response = await app.inject({
@@ -2040,42 +2300,77 @@ test("POST /api/ai/pre-deployment-check forwards Terraform files to the Trivy-ba
   });
 
   assert.equal(response.statusCode, 200);
-  assert.equal(receivedTerraformFileName, "security.tf");
-
   const body = response.json();
+  assert.equal(body.deepScan?.status, "running");
+  assert.equal(typeof body.deepScan?.scanId, "string");
+  assert.equal(body.findings.length, 0);
+  await new Promise((resolve) => setImmediate(resolve));
 
-  assert.equal(body.findings[0]?.sourceLocation?.fileName, "security.tf");
-  assert.equal(body.findings[0]?.sourceLocation?.line, 13);
-  assert.equal(body.findings[0]?.aiSafetyExplanation?.riskSummary, "Public SSH is exposed.");
+  const deepScanResponse = await app.inject({
+    method: "GET",
+    url: `/api/ai/pre-deployment-check/${body.deepScan.scanId}`
+  });
+  const deepScan = deepScanResponse.json();
+
+  assert.equal(deepScan.status, "complete");
+  assert.equal(receivedTerraformFileName, "security.tf");
+  assert.equal(deepScan.analysis.findings[0]?.sourceLocation?.fileName, "security.tf");
+  assert.equal(deepScan.analysis.findings[0]?.sourceLocation?.line, 13);
+  assert.equal(deepScan.analysis.findings[0]?.aiSafetyExplanation, undefined);
+  assert.equal(explanationCalls, 0);
 
   await app.close();
 });
 
-test("POST /api/ai/pre-deployment-check reuses cached finding explanations", async () => {
+test("POST /api/ai/pre-deployment-check returns the deterministic gate before deep scan completes", async () => {
+  let releaseDeepScan: (() => void) | undefined;
+  const app = buildApp({
+    analyzePreDeploymentCheck: async () => {
+      await new Promise<void>((resolve) => {
+        releaseDeepScan = resolve;
+      });
+      return {
+        summary: "deep scan complete",
+        totalMonthlyEstimate: { amount: 0, currency: "USD", pricingAssumption: "test" },
+        resourceCostEstimates: [],
+        findings: [],
+        checklist: [],
+        suggestions: []
+      };
+    }
+  });
+  const startedAt = performance.now();
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/ai/pre-deployment-check",
+    payload: {
+      architectureJson: { nodes: [], edges: [] },
+      terraformFiles: [
+        {
+          fileName: "main.tf",
+          terraformCode:
+            'resource "aws_db_instance" "db" { publicly_accessible = true }'
+        }
+      ]
+    }
+  });
+  const elapsedMs = performance.now() - startedAt;
+  const body = response.json();
+
+  assert.equal(response.statusCode, 200);
+  assert.ok(elapsedMs < 1_000, `immediate gate took ${elapsedMs.toFixed(1)}ms`);
+  assert.equal(body.deepScan.status, "running");
+  assert.equal(body.findings[0]?.riskFamily, "PUBLIC_RDS");
+
+  releaseDeepScan?.();
+  await new Promise((resolve) => setImmediate(resolve));
+  await app.close();
+});
+
+test("POST /api/ai/safety-finding-explanation reuses cached explanations", async () => {
   let explanationCalls = 0;
   const app = buildApp({
     runtimeCache: createInMemoryRuntimeCache(),
-    analyzePreDeploymentCheck: async () => ({
-      summary: "배포 전에 해결해야 할 Security Risk가 있습니다.",
-      totalMonthlyEstimate: {
-        amount: 0,
-        currency: "USD",
-        pricingAssumption: "test"
-      },
-      resourceCostEstimates: [],
-      findings: [
-        {
-          id: "trivy:aws-0107:main.tf:aws_security_group.open_ssh:13",
-          category: "network",
-          severity: "high",
-          title: "Open SSH",
-          description: "0.0.0.0/0",
-          recommendation: "Restrict CIDR"
-        }
-      ],
-      checklist: [],
-      suggestions: []
-    }),
     createSafetyFindingExplanation: async () => {
       explanationCalls += 1;
 
@@ -2089,26 +2384,24 @@ test("POST /api/ai/pre-deployment-check reuses cached finding explanations", asy
     }
   });
   const payload = {
-    architectureJson: {
-      nodes: [],
-      edges: []
-    },
-    terraformFiles: [
-      {
-        fileName: "main.tf",
-        terraformCode: "resource \"aws_security_group\" \"open_ssh\" {}"
-      }
-    ]
+    finding: {
+      id: "trivy:aws-0107:main.tf:aws_security_group.open_ssh:13",
+      category: "network",
+      severity: "high",
+      title: "Open SSH",
+      description: "0.0.0.0/0",
+      recommendation: "Restrict CIDR"
+    }
   };
 
   const firstResponse = await app.inject({
     method: "POST",
-    url: "/api/ai/pre-deployment-check",
+    url: "/api/ai/safety-finding-explanation",
     payload
   });
   const secondResponse = await app.inject({
     method: "POST",
-    url: "/api/ai/pre-deployment-check",
+    url: "/api/ai/safety-finding-explanation",
     payload
   });
 
@@ -2116,60 +2409,37 @@ test("POST /api/ai/pre-deployment-check reuses cached finding explanations", asy
   assert.equal(secondResponse.statusCode, 200);
   assert.equal(explanationCalls, 1);
   assert.equal(
-    secondResponse.json().findings[0]?.aiSafetyExplanation?.riskSummary,
+    secondResponse.json().riskSummary,
     "Cached public SSH explanation."
   );
 
   await app.close();
 });
 
-test("POST /api/ai/pre-deployment-check falls back when safety explanation generation stalls", async () => {
+test("POST /api/ai/safety-finding-explanation falls back when generation stalls", async () => {
   const app = buildApp({
     safetyExplanationTimeoutMs: 5,
-    analyzePreDeploymentCheck: async () => ({
-      summary: "배포 전에 해결해야 할 Security Risk가 있습니다.",
-      totalMonthlyEstimate: {
-        amount: 0,
-        currency: "USD",
-        pricingAssumption: "test"
-      },
-      resourceCostEstimates: [],
-      findings: [
-        {
-          id: "trivy:aws-0107:main.tf:aws_security_group.open_ssh:13",
-          category: "network",
-          severity: "high",
-          title: "Open SSH",
-          description: "0.0.0.0/0",
-          recommendation: "Restrict CIDR"
-        }
-      ],
-      checklist: [],
-      suggestions: []
-    }),
     createSafetyFindingExplanation: async () => new Promise<never>(() => {})
   });
 
   const response = await app.inject({
     method: "POST",
-    url: "/api/ai/pre-deployment-check",
+    url: "/api/ai/safety-finding-explanation",
     payload: {
-      architectureJson: {
-        nodes: [],
-        edges: []
-      },
-      terraformFiles: [
-        {
-          fileName: "main.tf",
-          terraformCode: "resource \"aws_security_group\" \"open_ssh\" {}"
-        }
-      ]
+      finding: {
+        id: "trivy:aws-0107:main.tf:aws_security_group.open_ssh:13",
+        category: "network",
+        severity: "high",
+        title: "Open SSH",
+        description: "0.0.0.0/0",
+        recommendation: "Restrict CIDR"
+      }
     }
   });
 
   assert.equal(response.statusCode, 200);
-  assert.equal(response.json().findings[0]?.aiSafetyExplanation?.fallbackUsed, true);
-  assert.equal(response.json().findings[0]?.aiSafetyExplanation?.fallbackReason, "provider_error");
+  assert.equal(response.json().fallbackUsed, true);
+  assert.equal(response.json().fallbackReason, "provider_error");
 
   await app.close();
 });

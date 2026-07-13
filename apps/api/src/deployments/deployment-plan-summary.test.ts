@@ -66,6 +66,29 @@ test("createDeploymentPlanSummaryFromTerraformShowJson counts create update dele
   });
 });
 
+test("demo web service live apply allows ECS Fargate and Application Auto Scaling resources", () => {
+  const terraformShowJson = JSON.stringify({
+    resource_changes: [
+      "aws_ecs_cluster",
+      "aws_ecs_task_definition",
+      "aws_ecs_service",
+      "aws_appautoscaling_target",
+      "aws_appautoscaling_policy",
+      "aws_ecr_repository",
+      "aws_eip",
+      "aws_nat_gateway"
+    ].map((type) => ({ mode: "managed", type, change: { actions: ["create"] } }))
+  });
+
+  assert.deepEqual(
+    findUnsupportedLiveApplyResourceTypesFromTerraformShowJson(
+      terraformShowJson,
+      "demo_web_service"
+    ),
+    []
+  );
+});
+
 test("createDeploymentPlanSummaryFromTerraformShowJson records unsupported action warnings", () => {
   const summary = createDeploymentPlanSummaryFromTerraformShowJson(
     JSON.stringify({
@@ -208,6 +231,34 @@ test("findUnsupportedLiveApplyResourceTypesFromTerraformShowJson allows demo web
       },
       {
         mode: "managed",
+        type: "aws_cloudwatch_log_group",
+        change: {
+          actions: ["create"]
+        }
+      },
+      {
+        mode: "managed",
+        type: "aws_iam_role",
+        change: {
+          actions: ["create"]
+        }
+      },
+      {
+        mode: "managed",
+        type: "aws_iam_role_policy_attachment",
+        change: {
+          actions: ["create"]
+        }
+      },
+      {
+        mode: "managed",
+        type: "aws_iam_instance_profile",
+        change: {
+          actions: ["create"]
+        }
+      },
+      {
+        mode: "managed",
         type: "aws_db_instance",
         change: {
           actions: ["create"]
@@ -221,8 +272,12 @@ test("findUnsupportedLiveApplyResourceTypesFromTerraformShowJson allows demo web
     [
       "aws_autoscaling_group",
       "aws_autoscaling_policy",
+      "aws_cloudwatch_log_group",
       "aws_cloudwatch_metric_alarm",
       "aws_db_instance",
+      "aws_iam_instance_profile",
+      "aws_iam_role",
+      "aws_iam_role_policy_attachment",
       "aws_lb"
     ]
   );
@@ -240,4 +295,45 @@ test("findUnsupportedLiveApplyResourceTypesFromTerraformShowJson allows demo web
     ),
     []
   );
+});
+
+test("findUnsupportedLiveApplyResourceTypesFromTerraformShowJson allows AI-generated CI/CD resources", () => {
+  const unsupportedTypes = findUnsupportedLiveApplyResourceTypesFromTerraformShowJson(
+    JSON.stringify({
+      resource_changes: [
+        {
+          mode: "managed",
+          type: "aws_codebuild_project",
+          change: { actions: ["create"] }
+        },
+        {
+          mode: "managed",
+          type: "aws_codedeploy_app",
+          change: { actions: ["create"] }
+        },
+        {
+          mode: "managed",
+          type: "aws_codedeploy_deployment_group",
+          change: { actions: ["create"] }
+        },
+        {
+          mode: "managed",
+          type: "aws_codepipeline",
+          change: { actions: ["create"] }
+        },
+        {
+          mode: "managed",
+          type: "aws_codestarconnections_connection",
+          change: { actions: ["create"] }
+        },
+        {
+          mode: "managed",
+          type: "aws_iam_role",
+          change: { actions: ["create"] }
+        }
+      ]
+    })
+  );
+
+  assert.deepEqual(unsupportedTypes, []);
 });

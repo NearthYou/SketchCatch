@@ -38,6 +38,10 @@ test("Live Observation routes create, snapshot, stream, collect, and stop one se
   const createdBody = created.json();
   assert.equal(createdBody.session.id, observationId);
   assert.equal(createdBody.snapshot.status, "active");
+  assert.equal(
+    new URL(createdBody.session.audienceUrl).searchParams.get("traffic"),
+    createdBody.session.trafficApiUrl
+  );
 
   const snapshot = await app.inject({
     method: "GET",
@@ -74,6 +78,13 @@ test("Live Observation routes create, snapshot, stream, collect, and stop one se
     collected.headers["access-control-allow-origin"],
     "https://audience.example.com"
   );
+
+  const traffic = await app.inject({
+    method: "POST",
+    url: "/traffic"
+  });
+
+  assert.equal(traffic.statusCode, 204);
 
   const duplicate = await app.inject({
     method: "POST",
@@ -176,6 +187,63 @@ test("Live Observation stream emits one-second updates, heartbeats, and clears t
 
   closeListener?.();
   assert.deepEqual(clearedIntervals.sort((left, right) => left - right), [1_000, 15_000]);
+  assert.equal(rawReply.writableEnded, true);
+});
+
+test("Live Observation stream registers close before a delayed snapshot and creates no timers after disconnect", async () => {
+  let resolveSnapshot: (() => void) | undefined;
+  const snapshotGate = new Promise<void>((resolve) => {
+    resolveSnapshot = resolve;
+  });
+  let closeListener: (() => void) | undefined;
+  const scheduledDelays: number[] = [];
+  const chunks: string[] = [];
+  const rawReply = {
+    destroyed: false,
+    writableEnded: false,
+    end() {
+      this.writableEnded = true;
+    },
+    write(chunk: string) {
+      chunks.push(chunk);
+    },
+    writeHead() {}
+  };
+  const stream = streamLiveObservationSnapshots({
+    deploymentId,
+    observationId,
+    once: false,
+    reply: { hijack() {}, raw: rawReply } as never,
+    request: {
+      log: { warn() {} },
+      raw: {
+        on(event: string, callback: () => void) {
+          if (event === "close") closeListener = callback;
+        }
+      }
+    } as never,
+    scheduler: {
+      clearInterval() {},
+      setInterval(_callback, delayMs) {
+        scheduledDelays.push(delayMs);
+        return delayMs;
+      }
+    },
+    service: {
+      async getSnapshotForDeployment() {
+        await snapshotGate;
+        return createSnapshot();
+      }
+    } as never
+  });
+
+  assert.ok(closeListener, "close listener should be registered before snapshot resolves");
+  closeListener();
+  resolveSnapshot?.();
+  await stream;
+
+  assert.deepEqual(scheduledDelays, []);
+  assert.deepEqual(chunks, []);
   assert.equal(rawReply.writableEnded, true);
 });
 
@@ -308,5 +376,39 @@ function createDeploymentContext(
     },
     status: "SUCCESS",
     ...overrides
+  };
+}
+
+function createSnapshot() {
+  return {
+    observationId,
+    status: "active" as const,
+    live: {
+      acceptedEventCount: 0,
+      rollingRequestsPerSecond: 0,
+      projectedRequestsPerMinute: 0,
+      pressurePercent: 0,
+      pressureLevel: "normal" as const,
+      observedAt: "2026-07-10T09:00:00.000Z"
+    },
+    cloudWatch: {
+      state: "available" as const,
+      requestCountPerTarget: 0,
+      periodSeconds: 60,
+      observedAt: "2026-07-10T09:00:00.000Z",
+      delayedBySeconds: 0,
+      errorCode: null
+    },
+    capacity: {
+      state: "available" as const,
+      desiredCapacity: 1,
+      currentInstanceCount: 1,
+      inServiceInstanceCount: 1,
+      maxCapacity: 2,
+      instances: [],
+      latestActivity: null,
+      observedAt: "2026-07-10T09:00:00.000Z",
+      errorCode: null
+    }
   };
 }

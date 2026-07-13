@@ -7,7 +7,7 @@ export type JsonPrimitive = string | number | boolean | null;
 export type JsonValue =
   | JsonPrimitive
   | JsonValue[]
-  | { [key: string]: JsonValue };
+  | { readonly [key: string]: JsonValue };
 
 export type ApiErrorCode =
   | "bad_request"
@@ -16,6 +16,9 @@ export type ApiErrorCode =
   | "conflict"
   | "github_oauth_required"
   | "too_many_requests"
+  | "unprocessable_entity"
+  | "bad_gateway"
+  | "service_unavailable"
   | "internal_server_error"
   | "LIVE_OBSERVATION_CACHE_UNAVAILABLE"
   | "LIVE_OBSERVATION_DEPLOYMENT_NOT_ELIGIBLE"
@@ -99,6 +102,8 @@ export const RESOURCE_TYPES = [
   "CLOUDTRAIL",
   "XRAY_GROUP",
   "XRAY_SAMPLING_RULE",
+  "AWS_CALLER_IDENTITY",
+  "SSM_PARAMETER",
   "API_GATEWAY_REST_API",
   "API_GATEWAY_AUTHORIZER",
   "API_GATEWAY_WEBSOCKET_API",
@@ -119,10 +124,17 @@ export const RESOURCE_TYPES = [
   "EVENTBRIDGE_PERMISSION",
   "SCHEDULER_SCHEDULE",
   "STEP_FUNCTIONS_STATE_MACHINE",
+  "CODEBUILD_PROJECT",
+  "CODEDEPLOY_APP",
+  "CODEDEPLOY_DEPLOYMENT_GROUP",
+  "CODEPIPELINE",
+  "CODESTAR_CONNECTION",
   "ECR_REPOSITORY",
   "ECR_LIFECYCLE_POLICY",
   "ECS_CLUSTER",
   "ECS_SERVICE",
+  "APPLICATION_AUTO_SCALING_TARGET",
+  "APPLICATION_AUTO_SCALING_POLICY",
   "ECS_TASK_DEFINITION",
   "ECS_CAPACITY_PROVIDER",
   "EKS_CLUSTER",
@@ -454,6 +466,14 @@ export type TerraformArtifact = ProjectAsset & {
   uploadStatus: "uploaded";
 };
 
+export type TerraformArtifactBundle = {
+  schemaVersion: 1;
+  files: Array<{
+    fileName: string;
+    terraformCode: string;
+  }>;
+};
+
 export type SourceRepositoryProvider = "internal" | "github";
 
 export type SourceRepositoryStatus = "active" | "inactive";
@@ -503,9 +523,12 @@ export type GitHubRepositoryCandidate = {
 };
 
 export type RepositoryAnalysisTemplateId =
-  | "template-static-website"
-  | "template-api-db"
-  | "template-3tier";
+  | "static-web-hosting"
+  | "minimal-serverless-api"
+  | "full-serverless-web-app"
+  | "three-tier-web-app"
+  | "ecs-fargate-container-app"
+  | "eks-container-app";
 
 export type RepositoryAnalysisEvidenceFile = {
   path: string;
@@ -524,6 +547,7 @@ export type SourceRepositoryAnalysisResult = {
   detectedSignals: string[];
   recommendedTemplateId: RepositoryAnalysisTemplateId | null;
   recommendationReason: string;
+  aiHandoff?: RepositoryAnalysisAiHandoff | undefined;
 };
 
 export type CreateGitHubArchitectureDraftRequest = AnalyzeSourceRepositoryRequest & {
@@ -594,10 +618,70 @@ export type RepositoryApplicationUnit = {
   readonly evidencePaths: readonly string[];
 };
 
+export const REPOSITORY_DEPLOYMENT_TYPES = [
+  "ec2_vm",
+  "container",
+  "serverless"
+] as const;
+
+export type RepositoryDeploymentType = (typeof REPOSITORY_DEPLOYMENT_TYPES)[number];
+
+export type RepositoryAnalysisQuestionOption = {
+  readonly value: string;
+  readonly label: string;
+};
+
+export type RepositoryAnalysisQuestion = {
+  readonly id: string;
+  readonly prompt: string;
+  readonly answerType: "single_select" | "boolean" | "free_text";
+  readonly options?: readonly RepositoryAnalysisQuestionOption[] | undefined;
+  readonly required: boolean;
+  readonly reason: string;
+};
+
+export type RepositoryAnalysisAnswer = {
+  readonly questionId: string;
+  readonly value: string | boolean;
+};
+
+export type RepositoryTemplateRecommendationCandidate = {
+  readonly templateId: TemplateId;
+  readonly displayTitle: string;
+  readonly confidence: number;
+  readonly reasons: readonly string[];
+  readonly tradeoffs: readonly string[];
+  readonly questions?: readonly RepositoryAnalysisQuestion[] | undefined;
+};
+
+export type RepositoryTemplateRecommendationResult = {
+  readonly deploymentType: RepositoryDeploymentType;
+  readonly usesCiCd: boolean;
+  readonly candidates: readonly RepositoryTemplateRecommendationCandidate[];
+  readonly rankingSource?: "ai" | "deterministic" | undefined;
+  readonly fallbackReason?: "not_configured" | "provider_error" | "invalid_response" | undefined;
+};
+
+export type RecommendRepositoryTemplateRequest = {
+  readonly deploymentType: RepositoryDeploymentType;
+  readonly usesCiCd: boolean;
+  readonly answers: readonly RepositoryAnalysisAnswer[];
+};
+
+export type RecommendRepositoryTemplateResponse = {
+  readonly sourceRepositoryId: string;
+  readonly repositoryRevision: string;
+  readonly recommendation: RepositoryTemplateRecommendationResult;
+};
+
 type RepositoryAnalysisAiHandoffBase = {
   readonly applicationUnits: readonly RepositoryApplicationUnit[];
   readonly evidence: readonly RepositoryAnalysisEvidence[];
   readonly missingEvidence: readonly RepositoryEvidenceKind[];
+  readonly deploymentTypeDefault?: RepositoryDeploymentType | null | undefined;
+  readonly usesCiCdDefault?: boolean | null | undefined;
+  readonly questions?: readonly RepositoryAnalysisQuestion[] | undefined;
+  readonly recommendation?: RepositoryTemplateRecommendationResult | undefined;
 };
 
 export type RepositoryAnalysisAiHandoff =
@@ -712,7 +796,7 @@ export type CreateGitCicdHandoffRequest = {
   architectureId: string;
   terraformArtifactId: string;
   handoffKind?: GitCicdHandoffKind | undefined;
-  sourceDeploymentId?: string | null | undefined;
+  sourceDeploymentId: string;
   deploymentMode?: GitCicdDeploymentMode | undefined;
   sourceRepositoryId: string;
   targetBranch?: string | undefined;
@@ -727,8 +811,6 @@ export type CreateGitCicdHandoffRequest = {
   releaseBucket?: string | undefined;
   staticSiteUrl?: string | null | undefined;
   apiBaseUrl?: string | null | undefined;
-  approveAwsRoleDiff?: boolean | undefined;
-  planSummary?: DeploymentPlanSummary | undefined;
   userAcceptedChangeId: string;
 };
 
@@ -1761,6 +1843,42 @@ export type ArchitecturePatchPreviewChange = {
   summary: string;
 };
 
+export type ArchitecturePatchPlanAction =
+  | "modify_resource"
+  | "remove_resource"
+  | "add_resource";
+
+export type ArchitecturePatchPlanOperationType =
+  | "set_value"
+  | "increase_one_step"
+  | "decrease_one_step"
+  | "enable"
+  | "disable"
+  | "rename";
+
+export type ArchitecturePatchPlanStatus = "planned" | "needs_clarification" | "unsupported";
+
+export type ArchitecturePatchPlanOperation = {
+  op: ArchitecturePatchPlanOperationType;
+  path: string;
+  value: string | number | boolean | null;
+};
+
+export type ArchitecturePatchPlan = {
+  status: ArchitecturePatchPlanStatus;
+  action: ArchitecturePatchPlanAction | null;
+  target: {
+    resourceType: ResourceType | null;
+    resourceId: string | null;
+    label: string | null;
+  };
+  candidateResourceIds: string[];
+  operations: ArchitecturePatchPlanOperation[];
+  preserve: string[];
+  clarificationQuestion: string | null;
+  confidence: number;
+};
+
 export type ArchitecturePatchClarificationCandidate = {
   resourceId: string;
   resourceType: ResourceType;
@@ -1773,6 +1891,7 @@ export type ArchitecturePatchClarification = {
   question: string;
   candidates: ArchitecturePatchClarificationCandidate[];
   suggestions?: string[] | undefined;
+  patchPlan?: ArchitecturePatchPlan | undefined;
   providerMetadata: AiProviderMetadata;
 };
 
@@ -1785,6 +1904,7 @@ export type ArchitecturePatchPreview = {
   requiresUserAcceptance: true;
   userAcceptedChange: UserAcceptedChange | null;
   llmExplanation?: LlmExplanation | undefined;
+  patchPlan?: ArchitecturePatchPlan | undefined;
   providerMetadata: AiProviderMetadata;
 };
 
@@ -1809,6 +1929,17 @@ export type CreateArchitectureDraftRequest = {
   } | undefined;
 };
 
+export const ARCHITECTURE_DRAFT_PROGRESS_STAGES = [
+  "preparing_requirements",
+  "normalizing_requirements",
+  "querying_amazon_q",
+  "validating_architecture",
+  "building_diagram"
+] as const;
+
+export type ArchitectureDraftProgressStage =
+  (typeof ARCHITECTURE_DRAFT_PROGRESS_STAGES)[number];
+
 export type AiArchitectureDraftResult = {
   architectureJson: ArchitectureJson;
   diagramJson?: DiagramJson | undefined;
@@ -1827,6 +1958,22 @@ export type ArchitectureDraftClarification = {
 export type CreateArchitectureDraftResponse =
   | AiArchitectureDraftResult
   | ArchitectureDraftClarification;
+
+export type ArchitectureDraftStreamEvent =
+  | {
+      type: "progress";
+      stage: ArchitectureDraftProgressStage;
+    }
+  | {
+      type: "result";
+      result: CreateArchitectureDraftResponse;
+    }
+  | {
+      type: "error";
+      error: ApiErrorResponse & {
+        statusCode: number;
+      };
+    };
 
 export type MoneyEstimate = {
   amount: number;
@@ -1911,6 +2058,8 @@ export type CheckFinding = {
   severity: RiskLevel;
   resourceId?: string | undefined;
   sourceLocation?: TerraformSourceLocation | undefined;
+  riskFamily?: string | undefined;
+  trivyRuleIds?: string[] | undefined;
   aiSafetyExplanation?: AiSafetyExplanation | undefined;
   title: string;
   description: string;
@@ -1999,7 +2148,18 @@ export type AiPreDeploymentAnalysisResult = {
   findings: CheckFinding[];
   checklist: ChecklistItem[];
   suggestions: ArchitectureSuggestion[];
+  deepScan?: {
+    status: "not_required" | "running" | "complete" | "failed";
+    scanId?: string | undefined;
+    message?: string | undefined;
+  } | undefined;
   llmExplanation?: LlmExplanation | undefined;
+};
+
+export type AiPreDeploymentDeepScanResponse = {
+  status: "running" | "complete" | "failed";
+  analysis?: AiPreDeploymentAnalysisResult | undefined;
+  message?: string | undefined;
 };
 
 export type AiPreDeploymentCheckRequest = {
@@ -2175,6 +2335,13 @@ export type AwsRegionCode =
 
 export type DiagramNodeMetadata = {
   parentAreaNodeId?: string | undefined;
+  liveObservationRole?:
+    | "traffic-source"
+    | "traffic-hop"
+    | "capacity-controller"
+    | "capacity-unit"
+    | "support"
+    | undefined;
   moduleSource?:
     | {
         moduleId: string;

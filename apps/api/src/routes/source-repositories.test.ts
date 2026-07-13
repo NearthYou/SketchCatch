@@ -148,6 +148,77 @@ test("source repository routes return Template Selection Failure as a successful
   assert.equal(response.json().aiHandoff.templateId, null);
 });
 
+test("source repository routes recommend supported templates from answers", async (t) => {
+  const repository = new FakeSourceRepositoryRepository([
+    createSourceRepositoryRecord({
+      id: sourceRepositoryId,
+      analysisRevision: "analysis-revision",
+      analyzedAt: fixedNow,
+      analysisResult: {
+        status: "template_selected",
+        templateId: "static-web-hosting",
+        applicationUnits: [
+          {
+            id: ".",
+            rootPath: ".",
+            kind: "frontend",
+            frameworks: ["React"],
+            evidencePaths: ["package.json"]
+          }
+        ],
+        evidence: [
+          {
+            kind: "package_json",
+            path: "package.json",
+            applicationUnitId: ".",
+            signals: ["React"]
+          }
+        ],
+        missingEvidence: ["dockerfile"],
+        deploymentTypeDefault: "serverless",
+        usesCiCdDefault: null,
+        questions: [],
+        selectionReasons: ["frontend evidence"]
+      }
+    })
+  ]);
+  const app = await buildSourceRepositoryRouteApp({ repository });
+  t.after(() => app.close());
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/projects/${projectId}/source-repositories/${sourceRepositoryId}/template-recommendation`,
+    headers: await authHeaders(),
+    payload: {
+      deploymentType: "container",
+      usesCiCd: true,
+      answers: [{ questionId: "operations-preference", value: "container" }]
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.json().sourceRepositoryId, sourceRepositoryId);
+  assert.equal(response.json().recommendation.deploymentType, "container");
+  assert.equal(response.json().recommendation.candidates[0].templateId, "ecs-fargate-container-app");
+  assert.ok(response.json().recommendation.candidates.length <= 3);
+});
+
+test("source repository routes report a migration hint for missing source repository columns", async (t) => {
+  const repository = new SourceRepositorySchemaMismatchRepository();
+  const app = await buildSourceRepositoryRouteApp({ repository });
+  t.after(() => app.close());
+
+  const response = await app.inject({
+    method: "GET",
+    url: `/api/projects/${projectId}/source-repositories`,
+    headers: await authHeaders()
+  });
+
+  assert.equal(response.statusCode, 503);
+  assert.equal(response.json().error, "service_unavailable");
+  assert.equal(response.json().message, "DATABASE_MIGRATION_REQUIRED");
+});
+
 test("source repository routes reject inactive repositories before reading GitHub", async (t) => {
   // Given
   const repository = new FakeSourceRepositoryRepository([
@@ -685,6 +756,17 @@ class FakeSourceRepositoryRepository implements SourceRepositoryRepository {
     row.analyzedAt = input.analyzedAt;
     row.updatedAt = input.analyzedAt;
     return row;
+  }
+}
+
+class SourceRepositorySchemaMismatchRepository extends FakeSourceRepositoryRepository {
+  async listProjectSourceRepositories(): Promise<SourceRepositoryRecord[]> {
+    throw Object.assign(
+      new Error(
+        'Failed query: select "analysis_result" from "source_repositories" where "source_repositories"."project_id" = $1'
+      ),
+      { cause: { code: "42703" } }
+    );
   }
 }
 

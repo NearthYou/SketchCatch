@@ -61,6 +61,25 @@ test("a created deployment without a plan advances to Plan", () => {
   assert.equal(flow.steps[2]?.state, "active");
 });
 
+test("a warning Preflight still advances a created deployment to Plan", () => {
+  const flow = getDirectDeploymentFlow(
+    createInput({
+      actions: { ...idleActions, canRunApplyPlan: true, shouldShowApplyPlanButton: true },
+      deployment: {
+        approvedAt: null,
+        currentPlanArtifactId: null,
+        currentPlanOperation: null,
+        status: "PENDING"
+      },
+      preflightState: "warning"
+    })
+  );
+
+  assert.equal(flow.activeStepId, "plan");
+  assert.equal(flow.steps[1]?.state, "warning");
+  assert.equal(flow.steps[2]?.state, "active");
+});
+
 test("an unapproved apply plan advances to approval", () => {
   const flow = getDirectDeploymentFlow(
     createInput({

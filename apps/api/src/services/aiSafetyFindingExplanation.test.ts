@@ -208,6 +208,43 @@ test("createFallbackSafetyFindingExplanation explains RDS encryption in Korean",
   assert.doesNotMatch(explanation.whyDangerous, /public database endpoint/i);
 });
 
+test("createFallbackSafetyFindingExplanation keeps S3 versioning separate from public access", () => {
+  const explanation = createFallbackSafetyFindingExplanation(
+    createFinding({
+      id: "trivy:s3-versioning:main.tf:aws_s3_bucket.assets:1",
+      category: "availability",
+      riskFamily: "S3_VERSIONING",
+      trivyRuleIds: ["AWS-0090"],
+      resourceId: "aws_s3_bucket.assets",
+      title: "S3 버킷 버전 관리를 활성화해야 합니다.",
+      description: "객체 복구를 위해 버전 관리가 필요합니다.",
+      recommendation: "aws_s3_bucket_versioning을 활성화하세요."
+    })
+  );
+
+  assert.match(explanation.riskSummary, /버전 관리/);
+  assert.match(explanation.recommendedFix, /versioning/i);
+  assert.doesNotMatch(explanation.riskSummary, /공개|public/i);
+});
+
+test("createFallbackSafetyFindingExplanation keeps S3 KMS encryption separate from public access", () => {
+  const explanation = createFallbackSafetyFindingExplanation(
+    createFinding({
+      id: "trivy:s3-kms-encryption:main.tf:aws_s3_bucket.assets:1",
+      riskFamily: "S3_KMS_ENCRYPTION",
+      trivyRuleIds: ["AWS-0132"],
+      resourceId: "aws_s3_bucket.assets",
+      title: "S3 버킷 암호화에 고객 관리형 KMS 키를 사용해야 합니다.",
+      description: "고객 관리형 KMS 키로 암호화해야 합니다.",
+      recommendation: "SSE-KMS와 kms_master_key_id를 설정하세요."
+    })
+  );
+
+  assert.match(explanation.riskSummary, /KMS|암호화/);
+  assert.match(explanation.recommendedFix, /kms/i);
+  assert.doesNotMatch(explanation.riskSummary, /공개|public/i);
+});
+
 test("createFallbackSafetyFindingExplanation masks secret-like input in metadata estimates", () => {
   const explanation = createFallbackSafetyFindingExplanation(
     createFinding({

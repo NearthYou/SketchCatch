@@ -5,6 +5,7 @@ resource "aws_lb" "ecs" {
   security_groups            = [aws_security_group.ecs_alb.id]
   subnets                    = var.public_subnet_ids
   enable_deletion_protection = var.enable_alb_deletion_protection
+  idle_timeout               = 120
   drop_invalid_header_fields = true
 
   tags = {

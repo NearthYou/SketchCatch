@@ -318,6 +318,80 @@ test("renders Autoscaling Policy nested target tracking configuration", () => {
   );
 });
 
+test("renders ECS Fargate Live Observation outputs and Application Auto Scaling blocks", () => {
+  const graph: InfrastructureGraph = {
+    nodes: [
+      createLiveObservationNode("aws_s3_bucket_website_configuration", "site", {}),
+      createLiveObservationNode("aws_lb", "demo", {}),
+      createLiveObservationNode("aws_lb_target_group", "api", {}),
+      createLiveObservationNode("aws_ecs_cluster", "demo", { name: "demo-cluster" }),
+      createLiveObservationNode("aws_ecs_service", "api", {
+        cluster: "aws_ecs_cluster.demo.id",
+        name: "demo-service"
+      }),
+      createLiveObservationNode("aws_appautoscaling_target", "api", {
+        maxCapacity: 2,
+        minCapacity: 1,
+        resourceId: "service/${aws_ecs_cluster.demo.name}/${aws_ecs_service.api.name}",
+        scalableDimension: "ecs:service:DesiredCount",
+        serviceNamespace: "ecs"
+      }),
+      createLiveObservationNode("aws_appautoscaling_policy", "api_requests", {
+        policyType: "TargetTrackingScaling",
+        resourceId: "aws_appautoscaling_target.api.resource_id",
+        scalableDimension: "aws_appautoscaling_target.api.scalable_dimension",
+        serviceNamespace: "aws_appautoscaling_target.api.service_namespace",
+        targetTrackingScalingPolicyConfiguration: {
+          targetValue: 60,
+          predefinedMetricSpecification: [{
+            predefinedMetricType: "ALBRequestCountPerTarget",
+            resourceLabel: "${aws_lb.demo.arn_suffix}/${aws_lb_target_group.api.arn_suffix}"
+          }]
+        }
+      })
+    ],
+    edges: []
+  };
+
+  const terraform = renderTerraformFromInfrastructureGraph(graph);
+
+  assert.match(terraform, /resource "aws_appautoscaling_policy" "api_requests"/);
+  assert.match(terraform, /target_tracking_scaling_policy_configuration \{/);
+  assert.match(terraform, /predefined_metric_specification \{/);
+  assert.match(terraform, /output "ecs_cluster_name" \{[\s\S]*aws_ecs_cluster\.demo\.name/);
+  assert.match(terraform, /output "ecs_service_name" \{[\s\S]*aws_ecs_service\.api\.name/);
+  assert.match(terraform, /output "max_capacity" \{[\s\S]*value = 2/);
+  assert.match(terraform, /output "scale_out_threshold" \{[\s\S]*value = 60/);
+  assert.doesNotMatch(terraform, /output "asg_name"/);
+});
+
+test("does not emit an ECS request threshold from a CPU target tracking policy", () => {
+  const graph: InfrastructureGraph = {
+    nodes: [
+      createLiveObservationNode("aws_s3_bucket_website_configuration", "site", {}),
+      createLiveObservationNode("aws_lb", "demo", {}),
+      createLiveObservationNode("aws_lb_target_group", "api", {}),
+      createLiveObservationNode("aws_ecs_cluster", "demo", {}),
+      createLiveObservationNode("aws_ecs_service", "api", {}),
+      createLiveObservationNode("aws_appautoscaling_target", "api", { maxCapacity: 2 }),
+      createLiveObservationNode("aws_appautoscaling_policy", "api_cpu", {
+        targetTrackingScalingPolicyConfiguration: {
+          targetValue: 60,
+          predefinedMetricSpecification: [{
+            predefinedMetricType: "ECSServiceAverageCPUUtilization"
+          }]
+        }
+      })
+    ],
+    edges: []
+  };
+
+  const terraform = renderTerraformFromInfrastructureGraph(graph);
+
+  assert.match(terraform, /output "ecs_service_name"/);
+  assert.doesNotMatch(terraform, /output "scale_out_threshold"/);
+});
+
 test("renders CloudWatch Alarm dimensions and Autoscaling Policy action reference", () => {
   const graph: InfrastructureGraph = {
     nodes: [
@@ -441,6 +515,110 @@ test("rejects unsafe Terraform identifiers while rendering InfrastructureGraph",
     () => renderTerraformFromInfrastructureGraph(graph),
     TerraformDiagramValidationError
   );
+});
+
+test("renders ECS Application Auto Scaling target tracking resources", () => {
+  const graph: InfrastructureGraph = {
+    nodes: [
+      {
+        id: "ecs-scaling-target",
+        label: "ecs_scaling_target",
+        iac: {
+          provider: "aws",
+          terraformBlockType: "resource",
+          resourceType: "aws_appautoscaling_target",
+          resourceName: "ecs_scaling_target",
+          fileName: "compute"
+        },
+        config: {
+          minCapacity: 2,
+          maxCapacity: 10,
+          resourceId: "service/${aws_ecs_cluster.app.name}/${aws_ecs_service.app.name}",
+          scalableDimension: "ecs:service:DesiredCount",
+          serviceNamespace: "ecs"
+        }
+      },
+      {
+        id: "ecs-scaling-policy",
+        label: "ecs_scaling_policy",
+        iac: {
+          provider: "aws",
+          terraformBlockType: "resource",
+          resourceType: "aws_appautoscaling_policy",
+          resourceName: "ecs_scaling_policy",
+          fileName: "compute"
+        },
+        config: {
+          name: "ecs-cpu-target",
+          policyType: "TargetTrackingScaling",
+          resourceId: "aws_appautoscaling_target.ecs_scaling_target.resource_id",
+          scalableDimension: "aws_appautoscaling_target.ecs_scaling_target.scalable_dimension",
+          serviceNamespace: "aws_appautoscaling_target.ecs_scaling_target.service_namespace",
+          targetTrackingScalingPolicyConfiguration: {
+            targetValue: 60,
+            predefinedMetricSpecification: [
+              { predefinedMetricType: "ECSServiceAverageCPUUtilization" }
+            ]
+          }
+        }
+      }
+    ],
+    edges: []
+  };
+
+  const terraform = renderTerraformFromInfrastructureGraph(graph);
+
+  assert.match(terraform, /resource "aws_appautoscaling_target" "ecs_scaling_target"/);
+  assert.match(
+    terraform,
+    /resource_id = "service\/\$\{aws_ecs_cluster\.app\.name\}\/\$\{aws_ecs_service\.app\.name\}"/
+  );
+  assert.match(terraform, /resource "aws_appautoscaling_policy" "ecs_scaling_policy"/);
+  assert.match(terraform, /target_tracking_scaling_policy_configuration \{/);
+  assert.match(terraform, /predefined_metric_type = "ECSServiceAverageCPUUtilization"/);
+});
+
+test("renders deployable ECS service network, load balancer, and rollback blocks", () => {
+  const graph: InfrastructureGraph = {
+    nodes: [
+      {
+        id: "ecs-service",
+        label: "app",
+        iac: {
+          provider: "aws",
+          terraformBlockType: "resource",
+          resourceType: "aws_ecs_service",
+          resourceName: "app"
+        },
+        config: {
+          name: "app",
+          cluster: "aws_ecs_cluster.app.id",
+          taskDefinition: "aws_ecs_task_definition.app.arn",
+          desiredCount: 2,
+          launchType: "FARGATE",
+          deploymentCircuitBreaker: { enable: true, rollback: true },
+          networkConfiguration: {
+            assignPublicIp: false,
+            subnets: ["aws_subnet.private_a.id", "aws_subnet.private_b.id"],
+            securityGroups: ["aws_security_group.app.id"]
+          },
+          loadBalancer: {
+            targetGroupArn: "aws_lb_target_group.app.arn",
+            containerName: "app",
+            containerPort: 8080
+          }
+        }
+      }
+    ],
+    edges: []
+  };
+  const terraform = renderTerraformFromInfrastructureGraph(graph);
+
+  assert.match(terraform, /deployment_circuit_breaker \{/);
+  assert.match(terraform, /network_configuration \{/);
+  assert.match(terraform, /assign_public_ip = false/);
+  assert.match(terraform, /load_balancer \{/);
+  assert.match(terraform, /target_group_arn = aws_lb_target_group\.app\.arn/);
 });
 
 test("diagram-to-terraform renderer does not import diagram projection concerns", () => {

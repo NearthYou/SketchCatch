@@ -1,8 +1,12 @@
 import { requireGitHubAppConfig } from "../config/env.js";
 import {
+  createTerraformArtifactCanonicalContent,
   defaultTerraformArtifactMaxBytes,
-  downloadTerraformArtifactFromS3
+  downloadTerraformArtifactFromS3,
+  parseTerraformArtifactBundle
 } from "../deployments/terraform-workspace.js";
+import { createHash } from "node:crypto";
+import { posix } from "node:path";
 import {
   createGitHubAppClient,
   type GitHubAppClient
@@ -25,12 +29,11 @@ export function createGitHubAppGitProvider(
   return {
     async createPullRequest(input) {
       cachedClient = cachedClient ?? options.githubAppClient ?? createGitHubAppClientFromEnv();
-      const files = await Promise.all(
-        input.files.map(async (file) => ({
-          path: file.path,
-          content: await downloadTerraformArtifactText(file, options.downloadTerraformArtifact)
-        }))
-      );
+      const files = (
+        await Promise.all(
+          input.files.map((file) => expandPullRequestFile(file, options.downloadTerraformArtifact))
+        )
+      ).flat();
       const result = await cachedClient.createPullRequest({
         installationId: input.repository.installationId,
         owner: input.repository.owner,
@@ -52,6 +55,59 @@ export function createGitHubAppGitProvider(
       };
     }
   };
+}
+
+// Terraform bundle은 PR 안에서 사용자가 편집한 원래 파일들로 다시 펼칩니다.
+async function expandPullRequestFile(
+  file: GitProviderCreatePullRequestInput["files"][number],
+  downloadTerraformArtifact:
+    | ((objectKey: string) => Promise<Buffer | Uint8Array | string>)
+    | undefined
+): Promise<Array<{ path: string; content: string }>> {
+  const content = await downloadTerraformArtifactText(file, downloadTerraformArtifact);
+  assertApprovedTerraformArtifact(file, content);
+  if (file.contentType !== "application/vnd.sketchcatch.terraform-files+json") {
+    return [{ path: file.path, content }];
+  }
+
+  const directory = posix.dirname(file.path);
+  return parseTerraformArtifactBundle(content).files.map((bundleFile) => ({
+    path: posix.join(directory, bundleFile.fileName),
+    content: bundleFile.terraformCode
+  }));
+}
+
+// S3에서 다시 읽은 Terraform이 사용자가 승인한 Plan의 파일과 같은지 확인합니다.
+function assertApprovedTerraformArtifact(
+  file: GitProviderCreatePullRequestInput["files"][number],
+  content: string
+): void {
+  if (file.expectedSha256 === undefined) {
+    return;
+  }
+
+  const canonicalContent = createTerraformArtifactCanonicalContent(
+    {
+      objectKey: file.artifactObjectKey ?? file.path,
+      fileName: posix.basename(file.path),
+      contentType: file.contentType
+    },
+    content
+  );
+  const currentSha256 = createHash("sha256").update(canonicalContent).digest("hex");
+
+  if (currentSha256 !== file.expectedSha256) {
+    throw new GitProviderArtifactChangedError();
+  }
+}
+
+class GitProviderArtifactChangedError extends Error {
+  readonly statusCode = 409;
+
+  constructor() {
+    super("Terraform artifact changed after approval");
+    this.name = "GitProviderArtifactChangedError";
+  }
 }
 
 function createGitHubAppClientFromEnv(): GitHubAppClient {

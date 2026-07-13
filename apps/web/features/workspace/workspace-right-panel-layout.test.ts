@@ -519,6 +519,7 @@ test("simulation opens beside Deploy and remains available in the collapsed shor
   assert.match(collapsedPanelSource, /title="시뮬레이션"/);
   assert.match(collapsedPanelSource, /onClick=\{openLiveObservation\}/);
   assert.match(componentSource, /<LiveObservationModal/);
+  assert.match(componentSource, /diagramJson=\{context\.diagram\}/);
   assert.match(componentSource, /projectId=\{projectId\}/);
 });
 
@@ -642,11 +643,18 @@ test("resource card menu omits data source switch and maximize actions", () => {
 });
 
 test("workspace AI has a dedicated error tab for Terraform issue resolution", () => {
-  assert.match(aiChatDockSource, /type WorkspaceAiChatScope = "draft" \| "errors" \| "preview" \| "simulation"/);
+  assert.match(aiChatDockSource, /type WorkspaceAiChatScope = "draft" \| "errors" \| "preview"/);
   assert.match(aiChatDockSource, /setActiveChatTab\("errors"\)/);
   assert.match(aiChatDockSource, /activeChatTab === "errors" && terraformIssueResolution !== null/);
   assert.match(aiChatDockSource, /AI 오류/);
   assert.match(stylesSource, /\.aiChatDock\[data-chat-tab="errors"\] \.aiChatComposer/);
+});
+
+test("workspace AI chat no longer owns design simulation controls or results", () => {
+  assert.doesNotMatch(aiChatDockSource, /runDesignSimulation/);
+  assert.doesNotMatch(aiChatDockSource, /시뮬레이션 실행/);
+  assert.doesNotMatch(aiChatDockSource, /WorkspaceAiDesignSimulationResult/);
+  assert.doesNotMatch(aiChatDockSource, /activeChatTab === "simulation"/);
 });
 
 test("terraform issue fix cards omit procedural apply steps", () => {
@@ -1280,15 +1288,35 @@ test("pre-deployment check result is preserved above the deployment tab", () => 
   );
 });
 
-test("pre-deployment check renders per-finding explanations without the blue summary block", () => {
+test("pre-deployment check loads per-finding explanations only when a card is expanded", () => {
   assert.doesNotMatch(deploymentPanelSource, /DeploymentPreDeploymentAiExplanation/);
   assert.doesNotMatch(deploymentPanelSource, /deploymentPreflightAiExplanation/);
   assert.doesNotMatch(stylesSource, /\.deploymentPreflightAiExplanation\s*\{/);
   assert.match(deploymentPanelSource, /DeploymentFindingAiExplanation/);
   assert.match(deploymentPanelSource, /finding\.aiSafetyExplanation/);
   assert.match(deploymentPanelSource, /className=\{styles\.deploymentFindingAiExplanation\}/);
-  assert.doesNotMatch(deploymentPanelSource, /deploymentFindingAiButton/);
+  assert.match(deploymentPanelSource, /finding\.trivyRuleIds/);
+  assert.match(deploymentPanelSource, /Trivy rules · \{finding\.trivyRuleIds\.join\(", "\)\}/);
+  assert.match(deploymentPanelSource, /deploymentFindingAiButton/);
+  assert.match(deploymentPanelSource, /runAiSafetyFindingExplanation/);
+  assert.match(deploymentPanelSource, /설명 접기/);
+  assert.match(deploymentPanelSource, /설명 보기/);
   assert.doesNotMatch(aiChatDockSource, /preDeploymentAnalysis/);
+});
+
+test("pre-deployment check shows background Trivy state without blocking Plan creation", () => {
+  assert.match(deploymentPanelSource, /getAiPreDeploymentDeepScan/);
+  assert.match(deploymentPanelSource, /핵심 안전검사 완료 · Trivy 심층검사 진행 중/);
+  assert.match(deploymentPanelSource, /핵심 안전검사 및 Trivy 심층검사 완료 · 결과 병합됨/);
+  assert.match(deploymentPanelSource, /disabled=\{!canRunPlan\}/);
+  assert.match(deploymentPanelSource, /return true;/);
+  assert.doesNotMatch(deploymentPanelSource, /canRunPlanForCurrentPreflight/);
+});
+
+test("pre-deployment check only downgrades checklist failures backed exclusively by high findings", () => {
+  assert.match(deploymentPanelSource, /const highFindingIds = new Set/);
+  assert.match(deploymentPanelSource, /const hasIndependentChecklistFailure = analysis\.checklist\.some/);
+  assert.match(deploymentPanelSource, /return "blocked"/);
 });
 
 test("pre-deployment finding fix buttons open the existing terraform source location handler", () => {

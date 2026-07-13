@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { DiagramJson } from "../../../../packages/types/src";
+import { TEMPLATE_IDS } from "../../../../packages/types/src";
 import { isAreaNode } from "../diagram-editor/area-nodes";
 import {
   applyTemplateToDiagramWithBackup,
@@ -8,6 +9,7 @@ import {
   filterBoardTemplates,
   listBoardTemplateTags,
   listBoardTemplates,
+  listLegacyBoardTemplates,
   readTemplateOverwriteBackups,
   TEMPLATE_OVERWRITE_BACKUP_STORAGE_KEY
 } from "./template-library";
@@ -29,6 +31,18 @@ test("buildBoardTemplateDiagram materializes Repository Analysis TemplateDefinit
   );
 });
 
+test("buildBoardTemplateDiagram maps public Repository Analysis template IDs to board templates", () => {
+  const diagram = buildBoardTemplateDiagram("template-api-db", {
+    projectSlug: "analysis-qa",
+    shortId: "repository"
+  });
+
+  assert.ok(diagram);
+  assert.equal(diagram.nodes.some((node) => node.type === "aws_db_instance"), true);
+  assert.equal(diagram.nodes.some((node) => node.type === "aws_lb"), true);
+  assert.equal(diagram.nodes.some((node) => node.type === "aws_autoscaling_group"), true);
+});
+
 test("filterBoardTemplates searches title, description, and tags", () => {
   const templates = listBoardTemplates();
 
@@ -36,7 +50,7 @@ test("filterBoardTemplates searches title, description, and tags", () => {
     filterBoardTemplates(templates, { query: "CloudFront", sort: "recommended", tag: "all" }).map(
       (template) => template.id
     ),
-    ["template-static-website"]
+    ["static-web-hosting"]
   );
 });
 
@@ -48,7 +62,7 @@ test("filterBoardTemplates combines tag filtering and resource sorting", () => {
     tag: "RDS"
   });
 
-  assert.deepEqual(filtered.map((template) => template.id), ["template-3tier", "template-api-db"]);
+  assert.deepEqual(filtered.map((template) => template.id), ["three-tier-web-app"]);
 });
 
 test("listBoardTemplateTags returns unique sorted tags", () => {
@@ -58,14 +72,14 @@ test("listBoardTemplateTags returns unique sorted tags", () => {
   assert.deepEqual(tags, [...tags].sort((left, right) => left.localeCompare(right, "ko-KR")));
 });
 
-test("listBoardTemplates returns templates with DiagramJson so page and board modal can share them", () => {
+test("listBoardTemplates exposes exactly the six deployable TemplateDefinitions", () => {
   const templates = listBoardTemplates();
 
-  assert.ok(templates.length >= 2);
+  assert.deepEqual(templates.map((template) => template.id), [...TEMPLATE_IDS]);
   assert.ok(templates.every((template) => template.diagramJson.nodes.length > 0));
 });
 
-test("board templates use 48px geometry for ordinary icons while preserving Area sizes", () => {
+test("board templates use 48px geometry and compact Area bounds around direct children", () => {
   const templates = listBoardTemplates();
   const ordinaryNodes = templates.flatMap((template) =>
     template.diagramJson.nodes.filter((node) => node.kind === "resource" && !isAreaNode(node))
@@ -76,16 +90,26 @@ test("board templates use 48px geometry for ordinary icons while preserving Area
     assert.deepEqual(node.size, { width: 48, height: 48 }, node.id);
   }
 
-  const apiTemplate = templates.find((template) => template.id === "template-api-db");
-  const apiVPC = apiTemplate?.diagramJson.nodes.find((node) => node.id === "template-api-vpc");
-  const apiSubnet = apiTemplate?.diagramJson.nodes.find((node) => node.id === "template-api-subnet");
+  const apiTemplate = templates.find((template) => template.id === "three-tier-web-app");
+  const apiVPC = apiTemplate?.diagramJson.nodes.find(
+    (node) => node.id === "template-three-tier-web-app-vpc"
+  );
+  const apiSubnet = apiTemplate?.diagramJson.nodes.find(
+    (node) => node.id === "template-three-tier-web-app-public-subnet-a"
+  );
 
-  assert.deepEqual(apiVPC?.size, { width: 680, height: 420 });
-  assert.deepEqual(apiSubnet?.size, { width: 520, height: 240 });
+  assert.ok(apiVPC);
+  assert.ok(apiSubnet);
+  assert.ok(apiVPC.size.width > 0 && apiVPC.size.height > 0);
+  assert.ok(apiSubnet.size.width > 0 && apiSubnet.size.height > 0);
+  assert.ok(apiSubnet.position.x >= apiVPC.position.x);
+  assert.ok(apiSubnet.position.y >= apiVPC.position.y);
+  assert.ok(apiSubnet.position.x + apiSubnet.size.width <= apiVPC.position.x + apiVPC.size.width);
+  assert.ok(apiSubnet.position.y + apiSubnet.size.height <= apiVPC.position.y + apiVPC.size.height);
 });
 
 test("Live Observation template carries the same ASG pressure resources as the demo deployment", () => {
-  const template = listBoardTemplates().find(
+  const template = listLegacyBoardTemplates().find(
     (candidate) => candidate.id === "template-live-observation"
   );
 
@@ -108,6 +132,10 @@ test("Live Observation template carries the same ASG pressure resources as the d
     "aws_s3_bucket_website_configuration",
     "aws_s3_object",
     "aws_ami",
+    "aws_cloudwatch_log_group",
+    "aws_iam_role",
+    "aws_iam_role_policy_attachment",
+    "aws_iam_instance_profile",
     "aws_launch_template",
     "aws_lb",
     "aws_lb_listener",
@@ -120,6 +148,10 @@ test("Live Observation template carries the same ASG pressure resources as the d
   }
 
   const launchTemplate = nodesByType.get("aws_launch_template");
+  const agentRole = nodesByType.get("aws_iam_role");
+  const agentPolicy = nodesByType.get("aws_iam_role_policy_attachment");
+  const agentProfile = nodesByType.get("aws_iam_instance_profile");
+  const logGroup = nodesByType.get("aws_cloudwatch_log_group");
   const targetGroup = nodesByType.get("aws_lb_target_group");
   const listener = nodesByType.get("aws_lb_listener");
   const audienceObject = template.diagramJson.nodes.find(
@@ -130,6 +162,10 @@ test("Live Observation template carries the same ASG pressure resources as the d
   assert.ok(policy);
   assert.ok(alarm);
   assert.ok(launchTemplate);
+  assert.ok(agentRole);
+  assert.ok(agentPolicy);
+  assert.ok(agentProfile);
+  assert.ok(logGroup);
   assert.ok(targetGroup);
   assert.ok(listener);
   assert.ok(audienceObject);
@@ -157,6 +193,16 @@ test("Live Observation template carries the same ASG pressure resources as the d
     type: "forward"
   });
   assert.equal(launchTemplate.parameters?.values.imageId, "data.aws_ami.al2023.id");
+  assert.deepEqual(launchTemplate.parameters?.values.iamInstanceProfile, {
+    name: "aws_iam_instance_profile.api_agent.name"
+  });
+  assert.equal(agentPolicy.parameters?.values.role, "aws_iam_role.api_agent.name");
+  assert.equal(
+    agentPolicy.parameters?.values.policyArn,
+    "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
+  );
+  assert.equal(agentProfile.parameters?.values.role, "aws_iam_role.api_agent.name");
+  assert.equal(logGroup.parameters?.values.retentionInDays, 1);
   assert.match(
     Buffer.from(String(launchTemplate.parameters?.values.userData), "base64").toString("utf8"),
     /sketchcatch-demo-managed-user-data-sha256:[a-f0-9]{64}/
@@ -166,6 +212,72 @@ test("Live Observation template carries the same ASG pressure resources as the d
   assert.equal(policy.parameters?.values.policyType, "StepScaling");
   assert.equal(alarm.parameters?.values.metricName, "RequestCountPerTarget");
   assert.equal(alarm.parameters?.values.threshold, 60);
+
+  const vpc = template.diagramJson.nodes.find((node) => node.id === "template-live-vpc");
+  const audienceSite = template.diagramJson.nodes.find((node) => node.id === "template-live-site");
+  const audienceEndpoint = template.diagramJson.nodes.find(
+    (node) => node.id === "template-live-site-config"
+  );
+  const alb = template.diagramJson.nodes.find((node) => node.id === "template-live-alb");
+  const audienceEdge = template.diagramJson.edges.find((edge) => edge.id === "template-live-site-flow");
+  assert.ok(vpc);
+  assert.ok(audienceSite);
+  assert.ok(audienceEndpoint);
+  assert.ok(alb);
+  assert.ok(targetGroup);
+  assert.ok(audienceEdge);
+  assert.equal(audienceEdge.sourceNodeId, "template-live-site-config");
+  assert.equal(template.diagramJson.nodes.length, 22);
+  assert.ok(vpc.size.height < 800, "dense VPC resources should form compact columns, not one tall stack");
+  assert.ok(audienceSite.position.x < vpc.position.x);
+  assert.ok(alb.position.x < targetGroup.position.x);
+  assert.ok(targetGroup.position.x < asg.position.x);
+
+  const curatedNodeIds = [
+    "template-live-vpc",
+    "template-live-igw",
+    "template-live-route-table",
+    "template-live-subnet-a",
+    "template-live-subnet-c",
+    "template-live-alb-sg",
+    "template-live-api-sg",
+    "template-live-listener",
+    "template-live-alb",
+    "template-live-target-group",
+    "template-live-asg",
+    "template-live-policy",
+    "template-live-alarm",
+    "template-live-site",
+    "template-live-site-config"
+  ];
+  const curatedNodes = curatedNodeIds.map((nodeId) => {
+    const node = template.diagramJson.nodes.find((candidate) => candidate.id === nodeId);
+    assert.ok(node, `${nodeId} is missing`);
+    return node;
+  });
+
+  for (const node of curatedNodes) {
+    assert.equal(node.position.x % 40, 0, `${node.id} x must use the 40px grid`);
+    assert.equal(node.position.y % 40, 0, `${node.id} y must use the 40px grid`);
+  }
+
+  for (const areaNodeId of [
+    "template-live-vpc",
+    "template-live-subnet-a",
+    "template-live-subnet-c",
+    "template-live-alb-sg",
+    "template-live-api-sg",
+    "template-live-asg"
+  ]) {
+    const areaNode = curatedNodes.find((node) => node.id === areaNodeId);
+    assert.ok(areaNode);
+    assert.equal(areaNode.size.width % 40, 0, `${areaNode.id} width must use the 40px grid`);
+    assert.equal(areaNode.size.height % 40, 0, `${areaNode.id} height must use the 40px grid`);
+  }
+
+  assert.equal(audienceEndpoint.position.y, alb.position.y);
+  assert.equal(alb.position.y, targetGroup.position.y);
+  assert.equal(policy.position.x, alarm.position.x);
 });
 
 test("applyTemplateToDiagramWithBackup backs up the current board and returns the template board", () => {

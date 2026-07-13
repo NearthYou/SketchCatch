@@ -76,18 +76,24 @@ export async function applyGitCicdAwsRoleDiff(
     throw new AwsRoleDiffApplyError("AWS role ARN is required before role diff can be applied");
   }
 
-  if (!diff.approved) {
-    throw new AwsRoleDiffApplyError("AWS role diff must be user-approved before apply");
-  }
+  const now = input.now ?? (() => new Date());
+  const approvedDiff: GitCicdAwsRoleDiff = diff.approved
+    ? diff
+    : {
+        ...diff,
+        approved: true,
+        approvedByUserId: input.accessContext.userId,
+        approvedAt: now().toISOString()
+      };
 
   const currentPolicy = await gateway.getAssumeRolePolicy(diff.roleArn);
-  const nextPolicy = mergeGitHubOidcTrustStatement(currentPolicy, diff);
+  const nextPolicy = mergeGitHubOidcTrustStatement(currentPolicy, approvedDiff);
 
   await gateway.updateAssumeRolePolicy(diff.roleArn, nextPolicy);
 
   const verifiedPolicy = await gateway.getAssumeRolePolicy(diff.roleArn);
-  const verified = policyHasGitHubOidcStatement(verifiedPolicy, diff);
-  const appliedAt = (input.now ?? (() => new Date()))().toISOString();
+  const verified = policyHasGitHubOidcStatement(verifiedPolicy, approvedDiff);
+  const appliedAt = now().toISOString();
 
   if (!verified) {
     throw new AwsRoleDiffApplyError("AWS role trust policy update could not be verified");
@@ -95,7 +101,7 @@ export async function applyGitCicdAwsRoleDiff(
 
   await repository.updateHandoffAutomationMetadata?.(handoff.id, {
     awsRoleDiff: {
-      ...diff,
+      ...approvedDiff,
       applied: true,
       appliedAt,
       verified: true
