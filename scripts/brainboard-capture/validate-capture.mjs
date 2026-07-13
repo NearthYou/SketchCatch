@@ -27,25 +27,32 @@ const SOURCE_MANIFEST_RELATIVE_PATH = "packages/types/src/brainboard-templates/m
 const SOURCE_IDS_RELATIVE_PATH = "packages/types/src/brainboard-templates/ids.ts";
 const EXPECTED_AUTHOR = "Chafik Belhaoues";
 const EXPECTED_PROVIDER = "aws";
-const EXPECTED_FAILED_ATTEMPT_CONTEXTS = [
+const EXPECTED_FAILED_ATTEMPTS = [
   {
-    architectureName: "AWS instance and DB with multiple networks #381 09fd3420"
+    architectureName: "AWS instance and DB with multiple networks #381 09fd3420",
+    result: "HTTP 400 ERR_BAD_REQUEST"
   },
   {
-    architectureName: "#381 multi-network 09fd3420"
+    architectureName: "#381 multi-network 09fd3420",
+    result: "HTTP 400 ERR_BAD_REQUEST"
   },
   {
     architectureName: "#381 09fd3420",
     project: "Project 1",
-    environment: "Development"
+    environment: "Development",
+    result: "HTTP 400 ERR_BAD_REQUEST"
   },
   {
     architectureName: "#381 recovery 09fd3420",
     project: "ai-workout-board-production",
     environment: "Production",
-    action: "Clone into current architecture"
+    action: "Clone into current architecture",
+    result:
+      "No UI response; after a second verified click and 12-second wait the modal remained open, the canvas stayed empty, undo stayed disabled, and main.tf stayed at one blank line"
   }
 ];
+const EXPECTED_FAILED_PREVIEW_WIDTH = 3840;
+const EXPECTED_FAILED_PREVIEW_HEIGHT = 2160;
 
 export function validateCaptureCorpus({
   indexPath = DEFAULT_INDEX_PATH,
@@ -130,7 +137,7 @@ export function validateCaptureCorpus({
 
     if (capture.status === "failed") {
       failedTemplates += 1;
-      validateFailedEvidence(capture, entry, file, addError);
+      validateFailedEvidence(capture, entry, index.capturedAt, file, addError);
       continue;
     }
     if (capture.status !== "captured") {
@@ -390,7 +397,7 @@ function validateCaptureMetadata(capture, entry, file, addError) {
   }
 }
 
-function validateFailedEvidence(capture, entry, file, addError) {
+function validateFailedEvidence(capture, entry, capturedAt, file, addError) {
   const forbiddenCompleteFields = ["viewport", "nodes", "edges", "terraform", "provider"];
   for (const key of forbiddenCompleteFields) {
     if (Object.hasOwn(capture, key)) {
@@ -410,6 +417,15 @@ function validateFailedEvidence(capture, entry, file, addError) {
       file,
       "attempts",
       "Failed evidence must preserve the four reviewed attempts and final Clone into current architecture action"
+    );
+  }
+  if (typeof capture.attemptedAt !== "string" || capture.attemptedAt !== capturedAt) {
+    addError(
+      "metadataMismatches",
+      "brainboard.capture.failed_attempted_at_invalid",
+      file,
+      "attemptedAt",
+      `Failed attemptedAt must equal the capture index date ${JSON.stringify(capturedAt)}`
     );
   }
   const expectedSourceUrl = `https://app.brainboard.co/templates/${entry.sourceTemplateId}`;
@@ -436,17 +452,15 @@ function validateFailedEvidence(capture, entry, file, addError) {
     );
   }
   if (
-    !Number.isInteger(capture.origin?.previewWidth) ||
-    capture.origin.previewWidth <= 0 ||
-    !Number.isInteger(capture.origin?.previewHeight) ||
-    capture.origin.previewHeight <= 0
+    capture.origin?.previewWidth !== EXPECTED_FAILED_PREVIEW_WIDTH ||
+    capture.origin?.previewHeight !== EXPECTED_FAILED_PREVIEW_HEIGHT
   ) {
     addError(
       "metadataMismatches",
       "brainboard.capture.failed_preview_dimensions_invalid",
       file,
       "origin.previewWidth/origin.previewHeight",
-      "Failed preview dimensions must be positive finite integers"
+      `Failed preview dimensions must be exactly ${EXPECTED_FAILED_PREVIEW_WIDTH}x${EXPECTED_FAILED_PREVIEW_HEIGHT}`
     );
   }
   if (typeof capture.error !== "string" || capture.error.trim() === "") {
@@ -478,18 +492,20 @@ function validateFailedEvidence(capture, entry, file, addError) {
 }
 
 function hasExactFailedAttempts(attempts) {
-  if (!Array.isArray(attempts) || attempts.length !== EXPECTED_FAILED_ATTEMPT_CONTEXTS.length) {
+  if (!Array.isArray(attempts) || attempts.length !== EXPECTED_FAILED_ATTEMPTS.length) {
     return false;
   }
   return attempts.every((attempt, index) => {
-    const expected = EXPECTED_FAILED_ATTEMPT_CONTEXTS[index];
+    const expected = EXPECTED_FAILED_ATTEMPTS[index];
+
+    if (!attempt || typeof attempt !== "object" || !expected) {
+      return false;
+    }
+
+    const expectedEntries = Object.entries(expected);
     return (
-      attempt?.architectureName === expected.architectureName &&
-      attempt?.project === expected.project &&
-      attempt?.environment === expected.environment &&
-      attempt?.action === expected.action &&
-      typeof attempt?.result === "string" &&
-      attempt.result.trim() !== ""
+      Object.keys(attempt).length === expectedEntries.length &&
+      expectedEntries.every(([key, value]) => attempt[key] === value)
     );
   });
 }

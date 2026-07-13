@@ -154,6 +154,34 @@ test("failed evidence enforces attempts, linked HTTPS metadata, dimensions, erro
       code: "brainboard.capture.failed_attempts_invalid"
     },
     {
+      name: "successful reviewed attempt",
+      mutate(raw) {
+        raw.attempts[0].result = "SUCCESS";
+      },
+      code: "brainboard.capture.failed_attempts_invalid"
+    },
+    {
+      name: "changed final no-response result",
+      mutate(raw) {
+        raw.attempts[3].result = "No UI response";
+      },
+      code: "brainboard.capture.failed_attempts_invalid"
+    },
+    {
+      name: "missing attempted date",
+      mutate(raw) {
+        delete raw.attemptedAt;
+      },
+      code: "brainboard.capture.failed_attempted_at_invalid"
+    },
+    {
+      name: "attempted date differs from capture index",
+      mutate(raw) {
+        raw.attemptedAt = "2026-07-13";
+      },
+      code: "brainboard.capture.failed_attempted_at_invalid"
+    },
+    {
       name: "source URL not linked to source template UUID",
       mutate(raw) {
         raw.origin.sourceUrl =
@@ -193,6 +221,14 @@ test("failed evidence enforces attempts, linked HTTPS metadata, dimensions, erro
       name: "fractional preview width",
       mutate(raw) {
         raw.origin.previewWidth = 1.5;
+      },
+      code: "brainboard.capture.failed_preview_dimensions_invalid"
+    },
+    {
+      name: "one-pixel preview",
+      mutate(raw) {
+        raw.origin.previewWidth = 1;
+        raw.origin.previewHeight = 1;
       },
       code: "brainboard.capture.failed_preview_dimensions_invalid"
     },
