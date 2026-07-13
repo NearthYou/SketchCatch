@@ -362,6 +362,10 @@
 }
 
 .blankAction {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   border: 0;
   padding: 0 4px;
   background: transparent;
@@ -370,8 +374,16 @@
 
 .blankAction::after {
   display: inline-block;
-  margin-left: 6px;
   content: "→";
+}
+
+.blankAction:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.blankAction[aria-busy="true"]::after {
+  display: none;
 }
 
 .blankActionSelected {
