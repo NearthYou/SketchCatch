@@ -12,8 +12,21 @@ Short English-only working log for the current agent context. Older records are 
 - CI/CD handoff is a prominent standalone setting; its GitHub App repository panel appears only while enabled.
 - Public Repository setup confirms Template and CI/CD before opening a separate follow-up-question stage.
 - Follow-up questions depend on the selected Template, affect diagram creation, and use direct clickable choices.
+- Tasks 1-9 of issue #361 pass focused API/Web integration, the full Web suite, and repository completion gates.
+- CI/CD polling, RDS records, approval gates, notification limits, and CI/CD-vs-Runtime log separation are recorded in the canonical architecture and deployment docs.
+- Migration and credentialed browser acceptance remain unrun because this worktree has no `DATABASE_URL`, local stack, or test credentials.
 
 ## Session Record
+
+### 2026-07-13 - Integrate and document the Deployment/CI/CD console
+
+- Documented the separate Direct/Pipeline Run record boundaries, 5s active/30s idle polling, RDS source of truth, accepted-change gates, session-deduplicated notifications, safe Output links, and Live Observation Runtime log boundary.
+- Focused API command passed 103/103: `pnpm --dir apps/api exec tsx --test src/db/schema-contract.test.ts src/git-cicd/git-cicd-monitoring-service.test.ts src/git-cicd/git-cicd-pipeline-run-service.test.ts src/git-cicd/github-actions-run-provider.test.ts src/git-cicd/git-cicd-workflows.test.ts src/routes/git-cicd-handoffs.test.ts src/source-repositories/github-app-client.test.ts`.
+- Focused Web command passed 82/82: `pnpm --dir apps/web exec tsx --test features/workspace/api.test.ts features/workspace/cicd-console-state.test.ts features/workspace/deployment-output-links.test.ts features/workspace/workspace-notifications.test.ts features/workspace/deployment-cicd-console-layout.test.ts features/workspace/deployment-panel-apply-confirmation.test.ts`.
+- Full Web command passed 1051/1051: `pnpm --filter @sketchcatch/web test`.
+- Completion commands passed: `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check`. Lint retained the pre-existing `setNow` warning and build retained the existing Next.js multi-lockfile warning.
+- `pnpm --filter @sketchcatch/api db:migrate` was not run because no approved local non-production `DATABASE_URL` was configured. The browser journey was not run because ports 3000/4000, test credentials, GitHub state, and AWS state were unavailable; no external mutation ran.
+- Task 8 reviewer ledger remains explicit: manager lifecycle wiring is covered by pure behavior and source-level integration tests, not a mounted React/browser integration test.
 
 ### 2026-07-13 - Add deployment completion notifications and safe Output links
 
@@ -76,23 +89,6 @@ Short English-only working log for the current agent context. Older records are 
 - Final review added metadata-free ECS/ASG capacity inference scoped to the selected controller, five-request bursts, disconnect-safe SSE startup, automatically expiring per-observation simulated traffic, metric-correct request thresholds, real Traffic API audience links with explicit simulation fallback, and polling listener cleanup.
 - Verification: focused Web tests passed 82/82 plus 9 diagram tests, focused API tests passed 38/38 plus 18 service/route tests; harness, lint, typecheck, and build passed. No AWS or Terraform mutation ran.
 - PR review: Kubernetes `depends_on` addresses now render as references and both polling/SSE delay messages use valid Korean text; 21 Terraform and 31 modal tests passed.
-
-### 2026-07-12 - Fail fast when API database URL is missing
-
-- Goal: Diagnose `/api/auth/login` returning 500 with `DATABASE_URL is required`.
-- Completed:
-  - Reproduced the login failure with a minimal POST to `http://localhost:3000/api/auth/login`.
-  - Added a startup regression test proving the API must reject missing `DATABASE_URL` before Terraform warmup, deployment recovery, or listen.
-  - Added the `requireDatabaseUrl()` startup guard after the static AWS credential-source check.
-- Verification:
-  - `pnpm --dir apps/api exec tsx --test src/server-startup.test.ts`
-  - `pnpm --filter @sketchcatch/api typecheck`
-  - `pnpm harness:check`
-  - `pnpm lint` passed with the pre-existing `live-observations` `setNow` warning.
-  - `pnpm typecheck`
-  - `pnpm build`
-- Risk:
-  - The already-running API process still needs to be restarted, and local login still requires a real `DATABASE_URL` configured outside git.
 
 ### 2026-07-12 - Implement issue #349 repository template recommendations
 
@@ -215,4 +211,4 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Next Action
 
-- Run Task 9 end-to-end verification and final issue #361 review.
+- Review the Task 9 commit. If an approved local test database and safe GitHub/AWS test environment are later provided, run migration and the credentialed representative browser journey as separate acceptance evidence.
