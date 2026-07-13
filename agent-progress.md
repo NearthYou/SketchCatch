@@ -192,6 +192,16 @@ Short English-only working log for the current agent context. Older records are 
   - Real Plan, Apply, health verification, and Destroy are pending because Chrome is logged out and every local AWS CLI profile has an expired session.
   - Root `pnpm test` still has unrelated existing Web failures in dashboard timezone, node-toolbar token, and mobile canvas-toolbar assertions; all changed-path tests pass.
 
+### 2026-07-13 - Verify Repository Fargate precheck and live deployment
+
+- Fixed subtype-aware pre-deployment requirements so `aws_iam_role_policy_attachment` validates `role` and `policyArn` instead of requiring an inline policy document.
+- Expanded the generated AWS Connection execution policy for the ECS, ECR, ELB, CloudFront, Logs, and IAM operations used by the supported Fargate Template.
+- Replaced the invalid nginx smoke configuration quoting with a shell-safe command and added structural regression coverage for the ECS entry point and command.
+- Made single-task Fargate drafts emit CloudFront, ALB, target group, ECS cluster, and ECS service Terraform outputs without requiring autoscaling.
+- Live evidence: pre-deployment findings 0; Plan `+22 ~0 -0 +/-0`; Apply SUCCESS; ALB `/health` returned `HTTP 200` with body `ok`; approved Destroy Plan `+0 ~0 -22 +/-0` completed without an error.
+- AWS Console verification: CloudFront 0, ECS clusters 0, active task definitions 0, ECR repositories 0, ALBs 0, target groups 0, and CloudWatch log groups 0 after cleanup. Two older `sketchcatch-demo-vpc` leftovers were also removed; the verified connection role and AWS-managed service-linked roles were retained.
+- Verification: 76 focused API tests, `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check` passed. Lint retains the pre-existing unused `setNow` warning.
+
 ## Next Action
 
-- Restore the authenticated Chrome session, select a verified AWS connection, and run the approved Direct Deployment Plan, Apply, health verification, Destroy Plan, and Destroy flow for `audience-live-check`.
+- Regenerate the Repository Fargate draft once after pulling this change so its Terraform artifact includes the new Live Observation outputs.

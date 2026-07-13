@@ -9,6 +9,7 @@ import {
   createArchitectureDraft,
   createDeterministicArchitectureIntentPlan
 } from "./aiArchitectureDrafts.js";
+import { analyzePreDeployment } from "./aiPreDeploymentAnalysis.js";
 
 const confirmedCreditPolicy = {
   bedrock: false,
@@ -265,6 +266,16 @@ test("repository evidence strict mode keeps the Fargate diagram minimal and evid
   }]);
   assert.match(String(taskDefinition?.config.containerDefinitions), /nginx:1\.27-alpine/u);
   assert.match(String(taskDefinition?.config.containerDefinitions), /\/health/u);
+  const containerDefinitions = JSON.parse(
+    String(taskDefinition?.config.containerDefinitions)
+  ) as Array<{ entryPoint?: string[]; command?: string[] }>;
+  assert.deepEqual(containerDefinitions[0]?.entryPoint, ["/bin/sh", "-c"]);
+  assert.equal(containerDefinitions[0]?.command?.length, 1);
+  assert.match(
+    containerDefinitions[0]?.command?.[0] ?? "",
+    /default_type text\/plain;.*return 200 ok;.*exec nginx/u
+  );
+  assert.equal((containerDefinitions[0]?.command?.[0] ?? "").includes('\\"'), false);
   assert.ok(labels.has("Browser"));
   assert.ok(labels.has("GitHub Actions"));
   assert.ok(labels.has("AWS Managed Services"));
@@ -281,6 +292,12 @@ test("repository evidence strict mode keeps the Fargate diagram minimal and evid
     response.metadata.assumptions.some((assumption) =>
       assumption.includes("domain and certificate") && assumption.includes("HTTP")
     )
+  );
+  assert.deepEqual(
+    analyzePreDeployment(response.architectureJson).findings.filter(
+      (finding) => finding.category === "configuration"
+    ),
+    []
   );
 });
 

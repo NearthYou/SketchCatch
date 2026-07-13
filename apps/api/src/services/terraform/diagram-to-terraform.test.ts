@@ -365,6 +365,27 @@ test("renders ECS Fargate Live Observation outputs and Application Auto Scaling 
   assert.doesNotMatch(terraform, /output "asg_name"/);
 });
 
+test("renders traffic outputs for a single-task Fargate topology without autoscaling", () => {
+  const graph: InfrastructureGraph = {
+    nodes: [
+      createLiveObservationNode("aws_cloudfront_distribution", "web", {}),
+      createLiveObservationNode("aws_lb", "demo", {}),
+      createLiveObservationNode("aws_lb_target_group", "api", {}),
+      createLiveObservationNode("aws_ecs_cluster", "demo", {}),
+      createLiveObservationNode("aws_ecs_service", "api", {})
+    ],
+    edges: []
+  };
+
+  const terraform = renderTerraformFromInfrastructureGraph(graph);
+
+  assert.match(terraform, /output "static_site_url"[\s\S]*aws_cloudfront_distribution\.web\.domain_name/);
+  assert.match(terraform, /output "api_base_url"[\s\S]*aws_lb\.demo\.dns_name/);
+  assert.match(terraform, /output "ecs_cluster_name"[\s\S]*aws_ecs_cluster\.demo\.name/);
+  assert.match(terraform, /output "ecs_service_name"[\s\S]*aws_ecs_service\.api\.name/);
+  assert.doesNotMatch(terraform, /output "max_capacity"/);
+});
+
 test("does not emit an ECS request threshold from a CPU target tracking policy", () => {
   const graph: InfrastructureGraph = {
     nodes: [

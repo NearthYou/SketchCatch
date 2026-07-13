@@ -72,6 +72,7 @@ function renderInlineLambdaArchive(node: InfrastructureGraphNode): string {
 
 function renderLiveObservationOutputs(graph: InfrastructureGraph): string[] {
   const website = findResourceNode(graph, "aws_s3_bucket_website_configuration");
+  const cloudFront = findResourceNode(graph, "aws_cloudfront_distribution");
   const loadBalancer = findResourceNode(graph, "aws_lb");
   const targetGroup = findResourceNode(graph, "aws_lb_target_group");
   const autoScalingGroup = findResourceNode(graph, "aws_autoscaling_group");
@@ -86,19 +87,33 @@ function renderLiveObservationOutputs(graph: InfrastructureGraph): string[] {
       typeof node.config["threshold"] === "number"
   );
 
-  if (!website || !loadBalancer || !targetGroup) {
-    return [];
+  const commonOutputs = website
+    ? [
+        renderOutput(
+          "static_site_url",
+          `"http://\${aws_s3_bucket_website_configuration.${website.iac.resourceName}.website_endpoint}"`
+        )
+      ]
+    : cloudFront
+      ? [
+          renderOutput(
+            "static_site_url",
+            `"https://\${aws_cloudfront_distribution.${cloudFront.iac.resourceName}.domain_name}"`
+          )
+        ]
+      : [];
+
+  if (!loadBalancer || !targetGroup) {
+    return commonOutputs;
   }
 
-  const websiteAddress = `aws_s3_bucket_website_configuration.${website.iac.resourceName}`;
   const loadBalancerAddress = `aws_lb.${loadBalancer.iac.resourceName}`;
   const targetGroupAddress = `aws_lb_target_group.${targetGroup.iac.resourceName}`;
-  const commonOutputs = [
-    renderOutput("static_site_url", `"http://\${${websiteAddress}.website_endpoint}"`),
+  commonOutputs.push(
     renderOutput("api_base_url", `"http://\${${loadBalancerAddress}.dns_name}"`),
     renderOutput("alb_arn_suffix", `${loadBalancerAddress}.arn_suffix`),
     renderOutput("target_group_arn_suffix", `${targetGroupAddress}.arn_suffix`)
-  ];
+  );
 
   if (autoScalingGroup && alarm) {
     const autoScalingGroupAddress = `aws_autoscaling_group.${autoScalingGroup.iac.resourceName}`;
@@ -112,13 +127,8 @@ function renderLiveObservationOutputs(graph: InfrastructureGraph): string[] {
 
   const maxCapacity = applicationScalingTarget?.config["maxCapacity"];
 
-  if (
-    !ecsCluster ||
-    !ecsService ||
-    !applicationScalingTarget ||
-    typeof maxCapacity !== "number"
-  ) {
-    return [];
+  if (!ecsCluster || !ecsService) {
+    return commonOutputs;
   }
 
   const ecsClusterAddress = `aws_ecs_cluster.${ecsCluster.iac.resourceName}`;
@@ -130,10 +140,18 @@ function renderLiveObservationOutputs(graph: InfrastructureGraph): string[] {
     targetGroupAddress
   );
 
-  return [
+  const ecsOutputs = [
     ...commonOutputs,
     renderOutput("ecs_cluster_name", `${ecsClusterAddress}.name`),
-    renderOutput("ecs_service_name", `${ecsServiceAddress}.name`),
+    renderOutput("ecs_service_name", `${ecsServiceAddress}.name`)
+  ];
+
+  if (!applicationScalingTarget || typeof maxCapacity !== "number") {
+    return ecsOutputs;
+  }
+
+  return [
+    ...ecsOutputs,
     renderOutput("max_capacity", String(maxCapacity)),
     ...(requestThreshold === null
       ? []

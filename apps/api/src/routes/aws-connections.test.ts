@@ -694,6 +694,13 @@ test("GET /api/aws/connections/:connectionId/cloudformation-template returns lau
   assert.match(body.templateBody, /Roles:\n\s+- !Ref SketchCatchTerraformExecutionRole/);
   assert.match(body.templateBody, /Action: ec2:\*/);
   assert.match(body.templateBody, /Action: s3:\*/);
+  assert.match(body.templateBody, /- ecs:\*/);
+  assert.match(body.templateBody, /- ecr:\*/);
+  assert.match(body.templateBody, /- elasticloadbalancing:\*/);
+  assert.match(body.templateBody, /- cloudfront:\*/);
+  assert.match(body.templateBody, /- logs:\*/);
+  assert.match(body.templateBody, /- iam:CreateRole/);
+  assert.match(body.templateBody, /- iam:PassRole/);
   assert.match(
     body.templateBody,
     new RegExp(callerPrincipalArn.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))

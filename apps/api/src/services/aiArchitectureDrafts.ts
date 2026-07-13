@@ -2205,7 +2205,7 @@ function applyStrictRepositoryEvidencePolicy(
               essential: true,
               entryPoint: ["/bin/sh", "-c"],
               command: [
-                "printf 'server { listen 8080; location = /health { add_header Content-Type text/plain; return 200 \\\"ok\\\"; } location / { add_header Content-Type text/plain; return 200 \\\"SketchCatch deployment smoke\\\"; } }' > /etc/nginx/conf.d/default.conf && exec nginx -g 'daemon off;'"
+                "printf '%s\\n' 'server {' '  listen 8080;' '  default_type text/plain;' '  location = /health { return 200 ok; }' '  location / { return 200 SketchCatch-deployment-smoke; }' '}' > /etc/nginx/conf.d/default.conf && exec nginx -g 'daemon off;'"
               ],
               portMappings: [{ containerPort, hostPort: containerPort, protocol: "tcp" }],
               ...(usesCloudWatch

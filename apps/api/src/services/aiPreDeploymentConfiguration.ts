@@ -65,7 +65,7 @@ function getRequiredConfigKeys(node: ResourceNode): readonly string[] {
     case "IAM_ROLE":
       return ["assumeRolePolicy"];
     case "IAM_POLICY":
-      return ["policy"];
+      return getRequiredIamPolicyConfigKeys(node);
     case "IAM_INSTANCE_PROFILE":
       return ["role"];
     case "CLOUDWATCH_METRIC_ALARM":
@@ -118,6 +118,17 @@ function getRequiredConfigKeys(node: ResourceNode): readonly string[] {
   }
 
   return [];
+}
+
+function getRequiredIamPolicyConfigKeys(node: ResourceNode): readonly string[] {
+  switch (node.config.terraformResourceType) {
+    case "aws_iam_role_policy_attachment":
+      return ["role", "policyArn"];
+    case "aws_iam_role_policy":
+      return ["role", "policy"];
+    default:
+      return ["policy"];
+  }
 }
 
 // 빈 문자열이나 빈 배열은 "입력 안 됨"으로 봅니다.
