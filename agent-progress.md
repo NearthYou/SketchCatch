@@ -39,23 +39,6 @@ Short English-only working log for the current agent context. Older records are 
 - Verification: focused Web tests passed 82/82 plus 9 diagram tests, focused API tests passed 38/38 plus 18 service/route tests; harness, lint, typecheck, and build passed. No AWS or Terraform mutation ran.
 - PR review: Kubernetes `depends_on` addresses now render as references and both polling/SSE delay messages use valid Korean text; 21 Terraform and 31 modal tests passed.
 
-### 2026-07-12 - Repair Repository candidate selection UI
-
-- Goal: Replace the unreadable black template candidate rows with a clear comparison and selection surface.
-- Completed:
-  - Removed the broad result-panel button selector that overrode candidate styles.
-  - Split candidate content into rank, title, fit, reasons, tradeoffs, and selected state.
-  - Added responsive one-column candidate details and preserved source title casing.
-  - Removed the duplicate deployment selector for repositories with decisive deployment evidence.
-  - Shared the separated CI/CD handoff and follow-up question sections across public and connected Repository flows.
-  - Made the public-flow GitHub App repository panel conditional on CI/CD handoff and reset it for each new URL analysis.
-  - Split public Repository configuration and follow-up questions into separate confirmed steps.
-  - Recomputed questions per selected Template, removed redundant/unused questions, reset stale answers, rendered full-box choices, and required every answer before board creation.
-- Verification:
-  - Focused recommendation tests, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
-  - Lint retains only the pre-existing API `setNow` warning.
-  - Live-tested `Jungle_AI_Board`: AI source, two unique candidates, relevant non-duplicated questions, and cache-covered repeat analysis.
-
 ### 2026-07-12 - Fail fast when API database URL is missing
 
 - Goal: Diagnose `/api/auth/login` returning 500 with `DATABASE_URL is required`.
