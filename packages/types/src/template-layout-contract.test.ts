@@ -3,9 +3,10 @@ import { createHash } from "node:crypto";
 import { test } from "node:test";
 import {
   buildTemplateDiagramJson,
-  templateDefinitions,
+  getTemplateDefinitionById,
+  REPOSITORY_TEMPLATE_IDS,
   type TemplateDefinition,
-  type TemplateId
+  type RepositoryTemplateId
 } from "./template-definitions.js";
 
 type LayoutExpectation = {
@@ -27,7 +28,7 @@ const EXPECTED_VIEWPORTS = {
   "three-tier-web-app": { x: 0, y: 0, zoom: 0.46 },
   "ecs-fargate-container-app": { x: 0, y: 0, zoom: 0.46 },
   "eks-container-app": { x: 0, y: 0, zoom: 0.46 }
-} as const satisfies Record<TemplateId, { readonly x: number; readonly y: number; readonly zoom: number }>;
+} as const satisfies Record<RepositoryTemplateId, { readonly x: number; readonly y: number; readonly zoom: number }>;
 
 const EXPECTED_LAYOUTS = {
   "static-web-hosting": {
@@ -145,7 +146,7 @@ const EXPECTED_LAYOUTS = {
     deployment: at(1040, 920, "namespace"),
     service: at(1280, 920, "namespace")
   }
-} as const satisfies Record<TemplateId, Readonly<Record<string, LayoutExpectation>>>;
+} as const satisfies Record<RepositoryTemplateId, Readonly<Record<string, LayoutExpectation>>>;
 
 const EXPECTED_ROUTING = {
   "static-web-hosting": {
@@ -222,7 +223,7 @@ const EXPECTED_ROUTING = {
     "cluster-node-group": route("handle-left", "handle-left"),
     "deployment-service": route("handle-right", "handle-left")
   }
-} as const satisfies Record<TemplateId, Readonly<Record<string, EdgeRoutingExpectation>>>;
+} as const satisfies Record<RepositoryTemplateId, Readonly<Record<string, EdgeRoutingExpectation>>>;
 
 const EXPECTED_SEMANTIC_HASHES = {
   "static-web-hosting": "eb1887762d91b666e43c572b51b1afbb399021be65a450051b7a273b7cd22cc9",
@@ -231,14 +232,15 @@ const EXPECTED_SEMANTIC_HASHES = {
   "three-tier-web-app": "c3f42dd6ac1f582d57c46919c2ac01a9439b7f6f6817213dcc9872f26f4ee4ec",
   "ecs-fargate-container-app": "2f23258ec46a5a20ee278e75de54782bf6f604dca3f16052c020dcf5f2352b88",
   "eks-container-app": "2c579e9e5d4f8f227c40c84d9ebb725e31aa7ce49c09f4f5f8b9171b35cd69d3"
-} as const satisfies Record<TemplateId, string>;
+} as const satisfies Record<RepositoryTemplateId, string>;
 
 test("six deployable templates keep their semantic graph while adopting the PNG layout contract", () => {
-  for (const definition of templateDefinitions) {
-    const expectedLayout = EXPECTED_LAYOUTS[definition.id];
-    const expectedRouting = EXPECTED_ROUTING[definition.id];
+  for (const templateId of REPOSITORY_TEMPLATE_IDS) {
+    const definition = getTemplateDefinitionById(templateId);
+    const expectedLayout = EXPECTED_LAYOUTS[templateId];
+    const expectedRouting = EXPECTED_ROUTING[templateId];
 
-    assert.equal(createSemanticHash(definition), EXPECTED_SEMANTIC_HASHES[definition.id], definition.id);
+    assert.equal(createSemanticHash(definition), EXPECTED_SEMANTIC_HASHES[templateId], templateId);
     assert.deepEqual(Object.keys(expectedLayout).sort(), definition.resources.map((resource) => resource.id).sort(), definition.id);
     assert.deepEqual(Object.keys(expectedRouting).sort(), definition.relationships
       .filter((relationship) => relationship.id in expectedRouting)
@@ -267,14 +269,15 @@ test("six deployable templates keep their semantic graph while adopting the PNG 
       assert.equal(relationship.targetHandleId, expected.targetHandleId, `${definition.id}/${relationship.id} target handle`);
     }
 
-    const diagram = buildTemplateDiagramJson(definition.id, { projectSlug: "layout", shortId: "contract" });
-    assert.deepEqual(diagram.viewport, EXPECTED_VIEWPORTS[definition.id], `${definition.id} viewport`);
+    const diagram = buildTemplateDiagramJson(templateId, { projectSlug: "layout", shortId: "contract" });
+    assert.deepEqual(diagram.viewport, EXPECTED_VIEWPORTS[templateId], `${templateId} viewport`);
   }
 });
 
 test("all authored template placements stay on the compact 40px grid", () => {
   // A shared grid keeps nested areas, resource cards, and Design annotations aligned across every template.
-  for (const definition of templateDefinitions) {
+  for (const templateId of REPOSITORY_TEMPLATE_IDS) {
+    const definition = getTemplateDefinitionById(templateId);
     for (const resource of definition.resources) {
       assertGridValue(resource.position.x, `${definition.id}/${resource.id} x`);
       assertGridValue(resource.position.y, `${definition.id}/${resource.id} y`);

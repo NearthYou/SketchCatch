@@ -6,7 +6,7 @@ import type {
   TerraformBlockType
 } from "./index.js";
 
-export const TEMPLATE_IDS = [
+export const REPOSITORY_TEMPLATE_IDS = [
   "static-web-hosting",
   "minimal-serverless-api",
   "full-serverless-web-app",
@@ -14,6 +14,10 @@ export const TEMPLATE_IDS = [
   "ecs-fargate-container-app",
   "eks-container-app"
 ] as const;
+
+export type RepositoryTemplateId = (typeof REPOSITORY_TEMPLATE_IDS)[number];
+
+export const TEMPLATE_IDS = [...REPOSITORY_TEMPLATE_IDS] as const;
 
 export type TemplateId = (typeof TEMPLATE_IDS)[number];
 export type TemplateProvider = "aws" | "kubernetes";
@@ -172,7 +176,7 @@ type TemplatePresentationLayout = {
 
 // The presentation layer is deliberately separate from deployable resource values.
 // It lets a template follow the AWS pattern diagram without changing Terraform identity or behavior.
-const TEMPLATE_PRESENTATION_LAYOUTS: Readonly<Record<TemplateId, TemplatePresentationLayout>> = {
+const TEMPLATE_PRESENTATION_LAYOUTS: Readonly<Record<RepositoryTemplateId, TemplatePresentationLayout>> = {
   "static-web-hosting": {
     viewport: { x: 0, y: 0, zoom: 0.8 },
     resources: {
@@ -1081,7 +1085,10 @@ function createDynamoDbPolicy(tableResourceId: string): string {
 
 // Apply visual-only PNG placement after the resource list is declared, keeping Terraform values immutable here.
 function createTemplate(
-  input: Omit<TemplateDefinition, "providers" | "viewport" | "presentationNodes" | "presentationEdges">
+  input: Omit<
+    TemplateDefinition,
+    "id" | "providers" | "viewport" | "presentationNodes" | "presentationEdges"
+  > & { readonly id: RepositoryTemplateId }
 ): TemplateDefinition {
   const presentation = TEMPLATE_PRESENTATION_LAYOUTS[input.id];
 

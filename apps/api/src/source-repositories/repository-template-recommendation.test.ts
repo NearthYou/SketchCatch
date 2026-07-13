@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import {
+  REPOSITORY_TEMPLATE_IDS,
+  type RepositoryTemplateId
+} from "@sketchcatch/types";
 import type { RepositoryTemplateRecommendationInput } from "./repository-template-recommendation.js";
 import {
   isRepositoryTemplateAiRankingConfigured,
@@ -14,6 +18,8 @@ test("Repository AI ranking is enabled by an OpenAI API key without a provider f
 });
 
 test("every deployment type returns at least two unique candidates with non-duplicated relevant questions", () => {
+  const repositoryTemplateIds = new Set<RepositoryTemplateId>(REPOSITORY_TEMPLATE_IDS);
+
   for (const deploymentType of ["ec2_vm", "container", "serverless"] as const) {
     const recommendation = recommendRepositoryTemplates({
       ...createInput(),
@@ -29,6 +35,7 @@ test("every deployment type returns at least two unique candidates with non-dupl
     );
 
     for (const candidate of recommendation.candidates) {
+      assert.equal(repositoryTemplateIds.has(candidate.templateId), true, candidate.templateId);
       const questions = candidate.questions ?? [];
       assert.ok(questions.length <= 5, candidate.templateId);
       assert.equal(new Set(questions.map((question) => question.id)).size, questions.length);

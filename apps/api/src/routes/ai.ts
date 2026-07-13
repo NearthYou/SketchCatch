@@ -23,11 +23,16 @@ import type {
   CreateArchitecturePatchPreviewRequest,
   CreateDesignSimulationRequest,
   DesignSimulationResult,
+  RepositoryAnalysisTemplateId,
   SourceRepositoryAnalysisResult,
   TranscribeConfirmation,
   VoiceRequirementInput
 } from "@sketchcatch/types";
-import { RESOURCE_TYPES, TEMPLATE_IDS } from "@sketchcatch/types";
+import {
+  REPOSITORY_TEMPLATE_IDS,
+  RESOURCE_TYPES,
+  TEMPLATE_IDS
+} from "@sketchcatch/types";
 import {
   ArchitectureDraftGenerationError,
   createConfiguredAmazonQArchitectureDraftResponse,
@@ -133,7 +138,8 @@ const architectureDraftBodySchema: z.ZodType<CreateArchitectureDraftRequest> = z
     .optional()
 });
 
-const repositoryTemplateIdSchema = z.enum(TEMPLATE_IDS);
+export const repositoryTemplateIdSchema = z.enum(REPOSITORY_TEMPLATE_IDS) satisfies
+  z.ZodType<RepositoryAnalysisTemplateId>;
 
 const sourceRepositoryAnalysisBodySchema = z.object({
   repositoryUrl: z

@@ -1,5 +1,8 @@
 // allow: SIZE_OK - shared package root contract; splitting needs a separate repo-wide migration.
-import type { TemplateId } from "./template-definitions.ts";
+import type {
+  RepositoryTemplateId,
+  TemplateId
+} from "./template-definitions.ts";
 
 export type IsoDateTimeString = string;
 
@@ -522,13 +525,7 @@ export type GitHubRepositoryCandidate = {
   archived: boolean;
 };
 
-export type RepositoryAnalysisTemplateId =
-  | "static-web-hosting"
-  | "minimal-serverless-api"
-  | "full-serverless-web-app"
-  | "three-tier-web-app"
-  | "ecs-fargate-container-app"
-  | "eks-container-app";
+export type RepositoryAnalysisTemplateId = RepositoryTemplateId;
 
 export type RepositoryAnalysisEvidenceFile = {
   path: string;
@@ -646,7 +643,7 @@ export type RepositoryAnalysisAnswer = {
 };
 
 export type RepositoryTemplateRecommendationCandidate = {
-  readonly templateId: TemplateId;
+  readonly templateId: RepositoryTemplateId;
   readonly displayTitle: string;
   readonly confidence: number;
   readonly reasons: readonly string[];
@@ -687,7 +684,7 @@ type RepositoryAnalysisAiHandoffBase = {
 export type RepositoryAnalysisAiHandoff =
   | (RepositoryAnalysisAiHandoffBase & {
       readonly status: "template_selected";
-      readonly templateId: TemplateId;
+      readonly templateId: RepositoryTemplateId;
       readonly selectionReasons: readonly string[];
     })
   | (RepositoryAnalysisAiHandoffBase & {
@@ -1162,11 +1159,13 @@ export type AwsConnectionListResponse = {
 export {
   buildTemplateDiagramJson,
   getTemplateDefinitionById,
+  REPOSITORY_TEMPLATE_IDS,
   TEMPLATE_IDS,
   templateDefinitions
 } from "./template-definitions.ts";
 export type {
   BuildTemplateDiagramInput,
+  RepositoryTemplateId,
   TemplateDefinition,
   TemplateId,
   TemplateParameterDefinition,

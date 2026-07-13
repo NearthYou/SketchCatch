@@ -5,10 +5,10 @@ import type {
   SourceRepositoryAnalysisResult,
   ResourceType
 } from "@sketchcatch/types";
-import type { TemplateId } from "../../../../packages/types/src/template-definitions";
+import type { RepositoryTemplateId } from "../../../../packages/types/src/template-definitions";
 import { convertArchitectureJsonToDiagramJson } from "./workspace-ai-diagram-adapter";
 
-export type PublicRepositoryTemplateId = TemplateId;
+export type PublicRepositoryTemplateId = RepositoryTemplateId;
 
 export type PublicRepositoryQuestion = {
   readonly id: string;
@@ -18,7 +18,7 @@ export type PublicRepositoryQuestion = {
 };
 
 export type PublicRepositoryTemplateCandidate = {
-  readonly templateId: TemplateId;
+  readonly templateId: RepositoryTemplateId;
   readonly displayTitle: string;
   readonly confidence: number;
   readonly reasons: readonly string[];
@@ -31,7 +31,7 @@ export type PublicRepositoryRecommendation = {
   readonly questions: readonly PublicRepositoryQuestion[];
 };
 
-const TEMPLATE_LABELS: Readonly<Record<TemplateId, string>> = {
+const TEMPLATE_LABELS: Readonly<Record<RepositoryTemplateId, string>> = {
   "ecs-fargate-container-app": "ECS Fargate 컨테이너 앱",
   "eks-container-app": "EKS 컨테이너 앱",
   "full-serverless-web-app": "전체 서버리스 웹 앱",
@@ -44,7 +44,7 @@ export function createPublicRepositoryRecommendation(input: {
   readonly analysis: SourceRepositoryAnalysisResult;
   readonly answers: Record<string, string | boolean>;
   readonly deploymentType: RepositoryDeploymentType;
-  readonly selectedTemplateId?: TemplateId | null;
+  readonly selectedTemplateId?: RepositoryTemplateId | null;
 }): PublicRepositoryRecommendation {
   const candidates = createPublicRepositoryTemplateCandidates(input);
   const selectedTemplateId = input.selectedTemplateId ?? candidates[0]?.templateId;
@@ -64,7 +64,7 @@ export function createPublicRepositoryDiagram(input: {
   readonly answers: Record<string, string | boolean>;
   readonly deploymentType: RepositoryDeploymentType;
   readonly projectName: string;
-  readonly templateId: TemplateId;
+  readonly templateId: RepositoryTemplateId;
   readonly usesCiCd: boolean;
 }): DiagramJson {
   return convertArchitectureJsonToDiagramJson(
@@ -79,7 +79,7 @@ export function createPublicRepositoryDiagram(input: {
 }
 
 export function formatPublicRepositoryTemplate(templateId: string): string {
-  return TEMPLATE_LABELS[templateId as TemplateId] ?? "맞는 템플릿 없음";
+  return TEMPLATE_LABELS[templateId as RepositoryTemplateId] ?? "맞는 템플릿 없음";
 }
 
 export function getPublicRepositoryDeploymentDefault(
@@ -112,7 +112,7 @@ export function shouldAskPublicRepositoryDeploymentType(
 }
 
 export function getPublicRepositoryTemplateDeploymentType(
-  templateId: TemplateId
+  templateId: RepositoryTemplateId
 ): RepositoryDeploymentType {
   if (templateId === "ecs-fargate-container-app" || templateId === "eks-container-app") {
     return "container";
@@ -150,7 +150,7 @@ function createPublicRepositoryTemplateCandidates(input: {
   }
 
   const signals = new Set(input.analysis.detectedSignals);
-  const candidateIds = new Set<TemplateId>();
+  const candidateIds = new Set<RepositoryTemplateId>();
   const primaryTemplateId = selectPrimaryTemplateId(input);
 
   candidateIds.add(primaryTemplateId);
@@ -172,7 +172,7 @@ function createPublicRepositoryTemplateCandidates(input: {
     candidateIds.add("minimal-serverless-api");
   }
 
-  const comparisonCandidates: Readonly<Record<RepositoryDeploymentType, readonly TemplateId[]>> = {
+  const comparisonCandidates: Readonly<Record<RepositoryDeploymentType, readonly RepositoryTemplateId[]>> = {
     container: ["ecs-fargate-container-app", "eks-container-app"],
     ec2_vm: ["three-tier-web-app", "ecs-fargate-container-app"],
     serverless: ["full-serverless-web-app", "minimal-serverless-api"]
@@ -196,7 +196,7 @@ function createPublicRepositoryTemplateCandidates(input: {
 
 function createPublicRepositoryQuestions(
   analysis: SourceRepositoryAnalysisResult,
-  templateId: TemplateId
+  templateId: RepositoryTemplateId
 ): readonly PublicRepositoryQuestion[] {
   const signals = new Set(analysis.detectedSignals);
   const questions: PublicRepositoryQuestion[] = [];
@@ -247,7 +247,7 @@ function selectPrimaryTemplateId(input: {
   readonly analysis: SourceRepositoryAnalysisResult;
   readonly answers: Record<string, string | boolean>;
   readonly deploymentType: RepositoryDeploymentType;
-}): TemplateId {
+}): RepositoryTemplateId {
   if (input.analysis.recommendedTemplateId === "static-web-hosting") {
     return "static-web-hosting";
   }
@@ -266,7 +266,7 @@ function selectPrimaryTemplateId(input: {
 }
 
 function createCandidate(
-  templateId: TemplateId,
+  templateId: RepositoryTemplateId,
   signals: ReadonlySet<string>,
   deploymentType: RepositoryDeploymentType,
   answers: Record<string, string | boolean>
@@ -329,7 +329,7 @@ function createPublicRepositoryArchitecture(input: {
   readonly analysis: SourceRepositoryAnalysisResult;
   readonly answers: Record<string, string | boolean>;
   readonly deploymentType: RepositoryDeploymentType;
-  readonly templateId: TemplateId;
+  readonly templateId: RepositoryTemplateId;
   readonly usesCiCd: boolean;
 }): ArchitectureJson {
   const signals = new Set(input.analysis.detectedSignals);

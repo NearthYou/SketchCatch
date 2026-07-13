@@ -2,15 +2,15 @@ import { z } from "zod";
 import OpenAI from "openai";
 import { zodTextFormat } from "openai/helpers/zod";
 import {
+  REPOSITORY_TEMPLATE_IDS,
   templateDefinitions,
   type RepositoryAnalysisAnswer,
   type RepositoryAnalysisQuestion,
   type RepositoryDeploymentType,
+  type RepositoryTemplateId,
   type RepositoryTemplateRecommendationCandidate,
-  type RepositoryTemplateRecommendationResult,
-  type TemplateId
+  type RepositoryTemplateRecommendationResult
 } from "@sketchcatch/types";
-import { TEMPLATE_IDS } from "@sketchcatch/types";
 import type {
   GitHubRepositoryEvidenceFile,
   GitHubRepositoryEvidenceSnapshot
@@ -33,7 +33,7 @@ export type RepositoryTemplateRecommendationProfile = {
 };
 
 type CandidateSetItem = {
-  readonly templateId: TemplateId;
+  readonly templateId: RepositoryTemplateId;
   readonly baseConfidence: number;
   readonly reasons: readonly string[];
   readonly tradeoffs: readonly string[];
@@ -64,7 +64,7 @@ const DEFAULT_REPOSITORY_TEMPLATE_RANKING_MODEL = "gpt-5-nano";
 const REPOSITORY_TEMPLATE_RANKING_TIMEOUT_MS = 15_000;
 const REPOSITORY_TEMPLATE_RANKING_MAX_RETRIES = 0;
 
-const templateIdSchema = z.enum(TEMPLATE_IDS);
+const templateIdSchema = z.enum(REPOSITORY_TEMPLATE_IDS);
 const aiCandidateSchema = z.object({
   templateId: templateIdSchema,
   confidence: z.number().min(0).max(1),
@@ -81,7 +81,7 @@ const aiRecommendationSchema = z.object({
 });
 
 const templateById = new Map(templateDefinitions.map((definition) => [definition.id, definition]));
-const templateDisplayTitles: Readonly<Record<TemplateId, string>> = {
+const templateDisplayTitles: Readonly<Record<RepositoryTemplateId, string>> = {
   "ecs-fargate-container-app": "ECS Fargate 컨테이너 앱",
   "eks-container-app": "EKS 컨테이너 앱",
   "full-serverless-web-app": "전체 서버리스 웹 앱",
@@ -246,7 +246,7 @@ function hydrateAiRecommendation(
 ): RepositoryTemplateRecommendationResult | null {
   const fallbackById = new Map(fallback.candidates.map((candidate) => [candidate.templateId, candidate]));
   const candidates: RepositoryTemplateRecommendationCandidate[] = [];
-  const acceptedTemplateIds = new Set<TemplateId>();
+  const acceptedTemplateIds = new Set<RepositoryTemplateId>();
 
   for (const candidate of parsed.candidates) {
     const fallbackCandidate = fallbackById.get(candidate.templateId);
@@ -498,7 +498,7 @@ function createSupportedCandidateSet(
   }
 
   if (input.deploymentType === "container") {
-    const orderedIds: TemplateId[] = wantsEks
+    const orderedIds: RepositoryTemplateId[] = wantsEks
       ? ["eks-container-app", "ecs-fargate-container-app"]
       : ["ecs-fargate-container-app", "eks-container-app"];
 
@@ -602,7 +602,7 @@ function rankSupportedCandidates(
 
 function createTemplateSpecificQuestions(
   input: RepositoryTemplateRecommendationInput,
-  templateId: TemplateId
+  templateId: RepositoryTemplateId
 ): readonly RepositoryAnalysisQuestion[] {
   const text = createSearchableText(input.snapshot, input.evidence.map((item) => item.path));
   const hasFrontend = input.applicationUnits.some(
@@ -668,7 +668,7 @@ function adjustConfidence(
 }
 
 function candidate(
-  templateId: TemplateId,
+  templateId: RepositoryTemplateId,
   baseConfidence: number,
   reasons: readonly string[],
   tradeoffs: readonly string[]
