@@ -24,5 +24,5 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Next Action
 
-- Commit the verification record, push the branch, and open the Korean issue #369 PR.
+- Review CI and feedback on PR #380; the implementation branch is pushed and the worktree is clean.
 - Re-run `pnpm build` after the repository restores `apps/web/.codegraph`; run Terraform validation only in an environment with the CLI installed.
