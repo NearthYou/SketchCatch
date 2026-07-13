@@ -5,11 +5,22 @@ Short English-only working log for the current agent context. Older records are 
 ## Current Verified State
 
 - Branch: `fix/gg/355-review-followup-v2`.
-- Six AWS Template Boards now preserve their existing resource graph and Terraform semantics while using authored PNG-aligned positions, grouping, viewport, and edge routing.
-- All 103 visible Template nodes materialize from active Resource Catalog items; no fake AWS tiles, temporary emoji nodes, or raw Terraform logical-name nodes were added.
-- Desktop Board QA passed 12 visual and structural checks for each of the six Templates. Evidence is in `docs/gg/feat-infrastructure-template/014_AWS템플릿Board실화면QA_gg.md`.
+- Six AWS Template Boards preserve 103 deployable Resources and their Terraform semantics while adding 28 parameterless, Catalog-backed Design presentation nodes.
+- All authored positions and Area sizes use the 40px grid; sibling collision, parent containment, and visible-edge caption-crossing checks pass.
+- Authenticated Board QA passed 12 visual and structural checks for each Template. Evidence is in `docs/gg/feat-infrastructure-template/017_AWS템플릿Design실화면QA_gg.md`.
 
 ## Session Record
+
+### 2026-07-13 - Add compact Catalog-backed Design layers to AWS Templates
+
+- Added a presentation graph separate from deployable Resources and semantic relationships, including User/Client, Internet, Source Repository, Region, Availability Zone, and role-specific Group lanes.
+- Kept the exact deployable counts Static 6, Minimal 12, Full 16, 3-Tier 30, ECS 20, and EKS 19; the semantic Resource total remains 103 and the presentation-only Design total is 28.
+- Reworked all six authored layouts onto a compact 40px grid and corrected the remaining ECS/EKS caption, containment, and edge-routing conflicts.
+- Kept Template gallery Resource counts and resource sorting based on parameterized deployable nodes, so Design nodes do not inflate user-facing Resource totals.
+- Verified all six Templates through the real authenticated new-project and Board flow; 72/72 visual and structural checks passed and the created project IDs are recorded in document 017.
+- Verification: 60 focused Template/Catalog/layout tests and 4 direct Template library regressions passed; `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `git diff --check` passed. Lint retains one pre-existing API unused-argument warning.
+- `pnpm build` is blocked before Web compilation by the pre-existing ignored broken `apps/web/.codegraph` symlink (`ENOENT stat`), as anticipated by the task contract; the symlink was not changed.
+- Risk: no Terraform plan/apply/destroy, AWS mutation, deployment API mutation, or approval-flow action ran.
 
 ### 2026-07-13 - Verify AWS Template Board placement against live Board screens
 
@@ -54,23 +65,6 @@ Short English-only working log for the current agent context. Older records are 
   - Focused recommendation tests, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
   - Lint retains only the pre-existing API `setNow` warning.
   - Live-tested `Jungle_AI_Board`: AI source, two unique candidates, relevant non-duplicated questions, and cache-covered repeat analysis.
-
-### 2026-07-12 - Fail fast when API database URL is missing
-
-- Goal: Diagnose `/api/auth/login` returning 500 with `DATABASE_URL is required`.
-- Completed:
-  - Reproduced the login failure with a minimal POST to `http://localhost:3000/api/auth/login`.
-  - Added a startup regression test proving the API must reject missing `DATABASE_URL` before Terraform warmup, deployment recovery, or listen.
-  - Added the `requireDatabaseUrl()` startup guard after the static AWS credential-source check.
-- Verification:
-  - `pnpm --dir apps/api exec tsx --test src/server-startup.test.ts`
-  - `pnpm --filter @sketchcatch/api typecheck`
-  - `pnpm harness:check`
-  - `pnpm lint` passed with the pre-existing `live-observations` `setNow` warning.
-  - `pnpm typecheck`
-  - `pnpm build`
-- Risk:
-  - The already-running API process still needs to be restarted, and local login still requires a real `DATABASE_URL` configured outside git.
 
 ### 2026-07-12 - Implement issue #349 repository template recommendations
 
@@ -209,4 +203,4 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Next Action
 
-- No Template layout implementation is pending. If the Template graph changes later, rerun the focused Template suite and the live Board QA checklist in `014`.
+- No Template Design/layout implementation is pending. If the Template graph changes later, rerun the focused suite and the live Board QA checklist in `017`.

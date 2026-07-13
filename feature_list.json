@@ -264,26 +264,26 @@
       "priority": 2,
       "area": "template-board",
       "title": "PNG-aligned AWS Template Board presentation",
-      "user_visible_behavior": "여섯 AWS Template가 실제 Resource Catalog 리소스만 사용하면서 원본 패턴의 흐름, 행·열, 중첩 container, support rail을 Board에서 읽을 수 있게 표시한다.",
+      "user_visible_behavior": "여섯 AWS Template가 실제 Resource Catalog의 Resource와 Design 항목을 사용하고, 40px grid 위의 촘촘한 행·열과 Region/AZ/Group 계층으로 Board에서 읽기 쉽게 표시한다.",
       "status": "passing",
       "verification": [
         "각 Template의 Resource ID, type, count, Terraform value, relationship ID/source/target/label은 semantic hash로 보존한다.",
-        "103개 visible node가 active Resource Catalog의 key/type/icon/kind와 일치한다.",
-        "여섯 Template마다 position, parent, size, presentation area, viewport, edge handle/routing 계약을 고정한다.",
+        "103개 deployable Resource와 28개 parameterless Design node가 active Resource Catalog 항목으로 materialize된다.",
+        "Design node/edge는 별도 presentation graph에 있고 Terraform 및 Architecture semantic graph에 포함되지 않는다.",
+        "여섯 Template마다 40px-grid position, parent, size, presentation area, viewport, edge handle/routing 계약을 고정한다.",
         "여섯 Template마다 실제 로그인된 Board에서 12개 시각·구조 QA 항목을 통과한다."
       ],
       "evidence": {
         "lastVerified": "2026-07-13",
         "commands": [
-          "/Users/lgg/.nvm/versions/node/v24.18.0/bin/node apps/web/node_modules/tsx/dist/cli.mjs --test packages/types/src/template-definitions.test.ts packages/types/src/template-layout-contract.test.ts apps/web/features/diagram-editor/area-nodes.test.ts apps/web/features/resource-settings/template-resource-materializer.test.ts apps/web/features/resource-settings/template-sibling-collision-integration.test.ts apps/web/features/resource-settings/template-sibling-collision-layout.test.ts",
-          "pnpm --filter @sketchcatch/types typecheck",
-          "pnpm --filter @sketchcatch/web typecheck",
+          "/Users/lgg/.nvm/versions/node/v24.18.0/bin/node apps/web/node_modules/tsx/dist/cli.mjs --test packages/types/src/template-definitions.test.ts packages/types/src/template-layout-contract.test.ts packages/types/src/template-presentation-contract.test.ts apps/web/features/resource-settings/catalog.test.ts apps/web/features/resource-settings/template-resource-materializer.test.ts apps/web/features/resource-settings/template-sibling-collision-integration.test.ts apps/web/features/resource-settings/template-sibling-collision-layout.test.ts apps/web/features/diagram-editor/area-nodes.test.ts",
+          "pnpm --filter @sketchcatch/web exec tsx --test --test-name-pattern='buildBoardTemplateDiagram|listBoardTemplates exposes|applyTemplateToDiagramWithBackup' features/resource-settings/template-library.test.ts",
           "pnpm typecheck",
           "pnpm lint",
-          "/Users/lgg/.nvm/versions/node/v24.18.0/bin/node scripts/check-harness.mjs",
-          "authenticated Chrome visual QA at /workspace?templateId=<templateId>&projectName=Template%20QA"
+          "pnpm harness:check",
+          "authenticated Chrome visual QA through /workspace/new?mode=template&templateId=<templateId>"
         ],
-        "notes": "39 focused tests and all listed checks passed. The visual evidence and the 12-check matrix are recorded in docs/gg/feat-infrastructure-template/014_AWS템플릿Board실화면QA_gg.md. pnpm build is separately blocked by a pre-existing ignored .codegraph symlink ENOENT."
+        "notes": "60 focused tests, 4 direct regressions, and 72/72 live Board checks passed. Evidence and created project IDs are recorded in docs/gg/feat-infrastructure-template/017_AWS템플릿Design실화면QA_gg.md. pnpm build is separately blocked by a pre-existing ignored .codegraph symlink ENOENT."
       },
       "notes": "Presentation-only work. No Terraform execution, AWS mutation, or approval-flow change was made."
     }
