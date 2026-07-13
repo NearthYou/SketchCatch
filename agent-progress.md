@@ -4,25 +4,25 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- Branch: `fix/gg/355-review-followup-v2`.
-- PR #366 preserves six Catalog-backed AWS Template Boards with 103 Terraform-deployable Resources and 28 parameterless Design nodes.
-- The current `dev` Deployment/CI/CD console split is integrated without restoring the retired monolithic panel.
-- Workspace deployment context counts only `isTerraformDeployableNode` results and passes that value into the Direct Deployment screen; CI/CD remains a separate screen.
-- Migrations `0032` and `0033` came from `dev` and have not been executed by this gg workstream.
+- Branch: `feat/gg/369-workspace-template-board-ux`.
+- Six deployable AWS Templates use compact 40px-grid authored layouts and real Resource-panel Catalog items.
+- Security Group is a visual scope with explicit attachment edges, never a persisted containment parent; ASG is a regular 48px Resource.
+- Template cards and large previews use actual 1280x720 ReactFlow Board WebP captures. Project cards use the latest authenticated Board DOM capture.
+- No `apps/api/drizzle/**` migration file was created, edited, renamed, or renumbered in this workstream.
 
 ## Session Record
 
-### 2026-07-13 - Integrate current dev into PR #366
+### 2026-07-13 - Implement issue #369 Workspace and Template Board UX
 
-- Merged `origin/dev` at `39118a79`, including the completed PR #368 Deployment/CI/CD console and Web baseline updates.
-- Resolved the deployment conflict by keeping the new console adapter and moving the branch's deployable-Resource count contract into `DirectDeploymentScreen`.
-- Preserved both Template regression contracts: the 103 deployable Resource total and the updated 26-node Live Observation baseline.
-- Archived completed PR #368 and Template/PR #366 records instead of combining two stale active workstreams.
-- Verification: no conflict markers or whitespace errors; 110 focused conflict regressions, harness, lint, typecheck, and build passed. Lint retains one pre-existing unused-argument warning.
-- Root tests passed 1,325/1,328; the three failures are unchanged Windows-only path expectations shared by the pre-merge branch and `origin/dev`, not conflict-resolution regressions.
-- Risk: no Terraform Apply/Destroy, AWS mutation, deployment API mutation, or database migration execution is part of this merge.
+- Added the repository-wide migration collision reporting contract, blank-board single-flight navigation, compact Template geometry, Terraform local-name separation, and actual Board thumbnail flow.
+- Removed the synthetic Template SVG preview model. Static Template captures now record the exact materialized DiagramJson hash; saved Projects upload a real ReactFlow DOM WebP after autosave.
+- Browser QA confirmed all six Workspace Template entries scroll correctly, the large-preview control does not apply a Template, and Dashboard cards render raster Board captures.
+- Verification: Web 1,125/1,125; focused Template contract 17/17; focused thumbnail API 25/25; harness, typecheck, migration compatibility, and API build passed.
+- Root API tests remain 1,331/1,334 because of the three existing Windows path-separator fixtures on macOS. Lint retains one existing unused-argument warning.
+- Full Web build remains blocked by the existing missing `apps/web/.codegraph`; Terraform CLI validation cannot start because this environment has no `terraform` binary.
+- Risk: no Terraform Apply/Destroy, AWS mutation, deployment mutation, or database migration execution was performed.
 
 ## Next Action
 
-- Commit and push the resolved merge, then confirm GitHub reports PR #366 mergeable with no unresolved review thread.
-- Run migrations and credentialed browser acceptance only with an approved safe environment.
+- Commit the verification record, push the branch, and open the Korean issue #369 PR.
+- Re-run `pnpm build` after the repository restores `apps/web/.codegraph`; run Terraform validation only in an environment with the CLI installed.
