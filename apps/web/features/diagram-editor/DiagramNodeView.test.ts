@@ -345,9 +345,7 @@ test("node toolbar uses compact board tokens and honest color targets", () => {
   const toolbarBlock = getCssBlock(".nodeToolbar");
   const disclosureBlock = getCssBlock(".nodeToolbarDisclosure");
   const panelBlock = getCssBlock(".nodeToolbarPanel");
-  const iconButtonBlock = getCssRuleContaining(
-    ".iconButton,\n.iconButtonSelected,\n.iconButtonDanger {"
-  );
+  const iconButtonBlock = getCssRuleContaining(".iconButton,");
   const swatchButtonBlock = getCssBlock(".swatchButton");
   const swatchVisualBlock = getCssBlock(".nodeSwatchVisual");
 
