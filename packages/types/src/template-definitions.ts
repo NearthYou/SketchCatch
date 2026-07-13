@@ -1,4 +1,10 @@
-import type { DiagramJson, DiagramNode, DiagramNodeKind, TerraformBlockType } from "./index.js";
+import type {
+  DiagramEdge,
+  DiagramJson,
+  DiagramNode,
+  DiagramNodeKind,
+  TerraformBlockType
+} from "./index.js";
 
 export const TEMPLATE_IDS = [
   "static-web-hosting",
@@ -20,7 +26,9 @@ export type TemplateResourceDefinition = {
   readonly terraformResourceType: string;
   readonly values: Record<string, unknown>;
   readonly position: { readonly x: number; readonly y: number };
+  readonly size?: DiagramNode["size"];
   readonly parentResourceId?: string;
+  readonly presentationArea?: boolean;
   readonly kind?: DiagramNodeKind;
 };
 
@@ -29,6 +37,9 @@ export type TemplateRelationship = {
   readonly sourceResourceId: string;
   readonly targetResourceId: string;
   readonly label: string;
+  readonly sourceHandleId?: string;
+  readonly targetHandleId?: string;
+  readonly type?: DiagramEdge["type"];
 };
 
 export type TemplateParameterDefinition = {
@@ -47,6 +58,7 @@ export type TemplateDefinition = {
   readonly resources: readonly TemplateResourceDefinition[];
   readonly relationships: readonly TemplateRelationship[];
   readonly parameters: readonly TemplateParameterDefinition[];
+  readonly viewport?: DiagramJson["viewport"];
 };
 
 export type BuildTemplateDiagramInput = {
@@ -119,6 +131,199 @@ const DYNAMODB_ACTIONS = [
   "dynamodb:Scan"
 ] as const;
 const THREE_TIER_USER_DATA = "IyEvYmluL2Jhc2gKIyBza2V0Y2hjYXRjaC1kZW1vLW1hbmFnZWQtdXNlci1kYXRhOnYxCiMgc2tldGNoY2F0Y2gtZGVtby1tYW5hZ2VkLXVzZXItZGF0YS1zaGEyNTY6ZTMxODQ5OGZkYTIxMTc0OTNlNjljOWM3ZmZkOTdmMWEwM2JkMDc3OTVkMDA4MzEwMTdiMTc4MTBkODZmODkxMApzZXQgLWV1eG8gcGlwZWZhaWwKZG5mIGluc3RhbGwgLXkgbmdpbngKc3lzdGVtY3RsIGVuYWJsZSAtLW5vdyBuZ2lueAo=";
+
+type TemplatePresentationPlacement = {
+  readonly position: TemplateResourceDefinition["position"];
+  readonly parentResourceId?: string;
+  readonly size?: DiagramNode["size"];
+  readonly presentationArea?: boolean;
+};
+
+type TemplatePresentationLayout = {
+  readonly viewport: DiagramJson["viewport"];
+  readonly resources: Readonly<Record<string, TemplatePresentationPlacement>>;
+  readonly routing: Readonly<Record<string, Pick<TemplateRelationship, "sourceHandleId" | "targetHandleId" | "type">>>;
+};
+
+// The presentation layer is deliberately separate from deployable resource values.
+// It lets a template follow the AWS pattern diagram without changing Terraform identity or behavior.
+const TEMPLATE_PRESENTATION_LAYOUTS: Readonly<Record<TemplateId, TemplatePresentationLayout>> = {
+  "static-web-hosting": {
+    viewport: { x: 0, y: 0, zoom: 0.75 },
+    resources: {
+      bucket: layoutAt(920, 280),
+      "index-object": layoutAt(1120, 360),
+      "public-access": layoutAt(920, 520),
+      oac: layoutAt(640, 480),
+      distribution: layoutAt(480, 280),
+      "bucket-policy": layoutAt(1480, 560)
+    },
+    routing: {
+      "bucket-public-access": layoutRoute("handle-bottom", "handle-top"),
+      "bucket-index": layoutRoute("handle-right", "handle-left"),
+      "bucket-oac": layoutRoute("handle-bottom", "handle-right"),
+      "oac-distribution": layoutRoute("handle-top", "handle-bottom"),
+      "distribution-bucket": layoutRoute("handle-right", "handle-left"),
+      "bucket-policy-bucket": layoutRoute("handle-left", "handle-right")
+    }
+  },
+  "minimal-serverless-api": {
+    viewport: { x: 0, y: 0, zoom: 0.64 },
+    resources: {
+      api: layoutAt(320, 240, undefined, { width: 480, height: 900 }, true),
+      route: layoutAt(440, 380, "api"),
+      method: layoutAt(440, 520, "api"),
+      integration: layoutAt(440, 660, "api"),
+      deployment: layoutAt(440, 800, "api"),
+      stage: layoutAt(440, 940, "api"),
+      handler: layoutAt(880, 560),
+      role: layoutAt(880, 840),
+      "role-policy": layoutAt(1160, 840),
+      permission: layoutAt(880, 320),
+      table: layoutAt(1200, 560),
+      "log-group": layoutAt(1480, 560)
+    },
+    routing: {
+      "api-route": layoutRoute("handle-bottom", "handle-top"),
+      "route-method": layoutRoute("handle-bottom", "handle-top"),
+      "method-integration": layoutRoute("handle-bottom", "handle-top"),
+      "integration-handler": layoutRoute("handle-right", "handle-left"),
+      "handler-role": layoutRoute("handle-bottom", "handle-top"),
+      "handler-table": layoutRoute("handle-right", "handle-left")
+    }
+  },
+  "full-serverless-web-app": {
+    viewport: { x: 0, y: 0, zoom: 0.48 },
+    resources: {
+      frontend: layoutAt(200, 560),
+      "user-pool": layoutAt(560, 640),
+      "user-client": layoutAt(560, 400),
+      api: layoutAt(920, 260, undefined, { width: 480, height: 1040 }, true),
+      authorizer: layoutAt(1040, 420, "api"),
+      route: layoutAt(1040, 580, "api"),
+      method: layoutAt(1040, 720, "api"),
+      integration: layoutAt(1040, 860, "api"),
+      deployment: layoutAt(1040, 1000, "api"),
+      stage: layoutAt(1040, 1140, "api"),
+      handler: layoutAt(1520, 560),
+      role: layoutAt(1520, 840),
+      "role-policy": layoutAt(1760, 840),
+      permission: layoutAt(1520, 400),
+      table: layoutAt(1840, 560),
+      "log-group": layoutAt(2080, 720)
+    },
+    routing: {
+      "frontend-api": layoutRoute("handle-right", "handle-left"),
+      "client-pool": layoutRoute("handle-bottom", "handle-top"),
+      "api-pool": layoutRoute("handle-left", "handle-right"),
+      "api-handler": layoutRoute("handle-right", "handle-left"),
+      "handler-table": layoutRoute("handle-right", "handle-left")
+    }
+  },
+  "three-tier-web-app": {
+    viewport: { x: 0, y: 0, zoom: 0.38 },
+    resources: {
+      vpc: layoutAt(160, 160, undefined, { width: 2400, height: 1840 }),
+      "public-subnet-a": layoutAt(680, 440, "vpc", { width: 560, height: 400 }),
+      "public-subnet-b": layoutAt(1440, 440, "vpc", { width: 560, height: 400 }),
+      "app-subnet-a": layoutAt(680, 920, "vpc", { width: 560, height: 440 }),
+      "app-subnet-b": layoutAt(1440, 920, "vpc", { width: 560, height: 440 }),
+      "db-subnet-a": layoutAt(680, 1400, "vpc", { width: 560, height: 360 }),
+      "db-subnet-b": layoutAt(1440, 1400, "vpc", { width: 560, height: 360 }),
+      "internet-gateway": layoutAt(320, 280, "vpc"),
+      "public-route-table": layoutAt(320, 560, "vpc"),
+      "public-route-a": layoutAt(520, 560, "vpc"),
+      "public-route-b": layoutAt(520, 680, "vpc"),
+      "nat-gateway": layoutAt(1120, 280, "vpc"),
+      "nat-eip": layoutAt(960, 280, "vpc"),
+      "app-route-table": layoutAt(320, 1040, "vpc"),
+      "app-route-a": layoutAt(520, 1040, "vpc"),
+      "app-route-b": layoutAt(520, 1160, "vpc"),
+      "db-route-table": layoutAt(320, 1520, "vpc"),
+      "db-route-a": layoutAt(520, 1520, "vpc"),
+      "db-route-b": layoutAt(520, 1640, "vpc"),
+      "alb-security-group": layoutAt(820, 680, "public-subnet-a"),
+      "app-security-group": layoutAt(1760, 1120, "app-subnet-b"),
+      "db-security-group": layoutAt(1820, 1560, "db-subnet-b"),
+      "latest-ami": layoutAt(1120, 1240, "app-subnet-a"),
+      "launch-template": layoutAt(900, 1080, "application-group"),
+      "load-balancer": layoutAt(820, 560, "public-subnet-a"),
+      "target-group": layoutAt(1520, 1000, "app-subnet-b"),
+      listener: layoutAt(1040, 560, "public-subnet-a"),
+      "application-group": layoutAt(760, 980, "app-subnet-a", { width: 400, height: 220 }),
+      "db-subnet-group": layoutAt(860, 1480, "db-subnet-a"),
+      database: layoutAt(1660, 1460, "db-subnet-b")
+    },
+    routing: {
+      "vpc-igw": layoutRoute("handle-top", "handle-bottom"),
+      "public-nat": layoutRoute("handle-top", "handle-bottom"),
+      "alb-asg": layoutRoute("handle-bottom", "handle-top"),
+      "app-db": layoutRoute("handle-bottom", "handle-top")
+    }
+  },
+  "ecs-fargate-container-app": {
+    viewport: { x: 0, y: 0, zoom: 0.4 },
+    resources: {
+      vpc: layoutAt(160, 160, undefined, { width: 1800, height: 1440 }),
+      "subnet-a": layoutAt(400, 360, "vpc", { width: 560, height: 400 }),
+      "subnet-b": layoutAt(1120, 360, "vpc", { width: 560, height: 320 }),
+      "internet-gateway": layoutAt(320, 1360, "vpc"),
+      "route-table": layoutAt(520, 1360, "vpc"),
+      "route-a": layoutAt(720, 1360, "vpc"),
+      "route-b": layoutAt(880, 1360, "vpc"),
+      cluster: layoutAt(440, 760, "vpc", { width: 1200, height: 560 }, true),
+      "alb-security-group": layoutAt(480, 620, "subnet-a"),
+      "task-security-group": layoutAt(600, 1160, "cluster"),
+      "execution-role": layoutAt(2200, 760),
+      "execution-policy": layoutAt(2440, 760),
+      "task-role": layoutAt(2200, 960),
+      repository: layoutAt(2200, 360),
+      "log-group": layoutAt(2600, 560),
+      "load-balancer": layoutAt(600, 440, "subnet-a"),
+      "target-group": layoutAt(1200, 480, "subnet-b"),
+      listener: layoutAt(800, 560, "subnet-a"),
+      task: layoutAt(2200, 560),
+      service: layoutAt(880, 980, "cluster")
+    },
+    routing: {
+      "cluster-service": layoutRoute("handle-right", "handle-left"),
+      "service-task": layoutRoute("handle-right", "handle-left"),
+      "repository-task": layoutRoute("handle-bottom", "handle-top"),
+      "task-log-group": layoutRoute("handle-right", "handle-left"),
+      "task-role": layoutRoute("handle-bottom", "handle-top")
+    }
+  },
+  "eks-container-app": {
+    viewport: { x: 0, y: 0, zoom: 0.42 },
+    resources: {
+      vpc: layoutAt(160, 160, undefined, { width: 1800, height: 1280 }),
+      "subnet-a": layoutAt(400, 360, "vpc", { width: 560, height: 200 }),
+      "subnet-b": layoutAt(1120, 360, "vpc", { width: 560, height: 200 }),
+      "internet-gateway": layoutAt(320, 1240, "vpc"),
+      "route-table": layoutAt(520, 1240, "vpc"),
+      "route-a": layoutAt(720, 1240, "vpc"),
+      "route-b": layoutAt(880, 1240, "vpc"),
+      "cluster-security-group": layoutAt(2160, 360),
+      "cluster-role": layoutAt(2160, 560),
+      "node-role": layoutAt(2160, 760),
+      "cluster-policy": layoutAt(2400, 560),
+      "node-policy": layoutAt(2400, 760),
+      "node-cni-policy": layoutAt(2160, 960),
+      "node-ecr-policy": layoutAt(2400, 960),
+      cluster: layoutAt(400, 640, "vpc", { width: 1200, height: 480 }, true),
+      "node-group": layoutAt(600, 800, "cluster"),
+      namespace: layoutAt(920, 760, "cluster", { width: 560, height: 280 }, true),
+      deployment: layoutAt(1040, 900, "namespace"),
+      service: layoutAt(1280, 900, "namespace")
+    },
+    routing: {
+      "cluster-role": layoutRoute("handle-left", "handle-right"),
+      "cluster-subnet": layoutRoute("handle-top", "handle-bottom"),
+      "cluster-node-group": layoutRoute("handle-right", "handle-left"),
+      "deployment-service": layoutRoute("handle-right", "handle-left")
+    }
+  }
+};
 
 export const templateDefinitions = [
   createTemplate({
@@ -378,6 +583,7 @@ export function buildTemplateDiagramJson(
   templateId: TemplateId,
   input: BuildTemplateDiagramInput
 ): DiagramJson {
+  // This builder only transfers authored Board presentation metadata; deployable values are resolved unchanged.
   const definition = getTemplateDefinitionById(templateId);
   const resourceById = new Map(definition.resources.map((resource) => [resource.id, resource]));
   const resourceNames = new Map(
@@ -394,9 +600,11 @@ export function buildTemplateDiagramJson(
       label: relationship.label,
       sourceNodeId: nodeIdByResourceId.get(relationship.sourceResourceId) ?? "",
       targetNodeId: nodeIdByResourceId.get(relationship.targetResourceId) ?? "",
-      type: "smoothstep"
+      type: relationship.type ?? "smoothstep",
+      ...(relationship.sourceHandleId ? { sourceHandleId: relationship.sourceHandleId } : {}),
+      ...(relationship.targetHandleId ? { targetHandleId: relationship.targetHandleId } : {})
     })),
-    viewport: { x: 0, y: 0, zoom: 0.8 }
+    viewport: definition.viewport ? { ...definition.viewport } : { x: 0, y: 0, zoom: 0.8 }
   };
 }
 
@@ -406,6 +614,7 @@ function createDiagramNode(
   resourceNames: ReadonlyMap<string, string>,
   nodeIdByResourceId: ReadonlyMap<string, string>
 ): DiagramNode {
+  // Preserve the catalog-backed resource identity while applying only template-authored Board geometry.
   const values = resolveTemplateValue(resource.values, resourceById, resourceNames);
 
   return {
@@ -413,8 +622,13 @@ function createDiagramNode(
     kind: resource.kind ?? "resource",
     label: resource.label,
     locked: false,
-    metadata: resource.parentResourceId
-      ? { parentAreaNodeId: nodeIdByResourceId.get(resource.parentResourceId) }
+    metadata: resource.parentResourceId || resource.presentationArea
+      ? {
+          ...(resource.parentResourceId
+            ? { parentAreaNodeId: nodeIdByResourceId.get(resource.parentResourceId) }
+            : {}),
+          ...(resource.presentationArea ? { presentationArea: true } : {})
+        }
       : undefined,
     parameters: {
       resourceType: resource.terraformResourceType,
@@ -423,8 +637,12 @@ function createDiagramNode(
       terraformBlockType: resource.terraformBlockType,
       values
     },
-    position: resource.position,
-    size: resource.kind === "design" ? { width: 260, height: 180 } : { width: 124, height: 96 },
+    position: { ...resource.position },
+    size: resource.size
+      ? { ...resource.size }
+      : resource.kind === "design"
+        ? { width: 260, height: 180 }
+        : { width: 124, height: 96 },
     type: resource.terraformResourceType,
     zIndex: resource.kind === "design" ? 0 : 1
   };
@@ -573,11 +791,79 @@ function createDynamoDbPolicy(tableResourceId: string): string {
   });
 }
 
-function createTemplate(input: Omit<TemplateDefinition, "providers">): TemplateDefinition {
+// Apply visual-only PNG placement after the resource list is declared, keeping Terraform values immutable here.
+function createTemplate(input: Omit<TemplateDefinition, "providers" | "viewport">): TemplateDefinition {
+  const presentation = TEMPLATE_PRESENTATION_LAYOUTS[input.id];
+
+  if (!presentation) {
+    throw new Error(`Missing Template presentation layout: ${input.id}`);
+  }
+
+  const resources = input.resources.map((resource) => {
+    const placement = presentation.resources[resource.id];
+
+    if (!placement) {
+      throw new Error(`Missing Template presentation resource: ${input.id}/${resource.id}`);
+    }
+
+    const {
+      position: _position,
+      parentResourceId: _parentResourceId,
+      size: _size,
+      presentationArea: _presentationArea,
+      ...semanticResource
+    } = resource;
+
+    return {
+      ...semanticResource,
+      position: { ...placement.position },
+      ...(placement.parentResourceId ? { parentResourceId: placement.parentResourceId } : {}),
+      ...(placement.size ? { size: { ...placement.size } } : {}),
+      ...(placement.presentationArea ? { presentationArea: true } : {})
+    };
+  });
+  const relationships = input.relationships.map((relationship) => {
+    const routing = presentation.routing[relationship.id];
+    const {
+      sourceHandleId: _sourceHandleId,
+      targetHandleId: _targetHandleId,
+      type: _type,
+      ...semanticRelationship
+    } = relationship;
+
+    return routing
+      ? { ...semanticRelationship, ...routing }
+      : semanticRelationship;
+  });
+
   return {
     ...input,
-    providers: [...new Set(input.resources.map((resource) => resource.provider))]
+    resources,
+    relationships,
+    viewport: { ...presentation.viewport },
+    providers: [...new Set(resources.map((resource) => resource.provider))]
   };
+}
+
+// Keep all layout coordinates on the same grid so edits remain easy to inspect in the Board.
+function layoutAt(
+  x: number,
+  y: number,
+  parentResourceId?: string,
+  size?: DiagramNode["size"],
+  presentationArea?: boolean
+): TemplatePresentationPlacement {
+  return {
+    position: { x, y },
+    ...(parentResourceId ? { parentResourceId } : {}),
+    ...(size ? { size } : {}),
+    ...(presentationArea ? { presentationArea: true } : {})
+  };
+}
+
+// Stored handles make support rails deterministic instead of letting auto-routing cross the runtime flow.
+function layoutRoute(sourceHandleId: string, targetHandleId: string) {
+  return { sourceHandleId, targetHandleId, type: "smoothstep" as const };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

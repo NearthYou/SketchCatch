@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { DiagramJson, DiagramNode } from "../../../../packages/types/src";
+import { buildTemplateDiagramJson, templateDefinitions } from "../../../../packages/types/src/template-definitions";
+import { isAreaNode } from "../diagram-editor/area-nodes";
 import { isRenderableDiagramNode } from "../diagram-editor/diagram-node-visibility";
 import { resourceCatalog } from "./catalog";
 import {
@@ -120,15 +122,48 @@ test("template-library entry points return strict catalog-materialized diagrams"
   );
 });
 
-test("strict Template materialization compacts every built-in Template while draft hydration preserves coordinates", () => {
+test("deployable Template materialization preserves reviewed geometry while draft hydration preserves coordinates", () => {
   for (const template of listBoardTemplates()) {
     assertCompactContainedAreas(template.diagramJson);
+
+    const definition = templateDefinitions.find((candidate) => candidate.id === template.id);
+    assert.ok(definition, `Missing definition for ${template.id}`);
+    const authored = buildTemplateDiagramJson(definition.id, {
+      projectSlug: "sketchcatch",
+      shortId: definition.id
+    });
+
+    for (const sourceNode of authored.nodes) {
+      const materialized = template.diagramJson.nodes.find((node) => node.id === sourceNode.id);
+
+      assert.deepEqual(materialized?.position, sourceNode.position, `${template.id}/${sourceNode.id}`);
+    }
   }
 
   const savedDraft = createDiagram([createTemplateNode("aws_s3_bucket")]);
   const hydratedDraft = hydrateCatalogResourceNodes(savedDraft);
 
   assert.deepEqual(hydratedDraft.nodes[0]?.position, savedDraft.nodes[0]?.position);
+});
+
+test("reviewed API, ECS, EKS, and Namespace resources become real visual containers", () => {
+  const templates = listBoardTemplates();
+  const requiredContainers = [
+    ["minimal-serverless-api", "aws_api_gateway_rest_api"],
+    ["full-serverless-web-app", "aws_api_gateway_rest_api"],
+    ["ecs-fargate-container-app", "aws_ecs_cluster"],
+    ["eks-container-app", "aws_eks_cluster"],
+    ["eks-container-app", "kubernetes_namespace"]
+  ] as const;
+
+  for (const [templateId, resourceType] of requiredContainers) {
+    const node = templates
+      .find((template) => template.id === templateId)
+      ?.diagramJson.nodes.find((candidate) => candidate.parameters?.resourceType === resourceType);
+
+    assert.ok(node, `${templateId}/${resourceType}`);
+    assert.equal(isAreaNode(node), true, `${templateId}/${resourceType}`);
+  }
 });
 
 function createDiagram(nodes: DiagramNode[]): DiagramJson {

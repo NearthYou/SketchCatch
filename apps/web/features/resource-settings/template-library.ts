@@ -634,11 +634,11 @@ const boardTemplates: readonly BoardTemplate[] = templateDefinitions.map((defini
   })
 }));
 
-// 페이지와 보드 모달이 같은 템플릿 목록을 쓰도록 한 곳에서 목록을 제공합니다.
+// 페이지와 보드 모달은 PNG 검토를 마친 authored geometry를 같은 목록에서 사용한다.
 export function listBoardTemplates(): readonly BoardTemplate[] {
   return boardTemplates.map((template) => ({
     ...template,
-    diagramJson: materializeTemplateDiagram(cloneDiagramJson(template.diagramJson))
+    diagramJson: materializeTemplateDiagram(cloneDiagramJson(template.diagramJson), "authored")
   }));
 }
 
@@ -654,9 +654,12 @@ export function buildBoardTemplateDiagram(
   templateId: string | undefined,
   input: { readonly projectSlug: string; readonly shortId: string }
 ): DiagramJson | undefined {
+  // New Boards must retain the reviewed layout instead of re-running the generic topology arranger.
   const definitionId = resolveTemplateDefinitionId(templateId);
   const definition = templateDefinitions.find((candidate) => candidate.id === definitionId);
-  return definition ? materializeTemplateDiagram(buildTemplateDiagramJson(definition.id, input)) : undefined;
+  return definition
+    ? materializeTemplateDiagram(buildTemplateDiagramJson(definition.id, input), "authored")
+    : undefined;
 }
 
 function resolveTemplateDefinitionId(templateId: string | undefined): TemplateId | undefined {

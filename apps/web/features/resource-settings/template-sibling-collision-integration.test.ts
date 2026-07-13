@@ -2,25 +2,72 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { DiagramJson, DiagramNode } from "../../../../packages/types/src";
 import { isAreaNode } from "../diagram-editor/area-nodes";
-import { isRenderableDiagramNode } from "../diagram-editor/diagram-node-visibility";
+import { toFlowEdges } from "../diagram-editor/flow-mappers";
+import { doesOrthogonalRouteCrossResource } from "../diagram-editor/obstacle-safe-edge-routing";
 import { getResourceNodeVisualBounds } from "../diagram-editor/resource-node-visual-footprint";
 import { hydrateCatalogResourceNodes } from "./template-resource-materializer";
 import * as templateLibrary from "./template-library";
 
-test("every materialized built-in Template has zero visible sibling collisions", () => {
-  const listLegacyBoardTemplates = (
-    templateLibrary as typeof templateLibrary & {
-      readonly listLegacyBoardTemplates?: typeof templateLibrary.listBoardTemplates;
-    }
-  ).listLegacyBoardTemplates;
-  const templates = [
-    ...templateLibrary.listBoardTemplates(),
-    ...(listLegacyBoardTemplates?.() ?? [])
-  ];
+test("every reviewed deployable Template has zero visible sibling collisions", () => {
+  const templates = templateLibrary.listBoardTemplates();
 
-  assert.ok(templates.length >= 4);
+  assert.equal(templates.length, 6);
   for (const template of templates) {
     assert.deepEqual(findSiblingVisualCollisions(template.diagramJson), [], template.id);
+  }
+});
+
+test("every reviewed deployable Template keeps child visual footprints inside its Area", () => {
+  for (const template of getAllMaterializedTemplates()) {
+    const nodeById = new Map(template.diagramJson.nodes.map((node) => [node.id, node]));
+
+    for (const child of template.diagramJson.nodes) {
+      const parentId = child.metadata?.parentAreaNodeId;
+      const parent = parentId ? nodeById.get(parentId) : undefined;
+
+      if (!parent || !isAreaNode(parent)) {
+        continue;
+      }
+
+      const childBounds = getResourceNodeVisualBounds(child);
+      const parentBounds = getResourceNodeVisualBounds(parent);
+      assert.ok(
+        childBounds.x >= parentBounds.x &&
+          childBounds.y >= parentBounds.y &&
+          childBounds.x + childBounds.width <= parentBounds.x + parentBounds.width &&
+          childBounds.y + childBounds.height <= parentBounds.y + parentBounds.height,
+        `${template.id}: ${child.id} must fit inside ${parent.id}`
+      );
+    }
+  }
+});
+
+test("every reviewed deployable Template routes each visible edge around Resource captions", () => {
+  for (const template of getAllMaterializedTemplates()) {
+    const nodeById = new Map(template.diagramJson.nodes.map((node) => [node.id, node]));
+    const flowEdges = toFlowEdges(template.diagramJson.edges, [], template.diagramJson.nodes, { isPreview: true });
+
+    for (const flowEdge of flowEdges) {
+      const source = nodeById.get(flowEdge.source);
+      const target = nodeById.get(flowEdge.target);
+      const sourceHandleId = toLogicalHandleId(flowEdge.sourceHandle);
+      const targetHandleId = toLogicalHandleId(flowEdge.targetHandle);
+
+      assert.ok(source, `${template.id}: ${flowEdge.id} source must exist`);
+      assert.ok(target, `${template.id}: ${flowEdge.id} target must exist`);
+      assert.ok(sourceHandleId, `${template.id}: ${flowEdge.id} source handle must exist`);
+      assert.ok(targetHandleId, `${template.id}: ${flowEdge.id} target handle must exist`);
+      assert.equal(
+        doesOrthogonalRouteCrossResource(
+          source,
+          target,
+          { sourceHandleId, targetHandleId },
+          template.diagramJson.nodes
+        ),
+        false,
+        `${template.id}: ${flowEdge.id} crosses a Resource caption`
+      );
+    }
   }
 });
 
@@ -51,7 +98,8 @@ test("draft catalog hydration preserves user-authored coordinates", () => {
 });
 
 function findSiblingVisualCollisions(diagram: DiagramJson): string[] {
-  const renderableNodes = diagram.nodes.filter(isRenderableDiagramNode);
+  // DiagramEditor renders every persisted node, including parameter-helper resources with captions.
+  const renderableNodes = diagram.nodes;
   const nodeById = new Map(diagram.nodes.map((node) => [node.id, node]));
   const groups = new Map<string, DiagramNode[]>();
 
@@ -81,6 +129,15 @@ function findSiblingVisualCollisions(diagram: DiagramJson): string[] {
   }
 
   return collisions;
+}
+
+function getAllMaterializedTemplates() {
+  return templateLibrary.listBoardTemplates();
+}
+
+function toLogicalHandleId(handleId: string | null | undefined): string | undefined {
+  const side = handleId?.match(/(?:source-|target-|handle-)?(left|top|right|bottom)$/u)?.[1];
+  return side ? `handle-${side}` : undefined;
 }
 
 function intersects(left: DiagramNode, right: DiagramNode): boolean {

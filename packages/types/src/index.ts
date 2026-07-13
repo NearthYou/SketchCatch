@@ -2335,6 +2335,8 @@ export type AwsRegionCode =
 
 export type DiagramNodeMetadata = {
   parentAreaNodeId?: string | undefined;
+  /** Limits a resource's area-frame rendering to an authored presentation, not every catalog use. */
+  presentationArea?: boolean | undefined;
   liveObservationRole?:
     | "traffic-source"
     | "traffic-hop"

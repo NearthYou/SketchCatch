@@ -10,8 +10,16 @@ import { cloneParameterValue } from "../diagram-editor/parameter-value-utils";
 import { resourceCatalog } from "./catalog";
 import { arrangeTemplateTopology } from "./template-topology-layout";
 
-export function materializeTemplateDiagram(diagram: DiagramJson): DiagramJson {
-  return arrangeTemplateTopology(materializeCatalogResourceNodes(diagram, "strict"));
+export type TemplatePresentationMode = "authored" | "compact";
+
+// Deployable templates keep their reviewed PNG geometry; legacy fixtures may still opt into compact auto-layout.
+export function materializeTemplateDiagram(
+  diagram: DiagramJson,
+  presentationMode: TemplatePresentationMode = "compact"
+): DiagramJson {
+  const materialized = materializeCatalogResourceNodes(diagram, "strict");
+
+  return presentationMode === "authored" ? materialized : arrangeTemplateTopology(materialized);
 }
 
 export function hydrateCatalogResourceNodes(diagram: DiagramJson): DiagramJson {
