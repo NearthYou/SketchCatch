@@ -325,35 +325,215 @@ test("diagram fingerprints ignore viewport-only changes", () => {
   assert.equal(toDeploymentBaselineFingerprint(diagramJson), toDeploymentBaselineFingerprint(pannedDiagramJson));
 });
 
-test("diagram fingerprints change when nodes or edges change", () => {
+test("diagram fingerprints ignore presentation-only node and edge edits", () => {
+  const vpc = makeNode("resource", "aws_vpc", "main");
+  const region: DiagramNode = {
+    id: "design-region",
+    type: "aws_region",
+    kind: "design",
+    label: "Region",
+    position: { x: 0, y: 0 },
+    size: { width: 640, height: 480 },
+    locked: false,
+    zIndex: 0
+  };
   const diagramJson: DiagramJson = {
-    nodes: [makeNode("resource", "aws_vpc", "main")],
+    nodes: [region, vpc],
+    edges: [
+      {
+        id: "presentation-region-vpc",
+        label: "contains",
+        sourceNodeId: region.id,
+        targetNodeId: vpc.id
+      }
+    ],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+  const presentationEditedDiagramJson: DiagramJson = {
+    ...diagramJson,
+    nodes: [
+      {
+        ...region,
+        label: "Seoul Region",
+        position: { x: 240, y: 160 },
+        size: { width: 720, height: 560 }
+      },
+      {
+        ...vpc,
+        label: "Production VPC",
+        position: { x: 320, y: 240 },
+        style: { borderColor: "#ff9900" },
+        parameters: {
+          ...vpc.parameters!,
+          values: { diagramLabel: "Production VPC" }
+        }
+      }
+    ],
+    edges: [
+      {
+        ...diagramJson.edges[0]!,
+        sourceHandleId: "handle-right",
+        style: { lineStyle: "dashed" }
+      }
+    ]
+  };
+
+  assert.equal(
+    toTerraformRefreshFingerprint(diagramJson),
+    toTerraformRefreshFingerprint(presentationEditedDiagramJson)
+  );
+  assert.equal(
+    toDeploymentBaselineFingerprint(diagramJson),
+    toDeploymentBaselineFingerprint(presentationEditedDiagramJson)
+  );
+});
+
+test("diagram fingerprints change when a Design AZ value changes inherited Terraform", () => {
+  const designAz = makeDesignAvailabilityZone("design-az-a", "ap-northeast-2a");
+  const subnet = {
+    ...makeNode("resource", "aws_subnet", "public"),
+    metadata: { parentAreaNodeId: designAz.id }
+  };
+  const diagramJson: DiagramJson = {
+    nodes: [designAz, subnet],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+  const changedAvailabilityZoneDiagramJson: DiagramJson = {
+    ...diagramJson,
+    nodes: [
+      {
+        ...designAz,
+        parameters: {
+          ...designAz.parameters!,
+          values: { awsAvailabilityZone: "ap-northeast-2b" }
+        }
+      },
+      subnet
+    ]
+  };
+
+  assert.notEqual(
+    toTerraformRefreshFingerprint(diagramJson),
+    toTerraformRefreshFingerprint(changedAvailabilityZoneDiagramJson)
+  );
+  assert.notEqual(
+    toDeploymentBaselineFingerprint(diagramJson),
+    toDeploymentBaselineFingerprint(changedAvailabilityZoneDiagramJson)
+  );
+});
+
+test("diagram fingerprints change when a deployable child moves between Design AZs", () => {
+  const designAzA = makeDesignAvailabilityZone("design-az-a", "ap-northeast-2a");
+  const designAzB = makeDesignAvailabilityZone("design-az-b", "ap-northeast-2b");
+  const subnet = {
+    ...makeNode("resource", "aws_subnet", "public"),
+    metadata: { parentAreaNodeId: designAzA.id }
+  };
+  const diagramJson: DiagramJson = {
+    nodes: [designAzA, designAzB, subnet],
     edges: [],
     viewport: { x: 0, y: 0, zoom: 1 }
   };
   const movedDiagramJson: DiagramJson = {
     ...diagramJson,
     nodes: [
-      {
-        ...diagramJson.nodes[0]!,
-        position: { x: 12, y: 0 }
-      }
-    ]
-  };
-  const connectedDiagramJson: DiagramJson = {
-    ...diagramJson,
-    edges: [
-      {
-        id: "edge-1",
-        sourceNodeId: "source",
-        targetNodeId: "target"
-      }
+      designAzA,
+      designAzB,
+      { ...subnet, metadata: { parentAreaNodeId: designAzB.id } }
     ]
   };
 
-  assert.notEqual(toTerraformRefreshFingerprint(diagramJson), toTerraformRefreshFingerprint(movedDiagramJson));
-  assert.notEqual(toDeploymentBaselineFingerprint(diagramJson), toDeploymentBaselineFingerprint(connectedDiagramJson));
+  assert.notEqual(
+    toTerraformRefreshFingerprint(diagramJson),
+    toTerraformRefreshFingerprint(movedDiagramJson)
+  );
+  assert.notEqual(
+    toDeploymentBaselineFingerprint(diagramJson),
+    toDeploymentBaselineFingerprint(movedDiagramJson)
+  );
 });
+
+test("diagram fingerprints change when Terraform identity or values change", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [makeNode("resource", "aws_vpc", "main")],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+  const renamedDiagramJson: DiagramJson = {
+    ...diagramJson,
+    nodes: [{
+      ...diagramJson.nodes[0]!,
+      parameters: {
+        ...diagramJson.nodes[0]!.parameters!,
+        resourceName: "production"
+      }
+    }]
+  };
+  const valueChangedDiagramJson: DiagramJson = {
+    ...diagramJson,
+    nodes: [{
+      ...diagramJson.nodes[0]!,
+      parameters: {
+        ...diagramJson.nodes[0]!.parameters!,
+        values: { cidrBlock: "10.42.0.0/16" }
+      }
+    }]
+  };
+
+  assert.notEqual(
+    toTerraformRefreshFingerprint(diagramJson),
+    toTerraformRefreshFingerprint(renamedDiagramJson)
+  );
+  assert.notEqual(
+    toDeploymentBaselineFingerprint(diagramJson),
+    toDeploymentBaselineFingerprint(valueChangedDiagramJson)
+  );
+});
+
+test("diagram fingerprints change when a deployable relationship changes", () => {
+  const vpc = makeNode("resource", "aws_vpc", "main");
+  const subnet = makeNode("resource", "aws_subnet", "public");
+  const diagramJson: DiagramJson = {
+    nodes: [vpc, subnet],
+    edges: [{ id: "vpc-subnet", label: "contains", sourceNodeId: vpc.id, targetNodeId: subnet.id }],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+  const relationshipChangedDiagramJson: DiagramJson = {
+    ...diagramJson,
+    edges: [{ ...diagramJson.edges[0]!, label: "routes" }]
+  };
+
+  assert.notEqual(
+    toTerraformRefreshFingerprint(diagramJson),
+    toTerraformRefreshFingerprint(relationshipChangedDiagramJson)
+  );
+  assert.notEqual(
+    toDeploymentBaselineFingerprint(diagramJson),
+    toDeploymentBaselineFingerprint(relationshipChangedDiagramJson)
+  );
+});
+
+// Design AZ fixtures model the generator's one intentional presentation-to-Terraform context edge.
+function makeDesignAvailabilityZone(id: string, availabilityZone: string): DiagramNode {
+  return {
+    id,
+    type: "aws_availability_zone",
+    kind: "design",
+    label: availabilityZone,
+    position: { x: 0, y: 0 },
+    size: { width: 320, height: 240 },
+    locked: false,
+    zIndex: 0,
+    parameters: {
+      terraformBlockType: "resource",
+      resourceType: "aws_availability_zone",
+      resourceName: id,
+      fileName: "main.tf",
+      values: { awsAvailabilityZone: availabilityZone }
+    }
+  };
+}
 
 function makeNode(
   terraformBlockType: "resource" | "data",

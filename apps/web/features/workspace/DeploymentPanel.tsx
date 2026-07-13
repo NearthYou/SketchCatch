@@ -8,6 +8,7 @@ export {
 
 export type DeploymentPanelProps = ComponentProps<typeof DeploymentConsoleShell>;
 
+// Keep the existing panel entry point while the console shell owns Direct Deployment and CI/CD screens.
 export function DeploymentPanel(props: DeploymentPanelProps) {
   return <DeploymentConsoleShell {...props} />;
 }

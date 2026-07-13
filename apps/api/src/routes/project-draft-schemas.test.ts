@@ -192,6 +192,31 @@ test("save project draft body preserves diagram node metadata", () => {
   });
 });
 
+test("save project draft body preserves Template presentation metadata", () => {
+  // Saved Template Boards need both the authored area flag and exact Design Catalog identity after reload.
+  const parsed = saveProjectDraftBodySchema.parse({
+    diagramJson: {
+      ...validDiagram,
+      nodes: [
+        {
+          ...validDiagram.nodes[0]!,
+          kind: "design",
+          parameters: undefined,
+          metadata: {
+            presentationArea: true,
+            presentationCatalogItemId: "aws-region"
+          }
+        }
+      ]
+    }
+  });
+
+  assert.deepEqual(parsed.diagramJson.nodes[0]?.metadata, {
+    presentationArea: true,
+    presentationCatalogItemId: "aws-region"
+  });
+});
+
 test("save project draft body accepts reverse engineering node metadata", () => {
   const parsed = saveProjectDraftBodySchema.parse({
     diagramJson: {

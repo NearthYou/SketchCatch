@@ -251,6 +251,13 @@ test("TemplateDiagramPreview keeps the SVG icon path label-free and bounded", ()
   assert.match(previewSource, />\s*\+\{model\.omittedNodeCount\}\s*<\/span>/);
 });
 
+test("Template Gallery reports only deployable semantic relationships", () => {
+  const source = readFileSync(new URL("./TemplateGallery.tsx", import.meta.url), "utf8");
+
+  assert.match(source, /getBoardTemplateRelationshipCount\(template\)/);
+  assert.doesNotMatch(source, /template\.diagramJson\.edges\.length/);
+});
+
 function createDiagram(nodes: DiagramNode[], edges: DiagramEdge[] = []): DiagramJson {
   return {
     nodes,

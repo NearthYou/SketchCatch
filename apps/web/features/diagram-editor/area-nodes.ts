@@ -7,6 +7,8 @@ import {
 import { getResourceNodeDisplayLabel } from "./resource-node-display-label";
 
 const designAreaNodeTypes = new Set([
+  "aws_region",
+  "aws_availability_zone",
   "design_region",
   "design_az",
   "design_group",
@@ -122,7 +124,11 @@ export function isDesignAreaNode(node: DiagramNode): boolean {
 }
 
 export function isResourceAreaNode(node: DiagramNode): boolean {
-  return node.kind === "resource" && resourceAreaNodeTypes.has(getResourceNodeType(node));
+  // Authored templates can opt a real catalog Resource into a frame without changing generic Board behavior.
+  return node.kind === "resource" && (
+    node.metadata?.presentationArea === true ||
+    resourceAreaNodeTypes.has(getResourceNodeType(node))
+  );
 }
 
 function getResourceNodeType(node: DiagramNode): string {

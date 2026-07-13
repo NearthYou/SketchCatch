@@ -107,7 +107,7 @@ export const initialPreDeploymentCheckState: DeploymentPreDeploymentCheckState =
 
 export type DirectDeploymentScreenProps = {
   readonly confirmationDismissRequestId?: number | undefined;
-  readonly currentNodeCount: number;
+  readonly deployableResourceCount: number;
   readonly deploymentAvailability: DeploymentAvailability;
   readonly diagramJson: DiagramJson;
   readonly hasUnsavedDeploymentBaseline: boolean;
@@ -121,9 +121,10 @@ export type DirectDeploymentScreenProps = {
   readonly projectId: string;
 };
 
+// Direct Deployment reports only Resources that can enter the Terraform execution graph.
 export function DirectDeploymentScreen({
   confirmationDismissRequestId = 0,
-  currentNodeCount,
+  deployableResourceCount,
   deploymentAvailability,
   diagramJson,
   hasUnsavedDeploymentBaseline,
@@ -1248,7 +1249,7 @@ export function DirectDeploymentScreen({
             <div><dt>Region</dt><dd>{selectedAwsConnection?.region ?? "선택 전"}</dd></div>
             <div><dt>Connection</dt><dd>{selectedAwsConnection ? "Verified" : "연결 필요"}</dd></div>
             <div><dt>Terraform artifact</dt><dd>{selectedDeployment ? formatShortHash(selectedDeployment.terraformArtifactId) : "저장 후 생성"}</dd></div>
-            <div><dt>Architecture</dt><dd>{currentNodeCount} resources</dd></div>
+            <div><dt>Architecture</dt><dd>{deployableResourceCount} resources</dd></div>
             <div><dt>저장 상태</dt><dd>{hasUnsavedDeploymentBaseline ? "변경사항 있음" : "저장됨"}</dd></div>
           </dl>
           <p>Apply와 Destroy는 승인 snapshot, 대상 계정, artifact가 모두 일치할 때만 실행됩니다.</p>

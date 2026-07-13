@@ -1175,7 +1175,10 @@ export type {
   TemplateResourceDefinition
 } from "./template-definitions.ts";
 
-export { createTerraformProviderFiles } from "./terraform-provider-files.ts";
+export {
+  createTerraformProviderFiles,
+  isTerraformDeployableNode
+} from "./terraform-provider-files.ts";
 
 export type ReverseEngineeringScanStatus =
   | "queued"
@@ -2471,6 +2474,10 @@ export type AwsRegionCode =
 
 export type DiagramNodeMetadata = {
   parentAreaNodeId?: string | undefined;
+  /** Limits a resource's area-frame rendering to an authored presentation, not every catalog use. */
+  presentationArea?: boolean | undefined;
+  /** Lets Web materialization reuse an exact Resource Panel item for a parameterless Template Design node. */
+  presentationCatalogItemId?: string | undefined;
   liveObservationRole?:
     | "traffic-source"
     | "traffic-hop"

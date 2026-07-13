@@ -6,12 +6,13 @@ import type {
   KeyboardEvent as ReactKeyboardEvent,
   PointerEvent as ReactPointerEvent
 } from "react";
-import type {
-  ArchitectureDiagnostic,
-  CheckFinding,
-  TerraformDiagnostic,
-  TerraformSourceLocation,
-  TerraformSyncFileInput
+import {
+  isTerraformDeployableNode,
+  type ArchitectureDiagnostic,
+  type CheckFinding,
+  type TerraformDiagnostic,
+  type TerraformSourceLocation,
+  type TerraformSyncFileInput
 } from "@sketchcatch/types";
 import {
   createArchitectureRuleInputFingerprint,
@@ -164,6 +165,10 @@ export function WorkspaceRightPanel({
     terraformDiagnostics.some((diagnostic) => diagnostic.severity === "error") ||
     architectureDiagnostics.some((diagnostic) => diagnostic.severity === "error");
   const issueCount = terraformDiagnostics.length + architectureDiagnostics.length;
+  const deployableResourceCount = useMemo(
+    () => context.nodes.filter(isTerraformDeployableNode).length,
+    [context.nodes]
+  );
   const currentDeploymentBaselineFingerprint = useMemo(
     () => toDeploymentBaselineFingerprint(context.diagram),
     [context.diagram]
@@ -680,7 +685,7 @@ export function WorkspaceRightPanel({
 
   const deploymentConsoleContent = isDeploymentConsoleOpen && canRenderDeploymentPortal ? (
     <DeploymentPanel
-      currentNodeCount={context.nodes.length}
+      deployableResourceCount={deployableResourceCount}
       deploymentAvailability={deploymentAvailability}
       diagramJson={context.diagram}
       fullScreenOnly

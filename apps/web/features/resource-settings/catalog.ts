@@ -184,6 +184,20 @@ const designCatalogItems: ResourceItem[] = [
     }
   },
   {
+    id: "design-source-repository",
+    name: "Source Repository",
+    cloudProvider: "aws",
+    area: "other",
+    category: "Flow",
+    iconUrl: `${resourceIconPath}/Res_General-Icons/Res_48_Light/Res_Git-Repository_48_Light.svg`,
+    enabled: true,
+    nodeDefaults: {
+      type: "sketchcatch_source_repository",
+      label: "Source Repository",
+      size
+    }
+  },
+  {
     id: "aws-region",
     name: "Region",
     cloudProvider: "aws",

@@ -140,7 +140,7 @@ test("resourceCatalog exposes Region and AZ as board resource area items", () =>
   });
 });
 
-test("resourceCatalog exposes User / Client and Internet as board-only design items", () => {
+test("resourceCatalog exposes the reusable flow Design items with their real icons", () => {
   assert.deepEqual(getCatalogDefaults("design-user-client"), {
     type: "sketchcatch_user_client",
     label: "User / Client",
@@ -149,6 +149,11 @@ test("resourceCatalog exposes User / Client and Internet as board-only design it
   assert.deepEqual(getCatalogDefaults("design-internet"), {
     type: "sketchcatch_internet",
     label: "Internet",
+    size: { width: 48, height: 48 }
+  });
+  assert.deepEqual(getCatalogDefaults("design-source-repository"), {
+    type: "sketchcatch_source_repository",
+    label: "Source Repository",
     size: { width: 48, height: 48 }
   });
 
@@ -161,6 +166,12 @@ test("resourceCatalog exposes User / Client and Internet as board-only design it
   assert.equal(
     existsSync(
       `${publicDirectoryPath}/Resource-Icons_07312025/Res_General-Icons/Res_48_Light/Res_Internet_48_Light.svg`
+    ),
+    true
+  );
+  assert.equal(
+    existsSync(
+      `${publicDirectoryPath}/Resource-Icons_07312025/Res_General-Icons/Res_48_Light/Res_Git-Repository_48_Light.svg`
     ),
     true
   );

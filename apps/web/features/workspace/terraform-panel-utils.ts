@@ -1,7 +1,9 @@
 import {
   createTerraformProviderFiles,
+  isTerraformDeployableNode,
   type DiagramJson,
   type DiagramNode,
+  type DiagramNodeParameters,
   type TerraformDiagnostic
 } from "@sketchcatch/types";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
@@ -36,11 +38,82 @@ export function toDeploymentBaselineFingerprint(diagramJson: DiagramJson): strin
   return toDiagramContentFingerprint(diagramJson);
 }
 
+// Deployment state follows Terraform semantics, not Board geometry or Design presentation layers.
 function toDiagramContentFingerprint(diagramJson: DiagramJson): string {
+  const deployableNodes = diagramJson.nodes.filter(isTerraformDeployableNode);
+  const deployableNodeIds = new Set(deployableNodes.map((node) => node.id));
+  const nodeById = new Map(diagramJson.nodes.map((node) => [node.id, node]));
+
   return JSON.stringify({
-    nodes: diagramJson.nodes,
+    nodes: deployableNodes.map((node) => {
+      const inheritedAvailabilityZone = getInheritedAvailabilityZoneFingerprint(node, nodeById);
+
+      return {
+        id: node.id,
+        parameters: toTerraformFingerprintParameters(node.parameters),
+        ...(inheritedAvailabilityZone !== undefined ? { inheritedAvailabilityZone } : {})
+      };
+    }),
     edges: diagramJson.edges
+      .filter(
+        (edge) =>
+          deployableNodeIds.has(edge.sourceNodeId) && deployableNodeIds.has(edge.targetNodeId)
+      )
+      .map((edge) => ({
+        id: edge.id,
+        sourceNodeId: edge.sourceNodeId,
+        targetNodeId: edge.targetNodeId,
+        ...(edge.label !== undefined ? { label: edge.label } : {})
+      }))
   });
+}
+
+// Fingerprints omit diagram-only values that the Terraform graph renderer deliberately drops.
+function toTerraformFingerprintParameters(
+  parameters: DiagramNodeParameters
+): DiagramNodeParameters {
+  return {
+    ...parameters,
+    values: Object.fromEntries(
+      Object.entries(parameters.values ?? {}).filter(
+        ([key]) => !/^diagram(?:_|[A-Z])/.test(key)
+      )
+    )
+  };
+}
+
+// Subnet and EBS fingerprints retain the Design AZ context that changes generated Terraform.
+function getInheritedAvailabilityZoneFingerprint(
+  node: DiagramNode & { readonly parameters: DiagramNodeParameters },
+  nodeById: ReadonlyMap<string, DiagramNode>
+): string | undefined {
+  const resourceType = node.parameters.resourceType;
+
+  if (resourceType !== "aws_subnet" && resourceType !== "aws_ebs_volume") {
+    return undefined;
+  }
+
+  const ownAvailabilityZone = node.parameters.values?.["availabilityZone"];
+
+  if (
+    ownAvailabilityZone !== undefined &&
+    ownAvailabilityZone !== null &&
+    ownAvailabilityZone !== ""
+  ) {
+    return undefined;
+  }
+
+  const parentNode = node.metadata?.parentAreaNodeId
+    ? nodeById.get(node.metadata.parentAreaNodeId)
+    : undefined;
+  const parentResourceType = parentNode?.parameters?.resourceType ?? parentNode?.type;
+  const inheritedAvailabilityZone = parentNode?.parameters?.values?.["awsAvailabilityZone"];
+
+  return parentResourceType === "aws_availability_zone" &&
+    typeof inheritedAvailabilityZone === "string" &&
+    inheritedAvailabilityZone.trim().length > 0
+    ? inheritedAvailabilityZone
+    : undefined;
 }
 
 export function createTerraformFilesFromGeneratedCode(

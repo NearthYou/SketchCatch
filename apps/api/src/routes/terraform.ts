@@ -51,7 +51,9 @@ const diagramNodeParametersSchema = z.object({
 });
 
 const diagramNodeMetadataSchema: z.ZodType<DiagramNodeMetadata> = z.object({
-  parentAreaNodeId: z.string().min(1).optional()
+  parentAreaNodeId: z.string().min(1).optional(),
+  presentationArea: z.boolean().optional(),
+  presentationCatalogItemId: z.string().min(1).optional()
 }).strict();
 
 const diagramEdgeMetadataSchema: z.ZodType<DiagramEdgeMetadata> = z.object({

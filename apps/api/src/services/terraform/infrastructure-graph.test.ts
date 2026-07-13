@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import type { DiagramNode } from "@sketchcatch/types";
+import {
+  buildTemplateDiagramJson,
+  templateDefinitions,
+  type DiagramNode
+} from "@sketchcatch/types";
 import { resourceDefinitions } from "@sketchcatch/types/resource-definitions";
 import { buildInfrastructureGraphFromDiagramJson } from "./infrastructure-graph.js";
 
@@ -45,6 +49,21 @@ test("buildInfrastructureGraphFromDiagramJson projects renderable resource nodes
       }
     }
   ]);
+});
+
+test("Template presentation nodes and edges stay outside the Terraform infrastructure graph", () => {
+  // Terraform planning must see the same deployable graph that existed before Design presentation was added.
+  for (const definition of templateDefinitions) {
+    const graph = buildInfrastructureGraphFromDiagramJson(buildTemplateDiagramJson(definition.id, {
+      projectSlug: "terraform",
+      shortId: "presentation"
+    }));
+
+    assert.equal(graph.nodes.length, definition.resources.length, `${definition.id} resources`);
+    assert.equal(graph.edges.length, definition.relationships.length, `${definition.id} relationships`);
+    assert.equal(graph.nodes.some((node) => node.id.includes("-presentation-")), false, definition.id);
+    assert.equal(graph.edges.some((edge) => edge.id.includes("-presentation-")), false, definition.id);
+  }
 });
 
 test("buildInfrastructureGraphFromDiagramJson keeps provider-specific Terraform resource identity", () => {

@@ -75,3 +75,17 @@ test("all AWS templates generate Terraform Preview from their shared definitions
     }
   }
 });
+
+test("ECS Template resolves its embedded CloudWatch Log Group reference", () => {
+  const diagramJson = buildTemplateDiagramJson("ecs-fargate-container-app", {
+    projectSlug: "preview",
+    shortId: "ecs"
+  });
+  const terraformCode = generateTerraformFromDiagramJson(diagramJson);
+
+  assert.doesNotMatch(terraformCode, /@ref:/);
+  assert.match(
+    terraformCode,
+    /awslogs-group\\":\\"\$\{aws_cloudwatch_log_group\.[^.]+\.name\}/
+  );
+});
