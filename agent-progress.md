@@ -169,6 +169,15 @@ Short English-only working log for the current agent context. Older records are 
 - Live verification for `chaekang/Jungle_DB_API_W8`: relational/API/direct-host answers produced an Amazon Q ECS Fargate draft with 49 Board resources and RDS, no EC2, no upload resources, no CodeDeploy Server resources, no unresolved Template placeholders, and zero dangling references across 83 Terraform references. The no-database/managed variant kept ECS and omitted RDS.
 - Verification: 4 focused API regressions, 41 focused Web regressions, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check` passed. Lint retains the pre-existing unused `setNow` warning in the Live Observation store contract.
 
+### 2026-07-13 - Fix `.git` public Repository URL evidence loss
+
+- Reproduced `https://github.com/whiskend/audience-live-check.git` returning empty evidence because public GitHub parsing kept the `.git` suffix and queried a nonexistent repository.
+- Normalized public GitHub repository URLs before tree/raw evidence fetches and bumped the analysis cache namespace to avoid stale empty results.
+- Added fallback UI copy so legacy comparison candidates never render a blank recommendation reason.
+- Chrome verification: re-running URL analysis now selects ECS Fargate first with populated reasons and CI/CD enabled for the sample repository.
+- Verification: `pnpm --dir apps/api exec tsx --test --test-name-pattern "clone URLs ending in .git" src/routes/ai.test.ts`; `pnpm --dir apps/web exec tsx --test features/workspace/public-repository-recommendation.test.ts`; `pnpm harness:check`; `pnpm lint`; `pnpm typecheck`; `pnpm build`.
+- Note: running the full `apps/api/src/routes/ai.test.ts` file still shows two unrelated baseline failures in repository-template and template-selection assertions.
+
 ## Next Action
 
-- Review and commit the verified Template-first Repository Architecture Draft changes.
+- Push or open a PR for the Repository URL and Template-first Repository Architecture Draft fixes.

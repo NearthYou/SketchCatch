@@ -866,13 +866,14 @@ type PublicGitHubRecursiveTreeResponse = {
 const PUBLIC_GITHUB_API_BASE_URL = "https://api.github.com";
 const MAX_PUBLIC_REPOSITORY_EVIDENCE_FILES = 24;
 const PUBLIC_GITHUB_REQUEST_TIMEOUT_MS = 10_000;
-const PUBLIC_REPOSITORY_ANALYSIS_CACHE_NAMESPACE = "ai:public-repository-analysis:v9";
+const PUBLIC_REPOSITORY_ANALYSIS_CACHE_NAMESPACE = "ai:public-repository-analysis:v10";
 const PUBLIC_REPOSITORY_ANALYSIS_CACHE_TTL_MS = 5 * 60 * 1_000;
 
 // GitHub URL에서 owner/repo만 뽑습니다. public repository 근거 파일을 읽을 때 이 값이 필요합니다.
 function parseGitHubRepositoryUrl(repositoryUrl: string): GitHubRepository {
   const url = new URL(repositoryUrl);
-  const [owner, repo] = url.pathname.split("/").filter((segment) => segment.length > 0);
+  const [owner, rawRepo] = url.pathname.split("/").filter((segment) => segment.length > 0);
+  const repo = rawRepo?.replace(/\.git$/i, "");
 
   return {
     owner: owner ?? "",
@@ -999,7 +1000,8 @@ function getRepositoryTemplateContext(templateId: CreateGitHubArchitectureDraftR
 // GitHub repository URL인지 먼저 막아주는 guardrail입니다.
 function isGitHubRepositoryUrl(repositoryUrl: string): boolean {
   const url = new URL(repositoryUrl);
-  const [owner, repo] = url.pathname.split("/").filter((segment) => segment.length > 0);
+  const [owner, rawRepo] = url.pathname.split("/").filter((segment) => segment.length > 0);
+  const repo = rawRepo?.replace(/\.git$/i, "");
 
   return url.hostname === "github.com" && owner !== undefined && repo !== undefined;
 }

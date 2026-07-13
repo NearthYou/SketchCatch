@@ -468,6 +468,14 @@ function createCandidate(
     tradeoffs.push("백엔드 API와 DB 신호가 있으면 별도 리소스 보강이 필요합니다.");
   }
 
+  if (reasons.length === 0) {
+    reasons.push("저장소 근거가 부족해 선택한 배포 방식에 맞는 비교 후보로 제시합니다.");
+  }
+
+  if (tradeoffs.length === 0) {
+    tradeoffs.push("추가 Repository evidence나 follow-up 답변에 따라 구성을 다시 조정해야 합니다.");
+  }
+
   return {
     confidence: Math.min(confidence, 0.96),
     displayTitle: TEMPLATE_LABELS[templateId],

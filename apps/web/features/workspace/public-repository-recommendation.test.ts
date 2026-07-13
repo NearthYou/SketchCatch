@@ -198,6 +198,13 @@ test("legacy public analysis fallback still returns at least two comparison cand
       recommendation.candidates.length,
       deploymentType
     );
+    assert.equal(
+      recommendation.candidates.every(
+        (candidate) => candidate.reasons.length > 0 && candidate.tradeoffs.length > 0
+      ),
+      true,
+      deploymentType
+    );
   }
 });
 
