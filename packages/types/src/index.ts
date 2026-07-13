@@ -740,6 +740,7 @@ export type GitCicdPipelineChangeScope = "app" | "infra" | "app_and_infra";
 export type GitCicdPipelineStageKind =
   | "detect"
   | "app_build"
+  | "artifact_publish"
   | "infra_plan"
   | "infra_apply"
   | "app_deploy"
@@ -785,6 +786,7 @@ export type GitCicdPipelineRun = {
   lastRefreshedAt: IsoDateTimeString;
   createdAt: IsoDateTimeString;
   stages: GitCicdPipelineStage[];
+  release?: ApplicationRelease | null;
 };
 
 export type GitCicdPipelineLog = {
@@ -1042,6 +1044,34 @@ export type ConfirmedBuildConfig = {
   confirmedAt: IsoDateTimeString;
 };
 
+export type EcsGitOpsReleaseEvidence = {
+  schemaVersion: 1;
+  runtimeTargetKind: "ecs_fargate";
+  outcome: "succeeded" | "rolled_back" | "failed";
+  commitSha: string;
+  imageDigest: string;
+  imageUri: string;
+  clusterName: string;
+  serviceName: string;
+  containerName: string;
+  taskDefinitionArn: string;
+  previousTaskDefinitionArn: string;
+  restoredTaskDefinitionArn?: string | undefined;
+  outputUrl: string;
+};
+
+export type EcsFargateRuntimeConfig = {
+  runtimeTargetKind: "ecs_fargate";
+  codeBuildProjectName: string;
+  ecrRepositoryName: string;
+  clusterName: string;
+  serviceName: string;
+  containerName: string;
+  outputUrl: string;
+};
+
+export type ProjectDeploymentRuntimeConfig = EcsFargateRuntimeConfig;
+
 export type ProjectDeploymentTarget = {
   projectId: string;
   provider: DeploymentTargetProvider;
@@ -1049,6 +1079,7 @@ export type ProjectDeploymentTarget = {
   region: string;
   runtimeTargetKind: RuntimeTargetKind;
   confirmedBuildConfig: ConfirmedBuildConfig | null;
+  runtimeConfig: ProjectDeploymentRuntimeConfig | null;
   rolloutStrategy: DeploymentRolloutStrategy;
   createdAt: IsoDateTimeString;
   updatedAt: IsoDateTimeString;
@@ -1056,9 +1087,10 @@ export type ProjectDeploymentTarget = {
 
 export type PutProjectDeploymentTargetRequest = Omit<
   ProjectDeploymentTarget,
-  "projectId" | "confirmedBuildConfig" | "createdAt" | "updatedAt"
+  "projectId" | "confirmedBuildConfig" | "runtimeConfig" | "createdAt" | "updatedAt"
 > & {
   confirmedBuildConfig: ConfirmedBuildConfig;
+  runtimeConfig: ProjectDeploymentRuntimeConfig | null;
 };
 
 export type ProjectDeploymentTargetResponse = {

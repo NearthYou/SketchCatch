@@ -17,7 +17,19 @@ test("a project has one provider-neutral deployment target", () => {
   assert(findColumn(config, "region"));
   assert(findColumn(config, "runtime_target_kind"));
   assert(findColumn(config, "confirmed_build_config"));
+  assert(findColumn(config, "runtime_config"));
   assert(findColumn(config, "rollout_strategy"));
+});
+
+test("ECS runtime coordinates are added by a non-destructive migration", () => {
+  const migrationUrl = new URL("../../drizzle/0037_ecs_gitops_runtime.sql", import.meta.url);
+
+  assert.equal(existsSync(migrationUrl), true);
+  const migration = readFileSync(migrationUrl, "utf8");
+
+  assert.match(migration, /ADD COLUMN "runtime_config" jsonb/);
+  assert.match(migration, /project_deployment_targets_runtime_config_check/);
+  assert.doesNotMatch(migration, /DROP TABLE|DROP COLUMN|TRUNCATE/i);
 });
 
 test("Direct and GitOps application releases share one project ledger", () => {

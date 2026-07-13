@@ -4,12 +4,21 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- Branch: `feature/sw/372-direct-deploy-three-stage` based on merged issue #371 (`450e7181`).
-- Issue #372 is implemented and locally verified: revision-locked save/prepare, exactly three Direct Deployment stages, snapshot-bound approval/execute, and summary-first project UI.
-- Migration `0036_deployment_prepared_revision.sql` applies successfully after migrations 0000-0035 on PostgreSQL 16.
+- Branch: `feature/sw/373-ecs-gitops-release` based on merged issue #372 (`6b521f0f`).
+- Issue #372 is merged in PR #384 after CI and review feedback resolution.
+- Issue #373 implementation is verified and ready for PR review.
 - No cloud mutation or production database migration was performed.
 
 ## Session Record
+
+### 2026-07-14 - Repository-confirmed ECS/Fargate GitOps release
+
+- Added confirmed ECS runtime coordinates and source-analysis Docker evidence gates to the single project deployment target.
+- Added CodeBuild/ECR immutable digest publication, ECS all-at-once replacement with circuit-breaker rollback, and GitHub Actions build/publish/deploy/health stages.
+- Added bounded masked release-evidence parsing, AWS ECS re-query verification, idempotent ApplicationRelease reconciliation, and release details in the CI/CD activity view.
+- Verification passed: focused API 87/87, target-state 6/6, migration compatibility, harness, lint, typecheck, build, and whitespace checks.
+- The full Web suite passed. The API suite passed 1,468/1,471; only the three unchanged Windows symlink fixture setup errors (`EPERM`) remain.
+- Sandbox deployment, rollback, and cleanup evidence remain assigned to issue #378; no cloud mutation was attempted.
 
 ### 2026-07-14 - Revision-locked three-stage Direct Deployment
 
@@ -44,5 +53,5 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Next Action
 
-- Commit and push issue #372, open its Korean PR, wait at least five minutes, resolve review/CI feedback, and merge to `dev`.
-- Then create or refresh the issue #373 branch from `dev` and continue the prioritized `docs/sw/plan2.md` milestones without changing the RAG recommendation scope.
+- Open the Korean issue #373 PR, wait at least five minutes, resolve review and CI feedback, and merge to `dev`.
+- Start issue #374 from the updated `dev` branch after issue #373 merges.

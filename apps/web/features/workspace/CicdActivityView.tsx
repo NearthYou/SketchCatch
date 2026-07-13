@@ -19,6 +19,34 @@ export function CicdActivityView({ run }: { readonly run: GitCicdPipelineRun | n
         </div>
         <strong data-status={run.status}>{formatRunStatus(run.status)}</strong>
       </header>
+      {run.release ? (
+        <dl className={styles.cicdReleaseSummary}>
+          <div>
+            <dt>Release</dt>
+            <dd>{run.release.version}</dd>
+          </div>
+          <div>
+            <dt>Image digest</dt>
+            <dd>{run.release.artifactDigest.slice(0, 12)}</dd>
+          </div>
+          <div>
+            <dt>ECS revision</dt>
+            <dd>{run.release.providerRevision?.revisionId ?? "-"}</dd>
+          </div>
+          <div>
+            <dt>Output</dt>
+            <dd>
+              {run.release.outputUrl ? (
+                <a href={run.release.outputUrl} rel="noreferrer" target="_blank">
+                  열기
+                </a>
+              ) : (
+                "-"
+              )}
+            </dd>
+          </div>
+        </dl>
+      ) : null}
       <ol className={styles.cicdStageList}>
         {run.stages.map((stage) => (
           <li data-status={stage.status} key={stage.id}>
@@ -57,6 +85,7 @@ function formatStage(kind: GitCicdPipelineRun["stages"][number]["kind"]): string
   return ({
     detect: "변경 감지",
     app_build: "앱 빌드",
+    artifact_publish: "이미지 게시",
     infra_plan: "Terraform Plan",
     infra_apply: "Terraform Apply",
     app_deploy: "앱 배포",

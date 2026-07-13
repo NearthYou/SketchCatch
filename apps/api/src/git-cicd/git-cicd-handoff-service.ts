@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, getTableColumns } from "drizzle-orm";
 import type {
+  ConfirmedBuildConfig,
   DeploymentPlanSummary,
   GitCicdAwsRoleDiff,
   GitCicdDeploymentMode,
@@ -9,16 +10,20 @@ import type {
   GitCicdRepositorySettingsPreview,
   GitCicdHandoffStatus,
   GitCicdMonitoredPath,
+  ProjectDeploymentRuntimeConfig,
+  RuntimeTargetKind,
   SourceRepositoryProvider
 } from "@sketchcatch/types";
 import type { Database } from "../db/client.js";
 import {
   architectures,
+  awsConnections,
   deploymentPlanArtifacts,
   deployments,
   gitCicdHandoffs,
   gitCicdMonitoringConfigs,
   projectAssets,
+  projectDeploymentTargets,
   projects,
   sourceRepositories,
   touchUpdatedAt
@@ -59,7 +64,12 @@ export type GitCicdHandoffSourceRepositoryRecord = Pick<
   | "name"
   | "defaultBranch"
   | "repositoryUrl"
+  | "analysisResult"
+  | "analysisRevision"
+  | "analyzedAt"
 >;
+export type GitCicdHandoffDeploymentTargetRecord =
+  typeof projectDeploymentTargets.$inferSelect & { awsRoleArn: string | null };
 export type GitCicdHandoffApprovedDeploymentRecord = Pick<
   typeof deployments.$inferSelect,
   | "id"
@@ -193,6 +203,9 @@ export type GitCicdProviderCreateInput = {
   releaseBucket: string | null;
   staticSiteUrl: string | null;
   apiBaseUrl: string | null;
+  runtimeTargetKind: RuntimeTargetKind;
+  confirmedBuildConfig: ConfirmedBuildConfig;
+  runtimeConfig: ProjectDeploymentRuntimeConfig;
   terraformArtifact: {
     id: string;
     objectKey: string;
@@ -302,6 +315,9 @@ export type GitCicdHandoffRepository = {
   findMonitoringConfig(
     sourceRepositoryId: string
   ): Promise<typeof gitCicdMonitoringConfigs.$inferSelect | undefined>;
+  findProjectDeploymentTarget(
+    projectId: string
+  ): Promise<GitCicdHandoffDeploymentTargetRecord | undefined>;
   findApprovedDeploymentForHandoff(
     deploymentId: string,
     projectId: string
@@ -472,7 +488,10 @@ export function createGitHubGitCicdHandoffProvider(
               releaseBucket: input.releaseBucket ?? undefined,
               rdsEnabled: input.rdsEnabled,
               staticSiteUrl: input.staticSiteUrl,
-              apiBaseUrl: input.apiBaseUrl
+              apiBaseUrl: input.apiBaseUrl,
+              runtimeTargetKind: input.runtimeTargetKind,
+              confirmedBuildConfig: input.confirmedBuildConfig,
+              runtimeConfig: input.runtimeConfig
             })
           ],
           pullRequest: input.pullRequestDraft,
@@ -699,7 +718,10 @@ export function createPostgresGitCicdHandoffRepository(
           owner: sourceRepositories.owner,
           name: sourceRepositories.name,
           defaultBranch: sourceRepositories.defaultBranch,
-          repositoryUrl: sourceRepositories.repositoryUrl
+          repositoryUrl: sourceRepositories.repositoryUrl,
+          analysisResult: sourceRepositories.analysisResult,
+          analysisRevision: sourceRepositories.analysisRevision,
+          analyzedAt: sourceRepositories.analyzedAt
         })
         .from(sourceRepositories)
         .where(
@@ -719,6 +741,23 @@ export function createPostgresGitCicdHandoffRepository(
         .from(gitCicdMonitoringConfigs)
         .where(eq(gitCicdMonitoringConfigs.sourceRepositoryId, sourceRepositoryId));
       return config;
+    },
+
+    async findProjectDeploymentTarget(projectId) {
+      const [target] = await db
+        .select({
+          ...getTableColumns(projectDeploymentTargets),
+          awsRoleArn: awsConnections.roleArn
+        })
+        .from(projectDeploymentTargets)
+        .innerJoin(awsConnections, eq(awsConnections.id, projectDeploymentTargets.connectionId))
+        .where(
+          and(
+            eq(projectDeploymentTargets.projectId, projectId),
+            eq(awsConnections.status, "verified")
+          )
+        );
+      return target;
     },
 
     // Git handoff가 실제 승인된 Plan을 기반으로 하는지 서버 DB에서 확인합니다.
@@ -774,7 +813,10 @@ export function createPostgresGitCicdHandoffRepository(
           owner: sourceRepositories.owner,
           name: sourceRepositories.name,
           defaultBranch: sourceRepositories.defaultBranch,
-          repositoryUrl: sourceRepositories.repositoryUrl
+          repositoryUrl: sourceRepositories.repositoryUrl,
+          analysisResult: sourceRepositories.analysisResult,
+          analysisRevision: sourceRepositories.analysisRevision,
+          analyzedAt: sourceRepositories.analyzedAt
         })
         .from(sourceRepositories)
         .where(
@@ -1016,6 +1058,8 @@ export async function createGitCicdHandoff(
       "Git/CI/CD handoff requires enabled and valid repository monitoring settings"
     );
   }
+  const deploymentTarget = await repository.findProjectDeploymentTarget(input.projectId);
+  assertEcsGitOpsTarget(deploymentTarget, sourceRepository, monitoringConfig.appPath);
 
   const handoffId = generateId();
   const projectSlug = createProjectSlug(project.name);
@@ -1031,8 +1075,18 @@ export async function createGitCicdHandoff(
   const deploymentMode = input.deploymentMode ?? "infra_and_app";
   const environmentName = input.environmentName ?? defaultGitCicdEnvironmentName;
   const rdsEnabled = input.rdsEnabled === true;
-  const awsRegion = input.awsRegion ?? "ap-northeast-2";
-  const awsRoleArn = input.awsRoleArn ?? null;
+  if (input.awsRegion && input.awsRegion !== deploymentTarget.region) {
+    throw new GitCicdHandoffProviderConflictError(
+      "GitOps AWS region must match the confirmed project deployment target"
+    );
+  }
+  if (input.awsRoleArn && input.awsRoleArn !== deploymentTarget.awsRoleArn) {
+    throw new GitCicdHandoffProviderConflictError(
+      "GitOps AWS role must match the confirmed project deployment target connection"
+    );
+  }
+  const awsRegion = deploymentTarget.region;
+  const awsRoleArn = deploymentTarget.awsRoleArn;
   const tfStateBucket = input.tfStateBucket ?? null;
   const releaseBucket = input.releaseBucket ?? null;
   const staticSiteUrl = input.staticSiteUrl ?? null;
@@ -1051,7 +1105,10 @@ export async function createGitCicdHandoff(
     releaseBucket: releaseBucket ?? undefined,
     rdsEnabled,
     staticSiteUrl,
-    apiBaseUrl
+    apiBaseUrl,
+    runtimeTargetKind: deploymentTarget.runtimeTargetKind,
+    confirmedBuildConfig: deploymentTarget.confirmedBuildConfig,
+    runtimeConfig: deploymentTarget.runtimeConfig
   });
   const awsRoleDiff = createAwsRoleDiffPreview({
     projectSlug,
@@ -1066,6 +1123,9 @@ export async function createGitCicdHandoff(
     rdsEnabled,
     staticSiteUrl,
     apiBaseUrl,
+    runtimeTargetKind: deploymentTarget.runtimeTargetKind,
+    confirmedBuildConfig: deploymentTarget.confirmedBuildConfig,
+    runtimeConfig: deploymentTarget.runtimeConfig,
     approvedByUserId: null,
     approvedAt: null
   });
@@ -1097,6 +1157,9 @@ export async function createGitCicdHandoff(
     releaseBucket,
     staticSiteUrl,
     apiBaseUrl,
+    runtimeTargetKind: deploymentTarget.runtimeTargetKind,
+    confirmedBuildConfig: deploymentTarget.confirmedBuildConfig,
+    runtimeConfig: deploymentTarget.runtimeConfig,
     terraformArtifact: {
       id: terraformArtifact.id,
       objectKey: terraformArtifact.objectKey,
@@ -1166,6 +1229,50 @@ export async function createGitCicdHandoff(
     userAcceptedChangeId: input.userAcceptedChangeId,
     createdByUserId: input.accessContext.userId
   });
+}
+
+function assertEcsGitOpsTarget(
+  target: GitCicdHandoffDeploymentTargetRecord | undefined,
+  sourceRepository: GitCicdHandoffSourceRepositoryRecord,
+  appPath: GitCicdMonitoredPath
+): asserts target is GitCicdHandoffDeploymentTargetRecord & {
+  runtimeTargetKind: "ecs_fargate";
+  confirmedBuildConfig: ConfirmedBuildConfig;
+  runtimeConfig: Extract<ProjectDeploymentRuntimeConfig, { runtimeTargetKind: "ecs_fargate" }>;
+  awsRoleArn: string;
+} {
+  if (
+    !target ||
+    target.runtimeTargetKind !== "ecs_fargate" ||
+    !target.confirmedBuildConfig ||
+    !target.runtimeConfig ||
+    target.runtimeConfig.runtimeTargetKind !== "ecs_fargate" ||
+    !target.awsRoleArn
+  ) {
+    throw new GitCicdHandoffProviderConflictError(
+      "GitOps application handoff requires a confirmed ECS Fargate project deployment target"
+    );
+  }
+
+  const build = target.confirmedBuildConfig;
+  const revision = sourceRepository.analysisRevision;
+  const dockerfiles = sourceRepository.analysisResult?.evidence.filter(
+    (item) => item.kind === "dockerfile"
+  ) ?? [];
+  if (
+    build.buildPreset !== "docker_build" ||
+    !build.dockerfilePath ||
+    !revision ||
+    !/^(?:[a-f\d]{40}|[a-f\d]{64})$/i.test(revision) ||
+    build.confirmedCommitSha.toLowerCase() !== revision.toLowerCase() ||
+    dockerfiles.length !== 1 ||
+    dockerfiles[0]?.path !== build.dockerfilePath ||
+    appPath.path !== build.sourceRoot
+  ) {
+    throw new GitCicdHandoffProviderConflictError(
+      "GitOps application handoff requires current, unambiguous Docker build evidence"
+    );
+  }
 }
 
 export async function listProjectGitCicdHandoffs(

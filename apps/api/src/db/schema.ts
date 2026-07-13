@@ -36,6 +36,7 @@ import type {
   GitCicdPipelineStageStatus,
   GitCicdRepositorySettingsPreview,
   JsonValue,
+  ProjectDeploymentRuntimeConfig,
   RepositoryAnalysisAiHandoff,
   ReverseEngineeringResourceSelection,
   ReverseEngineeringScanResult,
@@ -482,6 +483,7 @@ export const projectDeploymentTargets = pgTable(
       .$type<RuntimeTargetKind>()
       .notNull(),
     confirmedBuildConfig: jsonb("confirmed_build_config").$type<ConfirmedBuildConfig>(),
+    runtimeConfig: jsonb("runtime_config").$type<ProjectDeploymentRuntimeConfig>(),
     rolloutStrategy: varchar("rollout_strategy", { length: 32 })
       .$type<"all_at_once">()
       .notNull()
@@ -499,6 +501,14 @@ export const projectDeploymentTargets = pgTable(
     check(
       "project_deployment_targets_rollout_check",
       sql`${table.rolloutStrategy} = 'all_at_once'`
+    ),
+    check(
+      "project_deployment_targets_runtime_config_check",
+      sql`${table.runtimeConfig} is null or (
+        ${table.runtimeTargetKind} = 'ecs_fargate'
+        and jsonb_typeof(${table.runtimeConfig}) = 'object'
+        and ${table.runtimeConfig}->>'runtimeTargetKind' = 'ecs_fargate'
+      )`
     )
   ]
 );

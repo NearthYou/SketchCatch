@@ -1,4 +1,5 @@
 import type {
+  EcsGitOpsReleaseEvidence,
   GitCicdPipelineRunStatus,
   GitCicdPipelineStageKind,
   GitCicdPipelineStageStatus
@@ -37,6 +38,7 @@ export type GitCicdRunProviderSnapshot = {
   logRevision: string;
   jobs: GitCicdRunProviderJob[];
   logs: GitCicdRunProviderLog[];
+  releaseEvidence?: EcsGitOpsReleaseEvidence | null;
 };
 
 export type GitCicdRunProvider = {
@@ -70,6 +72,7 @@ export function createGitHubActionsRunProvider(
       for (const [commitSha, commitRuns] of [...groups].slice(0, maxHydratedPipelineCommitGroups)) {
         const jobs: GitCicdRunProviderJob[] = [];
         const logs: GitCicdRunProviderLog[] = [];
+        const releaseEvidenceCandidates: EcsGitOpsReleaseEvidence[] = [];
         for (const run of [...commitRuns].sort(compareWorkflowHydrationOrder)) {
           for (const job of await client.listWorkflowJobs({ ...input, runId: run.id })) {
             const jobStageKind = mapJobStageKind(run.workflowName, job.name);
@@ -98,14 +101,18 @@ export function createGitHubActionsRunProvider(
               });
             }
             if (job.status !== "completed") continue;
-            const text = maskDeploymentMessage(
-              await client.readWorkflowJobLog({ ...input, jobId: job.id })
-            );
+            const rawText = await client.readWorkflowJobLog({ ...input, jobId: job.id });
+            releaseEvidenceCandidates.push(...parseEcsReleaseEvidence(rawText));
+            const text = maskDeploymentMessage(rawText);
+            let activeStageKind = jobStageKind;
             for (const line of text.split(/\r?\n/).filter(Boolean)) {
+              const lineStageKind = mapLogLineStageKind(run.workflowName, job.name, line);
+              if (lineStageKind) activeStageKind = lineStageKind;
+              const containsEvidence = line.includes("SKETCHCATCH_ECS_RELEASE_EVIDENCE_B64=");
               logs.push({
-                stageKind: mappedSteps.length === 1 ? mappedSteps[0]!.stageKind : jobStageKind,
+                stageKind: containsEvidence ? "verify" : activeStageKind,
                 level: job.conclusion === "failure" ? "error" : "info",
-                message: line
+                message: containsEvidence ? "ECS release evidence captured." : line
               });
             }
           }
@@ -126,7 +133,8 @@ export function createGitHubActionsRunProvider(
           upstreamOrderingToken: `${getMaxWorkflowUpdatedAt(commitRuns).toISOString()}|${createSelectedWorkflowOrderingRevision(commitRuns)}`,
           logRevision,
           jobs,
-          logs
+          logs,
+          releaseEvidence: selectEcsReleaseEvidence(releaseEvidenceCandidates, commitSha)
         });
       }
       return snapshots;
@@ -231,10 +239,118 @@ function mapStepStageKind(
   stepName: string
 ): GitCicdPipelineStageKind | null {
   if (workflowName !== "SketchCatch App" || jobName !== "release") return null;
-  if (stepName === "Upload release artifact") return "app_build";
-  if (stepName === "Refresh Auto Scaling Group") return "app_deploy";
-  if (stepName === "Verify URLs") return "verify";
+  if (stepName === "Run CodeBuild" || stepName === "Upload release artifact") return "app_build";
+  if (stepName === "Publish immutable ECR digest") return "artifact_publish";
+  if (stepName === "Deploy ECS Fargate revision" || stepName === "Refresh Auto Scaling Group") return "app_deploy";
+  if (stepName === "Verify ECS release" || stepName === "Verify URLs") return "verify";
   return null;
+}
+
+function mapLogLineStageKind(
+  workflowName: string,
+  jobName: string,
+  line: string
+): GitCicdPipelineStageKind | null {
+  for (const stepName of [
+    "Run CodeBuild",
+    "Publish immutable ECR digest",
+    "Deploy ECS Fargate revision",
+    "Verify ECS release",
+    "Upload release artifact",
+    "Refresh Auto Scaling Group",
+    "Verify URLs"
+  ]) {
+    if (line.includes(stepName)) return mapStepStageKind(workflowName, jobName, stepName);
+  }
+  return null;
+}
+
+function parseEcsReleaseEvidence(text: string): EcsGitOpsReleaseEvidence[] {
+  const results: EcsGitOpsReleaseEvidence[] = [];
+  for (const line of text.split(/\r?\n/)) {
+    const match = line.match(
+      /SKETCHCATCH_ECS_RELEASE_EVIDENCE_B64=([A-Za-z0-9+/]{1,12000}={0,2})(?:\s|$)/
+    );
+    if (!match?.[1]) continue;
+    try {
+      const decoded = Buffer.from(match[1], "base64");
+      if (decoded.byteLength > 8_192) continue;
+      const evidence = validateEcsReleaseEvidence(JSON.parse(decoded.toString("utf8")));
+      if (evidence) results.push(evidence);
+    } catch {
+      continue;
+    }
+  }
+  return results;
+}
+
+function selectEcsReleaseEvidence(
+  candidates: readonly EcsGitOpsReleaseEvidence[],
+  commitSha: string
+): EcsGitOpsReleaseEvidence | null {
+  const matching = candidates.filter(
+    (candidate) => candidate.commitSha.toLowerCase() === commitSha.toLowerCase()
+  );
+  const distinct = new Map(matching.map((candidate) => [JSON.stringify(candidate), candidate]));
+  return distinct.size === 1 ? [...distinct.values()][0]! : null;
+}
+
+function validateEcsReleaseEvidence(value: unknown): EcsGitOpsReleaseEvidence | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const item = value as Record<string, unknown>;
+  const allowedKeys = new Set([
+    "schemaVersion", "runtimeTargetKind", "outcome", "commitSha", "imageDigest", "imageUri",
+    "clusterName", "serviceName", "containerName", "taskDefinitionArn",
+    "previousTaskDefinitionArn", "restoredTaskDefinitionArn", "outputUrl"
+  ]);
+  if (Object.keys(item).some((key) => !allowedKeys.has(key))) return null;
+  const stringKeys = [
+    "commitSha", "imageDigest", "imageUri", "clusterName", "serviceName", "containerName",
+    "taskDefinitionArn", "previousTaskDefinitionArn", "outputUrl"
+  ] as const;
+  if (stringKeys.some((key) => typeof item[key] !== "string")) return null;
+  if (
+    item.schemaVersion !== 1 ||
+    item.runtimeTargetKind !== "ecs_fargate" ||
+    !["succeeded", "rolled_back", "failed"].includes(String(item.outcome)) ||
+    !/^(?:[a-f\d]{40}|[a-f\d]{64})$/i.test(String(item.commitSha)) ||
+    !/^sha256:[a-f\d]{64}$/.test(String(item.imageDigest)) ||
+    !isEcsResourceName(String(item.clusterName)) ||
+    !isEcsResourceName(String(item.serviceName)) ||
+    !isEcsResourceName(String(item.containerName)) ||
+    !isTaskDefinitionArn(String(item.taskDefinitionArn)) ||
+    !isTaskDefinitionArn(String(item.previousTaskDefinitionArn)) ||
+    (item.restoredTaskDefinitionArn !== undefined &&
+      (typeof item.restoredTaskDefinitionArn !== "string" ||
+        !isTaskDefinitionArn(item.restoredTaskDefinitionArn)))
+  ) return null;
+
+  const imageUri = String(item.imageUri);
+  if (
+    imageUri.length > 2_048 ||
+    /[\s\0]/.test(imageUri) ||
+    !imageUri.endsWith(`@${String(item.imageDigest)}`)
+  ) return null;
+  if (!isSafeHttpsUrl(String(item.outputUrl))) return null;
+  return item as EcsGitOpsReleaseEvidence;
+}
+
+function isEcsResourceName(value: string): boolean {
+  return /^[A-Za-z0-9][A-Za-z0-9_-]{0,254}$/.test(value);
+}
+
+function isTaskDefinitionArn(value: string): boolean {
+  return /^arn:aws(?:-[a-z]+)?:ecs:[a-z0-9-]+:\d{12}:task-definition\/[A-Za-z0-9_-]+:\d+$/.test(value);
+}
+
+function isSafeHttpsUrl(value: string): boolean {
+  if (value.length > 2_048) return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && !url.username && !url.password && !url.search && !url.hash;
+  } catch {
+    return false;
+  }
 }
 
 function mapJobStageKind(workflowName: string, jobName: string): GitCicdPipelineStageKind | null {
