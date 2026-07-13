@@ -124,10 +124,23 @@ export function getDeploymentConsolePhase(deployment: {
 }
 
 function canonicalJson(value: unknown): string {
-  if (value === null || typeof value !== "object") return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (value === undefined) return "null";
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value) ?? "null";
+  }
+
+  const toJSON = (value as { toJSON?: () => unknown }).toJSON;
+  if (typeof toJSON === "function") {
+    return canonicalJson(toJSON.call(value));
+  }
+
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => canonicalJson(item)).join(",")}]`;
+  }
+
   return `{${Object.entries(value)
-    .sort(([left], [right]) => left.localeCompare(right))
+    .filter(([, item]) => item !== undefined)
+    .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
     .map(([key, item]) => `${JSON.stringify(key)}:${canonicalJson(item)}`)
     .join(",")}}`;
 }

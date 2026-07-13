@@ -1182,6 +1182,9 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
         if (saved) {
           await context.saveDiagramNow?.();
         }
+      }).catch(() => {
+        setRequestState("error");
+        setStatusMessage("프로젝트 저장 실패");
       });
     }
   }

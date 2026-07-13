@@ -14,6 +14,7 @@ test("the main board saves the project before opening deployment", () => {
   assert.ok(saveIndex > -1);
   assert.ok(openIndex > saveIndex);
   assert.match(managerSource, /if \(!result\.ok\)[\s\S]*?return;/);
+  assert.match(managerSource, /setTimeout\(\(\) => setSaveAndDeployError\(""\), 3_000\)/);
   assert.match(projectBarSource, /저장하고 배포/);
 });
 

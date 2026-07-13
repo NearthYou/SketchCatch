@@ -81,6 +81,32 @@ test("prepared draft hash is stable across object key order", () => {
   assert.equal(first, second);
 });
 
+test("prepared draft hash normalizes toJSON values and omitted undefined properties", () => {
+  const createdAt = new Date("2026-07-14T00:00:00.000Z");
+  const runtimeDiagram = {
+    ...diagramJson,
+    metadata: {
+      z: "last",
+      createdAt,
+      ignored: undefined,
+      alphabet: "first"
+    }
+  } as DiagramJson;
+  const normalizedDiagram = {
+    ...diagramJson,
+    metadata: {
+      alphabet: "first",
+      createdAt: createdAt.toJSON(),
+      z: "last"
+    }
+  } as DiagramJson;
+
+  assert.equal(
+    createPreparedDraftSnapshotHash({ revision: 7, diagramJson: runtimeDiagram, terraformFiles }),
+    createPreparedDraftSnapshotHash({ revision: 7, diagramJson: normalizedDiagram, terraformFiles })
+  );
+});
+
 test("console phase normalizes internal save, plan, approval, apply, and destroy states", () => {
   assert.equal(
     getDeploymentConsolePhase({ status: "PENDING", currentPlanArtifactId: null, approvedAt: null }),

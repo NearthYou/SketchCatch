@@ -372,6 +372,15 @@ export function ProjectWorkspaceDraftManager({
   }, [flushDraftToServer]);
 
   useEffect(() => {
+    if (!saveAndDeployError) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => setSaveAndDeployError(""), 3_000);
+    return () => window.clearTimeout(timer);
+  }, [saveAndDeployError]);
+
+  useEffect(() => {
     let cancelled = false;
     draftReadyRef.current = false;
 
