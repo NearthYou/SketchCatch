@@ -9,9 +9,9 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
-### 2026-07-13 - Add cost management header description
+### 2026-07-13 - Polish cost header and project deployment filter
 
-- Added a one-line Cost Management introduction connecting estimated cost and actual usage; 8 focused Web tests, lint, typecheck, build, diff check, and harness pass, with one unrelated API `setNow` warning.
+- Added the Cost Management introduction and prevented the Project deployment filter from collapsing below readable width; focused Web tests, lint, typecheck, build, diff check, and harness pass, with one unrelated API `setNow` warning.
 
 ### 2026-07-13 - Restore saved architecture thumbnails above project cards
 

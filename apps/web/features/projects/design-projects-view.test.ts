@@ -50,7 +50,7 @@ test("dashboard projects keeps one clear heading and readable project controls",
   assert.match(projectsClientSource, /settingsField projectDeploymentFilterField/);
   assert.match(
     dashboardStyles,
-    /\.projectDeploymentFilterField\s*\{[^}]*min-width:\s*112px/s
+    /\.settingsField\.projectDeploymentFilterField\s*\{[^}]*min-width:\s*120px/s
   );
   assert.match(
     dashboardStyles,

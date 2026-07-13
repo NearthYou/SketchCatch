@@ -498,8 +498,8 @@ a.dashboardActivityRow:hover {
   min-width: 154px;
 }
 
-.projectDeploymentFilterField {
-  min-width: 112px;
+.settingsField.projectDeploymentFilterField {
+  min-width: 120px;
 }
 
 .settingsField {
