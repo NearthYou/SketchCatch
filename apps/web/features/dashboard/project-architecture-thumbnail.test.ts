@@ -40,3 +40,16 @@ test("compact project cards render the saved architecture preview above card det
     /\.projectArchitectureSvg\s*\{[^}]*width:\s*100%[^}]*height:\s*100%/s
   );
 });
+
+test("draft project cards keep the timestamp compact without rendering a draft badge", () => {
+  assert.match(projectCardSource, /uiStatus !== "DRAFT"/);
+  assert.match(projectCardSource, /<time className="projectCardTimestamp" dateTime=\{timestampValue\}>/);
+  assert.match(
+    dashboardStyles,
+    /\.projectCardMeta \.dashboardIcon\s*\{[^}]*width:\s*11px[^}]*height:\s*11px/s
+  );
+  assert.match(
+    dashboardStyles,
+    /\.projectCardTimestamp\s*\{[^}]*text-overflow:\s*ellipsis[^}]*white-space:\s*nowrap/s
+  );
+});

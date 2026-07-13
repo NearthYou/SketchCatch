@@ -8,6 +8,7 @@ const routeSource = readLocalFile("../../app/dashboard/projects/page.tsx");
 const routeViewSource = readLocalFile("../dashboard/dashboard-projects-route.tsx");
 const projectsClientSource = readLocalFile("../../app/projects/projects-client.tsx");
 const globalStyles = readLocalFile("../../app/globals.css");
+const dashboardStyles = readLocalFile("../../components/dashboard/dashboard-content.css");
 
 test("dashboard projects route loads projects owned by the authenticated user", () => {
   assert.match(routeSource, /DashboardProjectsRoute/);
@@ -37,6 +38,23 @@ test("live project inventory follows the dashboard responsive surface", () => {
   assert.match(
     globalStyles,
     /@media \(max-width: 720px\)[\s\S]*\.designDashboardProjectRow\.designProjectsRow\s*{[^}]*grid-template-columns:\s*1fr/
+  );
+});
+
+test("dashboard projects keeps one clear heading and readable project controls", () => {
+  assert.match(
+    routeViewSource,
+    /설계한 프로젝트를 확인하고, 이어서 작업하거나 배포 상태를 관리합니다\./
+  );
+  assert.doesNotMatch(projectsClientSource, /Worked projects|내가 작업한 프로젝트/);
+  assert.match(projectsClientSource, /settingsField projectDeploymentFilterField/);
+  assert.match(
+    dashboardStyles,
+    /\.projectDeploymentFilterField\s*\{[^}]*min-width:\s*112px/s
+  );
+  assert.match(
+    dashboardStyles,
+    /\.projectCardActionMenuItem \.dashboardIcon\s*\{[^}]*width:\s*16px[^}]*height:\s*16px/s
   );
 });
 

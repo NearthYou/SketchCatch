@@ -490,8 +490,16 @@ a.dashboardActivityRow:hover {
   display: flex;
   align-items: end;
   gap: 12px;
-  padding: 18px 0;
+  padding: 4px 0 18px;
   border-bottom: 1px solid #f0f0f3;
+}
+
+.projectSortField {
+  min-width: 154px;
+}
+
+.projectDeploymentFilterField {
+  min-width: 112px;
 }
 
 .settingsField {
@@ -652,15 +660,32 @@ a.dashboardActivityRow:hover {
 }
 
 .projectCardMeta {
-  margin-top: auto;
+  min-width: 0;
+  margin-top: 2px;
   color: #777b84;
-  font-size: 11px;
+  font-size: 9px;
+  line-height: 1.2;
 }
 
 .projectCardMeta span {
-  display: inline-flex;
+  display: flex;
+  min-width: 0;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
+}
+
+.projectCardMeta .dashboardIcon {
+  width: 11px;
+  height: 11px;
+  flex: 0 0 11px;
+}
+
+.projectCardTimestamp {
+  min-width: 0;
+  overflow: hidden;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .projectCardWithActions {
@@ -694,27 +719,49 @@ a.dashboardActivityRow:hover {
   top: 40px;
   right: 0;
   display: grid;
-  width: 190px;
+  width: 176px;
   border: 1px solid #dcdee0;
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 6px;
   background: #ffffff;
-  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 16px 36px rgba(23, 23, 23, 0.16);
 }
 
 .projectCardActionMenuItem,
 .projectCardActionMenuStatus {
   display: flex;
-  min-height: 38px;
+  width: 100%;
+  min-height: 40px;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   border: 0;
-  border-radius: 6px;
+  border-radius: 7px;
   padding: 0 10px;
   background: transparent;
   color: #171717;
+  font: inherit;
   font-size: 12px;
+  font-weight: 650;
+  line-height: 1.35;
   text-decoration: none;
+}
+
+.projectCardActionMenuItem {
+  cursor: pointer;
+  text-align: left;
+}
+
+.projectCardActionMenuItem .dashboardIcon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+}
+
+.projectCardActionMenuItem span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .projectCardActionMenuItem:hover {
@@ -723,6 +770,11 @@ a.dashboardActivityRow:hover {
 
 .projectCardActionMenuItemDanger {
   color: #b42318;
+}
+
+.projectCardActionMenuItemDanger:hover,
+.projectCardActionMenuItemDanger:focus-visible {
+  background: #fff3f1;
 }
 
 .projectDeleteDialogOverlay {

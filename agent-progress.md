@@ -15,7 +15,7 @@ Short English-only working log for the current agent context. Older records are 
 
 ### 2026-07-13 - Restore saved architecture thumbnails above project cards
 
-- Restored the missing Dashboard thumbnail styles and stacked compact project previews above their project details.
+- Restored Dashboard thumbnails, stacked previews above details, removed duplicate headings and Draft badges, clarified page copy, widened filters, normalized action-menu icons, and compacted timestamps.
 - Reused each saved Project Draft `DiagramJson`, preserving authored node positions and edges in the SVG thumbnail.
 - Verification: focused thumbnail tests, lint, typecheck, build, diff check, and harness pass; lint retains one unrelated API `setNow` warning. Authenticated visual QA was unavailable because the in-app browser had no session and Chrome control was unavailable.
 
