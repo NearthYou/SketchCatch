@@ -25,7 +25,9 @@ export function ApiProjectCard({
 }: ApiProjectCardProps) {
   const href = getWorkspaceHref(project);
   const className =
-    variant === "wide" ? "projectCard projectCardWide projectCardLink" : "projectCard projectCardLink";
+    variant === "wide"
+      ? "projectCard projectCardWide projectCardLink"
+      : "projectCard projectCardCompact projectCardLink";
   const uiStatus = getProjectUiStatus(project, timestampLabel);
   const cardContent = (
     <>

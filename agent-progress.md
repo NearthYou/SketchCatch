@@ -13,6 +13,12 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-13 - Restore saved architecture thumbnails above project cards
+
+- Restored the missing Dashboard thumbnail styles and stacked compact project previews above their project details.
+- Reused each saved Project Draft `DiagramJson`, preserving authored node positions and edges in the SVG thumbnail.
+- Verification: focused thumbnail tests, lint, typecheck, build, diff check, and harness pass; lint retains one unrelated API `setNow` warning. Authenticated visual QA was unavailable because the in-app browser had no session and Chrome control was unavailable.
+
 ### 2026-07-13 - Split estimated and actual project costs with folder tabs
 
 - Added deployment-aware cost contracts across Direct Deployment and Git/CI/CD, including Destroy lifecycle handling.

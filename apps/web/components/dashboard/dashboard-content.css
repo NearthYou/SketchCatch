@@ -536,12 +536,74 @@ a.dashboardActivityRow:hover {
   grid-template-columns: minmax(140px, 42%) minmax(0, 1fr);
 }
 
+.projectCardCompact .projectCardContentLink {
+  grid-template-columns: 1fr;
+}
+
 .projectCardContentLink {
   display: grid;
   min-width: 0;
   color: inherit;
   grid-template-columns: minmax(120px, 40%) minmax(0, 1fr);
   text-decoration: none;
+}
+
+.projectPreview {
+  position: relative;
+  min-width: 0;
+  height: 150px;
+  overflow: hidden;
+  border-bottom: 1px solid #f0f0f3;
+  background-color: #f8fafc;
+  background-image:
+    linear-gradient(rgba(93, 104, 120, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(93, 104, 120, 0.07) 1px, transparent 1px);
+  background-size: 12px 12px;
+}
+
+.projectCardWide .projectPreview {
+  height: 100%;
+  min-height: 148px;
+  border-right: 1px solid #f0f0f3;
+  border-bottom: 0;
+}
+
+.projectArchitecturePreview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.projectArchitectureSvg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.projectArchitectureEdge {
+  stroke: #8f98a6;
+  stroke-linecap: round;
+}
+
+.projectArchitectureNodeBox {
+  fill: rgba(255, 255, 255, 0.96);
+  stroke: #aeb7c4;
+  stroke-width: 1.5;
+}
+
+.projectArchitectureNodeFrame {
+  fill: rgba(237, 241, 247, 0.58);
+  stroke: #a8b2c0;
+  stroke-width: 1.4;
+}
+
+.projectArchitectureNodeAccent {
+  fill: #d9e0e9;
+}
+
+.projectArchitectureEmptyBoard {
+  position: absolute;
+  inset: 0;
 }
 
 .projectCardBody {
