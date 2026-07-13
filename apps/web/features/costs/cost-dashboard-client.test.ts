@@ -104,5 +104,5 @@ test("actual usage chart keeps service-sized labels without stretching the SVG",
   assert.match(usagePanelSource, /createCostUsageLineChart\(dailyTrend, \{ width: chartWidth \}\)/);
   assert.match(chartRule, /height:\s*220px/);
   assert.doesNotMatch(chartRule, /min-height/);
-  assert.match(axisLabelRule, /font-size:\s*12px/);
+  assert.match(axisLabelRule, /font-size:\s*13px/);
 });

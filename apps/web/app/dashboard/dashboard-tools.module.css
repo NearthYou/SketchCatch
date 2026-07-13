@@ -297,7 +297,7 @@
 
 .chartAxisLabel {
   fill: var(--color-body);
-  font-size: 12px;
+  font-size: 13px;
   font-variant-numeric: tabular-nums;
   font-weight: 500;
 }
