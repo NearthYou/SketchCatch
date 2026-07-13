@@ -1339,6 +1339,37 @@ export type CreateDeploymentRequest = {
 
 export type DeploymentLiveProfile = "practice" | "demo_web_service" | "demo_web_service_with_rds";
 
+export type DeploymentLiveObservationAwsAdapterV1 = {
+  kind: "aws-live-observation";
+  version: 1;
+  payload: {
+    cloudFrontDistributionId: string;
+    loadBalancerArn: string;
+    targetGroupArn: string;
+    autoScalingGroupName: string;
+  };
+};
+
+export type DeploymentLiveObservationAwsAdapterV2 = {
+  kind: "aws-live-observation";
+  version: 2;
+  payload: {
+    loadBalancerArn: string;
+    targetGroupArn: string;
+    capacityTarget:
+      | {
+          kind: "asg";
+          autoScalingGroupName: string;
+        }
+      | {
+          kind: "ecs_fargate";
+          clusterName: string;
+          serviceName: string;
+          maxCapacity: number;
+        };
+  };
+};
+
 export type DeploymentLiveObservationManifestV2 = {
   schemaVersion: 2;
   provider: "aws";
@@ -1360,9 +1391,7 @@ export type DeploymentLiveObservationManifestV2 = {
   };
   adapter: {
     kind: "aws-live-observation";
-    version: 1;
-    payload: JsonValue;
-  };
+  } & (DeploymentLiveObservationAwsAdapterV1 | DeploymentLiveObservationAwsAdapterV2);
 };
 
 export type DeploymentLiveObservationManifestStatus =
@@ -1460,6 +1489,42 @@ export type CollectLiveObservationEventRequest = {
 export type CollectLiveObservationEventResponse = {
   accepted: boolean;
   acceptedEventCount: number;
+};
+
+export type LiveObservationV2Session = {
+  id: string;
+  deploymentId: string;
+  status: LiveObservationStatus;
+  audienceUrl: string;
+  createdAt: IsoDateTimeString;
+  expiresAt: IsoDateTimeString;
+};
+
+export type LiveObservationV2Snapshot = {
+  observationId: string;
+  status: LiveObservationStatus;
+  live: {
+    acceptedEventCount: number;
+    rollingRequestsPerSecond: number;
+    projectedRequestsPerMinute: number;
+    pressurePercent: number;
+    pressureLevel: LiveObservationPressureLevel;
+    observedAt: IsoDateTimeString;
+  };
+  latestObservation: {
+    observedAt: IsoDateTimeString;
+    payload: JsonValue;
+  } | null;
+  terminalAt: IsoDateTimeString | null;
+};
+
+export type CreateLiveObservationV2Response = {
+  session: LiveObservationV2Session;
+  snapshot: LiveObservationV2Snapshot;
+};
+
+export type LiveObservationV2SnapshotResponse = {
+  snapshot: LiveObservationV2Snapshot;
 };
 
 export type DeploymentResponse = {

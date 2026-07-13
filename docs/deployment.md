@@ -459,9 +459,9 @@ SKETCHCATCH_PUBLIC_BASE_URL=https://sketchcatch.net
 
 `SKETCHCATCH_PUBLIC_BASE_URL`은 audience page가 public receipt collector를 호출할 기준 origin입니다. Nginx/ALB는 이 origin의 `/api/live-observations/...` 요청을 API로 전달해야 합니다. audience S3 website origin과 SketchCatch Web origin만 collector CORS 응답을 받을 수 있습니다.
 
-현재 v1 collector는 token을 URL path에 포함한다. API의 Pino 설정은 structured object의 lowercase `authorization`, `cookie`, `set-cookie` header field를 redaction하지만 URL path/query string, interpolated string, `Error.message`까지 sanitize하지는 않는다. 따라서 collector v2 migration이 완료될 때까지 production `LIVE_OBSERVATION_ENABLED`는 반드시 `false`로 유지한다.
+운영 조립은 v2 Store route만 등록하며 legacy token path route는 등록하지 않습니다. audience URL은 `/observe/:observationId`이고 capability는 exact-Origin bootstrap 응답으로만 전달되며 URL, RDS, Redis, browser storage, 로그에 저장하지 않습니다.
 
-v2 capability 경로를 연결할 때 사용할 환경 변수는 다음과 같다. 이 Task에서는 v2 runtime을 연결하거나 feature flag를 활성화하지 않으므로, 아래 값은 아직 application startup 필수값이 아니며 GitHub/ECS enforcement 대상에도 추가하지 않는다.
+`LIVE_OBSERVATION_ENABLED=true`이면 application startup은 다음 capability keyring을 필수로 검증합니다.
 
 ```text
 LIVE_OBSERVATION_CAPABILITY_CURRENT_KID=<1-32 character safe kid>

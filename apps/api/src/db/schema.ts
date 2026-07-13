@@ -538,6 +538,21 @@ export const deploymentLiveObservationManifests = pgTable(
     check(
       "deployment_live_observation_manifests_schema_version_check",
       sql`${table.schemaVersion} = 2`
+    ),
+    check(
+      "deployment_live_observation_manifests_status_payload_check",
+      sql`(
+        (${table.status} = 'valid'
+          AND ${table.manifest} IS NOT NULL
+          AND jsonb_typeof(${table.manifest}) = 'object'
+          AND ${table.manifest}->>'schemaVersion' = '2'
+          AND ${table.invalidReason} IS NULL)
+        OR
+        (${table.status} = 'manifest_invalid'
+          AND ${table.manifest} IS NULL
+          AND ${table.invalidReason} IS NOT NULL
+          AND length(btrim(${table.invalidReason})) > 0)
+      )`
     )
   ]
 );

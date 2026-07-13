@@ -208,6 +208,85 @@ test("v2 collector route maps public failures to fixed generic statuses", async 
   }
 });
 
+test("v2 public bootstrap returns a transient credential with no-store caching", async (t) => {
+  const app = await createApp(
+    createCollector({
+      async bootstrap() {
+        return {
+          audienceOrigin: ORIGIN,
+          credential: `current-key.${"b".repeat(43)}`
+        };
+      }
+    })
+  );
+  t.after(() => app.close());
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/live-observations/public/${OBSERVATION_ID}/bootstrap`,
+    headers: { origin: ORIGIN }
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.headers["cache-control"], "no-store");
+  assert.equal(response.headers["access-control-allow-origin"], ORIGIN);
+  assert.deepEqual(response.json(), {
+    credential: `current-key.${"b".repeat(43)}`
+  });
+});
+
+test("v2 public request uses the server-observed IP and the authorized safe request path", async (t) => {
+  let requestInput: { eventId: string; ipAddress: string } | null = null;
+  const app = await createApp(
+    createCollector({
+      async authorize() {
+        return {
+          audienceOrigin: ORIGIN,
+          collectEvent: async () => ({ accepted: true, acceptedEventCount: 1 }),
+          async request(input) {
+            requestInput = input;
+            return { accepted: true, acceptedEventCount: 1 };
+          }
+        };
+      }
+    })
+  );
+  t.after(() => app.close());
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/live-observations/public/${OBSERVATION_ID}/requests`,
+    headers: { authorization: AUTHORIZATION, origin: ORIGIN },
+    payload: { eventId: EVENT_ID },
+    remoteAddress: "203.0.113.10"
+  });
+
+  assert.equal(response.statusCode, 202);
+  assert.deepEqual(requestInput, {
+    eventId: EVENT_ID,
+    ipAddress: "203.0.113.10"
+  });
+});
+
+test("disabled v2 public plugin registers no bootstrap, request, or collector route", async (t) => {
+  const app = Fastify();
+  await app.register(registerLiveObservationPublicCollectorRoutes, {
+    collector: createCollector(),
+    enabled: false
+  });
+  await app.ready();
+  t.after(() => app.close());
+
+  for (const path of ["bootstrap", "requests", "events"]) {
+    const response = await app.inject({
+      method: "POST",
+      url: `/live-observations/public/${OBSERVATION_ID}/${path}`,
+      headers: { origin: ORIGIN }
+    });
+    assert.equal(response.statusCode, 404);
+  }
+});
+
 async function createApp(collector: LiveObservationPublicCollector) {
   const app = Fastify();
   await app.register(registerLiveObservationPublicCollectorRoutes, {
@@ -238,6 +317,12 @@ function createCollector(
     },
     async preflight() {
       return { audienceOrigin: ORIGIN };
+    },
+    async bootstrap() {
+      return {
+        audienceOrigin: ORIGIN,
+        credential: `current-key.${"b".repeat(43)}`
+      };
     },
     ...overrides
   } as LiveObservationPublicCollector;

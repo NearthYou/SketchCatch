@@ -239,6 +239,13 @@
       "when": 1783987200001,
       "tag": "0033_git_cicd_pipeline_upstream_revision",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1783987200002,
+      "tag": "0034_live_observation_manifest_invariants",
+      "breakpoints": true
     }
   ]
 }

@@ -12,7 +12,15 @@ const loadBalancerArnPattern = new RegExp(
 const targetGroupArnPattern = new RegExp(
   `^arn:(${awsPartitionPattern}):elasticloadbalancing:(${awsRegionPattern}):([0-9]{12}):targetgroup/sc-lo-api-(${resourceSuffixPattern})/[0-9a-f]{16}$`
 );
+const generalLoadBalancerArnPattern = new RegExp(
+  `^arn:(${awsPartitionPattern}):elasticloadbalancing:(${awsRegionPattern}):([0-9]{12}):loadbalancer/app/([A-Za-z0-9-]{1,32})/[0-9a-f]{16}$`
+);
+const generalTargetGroupArnPattern = new RegExp(
+  `^arn:(${awsPartitionPattern}):elasticloadbalancing:(${awsRegionPattern}):([0-9]{12}):targetgroup/([A-Za-z0-9-]{1,32})/[0-9a-f]{16}$`
+);
 const autoScalingGroupNamePattern = new RegExp(`^sc-lo-asg-${resourceSuffixPattern}$`);
+const generalAutoScalingGroupNamePattern = /^[A-Za-z0-9_.:/=+@-]{1,255}$/;
+const ecsNamePattern = /^[A-Za-z0-9_-]{1,255}$/;
 const canonicalAwsConnectionIdPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
@@ -56,6 +64,46 @@ const awsLiveObservationAdapterPayloadV1Schema = z
   })
   .strict();
 
+const awsLiveObservationAdapterPayloadV2Schema = z
+  .object({
+    loadBalancerArn: z.string().regex(generalLoadBalancerArnPattern),
+    targetGroupArn: z.string().regex(generalTargetGroupArnPattern),
+    capacityTarget: z.discriminatedUnion("kind", [
+      z
+        .object({
+          kind: z.literal("asg"),
+          autoScalingGroupName: z.string().regex(generalAutoScalingGroupNamePattern)
+        })
+        .strict(),
+      z
+        .object({
+          kind: z.literal("ecs_fargate"),
+          clusterName: z.string().regex(ecsNamePattern),
+          serviceName: z.string().regex(ecsNamePattern),
+          maxCapacity: z.number().int().positive()
+        })
+        .strict()
+    ])
+  })
+  .strict();
+
+const awsLiveObservationAdapterSchema = z.discriminatedUnion("version", [
+  z
+    .object({
+      kind: z.literal("aws-live-observation"),
+      version: z.literal(1),
+      payload: awsLiveObservationAdapterPayloadV1Schema
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("aws-live-observation"),
+      version: z.literal(2),
+      payload: awsLiveObservationAdapterPayloadV2Schema
+    })
+    .strict()
+]);
+
 export const deploymentLiveObservationManifestV2Schema: z.ZodType<DeploymentLiveObservationManifestV2> =
   z
     .object({
@@ -83,31 +131,26 @@ export const deploymentLiveObservationManifestV2Schema: z.ZodType<DeploymentLive
           windowSeconds: z.literal(60)
         })
         .strict(),
-      adapter: z
-        .object({
-          kind: z.literal("aws-live-observation"),
-          version: z.literal(1),
-          payload: awsLiveObservationAdapterPayloadV1Schema
-        })
-        .strict()
+      adapter: awsLiveObservationAdapterSchema
     })
     .strict()
     .superRefine((manifest, context) => {
+      const isLegacyAdapter = manifest.adapter.version === 1;
       const resourceSuffix = deriveResourceSuffix(manifest.provenance.deploymentId);
       const loadBalancerIdentity = parseElasticLoadBalancingArnIdentity(
         manifest.adapter.payload.loadBalancerArn,
-        loadBalancerArnPattern
+        isLegacyAdapter ? loadBalancerArnPattern : generalLoadBalancerArnPattern
       );
       const targetGroupIdentity = parseElasticLoadBalancingArnIdentity(
         manifest.adapter.payload.targetGroupArn,
-        targetGroupArnPattern
+        isLegacyAdapter ? targetGroupArnPattern : generalTargetGroupArnPattern
       );
 
       if (!loadBalancerIdentity || !targetGroupIdentity) {
         return;
       }
 
-      if (loadBalancerIdentity.resourceSuffix !== resourceSuffix) {
+      if (isLegacyAdapter && loadBalancerIdentity.resourceSuffix !== resourceSuffix) {
         context.addIssue({
           code: "custom",
           path: ["adapter", "payload", "loadBalancerArn"],
@@ -115,7 +158,7 @@ export const deploymentLiveObservationManifestV2Schema: z.ZodType<DeploymentLive
         });
       }
 
-      if (targetGroupIdentity.resourceSuffix !== resourceSuffix) {
+      if (isLegacyAdapter && targetGroupIdentity.resourceSuffix !== resourceSuffix) {
         context.addIssue({
           code: "custom",
           path: ["adapter", "payload", "targetGroupArn"],
@@ -124,6 +167,7 @@ export const deploymentLiveObservationManifestV2Schema: z.ZodType<DeploymentLive
       }
 
       if (
+        manifest.adapter.version === 1 &&
         manifest.adapter.payload.autoScalingGroupName !== `sc-lo-asg-${resourceSuffix}`
       ) {
         context.addIssue({

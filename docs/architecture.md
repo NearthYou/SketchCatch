@@ -146,7 +146,7 @@ Representative Use Journey는 위 실제 서비스 흐름을 증명하는 발표
 - Terraform 생성 API는 `DiagramJson`을 입력으로 받는다.
 - Pre-Deployment Check는 비용/보안/설정 위험을 반환한다.
 - Deployment API는 생성, init, plan, approval, apply, logs, destroy 흐름으로 확장한다.
-- Live Observation API는 성공한 `demo_web_service` Deployment에서만 15분 세션을 만들고 인증 snapshot/SSE와 제한된 public receipt collector를 제공한다.
+- Live Observation API는 valid v2 manifest와 현재 verified connection을 가진 성공 Deployment에서만 15분 Store 세션을 만들고 인증 snapshot/SSE, capability-free audience URL, 제한된 public bootstrap/request/collector를 제공한다.
 - Git/CI/CD Integration API는 Source Repository 연결, Terraform handoff, PR 생성, pipeline 상태 추적 흐름으로 확장한다.
 - Repository Analysis API는 repository 원문을 실행하거나 저장하지 않고, 마지막 구조화된 AI Handoff와 분석 revision만 RDS에 저장한다.
 - Reverse Engineering API는 Provider Adapter를 통해 기존 cloud Resource를 스캔하고 Practice Architecture와 import suggestion을 반환한다.
@@ -180,7 +180,7 @@ CI/CD Logs는 GitHub Actions의 build/deploy workflow 증거이며 Runtime appli
 
 ## Live Observation 실행 경계
 
-Workspace의 `시뮬레이션` 버튼은 Architecture Board를 변경하지 않는 읽기 전용 모달을 연다. Web은 Deployment output으로 확정된 Traffic API만 직접 호출하며, 성공한 2xx 요청 뒤에만 public receipt를 보낸다. 발표자 boost는 브라우저에서 최대 5 rps, 90초, 450건, concurrency 5로 제한되고 API가 부하를 proxy하지 않는다.
+공개 audience page는 URL에 capability를 넣지 않고 bootstrap 응답의 credential을 메모리에만 보유한다. 실제 요청은 서버가 manifest의 검증된 HTTPS `trafficUrl`에 redirect 미허용, 3초 timeout, response body 미저장 조건으로 전송하며 성공한 2xx 뒤에만 Store receipt를 반영한다. IP별 한도는 Runtime Cache에서 SHA-256 fingerprint로만 집계한다.
 
 API의 Live Observation service는 session/receipt/snapshot 계산을 소유하고 `DeploymentObservabilityProvider`만 호출한다. AWS adapter는 CloudWatch `RequestCountPerTarget`, ASG lifecycle/capacity/activity를 조회하며 세션별 결과를 10초 cache한다. SSE는 1초 snapshot, 15초 heartbeat를 제공하고 Web은 연결 실패 시 인증 GET snapshot 후 exponential backoff로 재연결한다. CloudWatch와 ASG 오류는 각 상태를 `unavailable`로 만들 뿐 live receipt stream이나 다른 카드를 sample 값으로 대체하지 않는다.
 

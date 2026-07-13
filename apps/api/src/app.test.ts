@@ -4,6 +4,7 @@ import { once } from "node:events";
 import { Writable } from "node:stream";
 import Fastify from "fastify";
 import type { ApiErrorResponse } from "@sketchcatch/types";
+import type { RuntimeEnv } from "./config/env.js";
 import { buildApp, createApiLoggerOptions } from "./app.js";
 
 process.env.NODE_ENV = "test";
@@ -101,6 +102,123 @@ test("unknown routes return the standard 404 error response", async () => {
 
   assert.equal(response.statusCode, 404);
   assertErrorResponse(response.json() as ApiErrorResponse, "not_found");
+
+  await app.close();
+});
+
+test("Live Observation v2 registers no routes while disabled and does not require a keyring", async () => {
+  const app = buildApp({
+    runtimeEnv: createLiveObservationRuntimeEnv({ liveObservationEnabled: "false" })
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/deployments/123e4567-e89b-42d3-a456-426614174000/live-observations"
+  });
+
+  assert.equal(response.statusCode, 404);
+  await app.close();
+});
+
+test("Live Observation v2 requires a valid capability keyring when enabled", () => {
+  assert.throws(
+    () =>
+      buildApp({
+        runtimeEnv: createLiveObservationRuntimeEnv({ liveObservationEnabled: "true" })
+      }),
+    /Invalid Live Observation capability configuration/
+  );
+});
+
+test("Live Observation v2 app composition exposes Store routes and removes legacy token behavior", async () => {
+  const observationId = "11111111-1111-4111-8111-111111111111";
+  const deploymentId = "123e4567-e89b-42d3-a456-426614174000";
+  const snapshot = {
+    observationId,
+    status: "active" as const,
+    live: {
+      acceptedEventCount: 0,
+      rollingRequestsPerSecond: 0,
+      projectedRequestsPerMinute: 0,
+      pressurePercent: 0,
+      pressureLevel: "normal" as const,
+      observedAt: "2026-07-11T00:00:00.000Z"
+    },
+    latestObservation: null,
+    terminalAt: null
+  };
+  const app = buildApp({
+    runtimeEnv: createLiveObservationRuntimeEnv({
+      liveObservationEnabled: "true",
+      liveObservationCapabilityCurrentKid: "current-key",
+      liveObservationCapabilityCurrentSecret: Buffer.alloc(32, 0x41).toString("base64url")
+    }),
+    liveObservationV2Runtime: {
+      collector: {
+        async authorize() {
+          return {
+            audienceOrigin: "https://sketchcatch.example.com",
+            collectEvent: async () => ({ accepted: true, acceptedEventCount: 1 }),
+            request: async () => ({ accepted: true, acceptedEventCount: 1 })
+          };
+        },
+        async bootstrap() {
+          return {
+            audienceOrigin: "https://sketchcatch.example.com",
+            credential: `current-key.${"a".repeat(43)}`
+          };
+        },
+        async preflight() {
+          return { audienceOrigin: "https://sketchcatch.example.com" };
+        }
+      },
+      liveObservationService: {
+        async createSession() {
+          return {
+            session: {
+              id: observationId,
+              deploymentId,
+              status: "active" as const,
+              audienceUrl: `https://sketchcatch.example.com/observe/${observationId}`,
+              createdAt: "2026-07-11T00:00:00.000Z",
+              expiresAt: "2026-07-11T00:15:00.000Z"
+            },
+            snapshot
+          };
+        },
+        async readSession() {
+          return { snapshot };
+        },
+        async stopSession() {
+          return { snapshot: { ...snapshot, status: "stopped" as const } };
+        }
+      },
+      async prepareDeploymentManifest() {},
+      async requireDeploymentAccess() {}
+    }
+  });
+
+  const created = await app.inject({
+    method: "POST",
+    url: `/api/deployments/${deploymentId}/live-observations`
+  });
+  assert.equal(created.statusCode, 201);
+  assert.equal(created.json().session.audienceUrl, `https://sketchcatch.example.com/observe/${observationId}`);
+
+  const bootstrap = await app.inject({
+    method: "POST",
+    url: `/api/live-observations/public/${observationId}/bootstrap`,
+    headers: { origin: "https://sketchcatch.example.com" }
+  });
+  assert.equal(bootstrap.statusCode, 200);
+
+  const legacyToken = await app.inject({
+    method: "POST",
+    url: `/api/live-observations/public/${"a".repeat(43)}/events`,
+    headers: { origin: "https://sketchcatch.example.com" }
+  });
+  assert.equal(legacyToken.statusCode, 400);
+  assert.equal(legacyToken.json().error, "LIVE_OBSERVATION_COLLECTOR_BAD_REQUEST");
 
   await app.close();
 });
@@ -273,4 +391,28 @@ function assertErrorResponse(
   assert.deepEqual(Object.keys(body).sort(), ["error", "message"]);
   assert.equal(body.error, expectedError);
   assert.equal(typeof body.message, "string");
+}
+
+function createLiveObservationRuntimeEnv(
+  overrides: Partial<RuntimeEnv> = {}
+): RuntimeEnv {
+  return {
+    awsRegion: "ap-northeast-2",
+    authTokenSecret: process.env.AUTH_TOKEN_SECRET,
+    cloudFormationTemplateTokenSecret: undefined,
+    databaseUrl: undefined,
+    databaseSsl: false,
+    githubOauthClientId: undefined,
+    githubOauthClientSecret: undefined,
+    kakaoOauthClientId: undefined,
+    kakaoOauthClientSecret: undefined,
+    naverOauthClientId: undefined,
+    naverOauthClientSecret: undefined,
+    nodeEnv: "test",
+    oauthRedirectBaseUrl: undefined,
+    s3BucketName: undefined,
+    sketchcatchAwsCallerPrincipalArn: undefined,
+    sketchcatchPublicBaseUrl: "https://sketchcatch.example.com",
+    ...overrides
+  };
 }
