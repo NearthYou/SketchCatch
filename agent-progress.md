@@ -16,6 +16,15 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-15 - Explain disabled Live Observation routes and expose API diagnostics
+
+- Reproduced the reported `POST /api/deployments/:deploymentId/live-observations` 404 on both the Web proxy and API origin and traced it to conditional route registration while Live Observation was disabled.
+- Registered fail-closed session routes while disabled; they return `503 LIVE_OBSERVATION_DISABLED` without initializing the capability keyring, Store, manifest materializer, or AWS adapter.
+- Added `x-request-id` to API responses and safe Web diagnostics containing method, query/fragment-free path, HTTP status or no-response state, error code, and optional request ID.
+- Verified focused API tests 3/3 and Web tests 5/5. `pnpm harness:check`, `pnpm lint`, standalone `pnpm typecheck`, and `pnpm build` passed. A temporary disabled API on port 4010 returned 503, `x-request-id`, and the explicit code.
+- Known unrelated baseline: `pnpm test` remains non-green on the existing three three-tier Template position/parent contract failures in `packages/types`.
+- Known local boundary: the tracked code does not enable Live Observation or generate secrets; local runtime configuration must still satisfy the capability keyring and HTTPS audience-origin requirements before enabling the feature.
+
 ### 2026-07-15 - Localize Repository Draft and require inline CI/CD connection
 
 - Replaced the optional CI/CD handoff checkbox and Settings detour with project-scoped GitHub connection controls in the existing dev UI; draft progression now fails closed until an active Source Repository exists.
