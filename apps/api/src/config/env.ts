@@ -55,6 +55,7 @@ export type RuntimeEnv = {
   redisUrl?: string | undefined;
   s3BucketName: string | undefined;
   sketchcatchAwsCallerPrincipalArn: string | undefined;
+  sketchcatchAwsCallerPrincipalArns?: string | undefined;
   sketchcatchPublicBaseUrl: string | undefined;
   transcribeCreditConfirmed?: string | undefined;
   transcribeLanguageCode?: string | undefined;
@@ -130,6 +131,7 @@ export function getRuntimeEnv(): RuntimeEnv {
     redisUrl: process.env.REDIS_URL,
     s3BucketName: process.env.S3_BUCKET_NAME,
     sketchcatchAwsCallerPrincipalArn: process.env.SKETCHCATCH_AWS_CALLER_PRINCIPAL_ARN,
+    sketchcatchAwsCallerPrincipalArns: process.env.SKETCHCATCH_AWS_CALLER_PRINCIPAL_ARNS,
     sketchcatchPublicBaseUrl: process.env.SKETCHCATCH_PUBLIC_BASE_URL,
     transcribeCreditConfirmed: process.env.TRANSCRIBE_CREDIT_CONFIRMED,
     transcribeLanguageCode: process.env.TRANSCRIBE_LANGUAGE_CODE,
@@ -383,6 +385,25 @@ export function requireSketchCatchAwsCallerPrincipalArn(): string {
   }
 
   return callerPrincipalArn;
+}
+
+export function requireSketchCatchAwsCallerPrincipalArns(): readonly [string, ...string[]] {
+  const configuredPrincipalArns = process.env.SKETCHCATCH_AWS_CALLER_PRINCIPAL_ARNS
+    ?.split(",")
+    .map((callerPrincipalArn) => callerPrincipalArn.trim())
+    .filter(Boolean);
+  const callerPrincipalArns = [
+    requireSketchCatchAwsCallerPrincipalArn(),
+    ...(configuredPrincipalArns ?? [])
+  ].filter((callerPrincipalArn, index, values) => values.indexOf(callerPrincipalArn) === index);
+
+  for (const callerPrincipalArn of callerPrincipalArns) {
+    if (!/^arn:aws:iam::\d{12}:role\/[\w+=,.@/-]+$/.test(callerPrincipalArn)) {
+      throw new Error("SKETCHCATCH_AWS_CALLER_PRINCIPAL_ARNS must contain only IAM Role ARNs");
+    }
+  }
+
+  return callerPrincipalArns as [string, ...string[]];
 }
 
 export function assertNoStaticAwsCredentialsForApiServer(

@@ -71,7 +71,7 @@ export type AwsConnectionRecord = typeof awsConnections.$inferSelect;
 export type CreateAwsConnectionInput = {
   accessContext: ProjectAccessContext;
   region: string;
-  callerPrincipalArn: string;
+  callerPrincipalArns: readonly string[];
 };
 
 export type CreateAwsConnectionRecordInput = {
@@ -144,7 +144,7 @@ export type VerifyAwsConnectionOptions = {
 export type GetAwsConnectionCloudFormationTemplateInput = {
   connectionId: string;
   accessContext: ProjectAccessContext;
-  callerPrincipalArn: string;
+  callerPrincipalArns: readonly string[];
 };
 
 export type GetAwsConnectionCloudFormationTemplateOptions = {
@@ -318,6 +318,8 @@ export async function createAwsConnection(
   repository: AwsConnectionRepository,
   options: CreateAwsConnectionOptions = {}
 ): Promise<CreateAwsConnectionResponse> {
+  const callerPrincipalArns = requireCallerPrincipalArns(input.callerPrincipalArns);
+  const primaryCallerPrincipalArn = callerPrincipalArns[0];
   const generateId = options.generateId ?? randomUUID;
   const id = generateId();
   const externalId = options.generateExternalId?.() ?? createAwsExternalId(id);
@@ -330,7 +332,7 @@ export async function createAwsConnection(
     status: "pending"
   });
   const trustPolicyTemplate = createTrustPolicyTemplate({
-    callerPrincipalArn: input.callerPrincipalArn,
+    callerPrincipalArns,
     externalId
   });
   const permissionSetup = createInitialPermissionSetup();
@@ -338,11 +340,11 @@ export async function createAwsConnection(
 
   return {
     awsConnection: toAwsConnection(awsConnection),
-    callerPrincipalArn: input.callerPrincipalArn,
+    callerPrincipalArn: primaryCallerPrincipalArn,
     recommendedRoleName: roleName,
     roleSetup: {
       roleName,
-      trustedPrincipalArn: input.callerPrincipalArn,
+      trustedPrincipalArn: primaryCallerPrincipalArn,
       externalId,
       trustPolicy: trustPolicyTemplate,
       permissionSetup
@@ -647,7 +649,7 @@ export async function getAwsConnectionCloudFormationTemplate(
   const stackName = createAwsConnectionStackName(awsConnection.id);
   const templateBody = createAwsConnectionCloudFormationTemplateBody({
     roleName,
-    callerPrincipalArn: input.callerPrincipalArn,
+    callerPrincipalArns: requireCallerPrincipalArns(input.callerPrincipalArns),
     externalId: awsConnection.externalId
   });
   const inlineTemplateResponse: AwsConnectionCloudFormationTemplateResponse = {
@@ -704,7 +706,7 @@ export async function getAwsConnectionCloudFormationTemplate(
 }
 
 function createTrustPolicyTemplate(input: {
-  callerPrincipalArn: string;
+  callerPrincipalArns: readonly string[];
   externalId: string;
 }): Record<string, unknown> {
   return {
@@ -713,7 +715,7 @@ function createTrustPolicyTemplate(input: {
       {
         Effect: "Allow",
         Principal: {
-          AWS: input.callerPrincipalArn
+          AWS: [...input.callerPrincipalArns]
         },
         Action: "sts:AssumeRole",
         Condition: {
@@ -900,11 +902,13 @@ function createAwsConnectionStackName(connectionId: string): string {
 
 function createAwsConnectionCloudFormationTemplateBody(input: {
   roleName: string;
-  callerPrincipalArn: string;
+  callerPrincipalArns: readonly string[];
   externalId: string;
 }): string {
   const roleName = yamlDoubleQuote(input.roleName);
-  const callerPrincipalArn = yamlDoubleQuote(input.callerPrincipalArn);
+  const callerPrincipalArns = input.callerPrincipalArns.map(
+    (callerPrincipalArn) => `                - ${yamlDoubleQuote(callerPrincipalArn)}`
+  );
   const externalId = yamlDoubleQuote(input.externalId);
 
   return [
@@ -920,7 +924,8 @@ function createAwsConnectionCloudFormationTemplateBody(input: {
     "        Statement:",
     "          - Effect: Allow",
     "            Principal:",
-    `              AWS: ${callerPrincipalArn}`,
+    "              AWS:",
+    ...callerPrincipalArns,
     "            Action: sts:AssumeRole",
     "            Condition:",
     "              StringEquals:",
@@ -980,6 +985,18 @@ function createAwsConnectionCloudFormationTemplateBody(input: {
     "    Value: !GetAtt SketchCatchTerraformExecutionRole.Arn",
     ""
   ].join("\n");
+}
+
+function requireCallerPrincipalArns(callerPrincipalArns: readonly string[]): readonly [string, ...string[]] {
+  const uniqueCallerPrincipalArns = [...new Set(callerPrincipalArns)];
+
+  if (uniqueCallerPrincipalArns.length === 0) {
+    throw new AwsConnectionCloudFormationTemplateError(
+      "At least one SketchCatch AWS caller principal ARN is required"
+    );
+  }
+
+  return uniqueCallerPrincipalArns as [string, ...string[]];
 }
 
 function createAwsConnectionLaunchStackUrl(input: {
