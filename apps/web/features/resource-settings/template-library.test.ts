@@ -62,14 +62,27 @@ test("buildBoardTemplateDiagram maps public Repository Analysis template IDs to 
   );
 });
 
-test("filterBoardTemplates searches title, description, and tags", () => {
+test("filterBoardTemplates searches title, description, tags, and deployable resource identities", () => {
   const templates = listBoardTemplates();
 
-  assert.deepEqual(
-    filterBoardTemplates(templates, { query: "CloudFront", sort: "recommended", tag: "all" }).map(
-      (template) => template.id
-    ),
-    ["static-web-hosting"]
+  assert.ok(
+    filterBoardTemplates(templates, { query: "CloudFront", sort: "recommended", tag: "all" }).some(
+      (template) => template.id === "static-web-hosting"
+    )
+  );
+
+  assert.ok(
+    filterBoardTemplates(templates, {
+      query: "aws_instance",
+      sort: "recommended",
+      tag: "all"
+    }).some((template) => template.id === "brainboard-aws-ec2-vpc-subnet")
+  );
+
+  assert.ok(
+    filterBoardTemplates(templates, { query: "EC2", sort: "recommended", tag: "all" }).some(
+      (template) => template.id === "brainboard-aws-ec2-vpc-subnet"
+    )
   );
 });
 

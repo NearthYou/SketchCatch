@@ -5,6 +5,7 @@ import {
   type DiagramJson,
   type TerraformSyncFileInput
 } from "../../../../packages/types/src";
+import { getResourceDefinitionByTerraform } from "@sketchcatch/types/resource-definitions";
 import {
   buildTemplateDiagramJson,
   templateDefinitions,
@@ -828,7 +829,7 @@ function resolveTemplateDefinitionId(templateId: string | undefined): TemplateId
   );
 }
 
-// Template 목록에서 검색어와 tag를 적용하고 사용자가 고른 순서로 정렬합니다.
+// Template 목록에서 이름·설명·태그와 보드에 포함된 Resource identity를 검색합니다.
 export function filterBoardTemplates(
   templates: readonly BoardTemplate[],
   filter: BoardTemplateFilter
@@ -836,7 +837,12 @@ export function filterBoardTemplates(
   const query = filter.query.trim().toLocaleLowerCase("ko-KR");
   const filteredTemplates = templates.filter((template) => {
     const matchesTag = filter.tag === "all" || template.tags.includes(filter.tag);
-    const searchableText = [template.title, template.description, ...template.tags]
+    const searchableText = [
+      template.title,
+      template.description,
+      ...template.tags,
+      ...getBoardTemplateResourceSearchTerms(template)
+    ]
       .join(" ")
       .toLocaleLowerCase("ko-KR");
 
@@ -856,6 +862,29 @@ export function filterBoardTemplates(
   }
 
   return filteredTemplates;
+}
+
+function getBoardTemplateResourceSearchTerms(template: BoardTemplate): readonly string[] {
+  if (!isBoardTemplateAvailable(template)) return [];
+
+  return template.diagramJson.nodes.flatMap((node) => {
+    const parameters = node.parameters;
+    const resourceDefinition = parameters
+      ? getResourceDefinitionByTerraform(
+          parameters.terraformBlockType ?? "resource",
+          parameters.resourceType
+        )
+      : undefined;
+
+    return [
+      node.label,
+      node.type,
+      parameters?.resourceType,
+      parameters?.resourceName,
+      resourceDefinition?.id,
+      resourceDefinition?.resourceType
+    ].filter((term): term is string => Boolean(term));
+  });
 }
 
 // Template 필터에 보여줄 tag를 중복 없이 이름순으로 만듭니다.
