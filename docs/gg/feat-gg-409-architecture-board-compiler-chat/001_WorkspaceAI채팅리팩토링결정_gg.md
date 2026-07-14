@@ -119,4 +119,11 @@ workspace-ai-chat-request.test.ts: 통과
 AI Chat 집중 테스트: 13개 통과
 AI Chat 관련 ESLint: 통과
 Web typecheck: 통과
+Web lint 전체: 통과
+Harness check: 통과
+Web production build: 통과
 ```
+
+Web 전체 테스트도 실행했다. AI Chat 테스트는 모두 통과했지만, 병행 작업 중인 Architecture Board/Compiler 계약 테스트가 현재 구현과 어긋나 전체 명령은 실패했다. 실패 항목은 AI Chat 리팩토링 범위와 무관하며 이 문서의 구현에서는 수정하지 않았다.
+
+production build 최초 실행은 로컬 `.codegraph` 심볼릭 링크가 존재하지 않는 다른 사용자 경로를 가리켜 `ENOENT`로 중단됐다. 해당 로컬 링크를 build 동안만 제외하고 다시 실행했을 때 compile, TypeScript, static page generation을 포함한 전체 build가 통과했으며 링크는 원위치했다.
