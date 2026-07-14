@@ -201,7 +201,7 @@ export async function runDeploymentDestroyPlan(
     const terraformArtifactContent = await readTerraformArtifactFile(workspace.mainFilePath);
     assertTerraformArtifactIsSafe(
       createTerraformFilesSafetyContent(workspace.terraformFiles, terraformArtifactContent),
-      { liveProfile: deployment.liveProfile }
+      { liveProfile: deployment.liveProfile, resourceValidationMode: "plan" }
     );
     const terraformArtifactSha256 = createSha256(terraformArtifactContent);
 
@@ -524,7 +524,7 @@ async function saveApplicationCleanupPlan(input: {
     const terraformArtifactContent = await input.readTerraformArtifactFile(workspace.mainFilePath);
     assertTerraformArtifactIsSafe(
       createTerraformFilesSafetyContent(workspace.terraformFiles, terraformArtifactContent),
-      { liveProfile: input.deployment.liveProfile }
+      { liveProfile: input.deployment.liveProfile, resourceValidationMode: "plan" }
     );
     const terraformArtifactSha256 = createSha256(terraformArtifactContent);
     const wasPreMarkedRunning =

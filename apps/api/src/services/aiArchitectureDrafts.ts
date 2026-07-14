@@ -2387,7 +2387,8 @@ function applyStrictRepositoryEvidencePolicy(
       diagramType: "aws_ecs_task_definition",
       diagramWidth: 260,
       diagramHeight: 96,
-      parentAreaNodeId: coreNodeId("task-security-group")
+      parentAreaNodeId: coreNodeId("task-security-group"),
+      sketchcatchReferenceTerraform: true
     }
   });
 

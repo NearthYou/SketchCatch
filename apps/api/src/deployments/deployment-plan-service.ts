@@ -213,7 +213,7 @@ export async function runDeploymentPlan(
     const workspaceTerraformFiles = preparedWorkspace.terraformFiles ?? [];
     assertTerraformArtifactIsSafe(
       createTerraformFilesSafetyContent(workspaceTerraformFiles, terraformArtifactContent),
-      { liveProfile: deployment.liveProfile }
+      { liveProfile: deployment.liveProfile, resourceValidationMode: "plan" }
     );
     const terraformArtifactSha256 = createSha256(terraformArtifactContent);
     const preDeploymentTerraformFiles = workspaceTerraformFiles.length
