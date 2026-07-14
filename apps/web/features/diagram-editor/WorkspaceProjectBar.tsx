@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { useRef } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import {
@@ -14,6 +13,7 @@ import {
   Save
 } from "lucide-react";
 
+import { ProductBrand } from "../../components/ui/ProductBrand";
 import styles from "./diagram-editor.module.css";
 import { createDashboardNavigationHandler } from "./workspace-project-bar-navigation";
 import { getSaveStatusTone, isSaveInProgress } from "./workspace-project-save-status";
@@ -80,24 +80,7 @@ export function WorkspaceProjectBar({
 
   return (
     <header className={styles.projectBar}>
-      <a
-        aria-label="대시보드로 이동"
-        className={styles.projectBarBrand}
-        href={workspace.dashboardHref}
-        onClick={handleDashboardNavigation}
-        title="대시보드"
-      >
-        <Image
-          alt=""
-          aria-hidden="true"
-          className={styles.projectBarLogo}
-          height={28}
-          priority
-          src="/sketchcatch-logo.png"
-          width={19}
-        />
-        <span>SketchCatch</span>
-      </a>
+      <ProductBrand href={workspace.dashboardHref} onClick={handleDashboardNavigation} />
 
       <div className={styles.projectBarContext}>
         <strong title={workspace.projectName}>{workspace.projectName}</strong>

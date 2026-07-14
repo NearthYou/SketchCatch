@@ -13,6 +13,11 @@ test("shared ProductBrand uses the workspace logo spacing and vertical alignment
   assert.match(productBrandStyles, /\.brand img\s*\{[\s\S]*?transform:\s*translateY\(-2px\);/);
 });
 
+test("shared ProductBrand forwards an optional click handler for guarded navigation", () => {
+  assert.match(productBrandSource, /onClick\?: MouseEventHandler<HTMLAnchorElement>/);
+  assert.match(productBrandSource, /\.\.\.\(onClick \? \{ onClick \} : \{\}\)/);
+});
+
 function readLocalFile(relativePath: string): string {
   return readFileSync(fileURLToPath(new URL(relativePath, import.meta.url)), "utf8");
 }

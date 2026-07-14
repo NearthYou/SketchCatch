@@ -271,7 +271,6 @@ test("diagram editor restores the light canvas with a restrained two-level grid"
 
 test("diagram editor exposes project, save, and panel controls in one stable top bar", () => {
   const projectBarBlock = getCssBlock(".projectBar");
-  const brandLinkBlock = getCssBlock(".projectBarBrand");
   const saveStatusBlock = getCssBlock(".projectBarSaveStatus");
 
   assert.match(diagramEditorSource, /dashboardHref = "\/dashboard"/);
@@ -282,7 +281,8 @@ test("diagram editor exposes project, save, and panel controls in one stable top
   assert.match(diagramEditorSource, /onToggleLeftPanel:\s*toggleLeftPanel/);
   assert.match(diagramEditorSource, /onToggleRightPanel:\s*toggleRightPanel/);
 
-  assert.match(workspaceProjectBarSource, /src="\/sketchcatch-logo\.png"/);
+  assert.match(workspaceProjectBarSource, /import \{ ProductBrand \} from "\.\.\/\.\.\/components\/ui\/ProductBrand"/);
+  assert.match(workspaceProjectBarSource, /<ProductBrand[\s\S]*onClick=\{handleDashboardNavigation\}/);
   assert.match(workspaceProjectBarSource, /className=\{styles\.projectBarSaveStatus\}/);
   assert.match(workspaceProjectBarSource, /aria-label="지금 저장"/);
   assert.match(workspaceProjectBarSource, /"리소스 패널 열기"/);
@@ -290,9 +290,6 @@ test("diagram editor exposes project, save, and panel controls in one stable top
 
   assert.match(projectBarBlock, /grid-column:\s*1 \/ -1;/);
   assert.match(projectBarBlock, /height:\s*64px;/);
-  assert.match(brandLinkBlock, /background:\s*transparent;/);
-  assert.match(brandLinkBlock, /gap:\s*7px;/);
-  assert.match(diagramEditorStyles, /\.projectBarLogo\s*\{[\s\S]*?transform:\s*translateY\(-2px\);/);
   assert.match(saveStatusBlock, /min-width:\s*0;/);
 });
 

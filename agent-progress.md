@@ -118,3 +118,11 @@ Short English-only working log for the current agent context. Older records are 
 - Removed the fixed 150px preview height. The existing thumbnail image's 16:9 frame now determines the full preview height, and the Project title and timestamp remain in the following card row rather than visually truncating the capture.
 - TDD evidence: the new layout contract first failed against the three-column and 150px rules, then the focused suite passed 7/7. Browser verification confirmed the two-column Dashboard layout and full 16:9 preview frame above the card body.
 - Full Web tests passed 1,237/1,237; root lint passed with the existing API `setNow` warning and root typecheck passed. Root build remains blocked before Web compilation by the existing missing `apps/web/.codegraph` path.
+
+### 2026-07-14 - Make the Workspace brand text navigate to Dashboard
+
+- Replaced the Workspace-only raw logo anchor with the shared `ProductBrand` link used by Login and Dashboard, so the full logo-plus-text hit area has one consistent clickable surface.
+- Preserved the guarded Dashboard navigation callback: a left-click still attempts the existing save first and navigates in `finally`, while modifier, non-left, and new-tab clicks retain native link behavior.
+- Removed the duplicate Workspace brand/logo CSS and updated its layout contracts to assert the shared `.brand` tokens and click-handler forwarding.
+- TDD evidence: the Workspace layout contract first failed against the missing shared `ProductBrand`, then the focused suite passed 51/51. The complete Web suite passed 1,237/1,237; `git diff --check` passed. Browser checks clicked the center and right side of the visible Workspace brand text and both eventually landed on Dashboard.
+- Root lint and typecheck passed (lint retains the existing API `setNow` unused-argument warning), and harness passed. Root build confirmed the pre-existing block before Web compilation: `apps/web/.codegraph` is missing. No API, migration, cloud, deployment, or dependency change was made.

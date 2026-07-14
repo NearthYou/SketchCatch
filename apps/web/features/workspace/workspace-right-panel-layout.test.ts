@@ -43,6 +43,7 @@ const workspaceDraftManagerSource = readWorkspaceFile("WorkspaceDraftManager.tsx
 const workspaceStartSource = readFeatureFile("../../app/workspace/new/workspace-start-client.tsx");
 const stylesSource = readWorkspaceFile("workspace.module.css");
 const diagramEditorStylesSource = readFeatureFile("../diagram-editor/diagram-editor.module.css");
+const productUiStylesSource = readFeatureFile("../../components/ui/product-ui.module.css");
 
 test("deploy opens a full-screen console instead of rendering deployment inside the right panel", () => {
   const deploymentConsoleIndex = componentSource.search(
@@ -173,7 +174,7 @@ test("workspace shell follows DESIGN.md neutral surface and typography tokens", 
   const canvasPanelRule = getCssRule(diagramEditorStylesSource, "canvasPanel");
   const canvasToolbarRule = getCssRule(diagramEditorStylesSource, "canvasToolbar");
   const projectBarRule = getCssRule(diagramEditorStylesSource, "projectBar");
-  const projectBarBrandRule = getCssRule(diagramEditorStylesSource, "projectBarBrand");
+  const productBrandRule = getCssRule(productUiStylesSource, "brand");
   const projectShellRule = getCssRule(stylesSource, "projectShell");
   const primaryButtonRule = getCssRule(stylesSource, "primaryButton");
   const rightPanelShellRule = getCssRule(stylesSource, "rightPanelShell");
@@ -208,8 +209,11 @@ test("workspace shell follows DESIGN.md neutral surface and typography tokens", 
   assert.match(canvasToolbarRule, /\bborder:\s*1px solid var\(--workspace-line\);/);
   assert.match(projectBarRule, /\bbackground:\s*var\(--workspace-surface\);/);
   assert.match(projectBarRule, /\bborder-bottom:\s*1px solid var\(--workspace-line\);/);
-  assert.match(projectBarBrandRule, /\bbackground:\s*transparent;/);
-  assert.match(projectBarBrandRule, /\bcolor:\s*var\(--workspace-text\);/);
+  assert.match(productBrandRule, /\bcolor:\s*var\(--color-ink\);/);
+  assert.match(productBrandRule, /\bfont-size:\s*18px;/);
+  assert.match(productBrandRule, /\bfont-weight:\s*700;/);
+  assert.match(productBrandRule, /\bgap:\s*7px;/);
+  assert.match(productBrandRule, /\btext-decoration:\s*none;/);
 
   assert.match(projectShellRule, /\bbackground:\s*#ffffff;/);
   assert.match(projectShellRule, /\bcolor:\s*#171717;/);
@@ -232,7 +236,7 @@ test("workspace shell follows DESIGN.md neutral surface and typography tokens", 
     canvasPanelRule,
     canvasToolbarRule,
     projectBarRule,
-    projectBarBrandRule,
+    productBrandRule,
     projectShellRule,
     primaryButtonRule,
     rightPanelShellRule,
