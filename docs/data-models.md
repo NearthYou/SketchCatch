@@ -1888,6 +1888,11 @@ API 계약:
 - `POST /api/live-observations/public/:observationId/bootstrap`: active session-bound transient credential 재생성
 - `POST /api/live-observations/public/:observationId/requests`: 서버가 검증된 ALB target의 2xx를 확인한 뒤 receipt 수집
 
+`LIVE_OBSERVATION_ENABLED=false`이면 인증 세션 관리 경로는 service나 Store를 호출하지 않고
+`503 LIVE_OBSERVATION_DISABLED`를 반환한다. API는 모든 응답의 `x-request-id`에 Fastify request ID를
+반환한다. Web은 API 오류에 HTTP method, query/fragment를 제거한 path, HTTP status 또는 응답 없음,
+error code, 선택적인 request ID를 표시하며 credential-bearing query와 fragment는 화면에 복제하지 않는다.
+
 public request body는 `{ eventId: string }`만 받는다. count나 target URL을 받지 않는다. direct `/events` endpoint는 제공하지 않는다. 서버가 global per-IP limiter와 public ALB target 검증을 통과한 요청에서 2xx를 받은 뒤에만 receipt를 기록한다. 최초 수락은 `202`, 중복은 `200`과 `accepted: false`, 만료·중지는 `410`, rate limit은 `429`를 사용한다.
 
 SSE는 연결 직후 전체 snapshot을 보내고 live count는 최대 1초, AWS 상태는 최대 10초 간격으로 갱신한다. 15초 heartbeat를 보내며 재연결 시 최신 전체 snapshot을 다시 보낸다. 인증된 GET snapshot은 SSE fallback이다.
