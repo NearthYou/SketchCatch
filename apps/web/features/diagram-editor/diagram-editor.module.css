@@ -785,6 +785,10 @@
   z-index: 90;
 }
 
+.floatingPanelSlot:has([data-workspace-ai-chat-overlay]) {
+  z-index: 1450;
+}
+
 .floatingPanelSlot > * {
   pointer-events: auto;
 }

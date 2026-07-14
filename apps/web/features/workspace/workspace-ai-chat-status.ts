@@ -7,6 +7,16 @@ export type WorkspaceAiChatDockStatus = {
   readonly label: string;
 };
 
+export function hasCompletedWorkspaceAiChatResponse({
+  hasExplanation,
+  messageRoles
+}: {
+  readonly hasExplanation: boolean;
+  readonly messageRoles: readonly ("assistant" | "user")[];
+}): boolean {
+  return hasExplanation || messageRoles.includes("user");
+}
+
 export function getWorkspaceAiChatDockStatus({
   hasCompletedResponse,
   hasPendingApproval,

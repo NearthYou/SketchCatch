@@ -79,7 +79,10 @@ import {
   type TerraformSafeFixApplyRequest,
   type TerraformSafeFixApplyResult
 } from "./workspace-terraform-ai";
-import { getWorkspaceAiChatDockStatus } from "./workspace-ai-chat-status";
+import {
+  getWorkspaceAiChatDockStatus,
+  hasCompletedWorkspaceAiChatResponse
+} from "./workspace-ai-chat-status";
 import styles from "./workspace.module.css";
 
 export type WorkspaceAiChatDockProps = {
@@ -321,10 +324,12 @@ export function WorkspaceAiChatDock({
       : activeChatTab === "errors"
         ? terraformIssueResolution?.state ?? "idle"
         : terraformPreviewExplanation?.state ?? "idle";
-  const activeHasCompletedResponse =
-    visibleMessages.length > 0 ||
-    (activeChatTab === "errors" && terraformIssueResolution?.explanation != null) ||
-    (activeChatTab === "preview" && terraformPreviewExplanation?.explanation != null);
+  const activeHasCompletedResponse = hasCompletedWorkspaceAiChatResponse({
+    hasExplanation:
+      (activeChatTab === "errors" && terraformIssueResolution?.explanation != null) ||
+      (activeChatTab === "preview" && terraformPreviewExplanation?.explanation != null),
+    messageRoles: visibleMessages.map((message) => message.role)
+  });
   const activeHasPendingApproval =
     activeChatTab === "draft" && (draft !== null || patchPreviewModel !== null);
   const activeProposalIsStale =
@@ -1461,6 +1466,7 @@ export function WorkspaceAiChatDock({
   return (
     <div
       className={styles.aiChatOverlay}
+      data-workspace-ai-chat-overlay
       onClick={(event) => {
         if (event.target === event.currentTarget) {
           closeChatDock();

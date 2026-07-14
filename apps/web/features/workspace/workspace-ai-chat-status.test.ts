@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { getWorkspaceAiChatDockStatus } from "./workspace-ai-chat-status";
+import {
+  getWorkspaceAiChatDockStatus,
+  hasCompletedWorkspaceAiChatResponse
+} from "./workspace-ai-chat-status";
 
 const readyState = {
   hasCompletedResponse: false,
@@ -55,4 +58,21 @@ test("AI Chat 상태는 응답이 없을 때 입력 가능으로 표시한다", 
     description: "Architecture와 Terraform에 대해 물어보세요.",
     label: "입력 가능"
   });
+});
+
+test("초기 안내 메시지만으로 응답 완료 상태가 되지 않는다", () => {
+  assert.equal(
+    hasCompletedWorkspaceAiChatResponse({
+      hasExplanation: false,
+      messageRoles: ["assistant"]
+    }),
+    false
+  );
+  assert.equal(
+    hasCompletedWorkspaceAiChatResponse({
+      hasExplanation: false,
+      messageRoles: ["assistant", "user"]
+    }),
+    true
+  );
 });

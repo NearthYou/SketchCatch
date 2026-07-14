@@ -5769,7 +5769,7 @@
   border-radius: 8px;
   box-shadow: 0 12px 28px rgb(23 23 23 / 18%);
   height: 44px;
-  right: 20px;
+  right: 80px;
   width: 44px;
   z-index: 1302;
 }
@@ -5982,7 +5982,7 @@
   .aiChatLauncher,
   .aiChatLauncher[data-right-panel-open="true"] {
     bottom: max(16px, env(safe-area-inset-bottom));
-    right: 16px;
+    right: 76px;
   }
 
   .aiChatLauncher[data-right-panel-open="true"] {
