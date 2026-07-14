@@ -109,7 +109,11 @@ export function ProductEntry() {
         </nav>
 
         <div className={styles.headerActions}>
-          <a className={`${styles.button} ${styles.buttonSecondary} ${styles.desktopAction}`} href="#workspace">
+          <a
+            className={`${styles.button} ${styles.buttonSecondary} ${styles.desktopAction}`}
+            href="#workspace"
+            onClick={(event) => handleSectionNavigation(event, "workspace-title", "#workspace")}
+          >
             제품 둘러보기
           </a>
           <Link className={`${styles.button} ${styles.buttonSecondary}`} href="/login">
