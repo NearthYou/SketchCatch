@@ -288,6 +288,13 @@
       "when": 1784073600005,
       "tag": "0040_static_gitops_runtime",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1784073600006,
+      "tag": "0041_durable_deployment_notifications",
+      "breakpoints": true
     }
   ]
 }

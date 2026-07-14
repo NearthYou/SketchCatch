@@ -7,7 +7,6 @@ import { getApiErrorMessage } from "../../lib/api-client";
 import { DiagramEditor } from "../diagram-editor";
 import { EMPTY_DIAGRAM } from "../diagram-editor/constants";
 import { WorkspaceAiChatDock } from "./WorkspaceAiChatDock";
-import { WorkspaceNotificationHost } from "./WorkspaceNotificationHost";
 import { listSourceRepositories } from "./api";
 import { buildBoardTemplateDiagram } from "../resource-settings/template-library";
 import {
@@ -575,7 +574,7 @@ export function ProjectWorkspaceDraftManager({
   }
 
   return (
-    <WorkspaceNotificationHost projectId={projectId}>
+    <>
       <DiagramEditor
         draftStatusPanel={
           thumbnailLifecycleState === "failed" ? (
@@ -638,7 +637,7 @@ export function ProjectWorkspaceDraftManager({
           {saveAndDeployError}
         </div>
       ) : null}
-    </WorkspaceNotificationHost>
+    </>
   );
 }
 

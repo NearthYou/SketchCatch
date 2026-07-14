@@ -433,6 +433,40 @@
       "notes": "Sandbox deployment, rollback, and cleanup evidence remain assigned to issue #378; no AWS mutation is authorized in this workstream."
     },
     {
+      "id": "DURABLE-DEPLOYMENT-NOTIFICATIONS-001",
+      "priority": 1,
+      "area": "deployment-notifications",
+      "title": "Durable deployment Inbox, SSE, and Web Push",
+      "user_visible_behavior": "개발자는 Direct와 GitOps 배포의 성공, 실패, 취소 알림을 세션을 넘어 유지되는 Inbox와 명시적으로 허용한 Web Push에서 확인한다.",
+      "status": "passing",
+      "verification": [
+        "Direct Deployment와 GitOps Pipeline Run terminal event가 같은 transaction의 idempotent Inbox/outbox row를 만든다.",
+        "읽음 상태와 90일 retention은 RDS가 source of truth다.",
+        "인증 SSE와 Service Worker Web Push가 같은 notification ID와 안전한 프로젝트 경로를 전달한다.",
+        "subscription endpoint와 key는 암호화되고 Push outbound DNS는 public address에만 고정된다.",
+        "권한 거부, 만료, 영구 실패, bounded retry, 사용자 소유권이 테스트된다."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-14",
+        "commands": [
+          "pnpm --filter api exec tsx --test src/notifications/*.test.ts src/routes/notifications.test.ts src/db/notification-schema.test.ts src/live-observations/live-observation-https-transport.test.ts",
+          "pnpm --filter web exec tsx --test features/notifications/*.test.ts features/workspace/deployment-cicd-console-layout.test.ts",
+          "pnpm migration:compatibility:check",
+          "pnpm --filter api db:migrate:runtime (temporary PostgreSQL 16, migrations 0000-0041)",
+          "PostgreSQL terminal trigger integration: Direct/GitOps idempotency, owner, retention, and duplicate-source assertions",
+          "terraform -chdir=infra/aws/terraform fmt -check -recursive",
+          "terraform -chdir=infra/aws/terraform test",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build",
+          "pnpm test",
+          "pnpm harness:check"
+        ],
+        "notes": "Notification-focused tests, migration compatibility, clean PostgreSQL migrations and trigger integration, Terraform tests, lint, typecheck, and build passed. Full Web and other workspace tests passed; API passed 1,525/1,528 with only the three unchanged Windows symlink fixture EPERM setup failures."
+      },
+      "notes": "No Web Push provider call, cloud mutation, GitHub mutation, or production database migration was performed. Sandbox browser delivery evidence remains assigned to issue #378."
+    },
+    {
       "id": "AWS-TEMPLATE-LAYOUT-001",
       "priority": 2,
       "area": "template-board",

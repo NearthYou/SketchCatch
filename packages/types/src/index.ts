@@ -1249,6 +1249,46 @@ export type ApplicationReleaseListResponse = {
   releases: ApplicationRelease[];
 };
 
+export type DeploymentNotificationSource = "direct_deployment" | "gitops_pipeline";
+export type DeploymentNotificationStatus = "succeeded" | "failed" | "cancelled";
+
+export type DeploymentNotification = {
+  id: string;
+  projectId: string;
+  source: DeploymentNotificationSource;
+  sourceId: string;
+  status: DeploymentNotificationStatus;
+  title: string;
+  body: string;
+  actionUrl: string;
+  readAt: IsoDateTimeString | null;
+  createdAt: IsoDateTimeString;
+};
+
+export type DeploymentNotificationListResponse = {
+  notifications: DeploymentNotification[];
+  unreadCount: number;
+};
+
+export type WebPushPublicConfigResponse = {
+  enabled: boolean;
+  vapidPublicKey: string | null;
+};
+
+export type WebPushSubscriptionInput = {
+  endpoint: string;
+  expirationTime: number | null;
+  keys: {
+    auth: string;
+    p256dh: string;
+  };
+};
+
+export type WebPushSubscriptionResponse = {
+  subscriptionId: string;
+  expiresAt: IsoDateTimeString | null;
+};
+
 export type GitCicdGitHubOAuthStartResponse = {
   authorizationUrl: string;
   expiresAt: IsoDateTimeString;

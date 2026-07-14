@@ -311,7 +311,9 @@ variable "api_environment" {
       "KAKAO_OAUTH_CLIENT_SECRET",
       "NAVER_OAUTH_CLIENT_SECRET",
       "OPENAI_API_KEY",
-      "REDIS_URL"
+      "REDIS_URL",
+      "WEB_PUSH_SUBSCRIPTION_ENCRYPTION_KEY",
+      "WEB_PUSH_VAPID_PRIVATE_KEY"
     ]))) == 0
     error_message = "Sensitive API values must be provided through api_secret_arns, not api_environment."
   }
@@ -341,7 +343,9 @@ variable "api_secret_arns" {
       "KAKAO_OAUTH_CLIENT_SECRET",
       "NAVER_OAUTH_CLIENT_SECRET",
       "OPENAI_API_KEY",
-      "REDIS_URL"
+      "REDIS_URL",
+      "WEB_PUSH_SUBSCRIPTION_ENCRYPTION_KEY",
+      "WEB_PUSH_VAPID_PRIVATE_KEY"
     ]))) == 0
     error_message = "api_secret_arns may only contain the approved ECS API secret environment names."
   }

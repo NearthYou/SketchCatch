@@ -1192,6 +1192,48 @@ type DeploymentFailureExplanation = {
 응답은 `DeploymentFailureExplanationResponse = { explanation: DeploymentFailureExplanation }`이다.
 이 endpoint는 `FAILED` deployment에만 허용된다. `firstErrorLog`와 `summary`에 포함되는 로그 원문은 `maskDeploymentMessage`를 다시 통과해야 하며, OpenAI API key가 없거나 provider 호출이 실패하면 `llmExplanation.fallbackUsed: true`와 fallback reason을 내려준다. Rule 기반 fallback 요약은 실패 stage, 첫 오류 로그, cleanup 필요 여부를 포함해야 한다.
 
+## DeploymentNotification
+
+`DeploymentNotification`은 Direct Deployment와 GitOps Pipeline Run의 terminal 상태를 사용자별 Inbox로
+보존하는 공통 완료 알림이다. Direct는 `source: "direct_deployment"`, GitOps는
+`source: "gitops_pipeline"`을 사용하며, `source + sourceId + status` idempotency key마다 알림과 outbox가
+각각 하나만 존재한다. `gitops` source의 `Deployment`는 Pipeline Run 알림과 중복되지 않도록 직접 알림을
+만들지 않는다.
+
+```ts
+type DeploymentNotification = {
+  id: string;
+  projectId: string;
+  source: "direct_deployment" | "gitops_pipeline";
+  sourceId: string;
+  status: "succeeded" | "failed" | "cancelled";
+  title: string;
+  body: string;
+  actionUrl: string;
+  readAt: IsoDateTimeString | null;
+  createdAt: IsoDateTimeString;
+};
+```
+
+DB 기준은 `notifications`, `notification_outbox`, `web_push_subscriptions`다. terminal 상태와 Inbox/outbox
+생성은 같은 PostgreSQL transaction에서 처리한다. Inbox 읽음 상태는 RDS가 source of truth이며 알림은
+생성 시각부터 90일 보관한다. Web Push subscription endpoint와 `auth`/`p256dh` key는 AES-256-GCM으로
+암호화하고 endpoint SHA-256 hash만 별도 검색 키로 저장한다. 원문 subscription과 VAPID private key는
+API 응답, 로그, 브라우저 저장소에 남기지 않는다.
+
+조회와 전달 API:
+
+- `GET /api/notifications`
+- `PATCH /api/notifications/:notificationId/read`
+- `POST /api/notifications/read-all`
+- `GET /api/notifications/stream`
+- `GET /api/notifications/push-config`
+- `PUT|DELETE /api/notifications/push-subscription`
+
+SSE는 인증된 사용자의 Inbox event만 보내며, Service Worker Web Push도 같은 `notificationId`와 프로젝트
+상대 경로를 사용한다. Web Push 권한은 사용자가 명시적으로 요청한 경우에만 얻는다. 영구 실패 또는 만료된
+subscription은 비활성화하고, 일시 실패는 30초, 2분, 10분, 30분 간격으로 최대 5회까지만 시도한다.
+
 ## Git/CI/CD Handoff
 
 `GitCicdHandoff`는 `IaC Preview`를 Source Repository와 외부 pipeline으로 넘기는 팀 운영 배포 경로의 metadata다. Direct Deployment Path를 대체하는 것이 아니라 운영 배포용 별도 경로다.
