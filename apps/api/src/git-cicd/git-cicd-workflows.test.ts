@@ -138,6 +138,9 @@ test("ECS Fargate automation uses confirmed Docker evidence and immutable releas
   });
 
   assert.match(appWorkflow, /name: Run CodeBuild/);
+  assert.match(appWorkflow, /head_branch == 'main'/);
+  assert.doesNotMatch(appWorkflow, /head_branch == "main"/);
+  assert.match(buildspec, /env:\n {2}shell: bash\n {2}exported-variables:/);
   assert.match(appWorkflow, /codebuild start-build/);
   assert.match(appWorkflow, /--source-version "\$SKETCHCATCH_RELEASE_SHA"/);
   assert.match(appWorkflow, /github\.event\.workflow_run\.head_sha/);

@@ -13,6 +13,8 @@
     "migration:compatibility:check": "node scripts/check-db-migration-compatibility.mjs",
     "lint": "turbo lint",
     "test:live-observation:redis": "node scripts/test-live-observation-redis.mjs",
+    "test:sandbox-e2e": "node --test scripts/smoke/deployment-sandbox-e2e.test.mjs",
+    "sandbox:e2e": "node scripts/smoke/deployment-sandbox-e2e.mjs",
     "typecheck": "turbo typecheck",
     "test": "turbo test",
     "format": "prettier --write .",

@@ -53,6 +53,9 @@ importers:
       '@aws-sdk/client-cloudwatch-logs':
         specifier: 3.1073.0
         version: 3.1073.0
+      '@aws-sdk/client-codebuild':
+        specifier: 3.1073.0
+        version: 3.1073.0
       '@aws-sdk/client-codedeploy':
         specifier: 3.1073.0
         version: 3.1073.0
@@ -261,6 +264,10 @@ packages:
 
   '@aws-sdk/client-cloudwatch@3.1073.0':
     resolution: {integrity: sha512-FHO7lhR7QSdgj8jDnrOJ8m7zjpjSaX4SXZZiG7I2HrtEhXL2dTh3e2pxMnbks/gBIUCMLAbncKdWvXp6Y2XokA==}
+    engines: {node: '>=20.0.0'}
+
+  '@aws-sdk/client-codebuild@3.1073.0':
+    resolution: {integrity: sha512-cC9H6CaSeDXvyFSbitqPvktjSEIzIt6K/mP4JbVn7gWrvFq8MUEPcTccFY4RB1Oih5+uDHCJQVs6FOLWdBsVNw==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/client-codedeploy@3.1073.0':
@@ -2579,6 +2586,19 @@ snapshots:
       '@smithy/core': 3.29.1
       '@smithy/fetch-http-handler': 5.6.1
       '@smithy/middleware-compression': 4.5.6
+      '@smithy/node-http-handler': 4.8.1
+      '@smithy/types': 4.15.1
+      tslib: 2.8.1
+
+  '@aws-sdk/client-codebuild@3.1073.0':
+    dependencies:
+      '@aws-crypto/sha256-browser': 5.2.0
+      '@aws-crypto/sha256-js': 5.2.0
+      '@aws-sdk/core': 3.974.27
+      '@aws-sdk/credential-provider-node': 3.972.57
+      '@aws-sdk/types': 3.973.15
+      '@smithy/core': 3.29.1
+      '@smithy/fetch-http-handler': 5.6.1
       '@smithy/node-http-handler': 4.8.1
       '@smithy/types': 4.15.1
       tslib: 2.8.1

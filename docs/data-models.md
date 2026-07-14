@@ -803,6 +803,7 @@ type EcsFargateRuntimeConfig = {
 
 type LambdaRuntimeConfig = {
   runtimeTargetKind: "lambda";
+  codeBuildProjectName: string;
   functionLogicalId: string;
   functionName: string;
   aliasName: string;
@@ -813,6 +814,7 @@ type LambdaRuntimeConfig = {
 
 type Ec2AsgRuntimeConfig = {
   runtimeTargetKind: "ec2_asg";
+  codeBuildProjectName: string;
   codeDeployApplicationName: string;
   codeDeployDeploymentGroupName: string;
   autoScalingGroupName: string;
@@ -821,6 +823,7 @@ type Ec2AsgRuntimeConfig = {
 
 type StaticSiteRuntimeConfig = {
   runtimeTargetKind: "static_site";
+  codeBuildProjectName: string;
   hostingBucketName: string;
   cloudFrontDistributionId: string;
   cloudFrontOriginId: string;
@@ -865,6 +868,34 @@ row를 유지하기 위해 nullable JSONB로 추가했고, `0038_lambda_gitops_r
 
 API는 `GET|PUT /api/projects/:projectId/deployment-target`을 사용한다. Direct와 GitOps는 같은 target row를
 읽으며 환경별 복제, EKS, 임의 rollout 전략은 이 계약에 포함하지 않는다.
+
+### Direct application release 실행 계약
+
+모든 runtime target은 SketchCatch가 관리하는 격리된 `codeBuildProjectName`을 가진다. 이 project는 확인된
+commit만 checkout하고 `prepare`, `deploy` phase에서 immutable artifact와 release evidence를 export한다.
+ECS/Fargate는 SketchCatch가 고정한 buildspec override를 사용하고, Lambda, EC2/ASG, Static은 같은 export
+계약을 구현한 내부 build plane project를 사용한다. 사용자 임의 shell 문자열은 저장하거나 실행하지 않는다.
+Direct build를 시작하기 전에 active GitHub Source Repository의 owner/name과 CodeBuild project의 `GITHUB` source
+URL을 비교하고, source auth가 `CODECONNECTIONS`인지 확인한다. 다른 저장소, OAuth source, inactive installation은
+build 시작 전에 차단한다.
+
+scope별 실행 의미는 다음과 같다.
+
+- `infrastructure`: Terraform Plan 승인 후 Terraform Apply/Destroy를 실행한다.
+- `application`: immutable artifact와 artifact approval manifest를 준비한 후 runtime release만 실행한다. Terraform init/plan/apply는 실행하지 않는다.
+- `full_stack`: immutable artifact를 먼저 준비하고 Terraform Plan을 승인한다. 실행 시 Terraform Apply와 output/state 저장을 완료한 뒤 준비된 artifact를 runtime에 release한다.
+
+Direct runtime 성공은 CodeBuild 결과만 신뢰하지 않는다. ECS, Lambda, CodeDeploy/S3/ASG, S3/CloudFront adapter가
+AWS 상태를 다시 조회해 commit, digest, provider revision, HTTPS Output URL과 health가 모두 일치할 때만 성공을
+기록한다. provider metadata에는 CodeBuild build revision과 이전 정상 runtime revision을 함께 남겨 rollback과
+cleanup 기준을 고정한다.
+
+`application` scope cleanup은 Terraform state를 요구하지 않는다. 성공한 `ApplicationRelease`의 현재 revision과
+provider metadata의 이전 정상 revision을 `application_release_cleanup_plan` JSON artifact로 고정하고, 사용자가
+그 artifact hash와 AWS account/region snapshot을 승인한 뒤에만 CodeBuild `cleanup` phase를 실행한다. 실행 직전
+현재 release와 승인 manifest가 다르면 중단하며, runtime adapter가 이전 revision 복구를 AWS에서 재조회해 확인한
+경우에만 release를 `rolled_back`, Deployment를 `DESTROYED`로 기록한다. `infrastructure`와 `full_stack` cleanup은
+기존 Terraform state 기반 Destroy 계약을 유지한다.
 
 ## ApplicationRelease
 

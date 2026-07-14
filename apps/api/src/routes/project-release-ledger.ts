@@ -77,6 +77,7 @@ const ecsFargateRuntimeConfigSchema = z
 const lambdaRuntimeConfigSchema = z
   .object({
     runtimeTargetKind: z.literal("lambda"),
+    codeBuildProjectName: z.string().trim().min(2).max(255),
     functionLogicalId: z.string().trim().min(1).max(255),
     functionName: z.string().trim().min(1).max(64),
     aliasName: z.string().trim().min(1).max(128),
@@ -88,6 +89,7 @@ const lambdaRuntimeConfigSchema = z
 const ec2AsgRuntimeConfigSchema = z
   .object({
     runtimeTargetKind: z.literal("ec2_asg"),
+    codeBuildProjectName: z.string().trim().min(2).max(255),
     codeDeployApplicationName: z.string().trim().min(1).max(100),
     codeDeployDeploymentGroupName: z.string().trim().min(1).max(100),
     autoScalingGroupName: z.string().trim().min(1).max(255),
@@ -97,6 +99,7 @@ const ec2AsgRuntimeConfigSchema = z
 const staticSiteRuntimeConfigSchema = z
   .object({
     runtimeTargetKind: z.literal("static_site"),
+    codeBuildProjectName: z.string().trim().min(2).max(255),
     hostingBucketName: z.string().trim().min(3).max(63),
     cloudFrontDistributionId: z.string().trim().min(3).max(32),
     cloudFrontOriginId: z.string().trim().min(1).max(128),

@@ -7,6 +7,8 @@ param(
   [string]$AwsConnectionId = $env:AWS_CONNECTION_ID,
   [string]$SmokeAccountId = $env:SMOKE_ACCOUNT_ID,
   [string]$AwsRegion = $(if ($env:AWS_REGION) { $env:AWS_REGION } else { "ap-northeast-2" }),
+  [ValidateSet("infrastructure", "application", "full_stack")]
+  [string]$DeploymentScope = $(if ($env:DEPLOYMENT_SCOPE) { $env:DEPLOYMENT_SCOPE } else { "full_stack" }),
   [string]$ReportPath = $env:SMOKE_REPORT_PATH,
   [int]$PollTimeoutSeconds = 1200,
   [int]$PollIntervalSeconds = 5,
@@ -77,7 +79,29 @@ function Invoke-SketchCatchApi {
     $invokeParams.Body = "{}"
   }
 
-  Invoke-RestMethod @invokeParams
+  for ($attempt = 0; $attempt -lt 2; $attempt++) {
+    try {
+      return Invoke-RestMethod @invokeParams
+    } catch {
+      $statusCode = if ($_.Exception.Response) {
+        [int]$_.Exception.Response.StatusCode
+      } else {
+        0
+      }
+      $canRefresh = -not $NoAuth -and
+        $attempt -eq 0 -and
+        $statusCode -eq 401 -and
+        $SmokeEmail -and
+        $SmokePassword
+
+      if (-not $canRefresh) {
+        throw
+      }
+
+      Get-SmokeAccessToken -Force
+      $headers.Authorization = "Bearer $script:AccessToken"
+    }
+  }
 }
 
 function Resolve-ProjectAssetUpload {
@@ -113,8 +137,14 @@ function Resolve-ProjectAssetUpload {
 }
 
 function Get-SmokeAccessToken {
-  if ($script:AccessToken) {
+  param([switch]$Force)
+
+  if ($script:AccessToken -and -not $Force) {
     return
+  }
+
+  if ($Force) {
+    $script:AccessToken = $null
   }
 
   if (-not $SmokeEmail -or -not $SmokePassword) {
@@ -701,6 +731,7 @@ resource "aws_lb_target_group" "api" {
   port     = 8080
   protocol = "HTTP"
   vpc_id   = aws_vpc.demo.id
+  deregistration_delay = 10
 
   health_check {
     path                = "/api/health"
@@ -750,7 +781,6 @@ resource "aws_autoscaling_policy" "scale_out" {
   autoscaling_group_name    = aws_autoscaling_group.api.name
   policy_type               = "StepScaling"
   adjustment_type           = "ChangeInCapacity"
-  cooldown                  = 180
   estimated_instance_warmup = 60
 
   step_adjustment {
@@ -1175,6 +1205,9 @@ $deploymentResponse = Invoke-SketchCatchApi -Method POST -Path "/projects/$($pro
   terraformArtifactId = $terraformAsset.id
   awsConnectionId = $AwsConnectionId
   liveProfile = "demo_web_service"
+  scope = $DeploymentScope
+  targetKind = "ec2_asg"
+  source = "direct"
 }
 $deployment = $deploymentResponse.deployment
 
@@ -1240,6 +1273,7 @@ if (-not $SkipDestroy) {
 }
 
 $report = [ordered]@{
+  deploymentScope = $DeploymentScope
   bucketName = $bucketName
   deploymentId = $deployment.id
   staticSiteUrl = $staticSiteUrl
