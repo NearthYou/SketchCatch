@@ -129,8 +129,8 @@
 }
 
 .dashboardAccountText span {
-  color: #777b84;
-  font-size: 11px;
+  color: #60646c;
+  font-size: 12px;
 }
 
 .dashboardLogoutButton,
@@ -191,12 +191,6 @@
   min-width: 0;
   align-items: baseline;
   gap: 9px;
-}
-
-.dashboardTopbarTitle span {
-  color: #777b84;
-  font-size: 12px;
-  font-weight: 600;
 }
 
 .dashboardTopbarTitle strong {
@@ -363,10 +357,6 @@
   .dashboardTopbar {
     min-height: 64px;
     padding: 0 16px;
-  }
-
-  .dashboardTopbarTitle > div > span {
-    display: none;
   }
 
   .dashboardPrimaryAction,

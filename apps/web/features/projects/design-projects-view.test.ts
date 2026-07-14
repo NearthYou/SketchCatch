@@ -42,7 +42,8 @@ test("live project inventory follows the dashboard responsive surface", () => {
 });
 
 test("dashboard projects keeps one clear heading and readable project controls", () => {
-  assert.match(
+  assert.match(routeViewSource, /<h1>내 프로젝트<\/h1>/);
+  assert.doesNotMatch(
     routeViewSource,
     /설계한 프로젝트를 확인하고, 이어서 작업하거나 배포 상태를 관리합니다\./
   );

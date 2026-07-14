@@ -4,23 +4,29 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Currently Verified
 
-- Branch: `feature/gg/381-brainboard-aws-templates`.
-- Latest `origin/dev` at `e322afd2` is merged; only harness state-file conflicts required manual combination.
-- The branch contains 24 non-empty Brainboard AWS Templates plus the existing six deployable Templates.
+- Direct ECS evidence from the prior run remains valid, including persisted release/history/notifications and CloudWatch metrics.
+- ECS GitOps Infra run `29334708442` and App run `29334822683` succeeded for SHA `3a12e55c13e7be1a769cfbe920b112516d8c14ce`, digest `20ec77dba90b910f1a37fd1f9194b0ff4829f789d6548abf3b21262df04632e1`, and task definition revision 7.
+- Project refresh returns `stale=false`; all seven CI stages succeeded, 1,161 masked logs persisted, and release/history includes the matching SHA, digest, revision, URL, and healthy 1/1 ECS evidence.
+- The AWS Connection external ID was rotated and the old value was rejected. Destroy run `29337235499` removed the sandbox stack and manual cleanup removed GitOps task definitions and the task role.
+- Direct resource queries are zero. Three deleted ECS ARNs remain only in the eventually consistent Resource Groups tag index.
+
+## Verification
+
+- After fast-forwarding to `origin/dev` at `2fe0296a`, 76 focused GitHub client/provider/persistence/workflow tests pass, including red-green coverage for historical stale handling and actual-job stage precedence.
+- `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check` pass.
 
 ## Changes This Session
 
-- Preserved Brainboard source fixtures, Template catalog/detail creation, source-authoritative Terraform replacement, Board thumbnail capture/reload, fresh-project reset, and native Workspace brand navigation.
-- Preserved latest dev Repository AI, deployment/release, Live Observation, notifications, authentication, and sandbox E2E behavior.
-- Kept RDS read replicas separate from normal RDS defaults and prevented a fixed static-hosting Template from acquiring incompatible VPC or database additions after the dev merge.
-- Applied both PR #393 Workspace Template CSS color-token reviews; harness, lint, typecheck, 14 focused Web tests, and diff checks pass.
+- Hardened GitHub run selection/log hydration and nullable handoff persistence.
+- Added S3 backend enforcement and real ECS immediate replacement/rollback behavior.
+- Fixed stale aggregation and stage mapping, then persisted final ECS GitOps evidence through the normal API.
 
 ## Broken Or Unverified
 
-- No branch-authored DB migration exists. Migrations `0034` through `0041` arrived only from merged `dev`.
-- `pnpm catalog:check` and template Terraform CLI validation require a local Terraform executable; none is installed or configured through `TF_CLI_PATH` or `TERRAFORM_BIN`.
-- `pnpm build` stops before Web compilation because the ignored `apps/web/.codegraph` symlink targets a missing user-local path; it is a pre-existing local environment blocker.
+- Static/Lambda/EC2-ASG execution, rollback drills, QR public session, and Web Push provider delivery remain unverified.
+- Full API tests include pre-existing Windows symlink EPERM and AI diagram expectation failures; do not report the full suite as passing.
 
 ## Best Next Action
 
-- Commit and push, resolve both review threads, then merge PR #393 after CI passes.
+- Keep the completed cleanup intact and recreate only the resources required by a new approved sandbox run.
+- Provision separate project targets for Static, Lambda, and EC2/ASG, then rerun the remaining matrix and rollback tests.

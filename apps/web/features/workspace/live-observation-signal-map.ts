@@ -11,6 +11,12 @@ export const LIVE_OBSERVATION_SIGNAL_PULSE_DURATION_MS = 1_520;
 export const LIVE_OBSERVATION_SIGNAL_STAGGER_MS = 110;
 export const LIVE_OBSERVATION_SIGNAL_ARRIVAL_DURATION_MS = 240;
 
+export function getLiveObservationSignalMapLabel(overflowCount?: number): string {
+  return overflowCount && overflowCount > 0
+    ? `실시간 트래픽 신호 흐름, 추가 요청 ${overflowCount}건`
+    : "실시간 트래픽 신호 흐름";
+}
+
 export type LiveObservationSignalRouteVariant = "desktop" | "mobile";
 
 export type LiveObservationSignalRouteSelection = Readonly<{

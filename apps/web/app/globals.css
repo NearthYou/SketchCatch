@@ -2,7 +2,7 @@
   --color-canvas: #ffffff;
   --color-ink: #171717;
   --color-body: #55585f;
-  --color-muted: #777b84;
+  --color-muted: #60646c;
   --color-hairline: #f0f0f3;
   --color-hairline-soft: #f5f5f7;
   --color-hairline-strong: #dcdee0;
@@ -220,7 +220,7 @@ textarea:focus-visible {
 
 .designCostPage .dashboardPanelKicker {
   color: var(--dashboard-design-muted);
-  font-size: 0.68rem;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.04em;
 }
@@ -324,7 +324,7 @@ textarea:focus-visible {
   border: 0;
   border-radius: 999px;
   color: var(--dashboard-design-body);
-  font-size: 0.72rem;
+  font-size: 12px;
   font-weight: 700;
   padding: 5px 9px;
 }

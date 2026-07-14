@@ -104,8 +104,18 @@ export function createGitHubActionsRunProvider(
                 finishedAt: toDate(job.finishedAt)
               });
             }
-            if (job.status !== "completed") continue;
-            const rawText = await client.readWorkflowJobLog({ ...input, jobId: job.id });
+            if (job.status !== "completed" || job.conclusion === "skipped") continue;
+            let rawText: string;
+            try {
+              rawText = await client.readWorkflowJobLog({ ...input, jobId: job.id });
+            } catch {
+              logs.push({
+                stageKind: jobStageKind,
+                level: "warning",
+                message: "GitHub Actions job log is unavailable."
+              });
+              continue;
+            }
             releaseEvidenceCandidates.push(...parseReleaseEvidence(rawText));
             const text = maskDeploymentMessage(rawText);
             let activeStageKind = jobStageKind;
@@ -233,6 +243,9 @@ function selectLatestWorkflowAttempts(
 }
 
 function compareAttempts(left: GitHubWorkflowRunSummary, right: GitHubWorkflowRunSummary): number {
+  const automatedEventDifference =
+    Number(isAutomatedDeploymentEvent(left.event)) - Number(isAutomatedDeploymentEvent(right.event));
+  if (automatedEventDifference !== 0) return automatedEventDifference;
   if (left.id === right.id && left.runAttempt !== right.runAttempt) {
     return left.runAttempt - right.runAttempt;
   }
@@ -243,6 +256,10 @@ function compareAttempts(left: GitHubWorkflowRunSummary, right: GitHubWorkflowRu
   const rightCreated = right.createdAt ? Date.parse(right.createdAt) : 0;
   if (leftCreated !== rightCreated) return leftCreated - rightCreated;
   return left.id - right.id;
+}
+
+function isAutomatedDeploymentEvent(event: string): boolean {
+  return event === "push" || event === "workflow_run";
 }
 
 function mapStepStageKind(

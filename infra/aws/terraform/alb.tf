@@ -14,18 +14,19 @@ resource "aws_lb" "ecs" {
 }
 
 resource "aws_lb_target_group" "api" {
-  name        = "${local.name_prefix}-api"
-  vpc_id      = var.vpc_id
-  port        = 4000
-  protocol    = "HTTP"
-  target_type = "ip"
+  name                 = "${local.name_prefix}-api"
+  vpc_id               = var.vpc_id
+  port                 = 4000
+  protocol             = "HTTP"
+  target_type          = "ip"
+  deregistration_delay = 60
 
   health_check {
     enabled             = true
     path                = "/health"
     protocol            = "HTTP"
     matcher             = "200"
-    interval            = 30
+    interval            = 10
     timeout             = 5
     healthy_threshold   = 2
     unhealthy_threshold = 3
@@ -37,18 +38,19 @@ resource "aws_lb_target_group" "api" {
 }
 
 resource "aws_lb_target_group" "web" {
-  name        = "${local.name_prefix}-web"
-  vpc_id      = var.vpc_id
-  port        = 3000
-  protocol    = "HTTP"
-  target_type = "ip"
+  name                 = "${local.name_prefix}-web"
+  vpc_id               = var.vpc_id
+  port                 = 3000
+  protocol             = "HTTP"
+  target_type          = "ip"
+  deregistration_delay = 30
 
   health_check {
     enabled             = true
     path                = "/"
     protocol            = "HTTP"
     matcher             = "200-399"
-    interval            = 30
+    interval            = 10
     timeout             = 5
     healthy_threshold   = 2
     unhealthy_threshold = 3

@@ -86,7 +86,7 @@
 
 .authEyebrow {
   margin: 0;
-  color: #777b84;
+  color: #60646c;
   font-size: 12px;
   font-weight: 700;
   line-height: 1.5;
@@ -334,7 +334,7 @@
 
 .authFormActions,
 .authSwitch {
-  color: #777b84;
+  color: #60646c;
   font-size: 13px;
   line-height: 1.6;
 }
@@ -368,7 +368,7 @@
 }
 
 .authHelpText {
-  color: #777b84;
+  color: #60646c;
   font-size: 12px;
   font-weight: 400;
   line-height: 1.55;
@@ -425,6 +425,20 @@
   gap: 8px;
 }
 
+.authConsentAll {
+  padding-bottom: 10px;
+  border-bottom: 1px solid #f0f0f3;
+  color: #303238 !important;
+  font-weight: 700 !important;
+}
+
+.authSignupReadiness {
+  margin: 0;
+  color: #60646c;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
 .authConsentViewButton {
   flex: 0 0 auto;
   border: 0;
@@ -476,8 +490,8 @@
 
 .authLegalEyebrow {
   margin: 0;
-  color: #777b84;
-  font-size: 11px;
+  color: #60646c;
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -611,13 +625,16 @@
     grid-column: auto;
   }
 
-  .authInlineControl {
+  .authConsentRow {
+    display: grid;
     grid-template-columns: 1fr;
+    gap: 4px;
   }
 
-  .authCheckButton {
-    width: 100%;
-    min-height: 44px;
+  .authConsentViewButton {
+    justify-self: start;
+    margin-left: 25px;
+    text-align: left;
   }
 
   .authLegalOverlay {

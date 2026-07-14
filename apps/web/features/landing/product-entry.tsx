@@ -90,8 +90,8 @@ export function ProductEntry() {
             </p>
             <h1 id="hero-title">SketchCatch</h1>
             <p className={styles.heroDescription}>
-              Practice Architecture를 눈으로 설계하고, IaC Preview와 비용·보안 위험을 확인한 뒤
-              배포하세요. 복잡한 Resource 관계를 Architecture Board 한 장에서 시작할 수 있습니다.
+              원하는 서비스를 설명하면 배포 전 검토 가능한 설계 구조와 Terraform 초안을 만들고,
+              비용과 보안 위험을 미리 확인할 수 있습니다.
             </p>
             <ul className={styles.heroInputs} aria-label="지원하는 시작 방식">
               <li>Text</li>
@@ -101,7 +101,7 @@ export function ProductEntry() {
             </ul>
             <div className={styles.heroActions}>
               <Link className={`${styles.button} ${styles.buttonPrimary}`} href="/signup">
-                시작하기
+                설계 시작
                 <span className={styles.buttonIcon} aria-hidden="true">→</span>
               </Link>
               <a className={`${styles.button} ${styles.buttonSecondary}`} href="#workflow">

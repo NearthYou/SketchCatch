@@ -18,6 +18,7 @@ import {
 import {
   LIVE_OBSERVATION_SIGNAL_PULSE_DURATION_MS,
   LIVE_OBSERVATION_SIGNAL_STAGGER_MS,
+  getLiveObservationSignalMapLabel,
   getLiveObservationReducedRouteSelections,
   getLiveObservationSignalArrivalFeedback,
   getLiveObservationSignalMapSlots,
@@ -86,7 +87,7 @@ export function LiveObservationSignalMap({
 
   return (
     <section
-      aria-label="실시간 트래픽 신호 흐름"
+      aria-label={getLiveObservationSignalMapLabel(burst?.overflowCount)}
       className={styles.liveObservationSignalMap}
       data-pressure-level={pressureLevel}
     >

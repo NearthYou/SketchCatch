@@ -11,6 +11,7 @@ import {
   type PipelineRunWithStages
 } from "./git-cicd-pipeline-run-service.js";
 import type { GitCicdRunProvider } from "./github-actions-run-provider.js";
+import { EcsGitOpsReleaseVerificationError } from "./ecs-gitops-release-reconciler.js";
 
 const config = {
   appPath: { mode: "subdirectory" as const, path: "apps/web" },
@@ -77,6 +78,58 @@ test("refresh is idempotent and persists deterministic stages and log sequences"
   assert.deepEqual(
     repository.logs.map((log) => log.message),
     ["building", "[REDACTED]"]
+  );
+});
+
+test("actual workflow jobs override the changed-file scope when a chained App workflow ran", async () => {
+  const repository = createMemoryRepository();
+  const baseProvider = createProvider();
+  const provider: GitCicdRunProvider = {
+    listCommitFiles: async () => ["infra/terraform/main.tf"],
+    async listSnapshots(input) {
+      return (await baseProvider.listSnapshots(input)).map((snapshot) => ({
+        ...snapshot,
+        status: "succeeded" as const,
+        jobs: [
+          "infra_plan",
+          "infra_apply",
+          "app_build",
+          "artifact_publish",
+          "app_deploy",
+          "verify"
+        ].map((stageKind) => ({
+          stageKind: stageKind as PersistedPipelineStage["kind"],
+          status: "succeeded" as const,
+          runUrl: `https://job/${stageKind}`,
+          startedAt: null,
+          finishedAt: null
+        }))
+      }));
+    }
+  };
+  const service = createGitCicdPipelineRunService({
+    repository,
+    provider,
+    createId: sequentialIds()
+  });
+
+  const result = await service.refreshProjectPipelineRuns({
+    projectId: "project-1",
+    sourceRepositoryId: "repo-1"
+  });
+
+  assert.equal(result.runs[0]?.changeScope, "infra");
+  assert.deepEqual(
+    result.runs[0]?.stages.map((stage) => [stage.kind, stage.status]),
+    [
+      ["detect", "succeeded"],
+      ["app_build", "succeeded"],
+      ["artifact_publish", "succeeded"],
+      ["infra_plan", "succeeded"],
+      ["infra_apply", "succeeded"],
+      ["app_deploy", "succeeded"],
+      ["verify", "succeeded"]
+    ]
   );
 });
 
@@ -170,6 +223,90 @@ test("terminal ECS evidence is reconciled against AWS and attached as the Pipeli
 
   assert.deepEqual(reconciledPipelineRunIds, [result.runs[0]?.id]);
   assert.equal(result.runs[0]?.release?.version, "sha-abc");
+});
+
+test("an obsolete release verification failure does not make a newer verified release stale", async () => {
+  const repository = createMemoryRepository();
+  const evidence = (commitSha: string) => ({
+    schemaVersion: 1 as const,
+    runtimeTargetKind: "ecs_fargate" as const,
+    outcome: "succeeded" as const,
+    commitSha,
+    imageDigest: `sha256:${"b".repeat(64)}`,
+    imageUri: `registry.example/api@sha256:${"b".repeat(64)}`,
+    clusterName: "api",
+    serviceName: "api",
+    containerName: "api",
+    taskDefinitionArn: "arn:aws:ecs:ap-northeast-2:123456789012:task-definition/api:2",
+    previousTaskDefinitionArn: "arn:aws:ecs:ap-northeast-2:123456789012:task-definition/api:1",
+    outputUrl: "https://api.example.com"
+  });
+  const provider: GitCicdRunProvider = {
+    listCommitFiles: async () => ["apps/web/page.tsx"],
+    listSnapshots: async () =>
+      ["newest", "obsolete", "obsolete-2"].map((commitSha, index) => ({
+        commitSha,
+        commitMessage: commitSha,
+        branch: "main",
+        workflowName: "SketchCatch App",
+        runUrl: `https://run/${commitSha}`,
+        startedAt: new Date(`2026-07-13T0${index}:00:00Z`),
+        finishedAt: new Date(`2026-07-13T0${index}:03:00Z`),
+        status: "succeeded" as const,
+        upstreamOrderingToken: `2026-07-13T0${index}:03:00.000Z|SketchCatch App:${index}:1`,
+        logRevision: `SketchCatch App:${index}:1`,
+        jobs: [],
+        logs: [],
+        releaseEvidence: evidence(commitSha)
+      }))
+  };
+  const service = createGitCicdPipelineRunService({
+    repository,
+    provider,
+    createId: sequentialIds(),
+    releaseReconciler: {
+      async reconcile(input) {
+        if (input.commitSha.startsWith("obsolete")) {
+          throw new EcsGitOpsReleaseVerificationError("obsolete output URL");
+        }
+        return {
+          id: "release-newest",
+          projectId: input.projectId,
+          deploymentId: null,
+          pipelineRunId: input.pipelineRunId,
+          source: "gitops",
+          runtimeTargetKind: "ecs_fargate",
+          version: "sha-newest",
+          commitSha: input.commitSha,
+          artifactDigestAlgorithm: "sha256",
+          artifactDigest: "b".repeat(64),
+          providerRevision: null,
+          outputUrl: "https://api.example.com",
+          status: "succeeded",
+          healthEvidence: { state: "healthy" },
+          rollbackEvidence: null,
+          startedAt: input.startedAt,
+          completedAt: input.finishedAt,
+          createdAt: new Date("2026-07-13T00:03:00Z"),
+          updatedAt: new Date("2026-07-13T00:03:00Z")
+        };
+      }
+    }
+  });
+
+  const result = await service.refreshProjectPipelineRuns({
+    projectId: "project-1",
+    sourceRepositoryId: "repo-1"
+  });
+
+  assert.equal(result.stale, false);
+  assert.equal(result.errorMessage, null);
+  assert.equal(result.runs.find((run) => run.commitSha === "newest")?.release?.id, "release-newest");
+  assert.deepEqual(
+    new Set(repository.runs.map((run) => run.commitSha)),
+    new Set(["newest", "obsolete", "obsolete-2"])
+  );
+  assert.equal(repository.projectRunListCalls.value, 1);
 });
 
 test("refresh rejects malformed and non-HTTP accepted handoff URLs", async () => {
@@ -553,6 +690,7 @@ function createMemoryRepository() {
     stages: [] as PersistedPipelineStage[],
     logs: [] as PersistedPipelineLog[],
     existingLookupCalls: { value: 0 },
+    projectRunListCalls: { value: 0 },
     listRequests: [] as unknown[],
     refreshTargetEnabled: { value: true },
     target: {
@@ -588,6 +726,7 @@ function createMemoryRepository() {
         ? { ...state.target, commitSha: state.runs[0]!.commitSha }
         : undefined,
     listProjectPipelineRuns: async (...args: unknown[]) => {
+      state.projectRunListCalls.value += 1;
       state.listRequests.push(args[0]);
       return state.runs.map((run) => ({
         ...run,

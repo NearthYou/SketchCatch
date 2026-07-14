@@ -1,4 +1,4 @@
-const templateLibraryModalFocusableSelector = [
+const modalFocusableSelector = [
   'a[href]',
   'button:not([disabled])',
   'input:not([disabled])',
@@ -7,7 +7,7 @@ const templateLibraryModalFocusableSelector = [
   '[tabindex]:not([tabindex="-1"])'
 ].join(",");
 
-export function setupTemplateLibraryModalAccessibility({
+export function setupModalAccessibility({
   closeButton,
   dialog,
   documentRoot,
@@ -18,16 +18,14 @@ export function setupTemplateLibraryModalAccessibility({
   readonly dialog: HTMLElement;
   readonly documentRoot: Document;
   readonly onClose: () => void;
-  readonly overlay: HTMLDivElement;
+  readonly overlay: HTMLElement;
 }): () => void {
-  const previouslyFocusedElement = documentRoot.activeElement instanceof HTMLElement
-    ? documentRoot.activeElement
-    : null;
+  const previouslyFocusedElement =
+    documentRoot.activeElement instanceof HTMLElement ? documentRoot.activeElement : null;
   const previousBodyOverflow = documentRoot.body.style.overflow;
   const bodySiblingInertStates = Array.from(documentRoot.body.children)
     .filter(
-      (element): element is HTMLElement =>
-        element instanceof HTMLElement && element !== overlay
+      (element): element is HTMLElement => element instanceof HTMLElement && element !== overlay
     )
     .map((element) => ({ element, inert: element.inert }));
 
@@ -46,7 +44,7 @@ export function setupTemplateLibraryModalAccessibility({
     if (event.key !== "Tab") return;
 
     const focusableElements = Array.from(
-      dialog.querySelectorAll<HTMLElement>(templateLibraryModalFocusableSelector)
+      dialog.querySelectorAll<HTMLElement>(modalFocusableSelector)
     ).filter((element) => element.tabIndex >= 0);
     const firstFocusableElement = focusableElements[0];
     const lastFocusableElement = focusableElements.at(-1);

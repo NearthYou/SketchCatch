@@ -81,7 +81,7 @@ test("workspace Template 전체보기 uses a body Portal below the project navig
 test("workspace Template 전체보기 wires one stable accessibility lifecycle", () => {
   assert.match(
     panelSource,
-    /import \{ setupTemplateLibraryModalAccessibility \} from "\.\/template-library-modal-accessibility"/
+    /import \{ setupModalAccessibility \} from "\.\.\/\.\.\/components\/ui\/modal-accessibility"/
   );
   assert.match(panelSource, /import \{[^}]*useEffect[^}]*useRef[^}]*\} from "react"/s);
   assert.match(modalSource, /const overlayRef = useRef<HTMLDivElement>\(null\)/);
@@ -94,7 +94,7 @@ test("workspace Template 전체보기 wires one stable accessibility lifecycle",
   );
   assert.match(
     modalSource,
-    /return setupTemplateLibraryModalAccessibility\(\{[\s\S]*onClose: \(\) => onCloseRef\.current\(\)[\s\S]*\}\);[\s\S]*\}, \[\]\)/
+    /return setupModalAccessibility\(\{[\s\S]*onClose: \(\) => onCloseRef\.current\(\)[\s\S]*\}\);[\s\S]*\}, \[\]\)/
   );
   assert.match(modalSource, /<div className=\{modalStyles\.overlay\} ref=\{overlayRef\}/);
   assert.match(modalSource, /className=\{modalStyles\.dialog\}[\s\S]*ref=\{dialogRef\}/);

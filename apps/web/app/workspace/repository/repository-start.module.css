@@ -1,7 +1,7 @@
 .page {
   --repo-ink: #171717;
   --repo-body: #60646c;
-  --repo-muted: #999999;
+  --repo-muted: #60646c;
   --repo-line: #e7e8eb;
   min-height: 100dvh;
   background: #ffffff;
@@ -42,7 +42,7 @@
 .heading span,
 .analysisPanel span {
   color: var(--repo-muted);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.04em;
 }
@@ -178,7 +178,7 @@
 .publicAnalysisResult span,
 .signalList span {
   color: var(--color-muted);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
 }
@@ -287,7 +287,7 @@
 .publicCandidateHeading > span {
   flex: 0 0 auto;
   color: var(--color-body);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   text-transform: none;
 }
@@ -306,7 +306,7 @@
 
 .publicCandidateDetail b {
   color: var(--color-muted);
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.4;
 }
 
@@ -512,7 +512,7 @@
 
 .previewPanel > div:first-child span {
   color: var(--color-body);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
 }

@@ -42,7 +42,8 @@ test("cost dashboard separates pre-deployment estimates from deployed usage with
   assert.match(clientSource, /styles\.costFolderPanel/);
   assert.match(clientSource, /예상 비용/);
   assert.match(clientSource, /실제 사용량/);
-  assert.match(
+  assert.match(clientSource, /<h1>비용 관리<\/h1>/);
+  assert.doesNotMatch(
     clientSource,
     /프로젝트의 예상 비용과 실제 사용량을 한곳에서 비교하고 관리합니다\./
   );

@@ -91,18 +91,14 @@ export function DashboardOverview() {
   const { data } = state;
   const verifiedAwsConnectionCount =
     data.awsConnections?.filter((connection) => connection.status === "verified").length ?? null;
-  const fallbackEstimateCount =
-    data.costEstimate?.projects.filter((item) => item.costEstimate?.fallbackUsed).length ?? null;
   const latestDeploymentItem = data.recentDeployments[0] ?? null;
   const latestDeployment = latestDeploymentItem?.deployment ?? null;
 
   return (
     <div className="dashboardOverview">
-      <header className="dashboardPageHeader">
+      <header className="dashboardPageHeader dashboardPageHeaderCompact">
         <div>
-          <p className="dashboardEyebrow">Operations overview</p>
           <h1>작업 현황</h1>
-          <p>Practice Architecture와 Deployment 상태를 한곳에서 확인합니다.</p>
         </div>
       </header>
 
@@ -119,7 +115,6 @@ export function DashboardOverview() {
 
       <section className="dashboardMetricStrip" aria-label="Dashboard 핵심 지표">
         <DashboardMetric
-          detail="전체 프로젝트"
           href="/dashboard/projects"
           label="프로젝트"
           value={`${data.projects.length}개`}
@@ -134,13 +129,6 @@ export function DashboardOverview() {
         <DashboardMetric
           label="월 예상 비용"
           value={formatMoney(data.costEstimate?.totalMonthlyEstimate ?? null)}
-          detail={
-            fallbackEstimateCount === null
-              ? "불러오지 못함"
-              : fallbackEstimateCount > 0
-                ? `fallback 추정 ${fallbackEstimateCount}개 프로젝트`
-                : "지원 가능한 가격 근거 사용"
-          }
           href="/dashboard/costs"
         />
         <DashboardMetric
@@ -150,7 +138,6 @@ export function DashboardOverview() {
               ? "확인 불가"
               : `AWS ${verifiedAwsConnectionCount} · Git ${data.connectedRepositoryCount ?? 0}`
           }
-          detail="검증된 Role과 활성 Repository"
           href="/dashboard/settings"
         />
       </section>
@@ -159,7 +146,6 @@ export function DashboardOverview() {
         <section className="dashboardSection" aria-labelledby="recent-projects-title">
           <div className="dashboardSectionHeader">
             <div>
-              <p>Recently updated</p>
               <h2 id="recent-projects-title">최근 프로젝트</h2>
             </div>
             <Link href="/dashboard/projects">
@@ -176,7 +162,6 @@ export function DashboardOverview() {
         <section className="dashboardSection" aria-labelledby="recent-deployments-title">
           <div className="dashboardSectionHeader">
             <div>
-              <p>Deployment activity</p>
               <h2 id="recent-deployments-title">최근 Deployment</h2>
             </div>
           </div>
@@ -208,7 +193,6 @@ export function DashboardOverview() {
 
       <section className="dashboardConnectionBand" aria-labelledby="connections-title">
         <div>
-          <p>Connections</p>
           <h2 id="connections-title">외부 연결</h2>
         </div>
         <div className="dashboardConnectionItem">

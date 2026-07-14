@@ -203,7 +203,7 @@
   padding: 4px 7px;
   background: #f0f0f3;
   color: #60646c;
-  font-size: 10px;
+  font-size: 12px;
   font-style: normal;
   font-weight: 700;
   white-space: nowrap;
@@ -251,8 +251,8 @@
 }
 
 .eyebrow {
-  color: #7a7d82;
-  font-size: 10px;
+  color: #60646c;
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -263,7 +263,7 @@
   padding: 8px 11px;
   background: #ececef;
   color: #60646c;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   white-space: nowrap;
 }
@@ -357,8 +357,8 @@
 }
 
 .detailStats dt {
-  color: #7a7d82;
-  font-size: 10px;
+  color: #60646c;
+  font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
 }
@@ -381,7 +381,7 @@
   border-radius: 999px;
   padding: 6px 9px;
   color: #60646c;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
 }
 
@@ -479,7 +479,7 @@
 
 .repositoryUrlForm input:disabled {
   background: #f7f7f8;
-  color: #999999;
+  color: #60646c;
 }
 
 .boundaryNotice,
@@ -586,7 +586,17 @@
   .topbar > strong { display: none; }
   .brand { gap: 7px; font-size: 16px; }
   .brand img { width: 14px; height: 21px; }
-  .backLink { font-size: 0; }
+  .backLinkLabel {
+    border: 0;
+    clip: rect(0, 0, 0, 0);
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    padding: 0;
+    position: absolute;
+    white-space: nowrap;
+    width: 1px;
+  }
   .backLink svg { width: 20px; height: 20px; }
   .layout { padding: 48px 12px 72px; }
   .heading h1 { font-size: 30px; }

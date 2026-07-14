@@ -3,7 +3,7 @@
   --reverse-accent-active: #1a1a1a;
   --reverse-text: #171717;
   --reverse-muted: #60646c;
-  --reverse-subtle: #999999;
+  --reverse-subtle: #60646c;
   --reverse-line: #f0f0f3;
   --reverse-line-strong: #dcdee0;
   --reverse-surface: #ffffff;
@@ -37,7 +37,7 @@
 
 .eyebrow {
   color: var(--reverse-muted);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.04em;
   line-height: 1.4;
@@ -503,7 +503,7 @@ button.candidateCardSelected {
 .stat span,
 .stats > span {
   color: var(--reverse-muted);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.35;
 }
 
@@ -636,7 +636,7 @@ button.candidateCardSelected {
 
 .identityList dt {
   color: var(--reverse-muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .identityList dd {
