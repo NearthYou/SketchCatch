@@ -1,11 +1,13 @@
-import type {
+﻿import type {
   CreateArchitectureDraftRequest,
+  RepositoryAnalysisTemplateId,
   RepositoryDeploymentType,
   SourceRepositoryAnalysisResult
 } from "@sketchcatch/types";
-import type { RepositoryTemplateId } from "../../../../packages/types/src/template-definitions";
+import { TEMPLATE_IDS } from "../../../../packages/types/src/template-definitions";
+import { listBoardTemplates } from "../resource-settings/template-library";
 
-export type PublicRepositoryTemplateId = RepositoryTemplateId;
+export type PublicRepositoryTemplateId = RepositoryAnalysisTemplateId;
 
 export type PublicRepositoryQuestion = {
   readonly id: string;
@@ -15,7 +17,7 @@ export type PublicRepositoryQuestion = {
 };
 
 export type PublicRepositoryTemplateCandidate = {
-  readonly templateId: RepositoryTemplateId;
+  readonly templateId: PublicRepositoryTemplateId;
   readonly displayTitle: string;
   readonly confidence: number;
   readonly reasons: readonly string[];
@@ -28,20 +30,20 @@ export type PublicRepositoryRecommendation = {
   readonly questions: readonly PublicRepositoryQuestion[];
 };
 
-const TEMPLATE_LABELS: Readonly<Record<RepositoryTemplateId, string>> = {
-  "ecs-fargate-container-app": "ECS Fargate 컨테이너 앱",
-  "eks-container-app": "EKS 컨테이너 앱",
-  "full-serverless-web-app": "전체 서버리스 웹 앱",
-  "minimal-serverless-api": "최소 서버리스 API",
-  "static-web-hosting": "정적 웹사이트",
-  "three-tier-web-app": "3계층 웹 서비스"
+const TEMPLATE_LABELS: Partial<Record<PublicRepositoryTemplateId, string>> = {
+  "ecs-fargate-container-app": "ECS Fargate container app",
+  "eks-container-app": "EKS container app",
+  "full-serverless-web-app": "Full serverless web app",
+  "minimal-serverless-api": "Minimal serverless API",
+  "static-web-hosting": "Static web hosting",
+  "three-tier-web-app": "Three-tier web app"
 };
 
 export function createPublicRepositoryRecommendation(input: {
   readonly analysis: SourceRepositoryAnalysisResult;
   readonly answers: Record<string, string | boolean>;
   readonly deploymentType: RepositoryDeploymentType;
-  readonly selectedTemplateId?: RepositoryTemplateId | null;
+  readonly selectedTemplateId?: PublicRepositoryTemplateId | null;
 }): PublicRepositoryRecommendation {
   const candidates = createPublicRepositoryTemplateCandidates(input);
   const selectedTemplateId = input.selectedTemplateId ?? candidates[0]?.templateId;
@@ -64,7 +66,7 @@ export function createPublicRepositoryArchitectureDraftRequest(input: {
   readonly analysis: SourceRepositoryAnalysisResult;
   readonly answers: Record<string, string | boolean>;
   readonly deploymentType: RepositoryDeploymentType;
-  readonly templateId: RepositoryTemplateId;
+  readonly templateId: PublicRepositoryTemplateId;
   readonly usesCiCd: boolean;
 }): CreateArchitectureDraftRequest {
   const questions = createPublicRepositoryRecommendation({
@@ -125,7 +127,7 @@ export function createPublicRepositoryArchitectureDraftRequest(input: {
   const inferredRequirementLines = createInferredRepositoryRequirementLines(input);
 
   return {
-    templateId: input.templateId,
+    ...(isBuiltInTemplateId(input.templateId) ? { templateId: input.templateId } : {}),
     ...(dynamicQuestionAnswers.length > 0 ? { dynamicQuestionAnswers } : {}),
     ...(architectureFacts.length > 0
       ? {
@@ -207,7 +209,7 @@ function createInferredRepositoryRequirementLines(input: {
   readonly analysis: SourceRepositoryAnalysisResult;
   readonly answers: Record<string, string | boolean>;
   readonly deploymentType: RepositoryDeploymentType;
-  readonly templateId: RepositoryTemplateId;
+  readonly templateId: PublicRepositoryTemplateId;
   readonly usesCiCd: boolean;
 }): string[] {
   const normalizedAnswers = new Map(
@@ -297,7 +299,17 @@ function createInferredRepositoryRequirementLines(input: {
 }
 
 export function formatPublicRepositoryTemplate(templateId: string): string {
-  return TEMPLATE_LABELS[templateId as RepositoryTemplateId] ?? "맞는 템플릿 없음";
+  return TEMPLATE_LABELS[templateId as PublicRepositoryTemplateId]
+    ?? getPublicRepositoryTemplateTitle(templateId)
+    ?? "留욌뒗 ?쒗뵆由??놁쓬";
+}
+
+export function isBuiltInTemplateId(templateId: PublicRepositoryTemplateId): templateId is (typeof TEMPLATE_IDS)[number] {
+  return (TEMPLATE_IDS as readonly string[]).includes(templateId);
+}
+
+function getPublicRepositoryTemplateTitle(templateId: string): string | undefined {
+  return listBoardTemplates().find((template) => template.id === templateId)?.title;
 }
 
 export function getPublicRepositoryDeploymentDefault(
@@ -330,7 +342,7 @@ export function shouldAskPublicRepositoryDeploymentType(
 }
 
 export function getPublicRepositoryTemplateDeploymentType(
-  templateId: RepositoryTemplateId
+  templateId: PublicRepositoryTemplateId
 ): RepositoryDeploymentType {
   if (templateId === "ecs-fargate-container-app" || templateId === "eks-container-app") {
     return "container";
@@ -355,20 +367,22 @@ function createPublicRepositoryTemplateCandidates(input: {
   const backendCandidates = input.analysis.aiHandoff?.recommendation?.candidates;
 
   if (backendCandidates && backendCandidates.length > 0) {
-    return backendCandidates.map((candidate) => ({
-      ...candidate,
-      displayTitle: formatPublicRepositoryTemplate(candidate.templateId),
-      questions: candidate.questions?.map((question) => ({
-        id: question.id,
-        prompt: question.prompt,
-        answerType: question.answerType,
-        ...(question.options ? { options: question.options } : {})
+    return backendCandidates
+      .map((candidate) => ({
+        ...candidate,
+        displayTitle: formatPublicRepositoryTemplate(candidate.templateId),
+        questions: candidate.questions?.map((question) => ({
+          id: question.id,
+          prompt: question.prompt,
+          answerType: question.answerType,
+          ...(question.options ? { options: question.options } : {})
+        }))
       }))
-    }));
+      .slice(0, 3);
   }
 
   const signals = new Set(input.analysis.detectedSignals);
-  const candidateIds = new Set<RepositoryTemplateId>();
+  const candidateIds = new Set<PublicRepositoryTemplateId>();
   const primaryTemplateId = selectPrimaryTemplateId(input);
 
   candidateIds.add(primaryTemplateId);
@@ -390,14 +404,13 @@ function createPublicRepositoryTemplateCandidates(input: {
     candidateIds.add("minimal-serverless-api");
   }
 
-  const comparisonCandidates: Readonly<Record<RepositoryDeploymentType, readonly RepositoryTemplateId[]>> = {
+  const comparisonCandidates: Readonly<Record<RepositoryDeploymentType, readonly PublicRepositoryTemplateId[]>> = {
     container: ["ecs-fargate-container-app", "eks-container-app"],
     ec2_vm: ["three-tier-web-app", "ecs-fargate-container-app"],
     serverless: ["full-serverless-web-app", "minimal-serverless-api"]
   };
 
   for (const templateId of comparisonCandidates[input.deploymentType]) {
-    if (candidateIds.size >= 2) break;
     candidateIds.add(templateId);
   }
 
@@ -409,8 +422,9 @@ function createPublicRepositoryTemplateCandidates(input: {
         : candidate;
     })
     .sort((left, right) => right.confidence - left.confidence)
-    .slice(0, 4);
+    .slice(0, 3);
 }
+
 
 function createPublicRepositoryHandoffQuestions(
   analysis: SourceRepositoryAnalysisResult
@@ -427,7 +441,7 @@ function createPublicRepositoryHandoffQuestions(
 
 function createPublicRepositoryQuestions(
   analysis: SourceRepositoryAnalysisResult,
-  templateId: RepositoryTemplateId
+  templateId: PublicRepositoryTemplateId
 ): readonly PublicRepositoryQuestion[] {
   const signals = new Set(analysis.detectedSignals);
   const questions: PublicRepositoryQuestion[] = [];
@@ -447,11 +461,11 @@ function createPublicRepositoryQuestions(
       answerType: "single_select",
       id: "primary_runtime",
       options: [
-        { label: "Node API 중심", value: "node" },
-        { label: "Python API 중심", value: "python" },
-        { label: "둘 다 포함", value: "both" }
+        { label: "Node API 以묒떖", value: "node" },
+        { label: "Python API 以묒떖", value: "python" },
+        { label: "?????ы븿", value: "both" }
       ],
-      prompt: "어떤 API 런타임을 아키텍처에 포함할까요?"
+      prompt: "?대뼡 API ?고??꾩쓣 ?꾪궎?띿쿂???ы븿?좉퉴??"
     });
   }
 
@@ -459,7 +473,7 @@ function createPublicRepositoryQuestions(
     questions.push({
       answerType: "boolean",
       id: "include_frontend",
-      prompt: "감지된 React 프론트엔드를 이 템플릿에 포함할까요?"
+      prompt: "媛먯???React ?꾨줎?몄뿏?쒕? ???쒗뵆由우뿉 ?ы븿?좉퉴??"
     });
   }
 
@@ -467,7 +481,7 @@ function createPublicRepositoryQuestions(
     questions.push({
       answerType: "boolean",
       id: "include_database",
-      prompt: "감지된 데이터베이스 계층을 이 템플릿에 포함할까요?"
+      prompt: "媛먯????곗씠?곕쿋?댁뒪 怨꾩링?????쒗뵆由우뿉 ?ы븿?좉퉴??"
     });
   }
 
@@ -478,7 +492,7 @@ function selectPrimaryTemplateId(input: {
   readonly analysis: SourceRepositoryAnalysisResult;
   readonly answers: Record<string, string | boolean>;
   readonly deploymentType: RepositoryDeploymentType;
-}): RepositoryTemplateId {
+}): PublicRepositoryTemplateId {
   if (input.analysis.recommendedTemplateId === "static-web-hosting") {
     return "static-web-hosting";
   }
@@ -497,7 +511,7 @@ function selectPrimaryTemplateId(input: {
 }
 
 function createCandidate(
-  templateId: RepositoryTemplateId,
+  templateId: PublicRepositoryTemplateId,
   signals: ReadonlySet<string>,
   deploymentType: RepositoryDeploymentType,
   answers: Record<string, string | boolean>
@@ -509,55 +523,55 @@ function createCandidate(
   if (templateId === "three-tier-web-app") {
     confidence += deploymentType === "ec2_vm" ? 0.18 : 0.03;
     if (signals.has("Database")) confidence += 0.08;
-    if (signals.has("React")) reasons.push("프론트엔드와 API를 분리해 배치하기 좋습니다.");
-    if (signals.has("Database")) reasons.push("DB 계층을 private tier로 분리할 수 있습니다.");
-    tradeoffs.push("컨테이너 운영 신호는 ECS/EKS 후보보다 덜 직접적으로 반영됩니다.");
+    if (signals.has("React")) reasons.push("?꾨줎?몄뿏?쒖? API瑜?遺꾨━??諛곗튂?섍린 醫뗭뒿?덈떎.");
+    if (signals.has("Database")) reasons.push("DB 怨꾩링??private tier濡?遺꾨━?????덉뒿?덈떎.");
+    tradeoffs.push("而⑦뀒?대꼫 ?댁쁺 ?좏샇??ECS/EKS ?꾨낫蹂대떎 ??吏곸젒?곸쑝濡?諛섏쁺?⑸땲??");
   }
 
   if (templateId === "ecs-fargate-container-app") {
     confidence += signals.has("Container") ? 0.2 : 0.02;
     confidence += deploymentType === "container" ? 0.1 : 0;
-    reasons.push("Docker/Compose 신호를 컨테이너 서비스로 자연스럽게 옮길 수 있습니다.");
-    if (signals.has("Database")) reasons.push("API와 DB를 별도 관리 리소스로 분리할 수 있습니다.");
-    tradeoffs.push("Kubernetes 세부 설정이 필요하면 EKS 후보가 더 적합합니다.");
+    reasons.push("Docker/Compose ?좏샇瑜?而⑦뀒?대꼫 ?쒕퉬?ㅻ줈 ?먯뿰?ㅻ읇寃???만 ???덉뒿?덈떎.");
+    if (signals.has("Database")) reasons.push("API? DB瑜?蹂꾨룄 愿由?由ъ냼?ㅻ줈 遺꾨━?????덉뒿?덈떎.");
+    tradeoffs.push("Kubernetes ?몃? ?ㅼ젙???꾩슂?섎㈃ EKS ?꾨낫媛 ???곹빀?⑸땲??");
   }
 
   if (templateId === "eks-container-app") {
     confidence += answers.container_runtime === "eks" ? 0.24 : 0.02;
-    reasons.push("Kubernetes 운영을 전제로 할 때 확장성이 좋습니다.");
-    tradeoffs.push("초기 운영 복잡도가 ECS Fargate보다 높습니다.");
+    reasons.push("Kubernetes ?댁쁺???꾩젣濡??????뺤옣?깆씠 醫뗭뒿?덈떎.");
+    tradeoffs.push("珥덇린 ?댁쁺 蹂듭옟?꾧? ECS Fargate蹂대떎 ?믪뒿?덈떎.");
   }
 
   if (templateId === "full-serverless-web-app") {
     confidence += deploymentType === "serverless" ? 0.14 : 0;
     if (signals.has("React")) confidence += 0.06;
-    reasons.push("프론트엔드, API, 데이터 저장소를 관리형 서비스 중심으로 구성합니다.");
-    tradeoffs.push("컨테이너 이미지 기반 배포 흐름은 직접 반영하지 않습니다.");
+    reasons.push("?꾨줎?몄뿏?? API, ?곗씠????μ냼瑜?愿由ы삎 ?쒕퉬??以묒떖?쇰줈 援ъ꽦?⑸땲??");
+    tradeoffs.push("而⑦뀒?대꼫 ?대?吏 湲곕컲 諛고룷 ?먮쫫? 吏곸젒 諛섏쁺?섏? ?딆뒿?덈떎.");
   }
 
   if (templateId === "minimal-serverless-api") {
     confidence += deploymentType === "serverless" ? 0.08 : 0;
-    reasons.push("API 중심으로 작게 시작할 때 적합합니다.");
-    tradeoffs.push("프론트엔드와 DB 계층을 제외하면 repository 전체 구조를 덜 반영합니다.");
+    reasons.push("API 以묒떖?쇰줈 ?묎쾶 ?쒖옉?????곹빀?⑸땲??");
+    tradeoffs.push("?꾨줎?몄뿏?쒖? DB 怨꾩링???쒖쇅?섎㈃ repository ?꾩껜 援ъ“瑜???諛섏쁺?⑸땲??");
   }
 
   if (templateId === "static-web-hosting") {
     confidence += signals.has("React") && !signals.has("Database") ? 0.16 : 0;
-    reasons.push("정적 프론트엔드 배포에 적합합니다.");
-    tradeoffs.push("백엔드 API와 DB 신호가 있으면 별도 리소스 보강이 필요합니다.");
+    reasons.push("?뺤쟻 ?꾨줎?몄뿏??諛고룷???곹빀?⑸땲??");
+    tradeoffs.push("諛깆뿏??API? DB ?좏샇媛 ?덉쑝硫?蹂꾨룄 由ъ냼??蹂닿컯???꾩슂?⑸땲??");
   }
 
   if (reasons.length === 0) {
-    reasons.push("저장소 근거가 부족해 선택한 배포 방식에 맞는 비교 후보로 제시합니다.");
+    reasons.push("??μ냼 洹쇨굅媛 遺議깊빐 ?좏깮??諛고룷 諛⑹떇??留욌뒗 鍮꾧탳 ?꾨낫濡??쒖떆?⑸땲??");
   }
 
   if (tradeoffs.length === 0) {
-    tradeoffs.push("추가 Repository evidence나 follow-up 답변에 따라 구성을 다시 조정해야 합니다.");
+    tradeoffs.push("異붽? Repository evidence??follow-up ?듬????곕씪 援ъ꽦???ㅼ떆 議곗젙?댁빞 ?⑸땲??");
   }
 
   return {
     confidence: Math.min(confidence, 0.96),
-    displayTitle: TEMPLATE_LABELS[templateId],
+    displayTitle: formatPublicRepositoryTemplate(templateId),
     reasons,
     templateId,
     tradeoffs

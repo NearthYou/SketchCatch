@@ -1,5 +1,8 @@
 // allow: SIZE_OK - shared package root contract; splitting needs a separate repo-wide migration.
-import type { RepositoryTemplateId, TemplateId } from "./template-definitions.ts";
+import { AVAILABLE_BRAINBOARD_TEMPLATE_IDS } from "./brainboard-templates/ids.ts";
+import type { AvailableBrainboardTemplateId } from "./brainboard-templates/ids.ts";
+import { TEMPLATE_IDS } from "./template-definitions.ts";
+import type { TemplateId } from "./template-definitions.ts";
 
 export type IsoDateTimeString = string;
 
@@ -519,7 +522,12 @@ export type GitHubRepositoryCandidate = {
   archived: boolean;
 };
 
-export type RepositoryAnalysisTemplateId = RepositoryTemplateId;
+export const REPOSITORY_ANALYSIS_TEMPLATE_IDS = [
+  ...TEMPLATE_IDS,
+  ...AVAILABLE_BRAINBOARD_TEMPLATE_IDS
+] as const;
+
+export type RepositoryAnalysisTemplateId = TemplateId | AvailableBrainboardTemplateId;
 
 export type RepositoryAnalysisEvidenceFile = {
   path: string;
@@ -657,7 +665,7 @@ export type RepositoryAnalysisAnswer = {
 };
 
 export type RepositoryTemplateRecommendationCandidate = {
-  readonly templateId: RepositoryTemplateId;
+  readonly templateId: RepositoryAnalysisTemplateId;
   readonly displayTitle: string;
   readonly confidence: number;
   readonly reasons: readonly string[];
@@ -699,7 +707,7 @@ type RepositoryAnalysisAiHandoffBase = {
 export type RepositoryAnalysisAiHandoff =
   | (RepositoryAnalysisAiHandoffBase & {
       readonly status: "template_selected";
-      readonly templateId: RepositoryTemplateId;
+      readonly templateId: RepositoryAnalysisTemplateId;
       readonly selectionReasons: readonly string[];
     })
   | (RepositoryAnalysisAiHandoffBase & {
@@ -1474,8 +1482,8 @@ export type AwsConnectionListResponse = {
   awsConnections: AwsConnection[];
 };
 
-export { BRAINBOARD_TEMPLATE_IDS } from "./brainboard-templates/ids.ts";
-export type { BrainboardTemplateId } from "./brainboard-templates/ids.ts";
+export { AVAILABLE_BRAINBOARD_TEMPLATE_IDS, BRAINBOARD_TEMPLATE_IDS } from "./brainboard-templates/ids.ts";
+export type { AvailableBrainboardTemplateId, BrainboardTemplateId } from "./brainboard-templates/ids.ts";
 export {
   BRAINBOARD_TEMPLATE_AUTHOR,
   BRAINBOARD_TEMPLATE_PROVIDER,

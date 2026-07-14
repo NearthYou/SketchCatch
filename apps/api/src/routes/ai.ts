@@ -29,7 +29,7 @@ import type {
   VoiceRequirementInput
 } from "@sketchcatch/types";
 import {
-  REPOSITORY_TEMPLATE_IDS,
+  REPOSITORY_ANALYSIS_TEMPLATE_IDS,
   REPOSITORY_ARCHITECTURE_FACT_KINDS,
   RESOURCE_TYPES,
   TEMPLATE_IDS
@@ -167,7 +167,7 @@ const architectureDraftBodySchema: z.ZodType<CreateArchitectureDraftRequest> = z
   }
 });
 
-export const repositoryTemplateIdSchema = z.enum(REPOSITORY_TEMPLATE_IDS) satisfies
+export const repositoryTemplateIdSchema = z.enum(REPOSITORY_ANALYSIS_TEMPLATE_IDS) satisfies
   z.ZodType<RepositoryAnalysisTemplateId>;
 
 const sourceRepositoryAnalysisBodySchema = z.object({
@@ -345,7 +345,9 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
 
       return createArchitectureDraftResponse({
         ...body,
-        templateId: selectedTemplateId
+        ...((TEMPLATE_IDS as readonly string[]).includes(selectedTemplateId)
+          ? { templateId: selectedTemplateId as (typeof TEMPLATE_IDS)[number] }
+          : {})
       });
     }
 
@@ -1118,7 +1120,7 @@ function getRepositoryTemplateContext(templateId: CreateGitHubArchitectureDraftR
     "three-tier-web-app": "Selected Template: ALB, Auto Scaling Group, EC2, and RDS three-tier architecture."
   } as const;
 
-  return contexts[templateId];
+  return contexts[templateId as keyof typeof contexts] ?? `Selected Template: ${templateId}.`;
 }
 
 // GitHub repository URL인지 먼저 막아주는 guardrail입니다.

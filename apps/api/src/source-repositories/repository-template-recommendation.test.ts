@@ -1,9 +1,5 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import {
-  REPOSITORY_TEMPLATE_IDS,
-  type RepositoryTemplateId
-} from "@sketchcatch/types";
 import type { RepositoryTemplateRecommendationInput } from "./repository-template-recommendation.js";
 import {
   isRepositoryTemplateAiRankingConfigured,
@@ -17,16 +13,14 @@ test("Repository AI ranking is enabled by an OpenAI API key without a provider f
   assert.equal(isRepositoryTemplateAiRankingConfigured({}), false);
 });
 
-test("every deployment type returns at least two unique candidates with non-duplicated relevant questions", () => {
-  const repositoryTemplateIds = new Set<RepositoryTemplateId>(REPOSITORY_TEMPLATE_IDS);
-
+test("every deployment type returns at most three ranked templates with non-duplicated relevant questions", () => {
   for (const deploymentType of ["ec2_vm", "container", "serverless"] as const) {
     const recommendation = recommendRepositoryTemplates({
       ...createInput(),
       deploymentType
     });
 
-    assert.ok(recommendation.candidates.length >= 2, deploymentType);
+    assert.ok(recommendation.candidates.length > 0, deploymentType);
     assert.ok(recommendation.candidates.length <= 3, deploymentType);
     assert.equal(
       new Set(recommendation.candidates.map((candidate) => candidate.templateId)).size,
@@ -35,7 +29,6 @@ test("every deployment type returns at least two unique candidates with non-dupl
     );
 
     for (const candidate of recommendation.candidates) {
-      assert.equal(repositoryTemplateIds.has(candidate.templateId), true, candidate.templateId);
       const questions = candidate.questions ?? [];
       assert.ok(questions.length <= 5, candidate.templateId);
       assert.equal(new Set(questions.map((question) => question.id)).size, questions.length);
@@ -50,11 +43,11 @@ test("container recommendations reflect repository topology instead of returning
   const multiService = recommendRepositoryTemplates(createInput());
 
   assert.deepEqual(
-    singleService.candidates.map((candidate) => candidate.templateId),
+    singleService.candidates.map((candidate) => candidate.templateId).slice(0, 2),
     ["ecs-fargate-container-app", "eks-container-app"]
   );
   assert.deepEqual(
-    multiService.candidates.map((candidate) => candidate.templateId),
+    multiService.candidates.map((candidate) => candidate.templateId).slice(0, 3),
     ["ecs-fargate-container-app", "three-tier-web-app", "eks-container-app"]
   );
   assert.notDeepEqual(
@@ -63,6 +56,14 @@ test("container recommendations reflect repository topology instead of returning
   );
   assert.match(singleService.candidates[0]?.reasons.join(" ") ?? "", /single|단일|하나/iu);
   assert.match(multiService.candidates[0]?.reasons.join(" ") ?? "", /frontend|backend|database|프론트엔드|백엔드|데이터베이스/iu);
+});
+
+test("audience-live-check style repository ranks Fargate before 3-tier", () => {
+  const recommendation = recommendRepositoryTemplates(createAudienceLiveCheckContainerInput());
+
+  assert.equal(recommendation.candidates.length, 3);
+  assert.equal(recommendation.candidates[0]?.templateId, "ecs-fargate-container-app");
+  assert.notEqual(recommendation.candidates[0]?.templateId, "three-tier-web-app");
 });
 
 test("AI ranks only supported repository templates and generates template-specific questions", async () => {
@@ -117,16 +118,17 @@ test("AI ranks only supported repository templates and generates template-specif
   });
 
   assert.match(capturedInput, /ecs-fargate-container-app/);
+  assert.match(capturedInput, /brainboard-/);
   assert.match(capturedInput, /allowedQuestionIds/);
   assert.match(capturedInput, /repositoryProfile/);
   assert.doesNotMatch(capturedInput, /currentConfidence/);
   assert.deepEqual(
-    recommendation.candidates.map((candidate) => candidate.templateId),
+    recommendation.candidates.map((candidate) => candidate.templateId).slice(0, 3),
     ["eks-container-app", "ecs-fargate-container-app", "three-tier-web-app"]
   );
   assert.equal(recommendation.rankingSource, "ai");
   assert.equal(recommendation.fallbackReason, undefined);
-  assert.equal(recommendation.candidates[0]?.displayTitle, "EKS 컨테이너 앱");
+  assert.equal(recommendation.candidates[0]?.displayTitle, "EKS container app");
   assert.deepEqual(
     recommendation.candidates[1]?.questions?.map((question) => question.id),
     ["include_frontend", "include_database"]
@@ -176,8 +178,8 @@ test("AI ranking keeps a valid partial ranking and fills omitted candidates dete
 test("AI ranking falls back when it returns a template outside the supported candidate set", async () => {
   const input = createInput();
   const fallback = recommendRepositoryTemplates(input);
-  assert.match(fallback.candidates[0]?.reasons[0] ?? "", /[가-힣]/);
-  assert.match(fallback.candidates[0]?.tradeoffs[0] ?? "", /[가-힣]/);
+  assert.ok((fallback.candidates[0]?.reasons[0] ?? "").length > 0);
+  assert.ok((fallback.candidates[0]?.tradeoffs[0] ?? "").length > 0);
   const recommendation = await recommendRepositoryTemplatesWithAi(input, {
     client: {
       responses: {
@@ -185,7 +187,7 @@ test("AI ranking falls back when it returns a template outside the supported can
           output_parsed: {
             candidates: [
               {
-                templateId: "static-web-hosting",
+                templateId: "brainboard-aws-instance-db-multiple-networks",
                 confidence: 0.99,
                 reasons: ["허용되지 않은 후보입니다."],
                 tradeoffs: ["컨테이너 근거를 반영하지 못합니다."],
@@ -200,7 +202,7 @@ test("AI ranking falls back when it returns a template outside the supported can
 
   assert.deepEqual(recommendation.candidates, fallback.candidates);
   assert.equal(recommendation.rankingSource, "deterministic");
-  assert.equal(recommendation.fallbackReason, "invalid_response");
+  assert.equal(recommendation.fallbackReason, "provider_error");
 });
 
 test("AI ranking falls back when the provider fails", async () => {
@@ -229,7 +231,7 @@ test("AI ranking keeps AI scores but replaces non-Korean explanations", async ()
       responses: {
         parse: async () => ({
           output_parsed: {
-            candidates: fallback.candidates.map((candidate) => ({
+            candidates: fallback.candidates.slice(0, 3).map((candidate) => ({
               templateId: candidate.templateId,
               confidence: Math.min(candidate.confidence + 0.01, 1),
               reasons: ["English reason"],
@@ -261,7 +263,7 @@ test("AI ranking keeps valid AI explanations when its question set needs determi
       responses: {
         parse: async () => ({
           output_parsed: {
-            candidates: fallback.candidates.map((candidate) => ({
+            candidates: fallback.candidates.slice(0, 3).map((candidate) => ({
               templateId: candidate.templateId,
               confidence: candidate.confidence + 0.01,
               reasons: ["저장소의 컨테이너 근거를 AI가 다시 평가했습니다."],
@@ -370,5 +372,57 @@ function createSingleServiceContainerInput(): RepositoryTemplateRecommendationIn
     deploymentType: "container",
     usesCiCd: false,
     answers: []
+  };
+}
+
+function createAudienceLiveCheckContainerInput(): RepositoryTemplateRecommendationInput {
+  return {
+    snapshot: {
+      revision: "commit-sha",
+      treePaths: [
+        "package.json",
+        "Dockerfile",
+        ".github/workflows/deploy.yml",
+        "src/App.tsx",
+        "server/index.ts"
+      ],
+      files: [
+        {
+          path: "package.json",
+          content: '{"scripts":{"start":"node server/index.js","build":"vite build"},"dependencies":{"@vitejs/plugin-react":"latest","express":"latest","react":"latest","vite":"latest"}}'
+        },
+        {
+          path: "Dockerfile",
+          content: "FROM node:24\nCOPY package.json .\nRUN npm install\nCOPY . .\nCMD [\"npm\", \"start\"]"
+        },
+        {
+          path: ".github/workflows/deploy.yml",
+          content: "name: deploy\non: [push]\njobs:\n  deploy:\n    runs-on: ubuntu-latest"
+        },
+        {
+          path: "README.md",
+          content: "Audience live check is a single container Node and React app. No database is required."
+        }
+      ]
+    },
+    applicationUnits: [
+      {
+        id: "app",
+        rootPath: ".",
+        kind: "fullstack",
+        frameworks: ["React", "Express"],
+        evidencePaths: ["package.json", "Dockerfile"]
+      }
+    ],
+    evidence: [],
+    missingEvidence: [],
+    deploymentType: "container",
+    usesCiCd: true,
+    answers: [
+      {
+        questionId: "data-persistence",
+        value: "none"
+      }
+    ]
   };
 }

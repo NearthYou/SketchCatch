@@ -48,6 +48,7 @@ import {
   createPublicRepositoryRecommendation,
   getPublicRepositoryDeploymentDefault,
   getPublicRepositoryTemplateDeploymentType,
+  isBuiltInTemplateId,
   shouldAskPublicRepositoryDeploymentType,
   type PublicRepositoryTemplateId
 } from "../../../features/workspace/public-repository-recommendation";
@@ -237,6 +238,12 @@ export function RepositoryStartClient({
     setErrorMessage("");
 
     try {
+      if (!isBuiltInTemplateId(templateId)) {
+        await saveTemplateBoard(templateId);
+        setPublicAnalysisState("idle");
+        return;
+      }
+
       const draft = await createAiArchitectureDraft(
         createPublicRepositoryArchitectureDraftRequest({
           analysis: publicAnalysis,
@@ -274,13 +281,19 @@ export function RepositoryStartClient({
     }
   }
 
-  async function createConnectedRepositoryBoard(templateId: TemplateId): Promise<void> {
+  async function createConnectedRepositoryBoard(templateId: PublicRepositoryTemplateId): Promise<void> {
     if (!activeRepository?.analysis || actionState === "loading") return;
 
     setActionState("loading");
     setErrorMessage("");
 
     try {
+      if (!isBuiltInTemplateId(templateId)) {
+        await saveTemplateBoard(templateId);
+        setActionState("idle");
+        return;
+      }
+
       const draft = await createAiArchitectureDraft(
         createConnectedRepositoryArchitectureDraftRequest({
           projectId,
@@ -308,6 +321,25 @@ export function RepositoryStartClient({
       setActionState("error");
       setErrorMessage(getApiErrorMessage(error, "Amazon Q濡???μ냼 ?ㅼ씠?닿렇?⑥쓣 ?앹꽦?섏? 紐삵뻽?듬땲??"));
     }
+  }
+
+  async function saveTemplateBoard(templateId: PublicRepositoryTemplateId): Promise<void> {
+    const diagram = buildBoardTemplateDiagram(templateId, {
+      projectSlug: projectName,
+      shortId: "repository"
+    });
+
+    if (!diagram) {
+      throw new Error("REPOSITORY_ANALYSIS_TEMPLATE_UNAVAILABLE");
+    }
+
+    await saveProjectDraft({ diagramJson: diagram, projectId });
+    router.push(
+      `/workspace?${new URLSearchParams({
+        projectId,
+        projectName
+      }).toString()}`
+    );
   }
 
   async function connectRepository(candidate: GitHubInstalledRepositoryCandidate): Promise<void> {
@@ -677,7 +709,7 @@ function RepositoryTemplateCandidates({
   recommendation,
 }: {
   readonly actionState: RequestState;
-  readonly onCreateBoard: (templateId: TemplateId) => void;
+  readonly onCreateBoard: (templateId: PublicRepositoryTemplateId) => void;
   readonly recommendation: RepositoryTemplateRecommendationResult;
 }) {
   const isBusy = actionState === "loading";

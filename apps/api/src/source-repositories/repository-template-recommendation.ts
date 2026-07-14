@@ -2,12 +2,14 @@ import { z } from "zod";
 import OpenAI from "openai";
 import { zodTextFormat } from "openai/helpers/zod";
 import {
-  REPOSITORY_TEMPLATE_IDS,
+  BRAINBOARD_TEMPLATE_IDS,
+  brainboardTemplateManifest,
+  REPOSITORY_ANALYSIS_TEMPLATE_IDS,
   templateDefinitions,
   type RepositoryAnalysisAnswer,
   type RepositoryAnalysisQuestion,
+  type RepositoryAnalysisTemplateId,
   type RepositoryDeploymentType,
-  type RepositoryTemplateId,
   type RepositoryTemplateRecommendationCandidate,
   type RepositoryTemplateRecommendationResult
 } from "@sketchcatch/types";
@@ -33,7 +35,7 @@ export type RepositoryTemplateRecommendationProfile = {
 };
 
 type CandidateSetItem = {
-  readonly templateId: RepositoryTemplateId;
+  readonly templateId: RepositoryAnalysisTemplateId;
   readonly baseConfidence: number;
   readonly reasons: readonly string[];
   readonly tradeoffs: readonly string[];
@@ -64,7 +66,7 @@ const DEFAULT_REPOSITORY_TEMPLATE_RANKING_MODEL = "gpt-5-nano";
 const REPOSITORY_TEMPLATE_RANKING_TIMEOUT_MS = 15_000;
 const REPOSITORY_TEMPLATE_RANKING_MAX_RETRIES = 0;
 
-const templateIdSchema = z.enum(REPOSITORY_TEMPLATE_IDS);
+const templateIdSchema = z.enum(REPOSITORY_ANALYSIS_TEMPLATE_IDS);
 const aiCandidateSchema = z.object({
   templateId: templateIdSchema,
   confidence: z.number().min(0).max(1),
@@ -81,13 +83,14 @@ const aiRecommendationSchema = z.object({
 });
 
 const templateById = new Map(templateDefinitions.map((definition) => [definition.id, definition]));
-const templateDisplayTitles: Readonly<Record<RepositoryTemplateId, string>> = {
-  "ecs-fargate-container-app": "ECS Fargate 컨테이너 앱",
-  "eks-container-app": "EKS 컨테이너 앱",
-  "full-serverless-web-app": "전체 서버리스 웹 앱",
-  "minimal-serverless-api": "최소 서버리스 API",
-  "static-web-hosting": "정적 웹사이트",
-  "three-tier-web-app": "3계층 웹 서비스"
+const brainboardTemplateById = new Map(brainboardTemplateManifest.map((entry) => [entry.id, entry]));
+const templateDisplayTitles: Partial<Record<RepositoryAnalysisTemplateId, string>> = {
+  "ecs-fargate-container-app": "ECS Fargate container app",
+  "eks-container-app": "EKS container app",
+  "full-serverless-web-app": "Full serverless web app",
+  "minimal-serverless-api": "Minimal serverless API",
+  "static-web-hosting": "Static web hosting",
+  "three-tier-web-app": "Three-tier web app"
 };
 
 export function createRepositoryTemplateRecommendationProfile(
@@ -122,7 +125,7 @@ export function recommendRepositoryTemplates(
   return {
     deploymentType: input.deploymentType,
     usesCiCd: input.usesCiCd,
-    candidates: rankedCandidates,
+    candidates: rankedCandidates.slice(0, 3),
     rankingSource: "deterministic"
   };
 }
@@ -132,6 +135,7 @@ export async function recommendRepositoryTemplatesWithAi(
   options: RepositoryTemplateAiRankingOptions = {}
 ): Promise<RepositoryTemplateRecommendationResult> {
   const fallback = recommendRepositoryTemplates(input);
+  const rankingCandidates = rankSupportedCandidates(input, createSupportedCandidateSet(input));
   const client = options.client ?? createConfiguredRepositoryTemplateRankingClient();
 
   if (!client) {
@@ -144,7 +148,7 @@ export async function recommendRepositoryTemplatesWithAi(
         ?? process.env.OPENAI_REPOSITORY_TEMPLATE_MODEL
         ?? DEFAULT_REPOSITORY_TEMPLATE_RANKING_MODEL,
       instructions: createRepositoryTemplateRankingInstructions(),
-      input: createRepositoryTemplateRankingInput(input, fallback.candidates),
+      input: createRepositoryTemplateRankingInput(input, rankingCandidates),
       text: {
         format: zodTextFormat(aiRecommendationSchema, "repository_template_recommendation"),
         verbosity: "low"
@@ -153,7 +157,7 @@ export async function recommendRepositoryTemplatesWithAi(
       store: false
     });
     const parsed = aiRecommendationSchema.parse(response.output_parsed);
-    const hydrated = hydrateAiRecommendation(input, fallback, parsed);
+    const hydrated = hydrateAiRecommendation(input, fallback, rankingCandidates, parsed);
 
     return hydrated
       ? { ...hydrated, rankingSource: "ai" }
@@ -202,13 +206,13 @@ export function isRepositoryTemplateAiRankingConfigured(
 
 function createRepositoryTemplateRankingInstructions(): string {
   return [
-    "당신은 소스 저장소 근거를 바탕으로 IaC Practice Architecture 템플릿을 추천합니다.",
-    "입력에 제공된 후보만 사용하고 모든 후보를 정확히 한 번씩 반환하세요.",
-    "confidence는 저장소의 애플리케이션 단위, 데이터 계층, 프레임워크, 운영 근거를 비교해 독립적으로 산정하세요.",
-    "서로 다른 저장소에 정형화된 고정 점수를 반복하지 말고 근거 강도에 맞춰 후보 간 차이를 표현하세요.",
-    "추천 이유와 고려할 점은 저장소에서 확인된 구체적인 구성에 맞는 한국어로 작성하세요.",
-    "각 후보의 allowedQuestionIds를 빠짐없이 정확히 한 번씩 사용해 한국어 질문을 작성하세요.",
-    "근거에 없는 클라우드 구성이나 요구사항을 단정하지 마세요."
+    "??????? ???獒????????????琉??⒲걫??袁⑸즴?濚???⑥??IaC Practice Architecture ?????뭇?繹먮냱?????⑤베毓???筌뤾퍓???",
+    "????곸죷????癰궽블뀬????ш끽維亦낅쉥異???????寃뗏?癲ル슢?꾤땟?????ш끽維亦???嶺뚮쮳?곌섈?????類???승??袁⑸즵????筌뚯뼚???",
+    "confidence????????????ャ뀖??域????⑤젰?????쒙쭕? ???Β??????節뚮쳮嶺? ??ш끽維???ш끽維??? ???⑤㈇猿 ?????琉??⒲걫??????????紐껊렊???ㅼ굣筌뤿뱶?????Β????筌뚯뼚???",
+    "??筌먦끉큔 ????렺?????????嶺뚮쮳?⑤뜽??釉먮폇壤???關履?????????袁⑸즵????? 癲ル슢??슙???????琉???좊즴甕곗쥉???癲ル슢??????ш끽維亦???癲ル슓堉곁땟??リ랜??????猿??筌뚯뼚???",
+    "??⑤베毓???????? ??關履?????? ???????????嶺뚮Ĳ?됮??????늄????ㅼ굣??????늄???癲ル슢??????癰궽살쐿???繞????????筌뚯뼚???",
+    "????ш끽維亦??allowedQuestionIds????鴉딆눨????⑤챶???嶺뚮쮳?곌섈?????類???승????????癰궽살쐿??癲ル슣??袁ｋ즵?????????筌뚯뼚???",
+    "?????琉??????몄툗 ???????ㅻ쿋??????늄????????釉먮윥????????????? 癲ル슢???삳빝??"
   ].join("\n");
 }
 
@@ -234,9 +238,9 @@ function createRepositoryTemplateRankingInput(
     answers: input.answers,
     candidates: candidates.map((candidate) => ({
       templateId: candidate.templateId,
-      title: templateById.get(candidate.templateId)?.title,
-      description: templateById.get(candidate.templateId)?.description,
-      tags: templateById.get(candidate.templateId)?.tags,
+      title: getRepositoryAnalysisTemplateTitle(candidate.templateId),
+      description: templateById.get(candidate.templateId as Parameters<typeof templateById.get>[0])?.description,
+      tags: templateById.get(candidate.templateId as Parameters<typeof templateById.get>[0])?.tags,
       allowedQuestionIds: (candidate.questions ?? []).map((question) => question.id)
     }))
   });
@@ -245,14 +249,15 @@ function createRepositoryTemplateRankingInput(
 function hydrateAiRecommendation(
   input: RepositoryTemplateRecommendationInput,
   fallback: RepositoryTemplateRecommendationResult,
+  rankingCandidates: readonly RepositoryTemplateRecommendationCandidate[],
   parsed: z.infer<typeof aiRecommendationSchema>
 ): RepositoryTemplateRecommendationResult | null {
-  const fallbackById = new Map(fallback.candidates.map((candidate) => [candidate.templateId, candidate]));
+  const rankingCandidateById = new Map(rankingCandidates.map((candidate) => [candidate.templateId, candidate]));
   const candidates: RepositoryTemplateRecommendationCandidate[] = [];
-  const acceptedTemplateIds = new Set<RepositoryTemplateId>();
+  const acceptedTemplateIds = new Set<RepositoryAnalysisTemplateId>();
 
   for (const candidate of parsed.candidates) {
-    const fallbackCandidate = fallbackById.get(candidate.templateId);
+    const fallbackCandidate = rankingCandidateById.get(candidate.templateId);
 
     if (!fallbackCandidate || acceptedTemplateIds.has(candidate.templateId)) {
       continue;
@@ -308,12 +313,14 @@ function hydrateAiRecommendation(
   return {
     deploymentType: fallback.deploymentType,
     usesCiCd: fallback.usesCiCd,
-    candidates: candidates.sort((left, right) => right.confidence - left.confidence)
+    candidates: candidates
+      .sort((left, right) => right.confidence - left.confidence)
+      .slice(0, 3)
   };
 }
 
 function containsKorean(value: string): boolean {
-  return /[가-힣]/.test(value);
+  return /[\u3131-\u318e\uac00-\ud7a3]/u.test(value);
 }
 
 function normalizeQuestionPrompt(value: string): string {
@@ -321,23 +328,20 @@ function normalizeQuestionPrompt(value: string): string {
 }
 
 function isQuestionPromptAligned(questionId: string, prompt: string): boolean {
+  const normalizedPrompt = prompt.toLowerCase();
+
   if (questionId === "primary_runtime") {
-    return /api|런타임|node|python/i.test(prompt)
-      && /어떤|무엇|선택|중심|포함/i.test(prompt);
+    return /api|runtime|node|python/.test(normalizedPrompt);
   }
 
   if (questionId === "include_frontend") {
-    return /프론트|react|웹/i.test(prompt)
-      && /포함|사용|추가|배치/i.test(prompt)
-      && /아키텍처|템플릿|구성/i.test(prompt)
-      && !/데이터베이스|database|db/i.test(prompt);
+    return /frontend|react|web/.test(normalizedPrompt)
+      && !/database|db|postgres|mysql|dynamo|rds/.test(normalizedPrompt);
   }
 
   if (questionId === "include_database") {
-    return /데이터|database|db|저장소|postgres|mysql|dynamo|rds/i.test(prompt)
-      && /포함|사용|추가|배치/i.test(prompt)
-      && /아키텍처|템플릿|구성/i.test(prompt)
-      && !/클러스터|pod|파드|컨테이너 내부|컨테이너에/i.test(prompt);
+    return /database|db|postgres|mysql|dynamo|rds|data/.test(normalizedPrompt)
+      && !/cluster|pod|node group/.test(normalizedPrompt);
   }
 
   return false;
@@ -403,55 +407,55 @@ function createRepositoryAnalysisQuestions(
   if (!/rds|dynamodb|postgres|mysql|prisma|typeorm|sequelize/.test(text)) {
     questions.push({
       id: "data-persistence",
-      prompt: "이 애플리케이션에 영구 데이터 저장소가 필요한가요?",
+      prompt: "Does this application need persistent data storage?",
       answerType: "single_select",
       options: [
-        { value: "none", label: "영구 데이터 없음" },
-        { value: "relational", label: "관계형 데이터베이스" },
-        { value: "key_value", label: "키-값 또는 문서형 데이터" }
+        { value: "none", label: "No persistent data" },
+        { value: "relational", label: "Relational database" },
+        { value: "key_value", label: "Key-value or document store" }
       ],
       required: true,
-      reason: "저장소 근거에서 데이터 계층을 명확히 확인하지 못했습니다."
+      reason: "Repository evidence does not prove the persistence tier."
     });
   }
 
   if (!hasFrontend || !hasBackend) {
     questions.push({
       id: "application-scope",
-      prompt: "템플릿에서 어떤 실행 영역을 우선 준비할까요?",
+      prompt: "Which application scope should the architecture prepare first?",
       answerType: "single_select",
       options: [
-        { value: "web", label: "공개 웹 프론트엔드" },
-        { value: "api", label: "API 백엔드" },
-        { value: "web_and_api", label: "웹 프론트엔드와 API 백엔드" }
+        { value: "web", label: "Public web frontend" },
+        { value: "api", label: "API backend" },
+        { value: "web_and_api", label: "Web frontend and API backend" }
       ],
       required: true,
-      reason: "저장소 분석만으로 모든 애플리케이션 영역을 확인하지 못했습니다."
+      reason: "Repository analysis could not prove every deployable application boundary."
     });
   }
 
   if (!/cognito|auth|oauth|login|session/.test(text)) {
     questions.push({
       id: "authentication",
-      prompt: "초기 아키텍처에 관리형 사용자 인증을 포함할까요?",
+      prompt: "Should the initial architecture include managed user authentication?",
       answerType: "boolean",
       required: true,
-      reason: "저장소 근거에서 인증 요구사항을 명확히 확인하지 못했습니다."
+      reason: "Repository evidence does not prove an authentication requirement."
     });
   }
 
   if (!/kubernetes|eks|ecs|fargate/.test(text)) {
     questions.push({
       id: "operations-preference",
-      prompt: "첫 배포에서 선호하는 운영 방식은 무엇인가요?",
+      prompt: "Which operations model do you prefer for the first deployment?",
       answerType: "single_select",
       options: [
-        { value: "managed", label: "관리형 서비스 우선" },
-        { value: "container", label: "컨테이너 런타임" },
-        { value: "self_managed_vm", label: "EC2/VM 직접 운영" }
+        { value: "managed", label: "Managed services first" },
+        { value: "container", label: "Container runtime" },
+        { value: "self_managed_vm", label: "EC2/VM self-managed" }
       ],
       required: false,
-      reason: "저장소에서 배포 운영 방식에 대한 선호를 확인하지 못했습니다."
+      reason: "Repository evidence does not prove the preferred operations model."
     });
   }
 
@@ -473,31 +477,22 @@ function createSupportedCandidateSet(
   const hasBackend = input.applicationUnits.some(
     (unit) => unit.kind === "backend" || unit.kind === "fullstack"
   ) || applicationScope === "api" || applicationScope === "web_and_api";
-  const hasRelationalData = repositoryProfile.hasRelationalDatabase ||
-    dataPersistence === "relational";
+  const hasRelationalData = repositoryProfile.hasRelationalDatabase || dataPersistence === "relational";
   const wantsAuth = authentication === true || /cognito|auth|oauth|login|session/.test(text);
   const wantsEks = /\beks\b|kubernetes|helm|kustomization/.test(text);
 
   if (input.deploymentType === "ec2_vm") {
-    const alternative = hasFrontend && hasBackend
-      ? candidate("ecs-fargate-container-app", 0.6, [
-          "동일한 웹과 API 구조를 컨테이너 운영 방식으로 전환할 때 비교할 수 있는 대안입니다."
-        ], [
-          "현재 EC2/VM 배포 근거를 직접 반영하려면 이미지 빌드와 컨테이너 배포 흐름을 추가해야 합니다."
-        ])
-      : candidate("minimal-serverless-api", 0.58, [
-          "백엔드 API를 관리형 실행 환경으로 단순화할 때 비교할 수 있는 대안입니다."
-        ], [
-          "현재 EC2/VM 운영 방식과 달라 런타임과 데이터 계층을 서버리스 구조에 맞게 조정해야 합니다."
-        ]);
-
     return [
       candidate("three-tier-web-app", 0.82, [
-        "EC2/VM 배포 방식이 ALB, Auto Scaling, RDS로 구성된 지원 템플릿과 잘 맞습니다."
+        "EC2/VM evidence fits an ALB, compute, and data-tier architecture."
       ], [
-        "서버리스나 Fargate 템플릿보다 직접 운영해야 하는 인프라가 많습니다."
+        "It has more host-level operational work than Fargate or serverless options."
       ]),
-      alternative
+      candidate(hasFrontend && hasBackend ? "ecs-fargate-container-app" : "minimal-serverless-api", 0.6, [
+        "A managed runtime is a plausible alternative if the team wants less VM operation."
+      ], [
+        "The selected deployment model would move away from the EC2/VM default."
+      ])
     ];
   }
 
@@ -505,14 +500,14 @@ function createSupportedCandidateSet(
     if (wantsEks) {
       return [
         candidate("eks-container-app", 0.9, [
-          "저장소에서 Kubernetes 또는 EKS 운영 근거가 확인되어 관리형 클러스터 템플릿과 직접 맞습니다."
+          "Kubernetes or EKS evidence directly matches an EKS architecture."
         ], [
-          "EKS는 클러스터 운영과 Kubernetes 오브젝트 관리가 추가로 필요합니다."
+          "EKS adds cluster and Kubernetes object operations."
         ]),
         candidate("ecs-fargate-container-app", 0.78, [
-          "컨테이너 워크로드를 클러스터 운영 부담이 적은 ECS Fargate로 단순화할 수 있습니다."
+          "The container workload can also run on ECS Fargate with less cluster operation."
         ], [
-          "기존 Kubernetes 오브젝트와 운영 도구를 그대로 사용할 수 없습니다."
+          "Existing Kubernetes manifests would need translation."
         ])
       ];
     }
@@ -520,19 +515,19 @@ function createSupportedCandidateSet(
     if (hasFrontend && hasBackend && hasRelationalData) {
       return [
         candidate("ecs-fargate-container-app", 0.86, [
-          "감지된 프론트엔드와 백엔드 컨테이너를 ECS Fargate 서비스로 운영하고 데이터베이스 계층을 분리할 수 있습니다."
+          "Frontend, backend, and database evidence can be modeled around ECS Fargate services."
         ], [
-          "현재 템플릿은 여러 애플리케이션 서비스와 관계형 데이터베이스 구성을 추가로 조정해야 합니다."
+          "Database and service boundaries still need confirmation."
         ]),
         candidate("three-tier-web-app", 0.79, [
-          "프론트엔드, 백엔드, 관계형 데이터베이스가 분리된 저장소 구조를 웹, 애플리케이션, RDS 계층으로 대응할 수 있습니다."
+          "A traditional three-tier layout can represent web, app, and data tiers."
         ], [
-          "애플리케이션 실행 계층이 컨테이너가 아닌 EC2 Auto Scaling 기반이므로 배포 방식을 조정해야 합니다."
+          "It changes the runtime model from containers to EC2 Auto Scaling."
         ]),
         candidate("eks-container-app", 0.62, [
-          "여러 애플리케이션 컨테이너를 Kubernetes 워크로드로 분리 운영할 수 있는 확장 대안입니다."
+          "Kubernetes remains a scaling alternative for multiple containers."
         ], [
-          "저장소에 Kubernetes 운영 근거가 없어 클러스터 복잡도가 초기 요구보다 클 수 있습니다."
+          "No Kubernetes evidence was found, so EKS may be more complex than needed."
         ])
       ];
     }
@@ -540,28 +535,28 @@ function createSupportedCandidateSet(
     if (repositoryProfile.applicationUnitCount <= 1) {
       return [
         candidate("ecs-fargate-container-app", 0.9, [
-          "단일 백엔드 컨테이너를 별도 클러스터 관리 없이 실행하는 구조가 ECS Fargate와 잘 맞습니다."
+          "A single containerized service matches ECS Fargate better than a VM-based 3-tier template."
         ], [
-          "작은 VM 한 대보다 ALB와 Fargate 운영 비용이 높을 수 있습니다."
+          "ALB and Fargate cost can be higher than a tiny self-managed VM."
         ]),
         candidate("eks-container-app", 0.54, [
-          "단일 컨테이너도 Kubernetes 워크로드로 실행할 수 있어 향후 서비스 확장 대안이 됩니다."
+          "The container can run on Kubernetes if future orchestration needs grow."
         ], [
-          "현재 단일 서비스 규모에는 EKS 클러스터 운영 복잡도가 과도할 수 있습니다."
+          "EKS is likely too complex for a single service today."
         ])
       ];
     }
 
     return [
       candidate("ecs-fargate-container-app", 0.88, [
-        "여러 컨테이너 애플리케이션 단위를 관리형 ECS Fargate 서비스로 분리 운영할 수 있습니다."
+        "Container evidence matches managed ECS Fargate services."
       ], [
-        "서비스별 Task Definition, 네트워크, 로드 밸런싱 구성을 추가로 조정해야 합니다."
+        "Service-level task definitions and networking still need refinement."
       ]),
       candidate("eks-container-app", 0.64, [
-        "여러 컨테이너를 Kubernetes 워크로드로 분리할 수 있는 확장 대안입니다."
+        "Multiple containers can be separated into Kubernetes workloads."
       ], [
-        "저장소에 Kubernetes 근거가 없다면 초기 클러스터 운영 부담이 큽니다."
+        "Without Kubernetes evidence, EKS adds avoidable operational complexity."
       ])
     ];
   }
@@ -569,14 +564,14 @@ function createSupportedCandidateSet(
   if (hasFrontend && hasBackend && wantsAuth) {
     return [
       candidate("full-serverless-web-app", 0.86, [
-        "웹, API, 인증 요구가 전체 서버리스 웹 앱 템플릿과 잘 맞습니다."
+        "Web, API, and authentication needs fit a full serverless web app."
       ], [
-        "DynamoDB와 Cognito를 기본으로 사용하므로 관계형 데이터 요구가 있으면 조정이 필요합니다."
+        "Relational data requirements may need adaptation from the default data store."
       ]),
       candidate("minimal-serverless-api", 0.7, [
-        "API 영역은 최소 서버리스 API 템플릿으로 작게 시작할 수 있습니다."
+        "The API portion can start from a smaller serverless API template."
       ], [
-        "프론트엔드 호스팅과 Cognito는 기본 구성에 포함되지 않습니다."
+        "Frontend hosting and authentication are not included by default."
       ])
     ];
   }
@@ -584,14 +579,14 @@ function createSupportedCandidateSet(
   if (hasBackend && (hasRelationalData || dataPersistence === "key_value")) {
     return [
       candidate("minimal-serverless-api", 0.8, [
-        "API와 데이터 저장 요구가 Lambda API 시작 템플릿과 잘 맞습니다."
+        "API and data needs fit a compact serverless API starting point."
       ], [
-        "관계형 데이터베이스가 필요하면 기본 DynamoDB 계층을 교체하거나 확장해야 합니다."
+        "The data store may need adjustment for relational persistence."
       ]),
       candidate("full-serverless-web-app", 0.66, [
-        "웹과 API를 함께 운영하는 구조로 확장하기 좋습니다."
+        "The architecture can expand to include a web frontend later."
       ], [
-        "API 전용 서비스에는 불필요할 수 있는 인증과 프론트엔드 리소스가 포함됩니다."
+        "It includes more frontend and auth resources than an API-only service may need."
       ])
     ];
   }
@@ -599,28 +594,28 @@ function createSupportedCandidateSet(
   if (hasFrontend && !hasBackend) {
     return [
       candidate("static-web-hosting", 0.83, [
-        "프론트엔드 전용 근거가 CloudFront와 S3 정적 호스팅 구성에 잘 맞습니다."
+        "Frontend-only evidence fits static hosting with CDN delivery."
       ], [
-        "동적 API, 인증, 서버 렌더링이 필요하면 백엔드 리소스를 추가해야 합니다."
+        "Dynamic API or server rendering needs would require backend resources."
       ]),
       candidate("full-serverless-web-app", 0.62, [
-        "웹 앱이 성장할 때 API와 인증을 함께 확장할 수 있습니다."
+        "The frontend can grow into a serverless web app if APIs are added."
       ], [
-        "정적 웹사이트 시작 템플릿보다 초기 구성이 무겁습니다."
+        "It is heavier than a static hosting starting point."
       ])
     ];
   }
 
   return [
     candidate("minimal-serverless-api", 0.72, [
-      "서버리스 배포에서 가장 작게 시작할 수 있는 지원 API 템플릿입니다."
+      "A minimal serverless API is the smallest managed starting point for limited evidence."
     ], [
-      "저장소 근거가 제한적이므로 인계 전에 생성된 아키텍처를 검토해야 합니다."
+      "Additional architecture details should be confirmed before deployment."
     ]),
     candidate("static-web-hosting", 0.6, [
-      "프론트엔드 전용 저장소라면 정적 호스팅 템플릿도 사용할 수 있습니다."
+      "If the repository is frontend-only, static hosting may be enough."
     ], [
-      "백엔드 컴퓨팅 리소스는 포함하지 않습니다."
+      "Backend compute is not included."
     ])
   ];
 }
@@ -629,31 +624,25 @@ function rankSupportedCandidates(
   input: RepositoryTemplateRecommendationInput,
   deterministicCandidates: readonly CandidateSetItem[]
 ): readonly RepositoryTemplateRecommendationCandidate[] {
-  return deterministicCandidates
-    .slice(0, 3)
+  const candidatePool = includeEveryRepositoryAnalysisTemplate(deterministicCandidates);
+
+  return candidatePool
     .map((candidate, index) => {
-      const definition = templateById.get(candidate.templateId);
-
-      if (!definition) {
-        throw new Error(`Unsupported TemplateId in repository recommendation: ${candidate.templateId}`);
-      }
-
       return {
-      templateId: candidate.templateId,
-      displayTitle: templateDisplayTitles[candidate.templateId],
-      confidence: adjustConfidence(candidate.baseConfidence, input, index),
-      reasons: candidate.reasons,
-      tradeoffs: candidate.tradeoffs,
-      questions: createTemplateSpecificQuestions(input, candidate.templateId)
+        templateId: candidate.templateId,
+        displayTitle: getRepositoryAnalysisTemplateTitle(candidate.templateId),
+        confidence: adjustConfidence(candidate.baseConfidence, input, index),
+        reasons: candidate.reasons,
+        tradeoffs: candidate.tradeoffs,
+        questions: createTemplateSpecificQuestions(input, candidate.templateId)
       } satisfies RepositoryTemplateRecommendationCandidate;
     })
-    .sort((left, right) => right.confidence - left.confidence)
-    .slice(0, 3);
+    .sort((left, right) => right.confidence - left.confidence);
 }
 
 function createTemplateSpecificQuestions(
   input: RepositoryTemplateRecommendationInput,
-  templateId: RepositoryTemplateId
+  templateId: RepositoryAnalysisTemplateId
 ): readonly RepositoryAnalysisQuestion[] {
   const text = createSearchableText(input.snapshot, input.evidence.map((item) => item.path));
   const hasFrontend = input.applicationUnits.some(
@@ -671,41 +660,75 @@ function createTemplateSpecificQuestions(
   ) {
     questions.push({
       id: "primary_runtime",
-      prompt: "어떤 API 런타임을 아키텍처에 포함할까요?",
+      prompt: "Which API runtime should the architecture prioritize?",
       answerType: "single_select",
       options: [
-        { value: "node", label: "Node API 중심" },
-        { value: "python", label: "Python API 중심" },
-        { value: "both", label: "둘 다 포함" }
+        { value: "node", label: "Node API first" },
+        { value: "python", label: "Python API first" },
+        { value: "both", label: "Include both" }
       ],
       required: true,
-      reason: "저장소에서 Node API와 Python API가 모두 감지되었습니다."
+      reason: "Repository evidence includes both Node and Python API signals."
     });
   }
 
   if (hasFrontend && ["ecs-fargate-container-app", "three-tier-web-app"].includes(templateId)) {
     questions.push({
       id: "include_frontend",
-      prompt: "감지된 프론트엔드를 이 아키텍처에 포함할까요?",
+      prompt: "Should the detected frontend be included in this architecture?",
       answerType: "boolean",
       required: true,
-      reason: "선택한 템플릿에서 프론트엔드 배치 여부를 결정해야 합니다."
+      reason: "The selected template can include frontend delivery resources."
     });
   }
 
   if (hasDatabase && templateId !== "static-web-hosting") {
     questions.push({
       id: "include_database",
-      prompt: "감지된 데이터베이스 계층을 이 아키텍처에 포함할까요?",
+      prompt: "Should the detected data tier be included in this architecture?",
       answerType: "boolean",
       required: true,
-      reason: "선택한 템플릿에서 데이터 계층 포함 여부를 결정해야 합니다."
+      reason: "Repository evidence includes database-related signals."
     });
   }
 
   return questions.slice(0, 5);
 }
 
+function includeEveryRepositoryAnalysisTemplate(
+  rankedCandidates: readonly CandidateSetItem[]
+): readonly CandidateSetItem[] {
+  const includedTemplateIds = new Set(rankedCandidates.map((candidate) => candidate.templateId));
+  const supplementalCandidates = REPOSITORY_ANALYSIS_TEMPLATE_IDS
+    .filter((templateId) => !includedTemplateIds.has(templateId))
+    .map((templateId, index) =>
+      candidate(templateId, getSupplementalTemplateConfidence(templateId, index), [
+        "This available template is included in the repository-analysis ranking pool."
+      ], [
+        "Repository evidence is weaker for this template than for the top recommendations."
+      ])
+    );
+
+  return [...rankedCandidates, ...supplementalCandidates];
+}
+
+function getSupplementalTemplateConfidence(
+  templateId: RepositoryAnalysisTemplateId,
+  index: number
+): number {
+  const baseConfidence = (BRAINBOARD_TEMPLATE_IDS as readonly string[]).includes(templateId)
+    ? 0.42
+    : 0.5;
+
+  return Math.max(0.18, roundConfidence(baseConfidence - index * 0.003));
+}
+
+function getRepositoryAnalysisTemplateTitle(templateId: RepositoryAnalysisTemplateId): string {
+  return templateDisplayTitles[templateId]
+    ?? templateById.get(templateId as Parameters<typeof templateById.get>[0])?.title
+    ?? brainboardTemplateById.get(templateId as Parameters<typeof brainboardTemplateById.get>[0])?.title
+    ?? templateId;
+}
 function adjustConfidence(
   baseConfidence: number,
   input: RepositoryTemplateRecommendationInput,
@@ -719,7 +742,7 @@ function adjustConfidence(
 }
 
 function candidate(
-  templateId: RepositoryTemplateId,
+  templateId: RepositoryAnalysisTemplateId,
   baseConfidence: number,
   reasons: readonly string[],
   tradeoffs: readonly string[]

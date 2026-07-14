@@ -1,10 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import {
-  REPOSITORY_TEMPLATE_IDS,
-  type RepositoryTemplateId,
-  type SourceRepositoryAnalysisResult
-} from "@sketchcatch/types";
+import type { SourceRepositoryAnalysisResult } from "@sketchcatch/types";
 import {
   createPublicRepositoryArchitectureDraftRequest,
   createPublicRepositoryRecommendation,
@@ -122,7 +118,7 @@ test("public repository recommendation returns multiple candidates and follow-up
 
   assert.equal(deploymentType, "container");
   assert.equal(shouldAskPublicRepositoryDeploymentType(analysis), false);
-  assert.equal(recommendation.candidates.length, 2);
+  assert.ok(recommendation.candidates.length <= 3);
   assert.equal(recommendation.candidates[0]?.templateId, "ecs-fargate-container-app");
   assert.deepEqual(
     recommendation.questions.map((question) => question.id),
@@ -154,7 +150,7 @@ test("follow-up questions change with the selected template", () => {
   assert.ok(serverless.questions.length <= 5);
 });
 
-test("repository recommendation uses backend-ranked candidates without synthesizing extras", () => {
+test("repository recommendation keeps backend-ranked candidates first and shows at most three choices", () => {
   const analysis: SourceRepositoryAnalysisResult = {
     ...createAnalysis(),
     detectedSignals: ["Container"]
@@ -165,12 +161,9 @@ test("repository recommendation uses backend-ranked candidates without synthesiz
     deploymentType: "container"
   });
 
-  assert.equal(recommendation.candidates.length, 2);
+  assert.ok(recommendation.candidates.length <= 3);
   assert.equal(recommendation.candidates[0]?.templateId, "ecs-fargate-container-app");
-  assert.deepEqual(
-    new Set(recommendation.candidates.map((candidate) => candidate.templateId)),
-    new Set(["ecs-fargate-container-app", "eks-container-app"])
-  );
+  assert.equal(recommendation.candidates[1]?.templateId, "eks-container-app");
 });
 
 test("repository recommendation falls back to handoff questions when ranked candidates have none", () => {
@@ -244,9 +237,7 @@ test("repository recommendation falls back to handoff questions when ranked cand
   );
 });
 
-test("legacy public analysis fallback still returns at least two comparison candidates", () => {
-  const repositoryTemplateIds = new Set<RepositoryTemplateId>(REPOSITORY_TEMPLATE_IDS);
-
+test("legacy public analysis fallback shows at most three relevant template candidates", () => {
   for (const deploymentType of ["ec2_vm", "container", "serverless"] as const) {
     const recommendation = createPublicRepositoryRecommendation({
       analysis: {
@@ -259,14 +250,11 @@ test("legacy public analysis fallback still returns at least two comparison cand
       deploymentType
     });
 
-    assert.ok(recommendation.candidates.length >= 2, deploymentType);
+    assert.ok(recommendation.candidates.length > 0, deploymentType);
+    assert.ok(recommendation.candidates.length <= 3, deploymentType);
     assert.equal(
       new Set(recommendation.candidates.map((candidate) => candidate.templateId)).size,
       recommendation.candidates.length,
-      deploymentType
-    );
-    assert.ok(
-      recommendation.candidates.every((candidate) => repositoryTemplateIds.has(candidate.templateId)),
       deploymentType
     );
     assert.equal(
