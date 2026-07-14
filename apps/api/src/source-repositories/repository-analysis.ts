@@ -146,8 +146,12 @@ function detectApplicationUnits(
         !(file.rootPath === "." && file.workspacePatterns !== null && hasNestedPackage)
     )
     .flatMap((file) => createApplicationUnit(file, files));
+  const runtimeUnits = [
+    ...packageUnits,
+    ...detectDockerApplicationUnits(treePaths, packageUnits, files)
+  ];
 
-  return [...packageUnits, ...detectDockerApplicationUnits(treePaths, packageUnits, files)]
+  return [...runtimeUnits, ...detectDeploymentDescriptorUnits(treePaths, runtimeUnits, files)]
     .sort((left, right) => left.rootPath.localeCompare(right.rootPath));
 }
 
@@ -207,6 +211,38 @@ function detectDockerApplicationUnits(
             evidencePaths: paths.sort()
           }
         ];
+  });
+}
+
+function detectDeploymentDescriptorUnits(
+  treePaths: readonly string[],
+  existingUnits: readonly RepositoryApplicationUnit[],
+  files: readonly GitHubRepositoryEvidenceFile[]
+): RepositoryApplicationUnit[] {
+  const descriptors = treePaths.flatMap((path) => {
+    const fileName = getFileName(path).toLowerCase();
+    const file = files.find((candidate) => candidate.path === path);
+    const framework =
+      fileName === "appspec.yml" || fileName === "appspec.yaml"
+        ? "AWS CodeDeploy"
+        : (fileName === "template.yml" || fileName === "template.yaml") &&
+            /(?:^|\n)\s*Transform\s*:\s*["']?AWS::Serverless-/i.test(file?.content ?? "")
+          ? "AWS SAM"
+          : null;
+
+    return framework ? [{ path, rootPath: getParentPath(path), framework }] : [];
+  });
+
+  return [...new Set(descriptors.map((descriptor) => descriptor.rootPath))].flatMap((rootPath) => {
+    if (existingUnits.some((unit) => isWithinRoot(rootPath, unit.rootPath))) return [];
+    const matching = descriptors.filter((descriptor) => descriptor.rootPath === rootPath);
+    return [{
+      id: rootPath,
+      rootPath,
+      kind: "backend" as const,
+      frameworks: [...new Set(matching.map((descriptor) => descriptor.framework))].sort(),
+      evidencePaths: matching.map((descriptor) => descriptor.path).sort()
+    }];
   });
 }
 

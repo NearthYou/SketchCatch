@@ -24,6 +24,48 @@ test("captures CodeDeploy AppSpec as repository framework evidence", () => {
   );
 });
 
+test("creates application units for standalone SAM and CodeDeploy descriptors", () => {
+  const result = analyzeRepositoryEvidence({
+    revision: "deployment-descriptors-revision",
+    treePaths: ["apps/ec2/appspec.yml", "apps/lambda/template.yaml"],
+    files: [
+      {
+        path: "apps/ec2/appspec.yml",
+        content: "version: 0.0\nos: linux\nfiles:\n  - source: /\n    destination: /srv/app"
+      },
+      {
+        path: "apps/lambda/template.yaml",
+        content: "Transform: AWS::Serverless-2016-10-31\nResources: {}"
+      }
+    ]
+  });
+
+  assert.deepEqual(result.applicationUnits, [
+    {
+      id: "apps/ec2",
+      rootPath: "apps/ec2",
+      kind: "backend",
+      frameworks: ["AWS CodeDeploy"],
+      evidencePaths: ["apps/ec2/appspec.yml"]
+    },
+    {
+      id: "apps/lambda",
+      rootPath: "apps/lambda",
+      kind: "backend",
+      frameworks: ["AWS SAM"],
+      evidencePaths: ["apps/lambda/template.yaml"]
+    }
+  ]);
+  assert.equal(
+    result.evidence.find((item) => item.path === "apps/ec2/appspec.yml")?.applicationUnitId,
+    "apps/ec2"
+  );
+  assert.equal(
+    result.evidence.find((item) => item.path === "apps/lambda/template.yaml")?.applicationUnitId,
+    "apps/lambda"
+  );
+});
+
 test("selects static web hosting for a Vite frontend in a monorepo", () => {
   // Given
   const snapshot = {
