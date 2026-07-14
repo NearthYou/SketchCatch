@@ -128,6 +128,82 @@ test("EC2 in a VPC-contained subnet with matching references is clean", () => {
   assert.equal(diagnostics.filter((diagnostic) => diagnostic.resourceNodeId === "ec2-1").length, 0);
 });
 
+test("nested area ancestors satisfy matching VPC and subnet references", () => {
+  const vpc = vpcNode();
+  const availabilityZone = resourceNode({
+    id: "az-1",
+    metadata: { parentAreaNodeId: vpc.id },
+    resourceName: "ap_northeast_2a",
+    resourceType: "aws_availability_zone",
+    values: { awsAvailabilityZone: "ap-northeast-2a" }
+  });
+  const subnet = resourceNode({
+    id: "subnet-1",
+    metadata: { parentAreaNodeId: availabilityZone.id },
+    resourceName: "public",
+    resourceType: "aws_subnet",
+    values: { vpcId: "aws_vpc.main.id" }
+  });
+  const ami = amiNode();
+  const ec2 = resourceNode({
+    id: "ec2-1",
+    metadata: { parentAreaNodeId: subnet.id },
+    resourceName: "app",
+    resourceType: "aws_instance",
+    values: {
+      ami: "data.aws_ami.al2023.id",
+      subnetId: "aws_subnet.public.id"
+    }
+  });
+
+  assert.deepEqual(
+    evaluateArchitectureDependencies(diagramWith(vpc, availabilityZone, subnet, ami, ec2), "preview"),
+    []
+  );
+});
+
+test("physical VPC containment satisfies a Subnet that is grouped by Availability Zone", () => {
+  const vpc = vpcNode();
+  vpc.position = { x: 0, y: 0 };
+  vpc.size = { width: 800, height: 600 };
+
+  const availabilityZone = resourceNode({
+    id: "az-1",
+    resourceName: "ap_northeast_2a",
+    resourceType: "aws_availability_zone",
+    values: { awsAvailabilityZone: "ap-northeast-2a" }
+  });
+  availabilityZone.position = { x: 0, y: 800 };
+  availabilityZone.size = { width: 300, height: 200 };
+
+  const subnet = resourceNode({
+    id: "subnet-1",
+    metadata: { parentAreaNodeId: availabilityZone.id },
+    resourceName: "public",
+    resourceType: "aws_subnet",
+    values: {
+      availabilityZone: "ap-northeast-2a",
+      cidrBlock: "10.0.1.0/24",
+      vpcId: "aws_vpc.main.id"
+    }
+  });
+  subnet.position = { x: 100, y: 100 };
+  subnet.size = { width: 200, height: 150 };
+
+  assert.deepEqual(
+    evaluateArchitectureDependencies(diagramWith(vpc, availabilityZone, subnet), "preview"),
+    []
+  );
+
+  subnet.position = { x: 700, y: 500 };
+
+  assert.deepEqual(
+    evaluateArchitectureDependencies(diagramWith(vpc, availabilityZone, subnet), "preview")
+      .map((diagnostic) => diagnostic.code),
+    ["architecture.aws.subnet.vpc_context_missing"]
+  );
+});
+
 test("EC2 accepts a referenced Subnet nested beneath a presentation AZ", () => {
   const vpc = vpcNode();
   const availabilityZone: DiagramNode = {
@@ -162,7 +238,6 @@ test("EC2 accepts a referenced Subnet nested beneath a presentation AZ", () => {
       subnetId: "aws_subnet.public.id"
     }
   });
-
   const diagnostics = evaluateArchitectureDependencies(
     diagramWith(vpc, availabilityZone, subnet, ami, ec2),
     "preview"

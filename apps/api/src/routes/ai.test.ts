@@ -308,6 +308,26 @@ test("POST /api/ai/architecture-draft rejects an unknown Repository Analysis Tem
   await app.close();
 });
 
+test("POST /api/ai/architecture-draft requires Repository Analysis for template fallback", async () => {
+  const app = buildApp();
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    payload: {
+      prompt: "Repository 분석 기반으로 Template fallback 아키텍처를 만들어줘",
+      templateFallback: {
+        reason: "no_matching_template"
+      }
+    }
+  });
+
+  assert.equal(response.statusCode, 400);
+  assert.match(response.body, /Repository Analysis is required for template fallback/);
+
+  await app.close();
+});
+
 test("POST /api/ai/architecture-draft selects API server and database backend templates", async () => {
   const app = buildApp();
 
@@ -2063,6 +2083,162 @@ test("POST /api/ai/source-repository-analysis reads nested public repository evi
     assert.equal(cachedResponse.statusCode, 200);
     assert.deepEqual(cachedResponse.json(), body);
     assert.equal(fetchCallCount, firstRequestFetchCount);
+  } finally {
+    globalThis.fetch = originalFetch;
+    await app.close();
+  }
+});
+
+test("POST /api/ai/source-repository-analysis accepts clone URLs ending in .git", async () => {
+  const originalFetch = globalThis.fetch;
+  const requestedUrls: string[] = [];
+  globalThis.fetch = async (input) => {
+    const url = String(input);
+    requestedUrls.push(url);
+
+    if (url.includes("api.github.com/repos/example/fullstack/git/trees/main")) {
+      return Response.json({
+        truncated: false,
+        tree: [
+          { path: "README.md", type: "blob" },
+          { path: "apps/api/Dockerfile", type: "blob" },
+          { path: "apps/api/package.json", type: "blob" },
+          { path: "apps/web/package.json", type: "blob" },
+          { path: "apps/web/vite.config.ts", type: "blob" },
+          { path: "package-lock.json", type: "blob" },
+          { path: "package.json", type: "blob" }
+        ]
+      });
+    }
+
+    if (url.endsWith("/README.md")) {
+      return new Response("React frontend and Express API. Target deployment uses ECS Fargate. No database.", { status: 200 });
+    }
+
+    if (url.endsWith("/apps/api/Dockerfile")) {
+      return new Response("FROM node:22-alpine\nEXPOSE 8080", { status: 200 });
+    }
+
+    if (url.endsWith("/apps/api/package.json")) {
+      return new Response('{"dependencies":{"express":"latest"}}', { status: 200 });
+    }
+
+    if (url.endsWith("/apps/web/package.json")) {
+      return new Response('{"dependencies":{"react":"latest","vite":"latest"}}', { status: 200 });
+    }
+
+    if (url.endsWith("/apps/web/vite.config.ts")) {
+      return new Response("import react from '@vitejs/plugin-react';", { status: 200 });
+    }
+
+    if (url.endsWith("/package-lock.json")) {
+      return new Response("{}", { status: 200 });
+    }
+
+    if (url.endsWith("/package.json")) {
+      return new Response('{"workspaces":["apps/*"]}', { status: 200 });
+    }
+
+    return new Response("", { status: 404 });
+  };
+
+  const app = buildApp();
+
+  try {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/ai/source-repository-analysis",
+      payload: {
+        repositoryUrl: "https://github.com/example/fullstack.git",
+        defaultBranch: "main"
+      }
+    });
+
+    assert.equal(response.statusCode, 200, response.body);
+
+    const body = response.json();
+
+    assert.ok(
+      requestedUrls.some((url) => url.includes("api.github.com/repos/example/fullstack/git/trees/main")),
+      "expected GitHub tree lookup to strip .git from the repository name"
+    );
+    assert.equal(
+      requestedUrls.some((url) => url.includes("fullstack.git")),
+      false,
+      "expected no GitHub evidence request to keep the .git suffix"
+    );
+    assert.ok(body.detectedSignals.includes("Container"));
+    assert.ok(body.detectedSignals.includes("React"));
+    assert.ok(body.detectedSignals.includes("Node API"));
+    assert.equal(body.aiHandoff.deploymentTypeDefault, "container");
+    assert.equal(body.aiHandoff.recommendation.candidates[0].templateId, "ecs-fargate-container-app");
+    assert.ok(body.aiHandoff.architectureFacts.some(
+      (fact: { kind: string; value: string }) =>
+        fact.kind === "backend_runtime" && fact.value === "ecs_fargate_service"
+    ));
+    assert.ok(body.aiHandoff.architectureFacts.some(
+      (fact: { kind: string; value: string }) =>
+        fact.kind === "excluded_capability" && fact.value === "database"
+    ));
+  } finally {
+    globalThis.fetch = originalFetch;
+    await app.close();
+  }
+});
+
+test("POST /api/ai/source-repository-analysis resolves the GitHub default branch and supports branch reanalysis", async () => {
+  const originalFetch = globalThis.fetch;
+  const requestedTreeUrls: string[] = [];
+  globalThis.fetch = async (input) => {
+    const url = String(input);
+
+    if (url === "https://api.github.com/repos/example/legacy-default") {
+      return Response.json({ default_branch: "master" });
+    }
+
+    if (url.includes("/repos/example/legacy-default/branches?")) {
+      return Response.json([{ name: "develop" }, { name: "master" }, { name: "release" }]);
+    }
+
+    if (url.includes("/repos/example/legacy-default/git/trees/")) {
+      requestedTreeUrls.push(url);
+      return Response.json({ truncated: false, tree: [{ path: "README.md", type: "blob" }] });
+    }
+
+    if (url.endsWith("/README.md")) {
+      return new Response("A small public repository", { status: 200 });
+    }
+
+    return new Response("", { status: 404 });
+  };
+
+  const app = buildApp();
+
+  try {
+    const defaultResponse = await app.inject({
+      method: "POST",
+      url: "/api/ai/source-repository-analysis",
+      payload: { repositoryUrl: "https://github.com/example/legacy-default" }
+    });
+
+    assert.equal(defaultResponse.statusCode, 200, defaultResponse.body);
+    assert.equal(defaultResponse.json().defaultBranch, "master");
+    assert.deepEqual(defaultResponse.json().availableBranches, ["master", "develop", "release"]);
+
+    const branchResponse = await app.inject({
+      method: "POST",
+      url: "/api/ai/source-repository-analysis",
+      payload: {
+        repositoryUrl: "https://github.com/example/legacy-default",
+        defaultBranch: "develop"
+      }
+    });
+
+    assert.equal(branchResponse.statusCode, 200, branchResponse.body);
+    assert.equal(branchResponse.json().defaultBranch, "develop");
+    assert.deepEqual(branchResponse.json().availableBranches, ["develop", "master", "release"]);
+    assert.ok(requestedTreeUrls.some((url) => url.includes("/git/trees/master?")));
+    assert.ok(requestedTreeUrls.some((url) => url.includes("/git/trees/develop?")));
   } finally {
     globalThis.fetch = originalFetch;
     await app.close();

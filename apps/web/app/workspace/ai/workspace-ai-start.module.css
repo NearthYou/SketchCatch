@@ -106,6 +106,7 @@
   border-right: 1px solid var(--ai-line);
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
+  min-height: 0;
   min-width: 0;
 }
 
@@ -114,9 +115,31 @@
   flex-direction: column;
   gap: 0;
   min-height: 0;
-  overflow-y: auto;
+  overflow-x: hidden;
+  overflow-y: scroll;
+  overscroll-behavior: contain;
   padding: 36px 28px 24px;
+  scrollbar-color: #c8cbd1 transparent;
   scrollbar-gutter: stable;
+  scrollbar-width: thin;
+}
+
+.transcript::-webkit-scrollbar {
+  width: 10px;
+}
+
+.transcript::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.transcript::-webkit-scrollbar-thumb {
+  background: #c8cbd1;
+  border: 3px solid var(--ai-canvas);
+  border-radius: 999px;
+}
+
+.transcript::-webkit-scrollbar-thumb:hover {
+  background: #aeb3bb;
 }
 
 .message {

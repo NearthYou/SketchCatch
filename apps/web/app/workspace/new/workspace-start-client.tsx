@@ -92,7 +92,6 @@ export function WorkspaceStartClient({
   const [submittingKind, setSubmittingKind] = useState<WorkspaceStartKind | null>(null);
   const [repositoryUrlFormVisible, setRepositoryUrlFormVisible] = useState(initialStartKind === "repository");
   const [repositoryUrl, setRepositoryUrl] = useState("");
-  const [repositoryDefaultBranch, setRepositoryDefaultBranch] = useState("main");
   const selectedTemplate = useMemo(
     () => boardTemplates.find((template) => template.id === selectedTemplateId) ?? null,
     [selectedTemplateId]
@@ -239,7 +238,6 @@ export function WorkspaceStartClient({
   // Repository URL 시작도 공용 제출 상태를 사용해 다른 시작 버튼을 함께 잠급니다.
   async function startFromRepositoryUrl(projectName: string): Promise<void> {
     const trimmedRepositoryUrl = repositoryUrl.trim();
-    const trimmedDefaultBranch = repositoryDefaultBranch.trim();
 
     if (!trimmedRepositoryUrl) {
       setErrorMessage("Repository URL을 입력해주세요.");
@@ -255,7 +253,6 @@ export function WorkspaceStartClient({
       createdProjectId = project.id;
       clearWorkspaceStartForm();
       const params = new URLSearchParams({
-        defaultBranch: trimmedDefaultBranch || "main",
         projectId: project.id,
         projectName: project.name,
         repositoryUrl: trimmedRepositoryUrl
@@ -358,12 +355,7 @@ export function WorkspaceStartClient({
 
           {selectedKind === "repository" && repositoryUrlFormVisible ? (
             <RepositoryUrlStartPanel
-              branch={repositoryDefaultBranch}
               isSubmitting={isSubmitting}
-              onBranchChange={(value) => {
-                setRepositoryDefaultBranch(value);
-                setErrorMessage("");
-              }}
               onRepositoryUrlChange={(value) => {
                 setRepositoryUrl(value);
                 setErrorMessage("");
@@ -471,15 +463,11 @@ function TemplatePicker({
 }
 
 function RepositoryUrlStartPanel({
-  branch,
   isSubmitting,
-  onBranchChange,
   onRepositoryUrlChange,
   repositoryUrl
 }: {
-  readonly branch: string;
   readonly isSubmitting: boolean;
-  readonly onBranchChange: (value: string) => void;
   readonly onRepositoryUrlChange: (value: string) => void;
   readonly repositoryUrl: string;
 }) {
@@ -503,17 +491,6 @@ function RepositoryUrlStartPanel({
             placeholder="https://github.com/owner/repository"
             type="url"
             value={repositoryUrl}
-          />
-        </label>
-        <label htmlFor="repository-branch-input">
-          <span>Branch</span>
-          <input
-            disabled={isSubmitting}
-            id="repository-branch-input"
-            onChange={(event) => onBranchChange(event.target.value)}
-            placeholder="main"
-            type="text"
-            value={branch}
           />
         </label>
       </div>

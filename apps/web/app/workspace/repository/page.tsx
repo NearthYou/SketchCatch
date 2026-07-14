@@ -12,7 +12,7 @@ export default async function RepositoryStartPage({ searchParams }: RepositorySt
   return (
     <WorkspaceAuthGate>
       <RepositoryStartClient
-        initialDefaultBranch={getSingleValue(params?.defaultBranch) ?? "main"}
+        initialDefaultBranch={getSingleValue(params?.defaultBranch) ?? ""}
         initialRepositoryUrl={getSingleValue(params?.repositoryUrl) ?? ""}
         projectId={getSingleValue(params?.projectId) ?? ""}
         projectName={getSingleValue(params?.projectName) ?? "새 프로젝트"}

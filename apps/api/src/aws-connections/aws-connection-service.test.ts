@@ -292,6 +292,37 @@ test("createAwsConnection creates a pending connection with server-generated ext
       {
         Effect: "Allow",
         Action: [
+          "ecs:*",
+          "ecr:*",
+          "elasticloadbalancing:*",
+          "cloudfront:*",
+          "logs:*"
+        ],
+        Resource: "*"
+      },
+      {
+        Effect: "Allow",
+        Action: [
+          "iam:CreateRole",
+          "iam:DeleteRole",
+          "iam:GetRole",
+          "iam:UpdateAssumeRolePolicy",
+          "iam:TagRole",
+          "iam:UntagRole",
+          "iam:ListRoleTags",
+          "iam:ListRolePolicies",
+          "iam:ListAttachedRolePolicies",
+          "iam:ListInstanceProfilesForRole",
+          "iam:AttachRolePolicy",
+          "iam:DetachRolePolicy",
+          "iam:PassRole",
+          "iam:CreateServiceLinkedRole"
+        ],
+        Resource: "*"
+      },
+      {
+        Effect: "Allow",
+        Action: [
           "ce:GetCostAndUsage",
           "ce:GetDimensionValues",
           "autoscaling:DescribeAutoScalingGroups",

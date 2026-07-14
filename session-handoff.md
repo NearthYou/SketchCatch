@@ -4,30 +4,35 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Currently Verified
 
-- Branch: `feature/sw/377-durable-deployment-notifications`; issue #377 is implemented and locally verified.
-- Direct and GitOps terminal events atomically create one persistent Inbox notification and one outbox row per source/status.
-- Authenticated SSE and explicit-permission Service Worker Web Push use the same notification ID and safe project action path.
-- Subscription endpoints and keys are encrypted; outbound Push DNS is pinned only after all resolved addresses pass the public-address guard.
+- Branch `feat/ck/350-ai-diagram-fallback` is ready for a final latest-`dev` merge after the feature commit.
+- Repository URL analysis resolves the GitHub default branch, exposes fetched branches through the shared SelectMenu, and reanalyzes the selected revision.
+- Strict `audience-live-check` evidence targets a single ECS Fargate task in private app subnets behind an internet-facing ALB in public subnets, without unsupported persistence or scaling assumptions.
+- One cost-conscious NAT path supports private ECR image pulls and CloudWatch log delivery; the diagram states the single-AZ egress tradeoff.
+- Board containment and edge labels explicitly show ALB SG ingress, Task SG TCP 8080, ECR image pull, and ECS `awslogs` delivery.
+- The latest Template Design contracts and separated Direct Deployment/CI/CD console from `dev` are present.
+- Direct Deployment created 29 AWS resources, served ALB `/health` with HTTP 200, and finished cleanup as `DESTROYED`.
+- AWS Console confirms the deployment-owned CloudFront, ECS, ALB, ECR, S3, CloudWatch, IAM, VPC, and EIP resources are absent; the NAT row is `Deleted` history only.
 
 ## Verification
 
-- Notification-focused API/Web tests passed, including encryption, ownership, permission fallback, expiry, retry, retention, and safe Push routing.
-- PostgreSQL 16 applied migrations 0000-0041 and passed Direct/GitOps trigger idempotency and duplicate-source assertions.
-- Migration compatibility, Terraform tests, harness, lint, typecheck, and build passed on 2026-07-14.
-- Full Web and other workspace tests passed; API passed 1,525/1,528 with only three unchanged Windows symlink fixture setup errors (`EPERM`).
+- Focused verification passed: 15 deployment Plan/Destroy tests, 23 deployment action tests, 92 Terraform diagnostics/sync tests, and 25 virtual-file/palette pipeline tests.
+- Latest `origin/dev` is merged; focused integration tests plus `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check` passed.
 
 ## Changes This Session
 
-- Added durable notification schema/migration, shared contracts, service/repository/outbox job, authenticated routes, Web Push encryption and delivery, global Inbox UI, service worker, and tests.
-- Removed workspace polling/sessionStorage notification state and documented production Web Push secret injection.
+- Merged the latest `origin/dev` and preserved both the branch's Repository/Fargate changes and `dev` deployment/template behavior.
+- Combined load-balancer exclusion sizing with CI/CD IAM role sizing.
+- Preserved ECR/CloudFront nested blocks and Resource AZ, Design AZ, and physical VPC containment regressions.
+- Clarified strict Repository public/private subnet placement, SG boundaries, private egress, and operational edge labels.
+- Prevented visual `tier` metadata from leaking into `aws_subnet` HCL.
+- Gave Plan and Destroy Plan the 15-minute deployment timeout and made cleanup retryable after Plan failure.
+- Preserved generated Terraform outputs through file splitting, validation, and Diagram sync.
 
 ## Broken Or Unverified
 
-- Three unrelated filesystem security tests require Windows symlink privileges unavailable on this machine.
-- Browser Push provider delivery and the approved sandbox journey remain unverified until issue #378.
-- No Web Push provider call, Terraform Apply/Destroy, AWS/GitHub mutation, or production database migration was performed.
+- The live deployment artifact was generated before output preservation was fixed, so its output table was empty. Focused pipeline tests now prove outputs remain in `main.tf` for future artifacts.
+- No unrelated AWS resources were deleted.
 
 ## Best Next Action
 
-- Complete issue #377 PR review and merge to `dev`.
-- Continue issue #378 only with explicit approved sandbox credentials, rollback targets, and cleanup evidence.
+- Recreate the strict Repository board before its next deployment so the new Terraform artifact includes preserved outputs.

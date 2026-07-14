@@ -543,6 +543,7 @@ export type AnalyzeSourceRepositoryRequest = {
 export type SourceRepositoryAnalysisResult = {
   repositoryUrl: string;
   defaultBranch: string;
+  availableBranches: string[];
   evidenceFiles: RepositoryAnalysisEvidenceFile[];
   detectedSignals: string[];
   recommendedTemplateId: RepositoryAnalysisTemplateId | null;
@@ -609,6 +610,29 @@ export type RepositoryAnalysisEvidence = {
   readonly path: string;
   readonly applicationUnitId: string | null;
   readonly signals: readonly string[];
+};
+
+export const REPOSITORY_ARCHITECTURE_FACT_KINDS = [
+  "frontend_delivery",
+  "backend_runtime",
+  "container_registry",
+  "traffic_entry",
+  "observability",
+  "ci_cd",
+  "health_check",
+  "transport_security",
+  "runtime_scale",
+  "excluded_capability",
+  "infrastructure_definition"
+] as const;
+
+export type RepositoryArchitectureFactKind =
+  (typeof REPOSITORY_ARCHITECTURE_FACT_KINDS)[number];
+
+export type RepositoryArchitectureFact = {
+  readonly kind: RepositoryArchitectureFactKind;
+  readonly value: string;
+  readonly sourcePath: string;
 };
 
 export type RepositoryApplicationUnit = {
@@ -678,6 +702,7 @@ export type RecommendRepositoryTemplateResponse = {
 type RepositoryAnalysisAiHandoffBase = {
   readonly applicationUnits: readonly RepositoryApplicationUnit[];
   readonly evidence: readonly RepositoryAnalysisEvidence[];
+  readonly architectureFacts?: readonly RepositoryArchitectureFact[] | undefined;
   readonly missingEvidence: readonly RepositoryEvidenceKind[];
   readonly deploymentTypeDefault?: RepositoryDeploymentType | null | undefined;
   readonly usesCiCdDefault?: boolean | null | undefined;
@@ -2489,6 +2514,17 @@ export type CreateArchitecturePatchPreviewRequest = {
 export type CreateArchitectureDraftRequest = {
   prompt: string;
   templateId?: TemplateId | undefined;
+  dynamicQuestionAnswers?: readonly {
+    questionId: string;
+    question: string;
+    answer: string;
+  }[] | undefined;
+  templateFallback?: Record<string, unknown> | undefined;
+  repositoryEvidence?: {
+    mode: "strict";
+    facts: readonly RepositoryArchitectureFact[];
+    repositoryName?: string | undefined;
+  } | undefined;
   repositoryAnalysis?: {
     projectId: string;
     sourceRepositoryId: string;

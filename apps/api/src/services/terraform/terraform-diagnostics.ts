@@ -391,7 +391,8 @@ function isSupportedTopLevelBlockType(blockType: string | undefined): boolean {
   return blockType === "resource" ||
     blockType === "data" ||
     blockType === "provider" ||
-    blockType === "terraform";
+    blockType === "terraform" ||
+    blockType === "output";
 }
 
 function checkBodySyntax(terraformCode: string): TerraformDiagnostic[] {

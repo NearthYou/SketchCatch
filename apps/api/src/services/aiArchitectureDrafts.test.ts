@@ -6,8 +6,10 @@ import type { AiTextProvider } from "./aiLlmExplanation.js";
 import {
   ArchitectureDraftGenerationError,
   createAmazonQArchitectureDraftResponse,
-  createArchitectureDraft
+  createArchitectureDraft,
+  createDeterministicArchitectureIntentPlan
 } from "./aiArchitectureDrafts.js";
+import { analyzePreDeployment } from "./aiPreDeploymentAnalysis.js";
 
 const confirmedCreditPolicy = {
   bedrock: false,
@@ -15,6 +17,484 @@ const confirmedCreditPolicy = {
   transcribe: false,
   billingMode: "aws_credit_only"
 } as const;
+
+test("GitHub Actions handoff does not imply an AWS-native CI/CD pipeline", () => {
+  const githubActionsPlan = createDeterministicArchitectureIntentPlan(
+    "GitHub Actions builds an image, pushes to ECR, and deploys ECS. Do not substitute CodePipeline or CodeBuild."
+  );
+  const awsNativePlan = createDeterministicArchitectureIntentPlan(
+    "Use CodeStar Connection, CodePipeline, CodeBuild, and CodeDeploy for delivery."
+  );
+
+  assert.equal(githubActionsPlan?.patternIds?.includes("github-cicd-codedeploy") ?? false, false);
+  assert.equal(githubActionsPlan?.requiredResources?.includes("CODEPIPELINE") ?? false, false);
+  assert.equal(awsNativePlan?.patternIds?.includes("github-cicd-codedeploy"), true);
+  assert.equal(awsNativePlan?.requiredResources?.includes("CODEPIPELINE"), true);
+});
+
+test("fixed Template keeps its core resources and merges compatible answer-driven additions", () => {
+  const result = createArchitectureDraft({
+    prompt: [
+      "Generate an API backend on the selected ECS Fargate Template.",
+      "The selected Template is the highest-priority constraint.",
+      "Include a managed relational database such as RDS and connect the backend workload to it.",
+      "Do not include a public web frontend."
+    ].join("\n"),
+    templateId: "ecs-fargate-container-app"
+  });
+
+  assert.ok(
+    result.architectureJson.nodes.some((node) =>
+      node.id.startsWith("fixed-template-ecs-fargate-container-app-")
+      && node.type === "ECS_SERVICE"
+    )
+  );
+  assert.ok(result.architectureJson.nodes.some((node) => node.type === "RDS"));
+  assert.equal(
+    result.architectureJson.nodes.filter((node) => node.type === "ECS_SERVICE").length,
+    1
+  );
+  const fixedVpc = result.architectureJson.nodes.find((node) =>
+    node.id === "fixed-template-ecs-fargate-container-app-vpc"
+  );
+  const fixedService = result.architectureJson.nodes.find((node) =>
+    node.id === "fixed-template-ecs-fargate-container-app-service"
+  );
+  const fixedSubnet = result.architectureJson.nodes.find((node) =>
+    node.id === "fixed-template-ecs-fargate-container-app-subnet-a"
+  );
+  assert.equal(fixedVpc?.config.cidrBlock, "10.30.0.0/16");
+  assert.equal(fixedVpc?.config.values, undefined);
+  assert.equal(
+    fixedSubnet?.config.vpcId,
+    "aws_vpc.fixed-template-ecs-fargate-container-app-vpc.id"
+  );
+  assert.equal(fixedService?.config.launchType, "FARGATE");
+  assert.equal(fixedService?.config.desiredCount, 1);
+  assert.equal(fixedService?.config.values, undefined);
+  assert.equal(
+    fixedService?.config.cluster,
+    "aws_ecs_cluster.fixed-template-ecs-fargate-container-app-cluster.id"
+  );
+  assert.deepEqual(fixedService?.config.dependsOn, [
+    "aws_lb_listener.fixed-template-ecs-fargate-container-app-listener"
+  ]);
+  assert.ok(
+    result.architectureJson.edges.some((edge) => {
+      const source = result.architectureJson.nodes.find((node) => node.id === edge.sourceId);
+      const target = result.architectureJson.nodes.find((node) => node.id === edge.targetId);
+      return new Set([source?.type, target?.type]).has("ECS_SERVICE")
+        && new Set([source?.type, target?.type]).has("RDS");
+    })
+  );
+});
+
+test("fixed Template resolves data-source addresses with the Terraform data prefix", () => {
+  const result = createArchitectureDraft({
+    prompt: "Generate an API backend using the selected Template core.",
+    templateId: "three-tier-web-app"
+  });
+  const launchTemplate = result.architectureJson.nodes.find((node) =>
+    node.id === "fixed-template-three-tier-web-app-launch-template"
+  );
+
+  assert.equal(
+    launchTemplate?.config.imageId,
+    "data.aws_ami.fixed-template-three-tier-web-app-latest-ami.id"
+  );
+});
+
+test("fixed Template keeps CI/CD resource parameters aligned with merged Terraform names", async () => {
+  const provider = createFakeAmazonQProvider(createNormalizedRequirementPlan);
+  const response = await createAmazonQArchitectureDraftResponse({
+    prompt: [
+      "Generate a production-quality Practice Architecture for a source repository.",
+      "The selected Template is the highest-priority constraint.",
+      "Selected Template: ecs-fargate-container-app.",
+      "Required Components: preserve the selected ECS Fargate Template and add only compatible supporting resources.",
+      "Include a managed relational database such as RDS.",
+      "Include a Git/CI/CD handoff with CodeStar Connection, CodePipeline, CodeBuild, and an S3 artifact bucket.",
+      "Include the API backend scope and omit a public web frontend.",
+      "File upload: not required. Realtime transport: not required."
+    ].join("\n"),
+    templateId: "ecs-fargate-container-app"
+  }, {
+    provider,
+    creditPolicy: confirmedCreditPolicy
+  });
+  assert.ok(!("status" in response));
+  if ("status" in response) return;
+
+  const countNodes = (type: ArchitectureJson["nodes"][number]["type"]): number =>
+    response.architectureJson.nodes.filter((node) => node.type === type).length;
+  const terraformNames = new Set(
+    response.architectureJson.nodes
+      .map((node) => node.config.terraformResourceName)
+      .filter((name): name is string => typeof name === "string")
+  );
+
+  assert.ok(terraformNames.has("codebuild_service_role"));
+  assert.ok(terraformNames.has("codepipeline_service_role"));
+  assert.ok(terraformNames.has("codepipeline_artifacts"));
+  assert.ok(terraformNames.has("github"));
+  assert.ok(terraformNames.has("build"));
+  assert.equal(countNodes("INTERNET_GATEWAY"), 1);
+  assert.equal(countNodes("SUBNET"), 6);
+  assert.equal(countNodes("ROUTE_TABLE"), 3);
+  assert.equal(countNodes("ROUTE_TABLE_ASSOCIATION"), 6);
+  assert.equal(countNodes("SECURITY_GROUP"), 3);
+  assert.equal(countNodes("IAM_ROLE"), 4);
+  assert.ok(!response.architectureJson.nodes.some((node) => node.id === "public-subnet-a"));
+  assert.ok(!response.architectureJson.nodes.some((node) => node.id === "ecs-execution-role"));
+  assert.doesNotMatch(JSON.stringify(response.architectureJson), /aws_vpc\.vpc_main\./u);
+});
+
+test("repository evidence strict mode keeps the Fargate diagram minimal and evidence-backed", async () => {
+  const provider = createFakeAmazonQProvider(createNormalizedRequirementPlan);
+  const response = await createAmazonQArchitectureDraftResponse({
+    prompt: [
+      "Generate a source repository architecture on the selected ECS Fargate Template.",
+      "Repository architecture facts are authoritative.",
+      "Use S3 and CloudFront for the static web frontend.",
+      "Use ECR and one ECS Fargate task behind an ALB with /health on port 8080.",
+      "Use CloudWatch for logs and metrics.",
+      "GitHub Actions builds and deploys; do not substitute CodePipeline, CodeBuild, or CodeDeploy.",
+      "No database, Redis, WebSocket, or authentication is required.",
+      "Repository-inferred requirement profile:",
+      "- Application type: web frontend and API backend detected as separate application units.",
+      "- Traffic: not established by repository evidence; do not infer burst scaling.",
+      "- Database: no persistent database required by explicit repository evidence.",
+      "- Frontend: SPA frontend detected.",
+      "- Backend: Express API in a container.",
+      "- Primary region: ap-northeast-2 (Seoul) for the initial draft.",
+      "- Budget: cost-conscious initial deployment.",
+      "- HTTPS: TLS terminated at the Application Load Balancer.",
+      "- File upload: not required.",
+      "- Realtime features: not required.",
+      "- Management preference: managed container runtime.",
+      "- Performance target: not established by repository evidence.",
+      "- Runtime scale: one runtime task; do not add autoscaling.",
+      "- Traffic pattern: not established by repository evidence.",
+      "- Availability target: not established by repository evidence.",
+      "Required Components: preserve the selected ECS Fargate Template and add only evidence-backed resources.",
+      "Architecture Flow: Browser to CloudFront and S3; Browser to ALB to ECS Fargate.",
+      "Validation Checklist: keep the selected Template core visible and connected."
+    ].join("\n"),
+    templateId: "ecs-fargate-container-app",
+    repositoryEvidence: {
+      mode: "strict",
+      repositoryName: "audience-live-check",
+      facts: [
+        { kind: "frontend_delivery", value: "s3_cloudfront_static", sourcePath: "README.md" },
+        { kind: "backend_runtime", value: "ecs_fargate_service", sourcePath: "README.md" },
+        { kind: "container_registry", value: "ecr", sourcePath: "README.md" },
+        { kind: "traffic_entry", value: "application_load_balancer", sourcePath: "README.md" },
+        { kind: "observability", value: "cloudwatch", sourcePath: "README.md" },
+        { kind: "ci_cd", value: "github_actions", sourcePath: "README.md" },
+        { kind: "health_check", value: "http:8080/health", sourcePath: "apps/api/Dockerfile" },
+        { kind: "transport_security", value: "alb_tls_termination", sourcePath: "README.md" },
+        { kind: "runtime_scale", value: "single_task", sourcePath: "README.md" },
+        { kind: "excluded_capability", value: "database", sourcePath: "README.md" },
+        { kind: "excluded_capability", value: "redis", sourcePath: "README.md" },
+        { kind: "excluded_capability", value: "websocket", sourcePath: "README.md" },
+        { kind: "excluded_capability", value: "authentication", sourcePath: "README.md" }
+      ]
+    }
+  }, {
+    provider,
+    creditPolicy: confirmedCreditPolicy
+  });
+
+  assert.ok(!("status" in response));
+  if ("status" in response) return;
+
+  const countNodes = (type: ArchitectureJson["nodes"][number]["type"]): number =>
+    response.architectureJson.nodes.filter((node) => node.type === type).length;
+  const service = response.architectureJson.nodes.find((node) => node.type === "ECS_SERVICE");
+  const targetGroup = response.architectureJson.nodes.find(
+    (node) => node.type === "LOAD_BALANCER_TARGET_GROUP"
+  );
+  const listener = response.architectureJson.nodes.find(
+    (node) => node.type === "LOAD_BALANCER_LISTENER"
+  );
+  const cloudFront = response.architectureJson.nodes.find(
+    (node) =>
+      node.type === "CLOUDFRONT" &&
+      node.config.terraformResourceType !== "aws_cloudfront_origin_access_control"
+  );
+  const cloudFrontOac = response.architectureJson.nodes.find(
+    (node) => node.config.terraformResourceType === "aws_cloudfront_origin_access_control"
+  );
+  const webBucket = response.architectureJson.nodes.find(
+    (node) => node.type === "S3" && node.config.bucketPurpose === "static_website_origin"
+  );
+  const webPublicAccess = response.architectureJson.nodes.find(
+    (node) => node.config.terraformResourceType === "aws_s3_bucket_public_access_block"
+  );
+  const webBootstrap = response.architectureJson.nodes.find(
+    (node) => node.config.terraformResourceType === "aws_s3_object"
+  );
+  const webBucketPolicy = response.architectureJson.nodes.find(
+    (node) => node.config.terraformResourceType === "aws_s3_bucket_policy"
+  );
+  const taskDefinition = response.architectureJson.nodes.find(
+    (node) => node.type === "ECS_TASK_DEFINITION"
+  );
+  const loadBalancer = response.architectureJson.nodes.find(
+    (node) => node.type === "LOAD_BALANCER"
+  );
+  const albSecurityGroup = response.architectureJson.nodes.find(
+    (node) => node.config.templateResourceId === "alb-security-group"
+  );
+  const taskSecurityGroup = response.architectureJson.nodes.find(
+    (node) => node.config.templateResourceId === "task-security-group"
+  );
+  const executionPolicy = response.architectureJson.nodes.find(
+    (node) => node.config.templateResourceId === "execution-policy"
+  );
+  const taskRole = response.architectureJson.nodes.find(
+    (node) => node.config.templateResourceId === "task-role"
+  );
+  const publicSubnets = response.architectureJson.nodes.filter(
+    (node) => node.type === "SUBNET" && node.config.mapPublicIpOnLaunch === true
+  );
+  const privateAppSubnets = response.architectureJson.nodes.filter(
+    (node) => node.type === "SUBNET" && node.config.mapPublicIpOnLaunch === false
+  );
+  const fargateRuntime = response.architectureJson.nodes.find(
+    (node) => node.id === "repository-fargate-runtime"
+  );
+  const vpc = response.architectureJson.nodes.find((node) => node.type === "VPC");
+  const managedServices = response.architectureJson.nodes.find(
+    (node) => node.label === "AWS Managed Services"
+  );
+  const labels = new Set(response.architectureJson.nodes.map((node) => node.label));
+  const edgeLabels = new Set(response.architectureJson.edges.map((edge) => edge.label));
+
+  assert.equal(countNodes("SUBNET"), 4);
+  assert.equal(publicSubnets.length, 2);
+  assert.equal(privateAppSubnets.length, 2);
+  assert.equal(countNodes("S3"), 4);
+  assert.equal(countNodes("CLOUDFRONT"), 2);
+  assert.equal(countNodes("ECR_REPOSITORY"), 1);
+  assert.equal(countNodes("CLOUDWATCH_LOG_GROUP"), 1);
+  assert.equal(countNodes("ACM_CERTIFICATE"), 0);
+  assert.equal(countNodes("UNKNOWN"), 4);
+  assert.equal(countNodes("NAT_GATEWAY"), 1);
+  assert.equal(countNodes("ELASTIC_IP"), 1);
+  assert.equal(countNodes("APPLICATION_AUTO_SCALING_TARGET"), 0);
+  assert.equal(countNodes("APPLICATION_AUTO_SCALING_POLICY"), 0);
+  assert.equal(countNodes("CODESTAR_CONNECTION"), 0);
+  assert.equal(countNodes("CODEPIPELINE"), 0);
+  assert.equal(countNodes("CODEBUILD_PROJECT"), 0);
+  assert.equal(countNodes("RDS"), 0);
+  assert.equal(countNodes("ELASTICACHE_REDIS"), 0);
+  assert.equal(countNodes("API_GATEWAY_WEBSOCKET_API"), 0);
+  assert.equal(countNodes("COGNITO_USER_POOL"), 0);
+  assert.deepEqual(
+    [...((loadBalancer?.config.subnets as string[] | undefined) ?? [])].sort(),
+    publicSubnets.map((node) => `aws_subnet.${node.id}.id`).sort()
+  );
+  assert.deepEqual(
+    [...((service?.config.networkConfiguration as { subnets?: string[] } | undefined)?.subnets ?? [])].sort(),
+    privateAppSubnets.map((node) => `aws_subnet.${node.id}.id`).sort()
+  );
+  assert.equal(
+    (service?.config.networkConfiguration as { assignPublicIp?: boolean } | undefined)?.assignPublicIp,
+    false
+  );
+  assert.equal(albSecurityGroup?.config.parentAreaNodeId, publicSubnets[0]?.id);
+  assert.equal(loadBalancer?.config.parentAreaNodeId, albSecurityGroup?.id);
+  assert.equal(taskSecurityGroup?.config.parentAreaNodeId, privateAppSubnets[0]?.id);
+  assert.equal(fargateRuntime?.config.parentAreaNodeId, taskSecurityGroup?.id);
+  assert.match(loadBalancer?.label ?? "", /Public A\/B/u);
+  assert.match(fargateRuntime?.label ?? "", /Private App A\/B/u);
+  assert.equal(service?.config.desiredCount, 1);
+  assert.equal(
+    (service?.config.loadBalancer as { containerPort?: number } | undefined)?.containerPort,
+    8080
+  );
+  assert.deepEqual(targetGroup?.config.healthCheck, { path: "/health", matcher: "200-399" });
+  assert.equal(listener?.config.port, 80);
+  assert.equal(listener?.config.protocol, "HTTP");
+  assert.deepEqual(cloudFront?.config.restrictions, [{
+    geoRestriction: [{ restrictionType: "none" }]
+  }]);
+  assert.deepEqual(cloudFront?.config.viewerCertificate, [{
+    cloudfrontDefaultCertificate: true
+  }]);
+  assert.equal((cloudFront?.config.origin as unknown[] | undefined)?.length, 2);
+  assert.deepEqual(cloudFront?.config.orderedCacheBehavior, [{
+    pathPattern: "/api/*",
+    targetOriginId: "api-alb",
+    viewerProtocolPolicy: "redirect-to-https",
+    allowedMethods: ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"],
+    cachedMethods: ["GET", "HEAD"],
+    cachePolicyId: "4135ea2d-6df8-44a3-9df3-4b5a84be39ad",
+    originRequestPolicyId: "b689b0a8-53d0-40ab-baf2-68738e2966ac"
+  }]);
+  assert.equal(cloudFrontOac?.config.signingBehavior, "always");
+  assert.equal(cloudFrontOac?.config.signingProtocol, "sigv4");
+  assert.deepEqual(
+    [
+      webPublicAccess?.config.blockPublicAcls,
+      webPublicAccess?.config.blockPublicPolicy,
+      webPublicAccess?.config.ignorePublicAcls,
+      webPublicAccess?.config.restrictPublicBuckets
+    ],
+    [true, true, true, true]
+  );
+  assert.equal(webBootstrap?.config.key, "index.html");
+  assert.match(String(webBucketPolicy?.config.policy), /cloudfront\.amazonaws\.com/u);
+  assert.match(String(webBucketPolicy?.config.policy), /repository-cloudfront/u);
+  assert.match(String(webBucket?.config.bucketPrefix), /^audience-live-check-web-/u);
+  assert.match(String(taskDefinition?.config.containerDefinitions), /nginx:1\.27-alpine/u);
+  assert.match(String(taskDefinition?.config.containerDefinitions), /\/health/u);
+  const containerDefinitions = JSON.parse(
+    String(taskDefinition?.config.containerDefinitions)
+  ) as Array<{
+    entryPoint?: string[];
+    command?: string[];
+    environment?: Array<{ name: string; value: string }>;
+    logConfiguration?: { options?: Record<string, string> };
+  }>;
+  assert.deepEqual(containerDefinitions[0]?.entryPoint, ["/bin/sh", "-c"]);
+  assert.equal(containerDefinitions[0]?.command?.length, 1);
+  assert.match(
+    containerDefinitions[0]?.command?.[0] ?? "",
+    /default_type text\/plain;.*return 200 ok;.*exec nginx/u
+  );
+  assert.equal((containerDefinitions[0]?.command?.[0] ?? "").includes('\\"'), false);
+  assert.deepEqual(containerDefinitions[0]?.environment, [
+    { name: "PORT", value: "8080" },
+    {
+      name: "WEB_ORIGIN",
+      value: "https://${aws_cloudfront_distribution.repository-cloudfront.domain_name}"
+    },
+    { name: "INSTANCE_ID", value: "fargate" }
+  ]);
+  assert.equal(
+    containerDefinitions[0]?.logConfiguration?.options?.["awslogs-group"],
+    "/ecs/audience-live-check-api"
+  );
+  assert.deepEqual(taskDefinition?.config.dependsOn, [
+    "aws_cloudwatch_log_group.repository-ecs-logs"
+  ]);
+  assert.equal(taskDefinition?.config.family, "audience-live-check-api");
+  assert.equal(service?.config.name, "audience-live-check-service");
+  assert.equal(executionPolicy?.config.name, undefined);
+  assert.equal(taskRole?.config.name, "audience-live-check-ecs-task");
+  assert.ok(labels.has("Browser"));
+  assert.ok(labels.has("GitHub Actions"));
+  assert.ok(labels.has("AWS Managed Services"));
+  assert.ok(
+    managedServices !== undefined &&
+    vpc !== undefined &&
+    managedServices.positionY + Number(managedServices.config.diagramHeight) < vpc.positionY
+  );
+  assert.ok(edgeLabels.has("builds and pushes API image"));
+  assert.ok(edgeLabels.has("uploads apps/web/dist"));
+  assert.ok(edgeLabels.has("invalidates updated static assets"));
+  assert.ok(edgeLabels.has("deploys task revision"));
+  assert.ok(edgeLabels.has("health checks /health"));
+  assert.ok(edgeLabels.has("HTTPS web and /api entry"));
+  assert.ok(edgeLabels.has("proxies /api/* to ALB over HTTP"));
+  assert.ok(edgeLabels.has("ALB SG -> Task SG: TCP 8080 only"));
+  assert.ok(edgeLabels.has("application revisions pull API image from ECR"));
+  assert.ok(edgeLabels.has("writes ECS container logs via awslogs"));
+  assert.equal(
+    response.architectureJson.edges.filter(
+      (edge) =>
+        edge.sourceId === "repository-browser" && edge.targetId === cloudFront?.id
+    ).length,
+    1
+  );
+  assert.deepEqual(albSecurityGroup?.config.ingress, [{
+    fromPort: 80,
+    toPort: 80,
+    protocol: "tcp",
+    cidrBlocks: ["0.0.0.0/0"]
+  }]);
+  assert.deepEqual(taskSecurityGroup?.config.ingress, [{
+    fromPort: 8080,
+    toPort: 8080,
+    protocol: "tcp",
+    securityGroups: [`aws_security_group.${albSecurityGroup?.id}.id`]
+  }]);
+  assert.ok(
+    response.metadata.assumptions.some((assumption) =>
+      assumption.includes("CloudFront terminates public HTTPS") && assumption.includes("/api/*")
+    )
+  );
+  assert.deepEqual(
+    analyzePreDeployment(response.architectureJson).findings.filter(
+      (finding) => finding.category === "configuration"
+    ),
+    []
+  );
+});
+
+test("repository evidence strict mode does not create edges for unsupported delivery services", async () => {
+  const provider = createFakeAmazonQProvider(createNormalizedRequirementPlan);
+  const response = await createAmazonQArchitectureDraftResponse({
+    prompt: [
+      "website type: API server mobile app backend",
+      "traffic: small traffic under daily 100 users concurrent 10",
+      "database: no database required",
+      "frontend technology: mobile app native client",
+      "backend: simple API Node.js in one managed ECS Fargate task",
+      "region: Korea only Seoul region ap-northeast-2",
+      "monthly budget: under 10 manwon minimum cost",
+      "SSL HTTPS: optional HTTP acceptable",
+      "file upload: none",
+      "realtime feature: none",
+      "realtime notification transport: simple polling with cost warning",
+      "management preference: managed container runtime",
+      "loading time target: within 5 seconds",
+      "website size: under 10MB",
+      "traffic pattern: steady traffic",
+      "downtime tolerance: monthly 8 hours within 99 availability"
+    ].join("\n"),
+    templateId: "ecs-fargate-container-app",
+    repositoryEvidence: {
+      mode: "strict",
+      repositoryName: "api-only",
+      facts: [
+        { kind: "backend_runtime", value: "ecs_fargate_service", sourcePath: "README.md" },
+        { kind: "traffic_entry", value: "application_load_balancer", sourcePath: "README.md" },
+        { kind: "health_check", value: "http:8080/health", sourcePath: "Dockerfile" },
+        { kind: "runtime_scale", value: "single_task", sourcePath: "README.md" }
+      ]
+    }
+  }, {
+    provider,
+    creditPolicy: confirmedCreditPolicy
+  });
+
+  assert.ok(!("status" in response), JSON.stringify(response));
+  if ("status" in response) return;
+
+  const nodeIds = new Set(response.architectureJson.nodes.map((node) => node.id));
+  assert.ok(response.architectureJson.edges.every(
+    (edge) => nodeIds.has(edge.sourceId) && nodeIds.has(edge.targetId)
+  ));
+  assert.equal(
+    response.architectureJson.edges.some((edge) => edge.sourceId === "repository-cloudfront"),
+    false
+  );
+  assert.equal(
+    response.architectureJson.edges.some((edge) => edge.sourceId === "repository-github-actions"),
+    false
+  );
+  const albSecurityGroupId = response.architectureJson.nodes.find(
+    (node) => node.config.templateResourceId === "alb-security-group"
+  )?.id;
+  assert.ok(response.architectureJson.edges.some(
+    (edge) =>
+      edge.sourceId === "repository-browser" &&
+      edge.targetId === albSecurityGroupId
+  ));
+});
 
 test("createAmazonQArchitectureDraftResponse sends the web deployment answer path to Amazon Q", async () => {
   let callCount = 0;
@@ -34,6 +514,44 @@ test("createAmazonQArchitectureDraftResponse sends the web deployment answer pat
   );
 
   assert.ok(callCount > 0);
+});
+
+test("selected Repository Template and follow-up answers reach Amazon Q without generic clarification", async () => {
+  let callCount = 0;
+  let requestedPayload: unknown;
+  const provider = createFakeAmazonQProvider((request) => {
+    callCount += 1;
+    requestedPayload = request.payload;
+    return createNormalizedRequirementPlan(request);
+  });
+
+  const response = await createAmazonQArchitectureDraftResponse(
+    {
+      prompt: [
+        "Generate a production-quality Practice Architecture for a source repository.",
+        "The selected Template is the highest-priority constraint.",
+        "Selected Template: ecs-fargate-container-app.",
+        "Required Components: preserve the selected ECS Fargate Template and add only compatible supporting resources.",
+        "Include a managed relational database such as RDS.",
+        "Include the API backend scope and omit a public web frontend.",
+        "The user prefers direct host operations, but preserve the selected Template core."
+      ].join("\n"),
+      templateId: "ecs-fargate-container-app"
+    },
+    {
+      provider,
+      creditPolicy: confirmedCreditPolicy
+    }
+  );
+
+  assert.equal(callCount, 1);
+  assert.ok(!("status" in response));
+  const payload = requestedPayload as {
+    fixedTemplateSelection?: { id?: string };
+    prompt?: string;
+  };
+  assert.equal(payload.fixedTemplateSelection?.id, "ecs-fargate-container-app");
+  assert.match(payload.prompt ?? "", /relational database/i);
 });
 
 test("createAmazonQArchitectureDraftResponse asks the next required website question before calling Amazon Q", async () => {

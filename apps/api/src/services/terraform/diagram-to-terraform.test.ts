@@ -365,6 +365,36 @@ test("renders ECS Fargate Live Observation outputs and Application Auto Scaling 
   assert.doesNotMatch(terraform, /output "asg_name"/);
 });
 
+test("renders application delivery outputs for a single-task Fargate topology", () => {
+  const graph: InfrastructureGraph = {
+    nodes: [
+      createLiveObservationNode("aws_s3_bucket", "web_assets", {}),
+      createLiveObservationNode("aws_cloudfront_distribution", "web", {
+        orderedCacheBehavior: [{ pathPattern: "/api/*" }]
+      }),
+      createLiveObservationNode("aws_ecr_repository", "api_image", {}),
+      createLiveObservationNode("aws_lb", "demo", {}),
+      createLiveObservationNode("aws_lb_target_group", "api", {}),
+      createLiveObservationNode("aws_ecs_cluster", "demo", {}),
+      createLiveObservationNode("aws_ecs_service", "api", {}),
+      createLiveObservationNode("aws_ecs_task_definition", "api", {})
+    ],
+    edges: []
+  };
+
+  const terraform = renderTerraformFromInfrastructureGraph(graph);
+
+  assert.match(terraform, /output "static_site_url"[\s\S]*aws_cloudfront_distribution\.web\.domain_name/);
+  assert.match(terraform, /output "api_base_url"[\s\S]*aws_cloudfront_distribution\.web\.domain_name/);
+  assert.match(terraform, /output "static_site_bucket_name"[\s\S]*aws_s3_bucket\.web_assets\.bucket/);
+  assert.match(terraform, /output "cloudfront_distribution_id"[\s\S]*aws_cloudfront_distribution\.web\.id/);
+  assert.match(terraform, /output "ecr_repository_url"[\s\S]*aws_ecr_repository\.api_image\.repository_url/);
+  assert.match(terraform, /output "ecs_task_family"[\s\S]*aws_ecs_task_definition\.api\.family/);
+  assert.match(terraform, /output "ecs_cluster_name"[\s\S]*aws_ecs_cluster\.demo\.name/);
+  assert.match(terraform, /output "ecs_service_name"[\s\S]*aws_ecs_service\.api\.name/);
+  assert.doesNotMatch(terraform, /output "max_capacity"/);
+});
+
 test("does not emit an ECS request threshold from a CPU target tracking policy", () => {
   const graph: InfrastructureGraph = {
     nodes: [

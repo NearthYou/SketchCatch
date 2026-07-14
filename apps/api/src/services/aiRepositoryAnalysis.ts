@@ -38,6 +38,7 @@ export function analyzeRepositoryEvidence({
   const recommendedTemplateId = selectRepositoryTemplate(detectedSignals);
 
   return {
+    availableBranches: [defaultBranch],
     defaultBranch,
     detectedSignals,
     evidenceFiles: evidence
