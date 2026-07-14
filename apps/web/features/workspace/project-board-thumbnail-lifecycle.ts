@@ -32,19 +32,28 @@ type ProjectBoardThumbnailLifecycleOptions = {
   readonly fetchProjectThumbnail?: ((projectId: string) => Promise<Blob | null>) | undefined;
   readonly onStateChange?: ((state: ProjectBoardThumbnailLifecycleState) => void) | undefined;
   readonly projectId: string;
+  readonly waitForInitialCaptureStability?: (() => Promise<void>) | undefined;
 };
 
 const CAPTURE_UNAVAILABLE_ERROR = new Error(
   "Board capture unavailable for canonical server revision."
 );
 const DISPOSED_ERROR = new Error("Project Board thumbnail lifecycle is disposed.");
+const INITIAL_CAPTURE_SETTLE_DELAY_MS = 600;
+
+function waitForInitialCaptureStability(): Promise<void> {
+  return new Promise((resolve) => {
+    globalThis.setTimeout(resolve, INITIAL_CAPTURE_SETTLE_DELAY_MS);
+  });
+}
 
 export function createProjectBoardThumbnailLifecycle({
   captureAndUpload = ({ element, projectId }) =>
     captureAndUploadProjectBoardThumbnail({ element, projectId }),
   fetchProjectThumbnail = defaultFetchProjectThumbnail,
   onStateChange,
-  projectId
+  projectId,
+  waitForInitialCaptureStability: waitForInitialCaptureStabilityFn = waitForInitialCaptureStability
 }: ProjectBoardThumbnailLifecycleOptions) {
   let state: ProjectBoardThumbnailLifecycleState = "idle";
   let boardElement: HTMLElement | null = null;
@@ -101,6 +110,9 @@ export function createProjectBoardThumbnailLifecycle({
       if (existingThumbnail) {
         return;
       }
+
+      // 기존 Project를 열 때는 React Flow의 초기 자동 맞춤과 정렬이 끝난 뒤에만 보정 캡처합니다.
+      await waitForInitialCaptureStabilityFn();
     }
 
     publish("capturing");

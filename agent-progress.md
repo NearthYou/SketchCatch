@@ -96,4 +96,10 @@ Short English-only working log for the current agent context. Older records are 
 - The clone now renders at the paint-tree origin only while it is captured, remains pointer-inert, and is removed immediately after encoding. The save endpoint, asset upload/confirm sequence, Dashboard image loader, and Board data are unchanged.
 - Browser evidence: opened project `ㅜ`, clicked `지금 저장`, observed `저장됨`, then opened Dashboard Projects. The resulting card at 26. 7. 14. 오후 4:52 displayed the fitted diagram; browser error and warning logs were empty.
 - Focused regression suite passed 5/5; the full Web suite passed 1,234/1,234; harness and typecheck passed. Root lint passed with the existing API `setNow` unused-argument warning. Root build remains blocked before Web compilation by the existing missing `apps/web/.codegraph` path.
+
+### 2026-07-14 - Wait for initial Board thumbnail backfill to settle
+
+- Existing server Projects with no Dashboard thumbnail now wait 600ms after the missing-thumbnail check before capturing. This gives initial React Flow fit and layout frames time to settle.
+- Manual saves remain immediate and do not use the backfill delay. Existing thumbnails still skip capture altogether.
+- TDD evidence: the initial-delay regression was RED because capture began immediately after the existence check, then GREEN after the delay. The lifecycle suite passed 10/10 and the full Web suite passed 1,236/1,236; harness and typecheck passed. Root lint retains the existing API `setNow` warning; build remains blocked by the existing missing `apps/web/.codegraph` path.
 - Re-run `pnpm build` after the repository restores `apps/web/.codegraph`; root API test still needs the three Windows-path fixtures made platform-neutral before it can be green on macOS.

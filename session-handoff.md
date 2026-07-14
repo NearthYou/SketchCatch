@@ -9,13 +9,14 @@ Use this file only for compact continuation context. Write it in English.
 - The Dashboard retries a missing thumbnail (`404` mapped to `null`) and transient network, 408, 429, or 5xx failures at most three times with a fixed 250ms delay. Permanent HTTP failures stop immediately.
 - Cards continue to render only authenticated raster Board captures. A lifecycle helper ignores post-dispose results and revokes created object URLs.
 - Project Board capture now clones the React Flow DOM at the browser paint-tree origin at 1280x720, fits every rendered Resource into the frame with an 8% margin, and removes the clone after capture. It does not move or persist the user's Board viewport. A manual save forces capture even if the server revision is unchanged.
+- An existing server Project without a thumbnail waits 600ms after the missing-thumbnail check before its one-time backfill capture, allowing the initial Board fit and layout frames to settle. Manual saves remain immediate.
 - Dashboard thumbnail cards request their image again on a persisted browser `pageshow` event, so returning from a saved Workspace through browser history cannot retain an old object URL. A request-generation guard prevents stale reads from replacing the refreshed image.
 - No database schema, migration, storage adapter, backend route, cloud, deployment, or dependency change was made.
 
 ## Verification
 
 - TDD RED/GREEN: full Board bounds, CSS transform parsing, fitted viewport, and capture-path regressions passed alongside the existing thumbnail tests.
-- Full Web suite passed 1,234/1,234 after the latest paint-tree capture regression fix.
+- Full Web suite passed 1,236/1,236 after the initial-capture settling delay.
 - Real local filesystem thumbnail upload and read API flow passed without AWS credentials.
 - Root lint and typecheck passed; lint retains one existing unused `setNow` argument warning in `apps/api/src/live-observations/live-observation-store-contract.ts`.
 - Migration compatibility check and harness check passed.
