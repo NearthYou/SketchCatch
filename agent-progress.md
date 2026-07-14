@@ -109,8 +109,16 @@ Short English-only working log for the current agent context. Older records are 
 - Dev brought in ECS GitOps persistence and cleanup evidence, production ECS deployment speed optimization, live sandbox Direct recovery hardening, deployment sandbox E2E gates, Web UI clarity/accessibility improvements, dashboard navigation/copy simplification, and Brainboard AWS Template branch integration records.
 - Detailed older dev records remain available in `docs/agent-history/2026-07.md` and the merge commit history.
 
+### 2026-07-15 - Restore production Amazon Q deployment configuration
+
+- Found that the active ECS API task definition preserved disabled Terraform defaults even though the GitHub production environment contained the intended Amazon Q settings.
+- Updated the ECS deployment workflow to require, validate, and inject the production Amazon Q runtime configuration; added a structural regression check for the contract.
+- Added least-privilege `qbusiness:ChatSync` permission for the configured application to the production API task role and completed the missing GitHub production environment variable.
+- Verification passed: focused production infrastructure check, `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check`. Production ECS deployment was not run following the user's explicit instruction.
+
 ## Next Action
 
+- Review and merge `codex/fix-production-amazon-q-runtime`; run the production ECS deployment only after explicit approval.
 - Review and apply the approved production Terraform change, then re-run the signed-in production browser loop to confirm the AWS Console launch link is rendered.
 - Continue notification work separately from the completed repository diagram commit.
 - Run local API DB migrations before testing deployment notifications locally.
