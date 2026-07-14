@@ -53,7 +53,7 @@
 }
 
 .editorShellLeftCollapsed {
-  grid-template-columns: 48px minmax(0, 1fr) var(--right-panel-width);
+  grid-template-columns: 0 minmax(0, 1fr) var(--right-panel-width);
 }
 
 .editorShellRightCollapsed {
@@ -61,7 +61,7 @@
 }
 
 .editorShellLeftCollapsed.editorShellRightCollapsed {
-  grid-template-columns: 48px minmax(0, 1fr) 0;
+  grid-template-columns: 0 minmax(0, 1fr) 0;
 }
 
 .editorShellRightHidden {
@@ -69,7 +69,7 @@
 }
 
 .editorShellLeftCollapsed.editorShellRightHidden {
-  grid-template-columns: 48px minmax(0, 1fr) 0;
+  grid-template-columns: 0 minmax(0, 1fr) 0;
 }
 
 .projectBar {
@@ -256,43 +256,6 @@
   position: relative;
   width: 100%;
   z-index: 21;
-}
-
-.collapsedLeftPanel {
-  align-items: center;
-  background: var(--workspace-surface);
-  border-right: 1px solid var(--workspace-line);
-  display: grid;
-  gap: 6px;
-  grid-column: 1;
-  grid-row: 2;
-  height: 100%;
-  justify-items: center;
-  padding: 6px;
-  position: relative;
-  z-index: 22;
-}
-
-.collapsedLeftPanelButton {
-  align-items: center;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  color: var(--workspace-text);
-  cursor: pointer;
-  display: inline-flex;
-  height: 32px;
-  justify-content: center;
-  padding: 0;
-  width: 32px;
-}
-
-.collapsedLeftPanelButton:hover,
-.collapsedLeftPanelButton:focus-visible {
-  background: var(--workspace-surface-muted);
-  border-color: var(--workspace-line-strong);
-  color: var(--workspace-accent);
-  outline: none;
 }
 
 .leftRail :global(.resourcePanel) {
@@ -701,7 +664,6 @@
   color: var(--workspace-text);
 }
 
-.leftRail :global(.resourceModulesEmptyState),
 .leftRail :global(.emptyPanelState) {
   color: var(--workspace-muted);
   display: grid;
@@ -712,19 +674,8 @@
   word-break: keep-all;
 }
 
-.leftRail :global(.resourceModulesEmptyState strong) {
-  color: var(--workspace-text);
-  font-size: 13px;
-}
-
-.leftRail :global(.resourceModulesActions) {
-  display: flex;
-  gap: 7px;
-  margin-top: 3px;
-}
-
-.leftRail :global(.modulesImportButton),
-.leftRail :global(.modulesCatalogButton) {
+.leftRail :global(.templateModalCloseButton),
+.leftRail :global(.templateModalApplyButton) {
   background: var(--workspace-surface);
   border: 1px solid var(--workspace-line-strong);
   border-radius: 8px;
@@ -737,7 +688,7 @@
   padding: 0 12px;
 }
 
-.leftRail :global(.modulesCatalogButton) {
+.leftRail :global(.templateModalApplyButton) {
   background: var(--workspace-accent);
   border-color: var(--workspace-accent);
   color: #ffffff;
@@ -1831,8 +1782,6 @@ button.rightRailResizeHandle {
   z-index: 4;
 }
 
-.nodeShellZoomMedium .resourceNodeLabel,
-.nodeShellZoomFar .resourceNodeLabel,
 .nodeShellZoomMedium .areaNodeHeaderMeta,
 .nodeShellZoomFar .areaNodeHeaderMeta {
   opacity: 0;
@@ -1843,15 +1792,6 @@ button.rightRailResizeHandle {
 .nodeShellZoomFar .resourceNodeLabel {
   transform: translateX(-50%) scale(var(--board-lod-label-scale));
   transform-origin: top center;
-}
-
-.nodeShellZoomMedium:hover .resourceNodeLabel,
-.nodeShellZoomMedium.nodeShellSelected .resourceNodeLabel,
-.nodeShellZoomFar.nodeShellSelected .resourceNodeLabel,
-.canvasPanel :global(.react-flow__node:focus-visible) .nodeShellZoomMedium .resourceNodeLabel,
-.canvasPanel :global(.react-flow__node:focus-visible) .nodeShellZoomFar .resourceNodeLabel {
-  opacity: 1;
-  visibility: visible;
 }
 
 .lockBadge {
@@ -2655,10 +2595,6 @@ button.rightRailResizeHandle {
     top: 64px;
     width: min(var(--left-panel-width), calc(100vw - 56px));
     z-index: 42;
-  }
-
-  .collapsedLeftPanel {
-    display: none;
   }
 
   .rightRail {

@@ -8,13 +8,13 @@ const diagramEditorSource = readFileSync(
   "utf8"
 );
 
-test("open and collapsed left panels both expose the viewport measurement ref", () => {
+test("collapsed left panel leaves no shortcut rail beside the board", () => {
   assert.match(
     diagramEditorSource,
     /<div className=\{styles\.leftRail\} ref=\{leftRailRef\}>/
   );
-  assert.match(
+  assert.doesNotMatch(
     diagramEditorSource,
-    /className=\{styles\.collapsedLeftPanel\}[\s\S]*?ref=\{leftRailRef\}/
+    /collapsedLeftPanel|Open resources panel|Open templates panel/
   );
 });

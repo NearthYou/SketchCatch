@@ -204,6 +204,16 @@ test("assertTerraformArtifactIsSafe accepts supported AWS AMI data sources", () 
   );
 });
 
+test("assertTerraformArtifactIsSafe accepts the CloudFront origin-facing managed prefix list", () => {
+  assert.doesNotThrow(() =>
+    assertTerraformArtifactIsSafe(`
+      data "aws_ec2_managed_prefix_list" "cloudfront_origin_facing" {
+        name = "com.amazonaws.global.cloudfront.origin-facing"
+      }
+    `)
+  );
+});
+
 test("assertTerraformArtifactIsSafe accepts AI-generated CI/CD resource types", () => {
   assert.doesNotThrow(() =>
     assertTerraformArtifactIsSafe(`
@@ -600,7 +610,58 @@ test("assertTerraformArtifactIsSafe rejects local file functions inside interpol
           user_data     = "\${templatefile("/etc/passwd", {})}"
         }
       `),
-    /function "templatefile" is not allowed/
+    /templatefile is allowed only for base64encoded user_data/
+  );
+});
+
+test("assertTerraformArtifactIsSafe accepts a module-local tftpl for demo launch template user data", () => {
+  assert.doesNotThrow(() =>
+    assertTerraformArtifactIsSafe(
+      `
+        resource "aws_launch_template" "traffic" {
+          image_id      = "ami-1234567890abcdef0"
+          instance_type = "t3.micro"
+          user_data = base64encode(templatefile("\${path.module}/user-data.sh.tftpl", {
+            traffic_api_bundle_url_json = jsonencode("https://example.test/api.tar.gz")
+          }))
+        }
+      `,
+      { liveProfile: "demo_web_service_with_rds" }
+    )
+  );
+});
+
+test("assertTerraformArtifactIsSafe rejects traversing tftpl paths", () => {
+  assert.throws(
+    () =>
+      assertTerraformArtifactIsSafe(
+        `
+          resource "aws_launch_template" "traffic" {
+            image_id      = "ami-1234567890abcdef0"
+            instance_type = "t3.micro"
+            user_data     = base64encode(templatefile("\${path.module}/../user-data.sh.tftpl", {}))
+          }
+        `,
+        { liveProfile: "demo_web_service_with_rds" }
+      ),
+    /templatefile must use a static module-local \.tftpl basename/
+  );
+});
+
+test("assertTerraformArtifactIsSafe rejects nested tftpl paths", () => {
+  assert.throws(
+    () =>
+      assertTerraformArtifactIsSafe(
+        `
+          resource "aws_launch_template" "traffic" {
+            image_id      = "ami-1234567890abcdef0"
+            instance_type = "t3.micro"
+            user_data     = base64encode(templatefile("\${path.module}/scripts/user-data.sh.tftpl", {}))
+          }
+        `,
+        { liveProfile: "demo_web_service_with_rds" }
+      ),
+    /templatefile must use a static module-local \.tftpl basename/
   );
 });
 

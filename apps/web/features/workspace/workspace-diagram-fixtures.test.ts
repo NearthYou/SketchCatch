@@ -149,7 +149,8 @@ test("area-matrix provides a contained Region to workload Area hierarchy with bo
     ["area-availability-zone", "area-region"],
     ["area-vpc", "area-availability-zone"],
     ["area-subnet", "area-vpc"],
-    ["area-security-group", "area-subnet"]
+    ["area-security-group", "area-subnet"],
+    ["area-autoscaling-group", "area-subnet"]
   ]);
   const areas = fixture.nodes.filter(isAreaNode);
 
@@ -170,9 +171,9 @@ test("area-matrix provides a contained Region to workload Area hierarchy with bo
   const autoScalingGroup = fixture.nodes.find((node) => node.id === "area-autoscaling-group");
 
   assert.ok(autoScalingGroup);
-  assert.equal(isAreaNode(autoScalingGroup), false);
+  assert.equal(isAreaNode(autoScalingGroup), true);
   assert.equal(autoScalingGroup.metadata?.parentAreaNodeId, "area-subnet");
-  assert.deepEqual(autoScalingGroup.size, { width: 48, height: 48 });
+  assert.deepEqual(autoScalingGroup.size, { width: 200, height: 130 });
   assert.deepEqual(areas.find((node) => node.id === "area-region")?.size, {
     width: 1320,
     height: 700

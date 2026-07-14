@@ -16,7 +16,7 @@ const TEMPLATE_DIAGRAM_HASHES: Record<TemplateId, string> = {
   "full-serverless-web-app": "6c1984128c9552c9a211653614df31829bc0bcecfb5223daea6148f858e9a80d",
   "minimal-serverless-api": "b1f8986e65b14f5bbba9dd5eaf41541c7163ddc2a7fde4c4981593731b9bfafa",
   "static-web-hosting": "aa58cb0f15d92fb54c7da132a9492886aa06add1dda75f4370bb679e9182b9cf",
-  "three-tier-web-app": "9d08123799a20ea281aa4450902ba253058e5f2f07df75c694490a51c5deeaed"
+  "three-tier-web-app": "84371049077bf2836fd3ce4cefa42cee3b5fb36b683815bc354b854185ce3248"
 };
 
 // 실제 DiagramEditor에서 캡처해 검토한 asset만 Template 카드에 연결합니다.

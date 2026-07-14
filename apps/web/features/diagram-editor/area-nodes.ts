@@ -21,6 +21,7 @@ const designAreaNodeTypes = new Set([
 const resourceAreaNodeTypes = new Set([
   "aws_region",
   "aws_availability_zone",
+  "aws_autoscaling_group",
   "aws_vpc",
   "aws_subnet",
   "aws_security_group"
@@ -54,7 +55,7 @@ export function findInnermostAreaDropTarget(
     if (
       node.id === childNode.id ||
       ignoredAreaNodeIds.has(node.id) ||
-      !isContainmentAreaNode(node) ||
+      !isAreaDropParentNode(node) ||
       isNodeDescendantOf(node, childNode.id, nodeById) ||
       !isNodeContainedByArea(node, childNode)
     ) {
@@ -85,12 +86,35 @@ export function findInnermostAreaNodeAtPoint(
   return findInnermostMatchingAreaNodeAtPoint(nodes, point, isAreaNode);
 }
 
+/** 표시 전용 프레임 뒤의 실제 Area로 관통하지 않고 빈 공간 상호작용 대상을 찾습니다. */
+export function findAreaBlankInteractionNodeAtPoint(
+  nodes: readonly DiagramNode[],
+  point: DiagramNode["position"]
+): DiagramNode | null {
+  const visualArea = findInnermostAreaNodeAtPoint(nodes, point);
+
+  if (!visualArea || !isAreaBlankInteractionNode(visualArea)) {
+    return null;
+  }
+
+  return visualArea;
+}
+
+/** 선택·이동할 수 있는 실제 Area인지 판별합니다. */
+export function isAreaBlankInteractionNode(node: DiagramNode): boolean {
+  return (
+    isAreaNode(node) &&
+    !isPresentationOnlyAreaNode(node) &&
+    !isSecurityGroupScopeNode(node)
+  );
+}
+
 /** persisted parent 지정에는 VPC/Subnet 같은 실제 containment Area만 사용합니다. */
 export function findInnermostContainmentAreaNodeAtPoint(
   nodes: readonly DiagramNode[],
   point: DiagramNode["position"]
 ): DiagramNode | null {
-  return findInnermostMatchingAreaNodeAtPoint(nodes, point, isContainmentAreaNode);
+  return findInnermostMatchingAreaNodeAtPoint(nodes, point, isAreaDropParentNode);
 }
 
 export function getAreaNodeLabel(node: DiagramNode): string {
@@ -140,7 +164,7 @@ export function isDesignAreaNode(node: DiagramNode): boolean {
 }
 
 export function isResourceAreaNode(node: DiagramNode): boolean {
-  if (node.kind !== "resource" || getResourceNodeType(node) === "aws_autoscaling_group") {
+  if (node.kind !== "resource") {
     return false;
   }
 
@@ -154,6 +178,20 @@ export function isResourceAreaNode(node: DiagramNode): boolean {
 /** Security Group은 읽기 쉬운 범위지만 AWS 포함 관계를 만들지는 않습니다. */
 export function isContainmentAreaNode(node: DiagramNode): boolean {
   return isAreaNode(node) && !isSecurityGroupScopeNode(node);
+}
+
+/** 기본 Area 타입이 아니지만 작성된 템플릿에서만 프레임으로 표시되는 리소스입니다. */
+export function isPresentationOnlyAreaNode(node: DiagramNode): boolean {
+  return (
+    node.kind === "resource" &&
+    node.metadata?.presentationArea === true &&
+    !resourceAreaNodeTypes.has(getResourceNodeType(node))
+  );
+}
+
+/** 새 리소스를 실제 Board parent로 받을 수 있는 Area인지 판정합니다. */
+export function isAreaDropParentNode(node: DiagramNode): boolean {
+  return isContainmentAreaNode(node) && !isPresentationOnlyAreaNode(node);
 }
 
 /** Security Group resource가 visual scope 역할을 하는지 판별합니다. */

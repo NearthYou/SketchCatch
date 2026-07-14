@@ -26,6 +26,12 @@ test("resource settings logic does not bring back the removed Brainboard entry",
   assert.doesNotMatch(panelSource, /brainboardTile|kind: "brainboard"|id: "brainboard"/);
 });
 
+test("resource list does not show the empty Modules accordion", () => {
+  assert.doesNotMatch(panelSource, /id: "modules", label: "Modules"/);
+  assert.doesNotMatch(panelSource, /No modules yet/);
+  assert.doesNotMatch(panelSource, /resourceModulesEmptyState/);
+});
+
 test("workspace Template panel renders the complete catalog inside its scrollable panel", () => {
   assert.match(panelSource, /<div className="templateCatalogPanel">/);
   assert.match(panelSource, /\{templates\.map\(\(template\) => \(/);

@@ -7,7 +7,6 @@ import {
   Brush,
   ChartLine,
   ChevronDown,
-  Component,
   Container,
   Cpu,
   Database,
@@ -61,7 +60,6 @@ const awsProviderVersions = ["6.47.0", "6.46.0", "6.45.0", "6.44.0"] as const;
 type AwsProviderVersion = (typeof awsProviderVersions)[number];
 
 type ResourcePanelSectionId =
-  | "modules"
   | "design"
   | ResourceArea
   | "analytics"
@@ -72,7 +70,6 @@ type ResourcePanelSection = {
   label: string;
   icon: LucideIcon;
   defaultOpen?: boolean;
-  kind: "modules" | "resources";
 };
 
 type ResourceCategoryGroup = {
@@ -81,25 +78,23 @@ type ResourceCategoryGroup = {
 };
 
 const resourceSections: ResourcePanelSection[] = [
-  { id: "modules", label: "Modules", icon: Component, defaultOpen: true, kind: "modules" },
-  { id: "design", label: "Design", icon: Brush, kind: "resources" },
-  { id: "containers", label: "Containers", icon: Container, kind: "resources" },
-  { id: "compute", label: areaLabels.compute, icon: Cpu, kind: "resources" },
-  { id: "network", label: areaLabels.network, icon: Network, kind: "resources" },
-  { id: "storage", label: areaLabels.storage, icon: Archive, kind: "resources" },
-  { id: "database", label: areaLabels.database, icon: Database, kind: "resources" },
+  { id: "design", label: "Design", icon: Brush },
+  { id: "containers", label: "Containers", icon: Container },
+  { id: "compute", label: areaLabels.compute, icon: Cpu },
+  { id: "network", label: areaLabels.network, icon: Network },
+  { id: "storage", label: areaLabels.storage, icon: Archive },
+  { id: "database", label: areaLabels.database, icon: Database },
   {
     id: "security-identity",
     label: areaLabels["security-identity"],
-    icon: ShieldCheck,
-    kind: "resources"
+    icon: ShieldCheck
   },
-  { id: "tools", label: areaLabels.tools, icon: Settings, kind: "resources" },
-  { id: "ai", label: areaLabels.ai, icon: Bot, kind: "resources" },
-  { id: "analytics", label: "Analytics", icon: ChartLine, kind: "resources" },
-  { id: "application", label: areaLabels.application, icon: Monitor, kind: "resources" },
-  { id: "iot", label: "IoT", icon: RadioTower, kind: "resources" },
-  { id: "other", label: areaLabels.other, icon: Grid2X2, kind: "resources" }
+  { id: "tools", label: areaLabels.tools, icon: Settings },
+  { id: "ai", label: areaLabels.ai, icon: Bot },
+  { id: "analytics", label: "Analytics", icon: ChartLine },
+  { id: "application", label: areaLabels.application, icon: Monitor },
+  { id: "iot", label: "IoT", icon: RadioTower },
+  { id: "other", label: areaLabels.other, icon: Grid2X2 }
 ];
 
 const resourceCategoryOrderByArea: Partial<Record<ResourcePanelSectionId, readonly string[]>> = {
@@ -333,7 +328,6 @@ export function ResourceSettingsPanel({
                   isOpen={Boolean(openSections[section.id])}
                   items={resourcesBySection.get(section.id) ?? []}
                   key={section.id}
-                  onOpenModuleCatalog={() => setActiveResourceView("modules")}
                   onToggle={() => toggleSection(section.id)}
                   section={section}
                 />
@@ -534,13 +528,11 @@ const moduleCategories: readonly {
 function ResourceSection({
   isOpen,
   items,
-  onOpenModuleCatalog,
   onToggle,
   section
 }: {
   isOpen: boolean;
   items: readonly ResourceItem[];
-  onOpenModuleCatalog: () => void;
   onToggle: () => void;
   section: ResourcePanelSection;
 }) {
@@ -566,26 +558,7 @@ function ResourceSection({
         />
       </button>
 
-      {isOpen && section.kind === "modules" ? (
-        <div className="resourceSectionBody">
-          <div className="resourceModulesEmptyState">
-            <strong>No modules yet</strong>
-            <span className="resourceModulesDescription">
-              Import or browse curated modules when you want grouped Terraform resources.
-            </span>
-            <div className="resourceModulesActions">
-              <button className="modulesImportButton" onClick={onOpenModuleCatalog} type="button">
-                Import
-              </button>
-              <button className="modulesCatalogButton" onClick={onOpenModuleCatalog} type="button">
-                Catalog
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {isOpen && section.kind === "resources" ? (
+      {isOpen ? (
         <div className="resourceSectionBody">
           {items.length > 0 ? (
             <div className="resourceCategoryGroups">

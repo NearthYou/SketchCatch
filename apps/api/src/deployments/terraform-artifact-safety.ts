@@ -6,6 +6,7 @@ const allowedTopLevelBlocks = new Set(["terraform", "provider", "resource", "dat
 const liveApplySupportedDataSourceTypes = new Set([
   "archive_file",
   "aws_ami",
+  "aws_ec2_managed_prefix_list",
   "aws_eks_cluster_auth",
   "aws_caller_identity",
   "aws_ssm_parameter"
@@ -30,8 +31,7 @@ const disallowedTerraformFunctions = new Set([
   "filesha1",
   "filesha256",
   "filesha512",
-  "pathexpand",
-  "templatefile"
+  "pathexpand"
 ]);
 const restrictedNestedBlocks = new Set([
   "backend",
@@ -108,6 +108,7 @@ export function assertTerraformArtifactIsSafe(
   validateProviderSourceAttributes(tokens);
   validateDisallowedTerraformFunctionCalls(tokens);
   validateDisallowedStringInterpolations(tokens);
+  validateTemplateFileCalls(code);
   validateArchiveDataSourceAttributes(code);
   const liveProfile = options.liveProfile ?? "practice";
   const supportedResourceTypes = getLiveApplySupportedResourceTypes(liveProfile);
@@ -373,6 +374,37 @@ function validateDisallowedStringInterpolations(tokens: HclToken[]): void {
   }
 }
 
+function validateTemplateFileCalls(source: string): void {
+  const code = stripHclComments(source);
+  const calls = Array.from(code.matchAll(/\btemplatefile\s*\(/g));
+
+  if (calls.length === 0) {
+    return;
+  }
+
+  const allowedUsages = Array.from(
+    code.matchAll(/\buser_data\s*=\s*base64encode\s*\(\s*templatefile\s*\(/g)
+  );
+
+  if (allowedUsages.length !== calls.length) {
+    const line = countLineAtOffset(code, calls[0]?.index ?? 0);
+    throw new TerraformArtifactSafetyError(
+      `Terraform templatefile is allowed only for base64encoded user_data before live deployment at line ${line}`
+    );
+  }
+
+  for (const call of calls) {
+    const callIndex = call.index ?? 0;
+    const firstArgument = /^\btemplatefile\s*\(\s*"([^"]*)"/.exec(code.slice(callIndex))?.[1];
+
+    if (!firstArgument || !/^\$\{path\.module\}\/[A-Za-z0-9][A-Za-z0-9._-]*\.tftpl$/.test(firstArgument)) {
+      throw new TerraformArtifactSafetyError(
+        `Terraform templatefile must use a static module-local .tftpl basename before live deployment at line ${countLineAtOffset(code, callIndex)}`
+      );
+    }
+  }
+}
+
 function validateArchiveDataSourceAttributes(source: string): void {
   for (const dataSource of extractDataSourceBlocks(stripHclComments(source))) {
     if (dataSource.type !== "archive_file") {
@@ -607,6 +639,14 @@ function validateManagedDemoUserData(
     throw new TerraformArtifactSafetyError(
       `Terraform ${resourceLabel} ${argumentName} is not allowed for ${liveProfile} live deployment at line ${line}`
     );
+  }
+
+  if (
+    resourceLabel === "launch template" &&
+    argumentName === "user_data" &&
+    /\buser_data\s*=\s*base64encode\s*\(\s*templatefile\s*\(\s*"\$\{path\.module\}\/[A-Za-z0-9][A-Za-z0-9._-]*\.tftpl"\s*,/.test(body)
+  ) {
+    return;
   }
 
   const match = new RegExp(`\\b${argumentName}\\s*=\\s*"([A-Za-z0-9+/=]+)"`).exec(body);

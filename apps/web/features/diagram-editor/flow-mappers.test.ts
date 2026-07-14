@@ -313,7 +313,7 @@ test("toFlowNodes marks area nodes for click-through body hit testing", () => {
 
   assert.equal(flowNodes.find((node) => node.id === "vpc-1")?.className, "diagramAreaFlowNode");
   assert.equal(flowNodes.find((node) => node.id === "security-group-1")?.className, "diagramAreaFlowNode");
-  assert.equal(flowNodes.find((node) => node.id === "asg-1")?.className, undefined);
+  assert.equal(flowNodes.find((node) => node.id === "asg-1")?.className, "diagramAreaFlowNode");
   assert.equal(flowNodes.find((node) => node.id === "instance-1")?.className, undefined);
 });
 
@@ -418,7 +418,7 @@ test("toFlowNodes exposes the visual depth of nested Area surfaces", () => {
   assert.equal(flowNodes.find((node) => node.id === "vpc-1")?.data.areaDepth, 2);
 });
 
-test("toFlowEdges keeps ASG resource connections above backgrounds and behind resource tiles", () => {
+test("toFlowEdges keeps ASG Area connections above backgrounds and behind resource tiles", () => {
   const region = makeDesignAreaNode({ id: "region-1", type: "sketchcatch_region" });
   const instance = makeNode({
     id: "instance-1",
@@ -434,11 +434,13 @@ test("toFlowEdges keeps ASG resource connections above backgrounds and behind re
   const flowEdges = toFlowEdges([makeEdge("instance-1", "asg-1")], [], [region, instance, autoscalingGroup]);
 
   const regionZIndex = getFlowNodeZIndex(flowNodes, "region-1");
+  const instanceZIndex = getFlowNodeZIndex(flowNodes, "instance-1");
   const autoscalingGroupZIndex = getFlowNodeZIndex(flowNodes, "asg-1");
   const edgeZIndex = getFlowEdgeZIndex(flowEdges, "instance-1-to-asg-1");
 
-  assert.ok(regionZIndex < edgeZIndex);
-  assert.ok(edgeZIndex < autoscalingGroupZIndex);
+  assert.ok(regionZIndex < autoscalingGroupZIndex);
+  assert.ok(autoscalingGroupZIndex < edgeZIndex);
+  assert.ok(edgeZIndex < instanceZIndex);
 });
 
 test("toFlowEdges stacks selected area endpoint edges above unselected area endpoint edges", () => {

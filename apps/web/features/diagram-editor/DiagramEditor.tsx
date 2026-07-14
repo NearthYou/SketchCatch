@@ -30,9 +30,7 @@ import type {
   Viewport
 } from "@xyflow/react";
 import {
-  Box,
   Expand,
-  LayoutGrid,
   Maximize2,
   MousePointer2,
   Move,
@@ -73,7 +71,11 @@ import {
   readAutoExpandAreasEnabled,
   writeAutoExpandAreasEnabled
 } from "./area-auto-expand-preference";
-import { findInnermostAreaDropTarget, findInnermostAreaNodeAtPoint, isAreaNode } from "./area-nodes";
+import {
+  findAreaBlankInteractionNodeAtPoint,
+  findInnermostAreaDropTarget,
+  isAreaNode
+} from "./area-nodes";
 import {
   getAreaBlankInteractionTarget,
   getTemporaryPanReleaseMode,
@@ -744,47 +746,41 @@ function DiagramEditorInner({
 
   const undo = useCallback(() => {
     cancelSnapAnimation();
-    setHistory((currentHistory) => {
-      const previous = currentHistory.past.at(-1);
+    const previous = history.past.at(-1);
 
-      if (!previous) {
-        return currentHistory;
-      }
+    if (!previous) {
+      return;
+    }
 
-      const currentDiagram = diagramRef.current;
-      replaceDiagram(cloneDiagram(previous));
-      setInspectedNodeId(null);
-      setSelectedNodeIds([]);
-      setSelectedEdgeIds([]);
-
-      return {
-        past: currentHistory.past.slice(0, -1),
-        future: [cloneDiagram(currentDiagram), ...currentHistory.future]
-      };
+    const currentDiagram = diagramRef.current;
+    setHistory({
+      past: history.past.slice(0, -1),
+      future: [cloneDiagram(currentDiagram), ...history.future]
     });
-  }, [cancelSnapAnimation, replaceDiagram]);
+    replaceDiagram(cloneDiagram(previous));
+    setInspectedNodeId(null);
+    setSelectedNodeIds([]);
+    setSelectedEdgeIds([]);
+  }, [cancelSnapAnimation, history, replaceDiagram]);
 
   const redo = useCallback(() => {
     cancelSnapAnimation();
-    setHistory((currentHistory) => {
-      const next = currentHistory.future[0];
+    const next = history.future[0];
 
-      if (!next) {
-        return currentHistory;
-      }
+    if (!next) {
+      return;
+    }
 
-      const currentDiagram = diagramRef.current;
-      replaceDiagram(cloneDiagram(next));
-      setInspectedNodeId(null);
-      setSelectedNodeIds([]);
-      setSelectedEdgeIds([]);
-
-      return {
-        past: [...currentHistory.past, cloneDiagram(currentDiagram)].slice(-MAX_HISTORY_ITEMS),
-        future: currentHistory.future.slice(1)
-      };
+    const currentDiagram = diagramRef.current;
+    setHistory({
+      past: [...history.past, cloneDiagram(currentDiagram)].slice(-MAX_HISTORY_ITEMS),
+      future: history.future.slice(1)
     });
-  }, [cancelSnapAnimation, replaceDiagram]);
+    replaceDiagram(cloneDiagram(next));
+    setInspectedNodeId(null);
+    setSelectedNodeIds([]);
+    setSelectedEdgeIds([]);
+  }, [cancelSnapAnimation, history, replaceDiagram]);
 
   const addCuratedModule = useCallback((moduleId: string) => {
     commitDiagramUpdate((currentDiagram) =>
@@ -1298,7 +1294,7 @@ function DiagramEditorInner({
         y: clientY
       });
 
-      return findInnermostAreaNodeAtPoint(diagramRef.current.nodes, position);
+      return findAreaBlankInteractionNodeAtPoint(diagramRef.current.nodes, position);
     },
     [getFlowInstance]
   );
@@ -1943,7 +1939,7 @@ function DiagramEditorInner({
         x: event.clientX,
         y: event.clientY
       });
-      const areaNode = findInnermostAreaNodeAtPoint(diagramRef.current.nodes, position);
+      const areaNode = findAreaBlankInteractionNodeAtPoint(diagramRef.current.nodes, position);
 
       setSelectedNodeIds(areaNode ? [areaNode.id] : []);
       setSelectedEdgeIds([]);
@@ -2638,32 +2634,7 @@ function DiagramEditorInner({
             type="button"
           />
         </div>
-      ) : (
-        <div
-          className={styles.collapsedLeftPanel}
-          aria-label="Left panel shortcuts"
-          ref={leftRailRef}
-        >
-          <button
-            aria-label="Open resources panel"
-            className={styles.collapsedLeftPanelButton}
-            onClick={() => setLeftPanelOpen(true)}
-            title="Open resources"
-            type="button"
-          >
-            <Box aria-hidden="true" size={18} />
-          </button>
-          <button
-            aria-label="Open templates panel"
-            className={styles.collapsedLeftPanelButton}
-            onClick={() => setLeftPanelOpen(true)}
-            title="Open templates"
-            type="button"
-          >
-            <LayoutGrid aria-hidden="true" size={18} />
-          </button>
-        </div>
-      )}
+      ) : null}
 
       <div className={styles.workspace}>
         <header className={styles.canvasToolbar}>

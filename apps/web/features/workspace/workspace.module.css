@@ -1848,8 +1848,8 @@
   outline: none;
 }
 
-.serverSaveToast {
-  animation: serverSaveToastIn 180ms ease-out;
+.saveAndDeployErrorToast {
+  animation: saveAndDeployErrorToastIn 180ms ease-out;
   background: #ecfdf5;
   border: 1px solid #bbf7d0;
   border-left: 8px solid #22c55e;
@@ -1860,8 +1860,8 @@
   font-size: 25px;
   font-weight: 900;
   line-height: 1.3;
-  min-width: 380px;
   max-width: min(520px, calc(100vw - 32px));
+  min-width: 380px;
   padding: 22px 30px;
   pointer-events: none;
   position: fixed;
@@ -2188,7 +2188,7 @@
   outline: none;
 }
 
-@keyframes serverSaveToastIn {
+@keyframes saveAndDeployErrorToastIn {
   from {
     opacity: 0;
     transform: translateY(-8px);
@@ -5022,24 +5022,6 @@
   padding: 18px 16px 16px;
 }
 
-.deploymentExpandedTitleRow {
-  align-items: center;
-  display: flex;
-  min-height: 36px;
-  min-width: 0;
-  padding-right: 56px;
-}
-
-.deploymentExpandedTitle {
-  color: #172033;
-  font-size: 18px;
-  font-weight: 900;
-  line-height: 1.25;
-  margin: 0;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
 .deploymentExpandedBody .deploymentSection h3 {
   font-size: 15px;
 }
@@ -6114,7 +6096,7 @@
   background: var(--workspace-surface-muted, #fafafa);
 }
 
-.serverSaveToast {
+.saveAndDeployErrorToast {
   border-left-width: 1px;
   border-radius: 8px;
   font-size: 16px;
@@ -7548,7 +7530,7 @@
     top: 74px;
   }
 
-  .serverSaveToast {
+  .saveAndDeployErrorToast {
     max-width: calc(100vw - 24px);
     min-width: 0;
     padding: 16px 18px;
@@ -7618,37 +7600,55 @@
 .deploymentConsoleGrid {
   background: var(--workspace-surface, #ffffff);
   display: grid;
-  grid-template-columns: 224px minmax(420px, 1fr) 294px;
+  grid-template-columns: minmax(420px, 1fr) 294px;
+  grid-template-rows: auto minmax(0, 1fr);
   min-height: 100%;
   min-width: 0;
 }
 
 .deploymentStepNavigation {
   background: var(--workspace-surface, #ffffff);
-  border-right: 1px solid var(--workspace-line, #f0f0f3);
+  border-bottom: 1px solid var(--workspace-line, #f0f0f3);
+  grid-column: 1 / -1;
   min-width: 0;
-  padding: 28px 18px;
-}
-
-.deploymentStepNavigation > p {
-  color: var(--workspace-muted, #60646c);
-  font-size: 10px;
-  font-weight: 900;
-  letter-spacing: 0.1em;
-  margin: 0 10px 16px;
-  text-transform: uppercase;
+  padding: 18px 28px 16px;
 }
 
 .deploymentStepNavigation ol {
   display: grid;
-  gap: 4px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   list-style: none;
-  margin: 0;
+  margin: 0 auto;
+  max-width: 760px;
   padding: 0;
 }
 
+.deploymentStepNavigation li {
+  min-width: 0;
+  position: relative;
+}
+
+.deploymentStepNavigation li + li::before {
+  background: var(--workspace-line-strong, #dcdee0);
+  content: "";
+  height: 2px;
+  left: calc(-50% + 25px);
+  position: absolute;
+  top: 19px;
+  transition: background-color 160ms ease-out;
+  width: calc(100% - 50px);
+}
+
+.deploymentStepNavigation li[data-connector-state="active"]::before {
+  background: var(--workspace-accent, #000000);
+}
+
+.deploymentStepNavigation li[data-connector-state="done"]::before {
+  background: #18794e;
+}
+
 .deploymentStepButton {
-  align-items: center;
+  align-items: start;
   background: transparent;
   border: 1px solid transparent;
   border-radius: 10px;
@@ -7656,31 +7656,46 @@
   cursor: pointer;
   display: grid;
   font-family: var(--workspace-font, "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif);
-  gap: 10px;
-  grid-template-columns: 28px minmax(0, 1fr);
-  min-height: 58px;
-  padding: 9px 10px;
-  text-align: left;
+  gap: 7px;
+  grid-template-rows: 40px auto;
+  justify-items: center;
+  margin: 0 auto;
+  min-height: 68px;
+  padding: 0 12px 4px;
+  position: relative;
+  text-align: center;
   width: 100%;
+  z-index: 1;
 }
 
 .deploymentStepButton[data-selected="true"] {
-  background: #f5f5f5;
-  border-color: var(--workspace-line, #f0f0f3);
+  background: transparent;
+  border-color: transparent;
+}
+
+.deploymentStepButton[data-selected="true"] strong {
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
 }
 
 .deploymentStepButton:focus-visible {
-  border-color: var(--workspace-accent, #000000);
-  outline: none;
+  border-color: transparent;
+  outline: 2px solid var(--workspace-accent, #000000);
+  outline-offset: 2px;
 }
 
 .deploymentStepButton:disabled {
   cursor: not-allowed;
 }
 
+.deploymentStepButton:disabled strong {
+  color: var(--workspace-muted, #60646c);
+}
+
 .deploymentStepButton > span:last-child {
   display: grid;
-  gap: 3px;
+  gap: 2px;
   min-width: 0;
 }
 
@@ -7705,11 +7720,11 @@
   border-radius: 999px;
   color: var(--workspace-muted, #60646c);
   display: inline-flex;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 900;
-  height: 28px;
+  height: 40px;
   justify-content: center;
-  width: 28px;
+  width: 40px;
 }
 
 .deploymentStepButton[data-state="active"] .deploymentStepIndex,
@@ -7963,38 +7978,39 @@
   padding: 0;
 }
 
-.deploymentExpandedTitleRow {
+.deploymentExpandedBody .deploymentConsoleScreenNavigation {
+  align-items: center;
   background: var(--workspace-surface, #ffffff);
+  border: 0;
   border-bottom: 1px solid var(--workspace-line, #f0f0f3);
-  min-height: 82px;
-  padding: 18px 76px 18px 28px;
+  border-radius: 0;
+  justify-content: center;
+  margin: 0;
+  min-height: 64px;
+  padding: 8px 72px;
+  width: 100%;
 }
 
-.deploymentExpandedTitleRow > div {
-  display: grid;
-  gap: 3px;
-}
-
-.deploymentExpandedTitleRow span {
-  color: var(--workspace-muted, #60646c);
-  font-size: 11.5px;
-  font-weight: 700;
+.deploymentExpandedBody .deploymentConsoleScreenNavigation button {
+  font-size: 14px;
+  min-height: 44px;
+  min-width: 112px;
+  padding: 10px 20px;
 }
 
 .deploymentExpandedCloseButton {
   right: 24px;
-  top: 23px;
+  top: 14px;
 }
 
 @media (max-width: 1100px) {
   .deploymentConsoleGrid {
-    grid-template-columns: 200px minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .deploymentContextPanel {
     border-left: 0;
     border-top: 1px solid var(--workspace-line, #f0f0f3);
-    grid-column: 1 / -1;
   }
 
   .deploymentContextPanel dl {
@@ -8017,14 +8033,18 @@
     border-radius: 0;
   }
 
-  .deploymentExpandedTitleRow {
-    min-height: 76px;
-    padding: 14px 62px 14px 18px;
-  }
-
   .deploymentExpandedCloseButton {
     right: 14px;
-    top: 20px;
+    top: 14px;
+  }
+
+  .deploymentExpandedBody .deploymentConsoleScreenNavigation {
+    padding: 8px 58px;
+  }
+
+  .deploymentExpandedBody .deploymentConsoleScreenNavigation button {
+    min-width: 96px;
+    padding-inline: 14px;
   }
 
   .deploymentConsoleTabs {
@@ -8037,32 +8057,35 @@
     flex: 0 0 auto;
   }
 
-  .deploymentConsoleGrid {
-    display: block;
-  }
-
   .deploymentStepNavigation {
-    border-bottom: 1px solid var(--workspace-line, #f0f0f3);
-    border-right: 0;
-    overflow-x: auto;
-    padding: 12px 14px;
-  }
-
-  .deploymentStepNavigation > p {
-    display: none;
+    overflow: visible;
+    padding: 14px 10px 12px;
   }
 
   .deploymentStepNavigation ol {
-    display: flex;
-    width: max-content;
+    width: 100%;
   }
 
-  .deploymentStepNavigation li {
-    width: 148px;
+  .deploymentStepNavigation li + li::before {
+    left: calc(-50% + 23px);
+    top: 17px;
+    width: calc(100% - 46px);
   }
 
   .deploymentStepButton {
-    min-height: 52px;
+    grid-template-rows: 36px auto;
+    min-height: 64px;
+    padding-inline: 4px;
+    width: 100%;
+  }
+
+  .deploymentStepButton small {
+    display: none;
+  }
+
+  .deploymentStepIndex {
+    height: 36px;
+    width: 36px;
   }
 
   .deploymentStepWorkspace {
@@ -8104,6 +8127,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .deploymentStepNavigation li + li::before,
   .deploymentConsoleTab,
   .deploymentStepButton,
   .deploymentPrimaryButton,

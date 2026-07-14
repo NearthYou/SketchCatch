@@ -17,7 +17,7 @@ import type {
   TerraformSourceLocation,
   TerraformOutput
 } from "@sketchcatch/types";
-import { Clipboard, ClipboardCheck, Code2, ShieldCheck, Trash2 } from "lucide-react";
+import { Check, Clipboard, ClipboardCheck, Code2, ShieldCheck, Trash2 } from "lucide-react";
 import { DashboardIcon } from "../../components/dashboard/dashboard-icons";
 import { SelectMenu, type SelectMenuOption } from "../../components/ui/SelectMenu";
 import { getApiErrorMessage } from "../../lib/api-client";
@@ -931,6 +931,9 @@ export function DirectDeploymentScreen({
     const selectedStep =
       directDeploymentFlow.steps.find((step) => step.id === selectedDirectStepId) ??
       directDeploymentFlow.steps[0]!;
+    const activeStepIndex = directDeploymentFlow.steps.findIndex(
+      (step) => step.id === directDeploymentFlow.activeStepId
+    );
     const selectedAwsConnection =
       verifiedAwsConnections.find((connection) => connection.id === selectedAwsConnectionId) ??
       null;
@@ -1125,27 +1128,38 @@ export function DirectDeploymentScreen({
     return (
       <section className={styles.deploymentConsoleGrid} aria-label="Direct Deployment">
         <nav className={styles.deploymentStepNavigation} aria-label="Direct Deployment 단계">
-          <p>Direct Deployment</p>
           <ol>
-            {directDeploymentFlow.steps.map((step, index) => (
-              <li key={step.id}>
-                <button
-                  aria-current={step.id === directDeploymentFlow.activeStepId ? "step" : undefined}
-                  className={styles.deploymentStepButton}
-                  data-selected={step.id === selectedStep.id}
-                  data-state={step.state}
-                  disabled={step.state === "idle"}
-                  onClick={() => setSelectedDirectStepId(step.id)}
-                  type="button"
-                >
-                  <span className={styles.deploymentStepIndex}>{index + 1}</span>
-                  <span>
-                    <strong>{step.label}</strong>
-                    <small>{step.statusLabel}</small>
-                  </span>
-                </button>
-              </li>
-            ))}
+            {directDeploymentFlow.steps.map((step, index) => {
+              const isCompleted = step.state === "done";
+              const connectorState =
+                directDeploymentFlow.steps[index - 1]?.state === "done"
+                  ? "done"
+                  : index <= activeStepIndex
+                    ? "active"
+                    : "idle";
+
+              return (
+                <li data-connector-state={connectorState} key={step.id}>
+                  <button
+                    aria-current={step.id === directDeploymentFlow.activeStepId ? "step" : undefined}
+                    className={styles.deploymentStepButton}
+                    data-selected={step.id === selectedStep.id}
+                    data-state={step.state}
+                    disabled={step.state === "idle"}
+                    onClick={() => setSelectedDirectStepId(step.id)}
+                    type="button"
+                  >
+                    <span className={styles.deploymentStepIndex}>
+                      {isCompleted ? <Check size={16} aria-hidden="true" /> : index + 1}
+                    </span>
+                    <span>
+                      <strong>{step.label}</strong>
+                      <small>{step.statusLabel}</small>
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
           </ol>
         </nav>
 

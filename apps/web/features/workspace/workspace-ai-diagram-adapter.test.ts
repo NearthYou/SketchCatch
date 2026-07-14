@@ -340,7 +340,7 @@ test("normalizeDiagramJsonConventions repairs visual-only parents and keeps SG r
   const nodeById = new Map(normalized.nodes.map((node) => [node.id, node]));
 
   assert.equal(nodeById.get(instance.id)?.metadata?.parentAreaNodeId, vpc.id);
-  assert.equal(nodeById.get(launchTemplate.id)?.metadata?.parentAreaNodeId, subnet.id);
+  assert.equal(nodeById.get(launchTemplate.id)?.metadata?.parentAreaNodeId, autoscalingGroup.id);
   assert.deepEqual(normalized.edges.map((edge) => edge.id), ["sg-instance"]);
 });
 

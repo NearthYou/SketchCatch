@@ -4,6 +4,7 @@ import type {
   TerraformValidateRequest
 } from "@sketchcatch/types";
 import { getResourceDefinitionByTerraform } from "@sketchcatch/types/resource-definitions";
+import { isSilentlyPreservedTerraformBlockType } from "./terraform-configuration-blocks.js";
 import { isTerraformNestedBlockAttribute } from "./terraform-nested-blocks.js";
 
 const BLOCK_HEADER_PATTERN =
@@ -392,7 +393,7 @@ function isSupportedTopLevelBlockType(blockType: string | undefined): boolean {
     blockType === "data" ||
     blockType === "provider" ||
     blockType === "terraform" ||
-    blockType === "output";
+    isSilentlyPreservedTerraformBlockType(blockType);
 }
 
 function checkBodySyntax(terraformCode: string): TerraformDiagnostic[] {

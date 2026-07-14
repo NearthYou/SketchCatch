@@ -128,7 +128,7 @@ test("finalizeDraggedNodes updates containing Terraform references only after th
   assert.equal(subnet?.metadata?.parentAreaNodeId, "vpc-1");
 });
 
-test("finalizeDraggedNodes does not assign children to an ASG Resource", () => {
+test("finalizeDraggedNodes assigns children to an ASG Area", () => {
   const nodes = [
     makeResourceNode({
       id: "asg-1",
@@ -160,7 +160,7 @@ test("finalizeDraggedNodes does not assign children to an ASG Resource", () => {
   const instance = result.nodes.find((node) => node.id === "instance-1");
 
   assert.deepEqual(instance?.position, { x: 48, y: 36 });
-  assert.equal(instance?.metadata?.parentAreaNodeId, undefined);
+  assert.equal(instance?.metadata?.parentAreaNodeId, "asg-1");
 });
 
 test("finalizeDraggedNodes refits a Security Group scope after its referenced Resource moves", () => {

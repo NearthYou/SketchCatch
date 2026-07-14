@@ -591,9 +591,9 @@ test("diagram editor fits and centers visual footprints inside the unobscured bo
     diagramEditorSource,
     /<div className=\{styles\.leftRail\} ref=\{leftRailRef\}>/
   );
-  assert.match(
+  assert.doesNotMatch(
     diagramEditorSource,
-    /className=\{styles\.collapsedLeftPanel\}[\s\S]*?ref=\{leftRailRef\}/
+    /collapsedLeftPanel|Open resources panel|Open templates panel/
   );
 });
 

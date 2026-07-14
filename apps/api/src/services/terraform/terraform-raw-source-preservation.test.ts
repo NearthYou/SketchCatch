@@ -5,8 +5,13 @@ import { createTerraformDiagnostics } from "./terraform-diagnostics.js";
 import { syncTerraformToDiagramJson } from "./terraform-to-diagram.js";
 
 const exactVariableBlock = `variable "traffic_api_bundle_url" {
-  description = "Traffic API 배포 번들의 HTTPS URL"
+  description = "Prebuilt traffic API bundle HTTPS URL"
   type        = string
+
+  validation {
+    condition     = startswith(var.traffic_api_bundle_url, "https://")
+    error_message = "traffic_api_bundle_url must use HTTPS."
+  }
 }`;
 
 const emptyDiagram: DiagramJson = {
@@ -19,10 +24,47 @@ test("keeps the traffic API variable block nonblocking and out of the Architectu
   const validationDiagnostics = createTerraformDiagnostics(exactVariableBlock);
   const syncResult = syncTerraformToDiagramJson(emptyDiagram, exactVariableBlock);
 
-  assert.equal(validationDiagnostics.some((diagnostic) => diagnostic.severity === "error"), false);
-  assert.equal(syncResult.diagnostics.some((diagnostic) => diagnostic.severity === "error"), false);
+  assert.deepEqual(validationDiagnostics, []);
+  assert.deepEqual(syncResult.diagnostics, []);
   assert.deepEqual(syncResult.proposals, []);
   assert.deepEqual(syncResult.diagramJson.nodes, []);
+});
+
+test("silently preserves locals and output blocks outside the Architecture Board", () => {
+  const code = `locals {
+  service_name = "traffic-api"
+}
+
+output "service_name" {
+  value = local.service_name
+}`;
+
+  assert.deepEqual(createTerraformDiagnostics(code), []);
+
+  const syncResult = syncTerraformToDiagramJson(emptyDiagram, code);
+
+  assert.deepEqual(syncResult.diagnostics, []);
+  assert.deepEqual(syncResult.proposals, []);
+  assert.deepEqual(syncResult.diagramJson.nodes, []);
+});
+
+test("keeps module blocks visible because their infrastructure is not projected", () => {
+  const code = `module "network" {
+  source = "./network"
+}`;
+
+  assert.equal(
+    createTerraformDiagnostics(code).some(
+      (diagnostic) => diagnostic.code === "terraform.unsupported_block"
+    ),
+    true
+  );
+  assert.equal(
+    syncTerraformToDiagramJson(emptyDiagram, code).diagnostics.some(
+      (diagnostic) => diagnostic.code === "terraform.sync.unsupported_block"
+    ),
+    true
+  );
 });
 
 test("does not partially mutate a known resource containing an unsupported expression", () => {

@@ -445,22 +445,20 @@ test("reduced motion overrides are ordered after label and connection transition
   assert.ok(reducedMotionIndex > diagramEditorCssSource.indexOf(".edgeHalo {"));
 });
 
-test("resource and area metadata visibility follows the 50 and 75 percent LOD", () => {
-  const compactRule = getCssRuleContaining(".nodeShellZoomMedium .resourceNodeLabel,");
-  const revealRule = getCssRuleContaining(".nodeShellZoomMedium:hover .resourceNodeLabel,");
+test("resource names stay visible while area metadata follows zoom LOD", () => {
+  const metadataRule = getCssRuleContaining(".nodeShellZoomMedium .areaNodeHeaderMeta,");
+  const labelScaleRule = getCssRuleContaining(".nodeShellZoomMedium .resourceNodeLabel,");
 
-  assert.match(compactRule, /\.nodeShellZoomFar \.resourceNodeLabel/);
-  assert.match(compactRule, /\.nodeShellZoomMedium \.areaNodeHeaderMeta/);
-  assert.match(compactRule, /\.nodeShellZoomFar \.areaNodeHeaderMeta/);
-  assert.match(compactRule, /opacity:\s*0;/);
-  assert.match(compactRule, /visibility:\s*hidden;/);
-
-  assert.match(revealRule, /\.nodeShellZoomMedium\.nodeShellSelected \.resourceNodeLabel/);
-  assert.match(revealRule, /\.nodeShellZoomFar\.nodeShellSelected \.resourceNodeLabel/);
-  assert.match(revealRule, /react-flow__node:focus-visible/);
-  assert.match(revealRule, /opacity:\s*1;/);
-  assert.match(revealRule, /visibility:\s*visible;/);
-  assert.doesNotMatch(revealRule, /\.nodeShellZoomFar:hover/);
+  assert.doesNotMatch(metadataRule, /resourceNodeLabel/);
+  assert.match(metadataRule, /\.nodeShellZoomFar \.areaNodeHeaderMeta/);
+  assert.match(metadataRule, /opacity:\s*0;/);
+  assert.match(metadataRule, /visibility:\s*hidden;/);
+  assert.match(labelScaleRule, /\.nodeShellZoomFar \.resourceNodeLabel/);
+  assert.match(labelScaleRule, /scale\(var\(--board-lod-label-scale\)\)/);
+  assert.doesNotMatch(
+    diagramEditorCssSource,
+    /\.nodeShellZoomMedium:hover \.resourceNodeLabel/
+  );
 
   assert.match(
     diagramEditorCssSource,
