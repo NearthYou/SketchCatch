@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { copyTextToClipboard } from "../../lib/clipboard";
 import type { SafeDeploymentLink } from "./deployment-output-links";
 import styles from "./workspace.module.css";
 
@@ -34,10 +35,7 @@ export function DeploymentOutputLinks({
 
   async function copyUrl(url: string): Promise<void> {
     try {
-      if (!navigator.clipboard?.writeText) {
-        throw new Error("Clipboard API unavailable");
-      }
-      await navigator.clipboard.writeText(url);
+      await copyTextToClipboard(url);
       if (!isCurrentClipboardScope()) {
         return;
       }

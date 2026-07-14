@@ -5,6 +5,7 @@ import "pretendard/dist/web/static/pretendard-dynamic-subset.css";
 import "./globals.css";
 import "../components/auth/auth.css";
 import { AuthProvider } from "../components/auth/auth-provider";
+import { PlainTextCopyGuard } from "../components/clipboard/plain-text-copy-guard";
 import { DeploymentNotificationCenter } from "../components/notifications/DeploymentNotificationCenter";
 
 export const metadata: Metadata = {
@@ -20,6 +21,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="ko">
       <body>
         <AuthProvider>
+          <PlainTextCopyGuard />
           <DeploymentNotificationCenter>{children}</DeploymentNotificationCenter>
         </AuthProvider>
       </body>

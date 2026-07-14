@@ -10,6 +10,7 @@ import type {
 import { Check, Copy, ExternalLink, Radio, X } from "lucide-react";
 import QRCode from "qrcode";
 import { createPortal } from "react-dom";
+import { copyTextToClipboard } from "../../lib/clipboard";
 import { getApiErrorMessage } from "../../lib/api-client";
 import {
   createLiveObservation,
@@ -266,7 +267,7 @@ export function LiveObservationModal({ onClose, projectId }: LiveObservationModa
   async function copyAudienceUrl(): Promise<void> {
     if (!audienceUrl) return;
     try {
-      await navigator.clipboard.writeText(audienceUrl);
+      await copyTextToClipboard(audienceUrl);
       if (!activeRef.current) return;
       setCopied(true);
       if (copiedTimerRef.current !== null) window.clearTimeout(copiedTimerRef.current);

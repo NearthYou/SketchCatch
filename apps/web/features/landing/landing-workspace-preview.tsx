@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useState } from "react";
+import { copyTextToClipboard } from "../../lib/clipboard";
 import styles from "./product-entry.module.css";
 
 const RESOURCE_ICONS = {
@@ -44,7 +45,7 @@ export function LandingWorkspacePreview() {
 
   async function copyTerraformCode(): Promise<void> {
     try {
-      await navigator.clipboard.writeText(TERRAFORM_CODE);
+      await copyTextToClipboard(TERRAFORM_CODE);
       setCopyLabel("복사됨");
     } catch {
       setCopyLabel("선택해서 복사");
