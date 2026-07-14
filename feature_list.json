@@ -500,7 +500,7 @@
       "area": "ai-architecture-board",
       "title": "Deterministic provider-neutral AI diagram auto-layout",
       "user_visible_behavior": "AI가 만든 신규 Practice Architecture가 포함 관계, 주 흐름, 반복 구조, 지원 레인을 기준으로 읽기 쉽게 자동 배치되고 기존 수동 Board와 Template 좌표는 보호된다.",
-      "status": "passing",
+      "status": "in_progress",
       "verification": [
         "핵심 배치 엔진이 provider-neutral role을 사용하고 AWS 분류와 Area 최소 크기는 첫 Provider Adapter 매핑에 격리된다.",
         "node/Area 겹침, parent 경계, edge 교차·관통, Area 제목 관통, 역방향 edge, canvas 면적·공백·세로 비율, 반복 정렬, 주 흐름 연속성을 구조 지표로 검증한다.",

@@ -12,6 +12,21 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-14 - Reflow Repository strict frontend ECS diagrams
+
+- Reproduced the `audience-live-check` strict Repository frontend-included diagram as a 41-node generated Board with template presentation overlap, VPC/Managed Services overlap, and runtime/control-plane separation.
+- Kept ECS Cluster and ECS Service inside the VPC/runtime security boundary for strict Repository evidence, while leaving Task Definition, IAM, ECR, S3/CloudFront, and CloudWatch in the managed-services support area.
+- Disabled authored Template coordinate protection only for Repository-generated Template drafts, so the automatic layout can reflow the evidence-backed board while ordinary Template boards still keep hard authored positions.
+- Added a focused regression for the frontend-included ECS Repository diagram: no duplicated Template presentation nodes, no node/Area overlap, no boundary violations, and Service/Fargate runtime remain together in the task security group.
+- Verification: focused Web automatic-layout and AI adapter tests (60/60), focused API strict Repository evidence test, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check` passed. Chrome plugin attachment failed with a local runtime `process` property collision, so live Chrome visual inspection was not claimed. No Terraform, deployment, cloud, migration, commit, push, or PR mutation was performed.
+
+### 2026-07-14 - Compact AI diagram layout and border-only Areas
+
+- Added canvas expansion cost to support-node route adjustment so small routing improvements no longer spread support resources across an oversized Board.
+- Added a compactness regression for support routing adjustments while preserving overlap, containment, and route-intersection checks.
+- Removed translucent fills from Area nodes, including Security Group scopes, locked Areas, and drop-target feedback; Areas now render as border-only frames.
+- Verification: focused Diagram Node View and automatic-layout/AI-adapter tests (73/73), `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check` passed. No Terraform, deployment, cloud, migration, commit, push, or PR mutation was performed.
+
 ### 2026-07-14 - Integrate latest dev UI
 
 - Merged `origin/dev` at `f3ae778a`, preserving the dev UI decisions while retaining the feature branch's Repository and automatic-layout behavior.
@@ -144,6 +159,22 @@ Short English-only working log for the current agent context. Older records are 
 - Verification: `pnpm --dir apps/api exec tsx --test --test-name-pattern "clone URLs ending in .git" src/routes/ai.test.ts`; `pnpm --dir apps/web exec tsx --test features/workspace/public-repository-recommendation.test.ts`; `pnpm harness:check`; `pnpm lint`; `pnpm typecheck`; `pnpm build`.
 - Note: running the full `apps/api/src/routes/ai.test.ts` file still shows two unrelated baseline failures in repository-template and template-selection assertions.
 
+### 2026-07-14 - Route connected Repository boards through AI draft layout
+
+- Changed connected Repository template candidate actions from direct `/workspace?templateId=...` board links to the same `/ai/architecture-draft` path used by AI diagram generation.
+- Added connected Repository Architecture Draft context with selected Template, repository analysis identity, strict architecture facts, application units, and evidence signals.
+- Preserved the existing recommendation and preview flow while ensuring the saved Board is built through `getDiagramJsonForArchitectureDraft`.
+- Added a regression test that blocks reintroducing direct template href board creation for connected Repository analysis.
+- Verification: focused Repository Web tests, `pnpm typecheck`, `pnpm lint`, and `pnpm build` passed.
+
+### 2026-07-14 - Compact Repository frontend ECS diagram layout
+
+- Rechecked the current `whiskend/audience-live-check` frontend-included ECS diagram and found it still mechanically valid but not human-readable enough: no node overlap, yet the managed services lane was too wide and too detached from the Browser/CloudFront/S3 flow.
+- Added Repository-generated layout handling that ignores inherited template presentation nodes, keeps ECS service/runtime together inside the task security group, and compacts `repository-managed-services` into a stable web-delivery row plus support row.
+- Tightened the regression fixture so the same Repository frontend input must avoid node overlap, boundary violations, sibling Area overlap, presentation-node duplication, oversized boards, and scattered Browser -> CloudFront -> S3 ordering.
+- Verification: focused Web layout tests, focused API strict Repository test, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check` passed.
+- Note: Chrome visual inspection could not be completed because the Chrome connector runtime failed while loading with `Cannot redefine property: process`; deterministic layout metrics and regression tests were used instead.
+
 ## Next Action
 
-- Restore the live AI endpoint and repeat the saved-Board patch screen check when the API is available; no layout implementation continuation is required.
+- Repeat the live Chrome saved-Board visual check once the Chrome connector can attach cleanly; no layout implementation continuation is required.
