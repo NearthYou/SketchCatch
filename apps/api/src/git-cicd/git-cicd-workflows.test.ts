@@ -406,6 +406,16 @@ test("Static automation publishes an immutable manifest and rolls back the Cloud
   assert.equal(settings.variables.SKETCHCATCH_CLOUDFRONT_DISTRIBUTION_ID, "E1234567890ABC");
   assert.equal(settings.variables.SKETCHCATCH_CLOUDFRONT_ORIGIN_ID, "static-origin");
   assert.equal(settings.variables.SKETCHCATCH_OUTPUT_URL, "https://static.example.com");
+
+  const npmWorkflow = createGitCicdAutomationFiles({
+    ...input,
+    confirmedBuildConfig: {
+      ...input.confirmedBuildConfig,
+      installPreset: "npm_ci" as const
+    }
+  }).find((file) => file.path === ".github/workflows/sketchcatch-app.yml")?.content ?? "";
+  assert.match(npmWorkflow, /test -f "\$SKETCHCATCH_SOURCE_ROOT\/package-lock\.json"/);
+  assert.match(npmWorkflow, /npm --prefix "\$SKETCHCATCH_SOURCE_ROOT" ci/);
 });
 
 test("default S3 bucket names trim separators left at the 63-character boundary", () => {
