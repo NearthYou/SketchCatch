@@ -320,7 +320,7 @@ export function SignupForm() {
               type="button"
             >
               <Search aria-hidden="true" size={16} />
-              중복 확인
+              아이디 중복 확인
             </button>
           </div>
           <div className="authFieldFeedback">
@@ -457,7 +457,7 @@ export function SignupForm() {
               type="button"
             >
               <Search aria-hidden="true" size={16} />
-              중복 확인
+              이메일 중복 확인
             </button>
           </div>
           <div className="authFieldFeedback">
@@ -482,7 +482,7 @@ export function SignupForm() {
               onClick={() => setActiveLegalDocumentKey("terms")}
               type="button"
             >
-              보기
+              서비스 이용약관 보기
             </button>
           </div>
           <div className="authConsentRow">
@@ -502,7 +502,7 @@ export function SignupForm() {
               onClick={() => setActiveLegalDocumentKey("privacy")}
               type="button"
             >
-              보기
+              개인정보 수집 및 이용 내용 보기
             </button>
           </div>
         </div>

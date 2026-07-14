@@ -620,6 +620,18 @@
     min-height: 44px;
   }
 
+  .authConsentRow {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .authConsentViewButton {
+    justify-self: start;
+    margin-left: 25px;
+    text-align: left;
+  }
+
   .authLegalOverlay {
     padding: 12px;
   }

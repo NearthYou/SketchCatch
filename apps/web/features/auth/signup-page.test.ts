@@ -30,6 +30,17 @@ test("signup consent view actions stay beside their agreement labels", () => {
   assert.doesNotMatch(authStylesSource, /\.authConsentRow\s*\{[^}]*space-between;/s);
 });
 
+test("signup availability and legal actions state their exact purpose", () => {
+  assert.match(signupFormSource, /아이디 중복 확인/);
+  assert.match(signupFormSource, /이메일 중복 확인/);
+  assert.match(signupFormSource, /서비스 이용약관 보기/);
+  assert.match(signupFormSource, /개인정보 수집 및 이용 내용 보기/);
+  assert.match(
+    authStylesSource,
+    /@media \(max-width: 639px\)[\s\S]*\.authConsentRow\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*1fr;/s
+  );
+});
+
 test("signup fields stay in one narrow column in the requested order", () => {
   assert.doesNotMatch(signupPageSource, /\bwide\b/);
 
