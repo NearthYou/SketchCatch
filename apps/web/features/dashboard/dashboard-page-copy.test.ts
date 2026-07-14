@@ -33,6 +33,13 @@ test("projects page uses the requested Korean title without redundant introducti
   );
 });
 
+test("settings page uses one Korean title without the redundant AWS role eyebrow", () => {
+  const source = readWorkspaceFile("app/dashboard/settings/settings-dashboard-client.tsx");
+
+  assert.match(source, /<h1>설정<\/h1>/);
+  assert.doesNotMatch(source, /dashboardEyebrow">AWS Role|<h1>Settings<\/h1>/);
+});
+
 function readWorkspaceFile(path: string): string {
   return readFileSync(fileURLToPath(new URL(`../../${path}`, import.meta.url)), "utf8");
 }

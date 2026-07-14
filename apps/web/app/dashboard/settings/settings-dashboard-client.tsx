@@ -143,8 +143,8 @@ export function SettingsDashboardClient() {
 
   return (
     <div className="dashboardRouteStack">
-      <header className="dashboardPageHeader">
-        <div><p className="dashboardEyebrow">AWS Role</p><h1>Settings</h1></div>
+      <header className="dashboardPageHeader dashboardPageHeaderCompact">
+        <div><h1>설정</h1></div>
         <button className={styles.iconAction} aria-label="연결 새로고침" onClick={() => void loadConnections()} title="새로고침" type="button"><RefreshCw size={17} /></button>
       </header>
 
