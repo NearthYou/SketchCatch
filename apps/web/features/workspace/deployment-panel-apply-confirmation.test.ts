@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const deploymentPanelSource = readFileSync(
-  fileURLToPath(new URL("DeploymentPanel.tsx", import.meta.url)),
+  fileURLToPath(new URL("DirectDeploymentScreen.tsx", import.meta.url)),
   "utf8"
 );
 
@@ -15,7 +15,7 @@ test("apply confirmation can be dismissed after it opens for an approved plan", 
   );
   assert.match(
     deploymentPanelSource,
-    /\{selectedDeployment && showApplyConfirmation \? \(/
+    /\{showApplyConfirmation && selectedDeployment \? \(/
   );
   assert.doesNotMatch(
     deploymentPanelSource,

@@ -510,6 +510,12 @@ function createDeploymentRecord(
     terraformArtifactId,
     awsConnectionId,
     liveProfile: "practice",
+    scope: "infrastructure",
+    targetKind: null,
+    source: "direct",
+    releaseId: null,
+    preparedDraftRevision: null,
+    preparedSnapshotHash: null,
     currentPlanArtifactId: null,
     stateObjectKey: null,
     resultWarningSummary: null,
@@ -529,6 +535,7 @@ function createDeploymentRecord(
     approvedTfplanHash: null,
     approvedAwsAccountId: null,
     approvedAwsRegion: null,
+    approvedPreparedSnapshotHash: null,
     startedAt: null,
     completedAt: null,
     failedAt: null,
@@ -619,7 +626,11 @@ function toComparableLog(log: DeploymentLogRecord) {
 
 test("runDeploymentInit restores the artifact, runs Terraform init, logs output, and returns status to PENDING", async () => {
   const repository = new FakeDeploymentRepository();
-  const workspaceInputs: Array<{ objectKey: string; fileName?: string | null }> = [];
+  const workspaceInputs: Array<{
+    objectKey: string;
+    fileName?: string | null;
+    contentType?: string | null;
+  }> = [];
   const runnerWorkdirs: string[] = [];
   const runnerEnvs: Array<NodeJS.ProcessEnv | undefined> = [];
   const lockUploads: Array<{ deploymentId: string; lockFilePath: string }> = [];
@@ -691,7 +702,8 @@ test("runDeploymentInit restores the artifact, runs Terraform init, logs output,
   assert.deepEqual(workspaceInputs, [
     {
       objectKey: "projects/project-id/assets/terraform_file/artifact-main.tf",
-      fileName: "main.tf"
+      fileName: "main.tf",
+      contentType: "application/x-terraform"
     }
   ]);
   assert.deepEqual(runnerWorkdirs, ["C:/tmp/sketchcatch-terraform-success"]);
@@ -785,7 +797,7 @@ test("runDeploymentInit rejects unsafe Terraform before preparing AWS credential
             }
           }),
           readTerraformArtifactFile: async () => `
-            data "aws_caller_identity" "current" {
+            data "aws_region" "current" {
             }
           `,
           prepareTerraformAwsCredentialEnv: async () => {
@@ -798,7 +810,7 @@ test("runDeploymentInit rejects unsafe Terraform before preparing AWS credential
           }
         }
       ),
-    /data source "aws_caller_identity" is not allowed/
+    /data source "aws_region" is not allowed/
   );
 
   assert.equal(cleanupCalled, true);
@@ -806,7 +818,7 @@ test("runDeploymentInit rejects unsafe Terraform before preparing AWS credential
   assert.equal(terraformRan, false);
   assert.equal(repository.deployment?.status, "FAILED");
   assert.equal(repository.deployment?.failureStage, "init");
-  assert.match(repository.deployment?.errorSummary ?? "", /data source "aws_caller_identity" is not allowed/);
+  assert.match(repository.deployment?.errorSummary ?? "", /data source "aws_region" is not allowed/);
 });
 
 test("runDeploymentInit records failed init output, marks the deployment failed, and masks secret logs", async () => {

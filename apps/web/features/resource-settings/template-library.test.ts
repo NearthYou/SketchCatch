@@ -7,6 +7,8 @@ import {
   applyTemplateToDiagramWithBackup,
   buildBoardTemplateDiagram,
   filterBoardTemplates,
+  getBoardTemplateRelationshipCount,
+  getBoardTemplateResourceCount,
   listBoardTemplateTags,
   listBoardTemplates,
   listLegacyBoardTemplates,
@@ -21,7 +23,14 @@ test("buildBoardTemplateDiagram materializes Repository Analysis TemplateDefinit
   });
 
   assert.ok(diagram);
-  assert.equal(diagram.nodes.length, 6);
+  assert.equal(diagram.nodes.length, 8);
+  assert.equal(diagram.nodes.filter((node) => node.kind === "resource").length, 6);
+  assert.equal(diagram.nodes.filter((node) => node.kind === "design").length, 2);
+  assert.ok(
+    diagram.nodes
+      .filter((node) => node.kind === "design")
+      .every((node) => typeof node.metadata?.presentationCatalogItemId === "string")
+  );
   assert.equal(
     buildBoardTemplateDiagram("unsupported-template", {
       projectSlug: "analysis-qa",
@@ -38,9 +47,18 @@ test("buildBoardTemplateDiagram maps public Repository Analysis template IDs to 
   });
 
   assert.ok(diagram);
-  assert.equal(diagram.nodes.some((node) => node.type === "aws_db_instance"), true);
-  assert.equal(diagram.nodes.some((node) => node.type === "aws_lb"), true);
-  assert.equal(diagram.nodes.some((node) => node.type === "aws_autoscaling_group"), true);
+  assert.equal(
+    diagram.nodes.some((node) => node.type === "aws_db_instance"),
+    true
+  );
+  assert.equal(
+    diagram.nodes.some((node) => node.type === "aws_lb"),
+    true
+  );
+  assert.equal(
+    diagram.nodes.some((node) => node.type === "aws_autoscaling_group"),
+    true
+  );
 });
 
 test("filterBoardTemplates searches title, description, and tags", () => {
@@ -62,21 +80,65 @@ test("filterBoardTemplates combines tag filtering and resource sorting", () => {
     tag: "RDS"
   });
 
-  assert.deepEqual(filtered.map((template) => template.id), ["three-tier-web-app"]);
+  assert.deepEqual(
+    filtered.map((template) => template.id),
+    ["three-tier-web-app"]
+  );
 });
 
 test("listBoardTemplateTags returns unique sorted tags", () => {
   const tags = listBoardTemplateTags(listBoardTemplates());
 
   assert.equal(tags.filter((tag) => tag === "RDS").length, 1);
-  assert.deepEqual(tags, [...tags].sort((left, right) => left.localeCompare(right, "ko-KR")));
+  assert.deepEqual(
+    tags,
+    [...tags].sort((left, right) => left.localeCompare(right, "ko-KR"))
+  );
 });
 
 test("listBoardTemplates exposes exactly the six deployable TemplateDefinitions", () => {
   const templates = listBoardTemplates();
 
-  assert.deepEqual(templates.map((template) => template.id), [...TEMPLATE_IDS]);
+  assert.deepEqual(
+    templates.map((template) => template.id),
+    [...TEMPLATE_IDS]
+  );
   assert.ok(templates.every((template) => template.diagramJson.nodes.length > 0));
+  assert.equal(
+    templates.reduce((count, template) => count + getBoardTemplateResourceCount(template), 0),
+    103
+  );
+});
+
+test("Template counts use deployable Terraform identity instead of visual node kind alone", () => {
+  const visualResourceArea = createCountNode("visual-vpc", "resource", true);
+  const parameterlessResource = createCountNode("parameterless-resource", "resource", false);
+  const parameterizedDesign = createCountNode("design-region", "design", true);
+  const template = {
+    id: "count-contract",
+    title: "Count contract",
+    description: "Count contract fixture",
+    tags: [],
+    diagramJson: {
+      nodes: [visualResourceArea, parameterlessResource, parameterizedDesign],
+      edges: [
+        {
+          id: "semantic-self",
+          sourceNodeId: visualResourceArea.id,
+          targetNodeId: visualResourceArea.id
+        },
+        {
+          id: "presentation-edge",
+          sourceNodeId: parameterizedDesign.id,
+          targetNodeId: visualResourceArea.id
+        }
+      ],
+      viewport: { x: 0, y: 0, zoom: 1 }
+    }
+  };
+
+  assert.equal(getBoardTemplateResourceCount(template), 1);
+  assert.equal(getBoardTemplateRelationshipCount(template), 1);
 });
 
 test("board templates use 48px geometry and compact Area bounds around direct children", () => {
@@ -155,7 +217,8 @@ test("Live Observation template carries the same ASG pressure resources as the d
   const targetGroup = nodesByType.get("aws_lb_target_group");
   const listener = nodesByType.get("aws_lb_listener");
   const audienceObject = template.diagramJson.nodes.find(
-    (node) => node.parameters?.resourceType === "aws_s3_object" && node.parameters.resourceName === "index"
+    (node) =>
+      node.parameters?.resourceType === "aws_s3_object" && node.parameters.resourceName === "index"
   );
 
   assert.ok(asg);
@@ -207,8 +270,11 @@ test("Live Observation template carries the same ASG pressure resources as the d
     Buffer.from(String(launchTemplate.parameters?.values.userData), "base64").toString("utf8"),
     /sketchcatch-demo-managed-user-data-sha256:[a-f0-9]{64}/
   );
-  assert.match(String(audienceObject.parameters?.values.content), /\/api\/traffic/);
-  assert.match(String(audienceObject.parameters?.values.content), /\/api\/live-observations\/public\//);
+  assert.doesNotMatch(String(audienceObject.parameters?.values.content), /URLSearchParams|fetch\(/);
+  assert.doesNotMatch(
+    String(audienceObject.parameters?.values.content),
+    /\/api\/live-observations\/public\//
+  );
   assert.equal(policy.parameters?.values.policyType, "StepScaling");
   assert.equal(alarm.parameters?.values.metricName, "RequestCountPerTarget");
   assert.equal(alarm.parameters?.values.threshold, 60);
@@ -219,7 +285,9 @@ test("Live Observation template carries the same ASG pressure resources as the d
     (node) => node.id === "template-live-site-config"
   );
   const alb = template.diagramJson.nodes.find((node) => node.id === "template-live-alb");
-  const audienceEdge = template.diagramJson.edges.find((edge) => edge.id === "template-live-site-flow");
+  const audienceEdge = template.diagramJson.edges.find(
+    (edge) => edge.id === "template-live-site-flow"
+  );
   assert.ok(vpc);
   assert.ok(audienceSite);
   assert.ok(audienceEndpoint);
@@ -227,8 +295,11 @@ test("Live Observation template carries the same ASG pressure resources as the d
   assert.ok(targetGroup);
   assert.ok(audienceEdge);
   assert.equal(audienceEdge.sourceNodeId, "template-live-site-config");
-  assert.equal(template.diagramJson.nodes.length, 22);
-  assert.ok(vpc.size.height < 800, "dense VPC resources should form compact columns, not one tall stack");
+  assert.equal(template.diagramJson.nodes.length, 26);
+  assert.ok(
+    vpc.size.height < 800,
+    "dense VPC resources should form compact columns, not one tall stack"
+  );
   assert.ok(audienceSite.position.x < vpc.position.x);
   assert.ok(alb.position.x < targetGroup.position.x);
   assert.ok(targetGroup.position.x < asg.position.x);
@@ -275,7 +346,7 @@ test("Live Observation template carries the same ASG pressure resources as the d
     assert.equal(areaNode.size.height % 40, 0, `${areaNode.id} height must use the 40px grid`);
   }
 
-  assert.equal(audienceEndpoint.position.y, alb.position.y);
+  assert.ok(audienceEndpoint.position.x < alb.position.x);
   assert.equal(alb.position.y, targetGroup.position.y);
   assert.equal(policy.position.x, alarm.position.x);
 });
@@ -295,6 +366,11 @@ test("applyTemplateToDiagramWithBackup backs up the current board and returns th
   const backups = readTemplateOverwriteBackups(storage);
 
   assert.deepEqual(result, template.diagramJson);
+  assert.ok(
+    result.nodes
+      .filter((node) => node.kind === "design")
+      .every((node) => !Object.prototype.hasOwnProperty.call(node, "parameters"))
+  );
   assert.equal(backups.length, 1);
   assert.equal(backups[0]?.templateId, template.id);
   assert.deepEqual(backups[0]?.diagramJson, currentDiagram);
@@ -317,6 +393,35 @@ function createDiagram(nodeId: string): DiagramJson {
     ],
     edges: [],
     viewport: { x: 0, y: 0, zoom: 1 }
+  };
+}
+
+// Count fixtures deliberately vary Resource kind and Terraform parameter presence independently.
+function createCountNode(
+  id: string,
+  kind: DiagramJson["nodes"][number]["kind"],
+  withParameters: boolean
+): DiagramJson["nodes"][number] {
+  return {
+    id,
+    kind,
+    label: id,
+    locked: false,
+    position: { x: 0, y: 0 },
+    size: { height: 120, width: 120 },
+    type: "aws_vpc",
+    zIndex: 1,
+    ...(withParameters
+      ? {
+          parameters: {
+            fileName: "main.tf",
+            resourceName: id.replaceAll("-", "_"),
+            resourceType: "aws_vpc",
+            terraformBlockType: "resource" as const,
+            values: {}
+          }
+        }
+      : {})
   };
 }
 

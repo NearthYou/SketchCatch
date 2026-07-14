@@ -8,6 +8,299 @@
   padding: 32px;
 }
 
+/* Deployment and CI/CD console separation */
+.deploymentConsoleScreenNavigation {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 18px;
+  padding: 4px;
+  width: fit-content;
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  border-radius: 10px;
+  background: var(--workspace-surface, #ffffff);
+}
+
+.deploymentConsoleScreenNavigation button,
+.cicdViewNavigation button {
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--workspace-muted, #60646c);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  padding: 9px 16px;
+}
+
+.deploymentConsoleScreenNavigation button[aria-pressed="true"],
+.cicdViewNavigation button[aria-pressed="true"] {
+  background: var(--workspace-accent, #000000);
+  color: #ffffff;
+}
+
+.deploymentConsoleScreenBody {
+  min-height: 0;
+}
+
+.cicdConsole {
+  display: grid;
+  gap: 16px;
+}
+
+.cicdViewNavigation {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--workspace-line, #f0f0f3);
+  padding-bottom: 10px;
+}
+
+.cicdViewNavigation button:last-child {
+  margin-left: auto;
+}
+
+.cicdViewNavigation button:disabled {
+  cursor: progress;
+  opacity: .55;
+}
+
+.cicdState,
+.cicdRequiredState,
+.cicdRepositorySummary,
+.cicdActivity,
+.cicdLogs,
+.cicdSettings {
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  border-radius: 12px;
+  background: var(--workspace-surface, #ffffff);
+  padding: 20px;
+}
+
+.cicdState {
+  display: grid;
+  justify-items: start;
+  gap: 12px;
+}
+
+.cicdState h3,
+.cicdState p,
+.cicdRepositorySummary h3,
+.cicdRepositorySummary p,
+.cicdActivity h3,
+.cicdActivity p,
+.cicdSettings h3,
+.cicdSettings p,
+.cicdLogs h3,
+.cicdLogs p,
+.cicdOverviewPaths dd {
+  margin: 0;
+}
+
+.cicdRequiredState {
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  font-weight: 800;
+  color: #9a6700;
+  background: #fff8c5;
+}
+
+.cicdRunSelect,
+.cicdToggleField,
+.cicdSettings > .deploymentField {
+  display: grid;
+  gap: 8px;
+  color: var(--workspace-text, #171717);
+  font-weight: 700;
+}
+
+.cicdRunSelect select,
+.cicdSettings input[type="text"],
+.cicdSettings input:not([type]) {
+  min-height: 42px;
+  border: 1px solid var(--workspace-line-strong, #dcdee0);
+  border-radius: 8px;
+  padding: 0 12px;
+  background: #ffffff;
+  color: #171717;
+  font: inherit;
+}
+
+.cicdOverview {
+  display: grid;
+  gap: 16px;
+}
+
+.cicdOverviewPaths {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+
+.cicdOverviewPaths > div {
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  border-radius: 10px;
+  background: var(--workspace-surface, #ffffff);
+  padding: 14px;
+}
+
+.cicdOverviewPaths dt {
+  color: var(--workspace-muted, #60646c);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.cicdOverviewPaths dd {
+  margin-top: 6px;
+  color: var(--workspace-text, #171717);
+  font-weight: 800;
+}
+
+.cicdRepositorySummary,
+.cicdActivity > header,
+.cicdLogs > .deploymentSectionHeader,
+.cicdSettings > .deploymentSectionHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.cicdRepositorySummary > strong,
+.cicdActivity > header > strong {
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: #eef6ff;
+  color: #0969da;
+  white-space: nowrap;
+}
+
+.cicdReleaseSummary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 18px 0 0;
+}
+
+.cicdReleaseSummary > div {
+  min-width: 0;
+}
+
+.cicdReleaseSummary dt {
+  color: var(--workspace-muted, #60646c);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.cicdReleaseSummary dd {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+  font-weight: 700;
+}
+
+.cicdStageList,
+.cicdLogList {
+  display: grid;
+  gap: 0;
+  margin: 18px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cicdStageList li {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) auto auto;
+  align-items: center;
+  gap: 16px;
+  min-height: 50px;
+  border-top: 1px solid var(--workspace-line, #f0f0f3);
+}
+
+.cicdLogList {
+  max-height: 52vh;
+  overflow: auto;
+  border-radius: 8px;
+  background: #111827;
+  color: #e5e7eb;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+.cicdLogList li {
+  display: grid;
+  grid-template-columns: 100px minmax(0, 1fr);
+  gap: 12px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #283142;
+  white-space: pre-wrap;
+}
+
+.cicdLogList li[data-level="error"] {
+  color: #fca5a5;
+}
+
+.cicdLogList li[data-level="warning"] {
+  color: #fde68a;
+}
+
+.cicdSettings {
+  display: grid;
+  gap: 18px;
+}
+
+.cicdToggleField {
+  grid-template-columns: auto 1fr;
+  align-items: center;
+}
+
+.cicdPathField {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin: 0;
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  border-radius: 10px;
+  padding: 16px;
+}
+
+.cicdPathField legend {
+  padding: 0 6px;
+  font-weight: 800;
+}
+
+.cicdPathField label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cicdPathField > input {
+  flex-basis: 100%;
+}
+
+@media (max-width: 720px) {
+  .deploymentConsoleScreenNavigation,
+  .cicdViewNavigation {
+    width: 100%;
+  }
+
+  .cicdRepositorySummary,
+  .cicdActivity > header,
+  .cicdLogs > .deploymentSectionHeader,
+  .cicdSettings > .deploymentSectionHeader {
+    flex-direction: column;
+  }
+
+  .cicdStageList li {
+    grid-template-columns: 1fr auto;
+  }
+
+  .cicdReleaseSummary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 .projectForm,
 .noticePanel {
   background: #ffffff;
@@ -150,6 +443,33 @@
   background: #fff8e6;
   border-color: #f6dda4;
   color: #7a4d00;
+}
+
+.thumbnailFailureText {
+  color: #9f2a1d;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.thumbnailRetryButton {
+  background: #ffffff;
+  border: 1px solid #e7aaa3;
+  border-radius: 6px;
+  color: #9f2a1d;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 4px 8px;
+}
+
+.thumbnailRetryButton:hover {
+  background: #fff8f7;
+}
+
+.thumbnailRetryButton:focus-visible {
+  outline: 2px solid #9f2a1d;
+  outline-offset: 2px;
 }
 
 /* DESIGN.md workspace internal panel pass */
@@ -3464,9 +3784,7 @@
 
 .deploymentStageSettings {
   display: grid;
-  gap: 8px;
-  grid-column: 1 / 3;
-  grid-row: 2;
+  gap: 12px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   min-width: 0;
 }
@@ -3731,6 +4049,8 @@
 .deploymentSecondaryButton svg,
 .deploymentDangerButton svg {
   flex: 0 0 auto;
+  height: 16px;
+  width: 16px;
 }
 
 .deploymentButtonText {
@@ -3768,114 +4088,192 @@
 }
 
 .deploymentPreflightSummary {
-  background: #f8fafc;
-  border: 1px solid #dce3ee;
-  border-radius: 6px;
+  background: var(--workspace-surface, #ffffff);
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  border-radius: var(--radius-card);
   display: grid;
-  gap: 8px;
+  gap: 16px;
   min-width: 0;
-  padding: 10px;
+  padding: 20px;
 }
 
 .deploymentPreflightSummary p {
-  color: #334155;
-  font-size: 12px;
-  line-height: 1.45;
+  color: var(--workspace-muted, #60646c);
+  font-size: 13px;
+  line-height: 1.5;
   margin: 0;
+  word-break: keep-all;
+}
+
+.deploymentGateHeader {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+
+.deploymentGateHeader > strong {
+  color: var(--workspace-text, #171717);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.deploymentGateBadge {
+  align-items: center;
+  background: var(--workspace-accent-soft, #f0f0f3);
+  border-radius: var(--radius-card);
+  color: var(--workspace-text, #171717);
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1.4;
+  padding: 4px 8px;
+}
+
+.deploymentPreflightSummary[data-level="high"] .deploymentGateBadge,
+.deploymentGateCard[data-level="high"] .deploymentGateBadge {
+  background: var(--color-error-surface);
+  color: var(--color-error);
+}
+
+.deploymentPreflightSummary[data-level="medium"] .deploymentGateBadge,
+.deploymentGateCard[data-level="medium"] .deploymentGateBadge {
+  background: var(--color-warning-surface);
+  color: var(--color-warning);
+}
+
+.deploymentPreflightSummary[data-level="low"] .deploymentGateBadge,
+.deploymentGateCard[data-level="low"] .deploymentGateBadge {
+  background: var(--color-success-surface);
+  color: var(--color-success);
 }
 
 .deploymentPreflightStats {
   display: grid;
-  gap: 6px;
+  gap: 8px;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   min-width: 0;
 }
 
 .deploymentPreflightStats span {
-  background: #ffffff;
-  border: 1px solid #dce3ee;
-  border-radius: 5px;
-  color: #64748b;
+  background: var(--workspace-surface-muted, #fafafa);
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  border-radius: var(--radius-control);
+  color: var(--workspace-muted, #60646c);
   display: grid;
-  font-size: 10.5px;
-  font-weight: 850;
-  gap: 2px;
+  font-size: 11px;
+  font-weight: 700;
+  gap: 4px;
   min-width: 0;
-  padding: 6px 7px;
+  padding: 12px 16px;
 }
 
 .deploymentPreflightStats strong {
-  color: #172033;
-  font-size: 14px;
-  line-height: 1;
+  color: var(--workspace-text, #171717);
+  font-size: 20px;
+  line-height: 1.2;
 }
 
 .deploymentPreflightFindings {
   display: grid;
-  gap: 6px;
+  gap: 12px;
   list-style: none;
   margin: 0;
   padding: 0;
 }
 
 .deploymentPreflightFindings > li {
-  align-items: start;
-  background: #ffffff;
-  border: 1px solid #e3e9f2;
-  border-left: 4px solid #f59e0b;
-  border-radius: 6px;
+  background: var(--workspace-surface, #ffffff);
+  border: 1px solid var(--workspace-line-strong, #dcdee0);
+  border-left: 4px solid var(--workspace-warning, #ab6400);
+  border-radius: var(--radius-card);
   display: grid;
-  gap: 5px;
-  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
   min-width: 0;
-  padding: 7px 8px;
+  padding: 16px;
 }
 
 .deploymentPreflightFindings > li[data-severity="high"] {
-  border-left-color: #dc2626;
+  border-left-color: var(--workspace-error, #eb8e90);
 }
 
 .deploymentPreflightFindings > li[data-severity="medium"] {
-  border-left-color: #f59e0b;
+  border-left-color: var(--workspace-warning, #ab6400);
 }
 
 .deploymentPreflightFindings > li[data-severity="low"] {
-  border-left-color: #16a34a;
+  border-left-color: var(--workspace-success, #16a34a);
 }
 
-.deploymentPreflightFindings > li > span {
-  color: #9a3412;
-  font-size: 10px;
-  font-weight: 950;
+.deploymentFindingHeader {
+  align-items: flex-start;
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+
+.deploymentFindingHeader > span {
+  background: var(--color-warning-surface);
+  border-radius: var(--radius-card);
+  color: var(--color-warning);
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
   line-height: 1.4;
+  padding: 4px 8px;
 }
 
-.deploymentPreflightFindings > li[data-severity="high"] > span {
-  color: #b91c1c;
+.deploymentPreflightFindings > li[data-severity="high"] .deploymentFindingHeader > span {
+  background: var(--color-error-surface);
+  color: var(--color-error);
 }
 
-.deploymentPreflightFindings > li[data-severity="medium"] > span {
-  color: #9a3412;
+.deploymentPreflightFindings > li[data-severity="medium"] .deploymentFindingHeader > span {
+  background: var(--color-warning-surface);
+  color: var(--color-warning);
 }
 
-.deploymentPreflightFindings > li[data-severity="low"] > span {
-  color: #15803d;
+.deploymentPreflightFindings > li[data-severity="low"] .deploymentFindingHeader > span {
+  background: var(--color-success-surface);
+  color: var(--color-success);
 }
 
-.deploymentPreflightFindings > li > strong {
-  color: #172033;
+.deploymentFindingHeader > strong {
+  color: var(--workspace-text, #171717);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.45;
+  min-width: 0;
+  word-break: keep-all;
+}
+
+.deploymentFindingMeta {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  min-width: 0;
+}
+
+.deploymentFindingMeta > em {
+  color: var(--workspace-muted, #60646c);
+  font-family: Inter, Geist, sans-serif;
   font-size: 12px;
-  line-height: 1.35;
+  font-weight: 500;
+  font-style: normal;
   overflow-wrap: anywhere;
 }
 
-.deploymentPreflightFindings > li > em {
-  color: #64748b;
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  font-size: 10.5px;
-  font-style: normal;
-  grid-column: 2;
-  overflow-wrap: anywhere;
+.deploymentFindingActions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
 }
 
 .deploymentPreflightAiList {
@@ -3898,21 +4296,22 @@
 }
 
 .deploymentFindingAiExplanation {
-  background: #f8fafc;
-  border: 1px solid #dce3ee;
-  border-radius: 5px;
+  background: var(--workspace-surface-muted, #fafafa);
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  border-radius: var(--radius-control);
   display: grid;
-  gap: 7px;
-  grid-column: 1 / -1;
-  padding: 8px;
+  flex: 1 0 100%;
+  gap: 12px;
+  padding: 16px;
 }
 
 .deploymentFindingAiExplanation p {
-  color: #334155;
-  font-size: 11.5px;
-  font-weight: 750;
-  line-height: 1.45;
+  color: var(--workspace-muted, #60646c);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.5;
   margin: 0;
+  word-break: keep-all;
 }
 
 .deploymentFindingAiExplanation dl {
@@ -3956,48 +4355,44 @@
 
 .deploymentFindingFixButton {
   align-items: center;
-  background: #ffffff;
-  border: 1px solid #cbd5e1;
-  border-radius: 5px;
-  color: #243044;
+  background: var(--workspace-surface, #ffffff);
+  border: 1px solid var(--workspace-line-strong, #dcdee0);
+  border-radius: var(--radius-control);
+  color: var(--workspace-text, #171717);
   cursor: pointer;
   display: inline-flex;
   font: inherit;
-  font-size: 11px;
-  font-weight: 850;
-  gap: 4px;
-  grid-column: 2;
-  justify-self: start;
-  min-height: 26px;
-  padding: 0 8px;
+  font-size: 14px;
+  font-weight: 700;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 16px;
 }
 
 .deploymentFindingAiButton {
-  background: transparent;
-  border: 0;
-  color: #334155;
+  background: var(--workspace-surface, #ffffff);
+  border: 1px solid var(--workspace-line-strong, #dcdee0);
+  border-radius: var(--radius-control);
+  color: var(--workspace-text, #171717);
   cursor: pointer;
   font: inherit;
-  font-size: 11px;
-  font-weight: 850;
-  grid-column: 2;
-  justify-self: start;
-  padding: 2px 0;
-  text-decoration: underline;
-  text-underline-offset: 3px;
+  font-size: 14px;
+  font-weight: 700;
+  min-height: 40px;
+  padding: 0 16px;
 }
 
 .deploymentFindingAiButton:hover,
 .deploymentFindingAiButton:focus-visible {
-  color: #1d4ed8;
+  background: var(--workspace-surface-muted, #fafafa);
+  border-color: var(--workspace-text, #171717);
   outline: none;
 }
 
 .deploymentFindingFixButton:hover,
 .deploymentFindingFixButton:focus-visible {
-  background: #eff6ff;
-  border-color: #93c5fd;
-  color: #1d4ed8;
+  background: var(--workspace-surface-muted, #fafafa);
+  border-color: var(--workspace-text, #171717);
   outline: none;
 }
 
@@ -5400,6 +5795,126 @@
   color: #ffffff;
 }
 
+.workspaceNotificationHost {
+  align-items: end;
+  bottom: 18px;
+  display: grid;
+  gap: 8px;
+  max-width: min(380px, calc(100vw - 32px));
+  position: fixed;
+  right: 18px;
+  z-index: 1200;
+}
+
+.workspaceNotificationHost > button {
+  background: var(--workspace-surface, #ffffff);
+  border: 1px solid var(--workspace-line-strong, #d8d8de);
+  border-radius: 999px;
+  color: var(--workspace-text, #171717);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  justify-self: end;
+  padding: 8px 12px;
+}
+
+.workspaceNotificationHost > p {
+  background: var(--workspace-surface, #ffffff);
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  border-radius: 8px;
+  color: var(--workspace-muted, #60646c);
+  font-size: 11px;
+  margin: 0;
+  padding: 8px 10px;
+}
+
+.workspaceNotificationHost ol {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.workspaceNotificationHost li {
+  background: var(--workspace-surface, #ffffff);
+  border: 1px solid var(--workspace-line-strong, #d8d8de);
+  border-left: 4px solid #16794b;
+  border-radius: 10px;
+  box-shadow: 0 12px 30px rgb(0 0 0 / 12%);
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+}
+
+.workspaceNotificationHost li[data-status="failed"] {
+  border-left-color: #c53b3b;
+}
+
+.workspaceNotificationHost li span {
+  color: var(--workspace-muted, #60646c);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.deploymentOutputLinks {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  margin-block: 12px;
+}
+
+.deploymentOutputLinks article {
+  background: var(--workspace-surface, #ffffff);
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  border-radius: 10px;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 14px;
+}
+
+.deploymentOutputLinks article > span:first-child {
+  color: var(--workspace-muted, #60646c);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.deploymentOutputLinks article > strong {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.deploymentOutputLinks article > div {
+  display: flex;
+  gap: 8px;
+}
+
+.deploymentOutputLinks a,
+.deploymentOutputLinks button {
+  align-items: center;
+  background: var(--workspace-surface, #ffffff);
+  border: 1px solid var(--workspace-line-strong, #d8d8de);
+  border-radius: 7px;
+  color: var(--workspace-text, #171717);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  min-height: 32px;
+  padding: 6px 10px;
+  text-decoration: none;
+}
+
+.deploymentOutputLinks article > span:last-child {
+  color: var(--workspace-muted, #60646c);
+  font-size: 10px;
+  min-height: 15px;
+}
+
 .aiSecondaryButton:not(:disabled):hover,
 .aiSecondaryButton:not(:disabled):focus-visible,
 .deploymentSecondaryButton:not(:disabled):hover,
@@ -5982,6 +6497,42 @@
 
 .liveObservationEvidenceRail [data-source="aws"] small {
   color: #475569;
+}
+
+.liveObservationLogs {
+  border-bottom: 1px solid var(--workspace-line, #f0f0f3);
+  padding: 10px 18px;
+}
+
+.liveObservationLogs summary {
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.liveObservationLogs ol {
+  display: grid;
+  gap: 6px;
+  list-style: none;
+  margin: 10px 0 0;
+  max-height: 180px;
+  overflow: auto;
+  padding: 0;
+}
+
+.liveObservationLogs li {
+  display: grid;
+  gap: 4px;
+}
+
+.liveObservationLogs time {
+  color: var(--workspace-muted, #60646c);
+  font-size: 10px;
+}
+
+.liveObservationLogs code {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 .liveObservationPressureTrack {

@@ -493,6 +493,12 @@ function createFakeGitHubAppClient(
     async applyRepositorySettings() {
       throw new Error("not used");
     },
+    async validateRepositoryBranch() {
+      throw new Error("not used");
+    },
+    async validateRepositoryDirectory() {
+      throw new Error("not used");
+    },
     async getLatestWorkflowRunForHeadSha() {
       throw new Error("not used");
     },

@@ -5,6 +5,18 @@
   color: #171717;
 }
 
+.authPageCentered {
+  display: grid;
+  min-height: 100svh;
+  align-items: safe center;
+  justify-items: center;
+  padding: 32px 0;
+}
+
+.authPageCentered .authLayout {
+  margin: 0;
+}
+
 .authTopbar {
   position: sticky;
   z-index: 20;
@@ -24,7 +36,7 @@
 .authBrand {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
   color: #171717;
   font-size: 18px;
   font-weight: 700;
@@ -38,7 +50,7 @@
   height: 24px;
   flex: 0 0 auto;
   object-fit: contain;
-  transform: translateY(-3px);
+  transform: translateY(-2px);
 }
 
 .authLayout {
@@ -47,6 +59,7 @@
   margin: 52px auto 80px;
   border-radius: 16px;
   padding: 48px;
+  padding-block: 32px;
   background: rgba(255, 255, 255, 0.96);
   box-shadow: var(--shadow-product);
   grid-template-columns: minmax(0, 1fr);
@@ -63,8 +76,12 @@
   min-width: 0;
 }
 
+.authPanelBrand {
+  margin-bottom: 24px;
+}
+
 .authIntro {
-  margin-bottom: 32px;
+  margin-bottom: 24px;
 }
 
 .authEyebrow {
@@ -84,6 +101,10 @@
   letter-spacing: 0;
 }
 
+.authIntro > h1:first-child {
+  margin-top: 0;
+}
+
 .authIntro > p:last-child:not(:first-child) {
   margin: 12px 0 0;
   color: #55585f;
@@ -94,6 +115,10 @@
 .authForm {
   display: grid;
   gap: 20px;
+}
+
+.authSignupForm {
+  gap: 8px;
 }
 
 .authPageWide .authForm {
@@ -337,8 +362,8 @@
 }
 
 .authSwitch {
-  margin-top: 24px;
-  padding-top: 20px;
+  margin-top: 16px;
+  padding-top: 12px;
   border-top: 1px solid #f0f0f3;
 }
 
@@ -350,17 +375,18 @@
   overflow-wrap: anywhere;
 }
 
+.authFieldFeedback {
+  display: grid;
+  min-height: 19px;
+  align-content: start;
+}
+
 .authWarningText {
   color: #8a4b08;
 }
 
 .authErrorText {
   color: #b42318;
-}
-
-.authInlineMessageStack {
-  display: grid;
-  gap: 4px;
 }
 
 .authMessage {
@@ -395,8 +421,8 @@
 .authConsentRow {
   display: flex;
   align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
+  justify-content: flex-start;
+  gap: 8px;
 }
 
 .authConsentViewButton {
@@ -525,6 +551,7 @@
   .authPageWide .authLayout {
     width: min(100% - 64px, 680px);
     padding: 40px;
+    padding-block: 32px;
     grid-template-columns: 1fr;
     gap: 40px;
   }
@@ -536,6 +563,10 @@
     padding-top: 8px;
   }
 
+  .authPageCentered {
+    padding: 16px 0;
+  }
+
   .authTopbar {
     top: 8px;
     width: calc(100% - 32px);
@@ -544,7 +575,7 @@
   }
 
   .authBrand {
-    gap: 8px;
+    gap: 7px;
     font-size: 16px;
   }
 
@@ -558,11 +589,12 @@
     width: calc(100% - 32px);
     margin: 32px auto 48px;
     padding: 28px 22px;
+    padding-block: 20px;
     gap: 32px;
   }
 
   .authIntro {
-    margin-bottom: 28px;
+    margin-bottom: 20px;
   }
 
   .authIntro h1 {

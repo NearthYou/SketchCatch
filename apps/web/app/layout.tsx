@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import "@xyflow/react/dist/style.css";
+import "pretendard/dist/web/static/pretendard-dynamic-subset.css";
 import "./globals.css";
 import "../components/auth/auth.css";
 import { AuthProvider } from "../components/auth/auth-provider";
+import { DeploymentNotificationCenter } from "../components/notifications/DeploymentNotificationCenter";
 
 export const metadata: Metadata = {
   title: "SketchCatch",
@@ -17,7 +19,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="ko">
       <body>
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+          <DeploymentNotificationCenter>{children}</DeploymentNotificationCenter>
+        </AuthProvider>
       </body>
     </html>
   );

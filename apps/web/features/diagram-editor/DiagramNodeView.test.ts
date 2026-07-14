@@ -11,6 +11,7 @@ const diagramEditorCssSource = readFileSync(
   fileURLToPath(new URL("./diagram-editor.module.css", import.meta.url)),
   "utf8"
 );
+const normalizedDiagramEditorCssSource = diagramEditorCssSource.replace(/\r\n?/gu, "\n");
 
 test("diagram node view is a memoized custom node renderer", () => {
   assert.match(diagramNodeViewSource, /import \{[^}]*memo[^}]*\} from "react"/);
@@ -499,6 +500,15 @@ test("diagram node view applies computed area border style through CSS variables
   );
 });
 
+test("Security Group scopes use a distinct translucent dashed presentation", () => {
+  const scopeBlock = getCssBlock(".nodeShellArea.nodeShellSecurityGroupScope");
+
+  assert.match(diagramNodeViewSource, /isSecurityGroupScopeNode/);
+  assert.match(diagramNodeViewSource, /styles\.nodeShellSecurityGroupScope/);
+  assert.match(scopeBlock, /--area-body-background:/);
+  assert.match(scopeBlock, /--area-border-width:\s*2px;/);
+});
+
 test("Area placement feedback uses a restrained purple target state without a reference badge", () => {
   const targetBlock = getCssBlock(".nodeShellArea.nodeShellAreaDropTarget");
 
@@ -525,15 +535,15 @@ function getCssBlock(selector: string): string {
 }
 
 function getCssRuleContaining(selector: string): string {
-  const selectorStart = diagramEditorCssSource.indexOf(selector);
+  const selectorStart = normalizedDiagramEditorCssSource.indexOf(selector);
 
   assert.notEqual(selectorStart, -1);
 
-  const blockStart = diagramEditorCssSource.indexOf("{", selectorStart);
-  const blockEnd = diagramEditorCssSource.indexOf("}", blockStart);
+  const blockStart = normalizedDiagramEditorCssSource.indexOf("{", selectorStart);
+  const blockEnd = normalizedDiagramEditorCssSource.indexOf("}", blockStart);
 
   assert.notEqual(blockStart, -1);
   assert.notEqual(blockEnd, -1);
 
-  return diagramEditorCssSource.slice(selectorStart, blockEnd + 1);
+  return normalizedDiagramEditorCssSource.slice(selectorStart, blockEnd + 1);
 }

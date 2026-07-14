@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { DiagramNode } from "../../../../packages/types/src";
+import type { DiagramNode, ResourceConfig } from "../../../../packages/types/src";
 import { terraformParameterCatalog } from "../parameter-input/catalog";
 import {
   finalizeDraggedNodes,
@@ -128,7 +128,7 @@ test("finalizeDraggedNodes updates containing Terraform references only after th
   assert.equal(subnet?.metadata?.parentAreaNodeId, "vpc-1");
 });
 
-test("finalizeDraggedNodes assigns children dropped inside an ASG area", () => {
+test("finalizeDraggedNodes does not assign children to an ASG Resource", () => {
   const nodes = [
     makeResourceNode({
       id: "asg-1",
@@ -160,7 +160,120 @@ test("finalizeDraggedNodes assigns children dropped inside an ASG area", () => {
   const instance = result.nodes.find((node) => node.id === "instance-1");
 
   assert.deepEqual(instance?.position, { x: 48, y: 36 });
-  assert.equal(instance?.metadata?.parentAreaNodeId, "asg-1");
+  assert.equal(instance?.metadata?.parentAreaNodeId, undefined);
+});
+
+test("finalizeDraggedNodes refits a Security Group scope after its referenced Resource moves", () => {
+  const securityGroup = makeResourceNode({
+    id: "security-group-1",
+    resourceName: "web",
+    resourceType: "aws_security_group",
+    width: 180,
+    height: 178,
+    x: 72,
+    y: 56
+  });
+  const instance = makeResourceNode({
+    id: "instance-1",
+    resourceName: "web",
+    resourceType: "aws_instance",
+    values: { vpcSecurityGroupIds: ["aws_security_group.web.id"] },
+    x: 100,
+    y: 100
+  });
+
+  const result = finalizeDraggedNodes({
+    anchorNodeId: instance.id,
+    catalog: terraformParameterCatalog,
+    currentNodes: [securityGroup, instance],
+    directlyMovedNodeIds: new Set([instance.id]),
+    positionByNodeId: new Map([[instance.id, { x: 220, y: 180 }]]),
+    snapGridSize: 1,
+    snapshotNodes: [securityGroup, instance]
+  });
+
+  const securityGroupAfter = result.nodes.find((node) => node.id === securityGroup.id);
+
+  assert.deepEqual(securityGroupAfter?.position, { x: 192, y: 136 });
+  assert.deepEqual(securityGroupAfter?.size, { width: 180, height: 178 });
+});
+
+test("finalizeDraggedNodes preserves a directly moved Security Group scope", () => {
+  const securityGroup = makeResourceNode({
+    id: "security-group-1",
+    resourceName: "web",
+    resourceType: "aws_security_group",
+    width: 180,
+    height: 178,
+    x: 72,
+    y: 56
+  });
+  const instance = makeResourceNode({
+    id: "instance-1",
+    resourceName: "web",
+    resourceType: "aws_instance",
+    values: { vpcSecurityGroupIds: ["aws_security_group.web.id"] },
+    x: 100,
+    y: 100
+  });
+
+  const result = finalizeDraggedNodes({
+    anchorNodeId: securityGroup.id,
+    catalog: terraformParameterCatalog,
+    currentNodes: [securityGroup, instance],
+    directlyMovedNodeIds: new Set([securityGroup.id]),
+    positionByNodeId: new Map([[securityGroup.id, { x: 20, y: 40 }]]),
+    snapGridSize: 1,
+    snapshotNodes: [securityGroup, instance]
+  });
+  const securityGroupAfter = result.nodes.find((node) => node.id === securityGroup.id);
+
+  assert.deepEqual(securityGroupAfter?.position, { x: 20, y: 40 });
+  assert.deepEqual(securityGroupAfter?.size, securityGroup.size);
+});
+
+test("finalizeDraggedNodes refits a stationary Security Group around an indirectly moved target", () => {
+  const subnet = makeResourceNode({
+    id: "subnet-1",
+    resourceName: "public",
+    resourceType: "aws_subnet",
+    width: 320,
+    height: 240,
+    x: 0,
+    y: 0
+  });
+  const securityGroup = makeResourceNode({
+    id: "security-group-1",
+    resourceName: "web",
+    resourceType: "aws_security_group",
+    width: 180,
+    height: 178,
+    x: 72,
+    y: 56
+  });
+  const instance = makeResourceNode({
+    id: "instance-1",
+    metadata: { parentAreaNodeId: subnet.id },
+    resourceName: "web",
+    resourceType: "aws_instance",
+    values: { vpcSecurityGroupIds: ["aws_security_group.web.id"] },
+    x: 100,
+    y: 100
+  });
+
+  const result = finalizeDraggedNodes({
+    anchorNodeId: subnet.id,
+    catalog: terraformParameterCatalog,
+    currentNodes: [subnet, securityGroup, instance],
+    directlyMovedNodeIds: new Set([subnet.id]),
+    positionByNodeId: new Map([[subnet.id, { x: 120, y: 80 }]]),
+    snapGridSize: 1,
+    snapshotNodes: [subnet, securityGroup, instance]
+  });
+  const securityGroupAfter = result.nodes.find((node) => node.id === securityGroup.id);
+
+  assert.deepEqual(securityGroupAfter?.position, { x: 192, y: 136 });
+  assert.deepEqual(securityGroupAfter?.size, { width: 180, height: 178 });
 });
 
 test("finalizeDraggedNodes stores a baseline and expands by 1.3 times the entered child size", () => {
@@ -391,12 +504,14 @@ test("finalizeDraggedNodes restores the previous parent baseline after its last 
   assert.equal(vpcAfter?.metadata?.areaAutoSizeBaseline, undefined);
 });
 
+/** Drag transaction fixture를 최소 Diagram Resource 형태로 만듭니다. */
 function makeResourceNode({
   height = 72,
   id,
   metadata,
   resourceName,
   resourceType,
+  values = {},
   width = 120,
   x,
   y
@@ -406,6 +521,7 @@ function makeResourceNode({
   metadata?: DiagramNode["metadata"];
   resourceName: string;
   resourceType: string;
+  values?: ResourceConfig;
   width?: number;
   x: number;
   y: number;
@@ -425,7 +541,7 @@ function makeResourceNode({
       resourceType,
       resourceName,
       fileName: "main",
-      values: {}
+      values
     }
   };
 }

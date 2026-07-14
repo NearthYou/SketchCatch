@@ -122,7 +122,7 @@ test("resourceCatalog sizes area defaults below the Region hierarchy root", () =
   assert.deepEqual(getResourceSize("aws_vpc"), { width: 240, height: 160 });
   assert.deepEqual(getResourceSize("aws_availability_zone"), { width: 220, height: 150 });
   assert.deepEqual(getResourceSize("design_group"), { width: 200, height: 130 });
-  assert.deepEqual(getResourceSize("aws_autoscaling_group"), { width: 200, height: 130 });
+  assert.deepEqual(getResourceSize("aws_autoscaling_group"), { width: 48, height: 48 });
   assert.deepEqual(getResourceSize("aws_subnet"), { width: 180, height: 120 });
   assert.deepEqual(getResourceSize("aws_security_group"), { width: 180, height: 120 });
 });
@@ -140,7 +140,7 @@ test("resourceCatalog exposes Region and AZ as board resource area items", () =>
   });
 });
 
-test("resourceCatalog exposes User / Client and Internet as board-only design items", () => {
+test("resourceCatalog exposes the reusable flow Design items with their real icons", () => {
   assert.deepEqual(getCatalogDefaults("design-user-client"), {
     type: "sketchcatch_user_client",
     label: "User / Client",
@@ -149,6 +149,11 @@ test("resourceCatalog exposes User / Client and Internet as board-only design it
   assert.deepEqual(getCatalogDefaults("design-internet"), {
     type: "sketchcatch_internet",
     label: "Internet",
+    size: { width: 48, height: 48 }
+  });
+  assert.deepEqual(getCatalogDefaults("design-source-repository"), {
+    type: "sketchcatch_source_repository",
+    label: "Source Repository",
     size: { width: 48, height: 48 }
   });
 
@@ -161,6 +166,12 @@ test("resourceCatalog exposes User / Client and Internet as board-only design it
   assert.equal(
     existsSync(
       `${publicDirectoryPath}/Resource-Icons_07312025/Res_General-Icons/Res_48_Light/Res_Internet_48_Light.svg`
+    ),
+    true
+  );
+  assert.equal(
+    existsSync(
+      `${publicDirectoryPath}/Resource-Icons_07312025/Res_General-Icons/Res_48_Light/Res_Git-Repository_48_Light.svg`
     ),
     true
   );

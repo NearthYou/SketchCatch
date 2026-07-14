@@ -173,6 +173,12 @@ test("GitHub App repository settings applier skips blank variables", async () =>
     },
     async listInstallations() {
       throw new Error("not used");
+    },
+    async validateRepositoryBranch() {
+      throw new Error("not used");
+    },
+    async validateRepositoryDirectory() {
+      throw new Error("not used");
     }
   } satisfies GitHubAppClient);
 

@@ -54,6 +54,7 @@ const TERRAFORM_NESTED_BLOCK_ATTRIBUTES: Record<string, ReadonlySet<string>> = {
     "loadBalancer",
     "networkConfiguration"
   ]),
+  aws_ecr_repository: new Set(["imageScanningConfiguration"]),
   aws_instance: new Set(["rootBlockDevice"]),
   aws_lambda_function: new Set(["environment"]),
   aws_launch_template: new Set([
@@ -80,8 +81,9 @@ const TERRAFORM_NESTED_BLOCK_ATTRIBUTES: Record<string, ReadonlySet<string>> = {
 
 const TERRAFORM_NESTED_BLOCK_ATTRIBUTES_BY_PATH: Record<string, ReadonlySet<string>> = {
   "aws_autoscaling_policy.targetTrackingConfiguration": new Set(["predefinedMetricSpecification"]),
-  "aws_cloudfront_distribution.origin": new Set(["customOriginConfig"]),
-  "aws_cloudfront_distribution.restrictions": new Set(["geoRestriction"])
+  "aws_cloudfront_distribution.origin": new Set(["customOriginConfig", "s3OriginConfig"]),
+  "aws_cloudfront_distribution.restrictions": new Set(["geoRestriction"]),
+  "kubernetes_deployment.spec": new Set(["selector"])
 };
 
 const TERRAFORM_SINGLE_NESTED_BLOCK_ATTRIBUTES: Record<string, ReadonlySet<string>> = {
@@ -91,6 +93,7 @@ const TERRAFORM_SINGLE_NESTED_BLOCK_ATTRIBUTES: Record<string, ReadonlySet<strin
 const GENERIC_TERRAFORM_NESTED_BLOCKS = new Set([
   "container",
   "cookies",
+  "customOriginConfig",
   "forwardedValues",
   "geoRestriction",
   "loadBalancer",
@@ -98,7 +101,6 @@ const GENERIC_TERRAFORM_NESTED_BLOCKS = new Set([
   "networkConfiguration",
   "port",
   "predefinedMetricSpecification",
-  "selector",
   "spec",
   "template"
 ]);

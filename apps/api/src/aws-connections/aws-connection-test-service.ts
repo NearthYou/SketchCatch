@@ -29,6 +29,7 @@ export type AwsConnectionStsGateway = {
     externalId?: string;
     region: string;
     roleSessionName: string;
+    abortSignal?: AbortSignal;
   }): Promise<AwsTemporaryCredentials>;
   getCallerIdentity(input: {
     region: string;
@@ -173,7 +174,8 @@ export function createAwsSdkStsGateway(): AwsConnectionStsGateway {
           ExternalId: input.externalId,
           RoleSessionName: input.roleSessionName,
           DurationSeconds: assumeRoleDurationSeconds
-        })
+        }),
+        input.abortSignal ? { abortSignal: input.abortSignal } : undefined
       );
       const credentials = result.Credentials;
 

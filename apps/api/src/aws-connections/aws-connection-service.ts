@@ -24,6 +24,29 @@ export const recommendedAwsConnectionRoleName = "SketchCatchTerraformExecutionRo
 const callerAssumeRolePolicyName = "SketchCatchAssumeTerraformExecutionRole";
 const defaultCloudFormationTemplateTokenTtlMs = 60 * 60 * 1000;
 const awsConnectionRoleNameSuffixLength = 8;
+const terraformFargateServiceActions = [
+  "ecs:*",
+  "ecr:*",
+  "elasticloadbalancing:*",
+  "cloudfront:*",
+  "logs:*"
+] as const;
+const terraformFargateIamActions = [
+  "iam:CreateRole",
+  "iam:DeleteRole",
+  "iam:GetRole",
+  "iam:UpdateAssumeRolePolicy",
+  "iam:TagRole",
+  "iam:UntagRole",
+  "iam:ListRoleTags",
+  "iam:ListRolePolicies",
+  "iam:ListAttachedRolePolicies",
+  "iam:ListInstanceProfilesForRole",
+  "iam:AttachRolePolicy",
+  "iam:DetachRolePolicy",
+  "iam:PassRole",
+  "iam:CreateServiceLinkedRole"
+] as const;
 
 export type AwsConnectionRetentionPolicy = {
   maxUnverifiedConnectionsPerUser: number;
@@ -717,6 +740,16 @@ function createTerraformApplyPolicyDocument(): Record<string, unknown> {
       },
       {
         Effect: "Allow",
+        Action: terraformFargateServiceActions,
+        Resource: "*"
+      },
+      {
+        Effect: "Allow",
+        Action: terraformFargateIamActions,
+        Resource: "*"
+      },
+      {
+        Effect: "Allow",
         Action: [
           "ce:GetCostAndUsage",
           "ce:GetDimensionValues",
@@ -725,8 +758,11 @@ function createTerraformApplyPolicyDocument(): Record<string, unknown> {
           "ec2:DescribeInstances",
           "elasticloadbalancing:DescribeLoadBalancers",
           "elasticloadbalancing:DescribeTargetGroups",
+          "elasticloadbalancing:DescribeTargetHealth",
           "cloudwatch:GetMetricData",
-          "cloudwatch:GetMetricStatistics"
+          "cloudwatch:GetMetricStatistics",
+          "ecs:DescribeServices",
+          "logs:FilterLogEvents"
         ],
         Resource: "*"
       }
@@ -896,6 +932,14 @@ function createAwsConnectionCloudFormationTemplateBody(input: {
     '            Resource: "*"',
     "          - Effect: Allow",
     "            Action:",
+    ...terraformFargateServiceActions.map((action) => `              - ${action}`),
+    '            Resource: "*"',
+    "          - Effect: Allow",
+    "            Action:",
+    ...terraformFargateIamActions.map((action) => `              - ${action}`),
+    '            Resource: "*"',
+    "          - Effect: Allow",
+    "            Action:",
     "              - ce:GetCostAndUsage",
     "              - ce:GetDimensionValues",
     "              - autoscaling:DescribeAutoScalingGroups",
@@ -903,8 +947,11 @@ function createAwsConnectionCloudFormationTemplateBody(input: {
     "              - ec2:DescribeInstances",
     "              - elasticloadbalancing:DescribeLoadBalancers",
     "              - elasticloadbalancing:DescribeTargetGroups",
+    "              - elasticloadbalancing:DescribeTargetHealth",
     "              - cloudwatch:GetMetricData",
     "              - cloudwatch:GetMetricStatistics",
+    "              - ecs:DescribeServices",
+    "              - logs:FilterLogEvents",
     '            Resource: "*"',
     "Outputs:",
     "  RoleArn:",

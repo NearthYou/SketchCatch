@@ -1,0 +1,94 @@
+.page {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  background: #f7f8fa;
+  color: #171717;
+}
+
+.panel {
+  width: min(100%, 520px);
+  padding: 32px;
+  border: 1px solid #dcdee0;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 18px 48px rgba(23, 23, 23, 0.08);
+}
+
+.kicker {
+  margin: 0 0 8px;
+  color: #0d74ce;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.panel h1 {
+  margin: 0;
+  font-size: 30px;
+  line-height: 1.25;
+}
+
+.copy {
+  margin: 14px 0 24px;
+  color: #60646c;
+  line-height: 1.65;
+}
+
+.button {
+  width: 100%;
+  min-height: 54px;
+  border: 1px solid #171717;
+  border-radius: 8px;
+  background: #171717;
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+
+.button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.status {
+  min-height: 48px;
+  margin: 18px 0 0;
+  color: #60646c;
+  line-height: 1.5;
+}
+
+.status[data-state="success"] {
+  color: #0f7b46;
+}
+
+.status[data-state="error"],
+.status[data-state="expired"],
+.status[data-state="rate_limited"] {
+  color: #b42318;
+}
+
+@media (max-width: 520px) {
+  .page {
+    place-items: stretch;
+    padding: 18px;
+  }
+
+  .panel {
+    align-self: center;
+    box-sizing: border-box;
+    padding: 24px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .button {
+    transition: none;
+  }
+}

@@ -1,9 +1,16 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { CostProjectUsage, CostResourceUsage, CostServiceUsage } from "@sketchcatch/types";
+import type {
+  CostProjectUsage,
+  CostResourceUsage,
+  CostServiceUsage,
+  CostUsageMonthlyComparison
+} from "@sketchcatch/types";
 import {
   COST_USAGE_ALL_PROJECTS_KEY,
   createScopedCostUsageDailyTrend,
+  createScopedCostUsageMonthlyComparison,
+  createScopedCostUsageMonthlyTrend,
   createScopedCostUsageServiceCosts,
   createCostUsageProjectOptions,
   getCostUsageProjectIdFromKey,
@@ -85,6 +92,91 @@ test("createScopedCostUsageDailyTrend scales the account trend for a selected pr
   );
 });
 
+test("monthly project view scales values and marks allocated points as estimated", () => {
+  const monthlyComparison: CostUsageMonthlyComparison = {
+    currentMonthForecast: { amount: 80, currency: "USD" },
+    currentMonthToDate: { amount: 40, currency: "USD" },
+    forecastChangeAmount: { amount: -20, currency: "USD" },
+    forecastChangePercentage: -20,
+    previousMonthActual: { amount: 100, currency: "USD" }
+  };
+
+  assert.deepEqual(
+    createScopedCostUsageMonthlyTrend({
+      monthlyTrend: [
+        { amount: 100, isEstimated: false, isPartial: false, month: "2026-06" },
+        { amount: 40, isEstimated: false, isPartial: true, month: "2026-07" }
+      ],
+      selectedProject: projectCosts[0]!,
+      totalCostAmount: 40
+    }),
+    [
+      { amount: 60.5, isEstimated: true, isPartial: false, month: "2026-06" },
+      { amount: 24.2, isEstimated: true, isPartial: true, month: "2026-07" }
+    ]
+  );
+  assert.deepEqual(
+    createScopedCostUsageMonthlyComparison({
+      generatedAt: "2026-07-07T12:00:00.000Z",
+      monthlyComparison,
+      selectedProject: projectCosts[0]!,
+      totalCostAmount: 40
+    }),
+    {
+      currentMonthForecast: { amount: 48.4, currency: "USD" },
+      currentMonthToDate: { amount: 24.2, currency: "USD" },
+      forecastChangeAmount: { amount: -12.1, currency: "USD" },
+      forecastChangePercentage: -20,
+      previousMonthActual: { amount: 60.5, currency: "USD" }
+    }
+  );
+});
+
+test("monthly project view keeps tagged project actual costs when available", () => {
+  const taggedMonthlyTrend = [
+    { amount: 18.4, isEstimated: false, isPartial: false, month: "2026-06" },
+    { amount: 4.2, isEstimated: false, isPartial: true, month: "2026-07" }
+  ];
+
+  assert.deepEqual(
+    createScopedCostUsageMonthlyTrend({
+      monthlyTrend: [],
+      selectedProject: {
+        ...projectCosts[0]!,
+        monthlyTrend: taggedMonthlyTrend,
+        source: "cost_explorer_tag"
+      },
+      totalCostAmount: 40
+    }),
+    taggedMonthlyTrend
+  );
+  assert.deepEqual(
+    createScopedCostUsageMonthlyComparison({
+      generatedAt: "2026-07-07T12:00:00.000Z",
+      monthlyComparison: {
+        currentMonthForecast: { amount: 200, currency: "USD" },
+        currentMonthToDate: { amount: 50, currency: "USD" },
+        forecastChangeAmount: { amount: 20, currency: "USD" },
+        forecastChangePercentage: 10,
+        previousMonthActual: { amount: 180, currency: "USD" }
+      },
+      selectedProject: {
+        ...projectCosts[0]!,
+        monthlyTrend: taggedMonthlyTrend,
+        source: "cost_explorer_tag"
+      },
+      totalCostAmount: 40
+    }),
+    {
+      currentMonthForecast: { amount: 18.6, currency: "USD" },
+      currentMonthToDate: { amount: 4.2, currency: "USD" },
+      forecastChangeAmount: { amount: 0.2, currency: "USD" },
+      forecastChangePercentage: 1.1,
+      previousMonthActual: { amount: 18.4, currency: "USD" }
+    }
+  );
+});
+
 test("selectCostUsageResourceCosts returns only resources for the selected project", () => {
   assert.deepEqual(
     selectCostUsageResourceCosts(
@@ -158,6 +250,7 @@ function createProjectUsage(
   overrides: Pick<CostProjectUsage, "amount" | "percentage" | "projectId" | "projectName">
 ): CostProjectUsage {
   return {
+    monthlyTrend: [],
     resourceCount: 3,
     source: "deployed_resource_estimate",
     ...overrides

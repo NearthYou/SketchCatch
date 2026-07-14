@@ -6,7 +6,16 @@ import { fileURLToPath } from "node:url";
 const componentSource = readWorkspaceFile("WorkspaceRightPanel.tsx");
 const aiChatDockSource = readWorkspaceFile("WorkspaceAiChatDock.tsx");
 const aiPanelSource = readWorkspaceFile("WorkspaceAiPanel.tsx");
-const deploymentPanelSource = readWorkspaceFile("DeploymentPanel.tsx");
+const deploymentShellSource = readWorkspaceFile("DeploymentConsoleShell.tsx");
+const directDeploymentSource = readWorkspaceFile("DirectDeploymentScreen.tsx");
+const cicdConsoleSource = readWorkspaceFile("CicdConsoleScreen.tsx");
+const deploymentPanelSource = [
+  readWorkspaceFile("DeploymentPanel.tsx"),
+  deploymentShellSource,
+  directDeploymentSource,
+  cicdConsoleSource,
+  readWorkspaceFile("CicdMonitoringSettings.tsx")
+].join("\n");
 const diagramEditorSource = readFeatureFile("../diagram-editor/DiagramEditor.tsx");
 const flowMappersSource = readFeatureFile("../diagram-editor/flow-mappers.ts");
 const resourceWorkspaceSource = readWorkspaceFile("ResourceWorkspacePanel.tsx");
@@ -97,6 +106,14 @@ test("workspace owners explicitly gate Deployment availability", () => {
   assert.match(projectDraftManagerSource, /deploymentAvailability="enabled"/);
   assert.match(componentSource, /deploymentAvailability=\{deploymentAvailability\}/);
   assert.match(deploymentPanelSource, /canLoadDeploymentData\(deploymentAvailability\)/);
+});
+
+test("Deployment context labels only Terraform-deployable board nodes as resources", () => {
+  assert.match(componentSource, /isTerraformDeployableNode/);
+  assert.match(componentSource, /deployableResourceCount=\{deployableResourceCount\}/);
+  assert.doesNotMatch(componentSource, /currentNodeCount=\{context\.nodes\.length\}/);
+  assert.match(deploymentPanelSource, /value=\{String\(deployableResourceCount\)\}/);
+  assert.doesNotMatch(deploymentPanelSource, /currentNodeCount|board nodes/);
 });
 
 test("right panel width stays locked after deployment leaves the panel", () => {
@@ -229,14 +246,14 @@ test("save confirmation stays inside compact workspace viewports", () => {
   );
 });
 
-test("mobile AI launcher stays above the canvas toolbar", () => {
+test("mobile AI launcher and canvas toolbar keep their compact placements", () => {
   assert.match(
     stylesSource,
     /@media\s*\(max-width:\s*640px\)[\s\S]*?\.aiChatLauncher,[\s\S]*?bottom:\s*76px;/
   );
   assert.match(
     diagramEditorStylesSource,
-    /@media\s*\(max-width:\s*640px\)[\s\S]*?\.canvasToolbar\s*{[\s\S]*?bottom:\s*10px;/
+    /@media\s*\(max-width:\s*640px\)[\s\S]*?\.canvasToolbar\s*{[^}]*left:\s*10px;[^}]*max-height:\s*calc\(100% - 20px\);/
   );
 });
 
@@ -419,24 +436,20 @@ test("deployment panel uses one primary scroll area without a mode switch", () =
 });
 
 test("deployment panel gates remote content behind explicit availability", () => {
-  const contentIndex = deploymentPanelSource.indexOf("const deploymentContent =");
-  const availabilityIndex = deploymentPanelSource.indexOf(
+  const contentIndex = directDeploymentSource.indexOf("const deploymentContent =");
+  const availabilityIndex = directDeploymentSource.indexOf(
     "canLoadDeploymentData(deploymentAvailability)",
     contentIndex
   );
-  const setupIndex = deploymentPanelSource.indexOf(
-    'deploymentConsoleTab === "direct" ? renderSetupSection()',
+  const setupIndex = directDeploymentSource.indexOf(
+    "{renderSetupSection()}",
     availabilityIndex
   );
-  const gitIndex = deploymentPanelSource.indexOf(
-    'deploymentConsoleTab === "git-cicd" ? renderGitCicdHandoffSection()',
+  const historyIndex = directDeploymentSource.indexOf(
+    "{renderHistoryView()}",
     setupIndex
   );
-  const historyIndex = deploymentPanelSource.indexOf(
-    'deploymentConsoleTab === "history" ? renderHistoryView()',
-    gitIndex
-  );
-  const projectGateIndex = deploymentPanelSource.indexOf(
+  const projectGateIndex = directDeploymentSource.indexOf(
     "프로젝트로 저장 후 배포할 수 있습니다",
     historyIndex
   );
@@ -444,10 +457,9 @@ test("deployment panel gates remote content behind explicit availability", () =>
   assert.notEqual(contentIndex, -1);
   assert.ok(availabilityIndex > contentIndex);
   assert.ok(setupIndex > availabilityIndex);
-  assert.ok(gitIndex > setupIndex);
-  assert.ok(historyIndex > gitIndex);
+  assert.ok(historyIndex > setupIndex);
   assert.ok(projectGateIndex > historyIndex);
-  assert.match(deploymentPanelSource, /className=\{styles\.deploymentPanelContent\}>\s*\{deploymentContent\}/);
+  assert.match(deploymentShellSource, /className=\{styles\.deploymentPanelContent\}>\{screenContent\}/);
   assert.doesNotMatch(deploymentPanelSource, /className=\{styles\.deploymentModeSwitch\}/);
 });
 
@@ -495,7 +507,7 @@ test("right panel exposes resources, terraform, and deploy while Issues live ins
   assert.doesNotMatch(stylesSource, /\.panelDeployButton\s*\{/);
 });
 
-test("simulation opens beside Deploy and remains available in the collapsed shortcut rail", () => {
+test("Live Observation opens beside Deploy and remains available in the collapsed shortcut rail", () => {
   const modeBarIndex = componentSource.indexOf("className={styles.rightPanelModeBar}");
   const modeBarEndIndex = componentSource.indexOf(
     "<div className={styles.rightPanelView}",
@@ -503,7 +515,7 @@ test("simulation opens beside Deploy and remains available in the collapsed shor
   );
   const modeBarSource = componentSource.slice(modeBarIndex, modeBarEndIndex);
   const deployIndex = modeBarSource.indexOf("<span>Deploy</span>");
-  const simulationIndex = modeBarSource.indexOf("<span>시뮬레이션</span>");
+  const observationIndex = modeBarSource.indexOf("<span>Live Observation</span>");
   const collapsedPanelIndex = componentSource.indexOf(
     '<aside className={styles.collapsedRightPanel}'
   );
@@ -514,12 +526,12 @@ test("simulation opens beside Deploy and remains available in the collapsed shor
   );
 
   assert.ok(deployIndex > -1);
-  assert.ok(simulationIndex > deployIndex);
+  assert.ok(observationIndex > deployIndex);
   assert.match(modeBarSource, /onClick=\{openLiveObservation\}/);
-  assert.match(collapsedPanelSource, /title="시뮬레이션"/);
+  assert.match(collapsedPanelSource, /title="Live Observation"/);
   assert.match(collapsedPanelSource, /onClick=\{openLiveObservation\}/);
   assert.match(componentSource, /<LiveObservationModal/);
-  assert.match(componentSource, /diagramJson=\{context\.diagram\}/);
+  assert.doesNotMatch(componentSource, /<LiveObservationModal[\s\S]{0,160}diagramJson=/);
   assert.match(componentSource, /projectId=\{projectId\}/);
 });
 
@@ -992,19 +1004,21 @@ test("terraform leave save ignores stale external save completions", () => {
   assert.match(terraformPanelSource, /onExternalSaveComplete\(saved, externalSaveRequestId\)/);
 });
 
-test("deployment screen separates Direct, Git CI/CD, and history into console tabs", () => {
-  const tabsRule = getCssRule(stylesSource, "deploymentConsoleTabs");
+test("deployment screen separates Direct Deployment and CI/CD into focused screens", () => {
+  const navigationRule = getCssRule(stylesSource, "deploymentConsoleScreenNavigation");
   const disclosureRule = getCssRule(stylesSource, "deploymentDisclosure");
   const logListRule = getCssRule(stylesSource, "deploymentLogList");
 
-  assert.match(deploymentPanelSource, /type DeploymentConsoleTab = "direct" \| "git-cicd" \| "history";/);
-  assert.match(deploymentPanelSource, /Direct Deployment/);
-  assert.match(deploymentPanelSource, /Git \/ CI·CD/);
-  assert.match(deploymentPanelSource, /배포 기록/);
-  assert.match(deploymentPanelSource, /deploymentConsoleTab === "direct"/);
-  assert.match(deploymentPanelSource, /deploymentConsoleTab === "git-cicd"/);
-  assert.match(deploymentPanelSource, /deploymentConsoleTab === "history"/);
-  assert.match(tabsRule, /\bborder-bottom:\s*1px solid var\(--workspace-line,/);
+  assert.match(deploymentShellSource, /type DeploymentConsoleScreen = "deployment" \| "cicd";/);
+  assert.match(deploymentShellSource, />\s*배포\s*</);
+  assert.match(deploymentShellSource, />\s*CI\/CD\s*</);
+  assert.match(deploymentShellSource, /aria-pressed=\{activeScreen === "deployment"\}/);
+  assert.match(deploymentShellSource, /aria-pressed=\{activeScreen === "cicd"\}/);
+  assert.match(directDeploymentSource, /Deployment History/);
+  assert.match(directDeploymentSource, /Application releases/);
+  assert.match(cicdConsoleSource, /"activity" \| "logs"/);
+  assert.doesNotMatch(cicdConsoleSource, /CicdOverviewView|CicdMonitoringSettings/);
+  assert.match(navigationRule, /\bborder:\s*1px solid var\(--workspace-line,/);
   assert.match(disclosureRule, /\bborder:\s*1px solid #dce3ee;/);
   assert.match(logListRule, /\boverflow:\s*visible;/);
   assert.doesNotMatch(logListRule, /\bmax-height:/);
@@ -1039,21 +1053,20 @@ test("deployment expanded overlay sits above the floating AI dock and blocks low
     expandedOverlayZIndex > floatingPanelSlotZIndex,
     `Expected deployment overlay z-index ${expandedOverlayZIndex} to exceed floating AI slot ${floatingPanelSlotZIndex}`
   );
-  assert.match(deploymentPanelSource, /className=\{styles\.deploymentExpandedOverlay\}\s+onClick=\{\(event\) => \{/);
-  assert.match(deploymentPanelSource, /event\.target === event\.currentTarget/);
-  assert.match(deploymentPanelSource, /closeExpandedDeployment\(\)/);
-  assert.match(deploymentPanelSource, /className=\{styles\.deploymentExpandedShell\}/);
-  assert.match(deploymentPanelSource, /className=\{styles\.deploymentExpandedCloseButton\}/);
-  assert.match(deploymentPanelSource, /deploymentCloseButtonRef\.current\?\.focus\(\)/);
-  assert.match(deploymentPanelSource, /event\.key === "Escape"/);
-  assert.match(deploymentPanelSource, /event\.key !== "Tab"/);
-  assert.match(deploymentPanelSource, /deploymentDialogRef\.current\?\.querySelectorAll/);
-  assert.match(deploymentPanelSource, /"\[data-deployment-console-trigger\]"/);
+  assert.match(deploymentShellSource, /className=\{styles\.deploymentExpandedOverlay\}/);
+  assert.match(deploymentShellSource, /event\.target === event\.currentTarget/);
+  assert.match(deploymentShellSource, /className=\{styles\.deploymentExpandedShell\}/);
+  assert.match(deploymentShellSource, /className=\{styles\.deploymentExpandedCloseButton\}/);
+  assert.match(deploymentShellSource, /closeButtonRef\.current\?\.focus\(\)/);
+  assert.match(deploymentShellSource, /event\.key === "Escape"/);
+  assert.match(deploymentShellSource, /event\.key !== "Tab"/);
+  assert.match(deploymentShellSource, /dialogRef\.current\?\.querySelectorAll/);
+  assert.match(deploymentShellSource, /"\[data-deployment-console-trigger\]"/);
   assert.match(componentSource, /data-deployment-console-trigger/);
-  assert.match(deploymentPanelSource, /document\.body\.style\.overflow = "hidden"/);
-  assert.match(deploymentPanelSource, /className=\{styles\.deploymentExpandedTitleRow\}/);
-  assert.match(deploymentPanelSource, /<h2 className=\{styles\.deploymentExpandedTitle\}>배포 콘솔<\/h2>/);
-  assert.doesNotMatch(deploymentPanelSource, /className=\{styles\.deploymentExpandedHeader\}/);
+  assert.match(deploymentShellSource, /document\.body\.style\.overflow = "hidden"/);
+  assert.match(deploymentShellSource, /className=\{styles\.deploymentExpandedTitleRow\}/);
+  assert.match(deploymentShellSource, /<h2 className=\{styles\.deploymentExpandedTitle\}>배포 콘솔<\/h2>/);
+  assert.doesNotMatch(deploymentShellSource, /className=\{styles\.deploymentExpandedHeader\}/);
   assert.match(expandedOverlayRule, /\bpointer-events:\s*auto;/);
   assert.match(expandedShellRule, /\bposition:\s*relative;/);
   assert.match(expandedCloseButtonRule, /\bposition:\s*absolute;/);
@@ -1099,10 +1112,10 @@ test("deployment results render as compact rows instead of cards", () => {
 
 test("deployment creation prepares fresh snapshot and terraform artifact before creating the deployment", () => {
   const prepareIndex = deploymentPanelSource.indexOf(
-    "const savedArtifacts = await onPrepareDeploymentArtifacts();"
+    "preparedArtifacts = await onPrepareDeploymentArtifacts();"
   );
   const createDeploymentIndex = deploymentPanelSource.indexOf(
-    "const deployment = await createDeployment",
+    "const deployment = await prepareDeployment",
     prepareIndex
   );
 
@@ -1110,25 +1123,27 @@ test("deployment creation prepares fresh snapshot and terraform artifact before 
   assert.ok(createDeploymentIndex > prepareIndex);
   assert.match(deploymentPanelSource, /architectureId:\s*savedArtifacts\.architecture\.id/);
   assert.match(deploymentPanelSource, /terraformArtifactId:\s*savedArtifacts\.terraformArtifact\.id/);
+  assert.match(deploymentPanelSource, /draftRevision:\s*savedArtifacts\.preparedDraftRevision/);
+  assert.match(componentSource, /requireSavedProjectDraftRevision\(saveResult\)/);
   assert.match(componentSource, /ref=\{terraformPanelRef\}/);
   assert.match(componentSource, /onPrepareDeploymentArtifacts=\{prepareDeploymentArtifacts\}/);
 });
 
 test("GitHub repository setup is owned by project settings, not the deployment panel", () => {
-  assert.match(deploymentPanelSource, /projectGithubSettingsHref/);
+  assert.match(cicdConsoleSource, /settingsHref/);
   assert.match(
-    deploymentPanelSource,
+    cicdConsoleSource,
     /\/dashboard\/projects\/\$\{encodeURIComponent\(projectId\)\}\/settings\?tab=github/
   );
-  assert.match(deploymentPanelSource, /createGitCicdAutoDeployHandoff/);
-  assert.match(deploymentPanelSource, /activeGitHubSourceRepository/);
+  assert.doesNotMatch(directDeploymentSource, /createGitCicdAutoDeployHandoff/);
+  assert.match(cicdConsoleSource, /item\.provider === "github"/);
   assert.doesNotMatch(deploymentPanelSource, /function startGitHubConnection/);
   assert.doesNotMatch(deploymentPanelSource, /renderGitHubRepositoryChooser/);
   assert.doesNotMatch(deploymentPanelSource, /listGitHubInstalledRepositories/);
   assert.doesNotMatch(deploymentPanelSource, /createGitHubSourceRepositoryInstallUrl/);
 });
 
-test("deployment setup exposes a five-step Direct Deployment console", () => {
+test("deployment setup exposes a three-stage Direct Deployment console", () => {
   const consoleGridRule = getCssRule(stylesSource, "deploymentConsoleGrid");
   const stepNavigationRule = getCssRule(stylesSource, "deploymentStepNavigation");
   const stepWorkspaceRule = getCssRule(stylesSource, "deploymentStepWorkspace");
@@ -1143,38 +1158,22 @@ test("deployment setup exposes a five-step Direct Deployment console", () => {
     '.deploymentStepButton[data-state="blocked"] .deploymentStepIndex',
     0
   );
-  const saveIndex = deploymentPanelSource.indexOf("<h3>변경사항 저장</h3>");
-  const preflightIndex = deploymentPanelSource.indexOf("<h3>배포 전 검사</h3>", saveIndex);
-  const planIndex = deploymentPanelSource.indexOf("<h3>Plan 생성</h3>", preflightIndex);
-  const approvalIndex = deploymentPanelSource.indexOf("<h3>Plan 승인</h3>", planIndex);
-  const applyIndex = deploymentPanelSource.indexOf("<h3>Apply 실행</h3>", approvalIndex);
+  const validationIndex = directDeploymentSource.indexOf('stepId === "validation"');
+  const approvalIndex = directDeploymentSource.indexOf('stepId === "approval"', validationIndex);
 
-  assert.ok(saveIndex > -1);
-  assert.ok(preflightIndex > saveIndex);
-  assert.ok(planIndex > preflightIndex);
-  assert.ok(approvalIndex > planIndex);
-  assert.ok(applyIndex > approvalIndex);
+  assert.ok(validationIndex > -1);
+  assert.ok(approvalIndex > validationIndex);
+  assert.match(directDeploymentSource, /useState<DirectDeploymentStepId>\("validation"\)/);
   assert.match(deploymentPanelSource, /getDirectDeploymentFlow/);
   assert.match(deploymentPanelSource, /directDeploymentFlow\.steps\.map/);
   assert.match(deploymentPanelSource, /setSelectedDirectStepId\(step\.id\)/);
-  assert.match(
-    deploymentPanelSource,
-    /aria-current=\{step\.id === directDeploymentFlow\.activeStepId \? "step" : undefined\}/
-  );
-  assert.match(deploymentPanelSource, /disabled=\{step\.state === "idle"\}/);
-  assert.match(deploymentPanelSource, /검사 전 상태는 실패가 아닙니다/);
-  assert.match(deploymentPanelSource, /Plan은 AWS 리소스를 변경하지 않습니다/);
-  assert.match(deploymentPanelSource, /승인 snapshot이 Apply 직전에 다시 검증됩니다/);
-  assert.match(deploymentPanelSource, /Apply 실행 검토/);
+  assert.match(deploymentPanelSource, /selectedScope/);
+  assert.match(deploymentPanelSource, /Plan 생성/);
+  assert.match(deploymentPanelSource, /배포 실행 검토/);
   assert.match(deploymentPanelSource, /Destroy Plan 생성/);
-  assert.match(deploymentPanelSource, /Destroy 실행 검토/);
+  assert.match(deploymentPanelSource, /Prepared snapshot/);
   assert.match(deploymentPanelSource, /className=\{styles\.deploymentContextPanel\}/);
-  assert.match(deploymentPanelSource, /aria-controls="deployment-console-view"/);
-  assert.match(deploymentPanelSource, /event\.key !== "ArrowLeft" && event\.key !== "ArrowRight"/);
-  assert.match(deploymentPanelSource, /tabIndex=\{deploymentConsoleTab === tab \? 0 : -1\}/);
-  assert.match(deploymentPanelSource, /AWS account/);
-  assert.match(deploymentPanelSource, /Terraform artifact/);
-  assert.match(deploymentPanelSource, /Architecture/);
+  assert.doesNotMatch(directDeploymentSource, /deploymentConsoleTab/);
   assert.match(consoleGridRule, /grid-template-columns:\s*224px minmax\(420px,\s*1fr\) 294px;/);
   assert.match(stepNavigationRule, /\bborder-right:\s*1px solid var\(--workspace-line,/);
   assert.match(stepWorkspaceRule, /\bbackground:\s*var\(--workspace-surface,/);
@@ -1192,31 +1191,46 @@ test("deployment setup exposes a five-step Direct Deployment console", () => {
     stylesSource,
     /@media \(max-width: 720px\)[\s\S]*?\.deploymentStepNavigation ol\s*\{[\s\S]*?display:\s*flex;/
   );
-  assert.doesNotMatch(deploymentPanelSource, /DeploymentWizardStep/);
-  assert.doesNotMatch(deploymentPanelSource, /startPrimaryDeploymentStep/);
 });
-test("Git CI/CD handoff actions use user-facing labels and helper text", () => {
-  const actionGroupRule = getCssRule(stylesSource, "deploymentActionGroup");
-  const actionItemRule = getCssRule(stylesSource, "deploymentActionItem");
 
-  assert.match(deploymentPanelSource, /GitHub 저장소 준비 적용/);
-  assert.match(deploymentPanelSource, /Workflow와 Actions variable을 repository에 설정합니다\./);
-  assert.match(deploymentPanelSource, /AWS 실행 Role 연결 적용/);
-  assert.match(deploymentPanelSource, /GitHub Actions가 승인된 AWS Role을 사용할 수 있게 연결합니다\./);
-  assert.match(deploymentPanelSource, /프로젝트 GitHub 설정 열기/);
-  assert.match(deploymentPanelSource, /임시 OAuth 승인/);
-  assert.match(deploymentPanelSource, /OAuth로 저장소 준비 적용/);
-  assert.match(deploymentPanelSource, /GitHub 저장소 준비/);
-  assert.match(deploymentPanelSource, /AWS 실행 Role 연결/);
+test("deployment action icons stay compact inside their buttons", () => {
+  assert.match(
+    stylesSource,
+    /\.deploymentPrimaryButton svg,[\s\S]*?\.deploymentDangerButton svg\s*\{[^}]*\bheight:\s*16px;[^}]*\bwidth:\s*16px;/
+  );
+});
 
-  assert.doesNotMatch(deploymentPanelSource, /Repo settings 적용/);
-  assert.doesNotMatch(deploymentPanelSource, /AWS role diff 적용/);
-  assert.doesNotMatch(deploymentPanelSource, /GitHub App 권한 보강/);
-  assert.doesNotMatch(deploymentPanelSource, /GitHub OAuth 승인/);
-  assert.doesNotMatch(deploymentPanelSource, /OAuth 설정 적용/);
+test("deployment preflight keeps its heading and findings in one readable flow", () => {
+  const stageSettingsRule = getCssRule(stylesSource, "deploymentStageSettings");
+  const preflightSummaryRule = getCssRule(stylesSource, "deploymentPreflightSummary");
+  const gateHeaderRule = getCssRule(stylesSource, "deploymentGateHeader");
+  const findingHeaderRule = getCssRule(stylesSource, "deploymentFindingHeader");
 
-  assert.match(actionGroupRule, /grid-template-columns:\s*repeat\(auto-fit,\s*minmax\(220px,\s*1fr\)\);/);
-  assert.match(actionItemRule, /\bdisplay:\s*grid;/);
+  assert.doesNotMatch(stageSettingsRule, /\bgrid-column:/);
+  assert.doesNotMatch(stageSettingsRule, /\bgrid-row:/);
+  assert.match(preflightSummaryRule, /\bborder-radius:\s*var\(--radius-card\);/);
+  assert.match(preflightSummaryRule, /\bpadding:\s*20px;/);
+  assert.match(gateHeaderRule, /\bdisplay:\s*flex;/);
+  assert.match(gateHeaderRule, /\bgap:\s*8px;/);
+  assert.match(findingHeaderRule, /\bdisplay:\s*flex;/);
+  assert.match(directDeploymentSource, /className=\{styles\.deploymentFindingHeader\}/);
+  assert.match(directDeploymentSource, /className=\{styles\.deploymentFindingMeta\}/);
+  assert.match(directDeploymentSource, /className=\{styles\.deploymentFindingActions\}/);
+  assert.match(directDeploymentSource, /배포 안전성 검사 결과/);
+  assert.match(directDeploymentSource, /발견 항목/);
+});
+
+test("CI/CD settings require explicit monitored paths and user acceptance", () => {
+  const settingsSource = readWorkspaceFile("CicdMonitoringSettings.tsx");
+
+  assert.match(settingsSource, /저장소 루트/);
+  assert.match(settingsSource, /하위 디렉터리/);
+  assert.match(settingsSource, /애플리케이션 경로/);
+  assert.match(settingsSource, /인프라 경로/);
+  assert.match(settingsSource, /isCicdMonitoringDraftComplete\(draft\)/);
+  assert.match(settingsSource, /userAcceptedChangeId: `cicd-monitoring-\$\{crypto\.randomUUID\(\)\}`/);
+  assert.match(cicdConsoleSource, /GitHub 권한을 확인해 주세요\./);
+  assert.match(cicdConsoleSource, /프로젝트 GitHub 설정 열기/);
 });
 
 test("deployment baseline save button shows pending and saved icons", () => {
@@ -1244,23 +1258,21 @@ test("pre-deployment check is owned by the deployment tab", () => {
   assert.match(deploymentPanelSource, /addTerraformDiagnosticsToPreDeploymentAnalysis/);
   assert.match(deploymentPanelSource, /createPreDeploymentAnalysisFromTerraformDiagnostics/);
   assert.match(deploymentPanelSource, /onValidateTerraformDiagnostics/);
-  assert.match(deploymentPanelSource, /onGetTerraformFiles/);
   assert.match(deploymentPanelSource, /await onValidateTerraformDiagnostics\(\)/);
   assert.match(deploymentPanelSource, /currentTerraformDiagnostics/);
   assert.match(deploymentPanelSource, /diagnostic\.severity === "error"/);
-  assert.match(deploymentPanelSource, /terraformFiles:\s*\[\.\.\.onGetTerraformFiles\(\)\]/);
+  assert.match(deploymentPanelSource, /terraformFiles:\s*\[\.\.\.preparedArtifacts\.terraformFiles\]/);
   assert.match(deploymentPanelSource, /createWorkspaceAiBoardSnapshot/);
   assert.match(componentSource, /diagramJson=\{context\.diagram\}/);
   assert.match(componentSource, /validateTerraformForPreDeployment/);
-  assert.match(componentSource, /getTerraformFilesForPreDeployment/);
-  assert.match(componentSource, /onGetTerraformFiles=\{getTerraformFilesForPreDeployment\}/);
+  assert.match(componentSource, /terraformFiles:\s*preparedSource\.terraformFiles/);
   assert.match(componentSource, /preDeploymentCheckState=\{preDeploymentCheckState\}/);
   assert.match(componentSource, /onPreDeploymentCheckStateChange=\{setPreDeploymentCheckState\}/);
   assert.match(componentSource, /validateCurrentTerraform/);
   assert.match(terraformPanelSource, /validateCurrentTerraform/);
   assert.doesNotMatch(aiChatDockSource, /runAiPreDeploymentCheck/);
   assert.doesNotMatch(aiChatDockSource, /WorkspaceAiPreDeploymentResult/);
-  assert.match(preflightSummaryRule, /\bgap:\s*8px;/);
+  assert.match(preflightSummaryRule, /\bgap:\s*16px;/);
   assert.doesNotMatch(preflightFindingsRule, /\bmax-height:/);
   assert.doesNotMatch(preflightFindingsRule, /\boverflow-y:\s*auto;/);
   assert.doesNotMatch(preflightFindingsRule, /\bscrollbar-gutter:/);
@@ -1322,7 +1334,7 @@ test("pre-deployment check only downgrades checklist failures backed exclusively
 test("pre-deployment finding fix buttons open the existing terraform source location handler", () => {
   assert.match(deploymentPanelSource, /onOpenFindingTerraformSource/);
   assert.match(deploymentPanelSource, /className=\{styles\.deploymentFindingFixButton\}/);
-  assert.match(deploymentPanelSource, /<Code2 size=\{13\} aria-hidden="true" \/>/);
+  assert.match(deploymentPanelSource, /<Code2 size=\{14\} aria-hidden="true" \/>/);
   assert.match(componentSource, /getPreDeploymentFindingTerraformSourceLocation/);
   assert.match(componentSource, /openPreDeploymentFindingTerraformSource/);
   assert.match(componentSource, /terraformPanelRef\.current\?\.getTerraformFiles\(\)/);
@@ -1566,19 +1578,15 @@ test("terraform preview explanation is triggered from the terraform code panel",
 
 test("terraform resource code mode keeps explanation but omits validation and deployment actions", () => {
   assert.match(terraformToolbarSource, /<TerraformExplanationButton actions=\{actions\} state=\{state\} \/>/);
-  assert.match(terraformToolbarSource, /<span>Preview 설명<\/span>/);
   assert.doesNotMatch(terraformPanelSource, /<span>Validate<\/span>/);
   assert.doesNotMatch(terraformPanelSource, />\s*Validate\s*<\/button>/);
-  assert.doesNotMatch(terraformPanelSource, /리소스 단위 plan API 연결 예정/);
-  assert.doesNotMatch(terraformPanelSource, /리소스 단위 apply API 연결 예정/);
-  assert.doesNotMatch(terraformPanelSource, /리소스 단위 destroy API 연결 예정/);
   assert.doesNotMatch(terraformPanelSource, /className=\{styles\.resourceActionPrimary\}/);
   assert.doesNotMatch(terraformPanelSource, /className=\{styles\.resourceActionDanger\}/);
   assert.doesNotMatch(stylesSource, /\.resourceActionPrimary\s*\{/);
   assert.doesNotMatch(stylesSource, /\.resourceActionDanger\s*\{/);
   assert.match(deploymentPanelSource, /Plan 생성/);
-  assert.match(deploymentPanelSource, /Apply 실행/);
-  assert.match(deploymentPanelSource, /Destroy 실행 검토/);
+  assert.match(deploymentPanelSource, /배포 실행/);
+  assert.match(deploymentPanelSource, /정리 실행/);
 });
 
 test("terraform panel does not expose a detached artifact save action", () => {

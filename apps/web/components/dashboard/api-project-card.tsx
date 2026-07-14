@@ -25,7 +25,9 @@ export function ApiProjectCard({
 }: ApiProjectCardProps) {
   const href = getWorkspaceHref(project);
   const className =
-    variant === "wide" ? "projectCard projectCardWide projectCardLink" : "projectCard projectCardLink";
+    variant === "wide"
+      ? "projectCard projectCardWide projectCardLink"
+      : "projectCard projectCardCompact projectCardLink";
   const uiStatus = getProjectUiStatus(project, timestampLabel);
   const cardContent = (
     <>
@@ -33,7 +35,9 @@ export function ApiProjectCard({
 
       <div className="projectCardBody">
         <div className="projectCardTitle">
-          <span className={`projectStatusBadge projectStatusBadge${uiStatus}`}>{uiStatus}</span>
+          {uiStatus !== "DRAFT" ? (
+            <span className={`projectStatusBadge projectStatusBadge${uiStatus}`}>{uiStatus}</span>
+          ) : null}
           <h3>{project.name}</h3>
         </div>
         {project.description?.trim() ? <p>{project.description}</p> : null}
@@ -41,7 +45,9 @@ export function ApiProjectCard({
         <div className="projectCardMeta">
           <span>
             <DashboardIcon name="clock" />
-            {timestampLabel}: {formatProjectDate(timestampValue)}
+            <time className="projectCardTimestamp" dateTime={timestampValue}>
+              {timestampLabel} {formatProjectDate(timestampValue)}
+            </time>
           </span>
         </div>
       </div>

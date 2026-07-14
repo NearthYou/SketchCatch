@@ -1,5 +1,6 @@
 ﻿import { relations, sql } from "drizzle-orm";
 import {
+  type AnyPgColumn,
   boolean,
   check,
   index,
@@ -13,7 +14,14 @@ import {
   varchar
 } from "drizzle-orm/pg-core";
 import type {
+  ApplicationReleaseProviderRevision,
+  ApplicationReleaseStatus,
   ArchitectureJson,
+  ConfirmedBuildConfig,
+  DeploymentScope,
+  DeploymentNotificationSource,
+  DeploymentNotificationStatus,
+  DeploymentSource,
   DeploymentLiveObservationManifestV2,
   DeploymentLiveProfile,
   DeploymentPlanSummary,
@@ -21,11 +29,20 @@ import type {
   GitCicdAwsRoleDiff,
   GitCicdDeploymentMode,
   GitCicdHandoffKind,
+  GitCicdMonitoredPath,
+  GitCicdMonitoringValidationStatus,
+  GitCicdPipelineChangeScope,
   GitCicdPipelineDetailStatus,
+  GitCicdPipelineRunStatus,
+  GitCicdPipelineStageKind,
+  GitCicdPipelineStageStatus,
   GitCicdRepositorySettingsPreview,
+  JsonValue,
+  ProjectDeploymentRuntimeConfig,
   RepositoryAnalysisAiHandoff,
   ReverseEngineeringResourceSelection,
   ReverseEngineeringScanResult,
+  RuntimeTargetKind,
   TerraformSyncFileInput
 } from "@sketchcatch/types";
 
@@ -453,6 +470,55 @@ export const reverseEngineeringScanLogs = pgTable(
   ]
 );
 
+export const projectDeploymentTargets = pgTable(
+  "project_deployment_targets",
+  {
+    projectId: varchar("project_id", { length: 36 })
+      .primaryKey()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    provider: varchar("provider", { length: 32 }).$type<"aws">().notNull().default("aws"),
+    connectionId: varchar("connection_id", { length: 36 })
+      .notNull()
+      .references(() => awsConnections.id, { onDelete: "restrict" }),
+    region: varchar("region", { length: 32 }).notNull(),
+    runtimeTargetKind: varchar("runtime_target_kind", { length: 32 })
+      .$type<RuntimeTargetKind>()
+      .notNull(),
+    confirmedBuildConfig: jsonb("confirmed_build_config").$type<ConfirmedBuildConfig>(),
+    runtimeConfig: jsonb("runtime_config").$type<ProjectDeploymentRuntimeConfig>(),
+    rolloutStrategy: varchar("rollout_strategy", { length: 32 })
+      .$type<"all_at_once">()
+      .notNull()
+      .default("all_at_once"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    index("project_deployment_targets_connection_id_idx").on(table.connectionId),
+    check("project_deployment_targets_provider_check", sql`${table.provider} = 'aws'`),
+    check(
+      "project_deployment_targets_runtime_kind_check",
+      sql`${table.runtimeTargetKind} in ('ecs_fargate', 'lambda', 'ec2_asg', 'static_site')`
+    ),
+    check(
+      "project_deployment_targets_rollout_check",
+      sql`${table.rolloutStrategy} = 'all_at_once'`
+    ),
+    check(
+      "project_deployment_targets_runtime_config_check",
+      sql`${table.runtimeConfig} is null or (
+        jsonb_typeof(${table.runtimeConfig}) = 'object'
+        and (
+          (${table.runtimeTargetKind} = 'ecs_fargate' and ${table.runtimeConfig}->>'runtimeTargetKind' = 'ecs_fargate')
+          or (${table.runtimeTargetKind} = 'lambda' and ${table.runtimeConfig}->>'runtimeTargetKind' = 'lambda')
+          or (${table.runtimeTargetKind} = 'ec2_asg' and ${table.runtimeConfig}->>'runtimeTargetKind' = 'ec2_asg')
+          or (${table.runtimeTargetKind} = 'static_site' and ${table.runtimeConfig}->>'runtimeTargetKind' = 'static_site')
+        )
+      )`
+    )
+  ]
+);
+
 export const deployments = pgTable(
   "deployments",
   {
@@ -474,6 +540,22 @@ export const deployments = pgTable(
       .$type<DeploymentLiveProfile>()
       .notNull()
       .default("practice"),
+    scope: varchar("scope", { length: 32 })
+      .$type<DeploymentScope>()
+      .notNull()
+      .default("infrastructure"),
+    targetKind: varchar("target_kind", { length: 32 }).$type<RuntimeTargetKind>(),
+    source: varchar("source", { length: 16 })
+      .$type<DeploymentSource>()
+      .notNull()
+      .default("direct"),
+    releaseId: varchar("release_id", { length: 36 }).references(
+      (): AnyPgColumn => applicationReleases.id,
+      { onDelete: "set null" }
+    ),
+    preparedDraftRevision: integer("prepared_draft_revision"),
+    preparedSnapshotHash: varchar("prepared_snapshot_hash", { length: 64 }),
+    approvedPreparedSnapshotHash: varchar("approved_prepared_snapshot_hash", { length: 64 }),
     currentPlanArtifactId: varchar("current_plan_artifact_id", { length: 36 }),
     stateObjectKey: text("state_object_key"),
     resultWarningSummary: text("result_warning_summary"),
@@ -509,6 +591,34 @@ export const deployments = pgTable(
     index("deployments_aws_connection_id_idx").on(table.awsConnectionId),
     index("deployments_current_plan_artifact_id_idx").on(table.currentPlanArtifactId),
     index("deployments_approved_plan_artifact_id_idx").on(table.approvedPlanArtifactId),
+    index("deployments_project_prepared_revision_idx").on(
+      table.projectId,
+      table.preparedDraftRevision
+    ),
+    uniqueIndex("deployments_release_id_unique")
+      .on(table.releaseId)
+      .where(sql`${table.releaseId} is not null`),
+    check(
+      "deployments_scope_check",
+      sql`${table.scope} in ('infrastructure', 'application', 'full_stack')`
+    ),
+    check(
+      "deployments_target_kind_check",
+      sql`${table.targetKind} is null or ${table.targetKind} in ('ecs_fargate', 'lambda', 'ec2_asg', 'static_site')`
+    ),
+    check("deployments_source_check", sql`${table.source} in ('direct', 'gitops')`),
+    check(
+      "deployments_prepared_snapshot_pair_check",
+      sql`(
+        (${table.preparedDraftRevision} is null and ${table.preparedSnapshotHash} is null)
+        or
+        (${table.preparedDraftRevision} > 0 and ${table.preparedSnapshotHash} ~ '^[0-9a-f]{64}$')
+      )`
+    ),
+    check(
+      "deployments_approved_prepared_snapshot_hash_check",
+      sql`${table.approvedPreparedSnapshotHash} is null or ${table.approvedPreparedSnapshotHash} ~ '^[0-9a-f]{64}$'`
+    ),
     uniqueIndex("deployments_project_running_unique")
       .on(table.projectId)
       .where(sql`${table.status} = 'RUNNING'`)
@@ -532,6 +642,21 @@ export const deploymentLiveObservationManifests = pgTable(
     check(
       "deployment_live_observation_manifests_schema_version_check",
       sql`${table.schemaVersion} = 2`
+    ),
+    check(
+      "deployment_live_observation_manifests_status_payload_check",
+      sql`(
+        (${table.status} = 'valid'
+          AND ${table.manifest} IS NOT NULL
+          AND jsonb_typeof(${table.manifest}) = 'object'
+          AND ${table.manifest}->>'schemaVersion' = '2'
+          AND ${table.invalidReason} IS NULL)
+        OR
+        (${table.status} = 'manifest_invalid'
+          AND ${table.manifest} IS NULL
+          AND ${table.invalidReason} IS NOT NULL
+          AND length(btrim(${table.invalidReason})) > 0)
+      )`
     )
   ]
 );
@@ -656,6 +781,285 @@ export const gitCicdHandoffs = pgTable(
   ]
 );
 
+export const gitCicdMonitoringConfigs = pgTable("git_cicd_monitoring_configs", {
+  sourceRepositoryId: varchar("source_repository_id", { length: 36 })
+    .primaryKey()
+    .references(() => sourceRepositories.id, { onDelete: "cascade" }),
+  enabled: boolean("enabled").notNull().default(true),
+  monitorBranch: varchar("monitor_branch", { length: 255 }).notNull(),
+  appPath: jsonb("app_path").$type<GitCicdMonitoredPath>().notNull(),
+  infraPath: jsonb("infra_path").$type<GitCicdMonitoredPath>().notNull(),
+  validationStatus: varchar("validation_status", { length: 16 })
+    .$type<GitCicdMonitoringValidationStatus>()
+    .notNull()
+    .default("required"),
+  validationMessage: text("validation_message"),
+  validatedAt: timestamp("validated_at", { withTimezone: true }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+});
+
+export const gitCicdPipelineRuns = pgTable(
+  "git_cicd_pipeline_runs",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    projectId: varchar("project_id", { length: 36 })
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    sourceRepositoryId: varchar("source_repository_id", { length: 36 })
+      .notNull()
+      .references(() => sourceRepositories.id, { onDelete: "cascade" }),
+    handoffId: varchar("handoff_id", { length: 36 }).references(() => gitCicdHandoffs.id, {
+      onDelete: "set null"
+    }),
+    commitSha: varchar("commit_sha", { length: 64 }).notNull(),
+    commitMessage: text("commit_message").notNull(),
+    branch: varchar("branch", { length: 255 }).notNull(),
+    changeScope: varchar("change_scope", { length: 32 })
+      .$type<GitCicdPipelineChangeScope>()
+      .notNull(),
+    status: varchar("status", { length: 16 }).$type<GitCicdPipelineRunStatus>().notNull(),
+    statusMessage: text("status_message"),
+    pipelineRunUrl: text("pipeline_run_url"),
+    appUrl: text("app_url"),
+    apiUrl: text("api_url"),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+    upstreamOrderingToken: text("upstream_ordering_token").notNull().default(""),
+    logRevision: text("log_revision").notNull().default(""),
+    lastRefreshedAt: timestamp("last_refreshed_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    uniqueIndex("git_cicd_pipeline_runs_repository_commit_unique").on(
+      table.sourceRepositoryId,
+      table.commitSha
+    ),
+    index("git_cicd_pipeline_runs_project_id_idx").on(table.projectId),
+    index("git_cicd_pipeline_runs_project_created_id_idx").on(
+      table.projectId,
+      table.createdAt.desc(),
+      table.id.desc()
+    ),
+    index("git_cicd_pipeline_runs_status_idx").on(table.status),
+    index("git_cicd_pipeline_runs_created_at_idx").on(table.createdAt)
+  ]
+);
+
+export const gitCicdPipelineStages = pgTable(
+  "git_cicd_pipeline_stages",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    pipelineRunId: varchar("pipeline_run_id", { length: 36 })
+      .notNull()
+      .references(() => gitCicdPipelineRuns.id, { onDelete: "cascade" }),
+    kind: varchar("kind", { length: 32 }).$type<GitCicdPipelineStageKind>().notNull(),
+    status: varchar("status", { length: 16 }).$type<GitCicdPipelineStageStatus>().notNull(),
+    runUrl: text("run_url"),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    finishedAt: timestamp("finished_at", { withTimezone: true })
+  },
+  (table) => [
+    uniqueIndex("git_cicd_pipeline_stages_run_kind_unique").on(
+      table.pipelineRunId,
+      table.kind
+    )
+  ]
+);
+
+export const gitCicdPipelineLogs = pgTable(
+  "git_cicd_pipeline_logs",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    pipelineRunId: varchar("pipeline_run_id", { length: 36 })
+      .notNull()
+      .references(() => gitCicdPipelineRuns.id, { onDelete: "cascade" }),
+    stageId: varchar("stage_id", { length: 36 }).references(() => gitCicdPipelineStages.id, {
+      onDelete: "set null"
+    }),
+    sequence: integer("sequence").notNull(),
+    level: varchar("level", { length: 16 }).$type<"info" | "warning" | "error">().notNull(),
+    message: text("message").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    uniqueIndex("git_cicd_pipeline_logs_run_sequence_unique").on(
+      table.pipelineRunId,
+      table.sequence
+    )
+  ]
+);
+
+export const applicationReleases = pgTable(
+  "application_releases",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    projectId: varchar("project_id", { length: 36 })
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    deploymentId: varchar("deployment_id", { length: 36 }).references(() => deployments.id, {
+      onDelete: "set null"
+    }),
+    pipelineRunId: varchar("pipeline_run_id", { length: 36 }).references(
+      () => gitCicdPipelineRuns.id,
+      { onDelete: "set null" }
+    ),
+    source: varchar("source", { length: 16 }).$type<DeploymentSource>().notNull(),
+    runtimeTargetKind: varchar("runtime_target_kind", { length: 32 })
+      .$type<RuntimeTargetKind>()
+      .notNull(),
+    version: varchar("version", { length: 128 }).notNull(),
+    commitSha: varchar("commit_sha", { length: 64 }).notNull(),
+    artifactDigestAlgorithm: varchar("artifact_digest_algorithm", { length: 16 })
+      .$type<"sha256">()
+      .notNull()
+      .default("sha256"),
+    artifactDigest: varchar("artifact_digest", { length: 64 }).notNull(),
+    providerRevision: jsonb("provider_revision").$type<ApplicationReleaseProviderRevision>(),
+    outputUrl: text("output_url"),
+    status: varchar("status", { length: 16 })
+      .$type<ApplicationReleaseStatus>()
+      .notNull()
+      .default("pending"),
+    healthEvidence: jsonb("health_evidence").$type<JsonValue>(),
+    rollbackEvidence: jsonb("rollback_evidence").$type<JsonValue>(),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    index("application_releases_project_created_id_idx").on(
+      table.projectId,
+      table.createdAt.desc(),
+      table.id.desc()
+    ),
+    uniqueIndex("application_releases_deployment_unique")
+      .on(table.deploymentId)
+      .where(sql`${table.deploymentId} is not null`),
+    uniqueIndex("application_releases_pipeline_run_unique")
+      .on(table.pipelineRunId)
+      .where(sql`${table.pipelineRunId} is not null`),
+    check("application_releases_source_check", sql`${table.source} in ('direct', 'gitops')`),
+    check(
+      "application_releases_runtime_kind_check",
+      sql`${table.runtimeTargetKind} in ('ecs_fargate', 'lambda', 'ec2_asg', 'static_site')`
+    ),
+    check(
+      "application_releases_status_check",
+      sql`${table.status} in ('pending', 'building', 'deploying', 'succeeded', 'failed', 'rolled_back', 'cancelled')`
+    ),
+    check(
+      "application_releases_digest_check",
+      sql`${table.artifactDigestAlgorithm} = 'sha256' and ${table.artifactDigest} ~ '^[0-9a-f]{64}$'`
+    ),
+    check(
+      "application_releases_commit_sha_check",
+      sql`${table.commitSha} ~ '^([0-9a-f]{40}|[0-9a-f]{64})$'`
+    )
+  ]
+);
+
+export const notifications = pgTable(
+  "notifications",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    idempotencyKey: varchar("idempotency_key", { length: 160 }).notNull(),
+    userId: varchar("user_id", { length: 36 })
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    projectId: varchar("project_id", { length: 36 })
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    source: varchar("source", { length: 32 })
+      .$type<DeploymentNotificationSource>()
+      .notNull(),
+    sourceId: varchar("source_id", { length: 64 }).notNull(),
+    status: varchar("status", { length: 16 })
+      .$type<DeploymentNotificationStatus>()
+      .notNull(),
+    title: varchar("title", { length: 120 }).notNull(),
+    body: text("body").notNull(),
+    actionUrl: text("action_url").notNull(),
+    readAt: timestamp("read_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull()
+  },
+  (table) => [
+    uniqueIndex("notifications_idempotency_key_unique").on(table.idempotencyKey),
+    index("notifications_user_created_id_idx").on(
+      table.userId,
+      table.createdAt.desc(),
+      table.id.desc()
+    ),
+    index("notifications_expires_at_idx").on(table.expiresAt),
+    check(
+      "notifications_source_check",
+      sql`${table.source} in ('direct_deployment', 'gitops_pipeline')`
+    ),
+    check(
+      "notifications_status_check",
+      sql`${table.status} in ('succeeded', 'failed', 'cancelled')`
+    ),
+    check("notifications_action_url_check", sql`${table.actionUrl} ~ '^/dashboard/projects/[0-9a-f-]{36}$'`)
+  ]
+);
+
+export const notificationOutbox = pgTable(
+  "notification_outbox",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    notificationId: varchar("notification_id", { length: 36 })
+      .notNull()
+      .references(() => notifications.id, { onDelete: "cascade" }),
+    status: varchar("status", { length: 16 })
+      .$type<"pending" | "processing" | "retry" | "delivered" | "dead">()
+      .notNull()
+      .default("pending"),
+    attemptCount: integer("attempt_count").notNull().default(0),
+    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }).notNull().defaultNow(),
+    lockedAt: timestamp("locked_at", { withTimezone: true }),
+    deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+    lastErrorCode: varchar("last_error_code", { length: 64 }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    uniqueIndex("notification_outbox_notification_unique").on(table.notificationId),
+    index("notification_outbox_dispatch_idx").on(table.status, table.nextAttemptAt),
+    check(
+      "notification_outbox_status_check",
+      sql`${table.status} in ('pending', 'processing', 'retry', 'delivered', 'dead')`
+    ),
+    check("notification_outbox_attempt_count_check", sql`${table.attemptCount} >= 0`)
+  ]
+);
+
+export const webPushSubscriptions = pgTable(
+  "web_push_subscriptions",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    userId: varchar("user_id", { length: 36 })
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    endpointHash: varchar("endpoint_hash", { length: 64 }).notNull(),
+    encryptedPayload: text("encrypted_payload").notNull(),
+    keyVersion: varchar("key_version", { length: 32 }).notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    failureCount: integer("failure_count").notNull().default(0),
+    disabledAt: timestamp("disabled_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    uniqueIndex("web_push_subscriptions_endpoint_hash_unique").on(table.endpointHash),
+    index("web_push_subscriptions_user_id_idx").on(table.userId),
+    index("web_push_subscriptions_expires_at_idx").on(table.expiresAt),
+    check("web_push_subscriptions_failure_count_check", sql`${table.failureCount} >= 0`)
+  ]
+);
+
 export const deploymentPlanArtifacts = pgTable(
   "deployment_plan_artifacts",
   {
@@ -750,7 +1154,9 @@ export const usersRelations = relations(users, ({ many }) => ({
   sourceRepositories: many(sourceRepositories),
   reverseEngineeringScans: many(reverseEngineeringScans),
   deploymentJobs: many(deploymentJobs),
-  gitCicdHandoffs: many(gitCicdHandoffs)
+  gitCicdHandoffs: many(gitCicdHandoffs),
+  notifications: many(notifications),
+  webPushSubscriptions: many(webPushSubscriptions)
 }));
 
 export const refreshTokensRelations = relations(refreshTokens, ({ one }) => ({
@@ -787,12 +1193,16 @@ export const projectsRelations = relations(projects, ({ many, one }) => ({
     references: [users.id]
   }),
   draft: one(projectDrafts),
+  deploymentTarget: one(projectDeploymentTargets),
   architectures: many(architectures),
   assets: many(projectAssets),
   sourceRepositories: many(sourceRepositories),
   deployments: many(deployments),
+  applicationReleases: many(applicationReleases),
+  notifications: many(notifications),
   reverseEngineeringScans: many(reverseEngineeringScans),
-  gitCicdHandoffs: many(gitCicdHandoffs)
+  gitCicdHandoffs: many(gitCicdHandoffs),
+  gitCicdPipelineRuns: many(gitCicdPipelineRuns)
 }));
 
 export const architecturesRelations = relations(architectures, ({ many, one }) => ({
@@ -840,6 +1250,11 @@ export const deploymentsRelations = relations(deployments, ({ one, many }) => ({
     fields: [deployments.awsConnectionId],
     references: [awsConnections.id]
   }),
+  release: one(applicationReleases, {
+    fields: [deployments.releaseId],
+    references: [applicationReleases.id],
+    relationName: "deployment_release_pointer"
+  }),
   liveObservationManifest: one(deploymentLiveObservationManifests),
   logs: many(deploymentLogs),
   jobs: many(deploymentJobs),
@@ -847,6 +1262,20 @@ export const deploymentsRelations = relations(deployments, ({ one, many }) => ({
   resources: many(deployedResources),
   outputs: many(terraformOutputs)
 }));
+
+export const projectDeploymentTargetsRelations = relations(
+  projectDeploymentTargets,
+  ({ one }) => ({
+    project: one(projects, {
+      fields: [projectDeploymentTargets.projectId],
+      references: [projects.id]
+    }),
+    connection: one(awsConnections, {
+      fields: [projectDeploymentTargets.connectionId],
+      references: [awsConnections.id]
+    })
+  })
+);
 
 export const deploymentLiveObservationManifestsRelations = relations(
   deploymentLiveObservationManifests,
@@ -878,10 +1307,12 @@ export const sourceRepositoriesRelations = relations(sourceRepositories, ({ one,
     fields: [sourceRepositories.createdByUserId],
     references: [users.id]
   }),
-  gitCicdHandoffs: many(gitCicdHandoffs)
+  gitCicdHandoffs: many(gitCicdHandoffs),
+  monitoringConfig: one(gitCicdMonitoringConfigs),
+  pipelineRuns: many(gitCicdPipelineRuns)
 }));
 
-export const gitCicdHandoffsRelations = relations(gitCicdHandoffs, ({ one }) => ({
+export const gitCicdHandoffsRelations = relations(gitCicdHandoffs, ({ one, many }) => ({
   project: one(projects, {
     fields: [gitCicdHandoffs.projectId],
     references: [projects.id]
@@ -901,6 +1332,102 @@ export const gitCicdHandoffsRelations = relations(gitCicdHandoffs, ({ one }) => 
   createdBy: one(users, {
     fields: [gitCicdHandoffs.createdByUserId],
     references: [users.id]
+  }),
+  pipelineRuns: many(gitCicdPipelineRuns)
+}));
+
+export const gitCicdMonitoringConfigsRelations = relations(
+  gitCicdMonitoringConfigs,
+  ({ one }) => ({
+    sourceRepository: one(sourceRepositories, {
+      fields: [gitCicdMonitoringConfigs.sourceRepositoryId],
+      references: [sourceRepositories.id]
+    })
+  })
+);
+
+export const gitCicdPipelineRunsRelations = relations(
+  gitCicdPipelineRuns,
+  ({ many, one }) => ({
+    project: one(projects, {
+      fields: [gitCicdPipelineRuns.projectId],
+      references: [projects.id]
+    }),
+    sourceRepository: one(sourceRepositories, {
+      fields: [gitCicdPipelineRuns.sourceRepositoryId],
+      references: [sourceRepositories.id]
+    }),
+    handoff: one(gitCicdHandoffs, {
+      fields: [gitCicdPipelineRuns.handoffId],
+      references: [gitCicdHandoffs.id]
+    }),
+    stages: many(gitCicdPipelineStages),
+    logs: many(gitCicdPipelineLogs),
+    release: one(applicationReleases)
+  })
+);
+
+export const applicationReleasesRelations = relations(applicationReleases, ({ one }) => ({
+  project: one(projects, {
+    fields: [applicationReleases.projectId],
+    references: [projects.id]
+  }),
+  deployment: one(deployments, {
+    fields: [applicationReleases.deploymentId],
+    references: [deployments.id],
+    relationName: "application_release_deployment"
+  }),
+  pipelineRun: one(gitCicdPipelineRuns, {
+    fields: [applicationReleases.pipelineRunId],
+    references: [gitCicdPipelineRuns.id]
+  })
+}));
+
+export const notificationsRelations = relations(notifications, ({ one }) => ({
+  user: one(users, {
+    fields: [notifications.userId],
+    references: [users.id]
+  }),
+  project: one(projects, {
+    fields: [notifications.projectId],
+    references: [projects.id]
+  }),
+  outbox: one(notificationOutbox)
+}));
+
+export const notificationOutboxRelations = relations(notificationOutbox, ({ one }) => ({
+  notification: one(notifications, {
+    fields: [notificationOutbox.notificationId],
+    references: [notifications.id]
+  })
+}));
+
+export const webPushSubscriptionsRelations = relations(webPushSubscriptions, ({ one }) => ({
+  user: one(users, {
+    fields: [webPushSubscriptions.userId],
+    references: [users.id]
+  })
+}));
+
+export const gitCicdPipelineStagesRelations = relations(
+  gitCicdPipelineStages,
+  ({ many, one }) => ({
+    pipelineRun: one(gitCicdPipelineRuns, {
+      fields: [gitCicdPipelineStages.pipelineRunId],
+      references: [gitCicdPipelineRuns.id]
+    }),
+    logs: many(gitCicdPipelineLogs)
+  })
+);
+
+export const gitCicdPipelineLogsRelations = relations(gitCicdPipelineLogs, ({ one }) => ({
+  pipelineRun: one(gitCicdPipelineRuns, {
+    fields: [gitCicdPipelineLogs.pipelineRunId],
+    references: [gitCicdPipelineRuns.id]
+  }),
+  stage: one(gitCicdPipelineStages, {
+    fields: [gitCicdPipelineLogs.stageId],
+    references: [gitCicdPipelineStages.id]
   })
 }));
 
@@ -941,7 +1468,8 @@ export const awsConnectionsRelations = relations(awsConnections, ({ one, many })
     fields: [awsConnections.userId],
     references: [users.id]
   }),
-  reverseEngineeringScans: many(reverseEngineeringScans)
+  reverseEngineeringScans: many(reverseEngineeringScans),
+  projectDeploymentTargets: many(projectDeploymentTargets)
 }));
 
 export const reverseEngineeringScansRelations = relations(

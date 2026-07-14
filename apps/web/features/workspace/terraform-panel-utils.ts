@@ -1,7 +1,9 @@
 import {
   createTerraformProviderFiles,
+  isTerraformDeployableNode,
   type DiagramJson,
   type DiagramNode,
+  type DiagramNodeParameters,
   type TerraformDiagnostic
 } from "@sketchcatch/types";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
@@ -36,11 +38,82 @@ export function toDeploymentBaselineFingerprint(diagramJson: DiagramJson): strin
   return toDiagramContentFingerprint(diagramJson);
 }
 
+// Deployment state follows Terraform semantics, not Board geometry or Design presentation layers.
 function toDiagramContentFingerprint(diagramJson: DiagramJson): string {
+  const deployableNodes = diagramJson.nodes.filter(isTerraformDeployableNode);
+  const deployableNodeIds = new Set(deployableNodes.map((node) => node.id));
+  const nodeById = new Map(diagramJson.nodes.map((node) => [node.id, node]));
+
   return JSON.stringify({
-    nodes: diagramJson.nodes,
+    nodes: deployableNodes.map((node) => {
+      const inheritedAvailabilityZone = getInheritedAvailabilityZoneFingerprint(node, nodeById);
+
+      return {
+        id: node.id,
+        parameters: toTerraformFingerprintParameters(node.parameters),
+        ...(inheritedAvailabilityZone !== undefined ? { inheritedAvailabilityZone } : {})
+      };
+    }),
     edges: diagramJson.edges
+      .filter(
+        (edge) =>
+          deployableNodeIds.has(edge.sourceNodeId) && deployableNodeIds.has(edge.targetNodeId)
+      )
+      .map((edge) => ({
+        id: edge.id,
+        sourceNodeId: edge.sourceNodeId,
+        targetNodeId: edge.targetNodeId,
+        ...(edge.label !== undefined ? { label: edge.label } : {})
+      }))
   });
+}
+
+// Fingerprints omit diagram-only values that the Terraform graph renderer deliberately drops.
+function toTerraformFingerprintParameters(
+  parameters: DiagramNodeParameters
+): DiagramNodeParameters {
+  return {
+    ...parameters,
+    values: Object.fromEntries(
+      Object.entries(parameters.values ?? {}).filter(
+        ([key]) => !/^diagram(?:_|[A-Z])/.test(key)
+      )
+    )
+  };
+}
+
+// Subnet and EBS fingerprints retain the Design AZ context that changes generated Terraform.
+function getInheritedAvailabilityZoneFingerprint(
+  node: DiagramNode & { readonly parameters: DiagramNodeParameters },
+  nodeById: ReadonlyMap<string, DiagramNode>
+): string | undefined {
+  const resourceType = node.parameters.resourceType;
+
+  if (resourceType !== "aws_subnet" && resourceType !== "aws_ebs_volume") {
+    return undefined;
+  }
+
+  const ownAvailabilityZone = node.parameters.values?.["availabilityZone"];
+
+  if (
+    ownAvailabilityZone !== undefined &&
+    ownAvailabilityZone !== null &&
+    ownAvailabilityZone !== ""
+  ) {
+    return undefined;
+  }
+
+  const parentNode = node.metadata?.parentAreaNodeId
+    ? nodeById.get(node.metadata.parentAreaNodeId)
+    : undefined;
+  const parentResourceType = parentNode?.parameters?.resourceType ?? parentNode?.type;
+  const inheritedAvailabilityZone = parentNode?.parameters?.values?.["awsAvailabilityZone"];
+
+  return parentResourceType === "aws_availability_zone" &&
+    typeof inheritedAvailabilityZone === "string" &&
+    inheritedAvailabilityZone.trim().length > 0
+    ? inheritedAvailabilityZone
+    : undefined;
 }
 
 export function createTerraformFilesFromGeneratedCode(
@@ -58,6 +131,7 @@ export function createTerraformFilesFromGeneratedCode(
       .filter((entry): entry is readonly [string, string] => Boolean(entry[0]))
   );
   const generatedBlocks = parseTerraformBlocks("main.tf", generatedCode);
+  const generatedOutputBlocks = parseTerraformOutputBlocks(generatedCode);
 
   for (const block of generatedBlocks) {
     const fileName = nodeFileByAddress.get(block.address) ?? "main.tf";
@@ -65,7 +139,12 @@ export function createTerraformFilesFromGeneratedCode(
     codeByFileName.set(fileName, appendTerraformBlock(currentCode, block.code));
   }
 
-  if (generatedBlocks.length === 0 && generatedCode.trim()) {
+  for (const block of generatedOutputBlocks) {
+    const currentCode = codeByFileName.get("main.tf") ?? "";
+    codeByFileName.set("main.tf", appendTerraformBlock(currentCode, block.code));
+  }
+
+  if (generatedBlocks.length === 0 && generatedOutputBlocks.length === 0 && generatedCode.trim()) {
     codeByFileName.set("main.tf", generatedCode.trim());
   }
 
@@ -94,6 +173,8 @@ export function mergeGeneratedTerraformFiles(
     );
   const nextFiles = removeTerraformBlocksByAddress(existingFiles, staleManagedAddresses)
     .map((file) => ({ ...file }));
+
+  upsertGeneratedTerraformOutputs(nextFiles, generatedFiles);
 
   for (const generatedFile of generatedFiles) {
     const generatedBlocks = parseTerraformBlocks(generatedFile.fileName, generatedFile.code);
@@ -139,6 +220,47 @@ export function mergeGeneratedTerraformFiles(
   }
 
   return nextFiles.sort((left, right) => compareTerraformFileNames(left.fileName, right.fileName));
+}
+
+function upsertGeneratedTerraformOutputs(
+  files: TerraformVirtualFile[],
+  generatedFiles: readonly TerraformVirtualFile[]
+): void {
+  const generatedOutputs = generatedFiles.flatMap((file) => parseTerraformOutputBlocks(file.code));
+
+  for (const generatedOutput of generatedOutputs) {
+    let replaced = false;
+
+    for (let fileIndex = 0; fileIndex < files.length; fileIndex += 1) {
+      const file = files[fileIndex];
+      if (!file) continue;
+      const existingOutput = parseTerraformOutputBlocks(file.code).find(
+        (block) => block.name === generatedOutput.name
+      );
+      if (!existingOutput) continue;
+
+      files[fileIndex] = {
+        ...file,
+        code: `${file.code.slice(0, existingOutput.startOffset)}${generatedOutput.code}${file.code.slice(existingOutput.endOffset)}`
+      };
+      replaced = true;
+      break;
+    }
+
+    if (replaced) continue;
+
+    const mainFileIndex = files.findIndex((file) => file.fileName === "main.tf");
+    if (mainFileIndex === -1) {
+      files.push({ fileName: "main.tf", code: generatedOutput.code });
+      continue;
+    }
+
+    const mainFile = files[mainFileIndex]!;
+    files[mainFileIndex] = {
+      ...mainFile,
+      code: appendTerraformBlock(mainFile.code, generatedOutput.code)
+    };
+  }
 }
 
 export function getTerraformAddressesRemovedFromDiagram(
@@ -456,6 +578,54 @@ function parseTerraformBlocks(fileName: string, terraformCode: string): Terrafor
       terraformType
     });
 
+    index = endIndex;
+  }
+
+  return blocks;
+}
+
+type TerraformOutputBlockLocation = {
+  readonly code: string;
+  readonly endOffset: number;
+  readonly name: string;
+  readonly startOffset: number;
+};
+
+function parseTerraformOutputBlocks(terraformCode: string): TerraformOutputBlockLocation[] {
+  const blocks: TerraformOutputBlockLocation[] = [];
+  const rawLines = terraformCode.split("\n");
+  const lines = rawLines.map((line) => line.replace(/\r$/, ""));
+  const lineOffsets: number[] = [];
+  let offset = 0;
+
+  for (const rawLine of rawLines) {
+    lineOffsets.push(offset);
+    offset += rawLine.length + 1;
+  }
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index] ?? "";
+    const headerMatch = line.match(/^\s*output\s+"([^"]+)"\s*\{/);
+    if (!headerMatch) continue;
+
+    const startOffset = lineOffsets[index] ?? 0;
+    let depth = countBraceDelta(line);
+    let endIndex = index;
+    let endOffset = startOffset + line.length;
+
+    for (let scanIndex = index + 1; scanIndex < lines.length && depth > 0; scanIndex += 1) {
+      const scanLine = lines[scanIndex] ?? "";
+      depth += countBraceDelta(scanLine);
+      endIndex = scanIndex;
+      endOffset = (lineOffsets[scanIndex] ?? 0) + scanLine.length;
+    }
+
+    blocks.push({
+      code: terraformCode.slice(startOffset, endOffset),
+      endOffset,
+      name: headerMatch[1] ?? "",
+      startOffset
+    });
     index = endIndex;
   }
 

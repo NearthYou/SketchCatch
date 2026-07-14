@@ -15,6 +15,7 @@ test("repository analysis recommends the deployable three-tier template from dat
   });
 
   assert.equal(result.recommendedTemplateId, "three-tier-web-app");
+  assert.deepEqual(result.availableBranches, ["main"]);
   assert.deepEqual(result.detectedSignals, ["Node API", "Database"]);
   assert.deepEqual(result.evidenceFiles, [{ found: true, path: "package.json" }]);
 });

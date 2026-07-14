@@ -99,6 +99,21 @@ test("allows provider blocks as execution environment configuration", () => {
   );
 });
 
+test("allows Terraform output blocks generated for deployment observation", () => {
+  const diagnostics = createTerraformDiagnostics(`output "api_base_url" {
+  value = "http://\${aws_lb.api.dns_name}"
+}`);
+
+  assert.deepEqual(
+    diagnostics.filter((diagnostic) => diagnostic.severity === "error"),
+    []
+  );
+  assert.equal(
+    diagnostics.some((diagnostic) => diagnostic.code === "terraform.unsupported_block"),
+    false
+  );
+});
+
 test("does not treat provider-prefixed attributes as provider block headers", () => {
   const diagnostics = createTerraformDiagnostics(`resource "aws_vpc" "main" {
   cidr_block = "10.0.0.0/16"

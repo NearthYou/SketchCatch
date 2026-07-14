@@ -12,6 +12,7 @@ import {
   createArchitectureSnapshot,
   createAwsConnectionSetup,
   createDeployment,
+  executeDeployment,
   createLiveObservation,
   createGitCicdGitHubOAuthStartUrl,
   createProjectAssetUpload,
@@ -23,13 +24,18 @@ import {
   deleteReverseEngineeringScan,
   getAwsConnectionCloudFormationTemplate,
   getDeploymentFailureExplanation,
+  getGitCicdMonitoringConfig,
+  getGitCicdPipelineRun,
   getGitCicdHandoffPipelineStatus,
   getAiPreDeploymentDeepScan,
   getProjectDeletePreview,
+  fetchProjectThumbnail,
   listDeploymentResources,
   listAwsConnections,
   listDeployments,
   listGitCicdHandoffs,
+  listGitCicdPipelineLogs,
+  listGitCicdPipelineRuns,
   listGitHubInstalledRepositories,
   listTerraformOutputs,
   listCostUsageAnalysis,
@@ -38,6 +44,9 @@ import {
   listReverseEngineeringScanLogs,
   listReverseEngineeringScans,
   pollLiveObservationSnapshots,
+  prepareDeployment,
+  refreshGitCicdPipelineRun,
+  refreshProjectGitCicdPipelineRuns,
   runDeploymentDestroy,
   runDeploymentDestroyPlan,
   runAiPreDeploymentCheck,
@@ -48,6 +57,7 @@ import {
   streamLiveObservationSnapshots,
   saveProjectDraft,
   testAwsConnection,
+  updateGitCicdMonitoringConfig,
   uploadProjectAsset,
   validateTerraformCode,
   verifyAwsConnection,
@@ -469,6 +479,171 @@ test("listGitHubInstalledRepositories fetches GitHub App installation repository
   assert.equal(result.state, "signed-state");
   assert.equal(result.repositories[0]?.fullName, "NearthYou/sketchcatch-iac-handoff-test");
   assert.equal(result.repositories[0]?.installationId, "12345");
+});
+
+test("CI/CD monitoring clients use authenticated repository-scoped paths and the exact update body", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+  const config = createGitCicdMonitoringConfigPayload();
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+  installAuthSession();
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+    return Response.json({ config }, { status: 200 });
+  };
+
+  const request = {
+    enabled: true,
+    monitorBranch: "release/main",
+    appPath: { mode: "subdirectory" as const, path: "apps/web" },
+    infraPath: { mode: "repository_root" as const, path: "" },
+    userAcceptedChangeId: "accept-monitoring-1"
+  };
+  const current = await getGitCicdMonitoringConfig("project/with slash", "repo?active=1");
+  const updated = await updateGitCicdMonitoringConfig(
+    "project/with slash",
+    "repo?active=1",
+    request
+  );
+
+  const expectedPath =
+    "/api/projects/project%2Fwith%20slash/source-repositories/repo%3Factive%3D1/cicd-monitoring";
+  assert.equal(String(requests[0]?.input), expectedPath);
+  assert.equal(requests[0]?.init?.method, undefined);
+  assert.equal(String(requests[1]?.input), expectedPath);
+  assert.equal(requests[1]?.init?.method, "PUT");
+  assert.deepEqual(JSON.parse(String(requests[1]?.init?.body)), request);
+  assert.equal(new Headers(requests[0]?.init?.headers).get("authorization"), "Bearer access-token");
+  assert.equal(new Headers(requests[1]?.init?.headers).get("authorization"), "Bearer access-token");
+  assert.deepEqual(current, config);
+  assert.deepEqual(updated, config);
+});
+
+test("Pipeline Run list client preserves the cursor page and URL-encodes the query", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+  const run = createGitCicdPipelineRunPayload();
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+  installAuthSession();
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+    return Response.json({ runs: [run], nextCursor: "next+cursor==" }, { status: 200 });
+  };
+
+  const page = await listGitCicdPipelineRuns("project/one", {
+    cursor: "created+id/==",
+    limit: 25
+  });
+  const defaultPage = await listGitCicdPipelineRuns("project/one");
+
+  assert.equal(
+    String(requests[0]?.input),
+    "/api/projects/project%2Fone/git-cicd-pipeline-runs?cursor=created%2Bid%2F%3D%3D&limit=25"
+  );
+  assert.equal(requests[0]?.init?.method, undefined);
+  assert.equal(new Headers(requests[0]?.init?.headers).get("authorization"), "Bearer access-token");
+  assert.equal(
+    String(requests[1]?.input),
+    "/api/projects/project%2Fone/git-cicd-pipeline-runs"
+  );
+  assert.equal(requests[1]?.init?.method, undefined);
+  assert.equal(new Headers(requests[1]?.init?.headers).get("authorization"), "Bearer access-token");
+  assert.deepEqual(page, { runs: [run], nextCursor: "next+cursor==" });
+  assert.deepEqual(defaultPage, { runs: [run], nextCursor: "next+cursor==" });
+});
+
+test("project Pipeline Run discovery uses the authenticated project-scoped POST contract", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+  const run = createGitCicdPipelineRunPayload();
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+  installAuthSession();
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+    return Response.json({
+      runs: [run],
+      targets: [{ sourceRepositoryId: "repo-1", stale: false, errorMessage: null }],
+      stale: false
+    });
+  };
+
+  const result = await refreshProjectGitCicdPipelineRuns("project/one");
+
+  assert.equal(
+    String(requests[0]?.input),
+    "/api/projects/project%2Fone/git-cicd-pipeline-runs/refresh"
+  );
+  assert.equal(requests[0]?.init?.method, "POST");
+  assert.equal(new Headers(requests[0]?.init?.headers).get("authorization"), "Bearer access-token");
+  assert.equal(result.runs[0]?.logRevision, "SketchCatch App:1:1");
+  assert.equal(result.stale, false);
+});
+
+test("Pipeline Run detail, incremental logs, and refresh clients preserve typed response metadata", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+  const run = createGitCicdPipelineRunPayload();
+  const log = createGitCicdPipelineLogPayload(run.id);
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+  installAuthSession();
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+    const path = String(input);
+    if (path.endsWith("/logs?sinceSequence=17")) {
+      return Response.json({ logs: [log], nextSequence: 18 }, { status: 200 });
+    }
+    if (path.endsWith("/refresh")) {
+      return Response.json(
+        { run, stale: true, errorMessage: "Pipeline 상태를 갱신하지 못했습니다." },
+        { status: 200 }
+      );
+    }
+    return Response.json({ run }, { status: 200 });
+  };
+
+  const detail = await getGitCicdPipelineRun("run/one");
+  const logsPage = await listGitCicdPipelineLogs("run/one", 17);
+  const refresh = await refreshGitCicdPipelineRun("run/one");
+
+  assert.equal(String(requests[0]?.input), "/api/git-cicd-pipeline-runs/run%2Fone");
+  assert.equal(
+    String(requests[1]?.input),
+    "/api/git-cicd-pipeline-runs/run%2Fone/logs?sinceSequence=17"
+  );
+  assert.equal(String(requests[2]?.input), "/api/git-cicd-pipeline-runs/run%2Fone/refresh");
+  assert.equal(requests[2]?.init?.method, "POST");
+  assert.equal(new Headers(requests[0]?.init?.headers).get("authorization"), "Bearer access-token");
+  assert.equal(new Headers(requests[1]?.init?.headers).get("authorization"), "Bearer access-token");
+  assert.equal(new Headers(requests[2]?.init?.headers).get("authorization"), "Bearer access-token");
+  assert.deepEqual(detail, run);
+  assert.deepEqual(logsPage, { logs: [log], nextSequence: 18 });
+  assert.deepEqual(refresh, {
+    run,
+    stale: true,
+    errorMessage: "Pipeline 상태를 갱신하지 못했습니다."
+  });
 });
 
 test("listCostUsageAnalysis fetches actual usage analysis with range and AWS connection query", async (context) => {
@@ -1049,6 +1224,37 @@ test("uploadProjectAsset sends auth headers for same-origin API uploads", async 
   assert.equal(headers.get("authorization"), "Bearer access-token");
   assert.equal(headers.get("content-type"), "text/plain");
   assert.equal(requests[0]?.init?.body, "resource {}");
+});
+
+test("fetchProjectThumbnail reads the authenticated raster capture path as a Blob", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+
+  installAuthSession();
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+
+    return new Response(new Blob(["captured-board"], { type: "image/webp" }), {
+      headers: { "Content-Type": "image/webp" },
+      status: 200
+    });
+  };
+
+  const thumbnail = await fetchProjectThumbnail(project.id);
+
+  assert.equal(String(requests[0]?.input), `/api/projects/${project.id}/thumbnail`);
+  assert.equal(new Headers(requests[0]?.init?.headers).get("authorization"), "Bearer access-token");
+  assert.equal(requests[0]?.init?.credentials, "include");
+  assert.equal(requests[0]?.init?.cache, "no-store");
+  assert.equal(thumbnail?.type, "image/webp");
+  assert.equal(await thumbnail?.text(), "captured-board");
 });
 
 test("confirmProjectAssetUpload marks the uploaded asset through the API", async (context) => {
@@ -1971,6 +2177,54 @@ test("createDeployment posts selected artifact and verified AWS connection", asy
   assert.equal(deployment.status, "PENDING");
 });
 
+test("prepare and execute deployment use the revision-locked endpoints", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+
+  installAuthSession();
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+    return new Response(
+      JSON.stringify({
+        deployment: createDeploymentPayload({
+          id: "44444444-4444-4444-8444-444444444444",
+          projectId: project.id
+        })
+      }),
+      { headers: { "Content-Type": "application/json" }, status: 200 }
+    );
+  };
+
+  await prepareDeployment({
+    projectId: project.id,
+    architectureId: "55555555-5555-4555-8555-555555555555",
+    terraformArtifactId: "66666666-6666-4666-8666-666666666666",
+    awsConnectionId: "33333333-3333-4333-8333-333333333333",
+    draftRevision: 7,
+    scope: "auto"
+  });
+  await executeDeployment("44444444-4444-4444-8444-444444444444");
+
+  assert.equal(String(requests[0]?.input), `/api/projects/${project.id}/deployments/prepare`);
+  assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
+    architectureId: "55555555-5555-4555-8555-555555555555",
+    terraformArtifactId: "66666666-6666-4666-8666-666666666666",
+    awsConnectionId: "33333333-3333-4333-8333-333333333333",
+    draftRevision: 7,
+    scope: "auto"
+  });
+  assert.equal(
+    String(requests[1]?.input),
+    "/api/deployments/44444444-4444-4444-8444-444444444444/execute"
+  );
+});
+
 test("deployment helpers list records, start plan, approve plan, apply, destroy, and read results", async (context) => {
   const originalFetch = globalThis.fetch;
   const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
@@ -2640,42 +2894,71 @@ function createGitCicdHandoffPayload(input: { id: string; projectId: string }) {
   };
 }
 
+function createGitCicdMonitoringConfigPayload() {
+  return {
+    sourceRepositoryId: "repo-1",
+    enabled: true,
+    monitorBranch: "main",
+    appPath: { mode: "subdirectory", path: "apps/web" },
+    infraPath: { mode: "subdirectory", path: "infra/aws" },
+    validationStatus: "valid",
+    validationMessage: null,
+    validatedAt: "2026-07-13T00:00:00.000Z",
+    updatedAt: "2026-07-13T00:00:00.000Z"
+  };
+}
+
+function createGitCicdPipelineRunPayload() {
+  return {
+    id: "run-1",
+    projectId: project.id,
+    sourceRepositoryId: "repo-1",
+    handoffId: null,
+    commitSha: "a".repeat(40),
+    commitMessage: "Deploy application",
+    branch: "main",
+    changeScope: "app",
+    status: "running",
+    statusMessage: null,
+    pipelineRunUrl: "https://github.com/sketchcatch/app/actions/runs/1",
+    appUrl: null,
+    apiUrl: null,
+    startedAt: "2026-07-13T00:00:00.000Z",
+    finishedAt: null,
+    upstreamOrderingToken: "2026-07-13T00:00:05.000Z|SketchCatch App:1:1",
+    logRevision: "SketchCatch App:1:1",
+    lastRefreshedAt: "2026-07-13T00:00:05.000Z",
+    createdAt: "2026-07-13T00:00:00.000Z",
+    stages: []
+  };
+}
+
+function createGitCicdPipelineLogPayload(pipelineRunId: string) {
+  return {
+    id: "log-18",
+    pipelineRunId,
+    stageId: null,
+    sequence: 18,
+    level: "info",
+    message: "Deployment started",
+    createdAt: "2026-07-13T00:00:05.000Z"
+  };
+}
+
 function createLiveObservationSessionPayload() {
   return {
     audienceUrl:
-      "https://audience.example.com/?observation=public-token&collector=https%3A%2F%2Fapp.example.com",
+      "https://audience.example.com/observe/22222222-2222-4222-8222-222222222222",
     createdAt: "2026-07-10T00:00:00.000Z",
     deploymentId: "11111111-1111-4111-8111-111111111111",
     expiresAt: "2026-07-10T00:15:00.000Z",
     id: "22222222-2222-4222-8222-222222222222",
-    status: "active",
-    trafficApiUrl: "https://traffic.example.com/api/traffic"
+    status: "active"
   };
 }
 
 function createLiveObservationSnapshotPayload(status: "active" | "stopped") {
   return {
-    capacity: {
-      currentInstanceCount: 1,
-      desiredCapacity: 1,
-      errorCode: null,
-      inServiceInstanceCount: 1,
-      instances: [
-        { healthStatus: "Healthy", instanceId: "i-demo", lifecycleState: "InService" }
-      ],
-      latestActivity: null,
-      maxCapacity: 2,
-      observedAt: "2026-07-10T00:00:01.000Z",
-      state: "available"
-    },
-    cloudWatch: {
-      delayedBySeconds: 1,
-      errorCode: null,
-      observedAt: "2026-07-10T00:00:00.000Z",
-      periodSeconds: 60,
-      requestCountPerTarget: 12,
-      state: "available"
-    },
     live: {
       acceptedEventCount: 12,
       observedAt: "2026-07-10T00:00:01.000Z",
@@ -2684,8 +2967,10 @@ function createLiveObservationSnapshotPayload(status: "active" | "stopped") {
       projectedRequestsPerMinute: 12,
       rollingRequestsPerSecond: 0.2
     },
+    latestObservation: null,
     observationId: "22222222-2222-4222-8222-222222222222",
-    status
+    status,
+    terminalAt: status === "stopped" ? "2026-07-10T00:01:00.000Z" : null
   };
 }
 

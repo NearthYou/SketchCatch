@@ -55,7 +55,7 @@ ecs_autoscaling_max_capacity       = 2
 ecs_autoscaling_target_cpu_percent = 60
 ```
 
-API 민감 값은 secret 원문이 아니라 Secrets Manager 또는 SSM Parameter Store ARN으로 전달합니다. `DATABASE_URL`, `AUTH_TOKEN_SECRET`, `CLOUDFORMATION_TEMPLATE_TOKEN_SECRET`, `REDIS_URL`, OAuth secret, GitHub App secret와 `OPENAI_API_KEY`는 `api_secret_arns`에 있어야 합니다. public URL, client ID, bucket name과 region만 일반 environment에 둡니다.
+API 민감 값은 secret 원문이 아니라 Secrets Manager 또는 SSM Parameter Store ARN으로 전달합니다. `DATABASE_URL`, `AUTH_TOKEN_SECRET`, `CLOUDFORMATION_TEMPLATE_TOKEN_SECRET`, `REDIS_URL`, OAuth secret, GitHub App secret와 `OPENAI_API_KEY`는 `api_secret_arns`에 있어야 합니다. Web Push를 켤 때는 `WEB_PUSH_VAPID_PRIVATE_KEY`와 `WEB_PUSH_SUBSCRIPTION_ENCRYPTION_KEY`도 `api_secret_arns`로만 전달합니다. public URL, client ID, bucket name, region, VAPID public key와 subject만 일반 environment에 둡니다.
 
 ## 적용 절차
 

@@ -51,35 +51,33 @@ test("in-memory LiveObservationStore samples its clock once per operation", asyn
     fencingToken: observer.lease.fencingToken,
     observation: {
       observedAt: new Date(now).toISOString(),
-      payload: { state: "available" }
+      payload: providerSnapshot(new Date(now).toISOString())
     }
   });
   assert.equal(clockCalls, 3);
-  await store.acquirePresenterBoostLease({
-    observationId: input.observationId,
-    leaseId: "33333333-3333-4333-8333-333333333333"
-  });
-  assert.equal(clockCalls, 4);
-  await store.renewPresenterBoostLease({
-    observationId: input.observationId,
-    leaseId: "33333333-3333-4333-8333-333333333333"
-  });
-  assert.equal(clockCalls, 5);
-  await store.releasePresenterBoostLease({
-    observationId: input.observationId,
-    leaseId: "33333333-3333-4333-8333-333333333333"
-  });
-  assert.equal(clockCalls, 6);
   await store.readSession({ observationId: input.observationId });
-  assert.equal(clockCalls, 7);
+  assert.equal(clockCalls, 4);
   await store.collectEvent({
     observationId: input.observationId,
     eventId: "00000000-0000-4000-8000-000000000001"
   });
-  assert.equal(clockCalls, 8);
+  assert.equal(clockCalls, 5);
   await store.stopSession({
     observationId: input.observationId,
     deploymentId: input.manifest.provenance.deploymentId
   });
-  assert.equal(clockCalls, 9);
+  assert.equal(clockCalls, 6);
 });
+
+function providerSnapshot(observedAt: string) {
+  return {
+    requests: 1,
+    errorRate: 0,
+    p95LatencyMs: 10,
+    availability: 100,
+    capacity: { desired: 1, running: 1, healthy: 1, max: 2 },
+    logs: [{ timestamp: observedAt, message: "healthy" }],
+    observedAt,
+    state: "available" as const
+  };
+}

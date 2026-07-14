@@ -207,9 +207,9 @@ export function createArchitectureDraft(input: string | CreateArchitectureDraftR
   const draft = planPracticeArchitecture(resolution, resourceQuantities);
   const configuredDraft = applyOperatingConditionConfig(draft, resolution.operatingProfile);
 
-  return applyFixedTemplateSelection(
+  return applyArchitectureDraftRequestPolicies(
     applyGuardrailMetadata(configuredDraft, request, resolution),
-    request.templateId
+    request
   );
 }
 
@@ -301,9 +301,15 @@ export async function createAmazonQArchitectureDraftResponse(
     prompt: request.prompt,
     provider: options.requirementNormalizerProvider
   });
-  const normalizedRequirement = mergeArchitectureIntentPlans(
-    providerNormalizedRequirement,
-    createDeterministicArchitectureIntentPlan(request.prompt)
+  const normalizedRequirement = applyRepositoryEvidencePriorityToRequirementPlan(
+    applyFixedTemplatePriorityToRequirementPlan(
+      mergeArchitectureIntentPlans(
+        providerNormalizedRequirement,
+        createDeterministicArchitectureIntentPlan(request.prompt)
+      ),
+      request.templateId
+    ),
+    request
   );
   const architectureBrief = createAmazonQArchitectureBrief(request.prompt);
   const fixedTemplateSelection = createFixedTemplateSelection(request.templateId);
@@ -409,14 +415,14 @@ export async function createAmazonQArchitectureDraftResponse(
     if (parsedResponse.status === "plan") {
       try {
         reportArchitectureDraftProgress(options.onProgress, "building_diagram");
-        return applyFixedTemplateSelection(
+        return applyArchitectureDraftRequestPolicies(
           createAmazonQPlanDraftResult(
             parsedResponse,
             request,
             normalizedRequirement,
             providerMetadata
           ),
-          request.templateId
+          request
         );
       } catch (error) {
         if (retryUsed) {
@@ -476,22 +482,22 @@ export async function createAmazonQArchitectureDraftResponse(
         });
 
         reportArchitectureDraftProgress(options.onProgress, "building_diagram");
-        return applyFixedTemplateSelection(
+        return applyArchitectureDraftRequestPolicies(
           createAmazonQPlanDraftResult(
             parsedResponse,
             request,
             normalizedRequirement,
             providerMetadata
           ),
-          request.templateId
+          request
         );
       }
     }
 
     reportArchitectureDraftProgress(options.onProgress, "building_diagram");
-    return applyFixedTemplateSelection(
+    return applyArchitectureDraftRequestPolicies(
       createAmazonQDraftResult(parsedResponse, providerMetadata),
-      request.templateId
+      request
     );
   } catch (error) {
     if (error instanceof ArchitectureDraftGenerationError) {
@@ -1618,7 +1624,111 @@ function createFixedTemplateSelectionPrompt(selection: FixedTemplateSelection | 
   ].join("\n");
 }
 
-// Repository Analysis Template은 초안 자체로 고정하고 추가 요구는 이후 Patch 흐름에서 보완합니다.
+// 선택 Template의 핵심 리소스를 유지하면서 AI가 답변에 맞춰 만든 호환 리소스와 연결을 보강합니다.
+function applyFixedTemplatePriorityToRequirementPlan(
+  plan: ArchitectureIntentPlan | null,
+  templateId: TemplateId | undefined
+): ArchitectureIntentPlan | null {
+  if (plan === null || templateId === undefined) {
+    return plan;
+  }
+
+  const allowedPatternIds: Readonly<Record<TemplateId, ReadonlySet<string>>> = {
+    "ecs-fargate-container-app": new Set([
+      "ecs-fargate",
+      "multi-az-rds",
+      "spa-cloudfront-s3"
+    ]),
+    "eks-container-app": new Set([
+      "multi-az-rds",
+      "spa-cloudfront-s3"
+    ]),
+    "full-serverless-web-app": new Set([
+      "serverless-api",
+      "multi-az-rds",
+      "spa-cloudfront-s3"
+    ]),
+    "minimal-serverless-api": new Set([
+      "serverless-api",
+      "multi-az-rds"
+    ]),
+    "static-web-hosting": new Set(["spa-cloudfront-s3"]),
+    "three-tier-web-app": new Set([
+      "alb-asg-ec2",
+      "github-cicd-codedeploy",
+      "multi-az-rds",
+      "spa-cloudfront-s3"
+    ])
+  };
+  const fixedCompute: Readonly<Record<TemplateId, string | undefined>> = {
+    "ecs-fargate-container-app": "ECS_FARGATE",
+    "eks-container-app": "EKS_CLUSTER",
+    "full-serverless-web-app": "LAMBDA",
+    "minimal-serverless-api": "LAMBDA",
+    "static-web-hosting": undefined,
+    "three-tier-web-app": "EC2"
+  };
+  const requiredResources = (plan.requiredResources ?? []).filter((resourceType) =>
+    SUPPORTED_RESOURCE_TYPE_SET.has(resourceType as ResourceType)
+      && isCompatibleTemplateAddition(templateId, resourceType as ResourceType)
+  );
+  const resourceQuantities = Object.fromEntries(
+    Object.entries(plan.resourceQuantities ?? {}).filter(([resourceType]) =>
+      SUPPORTED_RESOURCE_TYPE_SET.has(resourceType as ResourceType)
+        && isCompatibleTemplateAddition(templateId, resourceType as ResourceType)
+    )
+  );
+  const patternIds = (plan.patternIds ?? []).filter((patternId) =>
+    allowedPatternIds[templateId].has(patternId)
+  );
+  const templateForbidsEc2Runtime = templateId !== "three-tier-web-app";
+  const forbiddenCapabilities = mergeUniqueTextItems(
+    (plan.forbiddenCapabilities ?? []).filter((capability) => {
+      const normalizedCapability = capability.toLowerCase();
+
+      if (normalizedCapability === "load_balancer" && templateId === "ecs-fargate-container-app") {
+        return false;
+      }
+      if (normalizedCapability === "database" && templateId === "three-tier-web-app") {
+        return false;
+      }
+      if (normalizedCapability === "ec2_runtime" && templateId === "three-tier-web-app") {
+        return false;
+      }
+
+      return true;
+    }),
+    templateForbidsEc2Runtime ? ["ec2_runtime"] : []
+  );
+  const compute = fixedCompute[templateId];
+  const runtimeTopology = compute === undefined
+    ? undefined
+    : {
+        ...(plan.runtimeTopology ?? {}),
+        compute,
+        ...(templateId === "ecs-fargate-container-app" ? { trafficEntry: "LOAD_BALANCER" } : {}),
+        ...(compute === "EC2"
+          ? {}
+          : { computeCount: undefined, spreadAcrossPrivateSubnets: undefined })
+      };
+
+  return {
+    ...plan,
+    ...(patternIds.length === 0 ? { patternIds: undefined } : { patternIds }),
+    ...(requiredResources.length === 0 ? { requiredResources: undefined } : { requiredResources }),
+    ...(Object.keys(resourceQuantities).length === 0
+      ? { resourceQuantities: undefined }
+      : { resourceQuantities }),
+    ...(forbiddenCapabilities.length === 0
+      ? { forbiddenCapabilities: undefined }
+      : { forbiddenCapabilities }),
+    runtimeTopology,
+    amazonQBrief: mergeUniqueTextItems(plan.amazonQBrief, [
+      `The selected Template ${templateId} is authoritative. Treat conflicting runtime or operations answers as advisory assumptions instead of replacing its compute model.`
+    ])
+  };
+}
+
 function applyFixedTemplateSelection(
   draft: AiArchitectureDraftResult,
   templateId: TemplateId | undefined
@@ -1639,6 +1749,11 @@ function applyFixedTemplateSelection(
       );
     }
 
+    const resolvedValues = resolveFixedTemplateValue(resource.values, definition);
+    if (!isObjectRecord(resolvedValues)) {
+      throw new Error(`Template resource values must be an object: ${resource.id}`);
+    }
+
     return {
       id: `fixed-template-${definition.id}-${resource.id}`,
       type: resourceDefinition.resourceType,
@@ -1646,10 +1761,10 @@ function applyFixedTemplateSelection(
       positionX: resource.position.x,
       positionY: resource.position.y,
       config: {
+        ...resolvedValues,
         templateResourceId: resource.id,
         terraformBlockType: resource.terraformBlockType,
-        terraformResourceType: resource.terraformResourceType,
-        values: resource.values
+        terraformResourceType: resource.terraformResourceType
       }
     };
   });
@@ -1659,12 +1774,100 @@ function applyFixedTemplateSelection(
     targetId: `fixed-template-${definition.id}-${relationship.targetResourceId}`,
     label: relationship.label
   }));
+  const availableFixedNodeIdsByType = new Map<ResourceType, string[]>();
+  const mergedNodeIds = new Set(fixedNodes.map((node) => node.id));
+  const draftNodeIdMap = new Map<string, string>();
+  const additionalNodes: ArchitectureJson["nodes"] = [];
+
+  for (const node of fixedNodes) {
+    if (!TEMPLATE_CORE_DEDUPE_RESOURCE_TYPES.has(node.type)) {
+      continue;
+    }
+
+    const ids = availableFixedNodeIdsByType.get(node.type) ?? [];
+    ids.push(node.id);
+    availableFixedNodeIdsByType.set(node.type, ids);
+  }
+
+  for (const node of draft.architectureJson.nodes) {
+    const matchingFixedIds = availableFixedNodeIdsByType.get(node.type);
+    const matchingFixedId =
+      findSemanticFixedTemplateMergeTarget(templateId, node, fixedNodes) ??
+      matchingFixedIds?.shift();
+
+    if (matchingFixedId) {
+      draftNodeIdMap.set(node.id, matchingFixedId);
+      continue;
+    }
+
+    if (!isCompatibleTemplateAddition(templateId, node.type)) {
+      continue;
+    }
+
+    const mergedNodeId = createUniqueTemplateMergeId(node.id, mergedNodeIds);
+    mergedNodeIds.add(mergedNodeId);
+    draftNodeIdMap.set(node.id, mergedNodeId);
+    additionalNodes.push({ ...node, id: mergedNodeId });
+  }
+
+  const mergedEdgeIds = new Set(fixedEdges.map((edge) => edge.id));
+  const mergedEdgePairs = new Set(
+    fixedEdges.map((edge) => `${edge.sourceId}->${edge.targetId}`)
+  );
+  const remappedAdditionalNodes = additionalNodes.map((node) => ({
+    ...node,
+    config: remapMergedArchitectureReferences(
+      node.config,
+      draft.architectureJson.nodes,
+      draftNodeIdMap
+    )
+  }));
+  const additionalEdges: ArchitectureJson["edges"] = [];
+
+  for (const edge of draft.architectureJson.edges) {
+    const sourceId = draftNodeIdMap.get(edge.sourceId);
+    const targetId = draftNodeIdMap.get(edge.targetId);
+
+    if (!sourceId || !targetId || sourceId === targetId) continue;
+
+    const edgePair = `${sourceId}->${targetId}`;
+    if (mergedEdgePairs.has(edgePair)) continue;
+
+    const mergedEdgeId = createUniqueTemplateMergeId(edge.id, mergedEdgeIds);
+    mergedEdgeIds.add(mergedEdgeId);
+    mergedEdgePairs.add(edgePair);
+    additionalEdges.push({ ...edge, id: mergedEdgeId, sourceId, targetId });
+  }
+
+  const fixedWorkloadNode = findFixedTemplateWorkloadNode(templateId, fixedNodes);
+  if (fixedWorkloadNode) {
+    for (const dataNode of remappedAdditionalNodes.filter((node) => TEMPLATE_DATA_RESOURCE_TYPES.has(node.type))) {
+      const hasWorkloadDataEdge = [...fixedEdges, ...additionalEdges].some((edge) =>
+        (edge.sourceId === fixedWorkloadNode.id && edge.targetId === dataNode.id)
+        || (edge.sourceId === dataNode.id && edge.targetId === fixedWorkloadNode.id)
+      );
+      if (hasWorkloadDataEdge) continue;
+
+      const edgeId = createUniqueTemplateMergeId(
+        `fixed-template-${definition.id}-${fixedWorkloadNode.id}-${dataNode.id}`,
+        mergedEdgeIds
+      );
+      mergedEdgeIds.add(edgeId);
+      additionalEdges.push({
+        id: edgeId,
+        sourceId: fixedWorkloadNode.id,
+        targetId: dataNode.id,
+        label: "reads/writes"
+      });
+    }
+  }
 
   return {
     ...draft,
+    diagramJson: undefined,
     architectureJson: {
-      nodes: fixedNodes,
-      edges: fixedEdges
+      nodes: [...fixedNodes, ...remappedAdditionalNodes],
+      edges: [...fixedEdges, ...additionalEdges]
     },
     metadata: {
       ...draft.metadata,
@@ -1674,6 +1877,1140 @@ function applyFixedTemplateSelection(
       ]
     }
   };
+}
+
+function applyRepositoryEvidencePriorityToRequirementPlan(
+  plan: ArchitectureIntentPlan | null,
+  request: CreateArchitectureDraftRequest
+): ArchitectureIntentPlan | null {
+  const evidence = request.repositoryEvidence;
+
+  if (plan === null || evidence === undefined || !usesStrictEcsRepositoryEvidence(request)) {
+    return plan;
+  }
+
+  const factKeys = new Set(evidence.facts.map((fact) => `${fact.kind}:${fact.value}`));
+  const hasFact = (kind: string, value: string): boolean => factKeys.has(`${kind}:${value}`);
+  const requiredResources = new Set<string>();
+  const resourceQuantities: Record<string, number> = {};
+  for (const resourceType of [
+    "ECS_CLUSTER",
+    "ECS_SERVICE",
+    "ECS_TASK_DEFINITION",
+    "LOAD_BALANCER",
+    "LOAD_BALANCER_LISTENER",
+    "LOAD_BALANCER_TARGET_GROUP"
+  ] as const) {
+    requiredResources.add(resourceType);
+  }
+
+  if (hasFact("frontend_delivery", "s3_cloudfront_static")) {
+    requiredResources.add("S3");
+    requiredResources.add("CLOUDFRONT");
+  }
+  if (hasFact("container_registry", "ecr")) {
+    requiredResources.add("ECR_REPOSITORY");
+  }
+  if (hasFact("observability", "cloudwatch")) {
+    requiredResources.add("CLOUDWATCH_LOG_GROUP");
+  }
+  if (hasFact("excluded_capability", "database")) {
+    requiredResources.delete("RDS");
+  }
+  if (hasFact("runtime_scale", "single_task")) {
+    resourceQuantities.ECS_SERVICE = 1;
+    resourceQuantities.ECS_TASK_DEFINITION = 1;
+    resourceQuantities.LOAD_BALANCER_TARGET_GROUP = 1;
+  }
+
+  return {
+    ...plan,
+    patternIds: undefined,
+    requiredResources: [...requiredResources],
+    resourceQuantities,
+    runtimeTopology: {
+      ...(plan.runtimeTopology ?? {}),
+      trafficEntry: "LOAD_BALANCER",
+      compute: "ECS_FARGATE",
+      ...(hasFact("runtime_scale", "single_task") ? { computeCount: 1 } : {}),
+      placement: "private_subnets",
+      spreadAcrossPrivateSubnets: true,
+      autoScaling: false
+    },
+    forbiddenCapabilities: mergeUniqueTextItems(plan.forbiddenCapabilities, [
+      "ec2_runtime",
+      ...(hasFact("excluded_capability", "database") ? ["database"] : []),
+      ...(hasFact("excluded_capability", "websocket") ? ["realtime"] : [])
+    ]),
+    ...(hasFact("excluded_capability", "database") ? { database: "none" } : {}),
+    availability: undefined,
+    amazonQBrief: mergeUniqueTextItems(plan.amazonQBrief, [
+      "Repository evidence is authoritative: keep one Fargate task unless the user explicitly overrides it.",
+      "Use GitHub Actions as an external delivery actor; do not add AWS-native CI/CD pipeline resources.",
+      "Place the internet-facing ALB in two public subnets and the Fargate service in two private app subnets.",
+      "Use one cost-conscious NAT gateway for private task image pulls and log delivery; do not add autoscaling or persistence."
+    ])
+  };
+}
+
+function usesStrictEcsRepositoryEvidence(request: CreateArchitectureDraftRequest): boolean {
+  return request.repositoryEvidence?.mode === "strict"
+    && request.templateId === "ecs-fargate-container-app"
+    && request.repositoryEvidence.facts.some(
+      (fact) => fact.kind === "backend_runtime" && fact.value === "ecs_fargate_service"
+    );
+}
+
+function createStrictRepositoryDeploymentName(repositoryName: string | undefined): string {
+  const normalized = (repositoryName ?? "application")
+    .toLowerCase()
+    .replace(/\.git$/u, "")
+    .replace(/[^a-z0-9-]+/gu, "-")
+    .replace(/^-+|-+$/gu, "")
+    .slice(0, 20)
+    .replace(/-+$/u, "");
+
+  return normalized || "application";
+}
+
+function applyArchitectureDraftRequestPolicies(
+  draft: AiArchitectureDraftResult,
+  request: CreateArchitectureDraftRequest
+): AiArchitectureDraftResult {
+  return applyStrictRepositoryEvidencePolicy(
+    applyFixedTemplateSelection(draft, request.templateId),
+    request
+  );
+}
+
+function applyStrictRepositoryEvidencePolicy(
+  draft: AiArchitectureDraftResult,
+  request: CreateArchitectureDraftRequest
+): AiArchitectureDraftResult {
+  const evidence = request.repositoryEvidence;
+
+  if (!usesStrictEcsRepositoryEvidence(request) || evidence === undefined) {
+    return draft;
+  }
+
+  const factKeys = new Set(evidence.facts.map((fact) => `${fact.kind}:${fact.value}`));
+  const hasFact = (kind: string, value: string): boolean => factKeys.has(`${kind}:${value}`);
+  const templatePrefix = "fixed-template-ecs-fargate-container-app-";
+  const fixedTemplateDraft = applyFixedTemplateSelection(
+    { ...draft, architectureJson: { nodes: [], edges: [] } },
+    request.templateId
+  );
+  const strictEvidenceManagedTemplateResourceIds = new Set(["repository", "log-group"]);
+  const coreNodes = fixedTemplateDraft.architectureJson.nodes.filter(
+    (node) =>
+      node.id.startsWith(templatePrefix) &&
+      !strictEvidenceManagedTemplateResourceIds.has(String(node.config.templateResourceId ?? ""))
+  );
+  const nodeByTemplateResourceId = new Map(
+    coreNodes.flatMap((node) =>
+      typeof node.config.templateResourceId === "string"
+        ? [[node.config.templateResourceId, node] as const]
+        : []
+    )
+  );
+  const coreNodeId = (resourceId: string): string =>
+    nodeByTemplateResourceId.get(resourceId)?.id ?? `${templatePrefix}${resourceId}`;
+  const staticDelivery = hasFact("frontend_delivery", "s3_cloudfront_static");
+  const usesEcr = hasFact("container_registry", "ecr");
+  const usesCloudWatch = hasFact("observability", "cloudwatch");
+  const usesGitHubActions = hasFact("ci_cd", "github_actions");
+  const requiresTlsAtAlb = hasFact("transport_security", "alb_tls_termination");
+  const singleTask = hasFact("runtime_scale", "single_task");
+  const healthCheck = evidence.facts.find((fact) => fact.kind === "health_check")?.value;
+  const healthMatch = /^http:(\d{2,5})(\/[a-z0-9_./-]+)$/iu.exec(healthCheck ?? "");
+  const containerPort = healthMatch ? Number(healthMatch[1]) : 80;
+  const healthCheckPath = healthMatch?.[2] ?? "/";
+  const deploymentName = createStrictRepositoryDeploymentName(evidence.repositoryName);
+  const apiName = `${deploymentName}-api`;
+  const logGroupName = `/ecs/${apiName}`;
+  const managedServicesAreaId = "repository-managed-services";
+  const hasManagedServices = staticDelivery || usesEcr || usesCloudWatch;
+  const vpcId = coreNodeId("vpc");
+  const publicSubnetAId = coreNodeId("subnet-a");
+  const publicSubnetBId = coreNodeId("subnet-b");
+  const privateAppSubnetAId = "repository-private-app-subnet-a";
+  const privateAppSubnetBId = "repository-private-app-subnet-b";
+  const natEipId = "repository-nat-eip";
+  const natGatewayId = "repository-nat-gateway";
+  const privateRouteTableId = "repository-private-route-table";
+  const privateRouteAssociationAId = "repository-private-route-association-a";
+  const privateRouteAssociationBId = "repository-private-route-association-b";
+  const fargateRuntimeId = "repository-fargate-runtime";
+  const webAssetsId = "repository-web-assets";
+  const webPublicAccessId = "repository-web-public-access";
+  const webBootstrapObjectId = "repository-web-bootstrap-index";
+  const cloudFrontOacId = "repository-cloudfront-oac";
+  const cloudFrontId = "repository-cloudfront";
+  const webBucketPolicyId = "repository-web-bucket-policy";
+  const ecrId = "repository-ecr";
+  const logGroupId = "repository-ecs-logs";
+  const vpcRef = `aws_vpc.${vpcId}.id`;
+  const publicSubnetRefs = [publicSubnetAId, publicSubnetBId].map(
+    (id) => `aws_subnet.${id}.id`
+  );
+  const privateAppSubnetRefs = [privateAppSubnetAId, privateAppSubnetBId].map(
+    (id) => `aws_subnet.${id}.id`
+  );
+  const additionalNodes: ArchitectureJson["nodes"] = [];
+
+  additionalNodes.push(
+    {
+      id: privateAppSubnetAId,
+      type: "SUBNET",
+      label: "Private App Subnet A",
+      positionX: 360,
+      positionY: 1010,
+      config: {
+        terraformResourceName: "private_app_a",
+        parentAreaNodeId: vpcId,
+        vpcId: vpcRef,
+        cidrBlock: "10.30.11.0/24",
+        availabilityZone: "ap-northeast-2a",
+        tier: "private_app",
+        mapPublicIpOnLaunch: false,
+        diagramWidth: 420,
+        diagramHeight: 300
+      }
+    },
+    {
+      id: privateAppSubnetBId,
+      type: "SUBNET",
+      label: "Private App Subnet B",
+      positionX: 840,
+      positionY: 1010,
+      config: {
+        terraformResourceName: "private_app_b",
+        parentAreaNodeId: vpcId,
+        vpcId: vpcRef,
+        cidrBlock: "10.30.12.0/24",
+        availabilityZone: "ap-northeast-2b",
+        tier: "private_app",
+        mapPublicIpOnLaunch: false,
+        diagramWidth: 420,
+        diagramHeight: 300
+      }
+    },
+    {
+      id: natEipId,
+      type: "ELASTIC_IP",
+      label: "NAT Elastic IP",
+      positionX: 900,
+      positionY: 690,
+      config: {
+        terraformResourceName: "nat",
+        parentAreaNodeId: publicSubnetAId,
+        domain: "vpc"
+      }
+    },
+    {
+      id: natGatewayId,
+      type: "NAT_GATEWAY",
+      label: "NAT Gateway (private egress)",
+      positionX: 1080,
+      positionY: 690,
+      config: {
+        terraformResourceName: "private_egress",
+        parentAreaNodeId: publicSubnetAId,
+        allocationId: `aws_eip.${natEipId}.id`,
+        subnetId: `aws_subnet.${publicSubnetAId}.id`
+      }
+    },
+    {
+      id: privateRouteTableId,
+      type: "ROUTE_TABLE",
+      label: "Private App Route Table",
+      positionX: 1360,
+      positionY: 1080,
+      config: {
+        terraformResourceName: "private_app",
+        parentAreaNodeId: vpcId,
+        vpcId: vpcRef,
+        route: [{
+          cidrBlock: "0.0.0.0/0",
+          natGatewayId: `aws_nat_gateway.${natGatewayId}.id`
+        }]
+      }
+    },
+    {
+      id: privateRouteAssociationAId,
+      type: "ROUTE_TABLE_ASSOCIATION",
+      label: "Private Route A",
+      positionX: 1580,
+      positionY: 1080,
+      config: {
+        terraformResourceName: "private_app_a",
+        parentAreaNodeId: vpcId,
+        subnetId: `aws_subnet.${privateAppSubnetAId}.id`,
+        routeTableId: `aws_route_table.${privateRouteTableId}.id`
+      }
+    },
+    {
+      id: privateRouteAssociationBId,
+      type: "ROUTE_TABLE_ASSOCIATION",
+      label: "Private Route B",
+      positionX: 1800,
+      positionY: 1080,
+      config: {
+        terraformResourceName: "private_app_b",
+        parentAreaNodeId: vpcId,
+        subnetId: `aws_subnet.${privateAppSubnetBId}.id`,
+        routeTableId: `aws_route_table.${privateRouteTableId}.id`
+      }
+    }
+  );
+
+  if (hasManagedServices) {
+    additionalNodes.push({
+      id: managedServicesAreaId,
+      type: "UNKNOWN",
+      label: "AWS Managed Services",
+      positionX: 260,
+      positionY: 40,
+      config: {
+        diagramKind: "design",
+        diagramType: "design_group",
+        diagramWidth: 1800,
+        diagramHeight: 400
+      }
+    });
+  }
+
+  if (staticDelivery) {
+    additionalNodes.push(
+      {
+        id: webAssetsId,
+        type: "S3",
+        label: "Static Web Assets",
+        positionX: 580,
+        positionY: 140,
+        config: {
+          terraformResourceName: "web_assets",
+          parentAreaNodeId: managedServicesAreaId,
+          bucketPrefix: `${deploymentName}-web-`,
+          bucketPurpose: "static_website_origin",
+          publicAccessBlock: true,
+          forceDestroy: true
+        }
+      },
+      {
+        id: webPublicAccessId,
+        type: "S3",
+        label: "S3 Public Access Block",
+        positionX: 560,
+        positionY: 280,
+        config: {
+          terraformResourceType: "aws_s3_bucket_public_access_block",
+          terraformResourceName: "web_public_access",
+          parentAreaNodeId: managedServicesAreaId,
+          bucket: `aws_s3_bucket.${webAssetsId}.id`,
+          blockPublicAcls: true,
+          blockPublicPolicy: true,
+          ignorePublicAcls: true,
+          restrictPublicBuckets: true
+        }
+      },
+      {
+        id: webBootstrapObjectId,
+        type: "S3",
+        label: "Bootstrap Index (CI/CD replaces)",
+        positionX: 760,
+        positionY: 280,
+        config: {
+          terraformResourceType: "aws_s3_object",
+          terraformResourceName: "web_bootstrap_index",
+          parentAreaNodeId: managedServicesAreaId,
+          bucket: `aws_s3_bucket.${webAssetsId}.id`,
+          key: "index.html",
+          contentType: "text/html; charset=utf-8",
+          content: "<!doctype html><html lang=\"en\"><meta charset=\"utf-8\"><title>Application deployment ready</title><body><main><h1>Application deployment ready</h1><p>GitHub Actions will replace this bootstrap document with apps/web/dist.</p></main></body></html>"
+        }
+      },
+      {
+        id: cloudFrontOacId,
+        type: "CLOUDFRONT",
+        label: "CloudFront Origin Access Control",
+        positionX: 300,
+        positionY: 280,
+        config: {
+          terraformResourceType: "aws_cloudfront_origin_access_control",
+          terraformResourceName: "web_oac",
+          parentAreaNodeId: managedServicesAreaId,
+          name: `${deploymentName}-web-oac`,
+          originAccessControlOriginType: "s3",
+          signingBehavior: "always",
+          signingProtocol: "sigv4"
+        }
+      },
+      {
+        id: cloudFrontId,
+        type: "CLOUDFRONT",
+        label: "CloudFront Web Entry",
+        positionX: 340,
+        positionY: 140,
+        config: {
+          terraformResourceName: "web_cdn",
+          parentAreaNodeId: managedServicesAreaId,
+          enabled: true,
+          defaultRootObject: "index.html",
+          priceClass: "PriceClass_100",
+          origin: [
+            {
+              domainName: `aws_s3_bucket.${webAssetsId}.bucket_regional_domain_name`,
+              originId: "web-assets",
+              originAccessControlId: `aws_cloudfront_origin_access_control.${cloudFrontOacId}.id`
+            },
+            {
+              domainName: `aws_lb.${coreNodeId("load-balancer")}.dns_name`,
+              originId: "api-alb",
+              customOriginConfig: [{
+                httpPort: 80,
+                httpsPort: 443,
+                originProtocolPolicy: "http-only",
+                originSslProtocols: ["TLSv1.2"]
+              }]
+            }
+          ],
+          defaultCacheBehavior: [{
+            targetOriginId: "web-assets",
+            viewerProtocolPolicy: "redirect-to-https",
+            allowedMethods: ["GET", "HEAD"],
+            cachedMethods: ["GET", "HEAD"],
+            cachePolicyId: "658327ea-f89d-4fab-a63d-7e88639e58f6"
+          }],
+          orderedCacheBehavior: [{
+            pathPattern: "/api/*",
+            targetOriginId: "api-alb",
+            viewerProtocolPolicy: "redirect-to-https",
+            allowedMethods: ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"],
+            cachedMethods: ["GET", "HEAD"],
+            cachePolicyId: "4135ea2d-6df8-44a3-9df3-4b5a84be39ad",
+            originRequestPolicyId: "b689b0a8-53d0-40ab-baf2-68738e2966ac"
+          }],
+          restrictions: [{ geoRestriction: [{ restrictionType: "none" }] }],
+          viewerCertificate: [{ cloudfrontDefaultCertificate: true }]
+        }
+      },
+      {
+        id: webBucketPolicyId,
+        type: "S3",
+        label: "CloudFront Read-only Bucket Policy",
+        positionX: 980,
+        positionY: 280,
+        config: {
+          terraformResourceType: "aws_s3_bucket_policy",
+          terraformResourceName: "web_cloudfront_read",
+          parentAreaNodeId: managedServicesAreaId,
+          bucket: `aws_s3_bucket.${webAssetsId}.id`,
+          dependsOn: [`aws_s3_bucket_public_access_block.${webPublicAccessId}`],
+          policy: JSON.stringify({
+            Version: "2012-10-17",
+            Statement: [{
+              Sid: "AllowCloudFrontServicePrincipalReadOnly",
+              Effect: "Allow",
+              Principal: { Service: "cloudfront.amazonaws.com" },
+              Action: "s3:GetObject",
+              Resource: `\${aws_s3_bucket.${webAssetsId}.arn}/*`,
+              Condition: {
+                StringEquals: {
+                  "AWS:SourceArn": `\${aws_cloudfront_distribution.${cloudFrontId}.arn}`
+                }
+              }
+            }]
+          })
+        }
+      }
+    );
+  }
+
+  if (usesEcr) {
+    additionalNodes.push({
+      id: ecrId,
+      type: "ECR_REPOSITORY",
+      label: "ECR API Image Repository",
+      positionX: 820,
+      positionY: 140,
+      config: {
+        terraformResourceName: "api_image",
+        parentAreaNodeId: managedServicesAreaId,
+        name: apiName,
+        imageTagMutability: "IMMUTABLE",
+        forceDelete: true,
+        imageScanningConfiguration: { scanOnPush: true }
+      }
+    });
+  }
+
+  if (usesCloudWatch) {
+    additionalNodes.push({
+      id: logGroupId,
+      type: "CLOUDWATCH_LOG_GROUP",
+      label: "CloudWatch ECS Container Logs",
+      positionX: 1300,
+      positionY: 140,
+      config: {
+        terraformResourceName: "ecs_logs",
+        parentAreaNodeId: managedServicesAreaId,
+        name: logGroupName,
+        retentionInDays: 30
+      }
+    });
+  }
+
+  additionalNodes.push({
+    id: "repository-browser",
+    type: "UNKNOWN",
+    label: "Browser",
+    positionX: 40,
+    positionY: 680,
+    config: {
+      diagramKind: "design",
+      diagramType: "client",
+      diagramWidth: 140,
+      diagramHeight: 80
+    }
+  });
+
+  additionalNodes.push({
+    id: fargateRuntimeId,
+    type: "UNKNOWN",
+    label: "Fargate Task (1, Private App A/B)",
+    positionX: 460,
+    positionY: 1140,
+    config: {
+      diagramKind: "design",
+      diagramType: "aws_ecs_task_definition",
+      diagramWidth: 260,
+      diagramHeight: 96,
+      parentAreaNodeId: coreNodeId("task-security-group")
+    }
+  });
+
+  if (usesGitHubActions) {
+    additionalNodes.push({
+      id: "repository-github-actions",
+      type: "UNKNOWN",
+      label: "GitHub Actions",
+      positionX: 40,
+      positionY: 180,
+      config: {
+        diagramKind: "design",
+        diagramType: "github_actions",
+        diagramWidth: 160,
+        diagramHeight: 80
+      }
+    });
+  }
+
+  const updatedCoreNodes = coreNodes.map((node) => {
+    switch (node.config.templateResourceId) {
+      case "vpc":
+        return {
+          ...node,
+          positionX: 260,
+          positionY: 500,
+          config: {
+            ...node.config,
+            diagramWidth: 1800,
+            diagramHeight: 900
+          }
+        };
+      case "subnet-a":
+        return {
+          ...node,
+          label: "Public Subnet A",
+          positionX: 360,
+          positionY: 620,
+          config: {
+            ...node.config,
+            parentAreaNodeId: vpcId,
+            tier: "public",
+            mapPublicIpOnLaunch: true,
+            diagramWidth: 420,
+            diagramHeight: 280
+          }
+        };
+      case "subnet-b":
+        return {
+          ...node,
+          label: "Public Subnet B",
+          positionX: 840,
+          positionY: 620,
+          config: {
+            ...node.config,
+            parentAreaNodeId: vpcId,
+            tier: "public",
+            mapPublicIpOnLaunch: true,
+            diagramWidth: 420,
+            diagramHeight: 280
+          }
+        };
+      case "alb-security-group":
+        return {
+          ...node,
+          positionX: 420,
+          positionY: 680,
+          config: {
+            ...node.config,
+            name: `${deploymentName}-alb-sg`,
+            parentAreaNodeId: publicSubnetAId,
+            diagramWidth: 300,
+            diagramHeight: 160,
+            description: requiresTlsAtAlb && staticDelivery
+              ? "Allow CloudFront origin HTTP while CloudFront terminates public TLS"
+              : requiresTlsAtAlb
+                ? "Allow HTTP for deployment validation until an ALB certificate is confirmed"
+              : "Allow public HTTP to the Application Load Balancer",
+            ingress: [{
+              fromPort: 80,
+              toPort: 80,
+              protocol: "tcp",
+              cidrBlocks: ["0.0.0.0/0"]
+            }]
+          }
+        };
+      case "task-security-group":
+        return {
+          ...node,
+          positionX: 420,
+          positionY: 1070,
+          config: {
+            ...node.config,
+            name: `${deploymentName}-task-sg`,
+            parentAreaNodeId: privateAppSubnetAId,
+            diagramWidth: 340,
+            diagramHeight: 180,
+            description: `Allow ALB traffic to the API on port ${containerPort}`,
+            ingress: [{
+              fromPort: containerPort,
+              toPort: containerPort,
+              protocol: "tcp",
+              securityGroups: [`aws_security_group.${coreNodeId("alb-security-group")}.id`]
+            }]
+          }
+        };
+      case "cluster":
+        return {
+          ...node,
+          positionX: 1540,
+          positionY: 140,
+          config: {
+            ...node.config,
+            name: `${deploymentName}-cluster`,
+            ...(hasManagedServices ? { parentAreaNodeId: managedServicesAreaId } : {})
+          }
+        };
+      case "load-balancer":
+        return {
+          ...node,
+          label: "Internet-facing ALB (Public A/B)",
+          positionX: 500,
+          positionY: 730,
+          config: {
+            ...node.config,
+            name: `${deploymentName.slice(0, 24)}-alb`,
+            parentAreaNodeId: coreNodeId("alb-security-group"),
+            subnets: publicSubnetRefs
+          }
+        };
+      case "target-group":
+        return {
+          ...node,
+          label: "API Target Group",
+          positionX: 1360,
+          positionY: 700,
+          config: {
+            ...node.config,
+            name: `${deploymentName.slice(0, 24)}-api`,
+            parentAreaNodeId: vpcId,
+            port: containerPort,
+            healthCheck: { path: healthCheckPath, matcher: "200-399" }
+          }
+        };
+      case "listener":
+        return {
+          ...node,
+          label: requiresTlsAtAlb && staticDelivery
+            ? "CloudFront Origin HTTP Listener"
+            : requiresTlsAtAlb
+              ? "HTTP Listener (TLS Pending)"
+              : "HTTP Listener",
+          positionX: 1560,
+          positionY: 700,
+          config: {
+            ...node.config,
+            parentAreaNodeId: vpcId,
+            port: 80,
+            protocol: "HTTP"
+          }
+        };
+      case "task":
+        return {
+          ...node,
+          label: "API Task Definition (control plane)",
+          positionX: 1060,
+          positionY: 140,
+          config: {
+            ...node.config,
+            ...(hasManagedServices ? { parentAreaNodeId: managedServicesAreaId } : {}),
+            family: apiName,
+            dependsOn: usesCloudWatch
+              ? [`aws_cloudwatch_log_group.${logGroupId}`]
+              : undefined,
+            containerDefinitions: JSON.stringify([{
+              name: "api",
+              image: "public.ecr.aws/docker/library/nginx:1.27-alpine",
+              essential: true,
+              entryPoint: ["/bin/sh", "-c"],
+              command: [
+                "printf '%s\\n' 'server {' '  listen 8080;' '  default_type text/plain;' '  location = /health { return 200 ok; }' '  location / { return 200 SketchCatch-deployment-smoke; }' '}' > /etc/nginx/conf.d/default.conf && exec nginx -g 'daemon off;'"
+              ],
+              portMappings: [{ containerPort, hostPort: containerPort, protocol: "tcp" }],
+              environment: [
+                { name: "PORT", value: String(containerPort) },
+                ...(staticDelivery
+                  ? [{
+                      name: "WEB_ORIGIN",
+                      value: `https://\${aws_cloudfront_distribution.${cloudFrontId}.domain_name}`
+                    }]
+                  : []),
+                { name: "INSTANCE_ID", value: "fargate" }
+              ],
+              ...(usesCloudWatch
+                ? {
+                    logConfiguration: {
+                      logDriver: "awslogs",
+                      options: {
+                        "awslogs-group": logGroupName,
+                        "awslogs-region": "ap-northeast-2",
+                        "awslogs-stream-prefix": "api"
+                      }
+                    }
+                  }
+                : {})
+            }])
+          }
+        };
+      case "service":
+        return {
+          ...node,
+          label: "API Fargate Service",
+          positionX: 1780,
+          positionY: 140,
+          config: {
+            ...node.config,
+            name: `${deploymentName}-service`,
+            ...(hasManagedServices ? { parentAreaNodeId: managedServicesAreaId } : {}),
+            desiredCount: singleTask ? 1 : node.config.desiredCount,
+            networkConfiguration: {
+              subnets: privateAppSubnetRefs,
+              securityGroups: [`aws_security_group.${coreNodeId("task-security-group")}.id`],
+              assignPublicIp: false
+            },
+            loadBalancer: {
+              targetGroupArn: `aws_lb_target_group.${coreNodeId("target-group")}.arn`,
+              containerName: "api",
+              containerPort
+            }
+          }
+        };
+      case "internet-gateway":
+        return {
+          ...node,
+          positionX: 1800,
+          positionY: 620,
+          config: { ...node.config, parentAreaNodeId: vpcId }
+        };
+      case "route-table":
+        return {
+          ...node,
+          positionX: 1800,
+          positionY: 780,
+          config: { ...node.config, parentAreaNodeId: vpcId }
+        };
+      case "route-a":
+        return {
+          ...node,
+          positionX: 1580,
+          positionY: 920,
+          config: { ...node.config, parentAreaNodeId: vpcId }
+        };
+      case "route-b":
+        return {
+          ...node,
+          positionX: 1800,
+          positionY: 920,
+          config: { ...node.config, parentAreaNodeId: vpcId }
+        };
+      case "execution-role":
+        return {
+          ...node,
+          positionX: 820,
+          positionY: 300,
+          config: {
+            ...node.config,
+            name: `${deploymentName}-ecs-execution`,
+            ...(hasManagedServices ? { parentAreaNodeId: managedServicesAreaId } : {})
+          }
+        };
+      case "execution-policy":
+        return {
+          ...node,
+          positionX: 1060,
+          positionY: 300,
+          config: {
+            ...node.config,
+            ...(hasManagedServices ? { parentAreaNodeId: managedServicesAreaId } : {})
+          }
+        };
+      case "task-role":
+        return {
+          ...node,
+          positionX: 1300,
+          positionY: 300,
+          config: {
+            ...node.config,
+            name: `${deploymentName}-ecs-task`,
+            ...(hasManagedServices ? { parentAreaNodeId: managedServicesAreaId } : {})
+          }
+        };
+      default:
+        return node;
+    }
+  });
+  const nodes = [...updatedCoreNodes, ...additionalNodes];
+  const nodeIds = new Set(nodes.map((node) => node.id));
+  const edges: ArchitectureJson["edges"] = [];
+  const edgePairs = new Set(edges.map((edge) => `${edge.sourceId}->${edge.targetId}`));
+  const connect = (sourceId: string, targetId: string, label: string): void => {
+    const pair = `${sourceId}->${targetId}`;
+    if (!nodeIds.has(sourceId) || !nodeIds.has(targetId)) return;
+
+    if (edgePairs.has(pair)) {
+      const edgeIndex = edges.findIndex(
+        (edge) => edge.sourceId === sourceId && edge.targetId === targetId
+      );
+      if (edgeIndex >= 0) {
+        edges[edgeIndex] = { ...edges[edgeIndex]!, label };
+      }
+      return;
+    }
+
+    edgePairs.add(pair);
+    edges.push({
+      id: `repository-evidence-${sourceId}-${targetId}`,
+      sourceId,
+      targetId,
+      label
+    });
+  };
+
+  if (staticDelivery) {
+    connect("repository-browser", cloudFrontId, "HTTPS web and /api entry");
+    connect(cloudFrontId, webAssetsId, "private OAC origin");
+    connect(webAssetsId, webPublicAccessId, "blocks public access");
+    connect(webAssetsId, webBootstrapObjectId, "stores bootstrap index");
+    connect(cloudFrontOacId, cloudFrontId, "signs S3 origin requests");
+    connect(webBucketPolicyId, webAssetsId, "allows CloudFront read-only access");
+    connect(
+      cloudFrontId,
+      coreNodeId("alb-security-group"),
+      "proxies /api/* to ALB over HTTP"
+    );
+  } else {
+    connect("repository-browser", coreNodeId("alb-security-group"), "API -> ALB SG: TCP 80");
+  }
+  connect(coreNodeId("alb-security-group"), coreNodeId("load-balancer"), "attached to public ALB");
+  connect(
+    coreNodeId("alb-security-group"),
+    coreNodeId("task-security-group"),
+    `ALB SG -> Task SG: TCP ${containerPort} only`
+  );
+  connect(coreNodeId("load-balancer"), coreNodeId("listener"), "accepts CloudFront origin HTTP");
+  connect(coreNodeId("listener"), coreNodeId("target-group"), "forwards API traffic");
+  connect(coreNodeId("target-group"), coreNodeId("service"), `health checks ${healthCheckPath}`);
+  connect(coreNodeId("cluster"), coreNodeId("service"), "runs the API service");
+  connect(coreNodeId("task"), coreNodeId("service"), "defines the deployed revision");
+  connect(coreNodeId("service"), fargateRuntimeId, "schedules desired task in private app subnets");
+  if (usesEcr) {
+    connect(ecrId, fargateRuntimeId, "application revisions pull API image from ECR");
+  }
+  if (usesCloudWatch) {
+    connect(fargateRuntimeId, logGroupId, "writes ECS container logs via awslogs");
+  }
+  connect(natEipId, natGatewayId, "allocates public address");
+  connect(privateRouteTableId, natGatewayId, "routes private egress through NAT");
+  connect(privateRouteAssociationAId, privateRouteTableId, "associates private app subnet A");
+  connect(privateRouteAssociationBId, privateRouteTableId, "associates private app subnet B");
+  if (usesGitHubActions) {
+    if (usesEcr) {
+      connect("repository-github-actions", ecrId, "builds and pushes API image");
+    }
+    if (staticDelivery) {
+      connect("repository-github-actions", webAssetsId, "uploads apps/web/dist");
+      connect("repository-github-actions", cloudFrontId, "invalidates updated static assets");
+    }
+    connect("repository-github-actions", coreNodeId("service"), "deploys task revision");
+  }
+
+  return {
+    ...draft,
+    diagramJson: undefined,
+    architectureJson: { nodes, edges },
+    metadata: {
+      ...draft.metadata,
+      assumptions: [
+        ...draft.metadata.assumptions,
+        "Repository evidence strict mode kept only explicitly supported deployment resources.",
+        ...(requiresTlsAtAlb && staticDelivery
+          ? ["CloudFront terminates public HTTPS and routes /api/* to the ALB HTTP origin, so the web application does not make mixed-content API requests."]
+          : requiresTlsAtAlb
+            ? ["The repository requires ALB TLS termination; the initial deployment uses HTTP until the domain and certificate are user-confirmed."]
+          : []),
+        ...(usesEcr
+          ? ["The initial Terraform apply uses a public 8080 /health smoke image because the new ECR repository is empty; the first application release registers the repository image as a new ECS task definition revision."]
+          : []),
+        ...(staticDelivery
+          ? ["Terraform uploads a bootstrap index.html so the CloudFront URL is immediately healthy; CI/CD replaces it with apps/web/dist and invalidates CloudFront."]
+          : []),
+        "The two private app subnets use one NAT gateway for cost-conscious ECR image pulls and CloudWatch log delivery; this is a single-AZ egress tradeoff."
+      ]
+    }
+  };
+}
+
+function resolveFixedTemplateValue(value: unknown, definition: TemplateDefinition): unknown {
+  if (typeof value === "string") {
+    const referenceMatch = /^@ref:([^.]+)\.(.+)$/u.exec(value);
+    const addressMatch = /^@address:(.+)$/u.exec(value);
+    const targetResourceId = referenceMatch?.[1] ?? addressMatch?.[1];
+
+    if (!targetResourceId) {
+      return value;
+    }
+
+    const targetResource = definition.resources.find((resource) => resource.id === targetResourceId);
+    if (!targetResource) {
+      throw new Error(`Template reference target is missing: ${targetResourceId}`);
+    }
+
+    const targetNodeId = `fixed-template-${definition.id}-${targetResource.id}`;
+    const address = `${targetResource.terraformBlockType === "data" ? "data." : ""}${targetResource.terraformResourceType}.${targetNodeId}`;
+    return referenceMatch ? `${address}.${referenceMatch[2]}` : address;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => resolveFixedTemplateValue(item, definition));
+  }
+
+  if (!isObjectRecord(value)) {
+    return value;
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).map(([key, entryValue]) => [
+      key,
+      resolveFixedTemplateValue(entryValue, definition)
+    ])
+  );
+}
+
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+const TEMPLATE_CORE_DEDUPE_RESOURCE_TYPES = new Set<ResourceType>([
+  "AMPLIFY_APP",
+  "API_GATEWAY_REST_API",
+  "CLOUDFRONT",
+  "EC2",
+  "ECS_CLUSTER",
+  "ECS_SERVICE",
+  "ECS_TASK_DEFINITION",
+  "EKS_CLUSTER",
+  "KUBERNETES_DEPLOYMENT",
+  "KUBERNETES_NAMESPACE",
+  "KUBERNETES_SERVICE",
+  "LAMBDA",
+  "LOAD_BALANCER",
+  "LOAD_BALANCER_LISTENER",
+  "LOAD_BALANCER_TARGET_GROUP",
+  "VPC"
+]);
+
+const ECS_FARGATE_TEMPLATE_SEMANTIC_MERGE_TARGETS: Readonly<Record<string, string>> = {
+  "public-subnet-a": "subnet-a",
+  "public-subnet-b": "subnet-b",
+  "internet-gateway": "internet-gateway",
+  "public-route-table": "route-table",
+  "public-route-association-a": "route-a",
+  "public-route-association-b": "route-b",
+  "alb-security-group": "alb-security-group",
+  "app-security-group": "task-security-group",
+  "ecs-execution-role": "execution-role",
+  "ecs-task-role": "task-role"
+};
+
+function findSemanticFixedTemplateMergeTarget(
+  templateId: TemplateId,
+  draftNode: ArchitectureJson["nodes"][number],
+  fixedNodes: readonly ArchitectureJson["nodes"][number][]
+): string | undefined {
+  if (templateId !== "ecs-fargate-container-app") {
+    return undefined;
+  }
+
+  const targetTemplateResourceId = ECS_FARGATE_TEMPLATE_SEMANTIC_MERGE_TARGETS[draftNode.id];
+  if (!targetTemplateResourceId) {
+    return undefined;
+  }
+
+  return fixedNodes.find(
+    (node) => node.config.templateResourceId === targetTemplateResourceId
+  )?.id;
+}
+
+function remapMergedArchitectureReferences(
+  value: unknown,
+  draftNodes: readonly ArchitectureJson["nodes"][number][],
+  draftNodeIdMap: ReadonlyMap<string, string>
+): ArchitectureJson["nodes"][number]["config"] {
+  const replacements = draftNodes.flatMap((draftNode) => {
+    const mergedNodeId = draftNodeIdMap.get(draftNode.id);
+    const terraformResourceType = resourceDefinitions.find(
+      (definition) => definition.resourceType === draftNode.type
+    )?.terraform.resourceType;
+
+    if (!mergedNodeId || !terraformResourceType || mergedNodeId === draftNode.id) {
+      return [];
+    }
+
+    const sourceNames = new Set([
+      draftNode.id,
+      draftNode.id.replaceAll("-", "_"),
+      typeof draftNode.config.terraformResourceName === "string"
+        ? draftNode.config.terraformResourceName
+        : undefined
+    ].filter((name): name is string => Boolean(name)));
+    const prefix = draftNode.config.terraformBlockType === "data" ? "data." : "";
+
+    return [...sourceNames].map((sourceName) => ({
+      from: `${prefix}${terraformResourceType}.${sourceName}`,
+      to: `${prefix}${terraformResourceType}.${mergedNodeId}`
+    }));
+  });
+  const remapValue = (entryValue: unknown): unknown => {
+    if (typeof entryValue === "string") {
+      let remappedValue = entryValue;
+      for (const replacement of replacements) {
+        remappedValue = remappedValue.replaceAll(replacement.from, replacement.to);
+      }
+      return remappedValue;
+    }
+
+    if (Array.isArray(entryValue)) {
+      return entryValue.map(remapValue);
+    }
+
+    if (!isObjectRecord(entryValue)) {
+      return entryValue;
+    }
+
+    return Object.fromEntries(
+      Object.entries(entryValue).map(([key, nestedValue]) => [key, remapValue(nestedValue)])
+    );
+  };
+  const remapped = remapValue(value);
+
+  return isObjectRecord(remapped) ? remapped : {};
+}
+
+function isCompatibleTemplateAddition(templateId: TemplateId, resourceType: ResourceType): boolean {
+  const incompatibleComputeTypes = new Set<ResourceType>([
+    "AMPLIFY_APP",
+    "AMI",
+    "API_GATEWAY_REST_API",
+    "AUTO_SCALING_GROUP",
+    "EC2",
+    "ECS_CLUSTER",
+    "ECS_SERVICE",
+    "ECS_TASK_DEFINITION",
+    "EKS_CLUSTER",
+    "KUBERNETES_DEPLOYMENT",
+    "KUBERNETES_NAMESPACE",
+    "KUBERNETES_SERVICE",
+    "LAMBDA",
+    "IAM_INSTANCE_PROFILE"
+  ]);
+  const allowedComputeTypes: Readonly<Record<TemplateId, ReadonlySet<ResourceType>>> = {
+    "ecs-fargate-container-app": new Set([
+      "ECS_CLUSTER",
+      "ECS_SERVICE",
+      "ECS_TASK_DEFINITION"
+    ]),
+    "eks-container-app": new Set([
+      "EKS_CLUSTER",
+      "KUBERNETES_DEPLOYMENT",
+      "KUBERNETES_NAMESPACE",
+      "KUBERNETES_SERVICE"
+    ]),
+    "full-serverless-web-app": new Set(["AMPLIFY_APP", "API_GATEWAY_REST_API", "LAMBDA"]),
+    "minimal-serverless-api": new Set(["API_GATEWAY_REST_API", "LAMBDA"]),
+    "static-web-hosting": new Set(),
+    "three-tier-web-app": new Set(["AMI", "AUTO_SCALING_GROUP", "EC2", "IAM_INSTANCE_PROFILE"])
+  };
+
+  if (templateId === "static-web-hosting" && ["DB_SUBNET_GROUP", "DYNAMODB_TABLE", "RDS"].includes(resourceType)) {
+    return false;
+  }
+
+  if (
+    templateId !== "three-tier-web-app"
+    && (resourceType === "CODEDEPLOY_APP" || resourceType === "CODEDEPLOY_DEPLOYMENT_GROUP")
+  ) {
+    return false;
+  }
+
+  return !incompatibleComputeTypes.has(resourceType) || allowedComputeTypes[templateId].has(resourceType);
+}
+
+const TEMPLATE_DATA_RESOURCE_TYPES = new Set<ResourceType>([
+  "DYNAMODB_TABLE",
+  "RDS",
+  "RDS_CLUSTER"
+]);
+
+function findFixedTemplateWorkloadNode(
+  templateId: TemplateId,
+  fixedNodes: ArchitectureJson["nodes"]
+): ArchitectureJson["nodes"][number] | undefined {
+  const workloadTypes: Readonly<Record<TemplateId, readonly ResourceType[]>> = {
+    "ecs-fargate-container-app": ["ECS_SERVICE", "ECS_TASK_DEFINITION"],
+    "eks-container-app": ["KUBERNETES_DEPLOYMENT", "KUBERNETES_SERVICE"],
+    "full-serverless-web-app": ["LAMBDA"],
+    "minimal-serverless-api": ["LAMBDA"],
+    "static-web-hosting": [],
+    "three-tier-web-app": ["EC2", "AUTO_SCALING_GROUP"]
+  };
+
+  for (const resourceType of workloadTypes[templateId]) {
+    const node = fixedNodes.find((candidate) => candidate.type === resourceType);
+    if (node) return node;
+  }
+
+  return undefined;
+}
+
+function createUniqueTemplateMergeId(baseId: string, occupiedIds: ReadonlySet<string>): string {
+  if (!occupiedIds.has(baseId)) return baseId;
+
+  let suffix = 2;
+  while (occupiedIds.has(`${baseId}-${suffix}`)) suffix += 1;
+  return `${baseId}-${suffix}`;
 }
 
 function createAmazonQArchitectureBrief(prompt: string): string {
@@ -2013,7 +3350,7 @@ export function createDeterministicArchitectureIntentPlan(prompt: string): Archi
   const cloudFrontStaticDeliveryRequired = requiresCloudFrontStaticDelivery(normalizedPrompt);
   const serverlessApiRuntime = requiresServerlessApiArchitecture(normalizedPrompt);
   const staticDeliveryRequired = requiresStaticDeliveryArchitecture(normalizedPrompt);
-  const gitCiCdHandoffRequired = requiresGitCiCdHandoff(normalizedPrompt);
+  const awsNativeCiCdPipelineRequired = requiresAwsNativeCiCdPipeline(normalizedPrompt);
 
   if (staticDeliveryRequired) {
     patternIds.add("spa-cloudfront-s3");
@@ -2132,7 +3469,7 @@ export function createDeterministicArchitectureIntentPlan(prompt: string): Archi
     amazonQBrief.push("Place EC2 runtime nodes across at least two private subnet boxes, not visually grouped into one subnet.");
   }
 
-  if (gitCiCdHandoffRequired) {
+  if (awsNativeCiCdPipelineRequired) {
     patternIds.add("github-cicd-codedeploy");
     requiredResources.add("CODESTAR_CONNECTION");
     requiredResources.add("CODEPIPELINE");
@@ -2142,6 +3479,16 @@ export function createDeterministicArchitectureIntentPlan(prompt: string): Archi
     requiredResources.add("S3");
     requiredResources.add("IAM_ROLE");
     amazonQBrief.push("Include a Git/CI/CD handoff path with CodeStar Connection, CodePipeline, CodeBuild, CodeDeploy, and an S3 artifact bucket.");
+  } else {
+    for (const resourceType of [
+      "CODESTAR_CONNECTION",
+      "CODEPIPELINE",
+      "CODEBUILD_PROJECT",
+      "CODEDEPLOY_APP",
+      "CODEDEPLOY_DEPLOYMENT_GROUP"
+    ] as const) {
+      requiredResources.delete(resourceType);
+    }
   }
 
   if (forbidsEc2Runtime) {
@@ -2423,14 +3770,20 @@ function createAmazonQPlanDraftResult(
   providerMetadata: AiProviderMetadata
 ): AiArchitectureDraftResult {
   const providerPlanIsCanonical = (response.plan.patternIds?.length ?? 0) > 0;
-  const plan = normalizeArchitecturePlanTopologyInvariants(
-    reconcileCanonicalProviderPlan(
-      providerPlanIsCanonical
-        ? response.plan
-        : mergeArchitectureIntentPlans(response.plan, normalizedRequirement),
-      response.plan
+  const plan = applyRepositoryEvidencePriorityToRequirementPlan(
+    applyFixedTemplatePriorityToRequirementPlan(
+      normalizeArchitecturePlanTopologyInvariants(
+        reconcileCanonicalProviderPlan(
+          providerPlanIsCanonical
+            ? response.plan
+            : mergeArchitectureIntentPlans(response.plan, normalizedRequirement),
+          response.plan
+        ),
+        request.prompt
+      ),
+      request.templateId
     ),
-    request.prompt
+    request
   );
   const requestDraft = createArchitectureDraft(request);
   const draft = createArchitectureDraft({
@@ -2460,15 +3813,25 @@ function createAmazonQPlanDraftResult(
     connectedCanonicalArchitectureJson,
     plan?.runtimeTopology
   );
-  const architectureJson = applyArchitectureParameterCompletenessDefaults(applyArchitectureOperationalPolicy(
+  const materializedArchitectureJson = applyArchitectureParameterCompletenessDefaults(applyArchitectureOperationalPolicy(
     topologyConnectedArchitectureJson,
     resolveArchitectureOperationalRequirements(request.prompt)
   ));
-  const validationIssues = findMaterializedArchitecturePlanValidationIssues(
-    request.prompt,
-    plan,
-    architectureJson
-  );
+  const architectureJson = applyStrictRepositoryEvidencePolicy(
+    {
+      architectureJson: materializedArchitectureJson,
+      title: response.title,
+      metadata: requestDraft.metadata
+    },
+    request
+  ).architectureJson;
+  const validationIssues = usesStrictEcsRepositoryEvidence(request)
+    ? findStrictRepositoryEvidenceValidationIssues(request, architectureJson)
+    : findMaterializedArchitecturePlanValidationIssues(
+        request.prompt,
+        plan,
+        architectureJson
+      );
 
   if (validationIssues.length > 0) {
     throw createRequirementsUnsatisfiedError(validationIssues);
@@ -2525,7 +3888,11 @@ function normalizeArchitecturePlanTopologyInvariants(
 
   const normalizedPrompt = prompt.normalize("NFKC").toLowerCase();
   const patternIds = new Set(plan.patternIds ?? []);
-  const usesSelfManagedEc2 = requiresSelfManagedEc2Architecture(normalizedPrompt);
+  const usesEksRuntime = (plan.requiredResources ?? []).some(
+    (resourceType) => resourceType === "EKS_CLUSTER" || resourceType === "EKS_NODE_GROUP"
+  );
+  const usesSelfManagedEc2 =
+    !usesEksRuntime && requiresSelfManagedEc2Architecture(normalizedPrompt);
 
   if (usesSelfManagedEc2) {
     patternIds.delete("ecs-fargate");
@@ -2541,7 +3908,9 @@ function normalizeArchitecturePlanTopologyInvariants(
 
   const usesEc2Pattern = patternIds.has("alb-asg-ec2");
   const usesFargatePattern =
-    patternIds.has("ecs-fargate") && !patternIds.has("serverless-api");
+    !usesEksRuntime &&
+    patternIds.has("ecs-fargate") &&
+    !patternIds.has("serverless-api");
   const operationalRequirements = resolveArchitectureOperationalRequirements(prompt);
   const topology = plan.runtimeTopology;
   const requiresEc2Spread =
@@ -2560,8 +3929,16 @@ function normalizeArchitecturePlanTopologyInvariants(
   const hasDatabase = patternIds.has("multi-az-rds");
   const hasSpaStaticDelivery = patternIds.has("spa-cloudfront-s3");
   const cloudFrontStaticDeliveryRequired = hasSpaStaticDelivery && requiresCloudFrontStaticDelivery(normalizedPrompt);
+  const loadBalancerForbidden = (plan.forbiddenCapabilities ?? []).some(
+    (capability) => capability.toLowerCase() === "load_balancer"
+  );
   const requiredResources = new Set(plan.requiredResources ?? []);
   const resourceQuantities = { ...(plan.resourceQuantities ?? {}) };
+  const hasCiCdHandoff =
+    patternIds.has("github-cicd-codedeploy") ||
+    requiredResources.has("CODEBUILD_PROJECT") ||
+    requiredResources.has("CODEPIPELINE") ||
+    requiredResources.has("CODESTAR_CONNECTION");
   const fargateServiceCount = usesFargatePattern ? resolveFargateServiceCount(normalizedPrompt) : 1;
 
   if (usesSelfManagedEc2) {
@@ -2699,6 +4076,14 @@ function normalizeArchitecturePlanTopologyInvariants(
       "CLOUDWATCH_LOG_GROUP",
       "CLOUDWATCH_METRIC_ALARM"
     ] as const) {
+      if (
+        loadBalancerForbidden &&
+        ["LOAD_BALANCER", "LOAD_BALANCER_LISTENER", "LOAD_BALANCER_TARGET_GROUP"].includes(
+          resourceType
+        )
+      ) {
+        continue;
+      }
       requiredResources.add(resourceType);
     }
 
@@ -2707,7 +4092,7 @@ function normalizeArchitecturePlanTopologyInvariants(
       requiredResources.add("APPLICATION_AUTO_SCALING_POLICY");
     }
 
-    if (requiresHttpsTransport(normalizedPrompt)) {
+    if (!loadBalancerForbidden && requiresHttpsTransport(normalizedPrompt)) {
       requiredResources.add("ACM_CERTIFICATE");
     }
 
@@ -2730,11 +4115,15 @@ function normalizeArchitecturePlanTopologyInvariants(
       resourceQuantities.ROUTE_TABLE_ASSOCIATION ?? 0,
       hasDatabase ? 6 : 4
     );
-    resourceQuantities.SECURITY_GROUP = Math.max(
-      resourceQuantities.SECURITY_GROUP ?? 0,
-      hasDatabase ? 3 : 2
+    const requiredSecurityGroupCount =
+      (loadBalancerForbidden ? 1 : 2) + (hasDatabase ? 1 : 0);
+    resourceQuantities.SECURITY_GROUP = loadBalancerForbidden
+      ? requiredSecurityGroupCount
+      : Math.max(resourceQuantities.SECURITY_GROUP ?? 0, requiredSecurityGroupCount);
+    resourceQuantities.IAM_ROLE = Math.max(
+      resourceQuantities.IAM_ROLE ?? 0,
+      hasCiCdHandoff ? 4 : 2
     );
-    resourceQuantities.IAM_ROLE = Math.max(resourceQuantities.IAM_ROLE ?? 0, 2);
     resourceQuantities.CLOUDWATCH_METRIC_ALARM = Math.max(
       resourceQuantities.CLOUDWATCH_METRIC_ALARM ?? 0,
       hasDatabase ? 2 : 1
@@ -2742,10 +4131,12 @@ function normalizeArchitecturePlanTopologyInvariants(
 
     resourceQuantities.ECS_SERVICE = Math.max(resourceQuantities.ECS_SERVICE ?? 0, fargateServiceCount);
     resourceQuantities.ECS_TASK_DEFINITION = Math.max(resourceQuantities.ECS_TASK_DEFINITION ?? 0, fargateServiceCount);
-    resourceQuantities.LOAD_BALANCER_TARGET_GROUP = Math.max(
-      resourceQuantities.LOAD_BALANCER_TARGET_GROUP ?? 0,
-      fargateServiceCount
-    );
+    if (!loadBalancerForbidden) {
+      resourceQuantities.LOAD_BALANCER_TARGET_GROUP = Math.max(
+        resourceQuantities.LOAD_BALANCER_TARGET_GROUP ?? 0,
+        fargateServiceCount
+      );
+    }
     resourceQuantities.CLOUDWATCH_LOG_GROUP = Math.max(
       resourceQuantities.CLOUDWATCH_LOG_GROUP ?? 0,
       fargateServiceCount
@@ -2987,6 +4378,169 @@ function findMaterializedArchitecturePlanValidationIssues(
   return issues;
 }
 
+function findStrictRepositoryEvidenceValidationIssues(
+  request: CreateArchitectureDraftRequest,
+  architectureJson: ArchitectureJson
+): string[] {
+  const facts = request.repositoryEvidence?.facts ?? [];
+  const factKeys = new Set(facts.map((fact) => `${fact.kind}:${fact.value}`));
+  const hasFact = (kind: string, value: string): boolean => factKeys.has(`${kind}:${value}`);
+  const issues: string[] = [];
+  const nodeTypes = new Set(architectureJson.nodes.map((node) => node.type));
+  const requiredTypes = new Set<ResourceType>([
+    "ECS_CLUSTER",
+    "ECS_SERVICE",
+    "ECS_TASK_DEFINITION",
+    "LOAD_BALANCER",
+    "LOAD_BALANCER_LISTENER",
+    "LOAD_BALANCER_TARGET_GROUP"
+  ]);
+
+  if (hasFact("frontend_delivery", "s3_cloudfront_static")) {
+    requiredTypes.add("S3");
+    requiredTypes.add("CLOUDFRONT");
+  }
+  if (hasFact("container_registry", "ecr")) requiredTypes.add("ECR_REPOSITORY");
+  if (hasFact("observability", "cloudwatch")) requiredTypes.add("CLOUDWATCH_LOG_GROUP");
+
+  const missingTypes = [...requiredTypes].filter((resourceType) => !nodeTypes.has(resourceType));
+  if (missingTypes.length > 0) {
+    issues.push(`Strict repository evidence is missing required resources: ${missingTypes.join(", ")}.`);
+  }
+
+  const forbiddenTypes = new Set<ResourceType>([
+    "APPLICATION_AUTO_SCALING_TARGET",
+    "APPLICATION_AUTO_SCALING_POLICY",
+    "CODESTAR_CONNECTION",
+    "CODEPIPELINE",
+    "CODEBUILD_PROJECT",
+    "CODEDEPLOY_APP",
+    "CODEDEPLOY_DEPLOYMENT_GROUP"
+  ]);
+  if (hasFact("excluded_capability", "database")) {
+    forbiddenTypes.add("RDS");
+    forbiddenTypes.add("RDS_CLUSTER");
+    forbiddenTypes.add("DB_SUBNET_GROUP");
+    forbiddenTypes.add("DYNAMODB_TABLE");
+  }
+  if (hasFact("excluded_capability", "redis")) {
+    forbiddenTypes.add("ELASTICACHE_REDIS");
+    forbiddenTypes.add("ELASTICACHE_SUBNET_GROUP");
+    forbiddenTypes.add("ELASTICACHE_PARAMETER_GROUP");
+  }
+  if (hasFact("excluded_capability", "websocket")) {
+    forbiddenTypes.add("API_GATEWAY_WEBSOCKET_API");
+    forbiddenTypes.add("API_GATEWAY_V2_ROUTE");
+    forbiddenTypes.add("API_GATEWAY_V2_INTEGRATION");
+    forbiddenTypes.add("API_GATEWAY_V2_STAGE");
+  }
+  if (hasFact("excluded_capability", "authentication")) {
+    forbiddenTypes.add("COGNITO_USER_POOL");
+    forbiddenTypes.add("COGNITO_USER_POOL_CLIENT");
+  }
+
+  const unexpectedTypes = [...forbiddenTypes].filter((resourceType) => nodeTypes.has(resourceType));
+  if (unexpectedTypes.length > 0) {
+    issues.push(`Strict repository evidence contains unsupported inferred resources: ${unexpectedTypes.join(", ")}.`);
+  }
+
+  if (hasFact("runtime_scale", "single_task")) {
+    const services = architectureJson.nodes.filter((node) => node.type === "ECS_SERVICE");
+    if (services.length !== 1 || services[0]?.config.desiredCount !== 1) {
+      issues.push("Strict repository evidence requires exactly one ECS service with desiredCount 1.");
+    }
+  }
+
+  const publicSubnets = architectureJson.nodes.filter(
+    (node) => node.type === "SUBNET" && node.config.mapPublicIpOnLaunch === true
+  );
+  const privateAppSubnets = architectureJson.nodes.filter(
+    (node) =>
+      node.type === "SUBNET" &&
+      node.config.mapPublicIpOnLaunch === false &&
+      node.config.tier === "private_app"
+  );
+  const loadBalancer = architectureJson.nodes.find((node) => node.type === "LOAD_BALANCER");
+  const service = architectureJson.nodes.find((node) => node.type === "ECS_SERVICE");
+  const loadBalancerSubnetRefs = Array.isArray(loadBalancer?.config.subnets)
+    ? loadBalancer.config.subnets
+    : [];
+  const serviceNetworkConfiguration = isObjectRecord(service?.config.networkConfiguration)
+    ? service.config.networkConfiguration
+    : undefined;
+  const serviceSubnetRefs = Array.isArray(serviceNetworkConfiguration?.subnets)
+    ? serviceNetworkConfiguration.subnets
+    : [];
+
+  if (
+    publicSubnets.length !== 2 ||
+    !publicSubnets.every((subnet) =>
+      loadBalancerSubnetRefs.includes(`aws_subnet.${subnet.id}.id`)
+    )
+  ) {
+    issues.push("Strict repository evidence requires the internet-facing ALB in two public subnets.");
+  }
+  if (
+    privateAppSubnets.length !== 2 ||
+    !privateAppSubnets.every((subnet) =>
+      serviceSubnetRefs.includes(`aws_subnet.${subnet.id}.id`)
+    ) ||
+    serviceNetworkConfiguration?.assignPublicIp !== false
+  ) {
+    issues.push("Strict repository evidence requires Fargate tasks in two private app subnets without public IP assignment.");
+  }
+  if (
+    architectureJson.nodes.filter((node) => node.type === "NAT_GATEWAY").length !== 1 ||
+    architectureJson.nodes.filter((node) => node.type === "ELASTIC_IP").length !== 1
+  ) {
+    issues.push("Strict repository evidence requires one cost-conscious NAT egress path for private Fargate tasks.");
+  }
+
+  const healthCheck = facts.find((fact) => fact.kind === "health_check")?.value;
+  const healthMatch = /^http:(\d{2,5})(\/[a-z0-9_./-]+)$/iu.exec(healthCheck ?? "");
+  if (healthMatch) {
+    const expectedPort = Number(healthMatch[1]);
+    const expectedPath = healthMatch[2];
+    const targetGroup = architectureJson.nodes.find(
+      (node) => node.type === "LOAD_BALANCER_TARGET_GROUP"
+    );
+    const targetHealthCheck = isObjectRecord(targetGroup?.config.healthCheck)
+      ? targetGroup.config.healthCheck
+      : undefined;
+    const taskDefinition = architectureJson.nodes.find(
+      (node) => node.type === "ECS_TASK_DEFINITION"
+    );
+    const containerDefinitions = taskDefinition?.config.containerDefinitions;
+    const serializedContainerDefinitions = typeof containerDefinitions === "string"
+      ? containerDefinitions
+      : JSON.stringify(containerDefinitions ?? "");
+    if (targetGroup?.config.port !== expectedPort || targetHealthCheck?.path !== expectedPath) {
+      issues.push(`Strict repository evidence requires target group health checks on ${expectedPort}${expectedPath}.`);
+    }
+    if (!serializedContainerDefinitions.includes(`"containerPort":${expectedPort}`)) {
+      issues.push(`Strict repository evidence requires the API task container port ${expectedPort}.`);
+    }
+  }
+
+  if (hasFact("transport_security", "alb_tls_termination")) {
+    const listener = architectureJson.nodes.find((node) => node.type === "LOAD_BALANCER_LISTENER");
+    if (listener?.config.port !== 80 || listener.config.protocol !== "HTTP") {
+      issues.push("Strict repository evidence without a confirmed certificate requires an explicit HTTP deployment-validation listener.");
+    }
+  }
+
+  if (hasFact("ci_cd", "github_actions")) {
+    const hasGitHubActionsActor = architectureJson.nodes.some(
+      (node) => node.type === "UNKNOWN" && node.config.diagramType === "github_actions"
+    );
+    if (!hasGitHubActionsActor) {
+      issues.push("Strict repository evidence requires GitHub Actions as an external delivery actor.");
+    }
+  }
+
+  return issues;
+}
+
 function findCanonicalPatternMaterializationIssues(
   normalizedPrompt: string,
   plan: ArchitectureIntentPlan | null,
@@ -3053,7 +4607,7 @@ function findCanonicalPatternMaterializationIssues(
   if (
     ecsServices.length < serviceProfiles.length ||
     ecsTaskDefinitions.length < serviceProfiles.length ||
-    targetGroups.length < serviceProfiles.length
+    (hasLoadBalancer && targetGroups.length < serviceProfiles.length)
   ) {
     issues.push("The Fargate plan must materialize each required service with its own service, task definition, and target group.");
   }
@@ -3071,9 +4625,10 @@ function findCanonicalPatternMaterializationIssues(
       service.config.networkConfiguration.assignPublicIp !== false ||
       !Array.isArray(service.config.networkConfiguration.subnets) ||
       service.config.networkConfiguration.subnets.length !== 2 ||
-      serviceLoadBalancer === undefined ||
-      serviceLoadBalancer.containerName !== profile.containerName ||
-      serviceLoadBalancer.containerPort !== 8080
+      (hasLoadBalancer &&
+        (serviceLoadBalancer === undefined ||
+          serviceLoadBalancer.containerName !== profile.containerName ||
+          serviceLoadBalancer.containerPort !== 8080))
     ) {
       issues.push(`The Fargate service ${profile.serviceId} must run two private tasks without public IPs.`);
     }
@@ -3882,6 +5437,20 @@ function resourcePromptExplicitlyForbidsType(
   normalizedPrompt: string,
   resourceType: ResourceType
 ): boolean {
+  if (
+    [
+      "CODESTAR_CONNECTION",
+      "CODEPIPELINE",
+      "CODEBUILD_PROJECT",
+      "CODEDEPLOY_APP",
+      "CODEDEPLOY_DEPLOYMENT_GROUP"
+    ].includes(resourceType)
+  ) {
+    return /(?:do not|don't|without|exclude|omit|not required)[^.\n]{0,160}(?:codestar|codepipeline|code\s*pipeline|codebuild|code\s*build|codedeploy|code\s*deploy)/iu.test(
+      normalizedPrompt
+    );
+  }
+
   if (resourceType === "EC2") {
     return (
       /(?:(?:\b(?:no|without|exclude)\b)|do\s+not\s+use)[^.\n]{0,48}ec2/iu.test(normalizedPrompt) ||
@@ -4917,6 +6486,11 @@ function configureCanonicalPatternResources(
   prompt: string
 ): ArchitectureJson {
   const patternIds = new Set(plan?.patternIds ?? []);
+  const hasCiCdHandoff =
+    patternIds.has("github-cicd-codedeploy") ||
+    (plan?.requiredResources ?? []).some((resourceType) =>
+      ["CODEBUILD_PROJECT", "CODEPIPELINE", "CODESTAR_CONNECTION"].includes(resourceType)
+    );
   const hasEcsRuntime = architectureJson.nodes.some(
     (node) => node.type === "ECS_SERVICE" || node.type === "ECS_TASK_DEFINITION"
   );
@@ -5027,6 +6601,14 @@ function configureCanonicalPatternResources(
     Version: "2012-10-17",
     Statement: [{ Effect: "Allow", Principal: { Service: "ecs-tasks.amazonaws.com" }, Action: "sts:AssumeRole" }]
   });
+  const codeBuildTrustPolicy = JSON.stringify({
+    Version: "2012-10-17",
+    Statement: [{ Effect: "Allow", Principal: { Service: "codebuild.amazonaws.com" }, Action: "sts:AssumeRole" }]
+  });
+  const codePipelineTrustPolicy = JSON.stringify({
+    Version: "2012-10-17",
+    Statement: [{ Effect: "Allow", Principal: { Service: "codepipeline.amazonaws.com" }, Action: "sts:AssumeRole" }]
+  });
   const publicSubnetRefs = ["public-subnet-a", "public-subnet-b"].map((id) =>
     canonicalTerraformReference("aws_subnet", id)
   );
@@ -5054,7 +6636,19 @@ function configureCanonicalPatternResources(
     ["SECURITY_GROUP", securityGroupSpecs],
     ["IAM_ROLE", [
       canonicalNodeSpec("ecs-execution-role", "ECS Task Execution Role", 1180, 700, { assumeRolePolicy: roleTrustPolicy }),
-      canonicalNodeSpec("ecs-task-role", "ECS Task Role", 1380, 700, { assumeRolePolicy: roleTrustPolicy })
+      canonicalNodeSpec("ecs-task-role", "ECS Task Role", 1380, 700, { assumeRolePolicy: roleTrustPolicy }),
+      ...(hasCiCdHandoff
+        ? [
+            canonicalNodeSpec("codebuild-service-role", "CodeBuild Service Role", 1580, 700, {
+              terraformResourceName: "codebuild_service_role",
+              assumeRolePolicy: codeBuildTrustPolicy
+            }),
+            canonicalNodeSpec("codepipeline-service-role", "CodePipeline Service Role", 1780, 700, {
+              terraformResourceName: "codepipeline_service_role",
+              assumeRolePolicy: codePipelineTrustPolicy
+            })
+          ]
+        : [])
     ]],
     ["IAM_POLICY", [canonicalNodeSpec("ecs-task-policy", "ECS Task Policy", 1380, 840, {
       policy: JSON.stringify({
@@ -5158,12 +6752,24 @@ function configureCanonicalPatternResources(
       taskDefinition: canonicalTerraformReference("aws_ecs_task_definition", profile.taskDefinitionId, "arn"),
       desiredCount: taskSizing.desiredCount,
       launchType: "FARGATE",
-      healthCheckGracePeriodSeconds: 60,
+      ...(hasLoadBalancer ? { healthCheckGracePeriodSeconds: 60 } : {}),
       deploymentMinimumHealthyPercent: 100,
       deploymentMaximumPercent: 200,
       deploymentCircuitBreaker: { enable: true, rollback: true },
       networkConfiguration: { assignPublicIp: false, subnets: privateAppSubnetRefs, securityGroups: [canonicalTerraformReference("aws_security_group", "app-security-group")] },
-      loadBalancer: { targetGroupArn: canonicalTerraformReference("aws_lb_target_group", profile.targetGroupId, "arn"), containerName: profile.containerName, containerPort: 8080 }
+      ...(hasLoadBalancer
+        ? {
+            loadBalancer: {
+              targetGroupArn: canonicalTerraformReference(
+                "aws_lb_target_group",
+                profile.targetGroupId,
+                "arn"
+              ),
+              containerName: profile.containerName,
+              containerPort: 8080
+            }
+          }
+        : {})
     }))],
     ...(hasDatabase
       ? [["DB_SUBNET_GROUP", [canonicalNodeSpec("db-subnet-group", "DB Subnet Group", 680, 920, {
@@ -5228,7 +6834,46 @@ function configureCanonicalPatternResources(
       case "ECS_TASK_DEFINITION":
         return { ...node, id: primaryServiceProfile.taskDefinitionId, label: primaryServiceProfile.taskDefinitionLabel, config: { family: primaryServiceProfile.taskFamily, networkMode: "awsvpc", requiresCompatibilities: ["FARGATE"], cpu: taskSizing.cpu, memory: taskSizing.memory, executionRoleArn: canonicalTerraformReference("aws_iam_role", "ecs-execution-role", "arn"), taskRoleArn: canonicalTerraformReference("aws_iam_role", "ecs-task-role", "arn"), applicationFramework: frontendProfile === "ssr" ? "next_nuxt_ssr" : undefined, containerDefinitions: JSON.stringify([{ name: primaryServiceProfile.containerName, image: "public.ecr.aws/docker/library/nginx:1.27-alpine", essential: true, portMappings: [{ containerPort: 8080, protocol: "tcp" }], logConfiguration: { logDriver: "awslogs", options: { "awslogs-group": primaryServiceProfile.logGroupName, "awslogs-region": region, "awslogs-stream-prefix": primaryServiceProfile.containerName } } }]) } };
       case "ECS_SERVICE":
-        return { ...node, id: primaryServiceProfile.serviceId, label: primaryServiceProfile.serviceLabel, config: { name: primaryServiceProfile.serviceName, cluster: canonicalTerraformReference("aws_ecs_cluster", "ecs-cluster"), taskDefinition: canonicalTerraformReference("aws_ecs_task_definition", primaryServiceProfile.taskDefinitionId, "arn"), desiredCount: taskSizing.desiredCount, launchType: "FARGATE", healthCheckGracePeriodSeconds: 60, deploymentMinimumHealthyPercent: 100, deploymentMaximumPercent: 200, deploymentCircuitBreaker: { enable: true, rollback: true }, networkConfiguration: { assignPublicIp: false, subnets: privateAppSubnetRefs, securityGroups: [canonicalTerraformReference("aws_security_group", "app-security-group")] }, loadBalancer: { targetGroupArn: canonicalTerraformReference("aws_lb_target_group", primaryServiceProfile.targetGroupId, "arn"), containerName: primaryServiceProfile.containerName, containerPort: 8080 } } };
+        return {
+          ...node,
+          id: primaryServiceProfile.serviceId,
+          label: primaryServiceProfile.serviceLabel,
+          config: {
+            name: primaryServiceProfile.serviceName,
+            cluster: canonicalTerraformReference("aws_ecs_cluster", "ecs-cluster"),
+            taskDefinition: canonicalTerraformReference(
+              "aws_ecs_task_definition",
+              primaryServiceProfile.taskDefinitionId,
+              "arn"
+            ),
+            desiredCount: taskSizing.desiredCount,
+            launchType: "FARGATE",
+            ...(hasLoadBalancer ? { healthCheckGracePeriodSeconds: 60 } : {}),
+            deploymentMinimumHealthyPercent: 100,
+            deploymentMaximumPercent: 200,
+            deploymentCircuitBreaker: { enable: true, rollback: true },
+            networkConfiguration: {
+              assignPublicIp: false,
+              subnets: privateAppSubnetRefs,
+              securityGroups: [
+                canonicalTerraformReference("aws_security_group", "app-security-group")
+              ]
+            },
+            ...(hasLoadBalancer
+              ? {
+                  loadBalancer: {
+                    targetGroupArn: canonicalTerraformReference(
+                      "aws_lb_target_group",
+                      primaryServiceProfile.targetGroupId,
+                      "arn"
+                    ),
+                    containerName: primaryServiceProfile.containerName,
+                    containerPort: 8080
+                  }
+                }
+              : {})
+          }
+        };
       case "CLOUDFRONT":
         return { ...node, config: { ...node.config, originResourceId: frontendProfile === "ssr" ? "application-load-balancer" : staticBucket?.id, originType: frontendProfile === "ssr" ? "application" : "static", enabled: true, viewerProtocolPolicy: "redirect-to-https" } };
       case "RDS":
@@ -5240,7 +6885,46 @@ function configureCanonicalPatternResources(
     }
   });
 
-  return { nodes, edges: architectureJson.edges };
+  return {
+    nodes: applyCanonicalCiCdTerraformNames(nodes, hasCiCdHandoff),
+    edges: architectureJson.edges
+  };
+}
+
+function applyCanonicalCiCdTerraformNames(
+  nodes: readonly ArchitectureJson["nodes"][number][],
+  hasCiCdHandoff: boolean
+): ArchitectureJson["nodes"] {
+  if (!hasCiCdHandoff) {
+    return [...nodes];
+  }
+
+  const artifactBucket = [...nodes].reverse().find(
+    (node) => node.type === "S3" && node.config.bucketPurpose !== "static_website_origin"
+  );
+
+  return nodes.map((node) => {
+    const terraformResourceName = (() => {
+      switch (node.type) {
+        case "CODEBUILD_PROJECT":
+          return "build";
+        case "CODEPIPELINE":
+          return "pipeline";
+        case "CODESTAR_CONNECTION":
+          return "github";
+        case "S3":
+          return node.id === artifactBucket?.id ? "codepipeline_artifacts" : undefined;
+        case "VPC":
+          return "vpc_main";
+        default:
+          return undefined;
+      }
+    })();
+
+    return terraformResourceName === undefined
+      ? node
+      : { ...node, config: { ...node.config, terraformResourceName } };
+  });
 }
 
 function configureCanonicalServerlessApiResources(
@@ -5288,7 +6972,7 @@ function configureCanonicalServerlessApiResources(
           }
         };
       case "S3":
-        if (hasCloudFront && node.config.bucketPurpose === "static_website_origin") {
+        if (hasCloudFront && node.id === staticBucket?.id) {
           return {
             ...node,
             id: staticOriginId,
@@ -6627,9 +8311,16 @@ function requiresStaticDeliveryArchitecture(normalizedPrompt: string): boolean {
   );
 }
 
-function requiresGitCiCdHandoff(normalizedPrompt: string): boolean {
-  return /(\bgit\b|github|ci\/cd|cicd|codepipeline|code\s*pipeline|codebuild|code\s*build|codedeploy|code\s*deploy|deployment\s+handoff|git\/ci\/cd|배포\s*핸드오프)/iu.test(
+function requiresAwsNativeCiCdPipeline(normalizedPrompt: string): boolean {
+  const excludesAwsNativePipeline = /(?:do not|don't|without|exclude|omit|not required)[^\n.]{0,120}(?:codepipeline|code\s*pipeline|codebuild|code\s*build|codedeploy|code\s*deploy|codestar)/iu.test(
     normalizedPrompt
+  );
+  const awsNativePrompt = excludesAwsNativePipeline ? "" : (normalizedPrompt.match(
+    /codepipeline|code\s*pipeline|codebuild|code\s*build|codedeploy|code\s*deploy|codestar/giu
+  ) ?? []).join(" ");
+
+  return /(\bgit\b|github|ci\/cd|cicd|codepipeline|code\s*pipeline|codebuild|code\s*build|codedeploy|code\s*deploy|deployment\s+handoff|git\/ci\/cd|배포\s*핸드오프)/iu.test(
+    awsNativePrompt
   );
 }
 

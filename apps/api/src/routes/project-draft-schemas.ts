@@ -23,6 +23,8 @@ const diagramNodeMetadataSchema: z.ZodType<DiagramNodeMetadata> = z.object({
     position: diagramPositionSchema,
     size: diagramSizeSchema
   }).optional(),
+  presentationArea: z.boolean().optional(),
+  presentationCatalogItemId: z.string().min(1).optional(),
   reverseEngineering: z.object({
     source: z.literal("aws_scan"),
     protectedValueKeys: z.array(z.string().min(1)),

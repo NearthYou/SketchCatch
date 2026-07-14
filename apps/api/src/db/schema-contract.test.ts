@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { existsSync, readFileSync } from "node:fs";
 import {
   createTableRelationsHelpers,
   extractTablesRelationalConfig
@@ -23,6 +24,10 @@ import {
   gitCicdHandoffStatusEnum,
   gitCicdHandoffKindEnum,
   gitCicdHandoffs,
+  gitCicdMonitoringConfigs,
+  gitCicdPipelineLogs,
+  gitCicdPipelineRuns,
+  gitCicdPipelineStages,
   gitCicdRepositoryProviderEnum,
   projectAssets,
   projectDrafts,
@@ -32,6 +37,81 @@ import {
   reverseEngineeringScans,
   users
 } from "./schema.js";
+
+test("Git/CI/CD monitoring tables expose commit-scoped run history", () => {
+  assert.ok(gitCicdMonitoringConfigs.sourceRepositoryId);
+  assert.ok(gitCicdMonitoringConfigs.validationStatus);
+  assert.ok(gitCicdPipelineRuns.commitSha);
+  assert.ok(gitCicdPipelineRuns.upstreamOrderingToken);
+  assert.ok(gitCicdPipelineRuns.logRevision);
+  assert.ok(gitCicdPipelineStages.pipelineRunId);
+  assert.ok(gitCicdPipelineLogs.sequence);
+
+  assert(
+    hasUniqueIndex(getTableConfig(gitCicdPipelineRuns).indexes, "git_cicd_pipeline_runs_repository_commit_unique", [
+      "source_repository_id",
+      "commit_sha"
+    ])
+  );
+  const pageIndex = getTableConfig(gitCicdPipelineRuns).indexes.find(
+    (candidate) => candidate.config.name === "git_cicd_pipeline_runs_project_created_id_idx"
+  );
+  assert.ok(pageIndex);
+  assert.deepEqual(pageIndex.config.columns.map(getColumnName), [
+    "project_id",
+    "created_at",
+    "id"
+  ]);
+  assert.deepEqual(
+    pageIndex.config.columns.map((column) =>
+      typeof column === "object" && column !== null && "indexConfig" in column
+        ? (column as { indexConfig: { order: string } }).indexConfig.order
+        : undefined
+    ),
+    ["asc", "desc", "desc"]
+  );
+  assert(
+    hasUniqueIndex(getTableConfig(gitCicdPipelineStages).indexes, "git_cicd_pipeline_stages_run_kind_unique", [
+      "pipeline_run_id",
+      "kind"
+    ])
+  );
+  assert(
+    hasUniqueIndex(getTableConfig(gitCicdPipelineLogs).indexes, "git_cicd_pipeline_logs_run_sequence_unique", [
+      "pipeline_run_id",
+      "sequence"
+    ])
+  );
+});
+
+test("Pipeline Run revision migration adds deterministic concurrency and log reset columns", () => {
+  const migrationUrl = new URL(
+    "../../drizzle/0033_git_cicd_pipeline_upstream_revision.sql",
+    import.meta.url
+  );
+  assert.equal(existsSync(migrationUrl), true);
+  const migration = readFileSync(migrationUrl, "utf8");
+  assert.match(migration, /ADD COLUMN "upstream_ordering_token" text/);
+  assert.match(migration, /ADD COLUMN "log_revision" text/);
+  assert.doesNotMatch(migration, /DROP TABLE|DELETE FROM|TRUNCATE/i);
+});
+
+test("Git/CI/CD monitoring migration safely backfills active repositories", () => {
+  const migrationUrl = new URL("../../drizzle/0032_git_cicd_monitoring_runs.sql", import.meta.url);
+
+  assert.equal(existsSync(migrationUrl), true);
+  const migration = readFileSync(migrationUrl, "utf8");
+
+  assert.match(migration, /INSERT INTO "git_cicd_monitoring_configs"/);
+  assert.match(migration, /WHERE "status" = 'active'/);
+  assert.match(migration, /'required'/);
+  assert.match(migration, /'\{"mode":"repository_root","path":"\."\}'::jsonb/);
+  assert.doesNotMatch(migration, /(?:INSERT INTO|UPDATE|DELETE FROM) "git_cicd_handoffs"/);
+  assert.match(
+    migration,
+    /CREATE INDEX "git_cicd_pipeline_runs_project_created_id_idx" ON "git_cicd_pipeline_runs" USING btree \("project_id","created_at" DESC,"id" DESC\)/
+  );
+});
 
 test("deployment status enum uses a domain-specific database name", () => {
   assert.equal(deploymentStatusEnum.enumName, "deployment_status");
@@ -173,6 +253,13 @@ test("deployment Live Observation manifests are one-to-one schema v2 records wit
         "deployment_live_observation_manifests_schema_version_check"
     )
   );
+  assert(
+    config.checks.some(
+      (constraint) =>
+        constraint.name ===
+        "deployment_live_observation_manifests_status_payload_check"
+    )
+  );
 
   const deploymentForeignKey = config.foreignKeys.find((foreignKey) => {
     const reference = foreignKey.reference();
@@ -185,6 +272,26 @@ test("deployment Live Observation manifests are one-to-one schema v2 records wit
   });
   assert.ok(deploymentForeignKey);
   assert.equal(deploymentForeignKey.onDelete, "cascade");
+});
+
+test("Live Observation manifest invariant migration rejects inconsistent status payloads", () => {
+  const migrationUrl = new URL(
+    "../../drizzle/0034_live_observation_manifest_invariants.sql",
+    import.meta.url
+  );
+  assert.equal(existsSync(migrationUrl), true);
+  const migration = readFileSync(migrationUrl, "utf8");
+
+  assert.match(migration, /status_payload_check/);
+  assert.match(migration, /"status" = 'valid'/);
+  assert.match(migration, /"manifest" IS NOT NULL/);
+  assert.match(migration, /"invalid_reason" IS NULL/);
+  assert.match(migration, /"status" = 'manifest_invalid'/);
+  assert.match(migration, /"manifest" IS NULL/);
+  assert.match(migration, /length\(btrim\("invalid_reason"\)\) > 0/);
+  assert.match(migration, /NOT VALID/);
+  assert.match(migration, /VALIDATE CONSTRAINT/);
+  assert.doesNotMatch(migration, /DROP TABLE|DELETE FROM|TRUNCATE/i);
 });
 
 test("deployments and Live Observation manifests expose inverse one-to-one relations", () => {

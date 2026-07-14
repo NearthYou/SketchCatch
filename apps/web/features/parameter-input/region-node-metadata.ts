@@ -10,8 +10,8 @@ import {
   isAwsAvailabilityZoneCode
 } from "./aws-availability-zone-options";
 
-const regionNodeTypes = new Set(["sketchcatch_region", "design_region"]);
-const availabilityZoneNodeTypes = new Set(["sketchcatch_az", "design_az"]);
+const regionNodeTypes = new Set(["aws_region", "sketchcatch_region", "design_region"]);
+const availabilityZoneNodeTypes = new Set(["aws_availability_zone", "sketchcatch_az", "design_az"]);
 type LegacyRegionMetadata = {
   awsRegion?: unknown;
 };

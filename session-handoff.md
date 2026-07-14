@@ -4,27 +4,35 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Currently Verified
 
-- Branch `feat/ck/349-repo-analysis` has issue #349 Repository Analysis template recommendation work plus a focused API startup guard.
-- New project Repository start shows the Repository URL analysis panel above the primary `Repository 분석하기` action.
-- API startup now requires `DATABASE_URL` before Terraform warmup, deployment recovery, or listening.
-- The focused startup regression test, API typecheck, harness check, lint, typecheck, and build passed.
+- Branch `feat/ck/350-ai-diagram-fallback` is ready for a final latest-`dev` merge after the feature commit.
+- Repository URL analysis resolves the GitHub default branch, exposes fetched branches through the shared SelectMenu, and reanalyzes the selected revision.
+- Strict `audience-live-check` evidence targets a single ECS Fargate task in private app subnets behind an internet-facing ALB in public subnets, without unsupported persistence or scaling assumptions.
+- One cost-conscious NAT path supports private ECR image pulls and CloudWatch log delivery; the diagram states the single-AZ egress tradeoff.
+- Board containment and edge labels explicitly show ALB SG ingress, Task SG TCP 8080, ECR image pull, and ECS `awslogs` delivery.
+- The latest Template Design contracts and separated Direct Deployment/CI/CD console from `dev` are present.
+- Direct Deployment created 29 AWS resources, served ALB `/health` with HTTP 200, and finished cleanup as `DESTROYED`.
+- AWS Console confirms the deployment-owned CloudFront, ECS, ALB, ECR, S3, CloudWatch, IAM, VPC, and EIP resources are absent; the NAT row is `Deleted` history only.
+
+## Verification
+
+- Focused verification passed: 15 deployment Plan/Destroy tests, 23 deployment action tests, 92 Terraform diagnostics/sync tests, and 25 virtual-file/palette pipeline tests.
+- Latest `origin/dev` is merged; focused integration tests plus `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check` passed.
 
 ## Changes This Session
 
-- Reproduced `/api/auth/login` returning 500 when the running API has no `DATABASE_URL`.
-- Added a regression test in `apps/api/src/server-startup.test.ts`.
-- Added `requireDatabaseUrl()` to `apps/api/src/server-startup.ts`.
-- Moved `RepositoryUrlStartPanel` above the action button group in `apps/web/app/workspace/new/workspace-start-client.tsx`.
-- Added source-order coverage in `apps/web/app/workspace/new/workspace-start-options.test.ts`.
-- Updated `agent-progress.md`.
+- Merged the latest `origin/dev` and preserved both the branch's Repository/Fargate changes and `dev` deployment/template behavior.
+- Combined load-balancer exclusion sizing with CI/CD IAM role sizing.
+- Preserved ECR/CloudFront nested blocks and Resource AZ, Design AZ, and physical VPC containment regressions.
+- Clarified strict Repository public/private subnet placement, SG boundaries, private egress, and operational edge labels.
+- Prevented visual `tier` metadata from leaking into `aws_subnet` HCL.
+- Gave Plan and Destroy Plan the 15-minute deployment timeout and made cleanup retryable after Plan failure.
+- Preserved generated Terraform outputs through file splitting, validation, and Diagram sync.
 
 ## Broken Or Unverified
 
-- The already-running API process may still be old code and must be restarted.
-- Local login still needs a real `DATABASE_URL` configured outside git, then migrations run if the database is fresh or stale.
-- Browser screenshot verification for the Repository URL panel move was skipped because browser automation is not installed in this worktree.
-- `apps/web/next-env.d.ts` was already modified before this fix and was not touched.
+- The live deployment artifact was generated before output preservation was fixed, so its output table was empty. Focused pipeline tests now prove outputs remain in `main.tf` for future artifacts.
+- No unrelated AWS resources were deleted.
 
 ## Best Next Action
 
-- Configure local `DATABASE_URL`, restart the API, and retry login. If the database is new or behind, run `pnpm --filter @sketchcatch/api db:migrate`.
+- Recreate the strict Repository board before its next deployment so the new Terraform artifact includes preserved outputs.

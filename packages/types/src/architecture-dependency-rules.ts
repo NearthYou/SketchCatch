@@ -300,20 +300,49 @@ function hasResourceReference(
   );
 }
 
+// Resolve Terraform context through visual-only containers without skipping Resource boundaries.
 function hasContainingAreaReference(
   node: DiagramNode,
   check: Extract<DependencyCheck, { kind: "containing-area-reference" }>,
   graph: ResolvedArchitectureGraph
 ): boolean {
-  const parentNodeId = node.metadata?.parentAreaNodeId;
-  const parentNode = parentNodeId ? graph.nodeById.get(parentNodeId) : undefined;
+  const parentNode = findContainingResourceNode(node, graph);
   const targetNode = resolveParameterReferenceTarget(getParameterValue(node, check.parameterPath), graph);
 
-  return Boolean(
-    parentNode &&
-      parentNode.parameters?.resourceType === check.areaTerraformType &&
-      targetNode?.id === parentNode.id
-  );
+  if (!targetNode || targetNode.parameters?.resourceType !== check.areaTerraformType) {
+    return false;
+  }
+
+  return parentNode ? parentNode.id === targetNode.id : isNodeFullyInsideArea(node, targetNode);
+}
+
+// Design and legacy AZ containers are transparent, but another deployable ancestor is a hard boundary.
+function findContainingResourceNode(
+  node: DiagramNode,
+  graph: ResolvedArchitectureGraph
+): DiagramNode | null {
+  let parentNodeId = node.metadata?.parentAreaNodeId;
+  const visitedNodeIds = new Set<string>([node.id]);
+
+  while (parentNodeId && !visitedNodeIds.has(parentNodeId)) {
+    visitedNodeIds.add(parentNodeId);
+    const parentNode = graph.nodeById.get(parentNodeId);
+
+    if (!parentNode) {
+      return null;
+    }
+
+    if (
+      parentNode.kind !== "design" &&
+      parentNode.parameters?.resourceType !== "aws_availability_zone"
+    ) {
+      return parentNode;
+    }
+
+    parentNodeId = parentNode.metadata?.parentAreaNodeId;
+  }
+
+  return null;
 }
 
 function hasReferencedTargetParentReference(
@@ -327,17 +356,32 @@ function hasReferencedTargetParentReference(
     return true;
   }
 
-  const parentNodeId = targetNode.metadata?.parentAreaNodeId;
-  const parentNode = parentNodeId ? graph.nodeById.get(parentNodeId) : undefined;
+  const parentNode = findContainingResourceNode(targetNode, graph);
   const configuredParent = resolveParameterReferenceTarget(
     getParameterValue(targetNode, check.parentParameterPath),
     graph
   );
 
-  return Boolean(
-    parentNode &&
-      parentNode.parameters?.resourceType === check.parentTerraformType &&
-      configuredParent?.id === parentNode.id
+  if (!configuredParent || configuredParent.parameters?.resourceType !== check.parentTerraformType) {
+    return false;
+  }
+
+  return parentNode
+    ? parentNode.id === configuredParent.id
+    : isNodeFullyInsideArea(targetNode, configuredParent);
+}
+
+function isNodeFullyInsideArea(node: DiagramNode, areaNode: DiagramNode): boolean {
+  const nodeRight = node.position.x + node.size.width;
+  const nodeBottom = node.position.y + node.size.height;
+  const areaRight = areaNode.position.x + areaNode.size.width;
+  const areaBottom = areaNode.position.y + areaNode.size.height;
+
+  return (
+    node.position.x >= areaNode.position.x &&
+    node.position.y >= areaNode.position.y &&
+    nodeRight <= areaRight &&
+    nodeBottom <= areaBottom
   );
 }
 

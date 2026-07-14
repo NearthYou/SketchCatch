@@ -1,7 +1,7 @@
 import type {
   DeploymentLiveObservationManifestV2,
   IsoDateTimeString,
-  JsonValue
+  LiveObservationProviderSnapshot
 } from "@sketchcatch/types";
 
 export const LIVE_OBSERVATION_STORE_POLICY = Object.freeze({
@@ -9,10 +9,9 @@ export const LIVE_OBSERVATION_STORE_POLICY = Object.freeze({
   terminalTombstoneRetentionMs: 60 * 1_000,
   rollingWindowSeconds: 10,
   maxWeightedBurstPerSecond: 20,
-  maxAcceptedEventsPerRateWindow: 100,
-  maxAcceptedEventsPerSession: 5_000,
-  observerLeaseDurationMs: 15 * 1_000,
-  presenterBoostLeaseDurationMs: 10 * 1_000
+  maxAcceptedEventsPerRateWindow: 120,
+  maxAcceptedEventsPerSession: 10_000,
+  observerLeaseDurationMs: 15 * 1_000
 } as const);
 
 export type LiveObservationStoreCreateInput = {
@@ -35,7 +34,7 @@ export type LiveObservationStoreLiveView = {
 
 export type LiveObservationStoreObservation = {
   observedAt: IsoDateTimeString;
-  payload: JsonValue;
+  payload: LiveObservationProviderSnapshot;
 };
 
 export type LiveObservationStoreActiveSession = {
@@ -191,75 +190,6 @@ export type LiveObservationStoreObservationCommitResult =
       evaluatedAt: IsoDateTimeString;
     };
 
-export type LiveObservationStorePresenterBoostLease = {
-  leaseId: string;
-  expiresAt: IsoDateTimeString;
-};
-
-export type LiveObservationStorePresenterBoostAcquireResult =
-  | {
-      kind: "acquired";
-      evaluatedAt: IsoDateTimeString;
-      lease: LiveObservationStorePresenterBoostLease;
-    }
-  | {
-      kind: "already_acquired";
-      evaluatedAt: IsoDateTimeString;
-      lease: LiveObservationStorePresenterBoostLease;
-    }
-  | {
-      kind: "busy";
-      evaluatedAt: IsoDateTimeString;
-    }
-  | {
-      kind: "gone";
-      evaluatedAt: IsoDateTimeString;
-      session: LiveObservationStoreTerminalSession;
-    }
-  | {
-      kind: "not_found";
-      evaluatedAt: IsoDateTimeString;
-    };
-
-export type LiveObservationStorePresenterBoostRenewResult =
-  | {
-      kind: "renewed";
-      evaluatedAt: IsoDateTimeString;
-      lease: LiveObservationStorePresenterBoostLease;
-    }
-  | {
-      kind: "lease_lost";
-      evaluatedAt: IsoDateTimeString;
-    }
-  | {
-      kind: "gone";
-      evaluatedAt: IsoDateTimeString;
-      session: LiveObservationStoreTerminalSession;
-    }
-  | {
-      kind: "not_found";
-      evaluatedAt: IsoDateTimeString;
-    };
-
-export type LiveObservationStorePresenterBoostReleaseResult =
-  | {
-      kind: "released";
-      evaluatedAt: IsoDateTimeString;
-    }
-  | {
-      kind: "lease_lost";
-      evaluatedAt: IsoDateTimeString;
-    }
-  | {
-      kind: "gone";
-      evaluatedAt: IsoDateTimeString;
-      session: LiveObservationStoreTerminalSession;
-    }
-  | {
-      kind: "not_found";
-      evaluatedAt: IsoDateTimeString;
-    };
-
 export type LiveObservationStore = {
   createSession(
     input: LiveObservationStoreCreateInput
@@ -285,18 +215,6 @@ export type LiveObservationStore = {
     fencingToken: number;
     observation: LiveObservationStoreObservation;
   }): Promise<LiveObservationStoreObservationCommitResult>;
-  acquirePresenterBoostLease(input: {
-    observationId: string;
-    leaseId: string;
-  }): Promise<LiveObservationStorePresenterBoostAcquireResult>;
-  renewPresenterBoostLease(input: {
-    observationId: string;
-    leaseId: string;
-  }): Promise<LiveObservationStorePresenterBoostRenewResult>;
-  releasePresenterBoostLease(input: {
-    observationId: string;
-    leaseId: string;
-  }): Promise<LiveObservationStorePresenterBoostReleaseResult>;
 };
 
 export class LiveObservationStoreInputError extends Error {

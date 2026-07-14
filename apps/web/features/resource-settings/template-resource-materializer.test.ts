@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { DiagramJson, DiagramNode } from "../../../../packages/types/src";
+import { buildTemplateDiagramJson, templateDefinitions } from "../../../../packages/types/src/template-definitions";
+import { isAreaNode } from "../diagram-editor/area-nodes";
 import { isRenderableDiagramNode } from "../diagram-editor/diagram-node-visibility";
 import { resourceCatalog } from "./catalog";
 import {
@@ -120,15 +122,86 @@ test("template-library entry points return strict catalog-materialized diagrams"
   );
 });
 
-test("strict Template materialization compacts every built-in Template while draft hydration preserves coordinates", () => {
+test("deployable Template materialization preserves reviewed geometry while draft hydration preserves coordinates", () => {
   for (const template of listBoardTemplates()) {
     assertCompactContainedAreas(template.diagramJson);
+
+    const definition = templateDefinitions.find((candidate) => candidate.id === template.id);
+    assert.ok(definition, `Missing definition for ${template.id}`);
+    const authored = buildTemplateDiagramJson(definition.id, {
+      projectSlug: "sketchcatch",
+      shortId: definition.id
+    });
+
+    for (const sourceNode of authored.nodes) {
+      const materialized = template.diagramJson.nodes.find((node) => node.id === sourceNode.id);
+
+      assert.deepEqual(materialized?.position, sourceNode.position, `${template.id}/${sourceNode.id}`);
+    }
   }
 
   const savedDraft = createDiagram([createTemplateNode("aws_s3_bucket")]);
   const hydratedDraft = hydrateCatalogResourceNodes(savedDraft);
 
   assert.deepEqual(hydratedDraft.nodes[0]?.position, savedDraft.nodes[0]?.position);
+});
+
+test("reviewed API, ECS, and Namespace resources become real visual containers", () => {
+  const templates = listBoardTemplates();
+  const requiredContainers = [
+    ["minimal-serverless-api", "aws_api_gateway_rest_api"],
+    ["full-serverless-web-app", "aws_api_gateway_rest_api"],
+    ["ecs-fargate-container-app", "aws_ecs_cluster"],
+    ["eks-container-app", "kubernetes_namespace"]
+  ] as const;
+
+  for (const [templateId, resourceType] of requiredContainers) {
+    const node = templates
+      .find((template) => template.id === templateId)
+      ?.diagramJson.nodes.find((candidate) => candidate.parameters?.resourceType === resourceType);
+
+    assert.ok(node, `${templateId}/${resourceType}`);
+    assert.equal(isAreaNode(node), true, `${templateId}/${resourceType}`);
+  }
+});
+
+test("ASG and EKS control plane materialize as ordinary 48px Resource tiles", () => {
+  const templates = listBoardTemplates();
+  const expectedTiles = [
+    ["three-tier-web-app", "aws_autoscaling_group"],
+    ["eks-container-app", "aws_eks_cluster"]
+  ] as const;
+
+  for (const [templateId, resourceType] of expectedTiles) {
+    const node = templates
+      .find((template) => template.id === templateId)
+      ?.diagramJson.nodes.find((candidate) => candidate.parameters?.resourceType === resourceType);
+
+    assert.ok(node, `${templateId}/${resourceType}`);
+    assert.equal(isAreaNode(node), false, `${templateId}/${resourceType}`);
+    assert.deepEqual(node.size, { width: 48, height: 48 }, `${templateId}/${resourceType}`);
+  }
+});
+
+test("Template presentation nodes materialize exact Catalog items without Terraform parameters", () => {
+  // Design nodes reuse the real panel payload even when Region and AZ normally create resource parameters on drag.
+  for (const template of listBoardTemplates()) {
+    const definition = templateDefinitions.find((candidate) => candidate.id === template.id);
+
+    assert.ok(definition, `Missing definition for ${template.id}`);
+    for (const presentationNode of definition.presentationNodes) {
+      const diagramNode = template.diagramJson.nodes.find(
+        (candidate) => candidate.id === `template-${template.id}-presentation-${presentationNode.id}`
+      );
+      const catalogItem = requireCatalogItemById(presentationNode.catalogItemId);
+
+      assert.ok(diagramNode, `${template.id}/${presentationNode.id}`);
+      assert.equal(diagramNode.type, catalogItem.nodeDefaults.type);
+      assert.equal(diagramNode.iconUrl, catalogItem.iconUrl);
+      assert.equal(diagramNode.kind, "design");
+      assert.equal(diagramNode.parameters, undefined);
+    }
+  }
 });
 
 function createDiagram(nodes: DiagramNode[]): DiagramJson {
@@ -162,6 +235,14 @@ function requireCatalogItem(resourceType: string) {
   );
 
   assert.ok(catalogItem, `Missing resource catalog item: ${resourceType}`);
+  return catalogItem;
+}
+
+// Presentation materialization is keyed by stable Catalog id because Region and AZ are not Terraform resources.
+function requireCatalogItemById(catalogItemId: string) {
+  const catalogItem = resourceCatalog.find((candidate) => candidate.id === catalogItemId);
+
+  assert.ok(catalogItem, `Missing resource catalog item: ${catalogItemId}`);
   return catalogItem;
 }
 

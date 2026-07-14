@@ -1,8 +1,9 @@
 import type { DiagramNode } from "../../../../packages/types/src";
 import {
   findInnermostAreaDropTarget,
-  findInnermostAreaNodeAtPoint,
+  findInnermostContainmentAreaNodeAtPoint,
   isAreaNode,
+  isContainmentAreaNode,
   isNodeContainedByArea
 } from "./area-nodes";
 
@@ -21,7 +22,7 @@ export function placeDroppedNodeInsideArea(
   droppedNode: DiagramNode,
   dropPoint: DiagramNode["position"]
 ): DiagramNode {
-  const parentArea = findInnermostAreaNodeAtPoint(currentNodes, dropPoint);
+  const parentArea = findInnermostContainmentAreaNodeAtPoint(currentNodes, dropPoint);
 
   if (!parentArea) {
     return droppedNode;
@@ -53,6 +54,7 @@ export function placeDroppedNodeInsideArea(
   };
 }
 
+/** 실제 containment Area를 움직일 때만 저장된 자손을 같은 delta로 이동합니다. */
 export function applyAreaNodeMovement(
   snapshotNodes: readonly DiagramNode[],
   currentNodes: readonly DiagramNode[],
@@ -94,6 +96,7 @@ export function applyAreaNodeMovement(
   });
 }
 
+/** 직접 움직인 노드의 parent를 visual scope가 아닌 실제 Area로 다시 계산합니다. */
 export function applyAreaNodeParentAssignments(
   currentNodes: readonly DiagramNode[],
   directlyMovedNodeIds: ReadonlySet<string>
@@ -143,6 +146,7 @@ export function clearDeletedAreaParentAssignments(
   });
 }
 
+/** resize 뒤에도 유효한 실제 parent 관계만 보존합니다. */
 export function clearOutOfBoundsAreaParentAssignments(
   currentNodes: readonly DiagramNode[],
   resizedAreaNodeIds: ReadonlySet<string>
@@ -162,7 +166,11 @@ export function clearOutOfBoundsAreaParentAssignments(
 
     const parentAreaNode = currentNodeById.get(parentAreaNodeId);
 
-    if (parentAreaNode && isAreaNode(parentAreaNode) && isNodeContainedByArea(parentAreaNode, node)) {
+    if (
+      parentAreaNode &&
+      isContainmentAreaNode(parentAreaNode) &&
+      isNodeContainedByArea(parentAreaNode, node)
+    ) {
       return node;
     }
 
@@ -192,6 +200,7 @@ export function getDirectlyMovedNodeIdsFromPositionMap(
   return movedNodeIds;
 }
 
+/** 움직이는 visual scope가 자손을 끌고 가지 않도록 containment Area만 수집합니다. */
 function getMovingAreas(
   snapshotNodes: readonly DiagramNode[],
   currentNodeById: ReadonlyMap<string, DiagramNode>,
@@ -200,7 +209,7 @@ function getMovingAreas(
   const movingAreas: AreaMovement[] = [];
 
   for (const snapshotNode of snapshotNodes) {
-    if (!directlyMovedNodeIds.has(snapshotNode.id) || !isAreaNode(snapshotNode)) {
+    if (!directlyMovedNodeIds.has(snapshotNode.id) || !isContainmentAreaNode(snapshotNode)) {
       continue;
     }
 

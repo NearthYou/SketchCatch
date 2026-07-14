@@ -1,0 +1,143 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { test } from "node:test";
+
+const workspaceDirectory = new URL(".", import.meta.url);
+
+function readWorkspaceSource(fileName: string): string {
+  return readFileSync(new URL(fileName, workspaceDirectory), "utf8");
+}
+
+test("the deployment console shell owns the top-level Deployment and CI/CD screens", () => {
+  const shellSource = readWorkspaceSource("DeploymentConsoleShell.tsx");
+
+  assert.match(shellSource, /DirectDeploymentScreen/);
+  assert.match(shellSource, /CicdConsoleScreen/);
+  assert.match(shellSource, />\s*배포\s*</);
+  assert.match(shellSource, />\s*CI\/CD\s*</);
+  assert.match(shellSource, /aria-pressed=/);
+  assert.match(shellSource, /sketchcatch:deployment-console-screen:/);
+});
+
+test("focused screens do not cross their execution client boundaries", () => {
+  const directSource = readWorkspaceSource("DirectDeploymentScreen.tsx");
+  const cicdSource = readWorkspaceSource("CicdConsoleScreen.tsx");
+
+  assert.doesNotMatch(directSource, /listGitCicdPipelineRuns/);
+  assert.doesNotMatch(cicdSource, /runDeploymentApply/);
+});
+
+test("Direct Deployment has no browser-side production traffic simulator", () => {
+  const directSource = readWorkspaceSource("DirectDeploymentScreen.tsx");
+
+  assert.doesNotMatch(directSource, /runTrafficSimulator|trafficSimulator|trafficAbortController/);
+  assert.doesNotMatch(directSource, /Array\.from\(\{ length: 20 \}|source=sketchcatch/);
+  assert.doesNotMatch(directSource, /트래픽 시뮬레이션|Traffic simulation/);
+});
+
+test("DeploymentPanel is a compatibility adapter without the former tab state", () => {
+  const panelSource = readWorkspaceSource("DeploymentPanel.tsx");
+
+  assert.match(panelSource, /DeploymentConsoleShell/);
+  assert.doesNotMatch(panelSource, /deploymentConsoleTab/);
+});
+
+test("WorkspaceRightPanel keeps the full-screen portal and Terraform leave gate", () => {
+  const panelSource = readWorkspaceSource("WorkspaceRightPanel.tsx");
+
+  assert.match(panelSource, /createPortal\(deploymentConsoleContent, document\.body\)/);
+  assert.match(panelSource, /requestTerraformLeave\(\{ kind: "deployment-console" \}\)/);
+});
+
+test("the CI/CD screen wires sorted refreshes and request-scoped recovery state", () => {
+  const cicdSource = readWorkspaceSource("CicdConsoleScreen.tsx");
+
+  assert.match(cicdSource, /const refreshList = useCallback/);
+  assert.match(cicdSource, /const nextRuns = await loadRuns\(\)/);
+  assert.match(cicdSource, /const manualRefresh = useCallback/);
+  assert.match(cicdSource, /refreshProjectGitCicdPipelineRuns\(projectId\)/);
+  assert.match(cicdSource, /mergeCicdPipelineRun\(currentRuns, detail\)/);
+  assert.match(cicdSource, /hasExplicitRunSelectionRef\.current = true/);
+  for (const scope of ["list", "detail", "refresh"] as const) {
+    assert.match(cicdSource, new RegExp(`type: "success", scope: "${scope}"`));
+  }
+  assert.match(cicdSource, /errorMessage=\{logsErrorMessage\}/);
+  assert.match(cicdSource, /type CicdConsoleView = "activity" \| "logs"/);
+  assert.doesNotMatch(cicdSource, /CicdOverviewView|CicdMonitoringSettings|updateGitCicdMonitoringConfig/);
+});
+
+test("monitoring settings save only normalized repository-relative paths", () => {
+  const settingsSource = readWorkspaceSource("CicdMonitoringSettings.tsx");
+
+  assert.match(settingsSource, /normalizeCicdMonitoredPath\(draft\.appPath\)/);
+  assert.match(settingsSource, /normalizeCicdMonitoredPath\(draft\.infraPath\)/);
+  assert.doesNotMatch(settingsSource, /normalizePathForSave/);
+});
+
+test("branch and monitored paths are edited from project settings", () => {
+  const clientSource = readFileSync(
+    new URL(
+      "../../app/projects/[projectId]/settings/project-cicd-monitoring-settings-client.tsx",
+      workspaceDirectory
+    ),
+    "utf8"
+  );
+  const pageSource = readFileSync(
+    new URL("../../app/dashboard/projects/[projectId]/settings/page.tsx", workspaceDirectory),
+    "utf8"
+  );
+
+  assert.match(clientSource, /updateGitCicdMonitoringConfig/);
+  assert.match(clientSource, /<CicdMonitoringSettings/);
+  assert.match(pageSource, /<ProjectCicdMonitoringSettingsClient projectId=\{projectId\}/);
+});
+
+test("Direct and CI/CD screens share accessible Deployment Output links", () => {
+  const directSource = readWorkspaceSource("DirectDeploymentScreen.tsx");
+  const cicdSource = readWorkspaceSource("CicdConsoleScreen.tsx");
+
+  assert.match(directSource, /import \{ DeploymentOutputLinks \}/);
+  assert.match(directSource, /<DeploymentOutputLinks[^>]*scopeKey=\{selectedDeploymentId \|\| null\}/);
+  assert.match(cicdSource, /import \{ DeploymentOutputLinks \}/);
+  assert.match(cicdSource, /<DeploymentOutputLinks[^>]*scopeKey=\{selectedRun\?\.id \?\? null\}/);
+});
+
+test("durable notifications are global and workspace polling notifications are retired", () => {
+  const managerSource = readWorkspaceSource("ProjectWorkspaceDraftManager.tsx");
+  const rootLayoutSource = readFileSync(
+    new URL("../../app/layout.tsx", import.meta.url),
+    "utf8"
+  );
+  const directSource = readWorkspaceSource("DirectDeploymentScreen.tsx");
+  const cicdSource = readWorkspaceSource("CicdConsoleScreen.tsx");
+
+  assert.doesNotMatch(managerSource, /WorkspaceNotificationHost|workspace-notifications/);
+  assert.match(rootLayoutSource, /<DeploymentNotificationCenter>\{children\}<\/DeploymentNotificationCenter>/);
+  assert.doesNotMatch(directSource, /useWorkspaceNotifications|getNotifiableDirectDeploymentTransitions/);
+  assert.doesNotMatch(cicdSource, /useWorkspaceNotifications|getNotifiablePipelineRunTransitions/);
+});
+
+test("the visible CI/CD console keeps automatic refresh RDS-only and resets logs by revision", () => {
+  const cicdSource = readWorkspaceSource("CicdConsoleScreen.tsx");
+
+  assert.match(cicdSource, /refreshProjectGitCicdPipelineRuns/);
+  assert.match(cicdSource, /manualRefresh/);
+  assert.doesNotMatch(
+    cicdSource.slice(cicdSource.indexOf("useEffect(() =>", cicdSource.indexOf("manualRefresh"))),
+    /refreshProjectGitCicdPipelineRuns/
+  );
+  assert.match(cicdSource, /const selectedLogRevision = selectedRun\?\.logRevision/);
+  assert.match(cicdSource, /logsSequenceRef\.current = 0/);
+  assert.match(cicdSource, /setLogs\(\[\]\)/);
+  assert.doesNotMatch(cicdSource, /\buseLayoutEffect\b/);
+  assert.match(cicdSource, /const visibleLogs =/);
+  assert.match(cicdSource, /logs=\{visibleLogs\}/);
+});
+
+test("Direct Output rendering is scoped to the selected Deployment owner", () => {
+  const directSource = readWorkspaceSource("DirectDeploymentScreen.tsx");
+
+  assert.match(directSource, /reduceDeploymentOutputState/);
+  assert.match(directSource, /getVisibleDeploymentOutputs\([^]*selectedDeploymentId/);
+  assert.match(directSource, /type: "clear",\s*deploymentId: selectedDeploymentId/);
+});

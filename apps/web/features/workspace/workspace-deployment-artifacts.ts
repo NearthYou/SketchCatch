@@ -3,7 +3,8 @@ import type {
   ArchitectureSource,
   DiagramJson,
   ProjectAssetUploadResponse,
-  TerraformArtifact
+  TerraformArtifact,
+  TerraformSyncFileInput
 } from "@sketchcatch/types";
 import {
   abortProjectAssetUpload,
@@ -25,6 +26,12 @@ export type SavedWorkspaceArchitectureSnapshot = {
 export type SavedWorkspaceTerraformArtifact = {
   readonly architecture: ArchitectureSnapshot;
   readonly terraformArtifact: TerraformArtifact;
+};
+
+export type PreparedWorkspaceDeploymentArtifacts = SavedWorkspaceTerraformArtifact & {
+  readonly preparedDraftRevision: number;
+  readonly diagramJson: DiagramJson;
+  readonly terraformFiles: readonly TerraformSyncFileInput[];
 };
 
 export async function saveWorkspaceArchitectureSnapshot({

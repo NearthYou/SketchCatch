@@ -514,6 +514,12 @@ function createDeploymentRecord(
     terraformArtifactId,
     awsConnectionId,
     liveProfile: "practice",
+    scope: "infrastructure",
+    targetKind: null,
+    source: "direct",
+    releaseId: null,
+    preparedDraftRevision: null,
+    preparedSnapshotHash: null,
     currentPlanArtifactId: null,
     stateObjectKey: null,
     resultWarningSummary: null,
@@ -533,6 +539,7 @@ function createDeploymentRecord(
     approvedTfplanHash: null,
     approvedAwsAccountId: null,
     approvedAwsRegion: null,
+    approvedPreparedSnapshotHash: null,
     startedAt: null,
     completedAt: null,
     failedAt: null,
@@ -679,6 +686,11 @@ test("createDeployment verifies project, architecture, and terraform artifact ow
         terraformArtifactId,
         awsConnectionId,
         liveProfile: "practice",
+        scope: "infrastructure",
+        targetKind: null,
+        source: "direct",
+        preparedDraftRevision: null,
+        preparedSnapshotHash: null,
         status: "PENDING"
       }
     }

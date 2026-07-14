@@ -61,7 +61,9 @@ const diagramNodeMetadataSchema: z.ZodType<DiagramNodeMetadata> = z.object({
       width: z.number().finite().positive(),
       height: z.number().finite().positive()
     })
-  }).optional()
+  }).optional(),
+  presentationArea: z.boolean().optional(),
+  presentationCatalogItemId: z.string().min(1).optional()
 }).strict();
 
 const diagramEdgeMetadataSchema: z.ZodType<DiagramEdgeMetadata> = z.object({

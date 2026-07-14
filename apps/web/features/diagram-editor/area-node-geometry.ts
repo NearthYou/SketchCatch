@@ -1,5 +1,5 @@
 import type { DiagramNode } from "../../../../packages/types/src";
-import { isAreaNode } from "./area-nodes";
+import { isContainmentAreaNode } from "./area-nodes";
 
 const AREA_CHILD_EXPANSION_MULTIPLIER = 1.3;
 
@@ -35,7 +35,7 @@ export function reconcileAreaNodeGeometry(
   for (const areaId of orderedAreaIds) {
     const area = currentNodeById.get(areaId);
 
-    if (!area || !isAreaNode(area) || hasParentCycle(area.id, currentNodeById)) {
+    if (!area || !isContainmentAreaNode(area) || hasParentCycle(area.id, currentNodeById)) {
       continue;
     }
 
@@ -59,7 +59,7 @@ function translateOrReplaceChangedAreaBaselines(
     const previousNode = previousNodeById.get(nodeId);
     const baseline = currentNode?.metadata?.areaAutoSizeBaseline;
 
-    if (!currentNode || !previousNode || !baseline || !isAreaNode(currentNode)) {
+    if (!currentNode || !previousNode || !baseline || !isContainmentAreaNode(currentNode)) {
       continue;
     }
 
@@ -104,7 +104,7 @@ function collectAffectedAreaIds(
     const previousNode = previousNodeById.get(nodeId);
     const currentNode = currentNodeById.get(nodeId);
 
-    if (currentNode && isAreaNode(currentNode)) {
+    if (currentNode && isContainmentAreaNode(currentNode)) {
       affectedAreaIds.add(currentNode.id);
     }
     if (previousNode?.metadata?.parentAreaNodeId) {

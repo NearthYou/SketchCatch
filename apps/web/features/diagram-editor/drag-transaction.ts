@@ -7,6 +7,7 @@ import {
   getDirectlyMovedNodeIdsFromPositionMap
 } from "./area-node-movement";
 import { applyContainingReferenceDropTargets } from "./reference-drop-targets";
+import { refitSecurityGroupScopesForTargetChanges } from "./security-group-scope";
 
 type DraggedNodesInput = {
   readonly currentNodes: readonly DiagramNode[];
@@ -57,6 +58,7 @@ export function getDraggedPreviewNodes({
   );
 }
 
+/** 최종 drop에서 grid, containment, reference, SG visual scope를 한 번에 확정합니다. */
 export function finalizeDraggedNodes({
   anchorNodeId,
   autoExpandAreasEnabled = true,
@@ -104,12 +106,24 @@ export function finalizeDraggedNodes({
   const nodesWithReconciledAreas = autoExpandAreasEnabled
     ? reconcileAreaNodeGeometry(snapshotNodes, nodesWithAssignedParents, movedNodeIds)
     : nodesWithAssignedParents;
-  const allMovedNodeIds = getMovedNodeIdsFromNodes(snapshotNodes, nodesWithReconciledAreas);
+  const preReferenceMovedNodeIds = getMovedNodeIdsFromNodes(snapshotNodes, nodesWithReconciledAreas);
+  const nodesWithReferences = applyContainingReferenceDropTargets(
+    nodesWithReconciledAreas,
+    preReferenceMovedNodeIds,
+    catalog
+  );
+  const finalizedNodes = refitSecurityGroupScopesForTargetChanges({
+    changedNodeIds: preReferenceMovedNodeIds,
+    currentNodes: nodesWithReferences,
+    preserveScopeNodeIds: preReferenceMovedNodeIds,
+    previousNodes: snapshotNodes
+  });
+  const allMovedNodeIds = getMovedNodeIdsFromNodes(snapshotNodes, finalizedNodes);
 
   return {
     directlyMovedNodeIds: movedNodeIds,
     movedNodeIds: allMovedNodeIds,
-    nodes: applyContainingReferenceDropTargets(nodesWithReconciledAreas, allMovedNodeIds, catalog)
+    nodes: finalizedNodes
   };
 }
 

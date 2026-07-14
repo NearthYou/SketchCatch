@@ -333,6 +333,7 @@ test("approveDeploymentPlan stores the approved artifact plan and AWS snapshot",
     approvedTfplanHash: tfplanHash,
     approvedAwsAccountId: "123456789012",
     approvedAwsRegion: "ap-northeast-2",
+    approvedPreparedSnapshotHash: null,
     planSummary: {
       ...createPlanSummary(),
       blocked: false
@@ -536,6 +537,7 @@ test("approveDeploymentPlan preserves failed cleanup state for destroy approvals
     approvedTfplanHash: tfplanHash,
     approvedAwsAccountId: "123456789012",
     approvedAwsRegion: "ap-northeast-2",
+    approvedPreparedSnapshotHash: null,
     planSummary: {
       createCount: 0,
       updateCount: 0,
@@ -765,6 +767,32 @@ test("assertDeploymentApplyPreconditions rejects AWS region drift before apply",
   );
 });
 
+test("assertDeploymentApplyPreconditions rejects prepared draft drift after approval", () => {
+  assert.throws(
+    () =>
+      assertDeploymentApplyPreconditions({
+        deployment: createApprovedDeploymentRecord({
+          preparedDraftRevision: 7,
+          preparedSnapshotHash: "c".repeat(64),
+          approvedPreparedSnapshotHash: "d".repeat(64)
+        }),
+        currentPlanArtifact: createPlanArtifactRecord(),
+        currentTerraformArtifactHash: artifactHash,
+        currentTfplanHash: tfplanHash,
+        currentAwsConnection: createVerifiedAwsConnection()
+      }),
+    (error) => {
+      assert.equal(error instanceof DeploymentApplyPreconditionError, true);
+      assert.equal(
+        (error as DeploymentApplyPreconditionError).reason,
+        "approval_snapshot"
+      );
+      assert.match((error as Error).message, /project draft changed after approval/i);
+      return true;
+    }
+  );
+});
+
 test("assertDeploymentApplyPreconditions rejects missing approval snapshot fields", () => {
   const requiredSnapshotFields: Array<keyof DeploymentRecord> = [
     "approvedAt",
@@ -823,6 +851,12 @@ function createDeploymentRecord(
     terraformArtifactId,
     awsConnectionId,
     liveProfile: "practice",
+    scope: "infrastructure",
+    targetKind: null,
+    source: "direct",
+    releaseId: null,
+    preparedDraftRevision: null,
+    preparedSnapshotHash: null,
     currentPlanArtifactId: planArtifactId,
     stateObjectKey: null,
     resultWarningSummary: null,
@@ -842,6 +876,7 @@ function createDeploymentRecord(
     approvedTfplanHash: null,
     approvedAwsAccountId: null,
     approvedAwsRegion: null,
+    approvedPreparedSnapshotHash: null,
     startedAt: null,
     completedAt: null,
     failedAt: null,
