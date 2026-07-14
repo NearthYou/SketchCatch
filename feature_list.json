@@ -673,6 +673,7 @@
         "CI/CD 연결 없이 확인하면 이동을 중단하고 확인 버튼 위에 작은 빨간 안내 문구를 표시한다.",
         "GitHub callback은 Repository 재선택 없이 서명된 target만 자동 연결하며, 두 개별 저장 버튼 대신 하단 확인 버튼이 두 API를 순서대로 저장한 뒤 복귀한다.",
         "Callback 완료 액션 바는 두 저장 결과를 설명하고 48px CTA, 저장 중 상태, 인라인 오류, 모바일 전체 너비를 제공한다.",
+        "nullable runtimeConfig와 잘못된 Repository URL은 TypeError 대신 제어된 배포 또는 Source Repository 오류로 차단한다.",
         "30분짜리 일회성 browser resume state는 project와 active Repository가 일치할 때만 소비되며 API 재분석 없이 추천 상태를 복원한다.",
         "어떤 추천 Template을 선택해도 callback 배포 타깃은 ECS Fargate이며 project slug, commit SHA, Dockerfile evidence로 필수 좌표를 채운다.",
         "whiskend/audience-live-check의 명확한 컨테이너 근거는 AI confidence 재정렬 이후에도 ECS Fargate를 1순위로 유지한다."
@@ -691,7 +692,7 @@
           "pnpm build",
           "pnpm harness:check"
         ],
-        "notes": "Repository callback/resume/runtime focused tests passed: API 10/10, Web 12/12, ECS Board name 1/1. Callback-wide ECS defaults, ordered single-confirm saves, and completion action bar contracts passed focused callback tests 6/6. Harness, lint, typecheck, and build passed. Full pnpm test remains non-green only on the same three pre-existing three-tier Template position/parent contract failures in packages/types."
+        "notes": "Repository callback/resume/runtime focused tests passed: API 10/10, Web 12/12, ECS Board name 1/1. Callback-wide ECS defaults, ordered single-confirm saves, and completion action bar contracts passed focused callback tests 6/6. Null runtime configuration and malformed URL review regressions passed 7/7. Harness, lint, typecheck, and build passed. Full pnpm test remains non-green only on the same three pre-existing three-tier Template position/parent contract failures in packages/types."
       },
       "notes": "No deployment, Terraform mutation, Git handoff, or GitHub permission change was performed. A temporary local visual-verification account was deleted after use."
     }

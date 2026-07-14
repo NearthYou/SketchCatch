@@ -587,7 +587,7 @@ function assertContextMatchesTarget(context: DirectApplicationReleaseContext): v
     context.deployment.source !== "direct" ||
     !context.sourceRepository ||
     context.deployment.targetKind !== context.target.runtimeTargetKind ||
-    context.target.runtimeConfig.runtimeTargetKind !== context.target.runtimeTargetKind
+    context.target.runtimeConfig?.runtimeTargetKind !== context.target.runtimeTargetKind
   ) {
     throw new DirectApplicationReleaseError(
       "Direct deployment runtime does not match the confirmed project target"
@@ -595,8 +595,8 @@ function assertContextMatchesTarget(context: DirectApplicationReleaseContext): v
   }
 
   if (
-    context.target.runtimeConfig.runtimeTargetKind === "ecs_fargate" &&
-    !context.target.runtimeConfig.outputUrl
+    context.target.runtimeConfig?.runtimeTargetKind === "ecs_fargate" &&
+    !context.target.runtimeConfig?.outputUrl
   ) {
     throw new DirectApplicationReleaseError(
       "DEPLOYMENT_OUTPUT_URL_REQUIRED",

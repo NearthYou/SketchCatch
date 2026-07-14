@@ -86,3 +86,56 @@ test("Direct application preparation fails before CodeBuild without an output UR
   );
   assert.equal(prepareCalls, 0);
 });
+
+test("Direct application preparation rejects a null runtime config without a TypeError", async () => {
+  let prepareCalls = 0;
+  const context = {
+    sourceRepository: {
+      provider: "github",
+      installationId: "installation-1",
+      owner: "NearthYou",
+      name: "SketchCatch"
+    },
+    deployment: {
+      id: "deployment-1",
+      projectId: "project-1",
+      scope: "application",
+      source: "direct",
+      targetKind: "ecs_fargate"
+    },
+    target: {
+      runtimeTargetKind: "ecs_fargate",
+      confirmedBuildConfig: {},
+      runtimeConfig: null
+    },
+    connection: {
+      roleArn: "arn:aws:iam::123456789012:role/SketchCatch",
+      externalId: "external-id",
+      region: "ap-northeast-2"
+    }
+  } as unknown as DirectApplicationReleaseContext;
+  const repository = {
+    async findContext() {
+      return context;
+    }
+  } as unknown as DirectApplicationReleaseRepository;
+  const gateway = {
+    async prepareArtifact() {
+      prepareCalls += 1;
+      throw new Error("should not run");
+    }
+  } as unknown as DirectApplicationReleaseGateway;
+
+  await assert.rejects(
+    prepareDirectApplicationRelease(
+      { deploymentId: "deployment-1", userId: "user-1" },
+      repository,
+      gateway,
+      () => "release-1"
+    ),
+    (error: unknown) =>
+      error instanceof DirectApplicationReleaseError &&
+      error.message === "Direct deployment runtime does not match the confirmed project target"
+  );
+  assert.equal(prepareCalls, 0);
+});

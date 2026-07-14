@@ -585,7 +585,12 @@ export function findTargetGitHubRepository(
 }
 
 function parseGitHubProjectConnectionTarget(repositoryUrl: string): GitHubProjectConnectionTarget {
-  const url = new URL(repositoryUrl);
+  let url: URL;
+  try {
+    url = new URL(repositoryUrl);
+  } catch {
+    throw new SourceRepositoryStateError("Invalid GitHub Repository URL");
+  }
   const pathSegments = url.pathname.split("/").filter(Boolean);
 
   if (

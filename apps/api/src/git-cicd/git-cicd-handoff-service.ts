@@ -1231,7 +1231,7 @@ export async function createGitCicdHandoff(
   });
 }
 
-function assertGitOpsTarget(
+export function assertGitOpsTarget(
   target: GitCicdHandoffDeploymentTargetRecord | undefined,
   sourceRepository: GitCicdHandoffSourceRepositoryRecord,
   appPath: GitCicdMonitoredPath
@@ -1243,10 +1243,24 @@ function assertGitOpsTarget(
   if (
     !target ||
     !target.confirmedBuildConfig ||
-    !target.runtimeConfig ||
-    target.runtimeConfig.runtimeTargetKind !== target.runtimeTargetKind ||
     !target.awsRoleArn
   ) {
+    throw new GitCicdHandoffProviderConflictError(
+      "GitOps application handoff requires a confirmed project deployment target"
+    );
+  }
+
+  if (
+    target.runtimeTargetKind === "ecs_fargate" &&
+    !target.runtimeConfig?.outputUrl
+  ) {
+    throw new GitCicdHandoffProviderConflictError(
+      "DEPLOYMENT_OUTPUT_URL_REQUIRED",
+      "DEPLOYMENT_OUTPUT_URL_REQUIRED"
+    );
+  }
+
+  if (target.runtimeConfig?.runtimeTargetKind !== target.runtimeTargetKind) {
     throw new GitCicdHandoffProviderConflictError(
       "GitOps application handoff requires a confirmed project deployment target"
     );
@@ -1263,14 +1277,8 @@ function assertGitOpsTarget(
     const dockerfiles = sourceRepository.analysisResult?.evidence.filter(
       (item) => item.kind === "dockerfile"
     ) ?? [];
-    if (!target.runtimeConfig.outputUrl) {
-      throw new GitCicdHandoffProviderConflictError(
-        "DEPLOYMENT_OUTPUT_URL_REQUIRED",
-        "DEPLOYMENT_OUTPUT_URL_REQUIRED"
-      );
-    }
     if (
-      target.runtimeConfig.runtimeTargetKind !== "ecs_fargate" ||
+      target.runtimeConfig?.runtimeTargetKind !== "ecs_fargate" ||
       build.buildPreset !== "docker_build" ||
       !build.dockerfilePath ||
       !hasCurrentRevision ||

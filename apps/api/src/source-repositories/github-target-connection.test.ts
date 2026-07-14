@@ -6,7 +6,9 @@ import { createGitHubAppState } from "./github-app-state.js";
 
 import {
   connectGitHubSourceRepository,
+  createGitHubInstallUrl,
   findTargetGitHubRepository,
+  SourceRepositoryStateError,
   type SourceRepositoryRecord,
   type SourceRepositoryRepository
 } from "./source-repository-service.js";
@@ -44,6 +46,26 @@ test("target matching does not fall back to another Repository", () => {
       { owner: "nearthyou", name: "sketchcatch" }
     ),
     null
+  );
+});
+
+test("GitHub install URL rejects a malformed Repository URL as a state error", async () => {
+  const repository = {
+    async findAccessibleProject() {
+      return {};
+    }
+  } as unknown as SourceRepositoryRepository;
+
+  await assert.rejects(
+    createGitHubInstallUrl({
+      projectId: "project-1",
+      repositoryUrl: "not-a-url",
+      resumeKey: "resume-12345678",
+      accessContext: { kind: "user", userId: "user-1" },
+      appSlug: "sketchcatch",
+      stateSecret
+    }, repository),
+    SourceRepositoryStateError
   );
 });
 
