@@ -605,3 +605,45 @@ Append the concise verification record to `agent-progress.md` after the source a
 - [ ] **Step 7: Review current branch changes**
 
 Run a standards and correctness review against the pre-feature commit. Fix every actionable finding, rerun focused tests and required checks, then commit only the fix files.
+
+### Task 8: Temporary Callback-wide ECS Fargate Defaults
+
+**Files:**
+- Modify: `apps/web/app/integrations/github/callback/github-callback-state.ts`
+- Modify: `apps/web/app/integrations/github/callback/github-callback-state.test.ts`
+- Modify: `apps/web/app/integrations/github/callback/page.tsx`
+- Modify: `apps/web/app/projects/[projectId]/settings/project-deployment-target-state.ts`
+- Modify: `apps/web/app/projects/[projectId]/settings/project-deployment-target-state.test.ts`
+- Modify: `apps/web/app/projects/[projectId]/settings/project-deployment-target-settings-client.tsx`
+
+**Interfaces:**
+- Produces: `createCallbackEcsDefaults(resume)` that always returns ECS defaults regardless of `selectedTemplateId`.
+- Produces: callback-only `preferEcsDefaults` draft mode that switches other runtimes to ECS and fills every required ECS coordinate while preserving an existing ECS output URL.
+
+- [ ] **Step 1: Write failing callback and draft tests**
+
+Add a callback test using a non-ECS `selectedTemplateId` and assert `createCallbackEcsDefaults` still returns the analyzed SHA and Dockerfile path. Add a deployment draft test with an existing Lambda target and assert callback preference returns `ecs_fargate` plus non-empty CodeBuild, ECR, cluster, service, and container values.
+
+- [ ] **Step 2: Run focused tests and verify RED**
+
+Run:
+
+```bash
+pnpm --filter @sketchcatch/web exec tsx --test \
+  app/integrations/github/callback/github-callback-state.test.ts \
+  'app/projects/[projectId]/settings/project-deployment-target-state.test.ts'
+```
+
+Expected: FAIL because callback defaults currently return `null` for non-ECS selections and an existing target suppresses ECS defaults.
+
+- [ ] **Step 3: Implement the callback-only preference**
+
+Move the pure ECS-default derivation into `github-callback-state.ts`, remove the selected-template guard, and make the callback pass `preferEcsDefaults`. In `createDeploymentTargetDraft`, use this mode to select `ecs_fargate`, apply analyzed source root, Dockerfile and commit SHA, fill deterministic ECS coordinates, and preserve only an existing ECS `outputUrl`.
+
+- [ ] **Step 4: Run focused tests and verify GREEN**
+
+Run the Step 2 command again. Expected: all focused tests PASS.
+
+- [ ] **Step 5: Run scoped static checks and commit**
+
+Run `pnpm --filter @sketchcatch/web typecheck`, `pnpm --filter @sketchcatch/web lint`, `pnpm harness:check`, and `git diff --check`. Commit only Task 8 source and test files with `Fix: Callback ECS 기본값 항상 적용`.
