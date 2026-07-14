@@ -17,7 +17,8 @@ export function TerraformIssuesPanel({
 }) {
   const diagnostics = issues.map((issue) => issue.diagnostic);
   const hasErrorDiagnostics = diagnostics.some((diagnostic) => diagnostic.severity === "error");
-  const firstErrorDiagnostic = diagnostics.find((diagnostic) => diagnostic.severity === "error") ?? null;
+  const firstErrorDiagnostic =
+    diagnostics.find((diagnostic) => diagnostic.severity === "error") ?? null;
 
   return (
     <div className={styles.issuesPanel}>
@@ -32,7 +33,11 @@ export function TerraformIssuesPanel({
             <span>Terraform diagnostics</span>
             <h3>검증 문제</h3>
           </div>
-          <span className={hasErrorDiagnostics ? styles.terraformIssueCountError : styles.terraformIssueCount}>
+          <span
+            className={
+              hasErrorDiagnostics ? styles.terraformIssueCountError : styles.terraformIssueCount
+            }
+          >
             {diagnostics.length}
           </span>
         </div>
@@ -49,15 +54,25 @@ export function TerraformIssuesPanel({
                     {formatTerraformDiagnosticSeverity(issue.diagnostic.severity)}
                   </span>
                 </div>
-                <span>{issue.diagnostic.message}</span>
-                <div className={styles.terraformDiagnosticMeta}>
-                  {formatTerraformDiagnosticLocation(issue.diagnostic) ? (
-                    <span>{formatTerraformDiagnosticLocation(issue.diagnostic)}</span>
-                  ) : null}
-                  {issue.isStale ? <span className={styles.terraformDiagnosticStale}>재검증 필요</span> : null}
-                  <span>{getTerraformSafeFix(issue.diagnostic).applicable ? "자동 적용 가능" : "수동 수정 필요"}</span>
+                <span className={styles.terraformDiagnosticMessage}>
+                  {issue.diagnostic.message}
+                </span>
+                <div className={styles.terraformDiagnosticFooter}>
+                  <div className={styles.terraformDiagnosticMeta}>
+                    {formatTerraformDiagnosticLocation(issue.diagnostic) ? (
+                      <span>{formatTerraformDiagnosticLocation(issue.diagnostic)}</span>
+                    ) : null}
+                    {issue.isStale ? (
+                      <span className={styles.terraformDiagnosticStale}>재검증 필요</span>
+                    ) : null}
+                    <span>
+                      {getTerraformSafeFix(issue.diagnostic).applicable
+                        ? "자동 적용 가능"
+                        : "수동 수정 필요"}
+                    </span>
+                  </div>
+                  <TerraformIssueAnalysisButton onAnalyze={() => onResolveWithAi(issue)} />
                 </div>
-                <TerraformIssueAnalysisButton onAnalyze={() => onResolveWithAi(issue)} />
               </li>
             ))}
           </ol>

@@ -1050,8 +1050,8 @@
 }
 
 .terraformPanel {
-  background: #f7f9fd;
-  color: #172033;
+  background: #ffffff;
+  color: #171717;
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -1063,7 +1063,7 @@
 .terraformSplitLayout {
   --terraform-code-pane-ratio: 62%;
 
-  background: #f7f9fd;
+  background: #ffffff;
   display: grid;
   grid-template-rows: var(--terraform-code-pane-ratio) 10px minmax(0, 1fr);
   height: 100%;
@@ -1072,11 +1072,13 @@
 }
 
 .terraformCodePane {
+  background: #ffffff;
   min-height: 0;
   overflow: hidden;
 }
 
 .terraformIssuesPane {
+  background: #ffffff;
   min-height: 0;
   overflow: hidden;
 }
@@ -1086,16 +1088,16 @@
 }
 
 .terraformSplitResizeHandle {
-  background: #ffffff;
-  border-bottom: 1px solid #dce3ee;
-  border-top: 1px solid #dce3ee;
+  background: #fafafa;
+  border-bottom: 1px solid #f0f0f3;
+  border-top: 1px solid #f0f0f3;
   cursor: row-resize;
   min-height: 10px;
   position: relative;
 }
 
 .terraformSplitResizeHandle::before {
-  background: #9ca3af;
+  background: #cccccc;
   border-radius: 999px;
   content: "";
   height: 2px;
@@ -1108,13 +1110,13 @@
 
 .terraformSplitResizeHandle:hover,
 .terraformSplitResizeHandle:focus-visible {
-  background: #f8fafc;
+  background: #f0f0f3;
   outline: none;
 }
 
 .terraformSplitResizeHandle:hover::before,
 .terraformSplitResizeHandle:focus-visible::before {
-  background: #64748b;
+  background: #60646c;
 }
 
 .terraformTopBar {
@@ -5701,7 +5703,9 @@
 .aiChatSelectionSubmitButton:focus-visible,
 .aiChatVoiceButton:focus-visible,
 .aiChatSendButton:focus-visible {
-  box-shadow: 0 0 0 2px #ffffff, 0 0 0 4px #171717;
+  box-shadow:
+    0 0 0 2px #ffffff,
+    0 0 0 4px #171717;
   outline: none;
 }
 
@@ -5988,9 +5992,6 @@
   color: #ffffff;
 }
 
-.workspaceNotificationHost {
-  align-items: end;
-  bottom: 18px;
 /* Deployment modal operational layout */
 .deploymentExpandedOverlay {
   align-items: center;
@@ -8435,7 +8436,6 @@
     right: 10px;
     top: 74px;
   }
-
 }
 
 @media (max-width: 640px) {

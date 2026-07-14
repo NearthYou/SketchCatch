@@ -7,14 +7,14 @@
   cursor: pointer;
   display: inline-flex;
   font-family: "Pretendard", "Noto Sans KR", "Inter", "Geist", sans-serif;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   gap: 7px;
-  height: 32px;
+  height: 36px;
   justify-content: center;
-  justify-self: start;
+  justify-self: end;
   line-height: 1;
-  padding: 0 10px 0 6px;
+  padding: 0 12px 0 6px;
   transition:
     background-color 150ms ease,
     box-shadow 150ms ease,
@@ -46,10 +46,10 @@
   display: inline-flex;
   font-size: 10px;
   font-weight: 800;
-  height: 22px;
+  height: 24px;
   justify-content: center;
   letter-spacing: -0.03em;
-  width: 22px;
+  width: 24px;
 }
 
 @media (prefers-reduced-motion: reduce) {

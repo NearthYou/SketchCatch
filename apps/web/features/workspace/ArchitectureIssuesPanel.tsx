@@ -15,12 +15,20 @@ export function ArchitectureIssuesPanel({
   return (
     <section className={styles.terraformDiagnostics} aria-live="polite">
       <div className={styles.terraformDiagnosticsHeader}>
-        {hasErrorDiagnostics ? <AlertCircle size={15} aria-hidden="true" /> : <Network size={15} aria-hidden="true" />}
+        {hasErrorDiagnostics ? (
+          <AlertCircle size={15} aria-hidden="true" />
+        ) : (
+          <Network size={15} aria-hidden="true" />
+        )}
         <div>
           <span>Architecture diagnostics</span>
           <h3>설계 문제</h3>
         </div>
-        <span className={hasErrorDiagnostics ? styles.terraformIssueCountError : styles.terraformIssueCount}>
+        <span
+          className={
+            hasErrorDiagnostics ? styles.terraformIssueCountError : styles.terraformIssueCount
+          }
+        >
           {diagnostics.length}
         </span>
       </div>
@@ -30,14 +38,17 @@ export function ArchitectureIssuesPanel({
       ) : (
         <ol className={styles.terraformDiagnosticList}>
           {diagnostics.map((diagnostic) => (
-            <li key={`${diagnostic.ruleId}:${diagnostic.resourceNodeId}`} data-severity={diagnostic.severity}>
+            <li
+              key={`${diagnostic.ruleId}:${diagnostic.resourceNodeId}`}
+              data-severity={diagnostic.severity}
+            >
               <div className={styles.terraformDiagnosticItemHeader}>
                 <strong>{diagnostic.summary}</strong>
                 <span className={styles.terraformDiagnosticSeverity}>
                   {formatTerraformDiagnosticSeverity(diagnostic.severity)}
                 </span>
               </div>
-              <span>{diagnostic.message}</span>
+              <span className={styles.terraformDiagnosticMessage}>{diagnostic.message}</span>
               <button
                 className={styles.architectureFocusButton}
                 onClick={() => onFocusResource(diagnostic)}

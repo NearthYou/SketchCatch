@@ -156,6 +156,14 @@ Short English-only working log for the current agent context. Older records are 
 - Dev brought in ECS GitOps persistence and cleanup evidence, production ECS deployment speed optimization, live sandbox Direct recovery hardening, deployment sandbox E2E gates, Web UI clarity/accessibility improvements, dashboard navigation/copy simplification, and Brainboard AWS Template branch integration records.
 - Detailed older dev records remain available in `docs/agent-history/2026-07.md` and the merge commit history.
 
+### 2026-07-15 - Unify Terraform review and diagnostics panel
+
+- Rebuilt the Terraform toolbar, status strip, dark code surface, split handle, and diagnostics hierarchy around the new `에이전트 리뷰` and `오류 분석` actions.
+- Preserved file selection, editing, diagnostics, Architecture focus, and the three independent Workspace AI conversation entry points.
+- Removed a stray duplicate notification selector that prevented `workspace.module.css` from compiling.
+- Chrome QA passed at the live 359px right-panel width with no horizontal overflow or console warnings; agent review opened the correct conversation and Escape closed the dialog.
+- Verification: harness, Web lint, Web typecheck, focused AI Chat tests (14/14), formatting, and diff checks passed. The full Workspace test run has two unrelated Architecture Board Compiler expectation failures; production build compiles and then stops on the existing invalid named Route export in `app/api/ai/architecture-draft/route.ts`.
+
 ## Next Action
 
 - Review the current integration PR after the latest dev merge; leave the independently committed 001 work and uncommitted clipboard work untouched for their owner.

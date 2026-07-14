@@ -1,5 +1,5 @@
 .issuesPanel {
-  background: var(--workspace-surface-muted, #fafafa);
+  background: var(--workspace-surface, #ffffff);
   color: var(--workspace-text, #171717);
   display: grid;
   font-family: var(--workspace-font, "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif);
@@ -10,16 +10,24 @@
 .terraformDiagnostics {
   align-content: start;
   display: grid;
-  gap: 12px;
+  gap: 16px;
   min-height: 0;
-  padding: 14px;
+  padding: 16px;
 }
 
 .terraformDiagnosticsHeader {
   align-items: center;
   display: grid;
-  gap: 10px;
-  grid-template-columns: 18px minmax(0, 1fr) auto;
+  gap: 12px;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+}
+
+.terraformDiagnosticsHeader > svg {
+  background: var(--workspace-surface-strong, #f0f0f3);
+  border-radius: 8px;
+  box-sizing: content-box;
+  color: var(--workspace-text, #171717);
+  padding: 10px;
 }
 
 .terraformDiagnosticsHeader > div {
@@ -29,14 +37,16 @@
 
 .terraformDiagnosticsHeader span {
   color: var(--workspace-muted, #60646c);
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 700;
   line-height: 1.4;
   text-transform: uppercase;
 }
 
 .terraformDiagnosticsHeader h3 {
-  font-size: 14px;
+  color: var(--workspace-text, #171717);
+  font-size: 16px;
+  font-weight: 700;
   line-height: 1.4;
   margin: 0;
 }
@@ -73,7 +83,7 @@
 
 .terraformDiagnosticList {
   display: grid;
-  gap: 8px;
+  gap: 12px;
   list-style: none;
   margin: 0;
   padding: 0;
@@ -82,31 +92,32 @@
 .terraformDiagnosticList li {
   background: var(--workspace-surface, #ffffff);
   border: 1px solid var(--workspace-line, #f0f0f3);
-  border-left: 3px solid var(--workspace-muted, #60646c);
-  border-radius: 8px;
+  border-radius: 12px;
+  box-shadow: inset 3px 0 0 var(--workspace-muted, #60646c);
   display: grid;
-  gap: 8px;
-  padding: 10px 12px;
+  gap: 10px;
+  padding: 14px;
 }
 
 .terraformDiagnosticList li[data-severity="error"] {
-  border-left-color: var(--workspace-error, #eb8e90);
+  box-shadow: inset 3px 0 0 var(--workspace-error, #eb8e90);
 }
 
 .terraformDiagnosticList li[data-severity="warning"] {
-  border-left-color: var(--workspace-warning, #ab6400);
+  box-shadow: inset 3px 0 0 var(--workspace-warning, #ab6400);
 }
 
 .terraformDiagnosticList strong {
   color: var(--workspace-text, #171717);
-  font-size: 12px;
-  line-height: 1.4;
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
-.terraformDiagnosticList > li > span {
+.terraformDiagnosticMessage {
   color: var(--workspace-muted, #60646c);
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: 13px;
+  line-height: 1.55;
   overflow-wrap: anywhere;
 }
 
@@ -122,7 +133,7 @@
 .terraformDiagnosticStale,
 .terraformDiagnosticMeta span {
   border-radius: 9999px;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   line-height: 1.3;
   padding: 3px 6px;
@@ -144,6 +155,14 @@
   gap: 5px;
 }
 
+.terraformDiagnosticFooter {
+  align-items: flex-end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: space-between;
+}
+
 .terraformDiagnosticMeta span {
   background: var(--workspace-surface-muted, #fafafa);
   border: 1px solid var(--workspace-line, #f0f0f3);
@@ -159,12 +178,12 @@
   cursor: pointer;
   display: inline-flex;
   font: inherit;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   gap: 6px;
   justify-self: start;
-  min-height: 32px;
-  padding: 0 10px;
+  min-height: 36px;
+  padding: 0 12px;
 }
 
 .architectureFocusButton:hover,

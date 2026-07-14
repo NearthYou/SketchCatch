@@ -66,50 +66,53 @@ export function TerraformCodeToolbar({
 
   return (
     <header className={styles.terraformTopBar}>
-      <div className={styles.terraformFilePicker}>
-        <button
-          aria-expanded={state.isFileMenuOpen}
-          aria-haspopup="listbox"
-          className={styles.terraformFileButton}
-          onClick={actions.toggleFileMenu}
-          type="button"
-        >
-          <FileCode2 aria-hidden="true" size={16} />
-          <span>{state.activeFileName}</span>
-          <ChevronDown aria-hidden="true" size={15} />
-        </button>
-        {state.isFileMenuOpen ? (
-          <div className={styles.terraformFileMenu}>
-            <input
-              aria-label="Terraform 파일 검색"
-              className={styles.terraformFileSearch}
-              onChange={(event) => actions.searchFiles(event.currentTarget.value)}
-              placeholder="파일 검색"
-              value={state.fileSearchQuery}
-            />
-            <div className={styles.terraformFileList} role="listbox">
-              {state.fileOptions.map((fileName) => (
-                <button
-                  aria-selected={fileName === state.activeFileName}
-                  className={
-                    fileName === state.activeFileName
-                      ? styles.terraformFileOptionActive
-                      : styles.terraformFileOption
-                  }
-                  key={fileName}
-                  onClick={() => actions.selectFile(fileName)}
-                  role="option"
-                  type="button"
-                >
-                  {fileName}
-                </button>
-              ))}
-              {state.fileOptions.length === 0 ? (
-                <span className={styles.terraformFileEmpty}>일치하는 파일이 없습니다</span>
-              ) : null}
+      <div className={styles.terraformFileContext}>
+        <span className={styles.terraformToolbarLabel}>Terraform preview</span>
+        <div className={styles.terraformFilePicker}>
+          <button
+            aria-expanded={state.isFileMenuOpen}
+            aria-haspopup="listbox"
+            className={styles.terraformFileButton}
+            onClick={actions.toggleFileMenu}
+            type="button"
+          >
+            <FileCode2 aria-hidden="true" size={16} />
+            <span>{state.activeFileName}</span>
+            <ChevronDown aria-hidden="true" size={15} />
+          </button>
+          {state.isFileMenuOpen ? (
+            <div className={styles.terraformFileMenu}>
+              <input
+                aria-label="Terraform 파일 검색"
+                className={styles.terraformFileSearch}
+                onChange={(event) => actions.searchFiles(event.currentTarget.value)}
+                placeholder="파일 검색"
+                value={state.fileSearchQuery}
+              />
+              <div className={styles.terraformFileList} role="listbox">
+                {state.fileOptions.map((fileName) => (
+                  <button
+                    aria-selected={fileName === state.activeFileName}
+                    className={
+                      fileName === state.activeFileName
+                        ? styles.terraformFileOptionActive
+                        : styles.terraformFileOption
+                    }
+                    key={fileName}
+                    onClick={() => actions.selectFile(fileName)}
+                    role="option"
+                    type="button"
+                  >
+                    {fileName}
+                  </button>
+                ))}
+                {state.fileOptions.length === 0 ? (
+                  <span className={styles.terraformFileEmpty}>일치하는 파일이 없습니다</span>
+                ) : null}
+              </div>
             </div>
-          </div>
-        ) : null}
+          ) : null}
+        </div>
       </div>
       <div className={styles.terraformTopActions}>
         <TerraformAgentReviewButton
@@ -117,7 +120,6 @@ export function TerraformCodeToolbar({
           onRequest={actions.requestExplanation}
           title={state.explanationLabel}
         />
-        <span className={styles.terraformShortcut}>Ctrl/⌘ + S</span>
       </div>
     </header>
   );
