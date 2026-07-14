@@ -72,6 +72,11 @@ test("signup validation feedback uses reserved single-message slots", () => {
   assert.doesNotMatch(signupFormSource, /PasswordValidationMessages/);
 });
 
+test("signup keeps reserved feedback slots without oversized vertical gaps", () => {
+  assert.match(signupFormSource, /<form className="authForm authSignupForm"/);
+  assert.match(authStylesSource, /\.authSignupForm\s*\{[^}]*gap:\s*8px;/s);
+});
+
 function readAppFile(path: string): string {
   return readFileSync(fileURLToPath(new URL(`../../app/${path}`, import.meta.url)), "utf8");
 }

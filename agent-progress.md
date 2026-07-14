@@ -12,6 +12,11 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-14 - Compact stable signup field spacing
+
+- Reduced only the signup form row gap from 20px to 8px, preserving the reserved validation slots that prevent fields and the centered card from shifting during input.
+- Verification passed: the focused spacing regression failed before the fix and passed 8/8 afterward, Web 1,182/1,182, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check`. The next action is manual pixel confirmation only if another spacing adjustment is requested.
+
 ### 2026-07-14 - Stabilize signup validation layout
 
 - Reserved a persistent feedback slot below the username, password, password confirmation, and email controls so validation state changes no longer insert new layout rows.

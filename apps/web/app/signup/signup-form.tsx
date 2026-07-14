@@ -279,7 +279,7 @@ export function SignupForm() {
 
   return (
     <>
-      <form className="authForm" onSubmit={handleSubmit}>
+      <form className="authForm authSignupForm" onSubmit={handleSubmit}>
         <label>
           이름
           <input
