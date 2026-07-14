@@ -33,6 +33,7 @@ import {
   type ReverseEngineeringBoardCandidate
 } from "./reverse-engineering-board-candidates";
 import {
+  getNextReverseEngineeringResourceSelections,
   REVERSE_ENGINEERING_ALL_RESOURCE_SELECTION,
   REVERSE_ENGINEERING_RESOURCE_SELECTIONS
 } from "./reverse-engineering-resource-types";
@@ -213,7 +214,7 @@ export function ReverseEngineeringPanel({
   // 사용자가 가져올 AWS 리소스 종류를 켜고 끕니다.
   function toggleResourceType(resourceType: ReverseEngineeringResourceSelection): void {
     setSelectedResourceTypes((currentResourceTypes) =>
-      getNextSelectedResourceTypes(currentResourceTypes, resourceType)
+      getNextReverseEngineeringResourceSelections(currentResourceTypes, resourceType)
     );
   }
 
@@ -599,29 +600,6 @@ function createWorkspaceProjectUrl(project: Project, startMode: "reverse"): stri
   });
 
   return `/workspace?${params.toString()}`;
-}
-
-// `ALL`과 개별 리소스가 동시에 선택되지 않게 해서 scan 요청 의미를 분명하게 합니다.
-function getNextSelectedResourceTypes(
-  currentResourceTypes: ReverseEngineeringResourceSelection[],
-  resourceType: ReverseEngineeringResourceSelection
-): ReverseEngineeringResourceSelection[] {
-  if (resourceType === REVERSE_ENGINEERING_ALL_RESOURCE_SELECTION) {
-    return currentResourceTypes.includes(REVERSE_ENGINEERING_ALL_RESOURCE_SELECTION)
-      ? []
-      : [REVERSE_ENGINEERING_ALL_RESOURCE_SELECTION];
-  }
-
-  if (currentResourceTypes.includes(resourceType)) {
-    return currentResourceTypes.filter((currentResourceType) => currentResourceType !== resourceType);
-  }
-
-  return [
-    ...currentResourceTypes.filter(
-      (currentResourceType) => currentResourceType !== REVERSE_ENGINEERING_ALL_RESOURCE_SELECTION
-    ),
-    resourceType
-  ];
 }
 
 // 사용자가 적용한 보드에도 Reverse Engineering 출처를 남겨 삭제 안내와 추적이 가능하게 합니다.
