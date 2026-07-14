@@ -20,6 +20,7 @@ export type ApiErrorCode =
   | "bad_gateway"
   | "service_unavailable"
   | "internal_server_error"
+  | "LIVE_OBSERVATION_DISABLED"
   | "LIVE_OBSERVATION_CACHE_UNAVAILABLE"
   | "LIVE_OBSERVATION_DEPLOYMENT_NOT_ELIGIBLE"
   | "LIVE_OBSERVATION_GONE"

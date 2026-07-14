@@ -9,8 +9,8 @@ const deploymentParamsSchema = z.object({ deploymentId: z.uuid() });
 const observationParamsSchema = deploymentParamsSchema.extend({ observationId: z.uuid() });
 const streamQuerySchema = z.object({ once: z.enum(["true", "false"]).optional() });
 
-export type LiveObservationV2RouteOptions = {
-  readonly enabled: boolean;
+type EnabledLiveObservationV2RouteOptions = {
+  readonly enabled: true;
   readonly liveObservationService: LiveObservationV2Service;
   readonly prepareDeploymentManifest: (
     request: FastifyRequest,
@@ -27,11 +27,32 @@ export type LiveObservationV2RouteOptions = {
   ) => Promise<void>;
 };
 
+export type LiveObservationV2RouteOptions =
+  | { readonly enabled: false }
+  | EnabledLiveObservationV2RouteOptions;
+
 export async function registerLiveObservationV2Routes(
   app: FastifyInstance,
   options: LiveObservationV2RouteOptions
 ): Promise<void> {
-  if (!options.enabled) return;
+  if (!options.enabled) {
+    app.post("/deployments/:deploymentId/live-observations", (_request, reply) =>
+      sendDisabled(reply)
+    );
+    app.get(
+      "/deployments/:deploymentId/live-observations/:observationId",
+      (_request, reply) => sendDisabled(reply)
+    );
+    app.get(
+      "/deployments/:deploymentId/live-observations/:observationId/stream",
+      (_request, reply) => sendDisabled(reply)
+    );
+    app.post(
+      "/deployments/:deploymentId/live-observations/:observationId/stop",
+      (_request, reply) => sendDisabled(reply)
+    );
+    return;
+  }
 
   app.post("/deployments/:deploymentId/live-observations", async (request, reply) => {
     try {
@@ -114,7 +135,7 @@ async function streamSnapshots(input: {
   once: boolean;
   reply: FastifyReply;
   request: FastifyRequest;
-  refreshObservation: LiveObservationV2RouteOptions["refreshObservation"];
+  refreshObservation: EnabledLiveObservationV2RouteOptions["refreshObservation"];
   service: LiveObservationV2Service;
 }): Promise<void> {
   input.reply.raw.writeHead(200, {
@@ -187,6 +208,13 @@ async function streamSnapshots(input: {
   }, 15_000);
   timers.snapshot.unref();
   timers.heartbeat.unref();
+}
+
+function sendDisabled(reply: FastifyReply) {
+  return reply.status(503).send({
+    error: "LIVE_OBSERVATION_DISABLED",
+    message: "Live Observation is disabled"
+  });
 }
 
 function handleError(error: unknown, reply: FastifyReply) {
