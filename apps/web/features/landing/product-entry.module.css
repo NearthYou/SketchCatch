@@ -243,8 +243,8 @@
 .hero {
   position: relative;
   display: flex;
-  min-height: 100vh;
-  min-height: 100svh;
+  min-height: calc(100vh - 88px);
+  min-height: calc(100svh - 88px);
   padding: clamp(220px, 28vh, 260px) 0 80px;
   overflow: hidden;
   isolation: isolate;
@@ -777,59 +777,6 @@
   font-size: 22px;
 }
 
-.findingList {
-  display: grid;
-  gap: 12px;
-}
-
-.finding {
-  display: grid;
-  align-items: center;
-  border-radius: 12px;
-  padding: 16px;
-  background: #ffffff;
-  box-shadow: var(--landing-shadow-ring);
-  color: var(--landing-ink);
-  grid-template-columns: 8px minmax(0, 1fr) auto;
-  gap: 12px;
-}
-
-.findingDot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--landing-warning);
-}
-
-.findingDotSuccess {
-  background: var(--landing-success);
-}
-
-.finding strong,
-.finding div > span {
-  display: block;
-}
-
-.finding strong {
-  font-size: 13px;
-}
-
-.finding div > span {
-  margin-top: 4px;
-  color: var(--landing-body);
-  font-size: 12px;
-}
-
-.findingTag {
-  border-radius: 9999px;
-  padding: 4px 8px;
-  background: #f0f0f3;
-  color: var(--landing-body);
-  font-size: 12px;
-  font-style: normal;
-  font-weight: 700;
-}
-
 .flowStrip {
   position: relative;
   z-index: 4;
@@ -889,11 +836,6 @@
   background: #fafafa;
 }
 
-.sectionDark {
-  background: var(--landing-dark);
-  color: #ffffff;
-}
-
 .sectionHeading {
   max-width: 760px;
   margin-bottom: 48px;
@@ -906,10 +848,6 @@
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-}
-
-.sectionDark .sectionKicker {
-  color: #47c2ff;
 }
 
 .sectionHeading h2,
@@ -927,10 +865,6 @@
   color: var(--landing-body);
   font-size: 16px;
   line-height: 1.7;
-}
-
-.sectionDark .sectionHeading > p:last-child {
-  color: var(--landing-on-dark-soft);
 }
 
 .workflowLayout {
@@ -1253,21 +1187,6 @@
   white-space: nowrap;
 }
 
-.sectionDark .finding {
-  background: #1a1a1a;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
-  color: #ffffff;
-}
-
-.sectionDark .finding div > span {
-  color: var(--landing-on-dark-soft);
-}
-
-.sectionDark .findingTag {
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--landing-on-dark-soft);
-}
-
 .deploymentPaths {
   display: grid;
   border-top: 1px solid var(--landing-hairline-strong);
@@ -1516,8 +1435,6 @@
   .checkSummary { gap: 8px; }
   .checkMetric { padding: 12px 10px; }
   .checkMetric strong { font-size: 18px; }
-  .finding { grid-template-columns: 8px minmax(0, 1fr); }
-  .findingTag { grid-column: 2; width: max-content; }
   .flowList { min-height: 0; padding: 16px 0; grid-template-columns: 1fr; gap: 0; }
   .flowList li { padding: 8px 0; }
   .flowList li::after { display: none; }

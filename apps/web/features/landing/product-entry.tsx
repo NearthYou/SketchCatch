@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Menu, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { type MouseEvent, useEffect, useState } from "react";
 import { useAuth } from "../../components/auth/auth-provider";
 import { LandingProductSections } from "./landing-product-sections";
 import { LandingWorkflowSection } from "./landing-workflow-section";
@@ -29,6 +29,33 @@ export function ProductEntry() {
       router.replace("/dashboard");
     }
   }, [router, status]);
+
+  const handleSectionNavigation = (
+    event: MouseEvent<HTMLAnchorElement>,
+    targetId: string,
+    hash: `#${string}`,
+    alignment: "center" | "title" = "title"
+  ) => {
+    const target = document.getElementById(targetId);
+
+    if (!target) return;
+
+    event.preventDefault();
+    setIsMenuOpen(false);
+    const headerBottom = document
+      .querySelector<HTMLElement>('header[aria-label="주요 메뉴"]')
+      ?.getBoundingClientRect().bottom ?? 96;
+    const targetRect = target.getBoundingClientRect();
+    const targetTop = alignment === "center"
+      ? window.scrollY + targetRect.top + targetRect.height / 2 - (headerBottom + window.innerHeight) / 2
+      : window.scrollY + targetRect.top - headerBottom - 64;
+
+    window.scrollTo({
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+      top: Math.max(0, targetTop)
+    });
+    window.history.replaceState(null, "", hash);
+  };
 
   if (status !== "unauthenticated") {
     return (
@@ -56,9 +83,24 @@ export function ProductEntry() {
           aria-label="페이지 이동"
         >
           <a href="#workflow" onClick={() => setIsMenuOpen(false)}>작동 방식</a>
-          <a href="#workspace" onClick={() => setIsMenuOpen(false)}>워크스페이스</a>
-          <a href="#reverse" onClick={() => setIsMenuOpen(false)}>Reverse Engineering</a>
-          <a href="#deployment" onClick={() => setIsMenuOpen(false)}>배포 경로</a>
+          <a
+            href="#workspace"
+            onClick={(event) => handleSectionNavigation(event, "workspace-title", "#workspace")}
+          >
+            워크스페이스
+          </a>
+          <a
+            href="#reverse"
+            onClick={(event) => handleSectionNavigation(event, "reverse-content", "#reverse", "center")}
+          >
+            Reverse Engineering
+          </a>
+          <a
+            href="#deployment"
+            onClick={(event) => handleSectionNavigation(event, "deployment-content", "#deployment", "center")}
+          >
+            배포 경로
+          </a>
         </nav>
 
         <div className={styles.headerActions}>
