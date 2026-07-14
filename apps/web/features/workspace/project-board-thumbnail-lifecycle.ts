@@ -13,6 +13,7 @@ export type ProjectBoardThumbnailLifecycleState =
 
 type ThumbnailWork = {
   readonly checkExisting: boolean;
+  readonly forceCapture: boolean;
   readonly revision: number;
 };
 
@@ -167,7 +168,7 @@ export function createProjectBoardThumbnailLifecycle({
       return Promise.reject(DISPOSED_ERROR);
     }
 
-    if (completedRevision >= work.revision) {
+    if (!work.forceCapture && completedRevision >= work.revision) {
       return Promise.resolve();
     }
 
@@ -182,8 +183,15 @@ export function createProjectBoardThumbnailLifecycle({
       failedError = null;
     }
 
-    if (!activeWork || work.revision > activeWork.revision) {
-      if (!pendingWork || work.revision > pendingWork.revision) {
+    const needsCaptureAfterActiveWork =
+      work.forceCapture && activeWork?.forceCapture !== true;
+
+    if (!activeWork || work.revision > activeWork.revision || needsCaptureAfterActiveWork) {
+      if (
+        !pendingWork ||
+        work.revision > pendingWork.revision ||
+        (work.forceCapture && pendingWork.forceCapture !== true)
+      ) {
         pendingWork = work;
       } else if (work.revision === pendingWork.revision && !work.checkExisting) {
         pendingWork = work;
@@ -215,10 +223,10 @@ export function createProjectBoardThumbnailLifecycle({
       return state;
     },
     requestInitialServerRevision(revision: number): Promise<void> {
-      return requestRevision({ checkExisting: true, revision });
+      return requestRevision({ checkExisting: true, forceCapture: false, revision });
     },
     requestSavedRevision(revision: number): Promise<void> {
-      return requestRevision({ checkExisting: false, revision });
+      return requestRevision({ checkExisting: false, forceCapture: true, revision });
     },
     retry(): Promise<void> {
       if (disposed) {

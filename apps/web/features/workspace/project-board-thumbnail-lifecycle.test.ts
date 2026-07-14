@@ -56,6 +56,24 @@ test("initial server revision keeps an existing thumbnail without capturing", as
   assert.deepEqual(states, ["checking", "ready"]);
 });
 
+test("manual save recaptures an existing thumbnail even when the server revision is unchanged", async () => {
+  const captures: number[] = [];
+  const lifecycle = createProjectBoardThumbnailLifecycle({
+    projectId,
+    fetchProjectThumbnail: async () => new Blob(["existing"], { type: "image/webp" }),
+    captureAndUpload: async ({ revision }) => {
+      captures.push(revision);
+      return { status: "uploaded", assetId: "asset-manual-refresh" };
+    }
+  });
+  lifecycle.setBoardElement({} as HTMLElement);
+
+  await lifecycle.requestInitialServerRevision(4);
+  await lifecycle.requestSavedRevision(4);
+
+  assert.deepEqual(captures, [4]);
+});
+
 test("freshly saved revision skips the existence check and remains awaited through capture", async () => {
   const captureGate = createDeferred<void>();
   let settled = false;
