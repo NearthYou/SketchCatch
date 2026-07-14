@@ -1,7 +1,5 @@
 "use client";
 
-import { useRef } from "react";
-import type { MouseEvent as ReactMouseEvent } from "react";
 import {
   AlertCircle,
   Check,
@@ -15,7 +13,6 @@ import {
 
 import { ProductBrand } from "../../components/ui/ProductBrand";
 import styles from "./diagram-editor.module.css";
-import { createDashboardNavigationHandler } from "./workspace-project-bar-navigation";
 import { getSaveStatusTone, isSaveInProgress } from "./workspace-project-save-status";
 
 type WorkspaceProjectBarProps = {
@@ -46,41 +43,15 @@ export function WorkspaceProjectBar({
 }: WorkspaceProjectBarProps) {
   const saveStatusTone = getSaveStatusTone(workspace.saveStatus);
   const isSaving = isSaveInProgress(workspace.saveStatus);
-  const dashboardNavigationRef = useRef<
-    ReturnType<typeof createDashboardNavigationHandler> | null
-  >(null);
-
-  if (!dashboardNavigationRef.current) {
-    dashboardNavigationRef.current = createDashboardNavigationHandler({
-      navigate: (href) => window.location.assign(href)
-    });
-  }
 
   /** 현재 DiagramJson을 기존 저장 경로로 넘깁니다. */
   function handleSave(): void {
     void actions.onSave?.();
   }
 
-  function handleDashboardNavigation(event: ReactMouseEvent<HTMLAnchorElement>): void {
-    void dashboardNavigationRef.current?.({
-      click: {
-        altKey: event.altKey,
-        button: event.button,
-        ctrlKey: event.ctrlKey,
-        defaultPrevented: event.defaultPrevented,
-        metaKey: event.metaKey,
-        preventDefault: () => event.preventDefault(),
-        shiftKey: event.shiftKey,
-        target: event.currentTarget.target
-      },
-      dashboardHref: workspace.dashboardHref,
-      onSave: actions.onSave
-    });
-  }
-
   return (
     <header className={styles.projectBar}>
-      <ProductBrand href={workspace.dashboardHref} onClick={handleDashboardNavigation} />
+      <ProductBrand href={workspace.dashboardHref} />
 
       <div className={styles.projectBarContext}>
         <strong title={workspace.projectName}>{workspace.projectName}</strong>

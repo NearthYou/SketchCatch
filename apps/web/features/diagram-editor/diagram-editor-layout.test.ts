@@ -282,7 +282,11 @@ test("diagram editor exposes project, save, and panel controls in one stable top
   assert.match(diagramEditorSource, /onToggleRightPanel:\s*toggleRightPanel/);
 
   assert.match(workspaceProjectBarSource, /import \{ ProductBrand \} from "\.\.\/\.\.\/components\/ui\/ProductBrand"/);
-  assert.match(workspaceProjectBarSource, /<ProductBrand[\s\S]*onClick=\{handleDashboardNavigation\}/);
+  assert.match(workspaceProjectBarSource, /<ProductBrand href=\{workspace\.dashboardHref\} \/>/);
+  assert.doesNotMatch(
+    workspaceProjectBarSource,
+    /handleDashboardNavigation|createDashboardNavigationHandler/
+  );
   assert.match(workspaceProjectBarSource, /className=\{styles\.projectBarSaveStatus\}/);
   assert.match(workspaceProjectBarSource, /aria-label="지금 저장"/);
   assert.match(workspaceProjectBarSource, /"리소스 패널 열기"/);

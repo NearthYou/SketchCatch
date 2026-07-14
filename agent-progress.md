@@ -122,7 +122,7 @@ Short English-only working log for the current agent context. Older records are 
 ### 2026-07-14 - Make the Workspace brand text navigate to Dashboard
 
 - Replaced the Workspace-only raw logo anchor with the shared `ProductBrand` link used by Login and Dashboard, so the full logo-plus-text hit area has one consistent clickable surface.
-- Preserved the guarded Dashboard navigation callback: a left-click still attempts the existing save first and navigates in `finally`, while modifier, non-left, and new-tab clicks retain native link behavior.
-- Removed the duplicate Workspace brand/logo CSS and updated its layout contracts to assert the shared `.brand` tokens and click-handler forwarding.
-- TDD evidence: the Workspace layout contract first failed against the missing shared `ProductBrand`, then the focused suite passed 51/51. The complete Web suite passed 1,237/1,237; `git diff --check` passed. Browser checks clicked the center and right side of the visible Workspace brand text and both eventually landed on Dashboard.
+- Follow-up Chrome reproduction showed the first fix still intercepted clicks with `preventDefault()` and waited about three seconds for an unnecessary save/capture before navigating. Removed that guarded callback and its dead helper so Workspace now uses the shared Link's native Dashboard navigation.
+- Removed the duplicate Workspace brand/logo CSS and updated its layout contracts to assert the shared `.brand` tokens and native Link behavior.
+- TDD evidence: the native-link contracts first failed 2/49 against the intercepted implementation, then passed 49/49. The complete Web suite passed 1,235/1,235; `git diff --check` passed. Chrome checks clicked the center and right side of the visible Workspace brand text and both landed on Dashboard.
 - Root lint and typecheck passed (lint retains the existing API `setNow` unused-argument warning), and harness passed. Root build confirmed the pre-existing block before Web compilation: `apps/web/.codegraph` is missing. No API, migration, cloud, deployment, or dependency change was made.

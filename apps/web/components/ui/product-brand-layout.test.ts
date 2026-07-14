@@ -13,9 +13,9 @@ test("shared ProductBrand uses the workspace logo spacing and vertical alignment
   assert.match(productBrandStyles, /\.brand img\s*\{[\s\S]*?transform:\s*translateY\(-2px\);/);
 });
 
-test("shared ProductBrand forwards an optional click handler for guarded navigation", () => {
-  assert.match(productBrandSource, /onClick\?: MouseEventHandler<HTMLAnchorElement>/);
-  assert.match(productBrandSource, /\.\.\.\(onClick \? \{ onClick \} : \{\}\)/);
+test("shared ProductBrand keeps its href as a native Link navigation", () => {
+  assert.match(productBrandSource, /<Link[\s\S]*href=\{href\}/);
+  assert.doesNotMatch(productBrandSource, /onClick/);
 });
 
 function readLocalFile(relativePath: string): string {
