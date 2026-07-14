@@ -85,8 +85,7 @@ export function ProductEntry() {
           <div className={`${styles.container} ${styles.heroCopy}`}>
             <h1 id="hero-title">SketchCatch</h1>
             <p className={styles.heroDescription}>
-              원하는 서비스를 설명하면 배포 전 검토 가능한 설계 구조와 Terraform 초안을 만들고,
-              비용과 보안 위험을 미리 확인할 수 있습니다.
+              서비스를 설명하면 아키텍처와 Terraform을 만들고, 비용·보안 검토부터 배포까지 한곳에서 이어집니다.
             </p>
             <div className={styles.heroActions}>
               <Link className={`${styles.button} ${styles.buttonPrimary}`} href="/signup">
