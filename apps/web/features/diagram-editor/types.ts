@@ -76,7 +76,7 @@ export type DiagramEditorProps = {
         readonly terraformFiles: readonly TerraformSyncFileInput[];
       }) => void)
     | undefined;
-  onSaveAndDeployRequest?: (() => Promise<unknown>) | undefined;
+  onSaveAndDeployRequest?: (() => void) | undefined;
   rightPanel?: ((context: DiagramEditorPanelContext) => ReactNode) | null | undefined;
   dashboardHref?: string | undefined;
   projectName?: string | undefined;

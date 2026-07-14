@@ -30,6 +30,19 @@ test("GitHub account settings renders immediately after connected AWS accounts",
   assert.ok(githubSettingsIndex > awsConnectionsIndex);
 });
 
+test("GitHub account icons stay bounded inside the settings header and action", () => {
+  const styles = readWorkspaceFile("app/dashboard/dashboard-tools.module.css");
+
+  assert.match(
+    styles,
+    /\.settingsSection > header > svg\s*\{[^}]*width:\s*20px;[^}]*height:\s*20px;[^}]*flex:\s*0 0 20px;/s
+  );
+  assert.match(
+    styles,
+    /\.githubSettingsActions \.primaryAction > svg\s*\{[^}]*width:\s*16px;[^}]*height:\s*16px;[^}]*flex:\s*0 0 16px;/s
+  );
+});
+
 function readWorkspaceFile(path: string): string {
   return readFileSync(fileURLToPath(new URL(`../../${path}`, import.meta.url)), "utf8");
 }

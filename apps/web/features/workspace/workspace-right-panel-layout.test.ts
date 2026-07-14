@@ -118,12 +118,12 @@ test("workspace owners explicitly gate Deployment availability", () => {
   assert.match(deploymentPanelSource, /canLoadDeploymentData\(deploymentAvailability\)/);
 });
 
-test("Deployment context labels only Terraform-deployable board nodes as resources", () => {
-  assert.match(componentSource, /isTerraformDeployableNode/);
-  assert.match(componentSource, /deployableResourceCount=\{deployableResourceCount\}/);
-  assert.doesNotMatch(componentSource, /currentNodeCount=\{context\.nodes\.length\}/);
-  assert.match(deploymentPanelSource, /value=\{String\(deployableResourceCount\)\}/);
-  assert.doesNotMatch(deploymentPanelSource, /currentNodeCount|board nodes/);
+test("Deployment omits the presentation-only resource count context", () => {
+  assert.doesNotMatch(componentSource, /isTerraformDeployableNode|deployableResourceCount/);
+  assert.doesNotMatch(
+    deploymentPanelSource,
+    /deployableResourceCount|currentNodeCount|board nodes/
+  );
 });
 
 test("right panel width stays locked after deployment leaves the panel", () => {
@@ -500,7 +500,7 @@ test("deployment panel gates remote content behind explicit availability", () =>
   assert.ok(projectGateIndex > historyIndex);
   assert.match(
     deploymentShellSource,
-    /className=\{styles\.deploymentPanelContent\}>\{screenContent\}/
+    /className=\{styles\.deploymentPanelContent\}>\{renderScreenContent\(false\)\}/
   );
   assert.doesNotMatch(deploymentPanelSource, /className=\{styles\.deploymentModeSwitch\}/);
 });
@@ -1054,10 +1054,7 @@ test("template application replaces Diagram and Terraform workspace as one sourc
     diagramEditorSource,
     /applyDiagramJson\(authoritativeDiagram\);[\s\S]*setHistory\(\{ past: \[\], future: \[\] \}\);/
   );
-  assert.match(
-    workspaceStartSource,
-    /markTerraformSourceAuthoritative\(template\.diagramJson\)/
-  );
+  assert.match(workspaceStartSource, /markTerraformSourceAuthoritative\(template\.diagramJson\)/);
   assert.match(projectDraftManagerSource, /handleTemplateWorkspaceApply/);
   assert.match(workspaceDraftManagerSource, /handleTemplateWorkspaceApply/);
   assert.match(componentSource, /externalTerraformFilesReplacement=\{terraformFilesReplacement\}/);
@@ -1346,14 +1343,16 @@ test("terraform leave dialog uses Korean copy", () => {
 
 test("terraform leave dialog continue action uses the neutral workspace tint", () => {
   const secondaryButtonRule = getCssRule(stylesSource, "terraformDialogSecondaryButton");
+  const secondaryButtonHoverRule = getCssRuleContainingAfter(
+    stylesSource,
+    ".terraformDialogSecondaryButton:hover",
+    0
+  );
 
   assert.match(secondaryButtonRule, /background:\s*var\(--workspace-accent-soft, #f0f0f3\);/);
   assert.doesNotMatch(secondaryButtonRule, /background:\s*#ffffff;/);
   assert.doesNotMatch(secondaryButtonRule, /var\(--bp-/);
-  assert.match(
-    stylesSource,
-    /\.terraformDialogSecondaryButton:hover,[\s\S]*?background:\s*color-mix\(in srgb, var\(--workspace-accent-soft, #f0f0f3\) 74%, var\(--workspace-accent, #000000\)\);/
-  );
+  assert.match(secondaryButtonHoverRule, /background:\s*color-mix\([\s\S]*?in srgb,[\s\S]*?var\(--workspace-accent-soft, #f0f0f3\) 74%,[\s\S]*?var\(--workspace-accent, #000000\)[\s\S]*?\);/);
 });
 
 test("terraform leave dialog exposes blocked save feedback instead of ignoring failed saves", () => {
@@ -1409,8 +1408,9 @@ test("deployment screen separates Direct Deployment and CI/CD into focused scree
   assert.match(deploymentShellSource, />\s*CI\/CD\s*</);
   assert.match(deploymentShellSource, /aria-pressed=\{activeScreen === "deployment"\}/);
   assert.match(deploymentShellSource, /aria-pressed=\{activeScreen === "cicd"\}/);
-  assert.match(directDeploymentSource, /Deployment History/);
-  assert.match(directDeploymentSource, /Application releases/);
+  assert.match(directDeploymentSource, /배포 이력/);
+  assert.doesNotMatch(directDeploymentSource, /실행 세부정보/);
+  assert.doesNotMatch(directDeploymentSource, /Deployment History|Application releases/);
   assert.match(cicdConsoleSource, /"activity" \| "logs"/);
   assert.doesNotMatch(cicdConsoleSource, /CicdOverviewView|CicdMonitoringSettings/);
   assert.match(navigationRule, /\bborder:\s*1px solid var\(--workspace-line,/);
@@ -1438,16 +1438,18 @@ test("deployment expanded panel uses one readable body instead of a split pane",
 });
 
 test("deployment modal removes the redundant title and centers the route selector", () => {
-  const directDeploymentConsoleIndex = stylesSource.indexOf("/* Direct Deployment console */");
-  const expandedBodyRule = getLastCssRuleAfter(
+  const operationalLayoutIndex = stylesSource.lastIndexOf(
+    "/* Deployment modal operational layout cascade */"
+  );
+  const expandedBodyRule = getCssRuleAfter(
     stylesSource,
     "deploymentExpandedBody",
-    directDeploymentConsoleIndex
+    operationalLayoutIndex
   );
   const routeNavigationRule = getCssRuleContainingAfter(
     stylesSource,
-    "deploymentExpandedBody .deploymentConsoleScreenNavigation",
-    directDeploymentConsoleIndex
+    "deploymentConsoleHeader .deploymentConsoleScreenNavigation",
+    operationalLayoutIndex
   );
 
   assert.doesNotMatch(deploymentShellSource, /deploymentExpandedTitleRow/);
@@ -1455,15 +1457,94 @@ test("deployment modal removes the redundant title and centers the route selecto
   assert.doesNotMatch(stylesSource, /\.deploymentExpandedTitle(?:Row)?\b/);
   assert.match(
     deploymentShellSource,
-    /const screenContent = \([\s\S]*?className=\{styles\.deploymentConsoleScreenNavigation\}[\s\S]*?className=\{styles\.deploymentConsoleScreenBody\}/
+    /function renderScreenContent\(showCloseButton: boolean\)[\s\S]*?className=\{styles\.deploymentConsoleScreenNavigation\}/
+  );
+  assert.match(deploymentShellSource, /const screenBody = \(/);
+  assert.match(expandedBodyRule, /\bgrid-template-rows:\s*auto minmax\(0,\s*1fr\);/);
+  assert.match(routeNavigationRule, /\bgrid-column:\s*2;/);
+  assert.match(routeNavigationRule, /\bmin-height:\s*64px;/);
+  assert.match(routeNavigationRule, /\bpadding:\s*0;/);
+});
+
+test("deployment modal exposes an operational header and a truthful validation flow", () => {
+  assert.match(deploymentShellSource, /aria-label="배포 모달 닫기"/);
+  assert.match(deploymentShellSource, /className=\{styles\.deploymentConsoleHeader\}/);
+  assert.match(deploymentShellSource, /onCancel=\{close\}/);
+  assert.match(directDeploymentSource, /<h3>배포 설정<\/h3>/);
+  assert.match(directDeploymentSource, /htmlFor="deployment-scope-select"/);
+  assert.match(directDeploymentSource, /id="deployment-scope-select"/);
+  assert.match(directDeploymentSource, /실행 타깃 결정 방식/);
+  assert.match(
+    directDeploymentSource,
+    /저장된 Terraform과 확인된 프로젝트 실행 타깃을 기준으로 실행 대상을 결정합니다\./
+  );
+  assert.match(directDeploymentSource, /저장 후 검증 실행/);
+  assert.match(directDeploymentSource, /aria-busy=\{/);
+  assert.match(directDeploymentSource, /getRecentDeploymentResultTitle/);
+  assert.match(directDeploymentSource, /role="status" aria-live="polite"/);
+  assert.doesNotMatch(directDeploymentSource, /href="#deployment-run-details"/);
+});
+
+test("deployment history counts releases separately from validation runs", () => {
+  assert.match(directDeploymentSource, /id="deployment-history"/);
+  assert.match(directDeploymentSource, />배포 이력<\/h3>/);
+  assert.match(directDeploymentSource, /\{applicationReleases\.length\}건/);
+  assert.match(directDeploymentSource, /아직 배포 이력이 없습니다\./);
+  assert.match(directDeploymentSource, /첫 번째 배포가 완료되면 이곳에 표시됩니다\./);
+  assert.doesNotMatch(directDeploymentSource, /id="deployment-run-details"/);
+  assert.doesNotMatch(directDeploymentSource, /id="deployment-record-select"/);
+  assert.doesNotMatch(directDeploymentSource, />실행 세부정보<\/h3>/);
+  assert.doesNotMatch(directDeploymentSource, /Deployment History|Application releases/);
+  assert.doesNotMatch(directDeploymentSource, /\{applicationReleases\.length\} releases/);
+});
+
+test("deployment modal uses the bounded operational layout at desktop and small widths", () => {
+  const operationalLayoutIndex = stylesSource.lastIndexOf(
+    "/* Deployment modal operational layout cascade */"
+  );
+  const expandedShellRule = getCssRuleAfter(
+    stylesSource,
+    "deploymentExpandedShell",
+    operationalLayoutIndex
+  );
+  const stepNavigationRule = getCssRuleAfter(
+    stylesSource,
+    "deploymentStepNavigation",
+    operationalLayoutIndex
+  );
+  const stepIndexRule = getCssRuleAfter(
+    stylesSource,
+    "deploymentStepIndex",
+    operationalLayoutIndex
+  );
+  const consoleGridRule = getCssRuleAfter(
+    stylesSource,
+    "deploymentConsoleGrid",
+    operationalLayoutIndex
+  );
+  const summaryGridRule = getCssRule(stylesSource, "deploymentValidationSummaryGrid");
+  const historySectionRule = getLastCssRuleAfter(
+    stylesSource,
+    "deploymentHistorySection",
+    operationalLayoutIndex
+  );
+
+  assert.match(expandedShellRule, /\bmax-width:\s*1280px;/);
+  assert.match(expandedShellRule, /\bwidth:\s*calc\(100% - 64px\);/);
+  assert.match(stepNavigationRule, /\bmin-height:\s*80px;/);
+  assert.match(stepIndexRule, /\bheight:\s*32px;/);
+  assert.match(stepIndexRule, /\bwidth:\s*32px;/);
+  assert.match(consoleGridRule, /grid-template-columns:\s*minmax\(0,\s*1fr\) 320px;/);
+  assert.match(summaryGridRule, /grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\);/);
+  assert.match(historySectionRule, /\bposition:\s*static;/);
+  assert.match(
+    stylesSource,
+    /@media \(max-width: 1199px\)[\s\S]*?\.deploymentConsoleGrid\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0,\s*1fr\);/
   );
   assert.match(
-    expandedBodyRule,
-    /\bgrid-template-rows:\s*auto minmax\(0,\s*1fr\);/
+    stylesSource,
+    /@media \(max-width: 768px\)[\s\S]*?\.deploymentValidationSummaryGrid\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0,\s*1fr\);/
   );
-  assert.match(routeNavigationRule, /\bjustify-content:\s*center;/);
-  assert.match(routeNavigationRule, /\bmin-height:\s*64px;/);
-  assert.match(routeNavigationRule, /\bpadding:\s*8px 72px;/);
 });
 
 test("deployment expanded overlay sits above the floating AI dock and blocks lower controls", () => {
@@ -1567,18 +1648,24 @@ test("GitHub repository setup is owned by the project repository page, not the d
 });
 
 test("deployment setup exposes a three-stage Direct Deployment console", () => {
-  const consoleGridRule = getCssRule(stylesSource, "deploymentConsoleGrid");
-  const stepNavigationRule = getCssRule(stylesSource, "deploymentStepNavigation");
-  const stepButtonRule = getCssRule(stylesSource, "deploymentStepButton");
-  const stepIndexRule = getCssRule(stylesSource, "deploymentStepIndex");
+  const operationalLayoutIndex = stylesSource.lastIndexOf(
+    "/* Deployment modal operational layout cascade */"
+  );
+  const consoleGridRule = getCssRuleAfter(stylesSource, "deploymentConsoleGrid", operationalLayoutIndex);
+  const stepNavigationRule = getCssRuleAfter(stylesSource, "deploymentStepNavigation", operationalLayoutIndex);
+  const stepButtonRule = getCssRuleAfter(stylesSource, "deploymentStepButton", operationalLayoutIndex);
+  const stepIndexRule = getCssRuleAfter(stylesSource, "deploymentStepIndex", operationalLayoutIndex);
   const connectorRule = getCssRuleContainingAfter(
     stylesSource,
     ".deploymentStepNavigation li + li::before",
-    0
+    operationalLayoutIndex
   );
-  const stepWorkspaceRule = getCssRule(stylesSource, "deploymentStepWorkspace");
-  const contextPanelRule = getCssRule(stylesSource, "deploymentContextPanel");
-  const stepListRule = getCssRule(stylesSource, "deploymentStepNavigation ol");
+  const stepWorkspaceRule = getCssRuleAfter(stylesSource, "deploymentStepWorkspace", operationalLayoutIndex);
+  const stepListRule = getCssRuleContainingAfter(
+    stylesSource,
+    ".deploymentStepNavigation ol",
+    operationalLayoutIndex
+  );
   const connectorActiveRule = getLastCssRuleContainingAfter(
     stylesSource,
     '.deploymentStepNavigation li[data-connector-state="active"]::before',
@@ -1613,55 +1700,49 @@ test("deployment setup exposes a three-stage Direct Deployment console", () => {
   assert.match(deploymentPanelSource, /배포 실행 검토/);
   assert.match(deploymentPanelSource, /Destroy Plan 생성/);
   assert.match(deploymentPanelSource, /Prepared snapshot/);
-  assert.match(deploymentPanelSource, /className=\{styles\.deploymentContextPanel\}/);
+  assert.doesNotMatch(deploymentPanelSource, /className=\{styles\.deploymentContextPanel\}/);
   assert.doesNotMatch(directDeploymentSource, /deploymentConsoleTab/);
   assert.match(directDeploymentSource, /import \{[^}]*Check[^}]*\} from "lucide-react"/s);
-  assert.match(directDeploymentSource, /const activeStepIndex = directDeploymentFlow\.steps\.findIndex/);
+  assert.match(
+    directDeploymentSource,
+    /const activeStepIndex = directDeploymentFlow\.steps\.findIndex/
+  );
   assert.match(directDeploymentSource, /const isCompleted = step\.state === "done"/);
   assert.match(directDeploymentSource, /data-connector-state=\{/);
   assert.match(
     directDeploymentSource,
     /directDeploymentFlow\.steps\[index - 1\]\?\.state === "done"/
   );
-  assert.match(
-    directDeploymentSource,
-    /index <= activeStepIndex\s*\?\s*"active"\s*:\s*"idle"/
-  );
+  assert.match(directDeploymentSource, /index <= activeStepIndex\s*\?\s*"active"\s*:\s*"idle"/);
   assert.match(
     directDeploymentSource,
     /isCompleted \? <Check size=\{16\} aria-hidden="true" \/> : index \+ 1/
   );
-  assert.match(consoleGridRule, /grid-template-columns:\s*minmax\(420px,\s*1fr\) 294px;/);
-  assert.match(consoleGridRule, /grid-template-rows:\s*auto minmax\(0,\s*1fr\);/);
+  assert.match(consoleGridRule, /grid-template-columns:\s*minmax\(0,\s*1fr\) 320px;/);
+  assert.match(consoleGridRule, /grid-template-rows:\s*auto auto;/);
   assert.match(stepNavigationRule, /\bgrid-column:\s*1 \/ -1;/);
   assert.match(stepNavigationRule, /\bborder-bottom:\s*1px solid var\(--workspace-line,/);
   assert.doesNotMatch(stepNavigationRule, /border-right:/);
   assert.match(stepListRule, /grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\);/);
   assert.match(stepButtonRule, /\balign-items:\s*start;/);
-  assert.match(stepButtonRule, /\bgrid-template-rows:\s*40px auto;/);
-  assert.match(stepIndexRule, /\bfont-size:\s*13px;/);
-  assert.match(stepIndexRule, /\bheight:\s*40px;/);
-  assert.match(stepIndexRule, /\bwidth:\s*40px;/);
-  assert.match(connectorRule, /\bleft:\s*calc\(-50% \+ 25px\);/);
-  assert.match(connectorRule, /\btop:\s*19px;/);
-  assert.match(connectorRule, /\bwidth:\s*calc\(100% - 50px\);/);
+  assert.match(stepButtonRule, /\bgrid-template-rows:\s*32px auto;/);
+  assert.match(stepIndexRule, /\bfont-size:\s*12px;/);
+  assert.match(stepIndexRule, /\bheight:\s*32px;/);
+  assert.match(stepIndexRule, /\bwidth:\s*32px;/);
+  assert.match(connectorRule, /\bleft:\s*calc\(-50% \+ 21px\);/);
+  assert.match(connectorRule, /\btop:\s*15px;/);
+  assert.match(connectorRule, /\bwidth:\s*calc\(100% - 42px\);/);
   assert.match(
     stylesSource,
     /\.deploymentStepNavigation li \+ li::before\s*\{[^}]*\bbackground:\s*var\(--workspace-line-strong,/
   );
   assert.match(connectorActiveRule, /\bbackground:\s*var\(--workspace-accent,/);
   assert.match(connectorDoneRule, /\bbackground:\s*#18794e;/);
-  assert.match(stepWorkspaceRule, /\bbackground:\s*var\(--workspace-surface,/);
-  assert.match(contextPanelRule, /\bbackground:\s*var\(--workspace-surface-muted,/);
-  assert.match(contextPanelRule, /\bborder-left:\s*1px solid var\(--workspace-line,/);
+  assert.match(stepWorkspaceRule, /\bbackground:\s*transparent;/);
   assert.match(activeStepRule, /\bbackground:\s*var\(--workspace-accent,/);
   assert.match(activeStepRule, /\bcolor:\s*#ffffff;/);
   assert.match(blockedStepRule, /\bbackground:\s*#fff1f0;/);
   assert.match(blockedStepRule, /\bcolor:\s*#b42318;/);
-  assert.match(
-    stylesSource,
-    /@media \(max-width: 1100px\)[\s\S]*?\.deploymentConsoleGrid\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0,\s*1fr\);/
-  );
   assert.match(
     stylesSource,
     /@media \(max-width: 720px\)[\s\S]*?\.deploymentStepButton small\s*\{[\s\S]*?display:\s*none;/
@@ -1716,7 +1797,10 @@ test("CI/CD settings require explicit monitored paths and user acceptance", () =
 });
 
 test("deployment baseline save button shows pending and saved icons", () => {
-  assert.match(deploymentPanelSource, /import \{ Check, Clipboard, ClipboardCheck,/);
+  assert.match(
+    deploymentPanelSource,
+    /import \{[\s\S]*?Check,[\s\S]*?Clipboard,[\s\S]*?ClipboardCheck,[\s\S]*?\} from "lucide-react"/
+  );
   assert.match(
     deploymentPanelSource,
     /const DeploymentBaselineIcon = hasUnsavedDeploymentBaseline \? Clipboard : ClipboardCheck;/
@@ -1740,7 +1824,10 @@ test("pre-deployment check is owned by the deployment tab", () => {
   assert.match(deploymentPanelSource, /await onValidateTerraformDiagnostics\(\)/);
   assert.match(deploymentPanelSource, /currentTerraformDiagnostics/);
   assert.match(deploymentPanelSource, /diagnostic\.severity === "error"/);
-  assert.match(deploymentPanelSource, /terraformFiles:\s*\[\.\.\.preparedArtifacts\.terraformFiles\]/);
+  assert.match(
+    deploymentPanelSource,
+    /terraformFiles:\s*\[\.\.\.preparedArtifacts\.terraformFiles\]/
+  );
   assert.match(deploymentPanelSource, /createWorkspaceAiBoardSnapshot/);
   assert.match(componentSource, /diagramJson=\{context\.diagram\}/);
   assert.match(componentSource, /validateTerraformForPreDeployment/);
@@ -2361,9 +2448,9 @@ function getCssRuleContainingAfter(
   assert.ok(fromIndex > -1, `Expected a starting point before ${selectorFragment} CSS rule`);
 
   const escapedSelectorFragment = selectorFragment.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const match = new RegExp(
-    `[^{}]*${escapedSelectorFragment}[^{}]*\\{(?<body>[^}]*)\\}`
-  ).exec(source.slice(fromIndex));
+  const match = new RegExp(`[^{}]*${escapedSelectorFragment}[^{}]*\\{(?<body>[^}]*)\\}`).exec(
+    source.slice(fromIndex)
+  );
 
   assert.ok(match?.groups?.body, `Expected ${selectorFragment} CSS rule to exist`);
 

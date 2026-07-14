@@ -384,6 +384,11 @@
 .recommendation small { color: var(--color-success); font-size: 12px; }
 
 .settingsSection > header { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 16px; }
+.settingsSection > header > svg {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+}
 .settingsSection p { margin: 3px 0 0; color: var(--color-body); font-size: 13px; }
 .setupSection { display: grid; gap: 14px; }
 .setupSection > div { display: flex; align-items: center; gap: 10px; }
@@ -466,6 +471,12 @@
 
 .githubSettingsActions .primaryAction {
   gap: 7px;
+}
+
+.githubSettingsActions .primaryAction > svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
 }
 
 .githubSettingsError button:focus-visible,

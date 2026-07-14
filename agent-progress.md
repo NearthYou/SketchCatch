@@ -18,6 +18,83 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-15 - Move project source repository connection out of Settings
+
+- Added `/dashboard/projects/:projectId/repository` as the dedicated project source repository surface and redirected the legacy `settings?tab=github` URL there.
+- Removed repository selection and analysis from project Settings, preserved AWS deployment target and CI/CD monitoring settings, and separated global GitHub account permissions from project repository selection.
+- Kept active repository details and analysis on the dedicated surface, collapsed replacement candidates by default, and required explicit confirmation before replacing an active repository.
+- Verification passed: TDD red-green coverage, 127 focused Web tests, Web tests 1,333/1,333, `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check`.
+- Authenticated browser verification stopped at the login guard while preserving the requested return URL; no API, database, dependency, deployment, Git handoff, or cloud mutation was performed.
+
+### 2026-07-15 - Fix disconnected GitHub account CTA routing
+
+- Traced the incorrect project Settings navigation to `GIT_APP_GITHUB_IDENTITY_REQUIRED` being classified by the broad `GIT_APP_*` permission-error rule.
+- Classified the missing GitHub OAuth identity as an account-disconnected state, so CI/CD now renders the global `/dashboard/settings#github-account-settings-title` action while preserving project Settings for repository-level permission failures.
+- Verification passed: TDD red-green regression, 17 focused CI/CD tests, Web tests 1,336/1,336, `pnpm lint`, `pnpm typecheck`, and `pnpm build`.
+- Authenticated browser click verification was unavailable because the local Workspace redirected to login; no API, database, dependency, Git handoff, deployment, or cloud mutation was performed.
+
+### 2026-07-15 - Fix oversized GitHub settings icons
+
+- Reproduced the global GitHub settings layout with mocked authenticated browser data and traced the breakage to unconstrained custom `DashboardIcon` SVG dimensions.
+- Bounded the GitHub settings header icon to 20px and the install action icon to 16px, preserving the existing account-scoped installation flow and responsive card layout.
+- Verified a TDD red-green cycle, 9 focused Web tests, desktop 1440x900 and mobile 390x844 browser renders, `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm harness:check`, and `git diff --check`.
+- No API tests, API/DB/dependency changes, Git handoff, deployment, or cloud mutation were performed.
+
+### 2026-07-15 - Route disconnected CI/CD users to the correct GitHub settings
+
+- Added an account-aware CI/CD empty state: users without a GitHub App installation go to global Settings, while connected accounts without an active project repository keep the project GitHub Settings action.
+- Reused the global GitHub account settings section already rendered after the connected AWS accounts list; active project repositories keep the existing Pipeline Run console without an extra account lookup.
+- Verification passed: focused CI/CD/Dashboard/Workspace/API tests 160/160, Web tests 1,331/1,331, `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check`.
+- No database migration, dependency, lockfile, GitHub installation, deployment, Git handoff, or cloud mutation was performed.
+
+### 2026-07-15 - Move GitHub App permissions to global settings
+
+- Added account-scoped GitHub App installation listing and install callbacks without creating or changing project `SourceRepository` rows.
+- Added the global `GitHub 계정 연결` section immediately below connected AWS accounts; project settings now keep only repository selection and analysis and link permission management to global settings.
+- Verification passed: 39 focused API tests, 64 focused Web tests, `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check`.
+- Authenticated visual QA redirected to login, so the rendered settings body was not inspected; source placement coverage and the production build passed.
+- No DB migration, dependency, lockfile, external GitHub permission change, deployment, or cloud mutation was performed.
+
+### 2026-07-15 - Remove deployment run details from the modal
+
+- Removed the `실행 세부정보` section, execution-record selector, refresh action, and the recent-result card's now-invalid details link.
+- Removed the section-only failure explanation request/state and presentation helpers while preserving deployment selection, execution actions, release history, resources, outputs, logs, and all deployment mutation contracts.
+- Focused Web tests passed 112/112 and `pnpm lint`, `pnpm harness:check`, and `git diff --check` passed. No API tests were run.
+- `pnpm typecheck` and `pnpm build` remain blocked by the concurrent GitHub callback union handling errors in `apps/web/app/integrations/github/callback/page.tsx:62-63`; the deployment modal files reported no type or lint errors.
+- No API, database, dependency, deployment, Git handoff, or cloud mutation was performed.
+
+### 2026-07-15 - Rebuild the Workspace deployment modal for operational clarity
+
+- Reorganized the deployment modal into a bounded 1280px operational layout with a compact three-step flow, a 320px recent-result card, and a single-column fallback below 1200px.
+- Added explicit deployment setting labels and help text, icon-and-text status badges, truthful recent validation/deployment results, localized execution details, and a normal-flow deployment history with a clear empty state.
+- Preserved the existing deployment APIs, state, automatic verified AWS connection selection, and safety gates; the removed AWS selector and legacy context panel were not restored.
+- Verification passed: Web tests 1,325/1,325, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check`. Full API tests were intentionally not run because no API path changed.
+- Authenticated visual QA could not reach the modal because the local Workspace route redirected to login; source-level responsive/accessibility coverage and production build passed.
+- No API, database, dependency, deployment, Git handoff, or cloud mutation was performed.
+
+### 2026-07-15 - Open the deployment modal without a pre-save wait
+
+- Changed the Workspace `배포` entry to open the deployment modal synchronously without waiting for project draft or Board thumbnail persistence.
+- Removed the entry button's save-dependent pending state, spinner, and obsolete pre-open save failure toast; the visible label remains `배포`.
+- Kept deployment safety in the modal: `저장 후 검증 실행` still synchronizes Terraform, saves the project draft, requires its revision, saves the Architecture/Terraform artifacts, and then runs validation.
+- Verification passed through a focused TDD red-green cycle, Web tests 1,325/1,325, `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm harness:check`, and `git diff --check`.
+- No API, database, dependency, deployment, Git handoff, or cloud mutation was performed.
+
+### 2026-07-15 - Simplify the Workspace deployment entry and validation layout
+
+- Removed the AWS connection dropdown and the right-side deployment context panel, then expanded the remaining validation content to the full row.
+- Kept the Workspace deployment button label fixed as `배포` while idle and pending, without removing the save-before-open safety flow.
+- Kept the first verified AWS connection auto-selection and `awsConnectionId` deployment request contract unchanged.
+- Verification passed: 121 focused Web tests, Web tests 1,319/1,319, `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm harness:check`, and `git diff --check`.
+- No API, database, dependency, deployment, Git handoff, or cloud mutation was performed.
+
+### 2026-07-15 - Remove the Dashboard external connections band
+
+- Removed the populated Dashboard's `외부 연결` band while preserving the `연결 상태` metric and the underlying AWS/Git connection workflows.
+- Removed the unused connection icons and responsive CSS selectors, and added a focused source regression test.
+- Verification passed: Web tests 1,317/1,317, `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm harness:check`, and `git diff --check`.
+- No API, database, dependency, deployment, Git handoff, or cloud mutation was performed.
+
 ### 2026-07-15 - Resolve Issue #360 branch conflicts with latest dev
 
 - Merged `origin/dev` at `6f1558bf` while preserving the branch's Area sizing/reconciliation, render-safe history updates, parameter panel layout, and deployment Stepper changes.

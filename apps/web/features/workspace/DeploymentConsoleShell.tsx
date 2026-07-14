@@ -1,10 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Maximize2, X } from "lucide-react";
 import { CicdConsoleScreen } from "./CicdConsoleScreen";
-import {
-  DirectDeploymentScreen,
-  type DirectDeploymentScreenProps
-} from "./DirectDeploymentScreen";
+import { DirectDeploymentScreen, type DirectDeploymentScreenProps } from "./DirectDeploymentScreen";
 import styles from "./workspace.module.css";
 
 export type DeploymentConsoleScreen = "deployment" | "cicd";
@@ -30,7 +27,8 @@ export function DeploymentConsoleShell({
   ...directProps
 }: DeploymentConsoleShellProps) {
   const storageKey = `sketchcatch:deployment-console-screen:${directProps.projectId}`;
-  const [storedActiveScreen, setStoredActiveScreen] = useState<DeploymentConsoleScreen>("deployment");
+  const [storedActiveScreen, setStoredActiveScreen] =
+    useState<DeploymentConsoleScreen>("deployment");
   const [isDeploymentExpanded, setIsDeploymentExpanded] = useState(initialExpanded);
   const [confirmationDismissRequestId, setConfirmationDismissRequestId] = useState(0);
   const confirmationOpenRef = useRef(false);
@@ -49,7 +47,8 @@ export function DeploymentConsoleShell({
       return;
     }
 
-    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousFocus =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const focusFrame = window.requestAnimationFrame(() => closeButtonRef.current?.focus());
@@ -68,9 +67,11 @@ export function DeploymentConsoleShell({
         return;
       }
 
-      const focusable = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>(
-        'a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), [tabindex]:not([tabindex="-1"])'
-      ) ?? []);
+      const focusable = Array.from(
+        dialogRef.current?.querySelectorAll<HTMLElement>(
+          'a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), [tabindex]:not([tabindex="-1"])'
+        ) ?? []
+      );
       const first = focusable[0];
       const last = focusable.at(-1);
       if (!first || !last) {
@@ -91,7 +92,9 @@ export function DeploymentConsoleShell({
       document.removeEventListener("keydown", handleKeyDown);
       document.body.style.overflow = previousOverflow;
       window.requestAnimationFrame(() => {
-        (document.querySelector<HTMLElement>("[data-deployment-console-trigger]") ?? previousFocus)?.focus();
+        (
+          document.querySelector<HTMLElement>("[data-deployment-console-trigger]") ?? previousFocus
+        )?.focus();
       });
     };
   }, [isDeploymentOverlayOpen]);
@@ -107,57 +110,98 @@ export function DeploymentConsoleShell({
     onActiveScreenChange?.(screen);
   }
 
-  const screenContent = (
-    <>
-      <nav className={styles.deploymentConsoleScreenNavigation} aria-label="배포 실행 경로">
-        <button aria-pressed={activeScreen === "deployment"} onClick={() => selectScreen("deployment")} type="button">
-          배포
-        </button>
-        <button aria-pressed={activeScreen === "cicd"} onClick={() => selectScreen("cicd")} type="button">
-          CI/CD
-        </button>
-      </nav>
-      <div className={styles.deploymentConsoleScreenBody}>
-        <div hidden={activeScreen !== "deployment"}>
-          <DirectDeploymentScreen
-            {...directProps}
-            confirmationDismissRequestId={confirmationDismissRequestId}
-            onConfirmationStateChange={(isOpen) => {
-              confirmationOpenRef.current = isOpen;
-            }}
-          />
-        </div>
-        <div hidden={activeScreen !== "cicd"}>
-          <CicdConsoleScreen
-            isVisible={activeScreen === "cicd"}
-            onOpenLiveObservation={onOpenLiveObservation}
-            projectId={directProps.projectId}
-          />
-        </div>
+  const screenBody = (
+    <div className={styles.deploymentConsoleScreenBody}>
+      <div hidden={activeScreen !== "deployment"}>
+        <DirectDeploymentScreen
+          {...directProps}
+          confirmationDismissRequestId={confirmationDismissRequestId}
+          onCancel={close}
+          onConfirmationStateChange={(isOpen) => {
+            confirmationOpenRef.current = isOpen;
+          }}
+        />
       </div>
-    </>
+      <div hidden={activeScreen !== "cicd"}>
+        <CicdConsoleScreen
+          isVisible={activeScreen === "cicd"}
+          onOpenLiveObservation={onOpenLiveObservation}
+          projectId={directProps.projectId}
+        />
+      </div>
+    </div>
   );
+
+  function renderScreenContent(showCloseButton: boolean) {
+    return (
+      <>
+        <header className={styles.deploymentConsoleHeader}>
+          <nav className={styles.deploymentConsoleScreenNavigation} aria-label="배포 실행 경로">
+            <button
+              aria-pressed={activeScreen === "deployment"}
+              onClick={() => selectScreen("deployment")}
+              type="button"
+            >
+              배포
+            </button>
+            <button
+              aria-pressed={activeScreen === "cicd"}
+              onClick={() => selectScreen("cicd")}
+              type="button"
+            >
+              CI/CD
+            </button>
+          </nav>
+          {showCloseButton ? (
+            <button
+              aria-label="배포 모달 닫기"
+              className={styles.deploymentExpandedCloseButton}
+              onClick={close}
+              ref={closeButtonRef}
+              type="button"
+            >
+              <X size={18} aria-hidden="true" />
+            </button>
+          ) : null}
+        </header>
+        {screenBody}
+      </>
+    );
+  }
 
   return (
     <div className={fullScreenOnly ? styles.deploymentPanelFullscreenHost : styles.deploymentPanel}>
       {!fullScreenOnly ? (
         <header className={styles.deploymentHeader}>
           <div className={styles.deploymentHeaderTop}>
-            <div><p className={styles.projectEyebrow}>Deployment</p><h2>{projectName}</h2></div>
-            <button aria-label="Deployment 패널 확장" className={styles.deploymentExpandButton} onClick={() => setIsDeploymentExpanded(true)} type="button">
+            <div>
+              <p className={styles.projectEyebrow}>Deployment</p>
+              <h2>{projectName}</h2>
+            </div>
+            <button
+              aria-label="Deployment 패널 확장"
+              className={styles.deploymentExpandButton}
+              onClick={() => setIsDeploymentExpanded(true)}
+              type="button"
+            >
               <Maximize2 size={16} aria-hidden="true" />
             </button>
           </div>
         </header>
       ) : null}
-      {!fullScreenOnly ? <div className={styles.deploymentPanelContent}>{screenContent}</div> : null}
+      {!fullScreenOnly ? (
+        <div className={styles.deploymentPanelContent}>{renderScreenContent(false)}</div>
+      ) : null}
       {isDeploymentOverlayOpen ? (
-        <div aria-label="Deployment console" aria-modal="true" className={styles.deploymentExpandedOverlay} onClick={(event) => event.target === event.currentTarget && close()} role="dialog">
+        <div
+          aria-label="Deployment console"
+          aria-modal="true"
+          className={styles.deploymentExpandedOverlay}
+          onClick={(event) => event.target === event.currentTarget && close()}
+          role="dialog"
+        >
           <div className={styles.deploymentExpandedShell} ref={dialogRef}>
-            <button aria-label="Deployment 패널 닫기" className={styles.deploymentExpandedCloseButton} onClick={close} ref={closeButtonRef} type="button">
-              <X size={18} aria-hidden="true" />
-            </button>
-            <div className={styles.deploymentExpandedBody}>{screenContent}</div>
+            <div className={styles.deploymentExpandedBody}>{renderScreenContent(true)}</div>
           </div>
         </div>
       ) : null}

@@ -51,8 +51,14 @@ test("SelectMenu surface tone provides the shared dashboard dropdown typography"
 
 test("SelectMenu board tone uses the calm Board tokens", () => {
   const triggerRule = getCssRuleContaining(selectMenuStylesSource, ".boardTone .selectMenuTrigger");
-  const focusRule = getCssRuleContaining(selectMenuStylesSource, ".boardTone .selectMenuTriggerOpen");
-  const selectedRule = getCssRuleContaining(selectMenuStylesSource, ".boardTone .selectMenuOptionSelected");
+  const focusRule = getCssRuleContaining(
+    selectMenuStylesSource,
+    ".boardTone .selectMenuTriggerOpen"
+  );
+  const selectedRule = getCssRuleContaining(
+    selectMenuStylesSource,
+    ".boardTone .selectMenuOptionSelected"
+  );
 
   assert.match(triggerRule, /background:\s*var\(--board-surface,/);
   assert.match(triggerRule, /border-color:\s*var\(--board-border,/);
@@ -62,9 +68,18 @@ test("SelectMenu board tone uses the calm Board tokens", () => {
 });
 
 test("SelectMenu workspace tone uses neutral workspace tokens", () => {
-  const workspaceTriggerRule = getCssRuleContaining(selectMenuStylesSource, ".workspaceTone .selectMenuTrigger");
-  const workspaceOpenRule = getCssRuleContaining(selectMenuStylesSource, ".workspaceTone .selectMenuTriggerOpen");
-  const workspaceSelectedRule = getCssRuleContaining(selectMenuStylesSource, ".workspaceTone .selectMenuOptionSelected");
+  const workspaceTriggerRule = getCssRuleContaining(
+    selectMenuStylesSource,
+    ".workspaceTone .selectMenuTrigger"
+  );
+  const workspaceOpenRule = getCssRuleContaining(
+    selectMenuStylesSource,
+    ".workspaceTone .selectMenuTriggerOpen"
+  );
+  const workspaceSelectedRule = getCssRuleContaining(
+    selectMenuStylesSource,
+    ".workspaceTone .selectMenuOptionSelected"
+  );
 
   assert.match(workspaceTriggerRule, /\bbackground:\s*var\(--workspace-surface,/);
   assert.match(workspaceTriggerRule, /\bborder-color:\s*var\(--workspace-line,/);
@@ -76,6 +91,18 @@ test("SelectMenu workspace tone uses neutral workspace tokens", () => {
   for (const workspaceRule of [workspaceTriggerRule, workspaceOpenRule, workspaceSelectedRule]) {
     assert.doesNotMatch(workspaceRule, /#2f6db3|#1f5fbf|#eef4ff|#f0f7ff|#8b71ff|#5f3de8/i);
   }
+});
+
+test("SelectMenu keeps option detail out of the closed trigger value", () => {
+  assert.match(
+    selectMenuSource,
+    /function getSelectMenuTriggerLabel\(option: SelectMenuOption\): string \{\s*return option\.label;\s*\}/
+  );
+  assert.doesNotMatch(
+    selectMenuSource,
+    /return option\.detail \? `\$\{option\.label\} \| \$\{option\.detail\}` : option\.label;/
+  );
+  assert.match(selectMenuSource, /className=\{styles\.selectMenuOptionDetail\}/);
 });
 
 function readUiFile(fileName: string): string {
@@ -90,7 +117,10 @@ function getCssRuleContaining(source: string, selectorFragment: string): string 
   const blockStart = source.indexOf("{", selectorIndex);
   const blockEnd = source.indexOf("}", blockStart);
 
-  assert.ok(blockStart > selectorIndex, `Expected CSS rule ${selectorFragment} to have a block start`);
+  assert.ok(
+    blockStart > selectorIndex,
+    `Expected CSS rule ${selectorFragment} to have a block start`
+  );
   assert.ok(blockEnd > blockStart, `Expected CSS rule ${selectorFragment} to have a block end`);
 
   return source.slice(selectorIndex, blockEnd + 1);

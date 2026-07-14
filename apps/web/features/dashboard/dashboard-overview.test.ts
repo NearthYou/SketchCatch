@@ -46,6 +46,10 @@ test("dashboard overview omits redundant English headings and secondary filler c
   assert.doesNotMatch(overviewSource, /설명 없음/);
 });
 
+test("dashboard overview does not render the external connections band", () => {
+  assert.doesNotMatch(overviewSource, /dashboardConnectionBand|connections-title|외부 연결/);
+});
+
 function readLocalFile(path: string): string {
   return readFileSync(fileURLToPath(new URL(path, import.meta.url)), "utf8");
 }
