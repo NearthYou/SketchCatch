@@ -59,6 +59,19 @@ test("signup password fields keep their controls top-aligned when help text is p
   );
 });
 
+test("signup validation feedback uses reserved single-message slots", () => {
+  assert.equal(
+    [...signupFormSource.matchAll(/className="authFieldFeedback/g)].length,
+    4
+  );
+  assert.match(
+    authStylesSource,
+    /\.authFieldFeedback\s*\{[^}]*min-height:\s*19px;/s
+  );
+  assert.match(signupFormSource, /const passwordFeedbackMessage =/);
+  assert.doesNotMatch(signupFormSource, /PasswordValidationMessages/);
+});
+
 function readAppFile(path: string): string {
   return readFileSync(fileURLToPath(new URL(`../../app/${path}`, import.meta.url)), "utf8");
 }

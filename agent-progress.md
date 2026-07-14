@@ -12,6 +12,12 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-14 - Stabilize signup validation layout
+
+- Reserved a persistent feedback slot below the username, password, password confirmation, and email controls so validation state changes no longer insert new layout rows.
+- Replaced stacked password-policy errors with one prioritized message in the existing feedback slot while preserving Caps Lock and mismatch feedback and accessible descriptions.
+- Verification passed: the red-capable signup layout regression failed before the fix and passed 7/7 afterward, the full Web test command passed, `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm harness:check`, live `/signup` HTTP 200, and API health HTTP 200. In-app browser measurement remained unavailable because browser initialization failed with `Cannot redefine property: process`; the next action is only manual pixel confirmation if additional tuning is requested.
+
 ### 2026-07-14 - Compact authentication card chrome
 
 - Reduced the shared login, signup, and password-reset card top and bottom spacing: vertical card padding, brand-to-title spacing, title-to-form spacing, and footer switch spacing.

@@ -371,17 +371,18 @@
   overflow-wrap: anywhere;
 }
 
+.authFieldFeedback {
+  display: grid;
+  min-height: 19px;
+  align-content: start;
+}
+
 .authWarningText {
   color: #8a4b08;
 }
 
 .authErrorText {
   color: #b42318;
-}
-
-.authInlineMessageStack {
-  display: grid;
-  gap: 4px;
 }
 
 .authMessage {
