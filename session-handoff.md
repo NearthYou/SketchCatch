@@ -22,4 +22,4 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Best Next Action
 
-- Commit the final verification record, push the merge, then open the issue #381 PR against `dev` with the known Terraform CLI and local `.codegraph` limitations.
+- Monitor PR #393 CI and resolve review feedback. The documented Terraform CLI and local `.codegraph` limitations remain.

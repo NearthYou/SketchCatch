@@ -190,10 +190,6 @@ Short English-only working log for the current agent context. Older records are 
 - Verification: `pnpm --dir apps/api exec tsx --test --test-name-pattern "clone URLs ending in .git" src/routes/ai.test.ts`; `pnpm --dir apps/web exec tsx --test features/workspace/public-repository-recommendation.test.ts`; `pnpm harness:check`; `pnpm lint`; `pnpm typecheck`; `pnpm build`.
 - Note: running the full `apps/api/src/routes/ai.test.ts` file still shows two unrelated baseline failures in repository-template and template-selection assertions.
 
-## Next Action
-
-- Finish the merged Brainboard branch verification, push it, and open the issue #381 PR against `dev`.
-
 ### 2026-07-14 - Merge latest dev into the Brainboard AWS Template branch
 
 - Merged `origin/dev` at `847a8206` into `feature/gg/381-brainboard-aws-templates` before PR creation and resolved all 16 content conflicts without dropping either workstream.
@@ -202,4 +198,5 @@ Short English-only working log for the current agent context. Older records are 
 - Verification passed: `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm migration:compatibility:check`, 114 focused API tests, 1,266 Web tests, 60 Brainboard type/source-contract tests, 37 capture tests, and `git diff --check`.
 - Known environment limit: `pnpm catalog:check` and `pnpm templates:validate` cannot run Terraform because this machine has no Terraform executable (`spawn terraform ENOENT`). No Terraform Apply, Destroy, or AWS mutation was performed.
 - Final build result: `pnpm build` stops before Web compilation because the ignored `apps/web/.codegraph` symlink targets a missing user-local path. Type/API/UI builds started successfully; this is the documented pre-existing local blocker.
-- Remaining action: commit this verification record, push the merge, then open the issue #381 PR against `dev`.
+- Opened PR #393 against `dev`: https://github.com/NearthYou/SketchCatch/pull/393. GitHub reports it as mergeable; `checks` and `sync-project` are still running.
+- Next: await CI and resolve review feedback; Terraform CLI and `.codegraph` limits remain.
