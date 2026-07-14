@@ -4,18 +4,25 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- Branch: `test/sw/378-deployment-sandbox-e2e` with latest `origin/dev` (`847a8206`) merged.
-- Issues #370-#377 and the current dev UI, diagram, and deployment updates are integrated.
-- The sandbox preflight passed against AWS account `614935468487`, `ap-northeast-2`, a verified local API connection, and `NearthYou/sketchcatch-deployment-sandbox`.
-- Direct Terraform runs labeled `infrastructure`, `application`, and `full_stack` each reached Apply success, healthy Output probes, and Destroyed; provider cleanup returned zero demo ASGs, ALBs, active EC2 instances, S3 buckets, and CloudWatch log groups.
-- Full-stack traffic produced 12 accepted API requests, 12 CloudWatch log events, and a `traffic_requests` metric sum of 12.
-- Full issue #378 acceptance is not verified: the earlier live Direct application/full-stack runs predate the new ApplicationRelease path, and GitOps cannot start without a GitHub App installation and credentials. The feature remains `in_progress`.
-- The missing Direct release path is now implemented locally: application/full_stack prepare immutable CodeBuild artifacts, verify AWS runtime evidence, persist ApplicationRelease, and application-only cleanup restores an approved previous revision without Terraform state.
-- Focused deployment/release integration passes 109 tests, Web target state passes 10 tests, and workspace lint, typecheck, and build pass.
-- GitHub App `4294146` is installed only on `NearthYou/sketchcatch-deployment-sandbox` as installation `146476093`; its private key is stored outside the repository with restricted ACL.
-- AWS CodeConnections `sketchcatch-sandbox-github` exists in `PENDING`. The GitHub `AWS Connector for GitHub` OAuth page renders its Authorize button disabled, so CodeBuild project creation and live release execution remain blocked.
+- Branch: `test/sw/378-deployment-sandbox-e2e`; issue #378 remains `in_progress` because the complete four-runtime matrix and service-side GitOps persistence did not pass.
+- Direct ECS infrastructure deployment `3f2e03ec-8b5c-46e3-af74-43d4e21c368e` created 19 resources and Direct application deployment `13f0f6c2-1890-46ce-8044-be754c810b5f` persisted release `5fcb826c-4bb4-45c8-8f59-3bae9790a82e`.
+- Direct evidence matched commit `9c4251baf058a8e0a6513236068d819fecfcdfd5`, ECR digest `3152546fc2cd37ce929dd63b20b161cae58124921fc27e7028a514db2f52a81e`, ECS task definition revision 2, and HTTPS health 200.
+- The API returned five project deployments, 808 infrastructure logs, 17 application logs, and five persisted notifications. CloudWatch returned real ECS CPU metrics. Web Push delivery was not claimed because no browser subscription existed.
+- Live Observation QR/session creation correctly returned 409 because the approved Terraform lacked the required custom hostname, ACM certificate, Route53 record, HTTPS ALB listener, and traffic outputs.
+- GitHub handoff `843323c9-c437-4727-b586-5801b1771f6e` created sandbox PR #1. GitHub Actions run `29324643997` attempt 2 succeeded against merge SHA `8ac5cf93495942a6e88265b848168c75e0da1740`, ECR digest `0e9fd2191ae781549b72389d89249c0eb3da9e9156632b137c9724448e043a4c`, ECS task definition revision 3, and HTTPS health 200.
+- GitOps service persistence did not pass: project pipeline refresh returned `stale=true` with no persisted runs because the successful manual run used the later workflow-fix merge SHA, while the handoff retained the cancelled initial infra run.
+- Static, Lambda, and EC2/ASG GitOps were not started within the hard deadline; their required project targets and runtime infrastructure were absent.
+- Application cleanup failed closed because the active GitOps revision 3 no longer matched the Direct release cleanup manifest's revision 2. Infrastructure destroy reached `DESTROYED`; CodeBuild, ECR, CloudWatch log groups, test S3 buckets and versions, CodeConnection, ALB/target groups, ECS cluster/task definitions, CloudFront, temporary OIDC, and the temporary operator policy all verify at zero.
+- Focused changed-path tests pass 89/89 plus workflow tests 9/9. Workspace lint, typecheck, and build pass; the full API suite retains known unrelated failures and one now-corrected deployment-plan expectation.
 
 ## Session Record
+
+### 2026-07-14 - Real Direct ECS and bounded GitOps validation
+
+- Completed a real Direct ECS infrastructure/app release with immutable commit, digest, task revision, persisted API logs/history/notifications, CloudWatch metrics, and repeated HTTPS 200 evidence.
+- Fixed practice-profile ECS resource admission, minimal CodeBuild permissions, Bash buildspec execution, and invalid GitHub expression quoting with focused regression tests.
+- Created and merged real sandbox GitOps PRs, applied repository variables and verified GitHub OIDC trust, and completed one real ECS GitHub Actions deployment.
+- Preserved fail-closed behavior for QR, CI persistence, and cleanup mismatches instead of marking partial evidence as complete.
 
 ### 2026-07-14 - Integrate latest dev for sandbox continuation
 
@@ -40,6 +47,6 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Next Action
 
-- Complete the pending AWS Connector for GitHub authorization and verify the CodeConnections status is `AVAILABLE`.
-- Create the prepared sandbox CodeBuild project, then run the new Direct ApplicationRelease path live.
-- Run the GitOps runtime matrix, rollback drills, QR/notification checks, final cleanup, and strict report verification before opening the PR.
+- Preserve the verified zero-resource cleanup result; recreate sandbox control-plane resources only for a new approved run.
+- Fix GitOps run-to-handoff correlation so a workflow-fix commit can still persist CI logs and release history without accepting unrelated runs.
+- Provision dedicated Static, Lambda, and EC2/ASG project targets before rerunning the remaining matrix; add a real custom domain/ACM/Route53 target before QR verification.

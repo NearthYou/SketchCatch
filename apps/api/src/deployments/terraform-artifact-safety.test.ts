@@ -77,6 +77,23 @@ test("assertTerraformArtifactIsSafe accepts the MVP AWS resource subset", () => 
   );
 });
 
+test("practice safety accepts the ECS Fargate runtime resources used by project deployment", () => {
+  assert.doesNotThrow(() =>
+    assertTerraformArtifactIsSafe(
+      `resource "aws_cloudwatch_log_group" "app" {}
+      resource "aws_iam_role_policy_attachment" "task_execution" {}
+      resource "aws_ecs_cluster" "app" {}
+      resource "aws_ecs_task_definition" "app" {}
+      resource "aws_ecs_service" "app" {}
+      resource "aws_lb" "app" {}
+      resource "aws_lb_listener" "http" {}
+      resource "aws_lb_target_group" "app" {}
+      resource "aws_cloudfront_distribution" "app" {}`,
+      { liveProfile: "practice" }
+    )
+  );
+});
+
 test("assertTerraformArtifactIsSafe accepts approved Kubernetes template resources", () => {
   assert.doesNotThrow(() =>
     assertTerraformArtifactIsSafe(

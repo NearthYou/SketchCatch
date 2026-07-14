@@ -44,6 +44,7 @@ test("prepare starts the confirmed CodeBuild project at the confirmed commit and
   assert.equal(client.commands[0]?.name, "BatchGetProjectsCommand");
   assert.equal(client.commands[1]?.input.projectName, "sketchcatch-api-build");
   assert.equal(client.commands[1]?.input.sourceVersion, commitSha);
+  assert.match(String(client.commands[1]?.input.buildspecOverride), /env:\s+shell: bash/);
   const environmentVariables = client.commands[1]?.input.environmentVariablesOverride as
     | Array<{ name?: string; value?: string }>
     | undefined;

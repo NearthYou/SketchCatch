@@ -4,36 +4,32 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Currently Verified
 
-- Branch: `test/sw/378-deployment-sandbox-e2e`; latest `origin/dev` at `847a8206` is integrated and issues #370-#377 are merged.
-- Non-production preflight passed for AWS account `614935468487`, region `ap-northeast-2`, the verified local API connection, and `NearthYou/sketchcatch-deployment-sandbox`.
-- Three Direct Terraform runs labeled `infrastructure`, `application`, and `full_stack` reached Apply success, healthy Output probes, and Destroyed.
-- Full-stack observation evidence matched: 12 accepted traffic requests, 12 CloudWatch log events, and metric sum 12.
-- AWS cleanup returned zero demo ASGs, ALBs, active EC2 instances, demo S3 buckets, and demo CloudWatch log groups.
-- Direct application/full_stack execution now prepares immutable CodeBuild artifacts, validates the active GitHub repository and CODECONNECTIONS source, re-queries AWS runtime state, and persists a Direct ApplicationRelease.
-- Application-only Destroy now uses an approved cleanup manifest and restores the prior AWS revision without Terraform state.
+- Direct infrastructure/app live deployment passed with exact commit, ECR digest, ECS task revision, persisted logs/release/history/notifications, CloudWatch metrics, and HTTPS 200 evidence.
+- GitHub Actions ECS deployment passed on run `29324643997` attempt 2 with merge SHA `8ac5cf93495942a6e88265b848168c75e0da1740`, digest `0e9fd2191ae781549b72389d89249c0eb3da9e9156632b137c9724448e043a4c`, and task definition revision 3.
+- GitOps API persistence remains broken: refresh returned stale with no runs and retained the cancelled initial infra run because the successful app run belonged to the later workflow-fix merge.
+- QR remains correctly blocked by the missing custom-domain/ACM/Route53 traffic contract. Web Push provider delivery was not claimed without a browser subscription.
+- Static, Lambda, and EC2/ASG runtimes were not started. Infrastructure reached `DESTROYED`, and all issue-scoped runtime/control-plane resource queries returned zero, including three deleted ECS task definitions.
 
 ## Verification
 
-- Sandbox E2E focused tests pass 20/20.
-- Destroy-plan retry regression passes 3/3; demo artifact and Terraform safety focused tests pass.
-- Final workspace harness, lint, typecheck, and build must be rerun after the dev merge and remaining implementation.
-- Deployment/release integration passes 109 tests, Web target state passes 10 tests, and workspace lint, typecheck, and build pass after the implementation.
+- Focused changed-path tests pass 89/89 and GitOps workflow tests pass 9/9.
+- Workspace lint, typecheck, and build pass after the latest fixes.
+- Run the final harness check after cleanup and documentation updates.
 
 ## Changes This Session
 
-- Fixed the StepScaling policy rejected by AWS, cleanup retry stage preservation, root API URL normalization, smoke token expiry recovery, explicit scope reporting, and sandbox deregistration delay.
-- Executed and cleaned a failed partial apply plus three successful labeled Direct runs.
-- Integrated the latest `origin/dev` while preserving the Issue #378 sandbox safety and recovery changes.
+- Added the practice-profile ECS resource subset and least-privilege Direct CodeBuild permissions.
+- Forced Direct and GitOps CodeBuild buildspecs to Bash and corrected GitHub expression string quoting for all four runtime workflows.
+- Executed real Direct and ECS GitOps paths and recorded exact partial-completion blockers.
 
 ## Broken Or Unverified
 
-- GitHub App `4294146` is installed only on the sandbox repository as installation `146476093`; its private key is stored at `%USERPROFILE%/.sketchcatch/secrets/sketchcatch-deployment-sandbox.pem` with restricted ACL.
-- AWS CodeConnections `sketchcatch-sandbox-github` was created in `ap-northeast-2` but remains `PENDING`. GitHub's `AWS Connector for GitHub` authorization page has a disabled Authorize button, and CodeBuild creation correctly fails closed until the connection becomes available.
-- The new Direct ApplicationRelease and application-only cleanup paths are automated-test verified but not yet live-verified against the sandbox CodeBuild release plane.
-- GitOps four-runtime deployment/rollback, QR public session, Inbox/Web Push provider delivery, and the complete verifier report remain unverified.
+- Application cleanup failed closed because active GitOps task definition revision 3 did not equal the Direct cleanup manifest's revision 2.
+- GitOps CI log/release persistence, Static/Lambda/EC2-ASG execution, rollback drills, QR public session, and Web Push provider delivery remain unverified.
+- Full API tests include pre-existing Windows symlink EPERM and AI diagram expectation failures; do not report the full suite as passing.
 
 ## Best Next Action
 
-- Complete the pending AWS Connector OAuth authorization, verify CodeConnections is `AVAILABLE`, then create `sketchcatch-issue-378-ecs` from the prepared sandbox configuration.
-- Inject GitHub App credentials through runtime environment variables without committing them, then live-verify Direct application/full_stack release and application cleanup.
-- Rerun the GitOps four-runtime matrix, rollback drills, QR/notification checks, final cleanup, and strict report verification.
+- Keep the completed cleanup intact and recreate only the resources required by a new approved sandbox run.
+- Repair GitOps run correlation and persist the successful ECS run through the normal API before claiming ECS GitOps complete.
+- Provision separate project targets for Static, Lambda, and EC2/ASG, then rerun the remaining matrix and rollback tests.

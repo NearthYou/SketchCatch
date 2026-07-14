@@ -366,7 +366,7 @@ env:
 
 jobs:
   release:
-    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == ${JSON.stringify(input.targetBranch)})
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == '${input.targetBranch.replaceAll("'", "''")}')
     runs-on: ubuntu-latest
     environment: ${environmentName}
     steps:
@@ -592,7 +592,7 @@ env:
 
 jobs:
   release:
-    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == ${JSON.stringify(input.targetBranch)})
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == '${input.targetBranch.replaceAll("'", "''")}')
     runs-on: ubuntu-latest
     environment: ${environmentName}
     steps:
@@ -805,7 +805,7 @@ env:
 
 jobs:
   release:
-    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == ${JSON.stringify(input.targetBranch)})
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == '${input.targetBranch.replaceAll("'", "''")}')
     runs-on: ubuntu-latest
     environment: ${environmentName}
     steps:
@@ -1090,7 +1090,7 @@ env:
 
 jobs:
   release:
-    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == ${JSON.stringify(input.targetBranch)})
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == '${input.targetBranch.replaceAll("'", "''")}')
     runs-on: ubuntu-latest
     environment: ${environmentName}
     steps:
@@ -1408,6 +1408,7 @@ function renderEcsFargateBuildspec(): string {
   return `version: 0.2
 
 env:
+  shell: bash
   exported-variables:
     - SKETCHCATCH_IMAGE_DIGEST
     - SKETCHCATCH_ECR_URI

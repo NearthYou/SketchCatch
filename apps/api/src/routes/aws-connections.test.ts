@@ -699,6 +699,14 @@ test("GET /api/aws/connections/:connectionId/cloudformation-template returns lau
   assert.match(body.templateBody, /- elasticloadbalancing:\*/);
   assert.match(body.templateBody, /- cloudfront:\*/);
   assert.match(body.templateBody, /- logs:\*/);
+  assert.match(body.templateBody, /- codebuild:BatchGetProjects/);
+  assert.match(body.templateBody, /- codebuild:StartBuild/);
+  assert.match(body.templateBody, /- codebuild:BatchGetBuilds/);
+  assert.match(body.templateBody, /- codebuild:StopBuild/);
+  assert.match(
+    body.templateBody,
+    /arn:\$\{AWS::Partition\}:codebuild:\$\{AWS::Region\}:\$\{AWS::AccountId\}:project\/sketchcatch-\*/
+  );
   assert.match(body.templateBody, /- iam:CreateRole/);
   assert.match(body.templateBody, /- iam:PassRole/);
   assert.match(

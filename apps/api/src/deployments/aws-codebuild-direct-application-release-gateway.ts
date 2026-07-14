@@ -396,6 +396,7 @@ function renderEcsPrepareBuildspec(): string {
   return `version: 0.2
 
 env:
+  shell: bash
   exported-variables:
     - SKETCHCATCH_COMMIT_SHA
     - SKETCHCATCH_ARTIFACT_DIGEST
@@ -429,6 +430,7 @@ function renderEcsDeployBuildspec(): string {
   return `version: 0.2
 
 env:
+  shell: bash
   exported-variables:
     - SKETCHCATCH_ECS_RELEASE_EVIDENCE_B64
 
@@ -506,6 +508,7 @@ function renderEcsCleanupBuildspec(): string {
   return `version: 0.2
 
 env:
+  shell: bash
   exported-variables:
     - SKETCHCATCH_ECS_RELEASE_EVIDENCE_B64
 
